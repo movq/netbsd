@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile.inc,v 1.32 2016/06/01 21:24:55 joerg Exp $
+#	$NetBSD: Makefile.inc,v 1.25 2014/03/04 17:57:56 joerg Exp $
 
 .include <bsd.own.mk>
 
@@ -12,13 +12,11 @@ CPPFLAGS+=	-I${NETBSDSRCDIR}/libexec/ld.elf_so -I${COMMON_DIR} -I.
 
 OBJS+=		crt0.o gcrt0.o crti.o crtn.o
 OBJS+=		crtbegin.o crtend.o
-OBJS+=		sysident.o
 
 .if ${MKPIC} == "yes"
 OBJS+=		crtbeginS.o
 CFLAGS.crtbegin.c+= -fPIE
 .endif
-
 .if ${MACHINE_ARCH} == "alpha"
 OBJS+=		crtfm.o
 .endif
@@ -57,7 +55,7 @@ crtbeginS.o: crtbegin.S
 .else
 crtbeginS.o: crtbegin.c crtbegin.h
 	${_MKTARGET_COMPILE}
-	${COMPILE.c} ${CFLAGS.crtbeginS.c} ${PICFLAGS} -DSHARED ${COMMON_DIR}/crtbegin.c -o ${.TARGET}.o
+	${COMPILE.c} ${PICFLAGS} -DSHARED ${COMMON_DIR}/crtbegin.c -o ${.TARGET}.o
 .endif
 	${OBJCOPY} ${OBJCOPYLIBFLAGS} ${.TARGET}.o ${.TARGET} 
 	rm -f ${.TARGET}.o
@@ -83,7 +81,7 @@ MY_PICFLAGS=
 crt0.o: crt0.S crt0-common.c
 	${_MKTARGET_COMPILE}
 	${COMPILE.S} ${ARCHDIR}/crt0.S -o ${.TARGET}.S.o
-	${COMPILE.c} ${CFLAGS.crt0-common.c} ${MY_PICFLAGS} ${COMMON_DIR}/crt0-common.c -o ${.TARGET}.c.o
+	${COMPILE.c} ${MY_PICFLAGS} ${COMMON_DIR}/crt0-common.c -o ${.TARGET}.c.o
 	${LD} -r -o ${.TARGET}.o ${.TARGET}.S.o ${.TARGET}.c.o
 	${OBJCOPY} ${OBJCOPYLIBFLAGS} ${.TARGET}.o ${.TARGET} 
 	rm -f ${.TARGET}.S.o ${.TARGET}.c.o ${.TARGET}.o
@@ -123,7 +121,6 @@ CLEANFILES+=	sysident_assym.h
 
 crti.o: crti.S sysident_assym.h sysident.S
 crtn.o: crtn.S
-sysident.o:	sysident.S sysident_assym.h
 
 FILES=${OBJS}
 FILESDIR=${LIBDIR}

@@ -1,6 +1,6 @@
 // REQUIRES: aarch64-registered-target
 // RUN: %clang_cc1 -triple arm64-none-linux-gnu \
-// RUN:   -S -emit-llvm -o - %s | opt -S -mem2reg | FileCheck %s
+// RUN:   -O3 -S -emit-llvm -o - %s | FileCheck %s
 
 int crc32b(int a, char b)
 {

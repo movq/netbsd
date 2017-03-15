@@ -455,8 +455,7 @@ int eap_fast_load_pac(struct eap_sm *sm, struct eap_fast_pac **pac_root,
 	}
 
 	if (pac) {
-		if (!err)
-			err = "PAC block not terminated with END";
+		err = "PAC block not terminated with END";
 		eap_fast_free_pac(pac);
 	}
 
@@ -710,7 +709,7 @@ static void eap_fast_pac_get_a_id(struct eap_fast_pac *pac)
 	pos = pac->pac_info;
 	end = pos + pac->pac_info_len;
 
-	while (end - pos > 4) {
+	while (pos + 4 < end) {
 		type = WPA_GET_BE16(pos);
 		pos += 2;
 		len = WPA_GET_BE16(pos);
@@ -802,10 +801,8 @@ int eap_fast_load_pac_bin(struct eap_sm *sm, struct eap_fast_pac **pac_root,
 	while (pos < end) {
 		u16 val;
 
-		if (end - pos < 2 + EAP_FAST_PAC_KEY_LEN + 2 + 2) {
-			pac = NULL;
+		if (end - pos < 2 + EAP_FAST_PAC_KEY_LEN + 2 + 2)
 			goto parse_fail;
-		}
 
 		pac = os_zalloc(sizeof(*pac));
 		if (pac == NULL)

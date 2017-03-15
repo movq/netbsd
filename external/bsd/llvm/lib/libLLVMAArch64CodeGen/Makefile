@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.7 2017/01/11 12:02:28 joerg Exp $
+#	$NetBSD: Makefile,v 1.5.2.1 2015/06/04 20:05:43 snj Exp $
 
 LIB=	LLVMAArch64CodeGen
 
@@ -8,17 +8,12 @@ LIB=	LLVMAArch64CodeGen
 
 CPPFLAGS+=	-I${LLVM_SRCDIR}/lib/Target/AArch64
 
-# Used only with GlobalISel:
-#	AArch64CallLowering.cpp
-#	AArch64InstructionSelector.cpp
-#	AArch64LegalizerInfo.cpp
-#	AArch64RegisterBankInfo.cpp
-
 SRCS+=	AArch64A53Fix835769.cpp \
 	AArch64A57FPLoadBalancing.cpp \
 	AArch64AddressTypePromotion.cpp \
 	AArch64AdvSIMDScalarPass.cpp \
 	AArch64AsmPrinter.cpp \
+	AArch64BranchRelaxation.cpp \
 	AArch64CleanupLocalDynamicTLSPass.cpp \
 	AArch64CollectLOH.cpp \
 	AArch64ConditionOptimizer.cpp \
@@ -34,15 +29,13 @@ SRCS+=	AArch64A53Fix835769.cpp \
 	AArch64MCInstLower.cpp \
 	AArch64PBQPRegAlloc.cpp \
 	AArch64PromoteConstant.cpp \
-	AArch64RedundantCopyElimination.cpp \
 	AArch64RegisterInfo.cpp \
 	AArch64SelectionDAGInfo.cpp \
 	AArch64StorePairSuppress.cpp \
 	AArch64Subtarget.cpp \
 	AArch64TargetMachine.cpp \
 	AArch64TargetObjectFile.cpp \
-	AArch64TargetTransformInfo.cpp \
-	AArch64VectorByElementOpt.cpp
+	AArch64TargetTransformInfo.cpp
 
 TABLEGEN_SRC=		AArch64.td
 TABLEGEN_INCLUDES=	-I${LLVM_SRCDIR}/lib/Target/AArch64
@@ -58,8 +51,7 @@ TABLEGEN_OUTPUT= \
 	AArch64GenMCCodeEmitter.inc|-gen-emitter \
 	AArch64GenMCPseudoLowering.inc|-gen-pseudo-lowering \
 	AArch64GenRegisterInfo.inc|-gen-register-info \
-	AArch64GenSubtargetInfo.inc|-gen-subtarget \
-	AArch64GenSystemOperands.inc|-gen-searchable-tables
+	AArch64GenSubtargetInfo.inc|-gen-subtarget
 
 .include "${.PARSEDIR}/../../tablegen.mk"
 

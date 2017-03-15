@@ -1,5 +1,6 @@
 /* mclex.c -- lexer for Windows mc files parser.
-   Copyright (C) 2007-2016 Free Software Foundation, Inc.
+   Copyright 2007
+   Free Software Foundation, Inc.
 
    Written by Kai Tietz, Onevision.
 

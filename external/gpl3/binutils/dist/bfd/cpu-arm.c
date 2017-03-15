@@ -1,5 +1,6 @@
 /* BFD support for the ARM processor
-   Copyright (C) 1994-2016 Free Software Foundation, Inc.
+   Copyright 1994, 1997, 1999, 2000, 2002, 2003, 2004, 2005, 2006, 2007,
+   2009, 2010 Free Software Foundation, Inc.
    Contributed by Richard Earnshaw (rwe@pegasus.esprit.ec.org)
 
    This file is part of BFD, the Binary File Descriptor library.
@@ -93,8 +94,7 @@ processors[] =
   { bfd_mach_arm_XScale, "xscale" },
   { bfd_mach_arm_ep9312, "ep9312" },
   { bfd_mach_arm_iWMMXt, "iwmmxt" },
-  { bfd_mach_arm_iWMMXt2, "iwmmxt2" },
-  { bfd_mach_arm_unknown, "arm_any" }
+  { bfd_mach_arm_iWMMXt2, "iwmmxt2" }
 };
 
 static bfd_boolean
@@ -129,20 +129,19 @@ scan (const struct bfd_arch_info *info, const char *string)
 
 static const bfd_arch_info_type arch_info_struct[] =
 {
-  N (bfd_mach_arm_2,       "armv2",   FALSE, & arch_info_struct[1]),
-  N (bfd_mach_arm_2a,      "armv2a",  FALSE, & arch_info_struct[2]),
-  N (bfd_mach_arm_3,       "armv3",   FALSE, & arch_info_struct[3]),
-  N (bfd_mach_arm_3M,      "armv3m",  FALSE, & arch_info_struct[4]),
-  N (bfd_mach_arm_4,       "armv4",   FALSE, & arch_info_struct[5]),
-  N (bfd_mach_arm_4T,      "armv4t",  FALSE, & arch_info_struct[6]),
-  N (bfd_mach_arm_5,       "armv5",   FALSE, & arch_info_struct[7]),
-  N (bfd_mach_arm_5T,      "armv5t",  FALSE, & arch_info_struct[8]),
-  N (bfd_mach_arm_5TE,     "armv5te", FALSE, & arch_info_struct[9]),
-  N (bfd_mach_arm_XScale,  "xscale",  FALSE, & arch_info_struct[10]),
-  N (bfd_mach_arm_ep9312,  "ep9312",  FALSE, & arch_info_struct[11]),
-  N (bfd_mach_arm_iWMMXt,  "iwmmxt",  FALSE, & arch_info_struct[12]),
-  N (bfd_mach_arm_iWMMXt2, "iwmmxt2", FALSE, & arch_info_struct[13]),
-  N (bfd_mach_arm_unknown, "arm_any", FALSE, NULL)
+  N (bfd_mach_arm_2,      "armv2",   FALSE, & arch_info_struct[1]),
+  N (bfd_mach_arm_2a,     "armv2a",  FALSE, & arch_info_struct[2]),
+  N (bfd_mach_arm_3,      "armv3",   FALSE, & arch_info_struct[3]),
+  N (bfd_mach_arm_3M,     "armv3m",  FALSE, & arch_info_struct[4]),
+  N (bfd_mach_arm_4,      "armv4",   FALSE, & arch_info_struct[5]),
+  N (bfd_mach_arm_4T,     "armv4t",  FALSE, & arch_info_struct[6]),
+  N (bfd_mach_arm_5,      "armv5",   FALSE, & arch_info_struct[7]),
+  N (bfd_mach_arm_5T,     "armv5t",  FALSE, & arch_info_struct[8]),
+  N (bfd_mach_arm_5TE,    "armv5te", FALSE, & arch_info_struct[9]),
+  N (bfd_mach_arm_XScale, "xscale",  FALSE, & arch_info_struct[10]),
+  N (bfd_mach_arm_ep9312, "ep9312",  FALSE, & arch_info_struct[11]),
+  N (bfd_mach_arm_iWMMXt, "iwmmxt",  FALSE, & arch_info_struct[12]),
+  N (bfd_mach_arm_iWMMXt2, "iwmmxt2", FALSE, NULL)
 };
 
 const bfd_arch_info_type bfd_arm_arch =
@@ -253,10 +252,10 @@ arm_check_note (bfd *abfd,
 	return FALSE;
     }
   else
-    {
+    { 
       if (namesz != ((strlen (expected_name) + 1 + 3) & ~3))
 	return FALSE;
-
+      
       if (strcmp (descr, expected_name) != 0)
 	return FALSE;
 
@@ -367,8 +366,7 @@ architectures[] =
   { "XScale",  bfd_mach_arm_XScale },
   { "ep9312",  bfd_mach_arm_ep9312 },
   { "iWMMXt",  bfd_mach_arm_iWMMXt },
-  { "iWMMXt2", bfd_mach_arm_iWMMXt2 },
-  { "arm_any", bfd_mach_arm_unknown }
+  { "iWMMXt2", bfd_mach_arm_iWMMXt2 }
 };
 
 /* Extract the machine number stored in a note section.  */

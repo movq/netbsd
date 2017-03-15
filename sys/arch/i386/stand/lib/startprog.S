@@ -1,4 +1,11 @@
-/*	$NetBSD: startprog.S,v 1.4 2016/12/04 08:21:08 maxv Exp $	*/
+/*	$NetBSD: startprog.S,v 1.3 2003/02/01 14:48:18 dsl Exp $	*/
+	
+/* starts program in protected mode / flat space
+ with given stackframe
+ needs global variables flatcodeseg and flatdataseg
+ (gdt offsets)
+  derived from: NetBSD:sys/arch/i386/boot/asm.S
+ */
 
 /*
  * Ported to boot 386BSD by Julian Elischer (julian@tfs.com) Sept 1992
@@ -29,80 +36,75 @@
  */
 
 /*
- *   Copyright 1988, 1989, 1990, 1991, 1992
- *    by Intel Corporation, Santa Clara, California.
- * 
- *                 All Rights Reserved
- * 
- * Permission to use, copy, modify, and distribute this software and
- * its documentation for any purpose and without fee is hereby
- * granted, provided that the above copyright notice appears in all
- * copies and that both the copyright notice and this permission notice
- * appear in supporting documentation, and that the name of Intel
- * not be used in advertising or publicity pertaining to distribution
- * of the software without specific, written prior permission.
- * 
- * INTEL DISCLAIMS ALL WARRANTIES WITH REGARD TO THIS SOFTWARE
- * INCLUDING ALL IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS,
- * IN NO EVENT SHALL INTEL BE LIABLE FOR ANY SPECIAL, INDIRECT, OR
- * CONSEQUENTIAL DAMAGES OR ANY DAMAGES WHATSOEVER RESULTING FROM
- * LOSS OF USE, DATA OR PROFITS, WHETHER IN ACTION OF CONTRACT,
- * NEGLIGENCE, OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION
- * WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
- */
+  Copyright 1988, 1989, 1990, 1991, 1992 
+   by Intel Corporation, Santa Clara, California.
+
+                All Rights Reserved
+
+Permission to use, copy, modify, and distribute this software and
+its documentation for any purpose and without fee is hereby
+granted, provided that the above copyright notice appears in all
+copies and that both the copyright notice and this permission notice
+appear in supporting documentation, and that the name of Intel
+not be used in advertising or publicity pertaining to distribution
+of the software without specific, written prior permission.
+
+INTEL DISCLAIMS ALL WARRANTIES WITH REGARD TO THIS SOFTWARE
+INCLUDING ALL IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS,
+IN NO EVENT SHALL INTEL BE LIABLE FOR ANY SPECIAL, INDIRECT, OR
+CONSEQUENTIAL DAMAGES OR ANY DAMAGES WHATSOEVER RESULTING FROM
+LOSS OF USE, DATA OR PROFITS, WHETHER IN ACTION OF CONTRACT,
+NEGLIGENCE, OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION
+WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+*/
 
 #include <machine/asm.h>
 
 /*
- * Starts program in protected mode / flat space with given stackframe.
- * Needs global variables flatcodeseg and flatdataseg (gdt offsets).
- */
-
-/*
- * startprog(phyaddr, argc, argv, stack)
+ * startprog(phyaddr,argc,argv,stack)
  *	start the program on protected mode where phyaddr is the entry point
  */
 ENTRY(startprog)
 	pushl	%ebp
-	movl	%esp,%ebp
+	movl	%esp, %ebp
 
-	/* Prepare a new stack */
-	movl	$flatdataseg,%ebx
-	movw	%bx,%es		/* for arg copy */
-	movl	20(%ebp),%eax	/* stack */
+	# prepare a new stack
+	movl	$flatdataseg, %ebx
+	movw	%bx, %es		# for arg copy
+	movl	20(%ebp), %eax	# stack
 	subl	$4,%eax
-	movl	%eax,%edi
+	movl	%eax, %edi
+	
+	# push some number of args onto the stack
+	movl	12(%ebp), %ecx		# argc
 
-	/* Push some number of args onto the stack */
-	movl	12(%ebp),%ecx	/* argc */
-	movl	%ecx,%eax
+	movl	%ecx, %eax
 	decl	%eax
-	shl	$2,%eax
-	addl	16(%ebp),%eax	/* ptr to last arg */
-	movl	%eax,%esi
+	shl	$2, %eax
+	addl	16(%ebp), %eax	# ptr to last arg
+	movl	%eax, %esi
 
-	std			/* backwards */
+	std			# backwards
 	rep
-	movsl			/* copy %ds:(%esi) -> %es:(%edi) */
+	movsl
 
-	cld
+	cld		# LynxOS depends on it
 
-	movl	8(%ebp),%ecx	/* entry */
+	movl	8(%ebp), %ecx	# entry
 
-	/* Set new stack pointer (movsl decd sp 1 more -> dummy return address) */
-	movw	%bx,%ss
-	movl	%edi,%esp
+	# set new stackptr (movsl decd sp 1 more -> dummy return address)
+	movw	%bx, %ss
+	movl	%edi, %esp
 
-	/* Push on our entry address */
-	movl	$flatcodeseg,%ebx
-	pushl	%ebx			/* code segment */
-	pushl	%ecx			/* phyaddr */
+	# push on our entry address
+	movl	$flatcodeseg, %ebx		# segment
+	pushl	%ebx
+	pushl	%ecx			#entry
 
-	/* Convert over the other data segs */
-	movl	$flatdataseg,%ebx
-	mov	%bx,%ds
-	mov	%bx,%es
+	# convert over the other data segs
+	movl	$flatdataseg, %ebx
+	mov	%bx, %ds
+	mov	%bx, %es
 
-	/* Jump to phyaddr, with the new code segment */
+	# convert the PC (and code seg)
 	lret
-

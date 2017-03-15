@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.8 2016/08/15 22:01:16 mrg Exp $
+#	$NetBSD: Makefile,v 1.5 2011/08/02 09:11:39 mrg Exp $
 
 .include "../Makefile.serverlib"
 .include "../Makefile.servermod"
@@ -6,27 +6,14 @@
 LIB=            randr
 
 .PATH:          ${X11SRCDIR.xorg-server}/randr
-SRCS=  \
-		randr.c \
-		rrcrtc.c \
-		rrdispatch.c \
-		rrinfo.c \
-		rrmode.c \
-		rrmonitor.c \
-		rroutput.c \
-		rrpointer.c \
-		rrproperty.c \
-		rrprovider.c \
-		rrproviderproperty.c \
-		rrscreen.c \
-		rrsdispatch.c \
-		rrtransform.c \
-		rrxinerama.c
+SRCS=           randr.c randrstr.h rrcrtc.c rrdispatch.c \
+		rrinfo.c rrmode.c rroutput.c rrpointer.c rrproperty.c \
+		rrscreen.c rrsdispatch.c rrtransform.c
+SRCS+=		rrxinerama.c
 
 CPPFLAGS+=      -I${DESTDIR}${X11INCDIR}/pixman-1 \
 		-I${DESTDIR}${X11INCDIR}/xorg \
 		-I${X11SRCDIR.xorg-server}/Xext \
-		-I${X11SRCDIR.xorg-server}/include \
 		-I${X11SRCDIR.xorg-server}/../include
 CPPFLAGS+=      ${X11FLAGS.DIX}
 

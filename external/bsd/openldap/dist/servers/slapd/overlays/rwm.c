@@ -1,10 +1,10 @@
-/*	$NetBSD: rwm.c,v 1.1.1.5 2017/02/09 01:47:03 christos Exp $	*/
+/*	$NetBSD: rwm.c,v 1.1.1.4 2014/05/28 09:58:52 tron Exp $	*/
 
 /* rwm.c - rewrite/remap operations */
 /* $OpenLDAP$ */
 /* This work is part of OpenLDAP Software <http://www.openldap.org/>.
  *
- * Copyright 2003-2016 The OpenLDAP Foundation.
+ * Copyright 2003-2014 The OpenLDAP Foundation.
  * Portions Copyright 2003 Pierangelo Masarati.
  * All rights reserved.
  *
@@ -16,9 +16,6 @@
  * top-level directory of the distribution or, alternatively, at
  * <http://www.OpenLDAP.org/license.html>.
  */
-
-#include <sys/cdefs.h>
-__RCSID("$NetBSD: rwm.c,v 1.1.1.5 2017/02/09 01:47:03 christos Exp $");
 
 #include "portable.h"
 
@@ -183,7 +180,7 @@ rwm_callback_get( Operation *op )
 {
 	rwm_op_cb	*roc;
 
-	roc = op->o_tmpcalloc( 1, sizeof( struct rwm_op_cb ), op->o_tmpmemctx );
+	roc = op->o_tmpalloc( sizeof( struct rwm_op_cb ), op->o_tmpmemctx );
 	roc->cb.sc_cleanup = rwm_op_cleanup;
 	roc->cb.sc_response = NULL;
 	roc->cb.sc_next = op->o_callback;
@@ -1959,8 +1956,7 @@ static ConfigOCs rwmocs[] = {
 			"olcRwmRewrite $ "
 			"olcRwmTFSupport $ "
 			"olcRwmMap $ "
-			"olcRwmNormalizeMapped $ "
-			"olcRwmDropUnrequested"
+			"olcRwmNormalizeMapped "
 			") )",
 		Cft_Overlay, rwmcfg, NULL, NULL },
 	{ NULL, 0, NULL }
@@ -2184,12 +2180,8 @@ rwm_cf_gen( ConfigArgs *c )
 
 					ca.line = rwmap->rwm_bva_rewrite[ i ].bv_val;
 					ca.argc = 0;
-					init_config_argv( &ca );
-					config_parse_ldif( &ca );
-
-					argv0 = ca.argv[ 0 ];
-					ca.argv[ 0 ] += STRLENOF( "rwm-" );
-
+					config_fp_parse_line( &ca );
+					
 					if ( strcasecmp( ca.argv[ 0 ], "suffixmassage" ) == 0 ) {
 						rc = rwm_suffixmassage_config( &db, c->fname, c->lineno,
 							ca.argc, ca.argv );
@@ -2198,8 +2190,6 @@ rwm_cf_gen( ConfigArgs *c )
 						rc = rwm_rw_config( &db, c->fname, c->lineno,
 							ca.argc, ca.argv );
 					}
-
-					ca.argv[ 0 ] = argv0;
 
 					ch_free( ca.tline );
 					ch_free( ca.argv );
@@ -2254,8 +2244,7 @@ rwm_cf_gen( ConfigArgs *c )
 
 					ca.line = rwmap->rwm_bva_map[ cnt ].bv_val;
 					ca.argc = 0;
-					init_config_argv( &ca );
-					config_parse_ldif( &ca );
+					config_fp_parse_line( &ca );
 					
 					argv[1] = ca.argv[0];
 					argv[2] = ca.argv[1];
@@ -2349,8 +2338,7 @@ rwm_cf_gen( ConfigArgs *c )
 
 				ca.line = rwmap->rwm_bva_rewrite[ i ].bv_val;
 				ca.argc = 0;
-				init_config_argv( &ca );
-				config_parse_ldif( &ca );
+				config_fp_parse_line( &ca );
 
 				argv0 = ca.argv[ 0 ];
 				ca.argv[ 0 ] += STRLENOF( "rwm-" );
@@ -2400,8 +2388,7 @@ rwm_cf_gen( ConfigArgs *c )
 
 				ca.line = rwmap->rwm_bva_rewrite[ i ].bv_val;
 				ca.argc = 0;
-				init_config_argv( &ca );
-				config_parse_ldif( &ca );
+				config_fp_parse_line( &ca );
 				
 				argv0 = ca.argv[ 0 ];
 				ca.argv[ 0 ] += STRLENOF( "rwm-" );
@@ -2500,8 +2487,7 @@ rwm_cf_gen( ConfigArgs *c )
 
 				ca.line = rwmap->rwm_bva_map[ cnt ].bv_val;
 				ca.argc = 0;
-				init_config_argv( &ca );
-				config_parse_ldif( &ca );
+				config_fp_parse_line( &ca );
 
 				argv[1] = ca.argv[0];
 				argv[2] = ca.argv[1];
@@ -2534,8 +2520,7 @@ rwm_cf_gen( ConfigArgs *c )
 
 					ca.line = rwmap->rwm_bva_map[ cnt ].bv_val;
 					ca.argc = 0;
-					init_config_argv( &ca );
-					config_parse_ldif( &ca );
+					config_fp_parse_line( &ca );
 			
 					argv[1] = ca.argv[0];
 					argv[2] = ca.argv[1];

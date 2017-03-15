@@ -1,4 +1,4 @@
-/*	$NetBSD: msdosfs_vnops.c,v 1.18 2017/02/16 18:50:05 christos Exp $ */
+/*	$NetBSD: msdosfs_vnops.c,v 1.15 2013/10/19 17:16:37 christos Exp $ */
 
 /*-
  * Copyright (C) 1994, 1995, 1997 Wolfgang Solfrank.
@@ -51,7 +51,7 @@
 #endif
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: msdosfs_vnops.c,v 1.18 2017/02/16 18:50:05 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: msdosfs_vnops.c,v 1.15 2013/10/19 17:16:37 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/mman.h>
@@ -98,20 +98,12 @@ static void
 msdosfs_times(struct msdosfsmount *pmp, struct denode *dep,
     const struct stat *st)
 {
-	struct timespec at;
-	struct timespec mt;
-
-	if (stampst.st_ino) 
-	    st = &stampst;
-
 #ifndef HAVE_NBTOOL_CONFIG_H
-	at = st->st_atimespec;
-	mt = st->st_mtimespec;
+	struct timespec at = st->st_atimespec;
+	struct timespec mt = st->st_mtimespec;
 #else
-	at.tv_sec = st->st_atime;
-	at.tv_nsec = 0;
-	mt.tv_sec = st->st_mtime;
-	mt.tv_nsec = 0;
+	struct timespec at = { st->st_atime, 0 };
+	struct timespec mt = { st->st_mtime, 0 };
 #endif
 	unix2dostime(&at, pmp->pm_gmtoff, &dep->de_ADate, NULL, NULL);
 	unix2dostime(&mt, pmp->pm_gmtoff, &dep->de_MDate, &dep->de_MTime, NULL);
@@ -162,12 +154,12 @@ msdosfs_findslot(struct denode *dp, struct componentname *cnp)
 		break;
 	case 2:
 		wincnt = winSlotCnt((const u_char *)cnp->cn_nameptr,
-		    cnp->cn_namelen, pmp->pm_flags & MSDOSFSMNT_UTF8) + 1;
+		    cnp->cn_namelen) + 1;
 		break;
 	case 3:
 		olddos = 0;
 		wincnt = winSlotCnt((const u_char *)cnp->cn_nameptr,
-		    cnp->cn_namelen, pmp->pm_flags & MSDOSFSMNT_UTF8) + 1;
+		    cnp->cn_namelen) + 1;
 		break;
 	}
 
@@ -200,7 +192,7 @@ msdosfs_findslot(struct denode *dp, struct componentname *cnp)
 				break;
 			return (error);
 		}
-		error = bread(pmp->pm_devvp, de_bn2kb(pmp, bn), blsize,
+		error = bread(pmp->pm_devvp, de_bn2kb(pmp, bn), blsize, NOCRED,
 		    0, &bp);
 		if (error) {
 			return (error);
@@ -251,8 +243,7 @@ msdosfs_findslot(struct denode *dp, struct componentname *cnp)
 					chksum = winChkName((const u_char *)cnp->cn_nameptr,
 							    cnp->cn_namelen,
 							    (struct winentry *)dep,
-							    chksum,
-							    pmp->pm_flags & MSDOSFSMNT_UTF8);
+							    chksum);
 					continue;
 				}
 
@@ -492,7 +483,7 @@ msdosfs_wfile(const char *path, struct denode *dep, fsnode *node)
 		    cn, (unsigned long long)bn,
 		    (unsigned long long)de_bn2kb(pmp, bn), blsize));
 		if ((error = bread(pmp->pm_devvp, de_bn2kb(pmp, bn), blsize,
-		    0, &bp)) != 0) {
+		    NULL, 0, &bp)) != 0) {
 			DPRINTF(("bread %d\n", error));
 			goto out;
 		} 

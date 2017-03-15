@@ -1,4 +1,4 @@
-/*	$NetBSD: crash.c,v 1.11 2017/01/10 20:57:26 christos Exp $	*/
+/*	$NetBSD: crash.c,v 1.5 2013/03/10 19:32:29 christos Exp $	*/
 
 /*-
  * Copyright (c) 2009 The NetBSD Foundation, Inc.
@@ -31,14 +31,13 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: crash.c,v 1.11 2017/01/10 20:57:26 christos Exp $");
+__RCSID("$NetBSD: crash.c,v 1.5 2013/03/10 19:32:29 christos Exp $");
 #endif /* not lint */
 
 #include <ddb/ddb.h>
 
 #include <sys/fcntl.h>
 #include <sys/mman.h>
-#include <sys/stat.h>
 #include <sys/ioctl.h>
 
 #include <machine/frame.h>
@@ -307,9 +306,9 @@ usage(void)
 {
 
 	fprintf(stderr,
-	    "usage: %s [-w] [-M core] [-N kernel]\n\n"
-	    "-M core\tspecify memory file (default /dev/mem)\n"
-	    "-N kernel\tspecify name list file (default /dev/ksyms)\n",
+	    "usage: %s [options]\n\n"
+	    "-M mem\tspecify memory file\n"
+	    "-N nlist\tspecify name list file (default /dev/ksyms)\n",
 	    getprogname());
 	exit(EXIT_FAILURE);
 }
@@ -330,29 +329,25 @@ main(int argc, char **argv)
 	struct stat sb;
 	size_t sz;
 	void *elf;
-	int fd, ch, flags;
+	int fd, ch;
 	char c;
 
 	nlistf = _PATH_KSYMS;
 	memf = _PATH_MEM;
 	ofp = stdout;
-	flags = O_RDONLY;
 
 	setprogname(argv[0]);
 
 	/*
 	 * Parse options.
 	 */
-	while ((ch = getopt(argc, argv, "M:N:w")) != -1) {
+	while ((ch = getopt(argc, argv, "M:N:")) != -1) {
 		switch (ch) {
 		case 'M':
 			memf = optarg;
 			break;
 		case 'N':
 			nlistf = optarg;
-			break;
-		case 'w':
-			flags = O_RDWR;
 			break;
 		default:
 			usage();
@@ -369,7 +364,7 @@ main(int argc, char **argv)
 	/*
 	 * Open the images (crash dump and symbol table).
 	 */
-	kd = kvm_open(nlistf, memf, NULL, flags, getprogname());
+	kd = kvm_open(nlistf, memf, NULL, O_RDONLY, getprogname());
 	if (kd == NULL) {
 		return EXIT_FAILURE;
 	}

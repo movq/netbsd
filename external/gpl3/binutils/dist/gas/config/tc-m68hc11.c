@@ -1,5 +1,7 @@
 /* tc-m68hc11.c -- Assembler code for the Motorola 68HC11 & 68HC12.
-   Copyright (C) 1999-2016 Free Software Foundation, Inc.
+   Copyright 1999, 2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2009, 2010,
+   2011, 2012
+   Free Software Foundation, Inc.
    Written by Stephane Carrez (stcarrez@nerim.fr)
    XGATE and S12X added by James Murray (jsm@jsm-net.demon.co.uk)
 
@@ -490,7 +492,7 @@ m68hc11_print_statistics (FILE *file)
 }
 
 int
-md_parse_option (int c, const char *arg)
+md_parse_option (int c, char *arg)
 {
   get_default_target ();
   switch (c)
@@ -574,7 +576,7 @@ md_undefined_symbol (char *name ATTRIBUTE_UNUSED)
   return 0;
 }
 
-const char *
+char *
 md_atof (int type, char *litP, int *sizeP)
 {
   return ieee_md_atof (type, litP, sizeP, TRUE);
@@ -584,7 +586,7 @@ valueT
 md_section_align (asection *seg, valueT addr)
 {
   int align = bfd_get_section_alignment (stdoutput, seg);
-  return ((addr + (1 << align) - 1) & -(1 << align));
+  return ((addr + (1 << align) - 1) & (-1 << align));
 }
 
 static int
@@ -603,7 +605,7 @@ cmp_opcode (struct m68hc11_opcode *op1, struct m68hc11_opcode *op2)
 void
 md_begin (void)
 {
-  const char *prev_name = "";
+  char *prev_name = "";
   struct m68hc11_opcode *opcodes;
   struct m68hc11_opcode_def *opc = 0;
   int i, j;
@@ -613,7 +615,9 @@ md_begin (void)
   m68hc11_hash = hash_new ();
 
   /* Get a writable copy of the opcode table and sort it on the names.  */
-  opcodes = XNEWVEC (struct m68hc11_opcode, m68hc11_num_opcodes);
+  opcodes = (struct m68hc11_opcode *) xmalloc (m68hc11_num_opcodes *
+					       sizeof (struct
+						       m68hc11_opcode));
   m68hc11_sorted_opcodes = opcodes;
   num_opcodes = 0;
   for (i = 0; i < m68hc11_num_opcodes; i++)
@@ -642,7 +646,8 @@ md_begin (void)
   qsort (opcodes, num_opcodes, sizeof (struct m68hc11_opcode),
          (int (*) (const void*, const void*)) cmp_opcode);
 
-  opc = XNEWVEC (struct m68hc11_opcode_def, num_opcodes);
+  opc = (struct m68hc11_opcode_def *)
+    xmalloc (num_opcodes * sizeof (struct m68hc11_opcode_def));
   m68hc11_opcode_defs = opc--;
 
   /* Insert unique names into hash table.  The M6811 instruction set
@@ -961,7 +966,7 @@ static void
 print_opcode_list (void)
 {
   int i;
-  const char *prev_name = "";
+  char *prev_name = "";
   struct m68hc11_opcode *opcodes;
   int example = flag_print_opcodes == 2;
 
@@ -1598,13 +1603,16 @@ fixup8 (expressionS *oper, int mode, int opmode)
 
       if (mode == M6811_OP_JUMP_REL)
 	{
-	  fix_new_exp (frag_now, f - frag_now->fr_literal, 1,
-		       oper, TRUE, BFD_RELOC_8_PCREL);
+	  fixS *fixp;
+
+	  fixp = fix_new_exp (frag_now, f - frag_now->fr_literal, 1,
+			      oper, TRUE, BFD_RELOC_8_PCREL);
+	  fixp->fx_pcrel_adjust = 1;
 	}
       else
 	{
 	  fixS *fixp;
-          bfd_reloc_code_real_type reloc;
+          int reloc;
 
 	  /* Now create an 8-bit fixup.  If there was some %hi, %lo
 	     or %page modifier, generate the reloc accordingly.  */
@@ -1651,7 +1659,7 @@ fixup16 (expressionS *oper, int mode, int opmode ATTRIBUTE_UNUSED)
   else if (oper->X_op != O_register)
     {
       fixS *fixp;
-      bfd_reloc_code_real_type reloc;
+      int reloc;
 
       if ((opmode & M6811_OP_CALL_ADDR) && (mode & M6811_OP_IMM16))
         reloc = BFD_RELOC_M68HC11_LO16;
@@ -1668,7 +1676,8 @@ fixup16 (expressionS *oper, int mode, int opmode ATTRIBUTE_UNUSED)
 			  reloc == BFD_RELOC_16_PCREL,
                           reloc);
       number_to_chars_bigendian (f, 0, 2);
-
+      if (reloc == BFD_RELOC_16_PCREL)
+	fixp->fx_pcrel_adjust = 2;
       if (reloc == BFD_RELOC_M68HC11_LO16)
         fixp->fx_no_overflow = 1;
     }
@@ -1721,7 +1730,7 @@ fixup8_xg (expressionS *oper, int mode, int opmode)
   if (oper->X_op == O_constant)
     {
       fixS *fixp;
-      bfd_reloc_code_real_type reloc;
+      int reloc;
 
       if ((opmode & M6811_OP_HIGH_ADDR) || (opmode & M6811_OP_LOW_ADDR))
         {
@@ -1747,22 +1756,28 @@ fixup8_xg (expressionS *oper, int mode, int opmode)
     {
       if (mode == M68XG_OP_REL9)
         {
+          fixS *fixp;
+
           /* Future improvement:
 	     This fixup/reloc isn't adding on constants to symbols.  */
-          fix_new_exp (frag_now, f - frag_now->fr_literal -1, 2,
-		       oper, TRUE, BFD_RELOC_M68HC12_9_PCREL);
+          fixp = fix_new_exp (frag_now, f - frag_now->fr_literal -1, 2,
+			      oper, TRUE, BFD_RELOC_M68HC12_9_PCREL);
+          fixp->fx_pcrel_adjust = 1;
       	}
       else if (mode == M68XG_OP_REL10)
         {
+          fixS *fixp;
+
           /* Future improvement:
 	     This fixup/reloc isn't adding on constants to symbols.  */
-          fix_new_exp (frag_now, f - frag_now->fr_literal -1, 2,
-    	               oper, TRUE, BFD_RELOC_M68HC12_10_PCREL);
+          fixp = fix_new_exp (frag_now, f - frag_now->fr_literal -1, 2,
+    	      oper, TRUE, BFD_RELOC_M68HC12_10_PCREL);
+          fixp->fx_pcrel_adjust = 1;
         }
       else
         {
           fixS *fixp;
-          bfd_reloc_code_real_type reloc;
+          int reloc;
 
           /* Now create an 8-bit fixup.  If there was some %hi, %lo
              modifier, generate the reloc accordingly.  */
@@ -2138,8 +2153,8 @@ build_indexed_byte (operand *op, int format ATTRIBUTE_UNUSED, int move_insn)
 	  if (!check_range (val, M6812_OP_IDX))
 	    as_bad (_("Offset out of 16-bit range: %ld."), val);
 
-	  if (move_insn && !(val >= -16 && val <= 15)
-	      && ((!(mode & M6812_OP_IDX) && !(mode & M6812_OP_D_IDX_2))
+	  if (move_insn && !(val >= -16 && val <= 15) 
+	      && ((!(mode & M6812_OP_IDX) && !(mode & M6812_OP_D_IDX_2)) 
 		  || !(current_architecture & cpu9s12x)))
 	    {
 	      as_bad (_("Offset out of 5-bit range for movw/movb insn: %ld."),
@@ -2417,7 +2432,7 @@ build_insn_xg (struct m68hc11_opcode *opcode,
       f = m68hc11_new_insn (1);
       number_to_chars_bigendian (f, opcode->opcode >> 8, 1); /* High byte.  */
       fixup8_xg (&operands[0].exp, format, M68XG_OP_REL9);
-    }
+    } 
   else if (format & M68XG_OP_REL10)
     {
       f = m68hc11_new_insn (1);
@@ -2946,7 +2961,7 @@ md_assemble (char *str)
 		}
 	      else
 		as_bad ("No opcode found\n");
-
+              
               return;
             }
           else
@@ -2970,7 +2985,7 @@ md_assemble (char *str)
               	{
 		  opcode_local.opcode |= (operands[0].exp.X_add_number);
 		  operands[0].mode = M68XG_OP_IMM3;
-
+  
 		  opcode = find (opc, operands, 1);
                   if (opcode)
                     {
@@ -3064,7 +3079,7 @@ md_assemble (char *str)
 
       if (opc->format & (M68XG_OP_REL9 | M68XG_OP_REL10))
         {
-          opcode_local.format = opc->format;
+          opcode_local.format = opc->format; 
           input_line_pointer = skip_whites (input_line_pointer);
           expression (&operands[0].exp);
           if (operands[0].exp.X_op == O_illegal)
@@ -3090,12 +3105,12 @@ md_assemble (char *str)
       if ((*input_line_pointer == '\n') || (*input_line_pointer == '\r')
           || (*input_line_pointer == '\0'))
         return; /* nothing left */
-
+      
       if (*input_line_pointer == '#')
         {
           as_bad ("No register specified before hash\n");
           return;
-        }
+        } 
 
       /* first operand is expected to be a register */
       if ((*input_line_pointer == 'R') || (*input_line_pointer == 'r'))
@@ -3162,12 +3177,12 @@ md_assemble (char *str)
                   if (opcode)
 		    opcode_local.opcode = opcode->opcode
 		      | (operands[0].reg1 << 8);
-
+                  
                   if (operands[0].exp.X_op != O_constant)
                     as_bad ("Only constants supported at for IMM4 mode\n");
                   else
                     {
-                      if (check_range
+                      if (check_range 
                           (operands[0].exp.X_add_number,M68XG_OP_R_IMM4))
                         opcode_local.opcode
 			  |= (operands[0].exp.X_add_number << 4);
@@ -3223,7 +3238,7 @@ md_assemble (char *str)
                              com RD, RS alias for xnor RD,R0,RS
                              mov RD, RS alias for or RD, R0, RS
                              neg RD, RS alias for sub RD, R0, RS */
-                          opcode_local.opcode = opcode->opcode
+                          opcode_local.opcode = opcode->opcode 
                             | (operands[0].reg1 << 8) | (operands[1].reg1 << 2);
                         }
                       else if ((strncmp (opc->opcode->name, "cmp",3) == 0)
@@ -3232,7 +3247,7 @@ md_assemble (char *str)
                           /* special cases for:
                              cmp RS1, RS2 alias for sub R0, RS1, RS2
                              cpc RS1, RS2 alias for sbc R0, RS1, RS2 */
-                          opcode_local.opcode = opcode->opcode
+                          opcode_local.opcode = opcode->opcode 
 			    | (operands[0].reg1 << 5) | (operands[1].reg1 << 2);
                         }
                       else
@@ -3274,7 +3289,7 @@ md_assemble (char *str)
                       opcode = find (opc, operands, 1);
                       if (opcode)
                         {
-                          opcode_local.opcode = opcode->opcode
+                          opcode_local.opcode = opcode->opcode 
                             | (operands[0].reg1 << 8) | (operands[1].reg1 << 5)
                             | (operands[2].reg1 << 2);
                           opcode_local.format = M68XG_OP_NONE;
@@ -3311,7 +3326,7 @@ md_assemble (char *str)
                 }
 
               input_line_pointer = skip_whites (input_line_pointer);
-
+              
               if (*input_line_pointer != ',')
                 {
                   as_bad (_("Missing operand."));
@@ -3346,7 +3361,7 @@ md_assemble (char *str)
                     {
                       input_line_pointer++;
                     }
-
+                      
                   /* Ok so far, can only be one mode. */
                   opcode_local.format = M68XG_OP_R_R_OFFS5;
                   operands[0].mode = M68XG_OP_R_R_OFFS5;
@@ -3757,9 +3772,10 @@ s_m68hc11_mark_symbol (int mark)
 
   do
     {
-      c = get_symbol_name (&name);
+      name = input_line_pointer;
+      c = get_symbol_end ();
       symbolP = symbol_find_or_make (name);
-      (void) restore_line_pointer (c);
+      *input_line_pointer = c;
 
       SKIP_WHITESPACE ();
 
@@ -3828,8 +3844,8 @@ tc_gen_reloc (asection *section ATTRIBUTE_UNUSED, fixS *fixp)
 {
   arelent *reloc;
 
-  reloc = XNEW (arelent);
-  reloc->sym_ptr_ptr = XNEW (asymbol *);
+  reloc = (arelent *) xmalloc (sizeof (arelent));
+  reloc->sym_ptr_ptr = (asymbol **) xmalloc (sizeof (asymbol *));
   *reloc->sym_ptr_ptr = symbol_get_bfdsym (fixp->fx_addsy);
   reloc->address = fixp->fx_frag->fr_address + fixp->fx_where;
   if (fixp->fx_r_type == 0)
@@ -3949,12 +3965,13 @@ void
 md_convert_frag (bfd *abfd ATTRIBUTE_UNUSED, asection *sec ATTRIBUTE_UNUSED,
                  fragS *fragP)
 {
+  fixS *fixp;
   long value;
   long disp;
   char *buffer_address = fragP->fr_literal;
 
   /* Address in object code of the displacement.  */
-  int object_address = fragP->fr_fix + fragP->fr_address;
+  register int object_address = fragP->fr_fix + fragP->fr_address;
 
   buffer_address += fragP->fr_fix;
 
@@ -4001,9 +4018,10 @@ md_convert_frag (bfd *abfd ATTRIBUTE_UNUSED, asection *sec ATTRIBUTE_UNUSED,
       fragP->fr_opcode[1] = fragP->fr_opcode[0];
       fragP->fr_opcode[0] = M6811_OPCODE_PAGE2;
 
-      fix_new (fragP, fragP->fr_fix, 2,
-	       fragP->fr_symbol, fragP->fr_offset, 1,
+      fixp = fix_new (fragP, fragP->fr_fix, 2,
+		      fragP->fr_symbol, fragP->fr_offset, 1,
 		      BFD_RELOC_16_PCREL);
+      fixp->fx_pcrel_adjust = 2;
       fragP->fr_fix += 2;
       break;
 
@@ -4042,9 +4060,9 @@ md_convert_frag (bfd *abfd ATTRIBUTE_UNUSED, asection *sec ATTRIBUTE_UNUSED,
           && fragP->fr_symbol != 0
           && S_GET_SEGMENT (fragP->fr_symbol) != absolute_section)
 	{
-	  fix_new (fragP, fragP->fr_fix, 2,
-	           fragP->fr_symbol, fragP->fr_offset,
-		   1, BFD_RELOC_16_PCREL);
+	  fixp = fix_new (fragP, fragP->fr_fix, 2,
+			  fragP->fr_symbol, fragP->fr_offset,
+			  1, BFD_RELOC_16_PCREL);
 	}
       else
 	{
@@ -4429,7 +4447,7 @@ md_apply_fix (fixS *fixP, valueT *valP, segT seg ATTRIBUTE_UNUSED)
 		      value);
       if (value >= 0)
 	where[0] |= value;
-      else
+      else 
 	where[0] |= (0x10 | (16 + value));
       break;
 
@@ -4441,7 +4459,7 @@ md_apply_fix (fixS *fixP, valueT *valP, segT seg ATTRIBUTE_UNUSED)
         /* sign bit already in xb postbyte */
       if (value >= 0)
         where[1] = value;
-      else
+      else 
         where[1] = (256 + value);
       break;
 

@@ -1,4 +1,4 @@
-	$NetBSD: prep.RISCOS,v 1.23 2015/05/09 08:13:34 snj Exp $
+	$NetBSD: prep.RISCOS,v 1.22.26.1 2015/05/24 11:14:42 martin Exp $
 
 These instructions are specific to NetBSD/acorn32 on Acorn RISC OS platforms
 (RiscPC/A7000/A7000+/NC).

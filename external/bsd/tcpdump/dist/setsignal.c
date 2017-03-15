@@ -21,7 +21,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: setsignal.c,v 1.6 2017/01/24 23:29:14 christos Exp $");
+__RCSID("$NetBSD: setsignal.c,v 1.4.4.1 2017/02/19 05:01:16 snj Exp $");
 #endif
 
 #ifdef HAVE_CONFIG_H

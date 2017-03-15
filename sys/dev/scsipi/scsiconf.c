@@ -1,4 +1,4 @@
-/*	$NetBSD: scsiconf.c,v 1.278 2016/12/01 15:39:02 mlelstv Exp $	*/
+/*	$NetBSD: scsiconf.c,v 1.273 2014/07/25 08:10:38 dholland Exp $	*/
 
 /*-
  * Copyright (c) 1998, 1999, 2004 The NetBSD Foundation, Inc.
@@ -48,7 +48,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: scsiconf.c,v 1.278 2016/12/01 15:39:02 mlelstv Exp $");
+__KERNEL_RCSID(0, "$NetBSD: scsiconf.c,v 1.273 2014/07/25 08:10:38 dholland Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -63,7 +63,6 @@ __KERNEL_RCSID(0, "$NetBSD: scsiconf.c,v 1.278 2016/12/01 15:39:02 mlelstv Exp $
 #include <sys/fcntl.h>
 #include <sys/scsiio.h>
 #include <sys/queue.h>
-#include <sys/atomic.h>
 
 #include <dev/scsipi/scsi_all.h>
 #include <dev/scsipi/scsipi_all.h>
@@ -118,12 +117,11 @@ const struct cdevsw scsibus_cdevsw = {
 	.d_mmap = nommap,
 	.d_kqfilter = nokqfilter,
 	.d_discard = nodiscard,
-	.d_flag = D_OTHER | D_MPSAFE
+	.d_flag = D_OTHER
 };
 
 static int	scsibusprint(void *, const char *);
-static void	scsibus_discover_thread(void *);
-static void	scsibus_config(struct scsibus_softc *);
+static void	scsibus_config(struct scsipi_channel *, void *);
 
 const struct scsipi_bustype scsi_bustype = {
 	SCSIPI_BUSTYPE_BUSTYPE(SCSIPI_BUSTYPE_SCSI, SCSIPI_BUSTYPE_SCSI_PSCSI),
@@ -241,21 +239,14 @@ scsibusattach(device_t parent, device_t self, void *aux)
 			chan->chan_adapter->adapt_max_periph = 256;
 	}
 
-	if (atomic_inc_uint_nv(&chan_running(chan)) == 1)
-		mutex_init(chan_mtx(chan), MUTEX_DEFAULT, IPL_BIO);
-
-	cv_init(&chan->chan_cv_thr, "scshut");
-	cv_init(&chan->chan_cv_comp, "sccomp");
-	cv_init(&chan->chan_cv_xs, "xscmd");
-
 	if (scsipi_adapter_addref(chan->chan_adapter))
 		return;
 
 	RUN_ONCE(&scsi_conf_ctrl, scsibus_init);
 
 	/* Initialize the channel structure first */
-	chan->chan_init_cb = NULL;
-	chan->chan_init_cb_arg = NULL;
+	chan->chan_init_cb = scsibus_config;
+	chan->chan_init_cb_arg = sc;
 
 	scsi_initq = malloc(sizeof(struct scsi_initq), M_DEVBUF, M_WAITOK);
 	scsi_initq->sc_channel = chan;
@@ -265,31 +256,12 @@ scsibusattach(device_t parent, device_t self, void *aux)
 		aprint_error_dev(sc->sc_dev, "failed to init channel\n");
 		return;
 	}
-
-        /*
-         * Create the discover thread
-         */
-        if (kthread_create(PRI_NONE, 0, NULL, scsibus_discover_thread, sc,
-            NULL, "%s-d", chan->chan_name)) {
-                aprint_error_dev(sc->sc_dev, "unable to create discovery "
-		    "thread for channel %d\n", chan->chan_channel);
-                return;
-        }
 }
 
 static void
-scsibus_discover_thread(void *arg)
+scsibus_config(struct scsipi_channel *chan, void *arg)
 {
 	struct scsibus_softc *sc = arg;
-
-	scsibus_config(sc);
-	kthread_exit(0);
-}
-
-static void
-scsibus_config(struct scsibus_softc *sc)
-{
-	struct scsipi_channel *chan = sc->sc_channel;
 	struct scsi_initq *scsi_initq;
 
 #ifndef SCSI_DELAY
@@ -301,7 +273,8 @@ scsibus_config(struct scsibus_softc *sc)
 		    "waiting %d seconds for devices to settle...\n",
 		    SCSI_DELAY);
 		/* ...an identifier we know no one will use... */
-		kpause("scsidly", false, SCSI_DELAY * hz, NULL);
+		(void) tsleep(scsibus_config, PRIBIO,
+		    "scsidly", SCSI_DELAY * hz);
 	}
 
 	/* Make sure the devices probe in scsibus order to avoid jitter. */
@@ -338,11 +311,18 @@ scsibusdetach(device_t self, int flags)
 	struct scsipi_xfer *xs;
 	int error;
 
+	/* XXXSMP scsipi */
+	KERNEL_LOCK(1, curlwp);
+
 	/*
 	 * Detach all of the periphs.
 	 */
-	if ((error = scsipi_target_detach(chan, -1, -1, flags)) != 0)
+	if ((error = scsipi_target_detach(chan, -1, -1, flags)) != 0) {
+		/* XXXSMP scsipi */
+		KERNEL_UNLOCK_ONE(curlwp);
+
 		return error;
+	}
 
 	pmf_device_deregister(self);
 
@@ -373,12 +353,8 @@ scsibusdetach(device_t self, int flags)
 	 */
 	scsipi_channel_shutdown(chan);
 
-	cv_destroy(&chan->chan_cv_xs);
-	cv_destroy(&chan->chan_cv_comp);
-	cv_destroy(&chan->chan_cv_thr);
-
-	if (atomic_dec_uint_nv(&chan_running(chan)) == 0)
-		mutex_destroy(chan_mtx(chan));
+	/* XXXSMP scsipi */
+	KERNEL_UNLOCK_ONE(curlwp);
 
 	return 0;
 }
@@ -393,6 +369,9 @@ scsi_probe_bus(struct scsibus_softc *sc, int target, int lun)
 	struct scsipi_channel *chan = sc->sc_channel;
 	int maxtarget, mintarget, maxlun, minlun;
 	int error;
+
+	/* XXXSMP scsipi */
+	KERNEL_LOCK(1, curlwp);
 
 	if (target == -1) {
 		maxtarget = chan->chan_ntargets - 1;
@@ -416,7 +395,9 @@ scsi_probe_bus(struct scsibus_softc *sc, int target, int lun)
 	 * Some HBAs provide an abstracted view of the bus; give them an
 	 * oppertunity to re-scan it before we do.
 	 */
-	scsipi_adapter_ioctl(chan, SCBUSIOLLSCAN, NULL, 0, curproc);
+	if (chan->chan_adapter->adapt_ioctl != NULL)
+		(*chan->chan_adapter->adapt_ioctl)(chan, SCBUSIOLLSCAN, NULL,
+		    0, curproc);
 
 	if ((error = scsipi_adapter_addref(chan->chan_adapter)) != 0)
 		goto ret;
@@ -441,6 +422,7 @@ scsi_probe_bus(struct scsibus_softc *sc, int target, int lun)
 	}
 	scsipi_adapter_delref(chan->chan_adapter);
 ret:
+	KERNEL_UNLOCK_ONE(curlwp);
 	return (error);
 }
 
@@ -467,15 +449,17 @@ scsidevdetached(device_t self, device_t child)
 	target = device_locator(child, SCSIBUSCF_TARGET);
 	lun = device_locator(child, SCSIBUSCF_LUN);
 
-	mutex_enter(chan_mtx(chan));
+	/* XXXSMP scsipi */
+	KERNEL_LOCK(1, curlwp);
 
-	periph = scsipi_lookup_periph_locked(chan, target, lun);
-	KASSERT(periph != NULL && periph->periph_dev == child);
+	periph = scsipi_lookup_periph(chan, target, lun);
+	KASSERT(periph->periph_dev == child);
 
 	scsipi_remove_periph(chan, periph);
-	scsipi_free_periph(periph);
+	free(periph, M_DEVBUF);
 
-	mutex_exit(chan_mtx(chan));
+	/* XXXSMP scsipi */
+	KERNEL_UNLOCK_ONE(curlwp);
 }
 
 /*
@@ -509,12 +493,9 @@ scsibusprint(void *aux, const char *pnp)
 
 	dtype = scsipi_dtype(type);
 
-	strnvisx(vendor, sizeof(vendor), inqbuf->vendor, 8,
-	    VIS_TRIM|VIS_SAFE|VIS_OCTAL);
-	strnvisx(product, sizeof(product), inqbuf->product, 16,
-	    VIS_TRIM|VIS_SAFE|VIS_OCTAL);
-	strnvisx(revision, sizeof(revision), inqbuf->revision, 4,
-	    VIS_TRIM|VIS_SAFE|VIS_OCTAL);
+	scsipi_strvis(vendor, 33, inqbuf->vendor, 8);
+	scsipi_strvis(product, 65, inqbuf->product, 16);
+	scsipi_strvis(revision, 17, inqbuf->revision, 4);
 
 	aprint_normal(" target %d lun %d: <%s, %s, %s> %s %s",
 	    target, lun, vendor, product, revision, dtype,
@@ -1040,7 +1021,7 @@ scsi_probe_device(struct scsibus_softc *sc, int target, int lun)
 	return (docontinue);
 
 bad:
-	scsipi_free_periph(periph);
+	free(periph, M_DEVBUF);
 	return (docontinue);
 }
 
@@ -1128,7 +1109,11 @@ scsibusioctl(dev_t dev, u_long cmd, void *addr, int flag, struct lwp *l)
 	case SCBUSIORESET:
 		/* FALLTHROUGH */
 	default:
-		error = scsipi_adapter_ioctl(chan, cmd, addr, flag, l->l_proc);
+		if (chan->chan_adapter->adapt_ioctl == NULL)
+			error = ENOTTY;
+		else
+			error = (*chan->chan_adapter->adapt_ioctl)(chan,
+			    cmd, addr, flag, l->l_proc);
 		break;
 	}
 

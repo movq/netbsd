@@ -11,6 +11,7 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "llvm/Support/Compiler.h"
 #include "clang/AST/ASTContext.h"
 #include "clang/AST/ASTVector.h"
 #include "clang/Basic/Builtins.h"

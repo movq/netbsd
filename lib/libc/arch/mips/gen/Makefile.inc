@@ -1,9 +1,9 @@
-#	$NetBSD: Makefile.inc,v 1.35 2016/10/07 11:10:44 christos Exp $
+#	$NetBSD: Makefile.inc,v 1.33 2011/03/15 07:40:18 matt Exp $
 
 .if ${MKSOFTFLOAT} == "no"
 SRCS+=	fabs.S ldexp.S modf.S
 .else
-SRCS+=	fabs_ieee754.c compat_ldexp_ieee754.c compat_modf_ieee754.c
+SRCS+=	fabs_ieee754.c ldexp_ieee754.c modf_ieee754.c
 .endif
 
 # Common ieee754 constants and functions
@@ -33,7 +33,6 @@ SRCS+=	makecontext.c resumecontext.c _resumecontext.S swapcontext.S _lwp.c
 SRCS+=	cacheflush.c
 
 CPPFLAGS._lwp.c	+= -D_LIBC_SOURCE
-CPPFLAGS.cacheflush.c	+= -D_KERNTYPES
 
 LSRCS.mips.gen=	Lint__setjmp.c Lint_bswap16.c Lint_bswap32.c Lint_swapcontext.c
 LSRCS+=		${LSRCS.mips.gen}

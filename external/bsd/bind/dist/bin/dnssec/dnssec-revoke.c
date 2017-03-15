@@ -1,4 +1,4 @@
-/*	$NetBSD: dnssec-revoke.c,v 1.10 2016/05/26 16:49:55 christos Exp $	*/
+/*	$NetBSD: dnssec-revoke.c,v 1.7.2.3 2016/10/14 12:01:10 martin Exp $	*/
 
 /*
  * Copyright (C) 2009-2012, 2014, 2015  Internet Systems Consortium, Inc. ("ISC")

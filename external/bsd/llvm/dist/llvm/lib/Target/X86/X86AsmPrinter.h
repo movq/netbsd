@@ -12,7 +12,6 @@
 
 #include "X86Subtarget.h"
 #include "llvm/CodeGen/AsmPrinter.h"
-#include "llvm/CodeGen/FaultMaps.h"
 #include "llvm/CodeGen/StackMaps.h"
 #include "llvm/Target/TargetMachine.h"
 
@@ -28,8 +27,8 @@ class MCSymbol;
 class LLVM_LIBRARY_VISIBILITY X86AsmPrinter : public AsmPrinter {
   const X86Subtarget *Subtarget;
   StackMaps SM;
-  FaultMaps FM;
-  std::unique_ptr<MCCodeEmitter> CodeEmitter;
+
+  void GenerateExportDirective(const MCSymbol *Sym, bool IsData);
 
   // This utility class tracks the length of a stackmap instruction's 'shadow'.
   // It is used by the X86AsmPrinter to ensure that the stackmap shadow
@@ -41,11 +40,10 @@ class LLVM_LIBRARY_VISIBILITY X86AsmPrinter : public AsmPrinter {
   // few instruction bytes to cover the shadow are NOPs used for padding.
   class StackMapShadowTracker {
   public:
-    void startFunction(MachineFunction &MF) {
-      this->MF = &MF;
-    }
-    void count(MCInst &Inst, const MCSubtargetInfo &STI,
-               MCCodeEmitter *CodeEmitter);
+    StackMapShadowTracker(TargetMachine &TM);
+    ~StackMapShadowTracker();
+    void startFunction(MachineFunction &MF);
+    void count(MCInst &Inst, const MCSubtargetInfo &STI);
 
     // Called to signal the start of a shadow of RequiredSize bytes.
     void reset(unsigned RequiredSize) {
@@ -58,15 +56,16 @@ class LLVM_LIBRARY_VISIBILITY X86AsmPrinter : public AsmPrinter {
     // to emit any necessary padding-NOPs.
     void emitShadowPadding(MCStreamer &OutStreamer, const MCSubtargetInfo &STI);
   private:
-    const MachineFunction *MF;
-    bool InShadow = false;
+    TargetMachine &TM;
+    std::unique_ptr<MCCodeEmitter> CodeEmitter;
+    bool InShadow;
 
     // RequiredShadowSize holds the length of the shadow specified in the most
     // recently encountered STACKMAP instruction.
     // CurrentShadowSize counts the number of bytes encoded since the most
     // recently encountered STACKMAP, stopping when that number is greater than
     // or equal to RequiredShadowSize.
-    unsigned RequiredShadowSize = 0, CurrentShadowSize = 0;
+    unsigned RequiredShadowSize, CurrentShadowSize;
   };
 
   StackMapShadowTracker SMShadowTracker;
@@ -78,31 +77,21 @@ class LLVM_LIBRARY_VISIBILITY X86AsmPrinter : public AsmPrinter {
   // outputting it to the OutStream. This allows the shadow tracker to minimise
   // the number of NOPs used for stackmap padding.
   void EmitAndCountInstruction(MCInst &Inst);
+
+  void InsertStackMapShadows(MachineFunction &MF);
   void LowerSTACKMAP(const MachineInstr &MI);
-  void LowerPATCHPOINT(const MachineInstr &MI, X86MCInstLower &MCIL);
-  void LowerSTATEPOINT(const MachineInstr &MI, X86MCInstLower &MCIL);
-  void LowerFAULTING_LOAD_OP(const MachineInstr &MI, X86MCInstLower &MCIL);
-  void LowerPATCHABLE_OP(const MachineInstr &MI, X86MCInstLower &MCIL);
+  void LowerPATCHPOINT(const MachineInstr &MI);
 
   void LowerTlsAddr(X86MCInstLower &MCInstLowering, const MachineInstr &MI);
 
-  // XRay-specific lowering for X86.
-  void LowerPATCHABLE_FUNCTION_ENTER(const MachineInstr &MI,
-                                     X86MCInstLower &MCIL);
-  void LowerPATCHABLE_RET(const MachineInstr &MI, X86MCInstLower &MCIL);
-  void LowerPATCHABLE_TAIL_CALL(const MachineInstr &MI, X86MCInstLower &MCIL);
+ public:
+  explicit X86AsmPrinter(TargetMachine &TM, MCStreamer &Streamer)
+    : AsmPrinter(TM, Streamer), SM(*this), SMShadowTracker(TM) {
+    Subtarget = &TM.getSubtarget<X86Subtarget>();
+  }
 
-  // Helper function that emits the XRay sleds we've collected for a particular
-  // function.
-  void EmitXRayTable();
-
-public:
-  explicit X86AsmPrinter(TargetMachine &TM,
-                         std::unique_ptr<MCStreamer> Streamer)
-      : AsmPrinter(TM, std::move(Streamer)), SM(*this), FM(*this) {}
-
-  StringRef getPassName() const override {
-    return "X86 Assembly Printer";
+  const char *getPassName() const override {
+    return "X86 Assembly / Object Emitter";
   }
 
   const X86Subtarget &getSubtarget() const { return *Subtarget; }
@@ -114,7 +103,7 @@ public:
   void EmitInstruction(const MachineInstr *MI) override;
 
   void EmitBasicBlockEnd(const MachineBasicBlock &MBB) override {
-    SMShadowTracker.emitShadowPadding(*OutStreamer, getSubtargetInfo());
+    SMShadowTracker.emitShadowPadding(OutStreamer, getSubtargetInfo());
   }
 
   bool PrintAsmOperand(const MachineInstr *MI, unsigned OpNo,

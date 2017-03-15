@@ -1,5 +1,7 @@
 /* ns32k.c  -- Assemble on the National Semiconductor 32k series
-   Copyright (C) 1987-2016 Free Software Foundation, Inc.
+   Copyright 1987, 1992, 1993, 1994, 1995, 1996, 1997, 1998, 1999, 2000,
+   2001, 2002, 2003, 2005, 2006, 2007, 2008, 2009
+   Free Software Foundation, Inc.
 
    This file is part of GAS, the GNU Assembler.
 
@@ -102,7 +104,7 @@ const char FLT_CHARS[] = "fd";	/* We don't want to support lowercase,
 /* Internal structs.  */
 struct ns32k_option
 {
-  const char *pattern;
+  char *pattern;
   unsigned long or;
   unsigned long and;
 };
@@ -132,6 +134,7 @@ struct int_ins_form
 
 struct int_ins_form iif;
 expressionS exprP;
+char *input_line_pointer;
 
 /* Description of the PARTs in IIF
   object[n]:
@@ -709,7 +712,7 @@ get_addr_mode (char *ptr, addr_modeS *addrmodeP)
       addrmodeP->am_size += 1;
     }
 
-  gas_assert (addrmodeP->mode >= 0);
+  gas_assert (addrmodeP->mode >= 0); 
   if (disp_test[(unsigned int) addrmodeP->mode])
     {
       char c;
@@ -802,7 +805,7 @@ optlist (char *str,			/* The string to extract options from.  */
 	 unsigned long *default_map)	/* Default pattern and output.  */
 {
   int i, j, k, strlen1, strlen2;
-  const char *patternP, *strP;
+  char *patternP, *strP;
 
   strlen1 = strlen (str);
 
@@ -877,7 +880,7 @@ bit_fix_new (int size,		/* Length of bitfield.  */
 {
   bit_fixS *bit_fixP;
 
-  bit_fixP = XOBNEW (&notes, bit_fixS);
+  bit_fixP = obstack_alloc (&notes, sizeof (bit_fixS));
 
   bit_fixP->fx_bit_size = size;
   bit_fixP->fx_bit_offset = offset;
@@ -1907,7 +1910,7 @@ md_begin (void)
     }
 
   /* Some private space please!  */
-  freeptr_static = XNEWVEC (char, PRIVATE_SIZE);
+  freeptr_static = (char *) malloc (PRIVATE_SIZE);
 }
 
 /* Turn the string pointed to by litP into a floating point constant
@@ -1915,7 +1918,7 @@ md_begin (void)
    LITTLENUMS emitted is stored in *SIZEP.  An error message is
    returned, or NULL on OK.  */
 
-const char *
+char *
 md_atof (int type, char *litP, int *sizeP)
 {
   return ieee_md_atof (type, litP, sizeP, FALSE);
@@ -2122,7 +2125,7 @@ struct option md_longopts[] =
 size_t md_longopts_size = sizeof (md_longopts);
 
 int
-md_parse_option (int c, const char *arg)
+md_parse_option (int c, char *arg)
 {
   switch (c)
     {
@@ -2180,8 +2183,7 @@ void
 cons_fix_new_ns32k (fragS *frag,	/* Which frag? */
 		    int where,		/* Where in that frag? */
 		    int size,		/* 1, 2  or 4 usually.  */
-		    expressionS *exp,	/* Expression.  */
-		    bfd_reloc_code_real_type r ATTRIBUTE_UNUSED)
+		    expressionS *exp)	/* Expression.  */
 {
   fix_new_ns32k_exp (frag, where, size, exp,
 		     0, 2, 0, 0, 0, 0);
@@ -2227,8 +2229,8 @@ tc_gen_reloc (asection *section ATTRIBUTE_UNUSED, fixS *fixp)
 
   code = reloc (fixp->fx_size, fixp->fx_pcrel, fix_im_disp (fixp));
 
-  rel = XNEW (arelent);
-  rel->sym_ptr_ptr = XNEW (asymbol *);
+  rel = xmalloc (sizeof (arelent));
+  rel->sym_ptr_ptr = xmalloc (sizeof (asymbol *));
   *rel->sym_ptr_ptr = symbol_get_bfdsym (fixp->fx_addsy);
   rel->address = fixp->fx_frag->fr_address + fixp->fx_where;
   if (fixp->fx_pcrel)

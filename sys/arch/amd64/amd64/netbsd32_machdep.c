@@ -1,4 +1,4 @@
-/*	$NetBSD: netbsd32_machdep.c,v 1.104 2017/02/23 03:34:22 kamil Exp $	*/
+/*	$NetBSD: netbsd32_machdep.c,v 1.92 2014/02/15 22:20:41 dsl Exp $	*/
 
 /*
  * Copyright (c) 2001 Wasabi Systems, Inc.
@@ -36,7 +36,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: netbsd32_machdep.c,v 1.104 2017/02/23 03:34:22 kamil Exp $");
+__KERNEL_RCSID(0, "$NetBSD: netbsd32_machdep.c,v 1.92 2014/02/15 22:20:41 dsl Exp $");
 
 #ifdef _KERNEL_OPT
 #include "opt_compat_netbsd.h"
@@ -50,7 +50,6 @@ __KERNEL_RCSID(0, "$NetBSD: netbsd32_machdep.c,v 1.104 2017/02/23 03:34:22 kamil
 #include <sys/exec.h>
 #include <sys/exec_aout.h>
 #include <sys/kmem.h>
-#include <sys/malloc.h>
 #include <sys/proc.h>
 #include <sys/signalvar.h>
 #include <sys/systm.h>
@@ -80,19 +79,9 @@ __KERNEL_RCSID(0, "$NetBSD: netbsd32_machdep.c,v 1.104 2017/02/23 03:34:22 kamil
 #include <compat/sys/signal.h>
 #include <compat/sys/signalvar.h>
 
-extern struct pool x86_dbregspl;
-
 /* Provide a the name of the architecture we're emulating */
 const char	machine32[] = "i386";
 const char	machine_arch32[] = "i386";	
-
-#ifdef USER_LDT
-static int x86_64_get_ldt32(struct lwp *, void *, register_t *);
-static int x86_64_set_ldt32(struct lwp *, void *, register_t *);
-#else
-#define x86_64_get_ldt32(x, y, z)	ENOSYS
-#define x86_64_set_ldt32(x, y, z)	ENOSYS
-#endif
 
 #ifdef MTRR
 static int x86_64_get_mtrr32(struct lwp *, void *, register_t *);
@@ -117,6 +106,19 @@ cpu_exec_aout_makecmds(struct lwp *p, struct exec_package *e)
 }
 #endif
 
+#ifdef COMPAT_16
+/*
+ * There is no NetBSD-1.6 compatibility for native code.
+ * COMPAT_16 is useful for i386 emulation (COMPAT_NETBSD32) only.
+ */
+int
+compat_16_sys___sigreturn14(struct lwp *l, const struct compat_16_sys___sigreturn14_args *uap, register_t *retval)
+{
+
+	return ENOSYS;
+}
+#endif
+
 void
 netbsd32_setregs(struct lwp *l, struct exec_package *pack, vaddr_t stack)
 {
@@ -126,8 +128,8 @@ netbsd32_setregs(struct lwp *l, struct exec_package *pack, vaddr_t stack)
 
 	pcb = lwp_getpcb(l);
 
-#if defined(USER_LDT)
-	pmap_ldt_cleanup(l);
+#if defined(USER_LDT) && 0
+	pmap_ldt_cleanup(p);
 #endif
 
 	netbsd32_adjust_limits(p);
@@ -137,11 +139,6 @@ netbsd32_setregs(struct lwp *l, struct exec_package *pack, vaddr_t stack)
 
 	fpu_save_area_clear(l, pack->ep_osversion >= 699002600
 	    ?  __NetBSD_NPXCW__ : __NetBSD_COMPAT_NPXCW__);
-
-	if (pcb->pcb_dbregs != NULL) {
-		pool_put(&x86_dbregspl, pcb->pcb_dbregs);
-		pcb->pcb_dbregs = NULL;
-	}
 
 	p->p_flag |= PK_32;
 
@@ -503,12 +500,12 @@ netbsd32_process_read_regs(struct lwp *l, struct reg32 *regs)
 {
 	struct trapframe *tf = l->l_md.md_regs;
 
-	/* XXX avoid sign extension problems with unknown upper bits? */
-	regs->r_gs = tf->tf_gs & 0xffff;
-	regs->r_fs = tf->tf_fs & 0xffff;
-	regs->r_es = tf->tf_es & 0xffff;
-	regs->r_ds = tf->tf_ds & 0xffff;
+	regs->r_gs = LSEL(LUCODE32_SEL, SEL_UPL);
+	regs->r_fs = LSEL(LUCODE32_SEL, SEL_UPL);
+	regs->r_es = LSEL(LUCODE32_SEL, SEL_UPL);
+	regs->r_ds = LSEL(LUCODE32_SEL, SEL_UPL);
 	regs->r_eflags = tf->tf_rflags;
+	/* XXX avoid sign extension problems with unknown upper bits? */
 	regs->r_edi = tf->tf_rdi & 0xffffffff;
 	regs->r_esi = tf->tf_rsi & 0xffffffff;
 	regs->r_ebp = tf->tf_rbp & 0xffffffff;
@@ -517,9 +514,9 @@ netbsd32_process_read_regs(struct lwp *l, struct reg32 *regs)
 	regs->r_ecx = tf->tf_rcx & 0xffffffff;
 	regs->r_eax = tf->tf_rax & 0xffffffff;
 	regs->r_eip = tf->tf_rip & 0xffffffff;
-	regs->r_cs = tf->tf_cs & 0xffff;
+	regs->r_cs = tf->tf_cs;
 	regs->r_esp = tf->tf_rsp & 0xffffffff;
-	regs->r_ss = tf->tf_ss & 0xffff;
+	regs->r_ss = tf->tf_ss;
 
 	return (0);
 }
@@ -527,115 +524,22 @@ netbsd32_process_read_regs(struct lwp *l, struct reg32 *regs)
 int
 netbsd32_process_read_fpregs(struct lwp *l, struct fpreg32 *regs, size_t *sz)
 {
-
-	__CTASSERT(sizeof *regs == sizeof (struct save87));
-	process_read_fpregs_s87(l, (struct save87 *)regs);
-	return 0;
-}
-
-int
-netbsd32_process_read_dbregs(struct lwp *l, struct dbreg32 *regs, size_t *sz)
-{
-#if notyet
-	struct pcb *pcb;
-
-	pcb = lwp_getpcb(l);
-
-	regs->dr[0] = pcb->pcb_dbregs->dr[0] & 0xffffffff;
-	regs->dr[1] = pcb->pcb_dbregs->dr[1] & 0xffffffff;
-	regs->dr[2] = pcb->pcb_dbregs->dr[2] & 0xffffffff;
-	regs->dr[3] = pcb->pcb_dbregs->dr[3] & 0xffffffff;
-
-	regs->dr[6] = pcb->pcb_dbregs->dr[6] & 0xffffffff;
-	regs->dr[7] = pcb->pcb_dbregs->dr[7] & 0xffffffff;
-
-	return 0;
-#else
-	return ENOTSUP;
-#endif
-}
-
-int
-netbsd32_process_write_regs(struct lwp *l, const struct reg32 *regs)
-{
-	struct trapframe *tf;
-	struct pcb *pcb;
-
-	tf = l->l_md.md_regs;
-	pcb = lwp_getpcb(l);
+	struct fpreg regs64;
+	int error;
+	size_t fp_size;
 
 	/*
-	 * Check for security violations.
+	 * All that stuff makes no sense in i386 code :(
 	 */
-	if (((regs->r_eflags ^ tf->tf_rflags) & PSL_USERSTATIC) != 0)
-		return EINVAL;
-	if (!VALID_USER_CSEL32(regs->r_cs))
-		return EINVAL;
-	if (regs->r_fs != 0 && !VALID_USER_DSEL32(regs->r_fs) &&
-	    !(VALID_USER_FSEL32(regs->r_fs) && pcb->pcb_fs != 0))
-		return EINVAL;
-	if (regs->r_gs != 0 && !VALID_USER_DSEL32(regs->r_gs) &&
-	    !(VALID_USER_GSEL32(regs->r_gs) && pcb->pcb_gs != 0))
-		return EINVAL;
-	if (regs->r_es != 0 && !VALID_USER_DSEL32(regs->r_es))
-		return EINVAL;
-	if (!VALID_USER_DSEL32(regs->r_ds) ||
-	    !VALID_USER_DSEL32(regs->r_ss))
-		return EINVAL;
-	if (regs->r_eip >= VM_MAXUSER_ADDRESS32)
-		return EINVAL;
 
-	tf->tf_rax = regs->r_eax;
-	tf->tf_rcx = regs->r_ecx;
-	tf->tf_rdx = regs->r_edx;
-	tf->tf_rbx = regs->r_ebx;
-	tf->tf_rsp = regs->r_esp;
-	tf->tf_rbp = regs->r_ebp;
-	tf->tf_rsi = regs->r_esi;
-	tf->tf_rdi = regs->r_edi;
-	tf->tf_rip = regs->r_eip;
-	tf->tf_rflags = regs->r_eflags;
-	tf->tf_cs = regs->r_cs;
-	tf->tf_ss = regs->r_ss;
-	tf->tf_ds = regs->r_ds;
-	tf->tf_es = regs->r_es;
-	tf->tf_fs = regs->r_fs;
-	tf->tf_gs = regs->r_gs;
-
-	return 0;
-}
-
-int
-netbsd32_process_write_fpregs(struct lwp *l, const struct fpreg32 *regs,
-    size_t sz)
-{
-
+	fp_size = sizeof regs64;
+	error = process_read_fpregs(l, &regs64, &fp_size);
+	if (error)
+		return error;
 	__CTASSERT(sizeof *regs == sizeof (struct save87));
-	process_write_fpregs_s87(l, (const struct save87 *)regs);
-	return 0;
-}
+	process_xmm_to_s87(&regs64.fxstate, (struct save87 *)regs);
 
-int
-netbsd32_process_write_dbregs(struct lwp *l, const struct dbreg32 *regs,
-    size_t sz)
-{
-#if notyet
-	struct pcb *pcb;
-
-	pcb = lwp_getpcb(l);
-
-	pcb->pcb_dbregs->dr[0] = regs->dr[0];
-	pcb->pcb_dbregs->dr[1] = regs->dr[1];
-	pcb->pcb_dbregs->dr[2] = regs->dr[2];
-	pcb->pcb_dbregs->dr[3] = regs->dr[3];
-
-	pcb->pcb_dbregs->dr[6] = regs->dr[6];
-	pcb->pcb_dbregs->dr[7] = regs->dr[7];
-
-	return 0;
-#else
-	return ENOTSUP;
-#endif
+	return (0);
 }
 
 int
@@ -652,14 +556,6 @@ netbsd32_sysarch(struct lwp *l, const struct netbsd32_sysarch_args *uap, registe
 		error = x86_iopl(l,
 		    NETBSD32PTR64(SCARG(uap, parms)), retval);
 		break;
-	case X86_GET_LDT: 
-		error = x86_64_get_ldt32(l,
-		    NETBSD32PTR64(SCARG(uap, parms)), retval);
-		break;
-	case X86_SET_LDT: 
-		error = x86_64_set_ldt32(l,
-		    NETBSD32PTR64(SCARG(uap, parms)), retval);
-		break;
 	case X86_GET_MTRR:
 		error = x86_64_get_mtrr32(l,
 		    NETBSD32PTR64(SCARG(uap, parms)), retval);
@@ -674,70 +570,6 @@ netbsd32_sysarch(struct lwp *l, const struct netbsd32_sysarch_args *uap, registe
 	}
 	return error;
 }
-
-#ifdef USER_LDT
-static int
-x86_64_set_ldt32(struct lwp *l, void *args, register_t *retval)
-{
-	struct x86_set_ldt_args32 ua32;
-	struct x86_set_ldt_args ua;
-	union descriptor *descv;
-	int error;
-
-	if ((error = copyin(args, &ua32, sizeof(ua32))) != 0)
-		return (error);
-
-	ua.start = ua32.start;
-	ua.num = ua32.num;
-
-	if (ua.num < 0 || ua.num > 8192)
-		return EINVAL;
-
-	descv = malloc(sizeof(*descv) * ua.num, M_TEMP, M_NOWAIT);
-	if (descv == NULL)
-		return ENOMEM;
-
-	error = copyin((void *)(uintptr_t)ua32.desc, descv,
-	    sizeof(*descv) * ua.num);
-	if (error == 0)
-		error = x86_set_ldt1(l, &ua, descv);
-	*retval = ua.start;
-
-	free(descv, M_TEMP);
-	return error;
-}
-
-static int
-x86_64_get_ldt32(struct lwp *l, void *args, register_t *retval)
-{
-	struct x86_get_ldt_args32 ua32;
-	struct x86_get_ldt_args ua;
-	union descriptor *cp;
-	int error;
-
-	if ((error = copyin(args, &ua32, sizeof(ua32))) != 0)
-		return error;
-
-	ua.start = ua32.start;
-	ua.num = ua32.num;
-
-	if (ua.num < 0 || ua.num > 8192)
-		return EINVAL;
-
-	cp = malloc(ua.num * sizeof(union descriptor), M_TEMP, M_WAITOK);
-	if (cp == NULL)
-		return ENOMEM;
-
-	error = x86_get_ldt1(l, &ua, cp);
-	*retval = ua.num;
-	if (error == 0)
-		error = copyout(cp, (void *)(uintptr_t)ua32.desc,
-		    ua.num * sizeof(*cp));
-
-	free(cp, M_TEMP);
-	return error;
-}
-#endif
 
 #ifdef MTRR
 static int
@@ -1084,7 +916,6 @@ check_sigcontext32(struct lwp *l, const struct netbsd32_sigcontext *scp)
 int
 cpu_mcontext32_validate(struct lwp *l, const mcontext32_t *mcp)
 {
-	struct pmap *pmap = l->l_proc->p_vmspace->vm_map.pmap;
 	const __greg32_t *gr;
 	struct trapframe *tf;
 	struct pcb *pcb;
@@ -1093,46 +924,41 @@ cpu_mcontext32_validate(struct lwp *l, const mcontext32_t *mcp)
 	tf = l->l_md.md_regs;
 	pcb = lwp_getpcb(l);
 
-	if (((gr[_REG32_EFL] ^ tf->tf_rflags) & PSL_USERSTATIC) != 0)
+	if (((gr[_REG32_EFL] ^ tf->tf_rflags) & PSL_USERSTATIC) != 0 ||
+	    !VALID_USER_CSEL32(gr[_REG32_CS]))
 		return EINVAL;
-
-	if (__predict_false(pmap->pm_ldt != NULL)) {
-		/* Only when the LDT is user-set (with USER_LDT) */
-		if (!USERMODE(gr[_REG32_CS], gr[_REG32_EFL]))
-			return EINVAL;
-	} else {
-		if (!VALID_USER_CSEL32(gr[_REG32_CS]))
-			return EINVAL;
-		if (gr[_REG32_FS] != 0 && !VALID_USER_DSEL32(gr[_REG32_FS]) &&
-		    !(VALID_USER_FSEL32(gr[_REG32_FS]) && pcb->pcb_fs != 0))
-			return EINVAL;
-		if (gr[_REG32_GS] != 0 && !VALID_USER_DSEL32(gr[_REG32_GS]) &&
-		    !(VALID_USER_GSEL32(gr[_REG32_GS]) && pcb->pcb_gs != 0))
-			return EINVAL;
-		if (gr[_REG32_ES] != 0 && !VALID_USER_DSEL32(gr[_REG32_ES]))
-			return EINVAL;
-		if (!VALID_USER_DSEL32(gr[_REG32_DS]) ||
-		    !VALID_USER_DSEL32(gr[_REG32_SS]))
-			return EINVAL;
-	}
-
+	if (gr[_REG32_FS] != 0 && !VALID_USER_DSEL32(gr[_REG32_FS]) &&
+	    !(VALID_USER_FSEL32(gr[_REG32_FS]) && pcb->pcb_fs != 0))
+		return EINVAL;
+	if (gr[_REG32_GS] != 0 && !VALID_USER_DSEL32(gr[_REG32_GS]) &&
+	    !(VALID_USER_GSEL32(gr[_REG32_GS]) && pcb->pcb_gs != 0))
+		return EINVAL;
+	if (gr[_REG32_ES] != 0 && !VALID_USER_DSEL32(gr[_REG32_ES]))
+		return EINVAL;
+	if (!VALID_USER_DSEL32(gr[_REG32_DS]) ||
+	    !VALID_USER_DSEL32(gr[_REG32_SS]))
+		return EINVAL;
 	if (gr[_REG32_EIP] >= VM_MAXUSER_ADDRESS32)
 		return EINVAL;
-
 	return 0;
 }
 
 vaddr_t
-netbsd32_vm_default_addr(struct proc *p, vaddr_t base, vsize_t sz,
-    int topdown)
+netbsd32_vm_default_addr(struct proc *p, vaddr_t base, vsize_t sz)
 {
-	if (topdown)
-		return VM_DEFAULT_ADDRESS32_TOPDOWN(base, sz);
-	else
-		return VM_DEFAULT_ADDRESS32_BOTTOMUP(base, sz);
+        if (p->p_vmspace->vm_map.flags & VM_MAP_TOPDOWN)
+                return VM_DEFAULT_ADDRESS32_TOPDOWN(base, sz);
+        else
+                return VM_DEFAULT_ADDRESS32_BOTTOMUP(base, sz);
 }
 
 #ifdef COMPAT_13
+int
+compat_13_sys_sigreturn(struct lwp *l, const struct compat_13_sys_sigreturn_args *uap, register_t *retval)
+{
+	return ENOSYS;
+}
+
 int
 compat_13_netbsd32_sigreturn(struct lwp *l, const struct compat_13_netbsd32_sigreturn_args *uap, register_t *retval)
 {

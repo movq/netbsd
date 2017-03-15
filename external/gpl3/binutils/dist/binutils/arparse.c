@@ -114,7 +114,8 @@
 
 /* arparse.y - Stange script language parser */
 
-/* Copyright (C) 1992-2016 Free Software Foundation, Inc.
+/* Copyright 1992, 1993, 1995, 1997, 1999, 2002, 2003, 2005, 2007
+   Free Software Foundation, Inc.
 
    This file is part of GNU Binutils.
 
@@ -167,14 +168,14 @@ static int yyerror (const char *);
 
 #if ! defined YYSTYPE && ! defined YYSTYPE_IS_DECLARED
 typedef union YYSTYPE
-#line 37 "arparse.y"
+#line 38 "arparse.y"
 {
   char *name;
 struct list *list ;
 
 }
 /* Line 193 of yacc.c.  */
-#line 178 "arparse.c"
+#line 179 "arparse.c"
 	YYSTYPE;
 # define yystype YYSTYPE /* obsolescent; will be withdrawn */
 # define YYSTYPE_IS_DECLARED 1
@@ -187,7 +188,7 @@ struct list *list ;
 
 
 /* Line 216 of yacc.c.  */
-#line 191 "arparse.c"
+#line 192 "arparse.c"
 
 #ifdef short
 # undef short
@@ -483,11 +484,11 @@ static const yytype_int8 yyrhs[] =
 /* YYRLINE[YYN] -- source line where rule number YYN was defined.  */
 static const yytype_uint8 yyrline[] =
 {
-       0,    68,    68,    68,    72,    73,    77,    81,    82,    83,
-      84,    85,    86,    87,    88,    89,    90,    91,    92,    93,
-      94,    95,    96,   101,   106,   111,   116,   120,   125,   130,
-     137,   142,   148,   152,   159,   161,   165,   168,   172,   178,
-     183,   184,   189
+       0,    69,    69,    69,    73,    74,    78,    82,    83,    84,
+      85,    86,    87,    88,    89,    90,    91,    92,    93,    94,
+      95,    96,    97,   102,   107,   112,   117,   121,   126,   131,
+     138,   143,   149,   153,   160,   162,   166,   169,   173,   179,
+     184,   185,   190
 };
 #endif
 
@@ -1426,122 +1427,122 @@ yyreduce:
   switch (yyn)
     {
         case 2:
-#line 68 "arparse.y"
+#line 69 "arparse.y"
     { prompt(); }
     break;
 
   case 6:
-#line 77 "arparse.y"
+#line 78 "arparse.y"
     { prompt(); }
     break;
 
   case 19:
-#line 93 "arparse.y"
+#line 94 "arparse.y"
     { ar_end(); return 0; }
     break;
 
   case 21:
-#line 95 "arparse.y"
+#line 96 "arparse.y"
     { yyerror("foo"); }
     break;
 
   case 23:
-#line 102 "arparse.y"
+#line 103 "arparse.y"
     { ar_extract((yyvsp[(2) - (2)].list)); }
     break;
 
   case 24:
-#line 107 "arparse.y"
+#line 108 "arparse.y"
     { ar_replace((yyvsp[(2) - (2)].list)); }
     break;
 
   case 25:
-#line 112 "arparse.y"
+#line 113 "arparse.y"
     { ar_clear(); }
     break;
 
   case 26:
-#line 117 "arparse.y"
+#line 118 "arparse.y"
     { ar_delete((yyvsp[(2) - (2)].list)); }
     break;
 
   case 27:
-#line 121 "arparse.y"
+#line 122 "arparse.y"
     { ar_addmod((yyvsp[(2) - (2)].list)); }
     break;
 
   case 28:
-#line 126 "arparse.y"
+#line 127 "arparse.y"
     { ar_list(); }
     break;
 
   case 29:
-#line 131 "arparse.y"
+#line 132 "arparse.y"
     { ar_save(); }
     break;
 
   case 30:
-#line 138 "arparse.y"
+#line 139 "arparse.y"
     { ar_open((yyvsp[(2) - (2)].name),0); }
     break;
 
   case 31:
-#line 143 "arparse.y"
+#line 144 "arparse.y"
     { ar_open((yyvsp[(2) - (2)].name),1); }
     break;
 
   case 32:
-#line 149 "arparse.y"
+#line 150 "arparse.y"
     { ar_addlib((yyvsp[(2) - (3)].name),(yyvsp[(3) - (3)].list)); }
     break;
 
   case 33:
-#line 153 "arparse.y"
+#line 154 "arparse.y"
     { ar_directory((yyvsp[(2) - (4)].name), (yyvsp[(3) - (4)].list), (yyvsp[(4) - (4)].name)); }
     break;
 
   case 34:
-#line 160 "arparse.y"
+#line 161 "arparse.y"
     { (yyval.name) = (yyvsp[(1) - (1)].name); }
     break;
 
   case 35:
-#line 161 "arparse.y"
+#line 162 "arparse.y"
     { (yyval.name) = 0; }
     break;
 
   case 36:
-#line 166 "arparse.y"
+#line 167 "arparse.y"
     { (yyval.list) = (yyvsp[(2) - (3)].list); }
     break;
 
   case 37:
-#line 168 "arparse.y"
+#line 169 "arparse.y"
     { (yyval.list) = 0; }
     break;
 
   case 38:
-#line 173 "arparse.y"
+#line 174 "arparse.y"
     { 	struct list *n  = (struct list *) malloc(sizeof(struct list));
-			n->next = (yyvsp[(1) - (3)].list);
+			n->next = (yyvsp[(1) - (3)].list); 
 			n->name = (yyvsp[(3) - (3)].name);
 			(yyval.list) = n;
 		 }
     break;
 
   case 39:
-#line 178 "arparse.y"
+#line 179 "arparse.y"
     { (yyval.list) = 0; }
     break;
 
   case 42:
-#line 190 "arparse.y"
+#line 191 "arparse.y"
     { verbose = !verbose; }
     break;
 
 
 /* Line 1267 of yacc.c.  */
-#line 1545 "arparse.c"
+#line 1546 "arparse.c"
       default: break;
     }
   YY_SYMBOL_PRINT ("-> $$ =", yyr1[yyn], &yyval, &yyloc);
@@ -1755,7 +1756,7 @@ yyreturn:
 }
 
 
-#line 194 "arparse.y"
+#line 195 "arparse.y"
 
 
 static int

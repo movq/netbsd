@@ -254,7 +254,7 @@ OPENSSL_GLOBAL const SSL_CIPHER ssl2_ciphers[] = {
      SSL_3DES,
      SSL_MD5,
      SSL_SSLV2,
-     SSL_NOT_DEFAULT | SSL_NOT_EXP | SSL_MEDIUM,
+     SSL_NOT_DEFAULT | SSL_NOT_EXP | SSL_HIGH,
      0,
      112,
      168,
@@ -441,7 +441,10 @@ const SSL_CIPHER *ssl2_get_cipher_by_char(const unsigned char *p)
         ((unsigned long)p[1] << 8L) | (unsigned long)p[2];
     c.id = id;
     cp = OBJ_bsearch_ssl_cipher_id(&c, ssl2_ciphers, SSL2_NUM_CIPHERS);
-    return cp;
+    if ((cp == NULL) || (cp->valid == 0))
+        return NULL;
+    else
+        return cp;
 }
 
 int ssl2_put_cipher_by_char(const SSL_CIPHER *c, unsigned char *p)

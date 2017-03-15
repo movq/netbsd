@@ -1,6 +1,5 @@
-/*	$NetBSD: auth-options.c,v 1.14 2016/12/25 00:07:46 christos Exp $	*/
-/* $OpenBSD: auth-options.c,v 1.72 2016/11/30 02:57:40 djm Exp $ */
-
+/*	$NetBSD: auth-options.c,v 1.7.4.1 2015/04/30 06:07:30 riz Exp $	*/
+/* $OpenBSD: auth-options.c,v 1.65 2015/01/14 10:30:34 markus Exp $ */
 /*
  * Author: Tatu Ylonen <ylo@cs.hut.fi>
  * Copyright (c) 1995 Tatu Ylonen <ylo@cs.hut.fi>, Espoo, Finland
@@ -13,7 +12,7 @@
  */
 
 #include "includes.h"
-__RCSID("$NetBSD: auth-options.c,v 1.14 2016/12/25 00:07:46 christos Exp $");
+__RCSID("$NetBSD: auth-options.c,v 1.7.4.1 2015/04/30 06:07:30 riz Exp $");
 #include <sys/types.h>
 #include <sys/queue.h>
 
@@ -31,7 +30,6 @@ __RCSID("$NetBSD: auth-options.c,v 1.14 2016/12/25 00:07:46 christos Exp $");
 #include "ssherr.h"
 #include "log.h"
 #include "canohost.h"
-#include "packet.h"
 #include "sshbuf.h"
 #include "misc.h"
 #include "channels.h"
@@ -78,42 +76,16 @@ auth_clear_options(void)
 		free(ce->s);
 		free(ce);
 	}
-	free(forced_command);
-	forced_command = NULL;
-	free(authorized_principals);
-	authorized_principals = NULL;
+	if (forced_command) {
+		free(forced_command);
+		forced_command = NULL;
+	}
+	if (authorized_principals) {
+		free(authorized_principals);
+		authorized_principals = NULL;
+	}
 	forced_tun_device = -1;
 	channel_clear_permitted_opens();
-}
-
-/*
- * Match flag 'opt' in *optsp, and if allow_negate is set then also match
- * 'no-opt'. Returns -1 if option not matched, 1 if option matches or 0
- * if negated option matches. 
- * If the option or negated option matches, then *optsp is updated to
- * point to the first character after the option and, if 'msg' is not NULL
- * then a message based on it added via auth_debug_add().
- */
-static int
-match_flag(const char *opt, int allow_negate, const char **optsp, const char *msg)
-{
-	size_t opt_len = strlen(opt);
-	const char *opts = *optsp;
-	int negate = 0;
-
-	if (allow_negate && strncasecmp(opts, "no-", 3) == 0) {
-		opts += 3;
-		negate = 1;
-	}
-	if (strncasecmp(opts, opt, opt_len) == 0) {
-		*optsp = opts + opt_len;
-		if (msg != NULL) {
-			auth_debug_add("%s %s.", msg,
-			    negate ? "disabled" : "enabled");
-		}
-		return negate ? 0 : 1;
-	}
-	return -1;
 }
 
 /*
@@ -124,9 +96,8 @@ int
 auth_parse_options(struct passwd *pw, const char *opts, const char *file,
     u_long linenum)
 {
-	struct ssh *ssh = active_state;		/* XXX */
 	const char *cp;
-	int i, r;
+	int i;
 
 	/* reset options */
 	auth_clear_options();
@@ -135,48 +106,52 @@ auth_parse_options(struct passwd *pw, const char *opts, const char *file,
 		return 1;
 
 	while (*opts && *opts != ' ' && *opts != '\t') {
-		if ((r = match_flag("cert-authority", 0, &opts, NULL)) != -1) {
-			key_is_cert_authority = r;
+		cp = "cert-authority";
+		if (strncasecmp(opts, cp, strlen(cp)) == 0) {
+			key_is_cert_authority = 1;
+			opts += strlen(cp);
 			goto next_option;
 		}
-		if ((r = match_flag("restrict", 0, &opts, NULL)) != -1) {
-			auth_debug_add("Key is restricted.");
+		cp = "no-port-forwarding";
+		if (strncasecmp(opts, cp, strlen(cp)) == 0) {
+			auth_debug_add("Port forwarding disabled.");
 			no_port_forwarding_flag = 1;
+			opts += strlen(cp);
+			goto next_option;
+		}
+		cp = "no-agent-forwarding";
+		if (strncasecmp(opts, cp, strlen(cp)) == 0) {
+			auth_debug_add("Agent forwarding disabled.");
 			no_agent_forwarding_flag = 1;
+			opts += strlen(cp);
+			goto next_option;
+		}
+		cp = "no-X11-forwarding";
+		if (strncasecmp(opts, cp, strlen(cp)) == 0) {
+			auth_debug_add("X11 forwarding disabled.");
 			no_x11_forwarding_flag = 1;
+			opts += strlen(cp);
+			goto next_option;
+		}
+		cp = "no-pty";
+		if (strncasecmp(opts, cp, strlen(cp)) == 0) {
+			auth_debug_add("Pty allocation disabled.");
 			no_pty_flag = 1;
+			opts += strlen(cp);
+			goto next_option;
+		}
+		cp = "no-user-rc";
+		if (strncasecmp(opts, cp, strlen(cp)) == 0) {
+			auth_debug_add("User rc file execution disabled.");
 			no_user_rc = 1;
-			goto next_option;
-		}
-		if ((r = match_flag("port-forwarding", 1, &opts,
-		    "Port forwarding")) != -1) {
-			no_port_forwarding_flag = r != 1;
-			goto next_option;
-		}
-		if ((r = match_flag("agent-forwarding", 1, &opts,
-		    "Agent forwarding")) != -1) {
-			no_agent_forwarding_flag = r != 1;
-			goto next_option;
-		}
-		if ((r = match_flag("x11-forwarding", 1, &opts,
-		    "X11 forwarding")) != -1) {
-			no_x11_forwarding_flag = r != 1;
-			goto next_option;
-		}
-		if ((r = match_flag("pty", 1, &opts,
-		    "PTY allocation")) != -1) {
-			no_pty_flag = r != 1;
-			goto next_option;
-		}
-		if ((r = match_flag("user-rc", 1, &opts,
-		    "User rc execution")) != -1) {
-			no_user_rc = r != 1;
+			opts += strlen(cp);
 			goto next_option;
 		}
 		cp = "command=\"";
 		if (strncasecmp(opts, cp, strlen(cp)) == 0) {
 			opts += strlen(cp);
-			free(forced_command);
+			if (forced_command != NULL)
+				free(forced_command);
 			forced_command = xmalloc(strlen(opts) + 1);
 			i = 0;
 			while (*opts) {
@@ -206,7 +181,8 @@ auth_parse_options(struct passwd *pw, const char *opts, const char *file,
 		cp = "principals=\"";
 		if (strncasecmp(opts, cp, strlen(cp)) == 0) {
 			opts += strlen(cp);
-			free(authorized_principals);
+			if (authorized_principals != NULL)
+				free(authorized_principals);
 			authorized_principals = xmalloc(strlen(opts) + 1);
 			i = 0;
 			while (*opts) {
@@ -235,7 +211,8 @@ auth_parse_options(struct passwd *pw, const char *opts, const char *file,
 			goto next_option;
 		}
 		cp = "environment=\"";
-		if (strncasecmp(opts, cp, strlen(cp)) == 0) {
+		if (options.permit_user_env &&
+		    strncasecmp(opts, cp, strlen(cp)) == 0) {
 			char *s;
 			struct envstring *new_envstring;
 
@@ -261,26 +238,20 @@ auth_parse_options(struct passwd *pw, const char *opts, const char *file,
 				goto bad_option;
 			}
 			s[i] = '\0';
+			auth_debug_add("Adding to environment: %.900s", s);
+			debug("Adding to environment: %.900s", s);
 			opts++;
-			if (options.permit_user_env) {
-				auth_debug_add("Adding to environment: "
-				    "%.900s", s);
-				debug("Adding to environment: %.900s", s);
-				new_envstring = xcalloc(1,
-				    sizeof(*new_envstring));
-				new_envstring->s = s;
-				new_envstring->next = custom_environment;
-				custom_environment = new_envstring;
-				s = NULL;
-			}
-			free(s);
+			new_envstring = xcalloc(1, sizeof(struct envstring));
+			new_envstring->s = s;
+			new_envstring->next = custom_environment;
+			custom_environment = new_envstring;
 			goto next_option;
 		}
 		cp = "from=\"";
 		if (strncasecmp(opts, cp, strlen(cp)) == 0) {
-			const char *remote_ip = ssh_remote_ipaddr(ssh);
-			const char *remote_host = auth_get_canonical_hostname(
-			    ssh, options.use_dns);
+			const char *remote_ip = get_remote_ipaddr();
+			const char *remote_host = get_canonical_hostname(
+			    options.use_dns);
 			char *patterns = xmalloc(strlen(opts) + 1);
 
 			opts += strlen(cp);
@@ -462,7 +433,6 @@ parse_option_list(struct sshbuf *oblob, struct passwd *pw,
     char **cert_forced_command,
     int *cert_source_address_done)
 {
-	struct ssh *ssh = active_state;		/* XXX */
 	char *command, *allowed;
 	const char *remote_ip;
 	char *name = NULL;
@@ -536,7 +506,7 @@ parse_option_list(struct sshbuf *oblob, struct passwd *pw,
 					free(allowed);
 					goto out;
 				}
-				remote_ip = ssh_remote_ipaddr(ssh);
+				remote_ip = get_remote_ipaddr();
 				result = addr_match_cidr_list(remote_ip,
 				    allowed);
 				free(allowed);
@@ -593,7 +563,8 @@ parse_option_list(struct sshbuf *oblob, struct passwd *pw,
 		free(*cert_forced_command);
 		*cert_forced_command = NULL;
 	}
-	free(name);
+	if (name != NULL)
+		free(name);
 	sshbuf_free(data);
 	sshbuf_free(c);
 	return ret;
@@ -604,7 +575,7 @@ parse_option_list(struct sshbuf *oblob, struct passwd *pw,
  * options so this must be called after auth_parse_options().
  */
 int
-auth_cert_options(struct sshkey *k, struct passwd *pw, const char **reason)
+auth_cert_options(struct sshkey *k, struct passwd *pw)
 {
 	int cert_no_port_forwarding_flag = 1;
 	int cert_no_agent_forwarding_flag = 1;
@@ -614,47 +585,47 @@ auth_cert_options(struct sshkey *k, struct passwd *pw, const char **reason)
 	char *cert_forced_command = NULL;
 	int cert_source_address_done = 0;
 
-	*reason = "invalid certificate options";
-
-	/* Separate options and extensions for v01 certs */
-	if (parse_option_list(k->cert->critical, pw,
-	    OPTIONS_CRITICAL, 1, NULL, NULL, NULL, NULL, NULL,
-	    &cert_forced_command,
-	    &cert_source_address_done) == -1)
-		return -1;
-	if (parse_option_list(k->cert->extensions, pw,
-	    OPTIONS_EXTENSIONS, 0,
-	    &cert_no_port_forwarding_flag,
-	    &cert_no_agent_forwarding_flag,
-	    &cert_no_x11_forwarding_flag,
-	    &cert_no_pty_flag,
-	    &cert_no_user_rc,
-	    NULL, NULL) == -1)
-		return -1;
+	if (sshkey_cert_is_legacy(k)) {
+		/* All options are in the one field for v00 certs */
+		if (parse_option_list(k->cert->critical, pw,
+		    OPTIONS_CRITICAL|OPTIONS_EXTENSIONS, 1,
+		    &cert_no_port_forwarding_flag,
+		    &cert_no_agent_forwarding_flag,
+		    &cert_no_x11_forwarding_flag,
+		    &cert_no_pty_flag,
+		    &cert_no_user_rc,
+		    &cert_forced_command,
+		    &cert_source_address_done) == -1)
+			return -1;
+	} else {
+		/* Separate options and extensions for v01 certs */
+		if (parse_option_list(k->cert->critical, pw,
+		    OPTIONS_CRITICAL, 1, NULL, NULL, NULL, NULL, NULL,
+		    &cert_forced_command,
+		    &cert_source_address_done) == -1)
+			return -1;
+		if (parse_option_list(k->cert->extensions, pw,
+		    OPTIONS_EXTENSIONS, 1,
+		    &cert_no_port_forwarding_flag,
+		    &cert_no_agent_forwarding_flag,
+		    &cert_no_x11_forwarding_flag,
+		    &cert_no_pty_flag,
+		    &cert_no_user_rc,
+		    NULL, NULL) == -1)
+			return -1;
+	}
 
 	no_port_forwarding_flag |= cert_no_port_forwarding_flag;
 	no_agent_forwarding_flag |= cert_no_agent_forwarding_flag;
 	no_x11_forwarding_flag |= cert_no_x11_forwarding_flag;
 	no_pty_flag |= cert_no_pty_flag;
 	no_user_rc |= cert_no_user_rc;
-	/*
-	 * Only permit both CA and key option forced-command if they match.
-	 * Otherwise refuse the certificate.
-	 */
-	if (cert_forced_command != NULL && forced_command != NULL) {
-		if (strcmp(forced_command, cert_forced_command) == 0) {
+	/* CA-specified forced command supersedes key option */
+	if (cert_forced_command != NULL) {
+		if (forced_command != NULL)
 			free(forced_command);
-			forced_command = cert_forced_command;
-		} else {
-			*reason = "certificate and key options forced command "
-			    "do not match";
-			free(cert_forced_command);
-			return -1;
-		}
-	} else if (cert_forced_command != NULL)
 		forced_command = cert_forced_command;
-	/* success */
-	*reason = NULL;
+	}
 	return 0;
 }
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: bcm2835_obio.c,v 1.26 2015/11/21 07:41:29 mlelstv Exp $	*/
+/*	$NetBSD: bcm2835_obio.c,v 1.20.2.3 2015/07/30 09:37:37 martin Exp $	*/
 
 /*-
  * Copyright (c) 2012, 2014 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: bcm2835_obio.c,v 1.26 2015/11/21 07:41:29 mlelstv Exp $");
+__KERNEL_RCSID(0, "$NetBSD: bcm2835_obio.c,v 1.20.2.3 2015/07/30 09:37:37 martin Exp $");
 
 #include "locators.h"
 #include "obio.h"
@@ -94,7 +94,7 @@ static const struct ambadev_locators bcm2835_ambadev_locs[] = {
 		.ad_name = "bcmmbox",
 		.ad_addr = BCM2835_ARMMBOX_BASE,
 		.ad_size = BCM2835_ARMMBOX_SIZE,
-		.ad_intr = BCM2835_INT_ARMMAILBOX
+		.ad_intr = -1, /* BCM2835_INT_ARMMAILBOX */
 	},
 #if !defined(BCM2836)
 	{
@@ -191,20 +191,6 @@ static const struct ambadev_locators bcm2835_ambadev_locs[] = {
 		.ad_name = "bcmgpio",
 		.ad_addr = BCM2835_GPIO_BASE,
 		.ad_size = BCM2835_GPIO_SIZE,
-		.ad_intr = -1,
-	},
-	{
-		/* Clock Manager */
-		.ad_name = "bcmcm",
-		.ad_addr = BCM2835_CM_BASE,
-		.ad_size = BCM2835_CM_SIZE,
-		.ad_intr = -1,
-	},
-	{
-		/* PWM Controller */
-		.ad_name = "bcmpwm",
-		.ad_addr = BCM2835_PWM_BASE,
-		.ad_size = BCM2835_PWM_SIZE,
 		.ad_intr = -1,
 	},
 	{

@@ -18,7 +18,7 @@
 
 // Effects: aborts if a + b overflows
 
-COMPILER_RT_ABI di_int __addvdi3(di_int a, di_int b);
+di_int __addvdi3(di_int a, di_int b);
 
 int test__addvdi3(di_int a, di_int b)
 {

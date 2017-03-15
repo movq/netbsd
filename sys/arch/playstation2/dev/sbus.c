@@ -1,4 +1,4 @@
-/*	$NetBSD: sbus.c,v 1.17 2016/07/19 17:04:25 maya Exp $	*/
+/*	$NetBSD: sbus.c,v 1.12 2014/03/31 11:25:49 martin Exp $	*/
 
 /*-
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -34,10 +34,9 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sbus.c,v 1.17 2016/07/19 17:04:25 maya Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sbus.c,v 1.12 2014/03/31 11:25:49 martin Exp $");
 
 #include <sys/param.h>
-#include <sys/device.h>
 #include <sys/systm.h>
 
 #include <machine/bootinfo.h>
@@ -79,20 +78,20 @@ STATIC void *sbus_usb_context;
 STATIC void sbus_init(int);
 STATIC int sbus_intr(void *);
 
-STATIC int sbus_match(device_t, cfdata_t, void *);
-STATIC void sbus_attach(device_t, device_t, void *);
-STATIC int sbus_search(device_t, cfdata_t,
+STATIC int sbus_match(struct device *, struct cfdata *, void *);
+STATIC void sbus_attach(struct device *, struct device *, void *);
+STATIC int sbus_search(struct device *, struct cfdata *,
 		       const int *, void *);
 STATIC int sbus_print(void *, const char *);
 
-CFATTACH_DECL_NEW(sbus, sizeof (struct device),
+CFATTACH_DECL(sbus, sizeof (struct device),
     sbus_match, sbus_attach, NULL, NULL);
 
 extern struct cfdriver sbus_cd;
 STATIC int __sbus_attached;
 
 int
-sbus_match(device_t parent, cfdata_t cf, void *aux)
+sbus_match(struct device *parent, struct cfdata *cf, void *aux)
 {
 	struct mainbus_attach_args *ma = aux;
 
@@ -103,7 +102,7 @@ sbus_match(device_t parent, cfdata_t cf, void *aux)
 }
 
 void
-sbus_attach(device_t parent, device_t self, void *aux)
+sbus_attach(struct device *parent, struct device *self, void *aux)
 {
 	int type = BOOTINFO_REF(BOOTINFO_PCMCIA_TYPE); 
 
@@ -116,7 +115,7 @@ sbus_attach(device_t parent, device_t self, void *aux)
 }
 
 int
-sbus_search(device_t parent, cfdata_t cf,
+sbus_search(struct device *parent, struct cfdata *cf,
 	    const int *ldesc, void *aux)
 {
 	struct sbus_attach_args sa;
@@ -247,7 +246,7 @@ sbus_spurious_intr(void *arg)
 
 /* SCPH-18000 */
 void
-sbus_type2_pcmcia_intr_clear(void)
+sbus_type2_pcmcia_intr_clear()
 {
 
 	if (_reg_read_2(SBUS_PCMCIA_CSC1_REG16) & 0x080)
@@ -255,21 +254,21 @@ sbus_type2_pcmcia_intr_clear(void)
 }
 
 void
-sbus_type2_pcmcia_intr_enable(void)
+sbus_type2_pcmcia_intr_enable()
 {
 
 	_reg_write_2(SBUS_PCMCIA_TIMR_REG16, 0);
 }
 
 void
-sbus_type2_pcmcia_intr_disable(void)
+sbus_type2_pcmcia_intr_disable()
 {
 
 	_reg_write_2(SBUS_PCMCIA_TIMR_REG16, 1);
 }
 
 void
-sbus_type2_pcmcia_intr_reinstall(void)
+sbus_type2_pcmcia_intr_reinstall()
 {
 	u_int16_t r = _reg_read_2(SBUS_PCMCIA_TIMR_REG16);
 
@@ -279,27 +278,27 @@ sbus_type2_pcmcia_intr_reinstall(void)
 
 /* SCPH-30000/35000 */
 void
-sbus_type3_pcmcia_intr_clear(void)
+sbus_type3_pcmcia_intr_clear()
 {
 	/* nothing */
 }
 
 void
-sbus_type3_pcmcia_intr_enable(void)
+sbus_type3_pcmcia_intr_enable()
 {
 
 	_reg_write_2(SBUS_PCMCIA3_TIMR_REG16, 0);
 }
 
 void
-sbus_type3_pcmcia_intr_disable(void)
+sbus_type3_pcmcia_intr_disable()
 {
 
 	_reg_write_2(SBUS_PCMCIA3_TIMR_REG16, 1);
 }
 
 void
-sbus_type3_pcmcia_intr_reinstall(void)
+sbus_type3_pcmcia_intr_reinstall()
 {
 	u_int16_t r = _reg_read_2(SBUS_PCMCIA3_TIMR_REG16);
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: adjtime.h,v 1.4 2016/01/08 21:35:35 christos Exp $	*/
+/*	$NetBSD: adjtime.h,v 1.1.1.1.26.1 2014/12/24 00:05:16 riz Exp $	*/
 
 /*************************************************************************/
 /* (c) Copyright Tai Jin, 1988.  All Rights Reserved.                    */

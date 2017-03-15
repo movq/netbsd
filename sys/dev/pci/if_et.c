@@ -1,4 +1,4 @@
-/*	$NetBSD: if_et.c,v 1.14 2016/12/15 09:28:05 ozaki-r Exp $	*/
+/*	$NetBSD: if_et.c,v 1.8.4.1 2015/08/04 21:16:43 snj Exp $	*/
 /*	$OpenBSD: if_et.c,v 1.11 2008/06/08 06:18:07 jsg Exp $	*/
 /*
  * Copyright (c) 2007 The DragonFly Project.  All rights reserved.
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_et.c,v 1.14 2016/12/15 09:28:05 ozaki-r Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_et.c,v 1.8.4.1 2015/08/04 21:16:43 snj Exp $");
 
 #include "opt_inet.h"
 #include "vlan.h"
@@ -284,7 +284,6 @@ et_attach(device_t parent, device_t self, void *aux)
 		ifmedia_set(&sc->sc_miibus.mii_media, IFM_ETHER | IFM_AUTO);
 
 	if_attach(ifp);
-	if_deferred_start_init(ifp, NULL);
 	ether_ifattach(ifp, sc->sc_enaddr);
 
 	callout_init(&sc->sc_tick, 0);
@@ -1755,9 +1754,12 @@ et_rxeof(struct et_softc *sc)
 			} else {
 				m->m_pkthdr.len = m->m_len = buflen -
 				    ETHER_CRC_LEN;
-				m_set_rcvif(m, ifp);
+				m->m_pkthdr.rcvif = ifp;
 
-				if_percpuq_enqueue(ifp->if_percpuq, m);
+				bpf_mtap(ifp, m);
+
+				ifp->if_ipackets++;
+				(*ifp->if_input)(ifp, m);
 			}
 		} else {
 			ifp->if_ierrors++;
@@ -1969,7 +1971,7 @@ et_txeof(struct et_softc *sc)
 	if (tbd->tbd_used + ET_NSEG_SPARE <= ET_TX_NDESC)
 		ifp->if_flags &= ~IFF_OACTIVE;
 
-	if_schedule_deferred_start(ifp);
+	et_start(ifp);
 }
 
 void
@@ -2051,6 +2053,11 @@ et_newbuf(struct et_rxbuf_data *rbd, int buf_idx, int init, int len0)
 	error = bus_dmamap_load_mbuf(sc->sc_dmat, sc->sc_mbuf_tmp_dmap, m,
 				     init ? BUS_DMA_WAITOK : BUS_DMA_NOWAIT);
 	if (error) {
+		if (!error) {
+			bus_dmamap_unload(sc->sc_dmat, sc->sc_mbuf_tmp_dmap);
+			error = EFBIG;
+			aprint_error_dev(sc->sc_dev, "too many segments?!\n");
+		}
 		m_freem(m);
 
 		/* XXX for debug */

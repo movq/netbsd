@@ -1,7 +1,4 @@
-// RUN: %clang_cc1 -triple %itanium_abi_triple -pedantic -verify %s
-// RUN: %clang_cc1 -triple %itanium_abi_triple -pedantic -verify -std=c++98 %s
-// RUN: %clang_cc1 -triple %itanium_abi_triple -pedantic -verify -std=c++11 %s
-
+// RUN: %clang_cc1 -pedantic -verify %s
 int* f(int) { return 0; }
 float* f(float) { return 0; }
 void f();
@@ -56,19 +53,8 @@ int* k(char*);
 double* k(bool);
 
 void test_k() {
-  int* ip1 = k("foo");
-#if __cplusplus <= 199711L
-  // expected-warning@-2 {{conversion from string literal to 'char *' is deprecated}}
-#else
-  // expected-error@-4 {{cannot initialize a variable of type 'int *' with an rvalue of type 'double *'}}
-#endif
-
-  int* ip2 = k(("foo"));
-#if __cplusplus <= 199711L
-  // expected-warning@-2 {{conversion from string literal to 'char *' is deprecated}}
-#else
-  // expected-error@-4 {{cannot initialize a variable of type 'int *' with an rvalue of type 'double *'}}
-#endif
+  int* ip1 = k("foo"); // expected-warning{{conversion from string literal to 'char *' is deprecated}}
+  int* ip2 = k(("foo")); // expected-warning{{conversion from string literal to 'char *' is deprecated}}
   double* dp1 = k(L"foo");
 }
 
@@ -76,12 +62,7 @@ int* l(wchar_t*);
 double* l(bool);
 
 void test_l() {
-  int* ip1 = l(L"foo");
-#if __cplusplus <= 199711L
-  // expected-warning@-2 {{conversion from string literal to 'wchar_t *' is deprecated}}
-#else
-  // expected-error@-4 {{cannot initialize a variable of type 'int *' with an rvalue of type 'double *'}}
-#endif
+  int* ip1 = l(L"foo"); // expected-warning{{conversion from string literal to 'wchar_t *' is deprecated}}
   double* dp1 = l("foo");
 }
 
@@ -99,12 +80,8 @@ class E;
 void test_n(E* e) {
   char ca[7];
   int* ip1 = n(ca);
-  int* ip2 = n("foo");
-#if __cplusplus <= 199711L
-  // expected-warning@-2 {{conversion from string literal to 'char *' is deprecated}}
-#else
-  // expected-warning@-4 {{ISO C++11 does not allow conversion from string literal to 'char *'}}
-#endif
+  int* ip2 = n("foo"); // expected-warning{{conversion from string literal to 'char *' is deprecated}}
+
   float fa[7];
   double* dp1 = n(fa);
 
@@ -338,7 +315,7 @@ namespace PR5756 {
 
 // Tests the exact text used to note the candidates
 namespace test1 {
-  template <class T> void foo(T t, unsigned N); // expected-note {{candidate function not viable: no known conversion from 'const char [6]' to 'unsigned int' for 2nd argument}}
+  template <class T> void foo(T t, unsigned N); // expected-note {{candidate function [with T = int] not viable: no known conversion from 'const char [6]' to 'unsigned int' for 2nd argument}}
   void foo(int n, char N); // expected-note {{candidate function not viable: no known conversion from 'const char [6]' to 'char' for 2nd argument}} 
   void foo(int n, const char *s, int t); // expected-note {{candidate function not viable: requires 3 arguments, but 2 were provided}}
   void foo(int n, const char *s, int t, ...); // expected-note {{candidate function not viable: requires at least 3 arguments, but 2 were provided}}
@@ -375,24 +352,16 @@ namespace test2 {
 }
 
 // PR 6117
-namespace IncompleteConversion {
-  struct Complete {};
+namespace test3 {
+  struct Base {};
   struct Incomplete;
 
-  void completeFunction(Complete *); // expected-note 2 {{cannot convert argument of incomplete type}}
-  void completeFunction(Complete &); // expected-note 2 {{cannot convert argument of incomplete type}}
-  
-  void testTypeConversion(Incomplete *P) {
-    completeFunction(P); // expected-error {{no matching function for call to 'completeFunction'}}
-    completeFunction(*P); // expected-error {{no matching function for call to 'completeFunction'}}
-  }
-  
-  void incompletePointerFunction(Incomplete *); // expected-note {{candidate function not viable: cannot convert argument of incomplete type 'IncompleteConversion::Incomplete' to 'IncompleteConversion::Incomplete *' for 1st argument; take the address of the argument with &}}
-  void incompleteReferenceFunction(Incomplete &); // expected-note {{candidate function not viable: cannot convert argument of incomplete type 'IncompleteConversion::Incomplete *' to 'IncompleteConversion::Incomplete &' for 1st argument; dereference the argument with *}}
-  
-  void testPointerReferenceConversion(Incomplete &reference, Incomplete *pointer) {
-    incompletePointerFunction(reference); // expected-error {{no matching function for call to 'incompletePointerFunction'}}
-    incompleteReferenceFunction(pointer); // expected-error {{no matching function for call to 'incompleteReferenceFunction'}}
+  void foo(Base *); // expected-note 2 {{cannot convert argument of incomplete type}}
+  void foo(Base &); // expected-note 2 {{cannot convert argument of incomplete type}}
+
+  void test(Incomplete *P) {
+    foo(P); // expected-error {{no matching function for call to 'foo'}}
+    foo(*P); // expected-error {{no matching function for call to 'foo'}}
   }
 }
 
@@ -624,16 +593,8 @@ void test5() {
 
 namespace PR20218 {
   void f(void (*const &)()); // expected-note 2{{candidate}}
-  void f(void (&&)()) = delete; // expected-note 2{{candidate}}
-#if __cplusplus <= 199711L
-  // expected-warning@-2 {{rvalue references are a C++11 extension}}
-  // expected-warning@-3 {{deleted function definitions are a C++11 extension}}
-#endif
-  void g(void (&&)()) = delete; // expected-note 2{{candidate}}
-#if __cplusplus <= 199711L
-  // expected-warning@-2 {{rvalue references are a C++11 extension}}
-  // expected-warning@-3 {{deleted function definitions are a C++11 extension}}
-#endif
+  void f(void (&&)()) = delete; // expected-note 2{{candidate}} expected-warning 2{{extension}}
+  void g(void (&&)()) = delete; // expected-note 2{{candidate}} expected-warning 2{{extension}}
   void g(void (*const &)()); // expected-note 2{{candidate}}
 
   void x();
@@ -646,15 +607,4 @@ namespace PR20218 {
     f(y); // expected-error {{ambiguous}}
     g(y); // expected-error {{ambiguous}}
   }
-}
-
-namespace StringLiteralToCharAmbiguity {
-  void f(char *, int);
-  void f(const char *, unsigned);
-  void g() { f("foo", 0); }
-#if __cplusplus <= 199711L
-  // expected-error@-2 {{call to 'f' is ambiguous}}
-  // expected-note@-5 {{candidate function}}
-  // expected-note@-5 {{candidate function}}
-#endif
 }

@@ -1,5 +1,5 @@
 /* Register support routines for the remote server for GDB.
-   Copyright (C) 2001-2016 Free Software Foundation, Inc.
+   Copyright (C) 2001-2014 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -19,10 +19,16 @@
 #ifndef REGCACHE_H
 #define REGCACHE_H
 
-#include "common-regcache.h"
-
+struct inferior_list_entry;
 struct thread_info;
 struct target_desc;
+
+/* The register exists, it has a value, but we don't know what it is.
+   Used when inspecting traceframes.  */
+#define REG_UNAVAILABLE 0
+
+/* We know the register's value (and we have it cached).  */
+#define REG_VALID 1
 
 /* The data for the register cache.  Note that we have one per
    inferior; this is primarily for simplicity, as the performance
@@ -67,10 +73,6 @@ void free_register_cache (struct regcache *regcache);
 
 void regcache_invalidate_thread (struct thread_info *);
 
-/* Invalidate cached registers for all threads of the given process.  */
-
-void regcache_invalidate_pid (int pid);
-
 /* Invalidate cached registers for all threads of the current
    process.  */
 
@@ -90,7 +92,7 @@ void registers_to_string (struct regcache *regcache, char *buf);
 
 void registers_from_string (struct regcache *regcache, char *buf);
 
-/* For regcache_read_pc see common/common-regcache.h.  */
+CORE_ADDR regcache_read_pc (struct regcache *regcache);
 
 void regcache_write_pc (struct regcache *regcache, CORE_ADDR pc);
 

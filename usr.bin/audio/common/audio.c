@@ -1,4 +1,4 @@
-/*	$NetBSD: audio.c,v 1.25 2015/08/05 06:54:39 mrg Exp $	*/
+/*	$NetBSD: audio.c,v 1.22.4.1 2015/01/12 19:15:27 martin Exp $	*/
 
 /*
  * Copyright (c) 1999 Matthew R. Green
@@ -32,7 +32,7 @@
 #include <sys/cdefs.h>
 
 #ifndef lint
-__RCSID("$NetBSD: audio.c,v 1.25 2015/08/05 06:54:39 mrg Exp $");
+__RCSID("$NetBSD: audio.c,v 1.22.4.1 2015/01/12 19:15:27 martin Exp $");
 #endif
 
 
@@ -139,6 +139,83 @@ audio_enc_to_val(const char *enc)
 		return (AUDIO_ENOENT);
 }
 
+void
+decode_int(const char *arg, int *intp)
+{
+	char	*ep;
+	int	ret;
+
+	ret = (int)strtoul(arg, &ep, 10);
+
+	if (ep[0] == '\0') {
+		*intp = ret;
+		return;
+	}
+	errx(1, "argument `%s' not a valid integer", arg);
+}
+
+void
+decode_uint(const char *arg, unsigned *intp)
+{
+	char	*ep;
+	unsigned	ret;
+
+	ret = (unsigned)strtoul(arg, &ep, 10);
+
+	if (ep[0] == '\0') {
+		*intp = ret;
+		return;
+	}
+	errx(1, "argument `%s' not a valid integer", arg);
+}
+
+void
+decode_time(const char *arg, struct timeval *tvp)
+{
+	char	*s, *colon, *dot;
+	char	*copy = strdup(arg);
+	int	first;
+
+	if (copy == NULL)
+		err(1, "could not allocate a copy of %s", arg);
+
+	tvp->tv_sec = tvp->tv_usec = 0;
+	s = copy;
+	
+	/* handle [hh:]mm:ss.dd */
+	if ((colon = strchr(s, ':')) != NULL) {
+		*colon++ = '\0';
+		decode_int(s, &first);
+		tvp->tv_sec = first * 60;	/* minutes */
+		s = colon;
+
+		if ((colon = strchr(s, ':')) != NULL) {
+			*colon++ = '\0';
+			decode_int(s, &first);
+			tvp->tv_sec += first;	/* minutes and hours */
+			tvp->tv_sec *= 60;
+			s = colon;
+		}
+	}
+	if ((dot = strchr(s, '.')) != NULL) {
+		int 	i, base = 100000;
+
+		*dot++ = '\0';
+
+		for (i = 0; i < 6; i++, base /= 10) {
+			if (!dot[i])
+				break;
+			if (!isdigit((unsigned char)dot[i]))
+				errx(1, "argument `%s' is not a value time specification", arg);
+			tvp->tv_usec += base * (dot[i] - '0');
+		}
+	}
+	decode_int(s, &first);
+	tvp->tv_sec += first;
+
+	free(copy);
+}
+
 /*
  * decode a string into an encoding value.
  */
@@ -178,21 +255,21 @@ audio_errstring(int errval)
 }
 
 void
-write_header(struct track_info *ti)
+write_header(struct write_info *wi)
 {
 	struct iovec iv[3];
 	int veclen, left, tlen;
 	void *hdr;
 	size_t hdrlen;
 
-	switch (ti->format) {
+	switch (wi->format) {
 	case AUDIO_FORMAT_DEFAULT:
 	case AUDIO_FORMAT_SUN:
-		if (sun_prepare_header(ti, &hdr, &hdrlen, &left) != 0)
+		if (sun_prepare_header(wi, &hdr, &hdrlen, &left) != 0)
 			return;
 		break;
 	case AUDIO_FORMAT_WAV:
-		if (wav_prepare_header(ti, &hdr, &hdrlen, &left) != 0)
+		if (wav_prepare_header(wi, &hdr, &hdrlen, &left) != 0)
 			return;
 		break;
 	case AUDIO_FORMAT_NONE:
@@ -209,9 +286,9 @@ write_header(struct track_info *ti)
 		iv[veclen].iov_len = hdrlen;
 		tlen += iv[veclen++].iov_len;
 	}
-	if (ti->header_info) {
-		iv[veclen].iov_base = ti->header_info;
-		iv[veclen].iov_len = (int)strlen(ti->header_info) + 1;
+	if (wi->header_info) {
+		iv[veclen].iov_base = wi->header_info;
+		iv[veclen].iov_len = (int)strlen(wi->header_info) + 1;
 		tlen += iv[veclen++].iov_len;
 	}
 	if (left) {
@@ -223,20 +300,20 @@ write_header(struct track_info *ti)
 	if (tlen == 0)
 		return;
 
-	if (writev(ti->outfd, iv, veclen) != tlen)
+	if (writev(wi->outfd, iv, veclen) != tlen)
 		err(1, "could not write audio header");
 }
 
 write_conv_func
-write_get_conv_func(struct track_info *ti)
+write_get_conv_func(struct write_info *wi)
 {
 
-	switch (ti->format) {
+	switch (wi->format) {
 	case AUDIO_FORMAT_DEFAULT:
 	case AUDIO_FORMAT_SUN:
-		return sun_write_get_conv_func(ti);
+		return sun_write_get_conv_func(wi);
 	case AUDIO_FORMAT_WAV:
-		return wav_write_get_conv_func(ti);
+		return wav_write_get_conv_func(wi);
 	case AUDIO_FORMAT_NONE:
 		return NULL;
 	default:

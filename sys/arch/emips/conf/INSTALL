@@ -1,4 +1,4 @@
-# 	$NetBSD: INSTALL,v 1.7 2017/02/19 07:47:00 rin Exp $
+# 	$NetBSD: INSTALL,v 1.4 2013/04/27 18:19:31 christos Exp $
 #
 # Distribution	install kernel (any model)
 #    netbsd:	cut-down kernel for miniroots.
@@ -35,8 +35,6 @@ file-system 	KERNFS			# kernel data-structure filesystem
 
 
 # Filesystem options
-#options 	DISKLABEL_EI		# disklabel Endian Independent support
-#options 	FFS_EI			# FFS Endian Independent support
 #options 	NFS_V2_ONLY		# Exclude NFS3 and NQNFS code to save space
 options 	FFS_NO_SNAPSHOT		# No FFS snapshot support
 
@@ -45,14 +43,14 @@ options 	FFS_NO_SNAPSHOT		# No FFS snapshot support
 options 	INET			# Internet protocols
 
 # Workstation console options
-#options 	FONT_BOLD8x16		# Font for fb devices
-#options 	FONT_GALLANT12x22
+options 	FONT_BOLD8x16		# Font for fb devices
+options 	FONT_GALLANT12x22
 
-#options		WSEMUL_VT100
-#options 	WSDISPLAY_DEFAULTSCREENS=1
+options		WSEMUL_VT100
+options 	WSDISPLAY_DEFAULTSCREENS=1
 #options 	WSDISPLAY_COMPAT_USL		# wsconscfg VT handling
-#options		WS_KERNEL_FG=WSCOL_GREEN
-#options		WS_KERNEL_BG=WSCOL_BLACK
+options		WS_KERNEL_FG=WSCOL_GREEN
+options		WS_KERNEL_BG=WSCOL_BLACK
 
 # Disable kernel security levels.  Needed for X with a PX or PXG.
 #options       INSECURE

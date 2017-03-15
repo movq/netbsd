@@ -43,15 +43,15 @@ protected:
 
 public:
   FixItAction();
-  ~FixItAction() override;
+  ~FixItAction();
 };
 
 /// \brief Emits changes to temporary files and uses them for the original
 /// frontend action.
 class FixItRecompile : public WrapperFrontendAction {
 public:
-  FixItRecompile(std::unique_ptr<FrontendAction> WrappedAction)
-    : WrapperFrontendAction(std::move(WrappedAction)) {}
+  FixItRecompile(FrontendAction *WrappedAction)
+    : WrapperFrontendAction(WrappedAction) {}
 
 protected:
   bool BeginInvocation(CompilerInstance &CI) override;

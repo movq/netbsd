@@ -1,4 +1,4 @@
-/*	$NetBSD: regress_et.c,v 1.3 2017/01/31 23:17:40 christos Exp $	*/
+/*	$NetBSD: regress_et.c,v 1.2 2013/04/11 16:56:42 christos Exp $	*/
 /*
  * Copyright (c) 2009-2012 Niels Provos and Nick Mathewson
  *
@@ -27,21 +27,21 @@
 #include "../util-internal.h"
 #include "event2/event-config.h"
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: regress_et.c,v 1.3 2017/01/31 23:17:40 christos Exp $");
+__RCSID("$NetBSD: regress_et.c,v 1.2 2013/04/11 16:56:42 christos Exp $");
 
-#ifdef _WIN32
+#ifdef WIN32
 #include <winsock2.h>
 #endif
 #include <sys/types.h>
 #include <sys/stat.h>
-#ifdef EVENT__HAVE_SYS_SOCKET_H
+#ifdef _EVENT_HAVE_SYS_SOCKET_H
 #include <sys/socket.h>
 #endif
 #include <fcntl.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
-#ifndef _WIN32
+#ifndef WIN32
 #include <sys/time.h>
 #include <unistd.h>
 #endif
@@ -70,7 +70,11 @@ read_cb(evutil_socket_t fd, short event, void *arg)
 		event_del(arg);
 }
 
-#ifdef _WIN32
+#ifndef SHUT_WR
+#define SHUT_WR 1
+#endif
+
+#ifdef WIN32
 #define LOCAL_SOCKETPAIR_AF AF_INET
 #else
 #define LOCAL_SOCKETPAIR_AF AF_UNIX
@@ -92,7 +96,7 @@ test_edgetriggered(void *et)
 	 * problem.
 	 */
 #ifdef __linux__
-	if (evutil_ersatz_socketpair_(AF_INET, SOCK_STREAM, 0, xpair) == -1) {
+	if (evutil_ersatz_socketpair(AF_INET, SOCK_STREAM, 0, xpair) == -1) {
 		tt_abort_perror("socketpair");
 	}
 #else
@@ -104,7 +108,7 @@ test_edgetriggered(void *et)
 	called = was_et = 0;
 
 	tt_int_op(send(xpair[0], test, (int)strlen(test)+1, 0), >, 0);
-	shutdown(xpair[0], EVUTIL_SHUT_WR);
+	shutdown(xpair[0], SHUT_WR);
 
 	/* Initalize the event library */
 	base = event_base_new();
@@ -161,13 +165,12 @@ test_edgetriggered_mix_error(void *data_)
 	struct event_base *base = NULL;
 	struct event *ev_et=NULL, *ev_lt=NULL;
 
-#ifdef EVENT__DISABLE_DEBUG_MODE
+#ifdef _EVENT_DISABLE_DEBUG_MODE
 	if (1)
 		tt_skip();
 #endif
 
-	if (!libevent_tests_running_in_debug_mode)
-		event_enable_debug_mode();
+	event_enable_debug_mode();
 
 	base = event_base_new();
 

@@ -17,8 +17,6 @@
 #include "llvm/IR/Function.h"
 #include "llvm/IR/IRPrintingPasses.h"
 #include "llvm/IR/LegacyPassNameParser.h"
-#include "llvm/IR/Module.h"
-#include "llvm/IR/OptBisect.h"
 #include "llvm/PassRegistry.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/raw_ostream.h"
@@ -47,10 +45,6 @@ PassManagerType ModulePass::getPotentialPassManagerType() const {
   return PMT_ModulePassManager;
 }
 
-bool ModulePass::skipModule(Module &M) const {
-  return !M.getContext().getOptBisect().shouldRunPass(this, M);
-}
-
 bool Pass::mustPreserveAnalysisID(char &AID) const {
   return Resolver->getAnalysisIfAvailable(&AID, true) != nullptr;
 }
@@ -64,7 +58,7 @@ void Pass::dumpPassStructure(unsigned Offset) {
 /// implemented in terms of the name that is registered by one of the
 /// Registration templates, but can be overloaded directly.
 ///
-StringRef Pass::getPassName() const {
+const char *Pass::getPassName() const {
   AnalysisID AID =  getPassID();
   const PassInfo *PI = PassRegistry::getPassRegistry()->getPassInfo(AID);
   if (PI)
@@ -119,7 +113,7 @@ void Pass::print(raw_ostream &O,const Module*) const {
 }
 
 // dump - call print(cerr);
-LLVM_DUMP_METHOD void Pass::dump() const {
+void Pass::dump() const {
   print(dbgs(), nullptr);
 }
 
@@ -146,13 +140,10 @@ PassManagerType FunctionPass::getPotentialPassManagerType() const {
   return PMT_FunctionPassManager;
 }
 
-bool FunctionPass::skipFunction(const Function &F) const {
-  if (!F.getContext().getOptBisect().shouldRunPass(this, F))
-    return true;
-
+bool FunctionPass::skipOptnoneFunction(const Function &F) const {
   if (F.hasFnAttribute(Attribute::OptimizeNone)) {
-    DEBUG(dbgs() << "Skipping pass '" << getPassName() << "' on function "
-                 << F.getName() << "\n");
+    DEBUG(dbgs() << "Skipping pass '" << getPassName()
+          << "' on function " << F.getName() << "\n");
     return true;
   }
   return false;
@@ -177,13 +168,9 @@ bool BasicBlockPass::doFinalization(Function &) {
   return false;
 }
 
-bool BasicBlockPass::skipBasicBlock(const BasicBlock &BB) const {
+bool BasicBlockPass::skipOptnoneFunction(const BasicBlock &BB) const {
   const Function *F = BB.getParent();
-  if (!F)
-    return false;
-  if (!F->getContext().getOptBisect().shouldRunPass(this, BB))
-    return true;
-  if (F->hasFnAttribute(Attribute::OptimizeNone)) {
+  if (F && F->hasFnAttribute(Attribute::OptimizeNone)) {
     // Report this only once per function.
     if (&BB == &F->getEntryBlock())
       DEBUG(dbgs() << "Skipping pass '" << getPassName()
@@ -218,7 +205,7 @@ Pass *Pass::createPass(AnalysisID ID) {
 
 // RegisterAGBase implementation
 //
-RegisterAGBase::RegisterAGBase(StringRef Name, const void *InterfaceID,
+RegisterAGBase::RegisterAGBase(const char *Name, const void *InterfaceID,
                                const void *PassID, bool isDefault)
     : PassInfo(Name, InterfaceID) {
   PassRegistry::getPassRegistry()->registerAnalysisGroup(InterfaceID, PassID,
@@ -236,8 +223,8 @@ void PassRegistrationListener::enumeratePasses() {
   PassRegistry::getPassRegistry()->enumerateWith(this);
 }
 
-PassNameParser::PassNameParser(cl::Option &O)
-    : cl::parser<const PassInfo *>(O) {
+PassNameParser::PassNameParser()
+    : Opt(nullptr) {
   PassRegistry::getPassRegistry()->addRegistrationListener(this);
 }
 

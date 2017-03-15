@@ -11,6 +11,7 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "clang/StaticAnalyzer/Core/PathDiagnosticConsumers.h"
 #include "clang/AST/ASTContext.h"
 #include "clang/AST/Decl.h"
 #include "clang/Basic/FileManager.h"
@@ -21,9 +22,6 @@
 #include "clang/Rewrite/Core/Rewriter.h"
 #include "clang/StaticAnalyzer/Core/BugReporter/PathDiagnostic.h"
 #include "clang/StaticAnalyzer/Core/CheckerManager.h"
-#include "clang/StaticAnalyzer/Core/IssueHash.h"
-#include "clang/StaticAnalyzer/Core/PathDiagnosticConsumers.h"
-#include "llvm/Support/Errc.h"
 #include "llvm/Support/FileSystem.h"
 #include "llvm/Support/MemoryBuffer.h"
 #include "llvm/Support/Path.h"
@@ -47,7 +45,7 @@ class HTMLDiagnostics : public PathDiagnosticConsumer {
 public:
   HTMLDiagnostics(AnalyzerOptions &AnalyzerOpts, const std::string& prefix, const Preprocessor &pp);
 
-  ~HTMLDiagnostics() override { FlushDiagnostics(nullptr); }
+  virtual ~HTMLDiagnostics() { FlushDiagnostics(nullptr); }
 
   void FlushDiagnosticsImpl(std::vector<const PathDiagnostic *> &Diags,
                             FilesMade *filesMade) override;
@@ -123,11 +121,11 @@ void HTMLDiagnostics::ReportDiag(const PathDiagnostic& D,
 
   // The path as already been prechecked that all parts of the path are
   // from the same file and that it is non-empty.
-  const SourceManager &SMgr = path.front()->getLocation().getManager();
+  const SourceManager &SMgr = (*path.begin())->getLocation().getManager();
   assert(!path.empty());
   FileID FID =
-    path.front()->getLocation().asLocation().getExpansionLoc().getFileID();
-  assert(FID.isValid());
+    (*path.begin())->getLocation().asLocation().getExpansionLoc().getFileID();
+  assert(!FID.isInvalid());
 
   // Create a new rewriter to generate HTML.
   Rewriter R(const_cast<SourceManager&>(SMgr), PP.getLangOpts());
@@ -144,7 +142,7 @@ void HTMLDiagnostics::ReportDiag(const PathDiagnostic& D,
           // Retrieve the relative position of the declaration which will be used
           // for the file name
           FullSourceLoc L(
-              SMgr.getExpansionLoc(path.back()->getLocation().asLocation()),
+              SMgr.getExpansionLoc((*path.rbegin())->getLocation().asLocation()),
               SMgr);
           FullSourceLoc FunL(SMgr.getExpansionLoc(Body->getLocStart()), SMgr);
           offsetDecl = L.getExpansionLineNumber() - FunL.getExpansionLineNumber();
@@ -152,30 +150,13 @@ void HTMLDiagnostics::ReportDiag(const PathDiagnostic& D,
   }
 
   // Process the path.
-  // Maintain the counts of extra note pieces separately.
-  unsigned TotalPieces = path.size();
-  unsigned TotalNotePieces =
-      std::count_if(path.begin(), path.end(),
-                    [](const std::shared_ptr<PathDiagnosticPiece> &p) {
-                      return isa<PathDiagnosticNotePiece>(*p);
-                    });
+  unsigned n = path.size();
+  unsigned max = n;
 
-  unsigned TotalRegularPieces = TotalPieces - TotalNotePieces;
-  unsigned NumRegularPieces = TotalRegularPieces;
-  unsigned NumNotePieces = TotalNotePieces;
-
-  for (auto I = path.rbegin(), E = path.rend(); I != E; ++I) {
-    if (isa<PathDiagnosticNotePiece>(I->get())) {
-      // This adds diagnostic bubbles, but not navigation.
-      // Navigation through note pieces would be added later,
-      // as a separate pass through the piece list.
-      HandlePiece(R, FID, **I, NumNotePieces, TotalNotePieces);
-      --NumNotePieces;
-    } else {
-      HandlePiece(R, FID, **I, NumRegularPieces, TotalRegularPieces);
-      --NumRegularPieces;
-    }
-  }
+  for (PathPieces::const_reverse_iterator I = path.rbegin(),
+       E = path.rend();
+        I != E; ++I, --n)
+    HandlePiece(R, FID, **I, n, max);
 
   // Add line numbers, header, footer, etc.
 
@@ -205,42 +186,28 @@ void HTMLDiagnostics::ReportDiag(const PathDiagnostic& D,
     DirName += '/';
   }
 
-  int LineNumber = path.back()->getLocation().asLocation().getExpansionLineNumber();
-  int ColumnNumber = path.back()->getLocation().asLocation().getExpansionColumnNumber();
+  int LineNumber = (*path.rbegin())->getLocation().asLocation().getExpansionLineNumber();
+  int ColumnNumber = (*path.rbegin())->getLocation().asLocation().getExpansionColumnNumber();
 
   // Add the name of the file as an <h1> tag.
+
   {
     std::string s;
     llvm::raw_string_ostream os(s);
 
     os << "<!-- REPORTHEADER -->\n"
-       << "<h3>Bug Summary</h3>\n<table class=\"simpletable\">\n"
+      << "<h3>Bug Summary</h3>\n<table class=\"simpletable\">\n"
           "<tr><td class=\"rowname\">File:</td><td>"
-       << html::EscapeText(DirName)
-       << html::EscapeText(Entry->getName())
-       << "</td></tr>\n<tr><td class=\"rowname\">Warning:</td><td>"
-          "<a href=\"#EndPath\">line "
-       << LineNumber
-       << ", column "
-       << ColumnNumber
-       << "</a><br />"
-       << D.getVerboseDescription() << "</td></tr>\n";
-
-    // The navigation across the extra notes pieces.
-    unsigned NumExtraPieces = 0;
-    for (const auto &Piece : path) {
-      if (const auto *P = dyn_cast<PathDiagnosticNotePiece>(Piece.get())) {
-        int LineNumber =
-            P->getLocation().asLocation().getExpansionLineNumber();
-        int ColumnNumber =
-            P->getLocation().asLocation().getExpansionColumnNumber();
-        os << "<tr><td class=\"rowname\">Note:</td><td>"
-           << "<a href=\"#Note" << NumExtraPieces << "\">line "
-           << LineNumber << ", column " << ColumnNumber << "</a><br />"
-           << P->getString() << "</td></tr>";
-        ++NumExtraPieces;
-      }
-    }
+      << html::EscapeText(DirName)
+      << html::EscapeText(Entry->getName())
+      << "</td></tr>\n<tr><td class=\"rowname\">Location:</td><td>"
+         "<a href=\"#EndPath\">line "
+      << LineNumber
+      << ", column "
+      << ColumnNumber
+      << "</a></td></tr>\n"
+         "<tr><td class=\"rowname\">Description:</td><td>"
+      << D.getVerboseDescription() << "</td></tr>\n";
 
     // Output any other meta data.
 
@@ -268,13 +235,6 @@ void HTMLDiagnostics::ReportDiag(const PathDiagnostic& D,
     if (!BugType.empty())
       os << "\n<!-- BUGTYPE " << BugType << " -->\n";
 
-    PathDiagnosticLocation UPDLoc = D.getUniqueingLoc();
-    FullSourceLoc L(SMgr.getExpansionLoc(UPDLoc.isValid()
-                                             ? UPDLoc.asLocation()
-                                             : D.getLocation().asLocation()),
-                    SMgr);
-    const Decl *DeclWithIssue = D.getDeclWithIssue();
-
     StringRef BugCategory = D.getCategory();
     if (!BugCategory.empty())
       os << "\n<!-- BUGCATEGORY " << BugCategory << " -->\n";
@@ -284,10 +244,6 @@ void HTMLDiagnostics::ReportDiag(const PathDiagnostic& D,
     os << "\n<!-- FILENAME " << llvm::sys::path::filename(Entry->getName()) << " -->\n";
 
     os  << "\n<!-- FUNCTIONNAME " <<  declName << " -->\n";
-
-    os << "\n<!-- ISSUEHASHCONTENTOFLINEINCONTEXT "
-       << GetIssueHash(SMgr, L, D.getCheckName(), D.getBugType(), DeclWithIssue,
-                       PP.getLangOpts()) << " -->\n";
 
     os << "\n<!-- BUGLINE "
        << LineNumber
@@ -324,14 +280,9 @@ void HTMLDiagnostics::ReportDiag(const PathDiagnostic& D,
 
   if (!AnalyzerOpts.shouldWriteStableReportFilename()) {
       llvm::sys::path::append(Model, Directory, "report-%%%%%%.html");
+
       if (std::error_code EC =
-          llvm::sys::fs::make_absolute(Model)) {
-          llvm::errs() << "warning: could not make '" << Model
-                       << "' absolute: " << EC.message() << '\n';
-        return;
-      }
-      if (std::error_code EC =
-          llvm::sys::fs::createUniqueFile(Model, FD, ResultPath)) {
+          llvm::sys::fs::createUniqueFile(Model.str(), FD, ResultPath)) {
           llvm::errs() << "warning: could not create file in '" << Directory
                        << "': " << EC.message() << '\n';
           return;
@@ -351,12 +302,12 @@ void HTMLDiagnostics::ReportDiag(const PathDiagnostic& D,
                    << "-" << i << ".html";
           llvm::sys::path::append(Model, Directory,
                                   filename.str());
-          EC = llvm::sys::fs::openFileForWrite(Model,
+          EC = llvm::sys::fs::openFileForWrite(Model.str(),
                                                FD,
                                                llvm::sys::fs::F_RW |
                                                llvm::sys::fs::F_Excl);
-          if (EC && EC != llvm::errc::file_exists) {
-              llvm::errs() << "warning: could not create file '" << Model
+          if (EC && EC != std::errc::file_exists) {
+              llvm::errs() << "warning: could not create file '" << Model.str()
                            << "': " << EC.message() << '\n';
               return;
           }
@@ -416,20 +367,13 @@ void HTMLDiagnostics::HandlePiece(Rewriter& R, FileID BugFileID,
   // Create the html for the message.
 
   const char *Kind = nullptr;
-  bool IsNote = false;
-  bool SuppressIndex = (max == 1);
   switch (P.getKind()) {
   case PathDiagnosticPiece::Call:
-      llvm_unreachable("Calls and extra notes should already be handled");
+      llvm_unreachable("Calls should already be handled");
   case PathDiagnosticPiece::Event:  Kind = "Event"; break;
   case PathDiagnosticPiece::ControlFlow: Kind = "Control"; break;
     // Setting Kind to "Control" is intentional.
   case PathDiagnosticPiece::Macro: Kind = "Control"; break;
-  case PathDiagnosticPiece::Note:
-    Kind = "Note";
-    IsNote = true;
-    SuppressIndex = true;
-    break;
   }
 
   std::string sbuf;
@@ -437,9 +381,7 @@ void HTMLDiagnostics::HandlePiece(Rewriter& R, FileID BugFileID,
 
   os << "\n<tr><td class=\"num\"></td><td class=\"line\"><div id=\"";
 
-  if (IsNote)
-    os << "Note" << num;
-  else if (num == max)
+  if (num == max)
     os << "EndPath";
   else
     os << "Path" << num;
@@ -452,13 +394,13 @@ void HTMLDiagnostics::HandlePiece(Rewriter& R, FileID BugFileID,
   // Output a maximum size.
   if (!isa<PathDiagnosticMacroPiece>(P)) {
     // Get the string and determining its maximum substring.
-    const auto &Msg = P.getString();
+    const std::string& Msg = P.getString();
     unsigned max_token = 0;
     unsigned cnt = 0;
     unsigned len = Msg.size();
 
-    for (char C : Msg)
-      switch (C) {
+    for (std::string::const_iterator I=Msg.begin(), E=Msg.end(); I!=E; ++I)
+      switch (*I) {
       default:
         ++cnt;
         continue;
@@ -501,7 +443,7 @@ void HTMLDiagnostics::HandlePiece(Rewriter& R, FileID BugFileID,
 
   os << "\">";
 
-  if (!SuppressIndex) {
+  if (max > 1) {
     os << "<table class=\"msgT\"><tr><td valign=\"top\">";
     os << "<div class=\"PathIndex";
     if (Kind) os << " PathIndex" << Kind;
@@ -541,7 +483,7 @@ void HTMLDiagnostics::HandlePiece(Rewriter& R, FileID BugFileID,
 
     os << "':\n";
 
-    if (!SuppressIndex) {
+    if (max > 1) {
       os << "</td>";
       if (num < max) {
         os << "<td><div class=\"PathNav\"><a href=\"#";
@@ -563,7 +505,7 @@ void HTMLDiagnostics::HandlePiece(Rewriter& R, FileID BugFileID,
   else {
     os << html::EscapeText(P.getString());
 
-    if (!SuppressIndex) {
+    if (max > 1) {
       os << "</td>";
       if (num < max) {
         os << "<td><div class=\"PathNav\"><a href=\"#";
@@ -615,13 +557,12 @@ unsigned HTMLDiagnostics::ProcessMacroPiece(raw_ostream &os,
         I!=E; ++I) {
 
     if (const PathDiagnosticMacroPiece *MP =
-            dyn_cast<PathDiagnosticMacroPiece>(I->get())) {
+          dyn_cast<PathDiagnosticMacroPiece>(*I)) {
       num = ProcessMacroPiece(os, *MP, num);
       continue;
     }
 
-    if (PathDiagnosticEventPiece *EP =
-            dyn_cast<PathDiagnosticEventPiece>(I->get())) {
+    if (PathDiagnosticEventPiece *EP = dyn_cast<PathDiagnosticEventPiece>(*I)) {
       os << "<div class=\"msg msgEvent\" style=\"width:94%; "
             "margin-left:5px\">"
             "<table class=\"msgT\"><tr>"

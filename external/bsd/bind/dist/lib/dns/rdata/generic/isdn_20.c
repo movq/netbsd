@@ -1,4 +1,4 @@
-/*	$NetBSD: isdn_20.c,v 1.6 2015/12/17 04:00:44 christos Exp $	*/
+/*	$NetBSD: isdn_20.c,v 1.4.4.2 2016/03/13 08:06:14 martin Exp $	*/
 
 /*
  * Copyright (C) 2004, 2005, 2007, 2009, 2013-2015  Internet Systems Consortium, Inc. ("ISC")

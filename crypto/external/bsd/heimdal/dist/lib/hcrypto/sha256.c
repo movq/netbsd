@@ -1,4 +1,4 @@
-/*	$NetBSD: sha256.c,v 1.2 2017/01/28 21:31:47 christos Exp $	*/
+/*	$NetBSD: sha256.c,v 1.1.1.2 2014/04/24 12:45:30 pettai Exp $	*/
 
 /*
  * Copyright (c) 2006 Kungliga Tekniska Högskolan
@@ -33,8 +33,7 @@
  * SUCH DAMAGE.
  */
 
-#include <config.h>
-#include <krb5/roken.h>
+#include "config.h"
 
 #include "hash.h"
 #include "sha.h"
@@ -77,7 +76,7 @@ static const uint32_t constant_256[64] = {
     0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2
 };
 
-int
+void
 SHA256_Init (SHA256_CTX *m)
 {
     m->sz[0] = 0;
@@ -90,7 +89,6 @@ SHA256_Init (SHA256_CTX *m)
     F = 0x9b05688c;
     G = 0x1f83d9ab;
     H = 0x5be0cd19;
-    return 1;
 }
 
 static void
@@ -166,7 +164,7 @@ struct x32{
     unsigned int b:32;
 };
 
-int
+void
 SHA256_Update (SHA256_CTX *m, const void *v, size_t len)
 {
     const unsigned char *p = v;
@@ -199,10 +197,9 @@ SHA256_Update (SHA256_CTX *m, const void *v, size_t len)
 	    offset = 0;
 	}
     }
-    return 1;
 }
 
-int
+void
 SHA256_Final (void *res, SHA256_CTX *m)
 {
     unsigned char zeros[72];
@@ -231,5 +228,4 @@ SHA256_Final (void *res, SHA256_CTX *m)
 	    r[4*i]   = (m->counter[i] >> 24) & 0xFF;
 	}
     }
-    return 1;
 }

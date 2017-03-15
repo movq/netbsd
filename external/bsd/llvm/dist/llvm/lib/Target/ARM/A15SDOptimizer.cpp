@@ -27,15 +27,12 @@
 #include "ARM.h"
 #include "ARMBaseInstrInfo.h"
 #include "ARMBaseRegisterInfo.h"
-#include "ARMSubtarget.h"
 #include "llvm/ADT/Statistic.h"
-#include "llvm/CodeGen/MachineFunction.h"
 #include "llvm/CodeGen/MachineFunctionPass.h"
 #include "llvm/CodeGen/MachineInstr.h"
 #include "llvm/CodeGen/MachineInstrBuilder.h"
 #include "llvm/CodeGen/MachineRegisterInfo.h"
 #include "llvm/Support/Debug.h"
-#include "llvm/Support/raw_ostream.h"
 #include "llvm/Target/TargetRegisterInfo.h"
 #include "llvm/Target/TargetSubtargetInfo.h"
 #include <map>
@@ -52,7 +49,9 @@ namespace {
 
     bool runOnMachineFunction(MachineFunction &Fn) override;
 
-    StringRef getPassName() const override { return "ARM A15 S->D optimizer"; }
+    const char *getPassName() const override {
+      return "ARM A15 S->D optimizer";
+    }
 
   private:
     const ARMBaseInstrInfo *TII;
@@ -66,31 +65,34 @@ namespace {
     //
     unsigned createDupLane(MachineBasicBlock &MBB,
                            MachineBasicBlock::iterator InsertBefore,
-                           const DebugLoc &DL, unsigned Reg, unsigned Lane,
-                           bool QPR = false);
+                           DebugLoc DL,
+                           unsigned Reg, unsigned Lane,
+                           bool QPR=false);
 
     unsigned createExtractSubreg(MachineBasicBlock &MBB,
                                  MachineBasicBlock::iterator InsertBefore,
-                                 const DebugLoc &DL, unsigned DReg,
-                                 unsigned Lane, const TargetRegisterClass *TRC);
+                                 DebugLoc DL,
+                                 unsigned DReg, unsigned Lane,
+                                 const TargetRegisterClass *TRC);
 
     unsigned createVExt(MachineBasicBlock &MBB,
                         MachineBasicBlock::iterator InsertBefore,
-                        const DebugLoc &DL, unsigned Ssub0, unsigned Ssub1);
+                        DebugLoc DL,
+                        unsigned Ssub0, unsigned Ssub1);
 
     unsigned createRegSequence(MachineBasicBlock &MBB,
                                MachineBasicBlock::iterator InsertBefore,
-                               const DebugLoc &DL, unsigned Reg1,
-                               unsigned Reg2);
+                               DebugLoc DL,
+                               unsigned Reg1, unsigned Reg2);
 
     unsigned createInsertSubreg(MachineBasicBlock &MBB,
                                 MachineBasicBlock::iterator InsertBefore,
-                                const DebugLoc &DL, unsigned DReg,
-                                unsigned Lane, unsigned ToInsert);
+                                DebugLoc DL, unsigned DReg, unsigned Lane,
+                                unsigned ToInsert);
 
     unsigned createImplicitDef(MachineBasicBlock &MBB,
                                MachineBasicBlock::iterator InsertBefore,
-                               const DebugLoc &DL);
+                               DebugLoc DL);
 
     //
     // Various property checkers
@@ -421,10 +423,11 @@ SmallVector<unsigned, 8> A15SDOptimizer::getReadDPRs(MachineInstr *MI) {
 }
 
 // Creates a DPR register from an SPR one by using a VDUP.
-unsigned A15SDOptimizer::createDupLane(MachineBasicBlock &MBB,
-                                       MachineBasicBlock::iterator InsertBefore,
-                                       const DebugLoc &DL, unsigned Reg,
-                                       unsigned Lane, bool QPR) {
+unsigned
+A15SDOptimizer::createDupLane(MachineBasicBlock &MBB,
+                              MachineBasicBlock::iterator InsertBefore,
+                              DebugLoc DL,
+                              unsigned Reg, unsigned Lane, bool QPR) {
   unsigned Out = MRI->createVirtualRegister(QPR ? &ARM::QPRRegClass :
                                                   &ARM::DPRRegClass);
   AddDefaultPred(BuildMI(MBB,
@@ -439,10 +442,12 @@ unsigned A15SDOptimizer::createDupLane(MachineBasicBlock &MBB,
 }
 
 // Creates a SPR register from a DPR by copying the value in lane 0.
-unsigned A15SDOptimizer::createExtractSubreg(
-    MachineBasicBlock &MBB, MachineBasicBlock::iterator InsertBefore,
-    const DebugLoc &DL, unsigned DReg, unsigned Lane,
-    const TargetRegisterClass *TRC) {
+unsigned
+A15SDOptimizer::createExtractSubreg(MachineBasicBlock &MBB,
+                                    MachineBasicBlock::iterator InsertBefore,
+                                    DebugLoc DL,
+                                    unsigned DReg, unsigned Lane,
+                                    const TargetRegisterClass *TRC) {
   unsigned Out = MRI->createVirtualRegister(TRC);
   BuildMI(MBB,
           InsertBefore,
@@ -454,9 +459,11 @@ unsigned A15SDOptimizer::createExtractSubreg(
 }
 
 // Takes two SPR registers and creates a DPR by using a REG_SEQUENCE.
-unsigned A15SDOptimizer::createRegSequence(
-    MachineBasicBlock &MBB, MachineBasicBlock::iterator InsertBefore,
-    const DebugLoc &DL, unsigned Reg1, unsigned Reg2) {
+unsigned
+A15SDOptimizer::createRegSequence(MachineBasicBlock &MBB,
+                                  MachineBasicBlock::iterator InsertBefore,
+                                  DebugLoc DL,
+                                  unsigned Reg1, unsigned Reg2) {
   unsigned Out = MRI->createVirtualRegister(&ARM::QPRRegClass);
   BuildMI(MBB,
           InsertBefore,
@@ -471,10 +478,11 @@ unsigned A15SDOptimizer::createRegSequence(
 
 // Takes two DPR registers that have previously been VDUPed (Ssub0 and Ssub1)
 // and merges them into one DPR register.
-unsigned A15SDOptimizer::createVExt(MachineBasicBlock &MBB,
-                                    MachineBasicBlock::iterator InsertBefore,
-                                    const DebugLoc &DL, unsigned Ssub0,
-                                    unsigned Ssub1) {
+unsigned
+A15SDOptimizer::createVExt(MachineBasicBlock &MBB,
+                           MachineBasicBlock::iterator InsertBefore,
+                           DebugLoc DL,
+                           unsigned Ssub0, unsigned Ssub1) {
   unsigned Out = MRI->createVirtualRegister(&ARM::DPRRegClass);
   AddDefaultPred(BuildMI(MBB,
                          InsertBefore,
@@ -486,9 +494,11 @@ unsigned A15SDOptimizer::createVExt(MachineBasicBlock &MBB,
   return Out;
 }
 
-unsigned A15SDOptimizer::createInsertSubreg(
-    MachineBasicBlock &MBB, MachineBasicBlock::iterator InsertBefore,
-    const DebugLoc &DL, unsigned DReg, unsigned Lane, unsigned ToInsert) {
+unsigned
+A15SDOptimizer::createInsertSubreg(MachineBasicBlock &MBB,
+                                   MachineBasicBlock::iterator InsertBefore,
+                                   DebugLoc DL, unsigned DReg, unsigned Lane,
+                                   unsigned ToInsert) {
   unsigned Out = MRI->createVirtualRegister(&ARM::DPR_VFP2RegClass);
   BuildMI(MBB,
           InsertBefore,
@@ -504,7 +514,7 @@ unsigned A15SDOptimizer::createInsertSubreg(
 unsigned
 A15SDOptimizer::createImplicitDef(MachineBasicBlock &MBB,
                                   MachineBasicBlock::iterator InsertBefore,
-                                  const DebugLoc &DL) {
+                                  DebugLoc DL) {
   unsigned Out = MRI->createVirtualRegister(&ARM::DPRRegClass);
   BuildMI(MBB,
           InsertBefore,
@@ -668,16 +678,8 @@ bool A15SDOptimizer::runOnInstruction(MachineInstr *MI) {
 }
 
 bool A15SDOptimizer::runOnMachineFunction(MachineFunction &Fn) {
-  if (skipFunction(*Fn.getFunction()))
-    return false;
-
-  const ARMSubtarget &STI = Fn.getSubtarget<ARMSubtarget>();
-  // Since the A15SDOptimizer pass can insert VDUP instructions, it can only be
-  // enabled when NEON is available.
-  if (!(STI.isCortexA15() && STI.hasNEON()))
-    return false;
-  TII = STI.getInstrInfo();
-  TRI = STI.getRegisterInfo();
+  TII = static_cast<const ARMBaseInstrInfo *>(Fn.getSubtarget().getInstrInfo());
+  TRI = Fn.getSubtarget().getRegisterInfo();
   MRI = &Fn.getRegInfo();
   bool Modified = false;
 
@@ -691,7 +693,7 @@ bool A15SDOptimizer::runOnMachineFunction(MachineFunction &Fn) {
 
     for (MachineBasicBlock::iterator MI = MFI->begin(), ME = MFI->end();
       MI != ME;) {
-      Modified |= runOnInstruction(&*MI++);
+      Modified |= runOnInstruction(MI++);
     }
 
   }

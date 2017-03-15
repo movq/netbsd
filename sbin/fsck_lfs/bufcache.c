@@ -1,4 +1,4 @@
-/* $NetBSD: bufcache.c,v 1.19 2016/08/25 07:43:18 christos Exp $ */
+/* $NetBSD: bufcache.c,v 1.14 2013/10/19 01:09:58 christos Exp $ */
 /*-
  * Copyright (c) 2003 The NetBSD Foundation, Inc.
  * All rights reserved.
@@ -101,19 +101,17 @@ bufinit(int max)
 /* Widen the hash table. */
 void bufrehash(int max)
 {
-	int i, newhashmax;
+	int i, newhashmax, newhashmask;
 	struct ubuf *bp, *nbp;
 	struct bufhash_struct *np;
 
-	if (max < 0 || max <= hashmax)
+	if (max < 0 || max < hashmax)
 		return;
 
 	/* Round up to a power of two */
 	for (newhashmax = 1; newhashmax < max; newhashmax <<= 1)
 		;
-
-	/* update the mask right away so vl_hash() uses it */
-	hashmask = newhashmax - 1;
+	newhashmask = newhashmax - 1;
 
 	/* Allocate new empty hash table, if we can */
 	np = emalloc(newhashmax * sizeof(*bufhash));
@@ -136,6 +134,7 @@ void bufrehash(int max)
 	free(bufhash);
 	bufhash = np;
 	hashmax = newhashmax;
+	hashmask = newhashmask;
 }
 
 /* Print statistics of buffer cache usage */
@@ -155,6 +154,7 @@ bufstats(void)
 void
 buf_destroy(struct ubuf * bp)
 {
+	bp->b_flags |= B_NEEDCOMMIT;
 	LIST_REMOVE(bp, b_vnbufs);
 	LIST_REMOVE(bp, b_hash);
 	if (!(bp->b_flags & B_DONTFREE))
@@ -173,6 +173,8 @@ bremfree(struct ubuf * bp)
 	 * We only calculate the head of the freelist when removing
 	 * the last element of the list as that is the only time that
 	 * it is needed (e.g. to reset the tail pointer).
+	 *
+	 * NB: This makes an assumption about how tailq's are implemented.
 	 */
 	if (bp->b_flags & B_LOCKED) {
 		locked_queue_bytes -= bp->b_bcount;
@@ -180,7 +182,7 @@ bremfree(struct ubuf * bp)
 	}
 	if (TAILQ_NEXT(bp, b_freelist) == NULL) {
 		for (dp = bufqueues; dp < &bufqueues[BQUEUES]; dp++)
-			if (TAILQ_LAST(dp, bqueues) == bp)
+			if (dp->tqh_last == &bp->b_freelist.tqe_next)
 				break;
 		if (dp == &bufqueues[BQUEUES])
 			errx(1, "bremfree: lost tail");
@@ -228,6 +230,7 @@ getblk(struct uvnode * vp, daddr_t lbn, int size)
 	 * the buffer, its contents are invalid; but shrinking is okay.
 	 */
 	if ((bp = incore(vp, lbn)) != NULL) {
+		assert(!(bp->b_flags & B_NEEDCOMMIT));
 		assert(!(bp->b_flags & B_BUSY));
 		bp->b_flags |= B_BUSY;
 		bremfree(bp);
@@ -305,6 +308,7 @@ brelse(struct ubuf * bp, int set)
 {
 	int age;
 
+	assert(!(bp->b_flags & B_NEEDCOMMIT));
 	assert(bp->b_flags & B_BUSY);
 
 	bp->b_flags |= set;
@@ -335,7 +339,8 @@ brelse(struct ubuf * bp, int set)
 
 /* Read the given block from disk, return it B_BUSY. */
 int
-bread(struct uvnode * vp, daddr_t lbn, int size, int flags, struct ubuf ** bpp)
+bread(struct uvnode * vp, daddr_t lbn, int size, void * unused,
+    int flags, struct ubuf ** bpp)
 {
 	struct ubuf *bp;
 	daddr_t daddr;

@@ -1,4 +1,4 @@
-/*	$NetBSD: domain_list.h,v 1.2 2017/02/14 01:16:45 christos Exp $	*/
+/*	$NetBSD: domain_list.h,v 1.1.1.2 2013/01/02 18:58:57 tron Exp $	*/
 
 #ifndef _DOMAIN_LIST_H_INCLUDED_
 #define _DOMAIN_LIST_H_INCLUDED_
@@ -23,8 +23,7 @@
   */
 #define DOMAIN_LIST	MATCH_LIST
 
-#define domain_list_init(o, f, p)\
-			match_list_init((o), (f), (p), 1, match_hostname)
+#define domain_list_init(f, p)	match_list_init((f), (p), 1, match_hostname)
 #define domain_list_match	match_list_match
 #define domain_list_free	match_list_free
 

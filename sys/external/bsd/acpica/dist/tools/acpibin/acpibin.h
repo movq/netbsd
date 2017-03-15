@@ -5,7 +5,7 @@
  *****************************************************************************/
 
 /*
- * Copyright (C) 2000 - 2017, Intel Corp.
+ * Copyright (C) 2000 - 2013, Intel Corp.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -43,7 +43,10 @@
 
 #include "acpi.h"
 #include "accommon.h"
-#include "acapps.h"
+
+#include <stdio.h>
+#include <fcntl.h>
+#include <errno.h>
 
 #define DB_CONSOLE_OUTPUT            0x02
 #define ACPI_DB_REDIRECTABLE_OUTPUT  0x01
@@ -63,14 +66,18 @@
 /* Globals */
 
 EXTERN BOOLEAN              INIT_GLOBAL (Gbl_TerseMode, FALSE);
-EXTERN BOOLEAN              INIT_GLOBAL (AbGbl_DisplayAllMiscompares, FALSE);
-EXTERN UINT32               INIT_GLOBAL (AbGbl_CompareOffset, 0);
 
 
 /* Prototypes */
 
 int
 AbCompareAmlFiles (
+    char                    *File1Path,
+    char                    *File2Path);
+
+int
+AbExtractAmlFile (
+    char                    *TableSig,
     char                    *File1Path,
     char                    *File2Path);
 

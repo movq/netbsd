@@ -1,9 +1,9 @@
-/*	$NetBSD: mods.c,v 1.1.1.5 2017/02/09 01:46:58 christos Exp $	*/
+/*	$NetBSD: mods.c,v 1.1.1.4 2014/05/28 09:58:47 tron Exp $	*/
 
 /* $OpenLDAP$ */
 /* This work is part of OpenLDAP Software <http://www.openldap.org/>.
  *
- * Copyright 1998-2016 The OpenLDAP Foundation.
+ * Copyright 1998-2014 The OpenLDAP Foundation.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -24,9 +24,6 @@
  * software without specific prior written permission. This software
  * is provided ``as is'' without express or implied warranty.
  */
-
-#include <sys/cdefs.h>
-__RCSID("$NetBSD: mods.c,v 1.1.1.5 2017/02/09 01:46:58 christos Exp $");
 
 #include "portable.h"
 
@@ -393,7 +390,6 @@ modify_increment_values(
 	char *textbuf, size_t textlen )
 {
 	Attribute *a;
-	const char *syn_oid;
 
 	a = attr_find( e->e_attrs, mod->sm_desc );
 	if( a == NULL ) {
@@ -412,8 +408,7 @@ modify_increment_values(
 		}
 	}
 
-	syn_oid = at_syntax( a->a_desc->ad_type );
-	if ( syn_oid && !strcmp( syn_oid, SLAPD_INTEGER_SYNTAX )) {
+	if ( !strcmp( a->a_desc->ad_type->sat_syntax_oid, SLAPD_INTEGER_SYNTAX )) {
 		int i;
 		char str[sizeof(long)*3 + 2]; /* overly long */
 		long incr;
@@ -453,7 +448,7 @@ modify_increment_values(
 		snprintf( textbuf, textlen,
 			"modify/increment: %s: increment not supported for value syntax %s",
 			mod->sm_desc->ad_cname.bv_val,
-			syn_oid ? syn_oid : "(NULL)" );
+			a->a_desc->ad_type->sat_syntax_oid );
 		return LDAP_CONSTRAINT_VIOLATION;
 	}
 

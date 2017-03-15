@@ -1,4 +1,4 @@
-/*	$NetBSD: cert.c,v 1.4 2017/01/28 21:31:48 christos Exp $	*/
+/*	$NetBSD: cert.c,v 1.3 2014/04/24 13:45:34 pettai Exp $	*/
 
 /*
  * Copyright (c) 2004 - 2007 Kungliga Tekniska Högskolan
@@ -95,14 +95,6 @@ typedef struct hx509_name_constraints {
 #define GeneralSubtrees_SET(g,var) \
 	(g)->len = (var)->len, (g)->val = (var)->val;
 
-static void
-init_context_once(void *ignored)
-{
-
-    ENGINE_add_conf_module();
-    OpenSSL_add_all_algorithms();
-}
-
 /**
  * Creates a hx509 context that most functions in the library
  * uses. The context is only allowed to be used by one thread at each
@@ -118,13 +110,9 @@ init_context_once(void *ignored)
 int
 hx509_context_init(hx509_context *context)
 {
-    static heim_base_once_t init_context = HEIM_BASE_ONCE_INIT;
-
     *context = calloc(1, sizeof(**context));
     if (*context == NULL)
 	return ENOMEM;
-
-    heim_base_once_f(&init_context, NULL, init_context_once);
 
     _hx509_ks_null_register(*context);
     _hx509_ks_mem_register(*context);
@@ -133,6 +121,9 @@ hx509_context_init(hx509_context *context)
     _hx509_ks_pkcs11_register(*context);
     _hx509_ks_dir_register(*context);
     _hx509_ks_keychain_register(*context);
+
+    ENGINE_add_conf_module();
+    OpenSSL_add_all_algorithms();
 
     (*context)->ocsp_time_diff = HX509_DEFAULT_OCSP_TIME_DIFF;
 
@@ -220,48 +211,42 @@ _hx509_cert_get_version(const Certificate *t)
  *
  * @param context A hx509 context.
  * @param c
- * @param error
+ * @param cert
  *
- * @return Returns an hx509 certificate
+ * @return Returns an hx509 error code.
  *
  * @ingroup hx509_cert
  */
 
-hx509_cert
-hx509_cert_init(hx509_context context, const Certificate *c, heim_error_t *error)
+int
+hx509_cert_init(hx509_context context, const Certificate *c, hx509_cert *cert)
 {
-    hx509_cert cert;
     int ret;
 
-    cert = malloc(sizeof(*cert));
-    if (cert == NULL) {
-	if (error)
-	    *error = heim_error_create_enomem();
-	return NULL;
-    }
-    cert->ref = 1;
-    cert->friendlyname = NULL;
-    cert->attrs.len = 0;
-    cert->attrs.val = NULL;
-    cert->private_key = NULL;
-    cert->basename = NULL;
-    cert->release = NULL;
-    cert->ctx = NULL;
+    *cert = malloc(sizeof(**cert));
+    if (*cert == NULL)
+	return ENOMEM;
+    (*cert)->ref = 1;
+    (*cert)->friendlyname = NULL;
+    (*cert)->attrs.len = 0;
+    (*cert)->attrs.val = NULL;
+    (*cert)->private_key = NULL;
+    (*cert)->basename = NULL;
+    (*cert)->release = NULL;
+    (*cert)->ctx = NULL;
 
-    cert->data = calloc(1, sizeof(*(cert->data)));
-    if (cert->data == NULL) {
-	free(cert);
-	if (error)
-	    *error = heim_error_create_enomem();
-	return NULL;
+    (*cert)->data = calloc(1, sizeof(*(*cert)->data));
+    if ((*cert)->data == NULL) {
+	free(*cert);
+	return ENOMEM;
     }
-    ret = copy_Certificate(c, cert->data);
+    ret = copy_Certificate(c, (*cert)->data);
     if (ret) {
-	free(cert->data);
-	free(cert);
-	cert = NULL;
+	free((*cert)->data);
+	free(*cert);
+	*cert = NULL;
     }
-    return cert;
+    return ret;
 }
 
 /**
@@ -276,41 +261,39 @@ hx509_cert_init(hx509_context context, const Certificate *c, heim_error_t *error
  * @param context A hx509 context.
  * @param ptr pointer to memory region containing encoded certificate.
  * @param len length of memory region.
- * @param error possibly returns an error
+ * @param cert a return pointer to a hx509 certificate object, will
+ * contain NULL on error.
  *
- * @return An hx509 certificate
+ * @return An hx509 error code, see hx509_get_error_string().
  *
  * @ingroup hx509_cert
  */
 
-hx509_cert
+int
 hx509_cert_init_data(hx509_context context,
 		     const void *ptr,
 		     size_t len,
-		     heim_error_t *error)
+		     hx509_cert *cert)
 {
-    hx509_cert cert;
     Certificate t;
     size_t size;
     int ret;
 
     ret = decode_Certificate(ptr, len, &t, &size);
     if (ret) {
-	if (error)
-	    *error = heim_error_create(ret, "Failed to decode certificate");
-	return NULL;
+	hx509_set_error_string(context, 0, ret, "Failed to decode certificate");
+	return ret;
     }
     if (size != len) {
 	free_Certificate(&t);
-	if (error)
-	    *error = heim_error_create(HX509_EXTRA_DATA_AFTER_STRUCTURE,
-				       "Extra data after certificate");
-	return NULL;
+	hx509_set_error_string(context, 0, HX509_EXTRA_DATA_AFTER_STRUCTURE,
+			       "Extra data after certificate");
+	return HX509_EXTRA_DATA_AFTER_STRUCTURE;
     }
 
-    cert = hx509_cert_init(context, &t, error);
+    ret = hx509_cert_init(context, &t, cert);
     free_Certificate(&t);
-    return cert;
+    return ret;
 }
 
 void
@@ -846,8 +829,7 @@ check_key_usage(hx509_context context, const Certificate *cert,
 	_hx509_unparse_Name(&cert->tbsCertificate.subject, &name);
 	hx509_set_error_string(context, 0, HX509_KU_CERT_MISSING,
 			       "Key usage %s required but missing "
-			       "from certifiate %s", buf,
-                               name ? name : "<unknown>");
+			       "from certifiate %s", buf, name);
 	free(name);
 	return HX509_KU_CERT_MISSING;
     }
@@ -990,7 +972,7 @@ _hx509_cert_is_parent_cmp(const Certificate *subject,
 	if (ai.authorityCertIssuer->val[0].element != choice_GeneralName_directoryName)
 	    return -1;
 
-	name.element = (enum Name_enum)
+	name.element =
 	    ai.authorityCertIssuer->val[0].u.directoryName.element;
 	name.u.rdnSequence =
 	    ai.authorityCertIssuer->val[0].u.directoryName.u.rdnSequence;
@@ -1823,12 +1805,12 @@ match_general_name(const GeneralName *c, const GeneralName *n, int *match)
 
 	c_name._save.data = NULL;
 	c_name._save.length = 0;
-	c_name.element = (enum Name_enum)c->u.directoryName.element;
+	c_name.element = c->u.directoryName.element;
 	c_name.u.rdnSequence = c->u.directoryName.u.rdnSequence;
 
 	n_name._save.data = NULL;
 	n_name._save.length = 0;
-	n_name.element = (enum Name_enum)n->u.directoryName.element;
+	n_name.element = n->u.directoryName.element;
 	n_name.u.rdnSequence = n->u.directoryName.u.rdnSequence;
 
 	ret = match_X501Name(&c_name, &n_name);
@@ -1849,7 +1831,7 @@ match_alt_name(const GeneralName *n, const Certificate *c,
 	       int *same, int *match)
 {
     GeneralNames sa;
-    int ret = 0;
+    int ret;
     size_t i, j;
 
     i = 0;
@@ -1864,7 +1846,7 @@ match_alt_name(const GeneralName *n, const Certificate *c,
 	for (j = 0; j < sa.len; j++) {
 	    if (n->element == sa.val[j].element) {
 		*same = 1;
-		match_general_name(n, &sa.val[j], match);
+		ret = match_general_name(n, &sa.val[j], match);
 	    }
 	}
 	free_GeneralNames(&sa);
@@ -1898,12 +1880,12 @@ match_tree(const GeneralSubtrees *t, const Certificate *c, int *match)
 
 	    memset(&certname, 0, sizeof(certname));
 	    certname.element = choice_GeneralName_directoryName;
-	    certname.u.directoryName.element = (enum GeneralName_directoryName_enum)
+	    certname.u.directoryName.element =
 		c->tbsCertificate.subject.element;
 	    certname.u.directoryName.u.rdnSequence =
 		c->tbsCertificate.subject.u.rdnSequence;
 
-	    match_general_name(&t->val[i].base, &certname, &name);
+	    ret = match_general_name(&t->val[i].base, &certname, &name);
 	}
 
 	/* Handle subjectAltNames, this is icky since they
@@ -1911,7 +1893,7 @@ match_tree(const GeneralSubtrees *t, const Certificate *c, int *match)
 	 * same type. So if there have been a match of type, require
 	 * altname to be set.
 	 */
-	match_alt_name(&t->val[i].base, c, &same, &alt_name);
+	ret = match_alt_name(&t->val[i].base, c, &same, &alt_name);
     }
     if (name && (!same || alt_name))
 	*match = 1;
@@ -2004,16 +1986,6 @@ hx509_verify_path(hx509_context context,
     hx509_certs anchors = NULL;
 
     memset(&proxy_issuer, 0, sizeof(proxy_issuer));
-
-    if ((ctx->flags & HX509_VERIFY_CTX_F_ALLOW_PROXY_CERTIFICATE) == 0 &&
-	is_proxy_cert(context, cert->data, NULL) == 0)
-    {
-	ret = HX509_PROXY_CERT_INVALID;
-	hx509_set_error_string(context, 0, ret,
-			       "Proxy certificate is not allowed as an EE "
-			       "certificae if proxy certificate is disabled");
-	return ret;
-    }
 
     ret = init_name_constraints(&nc);
     if (ret)
@@ -2383,12 +2355,20 @@ hx509_verify_path(hx509_context context,
 	    goto out;
 	}
 	/*
-	 * Verify that the sigature algorithm is not weak. Ignore
-	 * trust anchors since they are provisioned by the user.
+	 * Verify that the sigature algorithm "best-before" date is
+	 * before the creation date of the certificate, do this for
+	 * trust anchors too, since any trust anchor that is created
+	 * after a algorithm is known to be bad deserved to be invalid.
+	 *
+	 * Skip the leaf certificate for now...
 	 */
 
-	if (i + 1 != path.len && (ctx->flags & HX509_VERIFY_CTX_F_NO_BEST_BEFORE_CHECK) == 0) {
-	    ret = _hx509_signature_is_weak(context, &c->signatureAlgorithm);
+	if (i != 0 && (ctx->flags & HX509_VERIFY_CTX_F_NO_BEST_BEFORE_CHECK) == 0) {
+	    time_t notBefore =
+		_hx509_Time2time_t(&c->tbsCertificate.validity.notBefore);
+	    ret = _hx509_signature_best_before(context,
+					       &c->signatureAlgorithm,
+					       notBefore);
 	    if (ret)
 		goto out;
 	}
@@ -3406,7 +3386,7 @@ hx509_cert_binary(hx509_context context, hx509_cert c, heim_octet_string *os)
 
 void
 _hx509_abort(const char *fmt, ...)
-     __attribute__ ((__noreturn__, __format__ (__printf__, 1, 2)))
+     __attribute__ ((noreturn, format (printf, 1, 2)))
 {
     va_list ap;
     va_start(ap, fmt);
@@ -3447,9 +3427,7 @@ _hx509_cert_to_env(hx509_context context, hx509_cert cert, hx509_env *env)
     *env = NULL;
 
     /* version */
-    ret = asprintf(&buf, "%d", _hx509_cert_get_version(_hx509_get_cert(cert)));
-    if (ret == -1)
-	goto out;
+    asprintf(&buf, "%d", _hx509_cert_get_version(_hx509_get_cert(cert)));
     ret = hx509_env_add(context, &envcert, "version", buf);
     free(buf);
     if (ret)

@@ -22,6 +22,7 @@
 #include "clang/Lex/PreprocessorOptions.h"
 #include "gtest/gtest.h"
 
+using namespace llvm;
 using namespace clang;
 
 namespace {
@@ -36,12 +37,13 @@ class VoidModuleLoader : public ModuleLoader {
 
   void makeModuleVisible(Module *Mod,
                          Module::NameVisibilityKind Visibility,
-                         SourceLocation ImportLoc) override { }
+                         SourceLocation ImportLoc,
+                         bool Complain) override { }
 
   GlobalModuleIndex *loadGlobalModuleIndex(SourceLocation TriggerLoc) override
     { return nullptr; }
   bool lookupMissingImports(StringRef Name, SourceLocation TriggerLoc) override
-    { return 0; }
+    { return 0; };
 };
 
 // The test fixture.
@@ -58,16 +60,16 @@ protected:
     Target = TargetInfo::CreateTargetInfo(Diags, TargetOpts);
   }
 
-  std::vector<Token> Lex(StringRef Source) {
-    std::unique_ptr<llvm::MemoryBuffer> Buf =
-        llvm::MemoryBuffer::getMemBuffer(Source);
+  std::vector<Token> CheckLex(StringRef Source,
+                              ArrayRef<tok::TokenKind> ExpectedTokens) {
+    std::unique_ptr<MemoryBuffer> Buf = MemoryBuffer::getMemBuffer(Source);
     SourceMgr.setMainFileID(SourceMgr.createFileID(std::move(Buf)));
 
     VoidModuleLoader ModLoader;
-    HeaderSearch HeaderInfo(std::make_shared<HeaderSearchOptions>(), SourceMgr,
-                            Diags, LangOpts, Target.get());
-    Preprocessor PP(std::make_shared<PreprocessorOptions>(), Diags, LangOpts,
-                    SourceMgr, HeaderInfo, ModLoader, /*IILookup =*/nullptr,
+    HeaderSearch HeaderInfo(new HeaderSearchOptions, SourceMgr, Diags, LangOpts,
+                            Target.get());
+    Preprocessor PP(new PreprocessorOptions(), Diags, LangOpts, SourceMgr,
+                    HeaderInfo, ModLoader, /*IILookup =*/nullptr,
                     /*OwnsHeaderSearch =*/false);
     PP.Initialize(*Target);
     PP.EnterMainSourceFile();
@@ -81,12 +83,6 @@ protected:
       toks.push_back(tok);
     }
 
-    return toks;
-  }
-
-  std::vector<Token> CheckLex(StringRef Source,
-                              ArrayRef<tok::TokenKind> ExpectedTokens) {
-    auto toks = Lex(Source);
     EXPECT_EQ(ExpectedTokens.size(), toks.size());
     for (unsigned i = 0, e = ExpectedTokens.size(); i != e; ++i) {
       EXPECT_EQ(ExpectedTokens[i], toks[i].getKind());
@@ -361,23 +357,6 @@ TEST_F(LexerTest, LexAPI) {
   EXPECT_EQ("INN", Lexer::getImmediateMacroName(idLoc2, SourceMgr, LangOpts));
   EXPECT_EQ("NOF2", Lexer::getImmediateMacroName(idLoc3, SourceMgr, LangOpts));
   EXPECT_EQ("N", Lexer::getImmediateMacroName(idLoc4, SourceMgr, LangOpts));
-}
-
-TEST_F(LexerTest, DontMergeMacroArgsFromDifferentMacroFiles) {
-  std::vector<Token> toks =
-      Lex("#define helper1 0\n"
-          "void helper2(const char *, ...);\n"
-          "#define M1(a, ...) helper2(a, ##__VA_ARGS__)\n"
-          "#define M2(a, ...) M1(a, helper1, ##__VA_ARGS__)\n"
-          "void f1() { M2(\"a\", \"b\"); }");
-
-  // Check the file corresponding to the "helper1" macro arg in M2.
-  //
-  // The lexer used to report its size as 31, meaning that the end of the
-  // expansion would be on the *next line* (just past `M2("a", "b")`). Make
-  // sure that we get the correct end location (the comma after "helper1").
-  SourceLocation helper1ArgLoc = toks[20].getLocation();
-  EXPECT_EQ(SourceMgr.getFileIDSize(SourceMgr.getFileID(helper1ArgLoc)), 8U);
 }
 
 } // anonymous namespace

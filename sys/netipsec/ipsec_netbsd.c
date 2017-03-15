@@ -1,4 +1,4 @@
-/*	$NetBSD: ipsec_netbsd.c,v 1.39 2017/03/06 09:59:05 knakahara Exp $	*/
+/*	$NetBSD: ipsec_netbsd.c,v 1.37 2014/05/30 01:39:03 christos Exp $	*/
 /*	$KAME: esp_input.c,v 1.60 2001/09/04 08:43:19 itojun Exp $	*/
 /*	$KAME: ah_input.c,v 1.64 2001/09/04 08:43:19 itojun Exp $	*/
 
@@ -32,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ipsec_netbsd.c,v 1.39 2017/03/06 09:59:05 knakahara Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ipsec_netbsd.c,v 1.37 2014/05/30 01:39:03 christos Exp $");
 
 #include "opt_inet.h"
 #include "opt_ipsec.h"
@@ -95,7 +95,7 @@ ah4_ctlinput(int cmd, const struct sockaddr *sa, void *v)
 
 	if (sa->sa_family != AF_INET ||
 		sa->sa_len != sizeof(struct sockaddr_in))
-		return NULL;
+		return NULL; 
 	if ((unsigned)cmd >= PRC_NCMDS)
 		return NULL;
 
@@ -415,7 +415,7 @@ sysctl_ipsec_test(SYSCTLFN_ARGS)
 	int t, error;
 	struct sysctlnode node;
 
-	node = *rnode;
+	node = *rnode; 
 	t = *(int*)rnode->sysctl_data;
 	node.sysctl_data = &t;
 	error = sysctl_lookup(SYSCTLFN_CALL(&node));
@@ -700,12 +700,6 @@ SYSCTL_SETUP(sysctl_net_inet_ipsec_setup, "sysctl net.inet.ipsec subtree setup")
 		       CTLTYPE_INT, "used",
 		       SYSCTL_DESCR("Is IPSec active?"),
 		       NULL, 0, &ipsec_used, 0,
-		       CTL_NET, PF_INET, ipproto_ipsec,
-		       CTL_CREATE, CTL_EOL);
-	sysctl_createv(clog, 0, NULL, NULL,
-		       CTLFLAG_PERMANENT|CTLFLAG_READWRITE,
-		       CTLTYPE_INT, "crypto_support", NULL,
-		       NULL, 0, &crypto_support, 0,
 		       CTL_NET, PF_INET, ipproto_ipsec,
 		       CTL_CREATE, CTL_EOL);
 #ifdef IPSEC_DEBUG

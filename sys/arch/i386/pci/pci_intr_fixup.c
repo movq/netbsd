@@ -1,4 +1,4 @@
-/*	$NetBSD: pci_intr_fixup.c,v 1.50 2014/09/09 06:38:33 apb Exp $	*/
+/*	$NetBSD: pci_intr_fixup.c,v 1.49.28.1 2014/09/11 13:06:03 martin Exp $	*/
 
 /*-
  * Copyright (c) 1999 The NetBSD Foundation, Inc.
@@ -60,7 +60,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pci_intr_fixup.c,v 1.50 2014/09/09 06:38:33 apb Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pci_intr_fixup.c,v 1.49.28.1 2014/09/11 13:06:03 martin Exp $");
 
 #include "opt_pcibios.h"
 #include "opt_pcifixup.h"

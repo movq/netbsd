@@ -1,4 +1,4 @@
-/*	$NetBSD: pthread_types.h,v 1.22 2016/07/20 21:02:04 christos Exp $	*/
+/*	$NetBSD: pthread_types.h,v 1.13 2008/08/02 19:46:30 matt Exp $	*/
 
 /*-
  * Copyright (c) 2001, 2008 The NetBSD Foundation, Inc.
@@ -35,19 +35,8 @@
 /*
  * We use the "pthread_spin_t" name internally; "pthread_spinlock_t" is the
  * POSIX spinlock object. 
- *
- * C++ expects to be using PTHREAD_FOO_INITIALIZER as a member initializer.
- * This does not work for volatile types.  Since C++ does not touch the guts
- * of those types, we do not include volatile in the C++ definitions.
  */
-typedef __cpu_simple_lock_t pthread_spin_t;
-#ifdef __cplusplus
-typedef __cpu_simple_lock_nv_t __pthread_spin_t;
-#define __pthread_volatile
-#else
-typedef pthread_spin_t __pthread_spin_t;
-#define __pthread_volatile volatile
-#endif
+typedef __cpu_simple_lock_t	pthread_spin_t;
 
 /*
  * Copied from PTQ_HEAD in pthread_queue.h
@@ -111,26 +100,16 @@ struct	__pthread_attr_st {
 #endif
 struct	__pthread_mutex_st {
 	unsigned int	ptm_magic;
-	__pthread_spin_t ptm_errorcheck;
+	pthread_spin_t	ptm_errorcheck;
 #ifdef __CPU_SIMPLE_LOCK_PAD
 	uint8_t		ptm_pad1[3];
-#ifdef __cplusplus
-#define _PTHREAD_MUTEX_PAD(a)	{ 0, 0, 0 },
-#else
-#define _PTHREAD_MUTEX_PAD(a)	.a = { 0, 0, 0 },
 #endif
-#else
-#define _PTHREAD_MUTEX_PAD(a)
-#endif
-	union {
-		unsigned char ptm_ceiling;
-		__pthread_spin_t ptm_unused;
-	};
+	pthread_spin_t	ptm_interlock;	/* unused - backwards compat */
 #ifdef __CPU_SIMPLE_LOCK_PAD
 	uint8_t		ptm_pad2[3];
 #endif
-	__pthread_volatile pthread_t ptm_owner;
-	pthread_t * __pthread_volatile ptm_waiters;
+	volatile pthread_t ptm_owner;
+	pthread_t * volatile ptm_waiters;
 	unsigned int	ptm_recursed;
 	void		*ptm_spare2;	/* unused - backwards compat */
 };
@@ -138,25 +117,20 @@ struct	__pthread_mutex_st {
 #define	_PT_MUTEX_MAGIC	0x33330003
 #define	_PT_MUTEX_DEAD	0xDEAD0003
 
-#ifdef __cplusplus
-#define _PTHREAD_MUTEX_INI(a, b) b
-#define _PTHREAD_MUTEX_UNI(a) { 0 }
+#ifdef __CPU_SIMPLE_LOCK_PAD
+#define _PTHREAD_MUTEX_INITIALIZER { _PT_MUTEX_MAGIC, 			\
+				    __SIMPLELOCK_UNLOCKED, { 0, 0, 0 },	\
+				    __SIMPLELOCK_UNLOCKED, { 0, 0, 0 },	\
+				    NULL, NULL, 0, NULL			\
+				  }
 #else
-#define _PTHREAD_MUTEX_INI(a, b) .a = b
-#define _PTHREAD_MUTEX_UNI(a) .a = 0
-#endif
-
-#define _PTHREAD_MUTEX_INITIALIZER {					\
-	_PTHREAD_MUTEX_INI(ptm_magic, _PT_MUTEX_MAGIC), 		\
-	_PTHREAD_MUTEX_INI(ptm_errorcheck, __SIMPLELOCK_UNLOCKED),	\
-	_PTHREAD_MUTEX_PAD(ptm_pad1)					\
-	_PTHREAD_MUTEX_UNI(ptm_ceiling),				\
-	_PTHREAD_MUTEX_PAD(ptm_pad2)					\
-	_PTHREAD_MUTEX_INI(ptm_owner, NULL),				\
-	_PTHREAD_MUTEX_INI(ptm_waiters, NULL),				\
-	_PTHREAD_MUTEX_INI(ptm_recursed, 0),				\
-	_PTHREAD_MUTEX_INI(ptm_spare2, NULL),				\
-}
+#define _PTHREAD_MUTEX_INITIALIZER { _PT_MUTEX_MAGIC, 			\
+				    __SIMPLELOCK_UNLOCKED,		\
+				    __SIMPLELOCK_UNLOCKED,		\
+				    NULL, NULL, 0, NULL			\
+				  }
+#endif /* __CPU_SIMPLE_LOCK_PAD */
+	
 
 struct	__pthread_mutexattr_st {
 	unsigned int	ptma_magic;
@@ -171,7 +145,7 @@ struct	__pthread_cond_st {
 	unsigned int	ptc_magic;
 
 	/* Protects the queue of waiters */
-	__pthread_spin_t ptc_lock;
+	pthread_spin_t	ptc_lock;
 	pthread_queue_t	ptc_waiters;
 
 	pthread_mutex_t	*ptc_mutex;	/* Current mutex */
@@ -205,7 +179,7 @@ struct	__pthread_once_st {
 
 struct	__pthread_spinlock_st {
 	unsigned int	pts_magic;
-	__pthread_spin_t pts_spin;
+	pthread_spin_t	pts_spin;
 	int		pts_flags;
 };
 	
@@ -223,12 +197,12 @@ struct	__pthread_rwlock_st {
 	unsigned int	ptr_magic;
 
 	/* Protects data below */
-	__pthread_spin_t ptr_interlock;
+	pthread_spin_t	ptr_interlock;
 
 	pthread_queue_t	ptr_rblocked;
 	pthread_queue_t	ptr_wblocked;
 	unsigned int	ptr_nreaders;
-	__pthread_volatile pthread_t ptr_owner;
+	volatile pthread_t ptr_owner;
 	void	*ptr_private;
 };
 

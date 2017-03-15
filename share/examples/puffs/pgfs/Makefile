@@ -2,11 +2,8 @@
 PROG=	mount_pgfs
 SRCS=	mount.c pgfs_subs.c pgfs_db.c pgfs_puffs.c pgfs_waitq.c pgfs_debug.c
 
-DPADD+=		${LIBPUFFS} ${LIBUTIL}
-CPPFLAGS+=	-D_KERNTYPES
-LDADD+=		-lpuffs -lutil
-
-COPTS.pgfs_debug.c=	-Wno-format-nonliteral
+DPADD+=	${LIBPUFFS} ${LIBUTIL}
+LDADD+=	-lpuffs -lutil
 
 NOMAN=
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: conf.c,v 1.74 2016/10/03 14:26:02 rkujawa Exp $	*/
+/*	$NetBSD: conf.c,v 1.73 2011/12/15 14:25:12 phx Exp $	*/
 
 /*-
  * Copyright (c) 1991 The Regents of the University of California.
@@ -32,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: conf.c,v 1.74 2016/10/03 14:26:02 rkujawa Exp $");
+__KERNEL_RCSID(0, "$NetBSD: conf.c,v 1.73 2011/12/15 14:25:12 phx Exp $");
 
 #include <sys/param.h>
 #include <sys/conf.h>
@@ -42,7 +42,6 @@ __KERNEL_RCSID(0, "$NetBSD: conf.c,v 1.74 2016/10/03 14:26:02 rkujawa Exp $");
 #include "ser.h"
 #include "ite.h"
 #include "amidisplaycc.h"
-#include "mntva.h"
 #include "wsdisplay.h"
 
 /*
@@ -52,7 +51,6 @@ __KERNEL_RCSID(0, "$NetBSD: conf.c,v 1.74 2016/10/03 14:26:02 rkujawa Exp $");
  * known algorithm unless we see a pressing need otherwise.
  */
 cons_decl(ser);
-cons_decl(mntva);
 cons_decl(grf);
 cons_decl(amidisplaycc_);
 cons_decl(ite);
@@ -60,9 +58,6 @@ cons_decl(ite);
 struct	consdev constab[] = {
 #if NSER > 0
 	cons_init(ser),
-#endif
-#if NMNTVA > 0
-	cons_init(mntva),
 #endif
 #if NWSDISPLAY > 0
 	{ dev_init(grf,cnprobe), dev_init(grf,cninit) },

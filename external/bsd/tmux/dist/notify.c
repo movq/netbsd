@@ -1,4 +1,4 @@
-/* $OpenBSD$ */
+/* Id */
 
 /*
  * Copyright (c) 2012 George Nachman <tmux@georgester.com>
@@ -120,9 +120,9 @@ notify_drain(void)
 		}
 
 		if (ne->client != NULL)
-			server_client_unref(ne->client);
+			ne->client->references--;
 		if (ne->session != NULL)
-			session_unref(ne->session);
+			ne->session->references--;
 		if (ne->window != NULL)
 			window_remove_ref(ne->window);
 
@@ -135,6 +135,7 @@ void
 notify_input(struct window_pane *wp, struct evbuffer *input)
 {
 	struct client	*c;
+	u_int		 i;
 
 	/*
 	 * notify_input() is not queued and only does anything when
@@ -143,8 +144,9 @@ notify_input(struct window_pane *wp, struct evbuffer *input)
 	if (!notify_enabled)
 		return;
 
-	TAILQ_FOREACH(c, &clients, entry) {
-		if (c->flags & CLIENT_CONTROL)
+	for (i = 0; i < ARRAY_LENGTH(&clients); i++) {
+		c = ARRAY_ITEM(&clients, i);
+		if (c != NULL && (c->flags & CLIENT_CONTROL))
 			control_notify_input(c, wp, input);
 	}
 }

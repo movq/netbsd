@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.23 2016/01/15 08:27:04 mlelstv Exp $
+#	$NetBSD: Makefile,v 1.22 2014/04/29 08:11:46 martin Exp $
 
 ### what we need:
 
@@ -33,7 +33,7 @@ SOBJS += libstubs.o memcmp.o memmove.o memset.o strncmp.o
 
 OBJS=	$(SOBJS) $(COBJS)
 
-DEFS = -D_STANDALONE -DSA_EXEC_ANYOWNER -D_PRIMARY_BOOT -DSERCONSOLE
+DEFS = -D_STANDALONE -DSA_EXEC_ANYOWNER -D_PRIMARY_BOOT
 
 .NOPATH: ${OBJS} x.out f.out libboot.a xxstart.o
 

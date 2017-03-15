@@ -1,4 +1,4 @@
-/*	$NetBSD: linux_exec_elf32.c,v 1.94 2017/02/06 23:45:49 uwe Exp $	*/
+/*	$NetBSD: linux_exec_elf32.c,v 1.91.2.1 2015/03/29 09:07:55 martin Exp $	*/
 
 /*-
  * Copyright (c) 1995, 1998, 2000, 2001 The NetBSD Foundation, Inc.
@@ -35,7 +35,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: linux_exec_elf32.c,v 1.94 2017/02/06 23:45:49 uwe Exp $");
+__KERNEL_RCSID(0, "$NetBSD: linux_exec_elf32.c,v 1.91.2.1 2015/03/29 09:07:55 martin Exp $");
 
 #ifndef ELFSIZE
 /* XXX should die */
@@ -273,7 +273,7 @@ ELFNAME2(linux,signature)(struct lwp *l, struct exec_package *epp, Elf_Ehdr *eh,
 	int error;
 	static const char linux[] = "Linux";
 
-	if (eh->e_ident[EI_OSABI] == ELFOSABI_LINUX ||
+	if (eh->e_ident[EI_OSABI] == 3 ||
 	    memcmp(&eh->e_ident[EI_ABIVERSION], linux, sizeof(linux)) == 0)
 		return 0;
 
@@ -460,7 +460,7 @@ ELFNAME2(linux,copyargs)(struct lwp *l, struct exec_package *pack,
 	a++;
 
 	a->a_type = LINUX_AT_RANDOM;
-	a->a_v = (Elf_Addr)(uintptr_t)*stackp;
+	a->a_v = (Elf_Addr)*stackp;
 	a++;
 
 	a->a_type = AT_NULL;

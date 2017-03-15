@@ -1,5 +1,6 @@
 /* Morpho Technologies MT specific support for 32-bit ELF
-   Copyright (C) 2001-2016 Free Software Foundation, Inc.
+   Copyright 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2011, 2012
+   Free Software Foundation, Inc.
 
    This file is part of BFD, the Binary File Descriptor library.
 
@@ -48,8 +49,8 @@ static reloc_howto_type mt_elf_howto_table [] =
   /* This reloc does nothing.  */
   HOWTO (R_MT_NONE,           /* type */
           0,                      /* rightshift */
-          3,                      /* size (0 = byte, 1 = short, 2 = long) */
-          0,                      /* bitsize */
+          2,                      /* size (0 = byte, 1 = short, 2 = long) */
+          32,                     /* bitsize */
           FALSE,                  /* pc_relative */
           0,                      /* bitpos */
           complain_overflow_dont, /* complain_on_overflow */
@@ -236,11 +237,6 @@ mt_info_to_howto_rela
   unsigned int r_type;
 
   r_type = ELF32_R_TYPE (dst->r_info);
-  if (r_type >= (unsigned int) R_MT_max)
-    {
-      _bfd_error_handler (_("%B: invalid MT reloc number: %d"), abfd, r_type);
-      r_type = 0;
-    }
   cache_ptr->howto = & mt_elf_howto_table [r_type];
 }
 
@@ -362,7 +358,7 @@ mt_elf_relocate_section
 	RELOC_AGAINST_DISCARDED_SECTION (info, input_bfd, input_section,
 					 rel, 1, relend, howto, 0, contents);
 
-      if (bfd_link_relocatable (info))
+      if (info->relocatable)
 	continue;
 
       /* Finally, the sole MT-specific part.  */
@@ -385,13 +381,13 @@ mt_elf_relocate_section
 	  switch (r)
 	    {
 	    case bfd_reloc_overflow:
-	      (*info->callbacks->reloc_overflow)
+	      r = info->callbacks->reloc_overflow
 		(info, (h ? &h->root : NULL), name, howto->name, (bfd_vma) 0,
 		 input_bfd, input_section, rel->r_offset);
 	      break;
 
 	    case bfd_reloc_undefined:
-	      (*info->callbacks->undefined_symbol)
+	      r = info->callbacks->undefined_symbol
 		(info, name, input_bfd, input_section, rel->r_offset, TRUE);
 	      break;
 
@@ -409,8 +405,11 @@ mt_elf_relocate_section
 	    }
 
 	  if (msg)
-	    (*info->callbacks->warning) (info, msg, name, input_bfd,
-					 input_section, rel->r_offset);
+	    r = info->callbacks->warning
+	      (info, msg, name, input_bfd, input_section, rel->r_offset);
+
+	  if (! r)
+	    return FALSE;
 	}
     }
 
@@ -433,7 +432,7 @@ mt_elf_check_relocs
   const Elf_Internal_Rela *     rel;
   const Elf_Internal_Rela *     rel_end;
 
-  if (bfd_link_relocatable (info))
+  if (info->relocatable)
     return TRUE;
 
   symtab_hdr = &elf_tdata (abfd)->symtab_hdr;
@@ -575,7 +574,7 @@ mt_elf_print_private_bfd_data (bfd * abfd, void * ptr)
 }
 
 
-#define TARGET_BIG_SYM	 mt_elf32_vec
+#define TARGET_BIG_SYM	 bfd_elf32_mt_vec
 #define TARGET_BIG_NAME  "elf32-mt"
 
 #define ELF_ARCH	 bfd_arch_mt

@@ -37,7 +37,7 @@ MSP430RegisterInfo::MSP430RegisterInfo()
 
 const MCPhysReg*
 MSP430RegisterInfo::getCalleeSavedRegs(const MachineFunction *MF) const {
-  const MSP430FrameLowering *TFI = getFrameLowering(*MF);
+  const TargetFrameLowering *TFI = MF->getSubtarget().getFrameLowering();
   const Function* F = MF->getFunction();
   static const MCPhysReg CalleeSavedRegs[] = {
     MSP430::FP, MSP430::R5, MSP430::R6, MSP430::R7,
@@ -73,7 +73,7 @@ MSP430RegisterInfo::getCalleeSavedRegs(const MachineFunction *MF) const {
 
 BitVector MSP430RegisterInfo::getReservedRegs(const MachineFunction &MF) const {
   BitVector Reserved(getNumRegs());
-  const MSP430FrameLowering *TFI = getFrameLowering(MF);
+  const TargetFrameLowering *TFI = MF.getSubtarget().getFrameLowering();
 
   // Mark 4 special registers with subregisters as reserved.
   Reserved.set(MSP430::PCB);
@@ -109,18 +109,18 @@ MSP430RegisterInfo::eliminateFrameIndex(MachineBasicBlock::iterator II,
   MachineInstr &MI = *II;
   MachineBasicBlock &MBB = *MI.getParent();
   MachineFunction &MF = *MBB.getParent();
-  const MSP430FrameLowering *TFI = getFrameLowering(MF);
+  const TargetFrameLowering *TFI = MF.getSubtarget().getFrameLowering();
   DebugLoc dl = MI.getDebugLoc();
   int FrameIndex = MI.getOperand(FIOperandNum).getIndex();
 
   unsigned BasePtr = (TFI->hasFP(MF) ? MSP430::FP : MSP430::SP);
-  int Offset = MF.getFrameInfo().getObjectOffset(FrameIndex);
+  int Offset = MF.getFrameInfo()->getObjectOffset(FrameIndex);
 
   // Skip the saved PC
   Offset += 2;
 
   if (!TFI->hasFP(MF))
-    Offset += MF.getFrameInfo().getStackSize();
+    Offset += MF.getFrameInfo()->getStackSize();
   else
     Offset += 2; // Skip the saved FP
 
@@ -156,6 +156,7 @@ MSP430RegisterInfo::eliminateFrameIndex(MachineBasicBlock::iterator II,
 }
 
 unsigned MSP430RegisterInfo::getFrameRegister(const MachineFunction &MF) const {
-  const MSP430FrameLowering *TFI = getFrameLowering(MF);
+  const TargetFrameLowering *TFI = MF.getSubtarget().getFrameLowering();
+
   return TFI->hasFP(MF) ? MSP430::FP : MSP430::SP;
 }

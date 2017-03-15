@@ -1,5 +1,5 @@
 /* Callgraph based analysis of static variables.
-   Copyright (C) 2004-2015 Free Software Foundation, Inc.
+   Copyright (C) 2004-2013 Free Software Foundation, Inc.
    Contributed by Kenneth Zadeck <zadeck@naturalbridge.com>
 
 This file is part of GCC.
@@ -40,39 +40,17 @@ along with GCC; see the file COPYING3.  If not see
 #include "system.h"
 #include "coretypes.h"
 #include "tm.h"
-#include "hash-set.h"
-#include "machmode.h"
-#include "vec.h"
-#include "double-int.h"
-#include "input.h"
-#include "alias.h"
-#include "symtab.h"
-#include "options.h"
-#include "wide-int.h"
-#include "inchash.h"
 #include "tree.h"
-#include "fold-const.h"
-#include "calls.h"
-#include "predict.h"
-#include "hard-reg-set.h"
-#include "input.h"
-#include "function.h"
-#include "basic-block.h"
-#include "tree-ssa-alias.h"
-#include "internal-fn.h"
-#include "gimple-expr.h"
-#include "is-a.h"
-#include "gimple.h"
+#include "tree-flow.h"
 #include "tree-inline.h"
 #include "tree-pass.h"
+#include "pointer-set.h"
 #include "splay-tree.h"
-#include "hash-map.h"
-#include "plugin-api.h"
-#include "ipa-ref.h"
-#include "cgraph.h"
+#include "ggc.h"
 #include "ipa-utils.h"
-#include "bitmap.h"
 #include "ipa-reference.h"
+#include "gimple.h"
+#include "cgraph.h"
 #include "flags.h"
 #include "diagnostic.h"
 #include "data-streamer.h"
@@ -132,9 +110,6 @@ static splay_tree reference_vars_to_consider;
    static we are considering.  This is added to the local info when asm
    code is found that clobbers all memory.  */
 static bitmap all_module_statics;
-/* Set of all statics that should be ignored becuase they are touched by
-   -fno-ipa-reference code.  */
-static bitmap ignore_module_statics;
 
 /* Obstack holding bitmaps of local analysis (live from analysis to
    propagation)  */
@@ -201,14 +176,11 @@ set_reference_optimization_summary (struct cgraph_node *node,
 bitmap
 ipa_reference_get_not_read_global (struct cgraph_node *fn)
 {
-  if (!opt_for_fn (fn->decl, flag_ipa_reference)
-      || !opt_for_fn (current_function_decl, flag_ipa_reference))
-    return NULL;
   ipa_reference_optimization_summary_t info =
-    get_reference_optimization_summary (fn->function_symbol (NULL));
+    get_reference_optimization_summary (cgraph_function_node (fn, NULL));
   if (info)
     return info->statics_not_read;
-  else if (flags_from_decl_or_type (fn->decl) & ECF_LEAF)
+  else if (flags_from_decl_or_type (fn->symbol.decl) & ECF_LEAF)
     return all_module_statics;
   else
     return NULL;
@@ -222,20 +194,32 @@ ipa_reference_get_not_read_global (struct cgraph_node *fn)
 bitmap
 ipa_reference_get_not_written_global (struct cgraph_node *fn)
 {
-  if (!opt_for_fn (fn->decl, flag_ipa_reference)
-      || !opt_for_fn (current_function_decl, flag_ipa_reference))
-    return NULL;
   ipa_reference_optimization_summary_t info =
     get_reference_optimization_summary (fn);
   if (info)
     return info->statics_not_written;
-  else if (flags_from_decl_or_type (fn->decl) & ECF_LEAF)
+  else if (flags_from_decl_or_type (fn->symbol.decl) & ECF_LEAF)
     return all_module_statics;
   else
     return NULL;
 }
 
 
+
+/* Add VAR to all_module_statics and the two
+   reference_vars_to_consider* sets.  */
+
+static inline void
+add_static_var (tree var)
+{
+  int uid = DECL_UID (var);
+  gcc_assert (TREE_CODE (var) == VAR_DECL);
+  if (dump_file)
+    splay_tree_insert (reference_vars_to_consider,
+		       uid, (splay_tree_value)var);
+  bitmap_set_bit (all_module_statics, uid);
+}
+
 /* Return true if the variable T is the right kind of static variable to
    perform compilation unit scope escape analysis.  */
 
@@ -257,18 +241,11 @@ is_proper_for_analysis (tree t)
   if (TREE_READONLY (t))
     return false;
 
-  /* We can not track variables with address taken.  */
-  if (TREE_ADDRESSABLE (t))
-    return false;
-
-  /* TODO: We could track public variables that are not addressable, but currently
-     frontends don't give us those.  */
-  if (TREE_PUBLIC (t))
-    return false;
-
-  /* TODO: Check aliases.  */
-  if (bitmap_bit_p (ignore_module_statics, DECL_UID (t)))
-    return false;
+  /* This is a variable we care about.  Check if we have seen it
+     before, and if not add it the set of variables we care about.  */
+  if (all_module_statics
+      && !bitmap_bit_p (all_module_statics, DECL_UID (t)))
+    add_static_var (t);
 
   return true;
 }
@@ -333,6 +310,26 @@ union_static_var_sets (bitmap &x, bitmap y)
   return x == all_module_statics;
 }
 
+/* Compute X &= Y, taking into account the possibility that
+   X may become the maximum set.  */
+
+static bool
+intersect_static_var_sets (bitmap &x, bitmap y)
+{
+  if (x != all_module_statics)
+    {
+      bitmap_and_into (x, y);
+      /* As with union_static_var_sets, reducing to the maximum
+	 set as early as possible is an overall win.  */
+      if (bitmap_equal_p (x, all_module_statics))
+	{
+	  BITMAP_FREE (x);
+	  x = all_module_statics;
+	}
+    }
+  return x == all_module_statics;
+}
+
 /* Return a copy of SET on the bitmap obstack containing SET.
    But if SET is NULL or the maximum set, return that instead.  */
 
@@ -365,15 +362,14 @@ propagate_bits (ipa_reference_global_vars_info_t x_global, struct cgraph_node *x
        e = e->next_callee)
     {
       enum availability avail;
-      struct cgraph_node *y = e->callee->function_symbol (&avail);
+      struct cgraph_node *y = cgraph_function_node (e->callee, &avail);
       if (!y)
 	continue;
 
       /* Only look into nodes we can propagate something.  */
-      int flags = flags_from_decl_or_type (y->decl);
-      if (opt_for_fn (y->decl, flag_ipa_reference)
-	  && (avail > AVAIL_INTERPOSABLE
-	      || (avail == AVAIL_INTERPOSABLE && (flags & ECF_LEAF))))
+      int flags = flags_from_decl_or_type (y->symbol.decl);
+      if (avail > AVAIL_OVERWRITABLE
+	  || (avail == AVAIL_OVERWRITABLE && (flags & ECF_LEAF)))
 	{
 	  if (get_reference_vars_info (y))
 	    {
@@ -398,7 +394,7 @@ propagate_bits (ipa_reference_global_vars_info_t x_global, struct cgraph_node *x
 		 seems so to local analysis.  If we cannot return from
 		 the function, we can safely ignore the call.  */
 	      if ((flags & ECF_PURE)
-		  || e->cannot_lead_to_return_p ())
+		  || cgraph_edge_cannot_lead_to_return (e))
 		continue;
 
 	      union_static_var_sets (x_global->statics_written,
@@ -410,17 +406,17 @@ propagate_bits (ipa_reference_global_vars_info_t x_global, struct cgraph_node *x
     }
 }
 
-static bool ipa_init_p = false;
-
 /* The init routine for analyzing global static variable usage.  See
    comments at top for description.  */
 static void
 ipa_init (void)
 {
-  if (ipa_init_p)
+  static bool init_p = false;
+
+  if (init_p)
     return;
 
-  ipa_init_p = true;
+  init_p = true;
 
   if (dump_file)
     reference_vars_to_consider = splay_tree_new (splay_tree_compare_ints, 0, 0);
@@ -428,12 +424,11 @@ ipa_init (void)
   bitmap_obstack_initialize (&local_info_obstack);
   bitmap_obstack_initialize (&optimization_summary_obstack);
   all_module_statics = BITMAP_ALLOC (&optimization_summary_obstack);
-  ignore_module_statics = BITMAP_ALLOC (&optimization_summary_obstack);
 
   node_removal_hook_holder =
-      symtab->add_cgraph_removal_hook (&remove_node_data, NULL);
+      cgraph_add_node_removal_hook (&remove_node_data, NULL);
   node_duplication_hook_holder =
-      symtab->add_cgraph_duplication_hook (&duplicate_node_data, NULL);
+      cgraph_add_node_duplication_hook (&duplicate_node_data, NULL);
 }
 
 
@@ -462,47 +457,34 @@ static void
 analyze_function (struct cgraph_node *fn)
 {
   ipa_reference_local_vars_info_t local;
-  struct ipa_ref *ref = NULL;
+  struct ipa_ref *ref;
   int i;
   tree var;
 
-  if (!opt_for_fn (fn->decl, flag_ipa_reference))
-    return;
   local = init_function_info (fn);
-  for (i = 0; fn->iterate_reference (i, ref); i++)
+  for (i = 0; ipa_ref_list_reference_iterate (&fn->symbol.ref_list, i, ref); i++)
     {
-      if (!is_a <varpool_node *> (ref->referred))
+      if (!is_a <varpool_node> (ref->referred))
 	continue;
-      var = ref->referred->decl;
+      var = ipa_ref_varpool_node (ref)->symbol.decl;
       if (!is_proper_for_analysis (var))
 	continue;
-      /* This is a variable we care about.  Check if we have seen it
-	 before, and if not add it the set of variables we care about.  */
-      if (all_module_statics
-	  && bitmap_set_bit (all_module_statics, DECL_UID (var)))
-	{
-	  if (dump_file)
-	    splay_tree_insert (reference_vars_to_consider,
-			       DECL_UID (var), (splay_tree_value)var);
-	}
       switch (ref->use)
 	{
 	case IPA_REF_LOAD:
           bitmap_set_bit (local->statics_read, DECL_UID (var));
 	  break;
 	case IPA_REF_STORE:
-	  if (ref->cannot_lead_to_return ())
+	  if (ipa_ref_cannot_lead_to_return (ref))
 	    break;
           bitmap_set_bit (local->statics_written, DECL_UID (var));
 	  break;
 	case IPA_REF_ADDR:
 	  break;
-	default:
-	  gcc_unreachable ();
 	}
     }
 
-  if (fn->cannot_return_p ())
+  if (cgraph_node_cannot_return (fn))
     bitmap_clear (local->statics_written);
 }
 
@@ -562,22 +544,6 @@ generate_summary (void)
 
   /* Process all of the functions next.  */
   FOR_EACH_DEFINED_FUNCTION (node)
-    if (!node->alias && !opt_for_fn (node->decl, flag_ipa_reference))
-      {
-        struct ipa_ref *ref = NULL;
-        int i;
-        tree var;
-	for (i = 0; node->iterate_reference (i, ref); i++)
-	  {
-	    if (!is_a <varpool_node *> (ref->referred))
-	      continue;
-	    var = ref->referred->decl;
-	    if (!is_proper_for_analysis (var))
-	      continue;
-	    bitmap_set_bit (ignore_module_statics, DECL_UID (var));
-	  }
-      }
-  FOR_EACH_DEFINED_FUNCTION (node)
     analyze_function (node);
 
   if (dump_file)
@@ -589,8 +555,7 @@ generate_summary (void)
 
   if (dump_file)
     FOR_EACH_DEFINED_FUNCTION (node)
-      if (node->get_availability () >= AVAIL_INTERPOSABLE
-	  && opt_for_fn (node->decl, flag_ipa_reference))
+      if (cgraph_function_body_availability (node) >= AVAIL_OVERWRITABLE)
 	{
 	  ipa_reference_local_vars_info_t l;
 	  unsigned int index;
@@ -599,7 +564,7 @@ generate_summary (void)
 	  l = &get_reference_vars_info (node)->local;
 	  fprintf (dump_file,
 		   "\nFunction name:%s/%i:",
-		   node->asm_name (), node->order);
+		   cgraph_node_asm_name (node), node->symbol.order);
 	  fprintf (dump_file, "\n  locals read: ");
 	  if (l->statics_read)
 	    EXECUTE_IF_SET_IN_BITMAP (l->statics_read,
@@ -613,7 +578,8 @@ generate_summary (void)
 	    EXECUTE_IF_SET_IN_BITMAP (l->statics_written,
 				      0, index, bi)
 	      {
-	        fprintf (dump_file, "%s ", get_static_name (index));
+	        fprintf(dump_file, "%s ",
+		        get_static_name (index));
 	      }
 	}
 }
@@ -624,19 +590,20 @@ static void
 read_write_all_from_decl (struct cgraph_node *node,
 			  bool &read_all, bool &write_all)
 {
-  tree decl = node->decl;
+  tree decl = node->symbol.decl;
   int flags = flags_from_decl_or_type (decl);
   if ((flags & ECF_LEAF)
-      && node->get_availability () < AVAIL_INTERPOSABLE)
+      && cgraph_function_body_availability (node) <= AVAIL_OVERWRITABLE)
     ;
   else if (flags & ECF_CONST)
     ;
-  else if ((flags & ECF_PURE) || node->cannot_return_p ())
+  else if ((flags & ECF_PURE)
+	   || cgraph_node_cannot_return (node))
     {
       read_all = true;
       if (dump_file && (dump_flags & TDF_DETAILS))
          fprintf (dump_file, "   %s/%i -> read all\n",
-		  node->asm_name (), node->order);
+		  cgraph_node_asm_name (node), node->symbol.order);
     }
   else
     {
@@ -646,7 +613,7 @@ read_write_all_from_decl (struct cgraph_node *node,
       write_all = true;
       if (dump_file && (dump_flags & TDF_DETAILS))
          fprintf (dump_file, "   %s/%i -> read all, write all\n",
-		  node->asm_name (), node->order);
+		  cgraph_node_asm_name (node), node->symbol.order);
     }
 }
 
@@ -660,8 +627,7 @@ get_read_write_all_from_node (struct cgraph_node *node,
   struct cgraph_edge *e, *ie;
 
   /* When function is overwritable, we can not assume anything.  */
-  if (node->get_availability () <= AVAIL_INTERPOSABLE
-      || (node->analyzed && !opt_for_fn (node->decl, flag_ipa_reference)))
+  if (cgraph_function_body_availability (node) <= AVAIL_OVERWRITABLE)
     read_write_all_from_decl (node, read_all, write_all);
 
   for (e = node->callees;
@@ -669,10 +635,9 @@ get_read_write_all_from_node (struct cgraph_node *node,
        e = e->next_callee)
     {
       enum availability avail;
-      struct cgraph_node *callee = e->callee->function_symbol (&avail);
+      struct cgraph_node *callee = cgraph_function_node (e->callee, &avail);
       gcc_checking_assert (callee);
-      if (avail <= AVAIL_INTERPOSABLE
-          || (callee->analyzed && !opt_for_fn (callee->decl, flag_ipa_reference)))
+      if (avail <= AVAIL_OVERWRITABLE)
 	read_write_all_from_decl (callee, read_all, write_all);
     }
 
@@ -684,7 +649,7 @@ get_read_write_all_from_node (struct cgraph_node *node,
 	read_all = true;
 	if (dump_file && (dump_flags & TDF_DETAILS))
 	  fprintf (dump_file, "   indirect call -> read all\n");
-	if (!ie->cannot_lead_to_return_p ()
+	if (!cgraph_edge_cannot_lead_to_return (ie)
 	    && !(ie->indirect_info->ecf_flags & ECF_PURE))
 	  {
 	    if (dump_file && (dump_flags & TDF_DETAILS))
@@ -694,18 +659,6 @@ get_read_write_all_from_node (struct cgraph_node *node,
       }
 }
 
-/* Skip edges from and to nodes without ipa_reference enables.  This leave
-   them out of strongy connected coponents and makes them easyto skip in the
-   propagation loop bellow.  */
-
-static bool
-ignore_edge_p (cgraph_edge *e)
-{
-  return (!opt_for_fn (e->caller->decl, flag_ipa_reference)
-          || !opt_for_fn (e->callee->function_symbol ()->decl,
-			  flag_ipa_reference));
-}
-
 /* Produce the global information by preforming a transitive closure
    on the local information that was produced by ipa_analyze_function.  */
 
@@ -713,23 +666,42 @@ static unsigned int
 propagate (void)
 {
   struct cgraph_node *node;
+  struct varpool_node *vnode;
   struct cgraph_node **order =
-    XCNEWVEC (struct cgraph_node *, symtab->cgraph_count);
+    XCNEWVEC (struct cgraph_node *, cgraph_n_nodes);
   int order_pos;
   int i;
-  bool remove_p;
 
   if (dump_file)
-    cgraph_node::dump_cgraph (dump_file);
+    dump_cgraph (dump_file);
 
-  remove_p = ipa_discover_readonly_nonaddressable_vars ();
+  ipa_discover_readonly_nonaddressable_vars ();
   generate_summary ();
+
+  /* Now we know what vars are really statics; prune out those that aren't.  */
+  FOR_EACH_VARIABLE (vnode)
+    if (vnode->symbol.externally_visible
+	|| TREE_ADDRESSABLE (vnode->symbol.decl)
+	|| TREE_READONLY (vnode->symbol.decl)
+	|| !is_proper_for_analysis (vnode->symbol.decl)
+	|| !vnode->analyzed)
+      bitmap_clear_bit (all_module_statics, DECL_UID (vnode->symbol.decl));
+
+  /* Forget info we collected "just for fun" on variables that turned out to be
+     non-local.  */
+  FOR_EACH_DEFINED_FUNCTION (node)
+    {
+      ipa_reference_local_vars_info_t node_l;
+      node_l = &get_reference_vars_info (node)->local;
+      intersect_static_var_sets (node_l->statics_read, all_module_statics);
+      intersect_static_var_sets (node_l->statics_written, all_module_statics);
+    }
 
   /* Propagate the local information through the call graph to produce
      the global information.  All the nodes within a cycle will have
      the same info so we collapse cycles first.  Then we can do the
      propagation in one pass from the leaves to the roots.  */
-  order_pos = ipa_reduced_postorder (order, true, true, ignore_edge_p);
+  order_pos = ipa_reduced_postorder (order, true, true, NULL);
   if (dump_file)
     ipa_print_order (dump_file, "reduced", order, order_pos);
 
@@ -744,7 +716,7 @@ propagate (void)
       bool write_all = false;
 
       node = order[i];
-      if (node->alias || !opt_for_fn (node->decl, flag_ipa_reference))
+      if (node->alias)
 	continue;
 
       node_info = get_reference_vars_info (node);
@@ -754,16 +726,16 @@ propagate (void)
 
       if (dump_file && (dump_flags & TDF_DETAILS))
 	fprintf (dump_file, "Starting cycle with %s/%i\n",
-		  node->asm_name (), node->order);
+		  cgraph_node_asm_name (node), node->symbol.order);
 
-      vec<cgraph_node *> cycle_nodes = ipa_get_nodes_in_cycle (node);
+      vec<cgraph_node_ptr> cycle_nodes = ipa_get_nodes_in_cycle (node);
 
       /* If any node in a cycle is read_all or write_all, they all are.  */
       FOR_EACH_VEC_ELT (cycle_nodes, x, w)
 	{
 	  if (dump_file && (dump_flags & TDF_DETAILS))
 	    fprintf (dump_file, "  Visiting %s/%i\n",
-		     w->asm_name (), w->order);
+		     cgraph_node_asm_name (w), w->symbol.order);
 	  get_read_write_all_from_node (w, read_all, write_all);
 	  if (read_all && write_all)
 	    break;
@@ -790,13 +762,13 @@ propagate (void)
 	    {
 	      ipa_reference_vars_info_t w_ri = get_reference_vars_info (w);
 	      ipa_reference_local_vars_info_t w_l = &w_ri->local;
-	      int flags = flags_from_decl_or_type (w->decl);
+	      int flags = flags_from_decl_or_type (w->symbol.decl);
 
 	      if (!(flags & ECF_CONST))
 		read_all = union_static_var_sets (node_g->statics_read,
 						  w_l->statics_read);
 	      if (!(flags & ECF_PURE)
-		  && !w->cannot_return_p ())
+		  && !cgraph_node_cannot_return (w))
 		write_all = union_static_var_sets (node_g->statics_written,
 						   w_l->statics_written);
 	    }
@@ -822,24 +794,24 @@ propagate (void)
 	  struct cgraph_node *w;
 
 	  node = order[i];
-          if (node->alias || !opt_for_fn (node->decl, flag_ipa_reference))
+	  if (node->alias)
 	    continue;
 
 	  fprintf (dump_file,
 		   "\nFunction name:%s/%i:",
-		   node->asm_name (), node->order);
+		   cgraph_node_asm_name (node), node->symbol.order);
 
 	  ipa_reference_vars_info_t node_info = get_reference_vars_info (node);
 	  ipa_reference_global_vars_info_t node_g = &node_info->global;
 
-	  vec<cgraph_node *> cycle_nodes = ipa_get_nodes_in_cycle (node);
+	  vec<cgraph_node_ptr> cycle_nodes = ipa_get_nodes_in_cycle (node);
 	  FOR_EACH_VEC_ELT (cycle_nodes, x, w)
 	    {
 	      ipa_reference_vars_info_t w_ri = get_reference_vars_info (w);
 	      ipa_reference_local_vars_info_t w_l = &w_ri->local;
 	      if (w != node)
 		fprintf (dump_file, "\n  next cycle: %s/%i ",
-			 w->asm_name (), w->order);
+			 cgraph_node_asm_name (w), w->symbol.order);
 	      fprintf (dump_file, "\n    locals read: ");
 	      dump_static_vars_set_to_file (dump_file, w_l->statics_read);
 	      fprintf (dump_file, "\n    locals written: ");
@@ -863,9 +835,9 @@ propagate (void)
       ipa_reference_optimization_summary_t opt;
 
       node_info = get_reference_vars_info (node);
-      if (!node->alias && opt_for_fn (node->decl, flag_ipa_reference)
-	  && (node->get_availability () > AVAIL_INTERPOSABLE
-	      || (flags_from_decl_or_type (node->decl) & ECF_LEAF)))
+      if (!node->alias
+	  && (cgraph_function_body_availability (node) > AVAIL_OVERWRITABLE
+	      || (flags_from_decl_or_type (node->symbol.decl) & ECF_LEAF)))
 	{
 	  node_g = &node_info->global;
 
@@ -909,7 +881,7 @@ propagate (void)
   if (dump_file)
     splay_tree_delete (reference_vars_to_consider);
   reference_vars_to_consider = NULL;
-  return remove_p ? TODO_remove_functions : 0;
+  return 0;
 }
 
 /* Return true if we need to write summary of NODE. */
@@ -922,7 +894,7 @@ write_node_summary_p (struct cgraph_node *node,
   ipa_reference_optimization_summary_t info;
 
   /* See if we have (non-empty) info.  */
-  if (!node->definition || node->global.inlined_to)
+  if (!node->analyzed || node->global.inlined_to)
     return false;
   info = get_reference_optimization_summary (node);
   if (!info || (bitmap_empty_p (info->statics_not_read)
@@ -936,7 +908,7 @@ write_node_summary_p (struct cgraph_node *node,
      In future we might also want to include summaries of functions references
      by initializers of constant variables references in current unit.  */
   if (!reachable_from_this_partition_p (node, encoder)
-      && !referenced_from_this_partition_p (node, encoder))
+      && !referenced_from_this_partition_p (&node->symbol.ref_list, encoder))
     return false;
 
   /* See if the info has non-empty intersections with vars we want to encode.  */
@@ -977,7 +949,7 @@ stream_out_bitmap (struct lto_simple_output_block *ob,
   EXECUTE_IF_AND_IN_BITMAP (bits, ltrans_statics, 0, index, bi)
     {
       tree decl = (tree)splay_tree_lookup (reference_vars_to_consider, index)->value;
-      lto_output_var_decl_index (ob->decl_state, ob->main_stream, decl);
+      lto_output_var_decl_index(ob->decl_state, ob->main_stream, decl);
     }
 }
 
@@ -999,13 +971,13 @@ ipa_reference_write_optimization_summary (void)
   /* See what variables we are interested in.  */
   for (i = 0; i < lto_symtab_encoder_size (encoder); i++)
     {
-      symtab_node *snode = lto_symtab_encoder_deref (encoder, i);
-      varpool_node *vnode = dyn_cast <varpool_node *> (snode);
+      symtab_node snode = lto_symtab_encoder_deref (encoder, i);
+      varpool_node *vnode = dyn_cast <varpool_node> (snode);
       if (vnode
-	  && bitmap_bit_p (all_module_statics, DECL_UID (vnode->decl))
-	  && referenced_from_this_partition_p (vnode, encoder))
+	  && bitmap_bit_p (all_module_statics, DECL_UID (vnode->symbol.decl))
+	  && referenced_from_this_partition_p (&vnode->symbol.ref_list, encoder))
 	{
-	  tree decl = vnode->decl;
+	  tree decl = vnode->symbol.decl;
 	  bitmap_set_bit (ltrans_statics, DECL_UID (decl));
 	  splay_tree_insert (reference_vars_to_consider,
 			     DECL_UID (decl), (splay_tree_value)decl);
@@ -1017,8 +989,8 @@ ipa_reference_write_optimization_summary (void)
   if (ltrans_statics_bitcount)
     for (i = 0; i < lto_symtab_encoder_size (encoder); i++)
       {
-	symtab_node *snode = lto_symtab_encoder_deref (encoder, i);
-	cgraph_node *cnode = dyn_cast <cgraph_node *> (snode);
+	symtab_node snode = lto_symtab_encoder_deref (encoder, i);
+	cgraph_node *cnode = dyn_cast <cgraph_node> (snode);
 	if (cnode && write_node_summary_p (cnode, encoder, ltrans_statics))
 	  count++;
       }
@@ -1032,8 +1004,8 @@ ipa_reference_write_optimization_summary (void)
   if (ltrans_statics_bitcount)
     for (i = 0; i < lto_symtab_encoder_size (encoder); i++)
       {
-	symtab_node *snode = lto_symtab_encoder_deref (encoder, i);
-	cgraph_node *cnode = dyn_cast <cgraph_node *> (snode);
+	symtab_node snode = lto_symtab_encoder_deref (encoder, i);
+	cgraph_node *cnode = dyn_cast <cgraph_node> (snode);
 	if (cnode && write_node_summary_p (cnode, encoder, ltrans_statics))
 	  {
 	    ipa_reference_optimization_summary_t info;
@@ -1066,9 +1038,9 @@ ipa_reference_read_optimization_summary (void)
   bitmap_obstack_initialize (&optimization_summary_obstack);
 
   node_removal_hook_holder =
-      symtab->add_cgraph_removal_hook (&remove_node_data, NULL);
+      cgraph_add_node_removal_hook (&remove_node_data, NULL);
   node_duplication_hook_holder =
-      symtab->add_cgraph_duplication_hook (&duplicate_node_data, NULL);
+      cgraph_add_node_duplication_hook (&duplicate_node_data, NULL);
   all_module_statics = BITMAP_ALLOC (&optimization_summary_obstack);
 
   while ((file_data = file_data_vec[j++]))
@@ -1109,8 +1081,7 @@ ipa_reference_read_optimization_summary (void)
 
 	      index = streamer_read_uhwi (ib);
 	      encoder = file_data->symtab_node_encoder;
-	      node = dyn_cast<cgraph_node *> (lto_symtab_encoder_deref
-		(encoder, index));
+	      node = cgraph (lto_symtab_encoder_deref (encoder, index));
 	      info = XCNEW (struct ipa_reference_optimization_summary_d);
 	      set_reference_optimization_summary (node, info);
 	      info->statics_not_read = BITMAP_ALLOC (&optimization_summary_obstack);
@@ -1118,7 +1089,7 @@ ipa_reference_read_optimization_summary (void)
 	      if (dump_file)
 		fprintf (dump_file,
 			 "\nFunction name:%s/%i:\n  static not read:",
-			 node->asm_name (), node->order);
+			 cgraph_node_asm_name (node), node->symbol.order);
 
 	      /* Set the statics not read.  */
 	      v_count = streamer_read_hwi (ib);
@@ -1172,84 +1143,43 @@ ipa_reference_read_optimization_summary (void)
 	/* Fatal error here.  We do not want to support compiling ltrans units with
 	   different version of compiler or different flags than the WPA unit, so
 	   this should never happen.  */
-	fatal_error (input_location,
-		     "ipa reference summary is missing in ltrans unit");
+	fatal_error ("ipa reference summary is missing in ltrans unit");
     }
 }
 
-namespace {
-
-const pass_data pass_data_ipa_reference =
+static bool
+gate_reference (void)
 {
-  IPA_PASS, /* type */
-  "static-var", /* name */
-  OPTGROUP_NONE, /* optinfo_flags */
-  TV_IPA_REFERENCE, /* tv_id */
-  0, /* properties_required */
-  0, /* properties_provided */
-  0, /* properties_destroyed */
-  0, /* todo_flags_start */
-  0, /* todo_flags_finish */
+  return (flag_ipa_reference
+	  /* Don't bother doing anything if the program has errors.  */
+	  && !seen_error ());
+}
+
+struct ipa_opt_pass_d pass_ipa_reference =
+{
+ {
+  IPA_PASS,
+  "static-var",				/* name */
+  OPTGROUP_NONE,                        /* optinfo_flags */
+  gate_reference,			/* gate */
+  propagate,			        /* execute */
+  NULL,					/* sub */
+  NULL,					/* next */
+  0,					/* static_pass_number */
+  TV_IPA_REFERENCE,		        /* tv_id */
+  0,	                                /* properties_required */
+  0,					/* properties_provided */
+  0,					/* properties_destroyed */
+  0,					/* todo_flags_start */
+  0                                     /* todo_flags_finish */
+ },
+ NULL,				        /* generate_summary */
+ NULL,					/* write_summary */
+ NULL,				 	/* read_summary */
+ ipa_reference_write_optimization_summary,/* write_optimization_summary */
+ ipa_reference_read_optimization_summary,/* read_optimization_summary */
+ NULL,					/* stmt_fixup */
+ 0,					/* TODOs */
+ NULL,			                /* function_transform */
+ NULL					/* variable_transform */
 };
-
-class pass_ipa_reference : public ipa_opt_pass_d
-{
-public:
-  pass_ipa_reference (gcc::context *ctxt)
-    : ipa_opt_pass_d (pass_data_ipa_reference, ctxt,
-		      NULL, /* generate_summary */
-		      NULL, /* write_summary */
-		      NULL, /* read_summary */
-		      ipa_reference_write_optimization_summary, /*
-		      write_optimization_summary */
-		      ipa_reference_read_optimization_summary, /*
-		      read_optimization_summary */
-		      NULL, /* stmt_fixup */
-		      0, /* function_transform_todo_flags_start */
-		      NULL, /* function_transform */
-		      NULL) /* variable_transform */
-    {}
-
-  /* opt_pass methods: */
-  virtual bool gate (function *)
-    {
-      return ((in_lto_p || flag_ipa_reference)
-	      /* Don't bother doing anything if the program has errors.  */
-	      && !seen_error ());
-    }
-
-  virtual unsigned int execute (function *) { return propagate (); }
-
-}; // class pass_ipa_reference
-
-} // anon namespace
-
-ipa_opt_pass_d *
-make_pass_ipa_reference (gcc::context *ctxt)
-{
-  return new pass_ipa_reference (ctxt);
-}
-
-/* Reset all state within ipa-reference.c so that we can rerun the compiler
-   within the same process.  For use by toplev::finalize.  */
-
-void
-ipa_reference_c_finalize (void)
-{
-  if (ipa_init_p)
-    {
-      bitmap_obstack_release (&optimization_summary_obstack);
-      ipa_init_p = false;
-    }
-
-  if (node_removal_hook_holder)
-    {
-      symtab->remove_cgraph_removal_hook (node_removal_hook_holder);
-      node_removal_hook_holder = NULL;
-    }
-  if (node_duplication_hook_holder)
-    {
-      symtab->remove_cgraph_duplication_hook (node_duplication_hook_holder);
-      node_duplication_hook_holder = NULL;
-    }
-}

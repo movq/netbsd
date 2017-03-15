@@ -1,4 +1,4 @@
-/*	$NetBSD: print-pfsync.c,v 1.4 2017/01/24 23:29:14 christos Exp $	*/
+/*	$NetBSD: print-pfsync.c,v 1.1.24.1 2017/02/19 05:01:16 snj Exp $	*/
 /*	$OpenBSD: print-pfsync.c,v 1.30 2007/05/31 04:16:26 mcbride Exp $	*/
 
 /*
@@ -31,9 +31,9 @@
 #ifndef lint
 #if 0
 static const char rcsid[] =
-    "@(#) $Header: /home/mike/src/cvs/netbsd/src/external/bsd/tcpdump/dist/print-pfsync.c,v 1.4 2017/01/24 23:29:14 christos Exp $";
+    "@(#) $Header: /home/mike/src/cvs/netbsd/src/external/bsd/tcpdump/dist/print-pfsync.c,v 1.1.24.1 2017/02/19 05:01:16 snj Exp $";
 #else
-__RCSID("$NetBSD: print-pfsync.c,v 1.4 2017/01/24 23:29:14 christos Exp $");
+__RCSID("$NetBSD: print-pfsync.c,v 1.1.24.1 2017/02/19 05:01:16 snj Exp $");
 #endif
 #endif
 

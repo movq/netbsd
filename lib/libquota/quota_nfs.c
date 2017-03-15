@@ -1,4 +1,4 @@
-/*	$NetBSD: quota_nfs.c,v 1.5 2016/01/30 16:31:28 bouyer Exp $	*/
+/*	$NetBSD: quota_nfs.c,v 1.4.2.1 2016/02/06 21:01:39 snj Exp $	*/
 /*-
   * Copyright (c) 2011 Manuel Bouyer
   * All rights reserved.
@@ -26,7 +26,7 @@
   */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: quota_nfs.c,v 1.5 2016/01/30 16:31:28 bouyer Exp $");
+__RCSID("$NetBSD: quota_nfs.c,v 1.4.2.1 2016/02/06 21:01:39 snj Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h> /* XXX for DEV_BSIZE */

@@ -1,4 +1,4 @@
-/* $NetBSD: boot.c,v 1.7 2016/06/11 06:41:12 dholland Exp $ */
+/* $NetBSD: boot.c,v 1.6 2011/01/22 19:19:22 joerg Exp $ */
 
 /*
  * Copyright (c) 1992, 1993
@@ -119,7 +119,7 @@ main(long fwhandle,long fd,long fwentry)
 
 	if (strchr(boot_flags, 'i') || strchr(boot_flags, 'I')) {
 		printf("Boot file: ");
-		kgets(boot_file, sizeof(boot_file));
+		gets(boot_file);
 	}
 
 	memset(marks, 0, sizeof marks);

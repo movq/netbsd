@@ -1,4 +1,4 @@
-/*	$NetBSD: nouveau_pci.c,v 1.8 2016/04/19 06:57:37 mrg Exp $	*/
+/*	$NetBSD: nouveau_pci.c,v 1.3.2.7 2016/12/12 09:13:43 msaitoh Exp $	*/
 
 /*-
  * Copyright (c) 2015 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: nouveau_pci.c,v 1.8 2016/04/19 06:57:37 mrg Exp $");
+__KERNEL_RCSID(0, "$NetBSD: nouveau_pci.c,v 1.3.2.7 2016/12/12 09:13:43 msaitoh Exp $");
 
 #include <sys/types.h>
 #include <sys/device.h>

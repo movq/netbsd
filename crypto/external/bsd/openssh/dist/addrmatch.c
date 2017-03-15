@@ -1,5 +1,5 @@
-/*	$NetBSD: addrmatch.c,v 1.10 2016/12/25 00:07:46 christos Exp $	*/
-/*	$OpenBSD: addrmatch.c,v 1.13 2016/09/21 16:55:42 djm Exp $ */
+/*	$NetBSD: addrmatch.c,v 1.6.4.1 2015/04/30 06:07:30 riz Exp $	*/
+/*	$OpenBSD: addrmatch.c,v 1.9 2014/01/19 11:21:51 dtucker Exp $ */
 
 /*
  * Copyright (c) 2004-2008 Damien Miller <djm@mindrot.org>
@@ -18,7 +18,7 @@
  */
 
 #include "includes.h"
-__RCSID("$NetBSD: addrmatch.c,v 1.10 2016/12/25 00:07:46 christos Exp $");
+__RCSID("$NetBSD: addrmatch.c,v 1.6.4.1 2015/04/30 06:07:30 riz Exp $");
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
@@ -32,6 +32,7 @@ __RCSID("$NetBSD: addrmatch.c,v 1.10 2016/12/25 00:07:46 christos Exp $");
 
 #include "match.h"
 #include "log.h"
+#include "xmalloc.h"
 
 struct xaddr {
 	sa_family_t	af;
@@ -397,8 +398,8 @@ addr_match_list(const char *addr, const char *_list)
 		/* Prefer CIDR address matching */
 		r = addr_pton_cidr(cp, &match_addr, &masklen);
 		if (r == -2) {
-			debug2("%s: inconsistent mask length for "
-			    "match network \"%.100s\"", __func__, cp);
+			error("Inconsistent mask length for "
+			    "network \"%.100s\"", cp);
 			ret = -2;
 			break;
 		} else if (r == 0) {

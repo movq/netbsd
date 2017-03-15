@@ -1,4 +1,4 @@
-/*	$NetBSD: puffs_vfsops.c,v 1.119 2017/02/17 08:31:24 hannken Exp $	*/
+/*	$NetBSD: puffs_vfsops.c,v 1.113.2.4 2015/03/15 22:43:02 snj Exp $	*/
 
 /*
  * Copyright (c) 2005, 2006  Antti Kantee.  All Rights Reserved.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: puffs_vfsops.c,v 1.119 2017/02/17 08:31:24 hannken Exp $");
+__KERNEL_RCSID(0, "$NetBSD: puffs_vfsops.c,v 1.113.2.4 2015/03/15 22:43:02 snj Exp $");
 
 #include <sys/param.h>
 #include <sys/kernel.h>
@@ -269,22 +269,8 @@ puffs_vfsop_mount(struct mount *mp, const char *path, void *data,
 
 	/* XXX: check parameters */
 	pmp->pmp_root_cookie = args->pa_root_cookie;
-	switch (args->pa_root_vtype) {
-	case VNON: case VREG: case VDIR: case VBLK:
-	case VCHR: case VLNK: case VSOCK: case VFIFO:
-		break;
-	default:
-		error = EINVAL;
-		goto out;
-	}
 	pmp->pmp_root_vtype = args->pa_root_vtype;
-
-	if (args->pa_root_vsize < 0) {
-		error = EINVAL;
-		goto out;
-	}
 	pmp->pmp_root_vsize = args->pa_root_vsize;
-
 	pmp->pmp_root_rdev = args->pa_root_rdev;
 	pmp->pmp_docompat = args->pa_time32;
 
@@ -871,7 +857,7 @@ struct vfsops puffs_vfsops = {
 	.vfs_done = puffs_vfsop_done,
 	.vfs_snapshot = puffs_vfsop_snapshot,
 	.vfs_extattrctl = puffs_vfsop_extattrctl,
-	.vfs_suspendctl = genfs_suspendctl,
+	.vfs_suspendctl = (void *)eopnotsupp,
 	.vfs_renamelock_enter = genfs_renamelock_enter,
 	.vfs_renamelock_exit = genfs_renamelock_exit,
 	.vfs_fsync = (void *)eopnotsupp,

@@ -1,4 +1,4 @@
-/*	$NetBSD: content-bozo.c,v 1.14 2016/07/19 09:27:40 shm Exp $	*/
+/*	$NetBSD: content-bozo.c,v 1.10.2.4 2016/12/23 07:42:09 snj Exp $	*/
 
 /*	$eterna: content-bozo.c,v 1.17 2011/11/18 09:21:15 mrg Exp $	*/
 

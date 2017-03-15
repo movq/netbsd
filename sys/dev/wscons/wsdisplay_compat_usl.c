@@ -1,4 +1,4 @@
-/* $NetBSD: wsdisplay_compat_usl.c,v 1.49 2015/08/24 22:50:33 pooka Exp $ */
+/* $NetBSD: wsdisplay_compat_usl.c,v 1.48 2013/02/19 15:21:08 macallan Exp $ */
 
 /*
  * Copyright (c) 1998
@@ -27,12 +27,10 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: wsdisplay_compat_usl.c,v 1.49 2015/08/24 22:50:33 pooka Exp $");
+__KERNEL_RCSID(0, "$NetBSD: wsdisplay_compat_usl.c,v 1.48 2013/02/19 15:21:08 macallan Exp $");
 
-#ifdef _KERNEL_OPT
 #include "opt_compat_freebsd.h"
 #include "opt_compat_netbsd.h"
-#endif
 
 #include <sys/param.h>
 #include <sys/systm.h>

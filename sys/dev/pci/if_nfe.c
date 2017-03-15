@@ -1,4 +1,4 @@
-/*	$NetBSD: if_nfe.c,v 1.63 2016/12/15 09:28:05 ozaki-r Exp $	*/
+/*	$NetBSD: if_nfe.c,v 1.59 2014/03/29 19:28:25 christos Exp $	*/
 /*	$OpenBSD: if_nfe.c,v 1.77 2008/02/05 16:52:50 brad Exp $	*/
 
 /*-
@@ -21,7 +21,7 @@
 /* Driver for NVIDIA nForce MCP Fast Ethernet and Gigabit Ethernet */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_nfe.c,v 1.63 2016/12/15 09:28:05 ozaki-r Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_nfe.c,v 1.59 2014/03/29 19:28:25 christos Exp $");
 
 #include "opt_inet.h"
 #include "vlan.h"
@@ -409,7 +409,6 @@ nfe_attach(device_t parent, device_t self, void *aux)
 		ifmedia_set(&sc->sc_mii.mii_media, IFM_ETHER | IFM_AUTO);
 
 	if_attach(ifp);
-	if_deferred_start_init(ifp, NULL);
 	ether_ifattach(ifp, sc->sc_enaddr);
 	ether_set_ifflags_cb(&sc->sc_ethercom, nfe_ifflags_cb);
 
@@ -632,8 +631,8 @@ nfe_intr(void *arg)
 		}
 	}
 
-	if (handled)
-		if_schedule_deferred_start(ifp);
+	if (handled && !IF_IS_EMPTY(&ifp->if_snd))
+		nfe_start(ifp);
 
 	return handled;
 }
@@ -918,7 +917,7 @@ nfe_rxeof(struct nfe_softc *sc)
 mbufcopied:
 		/* finalize mbuf */
 		m->m_pkthdr.len = m->m_len = len;
-		m_set_rcvif(m, ifp);
+		m->m_pkthdr.rcvif = ifp;
 
 		if ((sc->sc_flags & NFE_HW_CSUM) != 0) {
 			/*
@@ -945,7 +944,9 @@ mbufcopied:
 				    device_xname(sc->sc_dev)));
 			}
 		}
-		if_percpuq_enqueue(ifp->if_percpuq, m);
+		bpf_mtap(ifp, m);
+		ifp->if_ipackets++;
+		(*ifp->if_input)(ifp, m);
 
 skip1:
 		/* update mapping address in h/w descriptor */

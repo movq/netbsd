@@ -1,4 +1,4 @@
-/*	$NetBSD: mainbus.c,v 1.37 2016/06/21 11:33:32 nonaka Exp $	*/
+/*	$NetBSD: mainbus.c,v 1.34 2013/07/31 14:05:33 soren Exp $	*/
 
 /*
  * Copyright (c) 1996 Christopher G. Demetriou.  All rights reserved.
@@ -31,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: mainbus.c,v 1.37 2016/06/21 11:33:32 nonaka Exp $");
+__KERNEL_RCSID(0, "$NetBSD: mainbus.c,v 1.34 2013/07/31 14:05:33 soren Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -74,7 +74,6 @@ __KERNEL_RCSID(0, "$NetBSD: mainbus.c,v 1.37 2016/06/21 11:33:32 nonaka Exp $");
 #include <arch/x86/pci/pci_addr_fixup.h>
 #endif
 #endif
-#include <arch/x86/pci/msipic.h>
 #endif
 
 /*
@@ -126,15 +125,11 @@ int mp_nintr;
 int mp_isa_bus = -1;
 int mp_eisa_bus = -1;
 
-# ifdef MPVERBOSE
-#  if MPVERBOSE > 0
-int mp_verbose = MPVERBOSE;
-#  else
+#ifdef MPVERBOSE
 int mp_verbose = 1;
-#  endif
-# else
+#else
 int mp_verbose = 0;
-# endif
+#endif
 #endif
 
 
@@ -180,8 +175,6 @@ mainbus_attach(device_t parent, device_t self, void *aux)
 #endif
 
 #if NPCI > 0
-	msipic_init();
-
 	/*
 	 * ACPI needs to be able to access PCI configuration space.
 	 */
@@ -248,8 +241,6 @@ mainbus_attach(device_t parent, device_t self, void *aux)
 		    PCI_FLAGS_MRL_OKAY | PCI_FLAGS_MRM_OKAY |
 		    PCI_FLAGS_MWI_OKAY;
 		mba.mba_acpi.aa_ic = &x86_isa_chipset;
-		mba.mba_acpi.aa_dmat = &pci_bus_dma_tag;
-		mba.mba_acpi.aa_dmat64 = &pci_bus_dma64_tag;
 		config_found_ia(self, "acpibus", &mba.mba_acpi, 0);
 	}
 #endif

@@ -1,7 +1,7 @@
-/* $OpenBSD$ */
+/* Id */
 
 /*
- * Copyright (c) 2009 Nicholas Marriott <nicholas.marriott@gmail.com>
+ * Copyright (c) 2009 Nicholas Marriott <nicm@users.sourceforge.net>
  *
  * Permission to use, copy, modify, and distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -24,7 +24,7 @@
 #include "tmux.h"
 
 struct cmd_list *
-cmd_list_parse(int argc, char **argv, const char *file, u_int line,
+cmd_list_parse(int argc, char **argv, const char* file, u_int line,
     char **cause)
 {
 	struct cmd_list	*cmdlist;
@@ -99,28 +99,21 @@ cmd_list_free(struct cmd_list *cmdlist)
 	free(cmdlist);
 }
 
-char *
-cmd_list_print(struct cmd_list *cmdlist)
+size_t
+cmd_list_print(struct cmd_list *cmdlist, char *buf, size_t len)
 {
 	struct cmd	*cmd;
-	char		*buf, *this;
-	size_t		 len;
+	size_t		 off;
 
-	len = 1;
-	buf = xcalloc(1, len);
-
+	off = 0;
 	TAILQ_FOREACH(cmd, &cmdlist->list, qentry) {
-		this = cmd_print(cmd);
-
-		len += strlen(this) + 3;
-		buf = xrealloc(buf, len);
-
-		strlcat(buf, this, len);
+		if (off >= len)
+			break;
+		off += cmd_print(cmd, buf + off, len - off);
+		if (off >= len)
+			break;
 		if (TAILQ_NEXT(cmd, qentry) != NULL)
-			strlcat(buf, " ; ", len);
-
-		free(this);
+			off += xsnprintf(buf + off, len - off, " ; ");
 	}
-
-	return (buf);
+	return (off);
 }

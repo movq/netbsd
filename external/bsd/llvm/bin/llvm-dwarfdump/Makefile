@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.4 2017/01/11 12:02:26 joerg Exp $
+#	$NetBSD: Makefile,v 1.2 2013/07/07 21:36:43 joerg Exp $
 
 PROG_CXX=	llvm-dwarfdump
 NOMAN=		yes
@@ -10,14 +10,9 @@ NOMAN=		yes
 SRCS=	llvm-dwarfdump.cpp
 
 LLVM_LIBS+= \
-	DebugInfoDWARF \
+	DebugInfo \
 	Object \
-	BitReader \
-	IR \
-	MC \
-	MCParser \
-	Support \
-	Demangle
+	Support
 
 LDADD+=	-lz
 DPADD+=	${LIBZ}

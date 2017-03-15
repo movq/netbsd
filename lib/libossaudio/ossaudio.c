@@ -1,4 +1,4 @@
-/*	$NetBSD: ossaudio.c,v 1.32 2017/02/10 08:52:04 maya Exp $	*/
+/*	$NetBSD: ossaudio.c,v 1.29.2.1 2014/09/11 13:58:45 martin Exp $	*/
 
 /*-
  * Copyright (c) 1997 The NetBSD Foundation, Inc.
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: ossaudio.c,v 1.32 2017/02/10 08:52:04 maya Exp $");
+__RCSID("$NetBSD: ossaudio.c,v 1.29.2.1 2014/09/11 13:58:45 martin Exp $");
 
 /*
  * This is an OSS (Linux) sound API emulator.
@@ -497,10 +497,12 @@ audio_ioctl(int fd, unsigned long com, void *argp)
 		*(struct count_info *)argp = cntinfo;
 		break;
 	case SNDCTL_SYSINFO:
-		strlcpy(tmpsysinfo.product, "OSS/NetBSD",
-		    sizeof tmpsysinfo.product);
-		strlcpy(tmpsysinfo.version, version, sizeof tmpsysinfo.version);
-		strlcpy(tmpsysinfo.license, license, sizeof tmpsysinfo.license);
+		strncpy(tmpsysinfo.product, "OSS/NetBSD", 31);
+		tmpsysinfo.product[31] = 0; 
+		strncpy(tmpsysinfo.version, version, 31); 
+		tmpsysinfo.version[31] = 0; 
+		strncpy(tmpsysinfo.license, license, 15);
+		tmpsysinfo.license[15] = 0; 
 		tmpsysinfo.versionnum = SOUND_VERSION;
 		memset(tmpsysinfo.options, 0, 8);
 		tmpsysinfo.numaudios = OSS_MAX_AUDIO_DEVS;
@@ -548,8 +550,8 @@ audio_ioctl(int fd, unsigned long com, void *argp)
 		if (idata & AUDIO_PROP_MMAP)
 			idat |= DSP_CAP_MMAP;
 		idat = PCM_CAP_INPUT | PCM_CAP_OUTPUT;
-		strlcpy(tmpaudioinfo->name, tmpaudiodev.name,
-		    sizeof tmpaudioinfo->name);
+		strncpy(tmpaudioinfo->name, tmpaudiodev.name, 64);
+		tmpaudioinfo->name[63] = 0;
 		tmpaudioinfo->busy = tmpinfo.play.open;
 		tmpaudioinfo->pid = -1;
 		tmpaudioinfo->caps = idat;
@@ -797,7 +799,7 @@ getdevinfo(int fd)
 				di->devmask |= 1 << dp->code;
 				if (mi.un.v.num_channels == 2)
 					di->stereomask |= 1 << dp->code;
-				strlcpy(di->names[i], mi.label.name,
+				strncpy(di->names[i], mi.label.name, 
 					sizeof di->names[i]);
 			}
 			break;
@@ -864,8 +866,8 @@ mixer_ioctl(int fd, unsigned long com, void *argp)
 		omi = argp;
 		if (com == SOUND_MIXER_INFO)
 			omi->modify_counter = 1;
-		strlcpy(omi->id, adev.name, sizeof omi->id);
-		strlcpy(omi->name, adev.name, sizeof omi->name);
+		strncpy(omi->id, adev.name, sizeof omi->id);
+		strncpy(omi->name, adev.name, sizeof omi->name);
 		return 0;
 	case SOUND_MIXER_READ_RECSRC:
 		if (di->source == -1)

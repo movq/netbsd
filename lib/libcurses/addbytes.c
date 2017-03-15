@@ -1,4 +1,4 @@
-/*	$NetBSD: addbytes.c,v 1.47 2017/01/06 14:25:41 roy Exp $	*/
+/*	$NetBSD: addbytes.c,v 1.42 2013/11/10 03:14:16 christos Exp $	*/
 
 /*
  * Copyright (c) 1987, 1993, 1994
@@ -34,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)addbytes.c	8.4 (Berkeley) 5/4/94";
 #else
-__RCSID("$NetBSD: addbytes.c,v 1.47 2017/01/06 14:25:41 roy Exp $");
+__RCSID("$NetBSD: addbytes.c,v 1.42 2013/11/10 03:14:16 christos Exp $");
 #endif
 #endif				/* not lint */
 
@@ -60,7 +60,6 @@ __RCSID("$NetBSD: addbytes.c,v 1.47 2017/01/06 14:25:41 roy Exp $");
 int
 addbytes(const char *bytes, int count)
 {
-
 	return _cursesi_waddbytes(stdscr, bytes, count, 0, 1);
 }
 
@@ -71,7 +70,6 @@ addbytes(const char *bytes, int count)
 int
 waddbytes(WINDOW *win, const char *bytes, int count)
 {
-
 	return _cursesi_waddbytes(win, bytes, count, 0, 1);
 }
 
@@ -82,7 +80,6 @@ waddbytes(WINDOW *win, const char *bytes, int count)
 int
 mvaddbytes(int y, int x, const char *bytes, int count)
 {
-
 	return mvwaddbytes(stdscr, y, x, bytes, count);
 }
 
@@ -93,7 +90,6 @@ mvaddbytes(int y, int x, const char *bytes, int count)
 int
 mvwaddbytes(WINDOW *win, int y, int x, const char *bytes, int count)
 {
-
 	if (wmove(win, y, x) == ERR)
 		return ERR;
 
@@ -105,7 +101,6 @@ mvwaddbytes(WINDOW *win, int y, int x, const char *bytes, int count)
 int
 __waddbytes(WINDOW *win, const char *bytes, int count, attr_t attr)
 {
-
 	return _cursesi_waddbytes(win, bytes, count, attr, 1);
 }
 
@@ -179,7 +174,7 @@ _cursesi_waddbytes(WINDOW *win, const char *bytes, int count, attr_t attr,
 #ifdef DEBUG
 	__CTRACE(__CTRACE_INPUT,
 		 "ADDBYTES WIDE(0x%x [%s], %x) at (%d, %d), ate %d bytes\n",
-		 (unsigned)wc, unctrl((unsigned)wc), attr, y, x, n);
+		 (unsigned) wc, unctrl((unsigned) wc), attr, y, x, n);
 #endif
 		cc.vals[0] = wc;
 		cc.elements = 1;
@@ -222,14 +217,12 @@ _cursesi_addbyte(WINDOW *win, __LINE **lp, int *y, int *x, int c,
 		case '\t':
 			tabsize = win->screen->TABSIZE;
 			PSYNCH_OUT;
-			newx = tabsize - (*x % tabsize);
-			for (i = 0; i < newx; i++) {
+			for (i = 0; i < (tabsize - (*x % tabsize)); i++) {
 				if (waddbytes(win, blank, 1) == ERR)
-					return ERR;
-				(*x)++;
+					return (ERR);
 			}
 			PSYNCH_IN;
-			return OK;
+			return (OK);
 
 		case '\n':
 			PSYNCH_OUT;
@@ -241,13 +234,13 @@ _cursesi_addbyte(WINDOW *win, __LINE **lp, int *y, int *x, int c,
 		case '\r':
 			*x = 0;
 			win->curx = *x;
-			return OK;
+			return (OK);
 
 		case '\b':
 			if (--(*x) < 0)
 				*x = 0;
 			win->curx = *x;
-			return OK;
+			return (OK);
 		}
 	}
 
@@ -274,7 +267,7 @@ _cursesi_addbyte(WINDOW *win, __LINE **lp, int *y, int *x, int c,
 		}
 		*lp = win->alines[*y];
 		if (c == '\n')
-			return OK;
+			return (OK);
 	}
 
 #ifdef DEBUG
@@ -333,8 +326,7 @@ _cursesi_addbyte(WINDOW *win, __LINE **lp, int *y, int *x, int c,
 		 *y, *x, *win->alines[*y]->firstchp,
 		 *win->alines[*y]->lastchp);
 #endif
-	__sync(win);
-	return OK;
+	return (OK);
 }
 
 /*
@@ -347,7 +339,7 @@ _cursesi_addwchar(WINDOW *win, __LINE **lnp, int *y, int *x,
 		  const cchar_t *wch, int char_interp)
 {
 #ifndef HAVE_WCHAR
-	return ERR;
+	return (ERR);
 #else
 	int sx = 0, ex = 0, cw = 0, i = 0, newx = 0, tabsize;
 	__LDATA *lp = &win->alines[*y]->line[*x], *tp = NULL;
@@ -388,11 +380,9 @@ _cursesi_addwchar(WINDOW *win, __LINE **lnp, int *y, int *x,
 			cc.elements = 1;
 			cc.attributes = win->wattr;
 			tabsize = win->screen->TABSIZE;
-			newx = tabsize - (*x % tabsize);
-			for (i = 0; i < newx; i++) {
+			for (i = 0; i < tabsize - (*x % tabsize); i++) {
 				if (wadd_wch(win, &cc) == ERR)
 					return ERR;
-				(*x)++;
 			}
 			return OK;
 		}
@@ -547,7 +537,7 @@ _cursesi_addwchar(WINDOW *win, __LINE **lnp, int *y, int *x,
 
 	if (wch->elements > 1) {
 		for (i = 1; i < wch->elements; i++) {
-			np = malloc(sizeof(nschar_t));
+			np = (nschar_t *)malloc(sizeof(nschar_t));
 			if (!np)
 				return ERR;;
 			np->ch = wch->vals[i];
@@ -593,9 +583,9 @@ _cursesi_addwchar(WINDOW *win, __LINE **lnp, int *y, int *x,
 			while (ex < win->maxx && WCOL(*tp) < 0) {
 #ifdef DEBUG
 				__CTRACE(__CTRACE_INPUT,
-				    "_cursesi_addwchar: clear "
-				    "remaining of current char (%d,%d)nn",
-				    *y, ex);
+				 	"_cursesi_addwchar: clear "
+				 	"remaining of current char (%d,%d)nn",
+				 	*y, ex);
 #endif /* DEBUG */
 				tp->ch = (wchar_t) btowc((int) win->bch);
 				if (_cursesi_copy_nsp(win->bnsp, tp) == ERR)
@@ -614,7 +604,6 @@ _cursesi_addwchar(WINDOW *win, __LINE **lnp, int *y, int *x,
 #ifdef DEBUG
 	__CTRACE(__CTRACE_INPUT, "add_wch: %d : 0x%x\n", lp->ch, lp->attr);
 #endif /* DEBUG */
-	__sync(win);
 	return OK;
 #endif
 }

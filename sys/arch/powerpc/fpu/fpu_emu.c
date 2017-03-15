@@ -1,4 +1,4 @@
-/*	$NetBSD: fpu_emu.c,v 1.19 2016/12/28 10:52:30 rin Exp $ */
+/*	$NetBSD: fpu_emu.c,v 1.16.14.2 2017/01/03 06:37:25 snj Exp $ */
 
 /*
  * Copyright 2001 Wasabi Systems, Inc.
@@ -76,7 +76,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: fpu_emu.c,v 1.19 2016/12/28 10:52:30 rin Exp $");
+__KERNEL_RCSID(0, "$NetBSD: fpu_emu.c,v 1.16.14.2 2017/01/03 06:37:25 snj Exp $");
 
 #include "opt_ddb.h"
 
@@ -324,7 +324,7 @@ fpu_execute(struct trapframe *tf, struct fpemu *fe, union instr *insn)
 		 * Convert to/from single if needed, calculate addr,
 		 * and update index reg if needed.
 		 */
-		uint64_t buf;
+		double buf;
 		size_t size = sizeof(float);
 		int store, update;
 

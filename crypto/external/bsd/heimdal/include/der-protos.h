@@ -1,25 +1,12 @@
 /* This is a generated file */
 #ifndef __der_protos_h__
 #define __der_protos_h__
-#ifndef DOXY
 
 #include <stdarg.h>
 
 #ifdef __cplusplus
 extern "C" {
 #endif
-
-int
-asn1_fuzzer_done (void);
-
-int
-asn1_fuzzer_method (const char */*mode*/);
-
-void
-asn1_fuzzer_next (void);
-
-void
-asn1_fuzzer_reset (void);
 
 int
 copy_heim_any (
@@ -81,11 +68,6 @@ der_copy_integer (
 	int */*to*/);
 
 int
-der_copy_integer64 (
-	const int64_t */*from*/,
-	int64_t */*to*/);
-
-int
 der_copy_octet_string (
 	const heim_octet_string */*from*/,
 	heim_octet_string */*to*/);
@@ -109,11 +91,6 @@ int
 der_copy_unsigned (
 	const unsigned */*from*/,
 	unsigned */*to*/);
-
-int
-der_copy_unsigned64 (
-	const uint64_t */*from*/,
-	uint64_t */*to*/);
 
 int
 der_copy_utctime (
@@ -152,9 +129,6 @@ void
 der_free_integer (int */*i*/);
 
 void
-der_free_integer64 (int64_t */*i*/);
-
-void
 der_free_octet_string (heim_octet_string */*k*/);
 
 void
@@ -168,9 +142,6 @@ der_free_universal_string (heim_universal_string */*k*/);
 
 void
 der_free_unsigned (unsigned */*u*/);
-
-void
-der_free_unsigned64 (uint64_t */*u*/);
 
 void
 der_free_utctime (time_t */*t*/);
@@ -244,13 +215,6 @@ der_get_integer (
 	size_t */*size*/);
 
 int
-der_get_integer64 (
-	const unsigned char */*p*/,
-	size_t /*len*/,
-	int64_t */*ret*/,
-	size_t */*size*/);
-
-int
 der_get_length (
 	const unsigned char */*p*/,
 	size_t /*len*/,
@@ -289,7 +253,7 @@ int
 der_get_tag (
 	const unsigned char */*p*/,
 	size_t /*len*/,
-	Der_class */*cls*/,
+	Der_class */*class*/,
 	Der_type */*type*/,
 	unsigned int */*tag*/,
 	size_t */*size*/);
@@ -318,13 +282,6 @@ der_get_unsigned (
 	const unsigned char */*p*/,
 	size_t /*len*/,
 	unsigned */*ret*/,
-	size_t */*size*/);
-
-int
-der_get_unsigned64 (
-	const unsigned char */*p*/,
-	size_t /*len*/,
-	uint64_t */*ret*/,
 	size_t */*size*/);
 
 int
@@ -411,9 +368,6 @@ size_t
 der_length_integer (const int */*data*/);
 
 size_t
-der_length_integer64 (const int64_t */*data*/);
-
-size_t
 der_length_len (size_t /*len*/);
 
 size_t
@@ -435,9 +389,6 @@ size_t
 der_length_unsigned (const unsigned */*data*/);
 
 size_t
-der_length_unsigned64 (const uint64_t */*data*/);
-
-size_t
 der_length_utctime (const time_t */*t*/);
 
 size_t
@@ -450,7 +401,7 @@ int
 der_match_tag (
 	const unsigned char */*p*/,
 	size_t /*len*/,
-	Der_class /*cls*/,
+	Der_class /*class*/,
 	Der_type /*type*/,
 	unsigned int /*tag*/,
 	size_t */*size*/);
@@ -459,7 +410,7 @@ int
 der_match_tag2 (
 	const unsigned char */*p*/,
 	size_t /*len*/,
-	Der_class /*cls*/,
+	Der_class /*class*/,
 	Der_type */*type*/,
 	unsigned int /*tag*/,
 	size_t */*size*/);
@@ -468,7 +419,7 @@ int
 der_match_tag_and_length (
 	const unsigned char */*p*/,
 	size_t /*len*/,
-	Der_class /*cls*/,
+	Der_class /*class*/,
 	Der_type */*type*/,
 	unsigned int /*tag*/,
 	size_t */*length_ret*/,
@@ -558,13 +509,6 @@ der_put_integer (
 	size_t */*size*/);
 
 int
-der_put_integer64 (
-	unsigned char */*p*/,
-	size_t /*len*/,
-	const int64_t */*v*/,
-	size_t */*size*/);
-
-int
 der_put_length (
 	unsigned char */*p*/,
 	size_t /*len*/,
@@ -626,13 +570,6 @@ der_put_unsigned (
 	size_t */*size*/);
 
 int
-der_put_unsigned64 (
-	unsigned char */*p*/,
-	size_t /*len*/,
-	const uint64_t */*v*/,
-	size_t */*size*/);
-
-int
 der_put_utctime (
 	unsigned char */*p*/,
 	size_t /*len*/,
@@ -688,5 +625,4 @@ length_heim_any_set (const heim_any */*data*/);
 }
 #endif
 
-#endif /* DOXY */
 #endif /* __der_protos_h__ */

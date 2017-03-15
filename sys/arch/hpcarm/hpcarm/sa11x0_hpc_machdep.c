@@ -1,4 +1,4 @@
-/*	$NetBSD: sa11x0_hpc_machdep.c,v 1.11 2016/12/22 14:47:57 cherry Exp $	*/
+/*	$NetBSD: sa11x0_hpc_machdep.c,v 1.9 2014/03/10 14:51:15 skrll Exp $	*/
 
 /*
  * Copyright (c) 1994-1998 Mark Brinicombe.
@@ -40,7 +40,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sa11x0_hpc_machdep.c,v 1.11 2016/12/22 14:47:57 cherry Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sa11x0_hpc_machdep.c,v 1.9 2014/03/10 14:51:15 skrll Exp $");
 
 #include "opt_ddb.h"
 #include "opt_dram_pages.h"
@@ -105,7 +105,7 @@ extern paddr_t physical_freestart;
 extern paddr_t physical_freeend;
 extern paddr_t physical_end;
 
-extern paddr_t msgbufphys;
+extern vaddr_t msgbufphys;
 
 extern int end;
 
@@ -537,7 +537,7 @@ init_sa11x0(int argc, char **argv, struct bootinfo *bi)
 #endif
 
 	/* Load memory into UVM. */
-	uvm_md_init();
+	uvm_setpagesize();	/* initialize PAGE_SIZE-dependent variables */
 	for (loop = 0; loop < bootconfig.dramblocks; loop++) {
 		paddr_t dblk_start = (paddr_t)bootconfig.dram[loop].address;
 		paddr_t dblk_end = dblk_start

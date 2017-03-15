@@ -1,4 +1,4 @@
-/* $NetBSD: if_gpn.c,v 1.7 2016/12/15 09:28:02 ozaki-r Exp $ */
+/* $NetBSD: if_gpn.c,v 1.4 2011/07/01 19:32:28 dyoung Exp $ */
 /*-
  * Copyright (c) 2008 The NetBSD Foundation, Inc.
  * All rights reserved.
@@ -32,7 +32,7 @@
 
 #include "opt_gemini.h"
 
-__KERNEL_RCSID(0, "$NetBSD: if_gpn.c,v 1.7 2016/12/15 09:28:02 ozaki-r Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_gpn.c,v 1.4 2011/07/01 19:32:28 dyoung Exp $");
 
 #include <sys/param.h>
 #include <sys/device.h>
@@ -298,14 +298,16 @@ gpn_process_data(struct gpn_softc *sc, const ipm_gpn_desc_t *gd)
 		struct mbuf *m;
 		m = sc->sc_rxmbuf;
 		sc->sc_rxmbuf = NULL;
-		m_set_rcvif(m, ifp);
+		m->m_pkthdr.rcvif = ifp;
 		KASSERT(((m->m_pkthdr.len + 63) >> 6) == gd->gd_pktlen64);
+		ifp->if_ipackets++;
 		ifp->if_ibytes += m->m_pkthdr.len;
+		bpf_mtap(ifp, m);
 #ifdef GPNDEBUG
 		printf("%s: rx len=%d crc=%#x\n", ifp->if_xname,
 		    m->m_pkthdr.len, m_crc32_le(m));
 #endif
-		if_percpuq_enqueue(ifp->if_percpuq, m);
+		(*ifp->if_input)(ifp, m);
 	}
 
 out:

@@ -1,4 +1,4 @@
-/*	$NetBSD: strchr.S,v 1.5 2017/02/25 21:16:50 joerg Exp $	*/
+/*	$NetBSD: strchr.S,v 1.3 2011/01/02 02:58:52 matt Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993
@@ -36,16 +36,15 @@
 
 #if defined(LIBC_SCCS) && !defined(lint)
 	ASMSTR("from: @(#)index.s	8.1 (Berkeley) 6/4/93")
-	ASMSTR("$NetBSD: strchr.S,v 1.5 2017/02/25 21:16:50 joerg Exp $")
+	ASMSTR("$NetBSD: strchr.S,v 1.3 2011/01/02 02:58:52 matt Exp $")
 #endif /* LIBC_SCCS and not lint */
 
-#ifdef __mips_abicalls
+#ifdef __ABICALLS__
 	.abicalls
 #endif
 
 LEAF(strchr)
 XLEAF(index)
-	and	a1, 0xff		# limit to byte value
 1:
 	lbu	a2, 0(a0)		# get a byte
 	PTR_ADDU a0, 1

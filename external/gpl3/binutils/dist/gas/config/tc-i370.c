@@ -1,6 +1,7 @@
 /* tc-i370.c -- Assembler for the IBM 360/370/390 instruction set.
    Loosely based on the ppc files by Linas Vepstas <linas@linas.org> 1998, 99
-   Copyright (C) 1994-2016 Free Software Foundation, Inc.
+   Copyright 1994, 1995, 1996, 1997, 1998, 1999, 2000, 2001, 2002, 2003,
+   2004, 2005, 2006, 2007, 2009, 2010  Free Software Foundation, Inc.
    Written by Ian Lance Taylor, Cygnus Support.
 
    This file is part of GAS, the GNU Assembler.
@@ -102,7 +103,7 @@ static bfd_boolean reg_names_p = TARGET_REG_NAMES_P;
 /* Structure to hold information about predefined registers.  */
 struct pd_reg
   {
-    const char *name;
+    char *name;
     int value;
   };
 
@@ -269,11 +270,11 @@ register_name (expressionS *expressionP)
     reg_number = get_single_number ();
   else
     {
-      c = get_symbol_name (&name);
+      c = get_symbol_end ();
       reg_number = reg_name_search (pre_defined_registers, REG_NAME_CNT, name);
 
       /* Put back the delimiting char.  */
-      (void) restore_line_pointer (c);
+      *input_line_pointer = c;
     }
 
   /* If numeric, make sure its not out of bounds.  */
@@ -358,7 +359,7 @@ struct option md_longopts[] =
 size_t md_longopts_size = sizeof (md_longopts);
 
 int
-md_parse_option (int c, const char *arg)
+md_parse_option (int c, char *arg)
 {
   switch (c)
     {
@@ -582,7 +583,7 @@ i370_elf_suffix (char **str_p, expressionS *exp_p)
 {
   struct map_bfd
   {
-    const char *string;
+    char *string;
     int length;
     bfd_reloc_code_real_type reloc;
   };
@@ -1033,11 +1034,12 @@ i370_elf_lcomm (int unused ATTRIBUTE_UNUSED)
   char *pfrag;
   int align2;
 
-  c = get_symbol_name (&name);
+  name = input_line_pointer;
+  c = get_symbol_end ();
 
   /* Just after name is now '\0'.  */
   p = input_line_pointer;
-  (void) restore_line_pointer (c);
+  *p = c;
   SKIP_WHITESPACE ();
   if (*input_line_pointer != ',')
     {
@@ -1184,7 +1186,7 @@ i370_elf_validate_fix (fixS *fixp, segT seg)
    waste space padding out to alignments.  The four pointers
    longlong_poolP, word_poolP, etc. point to a symbol labeling the
    start of each pool part.
-
+ 
    lit_pool_num increments from zero to infinity and uniquely id's
      -- its used to generate the *_poolP symbol name.  */
 
@@ -1867,7 +1869,7 @@ i370_macro (char *str, const struct i370_macro *macro)
     }
 
   /* Put the string together.  */
-  complete = s = XNEWVEC (char, len + 1);
+  complete = s = alloca (len + 1);
   format = macro->format;
   while (*format != '\0')
     {
@@ -1885,7 +1887,6 @@ i370_macro (char *str, const struct i370_macro *macro)
 
   /* Assemble the constructed instruction.  */
   md_assemble (complete);
-  free (complete);
 }
 
 /* This routine is called for each instruction to be assembled.  */
@@ -2352,7 +2353,7 @@ i370_tc (int ignore ATTRIBUTE_UNUSED)
     }
 }
 
-const char *
+char *
 md_atof (int type, char *litp, int *sizep)
 {
   /* 360/370/390 have two float formats: an old, funky 360 single-precision
@@ -2376,7 +2377,7 @@ md_section_align (asection *seg, valueT addr)
 {
   int align = bfd_get_section_alignment (stdoutput, seg);
 
-  return (addr + (1 << align) - 1) & -(1 << align);
+  return (addr + (1 << align) - 1) & (-1 << align);
 }
 
 /* We don't have any form of relaxing.  */
@@ -2499,7 +2500,7 @@ md_apply_fix (fixS *fixP, valueT * valP, segT seg)
 	 any operands that need relocation.  Due to the 12-bit naturew of
 	 i370 addressing, this would be unusual.  */
         {
-          const char *sfile;
+          char *sfile;
           unsigned int sline;
 
           /* Use expr_symbol_where to see if this is an expression
@@ -2603,9 +2604,9 @@ tc_gen_reloc (asection *seg ATTRIBUTE_UNUSED, fixS *fixp)
 {
   arelent *reloc;
 
-  reloc = XNEW (arelent);
+  reloc = xmalloc (sizeof (arelent));
 
-  reloc->sym_ptr_ptr = XNEW (asymbol *);
+  reloc->sym_ptr_ptr = xmalloc (sizeof (asymbol *));
   *reloc->sym_ptr_ptr = symbol_get_bfdsym (fixp->fx_addsy);
   reloc->address = fixp->fx_frag->fr_address + fixp->fx_where;
   reloc->howto = bfd_reloc_type_lookup (stdoutput, fixp->fx_r_type);

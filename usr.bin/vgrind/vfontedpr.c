@@ -1,4 +1,4 @@
-/*	$NetBSD: vfontedpr.c,v 1.17 2016/09/05 00:40:30 sevan Exp $	*/
+/*	$NetBSD: vfontedpr.c,v 1.15 2014/07/15 13:17:15 christos Exp $	*/
 
 /*
  * Copyright (c) 1980, 1993
@@ -43,7 +43,7 @@ __COPYRIGHT("@(#) Copyright (c) 1980, 1993\
 #if 0
 static char sccsid[] = "@(#)vfontedpr.c	8.1 (Berkeley) 6/6/93";
 #endif
-__RCSID("$NetBSD: vfontedpr.c,v 1.17 2016/09/05 00:40:30 sevan Exp $");
+__RCSID("$NetBSD: vfontedpr.c,v 1.15 2014/07/15 13:17:15 christos Exp $");
 #endif /* not lint */
 
 #include <sys/types.h>
@@ -126,6 +126,8 @@ char    *l_strend;		/* delimiter for string constant */
 bool	 l_toplex;		/* procedures only defined at top lex level */
 const char *language = "c";	/* the language indicator */
 
+int	main(int, char **);
+
 #define	ps(x)	printf("%s", x)
 static char minus[] = "-";
 static char minusn[] = "-n";
@@ -161,7 +163,7 @@ main(int argc, char *argv[])
 
 	    /* act as a filter like eqn */
 	    if (!strcmp(argv[0], "-f")) {
-		filter=true;
+		filter++;
 		argv[0] = argv[argc-1];
 		argv[argc-1] = minus;
 		continue;
@@ -175,13 +177,13 @@ main(int argc, char *argv[])
 
 	    /* build an index */
 	    if (!strcmp(argv[0], "-x")) {
-		idx=true;
+		idx++;
 		argv[0] = minusn;
 	    }
 
 	    /* indicate no keywords */
 	    if (!strcmp(argv[0], "-n")) {
-		nokeyw=true;
+		nokeyw++;
 		argc--, argv++;
 		continue;
 	    }

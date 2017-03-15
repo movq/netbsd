@@ -58,9 +58,6 @@ static CXCursorKind GetCursorKind(const Attr *A) {
     case attr::CUDAGlobal: return CXCursor_CUDAGlobalAttr;
     case attr::CUDAHost: return CXCursor_CUDAHostAttr;
     case attr::CUDAShared: return CXCursor_CUDASharedAttr;
-    case attr::Visibility: return CXCursor_VisibilityAttr;
-    case attr::DLLExport: return CXCursor_DLLExport;
-    case attr::DLLImport: return CXCursor_DLLImport;
   }
 
   return CXCursor_UnexposedAttr;
@@ -229,10 +226,6 @@ CXCursor cxcursor::MakeCXCursor(const Stmt *S, const Decl *Parent,
   case Stmt::AtomicExprClass:
   case Stmt::BinaryConditionalOperatorClass:
   case Stmt::TypeTraitExprClass:
-  case Stmt::CoroutineBodyStmtClass:
-  case Stmt::CoawaitExprClass:
-  case Stmt::CoreturnStmtClass:
-  case Stmt::CoyieldExprClass:
   case Stmt::CXXBindTemporaryExprClass:
   case Stmt::CXXDefaultArgExprClass:
   case Stmt::CXXDefaultInitExprClass:
@@ -242,15 +235,11 @@ CXCursor cxcursor::MakeCXCursor(const Stmt *S, const Decl *Parent,
   case Stmt::CXXUuidofExprClass:
   case Stmt::ChooseExprClass:
   case Stmt::DesignatedInitExprClass:
-  case Stmt::DesignatedInitUpdateExprClass:
-  case Stmt::ArrayInitLoopExprClass:
-  case Stmt::ArrayInitIndexExprClass:
   case Stmt::ExprWithCleanupsClass:
   case Stmt::ExpressionTraitExprClass:
   case Stmt::ExtVectorElementExprClass:
   case Stmt::ImplicitCastExprClass:
   case Stmt::ImplicitValueInitExprClass:
-  case Stmt::NoInitExprClass:
   case Stmt::MaterializeTemporaryExprClass:
   case Stmt::ObjCIndirectCopyRestoreExprClass:
   case Stmt::OffsetOfExprClass:
@@ -258,6 +247,7 @@ CXCursor cxcursor::MakeCXCursor(const Stmt *S, const Decl *Parent,
   case Stmt::PredefinedExprClass:
   case Stmt::ShuffleVectorExprClass:
   case Stmt::ConvertVectorExprClass:
+  case Stmt::UnaryExprOrTypeTraitExprClass:
   case Stmt::VAArgExprClass:
   case Stmt::ObjCArrayLiteralClass:
   case Stmt::ObjCDictionaryLiteralClass:
@@ -328,18 +318,12 @@ CXCursor cxcursor::MakeCXCursor(const Stmt *S, const Decl *Parent,
     K = CXCursor_UnaryOperator;
     break;
 
-  case Stmt::UnaryExprOrTypeTraitExprClass:
   case Stmt::CXXNoexceptExprClass:
     K = CXCursor_UnaryExpr;
     break;
 
-  case Stmt::MSPropertySubscriptExprClass:
   case Stmt::ArraySubscriptExprClass:
     K = CXCursor_ArraySubscriptExpr;
-    break;
-
-  case Stmt::OMPArraySectionExprClass:
-    K = CXCursor_OMPArraySectionExpr;
     break;
 
   case Stmt::BinaryOperatorClass:
@@ -449,11 +433,7 @@ CXCursor cxcursor::MakeCXCursor(const Stmt *S, const Decl *Parent,
   case Stmt::ObjCBoolLiteralExprClass:
     K = CXCursor_ObjCBoolLiteralExpr;
     break;
-
-  case Stmt::ObjCAvailabilityCheckExprClass:
-    K = CXCursor_ObjCAvailabilityCheckExpr;
-    break;
-
+      
   case Stmt::ObjCBridgedCastExprClass:
     K = CXCursor_ObjCBridgedCastExpr;
     break;
@@ -510,7 +490,6 @@ CXCursor cxcursor::MakeCXCursor(const Stmt *S, const Decl *Parent,
   case Stmt::CXXMemberCallExprClass:
   case Stmt::CUDAKernelCallExprClass:
   case Stmt::CXXConstructExprClass:  
-  case Stmt::CXXInheritedCtorInitExprClass:  
   case Stmt::CXXTemporaryObjectExprClass:
   case Stmt::CXXUnresolvedConstructExprClass:
   case Stmt::UserDefinedLiteralClass:
@@ -589,9 +568,6 @@ CXCursor cxcursor::MakeCXCursor(const Stmt *S, const Decl *Parent,
   case Stmt::OMPTaskwaitDirectiveClass:
     K = CXCursor_OMPTaskwaitDirective;
     break;
-  case Stmt::OMPTaskgroupDirectiveClass:
-    K = CXCursor_OMPTaskgroupDirective;
-    break;
   case Stmt::OMPFlushDirectiveClass:
     K = CXCursor_OMPFlushDirective;
     break;
@@ -604,83 +580,8 @@ CXCursor cxcursor::MakeCXCursor(const Stmt *S, const Decl *Parent,
   case Stmt::OMPTargetDirectiveClass:
     K = CXCursor_OMPTargetDirective;
     break;
-  case Stmt::OMPTargetDataDirectiveClass:
-    K = CXCursor_OMPTargetDataDirective;
-    break;
-  case Stmt::OMPTargetEnterDataDirectiveClass:
-    K = CXCursor_OMPTargetEnterDataDirective;
-    break;
-  case Stmt::OMPTargetExitDataDirectiveClass:
-    K = CXCursor_OMPTargetExitDataDirective;
-    break;
-  case Stmt::OMPTargetParallelDirectiveClass:
-    K = CXCursor_OMPTargetParallelDirective;
-    break;
-  case Stmt::OMPTargetParallelForDirectiveClass:
-    K = CXCursor_OMPTargetParallelForDirective;
-    break;
-  case Stmt::OMPTargetUpdateDirectiveClass:
-    K = CXCursor_OMPTargetUpdateDirective;
-    break;
   case Stmt::OMPTeamsDirectiveClass:
     K = CXCursor_OMPTeamsDirective;
-    break;
-  case Stmt::OMPCancellationPointDirectiveClass:
-    K = CXCursor_OMPCancellationPointDirective;
-    break;
-  case Stmt::OMPCancelDirectiveClass:
-    K = CXCursor_OMPCancelDirective;
-    break;
-  case Stmt::OMPTaskLoopDirectiveClass:
-    K = CXCursor_OMPTaskLoopDirective;
-    break;
-  case Stmt::OMPTaskLoopSimdDirectiveClass:
-    K = CXCursor_OMPTaskLoopSimdDirective;
-    break;
-  case Stmt::OMPDistributeDirectiveClass:
-    K = CXCursor_OMPDistributeDirective;
-    break;
-  case Stmt::OMPDistributeParallelForDirectiveClass:
-    K = CXCursor_OMPDistributeParallelForDirective;
-    break;
-  case Stmt::OMPDistributeParallelForSimdDirectiveClass:
-    K = CXCursor_OMPDistributeParallelForSimdDirective;
-    break;
-  case Stmt::OMPDistributeSimdDirectiveClass:
-    K = CXCursor_OMPDistributeSimdDirective;
-    break;
-  case Stmt::OMPTargetParallelForSimdDirectiveClass:
-    K = CXCursor_OMPTargetParallelForSimdDirective;
-    break;
-  case Stmt::OMPTargetSimdDirectiveClass:
-    K = CXCursor_OMPTargetSimdDirective;
-    break;
-  case Stmt::OMPTeamsDistributeDirectiveClass:
-    K = CXCursor_OMPTeamsDistributeDirective;
-    break;
-  case Stmt::OMPTeamsDistributeSimdDirectiveClass:
-    K = CXCursor_OMPTeamsDistributeSimdDirective;
-    break;
-  case Stmt::OMPTeamsDistributeParallelForSimdDirectiveClass:
-    K = CXCursor_OMPTeamsDistributeParallelForSimdDirective;
-    break;
-  case Stmt::OMPTeamsDistributeParallelForDirectiveClass:
-    K = CXCursor_OMPTeamsDistributeParallelForDirective;
-    break;
-  case Stmt::OMPTargetTeamsDirectiveClass:
-    K = CXCursor_OMPTargetTeamsDirective;
-    break;
-  case Stmt::OMPTargetTeamsDistributeDirectiveClass:
-    K = CXCursor_OMPTargetTeamsDistributeDirective;
-    break;
-  case Stmt::OMPTargetTeamsDistributeParallelForDirectiveClass:
-    K = CXCursor_OMPTargetTeamsDistributeParallelForDirective;
-    break;
-  case Stmt::OMPTargetTeamsDistributeParallelForSimdDirectiveClass:
-    K = CXCursor_OMPTargetTeamsDistributeParallelForSimdDirective;
-    break;
-  case Stmt::OMPTargetTeamsDistributeSimdDirectiveClass:
-    K = CXCursor_OMPTargetTeamsDistributeSimdDirective;
     break;
   }
 
@@ -849,28 +750,28 @@ SourceRange cxcursor::getCursorPreprocessingDirective(CXCursor C) {
   return TU->mapRangeFromPreamble(Range);
 }
 
-CXCursor cxcursor::MakeMacroDefinitionCursor(const MacroDefinitionRecord *MI,
+CXCursor cxcursor::MakeMacroDefinitionCursor(const MacroDefinition *MI,
                                              CXTranslationUnit TU) {
-  CXCursor C = {CXCursor_MacroDefinition, 0, {MI, nullptr, TU}};
+  CXCursor C = { CXCursor_MacroDefinition, 0, { MI, nullptr, TU } };
   return C;
 }
 
-const MacroDefinitionRecord *cxcursor::getCursorMacroDefinition(CXCursor C) {
+const MacroDefinition *cxcursor::getCursorMacroDefinition(CXCursor C) {
   assert(C.kind == CXCursor_MacroDefinition);
-  return static_cast<const MacroDefinitionRecord *>(C.data[0]);
+  return static_cast<const MacroDefinition *>(C.data[0]);
 }
 
-CXCursor cxcursor::MakeMacroExpansionCursor(MacroExpansion *MI,
+CXCursor cxcursor::MakeMacroExpansionCursor(MacroExpansion *MI, 
                                             CXTranslationUnit TU) {
   CXCursor C = { CXCursor_MacroExpansion, 0, { MI, nullptr, TU } };
   return C;
 }
 
-CXCursor cxcursor::MakeMacroExpansionCursor(MacroDefinitionRecord *MI,
+CXCursor cxcursor::MakeMacroExpansionCursor(MacroDefinition *MI,
                                             SourceLocation Loc,
                                             CXTranslationUnit TU) {
   assert(Loc.isValid());
-  CXCursor C = {CXCursor_MacroExpansion, 0, {MI, Loc.getPtrEncoding(), TU}};
+  CXCursor C = { CXCursor_MacroExpansion, 0, { MI, Loc.getPtrEncoding(), TU } };
   return C;
 }
 
@@ -879,8 +780,7 @@ const IdentifierInfo *cxcursor::MacroExpansionCursor::getName() const {
     return getAsMacroDefinition()->getName();
   return getAsMacroExpansion()->getName();
 }
-const MacroDefinitionRecord *
-cxcursor::MacroExpansionCursor::getDefinition() const {
+const MacroDefinition *cxcursor::MacroExpansionCursor::getDefinition() const {
   if (isPseudo())
     return getAsMacroDefinition();
   return getAsMacroExpansion()->getDefinition();
@@ -1119,6 +1019,8 @@ bool cxcursor::isFirstInDeclGroup(CXCursor C) {
 // libclang CXCursor APIs
 //===----------------------------------------------------------------------===//
 
+extern "C" {
+
 int clang_Cursor_isNull(CXCursor cursor) {
   return clang_equalCursors(cursor, clang_getNullCursor());
 }
@@ -1308,6 +1210,8 @@ unsigned long long clang_Cursor_getTemplateArgumentUnsignedValue(CXCursor C,
   return TA.getAsIntegral().getZExtValue();
 }
 
+} // end: extern "C"
+
 //===----------------------------------------------------------------------===//
 // CXCursorSet.
 //===----------------------------------------------------------------------===//
@@ -1341,6 +1245,7 @@ public:
 };
 }
 
+extern "C" {
 CXCursorSet clang_createCXCursorSet() {
   return packCXCursorSet(new CXCursorSet_Impl());
 }
@@ -1381,21 +1286,20 @@ CXCompletionString clang_getCursorCompletionString(CXCursor cursor) {
       CodeCompletionString *String
         = Result.CreateCodeCompletionString(unit->getASTContext(),
                                             unit->getPreprocessor(),
-                                            CodeCompletionContext::CCC_Other,
                                  unit->getCodeCompletionTUInfo().getAllocator(),
                                  unit->getCodeCompletionTUInfo(),
                                  true);
       return String;
     }
-  } else if (kind == CXCursor_MacroDefinition) {
-    const MacroDefinitionRecord *definition = getCursorMacroDefinition(cursor);
+  }
+  else if (kind == CXCursor_MacroDefinition) {
+    const MacroDefinition *definition = getCursorMacroDefinition(cursor);
     const IdentifierInfo *MacroInfo = definition->getName();
     ASTUnit *unit = getCursorASTUnit(cursor);
     CodeCompletionResult Result(MacroInfo);
     CodeCompletionString *String
       = Result.CreateCodeCompletionString(unit->getASTContext(),
                                           unit->getPreprocessor(),
-                                          CodeCompletionContext::CCC_Other,
                                  unit->getCodeCompletionTUInfo().getAllocator(),
                                  unit->getCodeCompletionTUInfo(),
                                  false);
@@ -1403,6 +1307,7 @@ CXCompletionString clang_getCursorCompletionString(CXCursor cursor) {
   }
   return nullptr;
 }
+} // end: extern C.
 
 namespace {
   struct OverridenCursorsPool {
@@ -1427,6 +1332,7 @@ void cxcursor::disposeOverridenCXCursorsPool(void *pool) {
   delete static_cast<OverridenCursorsPool*>(pool);
 }
  
+extern "C" {
 void clang_getOverriddenCursors(CXCursor cursor,
                                 CXCursor **overridden,
                                 unsigned *num_overridden) {
@@ -1548,3 +1454,5 @@ CXType clang_Cursor_getReceiverType(CXCursor C) {
 
   return cxtype::MakeCXType(QualType(), TU);
 }
+
+} // end: extern "C"

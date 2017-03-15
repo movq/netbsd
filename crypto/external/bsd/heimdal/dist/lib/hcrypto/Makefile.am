@@ -2,14 +2,7 @@
 
 include $(top_srcdir)/Makefile.am.common
 
-AUTOMAKE_OPTIONS = subdir-objects
-
-if HAVE_HCRYPTO_W_OPENSSL
-AM_CPPFLAGS += $(INCLUDE_openssl_crypto)
-endif
-
-AM_CPPFLAGS += -I$(top_srcdir)/lib/hx509 \
-	       -I$(srcdir)/libtommath -DUSE_HCRYPTO_LTM=1
+AM_CPPFLAGS += -I$(srcdir)/libtommath -DUSE_HCRYPTO_LTM=1
 
 lib_LTLIBRARIES = libhcrypto.la
 check_LTLIBRARIES = libhctest.la
@@ -18,12 +11,7 @@ libhcrypto_la_LDFLAGS = -version-info 5:0:1
 libhcrypto_la_LIBADD = \
 	$(top_builddir)/lib/asn1/libasn1.la \
 	$(LIB_dlopen) \
-	$(LIB_heimbase) \
 	$(LIBADD_roken)
-
-if HAVE_HCRYPTO_W_OPENSSL
-libhcrypto_la_LIBADD += $(LIB_openssl_crypto)
-endif
 
 hcryptoincludedir = $(includedir)/hcrypto
 buildhcryptoinclude = $(buildinclude)/hcrypto
@@ -41,8 +29,6 @@ hcryptoinclude_HEADERS =	\
 	evp.h			\
 	evp-hcrypto.h		\
 	evp-cc.h		\
-	evp-openssl.h		\
-	evp-pkcs11.h		\
 	hmac.h			\
 	md2.h			\
 	md4.h			\
@@ -53,8 +39,7 @@ hcryptoinclude_HEADERS =	\
 	rc4.h			\
 	rsa.h			\
 	sha.h			\
-	ui.h			\
-	undef.h
+	ui.h
 
 install-build-headers:: $(hcryptoinclude_HEADERS)
 	@foo='$(hcryptoinclude_HEADERS)'; \
@@ -75,7 +60,6 @@ PROGRAM_TESTS = \
 	rc2test  \
 	rctest \
 	test_bn \
-	test_bulk \
 	test_cipher \
 	test_engine_dso \
 	test_hmac \
@@ -101,8 +85,7 @@ check_SCRIPTS = $(SCRIPT_TESTS)
 
 TESTS = $(PROGRAM_TESTS) $(SCRIPT_TESTS)
 
-LDADD = $(lib_LTLIBRARIES) $(LIB_roken) $(LIB_openssl_crypto)
-test_rand_LDADD = $(LDADD) -lm
+LDADD = $(lib_LTLIBRARIES) $(LIB_roken)
 
 libhcrypto_la_SOURCES =	\
 	$(ltmsources)	\
@@ -129,8 +112,6 @@ libhcrypto_la_SOURCES =	\
 	evp.h		\
 	evp-hcrypto.c	\
 	evp-cc.c	\
-	evp-openssl.c	\
-	evp-pkcs11.c	\
 	engine.c	\
 	engine.h	\
 	hash.h		\
@@ -144,6 +125,7 @@ libhcrypto_la_SOURCES =	\
 	md5.h		\
 	pkcs5.c		\
 	pkcs12.c	\
+	rand-egd.c	\
 	rand-fortuna.c	\
 	rand-timer.c	\
 	rand-unix.c	\
@@ -167,8 +149,7 @@ libhcrypto_la_SOURCES =	\
 	sha512.c	\
 	validate.c	\
 	ui.c		\
-	ui.h		\
-	undef.h
+	ui.h
 
 ltmsources = \
 	libtommath/tommath.h \
@@ -259,6 +240,7 @@ ltmsources = \
 	libtommath/bn_mp_prime_is_prime.c \
 	libtommath/bn_mp_prime_next_prime.c \
 	libtommath/bn_mp_find_prime.c \
+	libtommath/bn_mp_isprime.c \
 	libtommath/bn_mp_dr_reduce.c \
 	libtommath/bn_mp_dr_is_modulus.c \
 	libtommath/bn_mp_dr_setup.c \
@@ -335,15 +317,10 @@ EXTRA_DIST = \
 	DESperate.txt \
 	passwd_dialog.rc \
 	libhcrypto-exports.def \
-	dh-tfm.c \
+	dllmain.c \
 	ec.h \
 	ecdh.h \
 	ecdsa.h \
-	evp-crypt.c \
-	evp-w32.c \
-	evp-w32.h \
-	evp-wincng.c \
-	evp-wincng.h \
 	gen-des.pl \
 	md5crypt_test.c \
 	passwd_dialog.aps \
@@ -352,9 +329,7 @@ EXTRA_DIST = \
 	passwd_dialog.res \
 	passwd_dlg.c \
 	passwd_dlg.h \
-	rand-w32.c \
 	resource.h \
-	rsa-tfm.c \
 	rsakey.der \
 	rsakey2048.der \
 	rsakey4096.der \

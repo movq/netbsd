@@ -22,7 +22,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: print-vtp.c,v 1.3 2017/02/05 04:05:05 spz Exp $");
+__RCSID("$NetBSD: print-vtp.c,v 1.1.1.2.4.1 2017/02/19 05:01:16 snj Exp $");
 #endif
 
 /* \summary: Cisco VLAN Trunking Protocol (VTP) printer */

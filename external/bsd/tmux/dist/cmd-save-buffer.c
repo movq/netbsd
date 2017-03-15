@@ -1,4 +1,4 @@
-/* $OpenBSD$ */
+/* Id */
 
 /*
  * Copyright (c) 2009 Tiago Cunha <me@tiagocunha.org>
@@ -34,25 +34,21 @@
 enum cmd_retval	 cmd_save_buffer_exec(struct cmd *, struct cmd_q *);
 
 const struct cmd_entry cmd_save_buffer_entry = {
-	.name = "save-buffer",
-	.alias = "saveb",
-
-	.args = { "ab:", 1, 1 },
-	.usage = "[-a] " CMD_BUFFER_USAGE " path",
-
-	.flags = 0,
-	.exec = cmd_save_buffer_exec
+	"save-buffer", "saveb",
+	"ab:", 1, 1,
+	"[-a] " CMD_BUFFER_USAGE " path",
+	0,
+	NULL,
+	cmd_save_buffer_exec
 };
 
 const struct cmd_entry cmd_show_buffer_entry = {
-	.name = "show-buffer",
-	.alias = "showb",
-
-	.args = { "b:", 0, 0 },
-	.usage = CMD_BUFFER_USAGE,
-
-	.flags = 0,
-	.exec = cmd_save_buffer_exec
+	"show-buffer", "showb",
+	"b:", 0, 0,
+	CMD_BUFFER_USAGE,
+	0,
+	NULL,
+	cmd_save_buffer_exec
 };
 
 enum cmd_retval
@@ -62,26 +58,31 @@ cmd_save_buffer_exec(struct cmd *self, struct cmd_q *cmdq)
 	struct client		*c = cmdq->client;
 	struct session          *s;
 	struct paste_buffer	*pb;
-	const char		*path, *bufname, *bufdata, *start, *end, *cwd;
-	const char		*flags;
-	char			*msg, *file, resolved[PATH_MAX];
-	size_t			 size, used, msglen, bufsize;
+	const char		*path;
+	char			*cause, *start, *end, *msg;
+	size_t			 size, used, msglen;
+	int			 cwd, fd, buffer;
 	FILE			*f;
 
 	if (!args_has(args, 'b')) {
-		if ((pb = paste_get_top(NULL)) == NULL) {
+		if ((pb = paste_get_top(&global_buffers)) == NULL) {
 			cmdq_error(cmdq, "no buffers");
 			return (CMD_RETURN_ERROR);
 		}
 	} else {
-		bufname = args_get(args, 'b');
-		pb = paste_get_name(bufname);
+		buffer = args_strtonum(args, 'b', 0, INT_MAX, &cause);
+		if (cause != NULL) {
+			cmdq_error(cmdq, "buffer %s", cause);
+			free(cause);
+			return (CMD_RETURN_ERROR);
+		}
+
+		pb = paste_get_index(&global_buffers, buffer);
 		if (pb == NULL) {
-			cmdq_error(cmdq, "no buffer %s", bufname);
+			cmdq_error(cmdq, "no buffer %d", buffer);
 			return (CMD_RETURN_ERROR);
 		}
 	}
-	bufdata = paste_buffer_data(pb, &bufsize);
 
 	if (self->entry == &cmd_show_buffer_entry)
 		path = "-";
@@ -97,35 +98,31 @@ cmd_save_buffer_exec(struct cmd *self, struct cmd_q *cmdq)
 		goto do_print;
 	}
 
-	if (c != NULL && c->session == NULL && c->cwd != NULL)
+	if (c != NULL && c->session == NULL)
 		cwd = c->cwd;
-	else if ((s = c->session) != NULL && s->cwd != NULL)
+	else if ((s = cmd_current_session(cmdq, 0)) != NULL)
 		cwd = s->cwd;
 	else
-		cwd = ".";
+		cwd = AT_FDCWD;
 
-	flags = "wb";
-	if (args_has(self->args, 'a'))
-		flags = "ab";
-
-	if (*path == '/')
-		file = xstrdup(path);
-	else
-		xasprintf(&file, "%s/%s", cwd, path);
-	if (realpath(file, resolved) == NULL &&
-	    strlcpy(resolved, file, sizeof resolved) >= sizeof resolved) {
-		cmdq_error(cmdq, "%s: %s", file, strerror(ENAMETOOLONG));
-		return (CMD_RETURN_ERROR);
+	f = NULL;
+	if (args_has(self->args, 'a')) {
+		fd = openat(cwd, path, O_CREAT|O_RDWR|O_APPEND, 0600);
+		if (fd != -1)
+			f = fdopen(fd, "ab");
+	} else {
+		fd = openat(cwd, path, O_CREAT|O_RDWR, 0600);
+		if (fd != -1)
+			f = fdopen(fd, "wb");
 	}
-	f = fopen(resolved, flags);
-	free(file);
 	if (f == NULL) {
-		cmdq_error(cmdq, "%s: %s", resolved, strerror(errno));
+		if (fd != -1)
+			close(fd);
+		cmdq_error(cmdq, "%s: %s", path, strerror(errno));
 		return (CMD_RETURN_ERROR);
 	}
-
-	if (fwrite(bufdata, 1, bufsize, f) != bufsize) {
-		cmdq_error(cmdq, "%s: write error", resolved);
+	if (fwrite(pb->data, 1, pb->size, f) != pb->size) {
+		cmdq_error(cmdq, "%s: fwrite error", path);
 		fclose(f);
 		return (CMD_RETURN_ERROR);
 	}
@@ -134,28 +131,29 @@ cmd_save_buffer_exec(struct cmd *self, struct cmd_q *cmdq)
 	return (CMD_RETURN_NORMAL);
 
 do_stdout:
-	evbuffer_add(c->stdout_data, bufdata, bufsize);
-	server_client_push_stdout(c);
+	evbuffer_add(c->stdout_data, pb->data, pb->size);
+	server_push_stdout(c);
 	return (CMD_RETURN_NORMAL);
 
 do_print:
-	if (bufsize > (INT_MAX / 4) - 1) {
+	if (pb->size > (INT_MAX / 4) - 1) {
 		cmdq_error(cmdq, "buffer too big");
 		return (CMD_RETURN_ERROR);
 	}
 	msg = NULL;
+	msglen = 0;
 
 	used = 0;
-	while (used != bufsize) {
-		start = bufdata + used;
-		end = memchr(start, '\n', bufsize - used);
+	while (used != pb->size) {
+		start = pb->data + used;
+		end = memchr(start, '\n', pb->size - used);
 		if (end != NULL)
 			size = end - start;
 		else
-			size = bufsize - used;
+			size = pb->size - used;
 
 		msglen = size * 4 + 1;
-		msg = xrealloc(msg, msglen);
+		msg = xrealloc(msg, 1, msglen);
 
 		strvisx(msg, start, size, VIS_OCTAL|VIS_TAB);
 		cmdq_print(cmdq, "%s", msg);

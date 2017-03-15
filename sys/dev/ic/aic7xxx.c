@@ -1,4 +1,4 @@
-/*	$NetBSD: aic7xxx.c,v 1.132 2015/02/07 04:27:54 christos Exp $	*/
+/*	$NetBSD: aic7xxx.c,v 1.131.4.1 2015/02/16 21:25:34 martin Exp $	*/
 
 /*
  * Core routines and tables shareable across OS platforms.
@@ -39,7 +39,7 @@
  * IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGES.
  *
- * $Id: aic7xxx.c,v 1.132 2015/02/07 04:27:54 christos Exp $
+ * $Id: aic7xxx.c,v 1.131.4.1 2015/02/16 21:25:34 martin Exp $
  *
  * //depot/aic7xxx/aic7xxx/aic7xxx.c#112 $
  *
@@ -50,7 +50,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: aic7xxx.c,v 1.132 2015/02/07 04:27:54 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: aic7xxx.c,v 1.131.4.1 2015/02/16 21:25:34 martin Exp $");
 
 #include <dev/ic/aic7xxx_osm.h>
 #include <dev/ic/aic7xxx_inline.h>

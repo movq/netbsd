@@ -1,4 +1,4 @@
-/*	$NetBSD: inet_windowsize.c,v 1.2 2017/02/14 01:16:49 christos Exp $	*/
+/*	$NetBSD: inet_windowsize.c,v 1.1.1.1 2009/06/23 10:09:00 tron Exp $	*/
 
 /*++
 /* NAME
@@ -75,10 +75,10 @@ void    set_inet_windowsize(int sock, int windowsize)
      * Generic implementation: set the send and receive buffer size before
      * listen() or connect().
      */
-    if (setsockopt(sock, SOL_SOCKET, SO_SNDBUF, (void *) &windowsize,
+    if (setsockopt(sock, SOL_SOCKET, SO_SNDBUF, (char *) &windowsize,
 		   sizeof(windowsize)) < 0)
 	msg_warn("setsockopt SO_SNDBUF %d: %m", windowsize);
-    if (setsockopt(sock, SOL_SOCKET, SO_RCVBUF, (void *) &windowsize,
+    if (setsockopt(sock, SOL_SOCKET, SO_RCVBUF, (char *) &windowsize,
 		   sizeof(windowsize)) < 0)
 	msg_warn("setsockopt SO_RCVBUF %d: %m", windowsize);
 }

@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.15 2016/04/20 17:18:52 christos Exp $
+#	$NetBSD: Makefile,v 1.13 2014/06/01 19:51:01 mrg Exp $
 
 REQUIRETOOLS=	yes
 NOLINT=		# defined
@@ -115,15 +115,9 @@ CLEANFILES+=	options.h optionlist
 
 .PATH: ${DIST}/libobjc ${DIST}/libobjc/objc ${DIST}/libobjc/objc-private
 
-# XXX insn-modes.h
-BINBACKENDOBJ!=	cd ${.CURDIR}/../../usr.bin/backend && ${PRINTOBJDIR}
-CPPFLAGS+=	-I${BINBACKENDOBJ}
-
 .else
 .include <bsd.prog.mk>	# do nothing
 .endif
 
 COPTS.archive.c+=	-Wno-error
 COPTS.sendmsg.c+=	-Wno-error
-COPTS.encoding.c+=	-Wno-pointer-arith	# sizeof(void)
-COPTS+=			-Wno-missing-prototypes

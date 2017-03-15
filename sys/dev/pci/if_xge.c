@@ -1,4 +1,4 @@
-/*      $NetBSD: if_xge.c,v 1.25 2016/12/15 09:28:05 ozaki-r Exp $ */
+/*      $NetBSD: if_xge.c,v 1.19 2014/03/29 19:28:25 christos Exp $ */
 
 /*
  * Copyright (c) 2004, SUNET, Swedish University Computer Network.
@@ -43,7 +43,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_xge.c,v 1.25 2016/12/15 09:28:05 ozaki-r Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_xge.c,v 1.19 2014/03/29 19:28:25 christos Exp $");
 
 
 #include <sys/param.h>
@@ -53,6 +53,8 @@ __KERNEL_RCSID(0, "$NetBSD: if_xge.c,v 1.25 2016/12/15 09:28:05 ozaki-r Exp $");
 #include <sys/kernel.h>
 #include <sys/socket.h>
 #include <sys/device.h>
+
+#include <sys/rnd.h>
 
 #include <net/if.h>
 #include <net/if_dl.h>
@@ -321,11 +323,9 @@ xge_attach(device_t parent, device_t self, void *aux)
 #error bad endianness!
 #endif
 
-	if ((val = PIF_RCSR(PIF_RD_SWAPPER_Fb)) != SWAPPER_MAGIC) {
-		aprint_error("%s: failed configuring endian, %llx != %llx!\n",
+	if ((val = PIF_RCSR(PIF_RD_SWAPPER_Fb)) != SWAPPER_MAGIC)
+		return printf("%s: failed configuring endian, %llx != %llx!\n",
 		    XNAME, (unsigned long long)val, SWAPPER_MAGIC);
-		return;
-	}
 
 	/*
 	 * The MAC addr may be all FF's, which is not good.
@@ -359,11 +359,9 @@ xge_attach(device_t parent, device_t self, void *aux)
 #error bad endianness!
 #endif
 
-	if ((val = PIF_RCSR(PIF_RD_SWAPPER_Fb)) != SWAPPER_MAGIC) {
-		aprint_error("%s: failed configuring endian2, %llx != %llx!\n",
+	if ((val = PIF_RCSR(PIF_RD_SWAPPER_Fb)) != SWAPPER_MAGIC)
+		return printf("%s: failed configuring endian2, %llx != %llx!\n",
 		    XNAME, (unsigned long long)val, SWAPPER_MAGIC);
-		return;
-	}
 
 	/*
 	 * XGXS initialization.
@@ -388,10 +386,8 @@ xge_attach(device_t parent, device_t self, void *aux)
 	/*
 	 * Get memory for transmit descriptor lists.
 	 */
-	if (xge_alloc_txmem(sc)) {
-		aprint_error("%s: failed allocating txmem.\n", XNAME);
-		return;
-	}
+	if (xge_alloc_txmem(sc))
+		return printf("%s: failed allocating txmem.\n", XNAME);
 
 	/* 9 and 10 - set FIFO number/prio */
 	PIF_WCSR(TX_FIFO_P0, TX_FIFO_LEN0(NTXDESCS));
@@ -416,10 +412,8 @@ xge_attach(device_t parent, device_t self, void *aux)
 	 */
 	for (i = 0; i < NTXDESCS; i++) {
 		if (bus_dmamap_create(sc->sc_dmat, XGE_IP_MAXPACKET,
-		    NTXFRAGS, MCLBYTES, 0, 0, &sc->sc_txm[i])) {
-			aprint_error("%s: cannot create TX DMA maps\n", XNAME);
-			return;
-		}
+		    NTXFRAGS, MCLBYTES, 0, 0, &sc->sc_txm[i]))
+			return printf("%s: cannot create TX DMA maps\n", XNAME);
 	}
 
 	sc->sc_lasttx = NTXDESCS-1;
@@ -428,18 +422,14 @@ xge_attach(device_t parent, device_t self, void *aux)
 	 * RxDMA initialization.
 	 * Only use one out of 8 possible receive queues.
 	 */
-	if (xge_alloc_rxmem(sc)) {	/* allocate rx descriptor memory */
-		aprint_error("%s: failed allocating rxmem\n", XNAME);
-		return;
-	}
+	if (xge_alloc_rxmem(sc))	/* allocate rx descriptor memory */
+		return printf("%s: failed allocating rxmem\n", XNAME);
 
 	/* Create receive buffer DMA maps */
 	for (i = 0; i < NRXREAL; i++) {
 		if (bus_dmamap_create(sc->sc_dmat, XGE_MAX_MTU,
-		    NRXFRAGS, MCLBYTES, 0, 0, &sc->sc_rxm[i])) {
-			aprint_error("%s: cannot create RX DMA maps\n", XNAME);
-			return;
-		}
+		    NRXFRAGS, MCLBYTES, 0, 0, &sc->sc_rxm[i]))
+			return printf("%s: cannot create RX DMA maps\n", XNAME);
 	}
 
 	/* allocate mbufs to receive descriptors */
@@ -553,24 +543,18 @@ xge_attach(device_t parent, device_t self, void *aux)
 	 * Attach the interface.
 	 */
 	if_attach(ifp);
-	if_deferred_start_init(ifp, NULL);
 	ether_ifattach(ifp, enaddr);
 
 	/*
 	 * Setup interrupt vector before initializing.
 	 */
-	if (pci_intr_map(pa, &ih)) {
-		aprint_error_dev(sc->sc_dev, "unable to map interrupt\n");
-		return;
-	}
+	if (pci_intr_map(pa, &ih))
+		return aprint_error_dev(sc->sc_dev, "unable to map interrupt\n");
 	intrstr = pci_intr_string(pc, ih, intrbuf, sizeof(intrbuf));
 	if ((sc->sc_ih =
-		pci_intr_establish(pc, ih, IPL_NET, xge_intr, sc)) == NULL) {
-		aprint_error_dev(sc->sc_dev,
-		    "unable to establish interrupt at %s\n",
+	    pci_intr_establish(pc, ih, IPL_NET, xge_intr, sc)) == NULL)
+		return aprint_error_dev(sc->sc_dev, "unable to establish interrupt at %s\n",
 		    intrstr ? intrstr : "<unknown>");
-		return;
-	}
 	aprint_normal_dev(sc->sc_dev, "interrupting at %s\n", intrstr);
 
 #ifdef XGE_EVENT_COUNTERS
@@ -712,7 +696,7 @@ xge_intr(void *pv)
 		while ((PIF_RCSR(ADAPTER_STATUS) & QUIESCENT) != QUIESCENT)
 			;
 		PIF_WCSR(MAC_RMAC_ERR_REG, RMAC_LINK_STATE_CHANGE_INT);
-
+		
 		val = PIF_RCSR(ADAPTER_STATUS);
 		if ((val & (RMAC_REMOTE_FAULT|RMAC_LOCAL_FAULT)) == 0)
 			xge_enable(sc); /* Only if link restored */
@@ -751,7 +735,7 @@ xge_intr(void *pv)
 	if (sc->sc_lasttx != lasttx)
 		ifp->if_flags &= ~IFF_OACTIVE;
 
-	if_schedule_deferred_start(ifp); /* Try to get more packets on the wire */
+	xge_start(ifp); /* Try to get more packets on the wire */
 
 	if ((val = PIF_RCSR(RX_TRAFFIC_INT))) {
 		XGE_EVCNT_INCR(&sc->sc_rxintr);
@@ -787,7 +771,7 @@ xge_intr(void *pv)
 		plen += m->m_next->m_next->m_next->m_next->m_len =
 		    RXD_CTL3_BUF4SIZ(rxd->rxd_control3);
 #endif
-		m_set_rcvif(m, ifp);
+		m->m_pkthdr.rcvif = ifp;
 		m->m_pkthdr.len = plen;
 
 		val = rxd->rxd_control1;
@@ -806,6 +790,8 @@ xge_intr(void *pv)
 			break;
 		}
 
+		ifp->if_ipackets++;
+
 		if (RXD_CTL1_PROTOS(val) & (RXD_CTL1_P_IPv4|RXD_CTL1_P_IPv6)) {
 			m->m_pkthdr.csum_flags |= M_CSUM_IPv4;
 			if (RXD_CTL1_L3CSUM(val) != 0xffff)
@@ -822,7 +808,9 @@ xge_intr(void *pv)
 				m->m_pkthdr.csum_flags |= M_CSUM_TCP_UDP_BAD;
 		}
 
-		if_percpuq_enqueue(ifp->if_percpuq, m);
+		bpf_mtap(ifp, m);
+
+		(*ifp->if_input)(ifp, m);
 
 		if (++sc->sc_nextrx == NRXREAL)
 			sc->sc_nextrx = 0;

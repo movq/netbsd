@@ -1,19 +1,15 @@
-#	$NetBSD: Makefile.inc,v 1.198 2017/02/07 19:29:40 kamil Exp $
+#	$NetBSD: Makefile.inc,v 1.188 2014/06/13 15:45:05 joerg Exp $
 #	from: @(#)Makefile.inc	8.6 (Berkeley) 5/4/95
 
 # gen sources
 .PATH: ${ARCHDIR}/gen ${.CURDIR}/gen
 
-.if ${RUMPRUN} != "yes"
-SRCS+=	_errno.c daemon.c
-.endif
-
-SRCS+=	alarm.c alphasort.c arc4random.c assert.c asysctl.c \
+SRCS+= 	_errno.c alarm.c alphasort.c arc4random.c assert.c asysctl.c \
 	basename.c clock.c closedir.c closefrom.c \
-	confstr.c ctermid.c ctype_.c \
+	confstr.c ctermid.c ctype_.c daemon.c \
 	dehumanize_number.c devname.c dirname.c disklabel.c err.c errx.c \
 	errc.c errlist.c errno.c execl.c execle.c execlp.c execv.c execvp.c \
-	exect.c extattr.c fmtcheck.c fmtmsg.c fnmatch.c fstab.c ftok.c \
+	extattr.c fmtcheck.c fmtmsg.c fnmatch.c fstab.c ftok.c \
 	fts.c ftw.c getbsize.c getcap.c getcwd.c \
 	getdevmajor.c getdomainname.c getgrent.c \
 	getgrouplist.c getgroupmembership.c gethostname.c \
@@ -32,12 +28,11 @@ SRCS+=	alarm.c alphasort.c arc4random.c assert.c asysctl.c \
 	siglist.c signal.c signame.c sigrelse.c \
 	sigset.c sigsetops.c sleep.c \
 	stringlist.c sysconf.c sysctl.c sysctlbyname.c sysctlgetmibinfo.c \
-	sysctlnametomib.c syslog.c syslog_ss.c telldir.c time.c timespec_get.c \
+	sysctlnametomib.c syslog.c telldir.c time.c \
 	times.c toascii.c tolower_.c ttyname.c ttyslot.c toupper_.c ualarm.c \
 	ulimit.c uname.c unvis.c usleep.c utime.c utimens.c utmp.c \
-	utmpx.c valloc.c vis.c wait.c wait3.c waitid.c waitpid.c warn.c \
-	warnx.c warnc.c wordexp.c xsyslog.c \
-	vwarn.c vwarnx.c vwarnc.c verr.c verrx.c verrc.c
+	utmpx.c valloc.c vis.c wait.c wait3.c waitpid.c warn.c warnx.c \
+	warnc.c vwarn.c vwarnx.c vwarnc.c verr.c verrx.c verrc.c wordexp.c
 
 # uses alloca
 COPTS.execvp.c = -Wno-stack-protector
@@ -53,8 +48,8 @@ COPTS.syslog.c = -Wno-format-nonliteral
 
 .include "${ARCHDIR}/gen/Makefile.inc"
 
-MAN+=	alarm.3 arc4random.3 basename.3 bsd_signal.3 bswap.3 \
-	clock.3 closefrom.3 confstr.3 \
+MAN+=	alarm.3 arc4random.3 basename.3 bswap.3 clock.3 closefrom.3 \
+	confstr.3 \
 	cpuset.3 ctermid.3 ctype.3 daemon.3 devname.3 directory.3 dirname.3 \
 	endutxent.3 err.3 exec.3 extattr_copy_file.3 extattr_namespace_to_string.3 \
 	fmtcheck.3 fmtmsg.3 fnmatch.3 fpclassify.3 fpgetmask.3 \
@@ -80,9 +75,8 @@ MAN+=	alarm.3 arc4random.3 basename.3 bsd_signal.3 bswap.3 \
 	raise.3 randomid.3 realpath.3 scandir.3 setjmp.3 setmode.3 \
 	setproctitle.3 shquote.3 sighold.3 sigignore.3 siginterrupt.3 \
 	signal.3 signbit.3 sigrelse.3 sigset.3 sigsetops.3 sleep.3 \
-	stringlist.3 sysconf.3 sysctl.3 syslog.3 \
-	time.3 timespec_get.3 times.3 timezone.3 toascii.3 tolower.3 \
-	toupper.3 ttyname.3 \
+	stringlist.3 sysconf.3 sysctl.3 syslog.3 time.3 times.3 \
+	timezone.3 toascii.3 tolower.3 toupper.3 ttyname.3 \
 	ualarm.3 ulimit.3 uname.3 unvis.3 usleep.3 utime.3 valloc.3 vis.3 \
 	wordexp.3
 
@@ -100,8 +94,8 @@ MLINKS+=endutxent.3 getutxent.3 endutxent.3 getutxid.3 \
 MLINKS+=err.3 verr.3 err.3 errx.3 err.3 verrx.3 err.3 warn.3 err.3 vwarn.3 \
         err.3 warnx.3 err.3 vwarnx.3 err.3 errc.3 err.3 verrc.3 err.3 warnc.3 \
 	err.3 vwarnc.3
-MLINKS+=exec.3 execl.3 exec.3 execle.3 exec.3 execlp.3 exec.3 execlpe.3 \
-	exec.3 execv.3 exec.3 execvp.3 exec.3 execvpe.3 exec.3 exect.3 
+MLINKS+=exec.3 execl.3 exec.3 execle.3 exec.3 execlp.3 exec.3 execv.3 \
+	exec.3 execvp.3 exec.3 exect.3
 MLINKS+=extattr_namespace_to_string.3 extattr_string_to_namespace.3 \
 	extattr_copy_file.3 extattr_copy_fd.3 \
 	extattr_copy_file.3 extattr_copy_link.3 \
@@ -149,7 +143,6 @@ MLINKS+=glob.3 glob_pattern_p.3
 MLINKS+=humanize_number.3 dehumanize_number.3
 MLINKS+=makecontext.3 swapcontext.3
 MLINKS+=popen.3 pclose.3
-MLINKS+=popen.3 popenve.3
 MLINKS+=posix_spawn.3 posix_spawnp.3 \
 	posix_spawn_file_actions_addopen.3 posix_spawn_file_actions_addclose.3 \
 	posix_spawn_file_actions_addopen.3 posix_spawn_file_actions_adddup2.3 \
@@ -190,7 +183,7 @@ MLINKS+=unvis.3 strnunvis.3 unvis.3 strnunvisx.3
 MLINKS+=vis.3 svis.3 vis.3 strvis.3 vis.3 strvisx.3 vis.3 strsvis.3 \
 	vis.3 strsvisx.3 vis.3 nvis.3
 MLINKS+=vis.3 snvis.3 vis.3 strnvis.3 vis.3 strnvisx.3 vis.3 strsnvis.3 \
-	vis.3 strsnvisx.3 vis.3 stravis.3
+	vis.3 strsnvisx.3
 
 CPPFLAGS.ctype_.c+=	-I${LIBCDIR}/locale
 CPPFLAGS.isctype.c+=	-I${LIBCDIR}/locale

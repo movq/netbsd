@@ -1,4 +1,4 @@
-/*	$NetBSD: internal.h,v 1.14 2016/04/04 15:52:56 christos Exp $	*/
+/*	$NetBSD: internal.h,v 1.12.2.2 2015/04/30 06:07:33 riz Exp $	*/
 
 /*-
  * Copyright (c) 2015 The NetBSD Foundation, Inc.
@@ -47,11 +47,7 @@ extern const char *rulename;
 extern const char *controlprog;
 extern struct ifaddrs *ifas;
 
-#if !defined(__syslog_attribute__) && !defined(__syslog__)
-#define __syslog__ __printf__
-#endif
-
-extern void (*lfun)(int, const char *, ...)
-    __attribute__((__format__(__syslog__, 2, 3)));
+void (*lfun)(int, const char *, ...)
+    __attribute__((__format__(__printf__, 2, 3)));
 
 #endif /* _INTERNAL_H */

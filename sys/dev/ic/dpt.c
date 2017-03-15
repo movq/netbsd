@@ -1,4 +1,4 @@
-/*	$NetBSD: dpt.c,v 1.73 2016/07/07 06:55:41 msaitoh Exp $	*/
+/*	$NetBSD: dpt.c,v 1.71 2014/07/25 08:10:37 dholland Exp $	*/
 
 /*-
  * Copyright (c) 1997, 1998, 1999, 2000, 2001 The NetBSD Foundation, Inc.
@@ -71,7 +71,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: dpt.c,v 1.73 2016/07/07 06:55:41 msaitoh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: dpt.c,v 1.71 2014/07/25 08:10:37 dholland Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -447,15 +447,15 @@ dpt_init(struct dpt_softc *sc, const char *intrstr)
 	aprint_normal("%s %s (%s)\n", vendor, dpt_cname[i + 1], model);
 
 	if (intrstr != NULL)
-		aprint_normal_dev(sc->sc_dev, "interrupting at %s\n", intrstr);
+		aprint_normal_dev(sc->sc_dev, "interrupting at %s\n",
+		    intrstr);
 
 	maxchannel = (ec->ec_feat3 & EC_F3_MAX_CHANNEL_MASK) >>
 	    EC_F3_MAX_CHANNEL_SHIFT;
 	maxtarget = (ec->ec_feat3 & EC_F3_MAX_TARGET_MASK) >>
 	    EC_F3_MAX_TARGET_SHIFT;
 
-	aprint_normal_dev(sc->sc_dev,
-	    "%d queued commands, %d channel(s), adapter on ID(s)",
+	aprint_normal_dev(sc->sc_dev, "%d queued commands, %d channel(s), adapter on ID(s)",
 	    sc->sc_nccbs, maxchannel + 1);
 
 	for (i = 0; i <= maxchannel; i++) {
@@ -608,7 +608,7 @@ dpt_readcfg(struct dpt_softc *sc)
 
 /*
  * Our `shutdownhook' to cleanly shut down the HBA.  The HBA must flush all
- * data from its cache and mark array groups as clean.
+ * data from it's cache and mark array groups as clean.
  *
  * XXX This doesn't always work (i.e., the HBA may still be flushing after
  * we tell root that it's safe to power off).

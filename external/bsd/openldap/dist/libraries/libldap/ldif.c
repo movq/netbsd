@@ -1,10 +1,10 @@
-/*	$NetBSD: ldif.c,v 1.1.1.2 2017/02/09 01:46:46 christos Exp $	*/
+/*	$NetBSD: ldif.c,v 1.1.1.1 2014/05/28 09:58:41 tron Exp $	*/
 
 /* ldif.c - routines for dealing with LDIF files */
 /* $OpenLDAP$ */
 /* This work is part of OpenLDAP Software <http://www.openldap.org/>.
  *
- * Copyright 1998-2016 The OpenLDAP Foundation.
+ * Copyright 1998-2014 The OpenLDAP Foundation.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -28,9 +28,6 @@
 /* This work was originally developed by the University of Michigan
  * and distributed as part of U-MICH LDAP.
  */
-
-#include <sys/cdefs.h>
-__RCSID("$NetBSD: ldif.c,v 1.1.1.2 2017/02/09 01:46:46 christos Exp $");
 
 #include "portable.h"
 
@@ -491,8 +488,8 @@ ldif_must_b64_encode( LDAP_CONST char *s )
 	return 0;
 }
 
-/* compatibility with U-Mich off by two bug */
-#define LDIF_KLUDGE 2
+/* compatibility with U-Mich off by one bug */
+#define LDIF_KLUDGE 1
 
 /* NOTE: only preserved for binary compatibility */
 void
@@ -503,7 +500,7 @@ ldif_sput(
 	LDAP_CONST char *val,
 	ber_len_t vlen )
 {
-	ldif_sput_wrap( out, type, name, val, vlen, LDIF_LINE_WIDTH+LDIF_KLUDGE );
+	ldif_sput_wrap( out, type, name, val, vlen, LDIF_LINE_WIDTH );
 }
 
 void
@@ -526,8 +523,7 @@ ldif_sput_wrap(
 	ber_len_t len=0;
 	ber_len_t i;
 
-	if ( !wrap )
-		wrap = LDIF_LINE_WIDTH+LDIF_KLUDGE;
+	wrap = LDIF_LINE_WIDTH_WRAP( wrap );
 
 	/* prefix */
 	switch( type ) {
@@ -639,7 +635,7 @@ ldif_sput_wrap(
 				b64 = 1;
 				break;
 			}
-			if ( len >= wrap ) {
+			if ( len - LDIF_KLUDGE > wrap ) {
 				*(*out)++ = '\n';
 				*(*out)++ = ' ';
 				len = 1;
@@ -668,7 +664,7 @@ ldif_sput_wrap(
 		bits |= (byte[2] & 0xff);
 
 		for ( i = 0; i < 4; i++, len++, bits <<= 6 ) {
-			if ( len >= wrap ) {
+			if ( len - LDIF_KLUDGE > wrap ) {
 				*(*out)++ = '\n';
 				*(*out)++ = ' ';
 				len = 1;
@@ -693,7 +689,7 @@ ldif_sput_wrap(
 		bits |= (byte[2] & 0xff);
 
 		for ( i = 0; i < 4; i++, len++, bits <<= 6 ) {
-			if ( len >= wrap ) {
+			if ( len - LDIF_KLUDGE > wrap ) {
 				*(*out)++ = '\n';
 				*(*out)++ = ' ';
 				len = 1;
@@ -843,36 +839,27 @@ ldif_read_record(
 				break;
 			}
 		}
-		if ( !stop ) {
-			if ( fgets( line, sizeof( line ), lfp->fp ) == NULL ) {
-				stop = 1;
-				len = 0;
-			} else {
-				len = strlen( line );
-			}
-		}
-
-		if ( stop ) {
-			/* Add \n in case the file does not end with newline */
-			if (last_ch != '\n') {
-				len = 1;
-				line[0] = '\n';
-				line[1] = '\0';
-				goto last;
-			}
+		if ( stop )
 			break;
+
+		if ( fgets( line, sizeof( line ), lfp->fp ) == NULL ) {
+			stop = 1;
+			len = 0;
+		} else {
+			len = strlen( line );
 		}
 
-		/* Squash \r\n to \n */
-		if ( len > 1 && line[len-2] == '\r' ) {
-			len--;
-			line[len-1] = '\n';
+		if ( len == 0 || line[len-1] != '\n' ) {
+			/* Add \n in case the line/file does not end with newline */
+			line[len] = '\n';
+			line[++len] = '\0';
 		}
 
 		if ( last_ch == '\n' ) {
 			(*lno)++;
 
-			if ( line[0] == '\n' ) {
+			if ( line[0] == '\n' ||
+				( line[0] == '\r' && line[1] == '\n' )) {
 				if ( !found_entry ) {
 					lcur = 0;
 					top_comment = 0;
@@ -899,6 +886,10 @@ ldif_read_record(
 						found_entry = 0;
 
 						if ( line[len-1] == '\n' ) {
+							len--;
+							line[len] = '\0';
+						}
+						if ( line[len-1] == '\r' ) {
 							len--;
 							line[len] = '\0';
 						}
@@ -929,10 +920,9 @@ ldif_read_record(
 						}
 					}
 				}
-			}
+			}			
 		}
 
-last:
 		if ( *buflenp - lcur <= len ) {
 			*buflenp += len + LDIF_MAXLINE;
 			nbufp = ber_memrealloc( *bufp, *buflenp );

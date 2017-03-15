@@ -1,4 +1,4 @@
-/*	$NetBSD: ufs_extattr.c,v 1.48 2016/11/09 05:08:35 dholland Exp $	*/
+/*	$NetBSD: ufs_extattr.c,v 1.43.4.3 2014/11/23 13:11:02 martin Exp $	*/
 
 /*-
  * Copyright (c) 1999-2002 Robert N. M. Watson
@@ -48,7 +48,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ufs_extattr.c,v 1.48 2016/11/09 05:08:35 dholland Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ufs_extattr.c,v 1.43.4.3 2014/11/23 13:11:02 martin Exp $");
 
 #ifdef _KERNEL_OPT
 #include "opt_ffs.h"
@@ -168,13 +168,7 @@ static void
 ufs_extattr_uepm_lock(struct ufsmount *ump)
 {
 
-	/*
-	 * XXX This needs to be recursive for the following reasons:
-	 *   - it is taken in ufs_extattr_vnode_inactive
-	 *   - which is called from VOP_INACTIVE
-	 *   - which can be triggered by any vrele, vput, or vn_close
-	 *   - several of these can happen while it's held
-	 */
+	/* XXX Why does this need to be recursive? */
 	if (mutex_owned(&ump->um_extattr.uepm_lock)) {
 		ump->um_extattr.uepm_lockcnt++;
 		return;
@@ -433,7 +427,7 @@ ufs_extattr_start(struct mount *mp, struct lwp *l)
 	ump = VFSTOUFS(mp);
 
 	if (!(ump->um_extattr.uepm_flags & UFS_EXTATTR_UEPM_INITIALIZED))
-		ufs_extattr_uepm_init(&ump->um_extattr);
+		ufs_extattr_uepm_init(&ump->um_extattr); 
 
 	ufs_extattr_uepm_lock(ump);
 
@@ -1273,7 +1267,7 @@ ufs_extattr_list(struct vnode *vp, int attrnamespace,
 
 		error = ufs_extattr_get_header(vp, uele, &ueh, NULL);
 		if (error == ENODATA)
-			continue;
+			continue;	
 		if (error != 0)
 			return error;
 
@@ -1307,16 +1301,16 @@ ufs_extattr_list(struct vnode *vp, int attrnamespace,
 				/* Copy leading name length */
 				error = uiomove(&len, sizeof(len), uio);
 				if (error != 0)
-					break;
+					break;	
 			} else {
 				/* Include trailing NULL */
-				attrnamelen++;
+				attrnamelen++; 
 			}
 
 			error = uiomove(uele->uele_attrname, 
 					(size_t)attrnamelen, uio);
 			if (error != 0)
-				break;
+				break;	
 		}
 
 		if (uele->uele_backing_vnode != vp)
@@ -1351,7 +1345,7 @@ vop_deleteextattr {
 */
 {
 	struct mount *mp = ap->a_vp->v_mount;
-	struct ufsmount *ump = VFSTOUFS(mp);
+	struct ufsmount *ump = VFSTOUFS(mp); 
 	int error;
 
 	if (!(ump->um_extattr.uepm_flags & UFS_EXTATTR_UEPM_STARTED))
@@ -1383,7 +1377,7 @@ vop_setextattr {
 */
 {
 	struct mount *mp = ap->a_vp->v_mount;
-	struct ufsmount *ump = VFSTOUFS(mp);
+	struct ufsmount *ump = VFSTOUFS(mp); 
 	int error;
 
 	if (!(ump->um_extattr.uepm_flags & UFS_EXTATTR_UEPM_STARTED))

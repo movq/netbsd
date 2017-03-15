@@ -1,8 +1,8 @@
-#	$NetBSD: Makefile.inc,v 1.7 2017/01/11 12:19:44 joerg Exp $
+#	$NetBSD: Makefile.inc,v 1.4 2010/03/01 13:12:20 pooka Exp $
 #
 
 RUMPTOP=	${.CURDIR}/../../..
-
-CWARNFLAGS.clang+=	-Wno-error=address-of-packed-member -Werror=constant-conversion
+CPPFLAGS+=	-I${RUMPTOP}/librump/rumpkern -I${RUMPTOP}/librump/rumpnet \
+		-I${RUMPTOP}/librump/rumpnet/opt
 
 .include "${RUMPTOP}/Makefile.rump"

@@ -1,4 +1,4 @@
-/*	$NetBSD: loadfile_machdep.c,v 1.16 2016/11/04 20:04:11 macallan Exp $	*/
+/*	$NetBSD: loadfile_machdep.c,v 1.13.2.1 2015/07/20 06:12:23 snj Exp $	*/
 
 /*-
  * Copyright (c) 2005 The NetBSD Foundation, Inc.
@@ -216,7 +216,6 @@ tlb_init_sun4u(void)
 	phandle_t child;
 	phandle_t root;
 	char buf[128];
-	bool foundcpu = false;
 	u_int bootcpu;
 	u_int cpu;
 
@@ -237,13 +236,10 @@ tlb_init_sun4u(void)
 			    sizeof(cpu)) == -1 && _prom_getprop(child, "portid",
 			    &cpu, sizeof(cpu)) == -1)
 				panic("tlb_init: prom_getprop");
-			foundcpu = true;
 			if (cpu == bootcpu)
 				break;
 		}
 	}
-	if (!foundcpu)
-		panic("tlb_init: no cpu found!");
 	if (cpu != bootcpu)
 		panic("tlb_init: no node for bootcpu?!?!");
 	if (_prom_getprop(child, "#dtlb-entries", &dtlb_slot_max,
@@ -353,8 +349,7 @@ mmu_mapin_sun4u(vaddr_t rva, vsize_t len)
 					1,		/* cache */
 					1,		/* alias */
 					1,		/* valid */
-					0,		/* endianness */
-					0		/* wc */
+					0		/* endianness */
 					);
 			data |= SUN4U_TLB_L | SUN4U_TLB_CV; /* locked, virt.cache */
 
@@ -430,8 +425,7 @@ mmu_mapin_sun4v(vaddr_t rva, vsize_t len)
 			1,		/* cache */
 			1,		/* alias */
 			1,		/* valid */
-			0,		/* endianness */
-			0		/* wc */
+			0		/* endianness */
 			);
 		data |= SUN4V_TLB_CV; /* virt.cache */
 		
@@ -648,8 +642,7 @@ sparc64_finalize_tlb_sun4u(u_long data_va)
 				1,		/* cache */
 				1,		/* alias */
 				1,		/* valid */
-				0,		/* endianness */
-				0		/* wc */
+				0		/* endianness */
 				);
 		data |= SUN4U_TLB_L | SUN4U_TLB_CV; /* locked, virt.cache */
 		if (!writable_text)
@@ -699,8 +692,7 @@ sparc64_finalize_tlb_sun4v(u_long data_va)
 			1,		/* cache */
 			1,		/* alias */
 			1,		/* valid */
-			0,		/* endianness */
-			0		/* wc */
+			0		/* endianness */
 			);
 		data |= SUN4V_TLB_CV|SUN4V_TLB_X; /* virt.cache, executable */
 		if (!writable_text) {

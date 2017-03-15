@@ -16,7 +16,7 @@
 #include <math.h>
 
 
-extern COMPILER_RT_ABI double __negdf2vfp(double a);
+extern double __negdf2vfp(double a);
 
 #if __arm__
 int test__negdf2vfp(double a)

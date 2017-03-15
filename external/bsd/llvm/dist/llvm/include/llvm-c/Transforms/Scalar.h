@@ -19,7 +19,7 @@
 #ifndef LLVM_C_TRANSFORMS_SCALAR_H
 #define LLVM_C_TRANSFORMS_SCALAR_H
 
-#include "llvm-c/Types.h"
+#include "llvm-c/Core.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -34,9 +34,6 @@ extern "C" {
 
 /** See llvm::createAggressiveDCEPass function. */
 void LLVMAddAggressiveDCEPass(LLVMPassManagerRef PM);
-
-/** See llvm::createBitTrackingDCEPass function. */
-void LLVMAddBitTrackingDCEPass(LLVMPassManagerRef PM);
 
 /** See llvm::createAlignmentFromAssumptionsPass function. */
 void LLVMAddAlignmentFromAssumptionsPass(LLVMPassManagerRef PM);
@@ -55,9 +52,6 @@ void LLVMAddMergedLoadStoreMotionPass(LLVMPassManagerRef PM);
 
 /** See llvm::createGVNPass function. */
 void LLVMAddGVNPass(LLVMPassManagerRef PM);
-
-/** See llvm::createGVNPass function. */
-void LLVMAddNewGVNPass(LLVMPassManagerRef PM);
 
 /** See llvm::createIndVarSimplifyPass function. */
 void LLVMAddIndVarSimplifyPass(LLVMPassManagerRef PM);
@@ -107,13 +101,13 @@ void LLVMAddReassociatePass(LLVMPassManagerRef PM);
 /** See llvm::createSCCPPass function. */
 void LLVMAddSCCPPass(LLVMPassManagerRef PM);
 
-/** See llvm::createSROAPass function. */
+/** See llvm::createScalarReplAggregatesPass function. */
 void LLVMAddScalarReplAggregatesPass(LLVMPassManagerRef PM);
 
-/** See llvm::createSROAPass function. */
+/** See llvm::createScalarReplAggregatesPass function. */
 void LLVMAddScalarReplAggregatesPassSSA(LLVMPassManagerRef PM);
 
-/** See llvm::createSROAPass function. */
+/** See llvm::createScalarReplAggregatesPass function. */
 void LLVMAddScalarReplAggregatesPassWithThreshold(LLVMPassManagerRef PM,
                                                   int Threshold);
 
@@ -137,9 +131,6 @@ void LLVMAddCorrelatedValuePropagationPass(LLVMPassManagerRef PM);
 
 /** See llvm::createEarlyCSEPass function */
 void LLVMAddEarlyCSEPass(LLVMPassManagerRef PM);
-
-/** See llvm::createEarlyCSEPass function */
-void LLVMAddEarlyCSEMemSSAPass(LLVMPassManagerRef PM);
 
 /** See llvm::createLowerExpectIntrinsicPass function */
 void LLVMAddLowerExpectIntrinsicPass(LLVMPassManagerRef PM);

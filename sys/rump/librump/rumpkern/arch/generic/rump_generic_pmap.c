@@ -1,4 +1,4 @@
-/*	$NetBSD: rump_generic_pmap.c,v 1.5 2016/01/26 23:12:18 pooka Exp $	*/
+/*	$NetBSD: rump_generic_pmap.c,v 1.2 2014/02/12 22:30:45 pooka Exp $	*/
 
 /*
  * Copyright (c) 2010 Antti Kantee.  All Rights Reserved.
@@ -26,18 +26,18 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: rump_generic_pmap.c,v 1.5 2016/01/26 23:12:18 pooka Exp $");
+__KERNEL_RCSID(0, "$NetBSD: rump_generic_pmap.c,v 1.2 2014/02/12 22:30:45 pooka Exp $");
 
 #include <sys/param.h>
 
 #include <uvm/uvm_extern.h>
 
-#include <rump-sys/kern.h>
-
 /*
  * This is the MI pmap implementation for rump kernels.  It's used only by
  * architectures which do not conform to the kernel ABI.
  */
+
+struct pmap *const kernel_pmap_ptr = (struct pmap *const)-1;
 
 void
 pmap_kenter_pa(vaddr_t va, paddr_t pa, vm_prot_t prot, u_int fl)

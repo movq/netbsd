@@ -236,7 +236,11 @@ int main() {
 // CHECK-NEXT: 84 |         int b_field
 // CHECK-NEXT: 88 |       int a_field
 // CHECK-NEXT: 92 |       char one
-// CHECK-NEXT: sizeof=96, align=8
+
+// CHECK-NEXT: sizeof=80, align=8
+// CHECK-NEXT: nvsize=64, nvalign=8
+
+// CHECK: sizeof=96, align=8
 // CHECK-NEXT: nvsize=96, nvalign=8
 
 // CHECK: %struct.BaseStruct = type { double, float, %class.C }
@@ -263,7 +267,10 @@ int main() {
 // CHECK-NEXT: 84 |           int b_field
 // CHECK-NEXT: 88 |         int a_field
 // CHECK-NEXT: 92 |         char one
-// CHECK-NEXT: 96 |   int x
+// CHECK-NEXT: sizeof=80, align=8
+// CHECK-NEXT: nvsize=64, nvalign=8
+
+// CHECK: 96 |   int x
 // CHECK-NEXT: sizeof=104, align=8
 // CHECK-NEXT: nvsize=104, nvalign=8
 

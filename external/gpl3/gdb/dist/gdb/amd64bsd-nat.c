@@ -1,6 +1,6 @@
 /* Native-dependent code for AMD64 BSD's.
 
-   Copyright (C) 2003-2016 Free Software Foundation, Inc.
+   Copyright (C) 2003-2014 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -23,16 +23,13 @@
 #include "target.h"
 
 #include "gdb_assert.h"
-/* We include <signal.h> to make sure `struct fxsave64' is defined on
-   NetBSD, since NetBSD's <machine/reg.h> needs it.  */
-#include <signal.h>
 #include <sys/types.h>
 #include <sys/ptrace.h>
 #include <machine/reg.h>
 
 #include "amd64-tdep.h"
 #include "amd64-nat.h"
-#include "x86bsd-nat.h"
+#include "amd64bsd-nat.h"
 #include "inf-ptrace.h"
 
 
@@ -49,7 +46,7 @@ amd64bsd_fetch_inferior_registers (struct target_ops *ops,
     {
       struct reg regs;
 
-      if (ptrace (PT_GETREGS, get_ptrace_pid (inferior_ptid),
+      if (ptrace (PT_GETREGS, ptid_get_pid (inferior_ptid),
 		  (PTRACE_TYPE_ARG3) &regs, ptid_get_lwp (inferior_ptid)) == -1)
 	perror_with_name (_("Couldn't get registers"));
 
@@ -61,22 +58,8 @@ amd64bsd_fetch_inferior_registers (struct target_ops *ops,
   if (regnum == -1 || !amd64_native_gregset_supplies_p (gdbarch, regnum))
     {
       struct fpreg fpregs;
-#ifdef PT_GETXSTATE_INFO
-      void *xstateregs;
 
-      if (x86bsd_xsave_len != 0)
-	{
-	  xstateregs = alloca (x86bsd_xsave_len);
-	  if (ptrace (PT_GETXSTATE, get_ptrace_pid (inferior_ptid),
-		      (PTRACE_TYPE_ARG3) xstateregs, ptid_get_lwp (inferior_ptid)) == -1)
-	    perror_with_name (_("Couldn't get extended state status"));
-
-	  amd64_supply_xsave (regcache, -1, xstateregs);
-	  return;
-	}
-#endif
-
-      if (ptrace (PT_GETFPREGS, get_ptrace_pid (inferior_ptid),
+      if (ptrace (PT_GETFPREGS, ptid_get_pid (inferior_ptid),
 		  (PTRACE_TYPE_ARG3) &fpregs, ptid_get_lwp (inferior_ptid)) == -1)
 	perror_with_name (_("Couldn't get floating point status"));
 
@@ -97,13 +80,13 @@ amd64bsd_store_inferior_registers (struct target_ops *ops,
     {
       struct reg regs;
 
-      if (ptrace (PT_GETREGS, get_ptrace_pid (inferior_ptid),
+      if (ptrace (PT_GETREGS, ptid_get_pid (inferior_ptid),
                   (PTRACE_TYPE_ARG3) &regs, ptid_get_lwp (inferior_ptid)) == -1)
         perror_with_name (_("Couldn't get registers"));
 
       amd64_collect_native_gregset (regcache, &regs, regnum);
 
-      if (ptrace (PT_SETREGS, get_ptrace_pid (inferior_ptid),
+      if (ptrace (PT_SETREGS, ptid_get_pid (inferior_ptid),
 	          (PTRACE_TYPE_ARG3) &regs, ptid_get_lwp (inferior_ptid)) == -1)
         perror_with_name (_("Couldn't write registers"));
 
@@ -114,32 +97,14 @@ amd64bsd_store_inferior_registers (struct target_ops *ops,
   if (regnum == -1 || !amd64_native_gregset_supplies_p (gdbarch, regnum))
     {
       struct fpreg fpregs;
-#ifdef PT_GETXSTATE_INFO
-      void *xstateregs;
 
-      if (x86bsd_xsave_len != 0)
-	{
-	  xstateregs = alloca (x86bsd_xsave_len);
-	  if (ptrace (PT_GETXSTATE, get_ptrace_pid (inferior_ptid),
-		      (PTRACE_TYPE_ARG3) xstateregs, 0) == -1)
-	    perror_with_name (_("Couldn't get extended state status"));
-
-	  amd64_collect_xsave (regcache, regnum, xstateregs, 0);
-
-	  if (ptrace (PT_SETXSTATE, get_ptrace_pid (inferior_ptid),
-		      (PTRACE_TYPE_ARG3) xstateregs, x86bsd_xsave_len) == -1)
-	    perror_with_name (_("Couldn't write extended state status"));
-	  return;
-	}
-#endif
-
-      if (ptrace (PT_GETFPREGS, get_ptrace_pid (inferior_ptid),
+      if (ptrace (PT_GETFPREGS, ptid_get_pid (inferior_ptid),
 		  (PTRACE_TYPE_ARG3) &fpregs, ptid_get_lwp (inferior_ptid)) == -1)
 	perror_with_name (_("Couldn't get floating point status"));
 
       amd64_collect_fxsave (regcache, regnum, &fpregs);
 
-      if (ptrace (PT_SETFPREGS, get_ptrace_pid (inferior_ptid),
+      if (ptrace (PT_SETFPREGS, ptid_get_pid (inferior_ptid),
 		  (PTRACE_TYPE_ARG3) &fpregs, ptid_get_lwp (inferior_ptid)) == -1)
 	perror_with_name (_("Couldn't write floating point status"));
     }
@@ -153,8 +118,80 @@ amd64bsd_target (void)
 {
   struct target_ops *t;
 
-  t = x86bsd_target ();
+  t = inf_ptrace_target ();
   t->to_fetch_registers = amd64bsd_fetch_inferior_registers;
   t->to_store_registers = amd64bsd_store_inferior_registers;
   return t;
 }
+
+
+/* Support for debug registers.  */
+
+#ifdef HAVE_PT_GETDBREGS
+
+static unsigned long
+amd64bsd_dr_get (ptid_t ptid, int regnum)
+{
+  struct dbreg dbregs;
+
+  if (ptrace (PT_GETDBREGS, ptid_get_pid (inferior_ptid),
+	      (PTRACE_TYPE_ARG3) &dbregs, 0) == -1)
+    perror_with_name (_("Couldn't read debug registers"));
+
+  return DBREG_DRX ((&dbregs), regnum);
+}
+
+static void
+amd64bsd_dr_set (int regnum, unsigned long value)
+{
+  struct dbreg dbregs;
+
+  if (ptrace (PT_GETDBREGS, ptid_get_pid (inferior_ptid),
+              (PTRACE_TYPE_ARG3) &dbregs, 0) == -1)
+    perror_with_name (_("Couldn't get debug registers"));
+
+  /* For some mysterious reason, some of the reserved bits in the
+     debug control register get set.  Mask these off, otherwise the
+     ptrace call below will fail.  */
+  DBREG_DRX ((&dbregs), 7) &= ~(0xffffffff0000fc00);
+
+  DBREG_DRX ((&dbregs), regnum) = value;
+
+  if (ptrace (PT_SETDBREGS, ptid_get_pid (inferior_ptid),
+              (PTRACE_TYPE_ARG3) &dbregs, 0) == -1)
+    perror_with_name (_("Couldn't write debug registers"));
+}
+
+void
+amd64bsd_dr_set_control (unsigned long control)
+{
+  amd64bsd_dr_set (7, control);
+}
+
+void
+amd64bsd_dr_set_addr (int regnum, CORE_ADDR addr)
+{
+  gdb_assert (regnum >= 0 && regnum <= 4);
+
+  amd64bsd_dr_set (regnum, addr);
+}
+
+CORE_ADDR
+amd64bsd_dr_get_addr (int regnum)
+{
+  return amd64bsd_dr_get (inferior_ptid, regnum);
+}
+
+unsigned long
+amd64bsd_dr_get_status (void)
+{
+  return amd64bsd_dr_get (inferior_ptid, 6);
+}
+
+unsigned long
+amd64bsd_dr_get_control (void)
+{
+  return amd64bsd_dr_get (inferior_ptid, 7);
+}
+
+#endif /* PT_GETDBREGS */

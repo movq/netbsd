@@ -1,4 +1,4 @@
-/*	$NetBSD: ibm4xx_machdep.c,v 1.25 2016/12/26 21:25:08 rin Exp $	*/
+/*	$NetBSD: ibm4xx_machdep.c,v 1.18 2011/12/12 11:38:26 kiyohara Exp $	*/
 /*	Original: ibm40x_machdep.c,v 1.3 2005/01/17 17:19:36 shige Exp $ */
 
 /*
@@ -68,14 +68,13 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ibm4xx_machdep.c,v 1.25 2016/12/26 21:25:08 rin Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ibm4xx_machdep.c,v 1.18 2011/12/12 11:38:26 kiyohara Exp $");
 
 #include "opt_compat_netbsd.h"
 #include "opt_ddb.h"
 #include "opt_kgdb.h"
 #include "opt_ipkdb.h"
 #include "opt_modular.h"
-#include "ksyms.h" /* for NKSYMS */
 
 #include <sys/param.h>
 #include <sys/msgbuf.h>
@@ -123,33 +122,37 @@ void *startsym, *endsym;
  */
 extern const uint32_t defaulttrap[], defaultsize;
 extern const uint32_t sctrap[], scsize;
-extern const uint32_t accesstrap[], accesssize;
-extern const uint32_t criticaltrap[], criticalsize;
+extern const uint32_t alitrap[], alisize;
+extern const uint32_t dsitrap[], dsisize;
+extern const uint32_t isitrap[], isisize;
+extern const uint32_t mchktrap[], mchksize;
 extern const uint32_t tlbimiss4xx[], tlbim4size;
 extern const uint32_t tlbdmiss4xx[], tlbdm4size;
 extern const uint32_t pitfitwdog[], pitfitwdogsize;
+extern const uint32_t debugtrap[], debugsize;
 extern const uint32_t errata51handler[], errata51size;
-#if defined(DDB)
+#ifdef DDB
 extern const uint32_t ddblow[], ddbsize;
-#elif defined(IPKDB)
 extern const uint32_t ipkdblow[], ipkdbsize;
 #endif
 static const struct exc_info trap_table[] = {
 	{ EXC_SC,	sctrap,		(uintptr_t)&scsize },
-	{ EXC_ALI,	accesstrap,	(uintptr_t)&accesssize },
-	{ EXC_DSI,	accesstrap,	(uintptr_t)&accesssize },
-	{ EXC_MCHK,	criticaltrap,	(uintptr_t)&criticalsize },
+	{ EXC_ALI,	alitrap,	(uintptr_t)&alisize },
+	{ EXC_DSI,	dsitrap,	(uintptr_t)&dsisize },
+	{ EXC_ISI,	isitrap,	(uintptr_t)&isisize },
+	{ EXC_MCHK,	mchktrap,	(uintptr_t)&mchksize },
 	{ EXC_ITMISS,	tlbimiss4xx,	(uintptr_t)&tlbim4size },
 	{ EXC_DTMISS,	tlbdmiss4xx,	(uintptr_t)&tlbdm4size },
 	{ EXC_PIT,	pitfitwdog,	(uintptr_t)&pitfitwdogsize },
-	{ EXC_DEBUG,	criticaltrap,	(uintptr_t)&criticalsize },
+	{ EXC_DEBUG,	debugtrap,	(uintptr_t)&debugsize },
 	{ (EXC_DTMISS|EXC_ALI),
 			errata51handler, (uintptr_t)&errata51size },
 #if defined(DDB)
 	{ EXC_PGM,	ddblow,		(uintptr_t)&ddbsize },
-#elif defined(IPKDB)
+#endif /* DDB */
+#if defined(IPKBD)
 	{ EXC_PGM,	ipkdblow,	(uintptr_t)&ipkdbsize },
-#endif
+#endif /* DDB */
 };
 
 /*
@@ -193,7 +196,6 @@ ibm4xx_init(vaddr_t startkernel, vaddr_t endkernel, void (*handler)(void))
 	}
 
 	for (size_t i = 0; i < __arraycount(trap_table); i++) {
-		KASSERT(trap_table[i].exc_size <= 0x100);
 		trap_copy(trap_table[i].exc_addr, trap_table[i].exc_vector,
 		    trap_table[i].exc_size);
 	}
@@ -223,7 +225,7 @@ ibm4xx_init(vaddr_t startkernel, vaddr_t endkernel, void (*handler)(void))
 	 */
 	consinit();
 
-	uvm_md_init();
+	uvm_setpagesize();
 
 	/*
 	 * Initialize pmap module.

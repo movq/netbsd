@@ -1,4 +1,4 @@
-/*	$NetBSD: pppd.h,v 1.5 2017/01/12 23:06:23 christos Exp $	*/
+/*	$NetBSD: pppd.h,v 1.2.6.1 2014/12/17 19:25:40 martin Exp $	*/
 
 /*
  * pppd.h - PPP daemon global declarations.
@@ -53,7 +53,6 @@
 
 #include <stdio.h>		/* for FILE */
 #include <limits.h>		/* for NGROUPS_MAX */
-#include <stddef.h>		/* offsetof() */
 #include <sys/param.h>		/* for MAXPATHLEN and BSD4_4, if defined */
 #include <sys/types.h>		/* for u_int32_t, if defined */
 #include <sys/time.h>		/* for struct timeval */

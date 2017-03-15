@@ -1,4 +1,4 @@
-/*	$NetBSD: get_addrs.c,v 1.2 2017/01/28 21:31:49 christos Exp $	*/
+/*	$NetBSD: get_addrs.c,v 1.1.1.1 2011/04/13 18:15:33 elric Exp $	*/
 
 /*
  * Copyright (c) 1997 - 2002 Kungliga Tekniska Högskolan
@@ -66,8 +66,10 @@ gethostname_fallback (krb5_context context, krb5_addresses *res)
     }
     res->len = 1;
     res->val = malloc (sizeof(*res->val));
-    if (res->val == NULL)
-	return krb5_enomem(context);
+    if (res->val == NULL) {
+	krb5_set_error_message(context, ENOMEM, N_("malloc: out of memory", ""));
+	return ENOMEM;
+    }
     res->val[0].addr_type = hostent->h_addrtype;
     res->val[0].address.data = NULL;
     res->val[0].address.length = 0;
@@ -130,10 +132,10 @@ find_all_addresses (krb5_context context, krb5_addresses *res, int flags)
     /* Allocate storage for them. */
     res->val = calloc(num, sizeof(*res->val));
     if (res->val == NULL) {
-	if (flags & EXTRA_ADDRESSES)
-	    krb5_free_addresses(context, &ignore_addresses);
+	krb5_free_addresses(context, &ignore_addresses);
 	freeifaddrs(ifa0);
-	return krb5_enomem(context);
+	krb5_set_error_message(context, ENOMEM, N_("malloc: out of memory", ""));
+	return ENOMEM;
     }
 
     /* Now traverse the list. */

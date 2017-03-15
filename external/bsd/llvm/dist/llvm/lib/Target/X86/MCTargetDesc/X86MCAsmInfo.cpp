@@ -31,10 +31,11 @@ static cl::opt<AsmWriterFlavorTy>
 AsmWriterFlavor("x86-asm-syntax", cl::init(ATT),
   cl::desc("Choose style of code to emit from X86 backend:"),
   cl::values(clEnumValN(ATT,   "att",   "Emit AT&T-style assembly"),
-             clEnumValN(Intel, "intel", "Emit Intel-style assembly")));
+             clEnumValN(Intel, "intel", "Emit Intel-style assembly"),
+             clEnumValEnd));
 
 static cl::opt<bool>
-MarkedJTDataRegions("mark-data-regions", cl::init(true),
+MarkedJTDataRegions("mark-data-regions", cl::init(false),
   cl::desc("Mark code section jump table data regions."),
   cl::Hidden);
 
@@ -118,9 +119,9 @@ X86_64MCAsmInfoDarwin::getExprForPersonalitySymbol(const MCSymbol *Sym,
                                                    MCStreamer &Streamer) const {
   MCContext &Context = Streamer.getContext();
   const MCExpr *Res =
-    MCSymbolRefExpr::create(Sym, MCSymbolRefExpr::VK_GOTPCREL, Context);
-  const MCExpr *Four = MCConstantExpr::create(4, Context);
-  return MCBinaryExpr::createAdd(Res, Four, Context);
+    MCSymbolRefExpr::Create(Sym, MCSymbolRefExpr::VK_GOTPCREL, Context);
+  const MCExpr *Four = MCConstantExpr::Create(4, Context);
+  return MCBinaryExpr::CreateAdd(Res, Four, Context);
 }
 
 void X86MCAsmInfoMicrosoft::anchor() { }
@@ -131,14 +132,10 @@ X86MCAsmInfoMicrosoft::X86MCAsmInfoMicrosoft(const Triple &Triple) {
     PrivateLabelPrefix = ".L";
     PointerSize = 8;
     WinEHEncodingType = WinEH::EncodingType::Itanium;
-  } else {
-    // 32-bit X86 doesn't use CFI, so this isn't a real encoding type. It's just
-    // a place holder that the Windows EHStreamer looks for to suppress CFI
-    // output. In particular, usesWindowsCFI() returns false.
-    WinEHEncodingType = WinEH::EncodingType::X86;
-  }
 
-  ExceptionsType = ExceptionHandling::WinEH;
+    // Use MSVC-compatible EH data.
+    ExceptionsType = ExceptionHandling::MSVC;
+  }
 
   AssemblerDialect = AsmWriterFlavor;
 
@@ -158,7 +155,7 @@ X86MCAsmInfoGNUCOFF::X86MCAsmInfoGNUCOFF(const Triple &Triple) {
     PrivateLabelPrefix = ".L";
     PointerSize = 8;
     WinEHEncodingType = WinEH::EncodingType::Itanium;
-    ExceptionsType = ExceptionHandling::WinEH;
+    ExceptionsType = ExceptionHandling::ItaniumWinEH;
   } else {
     ExceptionsType = ExceptionHandling::DwarfCFI;
   }

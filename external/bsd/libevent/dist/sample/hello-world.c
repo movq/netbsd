@@ -1,6 +1,6 @@
-/*	$NetBSD: hello-world.c,v 1.1.1.2 2017/01/31 21:14:53 christos Exp $	*/
+/*	$NetBSD: hello-world.c,v 1.1.1.1 2013/04/11 16:43:31 christos Exp $	*/
 /*
-  This example program provides a trivial server program that listens for TCP
+  This exmple program provides a trivial server program that listens for TCP
   connections on port 9995.  When they arrive, it writes a short message to
   each client connection, and closes each connection once it is flushed.
 
@@ -12,7 +12,7 @@
 #include <errno.h>
 #include <stdio.h>
 #include <signal.h>
-#ifndef _WIN32
+#ifndef WIN32
 #include <netinet/in.h>
 # ifdef _XOPEN_SOURCE_EXTENDED
 #  include <arpa/inet.h>
@@ -44,7 +44,7 @@ main(int argc, char **argv)
 	struct event *signal_event;
 
 	struct sockaddr_in sin;
-#ifdef _WIN32
+#ifdef WIN32
 	WSADATA wsa_data;
 	WSAStartup(0x0201, &wsa_data);
 #endif

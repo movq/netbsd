@@ -1,4 +1,4 @@
-/* $NetBSD: curterm.c,v 1.12 2016/04/01 19:59:08 christos Exp $ */
+/* $NetBSD: curterm.c,v 1.10.4.1 2016/12/12 07:37:53 snj Exp $ */
 
 /*
  * Copyright (c) 2009, 2011 The NetBSD Foundation, Inc.
@@ -28,7 +28,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: curterm.c,v 1.12 2016/04/01 19:59:08 christos Exp $");
+__RCSID("$NetBSD: curterm.c,v 1.10.4.1 2016/12/12 07:37:53 snj Exp $");
 
 #include <assert.h>
 #include <stdlib.h>

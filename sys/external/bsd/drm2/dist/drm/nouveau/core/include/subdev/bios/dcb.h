@@ -11,7 +11,6 @@ enum dcb_output_type {
 	DCB_OUTPUT_DP		= 0x6,
 	DCB_OUTPUT_EOL		= 0xe,
 	DCB_OUTPUT_UNUSED	= 0xf,
-	DCB_OUTPUT_MERGED	= 100,
 	DCB_OUTPUT_ANY = -1,
 };
 

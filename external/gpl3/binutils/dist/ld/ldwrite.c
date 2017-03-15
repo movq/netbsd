@@ -1,5 +1,7 @@
 /* ldwrite.c -- write out the linked file
-   Copyright (C) 1991-2016 Free Software Foundation, Inc.
+   Copyright 1991, 1992, 1993, 1994, 1995, 1996, 1997, 1998, 2000, 2002,
+   2003, 2004, 2005, 2006, 2007, 2008, 2010, 2012
+   Free Software Foundation, Inc.
    Written by Steve Chamberlain sac@cygnus.com
 
    This file is part of the GNU Binutils.
@@ -91,17 +93,17 @@ build_link_order (lang_statement_union_type *statement)
 		big_endian = TRUE;
 		{
 		  LANG_FOR_EACH_INPUT_STATEMENT (s)
-		  {
-		    if (s->the_bfd != NULL)
-		      {
-			if (bfd_little_endian (s->the_bfd))
-			  {
-			    big_endian = FALSE;
-			    swap = TRUE;
-			  }
-			break;
-		      }
-		  }
+		    {
+		      if (s->the_bfd != NULL)
+			{
+			  if (bfd_little_endian (s->the_bfd))
+			    {
+			      big_endian = FALSE;
+			      swap = TRUE;
+			    }
+			  break;
+			}
+		    }
 		}
 	      }
 
@@ -209,7 +211,7 @@ build_link_order (lang_statement_union_type *statement)
 	link_order->size = bfd_get_reloc_size (rs->howto);
 
 	link_order->u.reloc.p = (struct bfd_link_order_reloc *)
-	  xmalloc (sizeof (struct bfd_link_order_reloc));
+            xmalloc (sizeof (struct bfd_link_order_reloc));
 
 	link_order->u.reloc.p->reloc = rs->reloc;
 	link_order->u.reloc.p->addend = rs->addend_value;
@@ -336,7 +338,7 @@ clone_section (bfd *abfd, asection *s, const char *name, int *count)
 {
   char *tname;
   char *sname;
-  unsigned int len;
+  unsigned int len;	
   asection *n;
   struct bfd_link_hash_entry *h;
 
@@ -409,9 +411,13 @@ ds (asection *s)
   while (l)
     {
       if (l->type == bfd_indirect_link_order)
-	printf ("%8x %s\n", l->offset, l->u.indirect.section->owner->filename);
+	{
+	  printf ("%8x %s\n", l->offset, l->u.indirect.section->owner->filename);
+	}
       else
-	printf (_("%8x something else\n"), l->offset);
+	{
+	  printf (_("%8x something else\n"), l->offset);
+	}
       l = l->next;
     }
   printf ("\n");
@@ -484,13 +490,13 @@ split_sections (bfd *abfd, struct bfd_link_info *info)
 		  || info->strip == strip_some)
 		thislines = sec->lineno_count;
 
-	      if (bfd_link_relocatable (info))
+	      if (info->relocatable)
 		thisrelocs = sec->reloc_count;
 
 	      thissize = sec->size;
 
 	    }
-	  else if (bfd_link_relocatable (info)
+	  else if (info->relocatable
 		   && (p->type == bfd_section_reloc_link_order
 		       || p->type == bfd_symbol_reloc_link_order))
 	    thisrelocs++;
@@ -568,7 +574,6 @@ ldwrite (void)
   /* Reset error indicator, which can typically something like invalid
      format from opening up the .o files.  */
   bfd_set_error (bfd_error_no_error);
-  lang_clear_os_map ();
   lang_for_each_statement (build_link_order);
 
   if (config.split_by_reloc != (unsigned) -1

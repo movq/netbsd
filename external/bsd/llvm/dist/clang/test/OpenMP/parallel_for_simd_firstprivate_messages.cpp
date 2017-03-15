@@ -1,4 +1,4 @@
-// RUN: %clang_cc1 -verify -fopenmp %s
+// RUN: %clang_cc1 -verify -fopenmp=libiomp5 %s
 
 void foo() {
 }
@@ -65,7 +65,7 @@ int foomain(int argc, char **argv) {
   I e(4);
   C g(5);
   int i;
-  int &j = i;
+  int &j = i; // expected-note {{'j' defined here}}
 #pragma omp parallel for simd firstprivate // expected-error {{expected '(' after 'firstprivate'}}
   for (int k = 0; k < argc; ++k)
     ++k;
@@ -116,7 +116,7 @@ int foomain(int argc, char **argv) {
   }
 #pragma omp parallel shared(i)
 #pragma omp parallel private(i)
-#pragma omp parallel for simd firstprivate(j)
+#pragma omp parallel for simd firstprivate(j) // expected-error {{arguments of OpenMP clause 'firstprivate' cannot be of reference type}}
   for (int k = 0; k < argc; ++k)
     ++k;
 #pragma omp parallel for simd firstprivate(i)
@@ -136,14 +136,6 @@ int foomain(int argc, char **argv) {
   return 0;
 }
 
-namespace A {
-double x;
-#pragma omp threadprivate(x) // expected-note {{defined as threadprivate or thread local}}
-}
-namespace B {
-using A::x;
-}
-
 int main(int argc, char **argv) {
   const int d = 5;
   const int da[5] = {0};
@@ -152,7 +144,7 @@ int main(int argc, char **argv) {
   S3 m;
   S6 n(2);
   int i;
-  int &j = i;
+  int &j = i; // expected-note {{'j' defined here}}
 #pragma omp parallel for simd firstprivate // expected-error {{expected '(' after 'firstprivate'}}
   for (i = 0; i < argc; ++i)
     foo();
@@ -214,7 +206,7 @@ int main(int argc, char **argv) {
 #pragma omp parallel for simd firstprivate(m) // OK
   for (i = 0; i < argc; ++i)
     foo();
-#pragma omp parallel for simd firstprivate(h, B::x) // expected-error 2 {{threadprivate or thread local variable cannot be firstprivate}}
+#pragma omp parallel for simd firstprivate(h) // expected-error {{threadprivate or thread local variable cannot be firstprivate}}
   for (i = 0; i < argc; ++i)
     foo();
 #pragma omp parallel for simd private(xa), firstprivate(xa) // expected-error {{private variable cannot be firstprivate}} expected-note {{defined as private}}
@@ -226,7 +218,7 @@ int main(int argc, char **argv) {
 #pragma omp parallel for simd firstprivate(xa) // OK: may be firstprivate
   for (i = 0; i < argc; ++i)
     foo();
-#pragma omp parallel for simd firstprivate(j)
+#pragma omp parallel for simd firstprivate(j) // expected-error {{arguments of OpenMP clause 'firstprivate' cannot be of reference type}}
   for (i = 0; i < argc; ++i)
     foo();
 #pragma omp parallel for simd lastprivate(g) firstprivate(g) // expected-error {{calling a private constructor of class 'S5'}}
@@ -253,10 +245,6 @@ int main(int argc, char **argv) {
 #pragma omp parallel for simd firstprivate(i)  // expected-note {{defined as firstprivate}}
   for (i = 0; i < argc; ++i) // expected-error {{loop iteration variable in the associated loop of 'omp parallel for simd' directive may not be firstprivate, predetermined as linear}}
     foo();
-  static int si;
-#pragma omp parallel for simd firstprivate(si) // OK
-  for (i = 0; i < argc; ++i)
-    si = i + 2;
 
   return foomain<S4, S5>(argc, argv); // expected-note {{in instantiation of function template specialization 'foomain<S4, S5>' requested here}}
 }

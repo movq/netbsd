@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile.aarch64,v 1.7 2016/05/05 21:14:14 rjs Exp $
+#	$NetBSD: Makefile.aarch64,v 1.1.2.1 2016/01/05 22:22:36 snj Exp $
 
 # Makefile for NetBSD
 #
@@ -58,14 +58,18 @@ locore.o: ${A64}/aarch64/locore.S assym.h
 ##
 ## (5) link settings
 ##
-KERNLDSCRIPT?=	${A64}/conf/kern.ldscript
+LDSCRIPT?=	${A64}/conf/kern.ldscript
 LOADADDRESS?=	0xFFFFFFFF00000000
 LINKFLAGS_NORMAL=	-X
+.if "${LDSCRIPT}" != ""
+LINKFLAGS_NORMAL+=	-T ${LDSCRIPT}
+.endif
 
 # Strip AArch64 mapping symbols from the kernel image, as they interfere
 # with ddb. Do it differently if 'makeoptions DEBUG="-g"' was specified.
 .if !defined(DEBUG) || empty(DEBUG:M-g*)
-SYSTEM_LD_TAIL?=	${OBJCOPY} -w --strip-symbol='[$$][dx]'	\
+SYSTEM_LD_TAIL?=	${SYSTEM_LD_TAIL_DBSYM}; \
+			${OBJCOPY} -w --strip-symbol='[$$][dx]'	\
 				   --strip-symbol='[$$][dx]\.*' $@ ;\
 			${SIZE} $@; chmod 755 $@
 .else
@@ -87,16 +91,6 @@ spl.o vectors.o: assym.h
 ##
 ## (7) misc settings
 ##
-
-# define .MAIN _before_ the make() check, so that implicit target
-# would be defined
-.MAIN: all
-
-.if make(depend) || make(all) || make(dependall)
-.BEGIN:
-	@rm -f arm && \
-		ln -s $S/arch/arm/include arm
-.endif
 
 ##
 ## (8) config(8) generated machinery

@@ -1,4 +1,4 @@
-/*	$NetBSD: xy.c,v 1.99 2015/04/26 15:15:20 mlelstv Exp $	*/
+/*	$NetBSD: xy.c,v 1.97 2014/07/25 08:10:39 dholland Exp $	*/
 
 /*
  * Copyright (c) 1995 Charles D. Cranor
@@ -45,7 +45,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: xy.c,v 1.99 2015/04/26 15:15:20 mlelstv Exp $");
+__KERNEL_RCSID(0, "$NetBSD: xy.c,v 1.97 2014/07/25 08:10:39 dholland Exp $");
 
 #undef XYC_DEBUG		/* full debug */
 #undef XYC_DIAG			/* extra sanity checks */
@@ -243,9 +243,7 @@ struct xyc_attach_args {	/* this is the "aux" args to xyattach */
  * dkdriver
  */
 
-struct dkdriver xydkdriver = {
-	.d_strategy = xystrategy
-};
+struct dkdriver xydkdriver = { xystrategy };
 
 /*
  * start: disk label fix code (XXX)
@@ -955,10 +953,6 @@ xyioctl(dev_t dev, u_long command, void *addr, int flag, struct lwp *l)
 	if ((xy = device_lookup_private(&xy_cd, unit)) == NULL)
 		return (ENXIO);
 
-	error = disk_ioctl(&xy->sc_dk, dev, command, addr, flag, l);
-	if (error != EPASSTHROUGH)
-		return error;
-
 	/* switch on ioctl type */
 
 	switch (command) {
@@ -968,6 +962,24 @@ xyioctl(dev_t dev, u_long command, void *addr, int flag, struct lwp *l)
 		s = splbio();
 		memcpy(&xy->dkb, addr, sizeof(xy->dkb));
 		splx(s);
+		return 0;
+
+	case DIOCGDINFO:	/* get disk label */
+		memcpy(addr, xy->sc_dk.dk_label, sizeof(struct disklabel));
+		return 0;
+#ifdef __HAVE_OLD_DISKLABEL
+	case ODIOCGDINFO:
+		newlabel = *(xy->sc_dk.dk_label);
+		if (newlabel.d_npartitions > OLDMAXPARTITIONS)
+			return ENOTTY;
+		memcpy(addr, &newlabel, sizeof (struct olddisklabel));
+		return 0;
+#endif
+
+	case DIOCGPART:	/* get partition info */
+		((struct partinfo *) addr)->disklab = xy->sc_dk.dk_label;
+		((struct partinfo *) addr)->part =
+		    &xy->sc_dk.dk_label->d_partitions[DISKPART(dev)];
 		return 0;
 
 	case DIOCSDINFO:	/* set disk label */

@@ -1,4 +1,4 @@
-/*	$NetBSD: md2.c,v 1.3 2017/01/28 21:31:47 christos Exp $	*/
+/*	$NetBSD: md2.c,v 1.2 2014/03/27 16:10:45 apb Exp $	*/
 
 /*
  * Copyright (c) 2006 Kungliga Tekniska Högskolan
@@ -33,8 +33,7 @@
  * SUCH DAMAGE.
  */
 
-#include <config.h>
-#include <krb5/roken.h>
+#include "config.h"
 
 #include "hash.h"
 #include "md2.h"
@@ -60,11 +59,10 @@ static const unsigned char subst[256] = {
   31, 26, 219, 153, 141, 51, 159, 17, 131, 20
 };
 
-int
+void
 MD2_Init (struct md2 *m)
 {
     memset(m, 0, sizeof(*m));
-    return 1;
 }
 
 static void
@@ -95,7 +93,7 @@ calc(struct md2 *m, const void *v)
     memset(x, 0, sizeof(x));
 }
 
-int
+void
 MD2_Update (struct md2 *m, const void *v, size_t len)
 {
     size_t idx = m->len & 0xf;
@@ -118,10 +116,9 @@ MD2_Update (struct md2 *m, const void *v, size_t len)
     }
 
     memcpy(m->data + idx, p, len);
-    return 1;
 }
 
-int
+void
 MD2_Final (void *res, struct md2 *m)
 {
     unsigned char pad[16];
@@ -136,5 +133,4 @@ MD2_Final (void *res, struct md2 *m)
 
     memcpy(res, m->state, MD2_DIGEST_LENGTH);
     memset(m, 0, sizeof(*m));
-    return 1;
 }

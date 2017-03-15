@@ -1,4 +1,4 @@
-/*	$NetBSD: mopchk.c,v 1.14 2016/06/08 01:15:26 christos Exp $	*/
+/*	$NetBSD: mopchk.c,v 1.13 2011/08/30 19:49:11 joerg Exp $	*/
 
 /*
  * Copyright (c) 1995-96 Mats O Jansson.  All rights reserved.
@@ -24,9 +24,9 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "port.h"
+#include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: mopchk.c,v 1.14 2016/06/08 01:15:26 christos Exp $");
+__RCSID("$NetBSD: mopchk.c,v 1.13 2011/08/30 19:49:11 joerg Exp $");
 #endif
 
 /*

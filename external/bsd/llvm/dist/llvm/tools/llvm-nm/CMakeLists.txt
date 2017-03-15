@@ -1,7 +1,5 @@
 set(LLVM_LINK_COMPONENTS
-  AllTargetsAsmParsers
-  AllTargetsDescs
-  AllTargetsInfos
+  ${LLVM_TARGETS_TO_BUILD}
   Core
   Object
   Support
@@ -9,7 +7,4 @@ set(LLVM_LINK_COMPONENTS
 
 add_llvm_tool(llvm-nm
   llvm-nm.cpp
-
-  DEPENDS
-  intrinsics_gen
   )

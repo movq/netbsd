@@ -1,16 +1,11 @@
-#	$NetBSD: Makefile,v 1.14 2017/02/11 22:57:00 christos Exp $
+#	$NetBSD: Makefile,v 1.3.6.2 2015/05/09 08:37:32 msaitoh Exp $
 
 .include <bsd.own.mk>
 .include "${NETBSDSRCDIR}/distrib/common/Makefile.distrib"
 
 IMAGE=		sshramdisk.fs
-IMAGESIZE=	20000k
-MAKEFS_FLAGS+=	-f 15
-
-.if ${MKREPRO_TIMESTAMP:Uno} != "no"
-MAKEFS_TIMESTAMP=-T "${MKREPRO_TIMESTAMP}"
-PAX_TIMESTAMP=--timestamp "${MKREPRO_TIMESTAMP}"
-.endif
+IMAGESIZE=	5000k
+MAKEFS_FLAGS=	-f 15
 
 WARNS=		1
 DBG=		-Os
@@ -18,18 +13,13 @@ DBG=		-Os
 CRUNCHBIN=	ramdiskbin
 LISTS=		${.CURDIR}/list ${DISTRIBDIR}/common/list.sysinst
 MTREECONF=	${.CURDIR}/mtree.conf
-.if empty(MACHINE_ARCH:M*eb)
 IMAGEENDIAN=	le
-.else
-IMAGEENDIAN=	be
-.endif
 MAKEDEVTARGETS=	ramdisk
 IMAGEDEPENDS=	${CRUNCHBIN} \
 		dot.profile master.passwd sshd_config ssh_host_dsa_key \
 		${NETBSDSRCDIR}/etc/group \
 		${NETBSDSRCDIR}/etc/netconfig ${DISTRIBDIR}/common/protocols \
 		${DISTRIBDIR}/common/services
-IMAGEPREBUILD=	${TOOL_PAX} ${PAX_TIMESTAMP} -rw -pp ${DESTDIR}/libdata/firmware ${WORKDIR}
 
 # Use stubs to eliminate some large stuff from libc
 HACKSRC=	${DISTRIBDIR}/utils/libhack

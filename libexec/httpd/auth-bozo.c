@@ -1,4 +1,4 @@
-/*	$NetBSD: auth-bozo.c,v 1.18 2015/12/27 10:21:35 mrg Exp $	*/
+/*	$NetBSD: auth-bozo.c,v 1.13.2.2 2016/04/10 10:33:11 martin Exp $	*/
 
 /*	$eterna: auth-bozo.c,v 1.17 2011/11/18 09:21:15 mrg Exp $	*/
 

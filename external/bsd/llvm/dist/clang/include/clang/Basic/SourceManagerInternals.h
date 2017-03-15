@@ -88,16 +88,21 @@ class LineTableInfo {
   /// at which they occur in the file).
   std::map<FileID, std::vector<LineEntry> > LineEntries;
 public:
+  LineTableInfo() {
+  }
+
   void clear() {
     FilenameIDs.clear();
     FilenamesByID.clear();
     LineEntries.clear();
   }
 
+  ~LineTableInfo() {}
+
   unsigned getLineTableFilenameID(StringRef Str);
-  StringRef getFilename(unsigned ID) const {
+  const char *getFilename(unsigned ID) const {
     assert(ID < FilenamesByID.size() && "Invalid FilenameID");
-    return FilenamesByID[ID]->getKey();
+    return FilenamesByID[ID]->getKeyData();
   }
   unsigned getNumFilenames() const { return FilenamesByID.size(); }
 

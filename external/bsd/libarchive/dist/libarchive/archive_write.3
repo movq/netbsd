@@ -33,6 +33,7 @@
 .Nm archive_write_set_format_pax ,
 .Nm archive_write_set_format_pax_restricted ,
 .Nm archive_write_set_format_shar ,
+.Nm archive_write_set_format_shar_binary ,
 .Nm archive_write_set_format_ustar ,
 .Nm archive_write_get_bytes_per_block ,
 .Nm archive_write_set_bytes_per_block ,
@@ -84,6 +85,8 @@
 .Fn archive_write_set_format_pax_restricted "struct archive *"
 .Ft int
 .Fn archive_write_set_format_shar "struct archive *"
+.Ft int
+.Fn archive_write_set_format_shar_binary "struct archive *"
 .Ft int
 .Fn archive_write_set_format_ustar "struct archive *"
 .Ft int
@@ -174,6 +177,7 @@ A value of -1 here indicates that the library should use default values.
 Fn archive_write_set_format_pax , \
 Fn archive_write_set_format_pax_restricted , \
 Fn archive_write_set_format_shar , \
+Fn archive_write_set_format_shar_binary , \
 Fn archive_write_set_format_ustar
 Sets the format that will be used for the archive.
 The library can write

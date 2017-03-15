@@ -1,4 +1,4 @@
-/*	$NetBSD: if_cs_ofisa_machdep.c,v 1.11 2015/04/13 21:18:42 riastradh Exp $	*/
+/*	$NetBSD: if_cs_ofisa_machdep.c,v 1.10 2012/02/04 19:08:03 christos Exp $	*/
 
 /*
  * Copyright 1998
@@ -38,7 +38,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_cs_ofisa_machdep.c,v 1.11 2015/04/13 21:18:42 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_cs_ofisa_machdep.c,v 1.10 2012/02/04 19:08:03 christos Exp $");
 
 #include "opt_compat_old_ofw.h"
 
@@ -48,7 +48,7 @@ __KERNEL_RCSID(0, "$NetBSD: if_cs_ofisa_machdep.c,v 1.11 2015/04/13 21:18:42 ria
 #include <sys/malloc.h>
 #include <sys/socket.h>
 #include <sys/bus.h>
-#include <sys/rndsource.h>
+#include <sys/rnd.h>
 
 #include <net/if.h>
 #include <net/if_ether.h>

@@ -1,4 +1,4 @@
-/*	$NetBSD: namadr_list.c,v 1.2 2017/02/14 01:16:45 christos Exp $	*/
+/*	$NetBSD: namadr_list.c,v 1.1.1.2 2013/01/02 18:58:59 tron Exp $	*/
 
 /*++
 /* NAME
@@ -8,8 +8,7 @@
 /* SYNOPSIS
 /*	#include <namadr_list.h>
 /*
-/*	NAMADR_LIST *namadr_list_init(pname, flags, pattern_list)
-/*	const char *pname;
+/*	NAMADR_LIST *namadr_list_init(flags, pattern_list)
 /*	int	flags;
 /*	const char *pattern_list;
 /*
@@ -41,8 +40,7 @@
 /*	a pattern, or when any of its parent domains matches a
 /*	pattern. The matching process is case insensitive.
 /*
-/*	namadr_list_init() performs initializations. The pname
-/*	argument specifies error reporting context. The flags
+/*	namadr_list_init() performs initializations. The first
 /*	argument is the bit-wise OR of zero or more of the
 /*	following:
 /* .IP MATCH_FLAG_PARENT
@@ -55,7 +53,7 @@
 /*	code, instead of raising a fatal error.
 /* .PP
 /*	Specify MATCH_FLAG_NONE to request none of the above.
-/*	The last argument is a list of patterns, or the absolute
+/*	The second argument is a list of patterns, or the absolute
 /*	pathname of a file with patterns.
 /*
 /*	namadr_list_match() matches the specified host name and
@@ -93,13 +91,12 @@
 
 #ifdef TEST
 
+#include <msg.h>
 #include <stdlib.h>
 #include <unistd.h>
-#include <msg.h>
 #include <vstream.h>
 #include <msg_vstream.h>
 #include <dict.h>
-#include <stringops.h>			/* util_utf8_enable */
 
 static void usage(char *progname)
 {
@@ -127,9 +124,7 @@ int     main(int argc, char **argv)
     if (argc != optind + 3)
 	usage(argv[0]);
     dict_allow_surrogate = 1;
-    util_utf8_enable = 1;
-    list = namadr_list_init("command line", MATCH_FLAG_PARENT
-			    | MATCH_FLAG_RETURN, argv[optind]);
+    list = namadr_list_init(MATCH_FLAG_PARENT | MATCH_FLAG_RETURN, argv[optind]);
     host = argv[optind + 1];
     addr = argv[optind + 2];
     vstream_printf("%s/%s: %s\n", host, addr,

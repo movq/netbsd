@@ -1,6 +1,6 @@
 #!/bin/sh
 #
-# $NetBSD: rtadvd,v 1.10 2016/11/19 01:14:58 kre Exp $
+# $NetBSD: rtadvd,v 1.8.6.1 2016/11/21 07:29:25 snj Exp $
 #
 
 # PROVIDE: rtadvd
@@ -56,7 +56,7 @@ rtadvd_prereload()
 	# Make sure /var/run exists in the chroot
 	mkdir -p "${chdir}/var/run"
 
-	# Provide a link to the chrooted dump file
+	# Provide links to the chrooted dump & pid files
 	ln -snf "${chdir}/var/run/${name}.dump" /var/run
 
 	# Note: actual chroot is done by rtadvd itself

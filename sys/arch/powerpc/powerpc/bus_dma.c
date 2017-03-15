@@ -1,4 +1,4 @@
-/*	$NetBSD: bus_dma.c,v 1.47 2016/12/23 07:15:28 cherry Exp $	*/
+/*	$NetBSD: bus_dma.c,v 1.46 2012/02/01 09:54:03 matt Exp $	*/
 
 /*-
  * Copyright (c) 1996, 1997, 1998 The NetBSD Foundation, Inc.
@@ -32,7 +32,7 @@
 
 #define _POWERPC_BUS_DMA_PRIVATE
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: bus_dma.c,v 1.47 2016/12/23 07:15:28 cherry Exp $");
+__KERNEL_RCSID(0, "$NetBSD: bus_dma.c,v 1.46 2012/02/01 09:54:03 matt Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -45,7 +45,6 @@ __KERNEL_RCSID(0, "$NetBSD: bus_dma.c,v 1.47 2016/12/23 07:15:28 cherry Exp $");
 #include <sys/intr.h>
 
 #include <uvm/uvm.h>
-#include <uvm/uvm_physseg.h>
 
 #ifdef PPC_BOOKE
 #define	EIEIO	__asm volatile("mbar\t0")
@@ -545,15 +544,13 @@ int
 _bus_dmamem_alloc(bus_dma_tag_t t, bus_size_t size, bus_size_t alignment, bus_size_t boundary, bus_dma_segment_t *segs, int nsegs, int *rsegs, int flags)
 {
 	paddr_t start = 0xffffffff, end = 0;
-	uvm_physseg_t bank;
+	int bank;
 
-	for (bank = uvm_physseg_get_first();
-	     uvm_physseg_valid_p(bank);
-	     bank = uvm_physseg_get_next(bank)) {
-		if (start > ptoa(uvm_physseg_get_avail_start(bank)))
-			start = ptoa(uvm_physseg_get_avail_start(bank));
-		if (end < ptoa(uvm_physseg_get_avail_end(bank)))
-			end = ptoa(uvm_physseg_get_avail_end(bank));
+	for (bank = 0; bank < vm_nphysseg; bank++) {
+		if (start > ptoa(VM_PHYSMEM_PTR(bank)->avail_start))
+			start = ptoa(VM_PHYSMEM_PTR(bank)->avail_start);
+		if (end < ptoa(VM_PHYSMEM_PTR(bank)->avail_end))
+			end = ptoa(VM_PHYSMEM_PTR(bank)->avail_end);
 	}
 
 	return _bus_dmamem_alloc_range(t, size, alignment, boundary, segs,

@@ -27,7 +27,7 @@
  */
 
 /*
- * Watchdog register definitions for Freescale i.MX31/i.MX51/i.MX6
+ * Watchdog register definitions for Freescale i.MX31 and i.MX51
  *
  *	MCIMX31 and MCIMX31L Application Processors
  *	Reference Manual
@@ -36,16 +36,10 @@
  *	1/2007
  *
  *	MCIMX51 Multimedia Applications Processor
- *	Reference Manual
- *	MCIMX51RM
- *	Rev. 1
- *	2/2010
- *
- *	i.MX 6Dual/6Quad Applications Processor
- *	Reference Manual
- *	IMX6DQRM
- *	Rev. 1
- *	4/2013
+ *      Reference Manual
+ *      MCIMX51RM
+ *      Rev. 1
+ *      2/2010
  */
 
 #ifndef _ARM_IMX_IMXWDOGREG_H
@@ -75,17 +69,16 @@
 /* only for i.MX31 */
 #define	 WRSR_CMON	__BIT(2)
 #define	 WRSR_EXT	__BIT(3)
-#define	 WRSR_JRST	__BIT(5)
-/* i.MX31 and iMX6 */
 #define	 WRSR_PWR	__BIT(4)
+#define	 WRSR_JRST	__BIT(5)
 
-/* only for i.MX51 and i.MX6 */
+/* only for i.MX51 */
 #define	IMX_WDOG_WICR	0x0006	/* Watchdog Interrupt Control Register */
 #define	 WICR_WICT	__BITS(7,0)	/* interrupt count timeout */
 #define	 WICR_WTIS	__BIT(14)	/* interrupt status [w1c] */
 #define	 WICR_WIE	__BIT(15)	/* interrupt enable */
 
-/* only for i.MX51 and i.MX6 */
+/* only for i.MX51 */
 #define	IMX_WDOG_WMCR	0x0008
 #define	 WMCR_PDE	__BIT(0)	/* power down enable */
 

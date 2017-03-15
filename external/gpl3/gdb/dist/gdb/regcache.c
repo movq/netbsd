@@ -1,6 +1,6 @@
 /* Cache and manage the values of registers for GDB, the GNU debugger.
 
-   Copyright (C) 1986-2016 Free Software Foundation, Inc.
+   Copyright (C) 1986-2014 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -24,10 +24,12 @@
 #include "gdbcmd.h"
 #include "regcache.h"
 #include "reggroups.h"
+#include "gdb_assert.h"
+#include <string.h>
 #include "observer.h"
+#include "exceptions.h"
 #include "remote.h"
 #include "valprint.h"
-#include "regset.h"
 
 /*
  * DATA STRUCTURE
@@ -147,8 +149,7 @@ init_regcache_descr (struct gdbarch *gdbarch)
 static struct regcache_descr *
 regcache_descr (struct gdbarch *gdbarch)
 {
-  return (struct regcache_descr *) gdbarch_data (gdbarch,
-						 regcache_descr_handle);
+  return gdbarch_data (gdbarch, regcache_descr_handle);
 }
 
 /* Utility functions returning useful register attributes stored in
@@ -177,14 +178,6 @@ register_size (struct gdbarch *gdbarch, int regnum)
 			   + gdbarch_num_pseudo_regs (gdbarch)));
   size = descr->sizeof_register[regnum];
   return size;
-}
-
-/* See common/common-regcache.h.  */
-
-int
-regcache_register_size (const struct regcache *regcache, int n)
-{
-  return register_size (get_regcache_arch (regcache), n);
 }
 
 /* The register cache for storing raw register values.  */
@@ -224,22 +217,22 @@ regcache_xmalloc_1 (struct gdbarch *gdbarch, struct address_space *aspace,
 
   gdb_assert (gdbarch != NULL);
   descr = regcache_descr (gdbarch);
-  regcache = XNEW (struct regcache);
+  regcache = XMALLOC (struct regcache);
   regcache->descr = descr;
   regcache->readonly_p = readonly_p;
   if (readonly_p)
     {
       regcache->registers
-	= XCNEWVEC (gdb_byte, descr->sizeof_cooked_registers);
+	= XCALLOC (descr->sizeof_cooked_registers, gdb_byte);
       regcache->register_status
-	= XCNEWVEC (signed char, descr->sizeof_cooked_register_status);
+	= XCALLOC (descr->sizeof_cooked_register_status, signed char);
     }
   else
     {
       regcache->registers
-	= XCNEWVEC (gdb_byte, descr->sizeof_raw_registers);
+	= XCALLOC (descr->sizeof_raw_registers, gdb_byte);
       regcache->register_status
-	= XCNEWVEC (signed char, descr->sizeof_raw_register_status);
+	= XCALLOC (descr->sizeof_raw_register_status, signed char);
     }
   regcache->aspace = aspace;
   regcache->ptid = minus_one_ptid;
@@ -265,39 +258,13 @@ regcache_xfree (struct regcache *regcache)
 static void
 do_regcache_xfree (void *data)
 {
-  regcache_xfree ((struct regcache *) data);
+  regcache_xfree (data);
 }
 
 struct cleanup *
 make_cleanup_regcache_xfree (struct regcache *regcache)
 {
   return make_cleanup (do_regcache_xfree, regcache);
-}
-
-/* Cleanup routines for invalidating a register.  */
-
-struct register_to_invalidate
-{
-  struct regcache *regcache;
-  int regnum;
-};
-
-static void
-do_regcache_invalidate (void *data)
-{
-  struct register_to_invalidate *reg = (struct register_to_invalidate *) data;
-
-  regcache_invalidate (reg->regcache, reg->regnum);
-}
-
-static struct cleanup *
-make_cleanup_regcache_invalidate (struct regcache *regcache, int regnum)
-{
-  struct register_to_invalidate* reg = XNEW (struct register_to_invalidate);
-
-  reg->regcache = regcache;
-  reg->regnum = regnum;
-  return make_cleanup_dtor (do_regcache_invalidate, (void *) reg, xfree);
 }
 
 /* Return REGCACHE's architecture.  */
@@ -395,13 +362,10 @@ regcache_restore (struct regcache *dst,
 static enum register_status
 do_cooked_read (void *src, int regnum, gdb_byte *buf)
 {
-  struct regcache *regcache = (struct regcache *) src;
+  struct regcache *regcache = src;
 
   return regcache_cooked_read (regcache, regnum, buf);
 }
-
-static void regcache_cpy_no_passthrough (struct regcache *dst,
-					 struct regcache *src);
 
 void
 regcache_cpy (struct regcache *dst, struct regcache *src)
@@ -419,12 +383,7 @@ regcache_cpy (struct regcache *dst, struct regcache *src)
     regcache_cpy_no_passthrough (dst, src);
 }
 
-/* Copy/duplicate the contents of a register cache.  Unlike regcache_cpy,
-   which is pass-through, this does not go through to the target.
-   Only values values already in the cache are transferred.  The SRC and DST
-   buffers must not overlap.  */
-
-static void
+void
 regcache_cpy_no_passthrough (struct regcache *dst, struct regcache *src)
 {
   gdb_assert (src != NULL && dst != NULL);
@@ -461,7 +420,7 @@ regcache_register_status (const struct regcache *regcache, int regnum)
   else
     gdb_assert (regnum < regcache->descr->nr_raw_registers);
 
-  return (enum register_status) regcache->register_status[regnum];
+  return regcache->register_status[regnum];
 }
 
 void
@@ -505,7 +464,7 @@ get_thread_arch_aspace_regcache (ptid_t ptid, struct gdbarch *gdbarch,
   new_regcache = regcache_xmalloc_1 (gdbarch, aspace, 0);
   new_regcache->ptid = ptid;
 
-  list = XNEW (struct regcache_list);
+  list = xmalloc (sizeof (struct regcache_list));
   list->regcache = new_regcache;
   list->next = current_regcache;
   current_regcache = list;
@@ -552,13 +511,6 @@ get_current_regcache (void)
   return get_thread_regcache (inferior_ptid);
 }
 
-/* See common/common-regcache.h.  */
-
-struct regcache *
-get_thread_regcache_for_ptid (ptid_t ptid)
-{
-  return get_thread_regcache (ptid);
-}
 
 /* Observer for the target_changed event.  */
 
@@ -673,7 +625,7 @@ regcache_raw_read (struct regcache *regcache, int regnum, gdb_byte *buf)
     memcpy (buf, register_buffer (regcache, regnum),
 	    regcache->descr->sizeof_register[regnum]);
 
-  return (enum register_status) regcache->register_status[regnum];
+  return regcache->register_status[regnum];
 }
 
 enum register_status
@@ -684,7 +636,7 @@ regcache_raw_read_signed (struct regcache *regcache, int regnum, LONGEST *val)
 
   gdb_assert (regcache != NULL);
   gdb_assert (regnum >= 0 && regnum < regcache->descr->nr_raw_registers);
-  buf = (gdb_byte *) alloca (regcache->descr->sizeof_register[regnum]);
+  buf = alloca (regcache->descr->sizeof_register[regnum]);
   status = regcache_raw_read (regcache, regnum, buf);
   if (status == REG_VALID)
     *val = extract_signed_integer
@@ -704,7 +656,7 @@ regcache_raw_read_unsigned (struct regcache *regcache, int regnum,
 
   gdb_assert (regcache != NULL);
   gdb_assert (regnum >= 0 && regnum < regcache->descr->nr_raw_registers);
-  buf = (gdb_byte *) alloca (regcache->descr->sizeof_register[regnum]);
+  buf = alloca (regcache->descr->sizeof_register[regnum]);
   status = regcache_raw_read (regcache, regnum, buf);
   if (status == REG_VALID)
     *val = extract_unsigned_integer
@@ -718,11 +670,11 @@ regcache_raw_read_unsigned (struct regcache *regcache, int regnum,
 void
 regcache_raw_write_signed (struct regcache *regcache, int regnum, LONGEST val)
 {
-  gdb_byte *buf;
+  void *buf;
 
   gdb_assert (regcache != NULL);
   gdb_assert (regnum >=0 && regnum < regcache->descr->nr_raw_registers);
-  buf = (gdb_byte *) alloca (regcache->descr->sizeof_register[regnum]);
+  buf = alloca (regcache->descr->sizeof_register[regnum]);
   store_signed_integer (buf, regcache->descr->sizeof_register[regnum],
 			gdbarch_byte_order (regcache->descr->gdbarch), val);
   regcache_raw_write (regcache, regnum, buf);
@@ -732,11 +684,11 @@ void
 regcache_raw_write_unsigned (struct regcache *regcache, int regnum,
 			     ULONGEST val)
 {
-  gdb_byte *buf;
+  void *buf;
 
   gdb_assert (regcache != NULL);
   gdb_assert (regnum >=0 && regnum < regcache->descr->nr_raw_registers);
-  buf = (gdb_byte *) alloca (regcache->descr->sizeof_register[regnum]);
+  buf = alloca (regcache->descr->sizeof_register[regnum]);
   store_unsigned_integer (buf, regcache->descr->sizeof_register[regnum],
 			  gdbarch_byte_order (regcache->descr->gdbarch), val);
   regcache_raw_write (regcache, regnum, buf);
@@ -760,7 +712,7 @@ regcache_cooked_read (struct regcache *regcache, int regnum, gdb_byte *buf)
       else
 	memset (buf, 0, regcache->descr->sizeof_register[regnum]);
 
-      return (enum register_status) regcache->register_status[regnum];
+      return regcache->register_status[regnum];
     }
   else if (gdbarch_pseudo_register_read_value_p (regcache->descr->gdbarch))
     {
@@ -831,7 +783,7 @@ regcache_cooked_read_signed (struct regcache *regcache, int regnum,
 
   gdb_assert (regcache != NULL);
   gdb_assert (regnum >= 0 && regnum < regcache->descr->nr_cooked_registers);
-  buf = (gdb_byte *) alloca (regcache->descr->sizeof_register[regnum]);
+  buf = alloca (regcache->descr->sizeof_register[regnum]);
   status = regcache_cooked_read (regcache, regnum, buf);
   if (status == REG_VALID)
     *val = extract_signed_integer
@@ -851,7 +803,7 @@ regcache_cooked_read_unsigned (struct regcache *regcache, int regnum,
 
   gdb_assert (regcache != NULL);
   gdb_assert (regnum >= 0 && regnum < regcache->descr->nr_cooked_registers);
-  buf = (gdb_byte *) alloca (regcache->descr->sizeof_register[regnum]);
+  buf = alloca (regcache->descr->sizeof_register[regnum]);
   status = regcache_cooked_read (regcache, regnum, buf);
   if (status == REG_VALID)
     *val = extract_unsigned_integer
@@ -866,11 +818,11 @@ void
 regcache_cooked_write_signed (struct regcache *regcache, int regnum,
 			      LONGEST val)
 {
-  gdb_byte *buf;
+  void *buf;
 
   gdb_assert (regcache != NULL);
   gdb_assert (regnum >=0 && regnum < regcache->descr->nr_cooked_registers);
-  buf = (gdb_byte *) alloca (regcache->descr->sizeof_register[regnum]);
+  buf = alloca (regcache->descr->sizeof_register[regnum]);
   store_signed_integer (buf, regcache->descr->sizeof_register[regnum],
 			gdbarch_byte_order (regcache->descr->gdbarch), val);
   regcache_cooked_write (regcache, regnum, buf);
@@ -880,33 +832,21 @@ void
 regcache_cooked_write_unsigned (struct regcache *regcache, int regnum,
 				ULONGEST val)
 {
-  gdb_byte *buf;
+  void *buf;
 
   gdb_assert (regcache != NULL);
   gdb_assert (regnum >=0 && regnum < regcache->descr->nr_cooked_registers);
-  buf = (gdb_byte *) alloca (regcache->descr->sizeof_register[regnum]);
+  buf = alloca (regcache->descr->sizeof_register[regnum]);
   store_unsigned_integer (buf, regcache->descr->sizeof_register[regnum],
 			  gdbarch_byte_order (regcache->descr->gdbarch), val);
   regcache_cooked_write (regcache, regnum, buf);
-}
-
-/* See regcache.h.  */
-
-void
-regcache_raw_set_cached_value (struct regcache *regcache, int regnum,
-			       const gdb_byte *buf)
-{
-  memcpy (register_buffer (regcache, regnum), buf,
-	  regcache->descr->sizeof_register[regnum]);
-  regcache->register_status[regnum] = REG_VALID;
 }
 
 void
 regcache_raw_write (struct regcache *regcache, int regnum,
 		    const gdb_byte *buf)
 {
-  struct cleanup *chain_before_save_inferior;
-  struct cleanup *chain_before_invalidate_register;
+  struct cleanup *old_chain;
 
   gdb_assert (regcache != NULL && buf != NULL);
   gdb_assert (regnum >= 0 && regnum < regcache->descr->nr_raw_registers);
@@ -924,24 +864,16 @@ regcache_raw_write (struct regcache *regcache, int regnum,
 		  regcache->descr->sizeof_register[regnum]) == 0))
     return;
 
-  chain_before_save_inferior = save_inferior_ptid ();
+  old_chain = save_inferior_ptid ();
   inferior_ptid = regcache->ptid;
 
   target_prepare_to_store (regcache);
-  regcache_raw_set_cached_value (regcache, regnum, buf);
-
-  /* Register a cleanup function for invalidating the register after it is
-     written, in case of a failure.  */
-  chain_before_invalidate_register
-    = make_cleanup_regcache_invalidate (regcache, regnum);
-
+  memcpy (register_buffer (regcache, regnum), buf,
+	  regcache->descr->sizeof_register[regnum]);
+  regcache->register_status[regnum] = REG_VALID;
   target_store_registers (regcache, regnum);
 
-  /* The target did not throw an error so we can discard invalidating the
-     register and restore the cleanup chain to what it was.  */
-  discard_cleanups (chain_before_invalidate_register);
-
-  do_cleanups (chain_before_save_inferior);
+  do_cleanups (old_chain);
 }
 
 void
@@ -1097,94 +1029,6 @@ regcache_raw_collect (const struct regcache *regcache, int regnum, void *buf)
   regbuf = register_buffer (regcache, regnum);
   size = regcache->descr->sizeof_register[regnum];
   memcpy (buf, regbuf, size);
-}
-
-/* Transfer a single or all registers belonging to a certain register
-   set to or from a buffer.  This is the main worker function for
-   regcache_supply_regset and regcache_collect_regset.  */
-
-static void
-regcache_transfer_regset (const struct regset *regset,
-			  const struct regcache *regcache,
-			  struct regcache *out_regcache,
-			  int regnum, const void *in_buf,
-			  void *out_buf, size_t size)
-{
-  const struct regcache_map_entry *map;
-  int offs = 0, count;
-
-  for (map = (const struct regcache_map_entry *) regset->regmap;
-       (count = map->count) != 0;
-       map++)
-    {
-      int regno = map->regno;
-      int slot_size = map->size;
-
-      if (slot_size == 0 && regno != REGCACHE_MAP_SKIP)
-	slot_size = regcache->descr->sizeof_register[regno];
-
-      if (regno == REGCACHE_MAP_SKIP
-	  || (regnum != -1
-	      && (regnum < regno || regnum >= regno + count)))
-	  offs += count * slot_size;
-
-      else if (regnum == -1)
-	for (; count--; regno++, offs += slot_size)
-	  {
-	    if (offs + slot_size > size)
-	      break;
-
-	    if (out_buf)
-	      regcache_raw_collect (regcache, regno,
-				    (gdb_byte *) out_buf + offs);
-	    else
-	      regcache_raw_supply (out_regcache, regno, in_buf
-				   ? (const gdb_byte *) in_buf + offs
-				   : NULL);
-	  }
-      else
-	{
-	  /* Transfer a single register and return.  */
-	  offs += (regnum - regno) * slot_size;
-	  if (offs + slot_size > size)
-	    return;
-
-	  if (out_buf)
-	    regcache_raw_collect (regcache, regnum,
-				  (gdb_byte *) out_buf + offs);
-	  else
-	    regcache_raw_supply (out_regcache, regnum, in_buf
-				 ? (const gdb_byte *) in_buf + offs
-				 : NULL);
-	  return;
-	}
-    }
-}
-
-/* Supply register REGNUM from BUF to REGCACHE, using the register map
-   in REGSET.  If REGNUM is -1, do this for all registers in REGSET.
-   If BUF is NULL, set the register(s) to "unavailable" status. */
-
-void
-regcache_supply_regset (const struct regset *regset,
-			struct regcache *regcache,
-			int regnum, const void *buf, size_t size)
-{
-  regcache_transfer_regset (regset, regcache, regcache, regnum,
-			    buf, NULL, size);
-}
-
-/* Collect register REGNUM from REGCACHE to BUF, using the register
-   map in REGSET.  If REGNUM is -1, do this for all registers in
-   REGSET.  */
-
-void
-regcache_collect_regset (const struct regset *regset,
-			 const struct regcache *regcache,
-			 int regnum, void *buf, size_t size)
-{
-  regcache_transfer_regset (regset, regcache, NULL, regnum,
-			    NULL, buf, size);
 }
 
 
@@ -1370,7 +1214,7 @@ regcache_dump (struct regcache *regcache, struct ui_file *file,
 		t = n;
 	      }
 	    /* Chop a leading builtin_type.  */
-	    if (startswith (t, blt))
+	    if (strncmp (t, blt, strlen (blt)) == 0)
 	      t += strlen (blt);
 	  }
 	fprintf_unfiltered (file, " %-15s", t);

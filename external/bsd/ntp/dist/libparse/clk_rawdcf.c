@@ -1,4 +1,4 @@
-/*	$NetBSD: clk_rawdcf.c,v 1.7 2016/01/08 21:35:39 christos Exp $	*/
+/*	$NetBSD: clk_rawdcf.c,v 1.3.4.4 2016/05/11 11:35:38 martin Exp $	*/
 
 /*
  * /src/NTP/REPOSITORY/ntp4-dev/libparse/clk_rawdcf.c,v 4.18 2006/06/22 18:40:01 kardel RELEASE_20060622_A

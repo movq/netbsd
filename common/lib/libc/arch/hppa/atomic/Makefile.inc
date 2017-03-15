@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile.inc,v 1.13 2014/10/14 07:25:05 martin Exp $
+#	$NetBSD: Makefile.inc,v 1.12.4.1 2014/11/12 19:20:06 snj Exp $
 
 .if defined(LIB)
 

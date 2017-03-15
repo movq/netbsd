@@ -1,4 +1,4 @@
-/*	$NetBSD: procfs_machdep.c,v 1.14 2016/12/08 06:28:21 msaitoh Exp $ */
+/*	$NetBSD: procfs_machdep.c,v 1.6.4.2 2016/12/08 08:06:38 snj Exp $ */
 
 /*
  * Copyright (c) 2001 Wasabi Systems, Inc.
@@ -42,7 +42,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: procfs_machdep.c,v 1.14 2016/12/08 06:28:21 msaitoh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: procfs_machdep.c,v 1.6.4.2 2016/12/08 08:06:38 snj Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

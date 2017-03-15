@@ -1,7 +1,7 @@
-/* $OpenBSD$ */
+/* Id */
 
 /*
- * Copyright (c) 2007 Nicholas Marriott <nicholas.marriott@gmail.com>
+ * Copyright (c) 2007 Nicholas Marriott <nicm@users.sourceforge.net>
  *
  * Permission to use, copy, modify, and distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -30,10 +30,8 @@
  * direction with output).
  */
 
-void	 input_key_mouse(struct window_pane *, struct mouse_event *);
-
 struct input_key_ent {
-	key_code	 key;
+	int		 key;
 	const char	*data;
 
 	int		 flags;
@@ -58,14 +56,14 @@ const struct input_key_ent input_keys[] = {
 	{ KEYC_F10,		"\033[21~",	0 },
 	{ KEYC_F11,		"\033[23~",	0 },
 	{ KEYC_F12,		"\033[24~",	0 },
-	{ KEYC_F1|KEYC_SHIFT,	"\033[25~",	0 },
-	{ KEYC_F2|KEYC_SHIFT,	"\033[26~",	0 },
-	{ KEYC_F3|KEYC_SHIFT,	"\033[28~",	0 },
-	{ KEYC_F4|KEYC_SHIFT,	"\033[29~",	0 },
-	{ KEYC_F5|KEYC_SHIFT,	"\033[31~",	0 },
-	{ KEYC_F6|KEYC_SHIFT,	"\033[32~",	0 },
-	{ KEYC_F7|KEYC_SHIFT,	"\033[33~",	0 },
-	{ KEYC_F8|KEYC_SHIFT,	"\033[34~",	0 },
+	{ KEYC_F13,		"\033[25~",	0 },
+	{ KEYC_F14,		"\033[26~",	0 },
+	{ KEYC_F15,		"\033[28~",	0 },
+	{ KEYC_F16,		"\033[29~",	0 },
+	{ KEYC_F17,		"\033[31~",	0 },
+	{ KEYC_F18,		"\033[32~",	0 },
+	{ KEYC_F19,		"\033[33~",	0 },
+	{ KEYC_F20,		"\033[34~",	0 },
 	{ KEYC_IC,		"\033[2~",	0 },
 	{ KEYC_DC,		"\033[3~",	0 },
 	{ KEYC_HOME,		"\033[1~",	0 },
@@ -134,58 +132,27 @@ const struct input_key_ent input_keys[] = {
 	{ KEYC_KP_PERIOD,	".",		0 },
 };
 
-/* Split a character into two UTF-8 bytes. */
-static size_t
-input_split2(u_int c, u_char *dst)
-{
-	if (c > 0x7f) {
-		dst[0] = (c >> 6) | 0xc0;
-		dst[1] = (c & 0x3f) | 0x80;
-		return (2);
-	}
-	dst[0] = c;
-	return (1);
-}
-
 /* Translate a key code into an output key sequence. */
 void
-input_key(struct window_pane *wp, key_code key, struct mouse_event *m)
+input_key(struct window_pane *wp, int key)
 {
-	const struct input_key_ent	*ike;
-	u_int				 i;
-	size_t				 dlen;
-	char				*out;
-	key_code			 justkey;
-	struct utf8_data		 ud;
+	const struct input_key_ent     *ike;
+	u_int				i;
+	size_t				dlen;
+	char			       *out;
+	u_char				ch;
 
-	log_debug("writing key 0x%llx (%s) to %%%u", key,
-	    key_string_lookup_key(key), wp->id);
-
-	/* If this is a mouse key, pass off to mouse function. */
-	if (KEYC_IS_MOUSE(key)) {
-		if (m != NULL && m->wp != -1 && (u_int)m->wp == wp->id)
-			input_key_mouse(wp, m);
-		return;
-	}
+	log_debug2("writing key 0x%x", key);
 
 	/*
 	 * If this is a normal 7-bit key, just send it, with a leading escape
-	 * if necessary. If it is a UTF-8 key, split it and send it.
+	 * if necessary.
 	 */
-	justkey = (key & ~KEYC_ESCAPE);
-	if (justkey <= 0x7f) {
+	if (key != KEYC_NONE && (key & ~KEYC_ESCAPE) < 0x100) {
 		if (key & KEYC_ESCAPE)
 			bufferevent_write(wp->event, "\033", 1);
-		ud.data[0] = justkey;
-		bufferevent_write(wp->event, &ud.data[0], 1);
-		return;
-	}
-	if (justkey > 0x7f && justkey < KEYC_BASE) {
-		if (utf8_split(justkey, &ud) != UTF8_DONE)
-			return;
-		if (key & KEYC_ESCAPE)
-			bufferevent_write(wp->event, "\033", 1);
-		bufferevent_write(wp->event, ud.data, ud.size);
+		ch = key & ~KEYC_ESCAPE;
+		bufferevent_write(wp->event, &ch, 1);
 		return;
 	}
 
@@ -193,7 +160,7 @@ input_key(struct window_pane *wp, key_code key, struct mouse_event *m)
 	 * Then try to look this up as an xterm key, if the flag to output them
 	 * is set.
 	 */
-	if (options_get_number(wp->window->options, "xterm-keys")) {
+	if (options_get_number(&wp->window->options, "xterm-keys")) {
 		if ((out = xterm_keys_lookup(key)) != NULL) {
 			bufferevent_write(wp->event, out, strlen(out));
 			free(out);
@@ -218,11 +185,11 @@ input_key(struct window_pane *wp, key_code key, struct mouse_event *m)
 			break;
 	}
 	if (i == nitems(input_keys)) {
-		log_debug("key 0x%llx missing", key);
+		log_debug2("key 0x%x missing", key);
 		return;
 	}
 	dlen = strlen(ike->data);
-	log_debug("found key 0x%llx: \"%s\"", key, ike->data);
+	log_debug2("found key 0x%x: \"%s\"", key, ike->data);
 
 	/* Prefix a \033 for escape. */
 	if (key & KEYC_ESCAPE)
@@ -232,50 +199,57 @@ input_key(struct window_pane *wp, key_code key, struct mouse_event *m)
 
 /* Translate mouse and output. */
 void
-input_key_mouse(struct window_pane *wp, struct mouse_event *m)
+input_mouse(struct window_pane *wp, struct session *s, struct mouse_event *m)
 {
-	unsigned char	buf[40];
-	size_t	len;
-	u_int	x, y;
+	char			 buf[40];
+	size_t			 len;
+	struct paste_buffer	*pb;
 
-	if ((wp->screen->mode & ALL_MOUSE_MODES) == 0)
+	if (wp->screen->mode & ALL_MOUSE_MODES) {
+		/*
+		 * Use the SGR (1006) extension only if the application
+		 * requested it and the underlying terminal also sent the event
+		 * in this format (this is because an old style mouse release
+		 * event cannot be converted into the new SGR format, since the
+		 * released button is unknown). Otherwise pretend that tmux
+		 * doesn't speak this extension, and fall back to the UTF-8
+		 * (1005) extension if the application requested, or to the
+		 * legacy format.
+		 */
+		if (m->sgr && (wp->screen->mode & MODE_MOUSE_SGR)) {
+			len = xsnprintf(buf, sizeof buf, "\033[<%d;%d;%d%c",
+			    m->sgr_xb, m->x + 1, m->y + 1,
+			    m->sgr_rel ? 'm' : 'M');
+		} else if (wp->screen->mode & MODE_MOUSE_UTF8) {
+			len = xsnprintf(buf, sizeof buf, "\033[M");
+			len += utf8_split2(m->xb + 32, (u_char *)&buf[len]);
+			len += utf8_split2(m->x + 33, (u_char *)&buf[len]);
+			len += utf8_split2(m->y + 33, (u_char *)&buf[len]);
+		} else {
+			if (m->xb > 223)
+				return;
+			len = xsnprintf(buf, sizeof buf, "\033[M");
+			buf[len++] = m->xb + 32;
+			buf[len++] = m->x + 33;
+			buf[len++] = m->y + 33;
+		}
+		bufferevent_write(wp->event, buf, len);
 		return;
-	if (!window_pane_visible(wp))
-		return;
-	if (cmd_mouse_at(wp, m, &x, &y, 0) != 0)
-		return;
-
-	/* If this pane is not in button mode, discard motion events. */
-	if (!(wp->screen->mode & MODE_MOUSE_BUTTON) && (m->b & MOUSE_MASK_DRAG))
-		return;
-
-	/*
-	 * Use the SGR (1006) extension only if the application requested it
-	 * and the underlying terminal also sent the event in this format (this
-	 * is because an old style mouse release event cannot be converted into
-	 * the new SGR format, since the released button is unknown). Otherwise
-	 * pretend that tmux doesn't speak this extension, and fall back to the
-	 * UTF-8 (1005) extension if the application requested, or to the
-	 * legacy format.
-	 */
-	if (m->sgr_type != ' ' && (wp->screen->mode & MODE_MOUSE_SGR)) {
-		len = xsnprintf((char *)buf, sizeof buf, "\033[<%u;%u;%u%c",
-		    m->sgr_b, x + 1, y + 1, m->sgr_type);
-	} else if (wp->screen->mode & MODE_MOUSE_UTF8) {
-		if (m->b > 0x7ff - 32 || x > 0x7ff - 33 || y > 0x7ff - 33)
-			return;
-		len = xsnprintf((char *)buf, sizeof buf, "\033[M");
-		len += input_split2(m->b + 32, &buf[len]);
-		len += input_split2(x + 33, &buf[len]);
-		len += input_split2(y + 33, &buf[len]);
-	} else {
-		if (m->b > 223)
-			return;
-		len = xsnprintf((char *)buf, sizeof buf, "\033[M");
-		buf[len++] = m->b + 32;
-		buf[len++] = x + 33;
-		buf[len++] = y + 33;
 	}
-	log_debug("writing mouse %.*s to %%%u", (int)len, buf, wp->id);
-	bufferevent_write(wp->event, buf, len);
+
+	if (m->button == 1 && (m->event & MOUSE_EVENT_CLICK) &&
+	    options_get_number(&wp->window->options, "mode-mouse") == 1) {
+		pb = paste_get_top(&global_buffers);
+		if (pb != NULL) {
+			paste_send_pane(pb, wp, "\r",
+			    wp->screen->mode & MODE_BRACKETPASTE);
+		}
+	} else if ((m->xb & 3) != 1 &&
+	    options_get_number(&wp->window->options, "mode-mouse") == 1) {
+		if (window_pane_set_mode(wp, &window_copy_mode) == 0) {
+			window_copy_init_from_pane(wp);
+			if (wp->mode->mouse != NULL)
+				wp->mode->mouse(wp, s, m);
+		}
+	}
 }

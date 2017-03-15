@@ -11,6 +11,7 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "clang/Sema/SemaInternal.h"
 #include "TypeLocBuilder.h"
 #include "clang/AST/ASTContext.h"
 #include "clang/AST/DeclTemplate.h"
@@ -19,9 +20,9 @@
 #include "clang/Basic/PartialDiagnostic.h"
 #include "clang/Sema/DeclSpec.h"
 #include "clang/Sema/Lookup.h"
-#include "clang/Sema/SemaInternal.h"
 #include "clang/Sema/Template.h"
 #include "llvm/ADT/STLExtras.h"
+#include "llvm/Support/raw_ostream.h"
 using namespace clang;
 
 /// \brief Find the current instantiation that associated with the given type.
@@ -116,18 +117,8 @@ DeclContext *Sema::computeDeclContext(const CXXScopeSpec &SS,
           // specializations, we're entering into the definition of that
           // class template partial specialization.
           if (ClassTemplatePartialSpecializationDecl *PartialSpec
-                = ClassTemplate->findPartialSpecialization(ContextType)) {
-            // A declaration of the partial specialization must be visible.
-            // We can always recover here, because this only happens when we're
-            // entering the context, and that can't happen in a SFINAE context.
-            assert(!isSFINAEContext() &&
-                   "partial specialization scope specifier in SFINAE context?");
-            if (!hasVisibleDeclaration(PartialSpec))
-              diagnoseMissingImport(SS.getLastQualifierNameLoc(), PartialSpec,
-                                    MissingImportKind::PartialSpecialization,
-                                    /*Recover*/true);
+                = ClassTemplate->findPartialSpecialization(ContextType))
             return PartialSpec;
-          }
         }
       } else if (const RecordType *RecordT = NNSType->getAs<RecordType>()) {
         // The nested name specifier refers to a member of a class template.
@@ -204,8 +195,6 @@ bool Sema::RequireCompleteDeclContext(CXXScopeSpec &SS,
   TagDecl *tag = dyn_cast<TagDecl>(DC);
 
   // If this is a dependent type, then we consider it complete.
-  // FIXME: This is wrong; we should require a (visible) definition to
-  // exist in this case too.
   if (!tag || tag->isDependentContext())
     return false;
 
@@ -230,22 +219,8 @@ bool Sema::RequireCompleteDeclContext(CXXScopeSpec &SS,
   // until we see a definition, so awkwardly pull out this special
   // case.
   const EnumType *enumType = dyn_cast_or_null<EnumType>(tagType);
-  if (!enumType)
+  if (!enumType || enumType->getDecl()->isCompleteDefinition())
     return false;
-  if (enumType->getDecl()->isCompleteDefinition()) {
-    // If we know about the definition but it is not visible, complain.
-    NamedDecl *SuggestedDef = nullptr;
-    if (!hasVisibleDefinition(enumType->getDecl(), &SuggestedDef,
-                              /*OnlyNeedComplete*/false)) {
-      // If the user is going to see an error here, recover by making the
-      // definition visible.
-      bool TreatAsComplete = !isSFINAEContext();
-      diagnoseMissingImport(loc, SuggestedDef, MissingImportKind::Definition,
-                            /*Recover*/TreatAsComplete);
-      return !TreatAsComplete;
-    }
-    return false;
-  }
 
   // Try to instantiate the definition, if this is a specialization of an
   // enumeration temploid.
@@ -307,18 +282,12 @@ bool Sema::ActOnSuperScopeSpecifier(SourceLocation SuperLoc,
 
 /// \brief Determines whether the given declaration is an valid acceptable
 /// result for name lookup of a nested-name-specifier.
-/// \param SD Declaration checked for nested-name-specifier.
-/// \param IsExtension If not null and the declaration is accepted as an
-/// extension, the pointed variable is assigned true.
-bool Sema::isAcceptableNestedNameSpecifier(const NamedDecl *SD,
-                                           bool *IsExtension) {
+bool Sema::isAcceptableNestedNameSpecifier(const NamedDecl *SD) {
   if (!SD)
     return false;
 
-  SD = SD->getUnderlyingDecl();
-
   // Namespace and namespace aliases are fine.
-  if (isa<NamespaceDecl>(SD))
+  if (isa<NamespaceDecl>(SD) || isa<NamespaceAliasDecl>(SD))
     return true;
 
   if (!isa<TypeDecl>(SD))
@@ -329,23 +298,14 @@ bool Sema::isAcceptableNestedNameSpecifier(const NamedDecl *SD,
   QualType T = Context.getTypeDeclType(cast<TypeDecl>(SD));
   if (T->isDependentType())
     return true;
-  if (const TypedefNameDecl *TD = dyn_cast<TypedefNameDecl>(SD)) {
-    if (TD->getUnderlyingType()->isRecordType())
+  else if (const TypedefNameDecl *TD = dyn_cast<TypedefNameDecl>(SD)) {
+    if (TD->getUnderlyingType()->isRecordType() ||
+        (Context.getLangOpts().CPlusPlus11 &&
+         TD->getUnderlyingType()->isEnumeralType()))
       return true;
-    if (TD->getUnderlyingType()->isEnumeralType()) {
-      if (Context.getLangOpts().CPlusPlus11)
-        return true;
-      if (IsExtension)
-        *IsExtension = true;
-    }
-  } else if (isa<RecordDecl>(SD)) {
+  } else if (isa<RecordDecl>(SD) ||
+             (Context.getLangOpts().CPlusPlus11 && isa<EnumDecl>(SD)))
     return true;
-  } else if (isa<EnumDecl>(SD)) {
-    if (Context.getLangOpts().CPlusPlus11)
-      return true;
-    if (IsExtension)
-      *IsExtension = true;
-  }
 
   return false;
 }
@@ -380,11 +340,12 @@ NamedDecl *Sema::FindFirstQualifierInScope(Scope *S, NestedNameSpecifier *NNS) {
 }
 
 bool Sema::isNonTypeNestedNameSpecifier(Scope *S, CXXScopeSpec &SS,
-                                        NestedNameSpecInfo &IdInfo) {
-  QualType ObjectType = GetTypeFromParser(IdInfo.ObjectType);
-  LookupResult Found(*this, IdInfo.Identifier, IdInfo.IdentifierLoc,
-                     LookupNestedNameSpecifierName);
-
+                                        SourceLocation IdLoc,
+                                        IdentifierInfo &II,
+                                        ParsedType ObjectTypePtr) {
+  QualType ObjectType = GetTypeFromParser(ObjectTypePtr);
+  LookupResult Found(*this, &II, IdLoc, LookupNestedNameSpecifierName);
+  
   // Determine where to perform name lookup
   DeclContext *LookupCtx = nullptr;
   bool isDependent = false;
@@ -421,7 +382,10 @@ bool Sema::isNonTypeNestedNameSpecifier(Scope *S, CXXScopeSpec &SS,
   }
   Found.suppressDiagnostics();
   
-  return Found.getAsSingle<NamespaceDecl>();
+  if (NamedDecl *ND = Found.getAsSingle<NamedDecl>())
+    return isa<NamespaceDecl>(ND) || isa<NamespaceAliasDecl>(ND);
+  
+  return false;
 }
 
 namespace {
@@ -447,8 +411,11 @@ class NestedNameSpecifierValidatorCCC : public CorrectionCandidateCallback {
 /// by ActOnCXXNestedNameSpecifier.
 ///
 /// \param S Scope in which the nested-name-specifier occurs.
-/// \param IdInfo Parser information about an identifier in the
-///        nested-name-spec.
+/// \param Identifier Identifier in the sequence "identifier" "::".
+/// \param IdentifierLoc Location of the \p Identifier.
+/// \param CCLoc Location of "::" following Identifier.
+/// \param ObjectType Type of postfix expression if the nested-name-specifier
+///        occurs in construct like: <tt>ptr->nns::f</tt>.
 /// \param EnteringContext If true, enter the context specified by the
 ///        nested-name-specifier.
 /// \param SS Optional nested name specifier preceding the identifier.
@@ -474,15 +441,17 @@ class NestedNameSpecifierValidatorCCC : public CorrectionCandidateCallback {
 /// dependent context, for example. Nor will it extend \p SS with the scope
 /// specifier.
 bool Sema::BuildCXXNestedNameSpecifier(Scope *S,
-                                       NestedNameSpecInfo &IdInfo,
+                                       IdentifierInfo &Identifier,
+                                       SourceLocation IdentifierLoc,
+                                       SourceLocation CCLoc,
+                                       QualType ObjectType,
                                        bool EnteringContext,
                                        CXXScopeSpec &SS,
                                        NamedDecl *ScopeLookupResult,
                                        bool ErrorRecoveryLookup,
                                        bool *IsCorrectedToColon) {
-  LookupResult Found(*this, IdInfo.Identifier, IdInfo.IdentifierLoc,
+  LookupResult Found(*this, &Identifier, IdentifierLoc, 
                      LookupNestedNameSpecifierName);
-  QualType ObjectType = GetTypeFromParser(IdInfo.ObjectType);
 
   // Determine where to perform name lookup
   DeclContext *LookupCtx = nullptr;
@@ -550,9 +519,6 @@ bool Sema::BuildCXXNestedNameSpecifier(Scope *S,
     LookupName(Found, S);
   }
 
-  if (Found.isAmbiguous())
-    return true;
-
   // If we performed lookup into a dependent context and did not find anything,
   // that's fine: just build a dependent nested-name-specifier.
   if (Found.empty() && isDependent &&
@@ -567,9 +533,11 @@ bool Sema::BuildCXXNestedNameSpecifier(Scope *S,
     // base object type or prior nested-name-specifier, so this
     // nested-name-specifier refers to an unknown specialization. Just build
     // a dependent nested-name-specifier.
-    SS.Extend(Context, IdInfo.Identifier, IdInfo.IdentifierLoc, IdInfo.CCLoc);
+    SS.Extend(Context, &Identifier, IdentifierLoc, CCLoc);
     return false;
   }
+
+  // FIXME: Deal with ambiguities cleanly.
 
   if (Found.empty() && !ErrorRecoveryLookup) {
     // If identifier is not found as class-name-or-namespace-name, but is found
@@ -580,25 +548,22 @@ bool Sema::BuildCXXNestedNameSpecifier(Scope *S,
     else if (S && !isDependent)
       LookupName(R, S);
     if (!R.empty()) {
-      // Don't diagnose problems with this speculative lookup.
-      R.suppressDiagnostics();
       // The identifier is found in ordinary lookup. If correction to colon is
       // allowed, suggest replacement to ':'.
       if (IsCorrectedToColon) {
         *IsCorrectedToColon = true;
-        Diag(IdInfo.CCLoc, diag::err_nested_name_spec_is_not_class)
-            << IdInfo.Identifier << getLangOpts().CPlusPlus
-            << FixItHint::CreateReplacement(IdInfo.CCLoc, ":");
+        Diag(CCLoc, diag::err_nested_name_spec_is_not_class)
+            << &Identifier << getLangOpts().CPlusPlus
+            << FixItHint::CreateReplacement(CCLoc, ":");
         if (NamedDecl *ND = R.getAsSingle<NamedDecl>())
           Diag(ND->getLocation(), diag::note_declared_at);
         return true;
       }
       // Replacement '::' -> ':' is not allowed, just issue respective error.
       Diag(R.getNameLoc(), diag::err_expected_class_or_namespace)
-          << IdInfo.Identifier << getLangOpts().CPlusPlus;
+          << &Identifier << getLangOpts().CPlusPlus;
       if (NamedDecl *ND = R.getAsSingle<NamedDecl>())
-        Diag(ND->getLocation(), diag::note_entity_declared_at)
-            << IdInfo.Identifier;
+        Diag(ND->getLocation(), diag::note_entity_declared_at) << &Identifier;
       return true;
     }
   }
@@ -625,27 +590,16 @@ bool Sema::BuildCXXNestedNameSpecifier(Scope *S,
         diagnoseTypo(Corrected, PDiag(diag::err_undeclared_var_use_suggest)
                                   << Name);
 
-      if (Corrected.getCorrectionSpecifier())
-        SS.MakeTrivial(Context, Corrected.getCorrectionSpecifier(),
-                       SourceRange(Found.getNameLoc()));
-
-      if (NamedDecl *ND = Corrected.getFoundDecl())
+      if (NamedDecl *ND = Corrected.getCorrectionDecl())
         Found.addDecl(ND);
       Found.setLookupName(Corrected.getCorrection());
     } else {
-      Found.setLookupName(IdInfo.Identifier);
+      Found.setLookupName(&Identifier);
     }
   }
 
-  NamedDecl *SD =
-      Found.isSingleResult() ? Found.getRepresentativeDecl() : nullptr;
-  bool IsExtension = false;
-  bool AcceptSpec = isAcceptableNestedNameSpecifier(SD, &IsExtension);
-  if (!AcceptSpec && IsExtension) {
-    AcceptSpec = true;
-    Diag(IdInfo.IdentifierLoc, diag::ext_nested_name_spec_is_enum);
-  }
-  if (AcceptSpec) {
+  NamedDecl *SD = Found.getAsSingle<NamedDecl>();
+  if (isAcceptableNestedNameSpecifier(SD)) {
     if (!ObjectType.isNull() && !ObjectTypeSearchedInScope &&
         !getLangOpts().CPlusPlus11) {
       // C++03 [basic.lookup.classref]p4:
@@ -660,7 +614,7 @@ bool Sema::BuildCXXNestedNameSpecifier(Scope *S,
       // Note that C++11 does *not* perform this redundant lookup.
       NamedDecl *OuterDecl;
       if (S) {
-        LookupResult FoundOuter(*this, IdInfo.Identifier, IdInfo.IdentifierLoc,
+        LookupResult FoundOuter(*this, &Identifier, IdentifierLoc, 
                                 LookupNestedNameSpecifierName);
         LookupName(FoundOuter, S);
         OuterDecl = FoundOuter.getAsSingle<NamedDecl>();
@@ -676,9 +630,9 @@ bool Sema::BuildCXXNestedNameSpecifier(Scope *S,
         if (ErrorRecoveryLookup)
           return true;
 
-         Diag(IdInfo.IdentifierLoc,
+         Diag(IdentifierLoc, 
               diag::err_nested_name_member_ref_lookup_ambiguous)
-           << IdInfo.Identifier;
+           << &Identifier;
          Diag(SD->getLocation(), diag::note_ambig_member_ref_object_type)
            << ObjectType;
          Diag(OuterDecl->getLocation(), diag::note_ambig_member_ref_scope);
@@ -697,59 +651,59 @@ bool Sema::BuildCXXNestedNameSpecifier(Scope *S,
       return false;
 
     // The use of a nested name specifier may trigger deprecation warnings.
-    DiagnoseUseOfDecl(SD, IdInfo.CCLoc);
+    DiagnoseUseOfDecl(SD, CCLoc);
 
+    
     if (NamespaceDecl *Namespace = dyn_cast<NamespaceDecl>(SD)) {
-      SS.Extend(Context, Namespace, IdInfo.IdentifierLoc, IdInfo.CCLoc);
+      SS.Extend(Context, Namespace, IdentifierLoc, CCLoc);
       return false;
     }
 
     if (NamespaceAliasDecl *Alias = dyn_cast<NamespaceAliasDecl>(SD)) {
-      SS.Extend(Context, Alias, IdInfo.IdentifierLoc, IdInfo.CCLoc);
+      SS.Extend(Context, Alias, IdentifierLoc, CCLoc);
       return false;
     }
 
-    QualType T =
-        Context.getTypeDeclType(cast<TypeDecl>(SD->getUnderlyingDecl()));
+    QualType T = Context.getTypeDeclType(cast<TypeDecl>(SD));
     TypeLocBuilder TLB;
     if (isa<InjectedClassNameType>(T)) {
       InjectedClassNameTypeLoc InjectedTL
         = TLB.push<InjectedClassNameTypeLoc>(T);
-      InjectedTL.setNameLoc(IdInfo.IdentifierLoc);
+      InjectedTL.setNameLoc(IdentifierLoc);
     } else if (isa<RecordType>(T)) {
       RecordTypeLoc RecordTL = TLB.push<RecordTypeLoc>(T);
-      RecordTL.setNameLoc(IdInfo.IdentifierLoc);
+      RecordTL.setNameLoc(IdentifierLoc);
     } else if (isa<TypedefType>(T)) {
       TypedefTypeLoc TypedefTL = TLB.push<TypedefTypeLoc>(T);
-      TypedefTL.setNameLoc(IdInfo.IdentifierLoc);
+      TypedefTL.setNameLoc(IdentifierLoc);
     } else if (isa<EnumType>(T)) {
       EnumTypeLoc EnumTL = TLB.push<EnumTypeLoc>(T);
-      EnumTL.setNameLoc(IdInfo.IdentifierLoc);
+      EnumTL.setNameLoc(IdentifierLoc);
     } else if (isa<TemplateTypeParmType>(T)) {
       TemplateTypeParmTypeLoc TemplateTypeTL
         = TLB.push<TemplateTypeParmTypeLoc>(T);
-      TemplateTypeTL.setNameLoc(IdInfo.IdentifierLoc);
+      TemplateTypeTL.setNameLoc(IdentifierLoc);
     } else if (isa<UnresolvedUsingType>(T)) {
       UnresolvedUsingTypeLoc UnresolvedTL
         = TLB.push<UnresolvedUsingTypeLoc>(T);
-      UnresolvedTL.setNameLoc(IdInfo.IdentifierLoc);
+      UnresolvedTL.setNameLoc(IdentifierLoc);
     } else if (isa<SubstTemplateTypeParmType>(T)) {
       SubstTemplateTypeParmTypeLoc TL 
         = TLB.push<SubstTemplateTypeParmTypeLoc>(T);
-      TL.setNameLoc(IdInfo.IdentifierLoc);
+      TL.setNameLoc(IdentifierLoc);
     } else if (isa<SubstTemplateTypeParmPackType>(T)) {
       SubstTemplateTypeParmPackTypeLoc TL
         = TLB.push<SubstTemplateTypeParmPackTypeLoc>(T);
-      TL.setNameLoc(IdInfo.IdentifierLoc);
+      TL.setNameLoc(IdentifierLoc);
     } else {
       llvm_unreachable("Unhandled TypeDecl node in nested-name-specifier");
     }
 
     if (T->isEnumeralType())
-      Diag(IdInfo.IdentifierLoc, diag::warn_cxx98_compat_enum_nested_name_spec);
+      Diag(IdentifierLoc, diag::warn_cxx98_compat_enum_nested_name_spec);
 
     SS.Extend(Context, SourceLocation(), TLB.getTypeLocInContext(Context, T),
-              IdInfo.CCLoc);
+              CCLoc);
     return false;
   }
 
@@ -788,11 +742,9 @@ bool Sema::BuildCXXNestedNameSpecifier(Scope *S,
     if (DC->isDependentContext() && DC->isFunctionOrMethod()) {
       CXXRecordDecl *ContainingClass = dyn_cast<CXXRecordDecl>(DC->getParent());
       if (ContainingClass && ContainingClass->hasAnyDependentBases()) {
-        Diag(IdInfo.IdentifierLoc,
-             diag::ext_undeclared_unqual_id_with_dependent_base)
-            << IdInfo.Identifier << ContainingClass;
-        SS.Extend(Context, IdInfo.Identifier, IdInfo.IdentifierLoc,
-                  IdInfo.CCLoc);
+        Diag(IdentifierLoc, diag::ext_undeclared_unqual_id_with_dependent_base)
+            << &Identifier << ContainingClass;
+        SS.Extend(Context, &Identifier, IdentifierLoc, CCLoc);
         return false;
       }
     }
@@ -800,27 +752,28 @@ bool Sema::BuildCXXNestedNameSpecifier(Scope *S,
 
   if (!Found.empty()) {
     if (TypeDecl *TD = Found.getAsSingle<TypeDecl>())
-      Diag(IdInfo.IdentifierLoc, diag::err_expected_class_or_namespace)
-          << Context.getTypeDeclType(TD) << getLangOpts().CPlusPlus;
+      Diag(IdentifierLoc, diag::err_expected_class_or_namespace)
+          << QualType(TD->getTypeForDecl(), 0) << getLangOpts().CPlusPlus;
     else {
-      Diag(IdInfo.IdentifierLoc, diag::err_expected_class_or_namespace)
-          << IdInfo.Identifier << getLangOpts().CPlusPlus;
+      Diag(IdentifierLoc, diag::err_expected_class_or_namespace)
+          << &Identifier << getLangOpts().CPlusPlus;
       if (NamedDecl *ND = Found.getAsSingle<NamedDecl>())
-        Diag(ND->getLocation(), diag::note_entity_declared_at)
-            << IdInfo.Identifier;
+        Diag(ND->getLocation(), diag::note_entity_declared_at) << &Identifier;
     }
   } else if (SS.isSet())
-    Diag(IdInfo.IdentifierLoc, diag::err_no_member) << IdInfo.Identifier
-        << LookupCtx << SS.getRange();
+    Diag(IdentifierLoc, diag::err_no_member) << &Identifier << LookupCtx
+                                             << SS.getRange();
   else
-    Diag(IdInfo.IdentifierLoc, diag::err_undeclared_var_use)
-        << IdInfo.Identifier;
+    Diag(IdentifierLoc, diag::err_undeclared_var_use) << &Identifier;
 
   return true;
 }
 
 bool Sema::ActOnCXXNestedNameSpecifier(Scope *S,
-                                       NestedNameSpecInfo &IdInfo,
+                                       IdentifierInfo &Identifier,
+                                       SourceLocation IdentifierLoc,
+                                       SourceLocation CCLoc,
+                                       ParsedType ObjectType,
                                        bool EnteringContext,
                                        CXXScopeSpec &SS,
                                        bool ErrorRecoveryLookup,
@@ -828,8 +781,9 @@ bool Sema::ActOnCXXNestedNameSpecifier(Scope *S,
   if (SS.isInvalid())
     return true;
 
-  return BuildCXXNestedNameSpecifier(S, IdInfo,
-                                     EnteringContext, SS,
+  return BuildCXXNestedNameSpecifier(S, Identifier, IdentifierLoc, CCLoc,
+                                     GetTypeFromParser(ObjectType),
+                                     EnteringContext, SS, 
                                      /*ScopeLookupResult=*/nullptr, false,
                                      IsCorrectedToColon);
 }
@@ -864,12 +818,17 @@ bool Sema::ActOnCXXNestedNameSpecifierDecltype(CXXScopeSpec &SS,
 ///
 /// The arguments are the same as those passed to ActOnCXXNestedNameSpecifier.
 bool Sema::IsInvalidUnlessNestedName(Scope *S, CXXScopeSpec &SS,
-                                     NestedNameSpecInfo &IdInfo,
+                                     IdentifierInfo &Identifier, 
+                                     SourceLocation IdentifierLoc,
+                                     SourceLocation ColonLoc,
+                                     ParsedType ObjectType,
                                      bool EnteringContext) {
   if (SS.isInvalid())
     return false;
 
-  return !BuildCXXNestedNameSpecifier(S, IdInfo, EnteringContext, SS,
+  return !BuildCXXNestedNameSpecifier(S, Identifier, IdentifierLoc, ColonLoc,
+                                      GetTypeFromParser(ObjectType),
+                                      EnteringContext, SS, 
                                       /*ScopeLookupResult=*/nullptr, true);
 }
 
@@ -975,9 +934,9 @@ void *Sema::SaveNestedNameSpecifierAnnotation(CXXScopeSpec &SS) {
   if (SS.isEmpty() || SS.isInvalid())
     return nullptr;
 
-  void *Mem = Context.Allocate(
-      (sizeof(NestedNameSpecifierAnnotation) + SS.location_size()),
-      alignof(NestedNameSpecifierAnnotation));
+  void *Mem = Context.Allocate((sizeof(NestedNameSpecifierAnnotation) +
+                                                        SS.location_size()),
+                               llvm::alignOf<NestedNameSpecifierAnnotation>());
   NestedNameSpecifierAnnotation *Annotation
     = new (Mem) NestedNameSpecifierAnnotation;
   Annotation->NNS = SS.getScopeRep();
@@ -1000,11 +959,6 @@ void Sema::RestoreNestedNameSpecifierAnnotation(void *AnnotationPtr,
 
 bool Sema::ShouldEnterDeclaratorScope(Scope *S, const CXXScopeSpec &SS) {
   assert(SS.isSet() && "Parser passed invalid CXXScopeSpec.");
-
-  // Don't enter a declarator context when the current context is an Objective-C
-  // declaration.
-  if (isa<ObjCContainerDecl>(CurContext) || isa<ObjCMethodDecl>(CurContext))
-    return false;
 
   NestedNameSpecifier *Qualifier = SS.getScopeRep();
 

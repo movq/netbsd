@@ -1,4 +1,4 @@
-/*	$NetBSD: login_cap.c,v 1.33 2015/10/29 20:29:24 kamil Exp $	*/
+/*	$NetBSD: login_cap.c,v 1.31.6.1 2015/11/04 16:40:58 riz Exp $	*/
 
 /*-
  * Copyright (c) 1995,1997 Berkeley Software Design, Inc. All rights reserved.
@@ -36,7 +36,7 @@
 
 #include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-__RCSID("$NetBSD: login_cap.c,v 1.33 2015/10/29 20:29:24 kamil Exp $");
+__RCSID("$NetBSD: login_cap.c,v 1.31.6.1 2015/11/04 16:40:58 riz Exp $");
 #endif /* LIBC_SCCS and not lint */
  
 #include <sys/types.h>
@@ -934,7 +934,7 @@ multiply(u_quad_t n1, u_quad_t n2)
 
 	/*
 	 * First check the magnitude of each number.  If the sum of the
-	 * magnitude is to high, reject the number.  (If this test
+	 * magnatude is way to high, reject the number.  (If this test
 	 * is not done then the first multiply below may overflow.)
 	 */
 	for (b1 = bpw; (((u_quad_t)1 << (b1-1)) & n1) == 0; --b1)
@@ -963,7 +963,7 @@ multiply(u_quad_t n1, u_quad_t n2)
 	 * overflow.
 	 *
 	 * Finally, if MAX - ((h1 * l2) + (l1 * h2) + (l1 * l2)) < (h1*h2)
-	 * then adding in residual amount will cause an overflow.
+	 * then adding in residual amout will cause an overflow.
 	 */
 
 	m = (n1 >> 1) * (n2 >> 1);

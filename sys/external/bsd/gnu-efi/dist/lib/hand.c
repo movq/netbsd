@@ -1,4 +1,4 @@
-/*	$NetBSD: hand.c,v 1.3 2017/02/04 18:08:29 mlelstv Exp $	*/
+/*	$NetBSD: hand.c,v 1.1.1.1 2014/04/01 16:16:07 jakllsch Exp $	*/
 
 /*++
 
@@ -119,7 +119,7 @@ LibLocateHandleByDiskSignature (
     EFI_HANDLE            *BlockIoBuffer;
     EFI_DEVICE_PATH       *DevicePath;
     UINTN                 Index;
-    EFI_DEVICE_PATH       *Start __unused, *Next, *DevPath;
+    EFI_DEVICE_PATH       *Start, *Next, *DevPath;
     HARDDRIVE_DEVICE_PATH *HardDriveDevicePath;
     BOOLEAN               Match;
     BOOLEAN               PreviousNodeIsHardDriveDevicePath;
@@ -488,8 +488,6 @@ LibInstallProtocolInterfaces (
         Index += 1;
     }
 
-    va_end (args);
-
     //
     // If there was an error, remove all the interfaces that were
     // installed without any errors
@@ -505,7 +503,6 @@ LibInstallProtocolInterfaces (
 
             Index -= 1;
         }        
-	va_end (args);
 
         *Handle = OldHandle;
     }
@@ -554,7 +551,6 @@ LibUninstallProtocolInterfaces (
             DEBUG((D_ERROR, "LibUninstallProtocolInterfaces: failed %g, %r\n", Protocol, Handle));
         }
     }
-    va_end (args);
 }    
 
 
@@ -611,8 +607,6 @@ LibReinstallProtocolInterfaces (
         Index += 1;
     }
 
-    va_end (args);
-
     //
     // If there was an error, undo all the interfaces that were
     // reinstalled without any errors
@@ -630,7 +624,6 @@ LibReinstallProtocolInterfaces (
 
             Index -= 1;
         }        
-	va_end (args);
     }
 
     //

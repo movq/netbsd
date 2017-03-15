@@ -1,5 +1,5 @@
-/*	Id: local2.c,v 1.17 2016/01/30 17:26:19 ragge Exp 	*/	
-/*	$NetBSD: local2.c,v 1.1.1.2 2016/02/09 20:28:34 plunky Exp $	*/
+/*	Id: local2.c,v 1.6 2014/04/08 19:51:31 ragge Exp 	*/	
+/*	$NetBSD: local2.c,v 1.1.1.1 2014/07/24 19:21:25 plunky Exp $	*/
 /*
  * Copyright (c) 2014 Anders Magnusson (ragge@ludd.luth.se).
  * All rights reserved.
@@ -163,8 +163,8 @@ fldexpand(NODE *p, int cookie, char **cp)
 static void
 starg(NODE *p)
 {
-	int sz = attr_find(p->n_ap, ATTR_P2STRUCT)->iarg(0);
-	int subsz = (sz + 3) & ~3;
+	int sz = p->n_stsize;
+	int subsz = (p->n_stsize + 3) & ~3;
 	int fr, tr, cr;
 
 	fr = regno(getlr(p, 'L')); /* from reg (struct pointer) */
@@ -177,25 +177,26 @@ starg(NODE *p)
 
 	/* Gen an even copy start */
 	if (sz & 1)
-		expand(p, INBREG, "	move.b (AL)+,(A2)+\n");
+		expand(p, INBREG, "	move.b (A2)+,(AL)+\n");
 	if (sz & 2)
-		expand(p, INBREG, "	move.w (AL)+,(A2)+\n");
-	sz -= (sz & 3);
+		expand(p, INBREG, "	move.w (A2)+,(AL)+\n");
+	sz -= (sz & ~3);
 	
 	/* if more than 4 words, use loop, otherwise output instructions */
 	if (sz > 16) {
-		printf("	move.l #%d,%s\n", (sz/4)-1, rnames[cr]);
-		expand(p, INBREG, "1:	move.l (AL)+,(A2)+\n");
-		expand(p, INBREG, "	dbra A1,1b\n");
+		printf("	move.l #%d,%s\n", sz/4, rnames[cr]);
+		expand(p, INBREG, "1:	move.l (A2)+,(AL)+\n");
+		expand(p, INBREG, "	dec.l A1\n");
+		expand(p, INBREG, "	jne 1b\n");
 	} else {
 		if (sz > 12)
-			expand(p, INBREG, "	move.l (AL)+,(A2)+\n"), sz -= 4;
+			expand(p, INBREG, "	move.l (A2)+,(AL)+\n"), sz -= 4;
 		if (sz > 8)
-			expand(p, INBREG, "	move.l (AL)+,(A2)+\n"), sz -= 4;
+			expand(p, INBREG, "	move.l (A2)+,(AL)+\n"), sz -= 4;
 		if (sz > 4)
-			expand(p, INBREG, "	move.l (AL)+,(A2)+\n"), sz -= 4;
+			expand(p, INBREG, "	move.l (A2)+,(AL)+\n"), sz -= 4;
 		if (sz == 4)
-			expand(p, INBREG, "	move.l (AL)+,(A2)+\n");
+			expand(p, INBREG, "	move.l (A2)+,(AL)+\n");
 	}
 }
 
@@ -223,10 +224,6 @@ zzzcode(NODE *p, int c)
 			printf("	add.l #%d,%%sp\n", (int)p->n_qual);
 		break;
 
-	case 'C': /* jsr or bsr.l XXX - type of CPU? */
-		printf("%s", kflag ? "bsr.l" : "jsr");
-		break;
-
 	case 'F': /* Emit float branches */
 		switch (p->n_op) {
 		case GT: s = "fjnle"; break;
@@ -245,8 +242,7 @@ zzzcode(NODE *p, int c)
 		break;
 
 	case 'Q': /* struct assign */
-		printf("	move.l %d,-(%%sp)\n", 
-		    attr_find(p->n_ap, ATTR_P2STRUCT)->iarg(0));
+		printf("	move.l %d,-(%%sp)\n", p->n_stsize);
 		expand(p, INAREG, "	move.l AR,-(%sp)\n");
 		expand(p, INAREG, "	move.l AL,-(%sp)\n");
 		printf("	jsr memcpy\n");
@@ -336,7 +332,7 @@ adrcon(CONSZ val)
 void
 conput(FILE *fp, NODE *p)
 {
-	long val = getlval(p);
+	long val = p->n_lval;
 
 	if (p->n_type <= UCHAR)
 		val &= 255;
@@ -345,10 +341,13 @@ conput(FILE *fp, NODE *p)
 
 	switch (p->n_op) {
 	case ICON:
-		fprintf(fp, "%ld", val);
-		if (p->n_name[0])
-			printf("+%s", p->n_name);
-		break;
+		if (p->n_name[0] != '\0') {
+			fprintf(fp, "%s", p->n_name);
+			if (val)
+				fprintf(fp, "+%ld", val);
+		} else
+			fprintf(fp, "%ld", val);
+		return;
 
 	default:
 		comperr("illegal conput, p %p", p);
@@ -375,13 +374,13 @@ upput(NODE *p, int size)
 		break;
 	case NAME:
 	case OREG:
-		setlval(p, getlval(p) + 4);
+		p->n_lval += 4;
 		adrput(stdout, p);
-		setlval(p, getlval(p) - 4);
+		p->n_lval -= 4;
 		break;
 
 	case ICON:
-		printf("#%d", (int)getlval(p));
+		printf("#%d", (int)p->n_lval);
 		break;
 
 	default:
@@ -397,23 +396,22 @@ adrput(FILE *io, NODE *p)
 	/* output an address, with offsets, from p */
 	switch (p->n_op) {
 	case NAME:
-		if (getlval(p))
-			fprintf(io, CONFMT "%s", getlval(p),
-			    *p->n_name ? "+" : "");
-		if (p->n_name[0])
-			printf("%s", p->n_name);
-		else
+		if (p->n_name[0] != '\0') {
+			if (p->n_lval != 0)
+				fprintf(io, CONFMT "+", p->n_lval);
+			fprintf(io, "%s", p->n_name);
+		} else {
 			comperr("adrput");
+			fprintf(io, CONFMT, p->n_lval);
+		}
 		return;
 
 	case OREG:
 		r = p->n_rval;
-		
-		if (getlval(p))
-			fprintf(io, CONFMT "%s", getlval(p),
-			    *p->n_name ? "+" : "");
 		if (p->n_name[0])
-			printf("%s", p->n_name);
+			printf("%s%s", p->n_name, p->n_lval ? "+" : "");
+		if (p->n_lval)
+			fprintf(io, CONFMT, p->n_lval);
 		if (R2TEST(r)) {
 			int r1 = R2UPK1(r);
 			int r2 = R2UPK2(r);
@@ -428,7 +426,7 @@ adrput(FILE *io, NODE *p)
 	case ICON:
 		/* addressable value of the constant */
 		if (p->n_type == LONGLONG || p->n_type == ULONGLONG) {
-			fprintf(io, "#" CONFMT, getlval(p) >> 32);
+			fprintf(io, "#" CONFMT, p->n_lval >> 32);
 		} else {
 			fputc('#', io);
 			conput(io, p);
@@ -500,15 +498,13 @@ mkcall2(NODE *p, char *name)
 static void
 fixcalls(NODE *p, void *arg)
 {
-	struct attr *ap;
 	TWORD lt;
 
 	switch (p->n_op) {
 	case STCALL:
 	case USTCALL:
-		ap = attr_find(p->n_ap, ATTR_P2STRUCT);
-		if (ap->iarg(0)+p2autooff > stkpos)
-			stkpos = ap->iarg(0)+p2autooff;
+		if (p->n_stsize+p2autooff > stkpos)
+			stkpos = p->n_stsize+p2autooff;
 		break;
 
 	case DIV:
@@ -649,7 +645,7 @@ void
 rmove(int s, int d, TWORD t)
 {
 
-	if (s >= D0D1 && s <= D6D7) {
+	if (t == LONGLONG || t == ULONGLONG) {
 		printf("	move.l %s,%s\n",
 		    rnames[s-D0D1], rnames[d-D0D1]);
 		printf("	move.l %s,%s\n",
@@ -727,7 +723,7 @@ argsiz(NODE *p)
 	if (t == LDOUBLE)
 		return 12;
 	if (t == STRTY || t == UNIONTY)
-		return (attr_find(p->n_ap, ATTR_P2STRUCT)->iarg(0)+3) & ~3;
+		return (p->n_stsize+3) & ~3;
 	comperr("argsiz");
 	return 0;
 }
@@ -777,40 +773,13 @@ myxasm(struct interpass *ip, NODE *p)
 	int ww;
 	char *w;
 
-	ww = XASMVAL(cw);
-again:	switch (ww) {
+	switch (ww = XASMVAL(cw)) {
 	case 'd': /* Just convert to reg */
 	case 'a':
 		p->n_name = tmpstrdup(p->n_name);
 		w = strchr(p->n_name, XASMVAL(cw));
 		*w = 'r'; /* now reg */
 		break;
-	case 'o': /* offsetable reg */
-		if (p->n_left->n_op == UMUL || p->n_left->n_op == OREG ||
-		    p->n_left->n_op == NAME) {
-			return 1;
-		}
-		if (ww == XASMVAL(cw))
-			ww = XASMVAL1(cw);
-		else
-			ww = XASMVAL2(cw);
-		goto again;
 	}
 	return 0;
-}
-
-/*
- * Handle special characters following % in gcc extended assembler.
- */
-int
-targarg(char *w, void *arg)
-{
-	switch (w[1]) {
-	case '.': /* Remove dot if not needed */
-		printf(".");
-		break;
-	default:
-		return 0;
-	}
-	return 1;
 }

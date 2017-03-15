@@ -1,4 +1,4 @@
-/*	$NetBSD: autoconf.c,v 1.208 2016/08/19 19:02:07 palle Exp $ */
+/*	$NetBSD: autoconf.c,v 1.198.2.4 2015/09/04 14:43:45 martin Exp $ */
 
 /*
  * Copyright (c) 1996
@@ -48,7 +48,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.208 2016/08/19 19:02:07 palle Exp $");
+__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.198.2.4 2015/09/04 14:43:45 martin Exp $");
 
 #include "opt_ddb.h"
 #include "opt_kgdb.h"
@@ -93,7 +93,6 @@ __KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.208 2016/08/19 19:02:07 palle Exp $")
 #include <machine/bootinfo.h>
 #include <sparc64/sparc64/cache.h>
 #include <sparc64/sparc64/timerreg.h>
-#include <sparc64/dev/cbusvar.h>
 
 #include <dev/ata/atavar.h>
 #include <dev/pci/pcivar.h>
@@ -481,7 +480,6 @@ get_bootpath_from_prom(void)
 void
 cpu_configure(void)
 {
-	
 	bool userconf = (boothowto & RB_USERCONF) != 0;
 
 	/* fetch boot device settings */
@@ -764,7 +762,7 @@ romgetcursoraddr(int **rowp, int **colp)
 
 /*
  * Match a device_t against the bootpath, by
- * comparing its firmware package handle. If they match
+ * comparing it's firmware package handle. If they match
  * exactly, we found the boot device.
  */
 static void
@@ -780,7 +778,7 @@ dev_path_exact_match(device_t dev, int ofnode)
 
 /*
  * Match a device_t against the bootpath, by
- * comparing its firmware package handle and calculating
+ * comparing it's firmware package handle and calculating
  * the target/lun suffix and comparing that against
  * the bootpath remainder.
  */
@@ -981,11 +979,6 @@ device_register(device_t dev, void *aux)
 		dev_path_drive_match(dev, ofnode, adev->adev_channel*2+
 		    adev->adev_drv_data->drive, 0, 0);
 		return;
-	} else if (device_is_a(dev, "vdsk")) {
-		struct cbus_attach_args *ca = aux;
-		ofnode = ca->ca_node;
-		/* Ensure that the devices ofnode is stored for later use */
-		device_setofnode(dev, ofnode);
 	}
 
 	if (busdev == NULL)
@@ -1120,7 +1113,7 @@ noether:
 				}
 
 				of_enter_i2c_devs(props, busnode,
-				    sizeof(cell_t), 1);
+				    sizeof(cell_t));
 			}
 		}
 
@@ -1147,58 +1140,6 @@ noether:
 			prop_dictionary_set(props, "i2c-child-devices", cfg);
 			prop_object_release(cfg);
 			
-		}
-
-		/*
-		 * Add V210/V240 environmental sensors that are not in
-		 * the OFW tree.
-		 */
-		if (device_is_a(busdev, "pcfiic") &&
-		    (!strcmp(machine_model, "SUNW,Sun-Fire-V240") ||
-		    !strcmp(machine_model, "SUNW,Sun-Fire-V210"))) {
-			prop_dictionary_t props = device_properties(busdev);
-			prop_array_t cfg = NULL;
-			prop_dictionary_t sens;
-			prop_data_t data;
-			const char name_lm[] = "i2c-lm75";
-			const char name_adm[] = "i2c-adm1026";
-
-			DPRINTF(ACDB_PROBE, ("\nAdding sensors for %s ",
-			    machine_model));
-			cfg = prop_dictionary_get(props, "i2c-child-devices");
- 			if (!cfg) {
-				cfg = prop_array_create();
-				prop_dictionary_set(props, "i2c-child-devices",
-				    cfg);
-				prop_dictionary_set_bool(props,
-				    "i2c-indirect-config", false);
-			}
-
-			/* ADM1026 at 0x2e */
-			sens = prop_dictionary_create();
-			prop_dictionary_set_uint32(sens, "addr", 0x2e);
-			prop_dictionary_set_uint64(sens, "cookie", 0);
-			prop_dictionary_set_cstring(sens, "name",
-			    "hardware-monitor");
-			data = prop_data_create_data(&name_adm[0],
-			    sizeof(name_adm));
-			prop_dictionary_set(sens, "compatible", data);
-			prop_object_release(data);
-			prop_array_add(cfg, sens);
-			prop_object_release(sens);
-
-			/* LM75 at 0x4e */
-			sens = prop_dictionary_create();
-			prop_dictionary_set_uint32(sens, "addr", 0x4e);
-			prop_dictionary_set_uint64(sens, "cookie", 0);
-			prop_dictionary_set_cstring(sens, "name",
-			    "temperature-sensor");
-			data = prop_data_create_data(&name_lm[0],
-			    sizeof(name_lm));
-			prop_dictionary_set(sens, "compatible", data);
-			prop_object_release(data);
-			prop_array_add(cfg, sens);
-			prop_object_release(sens);
 		}
 	}
 
@@ -1263,27 +1204,6 @@ noether:
 				instance = OF_open(name);
 #endif
 	}
-
-	/* Hardware specific device properties */
-	if ((!strcmp(machine_model, "SUNW,Sun-Fire-V240") ||
-	    !strcmp(machine_model, "SUNW,Sun-Fire-V210"))) {
-		device_t busparent = device_parent(busdev);
-		prop_dictionary_t props = device_properties(dev);
-
-		if (busparent != NULL && device_is_a(busparent, "pcfiic") &&
-		    device_is_a(dev, "adm1026hm") && props != NULL) {
-			prop_dictionary_set_uint8(props, "fan_div2", 0x55);
-			prop_dictionary_set_bool(props, "multi_read", true);
-		}
-	}
-	if (!strcmp(machine_model, "SUNW,Sun-Fire-V440")) {
-		device_t busparent = device_parent(busdev);
-		prop_dictionary_t props = device_properties(dev);
-		if (busparent != NULL && device_is_a(busparent, "pcfiic") &&
-		    device_is_a(dev, "adm1026hm") && props != NULL) {
-			prop_dictionary_set_bool(props, "multi_read", true);
-		}
-	}
 }
 
 /*
@@ -1300,7 +1220,7 @@ device_register_post_config(device_t dev, void *aux)
 
 		/*
 		 * If this is a FC-AL drive it will have
-		 * aquired its WWN device property by now,
+		 * aquired it's WWN device property by now,
 		 * so we can properly match it.
 		 */
 		if (prop_dictionary_get_uint64(device_properties(dev),
@@ -1323,49 +1243,6 @@ device_register_post_config(device_t dev, void *aux)
 			}
 		}
 	}
-
-	if (CPU_ISSUN4V) {
-
-	  /*
-	   * Special sun4v handling in case the kernel is running in a 
-	   * secondary logical domain
-	   *
-	   * The bootpath looks something like this:
-	   *   /virtual-devices@100/channel-devices@200/disk@1:a
-	   *
-	   * The device hierarchy constructed during autoconfiguration is:
-	   *   mainbus/vbus/vdsk/scsibus/sd
-	   *
-	   * The logic to figure out the boot device is to look at the
-	   * grandparent to the 'sd' device and if this is a 'vdsk' device
-	   * and the ofnode matches the bootpaths ofnode then we have located
-	   * the boot device.
-	   */
-
-	  int ofnode;
-
-	  /* Cache the vdsk ofnode for later use later/below with sd device */  
-	  if (device_is_a(dev, "vdsk")) {
-	    ofnode = device_ofnode(dev);
-	    device_setofnode(dev, ofnode);
-	  }
-
-	  /* Examine if this is a sd device */  
-	  if (device_is_a(dev, "sd")) {
-	    device_t parent = device_parent(dev);
-	    device_t parent_parent = device_parent(parent);
-	    if (device_is_a(parent_parent, "vdsk")) {
-	      ofnode = device_ofnode(parent_parent);
-	      if (ofnode == ofbootpackage) {
-		booted_device = dev;
-		DPRINTF(ACDB_BOOTDEV, ("booted_device: %s\n", 
-				       device_xname(dev)));
-		return;
-	      }
-	    }
-	  }
-	}
-
 }
 
 static void

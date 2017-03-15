@@ -1,4 +1,4 @@
-#	$NetBSD: checktab.awk,v 1.8 2014/08/15 11:04:07 christos Exp $
+#	$NetBSD: checktab.awk,v 1.7.2.1 2015/01/25 09:11:03 martin Exp $
 
 # Check tz tables for consistency.
 

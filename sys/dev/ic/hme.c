@@ -1,4 +1,4 @@
-/*	$NetBSD: hme.c,v 1.95 2016/12/15 09:28:05 ozaki-r Exp $	*/
+/*	$NetBSD: hme.c,v 1.90 2014/08/10 16:44:35 tls Exp $	*/
 
 /*-
  * Copyright (c) 1999 The NetBSD Foundation, Inc.
@@ -34,7 +34,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: hme.c,v 1.95 2016/12/15 09:28:05 ozaki-r Exp $");
+__KERNEL_RCSID(0, "$NetBSD: hme.c,v 1.90 2014/08/10 16:44:35 tls Exp $");
 
 /* #define HMEDEBUG */
 
@@ -50,7 +50,7 @@ __KERNEL_RCSID(0, "$NetBSD: hme.c,v 1.95 2016/12/15 09:28:05 ozaki-r Exp $");
 #include <sys/malloc.h>
 #include <sys/ioctl.h>
 #include <sys/errno.h>
-#include <sys/rndsource.h>
+#include <sys/rnd.h>
 
 #include <net/if.h>
 #include <net/if_dl.h>
@@ -665,13 +665,13 @@ hme_put(struct hme_softc *sc, int ri, struct mbuf *m)
 	for (; m; m = n) {
 		len = m->m_len;
 		if (len == 0) {
-			n = m_free(m);
+			MFREE(m, n);
 			continue;
 		}
 		memcpy(bp, mtod(m, void *), len);
 		bp += len;
 		tlen += len;
-		n = m_free(m);
+		MFREE(m, n);
 	}
 	return (tlen);
 }
@@ -697,7 +697,7 @@ hme_get(struct hme_softc *sc, int ri, uint32_t flags)
 	MGETHDR(m0, M_DONTWAIT, MT_DATA);
 	if (m0 == 0)
 		return (0);
-	m_set_rcvif(m0, ifp);
+	m0->m_pkthdr.rcvif = ifp;
 	m0->m_pkthdr.len = totlen;
 	len = MHLEN;
 	m = m0;
@@ -876,8 +876,16 @@ hme_read(struct hme_softc *sc, int ix, uint32_t flags)
 		return;
 	}
 
+	ifp->if_ipackets++;
+
+	/*
+	 * Check if there's a BPF listener on this interface.
+	 * If so, hand off the raw packet to BPF.
+	 */
+	bpf_mtap(ifp, m);
+
 	/* Pass the packet up. */
-	if_percpuq_enqueue(ifp->if_percpuq, m);
+	(*ifp->if_input)(ifp, m);
 }
 
 void

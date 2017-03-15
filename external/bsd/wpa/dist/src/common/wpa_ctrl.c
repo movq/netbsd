@@ -21,7 +21,6 @@
 
 #ifdef ANDROID
 #include <dirent.h>
-#include <sys/stat.h>
 #include <cutils/sockets.h>
 #include "private/android_filesystem_config.h"
 #endif /* ANDROID */
@@ -85,13 +84,6 @@ struct wpa_ctrl {
 
 struct wpa_ctrl * wpa_ctrl_open(const char *ctrl_path)
 {
-	return wpa_ctrl_open2(ctrl_path, NULL);
-}
-
-
-struct wpa_ctrl * wpa_ctrl_open2(const char *ctrl_path,
-				 const char *cli_path)
-{
 	struct wpa_ctrl *ctrl;
 	static int counter = 0;
 	int ret;
@@ -115,18 +107,10 @@ struct wpa_ctrl * wpa_ctrl_open2(const char *ctrl_path,
 	ctrl->local.sun_family = AF_UNIX;
 	counter++;
 try_again:
-	if (cli_path && cli_path[0] == '/') {
-		ret = os_snprintf(ctrl->local.sun_path,
-				  sizeof(ctrl->local.sun_path),
-				  "%s/" CONFIG_CTRL_IFACE_CLIENT_PREFIX "%d-%d",
-				  cli_path, (int) getpid(), counter);
-	} else {
-		ret = os_snprintf(ctrl->local.sun_path,
-				  sizeof(ctrl->local.sun_path),
-				  CONFIG_CTRL_IFACE_CLIENT_DIR "/"
-				  CONFIG_CTRL_IFACE_CLIENT_PREFIX "%d-%d",
-				  (int) getpid(), counter);
-	}
+	ret = os_snprintf(ctrl->local.sun_path, sizeof(ctrl->local.sun_path),
+			  CONFIG_CTRL_IFACE_CLIENT_DIR "/"
+			  CONFIG_CTRL_IFACE_CLIENT_PREFIX "%d-%d",
+			  (int) getpid(), counter);
 	if (os_snprintf_error(sizeof(ctrl->local.sun_path), ret)) {
 		close(ctrl->s);
 		os_free(ctrl);
@@ -152,8 +136,6 @@ try_again:
 
 #ifdef ANDROID
 	chmod(ctrl->local.sun_path, S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP);
-	/* Set group even if we do not have privileges to change owner */
-	chown(ctrl->local.sun_path, -1, AID_WIFI);
 	chown(ctrl->local.sun_path, AID_SYSTEM, AID_WIFI);
 
 	if (os_strncmp(ctrl_path, "@android:", 9) == 0) {
@@ -532,8 +514,6 @@ retry_send:
 		FD_ZERO(&rfds);
 		FD_SET(ctrl->s, &rfds);
 		res = select(ctrl->s + 1, &rfds, NULL, NULL, &tv);
-		if (res < 0 && errno == EINTR)
-			continue;
 		if (res < 0)
 			return res;
 		if (FD_ISSET(ctrl->s, &rfds)) {

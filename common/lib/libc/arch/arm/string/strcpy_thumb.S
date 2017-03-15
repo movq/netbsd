@@ -28,21 +28,13 @@
  */
 #include <machine/asm.h>
 
-RCSID("$NetBSD: strcpy_thumb.S,v 1.3 2017/01/14 03:00:13 christos Exp $")
+RCSID("$NetBSD: strcpy_thumb.S,v 1.1 2013/08/20 21:32:50 matt Exp $")
 
 #ifdef _LIBC
 #ifdef STRLCPY
-WEAK_ALIAS(strlcpy, _strlcpy)
-#define strlcpy _strlcpy
+WEAK_ALIAS(strlcpy, _strlcpy)           
 #endif
-#ifdef STRNCPY
-WEAK_ALIAS(strncpy, _strncpy)
-#define strncpy _strncpy
-#endif
-#ifdef STRCPY
-WEAK_ALIAS(strcpy, _strcpy)
-#define strcpy _strcpy
-#endif
+#include "namespace.h"
 #endif
 
 /*

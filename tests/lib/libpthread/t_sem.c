@@ -1,4 +1,4 @@
-/* $NetBSD: t_sem.c,v 1.9 2017/01/16 16:22:22 christos Exp $ */
+/* $NetBSD: t_sem.c,v 1.7 2012/03/09 19:46:37 joerg Exp $ */
 
 /*
  * Copyright (c) 2008, 2010 The NetBSD Foundation, Inc.
@@ -86,9 +86,8 @@
 #include <sys/cdefs.h>
 __COPYRIGHT("@(#) Copyright (c) 2008, 2010\
  The NetBSD Foundation, inc. All rights reserved.");
-__RCSID("$NetBSD: t_sem.c,v 1.9 2017/01/16 16:22:22 christos Exp $");
+__RCSID("$NetBSD: t_sem.c,v 1.7 2012/03/09 19:46:37 joerg Exp $");
 
-#include <sys/time.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <pthread.h>
@@ -100,6 +99,7 @@ __RCSID("$NetBSD: t_sem.c,v 1.9 2017/01/16 16:22:22 christos Exp $");
 #include <unistd.h>
 
 #include <atf-c.h>
+#include <atf-c/config.h>
 
 #include "h_common.h"
 

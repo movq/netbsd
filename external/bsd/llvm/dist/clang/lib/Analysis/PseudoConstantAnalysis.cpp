@@ -22,7 +22,9 @@
 
 using namespace clang;
 
-typedef llvm::SmallPtrSet<const VarDecl*, 32> VarDeclSet;
+// The number of ValueDecls we want to keep track of by default (per-function)
+#define VARDECL_SET_SIZE 256
+typedef llvm::SmallPtrSet<const VarDecl*, VARDECL_SET_SIZE> VarDeclSet;
 
 PseudoConstantAnalysis::PseudoConstantAnalysis(const Stmt *DeclBody) :
       DeclBody(DeclBody), Analyzed(false) {
@@ -218,8 +220,8 @@ void PseudoConstantAnalysis::RunAnalysis() {
     } // switch (head->getStmtClass())
 
     // Add all substatements to the worklist
-    for (const Stmt *SubStmt : Head->children())
-      if (SubStmt)
-        WorkList.push_back(SubStmt);
+    for (Stmt::const_child_range I = Head->children(); I; ++I)
+      if (*I)
+        WorkList.push_back(*I);
   } // while (!WorkList.empty())
 }

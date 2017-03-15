@@ -1,4 +1,4 @@
-/*	$NetBSD: if_sk.c,v 1.85 2016/12/15 09:28:05 ozaki-r Exp $	*/
+/*	$NetBSD: if_sk.c,v 1.78 2014/08/10 16:44:36 tls Exp $	*/
 
 /*-
  * Copyright (c) 2003 The NetBSD Foundation, Inc.
@@ -115,7 +115,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_sk.c,v 1.85 2016/12/15 09:28:05 ozaki-r Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_sk.c,v 1.78 2014/08/10 16:44:36 tls Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -138,7 +138,7 @@ __KERNEL_RCSID(0, "$NetBSD: if_sk.c,v 1.85 2016/12/15 09:28:05 ozaki-r Exp $");
 #include <net/if_media.h>
 
 #include <net/bpf.h>
-#include <sys/rndsource.h>
+#include <sys/rnd.h>
 
 #include <dev/mii/mii.h>
 #include <dev/mii/miivar.h>
@@ -985,38 +985,11 @@ sk_ifmedia_upd(struct ifnet *ifp)
 	return rc;
 }
 
-static void
-sk_promisc(struct sk_if_softc *sc_if, int on)
-{
-	struct sk_softc *sc = sc_if->sk_softc;
-	switch (sc->sk_type) {
-	case SK_GENESIS:
-		if (on)
-			SK_XM_SETBIT_4(sc_if, XM_MODE, XM_MODE_RX_PROMISC);
-		else
-			SK_XM_CLRBIT_4(sc_if, XM_MODE, XM_MODE_RX_PROMISC);
-		break;
-	case SK_YUKON:
-	case SK_YUKON_LITE:
-	case SK_YUKON_LP:
-		if (on)
-			SK_YU_CLRBIT_2(sc_if, YUKON_RCR,
-			    YU_RCR_UFLEN | YU_RCR_MUFLEN);
-		else
-			SK_YU_SETBIT_2(sc_if, YUKON_RCR,
-			    YU_RCR_UFLEN | YU_RCR_MUFLEN);
-		break;
-	default:
-		aprint_error_dev(sc_if->sk_dev, "Can't set promisc for %d\n",
-			sc->sk_type);
-		break;
-	}
-}
-
 int
 sk_ioctl(struct ifnet *ifp, u_long command, void *data)
 {
 	struct sk_if_softc *sc_if = ifp->if_softc;
+	struct sk_softc *sc = sc_if->sk_softc;
 	int s, error = 0;
 
 	/* DPRINTFN(2, ("sk_ioctl\n")); */
@@ -1029,20 +1002,45 @@ sk_ioctl(struct ifnet *ifp, u_long command, void *data)
 	        DPRINTFN(2, ("sk_ioctl IFFLAGS\n"));
 		if ((error = ifioctl_common(ifp, command, data)) != 0)
 			break;
-		switch (ifp->if_flags & (IFF_UP | IFF_RUNNING)) {
-		case IFF_RUNNING:
-			sk_stop(ifp, 1);
-			break;
-		case IFF_UP:
-			sk_init(ifp);
-			break;
-		case IFF_UP | IFF_RUNNING:
-			if ((ifp->if_flags ^ sc_if->sk_if_flags) == IFF_PROMISC)			{
-				sk_promisc(sc_if, ifp->if_flags & IFF_PROMISC);
+		if (ifp->if_flags & IFF_UP) {
+			if (ifp->if_flags & IFF_RUNNING &&
+			    ifp->if_flags & IFF_PROMISC &&
+			    !(sc_if->sk_if_flags & IFF_PROMISC)) {
+				switch (sc->sk_type) {
+				case SK_GENESIS:
+					SK_XM_SETBIT_4(sc_if, XM_MODE,
+					    XM_MODE_RX_PROMISC);
+					break;
+				case SK_YUKON:
+				case SK_YUKON_LITE:
+				case SK_YUKON_LP:
+					SK_YU_CLRBIT_2(sc_if, YUKON_RCR,
+					    YU_RCR_UFLEN | YU_RCR_MUFLEN);
+					break;
+				}
+				sk_setmulti(sc_if);
+			} else if (ifp->if_flags & IFF_RUNNING &&
+			    !(ifp->if_flags & IFF_PROMISC) &&
+			    sc_if->sk_if_flags & IFF_PROMISC) {
+				switch (sc->sk_type) {
+				case SK_GENESIS:
+					SK_XM_CLRBIT_4(sc_if, XM_MODE,
+					    XM_MODE_RX_PROMISC);
+					break;
+				case SK_YUKON:
+				case SK_YUKON_LITE:
+				case SK_YUKON_LP:
+					SK_YU_SETBIT_2(sc_if, YUKON_RCR,
+					    YU_RCR_UFLEN | YU_RCR_MUFLEN);
+					break;
+				}
+
 				sk_setmulti(sc_if);
 			} else
-				sk_init(ifp);
-			break;
+				(void) sk_init(ifp);
+		} else {
+			if (ifp->if_flags & IFF_RUNNING)
+				sk_stop(ifp,0);
 		}
 		sc_if->sk_if_flags = ifp->if_flags;
 		error = 0;
@@ -1460,7 +1458,6 @@ sk_attach(device_t parent, device_t self, void *aux)
 	 * Call MI attach routines.
 	 */
 	if_attach(ifp);
-	if_deferred_start_init(ifp, NULL);
 
 	ether_ifattach(ifp, sc_if->sk_enaddr);
 
@@ -2112,12 +2109,15 @@ sk_rxeof(struct sk_if_softc *sc_if)
 			m_adj(m0, ETHER_ALIGN);
 			m = m0;
 		} else {
-			m_set_rcvif(m, ifp);
+			m->m_pkthdr.rcvif = ifp;
 			m->m_pkthdr.len = m->m_len = total_len;
 		}
 
+		ifp->if_ipackets++;
+
+		bpf_mtap(ifp, m);
 		/* pass it on. */
-		if_percpuq_enqueue(ifp->if_percpuq, m);
+		(*ifp->if_input)(ifp, m);
 	}
 }
 
@@ -2220,10 +2220,7 @@ sk_tick(void *xsc_if)
 	SK_XM_CLRBIT_2(sc_if, XM_IMR, XM_IMR_GP0_SET);
 	SK_XM_READ_2(sc_if, XM_ISR);
 	mii_tick(mii);
-	if (ifp->if_link_state != LINK_STATE_UP)
-		callout_reset(&sc_if->sk_tick_ch, hz, sk_tick, sc_if);
-	else
-		callout_stop(&sc_if->sk_tick_ch);
+	callout_stop(&sc_if->sk_tick_ch);
 }
 
 void
@@ -2397,10 +2394,10 @@ sk_intr(void *xsc)
 
 	CSR_WRITE_4(sc, SK_IMR, sc->sk_intrmask);
 
-	if (ifp0 != NULL)
-		if_schedule_deferred_start(ifp0);
-	if (ifp1 != NULL)
-		if_schedule_deferred_start(ifp1);
+	if (ifp0 != NULL && !IFQ_IS_EMPTY(&ifp0->if_snd))
+		sk_start(ifp0);
+	if (ifp1 != NULL && !IFQ_IS_EMPTY(&ifp1->if_snd))
+		sk_start(ifp1);
 
 	rnd_add_uint32(&sc->rnd_source, status);
 
@@ -2875,7 +2872,6 @@ sk_init(struct ifnet *ifp)
 
 	ifp->if_flags |= IFF_RUNNING;
 	ifp->if_flags &= ~IFF_OACTIVE;
-	callout_reset(&sc_if->sk_tick_ch, hz, sk_tick, sc_if);
 
 out:
 	splx(s);

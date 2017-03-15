@@ -27,7 +27,7 @@
  *	i4b_ipr.c - isdn4bsd IP over raw HDLC ISDN network driver
  *	---------------------------------------------------------
  *
- *	$Id: i4b_ipr.c,v 1.41 2017/01/24 09:05:28 ozaki-r Exp $
+ *	$Id: i4b_ipr.c,v 1.36 2014/06/05 23:48:17 rmind Exp $
  *
  * $FreeBSD$
  *
@@ -59,7 +59,7 @@
  *---------------------------------------------------------------------------*/
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: i4b_ipr.c,v 1.41 2017/01/24 09:05:28 ozaki-r Exp $");
+__KERNEL_RCSID(0, "$NetBSD: i4b_ipr.c,v 1.36 2014/06/05 23:48:17 rmind Exp $");
 
 #include "irip.h"
 #include "opt_irip.h"
@@ -257,8 +257,7 @@ static int iprwatchdog(int unit);
 static void iprwatchdog(struct ifnet *ifp);
 #endif
 static void ipr_tx_queue_empty(void *);
-static int iripoutput(struct ifnet *ifp, struct mbuf *m, const struct sockaddr *dst,
-    const struct rtentry *rtp);
+static int iripoutput(struct ifnet *ifp, struct mbuf *m, const struct sockaddr *dst, struct rtentry *rtp);
 static void iripclearqueues(struct ipr_softc *sc);
 static void ipr_set_linktab(void *softc, isdn_link_t *ilt);
 static void ipr_activity(void *softc, int rxtx);
@@ -406,7 +405,6 @@ iripattach(void)
 		bpfattach(&sc->sc_if, DLT_NULL, sizeof(u_int));
 #else
 		bpf_attach(&sc->sc_if, DLT_NULL, sizeof(u_int));
-		bpf_mtap_softint_init(&sc->sc_if);
 #endif
 #endif
 	}
@@ -417,12 +415,13 @@ iripattach(void)
  *---------------------------------------------------------------------------*/
 static int
 iripoutput(struct ifnet *ifp, struct mbuf *m, const struct sockaddr *dst,
-	 const struct rtentry *rtp)
+	 struct rtentry *rtp)
 {
 	struct ipr_softc *sc;
 	int s, rv;
 	struct ifqueue *ifq = NULL;
 	struct ip *ip;
+	ALTQ_DECL(struct altq_pktattr pktattr;)
 
 	s = splnet();
 
@@ -516,7 +515,7 @@ iripoutput(struct ifnet *ifp, struct mbuf *m, const struct sockaddr *dst,
 	 * else (i.e. ftp traffic) put it into the "normal" queue
 	 */
 
-	IFQ_CLASSIFY(&ifp->if_snd, m, dst->sa_family);
+	IFQ_CLASSIFY(&ifp->if_snd, m, dst->sa_family, &pktattr);
 
 	ip = mtod(m, struct ip *);		/* get ptr to ip header */
 
@@ -541,7 +540,7 @@ iripoutput(struct ifnet *ifp, struct mbuf *m, const struct sockaddr *dst,
 		}
 		IF_ENQUEUE(ifq, m);
 	} else {
-		IFQ_ENQUEUE(&sc->sc_if.if_snd, m, rv);
+		IFQ_ENQUEUE(&sc->sc_if.if_snd, m, &pktattr, rv);
 		if (rv != 0) {
 			sc->sc_if.if_oerrors++;
 			splx(s);
@@ -925,7 +924,7 @@ ipr_rx_data_rdy(void *softc)
 	if((m = *sc->sc_ilt->rx_mbuf) == NULL)
 		return;
 
-	m_set_rcvif(m, &sc->sc_if);
+	m->m_pkthdr.rcvif = &sc->sc_if;
 
 	m->m_pkthdr.len = m->m_len;
 
@@ -1071,7 +1070,7 @@ error:
 		mm.m_len = 4;
 		mm.m_data = (char *)&af;
 
-		bpf_mtap_softint(&sc->sc_if, &mm);
+		bpf_mtap(&sc->sc_if, &mm);
 	}
 #endif /* NBPFILTER > 0  || NBPF > 0 */
 

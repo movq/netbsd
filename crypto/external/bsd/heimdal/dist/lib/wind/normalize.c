@@ -1,4 +1,4 @@
-/*	$NetBSD: normalize.c,v 1.2 2017/01/28 21:31:50 christos Exp $	*/
+/*	$NetBSD: normalize.c,v 1.1.1.2 2014/04/24 12:45:56 pettai Exp $	*/
 
 /*
  * Copyright (c) 2004 Kungliga Tekniska Högskolan
@@ -129,7 +129,7 @@ compat_decomp(const uint32_t *in, size_t in_len,
     unsigned o = 0;
 
     for (i = 0; i < in_len; ++i) {
-	struct translation ts = {in[i], 0, 0};
+	struct translation ts = {in[i]};
 	size_t sub_len = *out_len - o;
 	int ret;
 

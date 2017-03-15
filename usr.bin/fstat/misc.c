@@ -1,4 +1,4 @@
-/*	$NetBSD: misc.c,v 1.17 2016/12/30 21:08:23 christos Exp $	*/
+/*	$NetBSD: misc.c,v 1.14 2014/08/10 16:44:37 tls Exp $	*/
 
 /*-
  * Copyright (c) 2008 The NetBSD Foundation, Inc.
@@ -30,8 +30,9 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: misc.c,v 1.17 2016/12/30 21:08:23 christos Exp $");
+__RCSID("$NetBSD: misc.c,v 1.14 2014/08/10 16:44:37 tls Exp $");
 
+#define _KMEMUSER
 #include <stdbool.h>
 #include <sys/param.h>
 #include <sys/types.h>
@@ -86,21 +87,19 @@ static struct nlist nl[] = {
     { .n_name = "pipeops" },
 #define NL_PUTTER	9
     { .n_name = "putter_fileops", },
-#define NL_RND		10
-    { .n_name = "rnd_fileops", },
-#define NL_SEM		11
+#define NL_SEM		10
     { .n_name = "semops", },
-#define NL_SOCKET	12
+#define NL_SOCKET	11
     { .n_name = "socketops" },
-#define NL_SVR4_NET	13
+#define NL_SVR4_NET	12
     { .n_name = "svr4_netops" },
-#define NL_SVR4_32_NET	14
+#define NL_SVR4_32_NET	13
     { .n_name = "svr4_32_netops" },
-#define NL_TAP		15
+#define NL_TAP		14
     { .n_name = "tap_fileops", },
-#define NL_VNOPS	16
+#define NL_VNOPS	15
     { .n_name = "vnops" },
-#define NL_XENEVT	17
+#define NL_XENEVT	16
     { .n_name = "xenevt_fileops" },
 #define NL_MAX		18
     { .n_name = NULL }
@@ -113,25 +112,12 @@ static int
 p_bpf(struct file *f)
 {
 	struct bpf_d bpf;
-	struct bpf_if bi;
-	struct ifnet ifn;
-
-	strlcpy(ifn.if_xname, "???", sizeof(ifn.if_xname));
 
 	if (!KVM_READ(f->f_data, &bpf, sizeof(bpf))) {
 		dprintf("can't read bpf at %p for pid %d", f->f_data, Pid);
 		return 0;
 	}
-	if (bpf.bd_bif != NULL) {
-		if (!KVM_READ(bpf.bd_bif, &bi, sizeof(bi)))
-			dprintf("can't read bpf interface at %p for pid %d",
-			    bpf.bd_bif, Pid);
-		if (bi.bif_ifp != NULL)
-			if (!KVM_READ(bi.bif_ifp, &ifn, sizeof(ifn)))
-				dprintf("can't read net interfsace"
-				    " at %p for pid %d", bi.bif_ifp, Pid);
-	}
-	(void)printf("* bpf@%s rec=%lu, dr=%lu, cap=%lu, pid=%lu", ifn.if_xname,
+	(void)printf("* bpf rec=%lu, dr=%lu, cap=%lu, pid=%lu",
 	    bpf.bd_rcount, bpf.bd_dcount, bpf.bd_ccount,
 	    (unsigned long)bpf.bd_pid);
 	if (bpf.bd_promisc)
@@ -196,34 +182,6 @@ p_mqueue(struct file *f)
 }
 
 static int
-p_rnd(struct file *f)
-{
-	struct cprng_strong {
-		char cs_name[16];
-		int  cs_flags;
-		/*...*/
-	} str;
-	struct rnd_ctx {
-		struct cprng_strong *rc_cprng;
-		bool rc_hard;
-	} ctx;
-	char buf[1024];
-
-	if (!KVM_READ(f->f_data, &ctx, sizeof(ctx))) {
-		dprintf("can't read rnd_ctx at %p for pid %d", f->f_data, Pid);
-		return 0;
-	}
-	if (!KVM_READ(ctx.rc_cprng, &str, sizeof(str))) {
-		dprintf("can't read cprng_strong at %p for pid %d", f->f_data,\
-		    Pid);
-		return 0;
-	}
-	snprintb(buf, sizeof(buf), CPRNG_FMT, str.cs_flags);
-	(void)printf("* rnd \"%s\" flags %s\n", str.cs_name, buf);
-	return 0;
-}
-
-static int
 p_kqueue(struct file *f)
 {
 	struct kqueue kq;
@@ -267,8 +225,6 @@ pmisc(struct file *f, const char *name)
 		return p_mqueue(f);
 	case NL_KQUEUE:
 		return p_kqueue(f);
-	case NL_RND:
-		return p_rnd(f);
 	case NL_SEM:
 		return p_sem(f);
 	case NL_TAP:

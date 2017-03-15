@@ -1,4 +1,4 @@
-/*	$NetBSD: crypto-evp.c,v 1.2 2017/01/28 21:31:49 christos Exp $	*/
+/*	$NetBSD: crypto-evp.c,v 1.1.1.2 2014/04/24 12:45:49 pettai Exp $	*/
 
 /*
  * Copyright (c) 1997 - 2008 Kungliga Tekniska Högskolan
@@ -74,8 +74,10 @@ _krb5_evp_encrypt(krb5_context context,
 	/* alloca ? */
 	size_t len2 = EVP_CIPHER_CTX_iv_length(c);
 	void *loiv = malloc(len2);
-	if (loiv == NULL)
-	    return krb5_enomem(context);
+	if (loiv == NULL) {
+	    krb5_clear_error_message(context);
+	    return ENOMEM;
+	}
 	memset(loiv, 0, len2);
 	EVP_CipherInit_ex(c, NULL, NULL, NULL, loiv, -1);
 	free(loiv);

@@ -1,4 +1,4 @@
-/*	$NetBSD: smc83c170.c,v 1.85 2017/02/20 07:43:29 ozaki-r Exp $	*/
+/*	$NetBSD: smc83c170.c,v 1.81 2012/07/22 14:32:58 matt Exp $	*/
 
 /*-
  * Copyright (c) 1998, 1999 The NetBSD Foundation, Inc.
@@ -36,7 +36,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: smc83c170.c,v 1.85 2017/02/20 07:43:29 ozaki-r Exp $");
+__KERNEL_RCSID(0, "$NetBSD: smc83c170.c,v 1.81 2012/07/22 14:32:58 matt Exp $");
 
 
 #include <sys/param.h>
@@ -291,7 +291,6 @@ epic_attach(struct epic_softc *sc)
 	 * Attach the interface.
 	 */
 	if_attach(ifp);
-	if_deferred_start_init(ifp, NULL);
 	ether_ifattach(ifp, enaddr);
 
 	/*
@@ -705,11 +704,18 @@ epic_intr(void *arg)
 				}
 			}
 
-			m_set_rcvif(m, ifp);
+			m->m_pkthdr.rcvif = ifp;
 			m->m_pkthdr.len = m->m_len = len;
 
+			/*
+			 * Pass this up to any BPF listeners, but only
+			 * pass it up the stack if it's for us.
+			 */
+			bpf_mtap(ifp, m);
+
 			/* Pass it on. */
-			if_percpuq_enqueue(ifp->if_percpuq, m);
+			(*ifp->if_input)(ifp, m);
+			ifp->if_ipackets++;
 		}
 
 		/* Update the receive pointer. */
@@ -798,7 +804,7 @@ epic_intr(void *arg)
 		/*
 		 * Try to get more packets going.
 		 */
-		if_schedule_deferred_start(ifp);
+		epic_start(ifp);
 	}
 
 	/*

@@ -1,4 +1,4 @@
-/*	$NetBSD: picvar.h,v 1.16 2015/07/07 21:43:46 matt Exp $	*/
+/*	$NetBSD: picvar.h,v 1.10.2.2 2015/07/30 09:37:37 martin Exp $	*/
 /*-
  * Copyright (c) 2008 The NetBSD Foundation, Inc.
  * All rights reserved.
@@ -30,9 +30,7 @@
 #ifndef _ARM_PIC_PICVAR_H_
 #define _ARM_PIC_PICVAR_H_
 
-#ifdef _KERNEL_OPT
 #include "opt_multiprocessor.h"
-#endif
 
 #ifdef MULTIPROCESSOR
 #include <sys/kcpuset.h>
@@ -174,13 +172,11 @@ void	pic_set_priority(struct cpu_info *, int);
 void	pic_add(struct pic_softc *, int);
 void	pic_do_pending_int(void);
 #ifdef MULTIPROCESSOR
-int	pic_ipi_ast(void *);
-int	pic_ipi_nop(void *);
+int	pic_ipi_nop(void *);		// IPI_KPREEMPT tto
 int	pic_ipi_xcall(void *);
 int	pic_ipi_generic(void *);
 int	pic_ipi_shootdown(void *);
 int	pic_ipi_ddb(void *);
-int	pic_ipi_kpreempt(void *);
 #endif
 #ifdef __HAVE_PIC_FAST_SOFTINTS
 int	pic_handle_softint(void *);

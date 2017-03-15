@@ -1,6 +1,6 @@
 #!/bin/sh
 #
-# $NetBSD: wpa_supplicant,v 1.6 2015/01/22 19:50:21 jmcneill Exp $
+# $NetBSD: wpa_supplicant,v 1.5.4.1 2015/01/23 09:47:25 martin Exp $
 #
 
 # PROVIDE: wpa_supplicant

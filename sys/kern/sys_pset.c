@@ -1,4 +1,4 @@
-/*	$NetBSD: sys_pset.c,v 1.19 2015/07/30 08:11:44 maxv Exp $	*/
+/*	$NetBSD: sys_pset.c,v 1.18.4.1 2015/08/06 21:47:11 snj Exp $	*/
 
 /*
  * Copyright (c) 2008, Mindaugas Rasiukevicius <rmind at NetBSD org>
@@ -36,7 +36,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sys_pset.c,v 1.19 2015/07/30 08:11:44 maxv Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sys_pset.c,v 1.18.4.1 2015/08/06 21:47:11 snj Exp $");
 
 #include <sys/param.h>
 

@@ -1,5 +1,3 @@
-// RUN: %clang_cc1 -fsyntax-only -verify -std=c++98 %s
-// RUN: %clang_cc1 -fsyntax-only -verify -std=c++11 %s
 // RUN: %clang_cc1 -fsyntax-only -verify %s
 
 // C++03 [namespace.udecl]p12:
@@ -163,33 +161,3 @@ namespace test4 {
     d.bar<int>(3); // expected-error {{'bar' is a protected member}}
   }
 }
-
-namespace test5 {
-  struct Derived;
-  struct Base {
-    void operator=(const Derived&);
-  };
-  struct Derived : Base {
-    // Hidden by implicit derived class operator.
-    using Base::operator=;
-  };
-  void f(Derived d) {
-    d = d;
-  }
-}
-
-#if __cplusplus >= 201103L
-namespace test6 {
-  struct Derived;
-  struct Base {
-    void operator=(Derived&&);
-  };
-  struct Derived : Base {
-    // Hidden by implicit derived class operator.
-    using Base::operator=;
-  };
-  void f(Derived d) {
-    d = Derived();
-  }
-}
-#endif

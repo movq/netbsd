@@ -1,5 +1,5 @@
 /* Array prefetching.
-   Copyright (C) 2005-2015 Free Software Foundation, Inc.
+   Copyright (C) 2005-2013 Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -21,43 +21,15 @@ along with GCC; see the file COPYING3.  If not see
 #include "system.h"
 #include "coretypes.h"
 #include "tm.h"
-#include "hash-set.h"
-#include "machmode.h"
-#include "vec.h"
-#include "double-int.h"
-#include "input.h"
-#include "alias.h"
-#include "symtab.h"
-#include "wide-int.h"
-#include "inchash.h"
 #include "tree.h"
-#include "fold-const.h"
-#include "stor-layout.h"
 #include "tm_p.h"
-#include "predict.h"
-#include "hard-reg-set.h"
-#include "function.h"
-#include "dominance.h"
-#include "cfg.h"
 #include "basic-block.h"
 #include "tree-pretty-print.h"
-#include "tree-ssa-alias.h"
-#include "internal-fn.h"
-#include "gimple-expr.h"
-#include "is-a.h"
-#include "gimple.h"
-#include "gimplify.h"
-#include "gimple-iterator.h"
-#include "gimplify-me.h"
-#include "gimple-ssa.h"
-#include "tree-ssa-loop-ivopts.h"
-#include "tree-ssa-loop-manip.h"
-#include "tree-ssa-loop-niter.h"
-#include "tree-ssa-loop.h"
-#include "tree-into-ssa.h"
+#include "tree-flow.h"
 #include "cfgloop.h"
 #include "tree-pass.h"
 #include "insn-config.h"
+#include "hashtab.h"
 #include "tree-chrec.h"
 #include "tree-scalar-evolution.h"
 #include "diagnostic-core.h"
@@ -69,21 +41,7 @@ along with GCC; see the file COPYING3.  If not see
 
 /* FIXME: Needed for optabs, but this should all be moved to a TBD interface
    between the GIMPLE and RTL worlds.  */
-#include "hashtab.h"
-#include "rtl.h"
-#include "flags.h"
-#include "statistics.h"
-#include "real.h"
-#include "fixed-value.h"
-#include "expmed.h"
-#include "dojump.h"
-#include "explow.h"
-#include "calls.h"
-#include "emit-rtl.h"
-#include "varasm.h"
-#include "stmt.h"
 #include "expr.h"
-#include "insn-codes.h"
 #include "optabs.h"
 #include "recog.h"
 
@@ -597,7 +555,7 @@ gather_memory_references_ref (struct loop *loop, struct mem_ref_group **refs,
               fprintf (dump_file, "Memory expression %p\n",(void *) ref ); 
               print_generic_expr (dump_file, ref, TDF_TREE); 
               fprintf (dump_file,":");
-              dump_mem_details (dump_file, base, step, delta, write_p);
+              dump_mem_details( dump_file, base, step, delta, write_p);              
               fprintf (dump_file, 
                        "Ignoring %p, non-constant step prefetching is "
                        "limited to inner most loops \n", 
@@ -614,7 +572,7 @@ gather_memory_references_ref (struct loop *loop, struct mem_ref_group **refs,
                 fprintf (dump_file, "Memory expression %p\n",(void *) ref );
                 print_generic_expr (dump_file, ref, TDF_TREE);
                 fprintf (dump_file,":");
-                dump_mem_details (dump_file, base, step, delta, write_p);
+                dump_mem_details(dump_file, base, step, delta, write_p);
                 fprintf (dump_file, 
                          "Not prefetching, ignoring %p due to "
                          "loop variant step\n",
@@ -1155,7 +1113,7 @@ issue_prefetch_ref (struct mem_ref *ref, unsigned unroll_factor, unsigned ahead)
 {
   HOST_WIDE_INT delta;
   tree addr, addr_base, write_p, local, forward;
-  gcall *prefetch;
+  gimple prefetch;
   gimple_stmt_iterator bsi;
   unsigned n_prefetches, ap;
   bool nontemporal = ref->reuse_distance >= L2_CACHE_SIZE_BYTES;
@@ -1226,7 +1184,7 @@ issue_prefetches (struct mem_ref_group *groups,
 static bool
 nontemporal_store_p (struct mem_ref *ref)
 {
-  machine_mode mode;
+  enum machine_mode mode;
   enum insn_code code;
 
   /* REF must be a write that is not reused.  We require it to be independent
@@ -1272,7 +1230,7 @@ emit_mfence_after_loop (struct loop *loop)
 {
   vec<edge> exits = get_loop_exit_edges (loop);
   edge exit;
-  gcall *call;
+  gimple call;
   gimple_stmt_iterator bsi;
   unsigned i;
 
@@ -1314,7 +1272,7 @@ may_use_storent_in_loop_p (struct loop *loop)
 
       FOR_EACH_VEC_ELT (exits, i, exit)
 	if ((exit->flags & EDGE_ABNORMAL)
-	    && exit->dest == EXIT_BLOCK_PTR_FOR_FN (cfun))
+	    && exit->dest == EXIT_BLOCK_PTR)
 	  ret = false;
 
       exits.release ();
@@ -1491,8 +1449,8 @@ add_subscript_strides (tree access_fn, unsigned stride,
       if ((unsigned) loop_depth (aloop) <= min_depth)
 	continue;
 
-      if (tree_fits_shwi_p (step))
-	astep = tree_to_shwi (step);
+      if (host_integerp (step, 0))
+	astep = tree_low_cst (step, 0);
       else
 	astep = L1_CACHE_LINE_SIZE;
 
@@ -1541,8 +1499,8 @@ self_reuse_distance (data_reference_p dr, unsigned *loop_sizes, unsigned n,
       if (TREE_CODE (ref) == ARRAY_REF)
 	{
 	  stride = TYPE_SIZE_UNIT (TREE_TYPE (ref));
-	  if (tree_fits_uhwi_p (stride))
-	    astride = tree_to_uhwi (stride);
+	  if (host_integerp (stride, 1))
+	    astride = tree_low_cst (stride, 1);
 	  else
 	    astride = L1_CACHE_LINE_SIZE;
 
@@ -1962,6 +1920,7 @@ fail:
 unsigned int
 tree_ssa_prefetch_arrays (void)
 {
+  loop_iterator li;
   struct loop *loop;
   bool unrolled = false;
   int todo_flags = 0;
@@ -2009,7 +1968,7 @@ tree_ssa_prefetch_arrays (void)
      here.  */
   gcc_assert ((PREFETCH_BLOCK & (PREFETCH_BLOCK - 1)) == 0);
 
-  FOR_EACH_LOOP (loop, LI_FROM_INNERMOST)
+  FOR_EACH_LOOP (li, loop, LI_FROM_INNERMOST)
     {
       if (dump_file && (dump_flags & TDF_DETAILS))
 	fprintf (dump_file, "Processing loop %d:\n", loop->num);
@@ -2029,52 +1988,3 @@ tree_ssa_prefetch_arrays (void)
   free_original_copy_tables ();
   return todo_flags;
 }
-
-/* Prefetching.  */
-
-namespace {
-
-const pass_data pass_data_loop_prefetch =
-{
-  GIMPLE_PASS, /* type */
-  "aprefetch", /* name */
-  OPTGROUP_LOOP, /* optinfo_flags */
-  TV_TREE_PREFETCH, /* tv_id */
-  ( PROP_cfg | PROP_ssa ), /* properties_required */
-  0, /* properties_provided */
-  0, /* properties_destroyed */
-  0, /* todo_flags_start */
-  0, /* todo_flags_finish */
-};
-
-class pass_loop_prefetch : public gimple_opt_pass
-{
-public:
-  pass_loop_prefetch (gcc::context *ctxt)
-    : gimple_opt_pass (pass_data_loop_prefetch, ctxt)
-  {}
-
-  /* opt_pass methods: */
-  virtual bool gate (function *) { return flag_prefetch_loop_arrays > 0; }
-  virtual unsigned int execute (function *);
-
-}; // class pass_loop_prefetch
-
-unsigned int
-pass_loop_prefetch::execute (function *fun)
-{
-  if (number_of_loops (fun) <= 1)
-    return 0;
-
-  return tree_ssa_prefetch_arrays ();
-}
-
-} // anon namespace
-
-gimple_opt_pass *
-make_pass_loop_prefetch (gcc::context *ctxt)
-{
-  return new pass_loop_prefetch (ctxt);
-}
-
-

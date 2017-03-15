@@ -1,4 +1,4 @@
-/*	$NetBSD: bcmgen_space.c,v 1.5 2015/02/25 13:52:42 joerg Exp $	*/
+/*	$NetBSD: bcmgen_space.c,v 1.4.6.1 2015/05/27 05:33:29 msaitoh Exp $	*/
 
 /*-
  * Copyright (c) 2012 The NetBSD Foundation, Inc.
@@ -31,7 +31,7 @@
 
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: bcmgen_space.c,v 1.5 2015/02/25 13:52:42 joerg Exp $");
+__KERNEL_RCSID(0, "$NetBSD: bcmgen_space.c,v 1.4.6.1 2015/05/27 05:33:29 msaitoh Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

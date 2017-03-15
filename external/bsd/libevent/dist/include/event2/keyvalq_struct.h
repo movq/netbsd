@@ -1,4 +1,5 @@
-/*	$NetBSD: keyvalq_struct.h,v 1.1.1.3 2017/01/31 21:14:53 christos Exp $	*/
+/*	$NetBSD: keyvalq_struct.h,v 1.1.1.1.12.1 2015/02/03 08:23:40 bouyer Exp $	*/
+/*	$NetBSD: keyvalq_struct.h,v 1.1.1.1.12.1 2015/02/03 08:23:40 bouyer Exp $	*/
 /*
  * Copyright (c) 2000-2007 Niels Provos <provos@citi.umich.edu>
  * Copyright (c) 2007-2012 Niels Provos and Nick Mathewson
@@ -25,8 +26,8 @@
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
-#ifndef EVENT2_KEYVALQ_STRUCT_H_INCLUDED_
-#define EVENT2_KEYVALQ_STRUCT_H_INCLUDED_
+#ifndef _EVENT2_EVENT_KEYVALQ_STRUCT_H_
+#define _EVENT2_EVENT_KEYVALQ_STRUCT_H_
 
 #ifdef __cplusplus
 extern "C" {
@@ -35,7 +36,7 @@ extern "C" {
 /* Fix so that people don't have to run with <sys/queue.h> */
 /* XXXX This code is duplicated with event_struct.h */
 #ifndef TAILQ_ENTRY
-#define EVENT_DEFINED_TQENTRY_
+#define _EVENT_DEFINED_TQENTRY
 #define TAILQ_ENTRY(type)						\
 struct {								\
 	struct type *tqe_next;	/* next element */			\
@@ -44,7 +45,7 @@ struct {								\
 #endif /* !TAILQ_ENTRY */
 
 #ifndef TAILQ_HEAD
-#define EVENT_DEFINED_TQHEAD_
+#define _EVENT_DEFINED_TQHEAD
 #define TAILQ_HEAD(name, type)			\
 struct name {					\
 	struct type *tqh_first;			\
@@ -66,11 +67,11 @@ struct evkeyval {
 TAILQ_HEAD (evkeyvalq, evkeyval);
 
 /* XXXX This code is duplicated with event_struct.h */
-#ifdef EVENT_DEFINED_TQENTRY_
+#ifdef _EVENT_DEFINED_TQENTRY
 #undef TAILQ_ENTRY
 #endif
 
-#ifdef EVENT_DEFINED_TQHEAD_
+#ifdef _EVENT_DEFINED_TQHEAD
 #undef TAILQ_HEAD
 #endif
 

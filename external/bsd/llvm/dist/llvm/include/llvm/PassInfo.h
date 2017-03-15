@@ -13,8 +13,6 @@
 #ifndef LLVM_PASSINFO_H
 #define LLVM_PASSINFO_H
 
-#include "llvm/ADT/StringRef.h"
-
 #include <cassert>
 #include <vector>
 
@@ -35,13 +33,13 @@ public:
   typedef Pass *(*TargetMachineCtor_t)(TargetMachine *);
 
 private:
-  StringRef PassName;     // Nice name for Pass
-  StringRef PassArgument; // Command Line argument to run this pass
-  const void *PassID;
-  const bool IsCFGOnlyPass;              // Pass only looks at the CFG.
-  const bool IsAnalysis;                 // True if an analysis pass.
-  const bool IsAnalysisGroup;            // True if an analysis group.
-  std::vector<const PassInfo *> ItfImpl; // Interfaces implemented by this pass
+  const char      *const PassName;     // Nice name for Pass
+  const char      *const PassArgument; // Command Line argument to run this pass
+  const void *PassID;      
+  const bool IsCFGOnlyPass;            // Pass only looks at the CFG.
+  const bool IsAnalysis;               // True if an analysis pass.
+  const bool IsAnalysisGroup;          // True if an analysis group.
+  std::vector<const PassInfo*> ItfImpl;// Interfaces implemented by this pass
 
   NormalCtor_t NormalCtor;
   TargetMachineCtor_t TargetMachineCtor;
@@ -49,37 +47,41 @@ private:
 public:
   /// PassInfo ctor - Do not call this directly, this should only be invoked
   /// through RegisterPass.
-  PassInfo(StringRef name, StringRef arg, const void *pi, NormalCtor_t normal,
-           bool isCFGOnly, bool is_analysis,
+  PassInfo(const char *name, const char *arg, const void *pi,
+           NormalCtor_t normal, bool isCFGOnly, bool is_analysis,
            TargetMachineCtor_t machine = nullptr)
-      : PassName(name), PassArgument(arg), PassID(pi), IsCFGOnlyPass(isCFGOnly),
-        IsAnalysis(is_analysis), IsAnalysisGroup(false), NormalCtor(normal),
-        TargetMachineCtor(machine) {}
+    : PassName(name), PassArgument(arg), PassID(pi), 
+      IsCFGOnlyPass(isCFGOnly), 
+      IsAnalysis(is_analysis), IsAnalysisGroup(false), NormalCtor(normal),
+      TargetMachineCtor(machine) {}
   /// PassInfo ctor - Do not call this directly, this should only be invoked
   /// through RegisterPass. This version is for use by analysis groups; it
   /// does not auto-register the pass.
-  PassInfo(StringRef name, const void *pi)
-      : PassName(name), PassArgument(""), PassID(pi), IsCFGOnlyPass(false),
-        IsAnalysis(false), IsAnalysisGroup(true), NormalCtor(nullptr),
-        TargetMachineCtor(nullptr) {}
+  PassInfo(const char *name, const void *pi)
+    : PassName(name), PassArgument(""), PassID(pi), 
+      IsCFGOnlyPass(false), 
+      IsAnalysis(false), IsAnalysisGroup(true), NormalCtor(nullptr),
+      TargetMachineCtor(nullptr) {}
 
   /// getPassName - Return the friendly name for the pass, never returns null
   ///
-  StringRef getPassName() const { return PassName; }
+  const char *getPassName() const { return PassName; }
 
   /// getPassArgument - Return the command line option that may be passed to
   /// 'opt' that will cause this pass to be run.  This will return null if there
   /// is no argument.
   ///
-  StringRef getPassArgument() const { return PassArgument; }
+  const char *getPassArgument() const { return PassArgument; }
 
   /// getTypeInfo - Return the id object for the pass...
   /// TODO : Rename
   const void *getTypeInfo() const { return PassID; }
 
   /// Return true if this PassID implements the specified ID pointer.
-  bool isPassID(const void *IDPtr) const { return PassID == IDPtr; }
-
+  bool isPassID(const void *IDPtr) const {
+    return PassID == IDPtr;
+  }
+  
   /// isAnalysisGroup - Return true if this is an analysis group, not a normal
   /// pass.
   ///
@@ -89,7 +91,7 @@ public:
   /// isCFGOnlyPass - return true if this pass only looks at the CFG for the
   /// function.
   bool isCFGOnlyPass() const { return IsCFGOnlyPass; }
-
+  
   /// getNormalCtor - Return a pointer to a function, that when called, creates
   /// an instance of the pass and returns it.  This pointer may be null if there
   /// is no default constructor for the pass.
@@ -136,8 +138,8 @@ public:
   }
 
 private:
-  void operator=(const PassInfo &) = delete;
-  PassInfo(const PassInfo &) = delete;
+  void operator=(const PassInfo &) LLVM_DELETED_FUNCTION;
+  PassInfo(const PassInfo &) LLVM_DELETED_FUNCTION;
 };
 
 }

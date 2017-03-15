@@ -4,7 +4,7 @@
 
 /* GDB Notifications to Observers.
 
-   Copyright (C) 2004-2016 Free Software Foundation, Inc.
+   Copyright (C) 2004-2014 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -44,62 +44,6 @@ extern struct observer *observer_attach_normal_stop (observer_normal_stop_ftype 
 extern void observer_detach_normal_stop (struct observer *observer);
 extern void observer_notify_normal_stop (struct bpstats *bs, int print_frame);
 
-/* signal_received notifications.  */
-
-typedef void (observer_signal_received_ftype) (enum gdb_signal siggnal);
-
-extern struct observer *observer_attach_signal_received (observer_signal_received_ftype *f);
-extern void observer_detach_signal_received (struct observer *observer);
-extern void observer_notify_signal_received (enum gdb_signal siggnal);
-
-/* end_stepping_range notifications.  */
-
-typedef void (observer_end_stepping_range_ftype) (void);
-
-extern struct observer *observer_attach_end_stepping_range (observer_end_stepping_range_ftype *f);
-extern void observer_detach_end_stepping_range (struct observer *observer);
-extern void observer_notify_end_stepping_range (void);
-
-/* signal_exited notifications.  */
-
-typedef void (observer_signal_exited_ftype) (enum gdb_signal siggnal);
-
-extern struct observer *observer_attach_signal_exited (observer_signal_exited_ftype *f);
-extern void observer_detach_signal_exited (struct observer *observer);
-extern void observer_notify_signal_exited (enum gdb_signal siggnal);
-
-/* exited notifications.  */
-
-typedef void (observer_exited_ftype) (int exitstatus);
-
-extern struct observer *observer_attach_exited (observer_exited_ftype *f);
-extern void observer_detach_exited (struct observer *observer);
-extern void observer_notify_exited (int exitstatus);
-
-/* no_history notifications.  */
-
-typedef void (observer_no_history_ftype) (void);
-
-extern struct observer *observer_attach_no_history (observer_no_history_ftype *f);
-extern void observer_detach_no_history (struct observer *observer);
-extern void observer_notify_no_history (void);
-
-/* sync_execution_done notifications.  */
-
-typedef void (observer_sync_execution_done_ftype) (void);
-
-extern struct observer *observer_attach_sync_execution_done (observer_sync_execution_done_ftype *f);
-extern void observer_detach_sync_execution_done (struct observer *observer);
-extern void observer_notify_sync_execution_done (void);
-
-/* command_error notifications.  */
-
-typedef void (observer_command_error_ftype) (void);
-
-extern struct observer *observer_attach_command_error (observer_command_error_ftype *f);
-extern void observer_detach_command_error (struct observer *observer);
-extern void observer_notify_command_error (void);
-
 /* target_changed notifications.  */
 
 typedef void (observer_target_changed_ftype) (struct target_ops *target);
@@ -126,11 +70,11 @@ extern void observer_notify_inferior_created (struct target_ops *objfile, int fr
 
 /* record_changed notifications.  */
 
-typedef void (observer_record_changed_ftype) (struct inferior *inferior, int started, const char *method, const char *format);
+typedef void (observer_record_changed_ftype) (struct inferior *inferior, int started);
 
 extern struct observer *observer_attach_record_changed (observer_record_changed_ftype *f);
 extern void observer_detach_record_changed (struct observer *observer);
-extern void observer_notify_record_changed (struct inferior *inferior, int started, const char *method, const char *format);
+extern void observer_notify_record_changed (struct inferior *inferior, int started);
 
 /* solib_loaded notifications.  */
 
@@ -340,30 +284,6 @@ extern struct observer *observer_attach_tsv_modified (observer_tsv_modified_ftyp
 extern void observer_detach_tsv_modified (struct observer *observer);
 extern void observer_notify_tsv_modified (const struct trace_state_variable *tsv);
 
-/* inferior_call_pre notifications.  */
-
-typedef void (observer_inferior_call_pre_ftype) (ptid_t thread, CORE_ADDR address);
-
-extern struct observer *observer_attach_inferior_call_pre (observer_inferior_call_pre_ftype *f);
-extern void observer_detach_inferior_call_pre (struct observer *observer);
-extern void observer_notify_inferior_call_pre (ptid_t thread, CORE_ADDR address);
-
-/* inferior_call_post notifications.  */
-
-typedef void (observer_inferior_call_post_ftype) (ptid_t thread, CORE_ADDR address);
-
-extern struct observer *observer_attach_inferior_call_post (observer_inferior_call_post_ftype *f);
-extern void observer_detach_inferior_call_post (struct observer *observer);
-extern void observer_notify_inferior_call_post (ptid_t thread, CORE_ADDR address);
-
-/* register_changed notifications.  */
-
-typedef void (observer_register_changed_ftype) (struct frame_info *frame, int regnum);
-
-extern struct observer *observer_attach_register_changed (observer_register_changed_ftype *f);
-extern void observer_detach_register_changed (struct observer *observer);
-extern void observer_notify_register_changed (struct frame_info *frame, int regnum);
-
 /* test_notification notifications.  */
 
 typedef void (observer_test_notification_ftype) (int somearg);
@@ -371,13 +291,5 @@ typedef void (observer_test_notification_ftype) (int somearg);
 extern struct observer *observer_attach_test_notification (observer_test_notification_ftype *f);
 extern void observer_detach_test_notification (struct observer *observer);
 extern void observer_notify_test_notification (int somearg);
-
-/* user_selected_context_changed notifications.  */
-
-typedef void (observer_user_selected_context_changed_ftype) (user_selected_what selection);
-
-extern struct observer *observer_attach_user_selected_context_changed (observer_user_selected_context_changed_ftype *f);
-extern void observer_detach_user_selected_context_changed (struct observer *observer);
-extern void observer_notify_user_selected_context_changed (user_selected_what selection);
 
 #endif /* OBSERVER_H */

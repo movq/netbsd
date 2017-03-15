@@ -11,13 +11,10 @@ if [ "$1" = "-MD" ]; then
 fi
 if [ "$MAKEDEPEND" = "" ]; then MAKEDEPEND=makedepend; fi
 
-# Preserve Makefile timestamp by moving instead of copying (cp -p is GNU only)
-mv Makefile Makefile.save
-cp Makefile.save Makefile
+cp Makefile Makefile.save
 # fake the presence of Kerberos
 touch $TOP/krb5.h
-if ${MAKEDEPEND} --version 2>&1 | grep "clang" > /dev/null ||
-   echo $MAKEDEPEND | grep "gcc" > /dev/null; then
+if expr "$MAKEDEPEND" : '.*gcc$' > /dev/null; then
     args=""
     while [ $# -gt 0 ]; do
 	if [ "$1" != "--" ]; then args="$args $1"; fi
@@ -34,12 +31,7 @@ else
     ${PERL} $TOP/util/clean-depend.pl < Makefile > Makefile.new
     RC=$?
 fi
-if ! cmp -s Makefile.save Makefile.new; then
-    mv Makefile.new Makefile
-else
-    mv Makefile.save Makefile
-    rm -f Makefile.new
-fi
+mv Makefile.new Makefile
 # unfake the presence of Kerberos
 rm $TOP/krb5.h
 

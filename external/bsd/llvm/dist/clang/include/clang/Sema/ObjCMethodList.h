@@ -14,7 +14,6 @@
 #ifndef LLVM_CLANG_SEMA_OBJCMETHODLIST_H
 #define LLVM_CLANG_SEMA_OBJCMETHODLIST_H
 
-#include "clang/AST/DeclObjC.h"
 #include "llvm/ADT/PointerIntPair.h"
 
 namespace clang {
@@ -33,9 +32,6 @@ struct ObjCMethodList {
   ObjCMethodList() { }
   ObjCMethodList(ObjCMethodDecl *M)
       : MethodAndHasMoreThanOneDecl(M, 0) {}
-  ObjCMethodList(const ObjCMethodList &L)
-      : MethodAndHasMoreThanOneDecl(L.MethodAndHasMoreThanOneDecl),
-        NextAndExtraBits(L.NextAndExtraBits) {}
 
   ObjCMethodList *getNext() const { return NextAndExtraBits.getPointer(); }
   unsigned getBits() const { return NextAndExtraBits.getInt(); }

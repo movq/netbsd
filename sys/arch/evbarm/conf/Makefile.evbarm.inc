@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile.evbarm.inc,v 1.34 2015/08/25 02:38:15 uebayasi Exp $
+#	$NetBSD: Makefile.evbarm.inc,v 1.30 2014/04/11 02:36:43 matt Exp $
 
 #
 # If this is a install kernel and the ramdisk image exists in the object
@@ -28,21 +28,16 @@ CPPFLAGS+=-DKERNEL_BASE_VOFFSET="(${KERNEL_BASE_VIRT}-${KERNEL_BASE_PHYS})"
 . endif
 .endif
 
-EXTRA_CLEAN+=	${KERNELS:=.map}
+EXTRA_CLEAN+= ldscript tmp ${KERNELS:=.map}
 
 .if defined(KERNEL_BASE_PHYS)
 LINKTEXT=
 KERNLDSCRIPT=	ldscript
-
-EXTRA_CLEAN+=	${KERNLDSCRIPT} tmp
+EXTRA_LINKFLAGS+=	-T ldscript
 
 # generate ldscript from common template
-${KERNLDSCRIPT}: \
-    ${THISARM}/conf/ldscript.evbarm \
-    ${THISARM}/conf/Makefile.evbarm.inc \
-    Makefile \
-    ${BOARDMKFRAG}
-	${_MKTARGET_CREATE}
+ldscript: ${THISARM}/conf/ldscript.evbarm ${THISARM}/conf/Makefile.evbarm.inc Makefile ${BOARDMKFRAG}
+	echo ${KERNELS}
 	${TOOL_SED} -e 's/@KERNEL_BASE_PHYS@/${KERNEL_BASE_PHYS}/' \
 	    -e 's/@KERNEL_BASE_VIRT@/${KERNEL_BASE_VIRT}/' \
 	    ${THISARM}/conf/ldscript.evbarm > tmp && mv tmp $@

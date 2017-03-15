@@ -1,4 +1,4 @@
-/*	$NetBSD: save_v2trap.c,v 1.2 2014/12/20 13:15:48 prlw1 Exp $	*/
+/*	$NetBSD: save_v2trap.c,v 1.1.1.2.12.1 2014/12/29 17:27:28 martin Exp $	*/
 
 #include "ipf.h"
 #include "netinet/ipl.h"

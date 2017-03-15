@@ -90,7 +90,6 @@ SVal Environment::getSVal(const EnvironmentEntry &Entry,
   case Stmt::CXXNullPtrLiteralExprClass:
   case Stmt::ObjCStringLiteralClass:
   case Stmt::StringLiteralClass:
-  case Stmt::TypeTraitExprClass:
     // Known constants; defer to SValBuilder.
     return svalBuilder.getConstantVal(cast<Expr>(S)).getValue();
 
@@ -98,9 +97,9 @@ SVal Environment::getSVal(const EnvironmentEntry &Entry,
     const ReturnStmt *RS = cast<ReturnStmt>(S);
     if (const Expr *RE = RS->getRetValue())
       return getSVal(EnvironmentEntry(RE, LCtx), svalBuilder);
-    return UndefinedVal();
+    return UndefinedVal();        
   }
-
+    
   // Handle all other Stmt* using a lookup.
   default:
     return lookupExpr(EnvironmentEntry(S, LCtx));
@@ -121,7 +120,7 @@ Environment EnvironmentManager::bindExpr(Environment Env,
 }
 
 namespace {
-class MarkLiveCallback final : public SymbolVisitor {
+class MarkLiveCallback : public SymbolVisitor {
   SymbolReaper &SymReaper;
 public:
   MarkLiveCallback(SymbolReaper &symreaper) : SymReaper(symreaper) {}
@@ -171,6 +170,10 @@ EnvironmentManager::removeDeadBindings(Environment Env,
       // Copy the binding to the new map.
       EBMapRef = EBMapRef.add(BlkExpr, X);
 
+      // If the block expr's value is a memory region, then mark that region.
+      if (Optional<loc::MemRegionVal> R = X.getAs<loc::MemRegionVal>())
+        SymReaper.markLive(R->getRegion());
+
       // Mark all symbols in the block expr's value live.
       RSScaner.scan(X);
       continue;
@@ -191,16 +194,16 @@ void Environment::print(raw_ostream &Out, const char *NL,
 
   for (Environment::iterator I = begin(), E = end(); I != E; ++I) {
     const EnvironmentEntry &En = I.getKey();
-
+    
     if (isFirst) {
       Out << NL << NL
           << "Expressions:"
-          << NL;
+          << NL;      
       isFirst = false;
     } else {
       Out << NL;
     }
-
+    
     const Stmt *S = En.getStmt();
     assert(S != nullptr && "Expected non-null Stmt");
 

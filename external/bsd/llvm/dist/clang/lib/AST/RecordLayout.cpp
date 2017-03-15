@@ -18,6 +18,8 @@
 using namespace clang;
 
 void ASTRecordLayout::Destroy(ASTContext &Ctx) {
+  if (FieldOffsets)
+    Ctx.Deallocate(FieldOffsets);
   if (CXXInfo) {
     CXXInfo->~CXXRecordLayoutInfo();
     Ctx.Deallocate(CXXInfo);
@@ -27,13 +29,18 @@ void ASTRecordLayout::Destroy(ASTContext &Ctx) {
 }
 
 ASTRecordLayout::ASTRecordLayout(const ASTContext &Ctx, CharUnits size,
-                                 CharUnits alignment,
+                                 CharUnits alignment, 
                                  CharUnits requiredAlignment,
                                  CharUnits datasize,
-                                 ArrayRef<uint64_t> fieldoffsets)
-    : Size(size), DataSize(datasize), Alignment(alignment),
-      RequiredAlignment(requiredAlignment), CXXInfo(nullptr) {
-  FieldOffsets.append(Ctx, fieldoffsets.begin(), fieldoffsets.end());
+                                 const uint64_t *fieldoffsets,
+                                 unsigned fieldcount)
+  : Size(size), DataSize(datasize), Alignment(alignment),
+    RequiredAlignment(requiredAlignment), FieldOffsets(nullptr),
+    FieldCount(fieldcount), CXXInfo(nullptr) {
+  if (FieldCount > 0)  {
+    FieldOffsets = new (Ctx) uint64_t[FieldCount];
+    memcpy(FieldOffsets, fieldoffsets, FieldCount * sizeof(*FieldOffsets));
+  }
 }
 
 // Constructor for C++ records.
@@ -43,21 +50,26 @@ ASTRecordLayout::ASTRecordLayout(const ASTContext &Ctx,
                                  bool hasOwnVFPtr, bool hasExtendableVFPtr,
                                  CharUnits vbptroffset,
                                  CharUnits datasize,
-                                 ArrayRef<uint64_t> fieldoffsets,
+                                 const uint64_t *fieldoffsets,
+                                 unsigned fieldcount,
                                  CharUnits nonvirtualsize,
                                  CharUnits nonvirtualalignment,
                                  CharUnits SizeOfLargestEmptySubobject,
                                  const CXXRecordDecl *PrimaryBase,
                                  bool IsPrimaryBaseVirtual,
                                  const CXXRecordDecl *BaseSharingVBPtr,
-                                 bool EndsWithZeroSizedObject,
+                                 bool HasZeroSizedSubObject,
                                  bool LeadsWithZeroSizedBase,
                                  const BaseOffsetsMapTy& BaseOffsets,
                                  const VBaseOffsetsMapTy& VBaseOffsets)
   : Size(size), DataSize(datasize), Alignment(alignment),
-    RequiredAlignment(requiredAlignment), CXXInfo(new (Ctx) CXXRecordLayoutInfo)
+    RequiredAlignment(requiredAlignment), FieldOffsets(nullptr),
+    FieldCount(fieldcount), CXXInfo(new (Ctx) CXXRecordLayoutInfo)
 {
-  FieldOffsets.append(Ctx, fieldoffsets.begin(), fieldoffsets.end());
+  if (FieldCount > 0)  {
+    FieldOffsets = new (Ctx) uint64_t[FieldCount];
+    memcpy(FieldOffsets, fieldoffsets, FieldCount * sizeof(*FieldOffsets));
+  }
 
   CXXInfo->PrimaryBase.setPointer(PrimaryBase);
   CXXInfo->PrimaryBase.setInt(IsPrimaryBaseVirtual);
@@ -70,7 +82,7 @@ ASTRecordLayout::ASTRecordLayout(const ASTContext &Ctx,
   CXXInfo->VBPtrOffset = vbptroffset;
   CXXInfo->HasExtendableVFPtr = hasExtendableVFPtr;
   CXXInfo->BaseSharingVBPtr = BaseSharingVBPtr;
-  CXXInfo->EndsWithZeroSizedObject = EndsWithZeroSizedObject;
+  CXXInfo->HasZeroSizedSubObject = HasZeroSizedSubObject;
   CXXInfo->LeadsWithZeroSizedBase = LeadsWithZeroSizedBase;
 
 

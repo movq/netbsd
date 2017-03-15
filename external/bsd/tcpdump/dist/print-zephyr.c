@@ -22,7 +22,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: print-zephyr.c,v 1.7 2017/02/05 04:05:05 spz Exp $");
+__RCSID("$NetBSD: print-zephyr.c,v 1.4.4.1 2017/02/19 05:01:16 snj Exp $");
 #endif
 
 /* \summary: Zephyr printer */

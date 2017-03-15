@@ -1,4 +1,4 @@
-/*	$NetBSD: grf_compat.c,v 1.28 2015/08/20 14:40:17 christos Exp $	*/
+/*	$NetBSD: grf_compat.c,v 1.26.2.1 2014/12/31 06:44:00 snj Exp $	*/
 
 /*
  * Copyright (C) 1999 Scott Reynolds
@@ -34,7 +34,7 @@
 #include "opt_grf_compat.h"
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: grf_compat.c,v 1.28 2015/08/20 14:40:17 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: grf_compat.c,v 1.26.2.1 2014/12/31 06:44:00 snj Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -56,8 +56,6 @@ __KERNEL_RCSID(0, "$NetBSD: grf_compat.c,v 1.28 2015/08/20 14:40:17 christos Exp
 #include <miscfs/specfs/specdev.h>
 
 #include <uvm/uvm_extern.h>
-
-#include "ioconf.h"
 
 dev_type_open(grfopen);
 dev_type_close(grfclose);
@@ -81,6 +79,7 @@ const struct cdevsw grf_cdevsw = {
 
 void	grf_scinit(struct grf_softc *, const char *, int);
 void	grf_init(int);
+void	grfattach(int);
 int	grfmap(dev_t, struct macfb_softc *, void **, struct proc *);
 int	grfunmap(dev_t, struct macfb_softc *, void *, struct proc *);
 

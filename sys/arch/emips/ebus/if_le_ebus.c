@@ -1,4 +1,4 @@
-/*	$NetBSD: if_le_ebus.c,v 1.13 2016/12/15 09:28:02 ozaki-r Exp $	*/
+/*	$NetBSD: if_le_ebus.c,v 1.6 2014/08/10 16:44:33 tls Exp $	*/
 
 /*-
  * Copyright (c) 2010 The NetBSD Foundation, Inc.
@@ -31,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_le_ebus.c,v 1.13 2016/12/15 09:28:02 ozaki-r Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_le_ebus.c,v 1.6 2014/08/10 16:44:33 tls Exp $");
 
 #include "opt_inet.h"
 
@@ -60,7 +60,7 @@ __KERNEL_RCSID(0, "$NetBSD: if_le_ebus.c,v 1.13 2016/12/15 09:28:02 ozaki-r Exp 
 #include <net/bpf.h>
 #include <net/bpfdesc.h>
 
-#include <sys/rndsource.h>
+#include <sys/rnd.h>
 
 #include <emips/ebus/ebusvar.h>
 #include <emips/emips/machdep.h>
@@ -216,7 +216,6 @@ enic_attach(device_t parent, device_t self, void *aux)
 
 	/* Attach the interface. */
 	if_attach(ifp);
-	if_deferred_start_init(ifp, NULL);
 	ether_ifattach(ifp, sc->sc_enaddr);
 
 	sc->sc_sh = shutdownhook_establish(enic_shutdown, ifp);
@@ -452,7 +451,7 @@ enic_post_recv(struct enic_softc *sc, struct mbuf *m)
 		MGETHDR(m, waitmode, MT_DATA);
 		if (m == 0)
 			break;
-		m_set_rcvif(m, &sc->sc_ethercom.ec_if);
+		m->m_pkthdr.rcvif = &sc->sc_ethercom.ec_if;
 		m->m_pkthdr.len = 0;
 
 		MCLGET(m, waitmode);
@@ -499,7 +498,7 @@ void enic_refill(struct enic_softc *sc)
 	MGETHDR(m, waitmode, MT_DATA);
 	if (m == NULL)
 		return;
-	m_set_rcvif(m, &sc->sc_ethercom.ec_if);
+	m->m_pkthdr.rcvif = &sc->sc_ethercom.ec_if;
 	m->m_pkthdr.len = 0;
 
 	MCLGET(m, waitmode);
@@ -541,7 +540,7 @@ enic_init(struct ifnet *ifp)
 	printf("enic_init <- %x\n",ctl);
 #endif
 
-	if_schedule_deferred_start(ifp);
+	enic_start(ifp);
 
 	return 0;
 }
@@ -759,8 +758,17 @@ enic_rint(struct enic_softc *sc, uint32_t saf, paddr_t phys)
 	m->m_pkthdr.len = len;
 	m->m_len = len; /* recheck */
 
+	ifp->if_ipackets++;
+
+	/*
+	 * Check if there's a BPF listener on this interface.
+	 * If so, hand off the raw packet to BPF.
+	 */
+	if (ifp->if_bpf)
+		bpf_mtap(ifp, m);
+
 	/* Pass the packet up. */
-	if_percpuq_enqueue(ifp->if_percpuq, m);
+	(*ifp->if_input)(ifp, m);
 
 	/* Need to refill now */
 	enic_refill(sc);
@@ -811,7 +819,7 @@ void enic_tint(struct enic_softc *sc, uint32_t saf, paddr_t phys)
 		ifp->if_timer = 0;
 
 	ifp->if_flags &= ~IFF_OACTIVE;
-	if_schedule_deferred_start(ifp);
+	enic_start(ifp);
 #if DEBUG
 	sc->it = 1;
 #endif
@@ -929,9 +937,9 @@ int enic_put(struct enic_softc *sc, struct mbuf **pm)
 	for (; m; m = n) {
 		len = m->m_len;
 		if (len == 0) {
-			n = m_free(m);
-			if (m == *pm)
-				*pm = n;
+			MFREE(m, n);
+		if (m == *pm)
+			*pm = n;
 			continue;
 		}
 		tlen -= len;
@@ -961,7 +969,7 @@ int enic_put(struct enic_softc *sc, struct mbuf **pm)
 	MGETHDR(n, M_NOWAIT, MT_DATA);
 	if (n == NULL)
 		goto Bad;
-	m_set_rcvif(n, &sc->sc_ethercom.ec_if);
+	n->m_pkthdr.rcvif = &sc->sc_ethercom.ec_if;
 	n->m_pkthdr.len = tlen;
 
 	MCLGET(n, M_NOWAIT);
@@ -982,7 +990,7 @@ int enic_put(struct enic_softc *sc, struct mbuf **pm)
 
 		cp += len;
 		tlen -= len;
-		mm = m_free(m);
+		MFREE(m, mm);
 
 	}
 

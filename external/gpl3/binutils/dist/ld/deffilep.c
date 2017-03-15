@@ -133,7 +133,8 @@
 #line 1 "deffilep.y"
  /* deffilep.y - parser for .def files */
 
-/*   Copyright (C) 1995-2016 Free Software Foundation, Inc.
+/*   Copyright 1995, 1997, 1998, 1999, 2000, 2001, 2002, 2003, 2005, 2006,
+     2007, 2009 Free Software Foundation, Inc.
 
      This file is part of GNU Binutils.
 
@@ -178,13 +179,13 @@
 #define	yylval	def_lval
 #define	yychar	def_char
 #define	yydebug	def_debug
-#define	yypact	def_pact
-#define	yyr1	def_r1
-#define	yyr2	def_r2
-#define	yydef	def_def
-#define	yychk	def_chk
-#define	yypgo	def_pgo
-#define	yyact	def_act
+#define	yypact	def_pact	
+#define	yyr1	def_r1			
+#define	yyr2	def_r2			
+#define	yydef	def_def		
+#define	yychk	def_chk		
+#define	yypgo	def_pgo		
+#define	yyact	def_act		
 #define	yyexca	def_exca
 #define yyerrflag def_errflag
 #define yynerrs	def_nerrs
@@ -226,7 +227,7 @@ static void def_exports (const char *, const char *, int, int, const char *);
 static void def_heapsize (int, int);
 static void def_import (const char *, const char *, const char *, const char *,
 			int, const char *);
-static void def_image_name (const char *, bfd_vma, int);
+static void def_image_name (const char *, int, int);
 static void def_section (const char *, int);
 static void def_section_alt (const char *, const char *);
 static void def_stacksize (int, int);
@@ -263,12 +264,11 @@ static const char *lex_parse_string_end = 0;
 
 #if ! defined YYSTYPE && ! defined YYSTYPE_IS_DECLARED
 typedef union YYSTYPE
-#line 113 "deffilep.y"
+#line 114 "deffilep.y"
 {
   char *id;
   const char *id_const;
   int number;
-  bfd_vma vma;
   char *digits;
 }
 /* Line 193 of yacc.c.  */
@@ -500,16 +500,16 @@ union yyalloc
 /* YYFINAL -- State number of the termination state.  */
 #define YYFINAL  69
 /* YYLAST -- Last index in YYTABLE.  */
-#define YYLAST   149
+#define YYLAST   148
 
 /* YYNTOKENS -- Number of terminals.  */
 #define YYNTOKENS  35
 /* YYNNTS -- Number of nonterminals.  */
-#define YYNNTS  27
+#define YYNNTS  26
 /* YYNRULES -- Number of rules.  */
-#define YYNRULES  99
+#define YYNRULES  98
 /* YYNRULES -- Number of states.  */
-#define YYNSTATES  146
+#define YYNSTATES  145
 
 /* YYTRANSLATE(YYLEX) -- Bison symbol number corresponding to YYLEX.  */
 #define YYUNDEFTOK  2
@@ -566,7 +566,7 @@ static const yytype_uint16 yyprhs[] =
      186,   188,   190,   192,   194,   196,   198,   200,   202,   204,
      206,   208,   210,   212,   214,   216,   218,   220,   223,   226,
      230,   234,   236,   237,   240,   241,   244,   245,   248,   249,
-     253,   254,   256,   259,   264,   266,   267,   269,   270,   272
+     253,   254,   256,   259,   264,   266,   267,   269,   270
 };
 
 /* YYRHS -- A `-1'-separated list of the rules' RHS.  */
@@ -597,24 +597,24 @@ static const yytype_int8 yyrhs[] =
       31,    50,    -1,    31,    51,    -1,    50,    31,    51,    -1,
       29,    31,    51,    -1,    51,    -1,    -1,    28,    29,    -1,
       -1,    34,    60,    -1,    -1,    33,    51,    -1,    -1,    15,
-      33,    61,    -1,    -1,    29,    -1,    31,    29,    -1,    57,
+      33,    60,    -1,    -1,    29,    -1,    31,    29,    -1,    57,
       31,    58,    59,    -1,    30,    -1,    -1,    29,    -1,    -1,
-      30,    -1,    30,    -1
+      30,    -1
 };
 
 /* YYRLINE[YYN] -- source line where rule number YYN was defined.  */
 static const yytype_uint16 yyrline[] =
 {
-       0,   138,   138,   139,   143,   144,   145,   146,   147,   148,
-     149,   150,   151,   152,   153,   154,   155,   156,   160,   162,
-     163,   170,   177,   178,   181,   182,   183,   184,   185,   186,
-     187,   188,   191,   192,   196,   198,   200,   202,   204,   206,
-     211,   212,   216,   217,   221,   222,   226,   227,   229,   230,
-     234,   235,   236,   237,   241,   242,   243,   244,   245,   246,
-     247,   248,   249,   250,   251,   252,   259,   260,   261,   262,
-     263,   264,   265,   266,   267,   268,   271,   272,   278,   284,
-     290,   298,   299,   302,   303,   307,   308,   312,   313,   316,
-     317,   320,   321,   327,   335,   336,   339,   340,   343,   345
+       0,   137,   137,   138,   142,   143,   144,   145,   146,   147,
+     148,   149,   150,   151,   152,   153,   154,   155,   159,   161,
+     162,   169,   176,   177,   180,   181,   182,   183,   184,   185,
+     186,   187,   190,   191,   195,   197,   199,   201,   203,   205,
+     210,   211,   215,   216,   220,   221,   225,   226,   228,   229,
+     233,   234,   235,   236,   240,   241,   242,   243,   244,   245,
+     246,   247,   248,   249,   250,   251,   258,   259,   260,   261,
+     262,   263,   264,   265,   266,   267,   270,   271,   277,   283,
+     289,   297,   298,   301,   302,   306,   307,   311,   312,   315,
+     316,   319,   320,   326,   334,   335,   338,   339,   342
 };
 #endif
 
@@ -633,7 +633,7 @@ static const char *const yytname[] =
   "secline", "attr_list", "opt_comma", "opt_number", "attr",
   "keyword_as_name", "opt_name2", "opt_name", "opt_equalequal_name",
   "opt_ordinal", "opt_equal_name", "opt_base", "anylang_id", "opt_digits",
-  "opt_id", "NUMBER", "VMA", 0
+  "opt_id", "NUMBER", 0
 };
 #endif
 
@@ -661,7 +661,7 @@ static const yytype_uint8 yyr1[] =
       50,    50,    50,    50,    50,    50,    50,    50,    50,    50,
       50,    50,    50,    50,    50,    50,    51,    51,    51,    51,
       51,    52,    52,    53,    53,    54,    54,    55,    55,    56,
-      56,    57,    57,    57,    58,    58,    59,    59,    60,    61
+      56,    57,    57,    57,    58,    58,    59,    59,    60
 };
 
 /* YYR2[YYN] -- Number of symbols composing right hand side of rule YYN.  */
@@ -676,7 +676,7 @@ static const yytype_uint8 yyr2[] =
        1,     1,     1,     1,     1,     1,     1,     1,     1,     1,
        1,     1,     1,     1,     1,     1,     1,     2,     2,     3,
        3,     1,     0,     2,     0,     2,     0,     2,     0,     3,
-       0,     1,     2,     4,     1,     0,     1,     0,     1,     1
+       0,     1,     2,     4,     1,     0,     1,     0,     1
 };
 
 /* YYDEFACT[STATE-NAME] -- Default rule to reduce with in state
@@ -695,18 +695,18 @@ static const yytype_uint8 yydefact[] =
        8,    46,     0,    43,    42,    40,    20,     0,    86,     0,
        0,    32,     0,    92,    95,     0,    80,    79,     0,    48,
       44,    87,     0,    47,    84,     0,    15,    94,    97,    17,
-      99,    89,    85,    23,     0,     0,    39,     0,    96,    93,
-      28,    29,    26,    27,    30,    31,    24,    25,    47,    47,
-      83,    84,    84,    84,    84,    23,    38,     0,    36,    37,
-      21,    22,    84,    84,    34,    35
+      89,    85,    23,     0,     0,    39,     0,    96,    93,    28,
+      29,    26,    27,    30,    31,    24,    25,    47,    47,    83,
+      84,    84,    84,    84,    23,    38,     0,    36,    37,    21,
+      22,    84,    84,    34,    35
 };
 
 /* YYDEFGOTO[NTERM-NUM].  */
 static const yytype_int16 yydefgoto[] =
 {
-      -1,    14,    15,    58,    59,   128,   129,    62,    63,    56,
-      57,    52,    82,    79,    53,    40,    41,    42,   116,   103,
-      88,    76,    67,   108,   119,    46,   111
+      -1,    14,    15,    58,    59,   127,   128,    62,    63,    56,
+      57,    52,    82,    79,    53,    40,    41,    42,   115,   103,
+      88,    76,    67,   108,   118,    46
 };
 
 /* YYPACT[STATE-NUM] -- Index in YYTABLE of the portion describing
@@ -714,29 +714,29 @@ static const yytype_int16 yydefgoto[] =
 #define YYPACT_NINF -82
 static const yytype_int8 yypact[] =
 {
-     122,    11,    11,   -25,     9,     9,    53,    53,   -17,    11,
-      14,     9,   -18,    20,    95,   -82,   -82,   -82,   -82,   -82,
+     121,    11,    11,   -25,     9,     9,    59,    59,   -17,    11,
+      25,     9,   -18,    40,    95,   -82,   -82,   -82,   -82,   -82,
      -82,   -82,   -82,   -82,   -82,   -82,   -82,   -82,   -82,   -82,
-     -82,   -82,   -82,   -82,   -82,   -82,   -82,   -82,    29,    11,
-      47,   -82,    67,    67,   -82,   -82,    54,    54,   -82,   -82,
-     -82,   -82,    48,   -82,    48,   -14,   -17,   -82,    11,   -82,
-      58,    50,    14,   -82,    61,   -82,    64,    33,   -82,   -82,
+     -82,   -82,   -82,   -82,   -82,   -82,   -82,   -82,    41,    11,
+      47,   -82,    69,    69,   -82,   -82,    54,    54,   -82,   -82,
+     -82,   -82,    53,   -82,    53,   -14,   -17,   -82,    11,   -82,
+      55,    12,    25,   -82,    58,   -82,    65,    21,   -82,   -82,
      -82,    11,    47,   -82,    11,    63,   -82,   -82,     9,   -82,
-     -82,   -82,    53,   -82,    48,   -82,   -82,    11,    60,    76,
-      81,   -82,     9,   -82,    83,     9,   -82,   -82,    84,   -82,
-     -82,   -82,     9,    79,   -26,    85,   -82,   -82,    88,   -82,
-     -82,   -82,   -82,    36,    89,    90,   -82,    55,   -82,   -82,
-     -82,   -82,   -82,   -82,   -82,   -82,   -82,   -82,    79,    79,
-     -82,    92,    13,    92,    92,    36,   -82,    59,   -82,   -82,
-     -82,   -82,    92,    92,   -82,   -82
+     -82,   -82,    59,   -82,    53,   -82,   -82,    11,    71,    81,
+      83,   -82,     9,   -82,    84,     9,   -82,   -82,     9,   -82,
+     -82,   -82,     9,    85,   -26,    82,   -82,   -82,    87,   -82,
+     -82,   -82,    39,    89,    90,   -82,    38,   -82,   -82,   -82,
+     -82,   -82,   -82,   -82,   -82,   -82,   -82,    85,    85,   -82,
+      92,    13,    92,    92,    39,   -82,    62,   -82,   -82,   -82,
+     -82,    92,    92,   -82,   -82
 };
 
 /* YYPGOTO[NTERM-NUM].  */
 static const yytype_int16 yypgoto[] =
 {
-     -82,   -82,   107,   -82,    65,   -11,   -82,   -82,    75,   -82,
-      82,    -4,   -81,    93,    57,   102,    -8,   141,   -75,   -82,
-     -82,   101,   -82,   -82,   -82,    -5,   -82
+     -82,   -82,   107,   -82,    78,   -11,   -82,   -82,    75,   -82,
+      86,    -4,   -81,    91,    57,   101,    -8,   141,   -71,   -82,
+     -82,   102,   -82,   -82,   -82,    -5
 };
 
 /* YYTABLE[YYPACT[STATE-NUM]].  What to do in state STATE-NUM.  If
@@ -746,21 +746,21 @@ static const yytype_int16 yypgoto[] =
 #define YYTABLE_NINF -48
 static const yytype_int16 yytable[] =
 {
-      47,    60,   114,    54,    44,   115,    64,    48,    49,    50,
+      47,    60,   113,    54,    44,   114,    64,    48,    49,    50,
       51,    65,    55,    66,    16,    83,    17,    18,    19,    20,
-      21,    22,   113,    23,    24,    25,    26,    27,    28,    29,
+      21,    22,   112,    23,    24,    25,    26,    27,    28,    29,
       30,    73,    31,    32,    33,    34,    35,    36,    37,    45,
-      38,   114,    39,    61,   137,   120,   121,   134,   135,    68,
-      60,    84,   122,   123,   124,   125,   136,   138,   139,   140,
-      71,   126,   127,    96,    94,    95,    97,   144,   145,   -47,
-     -47,   -47,   -47,    99,    48,    49,    50,    51,    74,   101,
-      81,    89,    75,    90,   132,    45,    78,   106,   142,    45,
-     109,    87,    92,    93,   102,    69,    98,   112,     1,     2,
-       3,     4,     5,     6,     7,   104,     8,     9,    10,    11,
-     105,    81,   133,   107,   110,    12,   117,   118,   130,   131,
-     114,    70,    13,    86,   141,     1,     2,     3,     4,     5,
-       6,     7,   143,     8,     9,    10,    11,    91,    85,   100,
-      80,    72,    12,    43,    77,     0,     0,     0,     0,    13
+      38,   113,    39,    89,   136,    90,   133,   134,   119,   120,
+      60,    84,    94,    95,    61,   121,   122,   123,   124,   135,
+     137,   138,   139,    96,   125,   126,    97,   131,    45,    68,
+     143,   144,    71,    99,   -47,   -47,   -47,   -47,    74,   101,
+      48,    49,    50,    51,    75,    81,    78,   106,    87,    92,
+     109,   141,    45,   110,    93,    69,    98,   111,     1,     2,
+       3,     4,     5,     6,     7,   102,     8,     9,    10,    11,
+     104,   132,   105,   116,   107,    12,   117,    81,   129,   130,
+     113,    70,    13,   140,     1,     2,     3,     4,     5,     6,
+       7,   142,     8,     9,    10,    11,    86,    91,    80,   100,
+      72,    12,    85,    43,     0,    77,     0,     0,    13
 };
 
 static const yytype_int16 yycheck[] =
@@ -769,17 +769,17 @@ static const yytype_int16 yycheck[] =
       24,    29,    29,    31,     3,    29,     5,     6,     7,     8,
        9,    10,   103,    12,    13,    14,    15,    16,    17,    18,
       19,    39,    21,    22,    23,    24,    25,    26,    27,    30,
-      29,    28,    31,    29,    31,     9,    10,   128,   129,    29,
-      58,    55,    16,    17,    18,    19,   131,   132,   133,   134,
-      31,    25,    26,    71,    31,    32,    74,   142,   143,    21,
-      22,    23,    24,    78,    21,    22,    23,    24,    31,    87,
-      32,    31,    15,    33,    29,    30,    32,    92,    29,    30,
-      95,    33,    31,    29,    34,     0,    33,   102,     3,     4,
-       5,     6,     7,     8,     9,    29,    11,    12,    13,    14,
-      29,    32,   117,    30,    30,    20,    31,    29,    29,    29,
-      28,    14,    27,    58,   135,     3,     4,     5,     6,     7,
-       8,     9,   137,    11,    12,    13,    14,    62,    56,    82,
-      47,    39,    20,     2,    43,    -1,    -1,    -1,    -1,    27
+      29,    28,    31,    31,    31,    33,   127,   128,     9,    10,
+      58,    55,    31,    32,    29,    16,    17,    18,    19,   130,
+     131,   132,   133,    71,    25,    26,    74,    29,    30,    29,
+     141,   142,    31,    78,    21,    22,    23,    24,    31,    87,
+      21,    22,    23,    24,    15,    32,    32,    92,    33,    31,
+      95,    29,    30,    98,    29,     0,    33,   102,     3,     4,
+       5,     6,     7,     8,     9,    34,    11,    12,    13,    14,
+      29,   116,    29,    31,    30,    20,    29,    32,    29,    29,
+      28,    14,    27,   134,     3,     4,     5,     6,     7,     8,
+       9,   136,    11,    12,    13,    14,    58,    62,    47,    82,
+      39,    20,    56,     2,    -1,    43,    -1,    -1,    27
 };
 
 /* YYSTOS[STATE-NUM] -- The (internal number of the) accessing
@@ -797,10 +797,10 @@ static const yytype_uint8 yystos[] =
       48,    32,    47,    29,    46,    45,    39,    33,    55,    31,
       33,    43,    31,    29,    31,    32,    51,    51,    33,    60,
       49,    51,    34,    54,    29,    29,    60,    30,    58,    60,
-      30,    61,    60,    47,    28,    31,    53,    31,    29,    59,
-       9,    10,    16,    17,    18,    19,    25,    26,    40,    41,
-      29,    29,    29,    60,    47,    47,    53,    31,    53,    53,
-      53,    40,    29,    60,    53,    53
+      60,    60,    47,    28,    31,    53,    31,    29,    59,     9,
+      10,    16,    17,    18,    19,    25,    26,    40,    41,    29,
+      29,    29,    60,    47,    47,    53,    31,    53,    53,    53,
+      40,    29,    60,    53,    53
 };
 
 #define yyerrok		(yyerrstatus = 0)
@@ -1615,312 +1615,312 @@ yyreduce:
   switch (yyn)
     {
         case 4:
-#line 143 "deffilep.y"
-    { def_image_name ((yyvsp[(2) - (3)].id), (yyvsp[(3) - (3)].vma), 0); }
+#line 142 "deffilep.y"
+    { def_image_name ((yyvsp[(2) - (3)].id), (yyvsp[(3) - (3)].number), 0); }
     break;
 
   case 5:
-#line 144 "deffilep.y"
-    { def_image_name ((yyvsp[(2) - (3)].id), (yyvsp[(3) - (3)].vma), 1); }
+#line 143 "deffilep.y"
+    { def_image_name ((yyvsp[(2) - (3)].id), (yyvsp[(3) - (3)].number), 1); }
     break;
 
   case 6:
-#line 145 "deffilep.y"
+#line 144 "deffilep.y"
     { def_description ((yyvsp[(2) - (2)].id));}
     break;
 
   case 7:
-#line 146 "deffilep.y"
+#line 145 "deffilep.y"
     { def_stacksize ((yyvsp[(2) - (3)].number), (yyvsp[(3) - (3)].number));}
     break;
 
   case 8:
-#line 147 "deffilep.y"
+#line 146 "deffilep.y"
     { def_heapsize ((yyvsp[(2) - (3)].number), (yyvsp[(3) - (3)].number));}
     break;
 
   case 9:
-#line 148 "deffilep.y"
+#line 147 "deffilep.y"
     { def_section ("CODE", (yyvsp[(2) - (2)].number));}
     break;
 
   case 10:
-#line 149 "deffilep.y"
+#line 148 "deffilep.y"
     { def_section ("DATA", (yyvsp[(2) - (2)].number));}
     break;
 
   case 14:
-#line 153 "deffilep.y"
+#line 152 "deffilep.y"
     { def_version ((yyvsp[(2) - (2)].number), 0);}
     break;
 
   case 15:
-#line 154 "deffilep.y"
+#line 153 "deffilep.y"
     { def_version ((yyvsp[(2) - (4)].number), (yyvsp[(4) - (4)].number));}
     break;
 
   case 16:
-#line 155 "deffilep.y"
+#line 154 "deffilep.y"
     { def_directive ((yyvsp[(2) - (2)].id));}
     break;
 
   case 17:
-#line 156 "deffilep.y"
+#line 155 "deffilep.y"
     { def_aligncomm ((yyvsp[(2) - (4)].id), (yyvsp[(4) - (4)].number));}
     break;
 
   case 21:
-#line 171 "deffilep.y"
+#line 170 "deffilep.y"
     { def_exports ((yyvsp[(1) - (7)].id), (yyvsp[(2) - (7)].id), (yyvsp[(3) - (7)].number), (yyvsp[(5) - (7)].number), (yyvsp[(7) - (7)].id)); }
     break;
 
   case 22:
-#line 177 "deffilep.y"
+#line 176 "deffilep.y"
     { (yyval.number) = (yyvsp[(1) - (3)].number) | (yyvsp[(3) - (3)].number); }
     break;
 
   case 23:
-#line 178 "deffilep.y"
+#line 177 "deffilep.y"
     { (yyval.number) = 0; }
     break;
 
   case 24:
-#line 181 "deffilep.y"
+#line 180 "deffilep.y"
     { (yyval.number) = 1; }
     break;
 
   case 25:
-#line 182 "deffilep.y"
+#line 181 "deffilep.y"
     { (yyval.number) = 1; }
     break;
 
   case 26:
-#line 183 "deffilep.y"
+#line 182 "deffilep.y"
     { (yyval.number) = 2; }
     break;
 
   case 27:
-#line 184 "deffilep.y"
+#line 183 "deffilep.y"
     { (yyval.number) = 2; }
     break;
 
   case 28:
-#line 185 "deffilep.y"
+#line 184 "deffilep.y"
     { (yyval.number) = 4; }
     break;
 
   case 29:
-#line 186 "deffilep.y"
+#line 185 "deffilep.y"
     { (yyval.number) = 4; }
     break;
 
   case 30:
-#line 187 "deffilep.y"
+#line 186 "deffilep.y"
     { (yyval.number) = 8; }
     break;
 
   case 31:
-#line 188 "deffilep.y"
+#line 187 "deffilep.y"
     { (yyval.number) = 8; }
     break;
 
   case 34:
-#line 197 "deffilep.y"
+#line 196 "deffilep.y"
     { def_import ((yyvsp[(1) - (8)].id), (yyvsp[(3) - (8)].id), (yyvsp[(5) - (8)].id), (yyvsp[(7) - (8)].id), -1, (yyvsp[(8) - (8)].id)); }
     break;
 
   case 35:
-#line 199 "deffilep.y"
+#line 198 "deffilep.y"
     { def_import ((yyvsp[(1) - (8)].id), (yyvsp[(3) - (8)].id), (yyvsp[(5) - (8)].id),  0, (yyvsp[(7) - (8)].number), (yyvsp[(8) - (8)].id)); }
     break;
 
   case 36:
-#line 201 "deffilep.y"
+#line 200 "deffilep.y"
     { def_import ((yyvsp[(1) - (6)].id), (yyvsp[(3) - (6)].id),  0, (yyvsp[(5) - (6)].id), -1, (yyvsp[(6) - (6)].id)); }
     break;
 
   case 37:
-#line 203 "deffilep.y"
+#line 202 "deffilep.y"
     { def_import ((yyvsp[(1) - (6)].id), (yyvsp[(3) - (6)].id),  0,  0, (yyvsp[(5) - (6)].number), (yyvsp[(6) - (6)].id)); }
     break;
 
   case 38:
-#line 205 "deffilep.y"
+#line 204 "deffilep.y"
     { def_import( 0, (yyvsp[(1) - (6)].id), (yyvsp[(3) - (6)].id), (yyvsp[(5) - (6)].id), -1, (yyvsp[(6) - (6)].id)); }
     break;
 
   case 39:
-#line 207 "deffilep.y"
+#line 206 "deffilep.y"
     { def_import ( 0, (yyvsp[(1) - (4)].id),  0, (yyvsp[(3) - (4)].id), -1, (yyvsp[(4) - (4)].id)); }
     break;
 
   case 42:
-#line 216 "deffilep.y"
+#line 215 "deffilep.y"
     { def_section ((yyvsp[(1) - (2)].id), (yyvsp[(2) - (2)].number));}
     break;
 
   case 43:
-#line 217 "deffilep.y"
+#line 216 "deffilep.y"
     { def_section_alt ((yyvsp[(1) - (2)].id), (yyvsp[(2) - (2)].id));}
     break;
 
   case 44:
-#line 221 "deffilep.y"
+#line 220 "deffilep.y"
     { (yyval.number) = (yyvsp[(1) - (3)].number) | (yyvsp[(3) - (3)].number); }
     break;
 
   case 45:
-#line 222 "deffilep.y"
+#line 221 "deffilep.y"
     { (yyval.number) = (yyvsp[(1) - (1)].number); }
     break;
 
   case 48:
-#line 229 "deffilep.y"
+#line 228 "deffilep.y"
     { (yyval.number)=(yyvsp[(2) - (2)].number);}
     break;
 
   case 49:
-#line 230 "deffilep.y"
+#line 229 "deffilep.y"
     { (yyval.number)=-1;}
     break;
 
   case 50:
-#line 234 "deffilep.y"
+#line 233 "deffilep.y"
     { (yyval.number) = 1;}
     break;
 
   case 51:
-#line 235 "deffilep.y"
+#line 234 "deffilep.y"
     { (yyval.number) = 2;}
     break;
 
   case 52:
-#line 236 "deffilep.y"
+#line 235 "deffilep.y"
     { (yyval.number)=4;}
     break;
 
   case 53:
-#line 237 "deffilep.y"
+#line 236 "deffilep.y"
     { (yyval.number)=8;}
     break;
 
   case 54:
-#line 241 "deffilep.y"
+#line 240 "deffilep.y"
     { (yyval.id_const) = "BASE"; }
     break;
 
   case 55:
-#line 242 "deffilep.y"
+#line 241 "deffilep.y"
     { (yyval.id_const) = "CODE"; }
     break;
 
   case 56:
-#line 243 "deffilep.y"
+#line 242 "deffilep.y"
     { (yyval.id_const) = "CONSTANT"; }
     break;
 
   case 57:
-#line 244 "deffilep.y"
+#line 243 "deffilep.y"
     { (yyval.id_const) = "constant"; }
     break;
 
   case 58:
-#line 245 "deffilep.y"
+#line 244 "deffilep.y"
     { (yyval.id_const) = "DATA"; }
     break;
 
   case 59:
-#line 246 "deffilep.y"
+#line 245 "deffilep.y"
     { (yyval.id_const) = "data"; }
     break;
 
   case 60:
-#line 247 "deffilep.y"
+#line 246 "deffilep.y"
     { (yyval.id_const) = "DESCRIPTION"; }
     break;
 
   case 61:
-#line 248 "deffilep.y"
+#line 247 "deffilep.y"
     { (yyval.id_const) = "DIRECTIVE"; }
     break;
 
   case 62:
-#line 249 "deffilep.y"
+#line 248 "deffilep.y"
     { (yyval.id_const) = "EXECUTE"; }
     break;
 
   case 63:
-#line 250 "deffilep.y"
+#line 249 "deffilep.y"
     { (yyval.id_const) = "EXPORTS"; }
     break;
 
   case 64:
-#line 251 "deffilep.y"
+#line 250 "deffilep.y"
     { (yyval.id_const) = "HEAPSIZE"; }
     break;
 
   case 65:
-#line 252 "deffilep.y"
+#line 251 "deffilep.y"
     { (yyval.id_const) = "IMPORTS"; }
     break;
 
   case 66:
-#line 259 "deffilep.y"
+#line 258 "deffilep.y"
     { (yyval.id_const) = "NAME"; }
     break;
 
   case 67:
-#line 260 "deffilep.y"
+#line 259 "deffilep.y"
     { (yyval.id_const) = "NONAME"; }
     break;
 
   case 68:
-#line 261 "deffilep.y"
+#line 260 "deffilep.y"
     { (yyval.id_const) = "noname"; }
     break;
 
   case 69:
-#line 262 "deffilep.y"
+#line 261 "deffilep.y"
     { (yyval.id_const) = "PRIVATE"; }
     break;
 
   case 70:
-#line 263 "deffilep.y"
+#line 262 "deffilep.y"
     { (yyval.id_const) = "private"; }
     break;
 
   case 71:
-#line 264 "deffilep.y"
+#line 263 "deffilep.y"
     { (yyval.id_const) = "READ"; }
     break;
 
   case 72:
-#line 265 "deffilep.y"
+#line 264 "deffilep.y"
     { (yyval.id_const) = "SHARED"; }
     break;
 
   case 73:
-#line 266 "deffilep.y"
+#line 265 "deffilep.y"
     { (yyval.id_const) = "STACKSIZE"; }
     break;
 
   case 74:
-#line 267 "deffilep.y"
+#line 266 "deffilep.y"
     { (yyval.id_const) = "VERSION"; }
     break;
 
   case 75:
-#line 268 "deffilep.y"
+#line 267 "deffilep.y"
     { (yyval.id_const) = "WRITE"; }
     break;
 
   case 76:
-#line 271 "deffilep.y"
+#line 270 "deffilep.y"
     { (yyval.id) = (yyvsp[(1) - (1)].id); }
     break;
 
   case 77:
-#line 273 "deffilep.y"
+#line 272 "deffilep.y"
     {
 	    char *name = xmalloc (strlen ((yyvsp[(2) - (2)].id_const)) + 2);
 	    sprintf (name, ".%s", (yyvsp[(2) - (2)].id_const));
@@ -1929,8 +1929,8 @@ yyreduce:
     break;
 
   case 78:
-#line 279 "deffilep.y"
-    {
+#line 278 "deffilep.y"
+    { 
 	    char *name = def_pool_alloc (strlen ((yyvsp[(2) - (2)].id)) + 2);
 	    sprintf (name, ".%s", (yyvsp[(2) - (2)].id));
 	    (yyval.id) = name;
@@ -1938,8 +1938,8 @@ yyreduce:
     break;
 
   case 79:
-#line 285 "deffilep.y"
-    {
+#line 284 "deffilep.y"
+    { 
 	    char *name = def_pool_alloc (strlen ((yyvsp[(1) - (3)].id_const)) + 1 + strlen ((yyvsp[(3) - (3)].id)) + 1);
 	    sprintf (name, "%s.%s", (yyvsp[(1) - (3)].id_const), (yyvsp[(3) - (3)].id));
 	    (yyval.id) = name;
@@ -1947,8 +1947,8 @@ yyreduce:
     break;
 
   case 80:
-#line 291 "deffilep.y"
-    {
+#line 290 "deffilep.y"
+    { 
 	    char *name = def_pool_alloc (strlen ((yyvsp[(1) - (3)].id)) + 1 + strlen ((yyvsp[(3) - (3)].id)) + 1);
 	    sprintf (name, "%s.%s", (yyvsp[(1) - (3)].id), (yyvsp[(3) - (3)].id));
 	    (yyval.id) = name;
@@ -1956,62 +1956,62 @@ yyreduce:
     break;
 
   case 81:
-#line 298 "deffilep.y"
+#line 297 "deffilep.y"
     { (yyval.id) = (yyvsp[(1) - (1)].id); }
     break;
 
   case 82:
-#line 299 "deffilep.y"
+#line 298 "deffilep.y"
     { (yyval.id) = ""; }
     break;
 
   case 83:
-#line 302 "deffilep.y"
+#line 301 "deffilep.y"
     { (yyval.id) = (yyvsp[(2) - (2)].id); }
     break;
 
   case 84:
-#line 303 "deffilep.y"
+#line 302 "deffilep.y"
     { (yyval.id) = 0; }
     break;
 
   case 85:
-#line 307 "deffilep.y"
+#line 306 "deffilep.y"
     { (yyval.number) = (yyvsp[(2) - (2)].number);}
     break;
 
   case 86:
-#line 308 "deffilep.y"
+#line 307 "deffilep.y"
     { (yyval.number) = -1;}
     break;
 
   case 87:
-#line 312 "deffilep.y"
+#line 311 "deffilep.y"
     { (yyval.id) = (yyvsp[(2) - (2)].id); }
     break;
 
   case 88:
-#line 313 "deffilep.y"
+#line 312 "deffilep.y"
     { (yyval.id) =  0; }
     break;
 
   case 89:
-#line 316 "deffilep.y"
-    { (yyval.vma) = (yyvsp[(3) - (3)].vma);}
+#line 315 "deffilep.y"
+    { (yyval.number) = (yyvsp[(3) - (3)].number);}
     break;
 
   case 90:
-#line 317 "deffilep.y"
-    { (yyval.vma) = (bfd_vma) -1;}
+#line 316 "deffilep.y"
+    { (yyval.number) = -1;}
     break;
 
   case 91:
-#line 320 "deffilep.y"
+#line 319 "deffilep.y"
     { (yyval.id) = (yyvsp[(1) - (1)].id); }
     break;
 
   case 92:
-#line 322 "deffilep.y"
+#line 321 "deffilep.y"
     {
 	    char *id = def_pool_alloc (strlen ((yyvsp[(2) - (2)].id)) + 2);
 	    sprintf (id, ".%s", (yyvsp[(2) - (2)].id));
@@ -2020,7 +2020,7 @@ yyreduce:
     break;
 
   case 93:
-#line 328 "deffilep.y"
+#line 327 "deffilep.y"
     {
 	    char *id = def_pool_alloc (strlen ((yyvsp[(1) - (4)].id)) + 1 + strlen ((yyvsp[(3) - (4)].digits)) + strlen ((yyvsp[(4) - (4)].id)) + 1);
 	    sprintf (id, "%s.%s%s", (yyvsp[(1) - (4)].id), (yyvsp[(3) - (4)].digits), (yyvsp[(4) - (4)].id));
@@ -2029,38 +2029,33 @@ yyreduce:
     break;
 
   case 94:
-#line 335 "deffilep.y"
+#line 334 "deffilep.y"
     { (yyval.digits) = (yyvsp[(1) - (1)].digits); }
     break;
 
   case 95:
-#line 336 "deffilep.y"
+#line 335 "deffilep.y"
     { (yyval.digits) = ""; }
     break;
 
   case 96:
-#line 339 "deffilep.y"
+#line 338 "deffilep.y"
     { (yyval.id) = (yyvsp[(1) - (1)].id); }
     break;
 
   case 97:
-#line 340 "deffilep.y"
+#line 339 "deffilep.y"
     { (yyval.id) = ""; }
     break;
 
   case 98:
-#line 343 "deffilep.y"
+#line 342 "deffilep.y"
     { (yyval.number) = strtoul ((yyvsp[(1) - (1)].digits), 0, 0); }
-    break;
-
-  case 99:
-#line 345 "deffilep.y"
-    { (yyval.vma) = (bfd_vma) strtoull ((yyvsp[(1) - (1)].digits), 0, 0); }
     break;
 
 
 /* Line 1267 of yacc.c.  */
-#line 2064 "deffilep.c"
+#line 2059 "deffilep.c"
       default: break;
     }
   YY_SYMBOL_PRINT ("-> $$ =", yyr1[yyn], &yyval, &yyloc);
@@ -2274,7 +2269,7 @@ yyreturn:
 }
 
 
-#line 347 "deffilep.y"
+#line 344 "deffilep.y"
 
 
 /*****************************************************************************
@@ -2443,11 +2438,7 @@ def_file_print (FILE *file, def_file *fdef)
   if (fdef->is_dll != -1)
     fprintf (file, "  is dll: %s\n", fdef->is_dll ? "yes" : "no");
   if (fdef->base_address != (bfd_vma) -1)
-    {
-      fprintf (file, "  base address: 0x");
-      fprintf_vma (file, fdef->base_address);
-      fprintf (file, "\n");
-    }
+    fprintf (file, "  base address: 0x%08x\n", fdef->base_address);
   if (fdef->description)
     fprintf (file, "  description: `%s'\n", fdef->description);
   if (fdef->stack_reserve != -1)
@@ -2864,20 +2855,13 @@ def_file_add_directive (def_file *my_def, const char *param, int len)
 
       if (!diropts[i].param)
 	{
-	  if (tend < pend)
-	    {
-	      char saved;
+	  char saved;
 
-	      saved = * tend;
-	      * tend = 0;
-	      /* xgettext:c-format */
-	      einfo (_("Warning: .drectve `%s' unrecognized\n"), param);
-	      * tend = saved;
-	    }
-	  else
-	    {
-	      einfo (_("Warning: corrupt .drectve at end of def file\n"));
-	    }
+	  saved = * tend;
+	  * tend = 0;
+	  /* xgettext:c-format */
+	  einfo (_("Warning: .drectve `%s' unrecognized\n"), param);
+	  * tend = saved;
 	}
 
       lex_parse_string = 0;
@@ -2891,7 +2875,7 @@ def_file_add_directive (def_file *my_def, const char *param, int len)
 /* Parser Callbacks.  */
 
 static void
-def_image_name (const char *name, bfd_vma base, int is_dll)
+def_image_name (const char *name, int base, int is_dll)
 {
   /* If a LIBRARY or NAME statement is specified without a name, there is nothing
      to do here.  We retain the output filename specified on command line.  */
@@ -2905,7 +2889,7 @@ def_image_name (const char *name, bfd_vma base, int is_dll)
 	       name);
       if (def->name)
 	free (def->name);
-      /* Append the default suffix, if none specified.  */
+      /* Append the default suffix, if none specified.  */ 
       if (strchr (image_name, '.') == 0)
 	{
 	  const char * suffix = is_dll ? ".dll" : ".exe";
@@ -3060,7 +3044,7 @@ def_import (const char *internal_name,
   char *buf = 0;
   const char *ext = dllext ? dllext : "dll";
   int is_dup = 0;
-
+   
   buf = xmalloc (strlen (module) + strlen (ext) + 2);
   sprintf (buf, "%s.%s", module, ext);
   module = buf;
@@ -3092,7 +3076,7 @@ static void
 def_aligncomm (char *str, int align)
 {
   def_file_aligncomm *c, *p;
-
+  
   p = NULL;
   c = def->aligncomms;
   while (c != NULL)

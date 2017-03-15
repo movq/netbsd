@@ -1,4 +1,4 @@
-/*	$NetBSD: ks_p12.c,v 1.2 2017/01/28 21:31:48 christos Exp $	*/
+/*	$NetBSD: ks_p12.c,v 1.1.1.2 2014/04/24 12:45:42 pettai Exp $	*/
 
 /*
  * Copyright (c) 2004 - 2007 Kungliga Tekniska Högskolan
@@ -132,7 +132,6 @@ certBag_parser(hx509_context context,
 	       const void *data, size_t length,
 	       const PKCS12_Attributes *attrs)
 {
-    heim_error_t error = NULL;
     heim_octet_string os;
     hx509_cert cert;
     PKCS12_CertBag cb;
@@ -155,13 +154,10 @@ certBag_parser(hx509_context context,
     if (ret)
 	return ret;
 
-    cert = hx509_cert_init_data(context, os.data, os.length, &error);
+    ret = hx509_cert_init_data(context, os.data, os.length, &cert);
     der_free_octet_string(&os);
-    if (cert == NULL) {
-	ret = heim_error_get_code(error);
-	heim_release(error);
+    if (ret)
 	return ret;
-    }
 
     ret = _hx509_collector_certs_add(context, c, cert);
     if (ret) {
@@ -703,10 +699,7 @@ static struct hx509_keyset_ops keyset_pkcs12 = {
     NULL,
     p12_iter_start,
     p12_iter,
-    p12_iter_end,
-    NULL,
-    NULL,
-    NULL
+    p12_iter_end
 };
 
 void

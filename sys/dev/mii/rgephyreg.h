@@ -1,4 +1,4 @@
-/*	$NetBSD: rgephyreg.h,v 1.9 2015/08/21 16:29:48 jmcneill Exp $	*/
+/*	$NetBSD: rgephyreg.h,v 1.6.34.3 2015/11/04 17:50:37 riz Exp $	*/
 
 /*
  * Copyright (c) 2003

@@ -1,6 +1,6 @@
 /* Native-dependent code for GNU/Linux TILE-Gx.
 
-   Copyright (C) 2012-2016 Free Software Foundation, Inc.
+   Copyright (C) 2012-2014 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -23,7 +23,10 @@
 #include "regcache.h"
 #include "linux-nat.h"
 
-#include "nat/gdb_ptrace.h"
+#include <sys/ptrace.h>
+
+#include "gdb_assert.h"
+#include <string.h>
 
 #include <sys/procfs.h>
 

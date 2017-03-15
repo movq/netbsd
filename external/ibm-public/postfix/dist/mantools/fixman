@@ -89,8 +89,6 @@ sub emit_text
 	$block =~ s/<\/blockquote>/\n.in -4\n.fi\n.ad\n/g;
 	$block =~ s/\n<br>/\n.br\n/g;
 	$block =~ s/<br>\s*/\n.br\n/g;
-	$block =~ s/&le;/<=/g;
-	$block =~ s/&ge;/>=/g;
 	$block =~ s/&lt;/</g;
 	$block =~ s/&gt;/>/g;
 
@@ -152,8 +150,6 @@ while(<POSTCONF>) {
 
 	$defval =~ s/\s+/ /g;
 	$defval =~ s/\s+$//;
-	$defval =~ s/&le;/<=/g;
-	$defval =~ s/&ge;/>=/g;
 	$defval =~ s/&lt;/</g;
 	$defval =~ s/&gt;/>/g;
 	$defval =~ s/"/'/g;

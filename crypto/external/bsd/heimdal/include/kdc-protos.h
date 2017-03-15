@@ -1,7 +1,6 @@
 /* This is a generated file */
 #ifndef __kdc_protos_h__
 #define __kdc_protos_h__
-#ifndef DOXY
 
 #include <stdarg.h>
 
@@ -115,5 +114,4 @@ krb5_kdc_windc_init (krb5_context /*context*/);
 }
 #endif
 
-#endif /* DOXY */
 #endif /* __kdc_protos_h__ */

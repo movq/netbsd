@@ -1,7 +1,7 @@
-/* $OpenBSD$ */
+/* Id */
 
 /*
- * Copyright (c) 2009 Nicholas Marriott <nicholas.marriott@gmail.com>
+ * Copyright (c) 2009 Nicholas Marriott <nicm@users.sourceforge.net>
  *
  * Permission to use, copy, modify, and distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -18,122 +18,115 @@
 
 #include <sys/types.h>
 
-#include <stdlib.h>
-
 #include "tmux.h"
 
 /*
  * Switch window to selected layout.
  */
 
+void		 cmd_select_layout_key_binding(struct cmd *, int);
 enum cmd_retval	 cmd_select_layout_exec(struct cmd *, struct cmd_q *);
 
 const struct cmd_entry cmd_select_layout_entry = {
-	.name = "select-layout",
-	.alias = "selectl",
-
-	.args = { "nopt:", 0, 1 },
-	.usage = "[-nop] " CMD_TARGET_WINDOW_USAGE " [layout-name]",
-
-	.tflag = CMD_WINDOW,
-
-	.flags = 0,
-	.exec = cmd_select_layout_exec
+	"select-layout", "selectl",
+	"npt:", 0, 1,
+	"[-np] " CMD_TARGET_WINDOW_USAGE " [layout-name]",
+	0,
+	cmd_select_layout_key_binding,
+	cmd_select_layout_exec
 };
 
 const struct cmd_entry cmd_next_layout_entry = {
-	.name = "next-layout",
-	.alias = "nextl",
-
-	.args = { "t:", 0, 0 },
-	.usage = CMD_TARGET_WINDOW_USAGE,
-
-	.tflag = CMD_WINDOW,
-
-	.flags = 0,
-	.exec = cmd_select_layout_exec
+	"next-layout", "nextl",
+	"t:", 0, 0,
+	CMD_TARGET_WINDOW_USAGE,
+	0,
+	NULL,
+	cmd_select_layout_exec
 };
 
 const struct cmd_entry cmd_previous_layout_entry = {
-	.name = "previous-layout",
-	.alias = "prevl",
-
-	.args = { "t:", 0, 0 },
-	.usage = CMD_TARGET_WINDOW_USAGE,
-
-	.tflag = CMD_WINDOW,
-
-	.flags = 0,
-	.exec = cmd_select_layout_exec
+	"previous-layout", "prevl",
+	"t:", 0, 0,
+	CMD_TARGET_WINDOW_USAGE,
+	0,
+	NULL,
+	cmd_select_layout_exec
 };
+
+void
+cmd_select_layout_key_binding(struct cmd *self, int key)
+{
+	switch (key) {
+	case '1' | KEYC_ESCAPE:
+		self->args = args_create(1, "even-horizontal");
+		break;
+	case '2' | KEYC_ESCAPE:
+		self->args = args_create(1, "even-vertical");
+		break;
+	case '3' | KEYC_ESCAPE:
+		self->args = args_create(1, "main-horizontal");
+		break;
+	case '4' | KEYC_ESCAPE:
+		self->args = args_create(1, "main-vertical");
+		break;
+	case '5' | KEYC_ESCAPE:
+		self->args = args_create(1, "tiled");
+		break;
+	default:
+		self->args = args_create(0);
+		break;
+	}
+}
 
 enum cmd_retval
 cmd_select_layout_exec(struct cmd *self, struct cmd_q *cmdq)
 {
 	struct args	*args = self->args;
-	struct winlink	*wl = cmdq->state.tflag.wl;
-	struct window	*w;
+	struct winlink	*wl;
 	const char	*layoutname;
-	char		*oldlayout;
 	int		 next, previous, layout;
 
-	w = wl->window;
-	server_unzoom_window(w);
+	if ((wl = cmd_find_window(cmdq, args_get(args, 't'), NULL)) == NULL)
+		return (CMD_RETURN_ERROR);
+	server_unzoom_window(wl->window);
 
 	next = self->entry == &cmd_next_layout_entry;
-	if (args_has(args, 'n'))
+	if (args_has(self->args, 'n'))
 		next = 1;
 	previous = self->entry == &cmd_previous_layout_entry;
-	if (args_has(args, 'p'))
+	if (args_has(self->args, 'p'))
 		previous = 1;
-
-	oldlayout = w->old_layout;
-	w->old_layout = layout_dump(w->layout_root);
 
 	if (next || previous) {
 		if (next)
-			layout_set_next(w);
+			layout = layout_set_next(wl->window);
 		else
-			layout_set_previous(w);
-		goto changed;
+			layout = layout_set_previous(wl->window);
+		server_redraw_window(wl->window);
+		cmdq_info(cmdq, "arranging in: %s", layout_set_name(layout));
+		return (CMD_RETURN_NORMAL);
 	}
 
-	if (!args_has(args, 'o')) {
-		if (args->argc == 0)
-			layout = w->lastlayout;
-		else
-			layout = layout_set_lookup(args->argv[0]);
-		if (layout != -1) {
-			layout_set_select(w, layout);
-			goto changed;
-		}
-	}
-
-	if (args->argc != 0)
-		layoutname = args->argv[0];
-	else if (args_has(args, 'o'))
-		layoutname = oldlayout;
+	if (args->argc == 0)
+		layout = wl->window->lastlayout;
 	else
-		layoutname = NULL;
-
-	if (layoutname != NULL) {
-		if (layout_parse(w, layoutname) == -1) {
-			cmdq_error(cmdq, "can't set layout: %s", layoutname);
-			goto error;
-		}
-		goto changed;
+		layout = layout_set_lookup(args->argv[0]);
+	if (layout != -1) {
+		layout = layout_set_select(wl->window, layout);
+		server_redraw_window(wl->window);
+		cmdq_info(cmdq, "arranging in: %s", layout_set_name(layout));
+		return (CMD_RETURN_NORMAL);
 	}
 
-	free(oldlayout);
+	if (args->argc != 0) {
+		layoutname = args->argv[0];
+		if (layout_parse(wl->window, layoutname) == -1) {
+			cmdq_error(cmdq, "can't set layout: %s", layoutname);
+			return (CMD_RETURN_ERROR);
+		}
+		server_redraw_window(wl->window);
+		cmdq_info(cmdq, "arranging in: %s", layoutname);
+	}
 	return (CMD_RETURN_NORMAL);
-
-changed:
-	free(oldlayout);
-	server_redraw_window(w);
-	return (CMD_RETURN_NORMAL);
-
-error:
-	free(w->old_layout);
-	w->old_layout = oldlayout;
-	return (CMD_RETURN_ERROR);
 }

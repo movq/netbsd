@@ -41,12 +41,14 @@ namespace llvm {
 //
 class PassNameParser : public PassRegistrationListener,
                        public cl::parser<const PassInfo*> {
+  cl::Option *Opt;
 public:
-  PassNameParser(cl::Option &O);
-  ~PassNameParser() override;
+  PassNameParser();
+  virtual ~PassNameParser();
 
-  void initialize() {
-    cl::parser<const PassInfo*>::initialize();
+  void initialize(cl::Option &O) {
+    Opt = &O;
+    cl::parser<const PassInfo*>::initialize(O);
 
     // Add all of the passes to the map that got initialized before 'this' did.
     enumeratePasses();
@@ -60,20 +62,20 @@ public:
   inline bool ignorablePass(const PassInfo *P) const {
     // Ignore non-selectable and non-constructible passes!  Ignore
     // non-optimizations.
-    return P->getPassArgument().empty() || P->getNormalCtor() == nullptr ||
-           ignorablePassImpl(P);
+    return P->getPassArgument() == nullptr || *P->getPassArgument() == 0 ||
+           P->getNormalCtor() == nullptr || ignorablePassImpl(P);
   }
 
   // Implement the PassRegistrationListener callbacks used to populate our map
   //
   void passRegistered(const PassInfo *P) override {
-    if (ignorablePass(P)) return;
-    if (findOption(P->getPassArgument().data()) != getNumOptions()) {
+    if (ignorablePass(P) || !Opt) return;
+    if (findOption(P->getPassArgument()) != getNumOptions()) {
       errs() << "Two passes with the same argument (-"
            << P->getPassArgument() << ") attempted to be registered!\n";
       llvm_unreachable(nullptr);
     }
-    addLiteralOption(P->getPassArgument().data(), P, P->getPassName().data());
+    addLiteralOption(P->getPassArgument(), P, P->getPassName());
   }
   void passEnumerate(const PassInfo *P) override { passRegistered(P); }
 
@@ -89,7 +91,7 @@ private:
   // ValLessThan - Provide a sorting comparator for Values elements...
   static int ValLessThan(const PassNameParser::OptionInfo *VT1,
                          const PassNameParser::OptionInfo *VT2) {
-    return VT1->Name < VT2->Name;
+    return std::strcmp(VT1->Name, VT2->Name);
   }
 };
 
@@ -130,7 +132,7 @@ template<const char *Args>
 class PassArgFilter {
 public:
   bool operator()(const PassInfo &P) const {
-    return StringRef(Args).contains(P.getPassArgument());
+    return(std::strstr(Args, P.getPassArgument()));
   }
 };
 

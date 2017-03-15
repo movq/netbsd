@@ -1,4 +1,4 @@
-/*	$NetBSD: dnssec-settime.c,v 1.14 2016/05/26 16:49:55 christos Exp $	*/
+/*	$NetBSD: dnssec-settime.c,v 1.10.2.4 2016/10/14 12:01:10 martin Exp $	*/
 
 /*
  * Copyright (C) 2009-2015  Internet Systems Consortium, Inc. ("ISC")

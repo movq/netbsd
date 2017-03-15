@@ -1,7 +1,6 @@
 /* This is a generated file */
 #ifndef __kcm_protos_h__
 #define __kcm_protos_h__
-#ifndef DOXY
 
 #include <stdarg.h>
 
@@ -304,5 +303,4 @@ kcm_zero_ccache_data_internal (
 }
 #endif
 
-#endif /* DOXY */
 #endif /* __kcm_protos_h__ */

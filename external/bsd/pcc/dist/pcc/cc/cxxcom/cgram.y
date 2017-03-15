@@ -1,5 +1,5 @@
-/*	Id: cgram.y,v 1.9 2015/11/24 17:30:20 ragge Exp 	*/	
-/*	$NetBSD: cgram.y,v 1.1.1.3 2016/02/09 20:28:58 plunky Exp $	*/
+/*	Id: cgram.y,v 1.7 2014/06/06 13:19:03 plunky Exp 	*/	
+/*	$NetBSD: cgram.y,v 1.1.1.2 2014/07/24 19:25:26 plunky Exp $	*/
 
 /*
  * Copyright (c) 2003 Anders Magnusson (ragge@ludd.luth.se).
@@ -520,7 +520,7 @@ parameter_list:	   parameter_declaration { $$ = $1; }
  */
 parameter_declaration:
 		   declaration_specifiers declarator attr_var {
-			if (glval($1) != SNULL && glval($1) != REGISTER)
+			if ($1->n_lval != SNULL && $1->n_lval != REGISTER)
 				uerror("illegal parameter class");
 			$$ = block(TYMERGE, $1, $2, INT, 0, gcc_attr_wrapper($3));
 		}
@@ -730,7 +730,7 @@ struct_declarator: declarator attr_var {
 			p = tymerge($<nodep>0, tymfix($1));
 			if ($2)
 				p->n_ap = attr_add(p->n_ap, gcc_attr_wrapper($2));
-			soumemb(p, (char *)$1->n_sp, glval($<nodep>0));
+			soumemb(p, (char *)$1->n_sp, $<nodep>0->n_lval);
 			tfree(p);
 		}
 		|  ':' e {
@@ -970,7 +970,7 @@ statement:	   e ';' { /* fwalk($1, eprint, 0); */ ecomp(eve($1)); symclear(bleve
 				uerror("return value required");
 			rch:
 			if (!reached)
-				warner(Wunreachable_code);
+				warner(Wunreachable_code, NULL);
 			reached = 0;
 		}
 		|  C_RETURN e  ';' {
@@ -1071,7 +1071,7 @@ ifelprefix:	  ifprefix statement C_ELSE {
 whprefix:	  C_WHILE  '('  e  ')' {
 			savebc();
 			$3 = eve($3);
-			if ($3->n_op == ICON && glval($3) != 0)
+			if ($3->n_op == ICON && $3->n_lval != 0)
 				flostat = FLOOP;
 			plabel( contlab = getlab());
 			reached = 1;
@@ -1372,8 +1372,7 @@ bdty(int op, ...)
 
 	case STRING:
 		q->n_name = va_arg(ap, char *);
-		val = va_arg(ap, int);
-		slval(q, val);
+		q->n_lval = va_arg(ap, int);
 		break;
 
 	default:
@@ -1454,15 +1453,15 @@ addcase(NODE *p)
 	}
 
 	if (DEUNSIGN(swpole->type) != DEUNSIGN(p->n_type)) {
-		val = glval(p);
+		val = p->n_lval;
 		p = makety(p, swpole->type, 0, 0, 0);
 		if (p->n_op != ICON)
 			cerror("could not cast case value to type of switch "
 			       "expression");
-		if (glval(p) != val)
+		if (p->n_lval != val)
 			werror("case expression truncated");
 	}
-	sw->sval = glval(p);
+	sw->sval = p->n_lval;
 	tfree(p);
 	put = &swpole->ents;
 	if (ISUNSIGNED(swpole->type)) {
@@ -1591,7 +1590,7 @@ genswitch(int num, TWORD type, struct swents **p, int n)
 static struct symtab *
 init_declarator(NODE *tn, NODE *p, int assign, NODE *a)
 {
-	int class = glval(tn);
+	int class = tn->n_lval;
 	struct symtab *sp;
 
 	p = aryfix(p);
@@ -1747,7 +1746,7 @@ fundef(NODE *tp, NODE *p)
 	extern int prolab;
 	struct symtab *s, *nsthis;
 	NODE *q, *typ;
-	int class = glval(tp), oclass, ctval;
+	int class = tp->n_lval, oclass, ctval;
 	char *c;
 
 	/*
@@ -2215,7 +2214,7 @@ eve(NODE *p)
 
 	case SZOF:
 		x = xinline; xinline = 0; /* XXX hack */
-		if (glval(p2) == 0)
+		if (p2->n_lval == 0)
 			p1 = eve(p1);
 		else
 			TYMFIX(p1);
@@ -2400,7 +2399,7 @@ eve2:		r = buildtree(p->n_op, p1, eve(p2));
 		break;
 
 	case STRING:
-		r = strend(glval(p), p->n_name);
+		r = strend(p->n_lval, p->n_name);
 		break;
 
 	case COMOP:
@@ -2425,7 +2424,7 @@ eve2:		r = buildtree(p->n_op, p1, eve(p2));
 
 	case DELETE:
 		p1 = eve(p1);
-		r = cxx_delete(p1, glval(p2));
+		r = cxx_delete(p1, p2->n_lval);
 		nfree(p2);
 		break;
 
@@ -2537,10 +2536,10 @@ aryfix(NODE *p)
 			if (!ISINTEGER(q->n_right->n_type))
 				werror("array size is not an integer");
 			else if (q->n_right->n_op == ICON &&
-			    glval(q->n_right) < 0 &&
-			    glval(q->n_right) != NOOFFSET) {
+			    q->n_right->n_lval < 0 &&
+			    q->n_right->n_lval != NOOFFSET) {
 					uerror("array size cannot be negative");
-					slval(q->n_right, 1);
+					q->n_right->n_lval = 1;
 			}
 		} else if (q->n_op == CALL)
 			q->n_right = namekill(q->n_right, 1);

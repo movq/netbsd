@@ -29,7 +29,7 @@ public:
     LE = new LineEditor("test", HistPath);
   }
 
-  ~LineEditorTest() override {
+  ~LineEditorTest() {
     delete LE;
     sys::fs::remove(HistPath.str());
   }

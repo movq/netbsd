@@ -1,4 +1,4 @@
-/*	$NetBSD: form.h,v 1.23 2015/09/07 15:50:49 joerg Exp $	*/
+/*	$NetBSD: form.h,v 1.22.4.1 2015/11/05 05:24:11 riz Exp $	*/
 
 /*-
  * Copyright (c) 1998-1999 Brett Lymn

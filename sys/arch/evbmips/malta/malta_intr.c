@@ -1,4 +1,4 @@
-/*	$NetBSD: malta_intr.c,v 1.25 2016/08/26 15:45:48 skrll Exp $	*/
+/*	$NetBSD: malta_intr.c,v 1.24 2014/03/31 20:44:19 christos Exp $	*/
 
 /*
  * Copyright 2001, 2002 Wasabi Systems, Inc.
@@ -40,7 +40,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: malta_intr.c,v 1.25 2016/08/26 15:45:48 skrll Exp $");
+__KERNEL_RCSID(0, "$NetBSD: malta_intr.c,v 1.24 2014/03/31 20:44:19 christos Exp $");
 
 #define	__INTR_PRIVATE
 
@@ -248,7 +248,7 @@ evbmips_intr_disestablish(void *arg)
 }
 
 void
-evbmips_iointr(int ipl, uint32_t ipending, struct clockframe *cf)
+evbmips_iointr(int ipl, vaddr_t pc, uint32_t ipending)
 {
 	
 	/* Check for error interrupts (SMI, GT64120) */

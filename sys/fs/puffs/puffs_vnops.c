@@ -1,4 +1,4 @@
-/*	$NetBSD: puffs_vnops.c,v 1.205 2016/07/21 18:21:27 christos Exp $	*/
+/*	$NetBSD: puffs_vnops.c,v 1.182.2.13 2015/02/27 19:39:56 martin Exp $	*/
 
 /*
  * Copyright (c) 2005, 2006, 2007  Antti Kantee.  All Rights Reserved.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: puffs_vnops.c,v 1.205 2016/07/21 18:21:27 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: puffs_vnops.c,v 1.182.2.13 2015/02/27 19:39:56 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/buf.h>
@@ -1147,7 +1147,7 @@ puffs_vnop_getattr(void *v)
 static void
 zerofill_lastpage(struct vnode *vp, voff_t off)
 {
-	char zbuf[16384];
+	char zbuf[PAGE_SIZE];
 	struct iovec iov;
 	struct uio uio;
 	vsize_t len;
@@ -1160,7 +1160,6 @@ zerofill_lastpage(struct vnode *vp, voff_t off)
 		return;
 
 	len = round_page(off) - off;
-	KASSERT(len < sizeof(zbuf));
 	memset(zbuf, 0, len);
 
 	iov.iov_base = zbuf;
@@ -1422,7 +1421,7 @@ puffs_vnop_inactive(void *v)
 				kmem_free(psopr, sizeof(*psopr));
 			} else {
 				TAILQ_INSERT_TAIL(&pmp->pmp_sopnodereqs,
-				    psopr, psopr_entries);
+				    psopr, psopr_entries); 
 				pnode->pn_stat |= PNODE_SOPEXP;
 			}
 
@@ -2018,7 +2017,7 @@ puffs_vnop_rmdir(void *v)
 int
 puffs_vnop_link(void *v)
 {
-	struct vop_link_v2_args /* {
+	struct vop_link_args /* {
 		const struct vnodeop_desc *a_desc;
 		struct vnode *a_dvp;
 		struct vnode *a_vp;
@@ -2041,6 +2040,8 @@ puffs_vnop_link(void *v)
 	    PUFFS_VN_LINK, VPTOPNC(dvp));
 
 	puffs_msg_enqueue(pmp, park_link);
+	REFPN_AND_UNLOCKVP(dvp, dpn);
+	REFPN(pn);
 	error = puffs_msg_wait2(pmp, park_link, dpn, pn);
 
 	PUFFS_MSG_RELEASE(link);
@@ -2056,6 +2057,9 @@ puffs_vnop_link(void *v)
 		puffs_updatenode(VPTOPP(dvp),
 				 PUFFS_UPDATECTIME|PUFFS_UPDATEMTIME, 0);
 	}
+
+	RELEPN_AND_VP(dvp, dpn);
+	puffs_releasenode(pn);
 
 	return error;
 }
@@ -2718,7 +2722,7 @@ puffs_vnop_advlock(void *v)
 	int error;
 
 	if (!EXISTSOP(pmp, ADVLOCK))
-		return lf_advlock(ap, &pn->pn_lockf, vp->v_size);
+		return lf_advlock(ap, &pn->pn_lockf, vp->v_size); 
 	
 	PUFFS_MSG_ALLOC(vn, advlock);
 	(void)memcpy(&advlock_msg->pvnr_fl, ap->a_fl, 

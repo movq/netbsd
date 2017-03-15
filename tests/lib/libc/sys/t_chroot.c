@@ -1,4 +1,4 @@
-/* $NetBSD: t_chroot.c,v 1.2 2017/01/10 22:36:29 christos Exp $ */
+/* $NetBSD: t_chroot.c,v 1.1 2011/07/07 06:57:53 jruoho Exp $ */
 
 /*-
  * Copyright (c) 2011 The NetBSD Foundation, Inc.
@@ -29,10 +29,9 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: t_chroot.c,v 1.2 2017/01/10 22:36:29 christos Exp $");
+__RCSID("$NetBSD: t_chroot.c,v 1.1 2011/07/07 06:57:53 jruoho Exp $");
 
 #include <sys/wait.h>
-#include <sys/stat.h>
 
 #include <atf-c.h>
 #include <errno.h>

@@ -1,4 +1,4 @@
-/*	$NetBSD: iyonix_machdep.c,v 1.25 2016/12/22 14:47:58 cherry Exp $	*/
+/*	$NetBSD: iyonix_machdep.c,v 1.23 2014/03/02 13:28:23 joerg Exp $	*/
 
 /*
  * Copyright (c) 2001, 2002, 2003 Wasabi Systems, Inc.
@@ -73,7 +73,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: iyonix_machdep.c,v 1.25 2016/12/22 14:47:58 cherry Exp $");
+__KERNEL_RCSID(0, "$NetBSD: iyonix_machdep.c,v 1.23 2014/03/02 13:28:23 joerg Exp $");
 
 #include "opt_ddb.h"
 #include "opt_kgdb.h"
@@ -133,12 +133,12 @@ struct bootconfig bootconfig;		/* Boot config storage */
 
 char *boot_args;
 
-vaddr_t physical_start;
-vaddr_t physical_freestart;
-vaddr_t physical_freeend;
-vaddr_t physical_end;
+vm_offset_t physical_start;
+vm_offset_t physical_freestart;
+vm_offset_t physical_freeend;
+vm_offset_t physical_end;
 u_int free_pages;
-vaddr_t pagetables_start;
+vm_offset_t pagetables_start;
 
 /*int debug_flags;*/
 #ifndef PMAP_STATIC_L1S
@@ -148,7 +148,7 @@ int max_processes = 64;			/* Default number */
 /* Physical and virtual addresses for some global pages */
 pv_addr_t minidataclean;
 
-paddr_t msgbufphys;
+vm_offset_t msgbufphys;
 
 #ifdef PMAP_DEBUG
 extern int pmap_debug_level;
@@ -780,7 +780,7 @@ initarm(void *arg)
 #ifdef VERBOSE_INIT_ARM
 	printf("page ");
 #endif
-	uvm_md_init();
+	uvm_setpagesize();	/* initialize PAGE_SIZE-dependent variables */
 	uvm_page_physload(atop(physical_freestart), atop(physical_freeend),
 	    atop(physical_freestart), atop(physical_freeend),
 	    VM_FREELIST_DEFAULT);

@@ -11,27 +11,21 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "llvm/Target/TargetRegisterInfo.h"
 #include "llvm/ADT/BitVector.h"
-#include "llvm/CodeGen/MachineFrameInfo.h"
 #include "llvm/CodeGen/MachineFunction.h"
 #include "llvm/CodeGen/MachineRegisterInfo.h"
 #include "llvm/CodeGen/VirtRegMap.h"
-#include "llvm/IR/Function.h"
 #include "llvm/Support/Debug.h"
-#include "llvm/Support/Format.h"
 #include "llvm/Support/raw_ostream.h"
-#include "llvm/Target/TargetFrameLowering.h"
-#include "llvm/Target/TargetRegisterInfo.h"
-
-#define DEBUG_TYPE "target-reg-info"
 
 using namespace llvm;
 
 TargetRegisterInfo::TargetRegisterInfo(const TargetRegisterInfoDesc *ID,
                              regclass_iterator RCB, regclass_iterator RCE,
                              const char *const *SRINames,
-                             const LaneBitmask *SRILaneMasks,
-                             LaneBitmask SRICoveringLanes)
+                             const unsigned *SRILaneMasks,
+                             unsigned SRICoveringLanes)
   : InfoDesc(ID), SubRegIndexNames(SRINames),
     SubRegIndexLaneMasks(SRILaneMasks),
     RegClassBegin(RCB), RegClassEnd(RCE),
@@ -40,94 +34,53 @@ TargetRegisterInfo::TargetRegisterInfo(const TargetRegisterInfoDesc *ID,
 
 TargetRegisterInfo::~TargetRegisterInfo() {}
 
-void TargetRegisterInfo::markSuperRegs(BitVector &RegisterSet, unsigned Reg)
-    const {
-  for (MCSuperRegIterator AI(Reg, this, true); AI.isValid(); ++AI)
-    RegisterSet.set(*AI);
-}
-
-bool TargetRegisterInfo::checkAllSuperRegsMarked(const BitVector &RegisterSet,
-    ArrayRef<MCPhysReg> Exceptions) const {
-  // Check that all super registers of reserved regs are reserved as well.
-  BitVector Checked(getNumRegs());
-  for (int Reg = RegisterSet.find_first(); Reg>=0;
-       Reg = RegisterSet.find_next(Reg)) {
-    if (Checked[Reg])
-      continue;
-    for (MCSuperRegIterator SR(Reg, this); SR.isValid(); ++SR) {
-      if (!RegisterSet[*SR] && !is_contained(Exceptions, Reg)) {
-        dbgs() << "Error: Super register " << PrintReg(*SR, this)
-               << " of reserved register " << PrintReg(Reg, this)
-               << " is not reserved.\n";
-        return false;
-      }
-
-      // We transitively check superregs. So we can remember this for later
-      // to avoid compiletime explosion in deep register hierarchies.
-      Checked.set(*SR);
-    }
-  }
-  return true;
-}
-
-namespace llvm {
-
-Printable PrintReg(unsigned Reg, const TargetRegisterInfo *TRI,
-                   unsigned SubIdx) {
-  return Printable([Reg, TRI, SubIdx](raw_ostream &OS) {
-    if (!Reg)
-      OS << "%noreg";
-    else if (TargetRegisterInfo::isStackSlot(Reg))
-      OS << "SS#" << TargetRegisterInfo::stackSlot2Index(Reg);
-    else if (TargetRegisterInfo::isVirtualRegister(Reg))
-      OS << "%vreg" << TargetRegisterInfo::virtReg2Index(Reg);
-    else if (TRI && Reg < TRI->getNumRegs())
-      OS << '%' << TRI->getName(Reg);
+void PrintReg::print(raw_ostream &OS) const {
+  if (!Reg)
+    OS << "%noreg";
+  else if (TargetRegisterInfo::isStackSlot(Reg))
+    OS << "SS#" << TargetRegisterInfo::stackSlot2Index(Reg);
+  else if (TargetRegisterInfo::isVirtualRegister(Reg))
+    OS << "%vreg" << TargetRegisterInfo::virtReg2Index(Reg);
+  else if (TRI && Reg < TRI->getNumRegs())
+    OS << '%' << TRI->getName(Reg);
+  else
+    OS << "%physreg" << Reg;
+  if (SubIdx) {
+    if (TRI)
+      OS << ':' << TRI->getSubRegIndexName(SubIdx);
     else
-      OS << "%physreg" << Reg;
-    if (SubIdx) {
-      if (TRI)
-        OS << ':' << TRI->getSubRegIndexName(SubIdx);
-      else
-        OS << ":sub(" << SubIdx << ')';
-    }
-  });
+      OS << ":sub(" << SubIdx << ')';
+  }
 }
 
-Printable PrintRegUnit(unsigned Unit, const TargetRegisterInfo *TRI) {
-  return Printable([Unit, TRI](raw_ostream &OS) {
-    // Generic printout when TRI is missing.
-    if (!TRI) {
-      OS << "Unit~" << Unit;
-      return;
-    }
+void PrintRegUnit::print(raw_ostream &OS) const {
+  // Generic printout when TRI is missing.
+  if (!TRI) {
+    OS << "Unit~" << Unit;
+    return;
+  }
 
-    // Check for invalid register units.
-    if (Unit >= TRI->getNumRegUnits()) {
-      OS << "BadUnit~" << Unit;
-      return;
-    }
+  // Check for invalid register units.
+  if (Unit >= TRI->getNumRegUnits()) {
+    OS << "BadUnit~" << Unit;
+    return;
+  }
 
-    // Normal units have at least one root.
-    MCRegUnitRootIterator Roots(Unit, TRI);
-    assert(Roots.isValid() && "Unit has no roots.");
-    OS << TRI->getName(*Roots);
-    for (++Roots; Roots.isValid(); ++Roots)
-      OS << '~' << TRI->getName(*Roots);
-  });
+  // Normal units have at least one root.
+  MCRegUnitRootIterator Roots(Unit, TRI);
+  assert(Roots.isValid() && "Unit has no roots.");
+  OS << TRI->getName(*Roots);
+  for (++Roots; Roots.isValid(); ++Roots)
+    OS << '~' << TRI->getName(*Roots);
 }
 
-Printable PrintVRegOrUnit(unsigned Unit, const TargetRegisterInfo *TRI) {
-  return Printable([Unit, TRI](raw_ostream &OS) {
-    if (TRI && TRI->isVirtualRegister(Unit)) {
-      OS << "%vreg" << TargetRegisterInfo::virtReg2Index(Unit);
-    } else {
-      OS << PrintRegUnit(Unit, TRI);
-    }
-  });
+void PrintVRegOrUnit::print(raw_ostream &OS) const {
+  if (TRI && TRI->isVirtualRegister(Unit)) {
+    OS << "%vreg" << TargetRegisterInfo::virtReg2Index(Unit);
+    return;
+  }
+  PrintRegUnit::print(OS);
 }
-
-} // End of llvm namespace
 
 /// getAllocatableClass - Return the maximal subclass of the given register
 /// class that is alloctable, or NULL.
@@ -136,11 +89,18 @@ TargetRegisterInfo::getAllocatableClass(const TargetRegisterClass *RC) const {
   if (!RC || RC->isAllocatable())
     return RC;
 
-  for (BitMaskClassIterator It(RC->getSubClassMask(), *this); It.isValid();
-       ++It) {
-    const TargetRegisterClass *SubRC = getRegClass(It.getID());
-    if (SubRC->isAllocatable())
-      return SubRC;
+  const unsigned *SubClass = RC->getSubClassMask();
+  for (unsigned Base = 0, BaseE = getNumRegClasses();
+       Base < BaseE; Base += 32) {
+    unsigned Idx = Base;
+    for (unsigned Mask = *SubClass++; Mask; Mask >>= 1) {
+      unsigned Offset = countTrailingZeros(Mask);
+      const TargetRegisterClass *SubRC = getRegClass(Idx + Offset);
+      if (SubRC->isAllocatable())
+        return SubRC;
+      Mask >>= Offset;
+      Idx += Offset + 1;
+    }
   }
   return nullptr;
 }
@@ -201,24 +161,16 @@ BitVector TargetRegisterInfo::getAllocatableSet(const MachineFunction &MF,
 static inline
 const TargetRegisterClass *firstCommonClass(const uint32_t *A,
                                             const uint32_t *B,
-                                            const TargetRegisterInfo *TRI,
-                                            const MVT::SimpleValueType SVT =
-                                            MVT::SimpleValueType::Any) {
-  const MVT VT(SVT);
+                                            const TargetRegisterInfo *TRI) {
   for (unsigned I = 0, E = TRI->getNumRegClasses(); I < E; I += 32)
-    if (unsigned Common = *A++ & *B++) {
-      const TargetRegisterClass *RC =
-          TRI->getRegClass(I + countTrailingZeros(Common));
-      if (SVT == MVT::SimpleValueType::Any || RC->hasType(VT))
-        return RC;
-    }
+    if (unsigned Common = *A++ & *B++)
+      return TRI->getRegClass(I + countTrailingZeros(Common));
   return nullptr;
 }
 
 const TargetRegisterClass *
 TargetRegisterInfo::getCommonSubClass(const TargetRegisterClass *A,
-                                      const TargetRegisterClass *B,
-                                      const MVT::SimpleValueType SVT) const {
+                                      const TargetRegisterClass *B) const {
   // First take care of the trivial cases.
   if (A == B)
     return A;
@@ -227,7 +179,7 @@ TargetRegisterInfo::getCommonSubClass(const TargetRegisterClass *A,
 
   // Register classes are ordered topologically, so the largest common
   // sub-class it the common sub-class with the smallest ID.
-  return firstCommonClass(A->getSubClassMask(), B->getSubClassMask(), this, SVT);
+  return firstCommonClass(A->getSubClassMask(), B->getSubClassMask(), this);
 }
 
 const TargetRegisterClass *
@@ -308,55 +260,13 @@ getCommonSuperRegClass(const TargetRegisterClass *RCA, unsigned SubA,
   return BestRC;
 }
 
-/// \brief Check if the registers defined by the pair (RegisterClass, SubReg)
-/// share the same register file.
-static bool shareSameRegisterFile(const TargetRegisterInfo &TRI,
-                                  const TargetRegisterClass *DefRC,
-                                  unsigned DefSubReg,
-                                  const TargetRegisterClass *SrcRC,
-                                  unsigned SrcSubReg) {
-  // Same register class.
-  if (DefRC == SrcRC)
-    return true;
-
-  // Both operands are sub registers. Check if they share a register class.
-  unsigned SrcIdx, DefIdx;
-  if (SrcSubReg && DefSubReg) {
-    return TRI.getCommonSuperRegClass(SrcRC, SrcSubReg, DefRC, DefSubReg,
-                                      SrcIdx, DefIdx) != nullptr;
-  }
-
-  // At most one of the register is a sub register, make it Src to avoid
-  // duplicating the test.
-  if (!SrcSubReg) {
-    std::swap(DefSubReg, SrcSubReg);
-    std::swap(DefRC, SrcRC);
-  }
-
-  // One of the register is a sub register, check if we can get a superclass.
-  if (SrcSubReg)
-    return TRI.getMatchingSuperRegClass(SrcRC, DefRC, SrcSubReg) != nullptr;
-
-  // Plain copy.
-  return TRI.getCommonSubClass(DefRC, SrcRC) != nullptr;
-}
-
-bool TargetRegisterInfo::shouldRewriteCopySrc(const TargetRegisterClass *DefRC,
-                                              unsigned DefSubReg,
-                                              const TargetRegisterClass *SrcRC,
-                                              unsigned SrcSubReg) const {
-  // If this source does not incur a cross register bank copy, use it.
-  return shareSameRegisterFile(*this, DefRC, DefSubReg, SrcRC, SrcSubReg);
-}
-
 // Compute target-independent register allocator hints to help eliminate copies.
 void
 TargetRegisterInfo::getRegAllocationHints(unsigned VirtReg,
                                           ArrayRef<MCPhysReg> Order,
                                           SmallVectorImpl<MCPhysReg> &Hints,
                                           const MachineFunction &MF,
-                                          const VirtRegMap *VRM,
-                                          const LiveRegMatrix *Matrix) const {
+                                          const VirtRegMap *VRM) const {
   const MachineRegisterInfo &MRI = MF.getRegInfo();
   std::pair<unsigned, unsigned> Hint = MRI.getRegAllocationHint(VirtReg);
 
@@ -378,40 +288,11 @@ TargetRegisterInfo::getRegAllocationHints(unsigned VirtReg,
   // Check that Phys is in the allocation order. We shouldn't heed hints
   // from VirtReg's register class if they aren't in the allocation order. The
   // target probably has a reason for removing the register.
-  if (!is_contained(Order, Phys))
+  if (std::find(Order.begin(), Order.end(), Phys) == Order.end())
     return;
 
   // All clear, tell the register allocator to prefer this register.
   Hints.push_back(Phys);
-}
-
-bool TargetRegisterInfo::canRealignStack(const MachineFunction &MF) const {
-  return !MF.getFunction()->hasFnAttribute("no-realign-stack");
-}
-
-bool TargetRegisterInfo::needsStackRealignment(
-    const MachineFunction &MF) const {
-  const MachineFrameInfo &MFI = MF.getFrameInfo();
-  const TargetFrameLowering *TFI = MF.getSubtarget().getFrameLowering();
-  const Function *F = MF.getFunction();
-  unsigned StackAlign = TFI->getStackAlignment();
-  bool requiresRealignment = ((MFI.getMaxAlignment() > StackAlign) ||
-                              F->hasFnAttribute(Attribute::StackAlignment));
-  if (MF.getFunction()->hasFnAttribute("stackrealign") || requiresRealignment) {
-    if (canRealignStack(MF))
-      return true;
-    DEBUG(dbgs() << "Can't realign function's stack: " << F->getName() << "\n");
-  }
-  return false;
-}
-
-bool TargetRegisterInfo::regmaskSubsetEqual(const uint32_t *mask0,
-                                            const uint32_t *mask1) const {
-  unsigned N = (getNumRegs()+31) / 32;
-  for (unsigned I = 0; I < N; ++I)
-    if ((mask0[I] & mask1[I]) != mask0[I])
-      return false;
-  return true;
 }
 
 #if !defined(NDEBUG) || defined(LLVM_ENABLE_DUMP)

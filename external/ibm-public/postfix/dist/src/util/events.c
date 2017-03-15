@@ -1,4 +1,4 @@
-/*	$NetBSD: events.c,v 1.2 2017/02/14 01:16:49 christos Exp $	*/
+/*	$NetBSD: events.c,v 1.1.1.4 2012/06/09 11:27:25 tron Exp $	*/
 
 /*++
 /* NAME
@@ -14,23 +14,23 @@
 /*	int	delay;
 /*
 /*	time_t	event_request_timer(callback, context, delay)
-/*	void	(*callback)(int event, void *context);
-/*	void	*context;
+/*	void	(*callback)(int event, char *context);
+/*	char	*context;
 /*	int	delay;
 /*
 /*	int	event_cancel_timer(callback, context)
-/*	void	(*callback)(int event, void *context);
-/*	void	*context;
+/*	void	(*callback)(int event, char *context);
+/*	char	*context;
 /*
 /*	void	event_enable_read(fd, callback, context)
 /*	int	fd;
-/*	void	(*callback)(int event, void *context);
-/*	void	*context;
+/*	void	(*callback)(int event, char *context);
+/*	char	*context;
 /*
 /*	void	event_enable_write(fd, callback, context)
 /*	int	fd;
-/*	void	(*callback)(int event, void *context);
-/*	void	*context;
+/*	void	(*callback)(int event, char *context);
+/*	char	*context;
 /*
 /*	void	event_disable_readwrite(fd)
 /*	int	fd;
@@ -388,7 +388,7 @@ static int event_pollfd;		/* handle to file descriptor set */
 	struct pollfd dummy; \
 	dummy.fd = (fh); \
 	dummy.events = (ev); \
-	(er) = write(event_pollfd, (void *) &dummy, \
+	(er) = write(event_pollfd, (char *) &dummy, \
 	    sizeof(dummy)) != sizeof(dummy) ? -1 : 0; \
     } while (0)
 
@@ -513,7 +513,7 @@ typedef struct EVENT_TIMER EVENT_TIMER;
 
 struct EVENT_TIMER {
     time_t  when;			/* when event is wanted */
-    EVENT_NOTIFY_TIME_FN callback;	/* callback function */
+    EVENT_NOTIFY_TIME_FN callback;		/* callback function */
     char   *context;			/* callback context */
     long    loop_instance;		/* event_loop() call instance */
     RING    ring;			/* linkage */
@@ -523,7 +523,7 @@ static RING event_timer_head;		/* timer queue head */
 static long event_loop_instance;	/* event_loop() call instance */
 
 #define RING_TO_TIMER(r) \
-	((EVENT_TIMER *) ((void *) (r) - offsetof(EVENT_TIMER, ring)))
+	((EVENT_TIMER *) ((char *) (r) - offsetof(EVENT_TIMER, ring)))
 
 #define FOREACH_QUEUE_ENTRY(entry, head) \
 	for (entry = ring_succ(head); entry != (head); entry = ring_succ(entry))
@@ -612,16 +612,12 @@ static void event_extend(int fd)
     int     new_slots = (event_fdslots > fd / 2 ?
 			 2 * old_slots : fd + EVENT_ALLOC_INCR);
     EVENT_FDTABLE *fdp;
-
-#ifdef EVENT_REG_UPD_HANDLE
     int     err;
-
-#endif
 
     if (msg_verbose > 2)
 	msg_info("%s: fd %d", myname, fd);
     event_fdtable = (EVENT_FDTABLE *)
-	myrealloc((void *) event_fdtable, sizeof(EVENT_FDTABLE) * new_slots);
+	myrealloc((char *) event_fdtable, sizeof(EVENT_FDTABLE) * new_slots);
     event_fdslots = new_slots;
     for (fdp = event_fdtable + old_slots;
 	 fdp < event_fdtable + new_slots; fdp++) {
@@ -728,7 +724,7 @@ void    event_fork(void)
 
 /* event_enable_read - enable read events */
 
-void    event_enable_read(int fd, EVENT_NOTIFY_RDWR_FN callback, void *context)
+void    event_enable_read(int fd, EVENT_NOTIFY_RDWR_FN callback, char *context)
 {
     const char *myname = "event_enable_read";
     EVENT_FDTABLE *fdp;
@@ -783,7 +779,7 @@ void    event_enable_read(int fd, EVENT_NOTIFY_RDWR_FN callback, void *context)
 
 /* event_enable_write - enable write events */
 
-void    event_enable_write(int fd, EVENT_NOTIFY_RDWR_FN callback, void *context)
+void    event_enable_write(int fd, EVENT_NOTIFY_RDWR_FN callback, char *context)
 {
     const char *myname = "event_enable_write";
     EVENT_FDTABLE *fdp;
@@ -893,7 +889,7 @@ void    event_disable_readwrite(int fd)
 
 /* event_request_timer - (re)set timer */
 
-time_t  event_request_timer(EVENT_NOTIFY_TIME_FN callback, void *context, int delay)
+time_t  event_request_timer(EVENT_NOTIFY_TIME_FN callback, char *context, int delay)
 {
     const char *myname = "event_request_timer";
     RING   *ring;
@@ -964,7 +960,7 @@ time_t  event_request_timer(EVENT_NOTIFY_TIME_FN callback, void *context, int de
 
 /* event_cancel_timer - cancel timer */
 
-int     event_cancel_timer(EVENT_NOTIFY_TIME_FN callback, void *context)
+int     event_cancel_timer(EVENT_NOTIFY_TIME_FN callback, char *context)
 {
     const char *myname = "event_cancel_timer";
     RING   *ring;
@@ -985,7 +981,7 @@ int     event_cancel_timer(EVENT_NOTIFY_TIME_FN callback, void *context)
 	    if ((time_left = timer->when - event_present) < 0)
 		time_left = 0;
 	    ring_detach(ring);
-	    myfree((void *) timer);
+	    myfree((char *) timer);
 	    break;
 	}
     }
@@ -1137,7 +1133,7 @@ void    event_loop(int delay)
 	    msg_info("%s: timer 0x%lx 0x%lx", myname,
 		     (long) timer->callback, (long) timer->context);
 	timer->callback(EVENT_TIME, timer->context);	/* then this */
-	myfree((void *) timer);
+	myfree((char *) timer);
     }
 
     /*
@@ -1217,7 +1213,7 @@ void    event_loop(int delay)
 
 /* timer_event - display event */
 
-static void timer_event(int unused_event, void *context)
+static void timer_event(int unused_event, char *context)
 {
     printf("%ld: %s\n", (long) event_present, context);
     fflush(stdout);
@@ -1225,7 +1221,7 @@ static void timer_event(int unused_event, void *context)
 
 /* echo - echo text received on stdin */
 
-static void echo(int unused_event, void *unused_context)
+static void echo(int unused_event, char *unused_context)
 {
     char    buf[BUFSIZ];
 
@@ -1236,7 +1232,7 @@ static void echo(int unused_event, void *unused_context)
 
 /* request - request a bunch of timer events */
 
-static void request(int unused_event, void *unused_context)
+static void request(int unused_event, char *unused_context)
 {
     event_request_timer(timer_event, "3 first", 3);
     event_request_timer(timer_event, "3 second", 3);
@@ -1250,12 +1246,12 @@ static void request(int unused_event, void *unused_context)
     event_request_timer(timer_event, "0 second", 0);
 }
 
-int     main(int argc, void **argv)
+int     main(int argc, char **argv)
 {
     if (argv[1])
 	msg_verbose = atoi(argv[1]);
-    event_request_timer(request, (void *) 0, 0);
-    event_enable_read(fileno(stdin), echo, (void *) 0);
+    event_request_timer(request, (char *) 0, 0);
+    event_enable_read(fileno(stdin), echo, (char *) 0);
     event_drain(10);
     exit(0);
 }

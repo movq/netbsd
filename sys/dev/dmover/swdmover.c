@@ -1,4 +1,4 @@
-/*	$NetBSD: swdmover.c,v 1.14 2017/01/07 21:11:14 christos Exp $	*/
+/*	$NetBSD: swdmover.c,v 1.12 2008/01/04 21:17:53 ad Exp $	*/
 
 /*
  * Copyright (c) 2002, 2003 Wasabi Systems, Inc.
@@ -49,7 +49,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: swdmover.c,v 1.14 2017/01/07 21:11:14 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: swdmover.c,v 1.12 2008/01/04 21:17:53 ad Exp $");
 
 #include <sys/param.h>
 #include <sys/kthread.h>
@@ -58,8 +58,6 @@ __KERNEL_RCSID(0, "$NetBSD: swdmover.c,v 1.14 2017/01/07 21:11:14 christos Exp $
 
 #include <dev/dmover/dmovervar.h>
 
-#include "ioconf.h"
-
 struct swdmover_function {
 	void	(*sdf_process)(struct dmover_request *);
 };
@@ -67,6 +65,8 @@ struct swdmover_function {
 static struct dmover_backend swdmover_backend;
 static struct lwp *swdmover_lwp;
 static int swdmover_cv;
+
+void	swdmoverattach(int);
 
 /*
  * swdmover_process:
@@ -147,7 +147,7 @@ swdmover_func_zero_process(struct dmover_request *dreq)
 	case DMOVER_BUF_UIO:
 	    {
 		struct uio *uio = dreq->dreq_outbuf.dmbuf_uio;
-		char cp[1024];
+		char *cp;
 		size_t count, buflen;
 		int error;
 
@@ -160,8 +160,9 @@ swdmover_func_zero_process(struct dmover_request *dreq)
 		}
 
 		buflen = uio->uio_resid;
-		if (buflen > sizeof(cp))
-			buflen = sizeof(cp);
+		if (buflen > 1024)
+			buflen = 1024;
+		cp = alloca(buflen);
 		memset(cp, 0, buflen);
 
 		while ((count = uio->uio_resid) != 0) {
@@ -208,7 +209,7 @@ swdmover_func_fill8_process(struct dmover_request *dreq)
 	case DMOVER_BUF_UIO:
 	    {
 		struct uio *uio = dreq->dreq_outbuf.dmbuf_uio;
-		char cp[1024];
+		char *cp;
 		size_t count, buflen;
 		int error;
 
@@ -221,8 +222,9 @@ swdmover_func_fill8_process(struct dmover_request *dreq)
 		}
 
 		buflen = uio->uio_resid;
-		if (buflen > sizeof(cp))
-			buflen = sizeof(cp);
+		if (buflen > 1024)
+			buflen = 1024;
+		cp = alloca(buflen);
 		memset(cp, dreq->dreq_immediate[0], buflen);
 
 		while ((count = uio->uio_resid) != 0) {
@@ -332,7 +334,7 @@ swdmover_func_xor_process(struct dmover_request *dreq)
 		struct uio *uio_out = dreq->dreq_outbuf.dmbuf_uio;
 		struct uio *uio_in = dreq->dreq_inbuf[0].dmbuf_uio;
 		struct uio *uio;
-		char cp[1024], dst[1024];
+		char *cp, *dst;
 		size_t count, buflen;
 		int error;
 
@@ -347,8 +349,10 @@ swdmover_func_xor_process(struct dmover_request *dreq)
 		}
 
 		buflen = uio_in->uio_resid;
-		if (buflen > sizeof(cp))
-			buflen = sizeof(cp);
+		if (buflen > 1024)
+			buflen = 1024;
+		cp = alloca(buflen);
+		dst = alloca(buflen);
 
 		/*
 		 * For each block, copy first input buffer into the destination
@@ -436,7 +440,7 @@ swdmover_func_copy_process(struct dmover_request *dreq)
 	    {
 		struct uio *uio_out = dreq->dreq_outbuf.dmbuf_uio;
 		struct uio *uio_in = dreq->dreq_inbuf[0].dmbuf_uio;
-		char cp[1024];
+		char *cp;
 		size_t count, buflen;
 		int error;
 
@@ -451,8 +455,9 @@ swdmover_func_copy_process(struct dmover_request *dreq)
 		}
 
 		buflen = uio_in->uio_resid;
-		if (buflen > sizeof(cp))
-			buflen = sizeof(cp);
+		if (buflen > 1024)
+			buflen = 1024;
+		cp = alloca(buflen);
 
 		while ((count = uio_in->uio_resid) != 0) {
 			if (count > buflen)
@@ -590,7 +595,7 @@ swdmover_func_iscsi_crc32c_process(struct dmover_request *dreq)
 	case DMOVER_BUF_UIO:
 	    {
 		struct uio *uio_in = dreq->dreq_inbuf[0].dmbuf_uio;
-		uint8_t cp[1024];
+		uint8_t *cp;
 		size_t count, buflen;
 		int error;
 
@@ -603,8 +608,9 @@ swdmover_func_iscsi_crc32c_process(struct dmover_request *dreq)
 		}
 
 		buflen = uio_in->uio_resid;
-		if (buflen > sizeof(cp))
-			buflen = sizeof(cp);
+		if (buflen > 1024)
+			buflen = 1024;
+		cp = alloca(buflen);
 
 		while ((count = uio_in->uio_resid) != 0) {
 			if (count > buflen)

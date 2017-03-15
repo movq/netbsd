@@ -12,8 +12,6 @@
  * 
  * Various useful functions for the CVS support code.
  */
-#include <sys/cdefs.h>
-__RCSID("$NetBSD: subr.c,v 1.4 2016/05/30 17:49:51 christos Exp $");
 
 #include "cvs.h"
 
@@ -542,8 +540,7 @@ make_message_rcsvalid (const char *message)
     if (message == NULL) message = "";
 
     /* Strip whitespace from end of lines and end of string. */
-    /* One for NUL, one for \n */
-    dp = dst = xmalloc (strlen (message) + 2);
+    dp = dst = (char *) xmalloc (strlen (message) + 1);
     for (mp = message; *mp != '\0'; ++mp)
     {
 	if (*mp == '\n')
@@ -565,12 +562,7 @@ make_message_rcsvalid (const char *message)
     if (*dst == '\0')
     {
 	free (dst);
-	dst = xstrdup ("*** empty log message ***\n");
-    }
-    else if (dp > dst && dp[-1] != '\n')
-    {
-	*dp++ = '\n';
-	*dp++ = '\0';
+	dst = xstrdup ("*** empty log message ***");
     }
 
     return dst;

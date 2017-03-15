@@ -1,4 +1,4 @@
-/*      $NetBSD: hijack.c,v 1.122 2017/02/16 08:08:01 ozaki-r Exp $	*/
+/*      $NetBSD: hijack.c,v 1.109.2.2 2016/03/03 14:30:52 martin Exp $	*/
 
 /*-
  * Copyright (c) 2011 Antti Kantee.  All Rights Reserved.
@@ -25,16 +25,10 @@
  * SUCH DAMAGE.
  */
 
-/*
- * XXX: rumphijack sort of works on glibc Linux.  But it's not
- * the same quality working as on NetBSD.
- * autoconf HAVE_FOO vs. __NetBSD__ / __linux__ could be further
- * improved.
- */
 #include <rump/rumpuser_port.h>
 
 #if !defined(lint)
-__RCSID("$NetBSD: hijack.c,v 1.122 2017/02/16 08:08:01 ozaki-r Exp $");
+__RCSID("$NetBSD: hijack.c,v 1.109.2.2 2016/03/03 14:30:52 martin Exp $");
 #endif
 
 #include <sys/param.h>
@@ -47,15 +41,15 @@ __RCSID("$NetBSD: hijack.c,v 1.122 2017/02/16 08:08:01 ozaki-r Exp $");
 #include <sys/time.h>
 #include <sys/uio.h>
 
-#ifdef __NetBSD__
+#ifdef PLATFORM_HAS_NBVFSSTAT
 #include <sys/statvfs.h>
 #endif
 
-#ifdef HAVE_KQUEUE
+#ifdef PLATFORM_HAS_KQUEUE
 #include <sys/event.h>
 #endif
 
-#ifdef __NetBSD__
+#ifdef PLATFORM_HAS_NBQUOTA
 #include <sys/quotactl.h>
 #endif
 
@@ -89,8 +83,7 @@ __RCSID("$NetBSD: hijack.c,v 1.122 2017/02/16 08:08:01 ozaki-r Exp $");
 enum dualcall {
 	DUALCALL_WRITE, DUALCALL_WRITEV, DUALCALL_PWRITE, DUALCALL_PWRITEV,
 	DUALCALL_IOCTL, DUALCALL_FCNTL,
-	DUALCALL_SOCKET, DUALCALL_ACCEPT, DUALCALL_PACCEPT,
-	DUALCALL_BIND, DUALCALL_CONNECT,
+	DUALCALL_SOCKET, DUALCALL_ACCEPT, DUALCALL_BIND, DUALCALL_CONNECT,
 	DUALCALL_GETPEERNAME, DUALCALL_GETSOCKNAME, DUALCALL_LISTEN,
 	DUALCALL_RECVFROM, DUALCALL_RECVMSG,
 	DUALCALL_SENDTO, DUALCALL_SENDMSG,
@@ -128,39 +121,39 @@ enum dualcall {
 	DUALCALL_MKNOD,
 #endif
 
-#ifdef __NetBSD__
+#ifdef PLATFORM_HAS_NBFILEHANDLE
 	DUALCALL_GETFH, DUALCALL_FHOPEN, DUALCALL_FHSTAT, DUALCALL_FHSTATVFS1,
 #endif
 
-#ifdef HAVE_KQUEUE
+#ifdef PLATFORM_HAS_KQUEUE
 	DUALCALL_KEVENT,
 #endif
 
-#ifdef __NetBSD__
+#ifdef PLATFORM_HAS_NBSYSCTL
 	DUALCALL___SYSCTL,
 #endif
 
-#ifdef __NetBSD__
+#ifdef PLATFORM_HAS_NFSSVC
 	DUALCALL_NFSSVC,
 #endif
 
-#ifdef __NetBSD__
+#ifdef PLATFORM_HAS_NBVFSSTAT
 	DUALCALL_STATVFS1, DUALCALL_FSTATVFS1, DUALCALL_GETVFSSTAT, 
 #endif
 
-#ifdef __NetBSD__
+#ifdef PLATFORM_HAS_NBMOUNT
 	DUALCALL_MOUNT, DUALCALL_UNMOUNT,
 #endif
 
-#ifdef HAVE_FSYNC_RANGE
+#ifdef PLATFORM_HAS_FSYNC_RANGE
 	DUALCALL_FSYNC_RANGE,
 #endif
 
-#ifdef HAVE_CHFLAGS
+#ifdef PLATFORM_HAS_CHFLAGS
 	DUALCALL_CHFLAGS, DUALCALL_LCHFLAGS, DUALCALL_FCHFLAGS,
 #endif
 
-#ifdef HAVE___QUOTACTL
+#ifdef PLATFORM_HAS_NBQUOTA
 	DUALCALL_QUOTACTL,
 #endif
 	DUALCALL__NUM
@@ -210,6 +203,7 @@ enum dualcall {
 #define REALGETFH __getfh30
 #define REALFHOPEN __fhopen40
 #define REALFHSTATVFS1 __fhstatvfs140
+#define OLDREALQUOTACTL __quotactl50	/* 5.99.48-62 only */
 #define REALSOCKET __socket30
 
 #define LSEEK_ALIAS _lseek
@@ -260,6 +254,10 @@ int REALFHSTAT(const void *, size_t, struct stat *);
 int REALFHSTATVFS1(const void *, size_t, struct statvfs *, int);
 int REALSOCKET(int, int, int);
 
+#ifdef PLATFORM_HAS_NBQUOTA
+int OLDREALQUOTACTL(const char *, struct plistref *);
+#endif
+
 #define S(a) __STRING(a)
 struct sysnames {
 	enum dualcall scm_callnum;
@@ -268,7 +266,6 @@ struct sysnames {
 } syscnames[] = {
 	{ DUALCALL_SOCKET,	S(REALSOCKET),	RSYS_NAME(SOCKET)	},
 	{ DUALCALL_ACCEPT,	"accept",	RSYS_NAME(ACCEPT)	},
-	{ DUALCALL_PACCEPT,	"paccept",	RSYS_NAME(PACCEPT)	},
 	{ DUALCALL_BIND,	"bind",		RSYS_NAME(BIND)		},
 	{ DUALCALL_CONNECT,	"connect",	RSYS_NAME(CONNECT)	},
 	{ DUALCALL_GETPEERNAME,	"getpeername",	RSYS_NAME(GETPEERNAME)	},
@@ -335,49 +332,53 @@ struct sysnames {
 	{ DUALCALL_MKNOD,	S(REALMKNOD),	RSYS_NAME(MKNOD)	},
 #endif
 
-#ifdef __NetBSD__
+#ifdef PLATFORM_HAS_NBFILEHANDLE
 	{ DUALCALL_GETFH,	S(REALGETFH),	RSYS_NAME(GETFH)	},
 	{ DUALCALL_FHOPEN,	S(REALFHOPEN),	RSYS_NAME(FHOPEN)	},
 	{ DUALCALL_FHSTAT,	S(REALFHSTAT),	RSYS_NAME(FHSTAT)	},
 	{ DUALCALL_FHSTATVFS1,	S(REALFHSTATVFS1),RSYS_NAME(FHSTATVFS1)	},
 #endif
 
-#ifdef HAVE_KQUEUE
+#ifdef PLATFORM_HAS_KQUEUE
 	{ DUALCALL_KEVENT,	S(REALKEVENT),	RSYS_NAME(KEVENT)	},
 #endif
 
-#ifdef __NetBSD__
+#ifdef PLATFORM_HAS_NBSYSCTL
 	{ DUALCALL___SYSCTL,	"__sysctl",	RSYS_NAME(__SYSCTL)	},
 #endif
 
-#ifdef __NetBSD__
+#ifdef PLATFORM_HAS_NFSSVC
 	{ DUALCALL_NFSSVC,	"nfssvc",	RSYS_NAME(NFSSVC)	},
 #endif
 
-#ifdef __NetBSD__
+#ifdef PLATFORM_HAS_NBVFSSTAT
 	{ DUALCALL_STATVFS1,	"statvfs1",	RSYS_NAME(STATVFS1)	},
 	{ DUALCALL_FSTATVFS1,	"fstatvfs1",	RSYS_NAME(FSTATVFS1)	},
 	{ DUALCALL_GETVFSSTAT,	"getvfsstat",	RSYS_NAME(GETVFSSTAT)	},
 #endif
 
-#ifdef __NetBSD__
+#ifdef PLATFORM_HAS_NBMOUNT
 	{ DUALCALL_MOUNT,	S(REALMOUNT),	RSYS_NAME(MOUNT)	},
 	{ DUALCALL_UNMOUNT,	"unmount",	RSYS_NAME(UNMOUNT)	},
 #endif
 
-#ifdef HAVE_FSYNC_RANGE
+#ifdef PLATFORM_HAS_FSYNC_RANGE
 	{ DUALCALL_FSYNC_RANGE,	"fsync_range",	RSYS_NAME(FSYNC_RANGE)	},
 #endif
 
-#ifdef HAVE_CHFLAGS
+#ifdef PLATFORM_HAS_CHFLAGS
 	{ DUALCALL_CHFLAGS,	"chflags",	RSYS_NAME(CHFLAGS)	},
 	{ DUALCALL_LCHFLAGS,	"lchflags",	RSYS_NAME(LCHFLAGS)	},
 	{ DUALCALL_FCHFLAGS,	"fchflags",	RSYS_NAME(FCHFLAGS)	},
-#endif /* HAVE_CHFLAGS */
+#endif /* PLATFORM_HAS_CHFLAGS */
 
-#ifdef HAVE___QUOTACTL
+#ifdef PLATFORM_HAS_NBQUOTA
+#if __NetBSD_Prereq__(5,99,63)
 	{ DUALCALL_QUOTACTL,	"__quotactl",	RSYS_NAME(__QUOTACTL)	},
-#endif /* HAVE___QUOTACTL */
+#elif __NetBSD_Prereq__(5,99,48)
+	{ DUALCALL_QUOTACTL,	S(OLDREALQUOTACTL),RSYS_NAME(QUOTACTL)	},
+#endif
+#endif /* PLATFORM_HAS_NBQUOTA */
 
 };
 #undef S
@@ -887,8 +888,7 @@ rcinit(void)
 
 	host_fork = dlsym(RTLD_NEXT, "fork");
 	host_daemon = dlsym(RTLD_NEXT, "daemon");
-	if (host_mmap == NULL)
-		host_mmap = dlsym(RTLD_NEXT, "mmap");
+	host_mmap = dlsym(RTLD_NEXT, "mmap");
 
 	/*
 	 * In theory cannot print anything during lookups because
@@ -989,6 +989,7 @@ fd_rump2host_withdup(int fd)
 static int
 fd_host2rump(int fd)
 {
+
 	if (!isdup2d(fd))
 		return fd - hijack_fdoff;
 	else
@@ -1065,10 +1066,6 @@ dodup(int oldd, int minfd)
 			minfd -= hijack_fdoff;
 		isrump = 1;
 	} else {
-		if (minfd >= hijack_fdoff) {
-			errno = EINVAL;
-			return -1;
-		}
 		op_fcntl = GETSYSCALL(host, FCNTL);
 		isrump = 0;
 	}
@@ -1336,35 +1333,6 @@ accept(int s, struct sockaddr *addr, socklen_t *addrlen)
 	return fd;
 }
 
-int
-paccept(int s, struct sockaddr *addr, socklen_t *addrlen,
-    const sigset_t * restrict sigmask, int flags)
-{
-	int (*op_paccept)(int, struct sockaddr *, socklen_t *,
-	    const sigset_t * restrict, int);
-	int fd;
-	bool isrump;
-
-	isrump = fd_isrump(s);
-
-	DPRINTF(("paccept -> %d", s));
-	if (isrump) {
-		op_paccept = GETSYSCALL(rump, PACCEPT);
-		s = fd_host2rump(s);
-	} else {
-		op_paccept = GETSYSCALL(host, PACCEPT);
-	}
-	fd = op_paccept(s, addr, addrlen, sigmask, flags);
-	if (fd != -1 && isrump)
-		fd = fd_rump2host(fd);
-	else
-		fd = fd_host2host(fd);
-
-	DPRINTF((" <- %d\n", fd));
-
-	return fd;
-}
-
 /*
  * ioctl() and fcntl() are varargs calls and need special treatment.
  */
@@ -1411,7 +1379,6 @@ fcntl(int fd, int cmd, ...)
 	DPRINTF(("fcntl -> %d (cmd %d)\n", fd, cmd));
 
 	switch (cmd) {
-	case F_DUPFD_CLOEXEC:	/* Ignore CLOEXEC bit for now */
 	case F_DUPFD:
 		va_start(ap, cmd);
 		minfd = va_arg(ap, int);
@@ -1757,8 +1724,7 @@ fork(void)
 }
 #ifdef VFORK
 /* we do not have the luxury of not requiring a stackframe */
-#define	__strong_alias_macro(m, f)	__strong_alias(m, f)
-__strong_alias_macro(VFORK,fork);
+__strong_alias(VFORK,fork);
 #endif
 
 int
@@ -2225,7 +2191,7 @@ poll(struct pollfd *fds, nfds_t nfds, int timeout)
 	return REALPOLLTS(fds, nfds, tsp, NULL);
 }
 
-#ifdef HAVE_KQUEUE
+#ifdef PLATFORM_HAS_KQUEUE
 int
 REALKEVENT(int kq, const struct kevent *changelist, size_t nchanges,
 	struct kevent *eventlist, size_t nevents,
@@ -2256,7 +2222,7 @@ REALKEVENT(int kq, const struct kevent *changelist, size_t nchanges,
 	op_kevent = GETSYSCALL(host, KEVENT);
 	return op_kevent(kq, changelist, nchanges, eventlist, nevents, timeout);
 }
-#endif /* HAVE_KQUEUE */
+#endif /* PLATFORM_HAS_KQUEUE */
 
 /*
  * mmapping from a rump kernel is not supported, so disallow it.
@@ -2269,13 +2235,10 @@ mmap(void *addr, size_t len, int prot, int flags, int fd, off_t offset)
 		errno = ENOSYS;
 		return MAP_FAILED;
 	}
-	if (__predict_false(host_mmap == NULL)) {
-		host_mmap = rumphijack_dlsym(RTLD_NEXT, "mmap");
-	}
 	return host_mmap(addr, len, prot, flags, fd, offset);
 }
 
-#ifdef __NetBSD__
+#ifdef PLATFORM_HAS_NBSYSCTL
 /*
  * these go to one or the other on a per-process configuration
  */
@@ -2305,12 +2268,10 @@ __sysctl(const int *name, unsigned int namelen, void *old, size_t *oldlenp,
  * Rest are std type calls.
  */
 
-#ifdef HAVE_UTIMENSAT
 ATCALL(int, utimensat, DUALCALL_UTIMENSAT,				\
 	(int fd, const char *path, const struct timespec t[2], int f),	\
 	(int, const char *, const struct timespec [2], int),
 	(fd, path, t, f))
-#endif
 
 FDCALL(int, bind, DUALCALL_BIND,					\
 	(int fd, const struct sockaddr *name, socklen_t namelen),	\
@@ -2413,7 +2374,7 @@ FDCALL(int, REALFSTAT, DUALCALL_FSTAT,					\
 	(fd, sb))
 #endif
 
-#ifdef __NetBSD__
+#ifdef PLATFORM_HAS_NBVFSSTAT
 FDCALL(int, fstatvfs1, DUALCALL_FSTATVFS1,				\
 	(int fd, struct statvfs *buf, int flags),			\
 	(int, struct statvfs *, int),					\
@@ -2455,7 +2416,7 @@ FDCALL(int, fsync, DUALCALL_FSYNC,					\
 	(int),								\
 	(fd))
 
-#ifdef HAVE_FSYNC_RANGE
+#ifdef PLATFORM_HAS_FSYNC_RANGE
 FDCALL(int, fsync_range, DUALCALL_FSYNC_RANGE,				\
 	(int fd, int how, off_t start, off_t length),			\
 	(int, int, off_t, off_t),					\
@@ -2467,12 +2428,7 @@ FDCALL(int, futimes, DUALCALL_FUTIMES,					\
 	(int, const struct timeval *),					\
 	(fd, tv))
 
-FDCALL(int, futimens, DUALCALL_FUTIMENS,				\
-	(int fd, const struct timespec *ts),				\
-	(int, const struct timespec *),					\
-	(fd, ts))
-
-#ifdef HAVE_CHFLAGS
+#ifdef PLATFORM_HAS_CHFLAGS
 FDCALL(int, fchflags, DUALCALL_FCHFLAGS,				\
 	(int fd, u_long flags),						\
 	(int, u_long),							\
@@ -2515,7 +2471,7 @@ PATHCALL(int, lchmod, DUALCALL_LCHMOD,					\
 	(const char *, mode_t),						\
 	(path, mode))
 
-#ifdef __NetBSD__
+#ifdef PLATFORM_HAS_NBVFSSTAT
 PATHCALL(int, statvfs1, DUALCALL_STATVFS1,				\
 	(const char *path, struct statvfs *buf, int flags),		\
 	(const char *, struct statvfs *, int),				\
@@ -2578,7 +2534,7 @@ PATHCALL(int, lutimes, DUALCALL_LUTIMES,				\
 	(const char *, const struct timeval *),				\
 	(path, tv))
 
-#ifdef HAVE_CHFLAGS
+#ifdef PLATFORM_HAS_CHFLAGS
 PATHCALL(int, chflags, DUALCALL_CHFLAGS,				\
 	(const char *path, u_long flags),				\
 	(const char *, u_long),						\
@@ -2588,7 +2544,7 @@ PATHCALL(int, lchflags, DUALCALL_LCHFLAGS,				\
 	(const char *path, u_long flags),				\
 	(const char *, u_long),						\
 	(path, flags))
-#endif /* HAVE_CHFLAGS */
+#endif /* PLATFORM_HAS_CHFLAGS */
 
 PATHCALL(int, truncate, DUALCALL_TRUNCATE,				\
 	(const char *path, off_t length),				\
@@ -2613,7 +2569,7 @@ PATHCALL(int, REALMKNOD, DUALCALL_MKNOD,				\
  * about the "source" directory in a generic call (and besides,
  * it might not even exist, cf. nfs).
  */
-#ifdef __NetBSD__
+#ifdef PLATFORM_HAS_NBMOUNT
 PATHCALL(int, REALMOUNT, DUALCALL_MOUNT,				\
 	(const char *type, const char *path, int flags,			\
 	    void *data, size_t dlen),					\
@@ -2624,16 +2580,23 @@ PATHCALL(int, unmount, DUALCALL_UNMOUNT,				\
 	(const char *path, int flags),					\
 	(const char *, int),						\
 	(path, flags))
-#endif /* __NetBSD__ */
+#endif /* PLATFORM_HAS_NBMOUNT */
 
-#ifdef HAVE___QUOTACTL
+#ifdef PLATFORM_HAS_NBQUOTA
+#if __NetBSD_Prereq__(5,99,63)
 PATHCALL(int, __quotactl, DUALCALL_QUOTACTL,				\
 	(const char *path, struct quotactl_args *args),			\
 	(const char *, struct quotactl_args *),				\
 	(path, args))
-#endif /* HAVE___QUOTACTL */
+#elif __NetBSD_Prereq__(5,99,48)
+PATHCALL(int, OLDREALQUOTACTL, DUALCALL_QUOTACTL,			\
+	(const char *path, struct plistref *p),				\
+	(const char *, struct plistref *),				\
+	(path, p))
+#endif
+#endif /* PLATFORM_HAS_NBQUOTA */
 
-#ifdef __NetBSD__
+#ifdef PLATFORM_HAS_NBFILEHANDLE
 PATHCALL(int, REALGETFH, DUALCALL_GETFH,				\
 	(const char *path, void *fhp, size_t *fh_size),			\
 	(const char *, void *, size_t *),				\
@@ -2644,14 +2607,14 @@ PATHCALL(int, REALGETFH, DUALCALL_GETFH,				\
  * These act different on a per-process vfs configuration
  */
 
-#ifdef __NetBSD__
+#ifdef PLATFORM_HAS_NBVFSSTAT
 VFSCALL(VFSBIT_GETVFSSTAT, int, getvfsstat, DUALCALL_GETVFSSTAT,	\
 	(struct statvfs *buf, size_t buflen, int flags),		\
 	(struct statvfs *, size_t, int),				\
 	(buf, buflen, flags))
 #endif
 
-#ifdef __NetBSD__
+#ifdef PLATFORM_HAS_NBFILEHANDLE
 VFSCALL(VFSBIT_FHCALLS, int, REALFHOPEN, DUALCALL_FHOPEN,		\
 	(const void *fhp, size_t fh_size, int flags),			\
 	(const char *, size_t, int),					\
@@ -2669,7 +2632,7 @@ VFSCALL(VFSBIT_FHCALLS, int, REALFHSTATVFS1, DUALCALL_FHSTATVFS1,	\
 #endif
 
 
-#ifdef __NetBSD__
+#ifdef PLATFORM_HAS_NFSSVC
 
 /* finally, put nfssvc here.  "keep the namespace clean" */
 #include <nfs/rpcv2.h>
@@ -2694,4 +2657,4 @@ nfssvc(int flags, void *argstructp)
 
 	return op_nfssvc(flags, argstructp);
 }
-#endif /* __NetBSD__ */
+#endif /* PLATFORM_HAS_NFSSVC */

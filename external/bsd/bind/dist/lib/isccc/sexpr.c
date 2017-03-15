@@ -1,4 +1,4 @@
-/*	$NetBSD: sexpr.c,v 1.7 2016/05/26 16:50:00 christos Exp $	*/
+/*	$NetBSD: sexpr.c,v 1.4.4.2 2016/10/14 12:01:33 martin Exp $	*/
 
 /*
  * Portions Copyright (C) 2004, 2005, 2007, 2014, 2015  Internet Systems Consortium, Inc. ("ISC")

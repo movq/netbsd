@@ -1,4 +1,4 @@
-/*	$NetBSD: qmgr_transport.c,v 1.2 2017/02/14 01:16:46 christos Exp $	*/
+/*	$NetBSD: qmgr_transport.c,v 1.1.1.1 2009/06/23 10:08:50 tron Exp $	*/
 
 /*++
 /* NAME
@@ -66,11 +66,6 @@
 /*	IBM T.J. Watson Research
 /*	P.O. Box 704
 /*	Yorktown Heights, NY 10598, USA
-/*
-/*	Wietse Venema
-/*	Google, Inc.
-/*	111 8th Avenue
-/*	New York, NY 10011, USA
 /*--*/
 
 /* System library. */
@@ -165,17 +160,9 @@ struct QMGR_TRANSPORT_ALLOC {
 #define QMGR_TRANSPORT_MAX_PEND	2
 #endif
 
- /*
-  * Important note on the _transport_rate_delay implementation: after
-  * qmgr_transport_alloc() sets the QMGR_TRANSPORT_STAT_RATE_LOCK flag, all
-  * code paths must directly or indirectly invoke qmgr_transport_unthrottle()
-  * or qmgr_transport_throttle(). Otherwise, transports with non-zero
-  * _transport_rate_delay will become stuck.
-  */
-
 /* qmgr_transport_unthrottle_wrapper - in case (char *) != (struct *) */
 
-static void qmgr_transport_unthrottle_wrapper(int unused_event, void *context)
+static void qmgr_transport_unthrottle_wrapper(int unused_event, char *context)
 {
     qmgr_transport_unthrottle((QMGR_TRANSPORT *) context);
 }
@@ -190,7 +177,7 @@ void    qmgr_transport_unthrottle(QMGR_TRANSPORT *transport)
      * This routine runs after expiration of the timer set by
      * qmgr_transport_throttle(), or whenever a delivery transport has been
      * used without malfunction. In either case, we enable delivery again if
-     * the transport was throttled. We always reset the transport rate lock.
+     * the transport was blocked, otherwise the request is ignored.
      */
     if ((transport->flags & QMGR_TRANSPORT_STAT_DEAD) != 0) {
 	if (msg_verbose)
@@ -202,10 +189,8 @@ void    qmgr_transport_unthrottle(QMGR_TRANSPORT *transport)
 	dsn_free(transport->dsn);
 	transport->dsn = 0;
 	event_cancel_timer(qmgr_transport_unthrottle_wrapper,
-			   (void *) transport);
+			   (char *) transport);
     }
-    if (transport->flags & QMGR_TRANSPORT_STAT_RATE_LOCK)
-	transport->flags &= ~QMGR_TRANSPORT_STAT_RATE_LOCK;
 }
 
 /* qmgr_transport_throttle - disable delivery process allocation */
@@ -229,32 +214,22 @@ void    qmgr_transport_throttle(QMGR_TRANSPORT *transport, DSN *dsn)
 		      myname, transport->name, transport->dsn->reason);
 	transport->dsn = DSN_COPY(dsn);
 	event_request_timer(qmgr_transport_unthrottle_wrapper,
-			    (void *) transport, var_transport_retry_time);
+			    (char *) transport, var_transport_retry_time);
     }
 }
 
 /* qmgr_transport_abort - transport connect watchdog */
 
-static void qmgr_transport_abort(int unused_event, void *context)
+static void qmgr_transport_abort(int unused_event, char *context)
 {
     QMGR_TRANSPORT_ALLOC *alloc = (QMGR_TRANSPORT_ALLOC *) context;
 
     msg_fatal("timeout connecting to transport: %s", alloc->transport->name);
 }
 
-/* qmgr_transport_rate_event - delivery process availability notice */
-
-static void qmgr_transport_rate_event(int unused_event, void *context)
-{
-    QMGR_TRANSPORT_ALLOC *alloc = (QMGR_TRANSPORT_ALLOC *) context;
-
-    alloc->notify(alloc->transport, alloc->stream);
-    myfree((void *) alloc);
-}
-
 /* qmgr_transport_event - delivery process availability notice */
 
-static void qmgr_transport_event(int unused_event, void *context)
+static void qmgr_transport_event(int unused_event, char *context)
 {
     QMGR_TRANSPORT_ALLOC *alloc = (QMGR_TRANSPORT_ALLOC *) context;
 
@@ -283,16 +258,8 @@ static void qmgr_transport_event(int unused_event, void *context)
     /*
      * Notify the requestor.
      */
-    if (alloc->transport->xport_rate_delay > 0) {
-	if ((alloc->transport->flags & QMGR_TRANSPORT_STAT_RATE_LOCK) == 0)
-	    msg_panic("transport_event: missing rate lock for transport %s",
-		      alloc->transport->name);
-	event_request_timer(qmgr_transport_rate_event, (void *) alloc,
-			    alloc->transport->xport_rate_delay);
-    } else {
-	alloc->notify(alloc->transport, alloc->stream);
-	myfree((void *) alloc);
-    }
+    alloc->notify(alloc->transport, alloc->stream);
+    myfree((char *) alloc);
 }
 
 /* qmgr_transport_select - select transport for allocation */
@@ -317,7 +284,6 @@ QMGR_TRANSPORT *qmgr_transport_select(void)
 
     for (xport = qmgr_transport_list.next; xport; xport = xport->peers.next) {
 	if ((xport->flags & QMGR_TRANSPORT_STAT_DEAD) != 0
-	    || (xport->flags & QMGR_TRANSPORT_STAT_RATE_LOCK) != 0
 	    || xport->pending >= QMGR_TRANSPORT_MAX_PEND)
 	    continue;
 	need = xport->pending + 1;
@@ -347,17 +313,8 @@ void    qmgr_transport_alloc(QMGR_TRANSPORT *transport, QMGR_TRANSPORT_ALLOC_NOT
      */
     if (transport->flags & QMGR_TRANSPORT_STAT_DEAD)
 	msg_panic("qmgr_transport: dead transport: %s", transport->name);
-    if (transport->flags & QMGR_TRANSPORT_STAT_RATE_LOCK)
-	msg_panic("qmgr_transport: rate-locked transport: %s", transport->name);
     if (transport->pending >= QMGR_TRANSPORT_MAX_PEND)
 	msg_panic("qmgr_transport: excess allocation: %s", transport->name);
-
-    /*
-     * When this message delivery transport is rate-limited, do not select it
-     * again before the end of a message delivery transaction.
-     */
-    if (transport->xport_rate_delay > 0)
-	transport->flags |= QMGR_TRANSPORT_STAT_RATE_LOCK;
 
     /*
      * Connect to the well-known port for this delivery service, and wake up
@@ -386,24 +343,24 @@ void    qmgr_transport_alloc(QMGR_TRANSPORT *transport, QMGR_TRANSPORT_ALLOC_NOT
 				      NON_BLOCKING)) == 0) {
 	msg_warn("connect to transport %s/%s: %m",
 		 MAIL_CLASS_PRIVATE, transport->name);
-	event_request_timer(qmgr_transport_event, (void *) alloc, 0);
+	event_request_timer(qmgr_transport_event, (char *) alloc, 0);
 	return;
     }
-#if (EVENTS_STYLE != EVENTS_STYLE_SELECT) && defined(CA_VSTREAM_CTL_DUPFD)
+#if (EVENTS_STYLE != EVENTS_STYLE_SELECT) && defined(VSTREAM_CTL_DUPFD)
 #ifndef THRESHOLD_FD_WORKAROUND
 #define THRESHOLD_FD_WORKAROUND 128
 #endif
     vstream_control(alloc->stream,
-		    CA_VSTREAM_CTL_DUPFD(THRESHOLD_FD_WORKAROUND),
-		    CA_VSTREAM_CTL_END);
+		    VSTREAM_CTL_DUPFD, THRESHOLD_FD_WORKAROUND,
+		    VSTREAM_CTL_END);
 #endif
     event_enable_read(vstream_fileno(alloc->stream), qmgr_transport_event,
-		      (void *) alloc);
+		      (char *) alloc);
 
     /*
      * Guard against broken systems.
      */
-    event_request_timer(qmgr_transport_abort, (void *) alloc,
+    event_request_timer(qmgr_transport_abort, (char *) alloc,
 			var_daemon_timeout);
 }
 
@@ -432,11 +389,8 @@ QMGR_TRANSPORT *qmgr_transport_create(const char *name)
     transport->init_dest_concurrency =
 	get_mail_conf_int2(name, _INIT_DEST_CON,
 			   var_init_dest_concurrency, 1, 0);
-    transport->xport_rate_delay = get_mail_conf_time2(name, _XPORT_RATE_DELAY,
-						      var_xport_rate_delay,
-						      's', 0, 0);
     transport->rate_delay = get_mail_conf_time2(name, _DEST_RATE_DELAY,
-						var_dest_rate_delay,
+						var_dest_rate_delay, 
 						's', 0, 0);
 
     if (transport->rate_delay > 0)
@@ -457,7 +411,7 @@ QMGR_TRANSPORT *qmgr_transport_create(const char *name)
 			   var_conc_cohort_limit, 0, 0);
     if (qmgr_transport_byname == 0)
 	qmgr_transport_byname = htable_create(10);
-    htable_enter(qmgr_transport_byname, name, (void *) transport);
+    htable_enter(qmgr_transport_byname, name, (char *) transport);
     QMGR_LIST_APPEND(qmgr_transport_list, transport);
     if (msg_verbose)
 	msg_info("qmgr_transport_create: %s concurrency %d recipients %d",

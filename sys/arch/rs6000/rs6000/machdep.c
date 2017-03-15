@@ -1,4 +1,4 @@
-/*	$NetBSD: machdep.c,v 1.11 2016/12/22 14:47:59 cherry Exp $	*/
+/*	$NetBSD: machdep.c,v 1.10 2011/06/20 07:18:07 matt Exp $	*/
 
 /*-
  * Copyright (c) 2007 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.11 2016/12/22 14:47:59 cherry Exp $");
+__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.10 2011/06/20 07:18:07 matt Exp $");
 
 #include "opt_compat_netbsd.h"
 #include "opt_ddb.h"
@@ -335,7 +335,7 @@ initppc(u_long startkernel, u_long endkernel, u_int args, void *btinfo)
 	setled(0x40400000);
 
 	/* Initialize pmap module. */
-	uvm_md_init();
+	uvm_setpagesize();
 	pmap_bootstrap(startkernel, endkernel);
 	setled(0x40500000);
 

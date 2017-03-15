@@ -51,8 +51,7 @@ static const struct simple_object_functions * const format_functions[] =
 {
   &simple_object_elf_functions,
   &simple_object_mach_o_functions,
-  &simple_object_coff_functions,
-  &simple_object_xcoff_functions
+  &simple_object_coff_functions
 };
 
 /* Read data from a file using the simple_object error reporting
@@ -63,6 +62,8 @@ simple_object_internal_read (int descriptor, off_t offset,
 			     unsigned char *buffer, size_t size,
 			     const char **errmsg, int *err)
 {
+  ssize_t got;
+
   if (lseek (descriptor, offset, SEEK_SET) < 0)
     {
       *errmsg = "lseek";
@@ -70,26 +71,15 @@ simple_object_internal_read (int descriptor, off_t offset,
       return 0;
     }
 
-  do
+  got = read (descriptor, buffer, size);
+  if (got < 0)
     {
-      ssize_t got = read (descriptor, buffer, size);
-      if (got == 0)
-	break;
-      else if (got > 0)
-	{
-	  buffer += got;
-	  size -= got;
-	}
-      else if (errno != EINTR)
-	{
-	  *errmsg = "read";
-	  *err = errno;
-	  return 0;
-	}
+      *errmsg = "read";
+      *err = errno;
+      return 0;
     }
-  while (size > 0);
 
-  if (size > 0)
+  if ((size_t) got < size)
     {
       *errmsg = "file too short";
       *err = 0;
@@ -107,6 +97,8 @@ simple_object_internal_write (int descriptor, off_t offset,
 			      const unsigned char *buffer, size_t size,
 			      const char **errmsg, int *err)
 {
+  ssize_t wrote;
+
   if (lseek (descriptor, offset, SEEK_SET) < 0)
     {
       *errmsg = "lseek";
@@ -114,26 +106,15 @@ simple_object_internal_write (int descriptor, off_t offset,
       return 0;
     }
 
-  do
+  wrote = write (descriptor, buffer, size);
+  if (wrote < 0)
     {
-      ssize_t wrote = write (descriptor, buffer, size);
-      if (wrote == 0)
-	break;
-      else if (wrote > 0)
-	{
-	  buffer += wrote;
-	  size -= wrote;
-	}
-      else if (errno != EINTR)
-	{
-	  *errmsg = "write";
-	  *err = errno;
-	  return 0;
-	}
+      *errmsg = "write";
+      *err = errno;
+      return 0;
     }
-  while (size > 0);
 
-  if (size > 0)
+  if ((size_t) wrote < size)
     {
       *errmsg = "short write";
       *err = 0;

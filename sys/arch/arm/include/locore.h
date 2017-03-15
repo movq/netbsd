@@ -1,4 +1,4 @@
-/*	$NetBSD: locore.h,v 1.26 2015/06/09 08:13:17 skrll Exp $	*/
+/*	$NetBSD: locore.h,v 1.16.6.2 2015/05/27 05:33:29 msaitoh Exp $	*/
 
 /*
  * Copyright (c) 1994-1996 Mark Brinicombe.
@@ -54,8 +54,6 @@
 #include "opt_arm_debug.h"
 #endif
 
-#include <sys/pcu.h>
-
 #include <arm/cpuconf.h>
 #include <arm/armreg.h>
 
@@ -79,7 +77,7 @@
 	mrs	r0, cpsr ; \
 	bic	r0, r0, #(I32_bit) ; \
 	msr	cpsr_c, r0 ; \
-	ldmfd	sp!, {r0}
+	ldmfd	sp!, {r0}		
 #else
 /* Not yet used in 26-bit code */
 #endif
@@ -89,13 +87,7 @@
 #define GET_CURLWP(rX)		GET_CURCPU(rX); ldr rX, [rX, #CI_CURLWP]
 #elif defined (TPIDRPRW_IS_CURLWP)
 #define GET_CURLWP(rX)		mrc	p15, 0, rX, c13, c0, 4
-#if defined (MULTIPROCESSOR)
 #define GET_CURCPU(rX)		GET_CURLWP(rX); ldr rX, [rX, #L_CPU]
-#elif defined(_ARM_ARCH_7)
-#define GET_CURCPU(rX)		movw rX, #:lower16:cpu_info_store; movt rX, #:upper16:cpu_info_store
-#else
-#define GET_CURCPU(rX)		ldr rX, =_C_LABEL(cpu_info_store)
-#endif
 #elif !defined(MULTIPROCESSOR)
 #define GET_CURCPU(rX)		ldr rX, =_C_LABEL(cpu_info_store)
 #define GET_CURLWP(rX)		GET_CURCPU(rX); ldr rX, [rX, #CI_CURLWP]
@@ -120,24 +112,16 @@
  */
 
 #ifdef __PROG32
-#ifdef __NO_FIQ
 #define VALID_R15_PSR(r15,psr)						\
-	(((psr) & PSR_MODE) == PSR_USR32_MODE && ((psr) & I32_bit) == 0)
-#else
-#define VALID_R15_PSR(r15,psr)						\
-	(((psr) & PSR_MODE) == PSR_USR32_MODE && ((psr) & IF32_bits) == 0)
-#endif
+	(((psr) & PSR_MODE) == PSR_USR32_MODE &&			\
+		((psr) & (I32_bit | F32_bit)) == 0)
 #else
 #define VALID_R15_PSR(r15,psr)						\
 	(((r15) & R15_MODE) == R15_MODE_USR &&				\
 		((r15) & (R15_IRQ_DISABLE | R15_FIQ_DISABLE)) == 0)
 #endif
 
-/*
- * Translation Table Base Register Share/Cache settings
- */
-#define	TTBR_UPATTR	(TTBR_S | TTBR_RGN_WBNWA | TTBR_C)
-#define	TTBR_MPATTR	(TTBR_S | TTBR_RGN_WBNWA /* | TTBR_NOS */ | TTBR_IRGN_WBNWA)
+
 
 /* The address of the vector page. */
 extern vaddr_t vector_page;
@@ -230,9 +214,7 @@ read_thumb_insn(vaddr_t va, bool user_p)
 	va &= ~1;
 	uint32_t insn;
 	if (user_p) {
-#if defined(__thumb__) && defined(_ARM_ARCH_T2)
-		__asm __volatile("ldrht %0, [%1, #0]" : "=&r"(insn) : "r"(va));
-#elif defined(_ARM_ARCH_7)
+#ifdef _ARM_ARCH_T2
 		__asm __volatile("ldrht %0, [%1], #0" : "=&r"(insn) : "r"(va));
 #else
 		__asm __volatile("ldrt %0, [%1]" : "=&r"(insn) : "r"(va & ~3));

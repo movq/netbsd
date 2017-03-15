@@ -1,4 +1,4 @@
-/*	$NetBSD: uha_eisa.c,v 1.38 2016/07/11 11:31:50 msaitoh Exp $	*/
+/*	$NetBSD: uha_eisa.c,v 1.36 2014/03/29 19:28:24 christos Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: uha_eisa.c,v 1.38 2016/07/11 11:31:50 msaitoh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: uha_eisa.c,v 1.36 2014/03/29 19:28:24 christos Exp $");
 
 #include "opt_ddb.h"
 
@@ -75,7 +75,7 @@ static void	u24_init(struct uha_softc *);
 
 /*
  * Check the slots looking for a board we recognise
- * If we find one, note its address (slot) and call
+ * If we find one, note it's address (slot) and call
  * the actual probe routine to check it out.
  */
 static int
@@ -164,8 +164,7 @@ uha_eisa_attach(device_t parent, device_t self, void *aux)
 }
 
 static int
-u24_find(bus_space_tag_t iot, bus_space_handle_t ioh,
-    struct uha_probe_data *sc)
+u24_find(bus_space_tag_t iot, bus_space_handle_t ioh, struct uha_probe_data *sc)
 {
 	u_int8_t config0, config1, config2;
 	int irq, drq;
@@ -234,8 +233,7 @@ u24_start_mbox(struct uha_softc *sc, struct uha_mscp *mscp)
 		delay(100);
 	}
 	if (!spincount) {
-		aprint_error_dev(sc->sc_dev,
-		    "uha_start_mbox, board not responding\n");
+		aprint_error_dev(sc->sc_dev, "uha_start_mbox, board not responding\n");
 		Debugger();
 	}
 

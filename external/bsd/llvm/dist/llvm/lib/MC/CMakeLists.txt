@@ -9,17 +9,16 @@ add_llvm_library(LLVMMC
   MCAsmStreamer.cpp
   MCAssembler.cpp
   MCCodeEmitter.cpp
-  MCCodeView.cpp
+  MCCodeGenInfo.cpp
   MCContext.cpp
   MCDwarf.cpp
+  MCELF.cpp
   MCELFObjectTargetWriter.cpp
   MCELFStreamer.cpp
   MCExpr.cpp
-  MCFragment.cpp
   MCInst.cpp
   MCInstPrinter.cpp
   MCInstrAnalysis.cpp
-  MCInstrDesc.cpp
   MCLabel.cpp
   MCLinkerOptimizationHint.cpp
   MCMachOStreamer.cpp
@@ -29,7 +28,6 @@ add_llvm_library(LLVMMC
   MCObjectStreamer.cpp
   MCObjectWriter.cpp
   MCRegisterInfo.cpp
-  MCSchedule.cpp
   MCSection.cpp
   MCSectionCOFF.cpp
   MCSectionELF.cpp
@@ -37,7 +35,7 @@ add_llvm_library(LLVMMC
   MCStreamer.cpp
   MCSubtargetInfo.cpp
   MCSymbol.cpp
-  MCSymbolELF.cpp
+  MCSymbolizer.cpp
   MCTargetOptions.cpp
   MCValue.cpp
   MCWin64EH.cpp
@@ -47,9 +45,7 @@ add_llvm_library(LLVMMC
   SubtargetFeature.cpp
   WinCOFFObjectWriter.cpp
   WinCOFFStreamer.cpp
-
-  ADDITIONAL_HEADER_DIRS
-  ${LLVM_MAIN_INCLUDE_DIR}/llvm/MC
+  YAML.cpp
   )
 
 add_subdirectory(MCParser)

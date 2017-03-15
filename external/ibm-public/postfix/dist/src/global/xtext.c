@@ -1,4 +1,4 @@
-/*	$NetBSD: xtext.c,v 1.2 2017/02/14 01:16:45 christos Exp $	*/
+/*	$NetBSD: xtext.c,v 1.1.1.2 2014/07/06 19:27:52 tron Exp $	*/
 
 /*++
 /* NAME
@@ -103,10 +103,10 @@ VSTRING *xtext_quote(VSTRING *quoted, const char *unquoted, const char *special)
 
 VSTRING *xtext_unquote_append(VSTRING *unquoted, const char *quoted)
 {
-    const unsigned char *cp;
+    const char *cp;
     int     ch;
 
-    for (cp = (const unsigned char *) quoted; (ch = *cp) != 0; cp++) {
+    for (cp = quoted; (ch = *cp) != 0; cp++) {
 	if (ch == '+') {
 	    if (ISDIGIT(cp[1]))
 		ch = (cp[1] - '0') << 4;
@@ -136,7 +136,8 @@ VSTRING *xtext_unquote_append(VSTRING *unquoted, const char *quoted)
 VSTRING *xtext_unquote(VSTRING *unquoted, const char *quoted)
 {
     VSTRING_RESET(unquoted);
-    return (xtext_unquote_append(unquoted, quoted) ? unquoted : 0);
+    xtext_unquote_append(unquoted, quoted);
+    return (unquoted);
 }
 
 #ifdef TEST
@@ -165,17 +166,6 @@ int     main(int unused_argc, char **unused_argv)
     VSTRING *quoted = vstring_alloc(100);
     ssize_t len;
 
-    /*
-     * Negative tests.
-     */
-    if (xtext_unquote(unquoted, "++1") != 0)
-	msg_warn("undetected error pattern 1");
-    if (xtext_unquote(unquoted, "+2+") != 0)
-	msg_warn("undetected error pattern 2");
-
-    /*
-     * Positive tests.
-     */
     while ((len = read_buf(VSTREAM_IN, unquoted)) > 0) {
 	xtext_quote(quoted, STR(unquoted), "+=");
 	if (xtext_unquote(unquoted, STR(quoted)) == 0)

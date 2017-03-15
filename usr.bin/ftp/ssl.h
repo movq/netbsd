@@ -1,4 +1,4 @@
-/*	$NetBSD: ssl.h,v 1.3 2015/09/12 19:38:42 wiz Exp $	*/
+/*	$NetBSD: ssl.h,v 1.2.4.1 2015/11/05 05:26:38 riz Exp $	*/
 
 /*-
  * Copyright (c) 2012 The NetBSD Foundation, Inc.

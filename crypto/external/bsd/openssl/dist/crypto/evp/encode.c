@@ -286,8 +286,8 @@ int EVP_DecodeUpdate(EVP_ENCODE_CTX *ctx, unsigned char *out, int *outl,
      /* Legacy behaviour: an empty input chunk signals end of input. */
     if (inl == 0) {
         rv = 0;
-        goto end;
-    }
+            goto end;
+        }
 
     for (i = 0; i < inl; i++) {
         tmp = *(in++);
@@ -313,16 +313,16 @@ int EVP_DecodeUpdate(EVP_ENCODE_CTX *ctx, unsigned char *out, int *outl,
         if (v == B64_EOF) {
             seof = 1;
             goto tail;
-        }
+            }
 
         /* Only save valid base64 characters. */
         if (B64_BASE64(v)) {
             if (n >= 64) {
-                /*
+        /*
                  * We increment n once per loop, and empty the buffer as soon as
                  * we reach 64 characters, so this can only happen if someone's
                  * manually messed with the ctx. Refuse to write any more data.
-                 */
+             */
                 rv = -1;
                 goto end;
             }
@@ -332,21 +332,21 @@ int EVP_DecodeUpdate(EVP_ENCODE_CTX *ctx, unsigned char *out, int *outl,
 
         if (n == 64) {
             decoded_len = EVP_DecodeBlock(out, d, n);
-            n = 0;
+                n = 0;
             if (decoded_len < 0 || eof > decoded_len) {
-                rv = -1;
-                goto end;
-            }
+                    rv = -1;
+                    goto end;
+                }
             ret += decoded_len - eof;
             out += decoded_len - eof;
         }
-    }
+            }
 
-    /*
+            /*
      * Legacy behaviour: if the current line is a full base64-block (i.e., has
      * 0 mod 4 base64 characters), it is processed immediately. We keep this
      * behaviour as applications may not be calling EVP_DecodeFinal properly.
-     */
+             */
 tail:
     if (n > 0) {
         if ((n & 3) == 0) {
@@ -365,7 +365,7 @@ tail:
     }
 
     rv = seof || (n == 0 && eof) ? 0 : 1;
-end:
+ end:
     /* Legacy behaviour. This should probably rather be zeroed on error. */
     *outl = ret;
     ctx->num = n;

@@ -1,4 +1,4 @@
-/* $NetBSD: i82596.c,v 1.36 2017/02/20 07:43:29 ozaki-r Exp $ */
+/* $NetBSD: i82596.c,v 1.31.4.1 2015/02/21 19:27:49 martin Exp $ */
 
 /*
  * Copyright (c) 2003 Jochen Kunz.
@@ -43,7 +43,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: i82596.c,v 1.36 2017/02/20 07:43:29 ozaki-r Exp $");
+__KERNEL_RCSID(0, "$NetBSD: i82596.c,v 1.31.4.1 2015/02/21 19:27:49 martin Exp $");
 
 /* autoconfig and device stuff */
 #include <sys/param.h>
@@ -256,7 +256,7 @@ iee_intr(void *intarg)
 		    BUS_DMASYNC_POSTREAD);
 		rx_mbuf->m_pkthdr.len = rx_mbuf->m_len =
 		    count & IEE_RBD_COUNT;
-		m_set_rcvif(rx_mbuf, ifp);
+		rx_mbuf->m_pkthdr.rcvif = ifp;
 		MGETHDR(new_mbuf, M_DONTWAIT, MT_DATA);
 		if (new_mbuf == NULL) {
 			printf("%s: iee_intr: can't allocate mbuf\n",
@@ -280,7 +280,9 @@ iee_intr(void *intarg)
 			    device_xname(sc->sc_dev));
 		bus_dmamap_sync(sc->sc_dmat, rx_map, 0,
 		    rx_map->dm_mapsize, BUS_DMASYNC_PREREAD);
-		if_percpuq_enqueue(ifp->if_percpuq, rx_mbuf);
+		bpf_mtap(ifp, rx_mbuf);
+		(*ifp->if_input)(ifp, rx_mbuf);
+		ifp->if_ipackets++;
 		sc->sc_rx_mbuf[sc->sc_rx_done] = new_mbuf;
 		rbd->rbd_count = 0;
 		rbd->rbd_size = IEE_RBD_EL | rx_map->dm_segs[0].ds_len;
@@ -383,7 +385,7 @@ iee_intr(void *intarg)
 				(sc->sc_iee_cmd)(sc, IEE_SCB_CUC_EXE);
 			} else
 				/* Try to get deferred packets going. */
-				if_schedule_deferred_start(ifp);
+				iee_start(ifp);
 		}
 	}
 	if (IEE_SWAP32(SC_SCB(sc)->scb_crc_err) != sc->sc_crc_err) {
@@ -663,7 +665,6 @@ iee_attach(struct iee_softc *sc, uint8_t *eth_addr, int *media, int nmedia,
 	sc->sc_ethercom.ec_capabilities |= ETHERCAP_VLAN_MTU;
 
 	if_attach(ifp);
-	if_deferred_start_init(ifp, NULL);
 	ether_ifattach(ifp, eth_addr);
 
 	aprint_normal(": Intel 82596%s address %s\n",

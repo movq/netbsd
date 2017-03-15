@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.15 2017/01/11 12:02:31 joerg Exp $
+#	$NetBSD: Makefile,v 1.12.4.1 2015/06/04 20:05:45 snj Exp $
 
 LIB=	LLVMTarget
 
@@ -8,9 +8,11 @@ LIB=	LLVMTarget
 
 SRCS+=	Target.cpp \
 	TargetIntrinsicInfo.cpp \
+	TargetLibraryInfo.cpp \
 	TargetLoweringObjectFile.cpp \
 	TargetMachine.cpp \
-	TargetMachineC.cpp
+	TargetMachineC.cpp \
+	TargetSubtargetInfo.cpp
 
 .if defined(HOSTLIB)
 .include <bsd.hostlib.mk>

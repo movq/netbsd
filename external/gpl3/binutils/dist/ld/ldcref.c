@@ -1,5 +1,6 @@
 /* ldcref.c -- output a cross reference table
-   Copyright (C) 1996-2016 Free Software Foundation, Inc.
+   Copyright 1996, 1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005, 2006,
+   2007, 2008  Free Software Foundation, Inc.
    Written by Ian Lance Taylor <ian@cygnus.com>
 
    This file is part of the GNU Binutils.
@@ -40,8 +41,7 @@
 /* We keep an instance of this structure for each reference to a
    symbol from a given object.  */
 
-struct cref_ref
-{
+struct cref_ref {
   /* The next reference.  */
   struct cref_ref *next;
   /* The object.  */
@@ -56,8 +56,7 @@ struct cref_ref
 
 /* We keep a hash table of symbols.  Each entry looks like this.  */
 
-struct cref_hash_entry
-{
+struct cref_hash_entry {
   struct bfd_hash_entry root;
   /* The demangled name.  */
   const char *demangled;
@@ -67,8 +66,7 @@ struct cref_hash_entry
 
 /* This is what the hash table looks like.  */
 
-struct cref_hash_table
-{
+struct cref_hash_table {
   struct bfd_hash_table root;
 };
 
@@ -163,7 +161,7 @@ add_cref (const char *name,
   struct cref_hash_entry *h;
   struct cref_ref *r;
 
-  if (!cref_initialized)
+  if (! cref_initialized)
     {
       if (!bfd_hash_table_init (&cref_table.root, cref_hash_newfunc,
 				sizeof (struct cref_hash_entry)))
@@ -346,15 +344,12 @@ cref_fill_array (struct cref_hash_entry *h, void *data)
 static int
 cref_sort_array (const void *a1, const void *a2)
 {
-  const struct cref_hash_entry *const *p1
-    = (const struct cref_hash_entry *const *) a1;
-  const struct cref_hash_entry *const *p2
-    = (const struct cref_hash_entry *const *) a2;
+  const struct cref_hash_entry * const *p1 =
+      (const struct cref_hash_entry * const *) a1;
+  const struct cref_hash_entry * const *p2 =
+      (const struct cref_hash_entry * const *) a2;
 
-  if (demangling)
-    return strcmp ((*p1)->demangled, (*p2)->demangled);
-  else
-    return strcmp ((*p1)->root.string, (*p2)->root.string);
+  return strcmp ((*p1)->demangled, (*p2)->demangled);
 }
 
 /* Write out the cref table.  */
@@ -379,7 +374,7 @@ output_cref (FILE *fp)
     }
   fprintf (fp, _("File\n"));
 
-  if (!cref_initialized)
+  if (! cref_initialized)
     {
       fprintf (fp, _("No symbols\n"));
       return;
@@ -432,16 +427,8 @@ output_one_cref (FILE *fp, struct cref_hash_entry *h)
 	}
     }
 
-  if (demangling)
-    {
-      fprintf (fp, "%s ", h->demangled);
-      len = strlen (h->demangled) + 1;
-    }
-  else
-    {
-      fprintf (fp, "%s ", h->root.string);
-      len = strlen (h->root.string) + 1;
-    }
+  fprintf (fp, "%s ", h->demangled);
+  len = strlen (h->demangled) + 1;
 
   for (r = h->refs; r != NULL; r = r->next)
     {
@@ -459,21 +446,7 @@ output_one_cref (FILE *fp, struct cref_hash_entry *h)
 
   for (r = h->refs; r != NULL; r = r->next)
     {
-      if (r->common)
-	{
-	  while (len < FILECOL)
-	    {
-	      putc (' ', fp);
-	      ++len;
-	    }
-	  lfinfo (fp, "%B\n", r->abfd);
-	  len = 0;
-	}
-    }
-
-  for (r = h->refs; r != NULL; r = r->next)
-    {
-      if (!r->def && !r->common)
+      if (! r->def)
 	{
 	  while (len < FILECOL)
 	    {
@@ -493,7 +466,7 @@ output_one_cref (FILE *fp, struct cref_hash_entry *h)
 void
 check_nocrossrefs (void)
 {
-  if (!cref_initialized)
+  if (! cref_initialized)
     return;
 
   cref_hash_traverse (&cref_table, check_nocrossref, NULL);
@@ -534,14 +507,8 @@ check_local_sym_xref (lang_input_statement_type *statement)
 	    symname = sym->name;
 	  for (ncrs = nocrossref_list; ncrs != NULL; ncrs = ncrs->next)
 	    for (ncr = ncrs->list; ncr != NULL; ncr = ncr->next)
-	      {
-		if (strcmp (ncr->name, outsecname) == 0)
-		  check_refs (symname, FALSE, sym->section, abfd, ncrs);
-		/* The NOCROSSREFS_TO command only checks symbols defined in
-		   the first section in the list.  */
-		if (ncrs->onlyfirst)
-		  break;
-	      }
+	      if (strcmp (ncr->name, outsecname) == 0)
+		check_refs (symname, FALSE, sym->section, abfd, ncrs);
 	}
     }
 }
@@ -578,16 +545,10 @@ check_nocrossref (struct cref_hash_entry *h, void *ignore ATTRIBUTE_UNUSED)
 
   for (ncrs = nocrossref_list; ncrs != NULL; ncrs = ncrs->next)
     for (ncr = ncrs->list; ncr != NULL; ncr = ncr->next)
-      {
-	if (strcmp (ncr->name, defsecname) == 0)
-	  for (ref = h->refs; ref != NULL; ref = ref->next)
-	    check_refs (hl->root.string, TRUE, hl->u.def.section,
-			ref->abfd, ncrs);
-	/* The NOCROSSREFS_TO command only checks symbols defined in the first
-	   section in the list.  */
-	if (ncrs->onlyfirst)
-	  break;
-      }
+      if (strcmp (ncr->name, defsecname) == 0)
+	for (ref = h->refs; ref != NULL; ref = ref->next)
+	  check_refs (hl->root.string, TRUE, hl->u.def.section,
+		      ref->abfd, ncrs);
 
   return TRUE;
 }
@@ -595,8 +556,7 @@ check_nocrossref (struct cref_hash_entry *h, void *ignore ATTRIBUTE_UNUSED)
 /* The struct is used to pass information from check_refs to
    check_reloc_refs through bfd_map_over_sections.  */
 
-struct check_refs_info
-{
+struct check_refs_info {
   const char *sym_name;
   asection *defsec;
   struct lang_nocrossrefs *ncrs;

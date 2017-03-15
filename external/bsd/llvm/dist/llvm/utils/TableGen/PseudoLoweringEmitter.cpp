@@ -177,10 +177,10 @@ void PseudoLoweringEmitter::evaluateExpansion(Record *Rec) {
     if (OperandMap[Insn.Operands[i].MIOperandNo].Kind != OpData::Operand)
       continue;
     StringMap<unsigned>::iterator SourceOp =
-      SourceOperands.find(Dag->getArgNameStr(i));
+      SourceOperands.find(Dag->getArgName(i));
     if (SourceOp == SourceOperands.end())
       PrintFatalError(Rec->getLoc(),
-                      "Pseudo output operand '" + Dag->getArgNameStr(i) +
+                      "Pseudo output operand '" + Dag->getArgName(i) +
                       "' has no matching source operand.");
     // Map the source operand to the destination operand index for each
     // MachineInstr operand.
@@ -232,12 +232,12 @@ void PseudoLoweringEmitter::emitLoweringEmitter(raw_ostream &o) {
               << "      TmpInst.addOperand(MCOp);\n";
             break;
             case OpData::Imm:
-            o << "      TmpInst.addOperand(MCOperand::createImm("
+            o << "      TmpInst.addOperand(MCOperand::CreateImm("
               << Expansion.OperandMap[MIOpNo + i].Data.Imm << "));\n";
             break;
             case OpData::Reg: {
               Record *Reg = Expansion.OperandMap[MIOpNo + i].Data.Reg;
-              o << "      TmpInst.addOperand(MCOperand::createReg(";
+              o << "      TmpInst.addOperand(MCOperand::CreateReg(";
               // "zero_reg" is special.
               if (Reg->getName() == "zero_reg")
                 o << "0";

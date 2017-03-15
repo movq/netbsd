@@ -1,7 +1,7 @@
-/* $OpenBSD$ */
+/* Id */
 
 /*
- * Copyright (c) 2007 Nicholas Marriott <nicholas.marriott@gmail.com>
+ * Copyright (c) 2007 Nicholas Marriott <nicm@users.sourceforge.net>
  *
  * Permission to use, copy, modify, and distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -28,25 +28,15 @@
  * List all sessions.
  */
 
-#define LIST_SESSIONS_TEMPLATE				\
-	"#{session_name}: #{session_windows} windows "	\
-	"(created #{t:session_created}) "		\
-	"[#{session_width}x#{session_height}]"		\
-	"#{?session_grouped, (group ,}"			\
-	"#{session_group}#{?session_grouped,),}"	\
-	"#{?session_attached, (attached),}"
-
 enum cmd_retval	 cmd_list_sessions_exec(struct cmd *, struct cmd_q *);
 
 const struct cmd_entry cmd_list_sessions_entry = {
-	.name = "list-sessions",
-	.alias = "ls",
-
-	.args = { "F:", 0, 0 },
-	.usage = "[-F format]",
-
-	.flags = 0,
-	.exec = cmd_list_sessions_exec
+	"list-sessions", "ls",
+	"F:", 0, 0,
+	"[-F format]",
+	0,
+	NULL,
+	cmd_list_sessions_exec
 };
 
 enum cmd_retval
@@ -64,9 +54,9 @@ cmd_list_sessions_exec(struct cmd *self, struct cmd_q *cmdq)
 
 	n = 0;
 	RB_FOREACH(s, sessions, &sessions) {
-		ft = format_create(cmdq, 0);
+		ft = format_create();
 		format_add(ft, "line", "%u", n);
-		format_defaults(ft, NULL, s, NULL, NULL);
+		format_session(ft, s);
 
 		line = format_expand(ft, template);
 		cmdq_print(cmdq, "%s", line);

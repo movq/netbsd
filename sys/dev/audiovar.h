@@ -1,4 +1,4 @@
-/*	$NetBSD: audiovar.h,v 1.51 2017/02/27 23:31:00 mrg Exp $	*/
+/*	$NetBSD: audiovar.h,v 1.46 2011/11/23 23:07:31 jmcneill Exp $	*/
 
 /*-
  * Copyright (c) 2002 The NetBSD Foundation, Inc.
@@ -67,17 +67,8 @@
 #define _SYS_DEV_AUDIOVAR_H_
 
 #include <sys/condvar.h>
-#include <sys/proc.h>
-#include <sys/queue.h>
 
 #include <dev/audio_if.h>
-#include <dev/auconv.h>
-
-/* Interfaces for audiobell. */
-int audiobellopen(dev_t, int, int, struct lwp *, struct file **);
-int audiobellclose(struct file *);
-int audiobellwrite(struct file *, off_t *, struct uio *, kauth_cred_t, int);
-int audiobellioctl(struct file *, u_long, void *);
 
 /*
  * Initial/default block duration is both configurable and patchable.
@@ -110,50 +101,6 @@ struct audio_ringbuffer {
 	bool mmapped;		/* device is mmap()-ed */
 };
 
-struct audio_chan {
-	dev_t	dev;
-#define MIXER_INUSE	-2
-	struct virtual_channel	*vc;
-	int	chan;			/* virtual channel */
-	int	deschan;		/* desired channel for ioctls*/
-	SIMPLEQ_ENTRY(audio_chan) entries;
-};
-
-struct virtual_channel {
-	u_char			sc_open;	/* multiple use device */
-	u_char			sc_mode;	/* bitmask for RECORD/PLAY */
-
-	bool			sc_blkset;	/* Blocksize has been set */
-
-	uint8_t			*sc_sil_start;	/* start of silence in buffer */
-	int			sc_sil_count;	/* # of silence bytes */
-	bool			sc_pbus;	/* output DMA in progress */
-	audio_params_t		sc_pparams;	/* play encoding parameters */
-	audio_stream_t		*sc_pustream;	/* the first buffer */
-	int			sc_npfilters;	/* number of filters */
-	audio_stream_t		sc_pstreams[AUDIO_MAX_FILTERS];
-	stream_filter_t		*sc_pfilters[AUDIO_MAX_FILTERS];
-	struct audio_ringbuffer	sc_mpr;		/* Play ring to mix */
-	u_long			sc_wstamp;	/* # of bytes read with read(2) */
-	u_long			sc_playdrop;
-
-	bool			sc_rbus;	/* input DMA in progress */
-	struct audio_ringbuffer	sc_mrr;		/* Virtual record ring */
-	int			sc_nrfilters;	/* number of filters */
-	stream_filter_t		*sc_rfilters[AUDIO_MAX_FILTERS];
-	audio_stream_t		sc_rstreams[AUDIO_MAX_FILTERS];
-	audio_stream_t		*sc_rustream;	/* the last buffer */
-	audio_params_t		sc_rparams;	/* record encoding parameters */
-
-	int			sc_full_duplex;	/* device in full duplex mode */
-
-	struct audio_info 	sc_lastinfo;
-	bool			sc_lastinfovalid;
-	bool			sc_draining;
-	uint8_t			sc_swvol;
-	uint8_t			sc_recswvol;
-};
-
 #define AUDIO_N_PORTS 4
 
 struct au_mixer_ports {
@@ -171,7 +118,6 @@ struct au_mixer_ports {
 				   mixerout is selected, for dual case */
 };
 
-SIMPLEQ_HEAD(chan_queue, audio_chan);
 /*
  * Software state, per audio device.
  */
@@ -180,11 +126,11 @@ struct audio_softc {
 	void		*hw_hdl;	/* Hardware driver handle */
 	const struct audio_hw_if *hw_if; /* Hardware interface */
 	device_t	sc_dev;		/* Hardware device struct */
-	struct chan_queue sc_audiochan; /* queue of open chans */
+	u_char		sc_open;	/* single use device */
 #define AUOPEN_READ	0x01
 #define AUOPEN_WRITE	0x02
+	u_char		sc_mode;	/* bitmask for RECORD/PLAY */
 
-	struct audio_encoding_set *sc_encodings;
 	struct	selinfo sc_wsel; /* write selector */
 	struct	selinfo sc_rsel; /* read selector */
 	pid_t		sc_async_audio;	/* process who wants audio SIGIO */
@@ -201,17 +147,20 @@ struct audio_softc {
 	kcondvar_t	sc_rchan;
 	kcondvar_t	sc_wchan;
 	kcondvar_t	sc_lchan;
-	bool		sc_trigger_started;
-	bool		sc_rec_started;
-	bool		sc_writeme;
-	bool		sc_ready;	/* audio hw configured properly */
-	int		sc_opens;
-	int		sc_recopens;
+	int		sc_dvlock;
 	bool		sc_dying;
+
+	bool		sc_blkset;	/* Blocksize has been set */
+
+	uint8_t		*sc_sil_start;	/* start of silence in buffer */
+	int		sc_sil_count;	/* # of silence bytes */
+
+	bool		sc_rbus;	/* input DMA in progress */
+	bool		sc_pbus;	/* output DMA in progress */
 
 	/**
 	 *  userland
-	 *      |  write(2) & uiomove(9)
+	 *	|  write(2) & uiomove(9)
 	 *  sc_pstreams[0]	<sc_pparams> == sc_pustream;
 	 *      |  sc_pfilters[0]
 	 *  sc_pstreams[1]	<list_t::filters[n-1].param>
@@ -219,44 +168,43 @@ struct audio_softc {
 	 *  sc_pstreams[n-1]	<list_t::filters[1].param>
 	 *      |  sc_pfilters[n-1]
 	 *    sc_pr		<list_t::filters[0].param>
-	 * (vchans mixed into sc_pr)
-	 *
-	 * play_thread
-	 *    sc_pr
-	 *      |
-	 *  vchan[0]->sc_pustream 	(First elemendt in sc_audiochan)
-	 *      |
-	 *  vchan[0]->sc_mpr
 	 *      |
 	 *  hardware
 	 */
-
-	struct audio_ringbuffer	sc_pr;	/* Play ring to mix into */
+	audio_params_t		sc_pparams;	/* play encoding parameters */
+	audio_stream_t		*sc_pustream;	/* the first buffer */
+	int			sc_npfilters;	/* number of filters */
+	audio_stream_t		sc_pstreams[AUDIO_MAX_FILTERS];
+	stream_filter_t		*sc_pfilters[AUDIO_MAX_FILTERS];
+	struct audio_ringbuffer	sc_pr;		/* Play ring */
 
 	/**
 	 *  hardware
-	 *      |
-	 * oc->sc_mrr		oc = sc->sc_vchan[0]
-	 *      :		Transform though filters same process as each
-	 *      :		 vc to IF
-	 * oc->sc_rustream	Audio now in intermediate format (IF)
-	 *      |	mix_read();
-	 *    sc_rr
-	 *      |	audio_upmix	vc = sc->sc_vchan[n]
-	 * vc->sc_mrr		<list_t::filters[0].param>
-	 *      |  vc->sc_rfilters[0]
-	 *  vc->sc_rstreams[0]	<list_t::filters[1].param>
-	 *      |  vc->sc_rfilters[1]
-	 *  vc->sc_rstreams[1]	<list_t::filters[2].param>
+	 *	|
+	 *    sc_rr		<list_t::filters[0].param>
+	 *	|  sc_rfilters[0]
+	 *  sc_rstreams[0]	<list_t::filters[1].param>
+	 *      |  sc_rfilters[1]
+	 *  sc_rstreams[1]	<list_t::filters[2].param>
 	 *      :
-	 *      |  vc->sc_rfilters[n-1]
-	 *  vc->sc_rstreams[n-1]	<vc->sc_rparams> == vc->sc_rustream
+	 *	|  sc_rfilters[n-1]
+	 *  sc_rstreams[n-1]	<sc_rparams> == sc_rustream
 	 *      |  uiomove(9) & read(2)
 	 *  userland
 	 */
 	struct audio_ringbuffer	sc_rr;		/* Record ring */
+	int			sc_nrfilters;	/* number of filters */
+	stream_filter_t		*sc_rfilters[AUDIO_MAX_FILTERS];
+	audio_stream_t		sc_rstreams[AUDIO_MAX_FILTERS];
+	audio_stream_t		*sc_rustream;	/* the last buffer */
+	audio_params_t		sc_rparams;	/* record encoding parameters */
 
 	int		sc_eof;		/* EOF, i.e. zero sized write, counter */
+	u_long		sc_wstamp;	/* # of bytes read with read(2) */
+	u_long		sc_playdrop;
+
+	int		sc_full_duplex;	/* device in full duplex mode */
+
 	struct	au_mixer_ports sc_inports, sc_outports;
 	int		sc_monitor_port;
 
@@ -272,33 +220,11 @@ struct audio_softc {
 #endif
 
 	u_int	sc_lastgain;
+	struct audio_info sc_lastinfo;
+	bool	sc_lastinfovalid;
 
 	mixer_ctrl_t	*sc_mixer_state;
 	int		sc_nmixer_states;
-	int		sc_static_nmixer_states;
-
-	bool		schedule_wih;
-	bool		schedule_rih;
-
-	lwp_t		*sc_playthread;
-	kcondvar_t	sc_condvar;
-	lwp_t		*sc_recthread;
-	kcondvar_t	sc_rcondvar;
-	
-	/* These are chanable by sysctl to set the vchan common format */
-	struct sysctllog	*sc_log;	/* sysctl log */
-	int		sc_channels;
-	int		sc_precision;
-	int		sc_iffreq;
-	bool		sc_saturate;
-	struct audio_info 	sc_ai;		/* Recent info for  dev sound */
-	bool			sc_aivalid;
-#define VAUDIO_NFORMATS	1
-	struct audio_format sc_format[VAUDIO_NFORMATS];
-	struct audio_params sc_vchan_params;
-
-	bool		sc_multiuser;
-	kauth_cred_t	sc_credentials;		/* audio user's credentials */
 };
 
 #endif /* _SYS_DEV_AUDIOVAR_H_ */

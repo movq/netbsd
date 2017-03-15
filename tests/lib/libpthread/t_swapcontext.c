@@ -1,4 +1,4 @@
-/* $NetBSD: t_swapcontext.c,v 1.3 2017/01/16 16:27:06 christos Exp $ */
+/* $NetBSD: t_swapcontext.c,v 1.1.12.1 2014/08/29 11:44:46 martin Exp $ */
 
 /*
  * Copyright (c) 2012 Emmanuel Dreyfus. All rights reserved.
@@ -28,13 +28,10 @@
 #include <sys/cdefs.h>
 __RCSID("$NetBSD");
 
-#include <sys/types.h>
-#include <errno.h>
 #include <pthread.h>
+#include <ucontext.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <string.h>
-#include <ucontext.h>
 
 #include <atf-c.h>
 
@@ -80,8 +77,7 @@ threadfunc(void *arg)
        
 	oself = (void *)pthread_self();
 	printf("before swapcontext self = %p\n", oself);
-	ATF_REQUIRE_MSG(swapcontext(&octx, &nctx) != -1, "swapcontext failed: %s",
-	    strerror(errno));
+	PTHREAD_REQUIRE(swapcontext(&octx, &nctx));
 
 	/* NOTREACHED */
 	return NULL;
@@ -103,8 +99,7 @@ ATF_TC_BODY(swapcontext1, tc)
 
 	printf("Testing if swapcontext() alters pthread_self()\n");
 
-	ATF_REQUIRE_MSG(getcontext(&nctx) != -1, "getcontext failed: %s",
-	    strerror(errno));
+	PTHREAD_REQUIRE(getcontext(&nctx));
 	PTHREAD_REQUIRE(pthread_create(&thread, NULL, threadfunc, NULL));
 	PTHREAD_REQUIRE(pthread_join(thread, NULL));
 }

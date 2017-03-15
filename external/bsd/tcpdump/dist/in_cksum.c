@@ -37,7 +37,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: in_cksum.c,v 1.2 2017/01/24 23:29:13 christos Exp $");
+__RCSID("$NetBSD: in_cksum.c,v 1.1.1.1.10.1 2017/02/19 05:01:15 snj Exp $");
 #endif
 
 #ifdef HAVE_CONFIG_H

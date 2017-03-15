@@ -1,8 +1,6 @@
 // RUN: %clang_cc1 -analyze -analyzer-store=region -analyzer-checker=core,unix.Malloc -fblocks -verify %s
-// RUN: %clang_cc1 -analyze -analyzer-store=region -analyzer-checker=core,unix.Malloc -fblocks -verify -analyzer-config unix.Malloc:Optimistic=true %s
-typedef __typeof(sizeof(int)) size_t;
+// RUN: %clang_cc1 -analyze -analyzer-store=region -analyzer-checker=core,alpha.unix.MallocWithAnnotations -fblocks -verify %s
 void free(void *);
-void *alloca(size_t);
 
 void t1 () {
   int a[] = { 1 };
@@ -51,29 +49,24 @@ void t10 () {
 }
 
 void t11 () {
-  char *p = (char*)alloca(2);
-  free(p); // expected-warning {{Memory allocated by alloca() should not be deallocated}}
-}
-
-void t12 () {
   char *p = (char*)__builtin_alloca(2);
   free(p); // expected-warning {{Memory allocated by alloca() should not be deallocated}}
 }
 
-void t13 () {
+void t12 () {
   free(^{return;}); // expected-warning {{Argument to free() is a block, which is not memory allocated by malloc()}}
 }
 
-void t14 (char a) {
+void t13 (char a) {
   free(&a); // expected-warning {{Argument to free() is the address of the parameter 'a', which is not memory allocated by malloc()}}
 }
 
 static int someGlobal[2];
-void t15 () {
+void t14 () {
   free(someGlobal); // expected-warning {{Argument to free() is the address of the global variable 'someGlobal', which is not memory allocated by malloc()}}
 }
 
-void t16 (char **x, int offset) {
+void t15 (char **x, int offset) {
   // Unknown value
   free(x[offset]); // no-warning
 }

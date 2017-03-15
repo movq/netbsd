@@ -1,4 +1,4 @@
-/*	$NetBSD: npf_nat_test.c,v 1.10 2016/12/26 23:05:05 christos Exp $	*/
+/*	$NetBSD: npf_nat_test.c,v 1.9 2014/07/20 00:37:41 rmind Exp $	*/
 
 /*
  * NPF NAT test.
@@ -6,9 +6,7 @@
  * Public Domain.
  */
 
-#ifdef _KERNEL
 #include <sys/types.h>
-#endif
 
 #include "npf_impl.h"
 #include "npf_test.h"
@@ -156,7 +154,7 @@ static bool
 checkresult(bool verbose, unsigned i, struct mbuf *m, ifnet_t *ifp, int error)
 {
 	const struct test_case *t = &test_cases[i];
-	npf_cache_t npc = { .npc_info = 0, .npc_ctx = npf_getkernctx() };
+	npf_cache_t npc = { .npc_info = 0 };
 	const int af = t->af;
 	nbuf_t nbuf;
 
@@ -167,7 +165,7 @@ checkresult(bool verbose, unsigned i, struct mbuf *m, ifnet_t *ifp, int error)
 		return error == t->ret;
 	}
 
-	nbuf_init(npf_getkernctx(), &nbuf, m, ifp);
+	nbuf_init(&nbuf, m, ifp);
 	npc.npc_nbuf = &nbuf;
 	if (!npf_cache_all(&npc)) {
 		printf("error: could not fetch the packet data");
@@ -236,11 +234,9 @@ fill_packet(const struct test_case *t)
 bool
 npf_nat_test(bool verbose)
 {
-	npf_t *npf = npf_getkernctx();
-
 	for (unsigned i = 0; i < __arraycount(test_cases); i++) {
 		const struct test_case *t = &test_cases[i];
-		ifnet_t *ifp = npf_test_getif(t->ifname);
+		ifnet_t *ifp = ifunit(t->ifname);
 		struct mbuf *m = fill_packet(t);
 		int error;
 		bool ret;
@@ -249,7 +245,7 @@ npf_nat_test(bool verbose)
 			printf("Interface %s is not configured.\n", t->ifname);
 			return false;
 		}
-		error = npf_packet_handler(npf, &m, ifp, t->di);
+		error = npf_packet_handler(NULL, &m, ifp, t->di);
 		ret = checkresult(verbose, i, m, ifp, error);
 		if (m) {
 			m_freem(m);

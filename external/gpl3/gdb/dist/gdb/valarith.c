@@ -1,6 +1,6 @@
 /* Perform arithmetic and other operations on values, for GDB.
 
-   Copyright (C) 1986-2016 Free Software Foundation, Inc.
+   Copyright (C) 1986-2014 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -24,10 +24,12 @@
 #include "expression.h"
 #include "target.h"
 #include "language.h"
+#include <string.h>
 #include "doublest.h"
 #include "dfp.h"
 #include <math.h>
 #include "infcall.h"
+#include "exceptions.h"
 
 /* Define whether or not the C operator '/' truncates towards zero for
    differently signed operands (truncation direction is undefined in C).  */
@@ -54,7 +56,7 @@ find_size_for_pointer_math (struct type *ptr_type)
   gdb_assert (TYPE_CODE (ptr_type) == TYPE_CODE_PTR);
   ptr_target = check_typedef (TYPE_TARGET_TYPE (ptr_type));
 
-  sz = type_length_units (ptr_target);
+  sz = TYPE_LENGTH (ptr_target);
   if (sz == 0)
     {
       if (TYPE_CODE (ptr_type) == TYPE_CODE_VOID)
@@ -121,7 +123,7 @@ value_ptrdiff (struct value *arg1, struct value *arg2)
 	     "second argument is neither\n"
 	     "an integer nor a pointer of the same type."));
 
-  sz = type_length_units (check_typedef (TYPE_TARGET_TYPE (type1)));
+  sz = TYPE_LENGTH (check_typedef (TYPE_TARGET_TYPE (type1)));
   if (sz == 0) 
     {
       warning (_("Type size unknown, assuming 1. "
@@ -192,28 +194,13 @@ value_subscripted_rvalue (struct value *array, LONGEST index, int lowerbound)
 {
   struct type *array_type = check_typedef (value_type (array));
   struct type *elt_type = check_typedef (TYPE_TARGET_TYPE (array_type));
-  ULONGEST elt_size = type_length_units (elt_type);
-  ULONGEST elt_offs = elt_size * (index - lowerbound);
+  unsigned int elt_size = TYPE_LENGTH (elt_type);
+  unsigned int elt_offs = elt_size * longest_to_int (index - lowerbound);
   struct value *v;
 
   if (index < lowerbound || (!TYPE_ARRAY_UPPER_BOUND_IS_UNDEFINED (array_type)
-			     && elt_offs >= type_length_units (array_type)))
-    {
-      if (type_not_associated (array_type))
-        error (_("no such vector element (vector not associated)"));
-      else if (type_not_allocated (array_type))
-        error (_("no such vector element (vector not allocated)"));
-      else
-        error (_("no such vector element"));
-    }
-
-  if (is_dynamic_type (elt_type))
-    {
-      CORE_ADDR address;
-
-      address = value_address (array) + elt_offs;
-      elt_type = resolve_dynamic_type (elt_type, NULL, address);
-    }
+			     && elt_offs >= TYPE_LENGTH (array_type)))
+    error (_("no such vector element"));
 
   if (VALUE_LVAL (array) == lval_memory && value_lazy (array))
     v = allocate_value_lazy (elt_type);
@@ -299,17 +286,17 @@ unop_user_defined_p (enum exp_opcode op, struct value *arg1)
    situations or combinations thereof.  */
 
 static struct value *
-value_user_defined_cpp_op (struct value **args, int nargs, char *oper,
-                           int *static_memfuncp, enum noside noside)
+value_user_defined_cpp_op (struct value **args, int nargs, char *operator,
+                           int *static_memfuncp)
 {
 
   struct symbol *symp = NULL;
   struct value *valp = NULL;
 
-  find_overload_match (args, nargs, oper, BOTH /* could be method */,
+  find_overload_match (args, nargs, operator, BOTH /* could be method */,
                        &args[0] /* objp */,
                        NULL /* pass NULL symbol since symbol is unknown */,
-                       &valp, &symp, static_memfuncp, 0, noside);
+                       &valp, &symp, static_memfuncp, 0);
 
   if (valp)
     return valp;
@@ -323,7 +310,7 @@ value_user_defined_cpp_op (struct value **args, int nargs, char *oper,
       return value_of_variable (symp, 0);
     }
 
-  error (_("Could not find %s."), oper);
+  error (_("Could not find %s."), operator);
 }
 
 /* Lookup user defined operator NAME.  Return a value representing the
@@ -331,15 +318,12 @@ value_user_defined_cpp_op (struct value **args, int nargs, char *oper,
 
 static struct value *
 value_user_defined_op (struct value **argp, struct value **args, char *name,
-                       int *static_memfuncp, int nargs, enum noside noside)
+                       int *static_memfuncp, int nargs)
 {
   struct value *result = NULL;
 
   if (current_language->la_language == language_cplus)
-    {
-      result = value_user_defined_cpp_op (args, nargs, name, static_memfuncp,
-					  noside);
-    }
+    result = value_user_defined_cpp_op (args, nargs, name, static_memfuncp);
   else
     result = value_struct_elt (argp, args, name, static_memfuncp,
                                "structure");
@@ -488,7 +472,7 @@ value_x_binop (struct value *arg1, struct value *arg2, enum exp_opcode op,
     }
 
   argvec[0] = value_user_defined_op (&arg1, argvec + 1, tstr,
-                                     &static_memfuncp, 2, noside);
+                                     &static_memfuncp, 2);
 
   if (argvec[0])
     {
@@ -496,21 +480,6 @@ value_x_binop (struct value *arg1, struct value *arg2, enum exp_opcode op,
 	{
 	  argvec[1] = argvec[0];
 	  argvec++;
-	}
-      if (TYPE_CODE (value_type (argvec[0])) == TYPE_CODE_XMETHOD)
-	{
-	  /* Static xmethods are not supported yet.  */
-	  gdb_assert (static_memfuncp == 0);
-	  if (noside == EVAL_AVOID_SIDE_EFFECTS)
-	    {
-	      struct type *return_type
-		= result_type_of_xmethod (argvec[0], 2, argvec + 1);
-
-	      if (return_type == NULL)
-		error (_("Xmethod is missing return type."));
-	      return value_zero (return_type, VALUE_LVAL (arg1));
-	    }
-	  return call_xmethod (argvec[0], 2, argvec + 1);
 	}
       if (noside == EVAL_AVOID_SIDE_EFFECTS)
 	{
@@ -606,7 +575,7 @@ value_x_unop (struct value *arg1, enum exp_opcode op, enum noside noside)
     }
 
   argvec[0] = value_user_defined_op (&arg1, argvec + 1, tstr,
-                                     &static_memfuncp, nargs, noside);
+                                     &static_memfuncp, nargs);
 
   if (argvec[0])
     {
@@ -615,21 +584,6 @@ value_x_unop (struct value *arg1, enum exp_opcode op, enum noside noside)
 	  argvec[1] = argvec[0];
 	  nargs --;
 	  argvec++;
-	}
-      if (TYPE_CODE (value_type (argvec[0])) == TYPE_CODE_XMETHOD)
-	{
-	  /* Static xmethods are not supported yet.  */
-	  gdb_assert (static_memfuncp == 0);
-	  if (noside == EVAL_AVOID_SIDE_EFFECTS)
-	    {
-	      struct type *return_type
-		= result_type_of_xmethod (argvec[0], 1, argvec + 1);
-
-	      if (return_type == NULL)
-		error (_("Xmethod is missing return type."));
-	      return value_zero (return_type, VALUE_LVAL (arg1));
-	    }
-	  return call_xmethod (argvec[0], 1, argvec + 1);
 	}
       if (noside == EVAL_AVOID_SIDE_EFFECTS)
 	{
@@ -1406,7 +1360,7 @@ value_vector_widen (struct value *scalar_value, struct type *vector_type)
   LONGEST low_bound, high_bound;
   int i;
 
-  vector_type = check_typedef (vector_type);
+  CHECK_TYPEDEF (vector_type);
 
   gdb_assert (TYPE_CODE (vector_type) == TYPE_CODE_ARRAY
 	      && TYPE_VECTOR (vector_type));

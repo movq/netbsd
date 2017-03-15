@@ -43,7 +43,6 @@
 
 #include "config.h"
 
-#include <sys/param.h>	/* MIN/MAX */
 #include <stdio.h>
 #include <stdlib.h>
 

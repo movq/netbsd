@@ -1,5 +1,5 @@
 #! /usr/bin/env sh
-#	$NetBSD: build.sh,v 1.315 2017/03/10 17:15:47 sevan Exp $
+#	$NetBSD: build.sh,v 1.294.2.3 2014/11/14 14:58:27 martin Exp $
 #
 # Copyright (c) 2001-2011 The NetBSD Foundation, Inc.
 # All rights reserved.
@@ -204,7 +204,7 @@ fi
 if test -n "$errmsg"; then
     if $re_exec_allowed; then
 	for othershell in \
-	    "${HOST_SH}" /usr/xpg4/bin/sh ksh ksh88 mksh pdksh dash bash
+	    "${HOST_SH}" /usr/xpg4/bin/sh ksh ksh88 mksh pdksh bash dash
 	    # NOTE: some shells known not to work are:
 	    # any shell using csh syntax;
 	    # Solaris /bin/sh (missing many modern features);
@@ -458,8 +458,7 @@ initdefaults()
 
 	[ -d usr.bin/make ] || cd "$(dirname $0)"
 	[ -d usr.bin/make ] ||
-	    bomb "usr.bin/make not found; build.sh must be run from the top \
-level of source directory"
+	    bomb "build.sh must be run from the top source level"
 	[ -f share/mk/bsd.own.mk ] ||
 	    bomb "src/share/mk is missing; please re-fetch the source tree"
 
@@ -507,7 +506,7 @@ level of source directory"
 	# XXX Except that doesn't work on Solaris. Or many Linuces.
 	#
 	unset PWD
-	TOP=$( (exec pwd -P 2>/dev/null) || (exec pwd 2>/dev/null) )
+	TOP=$(/bin/pwd -P 2>/dev/null || /bin/pwd 2>/dev/null)
 
 	# The user can set HOST_SH in the environment, or we try to
 	# guess an appropriate value.  Then we set several other
@@ -544,7 +543,6 @@ level of source directory"
 	do_release=false
 	do_kernel=false
 	do_releasekernel=false
-	do_kernels=false
 	do_modules=false
 	do_installmodules=false
 	do_install=false
@@ -652,7 +650,7 @@ MACHINE=evbarm		MACHINE_ARCH=earmv7	ALIAS=evbearmv7-el
 MACHINE=evbarm		MACHINE_ARCH=earmv7eb	ALIAS=evbearmv7-eb
 MACHINE=evbarm		MACHINE_ARCH=earmv7hf	ALIAS=evbearmv7hf-el
 MACHINE=evbarm		MACHINE_ARCH=earmv7hfeb	ALIAS=evbearmv7hf-eb
-MACHINE=evbarm64	MACHINE_ARCH=aarch64	ALIAS=evbarm64-el DEFAULT
+MACHINE=evbarm64	MACHINE_ARCH=aarch64	ALIAS=evbarm64-el
 MACHINE=evbarm64	MACHINE_ARCH=aarch64eb	ALIAS=evbarm64-eb
 MACHINE=evbcf		MACHINE_ARCH=coldfire
 MACHINE=evbmips		MACHINE_ARCH=		NO_DEFAULT
@@ -693,13 +691,10 @@ MACHINE=newsmips	MACHINE_ARCH=mipseb
 MACHINE=next68k		MACHINE_ARCH=m68k
 MACHINE=ofppc		MACHINE_ARCH=powerpc	DEFAULT
 MACHINE=ofppc		MACHINE_ARCH=powerpc64	ALIAS=ofppc64
-MACHINE=or1k		MACHINE_ARCH=or1k
 MACHINE=playstation2	MACHINE_ARCH=mipsel
 MACHINE=pmax		MACHINE_ARCH=mips64el	ALIAS=pmax64
 MACHINE=pmax		MACHINE_ARCH=mipsel	DEFAULT
 MACHINE=prep		MACHINE_ARCH=powerpc
-MACHINE=riscv		MACHINE_ARCH=riscv64	ALIAS=riscv64 DEFAULT
-MACHINE=riscv		MACHINE_ARCH=riscv32	ALIAS=riscv32
 MACHINE=rs6000		MACHINE_ARCH=powerpc
 MACHINE=sandpoint	MACHINE_ARCH=powerpc
 MACHINE=sbmips		MACHINE_ARCH=		NO_DEFAULT
@@ -1004,7 +999,7 @@ usage()
 	fi
 	cat <<_usage_
 
-Usage: ${progname} [-EhnoPRrUuxy] [-a arch] [-B buildid] [-C cdextras]
+Usage: ${progname} [-EhnorUuxy] [-a arch] [-B buildid] [-C cdextras]
                 [-D dest] [-j njob] [-M obj] [-m mach] [-N noisy]
                 [-O obj] [-R release] [-S seed] [-T tools]
                 [-V var=[value]] [-w wrapper] [-X x11src] [-Y extsrcsrc]
@@ -1027,9 +1022,8 @@ Usage: ${progname} [-EhnoPRrUuxy] [-a arch] [-B buildid] [-C cdextras]
                         except \`etc'.  Useful after "distribution" or "release"
     kernel=conf         Build kernel with config file \`conf'
     kernel.gdb=conf     Build kernel (including netbsd.gdb) with config
-                        file \`conf'
+    			file \`conf'
     releasekernel=conf  Install kernel built by kernel=conf to RELEASEDIR.
-    kernels             Build all kernels
     installmodules=idir Run "make installmodules" to \`idir' to install all
                         kernel modules.
     modules             Build kernel modules.
@@ -1046,8 +1040,8 @@ Usage: ${progname} [-EhnoPRrUuxy] [-a arch] [-B buildid] [-C cdextras]
                         RELEASEDIR/RELEASEMACHINEDIR/installation/liveimage.
     install-image       Create bootable installation image in
                         RELEASEDIR/RELEASEMACHINEDIR/installation/installimage.
-    disk-image=target   Create bootable disk image in
-                        RELEASEDIR/RELEASEMACHINEDIR/binary/gzimg/target.img.gz.
+    disk-image=target	Creae bootable disk image in
+			RELEASEDIR/RELEASEMACHINEDIR/binary/gzimg/target.img.gz.
     params              Display various make(1) parameters.
     list-arch           Display a list of valid MACHINE/MACHINE_ARCH values,
                         and exit.  The list may be narrowed by passing glob
@@ -1079,8 +1073,6 @@ Usage: ${progname} [-EhnoPRrUuxy] [-a arch] [-B buildid] [-C cdextras]
     -O obj         Set obj root directory to obj; sets a MAKEOBJDIR pattern.
                    Unsets MAKEOBJDIRPREFIX.
     -o             Set MKOBJDIRS=no; do not create objdirs at start of build.
-    -P             Set MKREPRO and MKREPRO_TIMESTAMP to the latest source
-                   CVS timestamp for reproducible builds.
     -R release     Set RELEASEDIR to release.  [Default: releasedir]
     -r             Remove contents of TOOLDIR and DESTDIR before building.
     -S seed        Set BUILDSEED to seed.  [Default: NetBSD-majorversion]
@@ -1106,7 +1098,7 @@ _usage_
 
 parseoptions()
 {
-	opts='a:B:C:D:Ehj:M:m:N:nO:oPR:rS:T:UuV:w:X:xY:yZ:'
+	opts='a:B:C:D:Ehj:M:m:N:nO:oR:rS:T:UuV:w:X:xY:yZ:'
 	opt_a=false
 	opt_m=false
 
@@ -1220,10 +1212,6 @@ parseoptions()
 
 		-o)
 			MKOBJDIRS=no
-			;;
-
-		-P)
-			MKREPRO=yes
 			;;
 
 		-R)
@@ -1354,7 +1342,6 @@ parseoptions()
 		install-image|\
 		iso-image-source|\
 		iso-image|\
-		kernels|\
 		live-image|\
 		makewrapper|\
 		modules|\
@@ -1442,62 +1429,7 @@ sanitycheck()
 		;;
 	esac
 }
-# print_tooldir_make --
-# Try to find and print a path to an existing
-# ${TOOLDIR}/bin/${toolprefix}program
-print_tooldir_program()
-{
-	local possible_TOP_OBJ
-	local possible_TOOLDIR
-	local possible_program
-	local tooldir_program
-	local program=${1}
 
-	if [ -n "${TOOLDIR}" ]; then
-		echo "${TOOLDIR}/bin/${toolprefix}${program}"
-		return
-	fi
-
-	# Set host_ostype to something like "NetBSD-4.5.6-i386".  This
-	# is intended to match the HOST_OSTYPE variable in <bsd.own.mk>.
-	#
-	local host_ostype="${uname_s}-$(
-		echo "${uname_r}" | sed -e 's/([^)]*)//g' -e 's/ /_/g'
-		)-$(
-		echo "${uname_p}" | sed -e 's/([^)]*)//g' -e 's/ /_/g'
-		)"
-
-	# Look in a few potential locations for
-	# ${possible_TOOLDIR}/bin/${toolprefix}${program}.
-	# If we find it, then set possible_program.
-	#
-	# In the usual case (without interference from environment
-	# variables or /etc/mk.conf), <bsd.own.mk> should set TOOLDIR to
-	# "${_SRC_TOP_OBJ_}/tooldir.${host_ostype}".
-	#
-	# In practice it's difficult to figure out the correct value
-	# for _SRC_TOP_OBJ_.  In the easiest case, when the -M or -O
-	# options were passed to build.sh, then ${TOP_objdir} will be
-	# the correct value.  We also try a few other possibilities, but
-	# we do not replicate all the logic of <bsd.obj.mk>.
-	#
-	for possible_TOP_OBJ in \
-		"${TOP_objdir}" \
-		"${MAKEOBJDIRPREFIX:+${MAKEOBJDIRPREFIX}${TOP}}" \
-		"${TOP}" \
-		"${TOP}/obj" \
-		"${TOP}/obj.${MACHINE}"
-	do
-		[ -n "${possible_TOP_OBJ}" ] || continue
-		possible_TOOLDIR="${possible_TOP_OBJ}/tooldir.${host_ostype}"
-		possible_program="${possible_TOOLDIR}/bin/${toolprefix}${program}"
-		if [ -x "${possible_make}" ]; then
-			echo ${possible_program}
-			return;
-		fi
-	done
-	echo ""
-}
 # print_tooldir_make --
 # Try to find and print a path to an existing
 # ${TOOLDIR}/bin/${toolprefix}make, for use by rebuildmake() before a
@@ -1521,11 +1453,56 @@ print_tooldir_program()
 #
 print_tooldir_make()
 {
-	local possible_make
+	local possible_TOP_OBJ
 	local possible_TOOLDIR
+	local possible_make
 	local tooldir_make
 
-	possible_make=$(print_tooldir_program make)
+	if [ -n "${TOOLDIR}" ]; then
+		echo "${TOOLDIR}/bin/${toolprefix}make"
+		return 0
+	fi
+
+	# Set host_ostype to something like "NetBSD-4.5.6-i386".  This
+	# is intended to match the HOST_OSTYPE variable in <bsd.own.mk>.
+	#
+	local host_ostype="${uname_s}-$(
+		echo "${uname_r}" | sed -e 's/([^)]*)//g' -e 's/ /_/g'
+		)-$(
+		echo "${uname_p}" | sed -e 's/([^)]*)//g' -e 's/ /_/g'
+		)"
+
+	# Look in a few potential locations for
+	# ${possible_TOOLDIR}/bin/${toolprefix}make.
+	# If we find it, then set possible_make.
+	#
+	# In the usual case (without interference from environment
+	# variables or /etc/mk.conf), <bsd.own.mk> should set TOOLDIR to
+	# "${_SRC_TOP_OBJ_}/tooldir.${host_ostype}".
+	#
+	# In practice it's difficult to figure out the correct value
+	# for _SRC_TOP_OBJ_.  In the easiest case, when the -M or -O
+	# options were passed to build.sh, then ${TOP_objdir} will be
+	# the correct value.  We also try a few other possibilities, but
+	# we do not replicate all the logic of <bsd.obj.mk>.
+	#
+	for possible_TOP_OBJ in \
+		"${TOP_objdir}" \
+		"${MAKEOBJDIRPREFIX:+${MAKEOBJDIRPREFIX}${TOP}}" \
+		"${TOP}" \
+		"${TOP}/obj" \
+		"${TOP}/obj.${MACHINE}"
+	do
+		[ -n "${possible_TOP_OBJ}" ] || continue
+		possible_TOOLDIR="${possible_TOP_OBJ}/tooldir.${host_ostype}"
+		possible_make="${possible_TOOLDIR}/bin/${toolprefix}make"
+		if [ -x "${possible_make}" ]; then
+			break
+		else
+			unset possible_make
+		fi
+	done
+
 	# If the above didn't work, search the PATH for a suitable
 	# ${toolprefix}make, nbmake, bmake, or make.
 	#
@@ -1610,28 +1587,21 @@ rebuildmake()
 	fi
 
 	# Build bootstrap ${toolprefix}make if needed.
-	if ! ${do_rebuildmake}; then
-		return
+	if ${do_rebuildmake}; then
+		statusmsg "Bootstrapping ${toolprefix}make"
+		${runcmd} cd "${tmpdir}"
+		${runcmd} env CC="${HOST_CC-cc}" CPPFLAGS="${HOST_CPPFLAGS}" \
+			CFLAGS="${HOST_CFLAGS--O}" LDFLAGS="${HOST_LDFLAGS}" \
+			${HOST_SH} "${TOP}/tools/make/configure" ||
+		    ( cp ${tmpdir}/config.log ${tmpdir}-config.log
+		      bomb "Configure of ${toolprefix}make failed, see ${tmpdir}-config.log for details" )
+		${runcmd} ${HOST_SH} buildmake.sh ||
+		    bomb "Build of ${toolprefix}make failed"
+		make="${tmpdir}/${toolprefix}make"
+		${runcmd} cd "${TOP}"
+		${runcmd} rm -f usr.bin/make/*.o usr.bin/make/lst.lib/*.o
+		done_rebuildmake=true
 	fi
-
-	statusmsg "Bootstrapping ${toolprefix}make"
-	${runcmd} cd "${tmpdir}"
-	${runcmd} env \
-\
-CC="${HOST_CC-cc}" \
-CPPFLAGS="${HOST_CPPFLAGS} -D_PATH_DEFSYSPATH="'\"'${NETBSDSRCDIR}/share/mk'\"' \
-CFLAGS="${HOST_CFLAGS--O}" \
-LDFLAGS="${HOST_LDFLAGS}" \
-\
-	    ${HOST_SH} "${TOP}/tools/make/configure" ||
-	( cp ${tmpdir}/config.log ${tmpdir}-config.log
-	      bomb "Configure of ${toolprefix}make failed, see ${tmpdir}-config.log for details" )
-	${runcmd} ${HOST_SH} buildmake.sh ||
-	    bomb "Build of ${toolprefix}make failed"
-	make="${tmpdir}/${toolprefix}make"
-	${runcmd} cd "${TOP}"
-	${runcmd} rm -f usr.bin/make/*.o usr.bin/make/lst.lib/*.o
-	done_rebuildmake=true
 }
 
 # validatemakeparams --
@@ -1893,7 +1863,7 @@ createmakewrapper()
 	eval cat <<EOF ${makewrapout}
 #! ${HOST_SH}
 # Set proper variables to allow easy "make" building of a NetBSD subtree.
-# Generated from:  \$NetBSD: build.sh,v 1.315 2017/03/10 17:15:47 sevan Exp $
+# Generated from:  \$NetBSD: build.sh,v 1.294.2.3 2014/11/14 14:58:27 martin Exp $
 # with these arguments: ${_args}
 #
 
@@ -1924,8 +1894,8 @@ EOF
 
 make_in_dir()
 {
-	local dir="$1"
-	local op="$2"
+	dir="$1"
+	op="$2"
 	${runcmd} cd "${dir}" ||
 	    bomb "Failed to cd to \"${dir}\""
 	${runcmd} "${makewrapper}" ${parallel} ${op} ||
@@ -2008,10 +1978,8 @@ buildkernel()
 	fi
 	[ -x "${TOOLDIR}/bin/${toolprefix}config" ] \
 	|| bomb "${TOOLDIR}/bin/${toolprefix}config does not exist. You need to \"$0 tools\" first."
-	CONFIGOPTS=$(getmakevar CONFIGOPTS)
-	${runcmd} "${TOOLDIR}/bin/${toolprefix}config" ${CONFIGOPTS} \
-		-b "${kernelbuildpath}" -s "${TOP}/sys" ${configopts} \
-		"${kernelconfpath}" ||
+	${runcmd} "${TOOLDIR}/bin/${toolprefix}config" -b "${kernelbuildpath}" \
+		${ksymopts} -s "${TOP}/sys" "${kernelconfpath}" ||
 	    bomb "${toolprefix}config failed for ${kernelconf}"
 	make_in_dir "${kernelbuildpath}" depend
 	make_in_dir "${kernelbuildpath}" all
@@ -2042,14 +2010,6 @@ releasekernel()
 		else
 			gzip -c -9 < "${builtkern}" > "${releasekern}"
 		fi
-	done
-}
-
-buildkernels()
-{
-	allkernels=$( runcmd= make_in_dir etc '-V ${ALL_KERNELS}' )
-	for k in $allkernels; do
-		buildkernel "${k}"
 	done
 }
 
@@ -2117,8 +2077,7 @@ RUMP_LIBSETS='
 	-lrumpkern_tty -lrumpvfs -lrump,
 	-lrumpfs_tmpfs -lrumpvfs -lrump,
 	-lrumpfs_ffs -lrumpfs_msdos -lrumpvfs -lrumpdev_disk -lrumpdev -lrump,
-	-lrumpnet_virtif -lrumpnet_netinet -lrumpnet_net -lrumpnet 
-	    -lrumpdev -lrumpvfs -lrump,
+	-lrumpnet_virtif -lrumpnet_netinet -lrumpnet_net -lrumpnet -lrump,
 	-lrumpnet_sockin -lrumpfs_smbfs -lrumpdev_netsmb
 	    -lrumpkern_crypto -lrumpdev -lrumpnet -lrumpvfs -lrump,
 	-lrumpnet_sockin -lrumpfs_nfs -lrumpnet -lrumpvfs -lrump,
@@ -2189,23 +2148,6 @@ dorump()
 	statusmsg "Rump build&link tests successful"
 }
 
-setup_mkrepro()
-{
-	if [ ${MKREPRO-no} != "yes" ]; then
-		return
-	fi
-	buildtools
-	local dirs=${NETBSDSRCDIR-/usr/src}/
-	if [ ${MKX11-no} = "yes" ]; then
-		dirs="$dirs ${X11SRCDIR-/usr/xsrc}/"
-	fi
-	local cvslatest=$(print_tooldir_program cvslatest)
-	MKREPRO_TIMESTAMP=$(${cvslatest} ${dirs})
-	[ -n "${MKREPRO_TIMESTAMP}" ] || bomb "Failed to compute timestamp"
-	statusmsg2 "MKREPRO_TIMESTAMP" "$(date -r ${MKREPRO_TIMESTAMP})"
-	export MKREPRO MKREPRO_TIMESTAMP
-}
-
 main()
 {
 	initdefaults
@@ -2258,14 +2200,7 @@ main()
 			statusmsg "Built sets to ${setdir}"
 			;;
 
-		build|distribution|release)
-			setup_mkrepro
-			${runcmd} "${makewrapper}" ${parallel} ${op} ||
-			    bomb "Failed to make ${op}"
-			statusmsg "Successful make ${op}"
-			;;
-
-		cleandir|obj|sourcesets|syspkgs|params)
+		cleandir|obj|build|distribution|release|sourcesets|syspkgs|params)
 			${runcmd} "${makewrapper}" ${parallel} ${op} ||
 			    bomb "Failed to make ${op}"
 			statusmsg "Successful make ${op}"
@@ -2295,16 +2230,12 @@ main()
 			;;
 		kernel.gdb=*)
 			arg=${op#*=}
-			configopts="-D DEBUG=-g"
+			ksymopts="-D DEBUG=-g"
 			buildkernel "${arg}"
 			;;
 		releasekernel=*)
 			arg=${op#*=}
 			releasekernel "${arg}"
-			;;
-
-		kernels)
-			buildkernels
 			;;
 
 		disk-image=*)

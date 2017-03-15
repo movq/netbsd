@@ -1,4 +1,4 @@
-/*	$NetBSD: networking.c,v 1.14 2016/05/01 23:32:01 christos Exp $	*/
+/*	$NetBSD: networking.c,v 1.7.4.4 2016/05/11 11:35:41 martin Exp $	*/
 
 #include <config.h>
 #include "networking.h"

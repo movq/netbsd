@@ -1,4 +1,4 @@
-/*	$NetBSD: trap.c,v 1.93 2017/03/09 00:16:07 chs Exp $	*/
+/*	$NetBSD: trap.c,v 1.78 2014/03/11 20:54:29 para Exp $	*/
 
 /*-
  * Copyright (c) 1998, 2000 The NetBSD Foundation, Inc.
@@ -68,7 +68,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: trap.c,v 1.93 2017/03/09 00:16:07 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: trap.c,v 1.78 2014/03/11 20:54:29 para Exp $");
 
 #include "opt_ddb.h"
 #include "opt_kgdb.h"
@@ -154,7 +154,7 @@ int	trapdebug = 0;
 #define	IDTVEC(name)	__CONCAT(X, name)
 
 #ifdef TRAP_SIGDEBUG
-static void frame_dump(struct trapframe *, struct pcb *);
+static void frame_dump(struct trapframe *);
 #endif
 
 static void *
@@ -194,8 +194,8 @@ trap_print(const struct trapframe *frame, const lwp_t *l)
 	}
 	printf(" in %s mode\n", (type & T_USER) ? "user" : "supervisor");
 
-	printf("trap type %d code %#lx rip %#lx cs %#lx rflags %#lx cr2 %#lx "
-	    "ilevel %#x rsp %#lx\n",
+	printf("trap type %d code %lx rip %lx cs %lx rflags %lx cr2 %lx "
+	    "ilevel %x rsp %lx\n",
 	    type, frame->tf_err, (u_long)frame->tf_rip, frame->tf_cs,
 	    frame->tf_rflags, rcr2(), curcpu()->ci_ilevel, frame->tf_rsp);
 
@@ -261,7 +261,7 @@ trap(struct trapframe *frame)
 	/*
 	 * A trap can occur while DTrace executes a probe. Before
 	 * executing the probe, DTrace blocks re-scheduling and sets
-	 * a flag in its per-cpu flags to indicate that it doesn't
+	 * a flag in it's per-cpu flags to indicate that it doesn't
 	 * want to fault. On returning from the the probe, the no-fault
 	 * flag is cleared and finally re-scheduling is enabled.
 	 *
@@ -342,16 +342,6 @@ kernelfault:
 		/* Get %rsp value before fault - there may be a pad word
 		 * below the trap frame. */
 		vframe = (void *)frame->tf_rsp;
-		if (frame->tf_rip == 0) {
-			/*
-			 * Assume that if we jumped to null we
-			 * probably did it via a null function
-			 * pointer, so print the return address.
-			 */
-			printf("kernel jumped to null; return addr was %p\n",
-			       *(void **)frame->tf_rsp);
-			goto we_re_toast;
-		}
 		switch (*(uint16_t *)frame->tf_rip) {
 		case 0xcf48:	/* iretq */
 			/*
@@ -373,12 +363,8 @@ kernelfault:
 			break;
 		case 0x848e:	/* mov 0xa8(%rsp),%es (8e 84 24 a8 00 00 00) */
 		case 0x9c8e:	/* mov 0xb0(%rsp),%ds (8e 9c 24 b0 00 00 00) */
-#ifdef USER_LDT
-		case 0xa48e:	/* mov 0xa0(%rsp),%fs (8e a4 24 a0 00 00 00) */
-		case 0xac8e:	/* mov 0x98(%rsp),%gs (8e ac 24 98 00 00 00) */
-#endif
 			/*
-			 * We faulted loading one of the user segment registers.
+			 * We faulted loading one if the user segment registers.
 			 * The stack frame containing the user registers is
 			 * still valid and pointed to by tf_rsp.
 			 * Maybe we should check the iretq follows.
@@ -408,9 +394,9 @@ kernelfault:
 	case T_STKFLT|T_USER:
 	case T_ALIGNFLT|T_USER:
 #ifdef TRAP_SIGDEBUG
-		printf("pid %d.%d (%s): BUS/SEGV (%#x) at rip %#lx addr %#lx\n",
+		printf("pid %d.%d (%s): BUS/SEGV (%x) at rip %lx addr %lx\n",
 		    p->p_pid, l->l_lid, p->p_comm, type, frame->tf_rip, rcr2());
-		frame_dump(frame, pcb);
+		frame_dump(frame);
 #endif
 		KSI_INIT_TRAP(&ksi);
 		ksi.ksi_trap = type & ~T_USER;
@@ -442,9 +428,9 @@ kernelfault:
 	case T_PRIVINFLT|T_USER:	/* privileged instruction fault */
 	case T_FPOPFLT|T_USER:		/* coprocessor operand fault */
 #ifdef TRAP_SIGDEBUG
-		printf("pid %d.%d (%s): ILL at rip %#lx addr %#lx\n",
+		printf("pid %d.%d (%s): ILL at rip %lx addr %lx\n",
 		    p->p_pid, l->l_lid, p->p_comm, frame->tf_rip, rcr2());
-		frame_dump(frame, pcb);
+		frame_dump(frame);
 #endif
 		KSI_INIT_TRAP(&ksi);
 		ksi.ksi_signo = SIGILL;
@@ -519,14 +505,6 @@ kernelfault:
 		}
 
 		cr2 = rcr2();
-
-		if (frame->tf_err & PGEX_X) {
-			/* SMEP might have brought us here */
-			if (cr2 > VM_MIN_ADDRESS && cr2 <= VM_MAXUSER_ADDRESS)
-				panic("prevented execution of %p (SMEP)",
-				    (void *)cr2);
-		}
-
 		goto faultcommon;
 
 	case T_PAGEFLT|T_USER: {	/* page fault */
@@ -630,6 +608,15 @@ faultcommon:
 			}
 			goto out;
 		}
+		KSI_INIT_TRAP(&ksi);
+		ksi.ksi_trap = type & ~T_USER;
+		ksi.ksi_addr = (void *)cr2;
+		if (error == EACCES) {
+			ksi.ksi_code = SEGV_ACCERR;
+			error = EFAULT;
+		} else {
+			ksi.ksi_code = SEGV_MAPERR;
+		}
 
 		if (type == T_PAGEFLT) {
 			onfault = onfault_handler(pcb, frame);
@@ -639,57 +626,25 @@ faultcommon:
 			    map, va, ftype, error);
 			goto kernelfault;
 		}
-
-		KSI_INIT_TRAP(&ksi);
-		ksi.ksi_trap = type & ~T_USER;
-		ksi.ksi_addr = (void *)cr2;
-		switch (error) {
-		case EINVAL:
-			ksi.ksi_signo = SIGBUS;
-			ksi.ksi_code = BUS_ADRERR;
-			break;
-		case EACCES:
-			ksi.ksi_signo = SIGSEGV;
-			ksi.ksi_code = SEGV_ACCERR;
-			error = EFAULT;
-			break;
-		case ENOMEM:
+		if (error == ENOMEM) {
 			ksi.ksi_signo = SIGKILL;
-			printf("UVM: pid %d.%d (%s), uid %d killed: "
-			    "out of swap\n", p->p_pid, l->l_lid, p->p_comm,
-			    l->l_cred ?  kauth_cred_geteuid(l->l_cred) : -1);
-			break;
-		default:
-			ksi.ksi_signo = SIGSEGV;
-			ksi.ksi_code = SEGV_MAPERR;
-			break;
-		}
-
+			printf("UVM: pid %d.%d (%s), uid %d killed: out of swap\n",
+			       p->p_pid, l->l_lid, p->p_comm,
+			       l->l_cred ?
+			       kauth_cred_geteuid(l->l_cred) : -1);
+		} else {
 #ifdef TRAP_SIGDEBUG
-		printf("pid %d.%d (%s): signal %d at rip %#lx addr %#lx "
-		    "error %d trap %d cr2 %p\n", p->p_pid, l->l_lid, p->p_comm,
-		    ksi.ksi_signo, frame->tf_rip, va, error, ksi.ksi_trap,
-		    ksi.ksi_addr);
-		frame_dump(frame, pcb);
+			printf("pid %d.%d (%s): SEGV at rip %lx addr %lx\n",
+			    p->p_pid, l->l_lid, p->p_comm, frame->tf_rip, va);
+			frame_dump(frame);
 #endif
+			ksi.ksi_signo = SIGSEGV;
+		}
 		(*p->p_emul->e_trapsignal)(l, &ksi);
 		break;
 	}
 
 	case T_TRCTRAP:
-		/*
-		 * Ignore debug register trace traps due to
-		 * accesses in the user's address space, which
-		 * can happen under several conditions such as
-		 * if a user sets a watchpoint on a buffer and
-		 * then passes that buffer to a system call.
-		 * We still want to get TRCTRAPS for addresses
-		 * in kernel space because that is useful when
-		 * debugging the kernel.
-		 */
-		if (x86_dbregs_user_trap())
-			break;
-
 		/* Check whether they single-stepped into a lcall. */
 		if (frame->tf_rip == (uint64_t)IDTVEC(oosyscall) ||
 		    frame->tf_rip == (uint64_t)IDTVEC(osyscall) ||
@@ -710,10 +665,7 @@ faultcommon:
 			KSI_INIT_TRAP(&ksi);
 			ksi.ksi_signo = SIGTRAP;
 			ksi.ksi_trap = type & ~T_USER;
-			if (x86_dbregs_user_trap()) {
-				x86_dbregs_store_dr6(l);
-				ksi.ksi_code = TRAP_DBREG;
-			} else if (type == (T_BPTFLT|T_USER))
+			if (type == (T_BPTFLT|T_USER))
 				ksi.ksi_code = TRAP_BRKPT;
 			else
 				ksi.ksi_code = TRAP_TRACE;
@@ -763,36 +715,32 @@ startlwp(void *arg)
 }
 
 #ifdef TRAP_SIGDEBUG
-void
-frame_dump(struct trapframe *tf, struct pcb *pcb)
+static void
+frame_dump(struct trapframe *tf)
 {
 	int i;
 	unsigned long *p;
 
-	printf("trapframe %p\n", tf);
-	printf("rip 0x%016lx  rsp 0x%016lx  rfl 0x%016lx\n",
-	    tf->tf_rip, tf->tf_rsp, tf->tf_rflags);
-	printf("rdi 0x%016lx  rsi 0x%016lx  rdx 0x%016lx\n",
-	    tf->tf_rdi, tf->tf_rsi, tf->tf_rdx);
-	printf("rcx 0x%016lx  r8  0x%016lx  r9  0x%016lx\n",
-	    tf->tf_rcx, tf->tf_r8, tf->tf_r9);
-	printf("r10 0x%016lx  r11 0x%016lx  r12 0x%016lx\n",
-	    tf->tf_r10, tf->tf_r11, tf->tf_r12);
-	printf("r13 0x%016lx  r14 0x%016lx  r15 0x%016lx\n",
-	    tf->tf_r13, tf->tf_r14, tf->tf_r15);
-	printf("rbp 0x%016lx  rbx 0x%016lx  rax 0x%016lx\n",
-	    tf->tf_rbp, tf->tf_rbx, tf->tf_rax);
-	printf("cs 0x%04lx  ds 0x%04lx  es 0x%04lx  "
-	       "fs 0x%04lx  gs 0x%04lx  ss 0x%04lx\n",
+	printf("rip %p  rsp %p  rfl %p\n",
+	    (void *)tf->tf_rip, (void *)tf->tf_rsp, (void *)tf->tf_rflags);
+	printf("rdi %p  rsi %p  rdx %p\n",
+	    (void *)tf->tf_rdi, (void *)tf->tf_rsi, (void *)tf->tf_rdx);
+	printf("rcx %p  r8  %p  r9  %p\n",
+	    (void *)tf->tf_rcx, (void *)tf->tf_r8, (void *)tf->tf_r9);
+	printf("r10 %p  r11 %p  r12 %p\n",
+	    (void *)tf->tf_r10, (void *)tf->tf_r11, (void *)tf->tf_r12);
+	printf("r13 %p  r14 %p  r15 %p\n",
+	    (void *)tf->tf_r13, (void *)tf->tf_r14, (void *)tf->tf_r15);
+	printf("rbp %p  rbx %p  rax %p\n",
+	    (void *)tf->tf_rbp, (void *)tf->tf_rbx, (void *)tf->tf_rax);
+	printf("cs %lx  ds %lx  es %lx  fs %lx  gs %lx  ss %lx\n",
 		tf->tf_cs & 0xffff, tf->tf_ds & 0xffff, tf->tf_es & 0xffff,
 		tf->tf_fs & 0xffff, tf->tf_gs & 0xffff, tf->tf_ss & 0xffff);
-	printf("fsbase 0x%016lx gsbase 0x%016lx\n",
-	       pcb->pcb_fs, pcb->pcb_gs);
+	
 	printf("\n");
 	printf("Stack dump:\n");
 	for (i = 0, p = (unsigned long *) tf; i < 20; i ++, p += 4)
-		printf(" 0x%.16lx  0x%.16lx  0x%.16lx  0x%.16lx\n",
-		       p[0], p[1], p[2], p[3]);
+		printf("   0x%.16lx  0x%.16lx  0x%.16lx 0x%.16lx\n", *p, p[1], p[2], p[3]);
 	printf("\n");
 }
 #endif

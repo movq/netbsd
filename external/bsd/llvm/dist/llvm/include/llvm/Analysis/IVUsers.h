@@ -15,14 +15,12 @@
 #ifndef LLVM_ANALYSIS_IVUSERS_H
 #define LLVM_ANALYSIS_IVUSERS_H
 
-#include "llvm/Analysis/LoopAnalysisManager.h"
 #include "llvm/Analysis/LoopPass.h"
 #include "llvm/Analysis/ScalarEvolutionNormalization.h"
 #include "llvm/IR/ValueHandle.h"
 
 namespace llvm {
 
-class AssumptionCache;
 class DominatorTree;
 class Instruction;
 class Value;
@@ -35,7 +33,7 @@ class DataLayout;
 /// The Expr member keeps track of the expression, User is the actual user
 /// instruction of the operand, and 'OperandValToReplace' is the operand of
 /// the User that is the use.
-class IVStrideUse final : public CallbackVH, public ilist_node<IVStrideUse> {
+class IVStrideUse : public CallbackVH, public ilist_node<IVStrideUse> {
   friend class IVUsers;
 public:
   IVStrideUse(IVUsers *P, Instruction* U, Value *O)
@@ -91,36 +89,55 @@ private:
   void deleted() override;
 };
 
-class IVUsers {
+template<> struct ilist_traits<IVStrideUse>
+  : public ilist_default_traits<IVStrideUse> {
+  // createSentinel is used to get hold of a node that marks the end of
+  // the list...
+  // The sentinel is relative to this instance, so we use a non-static
+  // method.
+  IVStrideUse *createSentinel() const {
+    // since i(p)lists always publicly derive from the corresponding
+    // traits, placing a data member in this class will augment i(p)list.
+    // But since the NodeTy is expected to publicly derive from
+    // ilist_node<NodeTy>, there is a legal viable downcast from it
+    // to NodeTy. We use this trick to superpose i(p)list with a "ghostly"
+    // NodeTy, which becomes the sentinel. Dereferencing the sentinel is
+    // forbidden (save the ilist_node<NodeTy>) so no one will ever notice
+    // the superposition.
+    return static_cast<IVStrideUse*>(&Sentinel);
+  }
+  static void destroySentinel(IVStrideUse*) {}
+
+  IVStrideUse *provideInitialHead() const { return createSentinel(); }
+  IVStrideUse *ensureHead(IVStrideUse*) const { return createSentinel(); }
+  static void noteHead(IVStrideUse*, IVStrideUse*) {}
+
+private:
+  mutable ilist_node<IVStrideUse> Sentinel;
+};
+
+class IVUsers : public LoopPass {
   friend class IVStrideUse;
   Loop *L;
-  AssumptionCache *AC;
   LoopInfo *LI;
   DominatorTree *DT;
   ScalarEvolution *SE;
-  SmallPtrSet<Instruction*, 16> Processed;
+  const DataLayout *DL;
+  SmallPtrSet<Instruction*,16> Processed;
 
   /// IVUses - A list of all tracked IV uses of induction variable expressions
   /// we are interested in.
   ilist<IVStrideUse> IVUses;
 
-  // Ephemeral values used by @llvm.assume in this function.
-  SmallPtrSet<const Value *, 32> EphValues;
+  void getAnalysisUsage(AnalysisUsage &AU) const override;
+
+  bool runOnLoop(Loop *L, LPPassManager &LPM) override;
+
+  void releaseMemory() override;
 
 public:
-  IVUsers(Loop *L, AssumptionCache *AC, LoopInfo *LI, DominatorTree *DT,
-          ScalarEvolution *SE);
-
-  IVUsers(IVUsers &&X)
-      : L(std::move(X.L)), AC(std::move(X.AC)), DT(std::move(X.DT)),
-        SE(std::move(X.SE)), Processed(std::move(X.Processed)),
-        IVUses(std::move(X.IVUses)), EphValues(std::move(X.EphValues)) {
-    for (IVStrideUse &U : IVUses)
-      U.Parent = this;
-  }
-  IVUsers(const IVUsers &) = delete;
-  IVUsers &operator=(IVUsers &&) = delete;
-  IVUsers &operator=(const IVUsers &) = delete;
+  static char ID; // Pass ID, replacement for typeid
+  IVUsers();
 
   Loop *getLoop() const { return L; }
 
@@ -152,50 +169,15 @@ public:
     return Processed.count(Inst);
   }
 
-  void releaseMemory();
-
-  void print(raw_ostream &OS, const Module * = nullptr) const;
+  void print(raw_ostream &OS, const Module* = nullptr) const override;
 
   /// dump - This method is used for debugging.
   void dump() const;
-
 protected:
   bool AddUsersImpl(Instruction *I, SmallPtrSetImpl<Loop*> &SimpleLoopNests);
 };
 
 Pass *createIVUsersPass();
-
-class IVUsersWrapperPass : public LoopPass {
-  std::unique_ptr<IVUsers> IU;
-
-public:
-  static char ID;
-
-  IVUsersWrapperPass();
-
-  IVUsers &getIU() { return *IU; }
-  const IVUsers &getIU() const { return *IU; }
-
-  void getAnalysisUsage(AnalysisUsage &AU) const override;
-
-  bool runOnLoop(Loop *L, LPPassManager &LPM) override;
-
-  void releaseMemory() override;
-
-  void print(raw_ostream &OS, const Module * = nullptr) const override;
-};
-
-/// Analysis pass that exposes the \c IVUsers for a loop.
-class IVUsersAnalysis : public AnalysisInfoMixin<IVUsersAnalysis> {
-  friend AnalysisInfoMixin<IVUsersAnalysis>;
-  static AnalysisKey Key;
-
-public:
-  typedef IVUsers Result;
-
-  IVUsers run(Loop &L, LoopAnalysisManager &AM,
-              LoopStandardAnalysisResults &AR);
-};
 
 }
 

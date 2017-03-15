@@ -1,5 +1,7 @@
 /* tc-d10v.c -- Assembler code for the Mitsubishi D10V
-   Copyright (C) 1996-2016 Free Software Foundation, Inc.
+   Copyright 1996, 1997, 1998, 1999, 2000, 2001, 2002, 2003, 2005, 2006,
+   2007, 2009, 2010
+   Free Software Foundation, Inc.
 
    This file is part of GAS, the GNU Assembler.
 
@@ -222,7 +224,7 @@ md_show_usage (FILE *stream)
 }
 
 int
-md_parse_option (int c, const char *arg ATTRIBUTE_UNUSED)
+md_parse_option (int c, char *arg ATTRIBUTE_UNUSED)
 {
   switch (c)
     {
@@ -251,7 +253,7 @@ md_undefined_symbol (char *name ATTRIBUTE_UNUSED)
   return 0;
 }
 
-const char *
+char *
 md_atof (int type, char *litP, int *sizeP)
 {
   return ieee_md_atof (type, litP, sizeP, TRUE);
@@ -269,13 +271,13 @@ valueT
 md_section_align (asection *seg, valueT addr)
 {
   int align = bfd_get_section_alignment (stdoutput, seg);
-  return ((addr + (1 << align) - 1) & -(1 << align));
+  return ((addr + (1 << align) - 1) & (-1 << align));
 }
 
 void
 md_begin (void)
 {
-  const char *prev_name = "";
+  char *prev_name = "";
   struct d10v_opcode *opcode;
   d10v_hash = hash_new ();
 
@@ -1117,7 +1119,7 @@ write_2_short (struct d10v_opcode *opcode1,
 static unsigned long prev_insn;
 static struct d10v_opcode *prev_opcode = 0;
 static subsegT prev_subseg;
-static segT prev_seg = 0;
+static segT prev_seg = 0;;
 
 /* Find the symbol which has the same name as the register in exp.  */
 
@@ -1226,7 +1228,9 @@ find_opcode (struct d10v_opcode *opcode, expressionS myops[])
 		  sym_frag = symbol_get_frag (myops[opnum].X_add_symbol);
 		  found_symbol = FALSE;
 
-		  current_position = frag_now_fix_octets ();
+		  current_position =
+		    obstack_next_free (&frchain_now->frch_obstack)
+		    - frag_now->fr_literal;
 		  symbol_position = S_GET_VALUE (myops[opnum].X_add_symbol);
 
 		  for (f = frchain_now->frch_root; f; f = f->fr_next)
@@ -1451,8 +1455,8 @@ arelent *
 tc_gen_reloc (asection *seg ATTRIBUTE_UNUSED, fixS *fixp)
 {
   arelent *reloc;
-  reloc = XNEW (arelent);
-  reloc->sym_ptr_ptr = XNEW (asymbol *);
+  reloc = xmalloc (sizeof (arelent));
+  reloc->sym_ptr_ptr = xmalloc (sizeof (asymbol *));
   *reloc->sym_ptr_ptr = symbol_get_bfdsym (fixp->fx_addsy);
   reloc->address = fixp->fx_frag->fr_address + fixp->fx_where;
   reloc->howto = bfd_reloc_type_lookup (stdoutput, fixp->fx_r_type);

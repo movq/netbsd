@@ -1,5 +1,4 @@
-// RUN: %clang_cc1 %s -triple=x86_64-apple-darwin10 -fcxx-exceptions -fexceptions -emit-llvm -std=c++98 -o - | FileCheck -check-prefix=CHECK -check-prefix=CHECK98 %s
-// RUN: %clang_cc1 %s -triple=x86_64-apple-darwin10 -fcxx-exceptions -fexceptions -emit-llvm -std=c++11 -o - | FileCheck -check-prefix=CHECK -check-prefix=CHECK11 %s
+// RUN: %clang_cc1 %s -triple=x86_64-apple-darwin10 -fcxx-exceptions -fexceptions -emit-llvm -o - | FileCheck %s
 
 // Reduced from a crash on boost::interprocess's node_allocator_test.cpp.
 namespace test0 {
@@ -19,15 +18,13 @@ namespace test0 {
     // CHECK-NEXT: [[CLEANUPACTIVE:%.*]] = alloca i1
     // CHECK:      call void @_ZN5test01AC1Ev([[A]]* [[Y]])
     // CHECK-NEXT: invoke void @_ZN5test01AC1Ev([[A]]* [[Z]])
-    // CHECK:      [[NEW:%.*]] = invoke i8* @_Znwm(i64 1)
+    // CHECK:      [[NEW:%.*]] = invoke noalias i8* @_Znwm(i64 1)
     // CHECK:      store i1 true, i1* [[CLEANUPACTIVE]]
     // CHECK:      [[NEWCAST:%.*]] = bitcast i8* [[NEW]] to [[V]]*
     // CHECK-NEXT: invoke void @_ZN5test01AC1Ev([[A]]* [[TMP]])
     // CHECK:      invoke void @_ZN5test01VC1ERKNS_1AE([[V]]* [[NEWCAST]], [[A]]* dereferenceable({{[0-9]+}}) [[TMP]])
     // CHECK:      store i1 false, i1* [[CLEANUPACTIVE]]
-
-    // CHECK98-NEXT: invoke void @_ZN5test01AD1Ev([[A]]* [[TMP]])
-    // CHECK11-NEXT: call void @_ZN5test01AD1Ev([[A]]* [[TMP]])
+    // CHECK-NEXT: invoke void @_ZN5test01AD1Ev([[A]]* [[TMP]])
     A y;
     try {
       A z;

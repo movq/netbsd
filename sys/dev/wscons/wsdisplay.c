@@ -1,4 +1,4 @@
-/* $NetBSD: wsdisplay.c,v 1.141 2017/01/25 15:40:31 jakllsch Exp $ */
+/* $NetBSD: wsdisplay.c,v 1.138 2014/07/25 08:10:39 dholland Exp $ */
 
 /*
  * Copyright (c) 1996, 1997 Christopher G. Demetriou.  All rights reserved.
@@ -31,13 +31,10 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: wsdisplay.c,v 1.141 2017/01/25 15:40:31 jakllsch Exp $");
+__KERNEL_RCSID(0, "$NetBSD: wsdisplay.c,v 1.138 2014/07/25 08:10:39 dholland Exp $");
 
-#ifdef _KERNEL_OPT
 #include "opt_wsdisplay_compat.h"
 #include "opt_wsmsgattrs.h"
-#endif
-
 #include "wskbd.h"
 #include "wsmux.h"
 #include "wsdisplay.h"
@@ -841,8 +838,7 @@ wsdisplay_common_attach(struct wsdisplay_softc *sc, int console, int kbdmux,
 		wsdisplay_addscreen_print(sc, start, i-start);
 
 	if (!pmf_device_register(sc->sc_dev, wsdisplay_suspend, NULL))
-		aprint_error_dev(sc->sc_dev,
-		    "couldn't establish power handler\n");
+		aprint_error_dev(sc->sc_dev, "couldn't establish power handler\n");
 }
 
 void
@@ -1223,7 +1219,7 @@ wsdisplay_internal_ioctl(struct wsdisplay_softc *sc, struct wsscreen *scr,
 	u_long cmd, void *data, int flag, struct lwp *l)
 {
 	int error;
-	char namebuf[32];
+	char namebuf[16];
 	struct wsdisplay_font fd;
 #ifdef WSDISPLAY_SCROLLSUPPORT
 	struct wsdisplay_scroll_data *ksdp, *usdp;
@@ -1922,8 +1918,7 @@ wsdisplay_switch1(device_t dv, int error, int waitok)
 		panic("wsdisplay_switch1: invalid screen %d", no);
 	scr = sc->sc_scr[no];
 	if (!scr) {
-		aprint_error_dev(dv,
-		    "wsdisplay_switch1: screen %d disappeared\n", no);
+		aprint_error_dev(dv, "wsdisplay_switch1: screen %d disappeared\n", no);
 		error = ENXIO;
 	}
 

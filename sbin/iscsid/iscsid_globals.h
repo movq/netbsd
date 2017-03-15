@@ -1,4 +1,4 @@
-/*	$NetBSD: iscsid_globals.h,v 1.9 2016/05/30 22:02:41 joerg Exp $	*/
+/*	$NetBSD: iscsid_globals.h,v 1.7 2012/05/28 00:13:19 riz Exp $	*/
 
 /*-
  * Copyright (c) 2005,2006,2011 The NetBSD Foundation, Inc.
@@ -47,8 +47,6 @@
 #include <string.h>
 #include <unistd.h>
 #include <errno.h>
-#include <stdarg.h>
-#include <signal.h>
 
 #ifndef ISCSI_NOTHREAD
 #include <pthread.h>
@@ -381,16 +379,20 @@ iscsid_set_node_name_req_t node_name;
 
 /* Debugging stuff */
 
-extern int debug_level;
 
-#define DEBOUT(x) iscsid_log x
-#define DEB(lev,x) { if (debug_level >= lev) iscsid_log x ; }
-void iscsid_log(const char *, ...) __printflike(1, 2);
+extern int debug_level;				/* How much info to display */
+
+#define DEBOUT(x) printf x
+#define DEB(lev,x) {if (debug_level >= lev) printf x ;}
 
 /* Session list protection shortcuts */
 
-#define LOCK_SESSIONS   pthread_mutex_lock(&sesslist_lock) 
-#define UNLOCK_SESSIONS pthread_mutex_unlock(&sesslist_lock)
+#if 0
+#define LOCK_SESSIONS   verify_sessions()
+#define UNLOCK_SESSIONS
+#endif
+#define LOCK_SESSIONS   if (nothreads) event_handler(NULL); else pthread_mutex_lock(&sesslist_lock) 
+#define UNLOCK_SESSIONS if (!nothreads) pthread_mutex_unlock(&sesslist_lock)
 
 /* Check whether ID is present */
 
@@ -399,6 +401,7 @@ void iscsid_log(const char *, ...) __printflike(1, 2);
 /* iscsid_main.c */
 
 iscsid_response_t *make_rsp(size_t, iscsid_response_t **, int *);
+void exit_daemon(void) __dead;
 
 /* iscsid_lists.c */
 
@@ -487,10 +490,10 @@ void deregister_event_handler(void);
 void *event_handler(void *);
 
 uint32_t set_node_name(iscsid_set_node_name_req_t *);
-void log_in(iscsid_login_req_t *, iscsid_response_t *);
+void login(iscsid_login_req_t *, iscsid_response_t *);
 void add_connection(iscsid_login_req_t *, iscsid_response_t *);
 uint32_t send_targets(uint32_t, uint8_t **, uint32_t *);
-uint32_t log_out(iscsid_sym_id_t *);
+uint32_t logout(iscsid_sym_id_t *);
 uint32_t remove_connection(iscsid_remove_connection_req_t *);
 void get_version(iscsid_response_t **, int *);
 

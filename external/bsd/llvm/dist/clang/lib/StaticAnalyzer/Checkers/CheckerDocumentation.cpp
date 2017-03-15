@@ -1,4 +1,4 @@
-//===- CheckerDocumentation.cpp - Documentation checker ---------*- C++ -*-===//
+//= CheckerDocumentation.cpp - Documentation checker ---------------*- C++ -*-//
 //
 //                     The LLVM Compiler Infrastructure
 //
@@ -38,14 +38,12 @@ class CheckerDocumentation : public Checker< check::PreStmt<ReturnStmt>,
                                        check::PostStmt<DeclStmt>,
                                        check::PreObjCMessage,
                                        check::PostObjCMessage,
-                                       check::ObjCMessageNil,
                                        check::PreCall,
                                        check::PostCall,
                                        check::BranchCondition,
                                        check::Location,
                                        check::Bind,
                                        check::DeadSymbols,
-                                       check::BeginFunction,
                                        check::EndFunction,
                                        check::EndAnalysis,
                                        check::EndOfTranslationUnit,
@@ -58,6 +56,7 @@ class CheckerDocumentation : public Checker< check::PreStmt<ReturnStmt>,
                                        check::Event<ImplicitNullDerefEvent>,
                                        check::ASTDecl<FunctionDecl> > {
 public:
+
   /// \brief Pre-visit the Statement.
   ///
   /// The method will be called before the analyzer core processes the
@@ -95,15 +94,6 @@ public:
   ///
   /// check::PostObjCMessage
   void checkPostObjCMessage(const ObjCMethodCall &M, CheckerContext &C) const {}
-
-  /// \brief Visit an Objective-C message whose receiver is nil.
-  ///
-  /// This will be called when the analyzer core processes a method call whose
-  /// receiver is definitely nil. In this case, check{Pre/Post}ObjCMessage and
-  /// check{Pre/Post}Call will not be called.
-  ///
-  /// check::ObjCMessageNil
-  void checkObjCMessageNil(const ObjCMethodCall &M, CheckerContext &C) const {}
 
   /// \brief Pre-visit an abstract "call" event.
   ///
@@ -147,6 +137,7 @@ public:
   /// check::Bind
   void checkBind(SVal Loc, SVal Val, const Stmt *S, CheckerContext &) const {}
 
+
   /// \brief Called whenever a symbol becomes dead.
   ///
   /// This callback should be used by the checkers to aggressively clean
@@ -163,16 +154,8 @@ public:
   /// check::DeadSymbols
   void checkDeadSymbols(SymbolReaper &SR, CheckerContext &C) const {}
 
-
-  /// \brief Called when the analyzer core starts analyzing a function,
-  /// regardless of whether it is analyzed at the top level or is inlined.
-  ///
-  /// check::BeginFunction
-  void checkBeginFunction(CheckerContext &Ctx) const {}
-
   /// \brief Called when the analyzer core reaches the end of a
-  /// function being analyzed regardless of whether it is analyzed at the top
-  /// level or is inlined.
+  /// function being analyzed.
   ///
   /// check::EndFunction
   void checkEndFunction(CheckerContext &Ctx) const {}
@@ -196,6 +179,7 @@ public:
   void checkEndOfTranslationUnit(const TranslationUnitDecl *TU,
                                  AnalysisManager &Mgr,
                                  BugReporter &BR) const {}
+
 
   /// \brief Evaluates function call.
   ///
@@ -238,7 +222,7 @@ public:
   /// changed, this allows the analyzer core to skip the more expensive
   /// #checkRegionChanges when no checkers are tracking any state.
   bool wantsRegionChangeUpdate(ProgramStateRef St) const { return true; }
-
+  
   /// \brief Called when the contents of one or more regions change.
   ///
   /// This can occur in many different ways: an explicit bind, a blanket
@@ -262,7 +246,7 @@ public:
   /// #wantsRegionChangeUpdate returns \c true.
   ///
   /// check::RegionChanges
-  ProgramStateRef
+  ProgramStateRef 
     checkRegionChanges(ProgramStateRef State,
                        const InvalidatedSymbols *Invalidated,
                        ArrayRef<const MemRegion *> ExplicitRegions,
@@ -275,12 +259,12 @@ public:
   ///
   /// This notifies the checkers about pointer escape, which occurs whenever
   /// the analyzer cannot track the symbol any more. For example, as a
-  /// result of assigning a pointer into a global or when it's passed to a
+  /// result of assigning a pointer into a global or when it's passed to a 
   /// function call the analyzer cannot model.
-  ///
+  /// 
   /// \param State The state at the point of escape.
   /// \param Escaped The list of escaped symbols.
-  /// \param Call The corresponding CallEvent, if the symbols escape as
+  /// \param Call The corresponding CallEvent, if the symbols escape as 
   /// parameters to the given call.
   /// \param Kind How the symbols have escaped.
   /// \returns Checkers can modify the state by returning a new state.
@@ -301,7 +285,7 @@ public:
                                      PointerEscapeKind Kind) const {
     return State;
   }
-
+                                         
   /// check::Event<ImplicitNullDerefEvent>
   void checkEvent(ImplicitNullDerefEvent Event) const {}
 
@@ -316,10 +300,12 @@ public:
   void checkASTDecl(const FunctionDecl *D,
                     AnalysisManager &Mgr,
                     BugReporter &BR) const {}
+
 };
 
 void CheckerDocumentation::checkPostStmt(const DeclStmt *DS,
                                          CheckerContext &C) const {
+  return;
 }
 
 } // end namespace ento

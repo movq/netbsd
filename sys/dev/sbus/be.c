@@ -1,4 +1,4 @@
-/*	$NetBSD: be.c,v 1.85 2016/12/15 09:28:06 ozaki-r Exp $	*/
+/*	$NetBSD: be.c,v 1.80 2013/06/09 09:23:35 msaitoh Exp $	*/
 
 /*-
  * Copyright (c) 1999 The NetBSD Foundation, Inc.
@@ -57,7 +57,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: be.c,v 1.85 2016/12/15 09:28:06 ozaki-r Exp $");
+__KERNEL_RCSID(0, "$NetBSD: be.c,v 1.80 2013/06/09 09:23:35 msaitoh Exp $");
 
 #include "opt_ddb.h"
 #include "opt_inet.h"
@@ -73,6 +73,7 @@ __KERNEL_RCSID(0, "$NetBSD: be.c,v 1.85 2016/12/15 09:28:06 ozaki-r Exp $");
 #include <sys/syslog.h>
 #include <sys/device.h>
 #include <sys/malloc.h>
+#include <sys/rnd.h>
 
 #include <net/if.h>
 #include <net/if_dl.h>
@@ -473,13 +474,13 @@ be_put(struct be_softc *sc, int idx, struct mbuf *m)
 	for (; m; m = n) {
 		len = m->m_len;
 		if (len == 0) {
-			n = m_free(m);
+			MFREE(m, n);
 			continue;
 		}
 		memcpy(bp + boff, mtod(m, void *), len);
 		boff += len;
 		tlen += len;
-		n = m_free(m);
+		MFREE(m, n);
 	}
 	return tlen;
 }
@@ -504,7 +505,7 @@ be_get(struct be_softc *sc, int idx, int totlen)
 	MGETHDR(m, M_DONTWAIT, MT_DATA);
 	if (m == NULL)
 		return (NULL);
-	m_set_rcvif(m, ifp);
+	m->m_pkthdr.rcvif = ifp;
 	m->m_pkthdr.len = totlen;
 
 	pad = ALIGN(sizeof(struct ether_header)) - sizeof(struct ether_header);
@@ -566,9 +567,15 @@ be_read(struct be_softc *sc, int idx, int len)
 		ifp->if_ierrors++;
 		return;
 	}
+	ifp->if_ipackets++;
 
+	/*
+	 * Check if there's a BPF listener on this interface.
+	 * If so, hand off the raw packet to BPF.
+	 */
+	bpf_mtap(ifp, m);
 	/* Pass the packet up. */
-	if_percpuq_enqueue(ifp->if_percpuq, m);
+	(*ifp->if_input)(ifp, m);
 }
 
 /*

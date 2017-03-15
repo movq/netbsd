@@ -1,4 +1,4 @@
-/*	$NetBSD: npf_scan.l,v 1.25 2017/01/03 01:29:49 rmind Exp $	*/
+/*	$NetBSD: npf_scan.l,v 1.21.2.1 2014/12/29 17:31:47 martin Exp $	*/
 
 /*-
  * Copyright (c) 2011-2012 The NetBSD Foundation, Inc.
@@ -129,7 +129,6 @@ off			return OFF;
 bpf.jit			return BPFJIT;
 inet6			return INET6;
 inet4			return INET4;
-ifaddrs			return IFADDRS;
 proto			return PROTO;
 family			return FAMILY;
 tcp			return TCP;
@@ -155,7 +154,6 @@ any			return ANY;
 ")"			return PAR_CLOSE;
 ","			return COMMA;
 "="			return EQ;
-"!"			return EXCL_MARK;
 
 "0x"{HEXDIG} {
 			char *endp, *buf = ecalloc(1, yyleng + 1);
@@ -177,7 +175,7 @@ any			return ANY;
 			return IPV6ADDR;
 		}
 
-"::"{HEXDIG}[0-9a-fA-F:.]* {
+"::"{HEXDIG}[0-9a-fA-F:]* {
 			yylval.str = estrndup(yytext, yyleng);
 			return IPV6ADDR;
 		}

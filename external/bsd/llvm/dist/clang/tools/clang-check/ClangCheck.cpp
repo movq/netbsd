@@ -17,7 +17,6 @@
 //===----------------------------------------------------------------------===//
 
 #include "clang/AST/ASTConsumer.h"
-#include "clang/CodeGen/ObjectFilePCHContainerOperations.h"
 #include "clang/Driver/Options.h"
 #include "clang/Frontend/ASTConsumers.h"
 #include "clang/Frontend/CompilerInstance.h"
@@ -30,7 +29,6 @@
 #include "llvm/Option/OptTable.h"
 #include "llvm/Support/Path.h"
 #include "llvm/Support/Signals.h"
-#include "llvm/Support/TargetSelect.h"
 
 using namespace clang::driver;
 using namespace clang::tooling;
@@ -142,7 +140,7 @@ public:
       return clang::CreateASTDumper(ASTDumpFilter, /*DumpDecls=*/true,
                                     /*DumpLookups=*/false);
     if (ASTPrint)
-      return clang::CreateASTPrinter(nullptr, ASTDumpFilter);
+      return clang::CreateASTPrinter(&llvm::outs(), ASTDumpFilter);
     return llvm::make_unique<clang::ASTConsumer>();
   }
 };
@@ -150,14 +148,7 @@ public:
 } // namespace
 
 int main(int argc, const char **argv) {
-  llvm::sys::PrintStackTraceOnErrorSignal(argv[0]);
-
-  // Initialize targets for clang module support.
-  llvm::InitializeAllTargets();
-  llvm::InitializeAllTargetMCs();
-  llvm::InitializeAllAsmPrinters();
-  llvm::InitializeAllAsmParsers();
-
+  llvm::sys::PrintStackTraceOnErrorSignal();
   CommonOptionsParser OptionsParser(argc, argv, ClangCheckCategory);
   ClangTool Tool(OptionsParser.getCompilations(),
                  OptionsParser.getSourcePathList());

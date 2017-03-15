@@ -1,4 +1,4 @@
-/*	$NetBSD: screen.c,v 1.32 2016/03/03 21:38:55 nat Exp $	*/
+/*	$NetBSD: screen.c,v 1.29.2.1 2015/07/17 03:39:35 snj Exp $	*/
 
 /*-
  * Copyright (c) 1992, 1993
@@ -197,7 +197,6 @@ scr_set(void)
 		    MINCOLS, MINROWS);
 		stop("");	/* stop() supplies \n */
 	}
-	Offset = (Rows - D_LAST + D_FIRST - 2) / 2;
 	if (tcgetattr(0, &oldtt) < 0)
 		stop("tcgetattr() fails");
 	newtt = oldtt;
@@ -331,8 +330,8 @@ scr_update(void)
 		putstr("Next shape:");
 						
 		/* draw */
-		setcolor(nextshape->color);
 		putpad(enter_standout_mode);
+		setcolor(nextshape->color);
 		moveto(r, 2*c);
 		putstr("  ");
 		for(i=0; i<3; i++) {
@@ -361,7 +360,7 @@ scr_update(void)
 					putpad(exit_standout_mode);
 					cur_so = 0;
 				}
-				moveto(RTOD(j + Offset), CTOD(i));
+				moveto(RTOD(j), CTOD(i));
 			}
 			if (enter_standout_mode) {
 				if (so != cur_so) {

@@ -1,4 +1,4 @@
-/*	$NetBSD: machdep.c,v 1.247 2016/12/23 07:40:05 maya Exp $	*/
+/*	$NetBSD: machdep.c,v 1.243.4.1 2015/06/10 17:19:28 snj Exp $	*/
 
 /*
  * Copyright (c) 1988 University of Utah.
@@ -50,7 +50,7 @@
 #include "empm.h"
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.247 2016/12/23 07:40:05 maya Exp $");
+__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.243.4.1 2015/06/10 17:19:28 snj Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -141,6 +141,7 @@ paddr_t msgbufpa;
 
 int	machineid;
 int	maxmem;			/* max memory per process */
+extern int	physmem;	/* max supported memory, changes to actual */
 
 extern  int   freebufspace;
 extern	u_int lowram;
@@ -534,7 +535,7 @@ cpu_dumpconf(void)
 		else if (dumplo == 0)
 			dumplo = nblks - btodb(ctob(dumpsize));
 	}
-	dumplo -= ctod(btoc(MDHDRSIZE));
+	dumplo -= btodb(ctob(btoc(MDHDRSIZE + ctob(1) - 1)));
 	/*
 	 * Don't dump on the first PAGE_SIZE (why PAGE_SIZE?)
 	 * in case the dump device includes a disk label.
@@ -1207,21 +1208,21 @@ int _spllkm6(void);
 int _spllkm7(void);
 
 #ifdef LEV6_DEFER
-int _spllkm6(void) {
+int _spllkm6() {
 	return spl4();
 };
 
-int _spllkm7(void) {
+int _spllkm7() {
 	return spl4();
 };
 
 #else
 
-int _spllkm6(void) {
+int _spllkm6() {
 	return spl6();
 };
 
-int _spllkm7(void) {
+int _spllkm7() {
 	return spl7();
 };
 

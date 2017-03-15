@@ -1,4 +1,4 @@
-// RUN: %clang_cc1 -std=c++11 -fsyntax-only -verify %s -pedantic-errors
+// RUN: %clang_cc1 -std=c++11 -fsyntax-only -verify %s
 
 struct one { char c[1]; };
 struct two { char c[2]; };
@@ -55,7 +55,7 @@ namespace integral {
     int ar[10];
     (void) ar[{1}]; // expected-error {{array subscript is not an integer}}
 
-    return {1}; // expected-warning {{braces around scalar init}}
+    return {1};
   }
 
   void inline_init() {
@@ -70,15 +70,15 @@ namespace integral {
 
   void function_call() {
     void takes_int(int);
-    takes_int({1}); // expected-warning {{braces around scalar init}}
+    takes_int({1});
   }
 
   void overloaded_call() {
     one overloaded(int);
     two overloaded(double);
 
-    static_assert(sizeof(overloaded({0})) == sizeof(one), "bad overload"); // expected-warning {{braces around scalar init}}
-    static_assert(sizeof(overloaded({0.0})) == sizeof(two), "bad overload"); // expected-warning {{braces around scalar init}}
+    static_assert(sizeof(overloaded({0})) == sizeof(one), "bad overload");
+    static_assert(sizeof(overloaded({0.0})) == sizeof(two), "bad overload");
 
     void ambiguous(int, double); // expected-note {{candidate}}
     void ambiguous(double, int); // expected-note {{candidate}}
@@ -91,23 +91,10 @@ namespace integral {
   }
 
   void edge_cases() {
-    int a({0}); // expected-error {{list-initializer for non-class type 'int' must not be parenthesized}}
-    (void) int({0}); // expected-error {{list-initializer for non-class type 'int' must not be parenthesized}}
-    new int({0});  // expected-error {{list-initializer for non-class type 'int' must not be parenthesized}}
-
-    int *b({0});  // expected-error {{list-initializer for non-class type 'int *' must not be parenthesized}}
-    typedef int *intptr;
-    int *c = intptr({0});  // expected-error {{list-initializer for non-class type 'intptr' (aka 'int *') must not be parenthesized}}
-  }
-
-  template<typename T> void dependent_edge_cases() {
-    T a({0});
-    (void) T({0});
-    new T({0});
-
-    T *b({0});
-    typedef T *tptr;
-    T *c = tptr({0});
+    // FIXME: very poor error message
+    int a({0}); // expected-error {{cannot initialize}}
+    (void) int({0}); // expected-error {{functional-style cast}}
+    new int({0});  // expected-error {{cannot initialize}}
   }
 
   void default_argument(int i = {}) {

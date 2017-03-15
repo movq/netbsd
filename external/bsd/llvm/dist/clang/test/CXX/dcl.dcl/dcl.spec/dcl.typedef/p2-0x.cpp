@@ -38,8 +38,8 @@ namespace VariableLengthArrays {
   using T = int[n]; // expected-error {{variable length array declaration not allowed at file scope}}
 
   const int m = 42;
-  using U = int[m];
-  using U = int[42]; // expected-note {{previous definition}}
+  using U = int[m]; // expected-note {{previous definition}}
+  using U = int[42]; // ok
   using U = int; // expected-error {{type alias redefinition with different types ('int' vs 'int [42]')}}
 
   void f() {
@@ -83,10 +83,12 @@ namespace InFunctions {
 
 namespace ClassNameRedecl {
   class C0 {
-    using C0 = int; // expected-error {{member 'C0' has the same name as its class}}
+    // FIXME: this diagnostic is pretty poor
+    using C0 = int; // expected-error {{name defined in alias declaration must be an identifier}}
   };
   class C1 {
-    using C1 = C1; // expected-error {{member 'C1' has the same name as its class}}
+    // FIXME: this diagnostic is pretty poor
+    using C1 = C1; // expected-error {{name defined in alias declaration must be an identifier}}
   };
   class C2 {
     using C0 = C1; // ok

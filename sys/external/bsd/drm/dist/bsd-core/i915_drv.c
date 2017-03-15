@@ -198,8 +198,7 @@ i915drm_attach(device_t parent, device_t self, void *aux)
 
 	i915_configure(dev);
 
-	if (!pmf_device_register(self, i915drm_suspend, i915drm_resume))
-		aprint_error_dev(self, "couldn't establish power handler\n");
+	pmf_device_register(self, i915drm_suspend, i915drm_resume);
 
 	drm_attach(self, pa, i915_pciidlist);
 }

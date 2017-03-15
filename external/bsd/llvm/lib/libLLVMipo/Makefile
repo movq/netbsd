@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.7 2017/01/11 12:02:32 joerg Exp $
+#	$NetBSD: Makefile,v 1.5 2012/10/28 17:07:46 joerg Exp $
 
 LIB=	LLVMipo
 
@@ -6,37 +6,27 @@ LIB=	LLVMipo
 
 .PATH: ${LLVM_SRCDIR}/lib/Transforms/IPO
 
-SRCS+=	AlwaysInliner.cpp \
-	ArgumentPromotion.cpp \
+SRCS+=	ArgumentPromotion.cpp \
 	BarrierNoopPass.cpp \
 	ConstantMerge.cpp \
-	CrossDSOCFI.cpp \
 	DeadArgumentElimination.cpp \
-	ElimAvailExtern.cpp \
 	ExtractGV.cpp \
-	ForceFunctionAttrs.cpp \
 	FunctionAttrs.cpp \
-	FunctionImport.cpp \
 	GlobalDCE.cpp \
 	GlobalOpt.cpp \
-	GlobalSplit.cpp \
 	IPConstantPropagation.cpp \
 	IPO.cpp \
-	InferFunctionAttrs.cpp \
+	InlineAlways.cpp \
 	InlineSimple.cpp \
 	Inliner.cpp \
 	Internalize.cpp \
 	LoopExtractor.cpp \
-	LowerTypeTests.cpp \
 	MergeFunctions.cpp \
 	PartialInlining.cpp \
 	PassManagerBuilder.cpp \
 	PruneEH.cpp \
-	SampleProfile.cpp \
 	StripDeadPrototypes.cpp \
-	StripSymbols.cpp \
-	ThinLTOBitcodeWriter.cpp \
-	WholeProgramDevirt.cpp
+	StripSymbols.cpp
 
 .if defined(HOSTLIB)
 .include <bsd.hostlib.mk>

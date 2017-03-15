@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.24 2017/02/02 22:07:05 martin Exp $
+#	$NetBSD: Makefile,v 1.19 2013/06/28 13:04:06 reinoud Exp $
 #
 
 .include <bsd.own.mk>
@@ -11,15 +11,11 @@ TESTS_C+=	t_io
 TESTS_C+=	t_renamerace
 TESTS_C+=	t_ro
 TESTS_C+=	t_rmdirrace
-TESTS_C+=	t_rwtoro
 TESTS_C+=	t_union
 TESTS_C+=	t_unpriv
-TESTS_C+=	t_mtime_otrunc
 TESTS_C+=	t_vfsops
 TESTS_C+=	t_vnops
 
-LDADD+=-lrumpnet_shmif -lrumpnet -lrumpnet_net -lrumpnet_netinet# TCP/IP
-LDADD+=-lrumpfs_nfs						# NFS
 LDADD+=-lrumpfs_ext2fs						# ext2fs
 LDADD+=-lrumpfs_ffs						# ffs
 LDADD+=-lrumpfs_lfs						# lfs
@@ -32,15 +28,14 @@ LDADD+=-lrumpfs_udf						# udf
 LDADD+=-lrumpfs_union						# union
 LDADD+=-lrumpfs_v7fs						# v7fs
 LDADD+=-lrumpdev_disk -lrumpdev					# disk device
-LDADD+=-lrumpfs_null -lrumpvfs_layerfs				# nullfs
 
 
 VFSTESTDIR != cd ${.CURDIR}/../common && ${PRINTOBJDIR}
 LDADD+=-L${VFSTESTDIR} -lvfstest
 
-LDADD+=-lrumpvfs -lrumpkern_sysproxy -lrump -lrumpuser		# base
-LDADD+=-lrumpnet						# static linking
-LDADD+=-lpthread
+LDADD+=-lrumpfs_nfs						# NFS
+LDADD+=-lrumpnet_shmif -lrumpnet_netinet -lrumpnet_net -lrumpnet
+LDADD+=-lrumpvfs -lrump -lrumpuser -lpthread			# base
 
 LDADD+=-lutil
 

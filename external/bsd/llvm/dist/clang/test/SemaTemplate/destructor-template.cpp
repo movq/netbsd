@@ -52,13 +52,9 @@ namespace PR7239 {
 }
 
 namespace PR7904 {
-  struct Foo {};
-  template <class T>
-  Foo::~Foo() { // expected-error{{destructor cannot be declared as a template}}
-    T t;
-    T &pT = t;
-    pT;
-  }
+  struct Foo {
+    template <int i> ~Foo() {} // expected-error{{destructor cannot be declared as a template}}
+  };
   Foo f;
 }
 

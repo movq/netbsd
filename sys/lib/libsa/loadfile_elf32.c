@@ -1,6 +1,6 @@
-/* $NetBSD: loadfile_elf32.c,v 1.36 2017/02/23 12:13:59 nonaka Exp $ */
+/* $NetBSD: loadfile_elf32.c,v 1.30 2013/11/27 17:33:03 jakllsch Exp $ */
 
-/*
+/*-
  * Copyright (c) 1997, 2008 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
@@ -255,25 +255,6 @@ externalize_shdr(Elf_Byte bo, Elf_Shdr *shdr)
 #define	externalize_shdr(bo, shdr)	/* nothing */
 #endif /* _STANDALONE */
 
-#define IS_TEXT(p)	(p.p_flags & PF_X)
-#define IS_DATA(p)	(p.p_flags & PF_W)
-#define IS_BSS(p)	(p.p_filesz < p.p_memsz)
-
-/*
- * Load the ELF binary into memory. Layout of the memory:
- * +-----------------+------------+-----------------+-----------------+
- * | KERNEL SEGMENTS | ELF HEADER | SECTION HEADERS | SYMBOL SECTIONS |
- * +-----------------+------------+-----------------+-----------------+
- * The KERNEL SEGMENTS start address is fixed by the segments themselves. We
- * then map the rest by increasing maxp.
- *
- * The offsets of the SYMBOL SECTIONS are relative to the start address of the
- * ELF HEADER. The shdr offset of ELF HEADER points to SECTION HEADERS.
- *
- * We just give the kernel a pointer to the ELF HEADER, which is enough for it
- * to find the location and number of symbols by itself later.
- */
-
 int
 ELFNAMEEND(loadfile)(int fd, Elf_Ehdr *elf, u_long *marks, int flags)
 {
@@ -287,9 +268,9 @@ ELFNAMEEND(loadfile)(int fd, Elf_Ehdr *elf, u_long *marks, int flags)
 	u_long offset = marks[MARK_START];
 	ssize_t nr;
 	struct __packed {
-		Elf_Nhdr nh;
-		uint8_t name[ELF_NOTE_NETBSD_NAMESZ + 1];
-		uint8_t desc[ELF_NOTE_NETBSD_DESCSZ];
+		Elf_Nhdr	nh;
+		uint8_t		name[ELF_NOTE_NETBSD_NAMESZ + 1];
+		uint8_t		desc[ELF_NOTE_NETBSD_DESCSZ];
 	} note;
 	char *shstr = NULL;
 	size_t shstrsz = 0;
@@ -297,9 +278,6 @@ ELFNAMEEND(loadfile)(int fd, Elf_Ehdr *elf, u_long *marks, int flags)
 
 	/* some ports dont use the offset */
 	(void)&offset;
-
-	/* have not seen a data segment so far */
-	marks[MARK_DATA] = 0;
 
 	internalize_ehdr(elf->e_ident[EI_DATA], elf);
 
@@ -334,10 +312,16 @@ ELFNAMEEND(loadfile)(int fd, Elf_Ehdr *elf, u_long *marks, int flags)
 		    (phdr[i].p_flags & (PF_W|PF_X)) == 0)
 			continue;
 
+#define IS_TEXT(p)	(p.p_flags & PF_X)
+#define IS_DATA(p)	(p.p_flags & PF_W)
+#define IS_BSS(p)	(p.p_filesz < p.p_memsz)
+		/*
+		 * XXX: Assume first address is lowest
+		 */
 		if ((IS_TEXT(phdr[i]) && (flags & LOAD_TEXT)) ||
 		    (IS_DATA(phdr[i]) && (flags & LOAD_DATA))) {
+
 		loadseg:
-			/* XXX: Assume first address is lowest */
 			if (marks[MARK_DATA] == 0 && IS_DATA(phdr[i]))
 				marks[MARK_DATA] = LOADADDR(phdr[i].p_vaddr);
 
@@ -360,13 +344,10 @@ ELFNAMEEND(loadfile)(int fd, Elf_Ehdr *elf, u_long *marks, int flags)
 				goto freephdr;
 			}
 			first = 0;
+
 		}
 		if ((IS_TEXT(phdr[i]) && (flags & (LOAD_TEXT|COUNT_TEXT))) ||
-		    (IS_DATA(phdr[i]) && (flags & (LOAD_DATA|COUNT_DATA)))) {
-			/* XXX: Assume first address is lowest */
-			if (marks[MARK_DATA] == 0 && IS_DATA(phdr[i]))
-				marks[MARK_DATA] = LOADADDR(phdr[i].p_vaddr);
-
+		    (IS_DATA(phdr[i]) && (flags & (LOAD_DATA|COUNT_TEXT)))) {
 			pos = phdr[i].p_vaddr;
 			if (minp > pos)
 				minp = pos;
@@ -426,43 +407,47 @@ ELFNAMEEND(loadfile)(int fd, Elf_Ehdr *elf, u_long *marks, int flags)
 		/* Internalize the section headers. */
 		for (i = 0; i < elf->e_shnum; i++)
 			internalize_shdr(elf->e_ident[EI_DATA], &shp[i]);
-#endif
+#endif /* ! _STANDALONE */
 
 		/*
 		 * First load the section names section.
 		 */
 		if (boot_load_ctf && (elf->e_shstrndx != 0)) {
-			Elf_Off shstroff = shp[elf->e_shstrndx].sh_offset;
-			shstrsz = shp[elf->e_shstrndx].sh_size;
 			if (flags & LOAD_SYM) {
-				if (lseek(fd, shstroff, SEEK_SET) == -1) {
+				if (lseek(fd, shp[elf->e_shstrndx].sh_offset,
+				    SEEK_SET) == -1) {
 					WARN(("lseek symbols"));
 					goto freeshp;
 				}
-				nr = READ(fd, maxp, shstrsz);
+				nr = READ(fd, maxp,
+				    shp[elf->e_shstrndx].sh_size);
 				if (nr == -1) {
 					WARN(("read symbols"));
 					goto freeshp;
 				}
-				if (nr != (ssize_t)shstrsz) {
+				if (nr !=
+				    (ssize_t)shp[elf->e_shstrndx].sh_size) {
 					errno = EIO;
 					WARN(("read symbols"));
 					goto freeshp;
 				}
-			}
 
-			shstr = ALLOC(shstrsz);
-			if (lseek(fd, shstroff, SEEK_SET) == -1) {
-				WARN(("lseek symbols"));
-				goto freeshp;
-			}
-			nr = read(fd, shstr, shstrsz);
-			if (nr == -1) {
-				WARN(("read symbols"));
-				goto freeshp;
+				shstr = ALLOC(shp[elf->e_shstrndx].sh_size);
+				shstrsz = shp[elf->e_shstrndx].sh_size;
+				if (lseek(fd, shp[elf->e_shstrndx].sh_offset,
+				    SEEK_SET) == -1) {
+					WARN(("lseek symbols"));
+					goto freeshp;
+				}
+				nr = read(fd, shstr,
+				    shp[elf->e_shstrndx].sh_size);
+				if (nr == -1) {
+					WARN(("read symbols"));
+					goto freeshp;
+				}
 			}
 			shp[elf->e_shstrndx].sh_offset = maxp - elfp;
-			maxp += roundup(shstrsz, ELFROUND);
+			maxp += roundup(shp[elf->e_shstrndx].sh_size, ELFROUND);
 		}
 
 		/*
@@ -472,23 +457,24 @@ ELFNAMEEND(loadfile)(int fd, Elf_Ehdr *elf, u_long *marks, int flags)
 		 * table.
 		 */
 		for (first = 1, i = 0; i < elf->e_shnum; i++) {
-			if (i == elf->e_shstrndx) {
-				/* already loaded this section */
-				continue;
+		    	if (i == elf->e_shstrndx) {
+			    /* already loaded this section */
+			    continue;
 			}
 			switch (shp[i].sh_type) {
 			case SHT_PROGBITS:
-				if (boot_load_ctf && shstr) {
+			    	if (boot_load_ctf && shstr) {
 					/* got a CTF section? */
 					if (strncmp(".SUNW_ctf",
-					    &shstr[shp[i].sh_name], 10) == 0) {
-						goto havesym;
+						    &shstr[shp[i].sh_name],
+						    10) == 0) {
+					    	goto havesym;
 					}
 				}
 
 				/* Not loading this, so zero out the offset. */
 				shp[i].sh_offset = 0;
-				break;
+			    	break;
 			case SHT_STRTAB:
 				for (j = 0; j < elf->e_shnum; j++)
 					if (shp[j].sh_type == SHT_SYMTAB &&
@@ -549,8 +535,8 @@ ELFNAMEEND(loadfile)(int fd, Elf_Ehdr *elf, u_long *marks, int flags)
 				    ELF_NOTE_TYPE_NETBSD_TAG &&
 				    memcmp(note.name, ELF_NOTE_NETBSD_NAME,
 				    sizeof(note.name)) == 0) {
-					memcpy(&netbsd_version, &note.desc,
-					    sizeof(netbsd_version));
+				    	memcpy(&netbsd_version, &note.desc,
+				    	    sizeof(netbsd_version));
 				}
 				shp[i].sh_offset = 0;
 				break;
@@ -562,7 +548,7 @@ ELFNAMEEND(loadfile)(int fd, Elf_Ehdr *elf, u_long *marks, int flags)
 			for (i = 0; i < elf->e_shnum; i++)
 				externalize_shdr(elf->e_ident[EI_DATA],
 				    &shp[i]);
-#endif
+#endif /* ! _STANDALONE */
 			BCOPY(shp, shpp, sz);
 
 			if (first == 0)
@@ -570,7 +556,7 @@ ELFNAMEEND(loadfile)(int fd, Elf_Ehdr *elf, u_long *marks, int flags)
 		}
 		DEALLOC(shp, sz);
 	}
-
+	
 	if (shstr) {
 	    DEALLOC(shstr, shstrsz);
 	}
@@ -602,11 +588,9 @@ ELFNAMEEND(loadfile)(int fd, Elf_Ehdr *elf, u_long *marks, int flags)
 	marks[MARK_SYM] = LOADADDR(elfp);
 	marks[MARK_END] = LOADADDR(maxp);
 	return 0;
-
 freephdr:
 	DEALLOC(phdr, sz);
 	return 1;
-
 freeshp:
 	DEALLOC(shp, sz);
 	return 1;

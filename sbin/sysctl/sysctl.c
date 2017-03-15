@@ -1,4 +1,4 @@
-/*	$NetBSD: sysctl.c,v 1.158 2016/07/31 23:30:28 dholland Exp $ */
+/*	$NetBSD: sysctl.c,v 1.153 2014/05/16 12:22:32 martin Exp $ */
 
 /*-
  * Copyright (c) 2003 The NetBSD Foundation, Inc.
@@ -68,7 +68,7 @@ __COPYRIGHT("@(#) Copyright (c) 1993\
 #if 0
 static char sccsid[] = "@(#)sysctl.c	8.1 (Berkeley) 6/6/93";
 #else
-__RCSID("$NetBSD: sysctl.c,v 1.158 2016/07/31 23:30:28 dholland Exp $");
+__RCSID("$NetBSD: sysctl.c,v 1.153 2014/05/16 12:22:32 martin Exp $");
 #endif
 #endif /* not lint */
 
@@ -128,8 +128,8 @@ static void canonicalize(const char *, char *);
 static void purge_tree(struct sysctlnode *);
 static void print_tree(int *, u_int, struct sysctlnode *, u_int, int, regex_t *,
     size_t *);
-static void write_number(int *, u_int, struct sysctlnode *, char *, bool);
-static void write_string(int *, u_int, struct sysctlnode *, char *, bool);
+static void write_number(int *, u_int, struct sysctlnode *, char *);
+static void write_string(int *, u_int, struct sysctlnode *, char *);
 static void display_number(const struct sysctlnode *, const char *,
 			   const void *, size_t, int);
 static void display_string(const struct sysctlnode *, const char *,
@@ -181,7 +181,6 @@ static const struct handlespec {
 	const void *ps_d;
 } handlers[] = {
 	{ "/kern/clockrate",			kern_clockrate, NULL, NULL },
-	{ "/kern/evcnt",			printother, NULL, "vmstat -e" },
 	{ "/kern/vnode",			printother, NULL, "pstat" },
 	{ "/kern/proc(2|_args)?",		printother, NULL, "ps" },
 	{ "/kern/file2?",			printother, NULL, "pstat" },
@@ -197,11 +196,6 @@ static const struct handlespec {
 	{ "/kern/coredump/setid/mode",		mode_bits, mode_bits, NULL },
 	{ "/kern/drivers",			kern_drivers, NULL, NULL },
 
-	{ "/kern/intr/list",			printother, NULL, "intrctl" },
-	{ "/kern/intr/affinity",		printother, NULL, "intrctl" },
-	{ "/kern/intr/intr",			printother, NULL, "intrctl" },
-	{ "/kern/intr/nointr",			printother, NULL, "intrctl" },
-
 	{ "/vm/vmmeter",			printother, NULL,
 						"vmstat' or 'systat" },
 	{ "/vm/loadavg",			vm_loadavg, NULL, NULL },
@@ -212,8 +206,6 @@ static const struct handlespec {
 
 	{ "/net/inet6?/tcp6?/ident",		printother, NULL, "identd" },
 	{ "/net/inet6/icmp6/nd6_[dp]rlist",	printother, NULL, "ndp" },
-	{ "/net/inet6/ip6/addctlpolicy",	printother, NULL,
-						"ip6addrctl" },
 	{ "/net/key/dumps[ap]",			printother, NULL, "setkey" },
 	{ "/net/[^/]+/[^/]+/pcblist",		printother, NULL,
 						"netstat' or 'sockstat" },
@@ -946,10 +938,10 @@ parse(char *l, regex_t *re, size_t *lastcompiled)
 	case CTLTYPE_INT:
 	case CTLTYPE_BOOL:
 	case CTLTYPE_QUAD:
-		write_number(&name[0], namelen, node, value, optional);
+		write_number(&name[0], namelen, node, value);
 		break;
 	case CTLTYPE_STRING:
-		write_string(&name[0], namelen, node, value, optional);
+		write_string(&name[0], namelen, node, value);
 		break;
 	case CTLTYPE_STRUCT:
 		/*
@@ -1709,8 +1701,8 @@ sysctlerror(int soft)
 		case EOPNOTSUPP:
 		case EPROTONOSUPPORT:
 			if (Aflag || req)
-				sysctlperror("%s: the value is not available "
-				    "(%s)\n", gsname, strerror(errno));
+				sysctlperror("%s: the value is not available\n",
+					     gsname);
 			return;
 		}
 	}
@@ -1754,8 +1746,7 @@ sysctlperror(const char *fmt, ...)
  * ********************************************************************
  */
 static void
-write_number(int *name, u_int namelen, struct sysctlnode *node, char *value,
-	bool optional)
+write_number(int *name, u_int namelen, struct sysctlnode *node, char *value)
 {
 	u_int ii, io;
 	u_quad_t qi, qo;
@@ -1812,9 +1803,7 @@ write_number(int *name, u_int namelen, struct sysctlnode *node, char *value,
 
 	rc = prog_sysctl(name, namelen, o, &so, i, si);
 	if (rc == -1) {
-		if (!optional || errno != EPERM) {
-			sysctlerror(0);
-		}
+		sysctlerror(0);
 		return;
 	}
 
@@ -1835,8 +1824,7 @@ write_number(int *name, u_int namelen, struct sysctlnode *node, char *value,
 }
 
 static void
-write_string(int *name, u_int namelen, struct sysctlnode *node, char *value,
-	bool optional)
+write_string(int *name, u_int namelen, struct sysctlnode *node, char *value)
 {
 	char *i, *o;
 	size_t si, so;
@@ -1857,10 +1845,7 @@ write_string(int *name, u_int namelen, struct sysctlnode *node, char *value,
 
 	rc = prog_sysctl(name, namelen, o, &so, i, si);
 	if (rc == -1) {
-		if (!optional || errno != EPERM) {
-			sysctlerror(0);
-		}
-		free(o);
+		sysctlerror(0);
 		return;
 	}
 

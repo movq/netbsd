@@ -1,4 +1,4 @@
-/*	$NetBSD: memberof.c,v 1.1.1.6 2017/02/09 01:47:01 christos Exp $	*/
+/*	$NetBSD: memberof.c,v 1.1.1.5 2014/05/28 09:58:52 tron Exp $	*/
 
 /* memberof.c - back-reference for group membership */
 /* $OpenLDAP$ */
@@ -19,9 +19,6 @@
  * This work was initially developed by Pierangelo Masarati for inclusion
  * in OpenLDAP Software, sponsored by SysNet s.r.l.
  */
-
-#include <sys/cdefs.h>
-__RCSID("$NetBSD: memberof.c,v 1.1.1.6 2017/02/09 01:47:01 christos Exp $");
 
 #include "portable.h"
 
@@ -195,16 +192,7 @@ typedef struct memberof_cbinfo_t {
 	BerVarray memberof;
 	memberof_is_t what;
 } memberof_cbinfo_t;
-
-static void
-memberof_set_backend( Operation *op_target, Operation *op, slap_overinst *on )
-{
-    BackendInfo *bi = op->o_bd->bd_info;
-
-    if ( bi->bi_type == memberof.on_bi.bi_type )
-        op_target->o_bd->bd_info = (BackendInfo *)on->on_info;
-}
-
+	
 static int
 memberof_isGroupOrMember_cb( Operation *op, SlapReply *rs )
 {
@@ -298,9 +286,8 @@ memberof_isGroupOrMember( Operation *op, memberof_cbinfo_t *mci )
 		an[ 0 ].an_name = an[ 0 ].an_desc->ad_cname;
 		op2.ors_filterstr = mo->mo_groupFilterstr;
 		op2.ors_filter = &mo->mo_groupFilter;
-		op2.o_do_not_cache = 1;	/* internal search, don't log */
 
-		memberof_set_backend( &op2, op, on );
+		op2.o_bd->bd_info = (BackendInfo *)on->on_info;
 		(void)op->o_bd->be_search( &op2, &rs2 );
 		op2.o_bd->bd_info = bi;
 
@@ -321,9 +308,8 @@ memberof_isGroupOrMember( Operation *op, memberof_cbinfo_t *mci )
 		an[ 0 ].an_name = an[ 0 ].an_desc->ad_cname;
 		op2.ors_filterstr = mo->mo_memberFilterstr;
 		op2.ors_filter = &mo->mo_memberFilter;
-		op2.o_do_not_cache = 1;	/* internal search, don't log */
 
-		memberof_set_backend( &op2, op, on );
+		op2.o_bd->bd_info = (BackendInfo *)on->on_info;
 		(void)op->o_bd->be_search( &op2, &rs2 );
 		op2.o_bd->bd_info = bi;
 
@@ -425,7 +411,7 @@ memberof_value_modify(
 
 		oex.oe_key = (void *)&memberof;
 		LDAP_SLIST_INSERT_HEAD(&op2.o_extra, &oex, oe_next);
-		memberof_set_backend( &op2, op, on );
+		op2.o_bd->bd_info = (BackendInfo *)on->on_info;
 		(void)op->o_bd->be_modify( &op2, &rs2 );
 		op2.o_bd->bd_info = bi;
 		LDAP_SLIST_REMOVE(&op2.o_extra, &oex, OpExtra, oe_next);
@@ -467,7 +453,7 @@ memberof_value_modify(
 
 		oex.oe_key = (void *)&memberof;
 		LDAP_SLIST_INSERT_HEAD(&op2.o_extra, &oex, oe_next);
-		memberof_set_backend( &op2, op, on );
+		op2.o_bd->bd_info = (BackendInfo *)on->on_info;
 		(void)op->o_bd->be_modify( &op2, &rs2 );
 		op2.o_bd->bd_info = bi;
 		LDAP_SLIST_REMOVE(&op2.o_extra, &oex, OpExtra, oe_next);
@@ -616,7 +602,6 @@ memberof_op_add( Operation *op, SlapReply *rs )
 						ber_memfree( a->a_nvals[ i ].bv_val );
 						BER_BVZERO( &a->a_nvals[ i ] );
 					}
-					a->a_numvals--;
 					if ( j - i == 1 ) {
 						break;
 					}
@@ -628,6 +613,7 @@ memberof_op_add( Operation *op, SlapReply *rs )
 							sizeof( struct berval ) * ( j - i ) );
 					}
 					i--;
+					a->a_numvals--;
 				}
 			}
 
@@ -887,6 +873,7 @@ memberof_op_modify( Operation *op, SlapReply *rs )
 					assert( ml->sml_nvalues != NULL );
 		
 					for ( i = 0; !BER_BVISNULL( &ml->sml_nvalues[ i ] ); i++ ) {
+						int		rc;
 						Entry		*e;
 		
 						/* ITS#6670 Ignore member pointing to this entry */

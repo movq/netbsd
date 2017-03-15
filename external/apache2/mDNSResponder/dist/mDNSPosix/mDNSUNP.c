@@ -221,7 +221,7 @@ struct ifi_info *get_ifi_info(int family, int doaliases)
     lastlen = 0;
     len = 100 * sizeof(struct ifreq);   /* initial buffer size guess */
     for ( ; ; ) {
-        buf = calloc(len, 1);
+        buf = (char*)malloc(len);
         if (buf == NULL) {
             goto gotError;
         }
@@ -277,19 +277,8 @@ struct ifi_info *get_ifi_info(int family, int doaliases)
         flags = ifrcopy.ifr_flags;
         if ((flags & IFF_UP) == 0)
             continue;   /* ignore if interface not up */
-	if ((flags & IFF_LOOPBACK))
-	    continue;	/* ignore loopback interfaces */
 
 	/* Skip addresses we can't use */
-#ifdef SIOCGIFAFLAG_IN
-	if (ifr->ifr_addr.sa_family == AF_INET) {
-		ifrcopy = *ifr;
-		if (ioctl(sockfd, SIOCGIFAFLAG_IN, &ifrcopy) < 0)
-			goto gotError;
-		if (ifrcopy.ifr_addrflags & (IN_IFF_NOTREADY | IN_IFF_DETACHED))
-			continue;
-	}
-#endif
 #ifdef SIOCGIFAFLAG_IN6
         if (ifr->ifr_addr.sa_family == AF_INET6) {
 		struct in6_ifreq ifr6;

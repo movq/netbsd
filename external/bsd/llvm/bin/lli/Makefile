@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.15 2017/01/11 12:02:25 joerg Exp $
+#	$NetBSD: Makefile,v 1.12.2.1 2015/06/04 20:04:22 snj Exp $
 
 PROG_CXX=	lli
 NOMAN=		yes
@@ -8,10 +8,11 @@ NOMAN=		yes
 .PATH: ${LLVM_SRCDIR}/tools/lli
 
 SRCS=	lli.cpp \
-	OrcLazyJIT.cpp
+	RemoteMemoryManager.cpp \
+	RemoteTarget.cpp \
+	RemoteTargetExternal.cpp
 
 LLVM_LIBS+= \
-	Orc \
 	X86CodeGen \
 	X86TargetInfo \
 	X86MCTargetDesc \
@@ -36,8 +37,7 @@ LLVM_LIBS+= \
 	Target \
 	MC \
 	IR \
-	Support \
-	Demangle
+	Support
 
 .include "${.PARSEDIR}/../../link.mk"
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: init_sec_context.c,v 1.4 2017/01/28 21:31:46 christos Exp $	*/
+/*	$NetBSD: init_sec_context.c,v 1.3 2014/04/24 13:45:34 pettai Exp $	*/
 
 /*
  * Copyright (c) 1997 - 2008 Kungliga Tekniska Högskolan
@@ -130,7 +130,7 @@ _gsskrb5_create_ctx(
     ctx->service_keyblock	= NULL;
     ctx->ticket			= NULL;
     krb5_data_zero(&ctx->fwd_data);
-    ctx->endtime		= 0;
+    ctx->lifetime		= GSS_C_INDEFINITE;
     ctx->order			= NULL;
     ctx->crypto			= NULL;
     HEIMDAL_MUTEX_init(&ctx->ctx_id_mutex);
@@ -139,7 +139,6 @@ _gsskrb5_create_ctx(
     if (kret) {
 	*minor_status = kret;
 	HEIMDAL_MUTEX_destroy(&ctx->ctx_id_mutex);
-	free(ctx);
 	return GSS_S_FAILURE;
     }
 
@@ -148,7 +147,6 @@ _gsskrb5_create_ctx(
 	*minor_status = kret;
 	krb5_auth_con_free(context, ctx->auth_context);
 	HEIMDAL_MUTEX_destroy(&ctx->ctx_id_mutex);
-	free(ctx);
 	return GSS_S_FAILURE;
     }
 
@@ -160,7 +158,7 @@ _gsskrb5_create_ctx(
 	krb5_auth_con_free(context, ctx->deleg_auth_context);
 
 	HEIMDAL_MUTEX_destroy(&ctx->ctx_id_mutex);
-	free(ctx);
+
 	return GSS_S_BAD_BINDINGS;
     }
 
@@ -172,7 +170,7 @@ _gsskrb5_create_ctx(
 	krb5_auth_con_free(context, ctx->deleg_auth_context);
 
 	HEIMDAL_MUTEX_destroy(&ctx->ctx_id_mutex);
-	free(ctx);
+
 	return GSS_S_BAD_BINDINGS;
     }
 
@@ -208,7 +206,8 @@ gsskrb5_get_creds(
 	krb5_context context,
 	krb5_ccache ccache,
 	gsskrb5_ctx ctx,
-	gss_const_name_t target_name,
+	const gss_name_t target_name,
+	int use_dns,
 	OM_uint32 time_req,
 	OM_uint32 * time_rec)
 {
@@ -226,8 +225,8 @@ gsskrb5_get_creds(
 	ctx->kcred = NULL;
     }
 
-    ret = _gsskrb5_canon_name(minor_status, context, target_name,
-                              &ctx->target);
+    ret = _gsskrb5_canon_name(minor_status, context, use_dns,
+			      ctx->source, target_name, &ctx->target);
     if (ret)
 	return ret;
 
@@ -256,10 +255,10 @@ gsskrb5_get_creds(
 	return GSS_S_FAILURE;
     }
 
-    ctx->endtime = ctx->kcred->times.endtime;
+    ctx->lifetime = ctx->kcred->times.endtime;
 
     ret = _gsskrb5_lifetime_left(minor_status, context,
-				 ctx->endtime, &lifetime_rec);
+				 ctx->lifetime, &lifetime_rec);
     if (ret) return ret;
 
     if (lifetime_rec == 0) {
@@ -347,7 +346,8 @@ do_delegation (krb5_context context,
     fwd_flags.forwarded = 1;
     fwd_flags.forwardable = 1;
 
-    if (name->name.name_string.len < 2)
+    if ( /*target_name->name.name_type != KRB5_NT_SRV_HST ||*/
+	name->name.name_string.len < 2)
 	goto out;
 
     kret = krb5_get_forwarded_creds(context,
@@ -380,7 +380,7 @@ init_auth
  gsskrb5_cred cred,
  gsskrb5_ctx ctx,
  krb5_context context,
- gss_const_name_t name,
+ gss_name_t name,
  const gss_OID mech_type,
  OM_uint32 req_flags,
  OM_uint32 time_req,
@@ -393,9 +393,12 @@ init_auth
 {
     OM_uint32 ret = GSS_S_FAILURE;
     krb5_error_code kret;
+    krb5_data outbuf;
     krb5_data fwd_data;
     OM_uint32 lifetime_rec;
+    int allow_dns = 1;
 
+    krb5_data_zero(&outbuf);
     krb5_data_zero(&fwd_data);
 
     *minor_status = 0;
@@ -424,17 +427,44 @@ init_auth
     /*
      * This is hideous glue for (NFS) clients that wants to limit the
      * available enctypes to what it can support (encryption in
-     * kernel).
+     * kernel). If there is no enctypes selected for this credential,
+     * reset it to the default set of enctypes.
      */
-    if (cred && cred->enctypes)
-	krb5_set_default_in_tkt_etypes(context, cred->enctypes);
+    {
+	krb5_enctype *enctypes = NULL;
 
+	if (cred && cred->enctypes)
+	    enctypes = cred->enctypes;
+	krb5_set_default_in_tkt_etypes(context, enctypes);
+    }
+
+    /* canon name if needed for client + target realm */
+    kret = krb5_cc_get_config(context, ctx->ccache, NULL,
+			      "realm-config", &outbuf);
+    if (kret == 0) {
+	/* XXX 2 is no server canon */
+	if (outbuf.length < 1 || ((((unsigned char *)outbuf.data)[0]) & 2))
+	    allow_dns = 0;
+	krb5_data_free(&outbuf);
+    }
+
+    /*
+     * First we try w/o dns, hope that the KDC have register alias
+     * (and referrals if cross realm) for this principal. If that
+     * fails and if we are allowed to using this realm try again with
+     * DNS canonicalizion.
+     */
     ret = gsskrb5_get_creds(minor_status, context, ctx->ccache,
-			    ctx, name, time_req, time_rec);
+			    ctx, name, 0, time_req,
+			    time_rec);
+    if (ret && allow_dns)
+	ret = gsskrb5_get_creds(minor_status, context, ctx->ccache,
+				ctx, name, 1, time_req,
+				time_rec);
     if (ret)
 	goto failure;
 
-    ctx->endtime = ctx->kcred->times.endtime;
+    ctx->lifetime = ctx->kcred->times.endtime;
 
     ret = _gss_DES3_get_mic_compat(minor_status, ctx, context);
     if (ret)
@@ -442,7 +472,7 @@ init_auth
 
     ret = _gsskrb5_lifetime_left(minor_status,
 				 context,
-				 ctx->endtime,
+				 ctx->lifetime,
 				 &lifetime_rec);
     if (ret)
 	goto failure;
@@ -789,11 +819,14 @@ repl_mutual
 			       repl);
 
     *minor_status = 0;
-    if (time_rec)
-        _gsskrb5_lifetime_left(minor_status,
-                               context,
-                               ctx->endtime,
-                               time_rec);
+    if (time_rec) {
+	ret = _gsskrb5_lifetime_left(minor_status,
+				     context,
+				     ctx->lifetime,
+				     time_rec);
+    } else {
+	ret = GSS_S_COMPLETE;
+    }
     if (ret_flags)
 	*ret_flags = ctx->flags;
 
@@ -834,9 +867,9 @@ repl_mutual
 
 OM_uint32 GSSAPI_CALLCONV _gsskrb5_init_sec_context
 (OM_uint32 * minor_status,
- gss_const_cred_id_t cred_handle,
+ const gss_cred_id_t cred_handle,
  gss_ctx_id_t * context_handle,
- gss_const_name_t target_name,
+ const gss_name_t target_name,
  const gss_OID mech_type,
  OM_uint32 req_flags,
  OM_uint32 time_req,

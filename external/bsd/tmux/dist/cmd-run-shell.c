@@ -1,4 +1,4 @@
-/* $OpenBSD$ */
+/* Id */
 
 /*
  * Copyright (c) 2009 Tiago Cunha <me@tiagocunha.org>
@@ -36,16 +36,12 @@ void	cmd_run_shell_free(void *);
 void	cmd_run_shell_print(struct job *, const char *);
 
 const struct cmd_entry cmd_run_shell_entry = {
-	.name = "run-shell",
-	.alias = "run",
-
-	.args = { "bt:", 1, 1 },
-	.usage = "[-b] " CMD_TARGET_PANE_USAGE " shell-command",
-
-	.tflag = CMD_PANE_CANFAIL,
-
-	.flags = 0,
-	.exec = cmd_run_shell_exec
+	"run-shell", "run",
+	"bt:", 1, 1,
+	"[-b] " CMD_TARGET_PANE_USAGE " shell-command",
+	0,
+	NULL,
+	cmd_run_shell_exec
 };
 
 struct cmd_run_shell_data {
@@ -80,20 +76,30 @@ cmd_run_shell_exec(struct cmd *self, struct cmd_q *cmdq)
 	struct args			*args = self->args;
 	struct cmd_run_shell_data	*cdata;
 	char				*shellcmd;
-	struct session			*s = cmdq->state.tflag.s;
-	struct winlink			*wl = cmdq->state.tflag.wl;
-	struct window_pane		*wp = cmdq->state.tflag.wp;
+	struct client			*c;
+	struct session			*s = NULL;
+	struct winlink			*wl = NULL;
+	struct window_pane		*wp = NULL;
 	struct format_tree		*ft;
-	const char			*cwd;
 
-	if (cmdq->client != NULL && cmdq->client->session == NULL)
-		cwd = cmdq->client->cwd;
-	else if (s != NULL)
-		cwd = s->cwd;
-	else
-		cwd = NULL;
-	ft = format_create(cmdq, 0);
-	format_defaults(ft, cmdq->state.c, s, wl, wp);
+	if (args_has(args, 't'))
+		wl = cmd_find_pane(cmdq, args_get(args, 't'), &s, &wp);
+	else {
+		c = cmd_find_client(cmdq, NULL, 1);
+		if (c != NULL && c->session != NULL) {
+			s = c->session;
+			wl = s->curw;
+			wp = wl->window->active;
+		}
+	}
+
+	ft = format_create();
+	if (s != NULL)
+		format_session(ft, s);
+	if (s != NULL && wl != NULL)
+		format_winlink(ft, s, wl);
+	if (wp != NULL)
+		format_window_pane(ft, wp);
 	shellcmd = format_expand(ft, args->argv[0]);
 	format_free(ft);
 
@@ -105,8 +111,7 @@ cmd_run_shell_exec(struct cmd *self, struct cmd_q *cmdq)
 	cdata->cmdq = cmdq;
 	cmdq->references++;
 
-	job_run(shellcmd, s, cwd, cmd_run_shell_callback, cmd_run_shell_free,
-	    cdata);
+	job_run(shellcmd, s, cmd_run_shell_callback, cmd_run_shell_free, cdata);
 
 	if (cdata->bflag)
 		return (CMD_RETURN_NORMAL);
@@ -123,7 +128,7 @@ cmd_run_shell_callback(struct job *job)
 	int				 retcode;
 	u_int				 lines;
 
-	if (cmdq->flags & CMD_Q_DEAD)
+	if (cmdq->dead)
 		return;
 	cmd = cdata->cmd;
 
@@ -156,9 +161,13 @@ cmd_run_shell_callback(struct job *job)
 		retcode = WTERMSIG(job->status);
 		xasprintf(&msg, "'%s' terminated by signal %d", cmd, retcode);
 	}
-	if (msg != NULL)
-		cmd_run_shell_print(job, msg);
-	free(msg);
+	if (msg != NULL) {
+		if (lines == 0)
+			cmdq_info(cmdq, "%s", msg);
+		else
+			cmd_run_shell_print(job, msg);
+		free(msg);
+	}
 }
 
 void

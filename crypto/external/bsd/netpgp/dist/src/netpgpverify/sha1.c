@@ -1,4 +1,4 @@
-/*	$NetBSD: sha1.c,v 1.2 2016/06/14 20:47:08 agc Exp $	*/
+/*	$NetBSD: sha1.c,v 1.1 2014/03/09 00:15:45 agc Exp $	*/
 /*	$OpenBSD: sha1.c,v 1.9 1997/07/23 21:12:32 kstailey Exp $	*/
 
 /*
@@ -16,6 +16,8 @@
  */
 
 #define SHA1HANDSOFF		/* Copies data before messing with it. */
+
+#include <sys/cdefs.h>
 
 #include <string.h>
 
@@ -117,7 +119,7 @@ do_R4(uint32_t *a, uint32_t *b, uint32_t *c, uint32_t *d, uint32_t *e, CHAR64LON
 /*
  * Hash a single 512-bit block. This is the core of the algorithm.
  */
-void netpgpv_SHA1Transform(uint32_t state[5], const uint8_t buffer[64])
+void SHA1Transform(uint32_t state[5], const uint8_t buffer[64])
 {
     uint32_t a, b, c, d, e;
     CHAR64LONG16 *block;
@@ -184,7 +186,7 @@ void netpgpv_SHA1Transform(uint32_t state[5], const uint8_t buffer[64])
 /*
  * SHA1Init - Initialize new context
  */
-void netpgpv_SHA1Init(NETPGPV_SHA1_CTX *context)
+void SHA1Init(SHA1_CTX *context)
 {
 
     /* SHA1 initialization constants */
@@ -200,7 +202,7 @@ void netpgpv_SHA1Init(NETPGPV_SHA1_CTX *context)
 /*
  * Run your data through this.
  */
-void netpgpv_SHA1Update(NETPGPV_SHA1_CTX *context, const uint8_t *data, unsigned int len)
+void SHA1Update(SHA1_CTX *context, const uint8_t *data, unsigned int len)
 {
     unsigned int i, j;
 
@@ -210,9 +212,9 @@ void netpgpv_SHA1Update(NETPGPV_SHA1_CTX *context, const uint8_t *data, unsigned
     j = (j >> 3) & 63;
     if ((j + len) > 63) {
 	(void)memcpy(&context->buffer[j], data, (i = 64-j));
-	netpgpv_SHA1Transform(context->state, context->buffer);
+	SHA1Transform(context->state, context->buffer);
 	for ( ; i + 63 < len; i += 64)
-	    netpgpv_SHA1Transform(context->state, &data[i]);
+	    SHA1Transform(context->state, &data[i]);
 	j = 0;
     } else {
 	i = 0;
@@ -224,7 +226,7 @@ void netpgpv_SHA1Update(NETPGPV_SHA1_CTX *context, const uint8_t *data, unsigned
 /*
  * Add padding and return the message digest.
  */
-void netpgpv_SHA1Final(uint8_t digest[20], NETPGPV_SHA1_CTX *context)
+void SHA1Final(uint8_t digest[20], SHA1_CTX *context)
 {
     unsigned int i;
     uint8_t finalcount[8];
@@ -233,10 +235,10 @@ void netpgpv_SHA1Final(uint8_t digest[20], NETPGPV_SHA1_CTX *context)
 	finalcount[i] = (uint8_t)((context->count[(i >= 4 ? 0 : 1)]
 	 >> ((3-(i & 3)) * 8) ) & 255);	 /* Endian independent */
     }
-    netpgpv_SHA1Update(context, (const uint8_t *)"\200", 1);
+    SHA1Update(context, (const uint8_t *)"\200", 1);
     while ((context->count[0] & 504) != 448)
-	netpgpv_SHA1Update(context, (const uint8_t *)"\0", 1);
-    netpgpv_SHA1Update(context, finalcount, 8);  /* Should cause a SHA1Transform() */
+	SHA1Update(context, (const uint8_t *)"\0", 1);
+    SHA1Update(context, finalcount, 8);  /* Should cause a SHA1Transform() */
 
     if (digest) {
 	for (i = 0; i < 20; i++)

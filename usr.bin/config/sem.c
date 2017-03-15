@@ -1,4 +1,4 @@
-/*	$NetBSD: sem.c,v 1.77 2016/09/13 16:06:59 christos Exp $	*/
+/*	$NetBSD: sem.c,v 1.43.2.2 2016/05/11 11:21:18 martin Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993
@@ -45,7 +45,7 @@
 #endif
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: sem.c,v 1.77 2016/09/13 16:06:59 christos Exp $");
+__RCSID("$NetBSD: sem.c,v 1.43.2.2 2016/05/11 11:21:18 martin Exp $");
 
 #include <sys/param.h>
 #include <ctype.h>
@@ -94,45 +94,6 @@ static devmajor_t dev2major(struct devbase *);
 
 extern const char *yyfile;
 extern int vflag;
-
-#define V_ATTRIBUTE	0
-#define V_DEVICE	1
-struct vtype {
-	int type;
-	struct attr *attr;
-	void *value;
-};
-
-static struct nvlist *
-makedevstack(struct devbase *d)
-{
-	struct devi *firsti, *i;
-	struct nvlist *stack = NULL;
-
-	for (firsti = d->d_ihead; firsti != NULL; firsti = firsti->i_bsame)
-		for (i = firsti; i != NULL; i = i->i_alias)
-			stack = newnv(NULL, NULL, i, 0, stack);
-	return stack;
-}
-
-static void
-devcleanup(struct nvlist *stack)
-{
-	struct nvlist *nv;
-	for (nv = stack; nv != NULL; nv = nv->nv_next)
-		remove_devi(nv->nv_ptr);
-	nvfreel(stack);
-}
-
-static void *
-addvalue(int type, struct attr *a, void *value)
-{
-	struct vtype *vt = emalloc(sizeof(*vt));
-	vt->type = type;
-	vt->attr = a;
-	vt->value = value;
-	return vt;
-}
 
 void
 initsem(void)
@@ -336,14 +297,6 @@ defattr(const char *name, struct loclist *locs, struct attrlist *deps,
 	struct attr *a, *dep;
 	struct attrlist *al;
 
-	if (getrefattr(name, &a)) {
-		cfgerror("attribute `%s' already defined", name);
-		loclist_destroy(locs);
-		return (1);
-	}
-	if (a == NULL)
-		a = mkattr(name);
-
 	/*
 	 * If this attribute depends on any others, make sure none of
 	 * the dependencies are interface attributes.
@@ -355,11 +308,17 @@ defattr(const char *name, struct loclist *locs, struct attrlist *deps,
 			    "attribute", name, dep->a_name);
 			return (1);
 		}
-		(void)ht_insert2(attrdeptab, name, dep->a_name,
-		    addvalue(V_ATTRIBUTE, a, dep));
+		(void)ht_insert2(attrdeptab, name, dep->a_name, NULL);
 		CFGDBG(2, "attr `%s' depends on attr `%s'", name, dep->a_name);
 	}
 
+	if (getrefattr(name, &a)) {
+		cfgerror("attribute `%s' already defined", name);
+		loclist_destroy(locs);
+		return (1);
+	}
+	if (a == NULL)
+		a = mkattr(name);
 
 	a->a_deps = deps;
 	expandattr(a, NULL);
@@ -577,8 +536,7 @@ defdev(struct devbase *dev, struct loclist *loclist, struct attrlist *attrs,
 		 * Implicit attribute definition for device dependencies.
 		 */
 		refattr(al->al_this->a_name);
-		(void)ht_insert2(attrdeptab, dev->d_name, al->al_this->a_name, 
-			addvalue(V_DEVICE, al->al_this, dev));
+		(void)ht_insert2(attrdeptab, dev->d_name, al->al_this->a_name, NULL);
 		CFGDBG(2, "device `%s' depends on attr `%s'", dev->d_name,
 		    al->al_this->a_name);
 	}
@@ -1093,14 +1051,13 @@ setconf(struct nvlist **npp, const char *what, struct nvlist *v)
 }
 
 void
-delconf(const char *name, int nowarn)
+delconf(const char *name)
 {
 	struct config *cf;
 
 	CFGDBG(5, "deselecting config `%s'", name);
 	if (ht_lookup(cfhashtab, name) == NULL) {
-		if (!nowarn)
-			cfgerror("configuration `%s' undefined", name);
+		cfgerror("configuration `%s' undefined", name);
 		return;
 	}
 	(void)ht_remove(cfhashtab, name);
@@ -1309,7 +1266,7 @@ adddev(const char *name, const char *at, struct loclist *loclist, int flags)
 }
 
 void
-deldevi(const char *name, const char *at, int nowarn)
+deldevi(const char *name, const char *at)
 {
 	struct devi *firsti, *i;
 	struct devbase *d;
@@ -1318,15 +1275,12 @@ deldevi(const char *name, const char *at, int nowarn)
 
 	CFGDBG(5, "deselecting devi `%s'", name);
 	if (split(name, strlen(name), base, sizeof base, &unit)) {
-		if (!nowarn) {
-			cfgerror("invalid device name `%s'", name);
-			return;
-		}
+		cfgerror("invalid device name `%s'", name);
+		return;
 	}
 	d = ht_lookup(devbasetab, intern(base));
 	if (d == NULL) {
-		if (!nowarn)
-			cfgerror("%s: unknown device `%s'", name, base);
+		cfgerror("%s: unknown device `%s'", name, base);
 		return;
 	}
 	if (d->d_ispseudo) {
@@ -1512,7 +1466,7 @@ remove_devi(struct devi *i)
 }
 
 void
-deldeva(const char *at, int nowarn)
+deldeva(const char *at)
 {
 	int unit;
 	const char *cp;
@@ -1605,15 +1559,17 @@ out:
 		}
 	}
 
-	devcleanup(stack);
+	for (nv = stack; nv != NULL; nv = nv->nv_next)
+		remove_devi(nv->nv_ptr);
+	nvfreel(stack);
 }
 
 void
-deldev(const char *name, int nowarn)
+deldev(const char *name)
 {
 	size_t l;
 	struct devi *firsti, *i;
-	struct nvlist *stack = NULL;
+	struct nvlist *nv, *stack = NULL;
 
 	CFGDBG(5, "deselecting dev `%s'", name);
 	if (name[0] == '\0')
@@ -1625,8 +1581,7 @@ deldev(const char *name, int nowarn)
 		firsti = ht_lookup(devitab, name);
 		if (firsti == NULL) {
 out:
-			if (!nowarn)
-				cfgerror("unknown instance %s", name);
+			cfgerror("unknown instance %s", name);
 			return;
 		}
 		for (i = firsti; i != NULL; i = i->i_alias)
@@ -1644,10 +1599,16 @@ out:
 			    name);
 			return;
 		}
-		stack = makedevstack(d);
+
+		for (firsti = d->d_ihead; firsti != NULL;
+		    firsti = firsti->i_bsame)
+			for (i = firsti; i != NULL; i = i->i_alias)
+				stack = newnv(NULL, NULL, i, 0, stack);
 	}
 
-	devcleanup(stack);
+	for (nv = stack; nv != NULL; nv = nv->nv_next)
+		remove_devi(nv->nv_ptr);
+	nvfreel(stack);
 }
 
 /*
@@ -1731,29 +1692,6 @@ addpseudoroot(const char *name)
 	ht_insert(devroottab, ib->d_name, ib);
 }
 
-static void
-deldevbase(struct devbase *d)
-{
-	struct devi *i;
-	const char *name = d->d_name;
-
-	if (!d->d_ispseudo) {
-		devcleanup(makedevstack(d));
-		return;
-	}
-
-	if ((i = ht_lookup(devitab, name)) == NULL)
-		return;
-
-	d->d_umax = 0;		/* clear neads-count entries */
-	d->d_ihead = NULL;	/* make sure it won't be considered active */
-	TAILQ_REMOVE(&allpseudo, i, i_next);
-	if (ht_remove(devitab, name))
-		panic("%s(%s) - can't remove from devitab", __func__, name);
-	if (ht_insert(deaddevitab, name, i))
-		panic("%s(%s) - can't add to deaddevitab", __func__, name);
-}
-
 void
 addpseudo(const char *name, int number)
 {
@@ -1783,22 +1721,32 @@ addpseudo(const char *name, int number)
 }
 
 void
-delpseudo(const char *name, int nowarn)
+delpseudo(const char *name)
 {
 	struct devbase *d;
+	struct devi *i;
 
 	CFGDBG(5, "deselecting pseudo `%s'", name);
 	d = ht_lookup(devbasetab, name);
 	if (d == NULL) {
-		if (!nowarn)
-			cfgerror("undefined pseudo-device %s", name);
+		cfgerror("undefined pseudo-device %s", name);
 		return;
 	}
 	if (!d->d_ispseudo) {
 		cfgerror("%s is a real device, not a pseudo-device", name);
 		return;
 	}
-	deldevbase(d);
+	if ((i = ht_lookup(devitab, name)) == NULL) {
+		cfgerror("`%s' not defined", name);
+		return;
+	}
+	d->d_umax = 0;		/* clear neads-count entries */
+	d->d_ihead = NULL;	/* make sure it won't be considered active */
+	TAILQ_REMOVE(&allpseudo, i, i_next);
+	if (ht_remove(devitab, name))
+		panic("delpseudo(%s) - can't remove from devitab", name);
+	if (ht_insert(deaddevitab, name, i))
+		panic("delpseudo(%s) - can't add to deaddevitab", name);
 }
 
 void
@@ -2021,7 +1969,7 @@ addattr(const char *name)
 }
 
 void
-delattr(const char *name, int nowarn)
+delattr(const char *name)
 {
 	struct attr *a;
 
@@ -2048,42 +1996,19 @@ selectattr(struct attr *a)
 static int
 deselectattrcb2(const char *name1, const char *name2, void *v, void *arg)
 {
-	struct attr *a = arg;
-	const char *name = a->a_name;
-	struct vtype *vt = v;
+	const char *name = arg;
 
-	if (strcmp(name, name2) == 0) {
-		delattr(name1, 0);
-		return 0;
-	}
-
-	if (!vt->attr->a_deselected)
-		return 0;
-
-	switch (vt->type) {
-	case V_ATTRIBUTE:
-#ifdef notyet
-		// XXX: Loops
-		deselectattr(vt->value);
-#endif
-		break;
-	case V_DEVICE:
-		CFGDBG(5, "removing device `%s' with attr `%s' because attr `%s'"
-		    " is deselected", name1, name2, name);
-		deldevbase(vt->value);
-		break;
-	default:
-		abort();
-	}
+	if (strcmp(name, name2) == 0)
+		delattr(name1);
 	return 0;
 }
 
 void
 deselectattr(struct attr *a)
 {
+
 	CFGDBG(5, "deselecting attr `%s'", a->a_name);
-	a->a_deselected = 1;
-	ht_enumerate2(attrdeptab, deselectattrcb2, a);
+	ht_enumerate2(attrdeptab, deselectattrcb2, __UNCONST(a->a_name));
 	if (ht_remove(selecttab, a->a_name) == 0)
 		nattrs--;
 	CFGDBG(3, "attr deselected `%s'", a->a_name);

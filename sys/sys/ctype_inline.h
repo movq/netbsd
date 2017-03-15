@@ -1,4 +1,4 @@
-/* $NetBSD: ctype_inline.h,v 1.4 2015/02/24 13:17:27 joerg Exp $ */
+/* $NetBSD: ctype_inline.h,v 1.3.10.1 2015/05/15 03:52:38 snj Exp $ */
 
 /*
  * Copyright (c) 1989 The Regents of the University of California.

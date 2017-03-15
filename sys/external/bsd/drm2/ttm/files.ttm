@@ -1,4 +1,4 @@
-#	$NetBSD: files.ttm,v 1.1 2014/09/14 19:06:01 riastradh Exp $
+#	$NetBSD: files.ttm,v 1.1.4.2 2015/01/11 05:59:17 snj Exp $
 
 # TTM, the texture and tiling manager.
 

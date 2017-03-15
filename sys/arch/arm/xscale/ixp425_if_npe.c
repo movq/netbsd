@@ -1,4 +1,4 @@
-/*	$NetBSD: ixp425_if_npe.c,v 1.33 2017/02/22 09:45:16 nonaka Exp $ */
+/*	$NetBSD: ixp425_if_npe.c,v 1.26.2.1 2015/07/05 20:34:51 snj Exp $ */
 
 /*-
  * Copyright (c) 2006 Sam Leffler.  All rights reserved.
@@ -28,7 +28,7 @@
 #if 0
 __FBSDID("$FreeBSD: src/sys/arm/xscale/ixp425/if_npe.c,v 1.1 2006/11/19 23:55:23 sam Exp $");
 #endif
-__KERNEL_RCSID(0, "$NetBSD: ixp425_if_npe.c,v 1.33 2017/02/22 09:45:16 nonaka Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ixp425_if_npe.c,v 1.26.2.1 2015/07/05 20:34:51 snj Exp $");
 
 /*
  * Intel XScale NPE Ethernet driver.
@@ -68,7 +68,7 @@ __KERNEL_RCSID(0, "$NetBSD: ixp425_if_npe.c,v 1.33 2017/02/22 09:45:16 nonaka Ex
 
 #include <net/bpf.h>
 
-#include <sys/rndsource.h>
+#include <sys/rnd.h>
 
 #include <arm/xscale/ixp425reg.h>
 #include <arm/xscale/ixp425var.h>
@@ -332,7 +332,6 @@ npe_attach(device_t parent, device_t self, void *arg)
 	sc->sc_ethercom.ec_capabilities |= ETHERCAP_VLAN_MTU;
 
 	if_attach(ifp);
-	if_deferred_start_init(ifp, NULL);
 	ether_ifattach(ifp, sc->sc_enaddr);
 	rnd_attach_source(&sc->rnd_source, device_xname(sc->sc_dev),
 	    RND_TYPE_NET, RND_FLAG_DEFAULT);
@@ -812,7 +811,7 @@ npe_txdone_finish(struct npe_softc *sc, const struct txdone *td)
 	ifp->if_opackets += td->count;
 	ifp->if_flags &= ~IFF_OACTIVE;
 	ifp->if_timer = 0;
-	if_schedule_deferred_start(ifp);
+	npestart(ifp);
 }
 
 /*
@@ -954,7 +953,7 @@ npe_rxdone(int qid, void *arg)
 			/* set m_len etc. per rx frame size */
 			mrx->m_len = be32toh(hw->ix_ne[0].len) & 0xffff;
 			mrx->m_pkthdr.len = mrx->m_len;
-			m_set_rcvif(mrx, ifp);
+			mrx->m_pkthdr.rcvif = ifp;
 			/* Don't add M_HASFCS. See below */
 
 #if 1
@@ -1051,11 +1050,12 @@ npe_rxdone(int qid, void *arg)
 			 */
 			m_adj(mrx, -ETHER_CRC_LEN);
 
+			ifp->if_ipackets++;
 			/*
 			 * Tap off here if there is a bpf listener.
 			 */
-
-			if_percpuq_enqueue(ifp->if_percpuq, mrx);
+			bpf_mtap(ifp, mrx);
+			ifp->if_input(ifp, mrx);
 		} else {
 fail:
 			/* discard frame and re-use mbuf */
@@ -1220,7 +1220,7 @@ npeinit(struct ifnet *ifp)
 /*
  * Defragment an mbuf chain, returning at most maxfrags separate
  * mbufs+clusters.  If this is not possible NULL is returned and
- * the original mbuf chain is left in its present (potentially
+ * the original mbuf chain is left in it's present (potentially
  * modified) state.  We use two techniques: collapsing consecutive
  * mbufs and replacing consecutive mbufs by a cluster.
  */

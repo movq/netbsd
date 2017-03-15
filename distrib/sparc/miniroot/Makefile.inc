@@ -1,9 +1,8 @@
-#	$NetBSD: Makefile.inc,v 1.27 2017/02/09 18:15:07 joerg Exp $
+#	$NetBSD: Makefile.inc,v 1.21 2014/08/04 13:09:42 martin Exp $
 
-IMAGESIZE=	9600k
-DBG=		${${ACTIVE_CC} == "clang":? -Oz -fomit-frame-pointer : -Os } -fno-unwind-tables
-
-MAKEFS_FLAGS+=   -o density=4k
+IMAGESIZE=	9216k
+DBG=		-Os -fno-unwind-tables
+MAKEFS_FLAGS=   -o density=4k
 IMAGEENDIAN=	be
 MAKEDEVTARGETS=	all ipty
 LISTS+=		${DISTRIBDIR}/common/list.sysinst

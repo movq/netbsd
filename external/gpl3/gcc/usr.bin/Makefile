@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.8 2016/03/15 19:14:47 mrg Exp $
+#	$NetBSD: Makefile,v 1.5.4.1 2015/01/25 00:19:41 martin Exp $
 
 NOOBJ=# defined
 
@@ -11,7 +11,6 @@ GCC_MACHINE_ARCH=${MACHINE_ARCH:S/earmv5/earm/}
 # We keep libcpp here since it depends upon frontend.
 
 SUBDIR+=	host-libiberty .WAIT \
-		host-libcpp .WAIT \
 		backend .WAIT \
 		frontend .WAIT \
 		common common-target .WAIT \

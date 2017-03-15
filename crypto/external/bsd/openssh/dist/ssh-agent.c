@@ -1,6 +1,5 @@
-/*	$NetBSD: ssh-agent.c,v 1.19 2016/12/25 00:07:47 christos Exp $	*/
-/* $OpenBSD: ssh-agent.c,v 1.215 2016/11/30 03:07:37 djm Exp $ */
-
+/*	$NetBSD: ssh-agent.c,v 1.12.4.1 2015/04/30 06:07:30 riz Exp $	*/
+/* $OpenBSD: ssh-agent.c,v 1.199 2015/03/04 21:12:59 djm Exp $ */
 /*
  * Author: Tatu Ylonen <ylo@cs.hut.fi>
  * Copyright (c) 1995 Tatu Ylonen <ylo@cs.hut.fi>, Espoo, Finland
@@ -37,8 +36,7 @@
  */
 
 #include "includes.h"
-__RCSID("$NetBSD: ssh-agent.c,v 1.19 2016/12/25 00:07:47 christos Exp $");
-
+__RCSID("$NetBSD: ssh-agent.c,v 1.12.4.1 2015/04/30 06:07:30 riz Exp $");
 #include <sys/param.h>	/* MIN MAX */
 #include <sys/types.h>
 #include <sys/time.h>
@@ -62,7 +60,9 @@ __RCSID("$NetBSD: ssh-agent.c,v 1.19 2016/12/25 00:07:47 christos Exp $");
 #include <limits.h>
 #include <time.h>
 #include <unistd.h>
-#include <util.h>
+
+#include "key.h"	/* XXX for typedef */
+#include "buffer.h"	/* XXX for typedef */
 
 #include "xmalloc.h"
 #include "ssh.h"
@@ -76,14 +76,9 @@ __RCSID("$NetBSD: ssh-agent.c,v 1.19 2016/12/25 00:07:47 christos Exp $");
 #include "getpeereid.h"
 #include "digest.h"
 #include "ssherr.h"
-#include "match.h"
 
 #ifdef ENABLE_PKCS11
 #include "ssh-pkcs11.h"
-#endif
-
-#ifndef DEFAULT_PKCS11_WHITELIST
-# define DEFAULT_PKCS11_WHITELIST "/usr/lib/*,/usr/local/lib/*"
 #endif
 
 typedef enum {
@@ -133,16 +128,9 @@ pid_t cleanup_pid = 0;
 char socket_name[PATH_MAX];
 char socket_dir[PATH_MAX];
 
-/* PKCS#11 path whitelist */
-static char *pkcs11_whitelist;
-
 /* locking */
-#define LOCK_SIZE	32
-#define LOCK_SALT_SIZE	16
-#define LOCK_ROUNDS	1
 int locked = 0;
-u_char lock_pwhash[LOCK_SIZE];
-u_char lock_salt[LOCK_SALT_SIZE];
+char *lock_passwd = NULL;
 
 extern char *__progname;
 
@@ -365,18 +353,6 @@ process_authentication_challenge1(SocketEntry *e)
 }
 #endif
 
-static const char *
-agent_decode_alg(struct sshkey *key, u_int flags)
-{
-	if (key->type == KEY_RSA) {
-		if (flags & SSH_AGENT_RSA_SHA2_256)
-			return "rsa-sha2-256";
-		else if (flags & SSH_AGENT_RSA_SHA2_512)
-			return "rsa-sha2-512";
-	}
-	return NULL;
-}
-
 /* ssh2 only */
 static void
 process_sign_request2(SocketEntry *e)
@@ -398,7 +374,7 @@ process_sign_request2(SocketEntry *e)
 	if (flags & SSH_AGENT_OLD_SIGNATURE)
 		compat = SSH_BUG_SIGBLOB;
 	if ((r = sshkey_from_blob(blob, blen, &key)) != 0) {
-		error("%s: cannot parse key blob: %s", __func__, ssh_err(r));
+		error("%s: cannot parse key blob: %s", __func__, ssh_err(ok));
 		goto send;
 	}
 	if ((id = lookup_identity(key, 2)) == NULL) {
@@ -410,8 +386,8 @@ process_sign_request2(SocketEntry *e)
 		goto send;
 	}
 	if ((r = sshkey_sign(id->key, &signature, &slen,
-	    data, dlen, agent_decode_alg(key, flags), compat)) != 0) {
-		error("%s: sshkey_sign: %s", __func__, ssh_err(r));
+	    data, dlen, compat)) != 0) {
+		error("%s: sshkey_sign: %s", __func__, ssh_err(ok));
 		goto send;
 	}
 	/* Success */
@@ -539,7 +515,7 @@ reaper(void)
 				tab->nentries--;
 			} else
 				deadline = (deadline == 0) ? id->death :
-				    MINIMUM(deadline, id->death);
+				    MIN(deadline, id->death);
 		}
 	}
 	if (deadline == 0 || deadline <= now)
@@ -672,46 +648,23 @@ send:
 static void
 process_lock_agent(SocketEntry *e, int lock)
 {
-	int r, success = 0, delay;
+	int r, success = 0;
 	char *passwd;
-	u_char passwdhash[LOCK_SIZE];
-	static u_int fail_count = 0;
-	size_t pwlen;
 
-	if ((r = sshbuf_get_cstring(e->request, &passwd, &pwlen)) != 0)
+	if ((r = sshbuf_get_cstring(e->request, &passwd, NULL)) != 0)
 		fatal("%s: buffer error: %s", __func__, ssh_err(r));
-	if (pwlen == 0) {
-		debug("empty password not supported");
-	} else if (locked && !lock) {
-		if (bcrypt_pbkdf(passwd, pwlen, (uint8_t *)lock_salt, sizeof(lock_salt),
-		    (uint8_t *)passwdhash, sizeof(passwdhash), LOCK_ROUNDS) < 0)
-			fatal("bcrypt_pbkdf");
-		if (timingsafe_bcmp(passwdhash, lock_pwhash, LOCK_SIZE) == 0) {
-			debug("agent unlocked");
-			locked = 0;
-			fail_count = 0;
-			explicit_bzero(lock_pwhash, sizeof(lock_pwhash));
-			success = 1;
-		} else {
-			/* delay in 0.1s increments up to 10s */
-			if (fail_count < 100)
-				fail_count++;
-			delay = 100000 * fail_count;
-			debug("unlock failed, delaying %0.1lf seconds",
-			    (double)delay/1000000);
-			usleep(delay);
-		}
-		explicit_bzero(passwdhash, sizeof(passwdhash));
+	if (locked && !lock && strcmp(passwd, lock_passwd) == 0) {
+		locked = 0;
+		explicit_bzero(lock_passwd, strlen(lock_passwd));
+		free(lock_passwd);
+		lock_passwd = NULL;
+		success = 1;
 	} else if (!locked && lock) {
-		debug("agent locked");
 		locked = 1;
-		arc4random_buf(lock_salt, sizeof(lock_salt));
-		if (bcrypt_pbkdf(passwd, pwlen, lock_salt, sizeof(lock_salt),
-		    lock_pwhash, sizeof(lock_pwhash), LOCK_ROUNDS) < 0)
-			fatal("bcrypt_pbkdf");
+		lock_passwd = xstrdup(passwd);
 		success = 1;
 	}
-	explicit_bzero(passwd, pwlen);
+	explicit_bzero(passwd, strlen(passwd));
 	free(passwd);
 	send_status(e, success);
 }
@@ -738,7 +691,7 @@ no_identities(SocketEntry *e, u_int type)
 static void
 process_add_smartcard_key(SocketEntry *e)
 {
-	char *provider = NULL, *pin, canonical_provider[PATH_MAX];
+	char *provider = NULL, *pin;
 	int r, i, version, count = 0, success = 0, confirm = 0;
 	u_int seconds;
 	time_t death = 0;
@@ -770,21 +723,10 @@ process_add_smartcard_key(SocketEntry *e)
 			goto send;
 		}
 	}
-	if (realpath(provider, canonical_provider) == NULL) {
-		verbose("failed PKCS#11 add of \"%.100s\": realpath: %s",
-		    provider, strerror(errno));
-		goto send;
-	}
-	if (match_pattern_list(canonical_provider, pkcs11_whitelist, 0) != 1) {
-		verbose("refusing PKCS#11 add of \"%.100s\": "
-		    "provider not whitelisted", canonical_provider);
-		goto send;
-	}
-	debug("%s: add %.100s", __func__, canonical_provider);
 	if (lifetime && !death)
 		death = monotime() + lifetime;
 
-	count = pkcs11_add_provider(canonical_provider, pin, &keys);
+	count = pkcs11_add_provider(provider, pin, &keys);
 	for (i = 0; i < count; i++) {
 		k = keys[i];
 		version = k->type == KEY_RSA1 ? 1 : 2;
@@ -792,8 +734,8 @@ process_add_smartcard_key(SocketEntry *e)
 		if (lookup_identity(k, version) == NULL) {
 			id = xcalloc(1, sizeof(Identity));
 			id->key = k;
-			id->provider = xstrdup(canonical_provider);
-			id->comment = xstrdup(canonical_provider); /* XXX */
+			id->provider = xstrdup(provider);
+			id->comment = xstrdup(provider); /* XXX */
 			id->death = death;
 			id->confirm = confirm;
 			TAILQ_INSERT_TAIL(&tab->idlist, id, next);
@@ -975,7 +917,7 @@ new_socket(sock_type type, int fd)
 		}
 	old_alloc = sockets_alloc;
 	new_alloc = sockets_alloc + 10;
-	sockets = xreallocarray(sockets, new_alloc, sizeof(sockets[0]));
+	sockets = xrealloc(sockets, new_alloc, sizeof(sockets[0]));
 	for (i = old_alloc; i < new_alloc; i++)
 		sockets[i].type = AUTH_UNUSED;
 	sockets_alloc = new_alloc;
@@ -1002,7 +944,7 @@ prepare_select(fd_set **fdrp, fd_set **fdwp, int *fdl, u_int *nallocp,
 		switch (sockets[i].type) {
 		case AUTH_SOCKET:
 		case AUTH_CONNECTION:
-			n = MAXIMUM(n, sockets[i].fd);
+			n = MAX(n, sockets[i].fd);
 			break;
 		case AUTH_UNUSED:
 			break;
@@ -1041,7 +983,7 @@ prepare_select(fd_set **fdrp, fd_set **fdwp, int *fdl, u_int *nallocp,
 	deadline = reaper();
 	if (parent_alive_interval != 0)
 		deadline = (deadline == 0) ? parent_alive_interval :
-		    MINIMUM(deadline, parent_alive_interval);
+		    MIN(deadline, parent_alive_interval);
 	if (deadline == 0) {
 		*tvpp = NULL;
 	} else {
@@ -1181,8 +1123,8 @@ __dead static void
 usage(void)
 {
 	fprintf(stderr,
-	    "usage: ssh-agent [-c | -s] [-Dd] [-a bind_address] [-E fingerprint_hash]\n"
-	    "                 [-P pkcs11_whitelist] [-t life] [command [arg ...]]\n"
+	    "usage: ssh-agent [-c | -s] [-d] [-a bind_address] [-E fingerprint_hash]\n"
+	    "                 [-t life] [command [arg ...]]\n"
 	    "       ssh-agent [-c | -s] -k\n");
 	exit(1);
 }
@@ -1213,7 +1155,7 @@ sh_unsetenv(const char *name)
 int
 main(int ac, char **av)
 {
-	int c_flag = 0, d_flag = 0, D_flag = 0, k_flag = 0, s_flag = 0;
+	int c_flag = 0, d_flag = 0, k_flag = 0, s_flag = 0;
 	int sock, fd, ch, result, saved_errno;
 	u_int nalloc;
 	char *shell, *pidstr, *agentsocket = NULL;
@@ -1229,7 +1171,6 @@ main(int ac, char **av)
 	void (*f_setenv)(const char *, const char *);
 	void (*f_unsetenv)(const char *);
 
-	ssh_malloc_init();	/* must be called before any mallocs */
 	/* Ensure that fds 0, 1 and 2 are open or directed to /dev/null */
 	sanitise_stdfd();
 
@@ -1241,7 +1182,7 @@ main(int ac, char **av)
 	OpenSSL_add_all_algorithms();
 #endif
 
-	while ((ch = getopt(ac, av, "cDdksE:a:P:t:")) != -1) {
+	while ((ch = getopt(ac, av, "cdksE:a:t:")) != -1) {
 		switch (ch) {
 		case 'E':
 			fingerprint_hash = ssh_digest_alg_by_name(optarg);
@@ -1256,25 +1197,15 @@ main(int ac, char **av)
 		case 'k':
 			k_flag++;
 			break;
-		case 'P':
-			if (pkcs11_whitelist != NULL)
-				fatal("-P option already specified");
-			pkcs11_whitelist = xstrdup(optarg);
-			break;
 		case 's':
 			if (c_flag)
 				usage();
 			s_flag++;
 			break;
 		case 'd':
-			if (d_flag || D_flag)
+			if (d_flag)
 				usage();
 			d_flag++;
-			break;
-		case 'D':
-			if (d_flag || D_flag)
-				usage();
-			D_flag++;
 			break;
 		case 'a':
 			agentsocket = optarg;
@@ -1292,11 +1223,8 @@ main(int ac, char **av)
 	ac -= optind;
 	av += optind;
 
-	if (ac > 0 && (c_flag || k_flag || s_flag || d_flag || D_flag))
+	if (ac > 0 && (c_flag || k_flag || s_flag || d_flag))
 		usage();
-
-	if (pkcs11_whitelist == NULL)
-		pkcs11_whitelist = xstrdup(DEFAULT_PKCS11_WHITELIST);
 
 	if (ac == 0 && !c_flag && !s_flag) {
 		shell = getenv("SHELL");
@@ -1370,19 +1298,10 @@ main(int ac, char **av)
 	 * Fork, and have the parent execute the command, if any, or present
 	 * the socket data.  The child continues as the authentication agent.
 	 */
-	if (D_flag || d_flag) {
-		log_init(__progname,
-		    d_flag ? SYSLOG_LEVEL_DEBUG3 : SYSLOG_LEVEL_INFO,
-		    SYSLOG_FACILITY_AUTH, 1);
-		if (c_flag)
-			printf("setenv %s %s;\n",
-			    SSH_AUTHSOCKET_ENV_NAME, socket_name);
-		else
-			printf("%s=%s; export %s;\n",
-			    SSH_AUTHSOCKET_ENV_NAME, socket_name,
-			    SSH_AUTHSOCKET_ENV_NAME);
+	if (d_flag) {
+		log_init(__progname, SYSLOG_LEVEL_DEBUG1, SYSLOG_FACILITY_AUTH, 1);
+		(*f_setenv)(SSH_AUTHSOCKET_ENV_NAME, socket_name);
 		printf("echo Agent pid %ld;\n", (long)parent_pid);
-		fflush(stdout);
 		goto skip;
 	}
 	pid = fork();
@@ -1483,15 +1402,10 @@ skip:
 		parent_alive_interval = 10;
 	idtab_init();
 	signal(SIGPIPE, SIG_IGN);
-	signal(SIGINT, (d_flag | D_flag) ? cleanup_handler : SIG_IGN);
+	signal(SIGINT, d_flag ? cleanup_handler : SIG_IGN);
 	signal(SIGHUP, cleanup_handler);
 	signal(SIGTERM, cleanup_handler);
 	nalloc = 0;
-
-#ifdef __OpenBSD__
-	if (pledge("stdio rpath cpath unix id proc exec", NULL) == -1)
-		fatal("%s: pledge: %s", __progname, strerror(errno));
-#endif
 
 	while (1) {
 		prepare_select(&readsetp, &writesetp, &max_fd, &nalloc, &tvp);

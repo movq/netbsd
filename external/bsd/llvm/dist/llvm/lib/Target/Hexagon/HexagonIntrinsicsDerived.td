@@ -14,27 +14,27 @@
 def : Pat <(mul DoubleRegs:$src1, DoubleRegs:$src2),
       (i64
        (A2_combinew
-        (M2_maci
-         (M2_maci
+        (HEXAGON_M2_maci
+         (HEXAGON_M2_maci
           (i32
            (EXTRACT_SUBREG
             (i64
              (M2_dpmpyuu_s0 (i32 (EXTRACT_SUBREG (i64 DoubleRegs:$src1),
-                                          isub_lo)),
+                                          subreg_loreg)),
                      (i32 (EXTRACT_SUBREG (i64 DoubleRegs:$src2),
-                                          isub_lo)))),
-            isub_hi)),
-          (i32 (EXTRACT_SUBREG (i64 DoubleRegs:$src1), isub_lo)),
-          (i32 (EXTRACT_SUBREG (i64 DoubleRegs:$src2), isub_hi))),
-         (i32 (EXTRACT_SUBREG (i64 DoubleRegs:$src2), isub_lo)),
-         (i32 (EXTRACT_SUBREG (i64 DoubleRegs:$src1), isub_hi))),
+                                          subreg_loreg)))),
+            subreg_hireg)),
+          (i32 (EXTRACT_SUBREG (i64 DoubleRegs:$src1), subreg_loreg)),
+          (i32 (EXTRACT_SUBREG (i64 DoubleRegs:$src2), subreg_hireg))),
+         (i32 (EXTRACT_SUBREG (i64 DoubleRegs:$src2), subreg_loreg)),
+         (i32 (EXTRACT_SUBREG (i64 DoubleRegs:$src1), subreg_hireg))),
         (i32
          (EXTRACT_SUBREG
           (i64
            (M2_dpmpyuu_s0 
-             (i32 (EXTRACT_SUBREG (i64 DoubleRegs:$src1), isub_lo)),
+             (i32 (EXTRACT_SUBREG (i64 DoubleRegs:$src1), subreg_loreg)),
                    (i32 (EXTRACT_SUBREG (i64 DoubleRegs:$src2),
-                                        isub_lo)))), isub_lo))))>;
+                                        subreg_loreg)))), subreg_loreg))))>;
 
 
 

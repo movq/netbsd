@@ -1,7 +1,7 @@
-// RUN: %clang_cc1 -triple i686-win32     -fsyntax-only -fms-extensions -verify -std=c++11 -Wunsupported-dll-base-class-template -DMS %s
-// RUN: %clang_cc1 -triple x86_64-win32   -fsyntax-only -fms-extensions -verify -std=c++1y -Wunsupported-dll-base-class-template -DMS %s
-// RUN: %clang_cc1 -triple i686-mingw32   -fsyntax-only -fms-extensions -verify -std=c++1y -Wunsupported-dll-base-class-template -DGNU %s
-// RUN: %clang_cc1 -triple x86_64-mingw32 -fsyntax-only -fms-extensions -verify -std=c++11 -Wunsupported-dll-base-class-template -DGNU %s
+// RUN: %clang_cc1 -triple i686-win32     -fsyntax-only -verify -std=c++11 -Wunsupported-dll-base-class-template -DMS %s
+// RUN: %clang_cc1 -triple x86_64-win32   -fsyntax-only -verify -std=c++1y -Wunsupported-dll-base-class-template -DMS %s
+// RUN: %clang_cc1 -triple i686-mingw32   -fsyntax-only -verify -std=c++1y -Wunsupported-dll-base-class-template -DGNU %s
+// RUN: %clang_cc1 -triple x86_64-mingw32 -fsyntax-only -verify -std=c++11 -Wunsupported-dll-base-class-template -DGNU %s
 
 // Helper structs to make templates more expressive.
 struct ImplicitInst_Imported {};
@@ -15,19 +15,13 @@ namespace { struct Internal {}; }
 
 
 // Invalid usage.
-__declspec(dllimport) typedef int typedef1;
-// expected-warning@-1{{'dllimport' attribute only applies to variables, functions and classes}}
-typedef __declspec(dllimport) int typedef2;
-// expected-warning@-1{{'dllimport' attribute only applies to variables, functions and classes}}
-typedef int __declspec(dllimport) typedef3;
-// expected-warning@-1{{'dllimport' attribute only applies to variables, functions and classes}}
-typedef __declspec(dllimport) void (*FunTy)();
-// expected-warning@-1{{'dllimport' attribute only applies to variables, functions and classes}}
-enum __declspec(dllimport) Enum {};
-// expected-warning@-1{{'dllimport' attribute only applies to variables, functions and classes}}
+__declspec(dllimport) typedef int typedef1; // expected-warning{{'dllimport' attribute only applies to variables, functions and classes}}
+typedef __declspec(dllimport) int typedef2; // expected-warning{{'dllimport' attribute only applies to variables, functions and classes}}
+typedef int __declspec(dllimport) typedef3; // expected-warning{{'dllimport' attribute only applies to variables, functions and classes}}
+typedef __declspec(dllimport) void (*FunTy)(); // expected-warning{{'dllimport' attribute only applies to variables, functions and classes}}
+enum __declspec(dllimport) Enum {}; // expected-warning{{'dllimport' attribute only applies to variables, functions and classes}}
 #if __has_feature(cxx_strong_enums)
-enum class __declspec(dllimport) EnumClass {};
-// expected-warning@-1{{'dllimport' attribute only applies to variables, functions and classes}}
+  enum class __declspec(dllimport) EnumClass {}; // expected-warning{{'dllimport' attribute only applies to variables, functions and classes}}
 #endif
 
 
@@ -50,49 +44,17 @@ __declspec(dllimport) int GlobalInit1 = 1; // expected-error{{definition of dlli
 int __declspec(dllimport) GlobalInit2 = 1; // expected-error{{definition of dllimport data}}
 
 // Declare, then reject definition.
-#ifdef GNU
-// expected-note@+2{{previous attribute is here}}
-#endif
-__declspec(dllimport) extern int ExternGlobalDeclInit; // expected-note{{previous declaration is here}}
-#ifdef MS
-// expected-warning@+4{{'ExternGlobalDeclInit' redeclared without 'dllimport' attribute: 'dllexport' attribute added}}
-#else
-// expected-warning@+2{{'ExternGlobalDeclInit' redeclared without 'dllimport' attribute: previous 'dllimport' ignored}}
-#endif
-int ExternGlobalDeclInit = 1;
+__declspec(dllimport) extern int ExternGlobalDeclInit; // expected-note{{previous declaration is here}} expected-note{{previous attribute is here}}
+int ExternGlobalDeclInit = 1; // expected-warning{{'ExternGlobalDeclInit' redeclared without 'dllimport' attribute: previous 'dllimport' ignored}}
 
-#ifdef GNU
-// expected-note@+2{{previous attribute is here}}
-#endif
-__declspec(dllimport) int GlobalDeclInit; // expected-note{{previous declaration is here}}
-#ifdef MS
-// expected-warning@+4{{'GlobalDeclInit' redeclared without 'dllimport' attribute: 'dllexport' attribute added}}
-#else
-// expected-warning@+2{{'GlobalDeclInit' redeclared without 'dllimport' attribute: previous 'dllimport' ignored}}
-#endif
-int GlobalDeclInit = 1;
+__declspec(dllimport) int GlobalDeclInit; // expected-note{{previous declaration is here}} expected-note{{previous attribute is here}}
+int GlobalDeclInit = 1; // expected-warning{{'GlobalDeclInit' redeclared without 'dllimport' attribute: previous 'dllimport' ignored}}
 
-#ifdef GNU
-// expected-note@+2{{previous attribute is here}}
-#endif
-int *__attribute__((dllimport)) GlobalDeclChunkAttrInit; // expected-note{{previous declaration is here}}
-#ifdef MS
-// expected-warning@+4{{'GlobalDeclChunkAttrInit' redeclared without 'dllimport' attribute: 'dllexport' attribute added}}
-#else
-// expected-warning@+2{{'GlobalDeclChunkAttrInit' redeclared without 'dllimport' attribute: previous 'dllimport' ignored}}
-#endif
-int *GlobalDeclChunkAttrInit = 0;
+int *__attribute__((dllimport)) GlobalDeclChunkAttrInit; // expected-note{{previous declaration is here}} expected-note{{previous attribute is here}}
+int *GlobalDeclChunkAttrInit = 0; // expected-warning{{'GlobalDeclChunkAttrInit' redeclared without 'dllimport' attribute: previous 'dllimport' ignored}}
 
-#ifdef GNU
-// expected-note@+2{{previous attribute is here}}
-#endif
-int GlobalDeclAttrInit __attribute__((dllimport)); // expected-note{{previous declaration is here}}
-#ifdef MS
-// expected-warning@+4{{'GlobalDeclAttrInit' redeclared without 'dllimport' attribute: 'dllexport' attribute added}}
-#else
-// expected-warning@+2{{'GlobalDeclAttrInit' redeclared without 'dllimport' attribute: previous 'dllimport' ignored}}
-#endif
-int GlobalDeclAttrInit = 1;
+int GlobalDeclAttrInit __attribute__((dllimport)); // expected-note{{previous declaration is here}} expected-note{{previous attribute is here}}
+int GlobalDeclAttrInit = 1; // expected-warning{{'GlobalDeclAttrInit' redeclared without 'dllimport' attribute: previous 'dllimport' ignored}}
 
 // Redeclarations
 __declspec(dllimport) extern int GlobalRedecl1;
@@ -107,6 +69,8 @@ int *__attribute__((dllimport)) GlobalRedecl2b;
 int GlobalRedecl2c __attribute__((dllimport));
 int GlobalRedecl2c __attribute__((dllimport));
 
+// NB: MSVC issues a warning and makes GlobalRedecl3 dllexport. We follow GCC
+// and drop the dllimport with a warning.
 __declspec(dllimport) extern int GlobalRedecl3; // expected-note{{previous declaration is here}} expected-note{{previous attribute is here}}
                       extern int GlobalRedecl3; // expected-warning{{'GlobalRedecl3' redeclared without 'dllimport' attribute: previous 'dllimport' ignored}}
 
@@ -129,21 +93,15 @@ __declspec(dllimport) auto InternalAutoTypeGlobal = Internal(); // expected-erro
 
 // Thread local variables are invalid.
 __declspec(dllimport) __thread int ThreadLocalGlobal; // expected-error{{'ThreadLocalGlobal' cannot be thread local when declared 'dllimport'}}
-// This doesn't work on MinGW, because there, dllimport on the inline function is ignored.
-#ifndef GNU
-inline void __declspec(dllimport) ImportedInlineWithThreadLocal() {
-  static __thread int OK; // no-error
-}
-#endif
 
 // Import in local scope.
-__declspec(dllimport) float LocalRedecl1; // expected-note{{previous declaration is here}}
-__declspec(dllimport) float LocalRedecl2; // expected-note{{previous declaration is here}}
-__declspec(dllimport) float LocalRedecl3; // expected-note{{previous declaration is here}}
+__declspec(dllimport) float LocalRedecl1; // expected-note{{previous definition is here}}
+__declspec(dllimport) float LocalRedecl2; // expected-note{{previous definition is here}}
+__declspec(dllimport) float LocalRedecl3; // expected-note{{previous definition is here}}
 void functionScope() {
-  __declspec(dllimport) int LocalRedecl1; // expected-error{{redeclaration of 'LocalRedecl1' with a different type: 'int' vs 'float'}}
-  int *__attribute__((dllimport)) LocalRedecl2; // expected-error{{redeclaration of 'LocalRedecl2' with a different type: 'int *' vs 'float'}}
-  int LocalRedecl3 __attribute__((dllimport)); // expected-error{{redeclaration of 'LocalRedecl3' with a different type: 'int' vs 'float'}}
+  __declspec(dllimport) int LocalRedecl1; // expected-error{{redefinition of 'LocalRedecl1' with a different type: 'int' vs 'float'}}
+  int *__attribute__((dllimport)) LocalRedecl2; // expected-error{{redefinition of 'LocalRedecl2' with a different type: 'int *' vs 'float'}}
+  int LocalRedecl3 __attribute__((dllimport)); // expected-error{{redefinition of 'LocalRedecl3' with a different type: 'int' vs 'float'}}
 
   __declspec(dllimport)        int LocalVarDecl;
   __declspec(dllimport)        int LocalVarDef = 1; // expected-error{{definition of dllimport data}}
@@ -171,31 +129,11 @@ template<typename T> __declspec(dllimport) int VarTmplInit1 = 1; // expected-err
 template<typename T> int __declspec(dllimport) VarTmplInit2 = 1; // expected-error{{definition of dllimport data}}
 
 // Declare, then reject definition.
-#ifdef GNU
-// expected-note@+3{{previous attribute is here}}
-#endif
-template <typename T>
-__declspec(dllimport) extern int ExternVarTmplDeclInit; // expected-note{{previous declaration is here}}
-#ifdef MS
-// expected-warning@+5{{'ExternVarTmplDeclInit' redeclared without 'dllimport' attribute: 'dllexport' attribute added}}
-#else
-// expected-warning@+3{{'ExternVarTmplDeclInit' redeclared without 'dllimport' attribute: previous 'dllimport' ignored}}
-#endif
-template <typename T>
-int ExternVarTmplDeclInit = 1;
+template<typename T> __declspec(dllimport) extern int ExternVarTmplDeclInit; // expected-note{{previous declaration is here}} expected-note{{previous attribute is here}}
+template<typename T>                              int ExternVarTmplDeclInit = 1; // expected-warning{{'ExternVarTmplDeclInit' redeclared without 'dllimport' attribute: previous 'dllimport' ignored}}
 
-#ifdef GNU
-// expected-note@+3{{previous attribute is here}}
-#endif
-template <typename T>
-__declspec(dllimport) int VarTmplDeclInit; // expected-note{{previous declaration is here}}
-#ifdef MS
-// expected-warning@+5{{'VarTmplDeclInit' redeclared without 'dllimport' attribute: 'dllexport' attribute added}}
-#else
-// expected-warning@+3{{'VarTmplDeclInit' redeclared without 'dllimport' attribute: previous 'dllimport' ignored}}
-#endif
-template <typename T>
-int VarTmplDeclInit = 1;
+template<typename T> __declspec(dllimport) int VarTmplDeclInit; // expected-note{{previous declaration is here}} expected-note{{previous attribute is here}}
+template<typename T>                       int VarTmplDeclInit = 1; // expected-warning{{'VarTmplDeclInit' redeclared without 'dllimport' attribute: previous 'dllimport' ignored}}
 
 // Redeclarations
 template<typename T> __declspec(dllimport) extern int VarTmplRedecl1;
@@ -294,20 +232,13 @@ __declspec(dllimport) void inlineDef();
 __declspec(dllimport) void redecl1();
 __declspec(dllimport) void redecl1();
 
+// NB: MSVC issues a warning and makes redecl2/redecl3 dllexport. We follow GCC
+// and drop the dllimport with a warning.
 __declspec(dllimport) void redecl2(); // expected-note{{previous declaration is here}} expected-note{{previous attribute is here}}
                       void redecl2(); // expected-warning{{'redecl2' redeclared without 'dllimport' attribute: previous 'dllimport' ignored}}
 
-#ifdef GNU
-                      // expected-note@+2{{previous attribute is here}}
-#endif
-                      __declspec(dllimport) void redecl3(); // expected-note{{previous declaration is here}}
-                      // NB: Both MSVC and Clang issue a warning and make redecl3 dllexport.
-#ifdef MS
-                      // expected-warning@+4{{'redecl3' redeclared without 'dllimport' attribute: 'dllexport' attribute added}}
-#else
-                      // expected-warning@+2{{'redecl3' redeclared without 'dllimport' attribute: previous 'dllimport' ignored}}
-#endif
-                      void redecl3() {}
+__declspec(dllimport) void redecl3(); // expected-note{{previous declaration is here}} expected-note{{previous attribute is here}}
+                      void redecl3() {} // expected-warning{{'redecl3' redeclared without 'dllimport' attribute: previous 'dllimport' ignored}}
 
                       void redecl4(); // expected-note{{previous declaration is here}}
 __declspec(dllimport) void redecl4(); // expected-warning{{redeclaration of 'redecl4' should not add 'dllimport' attribute}}
@@ -329,10 +260,7 @@ __declspec(dllimport) inline void redecl6() {} // expected-warning{{'dllimport' 
 struct FuncFriend {
   friend __declspec(dllimport) void friend1();
   friend __declspec(dllimport) void friend2(); // expected-note{{previous declaration is here}} expected-note{{previous attribute is here}}
-#ifdef GNU
-// expected-note@+2{{previous attribute is here}}
-#endif
-  friend __declspec(dllimport) void friend3(); // expected-note{{previous declaration is here}}
+  friend __declspec(dllimport) void friend3(); // expected-note{{previous declaration is here}} expected-note{{previous attribute is here}}
   friend                       void friend4(); // expected-note{{previous declaration is here}}
 #ifdef MS
 // expected-note@+2{{previous declaration is here}}
@@ -341,12 +269,7 @@ struct FuncFriend {
 };
 __declspec(dllimport) void friend1();
                       void friend2(); // expected-warning{{'friend2' redeclared without 'dllimport' attribute: previous 'dllimport' ignored}}
-#ifdef MS
-                      // expected-warning@+4{{'friend3' redeclared without 'dllimport' attribute: 'dllexport' attribute added}}
-#else
-                      // expected-warning@+2{{'friend3' redeclared without 'dllimport' attribute: previous 'dllimport' ignored}}
-#endif
-                      void friend3() {}
+                      void friend3() {} // expected-warning{{'friend3' redeclared without 'dllimport' attribute: previous 'dllimport' ignored}}
 __declspec(dllimport) void friend4(); // expected-warning{{redeclaration of 'friend4' should not add 'dllimport' attribute}}
 #ifdef MS
 __declspec(dllimport) inline void friend5() {} // expected-warning{{redeclaration of 'friend5' should not add 'dllimport' attribute}}
@@ -518,39 +441,33 @@ template<> __declspec(dllimport) inline void funcTmpl<ExplicitSpec_InlineDef_Imp
 struct ImportMembers {
   struct Nested {
     __declspec(dllimport) void normalDecl();
-#ifdef GNU
-// expected-note@+2{{previous attribute is here}}
-#endif
-    __declspec(dllimport) void normalDef(); // expected-note{{previous declaration is here}}
+    __declspec(dllimport) void normalDef(); // expected-note{{previous declaration is here}} expected-note{{previous attribute is here}}
   };
 
 #ifdef GNU
-// expected-note@+5{{previous attribute is here}}
 // expected-warning@+5{{'dllimport' attribute ignored on inline function}}
 // expected-warning@+6{{'dllimport' attribute ignored on inline function}}
 #endif
   __declspec(dllimport)                void normalDecl();
-  __declspec(dllimport) void normalDef(); // expected-note{{previous declaration is here}}
+  __declspec(dllimport)                void normalDef(); // expected-note{{previous declaration is here}} expected-note{{previous attribute is here}}
   __declspec(dllimport)                void normalInclass() {}
   __declspec(dllimport)                void normalInlineDef();
   __declspec(dllimport)         inline void normalInlineDecl();
 #ifdef GNU
-// expected-note@+5{{previous attribute is here}}
 // expected-warning@+5{{'dllimport' attribute ignored on inline function}}
 // expected-warning@+6{{'dllimport' attribute ignored on inline function}}
 #endif
   __declspec(dllimport) virtual        void virtualDecl();
-  __declspec(dllimport) virtual void virtualDef(); // expected-note{{previous declaration is here}}
+  __declspec(dllimport) virtual        void virtualDef(); // expected-note{{previous declaration is here}} expected-note{{previous attribute is here}}
   __declspec(dllimport) virtual        void virtualInclass() {}
   __declspec(dllimport) virtual        void virtualInlineDef();
   __declspec(dllimport) virtual inline void virtualInlineDecl();
 #ifdef GNU
-// expected-note@+5{{previous attribute is here}}
 // expected-warning@+5{{'dllimport' attribute ignored on inline function}}
 // expected-warning@+6{{'dllimport' attribute ignored on inline function}}
 #endif
   __declspec(dllimport) static         void staticDecl();
-  __declspec(dllimport) static void staticDef(); // expected-note{{previous declaration is here}}
+  __declspec(dllimport) static         void staticDef(); // expected-note{{previous declaration is here}} expected-note{{previous attribute is here}}
   __declspec(dllimport) static         void staticInclass() {}
   __declspec(dllimport) static         void staticInlineDef();
   __declspec(dllimport) static  inline void staticInlineDecl();
@@ -572,40 +489,20 @@ public:
   __declspec(dllimport) constexpr static int ConstexprFieldDef = 1; // expected-note{{attribute is here}}
 };
 
-#ifdef MS
-// expected-warning@+4{{'ImportMembers::Nested::normalDef' redeclared without 'dllimport' attribute: 'dllexport' attribute added}}
-#else
-                                                                                 // expected-warning@+2{{'ImportMembers::Nested::normalDef' redeclared without 'dllimport' attribute: previous 'dllimport' ignored}}
-#endif
-void ImportMembers::Nested::normalDef() {}
-#ifdef MS
-// expected-warning@+4{{'ImportMembers::normalDef' redeclared without 'dllimport' attribute: 'dllexport' attribute added}}
-#else
-                                                                                 // expected-warning@+2{{'ImportMembers::normalDef' redeclared without 'dllimport' attribute: previous 'dllimport' ignored}}
-#endif
-void ImportMembers::normalDef() {}
+       void ImportMembers::Nested::normalDef() {} // expected-warning{{'ImportMembers::Nested::normalDef' redeclared without 'dllimport' attribute: previous 'dllimport' ignored}}
+       void ImportMembers::normalDef() {} // expected-warning{{'ImportMembers::normalDef' redeclared without 'dllimport' attribute: previous 'dllimport' ignored}}
 #ifdef GNU
 // expected-warning@+2{{'ImportMembers::normalInlineDef' redeclared inline; 'dllimport' attribute ignored}}
 #endif
 inline void ImportMembers::normalInlineDef() {}
        void ImportMembers::normalInlineDecl() {}
-#ifdef MS
-       // expected-warning@+4{{'ImportMembers::virtualDef' redeclared without 'dllimport' attribute: 'dllexport' attribute added}}
-#else
-                                                                                 // expected-warning@+2{{'ImportMembers::virtualDef' redeclared without 'dllimport' attribute: previous 'dllimport' ignored}}
-#endif
-       void ImportMembers::virtualDef() {}
+       void ImportMembers::virtualDef() {} // expected-warning{{'ImportMembers::virtualDef' redeclared without 'dllimport' attribute: previous 'dllimport' ignored}}
 #ifdef GNU
 // expected-warning@+2{{'ImportMembers::virtualInlineDef' redeclared inline; 'dllimport' attribute ignored}}
 #endif
 inline void ImportMembers::virtualInlineDef() {}
        void ImportMembers::virtualInlineDecl() {}
-#ifdef MS
-       // expected-warning@+4{{'ImportMembers::staticDef' redeclared without 'dllimport' attribute: 'dllexport' attribute added}}
-#else
-                                                                                 // expected-warning@+2{{'ImportMembers::staticDef' redeclared without 'dllimport' attribute: previous 'dllimport' ignored}}
-#endif
-       void ImportMembers::staticDef() {}
+       void ImportMembers::staticDef() {} // expected-warning{{'ImportMembers::staticDef' redeclared without 'dllimport' attribute: previous 'dllimport' ignored}}
 #ifdef GNU
 // expected-warning@+2{{'ImportMembers::staticInlineDef' redeclared inline; 'dllimport' attribute ignored}}
 #endif
@@ -717,10 +614,7 @@ struct ImportDefaulted {
 // Import defaulted member function definitions.
 struct ImportDefaultedDefs {
   __declspec(dllimport) ImportDefaultedDefs();
-#ifdef GNU
-// expected-note@+2{{previous attribute is here}}
-#endif
-  __declspec(dllimport) ~ImportDefaultedDefs(); // expected-note{{previous declaration is here}}
+  __declspec(dllimport) ~ImportDefaultedDefs(); // expected-note{{previous declaration is here}} expected-note{{previous attribute is here}}
 
 #ifdef GNU
 // expected-warning@+3{{'dllimport' attribute ignored on inline function}}
@@ -730,22 +624,14 @@ struct ImportDefaultedDefs {
   __declspec(dllimport) ImportDefaultedDefs& operator=(const ImportDefaultedDefs&);
 
   __declspec(dllimport) ImportDefaultedDefs(ImportDefaultedDefs&&);
-#ifdef GNU
-// expected-note@+2{{previous attribute is here}}
-#endif
-  __declspec(dllimport) ImportDefaultedDefs &operator=(ImportDefaultedDefs &&); // expected-note{{previous declaration is here}}
+  __declspec(dllimport) ImportDefaultedDefs& operator=(ImportDefaultedDefs&&); // expected-note{{previous declaration is here}} expected-note{{previous attribute is here}}
 };
 
 // Not allowed on definitions.
 __declspec(dllimport) ImportDefaultedDefs::ImportDefaultedDefs() = default; // expected-error{{dllimport cannot be applied to non-inline function definition}}
 
-#ifdef MS
-// expected-warning@+5{{'ImportDefaultedDefs::~ImportDefaultedDefs' redeclared without 'dllimport' attribute: 'dllexport' attribute added}}
-#else
-// expected-warning@+3{{'ImportDefaultedDefs::~ImportDefaultedDefs' redeclared without 'dllimport' attribute: previous 'dllimport' ignored}}
-#endif
 // dllimport cannot be dropped.
-ImportDefaultedDefs::~ImportDefaultedDefs() = default;
+ImportDefaultedDefs::~ImportDefaultedDefs() = default; // expected-warning{{'ImportDefaultedDefs::~ImportDefaultedDefs' redeclared without 'dllimport' attribute: previous 'dllimport' ignored}}
 
 // Import inline declaration and definition.
 #ifdef GNU
@@ -756,12 +642,8 @@ __declspec(dllimport) ImportDefaultedDefs::ImportDefaultedDefs(const ImportDefau
 inline ImportDefaultedDefs& ImportDefaultedDefs::operator=(const ImportDefaultedDefs&) = default;
 
 __declspec(dllimport) ImportDefaultedDefs::ImportDefaultedDefs(ImportDefaultedDefs&&) = default; // expected-error{{dllimport cannot be applied to non-inline function definition}}
-#ifdef MS
-// expected-warning@+4{{'ImportDefaultedDefs::operator=' redeclared without 'dllimport' attribute: 'dllexport' attribute added}}
-#else
-// expected-warning@+2{{'ImportDefaultedDefs::operator=' redeclared without 'dllimport' attribute: previous 'dllimport' ignored}}
-#endif
-ImportDefaultedDefs &ImportDefaultedDefs::operator=(ImportDefaultedDefs &&) = default;
+ImportDefaultedDefs& ImportDefaultedDefs::operator=(ImportDefaultedDefs&&) = default; // expected-warning{{'ImportDefaultedDefs::operator=' redeclared without 'dllimport' attribute: previous 'dllimport' ignored}}
+
 
 // Redeclarations cannot add dllimport.
 struct MemberRedecl {
@@ -1082,22 +964,13 @@ template<> __declspec(dllimport) const int MemVarTmpl::StaticVar<ExplicitSpec_De
 template<typename T>
 struct ImportClassTmplMembers {
   __declspec(dllimport)                void normalDecl();
-#ifdef GNU
-// expected-note@+2{{previous attribute is here}}
-#endif
-  __declspec(dllimport) void normalDef(); // expected-note{{previous declaration is here}}
+  __declspec(dllimport)                void normalDef(); // expected-note{{previous declaration is here}} expected-note{{previous attribute is here}}
   __declspec(dllimport)                void normalInlineDef();
   __declspec(dllimport) virtual        void virtualDecl();
-#ifdef GNU
-// expected-note@+2{{previous attribute is here}}
-#endif
-  __declspec(dllimport) virtual void virtualDef(); // expected-note{{previous declaration is here}}
+  __declspec(dllimport) virtual        void virtualDef(); // expected-note{{previous declaration is here}} expected-note{{previous attribute is here}}
   __declspec(dllimport) virtual        void virtualInlineDef();
   __declspec(dllimport) static         void staticDecl();
-#ifdef GNU
-// expected-note@+2{{previous attribute is here}}
-#endif
-  __declspec(dllimport) static void staticDef(); // expected-note{{previous declaration is here}}
+  __declspec(dllimport) static         void staticDef(); // expected-note{{previous declaration is here}} expected-note{{previous attribute is here}}
   __declspec(dllimport) static         void staticInlineDef();
 
 #ifdef GNU
@@ -1134,37 +1007,19 @@ public:
 
 // NB: MSVC is inconsistent here and disallows *InlineDef on class templates,
 // but allows it on classes. We allow both.
-#ifdef MS
-// expected-warning@+5{{'ImportClassTmplMembers::normalDef' redeclared without 'dllimport' attribute: 'dllexport' attribute added}}
-#else
-// expected-warning@+3{{'ImportClassTmplMembers::normalDef' redeclared without 'dllimport' attribute: previous 'dllimport' ignored}}
-#endif
-template <typename T>
-void ImportClassTmplMembers<T>::normalDef() {}
+template<typename T>        void ImportClassTmplMembers<T>::normalDef() {} // expected-warning{{'ImportClassTmplMembers::normalDef' redeclared without 'dllimport' attribute: previous 'dllimport' ignored}}
 #ifdef GNU
 // expected-warning@+2{{'ImportClassTmplMembers::normalInlineDef' redeclared inline; 'dllimport' attribute ignored}}
 #endif
 template<typename T> inline void ImportClassTmplMembers<T>::normalInlineDef() {}
 template<typename T>        void ImportClassTmplMembers<T>::normalInlineDecl() {}
-#ifdef MS
-// expected-warning@+5{{'ImportClassTmplMembers::virtualDef' redeclared without 'dllimport' attribute: 'dllexport' attribute added}}
-#else
-// expected-warning@+3{{'ImportClassTmplMembers::virtualDef' redeclared without 'dllimport' attribute: previous 'dllimport' ignored}}
-#endif
-template <typename T>
-void ImportClassTmplMembers<T>::virtualDef() {}
+template<typename T>        void ImportClassTmplMembers<T>::virtualDef() {} // expected-warning{{'ImportClassTmplMembers::virtualDef' redeclared without 'dllimport' attribute: previous 'dllimport' ignored}}
 #ifdef GNU
 // expected-warning@+2{{'ImportClassTmplMembers::virtualInlineDef' redeclared inline; 'dllimport' attribute ignored}}
 #endif
 template<typename T> inline void ImportClassTmplMembers<T>::virtualInlineDef() {}
 template<typename T>        void ImportClassTmplMembers<T>::virtualInlineDecl() {}
-#ifdef MS
-// expected-warning@+5{{'ImportClassTmplMembers::staticDef' redeclared without 'dllimport' attribute: 'dllexport' attribute added}}
-#else
-// expected-warning@+3{{'ImportClassTmplMembers::staticDef' redeclared without 'dllimport' attribute: previous 'dllimport' ignored}}
-#endif
-template <typename T>
-void ImportClassTmplMembers<T>::staticDef() {}
+template<typename T>        void ImportClassTmplMembers<T>::staticDef() {} // expected-warning{{'ImportClassTmplMembers::staticDef' redeclared without 'dllimport' attribute: previous 'dllimport' ignored}}
 #ifdef GNU
 // expected-warning@+2{{'ImportClassTmplMembers::staticInlineDef' redeclared inline; 'dllimport' attribute ignored}}
 #endif
@@ -1419,17 +1274,21 @@ class __declspec(dllimport) DerivedFromImportedTemplate : public ImportedClassTe
 // ExportedClassTemplate is explicitly exported.
 class __declspec(dllimport) DerivedFromExportedTemplate : public ExportedClassTemplate<int> {};
 
+#ifdef MS
+// expected-note@+4{{class template 'ClassTemplate<double>' was instantiated here}}
+// expected-warning@+4{{propagating dll attribute to already instantiated base class template without dll attribute is not supported}}
+// expected-note@+3{{attribute is here}}
+#endif
 class DerivedFromTemplateD : public ClassTemplate<double> {};
-// Base class previously implicitly instantiated without attribute; it will get propagated.
 class __declspec(dllimport) DerivedFromTemplateD2 : public ClassTemplate<double> {};
 
-// Base class has explicit instantiation declaration; the attribute will get propagated.
-extern template class ClassTemplate<float>;
-class __declspec(dllimport) DerivedFromTemplateF : public ClassTemplate<float> {};
-
-class __declspec(dllimport) DerivedFromTemplateB : public ClassTemplate<bool> {};
-// The second derived class doesn't change anything, the attribute that was propagated first wins.
-class __declspec(dllexport) DerivedFromTemplateB2 : public ClassTemplate<bool> {};
+#ifdef MS
+// expected-note@+4{{class template 'ClassTemplate<bool>' was instantiated here}}
+// expected-warning@+4{{propagating dll attribute to already instantiated base class template with different dll attribute is not supported}}
+// expected-note@+3{{attribute is here}}
+#endif
+class __declspec(dllexport) DerivedFromTemplateB : public ClassTemplate<bool> {};
+class __declspec(dllimport) DerivedFromTemplateB2 : public ClassTemplate<bool> {};
 
 template <typename T> struct ExplicitlySpecializedTemplate { void func() {} };
 #ifdef MS
@@ -1474,18 +1333,3 @@ struct __declspec(dllimport) DerivedFromExplicitlyExportInstantiatedTemplate : p
 
 // Base class already instantiated with import attribute.
 struct __declspec(dllimport) DerivedFromExplicitlyImportInstantiatedTemplate : public ExplicitlyImportInstantiatedTemplate<int> {};
-
-template <typename T> struct ExplicitInstantiationDeclTemplateBase { void func() {} };
-extern template struct ExplicitInstantiationDeclTemplateBase<int>;
-struct __declspec(dllimport) DerivedFromExplicitInstantiationDeclTemplateBase : public ExplicitInstantiationDeclTemplateBase<int> {};
-
-//===----------------------------------------------------------------------===//
-// Lambdas
-//===----------------------------------------------------------------------===//
-// The MS ABI doesn't provide a stable mangling for lambdas, so they can't be imported or exported.
-#ifdef MS
-// expected-error@+4{{lambda cannot be declared 'dllimport'}}
-#else
-// expected-warning@+2{{'dllimport' attribute ignored on inline function}}
-#endif
-auto Lambda = []() __declspec(dllimport) -> bool { return true; };

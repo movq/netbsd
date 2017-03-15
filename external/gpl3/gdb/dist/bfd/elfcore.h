@@ -1,5 +1,6 @@
 /* ELF core file support for BFD.
-   Copyright (C) 1995-2016 Free Software Foundation, Inc.
+   Copyright 1995, 1996, 1997, 1998, 2000, 2001, 2002, 2003, 2005, 2007,
+   2008, 2010 Free Software Foundation, Inc.
 
    This file is part of BFD, the Binary File Descriptor library.
 
@@ -188,10 +189,13 @@ elf_core_file_p (bfd *abfd)
     {
       Elf_External_Shdr x_shdr;
       Elf_Internal_Shdr i_shdr;
-      file_ptr where = (file_ptr) i_ehdrp->e_shoff;
+      bfd_signed_vma where = i_ehdrp->e_shoff;
+
+      if (where != (file_ptr) where)
+	goto wrong;
 
       /* Seek to the section header table in the file.  */
-      if (bfd_seek (abfd, where, SEEK_SET) != 0)
+      if (bfd_seek (abfd, (file_ptr) where, SEEK_SET) != 0)
 	goto fail;
 
       /* Read the first section header at index 0, and convert to internal
@@ -214,7 +218,7 @@ elf_core_file_p (bfd *abfd)
     {
       Elf_External_Phdr x_phdr;
       Elf_Internal_Phdr i_phdr;
-      file_ptr where;
+      bfd_signed_vma where;
 
       /* Check that we don't have a totally silly number of
 	 program headers.  */
@@ -222,11 +226,13 @@ elf_core_file_p (bfd *abfd)
 	  || i_ehdrp->e_phnum > (unsigned int) -1 / sizeof (i_phdr))
 	goto wrong;
 
-      where = (file_ptr)(i_ehdrp->e_phoff + (i_ehdrp->e_phnum - 1) * sizeof (x_phdr));
+      where = i_ehdrp->e_phoff + (i_ehdrp->e_phnum - 1) * sizeof (x_phdr);
+      if (where != (file_ptr) where)
+	goto wrong;
       if ((bfd_size_type) where <= i_ehdrp->e_phoff)
 	goto wrong;
 
-      if (bfd_seek (abfd, where, SEEK_SET) != 0)
+      if (bfd_seek (abfd, (file_ptr) where, SEEK_SET) != 0)
 	goto fail;
       if (bfd_bread (&x_phdr, sizeof (x_phdr), abfd) != sizeof (x_phdr))
 	goto fail;

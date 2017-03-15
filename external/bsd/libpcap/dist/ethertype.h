@@ -1,4 +1,4 @@
-/*	$NetBSD: ethertype.h,v 1.3 2017/01/24 22:29:28 christos Exp $	*/
+/*	$NetBSD: ethertype.h,v 1.1.1.3 2013/04/06 15:57:48 christos Exp $	*/
 
 /*
  * Copyright (c) 1993, 1994, 1996
@@ -19,6 +19,8 @@
  * THIS SOFTWARE IS PROVIDED ``AS IS'' AND WITHOUT ANY EXPRESS OR IMPLIED
  * WARRANTIES, INCLUDING, WITHOUT LIMITATION, THE IMPLIED WARRANTIES OF
  * MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE.
+ *
+ * @(#) Header: /tcpdump/master/libpcap/ethertype.h,v 1.14 2005-09-05 09:06:58 guy Exp  (LBL)
  */
 
 /*
@@ -113,9 +115,6 @@
 #endif
 #ifndef ETHERTYPE_PPPOES
 #define ETHERTYPE_PPPOES	0x8864
-#endif
-#ifndef ETHERTYPE_8021AD
-#define ETHERTYPE_8021AD	0x88a8
 #endif
 #ifndef	ETHERTYPE_LOOPBACK
 #define	ETHERTYPE_LOOPBACK	0x9000

@@ -1,4 +1,4 @@
-/*	$NetBSD: profile.c,v 1.7 2017/01/07 21:39:52 christos Exp $	*/
+/*	$NetBSD: profile.c,v 1.4 2012/12/07 03:11:17 chs Exp $	*/
 
 /*
  * CDDL HEADER START
@@ -44,7 +44,7 @@
 #include <sys/kernel.h>
 #include <sys/kmem.h>
 #include <sys/kthread.h>
-#include <sys/syslimits.h>
+#include <sys/limits.h>
 #include <sys/linker.h>
 #include <sys/lock.h>
 #include <sys/malloc.h>
@@ -565,7 +565,7 @@ MODULE_DEPEND(profile, opensolaris, 1, 1, 1);
 #ifdef __NetBSD__
 
 static int
-dtrace_profile_modcmd(modcmd_t cmd, void *data)
+profile_modcmd(modcmd_t cmd, void *data)
 {
 	switch (cmd) {
 	case MODULE_CMD_INIT:
@@ -576,16 +576,11 @@ dtrace_profile_modcmd(modcmd_t cmd, void *data)
 		profile_unload();
 		return 0;
 
-	case MODULE_CMD_AUTOUNLOAD:
-		if (profile_total)
-			return EBUSY;
-		return 0;
-
 	default:
 		return ENOTTY;
 	}
 }
 
-MODULE(MODULE_CLASS_MISC, dtrace_profile, "dtrace,cyclic");
+MODULE(MODULE_CLASS_MISC, profile, "dtrace,cyclic");
 
 #endif

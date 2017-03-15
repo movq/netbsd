@@ -1,4 +1,4 @@
-/* $NetBSD: amlogic_board.c,v 1.16 2015/11/26 00:06:59 jmcneill Exp $ */
+/* $NetBSD: amlogic_board.c,v 1.9.2.3 2015/04/06 01:43:31 snj Exp $ */
 
 /*-
  * Copyright (c) 2015 Jared D. McNeill <jmcneill@invisible.ca>
@@ -29,16 +29,13 @@
 #include "opt_amlogic.h"
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: amlogic_board.c,v 1.16 2015/11/26 00:06:59 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: amlogic_board.c,v 1.9.2.3 2015/04/06 01:43:31 snj Exp $");
 
 #define	_ARM32_BUS_DMA_PRIVATE
 #include <sys/param.h>
 #include <sys/bus.h>
 #include <sys/cpu.h>
 #include <sys/device.h>
-#include <sys/wdog.h>
-
-#include <dev/sysmon/sysmonvar.h>
 
 #include <uvm/uvm_extern.h>
 
@@ -49,21 +46,7 @@ __KERNEL_RCSID(0, "$NetBSD: amlogic_board.c,v 1.16 2015/11/26 00:06:59 jmcneill 
 #include <arm/amlogic/amlogic_crureg.h>
 #include <arm/amlogic/amlogic_var.h>
 
-#define AMLOGIC_EE_WDOG_PERIOD_DEFAULT	8
-#define AMLOGIC_EE_WDOG_PERIOD_MAX	8
-#define AMLOGIC_EE_WDOG_TICKS_PER_SEC	7812
-
 bus_space_handle_t amlogic_core_bsh;
-
-static int	amlogic_ee_wdog_setmode(struct sysmon_wdog *);
-static int	amlogic_ee_wdog_tickle(struct sysmon_wdog *);
-
-static struct sysmon_wdog amlogic_ee_wdog = {
-	.smw_name = "EE-watchdog",
-	.smw_setmode = amlogic_ee_wdog_setmode,
-	.smw_tickle = amlogic_ee_wdog_tickle,
-	.smw_period = AMLOGIC_EE_WDOG_PERIOD_DEFAULT
-};
 
 struct arm32_bus_dma_tag amlogic_dma_tag = {
 	_BUS_DMAMAP_FUNCS,
@@ -72,14 +55,14 @@ struct arm32_bus_dma_tag amlogic_dma_tag = {
 };
 
 #define CBUS_READ(x)		\
-	bus_space_read_4(&armv7_generic_bs_tag, amlogic_core_bsh, \
+	bus_space_read_4(&amlogic_bs_tag, amlogic_core_bsh, \
 			 AMLOGIC_CBUS_OFFSET + (x))
 #define CBUS_WRITE(x, v)	\
-	bus_space_write_4(&armv7_generic_bs_tag, amlogic_core_bsh, \
+	bus_space_write_4(&amlogic_bs_tag, amlogic_core_bsh, \
 			  AMLOGIC_CBUS_OFFSET + (x), (v))
 
 #define CBUS_SET_CLEAR(x, s, c)	\
-	amlogic_reg_set_clear(&armv7_generic_bs_tag, amlogic_core_bsh, \
+	amlogic_reg_set_clear(&amlogic_bs_tag, amlogic_core_bsh, \
 			      AMLOGIC_CBUS_OFFSET + (x), (s), (c))
 
 void
@@ -87,7 +70,7 @@ amlogic_bootstrap(void)
 {
 	int error;
 
-	error = bus_space_map(&armv7_generic_bs_tag, AMLOGIC_CORE_BASE,
+	error = bus_space_map(&amlogic_bs_tag, AMLOGIC_CORE_BASE,
 	    AMLOGIC_CORE_SIZE, 0, &amlogic_core_bsh);
 	if (error)
 		panic("%s: failed to map CORE registers: %d", __func__, error);
@@ -123,31 +106,6 @@ amlogic_get_rate_sys(void)
 	clk >>= od;
 
 	return (uint32_t)clk;
-}
-
-uint32_t
-amlogic_get_rate_clk81(void)
-{
-	uint32_t cc, rate;
-
-	rate = amlogic_get_rate_fixed();
-	cc = CBUS_READ(HHI_MPEG_CLK_CNTL_REG);
-	
-	switch (__SHIFTOUT(cc, HHI_MPEG_CLK_CNTL_DIV_SRC)) {
-	case 7:
-		rate /= 5;
-		break;
-	case 6:
-		rate /= 3;
-		break;
-	case 5:
-		rate /= 4;
-		break;
-	default:
-		panic("CLK81: unknown rate, HHI_MPEG_CLK_CNTL_REG = %#x", cc);
-	}
-
-	return rate / (__SHIFTOUT(cc, HHI_MPEG_CLK_CNTL_DIV_N) + 1);
 }
 
 uint32_t
@@ -240,48 +198,6 @@ amlogic_rng_init(void)
 }
 
 void
-amlogic_wdog_init(void)
-{
-	/* Disable watchdog */
-	CBUS_WRITE(WATCHDOG_RESET_REG, 0);
-	CBUS_SET_CLEAR(WATCHDOG_TC_REG, 0, WATCHDOG_TC_ENABLE);
-
-	sysmon_wdog_register(&amlogic_ee_wdog);
-}
-
-static int
-amlogic_ee_wdog_setmode(struct sysmon_wdog *smw)
-{
-	if ((smw->smw_mode & WDOG_MODE_MASK) == WDOG_MODE_DISARMED) {
-		CBUS_WRITE(WATCHDOG_RESET_REG, 0);
-		CBUS_SET_CLEAR(WATCHDOG_TC_REG, 0, WATCHDOG_TC_ENABLE);
-		return 0;
-	}
-
-	if (smw->smw_period == WDOG_PERIOD_DEFAULT) {
-		amlogic_ee_wdog.smw_period = AMLOGIC_EE_WDOG_PERIOD_DEFAULT;
-	} else if (smw->smw_period == 0 ||
-		   smw->smw_period > AMLOGIC_EE_WDOG_PERIOD_MAX) {
-		return EINVAL;
-	} else {
-		amlogic_ee_wdog.smw_period = smw->smw_period;
-	}
-	u_int tcnt = amlogic_ee_wdog.smw_period * AMLOGIC_EE_WDOG_TICKS_PER_SEC;
-	CBUS_WRITE(WATCHDOG_RESET_REG, 0);
-	CBUS_WRITE(WATCHDOG_TC_REG, WATCHDOG_TC_CPUS | WATCHDOG_TC_ENABLE |
-	    __SHIFTIN(tcnt, WATCHDOG_TC_TCNT));
-
-	return 0;
-}
-
-static int
-amlogic_ee_wdog_tickle(struct sysmon_wdog *smw)
-{
-	CBUS_WRITE(WATCHDOG_RESET_REG, 0);
-	return 0;
-}
-
-void
 amlogic_sdhc_init(void)
 {
 	/* enable SDHC clk */
@@ -294,161 +210,20 @@ amlogic_sdhc_select_port(int port)
 {
 	switch (port) {
 	case AMLOGIC_SDHC_PORT_B:
-		/* Set CARD 0-5 to input */
-		CBUS_SET_CLEAR(PAD_PULL_UP_2_REG, 0x03f00000, 0);
-		CBUS_SET_CLEAR(PAD_PULL_UP_EN_2_REG, 0x03f00000, 0);
-		CBUS_SET_CLEAR(PREG_PAD_GPIO0_EN_N_REG, 0x0fc00000, 0);
-
 		/* CARD -> SDHC pin mux settings */
 		CBUS_SET_CLEAR(PERIPHS_PIN_MUX_5_REG, 0, 0x00007c00);
 		CBUS_SET_CLEAR(PERIPHS_PIN_MUX_4_REG, 0, 0x7c000000);
 		CBUS_SET_CLEAR(PERIPHS_PIN_MUX_2_REG, 0, 0x0000fc00);
 		CBUS_SET_CLEAR(PERIPHS_PIN_MUX_8_REG, 0, 0x00000600);
 		CBUS_SET_CLEAR(PERIPHS_PIN_MUX_2_REG, 0x000000f0, 0);
-
-		/* XXX ODROID-C1 */
-		CBUS_SET_CLEAR(PREG_PAD_GPIO5_EN_N_REG, 0x20000000, 0);
-		CBUS_SET_CLEAR(PREG_PAD_GPIO5_OUT_REG, 0, 0x80000000);
-		CBUS_SET_CLEAR(PREG_PAD_GPIO5_EN_N_REG, 0, 0x80000000);
 		break;
 	case AMLOGIC_SDHC_PORT_C:
-		/* Set BOOT 0-8,10 to input */
-		CBUS_SET_CLEAR(PAD_PULL_UP_2_REG, 0x000005ff, 0);
-		CBUS_SET_CLEAR(PAD_PULL_UP_EN_2_REG, 0x000005ff, 0);
-		CBUS_SET_CLEAR(PREG_PAD_GPIO3_EN_N_REG, 0x000005ff, 0);
-
 		/* BOOT -> SDHC pin mux settings */
 		CBUS_SET_CLEAR(PERIPHS_PIN_MUX_2_REG, 0, 0x04c000f0);
 		CBUS_SET_CLEAR(PERIPHS_PIN_MUX_5_REG, 0, 0x00007c00);
 		CBUS_SET_CLEAR(PERIPHS_PIN_MUX_6_REG, 0, 0xff000000);
 		CBUS_SET_CLEAR(PERIPHS_PIN_MUX_4_REG, 0x70000000, 0);
 		CBUS_SET_CLEAR(PERIPHS_PIN_MUX_7_REG, 0x000c0000, 0);
-
-		/* XXX ODROID-C1 */
-		CBUS_SET_CLEAR(PAD_PULL_UP_3_REG, 0, 0x000000ff);
-		break;
-	default:
-		return EINVAL;
-	}
-
-	return 0;
-}
-
-void
-amlogic_sdhc_reset_port(int port)
-{
-	switch (port) {
-	case AMLOGIC_SDHC_PORT_C:
-		CBUS_SET_CLEAR(PERIPHS_PIN_MUX_2_REG, 0, 0x01000000);
-		CBUS_SET_CLEAR(PREG_PAD_GPIO3_EN_N_REG, 0, 0x00000200);
-		CBUS_SET_CLEAR(PREG_PAD_GPIO3_OUT_REG, 0x00000200, 0);
-		delay(1000);
-		CBUS_SET_CLEAR(PREG_PAD_GPIO3_OUT_REG, 0, 0x00000200);
-		delay(2000);
-		CBUS_SET_CLEAR(PREG_PAD_GPIO3_OUT_REG, 0x00000200, 0);
-		delay(1000);
-		break;
-	}
-}
-
-bool
-amlogic_sdhc_is_removable(int port)
-{
-	switch (port) {
-	case AMLOGIC_SDHC_PORT_B:
-		return true;
-	default:
-		return false;
-	}
-}
-
-bool
-amlogic_sdhc_is_card_present(int port)
-{
-	switch (port) {
-	case AMLOGIC_SDHC_PORT_B:
-		/* GPIO CARD_6 */
-		return !(CBUS_READ(PREG_PAD_GPIO0_IN_REG) & __BIT(28));
-	default:
-		return true;
-	}
-}
-
-void
-amlogic_sdhc_set_voltage(int port, int voltage)
-{
-	const bus_size_t gpioao_reg = AMLOGIC_GPIOAO_OFFSET;
-	bus_space_tag_t bst = &armv7_generic_bs_tag;
-	bus_space_handle_t bsh = amlogic_core_bsh;
-	uint32_t val;
-	u_int pin;
-
-	switch (port) {
-	case AMLOGIC_SDHC_PORT_B:
-		/* GPIO GPIOAO_3 */
-		pin = 3;
-		val = bus_space_read_4(bst, bsh, gpioao_reg);
-		val &= ~__BIT(pin);	/* OEN */
-		bus_space_write_4(bst, bsh, gpioao_reg, val);
-		if (voltage == AMLOGIC_SDHC_VOL_180) {
-			val |= __BIT(pin + 16);		/* OUT */
-		} else {
-			val &= ~__BIT(pin + 16);	/* OUT */
-		}
-		bus_space_write_4(bst, bsh, gpioao_reg, val);
-		delay(20000);
-		break;
-	}
-}
-
-void
-amlogic_sdio_init(void)
-{
-	/* enable SDIO clk */
-	CBUS_WRITE(EE_CLK_GATING0_REG,
-	    CBUS_READ(EE_CLK_GATING0_REG) | EE_CLK_GATING0_SDIO);
-
-	/* reset */
-	CBUS_SET_CLEAR(RESET6_REG, RESET6_SDIO, 0);
-}
-
-int
-amlogic_sdio_select_port(int port)
-{
-	switch (port) {
-	case AMLOGIC_SDIO_PORT_B:
-		/* Set CARD 0-5 to input */
-		CBUS_SET_CLEAR(PAD_PULL_UP_2_REG, 0x03f00000, 0);
-		CBUS_SET_CLEAR(PAD_PULL_UP_EN_2_REG, 0x03f00000, 0);
-		CBUS_SET_CLEAR(PREG_PAD_GPIO0_EN_N_REG, 0x0fc00000, 0);
-
-		/* CARD -> SDIO pin mux settings */
-		CBUS_SET_CLEAR(PERIPHS_PIN_MUX_6_REG, 0, 0x3f000000);
-		CBUS_SET_CLEAR(PERIPHS_PIN_MUX_8_REG, 0, 0x0000063f);
-		CBUS_SET_CLEAR(PERIPHS_PIN_MUX_2_REG, 0, 0x000000f0);
-		CBUS_SET_CLEAR(PERIPHS_PIN_MUX_2_REG, 0x0000fc00, 0);
-
-		/* XXX ODROID-C1 */
-		CBUS_SET_CLEAR(PREG_PAD_GPIO5_EN_N_REG, 0x20000000, 0);
-		CBUS_SET_CLEAR(PREG_PAD_GPIO5_OUT_REG, 0, 0x80000000);
-		CBUS_SET_CLEAR(PREG_PAD_GPIO5_EN_N_REG, 0, 0x80000000);
-		break;
-	case AMLOGIC_SDIO_PORT_C:
-		delay(100);
-
-		/* Set BOOT 0-8,10 to input */
-		CBUS_SET_CLEAR(PAD_PULL_UP_2_REG, 0x0000050f, 0);
-		CBUS_SET_CLEAR(PAD_PULL_UP_EN_2_REG, 0x0000050f, 0);
-		CBUS_SET_CLEAR(PREG_PAD_GPIO3_EN_N_REG, 0x0000050f, 0);
-
-		/* BOOT -> SDIO pin mux settings */
-		CBUS_SET_CLEAR(PERIPHS_PIN_MUX_2_REG, 0, 0x06c2fc00);
-		CBUS_SET_CLEAR(PERIPHS_PIN_MUX_8_REG, 0, 0x0000003f);
-		CBUS_SET_CLEAR(PERIPHS_PIN_MUX_4_REG, 0, 0x6c000000);
-		CBUS_SET_CLEAR(PERIPHS_PIN_MUX_6_REG, 0xfc000000, 0);
-
-		/* XXX ODROID-C1 */
-		CBUS_SET_CLEAR(PAD_PULL_UP_3_REG, 0, 0x000000ff);
 		break;
 	default:
 		return EINVAL;
@@ -485,7 +260,7 @@ amlogic_usbphy_clkgate_enable(int port)
 void
 amlogic_usbphy_init(int port)
 {
-	bus_space_tag_t bst = &armv7_generic_bs_tag;
+	bus_space_tag_t bst = &amlogic_bs_tag;
 	bus_space_handle_t bsh = amlogic_core_bsh;
 	bus_size_t ctrl_reg, cfg_reg, adp_bc_reg, gpioao_reg;
 	uint32_t ctrl, cfg, adp_bc, gpioao;
@@ -517,7 +292,7 @@ amlogic_usbphy_init(int port)
 	}
 
 	if (port == 0) {
-		CBUS_SET_CLEAR(RESET1_REG, RESET1_USB, 0);
+		CBUS_WRITE(RESET1_REG, RESET1_USB);
 	}
 
 	amlogic_usbphy_clkgate_enable(port);

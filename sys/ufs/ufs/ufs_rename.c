@@ -1,4 +1,4 @@
-/*	$NetBSD: ufs_rename.c,v 1.13 2016/10/28 20:38:12 jdolecek Exp $	*/
+/*	$NetBSD: ufs_rename.c,v 1.11 2014/05/25 13:45:39 hannken Exp $	*/
 
 /*-
  * Copyright (c) 2012 The NetBSD Foundation, Inc.
@@ -34,7 +34,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ufs_rename.c,v 1.13 2016/10/28 20:38:12 jdolecek Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ufs_rename.c,v 1.11 2014/05/25 13:45:39 hannken Exp $");
 
 #include <sys/param.h>
 #include <sys/buf.h>
@@ -469,7 +469,9 @@ ufs_gro_rename(struct mount *mp, kauth_cred_t cred,
 				    "hard-linked directory");
 			VTOI(tvp)->i_nlink = 0;
 			DIP_ASSIGN(VTOI(tvp), nlink, 0);
-			(void) UFS_TRUNCATE(tvp, (off_t)0, IO_SYNC, cred);
+			error = UFS_TRUNCATE(tvp, (off_t)0, IO_SYNC, cred);
+			if (error)
+				goto whymustithurtsomuch;
 		}
 	}
 
@@ -872,8 +874,8 @@ ufs_read_dotdot(struct vnode *vp, kauth_cred_t cred, ino_t *ino_ret)
 	KASSERT(ino_ret != NULL);
 	KASSERT(vp->v_type == VDIR);
 
-	error = ufs_bufio(UIO_READ, vp, &dirbuf, sizeof dirbuf, (off_t)0,
-	    IO_NODELOCKED, cred, NULL, NULL);
+	error = vn_rdwr(UIO_READ, vp, &dirbuf, sizeof dirbuf, (off_t)0,
+	    UIO_SYSSPACE, IO_NODELOCKED, cred, NULL, NULL);
 	if (error)
 		return error;
 

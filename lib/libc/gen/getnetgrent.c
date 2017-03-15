@@ -1,4 +1,4 @@
-/*	$NetBSD: getnetgrent.c,v 1.43 2016/05/31 03:43:10 dholland Exp $	*/
+/*	$NetBSD: getnetgrent.c,v 1.42 2012/03/20 16:36:05 matt Exp $	*/
 
 /*
  * Copyright (c) 1994 Christos Zoulas
@@ -28,7 +28,7 @@
 
 #include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-__RCSID("$NetBSD: getnetgrent.c,v 1.43 2016/05/31 03:43:10 dholland Exp $");
+__RCSID("$NetBSD: getnetgrent.c,v 1.42 2012/03/20 16:36:05 matt Exp $");
 #endif /* LIBC_SCCS and not lint */
 
 #include "namespace.h"
@@ -166,8 +166,8 @@ getnetgroup(char **pp)
 #ifdef DEBUG_NG
 	{
 		char buf[1024];
-		_ng_print(buf, sizeof(buf), ng);
-		(void) fprintf(stderr, "netgroup %s\n", buf);
+		(void) fprintf(stderr, "netgroup %s\n",
+		    _ng_print(buf, sizeof(buf), ng));
 	}
 #endif
 	return ng;

@@ -1,4 +1,4 @@
-/*	$NetBSD: import-export.c,v 1.2 2014/11/15 01:24:53 joerg Exp $	*/
+/*	$NetBSD: import-export.c,v 1.1.1.2.24.1 2015/05/14 08:15:47 snj Exp $	*/
 
 /*
  * Copyright (C) 2001-2004 Sistina Software, Inc. All rights reserved.

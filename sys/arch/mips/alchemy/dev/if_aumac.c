@@ -1,4 +1,4 @@
-/* $NetBSD: if_aumac.c,v 1.43 2016/12/15 09:28:03 ozaki-r Exp $ */
+/* $NetBSD: if_aumac.c,v 1.38 2014/08/10 16:44:34 tls Exp $ */
 
 /*
  * Copyright (c) 2001 Wasabi Systems, Inc.
@@ -46,7 +46,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_aumac.c,v 1.43 2016/12/15 09:28:03 ozaki-r Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_aumac.c,v 1.38 2014/08/10 16:44:34 tls Exp $");
 
 
 
@@ -71,7 +71,7 @@ __KERNEL_RCSID(0, "$NetBSD: if_aumac.c,v 1.43 2016/12/15 09:28:03 ozaki-r Exp $"
 #include <net/if_ether.h>
 
 #include <net/bpf.h>
-#include <sys/rndsource.h>
+#include <sys/rnd.h>
 
 #include <dev/mii/mii.h>
 #include <dev/mii/miivar.h>
@@ -338,7 +338,6 @@ aumac_attach(device_t parent, device_t self, void *aux)
 
 	/* Attach the interface. */
 	if_attach(ifp); 
-	if_deferred_start_init(ifp, NULL);
 	ether_ifattach(ifp, enaddr);
 
 	rnd_attach_source(&sc->rnd_source, device_xname(self),
@@ -579,7 +578,7 @@ aumac_txintr(struct aumac_softc *sc)
 		ifp->if_flags &= ~IFF_OACTIVE;
 
 		/* Try to queue more packets. */
-		if_schedule_deferred_start(ifp);
+		aumac_start(ifp);
 	}
 
 	if (pkts)
@@ -713,11 +712,15 @@ aumac_rxintr(struct aumac_softc *sc)
 		    (void *)sc->sc_rxbufs[i].buf_vaddr, len);
 		AUMAC_INIT_RXDESC(sc, i);
 
-		m_set_rcvif(m, ifp);
+		m->m_pkthdr.rcvif = ifp;
 		m->m_pkthdr.len = m->m_len = len;
 
+		/* Pass this up to any BPF listeners. */
+		bpf_mtap(ifp, m);
+
 		/* Pass it on. */
-		if_percpuq_enqueue(ifp->if_percpuq, m);
+		(*ifp->if_input)(ifp, m);
+		ifp->if_ipackets++;
 	}
 	if (pkts)
 		AUMAC_EVCNT_INCR(&sc->sc_ev_rxintr);

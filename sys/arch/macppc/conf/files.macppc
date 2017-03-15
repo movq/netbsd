@@ -1,4 +1,4 @@
-#	$NetBSD: files.macppc,v 1.103 2016/06/16 14:51:56 macallan Exp $
+#	$NetBSD: files.macppc,v 1.100 2013/04/18 16:42:46 macallan Exp $
 #
 # macppc-specific configuration info
 
@@ -133,7 +133,7 @@ attach ofb at pci
 file arch/macppc/dev/ofb.c			ofb needs-flag
 
 # PCI-Host bridge chipsets
-device pchb: agpbus
+device pchb: agpbus, agp_apple
 attach pchb at pci
 file arch/powerpc/pci/pchb.c			pchb
 
@@ -307,7 +307,3 @@ device valkyriefb: wsemuldisplaydev, rasops8, vcons, videomode
 attach valkyriefb at mainbus
 file arch/macppc/dev/valkyriefb.c			valkyriefb
 defflag opt_valkyriefb.h VALKYRIEFB_DEBUG
-
-device platinumfb: wsemuldisplaydev, rasops8, vcons, videomode
-attach platinumfb at mainbus
-file arch/macppc/dev/platinumfb.c			platinumfb

@@ -21,7 +21,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: pcap_dump_ftell.c,v 1.4 2014/11/20 03:05:03 christos Exp $");
+__RCSID("$NetBSD: pcap_dump_ftell.c,v 1.3.6.1 2017/02/19 05:01:15 snj Exp $");
 #endif
 
 #include <stdio.h>

@@ -554,6 +554,7 @@ static Boolean eap_tnc_isSuccess(struct eap_sm *sm, void *priv)
 int eap_server_tnc_register(void)
 {
 	struct eap_method *eap;
+	int ret;
 
 	eap = eap_server_method_alloc(EAP_SERVER_METHOD_INTERFACE_VERSION,
 				      EAP_VENDOR_IETF, EAP_TYPE_TNC, "TNC");
@@ -568,5 +569,8 @@ int eap_server_tnc_register(void)
 	eap->isDone = eap_tnc_isDone;
 	eap->isSuccess = eap_tnc_isSuccess;
 
-	return eap_server_method_register(eap);
+	ret = eap_server_method_register(eap);
+	if (ret)
+		eap_server_method_free(eap);
+	return ret;
 }

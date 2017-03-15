@@ -61,16 +61,22 @@
 #include <openssl/crypto.h>
 #include <inttypes.h>
 
-/*
- * Pointer to memset is volatile so that compiler must de-reference
- * the pointer and can't assume that it points to any function in
- * particular (such as memset, which it then might further "optimize")
- */
-typedef void *(*memset_t)(void *,int,size_t);
-
-static volatile memset_t memset_func = memset;
+unsigned char cleanse_ctr = 0;
 
 void OPENSSL_cleanse(void *ptr, size_t len)
 {
-    memset_func(ptr, 0, len);
+    unsigned char *p = ptr;
+    size_t loop = len, ctr = cleanse_ctr;
+
+    if (ptr == NULL)
+        return;
+
+    while (loop--) {
+        *(p++) = (unsigned char)ctr;
+        ctr += (17 + (unsigned char)((intptr_t)p & 0xF));
+    }
+    p = memchr(ptr, (unsigned char)ctr, len);
+    if (p)
+        ctr += (63 + (size_t)p);
+    cleanse_ctr = (unsigned char)ctr;
 }

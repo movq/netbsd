@@ -1,4 +1,4 @@
-/*	$NetBSD: eb7500atx_machdep.c,v 1.29 2016/12/22 14:47:53 cherry Exp $	*/
+/*	$NetBSD: eb7500atx_machdep.c,v 1.26 2013/08/18 21:42:16 matt Exp $	*/
 
 /*
  * Copyright (c) 2000-2002 Reinoud Zandijk.
@@ -55,7 +55,7 @@
 
 #include <sys/param.h>
 
-__KERNEL_RCSID(0, "$NetBSD: eb7500atx_machdep.c,v 1.29 2016/12/22 14:47:53 cherry Exp $");
+__KERNEL_RCSID(0, "$NetBSD: eb7500atx_machdep.c,v 1.26 2013/08/18 21:42:16 matt Exp $");
 
 #include <sys/systm.h>
 #include <sys/kernel.h>
@@ -89,6 +89,7 @@ __KERNEL_RCSID(0, "$NetBSD: eb7500atx_machdep.c,v 1.29 2016/12/22 14:47:53 cherr
 #include <machine/signal.h>
 #include <machine/bootconfig.h>
 #include <machine/io.h>
+#include <arm/arm32/katelib.h>
 #include <arm/arm32/machdep.h>
 #include <machine/rtc.h>
 
@@ -708,7 +709,7 @@ initarm(void *cookie)
 	/* Map the core memory needed before autoconfig */
 	loop = 0;
 	while (l1_sec_table[loop].size) {
-		vsize_t sz;
+		vm_size_t sz;
 
 #ifdef VERBOSE_INIT_ARM
 		printf("%08lx -> %08lx @ %08lx\n", l1_sec_table[loop].pa,
@@ -862,8 +863,7 @@ initarm(void *cookie)
 #ifdef VERBOSE_INIT_ARM
 	printf("page ");
 #endif
-	uvm_md_init();
-
+	uvm_setpagesize();	/* initialize PAGE_SIZE-dependent variables */
 	for (loop = 0; loop < bootconfig.dramblocks; loop++) {
 		paddr_t start = (paddr_t)bootconfig.dram[loop].address;
 		paddr_t end = start + (bootconfig.dram[loop].pages * PAGE_SIZE);

@@ -1,4 +1,4 @@
-/*	$NetBSD: inet6.c,v 1.69 2016/12/17 09:12:22 mlelstv Exp $	*/
+/*	$NetBSD: inet6.c,v 1.66.4.1 2015/02/11 08:29:56 snj Exp $	*/
 /*	BSDI inet.c,v 2.3 1995/10/24 02:19:29 prb Exp	*/
 
 /*
@@ -64,7 +64,7 @@
 #if 0
 static char sccsid[] = "@(#)inet.c	8.4 (Berkeley) 4/20/94";
 #else
-__RCSID("$NetBSD: inet6.c,v 1.69 2016/12/17 09:12:22 mlelstv Exp $");
+__RCSID("$NetBSD: inet6.c,v 1.66.4.1 2015/02/11 08:29:56 snj Exp $");
 #endif
 #endif /* not lint */
 
@@ -135,7 +135,6 @@ extern const char * const tcptimers[];
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
-#include <util.h>
 #include "netstat.h"
 #include "vtw.h"
 #include "prog_ops.h"
@@ -1471,14 +1470,10 @@ tcp6_dump(u_long off, const char *name, u_long pcbaddr)
 	printf("TCP Protocol Control Block at 0x%08lx:\n\n", pcbaddr);
 	printf("Timers:\n");
 	for (i = 0; i < TCP6T_NTIMERS; i++) {
-		char buf[128];
 		ci = (callout_impl_t *)&tcpcb.t_timer[i];
-		snprintb(buf, sizeof(buf), CALLOUT_FMT, ci->c_flags);
-		printf("\t%s\t%s", tcptimers[i], buf);
-		if (ci->c_flags & CALLOUT_PENDING)
-			printf("\t%d\n", ci->c_time - hardticks);
-		else
-			printf("\n");
+		printf("\t%s: %d", tcptimers[i],
+		    (ci->c_flags & CALLOUT_PENDING) ?
+		    ci->c_time - hardticks : 0);
 	}
 	printf("\n\n");
 
@@ -1494,9 +1489,6 @@ tcp6_dump(u_long off, const char *name, u_long pcbaddr)
 #ifdef TCP6
 	printf("peermaxseg %u, maxseg %u, force %d\n\n", mypcb.t_peermaxseg,
 	    mypcb.t_maxseg, mypcb.t_force);
-#else
-        printf("peermss %u, ourmss %u, segsz %u, segqlen %u\n\n",
-	    tcpcb.t_peermss, tcpcb.t_ourmss, tcpcb.t_segsz, tcpcb.t_segqlen);
 #endif
 
 	printf("snd_una %u, snd_nxt %u, snd_up %u\n",
@@ -1514,11 +1506,8 @@ tcp6_dump(u_long off, const char *name, u_long pcbaddr)
 	    (unsigned long long)mypcb.snd_ssthresh);
 
 #ifdef TCP6
-	printf("idle %d, rtt %d, " mypcb.t_idle, mypcb.t_rtt);
-#else
-	printf("rcvtime %u, rtttime %u, ", tcpcb.t_rcvtime, tcpcb.t_rtttime);
+	printf("idle %d, rtt %d, " mypcb.t_idle, mypcb.t_rtt)
 #endif
-
 	printf("rtseq %u, srtt %d, rttvar %d, rttmin %d, "
 	    "max_sndwnd %llu\n\n", mypcb.t_rtseq,
 	    mypcb.t_srtt, mypcb.t_rttvar, mypcb.t_rttmin,

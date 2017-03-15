@@ -1,4 +1,4 @@
-/*	$NetBSD: version.h,v 1.87 2015/09/12 20:18:52 wiz Exp $	*/
+/*	$NetBSD: version.h,v 1.84.6.2 2015/11/05 05:26:38 riz Exp $	*/
 
 /*-
  * Copyright (c) 1999-2015 The NetBSD Foundation, Inc.

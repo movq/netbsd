@@ -1,4 +1,4 @@
-/*	$NetBSD: proc.h,v 1.338 2017/02/23 03:34:23 kamil Exp $	*/
+/*	$NetBSD: proc.h,v 1.320 2014/02/21 22:06:48 skrll Exp $	*/
 
 /*-
  * Copyright (c) 2006, 2007, 2008 The NetBSD Foundation, Inc.
@@ -81,7 +81,6 @@
 #include <machine/proc.h>		/* Machine-dependent proc substruct */
 #include <machine/pcb.h>
 #include <sys/aio.h>
-#include <sys/idtype.h>
 #include <sys/rwlock.h>
 #include <sys/mqueue.h>
 #include <sys/mutex.h>
@@ -125,14 +124,6 @@ struct pgrp {
 };
 
 /*
- * Autoloadable syscall definition
- */
-struct sc_autoload {
-	u_int		al_code;
-	const char	*al_module;
-};
-
-/*
  * One structure allocated per emulation.
  */
 struct exec_package;
@@ -152,7 +143,6 @@ struct emul {
 	struct sysent	*e_sysent;	/* System call array */
 	const char * const *e_syscallnames; /* System call name array */
 					/* Signal sending function */
-	struct sc_autoload *e_sc_autoload;	/* List of autoloadable syscalls */
 	void		(*e_sendsig)(const struct ksiginfo *,
 					  const sigset_t *);
 	void		(*e_trapsignal)(struct lwp *, struct ksiginfo *);
@@ -180,23 +170,13 @@ struct emul {
 	struct sysctlnode *e_sysctlovly;
 	int		(*e_fault)(struct proc *, vaddr_t, int);
 
-	vaddr_t		(*e_vm_default_addr)(struct proc *, vaddr_t, vsize_t,
-			     int);
+	vaddr_t		(*e_vm_default_addr)(struct proc *, vaddr_t, vsize_t);
 
 	/* Emulation-specific hook for userspace page faults */
 	int		(*e_usertrap)(struct lwp *, vaddr_t, void *);
 
 	size_t		e_ucsize;	/* size of ucontext_t */
 	void		(*e_startlwp)(void *);
-
-	/* Dtrace syscall probe */
-	void 		(*e_dtrace_syscall)(uint32_t, register_t,
-			    const struct sysent *, const void *,
-			    const register_t *, int);
-
-	/* Emulation specific support for ktracing signal posts */
-	void		(*e_ktrpsig)(int, sig_t, const sigset_t *,
-			    const struct ksiginfo *);
 };
 
 /*
@@ -310,11 +290,6 @@ struct proc {
 	struct lcproc	*p_lwpctl;	/* p, a: _lwp_ctl() information */
 	pid_t		p_ppid;		/* :: cached parent pid */
 	pid_t 		p_fpid;		/* :: forked pid */
-	pid_t 		p_vfpid;	/* :: vforked pid */
-	pid_t 		p_vfpid_done;	/* :: vforked done pid */
-	lwpid_t		p_lwp_created;	/* :: lwp created */
-	lwpid_t		p_lwp_exited;	/* :: lwp exited */
-	u_int		p_nsems;	/* Count of semaphores */
 
 /*
  * End area that is zeroed on creation
@@ -336,12 +311,12 @@ struct proc {
 	vaddr_t		p_psstrp;	/* :: address of process's ps_strings */
 	u_int		p_pax;		/* :: PAX flags */
 
-	int		p_xexit;	/* p: exit code */
 /*
  * End area that is copied on creation
  */
-#define	p_endcopy	p_xsig
-	u_short		p_xsig;		/* p: stop signal */
+#define	p_endcopy	p_xstat
+
+	u_short		p_xstat;	/* p: Exit status for wait; also stop signal */
 	u_short		p_acflag;	/* p: Acc. flags; see struct lwp also */
 	struct mdproc	p_md;		/* p: Any machine-dependent fields */
 	vaddr_t		p_stackbase;	/* :: ASLR randomized stack base */
@@ -393,23 +368,13 @@ struct proc {
 #define	PS_STOPEXEC	0x01000000 /* Will be stopped on exec(2) */
 #define	PS_STOPEXIT	0x02000000 /* Will be stopped at process exit */
 #define	PS_NOTIFYSTOP	0x10000000 /* Notify parent of successful STOP */
-#define	PS_COREDUMP	0x20000000 /* Process core-dumped */
-#define	PS_CONTINUED	0x40000000 /* Process is continued */
 #define	PS_STOPPING	0x80000000 /* Transitioning SACTIVE -> SSTOP */
 
 /*
- * These flags are kept in p_slflag and are protected by the proc_lock
+ * These flags are kept in p_sflag and are protected by the proc_lock
  * and p_lock.  Access from process context only.
  */
 #define	PSL_TRACEFORK	0x00000001 /* traced process wants fork events */
-#define	PSL_TRACEVFORK	0x00000002 /* traced process wants vfork events */
-#define	PSL_TRACEVFORK_DONE	\
-			0x00000004 /* traced process wants vfork done events */
-#define	PSL_TRACELWP_CREATE	\
-			0x00000008 /* traced process wants LWP create events */
-#define	PSL_TRACELWP_EXIT	\
-			0x00000010 /* traced process wants LWP exit events */
-
 #define	PSL_TRACED	0x00000800 /* Debugged process being traced */
 #define	PSL_FSTRACE	0x00010000 /* Debugger process being traced by procfs */
 #define	PSL_CHTRACED	0x00400000 /* Child has been traced & reparented */
@@ -422,7 +387,7 @@ struct proc {
 #define	PST_PROFIL	0x00000020 /* Has started profiling */
 
 /*
- * Kept in p_lflag and protected by the proc_lock.  Access
+ * The final set are protected by the proc_lock.  Access
  * from process context only.
  */
 #define	PL_CONTROLT	0x00000002 /* Has a controlling terminal */
@@ -437,11 +402,6 @@ struct proc {
  */
 #define	P_EXITSIG(p)	\
     (((p)->p_slflag & (PSL_TRACED|PSL_FSTRACE)) ? SIGCHLD : p->p_exitsig)
-/*
- * Compute a wait(2) 16 bit exit status code
- */
-#define P_WAITSTATUS(p) W_EXITCODE((p)->p_xexit, ((p)->p_xsig | \
-    (((p)->p_sflag & PS_COREDUMP) ? WCOREFLAG : 0)))
 
 LIST_HEAD(proclist, proc);		/* A list of processes */
 
@@ -493,7 +453,6 @@ extern const struct proclist_desc proclists[];
 
 extern struct pool	ptimer_pool;	/* Memory pool for ptimers */
 
-int		proc_find_locked(struct lwp *, struct proc **, pid_t);
 proc_t *	proc_find_raw(pid_t);
 proc_t *	proc_find(pid_t);		/* Find process by ID */
 struct pgrp *	pgrp_find(pid_t);		/* Find process group by ID */
@@ -510,12 +469,8 @@ int	tsleep(wchan_t, pri_t, const char *, int);
 int	mtsleep(wchan_t, pri_t, const char *, int, kmutex_t *);
 void	wakeup(wchan_t);
 int	kpause(const char *, bool, int, kmutex_t *);
-void	exit1(struct lwp *, int, int) __dead;
-int	kill1(struct lwp *l, pid_t pid, ksiginfo_t *ksi, register_t *retval);
+void	exit1(struct lwp *, int) __dead;
 int	do_sys_wait(int *, int *, int, struct rusage *);
-int	do_sys_waitid(idtype_t, id_t, int *, int *, int, struct wrusage *,
-	    siginfo_t *);
-
 struct proc *proc_alloc(void);
 void	proc0_init(void);
 pid_t	proc_alloc_pid(struct proc *);
@@ -567,14 +522,6 @@ _proclist_skipmarker(struct proc *p0)
 
 	return p;
 }
-
-#define PROC_PTRSZ(p) (((p)->p_flag & PK_32) ? sizeof(int) : sizeof(void *))
-#define PROC_REGSZ(p) (((p)->p_flag & PK_32) ? \
-    sizeof(process_reg32) : sizeof(struct reg))
-#define PROC_FPREGSZ(p) (((p)->p_flag & PK_32) ? \
-    sizeof(process_fpreg32) : sizeof(struct fpreg))
-#define PROC_DBREGSZ(p) (((p)->p_flag & PK_32) ? \
-    sizeof(process_dbreg32) : sizeof(struct dbreg))
 
 /*
  * PROCLIST_FOREACH: iterate on the given proclist, skipping PK_MARKER ones.

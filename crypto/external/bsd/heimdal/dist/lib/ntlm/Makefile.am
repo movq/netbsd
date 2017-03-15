@@ -2,9 +2,11 @@
 
 include $(top_srcdir)/Makefile.am.common
 
+AM_CPPFLAGS += $(INCLUDE_hcrypto)
+
 lib_LTLIBRARIES = libheimntlm.la
 
-dist_include_HEADERS = heimntlm.h $(srcdir)/heimntlm-protos.h
+dist_include_HEADERS = heimntlm.h heimntlm-protos.h
 
 nodist_include_HEADERS = ntlm_err.h
 
@@ -21,11 +23,10 @@ $(libheimntlm_la_OBJECTS): $(srcdir)/version-script.map
 
 libheimntlm_la_LIBADD = \
 	../krb5/libkrb5.la \
-	$(top_builddir)/lib/wind/libwind.la \
 	$(LIB_hcrypto) \
 	$(LIBADD_roken)
 
-$(srcdir)/heimntlm-protos.h: $(dist_libheimntlm_la_SOURCES)
+$(srcdir)/heimntlm-protos.h:
 	cd $(srcdir) && perl ../../cf/make-proto.pl -q -P comment -o heimntlm-protos.h $(dist_libheimntlm_la_SOURCES) || rm -f heimntlm-protos.h
 
 $(libheimntlm_la_OBJECTS): $(srcdir)/heimntlm-protos.h ntlm_err.h

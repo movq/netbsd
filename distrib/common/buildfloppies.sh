@@ -1,6 +1,6 @@
 #!/bin/sh
 #
-# $NetBSD: buildfloppies.sh,v 1.18 2017/02/11 03:07:06 christos Exp $
+# $NetBSD: buildfloppies.sh,v 1.17 2008/11/12 14:22:16 apb Exp $
 #
 # Copyright (c) 2002-2003 The NetBSD Foundation, Inc.
 # All rights reserved.
@@ -48,7 +48,6 @@ Usage: ${prog} [options] base size file [...]
 	-N etcdir	directory in which to find passwd and group files.
 	-p		pad last floppy to floppy size
 	-s suffix	suffix for floppies
-	-t timestamp	set timestamp for reproducible builds
 	base		basename of generated floppies
 	size		size of a floppy in 512 byte blocks
 	file [...]	file(s) to store in the floppies
@@ -70,7 +69,7 @@ roundup()
 #	parse and check arguments
 #
 
-while getopts i:m:N:ps:t: opt; do
+while getopts i:m:N:ps: opt; do
 	case ${opt} in
 	i)
 		instboot=${OPTARG} ;;
@@ -82,8 +81,6 @@ while getopts i:m:N:ps:t: opt; do
 		pad=1 ;;
 	s)
 		suffix=${OPTARG} ;;
-	t)
-		timestamp="--timestamp ${OPTARG}" ;;
 	\?|*)
 		usage
 		;;
@@ -112,7 +109,7 @@ dd if=/dev/zero of=${floppy} bs=8k count=1 2>/dev/null
 		echo "./$f type=file uname=root gname=wheel mode=0444"
 	done
 ) | \
-${PAX} ${timestamp} -O -w -b8k -M -N "${etcdir}" -s,^./,, >> ${floppy} || exit 1
+${PAX} -O -w -b8k -M -N "${etcdir}" -s,^./,, >> ${floppy} || exit 1
 
 #	install bootstrap before the image is split into multiple disks
 #

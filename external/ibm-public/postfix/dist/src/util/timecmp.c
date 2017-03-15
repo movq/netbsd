@@ -1,4 +1,4 @@
-/*	$NetBSD: timecmp.c,v 1.2 2017/02/14 01:16:49 christos Exp $	*/
+/*	$NetBSD: timecmp.c,v 1.1.1.1 2014/07/06 19:27:59 tron Exp $	*/
 
 /*++
 /* NAME
@@ -70,7 +70,7 @@ int     timecmp(time_t t1, time_t t2)
 #include <limits.h>
 #define __MAXINT__(T) ((T) (((((T) 1) << ((sizeof(T) * CHAR_BIT) - 1)) ^ ((T) -1))))
 
-int     main(void)
+int     main()
 {
     time_t  now = time((time_t *) 0);
 

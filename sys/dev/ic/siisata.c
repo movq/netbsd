@@ -1,4 +1,4 @@
-/* $NetBSD: siisata.c,v 1.30 2017/01/03 01:30:15 jakllsch Exp $ */
+/* $NetBSD: siisata.c,v 1.27 2013/08/08 17:38:56 bouyer Exp $ */
 
 /* from ahcisata_core.c */
 
@@ -79,7 +79,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: siisata.c,v 1.30 2017/01/03 01:30:15 jakllsch Exp $");
+__KERNEL_RCSID(0, "$NetBSD: siisata.c,v 1.27 2013/08/08 17:38:56 bouyer Exp $");
 
 #include <sys/types.h>
 #include <sys/malloc.h>
@@ -724,10 +724,11 @@ siisata_probe_drive(struct ata_channel *chp)
 		if (timed_out) {
 			aprint_error_dev(sc->sc_atac.atac_dev,
 			    "SOFT_RESET failed on port %d (error %d PSS 0x%x), "
-			    "resetting\n", chp->ch_channel,
+			    "disabling\n", chp->ch_channel,
 			    PRREAD(sc, PRX(chp->ch_channel, PRO_PCE)),
 			    PRREAD(sc, PRX(chp->ch_channel, PRO_PSS)));
-			siisata_reinit_port(chp);
+			PRWRITE(sc, PRX(chp->ch_channel, PRO_PCS),
+			    PR_PC_PORT_RESET);
 			break;
 		}
 
@@ -845,11 +846,6 @@ siisata_cmd_start(struct ata_channel *chp, struct ata_xfer *xfer)
 	prb->prb_fis[rhd_c] |= xfer->c_drive;
 
 	memset(prb->prb_atapi, 0, sizeof(prb->prb_atapi));
-
-	if (ata_c->r_command == ATA_DATA_SET_MANAGEMENT) {
-		prb->prb_control |= htole16(PRB_CF_PROTOCOL_OVERRIDE);
-		prb->prb_protocol_override |= htole16(PRB_PO_WRITE);
-	}
 
 	if (siisata_dma_setup(chp, slot,
 	    (ata_c->flags & (AT_READ | AT_WRITE)) ? ata_c->data : NULL,
@@ -1463,12 +1459,11 @@ siisata_atapi_probe_device(struct atapibus_softc *sc, int target)
 		sa.sa_inqbuf.type = ATAPI_CFG_TYPE(id->atap_config);
 		sa.sa_inqbuf.removable = id->atap_config & ATAPI_CFG_REMOV ?
 		    T_REMOV : T_FIXED;
-		strnvisx(model, sizeof(model), id->atap_model, 40,
-		    VIS_TRIM|VIS_SAFE|VIS_OCTAL);
-		strnvisx(serial_number, sizeof(serial_number),
-		    id->atap_serial, 20, VIS_TRIM|VIS_SAFE|VIS_OCTAL);
-		strnvisx(firmware_revision, sizeof(firmware_revision),
-		    id->atap_revision, 8, VIS_TRIM|VIS_SAFE|VIS_OCTAL);
+		scsipi_strvis((u_char *)model, 40, id->atap_model, 40);
+		scsipi_strvis((u_char *)serial_number, 20,
+		    id->atap_serial, 20);
+		scsipi_strvis((u_char *)firmware_revision, 8,
+		    id->atap_revision, 8);
 		sa.sa_inqbuf.vendor = model;
 		sa.sa_inqbuf.product = serial_number;
 		sa.sa_inqbuf.revision = firmware_revision;

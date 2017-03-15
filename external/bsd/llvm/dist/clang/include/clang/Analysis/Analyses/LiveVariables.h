@@ -16,6 +16,7 @@
 
 #include "clang/AST/Decl.h"
 #include "clang/Analysis/AnalysisContext.h"
+#include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/ImmutableSet.h"
 
 namespace clang {
@@ -43,6 +44,8 @@ public:
                    llvm::ImmutableSet<const VarDecl *> LiveDecls)
       : liveStmts(LiveStmts), liveDecls(LiveDecls) {}
 
+    ~LivenessValues() {}
+    
     bool isLive(const Stmt *S) const;
     bool isLive(const VarDecl *D) const;
     
@@ -63,10 +66,11 @@ public:
     /// Called when the live variables analysis registers
     /// that a variable is killed.
     virtual void observerKill(const DeclRefExpr *DR) {}
-  };
+  };    
 
-  ~LiveVariables() override;
 
+  virtual ~LiveVariables();
+  
   /// Compute the liveness information for a given CFG.
   static LiveVariables *computeLiveness(AnalysisDeclContext &analysisContext,
                                         bool killAtAssign);

@@ -1,4 +1,4 @@
-# $NetBSD: Makefile,v 1.7 2016/03/23 22:27:48 christos Exp $
+# $NetBSD: Makefile,v 1.5 2010/02/03 15:34:43 roy Exp $
 
 NOMAN=1
 PROG=wtc1

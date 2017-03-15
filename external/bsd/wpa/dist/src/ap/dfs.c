@@ -122,20 +122,6 @@ static int dfs_is_chan_allowed(struct hostapd_channel_data *chan, int n_chans)
 }
 
 
-static struct hostapd_channel_data *
-dfs_get_chan_data(struct hostapd_hw_modes *mode, int freq, int first_chan_idx)
-{
-	int i;
-
-	for (i = first_chan_idx; i < mode->num_channels; i++) {
-		if (mode->channels[i].freq == freq)
-			return &mode->channels[i];
-	}
-
-	return NULL;
-}
-
-
 static int dfs_chan_range_available(struct hostapd_hw_modes *mode,
 				    int first_chan_idx, int num_chans,
 				    int skip_radar)
@@ -143,15 +129,15 @@ static int dfs_chan_range_available(struct hostapd_hw_modes *mode,
 	struct hostapd_channel_data *first_chan, *chan;
 	int i;
 
-	if (first_chan_idx + num_chans > mode->num_channels)
+	if (first_chan_idx + num_chans >= mode->num_channels)
 		return 0;
 
 	first_chan = &mode->channels[first_chan_idx];
 
 	for (i = 0; i < num_chans; i++) {
-		chan = dfs_get_chan_data(mode, first_chan->freq + i * 20,
-					 first_chan_idx);
-		if (!chan)
+		chan = &mode->channels[first_chan_idx + i];
+
+		if (first_chan->freq + i * 20 != chan->freq)
 			return 0;
 
 		if (!dfs_channel_available(chan, skip_radar))
@@ -165,10 +151,16 @@ static int dfs_chan_range_available(struct hostapd_hw_modes *mode,
 static int is_in_chanlist(struct hostapd_iface *iface,
 			  struct hostapd_channel_data *chan)
 {
-	if (!iface->conf->acs_ch_list.num)
+	int *entry;
+
+	if (!iface->conf->chanlist)
 		return 1;
 
-	return freq_range_list_includes(&iface->conf->acs_ch_list, chan->chan);
+	for (entry = iface->conf->chanlist; *entry != -1; entry++) {
+		if (*entry == chan->chan)
+			return 1;
+	}
+	return 0;
 }
 
 
@@ -450,7 +442,7 @@ dfs_get_valid_channel(struct hostapd_iface *iface,
 		return NULL;
 
 	if (os_get_random((u8 *) &_rand, sizeof(_rand)) < 0)
-		return NULL;
+		_rand = os_random();
 	chan_idx = _rand % num_available_chandefs;
 	dfs_find_channel(iface, &chan, chan_idx, skip_radar);
 
@@ -704,8 +696,7 @@ int hostapd_handle_dfs(struct hostapd_iface *iface)
 							skip_radar);
 			if (!channel) {
 				wpa_printf(MSG_ERROR, "could not get valid channel");
-				hostapd_set_state(iface, HAPD_IFACE_DFS);
-				return 0;
+				return -1;
 			}
 
 			iface->freq = channel->freq;
@@ -794,6 +785,7 @@ static int hostapd_dfs_start_channel_switch_cac(struct hostapd_iface *iface)
 
 	if (!channel) {
 		wpa_printf(MSG_ERROR, "No valid channel available");
+		hostapd_setup_interface_complete(iface, err);
 		return err;
 	}
 
@@ -814,6 +806,16 @@ static int hostapd_dfs_start_channel_switch_cac(struct hostapd_iface *iface)
 
 	hostapd_setup_interface_complete(iface, err);
 	return err;
+}
+
+
+static int hostapd_csa_in_progress(struct hostapd_iface *iface)
+{
+	unsigned int i;
+	for (i = 0; i < iface->num_bss; i++)
+		if (iface->bss[i]->csa_in_progress)
+			return 1;
+	return 0;
 }
 
 
@@ -858,9 +860,8 @@ static int hostapd_dfs_start_channel_switch(struct hostapd_iface *iface)
 						&vht_oper_centr_freq_seg1_idx,
 						skip_radar);
 		if (!channel) {
-			wpa_printf(MSG_INFO,
-				   "%s: no DFS channels left, waiting for NOP to finish",
-				   __func__);
+			/* FIXME: Wait for channel(s) to become available */
+			hostapd_disable_iface(iface);
 			return err;
 		}
 
@@ -983,11 +984,6 @@ int hostapd_dfs_nop_finished(struct hostapd_iface *iface, int freq,
 	/* TODO add correct implementation here */
 	set_dfs_state(iface, freq, ht_enabled, chan_offset, chan_width,
 		      cf1, cf2, HOSTAPD_CHAN_DFS_USABLE);
-
-	/* Handle cases where all channels were initially unavailable */
-	if (iface->state == HAPD_IFACE_DFS && !iface->cac_started)
-		hostapd_handle_dfs(iface);
-
 	return 0;
 }
 

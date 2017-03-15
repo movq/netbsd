@@ -21,24 +21,25 @@
 #include "MipsGenRegisterInfo.inc"
 
 namespace llvm {
-class MipsRegisterInfo : public MipsGenRegisterInfo {
-public:
-  enum class MipsPtrClass {
-    /// The default register class for integer values.
-    Default = 0,
-    /// The subset of registers permitted in certain microMIPS instructions
-    /// such as lw16.
-    GPR16MM = 1,
-    /// The stack pointer only.
-    StackPointer = 2,
-    /// The global pointer only.
-    GlobalPointer = 3,
-  };
+class MipsSubtarget;
+class Type;
 
-  MipsRegisterInfo();
+class MipsRegisterInfo : public MipsGenRegisterInfo {
+protected:
+  const MipsSubtarget &Subtarget;
+
+public:
+  MipsRegisterInfo(const MipsSubtarget &Subtarget);
+
+  /// getRegisterNumbering - Given the enum value for some register, e.g.
+  /// Mips::RA, return the number that it corresponds to (e.g. 31).
+  static unsigned getRegisterNumbering(unsigned RegEnum);
 
   /// Get PIC indirect call register
   static unsigned getPICCallReg();
+
+  /// Adjust the Mips stack frame.
+  void adjustMipsStackFrame(MachineFunction &MF) const;
 
   /// Code Generation virtual methods...
   const TargetRegisterClass *getPointerRegClass(const MachineFunction &MF,
@@ -46,9 +47,9 @@ public:
 
   unsigned getRegPressureLimit(const TargetRegisterClass *RC,
                                MachineFunction &MF) const override;
-  const MCPhysReg *getCalleeSavedRegs(const MachineFunction *MF) const override;
-  const uint32_t *getCallPreservedMask(const MachineFunction &MF,
-                                       CallingConv::ID) const override;
+  const MCPhysReg *
+  getCalleeSavedRegs(const MachineFunction *MF = nullptr) const override;
+  const uint32_t *getCallPreservedMask(CallingConv::ID) const override;
   static const uint32_t *getMips16RetHelperMask();
 
   BitVector getReservedRegs(const MachineFunction &MF) const override;
@@ -62,8 +63,8 @@ public:
                            int SPAdj, unsigned FIOperandNum,
                            RegScavenger *RS = nullptr) const override;
 
-  // Stack realignment queries.
-  bool canRealignStack(const MachineFunction &MF) const override;
+  void processFunctionBeforeFrameFinalized(MachineFunction &MF,
+                                       RegScavenger *RS = nullptr) const;
 
   /// Debug information queries.
   unsigned getFrameRegister(const MachineFunction &MF) const override;

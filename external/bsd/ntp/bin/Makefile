@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.3 2016/06/29 23:03:24 christos Exp $
+#	$NetBSD: Makefile,v 1.2.26.1 2016/07/14 18:36:12 martin Exp $
 
 SUBDIR= ntp-keygen ntpd ntpdate ntpdc ntpq ntptime ntptrace sntp 
 

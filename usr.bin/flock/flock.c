@@ -1,4 +1,4 @@
-/*	$NetBSD: flock.c,v 1.11 2014/08/18 09:16:35 christos Exp $	*/
+/*	$NetBSD: flock.c,v 1.9.4.1 2014/08/30 14:06:55 martin Exp $	*/
 
 /*-
  * Copyright (c) 2012 The NetBSD Foundation, Inc.
@@ -31,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: flock.c,v 1.11 2014/08/18 09:16:35 christos Exp $");
+__RCSID("$NetBSD: flock.c,v 1.9.4.1 2014/08/30 14:06:55 martin Exp $");
 
 #include <stdio.h>
 #include <string.h>

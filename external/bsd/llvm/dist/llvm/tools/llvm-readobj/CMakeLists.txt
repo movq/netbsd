@@ -1,20 +1,18 @@
 set(LLVM_LINK_COMPONENTS
-  DebugInfoCodeView
+  ${LLVM_TARGETS_TO_BUILD}
   Object
   Support
-  DebugInfoCodeView
-  DebugInfoMSF
   )
 
 add_llvm_tool(llvm-readobj
   ARMAttributeParser.cpp
   ARMWinEHPrinter.cpp
   COFFDumper.cpp
-  COFFImportDumper.cpp
   ELFDumper.cpp
   Error.cpp
   llvm-readobj.cpp
   MachODumper.cpp
   ObjDumper.cpp
+  StreamWriter.cpp
   Win64EHDumper.cpp
   )

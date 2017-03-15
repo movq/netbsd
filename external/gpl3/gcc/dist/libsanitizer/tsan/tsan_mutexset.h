@@ -20,7 +20,7 @@ class MutexSet {
  public:
   // Holds limited number of mutexes.
   // The oldest mutexes are discarded on overflow.
-  static const uptr kMaxSize = 16;
+  static const uptr kMaxSize = 64;
   struct Desc {
     u64 id;
     u64 epoch;
@@ -36,10 +36,6 @@ class MutexSet {
   uptr Size() const;
   Desc Get(uptr i) const;
 
-  void operator=(const MutexSet &other) {
-    internal_memcpy(this, &other, sizeof(*this));
-  }
-
  private:
 #ifndef TSAN_GO
   uptr size_;
@@ -47,7 +43,6 @@ class MutexSet {
 #endif
 
   void RemovePos(uptr i);
-  MutexSet(const MutexSet&);
 };
 
 // Go does not have mutexes, so do not spend memory and time.
@@ -65,4 +60,4 @@ MutexSet::Desc MutexSet::Get(uptr i) const { return Desc(); }
 
 }  // namespace __tsan
 
-#endif  // TSAN_MUTEXSET_H
+#endif  // TSAN_REPORT_H

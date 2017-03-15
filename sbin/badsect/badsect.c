@@ -1,4 +1,4 @@
-/*	$NetBSD: badsect.c,v 1.34 2016/09/05 01:09:57 sevan Exp $	*/
+/*	$NetBSD: badsect.c,v 1.33 2013/06/23 02:06:04 dholland Exp $	*/
 
 /*
  * Copyright (c) 1981, 1983, 1993
@@ -39,7 +39,7 @@ __COPYRIGHT("@(#) Copyright (c) 1981, 1983, 1993\
 #if 0
 static char sccsid[] = "@(#)badsect.c	8.2 (Berkeley) 5/4/95";
 #else
-__RCSID("$NetBSD: badsect.c,v 1.34 2016/09/05 01:09:57 sevan Exp $");
+__RCSID("$NetBSD: badsect.c,v 1.33 2013/06/23 02:06:04 dholland Exp $");
 #endif
 #endif /* not lint */
 
@@ -89,6 +89,8 @@ static int is_ufs2;
 
 static void	rdfs(off_t, size_t, void *);
 static int	chkuse(daddr_t, int);
+
+int	main(int, char *[]);
 
 static const off_t sblock_try[] = SBLOCKSEARCH;
 

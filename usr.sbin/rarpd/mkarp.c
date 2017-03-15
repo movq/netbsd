@@ -1,4 +1,4 @@
-/*	$NetBSD: mkarp.c,v 1.11 2016/04/04 07:37:08 ozaki-r Exp $ */
+/*	$NetBSD: mkarp.c,v 1.9 2011/08/30 20:25:18 joerg Exp $ */
 
 /*
  * Copyright (c) 1984, 1993
@@ -42,7 +42,7 @@ __COPYRIGHT("@(#) Copyright (c) 1984, 1993\
 #if 0
 static char sccsid[] = "@(#)arp.c	8.3 (Berkeley) 4/28/95";
 #else
-__RCSID("$NetBSD: mkarp.c,v 1.11 2016/04/04 07:37:08 ozaki-r Exp $");
+__RCSID("$NetBSD: mkarp.c,v 1.9 2011/08/30 20:25:18 joerg Exp $");
 #endif
 #endif /* not lint */
 
@@ -87,26 +87,6 @@ static struct {
 	char	m_space[512];
 }	m_rtmsg;
 
-static int
-is_llinfo(const struct sockaddr_dl *sdl, int rtflags)
-{
-	if (sdl->sdl_family != AF_LINK ||
-	    (rtflags & (RTF_LLDATA|RTF_GATEWAY)) != RTF_LLDATA)
-		return 0;
-
-	switch (sdl->sdl_type) {
-	case IFT_ETHER:
-	case IFT_FDDI:
-	case IFT_ISO88023:
-	case IFT_ISO88024:
-	case IFT_ISO88025:
-	case IFT_ARCNET:
-		return 1;
-	default:
-		return 0;
-	}
-}
-
 /*
  * Set an individual arp entry 
  */
@@ -114,13 +94,9 @@ int
 mkarp(u_char *haddr, u_int32_t ipaddr)
 {
 	static struct sockaddr_inarp blank_sin = {
-		.sin_len = sizeof(blank_sin),
-		.sin_family = AF_INET,
-	};
+		sizeof(blank_sin), AF_INET, 0, { 0 }, { 0 }, 0, 0  };
 	static struct sockaddr_dl blank_sdl = {
-		.sdl_len = sizeof(blank_sdl),
-		.sdl_family = AF_LINK,
-	};
+		sizeof(blank_sdl), AF_LINK, 0, 0, 0, 0, 0, { 0 } };
 
 	struct sockaddr_inarp *sin;
 	struct sockaddr_dl *sdl;
@@ -171,8 +147,13 @@ mkarp(u_char *haddr, u_int32_t ipaddr)
 	sin = (struct sockaddr_inarp *)(rtm + 1);
 	sdl = (struct sockaddr_dl *)(sin->sin_len + (char *)sin);
 	if (sin->sin_addr.s_addr == sin_m.sin_addr.s_addr) {
-		if (is_llinfo(sdl, rtm->rtm_flags))
+		if (sdl->sdl_family == AF_LINK &&
+		    (rtm->rtm_flags & RTF_LLINFO) &&
+		    !(rtm->rtm_flags & RTF_GATEWAY)) switch (sdl->sdl_type) {
+		case IFT_ETHER: case IFT_FDDI: case IFT_ISO88023:
+		case IFT_ISO88024: case IFT_ISO88025: case IFT_ARCNET:
 			goto overwrite;
+		}
 #if 0
 		(void)printf("set: can only proxy for %s\n", host);
 #endif
@@ -224,7 +205,7 @@ rtmsg(int cmd, int s, struct rt_msghdr *rtm, struct sockaddr_inarp *sin_m,
 		(void)gettimeofday(&tv, 0);
 		rtm->rtm_rmx.rmx_expire = tv.tv_sec + 20 * 60;
 		rtm->rtm_inits = RTV_EXPIRE;
-		rtm->rtm_flags |= (RTF_HOST | RTF_STATIC | RTF_LLDATA);
+		rtm->rtm_flags |= (RTF_HOST | RTF_STATIC);
 		sin_m->sin_other = 0;
 
 		/* FALLTHROUGH */

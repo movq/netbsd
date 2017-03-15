@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile.inc,v 1.21 2016/09/05 07:23:43 skrll Exp $
+#	$NetBSD: Makefile.inc,v 1.18 2011/08/29 18:32:18 bouyer Exp $
 #
 #	etc.evbmips/Makefile.inc -- evbmips-specific etc Makefile targets
 #
@@ -6,12 +6,12 @@
 # If you change the list of distributed kernels, don't forget
 # to update the release documentation in distrib/notes/common/contents
 
-KERNEL_SUFFIXES=	srec ub elf32
+KERNEL_SUFFIXES=	srec
 
 .if ${MACHINE_ARCH} == "mipsel"
-KERNEL_SETS=		ALCHEMY CI20 CPMBR1400 DBAU1500 DBAU1550 GDIUM
+KERNEL_SETS=		ALCHEMY CPMBR1400 DBAU1500 DBAU1550 GDIUM
 KERNEL_SETS+=		MALTA MTX-1 OMSAL400
-BUILD_KERNELS=		INSTALL_CI20 INSTALL_OMSAL400 INSTALL_MALTA
+BUILD_KERNELS=		INSTALL_OMSAL400 INSTALL_MALTA
 
 KERNEL_SETS+=		P4032 P5064 P6032
 
@@ -25,9 +25,6 @@ KERNEL_SETS+=		P5064-64
 KERNEL_SETS+=		LOONGSON
 BUILD_KERNELS+=		INSTALL_LOONGSON
 KERNEL_SETS+=		GDIUM64
-.else
-KERNEL_SETS+=		ERLITE
-BUILD_KERNELS+=		INSTALL_ERLITE
 .endif
 .else
 KERNEL_SETS=		ALCHEMY DB120 DBAU1500 DBAU1550 MALTA RB433UAH

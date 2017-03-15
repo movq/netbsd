@@ -1,4 +1,4 @@
-/* $NetBSD: ieee80211_netbsd.c,v 1.29 2017/01/14 16:34:44 maya Exp $ */
+/* $NetBSD: ieee80211_netbsd.c,v 1.26 2014/04/07 00:07:40 pooka Exp $ */
 /*-
  * Copyright (c) 2003-2005 Sam Leffler, Errno Consulting
  * All rights reserved.
@@ -30,7 +30,7 @@
 #ifdef __FreeBSD__
 __FBSDID("$FreeBSD: src/sys/net80211/ieee80211_freebsd.c,v 1.8 2005/08/08 18:46:35 sam Exp $");
 #else
-__KERNEL_RCSID(0, "$NetBSD: ieee80211_netbsd.c,v 1.29 2017/01/14 16:34:44 maya Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ieee80211_netbsd.c,v 1.26 2014/04/07 00:07:40 pooka Exp $");
 #endif
 
 /*
@@ -139,7 +139,7 @@ ieee80211_sysctl_parent(SYSCTLFN_ARGS)
 
 	node = *rnode;
 	ic = node.sysctl_data;
-	strlcpy(pname, ic->ic_ifp->if_xname, IFNAMSIZ);
+	strncpy(pname, ic->ic_ifp->if_xname, IFNAMSIZ);
 	node.sysctl_data = pname;
 	return sysctl_lookup(SYSCTLFN_CALL(&node));
 }
@@ -468,7 +468,7 @@ static void
 ieee80211_sysctl_setup(void)
 {
 	int rc;
-	const struct sysctlnode *rnode;
+	const struct sysctlnode *cnode, *rnode;
 
 	if ((rnode = ieee80211_sysctl_treetop(&ieee80211_sysctllog)) == NULL)
 		return;
@@ -480,7 +480,7 @@ ieee80211_sysctl_setup(void)
 
 #ifdef IEEE80211_DEBUG
 	/* control debugging printfs */
-	if ((rc = sysctl_createv(&ieee80211_sysctllog, 0, &rnode, NULL,
+	if ((rc = sysctl_createv(&ieee80211_sysctllog, 0, &rnode, &cnode,
 	    CTLFLAG_PERMANENT|CTLFLAG_READWRITE, CTLTYPE_INT,
 	    "debug", SYSCTL_DESCR("control debugging printfs"),
 	    NULL, 0, &ieee80211_debug, 0, CTL_CREATE, CTL_EOL)) != 0)
@@ -515,10 +515,10 @@ ieee80211_drain_ifq(struct ifqueue *ifq)
 		if (m == NULL)
 			break;
 
-		ni = M_GETCTX(m, struct ieee80211_node *);
+		ni = (struct ieee80211_node *)m->m_pkthdr.rcvif;
 		KASSERT(ni != NULL);
 		ieee80211_free_node(ni);
-		M_SETCTX(m, NULL);
+		m->m_pkthdr.rcvif = NULL;
 
 		m_freem(m);
 	}

@@ -1,4 +1,4 @@
-/*	$NetBSD: n_sincos.c,v 1.7 2014/10/10 20:58:09 martin Exp $	*/
+/*	$NetBSD: n_sincos.c,v 1.6.74.1 2014/10/13 19:34:58 martin Exp $	*/
 /*
  * Copyright (c) 1987, 1993
  *	The Regents of the University of California.  All rights reserved.

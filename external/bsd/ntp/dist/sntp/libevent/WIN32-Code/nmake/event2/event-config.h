@@ -1,4 +1,4 @@
-/*	$NetBSD: event-config.h,v 1.5 2016/01/08 21:35:41 christos Exp $	*/
+/*	$NetBSD: event-config.h,v 1.2.2.3 2015/04/23 18:53:06 snj Exp $	*/
 
 /* event2/event-config.h
  *

@@ -1,4 +1,4 @@
-/*	$NetBSD: viomb.c,v 1.7 2016/09/27 03:33:32 pgoyette Exp $	*/
+/*	$NetBSD: viomb.c,v 1.3 2014/07/22 01:55:54 ozaki-r Exp $	*/
 
 /*
  * Copyright (c) 2010 Minoura Makoto.
@@ -26,7 +26,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: viomb.c,v 1.7 2016/09/27 03:33:32 pgoyette Exp $");
+__KERNEL_RCSID(0, "$NetBSD: viomb.c,v 1.3 2014/07/22 01:55:54 ozaki-r Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -38,7 +38,6 @@ __KERNEL_RCSID(0, "$NetBSD: viomb.c,v 1.7 2016/09/27 03:33:32 pgoyette Exp $");
 #include <sys/mutex.h>
 #include <sys/sysctl.h>
 #include <uvm/uvm_page.h>
-#include <sys/module.h>
 
 #include <dev/pci/pcidevs.h>
 #include <dev/pci/pcireg.h>
@@ -47,8 +46,6 @@ __KERNEL_RCSID(0, "$NetBSD: viomb.c,v 1.7 2016/09/27 03:33:32 pgoyette Exp $");
 #include <dev/pci/virtioreg.h>
 #include <dev/pci/virtiovar.h>
 
-#include "ioconf.h"
-
 /* Configuration registers */
 #define VIRTIO_BALLOON_CONFIG_NUM_PAGES	0 /* 32bit */
 #define VIRTIO_BALLOON_CONFIG_ACTUAL	4 /* 32bit */
@@ -56,11 +53,6 @@ __KERNEL_RCSID(0, "$NetBSD: viomb.c,v 1.7 2016/09/27 03:33:32 pgoyette Exp $");
 /* Feature bits */
 #define VIRTIO_BALLOON_F_MUST_TELL_HOST (1<<0)
 #define VIRTIO_BALLOON_F_STATS_VQ	(1<<1)
-
-#define VIRTIO_BALLOON_FLAG_BITS \
-	VIRTIO_COMMON_FLAG_BITS \
-	"\x02""STATS_VQ" \
-	"\x01""MUST_TELL_HOST"
 
 #define PGS_PER_REQ		(256) /* 1MB, 4KB/page */
 
@@ -126,18 +118,18 @@ viomb_attach(device_t parent, device_t self, void *aux)
 	struct viomb_softc *sc = device_private(self);
 	struct virtio_softc *vsc = device_private(parent);
 	const struct sysctlnode *node;
-	uint32_t features;
-	char buf[256];
 
 	if (vsc->sc_child != NULL) {
 		aprint_normal(": child already attached for %s; "
-			      "something wrong...\n", device_xname(parent));
+			      "something wrong...\n",
+			      device_xname(parent));
 		return;
 	}
 	if (balloon_initialized++) {
 		aprint_normal(": balloon already exists; something wrong...\n");
 		goto err_none;
 	}
+	aprint_normal("\n");
 
 	sc->sc_dev = self;
 	sc->sc_virtio = vsc;
@@ -150,11 +142,8 @@ viomb_attach(device_t parent, device_t self, void *aux)
 	vsc->sc_intrhand = virtio_vq_intr;
 	vsc->sc_flags = 0;
 
-	features = virtio_negotiate_features(vsc,
-	    VIRTIO_CONFIG_DEVICE_FEATURES);
-
-	snprintb(buf, sizeof(buf), VIRTIO_BALLOON_FLAG_BITS, features);
-	aprint_normal(": Features: %s\n", buf);
+	virtio_negotiate_features(vsc,
+				  VIRTIO_CONFIG_DEVICE_FEATURES);
 	if ((virtio_alloc_vq(vsc, &sc->sc_vq[0], 0,
 			     sizeof(uint32_t)*PGS_PER_REQ, 1,
 			     "inflate") != 0) ||
@@ -308,8 +297,8 @@ inflate(struct viomb_softc *sc)
 		uvm_pglistfree(&b->bl_pglist);
 		return 0;
 	}
-	bus_dmamap_sync(vsc->sc_dmat, b->bl_dmamap, 0,
-	    sizeof(uint32_t)*nvpages, BUS_DMASYNC_PREWRITE);
+	bus_dmamap_sync(vsc->sc_dmat, b->bl_dmamap, 0, sizeof(uint32_t)*nvpages,
+			BUS_DMASYNC_PREWRITE);
 	virtio_enqueue(vsc, vq, slot, b->bl_dmamap, true);
 	virtio_enqueue_commit(vsc, vq, slot, true);
 	sc->sc_inflight += nvpages;
@@ -394,8 +383,6 @@ deflate(struct viomb_softc *sc)
 	TAILQ_INIT(&b->bl_pglist);
 	for (i = 0; i < nhpages; i++) {
 		p = TAILQ_FIRST(&sc->sc_balloon_pages);
-		if (p == NULL)
-			break;
 		TAILQ_REMOVE(&sc->sc_balloon_pages, p, pageq.queue);
 		TAILQ_INSERT_TAIL(&b->bl_pglist, p, pageq.queue);
 		b->bl_pages[i] = p->phys_addr / VIRTIO_PAGE_SIZE;
@@ -406,8 +393,7 @@ deflate(struct viomb_softc *sc)
 		       device_xname(sc->sc_dev));
 		TAILQ_FOREACH_REVERSE(p, &b->bl_pglist, pglist, pageq.queue) {
 			TAILQ_REMOVE(&b->bl_pglist, p, pageq.queue);
-			TAILQ_INSERT_HEAD(&sc->sc_balloon_pages, p,
-			    pageq.queue);
+			TAILQ_INSERT_HEAD(&sc->sc_balloon_pages, p, pageq.queue);
 		}
 		return 0;
 	}
@@ -416,13 +402,12 @@ deflate(struct viomb_softc *sc)
 		       device_xname(sc->sc_dev));
 		TAILQ_FOREACH_REVERSE(p, &b->bl_pglist, pglist, pageq.queue) {
 			TAILQ_REMOVE(&b->bl_pglist, p, pageq.queue);
-			TAILQ_INSERT_HEAD(&sc->sc_balloon_pages, p,
-			    pageq.queue);
+			TAILQ_INSERT_HEAD(&sc->sc_balloon_pages, p, pageq.queue);
 		}
 		return 0;
 	}
-	bus_dmamap_sync(vsc->sc_dmat, b->bl_dmamap, 0,
-	    sizeof(uint32_t)*nvpages, BUS_DMASYNC_PREWRITE);
+	bus_dmamap_sync(vsc->sc_dmat, b->bl_dmamap, 0, sizeof(uint32_t)*nvpages,
+			BUS_DMASYNC_PREWRITE);
 	virtio_enqueue(vsc, vq, slot, b->bl_dmamap, true);
 	virtio_enqueue_commit(vsc, vq, slot, true);
 	sc->sc_inflight -= nvpages;
@@ -527,34 +512,4 @@ viomb_thread(void *arg)
 			     mstohz(sleeptime));
 		mutex_exit(&sc->sc_waitlock);
 	}
-}
-
-MODULE(MODULE_CLASS_DRIVER, viomb, "virtio");
- 
-#ifdef _MODULE
-#include "ioconf.c"
-#endif
- 
-static int 
-viomb_modcmd(modcmd_t cmd, void *opaque)
-{
-	int error = 0;
- 
-#ifdef _MODULE
-	switch (cmd) {
-	case MODULE_CMD_INIT:
-		error = config_init_component(cfdriver_ioconf_viomb, 
-		    cfattach_ioconf_viomb, cfdata_ioconf_viomb); 
-		break;
-	case MODULE_CMD_FINI:
-		error = config_fini_component(cfdriver_ioconf_viomb,
-		    cfattach_ioconf_viomb, cfdata_ioconf_viomb);
-		break;
-	default:
-		error = ENOTTY;
-		break; 
-	}
-#endif
-   
-	return error;
 }

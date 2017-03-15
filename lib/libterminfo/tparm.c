@@ -1,4 +1,4 @@
-/* $NetBSD: tparm.c,v 1.16 2015/11/25 18:46:59 christos Exp $ */
+/* $NetBSD: tparm.c,v 1.15.6.1 2016/12/12 07:37:53 snj Exp $ */
 
 /*
  * Copyright (c) 2009, 2011, 2013 The NetBSD Foundation, Inc.
@@ -28,7 +28,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: tparm.c,v 1.16 2015/11/25 18:46:59 christos Exp $");
+__RCSID("$NetBSD: tparm.c,v 1.15.6.1 2016/12/12 07:37:53 snj Exp $");
 #include <sys/param.h>
 
 #include <assert.h>

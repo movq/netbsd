@@ -1,4 +1,4 @@
-/*	$NetBSD: shm.c,v 1.3 2015/07/08 07:14:38 martin Exp $	*/
+/*	$NetBSD: shm.c,v 1.1.6.1 2016/03/22 09:04:19 snj Exp $	*/
 
 /*-
  * Copyright (c) 2013 The NetBSD Foundation, Inc.
@@ -34,7 +34,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: shm.c,v 1.3 2015/07/08 07:14:38 martin Exp $");
+__RCSID("$NetBSD: shm.c,v 1.1.6.1 2016/03/22 09:04:19 snj Exp $");
 
 #include <sys/mman.h>
 #include <sys/mount.h>

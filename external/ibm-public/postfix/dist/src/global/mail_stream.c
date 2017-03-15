@@ -1,4 +1,4 @@
-/*	$NetBSD: mail_stream.c,v 1.2 2017/02/14 01:16:45 christos Exp $	*/
+/*	$NetBSD: mail_stream.c,v 1.1.1.2 2013/01/02 18:58:58 tron Exp $	*/
 
 /*++
 /* NAME
@@ -78,22 +78,22 @@
 /*	mail_stream_ctl() selectively overrides information that
 /*	was specified with mail_stream_file(); none of the attributes
 /*	are applicable for other mail stream types.  The arguments
-/*	are a list macros with arguments, terminated with
-/*	CA_MAIL_STREAM_CTL_END which has none.  The following lists
-/*	the macros and the types of the corresponding arguments.
-/* .IP "CA_MAIL_STREAM_CTL_QUEUE(const char *)"
+/*	are a list of (operation, value) pairs, terminated with
+/*	MAIL_STREAM_CTL_END.  The following lists the operation
+/*	codes and the types of the corresponding value arguments.
+/* .IP "MAIL_STREAM_CTL_QUEUE (char *)"
 /*	The argument specifies an alternate destination queue. The
 /*	queue file is moved to the specified queue before the call
 /*	returns. Failure to rename the queue file results in a fatal
 /*	error.
-/* .IP "CA_MAIL_STREAM_CTL_CLASS(const char *)"
+/* .IP "MAIL_STREAM_CTL_CLASS (char *)"
 /*	The argument specifies an alternate trigger class.
-/* .IP "CA_MAIL_STREAM_CTL_SERVICE(const char *)"
+/* .IP "MAIL_STREAM_CTL_SERVICE (char *)"
 /*	The argument specifies an alternate trigger service.
-/* .IP "CA_MAIL_STREAM_CTL_MODE(int)"
+/* .IP "MAIL_STREAM_CTL_MODE (int)"
 /*	The argument specifies alternate permissions that override
 /*	the permissions specified with mail_stream_file().
-/* .IP "CA_MAIL_STREAM_CTL_DELAY(int)"
+/* .IP "MAIL_STREAM_CTL_DELAY (int)"
 /*	Attempt to postpone initial delivery by advancing the queue
 /*	file modification time stamp by this amount.  This has
 /*	effect only within the deferred mail queue.
@@ -138,7 +138,6 @@
 #include <opened.h>
 #include <mail_params.h>
 #include <mail_stream.h>
-#include <mail_parm_split.h>
 
 /* Application-specific. */
 
@@ -157,7 +156,7 @@ void    mail_stream_cleanup(MAIL_STREAM *info)
     FREE_AND_WIPE(myfree, info->id);
     FREE_AND_WIPE(myfree, info->class);
     FREE_AND_WIPE(myfree, info->service);
-    myfree((void *) info);
+    myfree((char *) info);
 }
 
 #if defined(HAS_FUTIMES_AT)
@@ -380,11 +379,11 @@ static int mail_stream_finish_ipc(MAIL_STREAM *info, VSTRING *why)
      * Receive the peer's completion status.
      */
     if ((why && attr_scan(info->stream, ATTR_FLAG_STRICT,
-			  RECV_ATTR_INT(MAIL_ATTR_STATUS, &status),
-			  RECV_ATTR_STR(MAIL_ATTR_WHY, why),
+			  ATTR_TYPE_INT, MAIL_ATTR_STATUS, &status,
+			  ATTR_TYPE_STR, MAIL_ATTR_WHY, why,
 			  ATTR_TYPE_END) != 2)
 	|| (!why && attr_scan(info->stream, ATTR_FLAG_MISSING,
-			      RECV_ATTR_INT(MAIL_ATTR_STATUS, &status),
+			      ATTR_TYPE_INT, MAIL_ATTR_STATUS, &status,
 			      ATTR_TYPE_END) != 1))
 	status = CLEANUP_STAT_WRITE;
 
@@ -443,7 +442,7 @@ MAIL_STREAM *mail_stream_service(const char *class, const char *name)
 
     stream = mail_connect_wait(class, name);
     if (attr_scan(stream, ATTR_FLAG_MISSING,
-		  RECV_ATTR_STR(MAIL_ATTR_QUEUEID, id_buf), 0) != 1) {
+		  ATTR_TYPE_STR, MAIL_ATTR_QUEUEID, id_buf, 0) != 1) {
 	vstream_fclose(stream);
 	return (0);
     } else {
@@ -481,21 +480,21 @@ MAIL_STREAM *mail_stream_command(const char *command)
      * talking a Postfix-internal protocol there is no way we can tell what
      * is being executed except by duplicating a lot of existing code.
      */
-    export_env = mail_parm_split(VAR_EXPORT_ENVIRON, var_export_environ);
+    export_env = argv_split(var_export_environ, ", \t\r\n");
     while ((stream = vstream_popen(O_RDWR,
-				   CA_VSTREAM_POPEN_COMMAND(command),
-				   CA_VSTREAM_POPEN_EXPORT(export_env->argv),
-				   CA_VSTREAM_POPEN_END)) == 0) {
+				   VSTREAM_POPEN_COMMAND, command,
+				   VSTREAM_POPEN_EXPORT, export_env->argv,
+				   VSTREAM_POPEN_END)) == 0) {
 	msg_warn("fork: %m");
 	sleep(10);
     }
     argv_free(export_env);
     vstream_control(stream,
-		    CA_VSTREAM_CTL_PATH(command),
-		    CA_VSTREAM_CTL_END);
+		    VSTREAM_CTL_PATH, command,
+		    VSTREAM_CTL_END);
 
     if (attr_scan(stream, ATTR_FLAG_MISSING,
-		  RECV_ATTR_STR(MAIL_ATTR_QUEUEID, id_buf), 0) != 1) {
+		  ATTR_TYPE_STR, MAIL_ATTR_QUEUEID, id_buf, 0) != 1) {
 	if ((status = vstream_pclose(stream)) != 0)
 	    msg_warn("command \"%s\" exited with status %d", command, status);
 	return (0);
@@ -601,8 +600,8 @@ void    mail_stream_ctl(MAIL_STREAM *info, int op,...)
 
 	(void) mail_queue_path(new_path, new_queue, info->id);
 	info->queue = mystrdup(new_queue);
-	vstream_control(info->stream, CA_VSTREAM_CTL_PATH(STR(new_path)),
-			CA_VSTREAM_CTL_END);
+	vstream_control(info->stream, VSTREAM_CTL_PATH, STR(new_path),
+			VSTREAM_CTL_END);
 
 	if (sane_rename(saved_path, STR(new_path)) == 0
 	    || (mail_queue_mkdirs(STR(new_path)) == 0

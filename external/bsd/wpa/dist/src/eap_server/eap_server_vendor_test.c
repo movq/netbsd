@@ -168,6 +168,7 @@ static Boolean eap_vendor_test_isSuccess(struct eap_sm *sm, void *priv)
 int eap_server_vendor_test_register(void)
 {
 	struct eap_method *eap;
+	int ret;
 
 	eap = eap_server_method_alloc(EAP_SERVER_METHOD_INTERFACE_VERSION,
 				      EAP_VENDOR_ID, EAP_VENDOR_TYPE,
@@ -184,5 +185,8 @@ int eap_server_vendor_test_register(void)
 	eap->getKey = eap_vendor_test_getKey;
 	eap->isSuccess = eap_vendor_test_isSuccess;
 
-	return eap_server_method_register(eap);
+	ret = eap_server_method_register(eap);
+	if (ret)
+		eap_server_method_free(eap);
+	return ret;
 }

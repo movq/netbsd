@@ -1,5 +1,4 @@
 ; RUN: opt < %s -inline -S | FileCheck %s
-; RUN: opt < %s -passes='cgscc(inline)' -S | FileCheck %s
 
 ; Test that the inliner correctly handles inlining into invoke sites
 ; by appending selectors and forwarding _Unwind_Resume directly to the
@@ -29,7 +28,7 @@ declare void @__cxa_end_catch()
 
 declare void @_ZSt9terminatev()
 
-define internal void @test0_in() alwaysinline uwtable ssp personality i32 (...)* @__gxx_personality_v0 {
+define internal void @test0_in() alwaysinline uwtable ssp {
 entry:
   %a = alloca %struct.A, align 1
   %b = alloca %struct.A, align 1
@@ -46,7 +45,7 @@ invoke.cont1:
   ret void
 
 lpad:
-  %exn = landingpad {i8*, i32}
+  %exn = landingpad {i8*, i32} personality i32 (...)* @__gxx_personality_v0
             cleanup
   invoke void @_ZN1AD1Ev(%struct.A* %a)
           to label %invoke.cont2 unwind label %terminate.lpad
@@ -55,13 +54,13 @@ invoke.cont2:
   resume { i8*, i32 } %exn
 
 terminate.lpad:
-  %exn1 = landingpad {i8*, i32}
+  %exn1 = landingpad {i8*, i32} personality i32 (...)* @__gxx_personality_v0
             catch i8* null
   call void @_ZSt9terminatev() noreturn nounwind
   unreachable
 }
 
-define void @test0_out() uwtable ssp personality i32 (...)* @__gxx_personality_v0 {
+define void @test0_out() uwtable ssp {
 entry:
   invoke void @test0_in()
           to label %ret unwind label %lpad
@@ -70,7 +69,7 @@ ret:
   ret void
 
 lpad:                                             ; preds = %entry
-  %exn = landingpad {i8*, i32}
+  %exn = landingpad {i8*, i32} personality i32 (...)* @__gxx_personality_v0
             catch i8* bitcast (i8** @_ZTIi to i8*)
   %eh.exc = extractvalue { i8*, i32 } %exn, 0
   %eh.selector = extractvalue { i8*, i32 } %exn, 1
@@ -94,7 +93,7 @@ eh.resume:
 ; CHECK:      invoke void @_ZN1AC1Ev(%struct.A* [[B]])
 ; CHECK:      invoke void @_ZN1AD1Ev(%struct.A* [[B]])
 ; CHECK:      invoke void @_ZN1AD1Ev(%struct.A* [[A]])
-; CHECK:      landingpad { i8*, i32 }
+; CHECK:      landingpad { i8*, i32 } personality i32 (...)* @__gxx_personality_v0
 ; CHECK-NEXT:    cleanup
 ; CHECK-NEXT:    catch i8* bitcast (i8** @_ZTIi to i8*)
 ; CHECK-NEXT: invoke void @_ZN1AD1Ev(%struct.A* [[A]])
@@ -102,7 +101,7 @@ eh.resume:
 ; CHECK: [[LBL]]:
 ; CHECK-NEXT: br label %[[LPAD:[^\s]+]]
 ; CHECK:      ret void
-; CHECK:      landingpad { i8*, i32 }
+; CHECK:      landingpad { i8*, i32 } personality i32 (...)* @__gxx_personality_v0
 ; CHECK-NEXT:    catch i8* bitcast (i8** @_ZTIi to i8*)
 ; CHECK-NEXT: br label %[[LPAD]]
 ; CHECK: [[LPAD]]:
@@ -114,7 +113,7 @@ eh.resume:
 
 ;; Test 1 - Correctly handle phis in outer landing pads.
 
-define void @test1_out() uwtable ssp personality i32 (...)* @__gxx_personality_v0 {
+define void @test1_out() uwtable ssp {
 entry:
   invoke void @test0_in()
           to label %cont unwind label %lpad
@@ -129,7 +128,7 @@ ret:
 lpad:
   %x = phi i32 [ 0, %entry ], [ 1, %cont ]
   %y = phi i32 [ 1, %entry ], [ 4, %cont ]
-  %exn = landingpad {i8*, i32}
+  %exn = landingpad {i8*, i32} personality i32 (...)* @__gxx_personality_v0
             catch i8* bitcast (i8** @_ZTIi to i8*)
   %eh.exc = extractvalue { i8*, i32 } %exn, 0
   %eh.selector = extractvalue { i8*, i32 } %exn, 1
@@ -164,7 +163,7 @@ eh.resume:
 
 ; Inner landing pad from first inlining.
 ; CHECK:    [[LPAD1]]:
-; CHECK-NEXT: [[LPADVAL1:%.*]] = landingpad { i8*, i32 }
+; CHECK-NEXT: [[LPADVAL1:%.*]] = landingpad { i8*, i32 } personality i32 (...)* @__gxx_personality_v0
 ; CHECK-NEXT:    cleanup
 ; CHECK-NEXT:    catch i8* bitcast (i8** @_ZTIi to i8*)
 ; CHECK-NEXT: invoke void @_ZN1AD1Ev(%struct.A* [[A1]])
@@ -183,7 +182,7 @@ eh.resume:
 
 ; Inner landing pad from second inlining.
 ; CHECK:    [[LPAD2]]:
-; CHECK-NEXT: [[LPADVAL2:%.*]] = landingpad { i8*, i32 }
+; CHECK-NEXT: [[LPADVAL2:%.*]] = landingpad { i8*, i32 } personality i32 (...)* @__gxx_personality_v0
 ; CHECK-NEXT:   cleanup
 ; CHECK-NEXT:   catch i8* bitcast (i8** @_ZTIi to i8*)
 ; CHECK-NEXT: invoke void @_ZN1AD1Ev(%struct.A* [[A2]])
@@ -196,7 +195,7 @@ eh.resume:
 ; CHECK:    [[LPAD]]:
 ; CHECK-NEXT: [[X:%.*]] = phi i32 [ 0, %entry ], [ 0, {{%.*}} ], [ 1, %cont ], [ 1, {{%.*}} ]
 ; CHECK-NEXT: [[Y:%.*]] = phi i32 [ 1, %entry ], [ 1, {{%.*}} ], [ 4, %cont ], [ 4, {{%.*}} ]
-; CHECK-NEXT: [[LPADVAL:%.*]] = landingpad { i8*, i32 }
+; CHECK-NEXT: [[LPADVAL:%.*]] = landingpad { i8*, i32 } personality i32 (...)* @__gxx_personality_v0
 ; CHECK-NEXT:   catch i8* bitcast (i8** @_ZTIi to i8*)
 ; CHECK-NEXT: br label %[[LPAD_JOIN2]]
 
@@ -222,7 +221,7 @@ eh.resume:
 
 
 ;; Test 2 - Don't make invalid IR for inlines into landing pads without eh.exception calls
-define void @test2_out() uwtable ssp personality i32 (...)* @__gxx_personality_v0 {
+define void @test2_out() uwtable ssp {
 entry:
   invoke void @test0_in()
           to label %ret unwind label %lpad
@@ -231,7 +230,7 @@ ret:
   ret void
 
 lpad:
-  %exn = landingpad {i8*, i32}
+  %exn = landingpad {i8*, i32} personality i32 (...)* @__gxx_personality_v0
             cleanup
   call void @_ZSt9terminatev()
   unreachable
@@ -251,7 +250,7 @@ lpad:
 
 
 ;; Test 3 - Deal correctly with split unwind edges.
-define void @test3_out() uwtable ssp personality i32 (...)* @__gxx_personality_v0 {
+define void @test3_out() uwtable ssp {
 entry:
   invoke void @test0_in()
           to label %ret unwind label %lpad
@@ -260,7 +259,7 @@ ret:
   ret void
 
 lpad:
-  %exn = landingpad {i8*, i32}
+  %exn = landingpad {i8*, i32} personality i32 (...)* @__gxx_personality_v0
             catch i8* bitcast (i8** @_ZTIi to i8*)
   br label %lpad.cont
 
@@ -270,7 +269,7 @@ lpad.cont:
 }
 
 ; CHECK: define void @test3_out()
-; CHECK:      landingpad { i8*, i32 }
+; CHECK:      landingpad { i8*, i32 } personality i32 (...)* @__gxx_personality_v0
 ; CHECK-NEXT:    cleanup
 ; CHECK-NEXT:    catch i8* bitcast (i8** @_ZTIi to i8*)
 ; CHECK-NEXT: invoke void @_ZN1AD1Ev(
@@ -285,7 +284,7 @@ lpad.cont:
 
 
 ;; Test 4 - Split unwind edges with a dominance problem
-define void @test4_out() uwtable ssp personality i32 (...)* @__gxx_personality_v0 {
+define void @test4_out() uwtable ssp {
 entry:
   invoke void @test0_in()
           to label %cont unwind label %lpad.crit
@@ -298,13 +297,13 @@ ret:
   ret void
 
 lpad.crit:
-  %exn = landingpad {i8*, i32}
+  %exn = landingpad {i8*, i32} personality i32 (...)* @__gxx_personality_v0
             catch i8* bitcast (i8** @_ZTIi to i8*)
   call void @opaque() nounwind
   br label %terminate
 
 lpad:
-  %exn2 = landingpad {i8*, i32}
+  %exn2 = landingpad {i8*, i32} personality i32 (...)* @__gxx_personality_v0
             catch i8* bitcast (i8** @_ZTIi to i8*)
   br label %terminate
 
@@ -316,7 +315,7 @@ terminate:
 }
 
 ; CHECK: define void @test4_out()
-; CHECK:      landingpad { i8*, i32 }
+; CHECK:      landingpad { i8*, i32 } personality i32 (...)* @__gxx_personality_v0
 ; CHECK-NEXT:    cleanup
 ; CHECK-NEXT:    catch i8* bitcast (i8** @_ZTIi to i8*)
 ; CHECK-NEXT: invoke void @_ZN1AD1Ev(
@@ -326,7 +325,7 @@ terminate:
 ; CHECK:      invoke void @opaque()
 ; CHECK-NEXT:                  unwind label %lpad
 ; CHECK:    lpad.crit:
-; CHECK-NEXT: landingpad { i8*, i32 }
+; CHECK-NEXT: landingpad { i8*, i32 } personality i32 (...)* @__gxx_personality_v0
 ; CHECK-NEXT:   catch i8* bitcast (i8** @_ZTIi to i8*)
 ; CHECK-NEXT: br label %[[JOIN]]
 ; CHECK:    [[JOIN]]:
@@ -334,7 +333,7 @@ terminate:
 ; CHECK-NEXT: call void @opaque() [[NUW:#[0-9]+]]
 ; CHECK-NEXT: br label %[[FIX:[^\s]+]]
 ; CHECK:    lpad:
-; CHECK-NEXT: landingpad { i8*, i32 }
+; CHECK-NEXT: landingpad { i8*, i32 } personality i32 (...)* @__gxx_personality_v0
 ; CHECK-NEXT:   catch i8* bitcast (i8** @_ZTIi to i8*)
 ; CHECK-NEXT: br label %[[FIX]]
 ; CHECK:    [[FIX]]:
@@ -345,5 +344,4 @@ terminate:
 ; CHECK: attributes [[NUW]] = { nounwind }
 ; CHECK: attributes #1 = { nounwind readnone }
 ; CHECK: attributes #2 = { ssp uwtable }
-; CHECK: attributes #3 = { argmemonly nounwind }
-; CHECK: attributes #4 = { noreturn nounwind }
+; CHECK: attributes #3 = { noreturn nounwind }

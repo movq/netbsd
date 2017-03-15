@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.10 2017/01/11 12:10:26 joerg Exp $
+#	$NetBSD: Makefile,v 1.6 2014/07/05 20:45:49 joerg Exp $
 
 LIB=		c++
 WARNS=		4
@@ -35,7 +35,7 @@ CLEANFILES+=	rt_${src}
 
 CPPFLAGS+=	-nostdinc++ -cxx-isystem ${LIBCXX_SRCDIR}/include -I${LIBCXXRT_SRCDIR}/src
 CPPFLAGS+=	-DLIBCXXRT
-CXXFLAGS+=	-std=c++11
+CXXFLAGS+=	${${ACTIVE_CC} == "clang":? -std=c++11 : -std=c++0x}
 
 CWARNFLAGS.gcc+=	-Wno-error
 
@@ -44,6 +44,6 @@ CWARNFLAGS.clang+=	-Wno-error=missing-prototypes -Wno-error=sometimes-uninitiali
 CWARNFLAGS.clang+=	-Wno-error=missing-field-initializers -Wno-error=switch
 CWARNFLAGS.clang+=	-Wno-error=implicit-exception-spec-mismatch
 
-LDFLAGS+=	-Wl,-z,defs
+LDADD+=	-Wl,-z,defs
 
 .include <bsd.lib.mk>

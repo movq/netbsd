@@ -1,4 +1,4 @@
-/*	$NetBSD: cmp.c,v 1.20 2016/10/30 19:33:49 christos Exp $	*/
+/*	$NetBSD: cmp.c,v 1.18 2011/08/29 14:14:11 joerg Exp $	*/
 
 /*
  * Copyright (c) 1987, 1990, 1993, 1994
@@ -39,7 +39,7 @@ __COPYRIGHT("@(#) Copyright (c) 1987, 1990, 1993, 1994\
 #if 0
 static char sccsid[] = "@(#)cmp.c	8.3 (Berkeley) 4/2/94";
 #else
-__RCSID("$NetBSD: cmp.c,v 1.20 2016/10/30 19:33:49 christos Exp $");
+__RCSID("$NetBSD: cmp.c,v 1.18 2011/08/29 14:14:11 joerg Exp $");
 #endif
 #endif /* not lint */
 
@@ -71,12 +71,8 @@ main(int argc, char *argv[])
 
 	setlocale(LC_ALL, "");
 
-	special = 0;
-	while ((ch = getopt(argc, argv, "cls")) != -1)
+	while ((ch = getopt(argc, argv, "ls")) != -1)
 		switch (ch) {
-		case 'c':
-			special = 1;	/* careful!  Don't use mmap() */
-			break;
 		case 'l':		/* print all differences */
 			lflag = 1;
 			break;
@@ -97,6 +93,7 @@ main(int argc, char *argv[])
 		usage();
 
 	/* Backward compatibility -- handle "-" meaning stdin. */
+	special = 0;
 	if (strcmp(file1 = argv[0], "-") == 0) {
 		special = 1;
 		fd1 = 0;
@@ -162,7 +159,6 @@ usage(void)
 {
 
 	(void)fprintf(stderr,
-	    "Usage: %s [-c] [-l | -s] file1 file2 [skip1 [skip2]]\n",
-	    getprogname());
+	    "usage: cmp [-l | -s] file1 file2 [skip1 [skip2]]\n");
 	exit(ERR_EXIT);
 }

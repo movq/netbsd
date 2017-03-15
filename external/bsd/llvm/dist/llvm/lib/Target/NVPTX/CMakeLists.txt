@@ -12,17 +12,15 @@ set(NVPTXCodeGen_sources
   NVPTXAllocaHoisting.cpp
   NVPTXAsmPrinter.cpp
   NVPTXAssignValidGlobalNames.cpp
+  NVPTXFavorNonGenericAddrSpaces.cpp
   NVPTXFrameLowering.cpp
   NVPTXGenericToNVVM.cpp
   NVPTXISelDAGToDAG.cpp
   NVPTXISelLowering.cpp
   NVPTXImageOptimizer.cpp
-  NVPTXInferAddressSpaces.cpp
   NVPTXInstrInfo.cpp
   NVPTXLowerAggrCopies.cpp
-  NVPTXLowerArgs.cpp
-  NVPTXLowerAlloca.cpp
-  NVPTXPeephole.cpp
+  NVPTXLowerStructArgs.cpp
   NVPTXMCExpr.cpp
   NVPTXPrologEpilogPass.cpp
   NVPTXRegisterInfo.cpp
@@ -31,7 +29,7 @@ set(NVPTXCodeGen_sources
   NVPTXTargetMachine.cpp
   NVPTXTargetTransformInfo.cpp
   NVPTXUtilities.cpp
-  NVVMIntrRange.cpp
+  NVPTXutil.cpp
   NVVMReflect.cpp
   )
 

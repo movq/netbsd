@@ -1,4 +1,4 @@
-/*	$NetBSD: dict_alloc.c,v 1.2 2017/02/14 01:16:49 christos Exp $	*/
+/*	$NetBSD: dict_alloc.c,v 1.1.1.4 2014/07/06 19:27:57 tron Exp $	*/
 
 /*++
 /* NAME
@@ -153,10 +153,9 @@ DICT   *dict_alloc(const char *dict_type, const char *dict_name, ssize_t size)
     dict->mtime = 0;
     dict->fold_buf = 0;
     dict->owner.status = DICT_OWNER_UNKNOWN;
-    dict->owner.uid = INT_MAX;
+    dict->owner.uid = ~0;
     dict->error = DICT_ERR_NONE;
     dict->jbuf = 0;
-    dict->utf8_backup = 0;
     return dict;
 }
 
@@ -167,10 +166,8 @@ void    dict_free(DICT *dict)
     myfree(dict->type);
     myfree(dict->name);
     if (dict->jbuf)
-	myfree((void *) dict->jbuf);
-    if (dict->utf8_backup)
-	myfree((void *) dict->utf8_backup);
-    myfree((void *) dict);
+	myfree((char *) dict->jbuf);
+    myfree((char *) dict);
 }
 
  /*

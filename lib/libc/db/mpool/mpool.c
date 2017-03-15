@@ -1,4 +1,4 @@
-/*	$NetBSD: mpool.c,v 1.23 2016/09/24 21:31:25 christos Exp $	*/
+/*	$NetBSD: mpool.c,v 1.21 2013/12/14 18:04:00 christos Exp $	*/
 
 /*-
  * Copyright (c) 1990, 1993, 1994
@@ -34,7 +34,7 @@
 #endif
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: mpool.c,v 1.23 2016/09/24 21:31:25 christos Exp $");
+__RCSID("$NetBSD: mpool.c,v 1.21 2013/12/14 18:04:00 christos Exp $");
 
 #include "namespace.h"
 #include <sys/queue.h>
@@ -56,7 +56,6 @@ __weak_alias(mpool_close,_mpool_close)
 __weak_alias(mpool_filter,_mpool_filter)
 __weak_alias(mpool_get,_mpool_get)
 __weak_alias(mpool_new,_mpool_new)
-__weak_alias(mpool_newf,_mpool_newf)
 __weak_alias(mpool_open,_mpool_open)
 __weak_alias(mpool_put,_mpool_put)
 __weak_alias(mpool_sync,_mpool_sync)
@@ -122,7 +121,7 @@ mpool_filter(MPOOL *mp, void (*pgin)(void *, pgno_t, void *),
  *	Get a new page of memory.
  */
 void *
-mpool_newf(MPOOL *mp, pgno_t *pgnoaddr, unsigned int flags)
+mpool_new( MPOOL *mp, pgno_t *pgnoaddr)
 {
 	struct _hqh *head;
 	BKT *bp;
@@ -141,50 +140,13 @@ mpool_newf(MPOOL *mp, pgno_t *pgnoaddr, unsigned int flags)
 	 */
 	if ((bp = mpool_bkt(mp)) == NULL)
 		return NULL;
-
-	if (flags == MPOOL_PAGE_REQUEST) {
-		mp->npages++;
-		bp->pgno = *pgnoaddr;
-	} else
-		bp->pgno = *pgnoaddr = mp->npages++;
-
-	bp->flags = MPOOL_PINNED | MPOOL_INUSE;
+	*pgnoaddr = bp->pgno = mp->npages++;
+	bp->flags = MPOOL_PINNED;
 
 	head = &mp->hqh[HASHKEY(bp->pgno)];
 	TAILQ_INSERT_HEAD(head, bp, hq);
 	TAILQ_INSERT_TAIL(&mp->lqh, bp, q);
 	return bp->page;
-}
-
-void *
-mpool_new(MPOOL *mp, pgno_t *pgnoaddr)
-{
-	return mpool_newf(mp, pgnoaddr, 0);
-}
-
-int
-mpool_delete(MPOOL *mp, void *page)
-{
-	struct _hqh *head;
-	BKT *bp;
-
-	bp = (void *)((char *)page - sizeof(BKT));
-
-#ifdef DEBUG
-	if (!(bp->flags & MPOOL_PINNED)) {
-	       (void)fprintf(stderr,
-		   "%s: page %d not pinned\n", __func__, bp->pgno);
-	       abort();
-	}
-#endif
-
-	/* Remove from the hash and lru queues. */
-	head = &mp->hqh[HASHKEY(bp->pgno)];
-	TAILQ_REMOVE(head, bp, hq);
-	TAILQ_REMOVE(&mp->lqh, bp, q);
-
-	free(bp);
-	return RET_SUCCESS;
 }
 
 /*
@@ -193,7 +155,7 @@ mpool_delete(MPOOL *mp, void *page)
  */
 /*ARGSUSED*/
 void *
-mpool_get(MPOOL *mp, pgno_t pgno, unsigned int flags)
+mpool_get(MPOOL *mp, pgno_t pgno, u_int flags)
 {
 	struct _hqh *head;
 	BKT *bp;
@@ -213,7 +175,7 @@ mpool_get(MPOOL *mp, pgno_t pgno, unsigned int flags)
 	/* Check for a page that is cached. */
 	if ((bp = mpool_look(mp, pgno)) != NULL) {
 #ifdef DEBUG
-		if (!(flags & MPOOL_IGNOREPIN) && bp->flags & MPOOL_PINNED) {
+		if (bp->flags & MPOOL_PINNED) {
 			(void)fprintf(stderr,
 			    "mpool_get: page %d already pinned\n", bp->pgno);
 			abort();
@@ -230,8 +192,7 @@ mpool_get(MPOOL *mp, pgno_t pgno, unsigned int flags)
 		TAILQ_INSERT_TAIL(&mp->lqh, bp, q);
 
 		/* Return a pinned page. */
-		if (!(flags & MPOOL_IGNOREPIN))
-			bp->flags |= MPOOL_PINNED;
+		bp->flags |= MPOOL_PINNED;
 		return bp->page;
 	}
 
@@ -244,32 +205,15 @@ mpool_get(MPOOL *mp, pgno_t pgno, unsigned int flags)
 	++mp->pageread;
 #endif
 	off = mp->pagesize * pgno;
-	if (off / mp->pagesize != pgno) {
-		/* Run past the end of the file, or at least the part we
-		   can address without large-file support?  */
-		errno = E2BIG;
- 		return NULL;
-	}
-
 	if ((nr = pread(mp->fd, bp->page, (size_t)mp->pagesize, off)) != (int)mp->pagesize) {
-		if (nr > 0) {
+		if (nr >= 0)
 			errno = EFTYPE;
-			return NULL;
-		} else if (nr == 0) {
-			/*
-			 * A zero-length reads, means you need to create a
-			 * new page.
-			 */
-			memset(bp->page, 0, mp->pagesize);
-		} else
-			return NULL;
+		return NULL;
 	}
 
 	/* Set the page number, pin the page. */
 	bp->pgno = pgno;
-	if (!(flags & MPOOL_IGNOREPIN))
-		bp->flags = MPOOL_PINNED;
-bp->flags |= MPOOL_INUSE;
+	bp->flags = MPOOL_PINNED;
 
 	/*
 	 * Add the page to the head of the hash chain and the tail
@@ -308,8 +252,7 @@ mpool_put(MPOOL *mp, void *page, u_int flags)
 	}
 #endif
 	bp->flags &= ~MPOOL_PINNED;
-	if (flags & MPOOL_DIRTY)
-		bp->flags |= flags & MPOOL_DIRTY;
+	bp->flags |= flags & MPOOL_DIRTY;
 	return (RET_SUCCESS);
 }
 
@@ -428,13 +371,6 @@ mpool_write(MPOOL *mp, BKT *bp)
 		(mp->pgout)(mp->pgcookie, bp->pgno, bp->page);
 
 	off = mp->pagesize * bp->pgno;
-	if (off / mp->pagesize != bp->pgno) {
-		/* Run past the end of the file, or at least the part we
-		   can address without large-file support?  */
-		errno = E2BIG;
-		return RET_ERROR;
-	}
-
 	if (pwrite(mp->fd, bp->page, (size_t)mp->pagesize, off) !=
 	    (ssize_t)mp->pagesize)
 		return RET_ERROR;

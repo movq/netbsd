@@ -1,7 +1,6 @@
 TEMPLATE	= app
 LANGUAGE	= C++
 TRANSLATIONS	= lang/wpa_gui_de.ts
-greaterThan(QT_MAJOR_VERSION, 4): QT += widgets
 
 CONFIG	+= qt warn_on release
 

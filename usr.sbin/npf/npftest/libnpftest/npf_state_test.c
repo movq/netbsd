@@ -1,4 +1,4 @@
-/*	$NetBSD: npf_state_test.c,v 1.7 2016/12/26 23:05:05 christos Exp $	*/
+/*	$NetBSD: npf_state_test.c,v 1.6 2014/07/20 00:37:41 rmind Exp $	*/
 
 /*
  * NPF state tracking test.
@@ -6,10 +6,8 @@
  * Public Domain.
  */
 
-#ifdef _KERNEL
 #include <sys/types.h>
 #include <sys/kmem.h>
-#endif
 
 #include "npf_impl.h"
 #include "npf_test.h"
@@ -137,7 +135,7 @@ process_packet(const int i, npf_state_t *nst, bool *snew)
 {
 	ifnet_t *dummy_ifp = npf_test_addif(IFNAME_TEST, false, false);
 	const tcp_meta_t *p = &packet_sequence[i];
-	npf_cache_t npc = { .npc_info = 0, .npc_ctx = npf_getkernctx() };
+	npf_cache_t npc = { .npc_info = 0 };
 	nbuf_t nbuf;
 	int ret;
 
@@ -147,7 +145,7 @@ process_packet(const int i, npf_state_t *nst, bool *snew)
 		return true;
 	}
 
-	nbuf_init(npf_getkernctx(), &nbuf, construct_packet(p), dummy_ifp);
+	nbuf_init(&nbuf, construct_packet(p), dummy_ifp);
 	npc.npc_nbuf = &nbuf;
 	ret = npf_cache_all(&npc);
 	KASSERT((ret & NPC_IPFRAG) == 0);

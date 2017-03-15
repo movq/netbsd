@@ -1,5 +1,6 @@
 /* M16C/M32C specific support for 32-bit ELF.
-   Copyright (C) 2005-2016 Free Software Foundation, Inc.
+   Copyright (C) 2005, 2006, 2007, 2008, 2009, 2010, 2011, 2012
+   Free Software Foundation, Inc.
 
    This file is part of BFD, the Binary File Descriptor library.
 
@@ -40,8 +41,6 @@ void dump_symtab (bfd *, void *, void *);
 #endif
 static bfd_boolean m32c_elf_relax_section
 (bfd *abfd, asection *sec, struct bfd_link_info *link_info, bfd_boolean *again);
-static bfd_reloc_status_type m32c_apply_reloc_24
-  (bfd *, arelent *, asymbol *, void *, asection *, bfd *, char **);
 
 
 static reloc_howto_type m32c_elf_howto_table [] =
@@ -49,11 +48,11 @@ static reloc_howto_type m32c_elf_howto_table [] =
   /* This reloc does nothing.  */
   HOWTO (R_M32C_NONE,		/* type */
 	 0,			/* rightshift */
-	 3,			/* size (0 = byte, 1 = short, 2 = long) */
-	 0,			/* bitsize */
+	 0,			/* size (0 = byte, 1 = short, 2 = long) */
+	 32,			/* bitsize */
 	 FALSE,			/* pc_relative */
 	 0,			/* bitpos */
-	 complain_overflow_dont, /* complain_on_overflow */
+	 complain_overflow_bitfield, /* complain_on_overflow */
 	 bfd_elf_generic_reloc,	/* special_function */
 	 "R_M32C_NONE",		/* name */
 	 FALSE,			/* partial_inplace */
@@ -85,7 +84,7 @@ static reloc_howto_type m32c_elf_howto_table [] =
 	 FALSE,			/* pc_relative */
 	 0,			/* bitpos */
 	 complain_overflow_dont, /* complain_on_overflow */
-	 m32c_apply_reloc_24,	/* special_function */
+	 bfd_elf_generic_reloc,	/* special_function */
 	 "R_M32C_24",		/* name */
 	 FALSE,			/* partial_inplace */
 	 0,			/* src_mask */
@@ -266,7 +265,7 @@ m32c_reloc_type_lookup
 {
   unsigned int i;
 
-  for (i = ARRAY_SIZE (m32c_reloc_map); i--;)
+  for (i = ARRAY_SIZE (m32c_reloc_map); --i;)
     if (m32c_reloc_map [i].bfd_reloc_val == code)
       return & m32c_elf_howto_table [m32c_reloc_map[i].m32c_reloc_val];
 
@@ -299,57 +298,11 @@ m32c_info_to_howto_rela
   unsigned int r_type;
 
   r_type = ELF32_R_TYPE (dst->r_info);
-  if (r_type >= (unsigned int) R_M32C_max)
-    {
-      _bfd_error_handler (_("%B: invalid M32C reloc number: %d"), abfd, r_type);
-      r_type = 0;
-    }
+  BFD_ASSERT (r_type < (unsigned int) R_M32C_max);
   cache_ptr->howto = & m32c_elf_howto_table [r_type];
 }
 
 
-
-/* Apply R_M32C_24 relocations.  We have to do this because it's not a
-   power-of-two size, and the generic code may think it overruns the
-   section if it's right at the end.
-
-   Must return something other than bfd_reloc_continue to avoid the
-   above problem.  Typical return values include bfd_reloc_ok or
-   bfd_reloc_overflow.
-*/
-
-static bfd_reloc_status_type m32c_apply_reloc_24 (bfd *abfd ATTRIBUTE_UNUSED,
-						  arelent *reloc_entry,
-						  asymbol *symbol,
-						  void *vdata_start ATTRIBUTE_UNUSED,
-						  asection *input_section,
-						  bfd *ibfd ATTRIBUTE_UNUSED,
-						  char **error_msg ATTRIBUTE_UNUSED)
-{
-  bfd_vma relocation;
-  bfd_reloc_status_type s;
-
-  s = bfd_elf_generic_reloc (abfd, reloc_entry, symbol,
-			     vdata_start,
-			     input_section, ibfd, error_msg);
-  if (s != bfd_reloc_continue)
-    return s;
-
-  /* Get symbol value.  (Common symbols are special.)  */
-  if (bfd_is_com_section (symbol->section))
-    relocation = 0;
-  else
-    relocation = symbol->value;
-
-  relocation += symbol->section->output_offset;
-
-  /* Add in supplied addend.  */
-  relocation += reloc_entry->addend;
-
-  reloc_entry->addend = relocation;
-  reloc_entry->address += input_section->output_offset;
-  return bfd_reloc_ok;
-}
 
 /* Relocate an M32C ELF section.
    There is some attempt to make this function usable for many architectures,
@@ -456,11 +409,6 @@ m32c_elf_relocate_section
 	{
 	  h = sym_hashes [r_symndx - symtab_hdr->sh_info];
 
-	  if (info->wrap_hash != NULL
-	      && (input_section->flags & SEC_DEBUGGING) != 0)
-	    h = ((struct elf_link_hash_entry *)
-		 unwrap_hash_lookup (info, input_bfd, &h->root));
-
 	  while (h->root.type == bfd_link_hash_indirect
 		 || h->root.type == bfd_link_hash_warning)
 	    h = (struct elf_link_hash_entry *) h->root.u.i.link;
@@ -477,17 +425,20 @@ m32c_elf_relocate_section
 	    }
 	  else if (h->root.type == bfd_link_hash_undefweak)
 	    ;
-	  else if (!bfd_link_relocatable (info))
-	    (*info->callbacks->undefined_symbol) (info, h->root.root.string,
-						  input_bfd, input_section,
-						  rel->r_offset, TRUE);
+	  else if (!info->relocatable)
+	    {
+	      if (! ((*info->callbacks->undefined_symbol)
+		     (info, h->root.root.string, input_bfd,
+		      input_section, rel->r_offset, TRUE)))
+		return FALSE;
+	    }
 	}
 
       if (sec != NULL && discarded_section (sec))
 	RELOC_AGAINST_DISCARDED_SECTION (info, input_bfd, input_section,
 					 rel, 1, relend, howto, 0, contents);
 
-      if (bfd_link_relocatable (info))
+      if (info->relocatable)
 	{
 	  /* This is a relocatable link.  We don't have to change
              anything, unless the reloc is against a section symbol,
@@ -576,32 +527,9 @@ m32c_elf_relocate_section
 	printf ("\n");
       }
 #endif
-      switch (ELF32_R_TYPE(rel->r_info))
-	{
-	case R_M32C_24:
-	  /* Like m32c_apply_reloc_24, we must handle this one separately.  */
-	  relocation += rel->r_addend;
-
-	  /* Sanity check the address.  */
-	  if (rel->r_offset + 3
-	      > bfd_get_section_limit_octets (input_bfd, input_section))
-	    r = bfd_reloc_outofrange;
-	  else
-	    {
-	      bfd_put_8 (input_bfd, relocation & 0xff, contents + rel->r_offset);
-	      bfd_put_8 (input_bfd, (relocation >> 8) & 0xff, contents + rel->r_offset + 1);
-	      bfd_put_8 (input_bfd, (relocation >> 16) & 0xff, contents + rel->r_offset + 2);
-	      r = bfd_reloc_ok;
-	    }
-
-	  break;
-
-	default:
-	  r = _bfd_final_link_relocate (howto, input_bfd, input_section,
-					contents, rel->r_offset, relocation,
-					rel->r_addend);
-	  break;
-	}
+      r = _bfd_final_link_relocate (howto, input_bfd, input_section,
+                                    contents, rel->r_offset, relocation,
+                                    rel->r_addend);
 
       if (r != bfd_reloc_ok)
 	{
@@ -610,14 +538,15 @@ m32c_elf_relocate_section
 	  switch (r)
 	    {
 	    case bfd_reloc_overflow:
-	      (*info->callbacks->reloc_overflow)
+	      r = info->callbacks->reloc_overflow
 		(info, (h ? &h->root : NULL), name, howto->name, (bfd_vma) 0,
 		 input_bfd, input_section, rel->r_offset);
 	      break;
 
 	    case bfd_reloc_undefined:
-	      (*info->callbacks->undefined_symbol)
-		(info, name, input_bfd, input_section, rel->r_offset, TRUE);
+	      r = info->callbacks->undefined_symbol
+		(info, name, input_bfd, input_section, rel->r_offset,
+		 TRUE);
 	      break;
 
 	    case bfd_reloc_outofrange:
@@ -638,8 +567,11 @@ m32c_elf_relocate_section
 	    }
 
 	  if (msg)
-	    (*info->callbacks->warning) (info, msg, name, input_bfd,
-					 input_section, rel->r_offset);
+	    r = info->callbacks->warning
+	      (info, msg, name, input_bfd, input_section, rel->r_offset);
+
+	  if (! r)
+	    return FALSE;
 	}
     }
 
@@ -664,7 +596,7 @@ m32c_elf_check_relocs
   asection *splt;
   bfd *dynobj;
 
-  if (bfd_link_relocatable (info))
+  if (info->relocatable)
     return TRUE;
 
   symtab_hdr = &elf_tdata (abfd)->symtab_hdr;
@@ -786,7 +718,7 @@ m32c_elf_always_size_sections (bfd *output_bfd ATTRIBUTE_UNUSED,
   bfd *dynobj;
   asection *splt;
 
-  if (bfd_link_relocatable (info))
+  if (info->relocatable)
     return TRUE;
 
   dynobj = elf_hash_table (info)->dynobj;
@@ -1158,7 +1090,7 @@ m32c_elf_relax_plt_section (asection *splt,
   /* Assume nothing changes.  */
   *again = FALSE;
 
-  if (bfd_link_relocatable (info))
+  if (info->relocatable)
     return TRUE;
 
   /* Quick check for an empty plt.  */
@@ -1174,7 +1106,7 @@ m32c_elf_relax_plt_section (asection *splt,
 
   /* Likewise for local symbols, though that's somewhat less convenient
      as we have to walk the list of input bfds and swap in symbol data.  */
-  for (ibfd = info->input_bfds; ibfd ; ibfd = ibfd->link.next)
+  for (ibfd = info->input_bfds; ibfd ; ibfd = ibfd->link_next)
     {
       bfd_vma *local_plt_offsets = elf_local_got_offsets (ibfd);
       Elf_Internal_Shdr *symtab_hdr;
@@ -1248,7 +1180,7 @@ m32c_elf_relax_plt_section (asection *splt,
       elf_link_hash_traverse (elf_hash_table (info),
 			      m32c_relax_plt_realloc, &entry);
 
-      for (ibfd = info->input_bfds; ibfd ; ibfd = ibfd->link.next)
+      for (ibfd = info->input_bfds; ibfd ; ibfd = ibfd->link_next)
 	{
 	  bfd_vma *local_plt_offsets = elf_local_got_offsets (ibfd);
 	  unsigned int nlocals = elf_tdata (ibfd)->symtab_hdr.sh_info;
@@ -1460,17 +1392,14 @@ m32c_elf_relax_section
   /* We don't have to do anything for a relocatable link, if
      this section does not have relocs, or if this is not a
      code section.  */
-  if (bfd_link_relocatable (link_info)
+  if (link_info->relocatable
       || (sec->flags & SEC_RELOC) == 0
       || sec->reloc_count == 0
       || (sec->flags & SEC_CODE) == 0)
     return TRUE;
 
-  symtab_hdr = & elf_symtab_hdr (abfd);
-  if (elf_symtab_shndx_list (abfd))
-    shndx_hdr = & elf_symtab_shndx_list (abfd)->hdr;
-  else
-    shndx_hdr = NULL;
+  symtab_hdr = &elf_tdata (abfd)->symtab_hdr;
+  shndx_hdr = &elf_tdata (abfd)->symtab_shndx_hdr;
 
   /* Get the section contents.  */
   if (elf_section_data (sec)->this_hdr.contents != NULL)
@@ -1491,7 +1420,7 @@ m32c_elf_relax_section
       symtab_hdr->contents = (bfd_byte *) intsyms;
     }
 
-  if (shndx_hdr && shndx_hdr->sh_size != 0)
+  if (shndx_hdr->sh_size != 0)
     {
       bfd_size_type amt;
 
@@ -2039,16 +1968,8 @@ m32c_elf_relax_delete_bytes
   isymend = isym + symtab_hdr->sh_info;
 
   sec_shndx  = _bfd_elf_section_from_bfd_section (abfd, sec);
-  if (elf_symtab_shndx_list (abfd))
-    {
-      shndx_hdr = & elf_symtab_shndx_list (abfd)->hdr;
-      shndx_buf  = (Elf_External_Sym_Shndx *) shndx_hdr->contents;
-    }
-  else
-    {
-      shndx_hdr = NULL;
-      shndx_buf = NULL;
-    }
+  shndx_hdr  = & elf_tdata (abfd)->symtab_shndx_hdr;
+  shndx_buf  = (Elf_External_Sym_Shndx *) shndx_hdr->contents;
   shndx = shndx_buf;
 
   for (; isym < isymend; isym++, shndx = (shndx ? shndx + 1 : NULL))
@@ -2123,10 +2044,10 @@ _bfd_m32c_elf_eh_frame_address_size (bfd *abfd, asection *sec ATTRIBUTE_UNUSED)
 #define ELF_MAXPAGESIZE		0x100
 
 #if 0
-#define TARGET_BIG_SYM		m32c_elf32_vec
+#define TARGET_BIG_SYM		bfd_elf32_m32c_vec
 #define TARGET_BIG_NAME		"elf32-m32c"
 #else
-#define TARGET_LITTLE_SYM		m32c_elf32_vec
+#define TARGET_LITTLE_SYM		bfd_elf32_m32c_vec
 #define TARGET_LITTLE_NAME		"elf32-m32c"
 #endif
 

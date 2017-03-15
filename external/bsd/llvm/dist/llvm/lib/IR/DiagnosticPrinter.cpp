@@ -16,7 +16,6 @@
 #include "llvm/IR/Module.h"
 #include "llvm/IR/Value.h"
 #include "llvm/Support/raw_ostream.h"
-#include "llvm/Support/SourceMgr.h"
 
 using namespace llvm;
 
@@ -104,14 +103,5 @@ DiagnosticPrinter &DiagnosticPrinterRawOStream::operator<<(const Value &V) {
 
 DiagnosticPrinter &DiagnosticPrinterRawOStream::operator<<(const Module &M) {
   Stream << M.getModuleIdentifier();
-  return *this;
-}
-
-// Other types.
-DiagnosticPrinter &DiagnosticPrinterRawOStream::
-operator<<(const SMDiagnostic &Diag) {
-  // We don't have to print the SMDiagnostic kind, as the diagnostic severity
-  // is printed by the diagnostic handler.
-  Diag.print("", Stream, /*ShowColors=*/true, /*ShowKindLabel=*/false);
   return *this;
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: linux_signal.h,v 1.5 2015/11/14 13:29:35 christos Exp $ */
+/*	$NetBSD: linux_signal.h,v 1.4 2005/12/11 12:20:14 christos Exp $ */
 
 /*-
  * Copyright (c) 2005 Emmanuel Dreyfus, all rights reserved.
@@ -103,24 +103,24 @@ typedef void (*linux_handler_t)(int);
 
 /* struct old_sigaction32 in Linux; uses a 32 bit pointer for handlers */
 struct linux_compat_old_sigaction { 
-	linux_handler_t linux_sa_handler;
+	int linux_sa_handler;
 	linux_old_sigset_t linux_sa_mask;
 	unsigned int linux_sa_flags;
-	void (*linux_sa_restorer)(void);
+	int linux_sa_restorer;
 };
 
 /* Dummy declaration to avoid errors, unused */
 struct linux_old_sigaction { 
 	linux_handler_t linux_sa_handler;
 	unsigned long linux_sa_flags;
-	void (*linux_sa_restorer)(void);
+	linux_handler_t linux_sa_restorer;
 	linux_sigset_t linux_sa_mask;
 };
 
 struct linux_sigaction {
 	linux_handler_t linux_sa_handler;
 	unsigned long linux_sa_flags;
-	void (*linux_sa_restorer)(void);
+	linux_handler_t linux_sa_restorer;
 	linux_sigset_t linux_sa_mask;
 };
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: toolcontext.c,v 1.8 2014/11/15 01:24:38 joerg Exp $	*/
+/*	$NetBSD: toolcontext.c,v 1.7.24.1 2015/05/14 08:15:47 snj Exp $	*/
 
 /*
  * Copyright (C) 2001-2004 Sistina Software, Inc. All rights reserved.

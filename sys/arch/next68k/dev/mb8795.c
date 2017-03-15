@@ -1,4 +1,4 @@
-/*	$NetBSD: mb8795.c,v 1.57 2016/12/15 09:28:03 ozaki-r Exp $	*/
+/*	$NetBSD: mb8795.c,v 1.53 2014/08/10 16:44:34 tls Exp $	*/
 /*
  * Copyright (c) 1998 Darrin B. Jewell
  * All rights reserved.
@@ -25,7 +25,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: mb8795.c,v 1.57 2016/12/15 09:28:03 ozaki-r Exp $");
+__KERNEL_RCSID(0, "$NetBSD: mb8795.c,v 1.53 2014/08/10 16:44:34 tls Exp $");
 
 #include "opt_inet.h"
 
@@ -38,7 +38,7 @@ __KERNEL_RCSID(0, "$NetBSD: mb8795.c,v 1.57 2016/12/15 09:28:03 ozaki-r Exp $");
 #include <sys/malloc.h>
 #include <sys/ioctl.h>
 #include <sys/errno.h>
-#include <sys/rndsource.h>
+#include <sys/rnd.h>
 
 #include <net/if.h>
 #include <net/if_dl.h>
@@ -303,7 +303,7 @@ mb8795_rint(struct mb8795_softc *sc)
 		while ((m = MBDMA_RX_MBUF (sc))) {
 			/* CRC is included with the packet; trim it. */
 			m->m_pkthdr.len = m->m_len = m->m_len - ETHER_CRC_LEN;
-			m_set_rcvif(m, ifp);
+			m->m_pkthdr.rcvif = ifp;
 			
 			/* Find receive length, keep crc */
 			/* enable DMA interrupts while we process the packet */
@@ -320,8 +320,15 @@ mb8795_rint(struct mb8795_softc *sc)
 			}
 #endif
 
+			/*
+			 * Pass packet to bpf if there is a listener.
+			 */
+			bpf_mtap(ifp, m);
+
+			ifp->if_ipackets++;
+
 			/* Pass the packet up. */
-			if_percpuq_enqueue(ifp->if_percpuq, m);
+			(*ifp->if_input)(ifp, m);
 
 			s = spldma();
 

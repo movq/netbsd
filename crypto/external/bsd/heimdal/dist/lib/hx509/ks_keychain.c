@@ -1,4 +1,4 @@
-/*	$NetBSD: ks_keychain.c,v 1.2 2017/01/28 21:31:48 christos Exp $	*/
+/*	$NetBSD: ks_keychain.c,v 1.1.1.2 2014/04/24 12:45:42 pettai Exp $	*/
 
 /*
  * Copyright (c) 2007 Kungliga Tekniska Högskolan
@@ -36,9 +36,6 @@
 #include "hx_locl.h"
 
 #ifdef HAVE_FRAMEWORK_SECURITY
-
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wdeprecated-declarations"
 
 #include <Security/Security.h>
 
@@ -251,7 +248,6 @@ static const RSA_METHOD kc_rsa_pkcs1_method = {
     0,
     NULL,
     NULL,
-    NULL,
     NULL
 };
 
@@ -346,13 +342,11 @@ keychain_init(hx509_context context,
 	    if (ret != noErr) {
 		hx509_set_error_string(context, 0, ENOENT,
 				       "Failed to open %s", residue);
-		free(ctx);
 		return ENOENT;
 	    }
 	} else {
 	    hx509_set_error_string(context, 0, ENOENT,
 				   "Unknown subtype %s", residue);
-	    free(ctx);
 	    return ENOENT;
 	}
     }
@@ -428,8 +422,8 @@ keychain_iter_start(hx509_context context,
 
 	    SecCertificateGetData(cr, &cssm);
 
-	    cert = hx509_cert_init_data(context, cssm.Data, cssm.Length, NULL);
-	    if (cert == NULL)
+	    ret = hx509_cert_init_data(context, cssm.Data, cssm.Length, &cert);
+	    if (ret)
 		continue;
 
 	    ret = hx509_certs_add(context, iter->certs, cert);
@@ -478,7 +472,6 @@ keychain_iter(hx509_context context,
     UInt32 attrFormat[1] = { 0 };
     SecKeychainItemRef itemRef;
     SecItemAttr item[1];
-    heim_error_t error = NULL;
     struct iter *iter = cursor;
     OSStatus ret;
     UInt32 len;
@@ -510,12 +503,9 @@ keychain_iter(hx509_context context,
     if (ret)
 	return EINVAL;
 
-    *cert = hx509_cert_init_data(context, ptr, len, &error);
-    if (*cert == NULL) {
-	ret = heim_error_get_code(error);
-	heim_release(error);
+    ret = hx509_cert_init_data(context, ptr, len, cert);
+    if (ret)
 	goto out;
-    }
 
     /*
      * Find related private key if there is one by looking at
@@ -598,13 +588,8 @@ struct hx509_keyset_ops keyset_keychain = {
     NULL,
     keychain_iter_start,
     keychain_iter,
-    keychain_iter_end,
-    NULL,
-    NULL,
-    NULL
+    keychain_iter_end
 };
-
-#pragma clang diagnostic pop
 
 #endif /* HAVE_FRAMEWORK_SECURITY */
 

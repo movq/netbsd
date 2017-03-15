@@ -29,7 +29,7 @@
 
 #include <sys/cdefs.h>
 
-__KERNEL_RCSID(0, "$NetBSD: pmap_synci.c,v 1.3 2016/07/11 16:06:09 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pmap_synci.c,v 1.2 2013/07/02 09:35:48 matt Exp $");
 
 #define __PMAP_PRIVATE
 
@@ -44,11 +44,8 @@ __KERNEL_RCSID(0, "$NetBSD: pmap_synci.c,v 1.3 2016/07/11 16:06:09 matt Exp $");
 #include <uvm/uvm.h>
 
 #if defined(MULTIPROCESSOR)
-u_int	pmap_tlb_synci_page_mask;
-u_int	pmap_tlb_synci_map_mask;
-
 void
-pmap_tlb_syncicache_ast(struct cpu_info *ci)
+pmap_syncicache_ast(struct cpu_info *ci)
 {
 	struct pmap_tlb_info * const ti = cpu_tlb_info(ci);
 
@@ -66,6 +63,7 @@ pmap_tlb_syncicache_ast(struct cpu_info *ci)
 		pmap_md_icache_sync_all();
 		ti->ti_evcnt_synci_all.ev_count++;
 		ti->ti_evcnt_synci_pages.ev_count += pmap_tlb_synci_page_mask+1;
+		kpreempt_enable();
 		return;
 	}
 
@@ -83,10 +81,12 @@ pmap_tlb_syncicache_ast(struct cpu_info *ci)
 			ti->ti_evcnt_synci_pages.ev_count++;
 		}
 	}
+
+	kpreempt_enable();
 }
 
 void
-pmap_tlb_syncicache(vaddr_t va, const kcpuset_t *page_onproc)
+pmap_tlb_syncicache(vaddr_t va, uint32_t page_onproc)
 {
 	KASSERT(kpreempt_disabled());
 	/*
@@ -108,11 +108,10 @@ pmap_tlb_syncicache(vaddr_t va, const kcpuset_t *page_onproc)
 	 * then become equal but that's a one in 4 billion cache and will
 	 * just cause an extra sync of the icache.
 	 */
-	struct cpu_info * const ci = curcpu();
-	kcpuset_t *onproc;
-	kcpuset_create(&onproc, true);
+	const uint32_t cpu_mask = 1L << cpu_index(curcpu());
 	const uint32_t page_mask =
 	    1L << ((va >> PGSHIFT) & pmap_tlb_synci_page_mask);
+	uint32_t onproc = 0;
 	for (size_t i = 0; i < pmap_ntlbs; i++) {
 		struct pmap_tlb_info * const ti = pmap_tlbs[i];
 		TLBINFO_LOCK(ti);
@@ -129,7 +128,7 @@ pmap_tlb_syncicache(vaddr_t va, const kcpuset_t *page_onproc)
 
 			if (orig_page_bitmap == old_page_bitmap) {
 				if (old_page_bitmap == 0) {
-					kcpuset_merge(onproc, ti->ti_kcpuset);
+					onproc |= ti->ti_cpu_mask;
 				} else {
 					ti->ti_evcnt_synci_deferred.ev_count++;
 				}
@@ -144,20 +143,20 @@ pmap_tlb_syncicache(vaddr_t va, const kcpuset_t *page_onproc)
 #endif
 		TLBINFO_UNLOCK(ti);
 	}
-	kcpuset_intersect(onproc, page_onproc);
-	if (__predict_false(!kcpuset_iszero(onproc))) {
+	onproc &= page_onproc;
+	if (__predict_false(onproc != 0)) {
 		/*
 		 * If the cpu need to sync this page, tell the current lwp
 		 * to sync the icache before it returns to userspace.
 		 */
-		if (kcpuset_isset(onproc, cpu_index(ci))) {
-			if (ci->ci_flags & CPUF_USERPMAP) {
+		if (onproc & cpu_mask) {
+			if (curcpu()->ci_flags & CPUF_USERPMAP) {
 				curlwp->l_md.md_astpending = 1;	/* force call to ast() */
-				ci->ci_evcnt_synci_onproc_rqst.ev_count++;
+				curcpu()->ci_evcnt_synci_onproc_rqst.ev_count++;
 			} else {
-				ci->ci_evcnt_synci_deferred_rqst.ev_count++;
+				curcpu()->ci_evcnt_synci_deferred_rqst.ev_count++;
 			}
-			kcpuset_clear(onproc, cpu_index(ci));
+			onproc ^= cpu_mask;
 		}
 
 		/*
@@ -166,14 +165,12 @@ pmap_tlb_syncicache(vaddr_t va, const kcpuset_t *page_onproc)
 		 * We might cause some spurious icache syncs but that's not
 		 * going to break anything.
 		 */
-		for (cpuid_t n = kcpuset_ffs(onproc);
-		     n-- > 0;
-		     n = kcpuset_ffs(onproc)) {
-			kcpuset_clear(onproc, n);
-			cpu_send_ipi(cpu_lookup(n), IPI_SYNCICACHE);
+		for (u_int n = ffs(onproc);
+		     onproc != 0;
+		     onproc >>= n, onproc <<= n, n = ffs(onproc)) {
+			cpu_send_ipi(cpu_lookup(n-1), IPI_SYNCICACHE);
 		}
 	}
-	kcpuset_destroy(onproc);
 }
 
 void

@@ -1,4 +1,4 @@
-/*	$NetBSD: sll.h,v 1.3 2017/01/24 22:29:29 christos Exp $	*/
+/*	$NetBSD: sll.h,v 1.1.1.3 2013/04/06 15:57:50 christos Exp $	*/
 
 /*-
  * Copyright (c) 1990, 1991, 1992, 1993, 1994, 1995, 1996, 1997
@@ -36,6 +36,8 @@
  * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
+ *
+ * @(#) Header: /tcpdump/master/libpcap/pcap/sll.h,v 1.3 2008-05-30 01:35:33 guy Exp  (LBL)
  */
 
 /*
@@ -125,7 +127,5 @@ struct sll_header {
  */
 #define LINUX_SLL_P_802_3	0x0001	/* Novell 802.3 frames without 802.2 LLC header */
 #define LINUX_SLL_P_802_2	0x0004	/* 802.2 frames (not D/I/X Ethernet) */
-#define LINUX_SLL_P_CAN		0x000C	/* CAN frames, with SocketCAN pseudo-headers */
-#define LINUX_SLL_P_CANFD	0x000D	/* CAN FD frames, with SocketCAN pseudo-headers */
 
 #endif

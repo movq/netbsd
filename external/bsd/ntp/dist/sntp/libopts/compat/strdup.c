@@ -1,4 +1,4 @@
-/*	$NetBSD: strdup.c,v 1.4 2016/01/08 21:35:42 christos Exp $	*/
+/*	$NetBSD: strdup.c,v 1.1.1.2.4.1 2014/12/24 00:05:27 riz Exp $	*/
 
 /*
  * Platforms without strdup ?!?!?!

@@ -1,4 +1,4 @@
-/*	$NetBSD: mopdef.c,v 1.6 2016/06/08 01:11:49 christos Exp $	*/
+/*	$NetBSD: mopdef.c,v 1.5 2011/08/30 19:49:10 joerg Exp $	*/
 
 /*
  * Copyright (c) 1995 Mats O Jansson.  All rights reserved.
@@ -24,9 +24,9 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "port.h"
+#include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: mopdef.c,v 1.6 2016/06/08 01:11:49 christos Exp $");
+__RCSID("$NetBSD: mopdef.c,v 1.5 2011/08/30 19:49:10 joerg Exp $");
 #endif
 
 #define MOPDEF_SURPESS_EXTERN

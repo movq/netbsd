@@ -1,4 +1,4 @@
-/*	$NetBSD: cleanup_message.c,v 1.2 2017/02/14 01:16:44 christos Exp $	*/
+/*	$NetBSD: cleanup_message.c,v 1.1.1.4.2.1 2015/01/27 08:14:03 martin Exp $	*/
 
 /*++
 /* NAME
@@ -179,7 +179,7 @@ static void cleanup_rewrite_sender(CLEANUP_STATE *state,
 	vstring_strcat(header_buf, ": ");
 	tok822_externalize(header_buf, tree, TOK822_STR_HEAD);
     }
-    myfree((void *) addr_list);
+    myfree((char *) addr_list);
     tok822_free_tree(tree);
     if ((hdr_opts->flags & HDR_OPT_DROP) == 0) {
 	if (did_rewrite)
@@ -236,7 +236,7 @@ static void cleanup_rewrite_recip(CLEANUP_STATE *state,
 	vstring_strcat(header_buf, ": ");
 	tok822_externalize(header_buf, tree, TOK822_STR_HEAD);
     }
-    myfree((void *) addr_list);
+    myfree((char *) addr_list);
     tok822_free_tree(tree);
     if ((hdr_opts->flags & HDR_OPT_DROP) == 0) {
 	if (did_rewrite)
@@ -387,26 +387,11 @@ static const char *cleanup_act(CLEANUP_STATE *state, char *context,
     if (STREQUAL(value, "PREPEND", command_len)) {
 	if (*optional_text == 0) {
 	    msg_warn("PREPEND action without text in %s map", map_class);
-	} else if (strcmp(context, CLEANUP_ACT_CTXT_HEADER) == 0) {
-	    if (!is_header(optional_text)) {
-		msg_warn("bad PREPEND header text \"%s\" in %s map -- "
-			 "need \"headername: headervalue\"",
-			 optional_text, map_class);
-	    }
-
-	    /*
-	     * By design, cleanup_out_header() may modify content. Play safe
-	     * and prepare for future developments.
-	     */
-	    else {
-		VSTRING *temp;
-
-		cleanup_act_log(state, "prepend", context, buf, optional_text);
-		temp = vstring_strcpy(vstring_alloc(strlen(optional_text)),
-						    optional_text);
-		cleanup_out_header(state, temp);
-		vstring_free(temp);
-	    }
+	} else if (strcmp(context, CLEANUP_ACT_CTXT_HEADER) == 0
+		   && !is_header(optional_text)) {
+	    msg_warn("bad PREPEND header text \"%s\" in %s map -- "
+		     "need \"headername: headervalue\"",
+		     optional_text, map_class);
 	} else {
 	    cleanup_act_log(state, "prepend", context, buf, optional_text);
 	    cleanup_out_string(state, REC_TYPE_NORM, optional_text);
@@ -439,19 +424,6 @@ static const char *cleanup_act(CLEANUP_STATE *state, char *context,
 	    state->redirect = mystrdup(optional_text);
 	    cleanup_act_log(state, "redirect", context, buf, optional_text);
 	    state->flags &= ~CLEANUP_FLAG_FILTER_ALL;
-	}
-	return (buf);
-    }
-    if (STREQUAL(value, "BCC", command_len)) {
-	if (strchr(optional_text, '@') == 0) {
-	    msg_warn("bad BCC address \"%s\" in %s map -- "
-		     "need user@domain",
-		     optional_text, map_class);
-	} else {
-	    if (state->hbc_rcpt == 0)
-		state->hbc_rcpt = argv_alloc(1);
-	    argv_add(state->hbc_rcpt, optional_text, (char *) 0);
-	    cleanup_act_log(state, "bcc", context, buf, optional_text);
 	}
 	return (buf);
     }
@@ -530,7 +502,7 @@ static void cleanup_header_callback(void *context, int header_class,
 	    } else if (result != header) {
 		vstring_strcpy(header_buf, result);
 		hdr_opts = header_opts_find(result);
-		myfree((void *) result);
+		myfree((char *) result);
 	    }
 	} else if (checks->error) {
 	    msg_warn("%s: %s map lookup problem -- "
@@ -614,11 +586,8 @@ static void cleanup_header_callback(void *context, int header_class,
 	if (hdr_opts->type == HDR_RESENT_MESSAGE_ID)
 	    msg_info("%s: resent-message-id=%s", state->queue_id, hdrval);
 	if (hdr_opts->type == HDR_RECEIVED) {
-	    if (state->hop_count >= var_hopcount_limit) {
-		msg_warn("%s: message rejected: hopcount exceeded",
-			 state->queue_id);
+	    if (state->hop_count >= var_hopcount_limit)
 		state->errs |= CLEANUP_STAT_HOPS;
-	    }
 	    /* Save our Received: header after maybe updating headers above. */
 	    if (state->hop_count == 1)
 		argv_add(state->auto_hdrs, vstring_str(header_buf), ARGV_END);
@@ -659,19 +628,6 @@ static void cleanup_header_done_callback(void *context)
      */
     if (CLEANUP_OUT_OK(state) == 0)
 	return;
-
-    /*
-     * Future proofing: the Milter client's header suppression algorithm
-     * assumes that the MTA prepends its own Received: header. This
-     * assupmtion may be violated after some source-code update. The
-     * following check ensures consistency, at least for local submission.
-     */
-    if (state->hop_count < 1) {
-	msg_warn("%s: message rejected: no Received: header",
-		 state->queue_id);
-	state->errs |= CLEANUP_STAT_BAD;
-	return;
-    }
 
     /*
      * Add a missing (Resent-)Message-Id: header. The message ID gives the
@@ -840,7 +796,7 @@ static void cleanup_body_callback(void *context, int type,
 		return;
 	    } else if (result != buf) {
 		cleanup_out(state, type, result, strlen(result));
-		myfree((void *) result);
+		myfree((char *) result);
 		return;
 	    }
 	} else if (cleanup_body_checks->error) {

@@ -1,7 +1,5 @@
 #!/bin/sh
 
-# $NetBSD: dhcpcd,v 1.5 2016/01/07 22:03:00 roy Exp $
-
 # PROVIDE: dhcpcd
 # REQUIRE: network mountcritlocal
 # BEFORE:  NETWORKING
@@ -15,14 +13,24 @@ extra_commands="reload"
 
 load_rc_config $name
 
-# Work out what pidfile dhcpcd will use based on flags
+# If the last argument to dhcpcd is a valid interface and the prior argument
+# is not then dhcpcd will start on one interface only and create a pidfile
+# based on the interface name. See PR bin/43490.
 if [ -n "$flags" ]; then
 	myflags=$flags
 else
 	eval myflags=\$${name}_flags
 fi
-pidfile=$(eval $command -P $myflags 2>/dev/null)
-: ${pidfile:=/var/run/$name.pid}
-unset myflags
+ifname="${myflags##* }"
+myflags="${myflags%% $ifname}"
+last_flag="${myflags##* }"
+if /sbin/ifconfig "$ifname" >/dev/null 2>&1 && 
+    ! /sbin/ifconfig "$last_flag" >/dev/null 2>&1
+then
+	pidfile=/var/run/$name-"$ifname".pid
+else
+	pidfile=/var/run/$name.pid
+fi
+unset myflags ifname last_flag
 
 run_rc_command "$1"

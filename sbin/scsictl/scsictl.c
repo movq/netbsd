@@ -1,4 +1,4 @@
-/*	$NetBSD: scsictl.c,v 1.39 2016/11/19 08:43:40 flxd Exp $	*/
+/*	$NetBSD: scsictl.c,v 1.37.8.1 2016/12/03 12:20:32 martin Exp $	*/
 
 /*-
  * Copyright (c) 1998, 2002 The NetBSD Foundation, Inc.
@@ -36,7 +36,7 @@
 #include <sys/cdefs.h>
 
 #ifndef lint
-__RCSID("$NetBSD: scsictl.c,v 1.39 2016/11/19 08:43:40 flxd Exp $");
+__RCSID("$NetBSD: scsictl.c,v 1.37.8.1 2016/12/03 12:20:32 martin Exp $");
 #endif
 
 
@@ -640,8 +640,8 @@ device_format(int argc, char *argv[])
 /*
  * device_identify:
  *
- *	Display the identity of the device, including its SCSI bus,
- *	target, lun, and its vendor/product/revision information.
+ *	Display the identity of the device, including it's SCSI bus,
+ *	target, lun, and it's vendor/product/revision information.
  */
 static void
 device_identify(int argc, char *argv[])

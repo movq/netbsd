@@ -1,9 +1,9 @@
-/*	$NetBSD: subst.c,v 1.1.1.5 2017/02/09 01:46:45 christos Exp $	*/
+/*	$NetBSD: subst.c,v 1.1.1.4 2014/05/28 09:58:45 tron Exp $	*/
 
 /* $OpenLDAP$ */
 /* This work is part of OpenLDAP Software <http://www.openldap.org/>.
  *
- * Copyright 2000-2016 The OpenLDAP Foundation.
+ * Copyright 2000-2014 The OpenLDAP Foundation.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -157,7 +157,6 @@ rewrite_subst_compile(
 			tmpsm = ( struct rewrite_submatch * )realloc( submatch,
 					sizeof( struct rewrite_submatch )*( nsub + 1 ) );
 			if ( tmpsm == NULL ) {
-				rewrite_map_destroy( &map );
 				goto cleanup;
 			}
 			submatch = tmpsm;
@@ -197,6 +196,7 @@ rewrite_subst_compile(
 		subs[ nsub ].bv_len = l;
 		subs[ nsub ].bv_val = malloc( l + 1 );
 		if ( subs[ nsub ].bv_val == NULL ) {
+			free( subs );
 			goto cleanup;
 		}
 		AC_MEMCPY( subs[ nsub ].bv_val, begin, l );
@@ -212,25 +212,11 @@ rewrite_subst_compile(
 	}
 
 	s->lt_subs_len = subs_len;
-	s->lt_subs = subs;
-	s->lt_num_submatch = nsub;
-	s->lt_submatch = submatch;
-	subs = NULL;
-	submatch = NULL;
+        s->lt_subs = subs;
+        s->lt_num_submatch = nsub;
+        s->lt_submatch = submatch;
 
 cleanup:;
-	if ( subs ) {
-		for ( l=0; l<nsub; l++ ) {
-			free( subs[nsub].bv_val );
-		}
-		free( subs );
-	}
-	if ( submatch ) {
-		for ( l=0; l<nsub; l++ ) {
-			free( submatch[nsub].ls_map );
-		}
-		free( submatch );
-	}
 	free( result );
 
 	return s;

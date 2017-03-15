@@ -1,4 +1,4 @@
-/*	$NetBSD: lmem.c,v 1.6 2016/09/08 02:21:31 salazar Exp $	*/
+/*	$NetBSD: lmem.c,v 1.2.2.3 2016/07/01 06:35:02 snj Exp $	*/
 
 /*
 ** Id: lmem.c,v 1.91 2015/03/06 19:45:54 roberto Exp 

@@ -1,4 +1,4 @@
-/*	$NetBSD: netbt_component.c,v 1.3 2016/01/26 23:12:18 pooka Exp $	*/
+/*	$NetBSD: netbt_component.c,v 1.1 2014/03/13 02:06:16 pooka Exp $	*/
 
 /*
  * Copyright (c) 2010 Antti Kantee.  All Rights Reserved.
@@ -26,17 +26,18 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: netbt_component.c,v 1.3 2016/01/26 23:12:18 pooka Exp $");
+__KERNEL_RCSID(0, "$NetBSD: netbt_component.c,v 1.1 2014/03/13 02:06:16 pooka Exp $");
 
 #include <sys/param.h>
 #include <sys/domain.h>
 #include <sys/protosw.h>
 
-#include <rump-sys/kern.h>
+#include "rump_private.h"
+#include "rump_net_private.h"
 
 RUMP_COMPONENT(RUMP_COMPONENT_NET)
 {
 	extern struct domain btdomain;
 
-	domain_attach(&btdomain);
+	DOMAINADD(btdomain);
 }

@@ -1,13 +1,11 @@
 [Unit]
 Description=WPA supplicant
-Before=network.target
-Wants=network.target
 
 [Service]
 Type=dbus
-BusName=@DBUS_INTERFACE@
+BusName=fi.epitest.hostap.WPASupplicant
 ExecStart=@BINDIR@/wpa_supplicant -u
 
 [Install]
 WantedBy=multi-user.target
-Alias=dbus-@DBUS_INTERFACE@.service
+Alias=dbus-fi.epitest.hostap.WPASupplicant.service

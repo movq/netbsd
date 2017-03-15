@@ -1,4 +1,4 @@
-/*	$NetBSD: init.c,v 1.8 2016/05/01 23:32:01 christos Exp $	*/
+/*	$NetBSD: init.c,v 1.2.6.3 2016/05/11 11:35:42 martin Exp $	*/
 
 /**
  * \file initialize.c

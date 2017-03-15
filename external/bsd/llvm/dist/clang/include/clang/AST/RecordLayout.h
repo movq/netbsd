@@ -71,7 +71,10 @@ private:
   CharUnits RequiredAlignment;
 
   /// FieldOffsets - Array of field offsets in bits.
-  ASTVector<uint64_t> FieldOffsets;
+  uint64_t *FieldOffsets;
+
+  // FieldCount - Number of fields.
+  unsigned FieldCount;
 
   /// CXXRecordLayoutInfo - Contains C++ specific layout information.
   struct CXXRecordLayoutInfo {
@@ -101,10 +104,10 @@ private:
     /// a primary base class.
     bool HasExtendableVFPtr : 1;
 
-    /// EndsWithZeroSizedObject - True if this class contains a zero sized
-    /// member or base or a base with a zero sized member or base.
-    /// Only used for MS-ABI.
-    bool EndsWithZeroSizedObject : 1;
+    /// HasZeroSizedSubObject - True if this class contains a zero sized member
+    /// or base or a base with a zero sized member or base.  Only used for
+    /// MS-ABI.
+    bool HasZeroSizedSubObject : 1;
 
     /// \brief True if this class is zero sized or first base is zero sized or
     /// has this property.  Only used for MS-ABI.
@@ -133,8 +136,9 @@ private:
   friend class ASTContext;
 
   ASTRecordLayout(const ASTContext &Ctx, CharUnits size, CharUnits alignment,
-                  CharUnits requiredAlignment, CharUnits datasize,
-                  ArrayRef<uint64_t> fieldoffsets);
+                  CharUnits requiredAlignment,
+                  CharUnits datasize, const uint64_t *fieldoffsets,
+                  unsigned fieldcount);
 
   // Constructor for C++ records.
   typedef CXXRecordLayoutInfo::BaseOffsetsMapTy BaseOffsetsMapTy;
@@ -144,23 +148,23 @@ private:
                   bool hasOwnVFPtr, bool hasExtendableVFPtr,
                   CharUnits vbptroffset,
                   CharUnits datasize,
-                  ArrayRef<uint64_t> fieldoffsets,
+                  const uint64_t *fieldoffsets, unsigned fieldcount,
                   CharUnits nonvirtualsize, CharUnits nonvirtualalignment,
                   CharUnits SizeOfLargestEmptySubobject,
                   const CXXRecordDecl *PrimaryBase,
                   bool IsPrimaryBaseVirtual,
                   const CXXRecordDecl *BaseSharingVBPtr,
-                  bool EndsWithZeroSizedObject,
+                  bool HasZeroSizedSubObject,
                   bool LeadsWithZeroSizedBase,
                   const BaseOffsetsMapTy& BaseOffsets,
                   const VBaseOffsetsMapTy& VBaseOffsets);
 
-  ~ASTRecordLayout() = default;
+  ~ASTRecordLayout() {}
 
   void Destroy(ASTContext &Ctx);
   
-  ASTRecordLayout(const ASTRecordLayout &) = delete;
-  void operator=(const ASTRecordLayout &) = delete;
+  ASTRecordLayout(const ASTRecordLayout &) LLVM_DELETED_FUNCTION;
+  void operator=(const ASTRecordLayout &) LLVM_DELETED_FUNCTION;
 public:
 
   /// getAlignment - Get the record alignment in characters.
@@ -170,11 +174,12 @@ public:
   CharUnits getSize() const { return Size; }
 
   /// getFieldCount - Get the number of fields in the layout.
-  unsigned getFieldCount() const { return FieldOffsets.size(); }
+  unsigned getFieldCount() const { return FieldCount; }
 
   /// getFieldOffset - Get the offset of the given field index, in
   /// bits.
   uint64_t getFieldOffset(unsigned FieldNo) const {
+    assert (FieldNo < FieldCount && "Invalid Field No");
     return FieldOffsets[FieldNo];
   }
 
@@ -278,8 +283,8 @@ public:
     return RequiredAlignment;
   }
 
-  bool endsWithZeroSizedObject() const {
-    return CXXInfo && CXXInfo->EndsWithZeroSizedObject;
+  bool hasZeroSizedSubObject() const {
+    return CXXInfo && CXXInfo->HasZeroSizedSubObject;
   }
 
   bool leadsWithZeroSizedBase() const {

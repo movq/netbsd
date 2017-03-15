@@ -1,4 +1,4 @@
-/*	$NetBSD: pstat.c,v 1.126 2017/01/11 09:07:58 hannken Exp $	*/
+/*	$NetBSD: pstat.c,v 1.124 2014/05/26 20:07:25 dholland Exp $	*/
 
 /*-
  * Copyright (c) 1980, 1991, 1993, 1994
@@ -39,7 +39,7 @@ __COPYRIGHT("@(#) Copyright (c) 1980, 1991, 1993, 1994\
 #if 0
 static char sccsid[] = "@(#)pstat.c	8.16 (Berkeley) 5/9/95";
 #else
-__RCSID("$NetBSD: pstat.c,v 1.126 2017/01/11 09:07:58 hannken Exp $");
+__RCSID("$NetBSD: pstat.c,v 1.124 2014/05/26 20:07:25 dholland Exp $");
 #endif
 #endif /* not lint */
 
@@ -89,15 +89,13 @@ struct nlist nl[] = {
 	{ "_mountlist", 0, 0, 0, 0 },	/* address of head of mount list. */
 #define	V_NUMV		1
 	{ "_numvnodes", 0, 0, 0, 0 },
-#define	V_NEXT_OFFSET	2
-	{ "_vnode_offset_next_by_mount", 0, 0, 0, 0 },
-#define	FNL_NFILE	3
+#define	FNL_NFILE	2
 	{ "_nfiles", 0, 0, 0, 0 },
-#define FNL_MAXFILE	4
+#define FNL_MAXFILE	3
 	{ "_maxfiles", 0, 0, 0, 0 },
-#define TTY_NTTY	5
+#define TTY_NTTY	4
 	{ "_tty_count", 0, 0, 0, 0 },
-#define TTY_TTYLIST	6
+#define TTY_TTYLIST	5
 	{ "_ttylist", 0, 0, 0, 0 },
 #define NLMANDATORY TTY_TTYLIST	/* names up to here are mandatory */
 	{ "", 0, 0, 0, 0 }
@@ -390,6 +388,7 @@ const struct flagbit_desc vnode_flags[] = {
 	{ VV_ISTTY,	'I' },
 	{ VI_EXECMAP,	'E' },
 	{ VU_DIROP,	'D' },
+	{ VI_LAYER,	'Y' },
 	{ VI_ONWORKLST,	'O' },
 	{ 0,		'\0' },
 };
@@ -749,20 +748,17 @@ kinfo_vnodes(int *avnodes)
 	struct mount *mp, mount;
 	struct vnode *vp, vnode;
 	char *beg, *bp, *ep;
-	int numvnodes, next_offset;
+	int numvnodes;
 
 	KGET(V_NUMV, numvnodes);
 	if ((bp = malloc((numvnodes + 20) * (VPTRSZ + VNODESZ))) == NULL)
 		err(1, "malloc");
 	beg = bp;
 	ep = bp + (numvnodes + 20) * (VPTRSZ + VNODESZ);
-	KGET(V_NEXT_OFFSET, next_offset);
 	KGET(V_MOUNTLIST, mlist);
-	mp = TAILQ_FIRST(&mlist);
-	while (mp != NULL) {
+	TAILQ_FOREACH(mp, &mlist, mnt_list) {
 		KGET2(mp, &mount, sizeof(mount), "mount entry");
-		vp = (struct vnode *)TAILQ_FIRST(&mount.mnt_vnodelist);
-		while (vp != NULL) {
+		TAILQ_FOREACH(vp, &mount.mnt_vnodelist, v_mntvnodes) {
 			KGET2(vp, &vnode, sizeof(vnode), "vnode");
 			if (bp + VPTRSZ + VNODESZ > ep)
 				/* XXX - should realloc */
@@ -771,9 +767,7 @@ kinfo_vnodes(int *avnodes)
 			bp += VPTRSZ;
 			memmove(bp, &vnode, VNODESZ);
 			bp += VNODESZ;
-			KGET2((char *)vp + next_offset, &vp, sizeof(vp), "nvp");
 		}
-		mp = TAILQ_NEXT(&mount, mnt_list);
 	}
 	*avnodes = (bp - beg) / (VPTRSZ + VNODESZ);
 	return (beg);

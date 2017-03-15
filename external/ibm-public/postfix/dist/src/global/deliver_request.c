@@ -1,4 +1,4 @@
-/*	$NetBSD: deliver_request.c,v 1.2 2017/02/14 01:16:45 christos Exp $	*/
+/*	$NetBSD: deliver_request.c,v 1.1.1.2 2011/03/02 19:32:13 tron Exp $	*/
 
 /*++
 /* NAME
@@ -139,7 +139,7 @@ static int deliver_request_initial(VSTREAM *stream)
     if (msg_verbose)
 	msg_info("deliver_request_initial: send initial status");
     attr_print(stream, ATTR_FLAG_NONE,
-	       SEND_ATTR_INT(MAIL_ATTR_STATUS, 0),
+	       ATTR_TYPE_INT, MAIL_ATTR_STATUS, 0,
 	       ATTR_TYPE_END);
     if ((err = vstream_fflush(stream)) != 0)
 	if (msg_verbose)
@@ -167,8 +167,8 @@ static int deliver_request_final(VSTREAM *stream, DELIVER_REQUEST *request,
 	msg_info("deliver_request_final: send: \"%s\" %d",
 		 hop_status->reason, status);
     attr_print(stream, ATTR_FLAG_NONE,
-	       SEND_ATTR_FUNC(dsn_print, (void *) hop_status),
-	       SEND_ATTR_INT(MAIL_ATTR_STATUS, status),
+	       ATTR_TYPE_FUNC, dsn_print, (void *) hop_status,
+	       ATTR_TYPE_INT, MAIL_ATTR_STATUS, status,
 	       ATTR_TYPE_END);
     if ((err = vstream_fflush(stream)) != 0)
 	if (msg_verbose)
@@ -210,7 +210,6 @@ static int deliver_request_get(VSTREAM *stream, DELIVER_REQUEST *request)
     static VSTRING *dsn_envid;
     static RCPT_BUF *rcpt_buf;
     int     rcpt_count;
-    int     smtputf8;
     int     dsn_ret;
 
     /*
@@ -243,33 +242,32 @@ static int deliver_request_get(VSTREAM *stream, DELIVER_REQUEST *request)
      * the conversation when they send bad information.
      */
     if (attr_scan(stream, ATTR_FLAG_STRICT,
-		  RECV_ATTR_INT(MAIL_ATTR_FLAGS, &request->flags),
-		  RECV_ATTR_STR(MAIL_ATTR_QUEUE, queue_name),
-		  RECV_ATTR_STR(MAIL_ATTR_QUEUEID, queue_id),
-		  RECV_ATTR_LONG(MAIL_ATTR_OFFSET, &request->data_offset),
-		  RECV_ATTR_LONG(MAIL_ATTR_SIZE, &request->data_size),
-		  RECV_ATTR_STR(MAIL_ATTR_NEXTHOP, nexthop),
-		  RECV_ATTR_STR(MAIL_ATTR_ENCODING, encoding),
-		  RECV_ATTR_INT(MAIL_ATTR_SMTPUTF8, &smtputf8),
-		  RECV_ATTR_STR(MAIL_ATTR_SENDER, address),
-		  RECV_ATTR_STR(MAIL_ATTR_DSN_ENVID, dsn_envid),
-		  RECV_ATTR_INT(MAIL_ATTR_DSN_RET, &dsn_ret),
-	       RECV_ATTR_FUNC(msg_stats_scan, (void *) &request->msg_stats),
+		  ATTR_TYPE_INT, MAIL_ATTR_FLAGS, &request->flags,
+		  ATTR_TYPE_STR, MAIL_ATTR_QUEUE, queue_name,
+		  ATTR_TYPE_STR, MAIL_ATTR_QUEUEID, queue_id,
+		  ATTR_TYPE_LONG, MAIL_ATTR_OFFSET, &request->data_offset,
+		  ATTR_TYPE_LONG, MAIL_ATTR_SIZE, &request->data_size,
+		  ATTR_TYPE_STR, MAIL_ATTR_NEXTHOP, nexthop,
+		  ATTR_TYPE_STR, MAIL_ATTR_ENCODING, encoding,
+		  ATTR_TYPE_STR, MAIL_ATTR_SENDER, address,
+		  ATTR_TYPE_STR, MAIL_ATTR_DSN_ENVID, dsn_envid,
+		  ATTR_TYPE_INT, MAIL_ATTR_DSN_RET, &dsn_ret,
+	       ATTR_TYPE_FUNC, msg_stats_scan, (void *) &request->msg_stats,
     /* XXX Should be encapsulated with ATTR_TYPE_FUNC. */
-		  RECV_ATTR_STR(MAIL_ATTR_LOG_CLIENT_NAME, client_name),
-		  RECV_ATTR_STR(MAIL_ATTR_LOG_CLIENT_ADDR, client_addr),
-		  RECV_ATTR_STR(MAIL_ATTR_LOG_CLIENT_PORT, client_port),
-		  RECV_ATTR_STR(MAIL_ATTR_LOG_PROTO_NAME, client_proto),
-		  RECV_ATTR_STR(MAIL_ATTR_LOG_HELO_NAME, client_helo),
+		  ATTR_TYPE_STR, MAIL_ATTR_LOG_CLIENT_NAME, client_name,
+		  ATTR_TYPE_STR, MAIL_ATTR_LOG_CLIENT_ADDR, client_addr,
+		  ATTR_TYPE_STR, MAIL_ATTR_LOG_CLIENT_PORT, client_port,
+		  ATTR_TYPE_STR, MAIL_ATTR_LOG_PROTO_NAME, client_proto,
+		  ATTR_TYPE_STR, MAIL_ATTR_LOG_HELO_NAME, client_helo,
     /* XXX Should be encapsulated with ATTR_TYPE_FUNC. */
-		  RECV_ATTR_STR(MAIL_ATTR_SASL_METHOD, sasl_method),
-		  RECV_ATTR_STR(MAIL_ATTR_SASL_USERNAME, sasl_username),
-		  RECV_ATTR_STR(MAIL_ATTR_SASL_SENDER, sasl_sender),
+		  ATTR_TYPE_STR, MAIL_ATTR_SASL_METHOD, sasl_method,
+		  ATTR_TYPE_STR, MAIL_ATTR_SASL_USERNAME, sasl_username,
+		  ATTR_TYPE_STR, MAIL_ATTR_SASL_SENDER, sasl_sender,
     /* XXX Ditto if we want to pass TLS certificate info. */
-		  RECV_ATTR_STR(MAIL_ATTR_LOG_IDENT, log_ident),
-		  RECV_ATTR_STR(MAIL_ATTR_RWR_CONTEXT, rewrite_context),
-		  RECV_ATTR_INT(MAIL_ATTR_RCPT_COUNT, &rcpt_count),
-		  ATTR_TYPE_END) != 23) {
+		  ATTR_TYPE_STR, MAIL_ATTR_LOG_IDENT, log_ident,
+		  ATTR_TYPE_STR, MAIL_ATTR_RWR_CONTEXT, rewrite_context,
+		  ATTR_TYPE_INT, MAIL_ATTR_RCPT_COUNT, &rcpt_count,
+		  ATTR_TYPE_END) != 22) {
 	msg_warn("%s: error receiving common attributes", myname);
 	return (-1);
     }
@@ -285,8 +283,6 @@ static int deliver_request_get(VSTREAM *stream, DELIVER_REQUEST *request)
     request->queue_id = mystrdup(vstring_str(queue_id));
     request->nexthop = mystrdup(vstring_str(nexthop));
     request->encoding = mystrdup(vstring_str(encoding));
-    /* Fix 20140708: dedicated smtputf8 attribute with its own flags. */
-    request->smtputf8 = smtputf8;
     request->sender = mystrdup(vstring_str(address));
     request->client_name = mystrdup(vstring_str(client_name));
     request->client_addr = mystrdup(vstring_str(client_addr));
@@ -307,7 +303,7 @@ static int deliver_request_get(VSTREAM *stream, DELIVER_REQUEST *request)
      */
     while (rcpt_count-- > 0) {
 	if (attr_scan(stream, ATTR_FLAG_STRICT,
-		      RECV_ATTR_FUNC(rcpb_scan, (void *) rcpt_buf),
+		      ATTR_TYPE_FUNC, rcpb_scan, (void *) rcpt_buf,
 		      ATTR_TYPE_END) != 1) {
 	    msg_warn("%s: error receiving recipient attributes", myname);
 	    return (-1);
@@ -433,7 +429,7 @@ static void deliver_request_free(DELIVER_REQUEST *request)
 	myfree(request->rewrite_context);
     if (request->dsn_envid)
 	myfree(request->dsn_envid);
-    myfree((void *) request);
+    myfree((char *) request);
 }
 
 /* deliver_request_read - create and read delivery request */

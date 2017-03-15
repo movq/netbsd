@@ -20,6 +20,7 @@
 
 #include "clang/AST/AttrIterator.h"
 #include "llvm/ADT/PointerIntPair.h"
+#include "llvm/Support/Allocator.h"
 #include "llvm/Support/type_traits.h"
 #include <algorithm>
 #include <cstring>
@@ -380,18 +381,17 @@ void ASTVector<T>::grow(const ASTContext &C, size_t MinSize) {
     NewCapacity = MinSize;
 
   // Allocate the memory from the ASTContext.
-  T *NewElts = new (C, alignof(T)) T[NewCapacity];
+  T *NewElts = new (C, llvm::alignOf<T>()) T[NewCapacity];
 
   // Copy the elements over.
-  if (Begin != End) {
-    if (std::is_class<T>::value) {
-      std::uninitialized_copy(Begin, End, NewElts);
-      // Destroy the original elements.
-      destroy_range(Begin, End);
-    } else {
-      // Use memcpy for PODs (std::uninitialized_copy optimizes to memmove).
-      memcpy(NewElts, Begin, CurSize * sizeof(T));
-    }
+  if (std::is_class<T>::value) {
+    std::uninitialized_copy(Begin, End, NewElts);
+    // Destroy the original elements.
+    destroy_range(Begin, End);
+  }
+  else {
+    // Use memcpy for PODs (std::uninitialized_copy optimizes to memmove).
+    memcpy(NewElts, Begin, CurSize * sizeof(T));
   }
 
   // ASTContext never frees any memory.

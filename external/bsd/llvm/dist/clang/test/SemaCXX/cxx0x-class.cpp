@@ -37,11 +37,3 @@ namespace Foo {
     int y = x;
   };
 }
-
-// Instantiating another default member initializer while parsing one should
-// not cause us to mess up the 'this' override.
-template<typename> struct DefaultMemberTemplate { int n = 0; };
-class DefaultMemberInitSelf {
-  DefaultMemberTemplate<int> t = {};
-  int *p = &t.n;
-};

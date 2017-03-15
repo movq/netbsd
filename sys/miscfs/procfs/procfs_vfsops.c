@@ -1,4 +1,4 @@
-/*	$NetBSD: procfs_vfsops.c,v 1.96 2017/02/17 08:31:25 hannken Exp $	*/
+/*	$NetBSD: procfs_vfsops.c,v 1.92.2.1 2015/01/17 12:10:54 martin Exp $	*/
 
 /*
  * Copyright (c) 1993
@@ -76,7 +76,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: procfs_vfsops.c,v 1.96 2017/02/17 08:31:25 hannken Exp $");
+__KERNEL_RCSID(0, "$NetBSD: procfs_vfsops.c,v 1.92.2.1 2015/01/17 12:10:54 martin Exp $");
 
 #if defined(_KERNEL_OPT)
 #include "opt_compat_netbsd.h"
@@ -105,7 +105,7 @@ __KERNEL_RCSID(0, "$NetBSD: procfs_vfsops.c,v 1.96 2017/02/17 08:31:25 hannken E
 
 #include <uvm/uvm_extern.h>			/* for PAGE_SIZE */
 
-MODULE(MODULE_CLASS_VFS, procfs, "ptrace_common");
+MODULE(MODULE_CLASS_VFS, procfs, NULL);
 
 VFS_PROTOS(procfs);
 
@@ -338,7 +338,7 @@ procfs_loadvnode(struct mount *mp, struct vnode *vp,
 			pfs->pfs_mode = S_IRUSR|S_IWUSR;
 			switch (fp->f_type) {
 			case DTYPE_VNODE:
-				vxp = fp->f_vnode;
+				vxp = fp->f_data;
 
 				/*
 				 * We make symlinks for directories
@@ -473,7 +473,7 @@ struct vfsops procfs_vfsops = {
 	.vfs_done = procfs_done,
 	.vfs_snapshot = (void *)eopnotsupp,
 	.vfs_extattrctl = vfs_stdextattrctl,
-	.vfs_suspendctl = genfs_suspendctl,
+	.vfs_suspendctl = (void *)eopnotsupp,
 	.vfs_renamelock_enter = genfs_renamelock_enter,
 	.vfs_renamelock_exit = genfs_renamelock_exit,
 	.vfs_fsync = (void *)eopnotsupp,

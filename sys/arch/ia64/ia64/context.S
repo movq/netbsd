@@ -1,4 +1,4 @@
-/*	$NetBSD: context.S,v 1.7 2016/12/26 19:46:59 scole Exp $	*/
+/*	$NetBSD: context.S,v 1.5 2013/03/24 06:06:19 kiyohara Exp $	*/
 
 /*
  * Copyright (c) 2003 Marcel Moolenaar
@@ -25,7 +25,7 @@
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
- * $FreeBSD: releng/10.1/sys/ia64/ia64/context.S 204184 2010-02-22 01:23:41Z marcel $
+ * $FreeBSD: src/sys/ia64/ia64/context.S,v 1.3 2003/07/02 12:57:07 ru Exp $
  */
 
 #include <machine/asm.h>
@@ -64,7 +64,7 @@ ENTRY(restorectx, 1)
 {	.mmi
 	loadrs
 	ld8		r21=[r30],16		// rnat
-	mov		pr=r18,0x1fffe
+	mov		pr=r18,0x1003e		// Preserved pr (p1-p5, p16-p63)
 	;;
 }
 {	.mmi
@@ -88,18 +88,18 @@ ENTRY(restorectx, 1)
 {	.mmi
 	ld8.fill	r6=[r14],16		// r6
 	ld8.fill	r7=[r15],16		// r7
-	nop		0
+	nop		1
 	;;
 }
 {	.mmi
 	mov		ar.unat=r16
 	mov		ar.rsc=3
-	nop		0
+	nop		2
 }
 {	.mmi
 	ld8		r17=[r14],16		// b1
 	ld8		r18=[r15],16		// b2
-	nop		0
+	nop		3
 	;;
 }
 {	.mmi
@@ -288,7 +288,7 @@ ENTRY(swapctx, 2)
 (p15)	br.ret.sptk	rp
 	;;
 }
-{	.mib
+{	.mfb
 	mov		r32=r33
 	nop		0
 	br.sptk		restorectx
@@ -340,10 +340,10 @@ ENTRY(save_callee_saved, 1)
 	mov		r17=b5
 	;;
 }
-{	.mii
+{	.mfi
 	st8		[r14]=r17,16		// b5
-	mov		r16=ar.lc
 	nop		0
+	mov		r16=ar.lc
 	;;
 }
 {	.mmb
@@ -365,13 +365,13 @@ ENTRY(restore_callee_saved, 1)
 	add		r31=-8,r32
 	;;
 }
-{	.mmi
+{	.mmb
 	ld8.fill	r4=[r31],16		// r4
 	ld8.fill	r5=[r32],16		// r5
 	nop		0
 	;;
 }
-{	.mmi
+{	.mmb
 	ld8.fill	r6=[r31],16		// r6
 	ld8.fill	r7=[r32],16		// r7
 	nop		0
@@ -657,7 +657,7 @@ ENTRY(restore_high_fp, 1)
 	ldf.fill	f32=[r32],32
 	;;
 	ldf.fill	f33=[r31],32
-	ldf.fill	f34=[r32],32	
+	ldf.fill	f34=[r32],32
 	;;
 	ldf.fill	f35=[r31],32
 	ldf.fill	f36=[r32],32
@@ -821,7 +821,7 @@ ENTRY(cpu_switchto, 3)
 	 * Save old context, unless the LWP is exiting.
 	 */
 	cmp.eq		p6,p0=r0,in0		// p6 = (in0 == 0)
-	add		r14=PC_CURLWP,r13	// r14 = &ci->ci_curlwp
+	add		r14=PC_CURLWP,r13	// r2 = &ci->ci_curlwp
 	;;
 }
 {	.mii
@@ -840,7 +840,7 @@ ENTRY(cpu_switchto, 3)
 	nop		0
 	/*
 	 * Switch to new context, if p6 == true.
-	 * We assume to return to restorectx_return_here for swapped context.
+	 * We assum to return to restorectx_return_here for swapped context.
 	 */
 (p6)	ld8		out0=[r3]		// out0 = pcb of &newlwp
 (p6)	br.call.sptk.many rp=restorectx		// if (p6) restorectx(out0)
@@ -855,25 +855,7 @@ ENTRY(cpu_switchto, 3)
 	br.call.sptk.many rp=swapctx
 	;;
 }
-	/*
-	 * XXX seems to be a bug here...
-	 *
-	 * swapctx() and restorectx() (which is called by swapctx())
-	 * both adjust the bspstore (and hence bsp) registers.  When
-	 * returning to "restorectx_return_here:" the bspstore can
-	 * be greater than bsp, a state known as an "Incomplete Register Frame".
-	 *
-	 * That is not necessarily fatal in itself, but apparently the RSE
-	 * engine sets bsp=bspstore to adjust, which re-syncs the stacked
-	 * registers (r32-r127).  This clobbers our local registers below
-	 * (loc0 and loc1) on the br return from swapctx(), and you get all
-	 * kind of mysterious exceptions depeding on what gets restored from
-	 * the backing store.
-	 *
-	 * Not sure of a proper fix is yet or how cpu_switchto should/can
-	 * be interacting with restorectx()/swapctx()
-	 * 
-	 */
+
 restorectx_return_here:
 {	.mib
 	mov		r8=r9			// r8(ret0) = oldlwp

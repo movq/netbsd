@@ -1,12 +1,11 @@
-# $NetBSD: Makefile.inc,v 1.11 2016/10/16 04:36:52 mrg Exp $
+# $NetBSD: Makefile.inc,v 1.8 2013/08/06 05:35:57 matt Exp $
 
 USE_LIBEDIT=no
 USE_TUI=yes
 BINDIR=/usr/bin
 WARNS?=		0
-CPPFLAGS+=	-D_KERNTYPES
 
-.include "Makefile.gdb_arch"
+GDB_MACHINE_ARCH=	${MACHINE_ARCH:C/armv[4-7]/arm/}
 
 CWARNFLAGS.clang+=	-Wno-unused-value -Wno-conversion \
 			-Wno-switch-enum -Wno-parentheses -Wno-comment \
@@ -14,4 +13,4 @@ CWARNFLAGS.clang+=	-Wno-unused-value -Wno-conversion \
 			-Wno-tautological-compare -Wno-format-extra-args \
 			-Wno-string-plus-int
 
-DIST:=		${.PARSEDIR}/dist
+DIST=		${NETBSDSRCDIR}/external/gpl3/gdb/dist

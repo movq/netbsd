@@ -15,11 +15,8 @@
 #ifndef LLVM_UNITTESTS_EXECUTIONENGINE_MCJIT_MCJITTESTAPICOMMON_H
 #define LLVM_UNITTESTS_EXECUTIONENGINE_MCJIT_MCJITTESTAPICOMMON_H
 
-#include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/Triple.h"
-#include "llvm/IR/LegacyPassManager.h"
-#include "llvm/InitializePasses.h"
 #include "llvm/Support/Host.h"
 #include "llvm/Support/TargetSelect.h"
 
@@ -42,10 +39,6 @@ protected:
     InitializeNativeTarget();
     InitializeNativeTargetAsmPrinter();
 
-    // FIXME: It isn't at all clear why this is necesasry, but without it we
-    // fail to initialize the AssumptionCacheTracker.
-    initializeAssumptionCacheTrackerPass(*PassRegistry::getPassRegistry());
-
 #ifdef LLVM_ON_WIN32
     // On Windows, generate ELF objects by specifying "-elf" in triple
     HostTriple += "-elf";
@@ -57,17 +50,19 @@ protected:
   bool ArchSupportsMCJIT() {
     Triple Host(HostTriple);
     // If ARCH is not supported, bail
-    if (!is_contained(SupportedArchs, Host.getArch()))
+    if (std::find(SupportedArchs.begin(), SupportedArchs.end(), Host.getArch())
+        == SupportedArchs.end())
       return false;
 
     // If ARCH is supported and has no specific sub-arch support
-    if (!is_contained(HasSubArchs, Host.getArch()))
+    if (std::find(HasSubArchs.begin(), HasSubArchs.end(), Host.getArch())
+        == HasSubArchs.end())
       return true;
 
     // If ARCH has sub-arch support, find it
     SmallVectorImpl<std::string>::const_iterator I = SupportedSubArchs.begin();
     for(; I != SupportedSubArchs.end(); ++I)
-      if (Host.getArchName().startswith(*I))
+      if (Host.getArchName().startswith(I->c_str()))
         return true;
 
     return false;
@@ -77,11 +72,12 @@ protected:
   bool OSSupportsMCJIT() {
     Triple Host(HostTriple);
 
-    if (find(UnsupportedEnvironments, Host.getEnvironment()) !=
-        UnsupportedEnvironments.end())
+    if (std::find(UnsupportedEnvironments.begin(), UnsupportedEnvironments.end(),
+                  Host.getEnvironment()) != UnsupportedEnvironments.end())
       return false;
 
-    if (!is_contained(UnsupportedOSs, Host.getOS()))
+    if (std::find(UnsupportedOSs.begin(), UnsupportedOSs.end(), Host.getOS())
+        == UnsupportedOSs.end())
       return true;
 
     return false;

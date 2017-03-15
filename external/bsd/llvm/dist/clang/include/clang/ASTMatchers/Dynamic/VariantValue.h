@@ -21,6 +21,7 @@
 #include "clang/ASTMatchers/ASTMatchersInternal.h"
 #include "llvm/ADT/IntrusiveRefCntPtr.h"
 #include "llvm/ADT/Optional.h"
+#include "llvm/ADT/Twine.h"
 #include <memory>
 #include <vector>
 
@@ -110,7 +111,7 @@ class VariantMatcher {
                               ArrayRef<VariantMatcher> InnerMatchers) const;
 
   protected:
-    ~MatcherOps() = default;
+    ~MatcherOps() {}
 
   private:
     ast_type_traits::ASTNodeKind NodeKind;
@@ -119,7 +120,7 @@ class VariantMatcher {
   /// \brief Payload interface to be specialized by each matcher type.
   ///
   /// It follows a similar interface as VariantMatcher itself.
-  class Payload {
+  class Payload : public RefCountedBaseVPTR {
   public:
     virtual ~Payload();
     virtual llvm::Optional<DynTypedMatcher> getSingleMatcher() const = 0;
@@ -208,8 +209,7 @@ public:
   std::string getTypeAsString() const;
 
 private:
-  explicit VariantMatcher(std::shared_ptr<Payload> Value)
-      : Value(std::move(Value)) {}
+  explicit VariantMatcher(Payload *Value) : Value(Value) {}
 
   template <typename T> struct TypedMatcherOps;
 
@@ -217,7 +217,7 @@ private:
   class PolymorphicPayload;
   class VariadicOpPayload;
 
-  std::shared_ptr<const Payload> Value;
+  IntrusiveRefCntPtr<const Payload> Value;
 };
 
 template <typename T>
@@ -242,7 +242,7 @@ struct VariantMatcher::TypedMatcherOps final : VariantMatcher::MatcherOps {
 ///
 /// Supported types:
 ///  - \c unsigned
-///  - \c llvm::StringRef
+///  - \c std::string
 ///  - \c VariantMatcher (\c DynTypedMatcher / \c Matcher<T>)
 class VariantValue {
 public:
@@ -254,11 +254,11 @@ public:
 
   /// \brief Specific constructors for each supported type.
   VariantValue(unsigned Unsigned);
-  VariantValue(StringRef String);
+  VariantValue(const std::string &String);
   VariantValue(const VariantMatcher &Matchers);
 
   /// \brief Returns true iff this is not an empty value.
-  explicit operator bool() const { return hasValue(); }
+  LLVM_EXPLICIT operator bool() const { return hasValue(); }
   bool hasValue() const { return Type != VT_Nothing; }
 
   /// \brief Unsigned value functions.
@@ -269,7 +269,7 @@ public:
   /// \brief String value functions.
   bool isString() const;
   const std::string &getString() const;
-  void setString(StringRef String);
+  void setString(const std::string &String);
 
   /// \brief Matcher value functions.
   bool isMatcher() const;

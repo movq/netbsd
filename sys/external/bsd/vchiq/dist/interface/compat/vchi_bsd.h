@@ -53,6 +53,46 @@
 #define copy_to_user(to, from, n)	copyout((from), (to), (n))
 
 /*
+ * Bit API
+ */
+
+static __inline int
+test_and_set_bit(int nr, volatile void *addr)
+{
+	volatile uint32_t *val;
+	uint32_t mask, old;
+
+	val = (volatile uint32_t *)addr;
+	mask = 1 << nr;
+
+	do {
+		old = *val;
+		if ((old & mask) != 0)
+			break;
+	} while (atomic_cas_uint(val, old, old | mask) != old);
+
+	return old & mask;
+}
+
+static __inline__ int
+test_and_clear_bit(int nr, volatile void *addr)
+{
+	volatile uint32_t *val;
+	uint32_t mask, old;
+
+	val = (volatile uint32_t *)addr;
+	mask = 1 << nr;
+
+	do {
+		old = *val;
+		if ((old & mask) == 0)
+			break;
+	} while (atomic_cas_uint(val, old, old & ~mask) != old);
+
+	return old & mask;
+}
+
+/*
  * Atomic API
  */
 typedef volatile unsigned int atomic_t;
@@ -83,7 +123,7 @@ typedef kmutex_t spinlock_t;
  */
 #define DEFINE_SPINLOCK(name)	kmutex_t name
 
-#define spin_lock_init(lock)	mutex_init(lock, MUTEX_DEFAULT, IPL_SCHED)
+#define spin_lock_init(lock)	mutex_init(lock, MUTEX_DEFAULT, IPL_VM)
 #define spin_lock_destroy(lock)	mutex_destroy(lock)
 #define spin_lock(lock)		mutex_spin_enter(lock)
 #define spin_unlock(lock)	mutex_spin_exit(lock)
@@ -108,7 +148,7 @@ typedef kmutex_t rwlock_t;
 
 #define DEFINE_RWLOCK(name)	kmutex_t name
 
-#define rwlock_init(rwlock)	mutex_init(rwlock, MUTEX_DEFAULT, IPL_SCHED)
+#define rwlock_init(rwlock)	mutex_init(rwlock, MUTEX_DEFAULT, IPL_VM)
 #define read_lock(rwlock)	mutex_spin_enter(rwlock)
 #define read_unlock(rwlock)	mutex_spin_exit(rwlock)
 
@@ -327,20 +367,13 @@ typedef	off_t	loff_t;
 #define BCM2835_MBOX_CHAN_VCHIQ	3
 #define bcm_mbox_write	bcmmbox_write
 
-#define mb      membar_sync
-#define wmb     membar_producer
-#define rmb     membar_consumer
+#define rmb	membar_consumer
+#define wmb	membar_producer
 #define dsb	membar_producer
 
-#ifdef MULTIPROCESSOR
-#  define       smp_mb                          mb
-#  define       smp_wmb                         wmb
-#  define       smp_rmb                         rmb
-#else
-#  define       smp_mb()                        do {} while (0)
-#  define       smp_wmb()                       do {} while (0)
-#  define       smp_rmb()                       do {} while (0)
-#endif
+#define smp_mb	membar_producer
+#define smp_rmb	membar_consumer
+#define smp_wmb	membar_producer
 
 #define device_print_prettyname(dev)	device_printf((dev), "")
 

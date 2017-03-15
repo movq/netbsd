@@ -1,4 +1,3 @@
-
 EXPORTS
 	_hx509_cert_assign_key
 	_hx509_cert_private_key
@@ -52,7 +51,6 @@ EXPORTS
 	hx509_ca_tbs_set_notBefore
 	hx509_ca_tbs_set_proxy
 	hx509_ca_tbs_set_serialnumber
-	hx509_ca_tbs_set_signature_algorithm
 	hx509_ca_tbs_set_spki
 	hx509_ca_tbs_set_subject
 	hx509_ca_tbs_set_template
@@ -198,7 +196,6 @@ EXPORTS
 	hx509_revoke_free
 	hx509_revoke_init
 	hx509_revoke_ocsp_print
-	hx509_revoke_print
 	hx509_revoke_verify
 	hx509_set_error_string
 	hx509_set_error_stringv

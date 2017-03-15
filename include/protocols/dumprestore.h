@@ -1,4 +1,4 @@
-/*	$NetBSD: dumprestore.h,v 1.18 2016/01/22 23:11:50 dholland Exp $	*/
+/*	$NetBSD: dumprestore.h,v 1.16.28.1 2016/01/26 04:53:42 riz Exp $	*/
 
 /*
  * Copyright (c) 1980, 1993
@@ -38,9 +38,6 @@
 
 #ifndef _PROTOCOLS_DUMPRESTORE_H_
 #define _PROTOCOLS_DUMPRESTORE_H_
-
-#include <stdint.h>
-#include <ufs/ufs/dinode.h>
 
 /*
  * TP_BSIZE is the size of file blocks on the dump tapes.

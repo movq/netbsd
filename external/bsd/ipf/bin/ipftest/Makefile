@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.4 2016/01/23 21:22:45 christos Exp $
+#	$NetBSD: Makefile,v 1.2.14.1 2015/01/20 21:04:35 snj Exp $
 
 .include <bsd.own.mk>
 
@@ -12,7 +12,7 @@ MAN=		ipftest.1
 
 CPPFLAGS+=	-DIPFILTER_LOG -DIPFILTER_LOOKUP \
 		-DIPFILTER_SYNC -DIPFILTER_CKSUM \
-		-I. -D_KERNTYPES
+		-I.
 
 COPTS.radix.c=	-Wno-error
 COPTS+=		-fno-strict-aliasing

@@ -5,7 +5,7 @@
  *****************************************************************************/
 
 /*
- * Copyright (C) 2000 - 2017, Intel Corp.
+ * Copyright (C) 2000 - 2013, Intel Corp.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -67,7 +67,6 @@
 #define ACPI_NS_PREFIX_IS_SCOPE     0x10
 #define ACPI_NS_EXTERNAL            0x20
 #define ACPI_NS_TEMPORARY           0x40
-#define ACPI_NS_OVERRIDE_IF_FOUND   0x80
 
 /* Flags for AcpiNsWalkNamespace */
 
@@ -78,7 +77,6 @@
 /* Object is not a package element */
 
 #define ACPI_NOT_PACKAGE_ELEMENT    ACPI_UINT32_MAX
-#define ACPI_ALL_PACKAGE_ELEMENTS   (ACPI_UINT32_MAX-1)
 
 /* Always emit warning message, not dependent on node flags */
 
@@ -94,7 +92,7 @@ AcpiNsInitializeObjects (
 
 ACPI_STATUS
 AcpiNsInitializeDevices (
-    UINT32                  Flags);
+    void);
 
 
 /*
@@ -140,11 +138,6 @@ AcpiNsGetNextNodeTyped (
  */
 ACPI_STATUS
 AcpiNsParseTable (
-    UINT32                  TableIndex,
-    ACPI_NAMESPACE_NODE     *StartNode);
-
-ACPI_STATUS
-AcpiNsExecuteTable (
     UINT32                  TableIndex,
     ACPI_NAMESPACE_NODE     *StartNode);
 
@@ -230,19 +223,11 @@ AcpiNsConvertToBuffer (
 
 ACPI_STATUS
 AcpiNsConvertToUnicode (
-    ACPI_NAMESPACE_NODE     *Scope,
     ACPI_OPERAND_OBJECT     *OriginalObject,
     ACPI_OPERAND_OBJECT     **ReturnObject);
 
 ACPI_STATUS
 AcpiNsConvertToResource (
-    ACPI_NAMESPACE_NODE     *Scope,
-    ACPI_OPERAND_OBJECT     *OriginalObject,
-    ACPI_OPERAND_OBJECT     **ReturnObject);
-
-ACPI_STATUS
-AcpiNsConvertToReference (
-    ACPI_NAMESPACE_NODE     *Scope,
     ACPI_OPERAND_OBJECT     *OriginalObject,
     ACPI_OPERAND_OBJECT     **ReturnObject);
 
@@ -270,7 +255,7 @@ AcpiNsDumpPathname (
 void
 AcpiNsPrintPathname (
     UINT32                  NumSegments,
-    const char              *Pathname);
+    char                    *Pathname);
 
 ACPI_STATUS
 AcpiNsDumpOneObject (
@@ -364,48 +349,29 @@ UINT32
 AcpiNsOpensScope (
     ACPI_OBJECT_TYPE        Type);
 
+ACPI_STATUS
+AcpiNsBuildExternalPath (
+    ACPI_NAMESPACE_NODE     *Node,
+    ACPI_SIZE               Size,
+    char                    *NameBuffer);
+
 char *
 AcpiNsGetExternalPathname (
     ACPI_NAMESPACE_NODE     *Node);
-
-UINT32
-AcpiNsBuildNormalizedPath (
-    ACPI_NAMESPACE_NODE     *Node,
-    char                    *FullPath,
-    UINT32                  PathSize,
-    BOOLEAN                 NoTrailing);
-
-char *
-AcpiNsGetNormalizedPathname (
-    ACPI_NAMESPACE_NODE     *Node,
-    BOOLEAN                 NoTrailing);
 
 char *
 AcpiNsNameOfCurrentScope (
     ACPI_WALK_STATE         *WalkState);
 
 ACPI_STATUS
-AcpiNsHandleToName (
-    ACPI_HANDLE             TargetHandle,
-    ACPI_BUFFER             *Buffer);
-
-ACPI_STATUS
 AcpiNsHandleToPathname (
     ACPI_HANDLE             TargetHandle,
-    ACPI_BUFFER             *Buffer,
-    BOOLEAN                 NoTrailing);
+    ACPI_BUFFER             *Buffer);
 
 BOOLEAN
 AcpiNsPatternMatch (
     ACPI_NAMESPACE_NODE     *ObjNode,
     char                    *SearchFor);
-
-ACPI_STATUS
-AcpiNsGetNodeUnlocked (
-    ACPI_NAMESPACE_NODE     *PrefixNode,
-    const char              *ExternalPathname,
-    UINT32                  Flags,
-    ACPI_NAMESPACE_NODE     **OutNode);
 
 ACPI_STATUS
 AcpiNsGetNode (

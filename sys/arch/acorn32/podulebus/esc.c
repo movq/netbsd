@@ -1,4 +1,4 @@
-/*	$NetBSD: esc.c,v 1.31 2016/08/17 22:03:57 skrll Exp $	*/
+/*	$NetBSD: esc.c,v 1.27 2014/02/22 19:03:06 matt Exp $	*/
 
 /*
  * Copyright (c) 1990 The Regents of the University of California.
@@ -86,7 +86,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: esc.c,v 1.31 2016/08/17 22:03:57 skrll Exp $");
+__KERNEL_RCSID(0, "$NetBSD: esc.c,v 1.27 2014/02/22 19:03:06 matt Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -103,6 +103,7 @@ __KERNEL_RCSID(0, "$NetBSD: esc.c,v 1.31 2016/08/17 22:03:57 skrll Exp $");
 #include <machine/cpu.h>
 #include <machine/io.h>
 #include <machine/intr.h>
+#include <arm/arm32/katelib.h>
 #include <acorn32/podulebus/podulebus.h>
 #include <acorn32/podulebus/escreg.h>
 #include <acorn32/podulebus/escvar.h>
@@ -253,7 +254,7 @@ escinitialize(struct esc_softc *dev)
 	l2pte_set(ptep, npte, opte);
 	PTE_SYNC(ptep);
 	cpu_tlb_flushD();
-	cpu_dcache_wbinv_range((vaddr_t)dev->sc_bump_va, PAGE_SIZE);
+	cpu_dcache_wbinv_range((vm_offset_t)dev->sc_bump_va, PAGE_SIZE);
 
 	printf(" dmabuf V0x%08x P0x%08x", (u_int)dev->sc_bump_va, (u_int)dev->sc_bump_pa);
 }
@@ -891,7 +892,7 @@ esc_setup_nexus(struct esc_softc *dev, struct nexus *nexus, struct esc_pending *
 /* Flush the caches. */
 
 	if (len && !(mode & ESC_SELECT_I))
-		cpu_dcache_wbinv_range((vaddr_t)buf, len);
+		cpu_dcache_wbinv_range((vm_offset_t)buf, len);
 }
 
 int
@@ -1445,7 +1446,6 @@ esc_postaction(struct esc_softc *dev, esc_regmap_p rp, struct nexus *nexus)
 			switch(dev->sc_msg_in[0]) {
 			case 0x00:	/* COMMAND COMPLETE */
 				nexus->state = ESC_NS_DONE;
-				break;
 			case 0x04:	/* DISCONNECT */
 				nexus->state = ESC_NS_DISCONNECTING;
 				break;
@@ -1491,7 +1491,7 @@ esc_postaction(struct esc_softc *dev, esc_regmap_p rp, struct nexus *nexus)
 					 * Make sure that the specs are within
 					 * chip limits. Note that if we
 					 * initiated the negotiation the specs
-					 * WILL be within chip limits. If it
+					 * WILL be withing chip limits. If it
 					 * was the scsi unit that initiated
 					 * the negotiation, the specs may be
 					 * to high.

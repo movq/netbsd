@@ -1,4 +1,4 @@
-/*	$NetBSD: recipient.c,v 1.2 2017/02/14 01:16:49 christos Exp $	*/
+/*	$NetBSD: recipient.c,v 1.1.1.1 2009/06/23 10:09:02 tron Exp $	*/
 
 /*++
 /* NAME
@@ -59,7 +59,6 @@
 int     deliver_recipient(LOCAL_STATE state, USER_ATTR usr_attr)
 {
     const char *myname = "deliver_recipient";
-    VSTRING *folded;
     int     rcpt_stat;
 
     /*
@@ -75,8 +74,8 @@ int     deliver_recipient(LOCAL_STATE state, USER_ATTR usr_attr)
      */
     if (state.msg_attr.delivered == 0)
 	state.msg_attr.delivered = state.msg_attr.rcpt.address;
-    folded = vstring_alloc(100);
-    state.msg_attr.user = casefold(folded, state.msg_attr.rcpt.address);
+    state.msg_attr.user = mystrdup(state.msg_attr.rcpt.address);
+    lowercase(state.msg_attr.user);
 
     /*
      * Deliver
@@ -90,7 +89,7 @@ int     deliver_recipient(LOCAL_STATE state, USER_ATTR usr_attr)
     /*
      * Cleanup.
      */
-    vstring_free(folded);
+    myfree(state.msg_attr.user);
 
     return (rcpt_stat);
 }

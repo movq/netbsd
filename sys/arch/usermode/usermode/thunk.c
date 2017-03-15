@@ -1,4 +1,4 @@
-/* $NetBSD: thunk.c,v 1.87 2015/12/21 20:44:54 christos Exp $ */
+/* $NetBSD: thunk.c,v 1.84 2013/11/10 19:51:00 jmcneill Exp $ */
 
 /*-
  * Copyright (c) 2011 Jared D. McNeill <jmcneill@invisible.ca>
@@ -28,7 +28,7 @@
 
 #include <sys/cdefs.h>
 #ifdef __NetBSD__
-__RCSID("$NetBSD: thunk.c,v 1.87 2015/12/21 20:44:54 christos Exp $");
+__RCSID("$NetBSD: thunk.c,v 1.84 2013/11/10 19:51:00 jmcneill Exp $");
 #endif
 
 #include <sys/types.h>
@@ -754,26 +754,22 @@ thunk_idle(void)
 }
 
 int
-thunk_getcpuinfo(char *cp, size_t *len)
+thunk_getcpuinfo(char *cp, int *len)
 {
 	ssize_t rlen;
 	int fd;
 
 	fd = open("/proc/cpuinfo", O_RDONLY);
 	if (fd == -1)
-		goto out;
-	rlen = read(fd, cp, *len);
+		return -1;
+	rlen = read(fd, cp, *len - 1);
 	close(fd);
 
 	if (rlen == -1)
-		goto out;
+		return -1;
 
-	cp[rlen ? rlen - 1 : 0] = '\0';
 	*len = rlen;
 	return 0;
-out:
-	*len = 0;
-	return -1;
 }
 
 int

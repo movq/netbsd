@@ -16,7 +16,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: print-eigrp.c,v 1.8 2017/02/05 04:05:05 spz Exp $");
+__RCSID("$NetBSD: print-eigrp.c,v 1.4.6.1 2017/02/19 05:01:15 snj Exp $");
 #endif
 
 /* \summary: Enhanced Interior Gateway Routing Protocol (EIGRP) printer */

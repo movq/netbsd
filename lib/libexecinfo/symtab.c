@@ -1,4 +1,4 @@
-/*	$NetBSD: symtab.c,v 1.5 2016/04/20 14:00:16 christos Exp $	*/
+/*	$NetBSD: symtab.c,v 1.3 2013/09/03 08:44:45 christos Exp $	*/
 
 /*-
  * Copyright (c) 2012 The NetBSD Foundation, Inc.
@@ -29,13 +29,12 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: symtab.c,v 1.5 2016/04/20 14:00:16 christos Exp $");
+__RCSID("$NetBSD: symtab.c,v 1.3 2013/09/03 08:44:45 christos Exp $");
 
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
 #include <stdint.h>
-#include <stdbool.h>
 #include <err.h>
 #include <dlfcn.h>
 
@@ -48,6 +47,7 @@ __RCSID("$NetBSD: symtab.c,v 1.5 2016/04/20 14:00:16 christos Exp $");
 #define ELF_ST_TYPE(x)          (((unsigned int)x) & 0xf)
 #endif
 
+
 #include "symtab.h"
 
 struct symbol {
@@ -59,7 +59,6 @@ struct symbol {
 struct symtab {
 	size_t nsymbols;
 	struct symbol *symbols;
-	bool ispie;
 };
 
 static int
@@ -87,7 +86,6 @@ symtab_create(int fd, int bind, int type)
 	Elf *elf;
 	symtab_t *st;
 	Elf_Scn *scn = NULL;
-	GElf_Ehdr ehdr;
 
 	if (elf_version(EV_CURRENT) == EV_NONE) {
 		warnx("Elf Library is out of date.");
@@ -105,13 +103,6 @@ symtab_create(int fd, int bind, int type)
 		elf_end(elf);
 		return NULL;
 	}
-	if (gelf_getehdr(elf, &ehdr) == NULL) {
-		warnx("Error getting ELF Ehdr");
-		elf_end(elf);
-		return NULL;
-	}
-
-	st->ispie = ehdr.e_type == ET_DYN;
 
 	while ((scn = elf_nextscn(elf, scn)) != NULL) {
 		GElf_Shdr shdr;
@@ -136,13 +127,6 @@ symtab_create(int fd, int bind, int type)
 			GElf_Sym sym;
                         gelf_getsym(edata, (int)i, &sym);
 
-#ifdef SYMTAB_DEBUG
-			fprintf(stderr, "%s: %s@%#jx=%d,%d\n", __func__,
-			    elf_strptr(elf, shdr.sh_link, sym.st_name),
-			    (uintmax_t)sym.st_value, ELF_ST_BIND(sym.st_info),
-			    ELF_ST_TYPE(sym.st_info));
-#endif
-			
 			if (bind != -1 &&
 			    (unsigned)bind != ELF_ST_BIND(sym.st_info))
 				continue;
@@ -186,15 +170,8 @@ symtab_find(const symtab_t *st, const void *p, Dl_info *dli)
 	size_t hi = ns;
 	size_t lo = 0;
 	size_t mid = ns / 2;
-	uintptr_t fbase = st->ispie ? (uintptr_t)dli->dli_fbase : 0;
-	uintptr_t dd, sd, me = (uintptr_t)p - fbase;
-	uintptr_t ad = (uintptr_t)dli->dli_saddr - fbase;
+	uintptr_t dd, sd, me = (uintptr_t)p;
 
-#ifdef SYMTAB_DEBUG
-	fprintf(stderr, "%s: [fbase=%#jx, saddr=%p, me=%#jx ad=%#jx]\n",
-	    __func__, (uintmax_t)fbase, dli->dli_saddr, (uintmax_t)me,
-	    (uintmax_t)ad);
-#endif
 	for (;;) {
 		if (s[mid].st_value < me)
 			lo = mid;
@@ -208,20 +185,11 @@ symtab_find(const symtab_t *st, const void *p, Dl_info *dli)
 		}
 		mid = (hi + lo) / 2;
 	}
-	dd = me - ad;
+	dd = me - (uintptr_t)dli->dli_saddr;
 	sd = me - s[mid].st_value;
 	if (dd > sd) {
 		dli->dli_saddr = (void *)s[mid].st_value;
 		dli->dli_sname = s[mid].st_name;
-#ifdef SYMTAB_DEBUG
-		fprintf(stderr, "%s: me=%#jx -> [%#jx, %s]\n", __func__,
-		    (uintmax_t)me, (uintmax_t)sd, dli->dli_sname);
-#endif
 	}
-#ifdef SYMTAB_DEBUG
-	else
-		fprintf(stderr, "%s: %#jx -> [%#jx, ***]\n", __func__,
-		    (uintmax_t)me, (uintmax_t)sd);
-#endif
 	return 1;
 }

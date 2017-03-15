@@ -1,4 +1,4 @@
-/*	$NetBSD: dir.c,v 1.58 2017/02/08 16:11:40 rin Exp $	*/
+/*	$NetBSD: dir.c,v 1.57 2013/06/23 07:28:36 dholland Exp $	*/
 
 /*
  * Copyright (c) 1980, 1986, 1993
@@ -34,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)dir.c	8.8 (Berkeley) 4/28/95";
 #else
-__RCSID("$NetBSD: dir.c,v 1.58 2017/02/08 16:11:40 rin Exp $");
+__RCSID("$NetBSD: dir.c,v 1.57 2013/06/23 07:28:36 dholland Exp $");
 #endif
 #endif /* not lint */
 
@@ -154,10 +154,10 @@ dirscan(struct inodesc *idesc)
 	struct bufarea *bp;
 	int dsize, n;
 	long blksiz;
-#if !defined(NO_APPLE_UFS) && UFS_DIRBLKSIZ < APPLEUFS_DIRBLKSIZ
-	char dbuf[APPLEUFS_DIRBLKSIZ];
-#else
+#if UFS_DIRBLKSIZ > APPLEUFS_DIRBLKSIZ
 	char dbuf[UFS_DIRBLKSIZ];
+#else
+	char dbuf[APPLEUFS_DIRBLKSIZ];
 #endif
 
 	if (idesc->id_type != DATA)
@@ -703,10 +703,10 @@ expanddir(union dinode *dp, char *name)
 	daddr_t lastbn, newblk, dirblk;
 	struct bufarea *bp;
 	char *cp;
-#if !defined(NO_APPLE_UFS) && UFS_DIRBLKSIZ < APPLEUFS_DIRBLKSIZ
-	char firstblk[APPLEUFS_DIRBLKSIZ];
+#if DIRBLKSIZ > APPLEUFS_DIRBLKSIZ
+	char firstblk[DIRBLKSIZ];
 #else
-	char firstblk[UFS_DIRBLKSIZ];
+	char firstblk[APPLEUFS_DIRBLKSIZ];
 #endif
 	struct ufs1_dinode *dp1 = NULL;
 	struct ufs2_dinode *dp2 = NULL;

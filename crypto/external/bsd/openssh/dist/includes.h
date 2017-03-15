@@ -1,4 +1,4 @@
-/*	$NetBSD: includes.h,v 1.5 2016/12/25 00:07:47 christos Exp $	*/
+/*	$NetBSD: includes.h,v 1.2.22.1 2015/04/30 06:07:30 riz Exp $	*/
 #include <sys/cdefs.h>
 #ifndef __OpenBSD__
 #define __bounded__(a, b, c)

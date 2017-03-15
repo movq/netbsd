@@ -1,4 +1,4 @@
-/*	$NetBSD: setterm.c,v 1.64 2017/01/31 09:17:53 roy Exp $	*/
+/*	$NetBSD: setterm.c,v 1.52 2013/10/16 19:59:29 roy Exp $	*/
 
 /*
  * Copyright (c) 1981, 1993, 1994
@@ -34,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)setterm.c	8.8 (Berkeley) 10/25/94";
 #else
-__RCSID("$NetBSD: setterm.c,v 1.64 2017/01/31 09:17:53 roy Exp $");
+__RCSID("$NetBSD: setterm.c,v 1.52 2013/10/16 19:59:29 roy Exp $");
 #endif
 #endif /* not lint */
 
@@ -50,21 +50,12 @@ __RCSID("$NetBSD: setterm.c,v 1.64 2017/01/31 09:17:53 roy Exp $");
 
 static int does_esc_m(const char *cap);
 static int does_ctrl_o(const char *exit_cap, const char *acs_cap);
-static bool __use_env = true;
 
 attr_t	 __mask_op, __mask_me, __mask_ue, __mask_se;
-
-void
-use_env(bool value)
-{
-
-	__use_env = value;
-}
 
 int
 setterm(char *type)
 {
-
 	return _cursesi_setterm(type, _cursesi_screen);
 }
 
@@ -78,8 +69,6 @@ _cursesi_setterm(char *type, SCREEN *screen)
 	if (type[0] == '\0')
 		type = "xx";
 	unknown = 0;
-	if (screen->term)
-		del_curterm(screen->term);
 	(void)ti_setupterm(&screen->term, type, fileno(screen->outfd), &r);
 	if (screen->term == NULL) {
 		unknown++;
@@ -108,56 +97,32 @@ _cursesi_setterm(char *type, SCREEN *screen)
 		}
 	}
 
-	if (screen->filtered) {
-		/* Disable use of clear, cud, cud1, cup, cuu1 and vpa. */
-		screen->term->strs[TICODE_clear] = NULL;
-		screen->term->strs[TICODE_cud] = NULL;
-		screen->term->strs[TICODE_cud1] = NULL;
-		screen->term->strs[TICODE_cup] = NULL;
-		screen->term->strs[TICODE_cuu] = NULL;
-		screen->term->strs[TICODE_cuu1] = NULL;
-		screen->term->strs[TICODE_vpa] = NULL;
-		/* Set the value of the home string to the value of
-		 * the cr string. */
-		screen->term->strs[TICODE_home] = screen->term->strs[TICODE_cr];
-		/* Set lines equal to 1. */
-		screen->LINES = 1;
-	}
-#ifdef DEBUG
-	__CTRACE(__CTRACE_INIT, "setterm: filtered %d", screen->filtered);
-#endif
-
 	/* POSIX 1003.2 requires that the environment override. */
-	if (__use_env) {
-		if (!screen->filtered && (p = getenv("LINES")) != NULL)
-			screen->LINES = (int)strtol(p, NULL, 0);
-		if ((p = getenv("COLUMNS")) != NULL)
-			screen->COLS = (int)strtol(p, NULL, 0);
-	}
+	if ((p = getenv("LINES")) != NULL)
+		screen->LINES = (int) strtol(p, NULL, 0);
+	if ((p = getenv("COLUMNS")) != NULL)
+		screen->COLS = (int) strtol(p, NULL, 0);
 	if ((p = getenv("ESCDELAY")) != NULL)
-		screen->ESCDELAY = (int)strtol(p, NULL, 0);
-	else
-		screen->ESCDELAY = ESCDELAY_DEFAULT;
+		ESCDELAY = (int) strtol(p, NULL, 0);
 	if ((p = getenv("TABSIZE")) != NULL)
-		screen->TABSIZE = (int)strtol(p, NULL, 0);
+		screen->TABSIZE = (int) strtol(p, NULL, 0);
 	else if (t_init_tabs(screen->term) >= 0)
-		screen->TABSIZE = (int)t_init_tabs(screen->term);
+		screen->TABSIZE = (int) t_init_tabs(screen->term);
 	else
-		screen->TABSIZE = TABSIZE_DEFAULT;
+		screen->TABSIZE = 8;
 	/*
 	 * Want cols > 4, otherwise things will fail.
 	 */
 	if (screen->COLS <= 4)
-		return ERR;
+		return (ERR);
 
-	LINES = screen->LINES - __rippedlines(screen);
+	LINES = screen->LINES;
 	COLS = screen->COLS;
-	ESCDELAY = screen->ESCDELAY;
 	TABSIZE = screen->TABSIZE;
 
 #ifdef DEBUG
 	__CTRACE(__CTRACE_INIT,
-	    "setterm: LINES = %d, COLS = %d, TABSIZE = %d\n",
+	    "setterm: LINES = %d, COLS = %d\n, TABSIZE = %d\n",
 	    LINES, COLS, TABSIZE);
 #endif
 
@@ -166,11 +131,11 @@ _cursesi_setterm(char *type, SCREEN *screen)
 	 * as this is all we can use.
 	 */
 	screen->padchar = t_pad_char(screen->term) ?
-	    t_pad_char(screen->term)[0] : 0;
+	    t_pad_char(screen->term)[0] : 0; 
 
 	/* If no scrolling commands, no quick change. */
 	screen->noqch =
-	    (t_change_scroll_region(screen->term) == NULL ||
+  	    (t_change_scroll_region(screen->term) == NULL ||
 		t_cursor_home(screen->term) == NULL ||
 		(t_parm_index(screen->term) == NULL &&
 		    t_scroll_forward(screen->term) == NULL) ||
@@ -270,7 +235,7 @@ _cursesi_setterm(char *type, SCREEN *screen)
 		}
 	}
 
-	return unknown ? ERR : OK;
+	return (unknown ? ERR : OK);
 }
 
 /*
@@ -282,9 +247,8 @@ void
 _cursesi_resetterm(SCREEN *screen)
 {
 
-	LINES = screen->LINES - __rippedlines(screen);
+	LINES = screen->LINES;
 	COLS = screen->COLS;
-	ESCDELAY = screen->ESCDELAY;
 	TABSIZE = screen->TABSIZE;
 	__GT = screen->GT;
 
@@ -393,19 +357,4 @@ does_ctrl_o(const char *exit_cap, const char *acs_cap)
 		eptr++;
 	}
 	return 0;
-}
-
-/*
- * set_tabsize --
- *   Sets the tabsize for the current screen.
- */
-int
-set_tabsize(int tabsize)
-{
-
-	if (_cursesi_screen == NULL)
-		return ERR;
-	_cursesi_screen->TABSIZE = tabsize;
-	TABSIZE = tabsize;
-	return OK;
 }

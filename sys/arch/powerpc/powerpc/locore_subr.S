@@ -1,4 +1,4 @@
-/*	$NetBSD: locore_subr.S,v 1.55 2017/02/28 17:35:29 chs Exp $	*/
+/*	$NetBSD: locore_subr.S,v 1.54 2014/07/30 23:27:55 matt Exp $	*/
 
 /*
  * Copyright (c) 2001 Wasabi Systems, Inc.
@@ -288,7 +288,6 @@ switchto_restore:
  */
 	ldreg	%r31,CFRAME_R31(%r1)	/* restore saved registers */
 	ldreg	%r30,CFRAME_R30(%r1)
-	stwcx.	%r1,0,%r1		/* clear reservation */
 #if 1
 	addi	%r1,%r1,CALLFRAMELEN
 #else
@@ -329,7 +328,6 @@ _ENTRY(softint_cleanup)
 	mtmsr	%r0
 	isync
 #endif
-	stwcx.	%r1,0,%r1		/* clear reservation */
 	addi	%r1, %r1, CALLFRAMELEN
 	ldreg	%r0, CFRAME_LR(%r1)
 	mtlr	%r0
@@ -480,7 +478,6 @@ _ENTRY(softint_fast_dispatch)
 	ldreg	%r29,SFRAME_R29(%r1)	/* R29 */
 	ldreg	%r31,SFRAMELEN+CFRAME_R31(%r1)	/* restore saved registers */
 	ldreg	%r30,SFRAMELEN+CFRAME_R30(%r1)
-	stwcx.	%r1,0,%r1		/* clear reservation */
 	addi	%r1,%r1,SFRAMELEN+2*CALLFRAMELEN /* remove switch & callframes */
 #endif
 	ldreg	%r0,CFRAME_LR(%r1)

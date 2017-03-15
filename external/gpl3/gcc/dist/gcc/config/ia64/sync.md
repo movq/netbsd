@@ -1,5 +1,5 @@
 ;; GCC machine description for IA-64 synchronization instructions.
-;; Copyright (C) 2005-2015 Free Software Foundation, Inc.
+;; Copyright (C) 2005-2013 Free Software Foundation, Inc.
 ;;
 ;; This file is part of GCC.
 ;;
@@ -33,7 +33,7 @@
   [(match_operand:SI 0 "const_int_operand" "")]		;; model
   ""
 {
-  if (is_mm_seq_cst (memmodel_from_int (INTVAL (operands[0]))))
+  if (INTVAL (operands[0]) == MEMMODEL_SEQ_CST)
     emit_insn (gen_memory_barrier ());
   DONE;
 })
@@ -60,11 +60,11 @@
    (match_operand:SI 2 "const_int_operand" "")]			;; model
   ""
 {
-  enum memmodel model = memmodel_from_int (INTVAL (operands[2]));
+  enum memmodel model = (enum memmodel) INTVAL (operands[2]);
 
   /* Unless the memory model is relaxed, we want to emit ld.acq, which
      will happen automatically for volatile memories.  */
-  gcc_assert (is_mm_relaxed (model) || MEM_VOLATILE_P (operands[1]));
+  gcc_assert (model == MEMMODEL_RELAXED || MEM_VOLATILE_P (operands[1]));
   emit_move_insn (operands[0], operands[1]);
   DONE;
 })
@@ -75,17 +75,17 @@
    (match_operand:SI 2 "const_int_operand" "")]			;; model
   ""
 {
-  enum memmodel model = memmodel_from_int (INTVAL (operands[2]));
+  enum memmodel model = (enum memmodel) INTVAL (operands[2]);
 
   /* Unless the memory model is relaxed, we want to emit st.rel, which
      will happen automatically for volatile memories.  */
-  gcc_assert (is_mm_relaxed (model) || MEM_VOLATILE_P (operands[0]));
+  gcc_assert (model == MEMMODEL_RELAXED || MEM_VOLATILE_P (operands[0]));
   emit_move_insn (operands[0], operands[1]);
 
   /* Sequentially consistent stores need a subsequent MF.  See
      http://www.decadent.org.uk/pipermail/cpp-threads/2008-December/001952.html
      for a discussion of why a MF is needed here, but not for atomic_load.  */
-  if (is_mm_seq_cst (model))
+  if (model == MEMMODEL_SEQ_CST)
     emit_insn (gen_memory_barrier ());
   DONE;
 })
@@ -101,8 +101,7 @@
    (match_operand:SI 7 "const_int_operand" "")]			;; fail model
   ""
 {
-  /* No need to distinquish __sync from __atomic, so get base value.  */
-  enum memmodel model = memmodel_base (INTVAL (operands[6]));
+  enum memmodel model = (enum memmodel) INTVAL (operands[6]);
   rtx ccv = gen_rtx_REG (DImode, AR_CCV_REGNUM);
   rtx dval, eval;
 
@@ -201,8 +200,7 @@
    (match_operand:SI 3 "const_int_operand" "")]			;; succ model
   ""
 {
-  /* No need to distinquish __sync from __atomic, so get base value.  */
-  enum memmodel model = memmodel_base (INTVAL (operands[3]));
+  enum memmodel model = (enum memmodel) INTVAL (operands[3]);
 
   switch (model)
     {

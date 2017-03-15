@@ -1,6 +1,6 @@
 /* Fork a Unix child process, and set up to debug it, for GDB.
 
-   Copyright (C) 1990-2016 Free Software Foundation, Inc.
+   Copyright (C) 1990-2014 Free Software Foundation, Inc.
 
    Contributed by Cygnus Support.
 
@@ -20,6 +20,7 @@
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #include "defs.h"
+#include <string.h>
 #include "inferior.h"
 #include "terminal.h"
 #include "target.h"
@@ -31,8 +32,7 @@
 #include "gdbcmd.h"
 #include "solib.h"
 #include "filestuff.h"
-#include "top.h"
-#include "signals-state-save-restore.h"
+
 #include <signal.h>
 
 /* This just gets used as a default if we can't find SHELL.  */
@@ -142,7 +142,6 @@ fork_inferior (char *exec_file_arg, char *allargs, char **env,
   struct inferior *inf;
   int i;
   int save_errno;
-  struct ui *save_ui;
 
   /* If no exec file handed to us, get it from the exec-file command
      -- with a good, common error message if none is specified.  */
@@ -172,7 +171,7 @@ fork_inferior (char *exec_file_arg, char *allargs, char **env,
 	 argument.  */
       int argc = (strlen (allargs) + 1) / 2 + 2;
 
-      argv = XALLOCAVEC (char *, argc);
+      argv = (char **) alloca (argc * sizeof (*argv));
       argv[0] = exec_file;
       breakup_args (allargs, &argv[1]);
     }
@@ -277,9 +276,6 @@ fork_inferior (char *exec_file_arg, char *allargs, char **env,
      restore it.  */
   save_our_env = environ;
 
-  /* Likewise the current UI.  */
-  save_ui = current_ui;
-
   /* Tell the terminal handling subsystem what tty we plan to run on;
      it will just record the information for later.  */
   new_tty_prefork (inferior_io_terminal);
@@ -287,8 +283,8 @@ fork_inferior (char *exec_file_arg, char *allargs, char **env,
   /* It is generally good practice to flush any possible pending stdio
      output prior to doing a fork, to avoid the possibility of both
      the parent and child flushing the same data after the fork.  */
-  gdb_flush (main_ui->m_gdb_stdout);
-  gdb_flush (main_ui->m_gdb_stderr);
+  gdb_flush (gdb_stdout);
+  gdb_flush (gdb_stderr);
 
   /* If there's any initialization of the target layers that must
      happen to prepare to handle the child we're about fork, do it
@@ -317,16 +313,6 @@ fork_inferior (char *exec_file_arg, char *allargs, char **env,
 
   if (pid == 0)
     {
-      /* Switch to the main UI, so that gdb_std{in/out/err} in the
-	 child are mapped to std{in/out/err}.  This makes it possible
-	 to use fprintf_unfiltered/warning/error/etc. in the child
-	 from here on.  */
-      current_ui = main_ui;
-
-      /* Close all file descriptors except those that gdb inherited
-	 (usually 0/1/2), so they don't leak to the inferior.  Note
-	 that this closes the file descriptors of all secondary
-	 UIs.  */
       close_most_fds ();
 
       if (debug_fork)
@@ -366,8 +352,6 @@ fork_inferior (char *exec_file_arg, char *allargs, char **env,
         saying "not parent".  Sorry; you'll have to use print
         statements!  */
 
-      restore_original_signals_state ();
-
       /* There is no execlpe call, so we have to set the environment
          for our child in the global variable.  If we've vforked, this
          clobbers the parent, but environ is restored a few lines down
@@ -382,7 +366,7 @@ fork_inferior (char *exec_file_arg, char *allargs, char **env,
 
       /* If we get here, it's an error.  */
       save_errno = errno;
-      fprintf_unfiltered (gdb_stderr, "Cannot exec %s", argv[0]);
+      fprintf_unfiltered (gdb_stderr, "Cannot exec %s", exec_file);
       for (i = 1; argv[i] != NULL; i++)
 	fprintf_unfiltered (gdb_stderr, " %s", argv[i]);
       fprintf_unfiltered (gdb_stderr, ".\n");
@@ -394,9 +378,6 @@ fork_inferior (char *exec_file_arg, char *allargs, char **env,
 
   /* Restore our environment in case a vforked child clob'd it.  */
   environ = save_our_env;
-
-  /* Likewise the current UI.  */
-  current_ui = save_ui;
 
   if (!have_inferiors ())
     init_thread_list ();

@@ -38,10 +38,6 @@ int defineListDoubleRight() {
   return ld.size;
 }
 
-inline void defineListLongRight() {
-  List<long> ll;
-}
-
 template<typename T> struct MergePatternDecl;
 
 void outOfLineInlineUseRightF(void (OutOfLineInline<int>::*)() = &OutOfLineInline<int>::f);
@@ -51,5 +47,3 @@ void outOfLineInlineUseRightH(void (OutOfLineInline<int>::*)() = &OutOfLineInlin
 inline int *getStaticDataMemberRight() {
   return WithUndefinedStaticDataMember<int[]>::undefined;
 }
-
-inline WithAttributes<int> make_with_attributes_right() { return WithAttributes<int>(); }

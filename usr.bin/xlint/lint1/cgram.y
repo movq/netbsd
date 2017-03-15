@@ -1,5 +1,5 @@
 %{
-/* $NetBSD: cgram.y,v 1.94 2017/03/06 21:01:39 christos Exp $ */
+/* $NetBSD: cgram.y,v 1.65 2014/04/21 21:52:24 christos Exp $ */
 
 /*
  * Copyright (c) 1996 Christopher G. Demetriou.  All Rights Reserved.
@@ -35,7 +35,7 @@
 
 #include <sys/cdefs.h>
 #if defined(__RCSID) && !defined(lint)
-__RCSID("$NetBSD: cgram.y,v 1.94 2017/03/06 21:01:39 christos Exp $");
+__RCSID("$NetBSD: cgram.y,v 1.65 2014/04/21 21:52:24 christos Exp $");
 #endif
 
 #include <stdlib.h>
@@ -68,8 +68,6 @@ static int olwarn = LWARN_BAD;
 static	int	toicon(tnode_t *, int);
 static	void	idecl(sym_t *, int, sbuf_t *);
 static	void	ignuptorp(void);
-static	sym_t	*symbolrename(sym_t *, sbuf_t *);
-
 
 #ifdef DEBUG
 static inline void CLRWFLGS(const char *file, size_t line);
@@ -107,17 +105,9 @@ static inline void RESTORE(const char *file, size_t line)
 #define SAVE(f, l)	olwarn = lwarn
 #define RESTORE(f, l) (void)(olwarn == LWARN_BAD ? (clrwflgs(), 0) : (lwarn = olwarn))
 #endif
-
-/* unbind the anonymous struct members from the struct */
-static void
-anonymize(sym_t *s)
-{
-	for ( ; s; s = s->s_nxt)
-		s->s_styp = NULL;
-}
 %}
 
-%expect 107
+%expect 75
 
 %union {
 	int	y_int;
@@ -140,7 +130,6 @@ anonymize(sym_t *s)
 %token	<y_op>		T_UNOP
 %token	<y_op>		T_INCDEC
 %token			T_SIZEOF
-%token			T_BUILTIN_OFFSETOF
 %token			T_TYPEOF
 %token			T_EXTENSION
 %token			T_ALIGNOF
@@ -164,7 +153,6 @@ anonymize(sym_t *s)
 %token			T_ELLIPSE
 %token			T_REAL
 %token			T_IMAG
-%token			T_GENERIC
 
 /* storage classes (extern, static, auto, register and typedef) */
 %token	<y_scl>		T_SCLASS
@@ -199,39 +187,23 @@ anonymize(sym_t *s)
 %token			T_PACKED
 /* Type Attributes */
 %token <y_type>		T_ATTRIBUTE
-%token <y_type>		T_AT_ALIAS
 %token <y_type>		T_AT_ALIGNED
-%token <y_type>		T_AT_ALWAYS_INLINE
-%token <y_type>		T_AT_BOUNDED
-%token <y_type>		T_AT_BUFFER
-%token <y_type>		T_AT_COLD
-%token <y_type>		T_AT_CONSTRUCTOR
 %token <y_type>		T_AT_DEPRECATED
-%token <y_type>		T_AT_FORMAT
-%token <y_type>		T_AT_FORMAT_ARG
-%token <y_type>		T_AT_FORMAT_PRINTF
-%token <y_type>		T_AT_FORMAT_SCANF
-%token <y_type>		T_AT_FORMAT_STRFMON
-%token <y_type>		T_AT_FORMAT_STRFTIME
-%token <y_type>		T_AT_GNU_INLINE
-%token <y_type>		T_AT_MAY_ALIAS
-%token <y_type>		T_AT_MINBYTES
-%token <y_type>		T_AT_MODE
-%token <y_type>		T_AT_NONNULL
 %token <y_type>		T_AT_NORETURN
-%token <y_type>		T_AT_NO_INSTRUMENT_FUNCTION
+%token <y_type>		T_AT_MAY_ALIAS
 %token <y_type>		T_AT_PACKED
-%token <y_type>		T_AT_PCS
 %token <y_type>		T_AT_PURE
-%token <y_type>		T_AT_RETURNS_TWICE
-%token <y_type>		T_AT_SECTION
-%token <y_type>		T_AT_SENTINEL
-%token <y_type>		T_AT_STRING
+%token <y_type>		T_AT_TUINION
 %token <y_type>		T_AT_TUNION
 %token <y_type>		T_AT_UNUSED
-%token <y_type>		T_AT_USED
-%token <y_type>		T_AT_VISIBILITY
-%token <y_type>		T_AT_WEAK
+%token <y_type>		T_AT_FORMAT
+%token <y_type>		T_AT_FORMAT_PRINTF
+%token <y_type>		T_AT_FORMAT_SCANF
+%token <y_type>		T_AT_FORMAT_STRFTIME
+%token <y_type>		T_AT_FORMAT_ARG
+%token <y_type>		T_AT_SENTINEL
+%token <y_type>		T_AT_RETURNS_TWICE
+%token <y_type>		T_AT_COLD
 
 %left	T_COMMA
 %right	T_ASSIGN T_OPASS
@@ -246,7 +218,7 @@ anonymize(sym_t *s)
 %left	T_SHFTOP
 %left	T_ADDOP
 %left	T_MULT T_DIVOP
-%right	T_UNOP T_INCDEC T_SIZEOF TBUILTIN_SIZEOF T_ALIGNOF T_REAL T_IMAG
+%right	T_UNOP T_INCDEC T_SIZEOF T_ALIGNOF T_REAL T_IMAG
 %left	T_LPARN T_LBRACK T_STROP
 
 %token	<y_sb>		T_NAME
@@ -263,6 +235,7 @@ anonymize(sym_t *s)
 %type	<y_type>	struct_spec
 %type	<y_type>	enum_spec
 %type	<y_type>	type_attribute
+%type	<y_type>	type_attribute_spec
 %type	<y_sym>		struct_tag
 %type	<y_sym>		enum_tag
 %type	<y_tspec>	struct
@@ -303,7 +276,6 @@ anonymize(sym_t *s)
 %type	<y_tnode>	expr_stmnt_val
 %type	<y_tnode>	expr_stmnt_list
 %type	<y_tnode>	term
-%type	<y_tnode>	generic_expr
 %type	<y_tnode>	func_arg_list
 %type	<y_op>		point_or_arrow
 %type	<y_type>	type_name
@@ -509,33 +481,15 @@ declaration:
 type_attribute_format_type:
 	  T_AT_FORMAT_PRINTF
 	| T_AT_FORMAT_SCANF
-	| T_AT_FORMAT_STRFMON
 	| T_AT_FORMAT_STRFTIME
 	;
 
-type_attribute_bounded_type:
-	  T_AT_MINBYTES
-	| T_AT_STRING
-	| T_AT_BUFFER
-	;
-
 type_attribute_spec:
-	  /* empty */	
-	| T_AT_DEPRECATED
+	  T_AT_DEPRECATED
 	| T_AT_ALIGNED T_LPARN constant T_RPARN
-	| T_AT_BOUNDED T_LPARN type_attribute_bounded_type
-	  T_COMMA constant T_COMMA constant T_RPARN
 	| T_AT_SENTINEL T_LPARN constant T_RPARN
 	| T_AT_FORMAT_ARG T_LPARN constant T_RPARN
-	| T_AT_NONNULL T_LPARN constant T_RPARN
-	| T_AT_MODE T_LPARN T_NAME T_RPARN
-	| T_AT_ALIAS T_LPARN string T_RPARN
-	| T_AT_PCS T_LPARN string T_RPARN
-	| T_AT_SECTION T_LPARN string T_RPARN
-	| T_AT_ALIGNED 
-	| T_AT_CONSTRUCTOR 
 	| T_AT_MAY_ALIAS
-	| T_AT_NO_INSTRUMENT_FUNCTION
 	| T_AT_NORETURN
 	| T_AT_COLD
 	| T_AT_RETURNS_TWICE
@@ -544,43 +498,24 @@ type_attribute_spec:
 	}
 	| T_AT_PURE
 	| T_AT_TUNION
-	| T_AT_GNU_INLINE
-	| T_AT_ALWAYS_INLINE
 	| T_AT_FORMAT T_LPARN type_attribute_format_type T_COMMA
 	    constant T_COMMA constant T_RPARN
-	| T_AT_USED {
-		addused();
-	}
-	| T_AT_UNUSED {
-		addused();
-	}
-	| T_AT_WEAK
-	| T_AT_VISIBILITY T_LPARN constant T_RPARN
+	| T_AT_UNUSED
 	| T_QUAL {
 		if ($1 != CONST)	
 			yyerror("Bad attribute");
 	}
 	;
 
-type_attribute_spec_list:
-	  type_attribute_spec
-	| type_attribute_spec_list T_COMMA type_attribute_spec
-	;
-
 type_attribute:
 	  T_ATTRIBUTE T_LPARN T_LPARN {
 	    attron = 1;
-	} type_attribute_spec_list {
+	} type_attribute_spec {
 	    attron = 0;
 	} T_RPARN T_RPARN
 	| T_PACKED {
 		addpacked();
 	}
-	;
-
-type_attribute_list:
-	  type_attribute
-	| type_attribute_list type_attribute
 	;
 
 clrtyp:
@@ -603,6 +538,7 @@ declspecs:
 		addtype($2);
 	  }
 	| type_attribute declspecs
+	| declspecs type_attribute
 	| declspecs declmod
 	| declspecs notype_typespec {
 		addtype($2);
@@ -626,7 +562,6 @@ declmod:
 	| T_SCLASS {
 		addscl($1);
 	  }
-	| type_attribute_list
 	;
 
 clrtyp_typespec:
@@ -739,11 +674,6 @@ member_declaration_list_with_rbrace:
 	  }
 	;
 
-opt_type_attribute:
-	  /* empty */
-	| type_attribute
-	;
-
 member_declaration_list:
 	  member_declaration {
 		$$ = $1;
@@ -757,33 +687,25 @@ member_declaration:
 	  noclass_declmods deftyp {
 		/* too late, i know, but getsym() compensates it */
 		symtyp = FMOS;
-	  } notype_member_decls opt_type_attribute {
+	  } notype_member_decls {
 		symtyp = FVFT;
 		$$ = $4;
 	  }
 	| noclass_declspecs deftyp {
 		symtyp = FMOS;
-	  } type_member_decls opt_type_attribute {
+	  } type_member_decls {
 		symtyp = FVFT;
 		$$ = $4;
 	  }
-	| noclass_declmods deftyp opt_type_attribute {
-		symtyp = FVFT;
+	| noclass_declmods deftyp {
 		/* struct or union member must be named */
-		if (!Sflag)
-			warning(49);
-		/* add all the members of the anonymous struct/union */
-		$$ = dcs->d_type->t_str->memb;
-		anonymize($$);
+		warning(49);
+		$$ = NULL;
 	  }
-	| noclass_declspecs deftyp opt_type_attribute {
-		symtyp = FVFT;
+	| noclass_declspecs deftyp {
 		/* struct or union member must be named */
-		if (!Sflag)
-			warning(49);
-		$$ = dcs->d_type->t_str->memb;
-		/* add all the members of the anonymous struct/union */
-		anonymize($$);
+		warning(49);
+		$$ = NULL;
 	  }
 	| error {
 		symtyp = FVFT;
@@ -968,7 +890,7 @@ type_init_decls:
 	;
 
 notype_init_decl:
-	notype_decl opt_asm_or_symbolrename {
+	  notype_decl opt_asm_or_symbolrename {
 		idecl($1, 0, $2);
 		chksz($1);
 	  }
@@ -980,7 +902,7 @@ notype_init_decl:
 	;
 
 type_init_decl:
-	type_decl opt_asm_or_symbolrename {
+	  type_decl opt_asm_or_symbolrename {
 		idecl($1, 0, $2);
 		chksz($1);
 	  }
@@ -1017,11 +939,11 @@ notype_direct_decl:
 		$$ = addarray($1, 1, toicon($3, 0));
 	  }
 	| notype_direct_decl param_list opt_asm_or_symbolrename {
-		$$ = addfunc(symbolrename($1, $3), $2);
+		$$ = addfunc($1, $2);
 		popdecl();
 		blklev--;
 	  }
-	| notype_direct_decl type_attribute_list
+	| notype_direct_decl type_attribute
 	;
 
 type_decl:
@@ -1050,11 +972,11 @@ type_direct_decl:
 		$$ = addarray($1, 1, toicon($3, 0));
 	  }
 	| type_direct_decl param_list opt_asm_or_symbolrename {
-		$$ = addfunc(symbolrename($1, $3), $2);
+		$$ = addfunc($1, $2);
 		popdecl();
 		blklev--;
 	  }
-	| type_direct_decl type_attribute_list
+	| type_direct_decl type_attribute
 	;
 
 /*
@@ -1074,10 +996,7 @@ param_decl:
 	;
 
 direct_param_decl:
-	  identifier type_attribute_list {
-		$$ = dname(getsym($1));
-	  }
-	| identifier {
+	  identifier {
 		$$ = dname(getsym($1));
 	  }
 	| T_LPARN notype_param_decl T_RPARN {
@@ -1090,7 +1009,7 @@ direct_param_decl:
 		$$ = addarray($1, 1, toicon($3, 0));
 	  }
 	| direct_param_decl param_list opt_asm_or_symbolrename {
-		$$ = addfunc(symbolrename($1, $3), $2);
+		$$ = addfunc($1, $2);
 		popdecl();
 		blklev--;
 	  }
@@ -1106,7 +1025,7 @@ notype_param_decl:
 	;
 
 direct_notype_param_decl:
-	  identifier {
+	  T_NAME {
 		$$ = dname(getsym($1));
 	  }
 	| T_LPARN notype_param_decl T_RPARN {
@@ -1119,7 +1038,7 @@ direct_notype_param_decl:
 		$$ = addarray($1, 1, toicon($3, 0));
 	  }
 	| direct_notype_param_decl param_list opt_asm_or_symbolrename {
-		$$ = addfunc(symbolrename($1, $3), $2);
+		$$ = addfunc($1, $2);
 		popdecl();
 		blklev--;
 	  }
@@ -1287,17 +1206,14 @@ opt_asm_or_symbolrename:		/* expect only one */
 	;
 
 initializer:
-	  init_assign_expr
+	  init_expr
 	;
 
-init_assign_expr:
-	| init_by_name init_base_expr	%prec T_COMMA
-	| init_base_expr
-
-init_base_expr:
+init_expr:
 	  expr				%prec T_COMMA {
 		mkinit($1);
 	  }
+	| init_by_name init_expr	%prec T_COMMA
 	| init_lbrace init_rbrace
 	| init_lbrace init_expr_list init_rbrace
 	| init_lbrace init_expr_list T_COMMA init_rbrace
@@ -1305,8 +1221,8 @@ init_base_expr:
 	;
 
 init_expr_list:
-	  init_assign_expr		%prec T_COMMA
-	| init_expr_list T_COMMA init_assign_expr
+	  init_expr			%prec T_COMMA
+	| init_expr_list T_COMMA init_expr
 	;
 
 lorange: 
@@ -1325,25 +1241,16 @@ range:
 	  }
 	;
 
-init_field:
-	  T_LBRACK range T_RBRACK {
+init_by_name:
+	  T_LBRACK range T_RBRACK T_ASSIGN {
 		if (!Sflag)
 			warning(321);
 	  }
-	| point identifier {
+	| point identifier T_ASSIGN {
 		if (!Sflag)
 			warning(313);
 		memberpush($2);
 	  }
-	;
-
-init_field_list:
-	  init_field
-	| init_field_list init_field
-	;
-
-init_by_name:
-	  init_field_list T_ASSIGN
 	| identifier T_COLON {
 		gnuism(315);
 		memberpush($1);
@@ -1363,7 +1270,7 @@ init_rbrace:
 	;
 
 type_name:
-  	  {
+	  {
 		pushdecl(ABSTRACT);
 	  } abstract_declaration {
 		popdecl();
@@ -1396,9 +1303,6 @@ abs_decl:
 	| pointer direct_abs_decl {
 		$$ = addptr($2, $1);
 	  }
-	| T_TYPEOF term {
-		$$ = mktempsym($2->tn_type);
-	  }
 	;
 
 direct_abs_decl:
@@ -1421,16 +1325,16 @@ direct_abs_decl:
 		$$ = addarray($1, 1, toicon($3, 0));
 	  }
 	| abs_decl_param_list opt_asm_or_symbolrename {
-		$$ = addfunc(symbolrename(aname(), $2), $1);
+		$$ = addfunc(aname(), $1);
 		popdecl();
 		blklev--;
 	  }
 	| direct_abs_decl abs_decl_param_list opt_asm_or_symbolrename {
-		$$ = addfunc(symbolrename($1, $3), $2);
+		$$ = addfunc($1, $2);
 		popdecl();
 		blklev--;
 	  }
-	| direct_abs_decl type_attribute_list
+	| direct_abs_decl type_attribute
 	;
 
 non_expr_stmnt:
@@ -1515,7 +1419,7 @@ stmnt_list:
 
 expr_stmnt:
 	  expr T_SEMI {
-		expr($1, 0, 0, 0);
+		expr($1, 0, 0, 1);
 		ftflg = 0;
 	  }
 	| T_SEMI {
@@ -1596,22 +1500,6 @@ switch_expr:
 	  }
 	;
 
-association:
-	  type_name T_COLON expr
-	| T_DEFAULT T_COLON expr 
-	;
-
-association_list:
-	  association
-	| association_list T_COMMA association
-	;
-
-generic_expr:
-	  T_GENERIC T_LPARN expr T_COMMA association_list T_RPARN {
-		$$ = $3;
-	  }
-	;
-
 do_stmnt:
 	  do stmnt {
 		CLRWFLGS(__FILE__, __LINE__);
@@ -1638,14 +1526,10 @@ iteration_stmnt:
 	| for_exprs stmnt {
 		CLRWFLGS(__FILE__, __LINE__);
 		for2();
-		popdecl();
-		blklev--;
 	  }
 	| for_exprs error {
 		CLRWFLGS(__FILE__, __LINE__);
 		for2();
-		popdecl();
-		blklev--;
 	  }
 	;
 
@@ -1668,21 +1552,15 @@ do_while_expr:
 	  }
 	;
 
-for_start:
-	  T_FOR T_LPARN {
-		pushdecl(AUTO);
-		blklev++;
-	  }
-	;
 for_exprs:
-	    for_start declspecs deftyp notype_init_decls T_SEMI opt_expr
+	    T_FOR T_LPARN declspecs deftyp notype_init_decls T_SEMI opt_expr
 	    T_SEMI opt_expr T_RPARN {
 		c99ism(325);
-		for1(NULL, $6, $8);
+		for1(NULL, $7, $9);
 		CLRWFLGS(__FILE__, __LINE__);
 	    }
-	  | for_start opt_expr T_SEMI opt_expr T_SEMI opt_expr T_RPARN {
-		for1($2, $4, $6);
+	  | T_FOR T_LPARN opt_expr T_SEMI opt_expr T_SEMI opt_expr T_RPARN {
+		for1($3, $5, $7);
 		CLRWFLGS(__FILE__, __LINE__);
 	  }
 	;
@@ -1803,9 +1681,6 @@ expr:
 	| term {
 		$$ = $1;
 	  }
-	| generic_expr {
-		$$ = $1;
-	  }
 	;
 
 term:
@@ -1905,11 +1780,6 @@ term:
 	  }
 	| T_IMAG T_LPARN term T_RPARN {
 		$$ = build(IMAG, $3, NULL);
-	  }
-	| T_BUILTIN_OFFSETOF T_LPARN type_name T_COMMA identifier T_RPARN
-						    %prec T_BUILTIN_OFFSETOF {
-		symtyp = FMOS;
-		$$ = bldoffsetof($3, getsym($5));
 	  }
 	| T_SIZEOF term					%prec T_SIZEOF {
 		if (($$ = $2 == NULL ? NULL : bldszof($2->tn_type)) != NULL)
@@ -2041,10 +1911,8 @@ toicon(tnode_t *tn, int required)
 	/*
 	 * Abstract declarations are used inside expression. To free
 	 * the memory would be a fatal error.
-	 * We don't free blocks that are inside casts because these
-	 * will be used later to match types.
 	 */
-	if (tn->tn_op != CON && dcs->d_ctx != ABSTRACT)
+	if (dcs->d_ctx != ABSTRACT)
 		tfreeblk();
 
 	if ((t = v->v_tspec) == FLOAT || t == DOUBLE || t == LDOUBLE) {
@@ -2083,7 +1951,7 @@ idecl(sym_t *decl, int initflg, sbuf_t *renaming)
 	case EXTERN:
 		if (renaming != NULL) {
 			if (decl->s_rename != NULL)
-				LERROR("idecl(rename)");
+				LERROR("idecl()");
 
 			s = getlblk(1, renaming->sb_len + 1);
 	                (void)memcpy(s, renaming->sb_name, renaming->sb_len + 1);
@@ -2111,7 +1979,7 @@ idecl(sym_t *decl, int initflg, sbuf_t *renaming)
 		decl1loc(decl, initflg);
 		break;
 	default:
-		LERROR("idecl(%d)", dcs->d_ctx);
+		LERROR("idecl()");
 	}
 
 	if (initflg && !initerr)
@@ -2142,12 +2010,4 @@ ignuptorp(void)
 	}
 
 	yyclearin;
-}
-
-static	sym_t *
-symbolrename(sym_t *s, sbuf_t *sb)
-{
-	if (sb)
-		s->s_rename = sb->sb_name;
-	return s;
 }

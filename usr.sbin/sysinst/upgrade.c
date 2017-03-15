@@ -1,4 +1,4 @@
-/*	$NetBSD: upgrade.c,v 1.6 2015/08/28 12:04:08 joerg Exp $	*/
+/*	$NetBSD: upgrade.c,v 1.2.4.2 2015/05/14 07:58:49 snj Exp $	*/
 
 /*
  * Copyright 1997 Piermont Information Systems Inc.
@@ -66,7 +66,7 @@ do_upgrade(void)
 	if (find_disks(msg_string(MSG_upgrade)) < 0)
 		return;
 
-	if (set_swap_if_low_ram(pm->diskdev, NULL) < 0)
+        if (set_swap_if_low_ram(pm->diskdev, NULL) < 0)
 		return;
 
 	if (md_pre_update() < 0)
@@ -105,7 +105,7 @@ do_upgrade(void)
 	    MSG_upgrcomplete, MSG_abortupgr) != 0)
 		return;
 
-	if (md_post_extract())
+	if (!md_post_extract() == 0)
 		return;
 
 	merge_X("/usr/X11R6");

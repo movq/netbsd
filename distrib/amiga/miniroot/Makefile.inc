@@ -1,7 +1,7 @@
-#	$NetBSD: Makefile.inc,v 1.20 2017/01/24 18:04:01 christos Exp $
+#	$NetBSD: Makefile.inc,v 1.18 2010/02/11 09:06:47 roy Exp $
 
-IMAGESIZE=	7m
-MAKEFS_FLAGS+=   -o density=4k
+IMAGESIZE=	6m
+MAKEFS_FLAGS=   -o density=4k
 IMAGEENDIAN=	be
 MAKEDEVTARGETS=	floppy
 IMAGEDEPENDS+=	${ARCHDIR}/dot.profile \

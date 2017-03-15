@@ -1,5 +1,6 @@
 /* Generic BFD support for file formats.
-   Copyright (C) 1990-2016 Free Software Foundation, Inc.
+   Copyright 1990, 1991, 1992, 1993, 1994, 1995, 1999, 2000, 2001, 2002,
+   2003, 2005, 2007, 2008, 2009 Free Software Foundation, Inc.
    Written by Cygnus Support.
 
    This file is part of BFD, the Binary File Descriptor library.
@@ -203,9 +204,6 @@ bfd_boolean
 bfd_check_format_matches (bfd *abfd, bfd_format format, char ***matching)
 {
   extern const bfd_target binary_vec;
-#if BFD_SUPPORTS_PLUGINS
-  extern const bfd_target plugin_vec;
-#endif
   const bfd_target * const *target;
   const bfd_target **matching_vector = NULL;
   const bfd_target *save_targ, *right_targ, *ar_right_targ, *match_targ;
@@ -308,16 +306,6 @@ bfd_check_format_matches (bfd *abfd, bfd_format format, char ***matching)
       temp = BFD_SEND_FMT (abfd, _bfd_check_format, (abfd));
       if (temp)
 	{
-	  int match_priority = temp->match_priority;
-#if BFD_SUPPORTS_PLUGINS
-	  /* If this object can be handled by a plugin, give that the
-	     lowest priority; objects both handled by a plugin and
-	     with an underlying object format will be claimed
-	     separately by the plugin.  */
-	  if (*target == &plugin_vec)
-	    match_priority = (*target)->match_priority;
-#endif
-
 	  match_targ = temp;
 	  if (preserve.marker != NULL)
 	    bfd_preserve_finish (abfd, &preserve);
@@ -339,9 +327,9 @@ bfd_check_format_matches (bfd *abfd, bfd_format format, char ***matching)
 		matching_vector[match_count] = temp;
 	      match_count++;
 
-	      if (match_priority < best_match)
+	      if (temp->match_priority < best_match)
 		{
-		  best_match = match_priority;
+		  best_match = temp->match_priority;
 		  best_count = 0;
 		}
 	      best_count++;
@@ -415,7 +403,7 @@ bfd_check_format_matches (bfd *abfd, bfd_format format, char ***matching)
   /* We still have more than one equally good match, and at least some
      of the targets support match priority.  Choose the first of the
      best matches.  */
-  if (matching_vector && match_count > 1 && best_count != match_count)
+  if (match_count > 1 && best_count != match_count)
     {
       int i;
 

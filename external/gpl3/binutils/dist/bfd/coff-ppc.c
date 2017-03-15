@@ -1,5 +1,7 @@
 /* BFD back-end for PowerPC Microsoft Portable Executable files.
-   Copyright (C) 1990-2016 Free Software Foundation, Inc.
+   Copyright 1990, 1991, 1992, 1993, 1994, 1995, 1996, 1997, 1998, 1999,
+   2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010, 2011,
+   2012  Free Software Foundation, Inc.
 
    Original version pieced together by Kim Knuttila (krk@cygnus.com)
 
@@ -299,13 +301,13 @@ ppc_coff_link_hash_table_create (bfd *abfd)
 
 static bfd_reloc_status_type ppc_refhi_reloc
   (bfd *, arelent *, asymbol *, void *, asection *, bfd *, char **);
-static bfd_reloc_status_type ppc_pair_reloc
+static bfd_reloc_status_type ppc_pair_reloc 
   (bfd *, arelent *, asymbol *, void *, asection *, bfd *, char **);
 static bfd_reloc_status_type ppc_toc16_reloc
   (bfd *, arelent *, asymbol *, void *, asection *, bfd *, char **);
 static bfd_reloc_status_type ppc_section_reloc
   (bfd *, arelent *, asymbol *, void *, asection *, bfd *, char **);
-static bfd_reloc_status_type ppc_secrel_reloc
+static bfd_reloc_status_type ppc_secrel_reloc 
   (bfd *, arelent *, asymbol *, void *, asection *, bfd *, char **);
 static bfd_reloc_status_type ppc_imglue_reloc
   (bfd *, arelent *, asymbol *, void *, asection *, bfd *, char **);
@@ -314,7 +316,7 @@ static bfd_reloc_status_type ppc_imglue_reloc
    get us started, so those I'll make sure work. Those marked FIXME are either
    completely unverified or have a specific unknown marked in the comment.  */
 
-/* Relocation entries for Windows/NT on PowerPC.
+/* Relocation entries for Windows/NT on PowerPC.                             
 
    From the document "" we find the following listed as used relocs:
 
@@ -947,7 +949,7 @@ coff_ppc_relocate_section (bfd *output_bfd,
   /* If we are performing a relocatable link, we don't need to do a
      thing.  The caller will take care of adjusting the reloc
      addresses and symbol indices.  */
-  if (bfd_link_relocatable (info))
+  if (info->relocatable)
     return TRUE;
 
   rel = relocs;
@@ -1026,9 +1028,12 @@ coff_ppc_relocate_section (bfd *output_bfd,
 		     + sec->output_offset);
 	    }
 	  else
-	    (*info->callbacks->undefined_symbol)
-	      (info, h->root.root.root.string, input_bfd, input_section,
-	       rel->r_vaddr - input_section->vma, TRUE);
+	    {
+	      if (! ((*info->callbacks->undefined_symbol)
+		     (info, h->root.root.root.string, input_bfd, input_section,
+		      rel->r_vaddr - input_section->vma, TRUE)))
+		return FALSE;
+	    }
 	}
 
       rstat = bfd_reloc_ok;
@@ -1070,11 +1075,10 @@ coff_ppc_relocate_section (bfd *output_bfd,
 	      {
 		/* It is a file local symbol.  */
 		int *local_toc_table;
-		char name[SYMNMLEN + 1];
+		const char *name;
 
 		sym = syms + symndx;
-		strncpy (name, sym->_n._n_name, SYMNMLEN);
-		name[SYMNMLEN] = '\0';
+		name = sym->_n._n_name;
 
 		local_toc_table = obj_coff_local_toc_table(input_bfd);
 		our_toc_offset = local_toc_table[symndx];
@@ -1196,7 +1200,7 @@ coff_ppc_relocate_section (bfd *output_bfd,
 	  {
 	    /* To solve this, we need to know whether or not the symbol
 	       appearing on the call instruction is a glue function or not.
-	       A glue function must announce itself via a IMGLUE reloc, and
+	       A glue function must announce itself via a IMGLUE reloc, and 
 	       the reloc contains the required toc restore instruction.  */
 	    DUMP_RELOC2 (howto->name, rel);
 
@@ -1223,14 +1227,9 @@ coff_ppc_relocate_section (bfd *output_bfd,
 	case IMAGE_REL_PPC_ABSOLUTE:
 	  {
 	    const char *my_name;
-	    char buf[SYMNMLEN + 1];
 
 	    if (h == 0)
-	      {
-		strncpy (buf, (syms+symndx)->_n._n_name, SYMNMLEN);
-		buf[SYMNMLEN] = '\0';
-		my_name = buf;
-	      }
+	      my_name = (syms+symndx)->_n._n_name;
 	    else
 	      my_name = h->root.root.root.string;
 
@@ -1291,8 +1290,11 @@ coff_ppc_relocate_section (bfd *output_bfd,
 	      }
 
 	    if (h == 0)
-	      /* It is a file local symbol.  */
-	      sym = syms + symndx;
+	      {
+		/* It is a file local symbol.  */
+		sym = syms + symndx;
+		name = sym->_n._n_name;
+	      }
 	    else
 	      {
 		char *target = 0;
@@ -1420,10 +1422,11 @@ coff_ppc_relocate_section (bfd *output_bfd,
 		name = buf;
 	      }
 
-	    (*info->callbacks->reloc_overflow)
-	      (info, (h ? &h->root.root : NULL), name, howto->name,
-	       (bfd_vma) 0, input_bfd, input_section,
-	       rel->r_vaddr - input_section->vma);
+	    if (! ((*info->callbacks->reloc_overflow)
+		   (info, (h ? &h->root.root : NULL), name, howto->name,
+		    (bfd_vma) 0, input_bfd,
+		    input_section, rel->r_vaddr - input_section->vma)))
+	      return FALSE;
 	  }
 	}
     }
@@ -2039,7 +2042,7 @@ ppc_bfd_coff_final_link (bfd *abfd, struct bfd_link_info *info)
 		  || info->strip == strip_some)
 		o->lineno_count += sec->lineno_count;
 
-	      if (bfd_link_relocatable (info))
+	      if (info->relocatable)
 		o->reloc_count += sec->reloc_count;
 
 	      if (sec->rawsize > max_contents_size)
@@ -2051,7 +2054,7 @@ ppc_bfd_coff_final_link (bfd *abfd, struct bfd_link_info *info)
 	      if (sec->reloc_count > max_reloc_count)
 		max_reloc_count = sec->reloc_count;
 	    }
-	  else if (bfd_link_relocatable (info)
+	  else if (info->relocatable
 		   && (p->type == bfd_section_reloc_link_order
 		       || p->type == bfd_symbol_reloc_link_order))
 	    ++o->reloc_count;
@@ -2068,7 +2071,7 @@ ppc_bfd_coff_final_link (bfd *abfd, struct bfd_link_info *info)
 
   /* If doing a relocatable link, allocate space for the pointers we
      need to keep.  */
-  if (bfd_link_relocatable (info))
+  if (info->relocatable)
     {
       unsigned int i;
 
@@ -2119,7 +2122,7 @@ ppc_bfd_coff_final_link (bfd *abfd, struct bfd_link_info *info)
 	     memory until the end of the link.  This wastes memory,
 	     but only when doing a relocatable link, which is not the
 	     common case.  */
-	  BFD_ASSERT (bfd_link_relocatable (info));
+	  BFD_ASSERT (info->relocatable);
 	  amt = o->reloc_count;
 	  amt *= sizeof (struct internal_reloc);
 	  flaginfo.section_info[o->target_index].relocs =
@@ -2148,7 +2151,7 @@ ppc_bfd_coff_final_link (bfd *abfd, struct bfd_link_info *info)
      the opportunity to clear the output_has_begun fields of all the
      input BFD's.  */
   max_sym_count = 0;
-  for (sub = info->input_bfds; sub != NULL; sub = sub->link.next)
+  for (sub = info->input_bfds; sub != NULL; sub = sub->link_next)
     {
       bfd_size_type sz;
 
@@ -2171,7 +2174,7 @@ ppc_bfd_coff_final_link (bfd *abfd, struct bfd_link_info *info)
   flaginfo.linenos = (bfd_byte *) bfd_malloc (amt);
   flaginfo.contents = (bfd_byte *) bfd_malloc (max_contents_size);
   flaginfo.external_relocs = (bfd_byte *) bfd_malloc (max_reloc_count * relsz);
-  if (! bfd_link_relocatable (info))
+  if (! info->relocatable)
     {
       amt = max_reloc_count * sizeof (struct internal_reloc);
       flaginfo.internal_relocs = (struct internal_reloc *) bfd_malloc (amt);
@@ -2183,7 +2186,7 @@ ppc_bfd_coff_final_link (bfd *abfd, struct bfd_link_info *info)
       || (flaginfo.linenos == NULL && max_lineno_count > 0)
       || (flaginfo.contents == NULL && max_contents_size > 0)
       || (flaginfo.external_relocs == NULL && max_reloc_count > 0)
-      || (! bfd_link_relocatable (info)
+      || (! info->relocatable
 	  && flaginfo.internal_relocs == NULL
 	  && max_reloc_count > 0))
     goto error_return;
@@ -2317,7 +2320,7 @@ ppc_bfd_coff_final_link (bfd *abfd, struct bfd_link_info *info)
       flaginfo.outsyms = NULL;
     }
 
-  if (bfd_link_relocatable (info))
+  if (info->relocatable)
     {
       /* Now that we have written out all the global symbols, we know
 	 the symbol indices to use for relocs against them, and we can
@@ -2477,11 +2480,10 @@ const bfd_target TARGET_LITTLE_SYM =
    HAS_SYMS | HAS_LOCALS | WP_TEXT | D_PAGED),
 
 #ifndef COFF_WITH_PE
-  (SEC_HAS_CONTENTS | SEC_ALLOC | SEC_LOAD | SEC_CODE | SEC_READONLY
-   | SEC_RELOC),		/* section flags */
+  (SEC_HAS_CONTENTS | SEC_ALLOC | SEC_LOAD | SEC_RELOC), /* section flags */
 #else
-  (SEC_HAS_CONTENTS | SEC_ALLOC | SEC_LOAD | SEC_CODE | SEC_READONLY
-   | SEC_RELOC | SEC_LINK_ONCE | SEC_LINK_DUPLICATES),
+  (SEC_HAS_CONTENTS | SEC_ALLOC | SEC_LOAD | SEC_RELOC /* section flags */
+   | SEC_LINK_ONCE | SEC_LINK_DUPLICATES),
 #endif
 
   0,				/* leading char */
@@ -2538,11 +2540,10 @@ const bfd_target TARGET_BIG_SYM =
    HAS_SYMS | HAS_LOCALS | WP_TEXT | D_PAGED),
 
 #ifndef COFF_WITH_PE
-  (SEC_HAS_CONTENTS | SEC_ALLOC | SEC_LOAD | SEC_CODE | SEC_READONLY
-   | SEC_RELOC),		/* section flags */
+  (SEC_HAS_CONTENTS | SEC_ALLOC | SEC_LOAD | SEC_RELOC), /* section flags */
 #else
-  (SEC_HAS_CONTENTS | SEC_ALLOC | SEC_LOAD | SEC_CODE | SEC_READONLY
-   | SEC_RELOC | SEC_LINK_ONCE | SEC_LINK_DUPLICATES),
+  (SEC_HAS_CONTENTS | SEC_ALLOC | SEC_LOAD | SEC_RELOC /* section flags */
+   | SEC_LINK_ONCE | SEC_LINK_DUPLICATES),
 #endif
 
   0,				/* leading char */

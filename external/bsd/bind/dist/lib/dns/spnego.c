@@ -1,4 +1,4 @@
-/*	$NetBSD: spnego.c,v 1.10 2016/03/23 21:39:42 christos Exp $	*/
+/*	$NetBSD: spnego.c,v 1.7.4.2 2016/10/14 12:01:29 martin Exp $	*/
 
 /*
  * Copyright (C) 2006-2015  Internet Systems Consortium, Inc. ("ISC")

@@ -1,4 +1,4 @@
-/*	$NetBSD: config_file.c,v 1.2 2017/01/28 21:31:49 christos Exp $	*/
+/*	$NetBSD: config_file.c,v 1.1.1.2 2014/04/24 12:45:49 pettai Exp $	*/
 
 /*
  * Copyright (c) 1997 - 2004 Kungliga Tekniska Högskolan
@@ -84,7 +84,7 @@ static krb5_error_code parse_list(struct fileptr *f, unsigned *lineno,
 				  krb5_config_binding **parent,
 				  const char **err_message);
 
-KRB5_LIB_FUNCTION krb5_config_section * KRB5_LIB_CALL
+krb5_config_section *
 _krb5_config_get_entry(krb5_config_section **parent, const char *name, int type)
 {
     krb5_config_section **q;
@@ -372,11 +372,11 @@ krb5_config_parse_debug (struct fileptr *f,
 	    b = NULL;
 	} else if (*p == '}') {
 	    *err_message = "unmatched }";
-	    return KRB5_CONFIG_BADFORMAT;
+	    return EINVAL;	/* XXX */
 	} else if(*p != '\0') {
 	    if (s == NULL) {
 		*err_message = "binding before section";
-		return KRB5_CONFIG_BADFORMAT;
+		return EINVAL;
 	    }
 	    ret = parse_binding(f, lineno, p, &b, &s->u.list, err_message);
 	    if (ret)
@@ -427,7 +427,7 @@ krb5_config_parse_file_multi (krb5_context context,
      * current users home directory. The behavior can be disabled and
      * enabled by calling krb5_set_home_dir_access().
      */
-    if (ISTILDE(fname[0]) && ISPATHSEP(fname[1])) {
+    if (fname[0] == '~' && fname[1] == '/') {
 #ifndef KRB5_USE_PATH_TOKENS
 	const char *home = NULL;
 
@@ -446,17 +446,22 @@ krb5_config_parse_file_multi (krb5_context context,
 		home = pw->pw_dir;
 	}
 	if (home) {
-	    int aret;
-
-	    aret = asprintf(&newfname, "%s%s", home, &fname[1]);
-	    if (aret == -1 || newfname == NULL)
-		return krb5_enomem(context);
+	    asprintf(&newfname, "%s%s", home, &fname[1]);
+	    if (newfname == NULL) {
+		krb5_set_error_message(context, ENOMEM,
+				       N_("malloc: out of memory", ""));
+		return ENOMEM;
+	    }
 	    fname = newfname;
 	}
 #else  /* KRB5_USE_PATH_TOKENS */
 	if (asprintf(&newfname, "%%{USERCONFIG}%s", &fname[1]) < 0 ||
 	    newfname == NULL)
-	    return krb5_enomem(context);
+	{
+	    krb5_set_error_message(context, ENOMEM,
+				   N_("malloc: out of memory", ""));
+	    return ENOMEM;
+	}
 	fname = newfname;
 #endif
     }
@@ -480,7 +485,7 @@ krb5_config_parse_file_multi (krb5_context context,
 #ifdef KRB5_USE_PATH_TOKENS
 	char * exp_fname = NULL;
 
-	ret = _krb5_expand_path_tokens(context, fname, 1, &exp_fname);
+	ret = _krb5_expand_path_tokens(context, fname, &exp_fname);
 	if (ret) {
 	    if (newfname)
 		free(newfname);
@@ -694,7 +699,7 @@ _krb5_config_get (krb5_context context,
 }
 
 
-KRB5_LIB_FUNCTION const void * KRB5_LIB_CALL
+const void *
 _krb5_config_vget (krb5_context context,
 		   const krb5_config_section *c,
 		   int type,
@@ -936,17 +941,13 @@ krb5_config_vget_strings(krb5_context context,
 	s = next_component_string(tmp, " \t", &pos);
 	while(s){
 	    char **tmp2 = realloc(strings, (nstr + 1) * sizeof(*strings));
-	    if(tmp2 == NULL) {
-		free(tmp);
+	    if(tmp2 == NULL)
 		goto cleanup;
-	    }
 	    strings = tmp2;
 	    strings[nstr] = strdup(s);
 	    nstr++;
-	    if(strings[nstr-1] == NULL)	{
-		free(tmp);
+	    if(strings[nstr-1] == NULL)
 		goto cleanup;
-	    }
 	    s = next_component_string(NULL, " \t", &pos);
 	}
 	free(tmp);

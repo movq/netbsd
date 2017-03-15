@@ -1,4 +1,4 @@
-/*	$NetBSD: npf_var.c,v 1.10 2017/01/11 02:11:21 christos Exp $	*/
+/*	$NetBSD: npf_var.c,v 1.8.4.1 2015/07/17 04:37:22 snj Exp $	*/
 
 /*-
  * Copyright (c) 2011-2012 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: npf_var.c,v 1.10 2017/01/11 02:11:21 christos Exp $");
+__RCSID("$NetBSD: npf_var.c,v 1.8.4.1 2015/07/17 04:37:22 snj Exp $");
 
 #include <stdlib.h>
 #include <string.h>
@@ -188,10 +188,6 @@ npfvar_destroy(npfvar_t *vp)
 char *
 npfvar_expand_string(const npfvar_t *vp)
 {
-	if (npfvar_get_count(vp) != 1)
-		yyerror("variable '%s' type '%s' has %zu elements", vp->v_key,
-		    npfvar_type(vp->v_type), npfvar_get_count(vp));
-			
 	return npfvar_get_data(vp, NPFVAR_STRING, 0);
 }
 

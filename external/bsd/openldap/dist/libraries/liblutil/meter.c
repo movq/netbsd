@@ -1,4 +1,4 @@
-/*	$NetBSD: meter.c,v 1.1.1.3 2017/02/09 01:46:46 christos Exp $	*/
+/*	$NetBSD: meter.c,v 1.1.1.2 2014/05/28 09:58:45 tron Exp $	*/
 
 /* meter.c - lutil_meter meters */
 /* $OpenLDAP$ */
@@ -19,9 +19,6 @@
  * This work was initially developed by Emily Backes for inclusion
  * in OpenLDAP software.
  */
-
-#include <sys/cdefs.h>
-__RCSID("$NetBSD: meter.c,v 1.1.1.3 2017/02/09 01:46:46 christos Exp $");
 
 #include "portable.h"
 #include "lutil_meter.h"
@@ -104,7 +101,7 @@ lutil_meter_open (
 	lutil_meter_t *meter,
 	const lutil_meter_display_t *display, 
 	const lutil_meter_estimator_t *estimator,
-	size_t goal_value)
+	unsigned long goal_value)
 {
 	int rc;
 
@@ -137,7 +134,7 @@ lutil_meter_open (
 int
 lutil_meter_update (
 	lutil_meter_t *meter,
-	size_t position,
+	unsigned long position,
 	int force)
 {
 	static const double display_rate = 0.5;

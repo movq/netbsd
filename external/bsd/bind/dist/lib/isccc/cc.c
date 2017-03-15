@@ -1,4 +1,4 @@
-/*	$NetBSD: cc.c,v 1.11 2016/05/26 16:50:00 christos Exp $	*/
+/*	$NetBSD: cc.c,v 1.7.4.2 2016/10/14 12:01:33 martin Exp $	*/
 
 /*
  * Portions Copyright (C) 2004-2007, 2012, 2013, 2015, 2016  Internet Systems Consortium, Inc. ("ISC")

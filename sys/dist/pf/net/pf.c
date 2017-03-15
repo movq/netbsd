@@ -1,4 +1,4 @@
-/*	$NetBSD: pf.c,v 1.76 2017/02/14 03:05:06 ozaki-r Exp $	*/
+/*	$NetBSD: pf.c,v 1.72 2014/07/25 04:09:58 ozaki-r Exp $	*/
 /*	$OpenBSD: pf.c,v 1.552.2.1 2007/11/27 16:37:57 henning Exp $ */
 
 /*
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pf.c,v 1.76 2017/02/14 03:05:06 ozaki-r Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pf.c,v 1.72 2014/07/25 04:09:58 ozaki-r Exp $");
 
 #include "pflog.h"
 
@@ -1735,7 +1735,7 @@ pf_send_tcp(const struct pf_rule *r, sa_family_t af,
 #endif /* ALTQ */
 	m->m_data += max_linkhdr;
 	m->m_pkthdr.len = m->m_len = len;
-	m_reset_rcvif(m);
+	m->m_pkthdr.rcvif = NULL;
 	bzero(m->m_data, len);
 	switch (af) {
 #ifdef INET
@@ -2980,7 +2980,6 @@ pf_calc_mss(struct pf_addr *addr, sa_family_t af, u_int16_t offer)
 	if ((rt = rtcache_init_noclone(rop)) != NULL) {
 		mss = rt->rt_ifp->if_mtu - hlen - sizeof(struct tcphdr);
 		mss = max(tcp_mssdflt, mss);
-		rtcache_unref(rt, rop);
 	}
 	rtcache_free(rop);
 #endif
@@ -5069,7 +5068,6 @@ pf_routable(struct pf_addr *addr, sa_family_t af, struct pfi_kif *kif)
 	} u;
 	struct route		 ro;
 	int			 ret = 1;
-	struct rtentry		*rt;
 
 	bzero(&ro, sizeof(ro));
 	switch (af) {
@@ -5086,10 +5084,7 @@ pf_routable(struct pf_addr *addr, sa_family_t af, struct pfi_kif *kif)
 	}
 	rtcache_setdst(&ro, &u.dst);
 
-	rt = rtcache_init(&ro);
-	ret = rt != NULL ? 1 : 0;
-	if (rt != NULL)
-		rtcache_unref(rt, &ro);
+	ret = rtcache_init(&ro) != NULL ? 1 : 0;
 	rtcache_free(&ro);
 
 	return (ret);
@@ -5305,7 +5300,6 @@ pf_route(struct mbuf **m, struct pf_rule *r, int dir, struct ifnet *oifp,
 
 		if (rt->rt_flags & RTF_GATEWAY)
 			dst = rt->rt_gateway;
-		rtcache_unref(rt, ro); /* FIXME dst is NOMPSAFE */
 	} else {
 		if (TAILQ_EMPTY(&r->rpool.list)) {
 			DPFPRINTF(PF_DEBUG_URGENT,
@@ -5387,7 +5381,7 @@ pf_route(struct mbuf **m, struct pf_rule *r, int dir, struct ifnet *oifp,
 		else if (m0->m_pkthdr.csum_flags & M_UDPV4_CSUM_OUT)
 			udpstat.udps_outhwcsum++;
 #endif /* !__NetBSD__ */
-		error = if_output_lock(ifp, ifp, m0, dst, NULL);
+		error = (*ifp->if_output)(ifp, m0, dst, NULL);
 		goto done;
 	}
 
@@ -5553,7 +5547,7 @@ pf_route6(struct mbuf **m, struct pf_rule *r, int dir, struct ifnet *oifp,
 	if (IN6_IS_SCOPE_EMBEDDABLE(&dst.sin6_addr))
 		dst.sin6_addr.s6_addr16[1] = htons(ifp->if_index);
 	if ((u_long)m0->m_pkthdr.len <= ifp->if_mtu) {
-		(void)ip6_if_output(ifp, ifp, m0, &dst, NULL);
+		(void)nd6_output(ifp, ifp, m0, &dst, NULL);
 	} else {
 		in6_ifstat_inc(ifp, ifs6_in_toobig);
 		if (r->rt != PF_DUPTO)

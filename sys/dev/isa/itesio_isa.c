@@ -1,4 +1,4 @@
-/*	$NetBSD: itesio_isa.c,v 1.25 2015/04/23 23:23:00 pgoyette Exp $ */
+/*	$NetBSD: itesio_isa.c,v 1.24 2012/11/15 04:45:01 msaitoh Exp $ */
 /*	Derived from $OpenBSD: it.c,v 1.19 2006/04/10 00:57:54 deraadt Exp $	*/
 
 /*
@@ -34,7 +34,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: itesio_isa.c,v 1.25 2015/04/23 23:23:00 pgoyette Exp $");
+__KERNEL_RCSID(0, "$NetBSD: itesio_isa.c,v 1.24 2012/11/15 04:45:01 msaitoh Exp $");
 
 #include <sys/param.h>
 #include <sys/kernel.h>
@@ -612,7 +612,7 @@ itesio_wdt_tickle(struct sysmon_wdog *smw)
 	return 0;
 }
 
-MODULE(MODULE_CLASS_DRIVER, itesio, "sysmon_envsys,sysmon_wdog");
+MODULE(MODULE_CLASS_DRIVER, itesio, NULL);
 
 #ifdef _MODULE
 #include "ioconf.c"

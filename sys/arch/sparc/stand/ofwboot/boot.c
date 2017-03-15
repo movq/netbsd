@@ -1,4 +1,4 @@
-/*	$NetBSD: boot.c,v 1.34 2016/08/31 16:24:34 martin Exp $	*/
+/*	$NetBSD: boot.c,v 1.31 2014/06/28 09:16:18 rtr Exp $	*/
 
 /*
  * Copyright (c) 1997, 1999 Eduardo E. Horvath.  All rights reserved.
@@ -141,7 +141,7 @@ bootoptions(const char *ap, char *loaddev, char *kernel, char *options)
 		}
 		end1 = ap;
 
-		while (*ap == ' ') {
+		while (*ap != '\0' && *ap == ' ') {
 			ap++;
 		}
 
@@ -364,9 +364,8 @@ start_kernel(char *kernel, char *bootline, void *ofw, int isfloppy,
 	int boothowto)
 {
 	int fd;
-	u_long marks[MARK_MAX] = {0};
+	u_long marks[MARK_MAX];
 	int flags = LOAD_ALL;
-
 	if (isfloppy)
 		flags &= ~LOAD_BACKWARDS;
 
@@ -464,7 +463,7 @@ main(void *ofw)
 			char cmdline[PROM_MAX_PATH];
 
 			printf("Boot: ");
-			kgets(cmdline, sizeof(cmdline));
+			gets(cmdline);
 
 			if (!strcmp(cmdline,"exit") ||
 			    !strcmp(cmdline,"halt")) {

@@ -1,4 +1,4 @@
-/*	$NetBSD: prop_object_impl.h,v 1.32 2015/05/11 16:50:35 christos Exp $	*/
+/*	$NetBSD: prop_object_impl.h,v 1.31.12.1 2015/05/16 18:02:14 snj Exp $	*/
 
 /*-
  * Copyright (c) 2006 The NetBSD Foundation, Inc.

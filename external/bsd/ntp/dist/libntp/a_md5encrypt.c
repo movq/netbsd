@@ -1,4 +1,4 @@
-/*	$NetBSD: a_md5encrypt.c,v 1.7 2016/11/22 03:09:30 christos Exp $	*/
+/*	$NetBSD: a_md5encrypt.c,v 1.1.1.3.4.3 2016/07/14 18:36:22 martin Exp $	*/
 
 /*
  *	digest support for NTP, MD5 and with OpenSSL more
@@ -13,7 +13,6 @@
 #include "ntp.h"
 #include "ntp_md5.h"	/* provides OpenSSL digest API */
 #include "isc/string.h"
-#include "libssl_compat.h"
 /*
  * MD5authencrypt - generate message digest
  *
@@ -29,7 +28,7 @@ MD5authencrypt(
 {
 	u_char	digest[EVP_MAX_MD_SIZE];
 	u_int	len;
-	EVP_MD_CTX *ctx;
+	EVP_MD_CTX ctx;
 
 	/*
 	 * Compute digest of key concatenated with packet. Note: the
@@ -37,20 +36,14 @@ MD5authencrypt(
 	 * was creaded.
 	 */
 	INIT_SSL();
-	ctx = EVP_MD_CTX_new();
-	if (!(ctx && EVP_DigestInit(ctx, EVP_get_digestbynid(type)))) {
+	if (!EVP_DigestInit(&ctx, EVP_get_digestbynid(type))) {
 		msyslog(LOG_ERR,
 		    "MAC encrypt: digest init failed");
-		EVP_MD_CTX_free(ctx);
 		return (0);
 	}
-	EVP_DigestUpdate(ctx, key, cache_secretsize);
-	EVP_DigestUpdate(ctx, (u_char *)pkt, length);
-	EVP_DigestFinal(ctx, digest, &len);
-	EVP_MD_CTX_free(ctx);
-	/* If the MAC is longer than the MAX then truncate it. */
-	if (len > MAX_MAC_LEN - 4)
-	    len = MAX_MAC_LEN - 4;
+	EVP_DigestUpdate(&ctx, key, cache_secretsize);
+	EVP_DigestUpdate(&ctx, (u_char *)pkt, length);
+	EVP_DigestFinal(&ctx, digest, &len);
 	memmove((u_char *)pkt + length + 4, digest, len);
 	return (len + 4);
 }
@@ -72,7 +65,7 @@ MD5authdecrypt(
 {
 	u_char	digest[EVP_MAX_MD_SIZE];
 	u_int	len;
-	EVP_MD_CTX *ctx;
+	EVP_MD_CTX ctx;
 
 	/*
 	 * Compute digest of key concatenated with packet. Note: the
@@ -80,26 +73,20 @@ MD5authdecrypt(
 	 * was created.
 	 */
 	INIT_SSL();
-	ctx = EVP_MD_CTX_new();
-	if (!(ctx && EVP_DigestInit(ctx, EVP_get_digestbynid(type)))) {
+	if (!EVP_DigestInit(&ctx, EVP_get_digestbynid(type))) {
 		msyslog(LOG_ERR,
 		    "MAC decrypt: digest init failed");
-		EVP_MD_CTX_free(ctx);
 		return (0);
 	}
-	EVP_DigestUpdate(ctx, key, cache_secretsize);
-	EVP_DigestUpdate(ctx, (u_char *)pkt, length);
-	EVP_DigestFinal(ctx, digest, &len);
-	EVP_MD_CTX_free(ctx);
-	/* If the MAC is longer than the MAX then truncate it. */
-	if (len > MAX_MAC_LEN - 4)
-	    len = MAX_MAC_LEN - 4;
+	EVP_DigestUpdate(&ctx, key, cache_secretsize);
+	EVP_DigestUpdate(&ctx, (u_char *)pkt, length);
+	EVP_DigestFinal(&ctx, digest, &len);
 	if (size != (size_t)len + 4) {
 		msyslog(LOG_ERR,
 		    "MAC decrypt: MAC length error");
 		return (0);
 	}
-	return !isc_tsmemcmp(digest, (u_char *)pkt + length + 4, len);
+	return !isc_tsmemcmp(digest, (const char *)pkt + length + 4, len);
 }
 
 /*
@@ -113,7 +100,7 @@ addr2refid(sockaddr_u *addr)
 {
 	u_char		digest[20];
 	u_int32		addr_refid;
-	EVP_MD_CTX	*ctx;
+	EVP_MD_CTX	ctx;
 	u_int		len;
 
 	if (IS_IPV4(addr))
@@ -121,23 +108,22 @@ addr2refid(sockaddr_u *addr)
 
 	INIT_SSL();
 
-	ctx = EVP_MD_CTX_new();
-	EVP_MD_CTX_init(ctx);
+#if defined(OPENSSL) && OPENSSL_VERSION_NUMBER >= 0x0090700fL
+	EVP_MD_CTX_init(&ctx);
 #ifdef EVP_MD_CTX_FLAG_NON_FIPS_ALLOW
 	/* MD5 is not used as a crypto hash here. */
-	EVP_MD_CTX_set_flags(ctx, EVP_MD_CTX_FLAG_NON_FIPS_ALLOW);
+	EVP_MD_CTX_set_flags(&ctx, EVP_MD_CTX_FLAG_NON_FIPS_ALLOW);
 #endif
-	if (!EVP_DigestInit_ex(ctx, EVP_md5(), NULL)) {
+#endif
+	if (!EVP_DigestInit(&ctx, EVP_md5())) {
 		msyslog(LOG_ERR,
 		    "MD5 init failed");
-		EVP_MD_CTX_free(ctx);	/* pedantic... but safe */
 		exit(1);
 	}
 
-	EVP_DigestUpdate(ctx, (u_char *)PSOCK_ADDR6(addr),
+	EVP_DigestUpdate(&ctx, (u_char *)PSOCK_ADDR6(addr),
 	    sizeof(struct in6_addr));
-	EVP_DigestFinal(ctx, digest, &len);
-	EVP_MD_CTX_free(ctx);
+	EVP_DigestFinal(&ctx, digest, &len);
 	memcpy(&addr_refid, digest, sizeof(addr_refid));
 	return (addr_refid);
 }

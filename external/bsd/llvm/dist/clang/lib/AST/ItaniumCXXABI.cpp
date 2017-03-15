@@ -63,10 +63,9 @@ public:
         CallOperator->getType()->getAs<FunctionProtoType>();
     ASTContext &Context = CallOperator->getASTContext();
 
-    FunctionProtoType::ExtProtoInfo EPI;
-    EPI.Variadic = Proto->isVariadic();
     QualType Key =
-        Context.getFunctionType(Context.VoidTy, Proto->getParamTypes(), EPI);
+        Context.getFunctionType(Context.VoidTy, Proto->getParamTypes(),
+                                FunctionProtoType::ExtProtoInfo());
     Key = Context.getCanonicalType(Key);
     return ++ManglingNumbers[Key->castAs<FunctionProtoType>()];
   }
@@ -107,7 +106,7 @@ public:
     TargetInfo::IntType PtrDiff = Target.getPtrDiffType(0);
     uint64_t Width = Target.getTypeWidth(PtrDiff);
     unsigned Align = Target.getTypeAlign(PtrDiff);
-    if (MPT->isMemberFunctionPointer())
+    if (MPT->getPointeeType()->isFunctionType())
       Width = 2 * Width;
     return std::make_pair(Width, Align);
   }
@@ -134,31 +133,8 @@ public:
     return Layout.getNonVirtualSize() == PointerSize;
   }
 
-  const CXXConstructorDecl *
-  getCopyConstructorForExceptionObject(CXXRecordDecl *RD) override {
-    return nullptr;
-  }
-
-  void addCopyConstructorForExceptionObject(CXXRecordDecl *RD,
-                                            CXXConstructorDecl *CD) override {}
-
-  void addTypedefNameForUnnamedTagDecl(TagDecl *TD,
-                                       TypedefNameDecl *DD) override {}
-
-  TypedefNameDecl *getTypedefNameForUnnamedTagDecl(const TagDecl *TD) override {
-    return nullptr;
-  }
-
-  void addDeclaratorForUnnamedTagDecl(TagDecl *TD,
-                                      DeclaratorDecl *DD) override {}
-
-  DeclaratorDecl *getDeclaratorForUnnamedTagDecl(const TagDecl *TD) override {
-    return nullptr;
-  }
-
-  std::unique_ptr<MangleNumberingContext>
-  createMangleNumberingContext() const override {
-    return llvm::make_unique<ItaniumNumberingContext>();
+  MangleNumberingContext *createMangleNumberingContext() const override {
+    return new ItaniumNumberingContext();
   }
 };
 }

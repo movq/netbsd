@@ -1,4 +1,4 @@
-/*	$NetBSD: lstate.h,v 1.6 2016/09/08 02:21:31 salazar Exp $	*/
+/*	$NetBSD: lstate.h,v 1.2.2.4 2016/09/25 11:16:02 bouyer Exp $	*/
 
 /*
 ** Id: lstate.h,v 2.130 2015/12/16 16:39:38 roberto Exp 

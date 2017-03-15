@@ -1,4 +1,4 @@
-/*	$NetBSD: njs_pci.c,v 1.12 2016/07/14 10:19:06 msaitoh Exp $	*/
+/*	$NetBSD: njs_pci.c,v 1.10 2014/03/29 19:28:25 christos Exp $	*/
 
 /*-
  * Copyright (c) 2004 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: njs_pci.c,v 1.12 2016/07/14 10:19:06 msaitoh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: njs_pci.c,v 1.10 2014/03/29 19:28:25 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -172,8 +172,7 @@ njs_pci_attach(device_t parent, device_t self, void *aux)
 #endif
 			sc->sc_flags = NJSC32_IO_MAPPED;
 		} else {
-			aprint_error_dev(self,
-			    "unable to map device registers\n");
+			aprint_error_dev(self, "unable to map device registers\n");
 			return;
 		}
 	}
@@ -198,7 +197,7 @@ njs_pci_attach(device_t parent, device_t self, void *aux)
 		    str_at, str_intr);
 		return;
 	}
-	aprint_normal_dev(self, "interrupting%s%s\n", str_at, str_intr);
+	printf("%s: interrupting%s%s\n", device_xname(self), str_at, str_intr);
 
 	/* attach */
 	njsc32_attach(sc);

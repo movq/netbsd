@@ -1,5 +1,6 @@
 /* tc-z8k.c -- Assemble code for the Zilog Z800n
-   Copyright (C) 1992-2016 Free Software Foundation, Inc.
+   Copyright 1992, 1993, 1994, 1995, 1996, 1998, 2000, 2001, 2002, 2003,
+   2005, 2006, 2007, 2009  Free Software Foundation, Inc.
 
    This file is part of GAS, the GNU Assembler.
 
@@ -33,8 +34,7 @@ extern int machine;
 extern int coff_flags;
 int segmented_mode;
 
-/* This is non-zero if target was set from the command line.
-   If non-zero, 1 means Z8002 (non-segmented), 2 means Z8001 (segmented).  */
+/* This is non-zero if target was set from the command line.  */
 static int z8k_target_from_cmdline;
 
 static void
@@ -156,13 +156,14 @@ md_begin (void)
     }
 
   /* Default to z8002.  */
-  s_segm (z8k_target_from_cmdline ? z8k_target_from_cmdline - 1 : 0);
+  if (! z8k_target_from_cmdline)
+    s_segm (0);
 
   /* Insert the pseudo ops, too.  */
   for (idx = 0; md_pseudo_table[idx].poc_name; idx++)
     {
       opcode_entry_type *fake_opcode;
-      fake_opcode = XNEW (opcode_entry_type);
+      fake_opcode = (opcode_entry_type *) malloc (sizeof (opcode_entry_type));
       fake_opcode->name = md_pseudo_table[idx].poc_name;
       fake_opcode->func = (void *) (md_pseudo_table + idx);
       fake_opcode->opcode = 250;
@@ -380,7 +381,7 @@ checkfor (char *ptr, char what)
 /* Make sure the mode supplied is the size of a word.  */
 
 static void
-regword (int mode, const char *string)
+regword (int mode, char *string)
 {
   int ok;
 
@@ -394,7 +395,7 @@ regword (int mode, const char *string)
 /* Make sure the mode supplied is the size of an address.  */
 
 static void
-regaddr (int mode, const char *string)
+regaddr (int mode, char *string)
 {
   int ok;
 
@@ -407,7 +408,7 @@ regaddr (int mode, const char *string)
 
 struct ctrl_names {
   int value;
-  const char *name;
+  char *name;
 };
 
 static struct ctrl_names ctrl_table[] = {
@@ -450,7 +451,7 @@ get_ctrl_operand (char **ptr, struct z8k_op *mode, unsigned int dst ATTRIBUTE_UN
 
 struct flag_names {
   int value;
-  const char *name;
+  char *name;
 };
 
 static struct flag_names flag_table[] = {
@@ -500,7 +501,7 @@ get_flags_operand (char **ptr, struct z8k_op *mode, unsigned int dst ATTRIBUTE_U
 
 struct interrupt_names {
   int value;
-  const char *name;
+  char *name;
 };
 
 static struct interrupt_names intr_table[] = {
@@ -564,7 +565,7 @@ get_interrupt_operand (char **ptr, struct z8k_op *mode, unsigned int dst ATTRIBU
 
 struct cc_names {
   int value;
-  const char *name;
+  char *name;
 };
 
 static struct cc_names table[] = {
@@ -1285,7 +1286,7 @@ md_undefined_symbol (char *name ATTRIBUTE_UNUSED)
 
 /* Various routines to kill one day.  */
 
-const char *
+char *
 md_atof (int type, char *litP, int *sizeP)
 {
   return ieee_md_atof (type, litP, sizeP, TRUE);
@@ -1303,20 +1304,21 @@ struct option md_longopts[] =
 size_t md_longopts_size = sizeof (md_longopts);
 
 int
-md_parse_option (int c, const char *arg)
+md_parse_option (int c, char *arg)
 {
   switch (c)
     {
     case 'z':
       if (!strcmp (arg, "8001"))
-	z8k_target_from_cmdline = 2;
+	s_segm (1);
       else if (!strcmp (arg, "8002"))
-	z8k_target_from_cmdline = 1;
+	s_segm (0);
       else
 	{
 	  as_bad (_("invalid architecture -z%s"), arg);
 	  return 0;
 	}
+      z8k_target_from_cmdline = 1;
       break;
 
     case OPTION_RELAX:
@@ -1357,8 +1359,8 @@ tc_gen_reloc (asection *section ATTRIBUTE_UNUSED,
 {
   arelent *reloc;
 
-  reloc = XNEW (arelent);
-  reloc->sym_ptr_ptr = XNEW (asymbol *);
+  reloc = xmalloc (sizeof (*reloc));
+  reloc->sym_ptr_ptr = xmalloc (sizeof (asymbol *));
   *reloc->sym_ptr_ptr = symbol_get_bfdsym (fixp->fx_addsy);
   reloc->address = fixp->fx_frag->fr_address + fixp->fx_where;
   reloc->addend = fixp->fx_offset;

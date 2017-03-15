@@ -15,20 +15,10 @@
 #ifndef LLVM_LIB_CODEGEN_SELECTIONDAG_SCHEDULEDAGSDNODES_H
 #define LLVM_LIB_CODEGEN_SELECTIONDAG_SCHEDULEDAGSDNODES_H
 
-#include "llvm/CodeGen/ISDOpcodes.h"
 #include "llvm/CodeGen/MachineBasicBlock.h"
-#include "llvm/CodeGen/MachineValueType.h"
 #include "llvm/CodeGen/ScheduleDAG.h"
-#include "llvm/CodeGen/SelectionDAGNodes.h"
-#include "llvm/Support/Casting.h"
-#include <cassert>
-#include <string>
-#include <vector>
 
 namespace llvm {
-
-class InstrItineraryData;
-
   /// ScheduleDAGSDNodes - A ScheduleDAG for scheduling SDNode-based DAGs.
   ///
   /// Edges between SUnits are initially based on edges in the SelectionDAG,
@@ -54,7 +44,7 @@ class InstrItineraryData;
 
     explicit ScheduleDAGSDNodes(MachineFunction &mf);
 
-    ~ScheduleDAGSDNodes() override = default;
+    virtual ~ScheduleDAGSDNodes() {}
 
     /// Run - perform scheduling.
     ///
@@ -74,7 +64,6 @@ class InstrItineraryData;
       if (isa<TargetIndexSDNode>(Node))    return true;
       if (isa<JumpTableSDNode>(Node))      return true;
       if (isa<ExternalSymbolSDNode>(Node)) return true;
-      if (isa<MCSymbolSDNode>(Node))       return true;
       if (isa<BlockAddressSDNode>(Node))   return true;
       if (Node->getOpcode() == ISD::EntryToken ||
           isa<MDNodeSDNode>(Node)) return true;
@@ -95,6 +84,12 @@ class InstrItineraryData;
     /// excludes nodes that aren't interesting to scheduling, and represents
     /// flagged together nodes with a single SUnit.
     void BuildSchedGraph(AliasAnalysis *AA);
+
+    /// InitVRegCycleFlag - Set isVRegCycle if this node's single use is
+    /// CopyToReg and its only active data operands are CopyFromReg within a
+    /// single block loop.
+    ///
+    void InitVRegCycleFlag(SUnit *SU);
 
     /// InitNumRegDefsLeft - Determine the # of regs defined by this node.
     ///
@@ -141,7 +136,6 @@ class InstrItineraryData;
       unsigned DefIdx;
       unsigned NodeNumDefs;
       MVT ValueType;
-
     public:
       RegDefIter(const SUnit *SU, const ScheduleDAGSDNodes *SD);
 
@@ -161,7 +155,6 @@ class InstrItineraryData;
       }
 
       void Advance();
-
     private:
       void InitNodeNumDefs();
     };
@@ -187,7 +180,6 @@ class InstrItineraryData;
     void EmitPhysRegCopy(SUnit *SU, DenseMap<SUnit*, unsigned> &VRBaseMap,
                          MachineBasicBlock::iterator InsertPos);
   };
+}
 
-} // end namespace llvm
-
-#endif // LLVM_LIB_CODEGEN_SELECTIONDAG_SCHEDULEDAGSDNODES_H
+#endif

@@ -1,4 +1,4 @@
-/*	$NetBSD: epoll.c,v 1.1.1.2 2017/01/31 21:14:52 christos Exp $	*/
+/*	$NetBSD: epoll.c,v 1.1.1.1 2013/04/11 16:43:19 christos Exp $	*/
 /*
  * Copyright 2000-2007 Niels Provos <provos@citi.umich.edu>
  * Copyright 2007-2012 Niels Provos, Nick Mathewson
@@ -27,15 +27,12 @@
  */
 #include "event2/event-config.h"
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: epoll.c,v 1.1.1.2 2017/01/31 21:14:52 christos Exp $");
-#include "evconfig-private.h"
-
-#ifdef EVENT__HAVE_EPOLL
+__RCSID("$NetBSD: epoll.c,v 1.1.1.1 2013/04/11 16:43:19 christos Exp $");
 
 #include <stdint.h>
 #include <sys/types.h>
 #include <sys/resource.h>
-#ifdef EVENT__HAVE_SYS_TIME_H
+#ifdef _EVENT_HAVE_SYS_TIME_H
 #include <sys/time.h>
 #endif
 #include <sys/queue.h>
@@ -47,11 +44,8 @@ __RCSID("$NetBSD: epoll.c,v 1.1.1.2 2017/01/31 21:14:52 christos Exp $");
 #include <string.h>
 #include <unistd.h>
 #include <errno.h>
-#ifdef EVENT__HAVE_FCNTL_H
+#ifdef _EVENT_HAVE_FCNTL_H
 #include <fcntl.h>
-#endif
-#ifdef EVENT__HAVE_SYS_TIMERFD_H
-#include <sys/timerfd.h>
 #endif
 
 #include "event-internal.h"
@@ -61,38 +55,11 @@ __RCSID("$NetBSD: epoll.c,v 1.1.1.2 2017/01/31 21:14:52 christos Exp $");
 #include "log-internal.h"
 #include "evmap-internal.h"
 #include "changelist-internal.h"
-#include "time-internal.h"
-
-/* Since Linux 2.6.17, epoll is able to report about peer half-closed connection
-   using special EPOLLRDHUP flag on a read event.
-*/
-#if !defined(EPOLLRDHUP)
-#define EPOLLRDHUP 0
-#define EARLY_CLOSE_IF_HAVE_RDHUP 0
-#else
-#define EARLY_CLOSE_IF_HAVE_RDHUP EV_FEATURE_EARLY_CLOSE
-#endif
-
-#include "epolltable-internal.h"
-
-#if defined(EVENT__HAVE_SYS_TIMERFD_H) &&			  \
-	defined(EVENT__HAVE_TIMERFD_CREATE) &&			  \
-	defined(HAVE_POSIX_MONOTONIC) && defined(TFD_NONBLOCK) && \
-	defined(TFD_CLOEXEC)
-/* Note that we only use timerfd if TFD_NONBLOCK and TFD_CLOEXEC are available
-   and working.  This means that we can't support it on 2.6.25 (where timerfd
-   was introduced) or 2.6.26, since 2.6.27 introduced those flags.
- */
-#define USING_TIMERFD
-#endif
 
 struct epollop {
 	struct epoll_event *events;
 	int nevents;
 	int epfd;
-#ifdef USING_TIMERFD
-	int timerfd;
-#endif
 };
 
 static void *epoll_init(struct event_base *);
@@ -102,12 +69,12 @@ static void epoll_dealloc(struct event_base *);
 static const struct eventop epollops_changelist = {
 	"epoll (with changelist)",
 	epoll_init,
-	event_changelist_add_,
-	event_changelist_del_,
+	event_changelist_add,
+	event_changelist_del,
 	epoll_dispatch,
 	epoll_dealloc,
 	1, /* need reinit */
-	EV_FEATURE_ET|EV_FEATURE_O1| EARLY_CLOSE_IF_HAVE_RDHUP,
+	EV_FEATURE_ET|EV_FEATURE_O1,
 	EVENT_CHANGELIST_FDINFO_SIZE
 };
 
@@ -125,7 +92,7 @@ const struct eventop epollops = {
 	epoll_dispatch,
 	epoll_dealloc,
 	1, /* need reinit */
-	EV_FEATURE_ET|EV_FEATURE_O1|EV_FEATURE_EARLY_CLOSE,
+	EV_FEATURE_ET|EV_FEATURE_O1,
 	0
 };
 
@@ -143,23 +110,18 @@ const struct eventop epollops = {
 static void *
 epoll_init(struct event_base *base)
 {
-	int epfd = -1;
+	int epfd;
 	struct epollop *epollop;
 
-#ifdef EVENT__HAVE_EPOLL_CREATE1
-	/* First, try the shiny new epoll_create1 interface, if we have it. */
-	epfd = epoll_create1(EPOLL_CLOEXEC);
-#endif
-	if (epfd == -1) {
-		/* Initialize the kernel queue using the old interface.  (The
-		size field is ignored   since 2.6.8.) */
-		if ((epfd = epoll_create(32000)) == -1) {
-			if (errno != ENOSYS)
-				event_warn("epoll_create");
-			return (NULL);
-		}
-		evutil_make_socket_closeonexec(epfd);
+	/* Initialize the kernel queue.  (The size field is ignored since
+	 * 2.6.8.) */
+	if ((epfd = epoll_create(32000)) == -1) {
+		if (errno != ENOSYS)
+			event_warn("epoll_create");
+		return (NULL);
 	}
+
+	evutil_make_socket_closeonexec(epfd);
 
 	if (!(epollop = mm_calloc(1, sizeof(struct epollop)))) {
 		close(epfd);
@@ -179,48 +141,10 @@ epoll_init(struct event_base *base)
 
 	if ((base->flags & EVENT_BASE_FLAG_EPOLL_USE_CHANGELIST) != 0 ||
 	    ((base->flags & EVENT_BASE_FLAG_IGNORE_ENV) == 0 &&
-		evutil_getenv_("EVENT_EPOLL_USE_CHANGELIST") != NULL)) {
-
+		evutil_getenv("EVENT_EPOLL_USE_CHANGELIST") != NULL))
 		base->evsel = &epollops_changelist;
-	}
 
-#ifdef USING_TIMERFD
-	/*
-	  The epoll interface ordinarily gives us one-millisecond precision,
-	  so on Linux it makes perfect sense to use the CLOCK_MONOTONIC_COARSE
-	  timer.  But when the user has set the new PRECISE_TIMER flag for an
-	  event_base, we can try to use timerfd to give them finer granularity.
-	*/
-	if ((base->flags & EVENT_BASE_FLAG_PRECISE_TIMER) &&
-	    base->monotonic_timer.monotonic_clock == CLOCK_MONOTONIC) {
-		int fd;
-		fd = epollop->timerfd = timerfd_create(CLOCK_MONOTONIC, TFD_NONBLOCK|TFD_CLOEXEC);
-		if (epollop->timerfd >= 0) {
-			struct epoll_event epev;
-			memset(&epev, 0, sizeof(epev));
-			epev.data.fd = epollop->timerfd;
-			epev.events = EPOLLIN;
-			if (epoll_ctl(epollop->epfd, EPOLL_CTL_ADD, fd, &epev) < 0) {
-				event_warn("epoll_ctl(timerfd)");
-				close(fd);
-				epollop->timerfd = -1;
-			}
-		} else {
-			if (errno != EINVAL && errno != ENOSYS) {
-				/* These errors probably mean that we were
-				 * compiled with timerfd/TFD_* support, but
-				 * we're running on a kernel that lacks those.
-				 */
-				event_warn("timerfd_create");
-			}
-			epollop->timerfd = -1;
-		}
-	} else {
-		epollop->timerfd = -1;
-	}
-#endif
-
-	evsig_init_(base);
+	evsig_init(base);
 
 	return (epollop);
 }
@@ -249,23 +173,6 @@ epoll_op_to_string(int op)
 	    "???";
 }
 
-#define PRINT_CHANGES(op, events, ch, status)  \
-	"Epoll %s(%d) on fd %d " status ". "       \
-	"Old events were %d; "                     \
-	"read change was %d (%s); "                \
-	"write change was %d (%s); "               \
-	"close change was %d (%s)",                \
-	epoll_op_to_string(op),                    \
-	events,                                    \
-	ch->fd,                                    \
-	ch->old_events,                            \
-	ch->read_change,                           \
-	change_to_string(ch->read_change),         \
-	ch->write_change,                          \
-	change_to_string(ch->write_change),        \
-	ch->close_change,                          \
-	change_to_string(ch->close_change)
-
 static int
 epoll_apply_one_change(struct event_base *base,
     struct epollop *epollop,
@@ -273,86 +180,156 @@ epoll_apply_one_change(struct event_base *base,
 {
 	struct epoll_event epev;
 	int op, events = 0;
-	int idx;
 
-	idx = EPOLL_OP_TABLE_INDEX(ch);
-	op = epoll_op_table[idx].op;
-	events = epoll_op_table[idx].events;
+	if (1) {
+		/* The logic here is a little tricky.  If we had no events set
+		   on the fd before, we need to set op="ADD" and set
+		   events=the events we want to add.  If we had any events set
+		   on the fd before, and we want any events to remain on the
+		   fd, we need to say op="MOD" and set events=the events we
+		   want to remain.  But if we want to delete the last event,
+		   we say op="DEL" and set events=the remaining events.  What
+		   fun!
+		*/
 
-	if (!events) {
-		EVUTIL_ASSERT(op == 0);
-		return 0;
-	}
+		/* TODO: Turn this into a switch or a table lookup. */
 
-	if ((ch->read_change|ch->write_change) & EV_CHANGE_ET)
-		events |= EPOLLET;
+		if ((ch->read_change & EV_CHANGE_ADD) ||
+		    (ch->write_change & EV_CHANGE_ADD)) {
+			/* If we are adding anything at all, we'll want to do
+			 * either an ADD or a MOD. */
+			events = 0;
+			op = EPOLL_CTL_ADD;
+			if (ch->read_change & EV_CHANGE_ADD) {
+				events |= EPOLLIN;
+			} else if (ch->read_change & EV_CHANGE_DEL) {
+				;
+			} else if (ch->old_events & EV_READ) {
+				events |= EPOLLIN;
+			}
+			if (ch->write_change & EV_CHANGE_ADD) {
+				events |= EPOLLOUT;
+			} else if (ch->write_change & EV_CHANGE_DEL) {
+				;
+			} else if (ch->old_events & EV_WRITE) {
+				events |= EPOLLOUT;
+			}
+			if ((ch->read_change|ch->write_change) & EV_ET)
+				events |= EPOLLET;
 
-	memset(&epev, 0, sizeof(epev));
-	epev.data.fd = ch->fd;
-	epev.events = events;
-	if (epoll_ctl(epollop->epfd, op, ch->fd, &epev) == 0) {
-		event_debug((PRINT_CHANGES(op, epev.events, ch, "okay")));
-		return 0;
-	}
+			if (ch->old_events) {
+				/* If MOD fails, we retry as an ADD, and if
+				 * ADD fails we will retry as a MOD.  So the
+				 * only hard part here is to guess which one
+				 * will work.  As a heuristic, we'll try
+				 * MOD first if we think there were old
+				 * events and ADD if we think there were none.
+				 *
+				 * We can be wrong about the MOD if the file
+				 * has in fact been closed and re-opened.
+				 *
+				 * We can be wrong about the ADD if the
+				 * the fd has been re-created with a dup()
+				 * of the same file that it was before.
+				 */
+				op = EPOLL_CTL_MOD;
+			}
+		} else if ((ch->read_change & EV_CHANGE_DEL) ||
+		    (ch->write_change & EV_CHANGE_DEL)) {
+			/* If we're deleting anything, we'll want to do a MOD
+			 * or a DEL. */
+			op = EPOLL_CTL_DEL;
 
-	switch (op) {
-	case EPOLL_CTL_MOD:
-		if (errno == ENOENT) {
-			/* If a MOD operation fails with ENOENT, the
-			 * fd was probably closed and re-opened.  We
-			 * should retry the operation as an ADD.
-			 */
-			if (epoll_ctl(epollop->epfd, EPOLL_CTL_ADD, ch->fd, &epev) == -1) {
-				event_warn("Epoll MOD(%d) on %d retried as ADD; that failed too",
-				    (int)epev.events, ch->fd);
-				return -1;
-			} else {
-				event_debug(("Epoll MOD(%d) on %d retried as ADD; succeeded.",
-					(int)epev.events,
-					ch->fd));
-				return 0;
+			if (ch->read_change & EV_CHANGE_DEL) {
+				if (ch->write_change & EV_CHANGE_DEL) {
+					events = EPOLLIN|EPOLLOUT;
+				} else if (ch->old_events & EV_WRITE) {
+					events = EPOLLOUT;
+					op = EPOLL_CTL_MOD;
+				} else {
+					events = EPOLLIN;
+				}
+			} else if (ch->write_change & EV_CHANGE_DEL) {
+				if (ch->old_events & EV_READ) {
+					events = EPOLLIN;
+					op = EPOLL_CTL_MOD;
+				} else {
+					events = EPOLLOUT;
+				}
 			}
 		}
-		break;
-	case EPOLL_CTL_ADD:
-		if (errno == EEXIST) {
-			/* If an ADD operation fails with EEXIST,
-			 * either the operation was redundant (as with a
-			 * precautionary add), or we ran into a fun
-			 * kernel bug where using dup*() to duplicate the
-			 * same file into the same fd gives you the same epitem
-			 * rather than a fresh one.  For the second case,
-			 * we must retry with MOD. */
-			if (epoll_ctl(epollop->epfd, EPOLL_CTL_MOD, ch->fd, &epev) == -1) {
-				event_warn("Epoll ADD(%d) on %d retried as MOD; that failed too",
-				    (int)epev.events, ch->fd);
-				return -1;
-			} else {
-				event_debug(("Epoll ADD(%d) on %d retried as MOD; succeeded.",
-					(int)epev.events,
-					ch->fd));
-				return 0;
-			}
-		}
-		break;
-	case EPOLL_CTL_DEL:
-		if (errno == ENOENT || errno == EBADF || errno == EPERM) {
-			/* If a delete fails with one of these errors,
-			 * that's fine too: we closed the fd before we
-			 * got around to calling epoll_dispatch. */
-			event_debug(("Epoll DEL(%d) on fd %d gave %s: DEL was unnecessary.",
-				(int)epev.events,
-				ch->fd,
-				strerror(errno)));
+
+		if (!events)
 			return 0;
-		}
-		break;
-	default:
-		break;
-	}
 
-	event_warn(PRINT_CHANGES(op, epev.events, ch, "failed"));
-	return -1;
+		memset(&epev, 0, sizeof(epev));
+		epev.data.fd = ch->fd;
+		epev.events = events;
+		if (epoll_ctl(epollop->epfd, op, ch->fd, &epev) == -1) {
+			if (op == EPOLL_CTL_MOD && errno == ENOENT) {
+				/* If a MOD operation fails with ENOENT, the
+				 * fd was probably closed and re-opened.  We
+				 * should retry the operation as an ADD.
+				 */
+				if (epoll_ctl(epollop->epfd, EPOLL_CTL_ADD, ch->fd, &epev) == -1) {
+					event_warn("Epoll MOD(%d) on %d retried as ADD; that failed too",
+					    (int)epev.events, ch->fd);
+					return -1;
+				} else {
+					event_debug(("Epoll MOD(%d) on %d retried as ADD; succeeded.",
+						(int)epev.events,
+						ch->fd));
+				}
+			} else if (op == EPOLL_CTL_ADD && errno == EEXIST) {
+				/* If an ADD operation fails with EEXIST,
+				 * either the operation was redundant (as with a
+				 * precautionary add), or we ran into a fun
+				 * kernel bug where using dup*() to duplicate the
+				 * same file into the same fd gives you the same epitem
+				 * rather than a fresh one.  For the second case,
+				 * we must retry with MOD. */
+				if (epoll_ctl(epollop->epfd, EPOLL_CTL_MOD, ch->fd, &epev) == -1) {
+					event_warn("Epoll ADD(%d) on %d retried as MOD; that failed too",
+					    (int)epev.events, ch->fd);
+					return -1;
+				} else {
+					event_debug(("Epoll ADD(%d) on %d retried as MOD; succeeded.",
+						(int)epev.events,
+						ch->fd));
+				}
+			} else if (op == EPOLL_CTL_DEL &&
+			    (errno == ENOENT || errno == EBADF ||
+				errno == EPERM)) {
+				/* If a delete fails with one of these errors,
+				 * that's fine too: we closed the fd before we
+				 * got around to calling epoll_dispatch. */
+				event_debug(("Epoll DEL(%d) on fd %d gave %s: DEL was unnecessary.",
+					(int)epev.events,
+					ch->fd,
+					strerror(errno)));
+			} else {
+				event_warn("Epoll %s(%d) on fd %d failed.  Old events were %d; read change was %d (%s); write change was %d (%s)",
+				    epoll_op_to_string(op),
+				    (int)epev.events,
+				    ch->fd,
+				    ch->old_events,
+				    ch->read_change,
+				    change_to_string(ch->read_change),
+				    ch->write_change,
+				    change_to_string(ch->write_change));
+				return -1;
+			}
+		} else {
+			event_debug(("Epoll %s(%d) on fd %d okay. [old events were %d; read change was %d; write change was %d]",
+				epoll_op_to_string(op),
+				(int)epev.events,
+				(int)ch->fd,
+				ch->old_events,
+				ch->read_change,
+				ch->write_change));
+		}
+	}
+	return 0;
 }
 
 static int
@@ -381,15 +358,12 @@ epoll_nochangelist_add(struct event_base *base, evutil_socket_t fd,
 	struct event_change ch;
 	ch.fd = fd;
 	ch.old_events = old;
-	ch.read_change = ch.write_change = ch.close_change = 0;
+	ch.read_change = ch.write_change = 0;
 	if (events & EV_WRITE)
 		ch.write_change = EV_CHANGE_ADD |
 		    (events & EV_ET);
 	if (events & EV_READ)
 		ch.read_change = EV_CHANGE_ADD |
-		    (events & EV_ET);
-	if (events & EV_CLOSED)
-		ch.close_change = EV_CHANGE_ADD |
 		    (events & EV_ET);
 
 	return epoll_apply_one_change(base, base->evbase, &ch);
@@ -402,13 +376,11 @@ epoll_nochangelist_del(struct event_base *base, evutil_socket_t fd,
 	struct event_change ch;
 	ch.fd = fd;
 	ch.old_events = old;
-	ch.read_change = ch.write_change = ch.close_change = 0;
+	ch.read_change = ch.write_change = 0;
 	if (events & EV_WRITE)
 		ch.write_change = EV_CHANGE_DEL;
 	if (events & EV_READ)
 		ch.read_change = EV_CHANGE_DEL;
-	if (events & EV_CLOSED)
-		ch.close_change = EV_CHANGE_DEL;
 
 	return epoll_apply_one_change(base, base->evbase, &ch);
 }
@@ -421,35 +393,8 @@ epoll_dispatch(struct event_base *base, struct timeval *tv)
 	int i, res;
 	long timeout = -1;
 
-#ifdef USING_TIMERFD
-	if (epollop->timerfd >= 0) {
-		struct itimerspec is;
-		is.it_interval.tv_sec = 0;
-		is.it_interval.tv_nsec = 0;
-		if (tv == NULL) {
-			/* No timeout; disarm the timer. */
-			is.it_value.tv_sec = 0;
-			is.it_value.tv_nsec = 0;
-		} else {
-			if (tv->tv_sec == 0 && tv->tv_usec == 0) {
-				/* we need to exit immediately; timerfd can't
-				 * do that. */
-				timeout = 0;
-			}
-			is.it_value.tv_sec = tv->tv_sec;
-			is.it_value.tv_nsec = tv->tv_usec * 1000;
-		}
-		/* TODO: we could avoid unnecessary syscalls here by only
-		   calling timerfd_settime when the top timeout changes, or
-		   when we're called with a different timeval.
-		*/
-		if (timerfd_settime(epollop->timerfd, 0, &is, NULL) < 0) {
-			event_warn("timerfd_settime");
-		}
-	} else
-#endif
 	if (tv != NULL) {
-		timeout = evutil_tv_to_msec_(tv);
+		timeout = evutil_tv_to_msec(tv);
 		if (timeout < 0 || timeout > MAX_EPOLL_TIMEOUT_MSEC) {
 			/* Linux kernels can wait forever if the timeout is
 			 * too big; see comment on MAX_EPOLL_TIMEOUT_MSEC. */
@@ -458,7 +403,7 @@ epoll_dispatch(struct event_base *base, struct timeval *tv)
 	}
 
 	epoll_apply_changes(base);
-	event_changelist_remove_all_(&base->changelist, base);
+	event_changelist_remove_all(&base->changelist, base);
 
 	EVBASE_RELEASE_LOCK(base, th_base_lock);
 
@@ -481,10 +426,6 @@ epoll_dispatch(struct event_base *base, struct timeval *tv)
 	for (i = 0; i < res; i++) {
 		int what = events[i].events;
 		short ev = 0;
-#ifdef USING_TIMERFD
-		if (events[i].data.fd == epollop->timerfd)
-			continue;
-#endif
 
 		if (what & (EPOLLHUP|EPOLLERR)) {
 			ev = EV_READ | EV_WRITE;
@@ -493,14 +434,12 @@ epoll_dispatch(struct event_base *base, struct timeval *tv)
 				ev |= EV_READ;
 			if (what & EPOLLOUT)
 				ev |= EV_WRITE;
-			if (what & EPOLLRDHUP)
-				ev |= EV_CLOSED;
 		}
 
 		if (!ev)
 			continue;
 
-		evmap_io_active_(base, events[i].data.fd, ev | EV_ET);
+		evmap_io_active(base, events[i].data.fd, ev | EV_ET);
 	}
 
 	if (res == epollop->nevents && epollop->nevents < MAX_NEVENT) {
@@ -526,18 +465,12 @@ epoll_dealloc(struct event_base *base)
 {
 	struct epollop *epollop = base->evbase;
 
-	evsig_dealloc_(base);
+	evsig_dealloc(base);
 	if (epollop->events)
 		mm_free(epollop->events);
 	if (epollop->epfd >= 0)
 		close(epollop->epfd);
-#ifdef USING_TIMERFD
-	if (epollop->timerfd >= 0)
-		close(epollop->timerfd);
-#endif
 
 	memset(epollop, 0, sizeof(struct epollop));
 	mm_free(epollop);
 }
-
-#endif /* EVENT__HAVE_EPOLL */

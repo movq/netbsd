@@ -1,5 +1,6 @@
 /* bfin-defs.h ADI Blackfin gas header file
-   Copyright (C) 2005-2016 Free Software Foundation, Inc.
+   Copyright 2005, 2006, 2007, 2009, 2010, 2011
+   Free Software Foundation, Inc.
 
    This file is part of GAS, the GNU Assembler.
 
@@ -325,6 +326,7 @@ Expr_Node *Expr_Node_Create (Expr_Node_Type type,
 INSTR_T Expr_Node_Gen_Reloc (Expr_Node *head, int parent_reloc);
 
 #define MKREF(x)	mkexpr (0,x)
+#define ALLOCATE(x)	malloc (x)
 
 #define NULL_CODE ((INSTR_T) 0)
 
@@ -377,7 +379,7 @@ extern "C" {
 
 extern int debug_codeselection;
 
-void error (const char *format, ...);
+void error (char *format, ...);
 void warn (char *format, ...);
 int  semantic_error (char *syntax);
 void semantic_error_2 (char *syntax);

@@ -1,4 +1,4 @@
-/*	$NetBSD: named-rrchecker.c,v 1.1.1.5 2016/05/26 15:45:45 christos Exp $	*/
+/*	$NetBSD: named-rrchecker.c,v 1.1.1.1.6.2 2016/10/14 12:01:23 martin Exp $	*/
 
 /*
  * Copyright (C) 2013, 2015, 2016  Internet Systems Consortium, Inc. ("ISC")

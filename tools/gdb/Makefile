@@ -1,10 +1,9 @@
-#	$NetBSD: Makefile,v 1.30 2016/10/16 04:37:42 mrg Exp $
+#	$NetBSD: Makefile,v 1.22 2012/10/01 19:27:04 bouyer Exp $
 
 .include <bsd.own.mk>
 
 MODULE=		gdb
-GDBDIR=		${.CURDIR}/../../external/gpl3/${EXTERNAL_GDB_SUBDIR}
-GNUHOSTDIST=    ${GDBDIR}/dist
+GNUHOSTDIST=    ${.CURDIR}/../../external/gpl3/gdb/dist
 
 FIND_ARGS=	\! \( -type d -name sim -prune \)
 
@@ -16,17 +15,9 @@ MAKE_ARGS=	MACHINE= MAKEINFO=${TOOL_MAKEINFO:Q}
 ALL_TARGET=	all-gdb
 INSTALL_TARGET=	install-gdb
 
-.include "${GDBDIR}/Makefile.gdb_arch"
-#GDB_MACHINE_ARCH=       ${MACHINE_ARCH:C/e?armv[4-7]h?f?/arm/}
-
 .include "${.CURDIR}/../Makefile.gmakehost"
 
-CCADDFLAGS+= --sysroot=${DESTDIR} -B${DESTDIR}/usr/lib/ -I${.OBJDIR}/.native/gcc/include
-LDADDFLAGS+= -L${DESTDIR}/lib -L${DESTDIR}/usr/lib
-CXXADDFLAGS+= -D__STDC_FORMAT_MACROS
-CXXADDFLAGS+= -D__STDC_LIMIT_MACROS
-CXXADDFLAGS+= -D__STDC_CONSTANT_MACROS
-HOST_CXXFLAGS+= ${CXXADDFLAGS}
+CCADDFLAGS=	--sysroot=${DESTDIR} -L${DESTDIR}/lib -L${DESTDIR}/usr/lib -B${DESTDIR}/usr/lib/ -I${.OBJDIR}/.native/gcc/include
 
 NEWCONFIGDIR?=	${.CURDIR}/../..
 MKNATIVE?=	${.CURDIR}/mknative-gdb
@@ -64,8 +55,7 @@ CONFIGURE_ARGS_SIM+= --disable-sim
 native-gdb: .native/.configure_done
 	@echo 'Extracting GDB configury for a native toolchain.'
 	MAKE=${MAKE:Q} ${HOST_SH} ${MKNATIVE} gdb \
-		${.OBJDIR}/.native ${NEWCONFIGDIR} ${MACHINE_GNU_PLATFORM} \
-		${GDB_MACHINE_ARCH}
+		${.OBJDIR}/.native ${NEWCONFIGDIR} ${MACHINE_GNU_PLATFORM}
 
 .native/.configure_done: ${_GNU_CFGSRC} ${.CURDIR}/Makefile
 	mkdir ${.OBJDIR}/.native 2>/dev/null || true
@@ -75,8 +65,7 @@ native-gdb: .native/.configure_done
 			CC=${CC:Q}' '${CCADDFLAGS:Q} \
 			CXX=${CXX:Q}' '${CCADDFLAGS:Q} \
 			CPP=${CPP:Q}' '-isystem' '${DESTDIR}/usr/include \
-			CFLAGS= CPPFLAGS= CXXFLAGS=${CXXADDFLAGS:Q} \
-			LDFLAGS=${LDADDFLAGS:Q} \
+			CFLAGS= CPPFLAGS= CXXFLAGS= LDFLAGS=${LDADDFLAGS:Q} \
 			MSGFMT=${TOOLDIR}/bin/${_TOOL_PREFIX}msgfmt \
 			XGETTEXT=${TOOLDIR}/bin/${_TOOL_PREFIX}xgettext \
 			LIBS=-lintl \

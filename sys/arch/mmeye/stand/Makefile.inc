@@ -1,4 +1,3 @@
-#	$NetBSD: Makefile.inc,v 1.2 2016/08/28 14:16:15 christos Exp $
+#	$NetBSD: Makefile.inc,v 1.1 1999/09/13 10:31:05 itojun Exp $
 
-NOPIE=	# defined
 BINDIR= /usr/mdec

@@ -7,7 +7,7 @@
  *****************************************************************************/
 
 /*
- * Copyright (C) 2000 - 2017, Intel Corp.
+ * Copyright (C) 2000 - 2013, Intel Corp.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -57,8 +57,7 @@ typedef enum
     OSL_GLOBAL_LOCK_HANDLER,
     OSL_NOTIFY_HANDLER,
     OSL_GPE_HANDLER,
-    OSL_DEBUGGER_MAIN_THREAD,
-    OSL_DEBUGGER_EXEC_THREAD,
+    OSL_DEBUGGER_THREAD,
     OSL_EC_POLL_HANDLER,
     OSL_EC_BURST_HANDLER
 
@@ -456,14 +455,6 @@ AcpiOsSignal (
     void                    *Info);
 #endif
 
-#ifndef ACPI_USE_ALTERNATE_PROTOTYPE_AcpiOsEnterSleep
-ACPI_STATUS
-AcpiOsEnterSleep (
-    UINT8                   SleepState,
-    UINT32                  RegaValue,
-    UINT32                  RegbValue);
-#endif
-
 
 /*
  * Debug print routines
@@ -490,7 +481,7 @@ AcpiOsRedirectOutput (
 
 
 /*
- * Debug IO
+ * Debug input
  */
 #ifndef ACPI_USE_ALTERNATE_PROTOTYPE_AcpiOsGetLine
 ACPI_STATUS
@@ -498,39 +489,6 @@ AcpiOsGetLine (
     char                    *Buffer,
     UINT32                  BufferLength,
     UINT32                  *BytesRead);
-#endif
-
-#ifndef ACPI_USE_ALTERNATE_PROTOTYPE_AcpiOsInitializeDebugger
-ACPI_STATUS
-AcpiOsInitializeDebugger (
-    void);
-#endif
-
-#ifndef ACPI_USE_ALTERNATE_PROTOTYPE_AcpiOsTerminateDebugger
-void
-AcpiOsTerminateDebugger (
-    void);
-#endif
-
-#ifndef ACPI_USE_ALTERNATE_PROTOTYPE_AcpiOsWaitCommandReady
-ACPI_STATUS
-AcpiOsWaitCommandReady (
-    void);
-#endif
-
-#ifndef ACPI_USE_ALTERNATE_PROTOTYPE_AcpiOsNotifyCommandComplete
-ACPI_STATUS
-AcpiOsNotifyCommandComplete (
-    void);
-#endif
-
-#ifndef ACPI_USE_ALTERNATE_PROTOTYPE_AcpiOsTracePoint
-void
-AcpiOsTracePoint (
-    ACPI_TRACE_EVENT_TYPE   Type,
-    BOOLEAN                 Begin,
-    UINT8                   *Aml,
-    char                    *Pathname);
 #endif
 
 

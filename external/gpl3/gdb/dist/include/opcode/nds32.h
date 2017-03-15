@@ -1,5 +1,5 @@
 /* nds32.h -- Header file for nds32 opcode table
-   Copyright (C) 2012-2016 Free Software Foundation, Inc.
+   Copyright (C) 2012-2013 Free Software Foundation, Inc.
    Contributed by Andes Technology Corporation.
 
    This program is free software; you can redistribute it and/or modify
@@ -29,20 +29,19 @@
 #define REG_R16		16
 #define REG_R20		20
 #define REG_TA		15
-#define REG_TP          27
 #define REG_FP		28
 #define REG_GP		29
 #define REG_LP		30
 #define REG_SP		31
 
 /* Macros for extracting fields or making an instruction.  */
-static const int nds32_r45map[] ATTRIBUTE_UNUSED =
+static const int nds32_r45map[] =
 {
   0, 1, 2,  3,  4,  5,  6,  7,
   8, 9, 10, 11, 16, 17, 18, 19
 };
 
-static const int nds32_r54map[] ATTRIBUTE_UNUSED =
+static const int nds32_r54map[] =
 {
    0,  1,  2,  3,  4,  5,  6,  7,
    8,  9, 10, 11, -1, -1, -1, -1,
@@ -359,13 +358,12 @@ enum n32_opcodes
   N32_ALU2_SUB_SC,
   N32_ALU2_ADD_WC,
   N32_ALU2_SUB_WC,
-  N32_ALU2_KMxy,
+  N32_ALU2_0x14,
   N32_ALU2_0x15,
   N32_ALU2_0x16,
   N32_ALU2_FFZMISM,
-  N32_ALU2_KADD = 0x18,
-  N32_ALU2_KSUB,
-  N32_ALU2_KSLRA,
+  N32_ALU2_QADD = 0x18,
+  N32_ALU2_QSUB,
   N32_ALU2_MFUSR = 0x20,
   N32_ALU2_MTUSR,
   N32_ALU2_0x22,
@@ -461,7 +459,7 @@ enum n32_opcodes
   N32_MISC_TLBOP,
   N32_MISC_0xf,
 
-  /* bit[0:4] */
+  /* bit[0;4] */
   N32_SIMD_PBSAD = 0,
   N32_SIMD_PBSADA = 1,
 

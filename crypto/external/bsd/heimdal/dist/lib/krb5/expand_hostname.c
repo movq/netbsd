@@ -1,4 +1,4 @@
-/*	$NetBSD: expand_hostname.c,v 1.2 2017/01/28 21:31:49 christos Exp $	*/
+/*	$NetBSD: expand_hostname.c,v 1.1.1.1 2011/04/13 18:15:33 elric Exp $	*/
 
 /*
  * Copyright (c) 1999 - 2001 Kungliga Tekniska Högskolan
@@ -41,8 +41,11 @@ copy_hostname(krb5_context context,
 	      char **new_hostname)
 {
     *new_hostname = strdup (orig_hostname);
-    if (*new_hostname == NULL)
-	return krb5_enomem(context);
+    if (*new_hostname == NULL) {
+	krb5_set_error_message(context, ENOMEM,
+			       N_("malloc: out of memory", ""));
+	return ENOMEM;
+    }
     strlwr (*new_hostname);
     return 0;
 }
@@ -83,10 +86,13 @@ krb5_expand_hostname (krb5_context context,
 	if (a->ai_canonname != NULL) {
 	    *new_hostname = strdup (a->ai_canonname);
 	    freeaddrinfo (ai);
-	    if (*new_hostname == NULL)
-		return krb5_enomem(context);
-	    else
+	    if (*new_hostname == NULL) {
+		krb5_set_error_message(context, ENOMEM,
+				       N_("malloc: out of memory", ""));
+		return ENOMEM;
+	    } else {
 		return 0;
+	    }
 	}
     }
     freeaddrinfo (ai);

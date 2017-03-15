@@ -62,9 +62,6 @@ class PPCFunctionInfo : public MachineFunctionInfo {
   /// entry, even though LR may otherwise apparently not be used.
   bool LRStoreRequired;
 
-  /// This function makes use of the PPC64 ELF TOC base pointer (register r2).
-  bool UsesTOCBasePtr;
-
   /// MinReservedArea - This is the frame size that is at least reserved in a
   /// potential caller (parameter+linkage area).
   unsigned MinReservedArea;
@@ -104,10 +101,6 @@ class PPCFunctionInfo : public MachineFunctionInfo {
   /// Whether this uses the PIC Base register or not.
   bool UsesPICBase;
 
-  /// True if this function has a subset of CSRs that is handled explicitly via
-  /// copies
-  bool IsSplitCSR;
-
 public:
   explicit PPCFunctionInfo(MachineFunction &MF) 
     : FramePointerSaveIndex(0),
@@ -119,7 +112,6 @@ public:
       SpillsCR(false),
       SpillsVRSAVE(false),
       LRStoreRequired(false),
-      UsesTOCBasePtr(false),
       MinReservedArea(0),
       TailCallSPDelta(0),
       HasFastCall(false),
@@ -129,8 +121,7 @@ public:
       VarArgsNumFPR(0),
       CRSpillFrameIndex(0),
       MF(MF),
-      UsesPICBase(0),
-      IsSplitCSR(false) {}
+      UsesPICBase(0) {}
 
   int getFramePointerSaveIndex() const { return FramePointerSaveIndex; }
   void setFramePointerSaveIndex(int Idx) { FramePointerSaveIndex = Idx; }
@@ -173,9 +164,6 @@ public:
   void setLRStoreRequired() { LRStoreRequired = true; }
   bool isLRStoreRequired() const { return LRStoreRequired; }
 
-  void setUsesTOCBasePtr()    { UsesTOCBasePtr = true; }
-  bool usesTOCBasePtr() const { return UsesTOCBasePtr; }
-
   void setHasFastCall() { HasFastCall = true; }
   bool hasFastCall() const { return HasFastCall;}
 
@@ -201,14 +189,7 @@ public:
   void setUsesPICBase(bool uses) { UsesPICBase = uses; }
   bool usesPICBase() const { return UsesPICBase; }
 
-  bool isSplitCSR() const { return IsSplitCSR; }
-  void setIsSplitCSR(bool s) { IsSplitCSR = s; }
-
   MCSymbol *getPICOffsetSymbol() const;
-
-  MCSymbol *getGlobalEPSymbol() const;
-  MCSymbol *getLocalEPSymbol() const;
-  MCSymbol *getTOCOffsetSymbol() const;
 };
 
 } // end of namespace llvm

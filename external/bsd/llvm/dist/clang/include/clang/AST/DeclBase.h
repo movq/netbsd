@@ -17,9 +17,7 @@
 #include "clang/AST/AttrIterator.h"
 #include "clang/AST/DeclarationName.h"
 #include "clang/Basic/Specifiers.h"
-#include "clang/Basic/VersionTuple.h"
 #include "llvm/ADT/PointerUnion.h"
-#include "llvm/ADT/iterator.h"
 #include "llvm/ADT/iterator_range.h"
 #include "llvm/Support/Compiler.h"
 #include "llvm/Support/PrettyStackTrace.h"
@@ -33,7 +31,6 @@ class DeclContext;
 class DeclarationName;
 class DependentDiagnostic;
 class EnumDecl;
-class ExportDecl;
 class FunctionDecl;
 class FunctionType;
 enum Linkage : unsigned char;
@@ -54,7 +51,6 @@ struct PrintingPolicy;
 class RecordDecl;
 class Stmt;
 class StoredDeclsMap;
-class TemplateDecl;
 class TranslationUnitDecl;
 class UsingDirectiveDecl;
 }
@@ -73,11 +69,7 @@ namespace clang {
 /// Decl - This represents one declaration (or definition), e.g. a variable,
 /// typedef, function, struct, etc.
 ///
-/// Note: There are objects tacked on before the *beginning* of Decl
-/// (and its subclasses) in its Decl::operator new(). Proper alignment
-/// of all subclasses (not requiring more than the alignment of Decl) is
-/// asserted in DeclBase.cpp.
-class LLVM_ALIGNAS(/*alignof(uint64_t)*/ 8) Decl {
+class Decl {
 public:
   /// \brief Lists the kind of concrete classes of Decl.
   enum Kind {
@@ -113,9 +105,6 @@ public:
     /// Tags, declared with 'struct foo;' and referenced with
     /// 'struct foo'.  All tags are also types.  This is what
     /// elaborated-type-specifiers look for in C.
-    /// This also contains names that conflict with tags in the
-    /// same scope but that are otherwise ordinary names (non-type
-    /// template parameters and indirect field declarations).
     IDNS_Tag                 = 0x0002,
 
     /// Types, declared with 'struct foo', typedefs, etc.
@@ -134,7 +123,7 @@ public:
     IDNS_Namespace           = 0x0010,
 
     /// Ordinary names.  In C, everything that's not a label, tag,
-    /// member, or function-local extern ends up here.
+    /// or member ends up here.
     IDNS_Ordinary            = 0x0020,
 
     /// Objective C \@protocol.
@@ -163,13 +152,8 @@ public:
 
     /// This declaration is a function-local extern declaration of a
     /// variable or function. This may also be IDNS_Ordinary if it
-    /// has been declared outside any function. These act mostly like
-    /// invisible friend declarations, but are also visible to unqualified
-    /// lookup within the scope of the declaring function.
-    IDNS_LocalExtern         = 0x0800,
-
-    /// This declaration is an OpenMP user defined reduction construction.
-    IDNS_OMPReduction        = 0x1000
+    /// has been declared outside any function.
+    IDNS_LocalExtern         = 0x0800
   };
 
   /// ObjCDeclQualifier - 'Qualifiers' written next to the return and
@@ -193,12 +177,7 @@ public:
     OBJC_TQ_Out = 0x4,
     OBJC_TQ_Bycopy = 0x8,
     OBJC_TQ_Byref = 0x10,
-    OBJC_TQ_Oneway = 0x20,
-
-    /// The nullability qualifier is set when the nullability of the
-    /// result or parameter was expressed via a context-sensitive
-    /// keyword.
-    OBJC_TQ_CSNullability = 0x40
+    OBJC_TQ_Oneway = 0x20
   };
 
 protected:
@@ -259,7 +238,7 @@ private:
   SourceLocation Loc;
 
   /// DeclKind - This indicates which class this is.
-  unsigned DeclKind : 7;
+  unsigned DeclKind : 8;
 
   /// InvalidDecl - This indicates a semantic error occurred.
   unsigned InvalidDecl :  1;
@@ -299,7 +278,7 @@ protected:
   unsigned Hidden : 1;
   
   /// IdentifierNamespace - This specifies what IDNS_* namespace this lives in.
-  unsigned IdentifierNamespace : 13;
+  unsigned IdentifierNamespace : 12;
 
   /// \brief If 0, we have not computed the linkage of this declaration.
   /// Otherwise, it is the linkage + 1.
@@ -337,7 +316,7 @@ protected:
     : NextInContextAndBits(), DeclCtx(DC),
       Loc(L), DeclKind(DK), InvalidDecl(0),
       HasAttrs(false), Implicit(false), Used(false), Referenced(false),
-      Access(AS_none), FromASTFile(0), Hidden(DC && cast<Decl>(DC)->Hidden),
+      Access(AS_none), FromASTFile(0), Hidden(0),
       IdentifierNamespace(getIdentifierNamespaceForKind(DK)),
       CacheValidAndLinkage(0)
   {
@@ -483,7 +462,8 @@ public:
 
   template <typename T>
   llvm::iterator_range<specific_attr_iterator<T>> specific_attrs() const {
-    return llvm::make_range(specific_attr_begin<T>(), specific_attr_end<T>());
+    return llvm::iterator_range<specific_attr_iterator<T>>(
+        specific_attr_begin<T>(), specific_attr_end<T>());
   }
 
   template <typename T>
@@ -517,8 +497,8 @@ public:
   bool isImplicit() const { return Implicit; }
   void setImplicit(bool I = true) { Implicit = I; }
 
-  /// \brief Whether *any* (re-)declaration of the entity was used, meaning that
-  /// a definition is required.
+  /// \brief Whether this declaration was used, meaning that a definition
+  /// is required.
   ///
   /// \param CheckUsedAttr When true, also consider the "used" attribute
   /// (in addition to the "used" bit set by \c setUsed()) when determining
@@ -528,8 +508,7 @@ public:
   /// \brief Set whether the declaration is used, in the sense of odr-use.
   ///
   /// This should only be used immediately after creating a declaration.
-  /// It intentionally doesn't notify any listeners.
-  void setIsUsed() { getCanonicalDecl()->Used = true; }
+  void setIsUsed() { Used = true; }
 
   /// \brief Mark the declaration used, in the sense of odr-use.
   ///
@@ -568,17 +547,6 @@ public:
     return NextInContextAndBits.getInt() & ModulePrivateFlag;
   }
 
-  /// \brief Whether this declaration is exported (by virtue of being lexically
-  /// within an ExportDecl or by being a NamespaceDecl).
-  bool isExported() const;
-
-  /// Return true if this declaration has an attribute which acts as
-  /// definition of the entity, such as 'alias' or 'ifunc'.
-  bool hasDefiningAttr() const;
-
-  /// Return this declaration's defining attribute if it has one.
-  const Attr *getDefiningAttr() const;
-
 protected:
   /// \brief Specify whether this declaration was marked as being private
   /// to the module in which it was defined.
@@ -609,12 +577,7 @@ public:
   /// AR_Available, will be set to a (possibly empty) message
   /// describing why the declaration has not been introduced, is
   /// deprecated, or is unavailable.
-  ///
-  /// \param EnclosingVersion The version to compare with. If empty, assume the
-  /// deployment target version.
-  AvailabilityResult
-  getAvailability(std::string *Message = nullptr,
-                  VersionTuple EnclosingVersion = VersionTuple()) const;
+  AvailabilityResult getAvailability(std::string *Message = nullptr) const;
 
   /// \brief Determine whether this declaration is marked 'deprecated'.
   ///
@@ -673,30 +636,13 @@ public:
 
 private:
   Module *getOwningModuleSlow() const;
-protected:
-  bool hasLocalOwningModuleStorage() const;
 
 public:
-  /// \brief Get the imported owning module, if this decl is from an imported
-  /// (non-local) module.
-  Module *getImportedOwningModule() const {
+  Module *getOwningModule() const {
     if (!isFromASTFile())
       return nullptr;
 
     return getOwningModuleSlow();
-  }
-
-  /// \brief Get the local owning module, if known. Returns nullptr if owner is
-  /// not yet known or declaration is not from a module.
-  Module *getLocalOwningModule() const {
-    if (isFromASTFile() || !Hidden)
-      return nullptr;
-    return reinterpret_cast<Module *const *>(this)[-1];
-  }
-  void setLocalOwningModule(Module *M) {
-    assert(!isFromASTFile() && Hidden && hasLocalOwningModuleStorage() &&
-           "should not have a cached owning module");
-    reinterpret_cast<Module **>(this)[-1] = M;
   }
 
   unsigned getIdentifierNamespace() const {
@@ -751,15 +697,6 @@ public:
   bool isDefinedOutsideFunctionOrMethod() const {
     return getParentFunctionOrMethod() == nullptr;
   }
-
-  /// \brief Returns true if this declaration lexically is inside a function.
-  /// It recognizes non-defining declarations as well as members of local
-  /// classes:
-  /// \code
-  ///     void foo() { void bar(); }
-  ///     void foo2() { class ABC { void bar(); }; }
-  /// \endcode
-  bool isLexicallyWithinFunctionOrMethod() const;
 
   /// \brief If this decl is defined inside a function/method/block it returns
   /// the corresponding DeclContext, otherwise it returns null.
@@ -915,10 +852,6 @@ public:
            DeclKind == FunctionTemplate;
   }
 
-  /// \brief If this is a declaration that describes some template, this
-  /// method returns that template declaration.
-  TemplateDecl *getDescribedTemplate() const;
-
   /// \brief Returns the function itself, or the templated function if this is a
   /// function template.
   FunctionDecl *getAsFunction() LLVM_READONLY;
@@ -1072,62 +1005,9 @@ public:
   void print(raw_ostream &OS) const override;
 };
 
-/// \brief The results of name lookup within a DeclContext. This is either a
-/// single result (with no stable storage) or a collection of results (with
-/// stable storage provided by the lookup table).
-class DeclContextLookupResult {
-  typedef ArrayRef<NamedDecl *> ResultTy;
-  ResultTy Result;
-  // If there is only one lookup result, it would be invalidated by
-  // reallocations of the name table, so store it separately.
-  NamedDecl *Single;
+typedef MutableArrayRef<NamedDecl *> DeclContextLookupResult;
 
-  static NamedDecl *const SingleElementDummyList;
-
-public:
-  DeclContextLookupResult() : Result(), Single() {}
-  DeclContextLookupResult(ArrayRef<NamedDecl *> Result)
-      : Result(Result), Single() {}
-  DeclContextLookupResult(NamedDecl *Single)
-      : Result(SingleElementDummyList), Single(Single) {}
-
-  class iterator;
-  typedef llvm::iterator_adaptor_base<iterator, ResultTy::iterator,
-                                      std::random_access_iterator_tag,
-                                      NamedDecl *const> IteratorBase;
-  class iterator : public IteratorBase {
-    value_type SingleElement;
-
-  public:
-    iterator() : IteratorBase(), SingleElement() {}
-    explicit iterator(pointer Pos, value_type Single = nullptr)
-        : IteratorBase(Pos), SingleElement(Single) {}
-
-    reference operator*() const {
-      return SingleElement ? SingleElement : IteratorBase::operator*();
-    }
-  };
-  typedef iterator const_iterator;
-  typedef iterator::pointer pointer;
-  typedef iterator::reference reference;
-
-  iterator begin() const { return iterator(Result.begin(), Single); }
-  iterator end() const { return iterator(Result.end(), Single); }
-
-  bool empty() const { return Result.empty(); }
-  pointer data() const { return Single ? &Single : Result.data(); }
-  size_t size() const { return Single ? 1 : Result.size(); }
-  reference front() const { return Single ? Single : Result.front(); }
-  reference back() const { return Single ? Single : Result.back(); }
-  reference operator[](size_t N) const { return Single ? Single : Result[N]; }
-
-  // FIXME: Remove this from the interface
-  DeclContextLookupResult slice(size_t N) const {
-    DeclContextLookupResult Sliced = Result.slice(N);
-    Sliced.Single = Single;
-    return Sliced;
-  }
-};
+typedef ArrayRef<NamedDecl *> DeclContextLookupConstResult;
 
 /// DeclContext - This is used only as base class of specific decl types that
 /// can act as declaration contexts. These decls are (only the top classes
@@ -1140,9 +1020,7 @@ public:
 ///   ObjCMethodDecl
 ///   ObjCContainerDecl
 ///   LinkageSpecDecl
-///   ExportDecl
 ///   BlockDecl
-///   OMPDeclareReductionDecl
 ///
 class DeclContext {
   /// DeclKind - This indicates which class this is.
@@ -1164,26 +1042,14 @@ class DeclContext {
   /// another lookup.
   mutable bool NeedToReconcileExternalVisibleStorage : 1;
 
-  /// \brief If \c true, this context may have local lexical declarations
-  /// that are missing from the lookup table.
-  mutable bool HasLazyLocalLexicalLookups : 1;
-
-  /// \brief If \c true, the external source may have lexical declarations
-  /// that are missing from the lookup table.
-  mutable bool HasLazyExternalLexicalLookups : 1;
-
-  /// \brief If \c true, lookups should only return identifier from
-  /// DeclContext scope (for example TranslationUnit). Used in
-  /// LookupQualifiedName()
-  mutable bool UseQualifiedLookup : 1;
-
   /// \brief Pointer to the data structure used to lookup declarations
   /// within this context (or a DependentStoredDeclsMap if this is a
-  /// dependent context). We maintain the invariant that, if the map
-  /// contains an entry for a DeclarationName (and we haven't lazily
-  /// omitted anything), then it contains all relevant entries for that
-  /// name (modulo the hasExternalDecls() flag).
-  mutable StoredDeclsMap *LookupPtr;
+  /// dependent context), and a bool indicating whether we have lazily
+  /// omitted any declarations from the map. We maintain the invariant
+  /// that, if the map contains an entry for a DeclarationName (and we
+  /// haven't lazily omitted anything), then it contains all relevant
+  /// entries for that name.
+  mutable llvm::PointerIntPair<StoredDeclsMap*, 1, bool> LookupPtr;
 
 protected:
   /// FirstDecl - The first declaration stored within this declaration
@@ -1209,10 +1075,8 @@ protected:
   DeclContext(Decl::Kind K)
       : DeclKind(K), ExternalLexicalStorage(false),
         ExternalVisibleStorage(false),
-        NeedToReconcileExternalVisibleStorage(false),
-        HasLazyLocalLexicalLookups(false), HasLazyExternalLexicalLookups(false),
-        UseQualifiedLookup(false),
-        LookupPtr(nullptr), FirstDecl(nullptr), LastDecl(nullptr) {}
+        NeedToReconcileExternalVisibleStorage(false), LookupPtr(nullptr, false),
+        FirstDecl(nullptr), LastDecl(nullptr) {}
 
 public:
   ~DeclContext();
@@ -1283,12 +1147,6 @@ public:
     }
   }
 
-  /// \brief Test whether the context supports looking up names.
-  bool isLookupContext() const {
-    return !isFunctionOrMethod() && DeclKind != Decl::LinkageSpec &&
-           DeclKind != Decl::Export;
-  }
-
   bool isFileContext() const {
     return DeclKind == Decl::TranslationUnit || DeclKind == Decl::Namespace;
   }
@@ -1333,9 +1191,6 @@ public:
   /// \brief Determines whether this context or some of its ancestors is a
   /// linkage specification context that specifies C linkage.
   bool isExternCContext() const;
-
-  /// \brief Retrieve the nearest enclosing C linkage specification context.
-  const LinkageSpecDecl *getExternCContext() const;
 
   /// \brief Determines whether this context or some of its ancestors is a
   /// linkage specification context that specifies C++ linkage.
@@ -1665,15 +1520,26 @@ public:
   /// @brief Checks whether a declaration is in this context.
   bool containsDecl(Decl *D) const;
 
+  /// lookup_iterator - An iterator that provides access to the results
+  /// of looking up a name within this context.
+  typedef NamedDecl **lookup_iterator;
+
+  /// lookup_const_iterator - An iterator that provides non-mutable
+  /// access to the results of lookup up a name within this context.
+  typedef NamedDecl * const * lookup_const_iterator;
+
   typedef DeclContextLookupResult lookup_result;
-  typedef lookup_result::iterator lookup_iterator;
+  typedef DeclContextLookupConstResult lookup_const_result;
 
   /// lookup - Find the declarations (if any) with the given Name in
   /// this context. Returns a range of iterators that contains all of
   /// the declarations with this name, with object, function, member,
   /// and enumerator names preceding any tag name. Note that this
   /// routine will not look into parent contexts.
-  lookup_result lookup(DeclarationName Name) const;
+  lookup_result lookup(DeclarationName Name);
+  lookup_const_result lookup(DeclarationName Name) const {
+    return const_cast<DeclContext*>(this)->lookup(Name);
+  }
 
   /// \brief Find the declarations with the given name that are visible
   /// within this context; don't attempt to retrieve anything from an
@@ -1727,16 +1593,7 @@ public:
   all_lookups_iterator noload_lookups_begin() const;
   all_lookups_iterator noload_lookups_end() const;
 
-  struct udir_iterator;
-  typedef llvm::iterator_adaptor_base<udir_iterator, lookup_iterator,
-                                      std::random_access_iterator_tag,
-                                      UsingDirectiveDecl *> udir_iterator_base;
-  struct udir_iterator : udir_iterator_base {
-    udir_iterator(lookup_iterator I) : udir_iterator_base(I) {}
-    UsingDirectiveDecl *operator*() const;
-  };
-
-  typedef llvm::iterator_range<udir_iterator> udir_range;
+  typedef llvm::iterator_range<UsingDirectiveDecl * const *> udir_range;
 
   udir_range using_directives() const;
 
@@ -1747,22 +1604,17 @@ public:
   inline ddiag_range ddiags() const;
 
   // Low-level accessors
-
-  /// \brief Mark that there are external lexical declarations that we need
-  /// to include in our lookup table (and that are not available as external
-  /// visible lookups). These extra lookup results will be found by walking
-  /// the lexical declarations of this context. This should be used only if
-  /// setHasExternalLexicalStorage() has been called on any decl context for
-  /// which this is the primary context.
+    
+  /// \brief Mark the lookup table as needing to be built.  This should be
+  /// used only if setHasExternalLexicalStorage() has been called on any
+  /// decl context for which this is the primary context.
   void setMustBuildLookupTable() {
-    assert(this == getPrimaryContext() &&
-           "should only be called on primary context");
-    HasLazyExternalLexicalLookups = true;
+    LookupPtr.setInt(true);
   }
 
   /// \brief Retrieve the internal representation of the lookup structure.
   /// This may omit some names if we are lazily building the structure.
-  StoredDeclsMap *getLookupPtr() const { return LookupPtr; }
+  StoredDeclsMap *getLookupPtr() const { return LookupPtr.getPointer(); }
 
   /// \brief Ensure the lookup structure is fully-built and return it.
   StoredDeclsMap *buildLookup();
@@ -1785,7 +1637,7 @@ public:
   /// declarations visible in this context.
   void setHasExternalVisibleStorage(bool ES = true) {
     ExternalVisibleStorage = ES;
-    if (ES && LookupPtr)
+    if (ES && LookupPtr.getPointer())
       NeedToReconcileExternalVisibleStorage = true;
   }
 
@@ -1794,16 +1646,6 @@ public:
   bool isDeclInLexicalTraversal(const Decl *D) const {
     return D && (D->NextInContextAndBits.getPointer() || D == FirstDecl || 
                  D == LastDecl);
-  }
-
-  bool setUseQualifiedLookup(bool use = true) {
-    bool old_value = UseQualifiedLookup;
-    UseQualifiedLookup = use;
-    return old_value;
-  }
-
-  bool shouldUseQualifiedLookup() const {
-    return UseQualifiedLookup;
   }
 
   static bool classof(const Decl *D);
@@ -1815,7 +1657,7 @@ public:
 
 private:
   void reconcileExternalVisibleStorage() const;
-  bool LoadLexicalDeclsFromExternalStorage() const;
+  void LoadLexicalDeclsFromExternalStorage() const;
 
   /// @brief Makes a declaration visible within this context, but
   /// suppresses searches for external declarations with the same
@@ -1828,7 +1670,9 @@ private:
   friend class DependentDiagnostic;
   StoredDeclsMap *CreateStoredDeclsMap(ASTContext &C) const;
 
-  void buildLookupImpl(DeclContext *DCtx, bool Internal);
+  template<decl_iterator (DeclContext::*Begin)() const,
+           decl_iterator (DeclContext::*End)() const>
+  void buildLookupImpl(DeclContext *DCtx);
   void makeDeclVisibleInContextWithFlags(NamedDecl *D, bool Internal,
                                          bool Rediscoverable);
   void makeDeclVisibleInContextImpl(NamedDecl *D, bool Internal);

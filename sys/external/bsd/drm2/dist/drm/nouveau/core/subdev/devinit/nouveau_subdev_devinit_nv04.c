@@ -1,4 +1,4 @@
-/*	$NetBSD: nouveau_subdev_devinit_nv04.c,v 1.3 2016/04/22 19:52:56 riastradh Exp $	*/
+/*	$NetBSD: nouveau_subdev_devinit_nv04.c,v 1.1.1.1.4.2 2016/12/12 09:13:42 msaitoh Exp $	*/
 
 /*
  * Copyright (C) 2010 Francisco Jerez.
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: nouveau_subdev_devinit_nv04.c,v 1.3 2016/04/22 19:52:56 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: nouveau_subdev_devinit_nv04.c,v 1.1.1.1.4.2 2016/12/12 09:13:42 msaitoh Exp $");
 
 #include <subdev/vga.h>
 

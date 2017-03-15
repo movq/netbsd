@@ -1,4 +1,4 @@
-; RUN: llc -verify-machineinstrs -mcpu=pwr7 < %s | FileCheck %s
+; RUN: llc -mcpu=pwr7 < %s | FileCheck %s
 target datalayout = "E-m:e-i64:64-n32:64"
 target triple = "powerpc64-unknown-linux-gnu"
 
@@ -10,11 +10,12 @@ entry:
 }
 
 ; CHECK-LABEL: @test1
-; CHECK: mflr {{[0-9]+}}
+; CHECK: mflr 0
 ; CHECK: std 0, 16(1)
-; CHECK-DAG: ld 3, 64(1)
-; CHECK-DAG: ld [[SR:[0-9]+]], 16(1)
-; CHECK: mtlr [[SR]]
+; FIXME: These next two lines don't both need to load the same value.
+; CHECK-DAG: ld 3, 16(1)
+; CHECK-DAG: ld 0, 16(1)
+; CHECK: mtlr 0
 ; CHECK: blr
 
 ; Function Attrs: nounwind readnone

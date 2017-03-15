@@ -1,10 +1,8 @@
-#	$NetBSD: libglsl.mk,v 1.2 2016/02/26 21:20:17 riastradh Exp $
+#	$NetBSD: libglsl.mk,v 1.1.2.2 2015/01/05 21:23:50 martin Exp $
 
 LIBGLSL_GENERATED_CXX_FILES = \
 	glsl_lexer.cpp \
 	glsl_parser.cpp 
-
-COPTS.glsl_lexer.cpp+=	-Wno-deprecated-register
 
 LIBGLSL_FILES = \
 	ast_array_index.cpp \

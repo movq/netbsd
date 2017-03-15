@@ -1,5 +1,5 @@
 /* Default language-specific hooks.
-   Copyright (C) 2001-2015 Free Software Foundation, Inc.
+   Copyright (C) 2001-2013 Free Software Foundation, Inc.
    Contributed by Alexandre Oliva  <aoliva@redhat.com>
 
 This file is part of GCC.
@@ -24,35 +24,18 @@ along with GCC; see the file COPYING3.  If not see
 #include "intl.h"
 #include "tm.h"
 #include "toplev.h"
-#include "hash-set.h"
-#include "machmode.h"
-#include "vec.h"
-#include "double-int.h"
-#include "input.h"
-#include "alias.h"
-#include "symtab.h"
-#include "wide-int.h"
-#include "inchash.h"
 #include "tree.h"
-#include "stringpool.h"
-#include "attribs.h"
 #include "tree-inline.h"
-#include "gimplify.h"
+#include "gimple.h"
 #include "rtl.h"
 #include "insn-config.h"
 #include "flags.h"
 #include "langhooks.h"
 #include "target.h"
 #include "langhooks-def.h"
+#include "ggc.h"
 #include "diagnostic.h"
 #include "tree-diagnostic.h"
-#include "hash-map.h"
-#include "is-a.h"
-#include "plugin-api.h"
-#include "hard-reg-set.h"
-#include "input.h"
-#include "function.h"
-#include "ipa-ref.h"
 #include "cgraph.h"
 #include "timevar.h"
 #include "output.h"
@@ -162,11 +145,6 @@ void
 lhd_set_decl_assembler_name (tree decl)
 {
   tree id;
-
-  /* set_decl_assembler_name may be called on TYPE_DECL to record ODR
-     name for C++ types.  By default types have no ODR names.  */
-  if (TREE_CODE (decl) == TYPE_DECL)
-    return;
 
   /* The language-independent code should never use the
      DECL_ASSEMBLER_NAME for lots of DECLs.  Only FUNCTION_DECLs and
@@ -341,7 +319,7 @@ write_global_declarations (void)
   timevar_start (TV_PHASE_OPT_GEN);
   /* This lang hook is dual-purposed, and also finalizes the
      compilation unit.  */
-  symtab->finalize_compilation_unit ();
+  finalize_compilation_unit ();
   timevar_stop (TV_PHASE_OPT_GEN);
 
   timevar_start (TV_PHASE_DBGINFO);
@@ -394,7 +372,7 @@ lhd_print_error_function (diagnostic_context *context, const char *file,
       const char *old_prefix = context->printer->prefix;
       tree abstract_origin = diagnostic_abstract_origin (diagnostic);
       char *new_prefix = (file && abstract_origin == NULL)
-			 ? file_name_as_prefix (context, file) : NULL;
+			 ? file_name_as_prefix (file) : NULL;
 
       pp_set_prefix (context->printer, new_prefix);
 
@@ -468,20 +446,20 @@ lhd_print_error_function (diagnostic_context *context, const char *file,
 	      if (fndecl)
 		{
 		  expanded_location s = expand_location (*locus);
-		  pp_comma (context->printer);
+		  pp_character (context->printer, ',');
 		  pp_newline (context->printer);
 		  if (s.file != NULL)
 		    {
 		      if (context->show_column)
 			pp_printf (context->printer,
-				   _("    inlined from %qs at %r%s:%d:%d%R"),
+				   _("    inlined from %qs at %s:%d:%d"),
 				   identifier_to_locale (lang_hooks.decl_printable_name (fndecl, 2)),
-				   "locus", s.file, s.line, s.column);
+				   s.file, s.line, s.column);
 		      else
 			pp_printf (context->printer,
-				   _("    inlined from %qs at %r%s:%d%R"),
+				   _("    inlined from %qs at %s:%d"),
 				   identifier_to_locale (lang_hooks.decl_printable_name (fndecl, 2)),
-				   "locus", s.file, s.line);
+				   s.file, s.line);
 
 		    }
 		  else
@@ -489,7 +467,7 @@ lhd_print_error_function (diagnostic_context *context, const char *file,
 			       identifier_to_locale (lang_hooks.decl_printable_name (fndecl, 2)));
 		}
 	    }
-	  pp_colon (context->printer);
+	  pp_character (context->printer, ':');
 	}
 
       diagnostic_set_last_function (context, diagnostic);
@@ -536,13 +514,6 @@ lhd_omp_assignment (tree clause ATTRIBUTE_UNUSED, tree dst, tree src)
   return build2 (MODIFY_EXPR, TREE_TYPE (dst), dst, src);
 }
 
-/* Finalize clause C.  */
-
-void
-lhd_omp_finish_clause (tree, gimple_seq *)
-{
-}
-
 /* Register language specific type size variables as potentially OpenMP
    firstprivate variables.  */
 
@@ -550,17 +521,6 @@ void
 lhd_omp_firstprivatize_type_sizes (struct gimplify_omp_ctx *c ATTRIBUTE_UNUSED,
 				   tree t ATTRIBUTE_UNUSED)
 {
-}
-
-/* Return true if TYPE is an OpenMP mappable type.  */
-
-bool
-lhd_omp_mappable_type (tree type)
-{
-  /* Mappable type has to be complete.  */
-  if (type == error_mark_node || !COMPLETE_TYPE_P (type))
-    return false;
-  return true;
 }
 
 /* Common function for add_builtin_function and
@@ -676,19 +636,20 @@ lhd_begin_section (const char *name)
     saved_section = text_section;
 
   /* Create a new section and switch to it.  */
-  section = get_section (name, SECTION_DEBUG | SECTION_EXCLUDE, NULL);
+  section = get_section (name, SECTION_DEBUG, NULL);
   switch_to_section (section);
 }
 
 
 /* Write DATA of length LEN to the current LTO output section.  This default
-   implementation just calls assemble_string.  */
+   implementation just calls assemble_string and frees BLOCK.  */
 
 void
-lhd_append_data (const void *data, size_t len, void *)
+lhd_append_data (const void *data, size_t len, void *block)
 {
   if (data)
     assemble_string ((const char *)data, len);
+  free (block);
 }
 
 
@@ -704,38 +665,4 @@ lhd_end_section (void)
       switch_to_section (saved_section);
       saved_section = NULL;
     }
-}
-
-/* Default implementation of enum_underlying_base_type using type_for_size.  */
-
-tree
-lhd_enum_underlying_base_type (const_tree enum_type)
-{
-  return lang_hooks.types.type_for_size (TYPE_PRECISION (enum_type),
-					 TYPE_UNSIGNED (enum_type));
-}
-
-/* Returns true if the current lang_hooks represents the GNU C frontend.  */
-
-bool
-lang_GNU_C (void)
-{
-  return (strncmp (lang_hooks.name, "GNU C", 5) == 0
-	  && (lang_hooks.name[5] == '\0' || ISDIGIT (lang_hooks.name[5])));
-}
-
-/* Returns true if the current lang_hooks represents the GNU C++ frontend.  */
-
-bool
-lang_GNU_CXX (void)
-{
-  return strncmp (lang_hooks.name, "GNU C++", 7) == 0;
-}
-
-/* Returns true if the current lang_hooks represents the GNU Fortran frontend.  */
-
-bool
-lang_GNU_Fortran (void)
-{
-  return strncmp (lang_hooks.name, "GNU Fortran", 11) == 0;
 }

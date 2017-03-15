@@ -34,7 +34,11 @@
 #include "utils/includes.h"
 #include <net/if.h>
 #include <sys/ioctl.h>
+#ifdef USE_KERNEL_HEADERS
+#include <linux/if_packet.h>
+#else /* USE_KERNEL_HEADERS */
 #include <netpacket/packet.h>
+#endif /* USE_KERNEL_HEADERS */
 
 #include "utils/common.h"
 #include "utils/eloop.h"
@@ -381,7 +385,6 @@ struct iapp_data * iapp_init(struct hostapd_data *hapd, const char *iface)
 	struct sockaddr_in *paddr, uaddr;
 	struct iapp_data *iapp;
 	struct ip_mreqn mreq;
-	int reuseaddr = 1;
 
 	iapp = os_zalloc(sizeof(*iapp));
 	if (iapp == NULL)
@@ -444,18 +447,6 @@ struct iapp_data * iapp_init(struct hostapd_data *hapd, const char *iface)
 	os_memset(&uaddr, 0, sizeof(uaddr));
 	uaddr.sin_family = AF_INET;
 	uaddr.sin_port = htons(IAPP_UDP_PORT);
-
-	if (setsockopt(iapp->udp_sock, SOL_SOCKET, SO_REUSEADDR, &reuseaddr,
-		       sizeof(reuseaddr)) < 0) {
-		wpa_printf(MSG_INFO,
-			   "iapp_init - setsockopt[UDP,SO_REUSEADDR]: %s",
-			   strerror(errno));
-		/*
-		 * Ignore this and try to continue. This is fine for single
-		 * BSS cases, but may fail if multiple BSSes enable IAPP.
-		 */
-	}
-
 	if (bind(iapp->udp_sock, (struct sockaddr *) &uaddr,
 		 sizeof(uaddr)) < 0) {
 		wpa_printf(MSG_INFO, "iapp_init - bind[UDP]: %s",

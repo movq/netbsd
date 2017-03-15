@@ -1,4 +1,4 @@
-/* $OpenBSD$ */
+/* Id */
 
 /*
  * Copyright (c) 2009 Joshua Elsasser <josh@elsasser.org>
@@ -28,10 +28,10 @@ char			*osdep_get_name(int, char *);
 char			*osdep_get_cwd(int);
 struct event_base	*osdep_event_init(void);
 
-#define __unused __attribute__ ((__unused__))
+#define unused __attribute__ ((unused))
 
 char *
-osdep_get_name(int fd, __unused char *tty)
+osdep_get_name(int fd, unused char *tty)
 {
 	struct proc_bsdinfo		bsdinfo;
 	pid_t				pgrp;

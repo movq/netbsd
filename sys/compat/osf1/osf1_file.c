@@ -1,4 +1,4 @@
-/* $NetBSD: osf1_file.c,v 1.43 2014/09/05 09:21:54 matt Exp $ */
+/* $NetBSD: osf1_file.c,v 1.41.28.1 2014/08/27 15:29:29 msaitoh Exp $ */
 
 /*
  * Copyright (c) 1999 Christopher G. Demetriou.  All rights reserved.
@@ -58,7 +58,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: osf1_file.c,v 1.43 2014/09/05 09:21:54 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: osf1_file.c,v 1.41.28.1 2014/08/27 15:29:29 msaitoh Exp $");
 
 #if defined(_KERNEL_OPT)
 #include "opt_syscall_debug.h"
@@ -164,7 +164,7 @@ osf1_sys_getdirentries(struct lwp *l, const struct osf1_sys_getdirentries_args *
 		goto out1;
 	}
 
-	vp = fp->f_vnode;
+	vp = (struct vnode *)fp->f_data;
 	if (vp->v_type != VDIR) {
 		error = EINVAL;
 		goto out1;

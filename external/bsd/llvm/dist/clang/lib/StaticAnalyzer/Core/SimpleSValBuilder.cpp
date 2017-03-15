@@ -29,7 +29,7 @@ public:
   SimpleSValBuilder(llvm::BumpPtrAllocator &alloc, ASTContext &context,
                     ProgramStateManager &stateMgr)
                     : SValBuilder(alloc, context, stateMgr) {}
-  ~SimpleSValBuilder() override {}
+  virtual ~SimpleSValBuilder() {}
 
   SVal evalMinus(NonLoc val) override;
   SVal evalComplement(NonLoc val) override;
@@ -68,9 +68,6 @@ SVal SimpleSValBuilder::dispatchCast(SVal Val, QualType CastTy) {
 SVal SimpleSValBuilder::evalCastFromNonLoc(NonLoc val, QualType castTy) {
 
   bool isLocType = Loc::isLocType(castTy);
-
-  if (val.getAs<nonloc::PointerToMember>())
-    return val;
 
   if (Optional<nonloc::LocAsInteger> LI = val.getAs<nonloc::LocAsInteger>()) {
     if (isLocType)
@@ -144,9 +141,9 @@ SVal SimpleSValBuilder::evalCastFromLoc(Loc val, QualType castTy) {
   // unless this is a weak function or a symbolic region.
   if (castTy->isBooleanType()) {
     switch (val.getSubKind()) {
-      case loc::MemRegionValKind: {
+      case loc::MemRegionKind: {
         const MemRegion *R = val.castAs<loc::MemRegionVal>().getRegion();
-        if (const FunctionCodeRegion *FTR = dyn_cast<FunctionCodeRegion>(R))
+        if (const FunctionTextRegion *FTR = dyn_cast<FunctionTextRegion>(R))
           if (const FunctionDecl *FD = dyn_cast<FunctionDecl>(FTR->getDecl()))
             if (FD->isWeak())
               // FIXME: Currently we are using an extent symbol here,
@@ -338,21 +335,6 @@ SVal SimpleSValBuilder::evalBinOpNN(ProgramStateRef state,
     switch (lhs.getSubKind()) {
     default:
       return makeSymExprValNN(state, op, lhs, rhs, resultTy);
-    case nonloc::PointerToMemberKind: {
-      assert(rhs.getSubKind() == nonloc::PointerToMemberKind &&
-             "Both SVals should have pointer-to-member-type");
-      auto LPTM = lhs.castAs<nonloc::PointerToMember>(),
-           RPTM = rhs.castAs<nonloc::PointerToMember>();
-      auto LPTMD = LPTM.getPTMData(), RPTMD = RPTM.getPTMData();
-      switch (op) {
-        case BO_EQ:
-          return makeTruthVal(LPTMD == RPTMD, resultTy);
-        case BO_NE:
-          return makeTruthVal(LPTMD != RPTMD, resultTy);
-        default:
-          return UnknownVal();
-      }
-    }
     case nonloc::LocAsIntegerKind: {
       Loc lhsL = lhs.castAs<nonloc::LocAsInteger>().getLoc();
       switch (rhs.getSubKind()) {
@@ -656,7 +638,7 @@ SVal SimpleSValBuilder::evalBinOpLL(ProgramStateRef state,
     // on the ABI).
     // FIXME: we can probably do a comparison against other MemRegions, though.
     // FIXME: is there a way to tell if two labels refer to the same location?
-    return UnknownVal();
+    return UnknownVal(); 
 
   case loc::ConcreteIntKind: {
     // If one of the operands is a symbol and the other is a constant,
@@ -707,7 +689,7 @@ SVal SimpleSValBuilder::evalBinOpLL(ProgramStateRef state,
     // completely unknowable.
     return UnknownVal();
   }
-  case loc::MemRegionValKind: {
+  case loc::MemRegionKind: {
     if (Optional<loc::ConcreteInt> rInt = rhs.getAs<loc::ConcreteInt>()) {
       // If one of the operands is a symbol and the other is a constant,
       // build an expression for use by the constraint manager.
@@ -736,7 +718,7 @@ SVal SimpleSValBuilder::evalBinOpLL(ProgramStateRef state,
 
     // Get both values as regions, if possible.
     const MemRegion *LeftMR = lhs.getAsRegion();
-    assert(LeftMR && "MemRegionValKind SVal doesn't have a region!");
+    assert(LeftMR && "MemRegionKind SVal doesn't have a region!");
 
     const MemRegion *RightMR = rhs.getAsRegion();
     if (!RightMR)
@@ -771,12 +753,6 @@ SVal SimpleSValBuilder::evalBinOpLL(ProgramStateRef state,
     // Note, heap base symbolic regions are assumed to not alias with
     // each other; for example, we assume that malloc returns different address
     // on each invocation.
-    // FIXME: ObjC object pointers always reside on the heap, but currently
-    // we treat their memory space as unknown, because symbolic pointers
-    // to ObjC objects may alias. There should be a way to construct
-    // possibly-aliasing heap-based regions. For instance, MacOSXApiChecker
-    // guesses memory space for ObjC object pointers manually instead of
-    // relying on us.
     if (LeftBase != RightBase &&
         ((!isa<SymbolicRegion>(LeftBase) && !isa<SymbolicRegion>(RightBase)) ||
          (isa<HeapSpaceRegion>(LeftMS) || isa<HeapSpaceRegion>(RightMS))) ){
@@ -881,30 +857,13 @@ SVal SimpleSValBuilder::evalBinOpLL(ProgramStateRef state,
 SVal SimpleSValBuilder::evalBinOpLN(ProgramStateRef state,
                                   BinaryOperator::Opcode op,
                                   Loc lhs, NonLoc rhs, QualType resultTy) {
-  if (op >= BO_PtrMemD && op <= BO_PtrMemI) {
-    if (auto PTMSV = rhs.getAs<nonloc::PointerToMember>()) {
-      if (PTMSV->isNullMemberPointer())
-        return UndefinedVal();
-      if (const FieldDecl *FD = PTMSV->getDeclAs<FieldDecl>()) {
-        SVal Result = lhs;
-
-        for (const auto &I : *PTMSV)
-          Result = StateMgr.getStoreManager().evalDerivedToBase(
-              Result, I->getType(),I->isVirtual());
-        return state->getLValue(FD, Result);
-      }
-    }
-
-    return rhs;
-  }
-
   assert(!BinaryOperator::isComparisonOp(op) &&
          "arguments to comparison ops must be of the same type");
 
   // Special case: rhs is a zero constant.
   if (rhs.isZeroConstant())
     return lhs;
-
+  
   // We are dealing with pointer arithmetic.
 
   // Handle pointer arithmetic on constant values.
@@ -921,7 +880,7 @@ SVal SimpleSValBuilder::evalBinOpLN(ProgramStateRef state,
       // Offset the increment by the pointer size.
       llvm::APSInt Multiplicand(rightI.getBitWidth(), /* isUnsigned */ true);
       rightI *= Multiplicand;
-
+      
       // Compute the adjusted pointer.
       switch (op) {
         case BO_Add:
@@ -952,9 +911,8 @@ SVal SimpleSValBuilder::evalBinOpLN(ProgramStateRef state,
       elementType = elemReg->getElementType();
     }
     else if (isa<SubRegion>(region)) {
-      assert(op == BO_Add || op == BO_Sub);
-      index = (op == BO_Add) ? rhs : evalMinus(rhs);
       superR = region;
+      index = rhs;
       if (resultTy->isAnyPointerType())
         elementType = resultTy->getPointeeType();
     }
@@ -964,7 +922,7 @@ SVal SimpleSValBuilder::evalBinOpLN(ProgramStateRef state,
                                                        superR, getContext()));
     }
   }
-  return UnknownVal();
+  return UnknownVal();  
 }
 
 const llvm::APSInt *SimpleSValBuilder::getKnownValue(ProgramStateRef state,

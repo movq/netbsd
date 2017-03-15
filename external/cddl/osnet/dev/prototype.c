@@ -1,180 +1,146 @@
-/*	$NetBSD: prototype.c,v 1.4 2016/04/09 15:18:48 riastradh Exp $	*/
+/*	$NetBSD: prototype.c,v 1.2 2010/02/21 01:46:32 darran Exp $	*/
 
-/*-
- * Copyright (c) 2015 The NetBSD Foundation, Inc.
- * All rights reserved.
+/*
+ * This file is freeware. You are free to use it and add your own
+ * license.
  *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions
- * are met:
- * 1. Redistributions of source code must retain the above copyright
- *    notice, this list of conditions and the following disclaimer.
- * 2. Redistributions in binary form must reproduce the above copyright
- *    notice, this list of conditions and the following disclaimer in the
- *    documentation and/or other materials provided with the distribution.
+ * $FreeBSD: src/sys/cddl/dev/prototype.c,v 1.1.4.1 2009/08/03 08:13:06 kensmith Exp $
  *
- * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
- * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
- * TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
- * PURPOSE ARE DISCLAIMED.  IN NO EVENT SHALL THE FOUNDATION OR CONTRIBUTORS
- * BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
- * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
- * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
- * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
- * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
- * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
- * POSSIBILITY OF SUCH DAMAGE.
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: prototype.c,v 1.4 2016/04/09 15:18:48 riastradh Exp $");
-
-#include <sys/types.h>
 #include <sys/param.h>
-#include <sys/conf.h>
-#include <sys/dtrace.h>
-#include <sys/module.h>
 #include <sys/systm.h>
+#include <sys/conf.h>
+#include <sys/kernel.h>
+#include <sys/module.h>
 
-static dtrace_provider_id_t prototype_id;
+#include <sys/dtrace.h>
+
+static d_open_t	prototype_open;
+static int	prototype_unload(void);
+static void	prototype_getargdesc(void *, dtrace_id_t, void *, dtrace_argdesc_t *);
+static void	prototype_provide(void *, dtrace_probedesc_t *);
+static void	prototype_destroy(void *, dtrace_id_t, void *);
+static void	prototype_enable(void *, dtrace_id_t, void *);
+static void	prototype_disable(void *, dtrace_id_t, void *);
+static void	prototype_load(void *);
+
+static struct cdevsw prototype_cdevsw = {
+	.d_version	= D_VERSION,
+	.d_open		= prototype_open,
+	.d_name		= "prototype",
+};
+
+static dtrace_pattr_t prototype_attr = {
+{ DTRACE_STABILITY_EVOLVING, DTRACE_STABILITY_EVOLVING, DTRACE_CLASS_COMMON },
+{ DTRACE_STABILITY_PRIVATE, DTRACE_STABILITY_PRIVATE, DTRACE_CLASS_UNKNOWN },
+{ DTRACE_STABILITY_PRIVATE, DTRACE_STABILITY_PRIVATE, DTRACE_CLASS_ISA },
+{ DTRACE_STABILITY_EVOLVING, DTRACE_STABILITY_EVOLVING, DTRACE_CLASS_COMMON },
+{ DTRACE_STABILITY_PRIVATE, DTRACE_STABILITY_PRIVATE, DTRACE_CLASS_ISA },
+};
+
+static dtrace_pops_t prototype_pops = {
+	prototype_provide,
+	NULL,
+	prototype_enable,
+	prototype_disable,
+	NULL,
+	NULL,
+	prototype_getargdesc,
+	NULL,
+	NULL,
+	prototype_destroy
+};
+
+static struct cdev		*prototype_cdev;
+static dtrace_provider_id_t	prototype_id;
 
 static void
-prototype_enable(void *arg, dtrace_id_t id, void *parg)
+prototype_getargdesc(void *arg, dtrace_id_t id, void *parg, dtrace_argdesc_t *desc)
 {
-	/* Enable the probe for id.  */
 }
 
 static void
-prototype_disable(void *arg, dtrace_id_t id, void *parg)
+prototype_provide(void *arg, dtrace_probedesc_t *desc)
 {
-	/* Disable the probe for id.  */
-}
-
-static void
-prototype_getargdesc(void *arg, dtrace_id_t id, void *parg,
-    dtrace_argdesc_t *desc)
-{
-	/* Get the argument descriptions for the probe id.  */
-}
-
-static uint64_t
-prototype_getargval(void *arg, dtrace_id_t id, void *parg, int argno,
-    int aframes)
-{
-	/* Get the value for the argno'th argument to the probe id.  */
-}
-
-static void
-prototype_provide(void *arg, const dtrace_probedesc_t *desc)
-{
-	/*
-	 * Create all probes for this provider.  Cookie passed to
-	 * dtrace_probe_create will be passed on to prototype_destroy.
-	 */
 }
 
 static void
 prototype_destroy(void *arg, dtrace_id_t id, void *parg)
 {
-	/*
-	 * Destroy a probe for this provider.  parg is cookie that was
-	 * passed to dtrace_probe_create for this probe.
-	 */
 }
 
-static dtrace_pattr_t prototype_attr = {
-/* provider attributes */
-{ DTRACE_STABILITY_EVOLVING, DTRACE_STABILITY_EVOLVING, DTRACE_CLASS_COMMON },
-/* module attributes */
-{ DTRACE_STABILITY_PRIVATE, DTRACE_STABILITY_PRIVATE, DTRACE_CLASS_UNKNOWN },
-/* function attributes */
-{ DTRACE_STABILITY_PRIVATE, DTRACE_STABILITY_PRIVATE, DTRACE_CLASS_UNKNOWN },
-/* name attributes */
-{ DTRACE_STABILITY_EVOLVING, DTRACE_STABILITY_EVOLVING, DTRACE_CLASS_COMMON },
-/* arguments attributes */
-{ DTRACE_STABILITY_EVOLVING, DTRACE_STABILITY_EVOLVING, DTRACE_CLASS_COMMON },
-};
+static void
+prototype_enable(void *arg, dtrace_id_t id, void *parg)
+{
+}
 
-static dtrace_pops_t prototype_pops = {
-	prototype_provide,
-	NULL,			/* provide_module (NYI) */
-	prototype_enable,
-	prototype_disable,
-	NULL,			/* suspend (NYI) */
-	NULL,			/* resume (NYI) */
-	prototype_getargdesc,	/* optional */
-	prototype_getargval,	/* optional */
-	NULL,			/* usermode permissions check */
-	prototype_destroy,
-};
+static void
+prototype_disable(void *arg, dtrace_id_t id, void *parg)
+{
+}
+
+static void
+prototype_load(void *dummy)
+{
+	/* Create the /dev/dtrace/prototype entry. */
+	prototype_cdev = make_dev(&prototype_cdevsw, 0, UID_ROOT, GID_WHEEL, 0600,
+	    "dtrace/prototype");
+
+	if (dtrace_register("prototype", &prototype_attr, DTRACE_PRIV_USER,
+	    NULL, &prototype_pops, NULL, &prototype_id) != 0)
+		return;
+}
+
 
 static int
-prototype_init(void)
+prototype_unload()
 {
-	int error;
+	int error = 0;
 
-	/* Set up any necessary state, or fail. */
+	if ((error = dtrace_unregister(prototype_id)) != 0)
+		return (error);
 
-	/* Register the dtrace provider.  */
-	KASSERT(prototype_id == 0);
-	error = dtrace_register("prototype", &prototype_attr, DTRACE_PRIV_USER,
-	    NULL, &prototype_pops, NULL, &prototype_id);
-	if (error) {
-		printf("dtrace_prototype: failed to register dtrace provider"
-		    ": %d\n", error);
-		goto fail0;
-	}
-	KASSERT(prototype_id != 0);
+	destroy_dev(prototype_cdev);
 
-	/* Success!  */
-	return 0;
-
-fail0:	KASSERT(error);
-	return error;
+	return (error);
 }
 
 static int
-prototype_fini(void)
+prototype_modevent(module_t mod __unused, int type, void *data __unused)
 {
-	int error;
+	int error = 0;
 
-	/*
-	 * Deregister the dtrace provider, unless we already did but
-	 * something below failed.
-	 */
-	if (prototype_id != 0) {
-		error = dtrace_unregister(prototype_id);
-		if (error) {
-			printf("dtrace prototype"
-			    ": failed to unregister dtrace provider: %d\n",
-			    error);
-			return error;
-		}
-		prototype_id = 0;
-	}
+	switch (type) {
+	case MOD_LOAD:
+		break;
 
-	/* Tear down any necessary state, or fail.  */
+	case MOD_UNLOAD:
+		break;
 
-	/* Success!  */
-	return 0;
-}
+	case MOD_SHUTDOWN:
+		break;
 
-static int
-dtrace_prototype_modcmd(modcmd_t cmd, void *data)
-{
-
-	switch (cmd) {
-	case MODULE_CMD_INIT:
-		return prototype_init();
-	case MODULE_CMD_FINI:
-		return prototype_fini();
-	case MODULE_CMD_AUTOUNLOAD:
-		if (prototype_users)
-			return EBUSY;
-		return 0;
 	default:
-		return ENOTTY;
+		error = EOPNOTSUPP;
+		break;
+
 	}
+
+	return (error);
 }
 
-MODULE(MODULE_CLASS_MISC, dtrace_prototype, "dtrace");
+static int
+prototype_open(struct cdev *dev __unused, int oflags __unused, int devtype __unused, struct thread *td __unused)
+{
+	return (0);
+}
+
+SYSINIT(prototype_load, SI_SUB_DTRACE_PROVIDER, SI_ORDER_ANY, prototype_load, NULL);
+SYSUNINIT(prototype_unload, SI_SUB_DTRACE_PROVIDER, SI_ORDER_ANY, prototype_unload, NULL);
+
+DEV_MODULE(prototype, prototype_modevent, NULL);
+MODULE_VERSION(prototype, 1);
+MODULE_DEPEND(prototype, dtrace, 1, 1, 1);
+MODULE_DEPEND(prototype, opensolaris, 1, 1, 1);

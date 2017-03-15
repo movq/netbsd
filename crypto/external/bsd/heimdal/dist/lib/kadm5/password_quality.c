@@ -1,4 +1,4 @@
-/*	$NetBSD: password_quality.c,v 1.2 2017/01/28 21:31:49 christos Exp $	*/
+/*	$NetBSD: password_quality.c,v 1.1.1.2 2014/04/24 12:45:49 pettai Exp $	*/
 
 /*
  * Copyright (c) 1997-2000, 2003-2005 Kungliga Tekniska Högskolan
@@ -380,24 +380,23 @@ kadm5_add_passwd_quality_verifier(krb5_context context,
 #ifdef HAVE_DLOPEN
 
     if(check_library == NULL) {
-	krb5_error_code ret = 0;
-        char **strs;
+	krb5_error_code ret;
 	char **tmp;
 
-	strs = krb5_config_get_strings(context, NULL,
-				       "password_quality",
-				       "policy_libraries",
-				       NULL);
-	if (strs == NULL)
+	tmp = krb5_config_get_strings(context, NULL,
+				      "password_quality",
+				      "policy_libraries",
+				      NULL);
+	if(tmp == NULL || *tmp == NULL)
 	    return 0;
 
-	for (tmp = strs; *tmp; tmp++) {
+	while (*tmp) {
 	    ret = add_verifier(context, *tmp);
 	    if (ret)
-		break;
+		return ret;
+	    tmp++;
 	}
-        krb5_config_free_strings(strs);
-	return ret;
+	return 0;
     } else {
 	return add_verifier(context, check_library);
     }

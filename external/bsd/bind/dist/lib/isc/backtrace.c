@@ -1,4 +1,4 @@
-/*	$NetBSD: backtrace.c,v 1.8 2015/12/17 04:00:45 christos Exp $	*/
+/*	$NetBSD: backtrace.c,v 1.6.2.1 2016/03/13 08:06:14 martin Exp $	*/
 
 /*
  * Copyright (C) 2009, 2013-2015  Internet Systems Consortium, Inc. ("ISC")

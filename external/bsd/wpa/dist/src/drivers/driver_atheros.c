@@ -55,10 +55,6 @@
 #include "netlink.h"
 #include "linux_ioctl.h"
 
-#if defined(CONFIG_IEEE80211W) || defined(CONFIG_IEEE80211R) || defined(CONFIG_HS20) || defined(CONFIG_WNM) || defined(CONFIG_WPS)
-#define ATHEROS_USE_RAW_RECEIVE
-#endif
-
 
 struct atheros_driver_data {
 	struct hostapd_data *hapd;		/* back pointer */
@@ -189,13 +185,13 @@ set80211priv(struct atheros_driver_data *drv, int op, void *data, int len)
 	    op == IEEE80211_IOCTL_FILTERFRAME)
 		do_inline = 0;
 
-	os_memset(&iwr, 0, sizeof(iwr));
+	memset(&iwr, 0, sizeof(iwr));
 	os_strlcpy(iwr.ifr_name, drv->iface, IFNAMSIZ);
 	if (do_inline) {
 		/*
 		 * Argument data fits inline; put it there.
 		 */
-		os_memcpy(iwr.u.name, data, len);
+		memcpy(iwr.u.name, data, len);
 	} else {
 		/*
 		 * Argument data too big for inline transfer; setup a
@@ -222,10 +218,10 @@ set80211param(struct atheros_driver_data *drv, int op, int arg)
 {
 	struct iwreq iwr;
 
-	os_memset(&iwr, 0, sizeof(iwr));
+	memset(&iwr, 0, sizeof(iwr));
 	os_strlcpy(iwr.ifr_name, drv->iface, IFNAMSIZ);
 	iwr.u.mode = op;
-	os_memcpy(iwr.u.name + sizeof(__u32), &arg, sizeof(arg));
+	memcpy(iwr.u.name+sizeof(__u32), &arg, sizeof(arg));
 
 	if (ioctl(drv->ioctl_sock, IEEE80211_IOCTL_SETPARAM, &iwr) < 0) {
 		wpa_printf(MSG_INFO,
@@ -244,9 +240,9 @@ ether_sprintf(const u8 *addr)
 	static char buf[sizeof(MACSTR)];
 
 	if (addr != NULL)
-		os_snprintf(buf, sizeof(buf), MACSTR, MAC2STR(addr));
+		snprintf(buf, sizeof(buf), MACSTR, MAC2STR(addr));
 	else
-		os_snprintf(buf, sizeof(buf), MACSTR, 0, 0, 0, 0, 0, 0);
+		snprintf(buf, sizeof(buf), MACSTR, 0,0,0,0,0,0);
 	return buf;
 }
 #endif /* CONFIG_NO_STDOUT_DEBUG */
@@ -422,7 +418,7 @@ atheros_set_sta_authorized(void *priv, const u8 *addr, int authorized)
 	else
 		mlme.im_op = IEEE80211_MLME_UNAUTHORIZE;
 	mlme.im_reason = 0;
-	os_memcpy(mlme.im_macaddr, addr, IEEE80211_ADDR_LEN);
+	memcpy(mlme.im_macaddr, addr, IEEE80211_ADDR_LEN);
 	ret = set80211priv(drv, IEEE80211_IOCTL_SETMLME, &mlme, sizeof(mlme));
 	if (ret < 0) {
 		wpa_printf(MSG_DEBUG, "%s: Failed to %sauthorize STA " MACSTR,
@@ -434,8 +430,7 @@ atheros_set_sta_authorized(void *priv, const u8 *addr, int authorized)
 
 static int
 atheros_sta_set_flags(void *priv, const u8 *addr,
-		      unsigned int total_flags, unsigned int flags_or,
-		      unsigned int flags_and)
+		      int total_flags, int flags_or, int flags_and)
 {
 	/* For now, only support setting Authorized flag */
 	if (flags_or & WPA_STA_AUTHORIZED)
@@ -455,9 +450,9 @@ atheros_del_key(void *priv, const u8 *addr, int key_idx)
 	wpa_printf(MSG_DEBUG, "%s: addr=%s key_idx=%d",
 		   __func__, ether_sprintf(addr), key_idx);
 
-	os_memset(&wk, 0, sizeof(wk));
+	memset(&wk, 0, sizeof(wk));
 	if (addr != NULL) {
-		os_memcpy(wk.idk_macaddr, addr, IEEE80211_ADDR_LEN);
+		memcpy(wk.idk_macaddr, addr, IEEE80211_ADDR_LEN);
 		wk.idk_keyix = (u8) IEEE80211_KEYIX_NONE;
 	} else {
 		wk.idk_keyix = key_idx;
@@ -538,20 +533,20 @@ atheros_set_key(const char *ifname, void *priv, enum wpa_alg alg,
 		return -3;
 	}
 
-	os_memset(&wk, 0, sizeof(wk));
+	memset(&wk, 0, sizeof(wk));
 	wk.ik_type = cipher;
 	wk.ik_flags = IEEE80211_KEY_RECV | IEEE80211_KEY_XMIT;
 	if (addr == NULL || is_broadcast_ether_addr(addr)) {
-		os_memset(wk.ik_macaddr, 0xff, IEEE80211_ADDR_LEN);
+		memset(wk.ik_macaddr, 0xff, IEEE80211_ADDR_LEN);
 		wk.ik_keyix = key_idx;
 		if (set_tx)
 			wk.ik_flags |= IEEE80211_KEY_DEFAULT;
 	} else {
-		os_memcpy(wk.ik_macaddr, addr, IEEE80211_ADDR_LEN);
+		memcpy(wk.ik_macaddr, addr, IEEE80211_ADDR_LEN);
 		wk.ik_keyix = IEEE80211_KEYIX_NONE;
 	}
 	wk.ik_keylen = key_len;
-	os_memcpy(wk.ik_keydata, key, key_len);
+	memcpy(wk.ik_keydata, key, key_len);
 
 	ret = set80211priv(drv, IEEE80211_IOCTL_SETKEY, &wk, sizeof(wk));
 	if (ret < 0) {
@@ -575,11 +570,11 @@ atheros_get_seqnum(const char *ifname, void *priv, const u8 *addr, int idx,
 	wpa_printf(MSG_DEBUG, "%s: addr=%s idx=%d",
 		   __func__, ether_sprintf(addr), idx);
 
-	os_memset(&wk, 0, sizeof(wk));
+	memset(&wk, 0, sizeof(wk));
 	if (addr == NULL)
-		os_memset(wk.ik_macaddr, 0xff, IEEE80211_ADDR_LEN);
+		memset(wk.ik_macaddr, 0xff, IEEE80211_ADDR_LEN);
 	else
-		os_memcpy(wk.ik_macaddr, addr, IEEE80211_ADDR_LEN);
+		memcpy(wk.ik_macaddr, addr, IEEE80211_ADDR_LEN);
 	wk.ik_keyix = idx;
 
 	if (set80211priv(drv, IEEE80211_IOCTL_GETKEY, &wk, sizeof(wk))) {
@@ -600,13 +595,13 @@ atheros_get_seqnum(const char *ifname, void *priv, const u8 *addr, int idx,
 #define WPA_KEY_RSC_LEN 8
 #endif
 		u8 tmp[WPA_KEY_RSC_LEN];
-		os_memcpy(tmp, &wk.ik_keytsc, sizeof(wk.ik_keytsc));
+		memcpy(tmp, &wk.ik_keytsc, sizeof(wk.ik_keytsc));
 		for (i = 0; i < WPA_KEY_RSC_LEN; i++) {
 			seq[i] = tmp[WPA_KEY_RSC_LEN - i - 1];
 		}
 	}
 #else /* WORDS_BIGENDIAN */
-	os_memcpy(seq, &wk.ik_keytsc, sizeof(wk.ik_keytsc));
+	memcpy(seq, &wk.ik_keytsc, sizeof(wk.ik_keytsc));
 #endif /* WORDS_BIGENDIAN */
 	return 0;
 }
@@ -616,7 +611,7 @@ static int
 atheros_flush(void *priv)
 {
 	u8 allsta[IEEE80211_ADDR_LEN];
-	os_memset(allsta, 0xff, IEEE80211_ADDR_LEN);
+	memset(allsta, 0xff, IEEE80211_ADDR_LEN);
 	return atheros_sta_deauth(priv, NULL, allsta,
 				  IEEE80211_REASON_AUTH_LEAVE);
 }
@@ -629,19 +624,19 @@ atheros_read_sta_driver_data(void *priv, struct hostap_sta_driver_data *data,
 	struct atheros_driver_data *drv = priv;
 	struct ieee80211req_sta_stats stats;
 
-	os_memset(data, 0, sizeof(*data));
+	memset(data, 0, sizeof(*data));
 
 	/*
 	 * Fetch statistics for station from the system.
 	 */
-	os_memset(&stats, 0, sizeof(stats));
-	os_memcpy(stats.is_u.macaddr, addr, IEEE80211_ADDR_LEN);
+	memset(&stats, 0, sizeof(stats));
+	memcpy(stats.is_u.macaddr, addr, IEEE80211_ADDR_LEN);
 	if (set80211priv(drv, IEEE80211_IOCTL_STA_STATS,
 			 &stats, sizeof(stats))) {
 		wpa_printf(MSG_DEBUG, "%s: Failed to fetch STA stats (addr "
 			   MACSTR ")", __func__, MAC2STR(addr));
-		if (os_memcmp(addr, drv->acct_mac, ETH_ALEN) == 0) {
-			os_memcpy(data, &drv->acct_data, sizeof(*data));
+		if (memcmp(addr, drv->acct_mac, ETH_ALEN) == 0) {
+			memcpy(data, &drv->acct_data, sizeof(*data));
 			return 0;
 		}
 
@@ -668,7 +663,7 @@ atheros_sta_clear_stats(void *priv, const u8 *addr)
 	wpa_printf(MSG_DEBUG, "%s: addr=%s", __func__, ether_sprintf(addr));
 
 	mlme.im_op = IEEE80211_MLME_CLEAR_STATS;
-	os_memcpy(mlme.im_macaddr, addr, IEEE80211_ADDR_LEN);
+	memcpy(mlme.im_macaddr, addr, IEEE80211_ADDR_LEN);
 	ret = set80211priv(drv, IEEE80211_IOCTL_SETMLME, &mlme,
 			   sizeof(mlme));
 	if (ret < 0) {
@@ -744,7 +739,7 @@ atheros_sta_deauth(void *priv, const u8 *own_addr, const u8 *addr,
 
 	mlme.im_op = IEEE80211_MLME_DEAUTH;
 	mlme.im_reason = reason_code;
-	os_memcpy(mlme.im_macaddr, addr, IEEE80211_ADDR_LEN);
+	memcpy(mlme.im_macaddr, addr, IEEE80211_ADDR_LEN);
 	ret = set80211priv(drv, IEEE80211_IOCTL_SETMLME, &mlme, sizeof(mlme));
 	if (ret < 0) {
 		wpa_printf(MSG_DEBUG, "%s: Failed to deauth STA (addr " MACSTR
@@ -768,7 +763,7 @@ atheros_sta_disassoc(void *priv, const u8 *own_addr, const u8 *addr,
 
 	mlme.im_op = IEEE80211_MLME_DISASSOC;
 	mlme.im_reason = reason_code;
-	os_memcpy(mlme.im_macaddr, addr, IEEE80211_ADDR_LEN);
+	memcpy(mlme.im_macaddr, addr, IEEE80211_ADDR_LEN);
 	ret = set80211priv(drv, IEEE80211_IOCTL_SETMLME, &mlme, sizeof(mlme));
 	if (ret < 0) {
 		wpa_printf(MSG_DEBUG, "%s: Failed to disassoc STA (addr "
@@ -794,7 +789,7 @@ static int atheros_set_qos_map(void *ctx, const u8 *qos_map_set,
 		wpa_printf(MSG_ERROR, "Invalid QoS Map");
 		return -1;
 	} else {
-		os_memset(&req, 0, sizeof(struct ieee80211req_athdbg));
+		memset(&req, 0, sizeof(struct ieee80211req_athdbg));
 		req.cmd = IEEE80211_DBGREQ_SETQOSMAPCONF;
 		os_memset(&iwr, 0, sizeof(iwr));
 		os_strlcpy(iwr.ifr_name, drv->iface, sizeof(iwr.ifr_name));
@@ -828,7 +823,7 @@ static int atheros_set_qos_map(void *ctx, const u8 *qos_map_set,
 	return 0;
 }
 
-#ifdef ATHEROS_USE_RAW_RECEIVE
+#if defined(CONFIG_WPS) || defined(CONFIG_IEEE80211R) || defined(CONFIG_WNM) || defined(CONFIG_HS20)
 static void atheros_raw_receive(void *ctx, const u8 *src_addr, const u8 *buf,
 				size_t len)
 {
@@ -855,26 +850,17 @@ static void atheros_raw_receive(void *ctx, const u8 *src_addr, const u8 *buf,
 		   (int) len);
 
 	if (stype == WLAN_FC_STYPE_PROBE_REQ) {
-		if (len < IEEE80211_HDRLEN)
+		if (len < IEEE80211_HDRLEN + sizeof(mgmt->u.probe_req))
 			return;
 
 		os_memset(&event, 0, sizeof(event));
 		event.rx_probe_req.sa = mgmt->sa;
 		event.rx_probe_req.da = mgmt->da;
 		event.rx_probe_req.bssid = mgmt->bssid;
-		event.rx_probe_req.ie = buf + IEEE80211_HDRLEN;
-		event.rx_probe_req.ie_len = len - IEEE80211_HDRLEN;
+		event.rx_probe_req.ie = mgmt->u.probe_req.variable;
+		event.rx_probe_req.ie_len =
+			len - (IEEE80211_HDRLEN + sizeof(mgmt->u.probe_req));
 		wpa_supplicant_event(drv->hapd, EVENT_RX_PROBE_REQ, &event);
-		return;
-	}
-
-	if (stype == WLAN_FC_STYPE_ACTION &&
-	    (os_memcmp(drv->own_addr, mgmt->bssid, ETH_ALEN) == 0 ||
-	     is_broadcast_ether_addr(mgmt->bssid))) {
-		os_memset(&event, 0, sizeof(event));
-		event.rx_mgmt.frame = buf;
-		event.rx_mgmt.frame_len = len;
-		wpa_supplicant_event(drv->hapd, EVENT_RX_MGMT, &event);
 		return;
 	}
 
@@ -899,6 +885,12 @@ static void atheros_raw_receive(void *ctx, const u8 *src_addr, const u8 *buf,
 		iebuf = mgmt->u.reassoc_req.variable;
 		drv_event_assoc(drv->hapd, mgmt->sa, iebuf, ielen, 1);
 		break;
+	case WLAN_FC_STYPE_ACTION:
+		os_memset(&event, 0, sizeof(event));
+		event.rx_mgmt.frame = buf;
+		event.rx_mgmt.frame_len = len;
+		wpa_supplicant_event(drv->hapd, EVENT_RX_MGMT, &event);
+		break;
 	case WLAN_FC_STYPE_AUTH:
 		if (len < IEEE80211_HDRLEN + sizeof(mgmt->u.auth))
 			break;
@@ -919,7 +911,7 @@ static void atheros_raw_receive(void *ctx, const u8 *src_addr, const u8 *buf,
 		break;
 	}
 }
-#endif /* ATHEROS_USE_RAW_RECEIVE */
+#endif
 
 static int atheros_receive_pkt(struct atheros_driver_data *drv)
 {
@@ -931,11 +923,11 @@ static int atheros_receive_pkt(struct atheros_driver_data *drv)
 #ifdef CONFIG_WPS
 	filt.app_filterype |= IEEE80211_FILTER_TYPE_PROBE_REQ;
 #endif /* CONFIG_WPS */
-#if defined(CONFIG_IEEE80211W) || defined(CONFIG_IEEE80211R)
+#ifdef CONFIG_IEEE80211R
 	filt.app_filterype |= (IEEE80211_FILTER_TYPE_ASSOC_REQ |
 			       IEEE80211_FILTER_TYPE_AUTH |
 			       IEEE80211_FILTER_TYPE_ACTION);
-#endif /* CONFIG_IEEE80211R || CONFIG_IEEE80211W */
+#endif
 #ifdef CONFIG_WNM
 	filt.app_filterype |= IEEE80211_FILTER_TYPE_ACTION;
 #endif /* CONFIG_WNM */
@@ -1034,7 +1026,7 @@ atheros_set_ap_wps_ie(void *priv, const struct wpabuf *beacon,
 #define atheros_set_ap_wps_ie NULL
 #endif /* CONFIG_WPS */
 
-#if defined(CONFIG_IEEE80211R) || defined(CONFIG_IEEE80211W)
+#ifdef CONFIG_IEEE80211R
 static int
 atheros_sta_auth(void *priv, const u8 *own_addr, const u8 *addr, u16 seq,
 		 u16 status_code, const u8 *ie, size_t len)
@@ -1110,7 +1102,7 @@ atheros_sta_assoc(void *priv, const u8 *own_addr, const u8 *addr,
 	}
 	return ret;
 }
-#endif /* CONFIG_IEEE80211R || CONFIG_IEEE80211W */
+#endif /* CONFIG_IEEE80211R */
 
 static void
 atheros_new_sta(struct atheros_driver_data *drv, u8 addr[IEEE80211_ADDR_LEN])
@@ -1123,8 +1115,8 @@ atheros_new_sta(struct atheros_driver_data *drv, u8 addr[IEEE80211_ADDR_LEN])
 	/*
 	 * Fetch negotiated WPA/RSN parameters from the system.
 	 */
-	os_memset(&ie, 0, sizeof(ie));
-	os_memcpy(ie.wpa_macaddr, addr, IEEE80211_ADDR_LEN);
+	memset(&ie, 0, sizeof(ie));
+	memcpy(ie.wpa_macaddr, addr, IEEE80211_ADDR_LEN);
 	if (set80211priv(drv, IEEE80211_IOCTL_GETWPAIE, &ie, sizeof(ie))) {
 		/*
 		 * See ATH_WPS_IE comment in the beginning of the file for a
@@ -1174,10 +1166,10 @@ atheros_new_sta(struct atheros_driver_data *drv, u8 addr[IEEE80211_ADDR_LEN])
 no_ie:
 	drv_event_assoc(hapd, addr, iebuf, ielen, 0);
 
-	if (os_memcmp(addr, drv->acct_mac, ETH_ALEN) == 0) {
+	if (memcmp(addr, drv->acct_mac, ETH_ALEN) == 0) {
 		/* Cached accounting data is not valid anymore. */
-		os_memset(drv->acct_mac, 0, ETH_ALEN);
-		os_memset(&drv->acct_data, 0, sizeof(drv->acct_data));
+		memset(drv->acct_mac, 0, ETH_ALEN);
+		memset(&drv->acct_data, 0, sizeof(drv->acct_data));
 	}
 }
 
@@ -1185,13 +1177,12 @@ static void
 atheros_wireless_event_wireless_custom(struct atheros_driver_data *drv,
 				       char *custom, char *end)
 {
-#define MGMT_FRAM_TAG_SIZE 30 /* hardcoded in driver */
 	wpa_printf(MSG_DEBUG, "Custom wireless event: '%s'", custom);
 
-	if (os_strncmp(custom, "MLME-MICHAELMICFAILURE.indication", 33) == 0) {
+	if (strncmp(custom, "MLME-MICHAELMICFAILURE.indication", 33) == 0) {
 		char *pos;
 		u8 addr[ETH_ALEN];
-		pos = os_strstr(custom, "addr=");
+		pos = strstr(custom, "addr=");
 		if (pos == NULL) {
 			wpa_printf(MSG_DEBUG,
 				   "MLME-MICHAELMICFAILURE.indication "
@@ -1215,33 +1206,36 @@ atheros_wireless_event_wireless_custom(struct atheros_driver_data *drv,
 		char *key, *value;
 		u32 val;
 		key = custom;
-		while ((key = os_strchr(key, '\n')) != NULL) {
+		while ((key = strchr(key, '\n')) != NULL) {
 			key++;
-			value = os_strchr(key, '=');
+			value = strchr(key, '=');
 			if (value == NULL)
 				continue;
 			*value++ = '\0';
 			val = strtoul(value, NULL, 10);
-			if (os_strcmp(key, "mac") == 0)
+			if (strcmp(key, "mac") == 0)
 				hwaddr_aton(value, drv->acct_mac);
-			else if (os_strcmp(key, "rx_packets") == 0)
+			else if (strcmp(key, "rx_packets") == 0)
 				drv->acct_data.rx_packets = val;
-			else if (os_strcmp(key, "tx_packets") == 0)
+			else if (strcmp(key, "tx_packets") == 0)
 				drv->acct_data.tx_packets = val;
-			else if (os_strcmp(key, "rx_bytes") == 0)
+			else if (strcmp(key, "rx_bytes") == 0)
 				drv->acct_data.rx_bytes = val;
-			else if (os_strcmp(key, "tx_bytes") == 0)
+			else if (strcmp(key, "tx_bytes") == 0)
 				drv->acct_data.tx_bytes = val;
 			key = value;
 		}
 #ifdef CONFIG_WPS
-	} else if (os_strncmp(custom, "PUSH-BUTTON.indication", 22) == 0) {
+	} else if (strncmp(custom, "PUSH-BUTTON.indication", 22) == 0) {
 		/* Some atheros kernels send push button as a wireless event */
 		/* PROBLEM! this event is received for ALL BSSs ...
 		 * so all are enabled for WPS... ugh.
 		 */
 		wpa_supplicant_event(drv->hapd, EVENT_WPS_BUTTON_PUSHED, NULL);
-	} else if (os_strncmp(custom, "Manage.prob_req ", 16) == 0) {
+#endif /* CONFIG_WPS */
+#if defined(CONFIG_WPS) || defined(CONFIG_IEEE80211R) || defined(CONFIG_HS20)
+#define MGMT_FRAM_TAG_SIZE 30 /* hardcoded in driver */
+	} else if (strncmp(custom, "Manage.prob_req ", 16) == 0) {
 		/*
 		 * Atheros driver uses a hack to pass Probe Request frames as a
 		 * binary data in the custom wireless event. The old way (using
@@ -1249,53 +1243,47 @@ atheros_wireless_event_wireless_custom(struct atheros_driver_data *drv,
 		 * Format: "Manage.prob_req <frame len>" | zero padding | frame
 		 */
 		int len = atoi(custom + 16);
-		if (len < 0 || MGMT_FRAM_TAG_SIZE + len > end - custom) {
+		if (len < 0 || custom + MGMT_FRAM_TAG_SIZE + len > end) {
 			wpa_printf(MSG_DEBUG, "Invalid Manage.prob_req event "
 				   "length %d", len);
 			return;
 		}
 		atheros_raw_receive(drv, NULL,
 				    (u8 *) custom + MGMT_FRAM_TAG_SIZE, len);
-#endif /* CONFIG_WPS */
-#if defined(CONFIG_IEEE80211R) || defined(CONFIG_IEEE80211W)
-	} else if (os_strncmp(custom, "Manage.assoc_req ", 17) == 0) {
+	} else if (strncmp(custom, "Manage.assoc_req ", 17) == 0) {
 		/* Format: "Manage.assoc_req <frame len>" | zero padding |
 		 * frame */
 		int len = atoi(custom + 17);
-		if (len < 0 || MGMT_FRAM_TAG_SIZE + len > end - custom) {
-			wpa_printf(MSG_DEBUG,
-				   "Invalid Manage.assoc_req event length %d",
-				   len);
+		if (len < 0 || custom + MGMT_FRAM_TAG_SIZE + len > end) {
+			wpa_printf(MSG_DEBUG, "Invalid Manage.prob_req/"
+				   "assoc_req/auth event length %d", len);
 			return;
 		}
 		atheros_raw_receive(drv, NULL,
 				    (u8 *) custom + MGMT_FRAM_TAG_SIZE, len);
-		} else if (os_strncmp(custom, "Manage.auth ", 12) == 0) {
-		/* Format: "Manage.auth <frame len>" | zero padding | frame */
-		int len = atoi(custom + 12);
-			if (len < 0 ||
-			    MGMT_FRAM_TAG_SIZE + len > end - custom) {
-			wpa_printf(MSG_DEBUG,
-				   "Invalid Manage.auth event length %d", len);
-			return;
-		}
-		atheros_raw_receive(drv, NULL,
-				    (u8 *) custom + MGMT_FRAM_TAG_SIZE, len);
-#endif /* CONFIG_IEEE80211W || CONFIG_IEEE80211R */
-#ifdef ATHEROS_USE_RAW_RECEIVE
-		} else if (os_strncmp(custom, "Manage.action ", 14) == 0) {
-		/* Format: "Manage.assoc_req <frame len>" | zero padding | frame
-		 */
+	} else if (strncmp(custom, "Manage.action ", 14) == 0) {
+		/* Format: "Manage.assoc_req <frame len>" | zero padding |
+		 * frame */
 		int len = atoi(custom + 14);
-		if (len < 0 || MGMT_FRAM_TAG_SIZE + len > end - custom) {
-			wpa_printf(MSG_DEBUG,
-				   "Invalid Manage.action event length %d",
-				   len);
+		if (len < 0 || custom + MGMT_FRAM_TAG_SIZE + len > end) {
+			wpa_printf(MSG_DEBUG, "Invalid Manage.prob_req/"
+				   "assoc_req/auth event length %d", len);
 			return;
 		}
 		atheros_raw_receive(drv, NULL,
 				    (u8 *) custom + MGMT_FRAM_TAG_SIZE, len);
-#endif /* ATHEROS_USE_RAW_RECEIVE */
+	} else if (strncmp(custom, "Manage.auth ", 12) == 0) {
+		/* Format: "Manage.auth <frame len>" | zero padding | frame
+		 */
+		int len = atoi(custom + 12);
+		if (len < 0 || custom + MGMT_FRAM_TAG_SIZE + len > end) {
+			wpa_printf(MSG_DEBUG, "Invalid Manage.prob_req/"
+				   "assoc_req/auth event length %d", len);
+			return;
+		}
+		atheros_raw_receive(drv, NULL,
+				    (u8 *) custom + MGMT_FRAM_TAG_SIZE, len);
+#endif /* CONFIG_WPS or CONFIG_IEEE80211R */
 	}
 }
 
@@ -1387,7 +1375,7 @@ atheros_wireless_event_atheros_custom(struct atheros_driver_data *drv,
 
 static void
 atheros_wireless_event_wireless(struct atheros_driver_data *drv,
-				char *data, unsigned int len)
+				char *data, int len)
 {
 	struct iw_event iwe_buf, *iwe = &iwe_buf;
 	char *pos, *end, *custom, *buf;
@@ -1395,13 +1383,13 @@ atheros_wireless_event_wireless(struct atheros_driver_data *drv,
 	pos = data;
 	end = data + len;
 
-	while ((size_t) (end - pos) >= IW_EV_LCP_LEN) {
+	while (pos + IW_EV_LCP_LEN <= end) {
 		/* Event data may be unaligned, so make a local, aligned copy
 		 * before processing. */
-		os_memcpy(&iwe_buf, pos, IW_EV_LCP_LEN);
+		memcpy(&iwe_buf, pos, IW_EV_LCP_LEN);
 		wpa_printf(MSG_MSGDUMP, "Wireless event: cmd=0x%x len=%d",
 			   iwe->cmd, iwe->len);
-		if (iwe->len <= IW_EV_LCP_LEN || iwe->len > end - pos)
+		if (iwe->len <= IW_EV_LCP_LEN)
 			return;
 
 		custom = pos + IW_EV_POINT_LEN;
@@ -1412,10 +1400,10 @@ atheros_wireless_event_wireless(struct atheros_driver_data *drv,
 			/* WE-19 removed the pointer from struct iw_point */
 			char *dpos = (char *) &iwe_buf.u.data.length;
 			int dlen = dpos - (char *) &iwe_buf;
-			os_memcpy(dpos, pos + IW_EV_LCP_LEN,
-				  sizeof(struct iw_event) - dlen);
+			memcpy(dpos, pos + IW_EV_LCP_LEN,
+			       sizeof(struct iw_event) - dlen);
 		} else {
-			os_memcpy(&iwe_buf, pos, sizeof(struct iw_event));
+			memcpy(&iwe_buf, pos, sizeof(struct iw_event));
 			custom += IW_EV_POINT_OFF;
 		}
 
@@ -1433,12 +1421,12 @@ atheros_wireless_event_wireless(struct atheros_driver_data *drv,
 			 * just like IWEVCUSTOM.
 			 */
 		case IWEVCUSTOM:
-			if (iwe->u.data.length > end - custom)
+			if (custom + iwe->u.data.length > end)
 				return;
-			buf = os_malloc(iwe->u.data.length + 1);
+			buf = malloc(iwe->u.data.length + 1);
 			if (buf == NULL)
 				return;		/* XXX */
-			os_memcpy(buf, custom, iwe->u.data.length);
+			memcpy(buf, custom, iwe->u.data.length);
 			buf[iwe->u.data.length] = '\0';
 
 			if (iwe->u.data.flags != 0) {
@@ -1449,7 +1437,7 @@ atheros_wireless_event_wireless(struct atheros_driver_data *drv,
 				atheros_wireless_event_wireless_custom(
 					drv, buf, buf + iwe->u.data.length);
 			}
-			os_free(buf);
+			free(buf);
 			break;
 		}
 
@@ -1503,7 +1491,7 @@ atheros_get_we_version(struct atheros_driver_data *drv)
 	if (range == NULL)
 		return -1;
 
-	os_memset(&iwr, 0, sizeof(iwr));
+	memset(&iwr, 0, sizeof(iwr));
 	os_strlcpy(iwr.ifr_name, drv->iface, IFNAMSIZ);
 	iwr.u.data.pointer = (caddr_t) range;
 	iwr.u.data.length = buflen;
@@ -1572,7 +1560,7 @@ atheros_send_eapol(void *priv, const u8 *addr, const u8 *data, size_t data_len,
 	 */
 	len = data_len + sizeof(struct l2_ethhdr);
 	if (len > sizeof(buf)) {
-		bp = os_malloc(len);
+		bp = malloc(len);
 		if (bp == NULL) {
 			wpa_printf(MSG_INFO,
 				   "EAPOL frame discarded, cannot malloc temp buffer of size %lu!",
@@ -1581,17 +1569,17 @@ atheros_send_eapol(void *priv, const u8 *addr, const u8 *data, size_t data_len,
 		}
 	}
 	eth = (struct l2_ethhdr *) bp;
-	os_memcpy(eth->h_dest, addr, ETH_ALEN);
-	os_memcpy(eth->h_source, own_addr, ETH_ALEN);
+	memcpy(eth->h_dest, addr, ETH_ALEN);
+	memcpy(eth->h_source, own_addr, ETH_ALEN);
 	eth->h_proto = host_to_be16(ETH_P_EAPOL);
-	os_memcpy(eth + 1, data, data_len);
+	memcpy(eth+1, data, data_len);
 
 	wpa_hexdump(MSG_MSGDUMP, "TX EAPOL", bp, len);
 
 	status = l2_packet_send(drv->sock_xmit, addr, ETH_P_EAPOL, bp, len);
 
 	if (bp != buf)
-		os_free(bp);
+		free(bp);
 	return status;
 }
 
@@ -1625,9 +1613,9 @@ atheros_init(struct hostapd_data *hapd, struct wpa_init_params *params)
 			   strerror(errno));
 		goto bad;
 	}
-	os_memcpy(drv->iface, params->ifname, sizeof(drv->iface));
+	memcpy(drv->iface, params->ifname, sizeof(drv->iface));
 
-	os_memset(&ifr, 0, sizeof(ifr));
+	memset(&ifr, 0, sizeof(ifr));
 	os_strlcpy(ifr.ifr_name, drv->iface, sizeof(ifr.ifr_name));
 	if (ioctl(drv->ioctl_sock, SIOCGIFINDEX, &ifr) != 0) {
 		wpa_printf(MSG_ERROR, "ioctl(SIOCGIFINDEX): %s",
@@ -1661,7 +1649,7 @@ atheros_init(struct hostapd_data *hapd, struct wpa_init_params *params)
 	} else
 		drv->sock_recv = drv->sock_xmit;
 
-	os_memset(&iwr, 0, sizeof(iwr));
+	memset(&iwr, 0, sizeof(iwr));
 	os_strlcpy(iwr.ifr_name, drv->iface, IFNAMSIZ);
 
 	iwr.u.mode = IW_MODE_MASTER;
@@ -1694,7 +1682,8 @@ bad:
 		l2_packet_deinit(drv->sock_xmit);
 	if (drv->ioctl_sock >= 0)
 		close(drv->ioctl_sock);
-	os_free(drv);
+	if (drv != NULL)
+		free(drv);
 	return NULL;
 }
 
@@ -1705,13 +1694,6 @@ atheros_deinit(void *priv)
 	struct atheros_driver_data *drv = priv;
 
 	atheros_reset_appfilter(drv);
-
-	if (drv->wpa_ie || drv->wps_beacon_ie || drv->wps_probe_resp_ie) {
-		atheros_set_opt_ie(priv, NULL, 0);
-		wpabuf_free(drv->wpa_ie);
-		wpabuf_free(drv->wps_beacon_ie);
-		wpabuf_free(drv->wps_probe_resp_ie);
-	}
 	netlink_deinit(drv->netlink);
 	(void) linux_set_iface_flags(drv->ioctl_sock, drv->iface, 0);
 	if (drv->ioctl_sock >= 0)
@@ -1722,7 +1704,10 @@ atheros_deinit(void *priv)
 		l2_packet_deinit(drv->sock_xmit);
 	if (drv->sock_raw)
 		l2_packet_deinit(drv->sock_raw);
-	os_free(drv);
+	wpabuf_free(drv->wpa_ie);
+	wpabuf_free(drv->wps_beacon_ie);
+	wpabuf_free(drv->wps_probe_resp_ie);
+	free(drv);
 }
 
 static int
@@ -1731,7 +1716,7 @@ atheros_set_ssid(void *priv, const u8 *buf, int len)
 	struct atheros_driver_data *drv = priv;
 	struct iwreq iwr;
 
-	os_memset(&iwr, 0, sizeof(iwr));
+	memset(&iwr, 0, sizeof(iwr));
 	os_strlcpy(iwr.ifr_name, drv->iface, IFNAMSIZ);
 	iwr.u.essid.flags = 1; /* SSID active */
 	iwr.u.essid.pointer = (caddr_t) buf;
@@ -1752,7 +1737,7 @@ atheros_get_ssid(void *priv, u8 *buf, int len)
 	struct iwreq iwr;
 	int ret = 0;
 
-	os_memset(&iwr, 0, sizeof(iwr));
+	memset(&iwr, 0, sizeof(iwr));
 	os_strlcpy(iwr.ifr_name, drv->iface, IFNAMSIZ);
 	iwr.u.essid.pointer = (caddr_t) buf;
 	iwr.u.essid.length = (len > IW_ESSID_MAX_SIZE) ?
@@ -1848,11 +1833,10 @@ static int atheros_set_ap(void *priv, struct wpa_driver_ap_params *params)
 }
 
 
-#if defined(CONFIG_IEEE80211R) || defined(CONFIG_IEEE80211W)
+#ifdef CONFIG_IEEE80211R
 
 static int atheros_send_mgmt(void *priv, const u8 *frm, size_t data_len,
-			     int noack, unsigned int freq,
-			     const u16 *csa_offs, size_t csa_offs_len)
+			     int noack)
 {
 	struct atheros_driver_data *drv = priv;
 	u8 buf[1510];
@@ -1863,7 +1847,7 @@ static int atheros_send_mgmt(void *priv, const u8 *frm, size_t data_len,
 	wpa_printf(MSG_DEBUG, "%s frmlen = %lu " MACSTR, __func__,
 		   (unsigned long) data_len, MAC2STR(mgmt->da));
 	mgmt_frm = (struct ieee80211req_mgmtbuf *) buf;
-	os_memcpy(mgmt_frm->macaddr, (u8 *)mgmt->da, IEEE80211_ADDR_LEN);
+	memcpy(mgmt_frm->macaddr, (u8 *)mgmt->da, IEEE80211_ADDR_LEN);
 	mgmt_frm->buflen = data_len;
 	if (&mgmt_frm->buf[0] + data_len > buf + sizeof(buf)) {
 		wpa_printf(MSG_INFO, "atheros: Too long frame for "
@@ -1874,10 +1858,7 @@ static int atheros_send_mgmt(void *priv, const u8 *frm, size_t data_len,
 	return set80211priv(drv, IEEE80211_IOCTL_SEND_MGMT, mgmt_frm,
 			    sizeof(struct ieee80211req_mgmtbuf) + data_len);
 }
-#endif /* CONFIG_IEEE80211R || CONFIG_IEEE80211W */
 
-
-#ifdef CONFIG_IEEE80211R
 
 static int atheros_add_tspec(void *priv, const u8 *addr, u8 *tspec_ie,
 			     size_t tspec_ielen)
@@ -2158,12 +2139,10 @@ const struct wpa_driver_ops wpa_driver_atheros_ops = {
 	.set_ap_wps_ie		= atheros_set_ap_wps_ie,
 	.set_authmode		= atheros_set_authmode,
 	.set_ap			= atheros_set_ap,
-#if defined(CONFIG_IEEE80211R) || defined(CONFIG_IEEE80211W)
+#ifdef CONFIG_IEEE80211R
 	.sta_assoc              = atheros_sta_assoc,
 	.sta_auth               = atheros_sta_auth,
 	.send_mlme       	= atheros_send_mgmt,
-#endif /* CONFIG_IEEE80211R || CONFIG_IEEE80211W */
-#ifdef CONFIG_IEEE80211R
 	.add_tspec      	= atheros_add_tspec,
 	.add_sta_node    	= atheros_add_sta_node,
 #endif /* CONFIG_IEEE80211R */

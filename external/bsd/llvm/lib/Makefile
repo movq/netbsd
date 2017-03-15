@@ -1,4 +1,4 @@
-# $NetBSD: Makefile,v 1.44 2017/01/11 12:02:28 joerg Exp $
+# $NetBSD: Makefile,v 1.41.2.1 2015/06/04 20:05:43 snj Exp $
 
 .include <bsd.own.mk>
 
@@ -9,16 +9,12 @@ SUBDIR=	\
 	libLLVMBitReader \
 	libLLVMBitWriter \
 	libLLVMCodeGen \
-	libLLVMDebugInfoCodeView \
-	libLLVMDebugInfoMSF \
-	libLLVMDemangle \
-	libLLVMGlobalISel \
 	libLLVMIR \
 	libLLVMIRReader \
 	libLLVMInstCombine \
 	libLLVMInstrumentation \
+	libLLVMipa \
 	libLLVMipo \
-	libLLVMLTO \
 	libLLVMLinker \
 	libLLVMMC \
 	libLLVMMCDisassembler \
@@ -26,15 +22,12 @@ SUBDIR=	\
 	libLLVMObjCARC \
 	libLLVMObject \
 	libLLVMOption \
-	libLLVMPasses \
 	libLLVMProfileData \
-	libLLVMProfileDataCoverage \
 	libLLVMScalarOpts \
 	libLLVMSelectionDAG \
 	libLLVMSupport \
 	libLLVMTableGen \
 	libLLVMTarget \
-	libLLVMTransformsCoroutines \
 	libLLVMTransformsUtils \
 	libLLVMVectorize \
 	libLLVMAArch64CodeGen \
@@ -94,33 +87,28 @@ SUBDIR+= \
 SUBDIR+= \
 	libLLVMExecutionEngine \
 	libLLVMMCJIT \
-	libLLVMMIRParser \
-	libLLVMOrc \
 	libLLVMRuntimeDyld
 .endif
 
 .if (${NO_LLVM_DEVELOPER:Uno} == "no" && ${LLVM_DEVELOPER:U} == "yes") || ${MKLLD} == "yes"
 SUBDIR+= \
-	libLLVMDebugInfoDWARF \
-	libLLVMDebugInfoPDB \
-	libLLVMDebugInfoPDBRaw \
-	libLLVMDebugInfoSymbolize
+	libLLVMDebugInfo
 .endif
 
 .if ${NO_LLVM_DEVELOPER:Uno} == "no" && ${LLVM_DEVELOPER:U} == "yes"
 SUBDIR+= \
+	libLLVMCppBackend \
+	libLLVMCppBackendInfo \
 	libLLVMHello \
 	libLLVMInterpreter \
-	libLLVMLibDriver \
-	libLLVMLineEditor \
-	libLLVMObjectYAML
+	libLLVMLTO \
+	libLLVMLineEditor
 .endif
 
 SUBDIR+= \
 	libclangAnalysis \
 	libclangARCMigrate \
 	libclangAST \
-	libclangASTMatchers \
 	libclangBasic \
 	libclangCodeGen \
 	libclangDriver \
@@ -140,6 +128,7 @@ SUBDIR+= \
 
 .if ${NO_LLVM_DEVELOPER:Uno} == "no" && ${LLVM_DEVELOPER:U} == "yes"
 SUBDIR+= \
+	libclangASTMatchers \
 	libclangASTMatchersDynamic \
 	libclangFormat \
 	libclangIndex \

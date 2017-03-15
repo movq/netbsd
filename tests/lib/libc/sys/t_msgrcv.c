@@ -1,4 +1,4 @@
-/* $NetBSD: t_msgrcv.c,v 1.4 2017/01/13 20:44:45 christos Exp $ */
+/* $NetBSD: t_msgrcv.c,v 1.3 2013/07/24 11:44:10 skrll Exp $ */
 
 /*-
  * Copyright (c) 2011 The NetBSD Foundation, Inc.
@@ -29,7 +29,7 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: t_msgrcv.c,v 1.4 2017/01/13 20:44:45 christos Exp $");
+__RCSID("$NetBSD: t_msgrcv.c,v 1.3 2013/07/24 11:44:10 skrll Exp $");
 
 #include <sys/msg.h>
 #include <sys/stat.h>
@@ -38,7 +38,6 @@ __RCSID("$NetBSD: t_msgrcv.c,v 1.4 2017/01/13 20:44:45 christos Exp $");
 
 #include <atf-c.h>
 #include <errno.h>
-#include <limits.h>
 #include <pwd.h>
 #include <signal.h>
 #include <stdio.h>

@@ -1,4 +1,4 @@
-/*	$NetBSD: nouveau_connector.c,v 1.3 2016/04/22 20:17:59 riastradh Exp $	*/
+/*	$NetBSD: nouveau_connector.c,v 1.2.4.1 2016/12/12 09:13:42 msaitoh Exp $	*/
 
 /*
  * Copyright (C) 2008 Maarten Maathuis.
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: nouveau_connector.c,v 1.3 2016/04/22 20:17:59 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: nouveau_connector.c,v 1.2.4.1 2016/12/12 09:13:42 msaitoh Exp $");
 
 #include <acpi/button.h>
 

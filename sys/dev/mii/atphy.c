@@ -1,4 +1,4 @@
-/*	$NetBSD: atphy.c,v 1.18 2016/11/02 10:11:32 msaitoh Exp $ */
+/*	$NetBSD: atphy.c,v 1.16.2.2 2016/12/12 07:04:31 snj Exp $ */
 /*	$OpenBSD: atphy.c,v 1.1 2008/09/25 20:47:16 brad Exp $	*/
 
 /*-
@@ -33,7 +33,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: atphy.c,v 1.18 2016/11/02 10:11:32 msaitoh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: atphy.c,v 1.16.2.2 2016/12/12 07:04:31 snj Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

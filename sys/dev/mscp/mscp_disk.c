@@ -1,4 +1,4 @@
-/*	$NetBSD: mscp_disk.c,v 1.89 2016/03/29 04:55:53 mlelstv Exp $	*/
+/*	$NetBSD: mscp_disk.c,v 1.81 2014/07/25 08:10:37 dholland Exp $	*/
 /*
  * Copyright (c) 1988 Regents of the University of California.
  * All rights reserved.
@@ -82,7 +82,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: mscp_disk.c,v 1.89 2016/03/29 04:55:53 mlelstv Exp $");
+__KERNEL_RCSID(0, "$NetBSD: mscp_disk.c,v 1.81 2014/07/25 08:10:37 dholland Exp $");
 
 #include <sys/param.h>
 #include <sys/buf.h>
@@ -183,8 +183,7 @@ const struct cdevsw ra_cdevsw = {
 };
 
 static struct dkdriver radkdriver = {
-	.d_strategy = rastrategy,
-	.d_minphys = minphys
+	rastrategy, minphys
 };
 
 /*
@@ -406,20 +405,33 @@ raioctl(dev_t dev, u_long cmd, void *data, int flag, struct lwp *l)
 {
 	struct disklabel *lp, *tp;
 	struct ra_softc *ra = mscp_device_lookup(dev);
-	int error;
+	int error = 0;
 #ifdef __HAVE_OLD_DISKLABEL
 	struct disklabel newlabel;
 #endif
 
 	lp = ra->ra_disk.dk_label;
 
-	error = disk_ioctl(&ra->ra_disk, dev, cmd, data, flag, l);
-	if (error != EPASSTHROUGH)
-		return error;
-	else
-		error = 0;
-
 	switch (cmd) {
+
+	case DIOCGDINFO:
+		memcpy(data, lp, sizeof (struct disklabel));
+		break;
+#ifdef __HAVE_OLD_DISKLABEL
+	case ODIOCGDINFO:
+		memcpy(&newlabel, lp, sizeof newlabel);
+		if (newlabel.d_npartitions > OLDMAXPARTITIONS)
+			return ENOTTY;
+		memcpy(data, &newlabel, sizeof (struct olddisklabel));
+		break;
+#endif
+
+	case DIOCGPART:
+		((struct partinfo *)data)->disklab = lp;
+		((struct partinfo *)data)->part =
+		    &lp->d_partitions[DISKPART(dev)];
+		break;
+
 	case DIOCWDINFO:
 	case DIOCSDINFO:
 #ifdef __HAVE_OLD_DISKLABEL
@@ -473,7 +485,7 @@ raioctl(dev_t dev, u_long cmd, void *data, int flag, struct lwp *l)
 		tp->d_ncylinders = lp->d_ncylinders;
 		tp->d_secpercyl = lp->d_secpercyl;
 		tp->d_secperunit = lp->d_secperunit;
-		tp->d_type = DKTYPE_MSCP;
+		tp->d_type = DTYPE_MSCP;
 		tp->d_rpm = 3600;
 		rrmakelabel(tp, ra->ra_mediaid);
 #ifdef __HAVE_OLD_DISKLABEL
@@ -484,6 +496,39 @@ raioctl(dev_t dev, u_long cmd, void *data, int flag, struct lwp *l)
 		}
 #endif
 		break;
+
+	case DIOCAWEDGE:
+	    {
+	    	struct dkwedge_info *dkw = (void *) data;
+
+		if ((flag & FWRITE) == 0)
+			return (EBADF);
+
+		/* If the ioctl happens here, the parent is us. */
+		strlcpy(dkw->dkw_parent, device_xname(ra->ra_dev),
+			sizeof(dkw->dkw_parent));
+		return (dkwedge_add(dkw));
+	    }
+
+	case DIOCDWEDGE:
+	    {
+	    	struct dkwedge_info *dkw = (void *) data;
+
+		if ((flag & FWRITE) == 0)
+			return (EBADF);
+
+		/* If the ioctl happens here, the parent is us. */
+		strlcpy(dkw->dkw_parent, device_xname(ra->ra_dev),
+			sizeof(dkw->dkw_parent));
+		return (dkwedge_del(dkw));
+	    }
+
+	case DIOCLWEDGES:
+	    {
+	    	struct dkwedge_list *dkwl = (void *) data;
+
+		return (dkwedge_list(&ra->ra_disk, dkwl, l));
+	    }
 
 	default:
 		error = ENOTTY;
@@ -724,29 +769,6 @@ raattach(device_t parent, device_t self, void *aux)
 }
 
 /*
- * Initialize drive geometry data from disklabel
- */
-static void
-ra_set_geometry(struct ra_softc *ra)
-{
-	struct	disklabel *dl;
-	struct	disk_geom *dg;
-
-	dl = ra->ra_disk.dk_label;
-	dg = &ra->ra_disk.dk_geom;
-
-	memset(dg, 0, sizeof(*dg));
-	dg->dg_secsize = dl->d_secsize;
-	dg->dg_nsectors = dl->d_nsectors;
-	dg->dg_ntracks = dl->d_ntracks;
-
-	dg->dg_ncylinders = dl->d_ncylinders;
-	dg->dg_secperunit = dl->d_secperunit;
-
-	disk_set_info(ra->ra_dev, &ra->ra_disk, NULL);
-}
-
-/*
  * (Try to) put the drive online. This is done the first time the
  * drive is opened, or if it har fallen offline.
  */
@@ -876,16 +898,25 @@ int
 rxioctl(dev_t dev, u_long cmd, void *data, int flag, struct lwp *l)
 {
 	int unit = DISKUNIT(dev);
+	struct disklabel *lp;
 	struct rx_softc *rx = device_lookup_private(&rx_cd, unit);
-	int error;
+	int error = 0;
 
-        error = disk_ioctl(&rx->ra_disk, dev, cmd, data, flag, l);
-	if (error != EPASSTHROUGH)
-		return error;
-	else
-		error = 0;
+	lp = rx->ra_disk.dk_label;
 
 	switch (cmd) {
+
+	case DIOCGDINFO:
+		memcpy(data, lp, sizeof (struct disklabel));
+		break;
+
+	case DIOCGPART:
+		((struct partinfo *)data)->disklab = lp;
+		((struct partinfo *)data)->part =
+		    &lp->d_partitions[DISKPART(dev)];
+		break;
+
+
 	case DIOCWDINFO:
 	case DIOCSDINFO:
 	case DIOCWLABEL:
@@ -984,14 +1015,13 @@ rronline(device_t usc, struct mscp *mp)
 
 	if (dl->d_secpercyl) {
 		dl->d_ncylinders = dl->d_secperunit/dl->d_secpercyl;
-		dl->d_type = DKTYPE_MSCP;
+		dl->d_type = DTYPE_MSCP;
 		dl->d_rpm = 3600;
 	} else {
-		dl->d_type = DKTYPE_FLOPPY;
+		dl->d_type = DTYPE_FLOPPY;
 		dl->d_rpm = 300;
 	}
 	rrmakelabel(dl, ra->ra_mediaid);
-	ra_set_geometry(ra);
 
 	return (MSCP_DONE);
 }

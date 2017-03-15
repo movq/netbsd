@@ -55,7 +55,7 @@ public:
   void addCalledDecl(Decl *D) {
     if (G->includeInGraph(D)) {
       CallGraphNode *CalleeNode = G->getOrInsertNode(D);
-      CallerNode->addCallee(CalleeNode);
+      CallerNode->addCallee(CalleeNode, G);
     }
   }
 
@@ -83,9 +83,9 @@ public:
   }
 
   void VisitChildren(Stmt *S) {
-    for (Stmt *SubStmt : S->children())
-      if (SubStmt)
-        this->Visit(SubStmt);
+    for (Stmt::child_range I = S->children(); I; ++I)
+      if (*I)
+        static_cast<CGBuilder*>(this)->Visit(*I);
   }
 };
 
@@ -104,7 +104,9 @@ CallGraph::CallGraph() {
   Root = getOrInsertNode(nullptr);
 }
 
-CallGraph::~CallGraph() {}
+CallGraph::~CallGraph() {
+  llvm::DeleteContainerSeconds(FunctionMap);
+}
 
 bool CallGraph::includeInGraph(const Decl *D) {
   assert(D);
@@ -140,22 +142,22 @@ void CallGraph::addNodeForDecl(Decl* D, bool IsGlobal) {
 CallGraphNode *CallGraph::getNode(const Decl *F) const {
   FunctionMapTy::const_iterator I = FunctionMap.find(F);
   if (I == FunctionMap.end()) return nullptr;
-  return I->second.get();
+  return I->second;
 }
 
 CallGraphNode *CallGraph::getOrInsertNode(Decl *F) {
   if (F && !isa<ObjCMethodDecl>(F))
     F = F->getCanonicalDecl();
 
-  std::unique_ptr<CallGraphNode> &Node = FunctionMap[F];
+  CallGraphNode *&Node = FunctionMap[F];
   if (Node)
-    return Node.get();
+    return Node;
 
-  Node = llvm::make_unique<CallGraphNode>(F);
+  Node = new CallGraphNode(F);
   // Make Root node a parent of all functions to make sure all are reachable.
   if (F)
-    Root->addCallee(Node.get());
-  return Node.get();
+    Root->addCallee(Node, this);
+  return Node;
 }
 
 void CallGraph::print(raw_ostream &OS) const {
@@ -186,7 +188,7 @@ void CallGraph::print(raw_ostream &OS) const {
   OS.flush();
 }
 
-LLVM_DUMP_METHOD void CallGraph::dump() const {
+void CallGraph::dump() const {
   print(llvm::errs());
 }
 
@@ -200,7 +202,7 @@ void CallGraphNode::print(raw_ostream &os) const {
   os << "< >";
 }
 
-LLVM_DUMP_METHOD void CallGraphNode::dump() const {
+void CallGraphNode::dump() const {
   print(llvm::errs());
 }
 

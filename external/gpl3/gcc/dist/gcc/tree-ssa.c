@@ -1,5 +1,5 @@
 /* Miscellaneous SSA utility functions.
-   Copyright (C) 2001-2015 Free Software Foundation, Inc.
+   Copyright (C) 2001-2013 Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -21,56 +21,27 @@ along with GCC; see the file COPYING3.  If not see
 #include "system.h"
 #include "coretypes.h"
 #include "tm.h"
-#include "hash-set.h"
-#include "machmode.h"
-#include "vec.h"
-#include "double-int.h"
-#include "input.h"
-#include "alias.h"
-#include "symtab.h"
-#include "wide-int.h"
-#include "inchash.h"
 #include "tree.h"
-#include "fold-const.h"
-#include "stor-layout.h"
 #include "flags.h"
 #include "tm_p.h"
 #include "target.h"
+#include "ggc.h"
 #include "langhooks.h"
-#include "predict.h"
-#include "hard-reg-set.h"
-#include "input.h"
-#include "function.h"
-#include "dominance.h"
-#include "cfg.h"
 #include "basic-block.h"
+#include "function.h"
 #include "gimple-pretty-print.h"
-#include "tree-ssa-alias.h"
-#include "internal-fn.h"
-#include "gimple-fold.h"
-#include "gimple-expr.h"
-#include "is-a.h"
+#include "bitmap.h"
+#include "pointer-set.h"
+#include "tree-flow.h"
 #include "gimple.h"
-#include "gimplify.h"
-#include "gimple-iterator.h"
-#include "gimple-walk.h"
-#include "gimple-ssa.h"
-#include "tree-phinodes.h"
-#include "ssa-iterators.h"
-#include "stringpool.h"
-#include "tree-ssanames.h"
-#include "tree-ssa-loop-manip.h"
-#include "tree-into-ssa.h"
-#include "tree-ssa.h"
 #include "tree-inline.h"
-#include "hash-map.h"
+#include "hashtab.h"
 #include "tree-pass.h"
 #include "diagnostic-core.h"
 #include "cfgloop.h"
-#include "cfgexpand.h"
 
 /* Pointer map of variable mappings, keyed by edge.  */
-static hash_map<edge, auto_vec<edge_var_map> > *edge_var_maps;
+static struct pointer_map_t *edge_var_maps;
 
 
 /* Add a mapping with PHI RESULT and PHI DEF associated with edge E.  */
@@ -78,17 +49,23 @@ static hash_map<edge, auto_vec<edge_var_map> > *edge_var_maps;
 void
 redirect_edge_var_map_add (edge e, tree result, tree def, source_location locus)
 {
+  void **slot;
+  edge_var_map_vector *head;
   edge_var_map new_node;
 
   if (edge_var_maps == NULL)
-    edge_var_maps = new hash_map<edge, auto_vec<edge_var_map> >;
+    edge_var_maps = pointer_map_create ();
 
-  auto_vec<edge_var_map> &slot = edge_var_maps->get_or_insert (e);
+  slot = pointer_map_insert (edge_var_maps, e);
+  head = (edge_var_map_vector *) *slot;
+  if (!head)
+    vec_safe_reserve (head, 5);
   new_node.def = def;
   new_node.result = result;
   new_node.locus = locus;
 
-  slot.safe_push (new_node);
+  vec_safe_push (head, new_node);
+  *slot = head;
 }
 
 
@@ -97,52 +74,82 @@ redirect_edge_var_map_add (edge e, tree result, tree def, source_location locus)
 void
 redirect_edge_var_map_clear (edge e)
 {
+  void **slot;
+  edge_var_map_vector *head;
+
   if (!edge_var_maps)
     return;
 
-  auto_vec<edge_var_map> *head = edge_var_maps->get (e);
+  slot = pointer_map_contains (edge_var_maps, e);
 
-  if (head)
-    head->release ();
+  if (slot)
+    {
+      head = (edge_var_map_vector *) *slot;
+      vec_free (head);
+      *slot = NULL;
+    }
 }
 
 
 /* Duplicate the redirected var mappings in OLDE in NEWE.
 
-   This assumes a hash_map can have multiple edges mapping to the same
-   var_map (many to one mapping), since we don't remove the previous mappings.
-   */
+   Since we can't remove a mapping, let's just duplicate it.  This assumes a
+   pointer_map can have multiple edges mapping to the same var_map (many to
+   one mapping), since we don't remove the previous mappings.  */
 
 void
 redirect_edge_var_map_dup (edge newe, edge olde)
 {
+  void **new_slot, **old_slot;
+  edge_var_map_vector *head;
+
   if (!edge_var_maps)
     return;
 
-  auto_vec<edge_var_map> *new_head = &edge_var_maps->get_or_insert (newe);
-  auto_vec<edge_var_map> *old_head = edge_var_maps->get (olde);
-  if (!old_head)
+  new_slot = pointer_map_insert (edge_var_maps, newe);
+  old_slot = pointer_map_contains (edge_var_maps, olde);
+  if (!old_slot)
     return;
+  head = (edge_var_map_vector *) *old_slot;
 
-  new_head->safe_splice (*old_head);
+  edge_var_map_vector *new_head = NULL;
+  if (head)
+    new_head = vec_safe_copy (head);
+  else
+    vec_safe_reserve (new_head, 5);
+  *new_slot = new_head;
 }
 
 
 /* Return the variable mappings for a given edge.  If there is none, return
    NULL.  */
 
-vec<edge_var_map> *
+edge_var_map_vector *
 redirect_edge_var_map_vector (edge e)
 {
+  void **slot;
+
   /* Hey, what kind of idiot would... you'd be surprised.  */
   if (!edge_var_maps)
     return NULL;
 
-  auto_vec<edge_var_map> *slot = edge_var_maps->get (e);
+  slot = pointer_map_contains (edge_var_maps, e);
   if (!slot)
     return NULL;
 
-  return slot;
+  return (edge_var_map_vector *) *slot;
+}
+
+/* Used by redirect_edge_var_map_destroy to free all memory.  */
+
+static bool
+free_var_map_entry (const void *key ATTRIBUTE_UNUSED,
+		    void **value,
+		    void *data ATTRIBUTE_UNUSED)
+{
+  edge_var_map_vector *head = (edge_var_map_vector *) *value;
+  vec_free (head);
+  return true;
 }
 
 /* Clear the edge variable mappings.  */
@@ -150,8 +157,12 @@ redirect_edge_var_map_vector (edge e)
 void
 redirect_edge_var_map_destroy (void)
 {
-  delete edge_var_maps;
-  edge_var_maps = NULL;
+  if (edge_var_maps)
+    {
+      pointer_map_traverse (edge_var_maps, free_var_map_entry, NULL);
+      pointer_map_destroy (edge_var_maps);
+      edge_var_maps = NULL;
+    }
 }
 
 
@@ -163,8 +174,8 @@ redirect_edge_var_map_destroy (void)
 edge
 ssa_redirect_edge (edge e, basic_block dest)
 {
-  gphi_iterator gsi;
-  gphi *phi;
+  gimple_stmt_iterator gsi;
+  gimple phi;
 
   redirect_edge_var_map_clear (e);
 
@@ -174,7 +185,7 @@ ssa_redirect_edge (edge e, basic_block dest)
       tree def;
       source_location locus ;
 
-      phi = gsi.phi ();
+      phi = gsi_stmt (gsi);
       def = gimple_phi_arg_def (phi, e->dest_idx);
       locus = gimple_phi_arg_location (phi, e->dest_idx);
 
@@ -196,12 +207,13 @@ ssa_redirect_edge (edge e, basic_block dest)
 void
 flush_pending_stmts (edge e)
 {
-  gphi *phi;
+  gimple phi;
+  edge_var_map_vector *v;
   edge_var_map *vm;
   int i;
-  gphi_iterator gsi;
+  gimple_stmt_iterator gsi;
 
-  vec<edge_var_map> *v = redirect_edge_var_map_vector (e);
+  v = redirect_edge_var_map_vector (e);
   if (!v)
     return;
 
@@ -211,48 +223,13 @@ flush_pending_stmts (edge e)
     {
       tree def;
 
-      phi = gsi.phi ();
+      phi = gsi_stmt (gsi);
       def = redirect_edge_var_map_def (vm);
       add_phi_arg (phi, def, e, redirect_edge_var_map_location (vm));
     }
 
   redirect_edge_var_map_clear (e);
 }
-
-/* Replace the LHS of STMT, an assignment, either a GIMPLE_ASSIGN or a
-   GIMPLE_CALL, with NLHS, in preparation for modifying the RHS to an
-   expression with a different value.
-
-   This will update any annotations (say debug bind stmts) referring
-   to the original LHS, so that they use the RHS instead.  This is
-   done even if NLHS and LHS are the same, for it is understood that
-   the RHS will be modified afterwards, and NLHS will not be assigned
-   an equivalent value.
-
-   Adjusting any non-annotation uses of the LHS, if needed, is a
-   responsibility of the caller.
-
-   The effect of this call should be pretty much the same as that of
-   inserting a copy of STMT before STMT, and then removing the
-   original stmt, at which time gsi_remove() would have update
-   annotations, but using this function saves all the inserting,
-   copying and removing.  */
-
-void
-gimple_replace_ssa_lhs (gimple stmt, tree nlhs)
-{
-  if (MAY_HAVE_DEBUG_STMTS)
-    {
-      tree lhs = gimple_get_lhs (stmt);
-
-      gcc_assert (SSA_NAME_DEF_STMT (lhs) == stmt);
-
-      insert_debug_temp_for_var_def (NULL, lhs);
-    }
-
-  gimple_set_lhs (stmt, nlhs);
-}
-
 
 /* Given a tree for an expression for which we might want to emit
    locations or values in debug information (generally a variable, but
@@ -372,7 +349,7 @@ insert_debug_temp_for_var_def (gimple_stmt_iterator *gsi, tree var)
      we'll have to drop debug information.  */
   if (gimple_code (def_stmt) == GIMPLE_PHI)
     {
-      value = degenerate_phi_result (as_a <gphi *> (def_stmt));
+      value = degenerate_phi_result (def_stmt);
       if (value && walk_tree (&value, find_released_ssa_name, NULL, NULL))
 	value = NULL;
       /* error_mark_node is what fixup_noreturn_call changes PHI arguments
@@ -450,7 +427,7 @@ insert_debug_temp_for_var_def (gimple_stmt_iterator *gsi, tree var)
 	;
       else
 	{
-	  gdebug *def_temp;
+	  gimple def_temp;
 	  tree vexpr = make_node (DEBUG_EXPR_DECL);
 
 	  def_temp = gimple_build_debug_bind (vexpr,
@@ -844,7 +821,7 @@ verify_use (basic_block bb, basic_block def_bb, use_operand_p use_p,
       definition of SSA_NAME.  */
 
 static bool
-verify_phi_args (gphi *phi, basic_block bb, basic_block *definition_block)
+verify_phi_args (gimple phi, basic_block bb, basic_block *definition_block)
 {
   edge e;
   bool err = false;
@@ -932,7 +909,7 @@ error:
    TODO: verify the variable annotations.  */
 
 DEBUG_FUNCTION void
-verify_ssa (bool check_modified_stmt, bool check_ssa_operands)
+verify_ssa (bool check_modified_stmt)
 {
   size_t i;
   basic_block bb;
@@ -961,9 +938,9 @@ verify_ssa (bool check_modified_stmt, bool check_ssa_operands)
 	  if (!gimple_nop_p (stmt))
 	    {
 	      basic_block bb = gimple_bb (stmt);
-	      if (verify_def (bb, definition_block,
-			      name, stmt, virtual_operand_p (name)))
-		goto err;
+	      verify_def (bb, definition_block,
+			  name, stmt, virtual_operand_p (name));
+
 	    }
 	}
     }
@@ -972,10 +949,12 @@ verify_ssa (bool check_modified_stmt, bool check_ssa_operands)
 
   /* Now verify all the uses and make sure they agree with the definitions
      found in the previous pass.  */
-  FOR_EACH_BB_FN (bb, cfun)
+  FOR_EACH_BB (bb)
     {
       edge e;
+      gimple phi;
       edge_iterator ei;
+      gimple_stmt_iterator gsi;
 
       /* Make sure that all edges have a clear 'aux' field.  */
       FOR_EACH_EDGE (e, ei, bb->preds)
@@ -989,9 +968,9 @@ verify_ssa (bool check_modified_stmt, bool check_ssa_operands)
 	}
 
       /* Verify the arguments for every PHI node in the block.  */
-      for (gphi_iterator gsi = gsi_start_phis (bb); !gsi_end_p (gsi); gsi_next (&gsi))
+      for (gsi = gsi_start_phis (bb); !gsi_end_p (gsi); gsi_next (&gsi))
 	{
-	  gphi *phi = gsi.phi ();
+	  phi = gsi_stmt (gsi);
 	  if (verify_phi_args (phi, bb, definition_block))
 	    goto err;
 
@@ -1000,8 +979,7 @@ verify_ssa (bool check_modified_stmt, bool check_ssa_operands)
 	}
 
       /* Now verify all the uses and vuses in every statement of the block.  */
-      for (gimple_stmt_iterator gsi = gsi_start_bb (bb); !gsi_end_p (gsi);
-	   gsi_next (&gsi))
+      for (gsi = gsi_start_bb (bb); !gsi_end_p (gsi); gsi_next (&gsi))
 	{
 	  gimple stmt = gsi_stmt (gsi);
 	  use_operand_p use_p;
@@ -1014,7 +992,7 @@ verify_ssa (bool check_modified_stmt, bool check_ssa_operands)
 	      goto err;
 	    }
 
-	  if (check_ssa_operands && verify_ssa_operands (cfun, stmt))
+	  if (verify_ssa_operands (stmt))
 	    {
 	      print_gimple_stmt (stderr, stmt, 0, TDF_VOPS);
 	      goto err;
@@ -1068,14 +1046,69 @@ err:
   internal_error ("verify_ssa failed");
 }
 
+/* Return true if the uid in both int tree maps are equal.  */
+
+int
+int_tree_map_eq (const void *va, const void *vb)
+{
+  const struct int_tree_map *a = (const struct int_tree_map *) va;
+  const struct int_tree_map *b = (const struct int_tree_map *) vb;
+  return (a->uid == b->uid);
+}
+
+/* Hash a UID in a int_tree_map.  */
+
+unsigned int
+int_tree_map_hash (const void *item)
+{
+  return ((const struct int_tree_map *)item)->uid;
+}
+
+/* Return true if the DECL_UID in both trees are equal.  */
+
+int
+uid_decl_map_eq (const void *va, const void *vb)
+{
+  const_tree a = (const_tree) va;
+  const_tree b = (const_tree) vb;
+  return (a->decl_minimal.uid == b->decl_minimal.uid);
+}
+
+/* Hash a tree in a uid_decl_map.  */
+
+unsigned int
+uid_decl_map_hash (const void *item)
+{
+  return ((const_tree)item)->decl_minimal.uid;
+}
+
+/* Return true if the DECL_UID in both trees are equal.  */
+
+static int
+uid_ssaname_map_eq (const void *va, const void *vb)
+{
+  const_tree a = (const_tree) va;
+  const_tree b = (const_tree) vb;
+  return (a->ssa_name.var->decl_minimal.uid == b->ssa_name.var->decl_minimal.uid);
+}
+
+/* Hash a tree in a uid_decl_map.  */
+
+static unsigned int
+uid_ssaname_map_hash (const void *item)
+{
+  return ((const_tree)item)->ssa_name.var->decl_minimal.uid;
+}
+
 
 /* Initialize global DFA and SSA structures.  */
 
 void
 init_tree_ssa (struct function *fn)
 {
-  fn->gimple_df = ggc_cleared_alloc<gimple_df> ();
-  fn->gimple_df->default_defs = hash_table<ssa_name_hasher>::create_ggc (20);
+  fn->gimple_df = ggc_alloc_cleared_gimple_df ();
+  fn->gimple_df->default_defs = htab_create_ggc (20, uid_ssaname_map_hash,
+				                 uid_ssaname_map_eq, NULL);
   pt_solution_reset (&fn->gimple_df->escaped);
   init_ssanames (fn, 0);
 }
@@ -1087,54 +1120,29 @@ static unsigned int
 execute_init_datastructures (void)
 {
   /* Allocate hash tables, arrays and other structures.  */
-  gcc_assert (!cfun->gimple_df);
   init_tree_ssa (cfun);
   return 0;
 }
 
-namespace {
-
-const pass_data pass_data_init_datastructures =
+struct gimple_opt_pass pass_init_datastructures =
 {
-  GIMPLE_PASS, /* type */
-  "*init_datastructures", /* name */
-  OPTGROUP_NONE, /* optinfo_flags */
-  TV_NONE, /* tv_id */
-  PROP_cfg, /* properties_required */
-  0, /* properties_provided */
-  0, /* properties_destroyed */
-  0, /* todo_flags_start */
-  0, /* todo_flags_finish */
+ {
+  GIMPLE_PASS,
+  "*init_datastructures",		/* name */
+  OPTGROUP_NONE,                        /* optinfo_flags */
+  NULL,					/* gate */
+  execute_init_datastructures,		/* execute */
+  NULL,					/* sub */
+  NULL,					/* next */
+  0,					/* static_pass_number */
+  TV_NONE,				/* tv_id */
+  PROP_cfg,				/* properties_required */
+  0,					/* properties_provided */
+  0,					/* properties_destroyed */
+  0,					/* todo_flags_start */
+  0					/* todo_flags_finish */
+ }
 };
-
-class pass_init_datastructures : public gimple_opt_pass
-{
-public:
-  pass_init_datastructures (gcc::context *ctxt)
-    : gimple_opt_pass (pass_data_init_datastructures, ctxt)
-  {}
-
-  /* opt_pass methods: */
-  virtual bool gate (function *fun)
-    {
-      /* Do nothing for funcions that was produced already in SSA form.  */
-      return !(fun->curr_properties & PROP_ssa);
-    }
-
-  virtual unsigned int execute (function *)
-    {
-      return execute_init_datastructures ();
-    }
-
-}; // class pass_init_datastructures
-
-} // anon namespace
-
-gimple_opt_pass *
-make_pass_init_datastructures (gcc::context *ctxt)
-{
-  return new pass_init_datastructures (ctxt);
-}
 
 /* Deallocate memory associated with SSA data structures for FNDECL.  */
 
@@ -1145,19 +1153,273 @@ delete_tree_ssa (void)
 
   /* We no longer maintain the SSA operand cache at this point.  */
   if (ssa_operands_active (cfun))
-    fini_ssa_operands (cfun);
+    fini_ssa_operands ();
 
-  cfun->gimple_df->default_defs->empty ();
+  htab_delete (cfun->gimple_df->default_defs);
   cfun->gimple_df->default_defs = NULL;
   pt_solution_reset (&cfun->gimple_df->escaped);
   if (cfun->gimple_df->decls_to_pointers != NULL)
-    delete cfun->gimple_df->decls_to_pointers;
+    pointer_map_destroy (cfun->gimple_df->decls_to_pointers);
   cfun->gimple_df->decls_to_pointers = NULL;
   cfun->gimple_df->modified_noreturn_calls = NULL;
   cfun->gimple_df = NULL;
 
   /* We no longer need the edge variable maps.  */
   redirect_edge_var_map_destroy ();
+}
+
+/* Return true if the conversion from INNER_TYPE to OUTER_TYPE is a
+   useless type conversion, otherwise return false.
+
+   This function implicitly defines the middle-end type system.  With
+   the notion of 'a < b' meaning that useless_type_conversion_p (a, b)
+   holds and 'a > b' meaning that useless_type_conversion_p (b, a) holds,
+   the following invariants shall be fulfilled:
+
+     1) useless_type_conversion_p is transitive.
+	If a < b and b < c then a < c.
+
+     2) useless_type_conversion_p is not symmetric.
+	From a < b does not follow a > b.
+
+     3) Types define the available set of operations applicable to values.
+	A type conversion is useless if the operations for the target type
+	is a subset of the operations for the source type.  For example
+	casts to void* are useless, casts from void* are not (void* can't
+	be dereferenced or offsetted, but copied, hence its set of operations
+	is a strict subset of that of all other data pointer types).  Casts
+	to const T* are useless (can't be written to), casts from const T*
+	to T* are not.  */
+
+bool
+useless_type_conversion_p (tree outer_type, tree inner_type)
+{
+  /* Do the following before stripping toplevel qualifiers.  */
+  if (POINTER_TYPE_P (inner_type)
+      && POINTER_TYPE_P (outer_type))
+    {
+      /* Do not lose casts between pointers to different address spaces.  */
+      if (TYPE_ADDR_SPACE (TREE_TYPE (outer_type))
+	  != TYPE_ADDR_SPACE (TREE_TYPE (inner_type)))
+	return false;
+    }
+
+  /* From now on qualifiers on value types do not matter.  */
+  inner_type = TYPE_MAIN_VARIANT (inner_type);
+  outer_type = TYPE_MAIN_VARIANT (outer_type);
+
+  if (inner_type == outer_type)
+    return true;
+
+  /* If we know the canonical types, compare them.  */
+  if (TYPE_CANONICAL (inner_type)
+      && TYPE_CANONICAL (inner_type) == TYPE_CANONICAL (outer_type))
+    return true;
+
+  /* Changes in machine mode are never useless conversions unless we
+     deal with aggregate types in which case we defer to later checks.  */
+  if (TYPE_MODE (inner_type) != TYPE_MODE (outer_type)
+      && !AGGREGATE_TYPE_P (inner_type))
+    return false;
+
+  /* If both the inner and outer types are integral types, then the
+     conversion is not necessary if they have the same mode and
+     signedness and precision, and both or neither are boolean.  */
+  if (INTEGRAL_TYPE_P (inner_type)
+      && INTEGRAL_TYPE_P (outer_type))
+    {
+      /* Preserve changes in signedness or precision.  */
+      if (TYPE_UNSIGNED (inner_type) != TYPE_UNSIGNED (outer_type)
+	  || TYPE_PRECISION (inner_type) != TYPE_PRECISION (outer_type))
+	return false;
+
+      /* Preserve conversions to/from BOOLEAN_TYPE if types are not
+	 of precision one.  */
+      if (((TREE_CODE (inner_type) == BOOLEAN_TYPE)
+	   != (TREE_CODE (outer_type) == BOOLEAN_TYPE))
+	  && TYPE_PRECISION (outer_type) != 1)
+	return false;
+
+      /* We don't need to preserve changes in the types minimum or
+	 maximum value in general as these do not generate code
+	 unless the types precisions are different.  */
+      return true;
+    }
+
+  /* Scalar floating point types with the same mode are compatible.  */
+  else if (SCALAR_FLOAT_TYPE_P (inner_type)
+	   && SCALAR_FLOAT_TYPE_P (outer_type))
+    return true;
+
+  /* Fixed point types with the same mode are compatible.  */
+  else if (FIXED_POINT_TYPE_P (inner_type)
+	   && FIXED_POINT_TYPE_P (outer_type))
+    return true;
+
+  /* We need to take special care recursing to pointed-to types.  */
+  else if (POINTER_TYPE_P (inner_type)
+	   && POINTER_TYPE_P (outer_type))
+    {
+      /* Do not lose casts to function pointer types.  */
+      if ((TREE_CODE (TREE_TYPE (outer_type)) == FUNCTION_TYPE
+	   || TREE_CODE (TREE_TYPE (outer_type)) == METHOD_TYPE)
+	  && !(TREE_CODE (TREE_TYPE (inner_type)) == FUNCTION_TYPE
+	       || TREE_CODE (TREE_TYPE (inner_type)) == METHOD_TYPE))
+	return false;
+
+      /* We do not care for const qualification of the pointed-to types
+	 as const qualification has no semantic value to the middle-end.  */
+
+      /* Otherwise pointers/references are equivalent.  */
+      return true;
+    }
+
+  /* Recurse for complex types.  */
+  else if (TREE_CODE (inner_type) == COMPLEX_TYPE
+	   && TREE_CODE (outer_type) == COMPLEX_TYPE)
+    return useless_type_conversion_p (TREE_TYPE (outer_type),
+				      TREE_TYPE (inner_type));
+
+  /* Recurse for vector types with the same number of subparts.  */
+  else if (TREE_CODE (inner_type) == VECTOR_TYPE
+	   && TREE_CODE (outer_type) == VECTOR_TYPE
+	   && TYPE_PRECISION (inner_type) == TYPE_PRECISION (outer_type))
+    return useless_type_conversion_p (TREE_TYPE (outer_type),
+				      TREE_TYPE (inner_type));
+
+  else if (TREE_CODE (inner_type) == ARRAY_TYPE
+	   && TREE_CODE (outer_type) == ARRAY_TYPE)
+    {
+      /* Preserve string attributes.  */
+      if (TYPE_STRING_FLAG (inner_type) != TYPE_STRING_FLAG (outer_type))
+	return false;
+
+      /* Conversions from array types with unknown extent to
+	 array types with known extent are not useless.  */
+      if (!TYPE_DOMAIN (inner_type)
+	  && TYPE_DOMAIN (outer_type))
+	return false;
+
+      /* Nor are conversions from array types with non-constant size to
+         array types with constant size or to different size.  */
+      if (TYPE_SIZE (outer_type)
+	  && TREE_CODE (TYPE_SIZE (outer_type)) == INTEGER_CST
+	  && (!TYPE_SIZE (inner_type)
+	      || TREE_CODE (TYPE_SIZE (inner_type)) != INTEGER_CST
+	      || !tree_int_cst_equal (TYPE_SIZE (outer_type),
+				      TYPE_SIZE (inner_type))))
+	return false;
+
+      /* Check conversions between arrays with partially known extents.
+	 If the array min/max values are constant they have to match.
+	 Otherwise allow conversions to unknown and variable extents.
+	 In particular this declares conversions that may change the
+	 mode to BLKmode as useless.  */
+      if (TYPE_DOMAIN (inner_type)
+	  && TYPE_DOMAIN (outer_type)
+	  && TYPE_DOMAIN (inner_type) != TYPE_DOMAIN (outer_type))
+	{
+	  tree inner_min = TYPE_MIN_VALUE (TYPE_DOMAIN (inner_type));
+	  tree outer_min = TYPE_MIN_VALUE (TYPE_DOMAIN (outer_type));
+	  tree inner_max = TYPE_MAX_VALUE (TYPE_DOMAIN (inner_type));
+	  tree outer_max = TYPE_MAX_VALUE (TYPE_DOMAIN (outer_type));
+
+	  /* After gimplification a variable min/max value carries no
+	     additional information compared to a NULL value.  All that
+	     matters has been lowered to be part of the IL.  */
+	  if (inner_min && TREE_CODE (inner_min) != INTEGER_CST)
+	    inner_min = NULL_TREE;
+	  if (outer_min && TREE_CODE (outer_min) != INTEGER_CST)
+	    outer_min = NULL_TREE;
+	  if (inner_max && TREE_CODE (inner_max) != INTEGER_CST)
+	    inner_max = NULL_TREE;
+	  if (outer_max && TREE_CODE (outer_max) != INTEGER_CST)
+	    outer_max = NULL_TREE;
+
+	  /* Conversions NULL / variable <- cst are useless, but not
+	     the other way around.  */
+	  if (outer_min
+	      && (!inner_min
+		  || !tree_int_cst_equal (inner_min, outer_min)))
+	    return false;
+	  if (outer_max
+	      && (!inner_max
+		  || !tree_int_cst_equal (inner_max, outer_max)))
+	    return false;
+	}
+
+      /* Recurse on the element check.  */
+      return useless_type_conversion_p (TREE_TYPE (outer_type),
+					TREE_TYPE (inner_type));
+    }
+
+  else if ((TREE_CODE (inner_type) == FUNCTION_TYPE
+	    || TREE_CODE (inner_type) == METHOD_TYPE)
+	   && TREE_CODE (inner_type) == TREE_CODE (outer_type))
+    {
+      tree outer_parm, inner_parm;
+
+      /* If the return types are not compatible bail out.  */
+      if (!useless_type_conversion_p (TREE_TYPE (outer_type),
+				      TREE_TYPE (inner_type)))
+	return false;
+
+      /* Method types should belong to a compatible base class.  */
+      if (TREE_CODE (inner_type) == METHOD_TYPE
+	  && !useless_type_conversion_p (TYPE_METHOD_BASETYPE (outer_type),
+					 TYPE_METHOD_BASETYPE (inner_type)))
+	return false;
+
+      /* A conversion to an unprototyped argument list is ok.  */
+      if (!prototype_p (outer_type))
+	return true;
+
+      /* If the unqualified argument types are compatible the conversion
+	 is useless.  */
+      if (TYPE_ARG_TYPES (outer_type) == TYPE_ARG_TYPES (inner_type))
+	return true;
+
+      for (outer_parm = TYPE_ARG_TYPES (outer_type),
+	   inner_parm = TYPE_ARG_TYPES (inner_type);
+	   outer_parm && inner_parm;
+	   outer_parm = TREE_CHAIN (outer_parm),
+	   inner_parm = TREE_CHAIN (inner_parm))
+	if (!useless_type_conversion_p
+	       (TYPE_MAIN_VARIANT (TREE_VALUE (outer_parm)),
+		TYPE_MAIN_VARIANT (TREE_VALUE (inner_parm))))
+	  return false;
+
+      /* If there is a mismatch in the number of arguments the functions
+	 are not compatible.  */
+      if (outer_parm || inner_parm)
+	return false;
+
+      /* Defer to the target if necessary.  */
+      if (TYPE_ATTRIBUTES (inner_type) || TYPE_ATTRIBUTES (outer_type))
+	return comp_type_attributes (outer_type, inner_type) != 0;
+
+      return true;
+    }
+
+  /* For aggregates we rely on TYPE_CANONICAL exclusively and require
+     explicit conversions for types involving to be structurally
+     compared types.  */
+  else if (AGGREGATE_TYPE_P (inner_type)
+	   && TREE_CODE (inner_type) == TREE_CODE (outer_type))
+    return false;
+
+  return false;
+}
+
+/* Return true if a conversion from either type of TYPE1 and TYPE2
+   to the other is not required.  Otherwise return false.  */
+
+bool
+types_compatible_p (tree type1, tree type2)
+{
+  return (type1 == type2
+	  || (useless_type_conversion_p (type1, type2)
+	      && useless_type_conversion_p (type2, type1)));
 }
 
 /* Return true if EXPR is a useless type conversion, otherwise return
@@ -1193,46 +1455,304 @@ tree_ssa_strip_useless_type_conversions (tree exp)
 }
 
 
-/* Return true if T, an SSA_NAME, has an undefined value.  PARTIAL is what
-   should be returned if the value is only partially undefined.  */
+/* Internal helper for walk_use_def_chains.  VAR, FN and DATA are as
+   described in walk_use_def_chains.
 
-bool
-ssa_undefined_value_p (tree t, bool partial)
+   VISITED is a pointer set used to mark visited SSA_NAMEs to avoid
+      infinite loops.  We used to have a bitmap for this to just mark
+      SSA versions we had visited.  But non-sparse bitmaps are way too
+      expensive, while sparse bitmaps may cause quadratic behavior.
+
+   IS_DFS is true if the caller wants to perform a depth-first search
+      when visiting PHI nodes.  A DFS will visit each PHI argument and
+      call FN after each one.  Otherwise, all the arguments are
+      visited first and then FN is called with each of the visited
+      arguments in a separate pass.  */
+
+static bool
+walk_use_def_chains_1 (tree var, walk_use_def_chains_fn fn, void *data,
+		       struct pointer_set_t *visited, bool is_dfs)
 {
   gimple def_stmt;
-  tree var = SSA_NAME_VAR (t);
 
-  if (!var)
-    ;
-  /* Parameters get their initial value from the function entry.  */
-  else if (TREE_CODE (var) == PARM_DECL)
-    return false;
-  /* When returning by reference the return address is actually a hidden
-     parameter.  */
-  else if (TREE_CODE (var) == RESULT_DECL && DECL_BY_REFERENCE (var))
-    return false;
-  /* Hard register variables get their initial value from the ether.  */
-  else if (TREE_CODE (var) == VAR_DECL && DECL_HARD_REGISTER (var))
+  if (pointer_set_insert (visited, var))
     return false;
 
-  /* The value is undefined iff its definition statement is empty.  */
-  def_stmt = SSA_NAME_DEF_STMT (t);
-  if (gimple_nop_p (def_stmt))
-    return true;
+  def_stmt = SSA_NAME_DEF_STMT (var);
 
-  /* Check if the complex was not only partially defined.  */
-  if (partial && is_gimple_assign (def_stmt)
-      && gimple_assign_rhs_code (def_stmt) == COMPLEX_EXPR)
+  if (gimple_code (def_stmt) != GIMPLE_PHI)
     {
-      tree rhs1, rhs2;
-
-      rhs1 = gimple_assign_rhs1 (def_stmt);
-      rhs2 = gimple_assign_rhs2 (def_stmt);
-      return (TREE_CODE (rhs1) == SSA_NAME && ssa_undefined_value_p (rhs1))
-	     || (TREE_CODE (rhs2) == SSA_NAME && ssa_undefined_value_p (rhs2));
+      /* If we reached the end of the use-def chain, call FN.  */
+      return fn (var, def_stmt, data);
     }
+  else
+    {
+      size_t i;
+
+      /* When doing a breadth-first search, call FN before following the
+	 use-def links for each argument.  */
+      if (!is_dfs)
+	for (i = 0; i < gimple_phi_num_args (def_stmt); i++)
+	  if (fn (gimple_phi_arg_def (def_stmt, i), def_stmt, data))
+	    return true;
+
+      /* Follow use-def links out of each PHI argument.  */
+      for (i = 0; i < gimple_phi_num_args (def_stmt); i++)
+	{
+	  tree arg = gimple_phi_arg_def (def_stmt, i);
+
+	  /* ARG may be NULL for newly introduced PHI nodes.  */
+	  if (arg
+	      && TREE_CODE (arg) == SSA_NAME
+	      && walk_use_def_chains_1 (arg, fn, data, visited, is_dfs))
+	    return true;
+	}
+
+      /* When doing a depth-first search, call FN after following the
+	 use-def links for each argument.  */
+      if (is_dfs)
+	for (i = 0; i < gimple_phi_num_args (def_stmt); i++)
+	  if (fn (gimple_phi_arg_def (def_stmt, i), def_stmt, data))
+	    return true;
+    }
+
   return false;
 }
+
+
+
+/* Walk use-def chains starting at the SSA variable VAR.  Call
+   function FN at each reaching definition found.  FN takes three
+   arguments: VAR, its defining statement (DEF_STMT) and a generic
+   pointer to whatever state information that FN may want to maintain
+   (DATA).  FN is able to stop the walk by returning true, otherwise
+   in order to continue the walk, FN should return false.
+
+   Note, that if DEF_STMT is a PHI node, the semantics are slightly
+   different.  The first argument to FN is no longer the original
+   variable VAR, but the PHI argument currently being examined.  If FN
+   wants to get at VAR, it should call PHI_RESULT (PHI).
+
+   If IS_DFS is true, this function will:
+
+	1- walk the use-def chains for all the PHI arguments, and,
+	2- call (*FN) (ARG, PHI, DATA) on all the PHI arguments.
+
+   If IS_DFS is false, the two steps above are done in reverse order
+   (i.e., a breadth-first search).  */
+
+void
+walk_use_def_chains (tree var, walk_use_def_chains_fn fn, void *data,
+                     bool is_dfs)
+{
+  gimple def_stmt;
+
+  gcc_assert (TREE_CODE (var) == SSA_NAME);
+
+  def_stmt = SSA_NAME_DEF_STMT (var);
+
+  /* We only need to recurse if the reaching definition comes from a PHI
+     node.  */
+  if (gimple_code (def_stmt) != GIMPLE_PHI)
+    (*fn) (var, def_stmt, data);
+  else
+    {
+      struct pointer_set_t *visited = pointer_set_create ();
+      walk_use_def_chains_1 (var, fn, data, visited, is_dfs);
+      pointer_set_destroy (visited);
+    }
+}
+
+
+/* Emit warnings for uninitialized variables.  This is done in two passes.
+
+   The first pass notices real uses of SSA names with undefined values.
+   Such uses are unconditionally uninitialized, and we can be certain that
+   such a use is a mistake.  This pass is run before most optimizations,
+   so that we catch as many as we can.
+
+   The second pass follows PHI nodes to find uses that are potentially
+   uninitialized.  In this case we can't necessarily prove that the use
+   is really uninitialized.  This pass is run after most optimizations,
+   so that we thread as many jumps and possible, and delete as much dead
+   code as possible, in order to reduce false positives.  We also look
+   again for plain uninitialized variables, since optimization may have
+   changed conditionally uninitialized to unconditionally uninitialized.  */
+
+/* Emit a warning for EXPR based on variable VAR at the point in the
+   program T, an SSA_NAME, is used being uninitialized.  The exact
+   warning text is in MSGID and LOCUS may contain a location or be null.
+   WC is the warning code.  */
+
+void
+warn_uninit (enum opt_code wc, tree t,
+	     tree expr, tree var, const char *gmsgid, void *data)
+{
+  gimple context = (gimple) data;
+  location_t location, cfun_loc;
+  expanded_location xloc, floc;
+
+  if (!ssa_undefined_value_p (t))
+    return;
+
+  /* TREE_NO_WARNING either means we already warned, or the front end
+     wishes to suppress the warning.  */
+  if ((context
+       && (gimple_no_warning_p (context)
+	   || (gimple_assign_single_p (context)
+	       && TREE_NO_WARNING (gimple_assign_rhs1 (context)))))
+      || TREE_NO_WARNING (expr))
+    return;
+
+  location = (context != NULL && gimple_has_location (context))
+	     ? gimple_location (context)
+	     : DECL_SOURCE_LOCATION (var);
+  location = linemap_resolve_location (line_table, location,
+				       LRK_SPELLING_LOCATION,
+				       NULL);
+  cfun_loc = DECL_SOURCE_LOCATION (cfun->decl);
+  xloc = expand_location (location);
+  floc = expand_location (cfun_loc);
+  if (warning_at (location, wc, gmsgid, expr))
+    {
+      TREE_NO_WARNING (expr) = 1;
+
+      if (location == DECL_SOURCE_LOCATION (var))
+	return;
+      if (xloc.file != floc.file
+	  || linemap_location_before_p (line_table,
+					location, cfun_loc)
+	  || linemap_location_before_p (line_table,
+					cfun->function_end_locus,
+					location))
+	inform (DECL_SOURCE_LOCATION (var), "%qD was declared here", var);
+    }
+}
+
+unsigned int
+warn_uninitialized_vars (bool warn_possibly_uninitialized)
+{
+  gimple_stmt_iterator gsi;
+  basic_block bb;
+
+  FOR_EACH_BB (bb)
+    {
+      bool always_executed = dominated_by_p (CDI_POST_DOMINATORS,
+					     single_succ (ENTRY_BLOCK_PTR), bb);
+      for (gsi = gsi_start_bb (bb); !gsi_end_p (gsi); gsi_next (&gsi))
+	{
+	  gimple stmt = gsi_stmt (gsi);
+	  use_operand_p use_p;
+	  ssa_op_iter op_iter;
+	  tree use;
+
+	  if (is_gimple_debug (stmt))
+	    continue;
+
+	  /* We only do data flow with SSA_NAMEs, so that's all we
+	     can warn about.  */
+	  FOR_EACH_SSA_USE_OPERAND (use_p, stmt, op_iter, SSA_OP_USE)
+	    {
+	      use = USE_FROM_PTR (use_p);
+	      if (always_executed)
+		warn_uninit (OPT_Wuninitialized, use,
+			     SSA_NAME_VAR (use), SSA_NAME_VAR (use),
+			     "%qD is used uninitialized in this function",
+			     stmt);
+	      else if (warn_possibly_uninitialized)
+		warn_uninit (OPT_Wmaybe_uninitialized, use,
+			     SSA_NAME_VAR (use), SSA_NAME_VAR (use),
+			     "%qD may be used uninitialized in this function",
+			     stmt);
+	    }
+
+	  /* For memory the only cheap thing we can do is see if we
+	     have a use of the default def of the virtual operand.
+	     ???  Note that at -O0 we do not have virtual operands.
+	     ???  Not so cheap would be to use the alias oracle via
+	     walk_aliased_vdefs, if we don't find any aliasing vdef
+	     warn as is-used-uninitialized, if we don't find an aliasing
+	     vdef that kills our use (stmt_kills_ref_p), warn as
+	     may-be-used-uninitialized.  But this walk is quadratic and
+	     so must be limited which means we would miss warning
+	     opportunities.  */
+	  use = gimple_vuse (stmt);
+	  if (use
+	      && gimple_assign_single_p (stmt)
+	      && !gimple_vdef (stmt)
+	      && SSA_NAME_IS_DEFAULT_DEF (use))
+	    {
+	      tree rhs = gimple_assign_rhs1 (stmt);
+	      tree base = get_base_address (rhs);
+
+	      /* Do not warn if it can be initialized outside this function.  */
+	      if (TREE_CODE (base) != VAR_DECL
+		  || DECL_HARD_REGISTER (base)
+		  || is_global_var (base))
+		continue;
+
+	      if (always_executed)
+		warn_uninit (OPT_Wuninitialized, use, 
+			     gimple_assign_rhs1 (stmt), base,
+			     "%qE is used uninitialized in this function",
+			     stmt);
+	      else if (warn_possibly_uninitialized)
+		warn_uninit (OPT_Wmaybe_uninitialized, use,
+			     gimple_assign_rhs1 (stmt), base,
+			     "%qE may be used uninitialized in this function",
+			     stmt);
+	    }
+	}
+    }
+
+  return 0;
+}
+
+static unsigned int
+execute_early_warn_uninitialized (void)
+{
+  /* Currently, this pass runs always but
+     execute_late_warn_uninitialized only runs with optimization. With
+     optimization we want to warn about possible uninitialized as late
+     as possible, thus don't do it here.  However, without
+     optimization we need to warn here about "may be uninitialized".
+  */
+  calculate_dominance_info (CDI_POST_DOMINATORS);
+
+  warn_uninitialized_vars (/*warn_possibly_uninitialized=*/!optimize);
+
+  /* Post-dominator information can not be reliably updated. Free it
+     after the use.  */
+
+  free_dominance_info (CDI_POST_DOMINATORS);
+  return 0;
+}
+
+static bool
+gate_warn_uninitialized (void)
+{
+  return warn_uninitialized != 0;
+}
+
+struct gimple_opt_pass pass_early_warn_uninitialized =
+{
+ {
+  GIMPLE_PASS,
+  "*early_warn_uninitialized",		/* name */
+  OPTGROUP_NONE,                        /* optinfo_flags */
+  gate_warn_uninitialized,		/* gate */
+  execute_early_warn_uninitialized,	/* execute */
+  NULL,					/* sub */
+  NULL,					/* next */
+  0,					/* static_pass_number */
+  TV_TREE_UNINIT,			/* tv_id */
+  PROP_ssa,				/* properties_required */
+  0,					/* properties_provided */
+  0,					/* properties_destroyed */
+  0,					/* todo_flags_start */
+  0                                     /* todo_flags_finish */
+ }
+};
 
 
 /* If necessary, rewrite the base of the reference tree *TP from
@@ -1309,9 +1829,9 @@ non_rewritable_mem_ref_base (tree ref)
 	   || TREE_CODE (TREE_TYPE (decl)) == COMPLEX_TYPE)
 	  && useless_type_conversion_p (TREE_TYPE (base),
 					TREE_TYPE (TREE_TYPE (decl)))
-	  && wi::fits_uhwi_p (mem_ref_offset (base))
-	  && wi::gtu_p (wi::to_offset (TYPE_SIZE_UNIT (TREE_TYPE (decl))),
-			mem_ref_offset (base))
+	  && mem_ref_offset (base).fits_uhwi ()
+	  && tree_to_double_int (TYPE_SIZE_UNIT (TREE_TYPE (decl)))
+	     .ugt (mem_ref_offset (base))
 	  && multiple_of_p (sizetype, TREE_OPERAND (base, 1),
 			    TYPE_SIZE_UNIT (TREE_TYPE (base))))
 	return NULL_TREE;
@@ -1334,13 +1854,6 @@ non_rewritable_lvalue_p (tree lhs)
 {
   /* A plain decl is always rewritable.  */
   if (DECL_P (lhs))
-    return false;
-
-  /* We can re-write REALPART_EXPR and IMAGPART_EXPR sets in
-     a reasonably efficient manner... */
-  if ((TREE_CODE (lhs) == REALPART_EXPR
-       || TREE_CODE (lhs) == IMAGPART_EXPR)
-      && DECL_P (TREE_OPERAND (lhs, 0)))
     return false;
 
   /* A decl that is wrapped inside a MEM-REF that covers
@@ -1418,6 +1931,7 @@ maybe_optimize_var (tree var, bitmap addresses_taken, bitmap not_reg_needs,
 void
 execute_update_addresses_taken (void)
 {
+  gimple_stmt_iterator gsi;
   basic_block bb;
   bitmap addresses_taken = BITMAP_ALLOC (NULL);
   bitmap not_reg_needs = BITMAP_ALLOC (NULL);
@@ -1429,10 +1943,9 @@ execute_update_addresses_taken (void)
 
   /* Collect into ADDRESSES_TAKEN all variables whose address is taken within
      the function body.  */
-  FOR_EACH_BB_FN (bb, cfun)
+  FOR_EACH_BB (bb)
     {
-      for (gimple_stmt_iterator gsi = gsi_start_bb (bb); !gsi_end_p (gsi);
-	   gsi_next (&gsi))
+      for (gsi = gsi_start_bb (bb); !gsi_end_p (gsi); gsi_next (&gsi))
 	{
 	  gimple stmt = gsi_stmt (gsi);
 	  enum gimple_code code = gimple_code (stmt);
@@ -1448,8 +1961,7 @@ execute_update_addresses_taken (void)
               tree lhs = gimple_get_lhs (stmt);
               if (lhs
 		  && TREE_CODE (lhs) != SSA_NAME
-		  && ((code == GIMPLE_CALL && ! DECL_P (lhs))
-		      || non_rewritable_lvalue_p (lhs)))
+		  && non_rewritable_lvalue_p (lhs))
 		{
 		  decl = get_base_address (lhs);
 		  if (DECL_P (decl))
@@ -1476,10 +1988,9 @@ execute_update_addresses_taken (void)
 
 	  else if (code == GIMPLE_ASM)
 	    {
-	      gasm *asm_stmt = as_a <gasm *> (stmt);
-	      for (i = 0; i < gimple_asm_noutputs (asm_stmt); ++i)
+	      for (i = 0; i < gimple_asm_noutputs (stmt); ++i)
 		{
-		  tree link = gimple_asm_output_op (asm_stmt, i);
+		  tree link = gimple_asm_output_op (stmt, i);
 		  tree lhs = TREE_VALUE (link);
 		  if (TREE_CODE (lhs) != SSA_NAME)
 		    {
@@ -1494,20 +2005,19 @@ execute_update_addresses_taken (void)
 			bitmap_set_bit (not_reg_needs, DECL_UID (decl));
 		    }
 		}
-	      for (i = 0; i < gimple_asm_ninputs (asm_stmt); ++i)
+	      for (i = 0; i < gimple_asm_ninputs (stmt); ++i)
 		{
-		  tree link = gimple_asm_input_op (asm_stmt, i);
+		  tree link = gimple_asm_input_op (stmt, i);
 		  if ((decl = non_rewritable_mem_ref_base (TREE_VALUE (link))))
 		    bitmap_set_bit (not_reg_needs, DECL_UID (decl));
 		}
 	    }
 	}
 
-      for (gphi_iterator gsi = gsi_start_phis (bb); !gsi_end_p (gsi);
-	   gsi_next (&gsi))
+      for (gsi = gsi_start_phis (bb); !gsi_end_p (gsi); gsi_next (&gsi))
 	{
 	  size_t i;
-	  gphi *phi = gsi.phi ();
+	  gimple phi = gsi_stmt (gsi);
 
 	  for (i = 0; i < gimple_phi_num_args (phi); i++)
 	    {
@@ -1535,8 +2045,8 @@ execute_update_addresses_taken (void)
      variables and operands need to be rewritten to expose bare symbols.  */
   if (!bitmap_empty_p (suitable_for_renaming))
     {
-      FOR_EACH_BB_FN (bb, cfun)
-	for (gimple_stmt_iterator gsi = gsi_start_bb (bb); !gsi_end_p (gsi);)
+      FOR_EACH_BB (bb)
+	for (gsi = gsi_start_bb (bb); !gsi_end_p (gsi);)
 	  {
 	    gimple stmt = gsi_stmt (gsi);
 
@@ -1547,37 +2057,6 @@ execute_update_addresses_taken (void)
 		tree lhs = gimple_assign_lhs (stmt);
 		tree rhs, *rhsp = gimple_assign_rhs1_ptr (stmt);
 		tree sym;
-
-		/* Rewrite LHS IMAG/REALPART_EXPR similar to
-		   gimplify_modify_expr_complex_part.  */
-		if ((TREE_CODE (lhs) == IMAGPART_EXPR
-		     || TREE_CODE (lhs) == REALPART_EXPR)
-		    && DECL_P (TREE_OPERAND (lhs, 0))
-		    && bitmap_bit_p (suitable_for_renaming,
-				     DECL_UID (TREE_OPERAND (lhs, 0))))
-		  {
-		    tree other = make_ssa_name (TREE_TYPE (lhs));
-		    tree lrhs = build1 (TREE_CODE (lhs) == IMAGPART_EXPR
-					? REALPART_EXPR : IMAGPART_EXPR,
-					TREE_TYPE (other),
-					TREE_OPERAND (lhs, 0));
-		    gimple load = gimple_build_assign (other, lrhs);
-		    location_t loc = gimple_location (stmt);
-		    gimple_set_location (load, loc);
-		    gimple_set_vuse (load, gimple_vuse (stmt));
-		    gsi_insert_before (&gsi, load, GSI_SAME_STMT);
-		    gimple_assign_set_lhs (stmt, TREE_OPERAND (lhs, 0));
-		    gimple_assign_set_rhs_with_ops
-		      (&gsi, COMPLEX_EXPR,
-		       TREE_CODE (lhs) == IMAGPART_EXPR
-		       ? other : gimple_assign_rhs1 (stmt),
-		       TREE_CODE (lhs) == IMAGPART_EXPR
-		       ? gimple_assign_rhs1 (stmt) : other, NULL_TREE);
-		    stmt = gsi_stmt (gsi);
-		    unlink_stmt_vdef (stmt);
-		    update_stmt (stmt);
-		    continue;
-		  }
 
 		/* We shouldn't have any fancy wrapping of
 		   component-refs on the LHS, but look through
@@ -1608,6 +2087,18 @@ execute_update_addresses_taken (void)
 		if (gimple_assign_lhs (stmt) != lhs)
 		  gimple_assign_set_lhs (stmt, lhs);
 
+		/* For var ={v} {CLOBBER}; where var lost
+		   TREE_ADDRESSABLE just remove the stmt.  */
+		if (DECL_P (lhs)
+		    && TREE_CLOBBER_P (rhs)
+		    && bitmap_bit_p (suitable_for_renaming, DECL_UID (lhs)))
+		  {
+		    unlink_stmt_vdef (stmt);
+      		    gsi_remove (&gsi, true);
+		    release_defs (stmt);
+		    continue;
+		  }
+
 		if (gimple_assign_rhs1 (stmt) != rhs)
 		  {
 		    gimple_stmt_iterator gsi = gsi_for_stmt (stmt);
@@ -1627,17 +2118,16 @@ execute_update_addresses_taken (void)
 
 	    else if (gimple_code (stmt) == GIMPLE_ASM)
 	      {
-		gasm *asm_stmt = as_a <gasm *> (stmt);
 		unsigned i;
-		for (i = 0; i < gimple_asm_noutputs (asm_stmt); ++i)
+		for (i = 0; i < gimple_asm_noutputs (stmt); ++i)
 		  {
-		    tree link = gimple_asm_output_op (asm_stmt, i);
+		    tree link = gimple_asm_output_op (stmt, i);
 		    maybe_rewrite_mem_ref_base (&TREE_VALUE (link),
 						suitable_for_renaming);
 		  }
-		for (i = 0; i < gimple_asm_ninputs (asm_stmt); ++i)
+		for (i = 0; i < gimple_asm_ninputs (stmt); ++i)
 		  {
-		    tree link = gimple_asm_input_op (asm_stmt, i);
+		    tree link = gimple_asm_input_op (stmt, i);
 		    maybe_rewrite_mem_ref_base (&TREE_VALUE (link),
 						suitable_for_renaming);
 		  }
@@ -1663,8 +2153,7 @@ execute_update_addresses_taken (void)
 	  }
 
       /* Update SSA form here, we are called as non-pass as well.  */
-      if (number_of_loops (cfun) > 1
-	  && loops_state_satisfies_p (LOOP_CLOSED_SSA))
+      if (number_of_loops () > 1 && loops_state_satisfies_p (LOOP_CLOSED_SSA))
 	rewrite_into_loop_closed_ssa (NULL, TODO_update_ssa);
       else
 	update_ssa (TODO_update_ssa);
@@ -1676,36 +2165,22 @@ execute_update_addresses_taken (void)
   timevar_pop (TV_ADDRESS_TAKEN);
 }
 
-namespace {
-
-const pass_data pass_data_update_address_taken =
+struct gimple_opt_pass pass_update_address_taken =
 {
-  GIMPLE_PASS, /* type */
-  "addressables", /* name */
-  OPTGROUP_NONE, /* optinfo_flags */
-  TV_ADDRESS_TAKEN, /* tv_id */
-  PROP_ssa, /* properties_required */
-  0, /* properties_provided */
-  0, /* properties_destroyed */
-  0, /* todo_flags_start */
-  TODO_update_address_taken, /* todo_flags_finish */
+ {
+  GIMPLE_PASS,
+  "addressables",			/* name */
+  OPTGROUP_NONE,                        /* optinfo_flags */
+  NULL,					/* gate */
+  NULL,					/* execute */
+  NULL,					/* sub */
+  NULL,					/* next */
+  0,					/* static_pass_number */
+  TV_ADDRESS_TAKEN,			/* tv_id */
+  PROP_ssa,				/* properties_required */
+  0,					/* properties_provided */
+  0,					/* properties_destroyed */
+  0,					/* todo_flags_start */
+  TODO_update_address_taken             /* todo_flags_finish */
+ }
 };
-
-class pass_update_address_taken : public gimple_opt_pass
-{
-public:
-  pass_update_address_taken (gcc::context *ctxt)
-    : gimple_opt_pass (pass_data_update_address_taken, ctxt)
-  {}
-
-  /* opt_pass methods: */
-
-}; // class pass_update_address_taken
-
-} // anon namespace
-
-gimple_opt_pass *
-make_pass_update_address_taken (gcc::context *ctxt)
-{
-  return new pass_update_address_taken (ctxt);
-}

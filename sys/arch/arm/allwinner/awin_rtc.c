@@ -1,4 +1,4 @@
-/* $NetBSD: awin_rtc.c,v 1.7 2014/11/07 18:10:16 jakllsch Exp $ */
+/* $NetBSD: awin_rtc.c,v 1.7.2.2 2014/11/09 14:42:33 martin Exp $ */
 
 /*-
  * Copyright (c) 2014 Jared D. McNeill <jmcneill@invisible.ca>
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: awin_rtc.c,v 1.7 2014/11/07 18:10:16 jakllsch Exp $");
+__KERNEL_RCSID(0, "$NetBSD: awin_rtc.c,v 1.7.2.2 2014/11/09 14:42:33 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/bus.h>

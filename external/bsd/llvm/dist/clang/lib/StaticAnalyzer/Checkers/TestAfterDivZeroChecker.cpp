@@ -70,10 +70,10 @@ public:
     ID.Add(SFC);
   }
 
-  std::shared_ptr<PathDiagnosticPiece> VisitNode(const ExplodedNode *Succ,
-                                                 const ExplodedNode *Pred,
-                                                 BugReporterContext &BRC,
-                                                 BugReport &BR) override;
+  PathDiagnosticPiece *VisitNode(const ExplodedNode *Succ,
+                                 const ExplodedNode *Pred,
+                                 BugReporterContext &BRC,
+                                 BugReport &BR) override;
 };
 
 class TestAfterDivZeroChecker
@@ -94,9 +94,10 @@ public:
 
 REGISTER_SET_WITH_PROGRAMSTATE(DivZeroMap, ZeroState)
 
-std::shared_ptr<PathDiagnosticPiece>
-DivisionBRVisitor::VisitNode(const ExplodedNode *Succ, const ExplodedNode *Pred,
-                             BugReporterContext &BRC, BugReport &BR) {
+PathDiagnosticPiece *DivisionBRVisitor::VisitNode(const ExplodedNode *Succ,
+                                                  const ExplodedNode *Pred,
+                                                  BugReporterContext &BRC,
+                                                  BugReport &BR) {
   if (Satisfied)
     return nullptr;
 
@@ -127,7 +128,7 @@ DivisionBRVisitor::VisitNode(const ExplodedNode *Succ, const ExplodedNode *Pred,
     if (!L.isValid() || !L.asLocation().isValid())
       return nullptr;
 
-    return std::make_shared<PathDiagnosticEventPiece>(
+    return new PathDiagnosticEventPiece(
         L, "Division with compared value made here");
   }
 
@@ -166,18 +167,18 @@ bool TestAfterDivZeroChecker::hasDivZeroMap(SVal Var,
 }
 
 void TestAfterDivZeroChecker::reportBug(SVal Val, CheckerContext &C) const {
-  if (ExplodedNode *N = C.generateErrorNode(C.getState())) {
+  if (ExplodedNode *N = C.generateSink(C.getState())) {
     if (!DivZeroBug)
       DivZeroBug.reset(new BuiltinBug(this, "Division by zero"));
 
-    auto R = llvm::make_unique<BugReport>(
-        *DivZeroBug, "Value being compared against zero has already been used "
-                     "for division",
-        N);
+    BugReport *R =
+        new BugReport(*DivZeroBug, "Value being compared against zero has "
+                                   "already been used for division",
+                      N);
 
     R->addVisitor(llvm::make_unique<DivisionBRVisitor>(Val.getAsSymbol(),
                                                        C.getStackFrame()));
-    C.emitReport(std::move(R));
+    C.emitReport(R);
   }
 }
 

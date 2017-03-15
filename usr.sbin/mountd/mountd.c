@@ -1,4 +1,4 @@
-/* 	$NetBSD: mountd.c,v 1.129 2015/12/23 16:19:49 christos Exp $	 */
+/* 	$NetBSD: mountd.c,v 1.126.4.1 2015/08/06 21:59:04 snj Exp $	 */
 
 /*
  * Copyright (c) 1989, 1993
@@ -42,7 +42,7 @@ __COPYRIGHT("@(#) Copyright (c) 1989, 1993\
 #if 0
 static char     sccsid[] = "@(#)mountd.c  8.15 (Berkeley) 5/1/95";
 #else
-__RCSID("$NetBSD: mountd.c,v 1.129 2015/12/23 16:19:49 christos Exp $");
+__RCSID("$NetBSD: mountd.c,v 1.126.4.1 2015/08/06 21:59:04 snj Exp $");
 #endif
 #endif				/* not lint */
 
@@ -63,13 +63,6 @@ __RCSID("$NetBSD: mountd.c,v 1.129 2015/12/23 16:19:49 christos Exp $");
 #include <nfs/nfsproto.h>
 #include <nfs/nfs.h>
 #include <nfs/nfsmount.h>
-
-#ifdef MOUNTD_RUMP
-#include <rump/rump.h>
-#include <rump/rump_syscalls.h>
-#include <pthread.h>
-#include <semaphore.h>
-#endif
 
 #include <arpa/inet.h>
 
@@ -97,15 +90,6 @@ __RCSID("$NetBSD: mountd.c,v 1.129 2015/12/23 16:19:49 christos Exp $");
 #endif
 
 #include <stdarg.h>
-
-#ifdef MOUNTD_RUMP
-#include "svc_fdset.h"
-#define DEBUGGING 1
-#else
-#define DEBUGGING 0
-#endif
-
-#include "mountd.h"
 
 /*
  * Structures for keeping the mount list and export list
@@ -141,6 +125,12 @@ struct exportlist {
 };
 /* ex_flag bits */
 #define	EX_LINKED	0x1
+
+struct netmsk {
+	struct sockaddr_storage nt_net;
+	int		nt_len;
+	char           *nt_name;
+};
 
 union grouptypes {
 	struct addrinfo *gt_addrinfo;
@@ -202,6 +192,7 @@ static int get_host(const char *, size_t, const char *,
     struct grouplist *);
 static struct hostlist *get_ht(void);
 static void get_mountlist(void);
+static int get_net(char *, struct netmsk *, int);
 static void free_exp_grp(struct exportlist *, struct grouplist *);
 static struct grouplist *get_grp(void);
 static void hang_dirp(struct dirlist *, struct grouplist *,
@@ -212,6 +203,7 @@ static void parsecred(char *, struct uucred *);
 static int put_exlist(struct dirlist *, XDR *, struct dirlist *, int *);
 static int scan_tree(struct dirlist *, struct sockaddr *);
 __dead static void send_umntall(int);
+static int umntall_each(caddr_t, struct sockaddr_in *);
 static int xdr_dir(XDR *, char *);
 static int xdr_explist(XDR *, caddr_t);
 static int xdr_fhs(XDR *, caddr_t);
@@ -220,6 +212,7 @@ static int bitcmp(void *, void *, int);
 static int netpartcmp(struct sockaddr *, struct sockaddr *, int);
 static int sacmp(struct sockaddr *, struct sockaddr *);
 static int allones(struct sockaddr_storage *, int);
+static int countones(struct sockaddr *);
 static void bind_resv_port(int, sa_family_t, in_port_t);
 __dead static void no_nfs(int);
 static struct exportlist *exphead;
@@ -234,11 +227,22 @@ static struct uucred def_anon = {
 	{ 0 }
 };
 
-int      opt_flags;
+static int      opt_flags;
 static int	have_v6 = 1;
-const int ninumeric = NI_NUMERICHOST;
+static const int ninumeric = NI_NUMERICHOST;
 
-int      debug = DEBUGGING;
+/* Bits for above */
+#define	OP_MAPROOT	0x001
+#define	OP_MAPALL	0x002
+#define	OP_KERB		0x004
+#define	OP_MASK		0x008
+#define	OP_NET		0x010
+#define	OP_ALLDIRS	0x040
+#define OP_NORESPORT	0x080
+#define OP_NORESMNT	0x100
+#define OP_MASKLEN	0x200
+
+static int      debug = 0;
 #if 0
 static void SYSLOG(int, const char *,...);
 #endif
@@ -249,82 +253,6 @@ static void SYSLOG(int, const char *,...);
  */
 static int noprivports;
 
-#ifdef MOUNTD_RUMP
-#define C2FD(_c_) ((int)(uintptr_t)(_c_))
-static int
-rumpread(void *cookie, char *buf, int count)
-{
-
-	return rump_sys_read(C2FD(cookie), buf, count);
-}
-
-static int
-rumpwrite(void *cookie, const char *buf, int count)
-{
-
-	return rump_sys_write(C2FD(cookie), buf, count);
-}
-
-static off_t
-rumpseek(void *cookie, off_t off, int whence)
-{
-
-	return rump_sys_lseek(C2FD(cookie), off, whence);
-}
-
-static int
-rumpclose(void *cookie)
-{
-
-	return rump_sys_close(C2FD(cookie));
-}
-
-int __sflags(const char *, int *); /* XXX */
-static FILE *
-rumpfopen(const char *path, const char *opts)
-{
-	int fd, oflags;
-
-	__sflags(opts, &oflags);
-	fd = rump_sys_open(path, oflags, 0777);
-	if (fd == -1)
-		return NULL;
-
-	return funopen((void *)(uintptr_t)fd,
-	    rumpread, rumpwrite, rumpseek, rumpclose);
-}
-
-/*
- * Make sure mountd signal handler is executed from a thread context
- * instead of the signal handler.  This avoids the signal handler
- * ruining our kernel context.
- */
-static sem_t exportsem;
-static void
-signal_get_exportlist(int sig)
-{
-
-	sem_post(&exportsem);
-}
-
-static void *
-exportlist_thread(void *arg)
-{
-
-	for (;;) {
-		sem_wait(&exportsem);
-		get_exportlist(0);
-	}
-
-	return NULL;
-}
-#define statvfs1(a, b, c) rump_sys_statvfs1((a), (b), (c))
-#define getfh(a, b, c) rump_sys_getfh((a), (b), (c))
-#define nfssvc(a, b) rump_sys_nfssvc((a), (b))
-#define fopen(a, b) rumpfopen((a), (b))
-#define lstat(a, b) rump_sys_lstat((a), (b))
-#define stat(a, b) rump_sys_stat((a), (b))
-
 /*
  * Mountd server for NFS mount protocol as described in:
  * NFS: Network File System Protocol Specification, RFC1094, Appendix A
@@ -333,19 +261,14 @@ exportlist_thread(void *arg)
  * "-d" to enable debugging
  * and "-n" to allow nonroot mount.
  */
-void *mountd_main(void *);
-void *
-mountd_main(void *arg)
-#else
 int
 main(int argc, char **argv)
-#endif
 {
 	SVCXPRT *udptransp, *tcptransp, *udp6transp, *tcp6transp;
 	struct netconfig *udpconf, *tcpconf, *udp6conf, *tcp6conf;
 	int udpsock, tcpsock, udp6sock, tcp6sock;
-	int xcreated = 0;
-	int one = 1;
+	int xcreated = 0, s;
+	int c, one = 1;
 	int maxrec = RPC_MAXDATASIZE;
 	in_port_t forcedport = 0;
 #ifdef IPSEC
@@ -354,8 +277,7 @@ main(int argc, char **argv)
 #else
 #define ADDOPTS
 #endif
-#ifndef MOUNTD_RUMP
-	int s, c;
+
 	while ((c = getopt(argc, argv, "dNnrp:" ADDOPTS)) != -1)
 		switch (c) {
 #ifdef IPSEC
@@ -388,34 +310,21 @@ main(int argc, char **argv)
 		};
 	argc -= optind;
 	argv += optind;
+	grphead = NULL;
+	exphead = NULL;
+	mlhead = NULL;
 	if (argc == 1)
 		exname = *argv;
 	else
 		exname = _PATH_EXPORTS;
+	openlog("mountd", LOG_PID | (debug ? LOG_PERROR : 0), LOG_DAEMON);
+	(void)signal(SIGSYS, no_nfs);
 
 	s = socket(AF_INET6, SOCK_DGRAM, IPPROTO_UDP);
 	if (s < 0)
 		have_v6 = 0;
 	else
 		close(s);
-	(void)signal(SIGHUP, get_exportlist);
-#else
-	extern sem_t gensem;
-	pthread_t ptdummy;
- 
-	svc_fdset_init(SVC_FDSET_MT);
-
-	sem_init(&exportsem, 0, 0);
-	pthread_create(&ptdummy, NULL, exportlist_thread, NULL);
-	exname = _PATH_EXPORTS;
-	have_v6 = 0;
-	(void)signal(SIGHUP, signal_get_exportlist);
-#endif
-	grphead = NULL;
-	exphead = NULL;
-	mlhead = NULL;
-	openlog("mountd", LOG_PID | (debug ? LOG_PERROR : 0), LOG_DAEMON);
-	(void)signal(SIGSYS, no_nfs);
 
 	if (debug)
 		(void)fprintf(stderr, "Getting export list.\n");
@@ -425,6 +334,7 @@ main(int argc, char **argv)
 	get_mountlist();
 	if (debug)
 		(void)fprintf(stderr, "Here we go.\n");
+	(void)signal(SIGHUP, get_exportlist);
 	(void)signal(SIGTERM, send_umntall);
 
 	rpcb_unset(RPCPROG_MNT, RPCMNT_VER1, NULL);
@@ -553,9 +463,6 @@ main(int argc, char **argv)
 		(void)signal(SIGQUIT, SIG_IGN);
 	}
 	pidfile(NULL);
-#ifdef MOUNTD_RUMP
-	sem_post(&gensem);
-#endif
 	svc_run();
 	syslog(LOG_ERR, "Mountd died");
 	exit(1);
@@ -628,15 +535,10 @@ mntsrv(struct svc_req *rqstp, SVCXPRT *transp)
 		 * Get the real pathname and make sure it is a file or
 		 * directory that exists.
 		 */
-		if (
-#ifndef MOUNTD_RUMP
-		realpath(rpcpath, rdirpath) == NULL ||
-#else
-		strcpy(rdirpath, rpcpath) == NULL ||
-#endif
+		if (realpath(rpcpath, rdirpath) == 0 ||
 		    stat(rdirpath, &stb) < 0 ||
 		    (!S_ISDIR(stb.st_mode) && !S_ISREG(stb.st_mode)) ||
-		    statvfs1(rdirpath, &fsb, ST_WAIT) < 0) {
+		    statvfs(rdirpath, &fsb) < 0) {
 			(void)chdir("/"); /* Just in case realpath doesn't */
 			if (debug)
 				(void)fprintf(stderr, "-> stat failed on %s\n",
@@ -958,7 +860,7 @@ parse_directory(const char *line, size_t lineno, struct grouplist *tgrp,
 	if (!check_dirpath(line, lineno, cp))
 		return 0;
 
-	if (statvfs1(cp, fsp, ST_WAIT) == -1) {
+	if (statvfs(cp, fsp) == -1) {
 		syslog(LOG_ERR, "\"%s\", line %ld: statvfs for `%s' failed: %m",
 		    line, (unsigned long)lineno, cp);
 		return 0;
@@ -1309,9 +1211,6 @@ free_exp_grp(struct exportlist *ep, struct grouplist *grp)
 static struct exportlist *
 ex_search(fsid_t *fsid)
 {
-#ifdef MOUNTD_RUMP
-	return exphead;
-#else
 	struct exportlist *ep;
 
 	ep = exphead;
@@ -1322,7 +1221,6 @@ ex_search(fsid_t *fsid)
 		ep = ep->ex_next;
 	}
 	return (ep);
-#endif
 }
 
 /*
@@ -1570,6 +1468,41 @@ allones(struct sockaddr_storage *ssp, int bitlen)
 		*p |= 1 << (7 - i);
 	
 	return 0;
+}
+
+static int
+countones(struct sockaddr *sa)
+{
+	void *mask;
+	int i, bits = 0, bytelen;
+	u_int8_t *p;
+
+	switch (sa->sa_family) {
+	case AF_INET:
+		mask = (u_int8_t *)&((struct sockaddr_in *)sa)->sin_addr;
+		bytelen = 4;
+		break;
+	case AF_INET6:
+		mask = (u_int8_t *)&((struct sockaddr_in6 *)sa)->sin6_addr;
+		bytelen = 16;
+		break;
+	default:
+		return 0;
+	}
+
+	p = mask;
+
+	for (i = 0; i < bytelen; i++, p++) {
+		if (*p != 0xff) {
+			for (bits = 0; bits < 8; bits++) {
+				if (!(*p & (1 << (7 - bits))))
+					break;
+			}
+			break;
+		}
+	}
+
+	return (i * 8 + bits);
 }
 
 static int
@@ -1999,6 +1932,125 @@ skip:
 }
 
 /*
+ * Translate a net address.
+ */
+static int
+get_net(char *cp, struct netmsk *net, int maskflg)
+{
+	struct netent *np;
+	char *nname, *p, *prefp;
+	struct sockaddr_in sin, *sinp;
+	struct sockaddr *sa;
+	struct addrinfo hints, *ai = NULL;
+	char netname[NI_MAXHOST];
+	long preflen;
+	int ecode;
+
+	(void)memset(&sin, 0, sizeof(sin));
+	if ((opt_flags & OP_MASKLEN) && !maskflg) {
+		p = strchr(cp, '/');
+		*p = '\0';
+		prefp = p + 1;
+	} else {
+		p = NULL;	/* XXXGCC -Wuninitialized */
+		prefp = NULL;	/* XXXGCC -Wuninitialized */
+	}
+
+	if ((np = getnetbyname(cp)) != NULL) {
+		sin.sin_family = AF_INET;
+		sin.sin_len = sizeof sin;
+		sin.sin_addr = inet_makeaddr(np->n_net, 0);
+		sa = (struct sockaddr *)&sin;
+	} else if (isdigit((unsigned char)*cp)) {
+		memset(&hints, 0, sizeof hints);
+		hints.ai_family = AF_UNSPEC;
+		hints.ai_flags = AI_NUMERICHOST;
+		if (getaddrinfo(cp, NULL, &hints, &ai) != 0) {
+			/*
+			 * If getaddrinfo() failed, try the inet4 network
+			 * notation with less than 3 dots.
+			 */
+			sin.sin_family = AF_INET;
+			sin.sin_len = sizeof sin;
+			sin.sin_addr = inet_makeaddr(inet_network(cp),0);
+			if (debug)
+				fprintf(stderr, "get_net: v4 addr %x\n",
+				    sin.sin_addr.s_addr);
+			sa = (struct sockaddr *)&sin;
+		} else
+			sa = ai->ai_addr;
+	} else if (isxdigit((unsigned char)*cp) || *cp == ':') {
+		memset(&hints, 0, sizeof hints);
+		hints.ai_family = AF_UNSPEC;
+		hints.ai_flags = AI_NUMERICHOST;
+		if (getaddrinfo(cp, NULL, &hints, &ai) == 0)
+			sa = ai->ai_addr;
+		else
+			goto fail;
+	} else
+		goto fail;
+
+	/*
+	 * Only allow /pref notation for v6 addresses.
+	 */
+	if (sa->sa_family == AF_INET6 && (!(opt_flags & OP_MASKLEN) || maskflg))
+		return 1;
+
+	ecode = getnameinfo(sa, sa->sa_len, netname, sizeof netname,
+	    NULL, 0, ninumeric);
+	if (ecode != 0)
+		goto fail;
+
+	if (maskflg)
+		net->nt_len = countones(sa);
+	else {
+		if (opt_flags & OP_MASKLEN) {
+			errno = 0;
+			preflen = strtol(prefp, NULL, 10);
+			if (preflen == LONG_MIN && errno == ERANGE)
+				goto fail;
+			net->nt_len = (int)preflen;
+			*p = '/';
+		}
+
+		if (np)
+			nname = np->n_name;
+		else {
+			if (getnameinfo(sa, sa->sa_len, netname, sizeof netname,
+			    NULL, 0, ninumeric) != 0)
+				strlcpy(netname, "?", sizeof(netname));
+			nname = netname;
+		}
+		net->nt_name = estrdup(nname);
+		memcpy(&net->nt_net, sa, sa->sa_len);
+	}
+
+	if (!maskflg && sa->sa_family == AF_INET &&
+	    !(opt_flags & (OP_MASK|OP_MASKLEN))) {
+		sinp = (struct sockaddr_in *)sa;
+		if (IN_CLASSA(sinp->sin_addr.s_addr))
+			net->nt_len = 8;
+		else if (IN_CLASSB(sinp->sin_addr.s_addr))
+			net->nt_len = 16;
+		else if (IN_CLASSC(sinp->sin_addr.s_addr))
+			net->nt_len = 24;
+		else if (IN_CLASSD(sinp->sin_addr.s_addr))
+			net->nt_len = 28;
+		else
+			net->nt_len = 32;	/* XXX */
+	}
+
+	if (ai)
+		freeaddrinfo(ai);
+	return 0;
+
+fail:
+	if (ai)
+		freeaddrinfo(ai);
+	return 1;
+}
+
+/*
  * Parse out the next white space separated field
  */
 static void
@@ -2224,14 +2276,6 @@ add_mlist(char *hostp, char *dirp, int flags)
 	(void)fclose(mlfile);
 }
 
-#ifndef MOUNTD_RUMP
-static int
-umntall_each(caddr_t resultsp, struct sockaddr_in *raddr)
-{
-	return (1);
-}
-#endif
-
 /*
  * This function is called via. SIGTERM when the system is going down.
  * It sends a broadcast RPCMNT_UMNTALL.
@@ -2240,14 +2284,17 @@ umntall_each(caddr_t resultsp, struct sockaddr_in *raddr)
 static void
 send_umntall(int n)
 {
-#ifndef MOUNTD_RUMP
 	(void)clnt_broadcast(RPCPROG_MNT, RPCMNT_VER1, RPCMNT_UMNTALL,
 	    (xdrproc_t)xdr_void, NULL, (xdrproc_t)xdr_void, NULL,
 	    (resultproc_t)umntall_each);
-#endif
 	exit(0);
 }
 
+static int
+umntall_each(caddr_t resultsp, struct sockaddr_in *raddr)
+{
+	return (1);
+}
 
 /*
  * Free up a group list.

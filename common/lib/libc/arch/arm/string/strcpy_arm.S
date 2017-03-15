@@ -29,29 +29,21 @@
 
 #include <machine/asm.h>
 
-RCSID("$NetBSD: strcpy_arm.S,v 1.6 2017/01/14 03:35:21 christos Exp $")
+RCSID("$NetBSD: strcpy_arm.S,v 1.3 2013/08/11 04:56:32 matt Exp $")
 
 #ifdef STRLCPY
 #ifdef _LIBC
 WEAK_ALIAS(strlcpy, _strlcpy)
-#  define	FUNCNAME	_strlcpy
-# else
-#  define	FUNCNAME	strlcpy
-# endif
+#endif
+#define	FUNCNAME	strlcpy
 #elif defined(STRNCPY)
-# ifdef _LIBC
-WEAK_ALIAS(strncpy, _strncpy)
-#  define	FUNCNAME	_strncpy
-# else
-#  define	FUNCNAME	strncpy
-# endif
+#define	FUNCNAME	strncpy
 #else
-# ifdef _LIBC
-WEAK_ALIAS(strcpy, _strcpy)
-#  define	FUNCNAME	_strcpy
-# else
-#  define	FUNCNAME	strcpy
-# endif
+#define	FUNCNAME	strcpy
+#endif
+
+#ifdef _LIBC
+#include "namespace.h"
 #endif
 
 #ifdef __ARMEL__

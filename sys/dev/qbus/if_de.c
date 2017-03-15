@@ -1,4 +1,4 @@
-/*	$NetBSD: if_de.c,v 1.31 2016/12/15 09:28:06 ozaki-r Exp $	*/
+/*	$NetBSD: if_de.c,v 1.29 2010/04/05 07:21:47 joerg Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1989 Regents of the University of California.
@@ -81,7 +81,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_de.c,v 1.31 2016/12/15 09:28:06 ozaki-r Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_de.c,v 1.29 2010/04/05 07:21:47 joerg Exp $");
 
 #include "opt_inet.h"
 
@@ -541,6 +541,7 @@ derecv(struct de_softc *sc)
 	dc = sc->sc_dedata;
 	rp = &dc->dc_rrent[sc->sc_rindex];
 	while ((rp->r_flags & RFLG_OWN) == 0) {
+		sc->sc_if.if_ipackets++;
 		len = (rp->r_lenerr&RERR_MLEN) - ETHER_CRC_LEN;
 		/* check for errors */
 		if ((rp->r_flags & (RFLG_ERRS|RFLG_FRAM|RFLG_OFLO|RFLG_CRC)) ||
@@ -554,8 +555,9 @@ derecv(struct de_softc *sc)
 			sc->sc_if.if_ierrors++;
 			goto next;
 		}
+		bpf_mtap(ifp, m);
 
-		if_percpuq_enqueue(ifp->if_percpuq, m);
+		(*ifp->if_input)(ifp, m);
 
 		/* hang the receive buffer again */
 next:		rp->r_lenerr = 0;

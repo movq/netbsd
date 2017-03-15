@@ -1,4 +1,4 @@
-/*	$NetBSD: npftest.c,v 1.20 2016/12/26 23:05:05 christos Exp $	*/
+/*	$NetBSD: npftest.c,v 1.17 2014/02/13 03:34:40 rmind Exp $	*/
 
 /*
  * NPF testing framework.
@@ -16,17 +16,12 @@
 #include <err.h>
 
 #include <sys/mman.h>
-#include <sys/stat.h>
-#if !defined(_NPF_STANDALONE)
 #include <sys/ioctl.h>
 #include <net/if.h>
 #include <arpa/inet.h>
 
-#include <prop/proplib.h>
-
 #include <rump/rump.h>
 #include <rump/rump_syscalls.h>
-#endif
 
 #include <cdbw.h>
 
@@ -35,7 +30,7 @@
 static bool verbose, quiet;
 
 __dead static void
-usage(const char *progname)
+usage(void)
 {
 	printf("usage:\n"
 	    "  %s [ -q | -v ] [ -c <config> ] "
@@ -52,7 +47,7 @@ usage(const char *progname)
 	    "\t-L: list testnames and description for -T\n"
 	    "\t-q: quiet mode\n"
 	    "\t-v: verbose mode\n",
-	    progname, progname, progname);
+	    getprogname(), getprogname(), getprogname());
 	exit(EXIT_FAILURE);
 }
 
@@ -174,27 +169,6 @@ generate_test_cdb(size_t *size)
 	return cdb;
 }
 
-static void
-npf_kern_init(void)
-{
-#if !defined(_NPF_STANDALONE)
-	/* XXX rn_init */
-	extern int rumpns_max_keylen;
-	rumpns_max_keylen = 1;
-
-	rump_init();
-	rump_schedule();
-#endif
-}
-
-static void
-npf_kern_fini(void)
-{
-#if !defined(_NPF_STANDALONE)
-	rump_unschedule();
-#endif
-}
-
 int
 main(int argc, char **argv)
 {
@@ -250,13 +224,14 @@ main(int argc, char **argv)
 			/* Note: RUMP_NCPU must be high enough. */
 			if ((nthreads = atoi(optarg)) > 0 &&
 			    getenv("RUMP_NCPU") == NULL) {
-				static char nthr[64];
-				sprintf(nthr, "%u", nthreads + 1);
-				setenv("RUMP_NCPU", nthr, 1);
+				char *val;
+				asprintf(&val, "%u", nthreads + 1);
+				setenv("RUMP_NCPU", val, 1);
+				free(val);
 			}
 			break;
 		default:
-			usage(argv[0]);
+			usage();
 		}
 	}
 
@@ -266,17 +241,20 @@ main(int argc, char **argv)
 	 * config should be loaded.
 	 */
 	if ((benchmark != NULL) == test && (stream && !interface)) {
-		usage(argv[0]);
+		usage();
 	}
 	if (benchmark && (!config || !nthreads)) {
 		errx(EXIT_FAILURE, "missing config for the benchmark or "
 		    "invalid thread count");
 	}
 
-	/*
-	 * Initialise the NPF kernel component.
-	 */
-	npf_kern_init();
+	/* XXX rn_init */
+	extern int rumpns_max_keylen;
+	rumpns_max_keylen = 1;
+
+	rump_init();
+	rump_schedule();
+
 	rumpns_npf_test_init(inet_pton, inet_ntop, random);
 
 	if (config) {
@@ -328,7 +306,6 @@ main(int argc, char **argv)
 		}
 
 		if (!testname || strcmp("nat", testname) == 0) {
-			srandom(1);
 			ok = rumpns_npf_nat_test(verbose);
 			fail |= result("nat", ok);
 			tname_matched = true;
@@ -348,8 +325,7 @@ main(int argc, char **argv)
 		}
 	}
 
-	rumpns_npf_test_fini();
-	npf_kern_fini();
+	rump_unschedule();
 
 	if (testname && !tname_matched)
 		errx(EXIT_FAILURE, "test \"%s\" unknown", testname);

@@ -1,7 +1,7 @@
-/* $OpenBSD$ */
+/* Id */
 
 /*
- * Copyright (c) 2010 Nicholas Marriott <nicholas.marriott@gmail.com>
+ * Copyright (c) 2010 Nicholas Marriott <nicm@users.sourceforge.net>
  *
  * Permission to use, copy, modify, and distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -81,7 +81,7 @@ tty_acs_get(struct tty *tty, u_char ch)
 	struct tty_acs_entry *entry;
 
 	/* If not a UTF-8 terminal, use the ACS set. */
-	if (tty != NULL && !(tty->flags & TTY_UTF8)) {
+	if (!(tty->flags & TTY_UTF8)) {
 		if (tty->term->acs[ch][0] == '\0')
 			return (NULL);
 		return (&tty->term->acs[ch][0]);

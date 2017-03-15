@@ -1,4 +1,4 @@
-/*	$NetBSD: dh.h,v 1.2 2017/01/28 21:31:47 christos Exp $	*/
+/*	$NetBSD: dh.h,v 1.1.1.2 2011/04/14 14:08:31 elric Exp $	*/
 
 /*
  * Copyright (c) 2006 Kungliga Tekniska Högskolan
@@ -41,8 +41,6 @@
 #define _HEIM_DH_H 1
 
 /* symbol renaming */
-#define DH hc_DH
-#define DH_METHOD hc_DH_METHOD
 #define DH_null_method hc_DH_null_method
 #define DH_tfm_method hc_DH_tfm_method
 #define DH_ltm_method hc_DH_ltm_method

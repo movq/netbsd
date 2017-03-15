@@ -1,4 +1,4 @@
-/*	$NetBSD: route.c,v 1.85 2016/04/04 07:37:08 ozaki-r Exp $	*/
+/*	$NetBSD: route.c,v 1.82.2.2 2015/06/01 19:22:31 snj Exp $	*/
 
 /*
  * Copyright (c) 1983, 1988, 1993
@@ -34,7 +34,7 @@
 #if 0
 static char sccsid[] = "from: @(#)route.c	8.3 (Berkeley) 3/9/94";
 #else
-__RCSID("$NetBSD: route.c,v 1.85 2016/04/04 07:37:08 ozaki-r Exp $");
+__RCSID("$NetBSD: route.c,v 1.82.2.2 2015/06/01 19:22:31 snj Exp $");
 #endif
 #endif /* not lint */
 
@@ -241,6 +241,9 @@ p_krtentry(struct rtentry *rt)
 	static struct ifnet ifnet, *lastif;
 	union sockaddr_union addr_un, mask_un;
 	struct sockaddr *addr, *mask;
+
+	if (Lflag && (rt->rt_flags & RTF_LLINFO))
+		return;
 
 	memset(&addr_un, 0, sizeof(addr_un));
 	memset(&mask_un, 0, sizeof(mask_un));

@@ -1,4 +1,4 @@
-/*	$NetBSD: cpu.h,v 1.68 2017/02/11 14:11:24 maxv Exp $	*/
+/*	$NetBSD: cpu.h,v 1.66.4.1 2016/03/06 17:53:26 martin Exp $	*/
 
 /*-
  * Copyright (c) 1990 The Regents of the University of California.
@@ -132,16 +132,6 @@ struct cpu_info {
 #endif
 	volatile int	ci_mtx_count;	/* Negative count of spin mutexes */
 	volatile int	ci_mtx_oldspl;	/* Old SPL at this ci_idepth */
-
-#ifndef __HAVE_DIRECT_MAP
-#define VPAGE_SRC 0
-#define VPAGE_DST 1
-#define VPAGE_ZER 2
-#define VPAGE_PTP 3
-#define VPAGE_MAX 4
-	vaddr_t		vpage[VPAGE_MAX];
-	pt_entry_t	*vpage_pte[VPAGE_MAX];
-#endif
 
 	/* The following must be aligned for cmpxchg8b. */
 	struct {

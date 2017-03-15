@@ -5,7 +5,7 @@
  *****************************************************************************/
 
 /*
- * Copyright (C) 2000 - 2017, Intel Corp.
+ * Copyright (C) 2000 - 2013, Intel Corp.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -41,7 +41,6 @@
  * POSSIBILITY OF SUCH DAMAGES.
  */
 
-#define DEFINE_AHELP_GLOBALS
 #include "acpihelp.h"
 
 
@@ -52,15 +51,7 @@ AhDisplayUsage (
     void);
 
 #define AH_UTILITY_NAME             "ACPI Help Utility"
-#define AH_SUPPORTED_OPTIONS        "adeghikmopstuv"
-
-
-#if defined ACPI_OPTION
-#undef ACPI_OPTION
-#endif
-
-#define ACPI_OPTION(Name, Description) \
-    AcpiOsPrintf ("  %-24s%s\n", Name, Description);
+#define AH_SUPPORTED_OPTIONS        "ehikmopsv"
 
 
 /******************************************************************************
@@ -76,34 +67,25 @@ AhDisplayUsage (
     void)
 {
 
-    ACPI_USAGE_HEADER ("acpihelp <options> [Name/Prefix | HexValue]");
+    ACPI_USAGE_HEADER ("acpihelp <options> [NamePrefix | HexValue]");
     ACPI_OPTION ("-h",                      "Display help");
     ACPI_OPTION ("-v",                      "Display version information");
 
-    ACPI_USAGE_TEXT ("\nAML Names and Encodings (ACPI Machine Language):\n");
-    ACPI_OPTION ("-a [Name/Prefix | *]",    "Display both ASL operator and AML opcode name(s)");
-    ACPI_OPTION ("-g [Name/Prefix | *]",    "Display AML grammar elements(s)");
-    ACPI_OPTION ("-m [Name/Prefix | *]",    "Display AML opcode name(s)");
+    printf ("\nACPI Names and Symbols:\n");
+    ACPI_OPTION ("-k [NamePrefix]",         "Find/Display ASL non-operator keyword(s)");
+    ACPI_OPTION ("-m [NamePrefix]",         "Find/Display AML opcode name(s)");
+    ACPI_OPTION ("-p [NamePrefix]",         "Find/Display ASL predefined method name(s)");
+    ACPI_OPTION ("-s [NamePrefix]",         "Find/Display ASL operator name(s)");
 
-    ACPI_USAGE_TEXT ("\nACPI Values:\n");
+    printf ("\nACPI Values:\n");
     ACPI_OPTION ("-e [HexValue]",           "Decode ACPICA exception code");
+    ACPI_OPTION ("-i",                      "Display known ACPI Device IDs (_HID)");
     ACPI_OPTION ("-o [HexValue]",           "Decode hex AML opcode");
 
-    ACPI_USAGE_TEXT ("\nASL Names and Symbols (ACPI Source Language):\n");
-    ACPI_OPTION ("-k [Name/Prefix | *]",    "Display ASL non-operator keyword(s)");
-    ACPI_OPTION ("-p [Name/Prefix | *]",    "Display ASL predefined method name(s)");
-    ACPI_OPTION ("-s [Name/Prefix | *]",    "Display ASL operator name(s)");
-
-    ACPI_USAGE_TEXT ("\nOther miscellaneous ACPI Names:\n");
-    ACPI_OPTION ("-i [Name/Prefix | *]",    "Display ACPI/PNP Hardware ID(s)");
-    ACPI_OPTION ("-d",                      "Display iASL Preprocessor directives");
-    ACPI_OPTION ("-t",                      "Display supported ACPI tables");
-    ACPI_OPTION ("-u",                      "Display ACPI-related UUIDs");
-
-    ACPI_USAGE_TEXT ("\nName/Prefix or HexValue not specified means \"Display All\"\n");
-    ACPI_USAGE_TEXT ("\nDefault search with valid Name/Prefix and no options:\n");
-    ACPI_USAGE_TEXT ("    Find ASL/AML operator names - if NamePrefix does not start with underscore\n");
-    ACPI_USAGE_TEXT ("    Find ASL predefined method names - if NamePrefix starts with underscore\n");
+    printf ("\nNamePrefix/HexValue not specified means \"Display All\"\n");
+    printf ("\nDefault search with NamePrefix and no options:\n");
+    printf ("    Find ASL operator names - if NamePrefix does not start with underscore\n");
+    printf ("    Find ASL predefined method names - if NamePrefix starts with underscore\n");
 }
 
 
@@ -125,7 +107,6 @@ main (
     int                     j;
 
 
-    AcpiOsInitialize ();
     ACPI_DEBUG_INITIALIZE (); /* For debug version only */
     printf (ACPI_COMMON_SIGNON (AH_UTILITY_NAME));
     DecodeType = AH_DECODE_DEFAULT;
@@ -138,26 +119,11 @@ main (
 
     /* Command line options */
 
-    while ((j = AcpiGetopt (argc, argv, AH_SUPPORTED_OPTIONS)) != ACPI_OPT_END) switch (j)
+    while ((j = AcpiGetopt (argc, argv, AH_SUPPORTED_OPTIONS)) != EOF) switch (j)
     {
-    case 'a':
-
-        DecodeType = AH_DECODE_ASL_AML;
-        break;
-
-    case 'd':
-
-        DecodeType = AH_DISPLAY_DIRECTIVES;
-        break;
-
     case 'e':
 
         DecodeType = AH_DECODE_EXCEPTION;
-        break;
-
-    case 'g':
-
-        DecodeType = AH_DECODE_AML_TYPE;
         break;
 
     case 'i':
@@ -190,16 +156,6 @@ main (
         DecodeType = AH_DECODE_ASL;
         break;
 
-    case 't':
-
-        DecodeType = AH_DISPLAY_TABLES;
-        break;
-
-    case 'u':
-
-        DecodeType = AH_DISPLAY_UUIDS;
-        break;
-
     case 'v': /* -v: (Version): signon already emitted, just exit */
 
         return (0);
@@ -217,11 +173,6 @@ main (
 
     switch (DecodeType)
     {
-    case AH_DECODE_ASL_AML:
-
-        AhFindAslAndAmlOperators (Name);
-        break;
-
     case AH_DECODE_AML:
 
         AhFindAmlOpcode (Name);
@@ -230,11 +181,6 @@ main (
     case AH_DECODE_AML_OPCODE:
 
         AhDecodeAmlOpcode (Name);
-        break;
-
-    case AH_DECODE_AML_TYPE:
-
-        AhFindAmlTypes (Name);
         break;
 
     case AH_DECODE_PREDEFINED_NAME:
@@ -254,7 +200,7 @@ main (
 
     case AH_DISPLAY_DEVICE_IDS:
 
-        AhDisplayDeviceIds (Name);
+        AhDisplayDeviceIds ();
         break;
 
     case AH_DECODE_EXCEPTION:
@@ -262,22 +208,7 @@ main (
         AhDecodeException (Name);
         break;
 
-    case AH_DISPLAY_UUIDS:
-
-        AhDisplayUuids ();
-        break;
-
-    case AH_DISPLAY_TABLES:
-
-        AhDisplayTables ();
-        break;
-
-    case AH_DISPLAY_DIRECTIVES:
-
-        AhDisplayDirectives ();
-        break;
-
-   default:
+    default:
 
         if (!Name)
         {
@@ -291,10 +222,47 @@ main (
         }
         else
         {
-            AhFindAslAndAmlOperators (Name);
+            AhFindAslOperators (Name);
         }
         break;
     }
 
     return (0);
+}
+
+
+/*******************************************************************************
+ *
+ * FUNCTION:    AhStrupr (strupr)
+ *
+ * PARAMETERS:  SrcString           - The source string to convert
+ *
+ * RETURN:      None
+ *
+ * DESCRIPTION: Convert string to uppercase
+ *
+ * NOTE: This is not a POSIX function, so it appears here, not in utclib.c
+ *
+ ******************************************************************************/
+
+void
+AhStrupr (
+    char                    *SrcString)
+{
+    char                    *String;
+
+
+    if (!SrcString)
+    {
+        return;
+    }
+
+    /* Walk entire string, uppercasing the letters */
+
+    for (String = SrcString; *String; String++)
+    {
+        *String = (char) toupper ((int) *String);
+    }
+
+    return;
 }

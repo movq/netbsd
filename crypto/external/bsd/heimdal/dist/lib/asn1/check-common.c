@@ -1,4 +1,4 @@
-/*	$NetBSD: check-common.c,v 1.2 2017/01/28 21:31:45 christos Exp $	*/
+/*	$NetBSD: check-common.c,v 1.1.1.2 2014/04/24 12:45:28 pettai Exp $	*/
 
 /*
  * Copyright (c) 1999 - 2006 Kungliga Tekniska Högskolan
@@ -35,7 +35,9 @@
  * SUCH DAMAGE.
  */
 
+#ifdef HAVE_CONFIG_H
 #include <config.h>
+#endif
 #ifdef HAVE_SYS_MMAN_H
 #include <sys/mman.h>
 #endif
@@ -46,6 +48,8 @@
 
 #include <krb5/asn1-common.h>
 #include "check-common.h"
+
+__RCSID("NetBSD");
 
 struct map_page {
     void *start;

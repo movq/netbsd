@@ -24,49 +24,41 @@ class MCInstrInfo;
 class MCObjectWriter;
 class MCRegisterInfo;
 class MCSubtargetInfo;
-class MCTargetOptions;
 class StringRef;
 class Target;
-class Triple;
 class raw_ostream;
-class raw_pwrite_stream;
 
-Target &getTheMipsTarget();
-Target &getTheMipselTarget();
-Target &getTheMips64Target();
-Target &getTheMips64elTarget();
+extern Target TheMipsTarget;
+extern Target TheMipselTarget;
+extern Target TheMips64Target;
+extern Target TheMips64elTarget;
 
 MCCodeEmitter *createMipsMCCodeEmitterEB(const MCInstrInfo &MCII,
                                          const MCRegisterInfo &MRI,
+                                         const MCSubtargetInfo &STI,
                                          MCContext &Ctx);
 MCCodeEmitter *createMipsMCCodeEmitterEL(const MCInstrInfo &MCII,
                                          const MCRegisterInfo &MRI,
+                                         const MCSubtargetInfo &STI,
                                          MCContext &Ctx);
 
 MCAsmBackend *createMipsAsmBackendEB32(const Target &T,
-                                       const MCRegisterInfo &MRI,
-                                       const Triple &TT, StringRef CPU,
-                                       const MCTargetOptions &Options);
+                                       const MCRegisterInfo &MRI, StringRef TT,
+                                       StringRef CPU);
 MCAsmBackend *createMipsAsmBackendEL32(const Target &T,
-                                       const MCRegisterInfo &MRI,
-                                       const Triple &TT, StringRef CPU,
-                                       const MCTargetOptions &Options);
+                                       const MCRegisterInfo &MRI, StringRef TT,
+                                       StringRef CPU);
 MCAsmBackend *createMipsAsmBackendEB64(const Target &T,
-                                       const MCRegisterInfo &MRI,
-                                       const Triple &TT, StringRef CPU,
-                                       const MCTargetOptions &Options);
+                                       const MCRegisterInfo &MRI, StringRef TT,
+                                       StringRef CPU);
 MCAsmBackend *createMipsAsmBackendEL64(const Target &T,
-                                       const MCRegisterInfo &MRI,
-                                       const Triple &TT, StringRef CPU,
-                                       const MCTargetOptions &Options);
+                                       const MCRegisterInfo &MRI, StringRef TT,
+                                       StringRef CPU);
 
-MCObjectWriter *createMipsELFObjectWriter(raw_pwrite_stream &OS, uint8_t OSABI,
-                                          bool IsLittleEndian, bool Is64Bit);
-
-namespace MIPS_MC {
-StringRef selectMipsCPU(const Triple &TT, StringRef CPU);
-}
-
+MCObjectWriter *createMipsELFObjectWriter(raw_ostream &OS,
+                                          uint8_t OSABI,
+                                          bool IsLittleEndian,
+                                          bool Is64Bit);
 } // End llvm namespace
 
 // Defines symbolic names for Mips registers.  This defines a mapping from

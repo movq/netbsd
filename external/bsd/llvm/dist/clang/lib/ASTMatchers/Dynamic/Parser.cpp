@@ -16,6 +16,7 @@
 #include "clang/ASTMatchers/Dynamic/Registry.h"
 #include "clang/Basic/CharInfo.h"
 #include "llvm/ADT/Optional.h"
+#include "llvm/ADT/Twine.h"
 #include "llvm/Support/ManagedStatic.h"
 #include <string>
 #include <vector>
@@ -215,7 +216,7 @@ private:
       if (Code[Length] == Marker) {
         Result->Kind = TokenInfo::TK_Literal;
         Result->Text = Code.substr(0, Length + 1);
-        Result->Value = Code.substr(1, Length - 1);
+        Result->Value = Code.substr(1, Length - 1).str();
         Code = Code.drop_front(Length + 1);
         return;
       }
@@ -533,7 +534,7 @@ Parser::RegistrySema::lookupMatcherCtor(StringRef MatcherName) {
 }
 
 VariantMatcher Parser::RegistrySema::actOnMatcherExpression(
-    MatcherCtor Ctor, SourceRange NameRange, StringRef BindID,
+    MatcherCtor Ctor, const SourceRange &NameRange, StringRef BindID,
     ArrayRef<ParserValue> Args, Diagnostics *Error) {
   if (BindID.empty()) {
     return Registry::constructMatcher(Ctor, NameRange, Args, Error);

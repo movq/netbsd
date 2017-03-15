@@ -1,5 +1,5 @@
 /* 32-bit ELF support for TI C6X
-   Copyright (C) 2010-2016 Free Software Foundation, Inc.
+   Copyright 2010-2013 Free Software Foundation, Inc.
    Contributed by Joseph Myers <joseph@codesourcery.com>
    		  Bernd Schmidt  <bernds@codesourcery.com>
 
@@ -152,7 +152,7 @@ static reloc_howto_type elf32_tic6x_howto_table[] =
 {
   HOWTO (R_C6000_NONE,		/* type */
 	 0,			/* rightshift */
-	 3,			/* size (0 = byte, 1 = short, 2 = long) */
+	 0,			/* size (0 = byte, 1 = short, 2 = long) */
 	 0,			/* bitsize */
 	 FALSE,			/* pc_relative */
 	 0,			/* bitpos */
@@ -820,7 +820,7 @@ static reloc_howto_type elf32_tic6x_howto_table_rel[] =
 {
   HOWTO (R_C6000_NONE,		/* type */
 	 0,			/* rightshift */
-	 3,			/* size (0 = byte, 1 = short, 2 = long) */
+	 0,			/* size (0 = byte, 1 = short, 2 = long) */
 	 0,			/* bitsize */
 	 FALSE,			/* pc_relative */
 	 0,			/* bitpos */
@@ -1591,7 +1591,7 @@ elf32_tic6x_link_hash_table_create (bfd *abfd)
 static bfd_boolean
 elf32_tic6x_final_link (bfd *abfd, struct bfd_link_info *info)
 {
-  if (bfd_link_pic (info))
+  if (info->shared)
     {
       obj_attribute *out_attr;
       out_attr = elf_known_obj_attributes_proc (abfd);
@@ -1661,11 +1661,11 @@ elf32_tic6x_create_dynamic_sections (bfd *dynobj, struct bfd_link_info *info)
     return FALSE;
 
   htab->sdynbss = bfd_get_linker_section (dynobj, ".dynbss");
-  if (!bfd_link_pic (info))
+  if (!info->shared)
     htab->srelbss = bfd_get_linker_section (dynobj, ".rela.bss");
 
   if (!htab->sdynbss
-      || (!bfd_link_pic (info) && !htab->srelbss))
+      || (!info->shared && !htab->srelbss))
     abort ();
 
   return TRUE;
@@ -1761,7 +1761,7 @@ elf32_tic6x_finish_dynamic_symbol (bfd * output_bfd,
 	 it up.  */
 
       if ((h->dynindx == -1
-	   && !((h->forced_local || bfd_link_executable (info))
+	   && !((h->forced_local || info->executable)
 		&& h->def_regular
 		&& h->type == STT_GNU_IFUNC))
 	  || plt == NULL
@@ -1848,8 +1848,8 @@ elf32_tic6x_finish_dynamic_symbol (bfd * output_bfd,
          the symbol was forced to be local because of a version file.
          The entry in the global offset table will already have been
          initialized in the relocate_section function.  */
-      if (bfd_link_pic (info)
-	  && (SYMBOLIC_BIND (info, h)
+      if (info->shared
+	  && (info->symbolic
 	      || h->dynindx == -1 || h->forced_local) && h->def_regular)
 	{
 	  asection *s = h->root.u.def.section;
@@ -1919,7 +1919,7 @@ elf32_tic6x_gc_mark_extra_sections (struct bfd_link_info *info,
   while (again)
     {
       again = FALSE;
-      for (sub = info->input_bfds; sub != NULL; sub = sub->link.next)
+      for (sub = info->input_bfds; sub != NULL; sub = sub->link_next)
 	{
 	  asection *o;
 
@@ -1993,7 +1993,7 @@ elf32_tic6x_gc_sweep_hook (bfd *abfd,
   bfd_signed_vma *local_got_refcounts;
   const Elf_Internal_Rela *rel, *relend;
 
-  if (bfd_link_relocatable (info))
+  if (info->relocatable)
     return TRUE;
 
   htab = elf32_tic6x_hash_table (info);
@@ -2128,7 +2128,7 @@ elf32_tic6x_adjust_dynamic_symbol (struct bfd_link_info *info,
      only references to the symbol are via the global offset table.
      For such cases we need not do anything here; the relocations will
      be handled correctly by relocate_section.  */
-  if (bfd_link_pic (info))
+  if (info->shared)
     return TRUE;
 
   /* If there are no references to this symbol that do not use the
@@ -2168,7 +2168,7 @@ elf32_tic6x_adjust_dynamic_symbol (struct bfd_link_info *info,
 
   s = htab->sdynbss;
 
-  return _bfd_elf_adjust_dynamic_copy (info, h, s);
+  return _bfd_elf_adjust_dynamic_copy (h, s);
 }
 
 static bfd_boolean
@@ -2321,7 +2321,7 @@ elf32_tic6x_relocate_section (bfd *output_bfd,
 	RELOC_AGAINST_DISCARDED_SECTION (info, input_bfd, input_section,
 					 rel, 1, relend, howto, 0, contents);
 
-      if (bfd_link_relocatable (info))
+      if (info->relocatable)
 	{
 	  if (is_rel
 	      && sym != NULL
@@ -2403,7 +2403,7 @@ elf32_tic6x_relocate_section (bfd *output_bfd,
 
 	case R_C6000_DSBT_INDEX:
 	  relocation = elf32_tic6x_hash_table (info)->params.dsbt_index;
-	  if (!bfd_link_pic (info) || relocation != 0)
+	  if (!info->shared || relocation != 0)
 	    break;
 
 	  /* fall through */
@@ -2416,7 +2416,7 @@ elf32_tic6x_relocate_section (bfd *output_bfd,
 	  /* When generating a shared object or relocatable executable, these
 	     relocations are copied into the output file to be resolved at
 	     run time.  */
-	  if ((bfd_link_pic (info) || elf32_tic6x_using_dsbt (output_bfd))
+	  if ((info->shared || elf32_tic6x_using_dsbt (output_bfd))
 	      && (input_section->flags & SEC_ALLOC)
 	      && (h == NULL
 		  || ELF_ST_VISIBILITY (h->other) == STV_DEFAULT
@@ -2448,8 +2448,8 @@ elf32_tic6x_relocate_section (bfd *output_bfd,
 		memset (&outrel, 0, sizeof outrel);
 	      else if (h != NULL
 		       && h->dynindx != -1
-		       && (!bfd_link_pic (info)
-			   || !SYMBOLIC_BIND (info, h)
+		       && (!info->shared
+			   || !info->symbolic
 			   || !h->def_regular))
 		{
 		  outrel.r_info = ELF32_R_INFO (h->dynindx, r_type);
@@ -2544,10 +2544,8 @@ elf32_tic6x_relocate_section (bfd *output_bfd,
 
 	      off = h->got.offset;
 	      dyn = htab->elf.dynamic_sections_created;
-	      if (! WILL_CALL_FINISH_DYNAMIC_SYMBOL (dyn,
-						     bfd_link_pic (info),
-						     h)
-		  || (bfd_link_pic (info)
+	      if (! WILL_CALL_FINISH_DYNAMIC_SYMBOL (dyn, info->shared, h)
+		  || (info->shared
 		      && SYMBOL_REFERENCES_LOCAL (info, h))
 		  || (ELF_ST_VISIBILITY (h->other)
 		      && h->root.type == bfd_link_hash_undefweak))
@@ -2572,8 +2570,7 @@ elf32_tic6x_relocate_section (bfd *output_bfd,
 				  htab->elf.sgot->contents + off);
 		      h->got.offset |= 1;
 
-		      if (!WILL_CALL_FINISH_DYNAMIC_SYMBOL (dyn,
-							    bfd_link_pic (info),
+		      if (!WILL_CALL_FINISH_DYNAMIC_SYMBOL (dyn, info->shared,
 							    h)
 			  && !(ELF_ST_VISIBILITY (h->other)
 			       && h->root.type == bfd_link_hash_undefweak))
@@ -2601,7 +2598,7 @@ elf32_tic6x_relocate_section (bfd *output_bfd,
 		  bfd_put_32 (output_bfd, relocation,
 			      htab->elf.sgot->contents + off);
 
-		  if (bfd_link_pic (info) || elf32_tic6x_using_dsbt (output_bfd))
+		  if (info->shared || elf32_tic6x_using_dsbt (output_bfd))
 		    elf32_tic6x_make_got_dynreloc (output_bfd, htab, sec, off);
 
 		  local_got_offsets[r_symndx] |= 1;
@@ -2719,16 +2716,20 @@ elf32_tic6x_relocate_section (bfd *output_bfd,
 	      /* If the overflowing reloc was to an undefined symbol,
 		 we have already printed one error message and there
 		 is no point complaining again.  */
-	      if (!h || h->root.type != bfd_link_hash_undefined)
-		(*info->callbacks->reloc_overflow)
-		  (info, (h ? &h->root : NULL), name, howto->name,
-		   (bfd_vma) 0, input_bfd, input_section, rel->r_offset);
+	      if ((! h ||
+		   h->root.type != bfd_link_hash_undefined)
+		  && (!((*info->callbacks->reloc_overflow)
+			(info, (h ? &h->root : NULL), name, howto->name,
+			 (bfd_vma) 0, input_bfd, input_section,
+			 rel->r_offset))))
+		  return FALSE;
 	      break;
 
 	    case bfd_reloc_undefined:
-	      (*info->callbacks->undefined_symbol) (info, name, input_bfd,
-						    input_section,
-						    rel->r_offset, TRUE);
+	      if (!((*info->callbacks->undefined_symbol)
+		    (info, name, input_bfd, input_section,
+		     rel->r_offset, TRUE)))
+		return FALSE;
 	      break;
 
 	    case bfd_reloc_outofrange:
@@ -2749,8 +2750,10 @@ elf32_tic6x_relocate_section (bfd *output_bfd,
 
 	    common_error:
 	      BFD_ASSERT (error_message != NULL);
-	      (*info->callbacks->reloc_dangerous)
-		(info, error_message, input_bfd, input_section, rel->r_offset);
+	      if (!((*info->callbacks->reloc_dangerous)
+		    (info, error_message, input_bfd, input_section,
+		     rel->r_offset)))
+		return FALSE;
 	      break;
 	    }
 	}
@@ -2775,7 +2778,7 @@ elf32_tic6x_check_relocs (bfd *abfd, struct bfd_link_info *info,
   const Elf_Internal_Rela *rel_end;
   asection *sreloc;
 
-  if (bfd_link_relocatable (info))
+  if (info->relocatable)
     return TRUE;
 
   htab = elf32_tic6x_hash_table (info);
@@ -2784,7 +2787,7 @@ elf32_tic6x_check_relocs (bfd *abfd, struct bfd_link_info *info,
 
   /* Create dynamic sections for relocatable executables so that we can
      copy relocations.  */
-  if ((bfd_link_pic (info) || elf32_tic6x_using_dsbt (abfd))
+  if ((info->shared || elf32_tic6x_using_dsbt (abfd))
       && ! htab->elf.dynamic_sections_created)
     {
       if (! _bfd_elf_link_create_dynamic_sections (abfd, info))
@@ -2899,7 +2902,7 @@ elf32_tic6x_check_relocs (bfd *abfd, struct bfd_link_info *info,
 	     store the number of R_C6000_DSBT_INDEX relocs in the
 	     pc_count field, and potentially discard the extra space
 	     in elf32_tic6x_allocate_dynrelocs.  */
-	  if (!bfd_link_pic (info))
+	  if (!info->shared)
 	    break;
 
 	  /* fall through */
@@ -2930,7 +2933,7 @@ elf32_tic6x_check_relocs (bfd *abfd, struct bfd_link_info *info,
 	     may need to keep relocations for symbols satisfied by a
 	     dynamic library if we manage to avoid copy relocs for the
 	     symbol.  */
-	  if ((bfd_link_pic (info) || elf32_tic6x_using_dsbt (abfd))
+	  if ((info->shared || elf32_tic6x_using_dsbt (abfd))
 	      && (sec->flags & SEC_ALLOC) != 0)
 	    {
 	      struct elf_dyn_relocs *p;
@@ -3003,7 +3006,7 @@ elf32_tic6x_check_relocs (bfd *abfd, struct bfd_link_info *info,
 	case R_C6000_SBR_H16_B:
 	case R_C6000_SBR_H16_H:
 	case R_C6000_SBR_H16_W:
-	  if (h != NULL && bfd_link_executable (info))
+	  if (h != NULL && info->executable)
 	    {
 	      /* For B14-relative addresses, we might need a copy
 		 reloc.  */
@@ -3127,7 +3130,7 @@ elf32_tic6x_allocate_dynrelocs (struct elf_link_hash_entry *h, void *inf)
 	    return FALSE;
 	}
 
-      if (bfd_link_pic (info)
+      if (info->shared
 	  || WILL_CALL_FINISH_DYNAMIC_SYMBOL (1, 0, h))
 	{
 	  asection *s = htab->elf.splt;
@@ -3144,7 +3147,7 @@ elf32_tic6x_allocate_dynrelocs (struct elf_link_hash_entry *h, void *inf)
 	     location in the .plt.  This is required to make function
 	     pointers compare as equal between the normal executable and
 	     the shared library.  */
-	  if (! bfd_link_pic (info) && !h->def_regular)
+	  if (! info->shared && !h->def_regular)
 	    {
 	      h->root.u.def.section = s;
 	      h->root.u.def.value = h->plt.offset;
@@ -3199,7 +3202,7 @@ elf32_tic6x_allocate_dynrelocs (struct elf_link_hash_entry *h, void *inf)
 
   /* Discard relocs on undefined weak syms with non-default
      visibility.  */
-  if (bfd_link_pic (info) || elf32_tic6x_using_dsbt (htab->obfd))
+  if (info->shared || elf32_tic6x_using_dsbt (htab->obfd))
     {
       /* We use the pc_count field to hold the number of
 	 R_C6000_DSBT_INDEX relocs.  */
@@ -3294,7 +3297,7 @@ elf32_tic6x_size_dynamic_sections (bfd *output_bfd, struct bfd_link_info *info)
   if (htab->elf.dynamic_sections_created)
     {
       /* Set the contents of the .interp section to the interpreter.  */
-      if (bfd_link_executable (info) && !info->nointerp)
+      if (info->executable)
 	{
 	  s = bfd_get_linker_section (dynobj, ".interp");
 	  if (s == NULL)
@@ -3306,7 +3309,7 @@ elf32_tic6x_size_dynamic_sections (bfd *output_bfd, struct bfd_link_info *info)
 
   /* Set up .got offsets for local syms, and space for local dynamic
      relocs.  */
-  for (ibfd = info->input_bfds; ibfd != NULL; ibfd = ibfd->link.next)
+  for (ibfd = info->input_bfds; ibfd != NULL; ibfd = ibfd->link_next)
     {
       bfd_signed_vma *local_got;
       bfd_signed_vma *end_local_got;
@@ -3357,7 +3360,7 @@ elf32_tic6x_size_dynamic_sections (bfd *output_bfd, struct bfd_link_info *info)
 	      *local_got = s->size;
 	      s->size += 4;
 
-	      if (bfd_link_pic (info) || elf32_tic6x_using_dsbt (output_bfd))
+	      if (info->shared || elf32_tic6x_using_dsbt (output_bfd))
 		{
 		  srel->size += sizeof (Elf32_External_Rela);
 		}
@@ -3456,7 +3459,7 @@ elf32_tic6x_size_dynamic_sections (bfd *output_bfd, struct bfd_link_info *info)
 #define add_dynamic_entry(TAG, VAL) \
   _bfd_elf_add_dynamic_entry (info, TAG, VAL)
 
-      if (bfd_link_executable (info))
+      if (info->executable)
 	{
 	  if (!add_dynamic_entry (DT_DEBUG, 0))
 	    return FALSE;
@@ -3508,7 +3511,7 @@ elf32_tic6x_size_dynamic_sections (bfd *output_bfd, struct bfd_link_info *info)
 static bfd_boolean
 elf32_tic6x_always_size_sections (bfd *output_bfd, struct bfd_link_info *info)
 {
-  if (elf32_tic6x_using_dsbt (output_bfd) && !bfd_link_relocatable (info)
+  if (elf32_tic6x_using_dsbt (output_bfd) && !info->relocatable
       && !bfd_elf_stack_segment_size (output_bfd, info,
 				      "__stacksize", DEFAULT_STACK_SIZE))
     return FALSE;
@@ -4048,7 +4051,7 @@ elf32_tic6x_fix_exidx_coverage (asection **text_section_order,
 
   /* Walk over all EXIDX sections, and create backlinks from the corrsponding
      text sections.  */
-  for (inp = info->input_bfds; inp != NULL; inp = inp->link.next)
+  for (inp = info->input_bfds; inp != NULL; inp = inp->link_next)
     {
       asection *sec;
 
@@ -4342,9 +4345,9 @@ elf32_tic6x_write_section (bfd *output_bfd,
   return TRUE;
 }
 
-#define TARGET_LITTLE_SYM	tic6x_elf32_le_vec
+#define TARGET_LITTLE_SYM	bfd_elf32_tic6x_le_vec
 #define TARGET_LITTLE_NAME	"elf32-tic6x-le"
-#define TARGET_BIG_SYM		tic6x_elf32_be_vec
+#define TARGET_BIG_SYM		bfd_elf32_tic6x_be_vec
 #define TARGET_BIG_NAME		"elf32-tic6x-be"
 #define ELF_ARCH		bfd_arch_tic6x
 #define ELF_TARGET_ID		TIC6X_ELF_DATA
@@ -4413,11 +4416,11 @@ elf32_tic6x_write_section (bfd *output_bfd,
 #define	elf32_bed		elf32_tic6x_linux_bed
 
 #undef TARGET_LITTLE_SYM
-#define	TARGET_LITTLE_SYM		tic6x_elf32_linux_le_vec
+#define	TARGET_LITTLE_SYM		bfd_elf32_tic6x_linux_le_vec
 #undef TARGET_LITTLE_NAME
 #define	TARGET_LITTLE_NAME		"elf32-tic6x-linux-le"
 #undef TARGET_BIG_SYM
-#define TARGET_BIG_SYM			tic6x_elf32_linux_be_vec
+#define TARGET_BIG_SYM			bfd_elf32_tic6x_linux_be_vec
 #undef TARGET_BIG_NAME
 #define	TARGET_BIG_NAME			"elf32-tic6x-linux-be"
 #undef ELF_OSABI
@@ -4429,11 +4432,11 @@ elf32_tic6x_write_section (bfd *output_bfd,
 #define	elf32_bed		elf32_tic6x_elf_bed
 
 #undef TARGET_LITTLE_SYM
-#define	TARGET_LITTLE_SYM		tic6x_elf32_c6000_le_vec
+#define	TARGET_LITTLE_SYM		bfd_elf32_tic6x_elf_le_vec
 #undef TARGET_LITTLE_NAME
 #define	TARGET_LITTLE_NAME		"elf32-tic6x-elf-le"
 #undef TARGET_BIG_SYM
-#define TARGET_BIG_SYM			tic6x_elf32_c6000_be_vec
+#define TARGET_BIG_SYM			bfd_elf32_tic6x_elf_be_vec
 #undef TARGET_BIG_NAME
 #define	TARGET_BIG_NAME			"elf32-tic6x-elf-be"
 #undef ELF_OSABI

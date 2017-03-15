@@ -1,4 +1,4 @@
-/*	$NetBSD: zoneconf.c,v 1.9 2016/05/26 16:49:56 christos Exp $	*/
+/*	$NetBSD: zoneconf.c,v 1.6.4.2 2016/10/14 12:01:10 martin Exp $	*/
 
 /*
  * Copyright (C) 2004-2015  Internet Systems Consortium, Inc. ("ISC")

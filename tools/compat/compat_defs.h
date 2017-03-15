@@ -1,4 +1,4 @@
-/*	$NetBSD: compat_defs.h,v 1.107 2017/01/07 21:29:30 christos Exp $	*/
+/*	$NetBSD: compat_defs.h,v 1.97.2.2 2015/04/22 07:18:58 snj Exp $	*/
 
 #ifndef	__NETBSD_COMPAT_DEFS_H__
 #define	__NETBSD_COMPAT_DEFS_H__
@@ -42,14 +42,10 @@
 #include <fcntl.h>
 #include <limits.h>
 #include <paths.h>
-#include <ctype.h>
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#if HAVE_ERR_H
-#include <err.h>
-#endif
 
 #if HAVE_SYS_CDEFS_H
 #include <sys/cdefs.h>
@@ -67,9 +63,6 @@
 #if HAVE_STDDEF_H
 #include <stddef.h>
 #endif
-#if HAVE_LIBGEN_H
-#include <libgen.h>
-#endif
 
 #if HAVE_RPC_TYPES_H
 #include <rpc/types.h>
@@ -84,11 +77,6 @@
 #undef __UNCONST
 #endif
 #define __UNCONST(a)   ((void *)(unsigned long)(const void *)(a))
-#ifdef __UNVOLATILE
-#undef __UNVOLATILE
-#endif
-#define __UNVOLATILE(a)        ((void *)(unsigned long)(volatile void *)(a))
-
 
 #undef __predict_false
 #define __predict_false(x) (x)
@@ -226,19 +214,19 @@ typedef unsigned short u_short;
 
 /* Prototypes for replacement functions. */
 
-#if !HAVE_DECL_ATOLL
+#if !HAVE_ATOLL
 long long int atoll(const char *);
 #endif
 
-#if !HAVE_DECL_ASPRINTF
+#if !HAVE_ASPRINTF
 int asprintf(char **, const char *, ...);
 #endif
 
-#if !HAVE_DECL_ASNPRINTF
+#if !HAVE_ASNPRINTF
 int asnprintf(char **, size_t, const char *, ...);
 #endif
 
-#if !HAVE_DECL_BASENAME
+#if !HAVE_BASENAME
 char *basename(char *);
 #endif
 
@@ -248,7 +236,7 @@ extern char *optarg;
 extern int optind, opterr, optopt;
 #endif
 
-#if !HAVE_DECL_DIRNAME
+#if !HAVE_DIRNAME
 char *dirname(char *);
 #endif
 
@@ -279,42 +267,25 @@ struct _dirdesc {
 #endif
 #endif
 
-#if !HAVE_DECL_ERR
+#if !HAVE_ERR_H
 void err(int, const char *, ...);
-#endif
-#if !HAVE_DECL_ERRC
-void errc(int, int, const char *, ...);
-#endif
-#if !HAVE_DECL_ERRX
 void errx(int, const char *, ...);
-#endif
-#if !HAVE_DECL_VERRC
-void verrc(int, int, const char *, va_list);
-#endif
-#if !HAVE_DECL_VERRX
-void verrx(int, const char *, va_list);
-#endif
-#if !HAVE_DECL_WARN
 void warn(const char *, ...);
+void warnx(const char *, ...);
+void vwarnx(const char *, va_list);
 #endif
 #if !HAVE_DECL_WARNC
 void warnc(int, const char *, ...);
 #endif
-#if !HAVE_DECL_WARNX
-void warnx(const char *, ...);
-#endif
 #if !HAVE_DECL_VWARNC
 void vwarnc(int, const char *, va_list);
 #endif
-#if !HAVE_DECL_VWARNX
-void vwarnx(const char *, va_list);
+#if !HAVE_DECL_ERRC
+void errc(int, int, const char *, ...);
 #endif
-
-#if !HAVE_DECL_MI_VECTOR_HASH
-void     mi_vector_hash(const void * __restrict, size_t, uint32_t,
-    uint32_t[3]);
+#if !HAVE_DECL_VERRC
+void verrc(int, int, const char *, va_list);
 #endif
-
 
 #if !HAVE_ESETFUNC
 void (*esetfunc(void (*)(int, const char *, ...)))(int, const char *, ...);
@@ -330,10 +301,10 @@ int easprintf(char **, const char *, ...);
 int evasprintf(char **, const char *, va_list);
 #endif
 
-#if !HAVE_DECL_FGETLN
+#if !HAVE_FGETLN || defined(__NetBSD__)
 char *fgetln(FILE *, size_t *);
 #endif
-#if !HAVE_DECL_DPRINTF
+#if !HAVE_DPRINTF
 int dprintf(int, const char *, ...);
 #endif
 
@@ -345,7 +316,7 @@ int dprintf(int, const char *, ...);
 int flock(int, int);
 #endif
 
-#if !HAVE_DECL_FPARSELN || BROKEN_FPARSELN
+#if !HAVE_FPARSELN || BROKEN_FPARSELN || defined(__NetBSD__)
 # define FPARSELN_UNESCESC	0x01
 # define FPARSELN_UNESCCONT	0x02
 # define FPARSELN_UNESCCOMM	0x04
@@ -354,18 +325,16 @@ int flock(int, int);
 char *fparseln(FILE *, size_t *, size_t *, const char [3], int);
 #endif
 
-#if !HAVE_DECL_GETDELIM
+#if !HAVE_GETLINE
 ssize_t getdelim(char **, size_t *, int, FILE *);
-#endif
-#if !HAVE_DECL_GETLINE
 ssize_t getline(char **, size_t *, FILE *);
 #endif
 
-#if !HAVE_DECL_ISSETUGID
+#if !HAVE_ISSETUGID
 int issetugid(void);
 #endif
 
-#if !HAVE_DECL_ISBLANK && !defined(isblank)
+#if !HAVE_ISBLANK && !defined(isblank)
 #define isblank(x) ((x) == ' ' || (x) == '\t')
 #endif
 
@@ -398,11 +367,11 @@ int issetugid(void);
 #define bswap64(x)	__nbcompat_bswap64(x)
 #endif
 
-#if !HAVE_DECL_MKSTEMP
+#if !HAVE_MKSTEMP
 int mkstemp(char *);
 #endif
 
-#if !HAVE_DECL_MKDTEMP
+#if !HAVE_MKDTEMP
 char *mkdtemp(char *);
 #endif
 
@@ -412,11 +381,11 @@ char *mkdtemp(char *);
 int __nbcompat_gettemp(char *, int *, int);
 #endif
 
-#if !HAVE_DECL_PREAD
+#if !HAVE_PREAD
 ssize_t pread(int, void *, size_t, off_t);
 #endif
 
-#if !HAVE_DECL_HEAPSORT
+#if !HAVE_HEAPSORT
 int heapsort (void *, size_t, size_t, int (*)(const void *, const void *));
 #endif
 /* Make them use our version */
@@ -471,12 +440,6 @@ int pwcache_groupdb(int (*)(int), void (*)(void),
     struct group * (*)(const char *), struct group * (*)(gid_t));
 #endif
 
-#if !HAVE_DECL_STRLCAT
-size_t		strlcat(char *, const char *, size_t);
-#endif
-#if !HAVE_DECL_STRLCPY
-size_t		strlcpy(char *, const char *, size_t);
-#endif
 #if !HAVE_DECL_STRNDUP
 char		*strndup(const char *, size_t);
 #endif
@@ -493,7 +456,7 @@ int		lchmod(const char *, mode_t);
 int		lchown(const char *, uid_t, gid_t);
 #endif
 
-#if !HAVE_DECL_PWRITE
+#if !HAVE_PWRITE
 ssize_t pwrite(int, const void *, size_t, off_t);
 #endif
 
@@ -501,11 +464,7 @@ ssize_t pwrite(int, const void *, size_t, off_t);
 int raise_default_signal(int);
 #endif
 
-#if !HAVE_DECL_REALLOCARR
-int reallocarr(void *, size_t, size_t);
-#endif
-
-#if !HAVE_DECL_SETENV
+#if !HAVE_SETENV
 int setenv(const char *, const char *, int);
 #endif
 
@@ -517,10 +476,8 @@ int setgroupent(int);
 int setpassent(int);
 #endif
 
-#if !HAVE_DECL_GETPROGNAME
+#if !HAVE_SETPROGNAME || defined(__NetBSD__)
 const char *getprogname(void);
-#endif
-#if !HAVE_DECL_SETPROGNAME
 void setprogname(const char *);
 #endif
 
@@ -529,19 +486,27 @@ int snprintb(char *, size_t, const char *, uint64_t);
 int snprintb_m(char *, size_t, const char *, uint64_t, size_t);
 #endif
 
-#if !HAVE_DECL_SNPRINTF && !defined(snprintf)
+#if !HAVE_SNPRINTF
 int snprintf(char *, size_t, const char *, ...);
 #endif
 
-#if !HAVE_DECL_STRMODE
+#if !HAVE_STRLCAT
+size_t strlcat(char *, const char *, size_t);
+#endif
+
+#if !HAVE_STRLCPY
+size_t strlcpy(char *, const char *, size_t);
+#endif
+
+#if !HAVE_STRMODE
 void strmode(mode_t, char *);
 #endif
 
-#if !HAVE_DECL_STRNDUP
+#if !HAVE_STRNDUP
 char *strndup(const char *, size_t);
 #endif
 
-#if !HAVE_DECL_STRSEP
+#if !HAVE_STRSEP || defined(__NetBSD__)
 char *strsep(char **, const char *);
 #endif
 
@@ -551,37 +516,37 @@ long long strsuftollx(const char *, const char *,
 			long long, long long, char *, size_t);
 #endif
 
-#if !HAVE_DECL_STRTOLL
+#if !HAVE_STRTOLL
 long long strtoll(const char *, char **, int);
 #endif
 
-#if !HAVE_DECL_STRTOI
+#if !HAVE_STRTOI
 intmax_t strtoi(const char * __restrict, char ** __restrict, int,
     intmax_t, intmax_t, int *);
 #endif
 
-#if !HAVE_DECL_STRTOU
+#if !HAVE_STRTOU
 uintmax_t strtou(const char * __restrict, char ** __restrict, int,
     uintmax_t, uintmax_t, int *);
 #endif
 
-#if !HAVE_DECL_USER_FROM_UID
+#if !HAVE_USER_FROM_UID
 const char *user_from_uid(uid_t, int);
 #endif
 
-#if !HAVE_DECL_GROUP_FROM_GID
+#if !HAVE_GROUP_FROM_GID
 const char *group_from_gid(gid_t, int);
 #endif
 
-#if !HAVE_DECL_VASPRINTF
+#if !HAVE_VASPRINTF
 int vasprintf(char **, const char *, va_list);
 #endif
 
-#if !HAVE_DECL_VASNPRINTF
+#if !HAVE_VASNPRINTF
 int vasnprintf(char **, size_t, const char *, va_list);
 #endif
 
-#if !HAVE_DECL_VSNPRINTF && !defined(vsnprintf)
+#if !HAVE_VSNPRINTF
 int vsnprintf(char *, size_t, const char *, va_list);
 #endif
 
@@ -637,9 +602,6 @@ void *setmode(const char *);
 #endif
 #ifndef O_SHLOCK
 #define O_SHLOCK 0
-#endif
-#ifndef O_CLOEXEC
-#define O_CLOEXEC 0
 #endif
 
 /* <inttypes.h> */
@@ -936,13 +898,6 @@ void *setmode(const char *);
 #define LLONG_MIN ((long long)(~LLONG_MAX))
 #endif
 
-#ifndef MAXPATHLEN
-#define MAXPATHLEN	4096
-#endif
-#ifndef PATH_MAX
-#define PATH_MAX	MAXPATHLEN
-#endif
-
 /* <paths.h> */
 
 /* The host's _PATH_BSHELL might be broken, so override it. */
@@ -1181,9 +1136,6 @@ __GEN_ENDIAN_DEC(64, le)
 #endif
 #ifndef MAXPHYS
 #define MAXPHYS (64 * 1024)
-#endif
-#ifndef MAXHOSTNAMELEN
-#define MAXHOSTNAMELEN	256
 #endif
 
 /* XXX needed by makefs; this should be done in a better way */

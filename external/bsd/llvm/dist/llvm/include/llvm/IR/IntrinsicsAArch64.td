@@ -38,6 +38,12 @@ def int_aarch64_udiv : Intrinsic<[llvm_anyint_ty], [LLVMMatchType<0>,
 def int_aarch64_hint : Intrinsic<[], [llvm_i32_ty]>;
 
 //===----------------------------------------------------------------------===//
+// RBIT
+
+def int_aarch64_rbit : Intrinsic<[llvm_anyint_ty], [LLVMMatchType<0>],
+                                 [IntrNoMem]>;
+
+//===----------------------------------------------------------------------===//
 // Data Barrier Instructions
 
 def int_aarch64_dmb : GCCBuiltin<"__builtin_arm_dmb">, Intrinsic<[], [llvm_i32_ty]>;
@@ -150,7 +156,7 @@ let TargetPrefix = "aarch64" in {  // All intrinsics start with "llvm.aarch64.".
 
 // Arithmetic ops
 
-let TargetPrefix = "aarch64", IntrProperties = [IntrNoMem] in {
+let Properties = [IntrNoMem] in {
   // Vector Add Across Lanes
   def int_aarch64_neon_saddv : AdvSIMD_1VectorArg_Int_Across_Intrinsic;
   def int_aarch64_neon_uaddv : AdvSIMD_1VectorArg_Int_Across_Intrinsic;
@@ -203,7 +209,7 @@ let TargetPrefix = "aarch64", IntrProperties = [IntrNoMem] in {
 
   // Vector Extending Multiply
   def int_aarch64_neon_fmulx : AdvSIMD_2FloatArg_Intrinsic {
-    let IntrProperties = [IntrNoMem, Commutative];
+    let Properties = [IntrNoMem, Commutative];
   }
 
   // Vector Saturating Doubling Long Multiply
@@ -427,70 +433,70 @@ def int_aarch64_neon_vcopy_lane: AdvSIMD_2Vector2Index_Intrinsic;
 let TargetPrefix = "aarch64" in {  // All intrinsics start with "llvm.aarch64.".
   class AdvSIMD_1Vec_Load_Intrinsic
       : Intrinsic<[llvm_anyvector_ty], [LLVMAnyPointerType<LLVMMatchType<0>>],
-                  [IntrReadMem, IntrArgMemOnly]>;
+                  [IntrReadArgMem]>;
   class AdvSIMD_1Vec_Store_Lane_Intrinsic
     : Intrinsic<[], [llvm_anyvector_ty, llvm_i64_ty, llvm_anyptr_ty],
-                [IntrArgMemOnly, NoCapture<2>]>;
+                [IntrReadWriteArgMem, NoCapture<2>]>;
 
   class AdvSIMD_2Vec_Load_Intrinsic
     : Intrinsic<[llvm_anyvector_ty, LLVMMatchType<0>],
                 [LLVMAnyPointerType<LLVMMatchType<0>>],
-                [IntrReadMem, IntrArgMemOnly]>;
+                [IntrReadArgMem]>;
   class AdvSIMD_2Vec_Load_Lane_Intrinsic
     : Intrinsic<[llvm_anyvector_ty, LLVMMatchType<0>],
                 [LLVMMatchType<0>, LLVMMatchType<0>,
                  llvm_i64_ty, llvm_anyptr_ty],
-                [IntrReadMem, IntrArgMemOnly]>;
+                [IntrReadArgMem]>;
   class AdvSIMD_2Vec_Store_Intrinsic
     : Intrinsic<[], [llvm_anyvector_ty, LLVMMatchType<0>,
                      LLVMAnyPointerType<LLVMMatchType<0>>],
-                [IntrArgMemOnly, NoCapture<2>]>;
+                [IntrReadWriteArgMem, NoCapture<2>]>;
   class AdvSIMD_2Vec_Store_Lane_Intrinsic
     : Intrinsic<[], [llvm_anyvector_ty, LLVMMatchType<0>,
                  llvm_i64_ty, llvm_anyptr_ty],
-                [IntrArgMemOnly, NoCapture<3>]>;
+                [IntrReadWriteArgMem, NoCapture<3>]>;
 
   class AdvSIMD_3Vec_Load_Intrinsic
     : Intrinsic<[llvm_anyvector_ty, LLVMMatchType<0>, LLVMMatchType<0>],
                 [LLVMAnyPointerType<LLVMMatchType<0>>],
-                [IntrReadMem, IntrArgMemOnly]>;
+                [IntrReadArgMem]>;
   class AdvSIMD_3Vec_Load_Lane_Intrinsic
     : Intrinsic<[llvm_anyvector_ty, LLVMMatchType<0>, LLVMMatchType<0>],
                 [LLVMMatchType<0>, LLVMMatchType<0>, LLVMMatchType<0>,
                  llvm_i64_ty, llvm_anyptr_ty],
-                [IntrReadMem, IntrArgMemOnly]>;
+                [IntrReadArgMem]>;
   class AdvSIMD_3Vec_Store_Intrinsic
     : Intrinsic<[], [llvm_anyvector_ty, LLVMMatchType<0>,
                      LLVMMatchType<0>, LLVMAnyPointerType<LLVMMatchType<0>>],
-                [IntrArgMemOnly, NoCapture<3>]>;
+                [IntrReadWriteArgMem, NoCapture<3>]>;
   class AdvSIMD_3Vec_Store_Lane_Intrinsic
     : Intrinsic<[], [llvm_anyvector_ty,
                  LLVMMatchType<0>, LLVMMatchType<0>,
                  llvm_i64_ty, llvm_anyptr_ty],
-                [IntrArgMemOnly, NoCapture<4>]>;
+                [IntrReadWriteArgMem, NoCapture<4>]>;
 
   class AdvSIMD_4Vec_Load_Intrinsic
     : Intrinsic<[llvm_anyvector_ty, LLVMMatchType<0>,
                  LLVMMatchType<0>, LLVMMatchType<0>],
                 [LLVMAnyPointerType<LLVMMatchType<0>>],
-                [IntrReadMem, IntrArgMemOnly]>;
+                [IntrReadArgMem]>;
   class AdvSIMD_4Vec_Load_Lane_Intrinsic
     : Intrinsic<[llvm_anyvector_ty, LLVMMatchType<0>,
                  LLVMMatchType<0>, LLVMMatchType<0>],
                 [LLVMMatchType<0>, LLVMMatchType<0>,
                  LLVMMatchType<0>, LLVMMatchType<0>,
                  llvm_i64_ty, llvm_anyptr_ty],
-                [IntrReadMem, IntrArgMemOnly]>;
+                [IntrReadArgMem]>;
   class AdvSIMD_4Vec_Store_Intrinsic
     : Intrinsic<[], [llvm_anyvector_ty, LLVMMatchType<0>,
                  LLVMMatchType<0>, LLVMMatchType<0>,
                  LLVMAnyPointerType<LLVMMatchType<0>>],
-                [IntrArgMemOnly, NoCapture<4>]>;
+                [IntrReadWriteArgMem, NoCapture<4>]>;
   class AdvSIMD_4Vec_Store_Lane_Intrinsic
     : Intrinsic<[], [llvm_anyvector_ty, LLVMMatchType<0>,
                  LLVMMatchType<0>, LLVMMatchType<0>,
                  llvm_i64_ty, llvm_anyptr_ty],
-                [IntrArgMemOnly, NoCapture<5>]>;
+                [IntrReadWriteArgMem, NoCapture<5>]>;
 }
 
 // Memory ops

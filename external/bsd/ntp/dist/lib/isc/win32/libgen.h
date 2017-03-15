@@ -1,4 +1,4 @@
-/*	$NetBSD: libgen.h,v 1.4 2016/01/08 21:35:38 christos Exp $	*/
+/*	$NetBSD: libgen.h,v 1.1.1.1.6.1 2014/12/24 00:05:19 riz Exp $	*/
 
 /*
  * Copyright (C) 2009  Internet Systems Consortium, Inc. ("ISC")

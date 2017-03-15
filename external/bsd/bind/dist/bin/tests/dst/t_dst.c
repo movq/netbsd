@@ -1,4 +1,4 @@
-/*	$NetBSD: t_dst.c,v 1.10 2014/12/10 04:37:53 christos Exp $	*/
+/*	$NetBSD: t_dst.c,v 1.9.4.1 2014/12/22 03:28:35 msaitoh Exp $	*/
 
 /*
  * Copyright (C) 2004, 2005, 2007-2009, 2011-2014  Internet Systems Consortium, Inc. ("ISC")

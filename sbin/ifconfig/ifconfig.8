@@ -1,4 +1,4 @@
-.\"	$NetBSD: ifconfig.8,v 1.114 2017/02/16 13:51:08 wiz Exp $
+.\"	$NetBSD: ifconfig.8,v 1.106.4.2 2014/10/27 13:42:37 martin Exp $
 .\"
 .\" Copyright (c) 1983, 1991, 1993
 .\"	The Regents of the University of California.  All rights reserved.
@@ -29,7 +29,7 @@
 .\"
 .\"     @(#)ifconfig.8	8.4 (Berkeley) 6/1/94
 .\"
-.Dd January 19, 2017
+.Dd October 12, 2014
 .Dt IFCONFIG 8
 .Os
 .Sh NAME
@@ -58,10 +58,6 @@
 .Nm
 .Fl s
 .Ar interface
-.Nm
-.Fl w
-.Ar secs
-.Op Fl W Ar secs
 .Nm
 .Fl C
 .Sh DESCRIPTION
@@ -316,7 +312,7 @@ to the destination network or host.
 .It Cm mtu Ar n
 Set the maximum transmission unit of the interface to
 .Ar n .
-Most interfaces do not support this option.
+Most interfaces don't support this option.
 .It Cm netmask Ar mask
 .Pq inet, inet6, and ISO
 Specify how much of the address to reserve for subdividing
@@ -388,7 +384,7 @@ can be any value between 0 and 2347.
 The default is 2347, which indicates the RTS/CTS mechanism should not be used.
 .It Cm ssid Ar id
 .Pq IEEE 802.11 devices only
-Configure the Service Set Identifier (aka the network name)
+Configure the Service Set Identifier (a.k.a. the network name)
 for IEEE 802.11-based wireless network interfaces.
 The
 .Ar id
@@ -436,7 +432,7 @@ are configured as WEP keys.
 Note that the order must be match within same network if multiple keys
 are used.
 For IEEE 802.11 wireless network, the length of each key is restricted to
-40 bits, i.e., 5-character string or 10 hexadecimal digits,
+40 bits, i.e. 5-character string or 10 hexadecimal digits,
 while the WaveLAN/IEEE Gold cards accept the 104 bits
 .Pq 13 characters
 key.
@@ -462,7 +458,7 @@ wireless clients directly (default).
 .It Fl apbridge
 .Pq IEEE 802.11 devices only
 When operating as an access point, pass packets through
-the system so that they can be forwarded using some other mechanism.
+the system so that they can be forwared using some other mechanism.
 Disabling the internal bridging is useful when traffic
 is to be processed with packet filtering.
 .It Cm pass Ar passphrase
@@ -497,7 +493,7 @@ to be used for IEEE 802.11-based wireless network interfaces.
 .Pq IEEE 802.11 devices only
 Unset the desired channel to be used
 for IEEE 802.11-based wireless network interfaces.
-It does not affect the channel to be created for IBSS or hostap mode.
+It doesn't affect the channel to be created for IBSS or hostap mode.
 .It Cm list scan
 .Pq IEEE 802.11 devices only
 Display the access points and/or ad-hoc neighbors
@@ -509,7 +505,8 @@ flag may be used to display long SSIDs.
 also causes received information elements to be displayed symbolically.
 The interface must be up before any scanning operation.
 Only the super-user can use this command.
-.It Cm tunnel Ar src_addr Ns Oo Ar ,src_port Oc Ar dest_addr Ns Oo Ar ,dest_port Oc
+.It Cm tunnel Ar src_addr Ns Oo Ar ,src_port Oc Ar dest_addr Ns Oo Ar ,dest_port
+.Oc
 .Pq IP tunnel devices only
 Configure the physical source and destination address for IP tunnel
 interfaces, including
@@ -533,25 +530,6 @@ UDP header.
 Unconfigure the physical source and destination address for IP tunnel
 interfaces previously configured with
 .Cm tunnel .
-.It Cm session Ar local_session Ar remote_session
-.Pq L2TPv3 devices only
-Configure local session id and remote session id for L2TPv3
-interface.
-The length of session id is 4 bytes.
-.It Cm deletesession
-Unconfigure the local session id and remote session id for
-L2TPv3 interface previously configured with
-.Cm session .
-.It Cm cookie Ar local_cookie_length Ar local_cookie  Ar remote_cookie_length Ar remote_cookie
-.Pq L2TPv3 devices only
-Configure local cookie and remote cookie for L2TPv3 interface.
-The cookie length must be 4 or 8 bytes.
-Generally, cookies are managed by daemon.
-So, this command would be used for test or debug only.
-.It Cm deletecookie
-Unconfigure the local cookie and remote cookie for L2TPv3
-interface previously configured with
-.Cm cookie .
 .It Cm create
 Create the specified network pseudo-device.
 .It Cm destroy
@@ -880,24 +858,6 @@ flag is identical to the
 .Fl v
 flag except that it zeros the interface input and output statistics
 after printing them.
-.Pp
-The
-.Fl w
-flag may be used to wait
-.Ar seconds
-seconds for the
-.Cm tentative
-flag to be removed from all addresses.
-0 seconds means to wait indefinitely until all addresses no longer have the
-.Cm tentative
-flag.
-The optional
-.Fl W
-flag may be used to wait
-.Ar seconds
-seconds during the above time for the detached flag to be removed from all
-addresses whose interface is marked ``up'' as well.
-The detached flag is set when the interface does not have a carrier.
 .Pp
 The
 .Fl N

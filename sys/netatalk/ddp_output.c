@@ -1,4 +1,4 @@
-/*	$NetBSD: ddp_output.c,v 1.20 2016/12/08 05:16:33 ozaki-r Exp $	 */
+/*	$NetBSD: ddp_output.c,v 1.17 2013/09/12 19:47:58 martin Exp $	 */
 
 /*
  * Copyright (c) 1990,1991 Regents of The University of Michigan.
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ddp_output.c,v 1.20 2016/12/08 05:16:33 ozaki-r Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ddp_output.c,v 1.17 2013/09/12 19:47:58 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -52,9 +52,15 @@ __KERNEL_RCSID(0, "$NetBSD: ddp_output.c,v 1.20 2016/12/08 05:16:33 ozaki-r Exp 
 int ddp_cksum = 1;
 
 int
-ddp_output(struct mbuf *m, struct ddpcb *ddp)
+ddp_output(struct mbuf *m,...)
 {
+	struct ddpcb   *ddp;
 	struct ddpehdr *deh;
+	va_list         ap;
+
+	va_start(ap, m);
+	ddp = va_arg(ap, struct ddpcb *);
+	va_end(ap);
 
 	M_PREPEND(m, sizeof(struct ddpehdr), M_DONTWAIT);
 	if (!m)
@@ -122,7 +128,6 @@ ddp_route(struct mbuf *m, struct route *ro)
 	struct ifnet   *ifp = NULL;
 	uint16_t        net;
 	uint8_t         loopback = 0;
-	int		error;
 
 	if ((rt = rtcache_validate(ro)) != NULL && (ifp = rt->rt_ifp) != NULL) {
 		const struct sockaddr_at *dst = satocsat(rtcache_getdst(ro));
@@ -154,8 +159,7 @@ ddp_route(struct mbuf *m, struct route *ro)
 		printf("%s: no address found\n", __func__);
 #endif
 		m_freem(m);
-		error = EINVAL;
-		goto out;
+		return EINVAL;
 	}
 	/*
          * There are several places in the kernel where data is added to
@@ -165,10 +169,8 @@ ddp_route(struct mbuf *m, struct route *ro)
          */
 	if (!(aa->aa_flags & AFA_PHASE2)) {
 		M_PREPEND(m, SZ_ELAPHDR, M_DONTWAIT);
-		if (m == NULL) {
-			error = ENOBUFS;
-			goto out;
-		}
+		if (m == NULL)
+			return ENOBUFS;
 
 		elh = mtod(m, struct elaphdr *);
 		elh->el_snode = satosat(&aa->aa_addr)->sat_addr.s_node;
@@ -207,9 +209,5 @@ ddp_route(struct mbuf *m, struct route *ro)
 #endif
 		looutput(lo0ifp, copym, rtcache_getdst(ro), NULL);
 	}
-
-	error = if_output_lock(ifp, ifp, m, (struct sockaddr *)&gate, NULL);
-out:
-	rtcache_unref(rt, ro);
-	return error;
+	return (*ifp->if_output)(ifp, m, (struct sockaddr *)&gate, NULL);
 }

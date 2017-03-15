@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile.inc,v 1.3 2014/10/19 16:30:58 christos Exp $
+#	$NetBSD: Makefile.inc,v 1.2.26.1 2015/04/30 06:07:29 riz Exp $
 
 CPPFLAGS+=-DWITH_OPENSSL
 LDADD+=	-lssh -lcrypto -lcrypt -lz

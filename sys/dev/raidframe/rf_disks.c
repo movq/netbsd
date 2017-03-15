@@ -1,4 +1,4 @@
-/*	$NetBSD: rf_disks.c,v 1.89 2017/01/13 13:01:13 christos Exp $	*/
+/*	$NetBSD: rf_disks.c,v 1.86 2014/06/14 07:39:00 hannken Exp $	*/
 /*-
  * Copyright (c) 1999 The NetBSD Foundation, Inc.
  * All rights reserved.
@@ -60,7 +60,7 @@
  ***************************************************************/
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: rf_disks.c,v 1.89 2017/01/13 13:01:13 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: rf_disks.c,v 1.86 2014/06/14 07:39:00 hannken Exp $");
 
 #include <dev/raidframe/raidframevar.h>
 
@@ -506,7 +506,7 @@ rf_AutoConfigureDisks(RF_Raid_t *raidPtr, RF_Config_t *cfgPtr,
 			if (ac->clabel->mod_counter != mod_counter) {
 				/* Even though we've filled in all of
 				   the above, we don't trust this
-				   component since its modification
+				   component since it's modification
 				   counter is not in sync with the
 				   rest, and we really consider it to
 				   be failed.  */
@@ -700,25 +700,6 @@ static int rf_check_label_vitals(RF_Raid_t *raidPtr, int row, int column,
 }
 
 
-static void
-rf_handle_hosed(RF_Raid_t *raidPtr, RF_Config_t *cfgPtr, int hosed_column,
-    int again)
-{
-	printf("Hosed component: %s\n", &cfgPtr->devnames[0][hosed_column][0]);
-	if (!cfgPtr->force)
-		return;
-
-	/* we'll fail this component, as if there are
-	   other major errors, we aren't forcing things
-	   and we'll abort the config anyways */
-	if (again && raidPtr->Disks[hosed_column].status == rf_ds_failed)
-		return;
-
-	raidPtr->Disks[hosed_column].status = rf_ds_failed;
-	raidPtr->numFailures++;
-	raidPtr->status = rf_rs_degraded;
-}
-
 /*
 
    rf_CheckLabels() - check all the component labels for consistency.
@@ -746,9 +727,11 @@ rf_CheckLabels(RF_Raid_t *raidPtr, RF_Config_t *cfgPtr)
 	int hosed_column;
 	int too_fatal;
 	int parity_good;
+	int force;
 
 	hosed_column = -1;
 	too_fatal = 0;
+	force = cfgPtr->force;
 
 	/*
 	   We're going to try to be a little intelligent here.  If one
@@ -840,9 +823,17 @@ rf_CheckLabels(RF_Raid_t *raidPtr, RF_Config_t *cfgPtr)
 					break;
 				}
 			}
-			if (hosed_column != -1)
-				rf_handle_hosed(raidPtr, cfgPtr, hosed_column,
-				    0);
+			printf("Hosed component: %s\n",
+			       &cfgPtr->devnames[0][hosed_column][0]);
+			if (!force) {
+				/* we'll fail this component, as if there are
+				   other major errors, we arn't forcing things
+				   and we'll abort the config anyways */
+				raidPtr->Disks[hosed_column].status
+					= rf_ds_failed;
+				raidPtr->numFailures++;
+				raidPtr->status = rf_rs_degraded;
+			}
 		} else {
 			too_fatal = 1;
 		}
@@ -898,9 +889,19 @@ rf_CheckLabels(RF_Raid_t *raidPtr, RF_Config_t *cfgPtr)
 					}
 				}
 			}
-			if (hosed_column != -1)
-				rf_handle_hosed(raidPtr, cfgPtr, hosed_column,
-				    1);
+			printf("Hosed component: %s\n",
+			       &cfgPtr->devnames[0][hosed_column][0]);
+			if (!force) {
+				/* we'll fail this component, as if there are
+				   other major errors, we arn't forcing things
+				   and we'll abort the config anyways */
+				if (raidPtr->Disks[hosed_column].status != rf_ds_failed) {
+					raidPtr->Disks[hosed_column].status
+						= rf_ds_failed;
+					raidPtr->numFailures++;
+					raidPtr->status = rf_rs_degraded;
+				}
+			}
 		} else {
 			too_fatal = 1;
 		}

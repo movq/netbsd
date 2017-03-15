@@ -23,29 +23,21 @@ void RecordStreamer::markDefined(const MCSymbol &Symbol) {
   case Used:
     S = Defined;
     break;
-  case DefinedWeak:
-    break;
-  case UndefinedWeak:
-    S = DefinedWeak;
   }
 }
 
-void RecordStreamer::markGlobal(const MCSymbol &Symbol,
-                                MCSymbolAttr Attribute) {
+void RecordStreamer::markGlobal(const MCSymbol &Symbol) {
   State &S = Symbols[Symbol.getName()];
   switch (S) {
   case DefinedGlobal:
   case Defined:
-    S = (Attribute == MCSA_Weak) ? DefinedWeak : DefinedGlobal;
+    S = DefinedGlobal;
     break;
 
   case NeverSeen:
   case Global:
   case Used:
-    S = (Attribute == MCSA_Weak) ? UndefinedWeak : Global;
-    break;
-  case UndefinedWeak:
-  case DefinedWeak:
+    S = Global;
     break;
   }
 }
@@ -56,8 +48,6 @@ void RecordStreamer::markUsed(const MCSymbol &Symbol) {
   case DefinedGlobal:
   case Defined:
   case Global:
-  case DefinedWeak:
-  case UndefinedWeak:
     break;
 
   case NeverSeen:
@@ -94,14 +84,12 @@ void RecordStreamer::EmitAssignment(MCSymbol *Symbol, const MCExpr *Value) {
 
 bool RecordStreamer::EmitSymbolAttribute(MCSymbol *Symbol,
                                          MCSymbolAttr Attribute) {
-  if (Attribute == MCSA_Global || Attribute == MCSA_Weak)
-    markGlobal(*Symbol, Attribute);
-  if (Attribute == MCSA_LazyReference)
-    markUsed(*Symbol);
+  if (Attribute == MCSA_Global)
+    markGlobal(*Symbol);
   return true;
 }
 
-void RecordStreamer::EmitZerofill(MCSection *Section, MCSymbol *Symbol,
+void RecordStreamer::EmitZerofill(const MCSection *Section, MCSymbol *Symbol,
                                   uint64_t Size, unsigned ByteAlignment) {
   markDefined(*Symbol);
 }

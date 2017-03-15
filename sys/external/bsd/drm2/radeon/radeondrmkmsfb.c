@@ -1,4 +1,4 @@
-/*	$NetBSD: radeondrmkmsfb.c,v 1.7 2017/01/20 12:25:07 maya Exp $	*/
+/*	$NetBSD: radeondrmkmsfb.c,v 1.3.4.3 2016/02/11 23:02:54 snj Exp $	*/
 
 /*-
  * Copyright (c) 2014 The NetBSD Foundation, Inc.
@@ -31,7 +31,7 @@
 
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: radeondrmkmsfb.c,v 1.7 2017/01/20 12:25:07 maya Exp $");
+__KERNEL_RCSID(0, "$NetBSD: radeondrmkmsfb.c,v 1.3.4.3 2016/02/11 23:02:54 snj Exp $");
 
 #ifdef _KERNEL_OPT
 #include "vga.h"
@@ -211,10 +211,8 @@ radeonfb_setconfig_task(struct radeon_task *task)
 	}
 	sc->sc_attached = true;
 
-	if (!pmf_device_register1(sc->sc_dev, NULL, NULL,
-	    radeonfb_genfb_shutdown))
-		aprint_error_dev(sc->sc_dev,
-		    "couldn't establish power handler\n");
+	pmf_device_register1(sc->sc_dev, NULL, NULL,
+	    radeonfb_genfb_shutdown);
 
 	/* Success!  */
 	sc->sc_scheduled = false;

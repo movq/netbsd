@@ -7,7 +7,7 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// This file defines the DenseSet and SmallDenseSet classes.
+// This file defines the DenseSet class.
 //
 //===----------------------------------------------------------------------===//
 
@@ -15,7 +15,6 @@
 #define LLVM_ADT_DENSESET_H
 
 #include "llvm/ADT/DenseMap.h"
-#include <initializer_list>
 
 namespace llvm {
 
@@ -33,33 +32,22 @@ public:
   DenseSetEmpty &getSecond() { return *this; }
   const DenseSetEmpty &getSecond() const { return *this; }
 };
+}
 
-/// Base class for DenseSet and DenseSmallSet.
-///
-/// MapTy should be either
-///
-///   DenseMap<ValueT, detail::DenseSetEmpty, ValueInfoT,
-///            detail::DenseSetPair<ValueT>>
-///
-/// or the equivalent SmallDenseMap type.  ValueInfoT must implement the
-/// DenseMapInfo "concept".
-template <typename ValueT, typename MapTy, typename ValueInfoT>
-class DenseSetImpl {
+/// DenseSet - This implements a dense probed hash-table based set.
+template<typename ValueT, typename ValueInfoT = DenseMapInfo<ValueT> >
+class DenseSet {
+  typedef DenseMap<ValueT, detail::DenseSetEmpty, ValueInfoT,
+                   detail::DenseSetPair<ValueT>> MapTy;
   static_assert(sizeof(typename MapTy::value_type) == sizeof(ValueT),
                 "DenseMap buckets unexpectedly large!");
   MapTy TheMap;
-
 public:
   typedef ValueT key_type;
   typedef ValueT value_type;
   typedef unsigned size_type;
 
-  explicit DenseSetImpl(unsigned InitialReserve = 0) : TheMap(InitialReserve) {}
-
-  DenseSetImpl(std::initializer_list<ValueT> Elems)
-      : DenseSetImpl(Elems.size()) {
-    insert(Elems.begin(), Elems.end());
-  }
+  explicit DenseSet(unsigned NumInitBuckets = 0) : TheMap(NumInitBuckets) {}
 
   bool empty() const { return TheMap.empty(); }
   size_type size() const { return TheMap.size(); }
@@ -68,10 +56,6 @@ public:
   /// Grow the DenseSet so that it has at least Size buckets. Will not shrink
   /// the Size of the set.
   void resize(size_t Size) { TheMap.resize(Size); }
-
-  /// Grow the DenseSet so that it can contain at least \p NumEntries items
-  /// before resizing again.
-  void reserve(size_t Size) { TheMap.reserve(Size); }
 
   void clear() {
     TheMap.clear();
@@ -86,14 +70,15 @@ public:
     return TheMap.erase(V);
   }
 
-  void swap(DenseSetImpl &RHS) { TheMap.swap(RHS.TheMap); }
+  void swap(DenseSet& RHS) {
+    TheMap.swap(RHS.TheMap);
+  }
 
   // Iterators.
 
   class Iterator {
     typename MapTy::iterator I;
-    friend class DenseSetImpl;
-
+    friend class DenseSet;
   public:
     typedef typename MapTy::iterator::difference_type difference_type;
     typedef ValueT value_type;
@@ -107,7 +92,6 @@ public:
     ValueT *operator->() { return &I->getFirst(); }
 
     Iterator& operator++() { ++I; return *this; }
-    Iterator operator++(int) { auto T = *this; ++I; return T; }
     bool operator==(const Iterator& X) const { return I == X.I; }
     bool operator!=(const Iterator& X) const { return I != X.I; }
   };
@@ -115,7 +99,6 @@ public:
   class ConstIterator {
     typename MapTy::const_iterator I;
     friend class DenseSet;
-
   public:
     typedef typename MapTy::const_iterator::difference_type difference_type;
     typedef ValueT value_type;
@@ -129,7 +112,6 @@ public:
     const ValueT *operator->() { return &I->getFirst(); }
 
     ConstIterator& operator++() { ++I; return *this; }
-    ConstIterator operator++(int) { auto T = *this; ++I; return T; }
     bool operator==(const ConstIterator& X) const { return I == X.I; }
     bool operator!=(const ConstIterator& X) const { return I != X.I; }
   };
@@ -144,9 +126,6 @@ public:
   const_iterator end() const { return ConstIterator(TheMap.end()); }
 
   iterator find(const ValueT &V) { return Iterator(TheMap.find(V)); }
-  const_iterator find(const ValueT &V) const {
-    return ConstIterator(TheMap.find(V));
-  }
 
   /// Alternative version of find() which allows a different, and possibly less
   /// expensive, key type.
@@ -167,68 +146,15 @@ public:
 
   std::pair<iterator, bool> insert(const ValueT &V) {
     detail::DenseSetEmpty Empty;
-    return TheMap.try_emplace(V, Empty);
+    return TheMap.insert(std::make_pair(V, Empty));
   }
-
-  std::pair<iterator, bool> insert(ValueT &&V) {
-    detail::DenseSetEmpty Empty;
-    return TheMap.try_emplace(std::move(V), Empty);
-  }
-
-  /// Alternative version of insert that uses a different (and possibly less
-  /// expensive) key type.
-  template <typename LookupKeyT>
-  std::pair<iterator, bool> insert_as(const ValueT &V,
-                                      const LookupKeyT &LookupKey) {
-    return TheMap.insert_as({V, detail::DenseSetEmpty()}, LookupKey);
-  }
-  template <typename LookupKeyT>
-  std::pair<iterator, bool> insert_as(ValueT &&V, const LookupKeyT &LookupKey) {
-    return TheMap.insert_as({std::move(V), detail::DenseSetEmpty()}, LookupKey);
-  }
-
+  
   // Range insertion of values.
   template<typename InputIt>
   void insert(InputIt I, InputIt E) {
     for (; I != E; ++I)
       insert(*I);
   }
-};
-
-} // namespace detail
-
-/// Implements a dense probed hash-table based set.
-template <typename ValueT, typename ValueInfoT = DenseMapInfo<ValueT>>
-class DenseSet : public detail::DenseSetImpl<
-                     ValueT, DenseMap<ValueT, detail::DenseSetEmpty, ValueInfoT,
-                                      detail::DenseSetPair<ValueT>>,
-                     ValueInfoT> {
-  using BaseT =
-      detail::DenseSetImpl<ValueT,
-                           DenseMap<ValueT, detail::DenseSetEmpty, ValueInfoT,
-                                    detail::DenseSetPair<ValueT>>,
-                           ValueInfoT>;
-
-public:
-  using BaseT::BaseT;
-};
-
-/// Implements a dense probed hash-table based set with some number of buckets
-/// stored inline.
-template <typename ValueT, unsigned InlineBuckets = 4,
-          typename ValueInfoT = DenseMapInfo<ValueT>>
-class SmallDenseSet
-    : public detail::DenseSetImpl<
-          ValueT, SmallDenseMap<ValueT, detail::DenseSetEmpty, InlineBuckets,
-                                ValueInfoT, detail::DenseSetPair<ValueT>>,
-          ValueInfoT> {
-  using BaseT = detail::DenseSetImpl<
-      ValueT, SmallDenseMap<ValueT, detail::DenseSetEmpty, InlineBuckets,
-                            ValueInfoT, detail::DenseSetPair<ValueT>>,
-      ValueInfoT>;
-
-public:
-  using BaseT::BaseT;
 };
 
 } // end namespace llvm

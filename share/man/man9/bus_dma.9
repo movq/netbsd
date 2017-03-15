@@ -1,4 +1,4 @@
-.\" $NetBSD: bus_dma.9,v 1.63 2017/01/02 09:53:04 wiz Exp $
+.\" $NetBSD: bus_dma.9,v 1.59.4.1 2017/01/03 06:49:30 snj Exp $
 .\"
 .\" Copyright (c) 1996, 1997, 1998, 2001, 2005, 2006 The NetBSD Foundation, Inc.
 .\" All rights reserved.
@@ -799,8 +799,7 @@ create a new bus_dma_tag_t with a limited bus address space.
 This function should not normally be used, but is useful for devices
 that do not support the full address space of the parent bus.
 Not all ports implement this method; on ports where it is unavailable,
-.Er EOPNOTSUPP
-is returned.
+EOPNOTSUPP is returned.
 The arguments are as follows:
 .Bl -tag -width max_addr -compact
 .It Fa tag
@@ -845,17 +844,9 @@ interface appeared in
 .An -nosplit
 The
 .Nm
-interface was designed and implemented by
-.An Jason R. Thorpe
-of the
+interface was designed and implemented by Jason R. Thorpe of the
 Numerical Aerospace Simulation Facility, NASA Ames Research Center.
 Additional input on the
 .Nm
-design was provided by
-.An Chris Demetriou ,
-.An Charles Hannum ,
-.An Ross Harvey ,
-.An Matthew Jacob ,
-.An Jonathan Stone ,
-and
-.An Matt Thomas .
+design was provided by Chris Demetriou, Charles Hannum, Ross Harvey,
+Matthew Jacob, Jonathan Stone, and Matt Thomas.

@@ -52,7 +52,6 @@ void MangleContext::anchor() { }
 enum CCMangling {
   CCM_Other,
   CCM_Fast,
-  CCM_RegCall,
   CCM_Vector,
   CCM_Std
 };
@@ -127,9 +126,9 @@ void MangleContext::mangleName(const NamedDecl *D, raw_ostream &Out) {
     // llvm mangler on ELF is a nop, so we can just avoid adding the \01
     // marker.  We also avoid adding the marker if this is an alias for an
     // LLVM intrinsic.
-    char GlobalPrefix =
-        getASTContext().getTargetInfo().getDataLayout().getGlobalPrefix();
-    if (GlobalPrefix && !ALA->getLabel().startswith("llvm."))
+    StringRef UserLabelPrefix =
+        getASTContext().getTargetInfo().getUserLabelPrefix();
+    if (!UserLabelPrefix.empty() && !ALA->getLabel().startswith("llvm."))
       Out << '\01'; // LLVM IR Marker for __asm("foo")
 
     Out << ALA->getLabel();
@@ -153,8 +152,6 @@ void MangleContext::mangleName(const NamedDecl *D, raw_ostream &Out) {
     Out << '_';
   else if (CC == CCM_Fast)
     Out << '@';
-  else if (CC == CCM_RegCall)
-    Out << "__regcall3__";
 
   if (!MCXX)
     Out << D->getIdentifier()->getName();
@@ -180,9 +177,9 @@ void MangleContext::mangleName(const NamedDecl *D, raw_ostream &Out) {
       ++ArgWords;
   for (const auto &AT : Proto->param_types())
     // Size should be aligned to pointer size.
-    ArgWords +=
-        llvm::alignTo(ASTContext.getTypeSize(AT), TI.getPointerWidth(0)) /
-        TI.getPointerWidth(0);
+    ArgWords += llvm::RoundUpToAlignment(ASTContext.getTypeSize(AT),
+                                         TI.getPointerWidth(0)) /
+                TI.getPointerWidth(0);
   Out << ((TI.getPointerWidth(0) / 8) * ArgWords);
 }
 
@@ -209,6 +206,7 @@ void MangleContext::mangleCtorBlock(const CXXConstructorDecl *CD,
   SmallString<64> Buffer;
   llvm::raw_svector_ostream Out(Buffer);
   mangleCXXCtor(CD, CT, Out);
+  Out.flush();
   mangleFunctionBlock(*this, Buffer, BD, ResStream);
 }
 
@@ -218,6 +216,7 @@ void MangleContext::mangleDtorBlock(const CXXDestructorDecl *DD,
   SmallString<64> Buffer;
   llvm::raw_svector_ostream Out(Buffer);
   mangleCXXDtor(DD, DT, Out);
+  Out.flush();
   mangleFunctionBlock(*this, Buffer, BD, ResStream);
 }
 
@@ -254,11 +253,15 @@ void MangleContext::mangleBlock(const DeclContext *DC, const BlockDecl *BD,
       }
     }
   }
+  Stream.flush();
   mangleFunctionBlock(*this, Buffer, BD, Out);
 }
 
-void MangleContext::mangleObjCMethodNameWithoutSize(const ObjCMethodDecl *MD,
-                                                    raw_ostream &OS) {
+void MangleContext::mangleObjCMethodName(const ObjCMethodDecl *MD,
+                                         raw_ostream &Out) {
+  SmallString<64> Name;
+  llvm::raw_svector_ostream OS(Name);
+  
   const ObjCContainerDecl *CD =
   dyn_cast<ObjCContainerDecl>(MD->getDeclContext());
   assert (CD && "Missing container decl in GetNameForMethod");
@@ -268,13 +271,6 @@ void MangleContext::mangleObjCMethodNameWithoutSize(const ObjCMethodDecl *MD,
   OS << ' ';
   MD->getSelector().print(OS);
   OS << ']';
-}
-
-void MangleContext::mangleObjCMethodName(const ObjCMethodDecl *MD,
-                                         raw_ostream &Out) {
-  SmallString<64> Name;
-  llvm::raw_svector_ostream OS(Name);
-
-  mangleObjCMethodNameWithoutSize(MD, OS);
+  
   Out << OS.str().size() << OS.str();
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: mail_conf_str.c,v 1.2 2017/02/14 01:16:45 christos Exp $	*/
+/*	$NetBSD: mail_conf_str.c,v 1.1.1.1 2009/06/23 10:08:46 tron Exp $	*/
 
 /*++
 /* NAME
@@ -36,12 +36,6 @@
 /*	const char *defval;
 /*	int	min;
 /*	int	max;
-/*
-/*	void	check_mail_conf_str(name, strval, min, max)
-/*	const char *name;
-/*	const char *strval;
-/*	int	min; 
-/*	int	max;
 /* DESCRIPTION
 /*	This module implements support for string-valued global
 /*	configuration parameters.
@@ -67,9 +61,6 @@
 /*
 /*	get_mail_conf_str2() concatenates the two names and is otherwise
 /*	identical to get_mail_conf_str().
-/*
-/*	check_mail_conf_str() exits with a fatal run-time error
-/*	when the string does not meet its length requirements.
 /* DIAGNOSTICS
 /*	Fatal errors: bad string length.
 /* SEE ALSO
@@ -103,8 +94,8 @@
 
 /* check_mail_conf_str - validate string length */
 
-void    check_mail_conf_str(const char *name, const char *strval,
-			            int min, int max)
+static void check_mail_conf_str(const char *name, const char *strval,
+				        int min, int max)
 {
     ssize_t len = strlen(strval);
 

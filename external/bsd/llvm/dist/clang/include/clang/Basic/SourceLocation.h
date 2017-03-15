@@ -43,7 +43,6 @@ class FileID {
 public:
   FileID() : ID(0) {}
 
-  bool isValid() const { return ID != 0; }
   bool isInvalid() const { return ID == 0; }
 
   bool operator==(const FileID &RHS) const { return ID == RHS.ID; }
@@ -253,7 +252,7 @@ public:
   
   SourceLocation getBegin() const { return Range.getBegin(); }
   SourceLocation getEnd() const { return Range.getEnd(); }
-  SourceRange getAsRange() const { return Range; }
+  const SourceRange &getAsRange() const { return Range; }
  
   void setBegin(SourceLocation b) { Range.setBegin(b); }
   void setEnd(SourceLocation e) { Range.setEnd(e); }
@@ -373,22 +372,22 @@ public:
   /// \brief Return the presumed filename of this location.
   ///
   /// This can be affected by \#line etc.
-  const char *getFilename() const { assert(isValid()); return Filename; }
+  const char *getFilename() const { return Filename; }
 
   /// \brief Return the presumed line number of this location.
   ///
   /// This can be affected by \#line etc.
-  unsigned getLine() const { assert(isValid()); return Line; }
+  unsigned getLine() const { return Line; }
 
   /// \brief Return the presumed column number of this location.
   ///
   /// This cannot be affected by \#line, but is packaged here for convenience.
-  unsigned getColumn() const { assert(isValid()); return Col; }
+  unsigned getColumn() const { return Col; }
 
   /// \brief Return the presumed include location of this location.
   ///
   /// This can be affected by GNU linemarker directives.
-  SourceLocation getIncludeLoc() const { assert(isValid()); return IncludeLoc; }
+  SourceLocation getIncludeLoc() const { return IncludeLoc; }
 };
 
 

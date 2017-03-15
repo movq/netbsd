@@ -1,4 +1,4 @@
-/*	$NetBSD: npf_bpf_comp.c,v 1.10 2016/12/27 22:35:33 rmind Exp $	*/
+/*	$NetBSD: npf_bpf_comp.c,v 1.7.2.1 2015/06/10 16:57:58 snj Exp $	*/
 
 /*-
  * Copyright (c) 2010-2014 The NetBSD Foundation, Inc.
@@ -34,7 +34,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: npf_bpf_comp.c,v 1.10 2016/12/27 22:35:33 rmind Exp $");
+__RCSID("$NetBSD: npf_bpf_comp.c,v 1.7.2.1 2015/06/10 16:57:58 snj Exp $");
 
 #include <stdlib.h>
 #include <stdbool.h>
@@ -46,7 +46,6 @@ __RCSID("$NetBSD: npf_bpf_comp.c,v 1.10 2016/12/27 22:35:33 rmind Exp $");
 
 #include <netinet/in.h>
 #include <netinet/in_systm.h>
-#define	__FAVOR_BSD
 #include <netinet/ip.h>
 #include <netinet/ip6.h>
 #include <netinet/udp.h>
@@ -103,10 +102,6 @@ struct npf_bpf {
 /* Reduce re-allocations by expanding in 64 byte blocks. */
 #define	ALLOC_MASK		(64 - 1)
 #define	ALLOC_ROUND(x)		(((x) + ALLOC_MASK) & ~ALLOC_MASK)
-
-#ifndef IPV6_VERSION
-#define	IPV6_VERSION		0x60
-#endif
 
 npf_bpf_t *
 npfctl_bpf_create(void)
@@ -244,26 +239,15 @@ npfctl_bpf_group(npf_bpf_t *ctx)
 }
 
 void
-npfctl_bpf_endgroup(npf_bpf_t *ctx, bool invert)
+npfctl_bpf_endgroup(npf_bpf_t *ctx)
 {
 	struct bpf_program *bp = &ctx->prog;
 	const size_t curoff = bp->bf_len;
 
 	/* If there are no blocks or only one - nothing to do. */
-	if (!invert && (ctx->nblocks - ctx->gblock) <= 1) {
+	if ((ctx->nblocks - ctx->gblock) <= 1) {
 		ctx->goff = ctx->gblock = 0;
 		return;
-	}
-
-	/*
-	 * If inverting, then prepend a jump over the statement below.
-	 * If matching, jump will jump below and the fail will happen.
-	 */
-	if (invert) {
-		struct bpf_insn insns_ret[] = {
-			BPF_STMT(BPF_JMP+BPF_JA, 1),
-		};
-		add_insns(ctx, insns_ret, __arraycount(insns_ret));
 	}
 
 	/*
@@ -320,7 +304,7 @@ fetch_l3(npf_bpf_t *ctx, sa_family_t af, u_int flags)
 		 */
 		if (ingroup) {
 			assert(ctx->nblocks == ctx->gblock);
-			npfctl_bpf_endgroup(ctx, false);
+			npfctl_bpf_endgroup(ctx);
 		}
 
 		/*

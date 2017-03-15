@@ -1,4 +1,4 @@
-/*	$NetBSD: ntp_restrict.c,v 1.1.1.3 2016/01/08 21:21:33 christos Exp $	*/
+/*	$NetBSD: ntp_restrict.c,v 1.1.1.1.8.3 2016/05/11 11:35:43 martin Exp $	*/
 
 #include "config.h"
 

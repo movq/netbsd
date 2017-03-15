@@ -1,4 +1,4 @@
-/*	$NetBSD: adb_usb_map.c,v 1.2 2014/11/08 16:52:35 macallan Exp $ */
+/*	$NetBSD: adb_usb_map.c,v 1.1.16.1 2016/07/05 19:14:59 snj Exp $ */
 
 /*-
  * Copyright (c) 2006 Michael Lorenz
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: adb_usb_map.c,v 1.2 2014/11/08 16:52:35 macallan Exp $");
+__KERNEL_RCSID(0, "$NetBSD: adb_usb_map.c,v 1.1.16.1 2016/07/05 19:14:59 snj Exp $");
 
 #include <sys/param.h>
 #include <sys/device.h>

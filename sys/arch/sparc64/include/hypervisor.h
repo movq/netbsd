@@ -1,4 +1,4 @@
-/*	$NetBSD: hypervisor.h,v 1.6 2017/02/10 23:26:23 palle Exp $ */
+/*	$NetBSD: hypervisor.h,v 1.4 2014/06/08 17:33:24 palle Exp $ */
 /*	$OpenBSD: hypervisor.h,v 1.14 2011/06/26 17:23:46 kettenis Exp $	*/
 
 /*
@@ -23,12 +23,6 @@
 /*
  * UltraSPARC Hypervisor API.
  */
-
-/*
- * FAST_TRAP function numbers
- */
-
-#define FT_MMU_MAP_PERM_ADDR 0x25
 
 /*
  * API versioning
@@ -90,17 +84,6 @@ struct tsb_desc {
 	uint32_t	td_pgsz;
 	paddr_t		td_pa;
 	uint64_t	td_reserved;
-};
-
-struct mmufsa {
-	uint64_t	ift; /* instruction fault type */
-	uint64_t	ifa; /* instruction fault address */
-	uint64_t	ifc; /* instruction fault context */
-	uint64_t	reserved1[5]; /* reserved */
-	uint64_t	dft; /* data fault type */
-	uint64_t	dfa; /* data fault address */
-	uint64_t	dfc; /* data fault context */
-	uint64_t	reserved2[5]; /* reserved */
 };
 
 int64_t	hv_mmu_tsb_ctx0(uint64_t ntsb, paddr_t tsbptr);

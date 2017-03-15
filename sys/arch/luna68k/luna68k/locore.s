@@ -1,4 +1,4 @@
-/* $NetBSD: locore.s,v 1.62 2015/09/03 13:07:46 tsutsui Exp $ */
+/* $NetBSD: locore.s,v 1.59.4.1 2016/12/06 06:44:14 snj Exp $ */
 
 /*
  * Copyright (c) 1988 University of Utah.

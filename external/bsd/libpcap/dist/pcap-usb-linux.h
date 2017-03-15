@@ -1,4 +1,4 @@
-/*	$NetBSD: pcap-usb-linux.h,v 1.3 2015/03/31 21:39:42 christos Exp $	*/
+/*	$NetBSD: pcap-usb-linux.h,v 1.1.1.4 2013/12/31 16:57:25 christos Exp $	*/
 
 /*
  * Copyright (c) 2006 Paolo Abeni (Italy)
@@ -13,8 +13,8 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  * notice, this list of conditions and the following disclaimer in the
  * documentation and/or other materials provided with the distribution.
- * 3. The name of the author may not be used to endorse or promote
- * products derived from this software without specific prior written
+ * 3. The name of the author may not be used to endorse or promote 
+ * products derived from this software without specific prior written 
  * permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
@@ -31,6 +31,8 @@
  *
  * USB sniffing API implementation for Linux platform
  * By Paolo Abeni <paolo.abeni@email.it>
+ *
+ * @(#) Header: /tcpdump/master/libpcap/pcap-usb-linux.h,v 1.5 2008-04-04 19:37:45 guy Exp  (LBL)
  */
 
 /*

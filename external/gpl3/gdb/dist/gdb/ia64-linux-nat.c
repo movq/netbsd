@@ -1,7 +1,7 @@
 /* Functions specific to running gdb native on IA-64 running
    GNU/Linux.
 
-   Copyright (C) 1999-2016 Free Software Foundation, Inc.
+   Copyright (C) 1999-2014 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -19,6 +19,7 @@
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #include "defs.h"
+#include <string.h>
 #include "inferior.h"
 #include "target.h"
 #include "gdbcore.h"
@@ -27,7 +28,7 @@
 #include "linux-nat.h"
 
 #include <signal.h>
-#include "nat/gdb_ptrace.h"
+#include <sys/ptrace.h>
 #include "gdb_wait.h"
 #ifdef HAVE_SYS_REG_H
 #include <sys/reg.h>
@@ -541,9 +542,7 @@ is_power_of_2 (int val)
 }
 
 static int
-ia64_linux_insert_watchpoint (struct target_ops *self,
-			      CORE_ADDR addr, int len,
-			      enum target_hw_bp_type type,
+ia64_linux_insert_watchpoint (CORE_ADDR addr, int len, int rw,
 			      struct expression *cond)
 {
   struct lwp_info *lp;
@@ -570,7 +569,7 @@ ia64_linux_insert_watchpoint (struct target_ops *self,
   dbr_addr = (long) addr;
   dbr_mask = (~(len - 1) & 0x00ffffffffffffffL);  /* construct mask to match */
   dbr_mask |= 0x0800000000000000L;           /* Only match privilege level 3 */
-  switch (type)
+  switch (rw)
     {
     case hw_write:
       dbr_mask |= (1L << 62);			/* Set w bit */
@@ -597,9 +596,7 @@ ia64_linux_insert_watchpoint (struct target_ops *self,
 }
 
 static int
-ia64_linux_remove_watchpoint (struct target_ops *self,
-			      CORE_ADDR addr, int len,
-			      enum target_hw_bp_type type,
+ia64_linux_remove_watchpoint (CORE_ADDR addr, int len, int type,
 			      struct expression *cond)
 {
   int idx;
@@ -672,16 +669,14 @@ ia64_linux_stopped_data_address (struct target_ops *ops, CORE_ADDR *addr_p)
 }
 
 static int
-ia64_linux_stopped_by_watchpoint (struct target_ops *ops)
+ia64_linux_stopped_by_watchpoint (void)
 {
   CORE_ADDR addr;
-  return ia64_linux_stopped_data_address (ops, &addr);
+  return ia64_linux_stopped_data_address (&current_target, &addr);
 }
 
 static int
-ia64_linux_can_use_hw_breakpoint (struct target_ops *self,
-				  enum bptype type,
-				  int cnt, int othertype)
+ia64_linux_can_use_hw_breakpoint (int type, int cnt, int othertype)
 {
   return 1;
 }
@@ -746,7 +741,7 @@ ia64_linux_fetch_register (struct regcache *regcache, int regnum)
   size = register_size (gdbarch, regnum);
 
   gdb_assert ((size % sizeof (PTRACE_TYPE_RET)) == 0);
-  buf = (PTRACE_TYPE_RET *) alloca (size);
+  buf = alloca (size);
 
   /* Read the register contents from the inferior a chunk at a time.  */
   for (i = 0; i < size / sizeof (PTRACE_TYPE_RET); i++)
@@ -804,7 +799,7 @@ ia64_linux_store_register (const struct regcache *regcache, int regnum)
   size = register_size (gdbarch, regnum);
 
   gdb_assert ((size % sizeof (PTRACE_TYPE_RET)) == 0);
-  buf = (PTRACE_TYPE_RET *) alloca (size);
+  buf = alloca (size);
 
   /* Write the register contents into the inferior a chunk at a time.  */
   regcache_raw_collect (regcache, regnum, buf);
@@ -840,47 +835,18 @@ ia64_linux_store_registers (struct target_ops *ops,
 
 static target_xfer_partial_ftype *super_xfer_partial;
 
-/* Implement the to_xfer_partial target_ops method.  */
-
-static enum target_xfer_status
+static LONGEST 
 ia64_linux_xfer_partial (struct target_ops *ops,
 			 enum target_object object,
 			 const char *annex,
 			 gdb_byte *readbuf, const gdb_byte *writebuf,
-			 ULONGEST offset, ULONGEST len,
-			 ULONGEST *xfered_len)
+			 ULONGEST offset, LONGEST len)
 {
-  if (object == TARGET_OBJECT_UNWIND_TABLE && readbuf != NULL)
-    {
-      static long gate_table_size;
-      gdb_byte *tmp_buf;
-      long res;
-
-      /* Probe for the table size once.  */
-      if (gate_table_size == 0)
-        gate_table_size = syscall (__NR_getunwind, NULL, 0);
-      if (gate_table_size < 0)
-	return TARGET_XFER_E_IO;
-
-      if (offset >= gate_table_size)
-	return TARGET_XFER_EOF;
-
-      tmp_buf = (gdb_byte *) alloca (gate_table_size);
-      res = syscall (__NR_getunwind, tmp_buf, gate_table_size);
-      if (res < 0)
-	return TARGET_XFER_E_IO;
-      gdb_assert (res == gate_table_size);
-
-      if (offset + len > gate_table_size)
-	len = gate_table_size - offset;
-
-      memcpy (readbuf, tmp_buf + offset, len);
-      *xfered_len = len;
-      return TARGET_XFER_OK;
-    }
+  if (object == TARGET_OBJECT_UNWIND_TABLE && writebuf == NULL && offset == 0)
+    return syscall (__NR_getunwind, readbuf, len);
 
   return super_xfer_partial (ops, object, annex, readbuf, writebuf,
-			     offset, len, xfered_len);
+			     offset, len);
 }
 
 /* For break.b instruction ia64 CPU forgets the immediate value and generates

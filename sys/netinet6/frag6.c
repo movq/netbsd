@@ -1,4 +1,4 @@
-/*	$NetBSD: frag6.c,v 1.60 2017/01/24 07:09:25 ozaki-r Exp $	*/
+/*	$NetBSD: frag6.c,v 1.55 2013/08/30 07:42:08 christos Exp $	*/
 /*	$KAME: frag6.c,v 1.40 2002/05/27 21:40:31 itojun Exp $	*/
 
 /*
@@ -31,15 +31,15 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: frag6.c,v 1.60 2017/01/24 07:09:25 ozaki-r Exp $");
-
-#ifdef _KERNEL_OPT
-#include "opt_net_mpsafe.h"
-#endif
+__KERNEL_RCSID(0, "$NetBSD: frag6.c,v 1.55 2013/08/30 07:42:08 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/mbuf.h>
+#include <sys/domain.h>
+#include <sys/protosw.h>
+#include <sys/socket.h>
+#include <sys/socketvar.h>
 #include <sys/errno.h>
 #include <sys/time.h>
 #include <sys/kmem.h>
@@ -148,7 +148,7 @@ frag6_input(struct mbuf **mp, int *offp, int proto)
 	if (ip6->ip6_plen == 0) {
 		icmp6_error(m, ICMP6_PARAM_PROB, ICMP6_PARAMPROB_HEADER, offset);
 		in6_ifstat_inc(dstifp, ifs6_reass_fail);
-		goto done;
+		return IPPROTO_DONE;
 	}
 
 	/*
@@ -162,7 +162,7 @@ frag6_input(struct mbuf **mp, int *offp, int proto)
 		icmp6_error(m, ICMP6_PARAM_PROB, ICMP6_PARAMPROB_HEADER,
 		    offsetof(struct ip6_hdr, ip6_plen));
 		in6_ifstat_inc(dstifp, ifs6_reass_fail);
-		goto done;
+		return IPPROTO_DONE;
 	}
 
 	IP6_STATINC(IP6_STAT_FRAGMENTS);
@@ -182,7 +182,6 @@ frag6_input(struct mbuf **mp, int *offp, int proto)
 		IP6_STATINC(IP6_STAT_REASSEMBLED);
 		in6_ifstat_inc(dstifp, ifs6_reass_ok);
 		*offp = offset;
-		rtcache_unref(rt, &ro);
 		return ip6f->ip6f_nxt;		
 	}
 
@@ -268,14 +267,14 @@ frag6_input(struct mbuf **mp, int *offp, int proto)
 			icmp6_error(m, ICMP6_PARAM_PROB, ICMP6_PARAMPROB_HEADER,
 			    offset - sizeof(struct ip6_frag) +
 			    offsetof(struct ip6_frag, ip6f_offlg));
-			goto done;
+			return IPPROTO_DONE;
 		}
 	} else if (fragoff + frgpartlen > IPV6_MAXPACKET) {
 		mutex_exit(&frag6_lock);
 		icmp6_error(m, ICMP6_PARAM_PROB, ICMP6_PARAMPROB_HEADER,
 			    offset - sizeof(struct ip6_frag) +
 				offsetof(struct ip6_frag, ip6f_offlg));
-		goto done;
+		return IPPROTO_DONE;
 	}
 	/*
 	 * If it's the first fragment, do the above check for each
@@ -383,13 +382,13 @@ insert:
 	     af6 = af6->ip6af_down) {
 		if (af6->ip6af_off != next) {
 			mutex_exit(&frag6_lock);
-			goto done;
+			return IPPROTO_DONE;
 		}
 		next += af6->ip6af_frglen;
 	}
 	if (af6->ip6af_up->ip6af_mff) {
 		mutex_exit(&frag6_lock);
-		goto done;
+		return IPPROTO_DONE;
 	}
 
 	/*
@@ -464,7 +463,6 @@ insert:
 
 	IP6_STATINC(IP6_STAT_REASSEMBLED);
 	in6_ifstat_inc(dstifp, ifs6_reass_ok);
-	rtcache_unref(rt, &ro);
 
 	/*
 	 * Tell launch routine the next header
@@ -481,8 +479,6 @@ insert:
 	in6_ifstat_inc(dstifp, ifs6_reass_fail);
 	IP6_STATINC(IP6_STAT_FRAGDROPPED);
 	m_freem(m);
- done:
-	rtcache_unref(rt, &ro);
 	return IPPROTO_DONE;
 }
 
@@ -572,15 +568,15 @@ frag6_deq(struct ip6asfrag *af6)
 }
 
 void
-frag6_insque(struct ip6q *newq, struct ip6q *oldq)
+frag6_insque(struct ip6q *new, struct ip6q *old)
 {
 
 	KASSERT(mutex_owned(&frag6_lock));
 
-	newq->ip6q_prev = oldq;
-	newq->ip6q_next = oldq->ip6q_next;
-	oldq->ip6q_next->ip6q_prev= newq;
-	oldq->ip6q_next = newq;
+	new->ip6q_prev = old;
+	new->ip6q_next = old->ip6q_next;
+	old->ip6q_next->ip6q_prev= new;
+	old->ip6q_next = new;
 }
 
 void
@@ -596,21 +592,16 @@ frag6_remque(struct ip6q *p6)
 void
 frag6_fasttimo(void)
 {
-
-#ifndef NET_MPSAFE
 	mutex_enter(softnet_lock);
 	KERNEL_LOCK(1, NULL);
-#endif
 
 	if (frag6_drainwanted) {
 		frag6_drain();
 		frag6_drainwanted = 0;
 	}
 
-#ifndef NET_MPSAFE
 	KERNEL_UNLOCK_ONE(NULL);
 	mutex_exit(softnet_lock);
-#endif
 }
 
 /*
@@ -623,10 +614,8 @@ frag6_slowtimo(void)
 {
 	struct ip6q *q6;
 
-#ifndef NET_MPSAFE
 	mutex_enter(softnet_lock);
 	KERNEL_LOCK(1, NULL);
-#endif
 
 	mutex_enter(&frag6_lock);
 	q6 = ip6q.ip6q_next;
@@ -653,10 +642,8 @@ frag6_slowtimo(void)
 	}
 	mutex_exit(&frag6_lock);
 
-#ifndef NET_MPSAFE
 	KERNEL_UNLOCK_ONE(NULL);
 	mutex_exit(softnet_lock);
-#endif
 
 #if 0
 	/*

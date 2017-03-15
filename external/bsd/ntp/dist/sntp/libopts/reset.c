@@ -1,4 +1,4 @@
-/*	$NetBSD: reset.c,v 1.8 2016/05/01 23:32:01 christos Exp $	*/
+/*	$NetBSD: reset.c,v 1.3.4.2 2015/11/08 01:51:13 riz Exp $	*/
 
 
 /**

@@ -9,7 +9,7 @@
 #ifndef SCANRESULTSITEM_H
 #define SCANRESULTSITEM_H
 
-#include <QTreeWidgetItem>
+#include <QtGui>
 
 class ScanResultsItem : public QTreeWidgetItem
 {

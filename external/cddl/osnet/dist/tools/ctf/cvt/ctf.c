@@ -81,7 +81,7 @@ struct ctf_buf {
 static int target_requires_swap;
 
 /*PRINTFLIKE1*/
-static void __printflike(1, 2) __dead
+static void
 parseterminate(const char *fmt, ...)
 {
 	static char msgbuf[1024]; /* sigh */
@@ -173,11 +173,11 @@ write_objects(iidesc_t *idp, ctf_buf_t *b)
 {
 	ushort_t id = (idp ? idp->ii_dtype->t_id : 0);
 
+	ctf_buf_write(b, &id, sizeof (id));
+
 	if (target_requires_swap) {
 		SWAP_16(id);
 	}
-
-	ctf_buf_write(b, &id, sizeof (id));
 
 	debug(3, "Wrote object %s (%d)\n", (idp ? idp->ii_name : "(null)"), id);
 }
@@ -361,7 +361,6 @@ write_type(void *arg1, void *arg2)
 		break;
 
 	case POINTER:
-	case REFERENCE:	/* XXX: */
 		ctt.ctt_info = CTF_TYPE_INFO(CTF_K_POINTER, isroot, 0);
 		ctt.ctt_type = tp->t_tdesc->t_id;
 		write_unsized_type_rec(b, &ctt);
@@ -384,14 +383,12 @@ write_type(void *arg1, void *arg2)
 
 	case STRUCT:
 	case UNION:
-	case CLASS:
 		for (i = 0, mp = tp->t_members; mp != NULL; mp = mp->ml_next)
 			i++; /* count up struct or union members */
 
 		if (i > CTF_MAX_VLEN) {
-			warning("sou %s has too many members: %d > %d\n",
+			terminate("sou %s has too many members: %d > %d\n",
 			    tdesc_name(tp), i, CTF_MAX_VLEN);
-			i = CTF_MAX_VLEN;
 		}
 
 		if (tp->t_type == STRUCT)
@@ -402,8 +399,7 @@ write_type(void *arg1, void *arg2)
 		write_sized_type_rec(b, &ctt, tp->t_size);
 
 		if (tp->t_size < CTF_LSTRUCT_THRESH) {
-			for (mp = tp->t_members; mp != NULL && i > 0;
-			    mp = mp->ml_next) {
+			for (mp = tp->t_members; mp != NULL; mp = mp->ml_next) {
 				offset = strtab_insert(&b->ctb_strtab,
 				    mp->ml_name);
 
@@ -417,11 +413,9 @@ write_type(void *arg1, void *arg2)
 					SWAP_16(ctm.ctm_offset);
 				}
 				ctf_buf_write(b, &ctm, sizeof (ctm));
-				i--;
 			}
 		} else {
-			for (mp = tp->t_members; mp != NULL && i > 0;
-			    mp = mp->ml_next) {
+			for (mp = tp->t_members; mp != NULL; mp = mp->ml_next) {
 				offset = strtab_insert(&b->ctb_strtab,
 				    mp->ml_name);
 
@@ -441,7 +435,6 @@ write_type(void *arg1, void *arg2)
 				}
 
 				ctf_buf_write(b, &ctlm, sizeof (ctlm));
-				i--;
 			}
 		}
 		break;
@@ -503,7 +496,7 @@ write_type(void *arg1, void *arg2)
 
 		if (i > CTF_MAX_VLEN) {
 			terminate("function %s has too many args: %d > %d\n",
-			    tdesc_name(tp), i, CTF_MAX_VLEN);
+			    i, CTF_MAX_VLEN);
 		}
 
 		ctt.ctt_info = CTF_TYPE_INFO(CTF_K_FUNCTION, isroot, i);
@@ -832,9 +825,8 @@ count_types(ctf_header_t *h, caddr_t data)
 		case CTF_K_UNKNOWN:
 			break;
 		default:
-			parseterminate("Unknown CTF type %d (#%d) at %#jx",
-			    CTF_INFO_KIND(ctt->ctt_info), count,
-			    (intmax_t)(dptr - data));
+			parseterminate("Unknown CTF type %d (#%d) at %#x",
+			    CTF_INFO_KIND(ctt->ctt_info), count, dptr - data);
 		}
 
 		dptr += increment;
@@ -921,8 +913,8 @@ resurrect_objects(ctf_header_t *h, tdata_t *td, tdesc_t **tdarr, int tdsize,
 
 		if (!(sym = symit_next(si, STT_OBJECT)) && id != 0) {
 			parseterminate(
-			    "Unexpected end of object symbols at %ju of %zu",
-			    (intmax_t)(dptr - buf), bufsz);
+			    "Unexpected end of object symbols at %x of %x",
+			    dptr - buf, bufsz);
 		}
 
 		if (id == 0) {
@@ -1344,9 +1336,8 @@ decompress_ctf(caddr_t cbuf, size_t cbufsz, caddr_t dbuf, size_t dbufsz)
 		return (0);
 	}
 
-	debug(3, "reflated %lu bytes to %lu, pointer at 0x%jx\n",
-	    zstr.total_in, zstr.total_out,
-	    (intmax_t)((caddr_t)zstr.next_in - cbuf));
+	debug(3, "reflated %lu bytes to %lu, pointer at %d\n",
+	    zstr.total_in, zstr.total_out, (caddr_t)zstr.next_in - cbuf);
 
 	return (zstr.total_out);
 }
@@ -1390,7 +1381,7 @@ ctf_load(char *file, caddr_t buf, size_t bufsz, symit_data_t *si, char *label)
 		if ((actual = decompress_ctf(buf, bufsz, ctfdata, ctfdatasz)) !=
 		    ctfdatasz) {
 			parseterminate("Corrupt CTF - short decompression "
-			    "(was %zu, expecting %zu)", actual, ctfdatasz);
+			    "(was %d, expecting %d)", actual, ctfdatasz);
 		}
 	} else {
 		ctfdata = buf;

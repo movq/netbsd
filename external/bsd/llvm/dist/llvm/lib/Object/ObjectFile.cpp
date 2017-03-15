@@ -11,10 +11,9 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "llvm/Object/ObjectFile.h"
 #include "llvm/Object/COFF.h"
 #include "llvm/Object/MachO.h"
-#include "llvm/Object/Wasm.h"
+#include "llvm/Object/ObjectFile.h"
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/FileSystem.h"
 #include "llvm/Support/MemoryBuffer.h"
@@ -29,48 +28,26 @@ void ObjectFile::anchor() { }
 ObjectFile::ObjectFile(unsigned int Type, MemoryBufferRef Source)
     : SymbolicFile(Type, Source) {}
 
-bool SectionRef::containsSymbol(SymbolRef S) const {
-  Expected<section_iterator> SymSec = S.getSection();
-  if (!SymSec) {
-    // TODO: Actually report errors helpfully.
-    consumeError(SymSec.takeError());
-    return false;
-  }
-  return *this == **SymSec;
-}
-
-uint64_t ObjectFile::getSymbolValue(DataRefImpl Ref) const {
-  uint32_t Flags = getSymbolFlags(Ref);
-  if (Flags & SymbolRef::SF_Undefined)
-    return 0;
-  if (Flags & SymbolRef::SF_Common)
-    return getCommonSymbolSize(Ref);
-  return getSymbolValueImpl(Ref);
-}
-
 std::error_code ObjectFile::printSymbolName(raw_ostream &OS,
                                             DataRefImpl Symb) const {
-  Expected<StringRef> Name = getSymbolName(Symb);
-  if (!Name)
-    return errorToErrorCode(Name.takeError());
-  OS << *Name;
-  return std::error_code();
+  StringRef Name;
+  if (std::error_code EC = getSymbolName(Symb, Name))
+    return EC;
+  OS << Name;
+  return object_error::success;
 }
 
-uint32_t ObjectFile::getSymbolAlignment(DataRefImpl DRI) const { return 0; }
-
-bool ObjectFile::isSectionBitcode(DataRefImpl Sec) const {
-  StringRef SectName;
-  if (!getSectionName(Sec, SectName))
-    return SectName == ".llvmbc";
-  return false;
+std::error_code ObjectFile::getSymbolAlignment(DataRefImpl DRI,
+                                               uint32_t &Result) const {
+  Result = 0;
+  return object_error::success;
 }
 
 section_iterator ObjectFile::getRelocatedSection(DataRefImpl Sec) const {
   return section_iterator(SectionRef(Sec, this));
 }
 
-Expected<std::unique_ptr<ObjectFile>>
+ErrorOr<std::unique_ptr<ObjectFile>>
 ObjectFile::createObjectFile(MemoryBufferRef Object, sys::fs::file_magic Type) {
   StringRef Data = Object.getBuffer();
   if (Type == sys::fs::file_magic::unknown)
@@ -79,17 +56,16 @@ ObjectFile::createObjectFile(MemoryBufferRef Object, sys::fs::file_magic Type) {
   switch (Type) {
   case sys::fs::file_magic::unknown:
   case sys::fs::file_magic::bitcode:
-  case sys::fs::file_magic::coff_cl_gl_object:
   case sys::fs::file_magic::archive:
   case sys::fs::file_magic::macho_universal_binary:
   case sys::fs::file_magic::windows_resource:
-    return errorCodeToError(object_error::invalid_file_type);
+    return object_error::invalid_file_type;
   case sys::fs::file_magic::elf:
   case sys::fs::file_magic::elf_relocatable:
   case sys::fs::file_magic::elf_executable:
   case sys::fs::file_magic::elf_shared_object:
   case sys::fs::file_magic::elf_core:
-    return errorOrToExpected(createELFObjectFile(Object));
+    return createELFObjectFile(Object);
   case sys::fs::file_magic::macho_object:
   case sys::fs::file_magic::macho_executable:
   case sys::fs::file_magic::macho_fixed_virtual_memory_shared_lib:
@@ -100,30 +76,27 @@ ObjectFile::createObjectFile(MemoryBufferRef Object, sys::fs::file_magic Type) {
   case sys::fs::file_magic::macho_bundle:
   case sys::fs::file_magic::macho_dynamically_linked_shared_lib_stub:
   case sys::fs::file_magic::macho_dsym_companion:
-  case sys::fs::file_magic::macho_kext_bundle:
     return createMachOObjectFile(Object);
   case sys::fs::file_magic::coff_object:
   case sys::fs::file_magic::coff_import_library:
   case sys::fs::file_magic::pecoff_executable:
-    return errorOrToExpected(createCOFFObjectFile(Object));
-  case sys::fs::file_magic::wasm_object:
-    return createWasmObjectFile(Object);
+    return createCOFFObjectFile(Object);
   }
   llvm_unreachable("Unexpected Object File Type");
 }
 
-Expected<OwningBinary<ObjectFile>>
+ErrorOr<OwningBinary<ObjectFile>>
 ObjectFile::createObjectFile(StringRef ObjectPath) {
   ErrorOr<std::unique_ptr<MemoryBuffer>> FileOrErr =
       MemoryBuffer::getFile(ObjectPath);
   if (std::error_code EC = FileOrErr.getError())
-    return errorCodeToError(EC);
+    return EC;
   std::unique_ptr<MemoryBuffer> Buffer = std::move(FileOrErr.get());
 
-  Expected<std::unique_ptr<ObjectFile>> ObjOrErr =
+  ErrorOr<std::unique_ptr<ObjectFile>> ObjOrErr =
       createObjectFile(Buffer->getMemBufferRef());
-  if (Error Err = ObjOrErr.takeError())
-    return std::move(Err);
+  if (std::error_code EC = ObjOrErr.getError())
+    return EC;
   std::unique_ptr<ObjectFile> Obj = std::move(ObjOrErr.get());
 
   return OwningBinary<ObjectFile>(std::move(Obj), std::move(Buffer));

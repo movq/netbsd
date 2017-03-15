@@ -1,4 +1,4 @@
-/*	$NetBSD: nouveau_dispnv04_tvnv17.c,v 1.3 2014/08/23 08:03:34 riastradh Exp $	*/
+/*	$NetBSD: nouveau_dispnv04_tvnv17.c,v 1.2.4.1 2014/09/21 17:41:52 snj Exp $	*/
 
 /*
  * Copyright (C) 2009 Francisco Jerez.
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: nouveau_dispnv04_tvnv17.c,v 1.3 2014/08/23 08:03:34 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: nouveau_dispnv04_tvnv17.c,v 1.2.4.1 2014/09/21 17:41:52 snj Exp $");
 
 #include <drm/drmP.h>
 #include <drm/drm_crtc_helper.h>

@@ -47,8 +47,3 @@ class C {
     static int x = 0; // no-warn
   }
 };
-
-// There is also no need to use static in anonymous namespaces.
-namespace {
-  int vgood4;
-}

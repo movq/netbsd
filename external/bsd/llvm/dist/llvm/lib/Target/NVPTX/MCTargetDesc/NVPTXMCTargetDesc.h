@@ -14,13 +14,11 @@
 #ifndef LLVM_LIB_TARGET_NVPTX_MCTARGETDESC_NVPTXMCTARGETDESC_H
 #define LLVM_LIB_TARGET_NVPTX_MCTARGETDESC_NVPTXMCTARGETDESC_H
 
-#include <stdint.h>
-
 namespace llvm {
 class Target;
 
-Target &getTheNVPTXTarget32();
-Target &getTheNVPTXTarget64();
+extern Target TheNVPTXTarget32;
+extern Target TheNVPTXTarget64;
 
 } // End llvm namespace
 

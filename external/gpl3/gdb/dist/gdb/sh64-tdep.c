@@ -1,6 +1,6 @@
 /* Target-dependent code for Renesas Super-H, for GDB.
 
-   Copyright (C) 1993-2016 Free Software Foundation, Inc.
+   Copyright (C) 1993-2014 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -32,6 +32,8 @@
 #include "value.h"
 #include "dis-asm.h"
 #include "inferior.h"
+#include <string.h>
+#include "gdb_assert.h"
 #include "arch-utils.h"
 #include "regcache.h"
 #include "osabi.h"
@@ -222,7 +224,7 @@ sh64_elf_make_msymbol_special (asymbol *sym, struct minimal_symbol *msym)
   if (((elf_symbol_type *)(sym))->internal_elf_sym.st_other == STO_SH5_ISA32)
     {
       MSYMBOL_TARGET_FLAG_1 (msym) = 1;
-      SET_MSYMBOL_VALUE_ADDRESS (msym, MSYMBOL_VALUE_RAW_ADDRESS (msym) | 1);
+      SYMBOL_VALUE_ADDRESS (msym) |= 1;
     }
 }
 
@@ -861,6 +863,9 @@ sh64_analyze_prologue (struct gdbarch *gdbarch,
   int insn;
   int r0_val = 0;
   int insn_size;
+  int gdb_register_number;
+  int register_number;
+  struct gdbarch_tdep *tdep = gdbarch_tdep (gdbarch);
   enum bfd_endian byte_order = gdbarch_byte_order (gdbarch);
   
   cache->sp_offset = 0;
@@ -901,11 +906,8 @@ sh64_analyze_prologue (struct gdbarch *gdbarch,
 	    }
 
 	  else if (IS_MOV_R14 (insn))
-	    {
-	      cache->saved_regs[MEDIA_FP_REGNUM] =
-		cache->sp_offset - ((((insn & 0xf) ^ 0x8) - 0x8) << 2);
-	      cache->uses_fp = 1;
-	    }
+	    cache->saved_regs[MEDIA_FP_REGNUM] =
+	      cache->sp_offset - ((((insn & 0xf) ^ 0x8) - 0x8) << 2);
 
 	  else if (IS_MOV_R0 (insn))
 	    {
@@ -934,7 +936,6 @@ sh64_analyze_prologue (struct gdbarch *gdbarch,
 	      /* Store R14 at r0_val-4 from SP.  Decrement r0 by 4.  */
 	      cache->saved_regs[MEDIA_FP_REGNUM] = cache->sp_offset
 	      					   - (r0_val - 4);
-	      cache->uses_fp = 1;
 	      r0_val -= 4;
 	    }
 
@@ -961,25 +962,22 @@ sh64_analyze_prologue (struct gdbarch *gdbarch,
 						 9) << 2);
 
 	  else if (IS_STQ_R14_R15 (insn))
-	    {
-	      cache->saved_regs[MEDIA_FP_REGNUM]
-		= cache->sp_offset - (sign_extend ((insn & 0xffc00) >> 10,
-						   9) << 3);
-	      cache->uses_fp = 1;
-	    }
+	    cache->saved_regs[MEDIA_FP_REGNUM]
+	      = cache->sp_offset - (sign_extend ((insn & 0xffc00) >> 10,
+						 9) << 3);
 
 	  else if (IS_STL_R14_R15 (insn))
-	    {
-	      cache->saved_regs[MEDIA_FP_REGNUM]
-		= cache->sp_offset - (sign_extend ((insn & 0xffc00) >> 10,
-						   9) << 2);
-	      cache->uses_fp = 1;
-	    }
+	    cache->saved_regs[MEDIA_FP_REGNUM]
+	      = cache->sp_offset - (sign_extend ((insn & 0xffc00) >> 10,
+						 9) << 2);
 
 	  else if (IS_MOV_SP_FP_MEDIA (insn))
 	    break;
 	}
     }
+
+  if (cache->saved_regs[MEDIA_FP_REGNUM] >= 0)
+    cache->uses_fp = 1;
 }
 
 static CORE_ADDR
@@ -1062,6 +1060,8 @@ sh64_push_dummy_call (struct gdbarch *gdbarch,
   enum bfd_endian byte_order = gdbarch_byte_order (gdbarch);
   int stack_offset, stack_alloc;
   int int_argreg;
+  int float_argreg;
+  int double_argreg;
   int float_arg_index = 0;
   int double_arg_index = 0;
   int argnum;
@@ -1095,6 +1095,8 @@ sh64_push_dummy_call (struct gdbarch *gdbarch,
      in eight registers available.  Loop thru args from first to last.  */
 
   int_argreg = ARG0_REGNUM;
+  float_argreg = gdbarch_fp0_regnum (gdbarch);
+  double_argreg = DR0_REGNUM;
 
   for (argnum = 0, stack_offset = 0; argnum < nargs; argnum++)
     {
@@ -1222,9 +1224,10 @@ sh64_push_dummy_call (struct gdbarch *gdbarch,
    TYPE, and copy that, in virtual format, into VALBUF.  */
 static void
 sh64_extract_return_value (struct type *type, struct regcache *regcache,
-			   gdb_byte *valbuf)
+			   void *valbuf)
 {
   struct gdbarch *gdbarch = get_regcache_arch (regcache);
+  enum bfd_endian byte_order = gdbarch_byte_order (gdbarch);
   int len = TYPE_LENGTH (type);
 
   if (TYPE_CODE (type) == TYPE_CODE_FLT)
@@ -1918,6 +1921,7 @@ sh64_do_fp_register (struct gdbarch *gdbarch, struct ui_file *file,
   unsigned char *raw_buffer;
   double flt;	/* Double extracted from raw hex data.  */
   int inv;
+  int j;
 
   /* Allocate space for the float.  */
   raw_buffer = (unsigned char *)
@@ -2208,7 +2212,7 @@ sh64_frame_cache (struct frame_info *this_frame, void **this_cache)
   int i;
 
   if (*this_cache)
-    return (struct sh64_frame_cache *) *this_cache;
+    return *this_cache;
 
   gdbarch = get_frame_arch (this_frame);
   cache = sh64_alloc_frame_cache ();
@@ -2366,7 +2370,7 @@ sh64_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
 
   /* None found, create a new architecture from the information
      provided.  */
-  tdep = XNEW (struct gdbarch_tdep);
+  tdep = XMALLOC (struct gdbarch_tdep);
   gdbarch = gdbarch_alloc (&info, tdep);
 
   /* Determine the ABI */

@@ -1,4 +1,4 @@
-/*	$NetBSD: sort.h,v 1.36 2016/06/01 02:37:55 kre Exp $	*/
+/*	$NetBSD: sort.h,v 1.34 2011/09/16 15:39:29 joerg Exp $	*/
 
 /*-
  * Copyright (c) 2000-2003 The NetBSD Foundation, Inc.
@@ -100,9 +100,9 @@
 		err(2, "%p", file);					\
 }
 
-#define	EWRITE(ptr, size, n, f, fmt) {					\
+#define	EWRITE(ptr, size, n, f) {					\
 	if (!fwrite(ptr, size, n, f))					\
-		 err(2, fmt);						\
+		 err(2, NULL);						\
 }
 
 /* Records are limited to MAXBUFSIZE (8MB) and less if you want to sort
@@ -191,7 +191,7 @@ int	 makekey(FILE *, RECHEADER *, u_char *, struct field *);
 int	 makeline(FILE *, RECHEADER *, u_char *, struct field *);
 void	 makeline_copydown(RECHEADER *);
 int	 optval(int, int);
-__dead void	 order(struct filelist *, struct field *, int);
+__dead void	 order(struct filelist *, struct field *);
 void	 putline(const RECHEADER *, FILE *);
 void	 putrec(const RECHEADER *, FILE *);
 void	 putkeydump(const RECHEADER *, FILE *);

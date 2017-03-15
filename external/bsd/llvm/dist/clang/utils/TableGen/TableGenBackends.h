@@ -69,7 +69,6 @@ void EmitNeonSema2(RecordKeeper &Records, raw_ostream &OS);
 void EmitNeonTest2(RecordKeeper &Records, raw_ostream &OS);
 
 void EmitClangAttrDocs(RecordKeeper &Records, raw_ostream &OS);
-void EmitClangDiagDocs(RecordKeeper &Records, raw_ostream &OS);
 
 } // end namespace clang
 

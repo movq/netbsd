@@ -44,8 +44,8 @@ class PTHLexer : public PreprocessorLexer {
   ///  to process when doing quick skipping of preprocessor blocks.
   const unsigned char* CurPPCondPtr;
 
-  PTHLexer(const PTHLexer &) = delete;
-  void operator=(const PTHLexer &) = delete;
+  PTHLexer(const PTHLexer &) LLVM_DELETED_FUNCTION;
+  void operator=(const PTHLexer &) LLVM_DELETED_FUNCTION;
 
   /// ReadToken - Used by PTHLexer to read tokens TokBuf.
   void ReadToken(Token& T);
@@ -64,7 +64,8 @@ protected:
   PTHLexer(Preprocessor& pp, FileID FID, const unsigned char *D,
            const unsigned char* ppcond, PTHManager &PM);
 public:
-  ~PTHLexer() override {}
+
+  ~PTHLexer() {}
 
   /// Lex - Return the next token.
   bool Lex(Token &Tok);

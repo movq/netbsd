@@ -6,6 +6,8 @@
 using namespace clang;
 using namespace clang::tooling;
 
+extern "C" {
+
 // FIXME: do something more useful with the error message
 CXCompilationDatabase
 clang_CompilationDatabase_fromDirectory(const char *BuildDir,
@@ -109,16 +111,6 @@ clang_CompileCommand_getDirectory(CXCompileCommand CCmd)
   return cxstring::createRef(cmd->Directory.c_str());
 }
 
-CXString
-clang_CompileCommand_getFilename(CXCompileCommand CCmd)
-{
-  if (!CCmd)
-    return cxstring::createNull();
-
-  CompileCommand *cmd = static_cast<CompileCommand *>(CCmd);
-  return cxstring::createRef(cmd->Filename.c_str());
-}
-
 unsigned
 clang_CompileCommand_getNumArgs(CXCompileCommand CCmd)
 {
@@ -178,3 +170,5 @@ clang_CompileCommand_getMappedSourceContent(CXCompileCommand CCmd, unsigned I)
 
   return cxstring::createRef(Cmd->MappedSources[I].second.c_str());
 }
+
+} // end: extern "C"

@@ -1116,7 +1116,7 @@
 /* #undef size_t */
 
 /* define to snprintf routine */
-/* #undef _snprintf */
+#define snprintf _snprintf
 
 /* Define like ber_socklen_t if <sys/socket.h> does not define. */
 /* #undef socklen_t */

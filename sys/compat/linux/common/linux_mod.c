@@ -1,4 +1,4 @@
-/*	$NetBSD: linux_mod.c,v 1.6 2015/12/03 02:51:01 pgoyette Exp $	*/
+/*	$NetBSD: linux_mod.c,v 1.4.4.2 2015/11/17 19:18:19 riz Exp $	*/
 
 /*-
  * Copyright (c) 2008 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: linux_mod.c,v 1.6 2015/12/03 02:51:01 pgoyette Exp $");
+__KERNEL_RCSID(0, "$NetBSD: linux_mod.c,v 1.4.4.2 2015/11/17 19:18:19 riz Exp $");
 
 #ifdef _KERNEL_OPT
 #include "opt_execfmt.h"
@@ -65,8 +65,7 @@ __KERNEL_RCSID(0, "$NetBSD: linux_mod.c,v 1.6 2015/12/03 02:51:01 pgoyette Exp $
 # define	MD3	""
 #endif
 
-MODULE(MODULE_CLASS_EXEC, compat_linux, "compat,compat_ossaudio,sysv_ipc"
-	MD1 MD2 MD3);
+MODULE(MODULE_CLASS_EXEC, compat_linux, "compat,compat_ossaudio" MD1 MD2 MD3);
 
 static struct execsw linux_execsw[] = {
 #if defined(EXEC_ELF32) && ELFSIZE == 32

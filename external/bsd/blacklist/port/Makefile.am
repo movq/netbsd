@@ -1,11 +1,11 @@
 #
 ACLOCAL_AMFLAGS = -I m4
 lib_LTLIBRARIES = libblacklist.la
-include_HEADERS = ../include/blacklist.h
+include_HEADERS = blacklist.h
 
 bin_PROGRAMS = blacklistd blacklistctl srvtest cltest
 
-VPATH = ../bin:../lib:../test:../include
+VPATH = ../bin:../lib:../test
 
 AM_CPPFLAGS = -I../include  -DDOT="."
 AM_CFLAGS = @WARNINGS@

@@ -1,7 +1,7 @@
-/* $OpenBSD$ */
+/* Id */
 
 /*
- * Copyright (c) 2008 Nicholas Marriott <nicholas.marriott@gmail.com>
+ * Copyright (c) 2008 Nicholas Marriott <nicm@users.sourceforge.net>
  *
  * Permission to use, copy, modify, and distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -29,64 +29,34 @@
  * a red-black tree.
  */
 
-struct options {
-	RB_HEAD(options_tree, options_entry) tree;
-	struct options	*parent;
-};
-
-static int	options_cmp(struct options_entry *, struct options_entry *);
-RB_PROTOTYPE(options_tree, options_entry, entry, options_cmp);
 RB_GENERATE(options_tree, options_entry, entry, options_cmp);
 
-static void	options_free1(struct options *, struct options_entry *);
-
-static int
+int
 options_cmp(struct options_entry *o1, struct options_entry *o2)
 {
 	return (strcmp(o1->name, o2->name));
 }
 
-struct options *
-options_create(struct options *parent)
+void
+options_init(struct options *oo, struct options *parent)
 {
-	struct options	*oo;
-
-	oo = xcalloc(1, sizeof *oo);
 	RB_INIT(&oo->tree);
 	oo->parent = parent;
-	return (oo);
-}
-
-static void
-options_free1(struct options *oo, struct options_entry *o)
-{
-	RB_REMOVE(options_tree, &oo->tree, o);
-	free(__UNCONST(o->name));
-	if (o->type == OPTIONS_STRING)
-		free(o->str);
-	free(o);
 }
 
 void
 options_free(struct options *oo)
 {
-	struct options_entry	*o, *o1;
+	struct options_entry	*o;
 
-	RB_FOREACH_SAFE (o, options_tree, &oo->tree, o1)
-		options_free1(oo, o);
-	free(oo);
-}
-
-struct options_entry *
-options_first(struct options *oo)
-{
-	return (RB_MIN(options_tree, &oo->tree));
-}
-
-struct options_entry *
-options_next(struct options_entry *o)
-{
-	return (RB_NEXT(options_tree, &oo->tree, o));
+	while (!RB_EMPTY(&oo->tree)) {
+		o = RB_ROOT(&oo->tree);
+		RB_REMOVE(options_tree, &oo->tree, o);
+		free(o->name);
+		if (o->type == OPTIONS_STRING)
+			free(o->str);
+		free(o);
+	}
 }
 
 struct options_entry *
@@ -119,11 +89,17 @@ options_remove(struct options *oo, const char *name)
 {
 	struct options_entry	*o;
 
-	if ((o = options_find1(oo, name)) != NULL)
-		options_free1(oo, o);
+	if ((o = options_find1(oo, name)) == NULL)
+		return;
+
+	RB_REMOVE(options_tree, &oo->tree, o);
+	free(o->name);
+	if (o->type == OPTIONS_STRING)
+		free(o->str);
+	free(o);
 }
 
-struct options_entry *
+struct options_entry *printflike3
 options_set_string(struct options *oo, const char *name, const char *fmt, ...)
 {
 	struct options_entry	*o;
@@ -150,9 +126,9 @@ options_get_string(struct options *oo, const char *name)
 	struct options_entry	*o;
 
 	if ((o = options_find(oo, name)) == NULL)
-		fatalx("missing option %s", name);
+		fatalx("missing option");
 	if (o->type != OPTIONS_STRING)
-		fatalx("option %s not a string", name);
+		fatalx("option not a string");
 	return (o->str);
 }
 
@@ -180,9 +156,9 @@ options_get_number(struct options *oo, const char *name)
 	struct options_entry	*o;
 
 	if ((o = options_find(oo, name)) == NULL)
-		fatalx("missing option %s", name);
+		fatalx("missing option");
 	if (o->type != OPTIONS_NUMBER)
-		fatalx("option %s not a number", name);
+		fatalx("option not a number");
 	return (o->num);
 }
 
@@ -191,26 +167,20 @@ options_set_style(struct options *oo, const char *name, const char *value,
     int append)
 {
 	struct options_entry	*o;
-	struct grid_cell	 tmpgc;
 
-	o = options_find1(oo, name);
-	if (o == NULL || !append)
-		memcpy(&tmpgc, &grid_default_cell, sizeof tmpgc);
-	else
-		memcpy(&tmpgc, &o->style, sizeof tmpgc);
-
-	if (style_parse(&grid_default_cell, &tmpgc, value) == -1)
-		return (NULL);
-
-	if (o == NULL) {
+	if ((o = options_find1(oo, name)) == NULL) {
 		o = xmalloc(sizeof *o);
 		o->name = xstrdup(name);
 		RB_INSERT(options_tree, &oo->tree, o);
 	} else if (o->type == OPTIONS_STRING)
 		free(o->str);
 
+	if (!append)
+		memcpy(&o->style, &grid_default_cell, sizeof o->style);
+
 	o->type = OPTIONS_STYLE;
-	memcpy(&o->style, &tmpgc, sizeof o->style);
+	if (style_parse(&grid_default_cell, &o->style, value) == -1)
+		return (NULL);
 	return (o);
 }
 
@@ -220,8 +190,8 @@ options_get_style(struct options *oo, const char *name)
 	struct options_entry	*o;
 
 	if ((o = options_find(oo, name)) == NULL)
-		fatalx("missing option %s", name);
+		fatalx("missing option");
 	if (o->type != OPTIONS_STYLE)
-		fatalx("option %s not a style", name);
+		fatalx("option not a style");
 	return (&o->style);
 }

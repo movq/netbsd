@@ -1,4 +1,4 @@
-/*	$NetBSD: scroll.c,v 1.24 2017/02/10 06:25:28 blymn Exp $	*/
+/*	$NetBSD: scroll.c,v 1.22 2010/02/03 15:34:40 roy Exp $	*/
 
 /*
  * Copyright (c) 1981, 1993, 1994
@@ -34,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)scroll.c	8.3 (Berkeley) 5/4/94";
 #else
-__RCSID("$NetBSD: scroll.c,v 1.24 2017/02/10 06:25:28 blymn Exp $");
+__RCSID("$NetBSD: scroll.c,v 1.22 2010/02/03 15:34:40 roy Exp $");
 #endif
 #endif				/* not lint */
 
@@ -48,8 +48,7 @@ __RCSID("$NetBSD: scroll.c,v 1.24 2017/02/10 06:25:28 blymn Exp $");
 int
 scroll(WINDOW *win)
 {
-
-	return wscrl(win, 1);
+	return(wscrl(win, 1));
 }
 
 #ifndef _CURSES_USE_MACROS
@@ -61,7 +60,6 @@ scroll(WINDOW *win)
 int
 scrl(int nlines)
 {
-
 	return wscrl(stdscr, nlines);
 }
 
@@ -72,7 +70,6 @@ scrl(int nlines)
 int
 setscrreg(int top, int bottom)
 {
-
 	return wsetscrreg(stdscr, top, bottom);
 }
 
@@ -92,15 +89,20 @@ wscrl(WINDOW *win, int nlines)
 #endif
 
 	if (!(win->flags & __SCROLLOK))
-		return ERR;
+		return (ERR);
 	if (!nlines)
-		return OK;
+		return (OK);
 
 	getyx(win, oy, ox);
 #ifdef DEBUG
 	__CTRACE(__CTRACE_WINDOW, "wscrl: y=%d\n", oy);
 #endif
-	wmove(win, win->scr_t, 0);
+	if (oy < win->scr_t || oy > win->scr_b)
+		/* Outside scrolling region */
+		wmove(win, 0, 0);
+	else
+		/* Inside scrolling region */
+		wmove(win, win->scr_t, 0);
 	winsdelln(win, 0 - nlines);
 	wmove(win, oy, ox);
 
@@ -112,7 +114,7 @@ wscrl(WINDOW *win, int nlines)
 		__CTRACE(__CTRACE_WINDOW, "scroll: win == curscr\n");
 #endif
 	}
-	return OK;
+	return (OK);
 }
 
 /*
@@ -123,10 +125,10 @@ int
 wsetscrreg(WINDOW *win, int top, int bottom)
 {
 	if (top < 0 || bottom >= win->maxy || bottom - top < 1)
-		return ERR;
+		return (ERR);
 	win->scr_t = top;
 	win->scr_b = bottom;
-	return OK;
+	return (OK);
 }
 
 /*
@@ -136,11 +138,10 @@ wsetscrreg(WINDOW *win, int top, int bottom)
 bool
 has_ic(void)
 {
-
 	if (insert_character != NULL && delete_character != NULL)
-		return true;
+		return (TRUE);
 	else
-		return false;
+		return (FALSE);
 }
 
 /*
@@ -151,7 +152,7 @@ bool
 has_il(void)
 {
 	if (insert_line !=NULL && delete_line != NULL)
-		return true;
+		return (TRUE);
 	else
-		return false;
+		return (FALSE);
 }

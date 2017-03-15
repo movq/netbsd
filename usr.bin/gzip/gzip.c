@@ -1,4 +1,4 @@
-/*	$NetBSD: gzip.c,v 1.109 2015/10/27 07:36:18 mrg Exp $	*/
+/*	$NetBSD: gzip.c,v 1.105.20.1 2015/02/28 07:59:22 snj Exp $	*/
 
 /*
  * Copyright (c) 1997, 1998, 2003, 2004, 2006 Matthew R. Green
@@ -30,7 +30,7 @@
 #ifndef lint
 __COPYRIGHT("@(#) Copyright (c) 1997, 1998, 2003, 2004, 2006\
  Matthew R. Green.  All rights reserved.");
-__RCSID("$NetBSD: gzip.c,v 1.109 2015/10/27 07:36:18 mrg Exp $");
+__RCSID("$NetBSD: gzip.c,v 1.105.20.1 2015/02/28 07:59:22 snj Exp $");
 #endif /* not lint */
 
 /*
@@ -788,7 +788,6 @@ gz_uncompress(int in, int out, char *pre, size_t prelen, off_t *gsizep,
 					goto stop;
 				}
 				maybe_warnx("input not gziped (MAGIC0)");
-				exit_value = 2;
 				goto stop_and_fail;
 			}
 			ADVANCE();
@@ -1367,16 +1366,13 @@ file_uncompress(char *file, char *outfile, size_t outsize)
 		timestamp = ts[3] << 24 | ts[2] << 16 | ts[1] << 8 | ts[0];
 
 		if (header1[3] & ORIG_NAME) {
-			rbytes = pread(fd, name, sizeof(name) - 1, GZIP_ORIGNAME);
+			rbytes = pread(fd, name, sizeof name, GZIP_ORIGNAME);
 			if (rbytes < 0) {
 				maybe_warn("can't read %s", file);
 				goto lose;
 			}
-			if (name[0] != '\0') {
+			if (name[0] != 0) {
 				char *dp, *nf;
-
-				/* Make sure that name is NUL-terminated */
-				name[rbytes] = '\0';
 
 				/* strip saved directory name */
 				nf = strrchr(name, '/');
@@ -1736,7 +1732,7 @@ handle_stdout(void)
 		return;
 	}
 #endif
-	/* If stdin is a file use its mtime, otherwise use current time */
+	/* If stdin is a file use it's mtime, otherwise use current time */
 	ret = fstat(STDIN_FILENO, &sb);
 
 #ifndef SMALL

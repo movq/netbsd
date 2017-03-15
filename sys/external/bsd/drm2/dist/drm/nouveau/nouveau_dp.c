@@ -1,4 +1,4 @@
-/*	$NetBSD: nouveau_dp.c,v 1.2 2016/01/29 22:25:45 riastradh Exp $	*/
+/*	$NetBSD: nouveau_dp.c,v 1.1.1.2.4.1 2016/12/12 09:13:42 msaitoh Exp $	*/
 
 /*
  * Copyright 2009 Red Hat Inc.
@@ -25,7 +25,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: nouveau_dp.c,v 1.2 2016/01/29 22:25:45 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: nouveau_dp.c,v 1.1.1.2.4.1 2016/12/12 09:13:42 msaitoh Exp $");
 
 #include <drm/drmP.h>
 #include <drm/drm_dp_helper.h>

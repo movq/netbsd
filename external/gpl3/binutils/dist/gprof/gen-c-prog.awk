@@ -15,7 +15,8 @@ NR == 1	{
 	      print ""
 	      print "void ", FUNCTION, "(FILE *);"
 	      print "void";
-	      printf "%s (FILE *file)\n", FUNCTION
+	      printf "%s (file)\n", FUNCTION
+	      print "     FILE *file;";
 	      print "{";
 	    }
 	  printf "  fputs (\"";

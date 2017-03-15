@@ -1,4 +1,4 @@
-/*	$NetBSD: pcap-pf.c,v 1.4 2017/01/24 22:29:28 christos Exp $	*/
+/*	$NetBSD: pcap-pf.c,v 1.1.1.4 2013/12/31 16:57:24 christos Exp $	*/
 
 /*
  * Copyright (c) 1990, 1991, 1992, 1993, 1994, 1995, 1996
@@ -24,8 +24,10 @@
  *	Extraction/creation by Jeffrey Mogul, DECWRL
  */
 
-#include <sys/cdefs.h>
-__RCSID("$NetBSD: pcap-pf.c,v 1.4 2017/01/24 22:29:28 christos Exp $");
+#ifndef lint
+static const char rcsid[] _U_ =
+    "@(#) Header: /tcpdump/master/libpcap/pcap-pf.c,v 1.97 2008-04-14 20:40:58 guy Exp  (LBL)";
+#endif
 
 #ifdef HAVE_CONFIG_H
 #include "config.h"
@@ -112,7 +114,7 @@ pcap_read_pf(pcap_t *pc, int cnt, pcap_handler callback, u_char *user)
 #ifdef LBL_ALIGN
 	struct enstamp stamp;
 #endif
-	register u_int pad;
+	register int pad;
 
  again:
 	cc = pc->cc;
@@ -132,11 +134,11 @@ pcap_read_pf(pcap_t *pc, int cnt, pcap_handler callback, u_char *user)
 				(void)lseek(pc->fd, 0L, SEEK_SET);
 				goto again;
 			}
-			pcap_snprintf(pc->errbuf, sizeof(pc->errbuf), "pf read: %s",
+			snprintf(pc->errbuf, sizeof(pc->errbuf), "pf read: %s",
 				pcap_strerror(errno));
 			return (-1);
 		}
-		bp = (u_char *)pc->buffer + pc->offset;
+		bp = pc->buffer + pc->offset;
 	} else
 		bp = pc->bp;
 	/*
@@ -165,7 +167,7 @@ pcap_read_pf(pcap_t *pc, int cnt, pcap_handler callback, u_char *user)
 			}
 		}
 		if (cc < sizeof(*sp)) {
-			pcap_snprintf(pc->errbuf, sizeof(pc->errbuf),
+			snprintf(pc->errbuf, sizeof(pc->errbuf),
 			    "pf short read (%d)", cc);
 			return (-1);
 		}
@@ -177,7 +179,7 @@ pcap_read_pf(pcap_t *pc, int cnt, pcap_handler callback, u_char *user)
 #endif
 			sp = (struct enstamp *)bp;
 		if (sp->ens_stamplen != sizeof(*sp)) {
-			pcap_snprintf(pc->errbuf, sizeof(pc->errbuf),
+			snprintf(pc->errbuf, sizeof(pc->errbuf),
 			    "pf short stamplen (%d)",
 			    sp->ens_stamplen);
 			return (-1);
@@ -219,7 +221,7 @@ pcap_read_pf(pcap_t *pc, int cnt, pcap_handler callback, u_char *user)
 			buflen -= pad;
 			h.caplen = buflen;
 			(*callback)(user, &h, p);
-			if (++n >= cnt && !PACKET_COUNT_IS_UNLIMITED(cnt)) {
+			if (++n >= cnt && cnt > 0) {
 				pc->cc = cc;
 				pc->bp = bp;
 				return (n);
@@ -237,12 +239,12 @@ pcap_inject_pf(pcap_t *p, const void *buf, size_t size)
 
 	ret = write(p->fd, buf, size);
 	if (ret == -1) {
-		pcap_snprintf(p->errbuf, PCAP_ERRBUF_SIZE, "send: %s",
+		snprintf(p->errbuf, PCAP_ERRBUF_SIZE, "send: %s",
 		    pcap_strerror(errno));
 		return (-1);
 	}
 	return (ret);
-}
+}                           
 
 static int
 pcap_stats_pf(pcap_t *p, struct pcap_stat *ps)
@@ -326,17 +328,14 @@ pcap_activate_pf(pcap_t *p)
 	 * its argument, even though it takes a "char *" rather than a
 	 * "const char *" as its first argument.  That appears to be
 	 * the case, at least on Digital UNIX 4.0.
-	 *
-	 * XXX - is there an error that means "no such device"?  Is
-	 * there one that means "that device doesn't support pf"?
 	 */
-	p->fd = pfopen(p->opt.device, O_RDWR);
+	p->fd = pfopen(p->opt.source, O_RDWR);
 	if (p->fd == -1 && errno == EACCES)
-		p->fd = pfopen(p->opt.device, O_RDONLY);
+		p->fd = pfopen(p->opt.source, O_RDONLY);
 	if (p->fd < 0) {
-		pcap_snprintf(p->errbuf, PCAP_ERRBUF_SIZE, "pf open: %s: %s\n\
+		snprintf(p->errbuf, PCAP_ERRBUF_SIZE, "pf open: %s: %s\n\
 your system may not be properly configured; see the packetfilter(4) man page\n",
-			p->opt.device, pcap_strerror(errno));
+			p->opt.source, pcap_strerror(errno));
 		goto bad;
 	}
 	pf->OrigMissed = -1;
@@ -346,7 +345,7 @@ your system may not be properly configured; see the packetfilter(4) man page\n",
 	if (p->opt.promisc)
 		enmode |= ENPROMISC;
 	if (ioctl(p->fd, EIOCMBIS, (caddr_t)&enmode) < 0) {
-		pcap_snprintf(p->errbuf, PCAP_ERRBUF_SIZE, "EIOCMBIS: %s",
+		snprintf(p->errbuf, PCAP_ERRBUF_SIZE, "EIOCMBIS: %s",
 		    pcap_strerror(errno));
 		goto bad;
 	}
@@ -357,13 +356,13 @@ your system may not be properly configured; see the packetfilter(4) man page\n",
 #endif
 	/* set the backlog */
 	if (ioctl(p->fd, EIOCSETW, (caddr_t)&backlog) < 0) {
-		pcap_snprintf(p->errbuf, PCAP_ERRBUF_SIZE, "EIOCSETW: %s",
+		snprintf(p->errbuf, PCAP_ERRBUF_SIZE, "EIOCSETW: %s",
 		    pcap_strerror(errno));
 		goto bad;
 	}
 	/* discover interface type */
 	if (ioctl(p->fd, EIOCDEVP, (caddr_t)&devparams) < 0) {
-		pcap_snprintf(p->errbuf, PCAP_ERRBUF_SIZE, "EIOCDEVP: %s",
+		snprintf(p->errbuf, PCAP_ERRBUF_SIZE, "EIOCDEVP: %s",
 		    pcap_strerror(errno));
 		goto bad;
 	}
@@ -445,7 +444,7 @@ your system may not be properly configured; see the packetfilter(4) man page\n",
 		 * framing", there's not much we can do, as that
 		 * doesn't specify a particular type of header.
 		 */
-		pcap_snprintf(p->errbuf, PCAP_ERRBUF_SIZE,
+		snprintf(p->errbuf, PCAP_ERRBUF_SIZE,
 		    "unknown data-link type %u", devparams.end_dev_type);
 		goto bad;
 	}
@@ -458,7 +457,7 @@ your system may not be properly configured; see the packetfilter(4) man page\n",
 	} else
 		p->fddipad = 0;
 	if (ioctl(p->fd, EIOCTRUNCATE, (caddr_t)&p->snapshot) < 0) {
-		pcap_snprintf(p->errbuf, PCAP_ERRBUF_SIZE, "EIOCTRUNCATE: %s",
+		snprintf(p->errbuf, PCAP_ERRBUF_SIZE, "EIOCTRUNCATE: %s",
 		    pcap_strerror(errno));
 		goto bad;
 	}
@@ -467,7 +466,7 @@ your system may not be properly configured; see the packetfilter(4) man page\n",
 	Filter.enf_Priority = 37;	/* anything > 2 */
 	Filter.enf_FilterLen = 0;	/* means "always true" */
 	if (ioctl(p->fd, EIOCSETF, (caddr_t)&Filter) < 0) {
-		pcap_snprintf(p->errbuf, PCAP_ERRBUF_SIZE, "EIOCSETF: %s",
+		snprintf(p->errbuf, PCAP_ERRBUF_SIZE, "EIOCSETF: %s",
 		    pcap_strerror(errno));
 		goto bad;
 	}
@@ -477,14 +476,14 @@ your system may not be properly configured; see the packetfilter(4) man page\n",
 		timeout.tv_sec = p->opt.timeout / 1000;
 		timeout.tv_usec = (p->opt.timeout * 1000) % 1000000;
 		if (ioctl(p->fd, EIOCSRTIMEOUT, (caddr_t)&timeout) < 0) {
-			pcap_snprintf(p->errbuf, PCAP_ERRBUF_SIZE, "EIOCSRTIMEOUT: %s",
+			snprintf(p->errbuf, PCAP_ERRBUF_SIZE, "EIOCSRTIMEOUT: %s",
 				pcap_strerror(errno));
 			goto bad;
 		}
 	}
 
 	p->bufsize = BUFSPACE;
-	p->buffer = malloc(p->bufsize + p->offset);
+	p->buffer = (u_char*)malloc(p->bufsize + p->offset);
 	if (p->buffer == NULL) {
 		strlcpy(p->errbuf, pcap_strerror(errno), PCAP_ERRBUF_SIZE);
 		goto bad;
@@ -511,11 +510,11 @@ your system may not be properly configured; see the packetfilter(4) man page\n",
 }
 
 pcap_t *
-pcap_create_interface(const char *device _U_, char *ebuf)
+pcap_create_interface(const char *device, char *ebuf)
 {
 	pcap_t *p;
 
-	p = pcap_create_common(ebuf, sizeof (struct pcap_pf));
+	p = pcap_create_common(device, ebuf, sizeof (struct pcap_pf));
 	if (p == NULL)
 		return (NULL);
 
@@ -523,20 +522,10 @@ pcap_create_interface(const char *device _U_, char *ebuf)
 	return (p);
 }
 
-/*
- * XXX - is there an error from pfopen() that means "no such device"?
- * Is there one that means "that device doesn't support pf"?
- */
-static int
-can_be_bound(const char *name _U_)
-{
-	return (1);
-}
-
 int
 pcap_platform_finddevs(pcap_if_t **alldevsp, char *errbuf)
 {
-	return (pcap_findalldevs_interfaces(alldevsp, errbuf, can_be_bound));
+	return (0);
 }
 
 static int
@@ -565,7 +554,7 @@ pcap_setfilter_pf(pcap_t *p, struct bpf_program *fp)
 			 * Yes.  Try to install the filter.
 			 */
 			if (ioctl(p->fd, BIOCSETF, (caddr_t)fp) < 0) {
-				pcap_snprintf(p->errbuf, sizeof(p->errbuf),
+				snprintf(p->errbuf, sizeof(p->errbuf),
 				    "BIOCSETF: %s", pcap_strerror(errno));
 				return (-1);
 			}

@@ -170,8 +170,6 @@ struct radius_server_conf {
 
 	const char *erp_domain;
 
-	unsigned int tls_session_lifetime;
-
 	/**
 	 * wps - Wi-Fi Protected Setup context
 	 *

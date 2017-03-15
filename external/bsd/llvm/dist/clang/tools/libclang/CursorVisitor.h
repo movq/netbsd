@@ -195,7 +195,6 @@ public:
   bool VisitChildren(CXCursor Parent);
 
   // Declaration visitors
-  bool VisitTypeAliasTemplateDecl(TypeAliasTemplateDecl *D);
   bool VisitTypeAliasDecl(TypeAliasDecl *D);
   bool VisitAttributes(Decl *D);
   bool VisitBlockDecl(BlockDecl *B);
@@ -218,13 +217,11 @@ public:
   bool VisitFunctionTemplateDecl(FunctionTemplateDecl *D);
   bool VisitClassTemplateDecl(ClassTemplateDecl *D);
   bool VisitTemplateTemplateParmDecl(TemplateTemplateParmDecl *D);
-  bool VisitObjCTypeParamDecl(ObjCTypeParamDecl *D);
   bool VisitObjCMethodDecl(ObjCMethodDecl *ND);
   bool VisitObjCContainerDecl(ObjCContainerDecl *D);
   bool VisitObjCCategoryDecl(ObjCCategoryDecl *ND);
   bool VisitObjCProtocolDecl(ObjCProtocolDecl *PID);
   bool VisitObjCPropertyDecl(ObjCPropertyDecl *PD);
-  bool VisitObjCTypeParamList(ObjCTypeParamList *typeParamList);
   bool VisitObjCInterfaceDecl(ObjCInterfaceDecl *D);
   bool VisitObjCImplDecl(ObjCImplDecl *D);
   bool VisitObjCCategoryImplDecl(ObjCCategoryImplDecl *D);
@@ -238,9 +235,7 @@ public:
   bool VisitUsingDecl(UsingDecl *D);
   bool VisitUnresolvedUsingValueDecl(UnresolvedUsingValueDecl *D);
   bool VisitUnresolvedUsingTypenameDecl(UnresolvedUsingTypenameDecl *D);
-  bool VisitStaticAssertDecl(StaticAssertDecl *D);
-  bool VisitFriendDecl(FriendDecl *D);
-
+  
   // Name visitor
   bool VisitDeclarationNameInfo(DeclarationNameInfo Name);
   bool VisitNestedNameSpecifier(NestedNameSpecifier *NNS, SourceRange Range);
@@ -266,9 +261,6 @@ public:
   bool RunVisitorWorkList(VisitorWorkList &WL);
   void EnqueueWorkList(VisitorWorkList &WL, const Stmt *S);
   LLVM_ATTRIBUTE_NOINLINE bool Visit(const Stmt *S);
-
-private:
-  Optional<bool> handleDeclForVisitation(const Decl *D);
 };
 
 }

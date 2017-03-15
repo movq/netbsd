@@ -21,7 +21,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: print-dvmrp.c,v 1.6 2017/02/05 04:05:05 spz Exp $");
+__RCSID("$NetBSD: print-dvmrp.c,v 1.3.6.1 2017/02/19 05:01:15 snj Exp $");
 #endif
 
 /* \summary: Distance Vector Multicast Routing Protocol printer */

@@ -1,4 +1,4 @@
-#	$NetBSD: GENERIC,v 1.50 2017/02/19 07:47:01 rin Exp $
+#	$NetBSD: GENERIC,v 1.43.2.2 2014/11/18 19:05:30 snj Exp $
 #
 #
 
@@ -23,11 +23,11 @@ maxusers	8
 options 	DDB
 
 # Compatibility options
-#options 	COMPAT_43	# 4.3BSD binary compatibility.
 #options 	COMPAT_13	# NetBSD 1.3,
 #options 	COMPAT_14	# NetBSD 1.4,
-#options 	COMPAT_15	# NetBSD 1.5, and
-options 	COMPAT_16	# NetBSD 1.6 binary compatibility.
+#options 	COMPAT_15	# NetBSD 1.5,
+options 	COMPAT_16	# NetBSD 1.6,
+#options 	COMPAT_43	# and 4.3BSD
 options		COMPAT_BSDPTY	# /dev/[pt]ty?? ptys.
 
 # File systems
@@ -44,7 +44,6 @@ file-system	TMPFS		# Efficient memory file-system
 #file-system	UDF		# experimental - OSTA UDF CD/DVD file-system
 
 # File system options
-#options 	DISKLABEL_EI	# disklabel Endian Independent support
 #options 	FFS_EI		# FFS Endian Independent support
 #options 	FFS_NO_SNAPSHOT	# No FFS snapshot support
 #options 	UFS_EXTATTR	# Extended attribute support for UFS1
@@ -274,8 +273,6 @@ icsphy* at mii? phy ?                   # Integrated Circuit Systems ICS189x
 # Audio support
 paud0 at isa? port 0x830 irq 10 drq 0 drq2 1
 audio*	at audiobus?
-
-spkr*	at audio?			# PC speaker (synthesized)
 
 # Pseudo-Devices
 

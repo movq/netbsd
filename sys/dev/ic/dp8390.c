@@ -1,4 +1,4 @@
-/*	$NetBSD: dp8390.c,v 1.86 2016/12/15 09:28:05 ozaki-r Exp $	*/
+/*	$NetBSD: dp8390.c,v 1.81 2014/08/10 16:44:35 tls Exp $	*/
 
 /*
  * Device driver for National Semiconductor DS8390/WD83C690 based ethernet
@@ -14,7 +14,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: dp8390.c,v 1.86 2016/12/15 09:28:05 ozaki-r Exp $");
+__KERNEL_RCSID(0, "$NetBSD: dp8390.c,v 1.81 2014/08/10 16:44:35 tls Exp $");
 
 #include "opt_ipkdb.h"
 #include "opt_inet.h"
@@ -28,7 +28,7 @@ __KERNEL_RCSID(0, "$NetBSD: dp8390.c,v 1.86 2016/12/15 09:28:05 ozaki-r Exp $");
 #include <sys/socket.h>
 #include <sys/syslog.h>
 
-#include <sys/rndsource.h>
+#include <sys/rnd.h>
 
 #include <net/if.h>
 #include <net/if_dl.h>
@@ -939,7 +939,15 @@ dp8390_read(struct dp8390_softc *sc, int buf, u_short len)
 		return;
 	}
 
-	if_percpuq_enqueue(ifp->if_percpuq, m);
+	ifp->if_ipackets++;
+
+	/*
+	 * Check if there's a BPF listener on this interface.
+	 * If so, hand off the raw packet to bpf.
+	 */
+	bpf_mtap(ifp, m);
+
+	(*ifp->if_input)(ifp, m);
 }
 
 
@@ -1024,7 +1032,7 @@ dp8390_get(struct dp8390_softc *sc, int src, u_short total_len)
 	MGETHDR(m0, M_DONTWAIT, MT_DATA);
 	if (m0 == NULL)
 		return NULL;
-	m_set_rcvif(m0, ifp);
+	m0->m_pkthdr.rcvif = ifp;
 	m0->m_pkthdr.len = total_len;
 	len = MHLEN;
 	m = m0;
@@ -1484,10 +1492,11 @@ dp8390_ipkdb_send(struct ipkdb_if *kip, uint8_t *buf, int l)
 	bus_space_handle_t regh = sc->sc_regh;
 	struct mbuf mb;
 
-	mbuf_hdr_init(&mb, MT_DATA, NULL, buf, l);
-	mbuf_pkthdr_init(&mb);
-	mb.m_pkthdr.len = l;
-	mb.m_flags |= M_EXT;
+	mb.m_next = NULL;
+	mb.m_pkthdr.len = mb.m_len = l;
+	mb.m_data = buf;
+	mb.m_flags = M_EXT | M_PKTHDR;
+	mb.m_type = MT_DATA;
 
 	l = sc->write_mbuf(sc, &mb,
 	    sc->mem_start + ((sc->txb_new * ED_TXBUF_SIZE) << ED_PAGE_SHIFT));

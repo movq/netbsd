@@ -1,4 +1,4 @@
-/*	$NetBSD: dkwedge_mbr.c,v 1.10 2017/01/19 00:44:40 maya Exp $	*/
+/*	$NetBSD: dkwedge_mbr.c,v 1.7.14.1 2014/11/11 10:31:16 martin Exp $	*/
 
 /*-
  * Copyright (c) 2004 The NetBSD Foundation, Inc.
@@ -34,7 +34,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: dkwedge_mbr.c,v 1.10 2017/01/19 00:44:40 maya Exp $");
+__KERNEL_RCSID(0, "$NetBSD: dkwedge_mbr.c,v 1.7.14.1 2014/11/11 10:31:16 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -103,16 +103,10 @@ getparts(mbr_args_t *a, uint32_t off, uint32_t extoff)
 	dp = mbr->mbr_parts;
 
 	for (i = 0; i < MBR_PART_COUNT; i++) {
-		switch (dp[i].mbrp_type) {
-		case 0:			/* empty */
-		case MBR_PTYPE_PMBR:	/* Handled by GPT */
-			continue;
-		default:
-		    /* Extended partitions are handled below. */
-			if (MBR_IS_EXTENDED(dp[i].mbrp_type))
-				continue;
-			break;
-		}
+		/* Extended partitions are handled below. */
+		if (dp[i].mbrp_type == 0 ||
+		    MBR_IS_EXTENDED(dp[i].mbrp_type))
+		    	continue;
 
 		if ((ptype = mbr_ptype_to_str(dp[i].mbrp_type)) == NULL) {
 			/*
@@ -124,9 +118,9 @@ getparts(mbr_args_t *a, uint32_t off, uint32_t extoff)
 			    dp[i].mbrp_type);
 			continue;
 		}
-		strlcpy(dkw.dkw_ptype, ptype, sizeof(dkw.dkw_ptype));
+		strcpy(dkw.dkw_ptype, ptype);
 
-		strlcpy(dkw.dkw_parent, a->pdk->dk_name, sizeof(dkw.dkw_parent));
+		strcpy(dkw.dkw_parent, a->pdk->dk_name);
 		dkw.dkw_offset = le32toh(dp[i].mbrp_start);
 		dkw.dkw_size = le32toh(dp[i].mbrp_size);
 

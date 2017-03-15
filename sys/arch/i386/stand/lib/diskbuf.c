@@ -1,4 +1,4 @@
-/*	$NetBSD: diskbuf.c,v 1.7 2017/01/24 11:09:14 nonaka Exp $	*/
+/*	$NetBSD: diskbuf.c,v 1.6 2005/12/11 12:17:48 christos Exp $	*/
 
 /*
  * Copyright (c) 1996
@@ -28,8 +28,6 @@
 
 /* data buffer for BIOS disk / DOS I/O  */
 
-#include <sys/inttypes.h>
-
 #include <lib/libsa/stand.h>
 #include "diskbuf.h"
 
@@ -50,12 +48,10 @@ alloc_diskbuf(const void *user)
 	diskbuf_user = user;
 	if (!diskbufp) {
 		diskbufp = alloc(DISKBUFSIZE);
-#ifndef EFIBOOT
-		if (((uintptr_t)diskbufp & 0xffff) + DISKBUFSIZE > 0x10000) {
-			printf("diskbufp %" PRIxPTR "\n", (uintptr_t)diskbufp);
+		if (((int)diskbufp & 0xffff) + DISKBUFSIZE > 0x10000) {
+			printf("diskbufp %x\n", (unsigned)diskbufp);
 			panic("diskbuf crosses 64k boundary");
 		}
-#endif
 	}
 	return diskbufp;
 }

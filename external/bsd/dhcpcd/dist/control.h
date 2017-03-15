@@ -1,8 +1,8 @@
-/* $NetBSD: control.h,v 1.8 2016/05/09 10:15:59 roy Exp $ */
+/* $NetBSD: control.h,v 1.1.1.5.2.2 2015/02/05 15:13:12 martin Exp $ */
 
 /*
  * dhcpcd - DHCP client daemon
- * Copyright (c) 2006-2016 Roy Marples <roy@marples.name>
+ * Copyright (c) 2006-2015 Roy Marples <roy@marples.name>
  * All rights reserved
 
  * Redistribution and use in source and binary forms, with or without
@@ -58,7 +58,7 @@ TAILQ_HEAD(fd_list_head, fd_list);
 
 int control_start(struct dhcpcd_ctx *, const char *);
 int control_stop(struct dhcpcd_ctx *);
-int control_open(const char *);
+int control_open(struct dhcpcd_ctx *, const char *);
 ssize_t control_send(struct dhcpcd_ctx *, int, char * const *);
 int control_queue(struct fd_list *fd, char *data, size_t data_len, uint8_t fit);
 void control_close(struct dhcpcd_ctx *ctx);

@@ -1,4 +1,4 @@
-/*	$NetBSD: natm.h,v 1.15 2015/09/06 06:01:01 dholland Exp $	*/
+/*	$NetBSD: natm.h,v 1.14 2014/07/06 15:44:25 rtr Exp $	*/
 
 /*
  * Copyright (c) 1996 Charles D. Cranor and Washington University.
@@ -31,8 +31,6 @@
 /*
  * natm.h: native mode atm
  */
-
-#include <sys/ioccom.h>
 
 
 /*

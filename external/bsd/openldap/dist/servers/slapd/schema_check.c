@@ -1,10 +1,10 @@
-/*	$NetBSD: schema_check.c,v 1.1.1.5 2017/02/09 01:46:58 christos Exp $	*/
+/*	$NetBSD: schema_check.c,v 1.1.1.4 2014/05/28 09:58:47 tron Exp $	*/
 
 /* schema_check.c - routines to enforce schema definitions */
 /* $OpenLDAP$ */
 /* This work is part of OpenLDAP Software <http://www.openldap.org/>.
  *
- * Copyright 1998-2016 The OpenLDAP Foundation.
+ * Copyright 1998-2014 The OpenLDAP Foundation.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -15,9 +15,6 @@
  * top-level directory of the distribution or, alternatively, at
  * <http://www.OpenLDAP.org/license.html>.
  */
-
-#include <sys/cdefs.h>
-__RCSID("$NetBSD: schema_check.c,v 1.1.1.5 2017/02/09 01:46:58 christos Exp $");
 
 #include "portable.h"
 
@@ -820,7 +817,6 @@ entry_naming_check(
 				"value of naming attribute '%s' in unsupported BER form",
 				ava->la_attr.bv_val );
 			rc = LDAP_NAMING_VIOLATION;
-			break;
 		}
 
 		rc = slap_bv2ad( &ava->la_attr, &desc, &errtext );

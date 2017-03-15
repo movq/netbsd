@@ -1,4 +1,4 @@
-/*	$NetBSD: save.c,v 1.10 2016/05/01 23:32:01 christos Exp $	*/
+/*	$NetBSD: save.c,v 1.5.4.2 2015/11/08 01:51:13 riz Exp $	*/
 
 
 /*

@@ -14,20 +14,21 @@
 //===----------------------------------------------------------------------===//
 
 #include "llvm/Support/SourceMgr.h"
-#include "llvm/ADT/STLExtras.h"
+#include "llvm/ADT/SmallString.h"
 #include "llvm/ADT/Twine.h"
 #include "llvm/Support/Locale.h"
 #include "llvm/Support/MemoryBuffer.h"
 #include "llvm/Support/Path.h"
 #include "llvm/Support/raw_ostream.h"
+#include <system_error>
 using namespace llvm;
 
 static const size_t TabStop = 8;
 
 namespace {
   struct LineNoCacheTy {
-    const char *LastQuery;
     unsigned LastQueryBufferID;
+    const char *LastQuery;
     unsigned LineNoOfQuery;
   };
 }
@@ -142,7 +143,7 @@ SMDiagnostic SourceMgr::GetMessage(SMLoc Loc, SourceMgr::DiagKind Kind,
   // location to pull out the source line.
   SmallVector<std::pair<unsigned, unsigned>, 4> ColRanges;
   std::pair<unsigned, unsigned> LineAndCol;
-  StringRef BufferID = "<unknown>";
+  const char *BufferID = "<unknown>";
   std::string LineStr;
   
   if (Loc.isValid()) {
@@ -333,8 +334,8 @@ static bool isNonASCII(char c) {
   return c & 0x80;
 }
 
-void SMDiagnostic::print(const char *ProgName, raw_ostream &S, bool ShowColors,
-                         bool ShowKindLabel) const {
+void SMDiagnostic::print(const char *ProgName, raw_ostream &S,
+                         bool ShowColors) const {
   // Display colors only if OS supports colors.
   ShowColors &= S.has_colors();
 
@@ -358,29 +359,27 @@ void SMDiagnostic::print(const char *ProgName, raw_ostream &S, bool ShowColors,
     S << ": ";
   }
 
-  if (ShowKindLabel) {
-    switch (Kind) {
-    case SourceMgr::DK_Error:
-      if (ShowColors)
-        S.changeColor(raw_ostream::RED, true);
-      S << "error: ";
-      break;
-    case SourceMgr::DK_Warning:
-      if (ShowColors)
-        S.changeColor(raw_ostream::MAGENTA, true);
-      S << "warning: ";
-      break;
-    case SourceMgr::DK_Note:
-      if (ShowColors)
-        S.changeColor(raw_ostream::BLACK, true);
-      S << "note: ";
-      break;
-    }
+  switch (Kind) {
+  case SourceMgr::DK_Error:
+    if (ShowColors)
+      S.changeColor(raw_ostream::RED, true);
+    S << "error: ";
+    break;
+  case SourceMgr::DK_Warning:
+    if (ShowColors)
+      S.changeColor(raw_ostream::MAGENTA, true);
+    S << "warning: ";
+    break;
+  case SourceMgr::DK_Note:
+    if (ShowColors)
+      S.changeColor(raw_ostream::BLACK, true);
+    S << "note: ";
+    break;
+  }
 
-    if (ShowColors) {
-      S.resetColor();
-      S.changeColor(raw_ostream::SAVEDCOLOR, true);
-    }
+  if (ShowColors) {
+    S.resetColor();
+    S.changeColor(raw_ostream::SAVEDCOLOR, true);
   }
 
   S << Message << '\n';
@@ -396,7 +395,8 @@ void SMDiagnostic::print(const char *ProgName, raw_ostream &S, bool ShowColors,
   // map like Clang's TextDiagnostic. For now, we'll just handle tabs by
   // expanding them later, and bail out rather than show incorrect ranges and
   // misaligned fixits for any other odd characters.
-  if (find_if(LineContents, isNonASCII) != LineContents.end()) {
+  if (std::find_if(LineContents.begin(), LineContents.end(), isNonASCII) !=
+      LineContents.end()) {
     printSourceLine(S, LineContents);
     return;
   }

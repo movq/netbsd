@@ -1,4 +1,4 @@
-/*	$NetBSD: config.c,v 1.13 2016/05/26 16:49:56 christos Exp $	*/
+/*	$NetBSD: config.c,v 1.9.4.4 2016/10/14 12:01:10 martin Exp $	*/
 
 /*
  * Copyright (C) 2004-2015  Internet Systems Consortium, Inc. ("ISC")

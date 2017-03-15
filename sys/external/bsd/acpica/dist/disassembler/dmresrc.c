@@ -5,7 +5,7 @@
  ******************************************************************************/
 
 /*
- * Copyright (C) 2000 - 2017, Intel Corp.
+ * Copyright (C) 2000 - 2013, Intel Corp.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -41,11 +41,13 @@
  * POSSIBILITY OF SUCH DAMAGES.
  */
 
+
 #include "acpi.h"
 #include "accommon.h"
 #include "amlcode.h"
 #include "acdisasm.h"
 
+#ifdef ACPI_DISASSEMBLER
 
 #define _COMPONENT          ACPI_CA_DEBUGGER
         ACPI_MODULE_NAME    ("dbresrc")
@@ -212,7 +214,6 @@ AcpiDmBitList (
             {
                 AcpiOsPrintf (",");
             }
-
             Previous = TRUE;
             AcpiOsPrintf ("%u", i);
         }
@@ -259,11 +260,6 @@ AcpiDmResourceTemplate (
     ACPI_NAMESPACE_NODE     *Node;
 
 
-    if (Op->Asl.AmlOpcode != AML_FIELD_OP)
-    {
-        Info->MappingOp = Op;
-    }
-
     Level = Info->Level;
     ResourceName = ACPI_DEFAULT_RESNAME;
     Node = Op->Common.Node;
@@ -286,8 +282,7 @@ AcpiDmResourceTemplate (
         Status = AcpiUtValidateResource (NULL, Aml, &ResourceIndex);
         if (ACPI_FAILURE (Status))
         {
-            AcpiOsPrintf (
-                "/*** Could not validate Resource, type (%X) %s***/\n",
+            AcpiOsPrintf ("/*** Could not validate Resource, type (%X) %s***/\n",
                 ResourceType, AcpiFormatException (Status));
             return;
         }
@@ -333,12 +328,11 @@ AcpiDmResourceTemplate (
 
                 /* Go ahead and insert EndDependentFn() */
 
-                AcpiDmEndDependentDescriptor (Info, Aml, ResourceLength, Level);
+                AcpiDmEndDependentDescriptor (Aml, ResourceLength, Level);
 
                 AcpiDmIndent (Level);
                 AcpiOsPrintf (
-                    "/*** Disassembler: inserted "
-                    "missing EndDependentFn () ***/\n");
+                    "/*** Disassembler: inserted missing EndDependentFn () ***/\n");
             }
             return;
 
@@ -356,7 +350,7 @@ AcpiDmResourceTemplate (
         }
 
         AcpiGbl_DmResourceDispatch [ResourceIndex] (
-            Info, Aml, ResourceLength, Level);
+            Aml, ResourceLength, Level);
 
         /* Descriptor post-processing */
 
@@ -392,8 +386,7 @@ AcpiDmIsResourceTemplate (
     ACPI_PARSE_OBJECT       *NextOp;
     UINT8                   *Aml;
     UINT8                   *EndAml;
-    UINT32                  BufferLength;
-    UINT32                  DeclaredBufferLength;
+    ACPI_SIZE               Length;
 
 
     /* This op must be a buffer */
@@ -403,20 +396,14 @@ AcpiDmIsResourceTemplate (
         return (AE_TYPE);
     }
 
-    /*
-     * Get the declared length of the buffer.
-     * This is the nn in "Buffer (nn)"
-     */
+    /* Get the ByteData list and length */
+
     NextOp = Op->Common.Value.Arg;
     if (!NextOp)
     {
         AcpiOsPrintf ("NULL byte list in buffer\n");
         return (AE_TYPE);
     }
-
-    DeclaredBufferLength = NextOp->Common.Value.Size;
-
-    /* Get the length of the raw initialization byte list */
 
     NextOp = NextOp->Common.Next;
     if (!NextOp)
@@ -425,22 +412,11 @@ AcpiDmIsResourceTemplate (
     }
 
     Aml = NextOp->Named.Data;
-    BufferLength = NextOp->Common.Value.Size;
-
-    /*
-     * Not a template if declared buffer length != actual length of the
-     * intialization byte list. Because the resource macros will create
-     * a buffer of the exact required length (buffer length will be equal
-     * to the actual length).
-     */
-    if (DeclaredBufferLength != BufferLength)
-    {
-        return (AE_TYPE);
-    }
+    Length = (ACPI_SIZE) NextOp->Common.Value.Integer;
 
     /* Walk the byte list, abort on any invalid descriptor type or length */
 
-    Status = AcpiUtWalkAmlResources (WalkState, Aml, BufferLength,
+    Status = AcpiUtWalkAmlResources (WalkState, Aml, Length,
         NULL, ACPI_CAST_INDIRECT_PTR (void, &EndAml));
     if (ACPI_FAILURE (Status))
     {
@@ -453,7 +429,7 @@ AcpiDmIsResourceTemplate (
      * of a ResourceTemplate, the buffer must not have any extra data after
      * the EndTag.)
      */
-    if ((Aml + BufferLength - sizeof (AML_RESOURCE_END_TAG)) != EndAml)
+    if ((Aml + Length - sizeof (AML_RESOURCE_END_TAG)) != EndAml)
     {
         return (AE_AML_NO_RESOURCE_END_TAG);
     }
@@ -464,3 +440,5 @@ AcpiDmIsResourceTemplate (
      */
     return (AE_OK);
 }
+
+#endif

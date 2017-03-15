@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.5 2017/01/04 15:41:24 christos Exp $
+#	$NetBSD: Makefile,v 1.3.4.1 2015/03/11 07:21:15 snj Exp $
 
 .include <bsd.own.mk>
 
@@ -11,9 +11,6 @@ INCSDIR=${X11INCDIR}/X11/Xtrans
 NOOBJ=	# defined
 
 PKGCONFIG=	xtrans
-
-FILES=		xtrans.m4
-FILESDIR=	${X11ROOTDIR}/share/aclocal
 
 .include <bsd.x11.mk>
 .include <bsd.prog.mk>

@@ -1,4 +1,4 @@
-/*	$NetBSD: if_cnwioctl.h,v 1.5 2015/09/06 06:01:00 dholland Exp $	*/
+/*	$NetBSD: if_cnwioctl.h,v 1.4 2005/12/11 12:23:23 christos Exp $	*/
 
 /*
  * Copyright (c) 1996, 1997 Berkeley Software Design, Inc.
@@ -54,8 +54,6 @@
  * Norway
  * johnm@staff.cs.uit.no, http://www.cs.uit.no/~johnm/
  */
-
-#include <sys/ioccom.h>
 
 struct cnwstatus {
 	struct ifreq	ifr;

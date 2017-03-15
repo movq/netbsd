@@ -1,4 +1,4 @@
-/*	$NetBSD: mail.local.c,v 1.28 2016/07/21 12:29:37 shm Exp $	*/
+/*	$NetBSD: mail.local.c,v 1.26.20.2 2016/07/21 12:54:09 martin Exp $	*/
 
 /*-
  * Copyright (c) 1990, 1993, 1994
@@ -36,7 +36,7 @@ __COPYRIGHT("@(#) Copyright (c) 1990, 1993, 1994\
 #if 0
 static char sccsid[] = "@(#)mail.local.c	8.22 (Berkeley) 6/21/95";
 #else
-__RCSID("$NetBSD: mail.local.c,v 1.28 2016/07/21 12:29:37 shm Exp $");
+__RCSID("$NetBSD: mail.local.c,v 1.26.20.2 2016/07/21 12:54:09 martin Exp $");
 #endif
 #endif /* not lint */
 

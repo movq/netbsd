@@ -1,4 +1,4 @@
-/*	$NetBSD: inet_aton.c,v 1.4 2016/01/08 21:35:36 christos Exp $	*/
+/*	$NetBSD: inet_aton.c,v 1.1.1.2.4.2 2016/05/11 11:35:37 martin Exp $	*/
 
 /*
  * Portions Copyright (C) 2004, 2005, 2007, 2008  Internet Systems Consortium, Inc. ("ISC")

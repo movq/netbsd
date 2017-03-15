@@ -14,17 +14,16 @@
 #ifndef LLVM_SUPPORT_MEMORYBUFFER_H
 #define LLVM_SUPPORT_MEMORYBUFFER_H
 
-#include "llvm/ADT/StringRef.h"
+#include "llvm-c/Support.h"
 #include "llvm/ADT/Twine.h"
 #include "llvm/Support/CBindingWrapping.h"
+#include "llvm/Support/Compiler.h"
+#include "llvm/Support/DataTypes.h"
 #include "llvm/Support/ErrorOr.h"
-#include "llvm-c/Types.h"
 #include <memory>
-#include <cstddef>
-#include <cstdint>
+#include <system_error>
 
 namespace llvm {
-
 class MemoryBufferRef;
 
 /// This interface provides simple read-only access to a block of memory, and
@@ -41,15 +40,13 @@ class MemoryBuffer {
   const char *BufferStart; // Start of the buffer.
   const char *BufferEnd;   // End of the buffer.
 
-
+  MemoryBuffer(const MemoryBuffer &) LLVM_DELETED_FUNCTION;
+  MemoryBuffer &operator=(const MemoryBuffer &) LLVM_DELETED_FUNCTION;
 protected:
-  MemoryBuffer() = default;
-
+  MemoryBuffer() {}
   void init(const char *BufStart, const char *BufEnd,
             bool RequiresNullTerminator);
 public:
-  MemoryBuffer(const MemoryBuffer &) = delete;
-  MemoryBuffer &operator=(const MemoryBuffer &) = delete;
   virtual ~MemoryBuffer();
 
   const char *getBufferStart() const { return BufferStart; }
@@ -62,7 +59,9 @@ public:
 
   /// Return an identifier for this buffer, typically the filename it was read
   /// from.
-  virtual StringRef getBufferIdentifier() const { return "Unknown buffer"; }
+  virtual const char *getBufferIdentifier() const {
+    return "Unknown buffer";
+  }
 
   /// Open the specified file as a MemoryBuffer, returning a new MemoryBuffer
   /// if successful, otherwise returning null. If FileSize is specified, this
@@ -75,12 +74,6 @@ public:
   static ErrorOr<std::unique_ptr<MemoryBuffer>>
   getFile(const Twine &Filename, int64_t FileSize = -1,
           bool RequiresNullTerminator = true, bool IsVolatileSize = false);
-
-  /// Read all of the specified file into a MemoryBuffer as a stream
-  /// (i.e. until EOF reached). This is useful for special files that
-  /// look like a regular file but have 0 size (e.g. /proc/cpuinfo on Linux).
-  static ErrorOr<std::unique_ptr<MemoryBuffer>>
-  getFileAsStream(const Twine &Filename);
 
   /// Given an already-open file descriptor, map some slice of it into a
   /// MemoryBuffer. The slice is specified by an \p Offset and \p MapSize.
@@ -131,10 +124,9 @@ public:
   /// Open the specified file as a MemoryBuffer, or open stdin if the Filename
   /// is "-".
   static ErrorOr<std::unique_ptr<MemoryBuffer>>
-  getFileOrSTDIN(const Twine &Filename, int64_t FileSize = -1,
-                 bool RequiresNullTerminator = true);
+  getFileOrSTDIN(const Twine &Filename, int64_t FileSize = -1);
 
-  /// Map a subrange of the specified file as a MemoryBuffer.
+  /// Map a subrange of the the specified file as a MemoryBuffer.
   static ErrorOr<std::unique_ptr<MemoryBuffer>>
   getFileSlice(const Twine &Filename, uint64_t MapSize, uint64_t Offset);
 
@@ -160,9 +152,7 @@ class MemoryBufferRef {
   StringRef Identifier;
 
 public:
-  MemoryBufferRef() = default;
-  MemoryBufferRef(MemoryBuffer& Buffer)
-      : Buffer(Buffer.getBuffer()), Identifier(Buffer.getBufferIdentifier()) {}
+  MemoryBufferRef() {}
   MemoryBufferRef(StringRef Buffer, StringRef Identifier)
       : Buffer(Buffer), Identifier(Identifier) {}
 
@@ -180,4 +170,4 @@ DEFINE_SIMPLE_CONVERSION_FUNCTIONS(MemoryBuffer, LLVMMemoryBufferRef)
 
 } // end namespace llvm
 
-#endif // LLVM_SUPPORT_MEMORYBUFFER_H
+#endif

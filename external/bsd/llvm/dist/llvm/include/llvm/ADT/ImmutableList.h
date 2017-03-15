@@ -16,9 +16,8 @@
 
 #include "llvm/ADT/FoldingSet.h"
 #include "llvm/Support/Allocator.h"
+#include "llvm/Support/DataTypes.h"
 #include <cassert>
-#include <cstdint>
-#include <new>
 
 namespace llvm {
 
@@ -26,18 +25,18 @@ template <typename T> class ImmutableListFactory;
 
 template <typename T>
 class ImmutableListImpl : public FoldingSetNode {
-  friend class ImmutableListFactory<T>;
-
   T Head;
   const ImmutableListImpl* Tail;
 
-  ImmutableListImpl(const T& head, const ImmutableListImpl* tail = nullptr)
+  ImmutableListImpl(const T& head, const ImmutableListImpl* tail = 0)
     : Head(head), Tail(tail) {}
 
-public:
-  ImmutableListImpl(const ImmutableListImpl &) = delete;
-  ImmutableListImpl &operator=(const ImmutableListImpl &) = delete;
+  friend class ImmutableListFactory<T>;
 
+  void operator=(const ImmutableListImpl&) LLVM_DELETED_FUNCTION;
+  ImmutableListImpl(const ImmutableListImpl&) LLVM_DELETED_FUNCTION;
+
+public:
   const T& getHead() const { return Head; }
   const ImmutableListImpl* getTail() const { return Tail; }
 
@@ -73,24 +72,22 @@ public:
   // This constructor should normally only be called by ImmutableListFactory<T>.
   // There may be cases, however, when one needs to extract the internal pointer
   // and reconstruct a list object from that pointer.
-  ImmutableList(const ImmutableListImpl<T>* x = nullptr) : X(x) {}
+  ImmutableList(const ImmutableListImpl<T>* x = 0) : X(x) {}
 
   const ImmutableListImpl<T>* getInternalPointer() const {
     return X;
   }
 
   class iterator {
-    const ImmutableListImpl<T>* L = nullptr;
-
+    const ImmutableListImpl<T>* L;
   public:
-    iterator() = default;
+    iterator() : L(0) {}
     iterator(ImmutableList l) : L(l.getInternalPointer()) {}
 
     iterator& operator++() { L = L->getTail(); return *this; }
     bool operator==(const iterator& I) const { return L == I.L; }
     bool operator!=(const iterator& I) const { return L != I.L; }
     const value_type& operator*() const { return L->getHead(); }
-
     ImmutableList getList() const { return L; }
   };
 
@@ -124,14 +121,14 @@ public:
 
   /// getHead - Returns the head of the list.
   const T& getHead() {
-    assert(!isEmpty() && "Cannot get the head of an empty list.");
+    assert (!isEmpty() && "Cannot get the head of an empty list.");
     return X->getHead();
   }
 
   /// getTail - Returns the tail of the list, which is another (possibly empty)
   ///  ImmutableList.
   ImmutableList getTail() {
-    return X ? X->getTail() : nullptr;
+    return X ? X->getTail() : 0;
   }
 
   void Profile(FoldingSetNodeID& ID) const {
@@ -148,7 +145,7 @@ class ImmutableListFactory {
   uintptr_t Allocator;
 
   bool ownsAllocator() const {
-    return (Allocator & 0x1) == 0;
+    return Allocator & 0x1 ? false : true;
   }
 
   BumpPtrAllocator& getAllocator() const {
@@ -193,7 +190,7 @@ public:
   }
 
   ImmutableList<T> getEmptyList() const {
-    return ImmutableList<T>(nullptr);
+    return ImmutableList<T>(0);
   }
 
   ImmutableList<T> create(const T& X) {
@@ -206,21 +203,18 @@ public:
 //===----------------------------------------------------------------------===//
 
 template<typename T> struct DenseMapInfo;
-template<typename T> struct DenseMapInfo<ImmutableList<T>> {
+template<typename T> struct DenseMapInfo<ImmutableList<T> > {
   static inline ImmutableList<T> getEmptyKey() {
     return reinterpret_cast<ImmutableListImpl<T>*>(-1);
   }
-
   static inline ImmutableList<T> getTombstoneKey() {
     return reinterpret_cast<ImmutableListImpl<T>*>(-2);
   }
-
   static unsigned getHashValue(ImmutableList<T> X) {
     uintptr_t PtrVal = reinterpret_cast<uintptr_t>(X.getInternalPointer());
     return (unsigned((uintptr_t)PtrVal) >> 4) ^
            (unsigned((uintptr_t)PtrVal) >> 9);
   }
-
   static bool isEqual(ImmutableList<T> X1, ImmutableList<T> X2) {
     return X1 == X2;
   }
@@ -228,8 +222,8 @@ template<typename T> struct DenseMapInfo<ImmutableList<T>> {
 
 template <typename T> struct isPodLike;
 template <typename T>
-struct isPodLike<ImmutableList<T>> { static const bool value = true; };
+struct isPodLike<ImmutableList<T> > { static const bool value = true; };
 
-} // end namespace llvm
+} // end llvm namespace
 
-#endif // LLVM_ADT_IMMUTABLELIST_H
+#endif

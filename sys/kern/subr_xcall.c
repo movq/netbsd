@@ -1,4 +1,4 @@
-/*	$NetBSD: subr_xcall.c,v 1.19 2016/11/21 00:54:21 ozaki-r Exp $	*/
+/*	$NetBSD: subr_xcall.c,v 1.18.4.1 2016/12/12 07:29:16 snj Exp $	*/
 
 /*-
  * Copyright (c) 2007-2010 The NetBSD Foundation, Inc.
@@ -74,7 +74,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: subr_xcall.c,v 1.19 2016/11/21 00:54:21 ozaki-r Exp $");
+__KERNEL_RCSID(0, "$NetBSD: subr_xcall.c,v 1.18.4.1 2016/12/12 07:29:16 snj Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>

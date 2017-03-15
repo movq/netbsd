@@ -66,7 +66,5 @@ int sha1_t_prf(const u8 *key, size_t key_len, const char *label,
 		len[0] = SHA1_MAC_LEN;
 	}
 
-	os_memset(hash, 0, SHA1_MAC_LEN);
-
 	return 0;
 }

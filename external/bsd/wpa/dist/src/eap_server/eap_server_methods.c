@@ -87,7 +87,7 @@ struct eap_method * eap_server_method_alloc(int version, int vendor,
  * eap_server_method_free - Free EAP server method structure
  * @method: Method structure allocated with eap_server_method_alloc()
  */
-static void eap_server_method_free(struct eap_method *method)
+void eap_server_method_free(struct eap_method *method)
 {
 	os_free(method);
 }
@@ -95,31 +95,26 @@ static void eap_server_method_free(struct eap_method *method)
 
 /**
  * eap_server_method_register - Register an EAP server method
- * @method: EAP method to register from eap_server_method_alloc()
+ * @method: EAP method to register
  * Returns: 0 on success, -1 on invalid method, or -2 if a matching EAP method
  * has already been registered
  *
  * Each EAP server method needs to call this function to register itself as a
- * supported EAP method. The caller must not free the allocated method data
- * regardless of the return value.
+ * supported EAP method.
  */
 int eap_server_method_register(struct eap_method *method)
 {
 	struct eap_method *m, *last = NULL;
 
 	if (method == NULL || method->name == NULL ||
-	    method->version != EAP_SERVER_METHOD_INTERFACE_VERSION) {
-		eap_server_method_free(method);
+	    method->version != EAP_SERVER_METHOD_INTERFACE_VERSION)
 		return -1;
-	}
 
 	for (m = eap_methods; m; m = m->next) {
 		if ((m->vendor == method->vendor &&
 		     m->method == method->method) ||
-		    os_strcmp(m->name, method->name) == 0) {
-			eap_server_method_free(method);
+		    os_strcmp(m->name, method->name) == 0)
 			return -2;
-		}
 		last = m;
 	}
 

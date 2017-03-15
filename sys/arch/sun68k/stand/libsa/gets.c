@@ -1,4 +1,4 @@
-/*	$NetBSD: gets.c,v 1.5 2016/06/11 06:49:46 dholland Exp $	*/
+/*	$NetBSD: gets.c,v 1.4 2005/12/11 12:19:29 christos Exp $	*/
 
 /*-
  * Copyright (c) 1993
@@ -45,7 +45,7 @@
  */
 
 void 
-kgets(char *buf, size_t size)
+gets(char *buf)
 {
 	int c;
 	char *lp;
@@ -54,11 +54,6 @@ top:
 	lp = buf;
 
 	for (;;) {
-		if (lp - buf == size) {
-			lp--;
-			*lp = '\0';
-			return;
-		}
 		c = getchar() & 0177;
 
 #ifdef	GETS_MUST_ECHO	/* Preserved in case someone wants it... */

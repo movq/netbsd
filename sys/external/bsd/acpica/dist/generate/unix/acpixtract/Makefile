@@ -19,9 +19,7 @@ PROG = $(OBJDIR)/acpixtract
 #
 vpath %.c \
     $(ACPIXTRACT)\
-    $(ACPICA_UTILITIES)\
-    $(ACPICA_COMMON)\
-    $(ACPICA_OSL)
+    $(ACPICA_COMMON)
 
 HEADERS = \
     $(wildcard $(ACPIXTRACT)/*.h)
@@ -29,17 +27,7 @@ HEADERS = \
 OBJECTS = \
     $(OBJDIR)/acpixtract.o\
     $(OBJDIR)/axmain.o\
-    $(OBJDIR)/axutils.o\
-    $(OBJDIR)/getopt.o\
-    $(OBJDIR)/osunixxf.o\
-    $(OBJDIR)/utascii.o\
-    $(OBJDIR)/utdebug.o\
-    $(OBJDIR)/utexcep.o\
-    $(OBJDIR)/utglobal.o\
-	$(OBJDIR)/uthex.o\
-    $(OBJDIR)/utmath.o\
-    $(OBJDIR)/utnonansi.o\
-    $(OBJDIR)/utxferror.o
+    $(OBJDIR)/getopt.o
 
 #
 # Flags specific to acpixtract

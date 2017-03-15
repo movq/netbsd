@@ -1,8 +1,8 @@
-/*	$NetBSD: dhc6.c,v 1.7 2016/01/10 20:10:44 christos Exp $	*/
+/*	$NetBSD: dhc6.c,v 1.6 2014/07/12 12:09:37 spz Exp $	*/
 /* dhc6.c - DHCPv6 client routines. */
 
 /*
- * Copyright (c) 2012-2015 by Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (c) 2012-2013 by Internet Systems Consortium, Inc. ("ISC")
  * Copyright (c) 2006-2010 by Internet Systems Consortium, Inc. ("ISC")
  *
  * Permission to use, copy, modify, and distribute this software for any
@@ -25,7 +25,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: dhc6.c,v 1.7 2016/01/10 20:10:44 christos Exp $");
+__RCSID("$NetBSD: dhc6.c,v 1.6 2014/07/12 12:09:37 spz Exp $");
 
 #include "dhcpd.h"
 
@@ -304,7 +304,7 @@ dhc6_retrans_init(struct client_state *client)
 static void
 dhc6_retrans_advance(struct client_state *client)
 {
-	struct timeval elapsed, elapsed_plus_rt;
+	struct timeval elapsed;
 
 	/* elapsed = cur - start */
 	elapsed.tv_sec = cur_tv.tv_sec - client->start_time.tv_sec;
@@ -321,12 +321,6 @@ dhc6_retrans_advance(struct client_state *client)
 		elapsed.tv_sec += 1;
 		elapsed.tv_usec -= 1000000;
 	}
-	/*
-	 * Save what the time will be after the current RT to determine
-	 * what the delta to MRD will be.
-	 */
-	elapsed_plus_rt.tv_sec = elapsed.tv_sec;
-	elapsed_plus_rt.tv_usec = elapsed.tv_usec;
 
 	/*
 	 * RT for each subsequent message transmission is based on the previous
@@ -365,16 +359,12 @@ dhc6_retrans_advance(struct client_state *client)
 	}
 	if (elapsed.tv_sec >= client->MRD) {
 		/*
-		 * The desired RT is the time that will be remaining in MRD
-		 * when the current timeout finishes.  We then have 
-		 * desired RT = MRD - (elapsed time + previous RT); or
-		 * desired RT = MRD - elapsed_plut_rt;
+		 * wake at RT + cur = start + MRD
 		 */
-		client->RT = client->MRD - elapsed_plus_rt.tv_sec;
-		client->RT = (client->RT * 100) -
-			(elapsed_plus_rt.tv_usec / 10000);
-		if (client->RT < 0)
-			client->RT = 0;
+		client->RT = client->MRD +
+			(client->start_time.tv_sec - cur_tv.tv_sec);
+		client->RT = client->RT * 100 +
+			(client->start_time.tv_usec - cur_tv.tv_usec) / 10000;
 	}
 	client->txcount++;
 }
@@ -1451,7 +1441,7 @@ check_timing6 (struct client_state *client, u_int8_t msg_type,
 	}
 
 	/* Check if finished (-1 argument). */
-	if ((client->MRD != 0) && (elapsed.tv_sec >= client->MRD)) {
+	if ((client->MRD != 0) && (elapsed.tv_sec > client->MRD)) {
 		log_info("Max retransmission duration exceeded.");
 		return(CHK_TIM_MRD_EXCEEDED);
 	}
@@ -2802,12 +2792,6 @@ init_handler(struct packet *packet, struct client_state *client)
 
 	lease = dhc6_leaseify(packet);
 
-	/* Out of memory or corrupt packet condition...hopefully a temporary
-	 * problem.  Returning now makes us try to retransmit later.
-	 */
-	if (lease == NULL)
-		return;
-
 	if (dhc6_check_advertise(lease) != ISC_R_SUCCESS) {
 		log_debug("PRC: Lease failed to satisfy.");
 		dhc6_lease_destroy(&lease, MDL);
@@ -2925,7 +2909,7 @@ rapid_commit_handler(struct packet *packet, struct client_state *client)
 
 	lease = dhc6_leaseify(packet);
 
-	/* Out of memory or corrupt packet condition...hopefully a temporary
+	/* This is an out of memory condition...hopefully a temporary
 	 * problem.  Returning now makes us try to retransmit later.
 	 */
 	if (lease == NULL)
@@ -3739,7 +3723,7 @@ reply_handler(struct packet *packet, struct client_state *client)
 
 	lease = dhc6_leaseify(packet);
 
-	/* Out of memory or corrupt packet condition...hopefully a temporary
+	/* This is an out of memory condition...hopefully a temporary
 	 * problem.  Returning now makes us try to retransmit later.
 	 */
 	if (lease == NULL)
@@ -3861,8 +3845,11 @@ dhc6_marshall_values(const char *prefix, struct client_state *client,
 				      piaddr(addr->address),
 				      (unsigned) addr->plen);
 		} else {
+			/* Current practice is that all subnets are /64's, but
+			 * some suspect this may not be permanent.
+			 */
 			client_envadd(client, prefix, "ip6_prefixlen",
-				      "%d", DHCLIENT_DEFAULT_PREFIX_LEN);
+				      "%d", 64);
 			client_envadd(client, prefix, "ip6_address",
 				      "%s", piaddr(addr->address));
 		}
@@ -3872,10 +3859,10 @@ dhc6_marshall_values(const char *prefix, struct client_state *client,
 		}
 		client_envadd(client, prefix, "life_starts", "%d",
 			      (int)(addr->starts));
-		client_envadd(client, prefix, "preferred_life", "%u",
-			      addr->preferred_life);
-		client_envadd(client, prefix, "max_life", "%u",
-			      addr->max_life);
+		client_envadd(client, prefix, "preferred_life", "%d",
+			      (int)(addr->preferred_life));
+		client_envadd(client, prefix, "max_life", "%d",
+			      (int)(addr->max_life));
 	}
 
 	/* ia fields. */
@@ -4269,10 +4256,6 @@ start_bound(struct client_state *client)
 			oldia = NULL;
 
 		for (addr = ia->addrs ; addr != NULL ; addr = addr->next) {
-			/* Don't try to use the address if it's already expired */
-			if (addr->flags & DHC6_ADDR_EXPIRED)
-				continue;
-
 			if (oldia != NULL) {
 				if (ia->ia_type != D6O_IA_PD)
 					oldaddr = find_addr(oldia->addrs,

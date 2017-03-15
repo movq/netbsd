@@ -156,6 +156,7 @@ test_ntp_signd_SOURCES =			\
 	t-ntp_signd.c				\
 	run-t-ntp_signd.c			\
 	$(srcdir)/../libntp/test-libntp.c	\
+	$(srcdir)/../../ntpd/ntp_signd.c	\
 	$(NULL)
 
 $(srcdir)/run-t-ntp_signd.c: $(srcdir)/t-ntp_signd.c $(std_unity_list)

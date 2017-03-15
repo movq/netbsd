@@ -1,4 +1,4 @@
-#	$NetBSD: bsd.prog.mk,v 1.303 2017/02/20 16:05:34 rin Exp $
+#	$NetBSD: bsd.prog.mk,v 1.290.4.1 2015/06/10 17:16:24 snj Exp $
 #	@(#)bsd.prog.mk	8.2 (Berkeley) 4/2/94
 
 .ifndef HOSTPROG
@@ -48,24 +48,24 @@ CLEANFILES+=strings
 	@rm -f x.cc
 .endif
 
-.if defined(MKPIE) && (${MKPIE} != "no") && !defined(NOPIE)
+.if defined(MKPIE) && (${MKPIE} != "no")
 CFLAGS+=	${PIE_CFLAGS}
 AFLAGS+=	${PIE_AFLAGS}
-LDFLAGS+=	${"${LDSTATIC.${.TARGET}}" == "-static" :? : ${PIE_LDFLAGS}}
+LDFLAGS+=	${PIE_LDFLAGS}
 .endif
 
 CFLAGS+=	${COPTS}
-.if ${MKDEBUG:Uno} != "no" && !defined(NODEBUG)
+.if defined(MKDEBUG) && (${MKDEBUG} != "no")
 CFLAGS+=	-g
 .endif
 OBJCFLAGS+=	${OBJCOPTS}
-MKDEP_SUFFIXES?=	.o .ln .d
+MKDEP_SUFFIXES?=	.o .ln
 
 # CTF preserve debug symbols
 .if (${MKCTF:Uno} != "no") && (${CFLAGS:M-g} != "")
 CTFFLAGS+= -g
 CTFMFLAGS+= -g
-.if defined(HAVE_GCC)
+.if defined(HAVE_GCC) && ${HAVE_GCC} >= 48
 #CFLAGS+=-gdwarf-2
 .endif
 .endif
@@ -118,14 +118,12 @@ LIBCRTI=	${DESTDIR}/usr/lib/${MLIBDIR:D${MLIBDIR}/}crti.o
 	crypto_mdc2 \
 	crypto_rc5 \
 	curses \
-	cxx \
 	dbm \
 	des \
 	dns \
 	edit \
 	event \
 	expat \
-	execinfo \
 	fetch \
 	fl \
 	form \
@@ -164,6 +162,7 @@ LIBCRTI=	${DESTDIR}/usr/lib/${MLIBDIR:D${MLIBDIR}/}crti.o
 	pmc \
 	posix \
 	pthread \
+	pthread_dbg \
 	puffs \
 	quota \
 	radius \
@@ -199,7 +198,6 @@ LIBCRTI=	${DESTDIR}/usr/lib/${MLIBDIR:D${MLIBDIR}/}crti.o
 	supcxx \
 	terminfo \
 	tre \
-	unbound \
 	usbhid \
 	util \
 	wind \
@@ -220,9 +218,9 @@ PAM_STATIC_DPADD+= ${LIBSSH}
 .endif
 .if (${MKKERBEROS} != "no")
 PAM_STATIC_LDADD+= -lkafs -lkrb5 -lhx509 -lwind -lasn1 \
-	-lroken -lcom_err -lheimbase -lcrypto -lsqlite3
+	-lroken -lcom_err -lheimbase -lcrypto
 PAM_STATIC_DPADD+= ${LIBKAFS} ${LIBKRB5} ${LIBHX509} ${LIBWIND} ${LIBASN1} \
-	${LIBROKEN} ${LIBCOM_ERR} ${LIBHEIMBASE} ${LIBCRYPTO} ${LIBSQLITE3}
+	${LIBROKEN} ${LIBCOM_ERR} ${LIBHEIMBASE} ${LIBCRYPTO}
 .endif
 .if (${MKSKEY} != "no")
 PAM_STATIC_LDADD+= -lskey
@@ -331,7 +329,6 @@ _CCLINK=	${CXX} ${_CCLINKFLAGS}
 .endif
 
 .if defined(RUMPPRG)
-CPPFLAGS+=	-D_KERNTYPES
 PROG=			${RUMPPRG}
 . ifndef CRUNCHEDPROG
 .  if (${MKRUMP} != "no")
@@ -435,7 +432,7 @@ _CCLINK.${_P}=	${CXX} ${_CCLINKFLAGS}
 BINDIR.${_P}?=		${BINDIR}
 PROGNAME.${_P}?=	${_P}
 
-.if ${MKDEBUG:Uno} != "no" && !defined(NODEBUG) && !commands(${_P})
+.if ${MKDEBUG} != "no" && !commands(${_P})
 _PROGDEBUG.${_P}:=	${PROGNAME.${_P}}.debug
 .endif
 
@@ -541,7 +538,7 @@ ${_P}: .gdbinit ${LIBCRT0} ${LIBCRTI} ${OBJS.${_P}} ${LIBC} ${LIBCRTBEGIN} \
 
 ${_P}.ro: ${OBJS.${_P}} ${_DPADD.${_P}}
 	${_MKTARGET_LINK}
-	${CC} ${LDFLAGS:N-pie} -nostdlib -r -Wl,-dc -o ${.TARGET} ${OBJS.${_P}}
+	${CC} ${LDFLAGS:N-Wl,-pie} -nostdlib -r -Wl,-dc -o ${.TARGET} ${OBJS.${_P}}
 
 .if defined(_PROGDEBUG.${_P})
 ${_PROGDEBUG.${_P}}: ${_P}

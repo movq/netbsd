@@ -1,6 +1,6 @@
 /* Very simple "bfd" target, for GDB, the GNU debugger.
 
-   Copyright (C) 2003-2016 Free Software Foundation, Inc.
+   Copyright (C) 2003-2014 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -36,41 +36,40 @@ struct target_bfd_data
   struct target_section_table table;
 };
 
-static enum target_xfer_status
+static LONGEST
 target_bfd_xfer_partial (struct target_ops *ops,
 			 enum target_object object,
 			 const char *annex, gdb_byte *readbuf,
 			 const gdb_byte *writebuf,
-			 ULONGEST offset, ULONGEST len,
-			 ULONGEST *xfered_len)
+			 ULONGEST offset, LONGEST len)
 {
   switch (object)
     {
     case TARGET_OBJECT_MEMORY:
       {
-	struct target_bfd_data *data = (struct target_bfd_data *) ops->to_data;
+	struct target_bfd_data *data = ops->to_data;
 	return section_table_xfer_memory_partial (readbuf, writebuf,
-						  offset, len, xfered_len,
+						  offset, len,
 						  data->table.sections,
 						  data->table.sections_end,
 						  NULL);
       }
     default:
-      return TARGET_XFER_E_IO;
+      return -1;
     }
 }
 
 static struct target_section_table *
 target_bfd_get_section_table (struct target_ops *ops)
 {
-  struct target_bfd_data *data = (struct target_bfd_data *) ops->to_data;
+  struct target_bfd_data *data = ops->to_data;
   return &data->table;
 }
 
 static void
 target_bfd_xclose (struct target_ops *t)
 {
-  struct target_bfd_data *data = (struct target_bfd_data *) t->to_data;
+  struct target_bfd_data *data = t->to_data;
 
   gdb_bfd_unref (data->bfd);
   xfree (data->table.sections);
@@ -84,12 +83,12 @@ target_bfd_reopen (struct bfd *abfd)
   struct target_ops *t;
   struct target_bfd_data *data;
 
-  data = XCNEW (struct target_bfd_data);
+  data = XZALLOC (struct target_bfd_data);
   data->bfd = abfd;
   gdb_bfd_ref (abfd);
   build_section_table (abfd, &data->table.sections, &data->table.sections_end);
 
-  t = XCNEW (struct target_ops);
+  t = XZALLOC (struct target_ops);
   t->to_shortname = "bfd";
   t->to_longname = _("BFD backed target");
   t->to_doc = _("You should never see this");

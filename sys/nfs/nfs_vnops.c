@@ -1,4 +1,4 @@
-/*	$NetBSD: nfs_vnops.c,v 1.309 2016/01/19 10:56:59 hannken Exp $	*/
+/*	$NetBSD: nfs_vnops.c,v 1.306.2.2 2016/02/06 20:52:36 snj Exp $	*/
 
 /*
  * Copyright (c) 1989, 1993
@@ -39,7 +39,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: nfs_vnops.c,v 1.309 2016/01/19 10:56:59 hannken Exp $");
+__KERNEL_RCSID(0, "$NetBSD: nfs_vnops.c,v 1.306.2.2 2016/02/06 20:52:36 snj Exp $");
 
 #ifdef _KERNEL_OPT
 #include "opt_nfs.h"
@@ -2043,7 +2043,7 @@ nfs_linkrpc(struct vnode *dvp, struct vnode *vp, const char *name,
 int
 nfs_link(void *v)
 {
-	struct vop_link_v2_args /* {
+	struct vop_link_args /* {
 		struct vnode *a_dvp;
 		struct vnode *a_vp;
 		struct componentname *a_cnp;
@@ -2056,6 +2056,7 @@ nfs_link(void *v)
 	error = vn_lock(vp, LK_EXCLUSIVE);
 	if (error != 0) {
 		VOP_ABORTOP(dvp, cnp);
+		vput(dvp);
 		return error;
 	}
 
@@ -2075,6 +2076,7 @@ nfs_link(void *v)
 	VOP_UNLOCK(vp);
 	VN_KNOTE(vp, NOTE_LINK);
 	VN_KNOTE(dvp, NOTE_WRITE);
+	vput(dvp);
 	return (error);
 }
 

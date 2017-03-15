@@ -20,47 +20,53 @@
 #include "CodeGenModule.h"
 #include "clang/CodeGen/CGFunctionInfo.h"
 #include "clang/Frontend/CodeGenOptions.h"
-#include "clang/Lex/HeaderSearchOptions.h"
-#include "clang/Lex/PreprocessorOptions.h"
 
 using namespace clang;
 using namespace CodeGen;
 
-const CGFunctionInfo &
-CodeGen::arrangeObjCMessageSendSignature(CodeGenModule &CGM,
-                                         const ObjCMethodDecl *MD,
-                                         QualType receiverType) {
-  return CGM.getTypes().arrangeObjCMessageSendSignature(MD, receiverType);
+CodeGenABITypes::CodeGenABITypes(ASTContext &C,
+                                 llvm::Module &M,
+                                 const llvm::DataLayout &TD,
+                                 CoverageSourceInfo *CoverageInfo)
+  : CGO(new CodeGenOptions),
+    CGM(new CodeGen::CodeGenModule(C, *CGO, M, TD, C.getDiagnostics(),
+                                   CoverageInfo)) {
+}
+
+CodeGenABITypes::~CodeGenABITypes()
+{
+  delete CGO;
+  delete CGM;
 }
 
 const CGFunctionInfo &
-CodeGen::arrangeFreeFunctionType(CodeGenModule &CGM,
-                                 CanQual<FunctionProtoType> Ty,
-                                 const FunctionDecl *FD) {
-  return CGM.getTypes().arrangeFreeFunctionType(Ty, FD);
+CodeGenABITypes::arrangeObjCMessageSendSignature(const ObjCMethodDecl *MD,
+                                                 QualType receiverType) {
+  return CGM->getTypes().arrangeObjCMessageSendSignature(MD, receiverType);
 }
 
 const CGFunctionInfo &
-CodeGen::arrangeFreeFunctionType(CodeGenModule &CGM,
-                                 CanQual<FunctionNoProtoType> Ty) {
-  return CGM.getTypes().arrangeFreeFunctionType(Ty);
+CodeGenABITypes::arrangeFreeFunctionType(CanQual<FunctionProtoType> Ty) {
+  return CGM->getTypes().arrangeFreeFunctionType(Ty);
 }
 
 const CGFunctionInfo &
-CodeGen::arrangeCXXMethodType(CodeGenModule &CGM,
-                              const CXXRecordDecl *RD,
-                              const FunctionProtoType *FTP,
-                              const CXXMethodDecl *MD) {
-  return CGM.getTypes().arrangeCXXMethodType(RD, FTP, MD);
+CodeGenABITypes::arrangeFreeFunctionType(CanQual<FunctionNoProtoType> Ty) {
+  return CGM->getTypes().arrangeFreeFunctionType(Ty);
 }
 
 const CGFunctionInfo &
-CodeGen::arrangeFreeFunctionCall(CodeGenModule &CGM,
-                                 CanQualType returnType,
-                                 ArrayRef<CanQualType> argTypes,
-                                 FunctionType::ExtInfo info,
-                                 RequiredArgs args) {
-  return CGM.getTypes().arrangeLLVMFunctionInfo(
+CodeGenABITypes::arrangeCXXMethodType(const CXXRecordDecl *RD,
+                                      const FunctionProtoType *FTP) {
+  return CGM->getTypes().arrangeCXXMethodType(RD, FTP);
+}
+
+const CGFunctionInfo &
+CodeGenABITypes::arrangeFreeFunctionCall(CanQualType returnType,
+                                         ArrayRef<CanQualType> argTypes,
+                                         FunctionType::ExtInfo info,
+                                         RequiredArgs args) {
+  return CGM->getTypes().arrangeLLVMFunctionInfo(
       returnType, /*IsInstanceMethod=*/false, /*IsChainCall=*/false, argTypes,
-      info, {}, args);
+      info, args);
 }

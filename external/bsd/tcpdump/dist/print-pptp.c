@@ -23,7 +23,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: print-pptp.c,v 1.6 2017/02/05 04:05:05 spz Exp $");
+__RCSID("$NetBSD: print-pptp.c,v 1.3.6.1 2017/02/19 05:01:16 snj Exp $");
 #endif
 
 /* \summary: Point-to-Point Tunnelling Protocol (PPTP) printer */

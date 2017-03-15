@@ -1,4 +1,4 @@
-/*	$NetBSD: installboot.c,v 1.39 2015/07/25 10:37:22 mlelstv Exp $	*/
+/*	$NetBSD: installboot.c,v 1.36.18.2 2015/07/30 15:36:03 snj Exp $	*/
 
 /*-
  * Copyright (c) 2002 The NetBSD Foundation, Inc.
@@ -35,7 +35,7 @@
 
 #include <sys/cdefs.h>
 #if !defined(__lint)
-__RCSID("$NetBSD: installboot.c,v 1.39 2015/07/25 10:37:22 mlelstv Exp $");
+__RCSID("$NetBSD: installboot.c,v 1.36.18.2 2015/07/30 15:36:03 snj Exp $");
 #endif	/* !__lint */
 
 #include <sys/param.h>

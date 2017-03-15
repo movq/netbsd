@@ -1,4 +1,4 @@
-/*	$NetBSD: ks_file.c,v 1.2 2017/01/28 21:31:48 christos Exp $	*/
+/*	$NetBSD: ks_file.c,v 1.1.1.2 2014/04/24 12:45:41 pettai Exp $	*/
 
 /*
  * Copyright (c) 2005 - 2007 Kungliga Tekniska Högskolan
@@ -54,16 +54,12 @@ parse_certificate(hx509_context context, const char *fn,
 		  const void *data, size_t len,
 		  const AlgorithmIdentifier *ai)
 {
-    heim_error_t error = NULL;
     hx509_cert cert;
     int ret;
 
-    cert = hx509_cert_init_data(context, data, len, &error);
-    if (cert == NULL) {
-	ret = heim_error_get_code(error);
-	heim_release(error);
+    ret = hx509_cert_init_data(context, data, len, &cert);
+    if (ret)
 	return ret;
-    }
 
     ret = _hx509_collector_certs_add(context, c, cert);
     hx509_cert_free(cert);
@@ -98,10 +94,9 @@ try_decrypt(hx509_context context,
 			 password, passwordlen,
 			 1, key, NULL);
     if (ret <= 0) {
-	ret = HX509_CRYPTO_INTERNAL_ERROR;
-	hx509_set_error_string(context, 0, ret,
+	hx509_set_error_string(context, 0, HX509_CRYPTO_INTERNAL_ERROR,
 			       "Failed to do string2key for private key");
-        goto out;
+	return HX509_CRYPTO_INTERNAL_ERROR;
     }
 
     clear.data = malloc(len);
@@ -322,9 +317,7 @@ struct pem_formats {
     { "CERTIFICATE", parse_certificate, NULL },
     { "PRIVATE KEY", parse_pkcs8_private_key, NULL },
     { "RSA PRIVATE KEY", parse_pem_private_key, hx509_signature_rsa },
-#ifdef HAVE_HCRYPTO_W_OPENSSL
     { "EC PRIVATE KEY", parse_pem_private_key, hx509_signature_ecPublicKey }
-#endif
 };
 
 

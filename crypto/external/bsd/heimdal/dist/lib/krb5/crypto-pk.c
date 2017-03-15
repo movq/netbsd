@@ -1,4 +1,4 @@
-/*	$NetBSD: crypto-pk.c,v 1.2 2017/01/28 21:31:49 christos Exp $	*/
+/*	$NetBSD: crypto-pk.c,v 1.1.1.2 2014/04/24 12:45:49 pettai Exp $	*/
 
 /*
  * Copyright (c) 1997 - 2008 Kungliga Tekniska Högskolan
@@ -37,7 +37,7 @@
 
 #include <krb5/pkinit_asn1.h>
 
-KRB5_LIB_FUNCTION krb5_error_code KRB5_LIB_CALL
+krb5_error_code
 _krb5_pk_octetstring2key(krb5_context context,
 			 krb5_enctype type,
 			 const void *dhdata,
@@ -63,13 +63,16 @@ _krb5_pk_octetstring2key(krb5_context context,
     keylen = (et->keytype->bits + 7) / 8;
 
     keydata = malloc(keylen);
-    if (keydata == NULL)
-	return krb5_enomem(context);
+    if (keydata == NULL) {
+	krb5_set_error_message(context, ENOMEM, N_("malloc: out of memory", ""));
+	return ENOMEM;
+    }
 
     m = EVP_MD_CTX_create();
     if (m == NULL) {
 	free(keydata);
-	return krb5_enomem(context);
+	krb5_set_error_message(context, ENOMEM, N_("malloc: out of memory", ""));
+	return ENOMEM;
     }
 
     counter = 0;
@@ -193,7 +196,7 @@ encode_otherinfo(krb5_context context,
 
 
 
-KRB5_LIB_FUNCTION krb5_error_code KRB5_LIB_CALL
+krb5_error_code
 _krb5_pk_kdf(krb5_context context,
 	     const struct AlgorithmIdentifier *ai,
 	     const void *dhdata,
@@ -247,8 +250,10 @@ _krb5_pk_kdf(krb5_context context,
     keylen = (et->keytype->bits + 7) / 8;
 
     keydata = malloc(keylen);
-    if (keydata == NULL)
-	return krb5_enomem(context);
+    if (keydata == NULL) {
+	krb5_set_error_message(context, ENOMEM, N_("malloc: out of memory", ""));
+	return ENOMEM;
+    }
 
     ret = encode_otherinfo(context, ai, client, server,
 			   enctype, as_req, pk_as_rep, ticket, &other);
@@ -261,7 +266,8 @@ _krb5_pk_kdf(krb5_context context,
     if (m == NULL) {
 	free(keydata);
 	free(other.data);
-	return krb5_enomem(context);
+	krb5_set_error_message(context, ENOMEM, N_("malloc: out of memory", ""));
+	return ENOMEM;
     }
 
     offset = 0;

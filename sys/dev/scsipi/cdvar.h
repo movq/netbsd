@@ -1,4 +1,4 @@
-/*	$NetBSD: cdvar.h,v 1.33 2016/12/10 10:26:38 mlelstv Exp $	*/
+/*	$NetBSD: cdvar.h,v 1.31 2012/02/02 19:43:06 tls Exp $	*/
 
 /*
  * Copyright (c) 1997 Manuel Bouyer.  All rights reserved.
@@ -24,16 +24,17 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include <dev/dkvar.h>
-
 #define	CDRETRIES	4
 
 struct cd_softc {
-	struct dk_softc sc_dksc;
+	device_t sc_dev;
+	struct disk sc_dk;
+	kmutex_t sc_lock;
 
 	int flags;
+#define	CDF_WLABEL	0x04		/* label is writable */
+#define	CDF_LABELLING	0x08		/* writing label */
 #define	CDF_ANCIENT	0x10		/* disk is ancient; for minphys */
-#define	CDF_EJECTED	0x20		/* be silent when flushing cache */
 
 	struct scsipi_periph *sc_periph;
 
@@ -43,9 +44,8 @@ struct cd_softc {
 		u_long disksize512;	/* total number sectors */
 	} params;
 
+	struct bufq_state *buf_queue;
 	struct callout sc_callout;
-};
 
-#define CDGP_RESULT_OK          0       /* parameters obtained */
-#define CDGP_RESULT_OFFLINE     1       /* no media, or otherwise losing */
-#define CDGP_RESULT_UNFORMATTED 2       /* unformatted media (max params) */
+	krndsource_t	rnd_source;
+};

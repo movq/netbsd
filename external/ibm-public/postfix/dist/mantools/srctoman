@@ -87,9 +87,6 @@ do
 	/^DIAGNOSTICS/s//.SH &\
 .ad\
 .fi/
-	/^HISTORY/s//.SH &\
-.ad\
-.fi/
 	/^[A-Z][A-Z][A-Z][^a-z]*$/s//.SH "&"\
 .na\
 .nf/
@@ -100,12 +97,6 @@ do
     s/^	//
     s/^[ 	]*$//
     /^\\"/d
-    /^\./{
-	s/\([^ ]\)-/\1\\-/g
-    }
-    /^[^.]/{
-	s/-/\\-/g
-    }
 ' $i
 done | expand
 

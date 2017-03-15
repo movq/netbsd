@@ -1,4 +1,4 @@
-/*	$NetBSD: signals.c,v 1.16 2016/01/26 23:12:18 pooka Exp $	*/
+/*	$NetBSD: signals.c,v 1.13 2014/02/20 00:41:05 pooka Exp $	*/
 
 /*-
  * Copyright (c) 2010, 2011 Antti Kantee.  All Rights Reserved.
@@ -26,7 +26,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: signals.c,v 1.16 2016/01/26 23:12:18 pooka Exp $");
+__KERNEL_RCSID(0, "$NetBSD: signals.c,v 1.13 2014/02/20 00:41:05 pooka Exp $");
 
 #include <sys/param.h>
 #include <sys/atomic.h>
@@ -34,10 +34,11 @@ __KERNEL_RCSID(0, "$NetBSD: signals.c,v 1.16 2016/01/26 23:12:18 pooka Exp $");
 #include <sys/proc.h>
 #include <sys/signal.h>
 
-#include <rump-sys/kern.h>
-
 #include <rump/rump.h>
 #include <rump/rumpuser.h>
+
+#include "rump_private.h"
+#include "rumpkern_if_priv.h"
 
 const struct filterops sig_filtops = {
 	.f_attach = (void *)eopnotsupp,
@@ -92,7 +93,7 @@ rumpsig_raise(struct proc *p, int signo)
 	if (RUMP_LOCALPROC_P(p)) {
 		rumpuser_kill(p->p_pid, signo);
 	} else {
-		rump_sysproxy_raise(RUMP_SPVM2CTL(p->p_vmspace), signo);
+		rumpuser_sp_raise(p->p_vmspace->vm_map.pmap, signo);
 	}
 }
 

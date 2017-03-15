@@ -1,7 +1,7 @@
-/*	$NetBSD: cpuctl.c,v 1.28 2015/11/16 03:34:50 mrg Exp $	*/
+/*	$NetBSD: cpuctl.c,v 1.23.4.1 2014/12/21 19:28:38 snj Exp $	*/
 
 /*-
- * Copyright (c) 2007, 2008, 2009, 2012, 2015 The NetBSD Foundation, Inc.
+ * Copyright (c) 2007, 2008, 2009, 2012 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
@@ -31,7 +31,7 @@
 
 #ifndef lint
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: cpuctl.c,v 1.28 2015/11/16 03:34:50 mrg Exp $");
+__RCSID("$NetBSD: cpuctl.c,v 1.23.4.1 2014/12/21 19:28:38 snj Exp $");
 #endif /* not lint */
 
 #include <sys/param.h>
@@ -51,11 +51,10 @@ __RCSID("$NetBSD: cpuctl.c,v 1.28 2015/11/16 03:34:50 mrg Exp $");
 #include <util.h>
 #include <time.h>
 #include <sched.h>
-#include <stdbool.h>
 
 #include "cpuctl.h"
 
-static u_int	getcpuid(char *);
+static u_int	getcpuid(char **);
 __dead static void	usage(void);
 
 static void	cpu_identify(char **);
@@ -68,18 +67,18 @@ static void	cpu_ucode(char **);
 
 static struct cmdtab {
 	const char	*label;
-	bool	takesargs;
-	bool	argsoptional;
+	int	takesargs;
+	int	argsoptional;
 	void	(*func)(char **);
 } const cpu_cmdtab[] = {
-	{ "identify",	true,  false, cpu_identify },
-	{ "list",	false, false, cpu_list },
-	{ "offline",	true,  false, cpu_offline },
-	{ "online",	true,  false, cpu_online },
-	{ "intr",	true,  false, cpu_intr },
-	{ "nointr",	true,  false, cpu_nointr },
-	{ "ucode",	true,  true,  cpu_ucode },
-	{ NULL,		false, false, NULL },
+	{ "identify", 1, 0, cpu_identify },
+	{ "list", 0, 0, cpu_list },
+	{ "offline", 1, 0, cpu_offline },
+	{ "online", 1, 0, cpu_online },
+	{ "intr", 1, 0, cpu_intr },
+	{ "nointr", 1, 0, cpu_nointr },
+	{ "ucode", 1, 1, cpu_ucode },
+	{ NULL, 0, 0, NULL },
 };
 
 static int	fd;
@@ -138,7 +137,7 @@ usage(void)
 	fprintf(stderr, "       %s online cpuno\n", progname);
 	fprintf(stderr, "       %s intr cpuno\n", progname);
 	fprintf(stderr, "       %s nointr cpuno\n", progname);
-	fprintf(stderr, "       %s ucode [cpuno] [file]\n", progname);
+	fprintf(stderr, "       %s ucode [file]\n", progname);
 	exit(EXIT_FAILURE);
 	/* NOTREACHED */
 }
@@ -148,14 +147,12 @@ cpu_online(char **argv)
 {
 	cpustate_t cs;
 
-	for (; *argv; argv++) {
-		cs.cs_id = getcpuid(*argv);
-		if (ioctl(fd, IOC_CPU_GETSTATE, &cs) < 0)
-			err(EXIT_FAILURE, "IOC_CPU_GETSTATE");
-		cs.cs_online = true;
-		if (ioctl(fd, IOC_CPU_SETSTATE, &cs) < 0)
-			err(EXIT_FAILURE, "IOC_CPU_SETSTATE");
-	}
+	cs.cs_id = getcpuid(argv);
+	if (ioctl(fd, IOC_CPU_GETSTATE, &cs) < 0)
+		err(EXIT_FAILURE, "IOC_CPU_GETSTATE");
+	cs.cs_online = true;
+	if (ioctl(fd, IOC_CPU_SETSTATE, &cs) < 0)
+		err(EXIT_FAILURE, "IOC_CPU_SETSTATE");
 }
 
 static void
@@ -163,14 +160,12 @@ cpu_offline(char **argv)
 {
 	cpustate_t cs;
 
-	for (; *argv; argv++) {
-		cs.cs_id = getcpuid(*argv);
-		if (ioctl(fd, IOC_CPU_GETSTATE, &cs) < 0)
-			err(EXIT_FAILURE, "IOC_CPU_GETSTATE");
-		cs.cs_online = false;
-		if (ioctl(fd, IOC_CPU_SETSTATE, &cs) < 0)
-			err(EXIT_FAILURE, "IOC_CPU_SETSTATE");
-	}
+	cs.cs_id = getcpuid(argv);
+	if (ioctl(fd, IOC_CPU_GETSTATE, &cs) < 0)
+		err(EXIT_FAILURE, "IOC_CPU_GETSTATE");
+	cs.cs_online = false;
+	if (ioctl(fd, IOC_CPU_SETSTATE, &cs) < 0)
+		err(EXIT_FAILURE, "IOC_CPU_SETSTATE");
 }
 
 static void
@@ -178,14 +173,12 @@ cpu_intr(char **argv)
 {
 	cpustate_t cs;
 
-	for (; *argv; argv++) {
-		cs.cs_id = getcpuid(*argv);
-		if (ioctl(fd, IOC_CPU_GETSTATE, &cs) < 0)
-			err(EXIT_FAILURE, "IOC_CPU_GETSTATE");
-		cs.cs_intr = true;
-		if (ioctl(fd, IOC_CPU_SETSTATE, &cs) < 0)
-			err(EXIT_FAILURE, "IOC_CPU_SETSTATE");
-	}
+	cs.cs_id = getcpuid(argv);
+	if (ioctl(fd, IOC_CPU_GETSTATE, &cs) < 0)
+		err(EXIT_FAILURE, "IOC_CPU_GETSTATE");
+	cs.cs_intr = true;
+	if (ioctl(fd, IOC_CPU_SETSTATE, &cs) < 0)
+		err(EXIT_FAILURE, "IOC_CPU_SETSTATE");
 }
 
 static void
@@ -193,18 +186,16 @@ cpu_nointr(char **argv)
 {
 	cpustate_t cs;
 
-	for (; *argv; argv++) {
-		cs.cs_id = getcpuid(*argv);
-		if (ioctl(fd, IOC_CPU_GETSTATE, &cs) < 0)
-			err(EXIT_FAILURE, "IOC_CPU_GETSTATE");
-		cs.cs_intr = false;
-		if (ioctl(fd, IOC_CPU_SETSTATE, &cs) < 0) {
-			if (errno == EOPNOTSUPP) {
-				warnx("interrupt control not supported on "
-				    "this platform");
-			} else
-				err(EXIT_FAILURE, "IOC_CPU_SETSTATE");
-		}
+	cs.cs_id = getcpuid(argv);
+	if (ioctl(fd, IOC_CPU_GETSTATE, &cs) < 0)
+		err(EXIT_FAILURE, "IOC_CPU_GETSTATE");
+	cs.cs_intr = false;
+	if (ioctl(fd, IOC_CPU_SETSTATE, &cs) < 0) {
+		if (errno == EOPNOTSUPP) {
+			warnx("interrupt control not supported on "
+			    "this platform");
+		} else
+			err(EXIT_FAILURE, "IOC_CPU_SETSTATE");
 	}
 }
 
@@ -263,39 +254,37 @@ cpu_identify(char **argv)
 	cpuset_t *cpuset;
 
 	np = sysconf(_SC_NPROCESSORS_CONF);
-	for (; *argv; argv++) {
-		id = getcpuid(*argv);
-		snprintf(name, sizeof(name), "cpu%u", id);
+	id = getcpuid(argv);
+	snprintf(name, sizeof(name), "cpu%u", id);
 
-		if (np != 1) {
-			cpuset = cpuset_create();
-			if (cpuset == NULL)
-				err(EXIT_FAILURE, "cpuset_create");
-			cpuset_zero(cpuset);
-			cpuset_set(id, cpuset);
-			if (_sched_setaffinity(0, 0, cpuset_size(cpuset), cpuset) < 0) {
-				if (errno == EPERM) {
-					printf("Cannot bind to target CPU.  Output "
-					    "may not accurately describe the target.\n"
-					    "Run as root to allow binding.\n\n");
-				} else { 
-					err(EXIT_FAILURE, "_sched_setaffinity");
-				}
+	if (np != 1) {
+		cpuset = cpuset_create();
+		if (cpuset == NULL)
+			err(EXIT_FAILURE, "cpuset_create");
+		cpuset_zero(cpuset);
+		cpuset_set(id, cpuset);
+		if (_sched_setaffinity(0, 0, cpuset_size(cpuset), cpuset) < 0) {
+			if (errno == EPERM) {
+				printf("Cannot bind to target CPU.  Output "
+				    "may not accurately describe the target.\n"
+				    "Run as root to allow binding.\n\n");
+			} else { 
+				err(EXIT_FAILURE, "_sched_setaffinity");
 			}
-			cpuset_destroy(cpuset);
 		}
-		identifycpu(fd, name);
+		cpuset_destroy(cpuset);
 	}
+	identifycpu(fd, name);
 }
 
 static u_int
-getcpuid(char *arg)
+getcpuid(char **argv)
 {
 	char *argp;
 	u_int id;
 	long np;
 
-	id = (u_int)strtoul(arg, &argp, 0);
+	id = (u_int)strtoul(argv[0], &argp, 0);
 	if (*argp != '\0')
 		usage();
 

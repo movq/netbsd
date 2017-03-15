@@ -21,6 +21,10 @@ enum Enum {
   Enum_value, // expected-warning {{commas at the end of enumerator lists are incompatible with C++98}}
 };
 
+template<typename T> struct InstantiationAfterSpecialization {};
+template<> struct InstantiationAfterSpecialization<int> {}; // expected-note {{here}}
+template struct InstantiationAfterSpecialization<int>; // expected-warning {{explicit instantiation of 'InstantiationAfterSpecialization<int>' that occurs after an explicit specialization is incompatible with C++98}}
+
 void *dlsym();
 void (*FnPtr)() = (void(*)())dlsym(); // expected-warning {{cast between pointer-to-function and pointer-to-object is incompatible with C++98}}
 void *FnVoidPtr = (void*)&dlsym; // expected-warning {{cast between pointer-to-function and pointer-to-object is incompatible with C++98}}
@@ -55,7 +59,7 @@ namespace CopyCtorIssues {
     Private(const Private&); // expected-note {{declared private here}}
   };
   struct NoViable {
-    NoViable(); // expected-note {{not viable}}
+    NoViable();
     NoViable(NoViable&); // expected-note {{not viable}}
   };
   struct Ambiguous {

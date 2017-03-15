@@ -35,7 +35,7 @@
 
 #include <sys/cdefs.h>
 
-__KERNEL_RCSID(1, "$NetBSD: bcm53xx_eth.c,v 1.29 2016/12/15 09:28:02 ozaki-r Exp $");
+__KERNEL_RCSID(1, "$NetBSD: bcm53xx_eth.c,v 1.26 2014/02/23 21:19:06 matt Exp $");
 
 #include <sys/param.h>
 #include <sys/atomic.h>
@@ -401,9 +401,8 @@ bcmeth_ccb_attach(device_t parent, device_t self, void *aux)
 	/*
 	 * Attach the interface.
 	 */
-	if_initialize(ifp);
+	if_attach(ifp);
 	ether_ifattach(ifp, sc->sc_enaddr);
-	if_register(ifp);
 
 #ifdef BCMETH_COUNTERS
 	evcnt_attach_dynamic(&sc->sc_ev_intr, EVCNT_TYPE_INTR,
@@ -1011,8 +1010,9 @@ bcmeth_rx_input(
 		|| *(uint32_t *)&m->m_data[2] != sc->sc_macaddr[1])) {
 		m->m_flags |= M_PROMISC;
 	}
-	m_set_rcvif(m, ifp);
+	m->m_pkthdr.rcvif = ifp;
 
+	ifp->if_ipackets++;
 	ifp->if_ibytes += m->m_pkthdr.len;
 
 	/*
@@ -1020,11 +1020,12 @@ bcmeth_rx_input(
 	 */
 #ifdef BCMETH_MPSAFE
 	mutex_exit(sc->sc_lock);
-	if_input(ifp, m);
+	(*ifp->if_input)(ifp, m);
 	mutex_enter(sc->sc_lock);
 #else
 	int s = splnet();
-	if_input(ifp, m);
+	bpf_mtap(ifp, m);
+	(*ifp->if_input)(ifp, m);
 	splx(s);
 #endif
 }

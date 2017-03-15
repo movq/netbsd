@@ -1,21 +1,18 @@
-#	$NetBSD: Makefile.usbdevs,v 1.8 2016/10/26 01:03:23 pgoyette Exp $
-#
-# As per tron@NetBSD.org, the proper procedure is
-#
-# 1.) Change "src/sys/dev/usb/usbdevs".
-# 2.) Commit "src/sys/dev/usb/usbdevs".
-# 3.) Execute "make -f Makefile.usbdevs" in "src/sys/dev/usb".
+#	$NetBSD: Makefile.usbdevs,v 1.6 2009/10/12 22:28:47 wiz Exp $
 
-# 4.) Ensure that the value of USB_MAX_STRING_LEN is at least as large as
-#     the values reported.  If necessary, update "src/sys/dev/usb/usb.h"
-#     and bump the kernel version in "src/sys/sys/param/h".
-# 5.) Commit "src/sys/dev/usb/usbdevs.h" and "src/sys/dev/usb/usbdevs_data.h";
-#     if you changed them, also commit "src/sys/dev/usb/usb.h" and
-#     "src/sys/sys/param/h".
-
+#	The header files depend on the correct version of usbdevs.
+#
+#	Thus, the procedure is:
+#	  1) change usbdevs
+#	  2) commit usbdevs
+#	  3) _then_ generate header files
+#	  4) commit them
 
 .include <bsd.own.mk>
 
-usbdevs.h usbdevs_data.h: ${.CURDIR}/../devlist2h.awk usbdevs
-	/bin/rm -f usbdevs.h usbdevs_data.h
-	${TOOL_AWK} -f ${.ALLSRC}
+UNAME=	uname
+RM=	rm
+
+usbdevs.h usbdevs_data.h: usbdevs devlist2h.awk
+	${RM} -f usbdevs.h usbdevs_data.h
+	${TOOL_AWK} -v os=`${UNAME} -s` -f devlist2h.awk usbdevs

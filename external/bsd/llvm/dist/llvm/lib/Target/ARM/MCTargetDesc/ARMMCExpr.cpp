@@ -10,18 +10,17 @@
 #include "ARMMCExpr.h"
 #include "llvm/MC/MCAssembler.h"
 #include "llvm/MC/MCContext.h"
-#include "llvm/MC/MCStreamer.h"
 using namespace llvm;
 
 #define DEBUG_TYPE "armmcexpr"
 
 const ARMMCExpr*
-ARMMCExpr::create(VariantKind Kind, const MCExpr *Expr,
+ARMMCExpr::Create(VariantKind Kind, const MCExpr *Expr,
                        MCContext &Ctx) {
   return new (Ctx) ARMMCExpr(Kind, Expr);
 }
 
-void ARMMCExpr::printImpl(raw_ostream &OS, const MCAsmInfo *MAI) const {
+void ARMMCExpr::PrintImpl(raw_ostream &OS) const {
   switch (Kind) {
   default: llvm_unreachable("Invalid kind!");
   case VK_ARM_HI16: OS << ":upper16:"; break;
@@ -31,7 +30,7 @@ void ARMMCExpr::printImpl(raw_ostream &OS, const MCAsmInfo *MAI) const {
   const MCExpr *Expr = getSubExpr();
   if (Expr->getKind() != MCExpr::SymbolRef)
     OS << '(';
-  Expr->print(OS, MAI);
+  Expr->print(OS);
   if (Expr->getKind() != MCExpr::SymbolRef)
     OS << ')';
 }

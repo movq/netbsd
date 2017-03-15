@@ -8,8 +8,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "llvm-c/BitReader.h"
-#include "llvm-c/Core.h"
-#include "llvm/Bitcode/BitcodeReader.h"
+#include "llvm/Bitcode/ReaderWriter.h"
 #include "llvm/IR/DiagnosticPrinter.h"
 #include "llvm/IR/LLVMContext.h"
 #include "llvm/IR/Module.h"
@@ -23,15 +22,10 @@ using namespace llvm;
 /* Builds a module from the bitcode in the specified memory buffer, returning a
    reference to the module via the OutModule parameter. Returns 0 on success.
    Optionally returns a human-readable error message via OutMessage. */
-LLVMBool LLVMParseBitcode(LLVMMemoryBufferRef MemBuf, LLVMModuleRef *OutModule,
-                          char **OutMessage) {
-  return LLVMParseBitcodeInContext(LLVMGetGlobalContext(), MemBuf, OutModule,
+LLVMBool LLVMParseBitcode(LLVMMemoryBufferRef MemBuf,
+                          LLVMModuleRef *OutModule, char **OutMessage) {
+  return LLVMParseBitcodeInContext(wrap(&getGlobalContext()), MemBuf, OutModule,
                                    OutMessage);
-}
-
-LLVMBool LLVMParseBitcode2(LLVMMemoryBufferRef MemBuf,
-                           LLVMModuleRef *OutModule) {
-  return LLVMParseBitcodeInContext2(LLVMGetGlobalContext(), MemBuf, OutModule);
 }
 
 LLVMBool LLVMParseBitcodeInContext(LLVMContextRef ContextRef,
@@ -41,36 +35,22 @@ LLVMBool LLVMParseBitcodeInContext(LLVMContextRef ContextRef,
   MemoryBufferRef Buf = unwrap(MemBuf)->getMemBufferRef();
   LLVMContext &Ctx = *unwrap(ContextRef);
 
-  Expected<std::unique_ptr<Module>> ModuleOrErr = parseBitcodeFile(Buf, Ctx);
-  if (Error Err = ModuleOrErr.takeError()) {
-    std::string Message;
-    handleAllErrors(std::move(Err), [&](ErrorInfoBase &EIB) {
-      Message = EIB.message();
-    });
-    if (OutMessage)
-      *OutMessage = strdup(Message.c_str());
-    *OutModule = wrap((Module *)nullptr);
-    return 1;
-  }
+  std::string Message;
+  raw_string_ostream Stream(Message);
+  DiagnosticPrinterRawOStream DP(Stream);
 
-  *OutModule = wrap(ModuleOrErr.get().release());
-  return 0;
-}
-
-LLVMBool LLVMParseBitcodeInContext2(LLVMContextRef ContextRef,
-                                    LLVMMemoryBufferRef MemBuf,
-                                    LLVMModuleRef *OutModule) {
-  MemoryBufferRef Buf = unwrap(MemBuf)->getMemBufferRef();
-  LLVMContext &Ctx = *unwrap(ContextRef);
-
-  ErrorOr<std::unique_ptr<Module>> ModuleOrErr =
-      expectedToErrorOrAndEmitErrors(Ctx, parseBitcodeFile(Buf, Ctx));
+  ErrorOr<Module *> ModuleOrErr = parseBitcodeFile(
+      Buf, Ctx, [&](const DiagnosticInfo &DI) { DI.print(DP); });
   if (ModuleOrErr.getError()) {
-    *OutModule = wrap((Module *)nullptr);
+    if (OutMessage) {
+      Stream.flush();
+      *OutMessage = strdup(Message.c_str());
+    }
+    *OutModule = wrap((Module*)nullptr);
     return 1;
   }
 
-  *OutModule = wrap(ModuleOrErr.get().release());
+  *OutModule = wrap(ModuleOrErr.get());
   return 0;
 }
 
@@ -79,48 +59,26 @@ LLVMBool LLVMParseBitcodeInContext2(LLVMContextRef ContextRef,
    Optionally returns a human-readable error message via OutMessage. */
 LLVMBool LLVMGetBitcodeModuleInContext(LLVMContextRef ContextRef,
                                        LLVMMemoryBufferRef MemBuf,
-                                       LLVMModuleRef *OutM, char **OutMessage) {
-  LLVMContext &Ctx = *unwrap(ContextRef);
-  std::unique_ptr<MemoryBuffer> Owner(unwrap(MemBuf));
-  Expected<std::unique_ptr<Module>> ModuleOrErr =
-      getOwningLazyBitcodeModule(std::move(Owner), Ctx);
-  // Release the buffer if we didn't take ownership of it since we never owned
-  // it anyway.
-  (void)Owner.release();
-
-  if (Error Err = ModuleOrErr.takeError()) {
-    std::string Message;
-    handleAllErrors(std::move(Err), [&](ErrorInfoBase &EIB) {
-      Message = EIB.message();
-    });
-    if (OutMessage)
-      *OutMessage = strdup(Message.c_str());
-    *OutM = wrap((Module *)nullptr);
-    return 1;
-  }
-
-  *OutM = wrap(ModuleOrErr.get().release());
-
-  return 0;
-}
-
-LLVMBool LLVMGetBitcodeModuleInContext2(LLVMContextRef ContextRef,
-                                        LLVMMemoryBufferRef MemBuf,
-                                        LLVMModuleRef *OutM) {
-  LLVMContext &Ctx = *unwrap(ContextRef);
+                                       LLVMModuleRef *OutM,
+                                       char **OutMessage) {
+  std::string Message;
   std::unique_ptr<MemoryBuffer> Owner(unwrap(MemBuf));
 
-  ErrorOr<std::unique_ptr<Module>> ModuleOrErr = expectedToErrorOrAndEmitErrors(
-      Ctx, getOwningLazyBitcodeModule(std::move(Owner), Ctx));
+  ErrorOr<Module *> ModuleOrErr =
+      getLazyBitcodeModule(std::move(Owner), *unwrap(ContextRef));
   Owner.release();
 
-  if (ModuleOrErr.getError()) {
+  if (std::error_code EC = ModuleOrErr.getError()) {
     *OutM = wrap((Module *)nullptr);
+    if (OutMessage)
+      *OutMessage = strdup(EC.message().c_str());
     return 1;
   }
 
-  *OutM = wrap(ModuleOrErr.get().release());
+  *OutM = wrap(ModuleOrErr.get());
+
   return 0;
+
 }
 
 LLVMBool LLVMGetBitcodeModule(LLVMMemoryBufferRef MemBuf, LLVMModuleRef *OutM,
@@ -129,7 +87,20 @@ LLVMBool LLVMGetBitcodeModule(LLVMMemoryBufferRef MemBuf, LLVMModuleRef *OutM,
                                        OutMessage);
 }
 
-LLVMBool LLVMGetBitcodeModule2(LLVMMemoryBufferRef MemBuf,
-                               LLVMModuleRef *OutM) {
-  return LLVMGetBitcodeModuleInContext2(LLVMGetGlobalContext(), MemBuf, OutM);
+/* Deprecated: Use LLVMGetBitcodeModuleInContext instead. */
+LLVMBool LLVMGetBitcodeModuleProviderInContext(LLVMContextRef ContextRef,
+                                               LLVMMemoryBufferRef MemBuf,
+                                               LLVMModuleProviderRef *OutMP,
+                                               char **OutMessage) {
+  return LLVMGetBitcodeModuleInContext(ContextRef, MemBuf,
+                                       reinterpret_cast<LLVMModuleRef*>(OutMP),
+                                       OutMessage);
+}
+
+/* Deprecated: Use LLVMGetBitcodeModule instead. */
+LLVMBool LLVMGetBitcodeModuleProvider(LLVMMemoryBufferRef MemBuf,
+                                      LLVMModuleProviderRef *OutMP,
+                                      char **OutMessage) {
+  return LLVMGetBitcodeModuleProviderInContext(LLVMGetGlobalContext(), MemBuf,
+                                               OutMP, OutMessage);
 }

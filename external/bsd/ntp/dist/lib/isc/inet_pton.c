@@ -1,4 +1,4 @@
-/*	$NetBSD: inet_pton.c,v 1.7 2016/01/08 21:35:36 christos Exp $	*/
+/*	$NetBSD: inet_pton.c,v 1.4.4.2 2016/05/11 11:35:37 martin Exp $	*/
 
 /*
  * Copyright (C) 2004, 2005, 2007  Internet Systems Consortium, Inc. ("ISC")

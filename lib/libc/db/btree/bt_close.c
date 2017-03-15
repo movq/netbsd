@@ -1,4 +1,4 @@
-/*	$NetBSD: bt_close.c,v 1.17 2016/09/24 21:31:25 christos Exp $	*/
+/*	$NetBSD: bt_close.c,v 1.14 2008/09/11 12:58:00 joerg Exp $	*/
 
 /*-
  * Copyright (c) 1990, 1993, 1994
@@ -37,7 +37,7 @@
 #endif
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: bt_close.c,v 1.17 2016/09/24 21:31:25 christos Exp $");
+__RCSID("$NetBSD: bt_close.c,v 1.14 2008/09/11 12:58:00 joerg Exp $");
 
 #include "namespace.h"
 
@@ -136,8 +136,7 @@ __bt_sync(const DB *dbp, u_int flags)
 		return (RET_ERROR);
 	}
 
-	if (F_ISSET(t, B_INMEM | B_RDONLY)
-	    || !F_ISSET(t, B_MODIFIED | B_METADIRTY))
+	if (F_ISSET(t, B_INMEM | B_RDONLY) || !F_ISSET(t, B_MODIFIED))
 		return (RET_SUCCESS);
 
 	if (F_ISSET(t, B_METADIRTY) && bt_meta(t) == RET_ERROR)

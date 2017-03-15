@@ -2,10 +2,10 @@
 
 // PR15768
 
-// A trivial 20 byte struct is returned indirectly and taken as byval.
+// A trivial 12 byte struct is returned indirectly.
 struct S {
   S();
-  int a, b, c, d, e;
+  int a, b, c;
 };
 
 struct C {

@@ -1,4 +1,4 @@
-/* $NetBSD: amlogic_var.h,v 1.12 2015/11/21 00:54:57 jmcneill Exp $ */
+/* $NetBSD: amlogic_var.h,v 1.8.2.2 2015/03/21 08:51:17 snj Exp $ */
 
 /*-
  * Copyright (c) 2015 Jared D. McNeill <jmcneill@invisible.ca>
@@ -49,8 +49,8 @@ struct amlogicio_attach_args {
 	bus_dma_tag_t aio_dmat;
 };
 
-extern struct bus_space armv7_generic_bs_tag;
-extern struct bus_space armv7_generic_a4x_bs_tag;
+extern struct bus_space amlogic_bs_tag;
+extern struct bus_space amlogic_a4x_bs_tag;
 extern bus_space_handle_t amlogic_core_bsh;
 extern struct arm32_bus_dma_tag amlogic_dma_tag;
 
@@ -59,35 +59,20 @@ void	amlogic_bootstrap(void);
 void	amlogic_cpufreq_bootstrap(void);
 void	amlogic_cpufreq_init(void);
 
-void	amlogic_wdog_init(void);
 void	amlogic_usbphy_init(int);
 void	amlogic_eth_init(void);
 void	amlogic_rng_init(void);
 void	amlogic_sdhc_init(void);
-void	amlogic_sdio_init(void);
 
 int	amlogic_sdhc_select_port(int);
-void	amlogic_sdhc_reset_port(int);
-bool	amlogic_sdhc_is_removable(int);
-bool	amlogic_sdhc_is_card_present(int);
-#define AMLOGIC_SDHC_PORT_A	0
 #define AMLOGIC_SDHC_PORT_B	1
 #define AMLOGIC_SDHC_PORT_C	2
-void	amlogic_sdhc_set_voltage(int, int);
-#define AMLOGIC_SDHC_VOL_330	0
-#define AMLOGIC_SDHC_VOL_180	1
-
-int	amlogic_sdio_select_port(int);
-#define AMLOGIC_SDIO_PORT_A	0
-#define AMLOGIC_SDIO_PORT_B	1
-#define AMLOGIC_SDIO_PORT_C	2
 
 uint32_t amlogic_get_rate_xtal(void);
 uint32_t amlogic_get_rate_sys(void);
 uint32_t amlogic_get_rate_fixed(void);
 uint32_t amlogic_get_rate_a9(void);
 uint32_t amlogic_get_rate_a9periph(void);
-uint32_t amlogic_get_rate_clk81(void);
 
 void	amlogic_genfb_ddb_trap_callback(int);
 void	amlogic_genfb_set_console_dev(device_t);

@@ -1,4 +1,4 @@
-/*	$NetBSD: ftp.c,v 1.167 2016/10/04 15:06:31 joerg Exp $	*/
+/*	$NetBSD: ftp.c,v 1.164.10.1 2016/03/13 11:49:14 martin Exp $	*/
 
 /*-
  * Copyright (c) 1996-2009 The NetBSD Foundation, Inc.
@@ -92,7 +92,7 @@
 #if 0
 static char sccsid[] = "@(#)ftp.c	8.6 (Berkeley) 10/27/94";
 #else
-__RCSID("$NetBSD: ftp.c,v 1.167 2016/10/04 15:06:31 joerg Exp $");
+__RCSID("$NetBSD: ftp.c,v 1.164.10.1 2016/03/13 11:49:14 martin Exp $");
 #endif
 #endif /* not lint */
 
@@ -2064,7 +2064,7 @@ abort_squared(int dummy)
 void
 abort_remote(FILE *din)
 {
-	unsigned char buf[BUFSIZ];
+	char buf[BUFSIZ];
 	int nfnd;
 
 	if (cout == NULL) {

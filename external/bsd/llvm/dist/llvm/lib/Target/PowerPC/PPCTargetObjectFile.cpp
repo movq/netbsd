@@ -22,8 +22,9 @@ Initialize(MCContext &Ctx, const TargetMachine &TM) {
   InitializeELF(TM.Options.UseInitArray);
 }
 
-MCSection *PPC64LinuxTargetObjectFile::SelectSectionForGlobal(
-    const GlobalObject *GO, SectionKind Kind, const TargetMachine &TM) const {
+const MCSection *PPC64LinuxTargetObjectFile::SelectSectionForGlobal(
+    const GlobalValue *GV, SectionKind Kind, Mangler &Mang,
+    const TargetMachine &TM) const {
   // Here override ReadOnlySection to DataRelROSection for PPC64 SVR4 ABI
   // when we have a constant that contains global relocations.  This is
   // necessary because of this ABI's handling of pointers to functions in
@@ -39,21 +40,24 @@ MCSection *PPC64LinuxTargetObjectFile::SelectSectionForGlobal(
   // For more information, see the description of ELIMINATE_COPY_RELOCS in
   // GNU ld.
   if (Kind.isReadOnly()) {
-    const auto *GVar = dyn_cast<GlobalVariable>(GO);
+    const GlobalVariable *GVar = dyn_cast<GlobalVariable>(GV);
 
-    if (GVar && GVar->isConstant() && GVar->getInitializer()->needsRelocation())
+    if (GVar && GVar->isConstant() &&
+        (GVar->getInitializer()->getRelocationInfo() ==
+         Constant::GlobalRelocations))
       Kind = SectionKind::getReadOnlyWithRel();
   }
 
-  return TargetLoweringObjectFileELF::SelectSectionForGlobal(GO, Kind, TM);
+  return TargetLoweringObjectFileELF::SelectSectionForGlobal(GV, Kind,
+                                                             Mang, TM);
 }
 
 const MCExpr *PPC64LinuxTargetObjectFile::
 getDebugThreadLocalSymbol(const MCSymbol *Sym) const {
   const MCExpr *Expr =
-    MCSymbolRefExpr::create(Sym, MCSymbolRefExpr::VK_DTPREL, getContext());
-  return MCBinaryExpr::createAdd(Expr,
-                                 MCConstantExpr::create(0x8000, getContext()),
+    MCSymbolRefExpr::Create(Sym, MCSymbolRefExpr::VK_PPC_DTPREL, getContext());
+  return MCBinaryExpr::CreateAdd(Expr,
+                                 MCConstantExpr::Create(0x8000, getContext()),
                                  getContext());
 }
 

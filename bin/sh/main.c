@@ -1,4 +1,4 @@
-/*	$NetBSD: main.c,v 1.67 2016/05/09 21:03:10 kre Exp $	*/
+/*	$NetBSD: main.c,v 1.58 2014/05/31 14:42:18 christos Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993
@@ -42,7 +42,7 @@ __COPYRIGHT("@(#) Copyright (c) 1991, 1993\
 #if 0
 static char sccsid[] = "@(#)main.c	8.7 (Berkeley) 7/19/95";
 #else
-__RCSID("$NetBSD: main.c,v 1.67 2016/05/09 21:03:10 kre Exp $");
+__RCSID("$NetBSD: main.c,v 1.58 2014/05/31 14:42:18 christos Exp $");
 #endif
 #endif /* not lint */
 
@@ -82,6 +82,7 @@ __RCSID("$NetBSD: main.c,v 1.67 2016/05/09 21:03:10 kre Exp $");
 
 int rootpid;
 int rootshell;
+int posix;
 #if PROFILE
 short profile_buf[16384];
 extern int etext();
@@ -105,11 +106,6 @@ main(int argc, char **argv)
 	struct stackmark smark;
 	volatile int state;
 	char *shinit;
-	uid_t uid;
-	gid_t gid;
-
-	uid = getuid();
-	gid = getgid();
 
 	setlocale(LC_ALL, "");
 
@@ -149,7 +145,11 @@ main(int argc, char **argv)
 				exitshell(exitstatus);
 		}
 		reset();
-		if (exception == EXINT) {
+		if (exception == EXINT
+#if ATTY
+		 && (! attyset() || equal(termval(), "emacs"))
+#endif
+		 ) {
 			out2c('\n');
 			flushout(&errout);
 		}
@@ -178,18 +178,6 @@ main(int argc, char **argv)
 	initpwd();
 	setstackmark(&smark);
 	procargs(argc, argv);
-
-	/*
-	 * Limit bogus system(3) or popen(3) calls in setuid binaries,
-	 * by requiring the -p flag
-	 */
-	if (!pflag && (uid != geteuid() || gid != getegid())) {
-		setuid(uid);
-		setgid(gid);
-		/* PS1 might need to be changed accordingly. */
-		choose_ps1();
-	}
-
 	if (argv[0] && argv[0][0] == '-') {
 		state = 1;
 		read_profile("/etc/profile");
@@ -263,18 +251,14 @@ cmdloop(int top)
 			showjobs(out2, SHOW_CHANGED);
 			chkmail(0);
 			flushout(&errout);
-			nflag = 0;
 		}
 		n = parsecmd(inter);
-		TRACE(("cmdloop: "); showtree(n));
 		/* showtree(n); DEBUG */
 		if (n == NEOF) {
 			if (!top || numeof >= 50)
 				break;
-			if (nflag)
-				break;
 			if (!stoppedjobs()) {
-				if (!iflag || !Iflag)
+				if (!Iflag)
 					break;
 				out2str("\nUse \"exit\" to leave shell.\n");
 			}
@@ -282,7 +266,7 @@ cmdloop(int top)
 		} else if (n != NULL && nflag == 0) {
 			job_warning = (job_warning == 2) ? 1 : 0;
 			numeof = 0;
-			evaltree(n, EV_MORE);
+			evaltree(n, 0);
 		}
 		popstackmark(&smark);
 		setstackmark(&smark);

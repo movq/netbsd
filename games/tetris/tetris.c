@@ -1,4 +1,4 @@
-/*	$NetBSD: tetris.c,v 1.32 2016/03/03 21:38:55 nat Exp $	*/
+/*	$NetBSD: tetris.c,v 1.27.2.1 2015/03/18 08:14:17 snj Exp $	*/
 
 /*-
  * Copyright (c) 1992, 1993
@@ -62,7 +62,6 @@ __COPYRIGHT("@(#) Copyright (c) 1992, 1993\
 cell	board[B_SIZE];		/* 1 => occupied, 0 => empty */
 
 int	Rows, Cols;		/* current screen size */
-int	Offset;			/* used to center board & shapes */
 
 static const struct shape *curshape;
 const struct shape *nextshape;
@@ -117,8 +116,6 @@ elide(void)
 				tsleep();
 				while (--base != 0)
 					board[base + B_COLS] = board[base];
-				/* don't forget to clear 0th row */
-				memset(&board[1], 0, B_COLS - 2);
 				scr_update();
 				tsleep();
 				break;
@@ -199,7 +196,7 @@ main(int argc, char *argv[])
 	}
 
 	snprintf(key_msg, sizeof(key_msg),
-"%s - left  %s - rotate  %s - right  %s - drop  %s - pause  %s - quit  %s - down",
+"%s - left   %s - rotate   %s - right   %s - drop   %s - pause   %s - quit   %s - down",
 		key_write[0], key_write[1], key_write[2], key_write[3],
 		key_write[4], key_write[5], key_write[6]);
 
@@ -344,7 +341,7 @@ onintr(int signo __unused)
 static void
 usage(void)
 {
-	(void)fprintf(stderr, "usage: %s [-bps] [-k keys] [-l level]\n",
+	(void)fprintf(stderr, "usage: %s [-ps] [-k keys] [-l level]\n",
 	    getprogname());
 	exit(1);
 }

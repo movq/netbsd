@@ -1,4 +1,4 @@
-/*	$NetBSD: rc.c,v 1.8 2016/06/08 01:11:49 christos Exp $	*/
+/*	$NetBSD: rc.c,v 1.7 2011/05/24 13:08:16 joerg Exp $	*/
 
 /*
  * Copyright (c) 1993-95 Mats O Jansson.  All rights reserved.
@@ -24,9 +24,9 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "port.h"
+#include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: rc.c,v 1.8 2016/06/08 01:11:49 christos Exp $");
+__RCSID("$NetBSD: rc.c,v 1.7 2011/05/24 13:08:16 joerg Exp $");
 #endif
 
 #include "os.h"

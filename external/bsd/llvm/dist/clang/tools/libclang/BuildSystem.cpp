@@ -16,15 +16,15 @@
 #include "clang/Basic/VirtualFileSystem.h"
 #include "llvm/ADT/SmallString.h"
 #include "llvm/Support/CBindingWrapping.h"
-#include "llvm/Support/Chrono.h"
 #include "llvm/Support/Path.h"
+#include "llvm/Support/TimeValue.h"
 #include "llvm/Support/raw_ostream.h"
 
 using namespace clang;
 using namespace llvm::sys;
 
 unsigned long long clang_getBuildSessionTimestamp(void) {
-  return llvm::sys::toTimeT(std::chrono::system_clock::now());
+  return llvm::sys::TimeValue::now().toEpochTime();
 }
 
 DEFINE_SIMPLE_CONVERSION_FUNCTIONS(clang::vfs::YAMLVFSWriter,
@@ -82,10 +82,6 @@ clang_VirtualFileOverlay_writeToBuffer(CXVirtualFileOverlay VFO, unsigned,
   *out_buffer_size = Data.size();
   memcpy(*out_buffer_ptr, Data.data(), Data.size());
   return CXError_Success;
-}
-
-void clang_free(void *buffer) {
-  free(buffer);
 }
 
 void clang_VirtualFileOverlay_dispose(CXVirtualFileOverlay VFO) {

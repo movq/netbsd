@@ -1,4 +1,4 @@
-/*	$NetBSD: mesh.c,v 1.38 2017/02/15 12:39:29 tsutsui Exp $	*/
+/*	$NetBSD: mesh.c,v 1.36 2014/03/14 21:59:41 mrg Exp $	*/
 
 /*-
  * Copyright (c) 2000	Tsubai Masanari.
@@ -33,7 +33,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: mesh.c,v 1.38 2017/02/15 12:39:29 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: mesh.c,v 1.36 2014/03/14 21:59:41 mrg Exp $");
 
 #include <sys/param.h>
 #include <sys/buf.h>
@@ -236,7 +236,7 @@ mesh_attach(device_t parent, device_t self, void *aux)
 	for (i = 0; i < sizeof(sc->sc_scb)/sizeof(sc->sc_scb[0]); i++)
 		TAILQ_INSERT_TAIL(&sc->free_scb, &sc->sc_scb[i], chain);
 
-	sc->sc_dmacmd = dbdma_alloc(sizeof(dbdma_command_t) * 20, NULL);
+	sc->sc_dmacmd = dbdma_alloc(sizeof(dbdma_command_t) * 20);
 
 	mesh_reset(sc);
 	mesh_bus_reset(sc);
@@ -264,7 +264,7 @@ mesh_attach(device_t parent, device_t self, void *aux)
 	intr_establish(sc->sc_irq, IST_EDGE, IPL_BIO, mesh_intr, sc);
 
 	/* Reset SCSI bus when halt. */
-	if (!pmf_device_register1(self, NULL, NULL, mesh_shutdown))
+	if (pmf_device_register1(self, NULL, NULL, mesh_shutdown))
 		aprint_error_dev(self, "couldn't establish power handler\n");
 }
 

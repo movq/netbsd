@@ -18,7 +18,7 @@
 #include "llvm/Support/ConvertUTF.h"
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/Locale.h"
-#include "llvm/Support/Path.h"
+#include "llvm/Support/MemoryBuffer.h"
 #include "llvm/Support/raw_ostream.h"
 #include <algorithm>
 
@@ -119,17 +119,16 @@ printableTextForNextCharacter(StringRef SourceLine, size_t *i,
   begin = reinterpret_cast<unsigned char const *>(&*(SourceLine.begin() + *i));
   end = begin + (SourceLine.size() - *i);
   
-  if (llvm::isLegalUTF8Sequence(begin, end)) {
-    llvm::UTF32 c;
-    llvm::UTF32 *cptr = &c;
+  if (isLegalUTF8Sequence(begin, end)) {
+    UTF32 c;
+    UTF32 *cptr = &c;
     unsigned char const *original_begin = begin;
-    unsigned char const *cp_end =
-        begin + llvm::getNumBytesForUTF8(SourceLine[*i]);
+    unsigned char const *cp_end = begin+getNumBytesForUTF8(SourceLine[*i]);
 
-    llvm::ConversionResult res = llvm::ConvertUTF8toUTF32(
-        &begin, cp_end, &cptr, cptr + 1, llvm::strictConversion);
+    ConversionResult res = ConvertUTF8toUTF32(&begin, cp_end, &cptr, cptr+1,
+                                              strictConversion);
     (void)res;
-    assert(llvm::conversionOK == res);
+    assert(conversionOK==res);
     assert(0 < begin-original_begin
            && "we must be further along in the string now");
     *i += begin-original_begin;
@@ -765,22 +764,6 @@ void TextDiagnostic::printDiagnosticMessage(raw_ostream &OS,
   OS << '\n';
 }
 
-void TextDiagnostic::emitFilename(StringRef Filename, const SourceManager &SM) {
-  SmallVector<char, 128> AbsoluteFilename;
-  if (DiagOpts->AbsolutePath) {
-    const DirectoryEntry *Dir = SM.getFileManager().getDirectory(
-        llvm::sys::path::parent_path(Filename));
-    if (Dir) {
-      StringRef DirName = SM.getFileManager().getCanonicalName(Dir);
-      llvm::sys::path::append(AbsoluteFilename, DirName,
-                              llvm::sys::path::filename(Filename));
-      Filename = StringRef(AbsoluteFilename.data(), AbsoluteFilename.size());
-    }
-  }
-
-  OS << Filename;
-}
-
 /// \brief Print out the file/line/column information and include trace.
 ///
 /// This method handlen the emission of the diagnostic location information.
@@ -794,10 +777,10 @@ void TextDiagnostic::emitDiagnosticLoc(SourceLocation Loc, PresumedLoc PLoc,
   if (PLoc.isInvalid()) {
     // At least print the file name if available:
     FileID FID = SM.getFileID(Loc);
-    if (FID.isValid()) {
+    if (!FID.isInvalid()) {
       const FileEntry* FE = SM.getFileEntryForID(FID);
       if (FE && FE->isValid()) {
-        emitFilename(FE->getName(), SM);
+        OS << FE->getName();
         if (FE->isInPCH())
           OS << " (in PCH)";
         OS << ": ";
@@ -813,21 +796,21 @@ void TextDiagnostic::emitDiagnosticLoc(SourceLocation Loc, PresumedLoc PLoc,
   if (DiagOpts->ShowColors)
     OS.changeColor(savedColor, true);
 
-  emitFilename(PLoc.getFilename(), SM);
+  OS << PLoc.getFilename();
   switch (DiagOpts->getFormat()) {
   case DiagnosticOptions::Clang: OS << ':'  << LineNo; break;
-  case DiagnosticOptions::MSVC:  OS << '('  << LineNo; break;
+  case DiagnosticOptions::Msvc:  OS << '('  << LineNo; break;
   case DiagnosticOptions::Vi:    OS << " +" << LineNo; break;
   }
 
   if (DiagOpts->ShowColumn)
     // Compute the column number.
     if (unsigned ColNo = PLoc.getColumn()) {
-      if (DiagOpts->getFormat() == DiagnosticOptions::MSVC) {
+      if (DiagOpts->getFormat() == DiagnosticOptions::Msvc) {
         OS << ',';
         // Visual Studio 2010 or earlier expects column number to be off by one
         if (LangOpts.MSCompatibilityVersion &&
-            !LangOpts.isCompatibleWithMSVC(LangOptions::MSVC2012))
+            LangOpts.MSCompatibilityVersion < 170000000)
           ColNo--;
       } else
         OS << ':';
@@ -836,15 +819,7 @@ void TextDiagnostic::emitDiagnosticLoc(SourceLocation Loc, PresumedLoc PLoc,
   switch (DiagOpts->getFormat()) {
   case DiagnosticOptions::Clang:
   case DiagnosticOptions::Vi:    OS << ':';    break;
-  case DiagnosticOptions::MSVC:
-    // MSVC2013 and before print 'file(4) : error'. MSVC2015 gets rid of the
-    // space and prints 'file(4): error'.
-    OS << ')';
-    if (LangOpts.MSCompatibilityVersion &&
-        !LangOpts.isCompatibleWithMSVC(LangOptions::MSVC2015))
-      OS << ' ';
-    OS << ": ";
-    break;
+  case DiagnosticOptions::Msvc:  OS << ") : "; break;
   }
 
   if (DiagOpts->ShowSourceRanges && !Ranges.empty()) {
@@ -900,7 +875,7 @@ void TextDiagnostic::emitDiagnosticLoc(SourceLocation Loc, PresumedLoc PLoc,
 void TextDiagnostic::emitIncludeLocation(SourceLocation Loc,
                                          PresumedLoc PLoc,
                                          const SourceManager &SM) {
-  if (DiagOpts->ShowLocation && PLoc.isValid())
+  if (DiagOpts->ShowLocation)
     OS << "In file included from " << PLoc.getFilename() << ':'
        << PLoc.getLine() << ":\n";
   else
@@ -910,18 +885,18 @@ void TextDiagnostic::emitIncludeLocation(SourceLocation Loc,
 void TextDiagnostic::emitImportLocation(SourceLocation Loc, PresumedLoc PLoc,
                                         StringRef ModuleName,
                                         const SourceManager &SM) {
-  if (DiagOpts->ShowLocation && PLoc.isValid())
+  if (DiagOpts->ShowLocation)
     OS << "In module '" << ModuleName << "' imported from "
        << PLoc.getFilename() << ':' << PLoc.getLine() << ":\n";
   else
-    OS << "In module '" << ModuleName << "':\n";
+    OS << "In module " << ModuleName << "':\n";
 }
 
 void TextDiagnostic::emitBuildingModuleLocation(SourceLocation Loc,
                                                 PresumedLoc PLoc,
                                                 StringRef ModuleName,
                                                 const SourceManager &SM) {
-  if (DiagOpts->ShowLocation && PLoc.isValid())
+  if (DiagOpts->ShowLocation && PLoc.getFilename())
     OS << "While building module '" << ModuleName << "' imported from "
       << PLoc.getFilename() << ':' << PLoc.getLine() << ":\n";
   else
@@ -1085,7 +1060,7 @@ void TextDiagnostic::emitSnippetAndCaret(
     SmallVectorImpl<CharSourceRange>& Ranges,
     ArrayRef<FixItHint> Hints,
     const SourceManager &SM) {
-  assert(Loc.isValid() && "must have a valid source location here");
+  assert(!Loc.isInvalid() && "must have a valid source location here");
   assert(Loc.isFileID() && "must have a file location here");
 
   // If caret diagnostics are enabled and we have location, we want to
@@ -1107,12 +1082,9 @@ void TextDiagnostic::emitSnippetAndCaret(
 
   // Get information about the buffer it points into.
   bool Invalid = false;
-  StringRef BufData = SM.getBufferData(FID, &Invalid);
+  const char *BufStart = SM.getBufferData(FID, &Invalid).data();
   if (Invalid)
     return;
-
-  const char *BufStart = BufData.data();
-  const char *BufEnd = BufStart + BufData.size();
 
   unsigned LineNo = SM.getLineNumber(FID, FileOffset);
   unsigned ColNo = SM.getColumnNumber(FID, FileOffset);
@@ -1129,20 +1101,15 @@ void TextDiagnostic::emitSnippetAndCaret(
   // Compute the line end.  Scan forward from the error position to the end of
   // the line.
   const char *LineEnd = TokPtr;
-  while (*LineEnd != '\n' && *LineEnd != '\r' && LineEnd != BufEnd)
+  while (*LineEnd != '\n' && *LineEnd != '\r' && *LineEnd != '\0')
     ++LineEnd;
 
   // Arbitrarily stop showing snippets when the line is too long.
   if (size_t(LineEnd - LineStart) > MaxLineLengthToPrint)
     return;
 
-  // Trim trailing null-bytes.
-  StringRef Line(LineStart, LineEnd - LineStart);
-  while (Line.size() > ColNo && Line.back() == '\0')
-    Line = Line.drop_back();
-
   // Copy the line of code into an std::string for ease of manipulation.
-  std::string SourceLine(Line.begin(), Line.end());
+  std::string SourceLine(LineStart, LineEnd);
 
   // Build the byte to column map.
   const SourceColumnMap sourceColMap(SourceLine, DiagOpts->TabStop);

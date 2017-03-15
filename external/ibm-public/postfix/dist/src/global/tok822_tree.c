@@ -1,4 +1,4 @@
-/*	$NetBSD: tok822_tree.c,v 1.2 2017/02/14 01:16:45 christos Exp $	*/
+/*	$NetBSD: tok822_tree.c,v 1.1.1.1.28.1 2015/03/03 07:11:08 snj Exp $	*/
 
 /*++
 /* NAME
@@ -211,7 +211,6 @@ TOK822 *tok822_sub_append(TOK822 *t1, TOK822 *t2)
 	return (t1->tail = tok822_append(t1->tail, t2));
     } else {
 	t1->head = t2;
-	t2->owner = t1;
 	while (t2->next)
 	    (t2 = t2->next)->owner = t1;
 	return (t1->tail = t2);
@@ -230,7 +229,6 @@ TOK822 *tok822_sub_prepend(TOK822 *t1, TOK822 *t2)
 	return (tp);
     } else {
 	t1->head = t2;
-	t2->owner = t1;
 	while (t2->next)
 	    (t2 = t2->next)->owner = t1;
 	return (t1->tail = t2);

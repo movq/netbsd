@@ -12,7 +12,7 @@
 
 
 UserDataRequest::UserDataRequest(QWidget *parent, const char *, bool,
-				 Qt::WindowFlags)
+				 Qt::WFlags)
 	: QDialog(parent)
 {
 	setupUi(this);
@@ -89,6 +89,6 @@ void UserDataRequest::sendReply()
 	QString cmd = QString(WPA_CTRL_RSP) + field + '-' +
 		QString::number(networkid) + ':' +
 		queryEdit->text();
-	wpagui->ctrlRequest(cmd.toLocal8Bit().constData(), reply, &reply_len);
+	wpagui->ctrlRequest(cmd.toAscii().constData(), reply, &reply_len);
 	accept();
 }

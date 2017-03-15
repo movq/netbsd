@@ -1,4 +1,4 @@
-/* $OpenBSD$ */
+/* Id */
 
 /*
  * Copyright (c) 2012 Thomas Adam <thomas@xteddy.org>
@@ -32,64 +32,43 @@
  * Enter choice mode to choose a session and/or window.
  */
 
-#define CHOOSE_TREE_SESSION_TEMPLATE				\
-	"#{session_name}: #{session_windows} windows"		\
-	"#{?session_grouped, (group ,}"				\
-	"#{session_group}#{?session_grouped,),}"		\
-	"#{?session_attached, (attached),}"
-#define CHOOSE_TREE_WINDOW_TEMPLATE				\
-	"#{window_index}: #{window_name}#{window_flags} "	\
-	"\"#{pane_title}\""
-
 enum cmd_retval	cmd_choose_tree_exec(struct cmd *, struct cmd_q *);
 
 const struct cmd_entry cmd_choose_tree_entry = {
-	.name = "choose-tree",
-	.alias = NULL,
-
-	.args = { "S:W:swub:c:t:", 0, 1 },
-	.usage = "[-suw] [-b session-template] [-c window template] "
-		 "[-S format] [-W format] " CMD_TARGET_WINDOW_USAGE,
-
-	.tflag = CMD_WINDOW,
-
-	.flags = 0,
-	.exec = cmd_choose_tree_exec
+	"choose-tree", NULL,
+	"S:W:swub:c:t:", 0, 1,
+	"[-suw] [-b session-template] [-c window template] [-S format] " \
+	"[-W format] " CMD_TARGET_WINDOW_USAGE,
+	0,
+	NULL,
+	cmd_choose_tree_exec
 };
 
 const struct cmd_entry cmd_choose_session_entry = {
-	.name = "choose-session",
-	.alias = NULL,
-
-	.args = { "F:t:", 0, 1 },
-	.usage = CMD_TARGET_WINDOW_USAGE " [-F format] [template]",
-
-	.tflag = CMD_WINDOW,
-
-	.flags = 0,
-	.exec = cmd_choose_tree_exec
+	"choose-session", NULL,
+	"F:t:", 0, 1,
+	CMD_TARGET_WINDOW_USAGE " [-F format] [template]",
+	0,
+	NULL,
+	cmd_choose_tree_exec
 };
 
 const struct cmd_entry cmd_choose_window_entry = {
-	.name = "choose-window",
-	.alias = NULL,
-
-	.args = { "F:t:", 0, 1 },
-	.usage = CMD_TARGET_WINDOW_USAGE "[-F format] [template]",
-
-	.tflag = CMD_WINDOW,
-
-	.flags = 0,
-	.exec = cmd_choose_tree_exec
+	"choose-window", NULL,
+	"F:t:", 0, 1,
+	CMD_TARGET_WINDOW_USAGE "[-F format] [template]",
+	0,
+	NULL,
+	cmd_choose_tree_exec
 };
 
 enum cmd_retval
 cmd_choose_tree_exec(struct cmd *self, struct cmd_q *cmdq)
 {
 	struct args			*args = self->args;
-	struct client			*c = cmdq->state.c;
-	struct winlink			*wl = cmdq->state.tflag.wl, *wm;
-	struct session			*s = cmdq->state.tflag.s, *s2;
+	struct winlink			*wl, *wm;
+	struct session			*s, *s2;
+	struct client			*c;
 	struct window_choose_data	*wcd = NULL;
 	const char			*ses_template, *win_template;
 	char				*final_win_action, *cur_win_template;
@@ -102,10 +81,13 @@ cmd_choose_tree_exec(struct cmd *self, struct cmd_q *cmdq)
 	ses_template = win_template = NULL;
 	ses_action = win_action = NULL;
 
-	if (c == NULL) {
+	if ((c = cmd_current_client(cmdq)) == NULL) {
 		cmdq_error(cmdq, "no client available");
 		return (CMD_RETURN_ERROR);
 	}
+
+	if ((wl = cmd_find_window(cmdq, args_get(args, 't'), &s)) == NULL)
+		return (CMD_RETURN_ERROR);
 
 	if (window_pane_set_mode(wl->window->active, &window_choose_mode) != 0)
 		return (CMD_RETURN_NORMAL);

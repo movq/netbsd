@@ -1,4 +1,4 @@
-/*	$NetBSD: rpc_svcout.c,v 1.31 2015/11/08 01:59:31 christos Exp $	*/
+/*	$NetBSD: rpc_svcout.c,v 1.26 2013/12/15 06:07:39 christos Exp $	*/
 /*
  * Sun RPC is a product of Sun Microsystems, Inc. and is provided for
  * unrestricted use provided that this legend is included on all tape
@@ -38,7 +38,7 @@
 #if 0
 static char sccsid[] = "@(#)rpc_svcout.c 1.29 89/03/30 (C) 1987 SMI";
 #else
-__RCSID("$NetBSD: rpc_svcout.c,v 1.31 2015/11/08 01:59:31 christos Exp $");
+__RCSID("$NetBSD: rpc_svcout.c,v 1.26 2013/12/15 06:07:39 christos Exp $");
 #endif
 #endif
 
@@ -449,12 +449,9 @@ write_program(definition *def, const char *storage)
 				    "\t\t%s = (char *(*)(char *, struct svc_req *))",
 				    ROUTINE);
 
-			if (newstyle) {	/* new style: calls internal routine */
+			if (newstyle)	/* new style: calls internal routine */
 				f_print(fout, "_");
-				pvname(proc->proc_name, vp->vers_num);
-			} else {
-				pvname_svc(proc->proc_name, vp->vers_num);
-			}
+			pvname_svc(proc->proc_name, vp->vers_num);
 			f_print(fout, ";\n");
 			f_print(fout, "\t\tbreak;\n\n");
 		}
@@ -649,9 +646,10 @@ write_timeout_func(void)
 	f_print(fout, "static void closedown(void);\n");
 	f_print(fout, "\n");
 	f_print(fout, "static void\n");
-	f_print(fout, "closedown(void)\n");
+	f_print(fout, "closedown()\n");
 	f_print(fout, "{\n");
 	f_print(fout, "\tif (_rpcsvcdirty == 0) {\n");
+	f_print(fout, "\t\textern fd_set svc_fdset;\n");
 	f_print(fout, "\t\tstatic int size;\n");
 	f_print(fout, "\t\tint i, openfd;\n");
 	if (tirpcflag && pmflag) {
@@ -665,8 +663,7 @@ write_timeout_func(void)
 	if (tirpcflag) {
 		f_print(fout, "\t\t\tstruct rlimit rl;\n\n");
 		f_print(fout, "\t\t\trl.rlim_max = 0;\n");
-		f_print(fout, "\t\t\tif (getrlimit(RLIMIT_NOFILE, &rl) == -1)\n");
-		f_print(fout, "\t\t\t\treturn;\n");
+		f_print(fout, "\t\t\tgetrlimit(RLIMIT_NOFILE, &rl);\n");
 		f_print(fout, "\t\t\tif ((size = rl.rlim_max) == 0)\n");
 		f_print(fout, "\t\t\t\treturn;\n");
 	} else {
@@ -737,6 +734,8 @@ write_pm_most(char *infile, int netflag)
 	}
 	if (timerflag)
 		f_print(fout, "\t\tint pmclose;\n");
+/* not necessary, defined in /usr/include/stdlib */
+/*	f_print(fout, "\t\textern char *getenv();\n");*/
 	f_print(fout, "\n");
 	f_print(fout, "\t\t_rpcpmstart = 1;\n");
 	if (logflag)
@@ -812,15 +811,15 @@ write_rpc_svc_fg(char *infile, const char *sp)
 		f_print(fout, "%sint pid, i;\n\n", sp);
 	f_print(fout, "%spid = fork();\n", sp);
 	f_print(fout, "%sif (pid < 0) {\n", sp);
-	f_print(fout, "%s\terr(EXIT_FAILURE, \"cannot fork\");\n", sp);
+	f_print(fout, "%s\tperror(\"cannot fork\");\n", sp);
+	f_print(fout, "%s\texit(1);\n", sp);
 	f_print(fout, "%s}\n", sp);
 	f_print(fout, "%sif (pid)\n", sp);
 	f_print(fout, "%s\texit(0);\n", sp);
 	/* get number of file descriptors */
 	if (tirpcflag) {
 		f_print(fout, "%srl.rlim_max = 0;\n", sp);
-		f_print(fout, "%sif (getrlimit(RLIMIT_NOFILE, &rl) == -1)\n", sp);
-		f_print(fout, "%s\terr(EXIT_FAILURE, \"getrlimit(RLIMIT_NOFILE)\");\n", sp);
+		f_print(fout, "%sgetrlimit(RLIMIT_NOFILE, &rl);\n", sp);
 		f_print(fout, "%sif ((size = rl.rlim_max) == 0)\n", sp);
 		f_print(fout, "%s\texit(1);\n", sp);
 	} else {

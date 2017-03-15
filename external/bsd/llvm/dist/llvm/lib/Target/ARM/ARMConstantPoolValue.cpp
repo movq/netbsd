@@ -46,24 +46,16 @@ ARMConstantPoolValue::ARMConstantPoolValue(LLVMContext &C, unsigned id,
 
 ARMConstantPoolValue::~ARMConstantPoolValue() {}
 
-StringRef ARMConstantPoolValue::getModifierText() const {
+const char *ARMConstantPoolValue::getModifierText() const {
   switch (Modifier) {
     // FIXME: Are these case sensitive? It'd be nice to lower-case all the
     // strings if that's legal.
-  case ARMCP::no_modifier:
-    return "none";
-  case ARMCP::TLSGD:
-    return "tlsgd";
-  case ARMCP::GOT_PREL:
-    return "GOT_PREL";
-  case ARMCP::GOTTPOFF:
-    return "gottpoff";
-  case ARMCP::TPOFF:
-    return "tpoff";
-  case ARMCP::SBREL:
-    return "SBREL";
-  case ARMCP::SECREL:
-    return "secrel32";
+  case ARMCP::no_modifier: return "none";
+  case ARMCP::TLSGD:       return "tlsgd";
+  case ARMCP::GOT:         return "GOT";
+  case ARMCP::GOTOFF:      return "GOTOFF";
+  case ARMCP::GOTTPOFF:    return "gottpoff";
+  case ARMCP::TPOFF:       return "tpoff";
   }
   llvm_unreachable("Unknown modifier!");
 }
@@ -83,9 +75,9 @@ bool
 ARMConstantPoolValue::hasSameValue(ARMConstantPoolValue *ACPV) {
   if (ACPV->Kind == Kind &&
       ACPV->PCAdjust == PCAdjust &&
-      ACPV->Modifier == Modifier &&
-      ACPV->LabelId == LabelId &&
-      ACPV->AddCurrentAddress == AddCurrentAddress) {
+      ACPV->Modifier == Modifier) {
+    if (ACPV->LabelId == LabelId)
+      return true;
     // Two PC relative constpool entries containing the same GV address or
     // external symbols. FIXME: What about blockaddress?
     if (Kind == ARMCP::CPValue || Kind == ARMCP::CPExtSymbol)
@@ -94,7 +86,7 @@ ARMConstantPoolValue::hasSameValue(ARMConstantPoolValue *ACPV) {
   return false;
 }
 
-LLVM_DUMP_METHOD void ARMConstantPoolValue::dump() const {
+void ARMConstantPoolValue::dump() const {
   errs() << "  " << *this;
 }
 
@@ -131,22 +123,10 @@ ARMConstantPoolConstant::ARMConstantPoolConstant(const Constant *C,
                          AddCurrentAddress),
     CVal(C) {}
 
-ARMConstantPoolConstant::ARMConstantPoolConstant(const GlobalVariable *GV,
-                                                 const Constant *C)
-    : ARMConstantPoolValue((Type *)C->getType(), 0, ARMCP::CPPromotedGlobal, 0,
-                           ARMCP::no_modifier, false),
-      CVal(C), GVar(GV) {}
-
 ARMConstantPoolConstant *
 ARMConstantPoolConstant::Create(const Constant *C, unsigned ID) {
   return new ARMConstantPoolConstant(C, ID, ARMCP::CPValue, 0,
                                      ARMCP::no_modifier, false);
-}
-
-ARMConstantPoolConstant *
-ARMConstantPoolConstant::Create(const GlobalVariable *GVar,
-                                const Constant *Initializer) {
-  return new ARMConstantPoolConstant(GVar, Initializer);
 }
 
 ARMConstantPoolConstant *
@@ -205,17 +185,18 @@ void ARMConstantPoolConstant::print(raw_ostream &O) const {
 // ARMConstantPoolSymbol
 //===----------------------------------------------------------------------===//
 
-ARMConstantPoolSymbol::ARMConstantPoolSymbol(LLVMContext &C, StringRef s,
-                                             unsigned id, unsigned char PCAdj,
+ARMConstantPoolSymbol::ARMConstantPoolSymbol(LLVMContext &C, const char *s,
+                                             unsigned id,
+                                             unsigned char PCAdj,
                                              ARMCP::ARMCPModifier Modifier,
                                              bool AddCurrentAddress)
-    : ARMConstantPoolValue(C, id, ARMCP::CPExtSymbol, PCAdj, Modifier,
-                           AddCurrentAddress),
-      S(s) {}
+  : ARMConstantPoolValue(C, id, ARMCP::CPExtSymbol, PCAdj, Modifier,
+                         AddCurrentAddress),
+    S(s) {}
 
-ARMConstantPoolSymbol *ARMConstantPoolSymbol::Create(LLVMContext &C,
-                                                     StringRef s, unsigned ID,
-                                                     unsigned char PCAdj) {
+ARMConstantPoolSymbol *
+ARMConstantPoolSymbol::Create(LLVMContext &C, const char *s,
+                              unsigned ID, unsigned char PCAdj) {
   return new ARMConstantPoolSymbol(C, s, ID, PCAdj, ARMCP::no_modifier, false);
 }
 

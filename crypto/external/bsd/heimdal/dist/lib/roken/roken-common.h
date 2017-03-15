@@ -1,4 +1,4 @@
-/*	$NetBSD: roken-common.h,v 1.2 2017/01/28 21:31:50 christos Exp $	*/
+/*	$NetBSD: roken-common.h,v 1.1.1.2 2011/04/14 14:09:31 elric Exp $	*/
 
 /*
  * Copyright (c) 1995 - 2005 Kungliga Tekniska Högskolan
@@ -124,15 +124,7 @@
 #define O_ACCMODE	003
 #endif
 
-#ifndef O_NOFOLLOW
-#define O_NOFOLLOW 0
-#endif
-
-#ifdef _WIN32
-
-#define _PATH_DEVNULL "\\\\.\\NUL"
-
-#else
+#ifndef _WIN32
 
 #ifndef _PATH_DEV
 #define _PATH_DEV "/dev/"
@@ -161,11 +153,7 @@
 #endif	/* !_WIN32 */
 
 #ifndef PATH_MAX
-#ifdef MAX_PATH
 #define PATH_MAX MAX_PATH
-#else
-#define PATH_MAX 4096
-#endif
 #endif
 
 #ifndef RETSIGTYPE
@@ -415,10 +403,6 @@ socket_set_debug (rk_socket_t);
 ROKEN_LIB_FUNCTION void ROKEN_LIB_CALL
 socket_set_tos (rk_socket_t, int);
 
-#define socket_set_nonblocking rk_socket_set_nonblocking
-ROKEN_LIB_FUNCTION void ROKEN_LIB_CALL
-socket_set_nonblocking(rk_socket_t, int);
-
 #define socket_set_reuseaddr rk_socket_set_reuseaddr
 ROKEN_LIB_FUNCTION void ROKEN_LIB_CALL
 socket_set_reuseaddr (rk_socket_t, int);
@@ -470,7 +454,7 @@ free_environment(char **);
 #define warnerr rk_warnerr
 ROKEN_LIB_FUNCTION void ROKEN_LIB_CALL
 rk_warnerr(int doerrno, const char *fmt, va_list ap)
-    __attribute__ ((__format__ (__printf__, 2, 0)));
+    __attribute__ ((format (printf, 2, 0)));
 
 ROKEN_LIB_FUNCTION void * ROKEN_LIB_CALL
 rk_realloc(void *, size_t);
@@ -482,7 +466,7 @@ rk_strpoolcollect(struct rk_strpool *);
 
 ROKEN_LIB_FUNCTION struct rk_strpool * ROKEN_LIB_CALL
 rk_strpoolprintf(struct rk_strpool *, const char *, ...)
-    __attribute__ ((__format__ (__printf__, 2, 3)));
+    __attribute__ ((format (printf, 2, 3)));
 
 ROKEN_LIB_FUNCTION void ROKEN_LIB_CALL
 rk_strpoolfree(struct rk_strpool *);
@@ -505,19 +489,11 @@ rk_cloexec_file(FILE *);
 ROKEN_LIB_FUNCTION void ROKEN_LIB_CALL
 rk_cloexec_dir(DIR *);
 
-ROKEN_LIB_FUNCTION void ROKEN_LIB_CALL
-rk_cloexec_socket(rk_socket_t);
-
 ROKEN_LIB_FUNCTION int ROKEN_LIB_CALL
-ct_memcmp(const volatile void * volatile,
-          const volatile void * volatile,
-          size_t);
+ct_memcmp(const void *, const void *, size_t);
 
 void ROKEN_LIB_FUNCTION
 rk_random_init(void);
-
-ROKEN_LIB_FUNCTION int ROKEN_LIB_CALL
-rk_mkdir(const char *, mode_t);
 
 ROKEN_CPP_END
 

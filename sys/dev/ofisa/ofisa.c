@@ -1,4 +1,4 @@
-/*	$NetBSD: ofisa.c,v 1.25 2016/12/09 17:18:35 christos Exp $	*/
+/*	$NetBSD: ofisa.c,v 1.24 2011/06/03 07:39:30 matt Exp $	*/
 
 /*
  * Copyright 1997, 1998
@@ -34,7 +34,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ofisa.c,v 1.25 2016/12/09 17:18:35 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ofisa.c,v 1.24 2011/06/03 07:39:30 matt Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -149,8 +149,8 @@ ofisa_reg_count(int phandle)
 int
 ofisa_reg_get(int phandle, struct ofisa_reg_desc *descp, int ndescs)
 {
-	char *buf, *bp, small[OFW_MAX_STACK_BUF_SIZE];
-	int i, proplen, rv;
+	char *buf, *bp;
+	int i, proplen, allocated, rv;
 
 	i = ofisa_reg_count(phandle);
 	if (i < 0)
@@ -161,8 +161,10 @@ ofisa_reg_get(int phandle, struct ofisa_reg_desc *descp, int ndescs)
 	i = ndescs * 12;
 	if (i > OFW_MAX_STACK_BUF_SIZE) {
 		buf = malloc(i, M_TEMP, M_WAITOK);
+		allocated = 1;
 	} else {
-		buf = small;
+		buf = alloca(i);
+		allocated = 0;
 	}
 
 	if (OF_getprop(phandle, "reg", buf, i) != proplen) {
@@ -181,7 +183,7 @@ ofisa_reg_get(int phandle, struct ofisa_reg_desc *descp, int ndescs)
 	rv = i;		/* number of descriptors processed (== ndescs) */
 
 out:
-	if (buf != small)
+	if (allocated)
 		free(buf, M_TEMP);
 	return (rv);
 }
@@ -219,8 +221,8 @@ ofisa_intr_count(int phandle)
 int
 ofisa_intr_get(int phandle, struct ofisa_intr_desc *descp, int ndescs)
 {
-	char *buf, *bp, small[OFW_MAX_STACK_BUF_SIZE];
-	int i, proplen, rv;
+	char *buf, *bp;
+	int i, proplen, allocated, rv;
 
 	i = ofisa_intr_count(phandle);
 	if (i < 0)
@@ -231,8 +233,10 @@ ofisa_intr_get(int phandle, struct ofisa_intr_desc *descp, int ndescs)
 	i = ndescs * 8;
 	if (i > OFW_MAX_STACK_BUF_SIZE) {
 		buf = malloc(i, M_TEMP, M_WAITOK);
+		allocated = 1;
 	} else {
-		buf = small;
+		buf = alloca(i);
+		allocated = 0;
 	}
 
 	if (OF_getprop(phandle, "interrupts", buf, i) != proplen) {
@@ -264,7 +268,7 @@ ofisa_intr_get(int phandle, struct ofisa_intr_desc *descp, int ndescs)
 	rv = i;		/* number of descriptors processed (== ndescs) */
 
 out:
-	if (buf != small)
+	if (allocated)
 		free(buf, M_TEMP);
 	return (rv);
 }
@@ -301,8 +305,8 @@ ofisa_dma_count(int phandle)
 int
 ofisa_dma_get(int phandle, struct ofisa_dma_desc *descp, int ndescs)
 {
-	char *buf, *bp, small[OFW_MAX_STACK_BUF_SIZE];
-	int i, proplen, rv;
+	char *buf, *bp;
+	int i, proplen, allocated, rv;
 
 	i = ofisa_dma_count(phandle);
 	if (i < 0)
@@ -313,8 +317,10 @@ ofisa_dma_get(int phandle, struct ofisa_dma_desc *descp, int ndescs)
 	i = ndescs * 20;
 	if (i > OFW_MAX_STACK_BUF_SIZE) {
 		buf = malloc(i, M_TEMP, M_WAITOK);
+		allocated = 1;
 	} else {
-		buf = small;
+		buf = alloca(i);
+		allocated = 0;
 	}
 
 	if (OF_getprop(phandle, "dma", buf, i) != proplen) {
@@ -332,7 +338,7 @@ ofisa_dma_get(int phandle, struct ofisa_dma_desc *descp, int ndescs)
 	rv = i;		/* number of descriptors processed (== ndescs) */
 
 out:
-	if (buf != small)
+	if (allocated)
 		free(buf, M_TEMP);
 	return (rv);
 }
@@ -379,30 +385,4 @@ ofisa_dma_print(struct ofisa_dma_desc *descp, int ndescs)
 		    descp[i].busmaster ? " busmaster" : "");
 
 	}
-}
-
-void
-ofisa_print_model(device_t self, int phandle)
-{
-	char *model, small[OFW_MAX_STACK_BUF_SIZE];
-        int n = OF_getproplen(phandle, "model");
-
-        if (n <= 0)
-		return;
-
-	if (n > OFW_MAX_STACK_BUF_SIZE) {
-		model = malloc(n, M_TEMP, M_WAITOK);
-	} else {
-		model = small;
-	}
-
-	if (OF_getprop(phandle, "model", model, n) != n)
-		goto out;
-		
-	aprint_normal(": %s\n", model);
-	if (self)
-		aprint_normal_dev(self, "");
-out:
-	if (model != small)
-		free(model, M_TEMP);
 }

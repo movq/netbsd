@@ -1,4 +1,4 @@
-/*	$NetBSD: fss.c,v 1.97 2017/02/17 08:30:00 hannken Exp $	*/
+/*	$NetBSD: fss.c,v 1.91.2.1 2016/08/27 15:09:22 bouyer Exp $	*/
 
 /*-
  * Copyright (c) 2003 The NetBSD Foundation, Inc.
@@ -36,7 +36,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: fss.c,v 1.97 2017/02/17 08:30:00 hannken Exp $");
+__KERNEL_RCSID(0, "$NetBSD: fss.c,v 1.91.2.1 2016/08/27 15:09:22 bouyer Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -65,7 +65,7 @@ __KERNEL_RCSID(0, "$NetBSD: fss.c,v 1.97 2017/02/17 08:30:00 hannken Exp $");
 
 #include <uvm/uvm.h>
 
-#include "ioconf.h"
+void fssattach(int);
 
 dev_type_open(fss_open);
 dev_type_close(fss_close);
@@ -851,10 +851,7 @@ fss_create_snapshot(struct fss_softc *sc, struct fss_set *fss, struct lwp *l)
 
 	microtime(&sc->sc_time);
 
-	vrele_flush(sc->sc_mount);
-	error = VFS_SYNC(sc->sc_mount, MNT_WAIT, curlwp->l_cred);
-	if (error == 0)
-		error = fscow_establish(sc->sc_mount, fss_copy_on_write, sc);
+	error = fscow_establish(sc->sc_mount, fss_copy_on_write, sc);
 	if (error == 0)
 		sc->sc_flags |= FSS_ACTIVE;
 
@@ -1295,12 +1292,10 @@ fss_bs_thread(void *arg)
 MODULE(MODULE_CLASS_DRIVER, fss, NULL);
 CFDRIVER_DECL(fss, DV_DISK, NULL);
 
-devmajor_t fss_bmajor = -1, fss_cmajor = -1;
-
 static int
 fss_modcmd(modcmd_t cmd, void *arg)
 {
-	int error = 0;
+	int bmajor = -1, cmajor = -1,  error = 0;
 
 	switch (cmd) {
 	case MODULE_CMD_INIT:
@@ -1317,8 +1312,9 @@ fss_modcmd(modcmd_t cmd, void *arg)
 			break;
 		}
 		error = devsw_attach(fss_cd.cd_name,
-		    &fss_bdevsw, &fss_bmajor, &fss_cdevsw, &fss_cmajor);
-
+		    &fss_bdevsw, &bmajor, &fss_cdevsw, &cmajor);
+		if (error == EEXIST)
+			error = 0;
 		if (error) {
 			config_cfattach_detach(fss_cd.cd_name, &fss_ca);
 			config_cfdriver_detach(&fss_cd);
@@ -1328,14 +1324,11 @@ fss_modcmd(modcmd_t cmd, void *arg)
 		break;
 
 	case MODULE_CMD_FINI:
-		devsw_detach(&fss_bdevsw, &fss_cdevsw);
 		error = config_cfattach_detach(fss_cd.cd_name, &fss_ca);
-		if (error) {
-			devsw_attach(fss_cd.cd_name, &fss_bdevsw, &fss_bmajor,
-			    &fss_cdevsw, &fss_cmajor);
+		if (error)
 			break;
-		}
 		config_cfdriver_detach(&fss_cd);
+		devsw_detach(&fss_bdevsw, &fss_cdevsw);
 		mutex_destroy(&fss_device_lock);
 		break;
 

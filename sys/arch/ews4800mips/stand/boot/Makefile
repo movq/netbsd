@@ -1,8 +1,7 @@
-#	$NetBSD: Makefile,v 1.21 2016/09/20 20:56:57 christos Exp $
+#	$NetBSD: Makefile,v 1.19 2014/08/05 15:40:59 apb Exp $
 
 WARNS		?= 1
 NOMAN		=
-NOPIE		=
 
 BINMODE		= 444
 
@@ -38,7 +37,7 @@ SRCS		+= boot_device.c floppy_2d.c floppy_2hd_ibmpc.c
 #SRCS		+= floppy_2hc.c
 SRCS		+= console.c cons_rom.c cons_fb.c cons_zskbd.c cons_zs.c
 BINKERNEL_C	= ${COMMON}/binkernel.c
-BINKERNEL_SIZE	= '2 * 1024 * 1024 + 32 * 1024'
+BINKERNEL_SIZE	= '2 * 1024 * 1024'
 BINKERNEL_O	= binkernel.o
 BINKERNEL_DUMMY_O= binkernel_dummy.o
 

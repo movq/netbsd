@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.3 2016/06/02 22:41:26 mrg Exp $
+#	$NetBSD: Makefile,v 1.2.20.1 2016/12/23 08:04:04 snj Exp $
 
 NOPIC=	1
 

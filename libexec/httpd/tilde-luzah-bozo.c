@@ -1,4 +1,4 @@
-/*	$NetBSD: tilde-luzah-bozo.c,v 1.14 2015/12/28 07:37:59 mrg Exp $	*/
+/*	$NetBSD: tilde-luzah-bozo.c,v 1.10.4.1 2016/04/10 10:33:11 martin Exp $	*/
 
 /*	$eterna: tilde-luzah-bozo.c,v 1.16 2011/11/18 09:21:15 mrg Exp $	*/
 

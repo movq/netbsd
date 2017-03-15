@@ -1,4 +1,4 @@
-/*	$NetBSD: pcache.c,v 1.2 2017/01/28 21:31:49 christos Exp $	*/
+/*	$NetBSD: pcache.c,v 1.1.1.1 2011/04/13 18:15:36 elric Exp $	*/
 
 /***********************************************************************
  * Copyright (c) 2010, Secure Endpoints Inc.
@@ -38,35 +38,31 @@
 #endif
 #include <assert.h>
 
-/*
- * cc_plugin_register_to_context is executed once per krb5_init_context().
- * Its job is to register the plugin's krb5_cc_ops structure with the
- * krb5_context.
- */
-
-static krb5_error_code KRB5_LIB_CALL
-cc_plugin_register_to_context(krb5_context context, const void *plug, void *plugctx, void *userctx)
-{
-    krb5_cc_ops *ccops = (krb5_cc_ops *)plugctx;
-    krb5_error_code ret;
-
-    if (ccops == NULL || ccops->version < KRB5_CC_OPS_VERSION)
-       return KRB5_PLUGIN_NO_HANDLE;
-
-    ret = krb5_cc_register(context, ccops, TRUE);
-    if (ret != 0)
-       *((krb5_error_code *)userctx) = ret;
-
-    return KRB5_PLUGIN_NO_HANDLE;
-}
-
-KRB5_LIB_FUNCTION krb5_error_code KRB5_LIB_CALL
+krb5_error_code
 _krb5_load_ccache_plugins(krb5_context context)
 {
-    krb5_error_code userctx = 0;
+    struct krb5_plugin * plist = NULL;
+    struct krb5_plugin *p;
+    krb5_error_code code;
 
-    (void)_krb5_plugin_run_f(context, "krb5", KRB5_PLUGIN_CCACHE,
-			     0, 0, &userctx, cc_plugin_register_to_context);
+    code = _krb5_plugin_find(context, PLUGIN_TYPE_DATA, KRB5_PLUGIN_CCACHE,
+                             &plist);
+    if (code)
+        return code;
 
-    return userctx;
+    for (p = plist; p != NULL; p = _krb5_plugin_get_next(p)) {
+        krb5_cc_ops * ccops;
+        krb5_error_code c_load;
+
+        ccops = _krb5_plugin_get_symbol(p);
+        if (ccops != NULL && ccops->version == KRB5_CC_OPS_VERSION) {
+            c_load = krb5_cc_register(context, ccops, TRUE);
+            if (c_load != 0)
+                code = c_load;
+        }
+    }
+
+    _krb5_plugin_free(plist);
+
+    return code;
 }

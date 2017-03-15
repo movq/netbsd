@@ -1,4 +1,4 @@
-/*	$NetBSD: opdump.c,v 1.37 2014/10/31 13:56:04 manu Exp $	*/
+/*	$NetBSD: opdump.c,v 1.36.10.1 2014/11/05 18:11:31 snj Exp $	*/
 
 /*
  * Copyright (c) 2005, 2006  Antti Kantee.  All Rights Reserved.
@@ -35,7 +35,7 @@
 
 #include <sys/cdefs.h>
 #if !defined(lint)
-__RCSID("$NetBSD: opdump.c,v 1.37 2014/10/31 13:56:04 manu Exp $");
+__RCSID("$NetBSD: opdump.c,v 1.36.10.1 2014/11/05 18:11:31 snj Exp $");
 #endif /* !lint */
 
 #include <sys/types.h>

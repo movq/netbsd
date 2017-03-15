@@ -1,4 +1,4 @@
-/*	$NetBSD: nouveau_gem.c,v 1.4 2016/01/29 23:58:22 riastradh Exp $	*/
+/*	$NetBSD: nouveau_gem.c,v 1.2.4.2 2016/12/12 09:13:42 msaitoh Exp $	*/
 
 /*
  * Copyright (C) 2008 Ben Skeggs.
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: nouveau_gem.c,v 1.4 2016/01/29 23:58:22 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: nouveau_gem.c,v 1.2.4.2 2016/12/12 09:13:42 msaitoh Exp $");
 
 #include <subdev/fb.h>
 

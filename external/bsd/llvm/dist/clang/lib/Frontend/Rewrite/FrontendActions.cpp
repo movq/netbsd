@@ -9,12 +9,13 @@
 
 #include "clang/Rewrite/Frontend/FrontendActions.h"
 #include "clang/AST/ASTConsumer.h"
+#include "clang/Basic/FileManager.h"
 #include "clang/Frontend/CompilerInstance.h"
 #include "clang/Frontend/FrontendActions.h"
 #include "clang/Frontend/FrontendDiagnostic.h"
 #include "clang/Frontend/Utils.h"
 #include "clang/Lex/Preprocessor.h"
-#include "clang/Lex/PreprocessorOptions.h"
+#include "clang/Parse/Parser.h"
 #include "clang/Rewrite/Frontend/ASTConsumers.h"
 #include "clang/Rewrite/Frontend/FixItRewriter.h"
 #include "clang/Rewrite/Frontend/Rewriters.h"
@@ -22,7 +23,6 @@
 #include "llvm/Support/Path.h"
 #include "llvm/Support/raw_ostream.h"
 #include <memory>
-#include <utility>
 
 using namespace clang;
 
@@ -32,9 +32,8 @@ using namespace clang;
 
 std::unique_ptr<ASTConsumer>
 HTMLPrintAction::CreateASTConsumer(CompilerInstance &CI, StringRef InFile) {
-  if (std::unique_ptr<raw_ostream> OS =
-          CI.createDefaultOutputFile(false, InFile))
-    return CreateHTMLPrinter(std::move(OS), CI.getPreprocessor());
+  if (raw_ostream *OS = CI.createDefaultOutputFile(false, InFile))
+    return CreateHTMLPrinter(OS, CI.getPreprocessor());
   return nullptr;
 }
 
@@ -49,10 +48,9 @@ FixItAction::CreateASTConsumer(CompilerInstance &CI, StringRef InFile) {
 namespace {
 class FixItRewriteInPlace : public FixItOptions {
 public:
-  FixItRewriteInPlace() { InPlace = true; }
-
   std::string RewriteFilename(const std::string &Filename, int &fd) override {
-    llvm_unreachable("don't call RewriteFilename for inplace rewrites");
+    fd = -1;
+    return Filename;
   }
 };
 
@@ -61,8 +59,8 @@ class FixItActionSuffixInserter : public FixItOptions {
 
 public:
   FixItActionSuffixInserter(std::string NewSuffix, bool FixWhatYouCan)
-      : NewSuffix(std::move(NewSuffix)) {
-    this->FixWhatYouCan = FixWhatYouCan;
+    : NewSuffix(NewSuffix) {
+      this->FixWhatYouCan = FixWhatYouCan;
   }
 
   std::string RewriteFilename(const std::string &Filename, int &fd) override {
@@ -79,7 +77,7 @@ public:
   std::string RewriteFilename(const std::string &Filename, int &fd) override {
     SmallString<128> Path;
     llvm::sys::fs::createTemporaryFile(llvm::sys::path::filename(Filename),
-                                       llvm::sys::path::extension(Filename).drop_front(), fd,
+                                       llvm::sys::path::extension(Filename), fd,
                                        Path);
     return Path.str();
   }
@@ -152,15 +150,15 @@ bool FixItRecompile::BeginInvocation(CompilerInstance &CI) {
 
 std::unique_ptr<ASTConsumer>
 RewriteObjCAction::CreateASTConsumer(CompilerInstance &CI, StringRef InFile) {
-  if (std::unique_ptr<raw_ostream> OS =
-          CI.createDefaultOutputFile(false, InFile, "cpp")) {
+  if (raw_ostream *OS = CI.createDefaultOutputFile(false, InFile, "cpp")) {
     if (CI.getLangOpts().ObjCRuntime.isNonFragile())
-      return CreateModernObjCRewriter(
-          InFile, std::move(OS), CI.getDiagnostics(), CI.getLangOpts(),
-          CI.getDiagnosticOpts().NoRewriteMacros,
-          (CI.getCodeGenOpts().getDebugInfo() != codegenoptions::NoDebugInfo));
-    return CreateObjCRewriter(InFile, std::move(OS), CI.getDiagnostics(),
-                              CI.getLangOpts(),
+      return CreateModernObjCRewriter(InFile, OS,
+                                CI.getDiagnostics(), CI.getLangOpts(),
+                                CI.getDiagnosticOpts().NoRewriteMacros,
+                                (CI.getCodeGenOpts().getDebugInfo() !=
+                                 CodeGenOptions::NoDebugInfo));
+    return CreateObjCRewriter(InFile, OS,
+                              CI.getDiagnostics(), CI.getLangOpts(),
                               CI.getDiagnosticOpts().NoRewriteMacros);
   }
   return nullptr;
@@ -174,28 +172,25 @@ RewriteObjCAction::CreateASTConsumer(CompilerInstance &CI, StringRef InFile) {
 
 void RewriteMacrosAction::ExecuteAction() {
   CompilerInstance &CI = getCompilerInstance();
-  std::unique_ptr<raw_ostream> OS =
-      CI.createDefaultOutputFile(true, getCurrentFile());
+  raw_ostream *OS = CI.createDefaultOutputFile(true, getCurrentFile());
   if (!OS) return;
 
-  RewriteMacrosInInput(CI.getPreprocessor(), OS.get());
+  RewriteMacrosInInput(CI.getPreprocessor(), OS);
 }
 
 void RewriteTestAction::ExecuteAction() {
   CompilerInstance &CI = getCompilerInstance();
-  std::unique_ptr<raw_ostream> OS =
-      CI.createDefaultOutputFile(false, getCurrentFile());
+  raw_ostream *OS = CI.createDefaultOutputFile(false, getCurrentFile());
   if (!OS) return;
 
-  DoRewriteTest(CI.getPreprocessor(), OS.get());
+  DoRewriteTest(CI.getPreprocessor(), OS);
 }
 
 void RewriteIncludesAction::ExecuteAction() {
   CompilerInstance &CI = getCompilerInstance();
-  std::unique_ptr<raw_ostream> OS =
-      CI.createDefaultOutputFile(true, getCurrentFile());
+  raw_ostream *OS = CI.createDefaultOutputFile(true, getCurrentFile());
   if (!OS) return;
 
-  RewriteIncludesInInput(CI.getPreprocessor(), OS.get(),
+  RewriteIncludesInInput(CI.getPreprocessor(), OS,
                          CI.getPreprocessorOutputOpts());
 }

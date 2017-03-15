@@ -1,4 +1,4 @@
-/* $NetBSD: privcmd.c,v 1.49 2014/10/17 16:37:02 christos Exp $ */
+/* $NetBSD: privcmd.c,v 1.45.4.1 2014/11/10 17:59:57 snj Exp $ */
 
 /*-
  * Copyright (c) 2004 Christian Limpach.
@@ -27,7 +27,7 @@
 
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: privcmd.c,v 1.49 2014/10/17 16:37:02 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: privcmd.c,v 1.45.4.1 2014/11/10 17:59:57 snj Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

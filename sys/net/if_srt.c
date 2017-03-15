@@ -1,12 +1,10 @@
-/* $NetBSD: if_srt.c,v 1.26 2017/02/14 03:05:06 ozaki-r Exp $ */
+/* $NetBSD: if_srt.c,v 1.19 2014/07/25 08:10:40 dholland Exp $ */
 /* This file is in the public domain. */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_srt.c,v 1.26 2017/02/14 03:05:06 ozaki-r Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_srt.c,v 1.19 2014/07/25 08:10:40 dholland Exp $");
 
-#ifdef _KERNEL_OPT
 #include "opt_inet.h"
-#endif
 
 #if !defined(INET) && !defined(INET6)
 #error "srt without INET/INET6?"
@@ -31,14 +29,8 @@ __KERNEL_RCSID(0, "$NetBSD: if_srt.c,v 1.26 2017/02/14 03:05:06 ozaki-r Exp $");
 #include <sys/fcntl.h>
 #include <sys/param.h>
 #include <sys/ioctl.h>
-#include <sys/module.h>
-#include <sys/device.h>
 #include <netinet/ip.h>
 #include <netinet/ip6.h>
-#include <netinet6/in6_var.h>
-#include <netinet6/ip6_var.h>
-#include <netinet6/nd6.h>
-#include <netinet6/scope6_var.h>
 #include <net/if_types.h>
 
 #include "if_srt.h"
@@ -57,12 +49,10 @@ struct srt_softc {
 #define SKF_CDEVOPEN 0x00000001
 };
 
-#include "ioconf.h"
+void srtattach(void);
 
 static struct srt_softc *softcv[SRT_MAXUNIT+1];
 static unsigned int global_flags;
-
-static u_int srt_count;
 
 /* Internal routines. */
 
@@ -189,7 +179,7 @@ srt_if_output(
 	struct ifnet *ifp,
 	struct mbuf *m,
 	const struct sockaddr *to,
-	const struct rtentry *rtp)
+	struct rtentry *rtp)
 {
 	struct srt_softc *sc;
 	struct srt_rt *r;
@@ -240,9 +230,7 @@ srt_if_output(
 		return 0; /* XXX ENETDOWN? */
 	}
 	/* XXX is 0 the right last arg here? */
-	if (to->sa_family == AF_INET6)
-		return ip6_if_output(r->u.dstifp, r->u.dstifp, m, &r->dst.sin6, 0);
-	return if_output_lock(r->u.dstifp, r->u.dstifp, m, &r->dst.sa, 0);
+	return (*r->u.dstifp->if_output)(r->u.dstifp,m,&r->dst.sa,0);
 }
 
 static int
@@ -274,7 +262,6 @@ srt_clone_create(struct if_clone *cl, int unit)
 	bpf_attach(&sc->intf, 0, 0);
 #endif
 	softcv[unit] = sc;
-	atomic_inc_uint(&srt_count);
 	return 0;
 }
 
@@ -299,7 +286,6 @@ srt_clone_destroy(struct ifnet *ifp)
 	}
 	softcv[sc->unit] = 0;
 	free(sc,M_DEVBUF);
-	atomic_inc_uint(&srt_count);
 	return 0;
 }
 
@@ -307,42 +293,14 @@ struct if_clone srt_clone =
     IF_CLONE_INITIALIZER("srt",&srt_clone_create,&srt_clone_destroy);
 
 void
-srtattach(int n)
-{
-
-	/*
-	 * Nothing to do here, initialization is handled by the
-	 * module initialization code in srtinit() below).
-	 */
-}
-
-static void
-srtinit(void)
+srtattach(void)
 {
 	int i;
 
-	for (i = SRT_MAXUNIT; i >= 0; i--)
+	for (i=SRT_MAXUNIT;i>=0;i--)
 		softcv[i] = 0;
 	global_flags = 0;
 	if_clone_attach(&srt_clone);
-}
-
-static int
-srtdetach(void)
-{
-	int error = 0;
-	int i;
-
-	for (i = SRT_MAXUNIT; i >= 0; i--)
-		if(softcv[i]) {
-			error = EBUSY;
-			break;
-		}
-
-	if (error == 0)
-		if_clone_detach(&srt_clone);
-
-	return error;
 }
 
 /* Special-device interface. */
@@ -408,7 +366,7 @@ srt_ioctl(dev_t dev, u_long cmd, void *data, int flag, struct lwp *l)
 		dr->af = scr->af;
 		dr->srcmatch = scr->srcmatch;
 		dr->srcmask = scr->srcmask;
-		strlcpy(&dr->u.dstifn[0],&scr->u.dstifp->if_xname[0],IFNAMSIZ);
+		strncpy(&dr->u.dstifn[0],&scr->u.dstifp->if_xname[0],IFNAMSIZ);
 		memcpy(&dr->dst,&scr->dst,scr->dst.sa.sa_len);
 		return 0;
 	case SRT_SETRT:
@@ -417,7 +375,7 @@ srt_ioctl(dev_t dev, u_long cmd, void *data, int flag, struct lwp *l)
 		dr = (struct srt_rt *) data;
 		if (dr->inx > sc->nrt)
 			return EDOM;
-		strlcpy(&nbuf[0],&dr->u.dstifn[0],IFNAMSIZ);
+		strncpy(&nbuf[0],&dr->u.dstifn[0],IFNAMSIZ);
 		nbuf[IFNAMSIZ-1] = '\0';
 		if (dr->dst.sa.sa_family != dr->af)
 			return EIO;
@@ -472,8 +430,6 @@ srt_ioctl(dev_t dev, u_long cmd, void *data, int flag, struct lwp *l)
 		scr->srcmask = dr->srcmask;
 		scr->u.dstifp = ifp;
 		memcpy(&scr->dst,&dr->dst,dr->dst.sa.sa_len);
-		if (dr->af == AF_INET6)
-			in6_setzoneid(&scr->dst.sin6.sin6_addr, ifp->if_index);
 		update_mtu(sc);
 		return 0;
 	case SRT_DELRT:
@@ -539,10 +495,3 @@ const struct cdevsw srt_cdevsw = {
 	.d_discard = nodiscard,
 	.d_flag = D_OTHER
 };
-
-/*
- * Module infrastructure
- */
-#include "if_module.h"
-
-IF_MODULE(MODULE_CLASS_DRIVER, srt, "")

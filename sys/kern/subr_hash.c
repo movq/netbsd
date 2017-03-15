@@ -1,4 +1,4 @@
-/*	$NetBSD: subr_hash.c,v 1.7 2016/07/06 05:20:48 ozaki-r Exp $	*/
+/*	$NetBSD: subr_hash.c,v 1.6 2014/05/29 21:15:55 rmind Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1991, 1993
@@ -37,13 +37,12 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: subr_hash.c,v 1.7 2016/07/06 05:20:48 ozaki-r Exp $");
+__KERNEL_RCSID(0, "$NetBSD: subr_hash.c,v 1.6 2014/05/29 21:15:55 rmind Exp $");
 
 #include <sys/param.h>
 #include <sys/bitops.h>
 #include <sys/kmem.h>
 #include <sys/systm.h>
-#include <sys/pslist.h>
 
 static size_t
 hash_list_size(enum hashtype htype)
@@ -51,15 +50,11 @@ hash_list_size(enum hashtype htype)
 	LIST_HEAD(, generic) *hashtbl_list;
 	SLIST_HEAD(, generic) *hashtbl_slist;
 	TAILQ_HEAD(, generic) *hashtbl_tailq;
-	struct pslist_head *hashtbl_pslist;
 	size_t esize;
 
 	switch (htype) {
 	case HASH_LIST:
 		esize = sizeof(*hashtbl_list);
-		break;
-	case HASH_PSLIST:
-		esize = sizeof(*hashtbl_pslist);
 		break;
 	case HASH_SLIST:
 		esize = sizeof(*hashtbl_slist);
@@ -85,7 +80,6 @@ hashinit(u_int elements, enum hashtype htype, bool waitok, u_long *hashmask)
 	LIST_HEAD(, generic) *hashtbl_list;
 	SLIST_HEAD(, generic) *hashtbl_slist;
 	TAILQ_HEAD(, generic) *hashtbl_tailq;
-	struct pslist_head *hashtbl_pslist;
 	u_long hashsize, i;
 	size_t esize;
 	void *p;
@@ -108,11 +102,6 @@ hashinit(u_int elements, enum hashtype htype, bool waitok, u_long *hashmask)
 		hashtbl_list = p;
 		for (i = 0; i < hashsize; i++)
 			LIST_INIT(&hashtbl_list[i]);
-		break;
-	case HASH_PSLIST:
-		hashtbl_pslist = p;
-		for (i = 0; i < hashsize; i++)
-			PSLIST_INIT(&hashtbl_pslist[i]);
 		break;
 	case HASH_SLIST:
 		hashtbl_slist = p;

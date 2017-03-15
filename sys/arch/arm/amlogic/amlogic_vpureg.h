@@ -1,4 +1,4 @@
-/* $NetBSD: amlogic_vpureg.h,v 1.3 2015/04/03 18:03:05 jmcneill Exp $ */
+/* $NetBSD: amlogic_vpureg.h,v 1.1.2.4 2015/04/06 01:48:25 snj Exp $ */
 
 /*-
  * Copyright (c) 2015 Jared D. McNeill <jmcneill@invisible.ca>

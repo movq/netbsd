@@ -1,4 +1,4 @@
-/*	$NetBSD: sys_lwp.c,v 1.58 2017/01/15 01:28:14 maya Exp $	*/
+/*	$NetBSD: sys_lwp.c,v 1.56 2013/03/29 01:08:17 christos Exp $	*/
 
 /*-
  * Copyright (c) 2001, 2006, 2007, 2008 The NetBSD Foundation, Inc.
@@ -35,7 +35,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sys_lwp.c,v 1.58 2017/01/15 01:28:14 maya Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sys_lwp.c,v 1.56 2013/03/29 01:08:17 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -134,7 +134,7 @@ sys__lwp_create(struct lwp *l, const struct sys__lwp_create_args *uap,
 		syscallarg(lwpid_t *) new_lwp;
 	} */
 	struct proc *p = l->l_proc;
-	ucontext_t *newuc;
+	ucontext_t *newuc = NULL;
 	lwpid_t lid;
 	int error;
 
@@ -822,7 +822,7 @@ sys__lwp_getname(struct lwp *l, const struct sys__lwp_getname_args *uap,
 	if (t->l_name == NULL)
 		name[0] = '\0';
 	else
-		strlcpy(name, t->l_name, sizeof(name));
+		strcpy(name, t->l_name);
 	lwp_unlock(t);
 	mutex_exit(p->p_lock);
 

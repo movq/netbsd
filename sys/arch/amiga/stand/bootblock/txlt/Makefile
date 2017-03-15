@@ -1,15 +1,8 @@
-#	$NetBSD: Makefile,v 1.10 2016/09/17 17:09:10 christos Exp $
+#	$NetBSD: Makefile,v 1.8 2005/12/11 12:16:36 christos Exp $
 #
-
-NOMAN=	# defined
-.include <bsd.init.mk>
-
 PROG=txlt
+NOMAN=	# defined
+LDADD=-ll
 CLEANFILES+=	txlt.c
-
-.ifndef HOSTPROG
-LDADD+=		-ll
-DPADD+=		${LIBL}
-.endif
 
 .include <bsd.prog.mk>

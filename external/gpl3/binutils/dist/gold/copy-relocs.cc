@@ -1,6 +1,6 @@
 // copy-relocs.cc -- handle COPY relocations for gold.
 
-// Copyright (C) 2006-2016 Free Software Foundation, Inc.
+// Copyright 2006, 2007, 2008, 2009, 2010, 2011 Free Software Foundation, Inc.
 // Written by Ian Lance Taylor <iant@google.com>.
 
 // This file is part of gold.
@@ -28,6 +28,25 @@
 namespace gold
 {
 
+// Copy_relocs::Copy_reloc_entry methods.
+
+// Emit the reloc if appropriate.
+
+template<int sh_type, int size, bool big_endian>
+void
+Copy_relocs<sh_type, size, big_endian>::Copy_reloc_entry::emit(
+    Output_data_reloc<sh_type, true, size, big_endian>* reloc_section)
+{
+  // If the symbol is no longer defined in a dynamic object, then we
+  // emitted a COPY relocation, and we do not want to emit this
+  // dynamic relocation.
+  if (this->sym_->is_from_dynobj())
+    reloc_section->add_global_generic(this->sym_, this->reloc_type_,
+				      this->output_section_, this->relobj_,
+				      this->shndx_, this->address_,
+				      this->addend_);
+}
+
 // Copy_relocs methods.
 
 // Handle a relocation against a symbol which may force us to generate
@@ -42,19 +61,16 @@ Copy_relocs<sh_type, size, big_endian>::copy_reloc(
     Sized_relobj_file<size, big_endian>* object,
     unsigned int shndx,
     Output_section* output_section,
-    unsigned int r_type,
-    typename elfcpp::Elf_types<size>::Elf_Addr r_offset,
-    typename elfcpp::Elf_types<size>::Elf_Swxword r_addend,
+    const Reloc& rel,
     Output_data_reloc<sh_type, true, size, big_endian>* reloc_section)
 {
   if (this->need_copy_reloc(sym, object, shndx))
-    this->make_copy_reloc(symtab, layout, sym, object, reloc_section);
+    this->make_copy_reloc(symtab, layout, sym, reloc_section);
   else
     {
       // We may not need a COPY relocation.  Save this relocation to
       // possibly be emitted later.
-      this->save(sym, object, shndx, output_section,
-		 r_type, r_offset, r_addend);
+      this->save(sym, object, shndx, output_section, rel);
     }
 }
 
@@ -111,23 +127,10 @@ Copy_relocs<sh_type, size, big_endian>::make_copy_reloc(
     Symbol_table* symtab,
     Layout* layout,
     Sized_symbol<size>* sym,
-    Sized_relobj_file<size, big_endian>* object,
     Output_data_reloc<sh_type, true, size, big_endian>* reloc_section)
 {
   // We should not be here if -z nocopyreloc is given.
   gold_assert(parameters->options().copyreloc());
-
-  gold_assert(sym->is_from_dynobj());
-
-  // The symbol must not have protected visibility.
-  if (sym->is_protected())
-    {
-      gold_error(_("%s: cannot make copy relocation for "
-		   "protected symbol '%s', defined in %s"),
-		 object->name().c_str(),
-		 sym->name(),
-		 sym->object()->name().c_str());
-    }
 
   typename elfcpp::Elf_types<size>::Elf_WXword symsize = sym->symsize();
 
@@ -137,6 +140,7 @@ Copy_relocs<sh_type, size, big_endian>::make_copy_reloc(
   // is defined; presumably we do not require an alignment larger than
   // that.  Then we reduce that alignment if the symbol is not aligned
   // within the section.
+  gold_assert(sym->is_from_dynobj());
   bool is_ordinary;
   unsigned int shndx = sym->shndx(&is_ordinary);
   gold_assert(is_ordinary);
@@ -191,13 +195,14 @@ Copy_relocs<sh_type, size, big_endian>::save(
     Sized_relobj_file<size, big_endian>* object,
     unsigned int shndx,
     Output_section* output_section,
-    unsigned int r_type,
-    typename elfcpp::Elf_types<size>::Elf_Addr r_offset,
-    typename elfcpp::Elf_types<size>::Elf_Swxword r_addend)
+    const Reloc& rel)
 {
-  this->entries_.push_back(Copy_reloc_entry(sym, r_type, object, shndx,
-					    output_section, r_offset,
-					    r_addend));
+  unsigned int reloc_type = elfcpp::elf_r_type<size>(rel.get_r_info());
+  typename elfcpp::Elf_types<size>::Elf_Addr addend =
+    Reloc_types<sh_type, size, big_endian>::get_reloc_addend_noerror(&rel);
+  this->entries_.push_back(Copy_reloc_entry(sym, reloc_type, object, shndx,
+					    output_section, rel.get_r_offset(),
+					    addend));
 }
 
 // Emit any saved relocs.
@@ -210,18 +215,7 @@ Copy_relocs<sh_type, size, big_endian>::emit(
   for (typename Copy_reloc_entries::iterator p = this->entries_.begin();
        p != this->entries_.end();
        ++p)
-    {
-      Copy_reloc_entry& entry = *p;
-
-      // If the symbol is no longer defined in a dynamic object, then we
-      // emitted a COPY relocation, and we do not want to emit this
-      // dynamic relocation.
-      if (entry.sym_->is_from_dynobj())
-        reloc_section->add_global_generic(entry.sym_, entry.reloc_type_,
-                                          entry.output_section_, entry.relobj_,
-                                          entry.shndx_, entry.address_,
-                                          entry.addend_);
-    }
+    p->emit(reloc_section);
 
   // We no longer need the saved information.
   this->entries_.clear();

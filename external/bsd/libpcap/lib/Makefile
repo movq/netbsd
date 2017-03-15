@@ -1,4 +1,4 @@
-# $NetBSD: Makefile,v 1.15 2017/01/24 23:26:58 christos Exp $	
+# $NetBSD: Makefile,v 1.11 2013/04/07 00:18:55 christos Exp $	
 
 USE_SHLIBDIR=yes
 .include <bsd.own.mk>
@@ -7,7 +7,7 @@ USE_FORT?= yes	# network protocol library
 CWARNFLAGS.clang+=	-Wno-format-extra-args \
 			-Wno-unneeded-internal-declaration
 
-CPPFLAGS+= -DPCAP_DONT_INCLUDE_PCAP_BPF_H -DHAVE_CONFIG_H -I${.OBJDIR}
+CPPFLAGS+= -DPCAP_DONT_INCLUDE_PCAP_BPF_H -DHAVE_CONFIG_H
 
 .SUFFIXES: .3 .3pcap
 
@@ -67,7 +67,6 @@ pcap_open_live.3pcap \
 pcap_open_offline.3pcap \
 pcap_set_buffer_size.3pcap \
 pcap_set_datalink.3pcap \
-pcap_set_immediate_mode.3pcap \
 pcap_set_promisc.3pcap \
 pcap_set_rfmon.3pcap \
 pcap_set_snaplen.3pcap \
@@ -89,12 +88,10 @@ pcap.3pcap.in \
 pcap_compile.3pcap.in \
 pcap_datalink.3pcap.in \
 pcap_dump_open.3pcap.in \
-pcap_get_tstamp_precision.3pcap.in \
 pcap_list_datalinks.3pcap.in \
 pcap_list_tstamp_types.3pcap.in \
 pcap_open_dead.3pcap.in \
 pcap_open_offline.3pcap.in \
-pcap_set_tstamp_precision.3pcap.in \
 pcap_set_tstamp_type.3pcap.in
 
 MANMISCIN= \
@@ -123,7 +120,6 @@ ${i:S/manfile.in/5/}: ${i} __sed
 CPPFLAGS+=	-I${.CURDIR}/../include -I${.CURDIR} -I${SRCDIR}
 CPPFLAGS+=	-DYYBISON
 LPREFIX=	pcap_
-LFLAGS+=	--header-file=scanner.h
 YPREFIX=	pcap_
 YHEADER=	1
 
@@ -136,13 +132,12 @@ CPPFLAGS+=	-DINET6
 
 SRCS=	scanner.l savefile.c pcap.c pcap-bpf.c optimize.c nametoaddr.c \
 	inet.c grammar.y gencode.c fad-getad.c etherent.c bpf_image.c \
-	bpf_dump.c pcap_version.c sf-pcap-ng.c sf-pcap.c pcap-common.c \
-	fad-getad.c fad-helpers.c
+	bpf_dump.c version.c sf-pcap-ng.c sf-pcap.c pcap-common.c
 
 .PATH:	${NETBSDSRCDIR}/sys/net
 SRCS+=	bpf_filter.c
 
-INCS=		pcap/pcap.h pcap/namedb.h pcap/export-defs.h
+INCS=		pcap/pcap.h pcap/namedb.h
 INCSDIR=	/usr/include
 INCSYMLINKS+=   ../net/bpf.h ${INCSDIR}/pcap/bpf.h
 INCSYMLINKS+=	pcap/pcap.h ${INCSDIR}/pcap.h

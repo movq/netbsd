@@ -1,15 +1,9 @@
 // RUN: %clang_cc1 -fsyntax-only -verify %s 
-// RUN: %clang_cc1 -fsyntax-only -verify -std=c++98 %s
-// RUN: %clang_cc1 -fsyntax-only -verify -std=c++11 %s
-
 namespace A
 {
     namespace B
     {
-        struct base
-#if __cplusplus <= 199711L
-        // expected-note@-2 {{lookup in the object type 'A::sub' refers here}}
-#endif
+        struct base // expected-note{{object type}}
         {
             void x() {}
             void y() {}
@@ -91,14 +85,8 @@ namespace C
     void fun4a() {
       A::sub *a;
       
-      typedef A::member base;
-#if __cplusplus <= 199711L
-      // expected-note@-2 {{lookup from the current scope refers here}}
-#endif
-      a->base::x();
-#if __cplusplus <= 199711L
-      // expected-error@-2 {{lookup of 'base' in member access expression is ambiguous}}
-#endif
+      typedef A::member base; // expected-note{{current scope}}
+      a->base::x(); // expected-error{{ambiguous}}      
     }
 
     void fun4b() {

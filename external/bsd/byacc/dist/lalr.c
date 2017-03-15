@@ -1,10 +1,10 @@
-/*	$NetBSD: lalr.c,v 1.8 2017/02/11 19:33:12 christos Exp $	*/
+/*	$NetBSD: lalr.c,v 1.5 2011/09/10 21:29:04 christos Exp $	*/
+/* Id: lalr.c,v 1.9 2009/10/27 09:49:27 tom Exp */
 
 #include "defs.h"
-/* Id: lalr.c,v 1.12 2016/06/07 00:28:03 tom Exp  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: lalr.c,v 1.8 2017/02/11 19:33:12 christos Exp $");
+__RCSID("$NetBSD: lalr.c,v 1.5 2011/09/10 21:29:04 christos Exp $");
 
 typedef struct shorts
 {
@@ -14,12 +14,12 @@ typedef struct shorts
 shorts;
 
 static Value_t map_goto(int state, int symbol);
-static Value_t **transpose(Value_t **R, int n);
+static Value_t **transpose(Value_t ** R, int n);
 static void add_lookback_edge(int stateno, int ruleno, int gotono);
 static void build_relations(void);
 static void compute_FOLLOWS(void);
 static void compute_lookaheads(void);
-static void digraph(Value_t **relation);
+static void digraph(Value_t ** relation);
 static void initialize_F(void);
 static void initialize_LA(void);
 static void set_accessing_symbol(void);
@@ -38,7 +38,6 @@ Value_t *accessing_symbol;
 core **state_table;
 shifts **shift_table;
 reductions **reduction_table;
-Value_t *goto_base;
 Value_t *goto_map;
 Value_t *from_state;
 Value_t *to_state;
@@ -151,12 +150,12 @@ initialize_LA(void)
     k = 0;
     for (i = 0; i < nstates; i++)
     {
-	lookaheads[i] = (Value_t)k;
+	lookaheads[i] = (Value_t) k;
 	rp = reduction_table[i];
 	if (rp)
 	    k += rp->nreds;
     }
-    lookaheads[nstates] = (Value_t)k;
+    lookaheads[nstates] = (Value_t) k;
 
     LA = NEW2(k * tokensetsize, unsigned);
     LAruleno = NEW2(k, Value_t);
@@ -184,16 +183,12 @@ set_goto_map(void)
     int i;
     int symbol;
     int k;
-    Value_t *temp_base;
     Value_t *temp_map;
     Value_t state2;
     Value_t state1;
 
-    goto_base = NEW2(nvars + 1, Value_t);
-    temp_base = NEW2(nvars + 1, Value_t);
-
-    goto_map = goto_base - ntokens;
-    temp_map = temp_base - ntokens;
+    goto_map = NEW2(nvars + 1, Value_t) - ntokens;
+    temp_map = NEW2(nvars + 1, Value_t) - ntokens;
 
     ngotos = 0;
     for (sp = first_shift; sp; sp = sp->next)
@@ -205,7 +200,7 @@ set_goto_map(void)
 	    if (ISTOKEN(symbol))
 		break;
 
-	    if (ngotos == MAXYYINT)
+	    if (ngotos == MAXSHORT)
 		fatal("too many gotos");
 
 	    ngotos++;
@@ -216,15 +211,15 @@ set_goto_map(void)
     k = 0;
     for (i = ntokens; i < nsyms; i++)
     {
-	temp_map[i] = (Value_t)k;
+	temp_map[i] = (Value_t) k;
 	k += goto_map[i];
     }
 
     for (i = ntokens; i < nsyms; i++)
 	goto_map[i] = temp_map[i];
 
-    goto_map[nsyms] = (Value_t)ngotos;
-    temp_map[nsyms] = (Value_t)ngotos;
+    goto_map[nsyms] = (Value_t) ngotos;
+    temp_map[nsyms] = (Value_t) ngotos;
 
     from_state = NEW2(ngotos, Value_t);
     to_state = NEW2(ngotos, Value_t);
@@ -246,7 +241,7 @@ set_goto_map(void)
 	}
     }
 
-    FREE(temp_base);
+    FREE(temp_map + ntokens);
 }
 
 /*  Map_goto maps a state/symbol pair into its numeric representation.	*/
@@ -268,7 +263,7 @@ map_goto(int state, int symbol)
 	middle = (low + high) >> 1;
 	s = from_state[middle];
 	if (s == state)
-	    return (Value_t)(middle);
+	    return (Value_t) (middle);
 	else if (s < state)
 	    low = middle + 1;
 	else
@@ -467,12 +462,12 @@ add_lookback_edge(int stateno, int ruleno, int gotono)
 
     sp = NEW(shorts);
     sp->next = lookback[i];
-    sp->value = (Value_t)gotono;
+    sp->value = (Value_t) gotono;
     lookback[i] = sp;
 }
 
 static Value_t **
-transpose(Value_t **R2, int n)
+transpose(Value_t ** R2, int n)
 {
     Value_t **new_R;
     Value_t **temp_R;
@@ -516,7 +511,7 @@ transpose(Value_t **R2, int n)
 	if (sp)
 	{
 	    while (*sp >= 0)
-		*temp_R[*sp++]++ = (Value_t)i;
+		*temp_R[*sp++]++ = (Value_t) i;
 	}
     }
 
@@ -566,11 +561,11 @@ compute_lookaheads(void)
 }
 
 static void
-digraph(Value_t **relation)
+digraph(Value_t ** relation)
 {
     int i;
 
-    infinity = (Value_t)(ngotos + 2);
+    infinity = (Value_t) (ngotos + 2);
     INDEX = NEW2(ngotos + 1, Value_t);
     VERTICES = NEW2(ngotos + 1, Value_t);
     top = 0;
@@ -602,7 +597,7 @@ traverse(int i)
     Value_t height;
     unsigned *base;
 
-    VERTICES[++top] = (Value_t)i;
+    VERTICES[++top] = (Value_t) i;
     INDEX[i] = height = top;
 
     base = F + i * tokensetsize;

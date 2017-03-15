@@ -1,4 +1,4 @@
-/* $OpenBSD: sandbox-rlimit.c,v 1.4 2016/09/12 01:22:38 deraadt Exp $ */
+/* $OpenBSD: sandbox-rlimit.c,v 1.3 2011/06/23 09:34:13 djm Exp $ */
 /*
  * Copyright (c) 2011 Damien Miller <djm@mindrot.org>
  *
@@ -16,8 +16,9 @@
  */
 
 #include "includes.h"
-__RCSID("$NetBSD: sandbox-rlimit.c,v 1.5 2016/12/25 00:07:47 christos Exp $");
+__RCSID("$NetBSD: sandbox-rlimit.c,v 1.2 2011/09/07 17:49:19 christos Exp $");
 #include <sys/types.h>
+#include <sys/param.h>
 #include <sys/time.h>
 #include <sys/resource.h>
 

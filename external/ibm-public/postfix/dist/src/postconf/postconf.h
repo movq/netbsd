@@ -1,4 +1,4 @@
-/*	$NetBSD: postconf.h,v 1.2 2017/02/14 01:16:46 christos Exp $	*/
+/*	$NetBSD: postconf.h,v 1.1.1.3 2014/07/06 19:27:53 tron Exp $	*/
 
 /*++
 /* NAME
@@ -46,8 +46,6 @@
 #define PCF_MAIN_OVER		(1<<17)	/* override parameter values */
 #define PCF_DUMP_DSN_TEMPL	(1<<18)	/* show bounce templates */
 #define PCF_MASTER_PARAM	(1<<19)	/* manage master.cf -o name=value */
-#define PCF_HIDE_VALUE		(1<<20)	/* hide main.cf/master.cf =value */
-#define PCF_SHOW_TLS		(1<<21)	/* TLS support introspection */
 
 #define PCF_DEF_MODE	0
 
@@ -58,8 +56,8 @@
   */
 typedef struct {
     int     flags;			/* see below */
-    void   *param_data;			/* mostly, the default value */
-    const char *(*convert_fn) (void *);	/* value to string */
+    char   *param_data;			/* mostly, the default value */
+    const char *(*convert_fn) (char *);	/* value to string */
 } PCF_PARAM_NODE;
 
  /* Values for flags. See the postconf_node module for narrative text. */
@@ -109,7 +107,7 @@ extern PCF_PARAM_TABLE *pcf_param_table;
 	htable_enter((table), (name), (char *) pcf_make_param_node((flags), \
 	    (data), (func)))
 
-extern PCF_PARAM_NODE *pcf_make_param_node(int, void *, const char *(*) (void *));
+extern PCF_PARAM_NODE *pcf_make_param_node(int, char *, const char *(*) (char *));
 extern const char *pcf_convert_param_node(int, const char *, PCF_PARAM_NODE *);
 extern VSTRING *pcf_param_string_buf;
 
@@ -292,7 +290,7 @@ extern char *pcf_expand_parameter_value(VSTRING *, int, const char *,
  /*
   * postconf_print.c.
   */
-extern void PRINTFLIKE(3, 4) pcf_print_line(VSTREAM *, int, const char *,...);
+extern void pcf_print_line(VSTREAM *, int, const char *,...);
 
  /*
   * postconf_unused.c.
@@ -306,7 +304,6 @@ extern void pcf_flag_unused_master_parameters(void);
 extern void pcf_show_maps(void);
 extern void pcf_show_locks(void);
 extern void pcf_show_sasl(int);
-extern void pcf_show_tls(const char *);
 
 /* LICENSE
 /* .ad
@@ -317,9 +314,4 @@ extern void pcf_show_tls(const char *);
 /*	IBM T.J. Watson Research
 /*	P.O. Box 704
 /*	Yorktown Heights, NY 10598, USA
-/*
-/*	Wietse Venema
-/*	Google, Inc.
-/*	111 8th Avenue
-/*	New York, NY 10011, USA
 /*--*/

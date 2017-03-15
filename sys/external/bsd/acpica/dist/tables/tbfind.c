@@ -5,7 +5,7 @@
  *****************************************************************************/
 
 /*
- * Copyright (C) 2000 - 2017, Intel Corp.
+ * Copyright (C) 2000 - 2013, Intel Corp.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -41,6 +41,8 @@
  * POSSIBILITY OF SUCH DAMAGES.
  */
 
+#define __TBFIND_C__
+
 #include "acpi.h"
 #include "accommon.h"
 #include "actables.h"
@@ -73,43 +75,27 @@ AcpiTbFindTable (
     char                    *OemTableId,
     UINT32                  *TableIndex)
 {
-    ACPI_STATUS             Status = AE_OK;
-    ACPI_TABLE_HEADER       Header;
     UINT32                  i;
+    ACPI_STATUS             Status;
+    ACPI_TABLE_HEADER       Header;
 
 
     ACPI_FUNCTION_TRACE (TbFindTable);
 
 
-    /* Validate the input table signature */
-
-    if (!AcpiUtValidNameseg (Signature))
-    {
-        return_ACPI_STATUS (AE_BAD_SIGNATURE);
-    }
-
-    /* Don't allow the OEM strings to be too long */
-
-    if ((strlen (OemId) > ACPI_OEM_ID_SIZE) ||
-        (strlen (OemTableId) > ACPI_OEM_TABLE_ID_SIZE))
-    {
-        return_ACPI_STATUS (AE_AML_STRING_LIMIT);
-    }
-
     /* Normalize the input strings */
 
-    memset (&Header, 0, sizeof (ACPI_TABLE_HEADER));
+    ACPI_MEMSET (&Header, 0, sizeof (ACPI_TABLE_HEADER));
     ACPI_MOVE_NAME (Header.Signature, Signature);
-    strncpy (Header.OemId, OemId, ACPI_OEM_ID_SIZE);
-    strncpy (Header.OemTableId, OemTableId, ACPI_OEM_TABLE_ID_SIZE);
+    ACPI_STRNCPY (Header.OemId, OemId, ACPI_OEM_ID_SIZE);
+    ACPI_STRNCPY (Header.OemTableId, OemTableId, ACPI_OEM_TABLE_ID_SIZE);
 
     /* Search for the table */
 
-    (void) AcpiUtAcquireMutex (ACPI_MTX_TABLES);
     for (i = 0; i < AcpiGbl_RootTableList.CurrentTableCount; ++i)
     {
-        if (memcmp (&(AcpiGbl_RootTableList.Tables[i].Signature),
-            Header.Signature, ACPI_NAME_SIZE))
+        if (ACPI_MEMCMP (&(AcpiGbl_RootTableList.Tables[i].Signature),
+                            Header.Signature, ACPI_NAME_SIZE))
         {
             /* Not the requested table */
 
@@ -122,10 +108,10 @@ AcpiTbFindTable (
         {
             /* Table is not currently mapped, map it */
 
-            Status = AcpiTbValidateTable (&AcpiGbl_RootTableList.Tables[i]);
+            Status = AcpiTbVerifyTable (&AcpiGbl_RootTableList.Tables[i]);
             if (ACPI_FAILURE (Status))
             {
-                goto UnlockAndExit;
+                return_ACPI_STATUS (Status);
             }
 
             if (!AcpiGbl_RootTableList.Tables[i].Pointer)
@@ -136,25 +122,22 @@ AcpiTbFindTable (
 
         /* Check for table match on all IDs */
 
-        if (!memcmp (AcpiGbl_RootTableList.Tables[i].Pointer->Signature,
-                Header.Signature, ACPI_NAME_SIZE) &&
+        if (!ACPI_MEMCMP (AcpiGbl_RootTableList.Tables[i].Pointer->Signature,
+                            Header.Signature, ACPI_NAME_SIZE) &&
             (!OemId[0] ||
-             !memcmp (AcpiGbl_RootTableList.Tables[i].Pointer->OemId,
-                 Header.OemId, ACPI_OEM_ID_SIZE)) &&
+             !ACPI_MEMCMP (AcpiGbl_RootTableList.Tables[i].Pointer->OemId,
+                             Header.OemId, ACPI_OEM_ID_SIZE)) &&
             (!OemTableId[0] ||
-             !memcmp (AcpiGbl_RootTableList.Tables[i].Pointer->OemTableId,
-                 Header.OemTableId, ACPI_OEM_TABLE_ID_SIZE)))
+             !ACPI_MEMCMP (AcpiGbl_RootTableList.Tables[i].Pointer->OemTableId,
+                             Header.OemTableId, ACPI_OEM_TABLE_ID_SIZE)))
         {
             *TableIndex = i;
 
             ACPI_DEBUG_PRINT ((ACPI_DB_TABLES, "Found table [%4.4s]\n",
                 Header.Signature));
-            goto UnlockAndExit;
+            return_ACPI_STATUS (AE_OK);
         }
     }
-    Status = AE_NOT_FOUND;
 
-UnlockAndExit:
-    (void) AcpiUtReleaseMutex (ACPI_MTX_TABLES);
-    return_ACPI_STATUS (Status);
+    return_ACPI_STATUS (AE_NOT_FOUND);
 }

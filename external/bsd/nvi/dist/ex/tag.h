@@ -1,4 +1,4 @@
-/*	$NetBSD: tag.h,v 1.4 2014/08/22 21:28:20 aymeric Exp $	*/
+/*	$NetBSD: tag.h,v 1.3.6.1 2014/09/22 11:04:05 martin Exp $	*/
 /*-
  * Copyright (c) 1992, 1993, 1994
  *	The Regents of the University of California.  All rights reserved.

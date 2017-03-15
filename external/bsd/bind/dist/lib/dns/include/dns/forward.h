@@ -1,4 +1,4 @@
-/*	$NetBSD: forward.h,v 1.6 2016/05/26 16:49:59 christos Exp $	*/
+/*	$NetBSD: forward.h,v 1.4.4.1 2016/10/14 12:01:29 martin Exp $	*/
 
 /*
  * Copyright (C) 2004-2007, 2009, 2013, 2016  Internet Systems Consortium, Inc. ("ISC")

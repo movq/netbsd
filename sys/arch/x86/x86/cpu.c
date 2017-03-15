@@ -1,4 +1,4 @@
-/*	$NetBSD: cpu.c,v 1.123 2017/02/11 14:11:24 maxv Exp $	*/
+/*	$NetBSD: cpu.c,v 1.111.2.3 2016/03/06 17:53:26 martin Exp $	*/
 
 /*-
  * Copyright (c) 2000-2012 NetBSD Foundation, Inc.
@@ -62,7 +62,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: cpu.c,v 1.123 2017/02/11 14:11:24 maxv Exp $");
+__KERNEL_RCSID(0, "$NetBSD: cpu.c,v 1.111.2.3 2016/03/06 17:53:26 martin Exp $");
 
 #include "opt_ddb.h"
 #include "opt_mpbios.h"		/* for MPDEBUG */
@@ -138,7 +138,7 @@ struct cpu_softc {
 };
 
 #ifdef MULTIPROCESSOR
-int mp_cpu_start(struct cpu_info *, paddr_t);
+int mp_cpu_start(struct cpu_info *, paddr_t); 
 void mp_cpu_start_cleanup(struct cpu_info *);
 const struct cpu_functions mp_cpu_funcs = { mp_cpu_start, NULL,
 					    mp_cpu_start_cleanup };
@@ -177,7 +177,7 @@ static void	tss_init(struct i386tss *, void *, void *);
 
 static void	cpu_init_idle_lwp(struct cpu_info *);
 
-uint32_t cpu_feature[7] __read_mostly; /* X86 CPUID feature bits */
+uint32_t cpu_feature[7]; /* X86 CPUID feature bits */
 			/* [0] basic features cpuid.1:%edx
 			 * [1] basic features cpuid.1:%ecx (CPUID2_xxx bits)
 			 * [2] extended features cpuid:80000001:%edx
@@ -286,9 +286,6 @@ cpu_vm_init(struct cpu_info *ci)
 	uvm_page_recolor(ncolors);
 
 	pmap_tlb_cpu_init(ci);
-#ifndef __HAVE_DIRECT_MAP
-	pmap_vpage_cpu_init(ci);
-#endif
 }
 
 static void
@@ -362,7 +359,6 @@ cpu_attach(device_t parent, device_t self, void *aux)
 	ci->ci_acpiid = caa->cpu_id;
 	ci->ci_cpuid = caa->cpu_number;
 	ci->ci_func = caa->cpu_func;
-	aprint_normal("\n");
 
 	/* Must be before mi_cpu_attach(). */
 	cpu_vm_init(ci);
@@ -372,6 +368,7 @@ cpu_attach(device_t parent, device_t self, void *aux)
 
 		error = mi_cpu_attach(ci);
 		if (error != 0) {
+			aprint_normal("\n");
 			aprint_error_dev(self,
 			    "mi_cpu_attach failed with %d\n", error);
 			return;
@@ -451,6 +448,7 @@ cpu_attach(device_t parent, device_t self, void *aux)
 #endif
 
 	default:
+		aprint_normal("\n");
 		panic("unknown processor type??\n");
 	}
 
@@ -583,10 +581,6 @@ cpu_init(struct cpu_info *ci)
 	/* If xsave is supported, enable it */
 	if (cpu_feature[1] & CPUID2_XSAVE)
 		cr4 |= CR4_OSXSAVE;
-
-	/* If SMEP is supported, enable it */
-	if (cpu_feature[5] & CPUID_SEF_SMEP)
-		cr4 |= CR4_SMEP;
 
 	if (cr4) {
 		cr4 |= rcr4();
@@ -880,7 +874,7 @@ cpu_hatch(void *v)
 
 	s = splhigh();
 #ifdef i386
-	i82489_writereg(LAPIC_TPRI, 0);
+	lapic_tpr = 0;
 #else
 	lcr8(0);
 #endif

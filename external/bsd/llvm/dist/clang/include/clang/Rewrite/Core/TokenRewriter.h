@@ -43,8 +43,8 @@ namespace clang {
     ///
     std::unique_ptr<ScratchBuffer> ScratchBuf;
 
-    TokenRewriter(const TokenRewriter &) = delete;
-    void operator=(const TokenRewriter &) = delete;
+    TokenRewriter(const TokenRewriter &) LLVM_DELETED_FUNCTION;
+    void operator=(const TokenRewriter &) LLVM_DELETED_FUNCTION;
   public:
     /// TokenRewriter - This creates a TokenRewriter for the file with the
     /// specified FileID.

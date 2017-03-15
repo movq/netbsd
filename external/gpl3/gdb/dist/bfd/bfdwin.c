@@ -1,5 +1,6 @@
 /* Support for memory-mapped windows into a BFD.
-   Copyright (C) 1995-2016 Free Software Foundation, Inc.
+   Copyright 1995, 1996, 2001, 2002, 2003, 2005, 2007, 2008, 2009, 2011
+   Free Software Foundation, Inc.
    Written by Cygnus Support.
 
    This file is part of BFD, the Binary File Descriptor library.
@@ -144,8 +145,7 @@ bfd_get_file_window (bfd *abfd,
       int fd;
 
       /* Find the real file and the real offset into it.  */
-      while (abfd->my_archive != NULL
-	     && !bfd_is_thin_archive (abfd->my_archive))
+      while (abfd->my_archive != NULL)
 	{
 	  offset += abfd->origin;
 	  abfd = abfd->my_archive;

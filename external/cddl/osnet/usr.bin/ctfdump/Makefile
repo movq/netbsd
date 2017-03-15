@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.8 2016/02/04 18:47:14 roy Exp $
+#	$NetBSD: Makefile,v 1.7 2014/04/28 21:56:20 christos Exp $
 
 # $FreeBSD: src/cddl/usr.bin/ctfdump/Makefile,v 1.1.4.1 2009/08/03 08:13:06 kensmith Exp $
 
@@ -14,8 +14,6 @@ PROG=		ctfdump
 SRCS=		dump.c \
 		symbol.c \
 		utils.c
-
-COPTS.utils.c +=	-Wno-format-nonliteral
 
 LDADD+=-lpthread
 DPADD+=${LIBPTHREAD}

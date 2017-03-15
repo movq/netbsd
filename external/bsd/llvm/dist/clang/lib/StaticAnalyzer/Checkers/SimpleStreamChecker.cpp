@@ -20,7 +20,6 @@
 #include "clang/StaticAnalyzer/Core/Checker.h"
 #include "clang/StaticAnalyzer/Core/PathSensitive/CallEvent.h"
 #include "clang/StaticAnalyzer/Core/PathSensitive/CheckerContext.h"
-#include <utility>
 
 using namespace clang;
 using namespace ento;
@@ -52,10 +51,13 @@ class SimpleStreamChecker : public Checker<check::PostCall,
                                            check::PreCall,
                                            check::DeadSymbols,
                                            check::PointerEscape> {
-  CallDescription OpenFn, CloseFn;
+
+  mutable IdentifierInfo *IIfopen, *IIfclose;
 
   std::unique_ptr<BugType> DoubleCloseBugType;
   std::unique_ptr<BugType> LeakBugType;
+
+  void initIdentifierInfo(ASTContext &Ctx) const;
 
   void reportDoubleClose(SymbolRef FileDescSym,
                          const CallEvent &Call,
@@ -90,10 +92,10 @@ public:
 REGISTER_MAP_WITH_PROGRAMSTATE(StreamMap, SymbolRef, StreamState)
 
 namespace {
-class StopTrackingCallback final : public SymbolVisitor {
+class StopTrackingCallback : public SymbolVisitor {
   ProgramStateRef state;
 public:
-  StopTrackingCallback(ProgramStateRef st) : state(std::move(st)) {}
+  StopTrackingCallback(ProgramStateRef st) : state(st) {}
   ProgramStateRef getState() const { return state; }
 
   bool VisitSymbol(SymbolRef sym) override {
@@ -104,7 +106,7 @@ public:
 } // end anonymous namespace
 
 SimpleStreamChecker::SimpleStreamChecker()
-    : OpenFn("fopen"), CloseFn("fclose", 1) {
+    : IIfopen(nullptr), IIfclose(nullptr) {
   // Initialize the bug types.
   DoubleCloseBugType.reset(
       new BugType(this, "Double fclose", "Unix Stream API Error"));
@@ -117,10 +119,12 @@ SimpleStreamChecker::SimpleStreamChecker()
 
 void SimpleStreamChecker::checkPostCall(const CallEvent &Call,
                                         CheckerContext &C) const {
+  initIdentifierInfo(C.getASTContext());
+
   if (!Call.isGlobalCFunction())
     return;
 
-  if (!Call.isCalled(OpenFn))
+  if (Call.getCalleeIdentifier() != IIfopen)
     return;
 
   // Get the symbolic value corresponding to the file handle.
@@ -136,10 +140,15 @@ void SimpleStreamChecker::checkPostCall(const CallEvent &Call,
 
 void SimpleStreamChecker::checkPreCall(const CallEvent &Call,
                                        CheckerContext &C) const {
+  initIdentifierInfo(C.getASTContext());
+
   if (!Call.isGlobalCFunction())
     return;
 
-  if (!Call.isCalled(CloseFn))
+  if (Call.getCalleeIdentifier() != IIfclose)
+    return;
+
+  if (Call.getNumArgs() != 1)
     return;
 
   // Get the symbolic value corresponding to the file handle.
@@ -191,9 +200,7 @@ void SimpleStreamChecker::checkDeadSymbols(SymbolReaper &SymReaper,
       State = State->remove<StreamMap>(Sym);
   }
 
-  ExplodedNode *N = C.generateNonFatalErrorNode(State);
-  if (!N)
-    return;
+  ExplodedNode *N = C.addTransition(State);
   reportLeaks(LeakedStreams, C, N);
 }
 
@@ -201,17 +208,17 @@ void SimpleStreamChecker::reportDoubleClose(SymbolRef FileDescSym,
                                             const CallEvent &Call,
                                             CheckerContext &C) const {
   // We reached a bug, stop exploring the path here by generating a sink.
-  ExplodedNode *ErrNode = C.generateErrorNode();
+  ExplodedNode *ErrNode = C.generateSink();
   // If we've already reached this node on another path, return.
   if (!ErrNode)
     return;
 
   // Generate the report.
-  auto R = llvm::make_unique<BugReport>(*DoubleCloseBugType,
+  BugReport *R = new BugReport(*DoubleCloseBugType,
       "Closing a previously closed file stream", ErrNode);
   R->addRange(Call.getSourceRange());
   R->markInteresting(FileDescSym);
-  C.emitReport(std::move(R));
+  C.emitReport(R);
 }
 
 void SimpleStreamChecker::reportLeaks(ArrayRef<SymbolRef> LeakedStreams,
@@ -220,10 +227,10 @@ void SimpleStreamChecker::reportLeaks(ArrayRef<SymbolRef> LeakedStreams,
   // Attach bug reports to the leak node.
   // TODO: Identify the leaked file descriptor.
   for (SymbolRef LeakedStream : LeakedStreams) {
-    auto R = llvm::make_unique<BugReport>(*LeakBugType,
+    BugReport *R = new BugReport(*LeakBugType,
         "Opened file is never closed; potential resource leak", ErrNode);
     R->markInteresting(LeakedStream);
-    C.emitReport(std::move(R));
+    C.emitReport(R);
   }
 }
 
@@ -264,6 +271,13 @@ SimpleStreamChecker::checkPointerEscape(ProgramStateRef State,
     State = State->remove<StreamMap>(Sym);
   }
   return State;
+}
+
+void SimpleStreamChecker::initIdentifierInfo(ASTContext &Ctx) const {
+  if (IIfopen)
+    return;
+  IIfopen = &Ctx.Idents.get("fopen");
+  IIfclose = &Ctx.Idents.get("fclose");
 }
 
 void ento::registerSimpleStreamChecker(CheckerManager &mgr) {

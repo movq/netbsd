@@ -1,4 +1,4 @@
-/*	$NetBSD: redir.c,v 1.51 2017/02/03 23:16:38 kre Exp $	*/
+/*	$NetBSD: redir.c,v 1.35 2013/06/27 23:22:04 yamt Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993
@@ -37,13 +37,12 @@
 #if 0
 static char sccsid[] = "@(#)redir.c	8.2 (Berkeley) 5/4/95";
 #else
-__RCSID("$NetBSD: redir.c,v 1.51 2017/02/03 23:16:38 kre Exp $");
+__RCSID("$NetBSD: redir.c,v 1.35 2013/06/27 23:22:04 yamt Exp $");
 #endif
 #endif /* not lint */
 
 #include <sys/types.h>
 #include <sys/param.h>	/* PIPE_BUF */
-#include <sys/stat.h>
 #include <signal.h>
 #include <string.h>
 #include <fcntl.h>
@@ -56,7 +55,6 @@ __RCSID("$NetBSD: redir.c,v 1.51 2017/02/03 23:16:38 kre Exp $");
  */
 
 #include "main.h"
-#include "builtins.h"
 #include "shell.h"
 #include "nodes.h"
 #include "jobs.h"
@@ -65,12 +63,11 @@ __RCSID("$NetBSD: redir.c,v 1.51 2017/02/03 23:16:38 kre Exp $");
 #include "redir.h"
 #include "output.h"
 #include "memalloc.h"
-#include "mystring.h"
 #include "error.h"
 
 
 #define EMPTY -2		/* marks an unused slot in redirtab */
-#define CLOSED -1		/* fd was not open before redir */
+#define	CLOSED -1		/* fd was not open before redir */
 #ifndef PIPE_BUF
 # define PIPESIZE 4096		/* amount of buffering in a pipe */
 #else
@@ -79,16 +76,9 @@ __RCSID("$NetBSD: redir.c,v 1.51 2017/02/03 23:16:38 kre Exp $");
 
 
 MKINIT
-struct renamelist {
-	struct renamelist *next;
-	int orig;
-	int into;
-};
-
-MKINIT
 struct redirtab {
 	struct redirtab *next;
-	struct renamelist *renamed;
+	short renamed[10];
 };
 
 
@@ -98,65 +88,12 @@ MKINIT struct redirtab *redirlist;
  * We keep track of whether or not fd0 has been redirected.  This is for
  * background commands, where we want to redirect fd0 to /dev/null only
  * if it hasn't already been redirected.
- */
-STATIC int fd0_redirected = 0;
+*/
+int fd0_redirected = 0;
 
-/*
- * And also where to put internal use fds that should be out of the
- * way of user defined fds (normally)
- */
-STATIC int big_sh_fd = 0;
-
-STATIC const struct renamelist *is_renamed(const struct renamelist *, int);
-STATIC void fd_rename(struct redirtab *, int, int);
-STATIC void free_rl(struct redirtab *, int);
 STATIC void openredirect(union node *, char[10], int);
 STATIC int openhere(const union node *);
-STATIC int copyfd(int, int, int);
-STATIC void find_big_fd(void);
 
-STATIC const struct renamelist *
-is_renamed(const struct renamelist *rl, int fd)
-{
-	while (rl != NULL) {
-		if (rl->orig == fd)
-			return rl;
-		rl = rl->next;
-	}
-	return NULL;
-}
-
-STATIC void
-free_rl(struct redirtab *rt, int reset)
-{
-	struct renamelist *rl, *rn = rt->renamed;
-
-	while ((rl = rn) != NULL) {
-		rn = rl->next;
-		if (rl->orig == 0)
-			fd0_redirected--;
-		if (reset) {
-			if (rl->into < 0)
-				close(rl->orig);
-			else
-				movefd(rl->into, rl->orig);
-		}
-		ckfree(rl);
-	}
-	rt->renamed = NULL;
-}
-
-STATIC void
-fd_rename(struct redirtab *rt, int from, int to)
-{
-	struct renamelist *rl = ckmalloc(sizeof(struct renamelist));
-
-	rl->next = rt->renamed;
-	rt->renamed = rl;
-
-	rl->orig = from;
-	rl->into = to;
-}
 
 /*
  * Process a list of redirection commands.  If the REDIR_PUSH flag is set,
@@ -183,51 +120,38 @@ redirect(union node *redir, int flags)
 		 * flags & REDIR_PUSH is never true if REDIR_VFORK is set.
 		 */
 		sv = ckmalloc(sizeof (struct redirtab));
-		sv->renamed = NULL;
+		for (i = 0 ; i < 10 ; i++)
+			sv->renamed[i] = EMPTY;
 		sv->next = redirlist;
 		redirlist = sv;
 	}
 	for (n = redir ; n ; n = n->nfile.next) {
 		fd = n->nfile.fd;
 		if ((n->nfile.type == NTOFD || n->nfile.type == NFROMFD) &&
-		    n->ndup.dupfd == fd) {
-			/* redirect from/to same file descriptor */
-			/* make sure it stays open */
-			if (fcntl(fd, F_SETFD, 0) < 0)
-				error("fd %d: %s", fd, strerror(errno));
-			continue;
-		}
+		    n->ndup.dupfd == fd)
+			continue; /* redirect from/to same file descriptor */
 
-		if ((flags & REDIR_PUSH) && !is_renamed(sv->renamed, fd)) {
+		if ((flags & REDIR_PUSH) && sv->renamed[fd] == EMPTY) {
 			INTOFF;
-			if (big_sh_fd < 10)
-				find_big_fd();
-			if ((i = fcntl(fd, F_DUPFD, big_sh_fd)) == -1) {
+			if ((i = fcntl(fd, F_DUPFD, 10)) == -1) {
 				switch (errno) {
 				case EBADF:
 					i = CLOSED;
 					break;
-				case EMFILE:
-				case EINVAL:
-					find_big_fd();
-					i = fcntl(fd, F_DUPFD, big_sh_fd);
-					if (i >= 0)
-						break;
-					/* FALLTHRU */
 				default:
-					i = errno;
-					INTON;    /* XXX not needed here ? */
-					error("%d: %s", fd, strerror(i));
+					INTON;
+					error("%d: %s", fd, strerror(errno));
 					/* NOTREACHED */
 				}
-			}
-			if (i >= 0)
+			} else
 				(void)fcntl(i, F_SETFD, FD_CLOEXEC);
-			fd_rename(sv, fd, i);
+			sv->renamed[fd] = i;
 			INTON;
+		} else {
+			close(fd);
 		}
-		if (fd == 0)
-			fd0_redirected++;
+                if (fd == 0)
+                        fd0_redirected++;
 		openredirect(n, memory, flags);
 	}
 	if (memory[1])
@@ -240,11 +164,10 @@ redirect(union node *redir, int flags)
 STATIC void
 openredirect(union node *redir, char memory[10], int flags)
 {
-	struct stat sb;
 	int fd = redir->nfile.fd;
 	char *fname;
 	int f;
-	int eflags, cloexec;
+	int oflags = O_WRONLY|O_CREAT|O_TRUNC, eflags;
 
 	/*
 	 * We suppress interrupts so that we won't leave open file
@@ -252,8 +175,7 @@ openredirect(union node *redir, char memory[10], int flags)
 	 * an open of a device or a fifo can block indefinitely.
 	 */
 	INTOFF;
-	if (fd < 10)
-		memory[fd] = 0;
+	memory[fd] = 0;
 	switch (redir->nfile.type) {
 	case NFROM:
 		fname = redir->nfile.expfname;
@@ -272,28 +194,12 @@ openredirect(union node *redir, char memory[10], int flags)
 			goto ecreate;
 		break;
 	case NTO:
-		if (Cflag) {
-			fname = redir->nfile.expfname;
-			if ((f = open(fname, O_WRONLY)) == -1) {
-				if ((f = open(fname, O_WRONLY|O_CREAT|O_EXCL,
-				    0666)) < 0)
-					goto ecreate;
-			} else if (fstat(f, &sb) == -1) {
-				int serrno = errno;
-				close(f);
-				errno = serrno;
-				goto ecreate;
-			} else if (S_ISREG(sb.st_mode)) {
-				close(f);
-				errno = EEXIST;
-				goto ecreate;
-			}
-			break;
-		}
+		if (Cflag)
+			oflags |= O_EXCL;
 		/* FALLTHROUGH */
 	case NCLOBBER:
 		fname = redir->nfile.expfname;
-		if ((f = open(fname, O_WRONLY|O_CREAT|O_TRUNC, 0666)) < 0)
+		if ((f = open(fname, oflags, 0666)) < 0)
 			goto ecreate;
 		break;
 	case NAPPEND:
@@ -304,15 +210,11 @@ openredirect(union node *redir, char memory[10], int flags)
 	case NTOFD:
 	case NFROMFD:
 		if (redir->ndup.dupfd >= 0) {	/* if not ">&-" */
-			if (fd < 10 && redir->ndup.dupfd < 10 &&
-			    memory[redir->ndup.dupfd])
+			if (memory[redir->ndup.dupfd])
 				memory[fd] = 1;
-			else if (copyfd(redir->ndup.dupfd, fd,
-			    (flags & REDIR_KEEP) == 0) < 0)
-				error("Redirect (from %d to %d) failed: %s",
-				    redir->ndup.dupfd, fd, strerror(errno));
-		} else
-			(void) close(fd);
+			else
+				copyfd(redir->ndup.dupfd, fd, 1);
+		}
 		INTON;
 		return;
 	case NHERE:
@@ -323,19 +225,10 @@ openredirect(union node *redir, char memory[10], int flags)
 		abort();
 	}
 
-	cloexec = fd > 2 && (flags & REDIR_KEEP) == 0;
 	if (f != fd) {
-		if (copyfd(f, fd, cloexec) < 0) {
-			int e = errno;
-
-			close(f);
-			error("redirect reassignment (fd %d) failed: %s", fd,
-			    strerror(e));
-		}
+		copyfd(f, fd, 1);
 		close(f);
-	} else if (cloexec)
-		(void)fcntl(f, F_SETFD, FD_CLOEXEC);
-
+	}
 	INTON;
 	return;
 ecreate:
@@ -398,9 +291,20 @@ void
 popredir(void)
 {
 	struct redirtab *rp = redirlist;
+	int i;
 
+	for (i = 0 ; i < 10 ; i++) {
+		if (rp->renamed[i] != EMPTY) {
+                        if (i == 0)
+                                fd0_redirected--;
+			close(i);
+			if (rp->renamed[i] >= 0) {
+				copyfd(rp->renamed[i], i, 1);
+				close(rp->renamed[i]);
+			}
+		}
+	}
 	INTOFF;
-	free_rl(rp, 1);
 	redirlist = rp->next;
 	ckfree(rp);
 	INTON;
@@ -427,9 +331,8 @@ SHELLPROC {
 
 /* Return true if fd 0 has already been redirected at least once.  */
 int
-fd0_redirected_p(void)
-{
-	return fd0_redirected != 0;
+fd0_redirected_p (void) {
+        return fd0_redirected != 0;
 }
 
 /*
@@ -440,334 +343,41 @@ void
 clearredir(int vforked)
 {
 	struct redirtab *rp;
-	struct renamelist *rl;
+	int i;
 
 	for (rp = redirlist ; rp ; rp = rp->next) {
-		if (!vforked)
-			free_rl(rp, 0);
-		else for (rl = rp->renamed; rl; rl = rl->next)
-			if (rl->into >= 0)
-				close(rl->into);
+		for (i = 0 ; i < 10 ; i++) {
+			if (rp->renamed[i] >= 0) {
+				close(rp->renamed[i]);
+			}
+			if (!vforked)
+				rp->renamed[i] = EMPTY;
+		}
 	}
 }
 
 
 
 /*
- * Copy a file descriptor to be == to.
- * cloexec indicates if we want close-on-exec or not.
- * Returns -1 if any error occurs.
+ * Copy a file descriptor to be >= to.  Returns -1
+ * if the source file descriptor is closed, EMPTY if there are no unused
+ * file descriptors left.
  */
 
-STATIC int
-copyfd(int from, int to, int cloexec)
+int
+copyfd(int from, int to, int equal)
 {
 	int newfd;
 
-	if (cloexec && to > 2)
-		newfd = dup3(from, to, O_CLOEXEC);
-	else
+	if (equal)
 		newfd = dup2(from, to);
-
+	else
+		newfd = fcntl(from, F_DUPFD, to);
+	if (newfd < 0) {
+		if (errno == EMFILE)
+			return EMPTY;
+		else
+			error("%d: %s", from, strerror(errno));
+	}
 	return newfd;
-}
-
-/*
- * rename fd from to be fd to (closing from).
- * close-on-exec is never set on 'to' (unless
- * from==to and it was set on from) - ie: a no-op
- * returns to (or errors() if an error occurs).  
- *
- * This is mostly used for rearranging the
- * results from pipe().
- */
-int
-movefd(int from, int to)
-{
-	if (from == to)
-		return to;
-
-	(void) close(to);
-	if (copyfd(from, to, 0) != to) {
-		int e = errno;
-
-		(void) close(from);
-		error("Unable to make fd %d: %s", to, strerror(e));
-	}
-	(void) close(from);
-
-	return to;
-}
-
-STATIC void
-find_big_fd(void)
-{
-	int i, fd;
-
-	for (i = (1 << 10); i >= 10; i >>= 1) {
-		if ((fd = fcntl(0, F_DUPFD, i - 1)) >= 0) {
-			close(fd);
-			break;
-		}
-	}
-
-	fd = (i / 5) * 4;
-	if ((i - fd) > 100)
-		fd = i - 100;
-	else if (fd < 10)
-		fd = 10;
-
-	big_sh_fd = fd;
-}
-
-/*
- * If possible, move file descriptor fd out of the way
- * of expected user fd values.   Returns the new fd
- * (which may be the input fd if things do not go well.)
- * Always set close-on-exec on the result, and close
- * the input fd unless it is to be our result.
- */
-int
-to_upper_fd(int fd)
-{
-	int i;
-
-	if (big_sh_fd < 10)
-		find_big_fd();
-	do {
-		i = fcntl(fd, F_DUPFD_CLOEXEC, big_sh_fd);
-		if (i >= 0) {
-			if (fd != i)
-				close(fd);
-			return i;
-		}
-		if (errno != EMFILE)
-			break;
-		find_big_fd();
-	} while (big_sh_fd > 10);
-
-	/*
-	 * If we wanted to move this fd to some random high number
-	 * we certainly do not intend to pass it through exec, even
-	 * if the reassignment failed.
-	 */
-	(void)fcntl(fd, F_SETFD, FD_CLOEXEC);
-	return fd;
-}
-
-static const struct flgnames {
-	const char *name;
-	uint32_t value;
-} nv[] = {
-#ifdef O_APPEND
-	{ "append",	O_APPEND 	},
-#endif
-#ifdef O_ASYNC
-	{ "async",	O_ASYNC		},
-#endif
-#ifdef O_SYNC
-	{ "sync",	O_SYNC		},
-#endif
-#ifdef O_NONBLOCK
-	{ "nonblock",	O_NONBLOCK	},
-#endif
-#ifdef O_FSYNC
-	{ "fsync",	O_FSYNC		},
-#endif
-#ifdef O_DSYNC
-	{ "dsync",	O_DSYNC		},
-#endif
-#ifdef O_RSYNC
-	{ "rsync",	O_RSYNC		},
-#endif
-#ifdef O_ALTIO
-	{ "altio",	O_ALT_IO	},
-#endif
-#ifdef O_DIRECT
-	{ "direct",	O_DIRECT	},
-#endif
-#ifdef O_NOSIGPIPE
-	{ "nosigpipe",	O_NOSIGPIPE	},
-#endif
-#ifdef O_CLOEXEC
-	{ "cloexec",	O_CLOEXEC	},
-#endif
-	{ 0, 0 }
-};
-#define ALLFLAGS (O_APPEND|O_ASYNC|O_SYNC|O_NONBLOCK|O_DSYNC|O_RSYNC|\
-    O_ALT_IO|O_DIRECT|O_NOSIGPIPE|O_CLOEXEC)
-
-static int
-getflags(int fd, int p)
-{
-	int c, f;
-
-	if ((c = fcntl(fd, F_GETFD)) == -1) {
-		if (!p)
-			return -1;
-		error("Can't get status for fd=%d (%s)", fd, strerror(errno));
-	}
-	if ((f = fcntl(fd, F_GETFL)) == -1) {
-		if (!p)
-			return -1;
-		error("Can't get flags for fd=%d (%s)", fd, strerror(errno));
-	}
-	if (c & FD_CLOEXEC)
-		f |= O_CLOEXEC;
-	return f & ALLFLAGS;
-}
-
-static void
-printone(int fd, int p, int verbose, int pfd)
-{
-	int f = getflags(fd, p);
-	const struct flgnames *fn;
-
-	if (f == -1)
-		return;
-
-	if (pfd)
-		outfmt(out1, "%d: ", fd);
-	for (fn = nv; fn->name; fn++) {
-		if (f & fn->value) {
-			outfmt(out1, "%s%s", verbose ? "+" : "", fn->name);
-			f &= ~fn->value;
-		} else if (verbose)
-			outfmt(out1, "-%s", fn->name);
-		else
-			continue;
-		if (f || (verbose && fn[1].name))
-			outfmt(out1, ",");
-	}
-	if (verbose && f)		/* f should be normally be 0 */
-		outfmt(out1, " +%#x", f);
-	outfmt(out1, "\n");
-}
-
-static void
-parseflags(char *s, int *p, int *n)
-{
-	int *v, *w;
-	const struct flgnames *fn;
-
-	*p = 0;
-	*n = 0;
-	for (s = strtok(s, ","); s; s = strtok(NULL, ",")) {
-		switch (*s++) {
-		case '+':
-			v = p;
-			w = n;
-			break;
-		case '-':
-			v = n;
-			w = p;
-			break;
-		default:
-			error("Missing +/- indicator before flag %s", s-1);
-		}
-			
-		for (fn = nv; fn->name; fn++)
-			if (strcmp(s, fn->name) == 0) {
-				*v |= fn->value;
-				*w &=~ fn->value;
-				break;
-			}
-		if (fn->name == 0)
-			error("Bad flag `%s'", s);
-	}
-}
-
-static void
-setone(int fd, int pos, int neg, int verbose)
-{
-	int f = getflags(fd, 1);
-	int n, cloexec;
-
-	if (f == -1)
-		return;
-
-	cloexec = -1;
-	if ((pos & O_CLOEXEC) && !(f & O_CLOEXEC))
-		cloexec = FD_CLOEXEC;
-	if ((neg & O_CLOEXEC) && (f & O_CLOEXEC))
-		cloexec = 0;
-
-	if (cloexec != -1 && fcntl(fd, F_SETFD, cloexec) == -1)
-		error("Can't set status for fd=%d (%s)", fd, strerror(errno));
-
-	pos &= ~O_CLOEXEC;
-	neg &= ~O_CLOEXEC;
-	f &= ~O_CLOEXEC;
-	n = f;
-	n |= pos;
-	n &= ~neg;
-	if (n != f && fcntl(fd, F_SETFL, n) == -1)
-		error("Can't set flags for fd=%d (%s)", fd, strerror(errno));
-	if (verbose)
-		printone(fd, 1, verbose, 1);
-}
-
-int
-fdflagscmd(int argc, char *argv[])
-{
-	char *num;
-	int verbose = 0, ch, pos = 0, neg = 0;
-	char *setflags = NULL;
-
-	optreset = 1; optind = 1; /* initialize getopt */
-	while ((ch = getopt(argc, argv, ":vs:")) != -1)
-		switch ((char)ch) {
-		case 'v':
-			verbose = 1;
-			break;
-		case 's':
-			if (setflags)
-				goto msg;
-			setflags = optarg;
-			break;
-		case '?':
-		default:
-		msg:
-			error("Usage: fdflags [-v] [-s <flags> fd] [fd...]");
-			/* NOTREACHED */
-		}
-
-	argc -= optind, argv += optind;
-
-	if (setflags)
-		parseflags(setflags, &pos, &neg);
-
-	if (argc == 0) {
-		int maxfd;
-
-		if (setflags)
-			goto msg;
-
-		/*
-		 * XXX  this has to go, maxfd might be 700 (or something)
-		 *
-		 * XXX  we should only ever operate on user defined fds
-		 * XXX  not on sh internal fds that might be open.
-		 * XXX  but for that we need to know their range (later)
-		 */
-		maxfd = fcntl(0, F_MAXFD);
-		if (maxfd == -1)
-			error("Can't get max fd (%s)", strerror(errno));
-		for (int i = 0; i <= maxfd; i++)
-			printone(i, 0, verbose, 1);
-		return 0;
-	}
-
-	while ((num = *argv++) != NULL) {
-		int fd = number(num);
-
-		if (strlen(num) > 5)
-			error("%s too big to be a file descriptor", num);
-
-		if (setflags)
-			setone(fd, pos, neg, verbose);
-		else
-			printone(fd, 1, verbose, argc > 1);
-	}
-	return 0;
 }

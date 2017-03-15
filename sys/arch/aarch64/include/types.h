@@ -1,4 +1,4 @@
-/* $NetBSD: types.h,v 1.5 2016/02/28 22:19:01 joerg Exp $ */
+/* $NetBSD: types.h,v 1.1 2014/08/10 05:47:38 matt Exp $ */
 
 /*-
  * Copyright (c) 2014 The NetBSD Foundation, Inc.
@@ -38,7 +38,8 @@
 #include <sys/featuretest.h>
 #include <aarch64/int_types.h>
 
-#if defined(_KERNEL) || defined(_KMEMUSER) || defined(_KERNTYPES) || defined(_STANDALONE)
+/* NB: This should probably be if defined(_KERNEL) */
+#if defined(_NETBSD_SOURCE)
 typedef	unsigned long	vm_offset_t;	/* depreciated */
 typedef	unsigned long	vm_size_t;	/* depreciated */
 
@@ -52,6 +53,7 @@ typedef unsigned long	vsize_t;
 #define PRIxVADDR	"lx"
 #define PRIxVSIZE	"lx"
 #define PRIuVSIZE	"lu"
+#endif
 
 typedef unsigned long long int register_t;
 typedef unsigned int register32_t;
@@ -68,14 +70,11 @@ typedef struct label_t {	/* Used by setjmp & longjmp */
         register_t lb_reg[13];	/* x19 .. x30, sp */
 } label_t;
 #endif
-
-#endif
          
 /*
  * This should have always been an 8-bit type.
  */
-typedef	unsigned char	__cpu_simple_lock_nv_t;
-typedef unsigned long long int __register_t;
+typedef	volatile unsigned char	__cpu_simple_lock_t;
 
 #define __SIMPLELOCK_LOCKED	1
 #define __SIMPLELOCK_UNLOCKED	0

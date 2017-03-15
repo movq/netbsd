@@ -19,7 +19,7 @@
 
 // Effects: aborts if a - b overflows
 
-COMPILER_RT_ABI di_int __subvdi3(di_int a, di_int b);
+di_int __subvdi3(di_int a, di_int b);
 
 int test__subvdi3(di_int a, di_int b)
 {

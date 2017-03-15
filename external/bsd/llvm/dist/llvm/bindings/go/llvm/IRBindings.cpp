@@ -12,6 +12,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "IRBindings.h"
+
 #include "llvm/IR/Attributes.h"
 #include "llvm/IR/DebugLoc.h"
 #include "llvm/IR/Function.h"
@@ -20,6 +21,34 @@
 #include "llvm/IR/Module.h"
 
 using namespace llvm;
+
+void LLVMAddFunctionAttr2(LLVMValueRef Fn, uint64_t PA) {
+  Function *Func = unwrap<Function>(Fn);
+  const AttributeSet PAL = Func->getAttributes();
+  AttrBuilder B(PA);
+  const AttributeSet PALnew =
+    PAL.addAttributes(Func->getContext(), AttributeSet::FunctionIndex,
+                      AttributeSet::get(Func->getContext(),
+                                        AttributeSet::FunctionIndex, B));
+  Func->setAttributes(PALnew);
+}
+
+uint64_t LLVMGetFunctionAttr2(LLVMValueRef Fn) {
+  Function *Func = unwrap<Function>(Fn);
+  const AttributeSet PAL = Func->getAttributes();
+  return PAL.Raw(AttributeSet::FunctionIndex);
+}
+
+void LLVMRemoveFunctionAttr2(LLVMValueRef Fn, uint64_t PA) {
+  Function *Func = unwrap<Function>(Fn);
+  const AttributeSet PAL = Func->getAttributes();
+  AttrBuilder B(PA);
+  const AttributeSet PALnew =
+    PAL.removeAttributes(Func->getContext(), AttributeSet::FunctionIndex,
+                         AttributeSet::get(Func->getContext(),
+                                           AttributeSet::FunctionIndex, B));
+  Func->setAttributes(PALnew);
+}
 
 LLVMMetadataRef LLVMConstantAsMetadata(LLVMValueRef C) {
   return wrap(ConstantAsMetadata::get(unwrap<Constant>(C)));
@@ -37,9 +66,8 @@ LLVMMetadataRef LLVMMDNode2(LLVMContextRef C, LLVMMetadataRef *MDs,
 
 LLVMMetadataRef LLVMTemporaryMDNode(LLVMContextRef C, LLVMMetadataRef *MDs,
                                     unsigned Count) {
-  return wrap(MDTuple::getTemporary(*unwrap(C),
-                                    ArrayRef<Metadata *>(unwrap(MDs), Count))
-                  .release());
+  return wrap(MDNode::getTemporary(*unwrap(C),
+                                   ArrayRef<Metadata *>(unwrap(MDs), Count)));
 }
 
 void LLVMAddNamedMetadataOperand2(LLVMModuleRef M, const char *name,
@@ -58,8 +86,8 @@ void LLVMSetMetadata2(LLVMValueRef Inst, unsigned KindID, LLVMMetadataRef MD) {
 }
 
 void LLVMMetadataReplaceAllUsesWith(LLVMMetadataRef MD, LLVMMetadataRef New) {
-  auto *Node = unwrap<MDNode>(MD);
-  Node->replaceAllUsesWith(unwrap<Metadata>(New));
+  auto *Node = unwrap<MDNodeFwdDecl>(MD);
+  Node->replaceAllUsesWith(unwrap<MDNode>(New));
   MDNode::deleteTemporary(Node);
 }
 
@@ -69,8 +97,4 @@ void LLVMSetCurrentDebugLocation2(LLVMBuilderRef Bref, unsigned Line,
   unwrap(Bref)->SetCurrentDebugLocation(
       DebugLoc::get(Line, Col, Scope ? unwrap<MDNode>(Scope) : nullptr,
                     InlinedAt ? unwrap<MDNode>(InlinedAt) : nullptr));
-}
-
-void LLVMSetSubprogram(LLVMValueRef Func, LLVMMetadataRef SP) {
-  unwrap<Function>(Func)->setSubprogram(unwrap<DISubprogram>(SP));
 }

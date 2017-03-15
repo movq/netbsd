@@ -1,4 +1,4 @@
-/*	$NetBSD: altq_fifoq.c,v 1.17 2016/04/20 08:58:48 knakahara Exp $	*/
+/*	$NetBSD: altq_fifoq.c,v 1.16 2007/03/04 05:59:01 christos Exp $	*/
 /*	$KAME: altq_fifoq.c,v 1.12 2003/07/10 12:07:48 kjc Exp $	*/
 
 /*
@@ -28,7 +28,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: altq_fifoq.c,v 1.17 2016/04/20 08:58:48 knakahara Exp $");
+__KERNEL_RCSID(0, "$NetBSD: altq_fifoq.c,v 1.16 2007/03/04 05:59:01 christos Exp $");
 
 #ifdef _KERNEL_OPT
 #include "opt_altq.h"
@@ -70,7 +70,8 @@ __KERNEL_RCSID(0, "$NetBSD: altq_fifoq.c,v 1.17 2016/04/20 08:58:48 knakahara Ex
 static fifoq_state_t *fifoq_list = NULL;
 
 /* internal function prototypes */
-static int		fifoq_enqueue(struct ifaltq *, struct mbuf *);
+static int		fifoq_enqueue(struct ifaltq *, struct mbuf *,
+				      struct altq_pktattr *);
 static struct mbuf 	*fifoq_dequeue(struct ifaltq *, int);
 static int 		fifoq_detach(fifoq_state_t *);
 static int		fifoq_request(struct ifaltq *, int, void *);
@@ -265,7 +266,8 @@ fifoqioctl(dev_t dev, ioctlcmd_t cmd, void *addr, int flag,
  *		 ENOBUFS when drop occurs.
  */
 static int
-fifoq_enqueue(struct ifaltq *ifq, struct mbuf *m)
+fifoq_enqueue(struct ifaltq *ifq, struct mbuf *m,
+    struct altq_pktattr *pktattr)
 {
 	fifoq_state_t *q = (fifoq_state_t *)ifq->altq_disc;
 

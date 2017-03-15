@@ -1,6 +1,6 @@
 /* Find a variable's value in memory, for GDB, the GNU debugger.
 
-   Copyright (C) 1986-2016 Free Software Foundation, Inc.
+   Copyright (C) 1986-2014 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -25,6 +25,8 @@
 #include "gdbcore.h"
 #include "inferior.h"
 #include "target.h"
+#include <string.h>
+#include "gdb_assert.h"
 #include "floatformat.h"
 #include "symfile.h"		/* for overlay functions */
 #include "regcache.h"
@@ -32,7 +34,6 @@
 #include "block.h"
 #include "objfiles.h"
 #include "language.h"
-#include "dwarf2loc.h"
 
 /* Basic byte-swapping routines.  All 'extract' functions return a
    host-format integer from a target-format integer at ADDR which is
@@ -337,13 +338,14 @@ address_to_signed_pointer (struct gdbarch *gdbarch, struct type *type,
   store_signed_integer (buf, TYPE_LENGTH (type), byte_order, addr);
 }
 
-/* See value.h.  */
-
-enum symbol_needs_kind
-symbol_read_needs (struct symbol *sym)
+/* Will calling read_var_value or locate_var_value on SYM end
+   up caring what frame it is being evaluated relative to?  SYM must
+   be non-NULL.  */
+int
+symbol_read_needs_frame (struct symbol *sym)
 {
   if (SYMBOL_COMPUTED_OPS (sym) != NULL)
-    return SYMBOL_COMPUTED_OPS (sym)->get_symbol_read_needs (sym);
+    return SYMBOL_COMPUTED_OPS (sym)->read_needs_frame (sym);
 
   switch (SYMBOL_CLASS (sym))
     {
@@ -357,7 +359,7 @@ symbol_read_needs (struct symbol *sym)
     case LOC_REF_ARG:
     case LOC_REGPARM_ADDR:
     case LOC_LOCAL:
-      return SYMBOL_NEEDS_FRAME;
+      return 1;
 
     case LOC_UNDEF:
     case LOC_CONST:
@@ -373,17 +375,9 @@ symbol_read_needs (struct symbol *sym)
     case LOC_CONST_BYTES:
     case LOC_UNRESOLVED:
     case LOC_OPTIMIZED_OUT:
-      return SYMBOL_NEEDS_NONE;
+      return 0;
     }
-  return SYMBOL_NEEDS_FRAME;
-}
-
-/* See value.h.  */
-
-int
-symbol_read_needs_frame (struct symbol *sym)
-{
-  return symbol_read_needs (sym) == SYMBOL_NEEDS_FRAME;
+  return 1;
 }
 
 /* Private data to be used with minsym_lookup_iterator_cb.  */
@@ -396,7 +390,10 @@ struct minsym_lookup_data
   /* The field where the callback should store the minimal symbol
      if found.  It should be initialized to NULL before the search
      is started.  */
-  struct bound_minimal_symbol result;
+  struct minimal_symbol *result;
+
+  /* The objfile in which the symbol was found.  */
+  struct objfile *objfile;
 };
 
 /* A callback function for gdbarch_iterate_over_objfiles_in_search_order.
@@ -409,180 +406,24 @@ minsym_lookup_iterator_cb (struct objfile *objfile, void *cb_data)
 {
   struct minsym_lookup_data *data = (struct minsym_lookup_data *) cb_data;
 
-  gdb_assert (data->result.minsym == NULL);
+  gdb_assert (data->result == NULL);
 
   data->result = lookup_minimal_symbol (data->name, NULL, objfile);
+  data->objfile = objfile;
 
   /* The iterator should stop iff a match was found.  */
-  return (data->result.minsym != NULL);
-}
-
-/* Given static link expression and the frame it lives in, look for the frame
-   the static links points to and return it.  Return NULL if we could not find
-   such a frame.   */
-
-static struct frame_info *
-follow_static_link (struct frame_info *frame,
-		    const struct dynamic_prop *static_link)
-{
-  CORE_ADDR upper_frame_base;
-
-  if (!dwarf2_evaluate_property (static_link, frame, NULL, &upper_frame_base))
-    return NULL;
-
-  /* Now climb up the stack frame until we reach the frame we are interested
-     in.  */
-  for (; frame != NULL; frame = get_prev_frame (frame))
-    {
-      struct symbol *framefunc = get_frame_function (frame);
-
-      /* Stacks can be quite deep: give the user a chance to stop this.  */
-      QUIT;
-
-      /* If we don't know how to compute FRAME's base address, don't give up:
-	 maybe the frame we are looking for is upper in the stace frame.  */
-      if (framefunc != NULL
-	  && SYMBOL_BLOCK_OPS (framefunc) != NULL
-	  && SYMBOL_BLOCK_OPS (framefunc)->get_frame_base != NULL
-	  && (SYMBOL_BLOCK_OPS (framefunc)->get_frame_base (framefunc, frame)
-	      == upper_frame_base))
-	break;
-    }
-
-  return frame;
-}
-
-/* Assuming VAR is a symbol that can be reached from FRAME thanks to lexical
-   rules, look for the frame that is actually hosting VAR and return it.  If,
-   for some reason, we found no such frame, return NULL.
-
-   This kind of computation is necessary to correctly handle lexically nested
-   functions.
-
-   Note that in some cases, we know what scope VAR comes from but we cannot
-   reach the specific frame that hosts the instance of VAR we are looking for.
-   For backward compatibility purposes (with old compilers), we then look for
-   the first frame that can host it.  */
-
-static struct frame_info *
-get_hosting_frame (struct symbol *var, const struct block *var_block,
-		   struct frame_info *frame)
-{
-  const struct block *frame_block = NULL;
-
-  if (!symbol_read_needs_frame (var))
-    return NULL;
-
-  /* Some symbols for local variables have no block: this happens when they are
-     not produced by a debug information reader, for instance when GDB creates
-     synthetic symbols.  Without block information, we must assume they are
-     local to FRAME. In this case, there is nothing to do.  */
-  else if (var_block == NULL)
-    return frame;
-
-  /* We currently assume that all symbols with a location list need a frame.
-     This is true in practice because selecting the location description
-     requires to compute the CFA, hence requires a frame.  However we have
-     tests that embed global/static symbols with null location lists.
-     We want to get <optimized out> instead of <frame required> when evaluating
-     them so return a frame instead of raising an error.  */
-  else if (var_block == block_global_block (var_block)
-	   || var_block == block_static_block (var_block))
-    return frame;
-
-  /* We have to handle the "my_func::my_local_var" notation.  This requires us
-     to look for upper frames when we find no block for the current frame: here
-     and below, handle when frame_block == NULL.  */
-  if (frame != NULL)
-    frame_block = get_frame_block (frame, NULL);
-
-  /* Climb up the call stack until reaching the frame we are looking for.  */
-  while (frame != NULL && frame_block != var_block)
-    {
-      /* Stacks can be quite deep: give the user a chance to stop this.  */
-      QUIT;
-
-      if (frame_block == NULL)
-	{
-	  frame = get_prev_frame (frame);
-	  if (frame == NULL)
-	    break;
-	  frame_block = get_frame_block (frame, NULL);
-	}
-
-      /* If we failed to find the proper frame, fallback to the heuristic
-	 method below.  */
-      else if (frame_block == block_global_block (frame_block))
-	{
-	  frame = NULL;
-	  break;
-	}
-
-      /* Assuming we have a block for this frame: if we are at the function
-	 level, the immediate upper lexical block is in an outer function:
-	 follow the static link.  */
-      else if (BLOCK_FUNCTION (frame_block))
-	{
-	  const struct dynamic_prop *static_link
-	    = block_static_link (frame_block);
-	  int could_climb_up = 0;
-
-	  if (static_link != NULL)
-	    {
-	      frame = follow_static_link (frame, static_link);
-	      if (frame != NULL)
-		{
-		  frame_block = get_frame_block (frame, NULL);
-		  could_climb_up = frame_block != NULL;
-		}
-	    }
-	  if (!could_climb_up)
-	    {
-	      frame = NULL;
-	      break;
-	    }
-	}
-
-      else
-	/* We must be in some function nested lexical block.  Just get the
-	   outer block: both must share the same frame.  */
-	frame_block = BLOCK_SUPERBLOCK (frame_block);
-    }
-
-  /* Old compilers may not provide a static link, or they may provide an
-     invalid one.  For such cases, fallback on the old way to evaluate
-     non-local references: just climb up the call stack and pick the first
-     frame that contains the variable we are looking for.  */
-  if (frame == NULL)
-    {
-      frame = block_innermost_frame (var_block);
-      if (frame == NULL)
-	{
-	  if (BLOCK_FUNCTION (var_block)
-	      && !block_inlined_p (var_block)
-	      && SYMBOL_PRINT_NAME (BLOCK_FUNCTION (var_block)))
-	    error (_("No frame is currently executing in block %s."),
-		   SYMBOL_PRINT_NAME (BLOCK_FUNCTION (var_block)));
-	  else
-	    error (_("No frame is currently executing in specified"
-		     " block"));
-	}
-    }
-
-  return frame;
+  return (data->result != NULL);
 }
 
 /* A default implementation for the "la_read_var_value" hook in
    the language vector which should work in most situations.  */
 
 struct value *
-default_read_var_value (struct symbol *var, const struct block *var_block,
-			struct frame_info *frame)
+default_read_var_value (struct symbol *var, struct frame_info *frame)
 {
   struct value *v;
   struct type *type = SYMBOL_TYPE (var);
   CORE_ADDR addr;
-  enum symbol_needs_kind sym_need;
 
   /* Call check_typedef on our type to make sure that, if TYPE is
      a TYPE_CODE_TYPEDEF, its length is set to the length of the target type
@@ -591,14 +432,8 @@ default_read_var_value (struct symbol *var, const struct block *var_block,
      set the returned value type description correctly.  */
   check_typedef (type);
 
-  sym_need = symbol_read_needs (var);
-  if (sym_need == SYMBOL_NEEDS_FRAME)
-    gdb_assert (frame != NULL);
-  else if (sym_need == SYMBOL_NEEDS_REGISTERS && !target_has_registers)
-    error (_("Cannot read `%s' without registers"), SYMBOL_PRINT_NAME (var));
-
-  if (frame != NULL)
-    frame = get_hosting_frame (var, var_block, frame);
+  if (symbol_read_needs_frame (var))
+    gdb_assert (frame);
 
   if (SYMBOL_COMPUTED_OPS (var) != NULL)
     return SYMBOL_COMPUTED_OPS (var)->read_variable (var, frame);
@@ -606,12 +441,7 @@ default_read_var_value (struct symbol *var, const struct block *var_block,
   switch (SYMBOL_CLASS (var))
     {
     case LOC_CONST:
-      if (is_dynamic_type (type))
-	{
-	  /* Value is a constant byte-sequence and needs no memory access.  */
-	  type = resolve_dynamic_type (type, NULL, /* Unused address.  */ 0);
-	}
-      /* Put the constant back in target format. */
+      /* Put the constant back in target format.  */
       v = allocate_value (type);
       store_signed_integer (value_contents_raw (v), TYPE_LENGTH (type),
 			    gdbarch_byte_order (get_type_arch (type)),
@@ -626,7 +456,7 @@ default_read_var_value (struct symbol *var, const struct block *var_block,
 	{
 	  CORE_ADDR addr
 	    = symbol_overlayed_address (SYMBOL_VALUE_ADDRESS (var),
-					SYMBOL_OBJ_SECTION (symbol_objfile (var),
+					SYMBOL_OBJ_SECTION (SYMBOL_OBJFILE (var),
 							    var));
 
 	  store_typed_address (value_contents_raw (v), type, addr);
@@ -638,11 +468,6 @@ default_read_var_value (struct symbol *var, const struct block *var_block,
       return v;
 
     case LOC_CONST_BYTES:
-      if (is_dynamic_type (type))
-	{
-	  /* Value is a constant byte-sequence and needs no memory access.  */
-	  type = resolve_dynamic_type (type, NULL, /* Unused address.  */ 0);
-	}
       v = allocate_value (type);
       memcpy (value_contents_raw (v), SYMBOL_VALUE_BYTES (var),
 	      TYPE_LENGTH (type));
@@ -652,7 +477,7 @@ default_read_var_value (struct symbol *var, const struct block *var_block,
     case LOC_STATIC:
       if (overlay_debugging)
 	addr = symbol_overlayed_address (SYMBOL_VALUE_ADDRESS (var),
-					 SYMBOL_OBJ_SECTION (symbol_objfile (var),
+					 SYMBOL_OBJ_SECTION (SYMBOL_OBJFILE (var),
 							     var));
       else
 	addr = SYMBOL_VALUE_ADDRESS (var);
@@ -694,8 +519,8 @@ default_read_var_value (struct symbol *var, const struct block *var_block,
     case LOC_BLOCK:
       if (overlay_debugging)
 	addr = symbol_overlayed_address
-	  (BLOCK_START (SYMBOL_BLOCK_VALUE (var)),
-	   SYMBOL_OBJ_SECTION (symbol_objfile (var), var));
+	  (BLOCK_START (SYMBOL_BLOCK_VALUE (var)), SYMBOL_OBJ_SECTION (SYMBOL_OBJFILE (var),
+								       var));
       else
 	addr = BLOCK_START (SYMBOL_BLOCK_VALUE (var));
       break;
@@ -744,36 +569,21 @@ default_read_var_value (struct symbol *var, const struct block *var_block,
 	lookup_data.name = SYMBOL_LINKAGE_NAME (var);
 
 	gdbarch_iterate_over_objfiles_in_search_order
-	  (symbol_arch (var),
+	  (get_objfile_arch (SYMBOL_SYMTAB (var)->objfile),
 	   minsym_lookup_iterator_cb, &lookup_data,
-	   symbol_objfile (var));
-	msym = lookup_data.result.minsym;
+	   SYMBOL_SYMTAB (var)->objfile);
+	msym = lookup_data.result;
 
-	/* If we can't find the minsym there's a problem in the symbol info.
-	   The symbol exists in the debug info, but it's missing in the minsym
-	   table.  */
 	if (msym == NULL)
-	  {
-	    const char *flavour_name
-	      = objfile_flavour_name (symbol_objfile (var));
-
-	    /* We can't get here unless we've opened the file, so flavour_name
-	       can't be NULL.  */
-	    gdb_assert (flavour_name != NULL);
-	    error (_("Missing %s symbol \"%s\"."),
-		   flavour_name, SYMBOL_LINKAGE_NAME (var));
-	  }
-	obj_section = MSYMBOL_OBJ_SECTION (lookup_data.result.objfile, msym);
-	/* Relocate address, unless there is no section or the variable is
-	   a TLS variable. */
-	if (obj_section == NULL
-	    || (obj_section->the_bfd_section->flags & SEC_THREAD_LOCAL) != 0)
-	   addr = MSYMBOL_VALUE_RAW_ADDRESS (msym);
-	else
-	   addr = BMSYMBOL_VALUE_ADDRESS (lookup_data.result);
+	  error (_("No global symbol \"%s\"."), SYMBOL_LINKAGE_NAME (var));
 	if (overlay_debugging)
-	  addr = symbol_overlayed_address (addr, obj_section);
-	/* Determine address of TLS variable. */
+	  addr = symbol_overlayed_address (SYMBOL_VALUE_ADDRESS (msym),
+					   SYMBOL_OBJ_SECTION (lookup_data.objfile,
+							       msym));
+	else
+	  addr = SYMBOL_VALUE_ADDRESS (msym);
+
+	obj_section = SYMBOL_OBJ_SECTION (lookup_data.objfile, msym);
 	if (obj_section
 	    && (obj_section->the_bfd_section->flags & SEC_THREAD_LOCAL) != 0)
 	  addr = target_translate_tls_address (obj_section->objfile, addr);
@@ -796,28 +606,28 @@ default_read_var_value (struct symbol *var, const struct block *var_block,
 /* Calls VAR's language la_read_var_value hook with the given arguments.  */
 
 struct value *
-read_var_value (struct symbol *var, const struct block *var_block,
-		struct frame_info *frame)
+read_var_value (struct symbol *var, struct frame_info *frame)
 {
   const struct language_defn *lang = language_def (SYMBOL_LANGUAGE (var));
 
   gdb_assert (lang != NULL);
   gdb_assert (lang->la_read_var_value != NULL);
 
-  return lang->la_read_var_value (var, var_block, frame);
+  return lang->la_read_var_value (var, frame);
 }
 
 /* Install default attributes for register values.  */
 
 struct value *
-default_value_from_register (struct gdbarch *gdbarch, struct type *type,
-                             int regnum, struct frame_id frame_id)
+default_value_from_register (struct type *type, int regnum,
+			     struct frame_info *frame)
 {
+  struct gdbarch *gdbarch = get_frame_arch (frame);
   int len = TYPE_LENGTH (type);
   struct value *value = allocate_value (type);
 
   VALUE_LVAL (value) = lval_register;
-  VALUE_FRAME_ID (value) = frame_id;
+  VALUE_FRAME_ID (value) = get_frame_id (frame);
   VALUE_REGNUM (value) = regnum;
 
   /* Any structure stored in more than one register will always be
@@ -846,10 +656,10 @@ void
 read_frame_register_value (struct value *value, struct frame_info *frame)
 {
   struct gdbarch *gdbarch = get_frame_arch (frame);
-  LONGEST offset = 0;
-  LONGEST reg_offset = value_offset (value);
+  int offset = 0;
+  int reg_offset = value_offset (value);
   int regnum = VALUE_REGNUM (value);
-  int len = type_length_units (check_typedef (value_type (value)));
+  int len = TYPE_LENGTH (check_typedef (value_type (value)));
 
   gdb_assert (VALUE_LVAL (value) == lval_register);
 
@@ -864,7 +674,13 @@ read_frame_register_value (struct value *value, struct frame_info *frame)
   while (len > 0)
     {
       struct value *regval = get_frame_register_value (frame, regnum);
-      int reg_len = type_length_units (value_type (regval)) - reg_offset;
+      int reg_len = TYPE_LENGTH (value_type (regval)) - reg_offset;
+
+      if (value_optimized_out (regval))
+	{
+	  set_value_optimized_out (value, 1);
+	  break;
+	}
 
       /* If the register length is larger than the number of bytes
          remaining to copy, then only copy the appropriate bytes.  */
@@ -911,7 +727,7 @@ value_from_register (struct type *type, int regnum, struct frame_info *frame)
       if (!ok)
 	{
 	  if (optim)
-	    mark_value_bytes_optimized_out (v, 0, TYPE_LENGTH (type));
+	    set_value_optimized_out (v, 1);
 	  if (unavail)
 	    mark_value_bytes_unavailable (v, 0, TYPE_LENGTH (type));
 	}
@@ -919,8 +735,7 @@ value_from_register (struct type *type, int regnum, struct frame_info *frame)
   else
     {
       /* Construct the value.  */
-      v = gdbarch_value_from_register (gdbarch, type,
-				       regnum, get_frame_id (frame));
+      v = gdbarch_value_from_register (gdbarch, type, regnum, frame);
 
       /* Get the data.  */
       read_frame_register_value (v, frame);
@@ -929,53 +744,18 @@ value_from_register (struct type *type, int regnum, struct frame_info *frame)
   return v;
 }
 
-/* Return contents of register REGNUM in frame FRAME as address.
-   Will abort if register value is not available.  */
+/* Return contents of register REGNUM in frame FRAME as address,
+   interpreted as value of type TYPE.   Will abort if register
+   value is not available.  */
 
 CORE_ADDR
-address_from_register (int regnum, struct frame_info *frame)
+address_from_register (struct type *type, int regnum, struct frame_info *frame)
 {
-  struct gdbarch *gdbarch = get_frame_arch (frame);
-  struct type *type = builtin_type (gdbarch)->builtin_data_ptr;
   struct value *value;
   CORE_ADDR result;
-  int regnum_max_excl = (gdbarch_num_regs (gdbarch)
-			 + gdbarch_num_pseudo_regs (gdbarch));
 
-  if (regnum < 0 || regnum >= regnum_max_excl)
-    error (_("Invalid register #%d, expecting 0 <= # < %d"), regnum,
-	   regnum_max_excl);
-
-  /* This routine may be called during early unwinding, at a time
-     where the ID of FRAME is not yet known.  Calling value_from_register
-     would therefore abort in get_frame_id.  However, since we only need
-     a temporary value that is never used as lvalue, we actually do not
-     really need to set its VALUE_FRAME_ID.  Therefore, we re-implement
-     the core of value_from_register, but use the null_frame_id.  */
-
-  /* Some targets require a special conversion routine even for plain
-     pointer types.  Avoid constructing a value object in those cases.  */
-  if (gdbarch_convert_register_p (gdbarch, regnum, type))
-    {
-      gdb_byte *buf = (gdb_byte *) alloca (TYPE_LENGTH (type));
-      int optim, unavail, ok;
-
-      ok = gdbarch_register_to_value (gdbarch, frame, regnum, type,
-				      buf, &optim, &unavail);
-      if (!ok)
-	{
-	  /* This function is used while computing a location expression.
-	     Complain about the value being optimized out, rather than
-	     letting value_as_address complain about some random register
-	     the expression depends on not being saved.  */
-	  error_value_optimized_out ();
-	}
-
-      return unpack_long (type, buf);
-    }
-
-  value = gdbarch_value_from_register (gdbarch, type, regnum, null_frame_id);
-  read_frame_register_value (value, frame);
+  value = value_from_register (type, regnum, frame);
+  gdb_assert (value);
 
   if (value_optimized_out (value))
     {

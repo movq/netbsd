@@ -1,4 +1,4 @@
-/* $NetBSD: freebsd_syscallargs.h,v 1.86 2017/01/16 17:43:04 christos Exp $ */
+/* $NetBSD: freebsd_syscallargs.h,v 1.82 2013/11/07 19:39:57 njoly Exp $ */
 
 /*
  * System call argument lists.

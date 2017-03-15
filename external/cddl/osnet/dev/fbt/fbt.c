@@ -1,4 +1,4 @@
-/*	$NetBSD: fbt.c,v 1.22 2017/02/27 06:47:00 chs Exp $	*/
+/*	$NetBSD: fbt.c,v 1.16 2014/07/26 04:54:20 ryoon Exp $	*/
 
 /*
  * CDDL HEADER START
@@ -44,7 +44,7 @@
 #include <sys/ksyms.h>
 #include <sys/cpu.h>
 #include <sys/kthread.h>
-#include <sys/syslimits.h>
+#include <sys/limits.h>
 #include <sys/linker.h>
 #include <sys/lock.h>
 #include <sys/malloc.h>
@@ -152,18 +152,9 @@ static void	fbt_resume(void *, dtrace_id_t, void *);
 #define	FBT_PROBETAB_SIZE	0x8000		/* 32k entries -- 128K total */
 
 static const struct cdevsw fbt_cdevsw = {
-	.d_open		= fbt_open,
-	.d_close	= noclose,
-	.d_read		= noread,
-	.d_write	= nowrite,
-	.d_ioctl	= noioctl,
-	.d_stop		= nostop,
-	.d_tty		= notty,
-	.d_poll		= nopoll,
-	.d_mmap		= nommap,
-	.d_kqfilter	= nokqfilter,
-	.d_discard	= nodiscard,
-	.d_flag		= D_OTHER
+	fbt_open, noclose, noread, nowrite, noioctl,
+	nostop, notty, nopoll, nommap, nokqfilter, nodiscard,
+	D_OTHER
 };
 
 static dtrace_pattr_t fbt_attr = {
@@ -456,45 +447,17 @@ fbt_doubletrap(void)
 
 
 static int
-fbt_invop(uintptr_t addr, struct trapframe *frame, uintptr_t rval)
+fbt_invop(uintptr_t addr, uintptr_t *stack, uintptr_t rval)
 {
-	solaris_cpu_t *cpu;
-	uintptr_t *stack;
-	uintptr_t arg0, arg1, arg2, arg3, arg4;
-	fbt_probe_t *fbt;
+	solaris_cpu_t *cpu = &solaris_cpu[cpu_number()];
+	uintptr_t stack0, stack1, stack2, stack3, stack4;
+	fbt_probe_t *fbt = fbt_probetab[FBT_ADDR2NDX(addr)];
 
-#ifdef __amd64__
-	stack = (uintptr_t *)frame->tf_rsp;
-#endif
-#ifdef __i386__
-	/* Skip hardware-saved registers. */
-	stack = (uintptr_t *)&frame->tf_esp;
-#endif
-#ifdef __arm__
-	stack = (uintptr_t *)frame->tf_svc_sp;
-#endif
-
-	cpu = &solaris_cpu[cpu_number()];
-	fbt = fbt_probetab[FBT_ADDR2NDX(addr)];
 	for (; fbt != NULL; fbt = fbt->fbtp_hashnext) {
 		if ((uintptr_t)fbt->fbtp_patchpoint == addr) {
 			fbt->fbtp_invop_cnt++;
 			if (fbt->fbtp_roffset == 0) {
-#ifdef __amd64__
-				/* fbt->fbtp_rval == DTRACE_INVOP_PUSHQ_RBP */
-				DTRACE_CPUFLAG_SET(CPU_DTRACE_NOFAULT);
-				cpu->cpu_dtrace_caller = stack[0];
-				DTRACE_CPUFLAG_CLEAR(CPU_DTRACE_NOFAULT |
-				    CPU_DTRACE_BADADDR);
-
-				arg0 = frame->tf_rdi;
-				arg1 = frame->tf_rsi;
-				arg2 = frame->tf_rdx;
-				arg3 = frame->tf_rcx;
-				arg4 = frame->tf_r8;
-#else
 				int i = 0;
-
 				/*
 				 * When accessing the arguments on the stack,
 				 * we must protect against accessing beyond
@@ -504,17 +467,16 @@ fbt_invop(uintptr_t addr, struct trapframe *frame, uintptr_t rval)
 				 */
 				DTRACE_CPUFLAG_SET(CPU_DTRACE_NOFAULT);
 				cpu->cpu_dtrace_caller = stack[i++];
-				arg0 = stack[i++];
-				arg1 = stack[i++];
-				arg2 = stack[i++];
-				arg3 = stack[i++];
-				arg4 = stack[i++];
+				stack0 = stack[i++];
+				stack1 = stack[i++];
+				stack2 = stack[i++];
+				stack3 = stack[i++];
+				stack4 = stack[i++];
 				DTRACE_CPUFLAG_CLEAR(CPU_DTRACE_NOFAULT |
 				    CPU_DTRACE_BADADDR);
-#endif
 
-				dtrace_probe(fbt->fbtp_id, arg0, arg1,
-				    arg2, arg3, arg4);
+				dtrace_probe(fbt->fbtp_id, stack0, stack1,
+				    stack2, stack3, stack4);
 
 				cpu->cpu_dtrace_caller = 0;
 			} else {
@@ -522,7 +484,7 @@ fbt_invop(uintptr_t addr, struct trapframe *frame, uintptr_t rval)
 				/*
 				 * On amd64, we instrument the ret, not the
 				 * leave.  We therefore need to set the caller
-				 * to ensure that the top frame of a stack()
+				 * to assure that the top frame of a stack()
 				 * action is correct.
 				 */
 				DTRACE_CPUFLAG_SET(CPU_DTRACE_NOFAULT);
@@ -2142,10 +2104,9 @@ fbt_unload(void)
 
 
 static int
-dtrace_fbt_modcmd(modcmd_t cmd, void *data)
+fbt_modcmd(modcmd_t cmd, void *data)
 {
 	int bmajor = -1, cmajor = -1;
-	int error;
 
 	switch (cmd) {
 	case MODULE_CMD_INIT:
@@ -2153,12 +2114,8 @@ dtrace_fbt_modcmd(modcmd_t cmd, void *data)
 		return devsw_attach("fbt", NULL, &bmajor,
 		    &fbt_cdevsw, &cmajor);
 	case MODULE_CMD_FINI:
-		error = fbt_unload();
-		if (error != 0)
-			return error;
+		fbt_unload();
 		return devsw_detach(NULL, &fbt_cdevsw);
-	case MODULE_CMD_AUTOUNLOAD:
-		return EBUSY;
 	default:
 		return ENOTTY;
 	}
@@ -2170,4 +2127,4 @@ fbt_open(dev_t dev, int flags, int mode, struct lwp *l)
 	return (0);
 }
 
-MODULE(MODULE_CLASS_MISC, dtrace_fbt, "dtrace,zlib");
+MODULE(MODULE_CLASS_MISC, fbt, "dtrace");

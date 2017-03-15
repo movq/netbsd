@@ -1,4 +1,4 @@
-/*	$NetBSD: nouveau_engine_disp_nvd0.c,v 1.3 2016/04/23 14:59:01 riastradh Exp $	*/
+/*	$NetBSD: nouveau_engine_disp_nvd0.c,v 1.1.1.1.4.2 2016/12/12 09:13:42 msaitoh Exp $	*/
 
 /*
  * Copyright 2012 Red Hat Inc.
@@ -25,7 +25,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: nouveau_engine_disp_nvd0.c,v 1.3 2016/04/23 14:59:01 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: nouveau_engine_disp_nvd0.c,v 1.1.1.1.4.2 2016/12/12 09:13:42 msaitoh Exp $");
 
 #include <core/object.h>
 #include <core/parent.h>

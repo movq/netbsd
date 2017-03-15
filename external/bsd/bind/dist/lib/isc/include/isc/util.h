@@ -1,4 +1,4 @@
-/*	$NetBSD: util.h,v 1.12 2016/05/26 16:50:00 christos Exp $	*/
+/*	$NetBSD: util.h,v 1.9.2.2 2016/10/14 12:01:31 martin Exp $	*/
 
 /*
  * Copyright (C) 2004-2007, 2010-2012, 2015, 2016  Internet Systems Consortium, Inc. ("ISC")

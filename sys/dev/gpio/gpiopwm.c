@@ -1,4 +1,4 @@
-/* $NetBSD: gpiopwm.c,v 1.6 2017/01/20 12:25:07 maya Exp $ */
+/* $NetBSD: gpiopwm.c,v 1.4 2014/02/25 18:30:09 pooka Exp $ */
 
 /*
  * Copyright (c) 2011 Marc Balmer <marc@msys.ch>
@@ -104,35 +104,34 @@ gpiopwm_attach(device_t parent, device_t self, void *aux)
 		return;
 	}
 	aprint_normal(" [%d]", sc->sc_map.pm_map[0]);
-	if (!pmf_device_register(self, NULL, NULL))
-		aprint_error_dev(self, "couldn't establish power handler\n");
+	pmf_device_register(self, NULL, NULL);
 
 	callout_init(&sc->sc_pulse, CALLOUT_MPSAFE);
 	callout_setfunc(&sc->sc_pulse, gpiopwm_pulse, sc);
 
-	sysctl_createv(&sc->sc_log, 0, NULL, &node,
-	    0,
-	    CTLTYPE_NODE, device_xname(sc->sc_dev),
-	    SYSCTL_DESCR("GPIO software PWM"),
-	    NULL, 0, NULL, 0,
-	    CTL_HW, CTL_CREATE, CTL_EOL);
+        sysctl_createv(&sc->sc_log, 0, NULL, &node,
+            0,
+            CTLTYPE_NODE, device_xname(sc->sc_dev),
+            SYSCTL_DESCR("GPIO software PWM"),
+            NULL, 0, NULL, 0,
+            CTL_HW, CTL_CREATE, CTL_EOL);
 
-	if (node == NULL) {
-		aprint_error(": can't create sysctl node\n");
-		return;
+        if (node == NULL) {
+		printf(": can't create sysctl node\n");
+                return;
 	}
 
-	sysctl_createv(&sc->sc_log, 0, &node, NULL,
-	    CTLFLAG_READWRITE,
-	    CTLTYPE_INT, "on",
-	    SYSCTL_DESCR("PWM 'on' period in ticks"),
-	    gpiopwm_set_on, 0, (void *)sc, 0,
+        sysctl_createv(&sc->sc_log, 0, &node, NULL,
+            CTLFLAG_READWRITE,
+            CTLTYPE_INT, "on",
+            SYSCTL_DESCR("PWM 'on' period in ticks"),
+            gpiopwm_set_on, 0, (void *)sc, 0,
 	    CTL_CREATE, CTL_EOL);
-	sysctl_createv(&sc->sc_log, 0, &node, NULL,
-	    CTLFLAG_READWRITE,
-	    CTLTYPE_INT, "off",
-	    SYSCTL_DESCR("PWM 'off' period in ticks"),
-	    gpiopwm_set_off, 0, (void *)sc, 0,
+        sysctl_createv(&sc->sc_log, 0, &node, NULL,
+            CTLFLAG_READWRITE,
+            CTLTYPE_INT, "off",
+            SYSCTL_DESCR("PWM 'off' period in ticks"),
+            gpiopwm_set_off, 0, (void *)sc, 0,
 	    CTL_CREATE, CTL_EOL);
 
 	aprint_normal("\n");
@@ -239,4 +238,5 @@ gpiopwm_activate(device_t self, enum devact act)
 	default:
 		return EOPNOTSUPP;
 	}
+
 }

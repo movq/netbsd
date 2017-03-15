@@ -1,4 +1,4 @@
-/*	$NetBSD: allascii.c,v 1.2 2017/02/14 01:16:48 christos Exp $	*/
+/*	$NetBSD: allascii.c,v 1.1.1.1 2009/06/23 10:08:58 tron Exp $	*/
 
 /*++
 /* NAME
@@ -10,18 +10,12 @@
 /*
 /*	int	allascii(buffer)
 /*	const char *buffer;
-/*
-/*	int	allascii_len(buffer, len)
-/*	const char *buffer;
-/*	ssize_t	len;
 /* DESCRIPTION
 /*	allascii() determines if its argument is an all-ASCII string.
 /*
 /*	Arguments:
 /* .IP buffer
 /*	The null-terminated input string.
-/* .IP len
-/*	The string length, -1 to determine the length dynamically.
 /* LICENSE
 /* .ad
 /* .fi
@@ -37,25 +31,21 @@
 
 #include <sys_defs.h>
 #include <ctype.h>
-#include <string.h>
 
 /* Utility library. */
 
 #include "stringops.h"
 
-/* allascii_len - return true if string is all ASCII */
+/* allascii - return true if string is all ASCII */
 
-int     allascii_len(const char *string, ssize_t len)
+int     allascii(const char *string)
 {
     const char *cp;
     int     ch;
 
-    if (len < 0)
-	len = strlen(string);
-    if (len == 0)
+    if (*string == 0)
 	return (0);
-    for (cp = string; cp < string + len
-	 && (ch = *(unsigned char *) cp) != 0; cp++)
+    for (cp = string; (ch = *(unsigned char *) cp) != 0; cp++)
 	if (!ISASCII(ch))
 	    return (0);
     return (1);

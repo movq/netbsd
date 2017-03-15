@@ -1,4 +1,4 @@
-/*  $NetBSD: perfuse_priv.h,v 1.36 2014/10/31 15:12:15 manu Exp $ */
+/*  $NetBSD: perfuse_priv.h,v 1.32.2.3 2014/11/05 18:11:30 snj Exp $ */
 
 /*-
  *  Copyright (c) 2010-2011 Emmanuel Dreyfus. All rights reserved.

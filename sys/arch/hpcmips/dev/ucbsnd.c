@@ -1,4 +1,4 @@
-/*	$NetBSD: ucbsnd.c,v 1.25 2016/12/17 03:46:52 riastradh Exp $ */
+/*	$NetBSD: ucbsnd.c,v 1.23 2014/07/25 08:10:33 dholland Exp $ */
 
 /*-
  * Copyright (c) 2000 The NetBSD Foundation, Inc.
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ucbsnd.c,v 1.25 2016/12/17 03:46:52 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ucbsnd.c,v 1.23 2014/07/25 08:10:33 dholland Exp $");
 
 #include "opt_use_poll.h"
 
@@ -48,11 +48,11 @@ __KERNEL_RCSID(0, "$NetBSD: ucbsnd.c,v 1.25 2016/12/17 03:46:52 riastradh Exp $"
 #include <sys/device.h>
 #include <sys/proc.h>
 #include <sys/endian.h>
-#include <sys/bus.h>
-#include <sys/intr.h>
 
-#include <mips/locore.h>
 #include <mips/cache.h>
+
+#include <machine/bus.h>
+#include <machine/intr.h>
 
 #include <hpcmips/tx/tx39var.h>
 #include <hpcmips/tx/tx39sibvar.h>
@@ -184,7 +184,7 @@ const struct cdevsw ucbsnd_cdevsw = {
 	.d_stop = nostop,
 	.d_tty = notty,
 	.d_poll = nopoll,
-	.d_mmap = nommap,
+	.d_mmap = nullmmap,
 	.d_kqfilter = nokqfilter,
 	.d_discard = nodiscard,
 	.d_flag = 0

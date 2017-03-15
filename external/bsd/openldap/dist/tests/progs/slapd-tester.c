@@ -1,9 +1,9 @@
-/*	$NetBSD: slapd-tester.c,v 1.1.1.5 2017/02/09 01:46:54 christos Exp $	*/
+/*	$NetBSD: slapd-tester.c,v 1.1.1.4 2014/05/28 09:58:54 tron Exp $	*/
 
 /* $OpenLDAP$ */
 /* This work is part of OpenLDAP Software <http://www.openldap.org/>.
  *
- * Copyright 1999-2016 The OpenLDAP Foundation.
+ * Copyright 1999-2014 The OpenLDAP Foundation.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -18,9 +18,6 @@
  * This work was initially developed by Kurt Spanier for inclusion
  * in OpenLDAP Software.
  */
-
-#include <sys/cdefs.h>
-__RCSID("$NetBSD: slapd-tester.c,v 1.1.1.5 2017/02/09 01:46:54 christos Exp $");
 
 #include "portable.h"
 
@@ -45,18 +42,12 @@ __RCSID("$NetBSD: slapd-tester.c,v 1.1.1.5 2017/02/09 01:46:54 christos Exp $");
 #include "lber_pvt.h"
 #include "slapd-common.h"
 
-#ifdef _WIN32
-#define EXE		".exe"
-#else
-#define EXE
-#endif
-
-#define SEARCHCMD		"slapd-search" EXE
-#define READCMD			"slapd-read" EXE
-#define ADDCMD			"slapd-addel" EXE
-#define MODRDNCMD		"slapd-modrdn" EXE
-#define MODIFYCMD		"slapd-modify" EXE
-#define BINDCMD			"slapd-bind" EXE
+#define SEARCHCMD		"slapd-search"
+#define READCMD			"slapd-read"
+#define ADDCMD			"slapd-addel"
+#define MODRDNCMD		"slapd-modrdn"
+#define MODIFYCMD		"slapd-modify"
+#define BINDCMD			"slapd-bind"
 #define MAXARGS      		100
 #define MAXREQS			5000
 #define LOOPS			100

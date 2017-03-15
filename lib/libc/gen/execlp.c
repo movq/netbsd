@@ -1,4 +1,4 @@
-/*	$NetBSD: execlp.c,v 1.13 2014/09/26 19:28:03 christos Exp $	*/
+/*	$NetBSD: execlp.c,v 1.12 2011/06/30 19:46:07 joerg Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993
@@ -34,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)exec.c	8.1 (Berkeley) 6/4/93";
 #else
-__RCSID("$NetBSD: execlp.c,v 1.13 2014/09/26 19:28:03 christos Exp $");
+__RCSID("$NetBSD: execlp.c,v 1.12 2011/06/30 19:46:07 joerg Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 
@@ -42,11 +42,9 @@ __RCSID("$NetBSD: execlp.c,v 1.13 2014/09/26 19:28:03 christos Exp $");
 #include <stdarg.h>
 #include <stdlib.h>
 #include <unistd.h>
-#include <errno.h>
 
 #ifdef __weak_alias
 __weak_alias(execlp,_execlp)
-__weak_alias(execlpe,_execlpe)
 #endif
 
 int
@@ -54,7 +52,7 @@ execlp(const char *name, const char *arg, ...)
 {
 	va_list ap;
 	char **argv;
-	size_t i;
+	int i;
 
 	va_start(ap, arg);
 	for (i = 2; va_arg(ap, char *) != NULL; i++)
@@ -70,28 +68,4 @@ execlp(const char *name, const char *arg, ...)
 	va_end(ap);
 	
 	return execvp(name, argv);
-}
-
-int
-execlpe(const char *name, const char *arg, ...)
-{
-	va_list ap;
-	char **argv, **envp;
-	size_t i;
-
-	va_start(ap, arg);
-	for (i = 2; va_arg(ap, char *) != NULL; i++)
-		continue;
-	va_end(ap);
-
-	argv = alloca(i * sizeof (char *));
-	
-	va_start(ap, arg);
-	argv[0] = __UNCONST(arg);
-	for (i = 1; (argv[i] = va_arg(ap, char *)) != NULL; i++) 
-		continue;
-	envp = va_arg(ap, char **);
-	va_end(ap);
-
-	return execvpe(name, argv, envp);
 }

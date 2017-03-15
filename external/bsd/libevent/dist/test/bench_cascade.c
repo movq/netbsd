@@ -1,4 +1,4 @@
-/*	$NetBSD: bench_cascade.c,v 1.1.1.2 2017/01/31 21:14:53 christos Exp $	*/
+/*	$NetBSD: bench_cascade.c,v 1.1.1.1 2013/04/11 16:43:32 christos Exp $	*/
 /*
  * Copyright 2007-2012 Niels Provos and Nick Mathewson
  *
@@ -28,14 +28,14 @@
 
 #include "event2/event-config.h"
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: bench_cascade.c,v 1.1.1.2 2017/01/31 21:14:53 christos Exp $");
+__RCSID("$NetBSD: bench_cascade.c,v 1.1.1.1 2013/04/11 16:43:32 christos Exp $");
 
 #include <sys/types.h>
 #include <sys/stat.h>
-#ifdef EVENT__HAVE_SYS_TIME_H
+#ifdef _EVENT_HAVE_SYS_TIME_H
 #include <sys/time.h>
 #endif
-#ifdef _WIN32
+#ifdef WIN32
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 #else
@@ -47,11 +47,11 @@ __RCSID("$NetBSD: bench_cascade.c,v 1.1.1.2 2017/01/31 21:14:53 christos Exp $")
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
-#ifdef EVENT__HAVE_UNISTD_H
+#ifdef _EVENT_HAVE_UNISTD_H
 #include <unistd.h>
 #endif
 #include <errno.h>
-#include <getopt.h>
+
 #include <event.h>
 #include <evutil.h>
 
@@ -72,7 +72,7 @@ read_cb(evutil_socket_t fd, short which, void *arg)
 	char ch;
 	evutil_socket_t sock = (evutil_socket_t)(ev_intptr_t)arg;
 
-	(void) recv(fd, &ch, sizeof(ch), 0);
+	recv(fd, &ch, sizeof(ch), 0);
 	if (sock >= 0) {
 		if (send(sock, "e", 1, 0) < 0)
 			perror("send");
@@ -87,8 +87,8 @@ run_once(int num_pipes)
 	evutil_socket_t *cp;
 	static struct timeval ts, te, tv_timeout;
 
-	events = (struct event *)calloc(num_pipes, sizeof(struct event));
-	pipes = (evutil_socket_t *)calloc(num_pipes * 2, sizeof(evutil_socket_t));
+	events = calloc(num_pipes, sizeof(struct event));
+	pipes = calloc(num_pipes * 2, sizeof(evutil_socket_t));
 
 	if (events == NULL || pipes == NULL) {
 		perror("malloc");
@@ -129,8 +129,8 @@ run_once(int num_pipes)
 
 	for (cp = pipes, i = 0; i < num_pipes; i++, cp += 2) {
 		event_del(&events[i]);
-		evutil_closesocket(cp[0]);
-		evutil_closesocket(cp[1]);
+		close(cp[0]);
+		close(cp[1]);
 	}
 
 	free(pipes);
@@ -142,18 +142,13 @@ run_once(int num_pipes)
 int
 main(int argc, char **argv)
 {
-#ifdef HAVE_SETRLIMIT
+#ifndef WIN32
 	struct rlimit rl;
 #endif
 	int i, c;
 	struct timeval *tv;
 
 	int num_pipes = 100;
-#ifdef _WIN32
-	WSADATA WSAData;
-	WSAStartup(0x101, &WSAData);
-#endif
-
 	while ((c = getopt(argc, argv, "n:")) != -1) {
 		switch (c) {
 		case 'n':
@@ -165,7 +160,7 @@ main(int argc, char **argv)
 		}
 	}
 
-#ifdef HAVE_SETRLIMIT 
+#ifndef WIN32
 	rl.rlim_cur = rl.rlim_max = num_pipes * 2 + 50;
 	if (setrlimit(RLIMIT_NOFILE, &rl) == -1) {
 		perror("setrlimit");
@@ -182,10 +177,6 @@ main(int argc, char **argv)
 		fprintf(stdout, "%ld\n",
 			tv->tv_sec * 1000000L + tv->tv_usec);
 	}
-
-#ifdef _WIN32
-	WSACleanup();
-#endif
 
 	exit(0);
 }

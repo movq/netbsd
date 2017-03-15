@@ -12,6 +12,7 @@
 
 #include "clang/Basic/SourceLocation.h"
 #include "llvm/ADT/IntrusiveRefCntPtr.h"
+#include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringRef.h"
 #include "llvm/ADT/StringSet.h"
 #include <cassert>
@@ -40,7 +41,7 @@ enum ObjCXXARCStandardLibraryKind {
   
 /// PreprocessorOptions - This class is used for passing the various options
 /// used in preprocessor initialization to InitializePreprocessor().
-class PreprocessorOptions {
+class PreprocessorOptions : public RefCountedBase<PreprocessorOptions> {
 public:
   std::vector<std::pair<std::string, bool/*isUndef*/> > Macros;
   std::vector<std::string> Includes;
@@ -117,7 +118,7 @@ public:
   ObjCXXARCStandardLibraryKind ObjCXXARCStandardLibrary;
     
   /// \brief Records the set of modules
-  class FailedModulesSet {
+  class FailedModulesSet : public RefCountedBase<FailedModulesSet> {
     llvm::StringSet<> Failed;
 
   public:
@@ -136,7 +137,7 @@ public:
   /// to (re)build modules, so that once a module fails to build anywhere,
   /// other instances will see that the module has failed and won't try to
   /// build it again.
-  std::shared_ptr<FailedModulesSet> FailedModules;
+  IntrusiveRefCntPtr<FailedModulesSet> FailedModules;
 
 public:
   PreprocessorOptions() : UsePredefines(true), DetailedRecord(false),
@@ -148,14 +149,18 @@ public:
                           RetainRemappedFileBuffers(false),
                           ObjCXXARCStandardLibrary(ARCXX_nolib) { }
 
-  void addMacroDef(StringRef Name) { Macros.emplace_back(Name, false); }
-  void addMacroUndef(StringRef Name) { Macros.emplace_back(Name, true); }
+  void addMacroDef(StringRef Name) {
+    Macros.push_back(std::make_pair(Name, false));
+  }
+  void addMacroUndef(StringRef Name) {
+    Macros.push_back(std::make_pair(Name, true));
+  }
   void addRemappedFile(StringRef From, StringRef To) {
-    RemappedFiles.emplace_back(From, To);
+    RemappedFiles.push_back(std::make_pair(From, To));
   }
 
   void addRemappedFile(StringRef From, llvm::MemoryBuffer *To) {
-    RemappedFileBuffers.emplace_back(From, To);
+    RemappedFileBuffers.push_back(std::make_pair(From, To));
   }
 
   void clearRemappedFiles() {

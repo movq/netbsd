@@ -1,6 +1,6 @@
 /* Native-dependent code for modern VAX BSD's.
 
-   Copyright (C) 2004-2016 Free Software Foundation, Inc.
+   Copyright (C) 2004-2014 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -17,9 +17,6 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-#ifndef _KERNTYPES
-#define _KERNTYPES
-#endif
 #include "defs.h"
 #include "inferior.h"
 #include "regcache.h"
@@ -36,18 +33,13 @@
 #ifndef HAVE_GREGSET_T
 typedef struct reg gregset_t;
 #endif
-#ifndef HAVE_FPREGSET_T
-typedef struct fpreg fpregset_t;
-#endif
-
-#include "gregset.h"
 
 /* Supply the general-purpose registers stored in GREGS to REGCACHE.  */
 
 static void
 vaxbsd_supply_gregset (struct regcache *regcache, const void *gregs)
 {
-  const gdb_byte *regs = (const gdb_byte *)gregs;
+  const gdb_byte *regs = gregs;
   int regnum;
 
   for (regnum = 0; regnum < VAX_NUM_REGS; regnum++)
@@ -61,7 +53,7 @@ static void
 vaxbsd_collect_gregset (const struct regcache *regcache,
 			void *gregs, int regnum)
 {
-  gdb_byte *regs = (gdb_byte *)gregs;
+  gdb_byte *regs = gregs;
   int i;
 
   for (i = 0; i <= VAX_NUM_REGS; i++)

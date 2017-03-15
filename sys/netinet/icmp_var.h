@@ -1,4 +1,4 @@
-/*	$NetBSD: icmp_var.h,v 1.30 2015/02/18 17:00:15 christos Exp $	*/
+/*	$NetBSD: icmp_var.h,v 1.29.22.1 2015/02/21 18:24:51 martin Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1993

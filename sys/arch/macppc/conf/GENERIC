@@ -1,4 +1,4 @@
-# $NetBSD: GENERIC,v 1.328 2017/02/26 12:03:14 rin Exp $
+# $NetBSD: GENERIC,v 1.312.4.3 2015/05/15 03:44:18 snj Exp $
 #
 # GENERIC machine description file
 # 
@@ -22,7 +22,7 @@ include		"arch/macppc/conf/std.macppc"
 
 options 	INCLUDE_CONFIG_FILE	# embed config file in kernel binary
 
-#ident 		"GENERIC-$Revision: 1.328 $"
+#ident 		"GENERIC-$Revision: 1.312.4.3 $"
 
 maxusers	32
 
@@ -74,10 +74,9 @@ options 	COMPAT_15	# NetBSD 1.5,
 options 	COMPAT_16	# NetBSD 1.6,
 options 	COMPAT_20	# NetBSD 2.0,
 options 	COMPAT_30	# NetBSD 3.0,
-options 	COMPAT_40	# NetBSD 4.0,
-options 	COMPAT_50	# NetBSD 5.0,
-options 	COMPAT_60	# NetBSD 6.0, and
-options 	COMPAT_70	# NetBSD 7.0 binary compatibility.
+options 	COMPAT_40	# NetBSD 4.0 compatibility.
+options 	COMPAT_50	# NetBSD 5.0 compatibility.
+options 	COMPAT_60	# NetBSD 6.0 compatibility.
 options 	COMPAT_43	# and 4.3BSD
 #options 	COMPAT_386BSD_MBRPART # recognize old partition ID
 #options 	COMPAT_LINUX	# Linux binary compatibility
@@ -87,10 +86,9 @@ options 	COMPAT_BSDPTY	# /dev/[pt]ty?? ptys.
 # Wedge support
 options         DKWEDGE_AUTODISCOVER    # Automatically add dk(4) instances
 options         DKWEDGE_METHOD_GPT      # Supports GPT partitions as wedges
-#options	DKWEDGE_METHOD_BSDLABEL # Support disklabel entries as wedges
-#options	DKWEDGE_METHOD_MBR      # Support MBR partitions as wedges
-#options	DKWEDGE_METHOD_APPLE    # Support Apple partitions as wedges
-#options 	DKWEDGE_METHOD_RDB	# Support RDB partitions as wedges
+# The following two options can break /etc/fstab, so handle with care
+#options        DKWEDGE_METHOD_BSDLABEL # Support disklabel entries as wedges
+#options        DKWEDGE_METHOD_MBR      # Support MBR partitions as wedges
 
 # File systems
 file-system 	FFS		# UFS
@@ -292,13 +290,13 @@ trm*	at pci? dev ? function ?	# Tekram DC-395U/UW/F, DC-315/U SCSI
 chipsfb*	at pci?	function ?	# C&T 65550
 gffb*		at pci?	function ?	# NVIDIA GeForce2 MX
 machfb*		at pci? function ?	# ATI Mach 64, Rage, Rage Pro
-pm3fb*		at pci? function ?	# 3Dlabs Permedia 3 Graphics
 tdvfb*		at pci? function ?	# 3Dfx Voodoo2
 r128fb*		at pci? function ?	# ATI Rage 128
 voodoofb*	at pci? function ?	# 3Dfx Voodoo3 
 
 # ATI Radeon. Still has problems on some hardware
 radeonfb*	at pci? function ?
+options 	RADEONFB_MMAP_BARS	# allow mmap()ing BARs - needed for X
 
 # generic PCI framebuffer, should work with everything supported by OF
 genfb*		at pci? function ?
@@ -504,7 +502,7 @@ ucom*	at ubsa? portno ?
 uplcom* at uhub? port ?					# Prolific serial
 ucom* at uplcom? portno ?
 
-uftdi* at uhub? port ?					# FTDI FT8U100AX serial adapter
+uftdi* at uhub? port ?					# FTDI serial
 ucom* at uftdi? portno ?
 
 uhso*	at uhub? port ? configuration ?			# Option N.V. Wireless WAN modems
@@ -520,8 +518,6 @@ radio* at udsbr?
 # USB Ethernet adapters
 aue*	at uhub? port ?		# ADMtek AN986 Pegasus based adapters
 axe*	at uhub? port ?		# ASIX AX88172 based adapters
-axen*	at uhub? port ?		# ASIX AX88178a/AX88179 based adapters
-cdce*	at uhub? port ?		# CDC, Ethernet Networking Control Model
 cue*	at uhub? port ?		# CATC USB-EL1201A based adapters
 kue*	at uhub? port ?		# Kawasaki LSI KL5KUSB101B based adapters
 url*	at uhub? port ?		# Realtek RTL8150L based adapters
@@ -530,36 +526,16 @@ udav*	at uhub? port ?		# Davicom DM9601 based adapters
 ukyopon* at uhub? port ?				# Kyocera AIR-EDGE PHONE
 ucom*	at ukyopon? portno ?
 
-#uscanner* at uhub? port ?				# USB scanners
+uscanner* at uhub? port ?				# USB scanners
 uyap* at uhub? port ?					# Y@P firmware loader
 ugen*	at uhub? port ? configuration ? interface ?	# USB Generic driver
 
 # USB 802.11 adapters
-atu*	at uhub? port ?		# Atmel AT76C50XX based adapters
+atu*	at uhub? port ?		# Atmel at76c50x 802.11b
 otus*	at uhub? port ?		# Atheros AR9001U
 ural*	at uhub? port ?		# Ralink Technology RT2500USB 802.11a/b/g
 rum*	at uhub? port ?		# Ralink Technology RT2501/RT2601 802.11a/b/g
-run*	at uhub? port ?		# Ralink Technology RT(2[78]|30)00 802.11a/b/g/n
-upgt*	at uhub? port ?		# Intersil PrismGT
-urtw*	at uhub? port ?		# Realtek RTL8187/RTL8187B 802.11b/g
-urtwn*	at uhub? port ?		# Realtek RTL8188CU/RTL8192CU 802.11b/g/n
 #zyd*	at uhub? port ?		# Zydas ZD1211
-
-# Serial adapters
-uchcom* at uhub? port ?         # WinChipHead CH341/CH340 serial adapter
-ucom*   at uchcom? portno ?
-
-uslsa*  at uhub? port ?         # Silicon Labs USB-RS232 serial adapter
-ucom*   at uslsa? portno ?
-
-# USB 3G datacards
-u3ginit* at uhub? port ?
-u3g*    at uhub? port ?
-ucom*   at u3g?
-
-# USB generic serial port (e.g., data over cellular)
-ugensa* at uhub? port ?
-ucom*   at ugensa?
 
 # PCI IEEE1394 controllers
 fwohci*	at pci? dev ? function ?	# IEEE1394 Open Host Controller
@@ -588,8 +564,6 @@ eap*	at pci? dev ? function ?	# Ensoniq AudioPCI
 
 # Audio support
 audio*	at audiobus?
-
-spkr*	at audio?		# PC speaker (synthesized)
 
 # MPU 401 UARTs
 #mpu*	at cmpci?

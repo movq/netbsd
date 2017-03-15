@@ -1,4 +1,4 @@
-/*	$NetBSD: bl.c,v 1.28 2016/07/29 17:13:09 christos Exp $	*/
+/*	$NetBSD: bl.c,v 1.24.2.4 2016/03/06 18:05:08 martin Exp $	*/
 
 /*-
  * Copyright (c) 2014 The NetBSD Foundation, Inc.
@@ -33,7 +33,7 @@
 #endif
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: bl.c,v 1.28 2016/07/29 17:13:09 christos Exp $");
+__RCSID("$NetBSD: bl.c,v 1.24.2.4 2016/03/06 18:05:08 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/types.h>
@@ -152,8 +152,8 @@ bl_init(bl_t b, bool srv)
 		b->b_fd = socket(PF_LOCAL,
 		    SOCK_DGRAM|SOCK_CLOEXEC|SOCK_NONBLOCK|SOCK_NOSIGPIPE, 0);
 		if (b->b_fd == -1) {
-			bl_log(b->b_fun, LOG_ERR, "%s: socket failed (%s)",
-			    __func__, strerror(errno));
+			bl_log(b->b_fun, LOG_ERR, "%s: socket failed (%m)",
+			    __func__);
 			BL_UNLOCK(b);
 			return -1;
 		}
@@ -200,8 +200,8 @@ bl_init(bl_t b, bool srv)
 			 */
 			if (b->b_connected != 1) {
 				bl_log(b->b_fun, LOG_DEBUG,
-				    "%s: connect failed for `%s' (%s)",
-				    __func__, sun->sun_path, strerror(errno));
+				    "%s: connect failed for `%s' (%m)",
+				    __func__, sun->sun_path);
 				b->b_connected = 1;
 			}
 			BL_UNLOCK(b);
@@ -220,8 +220,8 @@ bl_init(bl_t b, bool srv)
 		errno = serrno;
 		if (rv == -1) {
 			bl_log(b->b_fun, LOG_ERR,
-			    "%s: bind failed for `%s' (%s)",
-			    __func__, sun->sun_path, strerror(errno));
+			    "%s: bind failed for `%s' (%m)",
+			    __func__, sun->sun_path);
 			goto out;
 		}
 	}
@@ -260,8 +260,7 @@ bl_init(bl_t b, bool srv)
 	if (setsockopt(b->b_fd, CRED_LEVEL, CRED_NAME,
 	    &one, (socklen_t)sizeof(one)) == -1) {
 		bl_log(b->b_fun, LOG_ERR, "%s: setsockopt %s "
-		    "failed (%s)", __func__, __STRING(CRED_NAME),
-		    strerror(errno));
+		    "failed (%m)", __func__, __STRING(CRED_NAME));
 		goto out;
 	}
 #endif
@@ -297,8 +296,7 @@ bl_create(bool srv, const char *path, void (*fun)(int, const char *, va_list))
 	return b;
 out:
 	free(b);
-	bl_log(fun, LOG_ERR, "%s: malloc failed (%s)", __func__,
-	    strerror(errno));
+	bl_log(fun, LOG_ERR, "%s: malloc failed (%m)", __func__);
 	return NULL;
 }
 
@@ -453,8 +451,7 @@ bl_recv(bl_t b)
 
         rlen = recvmsg(b->b_fd, &msg, 0);
         if (rlen == -1) {
-		bl_log(b->b_fun, LOG_ERR, "%s: recvmsg failed (%s)", __func__,
-		    strerror(errno));
+		bl_log(b->b_fun, LOG_ERR, "%s: recvmsg failed (%m)", __func__);
 		return NULL;
         }
 

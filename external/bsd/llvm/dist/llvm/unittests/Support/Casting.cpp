@@ -250,7 +250,7 @@ class PTy {
   Base *B;
 public:
   PTy(Base *B) : B(B) {}
-  explicit operator bool() const { return get(); }
+  LLVM_EXPLICIT operator bool() const { return get(); }
   Base *get() const { return B; }
 };
 

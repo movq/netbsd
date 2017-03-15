@@ -20,7 +20,7 @@
  */
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: bpf_dump.c,v 1.5 2017/01/24 23:29:13 christos Exp $");
+__RCSID("$NetBSD: bpf_dump.c,v 1.3.6.1 2017/02/19 05:01:15 snj Exp $");
 #endif
 
 #ifdef HAVE_CONFIG_H

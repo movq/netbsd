@@ -1,4 +1,4 @@
-/*	$NetBSD: machdep.c,v 1.349 2015/08/30 01:46:03 uebayasi Exp $	*/
+/*	$NetBSD: machdep.c,v 1.347 2014/03/24 20:06:32 christos Exp $	*/
 
 /*
  * Copyright (c) 1988 University of Utah.
@@ -74,10 +74,9 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.349 2015/08/30 01:46:03 uebayasi Exp $");
+__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.347 2014/03/24 20:06:32 christos Exp $");
 
 #include "opt_adb.h"
-#include "opt_copy_symtab.h"
 #include "opt_ddb.h"
 #include "opt_ddbparam.h"
 #include "opt_kgdb.h"
@@ -962,7 +961,7 @@ getenvvars(u_long flag, char *buf)
 	 * Get end of symbols for kernel debugging
 	 */
 	esym = (int *)getenv("END_SYM");
-#ifndef makeoptions_COPY_SYMTAB
+#ifndef SYMTAB_SPACE
 	if (esym == (int *)0)
 #endif
 		esym = (int *)&end;

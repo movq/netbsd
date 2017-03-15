@@ -1,4 +1,4 @@
-/*	$NetBSD: perm.c,v 1.4 2016/03/13 00:32:09 dholland Exp $	*/
+/*	$NetBSD: perm.c,v 1.3 2008/04/05 16:26:57 christos Exp $	*/
 
 /*
  * perm.c - check user permission for at(1)
@@ -51,7 +51,7 @@
 #if 0
 static char rcsid[] = "$OpenBSD: perm.c,v 1.1 1997/03/01 23:40:12 millert Exp $";
 #else
-__RCSID("$NetBSD: perm.c,v 1.4 2016/03/13 00:32:09 dholland Exp $");
+__RCSID("$NetBSD: perm.c,v 1.3 2008/04/05 16:26:57 christos Exp $");
 #endif
 #endif
 
@@ -96,20 +96,20 @@ check_permission(void)
 		exit(EXIT_FAILURE);
 	}
 
-	privs_enter();
+	PRIV_START;
 
 	fp = fopen(_PATH_AT_ALLOW, "r");
 
-	privs_exit();
+	PRIV_END;
 
 	if (fp != NULL) {
 		return check_for_user(fp, pentry->pw_name);
 	} else {
-		privs_enter();
+		PRIV_START;
 
 		fp = fopen(_PATH_AT_DENY, "r");
 
-		privs_exit();
+		PRIV_END;
 
 		if (fp != NULL)
 			return !check_for_user(fp, pentry->pw_name);

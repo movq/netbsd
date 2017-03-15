@@ -12,8 +12,6 @@ libunity_a_CFLAGS =                  	\
 libunity_a_SOURCES =				\
 	../libpkgver/colcomp.c			\
 	unity.c					\
-	ulib_setup.c				\
-	ulib_teardown.c				\
 	unity.h					\
 	unity_config.h				\
 	unity_internals.h			\

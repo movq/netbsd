@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.7 2016/08/15 22:01:16 mrg Exp $
+#	$NetBSD: Makefile,v 1.4 2011/08/11 23:15:41 joerg Exp $
 
 .include "../Makefile.serverlib"
 .include "../Makefile.servermod"
@@ -16,7 +16,6 @@ SRCS=		allowev.c chgdctl.c chgfctl.c chgkbd.c chgkmap.c chgprop.c \
 		setfocus.c setmmap.c setmode.c ungrdev.c ungrdevb.c \
 		ungrdevk.c \
 		xiallowev.c \
-		xibarriers.c \
 		xichangecursor.c \
 		xichangehierarchy.c \
 		xigetclientpointer.c \
@@ -33,11 +32,7 @@ SRCS=		allowev.c chgdctl.c chgfctl.c chgkbd.c chgkmap.c chgprop.c \
 
 CPPFLAGS+=      -I${DESTDIR}${X11INCDIR}/pixman-1 \
 		-I${DESTDIR}${X11INCDIR}/xorg \
-		-I${DESTDIR}${X11INCDIR}/miext/damage \
 		-I${X11SRCDIR.xorg-server}/Xext \
-		-I${X11SRCDIR.xorg-server}/xfixes \
-		-I${X11SRCDIR.xorg-server}/Xi \
-		-I${X11SRCDIR.xorg-server}/include \
 		-I${X11SRCDIR.xorg-server}/../include
 CPPFLAGS+=      ${X11FLAGS.DIX}
 

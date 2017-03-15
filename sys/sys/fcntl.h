@@ -1,4 +1,4 @@
-/*	$NetBSD: fcntl.h,v 1.48 2017/01/10 23:08:13 christos Exp $	*/
+/*	$NetBSD: fcntl.h,v 1.46 2013/09/15 10:41:20 njoly Exp $	*/
 
 /*-
  * Copyright (c) 1983, 1990, 1993
@@ -48,9 +48,9 @@
 #ifndef _KERNEL
 #include <sys/featuretest.h>
 #include <sys/types.h>
-#if defined(_XOPEN_SOURCE)
+#if defined(_XOPEN_SOURCE) || defined(_NETBSD_SOURCE)
 #include <sys/stat.h>
-#endif /* _XOPEN_SOURCE */
+#endif /* _XOPEN_SOURCE || _NETBSD_SOURCE */
 #endif /* !_KERNEL */
 
 /*
@@ -313,21 +313,12 @@ int	flock(int, int);
 int	posix_fadvise(int, off_t, off_t, int);
 
 /*
- * The Open Group Base Specifications, Issue 6; IEEE Std 1003.1-2001 (POSIX)
- */
-#if (_POSIX_C_SOURCE - 0) >= 200112L || (_XOPEN_SOURCE - 0) >= 600 || \
-    defined(_NETBSD_SOURCE)
-int	 posix_fallocate(int, off_t, off_t);
-#endif
-
-/*
  * X/Open Extended API set 2 (a.k.a. C063)
  */
 #if (_POSIX_C_SOURCE - 0) >= 200809L || (_XOPEN_SOURCE - 0 >= 700) || \
     defined(_INCOMPLETE_XOPEN_C063) || defined(_NETBSD_SOURCE)
 int	openat(int, const char *, int, ...);
 #endif
-
 __END_DECLS
 #endif /* !_KERNEL */
 

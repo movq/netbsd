@@ -1,10 +1,10 @@
-/*	$NetBSD: init.c,v 1.1.1.2 2017/02/09 01:47:07 christos Exp $	*/
+/*	$NetBSD: init.c,v 1.1.1.1 2014/05/28 09:58:50 tron Exp $	*/
 
 /* init.c - initialize mdb backend */
 /* $OpenLDAP$ */
 /* This work is part of OpenLDAP Software <http://www.openldap.org/>.
  *
- * Copyright 2000-2016 The OpenLDAP Foundation.
+ * Copyright 2000-2014 The OpenLDAP Foundation.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -15,9 +15,6 @@
  * top-level directory of the distribution or, alternatively, at
  * <http://www.OpenLDAP.org/license.html>.
  */
-
-#include <sys/cdefs.h>
-__RCSID("$NetBSD: init.c,v 1.1.1.2 2017/02/09 01:47:07 christos Exp $");
 
 #include "portable.h"
 
@@ -67,7 +64,6 @@ mdb_db_init( BackendDB *be, ConfigReply *cr )
 	mdb->mi_search_stack = NULL;
 
 	mdb->mi_mapsize = DEFAULT_MAPSIZE;
-	mdb->mi_rtxn_size = DEFAULT_RTXN_SIZE;
 
 	be->be_private = mdb;
 	be->be_cf_ocs = be->bd_info->bi_cf_ocs;
@@ -182,18 +178,18 @@ mdb_db_open( BackendDB *be, ConfigReply *cr )
 
 	if ( rc ) {
 		Debug( LDAP_DEBUG_ANY,
-			LDAP_XSTRING(mdb_db_open) ": database \"%s\" cannot be opened: %s (%d). "
+			LDAP_XSTRING(mdb_db_open) ": database \"%s\" cannot be opened, err %d. "
 			"Restore from backup!\n",
-			be->be_suffix[0].bv_val, mdb_strerror(rc), rc );
+			be->be_suffix[0].bv_val, rc, 0 );
 		goto fail;
 	}
 
 	rc = mdb_txn_begin( mdb->mi_dbenv, NULL, flags & MDB_RDONLY, &txn );
 	if ( rc ) {
 		Debug( LDAP_DEBUG_ANY,
-			LDAP_XSTRING(mdb_db_open) ": database \"%s\" cannot be opened: %s (%d). "
+			LDAP_XSTRING(mdb_db_open) ": database \"%s\" cannot be opened, err %d. "
 			"Restore from backup!\n",
-			be->be_suffix[0].bv_val, mdb_strerror(rc), rc );
+			be->be_suffix[0].bv_val, rc, 0 );
 		goto fail;
 	}
 
@@ -271,15 +267,10 @@ mdb_db_open( BackendDB *be, ConfigReply *cr )
 		goto fail;
 	}
 
-	/* slapcat doesn't need indexes. avoid a failure if
-	 * a configured index wasn't created yet.
-	 */
-	if ( !(slapMode & SLAP_TOOL_READONLY) ) {
-		rc = mdb_attr_dbs_open( be, txn, cr );
-		if ( rc ) {
-			mdb_txn_abort( txn );
-			goto fail;
-		}
+	rc = mdb_attr_dbs_open( be, txn, cr );
+	if ( rc ) {
+		mdb_txn_abort( txn );
+		goto fail;
 	}
 
 	rc = mdb_txn_commit(txn);

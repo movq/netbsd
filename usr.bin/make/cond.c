@@ -1,4 +1,4 @@
-/*	$NetBSD: cond.c,v 1.74 2016/02/18 18:29:14 christos Exp $	*/
+/*	$NetBSD: cond.c,v 1.67 2012/11/03 13:59:27 christos Exp $	*/
 
 /*
  * Copyright (c) 1988, 1989, 1990 The Regents of the University of California.
@@ -70,14 +70,14 @@
  */
 
 #ifndef MAKE_NATIVE
-static char rcsid[] = "$NetBSD: cond.c,v 1.74 2016/02/18 18:29:14 christos Exp $";
+static char rcsid[] = "$NetBSD: cond.c,v 1.67 2012/11/03 13:59:27 christos Exp $";
 #else
 #include <sys/cdefs.h>
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)cond.c	8.2 (Berkeley) 1/2/94";
 #else
-__RCSID("$NetBSD: cond.c,v 1.74 2016/02/18 18:29:14 christos Exp $");
+__RCSID("$NetBSD: cond.c,v 1.67 2012/11/03 13:59:27 christos Exp $");
 #endif
 #endif /* not lint */
 #endif
@@ -181,15 +181,6 @@ static Token	  condPushBack=TOK_NONE;	/* Single push-back token used in
 static unsigned int	cond_depth = 0;  	/* current .if nesting level */
 static unsigned int	cond_min_depth = 0;  	/* depth at makefile open */
 
-/*
- * Indicate when we should be strict about lhs of comparisons.
- * TRUE when Cond_EvalExpression is called from Cond_Eval (.if etc)
- * FALSE when Cond_EvalExpression is called from var.c:ApplyModifiers
- * since lhs is already expanded and we cannot tell if 
- * it was a variable reference or not.
- */
-static Boolean lhsStrict;
-
 static int
 istoken(const char *str, const char *tok, size_t len)
 {
@@ -289,10 +280,10 @@ CondGetArg(char **linePtr, char **argPtr, const char *func)
 	    int		len;
 	    void	*freeIt;
 
-	    cp2 = Var_Parse(cp, VAR_CMD, VARF_UNDEFERR|VARF_WANTRES,
-			    &len, &freeIt);
+	    cp2 = Var_Parse(cp, VAR_CMD, TRUE, &len, &freeIt);
 	    Buf_AddBytes(&buf, strlen(cp2), cp2);
-	    free(freeIt);
+	    if (freeIt)
+		free(freeIt);
 	    cp += len;
 	    continue;
 	}
@@ -346,8 +337,8 @@ CondDoDefined(int argLen MAKE_ATTR_UNUSED, const char *arg)
     } else {
 	result = FALSE;
     }
-
-    free(p1);
+    if (p1)
+	free(p1);
     return (result);
 }
 
@@ -490,10 +481,6 @@ CondCvtArg(char *str, double *value)
     double d_val;
 
     errno = 0;
-    if (!*str) {
-	*value = (double)0;
-	return TRUE;
-    }
     l_val = strtoul(str, &eptr, str[1] == 'x' ? 16 : 10);
     ech = *eptr;
     if (ech == 0 && errno != ERANGE) {
@@ -530,7 +517,7 @@ CondCvtArg(char *str, double *value)
  */
 /* coverity:[+alloc : arg-*2] */
 static char *
-CondGetString(Boolean doEval, Boolean *quoted, void **freeIt, Boolean strictLHS)
+CondGetString(Boolean doEval, Boolean *quoted, void **freeIt)
 {
     Buffer buf;
     char *cp;
@@ -574,9 +561,8 @@ CondGetString(Boolean doEval, Boolean *quoted, void **freeIt, Boolean strictLHS)
 	    break;
 	case '$':
 	    /* if we are in quotes, then an undefined variable is ok */
-	    str = Var_Parse(condExpr, VAR_CMD,
-			    ((!qt && doEval) ? VARF_UNDEFERR : 0) |
-			    VARF_WANTRES, &len, freeIt);
+	    str = Var_Parse(condExpr, VAR_CMD, (qt ? 0 : doEval),
+			    &len, freeIt);
 	    if (str == var_Error) {
 		if (*freeIt) {
 		    free(*freeIt);
@@ -615,16 +601,6 @@ CondGetString(Boolean doEval, Boolean *quoted, void **freeIt, Boolean strictLHS)
 	    condExpr--;			/* don't skip over next char */
 	    break;
 	default:
-	    if (strictLHS && !qt && *start != '$' &&
-		!isdigit((unsigned char) *start)) {
-		/* lhs must be quoted, a variable reference or number */
-		if (*freeIt) {
-		    free(*freeIt);
-		    *freeIt = NULL;
-		}
-		str = NULL;
-		goto cleanup;
-	    }
 	    Buf_AddByte(&buf, *condExpr);
 	    break;
 	}
@@ -672,7 +648,7 @@ compare_expression(Boolean doEval)
      * Parse the variable spec and skip over it, saving its
      * value in lhs.
      */
-    lhs = CondGetString(doEval, &lhsQuoted, &lhsFree, lhsStrict);
+    lhs = CondGetString(doEval, &lhsQuoted, &lhsFree);
     if (!lhs)
 	goto done;
 
@@ -733,7 +709,7 @@ compare_expression(Boolean doEval)
 	goto done;
     }
 
-    rhs = CondGetString(doEval, &rhsQuoted, &rhsFree, FALSE);
+    rhs = CondGetString(doEval, &rhsQuoted, &rhsFree);
     if (!rhs)
 	goto done;
 
@@ -806,8 +782,10 @@ do_string_compare:
     }
 
 done:
-    free(lhsFree);
-    free(rhsFree);
+    if (lhsFree)
+	free(lhsFree);
+    if (rhsFree)
+	free(rhsFree);
     return t;
 }
 
@@ -826,7 +804,7 @@ get_mpt_arg(char **linePtr, char **argPtr, const char *func MAKE_ATTR_UNUSED)
     /* We do all the work here and return the result as the length */
     *argPtr = NULL;
 
-    val = Var_Parse(cp - 1, VAR_CMD, VARF_WANTRES, &length, &freeIt);
+    val = Var_Parse(cp - 1, VAR_CMD, FALSE, &length, &freeIt);
     /*
      * Advance *linePtr to beyond the closing ). Note that
      * we subtract one because 'length' is calculated from 'cp - 1'.
@@ -847,7 +825,8 @@ get_mpt_arg(char **linePtr, char **argPtr, const char *func MAKE_ATTR_UNUSED)
      * true/false here.
      */
     length = *val ? 2 : 1;
-    free(freeIt);
+    if (freeIt)
+	free(freeIt);
     return length;
 }
 
@@ -898,7 +877,8 @@ compare_function(Boolean doEval)
 	}
 	/* Evaluate the argument using the required function. */
 	t = !doEval || fn_def->fn_proc(arglen, arg);
-	free(arg);
+	if (arg)
+	    free(arg);
 	condExpr = cp;
 	return t;
     }
@@ -930,7 +910,8 @@ compare_function(Boolean doEval)
      * be empty - even if it contained a variable expansion.
      */
     t = !doEval || if_info->defProc(arglen, arg) != if_info->doNot;
-    free(arg);
+    if (arg)
+	free(arg);
     return t;
 }
 
@@ -1154,15 +1135,13 @@ CondE(Boolean doEval)
  *-----------------------------------------------------------------------
  */
 int
-Cond_EvalExpression(const struct If *info, char *line, Boolean *value, int eprint, Boolean strictLHS)
+Cond_EvalExpression(const struct If *info, char *line, Boolean *value, int eprint)
 {
     static const struct If *dflt_info;
     const struct If *sv_if_info = if_info;
     char *sv_condExpr = condExpr;
     Token sv_condPushBack = condPushBack;
     int rval;
-
-    lhsStrict = strictLHS;
 
     while (*line == ' ' || *line == '\t')
 	line++;
@@ -1380,7 +1359,7 @@ Cond_Eval(char *line)
     }
 
     /* And evaluate the conditional expresssion */
-    if (Cond_EvalExpression(ifp, line, &value, 1, TRUE) == COND_INVALID) {
+    if (Cond_EvalExpression(ifp, line, &value, 1) == COND_INVALID) {
 	/* Syntax error in conditional, error message already output. */
 	/* Skip everything to matching .endif */
 	cond_state[cond_depth] = SKIP_TO_ELSE;

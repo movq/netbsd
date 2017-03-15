@@ -1,11 +1,11 @@
-/*	$NetBSD: ddns.c,v 1.5 2016/01/10 20:10:45 christos Exp $	*/
+/*	$NetBSD: ddns.c,v 1.4 2014/07/12 12:09:38 spz Exp $	*/
 /* ddns.c
 
    Dynamic DNS updates. */
 
 /*
  * 
- * Copyright (c) 2009-2015 by Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (c) 2009-2014 by Internet Systems Consortium, Inc. ("ISC")
  * Copyright (c) 2004-2007 by Internet Systems Consortium, Inc. ("ISC")
  * Copyright (c) 2000-2003 by Internet Software Consortium
  *
@@ -36,9 +36,10 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: ddns.c,v 1.5 2016/01/10 20:10:45 christos Exp $");
+__RCSID("$NetBSD: ddns.c,v 1.4 2014/07/12 12:09:38 spz Exp $");
 
 #include "dhcpd.h"
+#include "dst/md5.h"
 #include <dns/result.h>
 
 char *ddns_standard_tag = "ddns-dhcid";
@@ -224,22 +225,6 @@ ddns_updates(struct packet *packet, struct lease *lease, struct lease *old,
 	else
 		s1 = 0;
 
-	/* If we don't have a host name based on ddns-hostname then use
-	 * the host declaration name if there is one and use-host-decl-names
-	 * is turned on. */
-	if ((s1 == 0) && (lease && lease->host && lease->host->name)) {
-		oc = lookup_option(&server_universe, options,
-				   SV_USE_HOST_DECL_NAMES);
-		if (evaluate_boolean_option_cache(NULL, packet, lease,
-						  NULL, packet->options,
-						  options, scope, oc, MDL)) {
-			s1 = ((data_string_new(&ddns_hostname,
-					      lease->host->name,
-					      strlen(lease->host->name),
-                                              MDL) && ddns_hostname.len > 0));
-		}
-	}
-
 	oc = lookup_option(&server_universe, options, SV_DDNS_DOMAIN_NAME);
 	if (oc)
 		s2 = evaluate_option_cache(&ddns_domainname, packet, lease,
@@ -255,9 +240,10 @@ ddns_updates(struct packet *packet, struct lease *lease, struct lease *old,
 			goto out;
 		}
 
-		if (buffer_allocate (&ddns_fwd_name.buffer,
-				     ddns_hostname.len +
-				     ddns_domainname.len + 2, MDL)) {
+		buffer_allocate (&ddns_fwd_name.buffer,
+				 ddns_hostname.len + ddns_domainname.len + 2,
+				 MDL);
+		if (ddns_fwd_name.buffer) {
 			ddns_fwd_name.data = ddns_fwd_name.buffer->data;
 			data_string_append (&ddns_fwd_name, &ddns_hostname);
 			ddns_fwd_name.buffer->data[ddns_fwd_name.len] = '.';
@@ -456,8 +442,8 @@ ddns_updates(struct packet *packet, struct lease *lease, struct lease *old,
 	}
 
 	if (s1) {
-		if (buffer_allocate(&ddns_cb->rev_name.buffer,
-				    rev_name_len, MDL)) {
+		buffer_allocate(&ddns_cb->rev_name.buffer, rev_name_len, MDL);
+		if (ddns_cb->rev_name.buffer != NULL) {
 			struct data_string *rname = &ddns_cb->rev_name;
 			rname->data = rname->buffer->data;
 
@@ -1155,7 +1141,8 @@ ddns_update_lease_ptr(struct lease    *lease,
 		return (ISC_R_FAILURE);
 	}
 	else {
-		strcpy(ddns_address, piaddr(ddns_cb->address));
+		strncpy(ddns_address, piaddr(ddns_cb->address), 
+			MAX_ADDRESS_STRING_LEN);
 	}
 #if defined (DEBUG_DNS_UPDATES)
 	log_info("%s(%d): Updating lease_ptr for ddns_cp=%p (addr=%s)",

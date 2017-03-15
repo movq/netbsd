@@ -13,6 +13,7 @@
 //===----------------------------------------------------------------------===//
 #include "clang/Serialization/Module.h"
 #include "ASTReaderInternals.h"
+#include "llvm/Support/MemoryBuffer.h"
 #include "llvm/Support/raw_ostream.h"
 
 using namespace clang;
@@ -36,12 +37,21 @@ ModuleFile::ModuleFile(ModuleKind Kind, unsigned Generation)
     LocalNumSelectors(0), SelectorOffsets(nullptr), BaseSelectorID(0),
     SelectorLookupTableData(nullptr), SelectorLookupTable(nullptr),
     LocalNumDecls(0), DeclOffsets(nullptr), BaseDeclID(0),
+    LocalNumCXXBaseSpecifiers(0), CXXBaseSpecifiersOffsets(nullptr),
     FileSortedDecls(nullptr), NumFileSortedDecls(0),
+    RedeclarationsMap(nullptr), LocalNumRedeclarationsInMap(0),
     ObjCCategoriesMap(nullptr), LocalNumObjCCategoriesInMap(0),
     LocalNumTypes(0), TypeOffsets(nullptr), BaseTypeIndex(0)
 {}
 
 ModuleFile::~ModuleFile() {
+  for (DeclContextInfosMap::iterator I = DeclContextInfos.begin(),
+       E = DeclContextInfos.end();
+       I != E; ++I) {
+    if (I->second.NameLookupTableData)
+      delete I->second.NameLookupTableData;
+  }
+  
   delete static_cast<ASTIdentifierLookupTable *>(IdentifierLookupTable);
   delete static_cast<HeaderFileInfoLookupTable *>(HeaderFileInfoTable);
   delete static_cast<ASTSelectorLookupTable *>(SelectorLookupTable);
@@ -62,7 +72,7 @@ dumpLocalRemap(StringRef Name,
   }
 }
 
-LLVM_DUMP_METHOD void ModuleFile::dump() {
+void ModuleFile::dump() {
   llvm::errs() << "\nModule: " << FileName << "\n";
   if (!Imports.empty()) {
     llvm::errs() << "  Imports: ";

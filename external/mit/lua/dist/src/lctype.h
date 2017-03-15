@@ -1,4 +1,4 @@
-/*	$NetBSD: lctype.h,v 1.4 2016/09/08 02:21:31 salazar Exp $	*/
+/*	$NetBSD: lctype.h,v 1.1.4.2 2016/07/01 06:35:02 snj Exp $	*/
 
 /*
 ** Id: lctype.h,v 1.12 2011/07/15 12:50:29 roberto Exp 

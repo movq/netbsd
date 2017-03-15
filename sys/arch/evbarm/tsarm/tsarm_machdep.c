@@ -1,4 +1,4 @@
-/*	$NetBSD: tsarm_machdep.c,v 1.24 2016/12/22 14:47:56 cherry Exp $ */
+/*	$NetBSD: tsarm_machdep.c,v 1.22 2014/03/08 18:07:39 skrll Exp $ */
 
 /*
  * Copyright (c) 2001, 2002, 2003 Wasabi Systems, Inc.
@@ -73,7 +73,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: tsarm_machdep.c,v 1.24 2016/12/22 14:47:56 cherry Exp $");
+__KERNEL_RCSID(0, "$NetBSD: tsarm_machdep.c,v 1.22 2014/03/08 18:07:39 skrll Exp $");
 
 #include "opt_ddb.h"
 #include "opt_kgdb.h"
@@ -148,14 +148,14 @@ struct bootconfig bootconfig;		/* Boot config storage */
 char *boot_args = NULL;
 char *boot_file = NULL;
 
-vaddr_t physical_start;
-vaddr_t physical_freestart;
-vaddr_t physical_freeend;
-vaddr_t physical_freeend_low;
-vaddr_t physical_end;
+vm_offset_t physical_start;
+vm_offset_t physical_freestart;
+vm_offset_t physical_freeend;
+vm_offset_t physical_freeend_low;
+vm_offset_t physical_end;
 u_int free_pages;
 
-paddr_t msgbufphys;
+vm_offset_t msgbufphys;
 
 static struct arm32_dma_range tsarm_dma_ranges[4];
 
@@ -726,7 +726,7 @@ initarm(void *arg)
 #ifdef VERBOSE_INIT_ARM
 	printf("page ");
 #endif
-	uvm_md_init();
+	uvm_setpagesize();	/* initialize PAGE_SIZE-dependent variables */
 	uvm_page_physload(atop(physical_freestart), atop(physical_freeend),
 	    atop(physical_freestart), atop(physical_freeend),
 	    VM_FREELIST_DEFAULT);

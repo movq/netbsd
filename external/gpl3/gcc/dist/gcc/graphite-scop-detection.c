@@ -1,5 +1,5 @@
 /* Detection of Static Control Parts (SCoP) for Graphite.
-   Copyright (C) 2009-2015 Free Software Foundation, Inc.
+   Copyright (C) 2009-2013 Free Software Foundation, Inc.
    Contributed by Sebastian Pop <sebastian.pop@amd.com> and
    Tobias Grosser <grosser@fim.uni-passau.de>.
 
@@ -21,59 +21,25 @@ along with GCC; see the file COPYING3.  If not see
 
 #include "config.h"
 
-#ifdef HAVE_isl
-#include <isl/constraint.h>
+#ifdef HAVE_cloog
 #include <isl/set.h>
 #include <isl/map.h>
 #include <isl/union_map.h>
+#include <cloog/cloog.h>
+#include <cloog/isl/domain.h>
 #endif
 
 #include "system.h"
 #include "coretypes.h"
-#include "hash-set.h"
-#include "machmode.h"
-#include "vec.h"
-#include "double-int.h"
-#include "input.h"
-#include "alias.h"
-#include "symtab.h"
-#include "options.h"
-#include "wide-int.h"
-#include "inchash.h"
-#include "tree.h"
-#include "fold-const.h"
-#include "predict.h"
-#include "tm.h"
-#include "hard-reg-set.h"
-#include "input.h"
-#include "function.h"
-#include "dominance.h"
-#include "cfg.h"
-#include "basic-block.h"
-#include "tree-ssa-alias.h"
-#include "internal-fn.h"
-#include "gimple-expr.h"
-#include "is-a.h"
-#include "gimple.h"
-#include "gimple-iterator.h"
-#include "gimple-ssa.h"
-#include "tree-phinodes.h"
-#include "ssa-iterators.h"
-#include "tree-ssa-loop-manip.h"
-#include "tree-ssa-loop-niter.h"
-#include "tree-ssa-loop.h"
-#include "tree-into-ssa.h"
-#include "tree-ssa.h"
+#include "tree-flow.h"
 #include "cfgloop.h"
 #include "tree-chrec.h"
 #include "tree-data-ref.h"
 #include "tree-scalar-evolution.h"
 #include "tree-pass.h"
 #include "sese.h"
-#include "tree-ssa-propagate.h"
-#include "cp/cp-tree.h"
 
-#ifdef HAVE_isl
+#ifdef HAVE_cloog
 #include "graphite-poly.h"
 #include "graphite-scop-detection.h"
 
@@ -193,10 +159,10 @@ graphite_can_represent_init (tree e)
     case MULT_EXPR:
       if (chrec_contains_symbols (TREE_OPERAND (e, 0)))
 	return graphite_can_represent_init (TREE_OPERAND (e, 0))
-	  && tree_fits_shwi_p (TREE_OPERAND (e, 1));
+	  && host_integerp (TREE_OPERAND (e, 1), 0);
       else
 	return graphite_can_represent_init (TREE_OPERAND (e, 1))
-	  && tree_fits_shwi_p (TREE_OPERAND (e, 0));
+	  && host_integerp (TREE_OPERAND (e, 0), 0);
 
     case PLUS_EXPR:
     case POINTER_PLUS_EXPR:
@@ -233,14 +199,6 @@ static bool
 graphite_can_represent_scev (tree scev)
 {
   if (chrec_contains_undetermined (scev))
-    return false;
-
-  /* We disable the handling of pointer types, because it’s currently not
-     supported by Graphite with the ISL AST generator. SSA_NAME nodes are
-     the only nodes, which are disabled in case they are pointers to object
-     types, but this can be changed.  */
-
-  if (TYPE_PTROB_P (TREE_TYPE (scev)) && TREE_CODE (scev) == SSA_NAME)
     return false;
 
   switch (TREE_CODE (scev))
@@ -488,7 +446,7 @@ scopdet_basic_block_info (basic_block bb, loop_p outermost_loop,
   gimple stmt;
 
   /* XXX: ENTRY_BLOCK_PTR could be optimized in later steps.  */
-  basic_block entry_block = ENTRY_BLOCK_PTR_FOR_FN (cfun);
+  basic_block entry_block = ENTRY_BLOCK_PTR;
   stmt = harmful_stmt_in_bb (entry_block, outermost_loop, bb);
   result.difficult = (stmt != NULL);
   result.exit = NULL;
@@ -500,10 +458,8 @@ scopdet_basic_block_info (basic_block bb, loop_p outermost_loop,
       result.exits = false;
 
       /* Mark bbs terminating a SESE region difficult, if they start
-	 a condition or if the block it exits to cannot be split
-	 with make_forwarder_block.  */
-      if (!single_succ_p (bb)
-	  || bb_has_abnormal_pred (single_succ (bb)))
+	 a condition.  */
+      if (!single_succ_p (bb))
 	result.difficult = true;
       else
 	result.exit = single_succ (bb);
@@ -518,7 +474,8 @@ scopdet_basic_block_info (basic_block bb, loop_p outermost_loop,
 
     case GBB_LOOP_SING_EXIT_HEADER:
       {
-	auto_vec<sd_region, 3> regions;
+	vec<sd_region> regions;
+	regions.create (3);
 	struct scopdet_info sinfo;
 	edge exit_e = single_exit (loop);
 
@@ -560,7 +517,7 @@ scopdet_basic_block_info (basic_block bb, loop_p outermost_loop,
 	    result.next = exit_e->dest;
 
 	    /* If we do not dominate result.next, remove it.  It's either
-	       the exit block, or another bb dominates it and will
+	       the EXIT_BLOCK_PTR, or another bb dominates it and will
 	       call the scop detection for this bb.  */
 	    if (!dominated_by_p (CDI_DOMINATORS, result.next, bb))
 	      result.next = NULL;
@@ -583,7 +540,8 @@ scopdet_basic_block_info (basic_block bb, loop_p outermost_loop,
       {
         /* XXX: For now we just do not join loops with multiple exits.  If the
            exits lead to the same bb it may be possible to join the loop.  */
-        auto_vec<sd_region, 3> regions;
+        vec<sd_region> regions;
+	regions.create (3);
         vec<edge> exits = get_loop_exit_edges (loop);
         edge e;
         int i;
@@ -626,7 +584,8 @@ scopdet_basic_block_info (basic_block bb, loop_p outermost_loop,
       }
     case GBB_COND_HEADER:
       {
-	auto_vec<sd_region, 3> regions;
+	vec<sd_region> regions;
+	regions.create (3);
 	struct scopdet_info sinfo;
 	vec<basic_block> dominated;
 	int i;
@@ -1072,7 +1031,7 @@ create_sese_edges (vec<sd_region> regions)
   FOR_EACH_VEC_ELT (regions, i, s)
     /* Don't handle multiple edges exiting the function.  */
     if (!find_single_exit_edge (s)
-	&& s->exit != EXIT_BLOCK_PTR_FOR_FN (cfun))
+	&& s->exit != EXIT_BLOCK_PTR)
       create_single_exit_edge (s);
 
   unmark_exit_edges (regions);
@@ -1082,7 +1041,7 @@ create_sese_edges (vec<sd_region> regions)
 
 #ifdef ENABLE_CHECKING
   verify_loop_structure ();
-  verify_ssa (false, true);
+  verify_ssa (false);
 #endif
 }
 
@@ -1151,7 +1110,7 @@ print_graphite_scop_statistics (FILE* file, scop_p scop)
 
   basic_block bb;
 
-  FOR_ALL_BB_FN (bb, cfun)
+  FOR_ALL_BB (bb)
     {
       gimple_stmt_iterator psi;
       loop_p loop = bb->loop_father;
@@ -1229,7 +1188,8 @@ print_graphite_statistics (FILE* file, vec<scop_p> scops)
 static void
 limit_scops (vec<scop_p> *scops)
 {
-  auto_vec<sd_region, 3> regions;
+  vec<sd_region> regions;
+  regions.create (3);
 
   int i;
   scop_p scop;
@@ -1264,13 +1224,14 @@ limit_scops (vec<scop_p> *scops)
 
   create_sese_edges (regions);
   build_graphite_scops (regions, scops);
+  regions.release ();
 }
 
 /* Returns true when P1 and P2 are close phis with the same
    argument.  */
 
 static inline bool
-same_close_phi_node (gphi *p1, gphi *p2)
+same_close_phi_node (gimple p1, gimple p2)
 {
   return operand_equal_p (gimple_phi_arg_def (p1, 0),
 			  gimple_phi_arg_def (p2, 0), 0);
@@ -1280,15 +1241,15 @@ same_close_phi_node (gphi *p1, gphi *p2)
    of PHI.  */
 
 static void
-remove_duplicate_close_phi (gphi *phi, gphi_iterator *gsi)
+remove_duplicate_close_phi (gimple phi, gimple_stmt_iterator *gsi)
 {
   gimple use_stmt;
   use_operand_p use_p;
   imm_use_iterator imm_iter;
   tree res = gimple_phi_result (phi);
-  tree def = gimple_phi_result (gsi->phi ());
+  tree def = gimple_phi_result (gsi_stmt (*gsi));
 
-  gcc_assert (same_close_phi_node (phi, gsi->phi ()));
+  gcc_assert (same_close_phi_node (phi, gsi_stmt (*gsi)));
 
   FOR_EACH_IMM_USE_STMT (use_stmt, imm_iter, def)
     {
@@ -1313,12 +1274,12 @@ remove_duplicate_close_phi (gphi *phi, gphi_iterator *gsi)
 static void
 make_close_phi_nodes_unique (basic_block bb)
 {
-  gphi_iterator psi;
+  gimple_stmt_iterator psi;
 
   for (psi = gsi_start_phis (bb); !gsi_end_p (psi); gsi_next (&psi))
     {
-      gphi_iterator gsi = psi;
-      gphi *phi = psi.phi ();
+      gimple_stmt_iterator gsi = psi;
+      gimple phi = gsi_stmt (psi);
 
       /* At this point, PHI should be a close phi in normal form.  */
       gcc_assert (gimple_phi_num_args (phi) == 1);
@@ -1326,7 +1287,7 @@ make_close_phi_nodes_unique (basic_block bb)
       /* Iterate over the next phis and remove duplicates.  */
       gsi_next (&gsi);
       while (!gsi_end_p (gsi))
-	if (same_close_phi_node (phi, gsi.phi ()))
+	if (same_close_phi_node (phi, gsi_stmt (gsi)))
 	  remove_duplicate_close_phi (phi, &gsi);
 	else
 	  gsi_next (&gsi);
@@ -1353,14 +1314,14 @@ canonicalize_loop_closed_ssa (loop_p loop)
     }
   else
     {
-      gphi_iterator psi;
+      gimple_stmt_iterator psi;
       basic_block close = split_edge (e);
 
       e = single_succ_edge (close);
 
       for (psi = gsi_start_phis (bb); !gsi_end_p (psi); gsi_next (&psi))
 	{
-	  gphi *phi = psi.phi ();
+	  gimple phi = gsi_stmt (psi);
 	  unsigned i;
 
 	  for (i = 0; i < gimple_phi_num_args (phi); i++)
@@ -1368,7 +1329,7 @@ canonicalize_loop_closed_ssa (loop_p loop)
 	      {
 		tree res, arg = gimple_phi_arg_def (phi, i);
 		use_operand_p use_p;
-		gphi *close_phi;
+		gimple close_phi;
 
 		if (TREE_CODE (arg) != SSA_NAME)
 		  continue;
@@ -1417,13 +1378,14 @@ canonicalize_loop_closed_ssa (loop_p loop)
 static void
 canonicalize_loop_closed_ssa_form (void)
 {
+  loop_iterator li;
   loop_p loop;
 
 #ifdef ENABLE_CHECKING
   verify_loop_closed_ssa (true);
 #endif
 
-  FOR_EACH_LOOP (loop, 0)
+  FOR_EACH_LOOP (li, loop, 0)
     canonicalize_loop_closed_ssa (loop);
 
   rewrite_into_loop_closed_ssa (NULL, TODO_update_ssa);
@@ -1441,11 +1403,11 @@ void
 build_scops (vec<scop_p> *scops)
 {
   struct loop *loop = current_loops->tree_root;
-  auto_vec<sd_region, 3> regions;
+  vec<sd_region> regions;
+  regions.create (3);
 
   canonicalize_loop_closed_ssa_form ();
-  build_scops_1 (single_succ (ENTRY_BLOCK_PTR_FOR_FN (cfun)),
-		 ENTRY_BLOCK_PTR_FOR_FN (cfun)->loop_father,
+  build_scops_1 (single_succ (ENTRY_BLOCK_PTR), ENTRY_BLOCK_PTR->loop_father,
 		 &regions, loop);
   create_sese_edges (regions);
   build_graphite_scops (regions, scops);
@@ -1487,7 +1449,7 @@ dot_all_scops_1 (FILE *file, vec<scop_p> scops)
 
   fprintf (file, "digraph all {\n");
 
-  FOR_ALL_BB_FN (bb, cfun)
+  FOR_ALL_BB (bb)
     {
       int part_of_scop = false;
 
@@ -1594,7 +1556,7 @@ dot_all_scops_1 (FILE *file, vec<scop_p> scops)
       fprintf (file, "  </TABLE>>, shape=box, style=\"setlinewidth(0)\"]\n");
     }
 
-  FOR_ALL_BB_FN (bb, cfun)
+  FOR_ALL_BB (bb)
     {
       FOR_EACH_EDGE (e, ei, bb->succs)
 	      fprintf (file, "%d -> %d;\n", bb->index, e->dest->index);
@@ -1632,7 +1594,7 @@ dot_all_scops (vec<scop_p> scops)
 DEBUG_FUNCTION void
 dot_scop (scop_p scop)
 {
-  auto_vec<scop_p, 1> scops;
+  vec<scop_p> scops = vNULL;
 
   if (scop)
     scops.safe_push (scop);
@@ -1652,6 +1614,8 @@ dot_scop (scop_p scop)
 #else
   dot_all_scops_1 (stderr, scops);
 #endif
+
+  scops.release ();
 }
 
 #endif

@@ -1,3 +1,6 @@
+set(LLVM_BINUTILS_INCDIR "" CACHE PATH
+  "PATH to binutils/include containing plugin-api.h for gold plugin.")
+
 set(LLVM_EXPORTED_SYMBOL_FILE ${CMAKE_CURRENT_SOURCE_DIR}/gold.exports)
 
 if( LLVM_ENABLE_PIC AND LLVM_BINUTILS_INCDIR )
@@ -10,7 +13,6 @@ if( LLVM_ENABLE_PIC AND LLVM_BINUTILS_INCDIR )
   set(LLVM_LINK_COMPONENTS
      ${LLVM_TARGETS_TO_BUILD}
      Linker
-     LTO
      BitWriter
      IPO
      )

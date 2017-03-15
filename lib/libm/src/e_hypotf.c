@@ -15,7 +15,7 @@
 
 #include <sys/cdefs.h>
 #if defined(LIBM_SCCS) && !defined(lint)
-__RCSID("$NetBSD: e_hypotf.c,v 1.10 2016/01/24 20:34:30 gson Exp $");
+__RCSID("$NetBSD: e_hypotf.c,v 1.9.40.1 2016/03/06 18:00:07 martin Exp $");
 #endif
 
 #include "math.h"

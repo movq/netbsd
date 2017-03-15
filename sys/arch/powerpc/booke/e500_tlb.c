@@ -1,4 +1,4 @@
-/*	$NetBSD: e500_tlb.c,v 1.18 2016/07/11 16:06:52 matt Exp $	*/
+/*	$NetBSD: e500_tlb.c,v 1.13.4.1 2015/02/21 18:18:33 martin Exp $	*/
 /*-
  * Copyright (c) 2010, 2011 The NetBSD Foundation, Inc.
  * All rights reserved.
@@ -34,13 +34,11 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "opt_ppcparam.h"
-
 #define	__PMAP_PRIVATE
 
 #include <sys/cdefs.h>
 
-__KERNEL_RCSID(0, "$NetBSD: e500_tlb.c,v 1.18 2016/07/11 16:06:52 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: e500_tlb.c,v 1.13.4.1 2015/02/21 18:18:33 martin Exp $");
 
 #include <sys/param.h>
 
@@ -363,7 +361,7 @@ e500_tlb_invalidate_all(void)
 	__asm volatile("tlbivax\t0, %0" :: "b"(4));	/* INV_ALL */
 	__asm volatile("tlbsync\n\tisync\n\tsync");
 #else
-	mtspr(SPR_MMUCSR0, MMUCSR0_TLB0_FI);
+	mtspr(SPR_MMUCSR0, MMUCSR0_TLB0_FL);
 	while (mfspr(SPR_MMUCSR0) != 0)
 		;
 #endif
@@ -372,9 +370,6 @@ e500_tlb_invalidate_all(void)
 static void
 e500_tlb_invalidate_globals(void)
 {
-#if defined(MULTIPROCESSOR)
-	e500_tlb_invalidate_all();
-#else	/* !MULTIPROCESSOR */
 	const size_t tlbassoc = TLBCFG_ASSOC(mftlb0cfg());
 	const size_t tlbentries = TLBCFG_NENTRY(mftlb0cfg());
 	const size_t max_epn = (tlbentries / tlbassoc) << PAGE_SHIFT;
@@ -419,15 +414,11 @@ e500_tlb_invalidate_globals(void)
 	}
 	__asm volatile("isync\n\tsync");
 	wrtee(msr);
-#endif	/* MULTIPROCESSOR */
 }
 
 static void
 e500_tlb_invalidate_asids(tlb_asid_t asid_lo, tlb_asid_t asid_hi)
 {
-#if defined(MULTIPROCESSOR)
-	e500_tlb_invalidate_all();
-#else	/* !MULTIPROCESSOR */
 	const size_t tlbassoc = TLBCFG_ASSOC(mftlb0cfg());
 	const size_t tlbentries = TLBCFG_NENTRY(mftlb0cfg());
 	const size_t max_epn = (tlbentries / tlbassoc) << PAGE_SHIFT;
@@ -461,11 +452,10 @@ e500_tlb_invalidate_asids(tlb_asid_t asid_lo, tlb_asid_t asid_hi)
 	}
 	__asm volatile("isync\n\tsync");
 	wrtee(msr);
-#endif	/* MULTIPROCESSOR */
 }
 
 static u_int
-e500_tlb_record_asids(u_long *bitmap, tlb_asid_t asid_max)
+e500_tlb_record_asids(u_long *bitmap)
 {
 	const size_t tlbassoc = TLBCFG_ASSOC(mftlb0cfg());
 	const size_t tlbentries = TLBCFG_NENTRY(mftlb0cfg());
@@ -533,10 +523,6 @@ e500_tlb_invalidate_addr(vaddr_t va, tlb_asid_t asid)
 static bool
 e500_tlb_update_addr(vaddr_t va, tlb_asid_t asid, pt_entry_t pte, bool insert)
 {
-#if defined(MULTIPROCESSOR)
-	e500_tlb_invalidate_addr(va, asid);
-	return true;
-#else	/* !MULTIPROCESSOR */
 	struct e500_hwtlb hwtlb = tlb_to_hwtlb(
 	    (struct e500_tlb){ .tlb_va = va, .tlb_asid = asid,
 		.tlb_size = PAGE_SIZE, .tlb_pte = pte,});
@@ -554,8 +540,7 @@ e500_tlb_update_addr(vaddr_t va, tlb_asid_t asid, pt_entry_t pte, bool insert)
 #endif
 			return false;
 		}
-		mas1 = hwtlb.hwtlb_mas1 | MAS1_V;
-		mtspr(SPR_MAS1, mas1);
+		mtspr(SPR_MAS1, hwtlb.hwtlb_mas1);
 	}
 	mtspr(SPR_MAS2, hwtlb.hwtlb_mas2);
 	mtspr(SPR_MAS3, hwtlb.hwtlb_mas3);
@@ -571,7 +556,6 @@ e500_tlb_update_addr(vaddr_t va, tlb_asid_t asid, pt_entry_t pte, bool insert)
 	    hwtlb.hwtlb_mas1, hwtlb.hwtlb_mas2, hwtlb.hwtlb_mas3);
 #endif
 	return (mas1 & MAS1_V) != 0;
-#endif	/* MULTIPROCESSOR */
 }
 
 static void
@@ -802,11 +786,6 @@ e500_tlb_ioreserve(vaddr_t va, vsize_t len, pt_entry_t pte)
 	xtlb->e_hwtlb = tlb_to_hwtlb(xtlb->e_tlb);
 	xtlb->e_hwtlb.hwtlb_mas0 |= __SHIFTIN(slot, MAS0_ESEL);
 	hwtlb_write(xtlb->e_hwtlb, true);
-
-#if defined(MULTIPROCESSOR)
-	cpu_send_ipi(IPI_DST_NOTME, IPI_TLB1SYNC);
-#endif
-
 	return 0;
 }
 
@@ -823,10 +802,6 @@ e500_tlb_iorelease(vaddr_t va)
 		return EBUSY;
 
 	e500_free_tlb1_entry(xtlb, slot, true);
-
-#if defined(MULTIPROCESSOR)
-	cpu_send_ipi(IPI_DST_NOTME, IPI_TLB1SYNC);
-#endif
 
 	return 0;
 }
@@ -864,13 +839,8 @@ e500_tlbmemmap(paddr_t memstart, psize_t memsize, struct e500_tlb1 *tlb1)
 		}
 	}
 
-#if defined(MULTIPROCESSOR)
-	cpu_send_ipi(IPI_DST_NOTME, IPI_TLB1SYNC);
-#endif
-
 	return nextslot;
 }
-
 static const struct tlb_md_ops e500_tlb_ops = {
 	.md_tlb_get_asid = e500_tlb_get_asid,
 	.md_tlb_set_asid = e500_tlb_set_asid,

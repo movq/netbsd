@@ -1,4 +1,4 @@
-/*	$NetBSD: npf_ext_normalize.c,v 1.5 2017/01/29 00:15:54 christos Exp $	*/
+/*	$NetBSD: npf_ext_normalize.c,v 1.3 2014/07/20 00:37:41 rmind Exp $	*/
 
 /*-
  * Copyright (c) 2009-2012 The NetBSD Foundation, Inc.
@@ -26,9 +26,8 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifdef _KERNEL
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: npf_ext_normalize.c,v 1.5 2017/01/29 00:15:54 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: npf_ext_normalize.c,v 1.3 2014/07/20 00:37:41 rmind Exp $");
 
 #include <sys/types.h>
 #include <sys/module.h>
@@ -38,7 +37,6 @@ __KERNEL_RCSID(0, "$NetBSD: npf_ext_normalize.c,v 1.5 2017/01/29 00:15:54 christ
 #include <netinet/in_systm.h>
 #include <netinet/in.h>
 #include <netinet/in_var.h>
-#endif
 
 #include "npf.h"
 #include "npf_impl.h"
@@ -143,8 +141,7 @@ npf_normalize_ip4(npf_cache_t *npc, npf_normalize_t *np)
  * npf_normalize: the main routine to normalize IPv4 and/or TCP headers.
  */
 static bool
-npf_normalize(npf_cache_t *npc, void *params, const npf_match_info_t *mi,
-    int *decision)
+npf_normalize(npf_cache_t *npc, void *params, int *decision)
 {
 	npf_normalize_t *np = params;
 	struct tcphdr *th = npc->npc_l4.tcp;
@@ -199,7 +196,6 @@ npf_ext_normalize_modcmd(modcmd_t cmd, void *arg)
 		.dtor		= npf_normalize_dtor,
 		.proc		= npf_normalize
 	};
-	npf_t *npf = npf_getkernctx();
 
 	switch (cmd) {
 	case MODULE_CMD_INIT:
@@ -208,12 +204,12 @@ npf_ext_normalize_modcmd(modcmd_t cmd, void *arg)
 		 * extension and its calls.
 		 */
 		npf_ext_normalize_id =
-		    npf_ext_register(npf, "normalize", &npf_normalize_ops);
+		    npf_ext_register("normalize", &npf_normalize_ops);
 		return npf_ext_normalize_id ? 0 : EEXIST;
 
 	case MODULE_CMD_FINI:
 		/* Unregister the normalisation rule procedure. */
-		return npf_ext_unregister(npf, npf_ext_normalize_id);
+		return npf_ext_unregister(npf_ext_normalize_id);
 
 	case MODULE_CMD_AUTOUNLOAD:
 		return npf_autounload_p() ? 0 : EBUSY;

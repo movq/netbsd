@@ -1,4 +1,4 @@
-/*	$NetBSD: ahc_eisa.c,v 1.41 2016/07/11 11:31:50 msaitoh Exp $	*/
+/*	$NetBSD: ahc_eisa.c,v 1.39 2014/03/29 19:28:24 christos Exp $	*/
 
 /*
  * Product specific probe and attach routines for:
@@ -32,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ahc_eisa.c,v 1.41 2016/07/11 11:31:50 msaitoh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ahc_eisa.c,v 1.39 2014/03/29 19:28:24 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -65,7 +65,7 @@ CFATTACH_DECL_NEW(ahc_eisa, sizeof(struct ahc_softc),
 
 /*
  * Check the slots looking for a board we recognise
- * If we find one, note its address (slot) and call
+ * If we find one, note it's address (slot) and call
  * the actual probe routine to check it out.
  */
 static int
@@ -170,8 +170,8 @@ ahc_eisa_attach(device_t parent, device_t self, void *aux)
 	ahc->ih = eisa_intr_establish(ec, ih,
 	    intrtype, IPL_BIO, ahc_intr, ahc);
 	if (ahc->ih == NULL) {
-		aprint_error_dev(ahc->sc_dev,
-		    "couldn't establish %s interrupt", intrtypestr);
+		aprint_error_dev(ahc->sc_dev, "couldn't establish %s interrupt",
+		    intrtypestr);
 		if (intrstr != NULL)
 			aprint_error(" at %s", intrstr);
 		aprint_error("\n");

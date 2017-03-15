@@ -1,4 +1,4 @@
-/*	$NetBSD: configfile.c,v 1.8 2016/05/01 23:32:01 christos Exp $	*/
+/*	$NetBSD: configfile.c,v 1.3.4.3 2016/05/11 11:35:42 martin Exp $	*/
 
 /**
  * \file configfile.c

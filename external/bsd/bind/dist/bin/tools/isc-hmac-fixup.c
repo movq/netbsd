@@ -1,4 +1,4 @@
-/*	$NetBSD: isc-hmac-fixup.c,v 1.8 2015/12/17 04:00:43 christos Exp $	*/
+/*	$NetBSD: isc-hmac-fixup.c,v 1.6.2.1 2016/03/13 08:06:10 martin Exp $	*/
 
 /*
  * Copyright (C) 2010, 2014, 2015  Internet Systems Consortium, Inc. ("ISC")

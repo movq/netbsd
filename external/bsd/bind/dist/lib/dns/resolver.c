@@ -1,4 +1,4 @@
-/*	$NetBSD: resolver.c,v 1.29 2017/02/09 00:23:27 christos Exp $	*/
+/*	$NetBSD: resolver.c,v 1.19.2.8 2017/02/20 15:48:24 sborrill Exp $	*/
 
 /*
  * Copyright (C) 2004-2016  Internet Systems Consortium, Inc. ("ISC")

@@ -1,4 +1,4 @@
-/*	$NetBSD: ypdb.c,v 1.12 2017/01/10 21:06:17 christos Exp $	*/
+/*	$NetBSD: ypdb.c,v 1.11 2008/02/29 03:00:47 lukem Exp $	*/
 
 /*
  * Copyright (c) 1990, 1993
@@ -38,12 +38,11 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: ypdb.c,v 1.12 2017/01/10 21:06:17 christos Exp $");
+__RCSID("$NetBSD: ypdb.c,v 1.11 2008/02/29 03:00:47 lukem Exp $");
 #endif
 
 #include <sys/param.h>
 #include <sys/types.h>
-#include <sys/stat.h>
 
 #include <db.h>
 #include <err.h>

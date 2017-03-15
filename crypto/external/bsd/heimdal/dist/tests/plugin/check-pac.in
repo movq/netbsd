@@ -35,11 +35,8 @@
 #
 
 srcdir="@srcdir@"
-env_setup="@env_setup@"
 objdir="@objdir@"
 EGREP="@EGREP@"
-
-. ${env_setup}
 
 testfailed="echo test failed; cat messages.log; exit 1"
 
@@ -95,8 +92,14 @@ echo "Empty log"
 > messages.log
 
 echo Starting kdc
-${kdc} --detach --testing || { echo "kdc failed to start"; exit 1; }
-kdcpid=`getpid kdc`
+${kdc} &
+kdcpid=$!
+
+sh ${srcdir}/../kdc/wait-kdc.sh
+if [ "$?" != 0 ] ; then
+    kill ${kdcpid}
+    exit 1
+fi
 
 trap "kill ${kdcpid}; echo signal killing kdc; exit 1;" EXIT
 

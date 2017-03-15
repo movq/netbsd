@@ -1,4 +1,4 @@
-/*	$NetBSD: main.c,v 1.6 2016/09/05 01:09:57 sevan Exp $	*/
+/*	$NetBSD: main.c,v 1.4 2010/12/13 20:48:45 pooka Exp $	*/
 
 /*-
  * Copyright (c) 2008 The NetBSD Foundation, Inc.
@@ -28,7 +28,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: main.c,v 1.6 2016/09/05 01:09:57 sevan Exp $");
+__RCSID("$NetBSD: main.c,v 1.4 2010/12/13 20:48:45 pooka Exp $");
 #endif /* !lint */
 
 #include <sys/module.h>
@@ -41,6 +41,7 @@ __RCSID("$NetBSD: main.c,v 1.6 2016/09/05 01:09:57 sevan Exp $");
 
 #include "prog_ops.h"
 
+int	main(int, char **);
 static void	usage(void) __dead;
 
 int
@@ -56,7 +57,7 @@ main(int argc, char **argv)
 
 	for (i = 1; i < argc; i++) {
 		if (prog_modctl(MODCTL_UNLOAD, argv[i])) {
-			err(EXIT_FAILURE, "%s", argv[i]);
+			err(EXIT_FAILURE, NULL);
 		}
 	}
 

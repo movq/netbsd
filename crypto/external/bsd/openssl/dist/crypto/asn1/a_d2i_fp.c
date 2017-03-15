@@ -236,22 +236,22 @@ static int asn1_d2i_read_bio(BIO *in, BUF_MEM **pb)
                     size_t chunk = want > chunk_max ? chunk_max : want;
 
                     if (!BUF_MEM_grow_clean(b, len + chunk)) {
-                        ASN1err(ASN1_F_ASN1_D2I_READ_BIO, ERR_R_MALLOC_FAILURE);
-                        goto err;
-                    }
+                    ASN1err(ASN1_F_ASN1_D2I_READ_BIO, ERR_R_MALLOC_FAILURE);
+                    goto err;
+                }
                     want -= chunk;
                     while (chunk > 0) {
                         i = BIO_read(in, &(b->data[len]), chunk);
-                        if (i <= 0) {
-                            ASN1err(ASN1_F_ASN1_D2I_READ_BIO,
-                                    ASN1_R_NOT_ENOUGH_DATA);
-                            goto err;
-                        }
+                    if (i <= 0) {
+                        ASN1err(ASN1_F_ASN1_D2I_READ_BIO,
+                                ASN1_R_NOT_ENOUGH_DATA);
+                        goto err;
+                    }
                     /*
                      * This can't overflow because |len+want| didn't
                      * overflow.
                      */
-                        len += i;
+                    len += i;
                         chunk -= i;
                     }
                     if (chunk_max < INT_MAX/2)

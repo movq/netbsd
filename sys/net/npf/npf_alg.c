@@ -1,4 +1,4 @@
-/*	$NetBSD: npf_alg.c,v 1.16 2016/12/26 23:05:06 christos Exp $	*/
+/*	$NetBSD: npf_alg.c,v 1.14.2.1 2014/08/29 11:14:14 martin Exp $	*/
 
 /*-
  * Copyright (c) 2010-2013 The NetBSD Foundation, Inc.
@@ -33,9 +33,8 @@
  * NPF interface for the Application Level Gateways (ALGs).
  */
 
-#ifdef _KERNEL
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: npf_alg.c,v 1.16 2016/12/26 23:05:06 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: npf_alg.c,v 1.14.2.1 2014/08/29 11:14:14 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/types.h>
@@ -45,7 +44,6 @@ __KERNEL_RCSID(0, "$NetBSD: npf_alg.c,v 1.16 2016/12/26 23:05:06 christos Exp $"
 #include <sys/mutex.h>
 #include <net/pfil.h>
 #include <sys/module.h>
-#endif
 
 #include "npf_impl.h"
 
@@ -60,44 +58,39 @@ struct npf_alg {
 	u_int		na_slot;
 };
 
-struct npf_algset {
-	/* List of ALGs and the count. */
-	npf_alg_t	alg_list[NPF_MAX_ALGS];
-	u_int		alg_count;
+/* List of ALGs and the count. */
+static pserialize_t	alg_psz			__cacheline_aligned;
+static npf_alg_t	alg_list[NPF_MAX_ALGS]	__read_mostly;
+static u_int		alg_count		__read_mostly;
 
-	/* Matching, inspection and translation functions. */
-	npfa_funcs_t	alg_funcs[NPF_MAX_ALGS];
-};
+/* Matching, inspection and translation functions. */
+static npfa_funcs_t	alg_funcs[NPF_MAX_ALGS]	__read_mostly;
 
 static const char	alg_prefix[] = "npf_alg_";
 #define	NPF_EXT_PREFLEN	(sizeof(alg_prefix) - 1)
 
 void
-npf_alg_init(npf_t *npf)
+npf_alg_sysinit(void)
 {
-	npf_algset_t *aset;
-
-	aset = kmem_zalloc(sizeof(npf_algset_t), KM_SLEEP);
-	npf->algset = aset;
+	alg_psz = pserialize_create();
+	memset(alg_list, 0, sizeof(alg_list));
+	memset(alg_funcs, 0, sizeof(alg_funcs));
+	alg_count = 0;
 }
 
 void
-npf_alg_fini(npf_t *npf)
+npf_alg_sysfini(void)
 {
-	npf_algset_t *aset = npf->algset;
-
-	kmem_free(aset, sizeof(npf_algset_t));
+	pserialize_destroy(alg_psz);
 }
 
 static npf_alg_t *
-npf_alg_lookup(npf_t *npf, const char *name)
+npf_alg_lookup(const char *name)
 {
-	npf_algset_t *aset = npf->algset;
+	KASSERT(npf_config_locked_p());
 
-	KASSERT(npf_config_locked_p(npf));
-
-	for (u_int i = 0; i < aset->alg_count; i++) {
-		npf_alg_t *alg = &aset->alg_list[i];
+	for (u_int i = 0; i < alg_count; i++) {
+		npf_alg_t *alg = &alg_list[i];
 		const char *aname = alg->na_name;
 
 		if (aname && strcmp(aname, name) == 0)
@@ -107,23 +100,23 @@ npf_alg_lookup(npf_t *npf, const char *name)
 }
 
 npf_alg_t *
-npf_alg_construct(npf_t *npf, const char *name)
+npf_alg_construct(const char *name)
 {
 	npf_alg_t *alg;
 
-	npf_config_enter(npf);
-	if ((alg = npf_alg_lookup(npf, name)) == NULL) {
+	npf_config_enter();
+	if ((alg = npf_alg_lookup(name)) == NULL) {
 		char modname[NPF_EXT_PREFLEN + 64];
 		snprintf(modname, sizeof(modname), "%s%s", alg_prefix, name);
-		npf_config_exit(npf);
+		npf_config_exit();
 
 		if (module_autoload(modname, MODULE_CLASS_MISC) != 0) {
 			return NULL;
 		}
-		npf_config_enter(npf);
-		alg = npf_alg_lookup(npf, name);
+		npf_config_enter();
+		alg = npf_alg_lookup(name);
 	}
-	npf_config_exit(npf);
+	npf_config_exit();
 	return alg;
 }
 
@@ -131,28 +124,26 @@ npf_alg_construct(npf_t *npf, const char *name)
  * npf_alg_register: register application-level gateway.
  */
 npf_alg_t *
-npf_alg_register(npf_t *npf, const char *name, const npfa_funcs_t *funcs)
+npf_alg_register(const char *name, const npfa_funcs_t *funcs)
 {
-	npf_algset_t *aset = npf->algset;
-	npfa_funcs_t *afuncs;
 	npf_alg_t *alg;
 	u_int i;
 
-	npf_config_enter(npf);
-	if (npf_alg_lookup(npf, name) != NULL) {
-		npf_config_exit(npf);
+	npf_config_enter();
+	if (npf_alg_lookup(name) != NULL) {
+		npf_config_exit();
 		return NULL;
 	}
 
 	/* Find a spare slot. */
 	for (i = 0; i < NPF_MAX_ALGS; i++) {
-		alg = &aset->alg_list[i];
+		alg = &alg_list[i];
 		if (alg->na_name == NULL) {
 			break;
 		}
 	}
 	if (i == NPF_MAX_ALGS) {
-		npf_config_exit(npf);
+		npf_config_exit();
 		return NULL;
 	}
 
@@ -161,13 +152,12 @@ npf_alg_register(npf_t *npf, const char *name, const npfa_funcs_t *funcs)
 	alg->na_slot = i;
 
 	/* Assign the functions. */
-	afuncs = &aset->alg_funcs[i];
-	afuncs->match = funcs->match;
-	afuncs->translate = funcs->translate;
-	afuncs->inspect = funcs->inspect;
+	alg_funcs[i].match = funcs->match;
+	alg_funcs[i].translate = funcs->translate;
+	alg_funcs[i].inspect = funcs->inspect;
 
-	aset->alg_count = MAX(aset->alg_count, i + 1);
-	npf_config_exit(npf);
+	alg_count = MAX(alg_count, i + 1);
+	npf_config_exit();
 
 	return alg;
 }
@@ -176,24 +166,21 @@ npf_alg_register(npf_t *npf, const char *name, const npfa_funcs_t *funcs)
  * npf_alg_unregister: unregister application-level gateway.
  */
 int
-npf_alg_unregister(npf_t *npf, npf_alg_t *alg)
+npf_alg_unregister(npf_alg_t *alg)
 {
-	npf_algset_t *aset = npf->algset;
 	u_int i = alg->na_slot;
-	npfa_funcs_t *afuncs;
 
 	/* Deactivate the functions first. */
-	npf_config_enter(npf);
-	afuncs = &aset->alg_funcs[i];
-	afuncs->match = NULL;
-	afuncs->translate = NULL;
-	afuncs->inspect = NULL;
-	pserialize_perform(npf->qsbr);
+	npf_config_enter();
+	alg_funcs[i].match = NULL;
+	alg_funcs[i].translate = NULL;
+	alg_funcs[i].inspect = NULL;
+	pserialize_perform(alg_psz);
 
 	/* Finally, unregister the ALG. */
-	npf_ruleset_freealg(npf_config_natset(npf), alg);
+	npf_ruleset_freealg(npf_config_natset(), alg);
 	alg->na_name = NULL;
-	npf_config_exit(npf);
+	npf_config_exit();
 
 	return 0;
 }
@@ -204,13 +191,12 @@ npf_alg_unregister(npf_t *npf, npf_alg_t *alg)
 bool
 npf_alg_match(npf_cache_t *npc, npf_nat_t *nt, int di)
 {
-	npf_algset_t *aset = npc->npc_ctx->algset;
 	bool match = false;
 	int s;
 
 	s = pserialize_read_enter();
-	for (u_int i = 0; i < aset->alg_count; i++) {
-		const npfa_funcs_t *f = &aset->alg_funcs[i];
+	for (u_int i = 0; i < alg_count; i++) {
+		const npfa_funcs_t *f = &alg_funcs[i];
 
 		if (f->match && f->match(npc, nt, di)) {
 			match = true;
@@ -227,12 +213,11 @@ npf_alg_match(npf_cache_t *npc, npf_nat_t *nt, int di)
 void
 npf_alg_exec(npf_cache_t *npc, npf_nat_t *nt, bool forw)
 {
-	npf_algset_t *aset = npc->npc_ctx->algset;
 	int s;
 
 	s = pserialize_read_enter();
-	for (u_int i = 0; i < aset->alg_count; i++) {
-		const npfa_funcs_t *f = &aset->alg_funcs[i];
+	for (u_int i = 0; i < alg_count; i++) {
+		const npfa_funcs_t *f = &alg_funcs[i];
 
 		if (f->translate) {
 			f->translate(npc, nt, forw);
@@ -244,13 +229,12 @@ npf_alg_exec(npf_cache_t *npc, npf_nat_t *nt, bool forw)
 npf_conn_t *
 npf_alg_conn(npf_cache_t *npc, int di)
 {
-	npf_algset_t *aset = npc->npc_ctx->algset;
 	npf_conn_t *con = NULL;
 	int s;
 
 	s = pserialize_read_enter();
-	for (u_int i = 0; i < aset->alg_count; i++) {
-		const npfa_funcs_t *f = &aset->alg_funcs[i];
+	for (u_int i = 0; i < alg_count; i++) {
+		const npfa_funcs_t *f = &alg_funcs[i];
 
 		if (!f->inspect)
 			continue;
@@ -262,15 +246,14 @@ npf_alg_conn(npf_cache_t *npc, int di)
 }
 
 prop_array_t
-npf_alg_export(npf_t *npf)
+npf_alg_export(void)
 {
 	prop_array_t alglist = prop_array_create();
-	npf_algset_t *aset = npf->algset;
 
-	KASSERT(npf_config_locked_p(npf));
+	KASSERT(npf_config_locked_p());
 
-	for (u_int i = 0; i < aset->alg_count; i++) {
-		const npf_alg_t *alg = &aset->alg_list[i];
+	for (u_int i = 0; i < alg_count; i++) {
+		const npf_alg_t *alg = &alg_list[i];
 
 		if (alg->na_name == NULL) {
 			continue;

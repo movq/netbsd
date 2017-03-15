@@ -1,4 +1,4 @@
-/*	$NetBSD: cd9660_vfsops.c,v 1.91 2017/02/17 08:31:24 hannken Exp $	*/
+/*	$NetBSD: cd9660_vfsops.c,v 1.89 2014/07/09 08:43:54 maxv Exp $	*/
 
 /*-
  * Copyright (c) 1994
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: cd9660_vfsops.c,v 1.91 2017/02/17 08:31:24 hannken Exp $");
+__KERNEL_RCSID(0, "$NetBSD: cd9660_vfsops.c,v 1.89 2014/07/09 08:43:54 maxv Exp $");
 
 #if defined(_KERNEL_OPT)
 #include "opt_compat_netbsd.h"
@@ -111,7 +111,7 @@ struct vfsops cd9660_vfsops = {
 	.vfs_mountroot = cd9660_mountroot,
 	.vfs_snapshot = (void *)eopnotsupp,
 	.vfs_extattrctl = vfs_stdextattrctl,
-	.vfs_suspendctl = genfs_suspendctl,
+	.vfs_suspendctl = (void *)eopnotsupp,
 	.vfs_renamelock_enter = genfs_renamelock_enter,
 	.vfs_renamelock_exit = genfs_renamelock_exit,
 	.vfs_fsync = (void *)eopnotsupp,
@@ -381,7 +381,7 @@ iso_mountfs(struct vnode *devvp, struct mount *mp, struct lwp *l,
 
 	for (iso_blknum = 16; iso_blknum < 100; iso_blknum++) {
 		if ((error = bread(devvp, (iso_blknum+sess) * btodb(iso_bsize),
-				   iso_bsize, 0, &bp)) != 0)
+				   iso_bsize, NOCRED, 0, &bp)) != 0)
 			goto out;
 
 		vdp = (struct iso_volume_descriptor *)bp->b_data;
@@ -458,7 +458,7 @@ iso_mountfs(struct vnode *devvp, struct mount *mp, struct lwp *l,
 		if ((error = bread(isomp->im_devvp,
 				   (isomp->root_extent + ext_attr_length) <<
 				   (isomp->im_bshift - DEV_BSHIFT),
-				   isomp->logical_block_size,
+				   isomp->logical_block_size, NOCRED,
 				   0, &bp)) != 0)
 		    goto out;
 
@@ -734,7 +734,7 @@ cd9660_loadvnode(struct mount *mp, struct vnode *vp,
 
 	error = bread(imp->im_devvp,
 		      lbn << (imp->im_bshift - DEV_BSHIFT),
-		      imp->logical_block_size, 0, &bp);
+		      imp->logical_block_size, NOCRED, 0, &bp);
 	if (error) {
 		pool_put(&cd9660_node_pool, ip);
 		printf("fhtovp: bread error %d\n",error);

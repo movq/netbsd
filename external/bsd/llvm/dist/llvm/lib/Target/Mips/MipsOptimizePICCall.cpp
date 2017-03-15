@@ -61,7 +61,7 @@ class OptimizePICCall : public MachineFunctionPass {
 public:
   OptimizePICCall(TargetMachine &tm) : MachineFunctionPass(ID) {}
 
-  StringRef getPassName() const override { return "Mips OptimizePICCall"; }
+  const char *getPassName() const override { return "Mips OptimizePICCall"; }
 
   bool runOnMachineFunction(MachineFunction &F) override;
 
@@ -174,7 +174,7 @@ void MBBInfo::postVisit() {
 
 // OptimizePICCall methods.
 bool OptimizePICCall::runOnMachineFunction(MachineFunction &F) {
-  if (static_cast<const MipsSubtarget &>(F.getSubtarget()).inMips16Mode())
+  if (F.getTarget().getSubtarget<MipsSubtarget>().inMips16Mode())
     return false;
 
   // Do a pre-order traversal of the dominator tree.

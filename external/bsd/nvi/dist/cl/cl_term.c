@@ -1,4 +1,4 @@
-/*	$NetBSD: cl_term.c,v 1.5 2015/11/25 20:25:20 christos Exp $ */
+/*	$NetBSD: cl_term.c,v 1.4.6.1 2016/12/18 06:37:30 snj Exp $ */
 /*-
  * Copyright (c) 1993, 1994
  *	The Regents of the University of California.  All rights reserved.
@@ -16,7 +16,7 @@
 static const char sccsid[] = "Id: cl_term.c,v 10.31 2001/07/08 13:06:56 skimo Exp  (Berkeley) Date: 2001/07/08 13:06:56 ";
 #endif /* not lint */
 #else
-__RCSID("$NetBSD: cl_term.c,v 1.5 2015/11/25 20:25:20 christos Exp $");
+__RCSID("$NetBSD: cl_term.c,v 1.4.6.1 2016/12/18 06:37:30 snj Exp $");
 #endif
 
 #include <sys/types.h>

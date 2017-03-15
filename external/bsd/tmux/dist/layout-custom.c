@@ -1,7 +1,7 @@
-/* $OpenBSD$ */
+/* Id */
 
 /*
- * Copyright (c) 2010 Nicholas Marriott <nicholas.marriott@gmail.com>
+ * Copyright (c) 2010 Nicholas Marriott <nicm@users.sourceforge.net>
  *
  * Permission to use, copy, modify, and distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -55,12 +55,12 @@ layout_checksum(const char *layout)
 
 /* Dump layout as a string. */
 char *
-layout_dump(struct layout_cell *root)
+layout_dump(struct window *w)
 {
 	char	layout[BUFSIZ], *out;
 
 	*layout = '\0';
-	if (layout_append(root, layout, sizeof layout) != 0)
+	if (layout_append(w->layout_root, layout, sizeof layout) != 0)
 		return (NULL);
 
 	xasprintf(&out, "%04x,%s", layout_checksum(layout), layout);

@@ -1,5 +1,5 @@
-/*	$NetBSD: log.h,v 1.11 2016/12/25 00:07:47 christos Exp $	*/
-/* $OpenBSD: log.h,v 1.21 2016/07/15 05:01:58 dtucker Exp $ */
+/*	$NetBSD: log.h,v 1.7 2014/01/07 02:13:39 joerg Exp $	*/
+/* $OpenBSD: log.h,v 1.20 2013/04/07 02:10:33 dtucker Exp $ */
 
 /*
  * Author: Tatu Ylonen <ylo@cs.hut.fi>
@@ -60,8 +60,6 @@ void     fatal(const char *, ...) __attribute__((noreturn))
     __attribute__((format(printf, 1, 2)));
 void     error(const char *, ...) __attribute__((format(printf, 1, 2)));
 void     sigdie(const char *, ...)  __attribute__((noreturn))
-    __attribute__((format(printf, 1, 2)));
-void     logdie(const char *, ...) __attribute__((noreturn))
     __attribute__((format(printf, 1, 2)));
 void     logit(const char *, ...) __attribute__((format(printf, 1, 2)));
 void     verbose(const char *, ...) __attribute__((format(printf, 1, 2)));

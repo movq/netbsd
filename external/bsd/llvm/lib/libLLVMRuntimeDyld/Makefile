@@ -1,20 +1,15 @@
-#	$NetBSD: Makefile,v 1.9 2017/01/11 12:02:30 joerg Exp $
+#	$NetBSD: Makefile,v 1.5.2.1 2015/06/04 20:05:44 snj Exp $
 
 LIB=	LLVMRuntimeDyld
 
 .include <bsd.init.mk>
 
 .PATH: ${LLVM_SRCDIR}/lib/ExecutionEngine/RuntimeDyld
-.PATH: ${LLVM_SRCDIR}/lib/ExecutionEngine/RuntimeDyld/Targets
 
-SRCS+=	JITSymbol.cpp \
-	RTDyldMemoryManager.cpp \
+SRCS+=	RTDyldMemoryManager.cpp \
 	RuntimeDyld.cpp \
-	RuntimeDyldCOFF.cpp \
 	RuntimeDyldChecker.cpp \
 	RuntimeDyldELF.cpp \
 	RuntimeDyldMachO.cpp
-
-SRCS+=	RuntimeDyldELFMips.cpp
 
 .include <bsd.lib.mk>

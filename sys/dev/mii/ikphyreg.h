@@ -1,4 +1,4 @@
-/*	$NetBSD: ikphyreg.h,v 1.3 2016/10/28 05:50:18 msaitoh Exp $	*/
+/*	$NetBSD: ikphyreg.h,v 1.2.34.1 2016/12/12 07:18:29 snj Exp $	*/
 /*******************************************************************************
 Copyright (c) 2001-2005, Intel Corporation 
 All rights reserved.

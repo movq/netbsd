@@ -1,6 +1,6 @@
 /* Disassemble SPU instructions
 
-   Copyright (C) 2006-2016 Free Software Foundation, Inc.
+   Copyright 2006, 2007, 2012  Free Software Foundation, Inc.
 
    This file is part of the GNU opcodes library.
 

@@ -1,4 +1,4 @@
-/*   $NetBSD: ins_wstr.c,v 1.11 2017/01/31 09:17:53 roy Exp $ */
+/*   $NetBSD: ins_wstr.c,v 1.7 2013/10/16 19:59:29 roy Exp $ */
 
 /*
  * Copyright (c) 2005 The NetBSD Foundation Inc.
@@ -36,7 +36,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: ins_wstr.c,v 1.11 2017/01/31 09:17:53 roy Exp $");
+__RCSID("$NetBSD: ins_wstr.c,v 1.7 2013/10/16 19:59:29 roy Exp $");
 #endif						  /* not lint */
 
 #include <string.h>
@@ -136,7 +136,7 @@ wins_nwstr(WINDOW *win, const wchar_t *wstr, int n)
 	__LDATA	 *start, *temp1, *temp2;
 	__LINE	  *lnp;
 	const wchar_t *scp;
-	int width, len, sx, x, y, cw, pcw, newx;
+	int width, len, sx, x, y, cw, pcw, newx, tabsize;
 	nschar_t *np;
 	wchar_t ws[] = L"		";
 
@@ -266,8 +266,9 @@ wins_nwstr(WINDOW *win, const wchar_t *wstr, int n)
 				}
 				continue;
 			case L'\t':
+				tabsize = win->screen->TABSIZE;
 				if (wins_nwstr(win, ws,
-				    min(win->maxx - x, TABSIZE - (x % TABSIZE)))
+				    min(win->maxx - x, tabsize - (x % tabsize)))
 				    == ERR)
 					return ERR;
 				continue;
@@ -300,7 +301,7 @@ wins_nwstr(WINDOW *win, const wchar_t *wstr, int n)
 			}
 		} else {
 			/* non-spacing character */
-			np = malloc(sizeof(nschar_t));
+			np = (nschar_t *)malloc(sizeof(nschar_t));
 			if (!np)
 				return ERR;
 			np->ch = *scp;
@@ -328,7 +329,6 @@ wins_nwstr(WINDOW *win, const wchar_t *wstr, int n)
 	if (newx > *lnp->lastchp)
 		*lnp->lastchp = newx;
 	__touchline(win, (int) win->cury, sx, (int) win->maxx - 1);
-	__sync(win);
 	return OK;
 #endif /* HAVE_WCHAR */
 }

@@ -5,7 +5,7 @@
  *****************************************************************************/
 
 /*
- * Copyright (C) 2000 - 2017, Intel Corp.
+ * Copyright (C) 2000 - 2013, Intel Corp.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -40,6 +40,9 @@
  * IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGES.
  */
+
+
+#define __PSTREE_C__
 
 #include "acpi.h"
 #include "accommon.h"
@@ -142,12 +145,12 @@ AcpiPsAppendArg (
     const ACPI_OPCODE_INFO  *OpInfo;
 
 
-    ACPI_FUNCTION_TRACE (PsAppendArg);
+    ACPI_FUNCTION_ENTRY ();
 
 
     if (!Op)
     {
-        return_VOID;
+        return;
     }
 
     /* Get the info structure for this opcode */
@@ -159,7 +162,7 @@ AcpiPsAppendArg (
 
         ACPI_ERROR ((AE_INFO, "Invalid AML Opcode: 0x%2.2X",
             Op->Common.AmlOpcode));
-        return_VOID;
+        return;
     }
 
     /* Check if this opcode requires argument sub-objects */
@@ -168,7 +171,7 @@ AcpiPsAppendArg (
     {
         /* Has no linked argument objects */
 
-        return_VOID;
+        return;
     }
 
     /* Append the argument to the linked argument list */
@@ -200,8 +203,6 @@ AcpiPsAppendArg (
 
         Op->Common.ArgListLength++;
     }
-
-    return_VOID;
 }
 
 

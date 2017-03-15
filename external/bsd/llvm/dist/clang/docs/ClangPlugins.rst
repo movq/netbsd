@@ -43,26 +43,6 @@ register a plugin in a library, use ``FrontendPluginRegistry::Add<>``:
 
   static FrontendPluginRegistry::Add<MyPlugin> X("my-plugin-name", "my plugin description");
 
-Defining pragmas
-================
-
-Plugins can also define pragmas by declaring a ``PragmaHandler`` and
-registering it using ``PragmaHandlerRegistry::Add<>``:
-
-.. code-block:: c++
-
-  // Define a pragma handler for #pragma example_pragma
-  class ExamplePragmaHandler : public PragmaHandler {
-  public:
-    ExamplePragmaHandler() : PragmaHandler("example_pragma") { }
-    void HandlePragma(Preprocessor &PP, PragmaIntroducerKind Introducer,
-                      Token &PragmaTok) {
-      // Handle the pragma
-    }
-  };
-
-  static PragmaHandlerRegistry::Add<ExamplePragmaHandler> Y("example_pragma","example pragma description");
-
 Putting it all together
 =======================
 
@@ -74,25 +54,21 @@ the `latest version of PrintFunctionNames.cpp
 Running the plugin
 ==================
 
-
-Using the cc1 command line
---------------------------
-
 To run a plugin, the dynamic library containing the plugin registry must be
-loaded via the `-load` command line option. This will load all plugins
+loaded via the :option:`-load` command line option. This will load all plugins
 that are registered, and you can select the plugins to run by specifying the
-`-plugin` option. Additional parameters for the plugins can be passed with
-`-plugin-arg-<plugin-name>`.
+:option:`-plugin` option. Additional parameters for the plugins can be passed with
+:option:`-plugin-arg-<plugin-name>`.
 
 Note that those options must reach clang's cc1 process. There are two
 ways to do so:
 
-* Directly call the parsing process by using the `-cc1` option; this
+* Directly call the parsing process by using the :option:`-cc1` option; this
   has the downside of not configuring the default header search paths, so
   you'll need to specify the full system path configuration on the command
   line.
 * Use clang as usual, but prefix all arguments to the cc1 process with
-  `-Xclang`.
+  :option:`-Xclang`.
 
 For example, to run the ``print-function-names`` plugin over a source file in
 clang, first build the plugin, and then call clang with the plugin from the
@@ -112,19 +88,3 @@ source tree:
 Also see the print-function-name plugin example's
 `README <http://llvm.org/viewvc/llvm-project/cfe/trunk/examples/PrintFunctionNames/README.txt?view=markup>`_
 
-
-Using the clang command line
-----------------------------
-
-Using `-fplugin=plugin` on the clang command line passes the plugin
-through as an argument to `-load` on the cc1 command line. If the plugin
-class implements the ``getActionType`` method then the plugin is run
-automatically. For example, to run the plugin automatically after the main AST
-action (i.e. the same as using `-add-plugin`):
-
-.. code-block:: c++
-
-  // Automatically run the plugin after the main AST action
-  PluginASTAction::ActionType getActionType() override {
-    return AddAfterMainAction;
-  }

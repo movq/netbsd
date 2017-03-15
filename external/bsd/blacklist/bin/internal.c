@@ -1,4 +1,4 @@
-/*	$NetBSD: internal.c,v 1.5 2015/01/27 19:40:37 christos Exp $	*/
+/*	$NetBSD: internal.c,v 1.5.2.2 2015/04/30 06:07:33 riz Exp $	*/
 
 /*-
  * Copyright (c) 2015 The NetBSD Foundation, Inc.
@@ -33,7 +33,7 @@
 #endif
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: internal.c,v 1.5 2015/01/27 19:40:37 christos Exp $");
+__RCSID("$NetBSD: internal.c,v 1.5.2.2 2015/04/30 06:07:33 riz Exp $");
 
 #include <stdio.h>
 #include <syslog.h>

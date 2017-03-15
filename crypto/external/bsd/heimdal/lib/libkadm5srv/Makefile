@@ -1,4 +1,4 @@
-# $NetBSD: Makefile,v 1.4 2017/01/28 21:31:52 christos Exp $
+# $NetBSD: Makefile,v 1.2.4.1 2014/11/27 11:36:25 martin Exp $
 
 USE_FORT?= yes	# network protocol library
 
@@ -10,7 +10,6 @@ NOLINT=		# defined
 .PATH:		${HEIMDIST}/lib/kadm5
 
 LIB=		kadm5srv
-CPPFLAGS+=	-I${HEIMDIST}/lib/krb5
 
 LIBDPLIBS+=	krb5	${.CURDIR}/../libkrb5 \
 		com_err	${.CURDIR}/../libcom_err \
@@ -44,7 +43,6 @@ SRCS =				\
 	randkey_s.c		\
 	rename_s.c		\
 	server_glue.c		\
-	setkey3_s.c		\
 	set_keys.c		\
 	set_modifier.c
 

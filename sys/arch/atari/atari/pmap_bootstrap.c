@@ -1,4 +1,4 @@
-/*	$NetBSD: pmap_bootstrap.c,v 1.8 2016/12/22 14:47:54 cherry Exp $	*/
+/*	$NetBSD: pmap_bootstrap.c,v 1.7 2010/04/13 09:49:54 tsutsui Exp $	*/
 /*-
  * Copyright (c) 1999 The NetBSD Foundation, Inc.
  * All rights reserved.
@@ -108,7 +108,7 @@ pmap_bootstrap(vaddr_t vstart)
 	 * Announce page-size to the VM-system
 	 */
 	uvmexp.pagesize = NBPG;
-	uvm_md_init();
+	uvm_setpagesize();
 
 	/*
 	 * Setup physical address ranges

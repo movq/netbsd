@@ -1,4 +1,4 @@
-/*	$NetBSD: errwarn.c,v 1.1.1.4 2016/01/10 19:44:43 christos Exp $	*/
+/*	$NetBSD: errwarn.c,v 1.1.1.3 2014/07/12 11:57:58 spz Exp $	*/
 /* errwarn.c
 
    Errors and warnings... */
@@ -34,7 +34,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: errwarn.c,v 1.1.1.4 2016/01/10 19:44:43 christos Exp $");
+__RCSID("$NetBSD: errwarn.c,v 1.1.1.3 2014/07/12 11:57:58 spz Exp $");
 
 #include "dhcpd.h"
 
@@ -47,6 +47,7 @@ int log_perror = -1;
 #else
 int log_perror = 1;
 #endif
+int log_priority;
 void (*log_cleanup) (void);
 
 #define CVT_BUF_MAX 1023
@@ -69,7 +70,7 @@ void log_fatal (const char * fmt, ... )
   va_end (list);
 
 #ifndef DEBUG
-  syslog (LOG_ERR, "%s", mbuf);
+  syslog (log_priority | LOG_ERR, "%s", mbuf);
 #endif
 
   /* Also log it to stderr? */
@@ -108,7 +109,7 @@ int log_error (const char * fmt, ...)
   va_end (list);
 
 #ifndef DEBUG
-  syslog (LOG_ERR, "%s", mbuf);
+  syslog (log_priority | LOG_ERR, "%s", mbuf);
 #endif
 
   if (log_perror) {
@@ -135,7 +136,7 @@ int log_info (const char *fmt, ...)
   va_end (list);
 
 #ifndef DEBUG
-  syslog (LOG_INFO, "%s", mbuf);
+  syslog (log_priority | LOG_INFO, "%s", mbuf);
 #endif
 
   if (log_perror) {
@@ -162,7 +163,7 @@ int log_debug (const char *fmt, ...)
   va_end (list);
 
 #ifndef DEBUG
-  syslog (LOG_DEBUG, "%s", mbuf);
+  syslog (log_priority | LOG_DEBUG, "%s", mbuf);
 #endif
 
   if (log_perror) {

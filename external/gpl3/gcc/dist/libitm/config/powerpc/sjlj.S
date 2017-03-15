@@ -1,4 +1,4 @@
-/* Copyright (C) 2012-2015 Free Software Foundation, Inc.
+/* Copyright (C) 2012-2013 Free Software Foundation, Inc.
    Contributed by Richard Henderson <rth@redhat.com>.
 
    This file is part of the GNU Transactional Memory Library (libitm).
@@ -83,16 +83,16 @@
 	bl	\name
 .endm
 #elif defined(_CALL_DARWIN)
-.macro FUNC
+.macro FUNC name
 	.globl	_$0
 _$0:
 .endmacro
-.macro END
+.macro END name
 .endmacro
-.macro HIDDEN
+.macro HIDDEN name
 	.private_extern _$0
 .endmacro
-.macro CALL
+.macro CALL name
 	bl	_$0
 .endmacro
 # ifdef __ppc64__
@@ -428,6 +428,6 @@ FUNC GTM_longjmp
 	cfi_endproc
 END GTM_longjmp
 
-#if defined(__ELF__) && defined(__linux__)
+#ifdef __linux__
 .section .note.GNU-stack, "", @progbits
 #endif

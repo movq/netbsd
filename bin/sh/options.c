@@ -1,4 +1,4 @@
-/*	$NetBSD: options.c,v 1.46 2016/03/31 16:16:35 christos Exp $	*/
+/*	$NetBSD: options.c,v 1.43 2012/03/20 18:42:29 matt Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993
@@ -37,7 +37,7 @@
 #if 0
 static char sccsid[] = "@(#)options.c	8.2 (Berkeley) 5/4/95";
 #else
-__RCSID("$NetBSD: options.c,v 1.46 2016/03/31 16:16:35 christos Exp $");
+__RCSID("$NetBSD: options.c,v 1.43 2012/03/20 18:42:29 matt Exp $");
 #endif
 #endif /* not lint */
 
@@ -103,10 +103,6 @@ procargs(int argc, char **argv)
 		iflag = 2;
 	if (mflag == 2)
 		mflag = iflag;
-#ifndef DO_SHAREDVFORK
-	if (usefork == 2)
-		usefork = 1;
-#endif
 	for (i = 0; i < NOPTS; i++)
 		if (optlist[i].val == 2)
 			optlist[i].val = 0;
@@ -224,40 +220,25 @@ STATIC void
 minus_o(char *name, int val)
 {
 	size_t i;
-	const char *sep = ": ";
 
 	if (name == NULL) {
 		if (val) {
-			out1str("Current option settings");
+			out1str("Current option settings\n");
 			for (i = 0; i < NOPTS; i++) {
-				if (optlist[i].name == NULL)  {
-					out1fmt("%s%c%c", sep,
-					    "+-"[optlist[i].val],
-					    optlist[i].letter);
-					sep = ", ";
-				}
-			}
-			out1c('\n');
-			for (i = 0; i < NOPTS; i++) {
-				if (optlist[i].name)
-				    out1fmt("%-16s%s\n", optlist[i].name,
+				out1fmt("%-16s%s\n", optlist[i].name,
 					optlist[i].val ? "on" : "off");
 			}
 		} else {
 			out1str("set");
 			for (i = 0; i < NOPTS; i++) {
-				if (optlist[i].name)
-				    out1fmt(" %co %s",
+				out1fmt(" %co %s",
 					"+-"[optlist[i].val], optlist[i].name);
-				else
-				    out1fmt(" %c%c", "+-"[optlist[i].val],
-					optlist[i].letter);
 			}
-			out1c('\n');
+			out1str("\n");
 		}
 	} else {
 		for (i = 0; i < NOPTS; i++)
-			if (optlist[i].name && equal(name, optlist[i].name)) {
+			if (equal(name, optlist[i].name)) {
 				set_opt_val(i, val);
 				return;
 			}
@@ -350,8 +331,6 @@ shiftcmd(int argc, char **argv)
 	int n;
 	char **ap1, **ap2;
 
-	if (argc > 2)
-		error("Usage: shift [n]");
 	n = 1;
 	if (argc > 1)
 		n = number(argv[1]);
@@ -364,8 +343,7 @@ shiftcmd(int argc, char **argv)
 			ckfree(*ap1);
 	}
 	ap2 = shellparam.p;
-	while ((*ap2++ = *ap1++) != NULL)
-		continue;
+	while ((*ap2++ = *ap1++) != NULL);
 	shellparam.optnext = NULL;
 	INTON;
 	return 0;
@@ -381,7 +359,7 @@ int
 setcmd(int argc, char **argv)
 {
 	if (argc == 1)
-		return showvars(0, 0, 1, 0);
+		return showvars(0, 0, 1);
 	INTOFF;
 	options(0);
 	optschanged();

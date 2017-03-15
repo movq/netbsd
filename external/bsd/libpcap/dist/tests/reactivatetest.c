@@ -1,4 +1,4 @@
-/*	$NetBSD: reactivatetest.c,v 1.3 2017/01/24 22:29:29 christos Exp $	*/
+/*	$NetBSD: reactivatetest.c,v 1.1.1.1 2013/04/06 15:57:51 christos Exp $	*/
 
 /*
  * Copyright (c) 1988, 1989, 1990, 1991, 1992, 1993, 1994, 1995, 1996, 1997, 2000
@@ -21,11 +21,8 @@
  * MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE.
  */
 
-#include <sys/cdefs.h>
-__RCSID("$NetBSD: reactivatetest.c,v 1.3 2017/01/24 22:29:29 christos Exp $");
-
 #ifndef lint
-static const char copyright[] _U_ =
+static const char copyright[] =
     "@(#) Copyright (c) 1988, 1989, 1990, 1991, 1992, 1993, 1994, 1995, 1996, 1997, 2000\n\
 The Regents of the University of California.  All rights reserved.\n";
 #endif

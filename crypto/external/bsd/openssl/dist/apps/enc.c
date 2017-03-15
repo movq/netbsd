@@ -126,8 +126,9 @@ int MAIN(int argc, char **argv)
         NULL, *wbio = NULL;
 #define PROG_NAME_SIZE  39
     char pname[PROG_NAME_SIZE + 1];
+#ifndef OPENSSL_NO_ENGINE
     char *engine = NULL;
-    ENGINE *e = NULL;
+#endif
     const EVP_MD *dgst = NULL;
     int non_fips_allow = 0;
 
@@ -321,7 +322,9 @@ int MAIN(int argc, char **argv)
         argv++;
     }
 
-    e = setup_engine(bio_err, engine, 0);
+#ifndef OPENSSL_NO_ENGINE
+    setup_engine(bio_err, engine, 0);
+#endif
 
     if (cipher && EVP_CIPHER_flags(cipher) & EVP_CIPH_FLAG_AEAD_CIPHER) {
         BIO_printf(bio_err,
@@ -671,7 +674,6 @@ int MAIN(int argc, char **argv)
     if (bzl != NULL)
         BIO_free(bzl);
 #endif
-    release_engine(e);
     if (pass)
         OPENSSL_free(pass);
     apps_shutdown();

@@ -39,7 +39,6 @@ void ap_list_process_beacon(struct hostapd_iface *iface,
 #ifdef NEED_AP_MLME
 int ap_list_init(struct hostapd_iface *iface);
 void ap_list_deinit(struct hostapd_iface *iface);
-void ap_list_timer(struct hostapd_iface *iface);
 #else /* NEED_AP_MLME */
 static inline int ap_list_init(struct hostapd_iface *iface)
 {
@@ -47,10 +46,6 @@ static inline int ap_list_init(struct hostapd_iface *iface)
 }
 
 static inline void ap_list_deinit(struct hostapd_iface *iface)
-{
-}
-
-static inline void ap_list_timer(struct hostapd_iface *iface)
 {
 }
 #endif /* NEED_AP_MLME */

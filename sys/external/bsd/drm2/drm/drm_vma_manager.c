@@ -1,4 +1,4 @@
-/*	$NetBSD: drm_vma_manager.c,v 1.5 2016/11/19 17:19:59 maya Exp $	*/
+/*	$NetBSD: drm_vma_manager.c,v 1.1.4.4 2016/12/12 09:13:43 msaitoh Exp $	*/
 
 /*-
  * Copyright (c) 2014 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: drm_vma_manager.c,v 1.5 2016/11/19 17:19:59 maya Exp $");
+__KERNEL_RCSID(0, "$NetBSD: drm_vma_manager.c,v 1.1.4.4 2016/12/12 09:13:43 msaitoh Exp $");
 
 #include <sys/kmem.h>
 #include <sys/rbtree.h>

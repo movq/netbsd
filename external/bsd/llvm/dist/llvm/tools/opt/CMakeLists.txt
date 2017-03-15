@@ -4,7 +4,7 @@ set(LLVM_LINK_COMPONENTS
   BitWriter
   CodeGen
   Core
-  Coroutines
+  IPA
   IPO
   IRReader
   InstCombine
@@ -16,7 +16,6 @@ set(LLVM_LINK_COMPONENTS
   Target
   TransformUtils
   Vectorize
-  Passes
   )
 
 # Support plugins.
@@ -27,15 +26,18 @@ add_llvm_tool(opt
   BreakpointPrinter.cpp
   GraphPrinters.cpp
   NewPMDriver.cpp
+  Passes.cpp
   PassPrinters.cpp
   PrintSCC.cpp
   opt.cpp
-
-  DEPENDS
-  intrinsics_gen
   )
-export_executable_symbols(opt)
+set_target_properties(opt PROPERTIES ENABLE_EXPORTS 1)
 
 if(WITH_POLLY AND LINK_POLLY_INTO_TOOLS)
   target_link_libraries(opt Polly)
+  if(POLLY_LINK_LIBS)
+    foreach(lib ${POLLY_LINK_LIBS})
+      target_link_libraries(opt ${lib})
+    endforeach(lib)
+  endif(POLLY_LINK_LIBS)
 endif(WITH_POLLY AND LINK_POLLY_INTO_TOOLS)

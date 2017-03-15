@@ -1,4 +1,4 @@
-/*	$NetBSD: fdesc_vfsops.c,v 1.92 2017/02/17 08:31:25 hannken Exp $	*/
+/*	$NetBSD: fdesc_vfsops.c,v 1.89.2.2 2015/05/07 03:50:01 snj Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993, 1995
@@ -41,7 +41,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: fdesc_vfsops.c,v 1.92 2017/02/17 08:31:25 hannken Exp $");
+__KERNEL_RCSID(0, "$NetBSD: fdesc_vfsops.c,v 1.89.2.2 2015/05/07 03:50:01 snj Exp $");
 
 #if defined(_KERNEL_OPT)
 #include "opt_compat_netbsd.h"
@@ -256,7 +256,7 @@ struct vfsops fdesc_vfsops = {
 	.vfs_done = fdesc_done,
 	.vfs_snapshot = (void *)eopnotsupp,
 	.vfs_extattrctl = vfs_stdextattrctl,
-	.vfs_suspendctl = genfs_suspendctl,
+	.vfs_suspendctl = (void *)eopnotsupp,
 	.vfs_renamelock_enter = genfs_renamelock_enter,
 	.vfs_renamelock_exit = genfs_renamelock_exit,
 	.vfs_fsync = (void *)eopnotsupp,

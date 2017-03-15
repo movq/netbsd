@@ -1,4 +1,4 @@
-/* $NetBSD: booted_dev.c,v 1.4 2016/10/13 16:18:20 flxd Exp $ */
+/* $NetBSD: booted_dev.c,v 1.3.196.1 2016/11/01 20:28:32 snj Exp $ */
 
 /*
  * Copyright (c) 1999 Christopher G. Demetriou.  All rights reserved.

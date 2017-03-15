@@ -131,8 +131,7 @@ void RegisterClassInfo::compute(const TargetRegisterClass *RC) const {
     RCI.NumRegs = StressRA;
 
   // Check if RC is a proper sub-class.
-  if (const TargetRegisterClass *Super =
-          TRI->getLargestLegalSuperClass(RC, *MF))
+  if (const TargetRegisterClass *Super = TRI->getLargestLegalSuperClass(RC))
     if (Super != RC && getNumAllocatableRegs(Super) > RCI.NumRegs)
       RCI.ProperSubClass = true;
 
@@ -176,6 +175,6 @@ unsigned RegisterClassInfo::computePSetLimit(unsigned Idx) const {
   }
   compute(RC);
   unsigned NReserved = RC->getNumRegs() - getNumAllocatableRegs(RC);
-  return TRI->getRegPressureSetLimit(*MF, Idx) -
-         TRI->getRegClassWeight(RC).RegWeight * NReserved;
+  return TRI->getRegPressureSetLimit(Idx)
+    - TRI->getRegClassWeight(RC).RegWeight * NReserved;
 }

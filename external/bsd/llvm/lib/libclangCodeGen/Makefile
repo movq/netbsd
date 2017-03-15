@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.14 2017/01/11 12:02:32 joerg Exp $
+#	$NetBSD: Makefile,v 1.11.2.1 2015/06/04 20:05:45 snj Exp $
 
 LIB=	clangCodeGen
 
@@ -10,15 +10,13 @@ SRCS+=	BackendUtil.cpp \
 	CGAtomic.cpp \
 	CGBlocks.cpp \
 	CGBuiltin.cpp \
-	CGCUDABuiltin.cpp \
 	CGCUDANV.cpp \
 	CGCUDARuntime.cpp \
-	CGCXX.cpp \
-	CGCXXABI.cpp \
 	CGCall.cpp \
 	CGClass.cpp \
 	CGCleanup.cpp \
-	CGCoroutine.cpp \
+	CGCXX.cpp \
+	CGCXXABI.cpp \
 	CGDebugInfo.cpp \
 	CGDecl.cpp \
 	CGDeclCXX.cpp \
@@ -36,7 +34,6 @@ SRCS+=	BackendUtil.cpp \
 	CGObjCRuntime.cpp \
 	CGOpenCLRuntime.cpp \
 	CGOpenMPRuntime.cpp \
-	CGOpenMPRuntimeNVPTX.cpp \
 	CGRecordLayoutBuilder.cpp \
 	CGStmt.cpp \
 	CGStmtOpenMP.cpp \
@@ -53,11 +50,8 @@ SRCS+=	BackendUtil.cpp \
 	ItaniumCXXABI.cpp \
 	MicrosoftCXXABI.cpp \
 	ModuleBuilder.cpp \
-	ObjectFilePCHContainerOperations.cpp \
 	SanitizerMetadata.cpp \
-	SwiftCallingConv.cpp \
-	TargetInfo.cpp \
-	VarBypassDetector.cpp
+	TargetInfo.cpp
 
 .if defined(HOSTLIB)
 .include <bsd.hostlib.mk>

@@ -1,4 +1,4 @@
-/*	$NetBSD: caa_257.c,v 1.1.1.5 2016/05/26 15:45:51 christos Exp $	*/
+/*	$NetBSD: caa_257.c,v 1.1.1.3.2.4 2016/10/14 12:01:29 martin Exp $	*/
 
 /*
  * Copyright (C) 2014-2016  Internet Systems Consortium, Inc. ("ISC")

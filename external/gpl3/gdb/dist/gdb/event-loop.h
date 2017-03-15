@@ -1,5 +1,5 @@
 /* Definitions used by the GDB event loop.
-   Copyright (C) 1999-2016 Free Software Foundation, Inc.
+   Copyright (C) 1999-2014 Free Software Foundation, Inc.
    Written by Elena Zannoni <ezannoni@cygnus.com> of Cygnus Solutions.
 
    This file is part of GDB.
@@ -66,8 +66,7 @@
    infinite loop.
 
    Corollary tasks are the creation and deletion of event sources.  */
-#ifndef _EVENT_LOOP_H_
-#define _EVENT_LOOP_H_
+
 typedef void *gdb_client_data;
 struct async_signal_handler;
 struct async_event_handler;
@@ -78,6 +77,7 @@ typedef void (timer_handler_func) (gdb_client_data);
 
 /* Exported functions from event-loop.c */
 
+extern void initialize_event_loop (void);
 extern void start_event_loop (void);
 extern int gdb_do_one_event (void);
 extern void delete_file_handler (int fd);
@@ -92,18 +92,27 @@ extern int create_timer (int milliseconds,
 			 gdb_client_data client_data);
 extern void delete_timer (int id);
 
-/* Call the handler from HANDLER the next time through the event
-   loop.  */
-extern void mark_async_signal_handler (struct async_signal_handler *handler);
+/* Call the handler from HANDLER immediately.  This function
+   runs signal handlers when returning to the event loop would be too
+   slow.  Do not call this directly; use gdb_call_async_signal_handler,
+   below, with IMMEDIATE_P == 1.  */
+void call_async_signal_handler (struct async_signal_handler *handler);
 
-/* Returns true if HANDLER is marked ready.  */
+/* Call the handler from HANDLER the next time through the event loop.
+   Do not call this directly; use gdb_call_async_signal_handler,
+   below, with IMMEDIATE_P == 0.  */
+void mark_async_signal_handler (struct async_signal_handler *handler);
 
-extern int
-  async_signal_handler_is_marked (struct async_signal_handler *handler);
+/* Wrapper for the body of signal handlers.  Call this function from
+   any SIGINT handler which needs to access GDB data structures or
+   escape via longjmp.  If IMMEDIATE_P is set, this triggers either
+   immediately (for POSIX platforms), or from gdb_select (for
+   MinGW).  If IMMEDIATE_P is clear, the handler will run the next
+   time we return to the event loop and any current select calls
+   will be interrupted.  */
 
-/* Mark HANDLER as NOT ready.  */
-
-extern void clear_async_signal_handler (struct async_signal_handler *handler);
+void gdb_call_async_signal_handler (struct async_signal_handler *handler,
+				    int immediate_p);
 
 /* Create and register an asynchronous event source in the event loop,
    and set PROC as its callback.  CLIENT_DATA is passed as argument to
@@ -122,10 +131,3 @@ extern void
 /* Call the handler from HANDLER the next time through the event
    loop.  */
 extern void mark_async_event_handler (struct async_event_handler *handler);
-
-/* Mark the handler (ASYNC_HANDLER_PTR) as NOT ready.  */
-
-extern void clear_async_event_handler (struct async_event_handler *handler);
-
-extern void initialize_async_signal_handlers (void);
-#endif

@@ -1,4 +1,4 @@
-/*	$NetBSD: protocol.c,v 1.2 2017/01/28 21:31:44 christos Exp $	*/
+/*	$NetBSD: protocol.c,v 1.1.1.2 2014/04/24 12:45:27 pettai Exp $	*/
 
 /*
  * Copyright (c) 2005, PADL Software Pty Ltd.
@@ -826,7 +826,7 @@ kcm_op_get_initial_ticket(krb5_context context,
 
     if (ret != 0) {
 	krb5_free_principal(context, server);
-	krb5_free_keyblock_contents(context, &key);
+	krb5_free_keyblock(context, &key);
     }
 
     kcm_release_ccache(context, ccache);
@@ -1072,7 +1072,6 @@ kcm_op_get_default_cache(krb5_context context,
     krb5_error_code ret;
     const char *name = NULL;
     char *n = NULL;
-    int aret;
 
     KCM_LOG_REQUEST(context, client, opcode);
 
@@ -1086,9 +1085,8 @@ kcm_op_get_default_cache(krb5_context context,
 	name = n = kcm_ccache_first_name(client);
 
     if (name == NULL) {
-	aret = asprintf(&n, "%d", (int)client->uid);
-	if (aret != -1)
-	    name = n;
+	asprintf(&n, "%d", (int)client->uid);
+	name = n;
     }
     if (name == NULL)
 	return ENOMEM;
@@ -1139,19 +1137,17 @@ kcm_op_set_default_cache(krb5_context context,
     }
     if (c == NULL) {
 	c = malloc(sizeof(*c));
-	if (c == NULL) {
-            free(name);
+	if (c == NULL)
 	    return ENOMEM;
-        }
 	c->session = client->session;
 	c->uid = client->uid;
-	c->name = name;
+	c->name = strdup(name);
 
 	c->next = default_caches;
 	default_caches = c;
     } else {
 	free(c->name);
-	c->name = name;
+	c->name = strdup(name);
     }
 
     return 0;
@@ -1501,7 +1497,7 @@ kcm_op_do_ntlm(krb5_context context,
      */
 
     if (1 || type2.targetinfo.length == 0) {
-	struct ntlm_buf tmpsesskey;
+	struct ntlm_buf sessionkey;
 
 	if (type2.flags & NTLM_NEG_NTLM2_SESSION) {
 	    unsigned char nonce[8];
@@ -1528,7 +1524,7 @@ kcm_op_do_ntlm(krb5_context context,
 
 	ret = heim_ntlm_build_ntlm1_master(c->nthash.data,
 					   c->nthash.length,
-					   &tmpsesskey,
+					   &sessionkey,
 					   &type3.sessionkey);
 	if (ret) {
 	    if (type3.lm.data)
@@ -1538,7 +1534,7 @@ kcm_op_do_ntlm(krb5_context context,
 	    goto error;
 	}
 
-	free(tmpsesskey.data);
+	free(sessionkey.data);
 	if (ret) {
 	    if (type3.lm.data)
 		free(type3.lm.data);
@@ -1633,7 +1629,7 @@ kcm_op_do_ntlm(krb5_context context,
     }
 #endif
 
-    ret = heim_ntlm_encode_type3(&type3, &ndata, NULL);
+    ret = heim_ntlm_encode_type3(&type3, &ndata);
     if (ret)
 	goto error;
 

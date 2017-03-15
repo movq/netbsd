@@ -1,6 +1,6 @@
 // target.cc -- target support for gold.
 
-// Copyright (C) 2009-2016 Free Software Foundation, Inc.
+// Copyright 2009, 2010, 2011 Free Software Foundation, Inc.
 // Written by Doug Kwan <dougkwan@google.com>.
 
 // This file is part of gold.
@@ -152,8 +152,7 @@ Target::do_make_output_section(const char* name, elfcpp::Elf_Word type,
 // whether the symbol is a function.
 
 bool
-Target::do_is_call_to_non_split(const Symbol* sym, const unsigned char*,
-				const unsigned char*, section_size_type) const
+Target::do_is_call_to_non_split(const Symbol* sym, unsigned int) const
 {
   return sym->type() == elfcpp::STT_FUNC;
 }
@@ -162,8 +161,7 @@ Target::do_is_call_to_non_split(const Symbol* sym, const unsigned char*,
 
 void
 Target::do_calls_non_split(Relobj* object, unsigned int, section_offset_type,
-			   section_size_type, const unsigned char*, size_t,
-			   unsigned char*, section_size_type,
+			   section_size_type, unsigned char*, section_size_type,
 			   std::string*, std::string*) const
 {
   static bool warned;
@@ -205,15 +203,6 @@ Target::set_view_to_nop(unsigned char* view, section_size_type view_size,
     }
 }
 
-// Return address and size to plug into eh_frame FDEs associated with a PLT.
-void
-Target::do_plt_fde_location(const Output_data* plt, unsigned char*,
-			    uint64_t* address, off_t* len) const
-{
-  *address = plt->address();
-  *len = plt->data_size();
-}
-
 // Class Sized_target.
 
 // Set the EI_OSABI field of the ELF header if requested.
@@ -221,7 +210,7 @@ Target::do_plt_fde_location(const Output_data* plt, unsigned char*,
 template<int size, bool big_endian>
 void
 Sized_target<size, big_endian>::do_adjust_elf_header(unsigned char* view,
-						     int len)
+						     int len) const
 {
   elfcpp::ELFOSABI osabi = this->osabi();
   if (osabi != elfcpp::ELFOSABI_NONE)

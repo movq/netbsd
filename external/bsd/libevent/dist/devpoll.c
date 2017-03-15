@@ -1,4 +1,4 @@
-/*	$NetBSD: devpoll.c,v 1.1.1.2 2017/01/31 21:14:52 christos Exp $	*/
+/*	$NetBSD: devpoll.c,v 1.1.1.1 2013/04/11 16:43:24 christos Exp $	*/
 /*
  * Copyright 2000-2009 Niels Provos <provos@citi.umich.edu>
  * Copyright 2009-2012 Niels Provos and Nick Mathewson
@@ -27,14 +27,11 @@
  */
 #include "event2/event-config.h"
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: devpoll.c,v 1.1.1.2 2017/01/31 21:14:52 christos Exp $");
-#include "evconfig-private.h"
-
-#ifdef EVENT__HAVE_DEVPOLL
+__RCSID("$NetBSD: devpoll.c,v 1.1.1.1 2013/04/11 16:43:24 christos Exp $");
 
 #include <sys/types.h>
 #include <sys/resource.h>
-#ifdef EVENT__HAVE_SYS_TIME_H
+#ifdef _EVENT_HAVE_SYS_TIME_H
 #include <sys/time.h>
 #endif
 #include <sys/queue.h>
@@ -135,7 +132,7 @@ devpoll_init(struct event_base *base)
 		nfiles = rl.rlim_cur;
 
 	/* Initialize the kernel queue */
-	if ((dpfd = evutil_open_closeonexec_("/dev/poll", O_RDWR, 0)) == -1) {
+	if ((dpfd = evutil_open_closeonexec("/dev/poll", O_RDWR, 0)) == -1) {
 		event_warn("open: /dev/poll");
 		mm_free(devpollop);
 		return (NULL);
@@ -162,7 +159,7 @@ devpoll_init(struct event_base *base)
 		return (NULL);
 	}
 
-	evsig_init_(base);
+	evsig_init(base);
 
 	return (devpollop);
 }
@@ -220,7 +217,7 @@ devpoll_dispatch(struct event_base *base, struct timeval *tv)
 			continue;
 
 		/* XXX(niels): not sure if this works for devpoll */
-		evmap_io_active_(base, events[i].fd, which);
+		evmap_io_active(base, events[i].fd, which);
 	}
 
 	return (0);
@@ -299,7 +296,7 @@ devpoll_dealloc(struct event_base *base)
 {
 	struct devpollop *devpollop = base->evbase;
 
-	evsig_dealloc_(base);
+	evsig_dealloc(base);
 	if (devpollop->events)
 		mm_free(devpollop->events);
 	if (devpollop->changes)
@@ -310,5 +307,3 @@ devpoll_dealloc(struct event_base *base)
 	memset(devpollop, 0, sizeof(struct devpollop));
 	mm_free(devpollop);
 }
-
-#endif /* EVENT__HAVE_DEVPOLL */

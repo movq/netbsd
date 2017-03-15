@@ -1,4 +1,4 @@
-/*	$NetBSD: funopen.c,v 1.15 2016/10/23 21:01:52 christos Exp $	*/
+/*	$NetBSD: funopen.c,v 1.14.10.1 2016/12/12 07:23:46 snj Exp $	*/
 
 /*-
  * Copyright (c) 1990, 1993
@@ -37,7 +37,7 @@
 #if 0
 static char sccsid[] = "@(#)funopen.c	8.1 (Berkeley) 6/4/93";
 #else
-__RCSID("$NetBSD: funopen.c,v 1.15 2016/10/23 21:01:52 christos Exp $");
+__RCSID("$NetBSD: funopen.c,v 1.14.10.1 2016/12/12 07:23:46 snj Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 

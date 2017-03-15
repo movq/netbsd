@@ -1,4 +1,4 @@
-/*	$NetBSD: a_md5encrypt.c,v 1.1.1.6 2016/11/22 01:35:19 christos Exp $	*/
+/*	$NetBSD: a_md5encrypt.c,v 1.1.1.3.8.3 2016/05/11 11:35:42 martin Exp $	*/
 
 #include "config.h"
 #include "unity.h"
@@ -51,7 +51,9 @@ test_Encrypt(void) {
 	u_int32 *packetPtr;
 	int length;
 
-	packetPtr = emalloc_zero(totalLength * sizeof(*packetPtr));
+	packetPtr = emalloc(totalLength * sizeof(*packetPtr));
+
+	memset(packetPtr + packetLength, 0, keyIdLength);
 	memcpy(packetPtr, packet, packetLength);
 
 	cache_secretsize = keyLength;

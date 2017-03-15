@@ -1,4 +1,4 @@
-/*	$NetBSD: nsupdate.c,v 1.15 2016/05/26 16:49:56 christos Exp $	*/
+/*	$NetBSD: nsupdate.c,v 1.11.2.4 2016/10/14 12:01:11 martin Exp $	*/
 
 /*
  * Copyright (C) 2004-2015  Internet Systems Consortium, Inc. ("ISC")

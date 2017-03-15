@@ -1,4 +1,4 @@
-// RUN: %clang_cc1 -triple arm-apple-ios -emit-llvm -debug-info-kind=limited -fblocks -fobjc-runtime=ios-7.0.0 -fobjc-arc %s -o - | FileCheck %s
+// RUN: %clang_cc1 -triple arm-apple-ios -emit-llvm -g -fblocks -fobjc-runtime=ios-7.0.0 -fobjc-arc %s -o - | FileCheck %s
 // rdar://problem/14990656
 @protocol NSObject
 - (id)copy;
@@ -13,14 +13,10 @@
 {
   // The debug type for these two will be identical, because we do not
   // actually emit the ownership qualifier.
-  // CHECK: !DILocalVariable(name: "weakSelf",
-  // CHECK-SAME:             line: [[@LINE+2]]
-  // CHECK-SAME:             type: ![[SELFTY:[0-9]+]]
+  // CHECK-DAG:  !"0x100\00weakSelf\00[[@LINE+1]]\000"{{, [^,]+, [^,]+}}, ![[SELFTY:[0-9]+]]} ; [ DW_TAG_auto_variable ] [weakSelf]
   __attribute__((objc_ownership(weak))) __typeof(self) weakSelf = self;
   Block = [^{
-  // CHECK: !DILocalVariable(name: "strongSelf",
-  // CHECK-SAME:             line: [[@LINE+2]]
-  // CHECK-SAME:             type: ![[SELFTY]]
+  // CHECK-DAG:  !"0x100\00strongSelf\00[[@LINE+1]]\000"{{, [^,]+, [^,]+}}, ![[SELFTY]]} ; [ DW_TAG_auto_variable ] [strongSelf]
       __attribute__((objc_ownership(strong))) __typeof(self) strongSelf = weakSelf;
     } copy];
 }

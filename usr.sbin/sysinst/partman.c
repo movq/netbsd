@@ -1,4 +1,4 @@
-/*	$NetBSD: partman.c,v 1.15 2017/01/12 17:38:08 christos Exp $ */
+/*	$NetBSD: partman.c,v 1.4.4.4 2015/05/14 07:58:49 snj Exp $ */
 
 /*
  * Copyright 2012 Eugene Lozovoy
@@ -65,7 +65,7 @@ typedef struct raids_t {
 	uint total_size;
 	pm_devs_t *pm[MAX_IN_RAID];
 } raids_t;
-raids_t *raids;
+raids_t raids[MAX_RAID];
 
 #define MAX_VND 4
 typedef struct vnds_t {
@@ -81,7 +81,7 @@ typedef struct vnds_t {
 	int pm_part;    /* Used only for */
 	pm_devs_t *pm;  /* referring device */
 } vnds_t;
-vnds_t *vnds;
+vnds_t vnds[MAX_VND];
 
 #define MAX_CGD 4
 typedef struct cgds_t {
@@ -97,7 +97,7 @@ typedef struct cgds_t {
 	const char *iv_type;
 	int key_size;
 } cgds_t;
-cgds_t *cgds;
+cgds_t cgds[MAX_CGD];
 
 #define MAX_LVM_VG 16
 #define MAX_LVM_PV 255
@@ -138,7 +138,7 @@ typedef struct lvms_t {
 	pv_t pv[MAX_LVM_PV];
 	lv_t lv[MAX_LVM_LV];
 } lvms_t;
-lvms_t *lvms;
+lvms_t lvms[MAX_LVM_VG];
 
 typedef struct structinfo_t {
 	int max;
@@ -163,7 +163,7 @@ typedef struct pm_upddevlist_adv_t {
 struct {
     char dev[STRSIZE];
     const char *mnt_opts, *on;
-} *mnts;
+} mnts[MAX_MNTS];
 
 int cursel; /* Number of selected entry in main menu */
 int changed; /* flag indicating that we have unsaved changes */
@@ -376,8 +376,8 @@ pm_raid_menufmt(menudesc *m, int opt, void *arg)
 		return;
 	for (i = 0; i < MAX_IN_RAID; i++)
 		if (dev_ptr->pm[i] != NULL) {
-			strlcat(buf, dev_ptr->pm_name[i], STRSIZE);
-			strlcat(buf, " ", STRSIZE);
+			strncat(buf, dev_ptr->pm_name[i], STRSIZE);
+			strncat(buf, " ", STRSIZE);
 			ok = 1;
 		}
 	if (ok)
@@ -469,11 +469,9 @@ pm_raid_set_value(menudesc *m, void *arg)
 		case PMR_MENU_NUMROW:
 			process_menu(MENU_ok, deconst(MSG_raid_nomultidim));
 			return 0;
-#if 0 /* notyet */
 			msg_to_show = MSG_raid_numrow_ask;
 			out_var = &(dev_ptr->numRow);
 			break;
-#endif
 		case PMR_MENU_NUMCOL:
 			msg_to_show = MSG_raid_numcol_ask;
 			out_var = &(dev_ptr->numCol);
@@ -692,7 +690,7 @@ pm_raid_commit(void)
 							raids[i].node) == 0
 			) {
 			raids[i].blocked = 1; /* RAID creation done, remove it from list to 
-									 prevent its repeated reinitialization */
+									 prevent it's repeated reinitialization */
 			for (ii = 0; ii < MAX_IN_RAID; ii++)
 				if (raids[i].pm[ii] != NULL)
 					raids[i].pm[ii]->blocked++;
@@ -736,7 +734,7 @@ pm_vnd_edit_menufmt(menudesc *m, int opt, void *arg)
 			break;
 		case PMV_MENU_EXIST:
 			wprintw(m->mw, msg_string(MSG_vnd_assgn_fmt),
-				dev_ptr->is_exist? msg_string(MSG_No) : msg_string(MSG_Yes));
+				dev_ptr->is_exist? msg_string(MSG_Yes) : msg_string(MSG_No));
 			break;
 		case PMV_MENU_SIZE:
 			if (!dev_ptr->is_exist)
@@ -1023,19 +1021,12 @@ pm_cgd_set_value(menudesc *m, void *arg)
 		case PMC_MENU_ENCTYPE:
 			process_menu(MENU_cgd_enctype, &retstring);
 			dev_ptr->enc_type = retstring;
-			if (! strcmp(retstring, "aes-xts"))
-				dev_ptr->key_size = 256;
-			if (! strcmp(retstring, "aes-cbc"))
-				dev_ptr->key_size = 192;
 			if (! strcmp(retstring, "blowfish-cbc"))
 				dev_ptr->key_size = 128;
 			if (! strcmp(retstring, "3des-cbc"))
 				dev_ptr->key_size = 192;
 			return 0;
 		case PMC_MENU_KEYSIZE:
-			if (! strcmp(dev_ptr->enc_type, "aes-xts"))
-				dev_ptr->key_size +=
-					(dev_ptr->key_size < 512)? 256 : -256;
 			if (! strcmp(dev_ptr->enc_type, "aes-cbc"))
 				dev_ptr->key_size +=
 					(dev_ptr->key_size < 256)? 64 : -128;
@@ -1078,9 +1069,9 @@ pm_cgd_init(void *arg1, void *arg2)
 		.pm_part = 0,
 		.keygen_type = "pkcs5_pbkdf2/sha1",
 		.verify_type = "disklabel",
-		.enc_type = "aes-xts",
+		.enc_type = "aes-cbc",
 		.iv_type = "encblkno1",
-		.key_size = 256,
+		.key_size = 192,
 	};
 	if (disk_entrie != NULL) {
 		pm_getdevstring(disk_entrie->fullname, SSTRSIZE,
@@ -1285,8 +1276,8 @@ pm_lvm_menufmt(menudesc *m, int opt, void *arg)
 	snprintf(buf1, STRSIZE, "VG '%s' on ", dev_ptr->name);
 	for (i = 0; i < MAX_LVM_PV; i++)
 		if (dev_ptr->pv[i].pm != NULL) {
-			strlcat(buf1, dev_ptr->pv[i].pm_name, STRSIZE);
-			strlcat(buf1, " ", STRSIZE);
+			strncat(buf1, dev_ptr->pv[i].pm_name, STRSIZE);
+			strncat(buf1, " ", STRSIZE);
 			ok = 1;
 		}
 	for (i = 0; i < MAX_LVM_LV; i++)
@@ -1814,7 +1805,6 @@ pm_wedge_create(int num, pm_devs_t **pm_dk)
 		if (! wedges[i].allocated && wedges[i].todel) {
 			hackerr = run_program(RUN_SILENT | RUN_ERROR_OK,
 				"dkctl %s delwedge dk%d", wedges[num].pm->diskdev, i);
-			(void)hackerr; /* XXX */
 			wedges[i].todel = 0;
 		}
 
@@ -2115,8 +2105,7 @@ pm_mountall(void)
 	pm_devs_t *pm_i;
 	
 	localfs_dev[0] = '\0';
-	if (mnts == NULL)
-		mnts = calloc(sizeof(*mnts), MAX_MNTS);
+	memset(&mnts, 0, sizeof mnts);
 
 	SLIST_FOREACH(pm_i, &pm_head, l) {
 		ok = 0;
@@ -2731,27 +2720,12 @@ partman(void)
 
 		if (!have_raid)
 			remove_raid_options();
-		else if (!(raids = calloc(sizeof(*raids), MAX_RAID)))
-			have_raid = 0;
-			
-#define remove_vnd_options() (void)0
-		if (!have_vnd)
-			remove_vnd_options();
-		else if (!(vnds = calloc(sizeof(*vnds), MAX_VND)))
-			have_vnd = 0;
-
-		if (!have_cgd)
-			remove_cgd_options();
-		else if (!(cgds = calloc(sizeof(*vnds), MAX_CGD)))
-			have_cgd = 0;
-
 		if (!have_lvm)
 			remove_lvm_options();
-		else if (!(lvms = calloc(sizeof(*lvms), MAX_LVM_VG)))
-			have_lvm = 0;
-
 		if (!have_gpt)
 			remove_gpt_options();
+		if (!have_cgd)
+			remove_cgd_options();
 
 		raids_t_info = (structinfo_t) {
 			.max = MAX_RAID,
@@ -2794,6 +2768,10 @@ partman(void)
 			.parent_size = sizeof lvms[0],
 		};
 
+		memset(&raids, 0, sizeof raids);
+		memset(&cgds, 0, sizeof cgds);
+		memset(&vnds, 0, sizeof vnds);
+		memset(&lvms, 0, sizeof lvms);
 		cursel = 0;
 		changed = 0;
 		firstrun = 0;

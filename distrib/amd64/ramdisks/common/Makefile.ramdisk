@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile.ramdisk,v 1.11 2015/10/07 14:09:04 martin Exp $
+#	$NetBSD: Makefile.ramdisk,v 1.10.10.1 2015/10/15 20:30:57 snj Exp $
 
 .include <bsd.own.mk>
 .include "${NETBSDSRCDIR}/distrib/common/Makefile.distrib"

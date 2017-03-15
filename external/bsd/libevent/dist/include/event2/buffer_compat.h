@@ -1,4 +1,5 @@
-/*	$NetBSD: buffer_compat.h,v 1.1.1.3 2017/01/31 21:14:53 christos Exp $	*/
+/*	$NetBSD: buffer_compat.h,v 1.1.1.1.12.1 2015/02/03 08:23:40 bouyer Exp $	*/
+/*	$NetBSD: buffer_compat.h,v 1.1.1.1.12.1 2015/02/03 08:23:40 bouyer Exp $	*/
 /*
  * Copyright (c) 2007-2012 Niels Provos and Nick Mathewson
  *
@@ -25,10 +26,8 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef EVENT2_BUFFER_COMPAT_H_INCLUDED_
-#define EVENT2_BUFFER_COMPAT_H_INCLUDED_
-
-#include <event2/visibility.h>
+#ifndef _EVENT2_BUFFER_COMPAT_H_
+#define _EVENT2_BUFFER_COMPAT_H_
 
 /** @file event2/buffer_compat.h
 
@@ -38,7 +37,7 @@
 
 
 /**
-   Obsolete alias for evbuffer_readln(buffer, NULL, EVBUFFER_EOL_ANY).
+   Obsolete alias for evbuffer_readln(buffer, NULL, EOL_STYLE_ANY).
 
    @deprecated This function is deprecated because its behavior is not correct
       for almost any protocol, and also because it's wholly subsumed by
@@ -48,7 +47,6 @@
    @return pointer to a single line, or NULL if an error occurred
 
 */
-EVENT2_EXPORT_SYMBOL
 char *evbuffer_readline(struct evbuffer *buffer);
 
 /** Type definition for a callback that is invoked whenever data is added or
@@ -92,7 +90,6 @@ typedef void (*evbuffer_cb)(struct evbuffer *buffer, size_t old_len, size_t new_
 	 or NULL to remove all callbacks.
   @param cbarg an argument to be provided to the callback function
  */
-EVENT2_EXPORT_SYMBOL
 void evbuffer_setcb(struct evbuffer *buffer, evbuffer_cb cb, void *cbarg);
 
 
@@ -104,7 +101,6 @@ void evbuffer_setcb(struct evbuffer *buffer, evbuffer_cb cb, void *cbarg);
   @param len the length of the search string
   @return a pointer to the beginning of the search string, or NULL if the search failed.
  */
-EVENT2_EXPORT_SYMBOL
 unsigned char *evbuffer_find(struct evbuffer *buffer, const unsigned char *what, size_t len);
 
 /** deprecated in favor of calling the functions directly */

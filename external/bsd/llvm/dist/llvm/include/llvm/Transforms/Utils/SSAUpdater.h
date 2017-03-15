@@ -21,9 +21,8 @@ namespace llvm {
   class BasicBlock;
   class Instruction;
   class LoadInst;
-  template <typename T> class ArrayRef;
-  template <typename T> class SmallVectorImpl;
-  template <typename T> class SSAUpdaterTraits;
+  template<typename T> class SmallVectorImpl;
+  template<typename T> class SSAUpdaterTraits;
   class PHINode;
   class Type;
   class Use;
@@ -119,8 +118,8 @@ public:
 private:
   Value *GetValueAtEndOfBlockInternal(BasicBlock *BB);
 
-  void operator=(const SSAUpdater&) = delete;
-  SSAUpdater(const SSAUpdater&) = delete;
+  void operator=(const SSAUpdater&) LLVM_DELETED_FUNCTION;
+  SSAUpdater(const SSAUpdater&) LLVM_DELETED_FUNCTION;
 };
 
 /// \brief Helper class for promoting a collection of loads and stores into SSA
@@ -136,7 +135,7 @@ protected:
   SSAUpdater &SSA;
 
 public:
-  LoadAndStorePromoter(ArrayRef<const Instruction*> Insts,
+  LoadAndStorePromoter(const SmallVectorImpl<Instruction*> &Insts,
                        SSAUpdater &S, StringRef Name = StringRef());
   virtual ~LoadAndStorePromoter() {}
 

@@ -1,5 +1,5 @@
 /* OpenCL language support for GDB, the GNU debugger.
-   Copyright (C) 2010-2016 Free Software Foundation, Inc.
+   Copyright (C) 2010-2014 Free Software Foundation, Inc.
 
    Contributed by Ken Werner <ken.werner@de.ibm.com>.
 
@@ -19,6 +19,7 @@
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #include "defs.h"
+#include <string.h>
 #include "gdbtypes.h"
 #include "symtab.h"
 #include "expression.h"
@@ -26,6 +27,7 @@
 #include "language.h"
 #include "varobj.h"
 #include "c-lang.h"
+#include "gdb_assert.h"
 
 extern void _initialize_opencl_language (void);
 
@@ -69,7 +71,7 @@ static struct gdbarch_data *opencl_type_data;
 static struct type **
 builtin_opencl_type (struct gdbarch *gdbarch)
 {
-  return (struct type **) gdbarch_data (gdbarch, opencl_type_data);
+  return gdbarch_data (gdbarch, opencl_type_data);
 }
 
 /* Returns the corresponding OpenCL vector type from the given type code,
@@ -154,11 +156,11 @@ struct lval_closure
 static struct lval_closure *
 allocate_lval_closure (int *indices, int n, struct value *val)
 {
-  struct lval_closure *c = XCNEW (struct lval_closure);
+  struct lval_closure *c = XZALLOC (struct lval_closure);
 
   c->refc = 1;
   c->n = n;
-  c->indices = XCNEWVEC (int, n);
+  c->indices = XCALLOC (n, int);
   memcpy (c->indices, indices, n * sizeof (int));
   value_incref (val); /* Increment the reference counter of the value.  */
   c->val = val;
@@ -172,8 +174,8 @@ lval_func_read (struct value *v)
   struct lval_closure *c = (struct lval_closure *) value_computed_closure (v);
   struct type *type = check_typedef (value_type (v));
   struct type *eltype = TYPE_TARGET_TYPE (check_typedef (value_type (c->val)));
-  LONGEST offset = value_offset (v);
-  LONGEST elsize = TYPE_LENGTH (eltype);
+  int offset = value_offset (v);
+  int elsize = TYPE_LENGTH (eltype);
   int n, i, j = 0;
   LONGEST lowb = 0;
   LONGEST highb = 0;
@@ -201,8 +203,8 @@ lval_func_write (struct value *v, struct value *fromval)
   struct lval_closure *c = (struct lval_closure *) value_computed_closure (v);
   struct type *type = check_typedef (value_type (v));
   struct type *eltype = TYPE_TARGET_TYPE (check_typedef (value_type (c->val)));
-  LONGEST offset = value_offset (v);
-  LONGEST elsize = TYPE_LENGTH (eltype);
+  int offset = value_offset (v);
+  int elsize = TYPE_LENGTH (eltype);
   int n, i, j = 0;
   LONGEST lowb = 0;
   LONGEST highb = 0;
@@ -238,12 +240,64 @@ lval_func_write (struct value *v, struct value *fromval)
   value_free_to_mark (mark);
 }
 
+/* Return nonzero if all bits in V within OFFSET and LENGTH are valid.  */
+
+static int
+lval_func_check_validity (const struct value *v, int offset, int length)
+{
+  struct lval_closure *c = (struct lval_closure *) value_computed_closure (v);
+  /* Size of the target type in bits.  */
+  int elsize =
+      TYPE_LENGTH (TYPE_TARGET_TYPE (check_typedef (value_type (c->val)))) * 8;
+  int startrest = offset % elsize;
+  int start = offset / elsize;
+  int endrest = (offset + length) % elsize;
+  int end = (offset + length) / elsize;
+  int i;
+
+  if (endrest)
+    end++;
+
+  if (end > c->n)
+    return 0;
+
+  for (i = start; i < end; i++)
+    {
+      int comp_offset = (i == start) ? startrest : 0;
+      int comp_length = (i == end) ? endrest : elsize;
+
+      if (!value_bits_valid (c->val, c->indices[i] * elsize + comp_offset,
+			     comp_length))
+	return 0;
+    }
+
+  return 1;
+}
+
+/* Return nonzero if any bit in V is valid.  */
+
+static int
+lval_func_check_any_valid (const struct value *v)
+{
+  struct lval_closure *c = (struct lval_closure *) value_computed_closure (v);
+  /* Size of the target type in bits.  */
+  int elsize =
+      TYPE_LENGTH (TYPE_TARGET_TYPE (check_typedef (value_type (c->val)))) * 8;
+  int i;
+
+  for (i = 0; i < c->n; i++)
+    if (value_bits_valid (c->val, c->indices[i] * elsize, elsize))
+      return 1;
+
+  return 0;
+}
+
 /* Return nonzero if bits in V from OFFSET and LENGTH represent a
    synthetic pointer.  */
 
 static int
 lval_func_check_synthetic_pointer (const struct value *v,
-				   LONGEST offset, int length)
+				   int offset, int length)
 {
   struct lval_closure *c = (struct lval_closure *) value_computed_closure (v);
   /* Size of the target type in bits.  */
@@ -304,6 +358,8 @@ static const struct lval_funcs opencl_value_funcs =
   {
     lval_func_read,
     lval_func_write,
+    lval_func_check_validity,
+    lval_func_check_any_valid,
     NULL,	/* indirect */
     NULL,	/* coerce_ref */
     lval_func_check_synthetic_pointer,
@@ -984,7 +1040,7 @@ Cannot perform conditional operation on vectors with different sizes"));
 						"structure");
 
 	    if (noside == EVAL_AVOID_SIDE_EFFECTS)
-	      v = value_zero (value_type (v), VALUE_LVAL (v));
+	      v = value_zero (value_type (v), not_lval);
 	    return v;
 	  }
       }
@@ -1007,7 +1063,7 @@ opencl_print_type (struct type *type, const char *varstring,
      be printed using their TYPE_NAME.  */
   if (show > 0)
     {
-      type = check_typedef (type);
+      CHECK_TYPEDEF (type);
       if (TYPE_CODE (type) == TYPE_CODE_ARRAY && TYPE_VECTOR (type)
 	  && TYPE_NAME (type) != NULL)
 	show = 0;
@@ -1052,10 +1108,9 @@ const struct language_defn opencl_language_defn =
   case_sensitive_on,
   array_row_major,
   macro_expansion_c,
-  NULL,
   &exp_descriptor_opencl,
   c_parse,
-  c_yyerror,
+  c_error,
   null_post_parser,
   c_printchar,			/* Print a character constant */
   c_printstr,			/* Function to print string constant */
@@ -1070,7 +1125,6 @@ const struct language_defn opencl_language_defn =
   basic_lookup_symbol_nonlocal,	/* lookup_symbol_nonlocal */
   basic_lookup_transparent_type,/* lookup_transparent_type */
   NULL,				/* Language specific symbol demangler */
-  NULL,
   NULL,				/* Language specific
 				   class_name_from_physname */
   c_op_print_tab,		/* expression operators for printing */
@@ -1085,8 +1139,6 @@ const struct language_defn opencl_language_defn =
   NULL,				/* la_get_symbol_name_cmp */
   iterate_over_symbols,
   &default_varobj_ops,
-  NULL,
-  NULL,
   LANG_MAGIC
 };
 

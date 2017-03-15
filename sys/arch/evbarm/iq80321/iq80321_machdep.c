@@ -1,4 +1,4 @@
-/*	$NetBSD: iq80321_machdep.c,v 1.57 2016/12/25 04:35:30 christos Exp $	*/
+/*	$NetBSD: iq80321_machdep.c,v 1.54 2013/08/18 15:58:20 matt Exp $	*/
 
 /*
  * Copyright (c) 2001, 2002, 2003 Wasabi Systems, Inc.
@@ -73,7 +73,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: iq80321_machdep.c,v 1.57 2016/12/25 04:35:30 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: iq80321_machdep.c,v 1.54 2013/08/18 15:58:20 matt Exp $");
 
 #include "opt_ddb.h"
 #include "opt_kgdb.h"
@@ -132,10 +132,10 @@ BootConfig bootconfig;		/* Boot config storage */
 char *boot_args = NULL;
 char *boot_file = NULL;
 
-vaddr_t physical_start;
-vaddr_t physical_freestart;
-vaddr_t physical_freeend;
-vaddr_t physical_end;
+vm_offset_t physical_start;
+vm_offset_t physical_freestart;
+vm_offset_t physical_freeend;
+vm_offset_t physical_end;
 u_int free_pages;
 
 /*int debug_flags;*/
@@ -146,7 +146,7 @@ int max_processes = 64;			/* Default number */
 /* Physical and virtual addresses for some global pages */
 pv_addr_t minidataclean;
 
-paddr_t msgbufphys;
+vm_offset_t msgbufphys;
 
 #ifdef PMAP_DEBUG
 extern int pmap_debug_level;
@@ -453,8 +453,8 @@ initarm(void *arg)
 
 #ifdef VERBOSE_INIT_ARM
 	/* Tell the user about the memory */
-	printf("physmemory: %"PRIuPSIZE" pages at 0x%08lx -> 0x%08lx\n",
-	    physmem, physical_start, physical_end - 1);
+	printf("physmemory: %d pages at 0x%08lx -> 0x%08lx\n", physmem,
+	    physical_start, physical_end - 1);
 #endif
 
 	/*
@@ -742,7 +742,7 @@ initarm(void *arg)
 #ifdef VERBOSE_INIT_ARM
 	printf("page ");
 #endif
-	uvm_md_init();
+	uvm_setpagesize();	/* initialize PAGE_SIZE-dependent variables */
 	uvm_page_physload(atop(physical_freestart), atop(physical_freeend),
 	    atop(physical_freestart), atop(physical_freeend),
 	    VM_FREELIST_DEFAULT);

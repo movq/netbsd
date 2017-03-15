@@ -1,4 +1,4 @@
-/*	$NetBSD: md.h,v 1.2 2015/11/14 23:00:17 pgoyette Exp $	*/
+/*	$NetBSD: md.h,v 1.1.4.2 2015/03/18 03:57:16 snj Exp $	*/
 
 /*
  * Copyright 1997 Piermont Information Systems Inc.
@@ -66,7 +66,6 @@
 #define	BOOTXXDIR	"/usr/mdec"
 #define	BOOTXX_FFSV1	"bootxx_ffsv1"
 #define	BOOTXX_FFSV2	"bootxx_ffsv2"
-#define	BOOTXX_LFSV2	"bootxx_lfsv2"
 
 
 /*

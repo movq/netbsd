@@ -1,4 +1,4 @@
-/*	$NetBSD: parser.h,v 1.21 2016/03/31 23:11:05 christos Exp $	*/
+/*	$NetBSD: parser.h,v 1.18 2013/10/02 19:52:58 christos Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993
@@ -53,7 +53,6 @@
 #define VSNUL		0x10	/* colon--treat the empty string as unset */
 #define VSLINENO	0x20	/* expansion of $LINENO, the line number
 				   follows immediately */
-#define VSPATQ		0x40	/* ensure correct pattern quoting in ${x#pat} */
 #define VSQUOTE	 	0x80	/* inside double quotes--suppress splitting */
 
 /* values of VSTYPE field */

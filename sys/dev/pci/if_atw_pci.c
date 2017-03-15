@@ -1,4 +1,4 @@
-/*	$NetBSD: if_atw_pci.c,v 1.27 2016/07/14 04:00:46 msaitoh Exp $	*/
+/*	$NetBSD: if_atw_pci.c,v 1.26 2014/03/29 19:28:24 christos Exp $	*/
 
 /*-
  * Copyright (c) 1998, 1999, 2000, 2002 The NetBSD Foundation, Inc.
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_atw_pci.c,v 1.27 2016/07/14 04:00:46 msaitoh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_atw_pci.c,v 1.26 2014/03/29 19:28:24 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -188,12 +188,11 @@ atw_pci_attach(device_t parent, device_t self, void *aux)
 		panic("atw_pci_attach: impossible");
 	}
 
-	aprint_naive("\n");
 	/*
 	 * Get revision info, and set some chip-specific variables.
 	 */
 	sc->sc_rev = PCI_REVISION(pa->pa_class);
-	aprint_normal(": %s, revision %d.%d\n", app->app_product_name,
+	printf(": %s, revision %d.%d\n", app->app_product_name,
 	    (sc->sc_rev >> 4) & 0xf, sc->sc_rev & 0xf);
 
 	/* power up chip */
@@ -220,7 +219,7 @@ atw_pci_attach(device_t parent, device_t self, void *aux)
 		sc->sc_st = iot;
 		sc->sc_sh = ioh;
 	} else {
-		aprint_error_dev(self, "unable to map device registers\n");
+		printf(": unable to map device registers\n");
 		return;
 	}
 
@@ -278,7 +277,8 @@ atw_pci_attach(device_t parent, device_t self, void *aux)
 	    atw_shutdown))
 		pmf_class_network_register(sc->sc_dev, &sc->sc_if);
 	else
-		aprint_error_dev(self, "couldn't establish power handler\n");
+		aprint_error_dev(sc->sc_dev,
+		    "couldn't establish power handler\n");
 
 	/*
 	 * Power down the socket.

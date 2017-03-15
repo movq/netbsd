@@ -1,16 +1,16 @@
-# $NetBSD: GENERIC.DEBUG,v 1.3 2016/05/25 20:00:50 nakayama Exp $
+# $NetBSD: GENERIC.DEBUG,v 1.2.16.1 2014/10/10 18:16:37 snj Exp $
 #
 # GENERIC with debugging support enabled.
 #
 
 include 	"arch/sparc64/conf/GENERIC"
 
-#ident		"GENERIC.DEBUG.$Revision: 1.3 $"
+#ident		"GENERIC.DEBUG.$Revision: 1.2.16.1 $"
 
 makeoptions	DEBUG="-g"
 options 	DEBUG
-# options 	DIAGNOSTIC	# already in GENERIC
+options 	DIAGNOSTIC
 options 	LOCKDEBUG
 
 options 	DB_MAX_WIDTH=160
-options 	DDB_ONPANIC=2	# print stack trace
+options 	DDB_ONPANIC=2   # print stack trace

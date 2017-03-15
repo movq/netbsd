@@ -1,6 +1,5 @@
-/*	$NetBSD: clientloop.c,v 1.20 2016/12/25 00:07:47 christos Exp $	*/
-/* $OpenBSD: clientloop.c,v 1.289 2016/09/30 09:19:13 markus Exp $ */
-
+/*	$NetBSD: clientloop.c,v 1.10.4.2 2016/03/11 12:22:42 martin Exp $	*/
+/* $OpenBSD: clientloop.c,v 1.272 2015/02/25 19:54:02 djm Exp $ */
 /*
  * Author: Tatu Ylonen <ylo@cs.hut.fi>
  * Copyright (c) 1995 Tatu Ylonen <ylo@cs.hut.fi>, Espoo, Finland
@@ -62,8 +61,9 @@
  */
 
 #include "includes.h"
-__RCSID("$NetBSD: clientloop.c,v 1.20 2016/12/25 00:07:47 christos Exp $");
+__RCSID("$NetBSD: clientloop.c,v 1.10.4.2 2016/03/11 12:22:42 martin Exp $");
 
+#include <sys/param.h>	/* MIN MAX */
 #include <sys/types.h>
 #include <sys/ioctl.h>
 #include <sys/stat.h>
@@ -95,7 +95,6 @@ __RCSID("$NetBSD: clientloop.c,v 1.20 2016/12/25 00:07:47 christos Exp $");
 #include "key.h"
 #include "cipher.h"
 #include "kex.h"
-#include "myproposal.h"
 #include "log.h"
 #include "misc.h"
 #include "readconf.h"
@@ -106,6 +105,7 @@ __RCSID("$NetBSD: clientloop.c,v 1.20 2016/12/25 00:07:47 christos Exp $");
 #include "sshpty.h"
 #include "match.h"
 #include "msg.h"
+#include "roaming.h"
 #include "getpeereid.h"
 #include "ssherr.h"
 #include "hostfile.h"
@@ -118,9 +118,6 @@ extern int stdin_null_flag;
 
 /* Flag indicating that no shell has been requested */
 extern int no_shell_flag;
-
-/* Flag indicating that ssh should daemonise after authentication is complete */
-extern int fork_after_authentication_flag;
 
 /* Control socket */
 extern int muxserver_sock; /* XXX use mux_client_cleanup() instead */
@@ -166,6 +163,8 @@ static u_int x11_refuse_time;	/* If >0, refuse x11 opens after this time. */
 
 static void client_init_dispatch(void);
 int	session_ident = -1;
+
+int	session_resumed = 0;
 
 /* Track escape per proto2 channel */
 struct escape_filter_ctx {
@@ -284,9 +283,6 @@ client_x11_display_valid(const char *display)
 {
 	size_t i, dlen;
 
-	if (display == NULL)
-		return 0;
-
 	dlen = strlen(display);
 	for (i = 0; i < dlen; i++) {
 		if (!isalnum((u_char)display[i]) &&
@@ -300,34 +296,35 @@ client_x11_display_valid(const char *display)
 
 #define SSH_X11_PROTO		"MIT-MAGIC-COOKIE-1"
 #define X11_TIMEOUT_SLACK	60
-int
+void
 client_x11_get_proto(const char *display, const char *xauth_path,
     u_int trusted, u_int timeout, char **_proto, char **_data)
 {
-	char cmd[1024], line[512], xdisplay[512];
-	char xauthfile[PATH_MAX], xauthdir[PATH_MAX];
+	char cmd[1024];
+	char line[512];
+	char xdisplay[512];
 	static char proto[512], data[512];
 	FILE *f;
-	int got_data = 0, generated = 0, do_unlink = 0, r;
+	int got_data = 0, generated = 0, do_unlink = 0, i;
+	char *xauthdir, *xauthfile;
 	struct stat st;
 	u_int now, x11_timeout_real;
 
+	xauthdir = xauthfile = NULL;
 	*_proto = proto;
 	*_data = data;
-	proto[0] = data[0] = xauthfile[0] = xauthdir[0] = '\0';
+	proto[0] = data[0] = '\0';
 
-	if (!client_x11_display_valid(display)) {
-		if (display != NULL)
-			logit("DISPLAY \"%s\" invalid; disabling X11 forwarding",
-			    display);
-		return -1;
-	}
-	if (xauth_path != NULL && stat(xauth_path, &st) == -1) {
+	if (xauth_path == NULL ||(stat(xauth_path, &st) == -1)) {
 		debug("No xauth program.");
-		xauth_path = NULL;
-	}
-
-	if (xauth_path != NULL) {
+	} else if (!client_x11_display_valid(display)) {
+		logit("DISPLAY '%s' invalid, falling back to fake xauth data",
+		    display);
+	} else {
+		if (display == NULL) {
+			debug("x11_get_proto: DISPLAY not set");
+			return;
+		}
 		/*
 		 * Handle FamilyLocal case where $DISPLAY does
 		 * not match an authorization entry.  For this we
@@ -336,60 +333,45 @@ client_x11_get_proto(const char *display, const char *xauth_path,
 		 *      is not perfect.
 		 */
 		if (strncmp(display, "localhost:", 10) == 0) {
-			if ((r = snprintf(xdisplay, sizeof(xdisplay), "unix:%s",
-			    display + 10)) < 0 ||
-			    (size_t)r >= sizeof(xdisplay)) {
-				error("%s: display name too long", __func__);
-				return -1;
-			}
+			snprintf(xdisplay, sizeof(xdisplay), "unix:%s",
+			    display + 10);
 			display = xdisplay;
 		}
 		if (trusted == 0) {
+			xauthdir = xmalloc(PATH_MAX);
+			xauthfile = xmalloc(PATH_MAX);
+			mktemp_proto(xauthdir, PATH_MAX);
 			/*
-			 * Generate an untrusted X11 auth cookie.
-			 *
 			 * The authentication cookie should briefly outlive
 			 * ssh's willingness to forward X11 connections to
 			 * avoid nasty fail-open behaviour in the X server.
 			 */
-			mktemp_proto(xauthdir, sizeof(xauthdir));
-			if (mkdtemp(xauthdir) == NULL) {
-				error("%s: mkdtemp: %s",
-				    __func__, strerror(errno));
-				return -1;
-			}
-			do_unlink = 1;
-			if ((r = snprintf(xauthfile, sizeof(xauthfile),
-			    "%s/xauthfile", xauthdir)) < 0 ||
-			    (size_t)r >= sizeof(xauthfile)) {
-				error("%s: xauthfile path too long", __func__);
-				unlink(xauthfile);
-				rmdir(xauthdir);
-				return -1;
-			}
-
 			if (timeout >= UINT_MAX - X11_TIMEOUT_SLACK)
 				x11_timeout_real = UINT_MAX;
 			else
 				x11_timeout_real = timeout + X11_TIMEOUT_SLACK;
-			if ((r = snprintf(cmd, sizeof(cmd),
-			    "%s -f %s generate %s " SSH_X11_PROTO
-			    " untrusted timeout %u 2>" _PATH_DEVNULL,
-			    xauth_path, xauthfile, display,
-			    x11_timeout_real)) < 0 ||
-			    (size_t)r >= sizeof(cmd))
-				fatal("%s: cmd too long", __func__);
-			debug2("%s: %s", __func__, cmd);
-			if (x11_refuse_time == 0) {
-				now = monotime() + 1;
-				if (UINT_MAX - timeout < now)
-					x11_refuse_time = UINT_MAX;
-				else
-					x11_refuse_time = now + timeout;
-				channel_set_x11_refuse_time(x11_refuse_time);
+			if (mkdtemp(xauthdir) != NULL) {
+				do_unlink = 1;
+				snprintf(xauthfile, PATH_MAX, "%s/xauthfile",
+				    xauthdir);
+				snprintf(cmd, sizeof(cmd),
+				    "%s -f %s generate %s " SSH_X11_PROTO
+				    " untrusted timeout %u 2>" _PATH_DEVNULL,
+				    xauth_path, xauthfile, display,
+				    x11_timeout_real);
+				debug2("x11_get_proto: %s", cmd);
+				if (x11_refuse_time == 0) {
+					now = monotime() + 1;
+					if (UINT_MAX - timeout < now)
+						x11_refuse_time = UINT_MAX;
+					else
+						x11_refuse_time = now + timeout;
+					channel_set_x11_refuse_time(
+					    x11_refuse_time);
+				}
+				if (system(cmd) == 0)
+					generated = 1;
 			}
-			if (system(cmd) == 0)
-				generated = 1;
 		}
 
 		/*
@@ -411,20 +393,17 @@ client_x11_get_proto(const char *display, const char *xauth_path,
 				got_data = 1;
 			if (f)
 				pclose(f);
-		}
+		} else
+			error("Warning: untrusted X11 forwarding setup failed: "
+			    "xauth key data not generated");
 	}
 
 	if (do_unlink) {
 		unlink(xauthfile);
 		rmdir(xauthdir);
 	}
-
-	/* Don't fall back to fake X11 data for untrusted forwarding */
-	if (!trusted && !got_data) {
-		error("Warning: untrusted X11 forwarding setup failed: "
-		    "xauth key data not generated");
-		return -1;
-	}
+	free(xauthdir);
+	free(xauthfile);
 
 	/*
 	 * If we didn't get authentication data, just make up some
@@ -435,20 +414,19 @@ client_x11_get_proto(const char *display, const char *xauth_path,
 	 * for the local connection.
 	 */
 	if (!got_data) {
-		u_int8_t rnd[16];
-		u_int i;
+		u_int32_t rnd = 0;
 
 		logit("Warning: No xauth data; "
 		    "using fake authentication data for X11 forwarding.");
 		strlcpy(proto, SSH_X11_PROTO, sizeof proto);
-		arc4random_buf(rnd, sizeof(rnd));
-		for (i = 0; i < sizeof(rnd); i++) {
+		for (i = 0; i < 16; i++) {
+			if (i % 4 == 0)
+				rnd = arc4random();
 			snprintf(data + 2 * i, sizeof data - 2 * i, "%02x",
-			    rnd[i]);
+			    rnd & 0xff);
+			rnd >>= 8;
 		}
 	}
-
-	return 0;
 }
 
 /*
@@ -670,16 +648,16 @@ client_wait_until_can_do_something(fd_set **readsetp, fd_set **writesetp,
 		server_alive_time = now + options.server_alive_interval;
 	}
 	if (options.rekey_interval > 0 && compat20 && !rekeying)
-		timeout_secs = MINIMUM(timeout_secs, packet_get_rekey_timeout());
+		timeout_secs = MIN(timeout_secs, packet_get_rekey_timeout());
 	set_control_persist_exit_time();
 	if (control_persist_exit_time > 0) {
-		timeout_secs = MINIMUM(timeout_secs,
+		timeout_secs = MIN(timeout_secs,
 			control_persist_exit_time - now);
 		if (timeout_secs < 0)
 			timeout_secs = 0;
 	}
 	if (minwait_secs != 0)
-		timeout_secs = MINIMUM(timeout_secs, (int)minwait_secs);
+		timeout_secs = MIN(timeout_secs, (int)minwait_secs);
 	if (timeout_secs == INT_MAX)
 		tvp = NULL;
 	else {
@@ -755,7 +733,7 @@ client_suspend_self(Buffer *bin, Buffer *bout, Buffer *berr)
 static void
 client_process_net_input(fd_set *readset)
 {
-	int len;
+	int len, cont = 0;
 	char buf[8192];
 
 	/*
@@ -764,8 +742,8 @@ client_process_net_input(fd_set *readset)
 	 */
 	if (FD_ISSET(connection_in, readset)) {
 		/* Read as much as possible. */
-		len = read(connection_in, buf, sizeof(buf));
-		if (len == 0) {
+		len = roaming_read(connection_in, buf, sizeof(buf), &cont);
+		if (len == 0 && cont == 0) {
 			/*
 			 * Received EOF.  The remote host has closed the
 			 * connection.
@@ -1500,45 +1478,12 @@ client_loop(int have_pty, int escape_char_arg, int ssh2_chan_id)
 {
 	fd_set *readset = NULL, *writeset = NULL;
 	double start_time, total_time;
-	int r, max_fd = 0, max_fd2 = 0, len;
+	int r, max_fd = 0, max_fd2 = 0, len, rekeying = 0;
 	u_int64_t ibytes, obytes;
 	u_int nalloc = 0;
 	char buf[100];
 
 	debug("Entering interactive session.");
-
-#ifdef __OpenBSD__
-	if (options.control_master &&
-	    !option_clear_or_none(options.control_path)) {
-		debug("pledge: id");
-		if (pledge("stdio rpath wpath cpath unix inet dns recvfd proc exec id tty",
-		    NULL) == -1)
-			fatal("%s pledge(): %s", __func__, strerror(errno));
-
-	} else if (options.forward_x11 || options.permit_local_command) {
-		debug("pledge: exec");
-		if (pledge("stdio rpath wpath cpath unix inet dns proc exec tty",
-		    NULL) == -1)
-			fatal("%s pledge(): %s", __func__, strerror(errno));
-
-	} else if (options.update_hostkeys) {
-		debug("pledge: filesystem full");
-		if (pledge("stdio rpath wpath cpath unix inet dns proc tty",
-		    NULL) == -1)
-			fatal("%s pledge(): %s", __func__, strerror(errno));
-
-	} else if (!option_clear_or_none(options.proxy_command) ||
-	    fork_after_authentication_flag) {
-		debug("pledge: proc");
-		if (pledge("stdio cpath unix inet dns proc tty", NULL) == -1)
-			fatal("%s pledge(): %s", __func__, strerror(errno));
-
-	} else {
-		debug("pledge: network");
-		if (pledge("stdio unix inet dns tty", NULL) == -1)
-			fatal("%s pledge(): %s", __func__, strerror(errno));
-	}
-#endif
 
 	start_time = get_current_time();
 
@@ -1550,7 +1495,7 @@ client_loop(int have_pty, int escape_char_arg, int ssh2_chan_id)
 	buffer_high = 64 * 1024;
 	connection_in = packet_get_connection_in();
 	connection_out = packet_get_connection_out();
-	max_fd = MAXIMUM(connection_in, connection_out);
+	max_fd = MAX(connection_in, connection_out);
 
 	if (!compat20) {
 		/* enable nonblocking unless tty */
@@ -1560,9 +1505,9 @@ client_loop(int have_pty, int escape_char_arg, int ssh2_chan_id)
 			set_nonblock(fileno(stdout));
 		if (!isatty(fileno(stderr)))
 			set_nonblock(fileno(stderr));
-		max_fd = MAXIMUM(max_fd, fileno(stdin));
-		max_fd = MAXIMUM(max_fd, fileno(stdout));
-		max_fd = MAXIMUM(max_fd, fileno(stderr));
+		max_fd = MAX(max_fd, fileno(stdin));
+		max_fd = MAX(max_fd, fileno(stdout));
+		max_fd = MAX(max_fd, fileno(stderr));
 	}
 	quit_pending = 0;
 	escape_char1 = escape_char_arg;
@@ -1618,15 +1563,10 @@ client_loop(int have_pty, int escape_char_arg, int ssh2_chan_id)
 		if (compat20 && session_closed && !channel_still_open())
 			break;
 
-		if (ssh_packet_is_rekeying(active_state)) {
+		rekeying = (active_state->kex != NULL && !active_state->kex->done);
+
+		if (rekeying) {
 			debug("rekeying in progress");
-		} else if (need_rekeying) {
-			/* manual rekey request */
-			debug("need rekeying");
-			if ((r = kex_start_rekex(active_state)) != 0)
-				fatal("%s: kex_start_rekex: %s", __func__,
-				    ssh_err(r));
-			need_rekeying = 0;
 		} else {
 			/*
 			 * Make packets of buffered stdin data, and buffer
@@ -1657,14 +1597,24 @@ client_loop(int have_pty, int escape_char_arg, int ssh2_chan_id)
 		 */
 		max_fd2 = max_fd;
 		client_wait_until_can_do_something(&readset, &writeset,
-		    &max_fd2, &nalloc, ssh_packet_is_rekeying(active_state));
+		    &max_fd2, &nalloc, rekeying);
 
 		if (quit_pending)
 			break;
 
 		/* Do channel operations unless rekeying in progress. */
-		if (!ssh_packet_is_rekeying(active_state))
+		if (!rekeying) {
 			channel_after_select(readset, writeset);
+			if (need_rekeying || packet_need_rekeying()) {
+				debug("need rekeying");
+				if (active_state->kex != NULL)
+					active_state->kex->done = 0;
+				if ((r = kex_send_kexinit(active_state)) != 0)
+					fatal("%s: kex_send_kexinit: %s",
+					    __func__, ssh_err(r));
+				need_rekeying = 0;
+			}
+		}
 
 		/* Buffer input from the connection.  */
 		client_process_net_input(readset);
@@ -1680,6 +1630,14 @@ client_loop(int have_pty, int escape_char_arg, int ssh2_chan_id)
 			 * the connection is processed elsewhere (above).
 			 */
 			client_process_output(writeset);
+		}
+
+		if (session_resumed) {
+			connection_in = packet_get_connection_in();
+			connection_out = packet_get_connection_out();
+			max_fd = MAX(max_fd, connection_out);
+			max_fd = MAX(max_fd, connection_in);
+			session_resumed = 0;
 		}
 
 		/*
@@ -1775,7 +1733,7 @@ client_loop(int have_pty, int escape_char_arg, int ssh2_chan_id)
 	}
 
 	/* Clear and free any buffers. */
-	explicit_bzero(buf, sizeof(buf));
+	memset(buf, 0, sizeof(buf));
 	buffer_free(&stdin_buffer);
 	buffer_free(&stdout_buffer);
 	buffer_free(&stderr_buffer);
@@ -1882,14 +1840,11 @@ client_input_agent_open(int type, u_int32_t seq, void *ctxt)
 }
 
 static Channel *
-client_request_forwarded_tcpip(const char *request_type, int rchan,
-    u_int rwindow, u_int rmaxpack)
+client_request_forwarded_tcpip(const char *request_type, int rchan)
 {
 	Channel *c = NULL;
-	struct sshbuf *b = NULL;
 	char *listen_address, *originator_address;
 	u_short listen_port, originator_port;
-	int r;
 
 	/* Get rest of the packet */
 	listen_address = packet_get_string(NULL);
@@ -1904,31 +1859,6 @@ client_request_forwarded_tcpip(const char *request_type, int rchan,
 	c = channel_connect_by_listen_address(listen_address, listen_port,
 	    "forwarded-tcpip", originator_address);
 
-	if (c != NULL && c->type == SSH_CHANNEL_MUX_CLIENT) {
-		if ((b = sshbuf_new()) == NULL) {
-			error("%s: alloc reply", __func__);
-			goto out;
-		}
-		/* reconstruct and send to muxclient */
-		if ((r = sshbuf_put_u8(b, 0)) != 0 ||	/* padlen */
-		    (r = sshbuf_put_u8(b, SSH2_MSG_CHANNEL_OPEN)) != 0 ||
-		    (r = sshbuf_put_cstring(b, request_type)) != 0 ||
-		    (r = sshbuf_put_u32(b, rchan)) != 0 ||
-		    (r = sshbuf_put_u32(b, rwindow)) != 0 ||
-		    (r = sshbuf_put_u32(b, rmaxpack)) != 0 ||
-		    (r = sshbuf_put_cstring(b, listen_address)) != 0 ||
-		    (r = sshbuf_put_u32(b, listen_port)) != 0 ||
-		    (r = sshbuf_put_cstring(b, originator_address)) != 0 ||
-		    (r = sshbuf_put_u32(b, originator_port)) != 0 ||
-		    (r = sshbuf_put_stringb(&c->output, b)) != 0) {
-			error("%s: compose for muxclient %s", __func__,
-			    ssh_err(r));
-			goto out;
-		}
-	}
-
- out:
-	sshbuf_free(b);
 	free(originator_address);
 	free(listen_address);
 	return c;
@@ -2094,8 +2024,7 @@ client_input_channel_open(int type, u_int32_t seq, void *ctxt)
 	    ctype, rchan, rwindow, rmaxpack);
 
 	if (strcmp(ctype, "forwarded-tcpip") == 0) {
-		c = client_request_forwarded_tcpip(ctype, rchan, rwindow,
-		    rmaxpack);
+		c = client_request_forwarded_tcpip(ctype, rchan);
 	} else if (strcmp(ctype, "forwarded-streamlocal@openssh.com") == 0) {
 		c = client_request_forwarded_streamlocal(ctype, rchan);
 	} else if (strcmp(ctype, "x11") == 0) {
@@ -2103,9 +2032,8 @@ client_input_channel_open(int type, u_int32_t seq, void *ctxt)
 	} else if (strcmp(ctype, "auth-agent@openssh.com") == 0) {
 		c = client_request_agent(ctype, rchan);
 	}
-	if (c != NULL && c->type == SSH_CHANNEL_MUX_CLIENT) {
-		debug3("proxied to downstream: %s", ctype);
-	} else if (c != NULL) {
+/* XXX duplicate : */
+	if (c != NULL) {
 		debug("confirm %s", ctype);
 		c->remote_id = rchan;
 		c->remote_window = rwindow;
@@ -2141,9 +2069,6 @@ client_input_channel_req(int type, u_int32_t seq, void *ctxt)
 	char *rtype;
 
 	id = packet_get_int();
-	c = channel_lookup(id);
-	if (channel_proxy_upstream(c, type, seq, ctxt))
-		return 0;
 	rtype = packet_get_string(NULL);
 	reply = packet_get_char();
 
@@ -2152,7 +2077,7 @@ client_input_channel_req(int type, u_int32_t seq, void *ctxt)
 
 	if (id == -1) {
 		error("client_input_channel_req: request for channel -1");
-	} else if (c == NULL) {
+	} else if ((c = channel_lookup(id)) == NULL) {
 		error("client_input_channel_req: channel %d: "
 		    "unknown channel", id);
 	} else if (strcmp(rtype, "eow@openssh.com") == 0) {
@@ -2444,11 +2369,11 @@ client_input_hostkeys(void)
 		debug3("%s: received %s key %s", __func__,
 		    sshkey_type(key), fp);
 		free(fp);
-
 		/* Check that the key is accepted in HostkeyAlgorithms */
-		if (match_pattern_list(sshkey_ssh_name(key),
-		    options.hostkeyalgorithms ? options.hostkeyalgorithms :
-		    KEX_DEFAULT_PK_ALG, 0) != 1) {
+		if (options.hostkeyalgorithms != NULL &&
+		    match_pattern_list(sshkey_ssh_name(key),
+		    options.hostkeyalgorithms,
+		    strlen(options.hostkeyalgorithms), 0) != 1) {
 			debug3("%s: %s key not permitted by HostkeyAlgorithms",
 			    __func__, sshkey_ssh_name(key));
 			continue;

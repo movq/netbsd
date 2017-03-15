@@ -1,4 +1,4 @@
-/*	$NetBSD: iscsid.h,v 1.5 2016/05/29 13:35:45 mlelstv Exp $	*/
+/*	$NetBSD: iscsid.h,v 1.3 2012/05/27 20:05:04 christos Exp $	*/
 
 /*-
  * Copyright (c) 2004,2006,2011 The NetBSD Foundation, Inc.
@@ -47,7 +47,7 @@ __BEGIN_DECLS
 
 /* The socket name */
 
-#define ISCSID_SOCK_NAME   "/var/run/iscsid_socket"
+#define ISCSID_SOCK_NAME   "/tmp/iscsid_socket"
 
 
 /* ==== Requests ==== */
@@ -907,6 +907,8 @@ typedef struct {
    driver_xxx
       Corresponding version information for driver.
 */
+
+extern int nothreads;
 
 __END_DECLS
 

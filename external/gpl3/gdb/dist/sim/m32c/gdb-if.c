@@ -1,6 +1,6 @@
 /* gdb.c --- sim interface to GDB.
 
-Copyright (C) 2005-2016 Free Software Foundation, Inc.
+Copyright (C) 2005-2014 Free Software Foundation, Inc.
 Contributed by Red Hat, Inc.
 
 This file is part of the GNU simulators.
@@ -22,7 +22,6 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 #include <stdio.h>
 #include <assert.h>
 #include <signal.h>
-#include <stdlib.h>
 #include <string.h>
 #include <ctype.h>
 
@@ -60,7 +59,7 @@ static int open;
 SIM_DESC
 sim_open (SIM_OPEN_KIND kind,
 	  struct host_callback_struct *callback,
-	  struct bfd *abfd, char * const *argv)
+	  struct bfd *abfd, char **argv)
 {
   setbuf (stdout, 0);
   if (open)
@@ -129,7 +128,7 @@ open_objfile (const char *filename)
 
 
 SIM_RC
-sim_load (SIM_DESC sd, const char *prog, struct bfd * abfd, int from_tty)
+sim_load (SIM_DESC sd, char *prog, struct bfd * abfd, int from_tty)
 {
   check_desc (sd);
 
@@ -144,8 +143,7 @@ sim_load (SIM_DESC sd, const char *prog, struct bfd * abfd, int from_tty)
 }
 
 SIM_RC
-sim_create_inferior (SIM_DESC sd, struct bfd * abfd,
-		     char * const *argv, char * const *env)
+sim_create_inferior (SIM_DESC sd, struct bfd * abfd, char **argv, char **env)
 {
   check_desc (sd);
 
@@ -511,14 +509,22 @@ sim_store_register (SIM_DESC sd, int regno, unsigned char *buf, int length)
   return size;
 }
 
+void
+sim_info (SIM_DESC sd, int verbose)
+{
+  check_desc (sd);
+
+  printf ("The m32c minisim doesn't collect any statistics.\n");
+}
+
 static volatile int stop;
 static enum sim_stop reason;
-static int siggnal;
+int siggnal;
 
 
 /* Given a signal number used by the M32C bsp (that is, newlib),
    return a target signal number used by GDB.  */
-static int
+int
 m32c_signal_to_target (int m32c)
 {
   switch (m32c)
@@ -554,7 +560,7 @@ m32c_signal_to_target (int m32c)
 
 /* Take a step return code RC and set up the variables consulted by
    sim_stop_reason appropriately.  */
-static void
+void
 handle_step (int rc)
 {
   if (M32C_STEPPED (rc) || M32C_HIT_BREAK (rc))
@@ -603,8 +609,6 @@ sim_resume (SIM_DESC sd, int step, int sig_to_deliver)
          interrupt signal handler.  */
       for (;;)
 	{
-	  int rc;
-
 	  if (stop)
 	    {
 	      stop = 0;
@@ -613,7 +617,7 @@ sim_resume (SIM_DESC sd, int step, int sig_to_deliver)
 	      break;
 	    }
 
-	  rc = decode_opcode ();
+	  int rc = decode_opcode ();
 #ifdef TIMER_A
 	  update_timer_a ();
 #endif
@@ -646,12 +650,11 @@ sim_stop_reason (SIM_DESC sd, enum sim_stop *reason_p, int *sigrc_p)
 }
 
 void
-sim_do_command (SIM_DESC sd, const char *cmd)
+sim_do_command (SIM_DESC sd, char *cmd)
 {
-  const char *args;
-  char *p = strdup (cmd);
-
   check_desc (sd);
+
+  char *p = cmd;
 
   /* Skip leading whitespace.  */
   while (isspace (*p))
@@ -664,6 +667,7 @@ sim_do_command (SIM_DESC sd, const char *cmd)
 
   /* Null-terminate the command word, and record the start of any
      further arguments.  */
+  char *args;
   if (*p)
     {
       *p = '\0';
@@ -697,18 +701,10 @@ sim_do_command (SIM_DESC sd, const char *cmd)
   else
     printf ("The 'sim' command expects either 'trace' or 'verbose'"
 	    " as a subcommand.\n");
-
-  free (p);
 }
 
 char **
 sim_complete_command (SIM_DESC sd, const char *text, const char *word)
 {
   return NULL;
-}
-
-void
-sim_info (SIM_DESC sd, int verbose)
-{
-  printf ("The m32c minisim doesn't collect any statistics.\n");
 }

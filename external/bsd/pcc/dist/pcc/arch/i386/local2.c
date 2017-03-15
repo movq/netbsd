@@ -1,5 +1,5 @@
-/*	Id: local2.c,v 1.186 2015/11/17 19:19:40 ragge Exp 	*/	
-/*	$NetBSD: local2.c,v 1.1.1.8 2016/02/09 20:28:17 plunky Exp $	*/
+/*	Id: local2.c,v 1.177 2014/06/04 06:43:49 gmcgarry Exp 	*/	
+/*	$NetBSD: local2.c,v 1.1.1.7 2014/07/24 19:17:13 plunky Exp $	*/
 /*
  * Copyright (c) 2003 Anders Magnusson (ragge@ludd.luth.se).
  * All rights reserved.
@@ -37,7 +37,7 @@
 #define EXPREFIX	""
 #endif
 
-int msettings = MI686;
+
 static int stkpos;
 
 void
@@ -286,11 +286,9 @@ fldexpand(NODE *p, int cookie, char **cp)
 static void
 starg(NODE *p)
 {
-	struct attr *ap;
 	NODE *q = p->n_left;
 
-	ap = attr_find(p->n_ap, ATTR_P2STRUCT);
-	printf("	subl $%d,%%esp\n", (ap->iarg(0) + 3) & ~3);
+	printf("	subl $%d,%%esp\n", (p->n_stsize + 3) & ~3);
 	p->n_left = mklnode(OREG, 0, ESP, INT);
 	zzzcode(p, 'Q');
 	tfree(p->n_left);
@@ -305,55 +303,19 @@ fcomp(NODE *p)
 {
 	static char *fpcb[] = { "jz", "jnz", "jbe", "jc", "jnc", "ja" };
 
-	if (msettings & MI686) {
-		if ((p->n_su & DORIGHT) == 0)
-			expand(p, 0, "\tfxch\n");
-		expand(p, 0, "\tfucomip %st(1),%st\n");	/* emit compare insn  */
-		expand(p, 0, "\tfstp %st(0)\n");	/* pop fromstack */
+	if ((p->n_su & DORIGHT) == 0)
+		expand(p, 0, "\tfxch\n");
+	expand(p, 0, "\tfucomip %st(1),%st\n");	/* emit compare insn  */
+	expand(p, 0, "\tfstp %st(0)\n");	/* pop fromstack */
 
-		if (p->n_op == NE || p->n_op == GT || p->n_op == GE)
-			expand(p, 0, "\tjp LC\n");
-		else if (p->n_op == EQ)
-			printf("\tjp 1f\n");
-		printf("	%s ", fpcb[p->n_op - EQ]);
-		expand(p, 0, "LC\n");
-		if (p->n_op == EQ)
-			printf("1:\n");
-	} else {
-		int swap = ((p->n_su & DORIGHT) == 0);
-
-		if (p->n_op == GT || p->n_op == GE)
-			swap ^= 1;
-		if (swap)
-			expand(p, 0, "\tfxch\n");
-
-		/*
-		 * Flags for x87:
-		 * C3 C2 C0
-		 * 0  0  0	st0 > st1
-		 * 0  0  1	st0 < st1
-		 * 1  0  0	st0 = st1
-		 * 1  1  1	unordered
-		 */
-
-		/* ax avoided in nspecial() */
-		printf("\tfucompp\n\tfnstsw %%ax\n");
-		if (p->n_op == GE || p->n_op == LE) {
-			printf("\ttestb $0x45,%%ah\n");
-		} else if (p->n_op == GT || p->n_op == LT) {
-			printf("\ttestb $0x05,%%ah\n");
-		} else if (p->n_op == NE) {
-			printf("\tandb $0x45,%%ah\n");
-			printf("\txorb $0x40,%%ah\n");
-		} else if (p->n_op == EQ) {
-			printf("\tandb $0x45,%%ah\n");
-			printf("\tcmpb $0x40,%%ah\n");
-		}
-		if (p->n_op == EQ) {
-			expand(p, 0, "\tje LC\n");
-		} else
-			expand(p, 0, "\tjne LC\n");
-	}
+	if (p->n_op == NE || p->n_op == GT || p->n_op == GE)
+		expand(p, 0, "\tjp LC\n");
+	else if (p->n_op == EQ)
+		printf("\tjp 1f\n");
+	printf("	%s ", fpcb[p->n_op - EQ]);
+	expand(p, 0, "LC\n");
+	if (p->n_op == EQ)
+		printf("1:\n");
 }
 
 /*
@@ -408,7 +370,7 @@ argsiz(NODE *p)
 	if (t == LDOUBLE)
 		return 12;
 	if (t == STRTY || t == UNIONTY)
-		return attr_find(p->n_ap, ATTR_P2STRUCT)->iarg(0) & ~3;
+		return (p->n_stsize+3) & ~3;
 	comperr("argsiz");
 	return 0;
 }
@@ -458,7 +420,6 @@ llshft(NODE *p)
 void
 zzzcode(NODE *p, int c)
 {
-	struct attr *ap;
 	NODE *l;
 	int pr, lr;
 	char *ch;
@@ -474,28 +435,17 @@ zzzcode(NODE *p, int c)
 		break;
 
 	case 'C':  /* remove from stack after subroutine call */
-#ifdef GCC_COMPAT
-		if (attr_find(p->n_left->n_ap, GCC_ATYP_STDCALL))
+#ifdef notdef
+		if (p->n_left->n_flags & FSTDCALL)
 			break;
 #endif
 		pr = p->n_qual;
-		if (attr_find(p->n_ap, ATTR_I386_FPPOP))
+		if (p->n_flags & FFPPOP)
 			printf("	fstp	%%st(0)\n");
 		if (p->n_op == UCALL)
 			return; /* XXX remove ZC from UCALL */
 		if (pr)
 			printf("	addl $%d, %s\n", pr, rnames[ESP]);
-#if defined(os_openbsd)
-		ap = attr_find(p->n_ap, ATTR_P2STRUCT);
-		if (p->n_op == STCALL && (ap->iarg(0) == 1 ||
-		    ap->iarg(0) == 2 || ap->iarg(0) == 4 || 
-		    ap->iarg(0) == 8)) {
-			/* save on stack */
-			printf("\tmovl %%eax,-%d(%%ebp)\n", stkpos);
-			printf("\tmovl %%edx,-%d(%%ebp)\n", stkpos+4);
-			printf("\tleal -%d(%%ebp),%%eax\n", stkpos);
-		}
-#endif
 		break;
 
 	case 'D': /* Long long comparision */
@@ -503,7 +453,8 @@ zzzcode(NODE *p, int c)
 		break;
 
 	case 'F': /* Structure argument */
-		starg(p);
+		if (p->n_stalign != 0) /* already on stack */
+			starg(p);
 		break;
 
 	case 'G': /* Floating point compare */
@@ -580,20 +531,19 @@ zzzcode(NODE *p, int c)
 		 * esi/edi/ecx are available.
 		 */
 		expand(p, INAREG, "	leal AL,%edi\n");
-		ap = attr_find(p->n_ap, ATTR_P2STRUCT);
-		if (ap->iarg(0) < 32) {
-			int i = ap->iarg(0) >> 2;
+		if (p->n_stsize < 32) {
+			int i = p->n_stsize >> 2;
 			while (i) {
 				expand(p, INAREG, "	movsl\n");
 				i--;
 			}
 		} else {
-			printf("\tmovl $%d,%%ecx\n", ap->iarg(0) >> 2);
+			printf("\tmovl $%d,%%ecx\n", p->n_stsize >> 2);
 			printf("	rep movsl\n");
 		}
-		if (ap->iarg(0) & 2)
+		if (p->n_stsize & 2)
 			printf("	movsw\n");
-		if (ap->iarg(0) & 1)
+		if (p->n_stsize & 1)
 			printf("	movsb\n");
 		break;
 
@@ -720,7 +670,7 @@ adrcon(CONSZ val)
 void
 conput(FILE *fp, NODE *p)
 {
-	int val = (int)getlval(p);
+	int val = (int)p->n_lval;
 
 	switch (p->n_op) {
 	case ICON:
@@ -760,12 +710,12 @@ upput(NODE *p, int size)
 
 	case NAME:
 	case OREG:
-		setlval(p, getlval(p) + size);
+		p->n_lval += size;
 		adrput(stdout, p);
-		setlval(p, getlval(p) - size);
+		p->n_lval -= size;
 		break;
 	case ICON:
-		printf("$" CONFMT, getlval(p) >> 32);
+		printf("$" CONFMT, p->n_lval >> 32);
 		break;
 	default:
 		comperr("upput bad op %d size %d", p->n_op, size);
@@ -783,18 +733,18 @@ adrput(FILE *io, NODE *p)
 	case NAME:
 		if (p->n_name[0] != '\0') {
 			fputs(p->n_name, io);
-			if (getlval(p) != 0)
-				fprintf(io, "+" CONFMT, getlval(p));
+			if (p->n_lval != 0)
+				fprintf(io, "+" CONFMT, p->n_lval);
 		} else
-			fprintf(io, CONFMT, getlval(p));
+			fprintf(io, CONFMT, p->n_lval);
 		return;
 
 	case OREG:
 		r = p->n_rval;
 		if (p->n_name[0])
-			printf("%s%s", p->n_name, getlval(p) ? "+" : "");
-		if (getlval(p))
-			fprintf(io, "%d", (int)getlval(p));
+			printf("%s%s", p->n_name, p->n_lval ? "+" : "");
+		if (p->n_lval)
+			fprintf(io, "%d", (int)p->n_lval);
 		if (R2TEST(r)) {
 			fprintf(io, "(%s,%s,4)", rnames[R2UPK1(r)],
 			    rnames[R2UPK2(r)]);
@@ -869,17 +819,12 @@ cbgen(int o, int lab)
 static void
 fixcalls(NODE *p, void *arg)
 {
-	struct attr *ap;
-
 	/* Prepare for struct return by allocating bounce space on stack */
 	switch (p->n_op) {
 	case STCALL:
 	case USTCALL:
-		ap = attr_find(p->n_ap, ATTR_P2STRUCT);
-		if (ap->iarg(0)+p2autooff > stkpos)
-			stkpos = ap->iarg(0)+p2autooff;
-		if (8+p2autooff > stkpos)
-			stkpos = ap->iarg(0)+p2autooff;
+		if (p->n_stsize+p2autooff > stkpos)
+			stkpos = p->n_stsize+p2autooff;
 		break;
 	case LS:
 	case RS:
@@ -1040,15 +985,6 @@ updatereg(NODE *p, void *arg)
 
 	if (p->n_op != STCALL)
 		return;
-#if defined(os_openbsd)
-	struct attr *ap = attr_find(p->n_ap, ATTR_P2STRUCT);
-	if (ap->iarg(0) == 1 || ap->iarg(0) == 2 || ap->iarg(0) == 4 || 
-	    ap->iarg(0) == 8)
-		return;
-#endif
-	if (attr_find(p->n_ap, ATTR_I386_FCMPLRET))
-		return;
-
 	if (p->n_right->n_op != CM)
 		p = p->n_right;
 	else for (p = p->n_right;
@@ -1263,7 +1199,7 @@ void
 lastcall(NODE *p)
 {
 	NODE *op = p;
-	int nr = 0, size = 0;
+	int size = 0;
 
 	p->n_qual = 0;
 	if (p->n_op != CALL && p->n_op != FORTCALL && p->n_op != STCALL)
@@ -1271,19 +1207,9 @@ lastcall(NODE *p)
 	for (p = p->n_right; p->n_op == CM; p = p->n_left) { 
 		if (p->n_right->n_op != ASSIGN)
 			size += argsiz(p->n_right);
-		else
-			nr = 1;
 	}
 	if (p->n_op != ASSIGN)
 		size += argsiz(p);
-	else
-		nr++;
-	if (op->n_op == STCALL) {
-		if (kflag)
-			nr--;
-		if (nr == 0)
-			size -= 4; /* XXX OpenBSD? */
-	}
 
 #if defined(MACHOABI)
 	int newsize = (size + 15) & ~15;	/* stack alignment */
@@ -1313,19 +1239,19 @@ special(NODE *p, int shape)
 		break;
 	case SPCON:
 		if (o != ICON || p->n_name[0] ||
-		    getlval(p) < 0 || getlval(p) > 0x7fffffff)
+		    p->n_lval < 0 || p->n_lval > 0x7fffffff)
 			break;
 		return SRDIR;
 	case SMIXOR:
 		return tshape(p, SZERO);
 	case SMILWXOR:
 		if (o != ICON || p->n_name[0] ||
-		    getlval(p) == 0 || getlval(p) & 0xffffffff)
+		    p->n_lval == 0 || p->n_lval & 0xffffffff)
 			break;
 		return SRDIR;
 	case SMIHWXOR:
 		if (o != ICON || p->n_name[0] ||
-		     getlval(p) == 0 || (getlval(p) >> 32) != 0)
+		     p->n_lval == 0 || (p->n_lval >> 32) != 0)
 			break;
 		return SRDIR;
 	}
@@ -1338,13 +1264,6 @@ special(NODE *p, int shape)
 void
 mflags(char *str)
 {
-#define	MSET(s,a) if (strcmp(str, s) == 0) \
-	msettings = (msettings & ~MCPUMSK) | a
-
-	MSET("arch=i386",MI386);
-	MSET("arch=i486",MI486);
-	MSET("arch=i586",MI586);
-	MSET("arch=i686",MI686);
 }
 
 /*
@@ -1417,7 +1336,7 @@ myxasm(struct interpass *ip, NODE *p)
 			}
 			uerror("xasm arg not constant");
 		}
-		v = getlval(p->n_left);
+		v = p->n_left->n_lval;
 		if ((c == 'K' && v < -128) ||
 		    (c == 'L' && v != 0xff && v != 0xffff) ||
 		    (c != 'K' && v < 0) ||
@@ -1438,13 +1357,16 @@ myxasm(struct interpass *ip, NODE *p)
 
 	t = p->n_left->n_type;
 	if (reg == EAXEDX) {
-		;
+		p->n_label = CLASSC;
 	} else {
+		p->n_label = CLASSA;
 		if (t == CHAR || t == UCHAR) {
+			p->n_label = CLASSB;
 			reg = reg * 2 + 8;
 		}
 	}
 	if (t == FLOAT || t == DOUBLE || t == LDOUBLE) {
+		p->n_label = CLASSD;
 		reg += 037;
 	}
 

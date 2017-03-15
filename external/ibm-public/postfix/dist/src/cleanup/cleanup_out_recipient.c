@@ -1,4 +1,4 @@
-/*	$NetBSD: cleanup_out_recipient.c,v 1.2 2017/02/14 01:16:44 christos Exp $	*/
+/*	$NetBSD: cleanup_out_recipient.c,v 1.1.1.1 2009/06/23 10:08:43 tron Exp $	*/
 
 /*++
 /* NAME
@@ -78,7 +78,6 @@
 #include <recipient_list.h>
 #include <dsn.h>
 #include <trace.h>
-#include <verify.h>
 #include <mail_queue.h>			/* cleanup_trace_path */
 #include <mail_proto.h>
 #include <msg_stats.h>
@@ -103,20 +102,6 @@ static void cleanup_trace_append(CLEANUP_STATE *state, RECIPIENT *rcpt,
 		     CLEANUP_MSG_STATS(&stats, state),
 		     rcpt, "none", dsn) != 0) {
 	msg_warn("%s: trace logfile update error", state->queue_id);
-	state->errs |= CLEANUP_STAT_WRITE;
-    }
-}
-
-/* cleanup_verify_append - update verify daemon */
-
-static void cleanup_verify_append(CLEANUP_STATE *state, RECIPIENT *rcpt,
-				          DSN *dsn, int verify_status)
-{
-    MSG_STATS stats;
-
-    if (verify_append(state->queue_id, CLEANUP_MSG_STATS(&stats, state),
-		      rcpt, "none", dsn, verify_status) != 0) {
-	msg_warn("%s: verify service update error", state->queue_id);
 	state->errs |= CLEANUP_STAT_WRITE;
     }
 }
@@ -210,15 +195,6 @@ void    cleanup_out_recipient(CLEANUP_STATE *state,
      * recipient information, also ignore differences in DSN attributes. We
      * do, however, keep the DSN attributes of the recipient that survives
      * duplicate elimination.
-     * 
-     * In the case of a verify(8) request for a one-to-many alias, declare the
-     * alias address as "deliverable". Do not verify the individual addresses
-     * in the expansion because that results in multiple verify(8) updates
-     * for one verify(8) request.
-     * 
-     * Multiple verify(8) updates for one verify(8) request would overwrite
-     * each other's status, and if the last status update is "undeliverable",
-     * then the whole alias is flagged as undeliverable.
      */
     else {
 	RECIPIENT rcpt;
@@ -226,14 +202,6 @@ void    cleanup_out_recipient(CLEANUP_STATE *state,
 
 	argv = cleanup_map1n_internal(state, recip, cleanup_virt_alias_maps,
 				  cleanup_ext_prop_mask & EXT_PROP_VIRTUAL);
-	if (argv->argc > 1 && (state->tflags & DEL_REQ_FLAG_MTA_VRFY)) {
-	    (void) DSN_SIMPLE(&dsn, "2.0.0", "aliased to multiple recipients");
-	    dsn.action = "deliverable";
-	    RECIPIENT_ASSIGN(&rcpt, 0, dsn_orcpt, dsn_notify, orcpt, recip);
-	    cleanup_verify_append(state, &rcpt, &dsn, DEL_RCPT_STAT_OK);
-	    argv_free(argv);
-	    return;
-	}
 	if ((dsn_notify & DSN_NOTIFY_SUCCESS)
 	    && (argv->argc > 1 || strcmp(recip, argv->argv[0]) != 0)) {
 	    (void) DSN_SIMPLE(&dsn, "2.0.0", "alias expanded");

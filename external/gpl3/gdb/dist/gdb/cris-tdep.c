@@ -1,6 +1,6 @@
 /* Target dependent code for CRIS, for GDB, the GNU debugger.
 
-   Copyright (C) 2001-2016 Free Software Foundation, Inc.
+   Copyright (C) 2001-2014 Free Software Foundation, Inc.
 
    Contributed by Axis Communications AB.
    Written by Hendrik Ruijter, Stefan Andersson, and Orjan Friberg.
@@ -37,11 +37,13 @@
 #include "osabi.h"
 #include "arch-utils.h"
 #include "regcache.h"
+#include "gdb_assert.h"
 
 #include "objfiles.h"
 
 #include "solib.h"              /* Support for shared libraries.  */
 #include "solib-svr4.h"
+#include <string.h>
 #include "dis-asm.h"
 
 #include "cris-tdep.h"
@@ -320,7 +322,7 @@ cris_sigtramp_frame_unwind_cache (struct frame_info *this_frame,
   int i;
 
   if ((*this_cache))
-    return (struct cris_unwind_cache *) (*this_cache);
+    return (*this_cache);
 
   info = FRAME_OBSTACK_ZALLOC (struct cris_unwind_cache);
   (*this_cache) = info;
@@ -485,7 +487,7 @@ struct instruction_environment
   int   delay_slot_pc_active;
   int   xflag_found;
   int   disable_interrupt;
-  enum bfd_endian byte_order;
+  int   byte_order;
 } inst_env_type;
 
 /* Machine-dependencies in CRIS for opcodes.  */
@@ -665,14 +667,15 @@ struct stack_item
 {
   int len;
   struct stack_item *prev;
-  gdb_byte *data;
+  void *data;
 };
 
 static struct stack_item *
 push_stack_item (struct stack_item *prev, const gdb_byte *contents, int len)
 {
-  struct stack_item *si = XNEW (struct stack_item);
-  si->data = (gdb_byte *) xmalloc (len);
+  struct stack_item *si;
+  si = xmalloc (sizeof (struct stack_item));
+  si->data = xmalloc (len);
   si->len = len;
   si->prev = prev;
   memcpy (si->data, contents, len);
@@ -704,7 +707,7 @@ cris_frame_unwind_cache (struct frame_info *this_frame,
   struct cris_unwind_cache *info;
 
   if ((*this_prologue_cache))
-    return (struct cris_unwind_cache *) (*this_prologue_cache);
+    return (*this_prologue_cache);
 
   info = FRAME_OBSTACK_ZALLOC (struct cris_unwind_cache);
   (*this_prologue_cache) = info;
@@ -811,8 +814,15 @@ cris_push_dummy_call (struct gdbarch *gdbarch, struct value *function,
 		      int struct_return, CORE_ADDR struct_addr)
 {
   enum bfd_endian byte_order = gdbarch_byte_order (gdbarch);
+  int stack_offset;
   int argreg;
   int argnum;
+
+  /* The function's arguments and memory allocated by gdb for the arguments to
+     point at reside in separate areas on the stack.
+     Both frame pointers grow toward higher addresses.  */
+  CORE_ADDR fp_arg;
+  CORE_ADDR fp_mem;
 
   struct stack_item *si = NULL;
 
@@ -830,6 +840,7 @@ cris_push_dummy_call (struct gdbarch *gdbarch, struct value *function,
   /* Now load as many as possible of the first arguments into registers,
      and push the rest onto the stack.  */
   argreg = ARG1_REGNUM;
+  stack_offset = 0;
 
   for (argnum = 0; argnum < nargs; argnum++)
     {
@@ -1032,6 +1043,9 @@ cris_scan_prologue (CORE_ADDR pc, struct frame_info *this_frame,
   /* Next instruction, lookahead.  */
   unsigned short insn_next; 
   int regno;
+
+  /* Is there a push fp?  */
+  int have_fp; 
 
   /* Number of byte on stack used for local variables and movem.  */
   int val; 
@@ -1461,6 +1475,7 @@ cris_spec_reg_applicable (struct gdbarch *gdbarch,
 static int
 cris_register_size (struct gdbarch *gdbarch, int regno)
 {
+  struct gdbarch_tdep *tdep = gdbarch_tdep (gdbarch);
   int i;
   int spec_regno;
   
@@ -1777,6 +1792,9 @@ cris_dwarf2_reg_to_regnum (struct gdbarch *gdbarch, int reg)
 
   if (reg >= 0 && reg < ARRAY_SIZE (cris_dwarf_regmap))
     regnum = cris_dwarf_regmap[reg];
+
+  if (regnum == -1)
+    warning (_("Unmapped DWARF Register #%d encountered."), reg);
 
   return regnum;
 }
@@ -3815,6 +3833,7 @@ cris_supply_gregset (struct regcache *regcache, cris_elf_gregset_t *gregsetp)
   struct gdbarch_tdep *tdep = gdbarch_tdep (gdbarch);
   int i;
   cris_elf_greg_t *regp = *gregsetp;
+  static char zerobuf[4] = {0};
 
   /* The kernel dumps all 32 registers as unsigned longs, but supply_register
      knows about the actual size of each register so that's no problem.  */
@@ -3882,6 +3901,11 @@ extern initialize_file_ftype _initialize_cris_tdep; /* -Wmissing-prototypes */
 void
 _initialize_cris_tdep (void)
 {
+  static struct cmd_list_element *cris_set_cmdlist;
+  static struct cmd_list_element *cris_show_cmdlist;
+
+  struct cmd_list_element *c;
+
   gdbarch_register (bfd_arch_cris, cris_gdbarch_init, cris_dump_tdep);
   
   /* CRIS-specific user-commands.  */
@@ -4019,7 +4043,7 @@ cris_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
     }
 
   /* No matching architecture was found.  Create a new one.  */
-  tdep = XNEW (struct gdbarch_tdep);
+  tdep = (struct gdbarch_tdep *) xmalloc (sizeof (struct gdbarch_tdep));
   gdbarch = gdbarch_alloc (&info, tdep);
 
   tdep->cris_version = usr_cmd_cris_version;
@@ -4034,10 +4058,10 @@ cris_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
       break;
 
     case BFD_ENDIAN_BIG:
-      /* Cris is always little endian, but the user could have forced
-	 big endian with "set endian".  */
-      return 0;
-
+      internal_error (__FILE__, __LINE__,
+		      _("cris_gdbarch_init: big endian byte order in info"));
+      break;
+    
     default:
       internal_error (__FILE__, __LINE__,
 		      _("cris_gdbarch_init: unknown byte order in info"));
@@ -4069,7 +4093,9 @@ cris_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
     case 8:
     case 9:
       /* Old versions; not supported.  */
-      return 0;
+      internal_error (__FILE__, __LINE__, 
+		      _("cris_gdbarch_init: unsupported CRIS version"));
+      break;
 
     case 10:
     case 11: 
@@ -4109,8 +4135,8 @@ cris_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
       break;
 
     default:
-      /* Unknown version.  */
-      return 0;
+      internal_error (__FILE__, __LINE__, 
+		      _("cris_gdbarch_init: unknown CRIS version"));
     }
 
   /* Dummy frame functions (shared between CRISv10 and CRISv32 since they

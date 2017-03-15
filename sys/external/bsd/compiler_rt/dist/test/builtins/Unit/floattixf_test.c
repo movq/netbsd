@@ -25,7 +25,7 @@
 // gggg gggg gggg gggg gggg gggg gggg gggg | gggg gggg gggg gggg seee eeee eeee eeee |
 // 1mmm mmmm mmmm mmmm mmmm mmmm mmmm mmmm | mmmm mmmm mmmm mmmm mmmm mmmm mmmm mmmm
 
-COMPILER_RT_ABI long double __floattixf(ti_int a);
+long double __floattixf(ti_int a);
 
 int test__floattixf(ti_int a, long double expected)
 {

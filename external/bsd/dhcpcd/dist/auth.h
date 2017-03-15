@@ -1,4 +1,4 @@
-/* $NetBSD: auth.h,v 1.10 2016/10/09 09:18:26 roy Exp $ */
+/* $NetBSD: auth.h,v 1.1.1.2.2.2 2015/02/05 15:13:12 martin Exp $ */
 
 /*
  * dhcpcd - DHCP client daemon
@@ -32,10 +32,6 @@
 
 #include "config.h"
 
-#ifdef HAVE_SYS_QUEUE_H
-#include <sys/queue.h>
-#endif
-
 #define DHCPCD_AUTH_SEND	(1 << 0)
 #define DHCPCD_AUTH_REQUIRE	(1 << 1)
 #define DHCPCD_AUTH_RDM_COUNTER	(1 << 2)
@@ -65,14 +61,12 @@ TAILQ_HEAD(token_head, token);
 
 struct auth {
 	int options;
-#ifdef AUTH
 	uint8_t protocol;
 	uint8_t algorithm;
 	uint8_t rdm;
 	uint64_t last_replay;
 	uint8_t last_replay_set;
 	struct token_head tokens;
-#endif
 };
 
 struct authstate {

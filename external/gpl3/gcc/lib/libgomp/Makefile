@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.16 2016/04/20 17:18:52 christos Exp $
+#	$NetBSD: Makefile,v 1.13 2014/06/04 19:07:22 tron Exp $
 
 # build GCC's libgomp, so that -fopenmp works.
 
@@ -37,18 +37,7 @@ SRCS= \
 	ptrlock.c \
 	time.c \
 	fortran.c \
-	affinity.c \
-	target.c \
-	splay-tree.c \
-	libgomp-plugin.c \
-	oacc-parallel.c \
-	oacc-host.c \
-	oacc-init.c \
-	oacc-mem.c \
-	oacc-async.c \
-	oacc-plugin.c \
-	oacc-cuda.c
-
+	affinity.c
 
 GOMP_MACHINE_ARCH?=	${MACHINE_ARCH:S/earmv5/earm/}
 ARCHDIR=		${.CURDIR}/arch/${GOMP_MACHINE_ARCH}
@@ -58,16 +47,14 @@ CPPFLAGS+= \
 	-I${DIST}/libgomp \
 	-I${DIST}/libgomp/config/posix \
 	-I${DIST}/libgcc \
-	-I${DIST}/include \
 	-I${ARCHDIR}
 CFLAGS+=-pthread
 
 CWARNFLAGS.clang+=	-Wno-conversion
 
 # libgomp is 1.0 is in GCC 4.5, and 1.1 in 4.8 since it added more symbols
-# XXXGCC5 -- marking 1.2 for GCC 5.3 for now
 SHLIB_MAJOR=	1
-SHLIB_MINOR=	2
+SHLIB_MINOR=	1
 
 LDFLAGS+=	-Wl,--version-script,${DIST}/libgomp/libgomp.map
 
@@ -76,8 +63,8 @@ LDFLAGS+=	-Wl,--version-script,${DIST}/libgomp/libgomp.map
 FILES=		libgomp.spec
 FILESDIR=	${LIBDIR}
 
-INCS=		omp.h openacc.h
-INCSDIR=	/usr/include/gcc-5
+INCS=		omp.h
+INCSDIR=	/usr/include/gcc-4.8
 .endif
 
 .else			# } else {
@@ -86,7 +73,6 @@ libinstall::
 
 .include <bsd.lib.mk>
 
-COPTS+=	-Wno-stack-protector -Wno-missing-prototypes
-COPTS.oacc-mem.c+= -Wno-pointer-arith
+COPTS+=	-Wno-stack-protector
 
 .PATH:	${ARCHDIR} ${DIST}/libgomp ${DIST}/libgomp/config/posix

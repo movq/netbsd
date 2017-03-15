@@ -1,4 +1,4 @@
-/*	$NetBSD: gss_mech_switch.c,v 1.2 2017/01/28 21:31:46 christos Exp $	*/
+/*	$NetBSD: gss_mech_switch.c,v 1.1.1.2 2014/04/24 12:45:29 pettai Exp $	*/
 
 /*-
  * Copyright (c) 2005 Doug Rabson
@@ -317,8 +317,6 @@ _gss_load_mech(void)
 			goto bad;
 
 		m->gm_so = so;
-		m->gm_mech_oid = mech_oid;
-		m->gm_mech.gm_name = strdup(name);
 		m->gm_mech.gm_mech_oid = mech_oid;
 		m->gm_mech.gm_flags = 0;
 		m->gm_mech.gm_compat = calloc(1, sizeof(struct gss_mech_compat_desc_struct));
@@ -385,7 +383,7 @@ _gss_load_mech(void)
 		OPTSYM(set_name_attribute);
 		OPTSYM(delete_name_attribute);
 		OPTSYM(export_name_composite);
-		OPTSYM(localname);
+		OPTSYM(pname_to_uid);
 		OPTSPISYM(authorize_localname);
 
 		mi = dlsym(so, "gss_mo_init");
@@ -418,7 +416,6 @@ _gss_load_mech(void)
 		if (m != NULL) {
 			free(m->gm_mech.gm_compat);
 			free(m->gm_mech.gm_mech_oid.elements);
-			free((char *)m->gm_mech.gm_name);
 			free(m);
 		}
 		dlclose(so);

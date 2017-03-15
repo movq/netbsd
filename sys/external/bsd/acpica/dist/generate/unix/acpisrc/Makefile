@@ -19,7 +19,6 @@ PROG = $(OBJDIR)/acpisrc
 #
 vpath %.c \
     $(ACPISRC)\
-    $(ACPICA_UTILITIES)\
     $(ACPICA_COMMON)\
     $(ACPICA_OSL)
 
@@ -34,19 +33,8 @@ OBJECTS = \
     $(OBJDIR)/asremove.o\
     $(OBJDIR)/astable.o\
     $(OBJDIR)/asutils.o\
-    $(OBJDIR)/cmfsize.o\
-    $(OBJDIR)/getopt.o \
     $(OBJDIR)/osunixdir.o\
-    $(OBJDIR)/osunixxf.o\
-    $(OBJDIR)/utascii.o\
-    $(OBJDIR)/utdebug.o\
-    $(OBJDIR)/utexcep.o\
-    $(OBJDIR)/utglobal.o\
-	$(OBJDIR)/uthex.o\
-    $(OBJDIR)/utmath.o\
-    $(OBJDIR)/utnonansi.o\
-    $(OBJDIR)/utstring.o\
-    $(OBJDIR)/utxferror.o
+    $(OBJDIR)/getopt.o
 
 #
 # Compile flags specific to acpisrc

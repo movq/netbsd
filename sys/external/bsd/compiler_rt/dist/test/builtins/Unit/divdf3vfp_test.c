@@ -11,14 +11,13 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "int_lib.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <math.h>
 
 
 #if __arm__
-extern COMPILER_RT_ABI double __divdf3vfp(double a, double b);
+extern double __divdf3vfp(double a, double b);
 
 int test__divdf3vfp(double a, double b)
 {

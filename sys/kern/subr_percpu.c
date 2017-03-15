@@ -1,4 +1,4 @@
-/*	$NetBSD: subr_percpu.c,v 1.17 2014/11/27 15:00:00 uebayasi Exp $	*/
+/*	$NetBSD: subr_percpu.c,v 1.16 2012/01/27 19:48:40 para Exp $	*/
 
 /*-
  * Copyright (c)2007,2008 YAMAMOTO Takashi,
@@ -31,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: subr_percpu.c,v 1.17 2014/11/27 15:00:00 uebayasi Exp $");
+__KERNEL_RCSID(0, "$NetBSD: subr_percpu.c,v 1.16 2012/01/27 19:48:40 para Exp $");
 
 #include <sys/param.h>
 #include <sys/cpu.h>
@@ -291,7 +291,7 @@ void *
 percpu_getref(percpu_t *pc)
 {
 
-	kpreempt_disable();
+	KPREEMPT_DISABLE(curlwp);
 	return percpu_getptr_remote(pc, curcpu());
 }
 
@@ -306,7 +306,7 @@ void
 percpu_putref(percpu_t *pc)
 {
 
-	kpreempt_enable();
+	KPREEMPT_ENABLE(curlwp);
 }
 
 /*

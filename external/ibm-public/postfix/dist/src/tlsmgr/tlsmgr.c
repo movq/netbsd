@@ -1,4 +1,4 @@
-/*	$NetBSD: tlsmgr.c,v 1.2 2017/02/14 01:16:48 christos Exp $	*/
+/*	$NetBSD: tlsmgr.c,v 1.1.1.3 2014/07/06 19:27:57 tron Exp $	*/
 
 /*++
 /* NAME
@@ -167,11 +167,6 @@
 /*	IBM T.J. Watson Research
 /*	P.O. Box 704
 /*	Yorktown Heights, NY 10598, USA
-/*
-/*	Wietse Venema
-/*	Google, Inc.
-/*	111 8th Avenue
-/*	New York, NY 10011, USA
 /*--*/
 
 /* System library. */
@@ -322,7 +317,7 @@ static TLSMGR_SCACHE cache_table[] = {
 
 /* tlsmgr_prng_exch_event - update PRNG exchange file */
 
-static void tlsmgr_prng_exch_event(int unused_event, void *dummy)
+static void tlsmgr_prng_exch_event(int unused_event, char *dummy)
 {
     const char *myname = "tlsmgr_prng_exch_event";
     unsigned char randbyte;
@@ -356,7 +351,7 @@ static void tlsmgr_prng_exch_event(int unused_event, void *dummy)
 
 /* tlsmgr_reseed_event - re-seed the internal PRNG pool */
 
-static void tlsmgr_reseed_event(int unused_event, void *dummy)
+static void tlsmgr_reseed_event(int unused_event, char *dummy)
 {
     int     next_period;
     unsigned char randbyte;
@@ -441,7 +436,7 @@ static void tlsmgr_reseed_event(int unused_event, void *dummy)
 
 /* tlsmgr_cache_run_event - start TLS session cache scan */
 
-static void tlsmgr_cache_run_event(int unused_event, void *ctx)
+static void tlsmgr_cache_run_event(int unused_event, char *ctx)
 {
     const char *myname = "tlsmgr_cache_run_event";
     TLSMGR_SCACHE *cache = (TLSMGR_SCACHE *) ctx;
@@ -462,7 +457,7 @@ static void tlsmgr_cache_run_event(int unused_event, void *ctx)
 	    tls_scache_sequence(cache->cache_info, DICT_SEQ_FUN_FIRST,
 				TLS_SCACHE_SEQUENCE_NOTHING);
 
-    event_request_timer(tlsmgr_cache_run_event, (void *) cache,
+    event_request_timer(tlsmgr_cache_run_event, (char *) cache,
 			cache->cache_info->timeout);
 }
 
@@ -581,7 +576,7 @@ static int tlsmgr_request_receive(VSTREAM *client_stream, VSTRING *request)
     else {
 	if (attr_scan(client_stream,
 		      ATTR_FLAG_MORE | ATTR_FLAG_STRICT,
-		      RECV_ATTR_STR(TLS_MGR_ATTR_REQ, request),
+		      ATTR_TYPE_STR, TLS_MGR_ATTR_REQ, request,
 		      ATTR_TYPE_END) != 1) {
 	    return (-1);
 	}
@@ -635,8 +630,8 @@ static void tlsmgr_service(VSTREAM *client_stream, char *unused_service,
 	 */
 	if (STREQ(STR(request), TLS_MGR_REQ_LOOKUP)) {
 	    if (attr_scan(client_stream, ATTR_FLAG_STRICT,
-			  RECV_ATTR_STR(TLS_MGR_ATTR_CACHE_TYPE, cache_type),
-			  RECV_ATTR_STR(TLS_MGR_ATTR_CACHE_ID, cache_id),
+			  ATTR_TYPE_STR, TLS_MGR_ATTR_CACHE_TYPE, cache_type,
+			  ATTR_TYPE_STR, TLS_MGR_ATTR_CACHE_ID, cache_id,
 			  ATTR_TYPE_END) == 2) {
 		for (ent = cache_table; ent->cache_label; ++ent)
 		    if (strcmp(ent->cache_label, STR(cache_type)) == 0)
@@ -658,9 +653,9 @@ static void tlsmgr_service(VSTREAM *client_stream, char *unused_service,
 		}
 	    }
 	    attr_print(client_stream, ATTR_FLAG_NONE,
-		       SEND_ATTR_INT(MAIL_ATTR_STATUS, status),
-		       SEND_ATTR_DATA(TLS_MGR_ATTR_SESSION,
-				      LEN(buffer), STR(buffer)),
+		       ATTR_TYPE_INT, MAIL_ATTR_STATUS, status,
+		       ATTR_TYPE_DATA, TLS_MGR_ATTR_SESSION,
+		       LEN(buffer), STR(buffer),
 		       ATTR_TYPE_END);
 	}
 
@@ -669,9 +664,9 @@ static void tlsmgr_service(VSTREAM *client_stream, char *unused_service,
 	 */
 	else if (STREQ(STR(request), TLS_MGR_REQ_UPDATE)) {
 	    if (attr_scan(client_stream, ATTR_FLAG_STRICT,
-			  RECV_ATTR_STR(TLS_MGR_ATTR_CACHE_TYPE, cache_type),
-			  RECV_ATTR_STR(TLS_MGR_ATTR_CACHE_ID, cache_id),
-			  RECV_ATTR_DATA(TLS_MGR_ATTR_SESSION, buffer),
+			  ATTR_TYPE_STR, TLS_MGR_ATTR_CACHE_TYPE, cache_type,
+			  ATTR_TYPE_STR, TLS_MGR_ATTR_CACHE_ID, cache_id,
+			  ATTR_TYPE_DATA, TLS_MGR_ATTR_SESSION, buffer,
 			  ATTR_TYPE_END) == 3) {
 		for (ent = cache_table; ent->cache_label; ++ent)
 		    if (strcmp(ent->cache_label, STR(cache_type)) == 0)
@@ -687,7 +682,7 @@ static void tlsmgr_service(VSTREAM *client_stream, char *unused_service,
 		}
 	    }
 	    attr_print(client_stream, ATTR_FLAG_NONE,
-		       SEND_ATTR_INT(MAIL_ATTR_STATUS, status),
+		       ATTR_TYPE_INT, MAIL_ATTR_STATUS, status,
 		       ATTR_TYPE_END);
 	}
 
@@ -696,8 +691,8 @@ static void tlsmgr_service(VSTREAM *client_stream, char *unused_service,
 	 */
 	else if (STREQ(STR(request), TLS_MGR_REQ_DELETE)) {
 	    if (attr_scan(client_stream, ATTR_FLAG_STRICT,
-			  RECV_ATTR_STR(TLS_MGR_ATTR_CACHE_TYPE, cache_type),
-			  RECV_ATTR_STR(TLS_MGR_ATTR_CACHE_ID, cache_id),
+			  ATTR_TYPE_STR, TLS_MGR_ATTR_CACHE_TYPE, cache_type,
+			  ATTR_TYPE_STR, TLS_MGR_ATTR_CACHE_ID, cache_id,
 			  ATTR_TYPE_END) == 2) {
 		for (ent = cache_table; ent->cache_label; ++ent)
 		    if (strcmp(ent->cache_label, STR(cache_type)) == 0)
@@ -712,7 +707,7 @@ static void tlsmgr_service(VSTREAM *client_stream, char *unused_service,
 		}
 	    }
 	    attr_print(client_stream, ATTR_FLAG_NONE,
-		       SEND_ATTR_INT(MAIL_ATTR_STATUS, status),
+		       ATTR_TYPE_INT, MAIL_ATTR_STATUS, status,
 		       ATTR_TYPE_END);
 	}
 
@@ -721,7 +716,7 @@ static void tlsmgr_service(VSTREAM *client_stream, char *unused_service,
 	 */
 	else if (STREQ(STR(request), TLS_MGR_REQ_TKTKEY)) {
 	    if (attr_scan(client_stream, ATTR_FLAG_STRICT,
-			  RECV_ATTR_DATA(TLS_MGR_ATTR_KEYNAME, buffer),
+			  ATTR_TYPE_DATA, TLS_MGR_ATTR_KEYNAME, buffer,
 			  ATTR_TYPE_END) == 1) {
 		if (LEN(buffer) != 0 && LEN(buffer) != TLS_TICKET_NAMELEN) {
 		    msg_warn("invalid session ticket key name length: %ld",
@@ -735,9 +730,9 @@ static void tlsmgr_service(VSTREAM *client_stream, char *unused_service,
 		}
 	    }
 	    attr_print(client_stream, ATTR_FLAG_NONE,
-		       SEND_ATTR_INT(MAIL_ATTR_STATUS, status),
-		       SEND_ATTR_DATA(TLS_MGR_ATTR_KEYBUF,
-				      LEN(buffer), STR(buffer)),
+		       ATTR_TYPE_INT, MAIL_ATTR_STATUS, status,
+		       ATTR_TYPE_DATA, TLS_MGR_ATTR_KEYBUF,
+		       LEN(buffer), STR(buffer),
 		       ATTR_TYPE_END);
 	}
 
@@ -746,7 +741,7 @@ static void tlsmgr_service(VSTREAM *client_stream, char *unused_service,
 	 */
 	else if (STREQ(STR(request), TLS_MGR_REQ_SEED)) {
 	    if (attr_scan(client_stream, ATTR_FLAG_STRICT,
-			  RECV_ATTR_INT(TLS_MGR_ATTR_SIZE, &len),
+			  ATTR_TYPE_INT, TLS_MGR_ATTR_SIZE, &len,
 			  ATTR_TYPE_END) == 1) {
 		VSTRING_RESET(buffer);
 		if (len <= 0 || len > 255) {
@@ -761,9 +756,9 @@ static void tlsmgr_service(VSTREAM *client_stream, char *unused_service,
 		}
 	    }
 	    attr_print(client_stream, ATTR_FLAG_NONE,
-		       SEND_ATTR_INT(MAIL_ATTR_STATUS, status),
-		       SEND_ATTR_DATA(TLS_MGR_ATTR_SEED,
-				      LEN(buffer), STR(buffer)),
+		       ATTR_TYPE_INT, MAIL_ATTR_STATUS, status,
+		       ATTR_TYPE_DATA, TLS_MGR_ATTR_SEED,
+		       LEN(buffer), STR(buffer),
 		       ATTR_TYPE_END);
 	}
 
@@ -775,7 +770,7 @@ static void tlsmgr_service(VSTREAM *client_stream, char *unused_service,
 	    int     timeout = 0;
 
 	    if (attr_scan(client_stream, ATTR_FLAG_STRICT,
-			  RECV_ATTR_STR(TLS_MGR_ATTR_CACHE_TYPE, cache_type),
+			  ATTR_TYPE_STR, TLS_MGR_ATTR_CACHE_TYPE, cache_type,
 			  ATTR_TYPE_END) == 1) {
 		for (ent = cache_table; ent->cache_label; ++ent)
 		    if (strcmp(ent->cache_label, STR(cache_type)) == 0)
@@ -790,9 +785,9 @@ static void tlsmgr_service(VSTREAM *client_stream, char *unused_service,
 		}
 	    }
 	    attr_print(client_stream, ATTR_FLAG_NONE,
-		       SEND_ATTR_INT(MAIL_ATTR_STATUS, status),
-		       SEND_ATTR_INT(TLS_MGR_ATTR_CACHABLE, cachable),
-		       SEND_ATTR_INT(TLS_MGR_ATTR_SESSTOUT, timeout),
+		       ATTR_TYPE_INT, MAIL_ATTR_STATUS, status,
+		       ATTR_TYPE_INT, TLS_MGR_ATTR_CACHABLE, cachable,
+		       ATTR_TYPE_INT, TLS_MGR_ATTR_SESSTOUT, timeout,
 		       ATTR_TYPE_END);
 	}
 
@@ -820,7 +815,7 @@ static void tlsmgr_service(VSTREAM *client_stream, char *unused_service,
      */
     else {
 	attr_print(client_stream, ATTR_FLAG_NONE,
-		   SEND_ATTR_INT(MAIL_ATTR_STATUS, TLS_MGR_STAT_FAIL),
+		   ATTR_TYPE_INT, MAIL_ATTR_STATUS, TLS_MGR_STAT_FAIL,
 		   ATTR_TYPE_END);
     }
     vstream_fflush(client_stream);
@@ -945,7 +940,7 @@ static void tlsmgr_pre_init(char *unused_name, char **unused_argv)
 				*ent->cache_timeout);
 	}
     }
-    htable_free(dup_filter, (void (*) (void *)) 0);
+    htable_free(dup_filter, (void (*) (char *)) 0);
 
     /*
      * Clean up and restore privilege.
@@ -998,7 +993,7 @@ static void tlsmgr_post_init(char *unused_name, char **unused_argv)
      */
     for (ent = cache_table; ent->cache_label; ++ent)
 	if (ent->cache_info)
-	    tlsmgr_cache_run_event(NULL_EVENT, (void *) ent);
+	    tlsmgr_cache_run_event(NULL_EVENT, (char *) ent);
 }
 
 /* tlsmgr_before_exit - save PRNG state before exit */
@@ -1053,14 +1048,14 @@ int     main(int argc, char **argv)
      * monitoring our service port while this process runs.
      */
     multi_server_main(argc, argv, tlsmgr_service,
-		      CA_MAIL_SERVER_TIME_TABLE(time_table),
-		      CA_MAIL_SERVER_INT_TABLE(int_table),
-		      CA_MAIL_SERVER_STR_TABLE(str_table),
-		      CA_MAIL_SERVER_PRE_INIT(tlsmgr_pre_init),
-		      CA_MAIL_SERVER_POST_INIT(tlsmgr_post_init),
-		      CA_MAIL_SERVER_EXIT(tlsmgr_before_exit),
-		      CA_MAIL_SERVER_LOOP(tlsmgr_loop),
-		      CA_MAIL_SERVER_SOLITARY,
+		      MAIL_SERVER_TIME_TABLE, time_table,
+		      MAIL_SERVER_INT_TABLE, int_table,
+		      MAIL_SERVER_STR_TABLE, str_table,
+		      MAIL_SERVER_PRE_INIT, tlsmgr_pre_init,
+		      MAIL_SERVER_POST_INIT, tlsmgr_post_init,
+		      MAIL_SERVER_EXIT, tlsmgr_before_exit,
+		      MAIL_SERVER_LOOP, tlsmgr_loop,
+		      MAIL_SERVER_SOLITARY,
 		      0);
 }
 

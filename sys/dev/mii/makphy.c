@@ -1,4 +1,4 @@
-/*	$NetBSD: makphy.c,v 1.42 2016/11/08 08:48:35 msaitoh Exp $	*/
+/*	$NetBSD: makphy.c,v 1.40.2.1 2016/12/12 07:04:31 snj Exp $	*/
 
 /*-
  * Copyright (c) 1998, 1999, 2000, 2001 The NetBSD Foundation, Inc.
@@ -59,7 +59,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: makphy.c,v 1.42 2016/11/08 08:48:35 msaitoh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: makphy.c,v 1.40.2.1 2016/12/12 07:04:31 snj Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -191,7 +191,8 @@ makphyattach(device_t parent, device_t self, void *aux)
 
 	PHY_RESET(sc);
 
-	sc->mii_capabilities = PHY_READ(sc, MII_BMSR) & ma->mii_capmask;
+	sc->mii_capabilities =
+	    PHY_READ(sc, MII_BMSR) & ma->mii_capmask;
 	if (sc->mii_capabilities & BMSR_EXTSTAT)
 		sc->mii_extcapabilities = PHY_READ(sc, MII_EXTSR);
 

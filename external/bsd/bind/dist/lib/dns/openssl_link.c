@@ -1,4 +1,4 @@
-/*	$NetBSD: openssl_link.c,v 1.13 2016/05/26 16:49:58 christos Exp $	*/
+/*	$NetBSD: openssl_link.c,v 1.10.2.2 2016/10/14 12:01:28 martin Exp $	*/
 
 /*
  * Portions Copyright (C) 2004-2012, 2014-2016  Internet Systems Consortium, Inc. ("ISC")

@@ -1,4 +1,4 @@
-/*	$NetBSD: ixdp425_machdep.c,v 1.37 2016/12/22 14:47:55 cherry Exp $ */
+/*	$NetBSD: ixdp425_machdep.c,v 1.34 2013/08/18 15:58:20 matt Exp $ */
 /*
  * Copyright (c) 2003
  *	Ichiro FUKUHARA <ichiro@ichiro.org>.
@@ -64,7 +64,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ixdp425_machdep.c,v 1.37 2016/12/22 14:47:55 cherry Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ixdp425_machdep.c,v 1.34 2013/08/18 15:58:20 matt Exp $");
 
 #include "opt_ddb.h"
 #include "opt_kgdb.h"
@@ -125,16 +125,16 @@ BootConfig bootconfig;		/* Boot config storage */
 char *boot_args = NULL;
 char *boot_file = NULL;
 
-vaddr_t physical_start;
-vaddr_t physical_freestart;
-vaddr_t physical_freeend;
-vaddr_t physical_end;
+vm_offset_t physical_start;
+vm_offset_t physical_freestart;
+vm_offset_t physical_freeend;
+vm_offset_t physical_end;
 u_int free_pages;
 
 /* Physical and virtual addresses for some global pages */
 pv_addr_t minidataclean;
 
-paddr_t msgbufphys;
+vm_offset_t msgbufphys;
 
 extern int end;
 
@@ -709,7 +709,7 @@ initarm(void *arg)
 #ifdef VERBOSE_INIT_ARM
 	printf("page ");
 #endif
-	uvm_md_init();
+	uvm_setpagesize();	/* initialize PAGE_SIZE-dependent variables */
 	uvm_page_physload(atop(physical_freestart), atop(physical_freeend),
 	    atop(physical_freestart), atop(physical_freeend),
 	    VM_FREELIST_DEFAULT);
@@ -726,7 +726,7 @@ initarm(void *arg)
 #endif
 	ixp425_intr_init();
 #ifdef VERBOSE_INIT_ARM
-	printf("\nAll initialization done!\nNow Starting NetBSD, Here we go!\n");
+	printf("\nAll initialize done!\nNow Starting NetBSD, Hear we go!\n");
 #endif
 
 #ifdef BOOTHOWTO

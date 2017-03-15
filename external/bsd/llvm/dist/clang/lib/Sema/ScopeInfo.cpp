@@ -28,22 +28,14 @@ void FunctionScopeInfo::Clear() {
   HasBranchIntoScope = false;
   HasIndirectGoto = false;
   HasDroppedStmt = false;
-  HasOMPDeclareReductionCombiner = false;
-  HasFallthroughStmt = false;
-  HasPotentialAvailabilityViolations = false;
   ObjCShouldCallSuper = false;
   ObjCIsDesignatedInit = false;
   ObjCWarnForNoDesignatedInitChain = false;
   ObjCIsSecondaryInit = false;
   ObjCWarnForNoInitDelegation = false;
-  FirstReturnLoc = SourceLocation();
-  FirstCXXTryLoc = SourceLocation();
-  FirstSEHTryLoc = SourceLocation();
 
   SwitchStack.clear();
   Returns.clear();
-  CoroutinePromise = nullptr;
-  CoroutineStmts.clear();
   ErrorTrap.reset();
   PossiblyUnreachableDiags.clear();
   WeakObjectUses.clear();
@@ -88,13 +80,11 @@ FunctionScopeInfo::WeakObjectProfileTy::getBaseInfo(const Expr *E) {
     if (BaseProp) {
       D = getBestPropertyDecl(BaseProp);
 
-      if (BaseProp->isObjectReceiver()) {
-        const Expr *DoubleBase = BaseProp->getBase();
-        if (const OpaqueValueExpr *OVE = dyn_cast<OpaqueValueExpr>(DoubleBase))
-          DoubleBase = OVE->getSourceExpr();
+      const Expr *DoubleBase = BaseProp->getBase();
+      if (const OpaqueValueExpr *OVE = dyn_cast<OpaqueValueExpr>(DoubleBase))
+        DoubleBase = OVE->getSourceExpr();
 
-        IsExact = DoubleBase->isObjCSelfExpr();
-      }
+      IsExact = DoubleBase->isObjCSelfExpr();
     }
     break;
   }
@@ -217,7 +207,7 @@ void FunctionScopeInfo::markSafeWeakUse(const Expr *E) {
 
   // Has there been a read from the object using this Expr?
   FunctionScopeInfo::WeakUseVector::reverse_iterator ThisUse =
-      llvm::find(llvm::reverse(Uses->second), WeakUseTy(E, true));
+    std::find(Uses->second.rbegin(), Uses->second.rend(), WeakUseTy(E, true));
   if (ThisUse == Uses->second.rend())
     return;
 
@@ -242,4 +232,5 @@ void LambdaScopeInfo::getPotentialVariableCapture(unsigned Idx, VarDecl *&VD,
 
 FunctionScopeInfo::~FunctionScopeInfo() { }
 BlockScopeInfo::~BlockScopeInfo() { }
+LambdaScopeInfo::~LambdaScopeInfo() { }
 CapturedRegionScopeInfo::~CapturedRegionScopeInfo() { }

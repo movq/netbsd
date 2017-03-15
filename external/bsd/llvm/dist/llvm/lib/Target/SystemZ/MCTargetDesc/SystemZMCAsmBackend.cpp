@@ -25,14 +25,11 @@ static uint64_t extractBitsForFixup(MCFixupKind Kind, uint64_t Value) {
     return Value;
 
   switch (unsigned(Kind)) {
-  case SystemZ::FK_390_PC12DBL:
   case SystemZ::FK_390_PC16DBL:
-  case SystemZ::FK_390_PC24DBL:
   case SystemZ::FK_390_PC32DBL:
+  case SystemZ::FK_390_PLT16DBL:
+  case SystemZ::FK_390_PLT32DBL:
     return (int64_t)Value / 2;
-
-  case SystemZ::FK_390_TLS_CALL:
-    return 0;
   }
 
   llvm_unreachable("Unknown fixup kind!");
@@ -60,12 +57,11 @@ public:
                             const MCAsmLayout &Layout) const override {
     return false;
   }
-  void relaxInstruction(const MCInst &Inst, const MCSubtargetInfo &STI,
-                        MCInst &Res) const override {
+  void relaxInstruction(const MCInst &Inst, MCInst &Res) const override {
     llvm_unreachable("SystemZ does do not have assembler relaxation");
   }
   bool writeNopData(uint64_t Count, MCObjectWriter *OW) const override;
-  MCObjectWriter *createObjectWriter(raw_pwrite_stream &OS) const override {
+  MCObjectWriter *createObjectWriter(raw_ostream &OS) const override {
     return createSystemZObjectWriter(OS, OSABI);
   }
 };
@@ -74,11 +70,10 @@ public:
 const MCFixupKindInfo &
 SystemZMCAsmBackend::getFixupKindInfo(MCFixupKind Kind) const {
   const static MCFixupKindInfo Infos[SystemZ::NumTargetFixupKinds] = {
-    { "FK_390_PC12DBL",  4, 12, MCFixupKindInfo::FKF_IsPCRel },
     { "FK_390_PC16DBL",  0, 16, MCFixupKindInfo::FKF_IsPCRel },
-    { "FK_390_PC24DBL",  0, 24, MCFixupKindInfo::FKF_IsPCRel },
     { "FK_390_PC32DBL",  0, 32, MCFixupKindInfo::FKF_IsPCRel },
-    { "FK_390_TLS_CALL", 0, 0, 0 }
+    { "FK_390_PLT16DBL", 0, 16, MCFixupKindInfo::FKF_IsPCRel },
+    { "FK_390_PLT32DBL", 0, 32, MCFixupKindInfo::FKF_IsPCRel }
   };
 
   if (Kind < FirstTargetFixupKind)
@@ -94,15 +89,12 @@ void SystemZMCAsmBackend::applyFixup(const MCFixup &Fixup, char *Data,
                                      bool IsPCRel) const {
   MCFixupKind Kind = Fixup.getKind();
   unsigned Offset = Fixup.getOffset();
-  unsigned BitSize = getFixupKindInfo(Kind).TargetSize;
-  unsigned Size = (BitSize + 7) / 8;
+  unsigned Size = (getFixupKindInfo(Kind).TargetSize + 7) / 8;
 
   assert(Offset + Size <= DataSize && "Invalid fixup offset!");
 
   // Big-endian insertion of Size bytes.
   Value = extractBitsForFixup(Kind, Value);
-  if (BitSize < 64)
-    Value &= ((uint64_t)1 << BitSize) - 1;
   unsigned ShiftValue = (Size * 8) - 8;
   for (unsigned I = 0; I != Size; ++I) {
     Data[Offset + I] |= uint8_t(Value >> ShiftValue);
@@ -113,14 +105,13 @@ void SystemZMCAsmBackend::applyFixup(const MCFixup &Fixup, char *Data,
 bool SystemZMCAsmBackend::writeNopData(uint64_t Count,
                                        MCObjectWriter *OW) const {
   for (uint64_t I = 0; I != Count; ++I)
-    OW->write8(7);
+    OW->Write8(7);
   return true;
 }
 
 MCAsmBackend *llvm::createSystemZMCAsmBackend(const Target &T,
                                               const MCRegisterInfo &MRI,
-                                              const Triple &TT, StringRef CPU,
-                                              const MCTargetOptions &Options) {
-  uint8_t OSABI = MCELFObjectTargetWriter::getOSABI(TT.getOS());
+                                              StringRef TT, StringRef CPU) {
+  uint8_t OSABI = MCELFObjectTargetWriter::getOSABI(Triple(TT).getOS());
   return new SystemZMCAsmBackend(OSABI);
 }

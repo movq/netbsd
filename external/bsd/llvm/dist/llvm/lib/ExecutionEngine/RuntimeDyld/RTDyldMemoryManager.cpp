@@ -41,8 +41,8 @@ RTDyldMemoryManager::~RTDyldMemoryManager() {}
 #endif
 
 #if HAVE_EHTABLE_SUPPORT
-extern "C" void __register_frame(void *);
-extern "C" void __deregister_frame(void *);
+extern "C" void __register_frame(void*);
+extern "C" void __deregister_frame(void*);
 #else
 // The building compiler does not have __(de)register_frame but
 // it may be found at runtime in a dynamically-loaded library.
@@ -50,28 +50,28 @@ extern "C" void __deregister_frame(void *);
 // but using the MingW runtime.
 void __register_frame(void *p) {
   static bool Searched = false;
-  static void((*rf)(void *)) = 0;
+  static void *rf = 0;
 
   if (!Searched) {
     Searched = true;
-    *(void **)&rf =
-        llvm::sys::DynamicLibrary::SearchForAddressOfSymbol("__register_frame");
+    rf = llvm::sys::DynamicLibrary::SearchForAddressOfSymbol(
+                                                      "__register_frame");
   }
   if (rf)
-    rf(p);
+    ((void (*)(void *))rf)(p);
 }
 
 void __deregister_frame(void *p) {
   static bool Searched = false;
-  static void((*df)(void *)) = 0;
+  static void *df = 0;
 
   if (!Searched) {
     Searched = true;
-    *(void **)&df = llvm::sys::DynamicLibrary::SearchForAddressOfSymbol(
-        "__deregister_frame");
+    df = llvm::sys::DynamicLibrary::SearchForAddressOfSymbol(
+                                                      "__deregister_frame");
   }
   if (df)
-    df(p);
+    ((void (*)(void *))df)(p);
 }
 #endif
 
@@ -94,11 +94,11 @@ static const char *processFDE(const char *Entry, bool isDeregister) {
 // This implementation handles frame registration for local targets.
 // Memory managers for remote targets should re-implement this function
 // and use the LoadAddr parameter.
-void RTDyldMemoryManager::registerEHFramesInProcess(uint8_t *Addr,
-                                                    size_t Size) {
+void RTDyldMemoryManager::registerEHFrames(uint8_t *Addr,
+                                           uint64_t LoadAddr,
+                                           size_t Size) {
   // On OS X OS X __register_frame takes a single FDE as an argument.
-  // See http://lists.llvm.org/pipermail/llvm-dev/2013-April/061737.html
-  // and projects/libunwind/src/UnwindLevel1-gcc-ext.c.
+  // See http://lists.cs.uiuc.edu/pipermail/llvmdev/2013-April/061768.html
   const char *P = (const char *)Addr;
   const char *End = P + Size;
   do  {
@@ -106,8 +106,9 @@ void RTDyldMemoryManager::registerEHFramesInProcess(uint8_t *Addr,
   } while(P != End);
 }
 
-void RTDyldMemoryManager::deregisterEHFramesInProcess(uint8_t *Addr,
-                                                      size_t Size) {
+void RTDyldMemoryManager::deregisterEHFrames(uint8_t *Addr,
+                                           uint64_t LoadAddr,
+                                           size_t Size) {
   const char *P = (const char *)Addr;
   const char *End = P + Size;
   do  {
@@ -117,8 +118,9 @@ void RTDyldMemoryManager::deregisterEHFramesInProcess(uint8_t *Addr,
 
 #else
 
-void RTDyldMemoryManager::registerEHFramesInProcess(uint8_t *Addr,
-                                                    size_t Size) {
+void RTDyldMemoryManager::registerEHFrames(uint8_t *Addr,
+                                           uint64_t LoadAddr,
+                                           size_t Size) {
   // On Linux __register_frame takes a single argument: 
   // a pointer to the start of the .eh_frame section.
 
@@ -127,8 +129,9 @@ void RTDyldMemoryManager::registerEHFramesInProcess(uint8_t *Addr,
   __register_frame(Addr);
 }
 
-void RTDyldMemoryManager::deregisterEHFramesInProcess(uint8_t *Addr,
-                                                      size_t Size) {
+void RTDyldMemoryManager::deregisterEHFrames(uint8_t *Addr,
+                                           uint64_t LoadAddr,
+                                           size_t Size) {
   __deregister_frame(Addr);
 }
 
@@ -263,15 +266,18 @@ RTDyldMemoryManager::getSymbolAddressInProcess(const std::string &Name) {
   // is called before ExecutionEngine::runFunctionAsMain() is called.
   if (Name == "__main") return (uint64_t)&jit_noop;
 
+  // Try to demangle Name before looking it up in the process, otherwise symbol
+  // '_<Name>' (if present) will shadow '<Name>', and there will be no way to
+  // refer to the latter.
+
   const char *NameStr = Name.c_str();
 
-  // DynamicLibrary::SearchForAddresOfSymbol expects an unmangled 'C' symbol
-  // name so ff we're on Darwin, strip the leading '_' off.
-#ifdef __APPLE__
   if (NameStr[0] == '_')
-    ++NameStr;
-#endif
+    if (void *Ptr = sys::DynamicLibrary::SearchForAddressOfSymbol(NameStr + 1))
+      return (uint64_t)Ptr;
 
+  // If we Name did not require demangling, or we failed to find the demangled
+  // name, try again without demangling.
   return (uint64_t)sys::DynamicLibrary::SearchForAddressOfSymbol(NameStr);
 }
 
@@ -282,7 +288,6 @@ void *RTDyldMemoryManager::getPointerToNamedFunction(const std::string &Name,
   if (!Addr && AbortOnFailure)
     report_fatal_error("Program used external function '" + Name +
                        "' which could not be resolved!");
-
   return (void*)Addr;
 }
 

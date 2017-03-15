@@ -31,14 +31,14 @@
 # OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
 # SUCH DAMAGE.
 
-use Getopt::Std;
+require 'getopts.pl';
 
 my $output;
 my $CFILE, $HFILE;
 my $onlybase;
 my $header = 0;
 
-getopts('b:h') || die "USAGE: ./gen-oid [-b BASE] [-h HEADER]";
+Getopts('b:h') || die "foo";
 
 if($opt_b) {
     $onlybase = $opt_b;
@@ -122,15 +122,15 @@ while(<>) {
 
 }
 
-foreach my $k (sort keys %types) {
+foreach my $k (keys %types) {
     if (!$header) {
 	print "struct _gss_oid_name_table _gss_ont_" . $k . "[] = {\n";
-	foreach my $m (sort {$$a->{oid} cmp $$b->{oid}} values %tables) {
+	foreach my $m (values %tables) {
 	    if ($$m->{type} eq $k) {
 		printf "  { %s, \"%s\", %s, %s },\n", $$m->{oid}, $$m->{oid}, $$m->{short}, $$m->{long};
 	    }
 	}
-	printf "  { NULL, NULL, NULL, NULL }\n";
+	printf "  { NULL }\n";
 	printf "};\n\n";
 	
     }

@@ -1,4 +1,4 @@
-/*	$NetBSD: nslookup.c,v 1.12 2015/12/17 04:00:40 christos Exp $	*/
+/*	$NetBSD: nslookup.c,v 1.9.2.2 2016/03/13 08:06:02 martin Exp $	*/
 
 /*
  * Copyright (C) 2004-2015  Internet Systems Consortium, Inc. ("ISC")

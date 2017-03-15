@@ -53,6 +53,7 @@ case "$ac_res" in
 	;;
 	*)
 	eval "ac_cv_func_$1=yes"
+	eval "ac_cv_lib_`echo "$ac_res" | sed 's/-l//'`=yes"
 	AC_DEFINE_UNQUOTED($ac_tr_func)
 	AC_DEFINE_UNQUOTED($ac_tr_lib)
 	AC_MSG_RESULT([yes, in $ac_res])

@@ -1,4 +1,4 @@
-/*	$NetBSD: cryptodev.c,v 1.85 2016/07/07 06:55:43 msaitoh Exp $ */
+/*	$NetBSD: cryptodev.c,v 1.80 2014/08/04 14:17:18 skrll Exp $ */
 /*	$FreeBSD: src/sys/opencrypto/cryptodev.c,v 1.4.2.4 2003/06/03 00:09:02 sam Exp $	*/
 /*	$OpenBSD: cryptodev.c,v 1.53 2002/07/10 22:21:30 mickey Exp $	*/
 
@@ -64,7 +64,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: cryptodev.c,v 1.85 2016/07/07 06:55:43 msaitoh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: cryptodev.c,v 1.80 2014/08/04 14:17:18 skrll Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -95,8 +95,6 @@ __KERNEL_RCSID(0, "$NetBSD: cryptodev.c,v 1.85 2016/07/07 06:55:43 msaitoh Exp $
 #include <opencrypto/cryptodev.h>
 #include <opencrypto/cryptodev_internal.h>
 #include <opencrypto/xform.h>
-
-#include "ioconf.h"
 
 struct csession {
 	TAILQ_ENTRY(csession) next;
@@ -222,7 +220,7 @@ cryptof_write(file_t *fp, off_t *poff,
 int
 cryptof_ioctl(struct file *fp, u_long cmd, void *data)
 {
-	struct fcrypt *fcr = fp->f_fcrypt;
+	struct fcrypt *fcr = fp->f_data;
 	struct csession *cse;
 	struct session_op *sop;
 	struct session_n_op *snop;
@@ -357,7 +355,7 @@ mbail:
 			}
 		}
 		kmem_free(cnop, (mop->count * sizeof(struct crypt_n_op)));
-		break;
+		break;		
 	case CIOCKEY:
 		error = cryptodev_key((struct crypt_kop *)data);
 		DPRINTF(("cryptodev_key error = %d\n", error));
@@ -410,7 +408,7 @@ reterr:
 		kmem_free(crypt_res, (count * sizeof(struct crypt_result)));
 		break;
 	case CIOCNCRYPTRET:
-		error = cryptodev_getstatus(fcr, (struct crypt_result *)data);
+		error = cryptodev_getstatus(fcr, (struct crypt_result *)data); 
 		break;
 	default:
 #ifdef COMPAT_50
@@ -697,7 +695,7 @@ eagain:
 	/* let the user know how much data was returned */
 	if (crp->crp_olen) {
 		if (crp->crp_olen > (cop->dst_len ? cop->dst_len : cop->len)) {
-			error = ENOSPC;
+			error = ENOMEM;
 			goto bail;
 		}
 		dst_len = cop->dst_len = crp->crp_olen;
@@ -944,7 +942,7 @@ fail:
 static int
 cryptof_close(struct file *fp)
 {
-	struct fcrypt *fcr = fp->f_fcrypt;
+	struct fcrypt *fcr = fp->f_data;
 	struct csession *cse;
 
 	mutex_enter(&crypto_mtx);
@@ -955,7 +953,7 @@ cryptof_close(struct file *fp)
 		mutex_enter(&crypto_mtx);
 	}
 	seldestroy(&fcr->sinfo);
-	fp->f_fcrypt = NULL;
+	fp->f_data = NULL;
 	crypto_refcount--;
 	mutex_exit(&crypto_mtx);
 
@@ -1429,7 +1427,7 @@ cryptodev_mkey(struct fcrypt *fcr, struct crypt_n_kop *kop, int count)
 			continue;
 		case CRK_MOD_MULT:
 			if (in == 3 && out == 1)
-				break;
+				break;	
 			kop[req].crk_status = EINVAL;
 			continue;
 		case CRK_MOD_MULTINV:
@@ -1711,7 +1709,7 @@ cryptodev_session(struct fcrypt *fcr, struct session_op *sop)
 
 	error = crypto_newsession(&sid, crihead, crypto_devallowsoft);
 	if (!error) {
-		DPRINTF(("cryptodev_session: got session %d\n", (uint32_t)sid));
+		DPRINTF(("cyrptodev_session: got session %d\n", (uint32_t)sid));
 		cse = csecreate(fcr, sid, crie.cri_key, crie.cri_klen,
 		    cria.cri_key, cria.cri_klen, (txform ? sop->cipher : 0), sop->mac,
 		    (tcomp ? sop->comp_alg : 0), txform, thash, tcomp);
@@ -1933,7 +1931,7 @@ fail:
 		}
 	}
 
-	return completed;
+	return completed;	
 }
 
 static int
@@ -1944,7 +1942,7 @@ cryptodev_getstatus (struct fcrypt *fcr, struct crypt_result *crypt_res)
         struct csession *cse;
         int i, size, req = 0;
 
-	mutex_enter(&crypto_mtx);
+	mutex_enter(&crypto_mtx);		
 	/* Here we dont know for which request the user is requesting the 
 	 * response so checking in both the queues */
 	TAILQ_FOREACH_SAFE(crp, &fcr->crp_ret_mq, crp_next, cnext) {
@@ -2033,13 +2031,13 @@ fail:
 		}
 	}
 	mutex_exit(&crypto_mtx);
-	return EINPROGRESS;
+	return EINPROGRESS;			
 }
 
 static int      
 cryptof_stat(struct file *fp, struct stat *st)
 {
-	struct fcrypt *fcr = fp->f_fcrypt;
+	struct fcrypt *fcr = fp->f_data;
 
 	(void)memset(st, 0, sizeof(*st));
 
@@ -2058,7 +2056,7 @@ cryptof_stat(struct file *fp, struct stat *st)
 static int      
 cryptof_poll(struct file *fp, int events)
 {
-	struct fcrypt *fcr = fp->f_fcrypt;
+	struct fcrypt *fcr = (struct fcrypt *)fp->f_data;
 	int revents = 0;
 
 	if (!(events & (POLLIN | POLLRDNORM))) {
@@ -2082,6 +2080,8 @@ cryptof_poll(struct file *fp, int events)
 /*
  * Pseudo-device initialization routine for /dev/crypto
  */
+void	cryptoattach(int);
+
 void
 cryptoattach(int num)
 {

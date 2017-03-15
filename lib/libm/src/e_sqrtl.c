@@ -28,7 +28,7 @@
 #if 0
 __FBSDID("$FreeBSD: head/lib/msun/src/e_sqrtl.c 176720 2008-03-02 01:47:58Z das $");
 #endif
-__RCSID("$NetBSD: e_sqrtl.c,v 1.5 2016/08/26 08:31:17 christos Exp $");
+__RCSID("$NetBSD: e_sqrtl.c,v 1.4 2013/11/22 20:15:06 martin Exp $");
 
 #include <machine/ieee.h>
 #include <float.h>
@@ -38,14 +38,15 @@ __RCSID("$NetBSD: e_sqrtl.c,v 1.5 2016/08/26 08:31:17 christos Exp $");
 
 #ifdef __HAVE_LONG_DOUBLE
 
-#define __TEST_FENV
+#ifdef HAVE_FENV_H
 #include <fenv.h>
+#endif
 
 #ifdef LDBL_IMPLICIT_NBIT
 #define	LDBL_NBIT	0
 #endif
 
-#ifdef __HAVE_FENV
+#ifdef HAVE_FENV_H
 
 /* Return (x + ulp) for normal positive x. Assumes no overflow. */
 static inline long double
@@ -166,7 +167,7 @@ __ieee754_sqrtl(long double x)
 	return (ux.extu_ld);
 }
 
-#else /* !__HAVE_FENV */
+#else
 
 /*
  * No fenv support:
@@ -178,6 +179,6 @@ __ieee754_sqrtl(long double x)
 	return __ieee754_sqrt((double)x);
 }
 
-#endif /* __HAVE_FENV */
+#endif
 
-#endif /* __HAVE_LONG_DOUBLE */
+#endif

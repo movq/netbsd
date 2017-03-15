@@ -1,4 +1,4 @@
-/* $NetBSD: ibmcd.c,v 1.3 2017/01/20 12:25:07 maya Exp $ */
+/* $NetBSD: ibmcd.c,v 1.1 2012/12/17 20:38:00 mbalmer Exp $ */
 
 /*
  * Copyright (c) 2012 Marc Balmer <marc@msys.ch>
@@ -102,7 +102,6 @@ ibmcd_attach(device_t parent, device_t self, void *aux)
 	struct gpiobus_attach_args gba;
 	pcireg_t memtype;
 
-	aprint_naive("\n");
 	memtype = pci_mapreg_type(pa->pa_pc, pa->pa_tag, PCI_MAPREG_START);
 	if (pci_mapreg_map(pa, PCI_MAPREG_START, memtype, 0, &sc->sc_iot,
 	    &sc->sc_ioh, NULL, &sc->sc_iosize)) {
@@ -111,11 +110,10 @@ ibmcd_attach(device_t parent, device_t self, void *aux)
 		    memtype == PCI_MAPREG_TYPE_IO ? "I/O" : "memory");
 		return;
 	}
-	aprint_normal(": IBM 4810 BSP cash drawer\n");
+	printf(": IBM 4810 BSP cash drawer\n");
 
 #if (__NetBSD_Version__ >= 600000000)
-	if (!pmf_device_register(self, ibmcd_suspend, ibmcd_resume))
-		aprint_error_dev(self, "couldn't establish power handler\n");
+	pmf_device_register(self, ibmcd_suspend, ibmcd_resume);
 #endif
 	/* Initialize pins array */
 	sc->sc_gpio_pins[PIN_OPEN].pin_num = 0;

@@ -12,50 +12,116 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "clang/Sema/SemaInternal.h"
 #include "clang/AST/ASTConsumer.h"
 #include "clang/AST/Attr.h"
 #include "clang/AST/Expr.h"
 #include "clang/Basic/TargetInfo.h"
 #include "clang/Lex/Preprocessor.h"
 #include "clang/Sema/Lookup.h"
-#include "clang/Sema/SemaInternal.h"
 using namespace clang;
 
 //===----------------------------------------------------------------------===//
 // Pragma 'pack' and 'options align'
 //===----------------------------------------------------------------------===//
 
-Sema::PragmaStackSentinelRAII::PragmaStackSentinelRAII(Sema &S,
-                                                       StringRef SlotLabel,
-                                                       bool ShouldAct)
-    : S(S), SlotLabel(SlotLabel), ShouldAct(ShouldAct) {
-  if (ShouldAct) {
-    S.VtorDispStack.SentinelAction(PSK_Push, SlotLabel);
-    S.DataSegStack.SentinelAction(PSK_Push, SlotLabel);
-    S.BSSSegStack.SentinelAction(PSK_Push, SlotLabel);
-    S.ConstSegStack.SentinelAction(PSK_Push, SlotLabel);
-    S.CodeSegStack.SentinelAction(PSK_Push, SlotLabel);
+namespace {
+  struct PackStackEntry {
+    // We just use a sentinel to represent when the stack is set to mac68k
+    // alignment.
+    static const unsigned kMac68kAlignmentSentinel = ~0U;
+
+    unsigned Alignment;
+    IdentifierInfo *Name;
+  };
+
+  /// PragmaPackStack - Simple class to wrap the stack used by #pragma
+  /// pack.
+  class PragmaPackStack {
+    typedef std::vector<PackStackEntry> stack_ty;
+
+    /// Alignment - The current user specified alignment.
+    unsigned Alignment;
+
+    /// Stack - Entries in the #pragma pack stack, consisting of saved
+    /// alignments and optional names.
+    stack_ty Stack;
+
+  public:
+    PragmaPackStack() : Alignment(0) {}
+
+    void setAlignment(unsigned A) { Alignment = A; }
+    unsigned getAlignment() { return Alignment; }
+
+    /// push - Push the current alignment onto the stack, optionally
+    /// using the given \arg Name for the record, if non-zero.
+    void push(IdentifierInfo *Name) {
+      PackStackEntry PSE = { Alignment, Name };
+      Stack.push_back(PSE);
+    }
+
+    /// pop - Pop a record from the stack and restore the current
+    /// alignment to the previous value. If \arg Name is non-zero then
+    /// the first such named record is popped, otherwise the top record
+    /// is popped. Returns true if the pop succeeded.
+    bool pop(IdentifierInfo *Name, bool IsReset);
+  };
+}  // end anonymous namespace.
+
+bool PragmaPackStack::pop(IdentifierInfo *Name, bool IsReset) {
+  // If name is empty just pop top.
+  if (!Name) {
+    // An empty stack is a special case...
+    if (Stack.empty()) {
+      // If this isn't a reset, it is always an error.
+      if (!IsReset)
+        return false;
+
+      // Otherwise, it is an error only if some alignment has been set.
+      if (!Alignment)
+        return false;
+
+      // Otherwise, reset to the default alignment.
+      Alignment = 0;
+    } else {
+      Alignment = Stack.back().Alignment;
+      Stack.pop_back();
+    }
+
+    return true;
   }
+
+  // Otherwise, find the named record.
+  for (unsigned i = Stack.size(); i != 0; ) {
+    --i;
+    if (Stack[i].Name == Name) {
+      // Found it, pop up to and including this record.
+      Alignment = Stack[i].Alignment;
+      Stack.erase(Stack.begin() + i, Stack.end());
+      return true;
+    }
+  }
+
+  return false;
 }
 
-Sema::PragmaStackSentinelRAII::~PragmaStackSentinelRAII() {
-  if (ShouldAct) {
-    S.VtorDispStack.SentinelAction(PSK_Pop, SlotLabel);
-    S.DataSegStack.SentinelAction(PSK_Pop, SlotLabel);
-    S.BSSSegStack.SentinelAction(PSK_Pop, SlotLabel);
-    S.ConstSegStack.SentinelAction(PSK_Pop, SlotLabel);
-    S.CodeSegStack.SentinelAction(PSK_Pop, SlotLabel);
-  }
+
+/// FreePackedContext - Deallocate and null out PackContext.
+void Sema::FreePackedContext() {
+  delete static_cast<PragmaPackStack*>(PackContext);
+  PackContext = nullptr;
 }
 
 void Sema::AddAlignmentAttributesForRecord(RecordDecl *RD) {
-  // If there is no pack value, we don't need any attributes.
-  if (!PackStack.CurrentValue)
+  // If there is no pack context, we don't need any attributes.
+  if (!PackContext)
     return;
 
+  PragmaPackStack *Stack = static_cast<PragmaPackStack*>(PackContext);
+
   // Otherwise, check to see if we need a max field alignment attribute.
-  if (unsigned Alignment = PackStack.CurrentValue) {
-    if (Alignment == Sema::kMac68kAlignmentSentinel)
+  if (unsigned Alignment = Stack->getAlignment()) {
+    if (Alignment == PackStackEntry::kMac68kAlignmentSentinel)
       RD->addAttr(AlignMac68kAttr::CreateImplicit(Context));
     else
       RD->addAttr(MaxFieldAlignmentAttr::CreateImplicit(Context,
@@ -65,20 +131,23 @@ void Sema::AddAlignmentAttributesForRecord(RecordDecl *RD) {
 
 void Sema::AddMsStructLayoutForRecord(RecordDecl *RD) {
   if (MSStructPragmaOn)
-    RD->addAttr(MSStructAttr::CreateImplicit(Context));
+    RD->addAttr(MsStructAttr::CreateImplicit(Context));
 
   // FIXME: We should merge AddAlignmentAttributesForRecord with
   // AddMsStructLayoutForRecord into AddPragmaAttributesForRecord, which takes
   // all active pragmas and applies them as attributes to class definitions.
-  if (VtorDispStack.CurrentValue != getLangOpts().VtorDispMode)
+  if (VtorDispModeStack.back() != getLangOpts().VtorDispMode)
     RD->addAttr(
-        MSVtorDispAttr::CreateImplicit(Context, VtorDispStack.CurrentValue));
+        MSVtorDispAttr::CreateImplicit(Context, VtorDispModeStack.back()));
 }
 
 void Sema::ActOnPragmaOptionsAlign(PragmaOptionsAlignKind Kind,
                                    SourceLocation PragmaLoc) {
-  PragmaMsStackAction Action = Sema::PSK_Reset;
-  unsigned Alignment = 0;
+  if (!PackContext)
+    PackContext = new PragmaPackStack();
+
+  PragmaPackStack *Context = static_cast<PragmaPackStack*>(PackContext);
+
   switch (Kind) {
     // For all targets we support native and natural are the same.
     //
@@ -86,15 +155,15 @@ void Sema::ActOnPragmaOptionsAlign(PragmaOptionsAlignKind Kind,
   case POAK_Native:
   case POAK_Power:
   case POAK_Natural:
-    Action = Sema::PSK_Push_Set;
-    Alignment = 0;
+    Context->push(nullptr);
+    Context->setAlignment(0);
     break;
 
     // Note that '#pragma options align=packed' is not equivalent to attribute
     // packed, it has a different precedence relative to attribute aligned.
   case POAK_Packed:
-    Action = Sema::PSK_Push_Set;
-    Alignment = 1;
+    Context->push(nullptr);
+    Context->setAlignment(1);
     break;
 
   case POAK_Mac68k:
@@ -103,31 +172,24 @@ void Sema::ActOnPragmaOptionsAlign(PragmaOptionsAlignKind Kind,
       Diag(PragmaLoc, diag::err_pragma_options_align_mac68k_target_unsupported);
       return;
     }
-    Action = Sema::PSK_Push_Set;
-    Alignment = Sema::kMac68kAlignmentSentinel;
+    Context->push(nullptr);
+    Context->setAlignment(PackStackEntry::kMac68kAlignmentSentinel);
     break;
 
   case POAK_Reset:
     // Reset just pops the top of the stack, or resets the current alignment to
     // default.
-    Action = Sema::PSK_Pop;
-    if (PackStack.Stack.empty()) {
-      if (PackStack.CurrentValue) {
-        Action = Sema::PSK_Reset;
-      } else {
-        Diag(PragmaLoc, diag::warn_pragma_options_align_reset_failed)
-            << "stack empty";
-        return;
-      }
+    if (!Context->pop(nullptr, /*IsReset=*/true)) {
+      Diag(PragmaLoc, diag::warn_pragma_options_align_reset_failed)
+        << "stack empty";
     }
     break;
   }
-
-  PackStack.Act(PragmaLoc, Action, StringRef(), Alignment);
 }
 
-void Sema::ActOnPragmaPack(SourceLocation PragmaLoc, PragmaMsStackAction Action,
-                           StringRef SlotLabel, Expr *alignment) {
+void Sema::ActOnPragmaPack(PragmaPackKind Kind, IdentifierInfo *Name,
+                           Expr *alignment, SourceLocation PragmaLoc,
+                           SourceLocation LParenLoc, SourceLocation RParenLoc) {
   Expr *Alignment = static_cast<Expr *>(alignment);
 
   // If specified then alignment must be a "small" power of two.
@@ -148,48 +210,87 @@ void Sema::ActOnPragmaPack(SourceLocation PragmaLoc, PragmaMsStackAction Action,
 
     AlignmentVal = (unsigned) Val.getZExtValue();
   }
-  if (Action == Sema::PSK_Show) {
+
+  if (!PackContext)
+    PackContext = new PragmaPackStack();
+
+  PragmaPackStack *Context = static_cast<PragmaPackStack*>(PackContext);
+
+  switch (Kind) {
+  case Sema::PPK_Default: // pack([n])
+    Context->setAlignment(AlignmentVal);
+    break;
+
+  case Sema::PPK_Show: // pack(show)
     // Show the current alignment, making sure to show the right value
     // for the default.
+    AlignmentVal = Context->getAlignment();
     // FIXME: This should come from the target.
-    AlignmentVal = PackStack.CurrentValue;
     if (AlignmentVal == 0)
       AlignmentVal = 8;
-    if (AlignmentVal == Sema::kMac68kAlignmentSentinel)
+    if (AlignmentVal == PackStackEntry::kMac68kAlignmentSentinel)
       Diag(PragmaLoc, diag::warn_pragma_pack_show) << "mac68k";
     else
       Diag(PragmaLoc, diag::warn_pragma_pack_show) << AlignmentVal;
-  }
-  // MSDN, C/C++ Preprocessor Reference > Pragma Directives > pack:
-  // "#pragma pack(pop, identifier, n) is undefined"
-  if (Action & Sema::PSK_Pop) {
-    if (Alignment && !SlotLabel.empty())
-      Diag(PragmaLoc, diag::warn_pragma_pack_pop_identifer_and_alignment);
-    if (PackStack.Stack.empty())
-      Diag(PragmaLoc, diag::warn_pragma_pop_failed) << "pack" << "stack empty";
-  }
+    break;
 
-  PackStack.Act(PragmaLoc, Action, SlotLabel, AlignmentVal);
+  case Sema::PPK_Push: // pack(push [, id] [, [n])
+    Context->push(Name);
+    // Set the new alignment if specified.
+    if (Alignment)
+      Context->setAlignment(AlignmentVal);
+    break;
+
+  case Sema::PPK_Pop: // pack(pop [, id] [,  n])
+    // MSDN, C/C++ Preprocessor Reference > Pragma Directives > pack:
+    // "#pragma pack(pop, identifier, n) is undefined"
+    if (Alignment && Name)
+      Diag(PragmaLoc, diag::warn_pragma_pack_pop_identifer_and_alignment);
+
+    // Do the pop.
+    if (!Context->pop(Name, /*IsReset=*/false)) {
+      // If a name was specified then failure indicates the name
+      // wasn't found. Otherwise failure indicates the stack was
+      // empty.
+      Diag(PragmaLoc, diag::warn_pragma_pop_failed)
+          << "pack" << (Name ? "no record matching name" : "stack empty");
+
+      // FIXME: Warn about popping named records as MSVC does.
+    } else {
+      // Pop succeeded, set the new alignment if specified.
+      if (Alignment)
+        Context->setAlignment(AlignmentVal);
+    }
+    break;
+  }
 }
 
 void Sema::ActOnPragmaMSStruct(PragmaMSStructKind Kind) { 
   MSStructPragmaOn = (Kind == PMSST_ON);
 }
 
-void Sema::ActOnPragmaMSComment(SourceLocation CommentLoc,
-                                PragmaMSCommentKind Kind, StringRef Arg) {
-  auto *PCD = PragmaCommentDecl::Create(
-      Context, Context.getTranslationUnitDecl(), CommentLoc, Kind, Arg);
-  Context.getTranslationUnitDecl()->addDecl(PCD);
-  Consumer.HandleTopLevelDecl(DeclGroupRef(PCD));
+void Sema::ActOnPragmaMSComment(PragmaMSCommentKind Kind, StringRef Arg) {
+  // FIXME: Serialize this.
+  switch (Kind) {
+  case PCK_Unknown:
+    llvm_unreachable("unexpected pragma comment kind");
+  case PCK_Linker:
+    Consumer.HandleLinkerOptionPragma(Arg);
+    return;
+  case PCK_Lib:
+    Consumer.HandleDependentLibrary(Arg);
+    return;
+  case PCK_Compiler:
+  case PCK_ExeStr:
+  case PCK_User:
+    return;  // We ignore all of these.
+  }
+  llvm_unreachable("invalid pragma comment kind");
 }
 
-void Sema::ActOnPragmaDetectMismatch(SourceLocation Loc, StringRef Name,
-                                     StringRef Value) {
-  auto *PDMD = PragmaDetectMismatchDecl::Create(
-      Context, Context.getTranslationUnitDecl(), Loc, Name, Value);
-  Context.getTranslationUnitDecl()->addDecl(PDMD);
-  Consumer.HandleTopLevelDecl(DeclGroupRef(PDMD));
+void Sema::ActOnPragmaDetectMismatch(StringRef Name, StringRef Value) {
+  // FIXME: Serialize this.
+  Consumer.HandleDetectMismatch(Name, Value);
 }
 
 void Sema::ActOnPragmaMSPointersToMembers(
@@ -199,13 +300,29 @@ void Sema::ActOnPragmaMSPointersToMembers(
   ImplicitMSInheritanceAttrLoc = PragmaLoc;
 }
 
-void Sema::ActOnPragmaMSVtorDisp(PragmaMsStackAction Action,
+void Sema::ActOnPragmaMSVtorDisp(PragmaVtorDispKind Kind,
                                  SourceLocation PragmaLoc,
                                  MSVtorDispAttr::Mode Mode) {
-  if (Action & PSK_Pop && VtorDispStack.Stack.empty())
-    Diag(PragmaLoc, diag::warn_pragma_pop_failed) << "vtordisp"
-                                                  << "stack empty";
-  VtorDispStack.Act(PragmaLoc, Action, StringRef(), Mode);
+  switch (Kind) {
+  case PVDK_Set:
+    VtorDispModeStack.back() = Mode;
+    break;
+  case PVDK_Push:
+    VtorDispModeStack.push_back(Mode);
+    break;
+  case PVDK_Reset:
+    VtorDispModeStack.clear();
+    VtorDispModeStack.push_back(MSVtorDispAttr::Mode(LangOpts.VtorDispMode));
+    break;
+  case PVDK_Pop:
+    VtorDispModeStack.pop_back();
+    if (VtorDispModeStack.empty()) {
+      Diag(PragmaLoc, diag::warn_pragma_pop_failed) << "vtordisp"
+                                                    << "stack empty";
+      VtorDispModeStack.push_back(MSVtorDispAttr::Mode(LangOpts.VtorDispMode));
+    }
+    break;
+  }
 }
 
 template<typename ValueType>
@@ -214,7 +331,7 @@ void Sema::PragmaStack<ValueType>::Act(SourceLocation PragmaLocation,
                                        llvm::StringRef StackSlotLabel,
                                        ValueType Value) {
   if (Action == PSK_Reset) {
-    CurrentValue = DefaultValue;
+    CurrentValue = nullptr;
     return;
   }
   if (Action & PSK_Push)
@@ -222,9 +339,8 @@ void Sema::PragmaStack<ValueType>::Act(SourceLocation PragmaLocation,
   else if (Action & PSK_Pop) {
     if (!StackSlotLabel.empty()) {
       // If we've got a label, try to find it and jump there.
-      auto I = llvm::find_if(llvm::reverse(Stack), [&](const Slot &x) {
-        return x.StackSlotLabel == StackSlotLabel;
-      });
+      auto I = std::find_if(Stack.rbegin(), Stack.rend(),
+        [&](const Slot &x) { return x.StackSlotLabel == StackSlotLabel; });
       // If we found the label so pop from there.
       if (I != Stack.rend()) {
         CurrentValue = I->Value;
@@ -306,9 +422,6 @@ void Sema::ActOnPragmaMSSeg(SourceLocation PragmaLocation,
   if (Action & PSK_Pop && Stack->Stack.empty())
     Diag(PragmaLocation, diag::warn_pragma_pop_failed) << PragmaName
         << "stack empty";
-  if (SegmentName &&
-      !checkSectionName(SegmentName->getLocStart(), SegmentName->getString()))
-    return;
   Stack->Act(PragmaLocation, Action, StackSlotLabel, SegmentName);
 }
 
@@ -351,8 +464,7 @@ void Sema::ActOnPragmaUnused(const Token &IdTok, Scope *curScope,
   if (VD->isUsed())
     Diag(PragmaLoc, diag::warn_used_but_marked_unused) << Name;
 
-  VD->addAttr(UnusedAttr::CreateImplicit(Context, UnusedAttr::GNU_unused,
-                                         IdTok.getLocation()));
+  VD->addAttr(UnusedAttr::CreateImplicit(Context, IdTok.getLocation()));
 }
 
 void Sema::AddCFAuditedAttribute(Decl *D) {

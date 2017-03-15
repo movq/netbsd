@@ -1,4 +1,4 @@
-/*	$NetBSD: rtutil.c,v 1.8 2016/04/04 07:37:07 ozaki-r Exp $	*/
+/*	$NetBSD: rtutil.c,v 1.4.2.3 2015/01/08 11:47:11 martin Exp $	*/
 /*	$OpenBSD: show.c,v 1.1 2006/05/27 19:16:37 claudio Exp $	*/
 
 /*
@@ -33,6 +33,7 @@
 #include <sys/param.h>
 #include <sys/protosw.h>
 #include <sys/socket.h>
+#include <sys/mbuf.h>
 #include <sys/sysctl.h>
 
 #include <net/if.h>
@@ -81,19 +82,16 @@ static const struct bits bits[] = {
 	{ RTF_MODIFIED,	'M' },
 	{ RTF_DONE,	'd' }, /* Completed -- for routing messages only */
 	{ RTF_MASK,	'm' }, /* Mask Present -- for routing messages only */
-	/* { RTF_CLONING,	'C' }, */
-	{ RTF_CONNECTED, 'C' },
-	/* { RTF_XRESOLVE,	'X' }, */
-	/* { RTF_LLINFO,	'L' }, */
+	{ RTF_CLONING,	'C' },
+	{ RTF_XRESOLVE,	'X' },
+	{ RTF_LLINFO,	'L' },
 	{ RTF_STATIC,	'S' },
 	{ RTF_PROTO1,	'1' },
 	{ RTF_PROTO2,	'2' },
 	/* { RTF_PROTO3,	'3' }, */
-	/* { RTF_CLONED,	'c' }, */
+	{ RTF_CLONED,	'c' },
 	/* { RTF_JUMBO,	'J' }, */
 	{ RTF_ANNOUNCE,	'p' },
-	{ RTF_LOCAL, 'l'},
-	{ RTF_BROADCAST, 'b'},
 	{ 0, 0 }
 };
 
@@ -188,14 +186,13 @@ p_rttables(int paf, int flags, int pflags, int interesting)
 /* 
  * column widths; each followed by one space
  * width of destination/gateway column
- * strlen("fe80::aaaa:bbbb:cccc:dddd@gif0") == 30, strlen("/128") == 4 = 34
- * strlen("aaaa:bbbb:cccc:dddd:eeee:ffff:gggg:hhhh") == 39
+ * strlen("fe80::aaaa:bbbb:cccc:dddd@gif0") == 30, strlen("/128") == 4
  */
 #ifndef INET6
 #define	WID_DST(af)	18	/* width of destination column */
 #define	WID_GW(af)	18	/* width of gateway column */
 #else
-#define	WID_DST(af)	((af) == AF_INET6 ? ((flags & RT_NFLAG) ? 39 : 18) : 18)
+#define	WID_DST(af)	((af) == AF_INET6 ? ((flags & RT_NFLAG) ? 34 : 18) : 18)
 #define	WID_GW(af)	((af) == AF_INET6 ? ((flags & RT_NFLAG) ? 30 : 18) : 18)
 #endif
 

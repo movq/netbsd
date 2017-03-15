@@ -1,4 +1,4 @@
-.\"	$NetBSD: xfer,v 1.18 2014/10/17 21:48:38 snj Exp $
+.\"	$NetBSD: xfer,v 1.17.40.1 2015/05/24 11:14:44 martin Exp $
 .
 Installation is supported from several media types, including:
 .(bullet

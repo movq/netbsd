@@ -7,7 +7,7 @@ TableGen Language Reference
 
 .. warning::
    This document is extremely rough. If you find something lacking, please
-   fix it, file a documentation bug, or ask about it on llvm-dev.
+   fix it, file a documentation bug, or ask about it on llvmdev.
 
 Introduction
 ============
@@ -97,9 +97,7 @@ wide variety of meanings:
    BangOperator: one of
                :!eq     !if      !head    !tail      !con
                :!add    !shl     !sra     !srl       !and
-               :!or     !empty   !subst   !foreach   !strconcat
-               :!cast   !listconcat
-
+               :!cast   !empty   !subst   !foreach   !listconcat   !strconcat
 
 Syntax
 ======
@@ -156,7 +154,7 @@ programmer.
 .. productionlist::
    Declaration: `Type` `TokIdentifier` ["=" `Value`]
 
-It assigns the value to the identifier.
+It assigns the value to the identifer.
 
 Types
 -----

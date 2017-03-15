@@ -1,4 +1,4 @@
-/*	$NetBSD: installboot.c,v 1.36 2017/01/11 18:32:48 christos Exp $	*/
+/*	$NetBSD: installboot.c,v 1.28.4.1 2015/03/29 07:42:53 snj Exp $	*/
 
 /*
  * Copyright (c) 1995 Waldi Ravens
@@ -30,9 +30,8 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include <sys/param.h>
 #include <sys/types.h>
-#include <sys/stat.h>
+#include <sys/param.h>
 #include <sys/sysctl.h>
 #include <sys/ioctl.h>
 #include <unistd.h>
@@ -74,26 +73,23 @@ static struct ahdi_root ahdiboot;
 static const char	mdecpath[] = PATH_MDEC;
 static const char	stdpath[] = PATH_STD;
 static const char	milanpath[] = PATH_MILAN;
-static bool		nowrite;
-static bool		verbose;
-static int		trackpercyl;
-static int		secpertrack;
-static bool		milan;
+static int		nowrite = 0;
+static int		verbose = 0;
+static int		trackpercyl = 0;
+static int		secpertrack = 0;
+static int		milan = 0;
 
 static void
 usage(void)
 {
 	fprintf(stderr,
 		"usage: installboot [options] device\n"
-#ifndef NO_USAGE
 		"where options are:\n"
 		"\t-N  do not actually write anything on the disk\n"
 		"\t-m  use Milan boot blocks\n"
 		"\t-t  number of tracks per cylinder (IDE disk)\n"
 		"\t-u  number of sectors per track (IDE disk)\n"
-		"\t-v  verbose mode\n"
-#endif
-		);
+		"\t-v  verbose mode\n");
 	exit(EXIT_FAILURE);
 }
 
@@ -114,10 +110,10 @@ main(int argc, char *argv[])
 	while ((c = getopt(argc, argv, "Nmt:u:v")) != -1) {
 		switch (c) {
 		  case 'N':
-			nowrite = true;
+			nowrite = 1;
 			break;
 		  case 'm':
-			milan = true;
+			milan = 1;
 			break;
 		  case 't':
 			trackpercyl = atoi(optarg);
@@ -126,7 +122,7 @@ main(int argc, char *argv[])
 			secpertrack = atoi(optarg);
 			break;
 		  case 'v':
-			verbose = true;
+			verbose = 1;
 			break;
 		  default:
 			usage();

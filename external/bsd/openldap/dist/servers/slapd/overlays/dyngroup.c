@@ -1,10 +1,10 @@
-/*	$NetBSD: dyngroup.c,v 1.1.1.5 2017/02/09 01:47:02 christos Exp $	*/
+/*	$NetBSD: dyngroup.c,v 1.1.1.4 2014/05/28 09:58:52 tron Exp $	*/
 
 /* dyngroup.c - Demonstration of overlay code */
 /* $OpenLDAP$ */
 /* This work is part of OpenLDAP Software <http://www.openldap.org/>.
  *
- * Copyright 2003-2016 The OpenLDAP Foundation.
+ * Copyright 2003-2014 The OpenLDAP Foundation.
  * Copyright 2003 by Howard Chu.
  * All rights reserved.
  *
@@ -20,9 +20,6 @@
  * This work was initially developed by Howard Chu for inclusion in
  * OpenLDAP Software.
  */
-
-#include <sys/cdefs.h>
-__RCSID("$NetBSD: dyngroup.c,v 1.1.1.5 2017/02/09 01:47:02 christos Exp $");
 
 #include "portable.h"
 
@@ -186,7 +183,7 @@ dyngroup_response( Operation *op, SlapReply *rs )
 }
 
 static int
-dyngroup_destroy(
+dyngroup_close(
 	BackendDB *be,
 	ConfigReply *cr
 )
@@ -212,7 +209,7 @@ int dyngroup_initialize() {
 	int code;
 
 	dyngroup.on_bi.bi_type = "dyngroup";
-	dyngroup.on_bi.bi_db_destroy = dyngroup_destroy;
+	dyngroup.on_bi.bi_db_close = dyngroup_close;
 	dyngroup.on_response = dyngroup_response;
 
 	dyngroup.on_bi.bi_cf_ocs = dgroupocs;

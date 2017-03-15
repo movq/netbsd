@@ -1,4 +1,4 @@
-/*	$NetBSD: pkcs11rsa_link.c,v 1.1.1.6 2015/12/17 03:22:07 christos Exp $	*/
+/*	$NetBSD: pkcs11rsa_link.c,v 1.1.1.2.2.2 2016/03/13 08:06:13 martin Exp $	*/
 
 /*
  * Copyright (C) 2014, 2015  Internet Systems Consortium, Inc. ("ISC")

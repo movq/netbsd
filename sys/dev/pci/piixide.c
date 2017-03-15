@@ -1,4 +1,4 @@
-/*	$NetBSD: piixide.c,v 1.65 2016/02/01 08:28:48 msaitoh Exp $	*/
+/*	$NetBSD: piixide.c,v 1.64.12.1 2016/12/09 05:15:18 snj Exp $	*/
 
 /*
  * Copyright (c) 1999, 2000, 2001 Manuel Bouyer.
@@ -25,7 +25,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: piixide.c,v 1.65 2016/02/01 08:28:48 msaitoh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: piixide.c,v 1.64.12.1 2016/12/09 05:15:18 snj Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

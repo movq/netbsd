@@ -1,4 +1,4 @@
-/*	$NetBSD: base32.h,v 1.5 2014/12/10 04:38:00 christos Exp $	*/
+/*	$NetBSD: base32.h,v 1.4.2.1 2014/12/22 03:28:46 msaitoh Exp $	*/
 
 /*
  * Copyright (C) 2008, 2014  Internet Systems Consortium, Inc. ("ISC")

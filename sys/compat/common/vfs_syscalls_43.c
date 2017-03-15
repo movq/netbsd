@@ -1,4 +1,4 @@
-/*	$NetBSD: vfs_syscalls_43.c,v 1.59 2017/01/13 20:25:35 christos Exp $	*/
+/*	$NetBSD: vfs_syscalls_43.c,v 1.56.4.1 2016/08/27 15:10:59 bouyer Exp $	*/
 
 /*
  * Copyright (c) 1989, 1993
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: vfs_syscalls_43.c,v 1.59 2017/01/13 20:25:35 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: vfs_syscalls_43.c,v 1.56.4.1 2016/08/27 15:10:59 bouyer Exp $");
 
 #if defined(_KERNEL_OPT)
 #include "opt_compat_netbsd.h"
@@ -327,7 +327,7 @@ compat_43_sys_lseek(struct lwp *l, const struct compat_43_sys_lseek_args *uap, r
 	SCARG(&nuap, fd) = SCARG(uap, fd);
 	SCARG(&nuap, offset) = SCARG(uap, offset);
 	SCARG(&nuap, whence) = SCARG(uap, whence);
-	error = sys_lseek(l, &nuap, (register_t *)&qret);
+	error = sys_lseek(l, &nuap, (void *)&qret);
 	*(long *)retval = qret;
 	return (error);
 }
@@ -378,8 +378,7 @@ compat_43_sys_getdirentries(struct lwp *l, const struct compat_43_sys_getdirentr
 	} */
 	struct dirent *bdp;
 	struct vnode *vp;
-	void *tbuf;			/* Current-format */
-	char *inp;			/* Current-format */
+	char *inp, *tbuf;		/* Current-format */
 	int len, reclen;		/* Current-format */
 	char *outp;			/* Dirent12-format */
 	int resid, old_reclen = 0;	/* Dirent12-format */
@@ -403,7 +402,7 @@ compat_43_sys_getdirentries(struct lwp *l, const struct compat_43_sys_getdirentr
 		goto out1;
 	}
 
-	vp = fp->f_vnode;
+	vp = (struct vnode *)fp->f_data;
 	if (vp->v_type != VDIR) {
 		error = ENOTDIR;
 		goto out1;
@@ -442,7 +441,7 @@ again:
 	if (error)
 		goto out;
 
-	inp = (char *)tbuf;
+	inp = tbuf;
 	outp = SCARG(uap, buf);
 	resid = nbytes;
 	if ((len = buflen - auio.uio_resid) == 0)
@@ -475,8 +474,7 @@ again:
 		idb.d_fileno = (uint32_t)bdp->d_fileno;
 		idb.d_reclen = (uint16_t)old_reclen;
 		idb.d_namlen = (uint16_t)bdp->d_namlen;
-		memcpy(idb.d_name, bdp->d_name, MIN(sizeof(idb.d_name),
-		    idb.d_namlen));
+		strcpy(idb.d_name, bdp->d_name);
 		if ((error = copyout(&idb, outp, old_reclen)))
 			goto out;
 		/* advance past this real entry */

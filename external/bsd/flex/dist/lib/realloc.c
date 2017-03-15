@@ -1,6 +1,4 @@
 #include <config.h>
-#undef realloc
-#undef malloc
 
 #include <stdlib.h>
 

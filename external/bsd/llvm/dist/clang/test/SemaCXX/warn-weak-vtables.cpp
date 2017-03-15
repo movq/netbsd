@@ -1,8 +1,5 @@
 // RUN: %clang_cc1 %s -fsyntax-only -verify -triple %itanium_abi_triple -Wweak-vtables -Wweak-template-vtables
-//
-// Check that this warning is disabled on MS ABI targets which don't have key
-// functions.
-// RUN: %clang_cc1 %s -fsyntax-only -triple %ms_abi_triple -Werror -Wweak-vtables -Wweak-template-vtables
+// RUN: %clang_cc1 %s -fsyntax-only -triple %ms_abi_triple -Werror -Wno-weak-vtables -Wno-weak-template-vtables
 
 struct A { // expected-warning {{'A' has no out-of-line virtual method definitions; its vtable will be emitted in every translation unit}}
   virtual void f() { } 
@@ -23,14 +20,15 @@ void f() {
     virtual void f() { }
   };
 
-  A a;
+  A *a;
+  a->f();
 }
 
 // Use the vtables
-void uses_abc() {
-  A a;
-  B<int> b;
-  C c;
+void uses(A &a, B<int> &b, C &c) {
+  a.f();
+  b.f();
+  c.f();
 }
 
 // <rdar://problem/9979458>
@@ -54,9 +52,10 @@ public:
 
 Parent::~Parent() {}
 
-void uses_derived() {
-  Derived d;
-  VeryDerived vd;
+void uses(Parent &p, Derived &d, VeryDerived &vd) {
+  p.getFoo();
+  d.getFoo();
+  vd.getFoo();
 }
 
 template<typename T> struct TemplVirt {
@@ -73,8 +72,8 @@ template<> struct TemplVirt<long> { // expected-warning{{'TemplVirt<long>' has n
   virtual void f() {}
 };
 
-void uses_templ() {
-  TemplVirt<float> f;
-  TemplVirt<bool> b;
-  TemplVirt<long> l;
+void uses(TemplVirt<float>& f, TemplVirt<bool>& b, TemplVirt<long>& l) {
+  f.f();
+  b.f();
+  l.f();
 }

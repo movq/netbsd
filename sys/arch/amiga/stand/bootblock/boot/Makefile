@@ -1,6 +1,6 @@
-#	$NetBSD: Makefile,v 1.54 2016/09/17 17:09:10 christos Exp $
+#	$NetBSD: Makefile,v 1.52 2014/04/19 00:55:37 tsutsui Exp $
 
-.include <bsd.init.mk>
+.include <bsd.own.mk>
 .include <bsd.sys.mk>		# for HOST_SH
 
 ### what we need:
@@ -52,7 +52,7 @@ OBJS=	$(SOBJS) $(COBJS)
 #XX#DEFS = -D_STANDALONE -DSA_EXEC_ANYOWNER -DDYNAMIC_CRC_TABLE -DNOBYFOUR -UBYFOUR 
 DEFS = -D_STANDALONE -DSA_EXEC_ANYOWNER 
 DEFS += -D__INTERNAL_LIBSA_CREAD
-DEFS += -DSERCONSOLE
+#DEFS += -DSERCONSOLE
 SOBJS += cread.o
 
 #XX#SOBJS += adler32.o crc32.o inflate.o trees.o \

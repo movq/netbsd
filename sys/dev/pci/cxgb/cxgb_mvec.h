@@ -124,7 +124,10 @@ m_collapse(struct mbuf *m, int maxbufs, struct mbuf **mnew)
 static inline struct mbuf *
 m_free_vec(struct mbuf *m)
 {
-    return m_free(m);
+    struct mbuf *n = NULL;
+
+    MFREE(m, n);
+    return (n);
 }
 
 static inline void 

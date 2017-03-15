@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.19 2017/01/11 12:02:31 joerg Exp $
+#	$NetBSD: Makefile,v 1.16.2.1 2015/06/04 20:05:45 snj Exp $
 
 LIB=	LLVMTransformsUtils
 
@@ -18,42 +18,28 @@ SRCS+=	ASanStackFrameLayout.cpp \
 	CodeExtractor.cpp \
 	CtorUtils.cpp \
 	DemoteRegToStack.cpp \
-	Evaluator.cpp \
-	EscapeEnumerator.cpp \
 	FlattenCFG.cpp \
-	FunctionComparator.cpp \
-	FunctionImportUtils.cpp \
 	GlobalStatus.cpp \
-	ImportedFunctionsInliningStatistics.cpp \
 	InlineFunction.cpp \
 	InstructionNamer.cpp \
 	IntegerDivision.cpp \
 	LCSSA.cpp \
-	LibCallsShrinkWrap.cpp \
 	Local.cpp \
 	LoopSimplify.cpp \
 	LoopUnroll.cpp \
-	LoopUnrollPeel.cpp \
 	LoopUnrollRuntime.cpp \
-	LoopUtils.cpp \
-	LoopVersioning.cpp \
+	LowerExpectIntrinsic.cpp \
 	LowerInvoke.cpp \
 	LowerSwitch.cpp \
 	Mem2Reg.cpp \
-	MemorySSA.cpp \
 	MetaRenamer.cpp \
 	ModuleUtils.cpp \
-	NameAnonGlobals.cpp \
 	PromoteMemoryToRegister.cpp \
 	SSAUpdater.cpp \
-	SanitizerStats.cpp \
 	SimplifyCFG.cpp \
 	SimplifyIndVar.cpp \
 	SimplifyInstructions.cpp \
 	SimplifyLibCalls.cpp \
-	SplitModule.cpp \
-	StripGCRelocates.cpp \
-	StripNonLineTableDebugInfo.cpp \
 	SymbolRewriter.cpp \
 	UnifyFunctionExitNodes.cpp \
 	Utils.cpp \

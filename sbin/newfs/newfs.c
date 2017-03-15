@@ -1,4 +1,4 @@
-/*	$NetBSD: newfs.c,v 1.115 2017/02/08 16:11:40 rin Exp $	*/
+/*	$NetBSD: newfs.c,v 1.111.10.2 2015/07/30 15:36:03 snj Exp $	*/
 
 /*
  * Copyright (c) 1983, 1989, 1993, 1994
@@ -78,7 +78,7 @@ __COPYRIGHT("@(#) Copyright (c) 1983, 1989, 1993, 1994\
 #if 0
 static char sccsid[] = "@(#)newfs.c	8.13 (Berkeley) 5/1/95";
 #else
-__RCSID("$NetBSD: newfs.c,v 1.115 2017/02/08 16:11:40 rin Exp $");
+__RCSID("$NetBSD: newfs.c,v 1.111.10.2 2015/07/30 15:36:03 snj Exp $");
 #endif
 #endif /* not lint */
 
@@ -225,15 +225,11 @@ int	avgfpdir = AFPDIR;	/* expected number of files per directory */
 int	mntflags = 0;		/* flags to be passed to mount */
 u_long	memleft;		/* virtual memory available */
 caddr_t	membase;		/* start address of memory based filesystem */
-#ifndef NO_FFS_EI
 int	needswap;		/* Filesystem not in native byte order */
-#endif
 char	*disktype = NULL;
 int	unlabeled;
-#ifndef NO_APPLE_UFS
 char *appleufs_volname = 0; /* Apple UFS volume name */
 int isappleufs = 0;
-#endif
 int quotas = 0;
 
 char	device[MAXPATHLEN];
@@ -284,20 +280,18 @@ main(int argc, char *argv[])
 	    "B:FGINO:S:T:V:Za:b:d:e:f:g:h:i:l:m:n:o:q:r:s:v:";
 	while ((ch = getopt(argc, argv, opstring)) != -1)
 		switch (ch) {
-#ifndef NO_FFS_EI
 		case 'B':
 			if (strcmp(optarg, "be") == 0) {
-# if BYTE_ORDER == LITTLE_ENDIAN
+#if BYTE_ORDER == LITTLE_ENDIAN
 				needswap = 1;
-# endif
+#endif
 			} else if (strcmp(optarg, "le") == 0) {
-# if BYTE_ORDER == BIG_ENDIAN
+#if BYTE_ORDER == BIG_ENDIAN
 				needswap = 1;
-# endif
+#endif
 			} else
 				usage();
 			break;
-#endif
 		case 'F':
 			Fflag = 1;
 			break;
@@ -419,7 +413,6 @@ main(int argc, char *argv[])
 			/* mfs only */
 			mfsuid = mfs_user(optarg);
 			break;
-#ifndef NO_APPLE_UFS
 		case 'v':
 			appleufs_volname = optarg;
 			if (strchr(appleufs_volname, ':') || strchr(appleufs_volname, '/'))
@@ -428,7 +421,6 @@ main(int argc, char *argv[])
 				errx(1,"Apple UFS volume name cannot be zero length");
 			isappleufs = 1;
 			break;
-#endif
 		case '?':
 		default:
 			usage();
@@ -564,10 +556,8 @@ main(int argc, char *argv[])
 			if (dkw.dkw_size == 0)
 				errx(1, "%s partition is unavailable", special);
 
-#ifndef NO_APPLE_UFS
 			if (strcmp(dkw.dkw_ptype, DKW_PTYPE_APPLEUFS) == 0)
 				isappleufs = 1;
-#endif
 				
 			if (!Iflag) {
 				static const char m[] =
@@ -853,9 +843,7 @@ struct help_strings {
 	int flags;
 	const char *str;
 } const help_strings[] = {
-#ifndef NO_FFS_EI
 	{ NEWFS,	"-B byteorder\tbyte order (`be' or `le')" },
-#endif
 	{ NEWFS,	"-F \t\tcreate file system image in regular file" },
 	{ NEWFS,	"-G \t\tmake sanity calculations non-fatal (testing only!)" },
 	{ NEWFS,	"-I \t\tdo not check that the file system type is '4.2BSD'" },
@@ -878,7 +866,7 @@ struct help_strings {
 	{ MFS_MOUNT,	"-g groupname\tgroup name of mount point" },
 	{ BOTH,		"-h avgfpdir\taverage files per directory" },
 	{ BOTH,		"-i density\tnumber of bytes per inode" },
-	{ BOTH,		"-m minfree\tminimum free space %" },
+	{ BOTH,		"-m minfree\tminimum free space %%" },
 	{ BOTH,		"-n inodes\tnumber of inodes (overrides -i density)" },
 	{ BOTH,		"-o optim\toptimization preference (`space' or `time')"
 			    },
@@ -886,9 +874,7 @@ struct help_strings {
 	{ MFS_MOUNT,	"-p perm\t\tpermissions (in octal)" },
 	{ BOTH,		"-s fssize\tfile system size (sectors)" },
 	{ MFS_MOUNT,	"-u username\tuser name of mount point" },
-#ifndef NO_APPLE_UFS
 	{ NEWFS,	"-v volname\tApple UFS volume name" },
-#endif
 	{ 0, NULL }
 };
 
