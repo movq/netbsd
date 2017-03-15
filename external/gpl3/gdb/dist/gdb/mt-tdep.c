@@ -1,6 +1,6 @@
 /* Target-dependent code for Morpho mt processor, for GDB.
 
-   Copyright (C) 2005-2016 Free Software Foundation, Inc.
+   Copyright (C) 2005-2014 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -27,6 +27,7 @@
 #include "dis-asm.h"
 #include "arch-utils.h"
 #include "gdbtypes.h"
+#include <string.h>
 #include "regcache.h"
 #include "reggroups.h"
 #include "gdbcore.h"
@@ -34,6 +35,7 @@
 #include "inferior.h"
 #include "dwarf2-frame.h"
 #include "infcall.h"
+#include "gdb_assert.h"
 #include "language.h"
 #include "valprint.h"
 
@@ -200,7 +202,7 @@ mt_register_name (struct gdbarch *gdbarch, int regnum)
 	array_names[regnum] = stub;
 	return stub;
       }
-    name = (char *) xmalloc (30);
+    name = xmalloc (30);
     sprintf (name, "copro_%d_%d_%s", dim_1, dim_2, stub);
     array_names[regnum] = name;
     return name;
@@ -415,7 +417,7 @@ mt_skip_prologue (struct gdbarch *gdbarch, CORE_ADDR pc)
       struct symbol *sym;
 
       /* Found a function.  */
-      sym = lookup_symbol (func_name, NULL, VAR_DOMAIN, NULL).symbol;
+      sym = lookup_symbol (func_name, NULL, VAR_DOMAIN, NULL);
       if (sym && SYMBOL_LANGUAGE (sym) != language_asm)
 	{
 	  /* Don't use this trick for assembly source files.  */
@@ -676,11 +678,12 @@ mt_registers_info (struct gdbarch *gdbarch,
 	{
 	  /* Special output handling for 38-bit context register.  */
 	  unsigned char *buff;
-	  unsigned int i, regsize;
+	  unsigned int *bytes, i, regsize;
 
 	  regsize = register_size (gdbarch, regnum);
 
-	  buff = (unsigned char *) alloca (regsize);
+	  buff = alloca (regsize);
+	  bytes = alloca (regsize * sizeof (*bytes));
 
 	  deprecated_frame_register_read (frame, regnum, buff);
 
@@ -706,7 +709,7 @@ mt_registers_info (struct gdbarch *gdbarch,
 	  gdb_byte *buf;
 	  struct value_print_options opts;
 
-	  buf = (gdb_byte *) alloca (register_size (gdbarch, MT_COPRO_REGNUM));
+	  buf = alloca (register_size (gdbarch, MT_COPRO_REGNUM));
 	  deprecated_frame_register_read (frame, MT_COPRO_REGNUM, buf);
 	  /* And print.  */
 	  regnum = MT_COPRO_PSEUDOREG_REGNUM;
@@ -848,7 +851,7 @@ mt_push_dummy_call (struct gdbarch *gdbarch, struct value *function,
       /* Right-justify the value in an aligned-length buffer.  */
       typelen = TYPE_LENGTH (value_type (args[j]));
       slacklen = (wordsize - (typelen % wordsize)) % wordsize;
-      val = (gdb_byte *) xmalloc (typelen + slacklen);
+      val = xmalloc (typelen + slacklen);
       back_to = make_cleanup (xfree, val);
       memcpy (val, contents, typelen);
       memset (val + typelen, 0, slacklen);
@@ -914,7 +917,7 @@ mt_frame_unwind_cache (struct frame_info *this_frame,
   ULONGEST sp, fp;
 
   if ((*this_prologue_cache))
-    return (struct mt_unwind_cache *) (*this_prologue_cache);
+    return (*this_prologue_cache);
 
   gdbarch = get_frame_arch (this_frame);
   info = FRAME_OBSTACK_ZALLOC (struct mt_unwind_cache);
@@ -1146,7 +1149,7 @@ mt_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
 
   /* None found, create a new architecture from the information
      provided.  */
-  tdep = XCNEW (struct gdbarch_tdep);
+  tdep = XCALLOC (1, struct gdbarch_tdep);
   gdbarch = gdbarch_alloc (&info, tdep);
 
   set_gdbarch_float_format (gdbarch, floatformats_ieee_single);

@@ -5,7 +5,7 @@
  *****************************************************************************/
 
 /*
- * Copyright (C) 2000 - 2017, Intel Corp.
+ * Copyright (C) 2000 - 2013, Intel Corp.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -47,7 +47,6 @@
 /*
  * ACPICA configuration
  */
-#define ACPI_USE_STANDARD_HEADERS
 #define ACPI_USE_SYSTEM_CLIBRARY
 #define ACPI_USE_DO_WHILE_0
 #define ACPI_FLUSH_CPU_CACHE()
@@ -59,9 +58,11 @@
 #define ACPI_USE_ALTERNATE_TIMEOUT
 
 
-#ifdef ACPI_USE_STANDARD_HEADERS
+#include <stdarg.h>
+#include <string.h>
+#include <stdlib.h>
+#include <ctype.h>
 #include <unistd.h>
-#endif
 
 #if defined(__ia64__) || defined(__x86_64__)
 #define ACPI_MACHINE_WIDTH          64
@@ -85,16 +86,17 @@
 
 #define ACPI_CAST_PTHREAD_T(pthread) ((ACPI_THREAD_ID) ACPI_TO_INTEGER (pthread))
 
+/* Cygwin uses GCC */
+
+#include "acgcc.h"
+
 
 /*
- * The vsnprintf/snprintf functions are defined by c99, but cygwin/gcc
- * does not enable this prototype when the -ansi flag is set. Also related
- * to __STRICT_ANSI__. So, we just declare the prototype here.
+ * The vsnprintf function is defined by c99, but cygwin/gcc does not
+ * enable this prototype when the -ansi flag is set. Also related to
+ * __STRICT_ANSI__. So, we just declare the prototype here.
  */
 int
 vsnprintf (char *s, size_t n, const char *format, va_list ap);
-
-int
-snprintf (char *s, size_t n, const char *format, ...);
 
 #endif /* __ACCYGWIN_H__ */

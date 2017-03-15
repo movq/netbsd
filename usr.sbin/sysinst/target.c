@@ -1,4 +1,4 @@
-/*	$NetBSD: target.c,v 1.3 2015/10/18 09:21:55 martin Exp $	*/
+/*	$NetBSD: target.c,v 1.2.4.1 2015/11/08 00:21:34 riz Exp $	*/
 
 /*
  * Copyright 1997 Jonathan Stone
@@ -71,7 +71,7 @@
 
 #include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-__RCSID("$NetBSD: target.c,v 1.3 2015/10/18 09:21:55 martin Exp $");
+__RCSID("$NetBSD: target.c,v 1.2.4.1 2015/11/08 00:21:34 riz Exp $");
 #endif
 
 /*

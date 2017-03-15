@@ -1,4 +1,4 @@
-/*	$NetBSD: lutil_meter.h,v 1.1.1.3 2017/02/09 01:46:42 christos Exp $	*/
+/*	$NetBSD: lutil_meter.h,v 1.1.1.2 2014/05/28 09:58:40 tron Exp $	*/
 
 /* lutil_meter.h - progress meters */
 /* $OpenLDAP$ */
@@ -22,9 +22,6 @@
 
 #ifndef _LUTIL_METER_H
 #define _LUTIL_METER_H
-
-#include <sys/cdefs.h>
-__RCSID("$NetBSD: lutil_meter.h,v 1.1.1.3 2017/02/09 01:46:42 christos Exp $");
 
 #include "portable.h"
 
@@ -54,8 +51,8 @@ typedef struct {
 	void * estimator_data;
 	double start_time;
 	double last_update;
-	size_t goal_value;
-	size_t last_position;
+	unsigned long goal_value;
+	unsigned long last_position;
 } lutil_meter_t;
 
 extern const lutil_meter_display_t lutil_meter_text_display;
@@ -65,10 +62,10 @@ extern int lutil_meter_open (
 	lutil_meter_t *lutil_meter,
 	const lutil_meter_display_t *display, 
 	const lutil_meter_estimator_t *estimator,
-	size_t goal_value);
+	unsigned long goal_value);
 extern int lutil_meter_update (
 	lutil_meter_t *lutil_meter,
-	size_t position,
+	unsigned long position,
 	int force);
 extern int lutil_meter_close (lutil_meter_t *lutil_meter);
 

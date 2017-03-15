@@ -1,6 +1,6 @@
 #!/bin/sh
 #
-# $NetBSD: zgrep,v 1.9 2015/07/06 12:05:40 nakayama Exp $
+# $NetBSD: zgrep,v 1.8.4.1 2015/07/17 03:37:40 snj Exp $
 #
 # Copyright (c) 2003 Thomas Klausner.
 #

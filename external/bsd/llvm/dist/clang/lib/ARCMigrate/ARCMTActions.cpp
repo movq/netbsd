@@ -16,7 +16,6 @@ using namespace arcmt;
 
 bool CheckAction::BeginInvocation(CompilerInstance &CI) {
   if (arcmt::checkForManualIssues(CI.getInvocation(), getCurrentInput(),
-                                  CI.getPCHContainerOperations(),
                                   CI.getDiagnostics().getClient()))
     return false; // errors, stop the action.
 
@@ -25,23 +24,24 @@ bool CheckAction::BeginInvocation(CompilerInstance &CI) {
   return true;
 }
 
-CheckAction::CheckAction(std::unique_ptr<FrontendAction> WrappedAction)
-  : WrapperFrontendAction(std::move(WrappedAction)) {}
+CheckAction::CheckAction(FrontendAction *WrappedAction)
+  : WrapperFrontendAction(WrappedAction) {}
 
 bool ModifyAction::BeginInvocation(CompilerInstance &CI) {
   return !arcmt::applyTransformations(CI.getInvocation(), getCurrentInput(),
-                                      CI.getPCHContainerOperations(),
                                       CI.getDiagnostics().getClient());
 }
 
-ModifyAction::ModifyAction(std::unique_ptr<FrontendAction> WrappedAction)
-  : WrapperFrontendAction(std::move(WrappedAction)) {}
+ModifyAction::ModifyAction(FrontendAction *WrappedAction)
+  : WrapperFrontendAction(WrappedAction) {}
 
 bool MigrateAction::BeginInvocation(CompilerInstance &CI) {
-  if (arcmt::migrateWithTemporaryFiles(
-          CI.getInvocation(), getCurrentInput(), CI.getPCHContainerOperations(),
-          CI.getDiagnostics().getClient(), MigrateDir, EmitPremigrationARCErros,
-          PlistOut))
+  if (arcmt::migrateWithTemporaryFiles(CI.getInvocation(),
+                                       getCurrentInput(),
+                                       CI.getDiagnostics().getClient(),
+                                       MigrateDir,
+                                       EmitPremigrationARCErros,
+                                       PlistOut))
     return false; // errors, stop the action.
 
   // We only want to see diagnostics emitted by migrateWithTemporaryFiles.
@@ -49,11 +49,11 @@ bool MigrateAction::BeginInvocation(CompilerInstance &CI) {
   return true;
 }
 
-MigrateAction::MigrateAction(std::unique_ptr<FrontendAction> WrappedAction,
+MigrateAction::MigrateAction(FrontendAction *WrappedAction,
                              StringRef migrateDir,
                              StringRef plistOut,
                              bool emitPremigrationARCErrors)
-  : WrapperFrontendAction(std::move(WrappedAction)), MigrateDir(migrateDir),
+  : WrapperFrontendAction(WrappedAction), MigrateDir(migrateDir),
     PlistOut(plistOut), EmitPremigrationARCErros(emitPremigrationARCErrors) {
   if (MigrateDir.empty())
     MigrateDir = "."; // user current directory if none is given.

@@ -1,4 +1,4 @@
-/*	$NetBSD: linkaddr.c,v 1.22 2016/12/07 10:03:29 pgoyette Exp $	*/
+/*	$NetBSD: linkaddr.c,v 1.16 2012/03/20 17:44:18 matt Exp $	*/
 
 /*-
  * Copyright (c) 1990, 1993
@@ -34,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)linkaddr.c	8.1 (Berkeley) 6/4/93";
 #else
-__RCSID("$NetBSD: linkaddr.c,v 1.22 2016/12/07 10:03:29 pgoyette Exp $");
+__RCSID("$NetBSD: linkaddr.c,v 1.16 2012/03/20 17:44:18 matt Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 
@@ -59,7 +59,7 @@ __RCSID("$NetBSD: linkaddr.c,v 1.22 2016/12/07 10:03:29 pgoyette Exp $");
 void
 link_addr(const char *addr, struct sockaddr_dl *sdl)
 {
-	char *cp = sdl->sdl_data;
+	register char *cp = sdl->sdl_data;
 	char *cplim = sdl->sdl_len + (char *)(void *)sdl;
 	int byte = 0, state = NAMING;
 	size_t newaddr = 0;	/* pacify gcc */
@@ -138,60 +138,34 @@ char *
 link_ntoa(const struct sockaddr_dl *sdl)
 {
 	static char obuf[64];
-	char *out = obuf; 
-	size_t i;
+	register char *out = obuf; 
+	register size_t i;
 	const u_char *in = (const u_char *)CLLADDR(sdl);
 	const u_char *inlim = in + sdl->sdl_alen;
 	int firsttime = 1;
 
 	_DIAGASSERT(sdl != NULL);
 
-#define ADDC(ch) \
-	do { \
-		if (out >= obuf + sizeof(obuf) - 1) \
-			return obuf; \
-		*out++ = (ch); \
-	} while (/*CONSTCOND*/0)
-
-	/*
-	 * This is not needed on the first call, as the static
-	 * obuf wil be fully init'd to 0 by default.   But after
-	 * obuf has been returned to userspace the first time,
-	 * anything may have been written to it, so, let's be safe.
-	 *
-	 * (An alternative method would be to make ADDC() more
-	 *  complex:
-	 *	if (out < obuf + sizeof(obuf) - ((ch) != '\0'))
-	 *		*out++ = (ch);
-	 *  so it never returns, and the final ADDC(0) always works
-	 *  but that evaluates 'ch' twice, and is slower, so ...)
-	 */
-	obuf[sizeof(obuf) - 1] = '\0';
-
 	if (sdl->sdl_nlen) {
-		if (sdl->sdl_nlen >= sizeof(obuf))
-			i = sizeof(obuf) - 1;
-		else
-			i = sdl->sdl_nlen;
-		(void)memcpy(obuf, sdl->sdl_data, i);
-		out += i;
+		(void)memcpy(obuf, sdl->sdl_data, (size_t)sdl->sdl_nlen);
+		out += sdl->sdl_nlen;
 		if (sdl->sdl_alen)
-			ADDC(':');
+			*out++ = ':';
 	}
 	while (in < inlim) {
 		if (firsttime)
 			firsttime = 0;
 		else
-			ADDC('.');
+			*out++ = '.';
 		i = *in++;
 		if (i > 0xf) {
-			size_t j = i & 0xf;
+			out[1] = hexlist[i & 0xf];
 			i >>= 4;
-			ADDC(hexlist[i]);
-			ADDC(hexlist[j]);
+			out[0] = hexlist[i];
+			out += 2;
 		} else
-			ADDC(hexlist[i]);
+			*out++ = hexlist[i];
 	}
-	ADDC('\0');
-	return obuf;
+	*out = 0;
+	return (obuf);
 }

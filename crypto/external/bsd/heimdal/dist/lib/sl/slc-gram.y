@@ -1,4 +1,4 @@
-/*	$NetBSD: slc-gram.y,v 1.2 2017/01/28 21:31:50 christos Exp $	*/
+/*	$NetBSD: slc-gram.y,v 1.1.1.2 2014/04/24 12:45:53 pettai Exp $	*/
 
 %{
 /*
@@ -330,7 +330,6 @@ gen_command(struct assignment *as)
     cprint(1, "    { ");
     fprintf(cfile, "\"%s\", ", a->u.value);
     fprintf(cfile, "%s_wrap, ", f);
-    free(f);
     b = find(as, "argument");
     if(b)
 	fprintf(cfile, "\"%s %s\", ", a->u.value, b->u.value);
@@ -344,7 +343,7 @@ gen_command(struct assignment *as)
     fprintf(cfile, " },\n");
     for(a = a->next; a != NULL; a = a->next)
 	if(strcmp(a->name, "name") == 0)
-	    cprint(1, "    { \"%s\", NULL, NULL, NULL },\n", a->u.value);
+	    cprint(1, "    { \"%s\" },\n", a->u.value);
     cprint(0, "\n");
 }
 
@@ -363,7 +362,6 @@ make_name(struct assignment *as)
     struct assignment *lopt;
     struct assignment *type;
     char *s;
-    int ret;
 
     lopt = find(as, "long");
     if(lopt == NULL)
@@ -373,11 +371,9 @@ make_name(struct assignment *as)
 
     type = find(as, "type");
     if(strcmp(type->u.value, "-flag") == 0)
-	ret = asprintf(&s, "%s_flag", lopt->u.value);
+	asprintf(&s, "%s_flag", lopt->u.value);
     else
-	ret = asprintf(&s, "%s_%s", lopt->u.value, type->u.value);
-    if (ret == -1)
-	return NULL;
+	asprintf(&s, "%s_%s", lopt->u.value, type->u.value);
     gen_name(s);
     return s;
 }
@@ -452,7 +448,7 @@ struct type_handler {
 	  defval_neg_flag,
 	  NULL
 	},
-	{ NULL, NULL, NULL, NULL, NULL }
+	{ NULL }
 };
 
 static struct type_handler *find_handler(struct assignment *type)
@@ -716,7 +712,7 @@ gen(struct assignment *as)
     cprint(0, "SL_cmd commands[] = {\n");
     for(a = as; a != NULL; a = a->next)
 	gen_command(a->u.assignment);
-    cprint(1, "{ NULL, NULL, NULL, NULL }\n");
+    cprint(1, "{ NULL }\n");
     cprint(0, "};\n");
 
     hprint(0, "extern SL_cmd commands[];\n");
@@ -725,8 +721,8 @@ gen(struct assignment *as)
 int version_flag;
 int help_flag;
 struct getargs args[] = {
-    { "version", 0, arg_flag, &version_flag, NULL, NULL },
-    { "help", 0, arg_flag, &help_flag, NULL, NULL }
+    { "version", 0, arg_flag, &version_flag },
+    { "help", 0, arg_flag, &help_flag }
 };
 int num_args = sizeof(args) / sizeof(args[0]);
 

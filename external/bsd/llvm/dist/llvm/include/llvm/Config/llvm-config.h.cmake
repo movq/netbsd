@@ -14,20 +14,41 @@
 #ifndef LLVM_CONFIG_H
 #define LLVM_CONFIG_H
 
-/* Define if we link Polly to the tools */
-#cmakedefine LINK_POLLY_INTO_TOOLS
+/* Installation directory for binary executables */
+#cmakedefine LLVM_BINDIR "${LLVM_BINDIR}"
+
+/* Time at which LLVM was configured */
+#cmakedefine LLVM_CONFIGTIME "${LLVM_CONFIGTIME}"
+
+/* Installation directory for data files */
+#cmakedefine LLVM_DATADIR "${LLVM_DATADIR}"
 
 /* Target triple LLVM will generate code for by default */
 #cmakedefine LLVM_DEFAULT_TARGET_TRIPLE "${LLVM_DEFAULT_TARGET_TRIPLE}"
 
+/* Installation directory for documentation */
+#cmakedefine LLVM_DOCSDIR "${LLVM_DOCSDIR}"
+
 /* Define if threads enabled */
 #cmakedefine01 LLVM_ENABLE_THREADS
+
+/* Installation directory for config files */
+#cmakedefine LLVM_ETCDIR "${LLVM_ETCDIR}"
 
 /* Has gcc/MSVC atomic intrinsics */
 #cmakedefine01 LLVM_HAS_ATOMICS
 
 /* Host triple LLVM will be executed on */
 #cmakedefine LLVM_HOST_TRIPLE "${LLVM_HOST_TRIPLE}"
+
+/* Installation directory for include files */
+#cmakedefine LLVM_INCLUDEDIR "${LLVM_INCLUDEDIR}"
+
+/* Installation directory for .info files */
+#cmakedefine LLVM_INFODIR "${LLVM_INFODIR}"
+
+/* Installation directory for man pages */
+#cmakedefine LLVM_MANDIR "${LLVM_MANDIR}"
 
 /* LLVM architecture name for the native architecture, if available */
 #cmakedefine LLVM_NATIVE_ARCH ${LLVM_NATIVE_ARCH}
@@ -60,10 +81,10 @@
 #cmakedefine LLVM_PREFIX "${LLVM_PREFIX}"
 
 /* Define if we have the Intel JIT API runtime support library */
-#cmakedefine01 LLVM_USE_INTEL_JITEVENTS
+#cmakedefine LLVM_USE_INTEL_JITEVENTS 1
 
 /* Define if we have the oprofile JIT-support library */
-#cmakedefine01 LLVM_USE_OPROFILE
+#cmakedefine LLVM_USE_OPROFILE 1
 
 /* Major version of the LLVM API */
 #define LLVM_VERSION_MAJOR ${LLVM_VERSION_MAJOR}
@@ -76,5 +97,8 @@
 
 /* LLVM version string */
 #define LLVM_VERSION_STRING "${PACKAGE_VERSION}"
+
+/* Define if we link Polly to the tools */
+#cmakedefine LINK_POLLY_INTO_TOOLS
 
 #endif

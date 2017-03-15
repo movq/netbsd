@@ -1,4 +1,4 @@
-/* $NetBSD: if_mec.c,v 1.55 2016/12/15 09:28:04 ozaki-r Exp $ */
+/* $NetBSD: if_mec.c,v 1.50 2014/08/10 16:44:34 tls Exp $ */
 
 /*-
  * Copyright (c) 2004, 2008 Izumi Tsutsui.  All rights reserved.
@@ -61,7 +61,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_mec.c,v 1.55 2016/12/15 09:28:04 ozaki-r Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_mec.c,v 1.50 2014/08/10 16:44:34 tls Exp $");
 
 #include "opt_ddb.h"
 
@@ -76,7 +76,7 @@ __KERNEL_RCSID(0, "$NetBSD: if_mec.c,v 1.55 2016/12/15 09:28:04 ozaki-r Exp $");
 #include <sys/ioctl.h>
 #include <sys/errno.h>
 
-#include <sys/rndsource.h>
+#include <sys/rnd.h>
 
 #include <net/if.h>
 #include <net/if_dl.h>
@@ -614,7 +614,6 @@ mec_attach(device_t parent, device_t self, void *aux)
 
 	/* attach the interface */
 	if_attach(ifp);
-	if_deferred_start_init(ifp, NULL);
 	ether_ifattach(ifp, sc->sc_enaddr);
 
 	/* establish interrupt */
@@ -1608,9 +1607,9 @@ mec_intr(void *arg)
 		}
 	}
 
-	if (sent) {
+	if (sent && !IFQ_IS_EMPTY(&ifp->if_snd)) {
 		/* try to get more packets going */
-		if_schedule_deferred_start(ifp);
+		mec_start(ifp);
 	}
 
 	if (handled)
@@ -1726,13 +1725,21 @@ mec_rxintr(struct mec_softc *sc)
 		MEC_RXSTATSYNC(sc, i, BUS_DMASYNC_PREREAD);
 		bus_space_write_8(st, sh, MEC_MCL_RX_FIFO, MEC_CDRXADDR(sc, i));
 
-		m_set_rcvif(m, ifp);
+		m->m_pkthdr.rcvif = ifp;
 		m->m_pkthdr.len = m->m_len = len;
 		if ((ifp->if_csum_flags_rx & (M_CSUM_TCPv4|M_CSUM_UDPv4)) != 0)
 			mec_rxcsum(sc, m, RXSTAT_CKSUM(rxstat), crc);
 
+		ifp->if_ipackets++;
+
+		/*
+		 * Pass this up to any BPF listeners, but only
+		 * pass it up the stack if it's for us.
+		 */
+		bpf_mtap(ifp, m);
+
 		/* Pass it on. */
-		if_percpuq_enqueue(ifp->if_percpuq, m);
+		(*ifp->if_input)(ifp, m);
 	}
 
 	/* update RX pointer */

@@ -1,4 +1,4 @@
-/*	$NetBSD: npf_ruleset.c,v 1.45 2017/01/29 00:15:54 christos Exp $	*/
+/*	$NetBSD: npf_ruleset.c,v 1.37.2.4 2015/03/21 17:49:03 snj Exp $	*/
 
 /*-
  * Copyright (c) 2009-2015 The NetBSD Foundation, Inc.
@@ -33,9 +33,8 @@
  * NPF ruleset module.
  */
 
-#ifdef _KERNEL
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: npf_ruleset.c,v 1.45 2017/01/29 00:15:54 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: npf_ruleset.c,v 1.37.2.4 2015/03/21 17:49:03 snj Exp $");
 
 #include <sys/param.h>
 #include <sys/types.h>
@@ -50,7 +49,6 @@ __KERNEL_RCSID(0, "$NetBSD: npf_ruleset.c,v 1.45 2017/01/29 00:15:54 christos Ex
 #include <net/bpfjit.h>
 #include <net/pfil.h>
 #include <net/if.h>
-#endif
 
 #include "npf_impl.h"
 
@@ -123,7 +121,7 @@ struct npf_rule {
 #define	SKIPTO_ADJ_FLAG		(1U << 31)
 #define	SKIPTO_MASK		(SKIPTO_ADJ_FLAG - 1)
 
-static int	npf_rule_export(npf_t *, const npf_ruleset_t *,
+static int	npf_rule_export(const npf_ruleset_t *,
     const npf_rule_t *, prop_dictionary_t);
 
 /*
@@ -175,8 +173,6 @@ npf_ruleset_destroy(npf_ruleset_t *rlset)
 		npf_rule_free(rl);
 	}
 	KASSERT(LIST_EMPTY(&rlset->rs_dynamic));
-
-	npf_ruleset_gc(rlset);
 	KASSERT(LIST_EMPTY(&rlset->rs_gc));
 	kmem_free(rlset, len);
 }
@@ -201,7 +197,6 @@ npf_ruleset_insert(npf_ruleset_t *rlset, npf_rule_t *rl)
 
 	rlset->rs_rules[n] = rl;
 	rlset->rs_nitems++;
-	rl->r_id = ++rlset->rs_idcnt;
 
 	if (rl->r_skip_to < ++n) {
 		rl->r_skip_to = SKIPTO_ADJ_FLAG | n;
@@ -212,6 +207,8 @@ static npf_rule_t *
 npf_ruleset_lookup(npf_ruleset_t *rlset, const char *name)
 {
 	npf_rule_t *rl;
+
+	KASSERT(npf_config_locked_p());
 
 	LIST_FOREACH(rl, &rlset->rs_dynamic, r_dentry) {
 		KASSERT(NPF_DYNAMIC_GROUP_P(rl->r_attr));
@@ -360,13 +357,13 @@ npf_ruleset_remkey(npf_ruleset_t *rlset, const char *rname,
  * npf_ruleset_list: serialise and return the dynamic rules.
  */
 prop_dictionary_t
-npf_ruleset_list(npf_t *npf, npf_ruleset_t *rlset, const char *rname)
+npf_ruleset_list(npf_ruleset_t *rlset, const char *rname)
 {
 	prop_dictionary_t rgdict;
 	prop_array_t rules;
 	npf_rule_t *rg;
 
-	KASSERT(npf_config_locked_p(npf));
+	KASSERT(npf_config_locked_p());
 
 	if ((rg = npf_ruleset_lookup(rlset, rname)) == NULL) {
 		return NULL;
@@ -386,7 +383,7 @@ npf_ruleset_list(npf_t *npf, npf_ruleset_t *rlset, const char *rname)
 		KASSERT(NPF_DYNAMIC_RULE_P(rl->r_attr));
 
 		rldict = prop_dictionary_create();
-		if (npf_rule_export(npf, rlset, rl, rldict)) {
+		if (npf_rule_export(rlset, rl, rldict)) {
 			prop_object_release(rldict);
 			prop_object_release(rules);
 			return NULL;
@@ -427,7 +424,6 @@ npf_ruleset_flush(npf_ruleset_t *rlset, const char *rname)
 		LIST_INSERT_HEAD(&rlset->rs_gc, rl, r_aentry);
 		rl = rl->r_next;
 	}
-	rlset->rs_idcnt = 0;
 	return 0;
 }
 
@@ -449,13 +445,13 @@ npf_ruleset_gc(npf_ruleset_t *rlset)
  * npf_ruleset_export: serialise and return the static rules.
  */
 int
-npf_ruleset_export(npf_t *npf, const npf_ruleset_t *rlset, prop_array_t rules)
+npf_ruleset_export(const npf_ruleset_t *rlset, prop_array_t rules)
 {
 	const u_int nitems = rlset->rs_nitems;
 	int error = 0;
 	u_int n = 0;
 
-	KASSERT(npf_config_locked_p(npf));
+	KASSERT(npf_config_locked_p());
 
 	while (n < nitems) {
 		const npf_rule_t *rl = rlset->rs_rules[n];
@@ -463,7 +459,7 @@ npf_ruleset_export(npf_t *npf, const npf_ruleset_t *rlset, prop_array_t rules)
 		prop_dictionary_t rldict;
 
 		rldict = prop_dictionary_create();
-		if ((error = npf_rule_export(npf, rlset, rl, rldict)) != 0) {
+		if ((error = npf_rule_export(rlset, rl, rldict)) != 0) {
 			prop_object_release(rldict);
 			break;
 		}
@@ -485,13 +481,12 @@ npf_ruleset_export(npf_t *npf, const npf_ruleset_t *rlset, prop_array_t rules)
  * => The active (old) ruleset should be exclusively locked.
  */
 void
-npf_ruleset_reload(npf_t *npf, npf_ruleset_t *newset,
-    npf_ruleset_t *oldset, bool load)
+npf_ruleset_reload(npf_ruleset_t *newset, npf_ruleset_t *oldset, bool load)
 {
 	npf_rule_t *rg, *rl;
 	uint64_t nid = 0;
 
-	KASSERT(npf_config_locked_p(npf));
+	KASSERT(npf_config_locked_p());
 
 	/*
 	 * Scan the dynamic rules and share (migrate) if needed.
@@ -649,7 +644,7 @@ npf_ruleset_freealg(npf_ruleset_t *rlset, npf_alg_t *alg)
  * npf_rule_alloc: allocate a rule and initialise it.
  */
 npf_rule_t *
-npf_rule_alloc(npf_t *npf, prop_dictionary_t rldict)
+npf_rule_alloc(prop_dictionary_t rldict)
 {
 	npf_rule_t *rl;
 	const char *rname;
@@ -680,7 +675,7 @@ npf_rule_alloc(npf_t *npf, prop_dictionary_t rldict)
 
 	/* Interface name; register and get the npf-if-id. */
 	if (prop_dictionary_get_cstring_nocopy(rldict, "ifname", &rname)) {
-		if ((rl->r_ifid = npf_ifmap_register(npf, rname)) == 0) {
+		if ((rl->r_ifid = npf_ifmap_register(rname)) == 0) {
 			kmem_free(rl, sizeof(npf_rule_t));
 			return NULL;
 		}
@@ -708,8 +703,8 @@ npf_rule_alloc(npf_t *npf, prop_dictionary_t rldict)
 }
 
 static int
-npf_rule_export(npf_t *npf, const npf_ruleset_t *rlset,
-    const npf_rule_t *rl, prop_dictionary_t rldict)
+npf_rule_export(const npf_ruleset_t *rlset, const npf_rule_t *rl,
+    prop_dictionary_t rldict)
 {
 	u_int skip_to = 0;
 	prop_data_t d;
@@ -727,7 +722,7 @@ npf_rule_export(npf_t *npf, const npf_ruleset_t *rlset,
 	}
 
 	if (rl->r_ifid) {
-		const char *ifname = npf_ifmap_getname(npf, rl->r_ifid);
+		const char *ifname = npf_ifmap_getname(rl->r_ifid);
 		prop_dictionary_set_cstring(rldict, "ifname", ifname);
 	}
 	prop_dictionary_set_uint64(rldict, "id", rl->r_id);
@@ -742,14 +737,6 @@ npf_rule_export(npf_t *npf, const npf_ruleset_t *rlset,
 	if (rl->r_info) {
 		prop_dictionary_set(rldict, "info", rl->r_info);
 	}
-
-	npf_rproc_t *rp = npf_rule_getrproc(rl);
-	if (rp != NULL) {
-		prop_dictionary_set_cstring(rldict, "rproc",
-		    npf_rproc_getname(rp));
-		npf_rproc_release(rp);
-	}
-
 	return 0;
 }
 
@@ -927,12 +914,9 @@ npf_ruleset_inspect(npf_cache_t *npc, const npf_ruleset_t *rlset,
 
 	/*
 	 * Prepare the external memory store and the arguments for
-	 * the BPF programs to be executed.  Reset mbuf before taking
-	 * any pointers for the BPF.
+	 * the BPF programs to be executed.
 	 */
 	uint32_t bc_words[NPF_BPF_NWORDS];
-
-	nbuf_reset(nbuf);
 	npf_bpf_prepare(npc, &bc_args, bc_words);
 
 	while (n < nitems) {
@@ -988,11 +972,10 @@ npf_ruleset_inspect(npf_cache_t *npc, const npf_ruleset_t *rlset,
  * => Returns ENETUNREACH if "block" and 0 if "pass".
  */
 int
-npf_rule_conclude(const npf_rule_t *rl, npf_match_info_t *mi)
+npf_rule_conclude(const npf_rule_t *rl, int *retfl)
 {
 	/* If not passing - drop the packet. */
-	mi->mi_retfl = rl->r_attr;
-	mi->mi_rid = rl->r_id;
+	*retfl = rl->r_attr;
 	return (rl->r_attr & NPF_RULE_PASS) ? 0 : ENETUNREACH;
 }
 
@@ -1000,9 +983,9 @@ npf_rule_conclude(const npf_rule_t *rl, npf_match_info_t *mi)
 #if defined(DDB) || defined(_NPF_TESTING)
 
 void
-npf_ruleset_dump(npf_t *npf, const char *name)
+npf_ruleset_dump(const char *name)
 {
-	npf_ruleset_t *rlset = npf_config_ruleset(npf);
+	npf_ruleset_t *rlset = npf_config_ruleset();
 	npf_rule_t *rg, *rl;
 
 	LIST_FOREACH(rg, &rlset->rs_dynamic, r_dentry) {

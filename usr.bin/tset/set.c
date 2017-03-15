@@ -1,4 +1,4 @@
-/*	$NetBSD: set.c,v 1.18 2015/06/21 08:23:22 mlelstv Exp $	*/
+/*	$NetBSD: set.c,v 1.17.10.1 2015/07/16 21:43:07 snj Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: set.c,v 1.18 2015/06/21 08:23:22 mlelstv Exp $");
+__RCSID("$NetBSD: set.c,v 1.17.10.1 2015/07/16 21:43:07 snj Exp $");
 
 #include <err.h>
 #include <stdio.h>

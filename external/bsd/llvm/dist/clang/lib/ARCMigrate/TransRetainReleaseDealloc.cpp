@@ -145,13 +145,16 @@ public:
       // when an exception is thrown.
       Pass.TA.replace(RecContainer->getSourceRange(), RecRange);
       std::string str = " = ";
-      str += getNilString(Pass);
+      str += getNilString(Pass.Ctx);
       Pass.TA.insertAfterToken(RecRange.getEnd(), str);
       return true;
     }
 
-    if (hasSideEffects(rec, Pass.Ctx) || !tryRemoving(RecContainer))
-      Pass.TA.replace(RecContainer->getSourceRange(), RecRange);
+    if (!hasSideEffects(rec, Pass.Ctx)) {
+      if (tryRemoving(RecContainer))
+        return true;
+    }
+    Pass.TA.replace(RecContainer->getSourceRange(), RecRange);
 
     return true;
   }
@@ -171,8 +174,11 @@ private:
   ///   return var;
   ///
   bool isCommonUnusedAutorelease(ObjCMessageExpr *E) {
-    return isPlusOneAssignBeforeOrAfterAutorelease(E) ||
-           isReturnedAfterAutorelease(E);
+    if (isPlusOneAssignBeforeOrAfterAutorelease(E))
+      return true;
+    if (isReturnedAfterAutorelease(E))
+      return true;
+    return false;
   }
 
   bool isReturnedAfterAutorelease(ObjCMessageExpr *E) {
@@ -219,7 +225,11 @@ private:
     // Check for "RefD = [+1 retained object];".
 
     if (BinaryOperator *Bop = dyn_cast<BinaryOperator>(S)) {
-      return (RefD == getReferencedDecl(Bop->getLHS())) && isPlusOneAssign(Bop);
+      if (RefD != getReferencedDecl(Bop->getLHS()))
+        return false;
+      if (isPlusOneAssign(Bop))
+        return true;
+      return false;
     }
 
     if (DeclStmt *DS = dyn_cast<DeclStmt>(S)) {
@@ -349,16 +359,16 @@ private:
       return;
 
     Stmt::child_range StmtExprChild = StmtE->children();
-    if (StmtExprChild.begin() == StmtExprChild.end())
+    if (!StmtExprChild)
       return;
-    auto *CompS = dyn_cast_or_null<CompoundStmt>(*StmtExprChild.begin());
+    CompoundStmt *CompS = dyn_cast_or_null<CompoundStmt>(*StmtExprChild);
     if (!CompS)
       return;
 
     Stmt::child_range CompStmtChild = CompS->children();
-    if (CompStmtChild.begin() == CompStmtChild.end())
+    if (!CompStmtChild)
       return;
-    auto *DeclS = dyn_cast_or_null<DeclStmt>(*CompStmtChild.begin());
+    DeclStmt *DeclS = dyn_cast_or_null<DeclStmt>(*CompStmtChild);
     if (!DeclS)
       return;
     if (!DeclS->isSingleDecl())

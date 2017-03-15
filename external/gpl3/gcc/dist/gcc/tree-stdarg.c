@@ -1,5 +1,5 @@
 /* Pass computing data for optimizing stdarg functions.
-   Copyright (C) 2004-2015 Free Software Foundation, Inc.
+   Copyright (C) 2004-2013 Free Software Foundation, Inc.
    Contributed by Jakub Jelinek <jakub@redhat.com>
 
 This file is part of GCC.
@@ -22,41 +22,12 @@ along with GCC; see the file COPYING3.  If not see
 #include "system.h"
 #include "coretypes.h"
 #include "tm.h"
-#include "hash-set.h"
-#include "machmode.h"
-#include "vec.h"
-#include "double-int.h"
-#include "input.h"
-#include "alias.h"
-#include "symtab.h"
-#include "wide-int.h"
-#include "inchash.h"
 #include "tree.h"
-#include "fold-const.h"
-#include "hard-reg-set.h"
-#include "input.h"
 #include "function.h"
 #include "langhooks.h"
 #include "gimple-pretty-print.h"
 #include "target.h"
-#include "bitmap.h"
-#include "predict.h"
-#include "dominance.h"
-#include "cfg.h"
-#include "basic-block.h"
-#include "tree-ssa-alias.h"
-#include "internal-fn.h"
-#include "gimple-expr.h"
-#include "is-a.h"
-#include "gimple.h"
-#include "gimple-iterator.h"
-#include "gimple-walk.h"
-#include "gimple-ssa.h"
-#include "tree-phinodes.h"
-#include "ssa-iterators.h"
-#include "stringpool.h"
-#include "tree-ssanames.h"
-#include "sbitmap.h"
+#include "tree-flow.h"
 #include "tree-pass.h"
 #include "tree-stdarg.h"
 
@@ -87,7 +58,7 @@ reachable_at_most_once (basic_block va_arg_bb, basic_block va_start_bb)
   if (! dominated_by_p (CDI_DOMINATORS, va_arg_bb, va_start_bb))
     return false;
 
-  visited = sbitmap_alloc (last_basic_block_for_fn (cfun));
+  visited = sbitmap_alloc (last_basic_block);
   bitmap_clear (visited);
   ret = true;
 
@@ -117,7 +88,7 @@ reachable_at_most_once (basic_block va_arg_bb, basic_block va_start_bb)
 	  break;
 	}
 
-      gcc_assert (src != ENTRY_BLOCK_PTR_FOR_FN (cfun));
+      gcc_assert (src != ENTRY_BLOCK_PTR);
 
       if (! bitmap_bit_p (visited, src->index))
 	{
@@ -134,7 +105,7 @@ reachable_at_most_once (basic_block va_arg_bb, basic_block va_start_bb)
 
 
 /* For statement COUNTER = RHS, if RHS is COUNTER + constant,
-   return constant, otherwise return HOST_WIDE_INT_M1U.
+   return constant, otherwise return (unsigned HOST_WIDE_INT) -1.
    GPR_P is true if this is GPR counter.  */
 
 static unsigned HOST_WIDE_INT
@@ -178,7 +149,7 @@ va_list_counter_bump (struct stdarg_info *si, tree counter, tree rhs,
       stmt = SSA_NAME_DEF_STMT (lhs);
 
       if (!is_gimple_assign (stmt) || gimple_assign_lhs (stmt) != lhs)
-	return HOST_WIDE_INT_M1U;
+	return (unsigned HOST_WIDE_INT) -1;
 
       rhs_code = gimple_assign_rhs_code (stmt);
       rhs1 = gimple_assign_rhs1 (stmt);
@@ -193,9 +164,9 @@ va_list_counter_bump (struct stdarg_info *si, tree counter, tree rhs,
       if ((rhs_code == POINTER_PLUS_EXPR
 	   || rhs_code == PLUS_EXPR)
 	  && TREE_CODE (rhs1) == SSA_NAME
-	  && tree_fits_uhwi_p (gimple_assign_rhs2 (stmt)))
+	  && host_integerp (gimple_assign_rhs2 (stmt), 1))
 	{
-	  ret += tree_to_uhwi (gimple_assign_rhs2 (stmt));
+	  ret += tree_low_cst (gimple_assign_rhs2 (stmt), 1);
 	  lhs = rhs1;
 	  continue;
 	}
@@ -203,29 +174,29 @@ va_list_counter_bump (struct stdarg_info *si, tree counter, tree rhs,
       if (rhs_code == ADDR_EXPR 
 	  && TREE_CODE (TREE_OPERAND (rhs1, 0)) == MEM_REF
 	  && TREE_CODE (TREE_OPERAND (TREE_OPERAND (rhs1, 0), 0)) == SSA_NAME
-	  && tree_fits_uhwi_p (TREE_OPERAND (TREE_OPERAND (rhs1, 0), 1)))
+	  && host_integerp (TREE_OPERAND (TREE_OPERAND (rhs1, 0), 1), 1))
 	{
-	  ret += tree_to_uhwi (TREE_OPERAND (TREE_OPERAND (rhs1, 0), 1));
+	  ret += tree_low_cst (TREE_OPERAND (TREE_OPERAND (rhs1, 0), 1), 1);
 	  lhs = TREE_OPERAND (TREE_OPERAND (rhs1, 0), 0);
 	  continue;
 	}
 
       if (get_gimple_rhs_class (rhs_code) != GIMPLE_SINGLE_RHS)
-	return HOST_WIDE_INT_M1U;
+	return (unsigned HOST_WIDE_INT) -1;
 
       rhs = gimple_assign_rhs1 (stmt);
       if (TREE_CODE (counter) != TREE_CODE (rhs))
-	return HOST_WIDE_INT_M1U;
+	return (unsigned HOST_WIDE_INT) -1;
 
       if (TREE_CODE (counter) == COMPONENT_REF)
 	{
 	  if (get_base_address (counter) != get_base_address (rhs)
 	      || TREE_CODE (TREE_OPERAND (rhs, 1)) != FIELD_DECL
 	      || TREE_OPERAND (counter, 1) != TREE_OPERAND (rhs, 1))
-	    return HOST_WIDE_INT_M1U;
+	    return (unsigned HOST_WIDE_INT) -1;
 	}
       else if (counter != rhs)
-	return HOST_WIDE_INT_M1U;
+	return (unsigned HOST_WIDE_INT) -1;
 
       lhs = NULL;
     }
@@ -260,9 +231,9 @@ va_list_counter_bump (struct stdarg_info *si, tree counter, tree rhs,
       if ((rhs_code == POINTER_PLUS_EXPR
 	   || rhs_code == PLUS_EXPR)
 	  && TREE_CODE (rhs1) == SSA_NAME
-	  && tree_fits_uhwi_p (gimple_assign_rhs2 (stmt)))
+	  && host_integerp (gimple_assign_rhs2 (stmt), 1))
 	{
-	  val -= tree_to_uhwi (gimple_assign_rhs2 (stmt));
+	  val -= tree_low_cst (gimple_assign_rhs2 (stmt), 1);
 	  lhs = rhs1;
 	  continue;
 	}
@@ -270,9 +241,9 @@ va_list_counter_bump (struct stdarg_info *si, tree counter, tree rhs,
       if (rhs_code == ADDR_EXPR 
 	  && TREE_CODE (TREE_OPERAND (rhs1, 0)) == MEM_REF
 	  && TREE_CODE (TREE_OPERAND (TREE_OPERAND (rhs1, 0), 0)) == SSA_NAME
-	  && tree_fits_uhwi_p (TREE_OPERAND (TREE_OPERAND (rhs1, 0), 1)))
+	  && host_integerp (TREE_OPERAND (TREE_OPERAND (rhs1, 0), 1), 1))
 	{
-	  val -= tree_to_uhwi (TREE_OPERAND (TREE_OPERAND (rhs1, 0), 1));
+	  val -= tree_low_cst (TREE_OPERAND (TREE_OPERAND (rhs1, 0), 1), 1);
 	  lhs = TREE_OPERAND (TREE_OPERAND (rhs1, 0), 0);
 	  continue;
 	}
@@ -430,7 +401,7 @@ va_list_ptr_read (struct stdarg_info *si, tree ap, tree tem)
   if (! si->compute_sizes)
     return false;
 
-  if (va_list_counter_bump (si, ap, tem, true) == HOST_WIDE_INT_M1U)
+  if (va_list_counter_bump (si, ap, tem, true) == (unsigned HOST_WIDE_INT) -1)
     return false;
 
   /* Note the temporary, as we need to track whether it doesn't escape
@@ -533,7 +504,7 @@ check_va_list_escapes (struct stdarg_info *si, tree lhs, tree rhs)
     }
 
   if (va_list_counter_bump (si, si->va_start_ap, lhs, true)
-      == HOST_WIDE_INT_M1U)
+      == (unsigned HOST_WIDE_INT) -1)
     {
       si->va_list_escapes = true;
       return;
@@ -551,15 +522,16 @@ check_all_va_list_escapes (struct stdarg_info *si)
 {
   basic_block bb;
 
-  FOR_EACH_BB_FN (bb, cfun)
+  FOR_EACH_BB (bb)
     {
-      for (gphi_iterator i = gsi_start_phis (bb); !gsi_end_p (i);
-	   gsi_next (&i))
+      gimple_stmt_iterator i;
+
+      for (i = gsi_start_phis (bb); !gsi_end_p (i); gsi_next (&i))
 	{
 	  tree lhs;
 	  use_operand_p uop;
 	  ssa_op_iter soi;
-	  gphi *phi = i.phi ();
+	  gimple phi = gsi_stmt (i);
 
 	  lhs = PHI_RESULT (phi);
 	  if (virtual_operand_p (lhs)
@@ -585,8 +557,7 @@ check_all_va_list_escapes (struct stdarg_info *si)
 	    }
 	}
 
-      for (gimple_stmt_iterator i = gsi_start_bb (bb); !gsi_end_p (i);
-	   gsi_next (&i))
+      for (i = gsi_start_bb (bb); !gsi_end_p (i); gsi_next (&i))
 	{
 	  gimple stmt = gsi_stmt (i);
 	  tree use;
@@ -610,15 +581,15 @@ check_all_va_list_escapes (struct stdarg_info *si)
 		  if (rhs_code == MEM_REF
 		      && TREE_OPERAND (rhs, 0) == use
 		      && TYPE_SIZE_UNIT (TREE_TYPE (rhs))
-		      && tree_fits_uhwi_p (TYPE_SIZE_UNIT (TREE_TYPE (rhs)))
+		      && host_integerp (TYPE_SIZE_UNIT (TREE_TYPE (rhs)), 1)
 		      && si->offsets[SSA_NAME_VERSION (use)] != -1)
 		    {
 		      unsigned HOST_WIDE_INT gpr_size;
 		      tree access_size = TYPE_SIZE_UNIT (TREE_TYPE (rhs));
 
 		      gpr_size = si->offsets[SSA_NAME_VERSION (use)]
-			  	 + tree_to_shwi (TREE_OPERAND (rhs, 1))
-				 + tree_to_uhwi (access_size);
+			  	 + tree_low_cst (TREE_OPERAND (rhs, 1), 0)
+				 + tree_low_cst (access_size, 1);
 		      if (gpr_size >= VA_LIST_MAX_GPR_SIZE)
 			cfun->va_list_gpr_size = VA_LIST_MAX_GPR_SIZE;
 		      else if (gpr_size > cfun->va_list_gpr_size)
@@ -679,49 +650,21 @@ check_all_va_list_escapes (struct stdarg_info *si)
 }
 
 
-namespace {
+/* Return true if this optimization pass should be done.
+   It makes only sense for stdarg functions.  */
 
-const pass_data pass_data_stdarg =
+static bool
+gate_optimize_stdarg (void)
 {
-  GIMPLE_PASS, /* type */
-  "stdarg", /* name */
-  OPTGROUP_NONE, /* optinfo_flags */
-  TV_NONE, /* tv_id */
-  ( PROP_cfg | PROP_ssa ), /* properties_required */
-  0, /* properties_provided */
-  0, /* properties_destroyed */
-  0, /* todo_flags_start */
-  0, /* todo_flags_finish */
-};
+  /* This optimization is only for stdarg functions.  */
+  return cfun->stdarg != 0;
+}
 
-class pass_stdarg : public gimple_opt_pass
-{
-public:
-  pass_stdarg (gcc::context *ctxt)
-    : gimple_opt_pass (pass_data_stdarg, ctxt)
-  {}
 
-  /* opt_pass methods: */
-  virtual bool gate (function *fun)
-    {
-      return (flag_stdarg_opt
-#ifdef ACCEL_COMPILER
-	      /* Disable for GCC5 in the offloading compilers, as
-		 va_list and gpr/fpr counter fields are not merged.
-		 In GCC6 when stdarg is lowered late this shouldn't be
-		 an issue.  */
-	      && !in_lto_p
-#endif
-	      /* This optimization is only for stdarg functions.  */
-	      && fun->stdarg != 0);
-    }
+/* Entry point to the stdarg optimization pass.  */
 
-  virtual unsigned int execute (function *);
-
-}; // class pass_stdarg
-
-unsigned int
-pass_stdarg::execute (function *fun)
+static unsigned int
+execute_optimize_stdarg (void)
 {
   basic_block bb;
   bool va_list_escapes = false;
@@ -731,8 +674,8 @@ pass_stdarg::execute (function *fun)
   const char *funcname = NULL;
   tree cfun_va_list;
 
-  fun->va_list_gpr_size = 0;
-  fun->va_list_fpr_size = 0;
+  cfun->va_list_gpr_size = 0;
+  cfun->va_list_fpr_size = 0;
   memset (&si, 0, sizeof (si));
   si.va_list_vars = BITMAP_ALLOC (NULL);
   si.va_list_escape_vars = BITMAP_ALLOC (NULL);
@@ -740,13 +683,13 @@ pass_stdarg::execute (function *fun)
   if (dump_file)
     funcname = lang_hooks.decl_printable_name (current_function_decl, 2);
 
-  cfun_va_list = targetm.fn_abi_va_list (fun->decl);
+  cfun_va_list = targetm.fn_abi_va_list (cfun->decl);
   va_list_simple_ptr = POINTER_TYPE_P (cfun_va_list)
 		       && (TREE_TYPE (cfun_va_list) == void_type_node
 			   || TREE_TYPE (cfun_va_list) == char_type_node);
   gcc_assert (is_gimple_reg_type (cfun_va_list) == va_list_simple_ptr);
 
-  FOR_EACH_BB_FN (bb, fun)
+  FOR_EACH_BB (bb)
     {
       gimple_stmt_iterator i;
 
@@ -795,7 +738,7 @@ pass_stdarg::execute (function *fun)
 	      ap = TREE_OPERAND (ap, 0);
 	    }
 	  if (TYPE_MAIN_VARIANT (TREE_TYPE (ap))
-	      != TYPE_MAIN_VARIANT (targetm.fn_abi_va_list (fun->decl))
+	      != TYPE_MAIN_VARIANT (targetm.fn_abi_va_list (cfun->decl))
 	      || TREE_CODE (ap) != VAR_DECL)
 	    {
 	      va_list_escapes = true;
@@ -850,14 +793,16 @@ pass_stdarg::execute (function *fun)
   /* For void * or char * va_list there is just one counter
      (va_list itself).  Use VA_LIST_GPR_SIZE for it.  */
   if (va_list_simple_ptr)
-    fun->va_list_fpr_size = VA_LIST_MAX_FPR_SIZE;
+    cfun->va_list_fpr_size = VA_LIST_MAX_FPR_SIZE;
 
   calculate_dominance_info (CDI_DOMINATORS);
   memset (&wi, 0, sizeof (wi));
   wi.info = si.va_list_vars;
 
-  FOR_EACH_BB_FN (bb, fun)
+  FOR_EACH_BB (bb)
     {
+      gimple_stmt_iterator i;
+
       si.compute_sizes = -1;
       si.bb = bb;
 
@@ -870,10 +815,9 @@ pass_stdarg::execute (function *fun)
       use_operand_p uop;
       ssa_op_iter soi;
 
-      for (gphi_iterator i = gsi_start_phis (bb); !gsi_end_p (i);
-	   gsi_next (&i))
+      for (i = gsi_start_phis (bb); !gsi_end_p (i); gsi_next (&i))
 	{
-	  gphi *phi = i.phi ();
+	  gimple phi = gsi_stmt (i);
 	  lhs = PHI_RESULT (phi);
 
 	  if (virtual_operand_p (lhs))
@@ -921,7 +865,7 @@ pass_stdarg::execute (function *fun)
 	      }
 	}
 
-      for (gimple_stmt_iterator i = gsi_start_bb (bb);
+      for (i = gsi_start_bb (bb);
 	   !gsi_end_p (i) && !va_list_escapes;
 	   gsi_next (&i))
 	{
@@ -1033,8 +977,8 @@ pass_stdarg::execute (function *fun)
 finish:
   if (va_list_escapes)
     {
-      fun->va_list_gpr_size = VA_LIST_MAX_GPR_SIZE;
-      fun->va_list_fpr_size = VA_LIST_MAX_FPR_SIZE;
+      cfun->va_list_gpr_size = VA_LIST_MAX_GPR_SIZE;
+      cfun->va_list_fpr_size = VA_LIST_MAX_FPR_SIZE;
     }
   BITMAP_FREE (si.va_list_vars);
   BITMAP_FREE (si.va_list_escape_vars);
@@ -1043,12 +987,12 @@ finish:
     {
       fprintf (dump_file, "%s: va_list escapes %d, needs to save ",
 	       funcname, (int) va_list_escapes);
-      if (fun->va_list_gpr_size >= VA_LIST_MAX_GPR_SIZE)
+      if (cfun->va_list_gpr_size >= VA_LIST_MAX_GPR_SIZE)
 	fputs ("all", dump_file);
       else
 	fprintf (dump_file, "%d", cfun->va_list_gpr_size);
       fputs (" GPR units and ", dump_file);
-      if (fun->va_list_fpr_size >= VA_LIST_MAX_FPR_SIZE)
+      if (cfun->va_list_fpr_size >= VA_LIST_MAX_FPR_SIZE)
 	fputs ("all", dump_file);
       else
 	fprintf (dump_file, "%d", cfun->va_list_fpr_size);
@@ -1057,10 +1001,23 @@ finish:
   return 0;
 }
 
-} // anon namespace
 
-gimple_opt_pass *
-make_pass_stdarg (gcc::context *ctxt)
+struct gimple_opt_pass pass_stdarg =
 {
-  return new pass_stdarg (ctxt);
-}
+ {
+  GIMPLE_PASS,
+  "stdarg",				/* name */
+  OPTGROUP_NONE,                        /* optinfo_flags */
+  gate_optimize_stdarg,			/* gate */
+  execute_optimize_stdarg,		/* execute */
+  NULL,					/* sub */
+  NULL,					/* next */
+  0,					/* static_pass_number */
+  TV_NONE,				/* tv_id */
+  PROP_cfg | PROP_ssa,			/* properties_required */
+  0,					/* properties_provided */
+  0,					/* properties_destroyed */
+  0,					/* todo_flags_start */
+  0             			/* todo_flags_finish */
+ }
+};

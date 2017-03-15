@@ -1,4 +1,4 @@
-/*	$NetBSD: glxsb.c,v 1.14 2016/07/14 10:19:05 msaitoh Exp $	*/
+/*	$NetBSD: glxsb.c,v 1.12 2014/08/10 16:44:34 tls Exp $	*/
 /* $OpenBSD: glxsb.c,v 1.7 2007/02/12 14:31:45 tom Exp $ */
 
 /*
@@ -25,7 +25,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: glxsb.c,v 1.14 2016/07/14 10:19:05 msaitoh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: glxsb.c,v 1.12 2014/08/10 16:44:34 tls Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -36,7 +36,6 @@ __KERNEL_RCSID(0, "$NetBSD: glxsb.c,v 1.14 2016/07/14 10:19:05 msaitoh Exp $");
 #include <sys/callout.h>
 #include <sys/bus.h>
 #include <sys/cprng.h>
-#include <sys/rndsource.h>
 
 #include <machine/cpufunc.h>
 
@@ -215,8 +214,7 @@ glxsb_attach(device_t parent, device_t self, void *aux)
 
 	msr = rdmsr(SB_GLD_MSR_CAP);
 	if ((msr & 0xFFFF00) != 0x130400) {
-		aprint_error(": unknown ID 0x%x\n",
-		    (int)((msr & 0xFFFF00) >> 16));
+		printf(": unknown ID 0x%x\n", (int) ((msr & 0xFFFF00) >> 16));
 		return;
 	}
 
@@ -226,7 +224,7 @@ glxsb_attach(device_t parent, device_t self, void *aux)
 	if (pci_mapreg_map(pa, PCI_MAPREG_START,
 	    PCI_MAPREG_TYPE_MEM | PCI_MAPREG_MEM_TYPE_32BIT, 0,
 	    &sc->sc_iot, &sc->sc_ioh, &membase, &memsize)) {
-		aprint_error(": can't find mem space\n");
+		printf(": can't find mem space\n");
 		return;
 	}
 
@@ -560,8 +558,8 @@ glxsb_crypto_process(void *aux, struct cryptop *crp, int hint)
 			cuio_copyback((struct uio *)crp->crp_buf,
 			    crd->crd_skip + offset, len, op_dst);
 		else
-			memcpy((char *)crp->crp_buf + crd->crd_skip + offset,
-			    op_dst, len);
+			memcpy((char *)crp->crp_buf + crd->crd_skip + offset, op_dst,
+			    len);
 
 		offset += len;
 		tlen -= len;
@@ -579,8 +577,7 @@ glxsb_crypto_process(void *aux, struct cryptop *crp, int hint)
 		 * time.
 		 */
 		if (crd->crd_flags & CRD_F_ENCRYPT) {
-			memcpy(piv, op_dst + len - sizeof(op_iv),
-			    sizeof(op_iv));
+			memcpy(piv, op_dst + len - sizeof(op_iv), sizeof(op_iv));
 		} else {
 			/* Decryption, only need this if another iteration */
 			if (tlen > 0) {
@@ -611,8 +608,8 @@ glxsb_dma_alloc(struct glxsb_softc *sc, int size, struct glxsb_dma_map *dma)
 	rc = bus_dmamap_create(sc->sc_dmat, size, dma->dma_nsegs, size,
 	    0, BUS_DMA_NOWAIT, &dma->dma_map);
 	if (rc != 0) {
-		aprint_error_dev(sc->sc_dev,
-		    "couldn't create DMA map for %d bytes (%d)\n", size, rc);
+		aprint_error_dev(sc->sc_dev, "couldn't create DMA map for %d bytes (%d)\n",
+		    size, rc);
 
 		goto fail0;
 	}
@@ -620,8 +617,7 @@ glxsb_dma_alloc(struct glxsb_softc *sc, int size, struct glxsb_dma_map *dma)
 	rc = bus_dmamem_alloc(sc->sc_dmat, size, SB_AES_ALIGN, 0,
 	    &dma->dma_seg, dma->dma_nsegs, &dma->dma_nsegs, BUS_DMA_NOWAIT);
 	if (rc != 0) {
-		aprint_error_dev(sc->sc_dev,
-		    "couldn't allocate DMA memory of %d bytes (%d)\n",
+		aprint_error_dev(sc->sc_dev, "couldn't allocate DMA memory of %d bytes (%d)\n",
 		    size, rc);
 
 		goto fail1;
@@ -630,8 +626,8 @@ glxsb_dma_alloc(struct glxsb_softc *sc, int size, struct glxsb_dma_map *dma)
 	rc = bus_dmamem_map(sc->sc_dmat, &dma->dma_seg, 1, size,
 	    &dma->dma_vaddr, BUS_DMA_NOWAIT);
 	if (rc != 0) {
-		aprint_error_dev(sc->sc_dev,
-		    "couldn't map DMA memory for %d bytes (%d)\n", size, rc);
+		aprint_error_dev(sc->sc_dev, "couldn't map DMA memory for %d bytes (%d)\n",
+		    size, rc);
 
 		goto fail2;
 	}
@@ -639,8 +635,8 @@ glxsb_dma_alloc(struct glxsb_softc *sc, int size, struct glxsb_dma_map *dma)
 	rc = bus_dmamap_load(sc->sc_dmat, dma->dma_map, dma->dma_vaddr,
 	    size, NULL, BUS_DMA_NOWAIT);
 	if (rc != 0) {
-		aprint_error_dev(sc->sc_dev,
-		    "couldn't load DMA memory for %d bytes (%d)\n", size, rc);
+		aprint_error_dev(sc->sc_dev, "couldn't load DMA memory for %d bytes (%d)\n",
+		    size, rc);
 
 		goto fail3;
 	}

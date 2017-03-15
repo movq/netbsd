@@ -19,7 +19,6 @@
 #include "clang/Analysis/CFG.h"
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/PostOrderIterator.h"
-#include "llvm/ADT/PriorityQueue.h"
 #include "llvm/Support/raw_ostream.h"
 #include <algorithm>
 #include <vector>
@@ -29,21 +28,20 @@ using namespace clang;
 namespace {
 
 class DataflowWorklist {
+  SmallVector<const CFGBlock *, 20> worklist;
   llvm::BitVector enqueuedBlocks;
   PostOrderCFGView *POV;
-  llvm::PriorityQueue<const CFGBlock *, SmallVector<const CFGBlock *, 20>,
-                      PostOrderCFGView::BlockOrderCompare> worklist;
-
 public:
   DataflowWorklist(const CFG &cfg, AnalysisDeclContext &Ctx)
     : enqueuedBlocks(cfg.getNumBlockIDs()),
-      POV(Ctx.getAnalysis<PostOrderCFGView>()),
-      worklist(POV->getComparator()) {}
+      POV(Ctx.getAnalysis<PostOrderCFGView>()) {}
   
   void enqueueBlock(const CFGBlock *block);
   void enqueuePredecessors(const CFGBlock *block);
 
   const CFGBlock *dequeue();
+
+  void sortWorklist();
 };
 
 }
@@ -51,22 +49,31 @@ public:
 void DataflowWorklist::enqueueBlock(const clang::CFGBlock *block) {
   if (block && !enqueuedBlocks[block->getBlockID()]) {
     enqueuedBlocks[block->getBlockID()] = true;
-    worklist.push(block);
+    worklist.push_back(block);
   }
 }
 
 void DataflowWorklist::enqueuePredecessors(const clang::CFGBlock *block) {
+  const unsigned OldWorklistSize = worklist.size();
   for (CFGBlock::const_pred_iterator I = block->pred_begin(),
        E = block->pred_end(); I != E; ++I) {
     enqueueBlock(*I);
   }
+  
+  if (OldWorklistSize == 0 || OldWorklistSize == worklist.size())
+    return;
+
+  sortWorklist();
+}
+
+void DataflowWorklist::sortWorklist() {
+  std::sort(worklist.begin(), worklist.end(), POV->getComparator());
 }
 
 const CFGBlock *DataflowWorklist::dequeue() {
   if (worklist.empty())
     return nullptr;
-  const CFGBlock *b = worklist.top();
-  worklist.pop();
+  const CFGBlock *b = worklist.pop_back_val();
   enqueuedBlocks[b->getBlockID()] = false;
   return b;
 }
@@ -315,10 +322,11 @@ void TransferFunctions::Visit(Stmt *S) {
       return;
     }
   }
-
-  for (Stmt *Child : S->children()) {
-    if (Child)
-      AddLiveStmt(val.liveStmts, LV.SSetFact, Child);
+  
+  for (Stmt::child_iterator it = S->child_begin(), ei = S->child_end();
+       it != ei; ++it) {
+    if (Stmt *child = *it)
+      AddLiveStmt(val.liveStmts, LV.SSetFact, child);
   }
 }
 
@@ -348,8 +356,11 @@ void TransferFunctions::VisitBinaryOperator(BinaryOperator *B) {
 }
 
 void TransferFunctions::VisitBlockExpr(BlockExpr *BE) {
-  for (const VarDecl *VD :
-       LV.analysisContext.getReferencedBlockVars(BE->getBlockDecl())) {
+  AnalysisDeclContext::referenced_decls_iterator I, E;
+  std::tie(I, E) =
+    LV.analysisContext.getReferencedBlockVars(BE->getBlockDecl());
+  for ( ; I != E ; ++I) {
+    const VarDecl *VD = *I;
     if (isAlwaysAlive(VD))
       continue;
     val.liveDecls = LV.DSetFact.add(val.liveDecls, VD);
@@ -520,6 +531,8 @@ LiveVariables::computeLiveness(AnalysisDeclContext &AC,
         }
       }
   }
+  
+  worklist.sortWorklist();
   
   while (const CFGBlock *block = worklist.dequeue()) {
     // Determine if the block's end value has changed.  If not, we

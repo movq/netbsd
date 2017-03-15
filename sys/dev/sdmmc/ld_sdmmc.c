@@ -1,4 +1,4 @@
-/*	$NetBSD: ld_sdmmc.c,v 1.25 2017/01/07 16:24:40 martin Exp $	*/
+/*	$NetBSD: ld_sdmmc.c,v 1.12.4.1 2015/05/26 01:29:53 msaitoh Exp $	*/
 
 /*
  * Copyright (c) 2008 KIYOHARA Takashi
@@ -28,7 +28,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ld_sdmmc.c,v 1.25 2017/01/07 16:24:40 martin Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ld_sdmmc.c,v 1.12.4.1 2015/05/26 01:29:53 msaitoh Exp $");
 
 #ifdef _KERNEL_OPT
 #include "opt_sdmmc.h"
@@ -41,28 +41,22 @@ __KERNEL_RCSID(0, "$NetBSD: ld_sdmmc.c,v 1.25 2017/01/07 16:24:40 martin Exp $")
 #include <sys/buf.h>
 #include <sys/bufq.h>
 #include <sys/bus.h>
+#include <sys/callout.h>
 #include <sys/endian.h>
 #include <sys/dkio.h>
 #include <sys/disk.h>
-#include <sys/disklabel.h>
 #include <sys/kthread.h>
-#include <sys/syslog.h>
-#include <sys/module.h>
+#include <sys/rnd.h>
 
 #include <dev/ldvar.h>
 
 #include <dev/sdmmc/sdmmcvar.h>
 
-#include "ioconf.h"
-
-#ifdef LD_SDMMC_DEBUG
+#ifdef SDMMC_DEBUG
 #define DPRINTF(s)	printf s
 #else
 #define DPRINTF(s)	/**/
 #endif
-
-#define	LD_SDMMC_IORETRIES	5	/* number of retries before giving up */
-#define	RECOVERYTIME		hz/2	/* time to wait before retrying a cmd */
 
 struct ld_sdmmc_softc;
 
@@ -71,8 +65,7 @@ struct ld_sdmmc_task {
 
 	struct ld_sdmmc_softc *task_sc;
 	struct buf *task_bp;
-	int task_retries; /* number of xfer retry */
-	struct callout task_restart_ch;
+	callout_t task_callout;
 };
 
 struct ld_sdmmc_softc {
@@ -80,9 +73,7 @@ struct ld_sdmmc_softc {
 	int sc_hwunit;
 
 	struct sdmmc_function *sc_sf;
-#define LD_SDMMC_MAXQUEUECNT 4
-	struct ld_sdmmc_task sc_task[LD_SDMMC_MAXQUEUECNT];
-	TAILQ_HEAD(, sdmmc_task) sc_freeq;
+	struct ld_sdmmc_task sc_task;
 };
 
 static int ld_sdmmc_match(device_t, cfdata_t, void *);
@@ -91,10 +82,10 @@ static int ld_sdmmc_detach(device_t, int);
 
 static int ld_sdmmc_dump(struct ld_softc *, void *, int, int);
 static int ld_sdmmc_start(struct ld_softc *, struct buf *);
-static void ld_sdmmc_restart(void *);
 
 static void ld_sdmmc_doattach(void *);
 static void ld_sdmmc_dobio(void *);
+static void ld_sdmmc_timeout(void *);
 
 CFATTACH_DECL_NEW(ld_sdmmc, sizeof(struct ld_sdmmc_softc),
     ld_sdmmc_match, ld_sdmmc_attach, ld_sdmmc_detach, NULL);
@@ -118,9 +109,7 @@ ld_sdmmc_attach(device_t parent, device_t self, void *aux)
 	struct ld_sdmmc_softc *sc = device_private(self);
 	struct sdmmc_attach_args *sa = aux;
 	struct ld_softc *ld = &sc->sc_ld;
-	struct ld_sdmmc_task *task;
 	struct lwp *lwp;
-	int i;
 
 	ld->sc_dv = self;
 
@@ -129,13 +118,7 @@ ld_sdmmc_attach(device_t parent, device_t self, void *aux)
 	    sa->sf->cid.rev, sa->sf->cid.psn, sa->sf->cid.mdt);
 	aprint_naive("\n");
 
-	TAILQ_INIT(&sc->sc_freeq);
-	for (i = 0; i < __arraycount(sc->sc_task); i++) {
-		task = &sc->sc_task[i];
-		task->task_sc = sc;
-		callout_init(&task->task_restart_ch, 0);
-		TAILQ_INSERT_TAIL(&sc->sc_freeq, &task->task, next);
-	}
+	callout_init(&sc->sc_task.task_callout, 0);
 
 	sc->sc_hwunit = 0;	/* always 0? */
 	sc->sc_sf = sa->sf;
@@ -144,7 +127,7 @@ ld_sdmmc_attach(device_t parent, device_t self, void *aux)
 	ld->sc_secperunit = sc->sc_sf->csd.capacity;
 	ld->sc_secsize = SDMMC_SECTOR_SIZE;
 	ld->sc_maxxfer = MAXPHYS;
-	ld->sc_maxqueuecnt = LD_SDMMC_MAXQUEUECNT;
+	ld->sc_maxqueuecnt = 1;
 	ld->sc_dump = ld_sdmmc_dump;
 	ld->sc_start = ld_sdmmc_start;
 
@@ -166,10 +149,9 @@ ld_sdmmc_doattach(void *arg)
 	struct ld_softc *ld = &sc->sc_ld;
 	struct sdmmc_softc *ssc = device_private(device_parent(ld->sc_dv));
 
-	ldattach(ld, BUFQ_DISK_DEFAULT_STRAT);
-	aprint_normal_dev(ld->sc_dv, "%d-bit width,", sc->sc_sf->width);
-	if (ssc->sc_transfer_mode != NULL)
-		aprint_normal(" %s,", ssc->sc_transfer_mode);
+	ldattach(ld);
+	aprint_normal_dev(ld->sc_dv, "%d-bit width, bus clock",
+	    sc->sc_sf->width);
 	if ((ssc->sc_busclk / 1000) != 0)
 		aprint_normal(" %u.%03u MHz\n",
 		    ssc->sc_busclk / 1000, ssc->sc_busclk % 1000);
@@ -184,14 +166,11 @@ ld_sdmmc_detach(device_t dev, int flags)
 {
 	struct ld_sdmmc_softc *sc = device_private(dev);
 	struct ld_softc *ld = &sc->sc_ld;
-	int rv, i;
+	int rv;
 
 	if ((rv = ldbegindetach(ld, flags)) != 0)
 		return rv;
 	ldenddetach(ld);
-
-	for (i = 0; i < __arraycount(sc->sc_task); i++)
-		callout_destroy(&sc->sc_task[i].task_restart_ch);
 
 	return 0;
 }
@@ -200,29 +179,16 @@ static int
 ld_sdmmc_start(struct ld_softc *ld, struct buf *bp)
 {
 	struct ld_sdmmc_softc *sc = device_private(ld->sc_dv);
-	struct ld_sdmmc_task *task = (void *)TAILQ_FIRST(&sc->sc_freeq);
+	struct ld_sdmmc_task *task = &sc->sc_task;
 
-	TAILQ_REMOVE(&sc->sc_freeq, &task->task, next);
-
+	task->task_sc = sc;
 	task->task_bp = bp;
-	task->task_retries = 0;
 	sdmmc_init_task(&task->task, ld_sdmmc_dobio, task);
 
+	callout_reset(&task->task_callout, hz, ld_sdmmc_timeout, task);
 	sdmmc_add_task(sc->sc_sf->sc, &task->task);
 
 	return 0;
-}
-
-static void
-ld_sdmmc_restart(void *arg)
-{
-	struct ld_sdmmc_task *task = (struct ld_sdmmc_task *)arg;
-	struct ld_sdmmc_softc *sc = task->task_sc;
-	struct buf *bp = task->task_bp;
-
-	bp->b_resid = bp->b_bcount;
-
-	sdmmc_add_task(sc->sc_sf->sc, &task->task);
 }
 
 static void
@@ -231,7 +197,9 @@ ld_sdmmc_dobio(void *arg)
 	struct ld_sdmmc_task *task = (struct ld_sdmmc_task *)arg;
 	struct ld_sdmmc_softc *sc = task->task_sc;
 	struct buf *bp = task->task_bp;
-	int error;
+	int error, s;
+
+	callout_stop(&task->task_callout);
 
 	/*
 	 * I/O operation
@@ -248,10 +216,13 @@ ld_sdmmc_dobio(void *arg)
 		    bp->b_rawblkno, sc->sc_sf->csd.capacity);
 		bp->b_error = EINVAL;
 		bp->b_resid = bp->b_bcount;
+		s = splbio();
 		lddone(&sc->sc_ld, bp);
+		splx(s);
 		return;
 	}
 
+	s = splbio();
 	if (bp->b_flags & B_READ)
 		error = sdmmc_mem_read_block(sc->sc_sf, bp->b_rawblkno,
 		    bp->b_data, bp->b_bcount);
@@ -259,27 +230,39 @@ ld_sdmmc_dobio(void *arg)
 		error = sdmmc_mem_write_block(sc->sc_sf, bp->b_rawblkno,
 		    bp->b_data, bp->b_bcount);
 	if (error) {
-		if (task->task_retries < LD_SDMMC_IORETRIES) {
-			struct dk_softc *dksc = &sc->sc_ld.sc_dksc;
-			struct cfdriver *cd = device_cfdriver(dksc->sc_dev);
-
-			diskerr(bp, cd->cd_name, "error", LOG_PRINTF, 0,
-				dksc->sc_dkdev.dk_label);
-			printf(", retrying\n");
-			task->task_retries++;
-			callout_reset(&task->task_restart_ch, RECOVERYTIME,
-			    ld_sdmmc_restart, task);
-			return;
-		}
+		DPRINTF(("%s: error %d\n", device_xname(sc->sc_ld.sc_dv),
+		    error));
 		bp->b_error = error;
 		bp->b_resid = bp->b_bcount;
 	} else {
 		bp->b_resid = 0;
 	}
 
-	TAILQ_INSERT_TAIL(&sc->sc_freeq, &task->task, next);
+	lddone(&sc->sc_ld, bp);
+	splx(s);
+}
+
+static void
+ld_sdmmc_timeout(void *arg)
+{
+	struct ld_sdmmc_task *task = (struct ld_sdmmc_task *)arg;
+	struct ld_sdmmc_softc *sc = task->task_sc;
+	struct buf *bp = task->task_bp;
+	int s;
+
+	s = splbio();
+	if (!sdmmc_task_pending(&task->task)) {
+		splx(s);
+		return;
+	}
+	bp->b_error = EIO;	/* XXXX */
+	bp->b_resid = bp->b_bcount;
+	sdmmc_del_task(&task->task);
+
+	aprint_error_dev(sc->sc_ld.sc_dv, "task timeout");
 
 	lddone(&sc->sc_ld, bp);
+	splx(s);
 }
 
 static int
@@ -289,47 +272,4 @@ ld_sdmmc_dump(struct ld_softc *ld, void *data, int blkno, int blkcnt)
 
 	return sdmmc_mem_write_block(sc->sc_sf, blkno, data,
 	    blkcnt * ld->sc_secsize);
-}
-
-MODULE(MODULE_CLASS_DRIVER, ld_sdmmc, "ld");
-
-#ifdef _MODULE
-/*
- * XXX Don't allow ioconf.c to redefine the "struct cfdriver ld_cd"
- * XXX it will be defined in the common-code module
- */
-#undef  CFDRIVER_DECL
-#define CFDRIVER_DECL(name, class, attr)
-#include "ioconf.c"    
-#endif
-
-static int
-ld_sdmmc_modcmd(modcmd_t cmd, void *opaque)
-{
-#ifdef _MODULE
-	/*
-	 * We ignore the cfdriver_vec[] that ioconf provides, since
-	 * the cfdrivers are attached already.
-	 */
-	static struct cfdriver * const no_cfdriver_vec[] = { NULL };
-#endif
-	int error = 0;
- 
-#ifdef _MODULE
-	switch (cmd) {
-	case MODULE_CMD_INIT:
-		error = config_init_component(no_cfdriver_vec,
-		    cfattach_ioconf_ld_sdmmc, cfdata_ioconf_ld_sdmmc);
-        	break;
-	case MODULE_CMD_FINI:
-		error = config_fini_component(no_cfdriver_vec,
-		    cfattach_ioconf_ld_sdmmc, cfdata_ioconf_ld_sdmmc);
-		break;
-	default:
-		error = ENOTTY;
-		break;
-	}
-#endif
-
-	return error;
 }

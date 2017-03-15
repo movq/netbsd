@@ -1,5 +1,5 @@
-/*	Id: local2.c,v 1.31 2016/01/06 16:11:24 ragge Exp 	 */	
-/*	$NetBSD: local2.c,v 1.1.1.5 2016/02/09 20:28:21 plunky Exp $	 */
+/*	Id: local2.c,v 1.26 2012/09/26 20:22:41 plunky Exp 	 */	
+/*	$NetBSD: local2.c,v 1.1.1.4 2014/07/24 19:18:25 plunky Exp $	 */
 /*
  * Copyright (c) 2003 Anders Magnusson (ragge@ludd.luth.se).
  * All rights reserved.
@@ -101,24 +101,15 @@ prologue(struct interpass_prolog * ipp)
 
 	addto = offcalc(ipp);
 
-	/* emit PIC only if -fpic or -fPIC set */
-	if (kflag > 0) {
-		printf("\t.frame %s,%d,%s\n",
-		    rnames[FP], ARGINIT/SZCHAR, rnames[RA]);
-		printf("\t.set noreorder\n");
-		printf("\t.cpload $25\t# pseudo-op to load GOT ptr into $25\n");
-		printf("\t.set reorder\n");
-	}
-
+	/* for the moment, just emit this PIC stuff - NetBSD does it */
 	printf("\t.frame %s,%d,%s\n", rnames[FP], ARGINIT/SZCHAR, rnames[RA]);
 	printf("\t.set noreorder\n");
 	printf("\t.cpload $25\t# pseudo-op to load GOT ptr into $25\n");
 	printf("\t.set reorder\n");
 
 	printf("\tsubu %s,%s,%d\n", rnames[SP], rnames[SP], ARGINIT/SZCHAR);
-	/* emit PIC only if -fpic or -fPIC set */
-	if (kflag > 0)
-		printf("\t.cprestore 8\t# pseudo-op to store GOT ptr at 8(sp)\n");
+	/* for the moment, just emit PIC stuff - NetBSD does it */
+	printf("\t.cprestore 8\t# pseudo-op to store GOT ptr at 8(sp)\n");
 
 	printf("\tsw %s,4(%s)\n", rnames[RA], rnames[SP]);
 	printf("\tsw %s,(%s)\n", rnames[FP], rnames[SP]);
@@ -152,8 +143,9 @@ void
 eoftn(struct interpass_prolog * ipp)
 {
 	int i, j;
+	int addto;
 
-	(void) offcalc(ipp);
+	addto = offcalc(ipp);
 
 	if (ipp->ipp_ip.ip_lbl == 0)
 		return;		/* no code needs to be generated */
@@ -328,12 +320,11 @@ tlen(NODE *p)
 static void
 starg(NODE *p)
 {
-	int sz = attr_find(p->n_ap, ATTR_P2STRUCT)->iarg(0);
 	//assert(p->n_rval == A1);
-	printf("\tsubu %s,%s,%d\n", rnames[SP], rnames[SP], sz);
+	printf("\tsubu %s,%s,%d\n", rnames[SP], rnames[SP], p->n_stsize);
 	/* A0 = dest, A1 = src, A2 = len */
 	printf("\tmove %s,%s\n", rnames[A0], rnames[SP]);
-	printf("\tli %s,%d\t# structure size\n", rnames[A2], sz);
+	printf("\tli %s,%d\t# structure size\n", rnames[A2], p->n_stsize);
 	printf("\tsubu %s,%s,16\n", rnames[SP], rnames[SP]);
 	printf("\tjal %s\t# structure copy\n", exname("memcpy"));
 	printf("\tnop\n");
@@ -348,12 +339,11 @@ stasg(NODE *p)
 {
 	assert(p->n_right->n_rval == A1);
 	/* A0 = dest, A1 = src, A2 = len */
-	printf("\tli %s,%d\t# structure size\n", rnames[A2],
-	    attr_find(p->n_ap, ATTR_P2STRUCT)->iarg(0));
+	printf("\tli %s,%d\t# structure size\n", rnames[A2], p->n_stsize);
 	if (p->n_left->n_op == OREG) {
 		printf("\taddiu %s,%s," CONFMT "\t# dest address\n",
 		    rnames[A0], rnames[p->n_left->n_rval],
-		    getlval(p->n_left));
+		    p->n_left->n_lval);
 	} else if (p->n_left->n_op == NAME) {
 		printf("\tla %s,", rnames[A0]);
 		adrput(stdout, p->n_left);
@@ -371,29 +361,29 @@ shiftop(NODE *p)
 	NODE *r = p->n_right;
 	TWORD ty = p->n_type;
 
-	if (p->n_op == LS && r->n_op == ICON && getlval(r) < 32) {
+	if (p->n_op == LS && r->n_op == ICON && r->n_lval < 32) {
 		expand(p, INBREG, "\tsrl A1,AL,");
-		printf(CONFMT "\t# 64-bit left-shift\n", 32 - getlval(r));
+		printf(CONFMT "\t# 64-bit left-shift\n", 32 - r->n_lval);
 		expand(p, INBREG, "\tsll U1,UL,AR\n");
 		expand(p, INBREG, "\tor U1,U1,A1\n");
 		expand(p, INBREG, "\tsll A1,AL,AR\n");
-	} else if (p->n_op == LS && r->n_op == ICON && getlval(r) < 64) {
+	} else if (p->n_op == LS && r->n_op == ICON && r->n_lval < 64) {
 		expand(p, INBREG, "\tli A1,0\t# 64-bit left-shift\n");
 		expand(p, INBREG, "\tsll U1,AL,");
-		printf(CONFMT "\n", getlval(r) - 32);
+		printf(CONFMT "\n", r->n_lval - 32);
 	} else if (p->n_op == LS && r->n_op == ICON) {
 		expand(p, INBREG, "\tli A1,0\t# 64-bit left-shift\n");
 		expand(p, INBREG, "\tli U1,0\n");
-	} else if (p->n_op == RS && r->n_op == ICON && getlval(r) < 32) {
+	} else if (p->n_op == RS && r->n_op == ICON && r->n_lval < 32) {
 		expand(p, INBREG, "\tsll U1,UL,");
-		printf(CONFMT "\t# 64-bit right-shift\n", 32 - getlval(r));
+		printf(CONFMT "\t# 64-bit right-shift\n", 32 - r->n_lval);
 		expand(p, INBREG, "\tsrl A1,AL,AR\n");
 		expand(p, INBREG, "\tor A1,A1,U1\n");
 		if (ty == LONGLONG)
 			expand(p, INBREG, "\tsra U1,UL,AR\n");
 		else
 			expand(p, INBREG, "\tsrl U1,UL,AR\n");
-	} else if (p->n_op == RS && r->n_op == ICON && getlval(r) < 64) {
+	} else if (p->n_op == RS && r->n_op == ICON && r->n_lval < 64) {
 		if (ty == LONGLONG) {
 			expand(p, INBREG, "\tsra U1,UL,31\t# 64-bit right-shift\n");
 			expand(p, INBREG, "\tsra A1,UL,");
@@ -401,7 +391,7 @@ shiftop(NODE *p)
 			expand(p, INBREG, "\tli U1,0\t# 64-bit right-shift\n");
 			expand(p, INBREG, "\tsrl A1,UL,");
 		}
-		printf(CONFMT "\n", getlval(r) - 32);
+		printf(CONFMT "\n", r->n_lval - 32);
 	} else if (p->n_op == LS && r->n_op == ICON) {
 		expand(p, INBREG, "\tli A1,0\t# 64-bit right-shift\n");
 		expand(p, INBREG, "\tli U1,0\n");
@@ -744,7 +734,7 @@ zzzcode(NODE * p, int c)
 	case 'I':		/* high part of init constant */
 		if (p->n_name[0] != '\0')
 			comperr("named highword");
-		printf(CONFMT, (getlval(p) >> 32) & 0xffffffff);
+		printf(CONFMT, (p->n_lval >> 32) & 0xffffffff);
 		break;
 
         case 'O': /* 64-bit left and right shift operators */
@@ -854,13 +844,13 @@ adrcon(CONSZ val)
 void
 conput(FILE *fp, NODE *p)
 {
-	int val = getlval(p);
+	int val = p->n_lval;
 
 	switch (p->n_op) {
 	case ICON:
 		if (p->n_name[0] != '\0') {
 			fprintf(fp, "%s", p->n_name);
-			if (getlval(p))
+			if (p->n_lval)
 				fprintf(fp, "+%d", val);
 		} else
 			fprintf(fp, "%d", val);
@@ -915,12 +905,12 @@ upput(NODE * p, int size)
 
 	case NAME:
 	case OREG:
-		setlval(p, getlval(p) + size);
+		p->n_lval += size;
 		adrput(stdout, p);
-		setlval(p, getlval(p) - size);
+		p->n_lval -= size;
 		break;
 	case ICON:
-		printf(CONFMT, getlval(p) >> 32);
+		printf(CONFMT, p->n_lval >> 32);
 		break;
 	default:
 		comperr("upput bad op %d size %d", p->n_op, size);
@@ -930,6 +920,7 @@ upput(NODE * p, int size)
 void
 adrput(FILE * io, NODE * p)
 {
+	int r;
 	/* output an address, with offsets, from p */
 
 	if (p->n_op == FLD)
@@ -940,16 +931,18 @@ adrput(FILE * io, NODE * p)
 	case NAME:
 		if (p->n_name[0] != '\0')
 			fputs(p->n_name, io);
-		if (getlval(p) != 0)
-			fprintf(io, "+" CONFMT, getlval(p));
+		if (p->n_lval != 0)
+			fprintf(io, "+" CONFMT, p->n_lval);
 		return;
 
 	case OREG:
-		if (getlval(p))
-			fprintf(io, "%d", (int) getlval(p));
+		r = p->n_rval;
+
+		if (p->n_lval)
+			fprintf(io, "%d", (int) p->n_lval);
+
 		fprintf(io, "(%s)", rnames[p->n_rval]);
 		return;
-
 	case ICON:
 		/* addressable value of the constant */
 		conput(io, p);
@@ -1029,26 +1022,26 @@ offchg(NODE *p, void *arg)
 	case SHORT:
 	case USHORT:
 		if (DEUNSIGN(p->n_type) == CHAR)
-			setlval(l, getlval(l) + 1);
+			l->n_lval += 1;
 		break;
 	case LONG:
 	case ULONG:
 	case INT:
 	case UNSIGNED:
 		if (DEUNSIGN(p->n_type) == CHAR)
-			setlval(l, getlval(l + 3));
+			l->n_lval += 3;
 		else if (DEUNSIGN(p->n_type) == SHORT)
-			setlval(l, getlval(l + 2));
+			l->n_lval += 2;
 		break;
 	case LONGLONG:
 	case ULONGLONG:
 		if (DEUNSIGN(p->n_type) == CHAR)
-			setlval(l, getlval(l + 7));
+			l->n_lval += 7;
 		else if (DEUNSIGN(p->n_type) == SHORT)
-			setlval(l, getlval(l + 6));
+			l->n_lval += 6;
 		else if (DEUNSIGN(p->n_type) == INT ||
 		    DEUNSIGN(p->n_type) == LONG)
-			setlval(l, getlval(l + 4));
+			l->n_lval += 4;
 		break;
 	default:
 		comperr("offchg: unknown type");
@@ -1263,7 +1256,7 @@ argsiz(NODE *p)
 	else if (t == FLOAT)
 		sz = 4;
 	else if (t == STRTY || t == UNIONTY)
-		sz = attr_find(p->n_ap, ATTR_P2STRUCT)->iarg(0);
+		sz = p->n_stsize;
 
 	if (p->n_type == STRTY || p->n_type == UNIONTY) {
 		return (size + sz);
@@ -1284,13 +1277,10 @@ int
 special(NODE *p, int shape)
 {
 	int o = p->n_op;
-
-	if (o != ICON || p->n_name[0] != 0)
-		return SRNOPE;
-
 	switch(shape) {
 	case SPCON:
-		if ((getlval(p) & ~0xffff) == 0)
+		if (o == ICON && p->n_name[0] == 0 &&
+		    (p->n_lval & ~0xffff) == 0)
 			return SRDIR;
 		break;
 	}

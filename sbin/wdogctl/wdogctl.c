@@ -1,4 +1,4 @@
-/*	$NetBSD: wdogctl.c,v 1.21 2015/05/06 23:08:30 pgoyette Exp $	*/
+/*	$NetBSD: wdogctl.c,v 1.20 2011/08/27 19:00:35 joerg Exp $	*/
 
 /*-
  * Copyright (c) 2000 Zembu Labs, Inc.
@@ -35,7 +35,7 @@
 #include <sys/cdefs.h>
 
 #ifndef lint
-__RCSID("$NetBSD: wdogctl.c,v 1.21 2015/05/06 23:08:30 pgoyette Exp $");
+__RCSID("$NetBSD: wdogctl.c,v 1.20 2011/08/27 19:00:35 joerg Exp $");
 #endif
 
 
@@ -53,7 +53,8 @@ __RCSID("$NetBSD: wdogctl.c,v 1.21 2015/05/06 23:08:30 pgoyette Exp $");
 #include <syslog.h>
 #include <unistd.h>
 #include <string.h>
-#include <paths.h>
+
+#define	_PATH_WATCHDOG		"/dev/watchdog"
 
 static void	enable_kernel(const char *, u_int);
 static void	enable_user(const char *, u_int, int);

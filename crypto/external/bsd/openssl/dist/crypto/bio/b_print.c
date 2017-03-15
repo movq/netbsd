@@ -126,15 +126,15 @@
 #endif
 
 static int fmtstr(char **, char **, size_t *, size_t *,
-                  const char *, int, int, int);
+                   const char *, int, int, int);
 static int fmtint(char **, char **, size_t *, size_t *,
-                  LLONG, int, int, int, int);
+                   LLONG, int, int, int, int);
 static int fmtfp(char **, char **, size_t *, size_t *,
-                 LDOUBLE, int, int, int);
+                  LDOUBLE, int, int, int);
 static int doapr_outch(char **, char **, size_t *, size_t *, int);
 static int _dopr(char **sbuffer, char **buffer,
-                 size_t *maxlen, size_t *retlen, int *truncated,
-                 const char *format, va_list args);
+                  size_t *maxlen, size_t *retlen, int *truncated,
+                  const char *format, va_list args);
 
 /* format read states */
 #define DP_S_DEFAULT    0
@@ -329,7 +329,7 @@ _dopr(char **sbuffer,
                     break;
                 }
                 if (!fmtint(sbuffer, buffer, &currlen, maxlen, value,
-                            ch == 'o' ? 8 : (ch == 'u' ? 10 : 16),
+                       ch == 'o' ? 8 : (ch == 'u' ? 10 : 16),
                             min, max, flags))
                     return 0;
                 break;
@@ -423,15 +423,9 @@ _dopr(char **sbuffer,
             break;
         }
     }
-    /*
-     * We have to truncate if there is no dynamic buffer and we have filled the
-     * static buffer.
-     */
-    if (buffer == NULL) {
-        *truncated = (currlen > *maxlen - 1);
-        if (*truncated)
-            currlen = *maxlen - 1;
-    }
+    *truncated = (currlen > *maxlen - 1);
+    if (*truncated)
+        currlen = *maxlen - 1;
     if(!doapr_outch(sbuffer, buffer, &currlen, maxlen, '\0'))
         return 0;
     *retlen = currlen - 1;

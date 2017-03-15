@@ -1,4 +1,4 @@
-/*	$NetBSD: indent.c,v 1.23 2016/09/05 00:40:29 sevan Exp $	*/
+/*	$NetBSD: indent.c,v 1.18.24.1 2014/09/21 18:58:56 snj Exp $	*/
 
 /*
  * Copyright (c) 1980, 1993
@@ -75,7 +75,7 @@ __COPYRIGHT("@(#) Copyright (c) 1985 Sun Microsystems, Inc.\
 #if 0
 static char sccsid[] = "@(#)indent.c	5.17 (Berkeley) 6/7/93";
 #else
-__RCSID("$NetBSD: indent.c,v 1.23 2016/09/05 00:40:29 sevan Exp $");
+__RCSID("$NetBSD: indent.c,v 1.18.24.1 2014/09/21 18:58:56 snj Exp $");
 #endif
 #endif				/* not lint */
 
@@ -99,6 +99,8 @@ const char *in_name = "Standard Input";		/* will always point to name of
 const char *out_name = "Standard Output";	/* will always point to name of
 						 * output file */
 char    bakfile[MAXPATHLEN] = "";
+
+int main(int, char **);
 
 int
 main(int argc, char **argv)
@@ -132,7 +134,7 @@ main(int argc, char **argv)
         \*-----------------------------------------------*/
 
 	if (!setlocale(LC_ALL, ""))
-		warnx("can't set locale.");
+		fprintf(stderr, "indent: can't set locale.\n");
 
 	hd_type = 0;
 	ps.p_stack[0] = stmt;	/* this is the parser's stack */
@@ -234,7 +236,8 @@ main(int argc, char **argv)
 								 * output file */
 					if (strcmp(in_name, out_name) == 0) {	/* attempt to overwrite
 										 * the file */
-						errx(1, "input and output files must be different");
+						fprintf(stderr, "indent: input and output files must be different\n");
+						exit(1);
 					}
 					output = fopen(out_name, "w");
 					if (output == 0)	/* check for create
@@ -242,7 +245,8 @@ main(int argc, char **argv)
 						err(1, "%s", out_name);
 					continue;
 				}
-			errx(1, "unknown parameter: %s", argv[i]);
+			fprintf(stderr, "indent: unknown parameter: %s\n", argv[i]);
+			exit(1);
 		} else
 			set_option(argv[i]);
 	}			/* end of for */
@@ -258,7 +262,7 @@ main(int argc, char **argv)
 		}
 	}
 	if (ps.com_ind <= 1)
-		ps.com_ind = 2;	/* don't put normal comments before column 2 */
+		ps.com_ind = 2;	/* dont put normal comments before column 2 */
 	if (troff) {
 		if (bodyf.font[0] == 0)
 			parsefont(&bodyf, "R");
@@ -353,7 +357,7 @@ main(int argc, char **argv)
 			case lbrace:	/* this is a brace that starts the
 					 * compound stmt */
 				if (sc_end == 0) {	/* ignore buffering if a
-							 * comment wasn't stored
+							 * comment wasnt stored
 							 * up */
 					ps.search_brace = false;
 					goto check_type;
@@ -418,7 +422,7 @@ main(int argc, char **argv)
 					force_nl = false;
 
 				if (sc_end == 0) {	/* ignore buffering if
-							 * comment wasn't saved
+							 * comment wasnt saved
 							 * up */
 					ps.search_brace = false;
 					goto check_type;
@@ -501,7 +505,7 @@ check_type:
 					diag(0, "Line broken");
 				flushed_nl = false;
 				dump_line();
-				ps.want_blank = false;	/* don't insert blank at
+				ps.want_blank = false;	/* dont insert blank at
 							 * line start */
 				force_nl = false;
 			}
@@ -621,7 +625,7 @@ check_type:
 				ps.last_u_d = true;	/* inform lexi that a
 							 * following operator is
 							 * unary */
-				ps.in_stmt = false;	/* don't use stmt
+				ps.in_stmt = false;	/* dont use stmt
 							 * continuation
 							 * indentation */
 
@@ -783,8 +787,8 @@ check_type:
 
 			ps.in_decl = (ps.dec_nest > 0);	/* if we were in a first
 							 * level structure
-							 * declaration, we
-							 * aren't any more */
+							 * declaration, we arent
+							 * any more */
 
 			if ((!sp_sw || hd_type != forstmt) && ps.p_l_follow > 0) {
 
@@ -799,8 +803,8 @@ check_type:
 						 * while, etc. with unbalanced
 						 * parens */
 					sp_sw = false;
-					parse(hd_type);	/* don't lose the if,
-							 * or whatever */
+					parse(hd_type);	/* dont lose the if, or
+							 * whatever */
 				}
 			}
 			*e_code++ = ';';
@@ -817,7 +821,7 @@ check_type:
 			break;
 
 		case lbrace:	/* got a '{' */
-			ps.in_stmt = false;	/* don't indent the {} */
+			ps.in_stmt = false;	/* dont indent the {} */
 			if (!ps.block_init)
 				force_nl = true;	/* force other stuff on
 							 * same line as '{' onto
@@ -854,7 +858,7 @@ check_type:
 				}
 			}
 			if (s_code == e_code)
-				ps.ind_stmt = false;	/* don't put extra
+				ps.ind_stmt = false;	/* dont put extra
 							 * indentation on line
 							 * with '{' */
 			if (ps.in_decl && ps.in_or_st) {	/* this is either a
@@ -863,9 +867,9 @@ check_type:
 				di_stack[ps.dec_nest++] = dec_ind;
 				/* ?		dec_ind = 0; */
 			} else {
-				ps.decl_on_line = false;	/* we can't be in the
+				ps.decl_on_line = false;	/* we cant be in the
 								 * middle of a
-								 * declaration, so don't
+								 * declaration, so dont
 								 * do special
 								 * indentation of
 								 * comments */
@@ -1086,7 +1090,7 @@ check_type:
 		case period:	/* treat a period kind of like a binary
 				 * operation */
 			*e_code++ = '.';	/* move the period into line */
-			ps.want_blank = false;	/* don't put a blank after a
+			ps.want_blank = false;	/* dont put a blank after a
 						 * period */
 			break;
 
@@ -1254,7 +1258,7 @@ check_type:
 						 * line here */
 				flushed_nl = false;
 				dump_line();
-				ps.want_blank = false;	/* don't insert blank at
+				ps.want_blank = false;	/* dont insert blank at
 							 * line start */
 				force_nl = false;
 			}

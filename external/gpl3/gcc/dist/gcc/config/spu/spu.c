@@ -1,4 +1,4 @@
-/* Copyright (C) 2006-2015 Free Software Foundation, Inc.
+/* Copyright (C) 2006-2013 Free Software Foundation, Inc.
 
    This file is free software; you can redistribute it and/or modify it under
    the terms of the GNU General Public License as published by the Free
@@ -27,47 +27,16 @@
 #include "flags.h"
 #include "recog.h"
 #include "obstack.h"
-#include "hash-set.h"
-#include "machmode.h"
-#include "vec.h"
-#include "double-int.h"
-#include "input.h"
-#include "alias.h"
-#include "symtab.h"
-#include "wide-int.h"
-#include "inchash.h"
 #include "tree.h"
-#include "fold-const.h"
-#include "stringpool.h"
-#include "stor-layout.h"
-#include "calls.h"
-#include "varasm.h"
-#include "hashtab.h"
-#include "function.h"
-#include "statistics.h"
-#include "real.h"
-#include "fixed-value.h"
-#include "expmed.h"
-#include "dojump.h"
-#include "explow.h"
-#include "emit-rtl.h"
-#include "stmt.h"
 #include "expr.h"
-#include "insn-codes.h"
 #include "optabs.h"
 #include "except.h"
+#include "function.h"
 #include "output.h"
-#include "predict.h"
-#include "dominance.h"
-#include "cfg.h"
-#include "cfgrtl.h"
-#include "cfganal.h"
-#include "lcm.h"
-#include "cfgbuild.h"
-#include "cfgcleanup.h"
 #include "basic-block.h"
 #include "diagnostic-core.h"
 #include "ggc.h"
+#include "hashtab.h"
 #include "tm_p.h"
 #include "target.h"
 #include "target-def.h"
@@ -75,24 +44,15 @@
 #include "reload.h"
 #include "sched-int.h"
 #include "params.h"
-#include "hash-table.h"
-#include "tree-ssa-alias.h"
-#include "internal-fn.h"
-#include "gimple-fold.h"
-#include "tree-eh.h"
-#include "gimple-expr.h"
-#include "is-a.h"
+#include "machmode.h"
 #include "gimple.h"
-#include "gimplify.h"
 #include "tm-constrs.h"
-#include "sbitmap.h"
-#include "df.h"
 #include "ddg.h"
+#include "sbitmap.h"
 #include "timevar.h"
+#include "df.h"
 #include "dumpfile.h"
 #include "cfgloop.h"
-#include "builtins.h"
-#include "rtl-iter.h"
 
 /* Builtin types, data and prototypes. */
 
@@ -187,7 +147,7 @@ static struct spu_builtin_range spu_builtin_range[] = {
 char regs_ever_allocated[FIRST_PSEUDO_REGISTER];
 
 /*  Prototypes and external defs.  */
-static int get_pipe (rtx_insn *insn);
+static int get_pipe (rtx insn);
 static int spu_naked_function_p (tree func);
 static int mem_is_padded_component_ref (rtx x);
 static void fix_range (const char *);
@@ -233,7 +193,7 @@ static enum spu_immediate which_immediate_load (HOST_WIDE_INT val);
 static enum spu_immediate which_logical_immediate (HOST_WIDE_INT val);
 static int cpat_info(unsigned char *arr, int size, int *prun, int *pstart);
 static enum immediate_class classify_immediate (rtx op,
-						machine_mode mode);
+						enum machine_mode mode);
 
 /* Pointer mode for __ea references.  */
 #define EAmode (spu_ea_model != 32 ? DImode : SImode)
@@ -250,7 +210,7 @@ struct GTY(()) machine_function
 static struct machine_function *
 spu_init_machine_status (void)
 {
-  return ggc_cleared_alloc<machine_function> ();
+  return ggc_alloc_cleared_machine_function ();
 }
 
 /* Implement TARGET_OPTION_OVERRIDE.  */
@@ -322,7 +282,7 @@ spu_option_override (void)
    be manipulated in non-trivial ways.  In particular, this means all
    the arithmetic is supported.  */
 static bool
-spu_scalar_mode_supported_p (machine_mode mode)
+spu_scalar_mode_supported_p (enum machine_mode mode)
 {
   switch (mode)
     {
@@ -344,7 +304,7 @@ spu_scalar_mode_supported_p (machine_mode mode)
    least some operations are supported; need to check optabs or builtins
    for further details.  */
 static bool
-spu_vector_mode_supported_p (machine_mode mode)
+spu_vector_mode_supported_p (enum machine_mode mode)
 {
   switch (mode)
     {
@@ -367,8 +327,8 @@ spu_vector_mode_supported_p (machine_mode mode)
 int
 valid_subreg (rtx op)
 {
-  machine_mode om = GET_MODE (op);
-  machine_mode im = GET_MODE (SUBREG_REG (op));
+  enum machine_mode om = GET_MODE (op);
+  enum machine_mode im = GET_MODE (SUBREG_REG (op));
   return om != VOIDmode && im != VOIDmode
     && (GET_MODE_SIZE (im) == GET_MODE_SIZE (om)
 	|| (GET_MODE_SIZE (im) <= 4 && GET_MODE_SIZE (om) <= 4)
@@ -380,7 +340,7 @@ valid_subreg (rtx op)
 static rtx
 adjust_operand (rtx op, HOST_WIDE_INT * start)
 {
-  machine_mode mode;
+  enum machine_mode mode;
   int op_size;
   /* Strip any paradoxical SUBREG.  */
   if (GET_CODE (op) == SUBREG
@@ -495,7 +455,7 @@ spu_expand_insv (rtx ops[])
   HOST_WIDE_INT width = INTVAL (ops[1]);
   HOST_WIDE_INT start = INTVAL (ops[2]);
   HOST_WIDE_INT maskbits;
-  machine_mode dst_mode;
+  enum machine_mode dst_mode;
   rtx dst = ops[0], src = ops[3];
   int dst_size;
   rtx mask;
@@ -512,7 +472,7 @@ spu_expand_insv (rtx ops[])
 
   if (CONSTANT_P (src))
     {
-      machine_mode m =
+      enum machine_mode m =
 	(width <= 32 ? SImode : width <= 64 ? DImode : TImode);
       src = force_reg (m, convert_to_mode (m, src, 0));
     }
@@ -699,8 +659,8 @@ spu_emit_branch_or_set (int is_set, rtx cmp, rtx operands[])
   int reverse_test = 0;
   rtx compare_result, eq_result;
   rtx comp_rtx, eq_rtx;
-  machine_mode comp_mode;
-  machine_mode op_mode;
+  enum machine_mode comp_mode;
+  enum machine_mode op_mode;
   enum spu_comp_code scode, eq_code;
   enum insn_code ior_code;
   enum rtx_code code = GET_CODE (cmp);
@@ -969,7 +929,7 @@ spu_emit_branch_or_set (int is_set, rtx cmp, rtx operands[])
       rtx target = operands[0];
       int compare_size = GET_MODE_BITSIZE (comp_mode);
       int target_size = GET_MODE_BITSIZE (GET_MODE (target));
-      machine_mode mode = mode_for_size (target_size, MODE_INT, 0);
+      enum machine_mode mode = mode_for_size (target_size, MODE_INT, 0);
       rtx select_mask;
       rtx op_t = operands[2];
       rtx op_f = operands[3];
@@ -1039,7 +999,7 @@ const_double_to_hwint (rtx x)
 }
 
 rtx
-hwint_to_const_double (machine_mode mode, HOST_WIDE_INT v)
+hwint_to_const_double (enum machine_mode mode, HOST_WIDE_INT v)
 {
   long tv[2];
   REAL_VALUE_TYPE rv;
@@ -1106,7 +1066,7 @@ print_operand_address (FILE * file, register rtx addr)
 void
 print_operand (FILE * file, rtx x, int code)
 {
-  machine_mode mode = GET_MODE (x);
+  enum machine_mode mode = GET_MODE (x);
   HOST_WIDE_INT val;
   unsigned char arr[16];
   int xcode = GET_CODE (x);
@@ -1521,7 +1481,7 @@ get_pic_reg (void)
 int
 spu_split_immediate (rtx * ops)
 {
-  machine_mode mode = GET_MODE (ops[0]);
+  enum machine_mode mode = GET_MODE (ops[0]);
   enum immediate_class c = classify_immediate (ops[1], mode);
 
   switch (c)
@@ -1532,7 +1492,7 @@ spu_split_immediate (rtx * ops)
 	unsigned char arrlo[16];
 	rtx to, temp, hi, lo;
 	int i;
-	machine_mode imode = mode;
+	enum machine_mode imode = mode;
 	/* We need to do reals as ints because the constant used in the
 	   IOR might not be a legitimate real constant. */
 	imode = int_mode_for_mode (mode);
@@ -1562,7 +1522,7 @@ spu_split_immediate (rtx * ops)
 	unsigned char arr_andbi[16];
 	rtx to, reg_fsmbi, reg_and;
 	int i;
-	machine_mode imode = mode;
+	enum machine_mode imode = mode;
 	/* We need to do reals as ints because the constant used in the
 	 * AND might not be a legitimate real constant. */
 	imode = int_mode_for_mode (mode);
@@ -1659,7 +1619,7 @@ spu_saved_regs_size (void)
   return reg_save_size;
 }
 
-static rtx_insn *
+static rtx
 frame_emit_store (int regno, rtx addr, HOST_WIDE_INT offset)
 {
   rtx reg = gen_rtx_REG (V4SImode, regno);
@@ -1668,7 +1628,7 @@ frame_emit_store (int regno, rtx addr, HOST_WIDE_INT offset)
   return emit_insn (gen_movv4si (mem, reg));
 }
 
-static rtx_insn *
+static rtx
 frame_emit_load (int regno, rtx addr, HOST_WIDE_INT offset)
 {
   rtx reg = gen_rtx_REG (V4SImode, regno);
@@ -1678,10 +1638,10 @@ frame_emit_load (int regno, rtx addr, HOST_WIDE_INT offset)
 }
 
 /* This happens after reload, so we need to expand it.  */
-static rtx_insn *
+static rtx
 frame_emit_add_imm (rtx dst, rtx src, HOST_WIDE_INT imm, rtx scratch)
 {
-  rtx_insn *insn;
+  rtx insn;
   if (satisfies_constraint_K (GEN_INT (imm)))
     {
       insn = emit_insn (gen_addsi3 (dst, src, GEN_INT (imm)));
@@ -1752,8 +1712,7 @@ spu_expand_prologue (void)
   HOST_WIDE_INT saved_regs_size;
   rtx sp_reg = gen_rtx_REG (Pmode, STACK_POINTER_REGNUM);
   rtx scratch_reg_0, scratch_reg_1;
-  rtx_insn *insn;
-  rtx real;
+  rtx insn, real;
 
   if (flag_pic && optimize == 0 && !cfun->machine->pic_reg)
     cfun->machine->pic_reg = pic_offset_table_rtx;
@@ -1935,7 +1894,7 @@ spu_return_addr (int count, rtx frame ATTRIBUTE_UNUSED)
    If MODE is a vector mode, every element will be VAL.
    For TImode, VAL will be zero extended to 128 bits. */
 rtx
-spu_const (machine_mode mode, HOST_WIDE_INT val)
+spu_const (enum machine_mode mode, HOST_WIDE_INT val)
 {
   rtx inner;
   rtvec v;
@@ -1970,7 +1929,7 @@ spu_const (machine_mode mode, HOST_WIDE_INT val)
 
 /* Create a MODE vector constant from 4 ints. */
 rtx
-spu_const_from_ints(machine_mode mode, int a, int b, int c, int d)
+spu_const_from_ints(enum machine_mode mode, int a, int b, int c, int d)
 {
   unsigned char arr[16];
   arr[0] = (a >> 24) & 0xff;
@@ -1997,13 +1956,13 @@ spu_const_from_ints(machine_mode mode, int a, int b, int c, int d)
 /* An array of these is used to propagate hints to predecessor blocks. */
 struct spu_bb_info
 {
-  rtx_insn *prop_jump; /* propagated from another block */
+  rtx prop_jump; /* propagated from another block */
   int bb_index;  /* the original block. */
 };
 static struct spu_bb_info *spu_bb_info;
 
 #define STOP_HINT_P(INSN) \
-		(CALL_P(INSN) \
+		(GET_CODE(INSN) == CALL_INSN \
 		 || INSN_CODE(INSN) == CODE_FOR_divmodsi4 \
 		 || INSN_CODE(INSN) == CODE_FOR_udivmodsi4)
 
@@ -2019,22 +1978,13 @@ static struct spu_bb_info *spu_bb_info;
 /* Emit a nop for INSN such that the two will dual issue.  This assumes
    INSN is 8-byte aligned.  When INSN is inline asm we emit an lnop.
    We check for TImode to handle a MULTI1 insn which has dual issued its
-   first instruction.  get_pipe returns -1 for MULTI0 or inline asm.  */
+   first instruction.  get_pipe returns -1 for MULTI0, inline asm, or
+   ADDR_VEC insns. */
 static void
-emit_nop_for_insn (rtx_insn *insn)
+emit_nop_for_insn (rtx insn)
 {
   int p;
-  rtx_insn *new_insn;
-
-  /* We need to handle JUMP_TABLE_DATA separately.  */
-  if (JUMP_TABLE_DATA_P (insn))
-    {
-      new_insn = emit_insn_after (gen_lnop(), insn);
-      recog_memoized (new_insn);
-      INSN_LOCATION (new_insn) = UNKNOWN_LOCATION;
-      return;
-    }
-
+  rtx new_insn;
   p = get_pipe (insn);
   if ((CALL_P (insn) || JUMP_P (insn)) && SCHED_ON_EVEN_P (insn))
     new_insn = emit_insn_after (gen_lnop (), insn);
@@ -2056,7 +2006,7 @@ emit_nop_for_insn (rtx_insn *insn)
 static void
 pad_bb(void)
 {
-  rtx_insn *insn, *next_insn, *prev_insn, *hbr_insn = 0;
+  rtx insn, next_insn, prev_insn, hbr_insn = 0;
   int length;
   int addr;
 
@@ -2092,7 +2042,7 @@ pad_bb(void)
 	    }
 	  hbr_insn = insn;
 	}
-      if (INSN_CODE (insn) == CODE_FOR_blockage && next_insn)
+      if (INSN_CODE (insn) == CODE_FOR_blockage)
 	{
 	  if (GET_MODE (insn) == TImode)
 	    PUT_MODE (next_insn, TImode);
@@ -2126,13 +2076,13 @@ pad_bb(void)
 /* Routines for branch hints. */
 
 static void
-spu_emit_branch_hint (rtx_insn *before, rtx_insn *branch, rtx target,
+spu_emit_branch_hint (rtx before, rtx branch, rtx target,
 		      int distance, sbitmap blocks)
 {
   rtx branch_label = 0;
-  rtx_insn *hint;
-  rtx_insn *insn;
-  rtx_jump_table_data *table;
+  rtx hint;
+  rtx insn;
+  rtx table;
 
   if (before == 0 || branch == 0 || target == 0)
     return;
@@ -2211,15 +2161,20 @@ spu_emit_branch_hint (rtx_insn *before, rtx_insn *branch, rtx target,
 /* Returns 0 if we don't want a hint for this branch.  Otherwise return
    the rtx for the branch target. */
 static rtx
-get_branch_target (rtx_insn *branch)
+get_branch_target (rtx branch)
 {
-  if (JUMP_P (branch))
+  if (GET_CODE (branch) == JUMP_INSN)
     {
       rtx set, src;
 
       /* Return statements */
       if (GET_CODE (PATTERN (branch)) == RETURN)
 	return gen_rtx_REG (SImode, LINK_REGISTER_REGNUM);
+
+      /* jump table */
+      if (GET_CODE (PATTERN (branch)) == ADDR_VEC
+	  || GET_CODE (PATTERN (branch)) == ADDR_DIFF_VEC)
+	return 0;
 
      /* ASM GOTOs. */
      if (extract_asm_operands (PATTERN (branch)) != NULL)
@@ -2238,7 +2193,7 @@ get_branch_target (rtx_insn *branch)
 	    {
 	      /* If the more probable case is not a fall through, then
 	         try a branch hint.  */
-	      int prob = XINT (note, 0);
+	      HOST_WIDE_INT prob = INTVAL (XEXP (note, 0));
 	      if (prob > (REG_BR_PROB_BASE * 6 / 10)
 		  && GET_CODE (XEXP (src, 1)) != PC)
 		lab = XEXP (src, 1);
@@ -2257,7 +2212,7 @@ get_branch_target (rtx_insn *branch)
 
       return src;
     }
-  else if (CALL_P (branch))
+  else if (GET_CODE (branch) == CALL_INSN)
     {
       rtx call;
       /* All of our call patterns are in a PARALLEL and the CALL is
@@ -2279,7 +2234,7 @@ get_branch_target (rtx_insn *branch)
    should only be used in a clobber, and this function searches for
    insns which clobber it.  */
 static bool
-insn_clobbers_hbr (rtx_insn *insn)
+insn_clobbers_hbr (rtx insn)
 {
   if (INSN_P (insn)
       && GET_CODE (PATTERN (insn)) == PARALLEL)
@@ -2310,9 +2265,9 @@ insn_clobbers_hbr (rtx_insn *insn)
    and an hbrp within 16 instructions of FIRST.
  */
 static void
-insert_hbrp_for_ilb_runout (rtx_insn *first)
+insert_hbrp_for_ilb_runout (rtx first)
 {
-  rtx_insn *insn, *before_4 = 0, *before_16 = 0;
+  rtx insn, before_4 = 0, before_16 = 0;
   int addr = 0, length, first_addr = -1;
   int hbrp_addr0 = 128 * 4, hbrp_addr1 = 128 * 4;
   int insert_lnop_after = 0;
@@ -2442,7 +2397,7 @@ insert_hbrp_for_ilb_runout (rtx_insn *first)
 static void
 insert_hbrp (void)
 {
-  rtx_insn *insn;
+  rtx insn;
   if (TARGET_SAFE_HINTS)
     {
       shorten_branches (get_insns ());
@@ -2479,7 +2434,7 @@ spu_machine_dependent_reorg (void)
 {
   sbitmap blocks;
   basic_block bb;
-  rtx_insn *branch, *insn;
+  rtx branch, insn;
   rtx branch_target = 0;
   int branch_addr = 0, insn_addr, required_dist = 0;
   int i;
@@ -2497,7 +2452,7 @@ spu_machine_dependent_reorg (void)
       return;
     }
 
-  blocks = sbitmap_alloc (last_basic_block_for_fn (cfun));
+  blocks = sbitmap_alloc (last_basic_block);
   bitmap_clear (blocks);
 
   in_spu_reorg = 1;
@@ -2510,15 +2465,15 @@ spu_machine_dependent_reorg (void)
   compact_blocks ();
 
   spu_bb_info =
-    (struct spu_bb_info *) xcalloc (n_basic_blocks_for_fn (cfun),
+    (struct spu_bb_info *) xcalloc (n_basic_blocks,
 				    sizeof (struct spu_bb_info));
 
   /* We need exact insn addresses and lengths.  */
   shorten_branches (get_insns ());
 
-  for (i = n_basic_blocks_for_fn (cfun) - 1; i >= 0; i--)
+  for (i = n_basic_blocks - 1; i >= 0; i--)
     {
-      bb = BASIC_BLOCK_FOR_FN (cfun, i);
+      bb = BASIC_BLOCK (i);
       branch = 0;
       if (spu_bb_info[i].prop_jump)
 	{
@@ -2551,7 +2506,7 @@ spu_machine_dependent_reorg (void)
 		      || insn_clobbers_hbr (insn)
 		      || branch_addr - insn_addr > 600))
 		{
-		  rtx_insn *next = NEXT_INSN (insn);
+		  rtx next = NEXT_INSN (insn);
 		  int next_addr = INSN_ADDRESSES (INSN_UID (next));
 		  if (insn != BB_END (bb)
 		      && branch_addr - next_addr >= required_dist)
@@ -2590,7 +2545,7 @@ spu_machine_dependent_reorg (void)
 	  /* If we haven't emitted a hint for this branch yet, it might
 	     be profitable to emit it in one of the predecessor blocks,
 	     especially for loops.  */
-	  rtx_insn *bbend;
+	  rtx bbend;
 	  basic_block prev = 0, prop = 0, prev2 = 0;
 	  int loop_exit = 0, simple_loop = 0;
 	  int next_addr = INSN_ADDRESSES (INSN_UID (NEXT_INSN (insn)));
@@ -2673,7 +2628,7 @@ spu_machine_dependent_reorg (void)
     find_many_sub_basic_blocks (blocks);
 
   /* We have to schedule to make sure alignment is ok. */
-  FOR_EACH_BB_FN (bb, cfun) bb->flags &= ~BB_DISABLE_SCHEDULE;
+  FOR_EACH_BB (bb) bb->flags &= ~BB_DISABLE_SCHEDULE;
 
   /* The hints need to be scheduled, so call it again. */
   schedule_insns ();
@@ -2691,8 +2646,8 @@ spu_machine_dependent_reorg (void)
 	   label because GCC expects it at the beginning of the block. */
 	rtx unspec = SET_SRC (XVECEXP (PATTERN (insn), 0, 0));
 	rtx label_ref = XVECEXP (unspec, 0, 0);
-	rtx_insn *label = as_a <rtx_insn *> (XEXP (label_ref, 0));
-	rtx_insn *branch;
+	rtx label = XEXP (label_ref, 0);
+	rtx branch;
 	int offset = 0;
 	for (branch = NEXT_INSN (label);
 	     !JUMP_P (branch) && !CALL_P (branch);
@@ -2721,7 +2676,7 @@ spu_sched_issue_rate (void)
 }
 
 static int
-uses_ls_unit(rtx_insn *insn)
+uses_ls_unit(rtx insn)
 {
   rtx set = single_set (insn);
   if (set != 0
@@ -2732,7 +2687,7 @@ uses_ls_unit(rtx_insn *insn)
 }
 
 static int
-get_pipe (rtx_insn *insn)
+get_pipe (rtx insn)
 {
   enum attr_type t;
   /* Handle inline asm */
@@ -2828,8 +2783,7 @@ spu_sched_init (FILE *file ATTRIBUTE_UNUSED, int verbose ATTRIBUTE_UNUSED,
 
 static int
 spu_sched_variable_issue (FILE *file ATTRIBUTE_UNUSED,
-			  int verbose ATTRIBUTE_UNUSED,
-			  rtx_insn *insn, int more)
+			  int verbose ATTRIBUTE_UNUSED, rtx insn, int more)
 {
   int len;
   int p;
@@ -2887,11 +2841,11 @@ spu_sched_variable_issue (FILE *file ATTRIBUTE_UNUSED,
    TARGET_SCHED_REORDER2.  */
 static int
 spu_sched_reorder (FILE *file ATTRIBUTE_UNUSED, int verbose ATTRIBUTE_UNUSED,
-		   rtx_insn **ready, int *nreadyp, int clock)
+		   rtx *ready, int *nreadyp, int clock)
 {
   int i, nready = *nreadyp;
   int pipe_0, pipe_1, pipe_hbrp, pipe_ls, schedule_i;
-  rtx_insn *insn;
+  rtx insn;
 
   clock_var = clock;
 
@@ -3026,7 +2980,7 @@ spu_sched_reorder (FILE *file ATTRIBUTE_UNUSED, int verbose ATTRIBUTE_UNUSED,
 
 /* INSN is dependent on DEP_INSN. */
 static int
-spu_sched_adjust_cost (rtx_insn *insn, rtx link, rtx_insn *dep_insn, int cost)
+spu_sched_adjust_cost (rtx insn, rtx link, rtx dep_insn, int cost)
 {
   rtx set;
 
@@ -3095,7 +3049,7 @@ spu_sched_adjust_cost (rtx_insn *insn, rtx link, rtx_insn *dep_insn, int cost)
 
 /* Create a CONST_DOUBLE from a string.  */
 rtx
-spu_float_const (const char *string, machine_mode mode)
+spu_float_const (const char *string, enum machine_mode mode)
 {
   REAL_VALUE_TYPE value;
   value = REAL_VALUE_ATOF (string, mode);
@@ -3130,7 +3084,7 @@ which_immediate_load (HOST_WIDE_INT val)
 /* Return true when OP can be loaded by one of the il instructions, or
    when flow2 is not completed and OP can be loaded using ilhu and iohl. */
 int
-immediate_load_p (rtx op, machine_mode mode)
+immediate_load_p (rtx op, enum machine_mode mode)
 {
   if (CONSTANT_P (op))
     {
@@ -3193,7 +3147,7 @@ cpat_info(unsigned char *arr, int size, int *prun, int *pstart)
 /* OP is a CONSTANT_P.  Determine what instructions can be used to load
    it into a register.  MODE is only valid when OP is a CONST_INT. */
 static enum immediate_class
-classify_immediate (rtx op, machine_mode mode)
+classify_immediate (rtx op, enum machine_mode mode)
 {
   HOST_WIDE_INT val;
   unsigned char arr[16];
@@ -3333,7 +3287,7 @@ const_vector_immediate_p (rtx x)
 }
 
 int
-logical_immediate_p (rtx op, machine_mode mode)
+logical_immediate_p (rtx op, enum machine_mode mode)
 {
   HOST_WIDE_INT val;
   unsigned char arr[16];
@@ -3365,7 +3319,7 @@ logical_immediate_p (rtx op, machine_mode mode)
 }
 
 int
-iohl_immediate_p (rtx op, machine_mode mode)
+iohl_immediate_p (rtx op, enum machine_mode mode)
 {
   HOST_WIDE_INT val;
   unsigned char arr[16];
@@ -3396,7 +3350,7 @@ iohl_immediate_p (rtx op, machine_mode mode)
 }
 
 int
-arith_immediate_p (rtx op, machine_mode mode,
+arith_immediate_p (rtx op, enum machine_mode mode,
 		   HOST_WIDE_INT low, HOST_WIDE_INT high)
 {
   HOST_WIDE_INT val;
@@ -3440,9 +3394,9 @@ arith_immediate_p (rtx op, machine_mode mode,
    OP is 2^scale, scale >= LOW && scale <= HIGH.  When OP is a vector,
    all entries must be the same. */
 bool
-exp2_immediate_p (rtx op, machine_mode mode, int low, int high)
+exp2_immediate_p (rtx op, enum machine_mode mode, int low, int high)
 {
-  machine_mode int_mode;
+  enum machine_mode int_mode;
   HOST_WIDE_INT val;
   unsigned char arr[16];
   int bytes, i, j;
@@ -3490,9 +3444,10 @@ exp2_immediate_p (rtx op, machine_mode mode, int low, int high)
 
 /* Return true if X is a SYMBOL_REF to an __ea qualified variable.  */
 
-static bool
-ea_symbol_ref_p (const_rtx x)
+static int
+ea_symbol_ref (rtx *px, void *data ATTRIBUTE_UNUSED)
 {
+  rtx x = *px;
   tree decl;
 
   if (GET_CODE (x) == CONST && GET_CODE (XEXP (x, 0)) == PLUS)
@@ -3517,17 +3472,15 @@ ea_symbol_ref_p (const_rtx x)
      (DImode, DFmode)
    - a 128-bit constant where the four 32-bit words match.  */
 bool
-spu_legitimate_constant_p (machine_mode mode, rtx x)
+spu_legitimate_constant_p (enum machine_mode mode, rtx x)
 {
-  subrtx_iterator::array_type array;
   if (GET_CODE (x) == HIGH)
     x = XEXP (x, 0);
 
   /* Reject any __ea qualified reference.  These can't appear in
      instructions but must be forced to the constant pool.  */
-  FOR_EACH_SUBRTX (iter, array, x, ALL)
-    if (ea_symbol_ref_p (*iter))
-      return 0;
+  if (for_each_rtx (&x, ea_symbol_ref, 0))
+    return 0;
 
   /* V4SI with all identical symbols is valid. */
   if (!flag_pic
@@ -3555,7 +3508,7 @@ spu_legitimate_constant_p (machine_mode mode, rtx x)
   16 byte modes because the expand phase will change all smaller MEM
   references to TImode.  */
 static bool
-spu_legitimate_address_p (machine_mode mode,
+spu_legitimate_address_p (enum machine_mode mode,
 			  rtx x, bool reg_ok_strict)
 {
   int aligned = GET_MODE_SIZE (mode) >= 16;
@@ -3573,7 +3526,7 @@ spu_legitimate_address_p (machine_mode mode,
     case CONST:
       /* Keep __ea references until reload so that spu_expand_mov can see them
 	 in MEMs.  */
-      if (ea_symbol_ref_p (x))
+      if (ea_symbol_ref (&x, 0))
 	return !reload_in_progress && !reload_completed;
       return !TARGET_LARGE_MEM;
 
@@ -3626,7 +3579,7 @@ spu_legitimate_address_p (machine_mode mode,
 
 /* Like spu_legitimate_address_p, except with named addresses.  */
 static bool
-spu_addr_space_legitimate_address_p (machine_mode mode, rtx x,
+spu_addr_space_legitimate_address_p (enum machine_mode mode, rtx x,
 				     bool reg_ok_strict, addr_space_t as)
 {
   if (as == ADDR_SPACE_EA)
@@ -3642,7 +3595,7 @@ spu_addr_space_legitimate_address_p (machine_mode mode, rtx x,
    register.  */
 static rtx
 spu_legitimize_address (rtx x, rtx oldx ATTRIBUTE_UNUSED,
-			machine_mode mode ATTRIBUTE_UNUSED)
+			enum machine_mode mode ATTRIBUTE_UNUSED)
 {
   rtx op0, op1;
   /* Make sure both operands are registers.  */
@@ -3671,7 +3624,7 @@ spu_legitimize_address (rtx x, rtx oldx ATTRIBUTE_UNUSED,
 
 /* Like spu_legitimate_address, except with named address support.  */
 static rtx
-spu_addr_space_legitimize_address (rtx x, rtx oldx, machine_mode mode,
+spu_addr_space_legitimize_address (rtx x, rtx oldx, enum machine_mode mode,
 				   addr_space_t as)
 {
   if (as != ADDR_SPACE_GENERIC)
@@ -3682,7 +3635,7 @@ spu_addr_space_legitimize_address (rtx x, rtx oldx, machine_mode mode,
 
 /* Reload reg + const_int for out-of-range displacements.  */
 rtx
-spu_legitimize_reload_address (rtx ad, machine_mode mode ATTRIBUTE_UNUSED,
+spu_legitimize_reload_address (rtx ad, enum machine_mode mode ATTRIBUTE_UNUSED,
 			       int opnum, int type)
 {
   bool removed_and = false;
@@ -3744,7 +3697,7 @@ spu_handle_vector_attribute (tree * node, tree name,
 			     int flags ATTRIBUTE_UNUSED, bool * no_add_attrs)
 {
   tree type = *node, result = NULL_TREE;
-  machine_mode mode;
+  enum machine_mode mode;
   int unsigned_p;
 
   while (POINTER_TYPE_P (type)
@@ -3831,7 +3784,7 @@ spu_initial_elimination_offset (int from, int to)
 rtx
 spu_function_value (const_tree type, const_tree func ATTRIBUTE_UNUSED)
 {
-  machine_mode mode = TYPE_MODE (type);
+  enum machine_mode mode = TYPE_MODE (type);
   int byte_size = ((mode == BLKmode)
 		   ? int_size_in_bytes (type) : GET_MODE_SIZE (mode));
 
@@ -3839,7 +3792,7 @@ spu_function_value (const_tree type, const_tree func ATTRIBUTE_UNUSED)
   if ((mode == BLKmode || (type && AGGREGATE_TYPE_P (type)))
       && byte_size <= UNITS_PER_WORD * MAX_REGISTER_RETURN && byte_size > 0)
     {
-      machine_mode smode;
+      enum machine_mode smode;
       rtvec v;
       int i;
       int nregs = (byte_size + UNITS_PER_WORD - 1) / UNITS_PER_WORD;
@@ -3873,7 +3826,7 @@ spu_function_value (const_tree type, const_tree func ATTRIBUTE_UNUSED)
 
 static rtx
 spu_function_arg (cumulative_args_t cum_v,
-		  machine_mode mode,
+		  enum machine_mode mode,
 		  const_tree type, bool named ATTRIBUTE_UNUSED)
 {
   CUMULATIVE_ARGS *cum = get_cumulative_args (cum_v);
@@ -3894,7 +3847,7 @@ spu_function_arg (cumulative_args_t cum_v,
   if ((mode == BLKmode || (type && AGGREGATE_TYPE_P (type)))
       && byte_size < UNITS_PER_WORD && byte_size > 0)
     {
-      machine_mode smode;
+      enum machine_mode smode;
       rtx gr_reg;
       if (byte_size < 4)
 	byte_size = 4;
@@ -3909,7 +3862,7 @@ spu_function_arg (cumulative_args_t cum_v,
 }
 
 static void
-spu_function_arg_advance (cumulative_args_t cum_v, machine_mode mode,
+spu_function_arg_advance (cumulative_args_t cum_v, enum machine_mode mode,
 			  const_tree type, bool named ATTRIBUTE_UNUSED)
 {
   CUMULATIVE_ARGS *cum = get_cumulative_args (cum_v);
@@ -3926,7 +3879,7 @@ spu_function_arg_advance (cumulative_args_t cum_v, machine_mode mode,
 /* Variable sized types are passed by reference.  */
 static bool
 spu_pass_by_reference (cumulative_args_t cum ATTRIBUTE_UNUSED,
-		       machine_mode mode ATTRIBUTE_UNUSED,
+		       enum machine_mode mode ATTRIBUTE_UNUSED,
 		       const_tree type, bool named ATTRIBUTE_UNUSED)
 {
   return type && TREE_CODE (TYPE_SIZE (type)) != INTEGER_CST;
@@ -4116,7 +4069,7 @@ spu_gimplify_va_arg_expr (tree valist, tree type, gimple_seq * pre_p,
    in the stack then save no registers.  Set pretend_args_size to the
    amount of space needed to save the registers. */
 static void
-spu_setup_incoming_varargs (cumulative_args_t cum, machine_mode mode,
+spu_setup_incoming_varargs (cumulative_args_t cum, enum machine_mode mode,
 			    tree type, int *pretend_size, int no_rtl)
 {
   if (!no_rtl)
@@ -4190,7 +4143,7 @@ spu_encode_section_info (tree decl, rtx rtl, int first)
 static int
 store_with_one_insn_p (rtx mem)
 {
-  machine_mode mode = GET_MODE (mem);
+  enum machine_mode mode = GET_MODE (mem);
   rtx addr = XEXP (mem, 0);
   if (mode == BLKmode)
     return 0;
@@ -4302,8 +4255,7 @@ ea_load_store_inline (rtx mem, bool is_store, rtx ea_addr, rtx data_addr)
   rtx tag_eq_pack = gen_reg_rtx (V4SImode);
   rtx tag_eq_pack_si = gen_reg_rtx (SImode);
   rtx eq_index = gen_reg_rtx (SImode);
-  rtx bcomp, hit_label, hit_ref, cont_label;
-  rtx_insn *insn;
+  rtx bcomp, hit_label, hit_ref, cont_label, insn;
 
   if (spu_ea_model != 32)
     {
@@ -4386,7 +4338,7 @@ ea_load_store_inline (rtx mem, bool is_store, rtx ea_addr, rtx data_addr)
 							    hit_ref, pc_rtx)));
   /* Say that this branch is very likely to happen.  */
   v = REG_BR_PROB_BASE - REG_BR_PROB_BASE / 100 - 1;
-  add_int_reg_note (insn, REG_BR_PROB, v);
+  add_reg_note (insn, REG_BR_PROB, GEN_INT (v));
 
   ea_load_store (mem, is_store, ea_addr, data_addr);
   cont_label = gen_label_rtx ();
@@ -4465,7 +4417,7 @@ expand_ea_mem (rtx mem, bool is_store)
 }
 
 int
-spu_expand_mov (rtx * ops, machine_mode mode)
+spu_expand_mov (rtx * ops, enum machine_mode mode)
 {
   if (GET_CODE (ops[0]) == SUBREG && !valid_subreg (ops[0]))
     {
@@ -4479,7 +4431,7 @@ spu_expand_mov (rtx * ops, machine_mode mode)
   if (GET_CODE (ops[1]) == SUBREG && !valid_subreg (ops[1]))
     {
       rtx from = SUBREG_REG (ops[1]);
-      machine_mode imode = int_mode_for_mode (GET_MODE (from));
+      enum machine_mode imode = int_mode_for_mode (GET_MODE (from));
 
       gcc_assert (GET_MODE_CLASS (mode) == MODE_INT
 		  && GET_MODE_CLASS (imode) == MODE_INT
@@ -4546,8 +4498,8 @@ spu_expand_mov (rtx * ops, machine_mode mode)
 static void
 spu_convert_move (rtx dst, rtx src)
 {
-  machine_mode mode = GET_MODE (dst);
-  machine_mode int_mode = mode_for_size (GET_MODE_BITSIZE (mode), MODE_INT, 0);
+  enum machine_mode mode = GET_MODE (dst);
+  enum machine_mode int_mode = mode_for_size (GET_MODE_BITSIZE (mode), MODE_INT, 0);
   rtx reg;
   gcc_assert (GET_MODE (src) == TImode);
   reg = int_mode != mode ? gen_reg_rtx (int_mode) : dst;
@@ -4710,7 +4662,7 @@ spu_expand_load (rtx dst0, rtx dst1, rtx src, int extra_rotby)
 int
 spu_split_load (rtx * ops)
 {
-  machine_mode mode = GET_MODE (ops[0]);
+  enum machine_mode mode = GET_MODE (ops[0]);
   rtx addr, load, rot;
   int rot_amt;
 
@@ -4744,7 +4696,7 @@ spu_split_load (rtx * ops)
 int
 spu_split_store (rtx * ops)
 {
-  machine_mode mode = GET_MODE (ops[0]);
+  enum machine_mode mode = GET_MODE (ops[0]);
   rtx reg;
   rtx addr, p0, p1, p1_lo, smem;
   int aform;
@@ -5001,7 +4953,7 @@ fsmbi_const_p (rtx x)
 /* Return TRUE if x is a CONST_INT, CONST_DOUBLE or CONST_VECTOR that
    can be generated using the cbd, chd, cwd or cdd instruction. */
 int
-cpat_const_p (rtx x, machine_mode mode)
+cpat_const_p (rtx x, enum machine_mode mode)
 {
   if (CONSTANT_P (x))
     {
@@ -5047,7 +4999,7 @@ gen_cpat_const (rtx * ops)
    array.  Use MODE for CONST_INT's.  When the constant's mode is smaller
    than 16 bytes, the value is repeated across the rest of the array. */
 void
-constant_to_array (machine_mode mode, rtx x, unsigned char arr[16])
+constant_to_array (enum machine_mode mode, rtx x, unsigned char arr[16])
 {
   HOST_WIDE_INT val;
   int i, j, first;
@@ -5126,9 +5078,9 @@ constant_to_array (machine_mode mode, rtx x, unsigned char arr[16])
    smaller than 16 bytes, use the bytes that would represent that value
    in a register, e.g., for QImode return the value of arr[3].  */
 rtx
-array_to_constant (machine_mode mode, const unsigned char arr[16])
+array_to_constant (enum machine_mode mode, const unsigned char arr[16])
 {
-  machine_mode inner_mode;
+  enum machine_mode inner_mode;
   rtvec v;
   int units, size, i, j, k;
   HOST_WIDE_INT val;
@@ -5264,7 +5216,7 @@ spu_rtx_costs (rtx x, int code, int outer_code ATTRIBUTE_UNUSED,
 	       int opno ATTRIBUTE_UNUSED, int *total,
 	       bool speed ATTRIBUTE_UNUSED)
 {
-  machine_mode mode = GET_MODE (x);
+  enum machine_mode mode = GET_MODE (x);
   int cost = COSTS_N_INSNS (2);
 
   /* Folding to a CONST_VECTOR will use extra space but there might
@@ -5375,7 +5327,7 @@ spu_rtx_costs (rtx x, int code, int outer_code ATTRIBUTE_UNUSED,
   return true;
 }
 
-static machine_mode
+static enum machine_mode
 spu_unwind_word_mode (void)
 {
   return SImode;
@@ -5504,7 +5456,7 @@ spu_init_libfuncs (void)
 /* Make a subreg, stripping any existing subreg.  We could possibly just
    call simplify_subreg, but in this case we know what we want. */
 rtx
-spu_gen_subreg (machine_mode mode, rtx x)
+spu_gen_subreg (enum machine_mode mode, rtx x)
 {
   if (GET_CODE (x) == SUBREG)
     x = SUBREG_REG (x);
@@ -5675,7 +5627,7 @@ spu_safe_dma (HOST_WIDE_INT channel)
 void
 spu_builtin_splats (rtx ops[])
 {
-  machine_mode mode = GET_MODE (ops[0]);
+  enum machine_mode mode = GET_MODE (ops[0]);
   if (GET_CODE (ops[1]) == CONST_INT || GET_CODE (ops[1]) == CONST_DOUBLE)
     {
       unsigned char arr[16];
@@ -5724,7 +5676,7 @@ spu_builtin_splats (rtx ops[])
 void
 spu_builtin_extract (rtx ops[])
 {
-  machine_mode mode;
+  enum machine_mode mode;
   rtx rot, from, tmp;
 
   mode = GET_MODE (ops[1]);
@@ -5789,8 +5741,8 @@ spu_builtin_extract (rtx ops[])
 void
 spu_builtin_insert (rtx ops[])
 {
-  machine_mode mode = GET_MODE (ops[0]);
-  machine_mode imode = GET_MODE_INNER (mode);
+  enum machine_mode mode = GET_MODE (ops[0]);
+  enum machine_mode imode = GET_MODE_INNER (mode);
   rtx mask = gen_reg_rtx (TImode);
   rtx offset;
 
@@ -5811,7 +5763,7 @@ spu_builtin_insert (rtx ops[])
 void
 spu_builtin_promote (rtx ops[])
 {
-  machine_mode mode, imode;
+  enum machine_mode mode, imode;
   rtx rot, from, offset;
   HOST_WIDE_INT pos;
 
@@ -5997,7 +5949,7 @@ spu_expand_sign_extend (rtx ops[])
 void
 spu_expand_vector_init (rtx target, rtx vals)
 {
-  machine_mode mode = GET_MODE (target);
+  enum machine_mode mode = GET_MODE (target);
   int n_elts = GET_MODE_NUNITS (mode);
   int n_var = 0;
   bool all_same = true;
@@ -6088,8 +6040,8 @@ spu_expand_vector_init (rtx target, rtx vals)
 
 static int
 get_vec_cmp_insn (enum rtx_code code,
-                  machine_mode dest_mode,
-                  machine_mode op_mode)
+                  enum machine_mode dest_mode,
+                  enum machine_mode op_mode)
 
 {
   switch (code)
@@ -6138,12 +6090,12 @@ get_vec_cmp_insn (enum rtx_code code,
 static rtx
 spu_emit_vector_compare (enum rtx_code rcode,
                          rtx op0, rtx op1,
-                         machine_mode dmode)
+                         enum machine_mode dmode)
 {
   int vec_cmp_insn;
   rtx mask;
-  machine_mode dest_mode;
-  machine_mode op_mode = GET_MODE (op1);
+  enum machine_mode dest_mode;
+  enum machine_mode op_mode = GET_MODE (op1);
 
   gcc_assert (GET_MODE (op0) == GET_MODE (op1));
 
@@ -6319,7 +6271,7 @@ int
 spu_emit_vector_cond_expr (rtx dest, rtx op1, rtx op2,
                            rtx cond, rtx cc_op0, rtx cc_op1)
 {   
-  machine_mode dest_mode = GET_MODE (dest);
+  enum machine_mode dest_mode = GET_MODE (dest);
   enum rtx_code rcode = GET_CODE (cond);
   rtx mask;
     
@@ -6332,7 +6284,7 @@ spu_emit_vector_cond_expr (rtx dest, rtx op1, rtx op2,
 }
 
 static rtx
-spu_force_reg (machine_mode mode, rtx op)
+spu_force_reg (enum machine_mode mode, rtx op)
 {
   rtx x, r;
   if (GET_MODE (op) == VOIDmode || GET_MODE (op) == BLKmode)
@@ -6453,7 +6405,7 @@ spu_expand_builtin_1 (struct spu_builtin_description *d,
   rtx pat;
   rtx ops[8];
   enum insn_code icode = (enum insn_code) d->icode;
-  machine_mode mode, tmode;
+  enum machine_mode mode, tmode;
   int i, p;
   int n_operands;
   tree return_type;
@@ -6488,7 +6440,7 @@ spu_expand_builtin_1 (struct spu_builtin_description *d,
 
   if (d->fcode == SPU_MASK_FOR_LOAD)
     {
-      machine_mode mode = insn_data[icode].operand[1].mode;
+      enum machine_mode mode = insn_data[icode].operand[1].mode;
       tree arg;
       rtx addr, op, pat;
 
@@ -6539,7 +6491,7 @@ spu_expand_builtin_1 (struct spu_builtin_description *d,
 	  else
 	    {
 	      rtx reg = gen_reg_rtx (mode);
-	      machine_mode imode = GET_MODE_INNER (mode);
+	      enum machine_mode imode = GET_MODE_INNER (mode);
 	      if (!spu_nonmem_operand (ops[i], GET_MODE (ops[i])))
 		ops[i] = force_reg (GET_MODE (ops[i]), ops[i]);
 	      if (imode != GET_MODE (ops[i]))
@@ -6613,7 +6565,7 @@ rtx
 spu_expand_builtin (tree exp,
 		    rtx target,
 		    rtx subtarget ATTRIBUTE_UNUSED,
-		    machine_mode mode ATTRIBUTE_UNUSED,
+		    enum machine_mode mode ATTRIBUTE_UNUSED,
 		    int ignore ATTRIBUTE_UNUSED)
 {
   tree fndecl = TREE_OPERAND (CALL_EXPR_FN (exp), 0);
@@ -6752,7 +6704,7 @@ spu_vector_alignment_reachable (const_tree type ATTRIBUTE_UNUSED, bool is_packed
 }
 
 /* Return the appropriate mode for a named address pointer.  */
-static machine_mode
+static enum machine_mode
 spu_addr_space_pointer_mode (addr_space_t addrspace)
 {
   switch (addrspace)
@@ -6767,7 +6719,7 @@ spu_addr_space_pointer_mode (addr_space_t addrspace)
 }
 
 /* Return the appropriate mode for a named address address.  */
-static machine_mode
+static enum machine_mode
 spu_addr_space_address_mode (addr_space_t addrspace)
 {
   switch (addrspace)
@@ -6870,7 +6822,7 @@ spu_sms_res_mii (struct ddg *g)
 
   for (i = 0; i < g->num_nodes; i++)
     {
-      rtx_insn *insn = g->nodes[i].insn;
+      rtx insn = g->nodes[i].insn;
       int p = get_pipe (insn) + 2;
 
       gcc_assert (p >= 0);
@@ -6913,7 +6865,7 @@ spu_init_expanders (void)
     }
 }
 
-static machine_mode
+static enum machine_mode
 spu_libgcc_cmp_return_mode (void)
 {
 
@@ -6922,7 +6874,7 @@ spu_libgcc_cmp_return_mode (void)
   return SImode;
 }
 
-static machine_mode
+static enum machine_mode
 spu_libgcc_shift_count_mode (void)
 {
 /* For SPU word mode is TI mode so it is better to use SImode
@@ -6981,7 +6933,7 @@ spu_unique_section (tree decl, int reloc)
    the result is valid for MODE.  Currently, MODE must be V4SFmode and
    SCALE must be SImode. */
 rtx
-spu_gen_exp2 (machine_mode mode, rtx scale)
+spu_gen_exp2 (enum machine_mode mode, rtx scale)
 {
   gcc_assert (mode == V4SFmode);
   gcc_assert (GET_MODE (scale) == SImode || GET_CODE (scale) == CONST_INT);
@@ -7371,9 +7323,6 @@ static const struct attribute_spec spu_attribute_table[] =
 
 #undef TARGET_CANONICALIZE_COMPARISON
 #define TARGET_CANONICALIZE_COMPARISON spu_canonicalize_comparison
-
-#undef TARGET_CAN_USE_DOLOOP_P
-#define TARGET_CAN_USE_DOLOOP_P can_use_doloop_if_innermost
 
 struct gcc_target targetm = TARGET_INITIALIZER;
 

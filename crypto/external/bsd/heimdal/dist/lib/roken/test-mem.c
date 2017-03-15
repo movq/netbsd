@@ -1,4 +1,4 @@
-/*	$NetBSD: test-mem.c,v 1.2 2017/01/28 21:31:50 christos Exp $	*/
+/*	$NetBSD: test-mem.c,v 1.1.1.1 2011/04/13 18:15:43 elric Exp $	*/
 
 /*
  * Copyright (c) 1999 - 2004 Kungliga Tekniska Högskolan
@@ -72,16 +72,13 @@ static RETSIGTYPE
 segv_handler(int sig)
 {
     int fd;
-    ssize_t ret;
     char msg[] = "SIGSEGV i current test: ";
 
     fd = open("/dev/stdout", O_WRONLY, 0600);
     if (fd >= 0) {
-	ret = write(fd, msg, sizeof(msg) - 1);
-	if (ret != -1)
-	    ret = write(fd, testname, strlen(testname));
-	if (ret != -1)
-	    ret = write(fd, "\n", 1);
+	(void)write(fd, msg, sizeof(msg) - 1);
+	(void)write(fd, testname, strlen(testname));
+	(void)write(fd, "\n", 1);
 	close(fd);
     }
     _exit(1);

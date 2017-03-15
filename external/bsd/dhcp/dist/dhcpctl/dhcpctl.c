@@ -1,4 +1,4 @@
-/*	$NetBSD: dhcpctl.c,v 1.1.1.3 2016/01/10 19:44:41 christos Exp $	*/
+/*	$NetBSD: dhcpctl.c,v 1.1.1.2 2014/07/12 11:57:52 spz Exp $	*/
 /* dhcpctl.c
 
    Subroutines providing general support for objects. */
@@ -29,7 +29,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: dhcpctl.c,v 1.1.1.3 2016/01/10 19:44:41 christos Exp $");
+__RCSID("$NetBSD: dhcpctl.c,v 1.1.1.2 2014/07/12 11:57:52 spz Exp $");
 
 #include "dhcpd.h"
 #include <omapip/omapip_p.h>
@@ -247,7 +247,6 @@ dhcpctl_status dhcpctl_get_boolean (int *result,
 	}
 	memcpy (&rv, data -> value, sizeof rv);
 	*result = ntohl (rv);
-	omapi_data_string_dereference (&data, MDL);
 	return ISC_R_SUCCESS;
 }
 

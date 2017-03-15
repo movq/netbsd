@@ -1,4 +1,4 @@
-/*	$NetBSD: sxreg.h,v 1.13 2017/01/13 21:49:46 macallan Exp $	*/
+/*	$NetBSD: sxreg.h,v 1.11 2013/06/19 00:41:16 macallan Exp $	*/
 
 /*-
  * Copyright (c) 2013 The NetBSD Foundation, Inc.
@@ -53,7 +53,7 @@
 /* write registers via pseudo instructions */
 #define SX_QUEUED_R0		0x00000300
 #define SX_QUEUED_R1		0x00000304	/* and so on until R127 */
-#define SX_QUEUED(r)		(0x300 + ((r) << 2))
+#define SX_QUEUED(r)		(0x300 + (r << 2))
 
 /* special purpose registers */
 #define R_ZERO	0
@@ -163,8 +163,6 @@
 #define SX_STM(sreg, cnt, o)  (0x80000000 | ((cnt) << 23) | SX_STORE_MASK | \
 				SX_LONG | (sreg << 7) | (o))
 #define SX_STB(sreg, cnt, o) (0x80000000 | ((cnt) << 23) | SX_STORE | \
-				SX_UBYTE_0 | (sreg << 7) | (o))
-#define SX_STBM(sreg, cnt, o) (0x80000000 | ((cnt) << 23) | SX_STORE_MASK | \
 				SX_UBYTE_0 | (sreg << 7) | (o))
 #define SX_STBC(sreg, cnt, o) (0x80000000 | ((cnt) << 23) | SX_STORE_CLAMP | \
 				SX_UBYTE_0 | (sreg << 7) | (o))

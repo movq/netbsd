@@ -1,4 +1,4 @@
-/*	$NetBSD: rrunner.c,v 1.83 2016/12/15 09:28:05 ozaki-r Exp $	*/
+/*	$NetBSD: rrunner.c,v 1.78 2014/07/25 08:10:37 dholland Exp $	*/
 
 /*
  * Copyright (c) 1997, 1998 The NetBSD Foundation, Inc.
@@ -35,7 +35,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: rrunner.c,v 1.83 2016/12/15 09:28:05 ozaki-r Exp $");
+__KERNEL_RCSID(0, "$NetBSD: rrunner.c,v 1.78 2014/07/25 08:10:37 dholland Exp $");
 
 #include "opt_inet.h"
 
@@ -724,10 +724,8 @@ esh_fpopen(dev_t dev, int oflags, int devtype,
 
 	if ((sc->sc_flags & ESH_FL_INITIALIZED) == 0) {
 		eshinit(sc);
-		if ((sc->sc_flags & ESH_FL_INITIALIZED) == 0) {
-			splx(s);
+		if ((sc->sc_flags & ESH_FL_INITIALIZED) == 0)
 			return EIO;
-		}
 	}
 
 	if ((sc->sc_flags & ESH_FL_RUNCODE_UP) == 0) {
@@ -869,6 +867,7 @@ esh_fpopen(dev_t dev, int oflags, int devtype,
 		error = tsleep((void *) &recv->ec_ulp, PCATCH | PRIBIO,
 			       "eshfpopen", 0);
 		if (error != 0 || recv->ec_index == -1) {
+			splx(s);
 			goto bad_fp_ring_create;
 		}
 	}
@@ -2222,7 +2221,7 @@ esh_adjust_mbufs(struct esh_softc *sc, struct mbuf *m)
 
 	for (n0 = n = m; n; n = n->m_next) {
 		while (n && n->m_len == 0) {
-			m0 = m_free(n);
+			MFREE(n, m0);
 			if (n == m)
 				n = n0 = m = m0;
 			else
@@ -2243,7 +2242,7 @@ esh_adjust_mbufs(struct esh_softc *sc, struct mbuf *m)
 
 			MCLGET(o, M_DONTWAIT);
 			if (!(o->m_flags & M_EXT)) {
-				m0 = m_free(o);
+				MFREE(o, m0);
 				goto bogosity;
 			}
 
@@ -2340,7 +2339,7 @@ esh_read_snap_ring(struct esh_softc *sc, u_int16_t consumer, int error)
 			}
 			recv->ec_cur_pkt = recv->ec_cur_mbuf = m;
 			/* allocated buffers all have pkthdrs... */
-			m_set_rcvif(m, ifp);
+			m->m_pkthdr.rcvif = ifp;
 			m->m_pkthdr.len = m->m_len;
 		} else {
 			if (!recv->ec_cur_pkt)
@@ -2360,12 +2359,24 @@ esh_read_snap_ring(struct esh_softc *sc, u_int16_t consumer, int error)
 		if (control & RR_CT_PACKET_END) { /* XXX: RR2_ matches */
 			m = recv->ec_cur_pkt;
 			if (!error && !recv->ec_error) {
+				/*
+				 * We have a complete packet, send it up
+				 * the stack...
+				 */
+				ifp->if_ipackets++;
+
+				/*
+				 * Check if there's a BPF listener on this
+				 * interface.  If so, hand off the raw packet
+				 * to BPF.
+				 */
+				bpf_mtap(ifp, m);
 				if ((ifp->if_flags & IFF_RUNNING) == 0) {
 					m_freem(m);
 				} else {
 					m = m_pullup(m,
 					    sizeof(struct hippi_header));
-					if_percpuq_enqueue(ifp->if_percpuq, m);
+					(*ifp->if_input)(ifp, m);
 				}
 			} else {
 				ifp->if_ierrors++;

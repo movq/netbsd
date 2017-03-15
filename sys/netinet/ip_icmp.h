@@ -1,4 +1,4 @@
-/*	$NetBSD: ip_icmp.h,v 1.35 2017/02/17 04:32:10 ozaki-r Exp $	*/
+/*	$NetBSD: ip_icmp.h,v 1.33.22.1 2015/02/21 18:24:51 martin Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1993
@@ -248,8 +248,6 @@ int	icmp_sysctl(int *, u_int, void *, size_t *, void *, size_t);
 
 void	icmp_mtudisc_callback_register(void (*)(struct in_addr));
 int	icmp_ratelimit(const struct in_addr *, const int, const int);
-void	icmp_mtudisc_lock(void);
-void	icmp_mtudisc_unlock(void);
 #endif
 
 

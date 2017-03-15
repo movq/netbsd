@@ -1,4 +1,4 @@
-/*	$NetBSD: layer_vfsops.c,v 1.47 2017/02/17 08:31:25 hannken Exp $	*/
+/*	$NetBSD: layer_vfsops.c,v 1.44.2.1 2015/01/17 12:10:53 martin Exp $	*/
 
 /*
  * Copyright (c) 1999 National Aeronautics & Space Administration
@@ -74,7 +74,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: layer_vfsops.c,v 1.47 2017/02/17 08:31:25 hannken Exp $");
+__KERNEL_RCSID(0, "$NetBSD: layer_vfsops.c,v 1.44.2.1 2015/01/17 12:10:53 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/sysctl.h>
@@ -86,7 +86,6 @@ __KERNEL_RCSID(0, "$NetBSD: layer_vfsops.c,v 1.47 2017/02/17 08:31:25 hannken Ex
 #include <sys/module.h>
 
 #include <miscfs/specfs/specdev.h>
-#include <miscfs/genfs/genfs.h>
 #include <miscfs/genfs/layer.h>
 #include <miscfs/genfs/layer_extern.h>
 
@@ -222,6 +221,7 @@ layerfs_loadvnode(struct mount *mp, struct vnode *vp,
 	/* Share the interlock with the lower node. */
 	mutex_obj_hold(lowervp->v_interlock);
 	uvm_obj_setlock(&vp->v_uobj, lowervp->v_interlock);
+	vp->v_iflag |= VI_LAYER | VI_LOCKSHARE;
 
 	vp->v_tag = lmp->layerm_tag;
 	vp->v_type = lowervp->v_type;
@@ -320,23 +320,6 @@ layerfs_snapshot(struct mount *mp, struct vnode *vp,
 {
 
 	return EOPNOTSUPP;
-}
-
-/*
- * layerfs_suspendctl - suspend a layered file system
- *
- * Here we should suspend the lower file system(s) too.  At present
- * this will deadlock as we don't know which to suspend first.
- *
- * This routine serves as a central resource for this behavior; all
- * layered file systems don't need to worry about the above. Also, if
- * things get fixed, all layers get the benefit.
- */
-int
-layerfs_suspendctl(struct mount *mp, int cmd)
-{
-
-	return genfs_suspendctl(mp, cmd);
 }
 
 SYSCTL_SETUP(sysctl_vfs_layerfs_setup, "sysctl vfs.layerfs subtree setup")

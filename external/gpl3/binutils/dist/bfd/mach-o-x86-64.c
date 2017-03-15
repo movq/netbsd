@@ -1,5 +1,6 @@
 /* Intel x86-64 Mach-O support for BFD.
-   Copyright (C) 2010-2016 Free Software Foundation, Inc.
+   Copyright 2010
+   Free Software Foundation, Inc.
 
    This file is part of BFD, the Binary File Descriptor library.
 
@@ -32,13 +33,13 @@
 static const bfd_target *
 bfd_mach_o_x86_64_object_p (bfd *abfd)
 {
-  return bfd_mach_o_header_p (abfd, 0, 0, BFD_MACH_O_CPU_TYPE_X86_64);
+  return bfd_mach_o_header_p (abfd, 0, BFD_MACH_O_CPU_TYPE_X86_64);
 }
 
 static const bfd_target *
 bfd_mach_o_x86_64_core_p (bfd *abfd)
 {
-  return bfd_mach_o_header_p (abfd, 0,
+  return bfd_mach_o_header_p (abfd,
                               BFD_MACH_O_MH_CORE, BFD_MACH_O_CPU_TYPE_X86_64);
 }
 
@@ -53,8 +54,7 @@ bfd_mach_o_x86_64_mkobject (bfd *abfd)
   mdata = bfd_mach_o_get_data (abfd);
   mdata->header.magic = BFD_MACH_O_MH_MAGIC_64;
   mdata->header.cputype = BFD_MACH_O_CPU_TYPE_X86_64;
-  mdata->header.cpusubtype =
-    BFD_MACH_O_CPU_SUBTYPE_X86_ALL | BFD_MACH_O_CPU_SUBTYPE_LIB64;
+  mdata->header.cpusubtype = BFD_MACH_O_CPU_SUBTYPE_X86_ALL;
   mdata->header.byteorder = BFD_ENDIAN_LITTLE;
   mdata->header.version = 2;
 
@@ -101,11 +101,11 @@ static reloc_howto_type x86_64_howto_table[]=
 	NULL, "GOT_LOAD",
 	FALSE, 0xffffffff, 0xffffffff, TRUE),
   /* 8 */
-  HOWTO(BFD_RELOC_MACH_O_SUBTRACTOR32, 0, 2, 32, FALSE, 0,
+  HOWTO(BFD_RELOC_MACH_O_X86_64_SUBTRACTOR32, 0, 2, 32, FALSE, 0,
 	complain_overflow_bitfield,
 	NULL, "SUBTRACTOR32",
 	FALSE, 0xffffffff, 0xffffffff, FALSE),
-  HOWTO(BFD_RELOC_MACH_O_SUBTRACTOR64, 0, 4, 64, FALSE, 0,
+  HOWTO(BFD_RELOC_MACH_O_X86_64_SUBTRACTOR64, 0, 4, 64, FALSE, 0,
 	complain_overflow_bitfield,
 	NULL, "SUBTRACTOR64",
 	FALSE, MINUS_ONE, MINUS_ONE, FALSE),
@@ -120,25 +120,18 @@ static reloc_howto_type x86_64_howto_table[]=
 };
 
 static bfd_boolean
-bfd_mach_o_x86_64_canonicalize_one_reloc (bfd *abfd,
-				        struct mach_o_reloc_info_external *raw,
-					arelent *res, asymbol **syms)
+bfd_mach_o_x86_64_swap_reloc_in (arelent *res, bfd_mach_o_reloc_info *reloc)
 {
-  bfd_mach_o_reloc_info reloc;
-
-  if (!bfd_mach_o_pre_canonicalize_one_reloc (abfd, raw, &reloc, res, syms))
-    return FALSE;
-
   /* On x86-64, scattered relocs are not used.  */
-  if (reloc.r_scattered)
+  if (reloc->r_scattered)
     return FALSE;
 
-  switch (reloc.r_type)
+  switch (reloc->r_type)
     {
     case BFD_MACH_O_X86_64_RELOC_UNSIGNED:
-      if (reloc.r_pcrel)
+      if (reloc->r_pcrel)
         return FALSE;
-      switch (reloc.r_length)
+      switch (reloc->r_length)
         {
         case 2:
           res->howto = &x86_64_howto_table[1];
@@ -150,16 +143,16 @@ bfd_mach_o_x86_64_canonicalize_one_reloc (bfd *abfd,
           return FALSE;
         }
     case BFD_MACH_O_X86_64_RELOC_SIGNED:
-      if (reloc.r_length == 2 && reloc.r_pcrel)
+      if (reloc->r_length == 2 && reloc->r_pcrel)
         {
           res->howto = &x86_64_howto_table[2];
           return TRUE;
         }
       break;
     case BFD_MACH_O_X86_64_RELOC_BRANCH:
-      if (!reloc.r_pcrel)
+      if (!reloc->r_pcrel)
         return FALSE;
-      switch (reloc.r_length)
+      switch (reloc->r_length)
         {
         case 2:
           res->howto = &x86_64_howto_table[6];
@@ -169,23 +162,23 @@ bfd_mach_o_x86_64_canonicalize_one_reloc (bfd *abfd,
         }
       break;
     case BFD_MACH_O_X86_64_RELOC_GOT_LOAD:
-      if (reloc.r_length == 2 && reloc.r_pcrel && reloc.r_extern)
+      if (reloc->r_length == 2 && reloc->r_pcrel && reloc->r_extern)
         {
           res->howto = &x86_64_howto_table[7];
           return TRUE;
         }
       break;
     case BFD_MACH_O_X86_64_RELOC_GOT:
-      if (reloc.r_length == 2 && reloc.r_pcrel && reloc.r_extern)
+      if (reloc->r_length == 2 && reloc->r_pcrel && reloc->r_extern)
         {
           res->howto = &x86_64_howto_table[10];
           return TRUE;
         }
       break;
     case BFD_MACH_O_X86_64_RELOC_SUBTRACTOR:
-      if (reloc.r_pcrel)
+      if (reloc->r_pcrel)
         return FALSE;
-      switch (reloc.r_length)
+      switch (reloc->r_length)
         {
         case 2:
           res->howto = &x86_64_howto_table[8];
@@ -198,21 +191,21 @@ bfd_mach_o_x86_64_canonicalize_one_reloc (bfd *abfd,
         }
       break;
     case BFD_MACH_O_X86_64_RELOC_SIGNED_1:
-      if (reloc.r_length == 2 && reloc.r_pcrel)
+      if (reloc->r_length == 2 && reloc->r_pcrel)
         {
           res->howto = &x86_64_howto_table[3];
           return TRUE;
         }
       break;
     case BFD_MACH_O_X86_64_RELOC_SIGNED_2:
-      if (reloc.r_length == 2 && reloc.r_pcrel)
+      if (reloc->r_length == 2 && reloc->r_pcrel)
         {
           res->howto = &x86_64_howto_table[4];
           return TRUE;
         }
       break;
     case BFD_MACH_O_X86_64_RELOC_SIGNED_4:
-      if (reloc.r_length == 2 && reloc.r_pcrel)
+      if (reloc->r_length == 2 && reloc->r_pcrel)
         {
           res->howto = &x86_64_howto_table[5];
           return TRUE;
@@ -266,12 +259,12 @@ bfd_mach_o_x86_64_swap_reloc_out (arelent *rel, bfd_mach_o_reloc_info *rinfo)
       rinfo->r_pcrel = 1;
       rinfo->r_length = 2;
       break;
-    case BFD_RELOC_MACH_O_SUBTRACTOR32:
+    case BFD_RELOC_MACH_O_X86_64_SUBTRACTOR32:
       rinfo->r_type = BFD_MACH_O_X86_64_RELOC_SUBTRACTOR;
       rinfo->r_pcrel = 0;
       rinfo->r_length = 2;
       break;
-    case BFD_RELOC_MACH_O_SUBTRACTOR64:
+    case BFD_RELOC_MACH_O_X86_64_SUBTRACTOR64:
       rinfo->r_type = BFD_MACH_O_X86_64_RELOC_SUBTRACTOR;
       rinfo->r_pcrel = 0;
       rinfo->r_length = 3;
@@ -292,8 +285,7 @@ bfd_mach_o_x86_64_swap_reloc_out (arelent *rel, bfd_mach_o_reloc_info *rinfo)
   if ((*rel->sym_ptr_ptr)->flags & BSF_SECTION_SYM)
     {
       rinfo->r_extern = 0;
-      rinfo->r_value =
-	(*rel->sym_ptr_ptr)->section->output_section->target_index;
+      rinfo->r_value = (*rel->sym_ptr_ptr)->section->target_index;
     }
   else
     {
@@ -351,7 +343,7 @@ const mach_o_segment_name_xlat mach_o_x86_64_segsec_names_xlat[] =
     { NULL, NULL }
   };
 
-#define bfd_mach_o_canonicalize_one_reloc bfd_mach_o_x86_64_canonicalize_one_reloc
+#define bfd_mach_o_swap_reloc_in bfd_mach_o_x86_64_swap_reloc_in
 #define bfd_mach_o_swap_reloc_out bfd_mach_o_x86_64_swap_reloc_out
 
 #define bfd_mach_o_bfd_reloc_type_lookup bfd_mach_o_x86_64_bfd_reloc_type_lookup
@@ -360,10 +352,9 @@ const mach_o_segment_name_xlat mach_o_x86_64_segsec_names_xlat[] =
 #define bfd_mach_o_tgt_seg_table mach_o_x86_64_segsec_names_xlat
 #define bfd_mach_o_section_type_valid_for_tgt bfd_mach_o_section_type_valid_for_x86_64
 
-#define TARGET_NAME 		x86_64_mach_o_vec
+#define TARGET_NAME 		mach_o_x86_64_vec
 #define TARGET_STRING 		"mach-o-x86-64"
 #define TARGET_ARCHITECTURE	bfd_arch_i386
-#define TARGET_PAGESIZE		4096
 #define TARGET_BIG_ENDIAN 	0
 #define TARGET_ARCHIVE 		0
 #define TARGET_PRIORITY		0

@@ -30,7 +30,7 @@
 static const char copyright[] _U_ =
     "@(#) Copyright (c) 1988, 1989, 1990, 1991, 1992, 1993, 1994, 1995, 1996, 1997, 2000\n\
 The Regents of the University of California.  All rights reserved.\n";
-__RCSID("$NetBSD: tcpdump.c,v 1.15 2017/02/05 04:05:05 spz Exp $");
+__RCSID("$NetBSD: tcpdump.c,v 1.8.2.1 2017/02/19 05:01:17 snj Exp $");
 #endif
 
 /*

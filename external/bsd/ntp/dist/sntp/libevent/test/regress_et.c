@@ -1,4 +1,4 @@
-/*	$NetBSD: regress_et.c,v 1.4 2016/01/08 21:35:41 christos Exp $	*/
+/*	$NetBSD: regress_et.c,v 1.1.1.1.6.1 2014/12/24 00:05:26 riz Exp $	*/
 
 /*
  * Copyright (c) 2009-2012 Niels Provos and Nick Mathewson

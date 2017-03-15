@@ -1,4 +1,4 @@
-/*	$NetBSD: milter.h,v 1.2 2017/02/14 01:16:45 christos Exp $	*/
+/*	$NetBSD: milter.h,v 1.1.1.1.28.1 2015/01/27 08:14:03 martin Exp $	*/
 
 #ifndef _MILTER_H_INCLUDED_
 #define _MILTER_H_INCLUDED_
@@ -87,11 +87,6 @@ extern int milter_macros_scan(ATTR_SCAN_MASTER_FN, VSTREAM *, int, void *);
 #define MILTER_MACROS_ALLOC_EMPTY	2	/* mystrdup(""); */
 
  /*
-  * Helper to parse list of name=value default macro settings.
-  */
-extern struct HTABLE *milter_macro_defaults_create(const char *);
-
- /*
   * A bunch of Milters.
   */
 typedef const char *(*MILTER_MAC_LOOKUP_FN) (const char *, void *);
@@ -108,7 +103,6 @@ typedef struct MILTERS {
     MILTER_MAC_LOOKUP_FN mac_lookup;
     void   *mac_context;		/* macro lookup context */
     struct MILTER_MACROS *macros;
-    struct HTABLE *macro_defaults;
     void   *chg_context;		/* context for queue file changes */
     MILTER_ADD_HEADER_FN add_header;
     MILTER_EDIT_HEADER_FN upd_header;
@@ -124,16 +118,14 @@ typedef struct MILTERS {
 #define milter_create(milter_names, conn_timeout, cmd_timeout, msg_timeout, \
 			protocol, def_action, conn_macros, helo_macros, \
 			mail_macros, rcpt_macros, data_macros, eoh_macros, \
-			eod_macros, unk_macros, macro_deflts) \
+			eod_macros, unk_macros) \
 	milter_new(milter_names, conn_timeout, cmd_timeout, msg_timeout, \
 		    protocol, def_action, milter_macros_create(conn_macros, \
 		    helo_macros, mail_macros, rcpt_macros, data_macros, \
-		    eoh_macros, eod_macros, unk_macros), \
-		    milter_macro_defaults_create(macro_deflts))
+		    eoh_macros, eod_macros, unk_macros))
 
 extern MILTERS *milter_new(const char *, int, int, int, const char *,
-			           const char *, MILTER_MACROS *,
-			           struct HTABLE *);
+			           const char *, MILTER_MACROS *);
 extern void milter_macro_callback(MILTERS *, MILTER_MAC_LOOKUP_FN, void *);
 extern void milter_edit_callback(MILTERS *milters, MILTER_ADD_HEADER_FN,
 		               MILTER_EDIT_HEADER_FN, MILTER_EDIT_HEADER_FN,
@@ -211,11 +203,6 @@ extern void milter_free(MILTERS *);
 /*	IBM T.J. Watson Research
 /*	P.O. Box 704
 /*	Yorktown Heights, NY 10598, USA
-/*
-/*	Wietse Venema
-/*	Google, Inc.
-/*	111 8th Avenue
-/*	New York, NY 10011, USA
 /*--*/
 
 #endif

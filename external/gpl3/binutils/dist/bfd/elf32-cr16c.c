@@ -1,5 +1,6 @@
 /* BFD back-end for National Semiconductor's CR16C ELF
-   Copyright (C) 2004-2016 Free Software Foundation, Inc.
+   Copyright 2004, 2005, 2006, 2007, 2009, 2010, 2012
+   Free Software Foundation, Inc.
 
    This file is part of BFD, the Binary File Descriptor library.
 
@@ -28,14 +29,14 @@
 
 #define USE_REL	1	/* CR16C uses REL relocations instead of RELA.  */
 
-/* The following definition is based on EMPTY_HOWTO macro,
+/* The following definition is based on EMPTY_HOWTO macro, 
    but also initiates the "name" field in HOWTO struct.  */
 #define ONLY_NAME_HOWTO(C) \
   HOWTO ((C), 0, 0, 0, FALSE, 0, complain_overflow_dont, NULL, \
 	  STRINGX(C), FALSE, 0, 0, FALSE)
 
 /* reloc_map_index array maps CRASM relocation type into a BFD
-   relocation enum. The array's indices are synchronized with
+   relocation enum. The array's indices are synchronized with 
    RINDEX_16C_* indices, created in include/elf/cr16c.h.
    The array is used in:
    1. elf32-cr16c.c : elf_cr16c_reloc_type_lookup().
@@ -180,11 +181,7 @@ elf_cr16c_info_to_howto_rel (bfd *abfd ATTRIBUTE_UNUSED,
 {
   unsigned int r_type = ELF32_R_TYPE (dst->r_info);
 
-  if (r_type >= RINDEX_16C_MAX)
-    {
-      _bfd_error_handler (_("%B: invalid CR16C reloc number: %d"), abfd, r_type);
-      r_type = 0;
-    }
+  BFD_ASSERT (r_type < (unsigned int) RINDEX_16C_MAX);
   cache_ptr->howto = &elf_howto_table[r_type];
 }
 
@@ -718,19 +715,19 @@ elf32_cr16c_relocate_section (bfd *output_bfd,
 	}
       else
 	{
-	  bfd_boolean unresolved_reloc, warned, ignored;
+	  bfd_boolean unresolved_reloc, warned;
 
 	  RELOC_FOR_GLOBAL_SYMBOL (info, input_bfd, input_section, rel,
 				   r_symndx, symtab_hdr, sym_hashes,
 				   h, sec, relocation,
-				   unresolved_reloc, warned, ignored);
+				   unresolved_reloc, warned);
 	}
 
       if (sec != NULL && discarded_section (sec))
 	RELOC_AGAINST_DISCARDED_SECTION (info, input_bfd, input_section,
 					 rel, 1, relend, howto, 0, contents);
 
-      if (bfd_link_relocatable (info))
+      if (info->relocatable)
 	{
 	  /* This is a relocatable link.  We don't have to change
 	     anything, unless the reloc is against a section symbol,
@@ -765,14 +762,18 @@ elf32_cr16c_relocate_section (bfd *output_bfd,
 	  switch (r)
 	    {
 	    case bfd_reloc_overflow:
-	      (*info->callbacks->reloc_overflow)
-		(info, (h ? &h->root : NULL), name, howto->name,
-		 (bfd_vma) 0, input_bfd, input_section, rel->r_offset);
+	      if (!((*info->callbacks->reloc_overflow)
+		    (info, (h ? &h->root : NULL), name, howto->name,
+		     (bfd_vma) 0, input_bfd, input_section,
+		     rel->r_offset)))
+		return FALSE;
 	      break;
 
 	    case bfd_reloc_undefined:
-	      (*info->callbacks->undefined_symbol)
-		(info, name, input_bfd, input_section, rel->r_offset, TRUE);
+	      if (!((*info->callbacks->undefined_symbol)
+		    (info, name, input_bfd, input_section,
+		     rel->r_offset, TRUE)))
+		return FALSE;
 	      break;
 
 	    case bfd_reloc_outofrange:
@@ -792,8 +793,10 @@ elf32_cr16c_relocate_section (bfd *output_bfd,
 	      /* fall through */
 
 	    common_error:
-	      (*info->callbacks->warning) (info, msg, name, input_bfd,
-					   input_section, rel->r_offset);
+	      if (!((*info->callbacks->warning)
+		    (info, msg, name, input_bfd, input_section,
+		     rel->r_offset)))
+		return FALSE;
 	      break;
 	    }
 	}
@@ -937,7 +940,7 @@ elf32_cr16c_link_output_symbol_hook (struct bfd_link_info *info ATTRIBUTE_UNUSED
 }
 
 /* Definitions for setting CR16C target vector.  */
-#define TARGET_LITTLE_SYM		cr16c_elf32_vec
+#define TARGET_LITTLE_SYM		bfd_elf32_cr16c_vec
 #define TARGET_LITTLE_NAME		"elf32-cr16c"
 #define ELF_ARCH			bfd_arch_cr16c
 #define ELF_MACHINE_CODE		EM_CR

@@ -1,7 +1,4 @@
-.\" $NetBSD: speaker.4,v 1.18 2017/02/18 22:39:00 wiz Exp $
-.\"
-.\" Copyright (c) 2016 Nathanial Sloss <nathanialsloss@yahoo.com.au>
-.\" All rights reserved.
+.\" $NetBSD: speaker.4,v 1.16 2014/03/18 18:20:39 riastradh Exp $
 .\"
 .\" Copyright (c) 1993 Christopher G. Demetriou
 .\" All rights reserved.
@@ -35,25 +32,19 @@
 .\"
 .\" <<Id: LICENSE,v 1.2 2000/06/14 15:57:33 cgd Exp>>
 .\"
-.Dd November 23, 2016
+.Dd August 6, 1993
 .Dt SPEAKER 4
 .Os
 .Sh NAME
 .Nm speaker
 .Nd console speaker audio device driver
 .Sh SYNOPSIS
-.Cd "options	PCPPISPEAKER"
 .Cd "spkr0	at pcppi?"
-.Pp
-.Cd "options	VAUDIOSPEAKER"
-.Cd "spkr0	at audio?"
-.Pp
 .In machine/spkr.h
 .Pa /dev/speaker
 .Sh DESCRIPTION
 The speaker device driver allows applications to control the console
-speaker on machines with a PC-like 8253 timer implementation or a synthesized
-speaker from an audio device/soundcard.
+speaker on machines with a PC-like 8253 timer implementation.
 .Pp
 Only one process may have this device open at any given time; open() and
 close() are used to lock and relinquish it. An attempt to open() when
@@ -64,18 +55,11 @@ simple ASCII melody notation. An
 .Fn ioctl
 for tone generation at arbitrary frequencies is also supported.
 .Pp
-For the pcppi device sound-generation does
+Sound-generation does
 .Em not
 monopolize the processor; in fact, the driver
 spends most of its time sleeping while the PC hardware is emitting
 tones. Other processes may emit beeps while the driver is running.
-.Pp
-For the audio device speaker, the speaker uses one of the virtual audio
-channels.
-Enabling this device will also provide a keyboard bell.
-The audio device used for synthesized beeps can be controlled by the
-.Sq hw.beep.device
-sysctl variable.
 .Pp
 Applications may call
 .Fn ioctl
@@ -173,15 +157,7 @@ melody sections.
 .It Pa /dev/speaker
 .El
 .Sh SEE ALSO
-.Xr pcppi 4 ,
-.Xr sysctl 8
-.Sh HISTORY
-This
-.Nm
-device was originally for the pcppi PC timer interface.
-Support was added for a synthesized device by Nathanial Sloss, first appearing
-in
-.Nx 8.0
+.Xr pcppi 4
 .Sh AUTHORS
 .An Eric S. Raymond Aq Mt esr@snark.thyrsus.com
 .Sh BUGS

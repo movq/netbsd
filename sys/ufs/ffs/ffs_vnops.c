@@ -1,4 +1,4 @@
-/*	$NetBSD: ffs_vnops.c,v 1.128 2017/03/02 00:43:40 christos Exp $	*/
+/*	$NetBSD: ffs_vnops.c,v 1.125 2014/07/25 08:20:53 dholland Exp $	*/
 
 /*-
  * Copyright (c) 2008, 2009 The NetBSD Foundation, Inc.
@@ -61,7 +61,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ffs_vnops.c,v 1.128 2017/03/02 00:43:40 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ffs_vnops.c,v 1.125 2014/07/25 08:20:53 dholland Exp $");
 
 #if defined(_KERNEL_OPT)
 #include "opt_ffs.h"
@@ -83,6 +83,7 @@ __KERNEL_RCSID(0, "$NetBSD: ffs_vnops.c,v 1.128 2017/03/02 00:43:40 christos Exp
 #include <sys/signalvar.h>
 #include <sys/kauth.h>
 #include <sys/wapbl.h>
+#include <sys/fstrans.h>
 
 #include <miscfs/fifofs/fifo.h>
 #include <miscfs/genfs/genfs.h>
@@ -283,18 +284,20 @@ ffs_spec_fsync(void *v)
 	} */ *ap = v;
 	int error, flags, uflags;
 	struct vnode *vp;
+	struct mount *mp;
 
 	flags = ap->a_flags;
 	uflags = UPDATE_CLOSE | ((flags & FSYNC_WAIT) ? UPDATE_WAIT : 0);
 	vp = ap->a_vp;
+	mp = vp->v_mount;
+
+	fstrans_start(mp, FSTRANS_LAZY);
 
 	error = spec_fsync(v);
 	if (error)
 		goto out;
 
 #ifdef WAPBL
-	struct mount *mp = vp->v_mount;
-
 	if (mp && mp->mnt_wapbl) {
 		/*
 		 * Don't bother writing out metadata if the syncer is
@@ -319,6 +322,7 @@ ffs_spec_fsync(void *v)
 	error = ffs_update(vp, NULL, NULL, uflags);
 
 out:
+	fstrans_done(mp);
 	return error;
 }
 
@@ -344,6 +348,7 @@ ffs_fsync(void *v)
 	vp = ap->a_vp;
 	mp = vp->v_mount;
 
+	fstrans_start(mp, FSTRANS_LAZY);
 	if ((ap->a_offlo == 0 && ap->a_offhi == 0) || (vp->v_type != VREG)) {
 		error = ffs_full_fsync(vp, ap->a_flags);
 		goto out;
@@ -376,6 +381,7 @@ ffs_fsync(void *v)
 		 * VFS_SYNC().
 		 */
 		if ((ap->a_flags & (FSYNC_DATAONLY | FSYNC_LAZY)) != 0) {
+			fstrans_done(mp);
 			return 0;
 		}
 		error = 0;
@@ -384,6 +390,7 @@ ffs_fsync(void *v)
 				 IN_MODIFIED | IN_ACCESSED)) {
 			error = UFS_WAPBL_BEGIN(mp);
 			if (error) {
+				fstrans_done(mp);
 				return error;
 			}
 			error = ffs_update(vp, NULL, NULL, UPDATE_CLOSE |
@@ -391,9 +398,11 @@ ffs_fsync(void *v)
 			UFS_WAPBL_END(mp);
 		}
 		if (error || (ap->a_flags & FSYNC_NOLOG) != 0) {
+			fstrans_done(mp);
 			return error;
 		}
 		error = wapbl_flush(mp->mnt_wapbl, 0);
+		fstrans_done(mp);
 		return error;
 	}
 #endif /* WAPBL */
@@ -440,6 +449,7 @@ ffs_fsync(void *v)
 	}
 
 out:
+	fstrans_done(mp);
 	return error;
 }
 
@@ -460,7 +470,6 @@ ffs_full_fsync(struct vnode *vp, int flags)
 
 #ifdef WAPBL
 	struct mount *mp = vp->v_mount;
-
 	if (mp && mp->mnt_wapbl) {
 
 		/*
@@ -473,6 +482,8 @@ ffs_full_fsync(struct vnode *vp, int flags)
 				pflags |= PGO_LAZY;
 			if ((flags & FSYNC_WAIT))
 				pflags |= PGO_SYNCIO;
+			if (fstrans_getstate(mp) == FSTRANS_SUSPENDING)
+				pflags |= PGO_FREE;
 			mutex_enter(vp->v_interlock);
 			error = VOP_PUTPAGES(vp, 0, 0, pflags);
 			if (error)
@@ -551,6 +562,7 @@ ffs_reclaim(void *v)
 	void *data;
 	int error;
 
+	fstrans_start(mp, FSTRANS_LAZY);
 	/*
 	 * The inode must be freed and updated before being removed
 	 * from its hash chain.  Other threads trying to gain a hold
@@ -558,6 +570,7 @@ ffs_reclaim(void *v)
 	 */
 	error = UFS_WAPBL_BEGIN(mp);
 	if (error) {
+		fstrans_done(mp);
 		return error;
 	}
 	if (ip->i_nlink <= 0 && ip->i_omode != 0 &&
@@ -565,6 +578,7 @@ ffs_reclaim(void *v)
 		ffs_vfree(vp, ip->i_number, ip->i_omode);
 	UFS_WAPBL_END(mp);
 	if ((error = ufs_reclaim(vp)) != 0) {
+		fstrans_done(mp);
 		return (error);
 	}
 	if (ip->i_din.ffs1_din != NULL) {
@@ -587,6 +601,7 @@ ffs_reclaim(void *v)
 	 * XXX a separate pool for MFS inodes?
 	 */
 	pool_cache_put(ffs_inode_cache, data);
+	fstrans_done(mp);
 	return (0);
 }
 
@@ -670,7 +685,9 @@ ffs_getextattr(void *v)
 #ifdef UFS_EXTATTR
 		int error;
 
+		fstrans_start(vp->v_mount, FSTRANS_SHARED);
 		error = ufs_getextattr(ap);
+		fstrans_done(vp->v_mount);
 		return error;
 #else
 		return (EOPNOTSUPP);
@@ -700,7 +717,9 @@ ffs_setextattr(void *v)
 #ifdef UFS_EXTATTR
 		int error;
 
+		fstrans_start(vp->v_mount, FSTRANS_SHARED);
 		error = ufs_setextattr(ap);
+		fstrans_done(vp->v_mount);
 		return error;
 #else
 		return (EOPNOTSUPP);
@@ -727,9 +746,12 @@ ffs_listextattr(void *v)
 
 	if (fs->fs_magic == FS_UFS1_MAGIC) {
 #ifdef UFS_EXTATTR
+		struct vnode *vp = ap->a_vp;
 		int error;
 
+		fstrans_start(vp->v_mount, FSTRANS_SHARED);
 		error = ufs_listextattr(ap);
+		fstrans_done(vp->v_mount);
 		return error;
 #else
 		return (EOPNOTSUPP);
@@ -757,7 +779,9 @@ ffs_deleteextattr(void *v)
 #ifdef UFS_EXTATTR
 		int error;
 
+		fstrans_start(vp->v_mount, FSTRANS_SHARED);
 		error = ufs_deleteextattr(ap);
+		fstrans_done(vp->v_mount);
 		return error;
 #else
 		return (EOPNOTSUPP);

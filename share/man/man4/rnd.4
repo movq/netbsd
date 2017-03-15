@@ -1,4 +1,4 @@
-.\"	$NetBSD: rnd.4,v 1.24 2017/01/18 22:38:00 abhinav Exp $
+.\"	$NetBSD: rnd.4,v 1.20.10.1 2015/03/18 07:54:26 snj Exp $
 .\"
 .\" Copyright (c) 2014 The NetBSD Foundation, Inc.
 .\" All rights reserved.
@@ -120,7 +120,7 @@ that any computationally bounded attacker who tries to distinguish
 outputs from uniform random cannot do more than negligibly better than
 uniform random guessing.
 .Sh ENTROPY
-The operating system continuously makes observations of hardware
+The operating system contiuously makes observations of hardware
 devices, such as network packet timings, disk seek delays, and
 keystrokes.
 The observations are combined into a seed for a cryptographic
@@ -180,7 +180,7 @@ command queries information about entropy sources and the entropy pool,
 and can control which entropy sources the operating system uses or
 ignores.
 .Pp
-256 bits of entropy is typically considered intractable to guess with
+256 bits of entropy is typically considered intractible to guess with
 classical computers and with current models of the capabilities of
 quantum computers.
 .Pp
@@ -199,10 +199,10 @@ kernel has started.
 For those that don't, the
 .Xr rndctl 8
 command can do it once userland has started, for example by setting
-.Dq Va random_seed=YES
+.Dq Va rndctl=YES
 in
-.Pa /etc/rc.conf ,
-which is enabled by default; see
+.Pa /etc/rc.conf ;
+see
 .Xr rc.conf 5 .
 .Sh LIMITATIONS
 Some people worry about recovery from state compromise -- that is,
@@ -244,7 +244,7 @@ The
 and
 .Pa /dev/urandom
 devices support a number of ioctls, defined in the
-.In sys/rndio.h
+.In sys/rnd.h
 header file, for querying and controlling the entropy pool.
 .Pp
 Since timing between hardware events contributes to the entropy pool,

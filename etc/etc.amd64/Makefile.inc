@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile.inc,v 1.15 2015/01/11 04:03:47 snj Exp $
+#	$NetBSD: Makefile.inc,v 1.14.12.3 2015/03/18 03:57:15 snj Exp $
 #
 #	etc.amd64/Makefile.inc -- amd64-specific etc Makefile targets
 #

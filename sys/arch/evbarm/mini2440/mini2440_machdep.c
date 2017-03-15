@@ -131,7 +131,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: mini2440_machdep.c,v 1.10 2016/12/22 14:47:55 cherry Exp $");
+__KERNEL_RCSID(0, "$NetBSD: mini2440_machdep.c,v 1.8 2014/03/14 21:39:48 matt Exp $");
 
 #include "opt_ddb.h"
 #include "opt_kgdb.h"
@@ -219,20 +219,20 @@ struct btinfo_rootdevice 	*bi_rdev;
 struct btinfo_net		*bi_net;
 struct btinfo_bootpath		*bi_path;
 
-vaddr_t physical_start;
-vaddr_t physical_freestart;
-vaddr_t physical_freeend;
-vaddr_t physical_freeend_low;
-vaddr_t physical_end;
+vm_offset_t physical_start;
+vm_offset_t physical_freestart;
+vm_offset_t physical_freeend;
+vm_offset_t physical_freeend_low;
+vm_offset_t physical_end;
 u_int free_pages;
-vaddr_t pagetables_start;
+vm_offset_t pagetables_start;
 
 /*int debug_flags;*/
 #ifndef PMAP_STATIC_L1S
 int max_processes = 64;		/* Default number */
 #endif				/* !PMAP_STATIC_L1S */
 
-paddr_t msgbufphys;
+vm_offset_t msgbufphys;
 
 #ifdef PMAP_DEBUG
 extern int pmap_debug_level;
@@ -886,7 +886,7 @@ initarm(void *arg)
 #ifdef VERBOSE_INIT_ARM
 	printf("page ");
 #endif
-	uvm_md_init();
+	uvm_setpagesize();	/* initialize PAGE_SIZE-dependent variables */
 	uvm_page_physload(atop(physical_freestart), atop(physical_freeend),
 	    atop(physical_freestart), atop(physical_freeend),
 	    VM_FREELIST_DEFAULT);

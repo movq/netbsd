@@ -186,7 +186,7 @@ EC_KEY *EC_KEY_copy(EC_KEY *dest, const EC_KEY *src)
         if (t == NULL)
             return 0;
         if (!EC_EX_DATA_set_data
-            (&dest->method_data, t, d->dup_func, d->freefunc,
+            (&dest->method_data, t, d->dup_func, d->free_func,
              d->clear_free_func))
             return 0;
     }
@@ -377,9 +377,9 @@ int EC_KEY_set_public_key_affine_coordinates(EC_KEY *key, BIGNUM *x,
         return 0;
     }
     ctx = BN_CTX_new();
-    if (ctx == NULL)
-        return 0;
-    BN_CTX_start(ctx);
+    if (!ctx)
+        goto err;
+
     point = EC_POINT_new(key->group);
 
     if (!point)
@@ -387,8 +387,6 @@ int EC_KEY_set_public_key_affine_coordinates(EC_KEY *key, BIGNUM *x,
 
     tx = BN_CTX_get(ctx);
     ty = BN_CTX_get(ctx);
-    if (ty == NULL)
-        goto err;
 
 #ifndef OPENSSL_NO_EC2M
     tmp_nid = EC_METHOD_get_field_type(EC_GROUP_method_of(key->group));
@@ -432,9 +430,10 @@ int EC_KEY_set_public_key_affine_coordinates(EC_KEY *key, BIGNUM *x,
     ok = 1;
 
  err:
-    BN_CTX_end(ctx);
-    BN_CTX_free(ctx);
-    EC_POINT_free(point);
+    if (ctx)
+        BN_CTX_free(ctx);
+    if (point)
+        EC_POINT_free(point);
     return ok;
 
 }
@@ -502,14 +501,14 @@ void EC_KEY_set_conv_form(EC_KEY *key, point_conversion_form_t cform)
 
 void *EC_KEY_get_key_method_data(EC_KEY *key,
                                  void *(*dup_func) (void *),
-                                 void (*freefunc) (void *),
+                                 void (*free_func) (void *),
                                  void (*clear_free_func) (void *))
 {
     void *ret;
 
     CRYPTO_r_lock(CRYPTO_LOCK_EC);
     ret =
-        EC_EX_DATA_get_data(key->method_data, dup_func, freefunc,
+        EC_EX_DATA_get_data(key->method_data, dup_func, free_func,
                             clear_free_func);
     CRYPTO_r_unlock(CRYPTO_LOCK_EC);
 
@@ -518,17 +517,17 @@ void *EC_KEY_get_key_method_data(EC_KEY *key,
 
 void *EC_KEY_insert_key_method_data(EC_KEY *key, void *data,
                                     void *(*dup_func) (void *),
-                                    void (*freefunc) (void *),
+                                    void (*free_func) (void *),
                                     void (*clear_free_func) (void *))
 {
     EC_EXTRA_DATA *ex_data;
 
     CRYPTO_w_lock(CRYPTO_LOCK_EC);
     ex_data =
-        EC_EX_DATA_get_data(key->method_data, dup_func, freefunc,
+        EC_EX_DATA_get_data(key->method_data, dup_func, free_func,
                             clear_free_func);
     if (ex_data == NULL)
-        EC_EX_DATA_set_data(&key->method_data, data, dup_func, freefunc,
+        EC_EX_DATA_set_data(&key->method_data, data, dup_func, free_func,
                             clear_free_func);
     CRYPTO_w_unlock(CRYPTO_LOCK_EC);
 

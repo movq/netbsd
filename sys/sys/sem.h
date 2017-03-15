@@ -1,4 +1,4 @@
-/*	$NetBSD: sem.h,v 1.32 2015/11/06 02:26:42 pgoyette Exp $	*/
+/*	$NetBSD: sem.h,v 1.29 2009/01/19 19:39:41 christos Exp $	*/
 
 /*-
  * Copyright (c) 1999 The NetBSD Foundation, Inc.
@@ -102,17 +102,15 @@ struct sembuf {
 /*
  * Undo structure (one per process)
  */
-struct sem_undo_entry {
-	short	un_adjval;	/* adjust on exit values */
-	short	un_num;		/* semaphore # */
-	int	un_id;		/* semid */
-};
-
 struct sem_undo {
 	struct	sem_undo *un_next;	/* ptr to next active undo structure */
 	struct	proc *un_proc;		/* owner of this structure */
 	short	un_cnt;			/* # of active entries */
-	struct	sem_undo_entry un_ent[1];/* undo entries */
+	struct undo {
+		short	un_adjval;	/* adjust on exit values */
+		short	un_num;		/* semaphore # */
+		int	un_id;		/* semid */
+	} un_ent[1];			/* undo entries */
 };
 #endif /* _KERNEL */
 
@@ -185,7 +183,7 @@ struct sem_sysctl_info {
 #endif
 
 /* actual size of an undo structure */
-#define SEMUSZ	(sizeof(struct sem_undo)+sizeof(struct sem_undo_entry)*SEMUME)
+#define SEMUSZ	(sizeof(struct sem_undo)+sizeof(struct undo)*SEMUME)
 
 /*
  * Structures allocated in machdep.c
@@ -222,8 +220,7 @@ int	semconfig(int);
 #endif
 __END_DECLS
 #else
-void	seminit(struct sysctllog **);
-int	semfini(void);
+void	seminit(void);
 void	semexit(struct proc *, void *);
 
 int	semctl1(struct lwp *, int, int, int, void *, register_t *);

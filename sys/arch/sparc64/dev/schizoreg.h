@@ -1,4 +1,4 @@
-/*	$NetBSD: schizoreg.h,v 1.11 2015/11/23 21:40:14 jdc Exp $	*/
+/*	$NetBSD: schizoreg.h,v 1.9.14.1 2016/01/26 01:25:32 riz Exp $	*/
 /*	$OpenBSD: schizoreg.h,v 1.20 2008/07/12 13:08:04 kettenis Exp $	*/
 
 /*

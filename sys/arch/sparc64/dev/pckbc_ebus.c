@@ -1,4 +1,4 @@
-/*	$NetBSD: pckbc_ebus.c,v 1.2 2015/08/14 10:59:27 nakayama Exp $ */
+/*	$NetBSD: pckbc_ebus.c,v 1.1.16.1 2015/09/04 14:43:45 martin Exp $ */
 
 /*
  * Copyright (c) 2002 Valeriy E. Ushakov
@@ -28,7 +28,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pckbc_ebus.c,v 1.2 2015/08/14 10:59:27 nakayama Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pckbc_ebus.c,v 1.1.16.1 2015/09/04 14:43:45 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

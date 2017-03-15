@@ -1,4 +1,4 @@
-/*      $NetBSD: ip6_etherip.c,v 1.21 2017/01/11 13:08:29 ozaki-r Exp $        */
+/*      $NetBSD: ip6_etherip.c,v 1.15 2011/07/17 20:54:53 joerg Exp $        */
 
 /*
  *  Copyright (c) 2006, Hans Rosenfeld <rosenfeld@grumpf.hope-2000.org>
@@ -58,11 +58,9 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ip6_etherip.c,v 1.21 2017/01/11 13:08:29 ozaki-r Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ip6_etherip.c,v 1.15 2011/07/17 20:54:53 joerg Exp $");
 
-#ifdef _KERNEL_OPT
 #include "opt_inet.h"
-#endif
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -73,6 +71,7 @@ __KERNEL_RCSID(0, "$NetBSD: ip6_etherip.c,v 1.21 2017/01/11 13:08:29 ozaki-r Exp
 #include <sys/errno.h>
 #include <sys/ioctl.h>
 #include <sys/syslog.h>
+#include <sys/protosw.h>
 #include <sys/kernel.h>
 
 #include <net/if.h>
@@ -171,12 +170,10 @@ ip6_etherip_output(struct ifnet *ifp, struct mbuf *m)
 	}
 	/* if it constitutes infinite encapsulation, punt. */
 	if (rt->rt_ifp == ifp) {
-		rtcache_unref(rt, &sc->sc_ro);
 		rtcache_free(&sc->sc_ro);
 		m_freem(m);
 		return ENETUNREACH;     /* XXX */
 	}
-	rtcache_unref(rt, &sc->sc_ro);
 
 	/*
 	 * force fragmentation to minimum MTU, to avoid path MTU discovery.
@@ -257,11 +254,15 @@ ip6_etherip_input(struct mbuf **mp, int *offp, int proto)
 		return IPPROTO_DONE;
 	}
 
-	m_set_rcvif(m, ifp);
+	m->m_pkthdr.rcvif = ifp;
 	m->m_flags &= ~(M_BCAST|M_MCAST);
 
+	bpf_mtap(ifp, m);
+
+	ifp->if_ipackets++;
+
 	s = splnet();
-	if_input(ifp, m);
+	(ifp->if_input)(ifp, m);
 	splx(s);
 
 	return IPPROTO_DONE;

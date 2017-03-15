@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile.inc,v 1.7 2016/01/23 21:22:49 christos Exp $
+#	$NetBSD: Makefile.inc,v 1.5.8.1 2015/06/29 17:20:04 snj Exp $
 
 WARNS?=	3	# XXX: -Wsign-compare issues ld.elf_so source
 
@@ -22,7 +22,6 @@ MLIBDIR=	64
 COMPAT_MLIBDIR=	o32
 CPPFLAGS+= -DLDD_ELF64 -DMIPS_N32
 .endif
-CPPFLAGS+=	-D_KERNTYPES
 
 .endif	# MKCOMPAT
 

@@ -1,10 +1,10 @@
-/*	$NetBSD: collect.c,v 1.1.1.5 2017/02/09 01:47:03 christos Exp $	*/
+/*	$NetBSD: collect.c,v 1.1.1.4 2014/05/28 09:58:51 tron Exp $	*/
 
 /* collect.c - Demonstration of overlay code */
 /* $OpenLDAP$ */
 /* This work is part of OpenLDAP Software <http://www.openldap.org/>.
  *
- * Copyright 2003-2016 The OpenLDAP Foundation.
+ * Copyright 2003-2014 The OpenLDAP Foundation.
  * Portions Copyright 2003 Howard Chu.
  * All rights reserved.
  *
@@ -20,9 +20,6 @@
  * This work was initially developed by the Howard Chu for inclusion
  * in OpenLDAP Software.
  */
-
-#include <sys/cdefs.h>
-__RCSID("$NetBSD: collect.c,v 1.1.1.5 2017/02/09 01:47:03 christos Exp $");
 
 #include "portable.h"
 
@@ -406,8 +403,8 @@ collect_response( Operation *op, SlapReply *rs )
 			 	 * current search result
 			 	 */
 				if ( vals ) {
-					attr_merge_normalize( rs->sr_entry, ci->ci_ad[idx],
-						vals, op->o_tmpmemctx );
+					attr_merge( rs->sr_entry, ci->ci_ad[idx], 
+						vals, NULL );
 					ber_bvarray_free_x( vals, op->o_tmpmemctx );
 				}
 			}

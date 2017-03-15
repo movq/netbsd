@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile.inc,v 1.9 2015/02/05 21:50:42 snj Exp $
+#	$NetBSD: Makefile.inc,v 1.8.58.1 2015/02/27 10:10:32 martin Exp $
 #
 #	etc.alpha/Makefile.inc -- alpha-specific etc Makefile targets
 #

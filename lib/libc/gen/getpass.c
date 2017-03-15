@@ -1,4 +1,4 @@
-/*	$NetBSD: getpass.c,v 1.30 2016/01/31 23:41:38 christos Exp $	*/
+/*	$NetBSD: getpass.c,v 1.28.2.1 2016/02/26 21:57:12 snj Exp $	*/
 
 /*-
  * Copyright (c) 2012 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 #include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-__RCSID("$NetBSD: getpass.c,v 1.30 2016/01/31 23:41:38 christos Exp $");
+__RCSID("$NetBSD: getpass.c,v 1.28.2.1 2016/02/26 21:57:12 snj Exp $");
 #endif /* LIBC_SCCS and not lint */
 
 #include "namespace.h"
@@ -107,8 +107,7 @@ getpassfd(const char *prompt, char *buf, size_t len, int *fd, int flags,
 		 * and write to stderr.
 		 */
 		fd = fdc;
-		if ((fd[0] = fd[1] = fd[2] = open(_PATH_TTY,
-		    O_RDWR | O_CLOEXEC)) == -1) {
+		if ((fd[0] = fd[1] = fd[2] = open(_PATH_TTY, O_RDWR)) == -1) {
 			fd[0] = STDIN_FILENO;
 			fd[1] = fd[2] = STDERR_FILENO;
 		} else

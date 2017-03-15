@@ -1,4 +1,4 @@
-/*	$NetBSD: ifiter_getifaddrs.c,v 1.7 2016/01/08 21:35:37 christos Exp $	*/
+/*	$NetBSD: ifiter_getifaddrs.c,v 1.3.4.3 2015/11/08 01:51:06 riz Exp $	*/
 
 /*
  * Copyright (C) 2004, 2005, 2007-2009  Internet Systems Consortium, Inc. ("ISC")

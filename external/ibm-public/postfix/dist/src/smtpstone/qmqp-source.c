@@ -1,10 +1,10 @@
-/*	$NetBSD: qmqp-source.c,v 1.2 2017/02/14 01:16:48 christos Exp $	*/
+/*	$NetBSD: qmqp-source.c,v 1.1.1.1 2009/06/23 10:08:56 tron Exp $	*/
 
 /*++
 /* NAME
 /*	qmqp-source 1
 /* SUMMARY
-/*	parallelized QMQP test generator
+/*	multi-threaded QMQP test generator
 /* SYNOPSIS
 /* .fi
 /*	\fBqmqp-source\fR [\fIoptions\fR] [\fBinet:\fR]\fIhost\fR[:\fIport\fR]
@@ -73,11 +73,6 @@
 /*	IBM T.J. Watson Research
 /*	P.O. Box 704
 /*	Yorktown Heights, NY 10598, USA
-/*
-/*	Wietse Venema
-/*	Google, Inc.
-/*	111 8th Avenue
-/*	New York, NY 10011, USA
 /*--*/
 
 /* System library. */
@@ -168,10 +163,10 @@ static int mypid;
 
 static void enqueue_connect(SESSION *);
 static void start_connect(SESSION *);
-static void connect_done(int, void *);
+static void connect_done(int, char *);
 
 static void send_data(SESSION *);
-static void receive_reply(int, void *);
+static void receive_reply(int, char *);
 
 static VSTRING *message_buffer;
 static VSTRING *sender_buffer;
@@ -202,7 +197,7 @@ static int socket_error(int sock)
      */
     error = 0;
     error_len = sizeof(error);
-    if (getsockopt(sock, SOL_SOCKET, SO_ERROR, (void *) &error, &error_len) < 0)
+    if (getsockopt(sock, SOL_SOCKET, SO_ERROR, (char *) &error, &error_len) < 0)
 	return (-1);
     if (error) {
 	errno = error;
@@ -241,7 +236,7 @@ static char *exception_text(int except)
 static void startup(SESSION *session)
 {
     if (message_count-- <= 0) {
-	myfree((void *) session);
+	myfree((char *) session);
 	session_count--;
 	return;
     }
@@ -250,7 +245,7 @@ static void startup(SESSION *session)
 
 /* start_event - invoke startup from timer context */
 
-static void start_event(int unused_event, void *context)
+static void start_event(int unused_event, char *context)
 {
     SESSION *session = (SESSION *) context;
 
@@ -262,10 +257,10 @@ static void start_event(int unused_event, void *context)
 static void start_another(SESSION *session)
 {
     if (random_delay > 0) {
-	event_request_timer(start_event, (void *) session,
+	event_request_timer(start_event, (char *) session,
 			    random_interval(random_delay));
     } else if (fixed_delay > 0) {
-	event_request_timer(start_event, (void *) session, fixed_delay);
+	event_request_timer(start_event, (char *) session, fixed_delay);
     } else {
 	startup(session);
     }
@@ -336,11 +331,11 @@ static void start_connect(SESSION *session)
     (void) non_blocking(fd, NON_BLOCKING);
     linger.l_onoff = 1;
     linger.l_linger = 0;
-    if (setsockopt(fd, SOL_SOCKET, SO_LINGER, (void *) &linger,
+    if (setsockopt(fd, SOL_SOCKET, SO_LINGER, (char *) &linger,
 		   sizeof(linger)) < 0)
 	msg_warn("setsockopt SO_LINGER %d: %m", linger.l_linger);
     session->stream = vstream_fdopen(fd, O_RDWR);
-    event_enable_write(fd, connect_done, (void *) session);
+    event_enable_write(fd, connect_done, (char *) session);
     netstring_setup(session->stream, var_timeout);
     if (sane_connect(fd, sa, sa_length) < 0 && errno != EINPROGRESS)
 	fail_connect(session);
@@ -348,7 +343,7 @@ static void start_connect(SESSION *session)
 
 /* connect_done - send message sender info */
 
-static void connect_done(int unused_event, void *context)
+static void connect_done(int unused_event, char *context)
 {
     SESSION *session = (SESSION *) context;
     int     fd = vstream_fileno(session->stream);
@@ -404,12 +399,12 @@ static void send_data(SESSION *session)
     /*
      * Wake me up when the server replies or when something bad happens.
      */
-    event_enable_read(fd, receive_reply, (void *) session);
+    event_enable_read(fd, receive_reply, (char *) session);
 }
 
 /* receive_reply - read server reply */
 
-static void receive_reply(int unused_event, void *context)
+static void receive_reply(int unused_event, char *context)
 {
     SESSION *session = (SESSION *) context;
     int     except;
@@ -478,6 +473,7 @@ int     main(int argc, char **argv)
     struct addrinfo *res;
     int     aierr;
     const char *protocols = INET_PROTO_NAME_ALL;
+    INET_PROTO_INFO *proto_info;
 
     /*
      * Fingerprint executables and core dumps.
@@ -561,19 +557,19 @@ int     main(int argc, char **argv)
     /*
      * Translate endpoint address to internal form.
      */
-    (void) inet_proto_init("protocols", protocols);
+    proto_info = inet_proto_init("protocols", protocols);
     if (strncmp(argv[optind], "unix:", 5) == 0) {
 	path = argv[optind] + 5;
 	path_len = strlen(path);
 	if (path_len >= (int) sizeof(sun.sun_path))
 	    msg_fatal("unix-domain name too long: %s", path);
-	memset((void *) &sun, 0, sizeof(sun));
+	memset((char *) &sun, 0, sizeof(sun));
 	sun.sun_family = AF_UNIX;
 #ifdef HAS_SUN_LEN
 	sun.sun_len = path_len + 1;
 #endif
 	memcpy(sun.sun_path, path, path_len);
-	sa = (struct sockaddr *) &sun;
+	sa = (struct sockaddr *) & sun;
 	sa_length = sizeof(sun);
     } else {
 	if (strncmp(argv[optind], "inet:", 5) == 0)
@@ -584,11 +580,11 @@ int     main(int argc, char **argv)
 	if ((aierr = hostname_to_sockaddr(host, port, SOCK_STREAM, &res)) != 0)
 	    msg_fatal("%s: %s", argv[optind], MAI_STRERROR(aierr));
 	myfree(buf);
-	sa = (struct sockaddr *) &ss;
+	sa = (struct sockaddr *) & ss;
 	if (res->ai_addrlen > sizeof(ss))
 	    msg_fatal("address length %d > buffer length %d",
 		      (int) res->ai_addrlen, (int) sizeof(ss));
-	memcpy((void *) sa, res->ai_addr, res->ai_addrlen);
+	memcpy((char *) sa, res->ai_addr, res->ai_addrlen);
 	sa_length = res->ai_addrlen;
 #ifdef HAS_SA_LEN
 	sa->sa_len = sa_length;

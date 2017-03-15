@@ -1,4 +1,4 @@
-/*	$NetBSD: nouveau_subdev_mxm_nv50.c,v 1.3 2016/04/22 20:19:30 riastradh Exp $	*/
+/*	$NetBSD: nouveau_subdev_mxm_nv50.c,v 1.1.1.1.4.2 2016/12/12 09:13:42 msaitoh Exp $	*/
 
 /*
  * Copyright 2011 Red Hat Inc.
@@ -25,7 +25,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: nouveau_subdev_mxm_nv50.c,v 1.3 2016/04/22 20:19:30 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: nouveau_subdev_mxm_nv50.c,v 1.1.1.1.4.2 2016/12/12 09:13:42 msaitoh Exp $");
 
 #include <subdev/mxm.h>
 #include <subdev/bios.h>

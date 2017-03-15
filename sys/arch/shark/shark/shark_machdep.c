@@ -1,4 +1,4 @@
-/*	$NetBSD: shark_machdep.c,v 1.43 2017/03/10 00:13:08 macallan Exp $	*/
+/*	$NetBSD: shark_machdep.c,v 1.41 2013/08/18 07:01:45 matt Exp $	*/
 
 /*
  * Copyright 1997
@@ -38,7 +38,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: shark_machdep.c,v 1.43 2017/03/10 00:13:08 macallan Exp $");
+__KERNEL_RCSID(0, "$NetBSD: shark_machdep.c,v 1.41 2013/08/18 07:01:45 matt Exp $");
 
 #include "opt_ddb.h"
 #include "opt_modular.h"
@@ -79,7 +79,6 @@ __KERNEL_RCSID(0, "$NetBSD: shark_machdep.c,v 1.43 2017/03/10 00:13:08 macallan 
 #include <shark/shark/sequoia.h>
 
 #include "isadma.h"
-#include "vlpci.h"
 
 #include "wd.h"
 #include "cd.h"
@@ -139,10 +138,6 @@ int ofw_handleticks = 0;	/* set to TRUE by cpu_initclocks */
  */
 extern unsigned int sa1_cache_clean_addr;
 extern unsigned int sa1_cache_clean_size;
-
-#if NVLPCI > 0
-extern vaddr_t vlpci_mem_vaddr;
-#endif
 
 CFATTACH_DECL_NEW(ofbus_root, 0,
     ofbus_match, ofbus_attach, NULL, NULL);
@@ -229,10 +224,6 @@ initarm(void *arg)
 	/* XXX - this should be done in the isa-bus attach routine! -JJK */
 	isa_mem_virtaddr = ofw_map(isa_mem_physaddr, L1_S_SIZE, 0);
 	isa_io_virtaddr  = ofw_map(isa_io_physaddr,  L1_S_SIZE, 0);
-#if NVLPCI > 0
-	/* XXX should get address from OF */
-	vlpci_mem_vaddr  = ofw_map(0x02000000,  0x00100000, 0);
-#endif
 
 	/* Set-up the ISA system: must be done before consinit */
 	isa_init(isa_io_virtaddr, isa_mem_virtaddr);
@@ -407,7 +398,7 @@ ofw_device_register(device_t dev, void *aux)
 			*cp++ = '\0';
 			if (cp[0] == '\\')
 				cp++;
-			booted_kernel = cp;
+			booted_kernel = cp; 
 
 			/* Zap ".aout" suffix, arm32 libkvm now requires ELF */
 			cplen = strlen(cp);

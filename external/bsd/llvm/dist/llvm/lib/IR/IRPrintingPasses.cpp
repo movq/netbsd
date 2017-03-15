@@ -21,20 +21,11 @@
 using namespace llvm;
 
 PrintModulePass::PrintModulePass() : OS(dbgs()) {}
-PrintModulePass::PrintModulePass(raw_ostream &OS, const std::string &Banner,
-                                 bool ShouldPreserveUseListOrder)
-    : OS(OS), Banner(Banner),
-      ShouldPreserveUseListOrder(ShouldPreserveUseListOrder) {}
+PrintModulePass::PrintModulePass(raw_ostream &OS, const std::string &Banner)
+    : OS(OS), Banner(Banner) {}
 
-PreservedAnalyses PrintModulePass::run(Module &M, ModuleAnalysisManager &) {
-  OS << Banner;
-  if (llvm::isFunctionInPrintList("*"))
-    M.print(OS, nullptr, ShouldPreserveUseListOrder);
-  else {
-    for(const auto &F : M.functions())
-      if (llvm::isFunctionInPrintList(F.getName()))
-        F.print(OS);
-  }
+PreservedAnalyses PrintModulePass::run(Module &M) {
+  OS << Banner << M;
   return PreservedAnalyses::all();
 }
 
@@ -42,10 +33,8 @@ PrintFunctionPass::PrintFunctionPass() : OS(dbgs()) {}
 PrintFunctionPass::PrintFunctionPass(raw_ostream &OS, const std::string &Banner)
     : OS(OS), Banner(Banner) {}
 
-PreservedAnalyses PrintFunctionPass::run(Function &F,
-                                         FunctionAnalysisManager &) {
-  if (isFunctionInPrintList(F.getName()))
-    OS << Banner << static_cast<Value &>(F);
+PreservedAnalyses PrintFunctionPass::run(Function &F) {
+  OS << Banner << static_cast<Value &>(F);
   return PreservedAnalyses::all();
 }
 
@@ -57,13 +46,11 @@ class PrintModulePassWrapper : public ModulePass {
 public:
   static char ID;
   PrintModulePassWrapper() : ModulePass(ID) {}
-  PrintModulePassWrapper(raw_ostream &OS, const std::string &Banner,
-                         bool ShouldPreserveUseListOrder)
-      : ModulePass(ID), P(OS, Banner, ShouldPreserveUseListOrder) {}
+  PrintModulePassWrapper(raw_ostream &OS, const std::string &Banner)
+      : ModulePass(ID), P(OS, Banner) {}
 
   bool runOnModule(Module &M) override {
-    ModuleAnalysisManager DummyMAM;
-    P.run(M, DummyMAM);
+    P.run(M);
     return false;
   }
 
@@ -83,8 +70,7 @@ public:
 
   // This pass just prints a banner followed by the function as it's processed.
   bool runOnFunction(Function &F) override {
-    FunctionAnalysisManager DummyFAM;
-    P.run(F, DummyFAM);
+    P.run(F);
     return false;
   }
 
@@ -126,9 +112,8 @@ INITIALIZE_PASS(PrintBasicBlockPass, "print-bb", "Print BB to stderr", false,
                 false)
 
 ModulePass *llvm::createPrintModulePass(llvm::raw_ostream &OS,
-                                        const std::string &Banner,
-                                        bool ShouldPreserveUseListOrder) {
-  return new PrintModulePassWrapper(OS, Banner, ShouldPreserveUseListOrder);
+                                        const std::string &Banner) {
+  return new PrintModulePassWrapper(OS, Banner);
 }
 
 FunctionPass *llvm::createPrintFunctionPass(llvm::raw_ostream &OS,

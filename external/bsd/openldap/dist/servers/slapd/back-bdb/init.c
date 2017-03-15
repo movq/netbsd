@@ -1,10 +1,10 @@
-/*	$NetBSD: init.c,v 1.1.1.5 2017/02/09 01:47:06 christos Exp $	*/
+/*	$NetBSD: init.c,v 1.1.1.4 2014/05/28 09:58:48 tron Exp $	*/
 
 /* init.c - initialize bdb backend */
 /* $OpenLDAP$ */
 /* This work is part of OpenLDAP Software <http://www.openldap.org/>.
  *
- * Copyright 2000-2016 The OpenLDAP Foundation.
+ * Copyright 2000-2014 The OpenLDAP Foundation.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -15,9 +15,6 @@
  * top-level directory of the distribution or, alternatively, at
  * <http://www.OpenLDAP.org/license.html>.
  */
-
-#include <sys/cdefs.h>
-__RCSID("$NetBSD: init.c,v 1.1.1.5 2017/02/09 01:47:06 christos Exp $");
 
 #include "portable.h"
 
@@ -411,7 +408,6 @@ shm_retry:
 			Debug( LDAP_DEBUG_ANY,
 				LDAP_XSTRING(bdb_db_open) ": %s\n",
 				cr->msg, 0, 0 );
-			ch_free( db );
 			goto fail;
 		}
 
@@ -425,8 +421,6 @@ shm_retry:
 				Debug( LDAP_DEBUG_ANY,
 					LDAP_XSTRING(bdb_db_open) ": %s\n",
 					cr->msg, 0, 0 );
-				db->bdi_db->close( db->bdi_db, 0 );
-				ch_free( db );
 				goto fail;
 			}
 		}
@@ -441,8 +435,6 @@ shm_retry:
 				Debug( LDAP_DEBUG_ANY,
 					LDAP_XSTRING(bdb_db_open) ": %s\n",
 					cr->msg, 0, 0 );
-				db->bdi_db->close( db->bdi_db, 0 );
-				ch_free( db );
 				goto fail;
 			}
 		}
@@ -514,7 +506,6 @@ shm_retry:
 				LDAP_XSTRING(bdb_db_open) ": %s\n",
 				cr->msg, 0, 0 );
 			db->bdi_db->close( db->bdi_db, 0 );
-			ch_free( db );
 			goto fail;
 		}
 

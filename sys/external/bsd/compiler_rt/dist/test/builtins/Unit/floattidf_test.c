@@ -24,7 +24,7 @@
 
 // seee eeee eeee mmmm mmmm mmmm mmmm mmmm | mmmm mmmm mmmm mmmm mmmm mmmm mmmm mmmm
 
-COMPILER_RT_ABI double __floattidf(ti_int a);
+double __floattidf(ti_int a);
 
 int test__floattidf(ti_int a, double expected)
 {

@@ -1,4 +1,4 @@
-/*	$NetBSD: cgi-bozo.c,v 1.37 2017/01/31 14:36:09 mrg Exp $	*/
+/*	$NetBSD: cgi-bozo.c,v 1.25.2.7 2017/02/12 22:07:17 snj Exp $	*/
 
 /*	$eterna: cgi-bozo.c,v 1.40 2011/11/18 09:21:15 mrg Exp $	*/
 

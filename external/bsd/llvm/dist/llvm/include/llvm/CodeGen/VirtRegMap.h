@@ -63,8 +63,8 @@ namespace llvm {
     /// createSpillSlot - Allocate a spill slot for RC from MFI.
     unsigned createSpillSlot(const TargetRegisterClass *RC);
 
-    VirtRegMap(const VirtRegMap&) = delete;
-    void operator=(const VirtRegMap&) = delete;
+    VirtRegMap(const VirtRegMap&) LLVM_DELETED_FUNCTION;
+    void operator=(const VirtRegMap&) LLVM_DELETED_FUNCTION;
 
   public:
     static char ID;

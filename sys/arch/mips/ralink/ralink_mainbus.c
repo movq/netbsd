@@ -1,4 +1,4 @@
-/*	$NetBSD: ralink_mainbus.c,v 1.5 2016/10/05 15:54:58 ryo Exp $	*/
+/*	$NetBSD: ralink_mainbus.c,v 1.4 2014/04/30 00:52:49 matt Exp $	*/
 /*-
  * Copyright (c) 2011 CradlePoint Technology, Inc.
  * All rights reserved.
@@ -27,9 +27,8 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ralink_mainbus.c,v 1.5 2016/10/05 15:54:58 ryo Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ralink_mainbus.c,v 1.4 2014/04/30 00:52:49 matt Exp $");
 
-#include "locators.h"
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/device.h>
@@ -125,11 +124,6 @@ mainbus_attach(device_t parent, device_t self, void *aux)
 static int
 mainbus_search(device_t parent, cfdata_t cf, const int *ldesc, void *aux)
 {
-	struct mainbus_attach_args *ma;
-
-	ma = aux;
-	ma->ma_addr = cf->cf_loc[MAINBUSCF_ADDR];
-
 	if (config_match(parent, cf, aux) > 0)
 		config_attach(parent, cf, aux, mainbus_print);
 	else
@@ -140,14 +134,8 @@ mainbus_search(device_t parent, cfdata_t cf, const int *ldesc, void *aux)
 int
 mainbus_print(void *aux, const char *pnp)
 {
-	struct mainbus_attach_args *ma;
-
 	if (pnp)
 		aprint_normal("%s unconfigured\n", pnp);
-
-	ma = aux;
-	if (ma->ma_addr != MAINBUSCF_ADDR_DEFAULT)
-		aprint_normal(" addr 0x%llx", ma->ma_addr);
 
 	return UNCONF;
 }
@@ -180,9 +168,8 @@ mainbus_attach_critical(struct mainbus_softc *sc)
 		cf = config_search_ia(mainbus_find, sc->sc_dev, "mainbus", &ma);
 		if (cf == NULL && critical_devs[i].required)
 			panic("%s: failed to find %s",
-			    __func__, critical_devs[i].name);
+				__func__, critical_devs[i].name);
 
-		ma.ma_addr = cf->cf_loc[MAINBUSCF_ADDR];
 		config_attach(sc->sc_dev, cf, &ma, mainbus_print);
 	}
 }

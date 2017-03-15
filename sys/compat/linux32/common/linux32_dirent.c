@@ -1,4 +1,4 @@
-/*	$NetBSD: linux32_dirent.c,v 1.17 2017/01/28 21:54:57 christos Exp $ */
+/*	$NetBSD: linux32_dirent.c,v 1.13 2011/10/14 09:23:29 hannken Exp $ */
 
 /*-
  * Copyright (c) 2006 Emmanuel Dreyfus, all rights reserved.
@@ -33,7 +33,7 @@
 
 #include <sys/cdefs.h>
 
-__KERNEL_RCSID(0, "$NetBSD: linux32_dirent.c,v 1.17 2017/01/28 21:54:57 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: linux32_dirent.c,v 1.13 2011/10/14 09:23:29 hannken Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>
@@ -215,9 +215,8 @@ again:
 			idb.d_off = (linux32_off_t)off;
 			idb.d_reclen = (u_short)linux32_reclen;
 		}
-		size_t dirl = MIN(sizeof(idb.d_name) - 1, bdp->d_namlen + 1);
-		memcpy(idb.d_name, bdp->d_name, dirl);
-		idb.d_name[dirl + 1] = bdp->d_type;
+		strcpy(idb.d_name, bdp->d_name);
+		idb.d_name[strlen(idb.d_name) + 1] = bdp->d_type;
 		if ((error = copyout((void *)&idb, outp, linux32_reclen)))
 			goto out;
 		/* advance past this real entry */

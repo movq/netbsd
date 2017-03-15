@@ -1,5 +1,5 @@
 /* Target-dependent mdebug code for the ALPHA architecture.
-   Copyright (C) 1993-2016 Free Software Foundation, Inc.
+   Copyright (C) 1993-2014 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -23,6 +23,8 @@
 #include "symtab.h"
 #include "gdbcore.h"
 #include "block.h"
+#include "gdb_assert.h"
+#include <string.h>
 #include "trad-frame.h"
 
 #include "alpha-tdep.h"
@@ -91,7 +93,7 @@
 static struct mdebug_extra_func_info *
 find_proc_desc (CORE_ADDR pc)
 {
-  const struct block *b = block_for_pc (pc);
+  struct block *b = block_for_pc (pc);
   struct mdebug_extra_func_info *proc_desc = NULL;
   struct symbol *sym = NULL;
   const char *sh_name = NULL;
@@ -107,8 +109,7 @@ find_proc_desc (CORE_ADDR pc)
 	   symbol reading.  */
 	sym = NULL;
       else
-	sym = lookup_symbol (MDEBUG_EFI_SYMBOL_NAME, b, LABEL_DOMAIN,
-			     0).symbol;
+	sym = lookup_symbol (MDEBUG_EFI_SYMBOL_NAME, b, LABEL_DOMAIN, 0);
     }
 
   if (sym)
@@ -197,7 +198,7 @@ alpha_mdebug_frame_unwind_cache (struct frame_info *this_frame,
   int ireg, returnreg;
 
   if (*this_prologue_cache)
-    return (struct alpha_mdebug_unwind_cache *) *this_prologue_cache;
+    return *this_prologue_cache;
 
   info = FRAME_OBSTACK_ZALLOC (struct alpha_mdebug_unwind_cache);
   *this_prologue_cache = info;
@@ -402,6 +403,8 @@ alpha_mdebug_frame_base_sniffer (struct frame_info *this_frame)
 void
 alpha_mdebug_init_abi (struct gdbarch_info info, struct gdbarch *gdbarch)
 {
+  struct gdbarch_tdep *tdep = gdbarch_tdep (gdbarch);
+
   frame_unwind_append_unwinder (gdbarch, &alpha_mdebug_frame_unwind);
   frame_base_append_sniffer (gdbarch, alpha_mdebug_frame_base_sniffer);
 }

@@ -11,11 +11,7 @@
  */
 
 #include "includes.h"
-#ifdef __APPLE__
-#include <PCSC/winscard.h>
-#else
 #include <winscard.h>
-#endif
 
 #include "common.h"
 #include "pcsc_funcs.h"
@@ -114,11 +110,7 @@ typedef enum { SCARD_GSM_SIM, SCARD_USIM } sim_types;
 struct scard_data {
 	SCARDCONTEXT ctx;
 	SCARDHANDLE card;
-#ifdef __APPLE__
-	uint32_t protocol;
-#else
 	DWORD protocol;
-#endif
 	sim_types sim_type;
 	int pin1_required;
 };
@@ -283,7 +275,7 @@ static int scard_parse_fsp_templ(unsigned char *buf, size_t buf_len,
 	pos++;
 	if (pos >= end)
 		return -1;
-	if (pos[0] < end - pos)
+	if ((pos + pos[0]) < end)
 		end = pos + 1 + pos[0];
 	pos++;
 	wpa_hexdump(MSG_DEBUG, "SCARD: file header FSP template",
@@ -512,12 +504,7 @@ static int scard_get_aid(struct scard_data *scard, unsigned char *aid,
 struct scard_data * scard_init(const char *reader)
 {
 	long ret;
-#ifdef __APPLE__
-	uint32_t len;
-#else
-	unsigned long len;
-#endif
-	unsigned long pos;
+	unsigned long len, pos;
 	struct scard_data *scard;
 #ifdef CONFIG_NATIVE_WINDOWS
 	TCHAR *readers = NULL;
@@ -618,7 +605,7 @@ struct scard_data * scard_init(const char *reader)
 	readers = NULL;
 
 	wpa_printf(MSG_DEBUG, "SCARD: card=0x%x active_protocol=%lu (%s)",
-		   (unsigned int) scard->card, (unsigned long) scard->protocol,
+		   (unsigned int) scard->card, scard->protocol,
 		   scard->protocol == SCARD_PROTOCOL_T0 ? "T0" : "T1");
 
 	ret = SCardBeginTransaction(scard->card);
@@ -777,11 +764,7 @@ static long scard_transmit(struct scard_data *scard,
 			   unsigned char *_recv, size_t *recv_len)
 {
 	long ret;
-#ifdef __APPLE__
-	uint32_t rlen;
-#else
 	unsigned long rlen;
-#endif
 
 	wpa_hexdump_key(MSG_DEBUG, "SCARD: scard_transmit: send",
 			_send, send_len);
@@ -1402,7 +1385,7 @@ int scard_umts_auth(struct scard_data *scard, const unsigned char *_rand,
 		end = buf + len;
 
 		/* RES */
-		if (pos[0] > RES_MAX_LEN || pos[0] > end - pos) {
+		if (pos[0] > RES_MAX_LEN || pos + pos[0] > end) {
 			wpa_printf(MSG_DEBUG, "SCARD: Invalid RES");
 			return -1;
 		}
@@ -1412,7 +1395,7 @@ int scard_umts_auth(struct scard_data *scard, const unsigned char *_rand,
 		wpa_hexdump(MSG_DEBUG, "SCARD: RES", res, *res_len);
 
 		/* CK */
-		if (pos[0] != CK_LEN || CK_LEN > end - pos) {
+		if (pos[0] != CK_LEN || pos + CK_LEN > end) {
 			wpa_printf(MSG_DEBUG, "SCARD: Invalid CK");
 			return -1;
 		}
@@ -1422,7 +1405,7 @@ int scard_umts_auth(struct scard_data *scard, const unsigned char *_rand,
 		wpa_hexdump(MSG_DEBUG, "SCARD: CK", ck, CK_LEN);
 
 		/* IK */
-		if (pos[0] != IK_LEN || IK_LEN > end - pos) {
+		if (pos[0] != IK_LEN || pos + IK_LEN > end) {
 			wpa_printf(MSG_DEBUG, "SCARD: Invalid IK");
 			return -1;
 		}

@@ -7,10 +7,6 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "__config"
-
-#ifndef _LIBCPP_HAS_NO_THREADS
-
 #include "future"
 #include "string"
 
@@ -98,6 +94,7 @@ __assoc_sub_state::set_value()
 #endif
     __state_ |= __constructed | ready;
     __cv_.notify_all();
+    __lk.unlock();
 }
 
 void
@@ -110,6 +107,7 @@ __assoc_sub_state::set_value_at_thread_exit()
 #endif
     __state_ |= __constructed;
     __thread_local_data()->__make_ready_at_thread_exit(this);
+    __lk.unlock();
 }
 
 void
@@ -122,6 +120,7 @@ __assoc_sub_state::set_exception(exception_ptr __p)
 #endif
     __exception_ = __p;
     __state_ |= ready;
+    __lk.unlock();
     __cv_.notify_all();
 }
 
@@ -135,6 +134,7 @@ __assoc_sub_state::set_exception_at_thread_exit(exception_ptr __p)
 #endif
     __exception_ = __p;
     __thread_local_data()->__make_ready_at_thread_exit(this);
+    __lk.unlock();
 }
 
 void
@@ -142,6 +142,7 @@ __assoc_sub_state::__make_ready()
 {
     unique_lock<mutex> __lk(__mut_);
     __state_ |= ready;
+    __lk.unlock();
     __cv_.notify_all();
 }
 
@@ -297,5 +298,3 @@ shared_future<void>::operator=(const shared_future& __rhs)
 }
 
 _LIBCPP_END_NAMESPACE_STD
-
-#endif // !_LIBCPP_HAS_NO_THREADS

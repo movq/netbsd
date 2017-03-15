@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.35 2017/01/11 12:02:25 joerg Exp $
+#	$NetBSD: Makefile,v 1.32.2.1 2015/06/04 20:04:22 snj Exp $
 
 PROG_CXX=	clang
 NOMAN=		yes
@@ -23,7 +23,6 @@ CLANG_LIBS+= \
 	clangStaticAnalyzerFrontend \
 	clangStaticAnalyzerCheckers \
 	clangStaticAnalyzerCore \
-	clangASTMatchers \
 	clangDriver \
 	clangSerialization \
 	clangCodeGen \
@@ -38,9 +37,6 @@ CLANG_LIBS+= \
 	clangBasic
 
 LLVM_LIBS+= \
-	TransformsCoroutines \
-	ProfileDataCoverage \
-	LTO \
 	ObjCARC \
 	ipo \
 	IRReader \
@@ -79,12 +75,8 @@ LLVM_LIBS+= \
 	X86Utils \
 	X86AsmParser \
 	X86AsmPrinter \
-	GlobalISel \
 	SelectionDAG \
 	AsmPrinter \
-	DebugInfoCodeView \
-	DebugInfoMSF \
-	Passes \
 	CodeGen \
 	Vectorize \
 	Target \
@@ -92,17 +84,17 @@ LLVM_LIBS+= \
 	Instrumentation \
 	ScalarOpts \
 	ProfileData \
+	Analysis \
 	MCDisassembler \
 	MCParser \
 	MC \
-	Analysis \
 	Object \
 	Linker \
 	TransformsUtils \
+	ipa \
 	IR \
 	Option \
-	Support \
-	Demangle
+	Support
 
 .include "${.PARSEDIR}/../../link.mk"
 

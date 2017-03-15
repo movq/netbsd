@@ -1,4 +1,4 @@
-/*	$NetBSD: kloader.h,v 1.6 2015/06/11 15:11:14 matt Exp $	*/
+/*	$NetBSD: kloader.h,v 1.5 2014/03/31 11:25:49 martin Exp $	*/
 
 /*-
  * Copyright (c) 2004 The NetBSD Foundation, Inc.
@@ -30,7 +30,3 @@
 #define	KLOADER_NO_BOOTINFO
 #define PG_VADDR(pg)	MIPS_PHYS_TO_KSEG0(VM_PAGE_TO_PHYS(pg))
 #include <dev/kloader.h>
-
-/* XXX: kludge: MI kloader.c assumes avail_start and avail_end are common */
-#define avail_start	pmap_limits.avail_start
-#define avail_end	pmap_limits.avail_end

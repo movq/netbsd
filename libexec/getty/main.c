@@ -1,4 +1,4 @@
-/*	$NetBSD: main.c,v 1.66 2017/01/10 21:08:15 christos Exp $	*/
+/*	$NetBSD: main.c,v 1.64 2013/08/12 13:54:33 joerg Exp $	*/
 
 /*-
  * Copyright (c) 1980, 1993
@@ -40,14 +40,13 @@ __COPYRIGHT("@(#) Copyright (c) 1980, 1993\
 #if 0
 static char sccsid[] = "from: @(#)main.c	8.1 (Berkeley) 6/20/93";
 #else
-__RCSID("$NetBSD: main.c,v 1.66 2017/01/10 21:08:15 christos Exp $");
+__RCSID("$NetBSD: main.c,v 1.64 2013/08/12 13:54:33 joerg Exp $");
 #endif
 #endif /* not lint */
 
 #include <sys/param.h>
 #include <sys/ioctl.h>
 #include <sys/resource.h>
-#include <sys/stat.h>
 #include <sys/utsname.h>
 
 #include <ctype.h>
@@ -184,8 +183,7 @@ int
 main(int argc, char *argv[], char *envp[])
 {
 	const char *progname;
-	int repcnt = 0, failopenlogged = 0;
-	volatile int first_time = 1;
+	int repcnt = 0, failopenlogged = 0, first_time = 1;
 	struct rlimit limit;
 	struct passwd *pw;
 	int rval;

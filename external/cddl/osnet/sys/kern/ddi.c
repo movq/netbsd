@@ -35,7 +35,6 @@
 #include <sys/debug.h>
 #include <sys/errno.h>
 #include <sys/param.h>
-#include <sys/lwp.h>
 #include <sys/kernel.h>
 #include <sys/kmem.h>
 #include <sys/cmn_err.h>

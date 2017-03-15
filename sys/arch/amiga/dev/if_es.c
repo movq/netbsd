@@ -1,4 +1,4 @@
-/*	$NetBSD: if_es.c,v 1.57 2017/02/22 09:45:15 nonaka Exp $ */
+/*	$NetBSD: if_es.c,v 1.52 2014/01/22 00:25:16 christos Exp $ */
 
 /*
  * Copyright (c) 1995 Michael L. Hitch
@@ -33,7 +33,7 @@
 #include "opt_ns.h"
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_es.c,v 1.57 2017/02/22 09:45:15 nonaka Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_es.c,v 1.52 2014/01/22 00:25:16 christos Exp $");
 
 
 #include <sys/param.h>
@@ -58,6 +58,11 @@ __KERNEL_RCSID(0, "$NetBSD: if_es.c,v 1.57 2017/02/22 09:45:15 nonaka Exp $");
 #include <netinet/in_var.h>
 #include <netinet/ip.h>
 #include <netinet/if_inarp.h>
+#endif
+
+#ifdef NS
+#include <netns/ns.h>
+#include <netns/ns_if.h>
 #endif
 
 #include <machine/cpu.h>
@@ -185,7 +190,6 @@ esattach(device_t parent, device_t self, void *aux)
 
 	/* Attach the interface. */
 	if_attach(ifp);
-	if_deferred_start_init(ifp, NULL);
 	ether_ifattach(ifp, myaddr);
 
 	/* Print additional info when attached. */
@@ -293,7 +297,7 @@ esinit(struct es_softc *sc)
 	ifp->if_flags &= ~IFF_OACTIVE;
 
 	/* Attempt to start output, if any. */
-	if_schedule_deferred_start(ifp);
+	esstart(ifp);
 
 	splx(s);
 }
@@ -660,10 +664,11 @@ esrint(struct es_softc *sc)
 	}
 #endif
 #endif /* USEPKTBUF */
+	ifp->if_ipackets++;
 	MGETHDR(m, M_DONTWAIT, MT_DATA);
 	if (m == NULL)
 		return;
-	m_set_rcvif(m, ifp);
+	m->m_pkthdr.rcvif = ifp;
 	m->m_pkthdr.len = pktlen;
 	len = MHLEN;
 	top = NULL;
@@ -720,7 +725,8 @@ esrint(struct es_softc *sc)
 	 * Check if there's a BPF listener on this interface.  If so, hand off
 	 * the raw packet to bpf.
 	 */
-	if_percpuq_enqueue(ifp->if_percpuq, top);
+	bpf_mtap(ifp, top);
+	(*ifp->if_input)(ifp, top);
 #ifdef ESDEBUG
 	if (--sc->sc_smcbusy) {
 		printf("%s: esintr busy on exit\n", device_xname(sc->sc_dev));
@@ -962,6 +968,22 @@ esioctl(struct ifnet *ifp, u_long cmd, void *data)
 			esinit(sc);
 			arp_ifinit(ifp, ifa);
 			break;
+#endif
+#ifdef NS
+		case AF_NS:
+		    {
+			register struct ns_addr *ina = &IA_SNS(ifa)->sns_addr;
+
+			if (ns_nullhost(*ina))
+				ina->x_host =
+				    *(union ns_host *)LLADDR(ifp->if_sadl);
+			else
+				bcopy(ina->x_host.c_host,
+				    LLADDR(ifp->if_sadl), ETHER_ADDR_LEN);
+			/* Set new address. */
+			esinit(sc);
+			break;
+		    }
 #endif
 		default:
 			esinit(sc);

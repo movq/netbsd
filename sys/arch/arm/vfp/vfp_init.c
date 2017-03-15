@@ -1,4 +1,4 @@
-/*      $NetBSD: vfp_init.c,v 1.50 2016/03/03 17:01:31 skrll Exp $ */
+/*      $NetBSD: vfp_init.c,v 1.41.2.2 2015/03/26 08:53:48 snj Exp $ */
 
 /*
  * Copyright (c) 2008 ARM Ltd
@@ -94,8 +94,6 @@ load_vfpregs(const struct vfpreg *fregs)
 	case FPU_VFP_CORTEXA8:
 	case FPU_VFP_CORTEXA9:
 	case FPU_VFP_CORTEXA15:
-	case FPU_VFP_CORTEXA15_QEMU:
-	case FPU_VFP_CORTEXA53:
 #endif
 		load_vfpregs_hi(fregs->vfp_regs);
 #ifdef CPU_ARM11
@@ -117,8 +115,6 @@ save_vfpregs(struct vfpreg *fregs)
 	case FPU_VFP_CORTEXA8:
 	case FPU_VFP_CORTEXA9:
 	case FPU_VFP_CORTEXA15:
-	case FPU_VFP_CORTEXA15_QEMU:
-	case FPU_VFP_CORTEXA53:
 #endif
 		save_vfpregs_hi(fregs->vfp_regs);
 #ifdef CPU_ARM11
@@ -267,8 +263,6 @@ vfp_attach(struct cpu_info *ci)
 		cpacr |= __SHIFTIN(CPACR_ALL, cpacr_vfp2);
 		armreg_cpacr_write(cpacr);
 
-		arm_isb();
-
 		/*
 		 * If we could enable them, then they exist.
 		 */
@@ -318,8 +312,6 @@ vfp_attach(struct cpu_info *ci)
 	case FPU_VFP_CORTEXA8:
 	case FPU_VFP_CORTEXA9:
 	case FPU_VFP_CORTEXA15:
-	case FPU_VFP_CORTEXA15_QEMU:
-	case FPU_VFP_CORTEXA53:
 		if (armreg_cpacr_read() & CPACR_V7_ASEDIS) {
 			model = "VFP 4.0+";
 		} else {
@@ -351,7 +343,7 @@ vfp_attach(struct cpu_info *ci)
 		    ((f0 & ARM_MVFR0_EXCEPT_MASK) ? ", exceptions" : ""),
 		    ((f1 & ARM_MVFR1_D_NAN_MASK) ? ", NaN propagation" : ""),
 		    ((f1 & ARM_MVFR1_FTZ_MASK) ? ", denormals" : ""));
-		aprint_debug("vfp%d: mvfr: [0]=%#x [1]=%#x\n",
+		aprint_verbose("vfp%d: mvfr: [0]=%#x [1]=%#x\n",
 		    device_unit(ci->ci_dev), f0, f1);
 		if (CPU_IS_PRIMARY(ci)) {
 			if (f0 & ARM_MVFR0_ROUNDING_MASK) {

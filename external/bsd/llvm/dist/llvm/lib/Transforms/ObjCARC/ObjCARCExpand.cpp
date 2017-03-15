@@ -24,6 +24,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "ObjCARC.h"
+#include "llvm/ADT/StringRef.h"
 #include "llvm/IR/Function.h"
 #include "llvm/IR/InstIterator.h"
 #include "llvm/IR/Instruction.h"
@@ -98,13 +99,13 @@ bool ObjCARCExpand::runOnFunction(Function &F) {
 
     DEBUG(dbgs() << "ObjCARCExpand: Visiting: " << *Inst << "\n");
 
-    switch (GetBasicARCInstKind(Inst)) {
-    case ARCInstKind::Retain:
-    case ARCInstKind::RetainRV:
-    case ARCInstKind::Autorelease:
-    case ARCInstKind::AutoreleaseRV:
-    case ARCInstKind::FusedRetainAutorelease:
-    case ARCInstKind::FusedRetainAutoreleaseRV: {
+    switch (GetBasicInstructionClass(Inst)) {
+    case IC_Retain:
+    case IC_RetainRV:
+    case IC_Autorelease:
+    case IC_AutoreleaseRV:
+    case IC_FusedRetainAutorelease:
+    case IC_FusedRetainAutoreleaseRV: {
       // These calls return their argument verbatim, as a low-level
       // optimization. However, this makes high-level optimizations
       // harder. Undo any uses of this optimization that the front-end

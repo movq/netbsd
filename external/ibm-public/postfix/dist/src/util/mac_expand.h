@@ -1,4 +1,4 @@
-/*	$NetBSD: mac_expand.h,v 1.2 2017/02/14 01:16:49 christos Exp $	*/
+/*	$NetBSD: mac_expand.h,v 1.1.1.3 2013/01/02 18:59:13 tron Exp $	*/
 
 #ifndef _MAC_EXPAND_H_INCLUDED_
 #define _MAC_EXPAND_H_INCLUDED_
@@ -10,8 +10,8 @@
 /*	expand macro references in string
 /* SYNOPSIS
 /*	#include <mac_expand.h>
-/* DESCRIPTION
-/* .nf
+ DESCRIPTION
+ .nf
 
  /*
   * Utility library.
@@ -26,7 +26,6 @@
 #define MAC_EXP_FLAG_RECURSE	(1<<0)
 #define MAC_EXP_FLAG_APPEND	(1<<1)
 #define MAC_EXP_FLAG_SCAN	(1<<2)
-#define MAC_EXP_FLAG_PRINTABLE  (1<<3)
 
  /*
   * Real lookup or just a test?
@@ -34,9 +33,9 @@
 #define MAC_EXP_MODE_TEST	(0)
 #define MAC_EXP_MODE_USE	(1)
 
-typedef const char *(*MAC_EXP_LOOKUP_FN) (const char *, int, void *);
+typedef const char *(*MAC_EXP_LOOKUP_FN)(const char *, int, char *);
 
-extern int mac_expand(VSTRING *, const char *, int, const char *, MAC_EXP_LOOKUP_FN, void *);
+extern int mac_expand(VSTRING *, const char *, int, const char *, MAC_EXP_LOOKUP_FN, char *);
 
 /* LICENSE
 /* .ad

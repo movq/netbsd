@@ -30,7 +30,9 @@
 #define LLVM_SUPPORT_STRINGPOOL_H
 
 #include "llvm/ADT/StringMap.h"
+#include "llvm/Support/Compiler.h"
 #include <cassert>
+#include <new>
 
 namespace llvm {
 
@@ -127,7 +129,7 @@ namespace llvm {
     }
 
     inline const char *operator*() const { return begin(); }
-    inline explicit operator bool() const { return S != nullptr; }
+    inline LLVM_EXPLICIT operator bool() const { return S != nullptr; }
 
     inline bool operator==(const PooledStringPtr &That) const { return S == That.S; }
     inline bool operator!=(const PooledStringPtr &That) const { return S != That.S; }

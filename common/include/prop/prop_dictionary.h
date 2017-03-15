@@ -1,4 +1,4 @@
-/*	$NetBSD: prop_dictionary.h,v 1.16 2017/01/29 00:16:19 christos Exp $	*/
+/*	$NetBSD: prop_dictionary.h,v 1.14 2011/09/30 22:08:18 jym Exp $	*/
 
 /*-
  * Copyright (c) 2006, 2009 The NetBSD Foundation, Inc.
@@ -33,7 +33,6 @@
 #define	_PROPLIB_PROP_DICTIONARY_H_
 
 #include <prop/prop_object.h>
-#include <prop/prop_array.h>
 
 typedef struct _prop_dictionary *prop_dictionary_t;
 typedef struct _prop_dictionary_keysym *prop_dictionary_keysym_t;
@@ -103,16 +102,11 @@ int		prop_dictionary_recv_syscall(const struct plistref *,
 #elif defined(_KERNEL)
 int		prop_dictionary_copyin(const struct plistref *,
 				       prop_dictionary_t *);
-int		prop_dictionary_copyin_size(const struct plistref *,
-					    prop_dictionary_t *, size_t);
 int		prop_dictionary_copyout(struct plistref *,
 				       prop_dictionary_t);
 int		prop_dictionary_copyin_ioctl(const struct plistref *,
 					     const u_long,
 					     prop_dictionary_t *);
-int		prop_dictionary_copyin_ioctl_size(const struct plistref *,
-						  const u_long,
-						  prop_dictionary_t *, size_t);
 int		prop_dictionary_copyout_ioctl(struct plistref *,
 					      const u_long,
 					      prop_dictionary_t);

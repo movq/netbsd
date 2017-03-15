@@ -1,4 +1,4 @@
-/*	$NetBSD: option-xat-attribute.h,v 1.4 2016/01/08 21:35:41 christos Exp $	*/
+/*	$NetBSD: option-xat-attribute.h,v 1.1.1.1.6.2 2015/11/08 01:51:13 riz Exp $	*/
 
 /*   -*- buffer-read-only: t -*- vi: set ro:
  *

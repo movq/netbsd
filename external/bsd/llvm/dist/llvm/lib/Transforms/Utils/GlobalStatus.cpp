@@ -20,10 +20,11 @@ using namespace llvm;
 /// and release, then return AcquireRelease.
 ///
 static AtomicOrdering strongerOrdering(AtomicOrdering X, AtomicOrdering Y) {
-  if ((X == AtomicOrdering::Acquire && Y == AtomicOrdering::Release) ||
-      (Y == AtomicOrdering::Acquire && X == AtomicOrdering::Release))
-    return AtomicOrdering::AcquireRelease;
-  return (AtomicOrdering)std::max((unsigned)X, (unsigned)Y);
+  if (X == Acquire && Y == Release)
+    return AcquireRelease;
+  if (Y == Acquire && X == Release)
+    return AcquireRelease;
+  return (AtomicOrdering)std::max(X, Y);
 }
 
 /// It is safe to destroy a constant iff it is only used by constants itself.
@@ -34,7 +35,7 @@ bool llvm::isSafeToDestroyConstant(const Constant *C) {
   if (isa<GlobalValue>(C))
     return false;
 
-  if (isa<ConstantData>(C))
+  if (isa<ConstantInt>(C) || isa<ConstantFP>(C))
     return false;
 
   for (const User *U : C->users())
@@ -48,10 +49,6 @@ bool llvm::isSafeToDestroyConstant(const Constant *C) {
 
 static bool analyzeGlobalAux(const Value *V, GlobalStatus &GS,
                              SmallPtrSetImpl<const PHINode *> &PhiUsers) {
-  if (const GlobalVariable *GV = dyn_cast<GlobalVariable>(V))
-    if (GV->isExternallyInitialized())
-      GS.StoredType = GlobalStatus::StoredOnce;
-
   for (const Use &U : V->uses()) {
     const User *UR = U.getUser();
     if (const ConstantExpr *CE = dyn_cast<ConstantExpr>(UR)) {
@@ -104,7 +101,7 @@ static bool analyzeGlobalAux(const Value *V, GlobalStatus &GS,
               }
             }
 
-            if (GV->hasInitializer() && StoredVal == GV->getInitializer()) {
+            if (StoredVal == GV->getInitializer()) {
               if (GS.StoredType < GlobalStatus::InitializerStored)
                 GS.StoredType = GlobalStatus::InitializerStored;
             } else if (isa<LoadInst>(StoredVal) &&
@@ -153,7 +150,7 @@ static bool analyzeGlobalAux(const Value *V, GlobalStatus &GS,
         if (MSI->isVolatile())
           return true;
         GS.StoredType = GlobalStatus::Stored;
-      } else if (auto C = ImmutableCallSite(I)) {
+      } else if (ImmutableCallSite C = I) {
         if (!C.isCallee(&U))
           return true;
         GS.IsLoaded = true;
@@ -184,4 +181,4 @@ GlobalStatus::GlobalStatus()
     : IsCompared(false), IsLoaded(false), StoredType(NotStored),
       StoredOnceValue(nullptr), AccessingFunction(nullptr),
       HasMultipleAccessingFunctions(false), HasNonInstructionUser(false),
-      Ordering(AtomicOrdering::NotAtomic) {}
+      Ordering(NotAtomic) {}

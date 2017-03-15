@@ -1,4 +1,4 @@
-/*	$NetBSD: openpam_version.h,v 1.5 2014/10/24 18:17:56 christos Exp $	*/
+/*	$NetBSD: openpam_version.h,v 1.4.4.1 2015/06/08 20:33:20 snj Exp $	*/
 
 /*-
  * Copyright (c) 2002-2003 Networks Associates Technology, Inc.

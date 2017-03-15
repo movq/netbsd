@@ -1,4 +1,4 @@
-/* $NetBSD: flash_cfi.c,v 1.4 2015/09/07 23:00:08 phx Exp $ */
+/* $NetBSD: flash_cfi.c,v 1.3.26.1 2015/11/04 21:05:01 riz Exp $ */
 
 /*-
  * Copyright (c) 2011 Frank Wille.
@@ -32,7 +32,7 @@
  * NOR CFI driver support for sandpoint
  */
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: flash_cfi.c,v 1.4 2015/09/07 23:00:08 phx Exp $");
+__KERNEL_RCSID(0, "$NetBSD: flash_cfi.c,v 1.3.26.1 2015/11/04 21:05:01 riz Exp $");
 
 #include <sys/param.h>
 #include <sys/device.h>

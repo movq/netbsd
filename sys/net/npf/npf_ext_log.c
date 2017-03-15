@@ -1,4 +1,4 @@
-/*	$NetBSD: npf_ext_log.c,v 1.13 2017/02/18 23:27:32 christos Exp $	*/
+/*	$NetBSD: npf_ext_log.c,v 1.8 2014/07/20 00:37:41 rmind Exp $	*/
 
 /*-
  * Copyright (c) 2010-2012 The NetBSD Foundation, Inc.
@@ -33,9 +33,8 @@
  * NPF logging extension.
  */
 
-#ifdef _KERNEL
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: npf_ext_log.c,v 1.13 2017/02/18 23:27:32 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: npf_ext_log.c,v 1.8 2014/07/20 00:37:41 rmind Exp $");
 
 #include <sys/types.h>
 #include <sys/module.h>
@@ -49,10 +48,8 @@ __KERNEL_RCSID(0, "$NetBSD: npf_ext_log.c,v 1.13 2017/02/18 23:27:32 christos Ex
 #include <net/if.h>
 #include <net/if_types.h>
 #include <net/bpf.h>
-#endif
 
 #include "npf_impl.h"
-#include "if_npflog.h"
 
 NPF_EXT_MODULE(npf_ext_log, "");
 
@@ -82,59 +79,26 @@ npf_log_dtor(npf_rproc_t *rp, void *meta)
 }
 
 static bool
-npf_log(npf_cache_t *npc, void *meta, const npf_match_info_t *mi, int *decision)
+npf_log(npf_cache_t *npc, void *meta, int *decision)
 {
 	struct mbuf *m = nbuf_head_mbuf(npc->npc_nbuf);
 	const npf_ext_log_t *log = meta;
-	struct psref psref;
 	ifnet_t *ifp;
-	struct npfloghdr hdr;
+	int family;
 
-	memset(&hdr, 0, sizeof(hdr));
 	/* Set the address family. */
 	if (npf_iscached(npc, NPC_IP4)) {
-		hdr.af = AF_INET;
+		family = AF_INET;
 	} else if (npf_iscached(npc, NPC_IP6)) {
-		hdr.af = AF_INET6;
+		family = AF_INET6;
 	} else {
-		hdr.af = AF_UNSPEC;
-	}
-
-	hdr.length = NPFLOG_REAL_HDRLEN;
-	hdr.action = *decision == NPF_DECISION_PASS ?
-	    0 /* pass */ : 1 /* block */;
-	hdr.reason = 0;	/* match */
-
-	struct nbuf *nb = npc->npc_nbuf;
-	npf_ifmap_copyname(npc->npc_ctx, nb ? nb->nb_ifid : 0,
-	    hdr.ifname, sizeof(hdr.ifname));
-
-	hdr.rulenr = htonl((uint32_t)mi->mi_rid);
-	hdr.subrulenr = htonl((uint32_t)(mi->mi_rid >> 32));
-	strlcpy(hdr.ruleset, "rules", sizeof(hdr.ruleset));
-
-	hdr.uid = UID_MAX;
-	hdr.pid = (pid_t)-1;
-	hdr.rule_uid = UID_MAX;
-	hdr.rule_pid = (pid_t)-1;
-
-	switch (mi->mi_di) {
-	default:
-	case PFIL_IN|PFIL_OUT:
-		hdr.dir = 0;
-		break;
-	case PFIL_IN:
-		hdr.dir = 1;
-		break;
-	case PFIL_OUT:
-		hdr.dir = 2;
-		break;
+		family = AF_UNSPEC;
 	}
 
 	KERNEL_LOCK(1, NULL);
 
 	/* Find a pseudo-interface to log. */
-	ifp = if_get_byindex(log->if_idx, &psref);
+	ifp = if_byindex(log->if_idx);
 	if (ifp == NULL) {
 		/* No interface. */
 		KERNEL_UNLOCK_ONE(NULL);
@@ -144,10 +108,7 @@ npf_log(npf_cache_t *npc, void *meta, const npf_match_info_t *mi, int *decision)
 	/* Pass through BPF. */
 	ifp->if_opackets++;
 	ifp->if_obytes += m->m_pkthdr.len;
-	if (ifp->if_bpf)
-		bpf_mtap2(ifp->if_bpf, &hdr, NPFLOG_HDRLEN, m);
-	if_put(ifp, &psref);
-
+	bpf_mtap_af(ifp, family, m);
 	KERNEL_UNLOCK_ONE(NULL);
 
 	return true;
@@ -166,7 +127,6 @@ npf_ext_log_modcmd(modcmd_t cmd, void *arg)
 		.dtor		= npf_log_dtor,
 		.proc		= npf_log
 	};
-	npf_t *npf = npf_getkernctx();
 	int error;
 
 	switch (cmd) {
@@ -174,14 +134,14 @@ npf_ext_log_modcmd(modcmd_t cmd, void *arg)
 		/*
 		 * Initialise the NPF logging extension.
 		 */
-		npf_ext_log_id = npf_ext_register(npf, "log", &npf_log_ops);
+		npf_ext_log_id = npf_ext_register("log", &npf_log_ops);
 		if (!npf_ext_log_id) {
 			return EEXIST;
 		}
 		break;
 
 	case MODULE_CMD_FINI:
-		error = npf_ext_unregister(npf, npf_ext_log_id);
+		error = npf_ext_unregister(npf_ext_log_id);
 		if (error) {
 			return error;
 		}

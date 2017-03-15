@@ -1,4 +1,4 @@
-/*	$NetBSD: at.c,v 1.31 2016/03/13 00:32:09 dholland Exp $	*/
+/*	$NetBSD: at.c,v 1.30 2011/08/29 14:24:03 joerg Exp $	*/
 
 /*
  *  at.c : Put file into atrun queue
@@ -57,6 +57,7 @@
 #include "perm.h"
 #include "pathnames.h"
 #include "stime.h"
+#define MAIN
 #include "privs.h"
 
 /* Macros */
@@ -71,7 +72,7 @@ enum { ATQ, ATRM, AT, BATCH, CAT };	/* what program we want to run */
 #if 0
 static char rcsid[] = "$OpenBSD: at.c,v 1.15 1998/06/03 16:20:26 deraadt Exp $";
 #else
-__RCSID("$NetBSD: at.c,v 1.31 2016/03/13 00:32:09 dholland Exp $");
+__RCSID("$NetBSD: at.c,v 1.30 2011/08/29 14:24:03 joerg Exp $");
 #endif
 #endif
 
@@ -107,9 +108,9 @@ sigc(int signo)
 
 	/* If a signal interrupts us, remove the spool file and exit. */
 	if (fcreated) {
-		privs_enter();
+		PRIV_START;
 		(void)unlink(atfile);
-		privs_exit();
+		PRIV_END;
 	}
 	(void)raise_default_signal(signo);
 	exit(EXIT_FAILURE);
@@ -206,7 +207,7 @@ writefile(time_t runtimer, unsigned char queue)
 	 * to make sure we're alone when doing this.
 	 */
 
-	privs_enter();
+	PRIV_START;
 
 	if ((lockdes = open(_PATH_LOCKFILE, O_WRONLY | O_CREAT, S_IWUSR | S_IRUSR)) < 0)
 		perr("Cannot open lockfile " _PATH_LOCKFILE);
@@ -259,7 +260,7 @@ writefile(time_t runtimer, unsigned char queue)
 	if (fchown(fd2, real_uid, real_gid) == -1)
 		perr("Cannot give away file");
 
-	privs_exit();
+	PRIV_END;
 
 	/*
 	 * We've successfully created the file; let's set the flag so it
@@ -401,7 +402,7 @@ writefile(time_t runtimer, unsigned char queue)
 
 	(void)fclose(fp);
 
- 	privs_enter();
+ 	PRIV_START;
 
 	/*
 	 * Set the x bit so that we're ready to start executing
@@ -409,7 +410,7 @@ writefile(time_t runtimer, unsigned char queue)
 	if (fchmod(fd2, S_IRUSR | S_IWUSR | S_IXUSR) == -1)
 		perr("Cannot give away file");
 
-	privs_exit();
+	PRIV_END;
 
 	(void)close(fd2);
 	(void)fprintf(stderr,
@@ -435,7 +436,7 @@ list_jobs(void)
 	char timestr[TIMESIZE];
 	int first = 1;
 
-	privs_enter();
+	PRIV_START;
 
 	if (chdir(_PATH_ATJOBS) == -1)
 		perr("Cannot change to " _PATH_ATJOBS);
@@ -492,7 +493,7 @@ list_jobs(void)
 		    jobno);
 	}
 	(void)closedir(spool);
-	privs_exit();
+	PRIV_END;
 }
 
 static void
@@ -507,7 +508,7 @@ process_jobs(int argc, char **argv, int what)
 	unsigned char queue;
 	int jobno;
 
-	privs_enter();
+	PRIV_START;
 
 	if (chdir(_PATH_ATJOBS) == -1)
 		perr("Cannot change to " _PATH_ATJOBS);
@@ -515,15 +516,15 @@ process_jobs(int argc, char **argv, int what)
 	if ((spool = opendir(".")) == NULL)
 		perr("Cannot open " _PATH_ATJOBS);
 
-	privs_exit();
+	PRIV_END;
 
 	/* Loop over every file in the directory */
 	while((dirent = readdir(spool)) != NULL) {
 
-		privs_enter();
+		PRIV_START;
 		if (stat(dirent->d_name, &buf) == -1)
 			perr("Cannot stat in " _PATH_ATJOBS);
-		privs_exit();
+		PRIV_END;
 
 		if (sscanf(dirent->d_name, "%c%5x%8lx", &queue, &jobno, &ctm) !=3)
 			continue;
@@ -536,23 +537,23 @@ process_jobs(int argc, char **argv, int what)
 
 				switch (what) {
 				case ATRM:
-					privs_enter();
+					PRIV_START;
 
 					if (unlink(dirent->d_name) == -1)
 						perr(dirent->d_name);
 
-					privs_exit();
+					PRIV_END;
 					break;
 
 				case CAT: {
 					FILE *fp;
 					int ch;
 
-					privs_enter();
+					PRIV_START;
 
 					fp = fopen(dirent->d_name, "r");
 
-					privs_exit();
+					PRIV_END;
 
 					if (!fp)
 						perr("Cannot open file");
@@ -592,7 +593,7 @@ main(int argc, char **argv)
 	int disp_version = 0;
 	time_t timer;
 
-	privs_relinquish();
+	RELINQUISH_PRIVS;
 
 	/* Eat any leading paths */
 	if ((pgm = strrchr(argv[0], '/')) == NULL)

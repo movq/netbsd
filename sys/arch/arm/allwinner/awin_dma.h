@@ -1,4 +1,4 @@
-/* $NetBSD: awin_dma.h,v 1.2 2014/12/05 18:54:35 jmcneill Exp $ */
+/* $NetBSD: awin_dma.h,v 1.1.2.2 2014/11/09 14:42:33 martin Exp $ */
 
 /*-
  * Copyright (c) 2014 Jared D. McNeill <jmcneill@invisible.ca>
@@ -33,7 +33,7 @@
 #include "opt_allwinner.h"
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: awin_dma.h,v 1.2 2014/12/05 18:54:35 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: awin_dma.h,v 1.1.2.2 2014/11/09 14:42:33 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/bus.h>
@@ -74,7 +74,7 @@ void awin_dma_a10_dump_regs(struct awin_dma_softc *);
 #endif
 
 #endif
-#if defined(ALLWINNER_A31) || defined(ALLWINNER_A80)
+#if defined(ALLWINNER_A31)
 void awin_dma_a31_attach(struct awin_dma_softc *, struct awinio_attach_args *,
 			 const struct awin_locators * const);
 #if defined(DDB)

@@ -1,14 +1,13 @@
-/*	$NetBSD: debugsyms.c,v 1.4 2015/10/06 22:13:39 christos Exp $	*/
+/*	$NetBSD: debugsyms.c,v 1.3 2009/11/23 02:13:45 rmind Exp $	*/
 /*
  * This file is in the public domain.
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: debugsyms.c,v 1.4 2015/10/06 22:13:39 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: debugsyms.c,v 1.3 2009/11/23 02:13:45 rmind Exp $");
 
 #define	_CALLOUT_PRIVATE
 #define	__MUTEX_PRIVATE
-#define	__KAUTH_PRIVATE
 
 #include <sys/param.h>
 #include <sys/lwp.h>
@@ -23,8 +22,6 @@ __KERNEL_RCSID(0, "$NetBSD: debugsyms.c,v 1.4 2015/10/06 22:13:39 christos Exp $
 #include <sys/un.h>
 #include <sys/unpcb.h>
 #include <sys/vnode.h>
-#include <sys/specificdata.h>
-#include <sys/kauth.h>
 
 /*
  * Without a dummy function referencing some of the types, gcc will
@@ -35,7 +32,6 @@ proc_t	*_debugsym_dummyfunc(vnode_t *vp);
 proc_t *
 _debugsym_dummyfunc(vnode_t *vp)
 {
-	struct kauth_cred *cr = (kauth_cred_t)vp;
 
-	return cr->cr_uid ? ((lwp_t *)vp->v_mount)->l_proc : NULL;
+	return ((lwp_t *)vp->v_mount)->l_proc;
 }

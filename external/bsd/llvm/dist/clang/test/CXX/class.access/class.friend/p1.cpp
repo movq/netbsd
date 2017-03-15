@@ -1,6 +1,3 @@
-// RUN: %clang_cc1 -fsyntax-only -verify -std=c++98 %s
-// RUN: %clang_cc1 -fsyntax-only -verify -std=c++11 %s
-// RUN: %clang_cc1 -fsyntax-only -verify -std=c++14 %s
 // RUN: %clang_cc1 -fsyntax-only -verify %s
 
 // C++'0x [class.friend] p1:
@@ -11,12 +8,11 @@
 //   friends members of the befriending class.
 
 struct S { static void f(); }; // expected-note 2 {{'S' declared here}}
-S* g() { return 0; }
+S* g() { return 0; } // expected-note 2 {{'g' declared here}}
 
 struct X {
   friend struct S;
-  friend S* g(); // expected-note 2 {{'g' declared here}}
-  // FIXME: The above two notes would be better attached to line 11.
+  friend S* g();
 };
 
 void test1() {
@@ -219,17 +215,9 @@ namespace test6 {
   struct A {};
 
   struct B {
-    friend
-#if __cplusplus >= 201103L
-      constexpr
-#endif
-      A::A();
+    friend A::A();
     friend A::~A();
-    friend
-#if __cplusplus >= 201402L
-      constexpr
-#endif
-      A &A::operator=(const A&);
+    friend A &A::operator=(const A&);
   };
 }
 
@@ -244,11 +232,7 @@ namespace test7 {
   class A {
     friend void X<int>::foo();
     friend X<int>::X();
-    friend
-#if __cplusplus >= 201103L
-      constexpr
-#endif
-      X<int>::X(const X&);
+    friend X<int>::X(const X&);
 
   private:
     A(); // expected-note 2 {{declared private here}}

@@ -1,4 +1,4 @@
-/*	$NetBSD: opt_41.c,v 1.11 2016/10/04 23:46:01 christos Exp $	*/
+/*	$NetBSD: opt_41.c,v 1.6.4.4 2016/10/14 12:01:30 martin Exp $	*/
 
 /*
  * Copyright (C) 2004, 2005, 2007, 2009, 2011-2016  Internet Systems Consortium, Inc. ("ISC")

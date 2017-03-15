@@ -1,5 +1,7 @@
+/* Id */
+
 /*
- * Copyright (c) 2013 Nicholas Marriott <nicholas.marriott@gmail.com>
+ * Copyright (c) 2013 Nicholas Marriott <nicm@users.sourceforge.net>
  *
  * Permission to use, copy, modify, and distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -40,12 +42,8 @@ openat(int fd, const char *path, int flags, ...)
 		dotfd = open(".", O_RDONLY);
 		if (dotfd == -1)
 			return (-1);
-		if (fchdir(fd) != 0) {
-			saved_errno = errno;
-			close(dotfd);
-			errno = saved_errno;
+		if (fchdir(fd) != 0)
 			return (-1);
-		}
 	}
 
 	retval = open(path, flags, mode);

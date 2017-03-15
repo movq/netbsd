@@ -41,7 +41,7 @@
 #define DRIVER_DESC		"Intel Graphics"
 #define DRIVER_DATE		"20080730"
 
-enum pipex {
+enum pipe {
 	PIPE_A = 0,
 	PIPE_B,
 };

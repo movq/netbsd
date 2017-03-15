@@ -1,4 +1,4 @@
-/*	$NetBSD: libelf.h,v 1.5 2016/02/20 02:43:42 christos Exp $	*/
+/*	$NetBSD: libelf.h,v 1.2 2014/03/09 16:58:04 christos Exp $	*/
 
 /*-
  * Copyright (c) 2006,2008-2010 Joseph Koshy
@@ -25,7 +25,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- * Id: libelf.h 3174 2015-03-27 17:13:41Z emaste 
+ * Id: libelf.h 2366 2011-12-29 06:12:14Z jkoshy 
  */
 
 #ifndef	_LIBELF_H_
@@ -35,18 +35,12 @@
 # include "nbtool_config.h"
 #endif
 
-
-#if HAVE_NBTOOL_CONFIG_H
-# include <nbinclude/sys/exec_elf.h>
-#elif defined(__NetBSD__)
-# include <sys/types.h>
-# include <sys/exec_elf.h>
-#elif defined(__FreeBSD__)
-# include <sys/types.h>
-# include <sys/elf32.h>
-# include <sys/elf64.h>
+#include <sys/types.h>
+#ifdef __NetBSD__
+#include <sys/exec_elf.h>
 #else
-# error "Unsupported platform"
+#include <sys/elf32.h>
+#include <sys/elf64.h>
 #endif
 
 /* Library private data structures */
@@ -145,7 +139,7 @@ typedef struct {
 	/*
 	 * Members that are not part of the public API.
 	 */
-	unsigned int	ar_flags;
+	int		ar_flags;
 } Elf_Arhdr;
 
 /*
@@ -192,9 +186,7 @@ enum Elf_Error {
 #define	ELF_F_ARCHIVE	   0x100U /* archive creation */
 #define	ELF_F_ARCHIVE_SYSV 0x200U /* SYSV style archive */
 
-#ifdef __cplusplus
-extern "C" {
-#endif
+__BEGIN_DECLS
 Elf		*elf_begin(int _fd, Elf_Cmd _cmd, Elf *_elf);
 int		elf_cntl(Elf *_elf, Elf_Cmd _cmd);
 int		elf_end(Elf *_elf);
@@ -265,8 +257,6 @@ Elf_Data	*elf64_xlatetof(Elf_Data *_dst, const Elf_Data *_src,
 			unsigned int _enc);
 Elf_Data	*elf64_xlatetom(Elf_Data *_dst, const Elf_Data *_src,
 			unsigned int _enc);
-#ifdef __cplusplus
-}
-#endif
+__END_DECLS
 
 #endif	/* _LIBELF_H_ */

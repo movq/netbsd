@@ -1,4 +1,4 @@
-/*	$NetBSD: if_agrvar_impl.h,v 1.11 2017/01/28 22:56:09 maya Exp $	*/
+/*	$NetBSD: if_agrvar_impl.h,v 1.10 2010/05/26 23:46:44 dyoung Exp $	*/
 
 /*-
  * Copyright (c)2005 YAMAMOTO Takashi,
@@ -35,7 +35,6 @@
 
 #include <sys/mutex.h>
 #include <sys/queue.h>
-#include <sys/workqueue.h>
 
 struct agr_port;
 struct agr_softc;
@@ -113,8 +112,6 @@ struct agr_softc {
 	volatile bool sc_wrports;
 	volatile int sc_rdports;
 	volatile int sc_paused;
-	struct workqueue *sc_wq;
-	struct work sc_wk;
 	struct callout sc_callout;
 	int sc_nports;
 	TAILQ_HEAD(, agr_port) sc_ports;
@@ -145,7 +142,7 @@ int agr_xmit_frame(struct ifnet *, struct mbuf *); /* XXX */
 #define	AGR_ROUNDROBIN(sc)	(((sc)->sc_if.if_flags & IFF_LINK0) != 0)
 #define	AGR_STATIC(sc)		(((sc)->sc_if.if_flags & IFF_LINK1) != 0)
 
-int agrtimer_init(struct agr_softc *);
+void agrtimer_init(struct agr_softc *);
 void agrtimer_destroy(struct agr_softc *);
 void agrtimer_start(struct agr_softc *);
 void agrtimer_stop(struct agr_softc *);

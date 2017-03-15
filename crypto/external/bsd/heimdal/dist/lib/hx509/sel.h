@@ -1,4 +1,4 @@
-/*	$NetBSD: sel.h,v 1.4 2017/01/28 21:31:48 christos Exp $	*/
+/*	$NetBSD: sel.h,v 1.3 2014/04/24 13:45:34 pettai Exp $	*/
 
 /*
  * Copyright (c) 2008 Kungliga Tekniska Högskolan

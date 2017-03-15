@@ -6,6 +6,6 @@ options 	LOCKDEBUG
 
 pseudo-device	lockstat
 
-no makeoptions	COPY_SYMTAB
-makeoptions	COPY_SYMTAB=1
+no options	SYMTAB_SPACE
+options		SYMTAB_SPACE=640000
 

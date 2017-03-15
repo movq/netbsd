@@ -1,4 +1,4 @@
-/* -*-C++-*-	$NetBSD: arm_console.cpp,v 1.8 2016/05/30 17:11:56 dholland Exp $	*/
+/* -*-C++-*-	$NetBSD: arm_console.cpp,v 1.7 2009/01/29 21:23:38 nonaka Exp $	*/
 
 /*-
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -77,7 +77,7 @@ ARMConsole::print(const TCHAR *fmt, ...)
 	if (!setupMultibyteBuffer())
 		return;
 
-	for (int i = 0; i < CONSOLE_BUFSIZE && _bufm[i] != '\0'; i++) {
+	for (int i = 0; _bufm[i] != '\0' && i < CONSOLE_BUFSIZE; i++) {
 		char s = _bufm[i];
 		if (s == '\n')
 			__putc('\r');

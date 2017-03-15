@@ -1,4 +1,4 @@
-/*	$NetBSD: nouveau_engine_device_base.c,v 1.11 2016/05/11 02:28:33 riastradh Exp $	*/
+/*	$NetBSD: nouveau_engine_device_base.c,v 1.2.4.5 2016/12/12 09:13:42 msaitoh Exp $	*/
 
 /*
  * Copyright 2012 Red Hat Inc.
@@ -25,7 +25,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: nouveau_engine_device_base.c,v 1.11 2016/05/11 02:28:33 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: nouveau_engine_device_base.c,v 1.2.4.5 2016/12/12 09:13:42 msaitoh Exp $");
 
 #include <core/object.h>
 #include <core/device.h>
@@ -533,8 +533,8 @@ nv_device_resource_tag(struct nouveau_device *device, unsigned int bar)
 		else
 			return pa->pa_iot;
 	} else {
-		KASSERT(bar < device->platformdev->nresource);
-		return device->platformdev->resource[bar].tag;
+		/* XXX nouveau platform device */
+		panic("can't handle non-PCI nouveau devices");
 	}
 }
 #endif
@@ -546,9 +546,8 @@ nv_device_resource_start(struct nouveau_device *device, unsigned int bar)
 		return pci_resource_start(device->pdev, bar);
 	} else {
 #ifdef __NetBSD__
-		if (bar >= device->platformdev->nresource)
-			return 0;
-		return device->platformdev->resource[bar].start;
+		/* XXX nouveau platform device */
+		panic("can't handle non-PCI nouveau devices");
 #else
 		struct resource *res;
 		res = platform_get_resource(device->platformdev,
@@ -567,9 +566,8 @@ nv_device_resource_len(struct nouveau_device *device, unsigned int bar)
 		return pci_resource_len(device->pdev, bar);
 	} else {
 #ifdef __NetBSD__
-		if (bar >= device->platformdev->nresource)
-			return 0;
-		return device->platformdev->resource[bar].len;
+		/* XXX nouveau platform device */
+		panic("can't handle non-PCI nouveau devices");
 #else
 		struct resource *res;
 		res = platform_get_resource(device->platformdev,

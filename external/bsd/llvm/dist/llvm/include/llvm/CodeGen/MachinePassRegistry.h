@@ -37,8 +37,8 @@ class MachinePassRegistryListener {
 public:
   MachinePassRegistryListener() {}
   virtual ~MachinePassRegistryListener() {}
-  virtual void NotifyAdd(StringRef N, MachinePassCtor C, StringRef D) = 0;
-  virtual void NotifyRemove(StringRef N) = 0;
+  virtual void NotifyAdd(const char *N, MachinePassCtor C, const char *D) = 0;
+  virtual void NotifyRemove(const char *N) = 0;
 };
 
 
@@ -52,8 +52,8 @@ class MachinePassRegistryNode {
 private:
 
   MachinePassRegistryNode *Next;        // Next function pass in list.
-  StringRef Name;                       // Name of function pass.
-  StringRef Description;                // Description string.
+  const char *Name;                     // Name of function pass.
+  const char *Description;              // Description string.
   MachinePassCtor Ctor;                 // Function pass creator.
 
 public:
@@ -68,8 +68,8 @@ public:
   // Accessors
   MachinePassRegistryNode *getNext()      const { return Next; }
   MachinePassRegistryNode **getNextAddress()    { return &Next; }
-  StringRef getName()                   const { return Name; }
-  StringRef getDescription()            const { return Description; }
+  const char *getName()                   const { return Name; }
+  const char *getDescription()            const { return Description; }
   MachinePassCtor getCtor()               const { return Ctor; }
   void setNext(MachinePassRegistryNode *N)      { Next = N; }
 
@@ -122,12 +122,11 @@ template<class RegistryClass>
 class RegisterPassParser : public MachinePassRegistryListener,
                    public cl::parser<typename RegistryClass::FunctionPassCtor> {
 public:
-  RegisterPassParser(cl::Option &O)
-      : cl::parser<typename RegistryClass::FunctionPassCtor>(O) {}
-  ~RegisterPassParser() override { RegistryClass::setListener(nullptr); }
+  RegisterPassParser() {}
+  ~RegisterPassParser() { RegistryClass::setListener(nullptr); }
 
-  void initialize() {
-    cl::parser<typename RegistryClass::FunctionPassCtor>::initialize();
+  void initialize(cl::Option &O) {
+    cl::parser<typename RegistryClass::FunctionPassCtor>::initialize(O);
 
     // Add existing passes to option.
     for (RegistryClass *Node = RegistryClass::getList();
@@ -143,10 +142,10 @@ public:
 
   // Implement the MachinePassRegistryListener callbacks.
   //
-  void NotifyAdd(StringRef N, MachinePassCtor C, StringRef D) override {
+  void NotifyAdd(const char *N, MachinePassCtor C, const char *D) override {
     this->addLiteralOption(N, (typename RegistryClass::FunctionPassCtor)C, D);
   }
-  void NotifyRemove(StringRef N) override {
+  void NotifyRemove(const char *N) override {
     this->removeLiteralOption(N);
   }
 };

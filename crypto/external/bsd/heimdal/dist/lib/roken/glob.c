@@ -1,4 +1,4 @@
-/*	$NetBSD: glob.c,v 1.2 2017/01/28 21:31:50 christos Exp $	*/
+/*	$NetBSD: glob.c,v 1.1.1.2 2014/04/24 12:45:52 pettai Exp $	*/
 
 /*
  * Copyright (c) 1989, 1993
@@ -406,7 +406,7 @@ static int
 glob0(const Char *pattern, glob_t *pglob)
 {
 	const Char *qpatnext;
-	int c, ret, oldpathc;
+	int c, err, oldpathc;
 	Char *bufnext, patbuf[MaxPathLen+1];
 	size_t limit = 0;
 
@@ -466,8 +466,8 @@ glob0(const Char *pattern, glob_t *pglob)
 	qprintf("glob0:", patbuf);
 #endif
 
-	if ((ret = glob1(patbuf, pglob, &limit)) != 0)
-		return(ret);
+	if ((err = glob1(patbuf, pglob, &limit)) != 0)
+		return(err);
 
 	/*
 	 * If there was no match we are going to append the pattern
@@ -574,7 +574,7 @@ glob3(Char *pathbuf, Char *pathend, Char *pattern, Char *restpattern,
 {
 	struct dirent *dp;
 	DIR *dirp;
-	int ret;
+	int err;
 	char buf[MaxPathLen];
 
 	/*
@@ -599,7 +599,7 @@ glob3(Char *pathbuf, Char *pathend, Char *pattern, Char *restpattern,
 		return(0);
 	}
 
-	ret = 0;
+	err = 0;
 
 	/* Search directory for matching names. */
 	if (pglob->gl_flags & GLOB_ALTDIRFUNC)
@@ -620,8 +620,8 @@ glob3(Char *pathbuf, Char *pathend, Char *pattern, Char *restpattern,
 			*pathend = CHAR_EOS;
 			continue;
 		}
-		ret = glob2(pathbuf, --dc, restpattern, pglob, limit);
-		if (ret)
+		err = glob2(pathbuf, --dc, restpattern, pglob, limit);
+		if (err)
 			break;
 	}
 
@@ -629,7 +629,7 @@ glob3(Char *pathbuf, Char *pathend, Char *pattern, Char *restpattern,
 		(*pglob->gl_closedir)(dirp);
 	else
 		closedir(dirp);
-	return(ret);
+	return(err);
 }
 
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: bonito_mainbus.c,v 1.3 2015/06/09 15:58:38 macallan Exp $	*/
+/*	$NetBSD: bonito_mainbus.c,v 1.2 2012/03/02 13:20:57 nonaka Exp $	*/
 
 /*-
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: bonito_mainbus.c,v 1.3 2015/06/09 15:58:38 macallan Exp $");
+__KERNEL_RCSID(0, "$NetBSD: bonito_mainbus.c,v 1.2 2012/03/02 13:20:57 nonaka Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -40,7 +40,6 @@ __KERNEL_RCSID(0, "$NetBSD: bonito_mainbus.c,v 1.3 2015/06/09 15:58:38 macallan 
 
 #include <sys/bus.h>
 
-#include <mips/cpuregs.h>
 #include <mips/bonito/bonitoreg.h>
 
 #include <evbmips/loongson/autoconf.h>

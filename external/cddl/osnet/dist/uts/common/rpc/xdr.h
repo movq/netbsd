@@ -46,39 +46,6 @@
 #include <sys/stream.h>
 #endif
 
-#ifdef __NetBSD__		/* Avoid conflicts with libc xdr.  */
-/* xdr.c */
-#define	xdr_bool		_solaris_xdr_bool
-#define	xdr_bytes		_solaris_xdr_bytes
-#define	xdr_char		_solaris_xdr_char
-#define	xdr_enum		_solaris_xdr_enum
-#define	xdr_free		_solaris_xdr_free
-#define	xdr_int			_solaris_xdr_int
-#define	xdr_int32_t		_solaris_xdr_int32_t
-#define	xdr_int64_t		_solaris_xdr_int64_t
-#define	xdr_longlong_t		_solaris_xdr_longlong_t
-#define	xdr_netobj		_solaris_xdr_netobj
-#define	xdr_opaque		_solaris_xdr_opaque
-#define	xdr_short		_solaris_xdr_short
-#define	xdr_string		_solaris_xdr_string
-#define	xdr_u_char		_solaris_xdr_u_char
-#define	xdr_u_int		_solaris_xdr_u_int
-#define	xdr_u_longlong_t	_solaris_xdr_u_longlong_t
-#define	xdr_u_short		_solaris_xdr_u_short
-#define	xdr_uint32_t		_solaris_xdr_uint32_t
-#define	xdr_uint64_t		_solaris_xdr_uint64_t
-#define	xdr_union		_solaris_xdr_union
-#define	xdr_vector		_solaris_xdr_vector
-#define	xdr_void		_solaris_xdr_void
-#define	xdr_wrapstring		_solaris_xdr_wrapstring
-
-/* xdr_array.c */
-#define	xdr_array		_solaris_xdr_array
-
-/* xdr_mem.c */
-#define	xdrmem_create		_solaris_xdrmem_create
-#endif
-
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -156,13 +123,10 @@ typedef struct XDR {
  * xdr_ops
  * Changes must be reviewed by Solaris File Sharing
  * Changes must be communicated to contract-2003-523@sun.com
- *
- * XXX We are not Solaris, we are NetBSD.  So no need for silly ABI
- * compatibility with Solaris ILP32 gunk.
  */
 struct xdr_ops {
 #ifdef __STDC__
-#if !defined(_KERNEL) && !defined(__NetBSD__)
+#if !defined(_KERNEL)
 		bool_t	(*x_getlong)(struct XDR *, long *);
 		/* get a long from underlying stream */
 		bool_t	(*x_putlong)(struct XDR *, long *);
@@ -181,14 +145,14 @@ struct xdr_ops {
 		void	(*x_destroy)(struct XDR *);
 		/* free privates of this xdr_stream */
 		bool_t	(*x_control)(struct XDR *, int, void *);
-#if defined(_LP64) || defined(_KERNEL) || defined(__NetBSD__)
+#if defined(_LP64) || defined(_KERNEL)
 		bool_t	(*x_getint32)(struct XDR *, int32_t *);
 		/* get a int from underlying stream */
 		bool_t	(*x_putint32)(struct XDR *, int32_t *);
 		/* put an int to " */
 #endif /* _LP64 || _KERNEL */
 #else
-#if !defined(_KERNEL) && !defined(__NetBSD__)
+#if !defined(_KERNEL)
 		bool_t	(*x_getlong)();	/* get a long from underlying stream */
 		bool_t	(*x_putlong)();	/* put a long to " */
 #endif /* KERNEL */
@@ -200,7 +164,7 @@ struct xdr_ops {
 				/* buf quick ptr to buffered data */
 		void	(*x_destroy)();	/* free privates of this xdr_stream */
 		bool_t	(*x_control)();
-#if defined(_LP64) || defined(_KERNEL) || defined(__NetBSD__)
+#if defined(_LP64) || defined(_KERNEL)
 		bool_t	(*x_getint32)();
 		bool_t	(*x_putint32)();
 #endif /* _LP64 || defined(_KERNEL) */
@@ -216,7 +180,7 @@ struct xdr_ops {
  * uint_t	 len;
  * uint_t	 pos;
  */
-#if !defined(_KERNEL) && !defined(__NetBSD__)
+#if !defined(_KERNEL)
 #define	XDR_GETLONG(xdrs, longp)			\
 	(*(xdrs)->x_ops->x_getlong)(xdrs, longp)
 #define	xdr_getlong(xdrs, longp)			\
@@ -229,7 +193,7 @@ struct xdr_ops {
 #endif /* KERNEL */
 
 
-#if !defined(_LP64) && !defined(_KERNEL) && !defined(__NetBSD__)
+#if !defined(_LP64) && !defined(_KERNEL)
 
 /*
  * For binary compatability on ILP32 we do not change the shape
@@ -370,7 +334,7 @@ struct xdr_discrim {
 #define	IXDR_GET_U_INT32(buf)		((uint32_t)IXDR_GET_INT32(buf))
 #define	IXDR_PUT_U_INT32(buf, v)	IXDR_PUT_INT32((buf), ((int32_t)(v)))
 
-#if !defined(_KERNEL) && !defined(_LP64) && !defined(__NetBSD__)
+#if !defined(_KERNEL) && !defined(_LP64)
 
 #define	IXDR_GET_LONG(buf)		((long)ntohl((ulong_t)*(buf)++))
 #define	IXDR_PUT_LONG(buf, v)		(*(buf)++ = (long)htonl((ulong_t)v))
@@ -576,6 +540,7 @@ typedef struct xdr_bytesrec xdr_bytesrec;
  * XDR_RDMANOCHUNK - for xdr implementaion over RDMA, sets private flags in
  *                   the XDR stream moving over RDMA.
  */
+#ifdef _KERNEL
 #define	XDR_PEEK		2
 #define	XDR_SKIPBYTES		3
 #define	XDR_RDMA_GET_FLAGS	4
@@ -586,6 +551,7 @@ typedef struct xdr_bytesrec xdr_bytesrec;
 #define	XDR_RDMA_GET_WLIST	9
 #define	XDR_RDMA_GET_WCINFO	10
 #define	XDR_RDMA_GET_RLIST	11
+#endif
 
 /*
  * These are the public routines for the various implementations of

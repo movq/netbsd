@@ -1,4 +1,4 @@
-/*	$NetBSD: ka660.c,v 1.11 2015/05/09 13:43:45 ragge Exp $	*/
+/*	$NetBSD: ka660.c,v 1.10.34.1 2015/05/13 14:09:09 martin Exp $	*/
 /*
  * Copyright (c) 2000 Ludd, University of Lule}, Sweden.
  * All rights reserved.
@@ -31,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ka660.c,v 1.11 2015/05/09 13:43:45 ragge Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ka660.c,v 1.10.34.1 2015/05/13 14:09:09 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

@@ -1,4 +1,4 @@
-/*	$NetBSD: is_ip_address.c,v 1.1.1.1 2016/05/01 15:57:23 christos Exp $	*/
+/*	$NetBSD: is_ip_address.c,v 1.1.1.1.10.2 2016/05/11 11:35:38 martin Exp $	*/
 
 /*
  * is_ip_address

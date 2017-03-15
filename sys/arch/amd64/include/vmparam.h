@@ -1,4 +1,4 @@
-/*	$NetBSD: vmparam.h,v 1.39 2017/02/11 15:05:15 maxv Exp $	*/
+/*	$NetBSD: vmparam.h,v 1.36 2014/07/24 13:42:28 riastradh Exp $	*/
 
 /*-
  * Copyright (c) 1990 The Regents of the University of California.
@@ -39,6 +39,7 @@
 
 #ifdef __x86_64__
 
+#include <sys/tree.h>
 #include <sys/mutex.h>
 #ifdef _KERNEL_OPT
 #include "opt_xen.h"
@@ -114,7 +115,7 @@
 
 /* user/kernel map constants */
 #define VM_MIN_ADDRESS		0
-#define VM_MAXUSER_ADDRESS	(0x00007f8000000000 - PAGE_SIZE)
+#define VM_MAXUSER_ADDRESS	0x00007f8000000000
 #define VM_MAX_ADDRESS		0x00007fbfdfeff000
 #ifndef XEN
 #define VM_MIN_KERNEL_ADDRESS	0xffff800000000000
@@ -142,6 +143,13 @@
 	trunc_page(USRSTACK32 - MAXSSIZ32 - (sz))
 #define VM_DEFAULT_ADDRESS32_BOTTOMUP(da, sz) \
     round_page((vaddr_t)(da) + (vsize_t)MAXDSIZ32)
+
+/*
+ * XXXfvdl we have plenty of KVM now, remove this.
+ */
+#ifndef VM_MAX_KERNEL_BUF
+#define VM_MAX_KERNEL_BUF	(384 * 1024 * 1024)
+#endif
 
 /* virtual sizes (bytes) for various kernel submaps */
 #define VM_PHYS_SIZE		(USRIOSIZE*PAGE_SIZE)

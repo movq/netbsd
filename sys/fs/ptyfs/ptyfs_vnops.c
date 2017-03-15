@@ -1,4 +1,4 @@
-/*	$NetBSD: ptyfs_vnops.c,v 1.52 2016/08/20 12:37:07 hannken Exp $	*/
+/*	$NetBSD: ptyfs_vnops.c,v 1.47.2.1 2014/08/17 03:34:02 riz Exp $	*/
 
 /*
  * Copyright (c) 1993, 1995
@@ -76,7 +76,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ptyfs_vnops.c,v 1.52 2016/08/20 12:37:07 hannken Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ptyfs_vnops.c,v 1.47.2.1 2014/08/17 03:34:02 riz Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -223,7 +223,9 @@ ptyfs_reclaim(void *v)
 		struct vnode *a_vp;
 	} */ *ap = v;
 	struct vnode *vp = ap->a_vp;
+	struct ptyfsnode *ptyfs = VTOPTYFS(vp);
 
+	vcache_remove(vp->v_mount, &ptyfs->ptyfs_key, sizeof(ptyfs->ptyfs_key));
 	vp->v_data = NULL;
 	return 0;
 }
@@ -240,8 +242,7 @@ ptyfs_inactive(void *v)
 
 	if (ptyfs->ptyfs_type == PTYFSptc)
 		ptyfs_clr_active(vp->v_mount, ptyfs->ptyfs_pty);
-	VOP_UNLOCK(vp);
-	return 0;
+	return spec_inactive(v);
 }
 
 /*
@@ -578,6 +579,8 @@ ptyfs_access(void *v)
 	    KAUTH_ACCESS_ACTION(ap->a_mode, ap->a_vp->v_type, va.va_mode),
 	    ap->a_vp, NULL, genfs_can_access(va.va_type, va.va_mode, va.va_uid,
 	    va.va_gid, ap->a_mode, ap->a_cred));
+
+	return error;
 }
 
 /*

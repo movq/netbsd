@@ -5,7 +5,7 @@
  *****************************************************************************/
 
 /*
- * Copyright (C) 2000 - 2017, Intel Corp.
+ * Copyright (C) 2000 - 2013, Intel Corp.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -40,6 +40,8 @@
  * IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGES.
  */
+
+#define __DTFIELD_C__
 
 #include "aslcompiler.h"
 #include "dtcompiler.h"
@@ -98,7 +100,6 @@ DtCompileOneField (
     UINT8                   Flags)
 {
     ACPI_STATUS             Status;
-
 
     switch (Type)
     {
@@ -167,7 +168,7 @@ DtCompileString (
     UINT32                  Length;
 
 
-    Length = strlen (Field->Value);
+    Length = ACPI_STRLEN (Field->Value);
 
     /* Check if the string is too long for the field */
 
@@ -178,7 +179,7 @@ DtCompileString (
         Length = ByteLength;
     }
 
-    memcpy (Buffer, Field->Value, Length);
+    ACPI_MEMCPY (Buffer, Field->Value, Length);
 }
 
 
@@ -213,7 +214,7 @@ DtCompileUnicode (
 
     AsciiString = Field->Value;
     UnicodeString = (UINT16 *) Buffer;
-    Count = strlen (AsciiString) + 1;
+    Count = ACPI_STRLEN (AsciiString) + 1;
 
     /* Convert to Unicode string (including null terminator) */
 
@@ -258,7 +259,7 @@ DtCompileUuid (
     }
     else
     {
-        AcpiUtConvertStringToUuid (InString, Buffer);
+        Status = AuConvertStringToUuid (InString, (char *) Buffer);
     }
 
     return (Status);
@@ -310,37 +311,21 @@ DtCompileInteger (
         return;
     }
 
-    /*
-     * Ensure that reserved fields are set properly. Note: uses
-     * the DT_NON_ZERO flag to indicate that the reserved value
-     * must be exactly one. Otherwise, the value must be zero.
-     * This is sufficient for now.
-     */
+    /* Ensure that reserved fields are set to zero */
+    /* TBD: should we set to zero, or just make this an ERROR? */
+    /* TBD: Probably better to use a flag */
 
-    /* TBD: Should use a flag rather than compare "Reserved" */
-
-    if (!strcmp (Field->Name, "Reserved"))
+    if (!ACPI_STRCMP (Field->Name, "Reserved") &&
+        (Value != 0))
     {
-        if (Flags & DT_NON_ZERO)
-        {
-            if (Value != 1)
-            {
-                DtError (ASL_WARNING, ASL_MSG_RESERVED_VALUE, Field,
-                    "Must be one, setting to one");
-                Value = 1;
-            }
-        }
-        else if (Value != 0)
-        {
-            DtError (ASL_WARNING, ASL_MSG_RESERVED_VALUE, Field,
-                "Must be zero, setting to zero");
-            Value = 0;
-        }
+        DtError (ASL_WARNING, ASL_MSG_RESERVED_VALUE, Field,
+            "Setting to zero");
+        Value = 0;
     }
 
     /* Check if the value must be non-zero */
 
-    else if ((Flags & DT_NON_ZERO) && (Value == 0))
+    if ((Value == 0) && (Flags & DT_NON_ZERO))
     {
         DtError (ASL_ERROR, ASL_MSG_ZERO_VALUE, Field, NULL);
     }
@@ -360,7 +345,7 @@ DtCompileInteger (
         DtError (ASL_ERROR, ASL_MSG_INTEGER_SIZE, Field, MsgBuffer);
     }
 
-    memcpy (Buffer, &Value, ByteLength);
+    ACPI_MEMCPY (Buffer, &Value, ByteLength);
     return;
 }
 
@@ -370,10 +355,10 @@ DtCompileInteger (
  * FUNCTION:    DtNormalizeBuffer
  *
  * PARAMETERS:  Buffer              - Input buffer
- *              Count               - Output the count of hex numbers in
+ *              Count               - Output the count of hex number in
  *                                    the Buffer
  *
- * RETURN:      The normalized buffer, must be freed by caller
+ * RETURN:      The normalized buffer, freed by caller
  *
  * DESCRIPTION: [1A,2B,3C,4D] or 1A, 2B, 3C, 4D will be normalized
  *              to 1A 2B 3C 4D
@@ -392,7 +377,7 @@ DtNormalizeBuffer (
     char                    c;
 
 
-    NewBuffer = UtLocalCalloc (strlen (Buffer) + 1);
+    NewBuffer = UtLocalCalloc (ACPI_STRLEN (Buffer) + 1);
     TmpBuffer = NewBuffer;
 
     while ((c = *Buffer++))
@@ -457,38 +442,36 @@ DtCompileBuffer (
     DT_FIELD                *Field,
     UINT32                  ByteLength)
 {
-    char                    *Substring;
     ACPI_STATUS             Status;
-    UINT32                  Count;
+    char                    Hex[3];
+    UINT64                  Value;
     UINT32                  i;
+    UINT32                  Count;
 
 
     /* Allow several different types of value separators */
 
     StringValue = DtNormalizeBuffer (StringValue, &Count);
-    Substring = StringValue;
 
-    /* Each element of StringValue is now three chars (2 hex + 1 space) */
-
-    for (i = 0; i < Count; i++, Substring += 3)
+    Hex[2] = 0;
+    for (i = 0; i < Count; i++)
     {
-        /* Check for byte value too long */
+        /* Each element of StringValue is three chars */
 
-        if (*(&Substring[2]) &&
-           (*(&Substring[2]) != ' '))
-        {
-            DtError (ASL_ERROR, ASL_MSG_BUFFER_ELEMENT, Field, Substring);
-            goto Exit;
-        }
+        Hex[0] = StringValue[(3 * i)];
+        Hex[1] = StringValue[(3 * i) + 1];
 
-        /* Convert two ASCII characters to one hex byte */
+        /* Convert one hex byte */
 
-        Status = AcpiUtAsciiToHexByte (Substring, &Buffer[i]);
+        Value = 0;
+        Status = DtStrtoul64 (Hex, &Value);
         if (ACPI_FAILURE (Status))
         {
-            DtError (ASL_ERROR, ASL_MSG_BUFFER_ELEMENT, Field, Substring);
+            DtError (ASL_ERROR, ASL_MSG_BUFFER_ELEMENT, Field, MsgBuffer);
             goto Exit;
         }
+
+        Buffer[i] = (UINT8) Value;
     }
 
 Exit:
@@ -501,13 +484,13 @@ Exit:
  *
  * FUNCTION:    DtCompileFlag
  *
- * PARAMETERS:  Buffer                      - Output buffer
- *              Field                       - Field to be compiled
- *              Info                        - Flag info
+ * PARAMETERS:  Buffer              - Output buffer
+ *              Field               - Field to be compiled
+ *              Info                - Flag info
  *
- * RETURN:      None
+ * RETURN:
  *
- * DESCRIPTION: Compile a flag field. Handles flags up to 64 bits.
+ * DESCRIPTION: Compile a flag
  *
  *****************************************************************************/
 
@@ -523,8 +506,7 @@ DtCompileFlag (
     ACPI_STATUS             Status;
 
 
-    Status = AcpiUtStrtoul64 (Field->Value,
-        (ACPI_STRTOUL_64BIT | ACPI_STRTOUL_BASE16), &Value);
+    Status = DtStrtoul64 (Field->Value, &Value);
     if (ACPI_FAILURE (Status))
     {
         DtError (ASL_ERROR, ASL_MSG_INVALID_HEX_INTEGER, Field, NULL);

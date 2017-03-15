@@ -1,4 +1,4 @@
-/*	$NetBSD: ttm_bo_vm.c,v 1.10 2015/07/28 01:25:00 riastradh Exp $	*/
+/*	$NetBSD: ttm_bo_vm.c,v 1.2.4.6 2015/07/30 15:29:25 snj Exp $	*/
 
 /*-
  * Copyright (c) 2014 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ttm_bo_vm.c,v 1.10 2015/07/28 01:25:00 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ttm_bo_vm.c,v 1.2.4.6 2015/07/30 15:29:25 snj Exp $");
 
 #include <sys/types.h>
 

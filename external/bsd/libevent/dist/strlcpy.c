@@ -1,4 +1,4 @@
-/*	$NetBSD: strlcpy.c,v 1.1.1.2 2017/01/31 21:14:53 christos Exp $	*/
+/*	$NetBSD: strlcpy.c,v 1.1.1.1 2013/04/11 16:43:21 christos Exp $	*/
 /*	$OpenBSD: strlcpy.c,v 1.5 2001/05/13 15:40:16 deraadt Exp $	*/
 
 /*
@@ -32,14 +32,13 @@
 static char *rcsid = "$OpenBSD: strlcpy.c,v 1.5 2001/05/13 15:40:16 deraadt Exp $";
 #endif /* LIBC_SCCS and not lint */
 
-#include "event2/event-config.h"
-#include <sys/cdefs.h>
-__RCSID("$NetBSD: strlcpy.c,v 1.1.1.2 2017/01/31 21:14:53 christos Exp $");
-#include "evconfig-private.h"
-
 #include <sys/types.h>
 
-#ifndef EVENT__HAVE_STRLCPY
+#include "event2/event-config.h"
+#include <sys/cdefs.h>
+__RCSID("$NetBSD: strlcpy.c,v 1.1.1.1 2013/04/11 16:43:21 christos Exp $");
+
+#ifndef _EVENT_HAVE_STRLCPY
 #include "strlcpy-internal.h"
 
 /*
@@ -48,7 +47,7 @@ __RCSID("$NetBSD: strlcpy.c,v 1.1.1.2 2017/01/31 21:14:53 christos Exp $");
  * Returns strlen(src); if retval >= siz, truncation occurred.
  */
 size_t
-event_strlcpy_(dst, src, siz)
+_event_strlcpy(dst, src, siz)
 	char *dst;
 	const char *src;
 	size_t siz;

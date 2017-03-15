@@ -1,4 +1,4 @@
-/*	$NetBSD: if_kse.c,v 1.31 2016/12/15 09:28:05 ozaki-r Exp $	*/
+/*	$NetBSD: if_kse.c,v 1.28 2014/06/16 16:48:16 msaitoh Exp $	*/
 
 /*-
  * Copyright (c) 2006 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_kse.c,v 1.31 2016/12/15 09:28:05 ozaki-r Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_kse.c,v 1.28 2014/06/16 16:48:16 msaitoh Exp $");
 
 
 #include <sys/param.h>
@@ -1188,7 +1188,8 @@ rxintr(struct kse_softc *sc)
 			continue;
 		}
 
-		m_set_rcvif(m, ifp);
+		ifp->if_ipackets++;
+		m->m_pkthdr.rcvif = ifp;
 		m->m_pkthdr.len = m->m_len = len;
 
 		if (sc->sc_mcsum) {
@@ -1198,7 +1199,8 @@ rxintr(struct kse_softc *sc)
 			if (rxstat & (R0_TCPE | R0_UDPE))
 				m->m_pkthdr.csum_flags |= M_CSUM_TCP_UDP_BAD;
 		}
-		if_percpuq_enqueue(ifp->if_percpuq, m);
+		bpf_mtap(ifp, m);
+		(*ifp->if_input)(ifp, m);
 #ifdef KSEDIAGNOSTIC
 		if (kse_monitor_rxintr > 0) {
 			printf("m stat %x data %p len %d\n",

@@ -1,4 +1,4 @@
-#	$NetBSD: std.kobo,v 1.2 2014/08/24 07:59:22 jnemeth Exp $
+#	$NetBSD: std.kobo,v 1.1.4.1 2015/05/15 03:44:18 snj Exp $
 #
 # standard NetBSD/evbarm options for Kobo
 

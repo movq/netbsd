@@ -1,4 +1,4 @@
-/*	$NetBSD: blacklistctl.c,v 1.21 2016/11/02 03:15:07 jnemeth Exp $	*/
+/*	$NetBSD: blacklistctl.c,v 1.17.2.5 2017/02/20 20:32:13 martin Exp $	*/
 
 /*-
  * Copyright (c) 2015 The NetBSD Foundation, Inc.
@@ -33,13 +33,10 @@
 #endif
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: blacklistctl.c,v 1.21 2016/11/02 03:15:07 jnemeth Exp $");
+__RCSID("$NetBSD: blacklistctl.c,v 1.17.2.5 2017/02/20 20:32:13 martin Exp $");
 
 #include <stdio.h>
 #include <time.h>
-#ifdef HAVE_LIBUTIL_H
-#include <libutil.h>
-#endif
 #ifdef HAVE_UTIL_H
 #include <util.h>
 #endif

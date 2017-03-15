@@ -1,4 +1,4 @@
-/*	$NetBSD: uglydate.c,v 1.4 2016/01/08 21:35:39 christos Exp $	*/
+/*	$NetBSD: uglydate.c,v 1.1.1.3.4.1 2014/12/24 00:05:20 riz Exp $	*/
 
 /*
  * uglydate - convert a time stamp to something barely readable

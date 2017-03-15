@@ -1,4 +1,4 @@
-/*	$NetBSD: tsig_250.c,v 1.8 2016/05/26 16:49:59 christos Exp $	*/
+/*	$NetBSD: tsig_250.c,v 1.5.4.2 2016/10/14 12:01:29 martin Exp $	*/
 
 /*
  * Copyright (C) 2004, 2005, 2007, 2009, 2011, 2012, 2015  Internet Systems Consortium, Inc. ("ISC")

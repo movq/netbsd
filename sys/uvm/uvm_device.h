@@ -1,4 +1,4 @@
-/*	$NetBSD: uvm_device.h,v 1.13 2014/12/14 23:48:58 chs Exp $	*/
+/*	$NetBSD: uvm_device.h,v 1.12.30.1 2014/12/31 06:44:01 snj Exp $	*/
 
 /*
  * Copyright (c) 1997 Charles D. Cranor and Washington University.

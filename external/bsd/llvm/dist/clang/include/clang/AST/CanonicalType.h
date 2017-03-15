@@ -16,8 +16,8 @@
 #define LLVM_CLANG_AST_CANONICALTYPE_H
 
 #include "clang/AST/Type.h"
-#include "llvm/ADT/iterator.h"
 #include "llvm/Support/Casting.h"
+#include <iterator>
 
 namespace clang {
 
@@ -80,7 +80,7 @@ public:
   operator QualType() const { return Stored; }
 
   /// \brief Implicit conversion to bool.
-  explicit operator bool() const { return !isNull(); }
+  LLVM_EXPLICIT operator bool() const { return !isNull(); }
   
   bool isNull() const {
     return Stored.isNull();
@@ -381,20 +381,93 @@ namespace clang {
 
 /// \brief Iterator adaptor that turns an iterator over canonical QualTypes
 /// into an iterator over CanQualTypes.
-template <typename InputIterator>
-struct CanTypeIterator
-    : llvm::iterator_adaptor_base<
-          CanTypeIterator<InputIterator>, InputIterator,
-          typename std::iterator_traits<InputIterator>::iterator_category,
-          CanQualType,
-          typename std::iterator_traits<InputIterator>::difference_type,
-          CanProxy<Type>, CanQualType> {
-  CanTypeIterator() {}
-  explicit CanTypeIterator(InputIterator Iter)
-      : CanTypeIterator::iterator_adaptor_base(std::move(Iter)) {}
+template<typename InputIterator>
+class CanTypeIterator {
+  InputIterator Iter;
 
-  CanQualType operator*() const { return CanQualType::CreateUnsafe(*this->I); }
-  CanProxy<Type> operator->() const;
+public:
+  typedef CanQualType    value_type;
+  typedef value_type     reference;
+  typedef CanProxy<Type> pointer;
+  typedef typename std::iterator_traits<InputIterator>::difference_type
+    difference_type;
+  typedef typename std::iterator_traits<InputIterator>::iterator_category
+    iterator_category;
+
+  CanTypeIterator() : Iter() { }
+  explicit CanTypeIterator(InputIterator Iter) : Iter(Iter) { }
+
+  // Input iterator
+  reference operator*() const {
+    return CanQualType::CreateUnsafe(*Iter);
+  }
+
+  pointer operator->() const;
+
+  CanTypeIterator &operator++() {
+    ++Iter;
+    return *this;
+  }
+
+  CanTypeIterator operator++(int) {
+    CanTypeIterator Tmp(*this);
+    ++Iter;
+    return Tmp;
+  }
+
+  friend bool operator==(const CanTypeIterator& X, const CanTypeIterator &Y) {
+    return X.Iter == Y.Iter;
+  }
+  friend bool operator!=(const CanTypeIterator& X, const CanTypeIterator &Y) {
+    return X.Iter != Y.Iter;
+  }
+
+  // Bidirectional iterator
+  CanTypeIterator &operator--() {
+    --Iter;
+    return *this;
+  }
+
+  CanTypeIterator operator--(int) {
+    CanTypeIterator Tmp(*this);
+    --Iter;
+    return Tmp;
+  }
+
+  // Random access iterator
+  reference operator[](difference_type n) const {
+    return CanQualType::CreateUnsafe(Iter[n]);
+  }
+
+  CanTypeIterator &operator+=(difference_type n) {
+    Iter += n;
+    return *this;
+  }
+
+  CanTypeIterator &operator-=(difference_type n) {
+    Iter -= n;
+    return *this;
+  }
+
+  friend CanTypeIterator operator+(CanTypeIterator X, difference_type n) {
+    X += n;
+    return X;
+  }
+
+  friend CanTypeIterator operator+(difference_type n, CanTypeIterator X) {
+    X += n;
+    return X;
+  }
+
+  friend CanTypeIterator operator-(CanTypeIterator X, difference_type n) {
+    X -= n;
+    return X;
+  }
+
+  friend difference_type operator-(const CanTypeIterator &X,
+                                   const CanTypeIterator &Y) {
+    return X - Y;
+  }
 };
 
 template<>
@@ -484,9 +557,6 @@ struct CanProxyAdaptor<FunctionProtoType>
   LLVM_CLANG_CANPROXY_TYPE_ACCESSOR(getReturnType)
   LLVM_CLANG_CANPROXY_SIMPLE_ACCESSOR(FunctionType::ExtInfo, getExtInfo)
   LLVM_CLANG_CANPROXY_SIMPLE_ACCESSOR(unsigned, getNumParams)
-  LLVM_CLANG_CANPROXY_SIMPLE_ACCESSOR(bool, hasExtParameterInfos)
-  LLVM_CLANG_CANPROXY_SIMPLE_ACCESSOR(
-            ArrayRef<FunctionProtoType::ExtParameterInfo>, getExtParameterInfos)
   CanQualType getParamType(unsigned i) const {
     return CanQualType::CreateUnsafe(this->getTypePtr()->getParamType(i));
   }
@@ -630,8 +700,8 @@ CanQual<T> CanQual<T>::CreateUnsafe(QualType Other) {
 template<typename T>
 template<typename U>
 CanProxy<U> CanQual<T>::getAs() const {
-  static_assert(!TypeIsArrayType<T>::value,
-                "ArrayType cannot be used with getAs!");
+  ArrayType_cannot_be_used_with_getAs<U> at;
+  (void)at;
 
   if (Stored.isNull())
     return CanProxy<U>();
@@ -645,8 +715,8 @@ CanProxy<U> CanQual<T>::getAs() const {
 template<typename T>
 template<typename U>
 CanProxy<U> CanQual<T>::castAs() const {
-  static_assert(!TypeIsArrayType<U>::value,
-                "ArrayType cannot be used with castAs!");
+  ArrayType_cannot_be_used_with_getAs<U> at;
+  (void)at;
 
   assert(!Stored.isNull() && isa<U>(Stored.getTypePtr()));
   return CanQual<U>::CreateUnsafe(Stored);
@@ -657,8 +727,9 @@ CanProxy<T> CanQual<T>::operator->() const {
   return CanProxy<T>(*this);
 }
 
-template <typename InputIterator>
-CanProxy<Type> CanTypeIterator<InputIterator>::operator->() const {
+template<typename InputIterator>
+typename CanTypeIterator<InputIterator>::pointer
+CanTypeIterator<InputIterator>::operator->() const {
   return CanProxy<Type>(*this);
 }
 

@@ -1,16 +1,10 @@
-// RUN: %clang_cc1 %s -verify -fsyntax-only -fobjc-runtime=ios
+// RUN: %clang_cc1 %s -verify -fsyntax-only
 
-@protocol P
--(id)description;
-@end
-
-@interface B<P>
+@interface B
 @property int x;
 @end
 
-@interface S : B {
-  id _someivar; // expected-note {{here}}
-}
+@interface S : B
 @end
 
 // Spell-checking 'undefined' is ok.
@@ -18,36 +12,9 @@ undefined var; // expected-error {{unknown type name}}
 
 typedef int super1;
 @implementation S
--(void)foo:(id)p1 other:(id)p2 {
+-(void)foo {
   // Spell-checking 'super' is not ok.
   super.x = 0;
   self.x = 0;
 }
-
--(void)test {
-  [self foo:[super description] other:someivar]; // expected-error {{use of undeclared identifier 'someivar'; did you mean '_someivar'?}}
-}
 @end
-
-__attribute__ (( __objc_root_class__ ))
-@interface I {
-  id _interface; // expected-note {{'_interface' declared here}}
-}
--(void)method;
-@end
-
-@interface I () {
-  id _extension; // expected-note {{'_extension' declared here}}
-}
-@end
-
-@implementation I {
-  id _implementation; // expected-note {{'_implementation' declared here}}
-}
--(void)method {
-  (void)self->implementation; // expected-error {{'I' does not have a member named 'implementation'; did you mean '_implementation'?}}
-  (void)self->interface; // expected-error {{'I' does not have a member named 'interface'; did you mean '_interface'?}}
-  (void)self->extension; // expected-error {{'I' does not have a member named 'extension'; did you mean '_extension'?}}
-}
-@end
-

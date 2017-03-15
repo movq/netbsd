@@ -1,11 +1,10 @@
-/*	$NetBSD: lr0.c,v 1.10 2017/02/11 19:33:12 christos Exp $	*/
-
-/* Id: lr0.c,v 1.19 2016/06/07 00:21:53 tom Exp  */
+/*	$NetBSD: lr0.c,v 1.7 2013/04/06 14:52:24 christos Exp $	*/
+/* Id: lr0.c,v 1.13 2012/05/26 00:40:47 tom Exp  */
 
 #include "defs.h"
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: lr0.c,v 1.10 2017/02/11 19:33:12 christos Exp $");
+__RCSID("$NetBSD: lr0.c,v 1.7 2013/04/06 14:52:24 christos Exp $");
 
 static core *new_state(int symbol);
 static Value_t get_state(int symbol);
@@ -33,9 +32,7 @@ static shifts *last_shift;
 static reductions *last_reduction;
 
 static int nshifts;
-static Value_t *shift_symbol;
-
-static Value_t *rules;
+static short *shift_symbol;
 
 static Value_t *redset;
 static Value_t *shiftset;
@@ -47,16 +44,16 @@ static Value_t *kernel_items;
 static void
 allocate_itemsets(void)
 {
-    Value_t *itemp;
-    Value_t *item_end;
+    short *itemp;
+    short *item_end;
     int symbol;
     int i;
     int count;
     int max;
-    Value_t *symbol_count;
+    short *symbol_count;
 
     count = 0;
-    symbol_count = NEW2(nsyms, Value_t);
+    symbol_count = NEW2(nsyms, short);
 
     item_end = ritem + nitems;
     for (itemp = ritem; itemp < item_end; itemp++)
@@ -69,8 +66,8 @@ allocate_itemsets(void)
 	}
     }
 
-    kernel_base = NEW2(nsyms, Value_t *);
-    kernel_items = NEW2(count, Value_t);
+    kernel_base = NEW2(nsyms, short *);
+    kernel_items = NEW2(count, short);
 
     count = 0;
     max = 0;
@@ -83,15 +80,15 @@ allocate_itemsets(void)
     }
 
     shift_symbol = symbol_count;
-    kernel_end = NEW2(nsyms, Value_t *);
+    kernel_end = NEW2(nsyms, short *);
 }
 
 static void
 allocate_storage(void)
 {
     allocate_itemsets();
-    shiftset = NEW2(nsyms, Value_t);
-    redset = NEW2(nrules + 1, Value_t);
+    shiftset = NEW2(nsyms, short);
+    redset = NEW2(nrules + 1, short);
     state_set = NEW2(nitems, core *);
 }
 
@@ -140,7 +137,7 @@ static void
 generate_states(void)
 {
     allocate_storage();
-    itemset = NEW2(nitems, Value_t);
+    itemset = NEW2(nitems, short);
     ruleset = NEW2(WORDSIZE(nrules), unsigned);
     set_first_derives();
     initialize_states();
@@ -165,9 +162,9 @@ static Value_t
 get_state(int symbol)
 {
     int key;
-    Value_t *isp1;
-    Value_t *isp2;
-    Value_t *iend;
+    short *isp1;
+    short *isp2;
+    short *iend;
     core *sp;
     int found;
     int n;
@@ -227,21 +224,21 @@ static void
 initialize_states(void)
 {
     unsigned i;
-    Value_t *start_derives;
+    short *start_derives;
     core *p;
 
     start_derives = derives[start_symbol];
     for (i = 0; start_derives[i] >= 0; ++i)
 	continue;
 
-    p = (core *)MALLOC(sizeof(core) + i * sizeof(Value_t));
+    p = (core *)MALLOC(sizeof(core) + i * sizeof(short));
     NO_SPACE(p);
 
     p->next = 0;
     p->link = 0;
     p->number = 0;
     p->accessing_symbol = 0;
-    p->nitems = (Value_t)i;
+    p->nitems = (Value_t) i;
 
     for (i = 0; start_derives[i] >= 0; ++i)
 	p->items[i] = rrhs[start_derives[i]];
@@ -255,8 +252,8 @@ new_itemsets(void)
 {
     Value_t i;
     int shiftcount;
-    Value_t *isp;
-    Value_t *ksp;
+    short *isp;
+    short *ksp;
     Value_t symbol;
 
     for (i = 0; i < nsyms; i++)
@@ -277,7 +274,7 @@ new_itemsets(void)
 		ksp = kernel_base[symbol];
 	    }
 
-	    *ksp++ = (Value_t)(i + 1);
+	    *ksp++ = (Value_t) (i + 1);
 	    kernel_end[symbol] = ksp;
 	}
     }
@@ -290,25 +287,25 @@ new_state(int symbol)
 {
     unsigned n;
     core *p;
-    Value_t *isp1;
-    Value_t *isp2;
-    Value_t *iend;
+    short *isp1;
+    short *isp2;
+    short *iend;
 
 #ifdef	TRACE
     fprintf(stderr, "Entering new_state(%d)\n", symbol);
 #endif
 
-    if (nstates >= MAXYYINT)
+    if (nstates >= MAXSHORT)
 	fatal("too many states");
 
     isp1 = kernel_base[symbol];
     iend = kernel_end[symbol];
     n = (unsigned)(iend - isp1);
 
-    p = (core *)allocate((sizeof(core) + (n - 1) * sizeof(Value_t)));
-    p->accessing_symbol = (Value_t)symbol;
-    p->number = (Value_t)nstates;
-    p->nitems = (Value_t)n;
+    p = (core *)allocate((sizeof(core) + (n - 1) * sizeof(short)));
+    p->accessing_symbol = (Value_t) symbol;
+    p->number = (Value_t) nstates;
+    p->nitems = (Value_t) n;
 
     isp2 = p->items;
     while (isp1 < iend)
@@ -323,7 +320,7 @@ new_state(int symbol)
 }
 
 /* show_cores is used for debugging */
-#ifdef DEBUG
+
 void
 show_cores(void)
 {
@@ -400,21 +397,20 @@ show_shifts(void)
 	    printf("\t%d\n", p->shift[i]);
     }
 }
-#endif
 
 static void
 save_shifts(void)
 {
     shifts *p;
-    Value_t *sp1;
-    Value_t *sp2;
-    Value_t *send;
+    short *sp1;
+    short *sp2;
+    short *send;
 
     p = (shifts *)allocate((sizeof(shifts) +
-			      (unsigned)(nshifts - 1) * sizeof(Value_t)));
+			      (unsigned)(nshifts - 1) * sizeof(short)));
 
     p->number = this_state->number;
-    p->nshifts = (Value_t)nshifts;
+    p->nshifts = (Value_t) nshifts;
 
     sp1 = shiftset;
     sp2 = p->shift;
@@ -438,13 +434,13 @@ save_shifts(void)
 static void
 save_reductions(void)
 {
-    Value_t *isp;
-    Value_t *rp1;
-    Value_t *rp2;
+    short *isp;
+    short *rp1;
+    short *rp2;
     int item;
     Value_t count;
     reductions *p;
-    Value_t *rend;
+    short *rend;
 
     count = 0;
     for (isp = itemset; isp < itemsetend; isp++)
@@ -452,7 +448,7 @@ save_reductions(void)
 	item = ritem[*isp];
 	if (item < 0)
 	{
-	    redset[count++] = (Value_t)-item;
+	    redset[count++] = (Value_t) - item;
 	}
     }
 
@@ -460,7 +456,7 @@ save_reductions(void)
     {
 	p = (reductions *)allocate((sizeof(reductions) +
 				      (unsigned)(count - 1) *
-				    sizeof(Value_t)));
+				    sizeof(short)));
 
 	p->number = this_state->number;
 	p->nreds = count;
@@ -490,9 +486,10 @@ set_derives(void)
 {
     Value_t i, k;
     int lhs;
+    short *rules;
 
-    derives = NEW2(nsyms, Value_t *);
-    rules = NEW2(nvars + nrules, Value_t);
+    derives = NEW2(nsyms, short *);
+    rules = NEW2(nvars + nrules, short);
 
     k = 0;
     for (lhs = start_symbol; lhs < nsyms; lhs++)
@@ -520,7 +517,7 @@ void
 print_derives(void)
 {
     int i;
-    Value_t *sp;
+    short *sp;
 
     printf("\nDERIVES\n\n");
 
@@ -599,15 +596,8 @@ lr0(void)
 void
 lr0_leaks(void)
 {
-    if (derives)
-    {
-	if (derives[start_symbol] != rules)
-	{
-	    DO_FREE(derives[start_symbol]);
-	}
-	DO_FREE(derives);
-	DO_FREE(rules);
-    }
+    DO_FREE(derives[start_symbol]);
+    DO_FREE(derives);
     DO_FREE(nullable);
 }
 #endif

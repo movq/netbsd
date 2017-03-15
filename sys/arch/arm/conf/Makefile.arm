@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile.arm,v 1.48 2015/05/01 02:00:41 nat Exp $
+#	$NetBSD: Makefile.arm,v 1.42.4.1 2016/01/05 22:22:36 snj Exp $
 
 # Makefile for NetBSD
 #
@@ -82,12 +82,12 @@ LINKFLAGS_NORMAL=	-X
 # Strip ARM mapping symbols from the kernel image, as they interfere
 # with ddb. Do it differently if 'makeoptions DEBUG="-g"' was specified.
 .if !defined(DEBUG) || empty(DEBUG:M-g*)
-SYSTEM_LD_TAIL?=	${OBJCOPY} --wildcard --strip-symbol='[$$][atd]' \
+SYSTEM_LD_TAIL?=	${SYSTEM_LD_TAIL_DBSYM} ; \
+			${OBJCOPY} --wildcard --strip-symbol='[$$][atd]' \
 				    --strip-symbol='[$$][atd]\.*' $@;   \
 			${SIZE} $@; chmod 755 $@
 .else
-STRIPFLAGS=-g --wildcard --strip-symbol='[$$][atd]' \
-	   --strip-symbol='[$$][atd]\.*'
+STRIPFLAGS=-g --strip-symbol='$$a' --strip-symbol='$$t' --strip-symbol='$$d'
 .endif
 
 ##

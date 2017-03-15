@@ -1,4 +1,4 @@
-# Copyright 2010-2016 Free Software Foundation, Inc.
+# Copyright 2010-2014 Free Software Foundation, Inc.
 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -17,16 +17,19 @@
 
 # Test arm displaced stepping.
 
-if {![is_aarch32_target]} then {
+if {![istarget "arm*-*-*"]} then {
     verbose "Skipping arm displaced stepping tests."
     return
 }
 
-standard_testfile .S
+set testfile "arm-disp-step"
+set srcfile ${testfile}.S
+set binfile ${objdir}/${subdir}/${testfile}
 
 set additional_flags "-Wa,-g"
 
-if { [prepare_for_testing $testfile.exp $testfile $srcfile [list debug $additional_flags]] } {
+if { [gdb_compile "${srcdir}/${subdir}/${srcfile}" "${binfile}" executable [list debug $additional_flags]] != "" } {
+    untested arm-disp-step.exp
     return -1
 }
 
@@ -368,44 +371,9 @@ proc test_str_pc {} {
 	".*bx lr.*"
 }
 
-# Test 16 bit thumb instruction 'add rd, pc'.
+# Get things started.
 
-proc test_add_rn_pc {} {
-    global srcfile gdb_prompt
-
-    set test "break test_add_rn_pc"
-    gdb_test_multiple "break *test_add_rn_pc" $test {
-	-re "Breakpoint.*at.* file .*$srcfile, line.*\r\n$gdb_prompt $" {
-	    pass $test
-	}
-	-re "No symbol.*\r\n$gdb_prompt $" {
-	    return
-	}
-    }
-
-    gdb_continue_to_breakpoint "continue to test_add_rn_pc" \
-	".*mov.*r3, 4.*"
-
-    gdb_test "break *test_add_rn_pc_start" \
-	"Breakpoint.*at.* file .*$srcfile, line.*" \
-	"break test_add_rn_pc_start"
-
-    gdb_continue_to_breakpoint "continue to test_add_rn_pc_start" \
-	".*add.*r3,.*pc.*"
-
-    set pc_val [get_integer_valueof "\$pc" 0]
-
-    gdb_test "break *test_add_rn_pc_end" \
-	"Breakpoint.*at.* file .*$srcfile, line.*" \
-	"break test_add_rn_pc_end"
-
-    gdb_continue_to_breakpoint "continue to test_add_rn_pc_end" \
-	".*bx lr.*"
-
-    set r3_val [get_integer_valueof "\$r3" 0]
-    # Test the value in r3 is correct.
-    gdb_assert { [expr {$pc_val + 4 + 4} == $r3_val] }
-}
+clean_restart ${testfile}
 
 # Turn displaced stepping off before runto main. When displaced stepping
 # is on, and we type 'run', GDB will first try to single step on _dl_debug_state,
@@ -441,8 +409,6 @@ test_adr_32bit
 test_pop_pc
 
 test_str_pc
-
-test_add_rn_pc
 
 ##########################################
 

@@ -13,7 +13,7 @@ endif
 
 libcom_err_la_LIBADD = $(LIB_libintl)
 
-noinst_PROGRAMS = compile_et
+bin_PROGRAMS = compile_et
 
 include_HEADERS = com_err.h com_right.h
 
@@ -42,7 +42,6 @@ strlcpy.c:
 
 EXTRA_DIST = \
 	NTMakefile \
-	com_err.3 \
 	compile_et-version.rc \
 	libcom_err-version.rc \
 	libcom_err-exports.def \

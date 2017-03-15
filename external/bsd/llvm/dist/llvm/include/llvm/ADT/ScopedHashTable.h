@@ -1,4 +1,4 @@
-//===- ScopedHashTable.h - A simple scoped hash table -----------*- C++ -*-===//
+//===- ScopedHashTable.h - A simple scoped hash table ---------------------===//
 //
 //                     The LLVM Compiler Infrastructure
 //
@@ -32,10 +32,7 @@
 #define LLVM_ADT_SCOPEDHASHTABLE_H
 
 #include "llvm/ADT/DenseMap.h"
-#include "llvm/ADT/DenseMapInfo.h"
 #include "llvm/Support/Allocator.h"
-#include <cassert>
-#include <new>
 
 namespace llvm {
 
@@ -49,10 +46,9 @@ class ScopedHashTableVal {
   ScopedHashTableVal *NextForKey;
   K Key;
   V Val;
-
   ScopedHashTableVal(const K &key, const V &val) : Key(key), Val(val) {}
-
 public:
+
   const K &getKey() const { return Key; }
   const V &getValue() const { return Val; }
   V &getValue() { return Val; }
@@ -60,7 +56,7 @@ public:
   ScopedHashTableVal *getNextForKey() { return NextForKey; }
   const ScopedHashTableVal *getNextForKey() const { return NextForKey; }
   ScopedHashTableVal *getNextInScope() { return NextInScope; }
-
+  
   template <typename AllocatorTy>
   static ScopedHashTableVal *Create(ScopedHashTableVal *nextInScope,
                                     ScopedHashTableVal *nextForKey,
@@ -70,11 +66,12 @@ public:
     // Set up the value.
     new (New) ScopedHashTableVal(key, val);
     New->NextInScope = nextInScope;
-    New->NextForKey = nextForKey;
+    New->NextForKey = nextForKey; 
     return New;
   }
-
-  template <typename AllocatorTy> void Destroy(AllocatorTy &Allocator) {
+  
+  template <typename AllocatorTy>
+  void Destroy(AllocatorTy &Allocator) {
     // Free memory referenced by the item.
     this->~ScopedHashTableVal();
     Allocator.Deallocate(this);
@@ -93,19 +90,17 @@ class ScopedHashTableScope {
   /// LastValInScope - This is the last value that was inserted for this scope
   /// or null if none have been inserted yet.
   ScopedHashTableVal<K, V> *LastValInScope;
-
+  void operator=(ScopedHashTableScope&) LLVM_DELETED_FUNCTION;
+  ScopedHashTableScope(ScopedHashTableScope&) LLVM_DELETED_FUNCTION;
 public:
   ScopedHashTableScope(ScopedHashTable<K, V, KInfo, AllocatorTy> &HT);
-  ScopedHashTableScope(ScopedHashTableScope &) = delete;
-  ScopedHashTableScope &operator=(ScopedHashTableScope &) = delete;
   ~ScopedHashTableScope();
 
   ScopedHashTableScope *getParentScope() { return PrevScope; }
   const ScopedHashTableScope *getParentScope() const { return PrevScope; }
-
+  
 private:
   friend class ScopedHashTable<K, V, KInfo, AllocatorTy>;
-
   ScopedHashTableVal<K, V> *getLastValInScope() {
     return LastValInScope;
   }
@@ -114,10 +109,10 @@ private:
   }
 };
 
-template <typename K, typename V, typename KInfo = DenseMapInfo<K>>
+
+template <typename K, typename V, typename KInfo = DenseMapInfo<K> >
 class ScopedHashTableIterator {
   ScopedHashTableVal<K, V> *Node;
-
 public:
   ScopedHashTableIterator(ScopedHashTableVal<K, V> *node) : Node(node) {}
 
@@ -146,6 +141,7 @@ public:
   }
 };
 
+
 template <typename K, typename V, typename KInfo, typename AllocatorTy>
 class ScopedHashTable {
 public:
@@ -153,25 +149,23 @@ public:
   /// to the name of the scope for this hash table.
   typedef ScopedHashTableScope<K, V, KInfo, AllocatorTy> ScopeTy;
   typedef unsigned size_type;
-
 private:
-  friend class ScopedHashTableScope<K, V, KInfo, AllocatorTy>;
-
   typedef ScopedHashTableVal<K, V> ValTy;
   DenseMap<K, ValTy*, KInfo> TopLevelMap;
-  ScopeTy *CurScope = nullptr;
-
+  ScopeTy *CurScope;
+  
   AllocatorTy Allocator;
-
+  
+  ScopedHashTable(const ScopedHashTable&); // NOT YET IMPLEMENTED
+  void operator=(const ScopedHashTable&);  // NOT YET IMPLEMENTED
+  friend class ScopedHashTableScope<K, V, KInfo, AllocatorTy>;
 public:
-  ScopedHashTable() = default;
+  ScopedHashTable() : CurScope(nullptr) {}
   ScopedHashTable(AllocatorTy A) : CurScope(0), Allocator(A) {}
-  ScopedHashTable(const ScopedHashTable &) = delete;
-  ScopedHashTable &operator=(const ScopedHashTable &) = delete;
-
   ~ScopedHashTable() {
     assert(!CurScope && TopLevelMap.empty() && "Scope imbalance!");
   }
+  
 
   /// Access to the allocator.
   AllocatorTy &getAllocator() { return Allocator; }
@@ -186,7 +180,7 @@ public:
     typename DenseMap<K, ValTy*, KInfo>::iterator I = TopLevelMap.find(Key);
     if (I != TopLevelMap.end())
       return I->second->getValue();
-
+      
     return V();
   }
 
@@ -204,7 +198,7 @@ public:
     if (I == TopLevelMap.end()) return end();
     return iterator(I->second);
   }
-
+  
   ScopeTy *getCurScope() { return CurScope; }
   const ScopeTy *getCurScope() const { return CurScope; }
 
@@ -259,4 +253,4 @@ ScopedHashTableScope<K, V, KInfo, Allocator>::~ScopedHashTableScope() {
 
 } // end namespace llvm
 
-#endif // LLVM_ADT_SCOPEDHASHTABLE_H
+#endif

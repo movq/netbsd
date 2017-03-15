@@ -1,4 +1,4 @@
-/*	$NetBSD: sysarch.h,v 1.14 2017/01/13 19:53:10 christos Exp $	*/
+/*	$NetBSD: sysarch.h,v 1.11 2014/01/16 21:48:41 matt Exp $	*/
 
 /*
  * Copyright (c) 1996-1997 Mark Brinicombe.
@@ -38,17 +38,11 @@
 #include <sys/cdefs.h>
 
 /*
- * Pickup definition of size_t and uintptr_t
+ * Pickup definition of uintptr_t
  */
-#include <machine/ansi.h>
 #include <sys/stdint.h>
 #ifndef _KERNEL
 #include <stdbool.h>
-#endif
-
-#ifdef	_BSD_SIZE_T_
-typedef	_BSD_SIZE_T_ size_t;
-#undef	_BSD_SIZE_T_
 #endif
 
 /*

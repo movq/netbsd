@@ -1,17 +1,21 @@
-#	$NetBSD: Makefile,v 1.17 2016/01/26 17:48:56 christos Exp $
+#	$NetBSD: Makefile,v 1.10 2014/06/14 20:49:36 mrg Exp $
 
 .include <bsd.own.mk>
 
 .if ${MKBINUTILS} != "no"
-SUBDIR+=	${EXTERNAL_BINUTILS_SUBDIR}
+SUBDIR+=	binutils
 .endif
 
 .if ${MKGCC} != "no"
+.if ${MKGCCCMDS} != "no"
 SUBDIR+=	${EXTERNAL_GCC_SUBDIR}
+.endif
 .endif
 
 .if ${MKGDB} != "no"
-SUBDIR+=        ${EXTERNAL_GDB_SUBDIR}
+.if ${HAVE_GDB} == "7"
+SUBDIR+=        gdb
+.endif
 .endif
 
 .include <bsd.subdir.mk>

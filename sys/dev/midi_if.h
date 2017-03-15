@@ -1,4 +1,4 @@
-/*	$NetBSD: midi_if.h,v 1.27 2015/03/01 00:34:14 mrg Exp $	*/
+/*	$NetBSD: midi_if.h,v 1.25.14.1 2015/01/11 14:13:25 martin Exp $	*/
 
 /*
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -50,11 +50,11 @@ struct midi_info {
  *
  *	METHOD			INTR	NOTES
  *	----------------------- ------- -------------------------
- *	open 			-	
- *	close 			-	
- *	output 			-	
- *	getinfo 		-	Called at attach time
- *	ioctl 			-	
+ *	open 			held	
+ *	close 			held	
+ *	output 			held	
+ *	getinfo 		held	Called at attach time
+ *	ioctl 			held	
  *	get_locks 		-	Called at attach time
  */
 

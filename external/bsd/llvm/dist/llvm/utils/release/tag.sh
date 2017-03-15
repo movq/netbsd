@@ -17,13 +17,13 @@ set -e
 release=""
 rc=""
 rebranch="no"
-projects="llvm cfe test-suite compiler-rt libcxx libcxxabi clang-tools-extra polly lldb lld openmp libunwind"
+projects="llvm cfe dragonegg test-suite compiler-rt libcxx libcxxabi clang-tools-extra polly lldb lld openmp"
 dryrun=""
 revision="HEAD"
 
 base_url="https://llvm.org/svn/llvm-project"
 
-usage() {
+function usage() {
     echo "usage: `basename $0` -release <num> [-rebranch] [-revision <num>] [-dry-run]"
     echo "usage: `basename $0` -release <num> -rc <num> [-dry-run]"
     echo " "
@@ -35,7 +35,7 @@ usage() {
     echo "  -dry-run         Make no changes to the repository, just print the commands"
 }
 
-tag_version() {
+function tag_version() {
     set -x
     for proj in  $projects; do
         if svn ls $base_url/$proj/branches/release_$branch_release > /dev/null 2>&1 ; then
@@ -53,7 +53,7 @@ tag_version() {
     set +x
 }
 
-tag_release_candidate() {
+function tag_release_candidate() {
     set -x
     for proj in $projects ; do
         if ! svn ls $base_url/$proj/tags/RELEASE_$tag_release > /dev/null 2>&1 ; then

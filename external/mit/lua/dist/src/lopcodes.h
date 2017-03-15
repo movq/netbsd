@@ -1,4 +1,4 @@
-/*	$NetBSD: lopcodes.h,v 1.5 2016/09/08 02:21:31 salazar Exp $	*/
+/*	$NetBSD: lopcodes.h,v 1.2.2.2 2016/07/01 06:35:02 snj Exp $	*/
 
 /*
 ** Id: lopcodes.h,v 1.148 2014/10/25 11:50:46 roberto Exp 

@@ -1,4 +1,4 @@
-/*	$NetBSD: schizo.c,v 1.37 2016/11/10 06:44:35 macallan Exp $	*/
+/*	$NetBSD: schizo.c,v 1.31.8.2 2016/01/26 01:25:32 riz Exp $	*/
 /*	$OpenBSD: schizo.c,v 1.55 2008/08/18 20:29:37 brad Exp $	*/
 
 /*
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: schizo.c,v 1.37 2016/11/10 06:44:35 macallan Exp $");
+__KERNEL_RCSID(0, "$NetBSD: schizo.c,v 1.31.8.2 2016/01/26 01:25:32 riz Exp $");
 
 #include <sys/param.h>
 #include <sys/device.h>
@@ -532,7 +532,7 @@ schizo_conf_read(pci_chipset_tag_t pc, pcitag_t tag, int reg)
 	int s;
 
 	DPRINTF(SDB_CONF, ("%s: tag %lx reg %x ", __func__, (long)tag, reg));
-	if (PCITAG_NODE(tag) != -1 && (unsigned int)reg < PCI_CONF_SIZE) {
+	if (PCITAG_NODE(tag) != -1) {
 		s = splhigh();
 		ci->ci_pci_probe = true;
 		membar_Sync();
@@ -562,9 +562,6 @@ schizo_conf_write(pci_chipset_tag_t pc, pcitag_t tag, int reg, pcireg_t data)
 		return;
 	}
 
-	if ((unsigned int)reg >= PCI_CONF_SIZE)
-		return;
-
         bus_space_write_4(sp->sp_cfgt, sp->sp_cfgh,
 	    PCITAG_OFFSET(tag) + reg, data);
 	DPRINTF(SDB_CONF, (" .. done\n"));
@@ -588,8 +585,10 @@ schizo_set_intr(struct schizo_softc *sc, struct schizo_pbm *pbm, int ipl,
 	DPRINTF(SDB_INTR, (" mapoff %" PRIx64 " clroff %" PRIx64 "\n",
 	    mapoff, clroff));
 
-	ih = intrhand_alloc();
-	
+	ih = (struct intrhand *)
+		kmem_alloc(sizeof(struct intrhand), KM_NOSLEEP);
+	if (ih == NULL)
+		return;
 	ih->ih_arg = arg;
 	intrregs = (uintptr_t)bus_space_vaddr(pbm->sp_regt, pbm->sp_intrh);
 	ih->ih_map = (uint64_t *)(uintptr_t)(intrregs + mapoff);
@@ -737,12 +736,6 @@ schizo_bus_map(bus_space_tag_t t, bus_addr_t offset, bus_size_t size,
 	    (unsigned long long)size,
 	    flags));
 
-	/*
-	 * BUS_SPACE_MAP_PREFETCHABLE causes hard hangs on schizo, so weed it
-	 * out for now
-	 */
-	flags &= ~BUS_SPACE_MAP_PREFETCHABLE;
-
 	ss = sparc_pci_childspace(t->type);
 	DPRINTF(SDB_BUSMAP, (" cspace %d\n", ss));
 
@@ -769,12 +762,6 @@ schizo_bus_mmap(bus_space_tag_t t, bus_addr_t paddr, off_t off, int prot,
 	struct schizo_softc *sc = pbm->sp_sc;
 	struct schizo_range *sr;
 	int ss;
-
-	/*
-	 * BUS_SPACE_MAP_PREFETCHABLE causes hard hangs on schizo, so weed it
-	 * out for now
-	 */
-	flags &= ~BUS_SPACE_MAP_PREFETCHABLE;
 
 	ss = sparc_pci_childspace(t->type);
 
@@ -825,7 +812,9 @@ schizo_intr_establish(bus_space_tag_t t, int ihandle, int level,
 	vec = INTVEC(ihandle);
 	ino = INTINO(vec);
 
-	ih = intrhand_alloc();
+	ih = kmem_alloc(sizeof *ih, KM_NOSLEEP);
+	if (ih == NULL)
+		return (NULL);
 
 	DPRINTF(SDB_INTR, ("\n%s: ihandle %x level %d fn %p arg %p\n", __func__,
 	    ihandle, level, handler, arg));

@@ -1,4 +1,4 @@
-/*	$NetBSD: uhidev.h,v 1.19 2016/04/23 10:15:32 skrll Exp $	*/
+/*	$NetBSD: uhidev.h,v 1.15.2.2 2015/03/21 17:30:43 snj Exp $	*/
 
 /*
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -31,20 +31,20 @@
  */
 
 
-#include <sys/rndsource.h>
+#include <sys/rnd.h>
 
 struct uhidev_softc {
 	device_t sc_dev;		/* base device */
-	struct usbd_device *sc_udev;
-	struct usbd_interface *sc_iface;	/* interface */
-	struct usbd_pipe *sc_ipipe;	/* input interrupt pipe */
+	usbd_device_handle sc_udev;
+	usbd_interface_handle sc_iface;	/* interface */
+	usbd_pipe_handle sc_ipipe;	/* input interrupt pipe */
 	int sc_iep_addr;
 
 	u_char *sc_ibuf;
 	u_int sc_isize;
 
-	struct usbd_pipe *sc_opipe;	/* output interrupt pipe */
-	struct usbd_xfer *sc_oxfer;	/* write request */
+	usbd_pipe_handle sc_opipe;	/* output interrupt pipe */
+	usbd_xfer_handle sc_oxfer;	/* write request */
 	int sc_oep_addr;
 
 	void *sc_repdesc;
@@ -66,15 +66,15 @@ struct uhidev {
 	device_t sc_dev;		/* base device */
 	struct uhidev_softc *sc_parent;
 	uByte sc_report_id;
-	uint8_t sc_state;
+	u_int8_t sc_state;
 	int sc_in_rep_size;
 #define	UHIDEV_OPEN	0x01	/* device is open */
 	void (*sc_intr)(struct uhidev *, void *, u_int);
-	krndsource_t     rnd_source;
+        krndsource_t     rnd_source;
 };
 
 struct uhidev_attach_arg {
-	struct usbif_attach_arg *uiaa;
+	struct usbif_attach_arg *uaa;
 	struct uhidev_softc *parent;
 	int reportid;
 	int reportsize;
@@ -87,5 +87,3 @@ void uhidev_close(struct uhidev *);
 usbd_status uhidev_set_report(struct uhidev *, int, void *, int);
 usbd_status uhidev_get_report(struct uhidev *, int, void *, int);
 usbd_status uhidev_write(struct uhidev_softc *, void *, int);
-
-#define	UHIDEV_OSIZE	64

@@ -1,4 +1,4 @@
-/*	$NetBSD: sshfp_44.c,v 1.7 2015/12/17 04:00:44 christos Exp $	*/
+/*	$NetBSD: sshfp_44.c,v 1.5.4.1 2016/03/13 08:06:14 martin Exp $	*/
 
 /*
  * Copyright (C) 2004, 2006, 2007, 2009, 2011-2013, 2015  Internet Systems Consortium, Inc. ("ISC")

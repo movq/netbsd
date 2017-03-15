@@ -1,4 +1,4 @@
-/*	$NetBSD: linux_llseek.c,v 1.34 2014/11/09 17:48:08 maxv Exp $	*/
+/*	$NetBSD: linux_llseek.c,v 1.33.58.1 2015/01/17 12:10:54 martin Exp $	*/
 
 /*-
  * Copyright (c) 1995, 1998 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: linux_llseek.c,v 1.34 2014/11/09 17:48:08 maxv Exp $");
+__KERNEL_RCSID(0, "$NetBSD: linux_llseek.c,v 1.33.58.1 2015/01/17 12:10:54 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

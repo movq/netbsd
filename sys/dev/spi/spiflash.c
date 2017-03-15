@@ -1,4 +1,4 @@
-/* $NetBSD: spiflash.c,v 1.19 2016/08/19 03:23:39 jakllsch Exp $ */
+/* $NetBSD: spiflash.c,v 1.15 2014/07/25 08:10:39 dholland Exp $ */
 
 /*-
  * Copyright (c) 2006 Urbana-Champaign Independent Media Center.
@@ -42,7 +42,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: spiflash.c,v 1.19 2016/08/19 03:23:39 jakllsch Exp $");
+__KERNEL_RCSID(0, "$NetBSD: spiflash.c,v 1.15 2014/07/25 08:10:39 dholland Exp $");
 
 #include <sys/param.h>
 #include <sys/conf.h>
@@ -166,9 +166,7 @@ const struct cdevsw spiflash_cdevsw = {
 	.d_flag = D_DISK,
 };
 
-static struct dkdriver spiflash_dkdriver = {
-	.d_strategy = spiflash_strategy
-};
+static struct dkdriver spiflash_dkdriver = { spiflash_strategy, NULL };
 
 spiflash_handle_t
 spiflash_attach_mi(const struct spiflash_hw_if *hw, void *cookie,
@@ -234,7 +232,9 @@ spiflash_attach(device_t parent, device_t self, void *aux)
 	bufq_alloc(&sc->sc_workq, "fcfs", BUFQ_SORT_RAWBLOCK);
 	bufq_alloc(&sc->sc_doneq, "fcfs", BUFQ_SORT_RAWBLOCK);
 
-	disk_init(&sc->sc_dk, device_xname(self), &spiflash_dkdriver);
+	sc->sc_dk.dk_driver = &spiflash_dkdriver;
+	sc->sc_dk.dk_name = device_xname(self);
+
 	disk_attach(&sc->sc_dk);
 
 	/* arrange to allocate the kthread */
@@ -313,7 +313,6 @@ spiflash_strategy(struct buf *bp)
 	sc = device_lookup_private(&spiflash_cd, DISKUNIT(bp->b_dev));
 	if (sc == NULL) {
 		bp->b_error = ENXIO;
-		bp->b_resid = bp->b_bcount;
 		biodone(bp);
 		return;
 	}
@@ -321,7 +320,6 @@ spiflash_strategy(struct buf *bp)
 	if (((bp->b_bcount % sc->sc_write_size) != 0) ||
 	    (bp->b_blkno < 0)) {
 		bp->b_error = EINVAL;
-		bp->b_resid = bp->b_bcount;
 		biodone(bp);
 		return;
 	}
@@ -683,7 +681,6 @@ spiflash_common_read(spiflash_handle_t sc, size_t start, size_t size,
 			return rv;
 		}
 
-		data += cnt;
 		start += cnt;
 		size -= cnt;
 	}

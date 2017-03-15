@@ -14,15 +14,24 @@
 #include <QtCore/QTranslator>
 #include "wpagui.h"
 
-WpaGuiApp::WpaGuiApp(int &argc, char **argv) :
-	QApplication(argc, argv),
-	argc(argc),
-	argv(argv)
+
+class WpaGuiApp : public QApplication
 {
-	w = NULL;
+public:
+	WpaGuiApp(int &argc, char **argv);
+
+#ifndef QT_NO_SESSIONMANAGER
+	virtual void saveState(QSessionManager &manager);
+#endif
+
+	WpaGui *w;
+};
+
+WpaGuiApp::WpaGuiApp(int &argc, char **argv) : QApplication(argc, argv)
+{
 }
 
-#if !defined(QT_NO_SESSIONMANAGER) && QT_VERSION < 0x050000
+#ifndef QT_NO_SESSIONMANAGER
 void WpaGuiApp::saveState(QSessionManager &manager)
 {
 	QApplication::saveState(manager);

@@ -1,4 +1,4 @@
-/*	$NetBSD: ppb.c,v 1.55 2015/11/16 09:10:58 msaitoh Exp $	*/
+/*	$NetBSD: ppb.c,v 1.52.10.1 2014/12/12 18:56:16 martin Exp $	*/
 
 /*
  * Copyright (c) 1996, 1998 Christopher G. Demetriou.  All rights reserved.
@@ -31,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ppb.c,v 1.55 2015/11/16 09:10:58 msaitoh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ppb.c,v 1.52.10.1 2014/12/12 18:56:16 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -102,16 +102,14 @@ ppb_fix_pcie(device_t self)
 {
 	struct ppb_softc *sc = device_private(self);
 	pcireg_t reg;
-	int off, capversion, devtype;
+	int off;
 
 	if (!pci_get_capability(sc->sc_pc, sc->sc_tag, PCI_CAP_PCIEXPRESS,
 				&off, &reg))
 		return; /* Not a PCIe device */
 
-	capversion = PCIE_XCAP_VER(reg);
-	devtype = PCIE_XCAP_TYPE(reg);
 	aprint_normal_dev(self, "PCI Express capability version ");
-	switch (capversion) {
+	switch (reg & PCIE_XCAP_VER_MASK) {
 	case PCIE_XCAP_VER_1:
 		aprint_normal("1");
 		break;
@@ -119,11 +117,13 @@ ppb_fix_pcie(device_t self)
 		aprint_normal("2");
 		break;
 	default:
-		aprint_normal_dev(self, "unsupported (%d)\n", capversion);
+		aprint_normal_dev(self,
+		    "unsupported (0x%" PRIxMAX ")\n",
+		    __SHIFTOUT(reg, PCIE_XCAP_VER_MASK));
 		return;
 	}
 	aprint_normal(" <");
-	switch (devtype) {
+	switch (reg & PCIE_XCAP_TYPE_MASK) {
 	case PCIE_XCAP_TYPE_PCIE_DEV:
 		aprint_normal("PCI-E Endpoint device");
 		break;
@@ -146,11 +146,12 @@ ppb_fix_pcie(device_t self)
 		aprint_normal("PCI/PCI-X to PCI-E Bridge");
 		break;
 	default:
-		aprint_normal("Device/Port Type %x", devtype);
+		aprint_normal("Device/Port Type 0x%" PRIxMAX,
+		    __SHIFTOUT(reg, PCIE_XCAP_TYPE_MASK));
 		break;
 	}
 
-	switch (devtype) {
+	switch (reg & PCIE_XCAP_TYPE_MASK) {
 	case PCIE_XCAP_TYPE_ROOT:
 	case PCIE_XCAP_TYPE_DOWN:
 	case PCIE_XCAP_TYPE_PCI2PCIE:

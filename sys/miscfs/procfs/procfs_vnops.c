@@ -1,4 +1,4 @@
-/*	$NetBSD: procfs_vnops.c,v 1.194 2016/08/20 12:37:09 hannken Exp $	*/
+/*	$NetBSD: procfs_vnops.c,v 1.191 2014/07/27 16:47:26 hannken Exp $	*/
 
 /*-
  * Copyright (c) 2006, 2007, 2008 The NetBSD Foundation, Inc.
@@ -105,7 +105,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: procfs_vnops.c,v 1.194 2016/08/20 12:37:09 hannken Exp $");
+__KERNEL_RCSID(0, "$NetBSD: procfs_vnops.c,v 1.191 2014/07/27 16:47:26 hannken Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -450,6 +450,7 @@ procfs_reclaim(void *v)
 	mutex_enter(vp->v_interlock);
 	vp->v_data = NULL;
 	mutex_exit(vp->v_interlock);
+	vcache_remove(vp->v_mount, &pfs->pfs_key, sizeof(pfs->pfs_key));
 	kmem_free(pfs, sizeof(*pfs));
 	return 0;
 }
@@ -515,13 +516,14 @@ procfs_print(void *v)
 int
 procfs_link(void *v)
 {
-	struct vop_link_v2_args /* {
+	struct vop_link_args /* {
 		struct vnode *a_dvp;
 		struct vnode *a_vp;
 		struct componentname *a_cnp;
 	} */ *ap = v;
 
 	VOP_ABORTOP(ap->a_dvp, ap->a_cnp);
+	vput(ap->a_dvp);
 	return (EROFS);
 }
 
@@ -819,7 +821,7 @@ procfs_getattr(void *v)
 			switch (fp->f_type) {
 			case DTYPE_VNODE:
 				vap->va_bytes = vap->va_size =
-				    fp->f_vnode->v_size;
+				    ((struct vnode *)fp->f_data)->v_size;
 				break;
 			default:
 				vap->va_bytes = vap->va_size = 0;
@@ -1144,7 +1146,7 @@ procfs_lookup(void *v)
 			procfs_proc_unlock(p);
 			return ENOENT;
 		}
-		fvp = fp->f_vnode;
+		fvp = fp->f_data;
 
 		/* Don't show directories */
 		if (fp->f_type == DTYPE_VNODE && fvp->v_type != VDIR) {
@@ -1646,7 +1648,7 @@ procfs_readlink(void *v)
 
 		switch (fp->f_type) {
 		case DTYPE_VNODE:
-			vxp = fp->f_vnode;
+			vxp = (struct vnode *)fp->f_data;
 			if (vxp->v_type != VDIR) {
 				error = EINVAL;
 				break;

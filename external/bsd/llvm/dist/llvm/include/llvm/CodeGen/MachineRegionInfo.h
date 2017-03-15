@@ -57,6 +57,8 @@ public:
 
   }
 
+  ~MachineRegionNode() { }
+
   bool operator==(const MachineRegion &RN) const {
     return this == reinterpret_cast<const MachineRegionNode*>(&RN);
   }
@@ -78,7 +80,7 @@ class MachineRegionInfo : public RegionInfoBase<RegionTraits<MachineFunction>> {
 public:
   explicit MachineRegionInfo();
 
-  ~MachineRegionInfo() override;
+  virtual ~MachineRegionInfo();
 
   // updateStatistics - Update statistic about created regions.
   void updateStatistics(MachineRegion *R) final;
@@ -96,7 +98,7 @@ public:
   static char ID;
   explicit MachineRegionInfoPass();
 
-  ~MachineRegionInfoPass() override;
+  ~MachineRegionInfoPass();
 
   MachineRegionInfo &getRegionInfo() {
     return RI;
@@ -142,11 +144,10 @@ RegionGraphTraits(const MachineRegion, const MachineRegionNode);
 
 template <> struct GraphTraits<MachineRegionInfo*>
   : public GraphTraits<FlatIt<MachineRegionNode*> > {
-  typedef df_iterator<NodeRef, df_iterator_default_set<NodeRef>, false,
-                      GraphTraits<FlatIt<NodeRef>>>
-      nodes_iterator;
+  typedef df_iterator<NodeType*, SmallPtrSet<NodeType*, 8>, false,
+                      GraphTraits<FlatIt<NodeType*> > > nodes_iterator;
 
-  static NodeRef getEntryNode(MachineRegionInfo *RI) {
+  static NodeType *getEntryNode(MachineRegionInfo *RI) {
     return GraphTraits<FlatIt<MachineRegion*> >::getEntryNode(RI->getTopLevelRegion());
   }
   static nodes_iterator nodes_begin(MachineRegionInfo* RI) {
@@ -159,11 +160,10 @@ template <> struct GraphTraits<MachineRegionInfo*>
 
 template <> struct GraphTraits<MachineRegionInfoPass*>
   : public GraphTraits<MachineRegionInfo *> {
-  typedef df_iterator<NodeRef, df_iterator_default_set<NodeRef>, false,
-                      GraphTraits<FlatIt<NodeRef>>>
-      nodes_iterator;
+  typedef df_iterator<NodeType*, SmallPtrSet<NodeType*, 8>, false,
+                      GraphTraits<FlatIt<NodeType*> > > nodes_iterator;
 
-  static NodeRef getEntryNode(MachineRegionInfoPass *RI) {
+  static NodeType *getEntryNode(MachineRegionInfoPass *RI) {
     return GraphTraits<MachineRegionInfo*>::getEntryNode(&RI->getRegionInfo());
   }
   static nodes_iterator nodes_begin(MachineRegionInfoPass* RI) {
@@ -174,9 +174,10 @@ template <> struct GraphTraits<MachineRegionInfoPass*>
   }
 };
 
-extern template class RegionBase<RegionTraits<MachineFunction>>;
-extern template class RegionNodeBase<RegionTraits<MachineFunction>>;
-extern template class RegionInfoBase<RegionTraits<MachineFunction>>;
+EXTERN_TEMPLATE_INSTANTIATION(class RegionBase<RegionTraits<MachineFunction>>);
+EXTERN_TEMPLATE_INSTANTIATION(class RegionNodeBase<RegionTraits<MachineFunction>>);
+EXTERN_TEMPLATE_INSTANTIATION(class RegionInfoBase<RegionTraits<MachineFunction>>);
+
 }
 
 #endif

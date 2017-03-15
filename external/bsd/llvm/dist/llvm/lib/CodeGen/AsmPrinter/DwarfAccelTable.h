@@ -126,7 +126,8 @@ public:
     uint16_t type; // enum AtomType
     uint16_t form; // DWARF DW_FORM_ defines
 
-    constexpr Atom(uint16_t type, uint16_t form) : type(type), form(form) {}
+    LLVM_CONSTEXPR Atom(uint16_t type, uint16_t form)
+        : type(type), form(form) {}
 #ifndef NDEBUG
     void print(raw_ostream &O) {
       O << "Type: " << dwarf::AtomTypeString(type) << "\n"
@@ -180,8 +181,9 @@ public:
 private:
   // String Data
   struct DataArray {
-    DwarfStringPoolEntryRef Name;
+    MCSymbol *StrSym;
     std::vector<HashDataContents *> Values;
+    DataArray() : StrSym(nullptr) {}
   };
   friend struct HashData;
   struct HashData {
@@ -199,7 +201,7 @@ private:
       O << "  Hash Value: " << format("0x%x", HashValue) << "\n";
       O << "  Symbol: ";
       if (Sym)
-        O << *Sym;
+        Sym->print(O);
       else
         O << "<none>";
       O << "\n";
@@ -213,15 +215,15 @@ private:
 #endif
   };
 
-  DwarfAccelTable(const DwarfAccelTable &) = delete;
-  void operator=(const DwarfAccelTable &) = delete;
+  DwarfAccelTable(const DwarfAccelTable &) LLVM_DELETED_FUNCTION;
+  void operator=(const DwarfAccelTable &) LLVM_DELETED_FUNCTION;
 
   // Internal Functions
   void EmitHeader(AsmPrinter *);
   void EmitBuckets(AsmPrinter *);
   void EmitHashes(AsmPrinter *);
-  void emitOffsets(AsmPrinter *, const MCSymbol *);
-  void EmitData(AsmPrinter *, DwarfDebug *D);
+  void EmitOffsets(AsmPrinter *, MCSymbol *);
+  void EmitData(AsmPrinter *, DwarfDebug *D, MCSymbol *StrSym);
 
   // Allocator for HashData and HashDataContents.
   BumpPtrAllocator Allocator;
@@ -243,9 +245,10 @@ private:
   // Public Implementation
 public:
   DwarfAccelTable(ArrayRef<DwarfAccelTable::Atom>);
-  void AddName(DwarfStringPoolEntryRef Name, const DIE *Die, char Flags = 0);
+  void AddName(StringRef Name, MCSymbol *StrSym, const DIE *Die,
+               char Flags = 0);
   void FinalizeTable(AsmPrinter *, StringRef);
-  void emit(AsmPrinter *, const MCSymbol *, DwarfDebug *);
+  void Emit(AsmPrinter *, MCSymbol *, DwarfDebug *, MCSymbol *StrSym);
 #ifndef NDEBUG
   void print(raw_ostream &O);
   void dump() { print(dbgs()); }

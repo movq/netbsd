@@ -1,4 +1,4 @@
-/*	$NetBSD: amd64_trap.S,v 1.4 2016/08/07 09:04:55 maxv Exp $	*/
+/*	$NetBSD: amd64_trap.S,v 1.2 2014/02/12 19:53:49 dsl Exp $	*/
 
 /*-
  * Copyright (c) 1998, 2007, 2008 The NetBSD Foundation, Inc.
@@ -66,7 +66,7 @@
 
 #if 0
 #include <machine/asm.h>
-__KERNEL_RCSID(0, "$NetBSD: amd64_trap.S,v 1.4 2016/08/07 09:04:55 maxv Exp $");
+__KERNEL_RCSID(0, "$NetBSD: amd64_trap.S,v 1.2 2014/02/12 19:53:49 dsl Exp $");
 #endif
 
 /*
@@ -144,7 +144,7 @@ IDTVEC(trap03)
 #else
 	ZTRAP_NJ(T_BPTFLT)
 	INTRENTRY
-	STI(si)
+  	STI(si)
 	/*
 	 * DTrace Function Boundary Trace (fbt) probes are triggered
 	 * by int3 (0xcc).
@@ -229,36 +229,28 @@ IDTVEC_END(trap0a)
 IDTVEC(trap0b)		/* #NP() Segment not present */
 	TRAP_NJ(T_SEGNPFLT)
 	jmp	check_swapgs
-IDTVEC_END(trap0b)
+IDTVEC_END(trap0b)		/* #NP() Segment not present */
 
 IDTVEC(trap0c)		/* #SS() Stack exception */
 	TRAP_NJ(T_STKFLT)
 	jmp	check_swapgs
-IDTVEC_END(trap0c)
+IDTVEC_END(trap0c)		/* #SS() Stack exception */
 
 IDTVEC(trap0d)		/* #GP() General protection */
 	TRAP_NJ(T_PROTFLT)
 #ifdef check_swapgs
 	jmp	check_swapgs
 #else
-/*
- * We need to worry about traps in kernel mode while the kernel %gs isn't
- * loaded. These are either faults on iretq during return to user or loads to
- * %gs.
- *
- * When such traps happen, we have CPL=0 and %gs=userland, and we must perform
- * an additional swapgs to get %gs=kernel.
- */
+/* We need to worry about traps while the kernel %gs_base isn't loaded.
+ * These are either loads to %gs (only 32bit) or faults on iret during
+ * return to user. */
 check_swapgs:
 	INTRENTRY_L(3f,1:)
-2:
-	sti
+2:	sti
 	jmp	calltrap
 3:
-	/*
-	 * Trap in kernel mode.
-	 */
-	/* Case 1: fault on iretq? */
+	/* Trap in kernel mode. */
+	/* If faulting instruction is 'iret' we may need to do a 'swapgs'. */
 	movq	TF_RIP(%rsp),%rax
 	cmpw	$0xcf48,(%rax)		/* Faulting instruction is iretq ? */
 	jne	5f			/* Jump if not */
@@ -267,8 +259,7 @@ check_swapgs:
 	je	2b			/* jump if iret was to kernel  */
 	jmp	1b			/* to user - must restore %gs */
 5:
-
-	/* Case 2: move to %gs? */
+	/* Not 'iret', all moves to %gs also need a swapgs */
 	movw	(%rax),%ax
 	andb	$070,%ah		/* mask mod/rm from mod/reg/rm */
 	cmpw	$0x8e+050*256,%ax	/* Any move to %gs (reg 5) */
@@ -387,7 +378,7 @@ END(trap_return_fault_return)
  */
 NENTRY(alltraps)
 	INTRENTRY
-	STI(si)
+  	STI(si)
 
 calltrap:
 #ifdef DIAGNOSTIC
@@ -402,11 +393,11 @@ calltrap:
 .Lalltraps_checkast:
 	movq	CPUVAR(CURLWP),%r14
 	/* Check for ASTs on exit to user mode. */
-	CLI(si)
+  	CLI(si)
 	CHECK_ASTPENDING(%r14)
 	je	3f
 	CLEAR_ASTPENDING(%r14)
-	STI(si)
+  	STI(si)
 	movl	$T_ASTFLT,TF_TRAPNO(%rsp)
 	movq	%rsp,%rdi
 	incq	CPUVAR(NTRAP)
@@ -420,7 +411,7 @@ calltrap:
 6:	cmpl	CPUVAR(ILEVEL),%ebx
 	jne	3f
 	INTRFASTEXIT
-3:	STI(si)
+3:  	STI(si)
 	movabsq	$4f,%rdi
 	movl	CPUVAR(ILEVEL),%esi
 	movl	%ebx,%edx

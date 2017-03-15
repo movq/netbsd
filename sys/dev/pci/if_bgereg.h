@@ -1,4 +1,4 @@
-/*	$NetBSD: if_bgereg.h,v 1.91 2015/05/17 12:06:26 msaitoh Exp $	*/
+/*	$NetBSD: if_bgereg.h,v 1.88.2.1 2015/05/09 08:37:53 snj Exp $	*/
 /*
  * Copyright (c) 2001 Wind River Systems
  * Copyright (c) 1997, 1998, 1999, 2001
@@ -260,7 +260,6 @@
 #define BGE_PCIMISCCTL_CLOCKCTL_RW	0x00000020
 #define BGE_PCIMISCCTL_REG_WORDSWAP	0x00000040
 #define BGE_PCIMISCCTL_INDIRECT_ACCESS	0x00000080
-#define	BGE_PCIMISCCTL_TAGGED_STATUS	0x00000200
 #define BGE_PCIMISCCTL_ASICREV		0xFFFF0000
 #define BGE_PCIMISCCTL_ASICREV_SHIFT	16
 
@@ -320,8 +319,7 @@
 #define BGE_CHIPID_BCM5761_A0		0x5761000
 #define BGE_CHIPID_BCM5761_A1		0x5761100
 #define BGE_CHIPID_BCM5784_A0		0x5784000
-#define BGE_CHIPID_BCM5784_A1		0x5784001
-#define BGE_CHIPID_BCM5784_B0		0x5784100
+#define BGE_CHIPID_BCM5784_A1		0x5784100
 #define BGE_CHIPID_BCM5752_A0		0x6000
 #define BGE_CHIPID_BCM5752_A1		0x6001
 #define BGE_CHIPID_BCM5752_A2		0x6002
@@ -388,7 +386,6 @@
 #define BGE_CHIPREV_5704_BX		0x21
 #define BGE_CHIPREV_5750_AX		0x40
 #define BGE_CHIPREV_5750_BX		0x41
-#define BGE_CHIPREV_5784_AX		0x57840
 #define BGE_CHIPREV_57765_AX		0x577850
 
 /* PCI DMA Read/Write Control register */
@@ -2299,7 +2296,7 @@ struct bge_sts_idx {
 
 struct bge_status_block {
 	volatile u_int32_t	bge_status;
-	volatile u_int32_t	bge_status_tag;
+	volatile u_int32_t	bge_rsvd0;
 #if BYTE_ORDER == BIG_ENDIAN
 	volatile u_int16_t	bge_rx_std_cons_idx;
 	volatile u_int16_t	bge_rx_jumbo_cons_idx;
@@ -2618,7 +2615,7 @@ struct vpd_key {
 #define BGEF_FIBER_MII		0x00000004
 #define	BGEF_CPMU_PRESENT	0x00000008
 #define	BGEF_APE		0x00000010
-#define BGEF_MSI		0x00000020
+/* Reserved for BGEF_MSI	0x00000020 */
 #define BGEF_PCIX		0x00000040
 #define BGEF_PCIE		0x00000080
 #define BGEF_TSO		0x00000100
@@ -2633,7 +2630,6 @@ struct vpd_key {
 #define	BGEF_57765_FAMILY	0x00040000
 #define	BGEF_57765_PLUS		0x00080000
 #define BGEF_40BIT_BUG		0x00100000
-#define BGEF_TAGGED_STATUS	0x00200000
 #define BGEF_RX_ALIGNBUG	0x00800000
 #define BGEF_TXRING_VALID	0x20000000
 #define BGEF_RXRING_VALID	0x40000000

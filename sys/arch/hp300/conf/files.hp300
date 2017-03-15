@@ -1,4 +1,4 @@
-#	$NetBSD: files.hp300,v 1.89 2014/08/24 08:17:44 tsutsui Exp $
+#	$NetBSD: files.hp300,v 1.88.2.1 2014/08/29 11:42:15 martin Exp $
 #
 # hp300-specific configuration info
 

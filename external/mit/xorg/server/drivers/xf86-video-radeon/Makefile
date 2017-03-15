@@ -1,13 +1,9 @@
-#	$NetBSD: Makefile,v 1.20 2016/08/16 07:08:17 mrg Exp $
+#	$NetBSD: Makefile,v 1.18 2014/08/11 08:25:58 mrg Exp $
 
 .include <bsd.own.mk>
 
 DRIVER=		xf86-video-ati
-.if ${MACHINE_ARCH} == "i386" || ${MACHINE_ARCH} == "x86_64"
-DRIVER_NAME=	radeon_drv_old
-.else
 DRIVER_NAME=	radeon_drv
-.endif
 
 .PATH:  ${X11SRCDIR.${DRIVER}}/src/AtomBios
 SRCS.ATOMBIOS= \
@@ -18,11 +14,6 @@ SRCS.ATOMBIOS= \
 .if ${X11DRI} != "no"
 SRCS.DRI=	radeon_dri.c
 CPPFLAGS+=	${X11FLAGS.DRI}
-.endif
-
-# XXX
-.if ${XORG_SERVER_SUBDIR} == "xorg-server.old"
-CPPFLAGS+=	-DUSE_XAA
 .endif
 
 .if ${X11DRI} != "no"
@@ -59,14 +50,7 @@ CPPFLAGS+=	-I${X11SRCDIR.${DRIVER}}/src/AtomBios/includes \
 		-I${DESTDIR}${X11INCDIR}/X11 \
 		-I${DESTDIR}${X11INCDIR}/X11/dri \
 		-I${DESTDIR}${X11INCDIR}/libdrm \
-		-I${X11SRCDIR.${DRIVER}}/../include \
-		-I${X11SRCDIR.${DRIVER}}/../xorg-server-copy
-.if ${XORG_SERVER_SUBDIR} != "xorg-server.old"
-CPPFLAGS+=	-DHAVE_XORG_LIST
-# XXX These have been copied from xorg-server 1.10.6.
-SRCS+=		fi1236.c msp3430.c tda9885.c uda1380.c
-.PATH:		${X11SRCDIR.${DRIVER}}/../xorg-server-copy
-.endif
+		-I${X11SRCDIR.${DRIVER}}/../include
 
 # XXX
 COPTS+=	-Wno-error

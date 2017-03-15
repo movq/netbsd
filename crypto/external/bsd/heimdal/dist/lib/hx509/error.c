@@ -1,4 +1,4 @@
-/*	$NetBSD: error.c,v 1.2 2017/01/28 21:31:48 christos Exp $	*/
+/*	$NetBSD: error.c,v 1.1.1.1 2011/04/13 18:15:10 elric Exp $	*/
 
 /*
  * Copyright (c) 2006 - 2007 Kungliga Tekniska Högskolan
@@ -47,6 +47,17 @@ struct hx509_error_data {
     char *msg;
 };
 
+static void
+free_error_string(hx509_error msg)
+{
+    while(msg) {
+	hx509_error m2 = msg->next;
+	free(msg->msg);
+	free(msg);
+	msg = m2;
+    }
+}
+
 /**
  * Resets the error strings the hx509 context.
  *
@@ -59,7 +70,7 @@ void
 hx509_clear_error_string(hx509_context context)
 {
     if (context) {
-	heim_release(context->error);
+	free_error_string(context->error);
 	context->error = NULL;
     }
 }
@@ -82,18 +93,31 @@ void
 hx509_set_error_stringv(hx509_context context, int flags, int code,
 			const char *fmt, va_list ap)
 {
-    heim_error_t msg;
+    hx509_error msg;
 
     if (context == NULL)
 	return;
 
-    msg = heim_error_createv(code, fmt, ap);
-    if (msg) {
-	if (flags & HX509_ERROR_APPEND)
-	    heim_error_append(msg, context->error);
-	heim_release(context->error);
+    msg = calloc(1, sizeof(*msg));
+    if (msg == NULL) {
+	hx509_clear_error_string(context);
+	return;
     }
-    context->error = msg;
+
+    if (vasprintf(&msg->msg, fmt, ap) == -1) {
+	hx509_clear_error_string(context);
+	free(msg);
+	return;
+    }
+    msg->code = code;
+
+    if (flags & HX509_ERROR_APPEND) {
+	msg->next = context->error;
+	context->error = msg;
+    } else  {
+	free_error_string(context->error);
+	context->error = msg;
+    }
 }
 
 /**
@@ -135,12 +159,12 @@ hx509_set_error_string(hx509_context context, int flags, int code,
 char *
 hx509_get_error_string(hx509_context context, int error_code)
 {
-    heim_error_t msg = context->error;
-    heim_string_t s;
-    char *str = NULL;
+    struct rk_strpool *p = NULL;
+    hx509_error msg = context->error;
 
-    if (msg == NULL || heim_error_get_code(msg) != error_code) {
+    if (msg == NULL || msg->code != error_code) {
 	const char *cstr;
+	char *str;
 
 	cstr = com_right(context->et_list, error_code);
 	if (cstr)
@@ -153,14 +177,11 @@ hx509_get_error_string(hx509_context context, int error_code)
 	return str;
     }
 
-    s = heim_error_copy_string(msg);
-    if (s) {
-	const char *cstr = heim_string_get_utf8(s);
-	if (cstr)
-	    str = strdup(cstr);
-	heim_release(s);
-    }
-    return str;
+    for (msg = context->error; msg; msg = msg->next)
+	p = rk_strpoolprintf(p, "%s%s", msg->msg,
+			     msg->next != NULL ? "; " : "");
+
+    return rk_strpoolcollect(p);
 }
 
 /**
@@ -196,14 +217,13 @@ hx509_err(hx509_context context, int exit_code,
     va_list ap;
     const char *msg;
     char *str;
-    int ret;
 
     va_start(ap, fmt);
-    ret = vasprintf(&str, fmt, ap);
+    vasprintf(&str, fmt, ap);
     va_end(ap);
     msg = hx509_get_error_string(context, error_code);
     if (msg == NULL)
 	msg = "no error";
 
-    errx(exit_code, "%s: %s", ret != -1 ? str : "ENOMEM", msg);
+    errx(exit_code, "%s: %s", str, msg);
 }

@@ -7,8 +7,7 @@ int f(int n) {
       [[clang::fallthrough]];  // This shouldn't generate a warning.
     case 1:
       n += 20;
-    case 2:  // This should generate a warning: "unannotated fallthrough"
-      n += 35;
+      [[clang::fallthrough]];  // This should generate a warning: "fallthrough annotation does not directly precede switch label".
       break;
   }
   return n;

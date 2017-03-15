@@ -1,4 +1,4 @@
-/* $NetBSD: aesxcbcmac.c,v 1.2 2016/09/26 14:50:54 christos Exp $ */
+/* $NetBSD: aesxcbcmac.c,v 1.1 2011/05/24 19:10:08 drochner Exp $ */
 
 /*
  * Copyright (C) 1995, 1996, 1997, 1998 and 2003 WIDE Project.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: aesxcbcmac.c,v 1.2 2016/09/26 14:50:54 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: aesxcbcmac.c,v 1.1 2011/05/24 19:10:08 drochner Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -39,20 +39,17 @@ __KERNEL_RCSID(0, "$NetBSD: aesxcbcmac.c,v 1.2 2016/09/26 14:50:54 christos Exp 
 #include <opencrypto/aesxcbcmac.h>
 
 int
-aes_xcbc_mac_init(void *vctx, const uint8_t *key, u_int16_t keylen)
+aes_xcbc_mac_init(void *vctx, const u_int8_t *key, u_int16_t keylen)
 {
-	static const uint8_t k1seed[AES_BLOCKSIZE] =
-	    { 1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1 };
-	static const uint8_t k2seed[AES_BLOCKSIZE] =
-	    { 2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2 };
-	static const uint8_t k3seed[AES_BLOCKSIZE] =
-	    { 3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3 };
+	u_int8_t k1seed[AES_BLOCKSIZE] = { 1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1 };
+	u_int8_t k2seed[AES_BLOCKSIZE] = { 2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2 };
+	u_int8_t k3seed[AES_BLOCKSIZE] = { 3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3 };
 	u_int32_t r_ks[(RIJNDAEL_MAXNR+1)*4];
 	aesxcbc_ctx *ctx;
-	uint8_t k1[AES_BLOCKSIZE];
+	u_int8_t k1[AES_BLOCKSIZE];
 
-	ctx = vctx;
-	memset(ctx, 0, sizeof(*ctx));
+	ctx = (aesxcbc_ctx *)vctx;
+	memset(ctx, 0, sizeof(aesxcbc_ctx));
 
 	if ((ctx->r_nr = rijndaelKeySetupEnc(r_ks, key, keylen * 8)) == 0)
 		return -1;
@@ -70,14 +67,14 @@ aes_xcbc_mac_init(void *vctx, const uint8_t *key, u_int16_t keylen)
 }
 
 int
-aes_xcbc_mac_loop(void *vctx, const uint8_t *addr, u_int16_t len)
+aes_xcbc_mac_loop(void *vctx, const u_int8_t *addr, u_int16_t len)
 {
-	uint8_t buf[AES_BLOCKSIZE];
+	u_int8_t buf[AES_BLOCKSIZE];
 	aesxcbc_ctx *ctx;
-	const uint8_t *ep;
+	const u_int8_t *ep;
 	int i;
 
-	ctx = vctx;
+	ctx = (aesxcbc_ctx *)vctx;
 	ep = addr + len;
 
 	if (ctx->buflen == sizeof(ctx->buf)) {
@@ -101,7 +98,7 @@ aes_xcbc_mac_loop(void *vctx, const uint8_t *addr, u_int16_t len)
 		ctx->buflen = 0;
 	}
 	/* due to the special processing for M[n], "=" case is not included */
-	while (ep - addr > AES_BLOCKSIZE) {
+	while (addr + AES_BLOCKSIZE < ep) {
 		memcpy(buf, addr, AES_BLOCKSIZE);
 		for (i = 0; i < sizeof(buf); i++)
 			buf[i] ^= ctx->e[i];
@@ -116,13 +113,13 @@ aes_xcbc_mac_loop(void *vctx, const uint8_t *addr, u_int16_t len)
 }
 
 void
-aes_xcbc_mac_result(uint8_t *addr, void *vctx)
+aes_xcbc_mac_result(u_int8_t *addr, void *vctx)
 {
-	uint8_t digest[AES_BLOCKSIZE];
+	u_char digest[AES_BLOCKSIZE];
 	aesxcbc_ctx *ctx;
 	int i;
 
-	ctx = vctx;
+	ctx = (aesxcbc_ctx *)vctx;
 
 	if (ctx->buflen == sizeof(ctx->buf)) {
 		for (i = 0; i < sizeof(ctx->buf); i++) {

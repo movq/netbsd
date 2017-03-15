@@ -1,4 +1,4 @@
-/*	$NetBSD: malloc.c,v 1.59 2017/01/13 04:18:54 christos Exp $	*/
+/*	$NetBSD: malloc.c,v 1.55 2012/12/30 21:23:20 dholland Exp $	*/
 
 /*
  * ----------------------------------------------------------------------------
@@ -84,27 +84,21 @@ void utrace(struct ut *, int);
 
 #include <sys/types.h>
 #if defined(__NetBSD__)
-# define malloc_minsize               16U
-# ifdef _LIBC
-#  define HAS_UTRACE
-#  define UTRACE_LABEL "malloc",
+#   define malloc_minsize               16U
+#   define HAS_UTRACE
+#   define UTRACE_LABEL "malloc",
+#include <sys/cdefs.h>
+#include "extern.h"
+#if defined(LIBC_SCCS) && !defined(lint)
+__RCSID("$NetBSD: malloc.c,v 1.55 2012/12/30 21:23:20 dholland Exp $");
+#endif /* LIBC_SCCS and not lint */
 int utrace(const char *, void *, size_t);
-# endif
-# include <sys/cdefs.h>
-# include "extern.h"
-# if defined(LIBC_SCCS) && !defined(lint)
-__RCSID("$NetBSD: malloc.c,v 1.59 2017/01/13 04:18:54 christos Exp $");
-# endif /* LIBC_SCCS and not lint */
-# include <reentrant.h>
-# ifdef _REENTRANT
+
+#include <reentrant.h>
 extern int __isthreaded;
 static mutex_t thread_lock = MUTEX_INITIALIZER;
-#  define _MALLOC_LOCK()	if (__isthreaded) mutex_lock(&thread_lock);
-#  define _MALLOC_UNLOCK()	if (__isthreaded) mutex_unlock(&thread_lock);
-# else
-#  define _MALLOC_LOCK()	
-#  define _MALLOC_UNLOCK()
-# endif
+#define _MALLOC_LOCK()	if (__isthreaded) mutex_lock(&thread_lock);
+#define _MALLOC_UNLOCK()	if (__isthreaded) mutex_unlock(&thread_lock);
 #endif /* __NetBSD__ */
 
 #if defined(__sparc__) && defined(sun)
@@ -113,7 +107,7 @@ static mutex_t thread_lock = MUTEX_INITIALIZER;
     static int fdzero;
 #   define MMAP_FD	fdzero
 #   define INIT_MMAP() \
-	{ if ((fdzero = open(_PATH_DEVZERO, O_RDWR | O_CLOEXEC, 0000)) == -1) \
+	{ if ((fdzero = open(_PATH_DEVZERO, O_RDWR, 0000)) == -1) \
 	    wrterror("open of /dev/zero"); }
 #endif /* __sparc__ */
 
@@ -458,7 +452,7 @@ malloc_init(void)
     /*
      * Compute page-size related variables.
      */
-    malloc_pagesize = getpagesize();
+    malloc_pagesize = (size_t)sysconf(_SC_PAGESIZE);
     malloc_pagemask = malloc_pagesize - 1;
     for (malloc_pageshift = 0;
 	 (1UL << malloc_pageshift) != malloc_pagesize;
@@ -478,10 +472,8 @@ malloc_init(void)
 		continue;
 	    b[j] = '\0';
 	    p = b;
-#ifdef _LIBC
 	} else if (i == 1 && issetugid() == 0) {
 	    p = getenv("MALLOC_OPTIONS");
-#endif
 	} else if (i == 1) {
 	    continue;
 	} else {

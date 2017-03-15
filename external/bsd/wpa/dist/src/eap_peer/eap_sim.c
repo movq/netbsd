@@ -249,7 +249,6 @@ static int eap_sim_gsm_auth(struct eap_sm *sm, struct eap_sim_data *data)
 			return eap_sim_ext_sim_req(sm, data);
 	}
 
-#ifdef PCSC_FUNCS
 	if (conf->pcsc) {
 		if (scard_gsm_auth(sm->scard_ctx, data->rand[0],
 				   data->sres[0], data->kc[0]) ||
@@ -264,7 +263,6 @@ static int eap_sim_gsm_auth(struct eap_sm *sm, struct eap_sim_data *data)
 		}
 		return 0;
 	}
-#endif /* PCSC_FUNCS */
 
 #ifdef CONFIG_SIM_SIMULATOR
 	if (conf->password) {
@@ -1044,7 +1042,7 @@ static struct wpabuf * eap_sim_process(struct eap_sm *sm, void *priv,
 	}
 
 	pos = eap_hdr_validate(EAP_VENDOR_IETF, EAP_TYPE_SIM, reqData, &len);
-	if (pos == NULL || len < 3) {
+	if (pos == NULL || len < 1) {
 		ret->ignore = TRUE;
 		return NULL;
 	}
@@ -1137,7 +1135,7 @@ static void * eap_sim_init_for_reauth(struct eap_sm *sm, void *priv)
 	if (random_get_bytes(data->nonce_mt, EAP_SIM_NONCE_MT_LEN)) {
 		wpa_printf(MSG_WARNING, "EAP-SIM: Failed to get random data "
 			   "for NONCE_MT");
-		eap_sim_deinit(sm, data);
+		os_free(data);
 		return NULL;
 	}
 	data->num_id_req = 0;
@@ -1237,6 +1235,7 @@ static u8 * eap_sim_get_emsk(struct eap_sm *sm, void *priv, size_t *len)
 int eap_peer_sim_register(void)
 {
 	struct eap_method *eap;
+	int ret;
 
 	eap = eap_peer_method_alloc(EAP_PEER_METHOD_INTERFACE_VERSION,
 				    EAP_VENDOR_IETF, EAP_TYPE_SIM, "SIM");
@@ -1255,5 +1254,8 @@ int eap_peer_sim_register(void)
 	eap->get_identity = eap_sim_get_identity;
 	eap->get_emsk = eap_sim_get_emsk;
 
-	return eap_peer_method_register(eap);
+	ret = eap_peer_method_register(eap);
+	if (ret)
+		eap_peer_method_free(eap);
+	return ret;
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: mips1_pte.h,v 1.20 2015/06/26 22:56:36 matt Exp $	*/
+/*	$NetBSD: mips1_pte.h,v 1.19 2011/02/20 07:45:47 matt Exp $	*/
 
 /*
  * Copyright (c) 1988 University of Utah.
@@ -45,7 +45,6 @@
  */
 
 #ifndef _LOCORE
-#if 0
 struct mips1_pte {
 #if BYTE_ORDER == BIG_ENDIAN
 unsigned int	pg_pfnum:20,		/* HW: core page frame number or 0 */
@@ -70,7 +69,6 @@ unsigned int	pg_prot:2,		/* SW: access control */
 		pg_pfnum:20;		/* HW: core page frame number or 0 */
 #endif
 };
-#endif
 #endif /* _LOCORE */
 
 #define	MIPS1_PG_PROT	0x00000003

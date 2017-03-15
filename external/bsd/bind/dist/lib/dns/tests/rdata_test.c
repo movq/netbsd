@@ -1,4 +1,4 @@
-/*	$NetBSD: rdata_test.c,v 1.6 2016/10/04 23:46:01 christos Exp $	*/
+/*	$NetBSD: rdata_test.c,v 1.3.2.1 2016/10/14 12:01:30 martin Exp $	*/
 
 /*
  * Copyright (C) 2012, 2013, 2015, 2016  Internet Systems Consortium, Inc. ("ISC")

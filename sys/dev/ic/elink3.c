@@ -1,4 +1,4 @@
-/*	$NetBSD: elink3.c,v 1.140 2016/12/15 09:28:05 ozaki-r Exp $	*/
+/*	$NetBSD: elink3.c,v 1.135 2014/08/10 16:44:35 tls Exp $	*/
 
 /*-
  * Copyright (c) 1998, 2001 The NetBSD Foundation, Inc.
@@ -62,7 +62,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: elink3.c,v 1.140 2016/12/15 09:28:05 ozaki-r Exp $");
+__KERNEL_RCSID(0, "$NetBSD: elink3.c,v 1.135 2014/08/10 16:44:35 tls Exp $");
 
 #include "opt_inet.h"
 
@@ -77,7 +77,7 @@ __KERNEL_RCSID(0, "$NetBSD: elink3.c,v 1.140 2016/12/15 09:28:05 ozaki-r Exp $")
 #include <sys/syslog.h>
 #include <sys/select.h>
 #include <sys/device.h>
-#include <sys/rndsource.h>
+#include <sys/rnd.h>
 
 #include <net/if.h>
 #include <net/if_dl.h>
@@ -1202,7 +1202,8 @@ startagain:
 				bus_space_write_multi_1(iot, ioh,
 				    txreg, mtod(m, u_int8_t *), m->m_len);
 			}
-			m = m0 = m_free(m);
+			MFREE(m, m0);
+			m = m0;
 		}
 	} else {
 		for (m = m0; m;) {
@@ -1222,7 +1223,8 @@ startagain:
 				bus_space_write_1(iot, ioh, txreg,
 				     *(mtod(m, u_int8_t *) + m->m_len - 1));
 			}
-			m = m0 = m_free(m);
+			MFREE(m, m0);
+			m = m0;
 		}
 	}
 	while (pad--)
@@ -1486,7 +1488,15 @@ again:
 		goto abort;
 	}
 
-	if_percpuq_enqueue(ifp->if_percpuq, m);
+	++ifp->if_ipackets;
+
+	/*
+	 * Check if there's a BPF listener on this interface.
+	 * If so, hand off the raw packet to BPF.
+	 */
+	bpf_mtap(ifp, m);
+
+	(*ifp->if_input)(ifp, m);
 
 	/*
 	 * In periods of high traffic we can actually receive enough
@@ -1555,7 +1565,7 @@ epget(struct ep_softc *sc, int totlen)
 		m->m_flags = M_PKTHDR;
 		memset(&m->m_pkthdr, 0, sizeof(m->m_pkthdr));
 	}
-	m_set_rcvif(m, ifp);
+	m->m_pkthdr.rcvif = ifp;
 	m->m_pkthdr.len = totlen;
 	len = MHLEN;
 

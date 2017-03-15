@@ -1,4 +1,4 @@
-/*	$NetBSD: hash_test.c,v 1.1.1.9 2016/05/26 15:45:52 christos Exp $	*/
+/*	$NetBSD: hash_test.c,v 1.1.1.3.4.4 2016/10/14 12:01:32 martin Exp $	*/
 
 /*
  * Copyright (C) 2011-2016  Internet Systems Consortium, Inc. ("ISC")

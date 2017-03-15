@@ -1,4 +1,5 @@
 set(LLVM_LINK_COMPONENTS
+  IPA
   Analysis
   AsmParser
   Core
@@ -6,16 +7,9 @@ set(LLVM_LINK_COMPONENTS
   )
 
 add_llvm_unittest(AnalysisTests
-  AliasAnalysisTest.cpp
-  BlockFrequencyInfoTest.cpp
-  BranchProbabilityInfoTest.cpp
   CallGraphTest.cpp
   CFGTest.cpp
-  CGSCCPassManagerTest.cpp
   LazyCallGraphTest.cpp
-  MemoryBuiltinsTest.cpp
   ScalarEvolutionTest.cpp
-  TBAATest.cpp
-  ValueTrackingTest.cpp
-  UnrollAnalyzer.cpp
+  MixedTBAATest.cpp
   )

@@ -14,14 +14,13 @@
 #ifndef LLVM_ADT_BITVECTOR_H
 #define LLVM_ADT_BITVECTOR_H
 
+#include "llvm/Support/Compiler.h"
+#include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/MathExtras.h"
 #include <algorithm>
 #include <cassert>
 #include <climits>
-#include <cstdint>
 #include <cstdlib>
-#include <cstring>
-#include <utility>
 
 namespace llvm {
 
@@ -30,12 +29,9 @@ class BitVector {
 
   enum { BITWORD_SIZE = (unsigned)sizeof(BitWord) * CHAR_BIT };
 
-  static_assert(BITWORD_SIZE == 64 || BITWORD_SIZE == 32,
-                "Unsupported word size");
-
   BitWord  *Bits;        // Actual bits.
   unsigned Size;         // Size of bitvector in bits.
-  unsigned Capacity;     // Number of BitWords allocated in the Bits array.
+  unsigned Capacity;     // Size of allocated memory in BitWord.
 
 public:
   typedef unsigned size_type;
@@ -46,14 +42,15 @@ public:
     BitWord *WordRef;
     unsigned BitPos;
 
+    reference();  // Undefined
+
   public:
     reference(BitVector &b, unsigned Idx) {
       WordRef = &b.Bits[Idx / BITWORD_SIZE];
       BitPos = Idx % BITWORD_SIZE;
     }
 
-    reference() = delete;
-    reference(const reference&) = default;
+    ~reference() {}
 
     reference &operator=(reference t) {
       *this = bool(t);
@@ -69,7 +66,7 @@ public:
     }
 
     operator bool() const {
-      return ((*WordRef) & (BitWord(1) << BitPos)) != 0;
+      return ((*WordRef) & (BitWord(1) << BitPos)) ? true : false;
     }
   };
 
@@ -105,7 +102,6 @@ public:
   BitVector(BitVector &&RHS)
     : Bits(RHS.Bits), Size(RHS.Size), Capacity(RHS.Capacity) {
     RHS.Bits = nullptr;
-    RHS.Size = RHS.Capacity = 0;
   }
 
   ~BitVector() {
@@ -122,7 +118,12 @@ public:
   size_type count() const {
     unsigned NumBits = 0;
     for (unsigned i = 0; i < NumBitWords(size()); ++i)
-      NumBits += countPopulation(Bits[i]);
+      if (sizeof(BitWord) == 4)
+        NumBits += CountPopulation_32((uint32_t)Bits[i]);
+      else if (sizeof(BitWord) == 8)
+        NumBits += CountPopulation_64(Bits[i]);
+      else
+        llvm_unreachable("Unsupported!");
     return NumBits;
   }
 
@@ -156,8 +157,13 @@ public:
   /// of the bits are set.
   int find_first() const {
     for (unsigned i = 0; i < NumBitWords(size()); ++i)
-      if (Bits[i] != 0)
-        return i * BITWORD_SIZE + countTrailingZeros(Bits[i]);
+      if (Bits[i] != 0) {
+        if (sizeof(BitWord) == 4)
+          return i * BITWORD_SIZE + countTrailingZeros((uint32_t)Bits[i]);
+        if (sizeof(BitWord) == 8)
+          return i * BITWORD_SIZE + countTrailingZeros(Bits[i]);
+        llvm_unreachable("Unsupported!");
+      }
     return -1;
   }
 
@@ -174,13 +180,23 @@ public:
     // Mask off previous bits.
     Copy &= ~0UL << BitPos;
 
-    if (Copy != 0)
-      return WordPos * BITWORD_SIZE + countTrailingZeros(Copy);
+    if (Copy != 0) {
+      if (sizeof(BitWord) == 4)
+        return WordPos * BITWORD_SIZE + countTrailingZeros((uint32_t)Copy);
+      if (sizeof(BitWord) == 8)
+        return WordPos * BITWORD_SIZE + countTrailingZeros(Copy);
+      llvm_unreachable("Unsupported!");
+    }
 
     // Check subsequent words.
     for (unsigned i = WordPos+1; i < NumBitWords(size()); ++i)
-      if (Bits[i] != 0)
-        return i * BITWORD_SIZE + countTrailingZeros(Bits[i]);
+      if (Bits[i] != 0) {
+        if (sizeof(BitWord) == 4)
+          return i * BITWORD_SIZE + countTrailingZeros((uint32_t)Bits[i]);
+        if (sizeof(BitWord) == 8)
+          return i * BITWORD_SIZE + countTrailingZeros(Bits[i]);
+        llvm_unreachable("Unsupported!");
+      }
     return -1;
   }
 
@@ -245,7 +261,7 @@ public:
 
     BitWord PrefixMask = ~0UL << (I % BITWORD_SIZE);
     Bits[I / BITWORD_SIZE] |= PrefixMask;
-    I = alignTo(I, BITWORD_SIZE);
+    I = RoundUpToAlignment(I, BITWORD_SIZE);
 
     for (; I + BITWORD_SIZE <= E; I += BITWORD_SIZE)
       Bits[I / BITWORD_SIZE] = ~0UL;
@@ -284,7 +300,7 @@ public:
 
     BitWord PrefixMask = ~0UL << (I % BITWORD_SIZE);
     Bits[I / BITWORD_SIZE] &= ~PrefixMask;
-    I = alignTo(I, BITWORD_SIZE);
+    I = RoundUpToAlignment(I, BITWORD_SIZE);
 
     for (; I + BITWORD_SIZE <= E; I += BITWORD_SIZE)
       Bits[I / BITWORD_SIZE] = 0UL;
@@ -455,7 +471,6 @@ public:
     Capacity = RHS.Capacity;
 
     RHS.Bits = nullptr;
-    RHS.Size = RHS.Capacity = 0;
 
     return *this;
   }
@@ -544,7 +559,7 @@ private:
 
   template<bool AddBits, bool InvertMask>
   void applyMask(const uint32_t *Mask, unsigned MaskWords) {
-    static_assert(BITWORD_SIZE % 32 == 0, "Unsupported BitWord size.");
+    assert(BITWORD_SIZE % 32 == 0 && "Unsupported BitWord size.");
     MaskWords = std::min(MaskWords, (size() + 31) / 32);
     const unsigned Scale = BITWORD_SIZE / 32;
     unsigned i;
@@ -568,17 +583,9 @@ private:
     if (AddBits)
       clear_unused_bits();
   }
-
-public:
-  /// Return the size (in bytes) of the bit vector.
-  size_t getMemorySize() const { return Capacity * sizeof(BitWord); }
 };
 
-static inline size_t capacity_in_bytes(const BitVector &X) {
-  return X.getMemorySize();
-}
-
-} // end namespace llvm
+} // End llvm namespace
 
 namespace std {
   /// Implement std::swap in terms of BitVector swap.
@@ -586,6 +593,6 @@ namespace std {
   swap(llvm::BitVector &LHS, llvm::BitVector &RHS) {
     LHS.swap(RHS);
   }
-} // end namespace std
+}
 
-#endif // LLVM_ADT_BITVECTOR_H
+#endif

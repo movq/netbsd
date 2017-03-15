@@ -14,7 +14,8 @@
 do {
   StatInc(thr, StatShadowProcessed);
   const unsigned kAccessSize = 1 << kAccessSizeLog;
-  u64 *sp = &shadow_mem[idx];
+  unsigned off = cur.ComputeSearchOffset();
+  u64 *sp = &shadow_mem[(idx + off) % kShadowCnt];
   old = LoadShadow(sp);
   if (old.IsZero()) {
     StatInc(thr, StatShadowZero);
@@ -30,6 +31,16 @@ do {
     // same thread?
     if (Shadow::TidsAreEqual(old, cur)) {
       StatInc(thr, StatShadowSameThread);
+      if (OldIsInSameSynchEpoch(old, thr)) {
+        if (old.IsRWNotWeaker(kAccessIsWrite, kIsAtomic)) {
+          // found a slot that holds effectively the same info
+          // (that is, same tid, same sync epoch and same size)
+          StatInc(thr, StatMopSame);
+          return;
+        }
+        StoreIfNotYetStored(sp, &store_word);
+        break;
+      }
       if (old.IsRWWeakerOrEqual(kAccessIsWrite, kIsAtomic))
         StoreIfNotYetStored(sp, &store_word);
       break;
@@ -44,7 +55,8 @@ do {
     goto RACE;
   }
   // Do the memory access intersect?
-  if (Shadow::TwoRangesIntersect(old, cur, kAccessSize)) {
+  // In Go all memory accesses are 1 byte, so there can be no intersections.
+  if (kCppMode && Shadow::TwoRangesIntersect(old, cur, kAccessSize)) {
     StatInc(thr, StatShadowIntersect);
     if (Shadow::TidsAreEqual(old, cur)) {
       StatInc(thr, StatShadowSameThread);

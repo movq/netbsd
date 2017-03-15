@@ -1,4 +1,4 @@
-/*	$NetBSD: paths.h,v 1.43 2017/01/16 19:15:28 christos Exp $	*/
+/*	$NetBSD: paths.h,v 1.41 2012/06/03 21:42:46 joerg Exp $	*/
 
 /*
  * Copyright (c) 1989, 1993
@@ -67,7 +67,6 @@
 #define	_PATH_DEVCDB	"/var/run/dev.cdb"
 #define	_PATH_DEVDB	"/var/run/dev.db"
 #define	_PATH_DEVNULL	"/dev/null"
-#define	_PATH_DEVZERO	"/dev/zero"
 #define	_PATH_DRUM	"/dev/drum"
 #define	_PATH_ESDB	"/usr/share/i18n/esdb"
 #define	_PATH_FTPUSERS	"/etc/ftpusers"
@@ -100,7 +99,6 @@
 #define	_PATH_URANDOM	"/dev/urandom"
 #define	_PATH_VIDEO	"/dev/video"
 #define	_PATH_VIDEO0	"/dev/video0"
-#define	_PATH_WATCHDOG	"/dev/watchdog"
 
 /*
  * Provide trailing slash, since mostly used for building pathnames.

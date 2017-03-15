@@ -1,4 +1,4 @@
-/*	$NetBSD: am335x_prcm.h,v 1.10 2016/10/18 15:10:35 kiyohara Exp $	*/
+/*	$NetBSD: am335x_prcm.h,v 1.8.2.1 2015/06/10 16:38:05 snj Exp $	*/
 
 /*
  * TI OMAP Power, Reset, and Clock Management on the AM335x
@@ -150,6 +150,7 @@ struct omap_module {
 #define RST_GLOBAL_COLD_SW	__BIT(1)
 
 #ifdef _KERNEL
+int  set_mpu_volt(int);
 void am335x_sys_clk(bus_space_handle_t);
 void am335x_cpu_clk(void);
 #endif

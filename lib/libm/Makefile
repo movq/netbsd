@@ -1,4 +1,4 @@
-#  $NetBSD: Makefile,v 1.188 2017/02/23 02:05:30 scole Exp $
+#  $NetBSD: Makefile,v 1.164.2.4 2016/09/25 11:32:33 bouyer Exp $
 #
 #  @(#)Makefile 5.1beta 93/09/24
 #
@@ -57,41 +57,40 @@ LINTFLAGS += -g
 .PATH: ${.CURDIR}/arch/aarch64
 ARCH_SRCS = e_sqrt.S e_sqrtf.S s_fabsf.S
 ARCH_SRCS+= s_fma.S s_fmaf.S s_fmax.S s_fmaxf.S s_fmin.S s_fminf.S
+COPTS.e_sqrtl.c += -DHAVE_FENV_H
 COMMON_SRCS+= fenv.c
 COMMON_SRCS+= e_sqrtl.c
 COMMON_SRCS+= s_fma.c s_fmaf.c s_fmal.c
 .elif (${LIBC_MACHINE_ARCH} == "alpha")
 .PATH: ${.CURDIR}/arch/alpha
 ARCH_SRCS = s_copysign.S s_copysignf.S lrint.S
-COMMON_SRCS+= fenv.c
 COPTS+=	-mfloat-ieee -mieee-with-inexact -mfp-trap-mode=sui -mtrap-precision=i
 .elif (${LIBC_MACHINE_CPU} == "arm")
 .PATH.c: ${.CURDIR}/arch/arm
 COMMON_SRCS+= fenv.c s_nexttowardf.c \
 	s_nearbyint.c s_rintl.c
-.for f in fenv.c lrint.S lrintf.S s_fabsf.S s_fma.S s_fmaf.S
-COPTS.$f +=	-mfpu=vfp
-.endfor
+COPTS.e_sqrtl.c += -DHAVE_FENV_H
+COPTS.fenv.c+=	-mfpu=vfp
 COMMON_SRCS+= s_fma.c s_fmaf.c s_fmal.c
 .if (${MKSOFTFLOAT} == "no")
 .PATH.S: ${.CURDIR}/arch/arm
 ARCH_SRCS = e_sqrt.S e_sqrtf.S lrint.S lrintf.S s_fabsf.S s_fma.S s_fmaf.S
 .endif
-.elif (${LIBC_MACHINE_ARCH} == "ia64")
-.PATH: ${.CURDIR}/arch/ia64
-COMMON_SRCS += fenv.c
 .elif (${LIBC_MACHINE_ARCH} == "hppa")
 .PATH.c: ${.CURDIR}/arch/hppa
 COMMON_SRCS+= fenv.c s_nexttowardf.c \
 	s_nearbyint.c s_rintl.c
+COPTS.e_sqrtl.c += -DHAVE_FENV_H
 .elif (${LIBC_MACHINE_ARCH} == "sparc")
 .PATH: ${.CURDIR}/arch/sparc
 COMMON_SRCS+= fenv.c
+COPTS.e_sqrtl.c += -DHAVE_FENV_H
 COMMON_SRCS+= s_fma.c s_fmaf.c s_fmal.c
 .elif (${LIBC_MACHINE_ARCH} == "sparc64")
 .PATH: ${.CURDIR}/arch/sparc64
 COMMON_SRCS+= fenv.c s_nexttowardf.c \
 	s_nearbyint.c s_rintl.c
+COPTS.e_sqrtl.c += -DHAVE_FENV_H
 .ifndef _COMPAT_M32_MK_
 COMMON_SRCS+= s_nexttoward.c
 .endif
@@ -107,20 +106,19 @@ COMMON_SRCS+= s_fma.c s_fmaf.c s_fmal.c
 COMMON_SRCS+= fenv.c s_nexttoward.c s_nexttowardf.c \
 	s_nearbyint.c s_rintl.c
 COMMON_SRCS+= s_fma.c s_fmaf.c s_fmal.c
+COPTS.e_sqrtl.c += -DHAVE_FENV_H
 
 ARCH_SRCS = e_acos.S e_asin.S e_atan2.S e_exp.S e_expf.S e_fmod.S e_log.S \
 	    e_logf.S e_log10.S e_log10f.S e_log2.S e_log2f.S e_remainder.S \
 	    e_remainderf.S e_scalb.S e_scalbf.S e_sqrt.S e_sqrtf.S s_atan.S \
 	    s_atanf.S s_ceil.S s_ceilf.S s_copysign.S s_copysignf.S s_cos.S \
 	    s_cosf.S s_finite.S s_finitef.S s_floor.S s_floorf.S \
-	    s_log1p.S s_log1pf.S s_logb.S s_logbf.S s_logbl.S \
+	    s_ilogb.S s_ilogbf.S s_ilogbl.S s_log1p.S s_log1pf.S \
+	    s_logb.S s_logbf.S s_logbl.S \
 	    s_rint.S s_rintf.S s_scalbn.S s_scalbnf.S s_significand.S \
 	    s_significandf.S s_sin.S s_sinf.S s_tan.S s_tanf.S lrint.S 
-# do not pick up the i387 asm version for the following functions;
-# it is incorrect
-.for f in modf ilogb ilogbl ilogbf
-s_${f}.o s_${f}.pico s_${f}.po s_${f}.go s_${f}.d: s_${f}.c
-.endfor
+# do not pick up the i387 asm version, it is incorrect
+s_modf.o s_modf.pico s_modf.po s_modf.d: s_modf.c
 
 .if (${MACHINE_ARCH} == "i386")
 SUBDIR=arch/i387
@@ -143,15 +141,13 @@ ARCH_SRCS = e_acos.S e_asin.S e_atanh.S e_cosh.S e_exp.S e_fmod.S e_log.S \
 	    e_log10.S e_remainder.S e_scalb.S e_sinh.S e_sqrt.S s_atan.S \
 	    s_ceil.S s_copysign.S s_cos.S s_expm1.S s_finite.S s_floor.S \
 	    s_log1p.S s_logb.S s_rint.S s_scalbn.S s_sin.S s_tan.S s_tanh.S
-COMMON_SRCS += fenv.c
 .endif
 .endif
 # end of m68k
 .elif (${LIBC_MACHINE_ARCH} == "vax")
 .PATH:	${.CURDIR}/arch/vax
 
-#NOIEEE_ARCH+= s_fmax.c s_fmaxf.c s_fmaxl.c
-#NOIEEE_ARCH+= n_infnan.S n_argred.S n_sqrt.S
+#NOIEEE_ARCH= n_infnan.S n_argred.S n_sqrt.S
 #ARCH_SRCS = n_atan2.S n_cabs.S n_cbrt.S n_support.S n_sincos.S n_tan.S
 # XXX - ripped out due to lack of the insn polyd in the Mariah chip,
 # and emulation code isn't written yet.
@@ -170,15 +166,6 @@ ARCH_SRCS += s_fma.S s_fmaf.S
 ARCH_SRCS += s_fmax.S s_fmaxf.S
 ARCH_SRCS += s_fmin.S s_fminf.S
 .endif
-.elif (${LIBC_MACHINE_ARCH} == "powerpc")
-.PATH:	${.CURDIR}/arch/powerpc
-COMMON_SRCS += fenv.c
-.elif (${LIBC_MACHINE_CPU} == "mips")
-.PATH:	${.CURDIR}/arch/mips
-COMMON_SRCS += fenv.c
-.elif (${LIBC_MACHINE_CPU} == "sh3")
-.PATH:	${.CURDIR}/arch/sh3
-COMMON_SRCS += fenv.c
 .endif
 
 WARNS?=5
@@ -248,10 +235,9 @@ COPTS.compat_cabs.c=	${${ACTIVE_CC} == "gcc":? -fno-builtin-cabs :}
 COPTS.compat_cabsf.c=	${${ACTIVE_CC} == "gcc":? -fno-builtin-cabsf :}
 
 # math routines for non-IEEE architectures.
-NOIEEE_SRCS = n_asincos.c n_acosh.c n_asinh.c n_atan.c n_atanh.c n_atanhf.c \
-	n_cosh.c \
+NOIEEE_SRCS = n_asincos.c n_acosh.c n_asinh.c n_atan.c n_atanh.c n_cosh.c \
 	n_erf.c n_exp.c n_exp2.c n_exp2f.c n_exp__E.c n_expm1.c n_floor.c \
-	n_fmod.c n_gamma.c n_ilogb.c \
+	n_fmod.c n_gamma.c \
 	n_lgamma.c n_j0.c n_j1.c n_jn.c n_log.c n_log10.c n_log1p.c \
 	n_log2.c n_log__L.c n_pow.c n_sinh.c n_tanh.c \
 	n_sincos.c n_tan.c \
@@ -292,7 +278,7 @@ COPTS.s_tanh.c+= -O0
 MAN+=	acos.3 acosh.3 asin.3 asinh.3 atan.3 atan2.3 atanh.3 \
 	ceil.3 copysign.3 cos.3 cosh.3 \
 	erf.3 exp.3 \
-	fabs.3 finite.3 fma.3 fmod.3 frexp.3 hypot.3 \
+	fabs.3 finite.3 fmod.3 frexp.3 hypot.3 \
 	ieee_test.3 ilogb.3 isinff.3 j0.3 ldexp.3 lgamma.3 log.3 lrint.3 \
 	math.3 modf.3 nextafter.3 pow.3 \
 	remainder.3 rint.3 round.3 \
@@ -343,8 +329,7 @@ MLINKS+=log.3 logf.3 \
 	log.3 log2.3 \
 	log.3 log2f.3
 MLINKS+=pow.3 powf.3
-MLINKS+=fabs.3 fabsf.3 \
-	fabs.3 fabsl.3
+MLINKS+=fabs.3 fabsf.3
 MLINKS+=finite.3 finitef.3
 MLINKS+=fmod.3 fmodf.3 \
 	fmod.3 fmodl.3
@@ -356,8 +341,6 @@ MLINKS+=ilogb.3 ilogbf.3 ilogb.3 ilogbl.3
 MLINKS+=isinff.3 isnanf.3
 MLINKS+=j0.3 j0f.3 j0.3 j1.3 j0.3 j1f.3 j0.3 jn.3 j0.3 jnf.3 \
 	j0.3 y0.3 j0.3 y0f.3 j0.3 y1.3 j0.3 y1f.3 j0.3 yn.3 j0.3 ynf.3
-MLINKS+=ldexp.3 ldexpf.3 \
-	ldexp.3 ldexpl.3
 MLINKS+=lgamma.3 lgammaf.3 lgamma.3 lgamma_r.3 lgamma.3 lgammaf_r.3 \
 	lgamma.3 gamma.3 lgamma.3 gammaf.3 lgamma.3 gamma_r.3 \
 	lgamma.3 gammaf_r.3 lgamma.3 tgamma.3 lgamma.3 tgammaf.3
@@ -365,17 +348,12 @@ MLINKS+=modf.3 modff.3 \
 	modf.3 modfl.3
 MLINKS+=nextafter.3 nextafterf.3 \
 	nextafter.3 nextafterl.3 \
-	nextafter.3 nexttoward.3 \
-	nextafter.3 nexttowardf.3
+	nextafter.3 nexttoward.3
 MLINKS+=lrint.3 lrintf.3 lrint.3 llrint.3 lrint.3 llrintf.3
 MLINKS+=remainder.3 remainderf.3 \
 	remainder.3 remquo.3 \
 	remainder.3 remquof.3
-MLINKS+=rint.3 rintf.3 \
-	rint.3 rintl.3 \
-	rint.3 nearbyint.3 \
-	rint.3 nearbyintf.3 \
-	rint.3 nearbyintl.3
+MLINKS+=rint.3 rintf.3
 MLINKS+=scalbn.3 scalbnf.3 \
 	scalbn.3 scalbnl.3
 MLINKS+=sin.3 sinf.3
@@ -395,8 +373,6 @@ MLINKS+=fmax.3 fminl.3
 MLINKS+=fmax.3 fminf.3
 MLINKS+=fdim.3 fdiml.3
 MLINKS+=fdim.3 fdimf.3
-MLINKS+=fma.3 fmaf.3 \
-	fma.3 fmal.3
 
 .if (${MKCOMPLEX} != "no")
 .include "${.CURDIR}/complex/Makefile.inc"

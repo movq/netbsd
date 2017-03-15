@@ -11,16 +11,15 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include <stdio.h>
-
 #if _ARCH_PPC
 
 #include "int_lib.h"
+#include <stdio.h>
 #include <math.h>
 
 // Returns: a ^ b
 
-COMPILER_RT_ABI long double __powitf2(long double a, si_int b);
+long double __powitf2(long double a, si_int b);
 
 int test__powitf2(long double a, si_int b, long double expected)
 {

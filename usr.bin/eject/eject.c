@@ -1,4 +1,4 @@
-/*	$NetBSD: eject.c,v 1.28 2016/09/05 00:40:28 sevan Exp $	*/
+/*	$NetBSD: eject.c,v 1.27 2012/07/14 20:41:27 abs Exp $	*/
 
 /*-
  * Copyright (c) 1999 The NetBSD Foundation, Inc.
@@ -36,7 +36,7 @@ __COPYRIGHT("@(#) Copyright (c) 1999\
 #endif				/* not lint */
 
 #ifndef lint
-__RCSID("$NetBSD: eject.c,v 1.28 2016/09/05 00:40:28 sevan Exp $");
+__RCSID("$NetBSD: eject.c,v 1.27 2012/07/14 20:41:27 abs Exp $");
 #endif				/* not lint */
 
 #include <sys/types.h>
@@ -115,6 +115,7 @@ enum eject_op {
 int verbose_f = 0;
 int umount_f = 1;
 
+int main(int, char *[]);
 __dead static void usage(void);
 static char *nick2dev(const char *);
 static char *nick2rdev(const char *);

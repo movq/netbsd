@@ -85,20 +85,19 @@ public:
   /// create the PCHGenerator instance returned by CreateASTConsumer.
   ///
   /// \returns true if an error occurred, false otherwise.
-  static std::unique_ptr<raw_pwrite_stream>
-  ComputeASTConsumerArguments(CompilerInstance &CI, StringRef InFile,
-                              std::string &Sysroot, std::string &OutputFile);
-
-  bool BeginSourceFileAction(CompilerInstance &CI, StringRef Filename) override;
+  static bool ComputeASTConsumerArguments(CompilerInstance &CI,
+                                          StringRef InFile,
+                                          std::string &Sysroot,
+                                          std::string &OutputFile,
+                                          raw_ostream *&OS);
 };
 
 class GenerateModuleAction : public ASTFrontendAction {
-  virtual std::unique_ptr<raw_pwrite_stream>
-  CreateOutputFile(CompilerInstance &CI, StringRef InFile) = 0;
-
+  clang::Module *Module;
+  const FileEntry *ModuleMapForUniquing;
+  bool IsSystem;
+  
 protected:
-  bool BeginSourceFileAction(CompilerInstance &CI, StringRef Filename) override;
-
   std::unique_ptr<ASTConsumer> CreateASTConsumer(CompilerInstance &CI,
                                                  StringRef InFile) override;
 
@@ -107,31 +106,24 @@ protected:
   }
 
   bool hasASTFileSupport() const override { return false; }
-};
-
-class GenerateModuleFromModuleMapAction : public GenerateModuleAction {
-  clang::Module *Module = nullptr;
-  const FileEntry *ModuleMapForUniquing = nullptr;
-  bool IsSystem = false;
-
-private:
-  bool BeginSourceFileAction(CompilerInstance &CI, StringRef Filename) override;
-
-  std::unique_ptr<raw_pwrite_stream>
-  CreateOutputFile(CompilerInstance &CI, StringRef InFile) override;
 
 public:
-  GenerateModuleFromModuleMapAction() {}
-  GenerateModuleFromModuleMapAction(const FileEntry *ModuleMap, bool IsSystem)
-      : ModuleMapForUniquing(ModuleMap), IsSystem(IsSystem) {}
-};
+  GenerateModuleAction(const FileEntry *ModuleMap = nullptr,
+                       bool IsSystem = false)
+    : ASTFrontendAction(), ModuleMapForUniquing(ModuleMap), IsSystem(IsSystem)
+  { }
 
-class GenerateModuleInterfaceAction : public GenerateModuleAction {
-private:
   bool BeginSourceFileAction(CompilerInstance &CI, StringRef Filename) override;
 
-  std::unique_ptr<raw_pwrite_stream>
-  CreateOutputFile(CompilerInstance &CI, StringRef InFile) override;
+  /// \brief Compute the AST consumer arguments that will be used to
+  /// create the PCHGenerator instance returned by CreateASTConsumer.
+  ///
+  /// \returns true if an error occurred, false otherwise.
+  bool ComputeASTConsumerArguments(CompilerInstance &CI,
+                                   StringRef InFile,
+                                   std::string &Sysroot,
+                                   std::string &OutputFile,
+                                   raw_ostream *&OS);
 };
 
 class SyntaxOnlyAction : public ASTFrontendAction {
@@ -140,7 +132,6 @@ protected:
                                                  StringRef InFile) override;
 
 public:
-  ~SyntaxOnlyAction() override;
   bool hasCodeCompletionSupport() const override { return true; }
 };
 
@@ -150,7 +141,6 @@ class DumpModuleInfoAction : public ASTFrontendAction {
 protected:
   std::unique_ptr<ASTConsumer> CreateASTConsumer(CompilerInstance &CI,
                                                  StringRef InFile) override;
-  bool BeginInvocation(CompilerInstance &CI) override;
   void ExecuteAction() override;
 
 public:
@@ -181,7 +171,7 @@ public:
  */
 class ASTMergeAction : public FrontendAction {
   /// \brief The action that the merge action adapts.
-  std::unique_ptr<FrontendAction> AdaptedAction;
+  FrontendAction *AdaptedAction;
   
   /// \brief The set of AST files to merge.
   std::vector<std::string> ASTFiles;
@@ -197,9 +187,8 @@ protected:
   void EndSourceFileAction() override;
 
 public:
-  ASTMergeAction(std::unique_ptr<FrontendAction> AdaptedAction,
-                 ArrayRef<std::string> ASTFiles);
-  ~ASTMergeAction() override;
+  ASTMergeAction(FrontendAction *AdaptedAction, ArrayRef<std::string> ASTFiles);
+  virtual ~ASTMergeAction();
 
   bool usesPreprocessorOnly() const override;
   TranslationUnitKind getTranslationUnitKind() override;

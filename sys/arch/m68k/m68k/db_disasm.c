@@ -1,4 +1,4 @@
-/*	$NetBSD: db_disasm.c,v 1.41 2014/09/21 16:32:51 christos Exp $	*/
+/*	$NetBSD: db_disasm.c,v 1.40.4.1 2014/10/30 12:30:24 martin Exp $	*/
 
 /*
  * Copyright (c) 1994 Christian E. Hopps
@@ -63,7 +63,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: db_disasm.c,v 1.41 2014/09/21 16:32:51 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: db_disasm.c,v 1.40.4.1 2014/10/30 12:30:24 martin Exp $");
 
 #include <sys/param.h>
 #ifdef _KERNEL

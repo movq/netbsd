@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.46 2017/01/24 18:04:05 christos Exp $
+#	$NetBSD: Makefile,v 1.44 2010/02/11 09:06:51 roy Exp $
 
 .include <bsd.own.mk>
 .include "${NETBSDSRCDIR}/distrib/common/Makefile.distrib"
@@ -7,7 +7,7 @@
 
 IMAGE=		miniroot.fs
 IMAGESIZE=	6m
-MAKEFS_FLAGS+=	-o density=8k
+MAKEFS_FLAGS=	-o density=8k
 
 KERNEL3=	${KERNOBJDIR}/INSTALL/netbsd
 KERNEL3X=	${KERNOBJDIR}/INSTALL3X/netbsd
@@ -53,8 +53,6 @@ install.sub: ${DISTRIBDIR}/miniroot/install.sub
 	${TOOL_SED} -e "/^VERSION=/s/=.*/=${DISTRIBREV}/" < $? > $@
 
 CLEANFILES+= install.sub
-
-fstab: .PHONY
 
 .include "${DISTRIBDIR}/common/Makefile.crunch"
 .include "${DISTRIBDIR}/common/Makefile.makedev"

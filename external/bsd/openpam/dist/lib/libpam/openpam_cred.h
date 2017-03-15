@@ -1,4 +1,4 @@
-/*	$NetBSD: openpam_cred.h,v 1.2 2014/10/24 18:17:56 christos Exp $	*/
+/*	$NetBSD: openpam_cred.h,v 1.2.2.2 2015/06/08 20:33:20 snj Exp $	*/
 
 /*-
  * Copyright (c) 2001-2003 Networks Associates Technology, Inc.

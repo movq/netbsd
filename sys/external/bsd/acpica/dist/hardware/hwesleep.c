@@ -6,7 +6,7 @@
  *****************************************************************************/
 
 /*
- * Copyright (C) 2000 - 2017, Intel Corp.
+ * Copyright (C) 2000 - 2013, Intel Corp.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -113,7 +113,7 @@ AcpiHwExtendedSleep (
     UINT8                   SleepState)
 {
     ACPI_STATUS             Status;
-    UINT8                   SleepControl;
+    UINT8                   SleepTypeValue;
     UINT64                  SleepStatus;
 
 
@@ -130,14 +130,17 @@ AcpiHwExtendedSleep (
 
     /* Clear wake status (WAK_STS) */
 
-    Status = AcpiWrite ((UINT64) ACPI_X_WAKE_STATUS,
-        &AcpiGbl_FADT.SleepStatus);
+    Status = AcpiWrite ((UINT64) ACPI_X_WAKE_STATUS, &AcpiGbl_FADT.SleepStatus);
     if (ACPI_FAILURE (Status))
     {
         return_ACPI_STATUS (Status);
     }
 
     AcpiGbl_SystemAwakeAndRunning = FALSE;
+
+    /* Flush caches, as per ACPI specification */
+
+    ACPI_FLUSH_CPU_CACHE ();
 
     /*
      * Set the SLP_TYP and SLP_EN bits.
@@ -148,24 +151,11 @@ AcpiHwExtendedSleep (
     ACPI_DEBUG_PRINT ((ACPI_DB_INIT,
         "Entering sleep state [S%u]\n", SleepState));
 
-    SleepControl = ((AcpiGbl_SleepTypeA << ACPI_X_SLEEP_TYPE_POSITION) &
-        ACPI_X_SLEEP_TYPE_MASK) | ACPI_X_SLEEP_ENABLE;
+    SleepTypeValue = ((AcpiGbl_SleepTypeA << ACPI_X_SLEEP_TYPE_POSITION) &
+        ACPI_X_SLEEP_TYPE_MASK);
 
-    /* Flush caches, as per ACPI specification */
-
-    ACPI_FLUSH_CPU_CACHE ();
-
-    Status = AcpiOsEnterSleep (SleepState, SleepControl, 0);
-    if (Status == AE_CTRL_TERMINATE)
-    {
-        return_ACPI_STATUS (AE_OK);
-    }
-    if (ACPI_FAILURE (Status))
-    {
-        return_ACPI_STATUS (Status);
-    }
-
-    Status = AcpiWrite ((UINT64) SleepControl, &AcpiGbl_FADT.SleepControl);
+    Status = AcpiWrite ((UINT64) (SleepTypeValue | ACPI_X_SLEEP_ENABLE),
+        &AcpiGbl_FADT.SleepControl);
     if (ACPI_FAILURE (Status))
     {
         return_ACPI_STATUS (Status);
@@ -212,7 +202,7 @@ AcpiHwExtendedWakePrep (
 
 
     Status = AcpiGetSleepTypeData (ACPI_STATE_S0,
-        &AcpiGbl_SleepTypeA, &AcpiGbl_SleepTypeB);
+                    &AcpiGbl_SleepTypeA, &AcpiGbl_SleepTypeB);
     if (ACPI_SUCCESS (Status))
     {
         SleepTypeValue = ((AcpiGbl_SleepTypeA << ACPI_X_SLEEP_TYPE_POSITION) &

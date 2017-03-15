@@ -1,4 +1,4 @@
-/*	$NetBSD: os-ultrix4.h,v 1.3 2017/01/24 22:29:29 christos Exp $	*/
+/*	$NetBSD: os-ultrix4.h,v 1.1.1.3 2013/04/06 15:57:52 christos Exp $	*/
 
 /*
  * Copyright (c) 1990, 1993, 1994, 1995, 1996
@@ -19,12 +19,15 @@
  * THIS SOFTWARE IS PROVIDED ``AS IS'' AND WITHOUT ANY EXPRESS OR IMPLIED
  * WARRANTIES, INCLUDING, WITHOUT LIMITATION, THE IMPLIED WARRANTIES OF
  * MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE.
+ *
+ * @(#) Header: /tcpdump/master/libpcap/lbl/os-ultrix4.h,v 1.19 1999-10-07 23:46:41 mcr Exp  (LBL)
  */
 
 /* Prototypes missing in Ultrix 4 */
 int	bcmp(const char *, const char *, u_int);
 void	bcopy(const void *, void *, u_int);
 void	bzero(void *, u_int);
+void	endservent(void);
 int	getopt(int, char * const *, const char *);
 #ifdef __STDC__
 struct timeval;

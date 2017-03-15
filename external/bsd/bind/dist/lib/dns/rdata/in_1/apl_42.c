@@ -1,4 +1,4 @@
-/*	$NetBSD: apl_42.c,v 1.7 2016/01/20 02:14:02 christos Exp $	*/
+/*	$NetBSD: apl_42.c,v 1.4.4.1 2016/03/13 08:06:14 martin Exp $	*/
 
 /*
  * Copyright (C) 2004, 2005, 2007-2009, 2014, 2015  Internet Systems Consortium, Inc. ("ISC")

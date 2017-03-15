@@ -1,4 +1,4 @@
-/*	$NetBSD: atapiconf.c,v 1.90 2016/11/29 03:23:00 mlelstv Exp $	*/
+/*	$NetBSD: atapiconf.c,v 1.87 2014/03/05 08:45:13 skrll Exp $	*/
 
 /*
  * Copyright (c) 1996, 2001 Manuel Bouyer.  All rights reserved.
@@ -25,7 +25,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: atapiconf.c,v 1.90 2016/11/29 03:23:00 mlelstv Exp $");
+__KERNEL_RCSID(0, "$NetBSD: atapiconf.c,v 1.87 2014/03/05 08:45:13 skrll Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -34,7 +34,6 @@ __KERNEL_RCSID(0, "$NetBSD: atapiconf.c,v 1.90 2016/11/29 03:23:00 mlelstv Exp $
 #include <sys/buf.h>
 #include <sys/proc.h>
 #include <sys/kthread.h>
-#include <sys/atomic.h>
 
 #include <dev/scsipi/scsipi_all.h>
 #include <dev/scsipi/scsipiconf.h>
@@ -153,13 +152,6 @@ atapibusattach(device_t parent, device_t self, void *aux)
 	aprint_naive("\n");
 	aprint_normal(": %d targets\n", chan->chan_ntargets);
 
-	if (atomic_inc_uint_nv(&chan_running(chan)) == 1)
-		mutex_init(chan_mtx(chan), MUTEX_DEFAULT, IPL_BIO);
-
-	cv_init(&chan->chan_cv_thr, "scshut");
-	cv_init(&chan->chan_cv_comp, "sccomp");
-	cv_init(&chan->chan_cv_xs, "xscmd");
-
 	/* Initialize the channel. */
 	chan->chan_init_cb = NULL;
 	chan->chan_init_cb_arg = NULL;
@@ -180,16 +172,20 @@ atapibuschilddet(device_t self, device_t child)
 	struct scsipi_periph *periph;
 	int target;
 
-	mutex_enter(chan_mtx(chan));
+	/* XXXSMP scsipi */
+	KERNEL_LOCK(1, curlwp);
+
 	for (target = 0; target < chan->chan_ntargets; target++) {
-		periph = scsipi_lookup_periph_locked(chan, target, 0);
+		periph = scsipi_lookup_periph(chan, target, 0);
 		if (periph == NULL || periph->periph_dev != child)
 			continue;
 		scsipi_remove_periph(chan, periph);
-		scsipi_free_periph(periph);
+		free(periph, M_DEVBUF);
 		break;
 	}
-	mutex_exit(chan_mtx(chan));
+
+	/* XXXSMP scsipi */
+	KERNEL_UNLOCK_ONE(curlwp);
 }
 
 static int
@@ -205,32 +201,21 @@ atapibusdetach(device_t self, int flags)
 	 */
 	scsipi_channel_shutdown(chan);
 
-	/* for config_detach() */
+	/* XXXSMP scsipi */
 	KERNEL_LOCK(1, curlwp);
 
 	/*
 	 * Now detach all of the periphs.
 	 */
-	mutex_enter(chan_mtx(chan));
 	for (target = 0; target < chan->chan_ntargets; target++) {
-		periph = scsipi_lookup_periph_locked(chan, target, 0);
+		periph = scsipi_lookup_periph(chan, target, 0);
 		if (periph == NULL)
 			continue;
 		error = config_detach(periph->periph_dev, flags);
-		if (error) {
-			mutex_exit(chan_mtx(chan));
+		if (error)
 			goto out;
-		}
 		KASSERT(scsipi_lookup_periph(chan, target, 0) == NULL);
 	}
-	mutex_exit(chan_mtx(chan));
-
-	cv_destroy(&chan->chan_cv_xs);
-	cv_destroy(&chan->chan_cv_comp);
-	cv_destroy(&chan->chan_cv_thr);
-
-	if (atomic_dec_uint_nv(&chan_running(chan)) == 0)
-		mutex_destroy(chan_mtx(chan));
 
 out:
 	/* XXXSMP scsipi */
@@ -303,8 +288,8 @@ atapi_probe_device(struct atapibus_softc *sc, int target,
 		    atapibusprint);
 	} else {
 		atapibusprint(sa, device_xname(sc->sc_dev));
-		aprint_normal(" not configured\n");
-		scsipi_free_periph(periph);
+		printf(" not configured\n");
+		free(periph, M_DEVBUF);
 		return NULL;
 	}
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: mount.c,v 1.102 2016/10/09 21:03:43 christos Exp $	*/
+/*	$NetBSD: mount.c,v 1.99 2013/10/05 08:06:35 ast Exp $	*/
 
 /*
  * Copyright (c) 1980, 1989, 1993, 1994
@@ -39,7 +39,7 @@ __COPYRIGHT("@(#) Copyright (c) 1980, 1989, 1993, 1994\
 #if 0
 static char sccsid[] = "@(#)mount.c	8.25 (Berkeley) 5/8/95";
 #else
-__RCSID("$NetBSD: mount.c,v 1.102 2016/10/09 21:03:43 christos Exp $");
+__RCSID("$NetBSD: mount.c,v 1.99 2013/10/05 08:06:35 ast Exp $");
 #endif
 #endif /* not lint */
 
@@ -473,9 +473,9 @@ mountfs(const char *vfstype, const char *spec, const char *name,
 			warn("Cannot create pipe");
 	}
 
-	switch (pid = fork()) {
+	switch (pid = vfork()) {
 	case -1:				/* Error. */
-		warn("fork");
+		warn("vfork");
 		if (optbuf)
 			free(optbuf);
 		free(argv);
@@ -503,7 +503,7 @@ mountfs(const char *vfstype, const char *spec, const char *name,
 		} while (*++edir != NULL);
 
 		if (errno == ENOENT)
-			warn("exec %s for %s: %s", execbase, name, execbase);
+			warnx("%s not found for %s", execbase, name);
 		_exit(1);
 		/* NOTREACHED */
 

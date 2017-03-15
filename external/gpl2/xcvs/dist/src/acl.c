@@ -28,9 +28,6 @@
  * - permission	change  (p) (8)
  * 
  */
-#include <sys/cdefs.h>
-__RCSID("$NetBSD: acl.c,v 1.6 2016/05/17 14:00:09 christos Exp $");
-
 #include "cvs.h"
 #include "getline.h"
 #include <pwd.h>

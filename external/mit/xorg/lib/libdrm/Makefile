@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.15 2017/03/04 23:24:51 mrg Exp $
+#	$NetBSD: Makefile,v 1.10 2014/03/21 18:14:20 riastradh Exp $
 
 .include <bsd.own.mk>
 
@@ -7,7 +7,7 @@ LIB=	drm
 
 SRCS=	xf86drm.c xf86drmHash.c xf86drmMode.c xf86drmRandom.c xf86drmSL.c
 
-INCS=	xf86drm.h xf86drmMode.h libsync.h
+INCS=	xf86drm.h xf86drmMode.h
 INCSDIR=${X11INCDIR}
 
 CPPFLAGS+=	-I${DESTDIR}${X11INCDIR}/libdrm
@@ -17,12 +17,7 @@ SUBDIR=	drm kms
 PKGCONFIG=	libdrm
 PKGDIST=	${LIB}
 
-COPTS.xf86drm.c+=	${${ACTIVE_CC} == "gcc":? -Wno-error=cpp :}
-COPTS.xf86drm.c+=	${${ACTIVE_CC} == "clang":? -Wno-error=\#warnings :}
-
 CWARNFLAGS.clang+=	-Wno-conversion -Wno-tautological-compare
-
-LIBDPLIBS=	m	${.CURDIR}/../../../../../lib/libm
 
 .if 0
 MAN=		drm.7 \

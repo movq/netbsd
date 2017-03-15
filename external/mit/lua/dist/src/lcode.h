@@ -1,4 +1,4 @@
-/*	$NetBSD: lcode.h,v 1.5 2016/09/08 02:21:31 salazar Exp $	*/
+/*	$NetBSD: lcode.h,v 1.2.2.3 2016/09/25 11:16:02 bouyer Exp $	*/
 
 /*
 ** Id: lcode.h,v 1.64 2016/01/05 16:22:37 roberto Exp 

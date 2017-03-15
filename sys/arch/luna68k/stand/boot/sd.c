@@ -1,4 +1,4 @@
-/*	$NetBSD: sd.c,v 1.12 2015/02/14 13:07:39 tsutsui Exp $	*/
+/*	$NetBSD: sd.c,v 1.11 2014/04/16 12:01:53 tsutsui Exp $	*/
 
 /*
  * Copyright (c) 1992 OMRON Corporation.
@@ -96,10 +96,10 @@ struct	sd_softc {
 	struct disklabel sc_label;
 };
 
-static int sdident(struct sd_softc *);
 static struct sd_softc *sdinit(uint);
+static int sdident(struct sd_softc *);
 
-static int
+int
 sdident(struct sd_softc *sc)
 {
 	struct scsi_inquiry inqbuf;
@@ -123,7 +123,7 @@ sdident(struct sd_softc *sc)
 	return inqbuf.type;
 }
 
-static struct sd_softc *
+struct sd_softc *
 sdinit(uint unit)
 {
 	struct sd_softc *sc;

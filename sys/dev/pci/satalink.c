@@ -1,4 +1,4 @@
-/*	$NetBSD: satalink.c,v 1.53 2016/08/23 09:46:45 msaitoh Exp $	*/
+/*	$NetBSD: satalink.c,v 1.52.4.1 2016/12/08 07:52:51 snj Exp $	*/
 
 /*-
  * Copyright (c) 2003 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: satalink.c,v 1.53 2016/08/23 09:46:45 msaitoh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: satalink.c,v 1.52.4.1 2016/12/08 07:52:51 snj Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

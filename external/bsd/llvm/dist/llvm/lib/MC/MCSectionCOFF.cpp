@@ -11,7 +11,6 @@
 #include "llvm/MC/MCAsmInfo.h"
 #include "llvm/MC/MCContext.h"
 #include "llvm/MC/MCSymbol.h"
-#include "llvm/Support/COFF.h"
 #include "llvm/Support/raw_ostream.h"
 using namespace llvm;
 
@@ -64,9 +63,6 @@ void MCSectionCOFF::PrintSwitchToSection(const MCAsmInfo &MAI,
     OS << 'n';
   if (getCharacteristics() & COFF::IMAGE_SCN_MEM_SHARED)
     OS << 's';
-  if ((getCharacteristics() & COFF::IMAGE_SCN_MEM_DISCARDABLE) &&
-      !isImplicitlyDiscardable(SectionName))
-    OS << 'D';
   OS << '"';
 
   if (getCharacteristics() & COFF::IMAGE_SCN_LNK_COMDAT) {
@@ -98,7 +94,7 @@ void MCSectionCOFF::PrintSwitchToSection(const MCAsmInfo &MAI,
         break;
     }
     assert(COMDATSymbol);
-    COMDATSymbol->print(OS, &MAI);
+    OS << *COMDATSymbol;
   }
   OS << '\n';
 }

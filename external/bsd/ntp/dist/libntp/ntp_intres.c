@@ -1,4 +1,4 @@
-/*	$NetBSD: ntp_intres.c,v 1.10 2016/11/22 03:09:30 christos Exp $	*/
+/*	$NetBSD: ntp_intres.c,v 1.3.6.3 2016/05/11 11:35:38 martin Exp $	*/
 
 /*
  * ntp_intres.c - Implements a generic blocking worker child or thread,
@@ -120,16 +120,14 @@
  * is managed by the code which calls the *_complete routines.
  */
 
-
 /* === typedefs === */
 typedef struct blocking_gai_req_tag {	/* marshalled args */
 	size_t			octets;
 	u_int			dns_idx;
 	time_t			scheduled;
 	time_t			earliest;
-	int			retry;
 	struct addrinfo		hints;
-	u_int			qflags;
+	int			retry;
 	gai_sometime_callback	callback;
 	void *			context;
 	size_t			nodesize;
@@ -209,8 +207,8 @@ static	dnsworker_ctx *	get_worker_context(blocking_child *, u_int);
 static	void		scheduled_sleep(time_t, time_t,
 					dnsworker_ctx *);
 static	void		manage_dns_retry_interval(time_t *, time_t *,
-						  int *, time_t *,
-						  int/*BOOL*/);
+						  int *,
+						  time_t *);
 static	int		should_retry_dns(int, int);
 #ifdef HAVE_RES_INIT
 static	void		reload_resolv_conf(dnsworker_ctx *);
@@ -234,14 +232,13 @@ static	void		getnameinfo_sometime_complete(blocking_work_req,
  *			  invokes provided callback completion function.
  */
 int
-getaddrinfo_sometime_ex(
+getaddrinfo_sometime(
 	const char *		node,
 	const char *		service,
 	const struct addrinfo *	hints,
 	int			retry,
 	gai_sometime_callback	callback,
-	void *			context,
-	u_int			qflags
+	void *			context
 	)
 {
 	blocking_gai_req *	gai_req;
@@ -282,7 +279,6 @@ getaddrinfo_sometime_ex(
 	gai_req->context = context;
 	gai_req->nodesize = nodesize;
 	gai_req->servsize = servsize;
-	gai_req->qflags = qflags;
 
 	memcpy((char *)gai_req + sizeof(*gai_req), node, nodesize);
 	memcpy((char *)gai_req + sizeof(*gai_req) + nodesize, service,
@@ -457,20 +453,6 @@ blocking_getaddrinfo(
 	return 0;
 }
 
-int
-getaddrinfo_sometime(
-	const char *		node,
-	const char *		service,
-	const struct addrinfo *	hints,
-	int			retry,
-	gai_sometime_callback	callback,
-	void *			context
-	)
-{
-	return getaddrinfo_sometime_ex(node, service, hints, retry,
-				       callback, context, 0);
-}
-
 
 static void
 getaddrinfo_sometime_complete(
@@ -490,7 +472,7 @@ getaddrinfo_sometime_complete(
 	char *			service;
 	char *			canon_start;
 	time_t			time_now;
-	int			again, noerr;
+	int			again;
 	int			af;
 	const char *		fam_spec;
 	int			i;
@@ -518,9 +500,8 @@ getaddrinfo_sometime_complete(
 				  gai_req->dns_idx, humantime(time_now)));
 		}
 	} else {
-		noerr = !!(gai_req->qflags & GAIR_F_IGNDNSERR);
-		again = noerr || should_retry_dns(
-					gai_resp->retcode, gai_resp->gai_errno);
+		again = should_retry_dns(gai_resp->retcode,
+					 gai_resp->gai_errno);
 		/*
 		 * exponential backoff of DNS retries to 64s
 		 */
@@ -549,10 +530,9 @@ getaddrinfo_sometime_complete(
 							gai_strerror(gai_resp->retcode),
 							gai_resp->retcode);
 				}
-			manage_dns_retry_interval(
-				&gai_req->scheduled, &gai_req->earliest,
-				&gai_req->retry, &child_ctx->next_dns_timeslot,
-				noerr);
+			manage_dns_retry_interval(&gai_req->scheduled,
+			    &gai_req->earliest, &gai_req->retry,
+			    &child_ctx->next_dns_timeslot);
 			if (!queue_blocking_request(
 					BLOCKING_GETADDRINFO,
 					gai_req,
@@ -848,7 +828,7 @@ getnameinfo_sometime_complete(
 		if (gni_req->retry > 0)
 			manage_dns_retry_interval(&gni_req->scheduled,
 			    &gni_req->earliest, &gni_req->retry,
-						  &child_ctx->next_dns_timeslot, FALSE);
+			    &child_ctx->next_dns_timeslot);
 
 		if (gni_req->retry > 0 && again) {
 			if (!queue_blocking_request(
@@ -1055,32 +1035,18 @@ manage_dns_retry_interval(
 	time_t *	pscheduled,
 	time_t *	pwhen,
 	int *		pretry,
-	time_t *	pnext_timeslot,
-	int		forever
+	time_t *	pnext_timeslot
 	)
 {
 	time_t	now;
 	time_t	when;
 	int	retry;
-	int	retmax;
 		
 	now = time(NULL);
 	retry = *pretry;
 	when = max(now + retry, *pnext_timeslot);
 	*pnext_timeslot = when;
-
-	/* this exponential backoff is slower than doubling up: The
-	 * sequence goes 2-3-4-6-8-12-16-24-32... and the upper limit is
-	 * 64 seconds for things that should not repeat forever, and
-	 * 1024 when repeated forever.
-	 */
-	retmax = forever ? 1024 : 64;
-	retry <<= 1;
-	if (retry & (retry - 1))
-		retry &= (retry - 1);
-	else
-		retry -= (retry >> 2);
-	retry = min(retmax, retry);
+	retry = min(64, retry << 1);
 
 	*pscheduled = now;
 	*pwhen = when;

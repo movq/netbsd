@@ -1,4 +1,4 @@
-/*	$NetBSD: luaconf.h,v 1.19 2016/09/10 09:31:24 mbalmer Exp $	*/
+/*	$NetBSD: luaconf.h,v 1.9.2.6 2016/09/25 11:16:02 bouyer Exp $	*/
 
 /*
 ** Id: luaconf.h,v 1.255 2016/05/01 20:06:09 roberto Exp 

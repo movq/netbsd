@@ -1,4 +1,4 @@
-/*	$NetBSD: mainbus.c,v 1.30 2015/09/07 23:00:08 phx Exp $	*/
+/*	$NetBSD: mainbus.c,v 1.29.22.1 2015/11/04 21:05:01 riz Exp $	*/
 
 /*
  * Copyright (c) 1996 Christopher G. Demetriou.  All rights reserved.
@@ -31,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: mainbus.c,v 1.30 2015/09/07 23:00:08 phx Exp $");
+__KERNEL_RCSID(0, "$NetBSD: mainbus.c,v 1.29.22.1 2015/11/04 21:05:01 riz Exp $");
 
 #include "opt_pci.h"
 #include "pci.h"

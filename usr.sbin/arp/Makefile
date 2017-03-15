@@ -1,15 +1,7 @@
-#	$NetBSD: Makefile,v 1.12 2015/07/29 06:07:35 ozaki-r Exp $
+#	$NetBSD: Makefile,v 1.11 2009/04/22 15:23:02 lukem Exp $
 #	from: @(#)Makefile	8.2 (Berkeley) 4/18/94
 
-.include <bsd.own.mk>
-
-RUMPPRG=	arp
-MAN=		arp.4 arp.8
-
-.PATH:		${.CURDIR}/../../lib/libc/net
-RUMPSRCS=	getifaddrs.c getnameinfo.c
-.if (${MKRUMP} != "no")
-CPPFLAGS+= 	-DRUMP_ACTION
-.endif
+PROG=	arp
+MAN=	arp.4 arp.8
 
 .include <bsd.prog.mk>

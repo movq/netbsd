@@ -1,4 +1,4 @@
-/*	$NetBSD: swapcontext.S,v 1.12 2015/04/06 01:50:46 uwe Exp $	*/
+/*	$NetBSD: swapcontext.S,v 1.10.4.1 2015/04/19 05:05:41 msaitoh Exp $	*/
 
 /*-
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -31,7 +31,7 @@
 
 #include <machine/asm.h>
 #if defined(SYSLIBC_SCCS) && !defined(lint)
-	RCSID("$NetBSD: swapcontext.S,v 1.12 2015/04/06 01:50:46 uwe Exp $")
+	RCSID("$NetBSD: swapcontext.S,v 1.10.4.1 2015/04/19 05:05:41 msaitoh Exp $")
 #endif /* SYSLIBC_SCCS and not lint */
 
 /*

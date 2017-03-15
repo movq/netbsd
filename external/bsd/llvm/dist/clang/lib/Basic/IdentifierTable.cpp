@@ -16,7 +16,6 @@
 #include "clang/Basic/IdentifierTable.h"
 #include "clang/Basic/LangOptions.h"
 #include "clang/Basic/OperatorKinds.h"
-#include "clang/Basic/Specifiers.h"
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/FoldingSet.h"
 #include "llvm/ADT/SmallString.h"
@@ -36,13 +35,12 @@ IdentifierInfo::IdentifierInfo() {
   HasMacro = false;
   HadMacro = false;
   IsExtension = false;
-  IsFutureCompatKeyword = false;
+  IsCXX11CompatKeyword = false;
   IsPoisoned = false;
   IsCPPOperatorKeyword = false;
   NeedsHandleIdentifier = false;
   IsFromAST = false;
   ChangedAfterLoad = false;
-  FEChangedAfterLoad = false;
   RevertedTokenID = false;
   OutOfDate = false;
   IsModulesImport = false;
@@ -71,6 +69,8 @@ namespace {
 IdentifierIterator *IdentifierInfoLookup::getIdentifiers() {
   return new EmptyLookupIterator();
 }
+
+ExternalIdentifierLookup::~ExternalIdentifierLookup() {}
 
 IdentifierTable::IdentifierTable(const LangOptions &LangOpts,
                                  IdentifierInfoLookup* externalLookup)
@@ -105,17 +105,10 @@ namespace {
     KEYOPENCL = 0x200,
     KEYC11 = 0x400,
     KEYARC = 0x800,
-    KEYNOMS18 = 0x01000,
-    KEYNOOPENCL = 0x02000,
-    WCHARSUPPORT = 0x04000,
-    HALFSUPPORT = 0x08000,
-    KEYCONCEPTS = 0x10000,
-    KEYOBJC2    = 0x20000,
-    KEYZVECTOR  = 0x40000,
-    KEYCOROUTINES = 0x80000,
-    KEYMODULES = 0x100000,
-    KEYALL = (0x1fffff & ~KEYNOMS18 &
-              ~KEYNOOPENCL) // KEYNOMS18 and KEYNOOPENCL are used to exclude.
+    KEYNOMS = 0x01000,
+    WCHARSUPPORT = 0x02000,
+    HALFSUPPORT = 0x04000,
+    KEYALL = (0xffff & ~KEYNOMS) // Because KEYNOMS is used to exclude.
   };
 
   /// \brief How a keyword is treated in the selected standard.
@@ -148,10 +141,6 @@ static KeywordStatus getKeywordStatus(const LangOptions &LangOpts,
   // We treat bridge casts as objective-C keywords so we can warn on them
   // in non-arc mode.
   if (LangOpts.ObjC2 && (Flags & KEYARC)) return KS_Enabled;
-  if (LangOpts.ObjC2 && (Flags & KEYOBJC2)) return KS_Enabled;
-  if (LangOpts.ConceptsTS && (Flags & KEYCONCEPTS)) return KS_Enabled;
-  if (LangOpts.CoroutinesTS && (Flags & KEYCOROUTINES)) return KS_Enabled;
-  if (LangOpts.ModulesTS && (Flags & KEYMODULES)) return KS_Enabled;
   if (LangOpts.CPlusPlus && (Flags & KEYCXX11)) return KS_Future;
   return KS_Disabled;
 }
@@ -165,21 +154,15 @@ static void AddKeyword(StringRef Keyword,
   KeywordStatus AddResult = getKeywordStatus(LangOpts, Flags);
 
   // Don't add this keyword under MSVCCompat.
-  if (LangOpts.MSVCCompat && (Flags & KEYNOMS18) &&
-      !LangOpts.isCompatibleWithMSVC(LangOptions::MSVC2015))
-    return;
-
-  // Don't add this keyword under OpenCL.
-  if (LangOpts.OpenCL && (Flags & KEYNOOPENCL))
-    return;
-
+  if (LangOpts.MSVCCompat && (Flags & KEYNOMS))
+     return;
   // Don't add this keyword if disabled in this language.
   if (AddResult == KS_Disabled) return;
 
   IdentifierInfo &Info =
       Table.get(Keyword, AddResult == KS_Future ? tok::identifier : TokenCode);
   Info.setIsExtensionToken(AddResult == KS_Extension);
-  Info.setIsFutureCompatKeyword(AddResult == KS_Future);
+  Info.setIsCXX11CompatKeyword(AddResult == KS_Future);
 }
 
 /// AddCXXOperatorKeyword - Register a C++ operator keyword alternative
@@ -224,9 +207,6 @@ void IdentifierTable::AddKeywords(const LangOptions &LangOpts) {
   if (LangOpts.ParseUnknownAnytype)
     AddKeyword("__unknown_anytype", tok::kw___unknown_anytype, KEYALL,
                LangOpts, *this);
-
-  if (LangOpts.DeclSpecKeyword)
-    AddKeyword("__declspec", tok::kw___declspec, KEYALL, LangOpts, *this);
 }
 
 /// \brief Checks if the specified token kind represents a keyword in the
@@ -443,11 +423,9 @@ std::string Selector::getAsString() const {
   if (getIdentifierInfoFlag() < MultiArg) {
     IdentifierInfo *II = getAsIdentifierInfo();
 
-    if (getNumArgs() == 0) {
-      assert(II && "If the number of arguments is 0 then II is guaranteed to "
-                   "not be null.");
+    // If the number of arguments is 0 then II is guaranteed to not be null.
+    if (getNumArgs() == 0)
       return II->getName();
-    }
 
     if (!II)
       return ":";
@@ -623,8 +601,8 @@ Selector SelectorTable::getSelector(unsigned nKeys, IdentifierInfo **IIV) {
   // variable size array (for parameter types) at the end of them.
   unsigned Size = sizeof(MultiKeywordSelector) + nKeys*sizeof(IdentifierInfo *);
   MultiKeywordSelector *SI =
-      (MultiKeywordSelector *)SelTabImpl.Allocator.Allocate(
-          Size, alignof(MultiKeywordSelector));
+    (MultiKeywordSelector*)SelTabImpl.Allocator.Allocate(Size,
+                                         llvm::alignOf<MultiKeywordSelector>());
   new (SI) MultiKeywordSelector(nKeys, IIV);
   SelTabImpl.Table.InsertNode(SI, InsertPos);
   return Selector(SI);
@@ -650,19 +628,4 @@ const char *clang::getOperatorSpelling(OverloadedOperatorKind Operator) {
   }
 
   llvm_unreachable("Invalid OverloadedOperatorKind!");
-}
-
-StringRef clang::getNullabilitySpelling(NullabilityKind kind,
-                                        bool isContextSensitive) {
-  switch (kind) {
-  case NullabilityKind::NonNull:
-    return isContextSensitive ? "nonnull" : "_Nonnull";
-
-  case NullabilityKind::Nullable:
-    return isContextSensitive ? "nullable" : "_Nullable";
-
-  case NullabilityKind::Unspecified:
-    return isContextSensitive ? "null_unspecified" : "_Null_unspecified";
-  }
-  llvm_unreachable("Unknown nullability kind.");
 }

@@ -38,7 +38,7 @@ struct ieee802_1x_kay;
 
 struct ieee802_1x_mka_peer_id {
 	u8 mi[MI_LEN];
-	be32 mn;
+	u32 mn;
 };
 
 struct ieee802_1x_kay_peer {
@@ -49,9 +49,19 @@ struct ieee802_1x_kay_peer {
 	Boolean is_key_server;
 	u8 key_server_priority;
 	Boolean macsec_desired;
-	enum macsec_cap macsec_capability;
+	enum macsec_cap macsec_capbility;
 	Boolean sak_used;
 	struct dl_list list;
+};
+
+struct key_conf {
+	u8 *key;
+	struct ieee802_1x_mka_ki ki;
+	enum confidentiality_offset offset;
+	u8 an;
+	Boolean tx;
+	Boolean rx;
+	int key_len; /* unit: byte */
 };
 
 struct data_key {
@@ -137,7 +147,7 @@ struct receive_sa {
 };
 
 struct macsec_ciphersuite {
-	u64 id;
+	u8 id[CS_ID_LEN];
 	char name[32];
 	enum macsec_cap capable;
 	int sak_len; /* unit: byte */
@@ -231,48 +241,48 @@ struct ieee802_1x_mka_participant {
 
 struct ieee802_1x_mka_hdr {
 	/* octet 1 */
-	u8 type;
+	u32 type:8;
 	/* octet 2 */
-	u8 reserve;
+	u32 reserve:8;
 	/* octet 3 */
 #if __BYTE_ORDER == __LITTLE_ENDIAN
-	u8 length:4;
-	u8 reserve1:4;
+	u32 length:4;
+	u32 reserve1:4;
 #elif __BYTE_ORDER == __BIG_ENDIAN
-	u8 reserve1:4;
-	u8 length:4;
+	u32 reserve1:4;
+	u32 length:4;
 #else
 #error "Please fix <bits/endian.h>"
 #endif
 	/* octet 4 */
-	u8 length1;
+	u32 length1:8;
 };
 
 #define MKA_HDR_LEN sizeof(struct ieee802_1x_mka_hdr)
 
 struct ieee802_1x_mka_basic_body {
 	/* octet 1 */
-	u8 version;
+	u32 version:8;
 	/* octet 2 */
-	u8 priority;
+	u32 priority:8;
 	/* octet 3 */
 #if __BYTE_ORDER == __LITTLE_ENDIAN
-	u8 length:4;
-	u8 macsec_capability:2;
-	u8 macsec_desired:1;
-	u8 key_server:1;
+	u32 length:4;
+	u32 macsec_capbility:2;
+	u32 macsec_desired:1;
+	u32 key_server:1;
 #elif __BYTE_ORDER == __BIG_ENDIAN
-	u8 key_server:1;
-	u8 macsec_desired:1;
-	u8 macsec_capability:2;
-	u8 length:4;
+	u32 key_server:1;
+	u32 macsec_desired:1;
+	u32 macsec_capbility:2;
+	u32 length:4;
 #endif
 	/* octet 4 */
-	u8 length1;
+	u32 length1:8;
 
 	struct ieee802_1x_mka_sci actor_sci;
 	u8 actor_mi[MI_LEN];
-	be32 actor_mn;
+	u32 actor_mn;
 	u8 algo_agility[4];
 
 	/* followed by CAK Name*/
@@ -281,19 +291,19 @@ struct ieee802_1x_mka_basic_body {
 
 struct ieee802_1x_mka_peer_body {
 	/* octet 1 */
-	u8 type;
+	u32 type:8;
 	/* octet 2 */
-	u8 reserve;
+	u32 reserve:8;
 	/* octet 3 */
 #if __BYTE_ORDER == __LITTLE_ENDIAN
-	u8 length:4;
-	u8 reserve1:4;
+	u32 length:4;
+	u32 reserve1:4;
 #elif __BYTE_ORDER == __BIG_ENDIAN
-	u8 reserve1:4;
-	u8 length:4;
+	u32 reserve1:4;
+	u32 length:4;
 #endif
 	/* octet 4 */
-	u8 length1;
+	u32 length1:8;
 
 	u8 peer[0];
 	/* followed by Peers */
@@ -301,83 +311,83 @@ struct ieee802_1x_mka_peer_body {
 
 struct ieee802_1x_mka_sak_use_body {
 	/* octet 1 */
-	u8 type;
+	u32 type:8;
 	/* octet 2 */
 #if __BYTE_ORDER == __LITTLE_ENDIAN
-	u8 orx:1;
-	u8 otx:1;
-	u8 oan:2;
-	u8 lrx:1;
-	u8 ltx:1;
-	u8 lan:2;
+	u32 orx:1;
+	u32 otx:1;
+	u32 oan:2;
+	u32 lrx:1;
+	u32 ltx:1;
+	u32 lan:2;
 #elif __BYTE_ORDER == __BIG_ENDIAN
-	u8 lan:2;
-	u8 ltx:1;
-	u8 lrx:1;
-	u8 oan:2;
-	u8 otx:1;
-	u8 orx:1;
+	u32 lan:2;
+	u32 ltx:1;
+	u32 lrx:1;
+	u32 oan:2;
+	u32 otx:1;
+	u32 orx:1;
 #endif
 
 	/* octet 3 */
 #if __BYTE_ORDER == __LITTLE_ENDIAN
-	u8 length:4;
-	u8 delay_protect:1;
-	u8 reserve:1;
-	u8 prx:1;
-	u8 ptx:1;
+	u32 length:4;
+	u32 delay_protect:1;
+	u32 reserve:1;
+	u32 prx:1;
+	u32 ptx:1;
 #elif __BYTE_ORDER == __BIG_ENDIAN
-	u8 ptx:1;
-	u8 prx:1;
-	u8 reserve:1;
-	u8 delay_protect:1;
-	u8 length:4;
+	u32 ptx:1;
+	u32 prx:1;
+	u32 reserve:1;
+	u32 delay_protect:1;
+	u32 length:4;
 #endif
 
 	/* octet 4 */
-	u8 length1;
+	u32 length1:8;
 
 	/* octet 5 - 16 */
 	u8 lsrv_mi[MI_LEN];
 	/* octet 17 - 20 */
-	be32 lkn;
+	u32 lkn;
 	/* octet 21 - 24 */
-	be32 llpn;
+	u32 llpn;
 
 	/* octet 25 - 36 */
 	u8 osrv_mi[MI_LEN];
 	/* octet 37 - 40 */
-	be32 okn;
+	u32 okn;
 	/* octet 41 - 44 */
-	be32 olpn;
+	u32 olpn;
 };
 
 
 struct ieee802_1x_mka_dist_sak_body {
 	/* octet 1 */
-	u8 type;
+	u32 type:8;
 	/* octet 2 */
 #if __BYTE_ORDER == __LITTLE_ENDIAN
-	u8 reserve:4;
-	u8 confid_offset:2;
-	u8 dan:2;
+	u32 reserve:4;
+	u32 confid_offset:2;
+	u32 dan:2;
 #elif __BYTE_ORDER == __BIG_ENDIAN
-	u8 dan:2;
-	u8 confid_offset:2;
-	u8 reserve:4;
+	u32 dan:2;
+	u32 confid_offset:2;
+	u32 reserve:4;
 #endif
 	/* octet 3 */
 #if __BYTE_ORDER == __LITTLE_ENDIAN
-	u8 length:4;
-	u8 reserve1:4;
+	u32 length:4;
+	u32 reserve1:4;
 #elif __BYTE_ORDER == __BIG_ENDIAN
-	u8 reserve1:4;
-	u8 length:4;
+	u32 reserve1:4;
+	u32 length:4;
 #endif
 	/* octet 4 */
-	u8 length1;
+	u32 length1:8;
 	/* octet 5 - 8 */
-	be32 kn;
+	u32 kn;
 
 	/* for GCM-AES-128: octet 9-32: SAK
 	 * for other cipher suite: octet 9-16: cipher suite id, octet 17-: SAK
@@ -388,19 +398,19 @@ struct ieee802_1x_mka_dist_sak_body {
 
 struct ieee802_1x_mka_icv_body {
 	/* octet 1 */
-	u8 type;
+	u32 type:8;
 	/* octet 2 */
-	u8 reserve;
+	u32 reserve:8;
 	/* octet 3 */
 #if __BYTE_ORDER == __LITTLE_ENDIAN
-	u8 length:4;
-	u8 reserve1:4;
+	u32 length:4;
+	u32 reserve1:4;
 #elif __BYTE_ORDER == __BIG_ENDIAN
-	u8 reserve1:4;
-	u8 length:4;
+	u32 reserve1:4;
+	u32 length:4;
 #endif
 	/* octet 4 */
-	u8 length1;
+	u32 length1:8;
 
 	/* octet 5 - */
 	u8 icv[0];

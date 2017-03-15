@@ -67,11 +67,3 @@ void sentinel_test(Sentinel *a) {
   sentinel(1, 2, 3); // expected-warning{{missing sentinel in function call}}
   [a sentinel:1, 2, 3]; // expected-warning{{missing sentinel in method dispatch}}
 }
-
-@interface A
-@property (class) int c;
-@end
-
-int test(A *a) {
-  return a.c; // expected-error {{property 'c' is a class property; did you mean to access it with class 'A'}}
-}

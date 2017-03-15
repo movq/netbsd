@@ -1,5 +1,5 @@
 /* Global constant/copy propagation for RTL.
-   Copyright (C) 1997-2015 Free Software Foundation, Inc.
+   Copyright (C) 1997-2013 Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -23,16 +23,8 @@ along with GCC; see the file COPYING3.  If not see
 #include "tm.h"
 #include "diagnostic-core.h"
 #include "toplev.h"
+
 #include "rtl.h"
-#include "hash-set.h"
-#include "machmode.h"
-#include "vec.h"
-#include "double-int.h"
-#include "input.h"
-#include "alias.h"
-#include "symtab.h"
-#include "wide-int.h"
-#include "inchash.h"
 #include "tree.h"
 #include "tm_p.h"
 #include "regs.h"
@@ -40,26 +32,8 @@ along with GCC; see the file COPYING3.  If not see
 #include "flags.h"
 #include "insn-config.h"
 #include "recog.h"
-#include "predict.h"
-#include "hashtab.h"
-#include "function.h"
-#include "dominance.h"
-#include "cfg.h"
-#include "cfgrtl.h"
-#include "cfganal.h"
-#include "lcm.h"
-#include "cfgcleanup.h"
 #include "basic-block.h"
-#include "statistics.h"
-#include "real.h"
-#include "fixed-value.h"
-#include "expmed.h"
-#include "dojump.h"
-#include "explow.h"
-#include "calls.h"
-#include "emit-rtl.h"
-#include "varasm.h"
-#include "stmt.h"
+#include "function.h"
 #include "expr.h"
 #include "except.h"
 #include "params.h"
@@ -67,6 +41,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "intl.h"
 #include "obstack.h"
 #include "tree-pass.h"
+#include "hashtab.h"
 #include "df.h"
 #include "dbgcnt.h"
 #include "target.h"
@@ -80,19 +55,19 @@ static struct obstack cprop_obstack;
    There is one per basic block.  If a pattern appears more than once the
    last appearance is used.  */
 
-struct cprop_occr
+struct occr
 {
   /* Next occurrence of this expression.  */
-  struct cprop_occr *next;
+  struct occr *next;
   /* The insn that computes the expression.  */
-  rtx_insn *insn;
+  rtx insn;
 };
 
-typedef struct cprop_occr *occr_t;
+typedef struct occr *occr_t;
 
 /* Hash table entry for assignment expressions.  */
 
-struct cprop_expr
+struct expr
 {
   /* The expression (DEST := SRC).  */
   rtx dest;
@@ -101,12 +76,12 @@ struct cprop_expr
   /* Index in the available expression bitmaps.  */
   int bitmap_index;
   /* Next entry with the same hash.  */
-  struct cprop_expr *next_same_hash;
+  struct expr *next_same_hash;
   /* List of available occurrence in basic blocks in the function.
      An "available occurrence" is one that is the last occurrence in the
      basic block and whose operands are not modified by following statements
      in the basic block [including this insn].  */
-  struct cprop_occr *avail_occr;
+  struct occr *avail_occr;
 };
 
 /* Hash table for copy propagation expressions.
@@ -122,7 +97,7 @@ struct hash_table_d
 {
   /* The table itself.
      This is an array of `set_hash_table_size' elements.  */
-  struct cprop_expr **table;
+  struct expr **table;
 
   /* Size of the hash table, in elements.  */
   unsigned int size;
@@ -179,7 +154,7 @@ cprop_alloc (unsigned long size)
    of INSN's basic block.  */
 
 static int
-reg_available_p (const_rtx x, const rtx_insn *insn ATTRIBUTE_UNUSED)
+reg_available_p (const_rtx x, const_rtx insn ATTRIBUTE_UNUSED)
 {
   return ! REGNO_REG_SET_P (reg_set_bitmap, REGNO (x));
 }
@@ -192,7 +167,7 @@ reg_available_p (const_rtx x, const rtx_insn *insn ATTRIBUTE_UNUSED)
    ??? May need to make things more elaborate.  Later, as necessary.  */
 
 static unsigned int
-hash_mod (int regno, int hash_table_size)
+hash_set (int regno, int hash_table_size)
 {
   return (unsigned) regno % hash_table_size;
 }
@@ -204,15 +179,15 @@ hash_mod (int regno, int hash_table_size)
    IMPLICIT is true if it's an implicit set, false otherwise.  */
 
 static void
-insert_set_in_table (rtx dest, rtx src, rtx_insn *insn,
-		     struct hash_table_d *table, bool implicit)
+insert_set_in_table (rtx dest, rtx src, rtx insn, struct hash_table_d *table,
+		     bool implicit)
 {
   bool found = false;
   unsigned int hash;
-  struct cprop_expr *cur_expr, *last_expr = NULL;
-  struct cprop_occr *cur_occr;
+  struct expr *cur_expr, *last_expr = NULL;
+  struct occr *cur_occr;
 
-  hash = hash_mod (REGNO (dest), table->size);
+  hash = hash_set (REGNO (dest), table->size);
 
   for (cur_expr = table->table[hash]; cur_expr;
        cur_expr = cur_expr->next_same_hash)
@@ -228,8 +203,8 @@ insert_set_in_table (rtx dest, rtx src, rtx_insn *insn,
 
   if (! found)
     {
-      cur_expr = GOBNEW (struct cprop_expr);
-      bytes_used += sizeof (struct cprop_expr);
+      cur_expr = GOBNEW (struct expr);
+      bytes_used += sizeof (struct expr);
       if (table->table[hash] == NULL)
 	/* This is the first pattern that hashed to this index.  */
 	table->table[hash] = cur_expr;
@@ -262,8 +237,8 @@ insert_set_in_table (rtx dest, rtx src, rtx_insn *insn,
   else
     {
       /* First occurrence of this expression in this basic block.  */
-      cur_occr = GOBNEW (struct cprop_occr);
-      bytes_used += sizeof (struct cprop_occr);
+      cur_occr = GOBNEW (struct occr);
+      bytes_used += sizeof (struct occr);
       cur_occr->insn = insn;
       cur_occr->next = cur_expr->avail_occr;
       cur_expr->avail_occr = cur_occr;
@@ -271,8 +246,7 @@ insert_set_in_table (rtx dest, rtx src, rtx_insn *insn,
 
   /* Record bitmap_index of the implicit set in implicit_set_indexes.  */
   if (implicit)
-    implicit_set_indexes[BLOCK_FOR_INSN (insn)->index]
-      = cur_expr->bitmap_index;
+    implicit_set_indexes[BLOCK_FOR_INSN(insn)->index] = cur_expr->bitmap_index;
 }
 
 /* Determine whether the rtx X should be treated as a constant for CPROP.
@@ -289,8 +263,7 @@ cprop_constant_p (const_rtx x)
    IMPLICIT is true if it's an implicit set, false otherwise.  */
 
 static void
-hash_scan_set (rtx set, rtx_insn *insn, struct hash_table_d *table,
-	       bool implicit)
+hash_scan_set (rtx set, rtx insn, struct hash_table_d *table, bool implicit)
 {
   rtx src = SET_SRC (set);
   rtx dest = SET_DEST (set);
@@ -333,7 +306,7 @@ hash_scan_set (rtx set, rtx_insn *insn, struct hash_table_d *table,
 /* Process INSN and add hash table entries as appropriate.  */
 
 static void
-hash_scan_insn (rtx_insn *insn, struct hash_table_d *table)
+hash_scan_insn (rtx insn, struct hash_table_d *table)
 {
   rtx pat = PATTERN (insn);
   int i;
@@ -360,11 +333,11 @@ dump_hash_table (FILE *file, const char *name, struct hash_table_d *table)
 {
   int i;
   /* Flattened out table, so it's printed in proper order.  */
-  struct cprop_expr **flat_table;
+  struct expr **flat_table;
   unsigned int *hash_val;
-  struct cprop_expr *expr;
+  struct expr *expr;
 
-  flat_table = XCNEWVEC (struct cprop_expr *, table->n_elems);
+  flat_table = XCNEWVEC (struct expr *, table->n_elems);
   hash_val = XNEWVEC (unsigned int, table->n_elems);
 
   for (i = 0; i < (int) table->size; i++)
@@ -398,12 +371,13 @@ dump_hash_table (FILE *file, const char *name, struct hash_table_d *table)
 /* Record as unavailable all registers that are DEF operands of INSN.  */
 
 static void
-make_set_regs_unavailable (rtx_insn *insn)
+make_set_regs_unavailable (rtx insn)
 {
-  df_ref def;
+  struct df_insn_info *insn_info = DF_INSN_INFO_GET (insn);
+  df_ref *def_rec;
 
-  FOR_EACH_INSN_DEF (def, insn)
-    SET_REGNO_REG_SET (reg_set_bitmap, DF_REF_REGNO (def));
+  for (def_rec = DF_INSN_INFO_DEFS (insn_info); *def_rec; def_rec++)
+    SET_REGNO_REG_SET (reg_set_bitmap, DF_REF_REGNO (*def_rec));
 }
 
 /* Top level function to create an assignment hash table.
@@ -425,9 +399,9 @@ compute_hash_table_work (struct hash_table_d *table)
   /* Allocate vars to track sets of regs.  */
   reg_set_bitmap = ALLOC_REG_SET (NULL);
 
-  FOR_EACH_BB_FN (bb, cfun)
+  FOR_EACH_BB (bb)
     {
-      rtx_insn *insn;
+      rtx insn;
 
       /* Reset tables used to keep track of what's not yet invalid [since
 	 the end of the block].  */
@@ -476,8 +450,8 @@ alloc_hash_table (struct hash_table_d *table)
      Making it an odd number is simplest for now.
      ??? Later take some measurements.  */
   table->size |= 1;
-  n = table->size * sizeof (struct cprop_expr *);
-  table->table = XNEWVAR (struct cprop_expr *, n);
+  n = table->size * sizeof (struct expr *);
+  table->table = XNEWVAR (struct expr *, n);
 }
 
 /* Free things allocated by alloc_hash_table.  */
@@ -496,7 +470,7 @@ compute_hash_table (struct hash_table_d *table)
 {
   /* Initialize count of number of entries in hash table.  */
   table->n_elems = 0;
-  memset (table->table, 0, table->size * sizeof (struct cprop_expr *));
+  memset (table->table, 0, table->size * sizeof (struct expr *));
 
   compute_hash_table_work (table);
 }
@@ -506,11 +480,11 @@ compute_hash_table (struct hash_table_d *table)
 /* Lookup REGNO in the set TABLE.  The result is a pointer to the
    table entry, or NULL if not found.  */
 
-static struct cprop_expr *
+static struct expr *
 lookup_set (unsigned int regno, struct hash_table_d *table)
 {
-  unsigned int hash = hash_mod (regno, table->size);
-  struct cprop_expr *expr;
+  unsigned int hash = hash_set (regno, table->size);
+  struct expr *expr;
 
   expr = table->table[hash];
 
@@ -522,8 +496,8 @@ lookup_set (unsigned int regno, struct hash_table_d *table)
 
 /* Return the next entry for REGNO in list EXPR.  */
 
-static struct cprop_expr *
-next_set (unsigned int regno, struct cprop_expr *expr)
+static struct expr *
+next_set (unsigned int regno, struct expr *expr)
 {
   do
     expr = expr->next_same_hash;
@@ -547,7 +521,7 @@ reset_opr_set_tables (void)
    start of the basic block containing INSN].  */
 
 static int
-reg_not_set_p (const_rtx x, const rtx_insn *insn ATTRIBUTE_UNUSED)
+reg_not_set_p (const_rtx x, const_rtx insn ATTRIBUTE_UNUSED)
 {
   return ! REGNO_REG_SET_P (reg_set_bitmap, REGNO (x));
 }
@@ -556,12 +530,13 @@ reg_not_set_p (const_rtx x, const rtx_insn *insn ATTRIBUTE_UNUSED)
    This data is used by reg_not_set_p.  */
 
 static void
-mark_oprs_set (rtx_insn *insn)
+mark_oprs_set (rtx insn)
 {
-  df_ref def;
+  struct df_insn_info *insn_info = DF_INSN_INFO_GET (insn);
+  df_ref *def_rec;
 
-  FOR_EACH_INSN_DEF (def, insn)
-    SET_REGNO_REG_SET (reg_set_bitmap, DF_REF_REGNO (def));
+  for (def_rec = DF_INSN_INFO_DEFS (insn_info); *def_rec; def_rec++)
+    SET_REGNO_REG_SET (reg_set_bitmap, DF_REF_REGNO (*def_rec));
 }
 
 /* Compute copy/constant propagation working variables.  */
@@ -619,18 +594,18 @@ compute_local_properties (sbitmap *kill, sbitmap *comp,
   unsigned int i;
 
   /* Initialize the bitmaps that were passed in.  */
-  bitmap_vector_clear (kill, last_basic_block_for_fn (cfun));
-  bitmap_vector_clear (comp, last_basic_block_for_fn (cfun));
+  bitmap_vector_clear (kill, last_basic_block);
+  bitmap_vector_clear (comp, last_basic_block);
 
   for (i = 0; i < table->size; i++)
     {
-      struct cprop_expr *expr;
+      struct expr *expr;
 
       for (expr = table->table[i]; expr != NULL; expr = expr->next_same_hash)
 	{
 	  int indx = expr->bitmap_index;
 	  df_ref def;
-	  struct cprop_occr *occr;
+	  struct occr *occr;
 
 	  /* For each definition of the destination pseudo-reg, the expression
 	     is killed in the block where the definition is.  */
@@ -673,7 +648,7 @@ compute_cprop_data (void)
      aren't recorded for the local pass so they cannot be propagated within
      their basic block by this pass and 2) the global pass would otherwise
      propagate them only in the successors of their basic block.  */
-  FOR_EACH_BB_FN (bb, cfun)
+  FOR_EACH_BB (bb)
     {
       int index = implicit_set_indexes[bb->index];
       if (index != -1)
@@ -751,7 +726,7 @@ find_used_regs (rtx *xptr, void *data ATTRIBUTE_UNUSED)
    Return nonzero if successful.  */
 
 static int
-try_replace_reg (rtx from, rtx to, rtx_insn *insn)
+try_replace_reg (rtx from, rtx to, rtx insn)
 {
   rtx note = find_reg_equal_equiv_note (insn);
   rtx src = 0;
@@ -824,12 +799,12 @@ try_replace_reg (rtx from, rtx to, rtx_insn *insn)
 /* Find a set of REGNOs that are available on entry to INSN's block.  Return
    NULL no such set is found.  */
 
-static struct cprop_expr *
-find_avail_set (int regno, rtx_insn *insn)
+static struct expr *
+find_avail_set (int regno, rtx insn)
 {
   /* SET1 contains the last set found that can be returned to the caller for
      use in a substitution.  */
-  struct cprop_expr *set1 = 0;
+  struct expr *set1 = 0;
 
   /* Loops are not possible here.  To get a loop we would need two sets
      available at the start of the block containing INSN.  i.e. we would
@@ -843,7 +818,7 @@ find_avail_set (int regno, rtx_insn *insn)
   while (1)
     {
       rtx src;
-      struct cprop_expr *set = lookup_set (regno, &set_hash_table);
+      struct expr *set = lookup_set (regno, &set_hash_table);
 
       /* Find a set that is available at the start of the block
 	 which contains INSN.  */
@@ -895,7 +870,7 @@ find_avail_set (int regno, rtx_insn *insn)
    if a change was made.  */
 
 static int
-cprop_jump (basic_block bb, rtx_insn *setcc, rtx_insn *jump, rtx from, rtx src)
+cprop_jump (basic_block bb, rtx setcc, rtx jump, rtx from, rtx src)
 {
   rtx new_rtx, set_src, note_src;
   rtx set = pc_set (jump);
@@ -927,7 +902,7 @@ cprop_jump (basic_block bb, rtx_insn *setcc, rtx_insn *jump, rtx from, rtx src)
 				      setcc_src);
     }
   else
-    setcc = NULL;
+    setcc = NULL_RTX;
 
   new_rtx = simplify_replace_rtx (set_src, from, src);
 
@@ -991,7 +966,7 @@ cprop_jump (basic_block bb, rtx_insn *setcc, rtx_insn *jump, rtx from, rtx src)
       edge_iterator ei;
 
       FOR_EACH_EDGE (e, ei, bb->succs)
-	if (e->dest != EXIT_BLOCK_PTR_FOR_FN (cfun)
+	if (e->dest != EXIT_BLOCK_PTR
 	    && BB_HEAD (e->dest) == JUMP_LABEL (jump))
 	  {
 	    e->flags |= EDGE_FALLTHRU;
@@ -1008,7 +983,7 @@ cprop_jump (basic_block bb, rtx_insn *setcc, rtx_insn *jump, rtx from, rtx src)
    it and INSN is the instruction where this will be happening.  */
 
 static int
-constprop_register (rtx from, rtx src, rtx_insn *insn)
+constprop_register (rtx from, rtx src, rtx insn)
 {
   rtx sset;
 
@@ -1044,7 +1019,7 @@ constprop_register (rtx from, rtx src, rtx_insn *insn)
    Return nonzero if a change was made.  */
 
 static int
-cprop_insn (rtx_insn *insn)
+cprop_insn (rtx insn)
 {
   unsigned i;
   int changed = 0, changed_this_round;
@@ -1065,7 +1040,7 @@ retry:
       rtx reg_used = reg_use_table[i];
       unsigned int regno = REGNO (reg_used);
       rtx src;
-      struct cprop_expr *set;
+      struct expr *set;
 
       /* If the register has already been set in this block, there's
 	 nothing we can do.  */
@@ -1096,7 +1071,7 @@ retry:
 		  print_rtl (dump_file, src);
 		  fprintf (dump_file, "\n");
 		}
-	      if (insn->deleted ())
+	      if (INSN_DELETED_P (insn))
 		return 1;
 	    }
 	}
@@ -1184,7 +1159,7 @@ local_cprop_find_used_regs (rtx *xptr, void *data)
 /* Try to perform local const/copy propagation on X in INSN.  */
 
 static bool
-do_local_cprop (rtx x, rtx_insn *insn)
+do_local_cprop (rtx x, rtx insn)
 {
   rtx newreg = NULL, newcnst = NULL;
 
@@ -1253,12 +1228,12 @@ static int
 local_cprop_pass (void)
 {
   basic_block bb;
-  rtx_insn *insn;
+  rtx insn;
   bool changed = false;
   unsigned i;
 
   cselib_init (0);
-  FOR_EACH_BB_FN (bb, cfun)
+  FOR_EACH_BB (bb)
     {
       FOR_BB_INSNS (bb, insn)
 	{
@@ -1282,7 +1257,7 @@ local_cprop_pass (void)
 			  break;
 			}
 		    }
-		  if (insn->deleted ())
+		  if (INSN_DELETED_P (insn))
 		    break;
 		}
 	      while (i < reg_use_count);
@@ -1310,7 +1285,7 @@ local_cprop_pass (void)
    but this would require some code reorganization.  */
 
 rtx
-fis_get_condition (rtx_insn *jump)
+fis_get_condition (rtx jump)
 {
   return get_condition (jump, NULL, false, true);
 }
@@ -1321,7 +1296,7 @@ fis_get_condition (rtx_insn *jump)
 static bool
 implicit_set_cond_p (const_rtx cond)
 {
-  machine_mode mode;
+  enum machine_mode mode;
   rtx cst;
 
   /* COND must be either an EQ or NE comparison.  */
@@ -1379,11 +1354,11 @@ find_implicit_sets (void)
   rtx cond, new_rtx;
   unsigned int count = 0;
   bool edges_split = false;
-  size_t implicit_sets_size = last_basic_block_for_fn (cfun) + 10;
+  size_t implicit_sets_size = last_basic_block + 10;
 
   implicit_sets = XCNEWVEC (rtx, implicit_sets_size);
 
-  FOR_EACH_BB_FN (bb, cfun)
+  FOR_EACH_BB (bb)
     {
       /* Check for more than one successor.  */
       if (EDGE_COUNT (bb->succs) <= 1)
@@ -1400,7 +1375,7 @@ find_implicit_sets (void)
 	? BRANCH_EDGE (bb)->dest : FALLTHRU_EDGE (bb)->dest;
 
       /* If DEST doesn't go anywhere, ignore it.  */
-      if (! dest || dest == EXIT_BLOCK_PTR_FOR_FN (cfun))
+      if (! dest || dest == EXIT_BLOCK_PTR)
 	continue;
 
       /* We have found a suitable implicit set.  Try to record it now as
@@ -1427,9 +1402,9 @@ find_implicit_sets (void)
       implicit_sets[dest->index] = new_rtx;
       if (dump_file)
 	{
-	  fprintf (dump_file, "Implicit set of reg %d in ",
-		   REGNO (XEXP (cond, 0)));
-	  fprintf (dump_file, "basic block %d\n", dest->index);
+	  fprintf(dump_file, "Implicit set of reg %d in ",
+		  REGNO (XEXP (cond, 0)));
+	  fprintf(dump_file, "basic block %d\n", dest->index);
 	}
       count++;
     }
@@ -1454,15 +1429,15 @@ static int bypass_last_basic_block;
    block BB.  Return NULL if no such set is found.  Based heavily upon
    find_avail_set.  */
 
-static struct cprop_expr *
+static struct expr *
 find_bypass_set (int regno, int bb)
 {
-  struct cprop_expr *result = 0;
+  struct expr *result = 0;
 
   for (;;)
     {
       rtx src;
-      struct cprop_expr *set = lookup_set (regno, &set_hash_table);
+      struct expr *set = lookup_set (regno, &set_hash_table);
 
       while (set)
 	{
@@ -1495,7 +1470,7 @@ find_bypass_set (int regno, int bb)
 static bool
 reg_killed_on_edge (const_rtx reg, const_edge e)
 {
-  rtx_insn *insn;
+  rtx insn;
 
   for (insn = e->insns.r; insn; insn = NEXT_INSN (insn))
     if (INSN_P (insn) && reg_set_p (reg, insn))
@@ -1515,10 +1490,9 @@ reg_killed_on_edge (const_rtx reg, const_edge e)
    these inserted insns when performing its transformations.  */
 
 static int
-bypass_block (basic_block bb, rtx_insn *setcc, rtx_insn *jump)
+bypass_block (basic_block bb, rtx setcc, rtx jump)
 {
-  rtx_insn *insn;
-  rtx note;
+  rtx insn, note;
   edge e, edest;
   int change;
   int may_be_loop_header = false;
@@ -1586,7 +1560,7 @@ bypass_block (basic_block bb, rtx_insn *setcc, rtx_insn *jump)
 	  rtx reg_used = reg_use_table[i];
 	  unsigned int regno = REGNO (reg_used);
 	  basic_block dest, old_dest;
-	  struct cprop_expr *set;
+	  struct expr *set;
 	  rtx src, new_rtx;
 
 	  set = find_bypass_set (regno, e->src->index);
@@ -1637,7 +1611,7 @@ bypass_block (basic_block bb, rtx_insn *setcc, rtx_insn *jump)
 	  old_dest = e->dest;
 	  if (dest != NULL
 	      && dest != old_dest
-	      && dest != EXIT_BLOCK_PTR_FOR_FN (cfun))
+	      && dest != EXIT_BLOCK_PTR)
             {
 	      redirect_edge_and_branch_force (e, dest);
 
@@ -1684,25 +1658,25 @@ bypass_conditional_jumps (void)
 {
   basic_block bb;
   int changed;
-  rtx_insn *setcc;
-  rtx_insn *insn;
+  rtx setcc;
+  rtx insn;
   rtx dest;
 
   /* Note we start at block 1.  */
-  if (ENTRY_BLOCK_PTR_FOR_FN (cfun)->next_bb == EXIT_BLOCK_PTR_FOR_FN (cfun))
+  if (ENTRY_BLOCK_PTR->next_bb == EXIT_BLOCK_PTR)
     return 0;
 
-  bypass_last_basic_block = last_basic_block_for_fn (cfun);
+  bypass_last_basic_block = last_basic_block;
   mark_dfs_back_edges ();
 
   changed = 0;
-  FOR_BB_BETWEEN (bb, ENTRY_BLOCK_PTR_FOR_FN (cfun)->next_bb->next_bb,
-		  EXIT_BLOCK_PTR_FOR_FN (cfun), next_bb)
+  FOR_BB_BETWEEN (bb, ENTRY_BLOCK_PTR->next_bb->next_bb,
+		  EXIT_BLOCK_PTR, next_bb)
     {
       /* Check for more than one predecessor.  */
       if (!single_pred_p (bb))
 	{
-	  setcc = NULL;
+	  setcc = NULL_RTX;
 	  FOR_BB_INSNS (bb, insn)
 	    if (DEBUG_INSN_P (insn))
 	      continue;
@@ -1754,25 +1728,24 @@ is_too_expensive (const char *pass)
      which have a couple switch statements.  Rather than simply
      threshold the number of blocks, uses something with a more
      graceful degradation.  */
-  if (n_edges_for_fn (cfun) > 20000 + n_basic_blocks_for_fn (cfun) * 4)
+  if (n_edges > 20000 + n_basic_blocks * 4)
     {
       warning (OPT_Wdisabled_optimization,
 	       "%s: %d basic blocks and %d edges/basic block",
-	       pass, n_basic_blocks_for_fn (cfun),
-	       n_edges_for_fn (cfun) / n_basic_blocks_for_fn (cfun));
+	       pass, n_basic_blocks, n_edges / n_basic_blocks);
 
       return true;
     }
 
   /* If allocating memory for the cprop bitmap would take up too much
      storage it's better just to disable the optimization.  */
-  if ((n_basic_blocks_for_fn (cfun)
+  if ((n_basic_blocks
        * SBITMAP_SET_SIZE (max_reg_num ())
        * sizeof (SBITMAP_ELT_TYPE)) > MAX_GCSE_MEMORY)
     {
       warning (OPT_Wdisabled_optimization,
 	       "%s: %d basic blocks and %d registers",
-	       pass, n_basic_blocks_for_fn (cfun), max_reg_num ());
+	       pass, n_basic_blocks, max_reg_num ());
 
       return true;
     }
@@ -1789,7 +1762,7 @@ one_cprop_pass (void)
   int changed = 0;
 
   /* Return if there's nothing to do, or it is too expensive.  */
-  if (n_basic_blocks_for_fn (cfun) <= NUM_FIXED_BLOCKS + 1
+  if (n_basic_blocks <= NUM_FIXED_BLOCKS + 1
       || is_too_expensive (_ ("const/copy propagation disabled")))
     return 0;
 
@@ -1834,8 +1807,8 @@ one_cprop_pass (void)
     df_analyze ();
 
   /* Initialize implicit_set_indexes array.  */
-  implicit_set_indexes = XNEWVEC (int, last_basic_block_for_fn (cfun));
-  for (i = 0; i < last_basic_block_for_fn (cfun); i++)
+  implicit_set_indexes = XNEWVEC (int, last_basic_block);
+  for (i = 0; i < last_basic_block; i++)
     implicit_set_indexes[i] = -1;
 
   alloc_hash_table (&set_hash_table);
@@ -1850,10 +1823,9 @@ one_cprop_pass (void)
   if (set_hash_table.n_elems > 0)
     {
       basic_block bb;
-      rtx_insn *insn;
+      rtx insn;
 
-      alloc_cprop_mem (last_basic_block_for_fn (cfun),
-		       set_hash_table.n_elems);
+      alloc_cprop_mem (last_basic_block, set_hash_table.n_elems);
       compute_cprop_data ();
 
       free (implicit_set_indexes);
@@ -1862,8 +1834,7 @@ one_cprop_pass (void)
       /* Allocate vars to track sets of regs.  */
       reg_set_bitmap = ALLOC_REG_SET (NULL);
 
-      FOR_BB_BETWEEN (bb, ENTRY_BLOCK_PTR_FOR_FN (cfun)->next_bb->next_bb,
-		      EXIT_BLOCK_PTR_FOR_FN (cfun),
+      FOR_BB_BETWEEN (bb, ENTRY_BLOCK_PTR->next_bb->next_bb, EXIT_BLOCK_PTR,
 		      next_bb)
 	{
 	  /* Reset tables used to keep track of what's still valid [since
@@ -1879,7 +1850,7 @@ one_cprop_pass (void)
 		/* ??? Need to be careful w.r.t. mods done to INSN.
 		       Don't call mark_oprs_set if we turned the
 		       insn into a NOTE, or deleted the insn.  */
-		if (! NOTE_P (insn) && ! insn->deleted ())
+		if (! NOTE_P (insn) && ! INSN_DELETED_P (insn))
 		  mark_oprs_set (insn);
 	      }
 	}
@@ -1901,8 +1872,7 @@ one_cprop_pass (void)
   if (dump_file)
     {
       fprintf (dump_file, "CPROP of %s, %d basic blocks, %d bytes needed, ",
-	       current_function_name (), n_basic_blocks_for_fn (cfun),
-	       bytes_used);
+	       current_function_name (), n_basic_blocks, bytes_used);
       fprintf (dump_file, "%d local const props, %d local copy props, ",
 	       local_const_prop_count, local_copy_prop_count);
       fprintf (dump_file, "%d global const props, %d global copy props\n\n",
@@ -1921,6 +1891,14 @@ one_cprop_pass (void)
    setjmp.
    FIXME: Should just handle setjmp via REG_SETJMP notes.  */
 
+static bool
+gate_rtl_cprop (void)
+{
+  return optimize > 0 && flag_gcse
+    && !cfun->calls_setjmp
+    && dbg_cnt (cprop);
+}
+
 static unsigned int
 execute_rtl_cprop (void)
 {
@@ -1935,45 +1913,23 @@ execute_rtl_cprop (void)
   return 0;
 }
 
-namespace {
-
-const pass_data pass_data_rtl_cprop =
+struct rtl_opt_pass pass_rtl_cprop =
 {
-  RTL_PASS, /* type */
-  "cprop", /* name */
-  OPTGROUP_NONE, /* optinfo_flags */
-  TV_CPROP, /* tv_id */
-  PROP_cfglayout, /* properties_required */
-  0, /* properties_provided */
-  0, /* properties_destroyed */
-  0, /* todo_flags_start */
-  TODO_df_finish, /* todo_flags_finish */
+ {
+  RTL_PASS,
+  "cprop",                              /* name */
+  OPTGROUP_NONE,                        /* optinfo_flags */
+  gate_rtl_cprop,                       /* gate */
+  execute_rtl_cprop,  			/* execute */
+  NULL,                                 /* sub */
+  NULL,                                 /* next */
+  0,                                    /* static_pass_number */
+  TV_CPROP,                             /* tv_id */
+  PROP_cfglayout,                       /* properties_required */
+  0,                                    /* properties_provided */
+  0,                                    /* properties_destroyed */
+  0,                                    /* todo_flags_start */
+  TODO_df_finish | TODO_verify_rtl_sharing |
+  TODO_verify_flow | TODO_ggc_collect   /* todo_flags_finish */
+ }
 };
-
-class pass_rtl_cprop : public rtl_opt_pass
-{
-public:
-  pass_rtl_cprop (gcc::context *ctxt)
-    : rtl_opt_pass (pass_data_rtl_cprop, ctxt)
-  {}
-
-  /* opt_pass methods: */
-  opt_pass * clone () { return new pass_rtl_cprop (m_ctxt); }
-  virtual bool gate (function *fun)
-    {
-      return optimize > 0 && flag_gcse
-	&& !fun->calls_setjmp
-	&& dbg_cnt (cprop);
-    }
-
-  virtual unsigned int execute (function *) { return execute_rtl_cprop (); }
-
-}; // class pass_rtl_cprop
-
-} // anon namespace
-
-rtl_opt_pass *
-make_pass_rtl_cprop (gcc::context *ctxt)
-{
-  return new pass_rtl_cprop (ctxt);
-}

@@ -1,13 +1,8 @@
-set(LLVM_LINK_COMPONENTS
-  OrcJIT
-  RuntimeDyld
-  Support
-  )
+set(LLVM_LINK_COMPONENTS support)
 
-add_llvm_utility(lli-child-target
+add_llvm_executable(lli-child-target
   ChildTarget.cpp
-
-  DEPENDS
-  intrinsics_gen
+  ../RemoteTarget.cpp
 )
 
+set_target_properties(lli-child-target PROPERTIES FOLDER "Misc")

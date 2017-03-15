@@ -1,4 +1,4 @@
-/*	$NetBSD: exec.h,v 1.151 2016/08/06 15:13:14 maxv Exp $	*/
+/*	$NetBSD: exec.h,v 1.145.4.1 2015/04/14 05:12:17 snj Exp $	*/
 
 /*-
  * Copyright (c) 1992, 1993
@@ -124,7 +124,6 @@ struct ps_strings32 {
 };
 #endif
 
-#ifdef _KERNEL
 /*
  * the following structures allow execve() to put together processes
  * in a more extensible and cleaner way.
@@ -155,6 +154,7 @@ struct execsw {
 		int (*elf_probe_func)(struct lwp *,
 			struct exec_package *, void *, char *, vaddr_t *);
 		int (*ecoff_probe_func)(struct lwp *, struct exec_package *);
+		int (*mach_probe_func)(const char **);
 	} u;
 	struct  emul *es_emul;		/* os emulation */
 	int	es_prio;		/* entry priority */
@@ -181,12 +181,9 @@ struct exec_vmcmd_set {
 };
 
 #define	EXEC_DEFAULT_VMCMD_SETSIZE	9	/* # of cmds in set to start */
-struct exec_fakearg {
-	char *fa_arg;
-	size_t fa_len;
-};
 
 struct exec_package {
+	const char *ep_name;		/* file's name */
 	const char *ep_kname;		/* kernel-side copy of file's name */
 	char *ep_resolvedname;		/* fully resolved path from namei */
 	void	*ep_hdr;		/* file's exec header */
@@ -208,7 +205,10 @@ struct exec_package {
 	vaddr_t	ep_vm_maxaddr;		/* top of process address space */
 	u_int	ep_flags;		/* flags; see below. */
 	size_t	ep_fa_len;		/* byte size of ep_fa */
-	struct exec_fakearg *ep_fa;	/* a fake args vector for scripts */
+	struct exec_fakearg {
+		char *fa_arg;
+		size_t fa_len;
+	} *ep_fa;			/* a fake args vector for scripts */
 	int	ep_fd;			/* a file descriptor we're holding */
 	void	*ep_emul_arg;		/* emulation argument */
 	const struct	execsw *ep_esch;/* execsw entry */
@@ -246,11 +246,11 @@ struct exec_vmcmd {
 #define	VMCMD_STACK	0x0008	/* entry is for a stack */
 };
 
+#ifdef _KERNEL
 /*
  * funtions used either by execve() or the various CPU-dependent execve()
  * hooks.
  */
-vaddr_t	exec_vm_minaddr		(vaddr_t);
 void	kill_vmcmd		(struct exec_vmcmd **);
 int	exec_makecmds		(struct lwp *, struct exec_package *);
 int	exec_runcmds		(struct lwp *, struct exec_package *);

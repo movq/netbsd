@@ -1,4 +1,4 @@
-/*	$NetBSD: ohci_s3c24x0.c,v 1.9 2016/04/23 10:15:28 skrll Exp $ */
+/*	$NetBSD: ohci_s3c24x0.c,v 1.8 2011/07/01 20:31:39 dyoung Exp $ */
 
 /* derived from ohci_pci.c */
 
@@ -33,7 +33,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ohci_s3c24x0.c,v 1.9 2016/04/23 10:15:28 skrll Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ohci_s3c24x0.c,v 1.8 2011/07/01 20:31:39 dyoung Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -89,11 +89,13 @@ ohci_ssio_attach(device_t parent, device_t self, void *aux)
 	struct ohci_ssio_softc *sc = device_private(self);
 	struct s3c2xx0_attach_args *sa = (struct s3c2xx0_attach_args *)aux;
 
+	usbd_status r;
+
 	aprint_normal("\n");
 	aprint_naive("\n");
 
 	sc->sc.sc_dev = self;
-	sc->sc.sc_bus.ub_hcpriv = sc;
+	sc->sc.sc_bus.hci_private = sc;
 
 	sc->sc.iot = sa->sa_iot;
 	/*ohcidebug=15;*/
@@ -108,7 +110,7 @@ ohci_ssio_attach(device_t parent, device_t self, void *aux)
 	bus_space_write_4(sc->sc.iot, sc->sc.ioh, OHCI_INTERRUPT_DISABLE,
 			  OHCI_ALL_INTRS);
 
-	sc->sc.sc_bus.ub_dmatag = sa->sa_dmat;
+	sc->sc.sc_bus.dmatag = sa->sa_dmat;
 
 	/* Enable the device. */
 	/* XXX: provide clock to USB block */
@@ -121,10 +123,10 @@ ohci_ssio_attach(device_t parent, device_t self, void *aux)
 	}
 
 	strlcpy(sc->sc.sc_vendor, "Samsung", sizeof sc->sc.sc_vendor);
-
-	int err = ohci_init(&sc->sc);
-	if (err) {
-		aprint_error_dev(self, "init failed, error=%d\n", err);
+	
+	r = ohci_init(&sc->sc);
+	if (r != USBD_NORMAL_COMPLETION) {
+		aprint_error_dev(self, "init failed, error=%d\n", r);
 		return;
 	}
 
@@ -135,5 +137,5 @@ ohci_ssio_attach(device_t parent, device_t self, void *aux)
 int
 ohci_ssio_detach(device_t self, int flags)
 {
-	return 0;
+	return (0);
 }

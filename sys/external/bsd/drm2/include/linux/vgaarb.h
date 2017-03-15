@@ -1,4 +1,4 @@
-/*	$NetBSD: vgaarb.h,v 1.3 2015/02/25 21:55:30 riastradh Exp $	*/
+/*	$NetBSD: vgaarb.h,v 1.2.8.1 2015/03/06 21:39:10 snj Exp $	*/
 
 /*-
  * Copyright (c) 2013 The NetBSD Foundation, Inc.

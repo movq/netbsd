@@ -1,4 +1,4 @@
-/*	$NetBSD: if_cnw.c,v 1.61 2016/12/15 09:28:06 ozaki-r Exp $	*/
+/*	$NetBSD: if_cnw.c,v 1.56 2012/10/27 17:18:36 chs Exp $	*/
 
 /*-
  * Copyright (c) 1998, 2004 The NetBSD Foundation, Inc.
@@ -105,7 +105,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_cnw.c,v 1.61 2016/12/15 09:28:06 ozaki-r Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_cnw.c,v 1.56 2012/10/27 17:18:36 chs Exp $");
 
 #include "opt_inet.h"
 
@@ -558,7 +558,6 @@ cnw_attach(device_t parent, device_t self, void *aux)
 
 	/* Attach the interface */
 	if_attach(ifp);
-	if_deferred_start_init(ifp, NULL);
 	ether_ifattach(ifp, macaddr);
 
 	sc->sc_resource |= CNW_RES_NET;
@@ -729,7 +728,8 @@ cnw_transmit(struct cnw_softc *sc, struct mbuf *m0)
 			mptr += n;
 			mbytes -= n;
 		}
-		m = m0 = m_free(m);
+		MFREE(m, m0);
+		m = m0;
 	}
 
 	/* Issue transmit command */
@@ -760,7 +760,7 @@ cnw_read(struct cnw_softc *sc)
 	MGETHDR(m, M_DONTWAIT, MT_DATA);
 	if (m == 0)
 		return (0);
-	m_set_rcvif(m, &sc->sc_ethercom.ec_if);
+	m->m_pkthdr.rcvif = &sc->sc_ethercom.ec_if;
 	m->m_pkthdr.len = totbytes;
 	mbytes = MHLEN;
 	top = 0;
@@ -853,8 +853,10 @@ cnw_recv(struct cnw_softc *sc)
 		}
 		++ifp->if_ipackets;
 
+		bpf_mtap(ifp, m);
+
 		/* Pass the packet up. */
-		if_percpuq_enqueue(ifp->if_percpuq, m);
+		(*ifp->if_input)(ifp, m);
 	}
 }
 
@@ -974,7 +976,7 @@ cnw_intr(void *arg)
 			ifp->if_flags &= ~IFF_OACTIVE;
 
 			/* Continue to send packets from the queue */
-			if_schedule_deferred_start(&sc->sc_ethercom.ec_if);
+			cnw_start(&sc->sc_ethercom.ec_if);
 		}
 
 	}

@@ -1,4 +1,4 @@
-/*	$NetBSD: asn1parse.y,v 1.2 2017/01/28 21:31:45 christos Exp $	*/
+/*	$NetBSD: asn1parse.y,v 1.1.1.3 2014/04/24 12:45:28 pettai Exp $	*/
 
 /*
  * Copyright (c) 1997 - 2007 Kungliga Tekniska Högskolan
@@ -43,12 +43,13 @@
 
 #include <stdio.h>
 #include <stdlib.h>
-#include <stdint.h>
 #include <string.h>
 #include "symbol.h"
 #include "lex.h"
 #include "gen_locl.h"
 #include "der.h"
+
+__RCSID("NetBSD");
 
 static Type *new_type (Typetype t);
 static struct constraint_spec *new_constraint_spec(enum ctype);
@@ -63,8 +64,6 @@ struct string_list {
     struct string_list *next;
 };
 
-static int default_tag_env = TE_EXPLICIT;
-
 /* Declarations for Bison */
 #define YYMALLOC malloc
 #define YYFREE   free
@@ -72,7 +71,7 @@ static int default_tag_env = TE_EXPLICIT;
 %}
 
 %union {
-    int64_t constant;
+    int constant;
     struct value *value;
     struct range *range;
     char *name;
@@ -246,10 +245,9 @@ ModuleDefinition: IDENTIFIER objid_opt kw_DEFINITIONS TagDefault ExtensionDefaul
 		}
 		;
 
-TagDefault	: kw_EXPLICIT kw_TAGS 
-			{ default_tag_env = TE_EXPLICIT; }
+TagDefault	: kw_EXPLICIT kw_TAGS
 		| kw_IMPLICIT kw_TAGS
-			{ default_tag_env = TE_IMPLICIT; }
+		      { lex_error_message("implicit tagging is not supported"); }
 		| kw_AUTOMATIC kw_TAGS
 		      { lex_error_message("automatic tagging is not supported"); }
 		| /* empty */
@@ -374,14 +372,14 @@ range		: '(' Value RANGE Value ')'
 			lex_error_message("Non-integer in first part of range");
 		    $$ = ecalloc(1, sizeof(*$$));
 		    $$->min = $2->u.integervalue;
-		    $$->max = INT_MAX;
+		    $$->max = $2->u.integervalue - 1;
 		}
 		| '(' kw_MIN RANGE Value ')'
 		{
 		    if($4->type != integervalue)
 			lex_error_message("Non-integer in second part of range");
 		    $$ = ecalloc(1, sizeof(*$$));
-		    $$->min = INT_MIN;
+		    $$->min = $4->u.integervalue + 2;
 		    $$->max = $4->u.integervalue;
 		}
 		| '(' Value ')'
@@ -478,11 +476,6 @@ OctetStringType	: kw_OCTET kw_STRING size
 		{
 		    Type *t = new_type(TOctetString);
 		    t->range = $3;
-		    if (t->range) {
-			if (t->range->min < 0)
-			    lex_error_message("can't use a negative SIZE range "
-					      "length for OCTET STRING");
-		    }
 		    $$ = new_tag(ASN1_C_UNIV, UT_OctetString,
 				 TE_EXPLICIT, t);
 		}
@@ -506,13 +499,13 @@ SequenceType	: kw_SEQUENCE '{' /* ComponentTypeLists */ ComponentTypeList '}'
 		{
 		  $$ = new_type(TSequence);
 		  $$->members = $3;
-		  $$ = new_tag(ASN1_C_UNIV, UT_Sequence, default_tag_env, $$);
+		  $$ = new_tag(ASN1_C_UNIV, UT_Sequence, TE_EXPLICIT, $$);
 		}
 		| kw_SEQUENCE '{' '}'
 		{
 		  $$ = new_type(TSequence);
 		  $$->members = NULL;
-		  $$ = new_tag(ASN1_C_UNIV, UT_Sequence, default_tag_env, $$);
+		  $$ = new_tag(ASN1_C_UNIV, UT_Sequence, TE_EXPLICIT, $$);
 		}
 		;
 
@@ -520,14 +513,8 @@ SequenceOfType	: kw_SEQUENCE size kw_OF Type
 		{
 		  $$ = new_type(TSequenceOf);
 		  $$->range = $2;
-		  if ($$->range) {
-		      if ($$->range->min < 0)
-			  lex_error_message("can't use a negative SIZE range "
-					    "length for SEQUENCE OF");
-		    }
-
 		  $$->subtype = $4;
-		  $$ = new_tag(ASN1_C_UNIV, UT_Sequence, default_tag_env, $$);
+		  $$ = new_tag(ASN1_C_UNIV, UT_Sequence, TE_EXPLICIT, $$);
 		}
 		;
 
@@ -535,13 +522,13 @@ SetType		: kw_SET '{' /* ComponentTypeLists */ ComponentTypeList '}'
 		{
 		  $$ = new_type(TSet);
 		  $$->members = $3;
-		  $$ = new_tag(ASN1_C_UNIV, UT_Set, default_tag_env, $$);
+		  $$ = new_tag(ASN1_C_UNIV, UT_Set, TE_EXPLICIT, $$);
 		}
 		| kw_SET '{' '}'
 		{
 		  $$ = new_type(TSet);
 		  $$->members = NULL;
-		  $$ = new_tag(ASN1_C_UNIV, UT_Set, default_tag_env, $$);
+		  $$ = new_tag(ASN1_C_UNIV, UT_Set, TE_EXPLICIT, $$);
 		}
 		;
 
@@ -549,7 +536,7 @@ SetOfType	: kw_SET kw_OF Type
 		{
 		  $$ = new_type(TSetOf);
 		  $$->subtype = $3;
-		  $$ = new_tag(ASN1_C_UNIV, UT_Set, default_tag_env, $$);
+		  $$ = new_tag(ASN1_C_UNIV, UT_Set, TE_EXPLICIT, $$);
 		}
 		;
 
@@ -651,16 +638,11 @@ TaggedType	: Tag tagenv Type
 			$$ = new_type(TTag);
 			$$->tag = $1;
 			$$->tag.tagenv = $2;
-			if (template_flag) {
-			    $$->subtype = $3;
-			} else {
-			    if($3->type == TTag && $2 == TE_IMPLICIT) {
+			if($3->type == TTag && $2 == TE_IMPLICIT) {
 				$$->subtype = $3->subtype;
 				free($3);
-			    } else {
+			} else
 				$$->subtype = $3;
-			    }
-			}
 		}
 		;
 
@@ -668,7 +650,7 @@ Tag		: '[' Class NUMBER ']'
 		{
 			$$.tagclass = $2;
 			$$.tagvalue = $3;
-			$$.tagenv = default_tag_env;
+			$$.tagenv = TE_EXPLICIT;
 		}
 		;
 
@@ -692,11 +674,11 @@ Class		: /* */
 
 tagenv		: /* */
 		{
-			$$ = default_tag_env;
+			$$ = TE_EXPLICIT;
 		}
 		| kw_EXPLICIT
 		{
-			$$ = default_tag_env;
+			$$ = TE_EXPLICIT;
 		}
 		| kw_IMPLICIT
 		{
@@ -1007,14 +989,11 @@ add_oid_to_tail(struct objid *head, struct objid *tail)
     o->next = tail;
 }
 
-static unsigned long idcounter;
-
 static Type *
 new_type (Typetype tt)
 {
     Type *t = ecalloc(1, sizeof(*t));
     t->type = tt;
-    t->id = idcounter++;
     return t;
 }
 

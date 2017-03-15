@@ -1,4 +1,4 @@
-/*	$NetBSD: dbiterator_test.c,v 1.1.1.6 2016/05/26 15:45:51 christos Exp $	*/
+/*	$NetBSD: dbiterator_test.c,v 1.1.1.3.4.1 2016/10/14 12:01:30 martin Exp $	*/
 
 /*
  * Copyright (C) 2011, 2012, 2016  Internet Systems Consortium, Inc. ("ISC")

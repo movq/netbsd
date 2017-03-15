@@ -1,4 +1,4 @@
-/*	$NetBSD: process_machdep.c,v 1.89 2017/02/23 03:34:22 kamil Exp $	*/
+/*	$NetBSD: process_machdep.c,v 1.85 2014/02/19 21:23:01 dsl Exp $	*/
 
 /*-
  * Copyright (c) 1998, 2000, 2001, 2008 The NetBSD Foundation, Inc.
@@ -44,38 +44,15 @@
  *	registers or privileged bits in the PSL.
  *	The process is stopped at the time write_regs is called.
  *
- * process_read_fpregs(proc, regs, sz)
- *	Get the current user-visible register set from the process
- *	and copy it into the regs structure (<machine/reg.h>).
- *	The process is stopped at the time read_fpregs is called.
- *
- * process_write_fpregs(proc, regs, sz)
- *	Update the current register set from the passed in regs
- *	structure.  Take care to avoid clobbering special CPU
- *	registers or privileged bits in the PSL.
- *	The process is stopped at the time write_fpregs is called.
- *
- * process_read_dbregs(proc, regs)
- *	Get the current user-visible register set from the process
- *	and copy it into the regs structure (<machine/reg.h>).
- *	The process is stopped at the time read_dbregs is called.
- *
- * process_write_dbregs(proc, regs)
- *	Update the current register set from the passed in regs
- *	structure.  Take care to avoid clobbering special CPU
- *	registers or privileged bits in the PSL.
- *	The process is stopped at the time write_dbregs is called.
- *
  * process_sstep(proc)
  *	Arrange for the process to trap after executing a single instruction.
  *
  * process_set_pc(proc)
  *	Set the process's program counter.
- *
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: process_machdep.c,v 1.89 2017/02/23 03:34:22 kamil Exp $");
+__KERNEL_RCSID(0, "$NetBSD: process_machdep.c,v 1.85 2014/02/19 21:23:01 dsl Exp $");
 
 #include "opt_vm86.h"
 #include "opt_ptrace.h"
@@ -94,7 +71,6 @@ __KERNEL_RCSID(0, "$NetBSD: process_machdep.c,v 1.89 2017/02/23 03:34:22 kamil E
 #include <machine/reg.h>
 #include <machine/segments.h>
 
-#include <x86/dbregs.h>
 #include <x86/fpu.h>
 
 #ifdef VM86
@@ -153,16 +129,7 @@ process_read_fpregs(struct lwp *l, struct fpreg *regs, size_t *sz)
 	return 0;
 }
 
-int
-process_read_dbregs(struct lwp *l, struct dbreg *regs, size_t *sz)
-{
-
-	x86_dbregs_read(l, regs);
-
-	return 0;
-}
-
-#ifdef PTRACE_HOOKS
+#ifdef PTRACE
 int
 process_write_regs(struct lwp *l, const struct reg *regs)
 {
@@ -227,22 +194,6 @@ process_write_fpregs(struct lwp *l, const struct fpreg *regs, size_t sz)
 	return 0;
 }
 
-int
-process_write_dbregs(struct lwp *l, const struct dbreg *regs, size_t sz)
-{
-	int error;
-
-	/*
-	 * Check for security violations.
-	 */
-	error = x86_dbregs_validate(regs);
-	if (error != 0)                                                                                                               
-		return error;
-
-	x86_dbregs_write(l, regs);
-
-	return 0;
-}
 
 int
 process_sstep(struct lwp *l, int sstep)
@@ -385,4 +336,4 @@ process_machdep_validxmmregs(struct proc *p)
 	return (i386_use_fxsave);
 }
 #endif /* __HAVE_PTRACE_MACHDEP */
-#endif /* PTRACE_HOOKS */
+#endif /* PTRACE */

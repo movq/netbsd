@@ -1,4 +1,4 @@
-/*	$NetBSD: ntp_lineedit.c,v 1.9 2016/01/08 21:35:38 christos Exp $	*/
+/*	$NetBSD: ntp_lineedit.c,v 1.4.4.3 2016/05/11 11:35:38 martin Exp $	*/
 
 /*
  * ntp_lineedit.c - generic interface to various line editing libs

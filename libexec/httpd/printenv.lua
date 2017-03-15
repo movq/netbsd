@@ -1,4 +1,4 @@
--- $NetBSD: printenv.lua,v 1.3 2015/12/07 03:11:48 kamil Exp $
+-- $NetBSD: printenv.lua,v 1.2.18.1 2016/04/10 10:33:11 martin Exp $
 
 -- this small Lua script demonstrates the use of Lua in (bozo)httpd
 -- it will simply output the "environment"

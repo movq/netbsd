@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.17 2017/01/11 12:02:27 joerg Exp $
+#	$NetBSD: Makefile,v 1.14.2.1 2015/06/04 20:04:22 snj Exp $
 
 PROG_CXX=	opt
 NOMAN=		yes
@@ -12,57 +12,45 @@ SRCS=	AnalysisWrappers.cpp \
 	GraphPrinters.cpp \
 	NewPMDriver.cpp \
 	PassPrinters.cpp \
+	Passes.cpp \
 	PrintSCC.cpp \
 	opt.cpp
 
 LLVM_LIBS+= \
-	Passes \
 	ObjCARC \
 	ipo \
-	Linker \
-	Object \
 	IRReader \
 	AsmParser \
 	BitReader \
 	BitWriter \
 	AArch64CodeGen \
 	AArch64TargetInfo \
-	AArch64AsmParser \
 	AArch64MCTargetDesc \
 	AArch64AsmPrinter \
 	AArch64Utils \
 	ARMCodeGen \
 	ARMTargetInfo \
-	ARMAsmParser \
 	ARMMCTargetDesc \
 	ARMAsmPrinter \
 	MipsCodeGen \
 	MipsTargetInfo \
-	MipsAsmParser \
 	MipsMCTargetDesc \
 	MipsAsmPrinter \
 	PowerPCCodeGen \
 	PowerPCTargetInfo \
-	PowerPCAsmParser \
 	PowerPCMCTargetDesc \
 	PowerPCAsmPrinter \
 	SparcCodeGen \
 	SparcTargetInfo \
-	SparcAsmParser \
 	SparcMCTargetDesc \
 	SparcAsmPrinter \
 	X86CodeGen \
-	X86AsmParser \
 	X86MCTargetDesc \
 	X86TargetInfo \
 	X86Utils \
 	X86AsmPrinter \
-	GlobalISel \
-	TransformsCoroutines \
 	MCDisassembler \
 	AsmPrinter \
-	DebugInfoCodeView \
-	DebugInfoMSF \
 	Object \
 	MCParser \
 	SelectionDAG \
@@ -73,12 +61,12 @@ LLVM_LIBS+= \
 	Instrumentation \
 	ScalarOpts \
 	ProfileData \
+	Analysis \
 	MC \
 	TransformsUtils \
-	Analysis \
+	ipa \
 	IR \
-	Support \
-	Demangle
+	Support
 
 LDADD+=	-lz
 DPADD+=	${LIBZ}

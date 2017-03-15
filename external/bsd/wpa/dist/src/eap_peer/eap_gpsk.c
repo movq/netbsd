@@ -274,7 +274,7 @@ static const u8 * eap_gpsk_process_csuite_list(struct eap_sm *sm,
 static struct wpabuf * eap_gpsk_process_gpsk_1(struct eap_sm *sm,
 					       struct eap_gpsk_data *data,
 					       struct eap_method_ret *ret,
-					       u8 identifier,
+					       const struct wpabuf *reqData,
 					       const u8 *payload,
 					       size_t payload_len)
 {
@@ -301,7 +301,7 @@ static struct wpabuf * eap_gpsk_process_gpsk_1(struct eap_sm *sm,
 		return NULL;
 	}
 
-	resp = eap_gpsk_send_gpsk_2(data, identifier,
+	resp = eap_gpsk_send_gpsk_2(data, eap_get_id(reqData),
 				    csuite_list, csuite_list_len);
 	if (resp == NULL)
 		return NULL;
@@ -583,7 +583,7 @@ static const u8 * eap_gpsk_validate_gpsk_3_mic(struct eap_gpsk_data *data,
 static struct wpabuf * eap_gpsk_process_gpsk_3(struct eap_sm *sm,
 					       struct eap_gpsk_data *data,
 					       struct eap_method_ret *ret,
-					       u8 identifier,
+					       const struct wpabuf *reqData,
 					       const u8 *payload,
 					       size_t payload_len)
 {
@@ -615,7 +615,7 @@ static struct wpabuf * eap_gpsk_process_gpsk_3(struct eap_sm *sm,
 			   (unsigned long) (end - pos));
 	}
 
-	resp = eap_gpsk_send_gpsk_4(data, identifier);
+	resp = eap_gpsk_send_gpsk_4(data, eap_get_id(reqData));
 	if (resp == NULL)
 		return NULL;
 
@@ -670,7 +670,6 @@ static struct wpabuf * eap_gpsk_process(struct eap_sm *sm, void *priv,
 	struct wpabuf *resp;
 	const u8 *pos;
 	size_t len;
-	u8 opcode, id;
 
 	pos = eap_hdr_validate(EAP_VENDOR_IETF, EAP_TYPE_GPSK, reqData, &len);
 	if (pos == NULL || len < 1) {
@@ -678,27 +677,25 @@ static struct wpabuf * eap_gpsk_process(struct eap_sm *sm, void *priv,
 		return NULL;
 	}
 
-	id = eap_get_id(reqData);
-	opcode = *pos++;
-	len--;
-	wpa_printf(MSG_DEBUG, "EAP-GPSK: Received frame: opcode %d", opcode);
+	wpa_printf(MSG_DEBUG, "EAP-GPSK: Received frame: opcode %d", *pos);
 
 	ret->ignore = FALSE;
 	ret->methodState = METHOD_MAY_CONT;
 	ret->decision = DECISION_FAIL;
 	ret->allowNotifications = FALSE;
 
-	switch (opcode) {
+	switch (*pos) {
 	case EAP_GPSK_OPCODE_GPSK_1:
-		resp = eap_gpsk_process_gpsk_1(sm, data, ret, id, pos, len);
+		resp = eap_gpsk_process_gpsk_1(sm, data, ret, reqData,
+					       pos + 1, len - 1);
 		break;
 	case EAP_GPSK_OPCODE_GPSK_3:
-		resp = eap_gpsk_process_gpsk_3(sm, data, ret, id, pos, len);
+		resp = eap_gpsk_process_gpsk_3(sm, data, ret, reqData,
+					       pos + 1, len - 1);
 		break;
 	default:
-		wpa_printf(MSG_DEBUG,
-			   "EAP-GPSK: Ignoring message with unknown opcode %d",
-			   opcode);
+		wpa_printf(MSG_DEBUG, "EAP-GPSK: Ignoring message with "
+			   "unknown opcode %d", *pos);
 		ret->ignore = TRUE;
 		return NULL;
 	}
@@ -771,6 +768,7 @@ static u8 * eap_gpsk_get_session_id(struct eap_sm *sm, void *priv, size_t *len)
 int eap_peer_gpsk_register(void)
 {
 	struct eap_method *eap;
+	int ret;
 
 	eap = eap_peer_method_alloc(EAP_PEER_METHOD_INTERFACE_VERSION,
 				    EAP_VENDOR_IETF, EAP_TYPE_GPSK, "GPSK");
@@ -785,5 +783,8 @@ int eap_peer_gpsk_register(void)
 	eap->get_emsk = eap_gpsk_get_emsk;
 	eap->getSessionId = eap_gpsk_get_session_id;
 
-	return eap_peer_method_register(eap);
+	ret = eap_peer_method_register(eap);
+	if (ret)
+		eap_peer_method_free(eap);
+	return ret;
 }

@@ -34,8 +34,8 @@ NestedNameSpecifier::FindOrInsert(const ASTContext &Context,
   NestedNameSpecifier *NNS
     = Context.NestedNameSpecifiers.FindNodeOrInsertPos(ID, InsertPos);
   if (!NNS) {
-    NNS =
-        new (Context, alignof(NestedNameSpecifier)) NestedNameSpecifier(Mockup);
+    NNS = new (Context, llvm::alignOf<NestedNameSpecifier>())
+        NestedNameSpecifier(Mockup);
     Context.NestedNameSpecifiers.InsertNode(NNS, InsertPos);
   }
 
@@ -113,7 +113,8 @@ NestedNameSpecifier *
 NestedNameSpecifier::GlobalSpecifier(const ASTContext &Context) {
   if (!Context.GlobalNestedNameSpecifier)
     Context.GlobalNestedNameSpecifier =
-        new (Context, alignof(NestedNameSpecifier)) NestedNameSpecifier();
+        new (Context, llvm::alignOf<NestedNameSpecifier>())
+            NestedNameSpecifier();
   return Context.GlobalNestedNameSpecifier;
 }
 
@@ -154,7 +155,7 @@ NestedNameSpecifier::SpecifierKind NestedNameSpecifier::getKind() const {
 
 /// \brief Retrieve the namespace stored in this nested name specifier.
 NamespaceDecl *NestedNameSpecifier::getAsNamespace() const {
-  if (Prefix.getInt() == StoredDecl)
+	if (Prefix.getInt() == StoredDecl)
     return dyn_cast<NamespaceDecl>(static_cast<NamedDecl *>(Specifier));
 
   return nullptr;
@@ -162,7 +163,7 @@ NamespaceDecl *NestedNameSpecifier::getAsNamespace() const {
 
 /// \brief Retrieve the namespace alias stored in this nested name specifier.
 NamespaceAliasDecl *NestedNameSpecifier::getAsNamespaceAlias() const {
-  if (Prefix.getInt() == StoredDecl)
+	if (Prefix.getInt() == StoredDecl)
     return dyn_cast<NamespaceAliasDecl>(static_cast<NamedDecl *>(Specifier));
 
   return nullptr;
@@ -170,19 +171,10 @@ NamespaceAliasDecl *NestedNameSpecifier::getAsNamespaceAlias() const {
 
 /// \brief Retrieve the record declaration stored in this nested name specifier.
 CXXRecordDecl *NestedNameSpecifier::getAsRecordDecl() const {
-  switch (Prefix.getInt()) {
-  case StoredIdentifier:
-    return nullptr;
-
-  case StoredDecl:
+  if (Prefix.getInt() == StoredDecl)
     return dyn_cast<CXXRecordDecl>(static_cast<NamedDecl *>(Specifier));
 
-  case StoredTypeSpec:
-  case StoredTypeSpecWithTemplate:
-    return getAsType()->getAsCXXRecordDecl();
-  }
-
-  llvm_unreachable("Invalid NNS Kind!");
+  return nullptr;
 }
 
 /// \brief Whether this nested name specifier refers to a dependent
@@ -314,7 +306,7 @@ NestedNameSpecifier::print(raw_ostream &OS,
 
       // Print the template argument list.
       TemplateSpecializationType::PrintTemplateArgumentList(
-          OS, SpecType->template_arguments(), InnerPolicy);
+          OS, SpecType->getArgs(), SpecType->getNumArgs(), InnerPolicy);
     } else {
       // Print the type normally
       QualType(T, 0).print(OS, InnerPolicy);
@@ -326,12 +318,7 @@ NestedNameSpecifier::print(raw_ostream &OS,
   OS << "::";
 }
 
-void NestedNameSpecifier::dump(const LangOptions &LO) const {
-  print(llvm::errs(), PrintingPolicy(LO));
-}
-
-LLVM_DUMP_METHOD void NestedNameSpecifier::dump() const {
-  LangOptions LO;
+void NestedNameSpecifier::dump(const LangOptions &LO) {
   print(llvm::errs(), PrintingPolicy(LO));
 }
 
@@ -448,19 +435,17 @@ TypeLoc NestedNameSpecifierLoc::getTypeLoc() const {
 namespace {
   void Append(char *Start, char *End, char *&Buffer, unsigned &BufferSize,
               unsigned &BufferCapacity) {
-    if (Start == End)
-      return;
-
     if (BufferSize + (End - Start) > BufferCapacity) {
       // Reallocate the buffer.
-      unsigned NewCapacity = std::max(
-          (unsigned)(BufferCapacity ? BufferCapacity * 2 : sizeof(void *) * 2),
-          (unsigned)(BufferSize + (End - Start)));
+      unsigned NewCapacity 
+      = std::max((unsigned)(BufferCapacity? BufferCapacity * 2 
+                            : sizeof(void*) * 2),
+                 (unsigned)(BufferSize + (End - Start)));
       char *NewBuffer = static_cast<char *>(malloc(NewCapacity));
-      if (BufferCapacity) {
-        memcpy(NewBuffer, Buffer, BufferSize);
+      memcpy(NewBuffer, Buffer, BufferSize);
+      
+      if (BufferCapacity)
         free(Buffer);
-      }
       Buffer = NewBuffer;
       BufferCapacity = NewCapacity;
     }
@@ -686,7 +671,7 @@ NestedNameSpecifierLocBuilder::getWithLocInContext(ASTContext &Context) const {
   // FIXME: After copying the source-location information, should we free
   // our (temporary) buffer and adopt the ASTContext-allocated memory?
   // Doing so would optimize repeated calls to getWithLocInContext().
-  void *Mem = Context.Allocate(BufferSize, alignof(void *));
+  void *Mem = Context.Allocate(BufferSize, llvm::alignOf<void *>());
   memcpy(Mem, Buffer, BufferSize);
   return NestedNameSpecifierLoc(Representation, Mem);
 }

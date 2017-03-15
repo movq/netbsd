@@ -1,4 +1,4 @@
-/* $NetBSD: siisata.c,v 1.6 2015/09/30 14:14:32 phx Exp $ */
+/* $NetBSD: siisata.c,v 1.5.22.1 2016/01/16 10:04:05 snj Exp $ */
 
 /*-
  * Copyright (c) 2008 The NetBSD Foundation, Inc.

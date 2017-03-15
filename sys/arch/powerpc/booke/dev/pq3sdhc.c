@@ -1,4 +1,4 @@
-/*	$NetBSD: pq3sdhc.c,v 1.6 2015/02/27 16:09:05 nonaka Exp $	*/
+/*	$NetBSD: pq3sdhc.c,v 1.5.14.1 2015/03/09 09:29:32 snj Exp $	*/
 /*-
  * Copyright (c) 2011 The NetBSD Foundation, Inc.
  * All rights reserved.
@@ -31,7 +31,7 @@
 #define	ESDHC_PRIVATE
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pq3sdhc.c,v 1.6 2015/02/27 16:09:05 nonaka Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pq3sdhc.c,v 1.5.14.1 2015/03/09 09:29:32 snj Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

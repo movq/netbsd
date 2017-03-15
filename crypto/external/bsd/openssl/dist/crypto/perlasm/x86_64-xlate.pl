@@ -195,17 +195,14 @@ my %globals;
     sub out {
     	my $self = shift;
 
-	$self->{value} =~ s/\b(0b[0-1]+)/oct($1)/eig;
 	if ($gas) {
 	    # Solaris /usr/ccs/bin/as can't handle multiplications
 	    # in $self->{value}
-	    my $value = $self->{value};
-	    $value =~ s/(?<![\w\$\.])(0x?[0-9a-f]+)/oct($1)/egi;
-	    if ($value =~ s/([0-9]+\s*[\*\/\%]\s*[0-9]+)/eval($1)/eg) {
-		$self->{value} = $value;
-	    }
+	    $self->{value} =~ s/(?<![\w\$\.])(0x?[0-9a-f]+)/oct($1)/egi;
+	    $self->{value} =~ s/([0-9]+\s*[\*\/\%]\s*[0-9]+)/eval($1)/eg;
 	    sprintf "\$%s",$self->{value};
 	} else {
+	    $self->{value} =~ s/(0b[0-1]+)/oct($1)/eig;
 	    $self->{value} =~ s/0x([0-9a-f]+)/0$1h/ig if ($masm);
 	    sprintf "%s",$self->{value};
 	}
@@ -250,23 +247,11 @@ my %globals;
 	$self->{base}  =~ s/^[er](.?[0-9xpi])[d]?$/r\1/;
 
 	# Solaris /usr/ccs/bin/as can't handle multiplications
-	# in $self->{label}...
+	# in $self->{label}, new gas requires sign extension...
 	use integer;
 	$self->{label} =~ s/(?<![\w\$\.])(0x?[0-9a-f]+)/oct($1)/egi;
-	$self->{label} =~ s/\b([0-9]+\s*[\*\/\%]\s*[0-9]+)\b/eval($1)/eg;
-
-	# Some assemblers insist on signed presentation of 32-bit
-	# offsets, but sign extension is a tricky business in perl...
-	if ((1<<31)<<1) {
-	    $self->{label} =~ s/\b([0-9]+)\b/$1<<32>>32/eg;
-	} else {
-	    $self->{label} =~ s/\b([0-9]+)\b/$1>>0/eg;
-	}
-
-	if (!$self->{label} && $self->{index} && $self->{scale}==1 &&
-	    $self->{base} =~ /(rbp|r13)/) {
-		$self->{base} = $self->{index}; $self->{index} = $1;
-	}
+	$self->{label} =~ s/([0-9]+\s*[\*\/\%]\s*[0-9]+)/eval($1)/eg;
+	$self->{label} =~ s/([0-9]+)/$1<<32>>32/eg;
 
 	if ($gas) {
 	    $self->{label} =~ s/^___imp_/__imp__/   if ($flavour eq "mingw64");
@@ -280,20 +265,14 @@ my %globals;
 		sprintf "%s%s(%%%s)",	$self->{asterisk},$self->{label},$self->{base};
 	    }
 	} else {
-	    %szmap = (	b=>"BYTE$PTR",  w=>"WORD$PTR",
-			l=>"DWORD$PTR", d=>"DWORD$PTR",
-	    		q=>"QWORD$PTR", o=>"OWORD$PTR",
-			x=>"XMMWORD$PTR", y=>"YMMWORD$PTR", z=>"ZMMWORD$PTR" );
+	    %szmap = (	b=>"BYTE$PTR", w=>"WORD$PTR", l=>"DWORD$PTR",
+	    		q=>"QWORD$PTR",o=>"OWORD$PTR",x=>"XMMWORD$PTR" );
 
 	    $self->{label} =~ s/\./\$/g;
 	    $self->{label} =~ s/(?<![\w\$\.])0x([0-9a-f]+)/0$1h/ig;
 	    $self->{label} = "($self->{label})" if ($self->{label} =~ /[\*\+\-\/]/);
-
-	    ($self->{asterisk})					&& ($sz="q") ||
-	    (opcode->mnemonic() =~ /^v?mov([qd])$/)		&& ($sz=$1)  ||
-	    (opcode->mnemonic() =~ /^v?pinsr([qdwb])$/)		&& ($sz=$1)  ||
-	    (opcode->mnemonic() =~ /^vpbroadcast([qdwb])$/)	&& ($sz=$1)  ||
-	    (opcode->mnemonic() =~ /^vinsert[fi]128$/)		&& ($sz="x");
+	    $sz="q" if ($self->{asterisk} || opcode->mnemonic() eq "movq");
+	    $sz="l" if (opcode->mnemonic() eq "movd");
 
 	    if (defined($self->{index})) {
 		sprintf "%s[%s%s*%d%s]",$szmap{$sz},
@@ -433,7 +412,7 @@ my %globals;
     }
     sub out {
 	my $self = shift;
-	if ($nasm && opcode->mnemonic()=~m/^j(?![re]cxz)/) {
+	if ($nasm && opcode->mnemonic()=~m/^j/) {
 	    "NEAR ".$self->{value};
 	} else {
 	    $self->{value};
@@ -551,7 +530,7 @@ my %globals;
 					$v="$current_segment\tENDS\n" if ($current_segment);
 					$current_segment = ".text\$";
 					$v.="$current_segment\tSEGMENT ";
-					$v.=$masm>=$masmref ? "ALIGN(256)" : "PAGE";
+					$v.=$masm>=$masmref ? "ALIGN(64)" : "PAGE";
 					$v.=" 'CODE'";
 				    }
 				    $self->{value} = $v;
@@ -793,64 +772,10 @@ my $rdrand = sub {
     }
 };
 
-my $rdseed = sub {
-    if (shift =~ /%[er](\w+)/) {
-      my @opcode=();
-      my $dst=$1;
-	if ($dst !~ /[0-9]+/) { $dst = $regrm{"%e$dst"}; }
-	rex(\@opcode,0,$1,8);
-	push @opcode,0x0f,0xc7,0xf8|($dst&7);
-	@opcode;
-    } else {
-	();
-    }
-};
-
-sub rxb {
- local *opcode=shift;
- my ($dst,$src1,$src2,$rxb)=@_;
-
-   $rxb|=0x7<<5;
-   $rxb&=~(0x04<<5) if($dst>=8);
-   $rxb&=~(0x01<<5) if($src1>=8);
-   $rxb&=~(0x02<<5) if($src2>=8);
-   push @opcode,$rxb;
-}
-
-my $vprotd = sub {
-    if (shift =~ /\$([x0-9a-f]+),\s*%xmm([0-9]+),\s*%xmm([0-9]+)/) {
-      my @opcode=(0x8f);
-	rxb(\@opcode,$3,$2,-1,0x08);
-	push @opcode,0x78,0xc2;
-	push @opcode,0xc0|($2&7)|(($3&7)<<3);		# ModR/M
-	my $c=$1;
-	push @opcode,$c=~/^0/?oct($c):$c;
-	@opcode;
-    } else {
-	();
-    }
-};
-
-my $vprotq = sub {
-    if (shift =~ /\$([x0-9a-f]+),\s*%xmm([0-9]+),\s*%xmm([0-9]+)/) {
-      my @opcode=(0x8f);
-	rxb(\@opcode,$3,$2,-1,0x08);
-	push @opcode,0x78,0xc3;
-	push @opcode,0xc0|($2&7)|(($3&7)<<3);		# ModR/M
-	my $c=$1;
-	push @opcode,$c=~/^0/?oct($c):$c;
-	@opcode;
-    } else {
-	();
-    }
-};
-
 if ($nasm) {
     print <<___;
 default	rel
 %define XMMWORD
-%define YMMWORD
-%define ZMMWORD
 ___
 } elsif ($masm) {
     print <<___;
@@ -864,7 +789,6 @@ while($line=<>) {
     $line =~ s|[#!].*$||;	# get rid of asm-style comments...
     $line =~ s|/\*.*\*/||;	# ... and C-style comments...
     $line =~ s|^\s+||;		# ... and skip white spaces in beginning
-    $line =~ s|\s+$||;		# ... and at the end
 
     undef $label;
     undef $opcode;
@@ -913,8 +837,6 @@ while($line=<>) {
 		    my $arg = $_->out();
 		    # $insn.=$sz compensates for movq, pinsrw, ...
 		    if ($arg =~ /^xmm[0-9]+$/) { $insn.=$sz; $sz="x" if(!$sz); last; }
-		    if ($arg =~ /^ymm[0-9]+$/) { $insn.=$sz; $sz="y" if(!$sz); last; }
-		    if ($arg =~ /^zmm[0-9]+$/) { $insn.=$sz; $sz="z" if(!$sz); last; }
 		    if ($arg =~ /^mm[0-9]+$/)  { $insn.=$sz; $sz="q" if(!$sz); last; }
 		}
 		@args = reverse(@args);

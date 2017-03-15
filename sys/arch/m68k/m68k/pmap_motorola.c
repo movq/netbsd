@@ -1,4 +1,4 @@
-/*	$NetBSD: pmap_motorola.c,v 1.69 2016/12/23 07:15:27 cherry Exp $        */
+/*	$NetBSD: pmap_motorola.c,v 1.67 2013/10/25 20:51:14 martin Exp $        */
 
 /*-
  * Copyright (c) 1999 The NetBSD Foundation, Inc.
@@ -119,7 +119,7 @@
 #include "opt_m68k_arch.h"
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pmap_motorola.c,v 1.69 2016/12/23 07:15:27 cherry Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pmap_motorola.c,v 1.67 2013/10/25 20:51:14 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -133,7 +133,6 @@ __KERNEL_RCSID(0, "$NetBSD: pmap_motorola.c,v 1.69 2016/12/23 07:15:27 cherry Ex
 #include <machine/pcb.h>
 
 #include <uvm/uvm.h>
-#include <uvm/uvm_physseg.h>
 
 #include <m68k/cacheops.h>
 
@@ -296,11 +295,10 @@ struct pool	pmap_pv_pool;	/* memory pool for pv entries */
 static inline struct pv_header *
 pa_to_pvh(paddr_t pa)
 {
-	uvm_physseg_t bank = 0;	/* XXX gcc4 -Wuninitialized */
-	psize_t pg = 0;
-	
-	bank = uvm_physseg_find(atop((pa)), &pg);
-	return &uvm_physseg_get_pmseg(bank)->pvheader[pg];
+	int bank, pg = 0;	/* XXX gcc4 -Wuninitialized */
+
+	bank = vm_physseg_find(atop((pa)), &pg);
+	return &VM_PHYSMEM_PTR(bank)->pmseg.pvheader[pg];
 }
 
 /*
@@ -342,7 +340,7 @@ pmap_bootstrap_finalize(void)
 	 * and they require this earlier.
 	 */
 	uvmexp.pagesize = NBPG;
-	uvm_md_init();
+	uvm_setpagesize();
 #endif
 
 	/*
@@ -414,7 +412,7 @@ pmap_init(void)
 	struct pv_header *pvh;
 	int		rv;
 	int		npages;
-	uvm_physseg_t	bank;
+	int		bank;
 
 	PMAP_DPRINTF(PDB_FOLLOW, ("pmap_init()\n"));
 
@@ -436,10 +434,8 @@ pmap_init(void)
 	 * Allocate memory for random pmap data structures.  Includes the
 	 * initial segment table, pv_head_table and pmap_attributes.
 	 */
-	for (page_cnt = 0, bank = uvm_physseg_get_first();
-	     uvm_physseg_valid_p(bank);
-	     bank = uvm_physseg_get_next(bank))
-		page_cnt += uvm_physseg_get_end(bank) - uvm_physseg_get_start(bank);
+	for (page_cnt = 0, bank = 0; bank < vm_nphysseg; bank++)
+		page_cnt += VM_PHYSMEM_PTR(bank)->end - VM_PHYSMEM_PTR(bank)->start;
 	s = M68K_STSIZE;					/* Segtabzero */
 	s += page_cnt * sizeof(struct pv_header);	/* pv table */
 	s = round_page(s);
@@ -465,11 +461,9 @@ pmap_init(void)
 	 * assign them to the memory segments.
 	 */
 	pvh = pv_table;
-	for (bank = uvm_physseg_get_first();
-	     uvm_physseg_valid_p(bank);
-	     bank = uvm_physseg_get_next(bank)) {
-		npages = uvm_physseg_get_end(bank) - uvm_physseg_get_start(bank);
-		uvm_physseg_get_pmseg(bank)->pvheader = pvh;
+	for (bank = 0; bank < vm_nphysseg; bank++) {
+		npages = VM_PHYSMEM_PTR(bank)->end - VM_PHYSMEM_PTR(bank)->start;
+		VM_PHYSMEM_PTR(bank)->pmseg.pvheader = pvh;
 		pvh += npages;
 	}
 
@@ -1710,8 +1704,7 @@ pmap_collect1(pmap_t pmap, paddr_t startpa, paddr_t endpa)
 static void
 pmap_collect(void)
 {
-	int s;
-	uvm_physseg_t bank;
+	int bank, s;
 
 	/*
 	 * XXX This is very bogus.  We should handle kernel PT
@@ -1719,11 +1712,9 @@ pmap_collect(void)
 	 */
 
 	s = splvm();
-	for (bank = uvm_physseg_get_first();
-	     uvm_physseg_valid_p(bank);
-	     bank = uvm_physseg_get_next(bank)) {
-		pmap_collect1(pmap_kernel(), ptoa(uvm_physseg_get_start(bank)),
-		    ptoa(uvm_physseg_get_end(bank)));
+	for (bank = 0; bank < vm_nphysseg; bank++) {
+		pmap_collect1(pmap_kernel(), ptoa(VM_PHYSMEM_PTR(bank)->start),
+		    ptoa(VM_PHYSMEM_PTR(bank)->end));
 	}
 	splx(s);
 }

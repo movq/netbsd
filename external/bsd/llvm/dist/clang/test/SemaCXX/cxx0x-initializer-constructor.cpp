@@ -142,7 +142,6 @@ namespace objects {
 
     one ov2(int);
     two ov2(F<3>);
-    // expected-warning@+1 {{braces around scalar initializer}}
     static_assert(sizeof(ov2({1})) == sizeof(one), "bad overload"); // list -> int ranks as identity
     static_assert(sizeof(ov2({1, 2, 3})) == sizeof(two), "bad overload"); // list -> F only viable
   }
@@ -215,10 +214,7 @@ namespace PR12092 {
 
 namespace PR12117 {
   struct A { A(int); }; 
-  struct B { B(A); } b{{0}};   //FIXME: non-conformant. Temporary fix until standard resolution.
-                                // expected- error {{call to constructor of 'struct B' is ambiguous}} \
-                                // expected- note 2{{candidate is the implicit}} \
-                                // expected- note {{candidate constructor}}
+  struct B { B(A); } b{{0}};
   struct C { C(int); } c{0};
 }
 
@@ -267,11 +263,8 @@ namespace PR12120 {
   struct A { explicit A(int); A(float); }; // expected-note {{declared here}}
   A a = { 0 }; // expected-error {{constructor is explicit}}
 
-  struct B { explicit B(short); B(long); }; // expected-note 4{{candidate}}
+  struct B { explicit B(short); B(long); }; // expected-note 2 {{candidate}}
   B b = { 0 }; // expected-error {{ambiguous}}
-
-  struct C { explicit C(short); C(long); }; // expected-note 2{{candidate}}
-  C c = {{ 0 }}; // expected-error {{ambiguous}}
 }
 
 namespace PR12498 {

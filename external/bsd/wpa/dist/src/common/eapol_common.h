@@ -25,7 +25,7 @@ struct ieee802_1x_hdr {
 struct ieee8023_hdr {
 	u8 dest[ETH_ALEN];
 	u8 src[ETH_ALEN];
-	be16 ethertype;
+	u16 ethertype;
 } STRUCT_PACKED;
 
 #ifdef _MSC_VER

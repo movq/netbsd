@@ -1,4 +1,4 @@
-/*	$NetBSD: t_lwproc.c,v 1.9 2017/01/13 21:30:43 christos Exp $	*/
+/*	$NetBSD: t_lwproc.c,v 1.5 2011/01/02 12:58:17 pooka Exp $	*/
 
 /*
  * Copyright (c) 2010 The NetBSD Foundation, Inc.
@@ -29,7 +29,6 @@
 
 #include <sys/types.h>
 #include <sys/wait.h>
-#include <sys/stat.h>
 
 #include <rump/rump.h>
 #include <rump/rump_syscalls.h>
@@ -44,7 +43,7 @@
 #include <unistd.h>
 #include <util.h>
 
-#include "h_macros.h"
+#include "../../h_macros.h"
 
 ATF_TC(makelwp);
 ATF_TC_HEAD(makelwp, tc)
@@ -89,7 +88,6 @@ ATF_TC_BODY(proccreds, tc)
 	rump_init();
 	RZ(rump_pub_lwproc_rfork(RUMP_RFCFDG));
 	l1 = rump_pub_lwproc_curlwp();
-	RZ(rump_pub_lwproc_newlwp(rump_sys_getpid()));
 
 	RZ(rump_pub_lwproc_rfork(RUMP_RFCFDG));
 	l2 = rump_pub_lwproc_curlwp();

@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.18 2017/02/05 04:05:05 spz Exp $	
+#	$NetBSD: Makefile,v 1.10.4.2 2017/02/19 05:01:15 snj Exp $	
 
 WARNS?=	1	# XXX: need to cleanup later
 

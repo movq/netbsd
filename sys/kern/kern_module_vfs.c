@@ -1,4 +1,4 @@
-/*	$NetBSD: kern_module_vfs.c,v 1.15 2017/01/15 01:47:24 maya Exp $	*/
+/*	$NetBSD: kern_module_vfs.c,v 1.12 2011/09/14 12:30:20 christos Exp $	*/
 
 /*-
  * Copyright (c) 2008 The NetBSD Foundation, Inc.
@@ -34,7 +34,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: kern_module_vfs.c,v 1.15 2017/01/15 01:47:24 maya Exp $");
+__KERNEL_RCSID(0, "$NetBSD: kern_module_vfs.c,v 1.12 2011/09/14 12:30:20 christos Exp $");
 
 #define _MODULE_INTERNAL
 #include <sys/param.h>
@@ -56,7 +56,6 @@ void
 module_load_vfs_init(void)
 {
 	module_load_vfs_vec = module_load_vfs;
-	aprint_normal("kern.module.path=%s\n", module_base);
 }
 
 int
@@ -81,7 +80,6 @@ module_load_vfs(const char *name, int flags, bool autoload,
 		if (strchr(name,  '/') != NULL) {
 			nochroot = false;
 			snprintf(path, MAXPATHLEN, "%s", name);
-			module_print("Loading module from %s", path);
 			error = kobj_load_vfs(&mod->mod_kobj, path, nochroot);
 		} else
 			error = ENOENT;
@@ -91,7 +89,6 @@ module_load_vfs(const char *name, int flags, bool autoload,
 			nochroot = true;
 			snprintf(path, MAXPATHLEN, "%s/%s/%s.kmod",
 			    module_base, name, name);
-			module_print("Loading module from %s", path);
 			error = kobj_load_vfs(&mod->mod_kobj, path, nochroot);
 		} else
 			error = ENOENT;
@@ -162,7 +159,7 @@ module_load_plist_vfs(const char *modpath, const bool nochroot,
 	base = NULL;
 
 	proppath = PNBUF_GET();
-	strlcpy(proppath, modpath, MAXPATHLEN);
+	strcpy(proppath, modpath);
 	pathlen = strlen(proppath);
 	if ((pathlen >= 6) && (strcmp(&proppath[pathlen - 5], ".kmod") == 0)) {
 		strcpy(&proppath[pathlen - 5], ".plist");
@@ -179,7 +176,6 @@ module_load_plist_vfs(const char *modpath, const bool nochroot,
 		error = ENOMEM;
 		goto out1;
 	}
-	module_print("Loading plist from %s", proppath);
 	
 	NDINIT(&nd, LOOKUP, FOLLOW | (nochroot ? NOCHROOT : 0), pb);
 

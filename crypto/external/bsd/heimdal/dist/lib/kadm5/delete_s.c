@@ -1,4 +1,4 @@
-/*	$NetBSD: delete_s.c,v 1.2 2017/01/28 21:31:49 christos Exp $	*/
+/*	$NetBSD: delete_s.c,v 1.1.1.2 2014/04/24 12:45:48 pettai Exp $	*/
 
 /*
  * Copyright (c) 1997 - 2001, 2003, 2005 - 2006 Kungliga Tekniska Högskolan
@@ -35,7 +35,7 @@
 
 #include "kadm5_locl.h"
 
-__RCSID("$NetBSD: delete_s.c,v 1.2 2017/01/28 21:31:49 christos Exp $");
+__RCSID("NetBSD");
 
 kadm5_ret_t
 kadm5_s_delete_principal(void *server_handle, krb5_principal princ)
@@ -45,44 +45,33 @@ kadm5_s_delete_principal(void *server_handle, krb5_principal princ)
     hdb_entry_ex ent;
 
     memset(&ent, 0, sizeof(ent));
-    if (!context->keep_open) {
-	ret = context->db->hdb_open(context->context, context->db, O_RDWR, 0);
-	if(ret) {
-	    krb5_warn(context->context, ret, "opening database");
-	    return ret;
-	}
+    ret = context->db->hdb_open(context->context, context->db, O_RDWR, 0);
+    if(ret) {
+	krb5_warn(context->context, ret, "opening database");
+	return ret;
     }
-
-    ret = kadm5_log_init(context);
-    if (ret)
-        goto out;
-
     ret = context->db->hdb_fetch_kvno(context->context, context->db, princ,
 				      HDB_F_DECRYPT|HDB_F_GET_ANY|HDB_F_ADMIN_DATA, 0, &ent);
-    if (ret == HDB_ERR_NOENTRY)
-	goto out2;
-    if (ent.entry.flags.immutable) {
+    if(ret == HDB_ERR_NOENTRY)
+	goto out;
+    if(ent.entry.flags.immutable) {
 	ret = KADM5_PROTECT_PRINCIPAL;
-	goto out3;
+	goto out2;
     }
 
     ret = hdb_seal_keys(context->context, context->db, &ent.entry);
     if (ret)
-	goto out3;
+	goto out2;
 
-    /* This logs the change for iprop and writes to the HDB */
-    ret = kadm5_log_delete(context, princ);
+    ret = context->db->hdb_remove(context->context, context->db, princ);
+    if (ret)
+	goto out2;
 
- out3:
+    kadm5_log_delete (context, princ);
+
+out2:
     hdb_free_entry(context->context, &ent);
- out2:
-    (void) kadm5_log_end(context);
- out:
-    if (!context->keep_open) {
-        kadm5_ret_t ret2;
-        ret2 = context->db->hdb_close(context->context, context->db);
-        if (ret == 0 && ret2 != 0)
-            ret = ret2;
-    }
+out:
+    context->db->hdb_close(context->context, context->db);
     return _kadm5_error_code(ret);
 }

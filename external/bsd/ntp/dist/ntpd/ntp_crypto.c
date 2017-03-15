@@ -1,4 +1,4 @@
-/*	$NetBSD: ntp_crypto.c,v 1.13 2016/11/22 03:09:30 christos Exp $	*/
+/*	$NetBSD: ntp_crypto.c,v 1.6.4.4 2016/05/11 11:35:38 martin Exp $	*/
 
 /*
  * ntp_crypto.c - NTP version 4 public key routines
@@ -24,13 +24,13 @@
 #include "ntp_calendar.h"
 #include "ntp_leapsec.h"
 
+#include "openssl/asn1_mac.h"
 #include "openssl/bn.h"
 #include "openssl/err.h"
 #include "openssl/evp.h"
 #include "openssl/pem.h"
 #include "openssl/rand.h"
 #include "openssl/x509v3.h"
-#include "libssl_compat.h"
 
 #ifdef KERNEL_PLL
 #include "ntp_syscall.h"
@@ -232,7 +232,7 @@ session_key(
 	u_long	lifetime 	/* key lifetime */
 	)
 {
-	EVP_MD_CTX *ctx;	/* message digest context */
+	EVP_MD_CTX ctx;		/* message digest context */
 	u_char dgst[EVP_MAX_MD_SIZE]; /* message digest */
 	keyid_t	keyid;		/* key identifer */
 	u_int32	header[10];	/* data in network byte order */
@@ -265,11 +265,9 @@ session_key(
 		hdlen = 10 * sizeof(u_int32);
 		break;
 	}
-	ctx = EVP_MD_CTX_new();
-	EVP_DigestInit(ctx, EVP_get_digestbynid(crypto_nid));
-	EVP_DigestUpdate(ctx, (u_char *)header, hdlen);
-	EVP_DigestFinal(ctx, dgst, &len);
-	EVP_MD_CTX_free(ctx);
+	EVP_DigestInit(&ctx, EVP_get_digestbynid(crypto_nid));
+	EVP_DigestUpdate(&ctx, (u_char *)header, hdlen);
+	EVP_DigestFinal(&ctx, dgst, &len);
 	memcpy(&keyid, dgst, 4);
 	keyid = ntohl(keyid);
 	if (lifetime != 0) {
@@ -303,7 +301,7 @@ make_keylist(
 	struct interface *dstadr /* interface */
 	)
 {
-	EVP_MD_CTX *ctx;	/* signature context */
+	EVP_MD_CTX ctx;		/* signature context */
 	tstamp_t tstamp;	/* NTP timestamp */
 	struct autokey *ap;	/* autokey pointer */
 	struct value *vp;	/* value pointer */
@@ -381,16 +379,14 @@ make_keylist(
 	if (tstamp != 0) {
 		if (vp->sig == NULL)
 			vp->sig = emalloc(sign_siglen);
-		ctx = EVP_MD_CTX_new();
-		EVP_SignInit(ctx, sign_digest);
-		EVP_SignUpdate(ctx, (u_char *)vp, 12);
-		EVP_SignUpdate(ctx, vp->ptr, sizeof(struct autokey));
-		if (EVP_SignFinal(ctx, vp->sig, &len, sign_pkey)) {
+		EVP_SignInit(&ctx, sign_digest);
+		EVP_SignUpdate(&ctx, (u_char *)vp, 12);
+		EVP_SignUpdate(&ctx, vp->ptr, sizeof(struct autokey));
+		if (EVP_SignFinal(&ctx, vp->sig, &len, sign_pkey)) {
 			INSIST(len <= sign_siglen);
 			vp->siglen = htonl(len);
 			peer->flags |= FLAG_ASSOC;
 		}
-		EVP_MD_CTX_free(ctx);
 	}
 	DPRINTF(1, ("make_keys: %d %08x %08x ts %u fs %u poll %d\n",
 		    peer->keynumber, keyid, cookie, ntohl(vp->tstamp),
@@ -826,8 +822,8 @@ crypto_recv(
 			 * errors.
 			 */
 			if (vallen == (u_int)EVP_PKEY_size(host_pkey)) {
-				RSA *rsa = EVP_PKEY_get0_RSA(host_pkey);
-				u_int32 *cookiebuf = malloc(RSA_size(rsa));
+				u_int32 *cookiebuf = malloc(
+				    RSA_size(host_pkey->pkey.rsa));
 				if (!cookiebuf) {
 					rval = XEVNT_CKY;
 					break;
@@ -836,7 +832,7 @@ crypto_recv(
 				if (RSA_private_decrypt(vallen,
 				    (u_char *)ep->pkt,
 				    (u_char *)cookiebuf,
-				    rsa,
+				    host_pkey->pkey.rsa,
 				    RSA_PKCS1_OAEP_PADDING) != 4) {
 					rval = XEVNT_CKY;
 					free(cookiebuf);
@@ -1427,7 +1423,7 @@ crypto_verify(
 	)
 {
 	EVP_PKEY *pkey;		/* server public key */
-	EVP_MD_CTX *ctx;	/* signature context */
+	EVP_MD_CTX ctx;		/* signature context */
 	tstamp_t tstamp, tstamp1 = 0; /* timestamp */
 	tstamp_t fstamp, fstamp1 = 0; /* filestamp */
 	u_int	vallen;		/* value length */
@@ -1539,16 +1535,12 @@ crypto_verify(
 	 * signature. If the identity exchange is verified, light the
 	 * proventic bit. What a relief.
 	 */
-	ctx = EVP_MD_CTX_new();
-	EVP_VerifyInit(ctx, peer->digest);
+	EVP_VerifyInit(&ctx, peer->digest);
 	/* XXX: the "+ 12" needs to be at least documented... */
-	EVP_VerifyUpdate(ctx, (u_char *)&ep->tstamp, vallen + 12);
-	if (EVP_VerifyFinal(ctx, (u_char *)&ep->pkt[i], siglen,
-	    pkey) <= 0) {
-		EVP_MD_CTX_free(ctx);
+	EVP_VerifyUpdate(&ctx, (u_char *)&ep->tstamp, vallen + 12);
+	if (EVP_VerifyFinal(&ctx, (u_char *)&ep->pkt[i], siglen,
+	    pkey) <= 0)
 		return (XEVNT_SIG);
-	}
-	EVP_MD_CTX_free(ctx);
 
 	if (peer->crypto & CRYPTO_FLAG_VRFY)
 		peer->crypto |= CRYPTO_FLAG_PROV;
@@ -1574,7 +1566,7 @@ crypto_encrypt(
 	)
 {
 	EVP_PKEY *pkey;		/* public key */
-	EVP_MD_CTX *ctx;	/* signature context */
+	EVP_MD_CTX ctx;		/* signature context */
 	tstamp_t tstamp;	/* NTP timestamp */
 	u_int32	temp32;
 	u_char *puch;
@@ -1602,7 +1594,7 @@ crypto_encrypt(
 	puch = vp->ptr;
 	temp32 = htonl(*cookie);
 	if (RSA_public_encrypt(4, (u_char *)&temp32, puch,
-	    EVP_PKEY_get0_RSA(pkey), RSA_PKCS1_OAEP_PADDING) <= 0) {
+	    pkey->pkey.rsa, RSA_PKCS1_OAEP_PADDING) <= 0) {
 		msyslog(LOG_ERR, "crypto_encrypt: %s",
 		    ERR_error_string(ERR_get_error(), NULL));
 		free(vp->ptr);
@@ -1614,15 +1606,13 @@ crypto_encrypt(
 		return (XEVNT_OK);
 
 	vp->sig = emalloc(sign_siglen);
-	ctx = EVP_MD_CTX_new();
-	EVP_SignInit(ctx, sign_digest);
-	EVP_SignUpdate(ctx, (u_char *)&vp->tstamp, 12);
-	EVP_SignUpdate(ctx, vp->ptr, vallen);
-	if (EVP_SignFinal(ctx, vp->sig, &vallen, sign_pkey)) {
+	EVP_SignInit(&ctx, sign_digest);
+	EVP_SignUpdate(&ctx, (u_char *)&vp->tstamp, 12);
+	EVP_SignUpdate(&ctx, vp->ptr, vallen);
+	if (EVP_SignFinal(&ctx, vp->sig, &vallen, sign_pkey)) {
 		INSIST(vallen <= sign_siglen);
 		vp->siglen = htonl(vallen);
 	}
-	EVP_MD_CTX_free(ctx);
 	return (XEVNT_OK);
 }
 
@@ -1829,7 +1819,7 @@ crypto_send(
 void
 crypto_update(void)
 {
-	EVP_MD_CTX *ctx;	/* message digest context */
+	EVP_MD_CTX ctx;		/* message digest context */
 	struct cert_info *cp;	/* certificate info/value */
 	char	statstr[NTP_MAXSTRLEN]; /* statistics for filegen */
 	u_int32	*ptr;
@@ -1839,8 +1829,6 @@ crypto_update(void)
 	hostval.tstamp = htonl(crypto_time());
 	if (hostval.tstamp == 0)
 		return;
-
-	ctx = EVP_MD_CTX_new();
 
 	/*
 	 * Sign public key and timestamps. The filestamp is derived from
@@ -1852,10 +1840,10 @@ crypto_update(void)
 		pubkey.siglen = 0;
 		if (pubkey.sig == NULL)
 			pubkey.sig = emalloc(sign_siglen);
-		EVP_SignInit(ctx, sign_digest);
-		EVP_SignUpdate(ctx, (u_char *)&pubkey, 12);
-		EVP_SignUpdate(ctx, pubkey.ptr, ntohl(pubkey.vallen));
-		if (EVP_SignFinal(ctx, pubkey.sig, &len, sign_pkey)) {
+		EVP_SignInit(&ctx, sign_digest);
+		EVP_SignUpdate(&ctx, (u_char *)&pubkey, 12);
+		EVP_SignUpdate(&ctx, pubkey.ptr, ntohl(pubkey.vallen));
+		if (EVP_SignFinal(&ctx, pubkey.sig, &len, sign_pkey)) {
 			INSIST(len <= sign_siglen);
 			pubkey.siglen = htonl(len);
 		}
@@ -1872,11 +1860,11 @@ crypto_update(void)
 		cp->cert.siglen = 0;
 		if (cp->cert.sig == NULL)
 			cp->cert.sig = emalloc(sign_siglen);
-		EVP_SignInit(ctx, sign_digest);
-		EVP_SignUpdate(ctx, (u_char *)&cp->cert, 12);
-		EVP_SignUpdate(ctx, cp->cert.ptr,
+		EVP_SignInit(&ctx, sign_digest);
+		EVP_SignUpdate(&ctx, (u_char *)&cp->cert, 12);
+		EVP_SignUpdate(&ctx, cp->cert.ptr,
 		    ntohl(cp->cert.vallen));
-		if (EVP_SignFinal(ctx, cp->cert.sig, &len, sign_pkey)) {
+		if (EVP_SignFinal(&ctx, cp->cert.sig, &len, sign_pkey)) {
 			INSIST(len <= sign_siglen);
 			cp->cert.siglen = htonl(len);
 		}
@@ -1923,10 +1911,10 @@ crypto_update(void)
 	}
 	if (tai_leap.sig == NULL)
 		tai_leap.sig = emalloc(sign_siglen);
-	EVP_SignInit(ctx, sign_digest);
-	EVP_SignUpdate(ctx, (u_char *)&tai_leap, 12);
-	EVP_SignUpdate(ctx, tai_leap.ptr, len);
-	if (EVP_SignFinal(ctx, tai_leap.sig, &len, sign_pkey)) {
+	EVP_SignInit(&ctx, sign_digest);
+	EVP_SignUpdate(&ctx, (u_char *)&tai_leap, 12);
+	EVP_SignUpdate(&ctx, tai_leap.ptr, len);
+	if (EVP_SignFinal(&ctx, tai_leap.sig, &len, sign_pkey)) {
 		INSIST(len <= sign_siglen);
 		tai_leap.siglen = htonl(len);
 	}
@@ -1936,7 +1924,6 @@ crypto_update(void)
 	    ntohl(hostval.tstamp)); 
 	record_crypto_stats(NULL, statstr);
 	DPRINTF(1, ("crypto_update: %s\n", statstr));
-	EVP_MD_CTX_free(ctx);
 }
 
 /*
@@ -2076,7 +2063,7 @@ bighash(
 	BIGNUM	*bk		/* BIGNUM * to */
 	)
 {
-	EVP_MD_CTX *ctx;	/* message digest context */
+	EVP_MD_CTX ctx;		/* message digest context */
 	u_char dgst[EVP_MAX_MD_SIZE]; /* message digest */
 	u_char	*ptr;		/* a BIGNUM as binary string */
 	u_int	len;
@@ -2084,11 +2071,9 @@ bighash(
 	len = BN_num_bytes(bn);
 	ptr = emalloc(len);
 	BN_bn2bin(bn, ptr);
-	ctx = EVP_MD_CTX_new();
-	EVP_DigestInit(ctx, EVP_md5());
-	EVP_DigestUpdate(ctx, ptr, len);
-	EVP_DigestFinal(ctx, dgst, &len);
-	EVP_MD_CTX_free(ctx);
+	EVP_DigestInit(&ctx, EVP_md5());
+	EVP_DigestUpdate(&ctx, ptr, len);
+	EVP_DigestFinal(&ctx, dgst, &len);
 	BN_bin2bn(dgst, len, bk);
 	free(ptr);
 }
@@ -2156,10 +2141,9 @@ crypto_alice(
 {
 	DSA	*dsa;		/* IFF parameters */
 	BN_CTX	*bctx;		/* BIGNUM context */
-	EVP_MD_CTX *ctx;	/* signature context */
+	EVP_MD_CTX ctx;		/* signature context */
 	tstamp_t tstamp;
 	u_int	len;
-	const BIGNUM *q;
 
 	/*
 	 * The identity parameters must have correct format and content.
@@ -2169,7 +2153,7 @@ crypto_alice(
 		return (XEVNT_ID);
 	}
 
-	if ((dsa = EVP_PKEY_get0_DSA(peer->ident_pkey->pkey)) == NULL) {
+	if ((dsa = peer->ident_pkey->pkey->pkey.dsa) == NULL) {
 		msyslog(LOG_NOTICE, "crypto_alice: defective key");
 		return (XEVNT_PUB);
 	}
@@ -2180,11 +2164,10 @@ crypto_alice(
 	if (peer->iffval != NULL)
 		BN_free(peer->iffval);
 	peer->iffval = BN_new();
-	DSA_get0_pqg(dsa, NULL, &q, NULL);
-	len = BN_num_bytes(q);
+	len = BN_num_bytes(dsa->q);
 	BN_rand(peer->iffval, len * 8, -1, 1);	/* r mod q*/
 	bctx = BN_CTX_new();
-	BN_mod(peer->iffval, peer->iffval, q, bctx);
+	BN_mod(peer->iffval, peer->iffval, dsa->q, bctx);
 	BN_CTX_free(bctx);
 
 	/*
@@ -2201,15 +2184,13 @@ crypto_alice(
 		return (XEVNT_OK);
 
 	vp->sig = emalloc(sign_siglen);
-	ctx = EVP_MD_CTX_new();
-	EVP_SignInit(ctx, sign_digest);
-	EVP_SignUpdate(ctx, (u_char *)&vp->tstamp, 12);
-	EVP_SignUpdate(ctx, vp->ptr, len);
-	if (EVP_SignFinal(ctx, vp->sig, &len, sign_pkey)) {
+	EVP_SignInit(&ctx, sign_digest);
+	EVP_SignUpdate(&ctx, (u_char *)&vp->tstamp, 12);
+	EVP_SignUpdate(&ctx, vp->ptr, len);
+	if (EVP_SignFinal(&ctx, vp->sig, &len, sign_pkey)) {
 		INSIST(len <= sign_siglen);
 		vp->siglen = htonl(len);
 	}
-	EVP_MD_CTX_free(ctx);
 	return (XEVNT_OK);
 }
 
@@ -2231,13 +2212,11 @@ crypto_bob(
 	DSA	*dsa;		/* IFF parameters */
 	DSA_SIG	*sdsa;		/* DSA signature context fake */
 	BN_CTX	*bctx;		/* BIGNUM context */
-	EVP_MD_CTX *ctx;	/* signature context */
+	EVP_MD_CTX ctx;		/* signature context */
 	tstamp_t tstamp;	/* NTP timestamp */
 	BIGNUM	*bn, *bk, *r;
 	u_char	*ptr;
 	u_int	len;		/* extension field value length */
-	const BIGNUM *p, *q, *g;
-	const BIGNUM *priv_key;
 
 	/*
 	 * If the IFF parameters are not valid, something awful
@@ -2247,9 +2226,7 @@ crypto_bob(
 		msyslog(LOG_NOTICE, "crypto_bob: scheme unavailable");
 		return (XEVNT_ID);
 	}
-	dsa = EVP_PKEY_get0_DSA(iffkey_info->pkey);
-	DSA_get0_pqg(dsa, &p, &q, &g);
-	DSA_get0_key(dsa, NULL, &priv_key);
+	dsa = iffkey_info->pkey->pkey.dsa;
 
 	/*
 	 * Extract r from the challenge.
@@ -2270,14 +2247,15 @@ crypto_bob(
 	bctx = BN_CTX_new(); bk = BN_new(); bn = BN_new();
 	sdsa = DSA_SIG_new();
 	BN_rand(bk, len * 8, -1, 1);		/* k */
-	BN_mod_mul(bn, priv_key, r, q, bctx); /* b r mod q */
+	BN_mod_mul(bn, dsa->priv_key, r, dsa->q, bctx); /* b r mod q */
 	BN_add(bn, bn, bk);
-	BN_mod(bn, bn, q, bctx);		/* k + b r mod q */
-	BN_mod_exp(bk, g, bk, p, bctx); /* g^k mod p */
+	BN_mod(bn, bn, dsa->q, bctx);		/* k + b r mod q */
+	sdsa->r = BN_dup(bn);
+	BN_mod_exp(bk, dsa->g, bk, dsa->p, bctx); /* g^k mod p */
 	bighash(bk, bk);
-	DSA_SIG_set0(sdsa, bn, bk);
+	sdsa->s = BN_dup(bk);
 	BN_CTX_free(bctx);
-	BN_free(r);
+	BN_free(r); BN_free(bn); BN_free(bk);
 #ifdef DEBUG
 	if (debug > 1)
 		DSA_print_fp(stdout, dsa, 0);
@@ -2314,15 +2292,13 @@ crypto_bob(
 
 	/* XXX: more validation to make sure the sign fits... */
 	vp->sig = emalloc(sign_siglen);
-	ctx = EVP_MD_CTX_new();
-	EVP_SignInit(ctx, sign_digest);
-	EVP_SignUpdate(ctx, (u_char *)&vp->tstamp, 12);
-	EVP_SignUpdate(ctx, vp->ptr, len);
-	if (EVP_SignFinal(ctx, vp->sig, &len, sign_pkey)) {
+	EVP_SignInit(&ctx, sign_digest);
+	EVP_SignUpdate(&ctx, (u_char *)&vp->tstamp, 12);
+	EVP_SignUpdate(&ctx, vp->ptr, len);
+	if (EVP_SignFinal(&ctx, vp->sig, &len, sign_pkey)) {
 		INSIST(len <= sign_siglen);
 		vp->siglen = htonl(len);
 	}
-	EVP_MD_CTX_free(ctx);
 	return (XEVNT_OK);
 }
 
@@ -2349,9 +2325,6 @@ crypto_iff(
 	u_int	len;
 	const u_char *ptr;
 	int	temp;
-	const BIGNUM *p, *g;
-	const BIGNUM *r, *s;
-	const BIGNUM *pub_key;
 
 	/*
 	 * If the IFF parameters are not valid or no challenge was sent,
@@ -2366,7 +2339,7 @@ crypto_iff(
 		    ntohl(ep->fstamp));
 		return (XEVNT_FSP);
 	}
-	if ((dsa = EVP_PKEY_get0_DSA(peer->ident_pkey->pkey)) == NULL) {
+	if ((dsa = peer->ident_pkey->pkey->pkey.dsa) == NULL) {
 		msyslog(LOG_NOTICE, "crypto_iff: defective key");
 		return (XEVNT_PUB);
 	}
@@ -2391,18 +2364,15 @@ crypto_iff(
 	/*
 	 * Compute g^(k + b r) g^(q - b)r mod p.
 	 */
-	DSA_get0_key(dsa, &pub_key, NULL);
-	DSA_get0_pqg(dsa, &p, NULL, &g);
-	DSA_SIG_get0(sdsa, &r, &s);
-	BN_mod_exp(bn, pub_key, peer->iffval, p, bctx);
-	BN_mod_exp(bk, g, r, p, bctx);
-	BN_mod_mul(bn, bn, bk, p, bctx);
+	BN_mod_exp(bn, dsa->pub_key, peer->iffval, dsa->p, bctx);
+	BN_mod_exp(bk, dsa->g, sdsa->r, dsa->p, bctx);
+	BN_mod_mul(bn, bn, bk, dsa->p, bctx);
 
 	/*
 	 * Verify the hash of the result matches hash(x).
 	 */
 	bighash(bn, bn);
-	temp = BN_cmp(bn, s);
+	temp = BN_cmp(bn, sdsa->s);
 	BN_free(bn); BN_free(bk); BN_CTX_free(bctx);
 	BN_free(peer->iffval);
 	peer->iffval = NULL;
@@ -2488,10 +2458,9 @@ crypto_alice2(
 {
 	RSA	*rsa;		/* GQ parameters */
 	BN_CTX	*bctx;		/* BIGNUM context */
-	EVP_MD_CTX *ctx;	/* signature context */
+	EVP_MD_CTX ctx;		/* signature context */
 	tstamp_t tstamp;
 	u_int	len;
-	const BIGNUM *n;
 
 	/*
 	 * The identity parameters must have correct format and content.
@@ -2499,7 +2468,7 @@ crypto_alice2(
 	if (peer->ident_pkey == NULL)
 		return (XEVNT_ID);
 
-	if ((rsa = EVP_PKEY_get0_RSA(peer->ident_pkey->pkey)) == NULL) {
+	if ((rsa = peer->ident_pkey->pkey->pkey.rsa) == NULL) {
 		msyslog(LOG_NOTICE, "crypto_alice2: defective key");
 		return (XEVNT_PUB);
 	}
@@ -2510,11 +2479,10 @@ crypto_alice2(
 	if (peer->iffval != NULL)
 		BN_free(peer->iffval);
 	peer->iffval = BN_new();
-	RSA_get0_key(rsa, &n, NULL, NULL);
-	len = BN_num_bytes(n);
+	len = BN_num_bytes(rsa->n);
 	BN_rand(peer->iffval, len * 8, -1, 1);	/* r mod n */
 	bctx = BN_CTX_new();
-	BN_mod(peer->iffval, peer->iffval, n, bctx);
+	BN_mod(peer->iffval, peer->iffval, rsa->n, bctx);
 	BN_CTX_free(bctx);
 
 	/*
@@ -2531,15 +2499,13 @@ crypto_alice2(
 		return (XEVNT_OK);
 
 	vp->sig = emalloc(sign_siglen);
-	ctx = EVP_MD_CTX_new();
-	EVP_SignInit(ctx, sign_digest);
-	EVP_SignUpdate(ctx, (u_char *)&vp->tstamp, 12);
-	EVP_SignUpdate(ctx, vp->ptr, len);
-	if (EVP_SignFinal(ctx, vp->sig, &len, sign_pkey)) {
+	EVP_SignInit(&ctx, sign_digest);
+	EVP_SignUpdate(&ctx, (u_char *)&vp->tstamp, 12);
+	EVP_SignUpdate(&ctx, vp->ptr, len);
+	if (EVP_SignFinal(&ctx, vp->sig, &len, sign_pkey)) {
 		INSIST(len <= sign_siglen);
 		vp->siglen = htonl(len);
 	}
-	EVP_MD_CTX_free(ctx);
 	return (XEVNT_OK);
 }
 
@@ -2561,13 +2527,12 @@ crypto_bob2(
 	RSA	*rsa;		/* GQ parameters */
 	DSA_SIG	*sdsa;		/* DSA parameters */
 	BN_CTX	*bctx;		/* BIGNUM context */
-	EVP_MD_CTX *ctx;	/* signature context */
+	EVP_MD_CTX ctx;		/* signature context */
 	tstamp_t tstamp;	/* NTP timestamp */
 	BIGNUM	*r, *k, *g, *y;
 	u_char	*ptr;
 	u_int	len;
 	int	s_len;
-	const BIGNUM *n, *p, *e;
 
 	/*
 	 * If the GQ parameters are not valid, something awful
@@ -2577,8 +2542,7 @@ crypto_bob2(
 		msyslog(LOG_NOTICE, "crypto_bob2: scheme unavailable");
 		return (XEVNT_ID);
 	}
-	rsa = EVP_PKEY_get0_RSA(gqkey_info->pkey);
-	RSA_get0_key(rsa, &n, &p, &e);
+	rsa = gqkey_info->pkey->pkey.rsa;
 
 	/*
 	 * Extract r from the challenge.
@@ -2599,14 +2563,15 @@ crypto_bob2(
 	bctx = BN_CTX_new(); k = BN_new(); g = BN_new(); y = BN_new();
 	sdsa = DSA_SIG_new();
 	BN_rand(k, len * 8, -1, 1);		/* k */
-	BN_mod(k, k, n, bctx);
-	BN_mod_exp(y, p, r, n, bctx); /* u^r mod n */
-	BN_mod_mul(y, k, y, n, bctx);	/* k u^r mod n */
-	BN_mod_exp(g, k, e, n, bctx); /* k^b mod n */
+	BN_mod(k, k, rsa->n, bctx);
+	BN_mod_exp(y, rsa->p, r, rsa->n, bctx); /* u^r mod n */
+	BN_mod_mul(y, k, y, rsa->n, bctx);	/* k u^r mod n */
+	sdsa->r = BN_dup(y);
+	BN_mod_exp(g, k, rsa->e, rsa->n, bctx); /* k^b mod n */
 	bighash(g, g);
-	DSA_SIG_set0(sdsa, y, g);
+	sdsa->s = BN_dup(g);
 	BN_CTX_free(bctx);
-	BN_free(r); BN_free(k);
+	BN_free(r); BN_free(k); BN_free(g); BN_free(y);
 #ifdef DEBUG
 	if (debug > 1)
 		RSA_print_fp(stdout, rsa, 0);
@@ -2636,15 +2601,13 @@ crypto_bob2(
 		return (XEVNT_OK);
 
 	vp->sig = emalloc(sign_siglen);
-	ctx = EVP_MD_CTX_new();
-	EVP_SignInit(ctx, sign_digest);
-	EVP_SignUpdate(ctx, (u_char *)&vp->tstamp, 12);
-	EVP_SignUpdate(ctx, vp->ptr, len);
-	if (EVP_SignFinal(ctx, vp->sig, &len, sign_pkey)) {
+	EVP_SignInit(&ctx, sign_digest);
+	EVP_SignUpdate(&ctx, (u_char *)&vp->tstamp, 12);
+	EVP_SignUpdate(&ctx, vp->ptr, len);
+	if (EVP_SignFinal(&ctx, vp->sig, &len, sign_pkey)) {
 		INSIST(len <= sign_siglen);
 		vp->siglen = htonl(len);
 	}
-	EVP_MD_CTX_free(ctx);
 	return (XEVNT_OK);
 }
 
@@ -2672,8 +2635,6 @@ crypto_gq(
 	const u_char *ptr;
 	long	len;
 	u_int	temp;
-	const BIGNUM *n, *e;
-	const BIGNUM *r, *s;
 
 	/*
 	 * If the GQ parameters are not valid or no challenge was sent,
@@ -2690,11 +2651,10 @@ crypto_gq(
 		    ntohl(ep->fstamp));
 		return (XEVNT_FSP);
 	}
-	if ((rsa = EVP_PKEY_get0_RSA(peer->ident_pkey->pkey)) == NULL) {
+	if ((rsa = peer->ident_pkey->pkey->pkey.rsa) == NULL) {
 		msyslog(LOG_NOTICE, "crypto_gq: defective key");
 		return (XEVNT_PUB);
 	}
-	RSA_get0_key(rsa, &n, NULL, &e);
 	if (peer->iffval == NULL) {
 		msyslog(LOG_NOTICE, "crypto_gq: missing challenge");
 		return (XEVNT_ID);
@@ -2713,7 +2673,6 @@ crypto_gq(
 		    ERR_error_string(ERR_get_error(), NULL));
 		return (XEVNT_ERR);
 	}
-	DSA_SIG_get0(sdsa, &r, &s);
 
 	/*
 	 * Compute v^r y^b mod n.
@@ -2722,16 +2681,16 @@ crypto_gq(
 		msyslog(LOG_NOTICE, "crypto_gq: missing group key");
 		return (XEVNT_ID);
 	}
-	BN_mod_exp(v, peer->grpkey, peer->iffval, n, bctx);
+	BN_mod_exp(v, peer->grpkey, peer->iffval, rsa->n, bctx);
 						/* v^r mod n */
-	BN_mod_exp(y, r, e, n, bctx); /* y^b mod n */
-	BN_mod_mul(y, v, y, n, bctx);	/* v^r y^b mod n */
+	BN_mod_exp(y, sdsa->r, rsa->e, rsa->n, bctx); /* y^b mod n */
+	BN_mod_mul(y, v, y, rsa->n, bctx);	/* v^r y^b mod n */
 
 	/*
 	 * Verify the hash of the result matches hash(x).
 	 */
 	bighash(y, y);
-	temp = BN_cmp(y, s);
+	temp = BN_cmp(y, sdsa->s);
 	BN_CTX_free(bctx); BN_free(y); BN_free(v);
 	BN_free(peer->iffval);
 	peer->iffval = NULL;
@@ -2832,10 +2791,9 @@ crypto_alice3(
 {
 	DSA	*dsa;		/* MV parameters */
 	BN_CTX	*bctx;		/* BIGNUM context */
-	EVP_MD_CTX *ctx;	/* signature context */
+	EVP_MD_CTX ctx;		/* signature context */
 	tstamp_t tstamp;
 	u_int	len;
-	const BIGNUM *p;
 
 	/*
 	 * The identity parameters must have correct format and content.
@@ -2843,11 +2801,10 @@ crypto_alice3(
 	if (peer->ident_pkey == NULL)
 		return (XEVNT_ID);
 
-	if ((dsa = EVP_PKEY_get0_DSA(peer->ident_pkey->pkey)) == NULL) {
+	if ((dsa = peer->ident_pkey->pkey->pkey.dsa) == NULL) {
 		msyslog(LOG_NOTICE, "crypto_alice3: defective key");
 		return (XEVNT_PUB);
 	}
-	DSA_get0_pqg(dsa, &p, NULL, NULL);
 
 	/*
 	 * Roll new random r (0 < r < q).
@@ -2855,10 +2812,10 @@ crypto_alice3(
 	if (peer->iffval != NULL)
 		BN_free(peer->iffval);
 	peer->iffval = BN_new();
-	len = BN_num_bytes(p);
+	len = BN_num_bytes(dsa->p);
 	BN_rand(peer->iffval, len * 8, -1, 1);	/* r mod p */
 	bctx = BN_CTX_new();
-	BN_mod(peer->iffval, peer->iffval, p, bctx);
+	BN_mod(peer->iffval, peer->iffval, dsa->p, bctx);
 	BN_CTX_free(bctx);
 
 	/*
@@ -2875,15 +2832,13 @@ crypto_alice3(
 		return (XEVNT_OK);
 
 	vp->sig = emalloc(sign_siglen);
-	ctx = EVP_MD_CTX_new();
-	EVP_SignInit(ctx, sign_digest);
-	EVP_SignUpdate(ctx, (u_char *)&vp->tstamp, 12);
-	EVP_SignUpdate(ctx, vp->ptr, len);
-	if (EVP_SignFinal(ctx, vp->sig, &len, sign_pkey)) {
+	EVP_SignInit(&ctx, sign_digest);
+	EVP_SignUpdate(&ctx, (u_char *)&vp->tstamp, 12);
+	EVP_SignUpdate(&ctx, vp->ptr, len);
+	if (EVP_SignFinal(&ctx, vp->sig, &len, sign_pkey)) {
 		INSIST(len <= sign_siglen);
 		vp->siglen = htonl(len);
 	}
-	EVP_MD_CTX_free(ctx);
 	return (XEVNT_OK);
 }
 
@@ -2904,14 +2859,11 @@ crypto_bob3(
 	DSA	*dsa;		/* MV parameters */
 	DSA	*sdsa;		/* DSA signature context fake */
 	BN_CTX	*bctx;		/* BIGNUM context */
-	EVP_MD_CTX *ctx;	/* signature context */
+	EVP_MD_CTX ctx;		/* signature context */
 	tstamp_t tstamp;	/* NTP timestamp */
 	BIGNUM	*r, *k, *u;
 	u_char	*ptr;
 	u_int	len;
-	const BIGNUM *p, *q, *g;
-	const BIGNUM *pub_key, *priv_key;
-	BIGNUM *sp, *sq, *sg;
 
 	/*
 	 * If the MV parameters are not valid, something awful
@@ -2921,9 +2873,7 @@ crypto_bob3(
 		msyslog(LOG_NOTICE, "crypto_bob3: scheme unavailable");
 		return (XEVNT_ID);
 	}
-	dsa = EVP_PKEY_get0_DSA(mvkey_info->pkey);
-	DSA_get0_pqg(dsa, &p, &q, &g);
-	DSA_get0_key(dsa, &pub_key, &priv_key);
+	dsa = mvkey_info->pkey->pkey.dsa;
 
 	/*
 	 * Extract r from the challenge.
@@ -2944,20 +2894,18 @@ crypto_bob3(
 	 */
 	bctx = BN_CTX_new(); k = BN_new(); u = BN_new();
 	sdsa = DSA_new();
-	sp = BN_new(); sq = BN_new(); sg = BN_new();
+	sdsa->p = BN_new(); sdsa->q = BN_new(); sdsa->g = BN_new();
 	while (1) {
-		BN_rand(k, BN_num_bits(q), 0, 0);
-		BN_mod(k, k, q, bctx);
-		BN_gcd(u, k, q, bctx);
+		BN_rand(k, BN_num_bits(dsa->q), 0, 0);
+		BN_mod(k, k, dsa->q, bctx);
+		BN_gcd(u, k, dsa->q, bctx);
 		if (BN_is_one(u))
 			break;
 	}
-	BN_mod_exp(u, g, k, p, bctx); /* A^k r */
-	BN_mod_mul(sp, u, r, p, bctx);
-	BN_mod_exp(sq, priv_key, k, p, bctx); /* gbar */
-	BN_mod_exp(sg, pub_key, k, p, bctx); /* ghat */
-	DSA_set0_key(sdsa, BN_dup(pub_key), NULL);
-	DSA_set0_pqg(sdsa, sp, sq, sg);
+	BN_mod_exp(u, dsa->g, k, dsa->p, bctx); /* A^k r */
+	BN_mod_mul(sdsa->p, u, r, dsa->p, bctx);
+	BN_mod_exp(sdsa->q, dsa->priv_key, k, dsa->p, bctx); /* gbar */
+	BN_mod_exp(sdsa->g, dsa->pub_key, k, dsa->p, bctx); /* ghat */
 	BN_CTX_free(bctx); BN_free(k); BN_free(r); BN_free(u);
 #ifdef DEBUG
 	if (debug > 1)
@@ -2988,15 +2936,13 @@ crypto_bob3(
 		return (XEVNT_OK);
 
 	vp->sig = emalloc(sign_siglen);
-	ctx = EVP_MD_CTX_new();
-	EVP_SignInit(ctx, sign_digest);
-	EVP_SignUpdate(ctx, (u_char *)&vp->tstamp, 12);
-	EVP_SignUpdate(ctx, vp->ptr, len);
-	if (EVP_SignFinal(ctx, vp->sig, &len, sign_pkey)) {
+	EVP_SignInit(&ctx, sign_digest);
+	EVP_SignUpdate(&ctx, (u_char *)&vp->tstamp, 12);
+	EVP_SignUpdate(&ctx, vp->ptr, len);
+	if (EVP_SignFinal(&ctx, vp->sig, &len, sign_pkey)) {
 		INSIST(len <= sign_siglen);
 		vp->siglen = htonl(len);
 	}
-	EVP_MD_CTX_free(ctx);
 	return (XEVNT_OK);
 }
 
@@ -3024,9 +2970,6 @@ crypto_mv(
 	u_int	len;
 	const u_char *ptr;
 	int	temp;
-	const BIGNUM *p;
-	const BIGNUM *pub_key, *priv_key;
-	const BIGNUM *sp, *sq, *sg;
 
 	/*
 	 * If the MV parameters are not valid or no challenge was sent,
@@ -3041,12 +2984,10 @@ crypto_mv(
 		    ntohl(ep->fstamp));
 		return (XEVNT_FSP);
 	}
-	if ((dsa = EVP_PKEY_get0_DSA(peer->ident_pkey->pkey)) == NULL) {
+	if ((dsa = peer->ident_pkey->pkey->pkey.dsa) == NULL) {
 		msyslog(LOG_NOTICE, "crypto_mv: defective key");
 		return (XEVNT_PUB);
 	}
-	DSA_get0_pqg(dsa, &p, NULL, NULL);
-	DSA_get0_key(dsa, &pub_key, &priv_key);
 	if (peer->iffval == NULL) {
 		msyslog(LOG_NOTICE, "crypto_mv: missing challenge");
 		return (XEVNT_ID);
@@ -3063,15 +3004,14 @@ crypto_mv(
 		    ERR_error_string(ERR_get_error(), NULL));
 		return (XEVNT_ERR);
 	}
-	DSA_get0_pqg(sdsa, &sp, &sq, &sg);
 
 	/*
 	 * Compute (gbar^xhat ghat^xbar) mod p.
 	 */
-	BN_mod_exp(u, sq, pub_key, p, bctx);
-	BN_mod_exp(v, sg, priv_key, p, bctx);
-	BN_mod_mul(u, u, v, p, bctx);
-	BN_mod_mul(u, u, sp, p, bctx);
+	BN_mod_exp(u, sdsa->q, dsa->pub_key, dsa->p, bctx);
+	BN_mod_exp(v, sdsa->g, dsa->priv_key, dsa->p, bctx);
+	BN_mod_mul(u, u, v, dsa->p, bctx);
+	BN_mod_mul(u, u, sdsa->p, dsa->p, bctx);
 
 	/*
 	 * The result should match r.
@@ -3142,7 +3082,7 @@ cert_sign(
 	ASN1_INTEGER *serial;	/* serial number */
 	X509_NAME *subj;	/* distinguished (common) name */
 	EVP_PKEY *pkey;		/* public key */
-	EVP_MD_CTX *ctx;	/* message digest context */
+	EVP_MD_CTX ctx;		/* message digest context */
 	tstamp_t tstamp;	/* NTP timestamp */
 	struct calendar tscal;
 	u_int	len;
@@ -3238,15 +3178,13 @@ cert_sign(
 	vp->siglen = 0;
 	if (tstamp != 0) {
 		vp->sig = emalloc(sign_siglen);
-		ctx = EVP_MD_CTX_new();
-		EVP_SignInit(ctx, sign_digest);
-		EVP_SignUpdate(ctx, (u_char *)vp, 12);
-		EVP_SignUpdate(ctx, vp->ptr, len);
-		if (EVP_SignFinal(ctx, vp->sig, &len, sign_pkey)) {
+		EVP_SignInit(&ctx, sign_digest);
+		EVP_SignUpdate(&ctx, (u_char *)vp, 12);
+		EVP_SignUpdate(&ctx, vp->ptr, len);
+		if (EVP_SignFinal(&ctx, vp->sig, &len, sign_pkey)) {
 			INSIST(len <= sign_siglen);
 			vp->siglen = htonl(len);
 		}
-		EVP_MD_CTX_free(ctx);
 	}
 #ifdef DEBUG
 	if (debug > 1)
@@ -3432,12 +3370,13 @@ cert_parse(
 	)
 {
 	X509	*cert;		/* X509 certificate */
+	X509_EXTENSION *ext;	/* X509v3 extension */
 	struct cert_info *ret;	/* certificate info/value */
 	BIO	*bp;
 	char	pathbuf[MAXFILENAME];
 	const u_char *ptr;
 	char	*pch;
-	int	cnt, i;
+	int	temp, cnt, i;
 	struct calendar fscal;
 
 	/*
@@ -3485,7 +3424,7 @@ cert_parse(
 	 * objects at this time, since the real crunch can happen only
 	 * when the time is valid but not yet certificated.
 	 */
-	ret->nid = X509_get_signature_nid(cert);
+	ret->nid = OBJ_obj2nid(cert->cert_info->signature->algorithm);
 	ret->digest = (const EVP_MD *)EVP_get_digestbynid(ret->nid);
 	ret->serial =
 	    (u_long)ASN1_INTEGER_get(X509_get_serialNumber(cert));
@@ -3509,16 +3448,9 @@ cert_parse(
 	 */
 	cnt = X509_get_ext_count(cert);
 	for (i = 0; i < cnt; i++) {
-		X509_EXTENSION *ext;
-		ASN1_OBJECT *obj;
-		int nid;
-		ASN1_OCTET_STRING *data;
-
 		ext = X509_get_ext(cert, i);
-		obj = X509_EXTENSION_get_object(ext);
-		nid = OBJ_obj2nid(obj);
-
-		switch (nid) {
+		temp = OBJ_obj2nid(ext->object);
+		switch (temp) {
 
 		/*
 		 * If a key_usage field is present, we decode whether
@@ -3536,7 +3468,7 @@ cert_parse(
 			else if (strcmp(pathbuf, "Private") == 0)
 				ret->flags |= CERT_PRIV;
 			DPRINTF(1, ("cert_parse: %s: %s\n",
-				    OBJ_nid2ln(nid), pathbuf));
+				    OBJ_nid2ln(temp), pathbuf));
 			break;
 
 		/*
@@ -3544,13 +3476,12 @@ cert_parse(
 		 * contains the GQ public key.
 		 */
 		case NID_subject_key_identifier:
-			data = X509_EXTENSION_get_data(ext);
-			ret->grpkey = BN_bin2bn(&data->data[2],
-			    data->length - 2, NULL);
+			ret->grpkey = BN_bin2bn(&ext->value->data[2],
+			    ext->value->length - 2, NULL);
 			/* fall through */
 		default:
 			DPRINTF(1, ("cert_parse: %s\n",
-				    OBJ_nid2ln(nid)));
+				    OBJ_nid2ln(temp)));
 			break;
 		}
 	}
@@ -3740,10 +3671,10 @@ crypto_key(
 	DPRINTF(1, ("crypto_key: %s\n", statstr));
 #ifdef DEBUG
 	if (debug > 1) {
-		if (EVP_PKEY_base_id(pkey) == EVP_PKEY_DSA)
-			DSA_print_fp(stdout, EVP_PKEY_get0_DSA(pkey), 0);
-		else if (EVP_PKEY_base_id(pkey) == EVP_PKEY_RSA)
-			RSA_print_fp(stdout, EVP_PKEY_get0_RSA(pkey), 0);
+		if (pkey->type == EVP_PKEY_DSA)
+			DSA_print_fp(stdout, pkey->pkey.dsa, 0);
+		else if (pkey->type == EVP_PKEY_RSA)
+			RSA_print_fp(stdout, pkey->pkey.rsa, 0);
 	}
 #endif
 	return (pkp);
@@ -3953,7 +3884,7 @@ crypto_setup(void)
 		    filename);
 		exit (-1);
 	}
-	if (EVP_PKEY_base_id(pinfo->pkey) != EVP_PKEY_RSA) {
+	if (pinfo->pkey->type != EVP_PKEY_RSA) {
 		msyslog(LOG_ERR,
 		    "crypto_setup: host key is not RSA key type");
 		exit (-1);

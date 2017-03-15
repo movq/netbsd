@@ -1,23 +1,20 @@
 #!/bin/sh
 #
-#	$NetBSD: wtf,v 1.21 2015/04/21 23:56:30 christos Exp $
+#	$NetBSD: wtf,v 1.19 2012/11/20 12:40:54 abs Exp $
 #
 # Public domain
 #
 
 PROGNAME="$(basename "$0")"
-offensive=false
 
 usage() {
-	echo "usage: $PROGNAME [-o] [-f dbfile] [is] term ..."
+	echo "usage: $PROGNAME [-f dbfile] [is] term ..."
 	exit 1
 }
 
-while getopts f:o f
+while getopts f: f
 do
 	case "$f" in
-	o)	offensive=true
-		;;
 	f)
 		acronyms="$OPTARG $acronyms"
 		;;
@@ -38,22 +35,7 @@ if [ -z "$1" ]; then
 fi
 
 if [ -z "$acronyms" ]; then
-	if [ -z "$ACRONYMDB" ]; then
-		for f in /usr/share/misc/acronyms*; do
-			case $f in
-			*-o)
-				if $offensive; then
-					acronyms="$acronyms $f"
-				fi
-				;;
-			*)
-				acronyms="$acronyms $f"
-				;;
-			esac
-		done
-	else
-		acronyms="$ACRONYMDB"
-	fi
+	acronyms=${ACRONYMDB:-$(ls /usr/share/misc/acronyms* 2>/dev/null)}
 fi
 
 if [ -z "$acronyms" ]; then

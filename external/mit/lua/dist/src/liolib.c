@@ -1,4 +1,4 @@
-/*	$NetBSD: liolib.c,v 1.6 2016/09/08 02:21:31 salazar Exp $	*/
+/*	$NetBSD: liolib.c,v 1.2.2.4 2016/09/25 11:16:02 bouyer Exp $	*/
 
 /*
 ** Id: liolib.c,v 2.149 2016/05/02 14:03:19 roberto Exp 

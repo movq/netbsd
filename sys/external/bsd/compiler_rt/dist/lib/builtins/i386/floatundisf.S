@@ -18,7 +18,7 @@
 
 #ifdef __i386__
 
-CONST_SECTION
+.const
 .balign 3
 
 		.quad	0x43f0000000000000
@@ -52,7 +52,13 @@ END_COMPILERRT_FUNCTION(__floatundisf)
 
 #ifdef __i386__
 
-CONST_SECTION
+#if defined(__APPLE__)
+	.const
+#elif defined(__ELF__)
+	.section .rodata
+#else
+	.section .rdata,"rd"
+#endif
 
 	.balign 16
 twop52:

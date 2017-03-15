@@ -1,10 +1,10 @@
-/*	$NetBSD: dupent.c,v 1.1.1.2 2017/02/09 01:46:42 christos Exp $	*/
+/*	$NetBSD: dupent.c,v 1.1.1.1 2014/05/28 09:58:27 tron Exp $	*/
 
 /* dupent.c - LDAP Control for a Duplicate Entry Representation of Search Results */
 /* $OpenLDAP$ */
 /* This work is part of OpenLDAP Software <http://www.openldap.org/>.
  *
- * Copyright 2006-2016 The OpenLDAP Foundation.
+ * Copyright 2006-2014 The OpenLDAP Foundation.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -25,9 +25,6 @@
  * <draft-ietf-ldapext-ldapv3-dupent-08.txt> (EXPIRED)
  * <http://tools.ietf.org/id/draft-ietf-ldapext-ldapv3-dupent-08.txt>
  */
-
-#include <sys/cdefs.h>
-__RCSID("$NetBSD: dupent.c,v 1.1.1.2 2017/02/09 01:46:42 christos Exp $");
 
 #include "portable.h"
 
@@ -345,7 +342,7 @@ dupent_response_entry_1level(
 	return rc;
 }
 
-static void
+static int
 dupent_attr_prepare( dupent_t *ds, Entry *e, valnum_t *valnum, int nattrs, int c, Attribute **app, Attribute **ap_listp )
 {
 	valnum[c].ap = *app;

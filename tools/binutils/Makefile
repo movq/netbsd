@@ -1,10 +1,10 @@
-#	$NetBSD: Makefile,v 1.26 2016/10/11 03:57:00 mrg Exp $
+#	$NetBSD: Makefile,v 1.24 2014/02/15 13:34:28 tsutsui Exp $
 
 .include <bsd.own.mk>
 
 MODULE=		binutils
 
-GNUHOSTDIST=	${.CURDIR}/../../external/gpl3/${EXTERNAL_BINUTILS_SUBDIR}/dist
+GNUHOSTDIST=	${.CURDIR}/../../external/gpl3/binutils/dist
 
 BRANDING?=	\
 	--with-pkgversion="NetBSD Binutils nb1" \
@@ -34,8 +34,7 @@ INSTALL_TARGET+=install-gprof
 
 .include "${.CURDIR}/../Makefile.gnuhost"
 
-CCADDFLAGS=	-I${DESTDIR}/usr/include -B${DESTDIR}/usr/lib/
-LDADDFLAGS=	-L${DESTDIR}/lib -L${DESTDIR}/usr/lib
+CCADDFLAGS=	-I${DESTDIR}/usr/include -L${DESTDIR}/lib -L${DESTDIR}/usr/lib -B${DESTDIR}/usr/lib/
 
 # Force avoiding possibly non-executable install-sh.
 CONFIGURE_ENV+= ac_cv_path_mkdir="${TOOLDIR}/bin/${MACHINE_GNU_PLATFORM}-install -d"
@@ -56,8 +55,7 @@ native-binutils: .native/.configure_done
 			CC=${CC:Q}' '${CCADDFLAGS:Q} \
 			CXX=${CXX:Q}' '${CCADDFLAGS:Q} \
 			CPP=${CPP:Q}' '-I${DESTDIR}/usr/include \
-			CFLAGS= CPPFLAGS= CXXFLAGS= \
-			LDFLAGS=${LDADDFLAGS:Q} \
+			CFLAGS= CPPFLAGS= CXXFLAGS= LDFLAGS= \
 			MSGFMT=${TOOLDIR}/bin/${_TOOL_PREFIX}msgfmt \
 			XGETTEXT=${TOOLDIR}/bin/${_TOOL_PREFIX}xgettext \
 			LIBS=-lintl \

@@ -1,4 +1,4 @@
-/*	$NetBSD: chfs_scan.c,v 1.6 2015/02/07 04:19:52 christos Exp $	*/
+/*	$NetBSD: chfs_scan.c,v 1.4.12.2 2015/02/16 21:25:34 martin Exp $	*/
 
 /*-
  * Copyright (c) 2010 Department of Software Engineering,

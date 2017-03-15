@@ -1,6 +1,8 @@
 /* tc.h - target cpu dependent
 
-   Copyright (C) 1987-2016 Free Software Foundation, Inc.
+   Copyright 1987, 1990, 1991, 1992, 1993, 1994, 1995, 2000, 2001, 2003,
+   2004, 2005, 2006, 2007, 2008, 2009
+   Free Software Foundation, Inc.
 
    This file is part of GAS, the GNU Assembler.
 
@@ -24,8 +26,8 @@
 
 extern const pseudo_typeS md_pseudo_table[];
 
-const char * md_atof (int, char *, int *);
-int    md_parse_option (int, const char *);
+char * md_atof (int, char *, int *);
+int    md_parse_option (int, char *);
 void   md_show_usage (FILE *);
 void   md_assemble (char *);
 void   md_begin (void);
@@ -75,6 +77,3 @@ extern arelent *tc_gen_reloc (asection *, fixS *);
 #else
 extern arelent **tc_gen_reloc (asection *, fixS *);
 #endif
-
-extern const char FLT_CHARS[];
-extern const char EXP_CHARS[];

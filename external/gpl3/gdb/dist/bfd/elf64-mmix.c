@@ -1,5 +1,7 @@
 /* MMIX-specific support for 64-bit ELF.
-   Copyright (C) 2001-2016 Free Software Foundation, Inc.
+   Copyright 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2009, 2010, 2011,
+   2012
+   Free Software Foundation, Inc.
    Contributed by Hans-Peter Nilsson <hp@bitrange.com>
 
    This file is part of BFD, the Binary File Descriptor library.
@@ -192,11 +194,11 @@ static reloc_howto_type elf_mmix_howto_table[] =
   /* This reloc does nothing.  */
   HOWTO (R_MMIX_NONE,		/* type */
 	 0,			/* rightshift */
-	 3,			/* size (0 = byte, 1 = short, 2 = long) */
-	 0,			/* bitsize */
+	 2,			/* size (0 = byte, 1 = short, 2 = long) */
+	 32,			/* bitsize */
 	 FALSE,			/* pc_relative */
 	 0,			/* bitpos */
-	 complain_overflow_dont, /* complain_on_overflow */
+	 complain_overflow_bitfield, /* complain_on_overflow */
 	 bfd_elf_generic_reloc,	/* special_function */
 	 "R_MMIX_NONE",		/* name */
 	 FALSE,			/* partial_inplace */
@@ -1259,11 +1261,7 @@ mmix_info_to_howto_rela (bfd *abfd ATTRIBUTE_UNUSED,
   unsigned int r_type;
 
   r_type = ELF64_R_TYPE (dst->r_info);
-  if (r_type >= (unsigned int) R_MMIX_max)
-    {
-      _bfd_error_handler (_("%B: invalid MMIX reloc number: %d"), abfd, r_type);
-      r_type = 0;
-    }
+  BFD_ASSERT (r_type < (unsigned int) R_MMIX_max);
   cache_ptr->howto = &elf_mmix_howto_table[r_type];
 }
 
@@ -1429,7 +1427,7 @@ mmix_elf_relocate_section (bfd *output_bfd ATTRIBUTE_UNUSED,
 	RELOC_AGAINST_DISCARDED_SECTION (info, input_bfd, input_section,
 					 rel, 1, relend, howto, 0, contents);
 
-      if (bfd_link_relocatable (info))
+      if (info->relocatable)
 	{
 	  /* This is a relocatable link.  For most relocs we don't have to
 	     change anything, unless the reloc is against a section
@@ -1516,12 +1514,13 @@ mmix_elf_relocate_section (bfd *output_bfd ATTRIBUTE_UNUSED,
 
       if (r != bfd_reloc_ok)
 	{
+	  bfd_boolean check_ok = TRUE;
 	  const char * msg = (const char *) NULL;
 
 	  switch (r)
 	    {
 	    case bfd_reloc_overflow:
-	      info->callbacks->reloc_overflow
+	      check_ok = info->callbacks->reloc_overflow
 		(info, (h ? &h->root : NULL), name, howto->name,
 		 (bfd_vma) 0, input_bfd, input_section, rel->r_offset);
 	      break;
@@ -1529,8 +1528,9 @@ mmix_elf_relocate_section (bfd *output_bfd ATTRIBUTE_UNUSED,
 	    case bfd_reloc_undefined:
 	      /* We may have sent this message above.  */
 	      if (! undefined_signalled)
-		info->callbacks->undefined_symbol
-		  (info, name, input_bfd, input_section, rel->r_offset, TRUE);
+		check_ok = info->callbacks->undefined_symbol
+		  (info, name, input_bfd, input_section, rel->r_offset,
+		   TRUE);
 	      undefined_signalled = TRUE;
 	      break;
 
@@ -1552,8 +1552,11 @@ mmix_elf_relocate_section (bfd *output_bfd ATTRIBUTE_UNUSED,
 	    }
 
 	  if (msg)
-	    (*info->callbacks->warning) (info, msg, name, input_bfd,
-					 input_section, rel->r_offset);
+	    check_ok = info->callbacks->warning
+	      (info, msg, name, input_bfd, input_section, rel->r_offset);
+
+	  if (! check_ok)
+	    return FALSE;
 	}
     }
 
@@ -1865,7 +1868,7 @@ mmix_elf_check_common_relocs  (bfd *abfd,
 	     DSO-related stuff if that member is non-NULL.  */
 	case R_MMIX_BASE_PLUS_OFFSET:
 	  /* We don't do anything with this reloc for a relocatable link.  */
-	  if (bfd_link_relocatable (info))
+	  if (info->relocatable)
 	    break;
 
 	  if (bpo_greg_owner == NULL)
@@ -1989,7 +1992,7 @@ mmix_elf_check_relocs (bfd *abfd,
   if (!mmix_elf_check_common_relocs (abfd, info, sec, relocs))
     return FALSE;
 
-  if (bfd_link_relocatable (info))
+  if (info->relocatable)
     return TRUE;
 
   rel_end = relocs + sec->reloc_count;
@@ -2109,7 +2112,9 @@ static asymbol *mmix_elf_reg_section_symbol_ptr;
 /* Handle the special section numbers that a symbol may use.  */
 
 void
-mmix_elf_symbol_processing (bfd *abfd ATTRIBUTE_UNUSED, asymbol *asym)
+mmix_elf_symbol_processing (abfd, asym)
+     bfd *abfd ATTRIBUTE_UNUSED;
+     asymbol *asym;
 {
   elf_symbol_type *elfsym;
 
@@ -2296,7 +2301,7 @@ mmix_set_relaxable_size (bfd *abfd ATTRIBUTE_UNUSED,
 
   /* For use in relocatable link, we start with a max stubs size.  See
      mmix_elf_relax_section.  */
-  if (bfd_link_relocatable (info) && sec->output_section)
+  if (info->relocatable && sec->output_section)
     mmix_elf_section_data (sec->output_section)->pjs.stubs_size_sum
       += (mmix_elf_section_data (sec)->pjs.n_pushj_relocs
 	  * MAX_PUSHJ_STUB_SIZE);
@@ -2319,7 +2324,7 @@ _bfd_mmix_before_linker_allocation (bfd *abfd ATTRIBUTE_UNUSED,
   bfd *ibfd;
 
   /* Set the initial size of sections.  */
-  for (ibfd = info->input_bfds; ibfd != NULL; ibfd = ibfd->link.next)
+  for (ibfd = info->input_bfds; ibfd != NULL; ibfd = ibfd->link_next)
     bfd_map_over_sections (ibfd, mmix_set_relaxable_size, info);
 
   /* The bpo_greg_owner bfd is supposed to have been set by
@@ -2484,8 +2489,9 @@ bpo_reloc_request_sort_fn (const void * p1, const void * p2)
    from base-plus-offset relocs.  */
 
 void
-mmix_dump_bpo_gregs (struct bfd_link_info *link_info,
-		     bfd_error_handler_type pf)
+mmix_dump_bpo_gregs (link_info, pf)
+     struct bfd_link_info *link_info;
+     bfd_error_handler_type pf;
 {
   bfd *bpo_greg_owner;
   asection *bpo_gregs_section;
@@ -2616,7 +2622,7 @@ mmix_elf_relax_section (bfd *abfd,
       /* We process relocs in a distinctly different way when this is a
 	 relocatable link (for one, we don't look at symbols), so we avoid
 	 mixing its code with that for the "normal" relaxation.  */
-      if (bfd_link_relocatable (link_info))
+      if (link_info->relocatable)
 	{
 	  /* The only transformation in a relocatable link is to generate
 	     a full stub at the location of the stub calculated for the
@@ -2898,7 +2904,7 @@ mmix_elf_relax_section (bfd *abfd,
    alignment.  */
 #define ELF_MAXPAGESIZE 0x100
 
-#define TARGET_BIG_SYM		mmix_elf64_vec
+#define TARGET_BIG_SYM		bfd_elf64_mmix_vec
 #define TARGET_BIG_NAME		"elf64-mmix"
 
 #define elf_info_to_howto_rel		NULL

@@ -1,4 +1,4 @@
-/*	$NetBSD: split_addr.c,v 1.2 2017/02/14 01:16:45 christos Exp $	*/
+/*	$NetBSD: split_addr.c,v 1.1.1.2 2014/07/06 19:27:52 tron Exp $	*/
 
 /*++
 /* NAME
@@ -43,7 +43,6 @@
 /* Utility library. */
 
 #include <split_at.h>
-#include <stringops.h>
 
 /* Global library. */
 
@@ -55,7 +54,7 @@
 
 char   *split_addr(char *localpart, const char *delimiter_set)
 {
-    ssize_t len;
+    int     len;
 
     /*
      * Don't split these, regardless of what the delimiter is.
@@ -64,7 +63,7 @@ char   *split_addr(char *localpart, const char *delimiter_set)
 	return (0);
     if (strcasecmp(localpart, MAIL_ADDR_MAIL_DAEMON) == 0)
 	return (0);
-    if (strcasecmp_utf8(localpart, var_double_bounce_sender) == 0)
+    if (strcasecmp(localpart, var_double_bounce_sender) == 0)
 	return (0);
 
     /*

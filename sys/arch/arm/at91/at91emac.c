@@ -1,5 +1,5 @@
-/*	$Id: at91emac.c,v 1.19 2017/02/20 08:25:57 ozaki-r Exp $	*/
-/*	$NetBSD: at91emac.c,v 1.19 2017/02/20 08:25:57 ozaki-r Exp $	*/
+/*	$Id: at91emac.c,v 1.13 2012/11/12 18:00:36 skrll Exp $	*/
+/*	$NetBSD: at91emac.c,v 1.13 2012/11/12 18:00:36 skrll Exp $	*/
 
 /*
  * Copyright (c) 2007 Embedtronics Oy
@@ -33,7 +33,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: at91emac.c,v 1.19 2017/02/20 08:25:57 ozaki-r Exp $");
+__KERNEL_RCSID(0, "$NetBSD: at91emac.c,v 1.13 2012/11/12 18:00:36 skrll Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>
@@ -66,6 +66,11 @@ __KERNEL_RCSID(0, "$NetBSD: at91emac.c,v 1.19 2017/02/20 08:25:57 ozaki-r Exp $"
 #include <netinet/in_var.h>
 #include <netinet/ip.h>
 #include <netinet/if_inarp.h>
+#endif
+
+#ifdef NS
+#include <netns/ns.h>
+#include <netns/ns_if.h>
 #endif
 
 #include <net/bpf.h>
@@ -224,7 +229,7 @@ emac_intr(void *arg)
 {
 	struct emac_softc *sc = (struct emac_softc *)arg;
 	struct ifnet * ifp = &sc->sc_ec.ec_if;
-	uint32_t imr, isr, ctl;
+	uint32_t imr, isr, rsr, ctl;
 	int bi;
 
 	imr = ~EMAC_READ(ETH_IMR);
@@ -234,10 +239,7 @@ emac_intr(void *arg)
 	}
 
 	isr = EMAC_READ(ETH_ISR) & imr;
-#ifdef EMAC_DEBUG 
-	uint32_t rsr = 
-#endif
-	EMAC_READ(ETH_RSR);		// get receive status register
+	rsr = EMAC_READ(ETH_RSR);		// get receive status register
 
 	DPRINTFN(2, ("%s: isr=0x%08X rsr=0x%08X imr=0x%08X\n", __FUNCTION__, isr, rsr, imr));
 
@@ -279,11 +281,12 @@ emac_intr(void *arg)
 						MCLBYTES, BUS_DMASYNC_POSTREAD);
 				bus_dmamap_unload(sc->sc_dmat, 
 					sc->rxq[bi].m_dmamap);
-				m_set_rcvif(sc->rxq[bi].m, ifp);
+				sc->rxq[bi].m->m_pkthdr.rcvif = ifp;
 				sc->rxq[bi].m->m_pkthdr.len = 
 					sc->rxq[bi].m->m_len = fl;
+				bpf_mtap(ifp, sc->rxq[bi].m);
 				DPRINTFN(2,("received %u bytes packet\n", fl));
-				if_percpuq_enqueue(ifp->if_percpuq, sc->rxq[bi].m);
+                                (*ifp->if_input)(ifp, sc->rxq[bi].m);
 				if (mtod(m, intptr_t) & 3) {
 					m_adj(m, mtod(m, intptr_t) & 3);
 				}
@@ -312,8 +315,9 @@ emac_intr(void *arg)
 //		bus_dmamap_sync(sc->sc_dmat, sc->rbqpage_dmamap, 0, sc->rbqlen, BUS_DMASYNC_PREREAD | BUS_DMASYNC_PREWRITE);
 	}
 
-	if (emac_gctx(sc) > 0)
-		if_schedule_deferred_start(ifp);
+	if (emac_gctx(sc) > 0 && IFQ_IS_EMPTY(&ifp->if_snd) == 0) {
+		emac_ifstart(ifp);
+	} 
 #if 0 // reloop
 	irq = EMAC_READ(IntStsC);
 	if ((irq & (IntSts_RxSQ|IntSts_ECI)) != 0)
@@ -495,7 +499,6 @@ emac_init(struct emac_softc *sc)
 	ifp->if_softc = sc;
         IFQ_SET_READY(&ifp->if_snd);
         if_attach(ifp);
-	if_deferred_start_init(ifp, NULL);
         ether_ifattach(ifp, (sc)->sc_enaddr);
 }
 
@@ -521,9 +524,9 @@ emac_mediastatus(struct ifnet *ifp, struct ifmediareq *ifmr)
 int
 emac_mii_readreg(device_t self, int phy, int reg)
 {
-#ifndef EMAC_FAST
-	struct emac_softc *sc = device_private(self);
-#endif
+	struct emac_softc *sc;
+
+	sc = device_private(self);
 
 	EMAC_WRITE(ETH_MAN, (ETH_MAN_HIGH | ETH_MAN_RW_RD
 			     | ((phy << ETH_MAN_PHYA_SHIFT) & ETH_MAN_PHYA)
@@ -536,9 +539,9 @@ emac_mii_readreg(device_t self, int phy, int reg)
 void
 emac_mii_writereg(device_t self, int phy, int reg, int val)
 {
-#ifndef EMAC_FAST
-	struct emac_softc *sc = device_private(self);
-#endif
+	struct emac_softc *sc;
+
+	sc = device_private(self);
 
 	EMAC_WRITE(ETH_MAN, (ETH_MAN_HIGH | ETH_MAN_RW_WR
 			     | ((phy << ETH_MAN_PHYA_SHIFT) & ETH_MAN_PHYA)

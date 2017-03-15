@@ -1,5 +1,5 @@
 /* Basic error reporting routines.
-   Copyright (C) 1999-2015 Free Software Foundation, Inc.
+   Copyright (C) 1999-2013 Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -21,11 +21,10 @@ along with GCC; see the file COPYING3.  If not see
    in the generator programs; the compiler has a more elaborate suite
    of diagnostic printers, found in diagnostic.c.  */
 
-#ifdef HOST_GENERATOR_FILE
-#include "config.h"
-#define GENERATOR_FILE 1
-#else
+#ifdef GENERATOR_FILE
 #include "bconfig.h"
+#else
+#include "config.h"
 #endif
 #include "system.h"
 #include "errors.h"
@@ -49,7 +48,7 @@ warning (const char *format, ...)
   fprintf (stderr, "%s: warning: ", progname);
   vfprintf (stderr, format, ap);
   va_end (ap);
-  fputc ('\n', stderr);
+  fputc('\n', stderr);
 }
 
 
@@ -64,7 +63,7 @@ error (const char *format, ...)
   fprintf (stderr, "%s: ", progname);
   vfprintf (stderr, format, ap);
   va_end (ap);
-  fputc ('\n', stderr);
+  fputc('\n', stderr);
 
   have_error = 1;
 }
@@ -81,7 +80,7 @@ fatal (const char *format, ...)
   fprintf (stderr, "%s: ", progname);
   vfprintf (stderr, format, ap);
   va_end (ap);
-  fputc ('\n', stderr);
+  fputc('\n', stderr);
   exit (FATAL_EXIT_CODE);
 }
 

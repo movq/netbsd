@@ -1,4 +1,4 @@
-/*	$NetBSD: salt-des.c,v 1.2 2017/01/28 21:31:49 christos Exp $	*/
+/*	$NetBSD: salt-des.c,v 1.1.1.2 2014/04/24 12:45:51 pettai Exp $	*/
 
 /*
  * Copyright (c) 1997 - 2008 Kungliga Tekniska Högskolan
@@ -193,8 +193,10 @@ krb5_DES_string_to_key(krb5_context context,
 
     len = password.length + salt.saltvalue.length;
     s = malloc(len);
-    if (len > 0 && s == NULL)
-	return krb5_enomem(context);
+    if(len > 0 && s == NULL) {
+	krb5_set_error_message(context, ENOMEM, N_("malloc: out of memory", ""));
+	return ENOMEM;
+    }
     memcpy(s, password.data, password.length);
     memcpy(s + password.length, salt.saltvalue.data, salt.saltvalue.length);
     DES_string_to_key_int(s, len, &tmp);
@@ -219,6 +221,6 @@ struct salt_type _krb5_des_salt[] = {
 	DES_AFS3_string_to_key
     },
 #endif
-    { 0, NULL, NULL }
+    { 0 }
 };
 #endif

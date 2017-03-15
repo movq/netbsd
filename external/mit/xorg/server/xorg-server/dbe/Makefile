@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.4 2016/08/14 03:43:04 mrg Exp $
+#	$NetBSD: Makefile,v 1.3 2009/08/22 02:40:27 mrg Exp $
 
 LIBISPRIVATE=	yes
 
@@ -7,6 +7,6 @@ LIBISPRIVATE=	yes
 LIB=	dbe
 SRCS=	${SRCS.dbe}
 
-CPPFLAGS+=      -I${X11SRCDIR.xorg-server}/present
+COPTS.dbe.c=		-Wno-error
 
 .include "Makefile.dbe"

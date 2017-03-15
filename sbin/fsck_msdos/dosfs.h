@@ -1,4 +1,4 @@
-/*	$NetBSD: dosfs.h,v 1.8 2015/01/02 06:21:28 mlelstv Exp $	*/
+/*	$NetBSD: dosfs.h,v 1.6.38.1 2014/11/14 15:49:16 martin Exp $	*/
 
 /*
  * Copyright (C) 1995, 1996, 1997 Wolfgang Solfrank
@@ -70,7 +70,7 @@ struct bootblock {
 	u_int32_t NumSectors;		/* how many sectors are there */
 	u_int32_t FATsecs;		/* how many sectors are in FAT */
 	u_int32_t NumFatEntries;	/* how many entries really are there */
-	u_int	FirstCluster;		/* at what sector is Cluster CLUST_FIRST */
+	int	ClusterOffset;		/* at what sector would sector 0 start */
 	u_int	ClusterSize;		/* Cluster size in bytes */
 
 	/* Now some statistics: */

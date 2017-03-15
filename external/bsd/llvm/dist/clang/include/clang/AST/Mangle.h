@@ -17,11 +17,10 @@
 #include "clang/AST/Type.h"
 #include "clang/Basic/ABI.h"
 #include "llvm/ADT/DenseMap.h"
+#include "llvm/ADT/SmallString.h"
+#include "llvm/ADT/StringRef.h"
 #include "llvm/Support/Casting.h"
-
-namespace llvm {
-  class raw_ostream;
-}
+#include "llvm/Support/raw_ostream.h"
 
 namespace clang {
   class ASTContext;
@@ -124,7 +123,6 @@ public:
   void mangleBlock(const DeclContext *DC, const BlockDecl *BD,
                    raw_ostream &Out);
 
-  void mangleObjCMethodNameWithoutSize(const ObjCMethodDecl *MD, raw_ostream &);
   void mangleObjCMethodName(const ObjCMethodDecl *MD, raw_ostream &);
 
   virtual void mangleStaticGuardVariable(const VarDecl *D, raw_ostream &) = 0;
@@ -133,12 +131,6 @@ public:
 
   virtual void mangleDynamicAtExitDestructor(const VarDecl *D,
                                              raw_ostream &) = 0;
-
-  virtual void mangleSEHFilterExpression(const NamedDecl *EnclosingDecl,
-                                         raw_ostream &Out) = 0;
-
-  virtual void mangleSEHFinallyBlock(const NamedDecl *EnclosingDecl,
-                                     raw_ostream &Out) = 0;
 
   /// Generates a unique string for an externally visible type for use with TBAA
   /// or type uniquing.
@@ -196,28 +188,8 @@ public:
                                 ArrayRef<const CXXRecordDecl *> BasePath,
                                 raw_ostream &Out) = 0;
 
-  virtual void mangleThreadSafeStaticGuardVariable(const VarDecl *VD,
-                                                   unsigned GuardNum,
-                                                   raw_ostream &Out) = 0;
-
   virtual void mangleVirtualMemPtrThunk(const CXXMethodDecl *MD,
                                         raw_ostream &) = 0;
-
-  virtual void mangleCXXVirtualDisplacementMap(const CXXRecordDecl *SrcRD,
-                                               const CXXRecordDecl *DstRD,
-                                               raw_ostream &Out) = 0;
-
-  virtual void mangleCXXThrowInfo(QualType T, bool IsConst, bool IsVolatile,
-                                  bool IsUnaligned, uint32_t NumEntries,
-                                  raw_ostream &Out) = 0;
-
-  virtual void mangleCXXCatchableTypeArray(QualType T, uint32_t NumEntries,
-                                           raw_ostream &Out) = 0;
-
-  virtual void mangleCXXCatchableType(QualType T, const CXXConstructorDecl *CD,
-                                      CXXCtorType CT, uint32_t Size,
-                                      uint32_t NVOffset, int32_t VBPtrOffset,
-                                      uint32_t VBIndex, raw_ostream &Out) = 0;
 
   virtual void mangleCXXRTTIBaseClassDescriptor(
       const CXXRecordDecl *Derived, uint32_t NVOffset, int32_t VBPtrOffset,

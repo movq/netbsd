@@ -1,6 +1,6 @@
 /* -*- indented-text -*- */
 /* Process source files and output type information.
-   Copyright (C) 2002-2015 Free Software Foundation, Inc.
+   Copyright (C) 2002-2013 Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -21,11 +21,10 @@ along with GCC; see the file COPYING3.  If not see
 %option noinput
 
 %{
-#ifdef HOST_GENERATOR_FILE
-#include "config.h"
-#define GENERATOR_FILE 1
-#else
+#ifdef GENERATOR_FILE
 #include "bconfig.h"
+#else
+#include "config.h"
 #endif
 #include "system.h"
 
@@ -53,12 +52,12 @@ update_lineno (const char *l, size_t len)
 CID	[[:alpha:]_][[:alnum:]_]*
 WS	[[:space:]]+
 HWS	[ \t\r\v\f]*
-IWORD	short|long|(un)?signed|char|int|HOST_WIDE_INT|uint64_t|int64_t|bool|size_t|BOOL_BITFIELD|CPPCHAR_SIGNED_T|ino_t|dev_t|HARD_REG_SET
+IWORD	short|long|(un)?signed|char|int|HOST_WIDE_INT|HOST_WIDEST_INT|bool|size_t|BOOL_BITFIELD|CPPCHAR_SIGNED_T|ino_t|dev_t|HARD_REG_SET
 ITYPE	{IWORD}({WS}{IWORD})*
     /* Include '::' in identifiers to capture C++ scope qualifiers.  */
 ID	{CID}({HWS}::{HWS}{CID})*
 EOID	[^[:alnum:]_]
-CXX_KEYWORD inline|public:|private:|protected:|template|operator|friend|static
+CXX_KEYWORD inline|public:|private:|protected:|template|operator|friend
 
 %x in_struct in_struct_comment in_comment
 %option warn noyywrap nounput nodefault perf-report
@@ -111,7 +110,6 @@ CXX_KEYWORD inline|public:|private:|protected:|template|operator|friend|static
 "const"/{EOID}			/* don't care */
 {CXX_KEYWORD}/{EOID}			|
 "~"					|
-"^"					|
 "&"					{
     *yylval = XDUPVAR (const char, yytext, yyleng, yyleng + 1);
     return IGNORABLE_CXX_KEYWORD;
@@ -126,6 +124,10 @@ CXX_KEYWORD inline|public:|private:|protected:|template|operator|friend|static
 "nested_ptr"/{EOID}		{ return NESTED_PTR; }
 "user"/{EOID}			{ return USER_GTY; }
 [0-9]+				{ return NUM; }
+"param"[0-9]*"_is"/{EOID}		{
+  *yylval = XDUPVAR (const char, yytext, yyleng, yyleng+1);
+  return PARAM_IS;
+}
 
 {IWORD}({WS}{IWORD})*/{EOID}		|
 "ENUM_BITFIELD"{WS}?"("{WS}?{ID}{WS}?")"	{

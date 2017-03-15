@@ -1,4 +1,4 @@
-/*	$NetBSD: bt_conv.c,v 1.15 2016/09/24 20:11:12 christos Exp $	*/
+/*	$NetBSD: bt_conv.c,v 1.14 2008/09/10 17:52:35 joerg Exp $	*/
 
 /*-
  * Copyright (c) 1990, 1993, 1994
@@ -37,11 +37,10 @@
 #endif
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: bt_conv.c,v 1.15 2016/09/24 20:11:12 christos Exp $");
+__RCSID("$NetBSD: bt_conv.c,v 1.14 2008/09/10 17:52:35 joerg Exp $");
 
 #include <assert.h>
 #include <stdio.h>
-#include <memory.h>
 
 #include <db.h>
 #include "btree.h"
@@ -65,7 +64,6 @@ __bt_pgin(void *t, pgno_t pg, void *pp)
 	indx_t i, top;
 	uint8_t flags;
 	char *p;
-	uint32_t ksize;
 
 	if (!F_ISSET(((BTREE *)t), B_NEEDSWAP))
 		return;
@@ -103,7 +101,6 @@ __bt_pgin(void *t, pgno_t pg, void *pp)
 			M_16_SWAP(h->linp[i]);
 			p = (char *)(void *)GETBLEAF(h, i);
 			P_32_SWAP(p);
-			memcpy(&ksize, p, sizeof(ksize));
 			p += sizeof(uint32_t);
 			P_32_SWAP(p);
 			p += sizeof(uint32_t);
@@ -116,7 +113,7 @@ __bt_pgin(void *t, pgno_t pg, void *pp)
 					P_32_SWAP(p);
 				}
 				if (flags & P_BIGDATA) {
-					p += ksize;
+					p += sizeof(uint32_t);
 					P_32_SWAP(p);
 					p += sizeof(pgno_t);
 					P_32_SWAP(p);
@@ -132,7 +129,6 @@ __bt_pgout(void *t, pgno_t pg, void *pp)
 	indx_t i, top;
 	uint8_t flags;
 	char *p;
-	uint32_t ksize;
 
 	if (!F_ISSET(((BTREE *)t), B_NEEDSWAP))
 		return;
@@ -161,7 +157,6 @@ __bt_pgout(void *t, pgno_t pg, void *pp)
 	else if ((h->flags & P_TYPE) == P_BLEAF)
 		for (i = 0; i < top; i++) {
 			p = (char *)(void *)GETBLEAF(h, i);
-			ksize = GETBLEAF(h, i)->ksize;
 			P_32_SWAP(p);
 			p += sizeof(uint32_t);
 			P_32_SWAP(p);
@@ -175,7 +170,7 @@ __bt_pgout(void *t, pgno_t pg, void *pp)
 					P_32_SWAP(p);
 				}
 				if (flags & P_BIGDATA) {
-					p += ksize;
+					p += sizeof(uint32_t);
 					P_32_SWAP(p);
 					p += sizeof(pgno_t);
 					P_32_SWAP(p);

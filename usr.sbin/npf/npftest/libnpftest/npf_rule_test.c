@@ -1,4 +1,4 @@
-/*	$NetBSD: npf_rule_test.c,v 1.14 2017/01/29 04:12:52 christos Exp $	*/
+/*	$NetBSD: npf_rule_test.c,v 1.12 2014/08/10 19:09:43 rmind Exp $	*/
 
 /*
  * NPF ruleset test.
@@ -6,9 +6,7 @@
  * Public Domain.
  */
 
-#ifdef _KERNEL
 #include <sys/types.h>
-#endif
 
 #include "npf_impl.h"
 #include "npf_test.h"
@@ -76,22 +74,20 @@ fill_packet(const struct test_case *t)
 static int
 npf_rule_raw_test(bool verbose, struct mbuf *m, ifnet_t *ifp, int di)
 {
-	npf_t *npf = npf_getkernctx();
-	npf_cache_t npc = { .npc_info = 0, .npc_ctx = npf };
+	npf_cache_t npc = { .npc_info = 0 };
 	nbuf_t nbuf;
 	npf_rule_t *rl;
-	npf_match_info_t mi;
-	int error;
+	int retfl, error;
 
-	nbuf_init(npf, &nbuf, m, ifp);
+	nbuf_init(&nbuf, m, ifp);
 	npc.npc_nbuf = &nbuf;
 	npf_cache_all(&npc);
 
 	int slock = npf_config_read_enter();
-	rl = npf_ruleset_inspect(&npc, npf_config_ruleset(npf),
+	rl = npf_ruleset_inspect(&npc, npf_config_ruleset(),
 	    di, NPF_LAYER_3);
 	if (rl) {
-		error = npf_rule_conclude(rl, &mi);
+		error = npf_rule_conclude(rl, &retfl);
 	} else {
 		error = ENOENT;
 	}
@@ -103,7 +99,7 @@ static int
 npf_test_case(u_int i, bool verbose)
 {
 	const struct test_case *t = &test_cases[i];
-	ifnet_t *ifp = npf_test_getif(t->ifname);
+	ifnet_t *ifp = ifunit(t->ifname);
 	int error;
 
 	struct mbuf *m = fill_packet(t);
@@ -115,19 +111,17 @@ npf_test_case(u_int i, bool verbose)
 static npf_rule_t *
 npf_blockall_rule(void)
 {
-	npf_t *npf = npf_getkernctx();
 	prop_dictionary_t rldict;
 
 	rldict = prop_dictionary_create();
 	prop_dictionary_set_uint32(rldict, "attr",
 	    NPF_RULE_IN | NPF_RULE_OUT | NPF_RULE_DYNAMIC);
-	return npf_rule_alloc(npf, rldict);
+	return npf_rule_alloc(rldict);
 }
 
 bool
 npf_rule_test(bool verbose)
 {
-	npf_t *npf = npf_getkernctx();
 	npf_ruleset_t *rlset;
 	npf_rule_t *rl;
 	bool fail = false;
@@ -136,7 +130,7 @@ npf_rule_test(bool verbose)
 
 	for (unsigned i = 0; i < __arraycount(test_cases); i++) {
 		const struct test_case *t = &test_cases[i];
-		ifnet_t *ifp = npf_test_getif(t->ifname);
+		ifnet_t *ifp = ifunit(t->ifname);
 		int serror;
 
 		if (ifp == NULL) {
@@ -146,7 +140,7 @@ npf_rule_test(bool verbose)
 
 		struct mbuf *m = fill_packet(t);
 		error = npf_rule_raw_test(verbose, m, ifp, t->di);
-		serror = npf_packet_handler(npf, &m, ifp, t->di);
+		serror = npf_packet_handler(NULL, &m, ifp, t->di);
 
 		if (m) {
 			m_freem(m);
@@ -167,8 +161,8 @@ npf_rule_test(bool verbose)
 	error = npf_test_case(0, verbose);
 	assert(error == RESULT_PASS);
 
-	npf_config_enter(npf);
-	rlset = npf_config_ruleset(npf);
+	npf_config_enter();
+	rlset = npf_config_ruleset();
 
 	rl = npf_blockall_rule();
 	error = npf_ruleset_add(rlset, "test-rules", rl);
@@ -181,7 +175,7 @@ npf_rule_test(bool verbose)
 	error = npf_ruleset_remove(rlset, "test-rules", id);
 	fail |= error != 0;
 
-	npf_config_exit(npf);
+	npf_config_exit();
 
 	error = npf_test_case(0, verbose);
 	fail |= (error != RESULT_PASS);

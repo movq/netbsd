@@ -1,4 +1,4 @@
-/*	$NetBSD: identcpu.c,v 1.53 2017/02/16 15:00:30 tls Exp $	*/
+/*	$NetBSD: identcpu.c,v 1.45.2.2 2016/03/06 17:53:26 martin Exp $	*/
 
 /*-
  * Copyright (c) 1999, 2000, 2001, 2006, 2007, 2008 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: identcpu.c,v 1.53 2017/02/16 15:00:30 tls Exp $");
+__KERNEL_RCSID(0, "$NetBSD: identcpu.c,v 1.45.2.2 2016/03/06 17:53:26 martin Exp $");
 
 #include "opt_xen.h"
 
@@ -61,9 +61,9 @@ static const struct x86_cache_info amd_cpuid_l3cache_assoc_info[] =
 int cpu_vendor;
 char cpu_brand_string[49];
 
-int x86_fpu_save __read_mostly = FPU_SAVE_FSAVE;
-unsigned int x86_fpu_save_size __read_mostly = 512;
-uint64_t x86_xsave_features __read_mostly = 0;
+int x86_fpu_save = FPU_SAVE_FSAVE;
+unsigned int x86_fpu_save_size = 512;
+uint64_t x86_xsave_features = 0;
 
 /*
  * Note: these are just the ones that may not have a cpuid instruction.
@@ -551,29 +551,11 @@ cpu_probe_c3(struct cpu_info *ci)
 			}
 		    }
 
-		    /*
-		     * Actually do the enables.  It's a little gross,
-		     * but per the PadLock programming guide, "Enabling
-		     * PadLock", condition 3, we must enable SSE too or
-		     * else the first use of RNG or ACE instructions
-		     * will generate a trap.
-		     *
-		     * We must do this early because of kernel RNG
-		     * initialization but it is safe without the full
-		     * FPU-detect as all these CPUs have SSE.
-		     */
-		    lcr4(rcr4() | CR4_OSFXSR);
-
+		    /* Actually do the enables. */
 		    if (rng_enable) {
 			msr = rdmsr(MSR_VIA_RNG);
-			msr |= MSR_VIA_RNG_ENABLE;
-			/* C7 stepping 8 and subsequent CPUs have dual RNG */
-			if (model > 0xA || (model == 0xA && stepping > 0x7)) {
-				msr |= MSR_VIA_RNG_2NOISE;
-			}
-			wrmsr(MSR_VIA_RNG, msr);
+			wrmsr(MSR_VIA_RNG, msr | MSR_VIA_RNG_ENABLE);
 		    }
-
 		    if (ace_enable) {
 			msr = rdmsr(MSR_VIA_ACE);
 			wrmsr(MSR_VIA_ACE, msr | MSR_VIA_ACE_ENABLE);
@@ -772,12 +754,10 @@ cpu_probe_fpu(struct cpu_info *ci)
 
 	/* Get features and maximum size of the save area */
 	x86_cpuid(0xd, descs);
+	/* XXX these probably ought to be per-cpu */
 	if (descs[2] > 512)
-		x86_fpu_save_size = descs[2];
-
-#ifdef XEN
-	/* Don't use xsave, force fxsave with x86_xsave_features = 0. */
-#else
+	    x86_fpu_save_size = descs[2];
+#ifndef XEN
 	x86_xsave_features = (uint64_t)descs[3] << 32 | descs[0];
 #endif
 }
@@ -939,9 +919,9 @@ cpu_identify(struct cpu_info *ci)
 	cpu_setmodel("%s %d86-class",
 	    cpu_vendor_names[cpu_vendor], cpu_class + 3);
 	if (cpu_brand_string[0] != '\0') {
-		aprint_normal_dev(ci->ci_dev, "%s", cpu_brand_string);
+		aprint_normal(": %s", cpu_brand_string);
 	} else {
-		aprint_normal_dev(ci->ci_dev, "%s", cpu_getmodel());
+		aprint_normal(": %s", cpu_getmodel());
 		if (ci->ci_data.cpu_cc_freq != 0)
 			aprint_normal(", %dMHz",
 			    (int)(ci->ci_data.cpu_cc_freq / 1000000));

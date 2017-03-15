@@ -1,4 +1,4 @@
-/*	$NetBSD: dpath.c,v 1.2 2017/02/04 18:08:29 mlelstv Exp $	*/
+/*	$NetBSD: dpath.c,v 1.1.1.1 2014/04/01 16:16:06 jakllsch Exp $	*/
 
 /*++
 
@@ -677,7 +677,7 @@ _DevPathIPv4 (
     IN VOID                 *DevPath
     )
 {
-    IPv4_DEVICE_PATH     *IP __unused;
+    IPv4_DEVICE_PATH     *IP;
 
     IP = DevPath;
     CatPrint(Str, L"IPv4(not-done)");
@@ -689,7 +689,7 @@ _DevPathIPv6 (
     IN VOID                 *DevPath
     )
 {
-    IPv6_DEVICE_PATH     *IP __unused;
+    IPv6_DEVICE_PATH     *IP;
 
     IP = DevPath;
     CatPrint(Str, L"IP-v6(not-done)");
@@ -701,7 +701,7 @@ _DevPathInfiniBand (
     IN VOID                 *DevPath
     )
 {
-    INFINIBAND_DEVICE_PATH  *InfiniBand __unused;
+    INFINIBAND_DEVICE_PATH  *InfiniBand;
 
     InfiniBand = DevPath;
     CatPrint(Str, L"InfiniBand(not-done)");

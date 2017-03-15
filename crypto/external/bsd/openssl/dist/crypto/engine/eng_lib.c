@@ -217,10 +217,10 @@ void ENGINE_cleanup(void)
 
 int ENGINE_get_ex_new_index(long argl, void *argp, CRYPTO_EX_new *new_func,
                             CRYPTO_EX_dup *dup_func,
-                            CRYPTO_EX_free *freefunc)
+                            CRYPTO_EX_free *free_func)
 {
     return CRYPTO_get_ex_new_index(CRYPTO_EX_INDEX_ENGINE, argl, argp,
-                                   new_func, dup_func, freefunc);
+                                   new_func, dup_func, free_func);
 }
 
 int ENGINE_set_ex_data(ENGINE *e, int idx, void *arg)

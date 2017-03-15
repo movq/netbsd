@@ -31,7 +31,7 @@
 
 #include <sys/cdefs.h>
 
-__KERNEL_RCSID(1, "$NetBSD: awin_eth.c,v 1.11 2016/06/10 13:27:10 ozaki-r Exp $");
+__KERNEL_RCSID(1, "$NetBSD: awin_eth.c,v 1.5.2.2 2015/03/15 22:59:39 snj Exp $");
 
 #include <sys/param.h>
 #include <sys/bus.h>
@@ -39,7 +39,7 @@ __KERNEL_RCSID(1, "$NetBSD: awin_eth.c,v 1.11 2016/06/10 13:27:10 ozaki-r Exp $"
 #include <sys/intr.h>
 #include <sys/ioctl.h>
 #include <sys/mutex.h>
-#include <sys/rndsource.h>
+#include <sys/rnd.h>
 #include <sys/systm.h>
 
 #include <net/if.h>
@@ -412,7 +412,7 @@ awin_eth_mgethdr(struct awin_eth_softc *sc, size_t rxlen)
 	m->m_data += 2;
 	m->m_len = rxlen;
 	m->m_pkthdr.len = rxlen;
-	m_set_rcvif(m, &sc->sc_ec.ec_if);
+	m->m_pkthdr.rcvif = &sc->sc_ec.ec_if;
 
 	return m;
 }
@@ -422,7 +422,7 @@ awin_eth_if_input(struct awin_eth_softc *sc, struct mbuf *m)
 {
 	struct ifnet * const ifp = &sc->sc_ec.ec_if;
 
-	if_percpuq_enqueue(ifp->if_percpuq, m);
+	(*ifp->if_input)(ifp, m);
 }
 
 static void

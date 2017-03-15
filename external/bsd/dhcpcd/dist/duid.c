@@ -1,5 +1,5 @@
 #include <sys/cdefs.h>
- __RCSID("$NetBSD: duid.c,v 1.13 2016/07/29 10:07:58 roy Exp $");
+ __RCSID("$NetBSD: duid.c,v 1.1.1.8.2.2 2015/02/05 15:13:12 martin Exp $");
 
 /*
  * dhcpcd - DHCP client daemon
@@ -35,16 +35,14 @@
 #include <sys/socket.h>
 #include <sys/types.h>
 
-#include <arpa/inet.h>
-
 #include <net/if.h>
 #include <net/if_arp.h>
 
 #include <errno.h>
-#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <syslog.h>
 #include <time.h>
 #include <unistd.h>
 
@@ -57,9 +55,9 @@
 #include "duid.h"
 
 static size_t
-duid_make(uint8_t *d, const struct interface *ifp, uint16_t type)
+duid_make(unsigned char *d, const struct interface *ifp, uint16_t type)
 {
-	uint8_t *p;
+	unsigned char *p;
 	uint16_t u16;
 	time_t t;
 	uint32_t u32;
@@ -87,71 +85,70 @@ duid_make(uint8_t *d, const struct interface *ifp, uint16_t type)
 
 #define DUID_STRLEN DUID_LEN * 3
 static size_t
-duid_get(uint8_t **d, const struct interface *ifp)
+duid_get(unsigned char *d, const struct interface *ifp)
 {
 	FILE *fp;
-	uint8_t *data;
-	size_t len;
 	int x = 0;
+	size_t len = 0;
 	char line[DUID_STRLEN];
 	const struct interface *ifp2;
 
 	/* If we already have a DUID then use it as it's never supposed
 	 * to change once we have one even if the interfaces do */
-	if ((len = read_hwaddr_aton(&data, DUID)) != 0) {
-		if (len <= DUID_LEN) {
-			*d = data;
-			return len;
+	if ((fp = fopen(DUID, "r"))) {
+		while (fgets(line, DUID_STRLEN, fp)) {
+			len = strlen(line);
+			if (len) {
+				if (line[len - 1] == '\n')
+					line[len - 1] = '\0';
+			}
+			len = hwaddr_aton(NULL, line);
+			if (len && len <= DUID_LEN) {
+				hwaddr_aton(d, line);
+				break;
+			}
+			len = 0;
 		}
-		logger(ifp->ctx, LOG_ERR,
-		    "DUID too big (max %u): %s", DUID_LEN, DUID);
-		/* Keep the buffer, will assign below. */
+		fclose(fp);
+		if (len)
+			return len;
 	} else {
 		if (errno != ENOENT)
-			logger(ifp->ctx, LOG_ERR,
-			    "error reading DUID: %s: %m", DUID);
-		if ((data = malloc(DUID_LEN)) == NULL) {
-			logger(ifp->ctx, LOG_ERR, "%s: malloc: %m", __func__);
-			return 0;
-		}
+			syslog(LOG_ERR, "error reading DUID: %s: %m", DUID);
 	}
-
-	/* Regardless of what happens we will create a DUID to use. */
-	*d = data;
 
 	/* No file? OK, lets make one based on our interface */
 	if (ifp->family == ARPHRD_NETROM) {
-		logger(ifp->ctx, LOG_WARNING,
-		    "%s: is a NET/ROM pseudo interface", ifp->name);
+		syslog(LOG_WARNING, "%s: is a NET/ROM psuedo interface",
+		    ifp->name);
 		TAILQ_FOREACH(ifp2, ifp->ctx->ifaces, next) {
 			if (ifp2->family != ARPHRD_NETROM)
 				break;
 		}
 		if (ifp2) {
 			ifp = ifp2;
-			logger(ifp->ctx, LOG_WARNING,
+			syslog(LOG_WARNING,
 			    "picked interface %s to generate a DUID",
 			    ifp->name);
 		} else {
-			logger(ifp->ctx, LOG_WARNING,
+			syslog(LOG_WARNING,
 			    "no interfaces have a fixed hardware address");
-			return duid_make(data, ifp, DUID_LL);
+			return duid_make(d, ifp, DUID_LL);
 		}
 	}
 
 	if (!(fp = fopen(DUID, "w"))) {
-		logger(ifp->ctx, LOG_ERR, "error writing DUID: %s: %m", DUID);
-		return duid_make(data, ifp, DUID_LL);
+		syslog(LOG_ERR, "error writing DUID: %s: %m", DUID);
+		return duid_make(d, ifp, DUID_LL);
 	}
-	len = duid_make(data, ifp, DUID_LLT);
-	x = fprintf(fp, "%s\n", hwaddr_ntoa(data, len, line, sizeof(line)));
-	if (fclose(fp) == EOF)
-		x = -1;
+	len = duid_make(d, ifp, DUID_LLT);
+	x = fprintf(fp, "%s\n", hwaddr_ntoa(d, len, line, sizeof(line)));
+	fclose(fp);
 	/* Failed to write the duid? scrub it, we cannot use it */
 	if (x < 1) {
-		logger(ifp->ctx, LOG_ERR, "error writing DUID: %s: %m", DUID);
+		syslog(LOG_ERR, "error writing DUID: %s: %m", DUID);
 		unlink(DUID);
-		return duid_make(data, ifp, DUID_LL);
+		return duid_make(d, ifp, DUID_LL);
 	}
 	return len;
 }
@@ -159,7 +156,13 @@ duid_get(uint8_t **d, const struct interface *ifp)
 size_t duid_init(const struct interface *ifp)
 {
 
-	if (ifp->ctx->duid == NULL)
-		ifp->ctx->duid_len = duid_get(&ifp->ctx->duid, ifp);
+	if (ifp->ctx->duid == NULL) {
+		ifp->ctx->duid = malloc(DUID_LEN);
+		if (ifp->ctx->duid == NULL) {
+			syslog(LOG_ERR, "%s: %m", __func__);
+			return 0;
+		}
+		ifp->ctx->duid_len = duid_get(ifp->ctx->duid, ifp);
+	}
 	return ifp->ctx->duid_len;
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: nfs_socket.c,v 1.198 2016/06/17 14:28:29 christos Exp $	*/
+/*	$NetBSD: nfs_socket.c,v 1.192.2.2 2016/07/10 09:42:34 martin Exp $	*/
 
 /*
  * Copyright (c) 1989, 1991, 1993, 1995
@@ -39,7 +39,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: nfs_socket.c,v 1.198 2016/06/17 14:28:29 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: nfs_socket.c,v 1.192.2.2 2016/07/10 09:42:34 martin Exp $");
 
 #ifdef _KERNEL_OPT
 #include "opt_nfs.h"
@@ -183,8 +183,9 @@ nfs_connect(struct nfsmount *nmp, struct nfsreq *rep, struct lwp *l)
 	struct socket *so;
 	int error, rcvreserve, sndreserve;
 	struct sockaddr *saddr;
-	struct sockaddr_in sin;
-	struct sockaddr_in6 sin6;
+	struct sockaddr_in *sin;
+	struct sockaddr_in6 *sin6;
+	struct mbuf *m;
 	int val;
 
 	nmp->nm_so = NULL;
@@ -210,11 +211,15 @@ nfs_connect(struct nfsmount *nmp, struct nfsreq *rep, struct lwp *l)
 		if ((error = so_setsockopt(NULL, so, IPPROTO_IP, IP_PORTRANGE,
 		    &val, sizeof(val))))
 			goto bad;
-		sin.sin_len = sizeof(struct sockaddr_in);
-		sin.sin_family = AF_INET;
-		sin.sin_addr.s_addr = INADDR_ANY;
-		sin.sin_port = 0;
-		error = sobind(so, (struct sockaddr *)&sin, &lwp0);
+		m = m_get(M_WAIT, MT_SONAME);
+		MCLAIM(m, so->so_mowner);
+		sin = mtod(m, struct sockaddr_in *);
+		sin->sin_len = m->m_len = sizeof (struct sockaddr_in);
+		sin->sin_family = AF_INET;
+		sin->sin_addr.s_addr = INADDR_ANY;
+		sin->sin_port = 0;
+		error = sobind(so, m, &lwp0);
+		m_freem(m);
 		if (error)
 			goto bad;
 	}
@@ -224,10 +229,14 @@ nfs_connect(struct nfsmount *nmp, struct nfsreq *rep, struct lwp *l)
 		if ((error = so_setsockopt(NULL, so, IPPROTO_IPV6,
 		    IPV6_PORTRANGE, &val, sizeof(val))))
 			goto bad;
-		memset(&sin6, 0, sizeof(sin6));
-		sin6.sin6_len = sizeof(struct sockaddr_in6);
-		sin6.sin6_family = AF_INET6;
-		error = sobind(so, (struct sockaddr *)&sin6, &lwp0);
+		m = m_get(M_WAIT, MT_SONAME);
+		MCLAIM(m, so->so_mowner);
+		sin6 = mtod(m, struct sockaddr_in6 *);
+		memset(sin6, 0, sizeof(*sin6));
+		sin6->sin6_len = m->m_len = sizeof (struct sockaddr_in6);
+		sin6->sin6_family = AF_INET6;
+		error = sobind(so, m, &lwp0);
+		m_freem(m);
 		if (error)
 			goto bad;
 	}
@@ -244,7 +253,7 @@ nfs_connect(struct nfsmount *nmp, struct nfsreq *rep, struct lwp *l)
 			goto bad;
 		}
 	} else {
-		error = soconnect(so, mtod(nmp->nm_nam, struct sockaddr *), l);
+		error = soconnect(so, nmp->nm_nam, l);
 		if (error) {
 			sounlock(so);
 			goto bad;
@@ -464,7 +473,7 @@ nfs_safedisconnect(struct nfsmount *nmp)
 int
 nfs_send(struct socket *so, struct mbuf *nam, struct mbuf *top, struct nfsreq *rep, struct lwp *l)
 {
-	struct sockaddr *sendnam;
+	struct mbuf *sendnam;
 	int error, soflags, flags;
 
 	/* XXX nfs_doio()/nfs_request() calls with  rep->r_lwp == NULL */
@@ -488,7 +497,7 @@ nfs_send(struct socket *so, struct mbuf *nam, struct mbuf *top, struct nfsreq *r
 	if ((soflags & PR_CONNREQUIRED) || (so->so_state & SS_ISCONNECTED))
 		sendnam = NULL;
 	else
-		sendnam = mtod(nam, struct sockaddr *);
+		sendnam = nam;
 	if (so->so_type == SOCK_SEQPACKET)
 		flags = MSG_EOR;
 	else
@@ -825,8 +834,7 @@ nfs_timer(void *arg)
 			    m, NULL, NULL, NULL);
 			else
 			    error = (*so->so_proto->pr_usrreqs->pr_send)(so,
-				m, mtod(nmp->nm_nam, struct sockaddr *),
-				NULL, NULL);
+			    m, nmp->nm_nam, NULL, NULL);
 			if (error) {
 				if (NFSIGNORE_SOERROR(nmp->nm_soflags, error)) {
 #ifdef DEBUG
@@ -906,7 +914,7 @@ nfs_rcvlock(struct nfsmount *nmp, struct nfsreq *rep)
 {
 	int *flagp = &nmp->nm_iflag;
 	int slptimeo = 0;
-	bool catch_p;
+	bool catch;
 	int error = 0;
 
 	KASSERT(nmp == rep->r_nmp);
@@ -917,7 +925,7 @@ nfs_rcvlock(struct nfsmount *nmp, struct nfsreq *rep)
 	if (nmp->nm_iflag & NFSMNT_DISMNTFORCE)
 		slptimeo = hz;
 
-	catch_p = (nmp->nm_flag & NFSMNT_INT) != 0;
+	catch = (nmp->nm_flag & NFSMNT_INT) != 0;
 	mutex_enter(&nmp->nm_lock);
 	while (/* CONSTCOND */ true) {
 		if (*flagp & NFSMNT_DISMNT) {
@@ -944,7 +952,7 @@ nfs_rcvlock(struct nfsmount *nmp, struct nfsreq *rep)
 			*flagp |= NFSMNT_RCVLOCK;
 			break;
 		}
-		if (catch_p) {
+		if (catch) {
 			error = cv_timedwait_sig(&nmp->nm_rcvcv, &nmp->nm_lock,
 			    slptimeo);
 		} else {
@@ -959,8 +967,8 @@ nfs_rcvlock(struct nfsmount *nmp, struct nfsreq *rep)
 			}
 			error = 0;
 		}
-		if (catch_p) {
-			catch_p = false;
+		if (catch) {
+			catch = false;
 			slptimeo = 2 * hz;
 		}
 	}

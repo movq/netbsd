@@ -1,4 +1,4 @@
-/* $NetBSD: t_cond.c,v 1.7 2016/07/03 14:24:59 christos Exp $ */
+/* $NetBSD: t_cond.c,v 1.5.4.1 2014/12/22 02:06:10 msaitoh Exp $ */
 
 /*
  * Copyright (c) 2008 The NetBSD Foundation, Inc.
@@ -29,7 +29,7 @@
 #include <sys/cdefs.h>
 __COPYRIGHT("@(#) Copyright (c) 2008\
  The NetBSD Foundation, inc. All rights reserved.");
-__RCSID("$NetBSD: t_cond.c,v 1.7 2016/07/03 14:24:59 christos Exp $");
+__RCSID("$NetBSD: t_cond.c,v 1.5.4.1 2014/12/22 02:06:10 msaitoh Exp $");
 
 #include <sys/time.h>
 
@@ -547,26 +547,6 @@ ATF_TC_BODY(destroy_after_cancel, tc)
 	PTHREAD_REQUIRE(pthread_mutex_destroy(&mutex));
 }
 
-ATF_TC(condattr);
-ATF_TC_HEAD(condattr, tc)
-{
-	atf_tc_set_md_var(tc, "descr", "Checks Condattr");
-}
-ATF_TC_BODY(condattr, tc)
-{
-	pthread_condattr_t condattr;
-	clockid_t clockid;
-
-	PTHREAD_REQUIRE(pthread_condattr_init(&condattr));
-	PTHREAD_REQUIRE(pthread_condattr_setclock(&condattr, CLOCK_REALTIME));
-	PTHREAD_REQUIRE(pthread_condattr_getclock(&condattr, &clockid));
-	ATF_REQUIRE_EQ(clockid, CLOCK_REALTIME);
-	
-	PTHREAD_REQUIRE(pthread_condattr_setclock(&condattr, CLOCK_MONOTONIC));
-	PTHREAD_REQUIRE(pthread_condattr_getclock(&condattr, &clockid));	
- 	ATF_REQUIRE_EQ(clockid, CLOCK_MONOTONIC);
-}
-
 ATF_TP_ADD_TCS(tp)
 {
 
@@ -578,7 +558,6 @@ ATF_TP_ADD_TCS(tp)
 	ATF_TP_ADD_TC(tp, broadcast);
 	ATF_TP_ADD_TC(tp, bogus_timedwaits);
 	ATF_TP_ADD_TC(tp, destroy_after_cancel);
-	ATF_TP_ADD_TC(tp, condattr);
 
 	return atf_no_error();
 }

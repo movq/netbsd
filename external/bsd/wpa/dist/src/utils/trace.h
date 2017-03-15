@@ -66,6 +66,4 @@ void wpa_trace_dump_funcname(const char *title, void *pc);
 
 #endif /* WPA_TRACE_BFD */
 
-void wpa_trace_deinit(void);
-
 #endif /* TRACE_H */

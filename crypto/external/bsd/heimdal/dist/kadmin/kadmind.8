@@ -1,4 +1,4 @@
-.\"	$NetBSD: kadmind.8,v 1.5 2017/01/28 21:31:44 christos Exp $
+.\"	$NetBSD: kadmind.8,v 1.4 2014/04/24 13:45:33 pettai Exp $
 .\"
 .\" Copyright (c) 2002 - 2004 Kungliga Tekniska Högskolan
 .\" (Royal Institute of Technology, Stockholm, Sweden).
@@ -109,8 +109,6 @@ add
 .It
 get
 .It
-get-keys
-.It
 all
 .El
 .Pp
@@ -151,15 +149,14 @@ compiled in defaults:
 .D1 Nm Fl Fl ports Ns Li "=\*[q]+ 4711\*[q] &"
 .Pp
 This acl file will grant Joe all rights, and allow Mallory to view and
-add host principals, as well as extract host principal keys (e.g., into
-keytabs).
+add host principals.
 .Bd -literal -offset indent
 joe/admin@EXAMPLE.COM      all
-mallory/admin@EXAMPLE.COM  add,get-keys  host/*@EXAMPLE.COM
+mallory/admin@EXAMPLE.COM  add,get  host/*@EXAMPLE.COM
 .Ed
 .\".Sh DIAGNOSTICS
 .Sh SEE ALSO
 .Xr kpasswd 1 ,
-.Xr kadmin 1 ,
+.Xr kadmin 8 ,
 .Xr kdc 8 ,
 .Xr kpasswdd 8

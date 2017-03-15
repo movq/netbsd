@@ -1,5 +1,4 @@
-# THIS FILE IS GENERATED.  -*- buffer-read-only: t -*- vi :set ro:
-# Generated from: rs6000/powerpc-32l.xml
+# DO NOT EDIT: generated from rs6000/powerpc-32l.xml
 name:powerpc_32l
 xmltarget:powerpc-32l.xml
 expedite:r1,pc

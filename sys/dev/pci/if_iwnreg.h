@@ -1,4 +1,4 @@
-/*	$NetBSD: if_iwnreg.h,v 1.16 2017/03/11 21:23:36 maya Exp $	*/
+/*	$NetBSD: if_iwnreg.h,v 1.13.4.1 2015/01/28 19:00:28 martin Exp $	*/
 /*	$OpenBSD: if_iwnreg.h,v 1.49 2014/09/09 18:56:24 sthen Exp $	*/
 
 /*-
@@ -201,7 +201,7 @@
 
 /* Possible flags for register IWN_HW_REV. */
 #define IWN_HW_REV_TYPE_SHIFT	4
-#define IWN_HW_REV_TYPE_MASK	0x000001f0
+#define IWN_HW_REV_TYPE_MASK	0x000000f0
 #define IWN_HW_REV_TYPE_4965	0
 #define IWN_HW_REV_TYPE_5300	2
 #define IWN_HW_REV_TYPE_5350	3
@@ -1940,7 +1940,7 @@ static const char * const iwn_fw_errmsg[] = {
 	"NMI_INTERRUPT_DATA_ACTION_PT",
 	"NMI_TRM_HW_ER",
 	"NMI_INTERRUPT_TRM",
-	"NMI_INTERRUPT_BREAKPOINT",
+	"NMI_INTERRUPT_BREAKPOINT"
 	"DEBUG_0",
 	"DEBUG_1",
 	"DEBUG_2",

@@ -1,4 +1,4 @@
-#	$NetBSD: majors.hp300,v 1.26 2014/08/24 08:17:44 tsutsui Exp $
+#	$NetBSD: majors.hp300,v 1.25.28.1 2014/08/29 11:42:15 martin Exp $
 #
 # Device majors for hp300
 #

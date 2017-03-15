@@ -1,4 +1,4 @@
-#       $NetBSD: t_tcpip.sh,v 1.18 2016/08/13 11:22:11 christos Exp $
+#       $NetBSD: t_tcpip.sh,v 1.13 2014/01/03 13:18:00 pooka Exp $
 #
 # Copyright (c) 2011 The NetBSD Foundation, Inc.
 # All rights reserved.
@@ -25,8 +25,7 @@
 # POSSIBILITY OF SUCH DAMAGE.
 #
 
-rumpnetlibs="-lrumpnet -lrumpnet_net -lrumpnet_netinet6 -lrumpnet_netinet"
-rumpnetsrv="rump_server $rumpnetlibs -lrumpdev"
+rumpnetsrv='rump_server -lrumpnet -lrumpnet_net -lrumpnet_netinet'
 export RUMP_SERVER=unix://csock
 
 atf_test_case http cleanup
@@ -38,7 +37,7 @@ http_head()
 http_body()
 {
 
-	atf_check -s exit:0 ${rumpnetsrv} ${RUMP_SERVER}
+	atf_check -s exit:0 ${rumpnetsrv} -lrumpnet_netinet6 ${RUMP_SERVER}
 
 	# start bozo in daemon mode
 	atf_check -s exit:0 env LD_PRELOAD=/usr/lib/librumphijack.so \
@@ -54,9 +53,8 @@ http_body()
 	# check that we got what we wanted
 	atf_check -o match:'HTTP/1.0 200 OK' cat webfile
 	atf_check -o match:'Content-Length: 95' cat webfile
-	blank_line_re="$(printf '^\r$')" # matches a line with only <CR><LF>
 	atf_check -o file:"$(atf_get_srcdir)/index.html" \
-	    sed -n "1,/${blank_line_re}/!p" webfile
+	    sed -n '1,/^$/!p' webfile
 }
 
 http_cleanup()
@@ -123,7 +121,6 @@ ssh_head()
 
 ssh_body()
 {
-	atf_expect_fail "PR lib/50174"
 
 	atf_check -s exit:0 ${rumpnetsrv} ${RUMP_SERVER}
 	# make sure clients die after we nuke the server
@@ -180,8 +177,6 @@ test_nfs()
 	    'echo "/export -noresvport -noresvmnt 10.1.1.100" | \
 		dd of=/rump/etc/exports 2> /dev/null'
 
-	atf_check -s exit:0 rump.sysctl -q -w kern.module.autoload=1
-
 	atf_check -s exit:0 -e ignore mount_ffs /dk /rump/export
 	atf_check -s exit:0 -x "echo ${magicstr} > /rump/export/im_alive"
 
@@ -206,7 +201,7 @@ test_nfs()
 	unset LD_PRELOAD
 
 	# at least the kernel server is easier
-	atf_check -s exit:0 rump_server -lrumpvfs -lrumpnet -lrumpdev	\
+	atf_check -s exit:0 rump_server -lrumpvfs -lrumpnet		\
 	    -lrumpnet_net -lrumpnet_netinet -lrumpnet_shmif -lrumpfs_nfs\
 	    ${RUMP_SERVER}
 
@@ -233,7 +228,7 @@ nfs_head()
 nfs_body()
 {
 	test_nfs -lrumpvfs -lrumpdev -lrumpnet -lrumpnet_net		\
-	    -lrumpnet_netinet -lrumpnet_local -lrumpnet_shmif -lrumpdev	\
+	    -lrumpnet_netinet -lrumpnet_local -lrumpnet_shmif		\
 	    -lrumpdev_disk -lrumpfs_ffs -lrumpfs_nfs -lrumpfs_nfsserver	\
 	    -d key=/dk,hostpath=ffs.img,size=host
 }
@@ -255,7 +250,7 @@ nfs_autoload_body()
 {
 	[ `uname -m` = "i386" ] || atf_skip "test currently valid only on i386"
 	test_nfs -lrumpvfs -lrumpdev -lrumpnet -lrumpnet_net		\
-	    -lrumpnet_netinet -lrumpnet_local -lrumpnet_shmif -lrumpdev	\
+	    -lrumpnet_netinet -lrumpnet_local -lrumpnet_shmif		\
 	    -lrumpdev_disk -d key=/dk,hostpath=ffs.img,size=host
 }
 

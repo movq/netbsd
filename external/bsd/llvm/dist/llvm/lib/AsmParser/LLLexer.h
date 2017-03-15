@@ -45,6 +45,7 @@ namespace llvm {
   public:
     explicit LLLexer(StringRef StartBuf, SourceMgr &SM, SMDiagnostic &,
                      LLVMContext &C);
+    ~LLLexer() {}
 
     lltok::Kind Lex() {
       return CurKind = LexToken();

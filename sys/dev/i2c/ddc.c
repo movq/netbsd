@@ -1,4 +1,4 @@
-/* $NetBSD: ddc.c,v 1.6 2015/07/25 15:20:49 jmcneill Exp $ */
+/* $NetBSD: ddc.c,v 1.3.62.1 2014/11/18 18:19:10 snj Exp $ */
 
 /*-
  * Copyright (c) 2006 Itronix Inc.
@@ -32,7 +32,7 @@
  */ 
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ddc.c,v 1.6 2015/07/25 15:20:49 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ddc.c,v 1.3.62.1 2014/11/18 18:19:10 snj Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -80,7 +80,6 @@ ddc_attach(device_t parent, device_t self, void *aux)
 	struct ddc_softc *sc = device_private(self);
 	struct i2c_attach_args *ia = aux;
 
-	sc->sc_tag = ia->ia_tag;
 	sc->sc_address = ia->ia_addr;
 
 	aprint_naive(": DDC\n");
@@ -98,43 +97,18 @@ ddc_read_edid(i2c_tag_t tag, uint8_t *dest, size_t len)
 int
 ddc_read_edid_block(i2c_tag_t tag, uint8_t *dest, size_t len, uint8_t block)
 {
-	uint8_t edid[256];
-	uint8_t wbuf[2];
-	int error;
+	uint8_t		wbuf[2];
 
-	if ((error = iic_acquire_bus(tag, I2C_F_POLL)) != 0)
-		return error;
+	if (iic_acquire_bus(tag, I2C_F_POLL) != 0)
+		return -1;
 
-	wbuf[0] = block >> 1;	/* start address */
+	wbuf[0] = block;	/* start address */
 
-	if ((error = iic_exec(tag, I2C_OP_READ_WITH_STOP, DDC_ADDR, wbuf, 1,
-		edid, sizeof(edid), I2C_F_POLL)) != 0) {
+	if (iic_exec(tag, I2C_OP_READ_WITH_STOP, DDC_ADDR, wbuf, 1, dest,
+		len, I2C_F_POLL)) {
 		iic_release_bus(tag, I2C_F_POLL);
-		return error;
+		return -1;
 	}
 	iic_release_bus(tag, I2C_F_POLL);
-
-	if (block & 1) {
-		memcpy(dest, &edid[128], min(len, 128));
-	} else {
-		memcpy(dest, &edid[0], min(len, 128));
-	}
-
 	return 0;
-}
-
-int
-ddc_dev_read_edid(device_t dev, uint8_t *dest, size_t len)
-{
-	return ddc_dev_read_edid_block(dev, dest, len, DDC_EDID_START);
-}
-
-int
-ddc_dev_read_edid_block(device_t dev, uint8_t *dest, size_t len, uint8_t block)
-{
-	if (!device_is_a(dev, "ddc"))
-		return EINVAL;
-
-	const struct ddc_softc *sc = device_private(dev);
-	return ddc_read_edid_block(sc->sc_tag, dest, len, block);
 }

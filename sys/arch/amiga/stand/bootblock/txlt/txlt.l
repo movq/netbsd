@@ -7,13 +7,14 @@ pea[ 	][._A-Za-z][A-Za-z0-9_.]*$	{printf("pea");munchit(yytext+3);}
 \ [._A-Za-z][A-Za-z0-9_.]*/\,		munchit(yytext);
 .					putchar(*yytext);
 %%
-/*	$NetBSD: txlt.l,v 1.6 2015/02/03 19:58:41 aymeric Exp $	*/
+/*	$NetBSD: txlt.l,v 1.5 2011/06/20 20:25:47 he Exp $	*/
 
 #include <string.h>
 
 void
-munchit(char *s) {
-
+munchit(s)
+	char *s;
+{
 	putchar(*s++);
 	if ((!strncmp(s, "fp", 2) ||
 	    !strncmp(s, "sp", 2) ||
@@ -22,12 +23,4 @@ munchit(char *s) {
 		printf("%s", s);
 	else
 		printf("%%pc@(%s)",s);
-}
-
-int
-main(void) {
-	while (yylex() != 0)
-		;
-
-	return 0;
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: rsa.c,v 1.2 2017/01/28 21:31:47 christos Exp $	*/
+/*	$NetBSD: rsa.c,v 1.1.1.2 2014/04/24 12:45:30 pettai Exp $	*/
 
 /*
  * Copyright (c) 2006 - 2008 Kungliga Tekniska Högskolan
@@ -34,7 +34,9 @@
  */
 
 #include <config.h>
-#include <krb5/roken.h>
+
+#include <stdio.h>
+#include <stdlib.h>
 #include <krb5/krb5-types.h>
 #include <krb5/rfc2459_asn1.h>
 
@@ -43,6 +45,8 @@
 #include <rsa.h>
 
 #include "common.h"
+
+#include <krb5/roken.h>
 
 /**
  * @page page_rsa RSA - public-key cryptography
@@ -504,7 +508,6 @@ static const RSA_METHOD rsa_null_method = {
     null_rsa_init,
     null_rsa_finish,
     0,
-    NULL,
     NULL,
     NULL,
     NULL

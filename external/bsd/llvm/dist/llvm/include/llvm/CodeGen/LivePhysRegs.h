@@ -31,10 +31,8 @@
 
 #include "llvm/ADT/SparseSet.h"
 #include "llvm/CodeGen/MachineBasicBlock.h"
-#include "llvm/MC/MCRegisterInfo.h"
 #include "llvm/Target/TargetRegisterInfo.h"
 #include <cassert>
-#include <utility>
 
 namespace llvm {
 
@@ -43,15 +41,14 @@ class MachineInstr;
 /// \brief A set of live physical registers with functions to track liveness
 /// when walking backward/forward through a basic block.
 class LivePhysRegs {
-  const TargetRegisterInfo *TRI = nullptr;
+  const TargetRegisterInfo *TRI;
   SparseSet<unsigned> LiveRegs;
 
-  LivePhysRegs(const LivePhysRegs&) = delete;
-  LivePhysRegs &operator=(const LivePhysRegs&) = delete;
-
+  LivePhysRegs(const LivePhysRegs&) LLVM_DELETED_FUNCTION;
+  LivePhysRegs &operator=(const LivePhysRegs&) LLVM_DELETED_FUNCTION;
 public:
   /// \brief Constructs a new empty LivePhysRegs set.
-  LivePhysRegs() = default;
+  LivePhysRegs() : TRI(nullptr), LiveRegs() {}
 
   /// \brief Constructs and initialize an empty LivePhysRegs set.
   LivePhysRegs(const TargetRegisterInfo *TRI) : TRI(TRI) {
@@ -60,10 +57,11 @@ public:
   }
 
   /// \brief Clear and initialize the LivePhysRegs set.
-  void init(const TargetRegisterInfo &TRI) {
-    this->TRI = &TRI;
+  void init(const TargetRegisterInfo *_TRI) {
+    assert(_TRI && "Invalid TargetRegisterInfo pointer.");
+    TRI = _TRI;
     LiveRegs.clear();
-    LiveRegs.setUniverse(TRI.getNumRegs());
+    LiveRegs.setUniverse(TRI->getNumRegs());
   }
 
   /// \brief Clears the LivePhysRegs set.
@@ -86,23 +84,21 @@ public:
   void removeReg(unsigned Reg) {
     assert(TRI && "LivePhysRegs is not initialized.");
     assert(Reg <= TRI->getNumRegs() && "Expected a physical register.");
-    for (MCRegAliasIterator R(Reg, TRI, true); R.isValid(); ++R)
-      LiveRegs.erase(*R);
+    for (MCSubRegIterator SubRegs(Reg, TRI, /*IncludeSelf=*/true);
+         SubRegs.isValid(); ++SubRegs)
+      LiveRegs.erase(*SubRegs);
+    for (MCSuperRegIterator SuperRegs(Reg, TRI, /*IncludeSelf=*/false);
+         SuperRegs.isValid(); ++SuperRegs)
+      LiveRegs.erase(*SuperRegs);
   }
 
   /// \brief Removes physical registers clobbered by the regmask operand @p MO.
-  void removeRegsInMask(const MachineOperand &MO,
-        SmallVectorImpl<std::pair<unsigned, const MachineOperand*>> *Clobbers);
+  void removeRegsInMask(const MachineOperand &MO);
 
   /// \brief Returns true if register @p Reg is contained in the set. This also
-  /// works if only the super register of @p Reg has been defined, because
-  /// addReg() always adds all sub-registers to the set as well.
-  /// Note: Returns false if just some sub registers are live, use available()
-  /// when searching a free register.
+  /// works if only the super register of @p Reg has been defined, because we
+  /// always add also all sub-registers to the set.
   bool contains(unsigned Reg) const { return LiveRegs.count(Reg); }
-
-  /// Returns true if register \p Reg and no aliasing register is in the set.
-  bool available(const MachineRegisterInfo &MRI, unsigned Reg) const;
 
   /// \brief Simulates liveness when stepping backwards over an
   /// instruction(bundle): Remove Defs, add uses. This is the recommended way of
@@ -112,27 +108,22 @@ public:
   /// \brief Simulates liveness when stepping forward over an
   /// instruction(bundle): Remove killed-uses, add defs. This is the not
   /// recommended way, because it depends on accurate kill flags. If possible
-  /// use stepBackward() instead of this function.
-  /// The clobbers set will be the list of registers either defined or clobbered
-  /// by a regmask.  The operand will identify whether this is a regmask or
-  /// register operand.
-  void stepForward(const MachineInstr &MI,
-        SmallVectorImpl<std::pair<unsigned, const MachineOperand*>> &Clobbers);
+  /// use stepBackwards() instead of this function.
+  void stepForward(const MachineInstr &MI);
 
-  /// Adds all live-in registers of basic block @p MBB.
-  /// Live in registers are the registers in the blocks live-in list and the
-  /// pristine registers.
-  void addLiveIns(const MachineBasicBlock &MBB);
+  /// \brief Adds all live-in registers of basic block @p MBB.
+  void addLiveIns(const MachineBasicBlock *MBB) {
+    for (MachineBasicBlock::livein_iterator LI = MBB->livein_begin(),
+         LE = MBB->livein_end(); LI != LE; ++LI)
+      addReg(*LI);
+  }
 
-  /// Adds all live-out registers of basic block @p MBB.
-  /// Live out registers are the union of the live-in registers of the successor
-  /// blocks and pristine registers. Live out registers of the end block are the
-  /// callee saved registers.
-  void addLiveOuts(const MachineBasicBlock &MBB);
-
-  /// Like addLiveOuts() but does not add pristine registers/callee saved
-  /// registers.
-  void addLiveOutsNoPristines(const MachineBasicBlock &MBB);
+  /// \brief Adds all live-out registers of basic block @p MBB.
+  void addLiveOuts(const MachineBasicBlock *MBB) {
+    for (MachineBasicBlock::const_succ_iterator SI = MBB->succ_begin(),
+         SE = MBB->succ_end(); SI != SE; ++SI)
+      addLiveIns(*SI);
+  }
 
   typedef SparseSet<unsigned>::const_iterator const_iterator;
   const_iterator begin() const { return LiveRegs.begin(); }
@@ -143,11 +134,6 @@ public:
 
   /// \brief Dumps the currently live registers to the debug output.
   void dump() const;
-
-private:
-  /// Adds live-in registers from basic block @p MBB, taking associated
-  /// lane masks into consideration.
-  void addBlockLiveIns(const MachineBasicBlock &MBB);
 };
 
 inline raw_ostream &operator<<(raw_ostream &OS, const LivePhysRegs& LR) {
@@ -155,13 +141,6 @@ inline raw_ostream &operator<<(raw_ostream &OS, const LivePhysRegs& LR) {
   return OS;
 }
 
-/// Compute the live-in list for \p MBB assuming all of its successors live-in
-/// lists are up-to-date. Uses the given LivePhysReg instance \p LiveRegs; This
-/// is just here to avoid repeated heap allocations when calling this multiple
-/// times in a pass.
-void computeLiveIns(LivePhysRegs &LiveRegs, const TargetRegisterInfo &TRI,
-                    MachineBasicBlock &MBB);
+} // namespace llvm
 
-} // end namespace llvm
-
-#endif // LLVM_CODEGEN_LIVEPHYSREGS_H
+#endif

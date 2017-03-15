@@ -1,5 +1,4 @@
-# THIS FILE IS GENERATED.  -*- buffer-read-only: t -*- vi :set ro:
-# Generated from: nios2-linux.xml
+# DO NOT EDIT: generated from nios2-linux.xml
 name:nios2_linux
 xmltarget:nios2-linux.xml
 expedite:sp,pc

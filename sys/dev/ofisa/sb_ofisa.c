@@ -1,4 +1,4 @@
-/*	$NetBSD: sb_ofisa.c,v 1.18 2016/12/09 17:18:35 christos Exp $	*/
+/*	$NetBSD: sb_ofisa.c,v 1.17 2008/04/28 20:23:54 martin Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -31,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sb_ofisa.c,v 1.18 2016/12/09 17:18:35 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sb_ofisa.c,v 1.17 2008/04/28 20:23:54 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -91,7 +91,8 @@ sb_ofisa_attach(device_t parent, device_t self, void *aux)
 	struct ofisa_reg_desc reg;
 	struct ofisa_intr_desc intr;
 	struct ofisa_dma_desc dma[2];
-	int ndrq;
+	int n, ndrq;
+	char *model;
 
 	sc->sc_dev = self;
 
@@ -108,28 +109,28 @@ sb_ofisa_attach(device_t parent, device_t self, void *aux)
 
 	n = ofisa_reg_get(aa->oba.oba_phandle, &reg, 1);
 	if (n != 1) {
-		aprint_error(": error getting register data\n");
+		printf(": error getting register data\n");
 		return;
 	}
 	if (reg.type != OFISA_REG_TYPE_IO) {
-		aprint_error(": register type not i/o\n");
+		printf(": register type not i/o\n");
 		return;
 	}
 	if (reg.len != SB_NPORT && reg.len != SBP_NPORT) {
-		aprint_error(": weird register size (%lu, expected %d or %d)\n",
+		printf(": weird register size (%lu, expected %d or %d)\n",
 		    (unsigned long)reg.len, SB_NPORT, SBP_NPORT);
 		return;
 	}
 
 	n = ofisa_intr_get(aa->oba.oba_phandle, &intr, 1);
 	if (n != 1) {
-		aprint_error(": error getting interrupt data\n");
+		printf(": error getting interrupt data\n");
 		return;
 	}
 
 	ndrq = ofisa_dma_get(aa->oba.oba_phandle, dma, 2);
 	if (ndrq != 1 && ndrq != 2) {
-		aprint_error(": error getting DMA data\n");
+		printf(": error getting DMA data\n");
 		return;
 	}
 
@@ -178,7 +179,12 @@ sb_ofisa_attach(device_t parent, device_t self, void *aux)
 	sc->sc_ih = isa_intr_establish(aa->ic, intr.irq, IST_EDGE, IPL_AUDIO,
 	    sbdsp_intr, sc);
 
-	ofisa_print_model(self, aa->oba.oba_phandle);
+	n = OF_getproplen(aa->oba.oba_phandle, "model");
+	if (n > 0) {
+		model = alloca(n);
+		if (OF_getprop(aa->oba.oba_phandle, "model", model, n) == n)
+			aprint_normal(": %s\n%s", model, device_xname(self));
+	}
 
 	sbattach(sc);
 }

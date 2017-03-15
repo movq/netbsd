@@ -1,4 +1,4 @@
-.\"	$NetBSD: curses_refresh.3,v 1.13 2017/01/05 09:46:32 wiz Exp $
+.\"	$NetBSD: curses_refresh.3,v 1.10 2003/04/16 13:35:01 wiz Exp $
 .\"
 .\" Copyright (c) 2002
 .\"	Brett Lymn (blymn@NetBSD.org, brett_lymn@yahoo.com.au)
@@ -30,7 +30,7 @@
 .\" SUCH DAMAGE.
 .\"
 .\"
-.Dd January 2, 2017
+.Dd March 26, 2003
 .Dt CURSES_REFRESH 3
 .Os
 .Sh NAME
@@ -39,10 +39,8 @@
 .Nm wrefresh ,
 .Nm wnoutrefresh ,
 .Nm doupdate ,
-.Nm immedok ,
-.Nm flushok ,
 .Nm leaveok ,
-.Nm is_leaveok
+.Nm flushok
 .Nd curses terminal update routines
 .Sh LIBRARY
 .Lb libcurses
@@ -57,13 +55,9 @@
 .Ft int
 .Fn doupdate "void"
 .Ft int
-.Fn immedok "WINDOW *win" "boolf flag"
+.Fn leaveok "WINDOW *win" "boolf flag"
 .Ft int
 .Fn flushok "WINDOW *win" "boolf flag"
-.Ft int
-.Fn leaveok "WINDOW *win" "boolf flag"
-.Ft bool
-.Fn is_leaveok "const WINDOW *win"
 .Sh DESCRIPTION
 These functions update the terminal with the contents of
 .Dv stdscr
@@ -113,11 +107,15 @@ followed by
 .Fn doupdate .
 .Pp
 The
-.Fn immedok
-function determines whether the screen is refreshed whenever the window is
-changed.
-The initial state is
-.Dv FALSE .
+.Fn leaveok
+function determines whether refresh operations may leave the screen cursor
+in an arbitrary position on the screen.
+Setting
+.Fa flag
+to
+.Dv FALSE
+ensures that the screen cursor is positioned at the current cursor
+position after a refresh operation has taken place.
 .Pp
 The
 .Fn flushok
@@ -128,20 +126,6 @@ Setting
 to
 .Dv TRUE
 will cause the output to be flushed.
-.Pp
-The
-.Fn leaveok
-function determines whether refresh operations may leave the screen cursor
-in an arbitrary position on the screen.
-Setting
-.Fa flag
-to
-.Dv FALSE
-ensures that the screen cursor is positioned at the current cursor
-position after a refresh operation has taken place.
-The
-.Fn is_leaveok
-function returns the setting.
 .Sh RETURN VALUES
 Functions returning pointers will return
 .Dv NULL
@@ -171,9 +155,3 @@ Single Unix Specification.
 .Sh HISTORY
 The Curses package appeared in
 .Bx 4.0 .
-The
-.Fn is_leaveok
-function is a
-.Em ncurses
-extension to the Curses library and was added in
-.Nx 8.0 .

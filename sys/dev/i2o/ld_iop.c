@@ -1,4 +1,4 @@
-/*	$NetBSD: ld_iop.c,v 1.37 2017/02/27 21:32:33 jdolecek Exp $	*/
+/*	$NetBSD: ld_iop.c,v 1.34 2012/02/02 19:43:02 tls Exp $	*/
 
 /*-
  * Copyright (c) 2000, 2001 The NetBSD Foundation, Inc.
@@ -36,7 +36,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ld_iop.c,v 1.37 2017/02/27 21:32:33 jdolecek Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ld_iop.c,v 1.34 2012/02/02 19:43:02 tls Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -48,6 +48,7 @@ __KERNEL_RCSID(0, "$NetBSD: ld_iop.c,v 1.37 2017/02/27 21:32:33 jdolecek Exp $")
 #include <sys/dkio.h>
 #include <sys/disk.h>
 #include <sys/proc.h>
+#include <sys/rnd.h>
 
 #include <sys/bus.h>
 
@@ -73,8 +74,7 @@ static void	ld_iop_adjqparam(device_t, int);
 static void	ld_iop_attach(device_t, device_t, void *);
 static int	ld_iop_detach(device_t, int);
 static int	ld_iop_dump(struct ld_softc *, void *, int, int);
-static int	ld_iop_flush(struct ld_softc *, bool);
-static int	ld_iop_ioctl(struct ld_softc *, u_long, void *, int32_t, bool);
+static int	ld_iop_flush(struct ld_softc *, int);
 static void	ld_iop_intr(device_t, struct iop_msg *, void *);
 static void	ld_iop_intr_event(device_t, struct iop_msg *, void *);
 static int	ld_iop_match(device_t, cfdata_t, void *);
@@ -169,7 +169,7 @@ ld_iop_attach(device_t parent, device_t self, void *aux)
 
 	ld->sc_maxxfer = IOP_MAX_XFER;
 	ld->sc_dump = ld_iop_dump;
-	ld->sc_ioctl = ld_iop_ioctl;
+	ld->sc_flush = ld_iop_flush;
 	ld->sc_start = ld_iop_start;
 
 	/* Say what the device is. */
@@ -267,7 +267,7 @@ ld_iop_attach(device_t parent, device_t self, void *aux)
 	else
 		aprint_error_dev(self, "device not yet supported\n");
 
-	ldattach(ld, BUFQ_DISK_DEFAULT_STRAT);
+	ldattach(ld);
 	return;
 
  bad:
@@ -438,7 +438,7 @@ ld_iop_dump(struct ld_softc *ld, void *data, int blkno, int blkcnt)
 }
 
 static int
-ld_iop_flush(struct ld_softc *ld, bool poll)
+ld_iop_flush(struct ld_softc *ld, int flags)
 {
 	struct iop_msg *im;
 	struct iop_softc *iop;
@@ -462,25 +462,7 @@ ld_iop_flush(struct ld_softc *ld, bool poll)
 	return (rv);
 }
 
-static int
-ld_iop_ioctl(struct ld_softc *ld, u_long cmd, void *addr, int32_t flag, bool poll)
-{
-	int error;
-
-	switch (cmd) {
-        case DIOCCACHESYNC:
-		error = ld_iop_flush(ld, poll);
-		break;
-
-	default:
-		error = EPASSTHROUGH;
-		break;
-	}
-
-        return error;
-}
-
-static void
+void
 ld_iop_intr(device_t dv, struct iop_msg *im, void *reply)
 {
 	struct i2o_rbs_reply *rb;

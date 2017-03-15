@@ -1,4 +1,4 @@
-/*	$NetBSD: event_tagging.c,v 1.4 2017/01/31 23:17:39 christos Exp $	*/
+/*	$NetBSD: event_tagging.c,v 1.2.8.1 2015/02/03 08:23:39 bouyer Exp $	*/
 /*
  * Copyright (c) 2003-2009 Niels Provos <provos@citi.umich.edu>
  * Copyright (c) 2009-2012 Niels Provos and Nick Mathewson
@@ -28,28 +28,26 @@
 
 #include "event2/event-config.h"
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: event_tagging.c,v 1.4 2017/01/31 23:17:39 christos Exp $");
-#include "evconfig-private.h"
+__RCSID("$NetBSD: event_tagging.c,v 1.2.8.1 2015/02/03 08:23:39 bouyer Exp $");
 
-#ifdef EVENT__HAVE_SYS_TYPES_H
+#ifdef _EVENT_HAVE_SYS_TYPES_H
 #include <sys/types.h>
 #endif
-#ifdef EVENT__HAVE_SYS_PARAM_H
+#ifdef _EVENT_HAVE_SYS_PARAM_H
 #include <sys/param.h>
 #endif
 
-#ifdef _WIN32
+#ifdef WIN32
 #define WIN32_LEAN_AND_MEAN
 #include <winsock2.h>
 #include <windows.h>
 #undef WIN32_LEAN_AND_MEAN
-#endif
-
-#ifdef EVENT__HAVE_SYS_IOCTL_H
+#else
 #include <sys/ioctl.h>
 #endif
+
 #include <sys/queue.h>
-#ifdef EVENT__HAVE_SYS_TIME_H
+#ifdef _EVENT_HAVE_SYS_TIME_H
 #include <sys/time.h>
 #endif
 
@@ -57,10 +55,10 @@ __RCSID("$NetBSD: event_tagging.c,v 1.4 2017/01/31 23:17:39 christos Exp $");
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#ifndef _WIN32
+#ifndef WIN32
 #include <syslog.h>
 #endif
-#ifdef EVENT__HAVE_UNISTD_H
+#ifdef _EVENT_HAVE_UNISTD_H
 #include <unistd.h>
 #endif
 #include <limits.h>
@@ -216,14 +214,7 @@ decode_tag_internal(ev_uint32_t *ptag, struct evbuffer *evbuf, int dodrain)
 
 	while (count++ < len) {
 		ev_uint8_t lower = *data++;
-		if (shift >= 28) {
-			/* Make sure it fits into 32 bits */
-			if (shift > 28)
-				return (-1);
-			if ((lower & 0x7f) > 15)
-				return (-1);
-		}
-		number |= (lower & (unsigned)0x7f) << shift;
+		number |= (lower & 0x7f) << shift;
 		shift += 7;
 
 		if (!(lower & 0x80)) {

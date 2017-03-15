@@ -1,5 +1,7 @@
 /* This file is tc-m68k.h
-   Copyright (C) 1987-2016 Free Software Foundation, Inc.
+   Copyright 1987, 1989, 1990, 1991, 1992, 1993, 1994, 1995, 1996, 1997,
+   1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007
+   Free Software Foundation, Inc.
 
    This file is part of GAS, the GNU Assembler.
 
@@ -172,7 +174,7 @@ extern struct relax_type md_relax_table[];
 #define DWARF2_CIE_DATA_ALIGNMENT (-4)
 
 #define tc_regname_to_dw2regnum tc_m68k_regname_to_dw2regnum
-extern int tc_m68k_regname_to_dw2regnum (const char *regname);
+extern int tc_m68k_regname_to_dw2regnum (char *regname);
 
 #define tc_cfi_frame_initial_instructions tc_m68k_frame_initial_instructions
 extern void tc_m68k_frame_initial_instructions (void);
@@ -186,9 +188,3 @@ extern void tc_m68k_frame_initial_instructions (void);
 /* However, follow compiler's guidance when it specifies encoding for LSDA.  */
 # define CFI_DIFF_LSDA_OK 1
 #endif
-
-struct broken_word;
-#define TC_CHECK_ADJUSTED_BROKEN_DOT_WORD(new_offset, brokw) \
-  tc_m68k_check_adjusted_broken_word ((offsetT) (new_offset), (brokw))
-extern void tc_m68k_check_adjusted_broken_word (offsetT,
-						struct broken_word *);

@@ -1,4 +1,4 @@
-/*	$NetBSD: cyclic.c,v 1.7 2017/02/01 21:59:09 chs Exp $	*/
+/*	$NetBSD: cyclic.c,v 1.4 2012/12/02 01:05:16 chs Exp $	*/
 
 /*
  * CDDL HEADER START
@@ -1455,16 +1455,10 @@ cyclic_modcmd(modcmd_t cmd, void *data)
 	case MODULE_CMD_FINI:
 		cyclic_unload();
 		return 0;
-
-	case MODULE_CMD_AUTOUNLOAD:
-		if (cyclic_id_head != NULL)
-			return EBUSY;
-		return 0;
-
 	default:
 		return ENOTTY;
 	}
 }
 
-MODULE(MODULE_CLASS_MISC, cyclic, "solaris");
+MODULE(MODULE_CLASS_MISC, cyclic, "dtrace");
 #endif

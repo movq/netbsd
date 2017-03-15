@@ -19,8 +19,8 @@
 #include "NVPTXISelLowering.h"
 #include "NVPTXInstrInfo.h"
 #include "NVPTXRegisterInfo.h"
-#include "llvm/CodeGen/SelectionDAGTargetInfo.h"
 #include "llvm/IR/DataLayout.h"
+#include "llvm/Target/TargetSelectionDAGInfo.h"
 #include "llvm/Target/TargetSubtargetInfo.h"
 #include <string>
 
@@ -32,6 +32,8 @@ namespace llvm {
 class NVPTXSubtarget : public NVPTXGenSubtargetInfo {
   virtual void anchor();
   std::string TargetName;
+  NVPTX::DrvInterface drvInterface;
+  bool Is64Bit;
 
   // PTX version x.y is represented as 10*x+y, e.g. 3.1 == 31
   unsigned PTXVersion;
@@ -39,37 +41,34 @@ class NVPTXSubtarget : public NVPTXGenSubtargetInfo {
   // SM version x.y is represented as 10*x+y, e.g. 3.1 == 31
   unsigned int SmVersion;
 
-  const NVPTXTargetMachine &TM;
+  const DataLayout DL; // Calculates type size & alignment
   NVPTXInstrInfo InstrInfo;
   NVPTXTargetLowering TLInfo;
-  SelectionDAGTargetInfo TSInfo;
+  TargetSelectionDAGInfo TSInfo;
 
   // NVPTX does not have any call stack frame, but need a NVPTX specific
   // FrameLowering class because TargetFrameLowering is abstract.
   NVPTXFrameLowering FrameLowering;
 
-protected:
-  // Processor supports scoped atomic operations.
-  bool HasAtomScope;
-
 public:
   /// This constructor initializes the data members to match that
   /// of the specified module.
   ///
-  NVPTXSubtarget(const Triple &TT, const std::string &CPU,
-                 const std::string &FS, const NVPTXTargetMachine &TM);
+  NVPTXSubtarget(const std::string &TT, const std::string &CPU,
+                 const std::string &FS, const TargetMachine &TM, bool is64Bit);
 
   const TargetFrameLowering *getFrameLowering() const override {
     return &FrameLowering;
   }
   const NVPTXInstrInfo *getInstrInfo() const override { return &InstrInfo; }
+  const DataLayout *getDataLayout() const override { return &DL; }
   const NVPTXRegisterInfo *getRegisterInfo() const override {
     return &InstrInfo.getRegisterInfo();
   }
   const NVPTXTargetLowering *getTargetLowering() const override {
     return &TLInfo;
   }
-  const SelectionDAGTargetInfo *getSelectionDAGInfo() const override {
+  const TargetSelectionDAGInfo *getSelectionDAGInfo() const override {
     return &TSInfo;
   }
 
@@ -81,10 +80,6 @@ public:
   bool hasAtomRedGen32() const { return SmVersion >= 20; }
   bool hasAtomRedGen64() const { return SmVersion >= 20; }
   bool hasAtomAddF32() const { return SmVersion >= 20; }
-  bool hasAtomAddF64() const { return SmVersion >= 60; }
-  bool hasAtomScope() const { return HasAtomScope; }
-  bool hasAtomBitwise64() const { return SmVersion >= 32; }
-  bool hasAtomMinMax64() const { return SmVersion >= 32; }
   bool hasVote() const { return SmVersion >= 12; }
   bool hasDouble() const { return SmVersion >= 13; }
   bool reqPTX20() const { return SmVersion >= 20; }
@@ -100,9 +95,20 @@ public:
   }
   inline bool hasROT32() const { return hasHWROT32() || hasSWROT32(); }
   inline bool hasROT64() const { return SmVersion >= 20; }
-  bool hasImageHandles() const;
+
+  bool hasImageHandles() const {
+    // Enable handles for Kepler+, where CUDA supports indirect surfaces and
+    // textures
+    if (getDrvInterface() == NVPTX::CUDA)
+      return (SmVersion >= 30);
+
+    // Disabled, otherwise
+    return false;
+  }
+  bool is64Bit() const { return Is64Bit; }
 
   unsigned int getSmVersion() const { return SmVersion; }
+  NVPTX::DrvInterface getDrvInterface() const { return drvInterface; }
   std::string getTargetName() const { return TargetName; }
 
   unsigned getPTXVersion() const { return PTXVersion; }

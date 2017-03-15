@@ -1,4 +1,4 @@
-/*	$NetBSD: athn.c,v 1.15 2017/02/02 10:05:35 nonaka Exp $	*/
+/*	$NetBSD: athn.c,v 1.10 2014/07/24 19:47:15 riz Exp $	*/
 /*	$OpenBSD: athn.c,v 1.83 2014/07/22 13:12:11 mpi Exp $	*/
 
 /*-
@@ -23,7 +23,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: athn.c,v 1.15 2017/02/02 10:05:35 nonaka Exp $");
+__KERNEL_RCSID(0, "$NetBSD: athn.c,v 1.10 2014/07/24 19:47:15 riz Exp $");
 
 #ifndef _MODULE
 #include "athn_usb.h"		/* for NATHN_USB */
@@ -118,7 +118,6 @@ Static void	athn_tx_reclaim(struct athn_softc *, int);
 Static void	athn_watchdog(struct ifnet *);
 Static void	athn_write_serdes(struct athn_softc *,
 		    const struct athn_serdes *);
-Static void	athn_softintr(void *);
 
 #ifdef ATHN_BT_COEXISTENCE
 Static void	athn_btcoex_disable(struct athn_softc *);
@@ -189,14 +188,6 @@ athn_attach(struct athn_softc *sc)
 	athn_set_power_sleep(sc);
 
 	if (!(sc->sc_flags & ATHN_FLAG_USB)) {
-		sc->sc_soft_ih = softint_establish(SOFTINT_NET, athn_softintr,
-		    sc);
-		if (sc->sc_soft_ih == NULL) {
-			aprint_error_dev(sc->sc_dev,
-			    "could not establish softint\n");
-			return EINVAL;
-		}
-
 		error = sc->sc_ops.dma_alloc(sc);
 		if (error != 0) {
 			aprint_error_dev(sc->sc_dev,
@@ -243,15 +234,16 @@ athn_attach(struct athn_softc *sc)
 	    ((sc->sc_rxchainmask >> 0) & 1);
 
 	if (AR_SINGLE_CHIP(sc)) {
-		aprint_normal(": Atheros %s\n", athn_get_mac_name(sc));
+		aprint_normal_dev(sc->sc_dev,
+		    "Atheros %s\n", athn_get_mac_name(sc));
 		aprint_verbose_dev(sc->sc_dev,
 		    "rev %d (%dT%dR), ROM rev %d, address %s\n",
 		    sc->sc_mac_rev,
 		    sc->sc_ntxchains, sc->sc_nrxchains, sc->sc_eep_rev,
 		    ether_sprintf(ic->ic_myaddr));
-	}
-	else {
-		aprint_normal(": Atheros %s, RF %s\n", athn_get_mac_name(sc),
+	} else {
+		aprint_normal_dev(sc->sc_dev,
+		    "Atheros %s, RF %s\n", athn_get_mac_name(sc),
 		    athn_get_rf_name(sc));
 		aprint_verbose_dev(sc->sc_dev,
 		    "rev %d (%dT%dR), ROM rev %d, address %s\n",
@@ -338,22 +330,15 @@ athn_attach(struct athn_softc *sc)
 
 	ifp->if_softc = sc;
 	ifp->if_flags = IFF_BROADCAST | IFF_SIMPLEX | IFF_MULTICAST;
-	if (!ifp->if_init)
-		ifp->if_init = athn_init;
-	if (!ifp->if_ioctl)
-		ifp->if_ioctl = athn_ioctl;
-	if (!ifp->if_start)
-		ifp->if_start = athn_start;
-	if (!ifp->if_watchdog)
-		ifp->if_watchdog = athn_watchdog;
+	ifp->if_init = athn_init;
+	ifp->if_ioctl = athn_ioctl;
+	ifp->if_start = athn_start;
+	ifp->if_watchdog = athn_watchdog;
 	IFQ_SET_READY(&ifp->if_snd);
 	memcpy(ifp->if_xname, device_xname(sc->sc_dev), IFNAMSIZ);
 
-	if_initialize(ifp);
+	if_attach(ifp);
 	ieee80211_ifattach(ic);
-	/* Use common softint-based if_input */
-	ifp->if_percpuq = if_percpuq_create(ifp);
-	if_register(ifp);
 
 	ic->ic_node_alloc = athn_node_alloc;
 	ic->ic_newassoc = athn_newassoc;
@@ -394,11 +379,6 @@ athn_detach(struct athn_softc *sc)
 
 		/* Free Tx/Rx DMA resources. */
 		sc->sc_ops.dma_free(sc);
-
-		if (sc->sc_soft_ih != NULL) {
-			softint_disestablish(sc->sc_soft_ih);
-			sc->sc_soft_ih = NULL;
-		}
 	}
 	/* Free ROM copy. */
 	if (sc->sc_eep != NULL) {
@@ -554,30 +534,7 @@ athn_intr(void *xsc)
 		 */
 		return 0;
 
-	if (!sc->sc_ops.intr_status(sc))
-		return 0;
-
-	softint_schedule(sc->sc_soft_ih);
-	return 1;
-}
-
-Static void
-athn_softintr(void *xsc)
-{
-	struct athn_softc *sc = xsc;
-	struct ifnet *ifp = &sc->sc_if;
-
-	if (!IS_UP_AND_RUNNING(ifp))
-		return;
-
-	if (!device_activation(sc->sc_dev, DEVACT_LEVEL_DRIVER))
-		/*
-		 * The hardware is not ready/present, don't touch anything.
-		 * Note this can happen early on if the IRQ is shared.
-		 */
-		return;
-
-	sc->sc_ops.intr(sc);
+	return sc->sc_ops.intr(sc);
 }
 
 Static void
@@ -2291,7 +2248,7 @@ athn_hw_reset(struct athn_softc *sc, struct ieee80211_channel *curchan,
 		/* Do not mask the subtype field in management frames. */
 		reg = RW(reg, AR_AES_MUTE_MASK1_FC0_MGMT, 0xff);
 		reg = RW(reg, AR_AES_MUTE_MASK1_FC1_MGMT,
-		    (uint32_t)~(IEEE80211_FC1_RETRY | IEEE80211_FC1_PWR_MGT |
+		    ~(IEEE80211_FC1_RETRY | IEEE80211_FC1_PWR_MGT |
 		      IEEE80211_FC1_MORE_DATA));
 		AR_WRITE(sc, AR_AES_MUTE_MASK1, reg);
 	}
@@ -2667,7 +2624,7 @@ athn_start(struct ifnet *ifp)
 		/* Send pending management frames first. */
 		IF_DEQUEUE(&ic->ic_mgtq, m);
 		if (m != NULL) {
-			ni = M_GETCTX(m, struct ieee80211_node *);
+			ni = (void *)m->m_pkthdr.rcvif;
 			goto sendit;
 		}
 		if (ic->ic_state != IEEE80211_S_RUN)
@@ -2868,8 +2825,8 @@ athn_init(struct ifnet *ifp)
 		/* avoid recursion in athn_resume */
 		if (!pmf_device_subtree_resume(sc->sc_dev, &sc->sc_qual) ||
 		    !device_is_active(sc->sc_dev)) {
-			printf("%s: failed to power up device\n",
-			    device_xname(sc->sc_dev));
+			aprint_error_dev(sc->sc_dev,
+			    "failed to power up device\n");
 			return 0;
 		}
 		ifp->if_flags = flags;

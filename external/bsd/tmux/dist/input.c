@@ -1,7 +1,7 @@
-/* $OpenBSD$ */
+/* Id */
 
 /*
- * Copyright (c) 2007 Nicholas Marriott <nicholas.marriott@gmail.com>
+ * Copyright (c) 2007 Nicholas Marriott <nicm@users.sourceforge.net>
  *
  * Permission to use, copy, modify, and distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -20,7 +20,6 @@
 
 #include <stdlib.h>
 #include <string.h>
-#include <time.h>
 
 #include "tmux.h"
 
@@ -44,69 +43,18 @@
  *   pretty stupid but not supporting it is more trouble than it is worth.
  *
  * - Special handling for ESC inside a DCS to allow arbitrary byte sequences to
- *   be passed to the underlying terminals.
+ *   be passed to the underlying teminal(s).
  */
-
-/* Input parser cell. */
-struct input_cell {
-	struct grid_cell	cell;
-	int			set;
-	int			g0set;	/* 1 if ACS */
-	int			g1set;	/* 1 if ACS */
-};
-
-/* Input parser context. */
-struct input_ctx {
-	struct window_pane     *wp;
-	struct screen_write_ctx ctx;
-
-	struct input_cell	cell;
-
-	struct input_cell	old_cell;
-	u_int 			old_cx;
-	u_int			old_cy;
-
-	u_char			interm_buf[4];
-	size_t			interm_len;
-
-	u_char			param_buf[64];
-	size_t			param_len;
-
-#define INPUT_BUF_START 32
-#define INPUT_BUF_LIMIT 1048576
-	u_char		       *input_buf;
-	size_t			input_len;
-	size_t			input_space;
-
-	int			param_list[24];	/* -1 not present */
-	u_int			param_list_len;
-
-	struct utf8_data	utf8data;
-
-	int			ch;
-	int			flags;
-#define INPUT_DISCARD 0x1
-
-	const struct input_state *state;
-
-	/*
-	 * All input received since we were last in the ground state. Sent to
-	 * control clients on connection.
-	 */
-	struct evbuffer	 	*since_ground;
-};
 
 /* Helper functions. */
 struct input_transition;
 int	input_split(struct input_ctx *);
 int	input_get(struct input_ctx *, u_int, int, int);
-void printflike(2, 3) input_reply(struct input_ctx *, const char *, ...);
+void	input_reply(struct input_ctx *, const char *, ...) __printflike(2, 3);
 void	input_set_state(struct window_pane *, const struct input_transition *);
-void	input_reset_cell(struct input_ctx *);
 
 /* Transition entry/exit handlers. */
 void	input_clear(struct input_ctx *);
-void	input_ground(struct input_ctx *);
 void	input_enter_osc(struct input_ctx *);
 void	input_exit_osc(struct input_ctx *);
 void	input_enter_apc(struct input_ctx *);
@@ -127,8 +75,6 @@ void	input_csi_dispatch_rm_private(struct input_ctx *);
 void	input_csi_dispatch_sm(struct input_ctx *);
 void	input_csi_dispatch_sm_private(struct input_ctx *);
 void	input_csi_dispatch_winops(struct input_ctx *);
-void	input_csi_dispatch_sgr_256(struct input_ctx *, int, u_int *);
-void	input_csi_dispatch_sgr_rgb(struct input_ctx *, int, u_int *);
 void	input_csi_dispatch_sgr(struct input_ctx *);
 int	input_dcs_dispatch(struct input_ctx *);
 int	input_utf8_open(struct input_ctx *);
@@ -157,23 +103,19 @@ enum input_esc_type {
 	INPUT_ESC_NEL,
 	INPUT_ESC_RI,
 	INPUT_ESC_RIS,
-	INPUT_ESC_SCSG0_OFF,
-	INPUT_ESC_SCSG0_ON,
-	INPUT_ESC_SCSG1_OFF,
-	INPUT_ESC_SCSG1_ON,
+	INPUT_ESC_SCSOFF_G0,
+	INPUT_ESC_SCSON_G0,
 };
 
 /* Escape command table. */
 const struct input_table_entry input_esc_table[] = {
-	{ '0', "(", INPUT_ESC_SCSG0_ON },
-	{ '0', ")", INPUT_ESC_SCSG1_ON },
+	{ '0', "(", INPUT_ESC_SCSOFF_G0 },
 	{ '7', "",  INPUT_ESC_DECSC },
 	{ '8', "",  INPUT_ESC_DECRC },
 	{ '8', "#", INPUT_ESC_DECALN },
 	{ '=', "",  INPUT_ESC_DECKPAM },
 	{ '>', "",  INPUT_ESC_DECKPNM },
-	{ 'B', "(", INPUT_ESC_SCSG0_OFF },
-	{ 'B', ")", INPUT_ESC_SCSG1_OFF },
+	{ 'B', "(", INPUT_ESC_SCSON_G0 },
 	{ 'D', "",  INPUT_ESC_IND },
 	{ 'E', "",  INPUT_ESC_NEL },
 	{ 'H', "",  INPUT_ESC_HTS },
@@ -300,7 +242,7 @@ const struct input_transition input_state_utf8_one_table[];
 /* ground state definition. */
 const struct input_state input_state_ground = {
 	"ground",
-	input_ground, NULL,
+	NULL, NULL,
 	input_state_ground_table
 };
 
@@ -446,11 +388,11 @@ const struct input_transition input_state_ground_table[] = {
 	{ 0x1c, 0x1f, input_c0_dispatch, NULL },
 	{ 0x20, 0x7e, input_print,	 NULL },
 	{ 0x7f, 0x7f, NULL,		 NULL },
-	{ 0x80, 0xc1, NULL,		 NULL },
+	{ 0x80, 0xc1, input_print,	 NULL },
 	{ 0xc2, 0xdf, input_utf8_open,	 &input_state_utf8_one },
 	{ 0xe0, 0xef, input_utf8_open,	 &input_state_utf8_two },
 	{ 0xf0, 0xf4, input_utf8_open,	 &input_state_utf8_three },
-	{ 0xf5, 0xff, NULL,		 NULL },
+	{ 0xf5, 0xff, input_print,	 NULL },
 
 	{ -1, -1, NULL, NULL }
 };
@@ -741,64 +683,17 @@ input_table_compare(const void *key, const void *value)
 	return (strcmp((const char *)ictx->interm_buf, entry->interm));
 }
 
-/* Reset cell state to default. */
-void
-input_reset_cell(struct input_ctx *ictx)
-{
-	memcpy(&ictx->cell.cell, &grid_default_cell, sizeof ictx->cell.cell);
-	ictx->cell.set = 0;
-	ictx->cell.g0set = ictx->cell.g1set = 0;
-
-	memcpy(&ictx->old_cell, &ictx->cell, sizeof ictx->old_cell);
-	ictx->old_cx = 0;
-	ictx->old_cy = 0;
-}
-
 /* Initialise input parser. */
 void
 input_init(struct window_pane *wp)
 {
-	struct input_ctx	*ictx;
+	struct input_ctx	*ictx = &wp->ictx;
 
-	ictx = wp->ictx = xcalloc(1, sizeof *ictx);
+	memcpy(&ictx->cell, &grid_default_cell, sizeof ictx->cell);
 
-	ictx->input_space = INPUT_BUF_START;
-	ictx->input_buf = xmalloc(INPUT_BUF_START);
-
-	ictx->since_ground = evbuffer_new();
-
-	input_reset(wp, 0);
-}
-
-/* Destroy input parser. */
-void
-input_free(struct window_pane *wp)
-{
-	struct input_ctx	*ictx = wp->ictx;
-
-	free(ictx->input_buf);
-	evbuffer_free(ictx->since_ground);
-
-	free (ictx);
-	wp->ictx = NULL;
-}
-
-/* Reset input state and clear screen. */
-void
-input_reset(struct window_pane *wp, int clear)
-{
-	struct input_ctx	*ictx = wp->ictx;
-
-	input_reset_cell(ictx);
-
-	if (clear) {
-		if (wp->mode == NULL)
-			screen_write_start(&ictx->ctx, wp, &wp->base);
-		else
-			screen_write_start(&ictx->ctx, NULL, &wp->base);
-		screen_write_reset(&ictx->ctx);
-		screen_write_stop(&ictx->ctx);
-	}
+	memcpy(&ictx->old_cell, &grid_default_cell, sizeof ictx->old_cell);
+	ictx->old_cx = 0;
+	ictx->old_cy = 0;
 
 	*ictx->interm_buf = '\0';
 	ictx->interm_len = 0;
@@ -806,28 +701,33 @@ input_reset(struct window_pane *wp, int clear)
 	*ictx->param_buf = '\0';
 	ictx->param_len = 0;
 
-	*ictx->input_buf = '\0';
-	ictx->input_len = 0;
-
 	ictx->state = &input_state_ground;
 	ictx->flags = 0;
+
+	ictx->since_ground = evbuffer_new();
 }
 
-/* Return pending data. */
-struct evbuffer *
-input_pending(struct window_pane *wp)
+/* Destroy input parser. */
+void
+input_free(struct window_pane *wp)
 {
-	return (wp->ictx->since_ground);
+	if (wp != NULL)
+		evbuffer_free(wp->ictx.since_ground);
 }
 
 /* Change input state. */
 void
 input_set_state(struct window_pane *wp, const struct input_transition *itr)
 {
-	struct input_ctx	*ictx = wp->ictx;
+	struct input_ctx	*ictx = &wp->ictx;
+	struct evbuffer		*ground_evb = ictx->since_ground;
 
 	if (ictx->state->exit != NULL)
 		ictx->state->exit(ictx);
+
+	if (itr->state == &input_state_ground)
+		evbuffer_drain(ground_evb, EVBUFFER_LENGTH(ground_evb));
+
 	ictx->state = itr->state;
 	if (ictx->state->enter != NULL)
 		ictx->state->enter(ictx);
@@ -837,7 +737,7 @@ input_set_state(struct window_pane *wp, const struct input_transition *itr)
 void
 input_parse(struct window_pane *wp)
 {
-	struct input_ctx		*ictx = wp->ictx;
+	struct input_ctx		*ictx = &wp->ictx;
 	const struct input_transition	*itr;
 	struct evbuffer			*evb = wp->event->input;
 	u_char				*buf;
@@ -846,8 +746,8 @@ input_parse(struct window_pane *wp)
 	if (EVBUFFER_LENGTH(evb) == 0)
 		return;
 
-	window_update_activity(wp->window);
-	wp->flags |= PANE_CHANGED;
+	wp->window->flags |= WINDOW_ACTIVITY;
+	wp->window->flags &= ~WINDOW_SILENCE;
 
 	/*
 	 * Open the screen. Use NULL wp if there is a mode set as don't want to
@@ -864,12 +764,10 @@ input_parse(struct window_pane *wp)
 	notify_input(wp, evb);
 	off = 0;
 
-	log_debug("%s: %%%u %s, %zu bytes: %.*s", __func__, wp->id,
-	    ictx->state->name, len, (int)len, buf);
-
 	/* Parse the input. */
 	while (off < len) {
 		ictx->ch = buf[off++];
+		log_debug("%s: '%c' %s", __func__, ictx->ch, ictx->state->name);
 
 		/* Find the transition. */
 		itr = ictx->state->transitions;
@@ -880,7 +778,7 @@ input_parse(struct window_pane *wp)
 		}
 		if (itr->first == -1 || itr->last == -1) {
 			/* No transition? Eh? */
-			fatalx("no transition from state");
+			fatalx("No transition from state!");
 		}
 
 		/*
@@ -984,34 +882,12 @@ input_clear(struct input_ctx *ictx)
 	ictx->flags &= ~INPUT_DISCARD;
 }
 
-/* Reset for ground state. */
-void
-input_ground(struct input_ctx *ictx)
-{
-	evbuffer_drain(ictx->since_ground, EVBUFFER_LENGTH(ictx->since_ground));
-
-	if (ictx->input_space > INPUT_BUF_START) {
-		ictx->input_space = INPUT_BUF_START;
-		ictx->input_buf = xrealloc(ictx->input_buf, INPUT_BUF_START);
-	}
-}
-
 /* Output this character to the screen. */
 int
 input_print(struct input_ctx *ictx)
 {
-	int	set;
-
-	set = ictx->cell.set == 0 ? ictx->cell.g0set : ictx->cell.g1set;
-	if (set == 1)
-		ictx->cell.cell.attr |= GRID_ATTR_CHARSET;
-	else
-		ictx->cell.cell.attr &= ~GRID_ATTR_CHARSET;
-
-	utf8_set(&ictx->cell.cell.data, ictx->ch);
-	screen_write_cell(&ictx->ctx, &ictx->cell.cell);
-
-	ictx->cell.cell.attr &= ~GRID_ATTR_CHARSET;
+	grid_cell_one(&ictx->cell, ictx->ch);
+	screen_write_cell(&ictx->ctx, &ictx->cell);
 
 	return (0);
 }
@@ -1048,20 +924,12 @@ input_parameter(struct input_ctx *ictx)
 int
 input_input(struct input_ctx *ictx)
 {
-	size_t available;
-
-	available = ictx->input_space;
-	while (ictx->input_len + 1 >= available) {
-		available *= 2;
-		if (available > INPUT_BUF_LIMIT) {
-			ictx->flags |= INPUT_DISCARD;
-			return (0);
-		}
-		ictx->input_buf = xrealloc(ictx->input_buf, available);
-		ictx->input_space = available;
+	if (ictx->input_len == (sizeof ictx->input_buf) - 1)
+		ictx->flags |= INPUT_DISCARD;
+	else {
+		ictx->input_buf[ictx->input_len++] = ictx->ch;
+		ictx->input_buf[ictx->input_len] = '\0';
 	}
-	ictx->input_buf[ictx->input_len++] = ictx->ch;
-	ictx->input_buf[ictx->input_len] = '\0';
 
 	return (0);
 }
@@ -1073,18 +941,19 @@ input_c0_dispatch(struct input_ctx *ictx)
 	struct screen_write_ctx	*sctx = &ictx->ctx;
 	struct window_pane	*wp = ictx->wp;
 	struct screen		*s = sctx->s;
+	u_int			 trigger;
 
-	log_debug("%s: '%c'", __func__, ictx->ch);
+	log_debug("%s: '%c", __func__, ictx->ch);
 
 	switch (ictx->ch) {
 	case '\000':	/* NUL */
 		break;
 	case '\007':	/* BEL */
-		alerts_queue(wp->window, WINDOW_BELL);
+		wp->window->flags |= WINDOW_BELL;
 		break;
 	case '\010':	/* BS */
 		screen_write_backspace(sctx);
-		break;
+		goto count_c0;
 	case '\011':	/* HT */
 		/* Don't tab beyond the end of the line. */
 		if (s->cx >= screen_size_x(s) - 1)
@@ -1101,19 +970,28 @@ input_c0_dispatch(struct input_ctx *ictx)
 	case '\013':	/* VT */
 	case '\014':	/* FF */
 		screen_write_linefeed(sctx, 0);
-		break;
+		goto count_c0;
 	case '\015':	/* CR */
 		screen_write_carriagereturn(sctx);
-		break;
+		goto count_c0;
 	case '\016':	/* SO */
-		ictx->cell.set = 1;
+		ictx->cell.attr |= GRID_ATTR_CHARSET;
 		break;
 	case '\017':	/* SI */
-		ictx->cell.set = 0;
+		ictx->cell.attr &= ~GRID_ATTR_CHARSET;
 		break;
 	default:
 		log_debug("%s: unknown '%c'", __func__, ictx->ch);
 		break;
+	}
+
+	return (0);
+
+count_c0:
+	trigger = options_get_number(&wp->window->options, "c0-change-trigger");
+	if (++wp->changes == trigger) {
+		wp->flags |= PANE_DROP;
+		window_pane_timer_start(wp);
 	}
 
 	return (0);
@@ -1140,7 +1018,11 @@ input_esc_dispatch(struct input_ctx *ictx)
 
 	switch (entry->type) {
 	case INPUT_ESC_RIS:
-		input_reset_cell(ictx);
+		memcpy(&ictx->cell, &grid_default_cell, sizeof ictx->cell);
+		memcpy(&ictx->old_cell, &ictx->cell, sizeof ictx->old_cell);
+		ictx->old_cx = 0;
+		ictx->old_cy = 0;
+
 		screen_write_reset(sctx);
 		break;
 	case INPUT_ESC_IND:
@@ -1175,17 +1057,16 @@ input_esc_dispatch(struct input_ctx *ictx)
 	case INPUT_ESC_DECALN:
 		screen_write_alignmenttest(sctx);
 		break;
-	case INPUT_ESC_SCSG0_ON:
-		ictx->cell.g0set = 1;
+	case INPUT_ESC_SCSON_G0:
+		/*
+		 * Not really supported, but fake it up enough for those that
+		 * use it to switch character sets (by redefining G0 to
+		 * graphics set, rather than switching to G1).
+		 */
+		ictx->cell.attr &= ~GRID_ATTR_CHARSET;
 		break;
-	case INPUT_ESC_SCSG0_OFF:
-		ictx->cell.g0set = 0;
-		break;
-	case INPUT_ESC_SCSG1_ON:
-		ictx->cell.g1set = 1;
-		break;
-	case INPUT_ESC_SCSG1_OFF:
-		ictx->cell.g1set = 0;
+	case INPUT_ESC_SCSOFF_G0:
+		ictx->cell.attr |= GRID_ATTR_CHARSET;
 		break;
 	}
 
@@ -1200,7 +1081,6 @@ input_csi_dispatch(struct input_ctx *ictx)
 	struct screen		       *s = sctx->s;
 	struct input_table_entry       *entry;
 	int				n, m;
-	u_int				cx;
 
 	if (ictx->flags & INPUT_DISCARD)
 		return (0);
@@ -1219,16 +1099,12 @@ input_csi_dispatch(struct input_ctx *ictx)
 	switch (entry->type) {
 	case INPUT_CSI_CBT:
 		/* Find the previous tab point, n times. */
-		cx = s->cx;
-		if (cx > screen_size_x(s) - 1)
-			cx = screen_size_x(s) - 1;
 		n = input_get(ictx, 0, 1, 1);
-		while (cx > 0 && n-- > 0) {
+		while (s->cx > 0 && n-- > 0) {
 			do
-				cx--;
-			while (cx > 0 && !bit_test(s->tabs, cx));
+				s->cx--;
+			while (s->cx > 0 && !bit_test(s->tabs, s->cx));
 		}
-		s->cx = cx;
 		break;
 	case INPUT_CSI_CUB:
 		screen_write_cursorleft(sctx, input_get(ictx, 0, 1, 1));
@@ -1271,7 +1147,7 @@ input_csi_dispatch(struct input_ctx *ictx)
 	case INPUT_CSI_DA_TWO:
 		switch (input_get(ictx, 0, 0, 0)) {
 		case 0:
-			input_reply(ictx, "\033[>84;0;0c");
+			input_reply(ictx, "\033[>0;95;0c");
 			break;
 		default:
 			log_debug("%s: unknown '%c'", __func__, ictx->ch);
@@ -1420,9 +1296,6 @@ input_csi_dispatch_rm(struct input_ctx *ictx)
 		case 4:		/* IRM */
 			screen_write_mode_clear(&ictx->ctx, MODE_INSERT);
 			break;
-		case 34:
-			screen_write_mode_set(&ictx->ctx, MODE_BLINKING);
-			break;
 		default:
 			log_debug("%s: unknown '%c'", __func__, ictx->ch);
 			break;
@@ -1434,8 +1307,7 @@ input_csi_dispatch_rm(struct input_ctx *ictx)
 void
 input_csi_dispatch_rm_private(struct input_ctx *ictx)
 {
-	struct window_pane	*wp = ictx->wp;
-	u_int			 i;
+	u_int	i;
 
 	for (i = 0; i < ictx->param_list_len; i++) {
 		switch (input_get(ictx, i, 0, -1)) {
@@ -1449,15 +1321,13 @@ input_csi_dispatch_rm_private(struct input_ctx *ictx)
 		case 7:		/* DECAWM */
 			screen_write_mode_clear(&ictx->ctx, MODE_WRAP);
 			break;
-		case 12:
-			screen_write_mode_clear(&ictx->ctx, MODE_BLINKING);
-			break;
 		case 25:	/* TCEM */
 			screen_write_mode_clear(&ictx->ctx, MODE_CURSOR);
 			break;
 		case 1000:
 		case 1001:
 		case 1002:
+		case 1003:
 			screen_write_mode_clear(&ictx->ctx, ALL_MOUSE_MODES);
 			break;
 		case 1004:
@@ -1471,10 +1341,10 @@ input_csi_dispatch_rm_private(struct input_ctx *ictx)
 			break;
 		case 47:
 		case 1047:
-			window_pane_alternate_off(wp, &ictx->cell.cell, 0);
+			window_pane_alternate_off(ictx->wp, &ictx->cell, 0);
 			break;
 		case 1049:
-			window_pane_alternate_off(wp, &ictx->cell.cell, 1);
+			window_pane_alternate_off(ictx->wp, &ictx->cell, 1);
 			break;
 		case 2004:
 			screen_write_mode_clear(&ictx->ctx, MODE_BRACKETPASTE);
@@ -1497,9 +1367,6 @@ input_csi_dispatch_sm(struct input_ctx *ictx)
 		case 4:		/* IRM */
 			screen_write_mode_set(&ictx->ctx, MODE_INSERT);
 			break;
-		case 34:
-			screen_write_mode_clear(&ictx->ctx, MODE_BLINKING);
-			break;
 		default:
 			log_debug("%s: unknown '%c'", __func__, ictx->ch);
 			break;
@@ -1511,8 +1378,7 @@ input_csi_dispatch_sm(struct input_ctx *ictx)
 void
 input_csi_dispatch_sm_private(struct input_ctx *ictx)
 {
-	struct window_pane	*wp = ictx->wp;
-	u_int			 i;
+	u_int	i;
 
 	for (i = 0; i < ictx->param_list_len; i++) {
 		switch (input_get(ictx, i, 0, -1)) {
@@ -1526,9 +1392,6 @@ input_csi_dispatch_sm_private(struct input_ctx *ictx)
 		case 7:		/* DECAWM */
 			screen_write_mode_set(&ictx->ctx, MODE_WRAP);
 			break;
-		case 12:
-			screen_write_mode_set(&ictx->ctx, MODE_BLINKING);
-			break;
 		case 25:	/* TCEM */
 			screen_write_mode_set(&ictx->ctx, MODE_CURSOR);
 			break;
@@ -1540,11 +1403,15 @@ input_csi_dispatch_sm_private(struct input_ctx *ictx)
 			screen_write_mode_clear(&ictx->ctx, ALL_MOUSE_MODES);
 			screen_write_mode_set(&ictx->ctx, MODE_MOUSE_BUTTON);
 			break;
+		case 1003:
+			screen_write_mode_clear(&ictx->ctx, ALL_MOUSE_MODES);
+			screen_write_mode_set(&ictx->ctx, MODE_MOUSE_ANY);
+			break;
 		case 1004:
 			if (ictx->ctx.s->mode & MODE_FOCUSON)
 				break;
 			screen_write_mode_set(&ictx->ctx, MODE_FOCUSON);
-			wp->flags |= PANE_FOCUSPUSH; /* force update */
+			ictx->wp->flags |= PANE_FOCUSPUSH; /* force update */
 			break;
 		case 1005:
 			screen_write_mode_set(&ictx->ctx, MODE_MOUSE_UTF8);
@@ -1554,10 +1421,10 @@ input_csi_dispatch_sm_private(struct input_ctx *ictx)
 			break;
 		case 47:
 		case 1047:
-			window_pane_alternate_on(wp, &ictx->cell.cell, 0);
+			window_pane_alternate_on(ictx->wp, &ictx->cell, 0);
 			break;
 		case 1049:
-			window_pane_alternate_on(wp, &ictx->cell.cell, 1);
+			window_pane_alternate_on(ictx->wp, &ictx->cell, 1);
 			break;
 		case 2004:
 			screen_write_mode_set(&ictx->ctx, MODE_BRACKETPASTE);
@@ -1608,7 +1475,7 @@ input_csi_dispatch_winops(struct input_ctx *ictx)
 				return;
 			break;
 		case 18:
-			input_reply(ictx, "\033[8;%u;%ut", wp->sy, wp->sx);
+			input_reply(ictx, "\033[8;%u;%u", wp->sy, wp->sx);
 			break;
 		default:
 			log_debug("%s: unknown '%c'", __func__, ictx->ch);
@@ -1618,81 +1485,19 @@ input_csi_dispatch_winops(struct input_ctx *ictx)
 	}
 }
 
-/* Handle CSI SGR for 256 colours. */
-void
-input_csi_dispatch_sgr_256(struct input_ctx *ictx, int fgbg, u_int *i)
-{
-	struct grid_cell	*gc = &ictx->cell.cell;
-	int			 c;
-
-	(*i)++;
-	c = input_get(ictx, *i, 0, -1);
-	if (c == -1) {
-		if (fgbg == 38) {
-			gc->flags &= ~(GRID_FLAG_FG256|GRID_FLAG_FGRGB);
-			gc->fg = 8;
-		} else if (fgbg == 48) {
-			gc->flags &= ~(GRID_FLAG_BG256|GRID_FLAG_BGRGB);
-			gc->bg = 8;
-		}
-	} else {
-		if (fgbg == 38) {
-			gc->flags |= GRID_FLAG_FG256;
-			gc->flags &= ~GRID_FLAG_FGRGB;
-			gc->fg = c;
-		} else if (fgbg == 48) {
-			gc->flags |= GRID_FLAG_BG256;
-			gc->flags &= ~GRID_FLAG_BGRGB;
-			gc->bg = c;
-		}
-	}
-}
-
-/* Handle CSI SGR for RGB colours. */
-void
-input_csi_dispatch_sgr_rgb(struct input_ctx *ictx, int fgbg, u_int *i)
-{
-	struct grid_cell	*gc = &ictx->cell.cell;
-	int			 r, g, b;
-
-	(*i)++;
-	r = input_get(ictx, *i, 0, -1);
-	if (r == -1 || r > 255)
-		return;
-	(*i)++;
-	g = input_get(ictx, *i, 0, -1);
-	if (g == -1 || g > 255)
-		return;
-	(*i)++;
-	b = input_get(ictx, *i, 0, -1);
-	if (b == -1 || b > 255)
-		return;
-
-	if (fgbg == 38) {
-		gc->flags &= ~GRID_FLAG_FG256;
-		gc->flags |= GRID_FLAG_FGRGB;
-		gc->fg_rgb.r = r;
-		gc->fg_rgb.g = g;
-		gc->fg_rgb.b = b;
-	} else if (fgbg == 48) {
-		gc->flags &= ~GRID_FLAG_BG256;
-		gc->flags |= GRID_FLAG_BGRGB;
-		gc->bg_rgb.r = r;
-		gc->bg_rgb.g = g;
-		gc->bg_rgb.b = b;
-	}
-}
-
 /* Handle CSI SGR. */
 void
 input_csi_dispatch_sgr(struct input_ctx *ictx)
 {
-	struct grid_cell	*gc = &ictx->cell.cell;
+	struct grid_cell	*gc = &ictx->cell;
 	u_int			 i;
-	int			 n;
+	int			 n, m;
+	u_char			 attr;
 
 	if (ictx->param_list_len == 0) {
+		attr = gc->attr;
 		memcpy(gc, &grid_default_cell, sizeof *gc);
+		gc->attr |= (attr & GRID_ATTR_CHARSET);
 		return;
 	}
 
@@ -1701,13 +1506,28 @@ input_csi_dispatch_sgr(struct input_ctx *ictx)
 
 		if (n == 38 || n == 48) {
 			i++;
-			switch (input_get(ictx, i, 0, -1)) {
-			case 2:
-				input_csi_dispatch_sgr_rgb(ictx, n, &i);
-				break;
-			case 5:
-				input_csi_dispatch_sgr_256(ictx, n, &i);
-				break;
+			if (input_get(ictx, i, 0, -1) != 5)
+				continue;
+
+			i++;
+			m = input_get(ictx, i, 0, -1);
+			if (m == -1) {
+				if (n == 38) {
+					gc->flags &= ~GRID_FLAG_FG256;
+					gc->fg = 8;
+				} else if (n == 48) {
+					gc->flags &= ~GRID_FLAG_BG256;
+					gc->bg = 8;
+				}
+
+			} else {
+				if (n == 38) {
+					gc->flags |= GRID_FLAG_FG256;
+					gc->fg = m;
+				} else if (n == 48) {
+					gc->flags |= GRID_FLAG_BG256;
+					gc->bg = m;
+				}
 			}
 			continue;
 		}
@@ -1715,7 +1535,9 @@ input_csi_dispatch_sgr(struct input_ctx *ictx)
 		switch (n) {
 		case 0:
 		case 10:
+			attr = gc->attr;
 			memcpy(gc, &grid_default_cell, sizeof *gc);
+			gc->attr |= (attr & GRID_ATTR_CHARSET);
 			break;
 		case 1:
 			gc->attr |= GRID_ATTR_BRIGHT;
@@ -1761,11 +1583,11 @@ input_csi_dispatch_sgr(struct input_ctx *ictx)
 		case 35:
 		case 36:
 		case 37:
-			gc->flags &= ~(GRID_FLAG_FG256|GRID_FLAG_FGRGB);
+			gc->flags &= ~GRID_FLAG_FG256;
 			gc->fg = n - 30;
 			break;
 		case 39:
-			gc->flags &= ~(GRID_FLAG_FG256|GRID_FLAG_FGRGB);
+			gc->flags &= ~GRID_FLAG_FG256;
 			gc->fg = 8;
 			break;
 		case 40:
@@ -1776,11 +1598,11 @@ input_csi_dispatch_sgr(struct input_ctx *ictx)
 		case 45:
 		case 46:
 		case 47:
-			gc->flags &= ~(GRID_FLAG_BG256|GRID_FLAG_BGRGB);
+			gc->flags &= ~GRID_FLAG_BG256;
 			gc->bg = n - 40;
 			break;
 		case 49:
-			gc->flags &= ~(GRID_FLAG_BG256|GRID_FLAG_BGRGB);
+			gc->flags &= ~GRID_FLAG_BG256;
 			gc->bg = 8;
 			break;
 		case 90:
@@ -1791,7 +1613,7 @@ input_csi_dispatch_sgr(struct input_ctx *ictx)
 		case 95:
 		case 96:
 		case 97:
-			gc->flags &= ~(GRID_FLAG_FG256|GRID_FLAG_FGRGB);
+			gc->flags &= ~GRID_FLAG_FG256;
 			gc->fg = n;
 			break;
 		case 100:
@@ -1802,7 +1624,7 @@ input_csi_dispatch_sgr(struct input_ctx *ictx)
 		case 105:
 		case 106:
 		case 107:
-			gc->flags &= ~(GRID_FLAG_BG256|GRID_FLAG_BGRGB);
+			gc->flags &= ~GRID_FLAG_BG256;
 			gc->bg = n - 10;
 			break;
 		}
@@ -1844,8 +1666,8 @@ input_enter_osc(struct input_ctx *ictx)
 void
 input_exit_osc(struct input_ctx *ictx)
 {
-	u_char	*p = ictx->input_buf;
-	u_int	 option;
+	u_char *p = ictx->input_buf;
+	int	option;
 
 	if (ictx->flags & INPUT_DISCARD)
 		return;
@@ -1916,12 +1738,12 @@ input_exit_rename(struct input_ctx *ictx)
 {
 	if (ictx->flags & INPUT_DISCARD)
 		return;
-	if (!options_get_number(ictx->wp->window->options, "allow-rename"))
+	if (!options_get_number(&ictx->wp->window->options, "allow-rename"))
 		return;
 	log_debug("%s: \"%s\"", __func__, ictx->input_buf);
 
 	window_set_name(ictx->wp->window, (const char *)ictx->input_buf);
-	options_set_number(ictx->wp->window->options, "automatic-rename", 0);
+	options_set_number(&ictx->wp->window->options, "automatic-rename", 0);
 
 	server_status_window(ictx->wp->window);
 }
@@ -1930,13 +1752,14 @@ input_exit_rename(struct input_ctx *ictx)
 int
 input_utf8_open(struct input_ctx *ictx)
 {
-	struct utf8_data	*ud = &ictx->utf8data;
+	if (!options_get_number(&ictx->wp->window->options, "utf8")) {
+		/* Print, and do not switch state. */
+		input_print(ictx);
+		return (-1);
+	}
+	log_debug("%s", __func__);
 
-	if (utf8_open(ud, ictx->ch) != UTF8_MORE)
-		fatalx("UTF-8 open invalid %#x", ictx->ch);
-
-	log_debug("%s %hhu", __func__, ud->size);
-
+	utf8_open(&ictx->utf8data, ictx->ch);
 	return (0);
 }
 
@@ -1944,13 +1767,9 @@ input_utf8_open(struct input_ctx *ictx)
 int
 input_utf8_add(struct input_ctx *ictx)
 {
-	struct utf8_data	*ud = &ictx->utf8data;
-
-	if (utf8_append(ud, ictx->ch) != UTF8_MORE)
-		fatalx("UTF-8 add invalid %#x", ictx->ch);
-
 	log_debug("%s", __func__);
 
+	utf8_append(&ictx->utf8data, ictx->ch);
 	return (0);
 }
 
@@ -1958,22 +1777,12 @@ input_utf8_add(struct input_ctx *ictx)
 int
 input_utf8_close(struct input_ctx *ictx)
 {
-	struct utf8_data	*ud = &ictx->utf8data;
+	log_debug("%s", __func__);
 
-	if (utf8_append(ud, ictx->ch) != UTF8_DONE) {
-		/*
-		 * An error here could be invalid UTF-8 or it could be a
-		 * nonprintable character for which we can't get the
-		 * width. Drop it.
-		 */
-		return (0);
-	}
+	utf8_append(&ictx->utf8data, ictx->ch);
 
-	log_debug("%s %hhu '%*s' (width %hhu)", __func__, ud->size,
-	    (int)ud->size, ud->data, ud->width);
-
-	utf8_copy(&ictx->cell.cell.data, ud);
-	screen_write_cell(&ictx->ctx, &ictx->cell.cell);
+	grid_cell_set(&ictx->cell, &ictx->utf8data);
+	screen_write_cell(&ictx->ctx, &ictx->cell);
 
 	return (0);
 }

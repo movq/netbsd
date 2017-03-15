@@ -1,4 +1,4 @@
-/*	$NetBSD: drm_wait_netbsd.h,v 1.14 2016/05/13 15:25:57 christos Exp $	*/
+/*	$NetBSD: drm_wait_netbsd.h,v 1.4.2.5 2016/12/12 09:13:41 msaitoh Exp $	*/
 
 /*-
  * Copyright (c) 2013 The NetBSD Foundation, Inc.

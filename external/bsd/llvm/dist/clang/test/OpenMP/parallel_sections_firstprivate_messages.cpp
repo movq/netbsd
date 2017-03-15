@@ -1,4 +1,4 @@
-// RUN: %clang_cc1 -verify -fopenmp %s
+// RUN: %clang_cc1 -verify -fopenmp=libiomp5 %s
 
 void foo() {
 }
@@ -65,7 +65,7 @@ int foomain(int argc, char **argv) {
   I e(4);
   C g(5);
   int i;
-  int &j = i;
+  int &j = i;                              // expected-note {{'j' defined here}}
 #pragma omp parallel sections firstprivate // expected-error {{expected '(' after 'firstprivate'}}
   {
     foo();
@@ -130,7 +130,7 @@ int foomain(int argc, char **argv) {
   }
 #pragma omp parallel shared(i)
 #pragma omp parallel private(i)
-#pragma omp parallel sections firstprivate(j)
+#pragma omp parallel sections firstprivate(j) // expected-error {{arguments of OpenMP clause 'firstprivate' cannot be of reference type}}
   {
     foo();
   }
@@ -155,14 +155,6 @@ int foomain(int argc, char **argv) {
   return 0;
 }
 
-namespace A {
-double x;
-#pragma omp threadprivate(x) // expected-note {{defined as threadprivate or thread local}}
-}
-namespace B {
-using A::x;
-}
-
 int main(int argc, char **argv) {
   const int d = 5;
   const int da[5] = {0};
@@ -171,7 +163,7 @@ int main(int argc, char **argv) {
   S3 m;
   S6 n(2);
   int i;
-  int &j = i;
+  int &j = i;                              // expected-note {{'j' defined here}}
 #pragma omp parallel sections firstprivate // expected-error {{expected '(' after 'firstprivate'}}
   {
     foo();
@@ -253,7 +245,7 @@ int main(int argc, char **argv) {
   {
     foo();
   }
-#pragma omp parallel sections firstprivate(h, B::x) // expected-error 2 {{threadprivate or thread local variable cannot be firstprivate}}
+#pragma omp parallel sections firstprivate(h) // expected-error {{threadprivate or thread local variable cannot be firstprivate}}
   {
     foo();
   }
@@ -266,7 +258,7 @@ int main(int argc, char **argv) {
   {
     foo();
   }
-#pragma omp parallel sections firstprivate(j)
+#pragma omp parallel sections firstprivate(j) // expected-error {{arguments of OpenMP clause 'firstprivate' cannot be of reference type}}
   {
     foo();
   }
@@ -295,11 +287,6 @@ int main(int argc, char **argv) {
   }
 #pragma omp parallel reduction(+ : i)
 #pragma omp parallel sections firstprivate(i)
-  {
-    foo();
-  }
-  static int r;
-#pragma omp parallel sections firstprivate(r) // OK
   {
     foo();
   }

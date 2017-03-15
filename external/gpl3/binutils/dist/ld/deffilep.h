@@ -104,16 +104,15 @@
 
 #if ! defined YYSTYPE && ! defined YYSTYPE_IS_DECLARED
 typedef union YYSTYPE
-#line 113 "deffilep.y"
+#line 114 "deffilep.y"
 {
   char *id;
   const char *id_const;
   int number;
-  bfd_vma vma;
   char *digits;
 }
 /* Line 1529 of yacc.c.  */
-#line 117 "deffilep.h"
+#line 116 "deffilep.h"
 	YYSTYPE;
 # define yystype YYSTYPE /* obsolescent; will be withdrawn */
 # define YYSTYPE_IS_DECLARED 1

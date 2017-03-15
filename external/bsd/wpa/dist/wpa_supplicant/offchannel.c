@@ -23,29 +23,8 @@ wpas_get_tx_interface(struct wpa_supplicant *wpa_s, const u8 *src)
 {
 	struct wpa_supplicant *iface;
 
-	if (os_memcmp(src, wpa_s->own_addr, ETH_ALEN) == 0) {
-#ifdef CONFIG_P2P
-		if (wpa_s->p2p_mgmt && wpa_s != wpa_s->parent &&
-		    wpa_s->parent->ap_iface &&
-		    os_memcmp(wpa_s->parent->own_addr,
-			      wpa_s->own_addr, ETH_ALEN) == 0 &&
-		    wpabuf_len(wpa_s->pending_action_tx) >= 2 &&
-		    *wpabuf_head_u8(wpa_s->pending_action_tx) !=
-		    WLAN_ACTION_PUBLIC) {
-			/*
-			 * When P2P Device interface has same MAC address as
-			 * the GO interface, make sure non-Public Action frames
-			 * are sent through the GO interface. The P2P Device
-			 * interface can only send Public Action frames.
-			 */
-			wpa_printf(MSG_DEBUG,
-				   "P2P: Use GO interface %s instead of interface %s for Action TX",
-				   wpa_s->parent->ifname, wpa_s->ifname);
-			return wpa_s->parent;
-		}
-#endif /* CONFIG_P2P */
+	if (os_memcmp(src, wpa_s->own_addr, ETH_ALEN) == 0)
 		return wpa_s;
-	}
 
 	/*
 	 * Try to find a group interface that matches with the source address.
@@ -139,9 +118,8 @@ static void wpas_send_action_cb(void *eloop_ctx, void *timeout_ctx)
 	}
 
 	wpa_printf(MSG_DEBUG, "Off-channel: Sending pending Action frame to "
-		   MACSTR " using interface %s (pending_action_tx=%p)",
-		   MAC2STR(wpa_s->pending_action_dst), iface->ifname,
-		   wpa_s->pending_action_tx);
+		   MACSTR " using interface %s",
+		   MAC2STR(wpa_s->pending_action_dst), iface->ifname);
 	res = wpa_drv_send_action(iface, wpa_s->pending_action_freq, 0,
 				  wpa_s->pending_action_dst,
 				  wpa_s->pending_action_src,
@@ -205,12 +183,8 @@ void offchannel_send_action_tx_status(
 		return;
 	}
 
-	wpa_printf(MSG_DEBUG,
-		   "Off-channel: Delete matching pending action frame (dst="
-		   MACSTR " pending_action_tx=%p)", MAC2STR(dst),
-		   wpa_s->pending_action_tx);
-	wpa_hexdump_buf(MSG_MSGDUMP, "Pending TX frame",
-			wpa_s->pending_action_tx);
+	wpa_printf(MSG_DEBUG, "Off-channel: Delete matching pending action frame");
+
 	wpabuf_free(wpa_s->pending_action_tx);
 	wpa_s->pending_action_tx = NULL;
 
@@ -276,11 +250,8 @@ int offchannel_send_action(struct wpa_supplicant *wpa_s, unsigned int freq,
 
 	if (wpa_s->pending_action_tx) {
 		wpa_printf(MSG_DEBUG, "Off-channel: Dropped pending Action "
-			   "frame TX to " MACSTR " (pending_action_tx=%p)",
-			   MAC2STR(wpa_s->pending_action_dst),
-			   wpa_s->pending_action_tx);
-		wpa_hexdump_buf(MSG_MSGDUMP, "Pending TX frame",
-				wpa_s->pending_action_tx);
+			   "frame TX to " MACSTR,
+			   MAC2STR(wpa_s->pending_action_dst));
 		wpabuf_free(wpa_s->pending_action_tx);
 	}
 	wpa_s->pending_action_tx_done = 0;
@@ -297,12 +268,6 @@ int offchannel_send_action(struct wpa_supplicant *wpa_s, unsigned int freq,
 	os_memcpy(wpa_s->pending_action_bssid, bssid, ETH_ALEN);
 	wpa_s->pending_action_freq = freq;
 	wpa_s->pending_action_no_cck = no_cck;
-	wpa_printf(MSG_DEBUG,
-		   "Off-channel: Stored pending action frame (dst=" MACSTR
-		   " pending_action_tx=%p)",
-		   MAC2STR(dst), wpa_s->pending_action_tx);
-	wpa_hexdump_buf(MSG_MSGDUMP, "Pending TX frame",
-			wpa_s->pending_action_tx);
 
 	if (freq != 0 && wpa_s->drv_flags & WPA_DRIVER_FLAGS_OFFCHANNEL_TX) {
 		struct wpa_supplicant *iface;
@@ -463,9 +428,6 @@ const void * offchannel_pending_action_tx(struct wpa_supplicant *wpa_s)
  */
 void offchannel_clear_pending_action_tx(struct wpa_supplicant *wpa_s)
 {
-	wpa_printf(MSG_DEBUG,
-		   "Off-channel: Clear pending Action frame TX (pending_action_tx=%p",
-		   wpa_s->pending_action_tx);
 	wpabuf_free(wpa_s->pending_action_tx);
 	wpa_s->pending_action_tx = NULL;
 }

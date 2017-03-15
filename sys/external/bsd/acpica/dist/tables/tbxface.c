@@ -5,7 +5,7 @@
  *****************************************************************************/
 
 /*
- * Copyright (C) 2000 - 2017, Intel Corp.
+ * Copyright (C) 2000 - 2013, Intel Corp.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -41,6 +41,7 @@
  * POSSIBILITY OF SUCH DAMAGES.
  */
 
+#define __TBXFACE_C__
 #define EXPORT_ACPI_INTERFACES
 
 #include "acpi.h"
@@ -103,7 +104,7 @@ AcpiAllocateRootTable (
  *
  ******************************************************************************/
 
-ACPI_STATUS ACPI_INIT_FUNCTION
+ACPI_STATUS
 AcpiInitializeTables (
     ACPI_TABLE_DESC         *InitialTableArray,
     UINT32                  InitialTableCount,
@@ -132,7 +133,7 @@ AcpiInitializeTables (
     {
         /* Root Table Array has been statically allocated by the host */
 
-        memset (InitialTableArray, 0,
+        ACPI_MEMSET (InitialTableArray, 0,
             (ACPI_SIZE) InitialTableCount * sizeof (ACPI_TABLE_DESC));
 
         AcpiGbl_RootTableList.Tables = InitialTableArray;
@@ -179,12 +180,11 @@ ACPI_EXPORT_SYMBOL_INIT (AcpiInitializeTables)
  *
  ******************************************************************************/
 
-ACPI_STATUS ACPI_INIT_FUNCTION
+ACPI_STATUS
 AcpiReallocateRootTable (
     void)
 {
     ACPI_STATUS             Status;
-    UINT32                  i;
 
 
     ACPI_FUNCTION_TRACE (AcpiReallocateRootTable);
@@ -197,22 +197,6 @@ AcpiReallocateRootTable (
     if (AcpiGbl_RootTableList.Flags & ACPI_ROOT_ORIGIN_ALLOCATED)
     {
         return_ACPI_STATUS (AE_SUPPORT);
-    }
-
-    /*
-     * Ensure OS early boot logic, which is required by some hosts. If the
-     * table state is reported to be wrong, developers should fix the
-     * issue by invoking AcpiPutTable() for the reported table during the
-     * early stage.
-     */
-    for (i = 0; i < AcpiGbl_RootTableList.CurrentTableCount; ++i)
-    {
-        if (AcpiGbl_RootTableList.Tables[i].Pointer)
-        {
-            ACPI_ERROR ((AE_INFO,
-                "Table [%4.4s] is not invalidated during early boot stage",
-                AcpiGbl_RootTableList.Tables[i].Signature.Ascii));
-        }
     }
 
     AcpiGbl_RootTableList.Flags |= ACPI_ROOT_ALLOW_RESIZE;
@@ -247,6 +231,7 @@ AcpiGetTableHeader (
     UINT32                  i;
     UINT32                  j;
     ACPI_TABLE_HEADER       *Header;
+    ACPI_STRING             USignature = __UNCONST(Signature);
 
     /* Parameter validation */
 
@@ -259,8 +244,8 @@ AcpiGetTableHeader (
 
     for (i = 0, j = 0; i < AcpiGbl_RootTableList.CurrentTableCount; i++)
     {
-        if (!ACPI_COMPARE_NAME (
-                &(AcpiGbl_RootTableList.Tables[i].Signature), Signature))
+        if (!ACPI_COMPARE_NAME (&(AcpiGbl_RootTableList.Tables[i].Signature),
+                    USignature))
         {
             continue;
         }
@@ -274,17 +259,18 @@ AcpiGetTableHeader (
         {
             if ((AcpiGbl_RootTableList.Tables[i].Flags &
                     ACPI_TABLE_ORIGIN_MASK) ==
-                ACPI_TABLE_ORIGIN_INTERNAL_PHYSICAL)
+                ACPI_TABLE_ORIGIN_MAPPED)
             {
                 Header = AcpiOsMapMemory (
-                    AcpiGbl_RootTableList.Tables[i].Address,
-                    sizeof (ACPI_TABLE_HEADER));
+                            AcpiGbl_RootTableList.Tables[i].Address,
+                            sizeof (ACPI_TABLE_HEADER));
                 if (!Header)
                 {
                     return (AE_NO_MEMORY);
                 }
 
-                memcpy (OutTableHeader, Header, sizeof (ACPI_TABLE_HEADER));
+                ACPI_MEMCPY (OutTableHeader, Header,
+                    sizeof (ACPI_TABLE_HEADER));
                 AcpiOsUnmapMemory (Header, sizeof (ACPI_TABLE_HEADER));
             }
             else
@@ -294,7 +280,7 @@ AcpiGetTableHeader (
         }
         else
         {
-            memcpy (OutTableHeader,
+            ACPI_MEMCPY (OutTableHeader,
                 AcpiGbl_RootTableList.Tables[i].Pointer,
                 sizeof (ACPI_TABLE_HEADER));
         }
@@ -320,11 +306,6 @@ ACPI_EXPORT_SYMBOL (AcpiGetTableHeader)
  *
  * DESCRIPTION: Finds and verifies an ACPI table. Table must be in the
  *              RSDT/XSDT.
- *              Note that an early stage AcpiGetTable() call must be paired
- *              with an early stage AcpiPutTable() call. otherwise the table
- *              pointer mapped by the early stage mapping implementation may be
- *              erroneously unmapped by the late stage unmapping implementation
- *              in an AcpiPutTable() invoked during the late stage.
  *
  ******************************************************************************/
 
@@ -336,8 +317,8 @@ AcpiGetTable (
 {
     UINT32                  i;
     UINT32                  j;
-    ACPI_STATUS             Status = AE_NOT_FOUND;
-    ACPI_TABLE_DESC         *TableDesc;
+    ACPI_STATUS             Status;
+    ACPI_STRING             USignature = __UNCONST(Signature);
 
     /* Parameter validation */
 
@@ -346,22 +327,12 @@ AcpiGetTable (
         return (AE_BAD_PARAMETER);
     }
 
-    /*
-     * Note that the following line is required by some OSPMs, they only
-     * check if the returned table is NULL instead of the returned status
-     * to determined if this function is succeeded.
-     */
-    *OutTable = NULL;
-
-    (void) AcpiUtAcquireMutex (ACPI_MTX_TABLES);
-
     /* Walk the root table list */
 
     for (i = 0, j = 0; i < AcpiGbl_RootTableList.CurrentTableCount; i++)
     {
-        TableDesc = &AcpiGbl_RootTableList.Tables[i];
-
-        if (!ACPI_COMPARE_NAME (&TableDesc->Signature, Signature))
+        if (!ACPI_COMPARE_NAME (&(AcpiGbl_RootTableList.Tables[i].Signature),
+                USignature))
         {
             continue;
         }
@@ -371,12 +342,16 @@ AcpiGetTable (
             continue;
         }
 
-        Status = AcpiTbGetTable (TableDesc, OutTable);
-        break;
+        Status = AcpiTbVerifyTable (&AcpiGbl_RootTableList.Tables[i]);
+        if (ACPI_SUCCESS (Status))
+        {
+            *OutTable = AcpiGbl_RootTableList.Tables[i].Pointer;
+        }
+
+        return (Status);
     }
 
-    (void) AcpiUtReleaseMutex (ACPI_MTX_TABLES);
-    return (Status);
+    return (AE_NOT_FOUND);
 }
 
 ACPI_EXPORT_SYMBOL (AcpiGetTable)
@@ -384,61 +359,10 @@ ACPI_EXPORT_SYMBOL (AcpiGetTable)
 
 /*******************************************************************************
  *
- * FUNCTION:    AcpiPutTable
- *
- * PARAMETERS:  Table               - The pointer to the table
- *
- * RETURN:      None
- *
- * DESCRIPTION: Release a table returned by AcpiGetTable() and its clones.
- *              Note that it is not safe if this function was invoked after an
- *              uninstallation happened to the original table descriptor.
- *              Currently there is no OSPMs' requirement to handle such
- *              situations.
- *
- ******************************************************************************/
-
-void
-AcpiPutTable (
-    ACPI_TABLE_HEADER       *Table)
-{
-    UINT32                  i;
-    ACPI_TABLE_DESC         *TableDesc;
-
-
-    ACPI_FUNCTION_TRACE (AcpiPutTable);
-
-
-    (void) AcpiUtAcquireMutex (ACPI_MTX_TABLES);
-
-    /* Walk the root table list */
-
-    for (i = 0; i < AcpiGbl_RootTableList.CurrentTableCount; i++)
-    {
-        TableDesc = &AcpiGbl_RootTableList.Tables[i];
-
-        if (TableDesc->Pointer != Table)
-        {
-            continue;
-        }
-
-        AcpiTbPutTable (TableDesc);
-        break;
-    }
-
-    (void) AcpiUtReleaseMutex (ACPI_MTX_TABLES);
-    return_VOID;
-}
-
-ACPI_EXPORT_SYMBOL (AcpiPutTable)
-
-
-/*******************************************************************************
- *
  * FUNCTION:    AcpiGetTableByIndex
  *
  * PARAMETERS:  TableIndex          - Table index
- *              OutTable            - Where the pointer to the table is returned
+ *              Table               - Where the pointer to the table is returned
  *
  * RETURN:      Status and pointer to the requested table
  *
@@ -450,7 +374,7 @@ ACPI_EXPORT_SYMBOL (AcpiPutTable)
 ACPI_STATUS
 AcpiGetTableByIndex (
     UINT32                  TableIndex,
-    ACPI_TABLE_HEADER       **OutTable)
+    ACPI_TABLE_HEADER       **Table)
 {
     ACPI_STATUS             Status;
 
@@ -460,17 +384,10 @@ AcpiGetTableByIndex (
 
     /* Parameter validation */
 
-    if (!OutTable)
+    if (!Table)
     {
         return_ACPI_STATUS (AE_BAD_PARAMETER);
     }
-
-    /*
-     * Note that the following line is required by some OSPMs, they only
-     * check if the returned table is NULL instead of the returned status
-     * to determined if this function is succeeded.
-     */
-    *OutTable = NULL;
 
     (void) AcpiUtAcquireMutex (ACPI_MTX_TABLES);
 
@@ -478,16 +395,25 @@ AcpiGetTableByIndex (
 
     if (TableIndex >= AcpiGbl_RootTableList.CurrentTableCount)
     {
-        Status = AE_BAD_PARAMETER;
-        goto UnlockAndExit;
+        (void) AcpiUtReleaseMutex (ACPI_MTX_TABLES);
+        return_ACPI_STATUS (AE_BAD_PARAMETER);
     }
 
-    Status = AcpiTbGetTable (
-        &AcpiGbl_RootTableList.Tables[TableIndex], OutTable);
+    if (!AcpiGbl_RootTableList.Tables[TableIndex].Pointer)
+    {
+        /* Table is not mapped, map it */
 
-UnlockAndExit:
+        Status = AcpiTbVerifyTable (&AcpiGbl_RootTableList.Tables[TableIndex]);
+        if (ACPI_FAILURE (Status))
+        {
+            (void) AcpiUtReleaseMutex (ACPI_MTX_TABLES);
+            return_ACPI_STATUS (Status);
+        }
+    }
+
+    *Table = AcpiGbl_RootTableList.Tables[TableIndex].Pointer;
     (void) AcpiUtReleaseMutex (ACPI_MTX_TABLES);
-    return_ACPI_STATUS (Status);
+    return_ACPI_STATUS (AE_OK);
 }
 
 ACPI_EXPORT_SYMBOL (AcpiGetTableByIndex)

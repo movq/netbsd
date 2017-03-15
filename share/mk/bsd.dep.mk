@@ -1,4 +1,4 @@
-#	$NetBSD: bsd.dep.mk,v 1.83 2016/12/21 03:00:51 christos Exp $
+#	$NetBSD: bsd.dep.mk,v 1.81 2014/07/19 17:19:22 plunky Exp $
 
 ##### Basic targets
 realdepend:	beforedepend .depend afterdepend
@@ -9,7 +9,7 @@ beforedepend .depend afterdepend: # ensure existence
 ##### Default values
 MKDEP?=			mkdep
 MKDEPCXX?=		mkdep
-MKDEP_SUFFIXES?=	.o .d
+MKDEP_SUFFIXES?=	.o
 
 ##### Build rules
 # some of the rules involve .h sources, so remove them from mkdep line
@@ -62,7 +62,7 @@ _MKDEP_FILEFLAGS=
 	${_MKTARGET_CREATE}
 	${MKDEP} -f ${.TARGET}.tmp ${_MKDEP_FILEFLAGS} -- ${MKDEPFLAGS} \
 	    ${CFLAGS:M-std=*} ${CFLAGS:C/-([IDU])[  ]*/-\1/Wg:M-[IDU]*} \
-	    ${CPPFLAGS:N-Wp,-iremap,*} ${COPTS.${.IMPSRC:T}} ${CPUFLAGS.${.IMPSRC:T}} \
+	    ${CPPFLAGS} ${COPTS.${.IMPSRC:T}} ${CPUFLAGS.${.IMPSRC:T}} \
 	    ${CPPFLAGS.${.IMPSRC:T}} ${.IMPSRC} && \
 	    mv ${.TARGET}.tmp ${.TARGET}
 
@@ -70,7 +70,7 @@ _MKDEP_FILEFLAGS=
 	${_MKTARGET_CREATE}
 	${MKDEP} -f ${.TARGET}.tmp ${_MKDEP_FILEFLAGS} -- ${MKDEPFLAGS} \
 	    ${OBJCFLAGS:C/-([IDU])[  ]*/-\1/Wg:M-[IDU]*} \
-	    ${CPPFLAGS:N-Wp,-iremap,*} ${COPTS.${.IMPSRC:T}} ${CPUFLAGS.${.IMPSRC:T}} \
+	    ${CPPFLAGS} ${COPTS.${.IMPSRC:T}} ${CPUFLAGS.${.IMPSRC:T}} \
 	    ${CPPFLAGS.${.IMPSRC:T}} ${.IMPSRC} && \
 	    mv ${.TARGET}.tmp ${.TARGET}
 
@@ -78,7 +78,7 @@ _MKDEP_FILEFLAGS=
 	${_MKTARGET_CREATE}
 	${MKDEP} -f ${.TARGET}.tmp ${_MKDEP_FILEFLAGS} -- ${MKDEPFLAGS} \
 	    ${AFLAGS:C/-([IDU])[  ]*/-\1/Wg:M-[IDU]*} \
-	    ${CPPFLAGS:N-Wp,-iremap,*} ${AFLAGS.${.IMPSRC:T}} ${CPPFLAGS.${.IMPSRC:T}} \
+	    ${CPPFLAGS} ${AFLAGS.${.IMPSRC:T}} ${CPPFLAGS.${.IMPSRC:T}} \
 	    ${__acpp_flags} ${.IMPSRC} && \
 	    mv ${.TARGET}.tmp ${.TARGET}
 
@@ -86,7 +86,7 @@ _MKDEP_FILEFLAGS=
 	${_MKTARGET_CREATE}
 	${MKDEPCXX} -f ${.TARGET}.tmp ${_MKDEP_FILEFLAGS} -- ${MKDEPFLAGS} \
 	    ${CXXFLAGS:M-std=*} ${CXXFLAGS:C/-([IDU])[  ]*/-\1/Wg:M-[IDU]*} \
-	    ${CPPFLAGS:N-Wp,-iremap,*} ${COPTS.${.IMPSRC:T}} ${CPUFLAGS.${.IMPSRC:T}} \
+	    ${CPPFLAGS} ${COPTS.${.IMPSRC:T}} ${CPUFLAGS.${.IMPSRC:T}} \
 	    ${CPPFLAGS.${.IMPSRC:T}} ${.IMPSRC} && \
 	    mv ${.TARGET}.tmp ${.TARGET}
 

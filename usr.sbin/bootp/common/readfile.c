@@ -22,7 +22,7 @@ SOFTWARE.
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: readfile.c,v 1.20 2017/01/11 12:18:22 joerg Exp $");
+__RCSID("$NetBSD: readfile.c,v 1.19 2011/10/07 10:06:39 joerg Exp $");
 #endif
 
 
@@ -1582,21 +1582,23 @@ makelower(char *s)
 PRIVATE struct in_addr_list *
 get_addresses(char **src)
 {
-	__aligned(4) struct in_addr tmpaddrlist[MAXINADDRS];
+	struct in_addr tmpaddrlist[MAXINADDRS];
+	struct in_addr *address1, *address2;
 	struct in_addr_list *result;
-	unsigned addrcount, totalsize, address;
+	unsigned addrcount, totalsize;
 
-	for (address = 0, addrcount = 0; addrcount < MAXINADDRS; addrcount++) {
+	address1 = tmpaddrlist;
+	for (addrcount = 0; addrcount < MAXINADDRS; addrcount++) {
 		while (isspace((unsigned char)**src) || (**src == ',')) {
 			(*src)++;
 		}
 		if (!**src) {			/* Quit if nothing more */
 			break;
 		}
-		if (prs_inetaddr(src, &tmpaddrlist[address].s_addr) < 0) {
+		if (prs_inetaddr(src, &(address1->s_addr)) < 0) {
 			break;
 		}
-		address++;				/* Point to next address slot */
+		address1++;				/* Point to next address slot */
 	}
 	if (addrcount < 1) {
 		result = NULL;
@@ -1606,8 +1608,13 @@ get_addresses(char **src)
 		result = (struct in_addr_list *) smalloc(totalsize);
 		result->linkcount = 1;
 		result->addrcount = addrcount;
-		for (address = 0; address < addrcount; ++address)
-			result->addr[address] = tmpaddrlist[address];
+		address1 = tmpaddrlist;
+		address2 = result->addr;
+		for (; addrcount > 0; addrcount--) {
+			address2->s_addr = address1->s_addr;
+			address1++;
+			address2++;
+		}
 	}
 	return result;
 }

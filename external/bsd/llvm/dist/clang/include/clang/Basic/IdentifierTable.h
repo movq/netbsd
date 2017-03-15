@@ -18,26 +18,16 @@
 
 #include "clang/Basic/LLVM.h"
 #include "clang/Basic/TokenKinds.h"
-#include "llvm/ADT/SmallString.h"
 #include "llvm/ADT/StringMap.h"
 #include "llvm/ADT/StringRef.h"
-#include "llvm/Support/Allocator.h"
 #include <cassert>
-#include <cstddef>
-#include <cstdint>
-#include <cstring>
-#include <new>
 #include <string>
-#include <utility>
 
 namespace llvm {
-
   template <typename T> struct DenseMapInfo;
-
-} // end namespace llvm
+}
 
 namespace clang {
-
   class LangOptions;
   class IdentifierInfo;
   class IdentifierTable;
@@ -48,24 +38,22 @@ namespace clang {
   /// \brief A simple pair of identifier info and location.
   typedef std::pair<IdentifierInfo*, SourceLocation> IdentifierLocPair;
 
+
 /// One of these records is kept for each identifier that
 /// is lexed.  This contains information about whether the token was \#define'd,
 /// is a language keyword, or if it is a front-end token of some sort (e.g. a
 /// variable or function name).  The preprocessor keeps this information in a
 /// set, and all tok::identifier tokens have a pointer to one of these.
 class IdentifierInfo {
-  friend class IdentifierTable;
-
   unsigned TokenID            : 9; // Front-end token ID or tok::identifier.
   // Objective-C keyword ('protocol' in '@protocol') or builtin (__builtin_inf).
   // First NUM_OBJC_KEYWORDS values are for Objective-C, the remaining values
   // are for builtins.
-  unsigned ObjCOrBuiltinID    :13;
+  unsigned ObjCOrBuiltinID    :11;
   bool HasMacro               : 1; // True if there is a #define for this.
   bool HadMacro               : 1; // True if there was a #define for this.
   bool IsExtension            : 1; // True if identifier is a lang extension.
-  bool IsFutureCompatKeyword  : 1; // True if identifier is a keyword in a
-                                   // newer Standard or proposed Standard.
+  bool IsCXX11CompatKeyword   : 1; // True if identifier is a keyword in C++11.
   bool IsPoisoned             : 1; // True if identifier is poisoned.
   bool IsCPPOperatorKeyword   : 1; // True if ident is a C++ operator keyword.
   bool NeedsHandleIdentifier  : 1; // See "RecomputeNeedsHandleIdentifier".
@@ -73,33 +61,33 @@ class IdentifierInfo {
                                    // partially) from an AST file.
   bool ChangedAfterLoad       : 1; // True if identifier has changed from the
                                    // definition loaded from an AST file.
-  bool FEChangedAfterLoad     : 1; // True if identifier's frontend information
-                                   // has changed from the definition loaded
-                                   // from an AST file.
-  bool RevertedTokenID        : 1; // True if revertTokenIDToIdentifier was
+  bool RevertedTokenID        : 1; // True if RevertTokenIDToIdentifier was
                                    // called.
   bool OutOfDate              : 1; // True if there may be additional
                                    // information about this identifier
                                    // stored externally.
   bool IsModulesImport        : 1; // True if this is the 'import' contextual
                                    // keyword.
-  // 29 bit left in 64-bit word.
+  // 32-bit word is filled.
 
   void *FETokenInfo;               // Managed by the language front-end.
   llvm::StringMapEntry<IdentifierInfo*> *Entry;
 
+  IdentifierInfo(const IdentifierInfo&) LLVM_DELETED_FUNCTION;
+  void operator=(const IdentifierInfo&) LLVM_DELETED_FUNCTION;
+
+  friend class IdentifierTable;
+  
 public:
   IdentifierInfo();
-  IdentifierInfo(const IdentifierInfo &) = delete;
-  IdentifierInfo &operator=(const IdentifierInfo &) = delete;
+
 
   /// \brief Return true if this is the identifier for the specified string.
   ///
   /// This is intended to be used for string literals only: II->isStr("foo").
   template <std::size_t StrLen>
   bool isStr(const char (&Str)[StrLen]) const {
-    return getLength() == StrLen-1 &&
-           memcmp(getNameStart(), Str, StrLen-1) == 0;
+    return getLength() == StrLen-1 && !memcmp(getNameStart(), Str, StrLen-1);
   }
 
   /// \brief Return the beginning of the actual null-terminated string for this
@@ -136,7 +124,6 @@ public:
   }
 
   /// \brief Return true if this identifier is \#defined to some other value.
-  /// \note The current definition may be in a module and not currently visible.
   bool hasMacroDefinition() const {
     return HasMacro;
   }
@@ -145,7 +132,7 @@ public:
 
     HasMacro = Val;
     if (Val) {
-      NeedsHandleIdentifier = true;
+      NeedsHandleIdentifier = 1;
       HadMacro = true;
     } else {
       RecomputeNeedsHandleIdentifier();
@@ -163,7 +150,7 @@ public:
   /// tokens.
   tok::TokenKind getTokenID() const { return (tok::TokenKind)TokenID; }
 
-  /// \brief True if revertTokenIDToIdentifier() was called.
+  /// \brief True if RevertTokenIDToIdentifier() was called.
   bool hasRevertedTokenIDToIdentifier() const { return RevertedTokenID; }
 
   /// \brief Revert TokenID to tok::identifier; used for GNU libstdc++ 4.2
@@ -172,15 +159,10 @@ public:
   /// TokenID is normally read-only but there are 2 instances where we revert it
   /// to tok::identifier for libstdc++ 4.2. Keep track of when this happens
   /// using this method so we can inform serialization about it.
-  void revertTokenIDToIdentifier() {
+  void RevertTokenIDToIdentifier() {
     assert(TokenID != tok::identifier && "Already at tok::identifier");
     TokenID = tok::identifier;
     RevertedTokenID = true;
-  }
-  void revertIdentifierToTokenID(tok::TokenKind TK) {
-    assert(TokenID == tok::identifier && "Should be at tok::identifier");
-    TokenID = TK;
-    RevertedTokenID = false;
   }
 
   /// \brief Return the preprocessor keyword ID for this identifier.
@@ -199,21 +181,10 @@ public:
   }
   void setObjCKeywordID(tok::ObjCKeywordKind ID) { ObjCOrBuiltinID = ID; }
 
-  /// \brief True if setNotBuiltin() was called.
-  bool hasRevertedBuiltin() const {
-    return ObjCOrBuiltinID == tok::NUM_OBJC_KEYWORDS;
-  }
-
-  /// \brief Revert the identifier to a non-builtin identifier. We do this if
-  /// the name of a known builtin library function is used to declare that
-  /// function, but an unexpected type is specified.
-  void revertBuiltin() {
-    setBuiltinID(0);
-  }
-
   /// \brief Return a value indicating whether this is a builtin function.
   ///
-  /// 0 is not-built-in. 1+ are specific builtin functions.
+  /// 0 is not-built-in.  1 is builtin-for-some-nonprimary-target.
+  /// 2+ are specific builtin functions.
   unsigned getBuiltinID() const {
     if (ObjCOrBuiltinID >= tok::NUM_OBJC_KEYWORDS)
       return ObjCOrBuiltinID - tok::NUM_OBJC_KEYWORDS;
@@ -236,21 +207,20 @@ public:
   void setIsExtensionToken(bool Val) {
     IsExtension = Val;
     if (Val)
-      NeedsHandleIdentifier = true;
+      NeedsHandleIdentifier = 1;
     else
       RecomputeNeedsHandleIdentifier();
   }
 
-  /// is/setIsFutureCompatKeyword - Initialize information about whether or not
-  /// this language token is a keyword in a newer or proposed Standard. This
-  /// controls compatibility warnings, and is only true when not parsing the
-  /// corresponding Standard. Once a compatibility problem has been diagnosed
-  /// with this keyword, the flag will be cleared.
-  bool isFutureCompatKeyword() const { return IsFutureCompatKeyword; }
-  void setIsFutureCompatKeyword(bool Val) {
-    IsFutureCompatKeyword = Val;
+  /// is/setIsCXX11CompatKeyword - Initialize information about whether or not
+  /// this language token is a keyword in C++11. This controls compatibility
+  /// warnings, and is only true when not parsing C++11. Once a compatibility
+  /// problem has been diagnosed with this keyword, the flag will be cleared.
+  bool isCXX11CompatKeyword() const { return IsCXX11CompatKeyword; }
+  void setIsCXX11CompatKeyword(bool Val) {
+    IsCXX11CompatKeyword = Val;
     if (Val)
-      NeedsHandleIdentifier = true;
+      NeedsHandleIdentifier = 1;
     else
       RecomputeNeedsHandleIdentifier();
   }
@@ -260,7 +230,7 @@ public:
   void setIsPoisoned(bool Value = true) {
     IsPoisoned = Value;
     if (Value)
-      NeedsHandleIdentifier = true;
+      NeedsHandleIdentifier = 1;
     else
       RecomputeNeedsHandleIdentifier();
   }
@@ -273,7 +243,7 @@ public:
   void setIsCPlusPlusOperatorKeyword(bool Val = true) {
     IsCPPOperatorKeyword = Val;
     if (Val)
-      NeedsHandleIdentifier = true;
+      NeedsHandleIdentifier = 1;
     else
       RecomputeNeedsHandleIdentifier();
   }
@@ -313,18 +283,6 @@ public:
     ChangedAfterLoad = true;
   }
 
-  /// \brief Determine whether the frontend token information for this
-  /// identifier has changed since it was loaded from an AST file.
-  bool hasFETokenInfoChangedSinceDeserialization() const {
-    return FEChangedAfterLoad;
-  }
-  
-  /// \brief Note that the frontend token information for this identifier has
-  /// changed since it was loaded from an AST file.
-  void setFETokenInfoChangedSinceDeserialization() {
-    FEChangedAfterLoad = true;
-  }
-
   /// \brief Determine whether the information for this identifier is out of
   /// date with respect to the external source.
   bool isOutOfDate() const { return OutOfDate; }
@@ -350,12 +308,7 @@ public:
     else
       RecomputeNeedsHandleIdentifier();
   }
-
-  /// \brief Provide less than operator for lexicographical sorting.
-  bool operator<(const IdentifierInfo &RHS) const {
-    return getName() < RHS.getName();
-  }
-
+  
 private:
   /// The Preprocessor::HandleIdentifier does several special (but rare)
   /// things to identifiers of various sorts.  For example, it changes the
@@ -366,7 +319,7 @@ private:
   void RecomputeNeedsHandleIdentifier() {
     NeedsHandleIdentifier =
       (isPoisoned() | hasMacroDefinition() | isCPlusPlusOperatorKeyword() |
-       isExtensionToken() | isFutureCompatKeyword() || isOutOfDate() ||
+       isExtensionToken() | isCXX11CompatKeyword() || isOutOfDate() ||
        isModulesImport());
   }
 };
@@ -378,7 +331,6 @@ private:
 class PoisonIdentifierRAIIObject {
   IdentifierInfo *const II;
   const bool OldValue;
-
 public:
   PoisonIdentifierRAIIObject(IdentifierInfo *II, bool NewValue)
     : II(II), OldValue(II ? II->isPoisoned() : false) {
@@ -403,13 +355,14 @@ public:
 /// operation. Subclasses of this iterator type will provide the
 /// actual functionality.
 class IdentifierIterator {
+private:
+  IdentifierIterator(const IdentifierIterator &) LLVM_DELETED_FUNCTION;
+  void operator=(const IdentifierIterator &) LLVM_DELETED_FUNCTION;
+
 protected:
-  IdentifierIterator() = default;
+  IdentifierIterator() { }
   
 public:
-  IdentifierIterator(const IdentifierIterator &) = delete;
-  IdentifierIterator &operator=(const IdentifierIterator &) = delete;
-
   virtual ~IdentifierIterator();
 
   /// \brief Retrieve the next string in the identifier table and
@@ -443,6 +396,19 @@ public:
   /// \returns A new iterator into the set of known identifiers. The
   /// caller is responsible for deleting this iterator.
   virtual IdentifierIterator *getIdentifiers();
+};
+
+/// \brief An abstract class used to resolve numerical identifier
+/// references (meaningful only to some external source) into
+/// IdentifierInfo pointers.
+class ExternalIdentifierLookup {
+public:
+  virtual ~ExternalIdentifierLookup();
+
+  /// \brief Return the identifier associated with the given ID number.
+  ///
+  /// The ID 0 is associated with the NULL identifier.
+  virtual IdentifierInfo *GetIdentifier(unsigned ID) = 0;
 };
 
 /// \brief Implements an efficient mapping from strings to IdentifierInfo nodes.
@@ -544,7 +510,7 @@ public:
 
   iterator begin() const { return HashTable.begin(); }
   iterator end() const   { return HashTable.end(); }
-  unsigned size() const  { return HashTable.size(); }
+  unsigned size() const { return HashTable.size(); }
 
   /// \brief Print some statistics to stderr that indicate how well the
   /// hashing is doing.
@@ -661,7 +627,6 @@ class Selector {
       return reinterpret_cast<IdentifierInfo *>(InfoPtr & ~ArgFlags);
     return nullptr;
   }
-
   MultiKeywordSelector *getMultiKeywordSelector() const {
     return reinterpret_cast<MultiKeywordSelector *>(InfoPtr & ~ArgFlags);
   }
@@ -690,7 +655,6 @@ public:
   bool operator!=(Selector RHS) const {
     return InfoPtr != RHS.InfoPtr;
   }
-
   void *getAsOpaquePtr() const {
     return reinterpret_cast<void*>(InfoPtr);
   }
@@ -702,12 +666,11 @@ public:
   bool isKeywordSelector() const {
     return getIdentifierInfoFlag() != ZeroArg;
   }
-
   bool isUnarySelector() const {
     return getIdentifierInfoFlag() == ZeroArg;
   }
-
   unsigned getNumArgs() const;
+  
   
   /// \brief Retrieve the identifier at a given position in the selector.
   ///
@@ -753,7 +716,6 @@ public:
   static Selector getEmptyMarker() {
     return Selector(uintptr_t(-1));
   }
-
   static Selector getTombstoneMarker() {
     return Selector(uintptr_t(-2));
   }
@@ -765,11 +727,10 @@ public:
 /// multi-keyword caching.
 class SelectorTable {
   void *Impl;  // Actually a SelectorTableImpl
-
+  SelectorTable(const SelectorTable &) LLVM_DELETED_FUNCTION;
+  void operator=(const SelectorTable &) LLVM_DELETED_FUNCTION;
 public:
   SelectorTable();
-  SelectorTable(const SelectorTable &) = delete;
-  SelectorTable &operator=(const SelectorTable &) = delete;
   ~SelectorTable();
 
   /// \brief Can create any sort of selector.
@@ -838,7 +799,6 @@ public:
 }  // end namespace clang
 
 namespace llvm {
-
 /// Define DenseMapInfo so that Selectors can be used as keys in DenseMap and
 /// DenseSets.
 template <>
@@ -846,7 +806,6 @@ struct DenseMapInfo<clang::Selector> {
   static inline clang::Selector getEmptyKey() {
     return clang::Selector::getEmptyMarker();
   }
-
   static inline clang::Selector getTombstoneKey() {
     return clang::Selector::getTombstoneMarker();
   }
@@ -869,11 +828,9 @@ public:
   static inline const void *getAsVoidPointer(clang::Selector P) {
     return P.getAsOpaquePtr();
   }
-
   static inline clang::Selector getFromVoidPointer(const void *P) {
     return clang::Selector(reinterpret_cast<uintptr_t>(P));
   }
-
   enum { NumLowBitsAvailable = 0 };  
 };
 
@@ -885,11 +842,9 @@ public:
   static inline void *getAsVoidPointer(clang::IdentifierInfo* P) {
     return P;
   }
-
   static inline clang::IdentifierInfo *getFromVoidPointer(void *P) {
     return static_cast<clang::IdentifierInfo*>(P);
   }
-
   enum { NumLowBitsAvailable = 1 };
 };
 
@@ -899,14 +854,11 @@ public:
   static inline const void *getAsVoidPointer(const clang::IdentifierInfo* P) {
     return P;
   }
-
   static inline const clang::IdentifierInfo *getFromVoidPointer(const void *P) {
     return static_cast<const clang::IdentifierInfo*>(P);
   }
-
   enum { NumLowBitsAvailable = 1 };
 };
 
-} // end namespace llvm
-
-#endif // LLVM_CLANG_BASIC_IDENTIFIERTABLE_H
+}  // end namespace llvm
+#endif

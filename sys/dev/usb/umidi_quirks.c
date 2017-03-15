@@ -1,4 +1,4 @@
-/*	$NetBSD: umidi_quirks.c,v 1.21 2016/11/25 12:56:29 skrll Exp $	*/
+/*	$NetBSD: umidi_quirks.c,v 1.18.14.1 2015/01/11 14:13:25 martin Exp $	*/
 
 /*
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -30,15 +30,12 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: umidi_quirks.c,v 1.21 2016/11/25 12:56:29 skrll Exp $");
-
-#ifdef _KERNEL_OPT
-#include "opt_usb.h"
-#endif
+__KERNEL_RCSID(0, "$NetBSD: umidi_quirks.c,v 1.18.14.1 2015/01/11 14:13:25 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/kernel.h>
+#include <sys/malloc.h>
 #include <sys/device.h>
 #include <sys/ioctl.h>
 #include <sys/conf.h>
@@ -669,7 +666,7 @@ umidi_print_quirk(const struct umidi_quirk *q)
 }
 
 const void *
-umidi_get_quirk_data_from_type(const struct umidi_quirk *q, uint32_t type)
+umidi_get_quirk_data_from_type(const struct umidi_quirk *q, u_int32_t type)
 {
 	const struct umq_data *qd;
 	if (q) {

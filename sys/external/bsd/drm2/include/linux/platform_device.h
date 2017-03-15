@@ -1,4 +1,4 @@
-/*	$NetBSD: platform_device.h,v 1.7 2015/10/27 13:21:18 riastradh Exp $	*/
+/*	$NetBSD: platform_device.h,v 1.4.2.1 2016/02/11 22:52:58 snj Exp $	*/
 
 /*-
  * Copyright (c) 2013 The NetBSD Foundation, Inc.
@@ -33,21 +33,10 @@
 #define _LINUX_PLATFORM_DEVICE_H_
 
 #include <sys/device.h>
-#include <sys/bus.h>
-
-#define NUM_PLATFORM_RESOURCE	2
 
 struct platform_device {
 	device_t	pd_dev;
 	uint64_t	id;
-
-	bus_dma_tag_t	dmat;
-	unsigned int	nresource;
-	struct {
-		bus_space_tag_t	tag;
-		bus_addr_t	start;
-		bus_size_t	len;
-	}		resource[NUM_PLATFORM_RESOURCE];
 };
 
 static inline device_t

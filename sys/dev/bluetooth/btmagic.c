@@ -1,4 +1,4 @@
-/*	$NetBSD: btmagic.c,v 1.16 2016/07/07 06:55:41 msaitoh Exp $	*/
+/*	$NetBSD: btmagic.c,v 1.11.2.1 2015/10/15 20:24:30 snj Exp $	*/
 
 /*-
  * Copyright (c) 2010 The NetBSD Foundation, Inc.
@@ -85,7 +85,7 @@
  *****************************************************************************/
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: btmagic.c,v 1.16 2016/07/07 06:55:41 msaitoh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: btmagic.c,v 1.11.2.1 2015/10/15 20:24:30 snj Exp $");
 
 #include <sys/param.h>
 #include <sys/conf.h>
@@ -163,7 +163,7 @@ struct btmagic_softc {
 	int			sc_rw;
 
 	/* previous touches */
-	uint32_t		sc_smask;	/* active IDs */
+	uint32_t		sc_smask;	/* active(s) IDs */
 	int			sc_nfingers;	/* number of active IDs */
 	int			sc_ax[16];
 	int			sc_ay[16];
@@ -196,15 +196,15 @@ static int  btmagic_listen(struct btmagic_softc *);
 static int  btmagic_connect(struct btmagic_softc *);
 static int  btmagic_sysctl_resolution(SYSCTLFN_PROTO);
 static int  btmagic_sysctl_scale(SYSCTLFN_PROTO);
-static int  btmagic_tap(struct btmagic_softc *, int);
+static int btmagic_tap(struct btmagic_softc *, int);
 static int  btmagic_sysctl_taptimeout(SYSCTLFN_PROTO);
 
 CFATTACH_DECL_NEW(btmagic, sizeof(struct btmagic_softc),
     btmagic_match, btmagic_attach, btmagic_detach, NULL);
 
 /* wsmouse(4) accessops */
-static int  btmagic_wsmouse_enable(void *);
-static int  btmagic_wsmouse_ioctl(void *, unsigned long, void *, int, struct lwp *);
+static int btmagic_wsmouse_enable(void *);
+static int btmagic_wsmouse_ioctl(void *, unsigned long, void *, int, struct lwp *);
 static void btmagic_wsmouse_disable(void *);
 
 static const struct wsmouse_accessops btmagic_wsmouse_accessops = {
@@ -234,7 +234,7 @@ static void  btmagic_tapcallout(void *);
 #define TRACKPAD_REPORT_ID	0x28
 #define MOUSE_REPORT_ID		0x29
 #define BATT_STAT_REPORT_ID	0x30
-#define BATT_STRENGTH_REPORT_ID	0x47
+#define BATT_STRENGHT_REPORT_ID	0x47
 #define SURFACE_REPORT_ID	0x61
 
 static const struct btproto btmagic_ctl_proto = {
@@ -1114,7 +1114,6 @@ btmagic_input(void *arg, struct mbuf *m)
 		case TRACKPAD_REPORT_ID: /* Magic trackpad (input) */
 			btmagic_input_magict(sc, data + 2, len - 2);
 			break;
-
 		case MOUSE_REPORT_ID: /* Magic touch (input) */
 			btmagic_input_magicm(sc, data + 2, len - 2);
 			break;
@@ -1132,7 +1131,7 @@ btmagic_input(void *arg, struct mbuf *m)
 			}
 			break;
 
-		case BATT_STRENGTH_REPORT_ID: /* Battery strength (feature) */
+		case BATT_STRENGHT_REPORT_ID: /* Battery strength (feature) */
 			if (len != 3)
 				break;
 
@@ -1530,7 +1529,7 @@ btmagic_input_magict(struct btmagic_softc *sc, uint8_t *data, size_t len)
 		ay = hid_get_data(data, &toucht.aY);
 
 		DPRINTF(sc,
-		    "btmagic_input_magict: id %d ax %d ay %d phase %ld %s\n",
+		    "btmagic_input_magicm: id %d ax %d ay %d phase %ld %s\n",
 		    id, ax, ay, hid_get_udata(data, &toucht.phase),
 		    bpress ? "button pressed" : "");
 
@@ -1572,8 +1571,6 @@ btmagic_input_magict(struct btmagic_softc *sc, uint8_t *data, size_t len)
 				 */
 				 continue;
 			}
-			if (id >= __arraycount(sc->sc_ax))
-				continue;
 					
 			tx = ax - sc->sc_ax[id];
 			ty = ay - sc->sc_ay[id];
@@ -1635,9 +1632,6 @@ btmagic_input_magict(struct btmagic_softc *sc, uint8_t *data, size_t len)
 			}
 			break;
 		}
-
-		if (id >= __arraycount(sc->sc_ax))
-			continue;
 
 		sc->sc_ax[id] = ax;
 		sc->sc_ay[id] = ay;

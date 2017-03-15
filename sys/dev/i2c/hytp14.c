@@ -1,5 +1,5 @@
 /*-
- * Copyright (c) 2014,2016 The NetBSD Foundation, Inc.
+ * Copyright (c) 2014 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
@@ -37,7 +37,7 @@
  */ 
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: hytp14.c,v 1.7 2016/07/03 12:26:55 kardel Exp $");
+__KERNEL_RCSID(0, "$NetBSD: hytp14.c,v 1.2.4.2 2015/11/04 21:00:29 riz Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -45,9 +45,6 @@ __KERNEL_RCSID(0, "$NetBSD: hytp14.c,v 1.7 2016/07/03 12:26:55 kardel Exp $");
 #include <sys/device.h>
 #include <sys/module.h>
 #include <sys/sysctl.h>
-#include <sys/mutex.h>
-#include <sys/condvar.h>
-#include <sys/kthread.h>
 
 #include <dev/sysmon/sysmonvar.h>
 #include <dev/i2c/i2cvar.h>
@@ -62,11 +59,9 @@ static int hytp14_refresh_sensor(struct hytp14_sc *sc);
 static void hytp14_refresh(struct sysmon_envsys *, envsys_data_t *);
 static void hytp14_refresh_humidity(struct hytp14_sc *, envsys_data_t *);
 static void hytp14_refresh_temp(struct hytp14_sc *, envsys_data_t *);
-static void hytp14_thread(void *);
 static int sysctl_hytp14_interval(SYSCTLFN_ARGS);
 
-/* #define HYT_DEBUG 3 */
-
+/*#define HYT_DEBUG 3*/
 #ifdef HYT_DEBUG
 volatile int hythygtemp_debug = HYT_DEBUG;
 
@@ -120,7 +115,7 @@ hytp14_attach(device_t parent, device_t self, void *aux)
 	const struct sysctlnode *rnode, *node;
 	struct hytp14_sc *sc;
 	struct i2c_attach_args *ia;
-	int i, rv;
+	int i;
 
 	ia = aux;
 	sc = device_private(self);
@@ -128,12 +123,6 @@ hytp14_attach(device_t parent, device_t self, void *aux)
 	sc->sc_dev = self;
 	sc->sc_tag = ia->ia_tag;
 	sc->sc_addr = ia->ia_addr;
-
-	mutex_init(&sc->sc_mutex, MUTEX_DEFAULT, IPL_NONE);
-	cv_init(&sc->sc_condvar, "hytcv");
-
-	sc->sc_state = HYTP14_THR_INIT;
-	
 	sc->sc_valid = ENVSYS_SINVALID;
 	sc->sc_numsensors = __arraycount(hytp14_sensors);
 
@@ -191,18 +180,15 @@ hytp14_attach(device_t parent, device_t self, void *aux)
 		    sysctl_hytp14_interval, 0, (void *)sc, 0,
 		    CTL_HW, rnode->sysctl_num, CTL_CREATE, CTL_EOL);
 
-
-	/* set up the default measurement interval for worker thread */
-	sc->sc_mrinterval = HYTP14_MR_INTERVAL;
-
-	/* create worker kthread */
-	rv = kthread_create(PRI_NONE, KTHREAD_MUSTJOIN, NULL,
-			    hytp14_thread, sc, &sc->sc_thread,
-			    "%s", device_xname(sc->sc_dev));
-	if (rv)
-	  aprint_error_dev(self, "unable to create intr thread\n");
-
 	aprint_normal(": HYT-221/271/939 humidity and temperature sensor\n");
+
+	/* set up callout for the default measurement interval */
+	sc->sc_mrinterval = HYTP14_MR_INTERVAL;
+	callout_init(&sc->sc_mrcallout, 0);
+	callout_setfunc(&sc->sc_mrcallout, hytp14_measurement_request, sc);
+
+	/* issue initial measurement request */
+	hytp14_measurement_request(sc);
 }
 
 static int
@@ -217,62 +203,11 @@ hytp14_detach(device_t self, int flags)
 		sc->sc_sme = NULL;
 	}
 
-	/* stop measurement thread */
-	mutex_enter(&sc->sc_mutex);
-	sc->sc_state = HYTP14_THR_STOP;
-	cv_signal(&sc->sc_condvar);
-	mutex_exit(&sc->sc_mutex);
+	/* stop our measurement requests */
+	callout_stop(&sc->sc_mrcallout);
+	callout_destroy(&sc->sc_mrcallout);
 
-	/* await thread completion */
-	kthread_join(sc->sc_thread);
-
-	/* cleanup */
-	cv_destroy(&sc->sc_condvar);
-	mutex_destroy(&sc->sc_mutex);
-	
 	return 0;
-}
-
-static void
-hytp14_thread(void *aux)
-{
-	struct hytp14_sc *sc = aux;
-	int rv;
-	
-	mutex_enter(&sc->sc_mutex);
-
-	DPRINTF(2, ("%s(%s): thread start - state=%d\n",
-		    __func__, device_xname(sc->sc_dev),
-		    sc->sc_state));
-	
-	while (sc->sc_state != HYTP14_THR_STOP) {
-		sc->sc_state = HYTP14_THR_RUN;
-
-		DPRINTF(2, ("%s(%s): waiting %d seconds\n",
-			    __func__, device_xname(sc->sc_dev),
-				sc->sc_mrinterval));
-		
-		rv = cv_timedwait(&sc->sc_condvar, &sc->sc_mutex, hz * sc->sc_mrinterval);
-
-		if (rv == EWOULDBLOCK) {
-			/* timeout - run measurement */
-			DPRINTF(2, ("%s(%s): timeout -> measurement\n",
-				    __func__, device_xname(sc->sc_dev)));
-
-			hytp14_measurement_request(sc);
-		} else {
-			DPRINTF(2, ("%s(%s): condvar signalled - state=%d\n",
-				    __func__, device_xname(sc->sc_dev),
-				    sc->sc_state));
-		}
-	}
-	
-	mutex_exit(&sc->sc_mutex);
-
-	DPRINTF(2, ("%s(%s): thread exit\n",
-		    __func__, device_xname(sc->sc_dev)));
-
-	kthread_exit(0);
 }
 
 static void
@@ -295,7 +230,6 @@ hytp14_measurement_request(void *aux)
 			DPRINTF(2, ("%s: %s: failed read from 0x%02x - error %d\n",
 			    device_xname(sc->sc_dev), __func__,
 			    sc->sc_addr, error));
-			sc->sc_valid = ENVSYS_SINVALID;
 		} else {
 			DPRINTF(3, ("%s(%s): DF success : "
 			    "0x%02x%02x%02x%02x\n",
@@ -332,6 +266,9 @@ hytp14_measurement_request(void *aux)
 		DPRINTF(2, ("%s: %s: failed acquire i2c bus - error %d\n",
 		    device_xname(sc->sc_dev), __func__, error));
 	}
+
+	/* schedule next measurement interval */
+	callout_schedule(&sc->sc_mrcallout, sc->sc_mrinterval * hz);
 }
 
 static int
@@ -351,7 +288,6 @@ hytp14_refresh_sensor(struct hytp14_sc *sc)
 			DPRINTF(2, ("%s: %s: failed read from 0x%02x - error %d\n",
 			    device_xname(sc->sc_dev), __func__,
 			    sc->sc_addr, error));
-			sc->sc_valid = ENVSYS_SINVALID;
 		} else {
 			DPRINTF(3, ("%s(%s): DF success : "
 			    "0x%02x%02x%02x%02x\n",
@@ -381,7 +317,7 @@ hytp14_refresh_sensor(struct hytp14_sc *sc)
 		DPRINTF(2, ("%s: %s: failed acquire i2c bus - error %d\n",
 		    device_xname(sc->sc_dev), __func__, error));
 	}
-
+	
 	return sc->sc_valid;
 }
 
@@ -456,7 +392,7 @@ sysctl_hytp14_interval(SYSCTLFN_ARGS)
 	return 0;
 }
 
-MODULE(MODULE_CLASS_DRIVER, hythygtemp, "i2cexec,sysmon_envsys");
+MODULE(MODULE_CLASS_DRIVER, hythygtemp, "i2cexec");
 
 #ifdef _MODULE
 #include "ioconf.c"

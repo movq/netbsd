@@ -1,4 +1,4 @@
-#	$NetBSD: std.rpi,v 1.19 2015/02/28 09:34:34 skrll Exp $
+#	$NetBSD: std.rpi,v 1.14.2.1 2015/03/11 20:22:56 snj Exp $
 #
 # standard NetBSD/evbarm for Raspberry Pi options
 

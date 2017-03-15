@@ -38,7 +38,6 @@
 #include "llvm/ADT/Twine.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/ManagedStatic.h"
-#include "llvm/Support/Path.h"
 #include "llvm/Support/PrettyStackTrace.h"
 #include "llvm/Support/Signals.h"
 #include "llvm/Support/WindowsError.h"
@@ -52,9 +51,9 @@
 #include <system_error>
 
 // These includes must be last.
-#include <windows.h>
-#include <winerror.h>
-#include <dbghelp.h>
+#include <Windows.h>
+#include <WinError.h>
+#include <Dbghelp.h>
 #include <psapi.h>
 
 using namespace llvm;
@@ -296,7 +295,7 @@ static StringRef ExceptionCodeToString(DWORD ExceptionCode) {
 
 int main(int argc, char **argv) {
   // Print a stack trace if we signal out.
-  sys::PrintStackTraceOnErrorSignal(argv[0]);
+  sys::PrintStackTraceOnErrorSignal();
   PrettyStackTraceProgram X(argc, argv);
   llvm_shutdown_obj Y;  // Call llvm_shutdown() on exit.
 
@@ -328,16 +327,18 @@ int main(int argc, char **argv) {
   if (TraceExecution)
     errs() << ToolName << ": Found Program: " << ProgramToRun << '\n';
 
-  for (const std::string &Arg : Argv) {
+  for (std::vector<std::string>::iterator i = Argv.begin(),
+                                          e = Argv.end();
+                                          i != e; ++i) {
     CommandLine.push_back(' ');
-    CommandLine.append(Arg);
+    CommandLine.append(*i);
   }
 
   if (TraceExecution)
     errs() << ToolName << ": Program Image Path: " << ProgramToRun << '\n'
            << ToolName << ": Command Line: " << CommandLine << '\n';
 
-  STARTUPINFOA StartupInfo;
+  STARTUPINFO StartupInfo;
   PROCESS_INFORMATION ProcessInfo;
   std::memset(&StartupInfo, 0, sizeof(StartupInfo));
   StartupInfo.cb = sizeof(StartupInfo);
@@ -349,7 +350,7 @@ int main(int argc, char **argv) {
   ::_set_error_mode(_OUT_TO_STDERR);
 
   BOOL success = ::CreateProcessA(ProgramToRun.c_str(),
-                                  const_cast<LPSTR>(CommandLine.c_str()),
+                            LPSTR(CommandLine.c_str()),
                                   NULL,
                                   NULL,
                                   FALSE,

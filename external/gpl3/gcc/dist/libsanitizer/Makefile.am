@@ -1,30 +1,14 @@
 ACLOCAL_AMFLAGS = -I .. -I ../config
 
-sanincludedir = $(libdir)/gcc/$(target_alias)/$(gcc_version)/include/sanitizer
-
-nodist_saninclude_HEADERS =
-
-if SANITIZER_SUPPORTED
-SUBDIRS = sanitizer_common
-nodist_saninclude_HEADERS += \
-  include/sanitizer/common_interface_defs.h
-if !USING_MAC_INTERPOSE
-SUBDIRS += interception
-endif
-if LIBBACKTRACE_SUPPORTED
-SUBDIRS += libbacktrace
-endif
-SUBDIRS += lsan asan ubsan
-nodist_saninclude_HEADERS += \
-  include/sanitizer/lsan_interface.h \
-  include/sanitizer/asan_interface.h
 if TSAN_SUPPORTED
-SUBDIRS += tsan
-endif
+SUBDIRS = interception sanitizer_common asan tsan 
+else
+SUBDIRS = interception sanitizer_common asan 
 endif
 
-## May be used by toolexeclibdir.
-gcc_version := $(shell cat $(top_srcdir)/../gcc/BASE-VER)
+if USING_MAC_INTERPOSE
+SUBDIRS = sanitizer_common asan
+endif
 
 # Work around what appears to be a GNU make bug handling MAKEFLAGS
 # values defined in terms of make variables, as is the case for CC and
@@ -65,8 +49,6 @@ AM_MAKEFLAGS = \
 	"DESTDIR=$(DESTDIR)"
 
 MAKEOVERRIDES=
-
-nodist_toolexeclib_HEADERS = libsanitizer.spec
 
 ## ################################################################
 

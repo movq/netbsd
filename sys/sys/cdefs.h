@@ -1,4 +1,4 @@
-/*	$NetBSD: cdefs.h,v 1.132 2017/02/08 17:59:35 christos Exp $	*/
+/*	$NetBSD: cdefs.h,v 1.121 2014/08/08 19:43:49 joerg Exp $	*/
 
 /* * Copyright (c) 1991, 1993
  *	The Regents of the University of California.  All rights reserved.
@@ -35,10 +35,6 @@
 
 #ifndef	_SYS_CDEFS_H_
 #define	_SYS_CDEFS_H_
-
-#ifdef _KERNEL_OPT
-#include "opt_diagnostic.h"
-#endif
 
 /*
  * Macro to test if we're using a GNU C compiler of a specific vintage
@@ -205,7 +201,7 @@
  * Calls to const functions can be optimised away and moved around
  * without limitations.
  */
-#if !__GNUC_PREREQ__(2, 0) && !defined(__lint__)
+#if !__GNUC_PREREQ__(2, 0)
 #define __attribute__(x)
 #endif
 
@@ -258,7 +254,7 @@
 /*
  * __unused: Note that item or function might be unused.
  */
-#if __GNUC_PREREQ__(2, 7) || defined(__lint__)
+#if __GNUC_PREREQ__(2, 7)
 #define	__unused	__attribute__((__unused__))
 #else
 #define	__unused	/* delete */
@@ -303,22 +299,8 @@
 #if __GNUC_PREREQ__(4, 6) || defined(__clang__)
 #define	__unreachable()	__builtin_unreachable()
 #else
-#define	__unreachable()	do {} while (/*CONSTCOND*/0)
+#define	__unreachable()	do {} while (0)
 #endif
-
-/*
- * To be used when an empty body is required like:
- *
- * #ifdef DEBUG
- * # define dprintf(a) printf(a)
- * #else
- * # define dprintf(a) __nothing
- * #endif
- *
- * We use ((void)0) instead of do {} while (0) so that it
- * works on , expressions.
- */
-#define __nothing	((void)0)
 
 #if defined(__cplusplus)
 #define	__BEGIN_EXTERN_C	extern "C" {
@@ -433,7 +415,7 @@
 #error "No function renaming possible"
 #endif /* __GNUC__ */
 #else /* _STANDALONE || _KERNEL */
-#define	__RENAME(x)	no renaming in kernel/standalone environment
+#define	__RENAME(x)	no renaming in kernel or standalone environment
 #endif
 
 /*
@@ -492,18 +474,12 @@
 #if __GNUC_PREREQ__(2, 7)
 #define __printflike(fmtarg, firstvararg)	\
 	    __attribute__((__format__ (__printf__, fmtarg, firstvararg)))
-#ifndef __syslog_attribute__
-#define __syslog__ __printf__
-#endif
-#define __sysloglike(fmtarg, firstvararg)	\
-	    __attribute__((__format__ (__syslog__, fmtarg, firstvararg)))
 #define __scanflike(fmtarg, firstvararg)	\
 	    __attribute__((__format__ (__scanf__, fmtarg, firstvararg)))
 #define __format_arg(fmtarg)    __attribute__((__format_arg__ (fmtarg)))
 #else
 #define __printflike(fmtarg, firstvararg)	/* nothing */
 #define __scanflike(fmtarg, firstvararg)	/* nothing */
-#define __sysloglike(fmtarg, firstvararg)	/* nothing */
 #define __format_arg(fmtarg)			/* nothing */
 #endif
 
@@ -574,8 +550,7 @@
 #ifndef __ASSEMBLER__
 /* __BIT(n): nth bit, where __BIT(0) == 0x1. */
 #define	__BIT(__n)	\
-    (((uintmax_t)(__n) >= NBBY * sizeof(uintmax_t)) ? 0 : \
-    ((uintmax_t)1 << (uintmax_t)((__n) & (NBBY * sizeof(uintmax_t) - 1))))
+    (((uintmax_t)(__n) >= NBBY * sizeof(uintmax_t)) ? 0 : ((uintmax_t)1 << (uintmax_t)((__n) & (NBBY * sizeof(uintmax_t) - 1))))
 
 /* __BITS(m, n): bits m through n, m < n. */
 #define	__BITS(__m, __n)	\
@@ -604,9 +579,6 @@
 #else
 #define __CAST(__dt, __st)	((__dt)(__st))
 #endif
-
-#define __CASTV(__dt, __st)	__CAST(__dt, __CAST(void *, __st))
-#define __CASTCV(__dt, __st)	__CAST(__dt, __CAST(const void *, __st))
 
 #define __USE(a) ((void)(a))
 

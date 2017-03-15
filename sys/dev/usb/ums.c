@@ -1,4 +1,4 @@
-/*	$NetBSD: ums.c,v 1.90 2016/04/27 19:35:17 jakllsch Exp $	*/
+/*	$NetBSD: ums.c,v 1.87 2014/01/25 00:03:14 mlelstv Exp $	*/
 
 /*
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -35,15 +35,12 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ums.c,v 1.90 2016/04/27 19:35:17 jakllsch Exp $");
-
-#ifdef _KERNEL_OPT
-#include "opt_usb.h"
-#endif
+__KERNEL_RCSID(0, "$NetBSD: ums.c,v 1.87 2014/01/25 00:03:14 mlelstv Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/kernel.h>
+#include <sys/malloc.h>
 #include <sys/device.h>
 #include <sys/ioctl.h>
 #include <sys/file.h>
@@ -106,7 +103,7 @@ struct ums_softc {
 
 	int nbuttons;
 
-	uint32_t sc_buttons;	/* mouse button status */
+	u_int32_t sc_buttons;	/* mouse button status */
 	device_t sc_wsmousedev;
 
 	char			sc_dying;
@@ -124,11 +121,11 @@ static const struct {
 
 #define MOUSE_FLAGS_MASK (HIO_CONST|HIO_RELATIVE)
 
-Static void ums_intr(struct uhidev *, void *, u_int);
+Static void ums_intr(struct uhidev *addr, void *ibuf, u_int len);
 
 Static int	ums_enable(void *);
 Static void	ums_disable(void *);
-Static int	ums_ioctl(void *, u_long, void *, int, struct lwp *);
+Static int	ums_ioctl(void *, u_long, void *, int, struct lwp * );
 
 const struct wsmouse_accessops ums_accessops = {
 	ums_enable,
@@ -156,9 +153,9 @@ ums_match(device_t parent, cfdata_t match, void *aux)
 	 * Some (older) Griffin PowerMate knobs may masquerade as a
 	 * mouse, avoid treating them as such, they have only one axis.
 	 */
-	if (uha->uiaa->uiaa_vendor == USB_VENDOR_GRIFFIN &&
-	    uha->uiaa->uiaa_product == USB_PRODUCT_GRIFFIN_POWERMATE)
-		return UMATCH_NONE;
+	if (uha->uaa->vendor == USB_VENDOR_GRIFFIN &&
+	    uha->uaa->product == USB_PRODUCT_GRIFFIN_POWERMATE)
+		return (UMATCH_NONE);
 
 	uhidev_get_report_desc(uha->parent, &desc, &size);
 	if (!hid_is_collection(desc, size, uha->reportid,
@@ -166,10 +163,10 @@ ums_match(device_t parent, cfdata_t match, void *aux)
 	    !hid_is_collection(desc, size, uha->reportid,
 			       HID_USAGE2(HUP_GENERIC_DESKTOP, HUG_POINTER)) &&
 	    !hid_is_collection(desc, size, uha->reportid,
-			       HID_USAGE2(HUP_DIGITIZERS, 0x0002)))
-		return UMATCH_NONE;
+                               HID_USAGE2(HUP_DIGITIZERS, 0x0002)))
+		return (UMATCH_NONE);
 
-	return UMATCH_IFACECLASS;
+	return (UMATCH_IFACECLASS);
 }
 
 void
@@ -180,7 +177,7 @@ ums_attach(device_t parent, device_t self, void *aux)
 	struct wsmousedev_attach_args a;
 	int size;
 	void *desc;
-	uint32_t flags, quirks;
+	u_int32_t flags, quirks;
 	int i, hl;
 	struct hid_location *zloc;
 	bool isdigitizer;
@@ -303,32 +300,18 @@ ums_attach(device_t parent, device_t self, void *aux)
 		}
 	}
 
-	if (uha->uiaa->uiaa_vendor == USB_VENDOR_MICROSOFT) {
-		int fixpos;
-		/*
-		 * The Microsoft Wireless Laser Mouse 6000 v2.0 and the
-		 * Microsoft Comfort Mouse 2.0 report a bad position for
-		 * the wheel and wheel tilt controls -- should be in bytes
-		 * 3 & 4 of the report. Fix this if necessary.
-		 */
-		switch (uha->uiaa->uiaa_product) {
-		case USB_PRODUCT_MICROSOFT_24GHZ_XCVR10:
-		case USB_PRODUCT_MICROSOFT_24GHZ_XCVR20:
-			fixpos = 24;
-			break;
-		case USB_PRODUCT_MICROSOFT_CM6000:
-			fixpos = 40;
-			break;
-		default:
-			fixpos = 0;
-			break;
-		}
-		if (fixpos) {
-			if ((sc->flags & UMS_Z) && sc->sc_loc_z.pos == 0)
-				sc->sc_loc_z.pos = fixpos;
-			if ((sc->flags & UMS_W) && sc->sc_loc_w.pos == 0)
-				sc->sc_loc_w.pos = sc->sc_loc_z.pos + 8;
-		}
+	/*
+	 * The Microsoft Wireless Laser Mouse 6000 v2.0 reports a bad
+	 * position for the wheel and wheel tilt controls -- should be
+	 * in bytes 3 & 4 of the report.  Fix this if necessary.
+	 */
+	if (uha->uaa->vendor == USB_VENDOR_MICROSOFT &&
+	    (uha->uaa->product == USB_PRODUCT_MICROSOFT_24GHZ_XCVR10 ||
+	     uha->uaa->product == USB_PRODUCT_MICROSOFT_24GHZ_XCVR20)) {
+		if ((sc->flags & UMS_Z) && sc->sc_loc_z.pos == 0)
+			sc->sc_loc_z.pos = 24;
+		if ((sc->flags & UMS_W) && sc->sc_loc_w.pos == 0)
+			sc->sc_loc_w.pos = sc->sc_loc_z.pos + 8;
 	}
 
 	/* figure out the number of buttons */
@@ -427,7 +410,7 @@ ums_detach(device_t self, int flags)
 
 	pmf_device_deregister(self);
 
-	return rv;
+	return (rv);
 }
 
 void
@@ -435,7 +418,7 @@ ums_intr(struct uhidev *addr, void *ibuf, u_int len)
 {
 	struct ums_softc *sc = (struct ums_softc *)addr;
 	int dx, dy, dz, dw;
-	uint32_t buttons = 0;
+	u_int32_t buttons = 0;
 	int i, flags, s;
 
 	DPRINTFN(5,("ums_intr: len=%d\n", len));
@@ -480,10 +463,10 @@ ums_enable(void *v)
 	DPRINTFN(1,("ums_enable: sc=%p\n", sc));
 
 	if (sc->sc_dying)
-		return EIO;
+		return (EIO);
 
 	if (sc->sc_enabled)
-		return EBUSY;
+		return (EBUSY);
 
 	sc->sc_enabled = 1;
 	sc->sc_buttons = 0;
@@ -527,8 +510,8 @@ ums_ioctl(void *v, u_long cmd, void *data, int flag,
 			*(u_int *)data = WSMOUSE_TYPE_TPANEL;
 		else
 			*(u_int *)data = WSMOUSE_TYPE_USB;
-		return 0;
+		return (0);
 	}
 
-	return EPASSTHROUGH;
+	return (EPASSTHROUGH);
 }

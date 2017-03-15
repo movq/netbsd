@@ -27,7 +27,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: boot.c,v 1.20 2016/05/02 17:33:03 jakllsch Exp $");
+__RCSID("$NetBSD: boot.c,v 1.16.2.1 2014/11/14 15:49:16 martin Exp $");
 #endif /* not lint */
 
 #include <stdlib.h>
@@ -185,10 +185,11 @@ readboot(int dosfs, struct bootblock *boot)
 		return FSFATAL;
 	}
 
-	boot->FirstCluster = (boot->RootDirEnts * 32 + boot->BytesPerSec - 1)
+	boot->ClusterOffset = (int)(boot->RootDirEnts * 32 + boot->BytesPerSec - 1)
 	    / boot->BytesPerSec
 	    + boot->ResSectors
-	    + boot->FATs * boot->FATsecs;
+	    + boot->FATs * boot->FATsecs
+	    - CLUST_FIRST * boot->SecPerClust;
 
 	if (boot->BytesPerSec % DOSBOOTBLOCKSIZE != 0) {
 		pfatal("Invalid sector size: %u", boot->BytesPerSec);
@@ -203,15 +204,13 @@ readboot(int dosfs, struct bootblock *boot)
 		boot->NumSectors = boot->Sectors;
 	} else
 		boot->NumSectors = boot->HugeSectors;
+	boot->NumClusters = (boot->NumSectors - boot->ClusterOffset) / boot->SecPerClust;
 
-	if (boot->FirstCluster + boot->SecPerClust > boot->NumSectors) {
-		pfatal("Cluster offset too large (%u clusters)\n",
-		    boot->FirstCluster);
+	if (boot->ClusterOffset > (intmax_t)boot->NumSectors) {
+		pfatal("Cluster offset too large (%d sectors)\n",
+		    boot->ClusterOffset);
 		return FSFATAL;
 	}
-
-	boot->NumClusters = (boot->NumSectors - boot->FirstCluster) / boot->SecPerClust
-			    + CLUST_FIRST;
 
 	if (boot->flags&FAT32)
 		boot->ClustMask = CLUST32_MASK;
@@ -237,7 +236,7 @@ readboot(int dosfs, struct bootblock *boot)
 		break;
 	}
 
-	if (boot->NumFatEntries < boot->NumClusters - CLUST_FIRST) {
+	if (boot->NumFatEntries < boot->NumClusters) {
 		pfatal("FAT size too small, %u entries won't fit into %u sectors\n",
 		       boot->NumClusters, boot->FATsecs);
 		return FSFATAL;

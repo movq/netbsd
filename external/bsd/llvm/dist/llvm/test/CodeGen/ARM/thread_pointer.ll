@@ -1,12 +1,10 @@
-; RUN: llc -mtriple arm-linux-gnueabi -filetype asm -o - %s | FileCheck %s
-
-declare i8* @llvm.thread.pointer()
+; RUN: llc < %s -march=arm -mtriple=arm-linux-gnueabi | \
+; RUN:     grep "__aeabi_read_tp"
 
 define i8* @test() {
 entry:
-  %tmp1 = call i8* @llvm.thread.pointer()
-  ret i8* %tmp1
+	%tmp1 = call i8* @llvm.arm.thread.pointer( )		; <i8*> [#uses=0]
+	ret i8* %tmp1
 }
 
-; CHECK: bl __aeabi_read_tp
-
+declare i8* @llvm.arm.thread.pointer()

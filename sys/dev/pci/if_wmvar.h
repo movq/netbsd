@@ -1,4 +1,4 @@
-/*	$NetBSD: if_wmvar.h,v 1.33 2017/02/01 08:56:41 msaitoh Exp $	*/
+/*	$NetBSD: if_wmvar.h,v 1.19.2.6 2017/03/09 06:28:36 snj Exp $	*/
 
 /*
  * Copyright (c) 2001, 2002, 2003, 2004 Wasabi Systems, Inc.

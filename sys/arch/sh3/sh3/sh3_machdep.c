@@ -1,4 +1,4 @@
-/*	$NetBSD: sh3_machdep.c,v 1.105 2016/12/22 14:47:59 cherry Exp $	*/
+/*	$NetBSD: sh3_machdep.c,v 1.102.4.1 2015/12/26 22:14:41 snj Exp $	*/
 
 /*-
  * Copyright (c) 1996, 1997, 1998, 2002 The NetBSD Foundation, Inc.
@@ -65,7 +65,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sh3_machdep.c,v 1.105 2016/12/22 14:47:59 cherry Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sh3_machdep.c,v 1.102.4.1 2015/12/26 22:14:41 snj Exp $");
 
 #include "opt_ddb.h"
 #include "opt_kgdb.h"
@@ -190,9 +190,11 @@ sh_cpu_init(int arch, int product)
 	/* kernel stack setup */
 	__sh_switch_resume = CPU_IS_SH3 ? sh3_switch_resume : sh4_switch_resume;
 
-	uvm_md_init();
+	/* Set page size (4KB) */
+	uvm_setpagesize();
+
 	/* setup UBC channel A for single-stepping */
-#if defined(PTRACE_HOOKS) || defined(DDB)
+#if defined(PTRACE) || defined(DDB)
 	_reg_write_2(SH_(BBRA), 0); /* disable channel A */
 	_reg_write_2(SH_(BBRB), 0); /* disable channel B */
 

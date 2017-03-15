@@ -1,4 +1,4 @@
-/*	$NetBSD: smtp_sasl_glue.c,v 1.2 2017/02/14 01:16:48 christos Exp $	*/
+/*	$NetBSD: smtp_sasl_glue.c,v 1.1.1.3 2014/07/06 19:27:56 tron Exp $	*/
 
 /*++
 /* NAME
@@ -230,16 +230,15 @@ void    smtp_sasl_initialize(void)
 	msg_panic("smtp_sasl_initialize: repeated call");
     if (*var_smtp_sasl_passwd == 0)
 	msg_fatal("specify a password table via the `%s' configuration parameter",
-		  VAR_LMTP_SMTP(SASL_PASSWD));
+		  SMTP_X(SASL_PASSWD));
 
     /*
      * Open the per-host password table and initialize the SASL library. Use
      * shared locks for reading, just in case someone updates the table.
      */
-    smtp_sasl_passwd_map = maps_create(VAR_LMTP_SMTP(SASL_PASSWD),
+    smtp_sasl_passwd_map = maps_create("smtp_sasl_passwd",
 				       var_smtp_sasl_passwd,
-				       DICT_FLAG_LOCK | DICT_FLAG_FOLD_FIX
-				       | DICT_FLAG_UTF8_REQUEST);
+				       DICT_FLAG_LOCK | DICT_FLAG_FOLD_FIX);
     if ((smtp_sasl_impl = xsasl_client_init(var_smtp_sasl_type,
 					    var_smtp_sasl_path)) == 0)
 	msg_fatal("SASL library initialization");
@@ -248,8 +247,7 @@ void    smtp_sasl_initialize(void)
      * Initialize optional supported mechanism matchlist
      */
     if (*var_smtp_sasl_mechs)
-	smtp_sasl_mechs = string_list_init(VAR_SMTP_SASL_MECHS,
-					   MATCH_FLAG_NONE,
+	smtp_sasl_mechs = string_list_init(MATCH_FLAG_NONE,
 					   var_smtp_sasl_mechs);
 
     /*
@@ -262,7 +260,7 @@ void    smtp_sasl_initialize(void)
 				      var_smtp_sasl_auth_cache_time);
 #else
 	msg_warn("not compiled with TLS support -- "
-	    "ignoring the %s setting", VAR_LMTP_SMTP(SASL_AUTH_CACHE_NAME));
+		 "ignoring the %s setting", SMTP_X(SASL_AUTH_CACHE_NAME));
 #endif
     }
 }

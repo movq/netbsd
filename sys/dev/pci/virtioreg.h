@@ -1,4 +1,4 @@
-/*	$NetBSD: virtioreg.h,v 1.6 2015/10/29 01:56:12 christos Exp $	*/
+/*	$NetBSD: virtioreg.h,v 1.2.4.1 2016/12/23 06:33:56 snj Exp $	*/
 
 /*
  * Copyright (c) 2010 Minoura Makoto.
@@ -99,10 +99,7 @@
 #define  VIRTIO_CONFIG_ISR_CONFIG_CHANGE	2
 #define VIRTIO_CONFIG_CONFIG_VECTOR	20 /* 16bit, optional */
 #define VIRTIO_CONFIG_DEVICE_CONFIG_NOMSI	20
-#define VIRTIO_CONFIG_DEVICE_CONFIG_MSI		24
-/* MSI/MSI-X */
-#define VIRTIO_CONFIG_MSI_CONFIG_VECTOR		20
-#define VIRTIO_CONFIG_MSI_QUEUE_VECTOR		22
+#define VIRTIO_CONFIG_DEVICE_CONFIG_MSI		22
 
 #define VIRTIO_COMMON_FLAG_BITS \
         "\20" \

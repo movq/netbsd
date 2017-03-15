@@ -1,4 +1,4 @@
-/*	$NetBSD: sig_machdep.c,v 1.45 2017/03/05 16:09:26 chs Exp $	*/
+/*	$NetBSD: sig_machdep.c,v 1.43.14.1 2014/12/31 06:51:08 snj Exp $	*/
 
 /*
  * Copyright (C) 1995, 1996 Wolfgang Solfrank.
@@ -32,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sig_machdep.c,v 1.45 2017/03/05 16:09:26 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sig_machdep.c,v 1.43.14.1 2014/12/31 06:51:08 snj Exp $");
 
 #include "opt_ppcarch.h"
 #include "opt_altivec.h"
@@ -216,17 +216,10 @@ cpu_setmcontext(struct lwp *l, const mcontext_t *mcp, unsigned int flags)
 		pcb->pcb_flags |= gr[_REG_MSR] & (PCB_FE0|PCB_FE1);
 #endif
 
-		/*
-		 * R2 is the TLS register so avoid updating it here.
-		 */
-
-		__greg_t save_r2 = tf->tf_fixreg[_REG_R2];
 		(void)memcpy(&tf->tf_fixreg, gr, 32 * sizeof (gr[0]));
-		tf->tf_fixreg[_REG_R2] = save_r2;
 		tf->tf_cr   = gr[_REG_CR];
 		tf->tf_lr   = gr[_REG_LR];
 		tf->tf_srr0 = gr[_REG_PC];
-
 		/*
 		 * Accept all user-settable bits without complaint;
 		 * userland should not need to know the machine-specific
@@ -239,9 +232,6 @@ cpu_setmcontext(struct lwp *l, const mcontext_t *mcp, unsigned int flags)
 		tf->tf_mq = gr[_REG_MQ];
 #endif
 	}
-
-	if (flags & _UC_TLSBASE)
-		lwp_setprivate(l, (void *)(uintptr_t)gr[_REG_R2]);
 
 #ifdef PPC_HAVE_FPU
 	/* Restore FPU context, if any. */

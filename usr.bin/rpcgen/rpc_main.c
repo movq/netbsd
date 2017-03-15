@@ -1,4 +1,4 @@
-/*	$NetBSD: rpc_main.c,v 1.44 2015/09/20 16:57:13 kamil Exp $	*/
+/*	$NetBSD: rpc_main.c,v 1.39 2013/12/15 09:18:31 wiz Exp $	*/
 
 /*
  * Sun RPC is a product of Sun Microsystems, Inc. and is provided for
@@ -39,7 +39,7 @@
 #if 0
 static char sccsid[] = "@(#)rpc_main.c 1.30 89/03/30 (C) 1987 SMI";
 #else
-__RCSID("$NetBSD: rpc_main.c,v 1.44 2015/09/20 16:57:13 kamil Exp $");
+__RCSID("$NetBSD: rpc_main.c,v 1.39 2013/12/15 09:18:31 wiz Exp $");
 #endif
 #endif
 
@@ -128,7 +128,6 @@ int     logflag;		/* Use syslog instead of fprintf for errors */
 int     tblflag;		/* Support for dispatch table file */
 int	BSDflag;		/* use BSD cplusplus macros */
 int     callerflag;		/* Generate svc_caller() function */
-int	docleanup = 1;		/* cause atexit to remove files */
 
 #define INLINE 3
 /*length at which to start doing an inline */
@@ -188,7 +187,6 @@ main(int argc, char *argv[])
 
 	(void) memset((char *) &cmd, 0, sizeof(struct commandline));
 	clear_args();
-	atexit(crash);
 	if (!parseargs(argc, argv, &cmd))
 		usage();
 
@@ -257,7 +255,6 @@ main(int argc, char *argv[])
 		(void) unlink(dos_cppfile);
 	}
 #endif
-	docleanup = 0;
 	exit(nonfatalerrors);
 	/* NOTREACHED */
 }
@@ -278,7 +275,7 @@ extendfile(const char *path, const char *ext)
 
 	res = alloc(strlen(file) + strlen(ext) + 1);
 	if (res == NULL) {
-		err(EXIT_FAILURE, "Out of memory");
+		errx(1, "Out of memory");
 	}
 	p = strrchr(file, '.');
 	if (p == NULL) {
@@ -300,11 +297,15 @@ open_output(const char *infile, const char *outfile)
 		return;
 	}
 	if (infile != NULL && streq(outfile, infile)) {
-		errx(EXIT_FAILURE, "Output would overwrite `%s'", infile);
+		f_print(stderr, "%s: output would overwrite %s\n", cmdname,
+		    infile);
+		crash();
 	}
 	fout = fopen(outfile, "w");
 	if (fout == NULL) {
-		err(EXIT_FAILURE, "Can't open `%s'", outfile);
+		f_print(stderr, "%s: unable to open ", cmdname);
+		perror(outfile);
+		crash();
 	}
 	record_open(outfile);
 
@@ -359,18 +360,22 @@ open_input(const char *infile, const char *define)
 
 		retval = spawnvp(P_WAIT, arglist[0], arglist);
 		if (retval != 0) {
-			err(EXIT_FAILURE, "C preprocessor failed");
+			fprintf(stderr, "%s: C PreProcessor failed\n", cmdname);
+			crash();
 		}
 		fnsplit(infile, drive, dir, name, ext);
 		fnmerge(cppfile, drive, dir, name, ".i");
 
 		fin = fopen(cppfile, "r");
 		if (fin == NULL) {
-			err(EXIT_FAILURE, "Can't open `%s'", cppfile);
+			f_print(stderr, "%s: ", cmdname);
+			perror(cppfile);
+			crash();
 		}
 		dos_cppfile = strdup(cppfile);
 		if (dos_cppfile == NULL) {
-			err(EXIT_FAILURE, "Can't copy `%s'", cppfile);
+			fprintf(stderr, "%s: out of memory\n", cmdname);
+			crash();
 		}
 	}
 #else
@@ -386,15 +391,17 @@ open_input(const char *infile, const char *define)
 		(void) dup2(pd[1], 1);
 		(void) close(pd[0]);
 		execvp(arglist[0], __UNCONST(arglist));
-		err(EXIT_FAILURE, "$RPCGEN_CPP: %s", CPP);
+		err(1, "$RPCGEN_CPP: %s", CPP);
 	case -1:
-		err(EXIT_FAILURE, "fork");
+		err(1, "fork");
 	}
 	(void) close(pd[1]);
 	fin = fdopen(pd[0], "r");
 #endif
 	if (fin == NULL) {
-		err(EXIT_FAILURE, "Can't open `%s'", infilename);
+		f_print(stderr, "%s: ", cmdname);
+		perror(infilename);
+		crash();
 	}
 }
 /* valid tirpc nettypes */
@@ -495,56 +502,21 @@ static char *
 generate_guard(const char *pathname)
 {
 	const char *filename;
-	char *guard, *tmp, *tmp2, *extdot;
+	char *guard, *tmp, *tmp2;
 
 	filename = strrchr(pathname, '/');	/* find last component */
 	filename = ((filename == 0) ? pathname : filename + 1);
 	guard = strdup(filename);
-	if (guard == NULL) {
-		err(EXIT_FAILURE, "strdup");
-	}
-	extdot = strrchr(guard, '.');
-
-	/*
-	 * Convert to valid C symbol name and make it upper case.
-	 * Map non alphanumerical characters to '_'.
-	 *
-	 * Leave extension as it is. It will be handled in extendfile().
-	 */
-	for (tmp = guard; *tmp; tmp++) {
-		if (islower((unsigned char)*tmp))
-			*tmp = toupper((unsigned char)*tmp);
-		else if (isupper((unsigned char)*tmp))
-			continue;
-		else if (isdigit((unsigned char)*tmp))
-			continue;
-		else if (*tmp == '_')
-			continue;
-		else if (tmp == extdot)
-			break;
-		else
-			*tmp = '_';
+	/* convert to upper case */
+	tmp = guard;
+	while (*tmp) {
+		*tmp = toupper((unsigned char)*tmp);
+		tmp++;
 	}
 
-	/*
-	 * Can't have a '_' or '.' at the front of a symbol name, beacuse it
-	 * will end up as "__".
-	 *
-	 * Prefix it with "RPCGEN_".
-	 */
-	if (guard[0] == '_' || guard[0] == '.') {
-		if (asprintf(&tmp2, "RPCGEN_%s", guard) == -1) {
-			err(EXIT_FAILURE, "asprintf");
-		}
-		free(guard);
-		guard = tmp2;
-	}
-
-	/* Replace the file extension */
 	tmp2 = extendfile(guard, "_H_RPCGEN");
 	free(guard);
 	guard = tmp2;
-
 	return (guard);
 }
 
@@ -571,7 +543,7 @@ h_output(const char *infile, const char *define, int extend,
 	else {
 		guard = strdup("STDIN_");
 		if (guard == NULL) {
-			err(EXIT_FAILURE, "strdup");
+			err(1, "strdup");
 		}
 	}
 
@@ -636,7 +608,6 @@ s_output(int argc, char *argv[], char *infile,
 	f_print(fout, "#include <sys/ioctl.h>\n");
 	f_print(fout, "#include <fcntl.h>\n");
 	f_print(fout, "#include <stdio.h>\n");
-	f_print(fout, "#include <err.h>\n");
 	f_print(fout, "#include <stdlib.h>\n");
 	f_print(fout, "#include <unistd.h>\n");
 	f_print(fout, "#include <rpc/pmap_clnt.h>\n");
@@ -809,7 +780,6 @@ clnt_output(const char *infile, const char *define, int extend,
 	open_output(infile, outfilename);
 	add_sample_msg();
 	f_print(fout, "#include <stdio.h>\n");
-	f_print(fout, "#include <err.h>\n");
 	if (infile && (include = extendfile(infile, ".h"))) {
 		f_print(fout, "#include \"%s\"\n", include);
 		free(include);
@@ -867,7 +837,8 @@ static void
 addarg(const char *cp)
 {
 	if (argcount >= ARGLISTLEN) {
-		errx(EXIT_FAILURE, "Internal error: too many defines");
+		f_print(stderr, "rpcgen: too many defines\n");
+		crash();
 		/* NOTREACHED */
 	}
 	arglist[argcount++] = cp;
@@ -878,7 +849,8 @@ static void
 putarg(int pwhere, const char *cp)
 {
 	if (pwhere >= ARGLISTLEN) {
-		errx(EXIT_FAILURE, "Internal error: arglist coding error");
+		f_print(stderr, "rpcgen: arglist coding error\n");
+		crash();
 		/* NOTREACHED */
 	}
 	arglist[pwhere] = cp;
@@ -898,16 +870,17 @@ checkfiles(const char *infile, const char *outfile)
 
 	if (infile)		/* infile ! = NULL */
 		if (stat(infile, &buf) < 0) {
-			err(EXIT_FAILURE, "Can't stat `%s'", infile);
+			perror(infile);
+			crash();
 		};
 #if 0
 	if (outfile) {
 		if (stat(outfile, &buf) < 0)
 			return;	/* file does not exist */
 		else {
-			errx(EXIT_FAILURE,
-			    "`%s' already exists and would be overwritten",
-			    outfile);
+			f_print(stderr,
+			    "file '%s' already exists and may be overwritten\n", outfile);
+			crash();
 		}
 	}
 #endif

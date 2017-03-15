@@ -1,4 +1,4 @@
-/*	$NetBSD: if_gif.h,v 1.25 2016/12/14 11:19:15 knakahara Exp $	*/
+/*	$NetBSD: if_gif.h,v 1.19 2008/11/12 12:36:28 ad Exp $	*/
 /*	$KAME: if_gif.h,v 1.23 2001/07/27 09:21:42 itojun Exp $	*/
 
 /*
@@ -38,7 +38,6 @@
 #define _NET_IF_GIF_H_
 
 #include <sys/queue.h>
-#include <sys/percpu.h>
 
 #ifdef _KERNEL_OPT
 #include "opt_inet.h"
@@ -53,29 +52,33 @@ struct gif_softc {
 	struct ifnet	gif_if;	   /* common area - must be at the top */
 	struct sockaddr	*gif_psrc; /* Physical src addr */
 	struct sockaddr	*gif_pdst; /* Physical dst addr */
-	percpu_t *gif_ro_percpu;
+	union {
+		struct route  gifscr_ro;    /* xxx */
+	} gifsc_gifscr;
 	int		gif_flags;
 	const struct encaptab *encap_cookie4;
 	const struct encaptab *encap_cookie6;
 	LIST_ENTRY(gif_softc) gif_list;	/* list of all gifs */
+	void	*gif_si;		/* softintr handle */
 };
 #define GIF_ROUTE_TTL	10
+
+#define gif_ro gifsc_gifscr.gifscr_ro
 
 #define GIF_MTU		(1280)	/* Default MTU */
 #define	GIF_MTU_MIN	(1280)	/* Minimum MTU */
 #define	GIF_MTU_MAX	(8192)	/* Maximum MTU */
 
 /* Prototypes */
+void	gifattach0(struct gif_softc *);
 void	gif_input(struct mbuf *, int, struct ifnet *);
-
-void	gif_rtcache_free_pc(void *, void *, struct cpu_info *);
-
+int	gif_output(struct ifnet *, struct mbuf *,
+		   const struct sockaddr *, struct rtentry *);
+int	gif_ioctl(struct ifnet *, u_long, void *);
+int	gif_set_tunnel(struct ifnet *, struct sockaddr *, struct sockaddr *);
+void	gif_delete_tunnel(struct ifnet *);
 #ifdef GIF_ENCAPCHECK
 int	gif_encapcheck(struct mbuf *, int, int, void *);
 #endif
 
-/*
- * Locking notes:
- * - All members of struct si_sync are protected by si_lock (an adaptive mutex)
- */
 #endif /* !_NET_IF_GIF_H_ */

@@ -1,4 +1,4 @@
-/*	$NetBSD: if_bnx.c,v 1.61 2016/12/15 09:28:05 ozaki-r Exp $	*/
+/*	$NetBSD: if_bnx.c,v 1.57 2014/07/09 16:30:11 msaitoh Exp $	*/
 /*	$OpenBSD: if_bnx.c,v 1.85 2009/11/09 14:32:41 dlg Exp $ */
 
 /*-
@@ -35,7 +35,7 @@
 #if 0
 __FBSDID("$FreeBSD: src/sys/dev/bce/if_bce.c,v 1.3 2006/04/13 14:12:26 ru Exp $");
 #endif
-__KERNEL_RCSID(0, "$NetBSD: if_bnx.c,v 1.61 2016/12/15 09:28:05 ozaki-r Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_bnx.c,v 1.57 2014/07/09 16:30:11 msaitoh Exp $");
 
 /*
  * The following controllers are supported by this driver:
@@ -846,7 +846,6 @@ bnx_attach(device_t parent, device_t self, void *aux)
 
 	/* Attach to the Ethernet interface list. */
 	if_attach(ifp);
-	if_deferred_start_init(ifp, NULL);
 	ether_ifattach(ifp,sc->eaddr);
 
 	callout_init(&sc->bnx_timeout, 0);
@@ -4578,7 +4577,7 @@ bnx_rx_intr(struct bnx_softc *sc)
 			m->m_pkthdr.len = m->m_len = len;
 
 			/* Send the packet to the appropriate interface. */
-			m_set_rcvif(m, ifp);
+			m->m_pkthdr.rcvif = ifp;
 
 			DBRUN(BNX_VERBOSE_RECV,
 			    struct ether_header *eh;
@@ -4638,11 +4637,17 @@ bnx_rx_intr(struct bnx_softc *sc)
 				    continue);
 			}
 
-			/* Pass the mbuf off to the upper layers. */
+			/*
+			 * Handle BPF listeners. Let the BPF
+			 * user see the packet.
+			 */
+			bpf_mtap(ifp, m);
 
+			/* Pass the mbuf off to the upper layers. */
+			ifp->if_ipackets++;
 			DBPRINT(sc, BNX_VERBOSE_RECV,
 			    "%s(): Passing received frame up.\n", __func__);
-			if_percpuq_enqueue(ifp->if_percpuq, m);
+			(*ifp->if_input)(ifp, m);
 			DBRUNIF(1, sc->rx_mbuf_alloc--);
 
 		}
@@ -5379,7 +5384,8 @@ bnx_intr(void *xsc)
 	    BNX_PCICFG_INT_ACK_CMD_INDEX_VALID | sc->last_status_idx);
 
 	/* Handle any frames that arrived while handling the interrupt. */
-	if_schedule_deferred_start(ifp);
+	if (!IFQ_IS_EMPTY(&ifp->if_snd))
+		bnx_start(ifp);
 
 	return 1;
 }

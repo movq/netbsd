@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile.inc,v 1.16 2016/06/29 18:42:17 christos Exp $
+#	$NetBSD: Makefile.inc,v 1.14.2.4 2016/07/14 18:36:12 martin Exp $
 
 .if !defined(NTP_MAKEFILE_INC)
 NTP_MAKEFILE_INC=yes
@@ -22,6 +22,7 @@ NTP_HTMLDIR=	/usr/share/doc/reference/ref8
 SYSCONFDIR=/etc
 LOCALSTATEDIR=/var
 
+CPPFLAGS+=-D__syslog__=__printf__
 CPPFLAGS+=-DHAVE_CONFIG_H
 CPPFLAGS+=-I${NTP_SRCDIR}/include \
 	  -I${IDIST}/include \

@@ -1,6 +1,6 @@
 // reloc.cc -- relocate input files for gold.
 
-// Copyright (C) 2006-2016 Free Software Foundation, Inc.
+// Copyright 2006, 2007, 2008, 2009, 2010, 2011 Free Software Foundation, Inc.
 // Written by Ian Lance Taylor <iant@google.com>.
 
 // This file is part of gold.
@@ -424,8 +424,8 @@ Sized_relobj_file<size, big_endian>::do_gc_process_relocs(Symbol_table* symtab,
 template<int size, bool big_endian>
 void
 Sized_relobj_file<size, big_endian>::do_scan_relocs(Symbol_table* symtab,
-						    Layout* layout,
-						    Read_relocs_data* rd)
+					       Layout* layout,
+					       Read_relocs_data* rd)
 {
   Sized_target<size, big_endian>* target =
     parameters->sized_target<size, big_endian>();
@@ -501,6 +501,41 @@ Sized_relobj_file<size, big_endian>::do_scan_relocs(Symbol_table* symtab,
     }
 }
 
+// This is a strategy class we use when scanning for --emit-relocs.
+
+template<int sh_type>
+class Emit_relocs_strategy
+{
+ public:
+  // A local non-section symbol.
+  inline Relocatable_relocs::Reloc_strategy
+  local_non_section_strategy(unsigned int, Relobj*, unsigned int)
+  { return Relocatable_relocs::RELOC_COPY; }
+
+  // A local section symbol.
+  inline Relocatable_relocs::Reloc_strategy
+  local_section_strategy(unsigned int, Relobj*)
+  {
+    if (sh_type == elfcpp::SHT_RELA)
+      return Relocatable_relocs::RELOC_ADJUST_FOR_SECTION_RELA;
+    else
+      {
+	// The addend is stored in the section contents.  Since this
+	// is not a relocatable link, we are going to apply the
+	// relocation contents to the section as usual.  This means
+	// that we have no way to record the original addend.  If the
+	// original addend is not zero, there is basically no way for
+	// the user to handle this correctly.  Caveat emptor.
+	return Relocatable_relocs::RELOC_ADJUST_FOR_SECTION_0;
+      }
+  }
+
+  // A global symbol.
+  inline Relocatable_relocs::Reloc_strategy
+  global_strategy(unsigned int, Relobj*, unsigned int)
+  { return Relocatable_relocs::RELOC_COPY; }
+};
+
 // Scan the input relocations for --emit-relocs.
 
 template<int size, bool big_endian>
@@ -511,18 +546,40 @@ Sized_relobj_file<size, big_endian>::emit_relocs_scan(
     const unsigned char* plocal_syms,
     const Read_relocs_data::Relocs_list::iterator& p)
 {
-  Sized_target<size, big_endian>* target =
-      parameters->sized_target<size, big_endian>();
-
   Relocatable_relocs* rr = this->relocatable_relocs(p->reloc_shndx);
   gold_assert(rr != NULL);
   rr->set_reloc_count(p->reloc_count);
-  target->emit_relocs_scan(
+
+  if (p->sh_type == elfcpp::SHT_REL)
+    this->emit_relocs_scan_reltype<elfcpp::SHT_REL>(symtab, layout,
+						    plocal_syms, p, rr);
+  else
+    {
+      gold_assert(p->sh_type == elfcpp::SHT_RELA);
+      this->emit_relocs_scan_reltype<elfcpp::SHT_RELA>(symtab, layout,
+						       plocal_syms, p, rr);
+    }
+}
+
+// Scan the input relocation for --emit-relocs, templatized on the
+// type of the relocation section.
+
+template<int size, bool big_endian>
+template<int sh_type>
+void
+Sized_relobj_file<size, big_endian>::emit_relocs_scan_reltype(
+    Symbol_table* symtab,
+    Layout* layout,
+    const unsigned char* plocal_syms,
+    const Read_relocs_data::Relocs_list::iterator& p,
+    Relocatable_relocs* rr)
+{
+  scan_relocatable_relocs<size, big_endian, sh_type,
+			  Emit_relocs_strategy<sh_type> >(
     symtab,
     layout,
     this,
     p->data_shndx,
-    p->sh_type,
     p->contents->data(),
     p->reloc_count,
     p->output_section,
@@ -571,8 +628,8 @@ Sized_relobj_file<size, big_endian>::incremental_relocs_scan_reltype(
 						         reloc.get_r_offset()))
 	continue;
 
-      // FIXME: Some targets have a non-standard r_info field.
-      typename elfcpp::Elf_types<size>::Elf_WXword r_info = reloc.get_r_info();
+      typename elfcpp::Elf_types<size>::Elf_WXword r_info =
+	  reloc.get_r_info();
       const unsigned int r_sym = elfcpp::elf_r_sym<size>(r_info);
 
       if (r_sym >= this->local_symbol_count_)
@@ -607,24 +664,6 @@ Sized_relobj_file<size, big_endian>::do_relocate(const Symbol_table* symtab,
   // To speed up relocations, we set up hash tables for fast lookup of
   // input offsets to output addresses.
   this->initialize_input_to_output_maps();
-
-  // Make the views available through get_output_view() for the duration
-  // of this routine.  This RAII class will reset output_views_ to NULL
-  // when the views go out of scope.
-  struct Set_output_views
-  {
-    Set_output_views(const Views** ppviews, const Views* pviews)
-    {
-      ppviews_ = ppviews;
-      *ppviews = pviews;
-    }
-
-    ~Set_output_views()
-    { *ppviews_ = NULL; }
-
-    const Views** ppviews_;
-  };
-  Set_output_views set_output_views(&this->output_views_, &views);
 
   // Apply relocations.
 
@@ -827,9 +866,7 @@ Sized_relobj_file<size, big_endian>::write_sections(const Layout* layout,
 	  // Read and decompress the section.
           section_size_type len;
 	  const unsigned char* p = this->section_contents(i, &len, false);
-	  if (!decompress_input_section(p, len, view, view_size,
-					size, big_endian,
-					shdr.get_sh_flags()))
+	  if (!decompress_input_section(p, len, view, view_size))
 	    this->error(_("could not decompress section %s"),
 			this->section_name(i).c_str());
         }
@@ -968,14 +1005,8 @@ Sized_relobj_file<size, big_endian>::do_relocate_sections(
 	  if ((data_shdr.get_sh_flags() & elfcpp::SHF_EXECINSTR) != 0)
 	    this->split_stack_adjust(symtab, pshdrs, sh_type, index,
 				     prelocs, reloc_count, view, view_size,
-				     &reloc_map, target);
+				     &reloc_map);
 	}
-
-      Relocatable_relocs* rr = NULL;
-      if (parameters->options().emit_relocs()
-	  || parameters->options().relocatable())
-	rr = this->relocatable_relocs(i);
-      relinfo.rr = rr;
 
       if (!parameters->options().relocatable())
 	{
@@ -983,37 +1014,92 @@ Sized_relobj_file<size, big_endian>::do_relocate_sections(
 				   output_offset == invalid_address,
 				   view, address, view_size, reloc_map);
 	  if (parameters->options().emit_relocs())
-	    target->relocate_relocs(&relinfo, sh_type, prelocs, reloc_count,
-				    os, output_offset,
-				    view, address, view_size,
-				    (*pviews)[i].view,
-				    (*pviews)[i].view_size);
+	    this->emit_relocs(&relinfo, i, sh_type, prelocs, reloc_count,
+			      os, output_offset, view, address, view_size,
+			      (*pviews)[i].view, (*pviews)[i].view_size);
 	  if (parameters->incremental())
 	    this->incremental_relocs_write(&relinfo, sh_type, prelocs,
 					   reloc_count, os, output_offset, of);
 	}
       else
-	target->relocate_relocs(&relinfo, sh_type, prelocs, reloc_count,
-				os, output_offset,
-				view, address, view_size,
-				(*pviews)[i].view,
-				(*pviews)[i].view_size);
+	{
+	  Relocatable_relocs* rr = this->relocatable_relocs(i);
+	  target->relocate_for_relocatable(&relinfo, sh_type, prelocs,
+					   reloc_count, os, output_offset, rr,
+					   view, address, view_size,
+					   (*pviews)[i].view,
+					   (*pviews)[i].view_size);
+	}
     }
 }
 
-// Return the output view for section SHNDX.
+// Emit the relocs for --emit-relocs.
 
 template<int size, bool big_endian>
-unsigned char*
-Sized_relobj_file<size, big_endian>::do_get_output_view(
-    unsigned int shndx,
-    section_size_type* plen) const
+void
+Sized_relobj_file<size, big_endian>::emit_relocs(
+    const Relocate_info<size, big_endian>* relinfo,
+    unsigned int i,
+    unsigned int sh_type,
+    const unsigned char* prelocs,
+    size_t reloc_count,
+    Output_section* output_section,
+    typename elfcpp::Elf_types<size>::Elf_Addr offset_in_output_section,
+    unsigned char* view,
+    typename elfcpp::Elf_types<size>::Elf_Addr address,
+    section_size_type view_size,
+    unsigned char* reloc_view,
+    section_size_type reloc_view_size)
 {
-  gold_assert(this->output_views_ != NULL);
-  gold_assert(shndx < this->output_views_->size());
-  const View_size& v = (*this->output_views_)[shndx];
-  *plen = v.view_size;
-  return v.view;
+  if (sh_type == elfcpp::SHT_REL)
+    this->emit_relocs_reltype<elfcpp::SHT_REL>(relinfo, i, prelocs,
+					       reloc_count, output_section,
+					       offset_in_output_section,
+					       view, address, view_size,
+					       reloc_view, reloc_view_size);
+  else
+    {
+      gold_assert(sh_type == elfcpp::SHT_RELA);
+      this->emit_relocs_reltype<elfcpp::SHT_RELA>(relinfo, i, prelocs,
+						  reloc_count, output_section,
+						  offset_in_output_section,
+						  view, address, view_size,
+						  reloc_view, reloc_view_size);
+    }
+}
+
+// Emit the relocs for --emit-relocs, templatized on the type of the
+// relocation section.
+
+template<int size, bool big_endian>
+template<int sh_type>
+void
+Sized_relobj_file<size, big_endian>::emit_relocs_reltype(
+    const Relocate_info<size, big_endian>* relinfo,
+    unsigned int i,
+    const unsigned char* prelocs,
+    size_t reloc_count,
+    Output_section* output_section,
+    typename elfcpp::Elf_types<size>::Elf_Addr offset_in_output_section,
+    unsigned char* view,
+    typename elfcpp::Elf_types<size>::Elf_Addr address,
+    section_size_type view_size,
+    unsigned char* reloc_view,
+    section_size_type reloc_view_size)
+{
+  const Relocatable_relocs* rr = this->relocatable_relocs(i);
+  relocate_for_relocatable<size, big_endian, sh_type>(
+    relinfo,
+    prelocs,
+    reloc_count,
+    output_section,
+    offset_in_output_section,
+    rr,
+    view,
+    address,
+    view_size,
+    reloc_view,
+    reloc_view_size);
 }
 
 // Write the incremental relocs.
@@ -1085,7 +1171,6 @@ Sized_relobj_file<size, big_endian>::incremental_relocs_write_reltype(
     {
       Reloc reloc(prelocs);
 
-      // FIXME: Some targets have a non-standard r_info field.
       typename elfcpp::Elf_types<size>::Elf_WXword r_info = reloc.get_r_info();
       const unsigned int r_sym = elfcpp::elf_r_sym<size>(r_info);
       const unsigned int r_type = elfcpp::elf_r_type<size>(r_info);
@@ -1184,21 +1269,20 @@ Sized_relobj_file<size, big_endian>::split_stack_adjust(
     size_t reloc_count,
     unsigned char* view,
     section_size_type view_size,
-    Reloc_symbol_changes** reloc_map,
-    const Sized_target<size, big_endian>* target)
+    Reloc_symbol_changes** reloc_map)
 {
   if (sh_type == elfcpp::SHT_REL)
     this->split_stack_adjust_reltype<elfcpp::SHT_REL>(symtab, pshdrs, shndx,
 						      prelocs, reloc_count,
 						      view, view_size,
-						      reloc_map, target);
+						      reloc_map);
   else
     {
       gold_assert(sh_type == elfcpp::SHT_RELA);
       this->split_stack_adjust_reltype<elfcpp::SHT_RELA>(symtab, pshdrs, shndx,
 							 prelocs, reloc_count,
 							 view, view_size,
-							 reloc_map, target);
+							 reloc_map);
     }
 }
 
@@ -1216,8 +1300,7 @@ Sized_relobj_file<size, big_endian>::split_stack_adjust_reltype(
     size_t reloc_count,
     unsigned char* view,
     section_size_type view_size,
-    Reloc_symbol_changes** reloc_map,
-    const Sized_target<size, big_endian>* target)
+    Reloc_symbol_changes** reloc_map)
 {
   typedef typename Reloc_types<sh_type, size, big_endian>::Reloc Reltype;
   const int reloc_size = Reloc_types<sh_type, size, big_endian>::reloc_size;
@@ -1229,10 +1312,10 @@ Sized_relobj_file<size, big_endian>::split_stack_adjust_reltype(
   const unsigned char* pr = prelocs;
   for (size_t i = 0; i < reloc_count; ++i, pr += reloc_size)
     {
-      // Some supported targets have a non-standard r_info field.
-      // If this call is too slow, we can move this routine to
-      // target-reloc.h and templatize it on Classify_reloc.
-      unsigned int r_sym = target->get_r_sym(pr);
+      Reltype reloc(pr);
+
+      typename elfcpp::Elf_types<size>::Elf_WXword r_info = reloc.get_r_info();
+      unsigned int r_sym = elfcpp::elf_r_sym<size>(r_info);
       if (r_sym < local_count)
 	continue;
 
@@ -1251,10 +1334,9 @@ Sized_relobj_file<size, big_endian>::split_stack_adjust_reltype(
 	  && gsym->source() == Symbol::FROM_OBJECT
 	  && !gsym->object()->uses_split_stack())
 	{
-	  if (parameters->target().is_call_to_non_split(gsym, pr, view,
-							view_size))
+	  unsigned int r_type = elfcpp::elf_r_type<size>(reloc.get_r_info());
+	  if (parameters->target().is_call_to_non_split(gsym, r_type))
 	    {
-	      Reltype reloc(pr);
 	      section_offset_type offset =
 		convert_to_section_size_type(reloc.get_r_offset());
 	      non_split_refs.push_back(offset);
@@ -1311,7 +1393,6 @@ Sized_relobj_file<size, big_endian>::split_stack_adjust_reltype(
       std::string from;
       std::string to;
       parameters->target().calls_non_split(this, shndx, p->first, p->second,
-					   prelocs, reloc_count,
 					   view, view_size, &from, &to);
       if (!from.empty())
 	{
@@ -1325,7 +1406,9 @@ Sized_relobj_file<size, big_endian>::split_stack_adjust_reltype(
 	    {
 	      Reltype reloc(pr);
 
-	      unsigned int r_sym = target->get_r_sym(pr);
+	      typename elfcpp::Elf_types<size>::Elf_WXword r_info =
+		reloc.get_r_info();
+	      unsigned int r_sym = elfcpp::elf_r_sym<size>(r_info);
 	      if (r_sym < local_count)
 		continue;
 
@@ -1396,21 +1479,13 @@ Sized_relobj_file<size, big_endian>::find_functions(
 	continue;
 
       bool is_ordinary;
-      Symbol_location loc;
-      loc.shndx = this->adjust_sym_shndx(i, isym.get_st_shndx(),
-					 &is_ordinary);
-      if (!is_ordinary)
-	continue;
-
-      loc.object = this;
-      loc.offset = isym.get_st_value();
-      parameters->target().function_location(&loc);
-
-      if (loc.shndx != shndx)
+      unsigned int sym_shndx = this->adjust_sym_shndx(i, isym.get_st_shndx(),
+						      &is_ordinary);
+      if (!is_ordinary || sym_shndx != shndx)
 	continue;
 
       section_offset_type value =
-	convert_to_section_size_type(loc.offset);
+	convert_to_section_size_type(isym.get_st_value());
       section_size_type fnsize =
 	convert_to_section_size_type(isym.get_st_size());
 
@@ -1446,9 +1521,10 @@ Merged_symbol_value<size>::initialize_input_to_output_map(
     const Relobj* object,
     unsigned int input_shndx)
 {
-  object->initialize_input_to_output_map<size>(input_shndx,
-					       this->output_start_address_,
-					       &this->output_addresses_);
+  Object_merge_map* map = object->merge_map();
+  map->initialize_input_to_output_map<size>(input_shndx,
+					    this->output_start_address_,
+					    &this->output_addresses_);
 }
 
 // Get the output value corresponding to an input offset if we
@@ -1462,8 +1538,9 @@ Merged_symbol_value<size>::value_from_output_section(
     typename elfcpp::Elf_types<size>::Elf_Addr input_offset) const
 {
   section_offset_type output_offset;
-  bool found = object->merge_output_offset(input_shndx, input_offset,
-					   &output_offset);
+  bool found = object->merge_map()->get_output_offset(NULL, input_shndx,
+						      input_offset,
+						      &output_offset);
 
   // If this assertion fails, it means that some relocation was
   // against a portion of an input merge section which we didn't map
@@ -1545,9 +1622,11 @@ Track_relocs<size, big_endian>::next_symndx() const
 {
   if (this->pos_ >= this->len_)
     return -1U;
-  Sized_target<size, big_endian>* target
-      = parameters->sized_target<size, big_endian>();
-  return target->get_r_sym(this->prelocs_ + this->pos_);
+
+  // Rel and Rela start out the same, so we can use Rel to find the
+  // symbol index.
+  elfcpp::Rel<size, big_endian> rel(this->prelocs_ + this->pos_);
+  return elfcpp::elf_r_sym<size>(rel.get_r_info());
 }
 
 // Return the addend of the next reloc, or 0 if there isn't one.
@@ -1716,12 +1795,6 @@ Sized_relobj_file<32, false>::do_relocate_sections(
     const unsigned char* pshdrs,
     Output_file* of,
     Views* pviews);
-
-template
-unsigned char*
-Sized_relobj_file<32, false>::do_get_output_view(
-    unsigned int shndx,
-    section_size_type* plen) const;
 #endif
 
 #ifdef HAVE_TARGET_32_BIG
@@ -1733,12 +1806,6 @@ Sized_relobj_file<32, true>::do_relocate_sections(
     const unsigned char* pshdrs,
     Output_file* of,
     Views* pviews);
-
-template
-unsigned char*
-Sized_relobj_file<32, true>::do_get_output_view(
-    unsigned int shndx,
-    section_size_type* plen) const;
 #endif
 
 #ifdef HAVE_TARGET_64_LITTLE
@@ -1750,12 +1817,6 @@ Sized_relobj_file<64, false>::do_relocate_sections(
     const unsigned char* pshdrs,
     Output_file* of,
     Views* pviews);
-
-template
-unsigned char*
-Sized_relobj_file<64, false>::do_get_output_view(
-    unsigned int shndx,
-    section_size_type* plen) const;
 #endif
 
 #ifdef HAVE_TARGET_64_BIG
@@ -1767,12 +1828,6 @@ Sized_relobj_file<64, true>::do_relocate_sections(
     const unsigned char* pshdrs,
     Output_file* of,
     Views* pviews);
-
-template
-unsigned char*
-Sized_relobj_file<64, true>::do_get_output_view(
-    unsigned int shndx,
-    section_size_type* plen) const;
 #endif
 
 #ifdef HAVE_TARGET_32_LITTLE

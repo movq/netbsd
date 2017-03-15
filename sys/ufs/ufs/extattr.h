@@ -1,4 +1,4 @@
-/*	$NetBSD: extattr.h,v 1.11 2014/12/19 10:59:21 manu Exp $	*/
+/*	$NetBSD: extattr.h,v 1.10.28.1 2014/12/22 03:32:23 msaitoh Exp $	*/
 
 /*-
  * Copyright (c) 1999-2001 Robert N. M. Watson

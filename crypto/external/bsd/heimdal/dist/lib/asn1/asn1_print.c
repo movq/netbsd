@@ -1,4 +1,4 @@
-/*	$NetBSD: asn1_print.c,v 1.2 2017/01/28 21:31:45 christos Exp $	*/
+/*	$NetBSD: asn1_print.c,v 1.1.1.2 2014/04/24 12:45:28 pettai Exp $	*/
 
 /*
  * Copyright (c) 1997 - 2005 Kungliga Tekniska Högskolan
@@ -176,14 +176,14 @@ loop (unsigned char *buf, size_t len, int indent)
 		printf ("(length %lu), ", (unsigned long)length);
 
 		if (inner_flag) {
-		    Der_class class2;
-		    Der_type type2;
-		    unsigned int tag2;
+		    Der_class class;
+		    Der_type type;
+		    unsigned int tag;
 
 		    ret = der_get_tag(str.data, str.length,
-				      &class2, &type2, &tag2, &sz);
+				      &class, &type, &tag, &sz);
 		    if (ret || sz > str.length ||
-			type2 != CONS || tag2 != UT_Sequence)
+			type != CONS || tag != UT_Sequence)
 			goto just_an_octet_string;
 
 		    printf("{\n");
@@ -317,11 +317,10 @@ doit (const char *filename)
 static int version_flag;
 static int help_flag;
 struct getargs args[] = {
-    { "indent", 0, arg_negative_flag, &indent_flag, NULL, NULL },
-    { "inner", 0, arg_flag, &inner_flag,
-      "try to parse inner structures of OCTET STRING", NULL },
-    { "version", 0, arg_flag, &version_flag, NULL, NULL },
-    { "help", 0, arg_flag, &help_flag, NULL, NULL }
+    { "indent", 0, arg_negative_flag, &indent_flag },
+    { "inner", 0, arg_flag, &inner_flag, "try to parse inner structures of OCTET STRING" },
+    { "version", 0, arg_flag, &version_flag },
+    { "help", 0, arg_flag, &help_flag }
 };
 int num_args = sizeof(args) / sizeof(args[0]);
 

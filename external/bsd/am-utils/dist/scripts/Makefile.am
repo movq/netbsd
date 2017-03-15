@@ -21,10 +21,12 @@ noinst_SCRIPTS =	\
 	redhat-ctl-amd	\
 	test-attrcache
 
+bin_SCRIPTS = expn
+
 sysconf_DATA = amd.conf-sample lostaltmail.conf-sample
 
 # man pages
-man_MANS = amd.conf.5 automount2amd.8
+man_MANS = amd.conf.5 automount2amd.8 expn.1
 
 EXTRA_DIST = 			\
 	am-eject.in		\
@@ -39,6 +41,8 @@ EXTRA_DIST = 			\
 	redhat-ctl-amd.in	\
 	wait4amd.in		\
 	wait4amd2die.in		\
+	\
+	expn.in			\
 	\
 	amd.conf-sample		\
 	lostaltmail.conf-sample \

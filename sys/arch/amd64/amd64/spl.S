@@ -1,4 +1,4 @@
-/*	$NetBSD: spl.S,v 1.30 2015/11/22 13:41:24 maxv Exp $	*/
+/*	$NetBSD: spl.S,v 1.28 2014/01/12 20:31:50 joerg Exp $	*/
 
 /*
  * Copyright (c) 2003 Wasabi Systems, Inc.
@@ -115,7 +115,7 @@ IDTVEC(softintr)
 	xchgq	%r15,CPUVAR(CURLWP)	/* must be globally visible */
 	popq	%r15			/* unwind switchframe */
 	addq	$(5 * 8),%rsp
-	jmp	*%r13			/* back to Xspllower/Xdoreti */
+	jmp	*%r13			/* back to splx/doreti */
 END(Xsoftintr)
 
 /*
@@ -130,7 +130,7 @@ NENTRY(softintr_ret)
 	incl	CPUVAR(MTX_COUNT)	/* re-adjust after mi_switch */
 	movl	$0, L_CTXSWTCH(%rax)	/* %rax from cpu_switchto */
 	cli
-	jmp	*%r13			/* back to Xspllower/Xdoreti */
+	jmp	*%r13			/* back to splx/doreti */
 END(softintr_ret)
 
 /*
@@ -155,7 +155,7 @@ IDTVEC(preemptrecurse)
 	xorq	%rdi, %rdi
 	call	_C_LABEL(kpreempt)
 	cli
-	jmp	*%r13			/* back to Xspllower */
+	jmp	*%r13
 END(Xpreemptrecurse)
 
 /*
@@ -166,16 +166,16 @@ END(Xpreemptrecurse)
 IDTVEC(preemptresume)
 	movl	$IPL_PREEMPT, CPUVAR(ILEVEL)
 	sti
-	testq	$SEL_RPL, TF_CS(%rsp)
+	testq   $SEL_RPL, TF_CS(%rsp)
 	jnz	1f
 	movq	TF_RIP(%rsp), %rdi
 	call	_C_LABEL(kpreempt)		# from kernel
 	cli
-	jmp	*%r13			/* back to Xdoreti */
+	jmp	*%r13
 1:
 	call	_C_LABEL(preempt)		# from user
 	cli
-	jmp	*%r13			/* back to Xdoreti */
+	jmp	*%r13
 END(Xpreemptresume)
 
 /*
@@ -303,8 +303,6 @@ IDTVEC(spllower)
 END(Xspllower)
 
 /*
- * void Xdoreti(void);
- * 
  * Handle return from interrupt after device handler finishes.
  *
  * Important registers:
@@ -320,14 +318,14 @@ IDTVEC(doreti)
 	CLI(si)
 	andl	CPUVAR(IPENDING),%eax
 	jz	2f
-	bsrl	%eax,%eax		# slow, but not worth optimizing
-	btrl	%eax,CPUVAR(IPENDING)
+	bsrl    %eax,%eax               # slow, but not worth optimizing
+	btrl    %eax,CPUVAR(IPENDING)
 	movq	CPUVAR(ISOURCES)(,%rax, 8),%rax
 	jmp	*IS_RESUME(%rax)
 2:	/* Check for ASTs on exit to user mode. */
 	movl	%ebx,CPUVAR(ILEVEL)
 5:
-	testb	$SEL_RPL,TF_CS(%rsp)
+	testb   $SEL_RPL,TF_CS(%rsp)
 	jz	6f
 
 	.type	_C_LABEL(doreti_checkast), @function

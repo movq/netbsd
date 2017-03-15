@@ -1,4 +1,4 @@
-/*	$NetBSD: gapspci_pci.c,v 1.17 2015/10/23 08:40:08 knakahara Exp $	*/
+/*	$NetBSD: gapspci_pci.c,v 1.15 2014/03/31 13:12:55 christos Exp $	*/
 
 /*-
  * Copyright (c) 2001 Marcus Comstedt.
@@ -38,7 +38,7 @@
  */
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
-__KERNEL_RCSID(0, "$NetBSD: gapspci_pci.c,v 1.17 2015/10/23 08:40:08 knakahara Exp $");
+__KERNEL_RCSID(0, "$NetBSD: gapspci_pci.c,v 1.15 2014/03/31 13:12:55 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -62,7 +62,7 @@ void		gaps_decompose_tag(void *, pcitag_t, int *, int *, int *);
 pcireg_t	gaps_conf_read(void *, pcitag_t, int);
 void		gaps_conf_write(void *, pcitag_t, int, pcireg_t);
 
-int		gaps_intr_map(const struct pci_attach_args *, pci_intr_handle_t *);
+int		gaps_intr_map(struct pci_attach_args *, pci_intr_handle_t *);
 const char	*gaps_intr_string(void *, pci_intr_handle_t,
 		    char *buf, size_t len);
 void		*gaps_intr_establish(void *, pci_intr_handle_t,
@@ -162,9 +162,6 @@ gaps_conf_read(void *v, pcitag_t tag, int reg)
 	if (tag != GAPS_PCITAG_MAGIC)
 		return -1;
 
-	if ((unsigned int)reg >= PCI_CONF_SIZE)
-		return -1;
-
 	if (reg == (PCI_MAPREG_START + 4)) {
 		/*
 		 * We fake the BAR -- just return the physical address
@@ -184,9 +181,6 @@ gaps_conf_write(void *v, pcitag_t tag, int reg, pcireg_t val)
 	if (tag != GAPS_PCITAG_MAGIC)
 		return;
 
-	if ((unsigned int)reg >= PCI_CONF_SIZE)
-		return;
-
 	/* Disallow writing to the "BAR" ... it doesn't actually exist. */
 	if (reg == (PCI_MAPREG_START + 4) && val != 0x01000000)
 		return;
@@ -195,7 +189,7 @@ gaps_conf_write(void *v, pcitag_t tag, int reg, pcireg_t val)
 }
 
 int
-gaps_intr_map(const struct pci_attach_args *pa, pci_intr_handle_t *ihp)
+gaps_intr_map(struct pci_attach_args *pa, pci_intr_handle_t *ihp)
 {
 
 	*ihp = SYSASIC_EVENT_EXT;

@@ -1,4 +1,4 @@
-/*	$NetBSD: inet.c,v 1.107 2016/12/23 06:22:00 mrg Exp $	*/
+/*	$NetBSD: inet.c,v 1.104.4.1 2015/02/11 08:29:56 snj Exp $	*/
 
 /*
  * Copyright (c) 1983, 1988, 1993
@@ -34,7 +34,7 @@
 #if 0
 static char sccsid[] = "from: @(#)inet.c	8.4 (Berkeley) 4/20/94";
 #else
-__RCSID("$NetBSD: inet.c,v 1.107 2016/12/23 06:22:00 mrg Exp $");
+__RCSID("$NetBSD: inet.c,v 1.104.4.1 2015/02/11 08:29:56 snj Exp $");
 #endif
 #endif /* not lint */
 
@@ -87,9 +87,6 @@ __RCSID("$NetBSD: inet.c,v 1.107 2016/12/23 06:22:00 mrg Exp $");
 #include <unistd.h>
 #include <stdlib.h>
 #include <err.h>
-#include <util.h>
-#include <errno.h>
-
 #include "netstat.h"
 #include "vtw.h"
 #include "prog_ops.h"
@@ -242,14 +239,8 @@ getpcblist_sysctl(const char *name, size_t *len) {
 		err(1, "asprintf");
 
 	/* get dynamic pcblist node */
-	if (sysctlnametomib(mibname, mib, &namelen) == -1) {
-		if (errno == ENOENT) {
-			*len = 0;
-			return NULL;
-		}
-			
+	if (sysctlnametomib(mibname, mib, &namelen) == -1)
 		err(1, "sysctlnametomib: %s", mibname);
-	}
 
 	free(mibname);
 
@@ -993,14 +984,10 @@ tcp_dump(u_long off, const char *name, u_long pcbaddr)
 
 	printf("Timers:\n");
 	for (i = 0; i < TCPT_NTIMERS; i++) {
-		char buf[128];
 		ci = (callout_impl_t *)&tcpcb.t_timer[i];
-		snprintb(buf, sizeof(buf), CALLOUT_FMT, ci->c_flags);
-		printf("\t%s\t%s", tcptimers[i], buf);
-		if (ci->c_flags & CALLOUT_PENDING)
-			printf("\t%d\n", ci->c_time - hardticks);
-		else
-			printf("\n");
+		printf("\t%s: %d", tcptimers[i],
+		    (ci->c_flags & CALLOUT_PENDING) ?
+		    ci->c_time - hardticks : 0);
 	}
 	printf("\n\n");
 

@@ -1,10 +1,10 @@
-/*	$NetBSD: common.c,v 1.6 2017/02/09 01:53:50 christos Exp $	*/
+/*	$NetBSD: common.c,v 1.4 2014/05/28 10:12:43 tron Exp $	*/
 
 /* common.c - common routines for the ldap client tools */
 /* $OpenLDAP$ */
 /* This work is part of OpenLDAP Software <http://www.openldap.org/>.
  *
- * Copyright 1998-2016 The OpenLDAP Foundation.
+ * Copyright 1998-2014 The OpenLDAP Foundation.
  * Portions Copyright 2003 Kurt D. Zeilenga.
  * Portions Copyright 2003 IBM Corporation.
  * All rights reserved.
@@ -23,9 +23,6 @@
  * this directory.   Additional contributors include:
  *   Kurt D. Zeilenga (additional common argument and control support)
  */
-
-#include <sys/cdefs.h>
-__RCSID("$NetBSD: common.c,v 1.6 2017/02/09 01:53:50 christos Exp $");
 
 #include "portable.h"
 
@@ -71,7 +68,7 @@ int		nocanon = 0;
 int		referrals = 0;
 int		verbose = 0;
 int		ldif = 0;
-ber_len_t	ldif_wrap = 0;
+ber_len_t	ldif_wrap = LDIF_LINE_WIDTH;
 char		*prog = NULL;
 
 /* connection */
@@ -2333,7 +2330,7 @@ void tool_print_ctrls(
 		/* known controls */
 		for ( j = 0; tool_ctrl_response[j].oid != NULL; j++ ) {
 			if ( strcmp( tool_ctrl_response[j].oid, ctrls[i]->ldctl_oid ) == 0 ) {
-				if ( !(tool_ctrl_response[j].mask & tool_type) ) {
+				if ( !tool_ctrl_response[j].mask & tool_type ) {
 					/* this control should not appear
 					 * with this tool; warning? */
 				}

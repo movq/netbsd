@@ -1,6 +1,5 @@
-/*	$NetBSD: hostfile.c,v 1.9 2016/12/25 00:07:47 christos Exp $	*/
-/* $OpenBSD: hostfile.c,v 1.67 2016/09/17 18:00:27 tedu Exp $ */
-
+/*	$NetBSD: hostfile.c,v 1.5.4.1 2015/04/30 06:07:30 riz Exp $	*/
+/* $OpenBSD: hostfile.c,v 1.64 2015/02/16 22:08:57 djm Exp $ */
 /*
  * Author: Tatu Ylonen <ylo@cs.hut.fi>
  * Copyright (c) 1995 Tatu Ylonen <ylo@cs.hut.fi>, Espoo, Finland
@@ -39,7 +38,7 @@
  */
 
 #include "includes.h"
-__RCSID("$NetBSD: hostfile.c,v 1.9 2016/12/25 00:07:47 christos Exp $");
+__RCSID("$NetBSD: hostfile.c,v 1.5.4.1 2015/04/30 06:07:30 riz Exp $");
 #include <sys/types.h>
 #include <sys/stat.h>
 
@@ -125,13 +124,14 @@ host_hash(const char *host, const char *name_from_hostfile, u_int src_len)
 	u_char salt[256], result[256];
 	char uu_salt[512], uu_result[512];
 	static char encoded[1024];
-	u_int len;
+	u_int i, len;
 
 	len = ssh_digest_bytes(SSH_DIGEST_SHA1);
 
 	if (name_from_hostfile == NULL) {
 		/* Create new salt */
-		arc4random_buf(salt, len);
+		for (i = 0; i < len; i++)
+			salt[i] = arc4random();
 	} else {
 		/* Extract salt from known host entry */
 		if (extract_salt(name_from_hostfile, src_len, salt,
@@ -243,8 +243,7 @@ record_hostkey(struct hostkey_foreach_line *l, void *_ctx)
 	struct hostkey_entry *tmp;
 
 	if (l->status == HKF_STATUS_INVALID) {
-		/* XXX make this verbose() in the future */
-		debug("%s:%ld: parse error in hostkeys file",
+		error("%s:%ld: parse error in hostkeys file",
 		    l->path, l->linenum);
 		return 0;
 	}
@@ -664,7 +663,7 @@ match_maybe_hashed(const char *host, const char *names, int *was_hashed)
 		return nlen == strlen(hashed_host) &&
 		    strncmp(hashed_host, names, nlen) == 0;
 	}
-	return match_hostname(host, names) == 1;
+	return match_hostname(host, names, nlen) == 1;
 }
 
 int
@@ -812,7 +811,7 @@ hostkeys_foreach(const char *path, hostkeys_foreach_fn *callback, void *ctx,
 			memcpy(ktype, lineinfo.rawkey, l);
 			ktype[l] = '\0';
 			lineinfo.keytype = sshkey_type_from_name(ktype);
-
+#ifdef WITH_SSH1
 			/*
 			 * Assume RSA1 if the first component is a short
 			 * decimal number.
@@ -820,7 +819,7 @@ hostkeys_foreach(const char *path, hostkeys_foreach_fn *callback, void *ctx,
 			if (lineinfo.keytype == KEY_UNSPEC && l < 8 &&
 			    strspn(ktype, "0123456789") == l)
 				lineinfo.keytype = KEY_RSA1;
-
+#endif
 			/*
 			 * Check that something other than whitespace follows
 			 * the key type. This won't catch all corruption, but

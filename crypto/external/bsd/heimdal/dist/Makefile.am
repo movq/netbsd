@@ -6,7 +6,7 @@ if KCM
 kcm_dir = kcm
 endif
 
-SUBDIRS=  include lib kuser kdc admin kadmin kpasswd 
+SUBDIRS=  include base lib kuser kdc admin kadmin kpasswd 
 SUBDIRS+= $(kcm_dir) appl tools tests packages etc po
 
 if HEIMDAL_DOCUMENTATION
@@ -38,7 +38,6 @@ EXTRA_DIST = \
 	autogen.sh \
 	krb5.conf \
 	cf/make-proto.pl \
-	cf/roken-h-process.pl \
 	cf/install-catman.sh \
 	cf/ChangeLog \
 	cf/c-function.m4 \
@@ -53,13 +52,6 @@ EXTRA_DIST = \
 	cf/krb-version.m4 \
 	cf/roken.m4 \
 	cf/valgrind-suppressions \
-	cf/maybe-valgrind.sh \
-	cf/symbol-version.py \
-	cf/w32-check-exported-symbols.pl \
-	cf/w32-def-from-dll.pl \
-	cf/w32-detect-vc-version.pl \
-	cf/w32-hh-toc-from-info.pl \
-	cf/w32-list-externs-from-objs.pl \
 	cf/vararray.m4
 
 print-distdir:

@@ -1,4 +1,4 @@
-/*	$NetBSD: fb_sbdio.c,v 1.15 2015/06/23 21:00:23 matt Exp $	*/
+/*	$NetBSD: fb_sbdio.c,v 1.13.4.1 2014/11/10 17:59:56 snj Exp $	*/
 
 /*-
  * Copyright (c) 2004, 2005 The NetBSD Foundation, Inc.
@@ -32,7 +32,7 @@
 #define WIRED_FB_TLB
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: fb_sbdio.c,v 1.15 2015/06/23 21:00:23 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: fb_sbdio.c,v 1.13.4.1 2014/11/10 17:59:56 snj Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -46,9 +46,9 @@ __KERNEL_RCSID(0, "$NetBSD: fb_sbdio.c,v 1.15 2015/06/23 21:00:23 matt Exp $");
 #include <dev/wsfont/wsfont.h>
 #include <dev/rasops/rasops.h>
 
-#include <mips/locore.h>
 #include <mips/pte.h>
 
+#include <machine/locore.h>
 #include <machine/sbdiovar.h>
 
 #include <machine/gareg.h>

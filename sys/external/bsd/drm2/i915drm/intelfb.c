@@ -1,4 +1,4 @@
-/*	$NetBSD: intelfb.c,v 1.14 2016/12/12 19:45:56 maya Exp $	*/
+/*	$NetBSD: intelfb.c,v 1.9.4.4 2016/12/14 19:13:24 snj Exp $	*/
 
 /*-
  * Copyright (c) 2014 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: intelfb.c,v 1.14 2016/12/12 19:45:56 maya Exp $");
+__KERNEL_RCSID(0, "$NetBSD: intelfb.c,v 1.9.4.4 2016/12/14 19:13:24 snj Exp $");
 
 #include <sys/types.h>
 #include <sys/bus.h>

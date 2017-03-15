@@ -1,4 +1,4 @@
-/*	$NetBSD: sysvbfs.c,v 1.16 2017/02/17 08:31:24 hannken Exp $	*/
+/*	$NetBSD: sysvbfs.c,v 1.14 2014/07/25 08:20:52 dholland Exp $	*/
 
 /*-
  * Copyright (c) 2004 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sysvbfs.c,v 1.16 2017/02/17 08:31:24 hannken Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sysvbfs.c,v 1.14 2014/07/25 08:20:52 dholland Exp $");
 
 #include <sys/resource.h>
 #include <sys/param.h>
@@ -121,7 +121,6 @@ struct vfsops sysvbfs_vfsops = {
 	.vfs_statvfs = sysvbfs_statvfs,
 	.vfs_sync = sysvbfs_sync,
 	.vfs_vget = sysvbfs_vget,
-	.vfs_loadvnode = sysvbfs_loadvnode,
 	.vfs_fhtovp = sysvbfs_fhtovp,
 	.vfs_vptofh = sysvbfs_vptofh,
 	.vfs_init = sysvbfs_init,
@@ -129,7 +128,7 @@ struct vfsops sysvbfs_vfsops = {
 	.vfs_done = sysvbfs_done,
 	.vfs_snapshot = (void *)eopnotsupp,
 	.vfs_extattrctl = vfs_stdextattrctl,
-	.vfs_suspendctl = genfs_suspendctl,
+	.vfs_suspendctl = (void *)eopnotsupp,
 	.vfs_renamelock_enter = genfs_renamelock_enter,
 	.vfs_renamelock_exit = genfs_renamelock_exit,
 	.vfs_fsync = (void *)eopnotsupp,

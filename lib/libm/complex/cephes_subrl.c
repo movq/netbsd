@@ -1,4 +1,4 @@
-/* $NetBSD: cephes_subrl.c,v 1.2 2014/10/10 14:06:40 christos Exp $ */
+/* $NetBSD: cephes_subrl.c,v 1.2.2.2 2014/10/13 19:34:58 martin Exp $ */
 
 /*-
  * Copyright (c) 2007 The NetBSD Foundation, Inc.

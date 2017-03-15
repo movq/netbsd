@@ -22,7 +22,7 @@ class MipsSEInstrInfo;
 
 class MipsSERegisterInfo : public MipsRegisterInfo {
 public:
-  MipsSERegisterInfo();
+  MipsSERegisterInfo(const MipsSubtarget &Subtarget);
 
   bool requiresRegisterScavenging(const MachineFunction &MF) const override;
 

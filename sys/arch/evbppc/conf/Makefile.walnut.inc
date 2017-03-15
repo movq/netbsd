@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile.walnut.inc,v 1.9 2016/07/28 22:46:48 maya Exp $
+#	$NetBSD: Makefile.walnut.inc,v 1.8.4.1 2016/08/27 15:19:09 bouyer Exp $
 
 MKIMG?=	${HOST_SH} ${THISPPC}/compile/walnut-mkimg.sh
 CFLAGS+=-mcpu=403

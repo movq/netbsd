@@ -1,4 +1,4 @@
-/*	$NetBSD: kern_proc.c,v 1.205 2017/01/28 16:43:59 christos Exp $	*/
+/*	$NetBSD: kern_proc.c,v 1.193 2014/07/12 09:57:25 njoly Exp $	*/
 
 /*-
  * Copyright (c) 1999, 2006, 2007, 2008 The NetBSD Foundation, Inc.
@@ -62,18 +62,13 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: kern_proc.c,v 1.205 2017/01/28 16:43:59 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: kern_proc.c,v 1.193 2014/07/12 09:57:25 njoly Exp $");
 
 #ifdef _KERNEL_OPT
 #include "opt_kstack.h"
 #include "opt_maxuprc.h"
 #include "opt_dtrace.h"
 #include "opt_compat_netbsd32.h"
-#endif
-
-#if defined(__HAVE_COMPAT_NETBSD32) && !defined(COMPAT_NETBSD32) \
-    && !defined(_RUMPKERNEL)
-#define COMPAT_NETBSD32
 #endif
 
 #include <sys/param.h>
@@ -100,14 +95,12 @@ __KERNEL_RCSID(0, "$NetBSD: kern_proc.c,v 1.205 2017/01/28 16:43:59 christos Exp
 #include <sys/sleepq.h>
 #include <sys/atomic.h>
 #include <sys/kmem.h>
-#include <sys/namei.h>
 #include <sys/dtrace_bsd.h>
 #include <sys/sysctl.h>
 #include <sys/exec.h>
 #include <sys/cpu.h>
 
 #include <uvm/uvm_extern.h>
-#include <uvm/uvm.h>
 
 #ifdef COMPAT_NETBSD32
 #include <compat/netbsd32/netbsd32.h>
@@ -240,8 +233,6 @@ static specificdata_domain_t proc_specificdata_domain;
 static pool_cache_t proc_cache;
 
 static kauth_listener_t proc_listener;
-
-static int fill_pathname(struct lwp *, pid_t, void *, size_t *);
 
 static int
 proc_listener_cb(kauth_cred_t cred, kauth_action_t action, void *cookie,
@@ -485,7 +476,7 @@ proc0_init(void)
 	 * share proc0's vmspace, and thus, the kernel pmap.
 	 */
 	uvmspace_init(&vmspace0, pmap_kernel(), round_page(VM_MIN_ADDRESS),
-	    trunc_page(VM_MAXUSER_ADDRESS),
+	    trunc_page(VM_MAX_ADDRESS),
 #ifdef __USE_TOPDOWN_VM
 	    true
 #else
@@ -1642,25 +1633,18 @@ sysctl_doeproc(SYSCTLFN_ARGS)
 	type = rnode->sysctl_num;
 
 	if (type == KERN_PROC) {
-		if (namelen == 0)
-			return EINVAL;
-		switch (op = name[0]) {
-		case KERN_PROC_ALL:
-			if (namelen != 1)
-				return EINVAL;
-			arg = 0;
-			break;
-		default:
-			if (namelen != 2)
-				return EINVAL;
+		if (namelen != 2 && !(namelen == 1 && name[0] == KERN_PROC_ALL))
+			return (EINVAL);
+		op = name[0];
+		if (op != KERN_PROC_ALL)
 			arg = name[1];
-			break;
-		}
+		else
+			arg = 0;		/* Quell compiler warning */
 		elem_count = 0;	/* Ditto */
 		kelem_size = elem_size = sizeof(kbuf->kproc);
 	} else {
 		if (namelen != 4)
-			return EINVAL;
+			return (EINVAL);
 		op = name[0];
 		arg = name[1];
 		elem_size = name[2];
@@ -1909,12 +1893,6 @@ sysctl_kern_proc_args(SYSCTLFN_ARGS)
 	type = name[1];
 
 	switch (type) {
-	case KERN_PROC_PATHNAME:
-		sysctl_unlock();
-		error = fill_pathname(l, pid, oldp, oldlenp);
-		sysctl_relock();
-		return error;
-
 	case KERN_PROC_ARGV:
 	case KERN_PROC_NARGV:
 	case KERN_PROC_ENV:
@@ -2057,6 +2035,12 @@ copy_procargs(struct proc *p, int oid, size_t *limit,
 		goto done;
 	}
 
+#ifdef COMPAT_NETBSD32
+	if (p->p_flag & PK_32)
+		entry_len = sizeof(netbsd32_charp);
+	else
+#endif
+		entry_len = sizeof(char *);
 
 	/*
 	 * Now copy each string.
@@ -2064,7 +2048,6 @@ copy_procargs(struct proc *p, int oid, size_t *limit,
 	len = 0; /* bytes written to user buffer */
 	loaded = 0; /* bytes from argv already processed */
 	i = 0; /* To make compiler happy */
-	entry_len = PROC_PTRSZ(p);
 
 	for (; argvlen; --argvlen) {
 		int finished = 0;
@@ -2114,7 +2097,7 @@ copy_procargs(struct proc *p, int oid, size_t *limit,
 			auio.uio_resid = xlen;
 			auio.uio_rw = UIO_READ;
 			UIO_SETUP_SYSSPACE(&auio);
-			error = uvm_io(&vmspace->vm_map, &auio, 0);
+			error = uvm_io(&vmspace->vm_map, &auio);
 			if (error)
 				goto done;
 
@@ -2191,7 +2174,8 @@ fill_eproc(struct proc *p, struct eproc *ep, bool zombie)
 			strncpy(ep->e_wmesg, l->l_wmesg, WMESGLEN);
 		lwp_unlock(l);
 	}
-	ep->e_ppid = p->p_ppid;
+	if (p->p_pptr)
+		ep->e_ppid = p->p_pptr->p_pid;
 	if (p->p_pgrp && p->p_session) {
 		ep->e_pgid = p->p_pgrp->pg_id;
 		ep->e_jobc = p->p_pgrp->pg_jobc;
@@ -2251,7 +2235,10 @@ fill_kproc2(struct proc *p, struct kinfo_proc2 *ki, bool zombie)
 	ki->p_flag |= sysctl_map_flags(sysctl_lflagmap, p->p_lflag);
 	ki->p_flag |= sysctl_map_flags(sysctl_stflagmap, p->p_stflag);
 	ki->p_pid = p->p_pid;
-	ki->p_ppid = p->p_ppid;
+	if (p->p_pptr)
+		ki->p_ppid = p->p_pptr->p_pid;
+	else
+		ki->p_ppid = 0;
 	ki->p_uid = kauth_cred_geteuid(p->p_cred);
 	ki->p_ruid = kauth_cred_getuid(p->p_cred);
 	ki->p_gid = kauth_cred_getegid(p->p_cred);
@@ -2279,7 +2266,7 @@ fill_kproc2(struct proc *p, struct kinfo_proc2 *ki, bool zombie)
 	ki->p_stat = p->p_stat; /* Will likely be overridden by LWP status */
 	ki->p_realstat = p->p_stat;
 	ki->p_nice = p->p_nice;
-	ki->p_xstat = P_WAITSTATUS(p);
+	ki->p_xstat = p->p_xstat;
 	ki->p_acflag = p->p_acflag;
 
 	strncpy(ki->p_comm, p->p_comm,
@@ -2398,75 +2385,4 @@ fill_kproc2(struct proc *p, struct kinfo_proc2 *ki, bool zombie)
 		ki->p_uctime_sec = ut.tv_sec;
 		ki->p_uctime_usec = ut.tv_usec;
 	}
-}
-
-
-int
-proc_find_locked(struct lwp *l, struct proc **p, pid_t pid)
-{
-	int error;
-
-	mutex_enter(proc_lock);
-	if (pid == -1)
-		*p = l->l_proc;
-	else
-		*p = proc_find(pid);
-
-	if (*p == NULL) {
-		if (pid != -1)
-			mutex_exit(proc_lock);
-		return ESRCH;
-	}
-	if (pid != -1)
-		mutex_enter((*p)->p_lock);
-	mutex_exit(proc_lock);
-
-	error = kauth_authorize_process(l->l_cred,
-	    KAUTH_PROCESS_CANSEE, *p,
-	    KAUTH_ARG(KAUTH_REQ_PROCESS_CANSEE_ENTRY), NULL, NULL);
-	if (error) {
-		if (pid != -1)
-			mutex_exit((*p)->p_lock);
-	}
-	return error;
-}
-
-static int
-fill_pathname(struct lwp *l, pid_t pid, void *oldp, size_t *oldlenp)
-{
-#ifndef _RUMPKERNEL
-	int error;
-	struct proc *p;
-	char *path;
-	size_t len;
-
-	if ((error = proc_find_locked(l, &p, pid)) != 0)
-		return error;
-
-	if (p->p_textvp == NULL) {
-		if (pid != -1)
-			mutex_exit(p->p_lock);
-		return ENOENT;
-	}
-
-	path = PNBUF_GET();
-	error = vnode_to_path(path, MAXPATHLEN / 2, p->p_textvp, l, p);
-	if (error)
-		goto out;
-
-	len = strlen(path) + 1;
-	if (oldp != NULL) {
-		error = sysctl_copyout(l, path, oldp, *oldlenp);
-		if (error == 0 && *oldlenp < len)
-			error = ENOSPC;
-	}
-	*oldlenp = len;
-out:
-	PNBUF_PUT(path);
-	if (pid != -1)
-		mutex_exit(p->p_lock);
-	return error;
-#else
-	return 0;
-#endif
 }

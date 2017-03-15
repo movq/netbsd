@@ -1,5 +1,5 @@
 /* Prologue value handling for GDB.
-   Copyright (C) 2003-2016 Free Software Foundation, Inc.
+   Copyright (C) 2003-2014 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -17,6 +17,8 @@
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #include "defs.h"
+#include <string.h>
+#include "gdb_assert.h"
 #include "prologue-value.h"
 #include "regcache.h"
 
@@ -314,7 +316,7 @@ struct pv_area
 struct pv_area *
 make_pv_area (int base_reg, int addr_bit)
 {
-  struct pv_area *a = XNEW (struct pv_area);
+  struct pv_area *a = (struct pv_area *) xmalloc (sizeof (*a));
 
   memset (a, 0, sizeof (*a));
 
@@ -490,7 +492,7 @@ pv_area_store (struct pv_area *area,
   else
     {
       CORE_ADDR offset = addr.k;
-      struct area_entry *e = XNEW (struct area_entry);
+      struct area_entry *e = (struct area_entry *) xmalloc (sizeof (*e));
 
       e->offset = offset;
       e->size = size;

@@ -35,7 +35,6 @@ int close(int fd);
 #include "driver.h"
 #include "eloop.h"
 #include "common/ieee802_11_defs.h"
-#include "common/ieee802_11_common.h"
 #include "driver_ndis.h"
 
 int wpa_driver_register_event_cb(struct wpa_driver_ndis_data *drv);
@@ -710,11 +709,11 @@ static int wpa_driver_ndis_radio_off(struct wpa_driver_ndis_data *drv)
 /* Disconnect by setting SSID to random (i.e., likely not used). */
 static int wpa_driver_ndis_disconnect(struct wpa_driver_ndis_data *drv)
 {
-	char ssid[SSID_MAX_LEN];
+	char ssid[32];
 	int i;
-	for (i = 0; i < SSID_MAX_LEN; i++)
+	for (i = 0; i < 32; i++)
 		ssid[i] = rand() & 0xff;
-	return wpa_driver_ndis_set_ssid(drv, (u8 *) ssid, SSID_MAX_LEN);
+	return wpa_driver_ndis_set_ssid(drv, (u8 *) ssid, 32);
 }
 
 
@@ -781,7 +780,20 @@ static int wpa_driver_ndis_scan(void *priv,
 
 static const u8 * wpa_scan_get_ie(const struct wpa_scan_res *res, u8 ie)
 {
-	return get_ie((const u8 *) (res + 1), res->ie_len, ie);
+	const u8 *end, *pos;
+
+	pos = (const u8 *) (res + 1);
+	end = pos + res->ie_len;
+
+	while (pos + 1 < end) {
+		if (pos + 2 + pos[1] > end)
+			break;
+		if (pos[0] == ie)
+			return pos;
+		pos += 2 + pos[1];
+	}
+
+	return NULL;
 }
 
 
@@ -794,7 +806,7 @@ static struct wpa_scan_res * wpa_driver_ndis_add_scan_ssid(
 	if (wpa_scan_get_ie(r, WLAN_EID_SSID))
 		return r; /* SSID IE already present */
 
-	if (ssid->SsidLength == 0 || ssid->SsidLength > SSID_MAX_LEN)
+	if (ssid->SsidLength == 0 || ssid->SsidLength > 32)
 		return r; /* No valid SSID inside scan data */
 
 	nr = os_realloc(r, sizeof(*r) + r->ie_len + 2 + ssid->SsidLength);

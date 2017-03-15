@@ -189,6 +189,7 @@ type DIFunction struct {
 	ScopeLine    int
 	Flags        int
 	Optimized    bool
+	Function     Value
 }
 
 // CreateCompileUnit creates function debug metadata.
@@ -210,41 +211,14 @@ func (d *DIBuilder) CreateFunction(diScope Metadata, f DIFunction) Metadata {
 		C.unsigned(f.ScopeLine),
 		C.unsigned(f.Flags),
 		boolToCInt(f.Optimized),
+		f.Function.C,
 	)
 	return Metadata{C: result}
 }
 
-// DIAutoVariable holds the values for creating auto variable debug metadata.
-type DIAutoVariable struct {
-	Name           string
-	File           Metadata
-	Line           int
-	Type           Metadata
-	AlwaysPreserve bool
-	Flags          int
-	AlignInBits    uint32
-}
-
-// CreateAutoVariable creates local variable debug metadata.
-func (d *DIBuilder) CreateAutoVariable(scope Metadata, v DIAutoVariable) Metadata {
-	name := C.CString(v.Name)
-	defer C.free(unsafe.Pointer(name))
-	result := C.LLVMDIBuilderCreateAutoVariable(
-		d.ref,
-		scope.C,
-		name,
-		v.File.C,
-		C.unsigned(v.Line),
-		v.Type.C,
-		boolToCInt(v.AlwaysPreserve),
-		C.unsigned(v.Flags),
-		C.uint32_t(v.AlignInBits),
-	)
-	return Metadata{C: result}
-}
-
-// DIParameterVariable holds the values for creating parameter variable debug metadata.
-type DIParameterVariable struct {
+// DILocalVariable holds the values for creating local variable debug metadata.
+type DILocalVariable struct {
+	Tag            dwarf.Tag
 	Name           string
 	File           Metadata
 	Line           int
@@ -253,33 +227,35 @@ type DIParameterVariable struct {
 	Flags          int
 
 	// ArgNo is the 1-based index of the argument in the function's
-	// parameter list.
+	// parameter list if it is an argument, or 0 otherwise.
 	ArgNo int
 }
 
-// CreateParameterVariable creates parameter variable debug metadata.
-func (d *DIBuilder) CreateParameterVariable(scope Metadata, v DIParameterVariable) Metadata {
+// CreateLocalVariable creates local variable debug metadata.
+func (d *DIBuilder) CreateLocalVariable(scope Metadata, v DILocalVariable) Metadata {
 	name := C.CString(v.Name)
 	defer C.free(unsafe.Pointer(name))
-	result := C.LLVMDIBuilderCreateParameterVariable(
+	result := C.LLVMDIBuilderCreateLocalVariable(
 		d.ref,
+		C.unsigned(v.Tag),
 		scope.C,
 		name,
-		C.unsigned(v.ArgNo),
 		v.File.C,
 		C.unsigned(v.Line),
 		v.Type.C,
 		boolToCInt(v.AlwaysPreserve),
 		C.unsigned(v.Flags),
+		C.unsigned(v.ArgNo),
 	)
 	return Metadata{C: result}
 }
 
 // DIBasicType holds the values for creating basic type debug metadata.
 type DIBasicType struct {
-	Name       string
-	SizeInBits uint64
-	Encoding   DwarfTypeEncoding
+	Name        string
+	SizeInBits  uint64
+	AlignInBits uint64
+	Encoding    DwarfTypeEncoding
 }
 
 // CreateBasicType creates basic type debug metadata.
@@ -290,6 +266,7 @@ func (d *DIBuilder) CreateBasicType(t DIBasicType) Metadata {
 		d.ref,
 		name,
 		C.uint64_t(t.SizeInBits),
+		C.uint64_t(t.AlignInBits),
 		C.unsigned(t.Encoding),
 	)
 	return Metadata{C: result}
@@ -299,7 +276,7 @@ func (d *DIBuilder) CreateBasicType(t DIBasicType) Metadata {
 type DIPointerType struct {
 	Pointee     Metadata
 	SizeInBits  uint64
-	AlignInBits uint32 // optional
+	AlignInBits uint64 // optional
 	Name        string // optional
 }
 
@@ -311,7 +288,7 @@ func (d *DIBuilder) CreatePointerType(t DIPointerType) Metadata {
 		d.ref,
 		t.Pointee.C,
 		C.uint64_t(t.SizeInBits),
-		C.uint32_t(t.AlignInBits),
+		C.uint64_t(t.AlignInBits),
 		name,
 	)
 	return Metadata{C: result}
@@ -340,7 +317,7 @@ type DIStructType struct {
 	File        Metadata
 	Line        int
 	SizeInBits  uint64
-	AlignInBits uint32
+	AlignInBits uint64
 	Flags       int
 	DerivedFrom Metadata
 	Elements    []Metadata
@@ -358,42 +335,10 @@ func (d *DIBuilder) CreateStructType(scope Metadata, t DIStructType) Metadata {
 		t.File.C,
 		C.unsigned(t.Line),
 		C.uint64_t(t.SizeInBits),
-		C.uint32_t(t.AlignInBits),
+		C.uint64_t(t.AlignInBits),
 		C.unsigned(t.Flags),
 		t.DerivedFrom.C,
 		elements.C,
-	)
-	return Metadata{C: result}
-}
-
-// DIReplaceableCompositeType holds the values for creating replaceable
-// composite type debug metadata.
-type DIReplaceableCompositeType struct {
-	Tag         dwarf.Tag
-	Name        string
-	File        Metadata
-	Line        int
-	RuntimeLang int
-	SizeInBits  uint64
-	AlignInBits uint32
-	Flags       int
-}
-
-// CreateReplaceableCompositeType creates replaceable composite type debug metadata.
-func (d *DIBuilder) CreateReplaceableCompositeType(scope Metadata, t DIReplaceableCompositeType) Metadata {
-	name := C.CString(t.Name)
-	defer C.free(unsafe.Pointer(name))
-	result := C.LLVMDIBuilderCreateReplaceableCompositeType(
-		d.ref,
-		C.unsigned(t.Tag),
-		name,
-		scope.C,
-		t.File.C,
-		C.unsigned(t.Line),
-		C.unsigned(t.RuntimeLang),
-		C.uint64_t(t.SizeInBits),
-		C.uint32_t(t.AlignInBits),
-		C.unsigned(t.Flags),
 	)
 	return Metadata{C: result}
 }
@@ -404,7 +349,7 @@ type DIMemberType struct {
 	File         Metadata
 	Line         int
 	SizeInBits   uint64
-	AlignInBits  uint32
+	AlignInBits  uint64
 	OffsetInBits uint64
 	Flags        int
 	Type         Metadata
@@ -421,7 +366,7 @@ func (d *DIBuilder) CreateMemberType(scope Metadata, t DIMemberType) Metadata {
 		t.File.C,
 		C.unsigned(t.Line),
 		C.uint64_t(t.SizeInBits),
-		C.uint32_t(t.AlignInBits),
+		C.uint64_t(t.AlignInBits),
 		C.uint64_t(t.OffsetInBits),
 		C.unsigned(t.Flags),
 		t.Type.C,
@@ -438,7 +383,7 @@ type DISubrange struct {
 // DIArrayType holds the values for creating array type debug metadata.
 type DIArrayType struct {
 	SizeInBits  uint64
-	AlignInBits uint32
+	AlignInBits uint64
 	ElementType Metadata
 	Subscripts  []DISubrange
 }
@@ -453,7 +398,7 @@ func (d *DIBuilder) CreateArrayType(t DIArrayType) Metadata {
 	result := C.LLVMDIBuilderCreateArrayType(
 		d.ref,
 		C.uint64_t(t.SizeInBits),
-		C.uint32_t(t.AlignInBits),
+		C.uint64_t(t.AlignInBits),
 		t.ElementType.C,
 		subscripts.C,
 	)

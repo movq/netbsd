@@ -1,6 +1,6 @@
 /* Pascal language support routines for GDB, the GNU debugger.
 
-   Copyright (C) 2000-2016 Free Software Foundation, Inc.
+   Copyright (C) 2000-2014 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -20,6 +20,7 @@
 /* This file is derived from c-lang.c */
 
 #include "defs.h"
+#include <string.h>
 #include "symtab.h"
 #include "gdbtypes.h"
 #include "expression.h"
@@ -58,23 +59,23 @@ static const char GPC_MAIN_PROGRAM_NAME_2[] = "pascal_main_program";
 const char *
 pascal_main_name (void)
 {
-  struct bound_minimal_symbol msym;
+  struct minimal_symbol *msym;
 
   msym = lookup_minimal_symbol (GPC_P_INITIALIZE, NULL, NULL);
 
   /*  If '_p_initialize' was not found, the main program is likely not
      written in Pascal.  */
-  if (msym.minsym == NULL)
+  if (msym == NULL)
     return NULL;
 
   msym = lookup_minimal_symbol (GPC_MAIN_PROGRAM_NAME_1, NULL, NULL);
-  if (msym.minsym != NULL)
+  if (msym != NULL)
     {
       return GPC_MAIN_PROGRAM_NAME_1;
     }
 
   msym = lookup_minimal_symbol (GPC_MAIN_PROGRAM_NAME_2, NULL, NULL);
-  if (msym.minsym != NULL)
+  if (msym != NULL)
     {
       return GPC_MAIN_PROGRAM_NAME_2;
     }
@@ -339,7 +340,7 @@ const struct op_print pascal_op_print_tab[] =
   {"^", UNOP_IND, PREC_SUFFIX, 1},
   {"@", UNOP_ADDR, PREC_PREFIX, 0},
   {"sizeof", UNOP_SIZEOF, PREC_PREFIX, 0},
-  {NULL, OP_NULL, PREC_PREFIX, 0}
+  {NULL, 0, 0, 0}
 };
 
 enum pascal_primitive_types {
@@ -412,11 +413,6 @@ pascal_language_arch_info (struct gdbarch *gdbarch,
   lai->bool_type_default = builtin->builtin_bool;
 }
 
-static const char *p_extensions[] =
-{
-  ".pas", ".p", ".pp", NULL
-};
-
 const struct language_defn pascal_language_defn =
 {
   "pascal",			/* Language name */
@@ -426,10 +422,9 @@ const struct language_defn pascal_language_defn =
   case_sensitive_on,
   array_row_major,
   macro_expansion_no,
-  p_extensions,
   &exp_descriptor_standard,
   pascal_parse,
-  pascal_yyerror,
+  pascal_error,
   null_post_parser,
   pascal_printchar,		/* Print a character constant */
   pascal_printstr,		/* Function to print string constant */
@@ -444,7 +439,6 @@ const struct language_defn pascal_language_defn =
   basic_lookup_symbol_nonlocal,	/* lookup_symbol_nonlocal */
   basic_lookup_transparent_type,/* lookup_transparent_type */
   NULL,				/* Language specific symbol demangler */
-  NULL,
   NULL,				/* Language specific class_name_from_physname */
   pascal_op_print_tab,		/* expression operators for printing */
   1,				/* c-style arrays */
@@ -458,8 +452,6 @@ const struct language_defn pascal_language_defn =
   NULL,				/* la_get_symbol_name_cmp */
   iterate_over_symbols,
   &default_varobj_ops,
-  NULL,
-  NULL,
   LANG_MAGIC
 };
 

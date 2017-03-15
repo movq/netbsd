@@ -1,4 +1,4 @@
-/*	$NetBSD: etherent.c,v 1.3 2017/01/24 22:29:28 christos Exp $	*/
+/*	$NetBSD: etherent.c,v 1.1.1.3 2013/04/06 15:57:49 christos Exp $	*/
 
 /*
  * Copyright (c) 1990, 1993, 1994, 1995, 1996
@@ -21,16 +21,18 @@
  * MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE.
  */
 
-#include <sys/cdefs.h>
-__RCSID("$NetBSD: etherent.c,v 1.3 2017/01/24 22:29:28 christos Exp $");
+#ifndef lint
+static const char rcsid[] _U_ =
+    "@(#) Header: /tcpdump/master/libpcap/etherent.c,v 1.23 2006-10-04 18:09:22 guy Exp  (LBL)";
+#endif
 
 #ifdef HAVE_CONFIG_H
 #include "config.h"
 #endif
 
-#ifdef _WIN32
+#ifdef WIN32
 #include <pcap-stdinc.h>
-#else /* _WIN32 */
+#else /* WIN32 */
 #if HAVE_INTTYPES_H
 #include <inttypes.h>
 #elif HAVE_STDINT_H
@@ -40,7 +42,7 @@ __RCSID("$NetBSD: etherent.c,v 1.3 2017/01/24 22:29:28 christos Exp $");
 #include <sys/bitypes.h>
 #endif
 #include <sys/types.h>
-#endif /* _WIN32 */
+#endif /* WIN32 */
 
 #include <ctype.h>
 #include <memory.h>

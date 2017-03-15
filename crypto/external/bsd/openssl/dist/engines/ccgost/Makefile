@@ -32,7 +32,7 @@ lib: $(LIBOBJ)
 		$(MAKE) -f $(TOP)/Makefile.shared -e \
 			LIBNAME=$(LIBNAME) \
 			LIBEXTRAS='$(LIBOBJ)' \
-			LIBDEPS='-L$(TOP) -lcrypto $(EX_LIBS)' \
+			LIBDEPS='-L$(TOP) -lcrypto' \
 			link_o.$(SHLIB_TARGET); \
 	else \
 		$(AR) $(LIB) $(LIBOBJ); \
@@ -45,10 +45,7 @@ install:
 		set -e; \
 		echo installing $(LIBNAME); \
 		pfx=lib; \
-		if expr "$(PLATFORM)" : "Cygwin" >/dev/null; then \
-			sfx=".so"; \
-			cp cyg$(LIBNAME).dll $(INSTALL_PREFIX)$(INSTALLTOP)/$(LIBDIR)/engines/$${pfx}$(LIBNAME)$$sfx.new; \
-		else \
+		if [ "$(PLATFORM)" != "Cygwin" ]; then \
 			case "$(CFLAGS)" in \
 			*DSO_BEOS*) sfx=".so";; \
 			*DSO_DLFCN*) sfx=`expr "$(SHLIB_EXT)" : '.*\(\.[a-z][a-z]*\)' \| ".so"`;; \
@@ -57,6 +54,9 @@ install:
 			*) sfx=".bad";; \
 			esac; \
 			cp $${pfx}$(LIBNAME)$$sfx $(INSTALL_PREFIX)$(INSTALLTOP)/$(LIBDIR)/engines/$${pfx}$(LIBNAME)$$sfx.new; \
+		else \
+			sfx=".so"; \
+			cp cyg$(LIBNAME).dll $(INSTALL_PREFIX)$(INSTALLTOP)/$(LIBDIR)/engines/$${pfx}$(LIBNAME)$$sfx.new; \
 		fi; \
 		chmod 555 $(INSTALL_PREFIX)$(INSTALLTOP)/$(LIBDIR)/engines/$${pfx}$(LIBNAME)$$sfx.new; \
 		mv -f $(INSTALL_PREFIX)$(INSTALLTOP)/$(LIBDIR)/engines/$${pfx}$(LIBNAME)$$sfx.new $(INSTALL_PREFIX)$(INSTALLTOP)/$(LIBDIR)/engines/$${pfx}$(LIBNAME)$$sfx; \
@@ -75,7 +75,8 @@ local_depend:
 	@[ -z "$(THIS)" ] || $(MAKEDEPEND) -- $(CFLAG) $(INCLUDES) $(DEPFLAG) -- $(PROGS) $(LIBSRC)
 
 files:
-	$(PERL) $(TOP)/util/files.pl Makefile >> $(TOP)/MINFO
+
+
 
 lint:
 	lint -DLINT $(INCLUDES) $(SRC)>fluff

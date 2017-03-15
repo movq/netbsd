@@ -1,4 +1,4 @@
-# $NetBSD: t_perm.sh,v 1.7 2016/06/17 03:55:35 pgoyette Exp $
+# $NetBSD: t_perm.sh,v 1.6 2012/03/18 09:46:50 jruoho Exp $
 #
 # Copyright (c) 2011 The NetBSD Foundation, Inc.
 # All rights reserved.
@@ -39,7 +39,6 @@ clean() {
 sysctl_write() {
 
 	deadbeef="3735928559"
-	deadbeef_signed="-559038737"
 
 	sysctl $1 | cut -d= -f1 > $file
 
@@ -64,7 +63,7 @@ sysctl_write() {
 	# A functional verification that $deadbeef
 	# was not actually written to the node.
 	#
-	if [ ! -z $(sysctl $1 | grep -e $deadbeef -e $deadbeef_signed) ]; then
+	if [ ! -z $(sysctl $1 | grep $deadbeef) ]; then
 		atf_fail "value was written"
 	fi
 }

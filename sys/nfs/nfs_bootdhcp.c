@@ -1,4 +1,4 @@
-/*	$NetBSD: nfs_bootdhcp.c,v 1.56 2016/06/10 13:27:16 ozaki-r Exp $	*/
+/*	$NetBSD: nfs_bootdhcp.c,v 1.52.34.1 2015/04/06 01:37:29 snj Exp $	*/
 
 /*-
  * Copyright (c) 1995, 1997 The NetBSD Foundation, Inc.
@@ -44,7 +44,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: nfs_bootdhcp.c,v 1.56 2016/06/10 13:27:16 ozaki-r Exp $");
+__KERNEL_RCSID(0, "$NetBSD: nfs_bootdhcp.c,v 1.52.34.1 2015/04/06 01:37:29 snj Exp $");
 
 #ifdef _KERNEL_OPT
 #include "opt_nfs_boot.h"
@@ -486,8 +486,8 @@ bootpc_call(struct nfs_diskless *nd, struct lwp *lwp, int *flags)
 	struct ifnet *ifp = nd->nd_ifp;
 	static u_int32_t xid = ~0xFF;
 	struct bootp *bootp;	/* request */
-	struct mbuf *m;
-	struct sockaddr_in sin;
+	struct mbuf *m, *nam;
+	struct sockaddr_in *sin;
 	int error;
 	const u_char *haddr;
 	u_char hafmt, halen;
@@ -505,7 +505,7 @@ bootpc_call(struct nfs_diskless *nd, struct lwp *lwp, int *flags)
 	 * and free each at the end if not null.
 	 */
 	bpc.replybuf = NULL;
-	m = NULL;
+	m = nam = NULL;
 
 	/* Record our H/W (Ethernet) address. */
 	{	const struct sockaddr_dl *sdl = ifp->if_sadl;
@@ -585,10 +585,12 @@ bootpc_call(struct nfs_diskless *nd, struct lwp *lwp, int *flags)
 	/*
 	 * Setup socket address for the server.
 	 */
-	sin.sin_len = sizeof(sin);
-	sin.sin_family = AF_INET;
-	sin.sin_addr.s_addr = INADDR_BROADCAST;
-	sin.sin_port = htons(IPPORT_BOOTPS);
+	nam = m_get(M_WAIT, MT_SONAME);
+	sin = mtod(nam, struct sockaddr_in *);
+	sin->sin_len = nam->m_len = sizeof(*sin);
+	sin->sin_family = AF_INET;
+	sin->sin_addr.s_addr = INADDR_BROADCAST;
+	sin->sin_port = htons(IPPORT_BOOTPS);
 
 	/*
 	 * Allocate buffer used for request
@@ -597,7 +599,7 @@ bootpc_call(struct nfs_diskless *nd, struct lwp *lwp, int *flags)
 	m_clget(m, M_WAIT);
 	bootp = mtod(m, struct bootp*);
 	m->m_pkthdr.len = m->m_len = BOOTP_SIZE_MAX;
-	m_reset_rcvif(m);
+	m->m_pkthdr.rcvif = NULL;
 
 	/*
 	 * Build the BOOTP reqest message.
@@ -633,8 +635,8 @@ bootpc_call(struct nfs_diskless *nd, struct lwp *lwp, int *flags)
 	bpc.dhcp_ok = 0;
 #endif
 
-	error = nfs_boot_sendrecv(so, &sin, bootpset, m,
-				  bootpcheck, NULL, NULL, &bpc, lwp);
+	error = nfs_boot_sendrecv(so, nam, bootpset, m,
+				  bootpcheck, 0, 0, &bpc, lwp);
 	if (error)
 		goto out;
 
@@ -660,8 +662,8 @@ bootpc_call(struct nfs_diskless *nd, struct lwp *lwp, int *flags)
 
 		bpc.expected_dhcpmsgtype = DHCPACK;
 
-		error = nfs_boot_sendrecv(so, &sin, bootpset, m,
-					  bootpcheck, NULL, NULL, &bpc, lwp);
+		error = nfs_boot_sendrecv(so, nam, bootpset, m,
+					  bootpcheck, 0, 0, &bpc, lwp);
 		if (error)
 			goto out;
 	}
@@ -686,6 +688,8 @@ out:
 		free(bpc.replybuf, M_DEVBUF);
 	if (m)
 		m_freem(m);
+	if (nam)
+		m_freem(nam);
 	soclose(so);
 	return (error);
 }

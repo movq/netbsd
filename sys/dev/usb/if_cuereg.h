@@ -1,4 +1,4 @@
-/*	$NetBSD: if_cuereg.h,v 1.20 2016/04/23 10:15:31 skrll Exp $	*/
+/*	$NetBSD: if_cuereg.h,v 1.18 2012/02/02 19:43:07 tls Exp $	*/
 /*
  * Copyright (c) 1997, 1998, 1999, 2000
  *	Bill Paul <wpaul@ee.columbia.edu>.  All rights reserved.
@@ -37,7 +37,6 @@
  * Definitions for the CATC Netmate II USB to ethernet controller.
  */
 
-#include <sys/rndsource.h>
 
 /*
  * Vendor specific control commands.
@@ -142,15 +141,15 @@
 #define CUE_ENDPT_MAX		0x3
 
 struct cue_type {
-	uint16_t		cue_vid;
-	uint16_t		cue_did;
+	u_int16_t		cue_vid;
+	u_int16_t		cue_did;
 };
 
 struct cue_softc;
 
 struct cue_chain {
 	struct cue_softc	*cue_sc;
-	struct usbd_xfer	*cue_xfer;
+	usbd_xfer_handle	cue_xfer;
 	char			*cue_buf;
 	struct mbuf		*cue_mbuf;
 	int			cue_idx;
@@ -174,15 +173,15 @@ struct cue_softc {
 
 	struct callout cue_stat_ch;
 
-	struct usbd_device *	cue_udev;
-	struct usbd_interface *	cue_iface;
-	uint16_t		cue_vendor;
-	uint16_t		cue_product;
+	usbd_device_handle	cue_udev;
+	usbd_interface_handle	cue_iface;
+	u_int16_t		cue_vendor;
+	u_int16_t		cue_product;
 	int			cue_ed[CUE_ENDPT_MAX];
-	struct usbd_pipe *	cue_ep[CUE_ENDPT_MAX];
-	uint8_t			cue_mctab[CUE_MCAST_TABLE_LEN];
+	usbd_pipe_handle	cue_ep[CUE_ENDPT_MAX];
+	u_int8_t		cue_mctab[CUE_MCAST_TABLE_LEN];
 	int			cue_if_flags;
-	uint16_t		cue_rxfilt;
+	u_int16_t		cue_rxfilt;
 	struct cue_cdata	cue_cdata;
 
 	char			cue_dying;

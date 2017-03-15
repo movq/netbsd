@@ -17,6 +17,7 @@
 #include "CIndexDiagnostic.h"
 #include "llvm/ADT/StringRef.h"
 #include "clang/Basic/LLVM.h"
+#include <string>
 #include <vector>
 
 namespace clang {
@@ -25,8 +26,8 @@ public:
   CXLoadedDiagnostic() : CXDiagnosticImpl(LoadedDiagnosticKind),
     severity(0), category(0) {}
 
-  ~CXLoadedDiagnostic() override;
-
+  virtual ~CXLoadedDiagnostic();
+  
   /// \brief Return the severity of the diagnostic.
   CXDiagnosticSeverity getSeverity() const override;
 

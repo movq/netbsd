@@ -1,4 +1,4 @@
-/*	$NetBSD: stresep.c,v 1.3 2017/02/12 17:19:00 maya Exp $	*/
+/*	$NetBSD: stresep.c,v 1.2 2007/12/06 22:07:07 seb Exp $	*/
 
 /*-
  * Copyright (c) 1990, 1993
@@ -34,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)strsep.c	8.1 (Berkeley) 6/4/93";
 #else
-__RCSID("$NetBSD: stresep.c,v 1.3 2017/02/12 17:19:00 maya Exp $");
+__RCSID("$NetBSD: stresep.c,v 1.2 2007/12/06 22:07:07 seb Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 
@@ -76,7 +76,7 @@ stresep(char **stringp, const char *delim, int esc)
 	for (tok = s;;) {
 		c = *s++;
 		while (esc != '\0' && c == esc) {
-			memmove(s - 1, s, strlen(s));
+			(void)strcpy(s - 1, s);
 			c = *s++;
 		}
 		spanp = delim;

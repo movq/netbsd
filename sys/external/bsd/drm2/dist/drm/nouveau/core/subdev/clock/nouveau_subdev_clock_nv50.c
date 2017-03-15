@@ -1,4 +1,4 @@
-/*	$NetBSD: nouveau_subdev_clock_nv50.c,v 1.3 2015/03/12 15:09:04 christos Exp $	*/
+/*	$NetBSD: nouveau_subdev_clock_nv50.c,v 1.1.1.1.4.2 2015/03/17 17:52:49 riz Exp $	*/
 
 /*
  * Copyright 2012 Red Hat Inc.
@@ -25,7 +25,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: nouveau_subdev_clock_nv50.c,v 1.3 2015/03/12 15:09:04 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: nouveau_subdev_clock_nv50.c,v 1.1.1.1.4.2 2015/03/17 17:52:49 riz Exp $");
 
 #include <subdev/bios.h>
 #include <subdev/bios/pll.h>

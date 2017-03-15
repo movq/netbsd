@@ -1,4 +1,4 @@
-/*	$NetBSD: view.c,v 1.33 2015/11/12 12:19:49 phx Exp $ */
+/*	$NetBSD: view.c,v 1.31 2014/07/25 08:10:31 dholland Exp $ */
 
 /*
  * Copyright (c) 1994 Christian E. Hopps
@@ -38,7 +38,7 @@
  * a interface to graphics. */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: view.c,v 1.33 2015/11/12 12:19:49 phx Exp $");
+__KERNEL_RCSID(0, "$NetBSD: view.c,v 1.31 2014/07/25 08:10:31 dholland Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -55,7 +55,6 @@ __KERNEL_RCSID(0, "$NetBSD: view.c,v 1.33 2015/11/12 12:19:49 phx Exp $");
 #include <amiga/dev/viewvar.h>
 
 #include "view.h"
-#include "ioconf.h"
 
 static void view_display(struct view_softc *);
 static void view_remove(struct view_softc *);
@@ -63,6 +62,8 @@ static int view_setsize(struct view_softc *, struct view_size *);
 
 int view_get_colormap(struct view_softc *, colormap_t *);
 int view_set_colormap(struct view_softc *, colormap_t *);
+
+void viewattach(int);
 
 struct view_softc views[NVIEW];
 int view_inited;			/* also checked in ite_cc.c */
@@ -405,7 +406,7 @@ viewmmap(dev_t dev, off_t off, int prot)
 	bmd_size = bm->bytes_per_row*bm->rows*bm->depth;
 
 	if (off >= 0 && off < bmd_size)
-		return MD_BTOP((paddr_t)bmd_start + off);
+		return(((paddr_t)bmd_start + off) >> PGSHIFT);
 
 	return(-1);
 }

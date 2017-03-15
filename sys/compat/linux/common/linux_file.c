@@ -1,4 +1,4 @@
-/*	$NetBSD: linux_file.c,v 1.115 2015/03/01 13:19:39 njoly Exp $	*/
+/*	$NetBSD: linux_file.c,v 1.113.2.1 2015/01/17 12:10:54 martin Exp $	*/
 
 /*-
  * Copyright (c) 1995, 1998, 2008 The NetBSD Foundation, Inc.
@@ -35,7 +35,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: linux_file.c,v 1.115 2015/03/01 13:19:39 njoly Exp $");
+__KERNEL_RCSID(0, "$NetBSD: linux_file.c,v 1.113.2.1 2015/01/17 12:10:54 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -416,10 +416,6 @@ linux_sys_fcntl(struct lwp *l, const struct linux_sys_fcntl_args *uap, register_
 		tp->t_pgrp = pgrp;
 		mutex_exit(proc_lock);
 		return 0;
-
-	case LINUX_F_DUPFD_CLOEXEC:
-		cmd = F_DUPFD_CLOEXEC;
-		break;
 
 	default:
 		return EOPNOTSUPP;

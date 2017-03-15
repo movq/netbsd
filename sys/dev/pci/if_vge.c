@@ -1,4 +1,4 @@
-/* $NetBSD: if_vge.c,v 1.60 2016/12/15 09:28:05 ozaki-r Exp $ */
+/* $NetBSD: if_vge.c,v 1.56 2014/03/29 19:28:25 christos Exp $ */
 
 /*-
  * Copyright (c) 2004
@@ -35,7 +35,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_vge.c,v 1.60 2016/12/15 09:28:05 ozaki-r Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_vge.c,v 1.56 2014/03/29 19:28:25 christos Exp $");
 
 /*
  * VIA Networking Technologies VT612x PCI gigabit ethernet NIC driver.
@@ -1067,7 +1067,6 @@ vge_attach(device_t parent, device_t self, void *aux)
 	 * Attach the interface.
 	 */
 	if_attach(ifp);
-	if_deferred_start_init(ifp, NULL);
 	ether_ifattach(ifp, eaddr);
 	ether_set_ifflags_cb(&sc->sc_ethercom, vge_ifflags_cb);
 
@@ -1327,7 +1326,8 @@ vge_rxeof(struct vge_softc *sc)
 #ifndef __NO_STRICT_ALIGNMENT
 		vge_fixup_rx(m);
 #endif
-		m_set_rcvif(m, ifp);
+		ifp->if_ipackets++;
+		m->m_pkthdr.rcvif = ifp;
 
 		/* Do RX checksumming if enabled */
 		if (ifp->if_csum_flags_rx & M_CSUM_IPv4) {
@@ -1368,7 +1368,12 @@ vge_rxeof(struct vge_softc *sc)
 			    bswap16(rxctl & VGE_RDCTL_VLANID), continue);
 		}
 
-		if_percpuq_enqueue(ifp->if_percpuq, m);
+		/*
+		 * Handle BPF listeners.
+		 */
+		bpf_mtap(ifp, m);
+
+		(*ifp->if_input)(ifp, m);
 
 		lim++;
 		if (lim == VGE_NRXDESC)
@@ -1524,8 +1529,8 @@ vge_intr(void *arg)
 	/* Re-enable interrupts */
 	CSR_WRITE_1(sc, VGE_CRS3, VGE_CR3_INT_GMSK);
 
-	if (claim)
-		if_schedule_deferred_start(ifp);
+	if (claim && !IFQ_IS_EMPTY(&ifp->if_snd))
+		vge_start(ifp);
 
 	return claim;
 }

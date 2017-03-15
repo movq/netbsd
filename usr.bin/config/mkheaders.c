@@ -1,4 +1,4 @@
-/*	$NetBSD: mkheaders.c,v 1.29 2015/09/03 13:53:36 uebayasi Exp $	*/
+/*	$NetBSD: mkheaders.c,v 1.21.10.1 2015/03/06 21:00:23 snj Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993
@@ -45,7 +45,7 @@
 #endif
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: mkheaders.c,v 1.29 2015/09/03 13:53:36 uebayasi Exp $");
+__RCSID("$NetBSD: mkheaders.c,v 1.21.10.1 2015/03/06 21:00:23 snj Exp $");
 
 #include <sys/param.h>
 #include <ctype.h>
@@ -389,19 +389,11 @@ emitioconfh(void)
 	const char *tfname;
 	FILE *tfp;
 	struct devbase *d;
-	struct devi *i;
 
 	tfname = "tmp_ioconf.h";
 	if ((tfp = fopen(tfname, "w")) == NULL)
 		return (herr("open", tfname, NULL));
 
-        fputs("\n/* pseudo-devices */\n", tfp);
-        TAILQ_FOREACH(i, &allpseudo, i_next) {
-                fprintf(tfp, "void %sattach(int);\n",
-                    i->i_base->d_name);
-        }
-
-        fputs("\n/* driver structs */\n", tfp);
 	TAILQ_FOREACH(d, &allbases, d_next) {
 		if (!devbase_has_instances(d, WILD))
 			continue;

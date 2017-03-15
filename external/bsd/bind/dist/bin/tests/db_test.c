@@ -1,4 +1,4 @@
-/*	$NetBSD: db_test.c,v 1.9 2016/05/26 16:49:57 christos Exp $	*/
+/*	$NetBSD: db_test.c,v 1.6.4.2 2016/10/14 12:01:12 martin Exp $	*/
 
 /*
  * Copyright (C) 2004, 2005, 2007-2009, 2011-2013, 2015  Internet Systems Consortium, Inc. ("ISC")

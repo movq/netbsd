@@ -1,6 +1,5 @@
-/*	$NetBSD: mux.c,v 1.17 2016/12/25 00:07:47 christos Exp $	*/
-/* $OpenBSD: mux.c,v 1.63 2016/10/19 23:21:56 dtucker Exp $ */
-
+/*	$NetBSD: mux.c,v 1.9.4.1 2015/04/30 06:07:30 riz Exp $	*/
+/* $OpenBSD: mux.c,v 1.50 2015/01/20 23:14:00 deraadt Exp $ */
 /*
  * Copyright (c) 2002-2008 Damien Miller <djm@openbsd.org>
  *
@@ -33,7 +32,7 @@
  */
 
 #include "includes.h"
-__RCSID("$NetBSD: mux.c,v 1.17 2016/12/25 00:07:47 christos Exp $");
+__RCSID("$NetBSD: mux.c,v 1.9.4.1 2015/04/30 06:07:30 riz Exp $");
 #include <sys/types.h>
 #include <sys/queue.h>
 #include <sys/stat.h>
@@ -70,7 +69,6 @@ __RCSID("$NetBSD: mux.c,v 1.17 2016/12/25 00:07:47 christos Exp $");
 #include "key.h"
 #include "readconf.h"
 #include "clientloop.h"
-#include "ssherr.h"
 
 /* from ssh.c */
 extern int tty_flag;
@@ -80,6 +78,8 @@ extern char *host;
 extern int subsystem_flag;
 extern Buffer command;
 extern volatile sig_atomic_t quit_pending;
+extern char *stdio_forward_host;
+extern int stdio_forward_port;
 
 /* Context for session open confirmation callback */
 struct mux_session_confirm_ctx {
@@ -136,7 +136,6 @@ struct mux_master_state {
 #define MUX_C_CLOSE_FWD		0x10000007
 #define MUX_C_NEW_STDIO_FWD	0x10000008
 #define MUX_C_STOP_LISTENING	0x10000009
-#define MUX_C_PROXY		0x1000000f
 #define MUX_S_OK		0x80000001
 #define MUX_S_PERMISSION_DENIED	0x80000002
 #define MUX_S_FAILURE		0x80000003
@@ -145,7 +144,6 @@ struct mux_master_state {
 #define MUX_S_SESSION_OPENED	0x80000006
 #define MUX_S_REMOTE_PORT	0x80000007
 #define MUX_S_TTY_ALLOC_FAIL	0x80000008
-#define MUX_S_PROXY		0x8000000f
 
 /* type codes for MUX_C_OPEN_FWD and MUX_C_CLOSE_FWD */
 #define MUX_FWD_LOCAL   1
@@ -163,7 +161,6 @@ static int process_mux_open_fwd(u_int, Channel *, Buffer *, Buffer *);
 static int process_mux_close_fwd(u_int, Channel *, Buffer *, Buffer *);
 static int process_mux_stdio_fwd(u_int, Channel *, Buffer *, Buffer *);
 static int process_mux_stop_listening(u_int, Channel *, Buffer *, Buffer *);
-static int process_mux_proxy(u_int, Channel *, Buffer *, Buffer *);
 
 static const struct {
 	u_int type;
@@ -177,7 +174,6 @@ static const struct {
 	{ MUX_C_CLOSE_FWD, process_mux_close_fwd },
 	{ MUX_C_NEW_STDIO_FWD, process_mux_stdio_fwd },
 	{ MUX_C_STOP_LISTENING, process_mux_stop_listening },
-	{ MUX_C_PROXY, process_mux_proxy },
 	{ 0, NULL }
 };
 
@@ -344,7 +340,7 @@ process_mux_new_session(u_int rid, Channel *c, Buffer *m, Buffer *r)
 			free(cp);
 			continue;
 		}
-		cctx->env = xreallocarray(cctx->env, env_len + 2,
+		cctx->env = xrealloc(cctx->env, env_len + 2,
 		    sizeof(*cctx->env));
 		cctx->env[env_len++] = cp;
 		cctx->env[env_len] = NULL;
@@ -587,9 +583,7 @@ mux_confirm_remote_forward(int type, u_int32_t seq, void *ctxt)
 		return;
 	}
 	buffer_init(&out);
-	if (fctx->fid >= options.num_remote_forwards ||
-	    (options.remote_forwards[fctx->fid].connect_path == NULL &&
-	    options.remote_forwards[fctx->fid].connect_host == NULL)) {
+	if (fctx->fid >= options.num_remote_forwards) {
 		xasprintf(&failmsg, "unknown forwarding id %d", fctx->fid);
 		goto fail;
 	}
@@ -601,7 +595,7 @@ mux_confirm_remote_forward(int type, u_int32_t seq, void *ctxt)
 	if (type == SSH2_MSG_REQUEST_SUCCESS) {
 		if (rfwd->listen_port == 0) {
 			rfwd->allocated_port = packet_get_int();
-			debug("Allocated port %u for mux remote forward"
+			logit("Allocated port %u for mux remote forward"
 			    " to %s:%d", rfwd->allocated_port,
 			    rfwd->connect_host, rfwd->connect_port);
 			buffer_put_int(&out, MUX_S_REMOTE_PORT);
@@ -623,17 +617,6 @@ mux_confirm_remote_forward(int type, u_int32_t seq, void *ctxt)
 		else
 			xasprintf(&failmsg, "remote port forwarding failed for "
 			    "listen port %d", rfwd->listen_port);
-
-                debug2("%s: clearing registered forwarding for listen %d, "
-		    "connect %s:%d", __func__, rfwd->listen_port,
-		    rfwd->connect_path ? rfwd->connect_path :
-		    rfwd->connect_host, rfwd->connect_port);
-
-		free(rfwd->listen_host);
-		free(rfwd->listen_path);
-		free(rfwd->connect_host);
-		free(rfwd->connect_path);
-		memset(rfwd, 0, sizeof(*rfwd));
 	}
  fail:
 	error("%s: %s", __func__, failmsg);
@@ -658,8 +641,6 @@ process_mux_open_fwd(u_int rid, Channel *c, Buffer *m, Buffer *r)
 	u_int ftype;
 	u_int lport, cport;
 	int i, ret = 0, freefwd = 1;
-
-	memset(&fwd, 0, sizeof(fwd));
 
 	/* XXX - lport/cport check redundant */
 	if (buffer_get_int_ret(&ftype, m) != 0 ||
@@ -827,8 +808,6 @@ process_mux_close_fwd(u_int rid, Channel *c, Buffer *m, Buffer *r)
 	u_int ftype;
 	int i, ret = 0;
 	u_int lport, cport;
-
-	memset(&fwd, 0, sizeof(fwd));
 
 	if (buffer_get_int_ret(&ftype, m) != 0 ||
 	    (listen_addr = buffer_get_string_ret(m, NULL)) == NULL ||
@@ -1106,18 +1085,6 @@ process_mux_stop_listening(u_int rid, Channel *c, Buffer *m, Buffer *r)
 	return 0;
 }
 
-static int
-process_mux_proxy(u_int rid, Channel *c, Buffer *m, Buffer *r)
-{
-	debug("%s: channel %d: proxy request", __func__, c->self);
-
-	c->mux_rcb = channel_proxy_downstream;
-	buffer_put_int(r, MUX_S_PROXY);
-	buffer_put_int(r, rid);
-
-	return 0;
-}
-
 /* Channel callbacks fired on read/write from mux slave fd */
 static int
 mux_master_read_cb(Channel *c)
@@ -1303,7 +1270,7 @@ muxserver_listen(void)
 	/* Now atomically "move" the mux socket into position */
 	if (link(options.control_path, orig_control_path) != 0) {
 		if (errno != EEXIST) {
-			fatal("%s: link mux listener %s => %s: %s", __func__,
+			fatal("%s: link mux listener %s => %s: %s", __func__, 
 			    options.control_path, orig_control_path,
 			    strerror(errno));
 		}
@@ -1360,18 +1327,16 @@ mux_session_confirm(int id, int success, void *arg)
 		char *proto, *data;
 
 		/* Get reasonable local authentication information. */
-		if (client_x11_get_proto(display, options.xauth_location,
+		client_x11_get_proto(display, options.xauth_location,
 		    options.forward_x11_trusted, options.forward_x11_timeout,
-		    &proto, &data) == 0) {
-			/* Request forwarding with authentication spoofing. */
-			debug("Requesting X11 forwarding with authentication "
-			    "spoofing.");
-			x11_request_forwarding_with_spoofing(id, display, proto,
-			    data, 1);
-			/* XXX exit_on_forward_failure */
-			client_expect_confirm(id, "X11 forwarding",
-			    CONFIRM_WARN);
-		}
+		    &proto, &data);
+		/* Request forwarding with authentication spoofing. */
+		debug("Requesting X11 forwarding with authentication "
+		    "spoofing.");
+		x11_request_forwarding_with_spoofing(id, display, proto,
+		    data, 1);
+		client_expect_confirm(id, "X11 forwarding", CONFIRM_WARN);
+		/* XXX exit_on_forward_failure */
 	}
 
 	if (cctx->want_agent_fwd && options.forward_agent) {
@@ -1741,12 +1706,12 @@ mux_client_forward(int fd, int cancel_flag, u_int ftype, struct Forward *fwd)
 		if (cancel_flag)
 			fatal("%s: got MUX_S_REMOTE_PORT for cancel", __func__);
 		fwd->allocated_port = buffer_get_int(&m);
-		verbose("Allocated port %u for remote forward to %s:%d",
+		logit("Allocated port %u for remote forward to %s:%d",
 		    fwd->allocated_port,
 		    fwd->connect_host ? fwd->connect_host : "",
 		    fwd->connect_port);
 		if (muxclient_command == SSHMUX_COMMAND_FORWARD)
-			fprintf(stdout, "%i\n", fwd->allocated_port);
+			fprintf(stdout, "%u\n", fwd->allocated_port);
 		break;
 	case MUX_S_PERMISSION_DENIED:
 		e = buffer_get_string(&m, NULL);
@@ -1891,11 +1856,6 @@ mux_client_request_session(int fd)
 	}
 	muxclient_request_id++;
 
-#ifdef __OpenBSD__
-	if (pledge("stdio proc tty", NULL) == -1)
-		fatal("%s pledge(): %s", __func__, strerror(errno));
-#endif
-
 	signal(SIGHUP, control_client_sighandler);
 	signal(SIGINT, control_client_sighandler);
 	signal(SIGTERM, control_client_sighandler);
@@ -1963,41 +1923,6 @@ mux_client_request_session(int fd)
 }
 
 static int
-mux_client_proxy(int fd)
-{
-	Buffer m;
-	char *e;
-	u_int type, rid;
-
-	buffer_init(&m);
-	buffer_put_int(&m, MUX_C_PROXY);
-	buffer_put_int(&m, muxclient_request_id);
-	if (mux_client_write_packet(fd, &m) != 0)
-		fatal("%s: write packet: %s", __func__, strerror(errno));
-
-	buffer_clear(&m);
-
-	/* Read their reply */
-	if (mux_client_read_packet(fd, &m) != 0) {
-		buffer_free(&m);
-		return 0;
-	}
-	type = buffer_get_int(&m);
-	if (type != MUX_S_PROXY) {
-		e = buffer_get_string(&m, NULL);
-		fatal("%s: master returned error: %s", __func__, e);
-	}
-	if ((rid = buffer_get_int(&m)) != muxclient_request_id)
-		fatal("%s: out of sequence reply: my id %u theirs %u",
-		    __func__, muxclient_request_id, rid);
-	buffer_free(&m);
-
-	debug3("%s: done", __func__);
-	muxclient_request_id++;
-	return 0;
-}
-
-static int
 mux_client_request_stdio_fwd(int fd)
 {
 	Buffer m;
@@ -2027,8 +1952,8 @@ mux_client_request_stdio_fwd(int fd)
 	buffer_put_int(&m, MUX_C_NEW_STDIO_FWD);
 	buffer_put_int(&m, muxclient_request_id);
 	buffer_put_cstring(&m, ""); /* reserved */
-	buffer_put_cstring(&m, options.stdio_forward_host);
-	buffer_put_int(&m, options.stdio_forward_port);
+	buffer_put_cstring(&m, stdio_forward_host);
+	buffer_put_int(&m, stdio_forward_port);
 
 	if (mux_client_write_packet(fd, &m) != 0)
 		fatal("%s: write packet: %s", __func__, strerror(errno));
@@ -2037,11 +1962,6 @@ mux_client_request_stdio_fwd(int fd)
 	if (mm_send_fd(fd, STDIN_FILENO) == -1 ||
 	    mm_send_fd(fd, STDOUT_FILENO) == -1)
 		fatal("%s: send fds failed", __func__);
-
-#ifdef __OpenBSD__
-	if (pledge("stdio proc tty", NULL) == -1)
-		fatal("%s pledge(): %s", __func__, strerror(errno));
-#endif
 
 	debug3("%s: stdio forward request sent", __func__);
 
@@ -2144,7 +2064,7 @@ mux_client_request_stop_listening(int fd)
 }
 
 /* Multiplex client main loop. */
-int
+void
 muxclient(const char *path)
 {
 	struct sockaddr_un addr;
@@ -2152,7 +2072,7 @@ muxclient(const char *path)
 	u_int pid;
 
 	if (muxclient_command == 0) {
-		if (options.stdio_forward_host != NULL)
+		if (stdio_forward_host != NULL)
 			muxclient_command = SSHMUX_COMMAND_STDIO_FWD;
 		else
 			muxclient_command = SSHMUX_COMMAND_OPEN;
@@ -2166,7 +2086,7 @@ muxclient(const char *path)
 	case SSHCTL_MASTER_NO:
 		break;
 	default:
-		return -1;
+		return;
 	}
 
 	memset(&addr, '\0', sizeof(addr));
@@ -2176,8 +2096,7 @@ muxclient(const char *path)
 
 	if (strlcpy(addr.sun_path, path,
 	    sizeof(addr.sun_path)) >= sizeof(addr.sun_path))
-		fatal("ControlPath too long ('%s' >= %u bytes)", path,
-		     (unsigned int)sizeof(addr.sun_path));
+		fatal("ControlPath too long");
 
 	if ((sock = socket(PF_UNIX, SOCK_STREAM, 0)) < 0)
 		fatal("%s socket(): %s", __func__, strerror(errno));
@@ -2202,26 +2121,25 @@ muxclient(const char *path)
 			    strerror(errno));
 		}
 		close(sock);
-		return -1;
+		return;
 	}
 	set_nonblock(sock);
 
 	if (mux_client_hello_exchange(sock) != 0) {
 		error("%s: master hello exchange failed", __func__);
 		close(sock);
-		return -1;
+		return;
 	}
 
 	switch (muxclient_command) {
 	case SSHMUX_COMMAND_ALIVE_CHECK:
 		if ((pid = mux_client_request_alive(sock)) == 0)
 			fatal("%s: master alive check failed", __func__);
-		fprintf(stderr, "Master running (pid=%u)\r\n", pid);
+		fprintf(stderr, "Master running (pid=%d)\r\n", pid);
 		exit(0);
 	case SSHMUX_COMMAND_TERMINATE:
 		mux_client_request_terminate(sock);
-		if (options.log_level != SYSLOG_LEVEL_QUIET)
-			fprintf(stderr, "Exit request sent.\r\n");
+		fprintf(stderr, "Exit request sent.\r\n");
 		exit(0);
 	case SSHMUX_COMMAND_FORWARD:
 		if (mux_client_forwards(sock, 0) != 0)
@@ -2230,26 +2148,22 @@ muxclient(const char *path)
 	case SSHMUX_COMMAND_OPEN:
 		if (mux_client_forwards(sock, 0) != 0) {
 			error("%s: master forward request failed", __func__);
-			return -1;
+			return;
 		}
 		mux_client_request_session(sock);
-		return -1;
+		return;
 	case SSHMUX_COMMAND_STDIO_FWD:
 		mux_client_request_stdio_fwd(sock);
 		exit(0);
 	case SSHMUX_COMMAND_STOP:
 		mux_client_request_stop_listening(sock);
-		if (options.log_level != SYSLOG_LEVEL_QUIET)
-			fprintf(stderr, "Stop listening request sent.\r\n");
+		fprintf(stderr, "Stop listening request sent.\r\n");
 		exit(0);
 	case SSHMUX_COMMAND_CANCEL_FWD:
 		if (mux_client_forwards(sock, 1) != 0)
 			error("%s: master cancel forward request failed",
 			    __func__);
 		exit(0);
-	case SSHMUX_COMMAND_PROXY:
-		mux_client_proxy(sock);
-		return (sock);
 	default:
 		fatal("unrecognised muxclient_command %d", muxclient_command);
 	}

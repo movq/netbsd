@@ -5,7 +5,7 @@
  *****************************************************************************/
 
 /*
- * Copyright (C) 2000 - 2017, Intel Corp.
+ * Copyright (C) 2000 - 2013, Intel Corp.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -44,10 +44,17 @@
 #ifndef __ACWIN_H__
 #define __ACWIN_H__
 
-#define ACPI_USE_STANDARD_HEADERS
-#define ACPI_USE_SYSTEM_CLIBRARY
+/*! [Begin] no source code translation (Keep the include) */
+
+/* Windows uses VC */
+#ifdef _MSC_VER
+#include "acmsvc.h"
+#endif
+/*! [End] no source code translation !*/
 
 #define ACPI_MACHINE_WIDTH      32
+
+#define ACPI_USE_STANDARD_HEADERS
 
 #ifdef ACPI_DEFINE_ALTERNATE_TYPES
 /*

@@ -1,4 +1,3 @@
 .PATH.S: ${.PARSEDIR}
-MODES_SRCS += ghash-x86_64.o
-MODESCPPFLAGS = -DGHASH_ASM
+MODES_SRCS += modexp512-x86_64.S
 .include "../../modes.inc"

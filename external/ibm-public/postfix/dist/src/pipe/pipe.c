@@ -1,4 +1,4 @@
-/*	$NetBSD: pipe.c,v 1.2 2017/02/14 01:16:46 christos Exp $	*/
+/*	$NetBSD: pipe.c,v 1.1.1.4 2014/07/06 19:27:53 tron Exp $	*/
 
 /*++
 /* NAME
@@ -191,17 +191,13 @@
 /*	The command is executed directly, i.e. without interpretation of
 /*	shell meta characters by a shell command interpreter.
 /* .sp
-/*	Specify "{" and "}" around command arguments that contain
-/*	whitespace (Postfix 3.0 and later). Whitespace
-/*	after "{" and before "}" is ignored.
-/* .sp
 /*	In the command argument vector, the following macros are recognized
 /*	and replaced with corresponding information from the Postfix queue
 /*	manager delivery request.
 /* .sp
 /*	In addition to the form ${\fIname\fR}, the forms $\fIname\fR and
-/*	the deprecated form $(\fIname\fR) are also recognized.
-/*	Specify \fB$$\fR where a single \fB$\fR is wanted.
+/*	$(\fIname\fR) are also recognized.  Specify \fB$$\fR where a single
+/*	\fB$\fR is wanted.
 /* .RS
 /* .IP \fB${client_address}\fR
 /*	This macro expands to the remote client network address.
@@ -322,16 +318,10 @@
 /*	Exit status 0 means normal successful completion.
 /*
 /*	In the case of a non-zero exit status, a limited amount of
-/*	command output is logged, and reported in a delivery status
-/*	notification.  When the output begins with a 4.X.X or 5.X.X
-/*	enhanced status code, the status code takes precedence over
-/*	the non-zero exit status (Postfix version 2.3 and later).
-/*
-/*	After successful delivery (zero exit status) a limited
-/*	amount of command output is logged, and reported in "success"
-/*	delivery status notifications (Postfix 3.0 and later).
-/*	This command output is not examined for the presence of an
-/*	enhanced status code.
+/*	command output is reported in an delivery status notification.
+/*	When the output begins with a 4.X.X or 5.X.X enhanced status
+/*	code, the status code takes precedence over the non-zero
+/*	exit status (Postfix version 2.3 and later).
 /*
 /*	Problems and transactions are logged to \fBsyslogd\fR(8).
 /*	Corrupted message files are marked so that the queue manager
@@ -414,12 +404,6 @@
 /* .IP "\fBsyslog_name (see 'postconf -d' output)\fR"
 /*	The mail system name that is prepended to the process name in syslog
 /*	records, so that "smtpd" becomes, for example, "postfix/smtpd".
-/* .PP
-/*	Available in Postfix version 3.0 and later:
-/* .IP "\fBpipe_delivery_status_filter ($default_delivery_status_filter)\fR"
-/*	Optional filter for the \fBpipe\fR(8) delivery agent to change the
-/*	delivery status code or explanatory text of successful or unsuccessful
-/*	deliveries.
 /* SEE ALSO
 /*	qmgr(8), queue manager
 /*	bounce(8), delivery status reports
@@ -436,11 +420,6 @@
 /*	IBM T.J. Watson Research
 /*	P.O. Box 704
 /*	Yorktown Heights, NY 10598, USA
-/*
-/*	Wietse Venema
-/*	Google, Inc.
-/*	111 8th Avenue
-/*	New York, NY 10011, USA
 /*--*/
 
 /* System library. */
@@ -497,7 +476,6 @@
 #include <sys_exits.h>
 #include <delivered_hdr.h>
 #include <fold_addr.h>
-#include <mail_parm_split.h>
 
 /* Single server skeleton. */
 
@@ -564,11 +542,6 @@
 int     var_command_maxtime;		/* You can now leave this here. */
 
  /*
-  * Other main.cf parameters.
-  */
-char   *var_pipe_dsn_filter;
-
- /*
   * For convenience. Instead of passing around lists of parameters, bundle
   * them up in convenient structures.
   */
@@ -610,7 +583,7 @@ typedef struct {
 
 /* parse_callback - callback for mac_parse() */
 
-static int parse_callback(int type, VSTRING *buf, void *context)
+static int parse_callback(int type, VSTRING *buf, char *context)
 {
     PIPE_STATE *state = (PIPE_STATE *) context;
     struct cmd_flags {
@@ -663,22 +636,20 @@ static int parse_callback(int type, VSTRING *buf, void *context)
 
 static void morph_recipient(VSTRING *buf, const char *address, int flags)
 {
-    VSTRING *temp = vstring_alloc(100);
 
     /*
      * Quote the recipient address as appropriate.
      */
     if (flags & PIPE_OPT_QUOTE_LOCAL)
-	quote_822_local(temp, address);
+	quote_822_local(buf, address);
     else
-	vstring_strcpy(temp, address);
+	vstring_strcpy(buf, address);
 
     /*
      * Fold the recipient address as appropriate.
      */
-    fold_addr(buf, STR(temp), PIPE_OPT_FOLD_FLAGS(flags));
-
-    vstring_free(temp);
+    if (flags & PIPE_OPT_FOLD_ALL)
+	fold_addr(STR(buf), PIPE_OPT_FOLD_FLAGS(flags));
 }
 
 /* expand_argv - expand macros in the argument vector */
@@ -714,7 +685,7 @@ static ARGV *expand_argv(const char *service, char **argv,
     for (cpp = argv; *cpp; cpp++) {
 	state.service = service;
 	state.expand_flag = 0;
-	if (mac_parse(*cpp, parse_callback, (void *) &state) & MAC_PARSE_ERROR)
+	if (mac_parse(*cpp, parse_callback, (char *) &state) & MAC_PARSE_ERROR)
 	    EARLY_RETURN(0);
 	if (state.expand_flag == 0) {		/* no $recipient etc. */
 	    argv_add(result, dict_eval(PIPE_DICT_TABLE, *cpp, NO), ARGV_END);
@@ -1028,7 +999,6 @@ static int eval_command_status(int command_status, char *service,
     int     status;
     int     result = 0;
     int     n;
-    char   *saved_text;
 
     /*
      * Depending on the result, bounce or defer the message, and mark the
@@ -1036,21 +1006,9 @@ static int eval_command_status(int command_status, char *service,
      */
     switch (command_status) {
     case PIPE_STAT_OK:
-	/* Save the command output before dsb_update() clobbers it. */
-	vstring_truncate(why->reason, trimblanks(STR(why->reason),
-			      VSTRING_LEN(why->reason)) - STR(why->reason));
-	if (VSTRING_LEN(why->reason) > 0) {
-	    VSTRING_TERMINATE(why->reason);
-	    saved_text =
-		vstring_export(vstring_sprintf(
-				    vstring_alloc(VSTRING_LEN(why->reason)),
-					    " (%.100s)", STR(why->reason)));
-	} else
-	    saved_text = mystrdup("");		/* uses shared R/O storage */
 	dsb_update(why, "2.0.0", (attr->flags & PIPE_OPT_FINAL_DELIVERY) ?
 		   "delivered" : "relayed", DSB_SKIP_RMTA, DSB_SKIP_REPLY,
-		   "delivered via %s service%s", service, saved_text);
-	myfree(saved_text);
+		   "delivered via %s service", service);
 	(void) DSN_FROM_DSN_BUF(why);
 	for (n = 0; n < request->rcpt_list.len; n++) {
 	    rcpt = request->rcpt_list.info + n;
@@ -1065,18 +1023,25 @@ static int eval_command_status(int command_status, char *service,
     case PIPE_STAT_BOUNCE:
     case PIPE_STAT_DEFER:
 	(void) DSN_FROM_DSN_BUF(why);
-	for (n = 0; n < request->rcpt_list.len; n++) {
-	    rcpt = request->rcpt_list.info + n;
-	    /* XXX Maybe encapsulate this with ndr_append(). */
-	    status = (STR(why->status)[0] != '4' ?
-		      bounce_append : defer_append)
-		(DEL_REQ_TRACE_FLAGS(request->flags),
-		 request->queue_id,
-		 &request->msg_stats, rcpt,
-		 service, &why->dsn);
-	    if (status == 0)
-		deliver_completed(request->fp, rcpt->offset);
-	    result |= status;
+	if (STR(why->status)[0] != '4') {
+	    for (n = 0; n < request->rcpt_list.len; n++) {
+		rcpt = request->rcpt_list.info + n;
+		status = bounce_append(DEL_REQ_TRACE_FLAGS(request->flags),
+				       request->queue_id,
+				       &request->msg_stats, rcpt,
+				       service, &why->dsn);
+		if (status == 0)
+		    deliver_completed(request->fp, rcpt->offset);
+		result |= status;
+	    }
+	} else {
+	    for (n = 0; n < request->rcpt_list.len; n++) {
+		rcpt = request->rcpt_list.info + n;
+		result |= defer_append(DEL_REQ_TRACE_FLAGS(request->flags),
+				       request->queue_id,
+				       &request->msg_stats, rcpt,
+				       service, &why->dsn);
+	    }
 	}
 	break;
     case PIPE_STAT_CORRUPT:
@@ -1241,7 +1206,8 @@ static int deliver_message(DELIVER_REQUEST *request, char *service, char **argv)
     } else
 	dict_update(PIPE_DICT_TABLE, PIPE_DICT_SENDER, sender);
     if (attr.flags & PIPE_OPT_FOLD_HOST) {
-	casefold(buf, request->nexthop);
+	vstring_strcpy(buf, request->nexthop);
+	lowercase(STR(buf));
 	dict_update(PIPE_DICT_TABLE, PIPE_DICT_NEXTHOP, STR(buf));
     } else
 	dict_update(PIPE_DICT_TABLE, PIPE_DICT_NEXTHOP, request->nexthop);
@@ -1275,22 +1241,22 @@ static int deliver_message(DELIVER_REQUEST *request, char *service, char **argv)
 	DELIVER_MSG_CLEANUP();
 	return (deliver_status);
     }
-    export_env = mail_parm_split(VAR_EXPORT_ENVIRON, var_export_environ);
+    export_env = argv_split(var_export_environ, ", \t\r\n");
 
     command_status = pipe_command(request->fp, why,
-				  CA_PIPE_CMD_UID(attr.uid),
-				  CA_PIPE_CMD_GID(attr.gid),
-				  CA_PIPE_CMD_SENDER(sender),
-				  CA_PIPE_CMD_COPY_FLAGS(attr.flags),
-				  CA_PIPE_CMD_ARGV(expanded_argv->argv),
-				  CA_PIPE_CMD_TIME_LIMIT(conf.time_limit),
-				  CA_PIPE_CMD_EOL(STR(attr.eol)),
-				  CA_PIPE_CMD_EXPORT(export_env->argv),
-				  CA_PIPE_CMD_CWD(attr.exec_dir),
-				  CA_PIPE_CMD_CHROOT(attr.chroot_dir),
-			CA_PIPE_CMD_ORIG_RCPT(rcpt_list->info[0].orig_addr),
-			  CA_PIPE_CMD_DELIVERED(rcpt_list->info[0].address),
-				  CA_PIPE_CMD_END);
+				  PIPE_CMD_UID, attr.uid,
+				  PIPE_CMD_GID, attr.gid,
+				  PIPE_CMD_SENDER, sender,
+				  PIPE_CMD_COPY_FLAGS, attr.flags,
+				  PIPE_CMD_ARGV, expanded_argv->argv,
+				  PIPE_CMD_TIME_LIMIT, conf.time_limit,
+				  PIPE_CMD_EOL, STR(attr.eol),
+				  PIPE_CMD_EXPORT, export_env->argv,
+				  PIPE_CMD_CWD, attr.exec_dir,
+				  PIPE_CMD_CHROOT, attr.chroot_dir,
+			   PIPE_CMD_ORIG_RCPT, rcpt_list->info[0].orig_addr,
+			     PIPE_CMD_DELIVERED, rcpt_list->info[0].address,
+				  PIPE_CMD_END);
     argv_free(export_env);
 
     deliver_status = eval_command_status(command_status, service, request,
@@ -1361,10 +1327,6 @@ int     main(int argc, char **argv)
 	VAR_COMMAND_MAXTIME, DEF_COMMAND_MAXTIME, &var_command_maxtime, 1, 0,
 	0,
     };
-    static const CONFIG_STR_TABLE str_table[] = {
-	VAR_PIPE_DSN_FILTER, DEF_PIPE_DSN_FILTER, &var_pipe_dsn_filter, 0, 0,
-	0,
-    };
 
     /*
      * Fingerprint executables and core dumps.
@@ -1372,13 +1334,10 @@ int     main(int argc, char **argv)
     MAIL_VERSION_STAMP_ALLOCATE;
 
     single_server_main(argc, argv, pipe_service,
-		       CA_MAIL_SERVER_TIME_TABLE(time_table),
-		       CA_MAIL_SERVER_STR_TABLE(str_table),
-		       CA_MAIL_SERVER_PRE_INIT(pre_init),
-		       CA_MAIL_SERVER_POST_INIT(drop_privileges),
-		       CA_MAIL_SERVER_PRE_ACCEPT(pre_accept),
-		       CA_MAIL_SERVER_PRIVILEGED,
-		       CA_MAIL_SERVER_BOUNCE_INIT(VAR_PIPE_DSN_FILTER,
-						  &var_pipe_dsn_filter),
+		       MAIL_SERVER_TIME_TABLE, time_table,
+		       MAIL_SERVER_PRE_INIT, pre_init,
+		       MAIL_SERVER_POST_INIT, drop_privileges,
+		       MAIL_SERVER_PRE_ACCEPT, pre_accept,
+		       MAIL_SERVER_PRIVILEGED,
 		       0);
 }

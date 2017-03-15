@@ -1,4 +1,4 @@
-/*	$NetBSD: acpi_wakeup.c,v 1.45 2016/10/20 16:05:04 maxv Exp $	*/
+/*	$NetBSD: acpi_wakeup.c,v 1.38 2014/02/25 18:30:08 pooka Exp $	*/
 
 /*-
  * Copyright (c) 2002, 2011 The NetBSD Foundation, Inc.
@@ -28,6 +28,9 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
+
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: acpi_wakeup.c,v 1.38 2014/02/25 18:30:08 pooka Exp $");
 
 /*-
  * Copyright (c) 2001 Takanori Watanabe <takawata@jp.freebsd.org>
@@ -59,7 +62,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: acpi_wakeup.c,v 1.45 2016/10/20 16:05:04 maxv Exp $");
+__KERNEL_RCSID(0, "$NetBSD: acpi_wakeup.c,v 1.38 2014/02/25 18:30:08 pooka Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -108,7 +111,7 @@ __KERNEL_RCSID(0, "$NetBSD: acpi_wakeup.c,v 1.45 2016/10/20 16:05:04 maxv Exp $"
 static paddr_t acpi_wakeup_paddr = 3 * PAGE_SIZE;
 static vaddr_t acpi_wakeup_vaddr;
 
-int acpi_md_vbios_reset = 0; /* Referenced by dev/pci/vga_pci.c */
+int acpi_md_vbios_reset = 1; /* Referenced by dev/pci/vga_pci.c */
 int acpi_md_vesa_modenum = 0; /* Referenced by arch/x86/x86/genfb_machdep.c */
 static int acpi_md_beep_on_reset = 0;
 
@@ -162,8 +165,10 @@ acpi_md_sleep_patch(struct cpu_info *ci)
 
 #ifdef __i386__
 	WAKECODE_FIXUP(WAKEUP_r_cr4, uint32_t, ci->ci_suspend_cr4);
-#endif
+#else
 	WAKECODE_FIXUP(WAKEUP_efer, uint32_t, ci->ci_suspend_efer);
+#endif
+
 	WAKECODE_FIXUP(WAKEUP_curcpu, void *, ci);
 #ifdef __i386__
 	WAKECODE_FIXUP(WAKEUP_r_cr3, uint32_t, tmp_pdir);
@@ -250,22 +255,19 @@ acpi_md_sleep_enter(int state)
 void
 acpi_cpu_sleep(struct cpu_info *ci)
 {
-	int s;
-
 	KASSERT(!CPU_IS_PRIMARY(ci));
 	KASSERT(ci == curcpu());
 
-	s = splhigh();
-	fpusave_cpu(true);
 	x86_disable_intr();
 
 	if (acpi_md_sleep_prepare(-1))
-		goto out;
+		return;
 
 	/* Execute Wakeup */
+#ifndef __i386__
 	cpu_init_msrs(ci, false);
+#endif
 	fpuinit(ci);
-
 #if NLAPIC > 0
 	lapic_enable();
 	lapic_set_lvt();
@@ -276,9 +278,7 @@ acpi_cpu_sleep(struct cpu_info *ci)
 	kcpuset_atomic_set(kcpuset_running, cpu_index(ci));
 	tsc_sync_ap(ci);
 
-out:
 	x86_enable_intr();
-	splx(s);
 }
 #endif
 
@@ -300,7 +300,7 @@ acpi_md_sleep(int state)
 		return -1;
 	}
 
-	AcpiSetFirmwareWakingVector(acpi_wakeup_paddr, acpi_wakeup_paddr);
+	AcpiSetFirmwareWakingVector(acpi_wakeup_paddr);
 
 	s = splhigh();
 	fpusave_cpu(true);
@@ -319,7 +319,9 @@ acpi_md_sleep(int state)
 		goto out;
 
 	/* Execute Wakeup */
+#ifndef __i386__
 	cpu_init_msrs(&cpu_info_primary, false);
+#endif
 	fpuinit(&cpu_info_primary);
 	i8259_reinit();
 #if NLAPIC > 0

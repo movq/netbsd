@@ -1,9 +1,9 @@
-/*	$NetBSD: passwd.c,v 1.5 2017/02/09 01:53:51 christos Exp $	*/
+/*	$NetBSD: passwd.c,v 1.4 2014/05/28 10:12:43 tron Exp $	*/
 
 /* $OpenLDAP$ */
 /* This work is part of OpenLDAP Software <http://www.openldap.org/>.
  *
- * Copyright 1998-2016 The OpenLDAP Foundation.
+ * Copyright 1998-2014 The OpenLDAP Foundation.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -27,9 +27,6 @@
  * Due to the use of the crypt(3) function 
  * this routine is NOT thread-safe.
  */
-
-#include <sys/cdefs.h>
-__RCSID("$NetBSD: passwd.c,v 1.5 2017/02/09 01:53:51 christos Exp $");
 
 #include "portable.h"
 
@@ -499,19 +496,19 @@ static int chk_ssha1(
 	unsigned char SHA1digest[LUTIL_SHA1_BYTES];
 	int rc;
 	unsigned char *orig_pass = NULL;
-	size_t decode_len = LUTIL_BASE64_DECODE_LEN(passwd->bv_len);
 
 	/* safety check -- must have some salt */
-	if (decode_len <= sizeof(SHA1digest)) {
+	if (LUTIL_BASE64_DECODE_LEN(passwd->bv_len) <= sizeof(SHA1digest)) {
 		return LUTIL_PASSWD_ERR;
 	}
 
 	/* decode base64 password */
-	orig_pass = (unsigned char *) ber_memalloc(decode_len + 1);
+	orig_pass = (unsigned char *) ber_memalloc( (size_t) (
+		LUTIL_BASE64_DECODE_LEN(passwd->bv_len) + 1) );
 
 	if( orig_pass == NULL ) return LUTIL_PASSWD_ERR;
 
-	rc = lutil_b64_pton(passwd->bv_val, orig_pass, decode_len);
+	rc = lutil_b64_pton(passwd->bv_val, orig_pass, passwd->bv_len);
 
 	/* safety check -- must have some salt */
 	if (rc <= (int)(sizeof(SHA1digest))) {
@@ -544,19 +541,19 @@ static int chk_sha1(
 	unsigned char SHA1digest[LUTIL_SHA1_BYTES];
 	int rc;
 	unsigned char *orig_pass = NULL;
-	size_t decode_len = LUTIL_BASE64_DECODE_LEN(passwd->bv_len);
  
 	/* safety check */
-	if (decode_len < sizeof(SHA1digest)) {
+	if (LUTIL_BASE64_DECODE_LEN(passwd->bv_len) < sizeof(SHA1digest)) {
 		return LUTIL_PASSWD_ERR;
 	}
 
 	/* base64 un-encode password */
-	orig_pass = (unsigned char *) ber_memalloc(decode_len + 1);
+	orig_pass = (unsigned char *) ber_memalloc( (size_t) (
+		LUTIL_BASE64_DECODE_LEN(passwd->bv_len) + 1) );
 
 	if( orig_pass == NULL ) return LUTIL_PASSWD_ERR;
 
-	rc = lutil_b64_pton(passwd->bv_val, orig_pass, decode_len);
+	rc = lutil_b64_pton(passwd->bv_val, orig_pass, passwd->bv_len);
 
 	if( rc != sizeof(SHA1digest) ) {
 		ber_memfree(orig_pass);
@@ -586,19 +583,19 @@ static int chk_smd5(
 	unsigned char MD5digest[LUTIL_MD5_BYTES];
 	int rc;
 	unsigned char *orig_pass = NULL;
-	size_t decode_len = LUTIL_BASE64_DECODE_LEN(passwd->bv_len);
 
 	/* safety check */
-	if (decode_len <= sizeof(MD5digest)) {
+	if (LUTIL_BASE64_DECODE_LEN(passwd->bv_len) <= sizeof(MD5digest)) {
 		return LUTIL_PASSWD_ERR;
 	}
 
 	/* base64 un-encode password */
-	orig_pass = (unsigned char *) ber_memalloc(decode_len + 1);
+	orig_pass = (unsigned char *) ber_memalloc( (size_t) (
+		LUTIL_BASE64_DECODE_LEN(passwd->bv_len) + 1) );
 
 	if( orig_pass == NULL ) return LUTIL_PASSWD_ERR;
 
-	rc = lutil_b64_pton(passwd->bv_val, orig_pass, decode_len);
+	rc = lutil_b64_pton(passwd->bv_val, orig_pass, passwd->bv_len);
 
 	if (rc <= (int)(sizeof(MD5digest))) {
 		ber_memfree(orig_pass);
@@ -631,19 +628,19 @@ static int chk_md5(
 	unsigned char MD5digest[LUTIL_MD5_BYTES];
 	int rc;
 	unsigned char *orig_pass = NULL;
-	size_t decode_len = LUTIL_BASE64_DECODE_LEN(passwd->bv_len);
 
 	/* safety check */
-	if (decode_len < sizeof(MD5digest)) {
+	if (LUTIL_BASE64_DECODE_LEN(passwd->bv_len) < sizeof(MD5digest)) {
 		return LUTIL_PASSWD_ERR;
 	}
 
 	/* base64 un-encode password */
-	orig_pass = (unsigned char *) ber_memalloc(decode_len + 1);
+	orig_pass = (unsigned char *) ber_memalloc( (size_t) (
+		LUTIL_BASE64_DECODE_LEN(passwd->bv_len) + 1) );
 
 	if( orig_pass == NULL ) return LUTIL_PASSWD_ERR;
 
-	rc = lutil_b64_pton(passwd->bv_val, orig_pass, decode_len);
+	rc = lutil_b64_pton(passwd->bv_val, orig_pass, passwd->bv_len);
 	if ( rc != sizeof(MD5digest) ) {
 		ber_memfree(orig_pass);
 		return LUTIL_PASSWD_ERR;

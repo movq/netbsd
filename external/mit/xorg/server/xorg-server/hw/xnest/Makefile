@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.19 2016/08/14 03:43:05 mrg Exp $
+#	$NetBSD: Makefile,v 1.14 2011/08/02 09:11:38 mrg Exp $
 
 .include <bsd.own.mk>
 
@@ -25,8 +25,6 @@ CPPFLAGS+=	-I${X11SRCDIR.xorg-server}/hw/xnest \
 		-I${X11SRCDIR.xorg-server}/Xext \
 		-I${X11SRCDIR.xorg-server}/include \
 		-I${X11SRCDIR.xorg-server}/os \
-		-I${X11SRCDIR.xorg-server}/present \
-		-I${X11SRCDIR.xorg-server}/hw/xfree86/common \
 		-I${DESTDIR}${X11INCDIR}/X11/extensions \
 		-I${DESTDIR}${X11INCDIR}/pixman-1 \
 		-I${X11SRCDIR.xorg-server}/../include \
@@ -35,7 +33,7 @@ CPPFLAGS+=	-I${X11SRCDIR.xorg-server}/hw/xnest \
 CPPFLAGS+=	${X11FLAGS.OS_DEFINES} \
 		${X11FLAGS.EXTENSION} \
 		${X11FLAGS.DIX} \
-		-UXFree86LOADER -UMITSHM \
+		-DNO_HW_ONLY_EXTS -UXFree86LOADER -UMITSHM \
 		-D__XKBDEFRULES__='"xorg"'
 
 CPPFLAGS+=	-I${X11SRCDIR.xorg-server}/hw/xnest \
@@ -62,6 +60,7 @@ LDADD+=	${LDADD.dix} \
 	${LDADD.render} \
 	${LDADD.damageext} \
 	${LDADD.miext/damage} \
+	${LDADD.cw/cw} \
 	${LDADD.miext/shadow} \
 	${LDADD.miext/sync} \
 	${LDADD.Xi} \
@@ -70,10 +69,9 @@ LDADD+=	${LDADD.dix} \
 	${LDADD.composite} \
 	${LDADD.os} \
 	${LDADD.glx} \
-	${LDADD.present} \
 	-lXfont -lXext -lfontenc \
 	-lpixman-1 -lX11 -lXau \
-	-lXdmcp -lfreetype -lm
+	-lXdmcp -lfreetype -lm -lcrypto
 
 DPADD+=	${LDADD.dix} \
 	${DPADD.fb} \
@@ -87,6 +85,7 @@ DPADD+=	${LDADD.dix} \
 	${DPADD.randr} \
 	${DPADD.damageext} \
 	${DPADD.miext/damage} \
+	${DPADD.cw/cw} \
 	${DPADD.miext/shadow} \
 	${DPADD.miext/sync} \
 	${DPADD.Xi} \
@@ -94,15 +93,9 @@ DPADD+=	${LDADD.dix} \
 	${DPADD.composite} \
 	${DPADD.os} \
 	${DPADD.glx} \
-	${DPADD.present} \
 	${LIBXFONT} ${LIBXEXT} ${LIBFONTENC} \
 	${LIBPIXMAN-1} ${LIBX11} ${LIBXAU} \
-	${LIBXDMCP} ${LIBFREETYPE} ${LIBM}
-
-.if ${MKCRYPTO:Uno} != "no"
-LDADD+=	-lcrypto
-DPADD+=	${LIBCRYPTO}
-.endif
+	${LIBXDMCP} ${LIBFREETYPE} ${LIBM} ${LIBCRYPTO}
 
 .if ${MACHINE_ARCH} == "i386"
 LDADD+=	-li386

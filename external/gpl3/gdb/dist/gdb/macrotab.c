@@ -1,5 +1,5 @@
 /* C preprocessor macro tables for GDB.
-   Copyright (C) 2002-2016 Free Software Foundation, Inc.
+   Copyright (C) 2002-2014 Free Software Foundation, Inc.
    Contributed by Red Hat, Inc.
 
    This file is part of GDB.
@@ -25,6 +25,7 @@
 #include "symfile.h"
 #include "objfiles.h"
 #include "macrotab.h"
+#include "gdb_assert.h"
 #include "bcache.h"
 #include "complaints.h"
 #include "macroexp.h"
@@ -47,8 +48,9 @@ struct macro_table
      #inclusion tree; everything else is #included from here.  */
   struct macro_source_file *main_source;
 
-  /* Backlink to containing compilation unit, or NULL if there isn't one.  */
-  struct compunit_symtab *compunit_symtab;
+  /* Compilation directory for all files of this macro table.  It is allocated
+     on objfile's obstack.  */
+  const char *comp_dir;
 
   /* True if macros in this table can be redefined without issuing an
      error.  */
@@ -130,7 +132,7 @@ macro_bcache (struct macro_table *t, const void *addr, int len)
 static const char *
 macro_bcache_str (struct macro_table *t, const char *s)
 {
-  return (const char *) macro_bcache (t, s, strlen (s) + 1);
+  return macro_bcache (t, s, strlen (s) + 1);
 }
 
 
@@ -352,7 +354,7 @@ new_macro_key (struct macro_table *t,
                struct macro_source_file *file,
                int line)
 {
-  struct macro_key *k = (struct macro_key *) macro_alloc (sizeof (*k), t);
+  struct macro_key *k = macro_alloc (sizeof (*k), t);
 
   memset (k, 0, sizeof (*k));
   k->table = t;
@@ -385,8 +387,7 @@ new_source_file (struct macro_table *t,
                  const char *filename)
 {
   /* Get space for the source file structure itself.  */
-  struct macro_source_file *f
-    = (struct macro_source_file *) macro_alloc (sizeof (*f), t);
+  struct macro_source_file *f = macro_alloc (sizeof (*f), t);
 
   memset (f, 0, sizeof (*f));
   f->table = t;
@@ -451,7 +452,7 @@ macro_include (struct macro_source_file *source,
                int line,
                const char *included)
 {
-  struct macro_source_file *newobj;
+  struct macro_source_file *new;
   struct macro_source_file **link;
 
   /* Find the right position in SOURCE's `includes' list for the new
@@ -497,13 +498,13 @@ macro_include (struct macro_source_file *source,
   /* At this point, we know that LINE is an unused line number, and
      *LINK points to the entry an #inclusion at that line should
      precede.  */
-  newobj = new_source_file (source->table, included);
-  newobj->included_by = source;
-  newobj->included_at_line = line;
-  newobj->next_included = *link;
-  *link = newobj;
+  new = new_source_file (source->table, included);
+  new->included_by = source;
+  new->included_at_line = line;
+  new->next_included = *link;
+  *link = new;
 
-  return newobj;
+  return new;
 }
 
 
@@ -554,8 +555,7 @@ new_macro_definition (struct macro_table *t,
                       int argc, const char **argv,
                       const char *replacement)
 {
-  struct macro_definition *d
-    = (struct macro_definition *) macro_alloc (sizeof (*d), t);
+  struct macro_definition *d = macro_alloc (sizeof (*d), t);
 
   memset (d, 0, sizeof (*d));
   d->table = t;
@@ -570,13 +570,12 @@ new_macro_definition (struct macro_table *t,
       int cached_argv_size = argc * sizeof (*cached_argv);
 
       /* Bcache all the arguments.  */
-      cached_argv = (const char **) alloca (cached_argv_size);
+      cached_argv = alloca (cached_argv_size);
       for (i = 0; i < argc; i++)
         cached_argv[i] = macro_bcache_str (t, argv[i]);
 
       /* Now bcache the array of argument pointers itself.  */
-      d->argv = ((const char * const *)
-		 macro_bcache (t, cached_argv, cached_argv_size));
+      d->argv = macro_bcache (t, cached_argv, cached_argv_size);
     }
 
   /* We don't bcache the entire definition structure because it's got
@@ -1051,21 +1050,21 @@ macro_for_each_in_scope (struct macro_source_file *file, int line,
 
 struct macro_table *
 new_macro_table (struct obstack *obstack, struct bcache *b,
-		 struct compunit_symtab *cust)
+		 const char *comp_dir)
 {
   struct macro_table *t;
 
   /* First, get storage for the `struct macro_table' itself.  */
   if (obstack)
-    t = XOBNEW (obstack, struct macro_table);
+    t = obstack_alloc (obstack, sizeof (*t));
   else
-    t = XNEW (struct macro_table);
+    t = xmalloc (sizeof (*t));
 
   memset (t, 0, sizeof (*t));
   t->obstack = obstack;
   t->bcache = b;
   t->main_source = NULL;
-  t->compunit_symtab = cust;
+  t->comp_dir = comp_dir;
   t->redef_ok = 0;
   t->definitions = (splay_tree_new_with_allocator
                     (macro_tree_compare,
@@ -1094,13 +1093,8 @@ free_macro_table (struct macro_table *table)
 char *
 macro_source_fullname (struct macro_source_file *file)
 {
-  const char *comp_dir = NULL;
-
-  if (file->table->compunit_symtab != NULL)
-    comp_dir = COMPUNIT_DIRNAME (file->table->compunit_symtab);
-
-  if (comp_dir == NULL || IS_ABSOLUTE_PATH (file->filename))
+  if (file->table->comp_dir == NULL || IS_ABSOLUTE_PATH (file->filename))
     return xstrdup (file->filename);
 
-  return concat (comp_dir, SLASH_STRING, file->filename, (char *) NULL);
+  return concat (file->table->comp_dir, SLASH_STRING, file->filename, NULL);
 }

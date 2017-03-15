@@ -16,7 +16,6 @@
 #include "llvm/MC/MCExpr.h"
 #include "llvm/MC/MCInst.h"
 #include "llvm/MC/MCRegisterInfo.h"
-#include "llvm/MC/MCSubtargetInfo.h"
 #include "llvm/MC/MCSymbol.h"
 #include "llvm/Support/raw_ostream.h"
 using namespace llvm;
@@ -35,8 +34,8 @@ namespace Sparc {
 #define PRINT_ALIAS_INSTR
 #include "SparcGenAsmWriter.inc"
 
-bool SparcInstPrinter::isV9(const MCSubtargetInfo &STI) const {
-  return (STI.getFeatureBits()[Sparc::FeatureV9]) != 0;
+bool SparcInstPrinter::isV9() const {
+  return (STI.getFeatureBits() & Sparc::FeatureV9) != 0;
 }
 
 void SparcInstPrinter::printRegName(raw_ostream &OS, unsigned RegNo) const
@@ -45,15 +44,15 @@ void SparcInstPrinter::printRegName(raw_ostream &OS, unsigned RegNo) const
 }
 
 void SparcInstPrinter::printInst(const MCInst *MI, raw_ostream &O,
-                                 StringRef Annot, const MCSubtargetInfo &STI) {
-  if (!printAliasInstr(MI, STI, O) && !printSparcAliasInstr(MI, STI, O))
-    printInstruction(MI, STI, O);
+                               StringRef Annot)
+{
+  if (!printAliasInstr(MI, O) && !printSparcAliasInstr(MI, O))
+    printInstruction(MI, O);
   printAnnotation(O, Annot);
 }
 
-bool SparcInstPrinter::printSparcAliasInstr(const MCInst *MI,
-                                            const MCSubtargetInfo &STI,
-                                            raw_ostream &O) {
+bool SparcInstPrinter::printSparcAliasInstr(const MCInst *MI, raw_ostream &O)
+{
   switch (MI->getOpcode()) {
   default: return false;
   case SP::JMPLrr:
@@ -73,16 +72,16 @@ bool SparcInstPrinter::printSparcAliasInstr(const MCInst *MI,
         case SP::O7: O << "\tretl"; return true;
         }
       }
-      O << "\tjmp "; printMemOperand(MI, 1, STI, O);
+      O << "\tjmp "; printMemOperand(MI, 1, O);
       return true;
     case SP::O7: // call $addr
-      O << "\tcall "; printMemOperand(MI, 1, STI, O);
+      O << "\tcall "; printMemOperand(MI, 1, O);
       return true;
     }
   }
   case SP::V9FCMPS:  case SP::V9FCMPD:  case SP::V9FCMPQ:
   case SP::V9FCMPES: case SP::V9FCMPED: case SP::V9FCMPEQ: {
-    if (isV9(STI)
+    if (isV9()
         || (MI->getNumOperands() != 3)
         || (!MI->getOperand(0).isReg())
         || (MI->getOperand(0).getReg() != SP::FCC0))
@@ -97,17 +96,17 @@ bool SparcInstPrinter::printSparcAliasInstr(const MCInst *MI,
     case SP::V9FCMPED: O << "\tfcmped "; break;
     case SP::V9FCMPEQ: O << "\tfcmpeq "; break;
     }
-    printOperand(MI, 1, STI, O);
+    printOperand(MI, 1, O);
     O << ", ";
-    printOperand(MI, 2, STI, O);
+    printOperand(MI, 2, O);
     return true;
   }
   }
 }
 
 void SparcInstPrinter::printOperand(const MCInst *MI, int opNum,
-                                    const MCSubtargetInfo &STI,
-                                    raw_ostream &O) {
+                                    raw_ostream &O)
+{
   const MCOperand &MO = MI->getOperand (opNum);
 
   if (MO.isReg()) {
@@ -116,36 +115,23 @@ void SparcInstPrinter::printOperand(const MCInst *MI, int opNum,
   }
 
   if (MO.isImm()) {
-    switch (MI->getOpcode()) {
-      default:
-        O << (int)MO.getImm(); 
-        return;
-        
-      case SP::TICCri: // Fall through
-      case SP::TICCrr: // Fall through
-      case SP::TRAPri: // Fall through
-      case SP::TRAPrr: // Fall through
-      case SP::TXCCri: // Fall through
-      case SP::TXCCrr: // Fall through
-        // Only seven-bit values up to 127.
-        O << ((int) MO.getImm() & 0x7f);  
-        return;
-    }
+    O << (int)MO.getImm();
+    return;
   }
 
   assert(MO.isExpr() && "Unknown operand kind in printOperand");
-  MO.getExpr()->print(O, &MAI);
+  MO.getExpr()->print(O);
 }
 
 void SparcInstPrinter::printMemOperand(const MCInst *MI, int opNum,
-                                       const MCSubtargetInfo &STI,
-                                       raw_ostream &O, const char *Modifier) {
-  printOperand(MI, opNum, STI, O);
+                                      raw_ostream &O, const char *Modifier)
+{
+  printOperand(MI, opNum, O);
 
   // If this is an ADD operand, emit it like normal operands.
   if (Modifier && !strcmp(Modifier, "arith")) {
     O << ", ";
-    printOperand(MI, opNum+1, STI, O);
+    printOperand(MI, opNum+1, O);
     return;
   }
   const MCOperand &MO = MI->getOperand(opNum+1);
@@ -157,12 +143,12 @@ void SparcInstPrinter::printMemOperand(const MCInst *MI, int opNum,
 
   O << "+";
 
-  printOperand(MI, opNum+1, STI, O);
+  printOperand(MI, opNum+1, O);
 }
 
 void SparcInstPrinter::printCCOperand(const MCInst *MI, int opNum,
-                                      const MCSubtargetInfo &STI,
-                                      raw_ostream &O) {
+                                     raw_ostream &O)
+{
   int CC = (int)MI->getOperand(opNum).getImm();
   switch (MI->getOpcode()) {
   default: break;
@@ -180,18 +166,13 @@ void SparcInstPrinter::printCCOperand(const MCInst *MI, int opNum,
     // Make sure CC is a fp conditional flag.
     CC = (CC < 16) ? (CC + 16) : CC;
     break;
-  case SP::CBCOND:
-  case SP::CBCONDA:
-    // Make sure CC is a cp conditional flag.
-    CC = (CC < 32) ? (CC + 32) : CC;
-    break;
   }
   O << SPARCCondCodeToString((SPCC::CondCodes)CC);
 }
 
 bool SparcInstPrinter::printGetPCX(const MCInst *MI, unsigned opNum,
-                                   const MCSubtargetInfo &STI,
-                                   raw_ostream &O) {
+                                  raw_ostream &O)
+{
   llvm_unreachable("FIXME: Implement SparcInstPrinter::printGetPCX.");
   return true;
 }

@@ -1,6 +1,6 @@
 /* Target-dependent code for the NEC V850 for GDB, the GNU debugger.
 
-   Copyright (C) 1996-2016 Free Software Foundation, Inc.
+   Copyright (C) 1996-2014 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -25,6 +25,8 @@
 #include "dwarf2-frame.h"
 #include "gdbtypes.h"
 #include "inferior.h"
+#include <string.h>
+#include "gdb_assert.h"
 #include "gdbcore.h"
 #include "arch-utils.h"
 #include "regcache.h"
@@ -559,7 +561,7 @@ v850_use_struct_convention (struct gdbarch *gdbarch, struct type *type)
 	  if (TYPE_CODE (fld_type) == TYPE_CODE_ARRAY)
 	    {
 	      tgt_type = TYPE_TARGET_TYPE (fld_type);
-	      if (TYPE_LENGTH (tgt_type) > 0
+	      if (TYPE_LENGTH (fld_type) >= 0 && TYPE_LENGTH (tgt_type) >= 0
 		  && TYPE_LENGTH (fld_type) / TYPE_LENGTH (tgt_type) > 2)
 		return 1;
 	    }
@@ -1220,7 +1222,7 @@ v850_frame_cache (struct frame_info *this_frame, void **this_cache)
   int i;
 
   if (*this_cache)
-    return (struct v850_frame_cache *) *this_cache;
+    return *this_cache;
 
   cache = v850_alloc_frame_cache (this_frame);
   *this_cache = cache;
@@ -1380,7 +1382,7 @@ v850_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
 
       return arches->gdbarch;
     }
-  tdep = XNEW (struct gdbarch_tdep);
+  tdep = (struct gdbarch_tdep *) xmalloc (sizeof (struct gdbarch_tdep));
   tdep->e_flags = e_flags;
   tdep->e_machine = e_machine;
 

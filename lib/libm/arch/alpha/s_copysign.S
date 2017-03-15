@@ -1,4 +1,4 @@
-/*	$NetBSD: s_copysign.S,v 1.7 2014/11/15 21:07:01 joerg Exp $	*/
+/*	$NetBSD: s_copysign.S,v 1.5.40.1 2015/05/27 09:22:56 msaitoh Exp $	*/
 
 /*-
  * Copyright (c) 1996 The NetBSD Foundation, Inc.

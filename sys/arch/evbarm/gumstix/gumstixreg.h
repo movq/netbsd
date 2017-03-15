@@ -1,4 +1,4 @@
-/*	$NetBSD: gumstixreg.h,v 1.9 2016/10/15 16:30:46 kiyohara Exp $  */
+/*	$NetBSD: gumstixreg.h,v 1.7 2012/12/24 06:49:41 kiyohara Exp $  */
 /*
  * Copyright (C) 2005, 2006 WIDE Project and SOUM Corporation.
  * All rights reserved.
@@ -47,18 +47,9 @@
 #define GUMSTIX_HWUART_VBASE		0xfd600000
 #define GUMSTIX_LCDC_VBASE		0xfd700000
 
-#define OVERO_L4_CORE_VBASE		0xc0000000
-#define OVERO_L4_PERIPHERAL_VBASE	0xc0100000
-#define OVERO_L4_WAKEUP_VBASE		0xc0200000
-#define OVERO_GPMC_VBASE		0xc0300000
+#define OVERO_L4_PERIPHERAL_VBASE	0xc0000000
+#define OVERO_GPMC_VBASE		0xc0100000
 
-#define DUOVERO_L4_CM_VBASE		0xc0000000
-#define DUOVERO_L4_PERIPHERAL_VBASE	0xc0100000
-#define DUOVERO_L4_WAKEUP_VBASE		0xc0400000
-#define DUOVERO_GPMC_VBASE		0xc0500000
-
-#define PEPPER_PRCM_VBASE		0xc0000000
-#define PEPPER_L4_PERIPHERAL_VBASE	0xc0100000
 
 #define ioreg_read(a)		(*(volatile unsigned *)(a))
 #define ioreg_write(a,v)	(*(volatile unsigned *)(a)=(v))

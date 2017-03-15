@@ -1,15 +1,10 @@
-# $NetBSD: Makefile,v 1.3 2016/07/02 14:52:09 christos Exp $
+# $NetBSD: Makefile,v 1.2 2011/01/02 22:03:25 pgoyette Exp $
 
 .include <bsd.own.mk>
 
 TESTSDIR=	${TESTSBASE}/lib/libc/hash
 
 TESTS_C+=	t_sha2
-.if ${MKCRYPTO:Uno} != "no"
-TESTS_C+=	t_hmac
-LDADD.t_hmac+=	-lcrypto
-DDADD.t_hmac+=	${LIBCRYPTO}
-.endif
 
 TESTS_SH+=	t_hash
 

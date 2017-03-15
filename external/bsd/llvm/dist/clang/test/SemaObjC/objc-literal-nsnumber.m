@@ -9,24 +9,6 @@ typedef unsigned int NSUInteger;
 typedef int NSInteger;
 #endif
 
-void checkNSNumberUnavailableDiagnostic() {
-  id num = @1000; // expected-error {{definition of class NSNumber must be available to use Objective-C numeric literals}}
-
-  int x = 1000;
-  id num1 = @(x); // expected-error {{definition of class NSNumber must be available to use Objective-C numeric literals}}\
-                  // expected-error {{illegal type 'int' used in a boxed expression}}
-}
-
-@class NSNumber; // expected-note 2 {{forward declaration of class here}}
-
-void checkNSNumberFDDiagnostic() {
-  id num = @1000; // expected-error {{definition of class NSNumber must be available to use Objective-C numeric literals}}
-
-  int x = 1000;
-  id num1 = @(x); // expected-error {{definition of class NSNumber must be available to use Objective-C numeric literals}}\
-                  // expected-error {{illegal type 'int' used in a boxed expression}}
-}
-
 @interface NSObject
 + (NSObject*)nsobject;
 @end
@@ -71,10 +53,10 @@ int main() {
 }
 
 // Dictionary test
-@class NSDictionary;  // expected-note {{forward declaration of class here}}
+@class NSDictionary;
 
 NSDictionary *err() {
-  return @{@"name" : @"value"}; // expected-error {{definition of class NSDictionary must be available to use Objective-C dictionary literals}}
+  return @{@"name" : @"value"}; // expected-error {{declaration of 'dictionaryWithObjects:forKeys:count:' is missing in NSDictionary class}}
 }
 
 @interface NSDate : NSObject

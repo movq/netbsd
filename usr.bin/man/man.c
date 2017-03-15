@@ -1,4 +1,4 @@
-/*	$NetBSD: man.c,v 1.64 2016/06/16 15:10:58 abhinav Exp $	*/
+/*	$NetBSD: man.c,v 1.61.4.1 2016/01/05 22:18:27 snj Exp $	*/
 
 /*
  * Copyright (c) 1987, 1993, 1994, 1995
@@ -40,7 +40,7 @@ __COPYRIGHT("@(#) Copyright (c) 1987, 1993, 1994, 1995\
 #if 0
 static char sccsid[] = "@(#)man.c	8.17 (Berkeley) 1/31/95";
 #else
-__RCSID("$NetBSD: man.c,v 1.64 2016/06/16 15:10:58 abhinav Exp $");
+__RCSID("$NetBSD: man.c,v 1.61.4.1 2016/01/05 22:18:27 snj Exp $");
 #endif
 #endif /* not lint */
 
@@ -51,6 +51,7 @@ __RCSID("$NetBSD: man.c,v 1.64 2016/06/16 15:10:58 abhinav Exp $");
 
 #include <ctype.h>
 #include <err.h>
+#include <errno.h>
 #include <fcntl.h>
 #include <fnmatch.h>
 #include <glob.h>
@@ -159,8 +160,7 @@ main(int argc, char **argv)
 			break;
 		case 'M':
 		case 'P':	/* -P for backward compatibility */
-			if ((m.manpath = strdup(optarg)) == NULL)
-				err(EXIT_FAILURE, "malloc failed");
+			m.manpath = strdup(optarg);
 			break;
 		case 'p':
 			m.getpath = 1;
@@ -1031,9 +1031,8 @@ usage(void)
 {
 	(void)fprintf(stderr, "Usage: %s [-acw|-h] [-C cfg] [-M path] "
 	    "[-m path] [-S srch] [[-s] sect] name ...\n", getprogname());
-	(void)fprintf(stderr, "Usage: %s [-C file] -f command ...\n", getprogname());
 	(void)fprintf(stderr, 
-	    "Usage: %s [-C file] -k keyword ...\n", 
+	    "Usage: %s -k [-C cfg] [-M path] [-m path] keyword ...\n", 
 	    getprogname());
 	(void)fprintf(stderr, "Usage: %s -p\n", getprogname());
 	exit(EXIT_FAILURE);

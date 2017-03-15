@@ -26,26 +26,23 @@ struct NonPOD {
 };
 
 struct NoDefaultCtor {
-  NoDefaultCtor(const NoDefaultCtor&); // expected-note{{candidate constructor}} \
-                                       // expected-note{{candidate constructor not viable: requires 1 argument, but 0 were provided}}
+  NoDefaultCtor(const NoDefaultCtor&); // expected-note{{candidate constructor}}
   ~NoDefaultCtor();
 };
 
 template<typename T>
 void defargs_in_template_unused(T t) {
-  auto l1 = [](const T& value = T()) { };  // expected-error{{no matching constructor for initialization of 'NoDefaultCtor'}}
+  auto l1 = [](const T& value = T()) { };
   l1(t);
 }
 
 template void defargs_in_template_unused(NonPOD);
-template void defargs_in_template_unused(NoDefaultCtor);  // expected-note{{in instantiation of function template specialization 'defargs_in_template_unused<NoDefaultCtor>' requested here}}
+template void defargs_in_template_unused(NoDefaultCtor);
 
 template<typename T>
 void defargs_in_template_used() {
-  auto l1 = [](const T& value = T()) { }; // expected-error{{no matching constructor for initialization of 'NoDefaultCtor'}} \
-                                          // expected-note{{candidate function not viable: requires single argument 'value', but no arguments were provided}} \
-                                          // expected-note{{conversion candidate of type 'void (*)(const NoDefaultCtor &)'}}
-  l1(); // expected-error{{no matching function for call to object of type '(lambda at }}
+  auto l1 = [](const T& value = T()) { }; // expected-error{{no matching constructor for initialization of 'NoDefaultCtor'}}
+  l1(); // expected-note{{in instantiation of default function argument expression for 'operator()<NoDefaultCtor>' required here}}
 }
 
 template void defargs_in_template_used<NonPOD>();

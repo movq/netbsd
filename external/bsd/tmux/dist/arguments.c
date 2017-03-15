@@ -1,7 +1,7 @@
-/* $OpenBSD$ */
+/* Id */
 
 /*
- * Copyright (c) 2010 Nicholas Marriott <nicholas.marriott@gmail.com>
+ * Copyright (c) 2010 Nicholas Marriott <nicm@users.sourceforge.net>
  *
  * Permission to use, copy, modify, and distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -27,12 +27,6 @@
 /*
  * Manipulate command arguments.
  */
-
-struct args_entry {
-	u_char			 flag;
-	char			*value;
-	RB_ENTRY(args_entry)	 entry;
-};
 
 struct args_entry	*args_find(struct args *, u_char);
 
@@ -127,73 +121,71 @@ args_free(struct args *args)
 	free(args);
 }
 
-/* Add to string. */
-static void printflike(3, 4)
-args_print_add(char **buf, size_t *len, const char *fmt, ...)
-{
-	va_list  ap;
-	char	*s;
-	size_t	 slen;
-
-	va_start(ap, fmt);
-	slen = xvasprintf(&s, fmt, ap);
-	va_end(ap);
-
-	*len += slen;
-	*buf = xrealloc(*buf, *len);
-
-	strlcat(*buf, s, *len);
-	free(s);
-}
-
 /* Print a set of arguments. */
-char *
-args_print(struct args *args)
+size_t
+args_print(struct args *args, char *buf, size_t len)
 {
-	size_t		 	 len;
-	char			*buf;
+	size_t		 	 off;
 	int			 i;
+	const char		*quotes;
 	struct args_entry	*entry;
 
-	len = 1;
-	buf = xcalloc(1, len);
+	/* There must be at least one byte at the start. */
+	if (len == 0)
+		return (0);
+	off = 0;
 
 	/* Process the flags first. */
+	buf[off++] = '-';
 	RB_FOREACH(entry, args_tree, &args->tree) {
 		if (entry->value != NULL)
 			continue;
 
-		if (*buf == '\0')
-			args_print_add(&buf, &len, "-");
-		args_print_add(&buf, &len, "%c", entry->flag);
+		if (off == len - 1) {
+			buf[off] = '\0';
+			return (len);
+		}
+		buf[off++] = entry->flag;
+		buf[off] = '\0';
 	}
+	if (off == 1)
+		buf[--off] = '\0';
 
 	/* Then the flags with arguments. */
 	RB_FOREACH(entry, args_tree, &args->tree) {
 		if (entry->value == NULL)
 			continue;
 
-		if (*buf != '\0')
-			args_print_add(&buf, &len, " -%c ", entry->flag);
-		else
-			args_print_add(&buf, &len, "-%c ", entry->flag);
+		if (off >= len) {
+			/* snprintf will have zero terminated. */
+			return (len);
+		}
+
 		if (strchr(entry->value, ' ') != NULL)
-			args_print_add(&buf, &len, "\"%s\"", entry->value);
+			quotes = "\"";
 		else
-			args_print_add(&buf, &len, "%s", entry->value);
+			quotes = "";
+		off += xsnprintf(buf + off, len - off, "%s-%c %s%s%s",
+		    off != 0 ? " " : "", entry->flag, quotes, entry->value,
+		    quotes);
 	}
 
 	/* And finally the argument vector. */
 	for (i = 0; i < args->argc; i++) {
-		if (*buf != '\0')
-			args_print_add(&buf, &len, " ");
+		if (off >= len) {
+			/* snprintf will have zero terminated. */
+			return (len);
+		}
+
 		if (strchr(args->argv[i], ' ') != NULL)
-			args_print_add(&buf, &len, "\"%s\"", args->argv[i]);
+			quotes = "\"";
 		else
-			args_print_add(&buf, &len, "%s", args->argv[i]);
+			quotes = "";
+		off += xsnprintf(buf + off, len - off, "%s%s%s%s",
+		    off != 0 ? " " : "", quotes, args->argv[i], quotes);
 	}
 
-	return (buf);
+	return (off);
 }
 
 /* Return if an argument is present. */

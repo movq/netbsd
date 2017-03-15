@@ -1,4 +1,4 @@
-/*	$NetBSD: soundcard.h,v 1.24 2014/09/09 10:45:18 nat Exp $	*/
+/*	$NetBSD: soundcard.h,v 1.23.2.1 2014/09/11 13:58:45 martin Exp $	*/
 
 /*-
  * Copyright (c) 1997 The NetBSD Foundation, Inc.

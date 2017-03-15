@@ -1,4 +1,4 @@
-/*	$NetBSD: bt_debug.c,v 1.19 2016/10/09 11:48:24 joerg Exp $	*/
+/*	$NetBSD: bt_debug.c,v 1.16 2011/07/17 20:47:39 christos Exp $	*/
 
 /*-
  * Copyright (c) 1990, 1993, 1994
@@ -37,7 +37,7 @@
 #endif
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: bt_debug.c,v 1.19 2016/10/09 11:48:24 joerg Exp $");
+__RCSID("$NetBSD: bt_debug.c,v 1.16 2011/07/17 20:47:39 christos Exp $");
 
 #include <assert.h>
 #include <stdio.h>
@@ -46,29 +46,6 @@ __RCSID("$NetBSD: bt_debug.c,v 1.19 2016/10/09 11:48:24 joerg Exp $");
 
 #include <db.h>
 #include "btree.h"
-
-#if defined(DEBUG) || defined(STATISTICS)
-
-static FILE *tracefp;
-
-/*
- * __bt_dinit --
- *     initialize debugging.
- */
-static void
-__bt_dinit(void)
-{
-	if (tracefp != NULL)
-		return;
-
-#ifndef TRACE_TO_STDERR
-	if ((tracefp = fopen("/tmp/__bt_debug", "w")) != NULL)
-		return;
-#endif
-	tracefp = stderr;
-}
-#endif
-
 
 #ifdef DEBUG
 /*
@@ -85,17 +62,15 @@ __bt_dump(DB *dbp)
 	pgno_t i;
 	const char *sep;
 
-	__bt_dinit();
-
 	t = dbp->internal;
-	(void)fprintf(tracefp, "%s: pgsz %d",
+	(void)fprintf(stderr, "%s: pgsz %d",
 	    F_ISSET(t, B_INMEM) ? "memory" : "disk", t->bt_psize);
 	if (F_ISSET(t, R_RECNO))
-		(void)fprintf(tracefp, " keys %lu", (unsigned long) t->bt_nrecs);
+		(void)fprintf(stderr, " keys %lu", (unsigned long) t->bt_nrecs);
 #undef X
 #define	X(flag, name) \
 	if (F_ISSET(t, flag)) { \
-		(void)fprintf(tracefp, "%s%s", sep, name); \
+		(void)fprintf(stderr, "%s%s", sep, name); \
 		sep = ", "; \
 	}
 	if (t->flags != 0) {
@@ -106,15 +81,14 @@ __bt_dump(DB *dbp)
 		X(B_RDONLY,	"RDONLY");
 		X(R_RECNO,	"RECNO");
 		X(B_METADIRTY,"METADIRTY");
-		(void)fprintf(tracefp, ")\n");
+		(void)fprintf(stderr, ")\n");
 	}
 #undef X
 
-	for (i = P_ROOT; i < t->bt_mp->npages &&
-	    (h = mpool_get(t->bt_mp, i, MPOOL_IGNOREPIN)) != NULL; ++i)
+	for (i = P_ROOT; (h = mpool_get(t->bt_mp, i, 0)) != NULL; ++i) {
 		__bt_dpage(h);
-
-	(void)fflush(tracefp);
+		(void)mpool_put(t->bt_mp, h, 0);
+	}
 }
 
 /*
@@ -130,26 +104,24 @@ __bt_dmpage(PAGE *h)
 	const char *sep;
 
 	m = (BTMETA *)(void *)h;
-	(void)fprintf(tracefp, "magic %lx\n", (unsigned long) m->magic);
-	(void)fprintf(tracefp, "version %lu\n", (unsigned long) m->version);
-	(void)fprintf(tracefp, "psize %lu\n", (unsigned long) m->psize);
-	(void)fprintf(tracefp, "free %lu\n", (unsigned long) m->free);
-	(void)fprintf(tracefp, "nrecs %lu\n", (unsigned long) m->nrecs);
-	(void)fprintf(tracefp, "flags %lu", (unsigned long) m->flags);
+	(void)fprintf(stderr, "magic %lx\n", (unsigned long) m->magic);
+	(void)fprintf(stderr, "version %lu\n", (unsigned long) m->version);
+	(void)fprintf(stderr, "psize %lu\n", (unsigned long) m->psize);
+	(void)fprintf(stderr, "free %lu\n", (unsigned long) m->free);
+	(void)fprintf(stderr, "nrecs %lu\n", (unsigned long) m->nrecs);
+	(void)fprintf(stderr, "flags %lu", (unsigned long) m->flags);
 #undef X
 #define	X(flag, name) \
 	if (m->flags & flag) { \
-		(void)fprintf(tracefp, "%s%s", sep, name); \
+		(void)fprintf(stderr, "%s%s", sep, name); \
 		sep = ", "; \
 	}
 	if (m->flags) {
 		sep = " (";
 		X(B_NODUPS,	"NODUPS");
 		X(R_RECNO,	"RECNO");
-		(void)fprintf(tracefp, ")");
+		(void)fprintf(stderr, ")");
 	}
-	(void)fprintf(tracefp, "\n");
-	(void)fflush(tracefp);
 }
 
 static pgno_t
@@ -180,14 +152,11 @@ __bt_dnpage(DB *dbp, pgno_t pgno)
 	BTREE *t;
 	PAGE *h;
 
-	__bt_dinit();
-
 	t = dbp->internal;
-	if ((h = mpool_get(t->bt_mp, pgno, MPOOL_IGNOREPIN)) != NULL) {
+	if ((h = mpool_get(t->bt_mp, pgno, 0)) != NULL) {
 		__bt_dpage(h);
 		(void)mpool_put(t->bt_mp, h, 0);
 	}
-	(void)fflush(tracefp);
 }
 
 /*
@@ -206,13 +175,11 @@ __bt_dpage(PAGE *h)
 	indx_t cur, top;
 	const char *sep;
 
-	__bt_dinit();
-
-	(void)fprintf(tracefp, "    page %d: (", h->pgno);
+	(void)fprintf(stderr, "    page %d: (", h->pgno);
 #undef X
 #define	X(flag, name) \
 	if (h->flags & flag) { \
-		(void)fprintf(tracefp, "%s%s", sep, name); \
+		(void)fprintf(stderr, "%s%s", sep, name); \
 		sep = ", "; \
 	}
 	sep = "";
@@ -222,69 +189,68 @@ __bt_dpage(PAGE *h)
 	X(P_RLEAF,	"RLEAF")
 	X(P_OVERFLOW,	"OVERFLOW")
 	X(P_PRESERVE,	"PRESERVE");
-	(void)fprintf(tracefp, ")\n");
+	(void)fprintf(stderr, ")\n");
 #undef X
 
-	(void)fprintf(tracefp, "\tprev %2d next %2d", h->prevpg, h->nextpg);
+	(void)fprintf(stderr, "\tprev %2d next %2d", h->prevpg, h->nextpg);
 	if (h->flags & P_OVERFLOW)
 		return;
 
 	top = NEXTINDEX(h);
-	(void)fprintf(tracefp, " lower %3d upper %3d nextind %d\n",
+	(void)fprintf(stderr, " lower %3d upper %3d nextind %d\n",
 	    h->lower, h->upper, top);
 	for (cur = 0; cur < top; cur++) {
-		(void)fprintf(tracefp, "\t[%03d] %4d ", cur, h->linp[cur]);
+		(void)fprintf(stderr, "\t[%03d] %4d ", cur, h->linp[cur]);
 		switch (h->flags & P_TYPE) {
 		case P_BINTERNAL:
 			bi = GETBINTERNAL(h, cur);
-			(void)fprintf(tracefp,
+			(void)fprintf(stderr,
 			    "size %03d pgno %03d", bi->ksize, bi->pgno);
 			if (bi->flags & P_BIGKEY)
-				(void)fprintf(tracefp, " (indirect)");
+				(void)fprintf(stderr, " (indirect)");
 			else if (bi->ksize)
-				(void)fprintf(tracefp,
+				(void)fprintf(stderr,
 				    " {%.*s}", (int)bi->ksize, bi->bytes);
 			break;
 		case P_RINTERNAL:
 			ri = GETRINTERNAL(h, cur);
-			(void)fprintf(tracefp, "entries %03d pgno %03d",
+			(void)fprintf(stderr, "entries %03d pgno %03d",
 				ri->nrecs, ri->pgno);
 			break;
 		case P_BLEAF:
 			bl = GETBLEAF(h, cur);
 			if (bl->flags & P_BIGKEY)
-				(void)fprintf(tracefp,
+				(void)fprintf(stderr,
 				    "big key page %lu size %u/",
 				    (unsigned long) __bt_pgno_t(bl->bytes),
 				    __bt_uint32_t(bl->bytes + sizeof(pgno_t)));
 			else if (bl->ksize)
-				(void)fprintf(tracefp, "%s/", bl->bytes);
+				(void)fprintf(stderr, "%s/", bl->bytes);
 			if (bl->flags & P_BIGDATA)
-				(void)fprintf(tracefp,
+				(void)fprintf(stderr,
 				    "big data page %lu size %u",
 				    (unsigned long)
 				    __bt_pgno_t(bl->bytes + bl->ksize),
 				    __bt_uint32_t(bl->bytes + bl->ksize +
 				    sizeof(pgno_t)));
 			else if (bl->dsize)
-				(void)fprintf(tracefp, "%.*s",
+				(void)fprintf(stderr, "%.*s",
 				    (int)bl->dsize, bl->bytes + bl->ksize);
 			break;
 		case P_RLEAF:
 			rl = GETRLEAF(h, cur);
 			if (rl->flags & P_BIGDATA)
-				(void)fprintf(tracefp,
+				(void)fprintf(stderr,
 				    "big data page %lu size %u",
 				    (unsigned long) __bt_pgno_t(rl->bytes),
 				    __bt_uint32_t(rl->bytes + sizeof(pgno_t)));
 			else if (rl->dsize)
-				(void)fprintf(tracefp,
+				(void)fprintf(stderr,
 				    "%.*s", (int)rl->dsize, rl->bytes);
 			break;
 		}
-		(void)fprintf(tracefp, "\n");
+		(void)fprintf(stderr, "\n");
 	}
-	(void)fflush(tracefp);
 }
 #endif
 
@@ -306,13 +272,10 @@ __bt_stat(DB *dbp)
 	unsigned long ifree, lfree, nkeys;
 	int levels;
 
-	__bt_dinit();
-
 	t = dbp->internal;
 	pcont = pinternal = pleaf = 0;
 	nkeys = ifree = lfree = 0;
-	for (i = P_ROOT; i < t->bt_mp->npages &&
-	    (h = mpool_get(t->bt_mp, i, MPOOL_IGNOREPIN)) != NULL; ++i) {
+	for (i = P_ROOT; (h = mpool_get(t->bt_mp, i, 0)) != NULL; ++i) {
 		switch (h->flags & P_TYPE) {
 		case P_BINTERNAL:
 		case P_RINTERNAL:
@@ -334,7 +297,7 @@ __bt_stat(DB *dbp)
 
 	/* Count the levels of the tree. */
 	for (i = P_ROOT, levels = 0 ;; ++levels) {
-		h = mpool_get(t->bt_mp, i, MPOOL_IGNOREPIN);
+		h = mpool_get(t->bt_mp, i, 0);
 		if (h->flags & (P_BLEAF|P_RLEAF)) {
 			if (levels == 0)
 				levels = 1;
@@ -347,33 +310,32 @@ __bt_stat(DB *dbp)
 		(void)mpool_put(t->bt_mp, h, 0);
 	}
 
-	(void)fprintf(tracefp, "%d level%s with %ld keys",
+	(void)fprintf(stderr, "%d level%s with %ld keys",
 	    levels, levels == 1 ? "" : "s", nkeys);
 	if (F_ISSET(t, R_RECNO))
-		(void)fprintf(tracefp, " (%ld header count)", (long)t->bt_nrecs);
-	(void)fprintf(tracefp,
+		(void)fprintf(stderr, " (%ld header count)", (long)t->bt_nrecs);
+	(void)fprintf(stderr,
 	    "\n%lu pages (leaf %ld, internal %ld, overflow %ld)\n",
 	    (long)pinternal + pleaf + pcont, (long)pleaf, (long)pinternal,
 	    (long)pcont);
-	(void)fprintf(tracefp, "%ld cache hits, %ld cache misses\n",
+	(void)fprintf(stderr, "%ld cache hits, %ld cache misses\n",
 	    bt_cache_hit, bt_cache_miss);
-	(void)fprintf(tracefp, "%ld splits (%ld root splits, %ld sort splits)\n",
+	(void)fprintf(stderr, "%ld splits (%ld root splits, %ld sort splits)\n",
 	    bt_split, bt_rootsplit, bt_sortsplit);
 	pleaf *= t->bt_psize - BTDATAOFF;
 	if (pleaf)
-		(void)fprintf(tracefp,
+		(void)fprintf(stderr,
 		    "%.0f%% leaf fill (%ld bytes used, %ld bytes free)\n",
 		    ((double)(pleaf - lfree) / pleaf) * 100,
 		    pleaf - lfree, lfree);
 	pinternal *= t->bt_psize - BTDATAOFF;
 	if (pinternal)
-		(void)fprintf(tracefp,
+		(void)fprintf(stderr,
 		    "%.0f%% internal fill (%ld bytes used, %ld bytes free\n",
 		    ((double)(pinternal - ifree) / pinternal) * 100,
 		    pinternal - ifree, ifree);
 	if (bt_pfxsaved)
-		(void)fprintf(tracefp, "prefix checking removed %lu bytes.\n",
+		(void)fprintf(stderr, "prefix checking removed %lu bytes.\n",
 		    bt_pfxsaved);
-	(void)fflush(tracefp);
 }
 #endif

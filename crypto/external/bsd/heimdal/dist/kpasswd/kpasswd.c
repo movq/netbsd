@@ -1,4 +1,4 @@
-/*	$NetBSD: kpasswd.c,v 1.2 2017/01/28 21:31:45 christos Exp $	*/
+/*	$NetBSD: kpasswd.c,v 1.1.1.2 2014/04/24 12:45:28 pettai Exp $	*/
 
 /*
  * Copyright (c) 1997-2004 Kungliga Tekniska Högskolan
@@ -34,7 +34,7 @@
  */
 
 #include "kpasswd_locl.h"
-__RCSID("$NetBSD: kpasswd.c,v 1.2 2017/01/28 21:31:45 christos Exp $");
+__RCSID("NetBSD");
 
 static int version_flag;
 static int help_flag;
@@ -66,23 +66,22 @@ change_password(krb5_context context,
     krb5_error_code ret;
     char pwbuf[BUFSIZ];
     char *msg, *name;
-    int aret;
 
     krb5_data_zero (&result_code_string);
     krb5_data_zero (&result_string);
 
     name = msg = NULL;
     if (principal == NULL)
-	aret = asprintf(&msg, "New password: ");
+	asprintf(&msg, "New password: ");
     else {
 	ret = krb5_unparse_name(context, principal, &name);
 	if (ret)
 	    krb5_err(context, 1, ret, "krb5_unparse_name");
 
-	aret = asprintf(&msg, "New password for %s: ", name);
+	asprintf(&msg, "New password for %s: ", name);
     }
 
-    if (aret == -1 || msg == NULL)
+    if (msg == NULL)
 	krb5_errx (context, 1, "out of memory");
 
     ret = UI_UTIL_read_pw_string (pwbuf, sizeof(pwbuf), msg, 1);

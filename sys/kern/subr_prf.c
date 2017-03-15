@@ -1,4 +1,4 @@
-/*	$NetBSD: subr_prf.c,v 1.160 2016/07/27 09:57:26 skrll Exp $	*/
+/*	$NetBSD: subr_prf.c,v 1.154.2.2 2014/08/15 23:57:51 riz Exp $	*/
 
 /*-
  * Copyright (c) 1986, 1988, 1991, 1993
@@ -37,15 +37,13 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: subr_prf.c,v 1.160 2016/07/27 09:57:26 skrll Exp $");
+__KERNEL_RCSID(0, "$NetBSD: subr_prf.c,v 1.154.2.2 2014/08/15 23:57:51 riz Exp $");
 
-#ifdef _KERNEL_OPT
 #include "opt_ddb.h"
 #include "opt_ipkdb.h"
 #include "opt_kgdb.h"
 #include "opt_dump.h"
 #include "opt_rnd_printf.h"
-#endif
 
 #include <sys/param.h>
 #include <sys/stdint.h>
@@ -67,7 +65,7 @@ __KERNEL_RCSID(0, "$NetBSD: subr_prf.c,v 1.160 2016/07/27 09:57:26 skrll Exp $")
 #include <sys/kernel.h>
 #include <sys/cpu.h>
 #include <sys/sha2.h>
-#include <sys/rndsource.h>
+#include <sys/rnd.h>
 
 #include <dev/cons.h>
 
@@ -265,7 +263,7 @@ vpanic(const char *fmt, va_list ap)
 	CPU_INFO_ITERATOR cii;
 	struct cpu_info *ci, *oci;
 	int bootopt;
-	static char scratchstr[384]; /* stores panic message */
+	static char scratchstr[256]; /* stores panic message */
 
 	spldebug_stop();
 
@@ -676,7 +674,7 @@ db_printf(const char *fmt, ...)
 		va_start(ap, fmt);
 		kprintf(fmt, TOLOG, NULL, NULL, ap);
 		va_end(ap);
-	}
+	};
 }
 
 void

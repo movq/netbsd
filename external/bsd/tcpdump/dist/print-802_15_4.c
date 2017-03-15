@@ -22,7 +22,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: print-802_15_4.c,v 1.3 2017/02/05 04:05:05 spz Exp $");
+__RCSID("$NetBSD: print-802_15_4.c,v 1.1.1.1.10.1 2017/02/19 05:01:15 snj Exp $");
 #endif
 
 /* \summary: IEEE 802.15.4 printer */

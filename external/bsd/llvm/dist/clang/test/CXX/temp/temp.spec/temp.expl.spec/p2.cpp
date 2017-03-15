@@ -1,7 +1,4 @@
 // RUN: %clang_cc1 -fsyntax-only -verify %s
-// RUN: %clang_cc1 -fsyntax-only -verify -std=c++98 %s
-// RUN: %clang_cc1 -fsyntax-only -verify -std=c++11 %s
-
 
 // This test creates cases where implicit instantiations of various entities
 // would cause a diagnostic, but provides expliict specializations for those
@@ -19,10 +16,7 @@ struct NonDefaultConstructible {
 
 //     -- function template
 namespace N0 {
-  template<typename T> void f0(T) {
-#if __cplusplus <= 199711L
-  // expected-note@-2 {{explicitly specialized declaration is here}}
-#endif
+  template<typename T> void f0(T) { // expected-note{{here}}
     T t;
   }
 
@@ -42,11 +36,7 @@ namespace N1 {
   template<> void N0::f0(long) { } // expected-error{{does not enclose namespace}}
 }
 
-template<> void N0::f0(double);
-#if __cplusplus <= 199711L
-// expected-warning@-2 {{first declaration of function template specialization of 'f0' outside namespace 'N0' is a C++11 extension}}
-#endif
-
+template<> void N0::f0(double); // expected-warning{{C++11 extension}}
 template<> void N0::f0(double) { }
 
 struct X1 {
@@ -59,39 +49,21 @@ struct X1 {
 namespace N0 {
   
 template<typename T>
-struct X0 { // expected-note {{explicitly specialized declaration is here}}
-#if __cplusplus <= 199711L
-// expected-note@-2 {{explicitly specialized declaration is here}}
-#endif
-  static T member;
-#if __cplusplus <= 199711L
-  // expected-note@-2 {{explicitly specialized declaration is here}}
-#endif
+struct X0 { // expected-note 2{{here}}
+  static T member; // expected-note{{here}}
   
-  void f1(T t) {
-#if __cplusplus <= 199711L
-  // expected-note@-2 {{explicitly specialized declaration is here}}
-#endif
+  void f1(T t) { // expected-note{{explicitly specialized declaration is here}}
     t = 17;
   }
   
-  struct Inner : public T { }; // expected-note 2{{explicitly specialized declaration is here}}
-#if __cplusplus <= 199711L
-  // expected-note@-2 {{explicitly specialized declaration is here}}
-#endif
+  struct Inner : public T { }; // expected-note 3{{here}}
   
   template<typename U>
-  struct InnerTemplate : public T { }; // expected-note {{explicitly specialized declaration is here}}
-#if __cplusplus <= 199711L
-  // expected-note@-2 {{explicitly specialized declaration is here}}
-#endif
-  // expected-error@-4 {{base specifier must name a class}}
+  struct InnerTemplate : public T { }; // expected-note 2{{explicitly specialized}} \
+   // expected-error{{base specifier}}
   
   template<typename U>
-  void ft1(T t, U u);
-#if __cplusplus <= 199711L
-  // expected-note@-2 {{explicitly specialized declaration is here}}
-#endif
+  void ft1(T t, U u); // expected-note{{explicitly specialized}}
 };
 
 }
@@ -104,10 +76,7 @@ void N0::X0<T>::ft1(T t, U u) {
 
 template<typename T> T N0::X0<T>::member;
 
-template<> struct N0::X0<void> { };
-#if __cplusplus <= 199711L
-// expected-warning@-2 {{first declaration of class template specialization of 'X0' outside namespace 'N0' is a C++11 extension}}
-#endif
+template<> struct N0::X0<void> { }; // expected-warning{{C++11 extension}}
 N0::X0<void> test_X0;
 
 namespace N1 {
@@ -123,10 +92,7 @@ template<> struct N0::X0<volatile void> {
 };
 
 //     -- member function of a class template
-template<> void N0::X0<void*>::f1(void *) { }
-#if __cplusplus <= 199711L
-// expected-warning@-2 {{first declaration of member function specialization of 'f1' outside namespace 'N0' is a C++11 extension}}
-#endif
+template<> void N0::X0<void*>::f1(void *) { } // expected-warning{{member function specialization}}
 
 void test_spec(N0::X0<void*> xvp, void *vp) {
   xvp.f1(vp);
@@ -159,10 +125,7 @@ NonDefaultConstructible &get_static_member() {
   return N0::X0<NonDefaultConstructible>::member;
 }
 
-template<> int N0::X0<int>::member;
-#if __cplusplus <= 199711L
-// expected-warning@-2 {{first declaration of static data member specialization of 'member' outside namespace 'N0' is a C++11 extension}}
-#endif
+template<> int N0::X0<int>::member;  // expected-warning{{C++11 extension}}
 
 template<> float N0::X0<float>::member = 3.14f;
 
@@ -190,10 +153,7 @@ namespace N0 {
 }
 
 template<>
-struct N0::X0<long>::Inner { };
-#if __cplusplus <= 199711L
-// expected-warning@-2 {{first declaration of member class specialization of 'Inner' outside namespace 'N0' is a C++11 extension}}
-#endif
+struct N0::X0<long>::Inner { }; // expected-warning{{C++11 extension}}
 
 template<>
 struct N0::X0<float>::Inner { };
@@ -232,10 +192,7 @@ template<> template<>
 struct N0::X0<int>::InnerTemplate<long> { }; // okay
 
 template<> template<>
-struct N0::X0<int>::InnerTemplate<float> { };
-#if __cplusplus <= 199711L
-// expected-warning@-2 {{first declaration of class template specialization of 'InnerTemplate' outside namespace 'N0' is a C++11 extension}}
-#endif
+struct N0::X0<int>::InnerTemplate<float> { }; // expected-warning{{class template specialization}}
 
 namespace N1 {
   template<> template<>
@@ -267,10 +224,7 @@ template<> template<>
 void N0::X0<void*>::ft1(void *, unsigned) { } // okay
 
 template<> template<>
-void N0::X0<void*>::ft1(void *, float) { }
-#if __cplusplus <= 199711L
-// expected-warning@-2 {{first declaration of function template specialization of 'ft1' outside namespace 'N0' is a C++11 extension}}
-#endif
+void N0::X0<void*>::ft1(void *, float) { } // expected-warning{{function template specialization}}
 
 namespace N1 {
   template<> template<>

@@ -1,4 +1,4 @@
-/*	$NetBSD: isadma_machdep.c,v 1.11 2016/12/23 07:15:27 cherry Exp $	*/
+/*	$NetBSD: isadma_machdep.c,v 1.9 2013/06/09 12:52:33 kiyohara Exp $	*/
 
 /*-
  * Copyright (c) 1996, 1997, 1998 The NetBSD Foundation, Inc.
@@ -31,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: isadma_machdep.c,v 1.11 2016/12/23 07:15:27 cherry Exp $");
+__KERNEL_RCSID(0, "$NetBSD: isadma_machdep.c,v 1.9 2013/06/09 12:52:33 kiyohara Exp $");
 
 #define ISA_DMA_STATS
 
@@ -168,11 +168,9 @@ _isa_bus_dmamap_create(bus_dma_tag_t t, bus_size_t size, int nsegments,
 	size_t cookiesize;
 	paddr_t avail_end = 0;
 
-	for (bank = uvm_physseg_get_first();
-	     uvm_physseg_valid_p(bank);
-	     bank = uvm_physseg_get_next(bank)) {
-		if (avail_end < uvm_physseg_get_avail_end(bank) << PGSHIFT)
-			avail_end = uvm_physseg_get_avail_end(bank) << PGSHIFT;
+	for (bank = 0; bank < vm_nphysseg; bank++) {
+		if (avail_end < VM_PHYSMEM_PTR(bank)->avail_end << PGSHIFT)
+			avail_end = VM_PHYSMEM_PTR(bank)->avail_end << PGSHIFT;
 	}
 
 	/* Call common function to create the basic map. */
@@ -298,7 +296,8 @@ _isa_bus_dmamap_load(bus_dma_tag_t t, bus_dmamap_t map, void *buf,
 	 * and we can bounce, we will.
 	 */
 	error = _bus_dmamap_load(t, map, buf, buflen, p, flags);
-	if (error == 0 || (cookie->id_flags & ID_MIGHT_NEED_BOUNCE) == 0)
+	if (error == 0 ||
+	    (error != 0 && (cookie->id_flags & ID_MIGHT_NEED_BOUNCE) == 0))
 		return (error);
 
 	/*
@@ -369,7 +368,8 @@ _isa_bus_dmamap_load_mbuf(bus_dma_tag_t t, bus_dmamap_t map, struct mbuf *m0,
 	 * and we can bounce, we will.
 	 */
 	error = _bus_dmamap_load_mbuf(t, map, m0, flags);
-	if (error == 0 || (cookie->id_flags & ID_MIGHT_NEED_BOUNCE) == 0)
+	if (error == 0 ||
+	    (error != 0 && (cookie->id_flags & ID_MIGHT_NEED_BOUNCE) == 0))
 		return (error);
 
 	/*
@@ -600,11 +600,9 @@ _isa_bus_dmamem_alloc(bus_dma_tag_t t, bus_size_t size, bus_size_t alignment,
 	paddr_t high, avail_end = 0;
 	int bank;
 
-	for (bank = uvm_physseg_get_first();
-	     uvm_physseg_valid_p(bank);
-	     bank = uvm_physseg_get_next(bank)) {
-		if (avail_end < uvm_physseg_get_avail_end(bank) << PGSHIFT)
-			avail_end = uvm_physseg_get_avail_end(bank) << PGSHIFT;
+	for (bank = 0; bank < vm_nphysseg; bank++) {
+		if (avail_end < VM_PHYSMEM_PTR(bank)->avail_end << PGSHIFT)
+			avail_end = VM_PHYSMEM_PTR(bank)->avail_end << PGSHIFT;
 	}
 
 	if (avail_end > ISA_DMA_BOUNCE_THRESHOLD)

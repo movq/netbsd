@@ -1,4 +1,4 @@
-/*	$NetBSD: log.c,v 1.2 2017/01/28 21:31:44 christos Exp $	*/
+/*	$NetBSD: log.c,v 1.1.1.2 2014/04/24 12:45:27 pettai Exp $	*/
 
 /*
  * Copyright (c) 1997, 1998, 2002 Kungliga Tekniska Högskolan
@@ -55,7 +55,7 @@ kdc_openlog(krb5_context context,
 	char *ss;
 	if (asprintf(&ss, "0-1/FILE:%s/%s", hdb_db_dir(context),
 	    KDC_LOG_FILE) < 0)
-	    err(1, "out of memory");
+	    err(1, NULL);
 	krb5_addlog_dest(context, config->logf, ss);
 	free(ss);
     }

@@ -1,4 +1,4 @@
-/*	$NetBSD: rf_driver.c,v 1.133 2016/12/10 23:03:27 maya Exp $	*/
+/*	$NetBSD: rf_driver.c,v 1.131 2012/12/10 08:36:03 msaitoh Exp $	*/
 /*-
  * Copyright (c) 1999 The NetBSD Foundation, Inc.
  * All rights reserved.
@@ -66,7 +66,7 @@
 
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: rf_driver.c,v 1.133 2016/12/10 23:03:27 maya Exp $");
+__KERNEL_RCSID(0, "$NetBSD: rf_driver.c,v 1.131 2012/12/10 08:36:03 msaitoh Exp $");
 
 #ifdef _KERNEL_OPT
 #include "opt_raid_diagnostic.h"
@@ -121,6 +121,9 @@ __KERNEL_RCSID(0, "$NetBSD: rf_driver.c,v 1.133 2016/12/10 23:03:27 maya Exp $")
 #define RF_MAX_FREE_RAD 128
 #define RF_MIN_FREE_RAD  32
 
+/* debug variables */
+char    rf_panicbuf[2048];	/* a buffer to hold an error msg when we panic */
+
 /* main configuration routines */
 static int raidframe_booted = 0;
 
@@ -155,21 +158,16 @@ static void rf_alloc_mutex_cond(RF_Raid_t *);
 
 /* called at system boot time */
 int
-rf_BootRaidframe(bool boot)
+rf_BootRaidframe(void)
 {
 
-	if (boot) {
-		if (raidframe_booted)
-			return (EBUSY);
-		raidframe_booted = 1;
-		rf_init_mutex2(configureMutex, IPL_NONE);
- 		configureCount = 0;
-		isconfigged = 0;
-		globalShutdown = NULL;
-	} else {
-		rf_destroy_mutex2(configureMutex);
-		raidframe_booted = 0;
-	}
+	if (raidframe_booted)
+		return (EBUSY);
+	raidframe_booted = 1;
+	rf_init_mutex2(configureMutex, IPL_NONE);
+ 	configureCount = 0;
+	isconfigged = 0;
+	globalShutdown = NULL;
 	return (0);
 }
 
@@ -885,15 +883,17 @@ rf_ConfigureDebug(RF_Config_t *cfgPtr)
 void
 rf_print_panic_message(int line, const char *file)
 {
-	kern_assert("raidframe error at line %d file %s", line, file);
+	snprintf(rf_panicbuf, sizeof(rf_panicbuf),
+	    "raidframe error at line %d file %s", line, file);
 }
 
 #ifdef RAID_DIAGNOSTIC
 void
 rf_print_assert_panic_message(int line,	const char *file, const char *condition)
 {
-	kern_assert("raidframe error at line %d file %s (failed asserting %s)\n",
-	    line, file, condition);
+	snprintf(rf_panicbuf, sizeof(rf_panicbuf),
+		"raidframe error at line %d file %s (failed asserting %s)\n",
+		line, file, condition);
 }
 #endif
 

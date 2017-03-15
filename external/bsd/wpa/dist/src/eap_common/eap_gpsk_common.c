@@ -92,8 +92,7 @@ static int eap_gpsk_gkdf_sha256(const u8 *psk /* Y */,
 	n = (len + hashlen - 1) / hashlen;
 	for (i = 1; i <= n; i++) {
 		WPA_PUT_BE16(ibuf, i);
-		if (hmac_sha256_vector(psk, 32, 2, addr, vlen, hash))
-			return -1;
+		hmac_sha256_vector(psk, 32, 2, addr, vlen, hash);
 		clen = left > hashlen ? hashlen : left;
 		os_memcpy(opos, hash, clen);
 		opos += clen;
@@ -535,7 +534,8 @@ int eap_gpsk_compute_mic(const u8 *sk, size_t sk_len, int vendor,
 		break;
 #ifdef EAP_GPSK_SHA256
 	case EAP_GPSK_CIPHER_SHA256:
-		ret = hmac_sha256(sk, sk_len, data, len, mic);
+		hmac_sha256(sk, sk_len, data, len, mic);
+		ret = 0;
 		break;
 #endif /* EAP_GPSK_SHA256 */
 	default:
@@ -544,9 +544,6 @@ int eap_gpsk_compute_mic(const u8 *sk, size_t sk_len, int vendor,
 		ret = -1;
 		break;
 	}
-
-	if (ret)
-		wpa_printf(MSG_DEBUG, "EAP-GPSK: Could not compute MIC");
 
 	return ret;
 }

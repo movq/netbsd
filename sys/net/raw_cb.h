@@ -1,4 +1,4 @@
-/*	$NetBSD: raw_cb.h,v 1.26 2016/01/20 21:43:59 riastradh Exp $	*/
+/*	$NetBSD: raw_cb.h,v 1.23 2014/08/05 07:55:31 rtr Exp $	*/
 
 /*
  * Copyright (c) 1980, 1986, 1993
@@ -68,11 +68,10 @@ void	raw_init(void);
 void	raw_input(struct mbuf *, ...);
 int	raw_usrreq(struct socket *,
 	    int, struct mbuf *, struct mbuf *, struct mbuf *, struct lwp *);
-void	raw_setsockaddr(struct rawcb *, struct sockaddr *);
-void	raw_setpeeraddr(struct rawcb *, struct sockaddr *);
+void	raw_setsockaddr(struct rawcb *, struct mbuf *);
+void	raw_setpeeraddr(struct rawcb *, struct mbuf *);
 int	raw_send(struct socket *,
-	    struct mbuf *, struct sockaddr *, struct mbuf *, struct lwp *,
-	    int (*)(struct mbuf *, struct socket *));
+	    struct mbuf *, struct mbuf *, struct mbuf *, struct lwp *);
 
 #endif /* _KERNEL */
 

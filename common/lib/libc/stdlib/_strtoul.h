@@ -1,4 +1,4 @@
-/* $NetBSD: _strtoul.h,v 1.10 2016/11/05 21:11:30 riastradh Exp $ */
+/* $NetBSD: _strtoul.h,v 1.7.6.1 2016/12/18 06:23:22 snj Exp $ */
 
 /*-
  * Copyright (c) 1990, 1993
@@ -105,14 +105,8 @@ INT_FUNCNAME(_int_, _FUNCNAME, _l)(const char *nptr, char **endptr,
 		c = s[1];
 		s += 2;
 		base = 16;
-#if 0
-	} else if ((base == 0 || base == 2) &&
-	    c == '0' && (*s == 'b' || *s == 'B')) {
-		c = s[1];
-		s += 2;
-		base = 2;
-#endif
-	} else if (base == 0)
+	}
+	if (base == 0)
 		base = (c == '0' ? 8 : 10);
 
 	/*

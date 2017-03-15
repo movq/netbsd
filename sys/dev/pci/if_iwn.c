@@ -1,4 +1,4 @@
-/*	$NetBSD: if_iwn.c,v 1.84 2017/02/02 10:05:35 nonaka Exp $	*/
+/*	$NetBSD: if_iwn.c,v 1.71.4.2 2015/11/06 00:50:52 riz Exp $	*/
 /*	$OpenBSD: if_iwn.c,v 1.135 2014/09/10 07:22:09 dcoppa Exp $	*/
 
 /*-
@@ -22,7 +22,7 @@
  * adapters.
  */
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_iwn.c,v 1.84 2017/02/02 10:05:35 nonaka Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_iwn.c,v 1.71.4.2 2015/11/06 00:50:52 riz Exp $");
 
 #define IWN_USE_RBUF	/* Use local storage for RX */
 #undef IWN_HWCRYPTO	/* XXX does not even compile yet */
@@ -47,7 +47,7 @@ __KERNEL_RCSID(0, "$NetBSD: if_iwn.c,v 1.84 2017/02/02 10:05:35 nonaka Exp $");
 
 #include <sys/bus.h>
 #include <machine/endian.h>
-#include <sys/intr.h>
+#include <machine/intr.h>
 
 #include <dev/pci/pcireg.h>
 #include <dev/pci/pcivar.h>
@@ -201,7 +201,6 @@ static void	iwn_notif_intr(struct iwn_softc *);
 static void	iwn_wakeup_intr(struct iwn_softc *);
 static void	iwn_fatal_intr(struct iwn_softc *);
 static int	iwn_intr(void *);
-static void	iwn_softintr(void *);
 static void	iwn4965_update_sched(struct iwn_softc *, int, int, uint8_t,
 		    uint16_t);
 static void	iwn5000_update_sched(struct iwn_softc *, int, int, uint8_t,
@@ -324,6 +323,13 @@ static int	iwn_alloc_rpool(struct iwn_softc *);
 static void	iwn_free_rpool(struct iwn_softc *);
 #endif
 
+/* XXX needed by iwn_scan */
+static u_int8_t	*ieee80211_add_ssid(u_int8_t *, const u_int8_t *, u_int);
+static u_int8_t	*ieee80211_add_rates(u_int8_t *,
+    const struct ieee80211_rateset *);
+static u_int8_t	*ieee80211_add_xrates(u_int8_t *,
+    const struct ieee80211_rateset *);
+
 static void	iwn_fix_channel(struct ieee80211com *, struct mbuf *,
 		    struct iwn_rx_stat *);
 
@@ -363,6 +369,7 @@ iwn_attach(device_t parent __unused, device_t self, void *aux)
 	struct ifnet *ifp = &sc->sc_ec.ec_if;
 	struct pci_attach_args *pa = aux;
 	const char *intrstr;
+	pci_intr_handle_t ih;
 	pcireg_t memtype, reg;
 	int i, error;
 	char intrbuf[PCI_INTRSTR_LEN];
@@ -385,8 +392,7 @@ iwn_attach(device_t parent __unused, device_t self, void *aux)
 	error = pci_get_capability(sc->sc_pct, sc->sc_pcitag,
 	    PCI_CAP_PCIEXPRESS, &sc->sc_cap_off, NULL);
 	if (error == 0) {
-		aprint_error_dev(self,
-		    "PCIe capability structure not found!\n");
+		aprint_error(": PCIe capability structure not found!\n");
 		return;
 	}
 
@@ -395,99 +401,84 @@ iwn_attach(device_t parent __unused, device_t self, void *aux)
 	if (reg & 0xff00)
 		pci_conf_write(sc->sc_pct, sc->sc_pcitag, 0x40, reg & ~0xff00);
 
-	/* Enable bus-mastering. */
+	/* Enable bus-mastering and hardware bug workaround. */
 	/* XXX verify the bus-mastering is really needed (not in OpenBSD) */
 	reg = pci_conf_read(sc->sc_pct, sc->sc_pcitag, PCI_COMMAND_STATUS_REG);
 	reg |= PCI_COMMAND_MASTER_ENABLE;
+	if (reg & PCI_COMMAND_INTERRUPT_DISABLE) {
+		DPRINTF(("PCIe INTx Disable set\n"));
+		reg &= ~PCI_COMMAND_INTERRUPT_DISABLE;
+	}
 	pci_conf_write(sc->sc_pct, sc->sc_pcitag, PCI_COMMAND_STATUS_REG, reg);
 
 	memtype = pci_mapreg_type(pa->pa_pc, pa->pa_tag, IWN_PCI_BAR0);
 	error = pci_mapreg_map(pa, IWN_PCI_BAR0, memtype, 0, &sc->sc_st,
 	    &sc->sc_sh, NULL, &sc->sc_sz);
 	if (error != 0) {
-		aprint_error_dev(self, "can't map mem space\n");
+		aprint_error(": can't map mem space\n");
 		return;
 	}
 
-	sc->sc_soft_ih = softint_establish(SOFTINT_NET, iwn_softintr, sc);
-	if (sc->sc_soft_ih == NULL) {
-		aprint_error_dev(self, "can't establish soft interrupt\n");
-		goto unmap;
-	}
-
 	/* Install interrupt handler. */
-	error = pci_intr_alloc(pa, &sc->sc_pihp, NULL, 0);
-	if (error) {
-		aprint_error_dev(self, "can't allocate interrupt\n");
-		goto failsi;
+	if (pci_intr_map(pa, &ih) != 0) {
+		aprint_error(": can't map interrupt\n");
+		return;
 	}
-	reg = pci_conf_read(sc->sc_pct, sc->sc_pcitag, PCI_COMMAND_STATUS_REG);
-	if (pci_intr_type(sc->sc_pct, sc->sc_pihp[0]) == PCI_INTR_TYPE_INTX)
-		CLR(reg, PCI_COMMAND_INTERRUPT_DISABLE);
-	else
-		SET(reg, PCI_COMMAND_INTERRUPT_DISABLE);
-	pci_conf_write(sc->sc_pct, sc->sc_pcitag, PCI_COMMAND_STATUS_REG, reg);
-	intrstr = pci_intr_string(sc->sc_pct, sc->sc_pihp[0], intrbuf,
-	    sizeof(intrbuf));
-	sc->sc_ih = pci_intr_establish_xname(sc->sc_pct, sc->sc_pihp[0],
-	    IPL_NET, iwn_intr, sc, device_xname(self));
+	intrstr = pci_intr_string(sc->sc_pct, ih, intrbuf, sizeof(intrbuf));
+	sc->sc_ih = pci_intr_establish(sc->sc_pct, ih, IPL_NET, iwn_intr, sc);
 	if (sc->sc_ih == NULL) {
-		aprint_error_dev(self, "can't establish interrupt");
+		aprint_error(": can't establish interrupt");
 		if (intrstr != NULL)
 			aprint_error(" at %s", intrstr);
 		aprint_error("\n");
-		goto failia;
+		return;
 	}
 	aprint_normal_dev(self, "interrupting at %s\n", intrstr);
 
 	/* Read hardware revision and attach. */
-	sc->hw_type =
-	    (IWN_READ(sc, IWN_HW_REV) & IWN_HW_REV_TYPE_MASK)
-	      >> IWN_HW_REV_TYPE_SHIFT;
+	sc->hw_type = (IWN_READ(sc, IWN_HW_REV) >> 4) & 0xf;
 	if (sc->hw_type == IWN_HW_REV_TYPE_4965)
 		error = iwn4965_attach(sc, PCI_PRODUCT(pa->pa_id));
 	else
 		error = iwn5000_attach(sc, PCI_PRODUCT(pa->pa_id));
 	if (error != 0) {
-		aprint_error_dev(self, "could not attach device\n");
-		goto failih;
+		aprint_error(": could not attach device\n");
+		return;
 	}	
 
 	if ((error = iwn_hw_prepare(sc)) != 0) {
-		aprint_error_dev(self, "hardware not ready\n");
-		goto failih;
+		aprint_error(": hardware not ready\n");
+		return;
 	}
 
 	/* Read MAC address, channels, etc from EEPROM. */
 	if ((error = iwn_read_eeprom(sc)) != 0) {
-		aprint_error_dev(self, "could not read EEPROM\n");
-		goto failih;
+		aprint_error(": could not read EEPROM\n");
+		return;
 	}
 
 	/* Allocate DMA memory for firmware transfers. */
 	if ((error = iwn_alloc_fwmem(sc)) != 0) {
-		aprint_error_dev(self,
-		    "could not allocate memory for firmware\n");
-		goto failih;
+		aprint_error(": could not allocate memory for firmware\n");
+		return;
 	}
 
 	/* Allocate "Keep Warm" page. */
 	if ((error = iwn_alloc_kw(sc)) != 0) {
-		aprint_error_dev(self, "could not allocate keep warm page\n");
+		aprint_error(": could not allocate keep warm page\n");
 		goto fail1;
 	}
 
 	/* Allocate ICT table for 5000 Series. */
 	if (sc->hw_type != IWN_HW_REV_TYPE_4965 &&
 	    (error = iwn_alloc_ict(sc)) != 0) {
-		aprint_error_dev(self, "could not allocate ICT table\n");
+		aprint_error(": could not allocate ICT table\n");
 		goto fail2;
 	}
 
 	/* Allocate TX scheduler "rings". */
 	if ((error = iwn_alloc_sched(sc)) != 0) {
-		aprint_error_dev(self,
-		    "could not allocate TX scheduler rings\n");
+		aprint_error(": could not allocate TX scheduler rings\n");
 		goto fail3;
 	}
 
@@ -502,15 +493,14 @@ iwn_attach(device_t parent __unused, device_t self, void *aux)
 	/* Allocate TX rings (16 on 4965AGN, 20 on >=5000). */
 	for (i = 0; i < sc->ntxqs; i++) {
 		if ((error = iwn_alloc_tx_ring(sc, &sc->txq[i], i)) != 0) {
-			aprint_error_dev(self,
-			    "could not allocate TX ring %d\n", i);
+			aprint_error(": could not allocate TX ring %d\n", i);
 			goto fail4;
 		}
 	}
 
 	/* Allocate RX ring. */
 	if ((error = iwn_alloc_rx_ring(sc, &sc->rxq)) != 0) {
-		aprint_error_dev(self, "could not allocate RX ring\n");
+		aprint_error(": could not allocate RX ring\n");
 		goto fail4;
 	}
 
@@ -596,12 +586,8 @@ iwn_attach(device_t parent __unused, device_t self, void *aux)
 	IFQ_SET_READY(&ifp->if_snd);
 	memcpy(ifp->if_xname, device_xname(self), IFNAMSIZ);
 
-	if_initialize(ifp);
+	if_attach(ifp);
 	ieee80211_ifattach(ic);
-	/* Use common softint-based if_input */
-	ifp->if_percpuq = if_percpuq_create(ifp);
-	if_register(ifp);
-
 	ic->ic_node_alloc = iwn_node_alloc;
 	ic->ic_newassoc = iwn_newassoc;
 #ifdef IWN_HWCRYPTO
@@ -639,7 +625,6 @@ iwn_attach(device_t parent __unused, device_t self, void *aux)
 	/* XXX NetBSD add call to ieee80211_announce for dmesg. */
 	ieee80211_announce(ic);
 
-	sc->sc_flags |= IWN_FLAG_ATTACHED;
 	return;
 
 	/* Free allocated memory if something failed during attachment. */
@@ -653,13 +638,6 @@ fail3:	if (sc->ict != NULL)
 		iwn_free_ict(sc);
 fail2:	iwn_free_kw(sc);
 fail1:	iwn_free_fwmem(sc);
-failih:	pci_intr_disestablish(sc->sc_pct, sc->sc_ih);
-	sc->sc_ih = NULL;
-failia:	pci_intr_release(sc->sc_pct, sc->sc_pihp, 1);
-	sc->sc_pihp = NULL;
-failsi:	softint_disestablish(sc->sc_soft_ih);
-	sc->sc_soft_ih = NULL;
-unmap:	bus_space_unmap(sc->sc_st, sc->sc_sh, sc->sc_sz);
 }
 
 int
@@ -842,18 +820,11 @@ iwn_detach(device_t self, int flags __unused)
 	struct ifnet *ifp = sc->sc_ic.ic_ifp;
 	int qid;
 
-	if (!(sc->sc_flags & IWN_FLAG_ATTACHED))
-		return 0;
-
 	callout_stop(&sc->calib_to);
 
 	/* Uninstall interrupt handler. */
 	if (sc->sc_ih != NULL)
 		pci_intr_disestablish(sc->sc_pct, sc->sc_ih);
-	if (sc->sc_pihp != NULL)
-		pci_intr_release(sc->sc_pct, sc->sc_pihp, 1);
-	if (sc->sc_soft_ih != NULL)
-		softint_disestablish(sc->sc_soft_ih);
 
 	/* Free DMA resources. */
 	iwn_free_rx_ring(sc, &sc->rxq);
@@ -1492,8 +1463,6 @@ iwn5000_ict_reset(struct iwn_softc *sc)
 
 	/* Reset ICT table. */
 	memset(sc->ict, 0, IWN_ICT_SIZE);
-	bus_dmamap_sync(sc->sc_dmat, sc->ict_dma.map, 0, IWN_ICT_SIZE,
-	    BUS_DMASYNC_PREWRITE);
 	sc->ict_cur = 0;
 
 	/* Set physical address of ICT table (4KB aligned). */
@@ -1883,7 +1852,7 @@ iwn_newstate(struct ieee80211com *ic, enum ieee80211_state nstate, int arg)
 		/* XXX Do not abort a running scan. */
 		if (sc->sc_flags & IWN_FLAG_SCANNING) {
 			if (ic->ic_state != nstate)
-				aprint_debug_dev(sc->sc_dev, "scan request(%d) "
+				aprint_error_dev(sc->sc_dev, "scan request(%d) "
 				    "while scanning(%d) ignored\n", nstate,
 				    ic->ic_state);
 			break;
@@ -1974,7 +1943,7 @@ iwn_calib_timeout(void *arg)
 	splx(s);
 
 	/* Automatic rate control triggered every 500ms. */
-	callout_schedule(&sc->calib_to, mstohz(500));
+	callout_schedule(&sc->calib_to, hz/2);
 }
 
 /*
@@ -2014,7 +1983,7 @@ iwn_rx_done(struct iwn_softc *sc, struct iwn_rx_desc *desc,
 	struct iwn_rx_stat *stat;
 	char	*head;
 	uint32_t flags;
-	int error, len, rssi, s;
+	int error, len, rssi;
 
 	if (desc->type == IWN_MPDU_RX_DONE) {
 		/* Check for prior RX_PHY notification. */
@@ -2100,11 +2069,9 @@ iwn_rx_done(struct iwn_softc *sc, struct iwn_rx_desc *desc,
 	    BUS_DMASYNC_PREWRITE);
 
 	/* Finalize mbuf. */
-	m_set_rcvif(m, ifp);
+	m->m_pkthdr.rcvif = ifp;
 	m->m_data = head;
 	m->m_pkthdr.len = m->m_len = len;
-
-	s = splnet();
 
 	/* Grab a reference to the source node. */
 	wh = mtod(m, struct ieee80211_frame *);
@@ -2159,8 +2126,6 @@ iwn_rx_done(struct iwn_softc *sc, struct iwn_rx_desc *desc,
 
 	/* Node is no longer needed. */
 	ieee80211_free_node(ni);
-
-	splx(s);
 }
 
 #ifndef IEEE80211_NO_HT
@@ -2345,9 +2310,6 @@ iwn_tx_done(struct iwn_softc *sc, struct iwn_rx_desc *desc, int ackfailcnt,
 	struct iwn_tx_ring *ring = &sc->txq[desc->qid & 0xf];
 	struct iwn_tx_data *data = &ring->data[desc->idx];
 	struct iwn_node *wn = (struct iwn_node *)data->ni;
-	int s;
-
-	s = splnet();
 
 	/* Update rate control statistics. */
 	wn->amn.amn_txcnt++;
@@ -2373,11 +2335,9 @@ iwn_tx_done(struct iwn_softc *sc, struct iwn_rx_desc *desc, int ackfailcnt,
 		sc->qfullmsk &= ~(1 << ring->qid);
 		if (sc->qfullmsk == 0 && (ifp->if_flags & IFF_OACTIVE)) {
 			ifp->if_flags &= ~IFF_OACTIVE;
-			iwn_start(ifp);
+			(*ifp->if_start)(ifp);
 		}
 	}
-
-	splx(s);
 }
 
 /*
@@ -2416,7 +2376,6 @@ iwn_notif_intr(struct iwn_softc *sc)
 	struct ieee80211com *ic = &sc->sc_ic;
 	struct ifnet *ifp = ic->ic_ifp;
 	uint16_t hw;
-	int s;
 
 	bus_dmamap_sync(sc->sc_dmat, sc->rxq.stat_dma.map,
 	    0, sc->rxq.stat_dma.size, BUS_DMASYNC_POSTREAD);
@@ -2520,10 +2479,8 @@ iwn_notif_intr(struct iwn_softc *sc)
 				aprint_error_dev(sc->sc_dev,
 				    "Radio transmitter is off\n");
 				/* Turn the interface down. */
-				s = splnet();
 				ifp->if_flags &= ~IFF_UP;
 				iwn_stop(ifp, 1);
-				splx(s);
 				return;	/* No further processing. */
 			}
 			break;
@@ -2671,34 +2628,20 @@ static int
 iwn_intr(void *arg)
 {
 	struct iwn_softc *sc = arg;
+	struct ifnet *ifp = sc->sc_ic.ic_ifp;
+	uint32_t r1, r2, tmp;
 
 	/* Disable interrupts. */
 	IWN_WRITE(sc, IWN_INT_MASK, 0);
 
-	softint_schedule(sc->sc_soft_ih);
-	return 1;
-}
-
-static void
-iwn_softintr(void *arg)
-{
-	struct iwn_softc *sc = arg;
-	struct ifnet *ifp = sc->sc_ic.ic_ifp;
-	uint32_t r1, r2, tmp;
-	int s;
-
 	/* Read interrupts from ICT (fast) or from registers (slow). */
 	if (sc->sc_flags & IWN_FLAG_USE_ICT) {
-		bus_dmamap_sync(sc->sc_dmat, sc->ict_dma.map, 0,
-		    IWN_ICT_SIZE, BUS_DMASYNC_POSTREAD);
 		tmp = 0;
 		while (sc->ict[sc->ict_cur] != 0) {
 			tmp |= sc->ict[sc->ict_cur];
 			sc->ict[sc->ict_cur] = 0;	/* Acknowledge. */
 			sc->ict_cur = (sc->ict_cur + 1) % IWN_ICT_COUNT;
 		}
-		bus_dmamap_sync(sc->sc_dmat, sc->ict_dma.map, 0,
-		    IWN_ICT_SIZE, BUS_DMASYNC_PREWRITE);
 		tmp = le32toh(tmp);
 		if (tmp == 0xffffffff)	/* Shouldn't happen. */
 			tmp = 0;
@@ -2709,11 +2652,13 @@ iwn_softintr(void *arg)
 	} else {
 		r1 = IWN_READ(sc, IWN_INT);
 		if (r1 == 0xffffffff || (r1 & 0xfffffff0) == 0xa5a5a5a0)
-			return;	/* Hardware gone! */
+			return 0;	/* Hardware gone! */
 		r2 = IWN_READ(sc, IWN_FH_INT);
 	}
 	if (r1 == 0 && r2 == 0) {
-		goto out;	/* Interrupt not for us. */
+		if (ifp->if_flags & IFF_UP)
+			IWN_WRITE(sc, IWN_INT_MASK, sc->int_mask);
+		return 0;	/* Interrupt not for us. */
 	}
 
 	/* Acknowledge interrupts. */
@@ -2736,18 +2681,17 @@ iwn_softintr(void *arg)
 		    "fatal firmware error\n");
 		/* Dump firmware error log and stop. */
 		iwn_fatal_intr(sc);
-		s = splnet();
 		ifp->if_flags &= ~IFF_UP;
 		iwn_stop(ifp, 1);
-		splx(s);
-		return;
+		return 1;
 	}
 	if ((r1 & (IWN_INT_FH_RX | IWN_INT_SW_RX | IWN_INT_RX_PERIODIC)) ||
 	    (r2 & IWN_FH_INT_RX)) {
 		if (sc->sc_flags & IWN_FLAG_USE_ICT) {
 			if (r1 & (IWN_INT_FH_RX | IWN_INT_SW_RX))
 				IWN_WRITE(sc, IWN_FH_INT, IWN_FH_INT_RX);
-			IWN_WRITE_1(sc, IWN_INT_PERIODIC, IWN_INT_PERIODIC_DIS);
+			IWN_WRITE_1(sc, IWN_INT_PERIODIC,
+			    IWN_INT_PERIODIC_DIS);
 			iwn_notif_intr(sc);
 			if (r1 & (IWN_INT_FH_RX | IWN_INT_SW_RX)) {
 				IWN_WRITE_1(sc, IWN_INT_PERIODIC,
@@ -2769,10 +2713,11 @@ iwn_softintr(void *arg)
 	if (r1 & IWN_INT_WAKEUP)
 		iwn_wakeup_intr(sc);
 
-out:
 	/* Re-enable interrupts. */
 	if (ifp->if_flags & IFF_UP)
 		IWN_WRITE(sc, IWN_INT_MASK, sc->int_mask);
+
+	return 1;
 }
 
 /*
@@ -3149,7 +3094,7 @@ iwn_start(struct ifnet *ifp)
 		/* Send pending management frames first. */
 		IF_DEQUEUE(&ic->ic_mgtq, m);
 		if (m != NULL) {
-			ni = M_GETCTX(m, struct ieee80211_node *);
+			ni = (void *)m->m_pkthdr.rcvif;
 			ac = 0;
 			goto sendit;
 		}
@@ -3240,6 +3185,11 @@ iwn_ioctl(struct ifnet *ifp, u_long cmd, void *data)
 	switch (cmd) {
 	case SIOCSIFADDR:
 		ifp->if_flags |= IFF_UP;
+#ifdef INET
+		struct ifaddr *ifa = (struct ifaddr *)data;
+		if (ifa->ifa_addr->sa_family == AF_INET)
+			arp_ifinit(&ic->ic_ac, ifa);
+#endif
 		/* FALLTHROUGH */
 	case SIOCSIFFLAGS:
 		/* XXX Added as it is in every NetBSD driver */
@@ -5997,7 +5947,8 @@ iwn_apm_stop_master(struct iwn_softc *sc)
 			return;
 		DELAY(10);
 	}
-	aprint_error_dev(sc->sc_dev, "timeout waiting for master\n");
+	aprint_error_dev(sc->sc_dev,
+	    "timeout waiting for master\n");
 }
 
 static void
@@ -6068,7 +6019,7 @@ iwn5000_nic_config(struct iwn_softc *sc)
 		IWN_WRITE(sc, IWN_GP_DRIVER, IWN_GP_DRIVER_RADIO_2X2_IPA);
 	}
 	if ((sc->hw_type == IWN_HW_REV_TYPE_6050 ||
-	     sc->hw_type == IWN_HW_REV_TYPE_6005) && sc->calib_ver >= 6) {
+		sc->hw_type == IWN_HW_REV_TYPE_6005) && sc->calib_ver >= 6) {
 		/* Indicate that ROM calibration version is >=6. */
 		IWN_SETBITS(sc, IWN_GP_DRIVER, IWN_GP_DRIVER_CALIB_VER6);
 	}
@@ -6498,6 +6449,58 @@ iwn_free_rpool(struct iwn_softc *sc)
 	iwn_dma_contig_free(&sc->rxq.buf_dma);
 }
 #endif
+
+/*
+ * XXX code from OpenBSD src/sys/net80211/ieee80211_output.c
+ * Copyright (c) 2001 Atsushi Onoe
+ * Copyright (c) 2002, 2003 Sam Leffler, Errno Consulting
+ * Copyright (c) 2007-2009 Damien Bergamini
+ * All rights reserved.
+ */
+
+/*
+ * Add an SSID element to a frame (see 7.3.2.1).
+ */
+static u_int8_t *
+ieee80211_add_ssid(u_int8_t *frm, const u_int8_t *ssid, u_int len)
+{
+	*frm++ = IEEE80211_ELEMID_SSID;
+	*frm++ = len;
+	memcpy(frm, ssid, len);
+	return frm + len;
+}
+
+/*
+ * Add a supported rates element to a frame (see 7.3.2.2).
+ */
+static u_int8_t *
+ieee80211_add_rates(u_int8_t *frm, const struct ieee80211_rateset *rs)
+{
+	int nrates;
+
+	*frm++ = IEEE80211_ELEMID_RATES;
+	nrates = min(rs->rs_nrates, IEEE80211_RATE_SIZE);
+	*frm++ = nrates;
+	memcpy(frm, rs->rs_rates, nrates);
+	return frm + nrates;
+}
+
+/*
+ * Add an extended supported rates element to a frame (see 7.3.2.14).
+ */
+static u_int8_t *
+ieee80211_add_xrates(u_int8_t *frm, const struct ieee80211_rateset *rs)
+{
+	int nrates;
+
+	KASSERT(rs->rs_nrates > IEEE80211_RATE_SIZE);
+
+	*frm++ = IEEE80211_ELEMID_XRATES;
+	nrates = rs->rs_nrates - IEEE80211_RATE_SIZE;
+	*frm++ = nrates;
+	memcpy(frm, rs->rs_rates + IEEE80211_RATE_SIZE, nrates);
+	return frm + nrates;
+}
 
 /*
  * XXX: Hack to set the current channel to the value advertised in beacons or

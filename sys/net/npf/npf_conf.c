@@ -1,4 +1,4 @@
-/*	$NetBSD: npf_conf.c,v 1.11 2017/01/03 00:58:05 rmind Exp $	*/
+/*	$NetBSD: npf_conf.c,v 1.8.2.1 2014/12/01 13:05:26 martin Exp $	*/
 
 /*-
  * Copyright (c) 2013 The NetBSD Foundation, Inc.
@@ -47,9 +47,8 @@
  *	necessary writer-side barrier of the passive serialisation.
  */
 
-#ifdef _KERNEL
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: npf_conf.c,v 1.11 2017/01/03 00:58:05 rmind Exp $");
+__KERNEL_RCSID(0, "$NetBSD: npf_conf.c,v 1.8.2.1 2014/12/01 13:05:26 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/types.h>
@@ -58,35 +57,39 @@ __KERNEL_RCSID(0, "$NetBSD: npf_conf.c,v 1.11 2017/01/03 00:58:05 rmind Exp $");
 #include <sys/kmem.h>
 #include <sys/pserialize.h>
 #include <sys/mutex.h>
-#endif
 
 #include "npf_impl.h"
 #include "npf_conn.h"
 
-struct npf_config {
+typedef struct {
 	npf_ruleset_t *		n_rules;
 	npf_tableset_t *	n_tables;
 	npf_ruleset_t *		n_nat_rules;
 	npf_rprocset_t *	n_rprocs;
 	bool			n_default_pass;
-};
+} npf_config_t;
+
+static npf_config_t *		npf_config		__cacheline_aligned;
+static kmutex_t			npf_config_lock		__cacheline_aligned;
+static pserialize_t		npf_config_psz		__cacheline_aligned;
 
 void
-npf_config_init(npf_t *npf)
+npf_config_init(void)
 {
 	npf_ruleset_t *rlset, *nset;
 	npf_rprocset_t *rpset;
 	npf_tableset_t *tset;
 
-	mutex_init(&npf->config_lock, MUTEX_DEFAULT, IPL_SOFTNET);
+	mutex_init(&npf_config_lock, MUTEX_DEFAULT, IPL_SOFTNET);
+	npf_config_psz = pserialize_create();
 
 	/* Load the empty configuration. */
 	tset = npf_tableset_create(0);
 	rpset = npf_rprocset_create();
 	rlset = npf_ruleset_create(0);
 	nset = npf_ruleset_create(0);
-	npf_config_load(npf, rlset, tset, nset, rpset, NULL, true);
-	KASSERT(npf->config != NULL);
+	npf_config_load(rlset, tset, nset, rpset, NULL, true);
+	KASSERT(npf_config != NULL);
 }
 
 static void
@@ -100,20 +103,21 @@ npf_config_destroy(npf_config_t *nc)
 }
 
 void
-npf_config_fini(npf_t *npf)
+npf_config_fini(void)
 {
 	npf_conndb_t *cd = npf_conndb_create();
 
 	/* Flush the connections. */
-	mutex_enter(&npf->config_lock);
-	npf_conn_tracking(npf, false);
-	pserialize_perform(npf->qsbr);
-	npf_conn_load(npf, cd, false);
-	npf_ifmap_flush(npf);
-	mutex_exit(&npf->config_lock);
+	mutex_enter(&npf_config_lock);
+	npf_conn_tracking(false);
+	pserialize_perform(npf_config_psz);
+	npf_conn_load(cd, false);
+	npf_ifmap_flush();
+	mutex_exit(&npf_config_lock);
 
-	npf_config_destroy(npf->config);
-	mutex_destroy(&npf->config_lock);
+	npf_config_destroy(npf_config);
+	pserialize_destroy(npf_config_psz);
+	mutex_destroy(&npf_config_lock);
 }
 
 /*
@@ -121,7 +125,7 @@ npf_config_fini(npf_t *npf)
  * Performs the necessary synchronisation and destroys the old config.
  */
 void
-npf_config_load(npf_t *npf, npf_ruleset_t *rset, npf_tableset_t *tset,
+npf_config_load(npf_ruleset_t *rset, npf_tableset_t *tset,
     npf_ruleset_t *nset, npf_rprocset_t *rpset,
     npf_conndb_t *conns, bool flush)
 {
@@ -140,24 +144,24 @@ npf_config_load(npf_t *npf, npf_ruleset_t *rset, npf_tableset_t *tset,
 	 * - Scan and use existing dynamic tables, reload only static.
 	 * - Scan and use matching NAT policies to preserve the connections.
 	 */
-	mutex_enter(&npf->config_lock);
-	if ((onc = npf->config) != NULL) {
-		npf_ruleset_reload(npf, rset, onc->n_rules, load);
-		npf_tableset_reload(npf, tset, onc->n_tables);
-		npf_ruleset_reload(npf, nset, onc->n_nat_rules, load);
+	mutex_enter(&npf_config_lock);
+	if ((onc = npf_config) != NULL) {
+		npf_ruleset_reload(rset, onc->n_rules, load);
+		npf_tableset_reload(tset, onc->n_tables);
+		npf_ruleset_reload(nset, onc->n_nat_rules, load);
 	}
 
 	/*
 	 * Set the new config and release the lock.
 	 */
 	membar_sync();
-	npf->config = nc;
+	npf_config = nc;
 	if (onc == NULL) {
 		/* Initial load, done. */
-		npf_ifmap_flush(npf);
-		npf_conn_load(npf, conns, !flush);
-		mutex_exit(&npf->config_lock);
-		goto done;
+		npf_ifmap_flush();
+		npf_conn_load(conns, !flush);
+		mutex_exit(&npf_config_lock);
+		return;
 	}
 
 	/*
@@ -165,27 +169,24 @@ npf_config_load(npf_t *npf, npf_ruleset_t *rset, npf_tableset_t *tset,
 	 * then disable the connection tracking for the grace period.
 	 */
 	if (flush || conns) {
-		npf_conn_tracking(npf, false);
+		npf_conn_tracking(false);
 	}
 
 	/* Synchronise: drain all references. */
-	pserialize_perform(npf->qsbr);
+	pserialize_perform(npf_config_psz);
 	if (flush) {
-		npf_ifmap_flush(npf);
+		npf_ifmap_flush();
 	}
 
 	/*
 	 * G/C the existing connections and, if passed, load the new ones.
 	 * If not flushing - enable the connection tracking.
 	 */
-	npf_conn_load(npf, conns, !flush);
-	mutex_exit(&npf->config_lock);
+	npf_conn_load(conns, !flush);
+	mutex_exit(&npf_config_lock);
 
 	/* Finally, it is safe to destroy the old config. */
 	npf_config_destroy(onc);
-done:
-	/* Sync all interface address tables (can be done asynchronously). */
-	npf_ifaddr_syncall(npf);
 }
 
 /*
@@ -193,28 +194,28 @@ done:
  */
 
 void
-npf_config_enter(npf_t *npf)
+npf_config_enter(void)
 {
-	mutex_enter(&npf->config_lock);
+	mutex_enter(&npf_config_lock);
 }
 
 void
-npf_config_exit(npf_t *npf)
+npf_config_exit(void)
 {
-	mutex_exit(&npf->config_lock);
+	mutex_exit(&npf_config_lock);
 }
 
 bool
-npf_config_locked_p(npf_t *npf)
+npf_config_locked_p(void)
 {
-	return mutex_owned(&npf->config_lock);
+	return mutex_owned(&npf_config_lock);
 }
 
 void
-npf_config_sync(npf_t *npf)
+npf_config_sync(void)
 {
-	KASSERT(npf_config_locked_p(npf));
-	pserialize_perform(npf->qsbr);
+	KASSERT(npf_config_locked_p());
+	pserialize_perform(npf_config_psz);
 }
 
 /*
@@ -238,31 +239,31 @@ npf_config_read_exit(int s)
  */
 
 npf_ruleset_t *
-npf_config_ruleset(npf_t *npf)
+npf_config_ruleset(void)
 {
-	return npf->config->n_rules;
+	return npf_config->n_rules;
 }
 
 npf_ruleset_t *
-npf_config_natset(npf_t *npf)
+npf_config_natset(void)
 {
-	return npf->config->n_nat_rules;
+	return npf_config->n_nat_rules;
 }
 
 npf_tableset_t *
-npf_config_tableset(npf_t *npf)
+npf_config_tableset(void)
 {
-	return npf->config->n_tables;
+	return npf_config->n_tables;
 }
 
 npf_rprocset_t *
-npf_config_rprocs(npf_t *npf)
+npf_config_rprocs(void)
 {
-	return npf->config->n_rprocs;
+	return npf_config->n_rprocs;
 }
 
 bool
-npf_default_pass(npf_t *npf)
+npf_default_pass(void)
 {
-	return npf->config->n_default_pass;
+	return npf_config->n_default_pass;
 }

@@ -1,3 +1,5 @@
+/*	$NetBSD: inffas86.c,v 1.1.1.1 2006/01/14 20:10:53 christos Exp $	*/
+
 /* inffas86.c is a hand tuned assembler version of
  *
  * inffast.c -- fast decoding
@@ -113,7 +115,7 @@ unsigned start;         /* inflate()'s starting value for strm->avail_out */
     ar.beg = ar.out - (start - strm->avail_out);
     ar.end = ar.out + (strm->avail_out - PAD_AVAIL_OUT);
     ar.wsize = state->wsize;
-    ar.write = state->wnext;
+    ar.write = state->write;
     ar.window = state->window;
     ar.hold = state->hold;
     ar.bits = state->bits;

@@ -1,4 +1,4 @@
-/*	$NetBSD: trap.c,v 1.134 2016/07/07 06:55:39 msaitoh Exp $     */
+/*	$NetBSD: trap.c,v 1.132 2013/10/25 16:30:52 martin Exp $     */
 
 /*
  * Copyright (c) 1994 Ludd, University of Lule}, Sweden.
@@ -33,7 +33,7 @@
  /* All bugs are subject to removal without further notice */
 		
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: trap.c,v 1.134 2016/07/07 06:55:39 msaitoh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: trap.c,v 1.132 2013/10/25 16:30:52 martin Exp $");
 
 #include "opt_ddb.h"
 #include "opt_multiprocessor.h"
@@ -111,7 +111,7 @@ trap(struct trapframe *tf)
 	if (usermode) {
 		type |= T_USER;
 		oticks = p->p_sticks;
-		l->l_md.md_utf = tf;
+		l->l_md.md_utf = tf; 
 		LWP_CACHE_CREDS(l, p);
 	}
 
@@ -244,28 +244,18 @@ if(faultdebug)printf("trap accflt type %lx, code %lx, pc %lx, psl %lx\n",
 				panic("SEGV in kernel mode: pc %#lx addr %#lx",
 				    tf->tf_pc, tf->tf_code);
 			}
-			switch (rv) {
-			case ENOMEM:
+			code = SEGV_ACCERR;
+			if (rv == ENOMEM) {
 				printf("UVM: pid %d (%s), uid %d killed: "
 				       "out of swap\n",
 				       p->p_pid, p->p_comm,
 				       l->l_cred ?
 				       kauth_cred_geteuid(l->l_cred) : -1);
 				sig = SIGKILL;
-				code = SI_NOINFO;
-				break;
-			case EINVAL:
-				code = BUS_ADRERR;
-				sig = SIGBUS;
-				break;
-			case EACCES:
-				code = SEGV_ACCERR;
+			} else {
 				sig = SIGSEGV;
-				break;
-			default:
-				code = SEGV_MAPERR;
-				sig = SIGSEGV;
-				break;
+				if (rv != EACCES)
+					code = SEGV_MAPERR;
 			}
 		} else {
 			trapsig = false;

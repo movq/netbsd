@@ -1,5 +1,6 @@
 /* depend.c - Handle dependency tracking.
-   Copyright (C) 1997-2016 Free Software Foundation, Inc.
+   Copyright 1997, 1998, 2000, 2001, 2003, 2004, 2005, 2007
+   Free Software Foundation, Inc.
 
    This file is part of GAS, the GNU Assembler.
 
@@ -25,10 +26,10 @@
 static char * dep_file = NULL;
 
 struct dependency
-{
-  char * file;
-  struct dependency * next;
-};
+  {
+    char * file;
+    struct dependency * next;
+  };
 
 /* All the files we depend on.  */
 static struct dependency * dep_chain = NULL;
@@ -36,8 +37,8 @@ static struct dependency * dep_chain = NULL;
 /* Current column in output file.  */
 static int column = 0;
 
-static int quote_string_for_make (FILE *, const char *);
-static void wrap_output (FILE *, const char *, int);
+static int quote_string_for_make (FILE *, char *);
+static void wrap_output (FILE *, char *, int);
 
 /* Number of columns allowable.  */
 #define MAX_COLUMNS 72
@@ -54,7 +55,7 @@ start_dependencies (char *filename)
 /* Noticed a new filename, so try to register it.  */
 
 void
-register_dependency (const char *filename)
+register_dependency (char *filename)
 {
   struct dependency *dep;
 
@@ -67,7 +68,7 @@ register_dependency (const char *filename)
 	return;
     }
 
-  dep = XNEW (struct dependency);
+  dep = (struct dependency *) xmalloc (sizeof (struct dependency));
   dep->file = xstrdup (filename);
   dep->next = dep_chain;
   dep_chain = dep;
@@ -80,9 +81,9 @@ register_dependency (const char *filename)
    This code is taken from gcc with only minor changes.  */
 
 static int
-quote_string_for_make (FILE *file, const char *src)
+quote_string_for_make (FILE *file, char *src)
 {
-  const char *p = src;
+  char *p = src;
   int i = 0;
 
   for (;;)
@@ -101,7 +102,7 @@ quote_string_for_make (FILE *file, const char *src)
 	       preceded by 2N backslashes represents N backslashes at
 	       the end of a file name; and backslashes in other
 	       contexts should not be doubled.  */
-	    const char *q;
+	    char *q;
 
 	    for (q = p - 1; src < q && q[-1] == '\\'; q--)
 	      {
@@ -142,7 +143,7 @@ quote_string_for_make (FILE *file, const char *src)
    wrapping as necessary.  */
 
 static void
-wrap_output (FILE *f, const char *string, int spacer)
+wrap_output (FILE *f, char *string, int spacer)
 {
   int len = quote_string_for_make (NULL, string);
 

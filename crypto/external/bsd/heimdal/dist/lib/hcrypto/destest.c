@@ -1,4 +1,4 @@
-/*	$NetBSD: destest.c,v 1.2 2017/01/28 21:31:47 christos Exp $	*/
+/*	$NetBSD: destest.c,v 1.1.1.2 2014/04/24 12:45:30 pettai Exp $	*/
 
 /*
  * Copyright (c) 2005 Kungliga Tekniska Högskolan
@@ -33,13 +33,15 @@
  * SUCH DAMAGE.
  */
 
-#include <config.h>
-#include <krb5/roken.h>
+#include "config.h"
 
 #ifdef KRB5
 #include <krb5/krb5-types.h>
 #endif
 
+#include <string.h>
+#include <stdio.h>
+#include <stdlib.h>
 #ifdef HAVE_UNISTD_H
 #include <unistd.h>
 #endif

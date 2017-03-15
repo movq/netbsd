@@ -1,5 +1,7 @@
 /* Matsushita 10200 specific support for 32-bit ELF
-   Copyright (C) 1996-2016 Free Software Foundation, Inc.
+   Copyright 1996, 1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005,
+   2007, 2010, 2012
+   Free Software Foundation, Inc.
 
    This file is part of BFD, the Binary File Descriptor library.
 
@@ -46,11 +48,11 @@ static reloc_howto_type elf_mn10200_howto_table[] =
   /* Dummy relocation.  Does nothing.  */
   HOWTO (R_MN10200_NONE,
 	 0,
-	 3,
-	 0,
+	 2,
+	 16,
 	 FALSE,
 	 0,
-	 complain_overflow_dont,
+	 complain_overflow_bitfield,
 	 bfd_elf_generic_reloc,
 	 "R_MN10200_NONE",
 	 FALSE,
@@ -371,19 +373,19 @@ mn10200_elf_relocate_section (bfd *output_bfd,
 	}
       else
 	{
-	  bfd_boolean unresolved_reloc, warned, ignored;
+	  bfd_boolean unresolved_reloc, warned;
 
 	  RELOC_FOR_GLOBAL_SYMBOL (info, input_bfd, input_section, rel,
 				   r_symndx, symtab_hdr, sym_hashes,
 				   h, sec, relocation,
-				   unresolved_reloc, warned, ignored);
+				   unresolved_reloc, warned);
 	}
 
       if (sec != NULL && discarded_section (sec))
 	RELOC_AGAINST_DISCARDED_SECTION (info, input_bfd, input_section,
 					 rel, 1, relend, howto, 0, contents);
 
-      if (bfd_link_relocatable (info))
+      if (info->relocatable)
 	continue;
 
       r = mn10200_elf_final_link_relocate (howto, input_bfd, output_bfd,
@@ -410,15 +412,18 @@ mn10200_elf_relocate_section (bfd *output_bfd,
 	  switch (r)
 	    {
 	    case bfd_reloc_overflow:
-	      (*info->callbacks->reloc_overflow)
-		(info, (h ? &h->root : NULL), name, howto->name,
-		 (bfd_vma) 0, input_bfd, input_section, rel->r_offset);
+	      if (! ((*info->callbacks->reloc_overflow)
+		     (info, (h ? &h->root : NULL), name, howto->name,
+		      (bfd_vma) 0, input_bfd, input_section,
+		      rel->r_offset)))
+		return FALSE;
 	      break;
 
 	    case bfd_reloc_undefined:
-	      (*info->callbacks->undefined_symbol) (info, name, input_bfd,
-						    input_section,
-						    rel->r_offset, TRUE);
+	      if (! ((*info->callbacks->undefined_symbol)
+		     (info, name, input_bfd, input_section,
+		      rel->r_offset, TRUE)))
+		return FALSE;
 	      break;
 
 	    case bfd_reloc_outofrange:
@@ -438,8 +443,10 @@ mn10200_elf_relocate_section (bfd *output_bfd,
 	      /* fall through */
 
 	    common_error:
-	      (*info->callbacks->warning) (info, msg, name, input_bfd,
-					   input_section, rel->r_offset);
+	      if (!((*info->callbacks->warning)
+		    (info, msg, name, input_bfd, input_section,
+		     rel->r_offset)))
+		return FALSE;
 	      break;
 	    }
 	}
@@ -567,7 +574,7 @@ mn10200_elf_relax_section (bfd *abfd,
   /* We don't have to do anything for a relocatable link, if
      this section does not have relocs, or if this is not a
      code section.  */
-  if (bfd_link_relocatable (link_info)
+  if (link_info->relocatable
       || (sec->flags & SEC_RELOC) == 0
       || sec->reloc_count == 0
       || (sec->flags & SEC_CODE) == 0)
@@ -1369,7 +1376,7 @@ mn10200_elf_get_relocated_section_contents (bfd *output_bfd,
   return NULL;
 }
 
-#define TARGET_LITTLE_SYM	mn10200_elf32_vec
+#define TARGET_LITTLE_SYM	bfd_elf32_mn10200_vec
 #define TARGET_LITTLE_NAME	"elf32-mn10200"
 #define ELF_ARCH		bfd_arch_mn10200
 #define ELF_MACHINE_CODE	EM_MN10200

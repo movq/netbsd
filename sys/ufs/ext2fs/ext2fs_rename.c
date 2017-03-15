@@ -1,4 +1,4 @@
-/*	$NetBSD: ext2fs_rename.c,v 1.11 2016/08/15 18:38:10 jdolecek Exp $	*/
+/*	$NetBSD: ext2fs_rename.c,v 1.7 2014/05/25 13:46:58 hannken Exp $	*/
 
 /*-
  * Copyright (c) 2012 The NetBSD Foundation, Inc.
@@ -34,7 +34,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ext2fs_rename.c,v 1.11 2016/08/15 18:38:10 jdolecek Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ext2fs_rename.c,v 1.7 2014/05/25 13:46:58 hannken Exp $");
 
 #include <sys/param.h>
 #include <sys/buf.h>
@@ -44,7 +44,6 @@ __KERNEL_RCSID(0, "$NetBSD: ext2fs_rename.c,v 1.11 2016/08/15 18:38:10 jdolecek 
 #include <sys/namei.h>
 #include <sys/vnode.h>
 #include <sys/vnode_if.h>
-#include <sys/dirent.h>
 
 #include <miscfs/genfs/genfs.h>
 
@@ -307,7 +306,7 @@ ext2fs_gro_rename(struct mount *mp, kauth_cred_t cred,
 	 * We shall need to temporarily bump the link count, so make
 	 * sure there is room to do so.
 	 */
-	if ((nlink_t)VTOI(fvp)->i_e2fs_nlink >= EXT2FS_LINK_MAX)
+	if ((nlink_t)VTOI(fvp)->i_e2fs_nlink >= LINK_MAX)
 		return EMLINK;
 
 	directory_p = (fvp->v_type == VDIR);
@@ -330,7 +329,7 @@ ext2fs_gro_rename(struct mount *mp, kauth_cred_t cred,
 	 *    may be wrong, but correctable.
 	 */
 
-	KASSERT((nlink_t)VTOI(fvp)->i_e2fs_nlink < EXT2FS_LINK_MAX);
+	KASSERT((nlink_t)VTOI(fvp)->i_e2fs_nlink < LINK_MAX);
 	VTOI(fvp)->i_e2fs_nlink++;
 	VTOI(fvp)->i_flag |= IN_CHANGE;
 	error = ext2fs_update(fvp, NULL, NULL, UPDATE_WAIT);
@@ -352,11 +351,11 @@ ext2fs_gro_rename(struct mount *mp, kauth_cred_t cred,
 		 * parent we don't fool with the link count.
 		 */
 		if (directory_p && reparent_p) {
-			if ((nlink_t)VTOI(tdvp)->i_e2fs_nlink >= EXT2FS_LINK_MAX) {
+			if ((nlink_t)VTOI(tdvp)->i_e2fs_nlink >= LINK_MAX) {
 				error = EMLINK;
 				goto whymustithurtsomuch;
 			}
-			KASSERT((nlink_t)VTOI(tdvp)->i_e2fs_nlink < EXT2FS_LINK_MAX);
+			KASSERT((nlink_t)VTOI(tdvp)->i_e2fs_nlink < LINK_MAX);
 			VTOI(tdvp)->i_e2fs_nlink++;
 			VTOI(tdvp)->i_flag |= IN_CHANGE;
 			error = ext2fs_update(tdvp, NULL, NULL, UPDATE_WAIT);
@@ -781,7 +780,7 @@ ext2fs_rmdired_p(struct vnode *vp)
 	KASSERT(vp->v_type == VDIR);
 
 	/* XXX Is this correct?  */
-	return ext2fs_size(VTOI(vp)) == 0;
+	return (ext2fs_size(VTOI(vp)) == 0);
 }
 
 /*
@@ -893,8 +892,8 @@ ext2fs_read_dotdot(struct vnode *vp, kauth_cred_t cred, ino_t *ino_ret)
 	KASSERT(ino_ret != NULL);
 	KASSERT(vp->v_type == VDIR);
 
-	error = ufs_bufio(UIO_READ, vp, &dirbuf, sizeof dirbuf, (off_t)0,
-	    IO_NODELOCKED, cred, NULL, NULL);
+	error = vn_rdwr(UIO_READ, vp, &dirbuf, sizeof dirbuf, (off_t)0,
+	    UIO_SYSSPACE, IO_NODELOCKED, cred, NULL, NULL);
 	if (error)
 		return error;
 
@@ -925,8 +924,8 @@ ext2fs_rename_replace_dotdot(struct vnode *vp,
 	VTOI(fdvp)->i_e2fs_nlink--;
 	VTOI(fdvp)->i_flag |= IN_CHANGE;
 
-	error = ufs_bufio(UIO_READ, vp, &dirbuf, sizeof dirbuf, (off_t)0,
-	    IO_NODELOCKED, cred, NULL, NULL);
+	error = vn_rdwr(UIO_READ, vp, &dirbuf, sizeof dirbuf, (off_t)0,
+	    UIO_SYSSPACE, IO_NODELOCKED, cred, NULL, NULL);
 	if (error)
 		return error;
 
@@ -945,8 +944,8 @@ ext2fs_rename_replace_dotdot(struct vnode *vp,
 
 	dirbuf.dotdot_ino = h2fs32(VTOI(tdvp)->i_number);
 	/* XXX WTF?  Why not check error?  */
-	(void)ufs_bufio(UIO_WRITE, vp, &dirbuf, sizeof dirbuf, (off_t)0,
-	    (IO_NODELOCKED | IO_SYNC), cred, NULL, NULL);
+	(void)vn_rdwr(UIO_WRITE, vp, &dirbuf, sizeof dirbuf, (off_t)0,
+	    UIO_SYSSPACE, (IO_NODELOCKED | IO_SYNC), cred, NULL, NULL);
 
 	return 0;
 }

@@ -1,6 +1,6 @@
 #!/bin/sh
 #
-# $NetBSD: resize_disklabel,v 1.1 2015/04/06 20:19:28 jmcneill Exp $
+# $NetBSD: resize_disklabel,v 1.1.2.2 2015/08/06 21:13:43 snj Exp $
 #
 
 # PROVIDE: resize_disklabel

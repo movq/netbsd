@@ -1,4 +1,4 @@
-/*	$NetBSD: kern_rwlock.c,v 1.46 2017/01/26 04:11:56 christos Exp $	*/
+/*	$NetBSD: kern_rwlock.c,v 1.43 2014/07/30 07:44:00 ozaki-r Exp $	*/
 
 /*-
  * Copyright (c) 2002, 2006, 2007, 2008, 2009 The NetBSD Foundation, Inc.
@@ -38,7 +38,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: kern_rwlock.c,v 1.46 2017/01/26 04:11:56 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: kern_rwlock.c,v 1.43 2014/07/30 07:44:00 ozaki-r Exp $");
 
 #define	__RWLOCK_PRIVATE
 
@@ -73,7 +73,7 @@ __KERNEL_RCSID(0, "$NetBSD: kern_rwlock.c,v 1.46 2017/01/26 04:11:56 christos Ex
 #define	RW_DASSERT(rw, cond)						\
 do {									\
 	if (!(cond))							\
-		rw_abort(__func__, __LINE__, rw, "assertion failed: " #cond);\
+		rw_abort(rw, __func__, "assertion failed: " #cond);	\
 } while (/* CONSTCOND */ 0);
 
 #else	/* LOCKDEBUG */
@@ -94,7 +94,7 @@ do {									\
 #define	RW_ASSERT(rw, cond)						\
 do {									\
 	if (!(cond))							\
-		rw_abort(__func__, __LINE__, rw, "assertion failed: " #cond);\
+		rw_abort(rw, __func__, "assertion failed: " #cond);	\
 } while (/* CONSTCOND */ 0)
 
 #else
@@ -106,12 +106,12 @@ do {									\
 #define	RW_SETDEBUG(rw, on)		((rw)->rw_owner |= (on) ? 0 : RW_NODEBUG)
 #define	RW_DEBUG_P(rw)			(((rw)->rw_owner & RW_NODEBUG) == 0)
 #if defined(LOCKDEBUG)
-#define	RW_INHERITDEBUG(n, o)		(n) |= (o) & RW_NODEBUG
+#define	RW_INHERITDEBUG(new, old)	(new) |= (old) & RW_NODEBUG
 #else /* defined(LOCKDEBUG) */
-#define	RW_INHERITDEBUG(n, o)		/* nothing */
+#define	RW_INHERITDEBUG(new, old)	/* nothing */
 #endif /* defined(LOCKDEBUG) */
 
-static void	rw_abort(const char *, size_t, krwlock_t *, const char *);
+static void	rw_abort(krwlock_t *, const char *, const char *);
 static void	rw_dump(volatile void *);
 static lwp_t	*rw_owner(wchan_t);
 
@@ -183,13 +183,13 @@ rw_dump(volatile void *cookie)
  *	we ask the compiler to not inline it.
  */
 static void __noinline
-rw_abort(const char *func, size_t line, krwlock_t *rw, const char *msg)
+rw_abort(krwlock_t *rw, const char *func, const char *msg)
 {
 
 	if (panicstr != NULL)
 		return;
 
-	LOCKDEBUG_ABORT(func, line, rw, &rwlock_lockops, msg);
+	LOCKDEBUG_ABORT(rw, &rwlock_lockops, func, msg);
 }
 
 /*
@@ -334,12 +334,11 @@ rw_vector_enter(krwlock_t *rw, const krw_t op)
 			continue;
 		}
 		if (__predict_false(panicstr != NULL)) {
-			KPREEMPT_ENABLE(curlwp);
+			kpreempt_enable();
 			return;
 		}
 		if (__predict_false(RW_OWNER(rw) == curthread)) {
-			rw_abort(__func__, __LINE__, rw,
-			    "locking against myself");
+			rw_abort(rw, __func__, "locking against myself");
 		}
 		/*
 		 * If the lock owner is running on another CPU, and
@@ -418,7 +417,7 @@ rw_vector_enter(krwlock_t *rw, const krw_t op)
 void
 rw_vector_exit(krwlock_t *rw)
 {
-	uintptr_t curthread, owner, decr, newown, next;
+	uintptr_t curthread, owner, decr, new, next;
 	turnstile_t *ts;
 	int rcnt, wcnt;
 	lwp_t *l;
@@ -453,10 +452,10 @@ rw_vector_exit(krwlock_t *rw)
 	 */
 	membar_exit();
 	for (;;) {
-		newown = (owner - decr);
-		if ((newown & (RW_THREAD | RW_HAS_WAITERS)) == RW_HAS_WAITERS)
+		new = (owner - decr);
+		if ((new & (RW_THREAD | RW_HAS_WAITERS)) == RW_HAS_WAITERS)
 			break;
-		next = rw_cas(rw, owner, newown);
+		next = rw_cas(rw, owner, new);
 		if (__predict_true(next == owner))
 			return;
 		owner = next;
@@ -493,10 +492,10 @@ rw_vector_exit(krwlock_t *rw)
 		if (rcnt != 0) {
 			/* Give the lock to the longest waiting writer. */
 			l = TS_FIRST(ts, TS_WRITER_Q);
-			newown = (uintptr_t)l | RW_WRITE_LOCKED | RW_HAS_WAITERS;
+			new = (uintptr_t)l | RW_WRITE_LOCKED | RW_HAS_WAITERS;
 			if (wcnt > 1)
-				newown |= RW_WRITE_WANTED;
-			rw_swap(rw, owner, newown);
+				new |= RW_WRITE_WANTED;
+			rw_swap(rw, owner, new);
 			turnstile_wakeup(ts, TS_WRITER_Q, 1, l);
 		} else {
 			/* Wake all writers and let them fight it out. */
@@ -511,12 +510,12 @@ rw_vector_exit(krwlock_t *rw)
 		 * is a writer waiting, new readers that arrive
 		 * after the release will be blocked out.
 		 */
-		newown = rcnt << RW_READ_COUNT_SHIFT;
+		new = rcnt << RW_READ_COUNT_SHIFT;
 		if (wcnt != 0)
-			newown |= RW_HAS_WAITERS | RW_WRITE_WANTED;
+			new |= RW_HAS_WAITERS | RW_WRITE_WANTED;
 			
 		/* Wake up all sleeping readers. */
-		rw_swap(rw, owner, newown);
+		rw_swap(rw, owner, new);
 		turnstile_wakeup(ts, TS_READER_Q, rcnt, NULL);
 	}
 }
@@ -572,7 +571,7 @@ rw_vector_tryenter(krwlock_t *rw, const krw_t op)
 void
 rw_downgrade(krwlock_t *rw)
 {
-	uintptr_t owner, curthread, newown, next;
+	uintptr_t owner, curthread, new, next;
 	turnstile_t *ts;
 	int rcnt, wcnt;
 
@@ -626,8 +625,8 @@ rw_downgrade(krwlock_t *rw)
 			RW_DASSERT(rw, (rw->rw_owner & RW_WRITE_WANTED) != 0);
 			RW_DASSERT(rw, (rw->rw_owner & RW_HAS_WAITERS) != 0);
 
-			newown = RW_READ_INCR | RW_HAS_WAITERS | RW_WRITE_WANTED;
-			next = rw_cas(rw, owner, newown);
+			new = RW_READ_INCR | RW_HAS_WAITERS | RW_WRITE_WANTED;
+			next = rw_cas(rw, owner, new);
 			turnstile_exit(rw);
 			if (__predict_true(next == owner))
 				break;
@@ -638,11 +637,11 @@ rw_downgrade(krwlock_t *rw)
 			 * is a writer waiting, new readers will be blocked
 			 * out.
 			 */
-			newown = (rcnt << RW_READ_COUNT_SHIFT) + RW_READ_INCR;
+			new = (rcnt << RW_READ_COUNT_SHIFT) + RW_READ_INCR;
 			if (wcnt != 0)
-				newown |= RW_HAS_WAITERS | RW_WRITE_WANTED;
+				new |= RW_HAS_WAITERS | RW_WRITE_WANTED;
 
-			next = rw_cas(rw, owner, newown);
+			next = rw_cas(rw, owner, new);
 			if (__predict_true(next == owner)) {
 				/* Wake up all sleeping readers. */
 				turnstile_wakeup(ts, TS_READER_Q, rcnt, NULL);
@@ -667,7 +666,7 @@ rw_downgrade(krwlock_t *rw)
 int
 rw_tryupgrade(krwlock_t *rw)
 {
-	uintptr_t owner, curthread, newown, next;
+	uintptr_t owner, curthread, new, next;
 
 	curthread = (uintptr_t)curlwp;
 	RW_ASSERT(rw, curthread != 0);
@@ -679,8 +678,8 @@ rw_tryupgrade(krwlock_t *rw)
 			RW_ASSERT(rw, (owner & RW_THREAD) != 0);
 			return 0;
 		}
-		newown = curthread | RW_WRITE_LOCKED | (owner & ~RW_THREAD);
-		next = rw_cas(rw, owner, newown);
+		new = curthread | RW_WRITE_LOCKED | (owner & ~RW_THREAD);
+		next = rw_cas(rw, owner, new);
 		if (__predict_true(next == owner)) {
 			membar_producer();
 			break;

@@ -1,4 +1,4 @@
-/*	$NetBSD: stats.c,v 1.7 2016/05/26 16:49:59 christos Exp $	*/
+/*	$NetBSD: stats.c,v 1.4.4.2 2016/10/14 12:01:31 martin Exp $	*/
 
 /*
  * Copyright (C) 2009, 2012-2015  Internet Systems Consortium, Inc. ("ISC")

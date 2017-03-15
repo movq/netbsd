@@ -1,4 +1,4 @@
-/*	$NetBSD: ddp_input.c,v 1.29 2016/12/08 05:16:33 ozaki-r Exp $	 */
+/*	$NetBSD: ddp_input.c,v 1.26 2011/08/31 18:31:03 plunky Exp $	 */
 
 /*
  * Copyright (c) 1990,1994 Regents of The University of Michigan.
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ddp_input.c,v 1.29 2016/12/08 05:16:33 ozaki-r Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ddp_input.c,v 1.26 2011/08/31 18:31:03 plunky Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -65,18 +65,21 @@ atintr(void)
 	struct ifnet   *ifp;
 	struct mbuf    *m;
 	struct at_ifaddr *aa;
+	int             s;
 
 	mutex_enter(softnet_lock);
 	for (;;) {
-		IFQ_LOCK(&atintrq2);
+		s = splnet();
+
 		IF_DEQUEUE(&atintrq2, m);
-		IFQ_UNLOCK(&atintrq2);
+
+		splx(s);
 
 		if (m == 0)	/* no more queued packets */
 			break;
 
 		m_claimm(m, &atalk_rx_mowner);
-		ifp = m_get_rcvif_NOMPSAFE(m);
+		ifp = m->m_pkthdr.rcvif;
 		for (aa = at_ifaddr.tqh_first; aa; aa = aa->aa_list.tqe_next) {
 			if (aa->aa_ifp == ifp && (aa->aa_flags & AFA_PHASE2))
 				break;
@@ -89,16 +92,18 @@ atintr(void)
 	}
 
 	for (;;) {
-		IFQ_LOCK(&atintrq1);
+		s = splnet();
+
 		IF_DEQUEUE(&atintrq1, m);
-		IFQ_UNLOCK(&atintrq1);
+
+		splx(s);
 
 		if (m == 0)	/* no more queued packets */
 
 			break;
 
 		m_claimm(m, &atalk_rx_mowner);
-		ifp = m_get_rcvif_NOMPSAFE(m);
+		ifp = m->m_pkthdr.rcvif;
 		for (aa = at_ifaddr.tqh_first; aa; aa = aa->aa_list.tqe_next) {
 			if (aa->aa_ifp == ifp &&
 			    (aa->aa_flags & AFA_PHASE2) == 0)
@@ -279,11 +284,9 @@ ddp_input(struct mbuf *m, struct ifnet *ifp, struct elaphdr *elh, int phase)
 		}
 #endif
 		if (ddp_firewall && (rt == NULL || rt->rt_ifp != ifp)) {
-			rtcache_unref(rt, &forwro);
 			m_freem(m);
 			return;
 		}
-		rtcache_unref(rt, &forwro);
 		ddpe.deh_hops++;
 		ddpe.deh_bytes = htonl(ddpe.deh_bytes);
 		memcpy((void *) deh, (void *) & ddpe, sizeof(u_short));/*XXX*/

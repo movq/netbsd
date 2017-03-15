@@ -1,4 +1,4 @@
-/*	$NetBSD: ffs_wapbl.c,v 1.38 2017/03/10 22:43:03 jdolecek Exp $	*/
+/*	$NetBSD: ffs_wapbl.c,v 1.28 2014/07/11 16:17:29 christos Exp $	*/
 
 /*-
  * Copyright (c) 2003,2006,2008 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ffs_wapbl.c,v 1.38 2017/03/10 22:43:03 jdolecek Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ffs_wapbl.c,v 1.28 2014/07/11 16:17:29 christos Exp $");
 
 #define WAPBL_INTERNAL
 
@@ -126,17 +126,16 @@ ffs_wapbl_replay_finish(struct mount *mp)
 		struct inode *ip;
 		error = VFS_VGET(mp, wr->wr_inodes[i].wr_inumber, &vp);
 		if (error) {
-			printf("%s: %s: unable to cleanup inode %" PRIu32 "\n",
-			    __func__, VFSTOUFS(mp)->um_fs->fs_fsmnt,
+			printf("ffs_wapbl_replay_finish: "
+			    "unable to cleanup inode %" PRIu32 "\n",
 			    wr->wr_inodes[i].wr_inumber);
 			continue;
 		}
 		ip = VTOI(vp);
 		KDASSERT(wr->wr_inodes[i].wr_inumber == ip->i_number);
 #ifdef WAPBL_DEBUG
-		printf("%s%s: %s: cleaning inode %" PRIu64 " size=%" PRIu64
-		    " mode=%o nlink=%d\n",
-		    __func__, VFSTOUFS(mp)->um_fs->fs_fsmnt,
+		printf("ffs_wapbl_replay_finish: "
+		    "cleaning inode %" PRIu64 " size=%" PRIu64 " mode=%o nlink=%d\n",
 		    ip->i_number, ip->i_size, ip->i_mode, ip->i_nlink);
 #endif
 		KASSERT(ip->i_nlink == 0);
@@ -150,9 +149,8 @@ ffs_wapbl_replay_finish(struct mount *mp)
 		if (ip->i_mode == 0) {
 			error = UFS_WAPBL_BEGIN(mp);
 			if (error) {
-				printf("%s: %s: "
+				printf("ffs_wapbl_replay_finish: "
 				    "unable to cleanup inode %" PRIu32 "\n",
-				    __func__, VFSTOUFS(mp)->um_fs->fs_fsmnt,
 				    wr->wr_inodes[i].wr_inumber);
 			} else {
 				ffs_vfree(vp, ip->i_number,
@@ -169,52 +167,49 @@ ffs_wapbl_replay_finish(struct mount *mp)
 
 /* Callback for wapbl */
 void
-ffs_wapbl_sync_metadata(struct mount *mp, struct wapbl_dealloc *fdealloc)
+ffs_wapbl_sync_metadata(struct mount *mp, daddr_t *deallocblks,
+    int *dealloclens, int dealloccnt)
 {
 	struct ufsmount *ump = VFSTOUFS(mp);
 	struct fs *fs = ump->um_fs;
-	int error __diagused;
-	struct wapbl_dealloc *wd;
-
-	UFS_WAPBL_JLOCK_ASSERT(mp);
+	int i, error __diagused;
 
 #ifdef WAPBL_DEBUG_INODES
-	ufs_wapbl_verify_inodes(mp, __func__);
+	ufs_wapbl_verify_inodes(mp, "ffs_wapbl_sync_metadata");
 #endif
 
-	for (wd = fdealloc; wd != NULL; wd = TAILQ_NEXT(wd, wd_entries)) {
+	for (i = 0; i< dealloccnt; i++) {
 		/*
 		 * blkfree errors are unreported, might silently fail
 		 * if it cannot read the cylinder group block
 		 */
 		ffs_blkfree(fs, ump->um_devvp,
-		    FFS_DBTOFSB(fs, wd->wd_blkno), wd->wd_len, -1);
+		    FFS_DBTOFSB(fs, deallocblks[i]), dealloclens[i], -1);
 	}
 
-	if (fs->fs_fmod != 0) {
-		fs->fs_fmod = 0;
-		fs->fs_time = time_second;
-		error = ffs_cgupdate(ump, 0);
-		KASSERT(error == 0);
-	}
+	fs->fs_fmod = 0;
+	fs->fs_time = time_second;
+	error = ffs_cgupdate(ump, 0);
+	KASSERT(error == 0);
 }
 
 void
-ffs_wapbl_abort_sync_metadata(struct mount *mp, struct wapbl_dealloc *fdealloc)
+ffs_wapbl_abort_sync_metadata(struct mount *mp, daddr_t *deallocblks,
+    int *dealloclens, int dealloccnt)
 {
 	struct ufsmount *ump = VFSTOUFS(mp);
 	struct fs *fs = ump->um_fs;
-	struct wapbl_dealloc *wd;
+	int i;
 
-	for (wd = fdealloc; wd != NULL; wd = TAILQ_NEXT(wd, wd_entries)) {
+	for (i = 0; i < dealloccnt; i++) {
 		/*
 		 * Since the above blkfree may have failed, this blkalloc might
 		 * fail as well, so don't check its error.  Note that if the
 		 * blkfree succeeded above, then this shouldn't fail because
 		 * the buffer will be locked in the current transaction.
 		 */
-		ffs_blkalloc_ump(ump, FFS_DBTOFSB(fs, wd->wd_blkno),
-		    wd->wd_len);
+		ffs_blkalloc_ump(ump, FFS_DBTOFSB(fs, deallocblks[i]),
+		    dealloclens[i]);
 	}
 }
 
@@ -256,16 +251,16 @@ wapbl_remove_log(struct mount *mp)
 			goto done;
 		error = VFS_VGET(mp, log_ino, &vp);
 		if (error != 0) {
-			printf("%s: %s: vget failed %d\n", __func__,
-			    fs->fs_fsmnt, error);
+			printf("ffs_wapbl: vget failed %d\n",
+			    error);
 			/* clear out log info on error */
 			goto done;
 		}
 		ip = VTOI(vp);
 		KASSERT(log_ino == ip->i_number);
 		if ((ip->i_flags & SF_LOG) == 0) {
-			printf("%s: %s: try to clear non-log inode "
-			    "%" PRId64 "\n", __func__, fs->fs_fsmnt, log_ino);
+			printf("ffs_wapbl: try to clear non-log inode "
+			    "%" PRId64 "\n", log_ino);
 			vput(vp);
 			/* clear out log info on error */
 			goto done;
@@ -278,7 +273,6 @@ wapbl_remove_log(struct mount *mp)
 		ip->i_nlink = 0;
 		DIP_ASSIGN(ip, nlink, 0);
 		vput(vp);
-		break;
 
 	case UFS_WAPBL_JOURNALLOC_END_PARTITION:
 		DPRINTF("end-of-partition log\n");
@@ -286,8 +280,8 @@ wapbl_remove_log(struct mount *mp)
 		break;
 
 	default:
-		printf("%s: %s: unknown journal type %d\n", __func__,
-		    fs->fs_fsmnt, fs->fs_journal_location);
+		printf("ffs_wapbl: unknown journal type %d\n",
+		    fs->fs_journal_location);
 		break;
 	}
 
@@ -331,19 +325,12 @@ ffs_wapbl_start(struct mount *mp)
 
 			/* WAPBL needs UFS2 format super block */
 			if (ffs_superblock_layout(fs) < 2) {
-				printf("%s: %s: fs superblock in old format, "
-				   "not journaling\n", __func__,
+				printf("%s fs superblock in old format, "
+				   "not journaling\n",
 				   VFSTOUFS(mp)->um_fs->fs_fsmnt);
 				mp->mnt_flag &= ~MNT_LOG;
 				return EINVAL;
 			}
-
-			/*
-			 * Make sure we don't carry over any delayed write
-			 * buffers when updating to log.
-			 */
-			if (mp->mnt_flag & MNT_UPDATE)
-				ffs_sync(mp, MNT_WAIT, FSCRED);
 
 			error = wapbl_log_position(mp, fs, devvp, &off,
 			    &count, &blksize, &extradata);
@@ -360,8 +347,7 @@ ffs_wapbl_start(struct mount *mp)
 			mp->mnt_wapbl_op = &wapbl_ops;
 
 #ifdef WAPBL_DEBUG
-			printf("%s: %s: enabling logging\n", __func__,
-			    fs->fs_fsmnt);
+			printf("%s: enabling logging\n", fs->fs_fsmnt);
 #endif
 
 			if ((fs->fs_flags & FS_DOWAPBL) == 0) {
@@ -378,23 +364,6 @@ ffs_wapbl_start(struct mount *mp)
 				if (error)
 					goto out;
 			}
-
-			/*
-			 * XXX discard interferes with block deallocation
-			 * registration and hence log consistency
-			 */
-			if (mp->mnt_flag & MNT_DISCARD) {
-				CLR(mp->mnt_flag, MNT_DISCARD);
-				printf("%s: %s: disabling discard to preserve log consistency\n", __func__,
-				    fs->fs_fsmnt);
-
-				if (ump->um_discarddata != NULL) {
-		                	ffs_discard_finish(ump->um_discarddata,
-					    0);
-	                		ump->um_discarddata = NULL;
-				}
-			}
-
 		} else if (fs->fs_flags & FS_DOWAPBL) {
 			fs->fs_fmod = 1;
 			fs->fs_flags &= ~FS_DOWAPBL;
@@ -467,7 +436,7 @@ ffs_wapbl_stop(struct mount *mp, int force)
 		mp->mnt_wapbl = NULL;
 
 #ifdef WAPBL_DEBUG
-		printf("%s: %s: disabled logging\n", __func__, fs->fs_fsmnt);
+		printf("%s: disabled logging\n", fs->fs_fsmnt);
 #endif
 	}
 
@@ -560,8 +529,8 @@ wapbl_log_position(struct mount *mp, struct fs *fs, struct vnode *devvp,
 			return 0;
 
 		default:
-			printf("%s: %s: unknown journal type %d\n", __func__,
-			    fs->fs_fsmnt, fs->fs_journal_location);
+			printf("ffs_wapbl: unknown journal type %d\n",
+			    fs->fs_journal_location);
 			return EINVAL;
 		}
 	}
@@ -641,34 +610,31 @@ wapbl_create_infs_log(struct mount *mp, struct fs *fs, struct vnode *devvp,
     daddr_t *startp, size_t *countp, uint64_t *extradatap)
 {
 	struct vnode *vp, *rvp;
-	struct vattr va;
 	struct inode *ip;
 	int error;
 
 	if ((error = VFS_ROOT(mp, &rvp)) != 0)
 		return error;
 
-	vattr_null(&va);
-	va.va_type = VREG;
-	va.va_mode = 0;
-
-	error = vcache_new(mp, rvp, &va, NOCRED, &vp);
-	vput(rvp);
-	if (error)
-		return error;
-
-	error = vn_lock(vp, LK_EXCLUSIVE);
-	if (error) {
-		vrele(vp);
-		return error;
+	error = UFS_VALLOC(rvp, 0 | S_IFREG, NOCRED, &vp);
+	if (mp->mnt_flag & MNT_UPDATE) {
+		vput(rvp);
+	} else {
+		VOP_UNLOCK(rvp);
+		vgone(rvp);
 	}
+	if (error != 0)
+		return error;
 
+	vp->v_type = VREG;
 	ip = VTOI(vp);
+	ip->i_flag |= IN_ACCESS | IN_CHANGE | IN_UPDATE;
+	ip->i_mode = 0 | IFREG;
+	DIP_ASSIGN(ip, mode, ip->i_mode);
 	ip->i_flags = SF_LOG;
 	DIP_ASSIGN(ip, flags, ip->i_flags);
 	ip->i_nlink = 1;
 	DIP_ASSIGN(ip, nlink, 1);
-	ip->i_flag |= IN_ACCESS | IN_CHANGE | IN_UPDATE;
 	ffs_update(vp, NULL, NULL, UPDATE_WAIT);
 
 	if ((error = wapbl_allocate_log_file(mp, vp,
@@ -714,14 +680,14 @@ wapbl_allocate_log_file(struct mount *mp, struct vnode *vp,
 		logsize = fs->fs_journallocs[UFS_WAPBL_INFS_COUNT];
 
 	if (vp->v_size > 0) {
-		printf("%s: %s: file size (%" PRId64 ") non zero\n", __func__,
-		    fs->fs_fsmnt, vp->v_size);
+		printf("%s: file size (%" PRId64 ") non zero\n", __func__,
+		    vp->v_size);
 		return EEXIST;
 	}
 	wapbl_find_log_start(mp, vp, logsize, &addr, &indir_addr, &size);
 	if (addr == 0) {
-		printf("%s: %s: log not allocated, largest extent is "
-		    "%" PRId64 "MB\n", __func__, fs->fs_fsmnt,
+		printf("%s: log not allocated, largest extent is "
+		    "%" PRId64 "MB\n", __func__,
 		    ffs_lblktosize(fs, size) / (1024 * 1024));
 		return ENOSPC;
 	}
@@ -733,8 +699,7 @@ wapbl_allocate_log_file(struct mount *mp, struct vnode *vp,
 
 	error = GOP_ALLOC(vp, 0, logsize, B_CONTIG, FSCRED);
 	if (error) {
-		printf("%s: %s: GOP_ALLOC error %d\n", __func__, fs->fs_fsmnt,
-		    error);
+		printf("%s: GOP_ALLOC error %d\n", __func__, error);
 		return error;
 	}
 
@@ -800,8 +765,8 @@ wapbl_find_log_start(struct mount *mp, struct vnode *vp, off_t logsize,
 
 		error = ufs_getlbns(vp, desired_blks, indirs, &num);
 		if (error) {
-			printf("%s: %s:  ufs_getlbns failed, error %d!\n",
-			    __func__, fs->fs_fsmnt, error);
+			printf("%s: ufs_getlbns failed, error %d!\n",
+			    __func__, error);
 			goto bad;
 		}
 
@@ -815,8 +780,8 @@ wapbl_find_log_start(struct mount *mp, struct vnode *vp, off_t logsize,
 			    indirs[1].in_off + 1; /* extra 1st level indirect */
 			break;
 		default:
-			printf("%s: %s: unexpected numlevels %d from "
-			    "ufs_getlbns\n", __func__, fs->fs_fsmnt, num);
+			printf("%s: unexpected numlevels %d from ufs_getlbns\n",
+			    __func__, num);
 			*size = 0;
 			goto bad;
 		}
@@ -836,8 +801,8 @@ wapbl_find_log_start(struct mount *mp, struct vnode *vp, off_t logsize,
 	/* Look at number of blocks per CG.  If it's too small, bail early. */
 	bpcg = ffs_fragstoblks(fs, fs->fs_fpg);
 	if (min_desired_blks > bpcg) {
-		printf("%s: %s: cylinder group size of %" PRId64 " MB "
-		    " is not big enough for journal\n", __func__, fs->fs_fsmnt,
+		printf("ffs_wapbl: cylinder group size of %" PRId64 " MB "
+		    " is not big enough for journal\n",
 		    ffs_lblktosize(fs, bpcg) / (1024 * 1024));
 		goto bad;
 	}
@@ -861,7 +826,7 @@ wapbl_find_log_start(struct mount *mp, struct vnode *vp, off_t logsize,
 	    s++, n = -n, cg += n * s) {
 		DPRINTF("check cg %d of %d\n", cg, fs->fs_ncg);
 		error = bread(devvp, FFS_FSBTODB(fs, cgtod(fs, cg)),
-		    fs->fs_cgsize, 0, &bp);
+		    fs->fs_cgsize, FSCRED, 0, &bp);
 		if (error) {
 			continue;
 		}

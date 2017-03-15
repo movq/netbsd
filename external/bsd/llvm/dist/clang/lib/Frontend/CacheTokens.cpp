@@ -12,14 +12,13 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "clang/Frontend/Utils.h"
 #include "clang/Basic/Diagnostic.h"
 #include "clang/Basic/FileManager.h"
 #include "clang/Basic/FileSystemStatCache.h"
 #include "clang/Basic/IdentifierTable.h"
 #include "clang/Basic/SourceManager.h"
-#include "clang/Frontend/Utils.h"
 #include "clang/Lex/Lexer.h"
-#include "clang/Lex/PTHManager.h"
 #include "clang/Lex/Preprocessor.h"
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/ADT/StringMap.h"
@@ -28,6 +27,7 @@
 #include "llvm/Support/MemoryBuffer.h"
 #include "llvm/Support/OnDiskHashTable.h"
 #include "llvm/Support/Path.h"
+#include "llvm/Support/raw_ostream.h"
 
 // FIXME: put this somewhere else?
 #ifndef S_ISDIR
@@ -58,30 +58,23 @@ public:
 
 
 class PTHEntryKeyVariant {
-  union {
-    const FileEntry *FE;
-    // FIXME: Use "StringRef Path;" when MSVC 2013 is dropped.
-    const char *PathPtr;
-  };
-  size_t PathSize;
+  union { const FileEntry* FE; const char* Path; };
   enum { IsFE = 0x1, IsDE = 0x2, IsNoExist = 0x0 } Kind;
   FileData *Data;
 
 public:
   PTHEntryKeyVariant(const FileEntry *fe) : FE(fe), Kind(IsFE), Data(nullptr) {}
 
-  PTHEntryKeyVariant(FileData *Data, StringRef Path)
-      : PathPtr(Path.data()), PathSize(Path.size()), Kind(IsDE),
-        Data(new FileData(*Data)) {}
+  PTHEntryKeyVariant(FileData *Data, const char *path)
+      : Path(path), Kind(IsDE), Data(new FileData(*Data)) {}
 
-  explicit PTHEntryKeyVariant(StringRef Path)
-      : PathPtr(Path.data()), PathSize(Path.size()), Kind(IsNoExist),
-        Data(nullptr) {}
+  explicit PTHEntryKeyVariant(const char *path)
+      : Path(path), Kind(IsNoExist), Data(nullptr) {}
 
   bool isFile() const { return Kind == IsFE; }
 
   StringRef getString() const {
-    return Kind == IsFE ? FE->getName() : StringRef(PathPtr, PathSize);
+    return Kind == IsFE ? FE->getName() : Path;
   }
 
   unsigned getKind() const { return (unsigned) Kind; }
@@ -112,7 +105,7 @@ public:
   }
 
   unsigned getRepresentationLength() const {
-    return Kind == IsNoExist ? 0 : 4 * 8;
+    return Kind == IsNoExist ? 0 : 4 + 4 + 2 + 8 + 8;
   }
 };
 
@@ -189,14 +182,14 @@ class PTHWriter {
   typedef llvm::DenseMap<const IdentifierInfo*,uint32_t> IDMap;
   typedef llvm::StringMap<OffsetOpt, llvm::BumpPtrAllocator> CachedStrsTy;
 
-  raw_pwrite_stream &Out;
-  Preprocessor& PP;
   IDMap IM;
-  std::vector<llvm::StringMapEntry<OffsetOpt>*> StrEntries;
+  llvm::raw_fd_ostream& Out;
+  Preprocessor& PP;
+  uint32_t idcount;
   PTHMap PM;
   CachedStrsTy CachedStrs;
-  uint32_t idcount;
   Offset CurStrOffset;
+  std::vector<llvm::StringMapEntry<OffsetOpt>*> StrEntries;
 
   //// Get the persistent id for the given IdentifierInfo*.
   uint32_t ResolveID(const IdentifierInfo* II);
@@ -243,11 +236,11 @@ class PTHWriter {
   Offset EmitCachedSpellings();
 
 public:
-  PTHWriter(raw_pwrite_stream &out, Preprocessor &pp)
-      : Out(out), PP(pp), idcount(0), CurStrOffset(0) {}
+  PTHWriter(llvm::raw_fd_ostream& out, Preprocessor& pp)
+    : Out(out), PP(pp), idcount(0), CurStrOffset(0) {}
 
   PTHMap &getPM() { return PM; }
-  void GeneratePTH(StringRef MainFile);
+  void GeneratePTH(const std::string &MainFile);
 };
 } // end anonymous namespace
 
@@ -475,17 +468,7 @@ Offset PTHWriter::EmitCachedSpellings() {
   return SpellingsOff;
 }
 
-static uint32_t swap32le(uint32_t X) {
-  return llvm::support::endian::byte_swap<uint32_t, llvm::support::little>(X);
-}
-
-static void pwrite32le(raw_pwrite_stream &OS, uint32_t Val, uint64_t &Off) {
-  uint32_t LEVal = swap32le(Val);
-  OS.pwrite(reinterpret_cast<const char *>(&LEVal), 4, Off);
-  Off += 4;
-}
-
-void PTHWriter::GeneratePTH(StringRef MainFile) {
+void PTHWriter::GeneratePTH(const std::string &MainFile) {
   // Generate the prologue.
   Out << "cfe-pth" << '\0';
   Emit32(PTHManager::Version);
@@ -537,11 +520,11 @@ void PTHWriter::GeneratePTH(StringRef MainFile) {
   Offset FileTableOff = EmitFileTable();
 
   // Finally, write the prologue.
-  uint64_t Off = PrologueOffset;
-  pwrite32le(Out, IdTableOff.first, Off);
-  pwrite32le(Out, IdTableOff.second, Off);
-  pwrite32le(Out, FileTableOff, Off);
-  pwrite32le(Out, SpellingOff, Off);
+  Out.seek(PrologueOffset);
+  Emit32(IdTableOff.first);
+  Emit32(IdTableOff.second);
+  Emit32(FileTableOff);
+  Emit32(SpellingOff);
 }
 
 namespace {
@@ -554,9 +537,9 @@ class StatListener : public FileSystemStatCache {
   PTHMap &PM;
 public:
   StatListener(PTHMap &pm) : PM(pm) {}
-  ~StatListener() override {}
+  ~StatListener() {}
 
-  LookupResult getStat(StringRef Path, FileData &Data, bool isFile,
+  LookupResult getStat(const char *Path, FileData &Data, bool isFile,
                        std::unique_ptr<vfs::File> *F,
                        vfs::FileSystem &FS) override {
     LookupResult Result = statChained(Path, Data, isFile, F, FS);
@@ -576,7 +559,8 @@ public:
 };
 } // end anonymous namespace
 
-void clang::CacheTokens(Preprocessor &PP, raw_pwrite_stream *OS) {
+
+void clang::CacheTokens(Preprocessor &PP, llvm::raw_fd_ostream* OS) {
   // Get the name of the main file.
   const SourceManager &SrcMgr = PP.getSourceManager();
   const FileEntry *MainFile = SrcMgr.getFileEntryForID(SrcMgr.getMainFileID());

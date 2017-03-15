@@ -1,4 +1,4 @@
-/*	$NetBSD: i386_trap.S,v 1.6 2017/02/27 06:46:59 chs Exp $	*/
+/*	$NetBSD: i386_trap.S,v 1.5 2014/02/12 23:24:09 dsl Exp $	*/
 
 /*
  * Copyright 2002 (c) Wasabi Systems, Inc.
@@ -66,7 +66,7 @@
 
 #if 0
 #include <machine/asm.h>
-__KERNEL_RCSID(0, "$NetBSD: i386_trap.S,v 1.6 2017/02/27 06:46:59 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: i386_trap.S,v 1.5 2014/02/12 23:24:09 dsl Exp $");
 #endif
 
 /*
@@ -133,7 +133,8 @@ IDTVEC(trap06)
 	 * This is a kernel instruction fault that might have been caused
 	 * by a DTrace provider.
 	 */
-	
+	pushal				/* Push all registers onto the stack. */
+
 	/*
 	 * Set our jump address for the jump back in the event that
 	 * the exception wasn't caused by DTrace at all.

@@ -1,4 +1,4 @@
-/*	$NetBSD: com_right.h,v 1.2 2017/01/28 21:31:45 christos Exp $	*/
+/*	$NetBSD: com_right.h,v 1.1.1.2 2011/04/14 14:08:23 elric Exp $	*/
 
 /*
  * Copyright (c) 1997 - 2000 Kungliga Tekniska Högskolan
@@ -60,7 +60,6 @@
 
 #ifdef __STDC__
 #include <stdarg.h>
-#include <stddef.h>
 #endif
 
 struct error_table {

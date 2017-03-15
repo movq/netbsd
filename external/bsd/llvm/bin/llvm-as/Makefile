@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.3 2017/01/11 12:02:25 joerg Exp $
+#	$NetBSD: Makefile,v 1.2 2013/01/23 15:02:55 joerg Exp $
 
 PROG_CXX=	llvm-as
 NOMAN=		yes
@@ -13,8 +13,7 @@ LLVM_LIBS+= \
 	AsmParser \
 	BitWriter \
 	IR \
-	Support \
-	Demangle
+	Support
 
 .include "${.PARSEDIR}/../../link.mk"
 

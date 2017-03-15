@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.9 2016/10/06 20:14:11 christos Exp $
+#	$NetBSD: Makefile,v 1.5 2012/12/02 17:36:10 pgoyette Exp $
 #
 
 .include <bsd.own.mk>
@@ -14,11 +14,8 @@ MKMAN=		no
 
 PROGS+=		h_exec
 PROGS+=		h_execthr
-CPPFLAGS+=	-D_KERNTYPES
 
 LDADD+= -lrumpclient
-LDADD+= -lrumpdev
-LDADD+= -lrumpvfs
 LDADD.h_execthr= -lpthread
 
 .include <bsd.test.mk>

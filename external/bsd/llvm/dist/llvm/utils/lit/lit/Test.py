@@ -27,13 +27,11 @@ class ResultCode(object):
                          (self.name, self.isFailure))
 
 PASS        = ResultCode('PASS', False)
-FLAKYPASS   = ResultCode('FLAKYPASS', False)
 XFAIL       = ResultCode('XFAIL', False)
 FAIL        = ResultCode('FAIL', True)
 XPASS       = ResultCode('XPASS', True)
 UNRESOLVED  = ResultCode('UNRESOLVED', True)
 UNSUPPORTED = ResultCode('UNSUPPORTED', False)
-TIMEOUT     = ResultCode('TIMEOUT', True)
 
 # Test metric values.
 
@@ -93,8 +91,7 @@ class JSONMetricValue(MetricValue):
         self.value = value
 
     def format(self):
-        e = JSONEncoder(indent=2, sort_keys=True)
-        return e.encode(self.value)
+        return str(self.value)
 
     def todata(self):
         return self.value
@@ -102,18 +99,11 @@ class JSONMetricValue(MetricValue):
 def toMetricValue(value):
     if isinstance(value, MetricValue):
         return value
-    elif isinstance(value, int):
+    elif isinstance(value, int) or isinstance(value, long):
         return IntMetricValue(value)
     elif isinstance(value, float):
         return RealMetricValue(value)
     else:
-        # 'long' is only present in python2
-        try:
-            if isinstance(value, long):
-                return IntMetricValue(value)
-        except NameError:
-            pass
-
         # Try to create a JSONMetricValue and let the constructor throw
         # if value is not a valid type.
         return JSONMetricValue(value)
@@ -189,9 +179,9 @@ class Test:
 
     def setResult(self, result):
         if self.result is not None:
-            raise ValueError("test result already set")
+            raise ArgumentError("test result already set")
         if not isinstance(result, Result):
-            raise ValueError("unexpected result type")
+            raise ArgumentError("unexpected result type")
 
         self.result = result
 
@@ -237,20 +227,11 @@ class Test:
                 return True
 
             # If this is a part of the target triple, it fails.
-            if item and item in self.suite.config.target_triple:
+            if item in self.suite.config.target_triple:
                 return True
 
         return False
 
-    def isEarlyTest(self):
-        """
-        isEarlyTest() -> bool
-
-        Check whether this test should be executed early in a particular run.
-        This can be used for test suites with long running tests to maximize
-        parallelism or where it is desirable to surface their failures early.
-        """
-        return self.suite.config.is_early
 
     def getJUnitXML(self):
         test_name = self.path_in_suite[-1]

@@ -1,4 +1,4 @@
-/*	$NetBSD: agr_component.c,v 1.2 2016/01/26 23:12:18 pooka Exp $	*/
+/*	$NetBSD: agr_component.c,v 1.1 2014/03/13 02:07:03 pooka Exp $	*/
 
 /*
  * Copyright (c) 2009 Antti Kantee.  All Rights Reserved.
@@ -26,11 +26,12 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: agr_component.c,v 1.2 2016/01/26 23:12:18 pooka Exp $");
+__KERNEL_RCSID(0, "$NetBSD: agr_component.c,v 1.1 2014/03/13 02:07:03 pooka Exp $");
 
 #include <sys/param.h>
 
-#include <rump-sys/kern.h>
+#include "rump_private.h"
+#include "rump_net_private.h"
 
 int agrattach(int);
 

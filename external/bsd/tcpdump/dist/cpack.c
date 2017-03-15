@@ -26,7 +26,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: cpack.c,v 1.6 2017/01/24 23:29:13 christos Exp $");
+__RCSID("$NetBSD: cpack.c,v 1.4.4.1 2017/02/19 05:01:15 snj Exp $");
 #endif
 
 #ifdef HAVE_CONFIG_H

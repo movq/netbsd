@@ -1,4 +1,4 @@
-/*	$NetBSD: cdefs_elf.h,v 1.52 2016/06/07 12:09:29 joerg Exp $	*/
+/*	$NetBSD: cdefs_elf.h,v 1.44.2.1 2014/12/13 19:13:25 martin Exp $	*/
 
 /*
  * Copyright (c) 1995, 1996 Carnegie-Mellon University.
@@ -112,18 +112,6 @@
 
 #endif /* !__STDC__ */
 
-#if __arm__
-#define __ifunc(name, resolver) \
-	__asm(".globl	" _C_LABEL_STRING(#name) "\n" \
-	      ".type	" _C_LABEL_STRING(#name) ", %gnu_indirect_function\n" \
-	       _C_LABEL_STRING(#name) " = " _C_LABEL_STRING(#resolver))
-#else
-#define __ifunc(name, resolver) \
-	__asm(".globl	" _C_LABEL_STRING(#name) "\n" \
-	      ".type	" _C_LABEL_STRING(#name) ", @gnu_indirect_function\n" \
-	      _C_LABEL_STRING(#name) " = " _C_LABEL_STRING(#resolver))
-#endif
-
 #if __STDC__
 #define	__SECTIONSTRING(_sec, _str)					\
 	__asm(".pushsection " #_sec "\n"				\
@@ -175,7 +163,6 @@
 
 #define	__link_set_decl(set, ptype)					\
 	extern ptype * const __link_set_start(set)[] __dso_hidden;	\
-	__asm__(".hidden " __STRING(__stop_link_set_##set)); \
 	extern ptype * const __link_set_end(set)[] __weak __dso_hidden
 
 #define	__link_set_count(set)						\

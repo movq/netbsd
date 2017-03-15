@@ -1,10 +1,10 @@
-/*	$NetBSD: backend.c,v 1.1.1.5 2017/02/09 01:47:03 christos Exp $	*/
+/*	$NetBSD: backend.c,v 1.1.1.4 2014/05/28 09:58:50 tron Exp $	*/
 
 /* backend.c - deals with backend subsystem */
 /* $OpenLDAP$ */
 /* This work is part of OpenLDAP Software <http://www.openldap.org/>.
  *
- * Copyright 2001-2016 The OpenLDAP Foundation.
+ * Copyright 2001-2014 The OpenLDAP Foundation.
  * Portions Copyright 2001-2003 Pierangelo Masarati.
  * All rights reserved.
  *
@@ -21,9 +21,6 @@
  * in OpenLDAP Software.
  */
 
-
-#include <sys/cdefs.h>
-__RCSID("$NetBSD: backend.c,v 1.1.1.5 2017/02/09 01:47:03 christos Exp $");
 
 #include "portable.h"
 

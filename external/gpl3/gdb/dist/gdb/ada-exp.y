@@ -1,5 +1,5 @@
 /* YACC parser for Ada expressions, for GDB.
-   Copyright (C) 1986-2016 Free Software Foundation, Inc.
+   Copyright (C) 1986-2014 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -36,6 +36,7 @@
 %{
 
 #include "defs.h"
+#include <string.h>
 #include <ctype.h>
 #include "expression.h"
 #include "value.h"
@@ -48,24 +49,69 @@
 #include "frame.h"
 #include "block.h"
 
-#define parse_type(ps) builtin_type (parse_gdbarch (ps))
+#define parse_type builtin_type (parse_gdbarch)
 
-/* Remap normal yacc parser interface names (yyparse, yylex, yyerror,
-   etc).  */
-#define GDB_YY_REMAP_PREFIX ada_
-#include "yy-remap.h"
+/* Remap normal yacc parser interface names (yyparse, yylex, yyerror, etc),
+   as well as gratuitiously global symbol names, so we can have multiple
+   yacc generated parsers in gdb.  These are only the variables
+   produced by yacc.  If other parser generators (bison, byacc, etc) produce
+   additional global names that conflict at link time, then those parser
+   generators need to be fixed instead of adding those names to this list.  */
+
+/* NOTE: This is clumsy, especially since BISON and FLEX provide --prefix
+   options.  I presume we are maintaining it to accommodate systems
+   without BISON?  (PNH) */
+
+#define	yymaxdepth ada_maxdepth
+#define	yyparse	_ada_parse	/* ada_parse calls this after  initialization */
+#define	yylex	ada_lex
+#define	yyerror	ada_error
+#define	yylval	ada_lval
+#define	yychar	ada_char
+#define	yydebug	ada_debug
+#define	yypact	ada_pact
+#define	yyr1	ada_r1
+#define	yyr2	ada_r2
+#define	yydef	ada_def
+#define	yychk	ada_chk
+#define	yypgo	ada_pgo
+#define	yyact	ada_act
+#define	yyexca	ada_exca
+#define yyerrflag ada_errflag
+#define yynerrs	ada_nerrs
+#define	yyps	ada_ps
+#define	yypv	ada_pv
+#define	yys	ada_s
+#define	yy_yys	ada_yys
+#define	yystate	ada_state
+#define	yytmp	ada_tmp
+#define	yyv	ada_v
+#define	yy_yyv	ada_yyv
+#define	yyval	ada_val
+#define	yylloc	ada_lloc
+#define yyreds	ada_reds		/* With YYDEBUG defined */
+#define yytoks	ada_toks		/* With YYDEBUG defined */
+#define yyname	ada_name		/* With YYDEBUG defined */
+#define yyrule	ada_rule		/* With YYDEBUG defined */
+#define yyss	ada_yyss
+#define yysslim	ada_yysslim
+#define yyssp	ada_yyssp
+#define yystacksize ada_yystacksize
+#define yyvs	ada_yyvs
+#define yyvsp	ada_yyvsp
+
+#ifndef YYDEBUG
+#define	YYDEBUG	1		/* Default to yydebug support */
+#endif
+
+#define YYFPRINTF parser_fprintf
 
 struct name_info {
   struct symbol *sym;
   struct minimal_symbol *msym;
-  const struct block *block;
+  struct block *block;
   struct stoken stoken;
 };
-
-/* The state of the parser, used internally when we are parsing the
-   expression.  */
-
-static struct parser_state *pstate = NULL;
 
 static struct stoken empty_stoken = { "", 0 };
 
@@ -79,44 +125,40 @@ static int yylex (void);
 
 void yyerror (char *);
 
-static void write_int (struct parser_state *, LONGEST, struct type *);
+static void write_int (LONGEST, struct type *);
 
-static void write_object_renaming (struct parser_state *,
-				   const struct block *, const char *, int,
+static void write_object_renaming (const struct block *, const char *, int,
 				   const char *, int);
 
-static struct type* write_var_or_type (struct parser_state *,
-				       const struct block *, struct stoken);
+static struct type* write_var_or_type (const struct block *, struct stoken);
 
-static void write_name_assoc (struct parser_state *, struct stoken);
+static void write_name_assoc (struct stoken);
 
-static void write_exp_op_with_string (struct parser_state *, enum exp_opcode,
-				      struct stoken);
+static void write_exp_op_with_string (enum exp_opcode, struct stoken);
 
-static const struct block *block_lookup (const struct block *, const char *);
+static struct block *block_lookup (struct block *, const char *);
 
 static LONGEST convert_char_literal (struct type *, LONGEST);
 
-static void write_ambiguous_var (struct parser_state *,
-				 const struct block *, char *, int);
+static void write_ambiguous_var (const struct block *, char *, int);
 
-static struct type *type_int (struct parser_state *);
+static struct type *type_int (void);
 
-static struct type *type_long (struct parser_state *);
+static struct type *type_long (void);
 
-static struct type *type_long_long (struct parser_state *);
+static struct type *type_long_long (void);
 
-static struct type *type_float (struct parser_state *);
+static struct type *type_float (void);
 
-static struct type *type_double (struct parser_state *);
+static struct type *type_double (void);
 
-static struct type *type_long_double (struct parser_state *);
+static struct type *type_long_double (void);
 
-static struct type *type_char (struct parser_state *);
+static struct type *type_char (void);
 
-static struct type *type_boolean (struct parser_state *);
+static struct type *type_boolean (void);
 
-static struct type *type_system_address (struct parser_state *);
+static struct type *type_system_address (void);
 
 %}
 
@@ -133,7 +175,7 @@ static struct type *type_system_address (struct parser_state *);
     } typed_val_float;
     struct type *tval;
     struct stoken sval;
-    const struct block *bval;
+    struct block *bval;
     struct internalvar *ivar;
   }
 
@@ -192,26 +234,25 @@ start   :	exp1
 /* Expressions, including the sequencing operator.  */
 exp1	:	exp
 	|	exp1 ';' exp
-			{ write_exp_elt_opcode (pstate, BINOP_COMMA); }
+			{ write_exp_elt_opcode (BINOP_COMMA); }
 	| 	primary ASSIGN exp   /* Extension for convenience */
-			{ write_exp_elt_opcode (pstate, BINOP_ASSIGN); }
+			{ write_exp_elt_opcode (BINOP_ASSIGN); }
 	;
 
 /* Expressions, not including the sequencing operator.  */
 primary :	primary DOT_ALL
-			{ write_exp_elt_opcode (pstate, UNOP_IND); }
+			{ write_exp_elt_opcode (UNOP_IND); }
 	;
 
 primary :	primary DOT_ID
-			{ write_exp_op_with_string (pstate, STRUCTOP_STRUCT,
-						    $2); }
+			{ write_exp_op_with_string (STRUCTOP_STRUCT, $2); }
 	;
 
 primary :	primary '(' arglist ')'
 			{
-			  write_exp_elt_opcode (pstate, OP_FUNCALL);
-			  write_exp_elt_longcst (pstate, $3);
-			  write_exp_elt_opcode (pstate, OP_FUNCALL);
+			  write_exp_elt_opcode (OP_FUNCALL);
+			  write_exp_elt_longcst ($3);
+			  write_exp_elt_opcode (OP_FUNCALL);
 		        }
 	|	var_or_type '(' arglist ')'
 			{
@@ -219,15 +260,15 @@ primary :	primary '(' arglist ')'
 			    {
 			      if ($3 != 1)
 				error (_("Invalid conversion"));
-			      write_exp_elt_opcode (pstate, UNOP_CAST);
-			      write_exp_elt_type (pstate, $1);
-			      write_exp_elt_opcode (pstate, UNOP_CAST);
+			      write_exp_elt_opcode (UNOP_CAST);
+			      write_exp_elt_type ($1);
+			      write_exp_elt_opcode (UNOP_CAST);
 			    }
 			  else
 			    {
-			      write_exp_elt_opcode (pstate, OP_FUNCALL);
-			      write_exp_elt_longcst (pstate, $3);
-			      write_exp_elt_opcode (pstate, OP_FUNCALL);
+			      write_exp_elt_opcode (OP_FUNCALL);
+			      write_exp_elt_longcst ($3);
+			      write_exp_elt_opcode (OP_FUNCALL);
 			    }
 			}
 	;
@@ -237,9 +278,9 @@ primary :	var_or_type '\'' save_qualifier { type_qualifier = $1; }
 			{
 			  if ($1 == NULL)
 			    error (_("Type required for qualification"));
-			  write_exp_elt_opcode (pstate, UNOP_QUAL);
-			  write_exp_elt_type (pstate, $1);
-			  write_exp_elt_opcode (pstate, UNOP_QUAL);
+			  write_exp_elt_opcode (UNOP_QUAL);
+			  write_exp_elt_type ($1);
+			  write_exp_elt_opcode (UNOP_QUAL);
 			  type_qualifier = $3;
 			}
 	;
@@ -249,10 +290,10 @@ save_qualifier : 	{ $$ = type_qualifier; }
 
 primary :
 		primary '(' simple_exp DOTDOT simple_exp ')'
-			{ write_exp_elt_opcode (pstate, TERNOP_SLICE); }
+			{ write_exp_elt_opcode (TERNOP_SLICE); }
 	|	var_or_type '(' simple_exp DOTDOT simple_exp ')'
 			{ if ($1 == NULL) 
-                            write_exp_elt_opcode (pstate, TERNOP_SLICE);
+                            write_exp_elt_opcode (TERNOP_SLICE);
 			  else
 			    error (_("Cannot slice a type"));
 			}
@@ -272,15 +313,15 @@ primary :	'(' exp1 ')'	{ }
 primary :	var_or_type	%prec VAR
 			{ if ($1 != NULL)
 			    {
-			      write_exp_elt_opcode (pstate, OP_TYPE);
-			      write_exp_elt_type (pstate, $1);
-			      write_exp_elt_opcode (pstate, OP_TYPE);
+			      write_exp_elt_opcode (OP_TYPE);
+			      write_exp_elt_type ($1);
+			      write_exp_elt_opcode (OP_TYPE);
 			    }
 			}
 	;
 
 primary :	SPECIAL_VARIABLE /* Various GDB extensions */
-			{ write_dollar_variable (pstate, $1); }
+			{ write_dollar_variable ($1); }
 	;
 
 primary :     	aggregate
@@ -290,19 +331,19 @@ simple_exp : 	primary
 	;
 
 simple_exp :	'-' simple_exp    %prec UNARY
-			{ write_exp_elt_opcode (pstate, UNOP_NEG); }
+			{ write_exp_elt_opcode (UNOP_NEG); }
 	;
 
 simple_exp :	'+' simple_exp    %prec UNARY
-			{ write_exp_elt_opcode (pstate, UNOP_PLUS); }
+			{ write_exp_elt_opcode (UNOP_PLUS); }
 	;
 
 simple_exp :	NOT simple_exp    %prec UNARY
-			{ write_exp_elt_opcode (pstate, UNOP_LOGICAL_NOT); }
+			{ write_exp_elt_opcode (UNOP_LOGICAL_NOT); }
 	;
 
 simple_exp :    ABS simple_exp	   %prec UNARY
-			{ write_exp_elt_opcode (pstate, UNOP_ABS); }
+			{ write_exp_elt_opcode (UNOP_ABS); }
 	;
 
 arglist	:		{ $$ = 0; }
@@ -323,111 +364,111 @@ primary :	'{' var_or_type '}' primary  %prec '.'
 			{ 
 			  if ($2 == NULL)
 			    error (_("Type required within braces in coercion"));
-			  write_exp_elt_opcode (pstate, UNOP_MEMVAL);
-			  write_exp_elt_type (pstate, $2);
-			  write_exp_elt_opcode (pstate, UNOP_MEMVAL);
+			  write_exp_elt_opcode (UNOP_MEMVAL);
+			  write_exp_elt_type ($2);
+			  write_exp_elt_opcode (UNOP_MEMVAL);
 			}
 	;
 
 /* Binary operators in order of decreasing precedence.  */
 
 simple_exp 	: 	simple_exp STARSTAR simple_exp
-			{ write_exp_elt_opcode (pstate, BINOP_EXP); }
+			{ write_exp_elt_opcode (BINOP_EXP); }
 	;
 
 simple_exp	:	simple_exp '*' simple_exp
-			{ write_exp_elt_opcode (pstate, BINOP_MUL); }
+			{ write_exp_elt_opcode (BINOP_MUL); }
 	;
 
 simple_exp	:	simple_exp '/' simple_exp
-			{ write_exp_elt_opcode (pstate, BINOP_DIV); }
+			{ write_exp_elt_opcode (BINOP_DIV); }
 	;
 
 simple_exp	:	simple_exp REM simple_exp /* May need to be fixed to give correct Ada REM */
-			{ write_exp_elt_opcode (pstate, BINOP_REM); }
+			{ write_exp_elt_opcode (BINOP_REM); }
 	;
 
 simple_exp	:	simple_exp MOD simple_exp
-			{ write_exp_elt_opcode (pstate, BINOP_MOD); }
+			{ write_exp_elt_opcode (BINOP_MOD); }
 	;
 
 simple_exp	:	simple_exp '@' simple_exp	/* GDB extension */
-			{ write_exp_elt_opcode (pstate, BINOP_REPEAT); }
+			{ write_exp_elt_opcode (BINOP_REPEAT); }
 	;
 
 simple_exp	:	simple_exp '+' simple_exp
-			{ write_exp_elt_opcode (pstate, BINOP_ADD); }
+			{ write_exp_elt_opcode (BINOP_ADD); }
 	;
 
 simple_exp	:	simple_exp '&' simple_exp
-			{ write_exp_elt_opcode (pstate, BINOP_CONCAT); }
+			{ write_exp_elt_opcode (BINOP_CONCAT); }
 	;
 
 simple_exp	:	simple_exp '-' simple_exp
-			{ write_exp_elt_opcode (pstate, BINOP_SUB); }
+			{ write_exp_elt_opcode (BINOP_SUB); }
 	;
 
 relation :	simple_exp
 	;
 
 relation :	simple_exp '=' simple_exp
-			{ write_exp_elt_opcode (pstate, BINOP_EQUAL); }
+			{ write_exp_elt_opcode (BINOP_EQUAL); }
 	;
 
 relation :	simple_exp NOTEQUAL simple_exp
-			{ write_exp_elt_opcode (pstate, BINOP_NOTEQUAL); }
+			{ write_exp_elt_opcode (BINOP_NOTEQUAL); }
 	;
 
 relation :	simple_exp LEQ simple_exp
-			{ write_exp_elt_opcode (pstate, BINOP_LEQ); }
+			{ write_exp_elt_opcode (BINOP_LEQ); }
 	;
 
 relation :	simple_exp IN simple_exp DOTDOT simple_exp
-			{ write_exp_elt_opcode (pstate, TERNOP_IN_RANGE); }
+			{ write_exp_elt_opcode (TERNOP_IN_RANGE); }
         |       simple_exp IN primary TICK_RANGE tick_arglist
-			{ write_exp_elt_opcode (pstate, BINOP_IN_BOUNDS);
-			  write_exp_elt_longcst (pstate, (LONGEST) $5);
-			  write_exp_elt_opcode (pstate, BINOP_IN_BOUNDS);
+			{ write_exp_elt_opcode (BINOP_IN_BOUNDS);
+			  write_exp_elt_longcst ((LONGEST) $5);
+			  write_exp_elt_opcode (BINOP_IN_BOUNDS);
 			}
  	|	simple_exp IN var_or_type	%prec TICK_ACCESS
 			{ 
 			  if ($3 == NULL)
 			    error (_("Right operand of 'in' must be type"));
-			  write_exp_elt_opcode (pstate, UNOP_IN_RANGE);
-		          write_exp_elt_type (pstate, $3);
-		          write_exp_elt_opcode (pstate, UNOP_IN_RANGE);
+			  write_exp_elt_opcode (UNOP_IN_RANGE);
+		          write_exp_elt_type ($3);
+		          write_exp_elt_opcode (UNOP_IN_RANGE);
 			}
 	|	simple_exp NOT IN simple_exp DOTDOT simple_exp
-			{ write_exp_elt_opcode (pstate, TERNOP_IN_RANGE);
-		          write_exp_elt_opcode (pstate, UNOP_LOGICAL_NOT);
+			{ write_exp_elt_opcode (TERNOP_IN_RANGE);
+		          write_exp_elt_opcode (UNOP_LOGICAL_NOT);
 			}
         |       simple_exp NOT IN primary TICK_RANGE tick_arglist
-			{ write_exp_elt_opcode (pstate, BINOP_IN_BOUNDS);
-			  write_exp_elt_longcst (pstate, (LONGEST) $6);
-			  write_exp_elt_opcode (pstate, BINOP_IN_BOUNDS);
-		          write_exp_elt_opcode (pstate, UNOP_LOGICAL_NOT);
+			{ write_exp_elt_opcode (BINOP_IN_BOUNDS);
+			  write_exp_elt_longcst ((LONGEST) $6);
+			  write_exp_elt_opcode (BINOP_IN_BOUNDS);
+		          write_exp_elt_opcode (UNOP_LOGICAL_NOT);
 			}
  	|	simple_exp NOT IN var_or_type	%prec TICK_ACCESS
 			{ 
 			  if ($4 == NULL)
 			    error (_("Right operand of 'in' must be type"));
-			  write_exp_elt_opcode (pstate, UNOP_IN_RANGE);
-		          write_exp_elt_type (pstate, $4);
-		          write_exp_elt_opcode (pstate, UNOP_IN_RANGE);
-		          write_exp_elt_opcode (pstate, UNOP_LOGICAL_NOT);
+			  write_exp_elt_opcode (UNOP_IN_RANGE);
+		          write_exp_elt_type ($4);
+		          write_exp_elt_opcode (UNOP_IN_RANGE);
+		          write_exp_elt_opcode (UNOP_LOGICAL_NOT);
 			}
 	;
 
 relation :	simple_exp GEQ simple_exp
-			{ write_exp_elt_opcode (pstate, BINOP_GEQ); }
+			{ write_exp_elt_opcode (BINOP_GEQ); }
 	;
 
 relation :	simple_exp '<' simple_exp
-			{ write_exp_elt_opcode (pstate, BINOP_LESS); }
+			{ write_exp_elt_opcode (BINOP_LESS); }
 	;
 
 relation :	simple_exp '>' simple_exp
-			{ write_exp_elt_opcode (pstate, BINOP_GTR); }
+			{ write_exp_elt_opcode (BINOP_GTR); }
 	;
 
 exp	:	relation
@@ -440,36 +481,36 @@ exp	:	relation
 
 and_exp :
 		relation _AND_ relation 
-			{ write_exp_elt_opcode (pstate, BINOP_BITWISE_AND); }
+			{ write_exp_elt_opcode (BINOP_BITWISE_AND); }
 	|	and_exp _AND_ relation
-			{ write_exp_elt_opcode (pstate, BINOP_BITWISE_AND); }
+			{ write_exp_elt_opcode (BINOP_BITWISE_AND); }
 	;
 
 and_then_exp :
 	       relation _AND_ THEN relation
-			{ write_exp_elt_opcode (pstate, BINOP_LOGICAL_AND); }
+			{ write_exp_elt_opcode (BINOP_LOGICAL_AND); }
 	|	and_then_exp _AND_ THEN relation
-			{ write_exp_elt_opcode (pstate, BINOP_LOGICAL_AND); }
+			{ write_exp_elt_opcode (BINOP_LOGICAL_AND); }
         ;
 
 or_exp :
 		relation OR relation 
-			{ write_exp_elt_opcode (pstate, BINOP_BITWISE_IOR); }
+			{ write_exp_elt_opcode (BINOP_BITWISE_IOR); }
 	|	or_exp OR relation
-			{ write_exp_elt_opcode (pstate, BINOP_BITWISE_IOR); }
+			{ write_exp_elt_opcode (BINOP_BITWISE_IOR); }
 	;
 
 or_else_exp :
 	       relation OR ELSE relation
-			{ write_exp_elt_opcode (pstate, BINOP_LOGICAL_OR); }
+			{ write_exp_elt_opcode (BINOP_LOGICAL_OR); }
 	|      or_else_exp OR ELSE relation
-			{ write_exp_elt_opcode (pstate, BINOP_LOGICAL_OR); }
+			{ write_exp_elt_opcode (BINOP_LOGICAL_OR); }
         ;
 
 xor_exp :       relation XOR relation
-			{ write_exp_elt_opcode (pstate, BINOP_BITWISE_XOR); }
+			{ write_exp_elt_opcode (BINOP_BITWISE_XOR); }
 	|	xor_exp XOR relation
-			{ write_exp_elt_opcode (pstate, BINOP_BITWISE_XOR); }
+			{ write_exp_elt_opcode (BINOP_BITWISE_XOR); }
         ;
 
 /* Primaries can denote types (OP_TYPE).  In cases such as 
@@ -481,37 +522,36 @@ xor_exp :       relation XOR relation
    aType'access evaluates to a type that evaluate_subexp attempts to 
    evaluate. */
 primary :	primary TICK_ACCESS
-			{ write_exp_elt_opcode (pstate, UNOP_ADDR); }
+			{ write_exp_elt_opcode (UNOP_ADDR); }
 	|	primary TICK_ADDRESS
-			{ write_exp_elt_opcode (pstate, UNOP_ADDR);
-			  write_exp_elt_opcode (pstate, UNOP_CAST);
-			  write_exp_elt_type (pstate,
-					      type_system_address (pstate));
-			  write_exp_elt_opcode (pstate, UNOP_CAST);
+			{ write_exp_elt_opcode (UNOP_ADDR);
+			  write_exp_elt_opcode (UNOP_CAST);
+			  write_exp_elt_type (type_system_address ());
+			  write_exp_elt_opcode (UNOP_CAST);
 			}
 	|	primary TICK_FIRST tick_arglist
-			{ write_int (pstate, $3, type_int (pstate));
-			  write_exp_elt_opcode (pstate, OP_ATR_FIRST); }
+			{ write_int ($3, type_int ());
+			  write_exp_elt_opcode (OP_ATR_FIRST); }
 	|	primary TICK_LAST tick_arglist
-			{ write_int (pstate, $3, type_int (pstate));
-			  write_exp_elt_opcode (pstate, OP_ATR_LAST); }
+			{ write_int ($3, type_int ());
+			  write_exp_elt_opcode (OP_ATR_LAST); }
 	| 	primary TICK_LENGTH tick_arglist
-			{ write_int (pstate, $3, type_int (pstate));
-			  write_exp_elt_opcode (pstate, OP_ATR_LENGTH); }
+			{ write_int ($3, type_int ());
+			  write_exp_elt_opcode (OP_ATR_LENGTH); }
         |       primary TICK_SIZE
-			{ write_exp_elt_opcode (pstate, OP_ATR_SIZE); }
+			{ write_exp_elt_opcode (OP_ATR_SIZE); }
 	|	primary TICK_TAG
-			{ write_exp_elt_opcode (pstate, OP_ATR_TAG); }
+			{ write_exp_elt_opcode (OP_ATR_TAG); }
         |       opt_type_prefix TICK_MIN '(' exp ',' exp ')'
-			{ write_exp_elt_opcode (pstate, OP_ATR_MIN); }
+			{ write_exp_elt_opcode (OP_ATR_MIN); }
         |       opt_type_prefix TICK_MAX '(' exp ',' exp ')'
-			{ write_exp_elt_opcode (pstate, OP_ATR_MAX); }
+			{ write_exp_elt_opcode (OP_ATR_MAX); }
 	| 	opt_type_prefix TICK_POS '(' exp ')'
-			{ write_exp_elt_opcode (pstate, OP_ATR_POS); }
+			{ write_exp_elt_opcode (OP_ATR_POS); }
 	|	type_prefix TICK_VAL '(' exp ')'
-			{ write_exp_elt_opcode (pstate, OP_ATR_VAL); }
+			{ write_exp_elt_opcode (OP_ATR_VAL); }
 	|	type_prefix TICK_MODULUS
-			{ write_exp_elt_opcode (pstate, OP_ATR_MODULUS); }
+			{ write_exp_elt_opcode (OP_ATR_MODULUS); }
 	;
 
 tick_arglist :			%prec '('
@@ -525,55 +565,53 @@ type_prefix :
 			{ 
 			  if ($1 == NULL)
 			    error (_("Prefix must be type"));
-			  write_exp_elt_opcode (pstate, OP_TYPE);
-			  write_exp_elt_type (pstate, $1);
-			  write_exp_elt_opcode (pstate, OP_TYPE); }
+			  write_exp_elt_opcode (OP_TYPE);
+			  write_exp_elt_type ($1);
+			  write_exp_elt_opcode (OP_TYPE); }
 	;
 
 opt_type_prefix :
 		type_prefix
 	| 	/* EMPTY */
-			{ write_exp_elt_opcode (pstate, OP_TYPE);
-			  write_exp_elt_type (pstate,
-					  parse_type (pstate)->builtin_void);
-			  write_exp_elt_opcode (pstate, OP_TYPE); }
+			{ write_exp_elt_opcode (OP_TYPE);
+			  write_exp_elt_type (parse_type->builtin_void);
+			  write_exp_elt_opcode (OP_TYPE); }
 	;
 
 
 primary	:	INT
-			{ write_int (pstate, (LONGEST) $1.val, $1.type); }
+			{ write_int ((LONGEST) $1.val, $1.type); }
 	;
 
 primary	:	CHARLIT
-                  { write_int (pstate,
-			       convert_char_literal (type_qualifier, $1.val),
+                  { write_int (convert_char_literal (type_qualifier, $1.val),
 			       (type_qualifier == NULL) 
 			       ? $1.type : type_qualifier);
 		  }
 	;
 
 primary	:	FLOAT
-			{ write_exp_elt_opcode (pstate, OP_DOUBLE);
-			  write_exp_elt_type (pstate, $1.type);
-			  write_exp_elt_dblcst (pstate, $1.dval);
-			  write_exp_elt_opcode (pstate, OP_DOUBLE);
+			{ write_exp_elt_opcode (OP_DOUBLE);
+			  write_exp_elt_type ($1.type);
+			  write_exp_elt_dblcst ($1.dval);
+			  write_exp_elt_opcode (OP_DOUBLE);
 			}
 	;
 
 primary	:	NULL_PTR
-			{ write_int (pstate, 0, type_int (pstate)); }
+			{ write_int (0, type_int ()); }
 	;
 
 primary	:	STRING
 			{ 
-			  write_exp_op_with_string (pstate, OP_STRING, $1);
+			  write_exp_op_with_string (OP_STRING, $1);
 			}
 	;
 
 primary :	TRUEKEYWORD
-			{ write_int (pstate, 1, type_boolean (pstate)); }
+			{ write_int (1, type_boolean ()); }
         |	FALSEKEYWORD
-			{ write_int (pstate, 0, type_boolean (pstate)); }
+			{ write_int (0, type_boolean ()); }
 	;
 
 primary	: 	NEW NAME
@@ -581,22 +619,22 @@ primary	: 	NEW NAME
 	;
 
 var_or_type:	NAME   	    %prec VAR
-				{ $$ = write_var_or_type (pstate, NULL, $1); }
+				{ $$ = write_var_or_type (NULL, $1); } 
 	|	block NAME  %prec VAR
-                                { $$ = write_var_or_type (pstate, $1, $2); }
+                                { $$ = write_var_or_type ($1, $2); }
 	|       NAME TICK_ACCESS 
 			{ 
-			  $$ = write_var_or_type (pstate, NULL, $1);
+			  $$ = write_var_or_type (NULL, $1);
 			  if ($$ == NULL)
-			    write_exp_elt_opcode (pstate, UNOP_ADDR);
+			    write_exp_elt_opcode (UNOP_ADDR);
 			  else
 			    $$ = lookup_pointer_type ($$);
 			}
 	|	block NAME TICK_ACCESS
 			{ 
-			  $$ = write_var_or_type (pstate, $1, $2);
+			  $$ = write_var_or_type ($1, $2);
 			  if ($$ == NULL)
-			    write_exp_elt_opcode (pstate, UNOP_ADDR);
+			    write_exp_elt_opcode (UNOP_ADDR);
 			  else
 			    $$ = lookup_pointer_type ($$);
 			}
@@ -612,18 +650,18 @@ block   :       NAME COLONCOLON
 aggregate :
 		'(' aggregate_component_list ')'  
 			{
-			  write_exp_elt_opcode (pstate, OP_AGGREGATE);
-			  write_exp_elt_longcst (pstate, $2);
-			  write_exp_elt_opcode (pstate, OP_AGGREGATE);
+			  write_exp_elt_opcode (OP_AGGREGATE);
+			  write_exp_elt_longcst ($2);
+			  write_exp_elt_opcode (OP_AGGREGATE);
 		        }
 	;
 
 aggregate_component_list :
 		component_groups	 { $$ = $1; }
 	|	positional_list exp
-			{ write_exp_elt_opcode (pstate, OP_POSITIONAL);
-			  write_exp_elt_longcst (pstate, $1);
-			  write_exp_elt_opcode (pstate, OP_POSITIONAL);
+			{ write_exp_elt_opcode (OP_POSITIONAL);
+			  write_exp_elt_longcst ($1);
+			  write_exp_elt_opcode (OP_POSITIONAL);
 			  $$ = $1 + 1;
 			}
 	|	positional_list component_groups
@@ -632,15 +670,15 @@ aggregate_component_list :
 
 positional_list :
 		exp ','
-			{ write_exp_elt_opcode (pstate, OP_POSITIONAL);
-			  write_exp_elt_longcst (pstate, 0);
-			  write_exp_elt_opcode (pstate, OP_POSITIONAL);
+			{ write_exp_elt_opcode (OP_POSITIONAL);
+			  write_exp_elt_longcst (0);
+			  write_exp_elt_opcode (OP_POSITIONAL);
 			  $$ = 1;
 			} 
 	|	positional_list exp ','
-			{ write_exp_elt_opcode (pstate, OP_POSITIONAL);
-			  write_exp_elt_longcst (pstate, $1);
-			  write_exp_elt_opcode (pstate, OP_POSITIONAL);
+			{ write_exp_elt_opcode (OP_POSITIONAL);
+			  write_exp_elt_longcst ($1);
+			  write_exp_elt_opcode (OP_POSITIONAL);
 			  $$ = $1 + 1; 
 			}
 	;
@@ -653,15 +691,15 @@ component_groups:
 	;
 
 others 	:	OTHERS ARROW exp
-			{ write_exp_elt_opcode (pstate, OP_OTHERS); }
+			{ write_exp_elt_opcode (OP_OTHERS); }
 	;
 
 component_group :
 		component_associations
 			{
-			  write_exp_elt_opcode (pstate, OP_CHOICES);
-			  write_exp_elt_longcst (pstate, $1);
-			  write_exp_elt_opcode (pstate, OP_CHOICES);
+			  write_exp_elt_opcode (OP_CHOICES);
+			  write_exp_elt_longcst ($1);
+			  write_exp_elt_opcode (OP_CHOICES);
 		        }
 	;
 
@@ -672,23 +710,22 @@ component_group :
    resolved shift/reduce conflict. */
 component_associations :
 		NAME ARROW 
-			{ write_name_assoc (pstate, $1); }
+			{ write_name_assoc ($1); }
 		    exp	{ $$ = 1; }
 	|	simple_exp ARROW exp
 			{ $$ = 1; }
 	|	simple_exp DOTDOT simple_exp ARROW 
-			{ write_exp_elt_opcode (pstate, OP_DISCRETE_RANGE);
-			  write_exp_op_with_string (pstate, OP_NAME,
-						    empty_stoken);
+			{ write_exp_elt_opcode (OP_DISCRETE_RANGE);
+			  write_exp_op_with_string (OP_NAME, empty_stoken);
 			}
 		    exp { $$ = 1; }
 	|	NAME '|' 
-		        { write_name_assoc (pstate, $1); }
+		        { write_name_assoc ($1); }
 		    component_associations  { $$ = $4 + 1; }
 	|	simple_exp '|'  
 	            component_associations  { $$ = $3 + 1; }
 	|	simple_exp DOTDOT simple_exp '|'
-			{ write_exp_elt_opcode (pstate, OP_DISCRETE_RANGE); }
+			{ write_exp_elt_opcode (OP_DISCRETE_RANGE); }
 		    component_associations  { $$ = $6 + 1; }
 	;
 
@@ -696,11 +733,11 @@ component_associations :
    can't get used to Ada notation in GDB.  */
 
 primary	:	'*' primary		%prec '.'
-			{ write_exp_elt_opcode (pstate, UNOP_IND); }
+			{ write_exp_elt_opcode (UNOP_IND); }
 	|	'&' primary		%prec '.'
-			{ write_exp_elt_opcode (pstate, UNOP_ADDR); }
+			{ write_exp_elt_opcode (UNOP_ADDR); }
 	|	primary '[' exp ']'
-			{ write_exp_elt_opcode (pstate, BINOP_SUBSCRIPT); }
+			{ write_exp_elt_opcode (BINOP_SUBSCRIPT); }
 	;
 
 %%
@@ -731,23 +768,14 @@ static struct obstack temp_parse_space;
 #include "ada-lex.c"
 
 int
-ada_parse (struct parser_state *par_state)
+ada_parse (void)
 {
-  int result;
-  struct cleanup *c = make_cleanup_clear_parser_state (&pstate);
-
-  /* Setting up the parser state.  */
-  gdb_assert (par_state != NULL);
-  pstate = par_state;
-
   lexer_init (yyin);		/* (Re-)initialize lexer.  */
   type_qualifier = NULL;
   obstack_free (&temp_parse_space, NULL);
   obstack_init (&temp_parse_space);
 
-  result = yyparse ();
-  do_cleanups (c);
-  return result;
+  return _ada_parse ();
 }
 
 void
@@ -759,8 +787,7 @@ yyerror (char *msg)
 /* Emit expression to access an instance of SYM, in block BLOCK (if
  * non-NULL), and with :: qualification ORIG_LEFT_CONTEXT.  */
 static void
-write_var_from_sym (struct parser_state *par_state,
-		    const struct block *orig_left_context,
+write_var_from_sym (const struct block *orig_left_context,
 		    const struct block *block,
 		    struct symbol *sym)
 {
@@ -771,31 +798,30 @@ write_var_from_sym (struct parser_state *par_state,
 	innermost_block = block;
     }
 
-  write_exp_elt_opcode (par_state, OP_VAR_VALUE);
-  write_exp_elt_block (par_state, block);
-  write_exp_elt_sym (par_state, sym);
-  write_exp_elt_opcode (par_state, OP_VAR_VALUE);
+  write_exp_elt_opcode (OP_VAR_VALUE);
+  write_exp_elt_block (block);
+  write_exp_elt_sym (sym);
+  write_exp_elt_opcode (OP_VAR_VALUE);
 }
 
 /* Write integer or boolean constant ARG of type TYPE.  */
 
 static void
-write_int (struct parser_state *par_state, LONGEST arg, struct type *type)
+write_int (LONGEST arg, struct type *type)
 {
-  write_exp_elt_opcode (par_state, OP_LONG);
-  write_exp_elt_type (par_state, type);
-  write_exp_elt_longcst (par_state, arg);
-  write_exp_elt_opcode (par_state, OP_LONG);
+  write_exp_elt_opcode (OP_LONG);
+  write_exp_elt_type (type);
+  write_exp_elt_longcst (arg);
+  write_exp_elt_opcode (OP_LONG);
 }
 
 /* Write an OPCODE, string, OPCODE sequence to the current expression.  */
 static void
-write_exp_op_with_string (struct parser_state *par_state,
-			  enum exp_opcode opcode, struct stoken token)
+write_exp_op_with_string (enum exp_opcode opcode, struct stoken token)
 {
-  write_exp_elt_opcode (par_state, opcode);
-  write_exp_string (par_state, token);
-  write_exp_elt_opcode (par_state, opcode);
+  write_exp_elt_opcode (opcode);
+  write_exp_string (token);
+  write_exp_elt_opcode (opcode);
 }
   
 /* Emit expression corresponding to the renamed object named 
@@ -810,14 +836,13 @@ write_exp_op_with_string (struct parser_state *par_state,
  * new encoding entirely (FIXME pnh 7/20/2007).  */
 
 static void
-write_object_renaming (struct parser_state *par_state,
-		       const struct block *orig_left_context,
+write_object_renaming (const struct block *orig_left_context,
 		       const char *renamed_entity, int renamed_entity_len,
 		       const char *renaming_expr, int max_depth)
 {
   char *name;
   enum { SIMPLE_INDEX, LOWER_BOUND, UPPER_BOUND } slice_state;
-  struct block_symbol sym_info;
+  struct ada_symbol_info sym_info;
 
   if (max_depth <= 0)
     error (_("Could not find renamed symbol"));
@@ -825,12 +850,11 @@ write_object_renaming (struct parser_state *par_state,
   if (orig_left_context == NULL)
     orig_left_context = get_selected_block (NULL);
 
-  name = (char *) obstack_copy0 (&temp_parse_space, renamed_entity,
-				 renamed_entity_len);
+  name = obstack_copy0 (&temp_parse_space, renamed_entity, renamed_entity_len);
   ada_lookup_encoded_symbol (name, orig_left_context, VAR_DOMAIN, &sym_info);
-  if (sym_info.symbol == NULL)
+  if (sym_info.sym == NULL)
     error (_("Could not find renamed variable: %s"), ada_decode (name));
-  else if (SYMBOL_CLASS (sym_info.symbol) == LOC_TYPEDEF)
+  else if (SYMBOL_CLASS (sym_info.sym) == LOC_TYPEDEF)
     /* We have a renaming of an old-style renaming symbol.  Don't
        trust the block information.  */
     sym_info.block = orig_left_context;
@@ -840,16 +864,15 @@ write_object_renaming (struct parser_state *par_state,
     int inner_renamed_entity_len;
     const char *inner_renaming_expr;
 
-    switch (ada_parse_renaming (sym_info.symbol, &inner_renamed_entity,
+    switch (ada_parse_renaming (sym_info.sym, &inner_renamed_entity,
 				&inner_renamed_entity_len,
 				&inner_renaming_expr))
       {
       case ADA_NOT_RENAMING:
-	write_var_from_sym (par_state, orig_left_context, sym_info.block,
-			    sym_info.symbol);
+	write_var_from_sym (orig_left_context, sym_info.block, sym_info.sym);
 	break;
       case ADA_OBJECT_RENAMING:
-	write_object_renaming (par_state, sym_info.block,
+	write_object_renaming (sym_info.block,
 			       inner_renamed_entity, inner_renamed_entity_len,
 			       inner_renaming_expr, max_depth - 1);
 	break;
@@ -866,7 +889,7 @@ write_object_renaming (struct parser_state *par_state,
       switch (*renaming_expr) {
       case 'A':
         renaming_expr += 1;
-        write_exp_elt_opcode (par_state, UNOP_IND);
+        write_exp_elt_opcode (UNOP_IND);
         break;
       case 'L':
 	slice_state = LOWER_BOUND;
@@ -880,47 +903,47 @@ write_object_renaming (struct parser_state *par_state,
 	    if (next == renaming_expr)
 	      goto BadEncoding;
 	    renaming_expr = next;
-	    write_exp_elt_opcode (par_state, OP_LONG);
-	    write_exp_elt_type (par_state, type_int (par_state));
-	    write_exp_elt_longcst (par_state, (LONGEST) val);
-	    write_exp_elt_opcode (par_state, OP_LONG);
+	    write_exp_elt_opcode (OP_LONG);
+	    write_exp_elt_type (type_int ());
+	    write_exp_elt_longcst ((LONGEST) val);
+	    write_exp_elt_opcode (OP_LONG);
 	  }
 	else
 	  {
 	    const char *end;
 	    char *index_name;
-	    struct block_symbol index_sym_info;
+	    struct ada_symbol_info index_sym_info;
 
 	    end = strchr (renaming_expr, 'X');
 	    if (end == NULL)
 	      end = renaming_expr + strlen (renaming_expr);
 
-	    index_name
-	      = (char *) obstack_copy0 (&temp_parse_space, renaming_expr,
-					end - renaming_expr);
+	    index_name =
+	      obstack_copy0 (&temp_parse_space, renaming_expr,
+			     end - renaming_expr);
 	    renaming_expr = end;
 
 	    ada_lookup_encoded_symbol (index_name, NULL, VAR_DOMAIN,
 				       &index_sym_info);
-	    if (index_sym_info.symbol == NULL)
+	    if (index_sym_info.sym == NULL)
 	      error (_("Could not find %s"), index_name);
-	    else if (SYMBOL_CLASS (index_sym_info.symbol) == LOC_TYPEDEF)
+	    else if (SYMBOL_CLASS (index_sym_info.sym) == LOC_TYPEDEF)
 	      /* Index is an old-style renaming symbol.  */
 	      index_sym_info.block = orig_left_context;
-	    write_var_from_sym (par_state, NULL, index_sym_info.block,
-				index_sym_info.symbol);
+	    write_var_from_sym (NULL, index_sym_info.block,
+				index_sym_info.sym);
 	  }
 	if (slice_state == SIMPLE_INDEX)
 	  {
-	    write_exp_elt_opcode (par_state, OP_FUNCALL);
-	    write_exp_elt_longcst (par_state, (LONGEST) 1);
-	    write_exp_elt_opcode (par_state, OP_FUNCALL);
+	    write_exp_elt_opcode (OP_FUNCALL);
+	    write_exp_elt_longcst ((LONGEST) 1);
+	    write_exp_elt_opcode (OP_FUNCALL);
 	  }
 	else if (slice_state == LOWER_BOUND)
 	  slice_state = UPPER_BOUND;
 	else if (slice_state == UPPER_BOUND)
 	  {
-	    write_exp_elt_opcode (par_state, TERNOP_SLICE);
+	    write_exp_elt_opcode (TERNOP_SLICE);
 	    slice_state = SIMPLE_INDEX;
 	  }
 	break;
@@ -939,12 +962,12 @@ write_object_renaming (struct parser_state *par_state,
 	  if (end == NULL)
 	    end = renaming_expr + strlen (renaming_expr);
 	  field_name.length = end - renaming_expr;
-	  buf = (char *) malloc (end - renaming_expr + 1);
+	  buf = malloc (end - renaming_expr + 1);
 	  field_name.ptr = buf;
 	  strncpy (buf, renaming_expr, end - renaming_expr);
 	  buf[end - renaming_expr] = '\000';
 	  renaming_expr = end;
-	  write_exp_op_with_string (par_state, STRUCTOP_STRUCT, field_name);
+	  write_exp_op_with_string (STRUCTOP_STRUCT, field_name);
 	  break;
 	}
 
@@ -959,11 +982,11 @@ write_object_renaming (struct parser_state *par_state,
   error (_("Internal error in encoding of renaming declaration"));
 }
 
-static const struct block*
-block_lookup (const struct block *context, const char *raw_name)
+static struct block*
+block_lookup (struct block *context, const char *raw_name)
 {
   const char *name;
-  struct block_symbol *syms;
+  struct ada_symbol_info *syms;
   int nsyms;
   struct symtab *symtab;
 
@@ -977,14 +1000,14 @@ block_lookup (const struct block *context, const char *raw_name)
 
   nsyms = ada_lookup_symbol_list (name, context, VAR_DOMAIN, &syms);
   if (context == NULL
-      && (nsyms == 0 || SYMBOL_CLASS (syms[0].symbol) != LOC_BLOCK))
+      && (nsyms == 0 || SYMBOL_CLASS (syms[0].sym) != LOC_BLOCK))
     symtab = lookup_symtab (name);
   else
     symtab = NULL;
 
   if (symtab != NULL)
-    return BLOCKVECTOR_BLOCK (SYMTAB_BLOCKVECTOR (symtab), STATIC_BLOCK);
-  else if (nsyms == 0 || SYMBOL_CLASS (syms[0].symbol) != LOC_BLOCK)
+    return BLOCKVECTOR_BLOCK (BLOCKVECTOR (symtab), STATIC_BLOCK);
+  else if (nsyms == 0 || SYMBOL_CLASS (syms[0].sym) != LOC_BLOCK)
     {
       if (context == NULL)
 	error (_("No file or function \"%s\"."), raw_name);
@@ -995,12 +1018,12 @@ block_lookup (const struct block *context, const char *raw_name)
     {
       if (nsyms > 1)
 	warning (_("Function name \"%s\" ambiguous here"), raw_name);
-      return SYMBOL_BLOCK_VALUE (syms[0].symbol);
+      return SYMBOL_BLOCK_VALUE (syms[0].sym);
     }
 }
 
 static struct symbol*
-select_possible_type_sym (struct block_symbol *syms, int nsyms)
+select_possible_type_sym (struct ada_symbol_info *syms, int nsyms)
 {
   int i;
   int preferred_index;
@@ -1008,13 +1031,13 @@ select_possible_type_sym (struct block_symbol *syms, int nsyms)
 	  
   preferred_index = -1; preferred_type = NULL;
   for (i = 0; i < nsyms; i += 1)
-    switch (SYMBOL_CLASS (syms[i].symbol))
+    switch (SYMBOL_CLASS (syms[i].sym))
       {
       case LOC_TYPEDEF:
-	if (ada_prefer_type (SYMBOL_TYPE (syms[i].symbol), preferred_type))
+	if (ada_prefer_type (SYMBOL_TYPE (syms[i].sym), preferred_type))
 	  {
 	    preferred_index = i;
-	    preferred_type = SYMBOL_TYPE (syms[i].symbol);
+	    preferred_type = SYMBOL_TYPE (syms[i].sym);
 	  }
 	break;
       case LOC_REGISTER:
@@ -1029,18 +1052,18 @@ select_possible_type_sym (struct block_symbol *syms, int nsyms)
       }
   if (preferred_type == NULL)
     return NULL;
-  return syms[preferred_index].symbol;
+  return syms[preferred_index].sym;
 }
 
 static struct type*
-find_primitive_type (struct parser_state *par_state, char *name)
+find_primitive_type (char *name)
 {
   struct type *type;
-  type = language_lookup_primitive_type (parse_language (par_state),
-					 parse_gdbarch (par_state),
-					 name);
+  type = language_lookup_primitive_type_by_name (parse_language,
+						 parse_gdbarch,
+						 name);
   if (type == NULL && strcmp ("system__address", name) == 0)
-    type = type_system_address (par_state);
+    type = type_system_address ();
 
   if (type != NULL)
     {
@@ -1051,7 +1074,7 @@ find_primitive_type (struct parser_state *par_state, char *name)
 	(char *) alloca (strlen (name) + sizeof ("standard__"));
       strcpy (expanded_name, "standard__");
       strcat (expanded_name, name);
-      sym = ada_lookup_symbol (expanded_name, NULL, VAR_DOMAIN, NULL).symbol;
+      sym = ada_lookup_symbol (expanded_name, NULL, VAR_DOMAIN, NULL);
       if (sym != NULL && SYMBOL_CLASS (sym) == LOC_TYPEDEF)
 	type = SYMBOL_TYPE (sym);
     }
@@ -1089,7 +1112,7 @@ chop_separator (char *name)
    <sep> is '__' or '.', write the indicated sequence of
    STRUCTOP_STRUCT expression operators. */
 static void
-write_selectors (struct parser_state *par_state, char *sels)
+write_selectors (char *sels)
 {
   while (*sels != '\0')
     {
@@ -1101,7 +1124,7 @@ write_selectors (struct parser_state *par_state, char *sels)
 	sels += 1;
       field_name.length = sels - p;
       field_name.ptr = p;
-      write_exp_op_with_string (par_state, STRUCTOP_STRUCT, field_name);
+      write_exp_op_with_string (STRUCTOP_STRUCT, field_name);
     }
 }
 
@@ -1110,21 +1133,19 @@ write_selectors (struct parser_state *par_state, char *sels)
    a temporary symbol that is valid until the next call to ada_parse.
    */
 static void
-write_ambiguous_var (struct parser_state *par_state,
-		     const struct block *block, char *name, int len)
+write_ambiguous_var (const struct block *block, char *name, int len)
 {
-  struct symbol *sym = XOBNEW (&temp_parse_space, struct symbol);
-
+  struct symbol *sym =
+    obstack_alloc (&temp_parse_space, sizeof (struct symbol));
   memset (sym, 0, sizeof (struct symbol));
   SYMBOL_DOMAIN (sym) = UNDEF_DOMAIN;
-  SYMBOL_LINKAGE_NAME (sym)
-    = (const char *) obstack_copy0 (&temp_parse_space, name, len);
+  SYMBOL_LINKAGE_NAME (sym) = obstack_copy0 (&temp_parse_space, name, len);
   SYMBOL_LANGUAGE (sym) = language_ada;
 
-  write_exp_elt_opcode (par_state, OP_VAR_VALUE);
-  write_exp_elt_block (par_state, block);
-  write_exp_elt_sym (par_state, sym);
-  write_exp_elt_opcode (par_state, OP_VAR_VALUE);
+  write_exp_elt_opcode (OP_VAR_VALUE);
+  write_exp_elt_block (block);
+  write_exp_elt_sym (sym);
+  write_exp_elt_opcode (OP_VAR_VALUE);
 }
 
 /* A convenient wrapper around ada_get_field_index that takes
@@ -1135,7 +1156,7 @@ static int
 ada_nget_field_index (const struct type *type, const char *field_name0,
                       int field_name_len, int maybe_missing)
 {
-  char *field_name = (char *) alloca ((field_name_len + 1) * sizeof (char));
+  char *field_name = alloca ((field_name_len + 1) * sizeof (char));
 
   strncpy (field_name, field_name0, field_name_len);
   field_name[field_name_len] = '\0';
@@ -1204,8 +1225,7 @@ get_symbol_field_type (struct symbol *sym, char *encoded_field_name)
    identifier).  */
 
 static struct type*
-write_var_or_type (struct parser_state *par_state,
-		   const struct block *block, struct stoken name0)
+write_var_or_type (const struct block *block, struct stoken name0)
 {
   int depth;
   char *encoded_name;
@@ -1216,8 +1236,7 @@ write_var_or_type (struct parser_state *par_state,
 
   encoded_name = ada_encode (name0.ptr);
   name_len = strlen (encoded_name);
-  encoded_name
-    = (char *) obstack_copy0 (&temp_parse_space, encoded_name, name_len);
+  encoded_name = obstack_copy0 (&temp_parse_space, encoded_name, name_len);
   for (depth = 0; depth < MAX_RENAMING_CHAIN_LENGTH; depth += 1)
     {
       int tail_index;
@@ -1226,7 +1245,7 @@ write_var_or_type (struct parser_state *par_state,
       while (tail_index > 0)
 	{
 	  int nsyms;
-	  struct block_symbol *syms;
+	  struct ada_symbol_info *syms;
 	  struct symbol *type_sym;
 	  struct symbol *renaming_sym;
 	  const char* renaming;
@@ -1246,10 +1265,10 @@ write_var_or_type (struct parser_state *par_state,
 	  if (nsyms == 1)
 	    {
 	      struct symbol *ren_sym =
-		ada_find_renaming_symbol (syms[0].symbol, syms[0].block);
+		ada_find_renaming_symbol (syms[0].sym, syms[0].block);
 
 	      if (ren_sym != NULL)
-		syms[0].symbol = ren_sym;
+		syms[0].sym = ren_sym;
 	    }
 
 	  type_sym = select_possible_type_sym (syms, nsyms);
@@ -1257,7 +1276,7 @@ write_var_or_type (struct parser_state *par_state,
 	  if (type_sym != NULL)
 	    renaming_sym = type_sym;
 	  else if (nsyms == 1)
-	    renaming_sym = syms[0].symbol;
+	    renaming_sym = syms[0].sym;
 	  else 
 	    renaming_sym = NULL;
 
@@ -1270,9 +1289,9 @@ write_var_or_type (struct parser_state *par_state,
 	    case ADA_EXCEPTION_RENAMING:
 	    case ADA_SUBPROGRAM_RENAMING:
 	      {
-	        int alloc_len = renaming_len + name_len - tail_index + 1;
 		char *new_name
-		  = (char *) obstack_alloc (&temp_parse_space, alloc_len);
+		  = obstack_alloc (&temp_parse_space,
+				   renaming_len + name_len - tail_index + 1);
 		strncpy (new_name, renaming, renaming_len);
 		strcpy (new_name + renaming_len, encoded_name + tail_index);
 		encoded_name = new_name;
@@ -1280,9 +1299,9 @@ write_var_or_type (struct parser_state *par_state,
 		goto TryAfterRenaming;
 	      }	
 	    case ADA_OBJECT_RENAMING:
-	      write_object_renaming (par_state, block, renaming, renaming_len,
+	      write_object_renaming (block, renaming, renaming_len, 
 				     renaming_expr, MAX_RENAMING_CHAIN_LENGTH);
-	      write_selectors (par_state, encoded_name + tail_index);
+	      write_selectors (encoded_name + tail_index);
 	      return NULL;
 	    default:
 	      internal_error (__FILE__, __LINE__,
@@ -1309,8 +1328,7 @@ write_var_or_type (struct parser_state *par_state,
 	    }
 	  else if (tail_index == name_len && nsyms == 0)
 	    {
-	      struct type *type = find_primitive_type (par_state,
-						       encoded_name);
+	      struct type *type = find_primitive_type (encoded_name);
 
 	      if (type != NULL)
 		return type;
@@ -1318,9 +1336,8 @@ write_var_or_type (struct parser_state *par_state,
 
 	  if (nsyms == 1)
 	    {
-	      write_var_from_sym (par_state, block, syms[0].block,
-				  syms[0].symbol);
-	      write_selectors (par_state, encoded_name + tail_index);
+	      write_var_from_sym (block, syms[0].block, syms[0].sym);
+	      write_selectors (encoded_name + tail_index);
 	      return NULL;
 	    }
 	  else if (nsyms == 0) 
@@ -1329,9 +1346,9 @@ write_var_or_type (struct parser_state *par_state,
 		= ada_lookup_simple_minsym (encoded_name);
 	      if (msym.minsym != NULL)
 		{
-		  write_exp_msymbol (par_state, msym);
+		  write_exp_msymbol (msym);
 		  /* Maybe cause error here rather than later? FIXME? */
-		  write_selectors (par_state, encoded_name + tail_index);
+		  write_selectors (encoded_name + tail_index);
 		  return NULL;
 		}
 
@@ -1344,9 +1361,8 @@ write_var_or_type (struct parser_state *par_state,
 	    } 
 	  else
 	    {
-	      write_ambiguous_var (par_state, block, encoded_name,
-				   tail_index);
-	      write_selectors (par_state, encoded_name + tail_index);
+	      write_ambiguous_var (block, encoded_name, tail_index);
+	      write_selectors (encoded_name + tail_index);
 	      return NULL;
 	    }
 	}
@@ -1381,21 +1397,20 @@ write_var_or_type (struct parser_state *par_state,
    ambiguous name, one must write instead ((R) => 42). */
    
 static void
-write_name_assoc (struct parser_state *par_state, struct stoken name)
+write_name_assoc (struct stoken name)
 {
   if (strchr (name.ptr, '.') == NULL)
     {
-      struct block_symbol *syms;
+      struct ada_symbol_info *syms;
       int nsyms = ada_lookup_symbol_list (name.ptr, expression_context_block,
 					  VAR_DOMAIN, &syms);
-
-      if (nsyms != 1 || SYMBOL_CLASS (syms[0].symbol) == LOC_TYPEDEF)
-	write_exp_op_with_string (par_state, OP_NAME, name);
+      if (nsyms != 1 || SYMBOL_CLASS (syms[0].sym) == LOC_TYPEDEF)
+	write_exp_op_with_string (OP_NAME, name);
       else
-	write_var_from_sym (par_state, NULL, syms[0].block, syms[0].symbol);
+	write_var_from_sym (NULL, syms[0].block, syms[0].sym);
     }
   else
-    if (write_var_or_type (par_state, NULL, name) != NULL)
+    if (write_var_or_type (NULL, name) != NULL)
       error (_("Invalid use of type."));
 }
 
@@ -1426,62 +1441,61 @@ convert_char_literal (struct type *type, LONGEST val)
 }
 
 static struct type *
-type_int (struct parser_state *par_state)
+type_int (void)
 {
-  return parse_type (par_state)->builtin_int;
+  return parse_type->builtin_int;
 }
 
 static struct type *
-type_long (struct parser_state *par_state)
+type_long (void)
 {
-  return parse_type (par_state)->builtin_long;
+  return parse_type->builtin_long;
 }
 
 static struct type *
-type_long_long (struct parser_state *par_state)
+type_long_long (void)
 {
-  return parse_type (par_state)->builtin_long_long;
+  return parse_type->builtin_long_long;
 }
 
 static struct type *
-type_float (struct parser_state *par_state)
+type_float (void)
 {
-  return parse_type (par_state)->builtin_float;
+  return parse_type->builtin_float;
 }
 
 static struct type *
-type_double (struct parser_state *par_state)
+type_double (void)
 {
-  return parse_type (par_state)->builtin_double;
+  return parse_type->builtin_double;
 }
 
 static struct type *
-type_long_double (struct parser_state *par_state)
+type_long_double (void)
 {
-  return parse_type (par_state)->builtin_long_double;
+  return parse_type->builtin_long_double;
 }
 
 static struct type *
-type_char (struct parser_state *par_state)
+type_char (void)
 {
-  return language_string_char_type (parse_language (par_state),
-				    parse_gdbarch (par_state));
+  return language_string_char_type (parse_language, parse_gdbarch);
 }
 
 static struct type *
-type_boolean (struct parser_state *par_state)
+type_boolean (void)
 {
-  return parse_type (par_state)->builtin_bool;
+  return parse_type->builtin_bool;
 }
 
 static struct type *
-type_system_address (struct parser_state *par_state)
+type_system_address (void)
 {
   struct type *type 
-    = language_lookup_primitive_type (parse_language (par_state),
-				      parse_gdbarch (par_state),
-				      "system__address");
-  return  type != NULL ? type : parse_type (par_state)->builtin_data_ptr;
+    = language_lookup_primitive_type_by_name (parse_language,
+					      parse_gdbarch,
+					      "system__address");
+  return  type != NULL ? type : parse_type->builtin_data_ptr;
 }
 
 /* Provide a prototype to silence -Wmissing-prototypes.  */

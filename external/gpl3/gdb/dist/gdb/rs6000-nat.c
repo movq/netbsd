@@ -1,6 +1,6 @@
 /* IBM RS/6000 native-dependent code for GDB, the GNU debugger.
 
-   Copyright (C) 1986-2016 Free Software Foundation, Inc.
+   Copyright (C) 1986-2014 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -23,7 +23,9 @@
 #include "gdbcore.h"
 #include "symfile.h"
 #include "objfiles.h"
+#include "libbfd.h"		/* For bfd_default_set_arch_mach (FIXME) */
 #include "bfd.h"
+#include "exceptions.h"
 #include "gdb-stabs.h"
 #include "regcache.h"
 #include "arch-utils.h"
@@ -44,6 +46,7 @@
 #include <signal.h>
 #include <sys/ioctl.h>
 #include <fcntl.h>
+#include <errno.h>
 
 #include <a.out.h>
 #include <sys/file.h>
@@ -74,7 +77,12 @@
 # define ARCH64() (register_size (target_gdbarch (), 0) == 8)
 #endif
 
-static target_xfer_partial_ftype rs6000_xfer_shared_libraries;
+static void exec_one_dummy_insn (struct regcache *);
+
+static LONGEST rs6000_xfer_shared_libraries
+  (struct target_ops *ops, enum target_object object,
+   const char *annex, gdb_byte *readbuf, const gdb_byte *writebuf,
+   ULONGEST offset, LONGEST len);
 
 /* Given REGNO, a gdb register number, return the corresponding
    number suitable for use as a ptrace() parameter.  Return -1 if
@@ -142,9 +150,9 @@ rs6000_ptrace64 (int req, int id, long long addr, int data, void *buf)
 {
 #ifdef ARCH3264
 #  ifdef HAVE_PTRACE64
-  int ret = ptrace64 (req, id, addr, data, (PTRACE_TYPE_ARG5) buf);
+  int ret = ptrace64 (req, id, addr, data, buf);
 #  else
-  int ret = ptracex (req, id, addr, data, (PTRACE_TYPE_ARG5) buf);
+  int ret = ptracex (req, id, addr, data, buf);
 #  endif
 #else
   int ret = 0;
@@ -249,6 +257,14 @@ store_register (struct regcache *regcache, int regno)
   /* Fixed-point registers.  */
   else
     {
+      if (regno == gdbarch_sp_regnum (gdbarch))
+	/* Execute one dummy instruction (which is a breakpoint) in inferior
+	   process to give kernel a chance to do internal housekeeping.
+	   Otherwise the following ptrace(2) calls will mess up user stack
+	   since kernel will get confused about the bottom of the stack
+	   (%sp).  */
+	exec_one_dummy_insn (regcache);
+
       /* The PT_WRITE_GPR operation is rather odd.  For 32-bit inferiors,
          the register's value is passed by value, but for 64-bit inferiors,
 	 the address of a buffer containing the value is passed.  */
@@ -361,13 +377,16 @@ rs6000_store_inferior_registers (struct target_ops *ops,
     }
 }
 
-/* Implement the to_xfer_partial target_ops method.  */
 
-static enum target_xfer_status
+/* Attempt a transfer all LEN bytes starting at OFFSET between the
+   inferior's OBJECT:ANNEX space and GDB's READBUF/WRITEBUF buffer.
+   Return the number of bytes actually transferred.  */
+
+static LONGEST
 rs6000_xfer_partial (struct target_ops *ops, enum target_object object,
 		     const char *annex, gdb_byte *readbuf,
 		     const gdb_byte *writebuf,
-		     ULONGEST offset, ULONGEST len, ULONGEST *xfered_len)
+		     ULONGEST offset, LONGEST len)
 {
   pid_t pid = ptid_get_pid (inferior_ptid);
   int arch64 = ARCH64 ();
@@ -377,7 +396,7 @@ rs6000_xfer_partial (struct target_ops *ops, enum target_object object,
     case TARGET_OBJECT_LIBRARIES_AIX:
       return rs6000_xfer_shared_libraries (ops, object, annex,
 					   readbuf, writebuf,
-					   offset, len, xfered_len);
+					   offset, len);
     case TARGET_OBJECT_MEMORY:
       {
 	union
@@ -435,7 +454,7 @@ rs6000_xfer_partial (struct target_ops *ops, enum target_object object,
 			       (int *) (uintptr_t) rounded_offset,
 			       buffer.word, NULL);
 	    if (errno)
-	      return TARGET_XFER_EOF;
+	      return 0;
 	  }
 
 	if (readbuf)
@@ -449,19 +468,18 @@ rs6000_xfer_partial (struct target_ops *ops, enum target_object object,
 					     (int *)(uintptr_t)rounded_offset,
 					     0, NULL);
 	    if (errno)
-	      return TARGET_XFER_EOF;
+	      return 0;
 
 	    /* Copy appropriate bytes out of the buffer.  */
 	    memcpy (readbuf, buffer.byte + (offset - rounded_offset),
 		    partial_len);
 	  }
 
-	*xfered_len = (ULONGEST) partial_len;
-	return TARGET_XFER_OK;
+	return partial_len;
       }
 
     default:
-      return TARGET_XFER_E_IO;
+      return -1;
     }
 }
 
@@ -520,6 +538,53 @@ rs6000_wait (struct target_ops *ops,
     store_waitstatus (ourstatus, status);
 
   return pid_to_ptid (pid);
+}
+
+/* Execute one dummy breakpoint instruction.  This way we give the kernel
+   a chance to do some housekeeping and update inferior's internal data,
+   including u_area.  */
+
+static void
+exec_one_dummy_insn (struct regcache *regcache)
+{
+#define	DUMMY_INSN_ADDR	AIX_TEXT_SEGMENT_BASE+0x200
+
+  struct gdbarch *gdbarch = get_regcache_arch (regcache);
+  int ret, status, pid;
+  CORE_ADDR prev_pc;
+  void *bp;
+
+  /* We plant one dummy breakpoint into DUMMY_INSN_ADDR address.  We
+     assume that this address will never be executed again by the real
+     code.  */
+
+  bp = deprecated_insert_raw_breakpoint (gdbarch, NULL, DUMMY_INSN_ADDR);
+
+  /* You might think this could be done with a single ptrace call, and
+     you'd be correct for just about every platform I've ever worked
+     on.  However, rs6000-ibm-aix4.1.3 seems to have screwed this up --
+     the inferior never hits the breakpoint (it's also worth noting
+     powerpc-ibm-aix4.1.3 works correctly).  */
+  prev_pc = regcache_read_pc (regcache);
+  regcache_write_pc (regcache, DUMMY_INSN_ADDR);
+  if (ARCH64 ())
+    ret = rs6000_ptrace64 (PT_CONTINUE, ptid_get_pid (inferior_ptid),
+			   1, 0, NULL);
+  else
+    ret = rs6000_ptrace32 (PT_CONTINUE, ptid_get_pid (inferior_ptid),
+			   (int *) 1, 0, NULL);
+
+  if (ret != 0)
+    perror (_("pt_continue"));
+
+  do
+    {
+      pid = waitpid (ptid_get_pid (inferior_ptid), &status, 0);
+    }
+  while (pid != ptid_get_pid (inferior_ptid));
+
+  regcache_write_pc (regcache, prev_pc);
+  deprecated_remove_raw_breakpoint (gdbarch, bp);
 }
 
 
@@ -592,7 +657,7 @@ rs6000_ptrace_ldinfo (ptid_t ptid)
 {
   const int pid = ptid_get_pid (ptid);
   int ldi_size = 1024;
-  void *ldi = xmalloc (ldi_size);
+  gdb_byte *ldi = xmalloc (ldi_size);
   int rc = -1;
 
   while (1)
@@ -614,17 +679,17 @@ rs6000_ptrace_ldinfo (ptid_t ptid)
       ldi = xrealloc (ldi, ldi_size);
     }
 
-  return (gdb_byte *) ldi;
+  return ldi;
 }
 
 /* Implement the to_xfer_partial target_ops method for
    TARGET_OBJECT_LIBRARIES_AIX objects.  */
 
-static enum target_xfer_status
+static LONGEST
 rs6000_xfer_shared_libraries
   (struct target_ops *ops, enum target_object object,
    const char *annex, gdb_byte *readbuf, const gdb_byte *writebuf,
-   ULONGEST offset, ULONGEST len, ULONGEST *xfered_len)
+   ULONGEST offset, LONGEST len)
 {
   gdb_byte *ldi_buf;
   ULONGEST result;
@@ -635,7 +700,7 @@ rs6000_xfer_shared_libraries
   gdb_assert (target_has_execution);
 
   if (writebuf)
-    return TARGET_XFER_E_IO;
+    return -1;
 
   ldi_buf = rs6000_ptrace_ldinfo (inferior_ptid);
   gdb_assert (ldi_buf != NULL);
@@ -645,14 +710,7 @@ rs6000_xfer_shared_libraries
   xfree (ldi_buf);
 
   do_cleanups (cleanup);
-
-  if (result == 0)
-    return TARGET_XFER_EOF;
-  else
-    {
-      *xfered_len = result;
-      return TARGET_XFER_OK;
-    }
+  return result;
 }
 
 void _initialize_rs6000_nat (void);

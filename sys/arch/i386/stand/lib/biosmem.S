@@ -1,4 +1,4 @@
-/*	$NetBSD: biosmem.S,v 1.10 2016/12/04 08:21:08 maxv Exp $	*/
+/*	$NetBSD: biosmem.S,v 1.9 2011/06/16 13:27:59 joerg Exp $	*/
 
 /*
  * Copyright (c) 1996
@@ -36,9 +36,8 @@
 
 	.text
 
-/*
- * Get mem below 1M, in kByte.
- */
+/* get mem below 1M, in kByte */
+
 ENTRY(getbasemem)
 	pusha
 
@@ -46,19 +45,18 @@ ENTRY(getbasemem)
 	.code16
 
 	int	$0x12
-	/* Zero-extend 16-bit result to 32 bits */
-	movzwl	%ax,%eax
+	# zero-extend 16-bit result to 32 bits.
+	movzwl	%ax, %eax
 
 	calll	_C_LABEL(real_to_prot)
 	.code32
 
-	movl	%eax,28(%esp)
+	movl	%eax, 28(%esp)
 	popa
 	ret
 
-/*
- * Get mem above 1M, in kByte.
- */
+/* get mem above 1M, in kByte */
+
 ENTRY(getextmem1)
 	pusha
 
@@ -68,13 +66,13 @@ ENTRY(getextmem1)
 	movb	$0x88,%ah
 	int	$0x15
 
-	/* Zero-extend 16-bit result to 32 bits */
-	movzwl	%ax,%eax
+	# zero-extend 16-bit result to 32 bits.
+	movzwl	%ax, %eax
 
 	calll	_C_LABEL(real_to_prot)
 	.code32
 
-	movl	%eax,28(%esp)
+	movl	%eax, 28(%esp)
 	popa
 	ret
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: nfsmount.h,v 1.53 2015/07/15 03:28:55 manu Exp $	*/
+/*	$NetBSD: nfsmount.h,v 1.52.2.1 2015/11/04 17:32:00 riz Exp $	*/
 
 /*
  * Copyright (c) 1989, 1993

@@ -1,4 +1,4 @@
-/* $NetBSD: gttwsireg.h,v 1.3 2014/09/11 11:14:44 jmcneill Exp $ */
+/* $NetBSD: gttwsireg.h,v 1.1.10.1 2014/11/12 20:07:20 martin Exp $ */
 
 /*
  * Copyright (c) 2008 Eiji Kawauchi.
@@ -38,7 +38,7 @@
 #define TWSI_CONTROL		0x0c
 #define TWSI_STATUS		0x10
 #define TWSI_BAUDRATE		0x14
-#define TWSI_SOFTRESET		0x18
+#define TWSI_SOFTRESET		0x1c
 #else
 #define	TWSI_SLAVEADDR		0x00
 #define	TWSI_EXTEND_SLAVEADDR	0x10

@@ -1,4 +1,4 @@
-/*	$NetBSD: sdtemp_reg.h,v 1.12 2016/12/07 04:58:39 nonaka Exp $	*/
+/*	$NetBSD: sdtemp_reg.h,v 1.7.4.1 2016/12/08 07:34:34 snj Exp $	*/
 
 /*
  * Copyright (c) 2009 The NetBSD Foundation, Inc.

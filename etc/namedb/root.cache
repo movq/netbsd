@@ -1,4 +1,4 @@
-;	$NetBSD: root.cache,v 1.22 2016/10/27 15:20:32 taca Exp $
+;	$NetBSD: root.cache,v 1.18.2.4 2016/11/01 19:52:22 snj Exp $
 ;       This file holds the information on root name servers needed to
 ;       initialize cache of Internet domain name servers
 ;       (e.g. reference this file in the "cache  .  <file>"

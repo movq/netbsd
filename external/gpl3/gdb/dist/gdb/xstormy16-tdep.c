@@ -1,6 +1,6 @@
 /* Target-dependent code for the Sanyo Xstormy16a (LC590000) processor.
 
-   Copyright (C) 2001-2016 Free Software Foundation, Inc.
+   Copyright (C) 2001-2014 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -29,6 +29,8 @@
 #include "value.h"
 #include "dis-asm.h"
 #include "inferior.h"
+#include <string.h>
+#include "gdb_assert.h"
 #include "arch-utils.h"
 #include "floatformat.h"
 #include "regcache.h"
@@ -282,7 +284,7 @@ xstormy16_push_dummy_call (struct gdbarch *gdbarch,
 
       typelen = TYPE_LENGTH (value_enclosing_type (args[j]));
       slacklen = typelen & 1;
-      val = (gdb_byte *) xmalloc (typelen + slacklen);
+      val = xmalloc (typelen + slacklen);
       back_to = make_cleanup (xfree, val);
       memcpy (val, bytes, typelen);
       memset (val + typelen, 0, slacklen);
@@ -374,7 +376,7 @@ xstormy16_analyze_prologue (struct gdbarch *gdbarch,
       /* Probably only in optimized case but legal action for prologue.  */
       else if ((inst & 0xff00) == 0x4600	/* 46SD   mov rD, rS */
 	       && (inst & 0x00f0) >= 0x0020 && (inst & 0x00f0) <= 0x0070
-	       && (inst & 0x000f) >= 0x000a && (inst & 0x000f) <= 0x000d)
+	       && (inst & 0x000f) >= 0x00a0 && (inst & 0x000f) <= 0x000d)
 	;
 
       /* Optional copying of args in r2-r7 to stack.  */
@@ -433,7 +435,7 @@ xstormy16_skip_prologue (struct gdbarch *gdbarch, CORE_ADDR pc)
         return plg_end;
 
       /* Found a function.  */
-      sym = lookup_symbol (func_name, NULL, VAR_DOMAIN, NULL).symbol;
+      sym = lookup_symbol (func_name, NULL, VAR_DOMAIN, NULL);
       /* Don't use line number debug info for assembly source files.  */
       if (sym && SYMBOL_LANGUAGE (sym) != language_asm)
 	{
@@ -453,14 +455,11 @@ xstormy16_skip_prologue (struct gdbarch *gdbarch, CORE_ADDR pc)
   return (CORE_ADDR) pc;
 }
 
-/* Implement the stack_frame_destroyed_p gdbarch method.
-
-   The epilogue is defined here as the area at the end of a function,
+/* The epilogue is defined here as the area at the end of a function,
    either on the `ret' instruction itself or after an instruction which
    destroys the function's stack frame.  */
-
 static int
-xstormy16_stack_frame_destroyed_p (struct gdbarch *gdbarch, CORE_ADDR pc)
+xstormy16_in_function_epilogue_p (struct gdbarch *gdbarch, CORE_ADDR pc)
 {
   enum bfd_endian byte_order = gdbarch_byte_order (gdbarch);
   CORE_ADDR func_addr = 0, func_end = 0;
@@ -678,7 +677,7 @@ xstormy16_frame_cache (struct frame_info *this_frame, void **this_cache)
   int i;
 
   if (*this_cache)
-    return (struct xstormy16_frame_cache *) *this_cache;
+    return *this_cache;
 
   cache = xstormy16_alloc_frame_cache ();
   *this_cache = cache;
@@ -838,8 +837,8 @@ xstormy16_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
   frame_base_set_default (gdbarch, &xstormy16_frame_base);
 
   set_gdbarch_skip_prologue (gdbarch, xstormy16_skip_prologue);
-  set_gdbarch_stack_frame_destroyed_p (gdbarch,
-				       xstormy16_stack_frame_destroyed_p);
+  set_gdbarch_in_function_epilogue_p (gdbarch,
+				      xstormy16_in_function_epilogue_p);
 
   /* These values and methods are used when gdb calls a target function.  */
   set_gdbarch_push_dummy_call (gdbarch, xstormy16_push_dummy_call);

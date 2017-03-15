@@ -179,8 +179,8 @@ public:
     }
 
   private:
-    Query(const Query&) = delete;
-    void operator=(const Query&) = delete;
+    Query(const Query&) LLVM_DELETED_FUNCTION;
+    void operator=(const Query&) LLVM_DELETED_FUNCTION;
   };
 
   // Array of LiveIntervalUnions.
@@ -202,11 +202,6 @@ public:
     LiveIntervalUnion& operator[](unsigned idx) {
       assert(idx <  Size && "idx out of bounds");
       return LIUs[idx];
-    }
-
-    const LiveIntervalUnion& operator[](unsigned Idx) const {
-      assert(Idx < Size && "Idx out of bounds");
-      return LIUs[Idx];
     }
   };
 };

@@ -1,4 +1,4 @@
-.\"	$NetBSD: macros,v 1.42 2015/05/19 19:45:57 snj Exp $
+.\"	$NetBSD: macros,v 1.40.4.1 2015/05/24 11:14:43 martin Exp $
 .\"
 .\" Copyright (c) 1999-2004 The NetBSD Foundation, Inc.
 .\" All rights reserved.

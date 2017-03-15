@@ -1,4 +1,4 @@
-/*	$NetBSD: lan9118.c,v 1.24 2017/02/20 07:43:29 ozaki-r Exp $	*/
+/*	$NetBSD: lan9118.c,v 1.17 2014/08/10 16:44:35 tls Exp $	*/
 /*
  * Copyright (c) 2008 KIYOHARA Takashi
  * All rights reserved.
@@ -25,7 +25,7 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: lan9118.c,v 1.24 2017/02/20 07:43:29 ozaki-r Exp $");
+__KERNEL_RCSID(0, "$NetBSD: lan9118.c,v 1.17 2014/08/10 16:44:35 tls Exp $");
 
 /*
  * The LAN9118 Family
@@ -65,7 +65,7 @@ __KERNEL_RCSID(0, "$NetBSD: lan9118.c,v 1.24 2017/02/20 07:43:29 ozaki-r Exp $")
 #include <dev/mii/miivar.h>
 
 #include <net/bpf.h>
-#include <sys/rndsource.h>
+#include <sys/rnd.h>
 
 #include <dev/ic/lan9118reg.h>
 #include <dev/ic/lan9118var.h>
@@ -274,7 +274,6 @@ lan9118_attach(struct lan9118_softc *sc)
 
 	/* Attach the interface. */
 	if_attach(ifp);
-	if_deferred_start_init(ifp, NULL);
 	ether_ifattach(ifp, sc->sc_enaddr);
 
 	callout_init(&sc->sc_tick, 0);
@@ -333,7 +332,8 @@ lan9118_intr(void *arg)
 			 lan9118_rxintr(sc);
 	}
 
-	if_schedule_deferred_start(ifp);
+	if (!IFQ_IS_EMPTY(&ifp->if_snd))
+		lan9118_start(ifp);
 
 	rnd_add_uint32(&sc->rnd_source, datum);
 
@@ -991,11 +991,18 @@ dropit:
 		    roundup(pad + pktlen, sizeof(uint32_t)) >> 2);
 		m->m_data += pad;
 
-		m_set_rcvif(m, ifp);
+		ifp->if_ipackets++;
+		m->m_pkthdr.rcvif = ifp;
 		m->m_pkthdr.len = m->m_len = (pktlen - ETHER_CRC_LEN);
 
+		/*
+		 * Pass this up to any BPF listeners, but only
+		 * pass if up the stack if it's for us.
+		 */
+		bpf_mtap(ifp, m);
+
 		/* Pass it on. */
-		if_percpuq_enqueue(ifp->if_percpuq, m);
+		(*ifp->if_input)(ifp, m);
 	}
 }
 

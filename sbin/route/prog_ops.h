@@ -1,4 +1,4 @@
-/*      $NetBSD: prog_ops.h,v 1.3 2014/11/06 21:29:32 christos Exp $	*/
+/*      $NetBSD: prog_ops.h,v 1.2.24.1 2015/01/08 11:01:01 martin Exp $	*/
 
 /*
  * Copyright (c) 2010 The NetBSD Foundation, Inc.

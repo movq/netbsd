@@ -1,5 +1,5 @@
 /* Support for printing Modula 2 types for GDB, the GNU debugger.
-   Copyright (C) 1986-2016 Free Software Foundation, Inc.
+   Copyright (C) 1986-2014 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -31,6 +31,9 @@
 #include "c-lang.h"
 #include "typeprint.h"
 #include "cp-abi.h"
+
+#include <string.h>
+#include <errno.h>
 
 static void m2_print_bounds (struct type *type,
 			     struct ui_file *stream, int show, int level,
@@ -74,7 +77,7 @@ m2_print_type (struct type *type, const char *varstring,
 	       int show, int level,
 	       const struct type_print_options *flags)
 {
-  type = check_typedef (type);
+  CHECK_TYPEDEF (type);
 
   QUIT;
 
@@ -160,7 +163,7 @@ void
 m2_print_typedef (struct type *type, struct symbol *new_symbol,
 		  struct ui_file *stream)
 {
-  type = check_typedef (type);
+  CHECK_TYPEDEF (type);
   fprintf_filtered (stream, "TYPE ");
   if (!TYPE_NAME (SYMBOL_TYPE (new_symbol))
       || strcmp (TYPE_NAME ((SYMBOL_TYPE (new_symbol))),
@@ -188,12 +191,8 @@ m2_range (struct type *type, struct ui_file *stream, int show,
 	  int level, const struct type_print_options *flags)
 {
   if (TYPE_HIGH_BOUND (type) == TYPE_LOW_BOUND (type))
-    {
-      /* FIXME: TYPE_TARGET_TYPE used to be TYPE_DOMAIN_TYPE but that was
-	 wrong.  Not sure if TYPE_TARGET_TYPE is correct though.  */
-      m2_print_type (TYPE_TARGET_TYPE (type), "", stream, show, level,
-		     flags);
-    }
+    m2_print_type (TYPE_DOMAIN_TYPE (type), "", stream, show, level,
+		   flags);
   else
     {
       struct type *target = TYPE_TARGET_TYPE (type);
@@ -373,7 +372,7 @@ m2_is_long_set (struct type *type)
 static int
 m2_get_discrete_bounds (struct type *type, LONGEST *lowp, LONGEST *highp)
 {
-  type = check_typedef (type);
+  CHECK_TYPEDEF (type);
   switch (TYPE_CODE (type))
     {
     case TYPE_CODE_CHAR:
@@ -538,7 +537,7 @@ m2_record_fields (struct type *type, struct ui_file *stream, int show,
   /* Print the tag if it exists.  */
   if (TYPE_TAG_NAME (type) != NULL)
     {
-      if (!startswith (TYPE_TAG_NAME (type), "$$"))
+      if (strncmp (TYPE_TAG_NAME (type), "$$", 2) != 0)
 	{
 	  fputs_filtered (TYPE_TAG_NAME (type), stream);
 	  if (show > 0)

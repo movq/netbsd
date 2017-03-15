@@ -1,4 +1,4 @@
-/*	$NetBSD: t_fchownat.c,v 1.4 2017/01/10 15:13:56 christos Exp $ */
+/*	$NetBSD: t_fchownat.c,v 1.3 2013/03/17 04:46:06 jmmv Exp $ */
 
 /*-
  * Copyright (c) 2012 The NetBSD Foundation, Inc.
@@ -29,10 +29,8 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: t_fchownat.c,v 1.4 2017/01/10 15:13:56 christos Exp $");
+__RCSID("$NetBSD: t_fchownat.c,v 1.3 2013/03/17 04:46:06 jmmv Exp $");
 
-#include <sys/param.h>
-#include <sys/stat.h>
 #include <atf-c.h>
 #include <errno.h>
 #include <fcntl.h>
@@ -42,6 +40,7 @@ __RCSID("$NetBSD: t_fchownat.c,v 1.4 2017/01/10 15:13:56 christos Exp $");
 #include <string.h>
 #include <unistd.h>
 #include <pwd.h>
+#include <sys/param.h>
 
 #define DIR "dir"
 #define FILE "dir/fchownat"

@@ -1,6 +1,6 @@
 /* Target-dependent, architecture-independent code for DICOS, for GDB.
 
-   Copyright (C) 2009-2016 Free Software Foundation, Inc.
+   Copyright (C) 2009-2014 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -19,6 +19,7 @@
 
 #include "defs.h"
 #include "osabi.h"
+#include <string.h>
 #include "solib.h"
 #include "solib-target.h"
 #include "inferior.h"
@@ -27,6 +28,8 @@
 void
 dicos_init_abi (struct gdbarch *gdbarch)
 {
+  struct gdbarch_tdep *tdep = gdbarch_tdep (gdbarch);
+
   set_solib_ops (gdbarch, &solib_target_so_ops);
 
   /* Every process, although has its own address space, sees the same
@@ -88,7 +91,7 @@ dicos_load_module_p (bfd *abfd, int header_size)
     {
       long i, symcount;
 
-      symbol_table = (asymbol **) xmalloc (storage_needed);
+      symbol_table = xmalloc (storage_needed);
       symcount = bfd_canonicalize_symtab (abfd, symbol_table);
 
       if (symcount < 0)

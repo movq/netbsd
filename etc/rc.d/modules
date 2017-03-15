@@ -1,6 +1,6 @@
 #!/bin/sh
 #
-# $NetBSD: modules,v 1.2 2015/04/06 15:07:50 mlelstv Exp $
+# $NetBSD: modules,v 1.1.2.3 2015/05/16 04:37:04 snj Exp $
 #
 
 # PROVIDE: modules

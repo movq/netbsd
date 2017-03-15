@@ -17,7 +17,7 @@
 
 
 struct eap_wsc_data {
-	enum { WAIT_START, MESG, WAIT_FRAG_ACK, FAIL } state;
+	enum { WAIT_START, MESG, FRAG_ACK, WAIT_FRAG_ACK, DONE, FAIL } state;
 	int registrar;
 	struct wpabuf *in_buf;
 	struct wpabuf *out_buf;
@@ -36,8 +36,12 @@ static const char * eap_wsc_state_txt(int state)
 		return "WAIT_START";
 	case MESG:
 		return "MESG";
+	case FRAG_ACK:
+		return "FRAG_ACK";
 	case WAIT_FRAG_ACK:
 		return "WAIT_FRAG_ACK";
+	case DONE:
+		return "DONE";
 	case FAIL:
 		return "FAIL";
 	default:
@@ -553,9 +557,6 @@ send_msg:
 		if (data->out_buf == NULL) {
 			wpa_printf(MSG_DEBUG, "EAP-WSC: Failed to receive "
 				   "message from WPS");
-			eap_wsc_state(data, FAIL);
-			ret->methodState = METHOD_DONE;
-			ret->decision = DECISION_FAIL;
 			return NULL;
 		}
 		data->out_used = 0;
@@ -575,6 +576,7 @@ send_msg:
 int eap_peer_wsc_register(void)
 {
 	struct eap_method *eap;
+	int ret;
 
 	eap = eap_peer_method_alloc(EAP_PEER_METHOD_INTERFACE_VERSION,
 				    EAP_VENDOR_WFA, EAP_VENDOR_TYPE_WSC,
@@ -586,5 +588,8 @@ int eap_peer_wsc_register(void)
 	eap->deinit = eap_wsc_deinit;
 	eap->process = eap_wsc_process;
 
-	return eap_peer_method_register(eap);
+	ret = eap_peer_method_register(eap);
+	if (ret)
+		eap_peer_method_free(eap);
+	return ret;
 }

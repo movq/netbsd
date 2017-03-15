@@ -1,4 +1,4 @@
-/*	$NetBSD: midway.c,v 1.99 2017/01/24 09:05:28 ozaki-r Exp $	*/
+/*	$NetBSD: midway.c,v 1.94 2012/03/13 18:40:31 elad Exp $	*/
 /*	(sync'd to midway.c 1.68)	*/
 
 /*
@@ -61,7 +61,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: midway.c,v 1.99 2017/01/24 09:05:28 ozaki-r Exp $");
+__KERNEL_RCSID(0, "$NetBSD: midway.c,v 1.94 2012/03/13 18:40:31 elad Exp $");
 
 #include "opt_natm.h"
 
@@ -638,7 +638,7 @@ STATIC INLINE struct mbuf *en_mget(struct en_softc *sc, u_int totlen, u_int *drq
   MGETHDR(m, M_DONTWAIT, MT_DATA);
   if (m == NULL)
     return(NULL);
-  m_set_rcvif(m, &sc->enif);
+  m->m_pkthdr.rcvif = &sc->enif;
   m->m_pkthdr.len = totlen;
   m->m_len = MHLEN;
   top = NULL;
@@ -2760,13 +2760,13 @@ EN_INTR_TYPE en_intr(void *arg)
 	  /* if there's a subinterface for this vci, override ifp. */
 	  ifp = en_vci2ifp(sc, sc->rxslot[slot].atm_vci);
 	  ifp->if_ipackets++;
-	  m_set_rcvif(m, ifp);	/* XXX */
+	  m->m_pkthdr.rcvif = ifp;	/* XXX */
 #else
 	  ifp = &sc->enif;
 	  ifp->if_ipackets++;
 #endif
 
-	  bpf_mtap_softint(ifp, m);
+	  bpf_mtap(ifp, m);
 
 	  atm_input(ifp, &ah, m, sc->rxslot[slot].rxhand);
 	}
@@ -3623,7 +3623,6 @@ en_pvcattach(struct ifnet *ifp)
 	LIST_INSERT_HEAD(&sc->sif_list, (struct pvcsif *)pvc_ifp, sif_links);
 	if_attach(pvc_ifp);
 	atm_ifattach(pvc_ifp);
-	bpf_mtap_softint_init(pvc_ifp);
 
 #ifdef ATM_PVCEXT
 	rrp_add(sc, pvc_ifp);

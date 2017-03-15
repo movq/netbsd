@@ -1,5 +1,5 @@
 /* BFD back-end for Renesas H8/300 ELF binaries.
-   Copyright (C) 1993-2016 Free Software Foundation, Inc.
+   Copyright 1993-2013 Free Software Foundation, Inc.
 
    This file is part of BFD, the Binary File Descriptor library.
 
@@ -61,7 +61,7 @@ static reloc_howto_type h8_elf_howto_table[] =
 #define R_H8_NONE_X 0
   HOWTO (R_H8_NONE,		/* type */
 	 0,			/* rightshift */
-	 3,			/* size (0 = byte, 1 = short, 2 = long) */
+	 0,			/* size (0 = byte, 1 = short, 2 = long) */
 	 0,			/* bitsize */
 	 FALSE,			/* pc_relative */
 	 0,			/* bitpos */
@@ -480,7 +480,7 @@ elf32_h8_relocate_section (bfd *output_bfd, struct bfd_link_info *info,
 	RELOC_AGAINST_DISCARDED_SECTION (info, input_bfd, input_section,
 					 rel, 1, relend, howto, 0, contents);
 
-      if (bfd_link_relocatable (info))
+      if (info->relocatable)
 	continue;
 
       r = elf32_h8_final_link_relocate (r_type, input_bfd, output_bfd,
@@ -507,14 +507,18 @@ elf32_h8_relocate_section (bfd *output_bfd, struct bfd_link_info *info,
 	  switch (r)
 	    {
 	    case bfd_reloc_overflow:
-	      (*info->callbacks->reloc_overflow)
-		(info, (h ? &h->root : NULL), name, howto->name,
-		 (bfd_vma) 0, input_bfd, input_section, rel->r_offset);
+	      if (! ((*info->callbacks->reloc_overflow)
+		     (info, (h ? &h->root : NULL), name, howto->name,
+		      (bfd_vma) 0, input_bfd, input_section,
+		      rel->r_offset)))
+		return FALSE;
 	      break;
 
 	    case bfd_reloc_undefined:
-	      (*info->callbacks->undefined_symbol)
-		(info, name, input_bfd, input_section, rel->r_offset, TRUE);
+	      if (! ((*info->callbacks->undefined_symbol)
+		     (info, name, input_bfd, input_section,
+		      rel->r_offset, TRUE)))
+		return FALSE;
 	      break;
 
 	    case bfd_reloc_outofrange:
@@ -534,8 +538,10 @@ elf32_h8_relocate_section (bfd *output_bfd, struct bfd_link_info *info,
 	      /* fall through */
 
 	    common_error:
-	      (*info->callbacks->warning) (info, msg, name, input_bfd,
-					   input_section, rel->r_offset);
+	      if (!((*info->callbacks->warning)
+		    (info, msg, name, input_bfd, input_section,
+		     rel->r_offset)))
+		return FALSE;
 	      break;
 	    }
 	}
@@ -701,7 +707,7 @@ elf32_h8_relax_section (bfd *abfd, asection *sec,
   /* We don't have to do anything for a relocatable link, if
      this section does not have relocs, or if this is not a
      code section.  */
-  if (bfd_link_relocatable (link_info)
+  if (link_info->relocatable
       || (sec->flags & SEC_RELOC) == 0
       || sec->reloc_count == 0
       || (sec->flags & SEC_CODE) == 0)
@@ -736,7 +742,7 @@ elf32_h8_relax_section (bfd *abfd, asection *sec,
 	 some long jumps created by the compiler.  */
       if (irel != internal_relocs)
 	last_reloc = irel - 1;
-
+      
       switch(ELF32_R_TYPE (irel->r_info))
 	{
 	case R_H8_DIR24R8:
@@ -1699,7 +1705,7 @@ elf32_h8_get_relocated_section_contents (bfd *output_bfd,
 }
 
 
-#define TARGET_BIG_SYM			h8300_elf32_vec
+#define TARGET_BIG_SYM			bfd_elf32_h8300_vec
 #define TARGET_BIG_NAME			"elf32-h8300"
 #define ELF_ARCH			bfd_arch_h8300
 #define ELF_MACHINE_CODE		EM_H8_300
@@ -1736,14 +1742,5 @@ elf32_h8_get_relocated_section_contents (bfd *output_bfd,
                                 elf32_h8_get_relocated_section_contents
 
 #define elf_symbol_leading_char '_'
-
-#include "elf32-target.h"
-
-#undef  TARGET_BIG_SYM
-#define TARGET_BIG_SYM			h8300_elf32_linux_vec
-#undef  TARGET_BIG_NAME
-#define TARGET_BIG_NAME			"elf32-h8300-linux"
-#undef  elf_symbol_leading_char
-#define elf32_bed			elf32_h8300_linux_bed
 
 #include "elf32-target.h"

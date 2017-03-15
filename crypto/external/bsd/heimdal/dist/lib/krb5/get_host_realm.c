@@ -1,4 +1,4 @@
-/*	$NetBSD: get_host_realm.c,v 1.2 2017/01/28 21:31:49 christos Exp $	*/
+/*	$NetBSD: get_host_realm.c,v 1.1.1.2 2014/04/24 12:45:50 pettai Exp $	*/
 
 /*
  * Copyright (c) 1997 - 2005 Kungliga Tekniska Högskolan
@@ -51,10 +51,8 @@
  */
 
 static int
-copy_txt_to_realms(krb5_context context,
-		   const char *domain,
-		   struct rk_resource_record *head,
-		   krb5_realm **realms)
+copy_txt_to_realms (struct rk_resource_record *head,
+		    krb5_realm **realms)
 {
     struct rk_resource_record *rr;
     unsigned int n, i;
@@ -68,36 +66,21 @@ copy_txt_to_realms(krb5_context context,
 
     *realms = malloc ((n + 1) * sizeof(krb5_realm));
     if (*realms == NULL)
-	return krb5_enomem(context);;
+	return -1;
 
     for (i = 0; i < n + 1; ++i)
 	(*realms)[i] = NULL;
 
     for (i = 0, rr = head; rr; rr = rr->next) {
 	if (rr->type == rk_ns_t_txt) {
-	    char *tmp = NULL;
-	    int invalid_tld = 1;
+	    char *tmp;
 
-	    /* Check for a gTLD controlled interruption */
-	    if (strcmp("Your DNS configuration needs immediate "
-			"attention see https://icann.org/namecollision",
-			rr->u.txt) != 0) {
-		invalid_tld = 0;
-		tmp = strdup(rr->u.txt);
-	    }
+	    tmp = strdup(rr->u.txt);
 	    if (tmp == NULL) {
 		for (i = 0; i < n; ++i)
 		    free ((*realms)[i]);
 		free (*realms);
-		if (invalid_tld) {
-		    krb5_warnx(context,
-			       "Realm lookup failed: "
-			       "Domain '%s' needs immediate attention "
-			       "see https://icann.org/namecollision",
-				domain);
-		    return KRB5_KDC_UNREACH;
-		}
-		return krb5_enomem(context);;
+		return -1;
 	    }
 	    (*realms)[i] = tmp;
 	    ++i;
@@ -116,7 +99,7 @@ dns_find_realm(krb5_context context,
     struct rk_dns_reply *r;
     const char **labels;
     char **config_labels;
-    int i, ret = 0;
+    int i, ret;
 
     config_labels = krb5_config_get_strings(context, NULL, "libdefaults",
 					    "dns_lookup_realm_labels", NULL);
@@ -129,26 +112,24 @@ dns_find_realm(krb5_context context,
     for (i = 0; labels[i] != NULL; i++) {
 	ret = snprintf(dom, sizeof(dom), "%s.%s.", labels[i], domain);
 	if(ret < 0 || (size_t)ret >= sizeof(dom)) {
-	    ret = krb5_enomem(context);
-	    goto out;
+	    if (config_labels)
+		krb5_config_free_strings(config_labels);
+	    return -1;
 	}
     	r = rk_dns_lookup(dom, "TXT");
     	if(r != NULL) {
-	    ret = copy_txt_to_realms(context, domain, r->head, realms);
+	    ret = copy_txt_to_realms (r->head, realms);
 	    rk_dns_free_data(r);
-	    if(ret == 0)
-		goto out;
+	    if(ret == 0) {
+		if (config_labels)
+		    krb5_config_free_strings(config_labels);
+		return 0;
+	    }
 	}
     }
-    krb5_set_error_message(context, KRB5_KDC_UNREACH,
-			    "Realm lookup failed: "
-			    "No DNS TXT record for %s",
-			    domain);
-    ret = KRB5_KDC_UNREACH;
-out:
     if (config_labels)
 	krb5_config_free_strings(config_labels);
-    return ret;
+    return -1;
 }
 
 /*
@@ -180,78 +161,55 @@ config_find_realm(krb5_context context,
  */
 
 KRB5_LIB_FUNCTION krb5_error_code KRB5_LIB_CALL
-_krb5_get_host_realm_int(krb5_context context,
-                         const char *host,
-                         krb5_boolean use_dns,
-                         krb5_realm **realms)
+_krb5_get_host_realm_int (krb5_context context,
+			  const char *host,
+			  krb5_boolean use_dns,
+			  krb5_realm **realms)
 {
     const char *p, *q;
-    const char *port;
     krb5_boolean dns_locate_enable;
-    krb5_error_code ret = 0;
-
-    /* Strip off any trailing ":port" suffix. */
-    port = strchr(host, ':');
-    if (port != NULL) {
-        host = strndup(host, port - host);
-        if (host == NULL)
-            return krb5_enomem(context);
-    }
 
     dns_locate_enable = krb5_config_get_bool_default(context, NULL, TRUE,
-        "libdefaults", "dns_lookup_realm", NULL);
+	"libdefaults", "dns_lookup_realm", NULL);
     for (p = host; p != NULL; p = strchr (p + 1, '.')) {
-        if (config_find_realm(context, p, realms) == 0) {
-            if (strcasecmp(*realms[0], "dns_locate") != 0)
-                break;
-	    krb5_free_host_realm(context, *realms);
-	    *realms = NULL;
-            if (!use_dns)
-                continue;
-            for (q = host; q != NULL; q = strchr(q + 1, '.'))
-                if (dns_find_realm(context, q, realms) == 0)
-                    break;
-            if (q)
-                break;
-        } else if (use_dns && dns_locate_enable) {
-            if (dns_find_realm(context, p, realms) == 0)
-                break;
-        }
+	if(config_find_realm(context, p, realms) == 0) {
+	    if(strcasecmp(*realms[0], "dns_locate") == 0) {
+		if(use_dns)
+		    for (q = host; q != NULL; q = strchr(q + 1, '.'))
+			if(dns_find_realm(context, q, realms) == 0)
+			    return 0;
+		continue;
+	    } else
+	    	return 0;
+	}
+	else if(use_dns && dns_locate_enable) {
+	    if(dns_find_realm(context, p, realms) == 0)
+		return 0;
+	}
     }
+    p = strchr(host, '.');
+    if(p != NULL) {
+	p++;
+	*realms = malloc(2 * sizeof(krb5_realm));
+	if (*realms == NULL) {
+	    krb5_set_error_message(context, ENOMEM, N_("malloc: out of memory", ""));
+	    return ENOMEM;
+	}
 
-    /*
-     * If 'p' is NULL, we did not find an explicit realm mapping in either the
-     * configuration file or DNS.  Try the hostname suffix as a last resort.
-     *
-     * XXX: If we implement a KDC-specific variant of this function just for
-     * referrals, we could check whether we have a cross-realm TGT for the
-     * realm in question, and if not try the parent (loop again).
-     */
-    if (p == NULL) {
-        p = strchr(host, '.');
-        if (p != NULL) {
-            p++;
-            *realms = malloc(2 * sizeof(krb5_realm));
-            if (*realms != NULL &&
-                ((*realms)[0] = strdup(p)) != NULL) {
-                strupr((*realms)[0]);
-                (*realms)[1] = NULL;
-            } else {
-                free(*realms);
-                ret = krb5_enomem(context);
-            }
-        } else {
-            krb5_set_error_message(context, KRB5_ERR_HOST_REALM_UNKNOWN,
-                                   N_("unable to find realm of host %s", ""),
-                                   host);
-            ret = KRB5_ERR_HOST_REALM_UNKNOWN;
-        }
+	(*realms)[0] = strdup(p);
+	if((*realms)[0] == NULL) {
+	    free(*realms);
+	    krb5_set_error_message(context, ENOMEM, N_("malloc: out of memory", ""));
+	    return ENOMEM;
+	}
+	strupr((*realms)[0]);
+	(*realms)[1] = NULL;
+	return 0;
     }
-
-    /* If 'port' is not NULL, we have a copy of 'host' to free. */
-    if (port)
-        free((void *)host);
-    return ret;
+    krb5_set_error_message(context, KRB5_ERR_HOST_REALM_UNKNOWN,
+			   N_("unable to find realm of host %s", ""),
+			   host);
+    return KRB5_ERR_HOST_REALM_UNKNOWN;
 }
 
 /*

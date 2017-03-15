@@ -1,4 +1,4 @@
-/*	$NetBSD: evthread_win32.c,v 1.1.1.3 2017/01/31 21:14:52 christos Exp $	*/
+/*	$NetBSD: evthread_win32.c,v 1.1.1.1.12.1 2015/02/03 08:23:39 bouyer Exp $	*/
 /*
  * Copyright 2009-2012 Niels Provos and Nick Mathewson
  *
@@ -26,10 +26,9 @@
  */
 #include "event2/event-config.h"
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: evthread_win32.c,v 1.1.1.3 2017/01/31 21:14:52 christos Exp $");
-#include "evconfig-private.h"
+__RCSID("$NetBSD: evthread_win32.c,v 1.1.1.1.12.1 2015/02/03 08:23:39 bouyer Exp $");
 
-#ifdef _WIN32
+#ifdef WIN32
 #ifndef _WIN32_WINNT
 /* Minimum required for InitializeCriticalSectionAndSpinCount */
 #define _WIN32_WINNT 0x0403
@@ -46,7 +45,6 @@ struct event_base;
 
 #include "mm-internal.h"
 #include "evthread-internal.h"
-#include "time-internal.h"
 
 #define SPIN_COUNT 2000
 
@@ -64,17 +62,17 @@ evthread_win32_lock_create(unsigned locktype)
 }
 
 static void
-evthread_win32_lock_free(void *lock_, unsigned locktype)
+evthread_win32_lock_free(void *_lock, unsigned locktype)
 {
-	CRITICAL_SECTION *lock = lock_;
+	CRITICAL_SECTION *lock = _lock;
 	DeleteCriticalSection(lock);
 	mm_free(lock);
 }
 
 static int
-evthread_win32_lock(unsigned mode, void *lock_)
+evthread_win32_lock(unsigned mode, void *_lock)
 {
-	CRITICAL_SECTION *lock = lock_;
+	CRITICAL_SECTION *lock = _lock;
 	if ((mode & EVTHREAD_TRY)) {
 		return ! TryEnterCriticalSection(lock);
 	} else {
@@ -84,9 +82,9 @@ evthread_win32_lock(unsigned mode, void *lock_)
 }
 
 static int
-evthread_win32_unlock(unsigned mode, void *lock_)
+evthread_win32_unlock(unsigned mode, void *_lock)
 {
-	CRITICAL_SECTION *lock = lock_;
+	CRITICAL_SECTION *lock = _lock;
 	LeaveCriticalSection(lock);
 	return 0;
 }
@@ -138,17 +136,17 @@ evthread_win32_condvar_alloc(unsigned condflags)
 }
 
 static void
-evthread_win32_condvar_free(void *cond_)
+evthread_win32_condvar_free(void *_cond)
 {
-	CONDITION_VARIABLE *cond = cond_;
+	CONDITION_VARIABLE *cond = _cond;
 	/* There doesn't _seem_ to be a cleaup fn here... */
 	mm_free(cond);
 }
 
 static int
-evthread_win32_condvar_signal(void *cond, int broadcast)
+evthread_win32_condvar_signal(void *_cond, int broadcast)
 {
-	CONDITION_VARIABLE *cond = cond_;
+	CONDITION_VARIABLE *cond = _cond;
 	if (broadcast)
 		WakeAllConditionVariable_fn(cond);
 	else
@@ -157,15 +155,15 @@ evthread_win32_condvar_signal(void *cond, int broadcast)
 }
 
 static int
-evthread_win32_condvar_wait(void *cond_, void *lock_, const struct timeval *tv)
+evthread_win32_condvar_wait(void *_cond, void *_lock, const struct timeval *tv)
 {
-	CONDITION_VARIABLE *cond = cond_;
-	CRITICAL_SECTION *lock = lock_;
+	CONDITION_VARIABLE *cond = _cond;
+	CRITICAL_SECTION *lock = _lock;
 	DWORD ms, err;
 	BOOL result;
 
 	if (tv)
-		ms = evutil_tv_to_msec_(tv);
+		ms = evutil_tv_to_msec(tv);
 	else
 		ms = INFINITE;
 	result = SleepConditionVariableCS_fn(cond, lock, ms);
@@ -209,18 +207,18 @@ evthread_win32_cond_alloc(unsigned flags)
 }
 
 static void
-evthread_win32_cond_free(void *cond_)
+evthread_win32_cond_free(void *_cond)
 {
-	struct evthread_win32_cond *cond = cond_;
+	struct evthread_win32_cond *cond = _cond;
 	DeleteCriticalSection(&cond->lock);
 	CloseHandle(cond->event);
 	mm_free(cond);
 }
 
 static int
-evthread_win32_cond_signal(void *cond_, int broadcast)
+evthread_win32_cond_signal(void *_cond, int broadcast)
 {
-	struct evthread_win32_cond *cond = cond_;
+	struct evthread_win32_cond *cond = _cond;
 	EnterCriticalSection(&cond->lock);
 	if (broadcast)
 		cond->n_to_wake = cond->n_waiting;
@@ -233,16 +231,16 @@ evthread_win32_cond_signal(void *cond_, int broadcast)
 }
 
 static int
-evthread_win32_cond_wait(void *cond_, void *lock_, const struct timeval *tv)
+evthread_win32_cond_wait(void *_cond, void *_lock, const struct timeval *tv)
 {
-	struct evthread_win32_cond *cond = cond_;
-	CRITICAL_SECTION *lock = lock_;
+	struct evthread_win32_cond *cond = _cond;
+	CRITICAL_SECTION *lock = _lock;
 	int generation_at_start;
 	int waiting = 1;
 	int result = -1;
 	DWORD ms = INFINITE, ms_orig = INFINITE, startTime, endTime;
 	if (tv)
-		ms_orig = ms = evutil_tv_to_msec_(tv);
+		ms_orig = ms = evutil_tv_to_msec(tv);
 
 	EnterCriticalSection(&cond->lock);
 	++cond->n_waiting;

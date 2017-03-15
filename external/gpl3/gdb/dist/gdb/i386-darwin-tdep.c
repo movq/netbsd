@@ -1,5 +1,5 @@
 /* Darwin support for GDB, the GNU debugger.
-   Copyright (C) 1997-2016 Free Software Foundation, Inc.
+   Copyright (C) 1997-2014 Free Software Foundation, Inc.
 
    Contributed by Apple Computer, Inc.
 
@@ -26,12 +26,14 @@
 #include "floatformat.h"
 #include "symtab.h"
 #include "regcache.h"
+#include "libbfd.h"
 #include "objfiles.h"
 
 #include "i387-tdep.h"
 #include "i386-tdep.h"
 #include "osabi.h"
 #include "ui-out.h"
+#include "gdb_assert.h"
 #include "i386-darwin-tdep.h"
 #include "solib.h"
 #include "solib-darwin.h"

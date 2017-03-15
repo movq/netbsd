@@ -1,4 +1,4 @@
-/*	$NetBSD: scsipi_base.h,v 1.24 2017/02/26 10:58:47 maya Exp $	*/
+/*	$NetBSD: scsipi_base.h,v 1.22 2008/04/28 20:23:58 martin Exp $	*/
 
 /*-
  * Copyright (c) 1998, 2004 The NetBSD Foundation, Inc.
@@ -35,17 +35,7 @@
 struct scsipi_xfer *scsipi_get_xs(struct scsipi_periph *, int);
 void	scsipi_put_xs(struct scsipi_xfer *);
 
-static __inline struct scsipi_xfer *scsipi_make_xs_internal(struct scsipi_periph *,
-	    struct scsipi_generic *, int cmdlen, u_char *data_addr,
-	    int datalen, int retries, int timeout, struct buf *,
-	    int flags) __unused;
-
-static __inline struct scsipi_xfer *scsipi_make_xs_unlocked(struct scsipi_periph *,
-	    struct scsipi_generic *, int cmdlen, u_char *data_addr,
-	    int datalen, int retries, int timeout, struct buf *,
-	    int flags) __unused;
-
-static __inline struct scsipi_xfer *scsipi_make_xs_locked(struct scsipi_periph *,
+static __inline struct scsipi_xfer *scsipi_make_xs(struct scsipi_periph *,
 	    struct scsipi_generic *, int cmdlen, u_char *data_addr,
 	    int datalen, int retries, int timeout, struct buf *,
 	    int flags) __unused;
@@ -55,7 +45,7 @@ static __inline struct scsipi_xfer *scsipi_make_xs_locked(struct scsipi_periph *
  */
 
 static __inline struct scsipi_xfer *
-scsipi_make_xs_internal(struct scsipi_periph *periph, struct scsipi_generic *cmd,
+scsipi_make_xs(struct scsipi_periph *periph, struct scsipi_generic *cmd,
     int cmdlen, u_char *data_addr, int datalen, int retries, int timeout,
     struct buf *bp, int flags)
 {
@@ -78,27 +68,6 @@ scsipi_make_xs_internal(struct scsipi_periph *periph, struct scsipi_generic *cmd
 	xs->bp = bp;
 
 	return (xs);
-}
-
-static __inline struct scsipi_xfer *
-scsipi_make_xs_unlocked(struct scsipi_periph *periph, struct scsipi_generic *cmd,
-    int cmdlen, u_char *data_addr, int datalen, int retries, int timeout,
-    struct buf *bp, int flags)
-{
-
-	return scsipi_make_xs_internal(periph, cmd, cmdlen, data_addr,
-	    datalen, retries, timeout, bp, flags & ~XS_CTL_NOSLEEP);
-}
-
-static __inline struct scsipi_xfer *
-scsipi_make_xs_locked(struct scsipi_periph *periph, struct scsipi_generic *cmd,
-    int cmdlen, u_char *data_addr, int datalen, int retries, int timeout,
-    struct buf *bp, int flags)
-{
-
-	KDASSERT(mutex_owned(chan_mtx(periph->periph_channel)));
-	return scsipi_make_xs_internal(periph, cmd, cmdlen, data_addr,
-	    datalen, retries, timeout, bp, flags | XS_CTL_NOSLEEP);
 }
 
 #endif /* _DEV_SCSIPI_SCSIPI_BASE_H_ */

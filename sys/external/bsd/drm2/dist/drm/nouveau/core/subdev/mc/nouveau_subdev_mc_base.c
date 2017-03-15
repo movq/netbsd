@@ -1,4 +1,4 @@
-/*	$NetBSD: nouveau_subdev_mc_base.c,v 1.6 2017/03/02 04:31:51 nonaka Exp $	*/
+/*	$NetBSD: nouveau_subdev_mc_base.c,v 1.1.1.1.4.1 2015/03/06 21:39:09 snj Exp $	*/
 
 /*
  * Copyright 2012 Red Hat Inc.
@@ -25,18 +25,10 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: nouveau_subdev_mc_base.c,v 1.6 2017/03/02 04:31:51 nonaka Exp $");
+__KERNEL_RCSID(0, "$NetBSD: nouveau_subdev_mc_base.c,v 1.1.1.1.4.1 2015/03/06 21:39:09 snj Exp $");
 
 #include <subdev/mc.h>
 #include <core/option.h>
-
-#if defined(__NetBSD__)
-#include <drm/drmP.h>
-#if defined(__arm__)
-/* XXX nouveau platform kludge */
-#include <arm/nvidia/tegra_intr.h>
-#endif
-#endif	/* __NetBSD__ */
 
 static inline u32
 nouveau_mc_intr_mask(struct nouveau_mc *pmc)
@@ -115,15 +107,8 @@ _nouveau_mc_dtor(struct nouveau_object *object)
 {
 	struct nouveau_device *device = nv_device(object);
 	struct nouveau_mc *pmc = (void *)object;
-#if defined(__NetBSD__)
-	if (nv_device_is_pci(device)) {
-		struct drm_device *dev = pci_get_drvdata(device->pdev);
-		(*dev->driver->bus->irq_uninstall)(dev, pmc->irq_cookie);
-#if defined(__arm__)
-	} else {
-		intr_disestablish(pmc->irq_cookie);
-#endif
-	}
+#ifdef __NetBSD__
+	pci_intr_disestablish(device->pdev->pd_pa.pa_pc, pmc->irq_cookie);
 #else
 	free_irq(pmc->irq, pmc);
 #endif
@@ -177,21 +162,18 @@ nouveau_mc_create_(struct nouveau_object *parent, struct nouveau_object *engine,
 		}
 	}
 
-#if defined(__NetBSD__)
+#ifdef __NetBSD__		/* XXX nouveau platform */
 	if (nv_device_is_pci(device)) {
-		struct drm_device *dev = pci_get_drvdata(device->pdev);
-		ret = (*dev->driver->bus->irq_install)(dev, nouveau_mc_intr,
-		    IRQF_SHARED, "nouveau", pmc,
-		    (struct drm_bus_irq_cookie **)&pmc->irq_cookie);
-		if (ret < 0)
-			return ret;
-#if defined (__arm__)
-	} else {
-		pmc->irq_cookie = intr_establish(TEGRA_INTR_GPU,
-		    IPL_VM, IST_LEVEL, nouveau_mc_intr, pmc);
+		const pci_chipset_tag_t pc = device->pdev->pd_pa.pa_pc;
+		pci_intr_handle_t ih;
+
+		if (pci_intr_map(&device->pdev->pd_pa, &ih))
+			return -EIO;
+
+		pmc->irq_cookie = pci_intr_establish(pc, ih, IPL_VM,
+		    &nouveau_mc_intr, pmc);
 		if (pmc->irq_cookie == NULL)
 			return -EIO;
-#endif
 	}
 #else
 	ret = nv_device_get_irq(device, true);

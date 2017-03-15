@@ -1,4 +1,4 @@
-/*	$NetBSD: audioio.h,v 1.36 2017/02/10 19:31:42 nat Exp $	*/
+/*	$NetBSD: audioio.h,v 1.34 2011/09/06 01:16:43 jmcneill Exp $	*/
 
 /*
  * Copyright (c) 1991-1993 Regents of the University of California.
@@ -157,7 +157,6 @@ typedef struct audio_encoding {
 #define	AUDIO_SPEAKER		0x01	/* built-in speaker */
 #define	AUDIO_HEADPHONE		0x02	/* headphone jack */
 #define	AUDIO_LINE_OUT		0x04	/* line out	 */
-#define	VC_OUT			0x08	/* virt chan out */
 
 /*
  * Input ports
@@ -166,7 +165,6 @@ typedef struct audio_encoding {
 #define	AUDIO_LINE_IN		0x02	/* line in	 */
 #define	AUDIO_CD		0x04	/* on-board CD inputs */
 #define	AUDIO_INTERNAL_CD_IN	AUDIO_CD	/* internal CDROM */
-#define	VC_IN			0x08	/* virt chan in */
 
 /*
  * Audio device operations
@@ -191,7 +189,6 @@ typedef struct audio_encoding {
 #define  AUDIO_PROP_PLAYBACK	0x10
 #define  AUDIO_PROP_CAPTURE	0x20
 #define AUDIO_GETBUFINFO	_IOR('A', 35, struct audio_info)
-#define AUDIO_SETPROC	_IOW('A', 36, int)
 
 /*
  * Mixer device
@@ -337,6 +334,5 @@ typedef struct mixer_ctrl {
 #define AudioCmonitor	"monitor"
 #define AudioCequalization	"equalization"
 #define AudioCmodem	"modem"
-#define AudioCvirtchan	"vchan"
 
 #endif /* !_SYS_AUDIOIO_H_ */

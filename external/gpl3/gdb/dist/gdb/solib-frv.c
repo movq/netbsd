@@ -1,5 +1,5 @@
 /* Handle FR-V (FDPIC) shared libraries for GDB, the GNU Debugger.
-   Copyright (C) 2004-2016 Free Software Foundation, Inc.
+   Copyright (C) 2004-2014 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -18,6 +18,7 @@
 
 
 #include "defs.h"
+#include <string.h>
 #include "inferior.h"
 #include "gdbcore.h"
 #include "solib.h"
@@ -29,6 +30,7 @@
 #include "command.h"
 #include "gdbcmd.h"
 #include "elf/frv.h"
+#include "exceptions.h"
 #include "gdb_bfd.h"
 
 /* Flag which indicates whether internal debug messages should be printed.  */
@@ -132,7 +134,7 @@ fetch_loadmap (CORE_ADDR ldmaddr)
   /* Allocate space for the complete (external) loadmap.  */
   ext_ldmbuf_size = sizeof (struct ext_elf32_fdpic_loadmap)
                + (nsegs - 1) * sizeof (struct ext_elf32_fdpic_loadseg);
-  ext_ldmbuf = (struct ext_elf32_fdpic_loadmap *) xmalloc (ext_ldmbuf_size);
+  ext_ldmbuf = xmalloc (ext_ldmbuf_size);
 
   /* Copy over the portion of the loadmap that's already been read.  */
   memcpy (ext_ldmbuf, &ext_ldmbuf_partial, sizeof ext_ldmbuf_partial);
@@ -151,7 +153,7 @@ fetch_loadmap (CORE_ADDR ldmaddr)
      external loadsegs.  I.e, allocate the internal loadsegs.  */
   int_ldmbuf_size = sizeof (struct int_elf32_fdpic_loadmap)
                + (nsegs - 1) * sizeof (struct int_elf32_fdpic_loadseg);
-  int_ldmbuf = (struct int_elf32_fdpic_loadmap *) xmalloc (int_ldmbuf_size);
+  int_ldmbuf = xmalloc (int_ldmbuf_size);
 
   /* Place extracted information in internal structs.  */
   int_ldmbuf->version = version;
@@ -264,7 +266,7 @@ static CORE_ADDR
 lm_base (void)
 {
   enum bfd_endian byte_order = gdbarch_byte_order (target_gdbarch ());
-  struct bound_minimal_symbol got_sym;
+  struct minimal_symbol *got_sym;
   CORE_ADDR addr;
   gdb_byte buf[FRV_PTR_SIZE];
 
@@ -282,7 +284,7 @@ lm_base (void)
 
   got_sym = lookup_minimal_symbol ("_GLOBAL_OFFSET_TABLE_", NULL,
                                    symfile_objfile);
-  if (got_sym.minsym == 0)
+  if (got_sym == 0)
     {
       if (solib_frv_debug)
 	fprintf_unfiltered (gdb_stdlog,
@@ -290,7 +292,7 @@ lm_base (void)
       return 0;
     }
 
-  addr = BMSYMBOL_VALUE_ADDRESS (got_sym) + 8;
+  addr = SYMBOL_VALUE_ADDRESS (got_sym) + 8;
 
   if (solib_frv_debug)
     fprintf_unfiltered (gdb_stdlog,
@@ -388,8 +390,8 @@ frv_current_sos (void)
 	      break;
 	    }
 
-	  sop = XCNEW (struct so_list);
-	  sop->lm_info = XCNEW (struct lm_info);
+	  sop = xcalloc (1, sizeof (struct so_list));
+	  sop->lm_info = xcalloc (1, sizeof (struct lm_info));
 	  sop->lm_info->map = loadmap;
 	  sop->lm_info->got_value = got_addr;
 	  sop->lm_info->lm_addr = lm_addr;
@@ -484,7 +486,7 @@ enable_break_failure_warning (void)
 /* Helper function for gdb_bfd_lookup_symbol.  */
 
 static int
-cmp_name (const asymbol *sym, const void *data)
+cmp_name (asymbol *sym, void *data)
 {
   return (strcmp (sym->name, (const char *) data) == 0);
 }
@@ -517,6 +519,8 @@ static int
 enable_break2 (void)
 {
   enum bfd_endian byte_order = gdbarch_byte_order (target_gdbarch ());
+  int success = 0;
+  char **bkpt_namep;
   asection *interp_sect;
 
   if (enable_break2_done)
@@ -537,11 +541,12 @@ enable_break2 (void)
       CORE_ADDR addr, interp_loadmap_addr;
       gdb_byte addr_buf[FRV_PTR_SIZE];
       struct int_elf32_fdpic_loadmap *ldm;
+      volatile struct gdb_exception ex;
 
       /* Read the contents of the .interp section into a local buffer;
          the contents specify the dynamic linker this program uses.  */
       interp_sect_size = bfd_section_size (exec_bfd, interp_sect);
-      buf = (char *) alloca (interp_sect_size);
+      buf = alloca (interp_sect_size);
       bfd_get_section_contents (exec_bfd, interp_sect,
 				buf, 0, interp_sect_size);
 
@@ -554,15 +559,10 @@ enable_break2 (void)
          be trivial on GNU/Linux).  Therefore, we have to try an alternate
          mechanism to find the dynamic linker's base address.  */
 
-      TRY
+      TRY_CATCH (ex, RETURN_MASK_ALL)
         {
           tmp_bfd = solib_bfd_open (buf);
         }
-      CATCH (ex, RETURN_MASK_ALL)
-	{
-	}
-      END_CATCH
-
       if (tmp_bfd == NULL)
 	{
 	  enable_break_failure_warning ();
@@ -721,7 +721,6 @@ static int
 enable_break (void)
 {
   asection *interp_sect;
-  CORE_ADDR entry_point;
 
   if (symfile_objfile == NULL)
     {
@@ -731,7 +730,7 @@ enable_break (void)
       return 0;
     }
 
-  if (!entry_point_address_query (&entry_point))
+  if (!symfile_objfile->ei.entry_point_p)
     {
       if (solib_frv_debug)
 	fprintf_unfiltered (gdb_stdlog,
@@ -752,13 +751,15 @@ enable_break (void)
       return 0;
     }
 
-  create_solib_event_breakpoint (target_gdbarch (), entry_point);
+  create_solib_event_breakpoint (target_gdbarch (),
+				 symfile_objfile->ei.entry_point);
 
   if (solib_frv_debug)
     fprintf_unfiltered (gdb_stdlog,
 			"enable_break: solib event breakpoint "
 			"placed at entry point: %s\n",
-			hex_string_custom (entry_point, 8));
+			hex_string_custom (symfile_objfile->ei.entry_point,
+					   8));
   return 1;
 }
 
@@ -797,11 +798,11 @@ frv_relocate_main_executable (void)
 
   if (main_executable_lm_info)
     xfree (main_executable_lm_info);
-  main_executable_lm_info = XCNEW (struct lm_info);
+  main_executable_lm_info = xcalloc (1, sizeof (struct lm_info));
   main_executable_lm_info->map = ldm;
 
-  new_offsets = XCNEWVEC (struct section_offsets,
-			  symfile_objfile->num_sections);
+  new_offsets = xcalloc (symfile_objfile->num_sections,
+			 sizeof (struct section_offsets));
   old_chain = make_cleanup (xfree, new_offsets);
   changed = 0;
 
@@ -919,14 +920,14 @@ frv_relocate_section_addresses (struct so_list *so,
 static CORE_ADDR
 main_got (void)
 {
-  struct bound_minimal_symbol got_sym;
+  struct minimal_symbol *got_sym;
 
   got_sym = lookup_minimal_symbol ("_GLOBAL_OFFSET_TABLE_",
 				   NULL, symfile_objfile);
-  if (got_sym.minsym == 0)
+  if (got_sym == 0)
     return 0;
 
-  return BMSYMBOL_VALUE_ADDRESS (got_sym);
+  return SYMBOL_VALUE_ADDRESS (got_sym);
 }
 
 /* Find the global pointer for the given function address ADDR.  */
@@ -973,6 +974,7 @@ frv_fdpic_find_canonical_descriptor (CORE_ADDR entry_point)
   const char *name;
   CORE_ADDR addr;
   CORE_ADDR got_value;
+  struct int_elf32_fdpic_loadmap *ldm = 0;
   struct symbol *sym;
 
   /* Fetch the corresponding global pointer for the entry point.  */

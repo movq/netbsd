@@ -1,4 +1,4 @@
-/*	$NetBSD: nfs_clntsocket.c,v 1.5 2016/06/17 14:28:29 christos Exp $	*/
+/*	$NetBSD: nfs_clntsocket.c,v 1.1.40.2 2016/07/10 09:42:34 martin Exp $	*/
 
 /*
  * Copyright (c) 1989, 1991, 1993, 1995
@@ -39,7 +39,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: nfs_clntsocket.c,v 1.5 2016/06/17 14:28:29 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: nfs_clntsocket.c,v 1.1.40.2 2016/07/10 09:42:34 martin Exp $");
 
 #ifdef _KERNEL_OPT
 #include "opt_nfs.h"
@@ -404,69 +404,67 @@ nfsmout:
 		 */
 		s = splsoftnet();
 		TAILQ_FOREACH(rep, &nfs_reqq, r_chain) {
-			if (rep->r_mrep != NULL || rxid != rep->r_xid)
-				continue;
+			if (rep->r_mrep == NULL && rxid == rep->r_xid) {
+				/* Found it.. */
+				rep->r_mrep = mrep;
+				rep->r_md = md;
+				rep->r_dpos = dpos;
+				if (nfsrtton) {
+					struct rttl *rt;
 
-			/* Found it.. */
-			rep->r_mrep = mrep;
-			rep->r_md = md;
-			rep->r_dpos = dpos;
-			if (nfsrtton) {
-				struct rttl *rt;
-				int proct = nfs_proct[rep->r_procnum];
-
-				rt = &nfsrtt.rttl[nfsrtt.pos];
-				rt->proc = rep->r_procnum;
-				rt->rto = NFS_RTO(nmp, proct);
-				rt->sent = nmp->nm_sent;
-				rt->cwnd = nmp->nm_cwnd;
-				rt->srtt = nmp->nm_srtt[proct - 1];
-				rt->sdrtt = nmp->nm_sdrtt[proct - 1];
-				rt->fsid = nmp->nm_mountp->mnt_stat.f_fsidx;
-				getmicrotime(&rt->tstamp);
-				if (rep->r_flags & R_TIMING)
-					rt->rtt = rep->r_rtt;
-				else
-					rt->rtt = 1000000;
-				nfsrtt.pos = (nfsrtt.pos + 1) % NFSRTTLOGSIZ;
-			}
-			/*
-			 * Update congestion window.
-			 * Do the additive increase of
-			 * one rpc/rtt.
-			 */
-			if (nmp->nm_cwnd <= nmp->nm_sent) {
-				nmp->nm_cwnd +=
-				   (NFS_CWNDSCALE * NFS_CWNDSCALE +
-				   (nmp->nm_cwnd >> 1)) / nmp->nm_cwnd;
-				if (nmp->nm_cwnd > NFS_MAXCWND)
-					nmp->nm_cwnd = NFS_MAXCWND;
-			}
-			rep->r_flags &= ~R_SENT;
-			nmp->nm_sent -= NFS_CWNDSCALE;
-			/*
-			 * Update rtt using a gain of 0.125 on the mean
-			 * and a gain of 0.25 on the deviation.
-			 */
-			if (rep->r_flags & R_TIMING) {
+					rt = &nfsrtt.rttl[nfsrtt.pos];
+					rt->proc = rep->r_procnum;
+					rt->rto = NFS_RTO(nmp, nfs_proct[rep->r_procnum]);
+					rt->sent = nmp->nm_sent;
+					rt->cwnd = nmp->nm_cwnd;
+					rt->srtt = nmp->nm_srtt[nfs_proct[rep->r_procnum] - 1];
+					rt->sdrtt = nmp->nm_sdrtt[nfs_proct[rep->r_procnum] - 1];
+					rt->fsid = nmp->nm_mountp->mnt_stat.f_fsidx;
+					getmicrotime(&rt->tstamp);
+					if (rep->r_flags & R_TIMING)
+						rt->rtt = rep->r_rtt;
+					else
+						rt->rtt = 1000000;
+					nfsrtt.pos = (nfsrtt.pos + 1) % NFSRTTLOGSIZ;
+				}
 				/*
-				 * Since the timer resolution of
-				 * NFS_HZ is so course, it can often
-				 * result in r_rtt == 0. Since
-				 * r_rtt == N means that the actual
-				 * rtt is between N+dt and N+2-dt ticks,
-				 * add 1.
+				 * Update congestion window.
+				 * Do the additive increase of
+				 * one rpc/rtt.
 				 */
-				t1 = rep->r_rtt + 1;
-				t1 -= (NFS_SRTT(rep) >> 3);
-				NFS_SRTT(rep) += t1;
-				if (t1 < 0)
-					t1 = -t1;
-				t1 -= (NFS_SDRTT(rep) >> 2);
-				NFS_SDRTT(rep) += t1;
+				if (nmp->nm_cwnd <= nmp->nm_sent) {
+					nmp->nm_cwnd +=
+					   (NFS_CWNDSCALE * NFS_CWNDSCALE +
+					   (nmp->nm_cwnd >> 1)) / nmp->nm_cwnd;
+					if (nmp->nm_cwnd > NFS_MAXCWND)
+						nmp->nm_cwnd = NFS_MAXCWND;
+				}
+				rep->r_flags &= ~R_SENT;
+				nmp->nm_sent -= NFS_CWNDSCALE;
+				/*
+				 * Update rtt using a gain of 0.125 on the mean
+				 * and a gain of 0.25 on the deviation.
+				 */
+				if (rep->r_flags & R_TIMING) {
+					/*
+					 * Since the timer resolution of
+					 * NFS_HZ is so course, it can often
+					 * result in r_rtt == 0. Since
+					 * r_rtt == N means that the actual
+					 * rtt is between N+dt and N+2-dt ticks,
+					 * add 1.
+					 */
+					t1 = rep->r_rtt + 1;
+					t1 -= (NFS_SRTT(rep) >> 3);
+					NFS_SRTT(rep) += t1;
+					if (t1 < 0)
+						t1 = -t1;
+					t1 -= (NFS_SDRTT(rep) >> 2);
+					NFS_SDRTT(rep) += t1;
+				}
+				nmp->nm_timeouts = 0;
+				break;
 			}
-			nmp->nm_timeouts = 0;
-			break;
 		}
 		splx(s);
 		nfs_rcvunlock(nmp);
@@ -968,7 +966,7 @@ nfs_sndlock(struct nfsmount *nmp, struct nfsreq *rep)
 {
 	struct lwp *l;
 	int timeo = 0;
-	bool catch_p = false;
+	bool catch = false;
 	int error = 0;
 
 	if (nmp->nm_flag & NFSMNT_SOFT)
@@ -980,7 +978,7 @@ nfs_sndlock(struct nfsmount *nmp, struct nfsreq *rep)
 	if (rep) {
 		l = rep->r_lwp;
 		if (rep->r_nmp->nm_flag & NFSMNT_INT)
-			catch_p = true;
+			catch = true;
 	} else
 		l = NULL;
 	mutex_enter(&nmp->nm_lock);
@@ -989,7 +987,7 @@ nfs_sndlock(struct nfsmount *nmp, struct nfsreq *rep)
 			error = EINTR;
 			goto quit;
 		}
-		if (catch_p) {
+		if (catch) {
 			error = cv_timedwait_sig(&nmp->nm_sndcv,
 						 &nmp->nm_lock, timeo);
 		} else {
@@ -1005,8 +1003,8 @@ nfs_sndlock(struct nfsmount *nmp, struct nfsreq *rep)
 			}
 			error = 0;
 		}
-		if (catch_p) {
-			catch_p = false;
+		if (catch) {
+			catch = false;
 			timeo = 2 * hz;
 		}
 	}

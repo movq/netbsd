@@ -1,4 +1,4 @@
-/*	$NetBSD: vfs_syscalls_12.c,v 1.33 2017/01/13 22:29:59 christos Exp $	*/
+/*	$NetBSD: vfs_syscalls_12.c,v 1.30 2014/01/24 22:11:46 christos Exp $	*/
 
 /*
  * Copyright (c) 1989, 1993
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: vfs_syscalls_12.c,v 1.33 2017/01/13 22:29:59 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: vfs_syscalls_12.c,v 1.30 2014/01/24 22:11:46 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -123,7 +123,7 @@ compat_12_sys_getdirentries(struct lwp *l, const struct compat_12_sys_getdirentr
 		goto out1;
 	}
 
-	vp = (struct vnode *)fp->f_vnode;
+	vp = (struct vnode *)fp->f_data;
 	if (vp->v_type != VDIR) {
 		error = ENOTDIR;
 		goto out1;
@@ -196,8 +196,7 @@ again:
 		idb.d_reclen = (uint16_t)old_reclen;
 		idb.d_type = (uint8_t)bdp->d_type;
 		idb.d_namlen = (uint8_t)bdp->d_namlen;
-		memcpy(idb.d_name, bdp->d_name, MIN(sizeof(idb.d_name),
-		    bdp->d_namlen));
+		strcpy(idb.d_name, bdp->d_name);
 		if ((error = copyout(&idb, outp, old_reclen)))
 			goto out;
 		/* advance past this real entry */

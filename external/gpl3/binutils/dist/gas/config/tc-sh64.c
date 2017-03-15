@@ -1,5 +1,6 @@
 /* tc-sh64.c -- Assemble code for the SuperH SH SHcompact and SHmedia.
-   Copyright (C) 2000-2016 Free Software Foundation, Inc.
+   Copyright 2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009
+   Free Software Foundation.
 
    This file is part of GAS, the GNU Assembler.
 
@@ -133,8 +134,7 @@ static const unsigned char shmedia_little_nop_pattern[4] =
  };
 
 static void shmedia_md_begin (void);
-static int shmedia_parse_reg (char *, shmedia_arg_type *, int *,
-			      shmedia_arg_type);
+static int shmedia_parse_reg (char *, int *, int *, shmedia_arg_type);
 static void shmedia_md_assemble (char *);
 static void shmedia_md_apply_fix (fixS *, valueT *);
 static int shmedia_md_estimate_size_before_relax (fragS *, segT);
@@ -440,7 +440,7 @@ shmedia_frob_section_type (asection *sec)
       sec_elf_data = sh64_elf_section_data (sec)->sh64_info;
       if (sec_elf_data == NULL)
 	{
-	  sec_elf_data = XCNEW (struct sh64_section_data);
+	  sec_elf_data = xcalloc (1, sizeof (*sec_elf_data));
 	  sh64_elf_section_data (sec)->sh64_info = sec_elf_data;
 	}
 
@@ -1474,7 +1474,7 @@ shmedia_check_limits (offsetT *valp, bfd_reloc_code_real_type reloc,
 {
   offsetT val = *valp;
 
-  const char *msg = NULL;
+  char *msg = NULL;
 
   switch (reloc)
     {
@@ -1612,8 +1612,7 @@ shmedia_immediate_op (char *where, shmedia_operand_info *op, int pcrel,
    chars consumed.  */
 
 static int
-shmedia_parse_reg (char *src, shmedia_arg_type *mode, int *reg,
-		   shmedia_arg_type argtype)
+shmedia_parse_reg (char *src, int *mode, int *reg, shmedia_arg_type argtype)
 {
   int l0 = TOLOWER (src[0]);
   int l1 = l0 ? TOLOWER (src[1]) : 0;
@@ -2022,7 +2021,7 @@ shmedia_md_estimate_size_before_relax (fragS *fragP,
 	  offsetT value = fragP->fr_offset
 	    + (fragP->fr_symbol == NULL ? 0 : S_GET_VALUE (fragP->fr_symbol));
 
-	  if (value >= (-((offsetT) 1 << 15)) && value < ((offsetT) 1 << 15))
+	  if (value >= ((offsetT) -1 << 15) && value < ((offsetT) 1 << 15))
 	    {
 	      /* Fits in 16-bit signed number.  */
 	      int what = GET_WHAT (fragP->fr_subtype);
@@ -2224,7 +2223,7 @@ shmedia_get_operand (char **ptr, shmedia_operand_info *op,
 		     shmedia_arg_type argtype)
 {
   char *src = *ptr;
-  shmedia_arg_type mode = (shmedia_arg_type) -1;
+  int mode = -1;
   unsigned int len;
 
   len = shmedia_parse_reg (src, &mode, &(op->reg), argtype);
@@ -3275,7 +3274,8 @@ sh64_consume_datalabel (const char *name, expressionS *exp,
 	    {
 	      symbolS *dl_symp;
 	      const char * sname = S_GET_NAME (symp);
-	      char *dl_name = concat (sname, DATALABEL_SUFFIX, (char *) NULL);
+	      char *dl_name
+		= xmalloc (strlen (sname) + sizeof (DATALABEL_SUFFIX));
 
 	      /* Now we copy the datalabel-qualified symbol into a symbol
 		 with the same name, but with " DL" appended.  We mark the
@@ -3283,6 +3283,8 @@ sh64_consume_datalabel (const char *name, expressionS *exp,
 		 the main symbol, so we don't have to inspect all symbol
 		 names.  Note that use of "datalabel" is not expected to
 		 be a common case.  */
+	      strcpy (dl_name, sname);
+	      strcat (dl_name, DATALABEL_SUFFIX);
 
 	      /* A FAKE_LABEL_NAME marks "$" or ".".  There can be any
 		 number of them and all have the same (faked) name; we

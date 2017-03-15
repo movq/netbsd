@@ -1,4 +1,4 @@
-/*	$NetBSD: intel_gtt.c,v 1.5 2015/03/06 22:03:06 riastradh Exp $	*/
+/*	$NetBSD: intel_gtt.c,v 1.4.2.1 2015/03/17 17:52:48 riz Exp $	*/
 
 /*-
  * Copyright (c) 2014 The NetBSD Foundation, Inc.
@@ -32,7 +32,7 @@
 /* Intel GTT stubs */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: intel_gtt.c,v 1.5 2015/03/06 22:03:06 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: intel_gtt.c,v 1.4.2.1 2015/03/17 17:52:48 riz Exp $");
 
 #include <sys/types.h>
 #include <sys/bus.h>

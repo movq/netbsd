@@ -1,4 +1,4 @@
-.\"     $NetBSD: pci.9,v 1.45 2016/07/12 09:50:36 wiz Exp $
+.\"     $NetBSD: pci.9,v 1.36 2012/01/30 19:20:13 drochner Exp $
 .\"
 .\" Copyright (c) 2001, 2003 The NetBSD Foundation, Inc.
 .\" All rights reserved.
@@ -27,7 +27,7 @@
 .\" ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 .\" POSSIBILITY OF SUCH DAMAGE.
 .\"
-.Dd July 12, 2016
+.Dd January 30, 2012
 .Dt PCI 9
 .Os
 .Sh NAME
@@ -43,8 +43,6 @@
 .Nm pci_conf_restore ,
 .Nm pci_find_device ,
 .Nm pci_get_capability ,
-.Nm pci_get_ht_capability ,
-.Nm pci_get_ext_capability ,
 .Nm pci_mapreg_type ,
 .Nm pci_mapreg_map ,
 .Nm pci_mapreg_info ,
@@ -52,10 +50,7 @@
 .Nm pci_intr_string ,
 .Nm pci_intr_evcnt ,
 .Nm pci_intr_establish ,
-.Nm pci_intr_establish_xname ,
 .Nm pci_intr_disestablish ,
-.Nm pci_intr_type ,
-.Nm pci_intr_setattr ,
 .Nm pci_get_powerstate ,
 .Nm pci_set_powerstate ,
 .Nm pci_vpd_read ,
@@ -78,7 +73,8 @@
 "int maxdevs"
 .Ft int
 .Fn pci_activate "pci_chipset_tag_t pc" "pcitag_t tag" "device_t dev" \
-"int (*wakeup)(pci_chipset_tag_t pc, pcitag_t tag, device_t dev, pcireg_t reg)"
+"int (*wakeup)(pci_chipset_tag_t pc, pcitag_t tag" \
+"\t\tdevice_t dev, pcireg_t reg)"
 .Ft int
 .Fn pci_chipset_tag_create "pci_chipset_tag_t opc" "uint64_t present" \
 "const struct pci_overrides *ov" "void *ctx" "pci_chipset_tag_t *pcp"
@@ -104,12 +100,6 @@
 .Ft int
 .Fn pci_get_capability "pci_chipset_tag_t pc" "pcitag_t tag" \
 "int capid" "int *offsetp" "pcireg_t *valuep"
-.Ft int
-.Fn pci_get_ht_capability "pci_chipset_tag_t pc" "pcitag_t tag" \
-"int capid" "int *offsetp" "pcireg_t *valuep"
-.Ft int
-.Fn pci_get_ext_capability "pci_chipset_tag_t pc" "pcitag_t tag" \
-"int capid" "int *offsetp" "pcireg_t *valuep"
 .Ft pcireg_t
 .Fn pci_mapreg_type "pci_chipset_tag_t pc" "pcitag_t tag" "int reg"
 .Ft int
@@ -132,15 +122,8 @@
 .Ft void *
 .Fn pci_intr_establish "pci_chipset_tag_t pc" "pci_intr_handle_t ih" \
 "int level" "int (*handler)(void *)" "void *arg"
-.Ft void *
-.Fn pci_intr_establish_xname "pci_chipset_tag_t pc" "pci_intr_handle_t ih" \
-"int level" "int (*handler)(void *)" "void *arg" "const char *xname"
 .Ft void
 .Fn pci_intr_disestablish "pci_chipset_tag_t pc" "void *ih"
-.Ft pci_intr_type_t
-.Fn pci_intr_type "pci_chipset_tag_t pc" "pci_intr_handle_t ih"
-.Ft int
-.Fn pci_intr_setattr "pci_chipset_tag_t pc" "pci_intr_handle_t *ih" "int attr" "uint64_t data"
 .Ft int
 .Fn pci_set_powerstate "pci_chipset_tag_t pc" "pcitag_t tag" \
 "pcireg_t newstate"
@@ -246,7 +229,7 @@ It contains the following member:
 .It Fa struct pci_overrides
 Stores pointers to functions that override the architecture's
 default
-.Nm
+.Xr pci 9
 and
 .Xr pci_intr 9
 implementation.
@@ -464,67 +447,11 @@ capability
 .Fa capid .
 If
 .Fa offsetp
-is not
-.Dv NULL ,
-the register offset in configuration space is returned in
+is not NULL, the register offset in configuration space is returned in
 .Fa offsetp .
 If
 .Fa valuep
-is not
-.Dv NULL ,
-the value of the capability is returned in
-.Fa valuep .
-The argument
-.Fa tag
-is the PCI tag for the current device attached to PCI chipset
-.Fa pc .
-This function returns 1 if the capability was found.
-If the capability was not found, it returns zero, and
-.Fa offsetp
-and
-.Fa valuep
-remain unchanged.
-.It Fn pci_get_ht_capability "pc" "tag" "capid" "offsetp" "valuep"
-Parse the device capability list in HyperTransport configuration
-space looking for capability
-.Fa capid .
-If
-.Fa offsetp
-is not
-.Dv NULL ,
-the register offset in configuration space is returned in
-.Fa offsetp .
-If
-.Fa valuep
-is not
-.Dv NULL ,
-the value of the capability is returned in
-.Fa valuep .
-The argument
-.Fa tag
-is the PCI tag for the current device attached to PCI chipset
-.Fa pc .
-This function returns 1 if the capability was found.
-If the capability was not found, it returns zero, and
-.Fa offsetp
-and
-.Fa valuep
-remain unchanged.
-.It Fn pci_get_ext_capability "pc" "tag" "capid" "offsetp" "valuep"
-Parse the device capability list in extended configuration space looking for
-capability
-.Fa capid .
-If
-.Fa offsetp
-is not
-.Dv NULL ,
-the register offset in extended configuration space is returned in
-.Fa offsetp .
-If
-.Fa valuep
-is not
-.Dv NULL ,
-the value of the capability is returned in
+is not NULL, the value of the capability is returned in
 .Fa valuep .
 The argument
 .Fa tag
@@ -611,9 +538,7 @@ If any of
 .Fa basep ,
 or
 .Fa sizep
-are
-.Dv NULL
-then
+are NULL then
 .Fn pci_mapreg_map
 does not define their return value.
 This function returns zero on success and non-zero on error.
@@ -680,16 +605,7 @@ See
 .It Fn pci_intr_establish "pc" "ih" "level" "handler" "arg"
 See
 .Xr pci_intr 9 .
-.It Fn pci_intr_establish_xname "pc" "ih" "level" "handler" "arg" "xname"
-See
-.Xr pci_intr 9 .
 .It Fn pci_intr_disestablish "pc" "ih"
-See
-.Xr pci_msi 9 .
-.It Fn pci_intr_type "pc" "ih"
-See
-.Xr pci_intr 9 .
-.It Fn pci_intr_setattr "pc" "ih" "attr" "data"
 See
 .Xr pci_intr 9 .
 .It Fn pci_set_powerstate "pc" "tag" "newstate"
@@ -860,7 +776,6 @@ The database can be regenerated using the Makefile
 .Xr driver 9 ,
 .Xr pci_configure_bus 9 ,
 .Xr pci_intr 9 ,
-.Xr pci_msi 9 ,
 .Xr pmf 9
 .Sh HISTORY
 The machine-independent PCI subsystem appeared in

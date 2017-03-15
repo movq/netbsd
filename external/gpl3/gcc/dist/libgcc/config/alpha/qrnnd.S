@@ -1,5 +1,5 @@
  # Alpha 21064 __udiv_qrnnd
- # Copyright (C) 1992-2015 Free Software Foundation, Inc.
+ # Copyright (C) 1992-2013 Free Software Foundation, Inc.
 
  # This file is part of GCC.
 
@@ -22,9 +22,8 @@
  # see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
  # <http://www.gnu.org/licenses/>.
 
-#if defined(__ELF__) && defined(__linux__)
+#ifdef __ELF__
 .section .note.GNU-stack,""
-.previous
 #endif
 
         .set noreorder

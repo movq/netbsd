@@ -23,6 +23,7 @@
 #include "llvm/Support/Program.h"
 #include <cassert>
 #include <cerrno>
+#include <cstdio>
 #include <cstring>
 #include <new>
 #include <sys/types.h>
@@ -57,8 +58,7 @@ void MemoryBuffer::init(const char *BufStart, const char *BufEnd,
 /// CopyStringRef - Copies contents of a StringRef into a block of memory and
 /// null-terminates it.
 static void CopyStringRef(char *Memory, StringRef Data) {
-  if (!Data.empty())
-    memcpy(Memory, Data.data(), Data.size());
+  memcpy(Memory, Data.data(), Data.size());
   Memory[Data.size()] = 0; // Null terminate string.
 }
 
@@ -86,13 +86,9 @@ public:
     init(InputData.begin(), InputData.end(), RequiresNullTerminator);
   }
 
-  /// Disable sized deallocation for MemoryBufferMem, because it has
-  /// tail-allocated data.
-  void operator delete(void *p) { ::operator delete(p); }
-
-  StringRef getBufferIdentifier() const override {
-    // The name is stored after the class itself.
-    return StringRef(reinterpret_cast<const char *>(this + 1));
+  const char *getBufferIdentifier() const override {
+     // The name is stored after the class itself.
+    return reinterpret_cast<const char*>(this + 1);
   }
 
   BufferKind getBufferKind() const override {
@@ -139,7 +135,7 @@ MemoryBuffer::getNewUninitMemBuffer(size_t Size, const Twine &BufferName) {
   SmallString<256> NameBuf;
   StringRef NameRef = BufferName.toStringRef(NameBuf);
   size_t AlignedStringLen =
-      alignTo(sizeof(MemoryBufferMem) + NameRef.size() + 1, 16);
+      RoundUpToAlignment(sizeof(MemoryBufferMem) + NameRef.size() + 1, 16);
   size_t RealLen = AlignedStringLen + Size + 1;
   char *Mem = static_cast<char*>(operator new(RealLen, std::nothrow));
   if (!Mem)
@@ -166,14 +162,13 @@ MemoryBuffer::getNewMemBuffer(size_t Size, StringRef BufferName) {
 }
 
 ErrorOr<std::unique_ptr<MemoryBuffer>>
-MemoryBuffer::getFileOrSTDIN(const Twine &Filename, int64_t FileSize,
-                             bool RequiresNullTerminator) {
+MemoryBuffer::getFileOrSTDIN(const Twine &Filename, int64_t FileSize) {
   SmallString<256> NameBuf;
   StringRef NameRef = Filename.toStringRef(NameBuf);
 
   if (NameRef == "-")
     return getSTDIN();
-  return getFile(Filename, FileSize, RequiresNullTerminator);
+  return getFile(Filename, FileSize);
 }
 
 ErrorOr<std::unique_ptr<MemoryBuffer>>
@@ -217,13 +212,9 @@ public:
     }
   }
 
-  /// Disable sized deallocation for MemoryBufferMMapFile, because it has
-  /// tail-allocated data.
-  void operator delete(void *p) { ::operator delete(p); }
-
-  StringRef getBufferIdentifier() const override {
+  const char *getBufferIdentifier() const override {
     // The name is stored after the class itself.
-    return StringRef(reinterpret_cast<const char *>(this + 1));
+    return reinterpret_cast<const char *>(this + 1);
   }
 
   BufferKind getBufferKind() const override {
@@ -436,18 +427,6 @@ ErrorOr<std::unique_ptr<MemoryBuffer>> MemoryBuffer::getSTDIN() {
   sys::ChangeStdinToBinary();
 
   return getMemoryBufferForStream(0, "<stdin>");
-}
-
-ErrorOr<std::unique_ptr<MemoryBuffer>>
-MemoryBuffer::getFileAsStream(const Twine &Filename) {
-  int FD;
-  std::error_code EC = sys::fs::openFileForRead(Filename, FD);
-  if (EC)
-    return EC;
-  ErrorOr<std::unique_ptr<MemoryBuffer>> Ret =
-      getMemoryBufferForStream(FD, Filename);
-  close(FD);
-  return Ret;
 }
 
 MemoryBufferRef MemoryBuffer::getMemBufferRef() const {

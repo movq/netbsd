@@ -1,4 +1,4 @@
-/*	$NetBSD: sysctlgetmibinfo.c,v 1.13 2016/09/30 06:22:21 dholland Exp $ */
+/*	$NetBSD: sysctlgetmibinfo.c,v 1.11 2014/05/16 12:22:32 martin Exp $ */
 
 /*-
  * Copyright (c) 2003,2004 The NetBSD Foundation, Inc.
@@ -31,7 +31,7 @@
 
 #include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-__RCSID("$NetBSD: sysctlgetmibinfo.c,v 1.13 2016/09/30 06:22:21 dholland Exp $");
+__RCSID("$NetBSD: sysctlgetmibinfo.c,v 1.11 2014/05/16 12:22:32 martin Exp $");
 #endif /* LIBC_SCCS and not lint */
 
 #ifndef RUMP_ACTION
@@ -277,7 +277,6 @@ __learn_tree(int *name, u_int namelen, struct sysctlnode *pnode)
 	struct sysctlnode qnode;
 	uint32_t rc;
 	size_t sz;
-	int serrno;
 
 	if (pnode == NULL)
 		pnode = &sysctl_mibroot;
@@ -304,9 +303,7 @@ __learn_tree(int *name, u_int namelen, struct sysctlnode *pnode)
 	rc = sysctl(name, namelen + 1, pnode->sysctl_child, &sz,
 		    &qnode, sizeof(qnode));
 	if (sz == 0) {
-		serrno = errno;
 		free(pnode->sysctl_child);
-		errno = serrno;
 		pnode->sysctl_child = NULL;
 		return (rc);
 	}
@@ -327,9 +324,7 @@ __learn_tree(int *name, u_int namelen, struct sysctlnode *pnode)
 		rc = sysctl(name, namelen + 1, pnode->sysctl_child, &sz,
 			    &qnode, sizeof(qnode));
 		if (rc) {
-			serrno = errno;
 			free(pnode->sysctl_child);
-			errno = serrno;
 			pnode->sysctl_child = NULL;
 			return (rc);
 		}
@@ -426,27 +421,20 @@ sysctlgetmibinfo_unlocked(const char *gname, int *iname, u_int *namelenp,
 	if (rnode != NULL) {
 		if (*rnode == NULL) {
 			/* XXX later deal with dealing back a sub version */
-			if (v != SYSCTL_VERSION) {
-				errno = EINVAL;
-				return -1;
-			}
+			if (v != SYSCTL_VERSION)
+				return (EINVAL);
 
 			pnode = &sysctl_mibroot;
 		}
 		else {
 			/* this is just someone being silly */
-			if (SYSCTL_VERS((*rnode)->sysctl_flags)
-			    != (uint32_t)v) {
-				errno = EINVAL;
-				return -1;
-			}
+			if (SYSCTL_VERS((*rnode)->sysctl_flags) != (uint32_t)v)
+				return (EINVAL);
 
 			/* XXX later deal with other people's trees */
 			if (SYSCTL_VERS((*rnode)->sysctl_flags) !=
-			    SYSCTL_VERSION) {
-				errno = EINVAL;
-				return -1;
-			}
+			    SYSCTL_VERSION)
+				return (EINVAL);
 
 			pnode = *rnode;
 		}

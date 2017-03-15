@@ -1,4 +1,4 @@
-/*	$NetBSD: zynq_machdep.c,v 1.1 2015/01/23 12:34:09 hkenken Exp $	*/
+/*	$NetBSD: zynq_machdep.c,v 1.1.4.2 2015/05/11 11:00:33 msaitoh Exp $	*/
 /*-
  * Copyright (c) 2012 The NetBSD Foundation, Inc.
  * All rights reserved.
@@ -29,7 +29,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: zynq_machdep.c,v 1.1 2015/01/23 12:34:09 hkenken Exp $");
+__KERNEL_RCSID(0, "$NetBSD: zynq_machdep.c,v 1.1.4.2 2015/05/11 11:00:33 msaitoh Exp $");
 
 #include "opt_evbarm_boardtype.h"
 #include "opt_arm_debug.h"

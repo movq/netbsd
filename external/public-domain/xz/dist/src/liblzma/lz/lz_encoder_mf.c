@@ -13,7 +13,6 @@
 
 #include "lz_encoder.h"
 #include "lz_encoder_hash.h"
-#include "memcmplen.h"
 
 
 /// \brief      Find matches starting from the current byte
@@ -66,7 +65,9 @@ lzma_mf_find(lzma_mf *mf, uint32_t *count_ptr, lzma_match *matches)
 			// here because the match distances are zero based.
 			const uint8_t *p2 = p1 - matches[count - 1].dist - 1;
 
-			len_best = lzma_memcmplen(p1, p2, len_best, limit);
+			while (len_best < limit
+					&& p1[len_best] == p2[len_best])
+				++len_best;
 		}
 	}
 
@@ -115,27 +116,24 @@ normalize(lzma_mf *mf)
 			= (MUST_NORMALIZE_POS - mf->cyclic_size);
 				// & (~(UINT32_C(1) << 10) - 1);
 
-	for (uint32_t i = 0; i < mf->hash_count; ++i) {
+	const uint32_t count = mf->hash_size_sum + mf->sons_count;
+	uint32_t *hash = mf->hash;
+
+	for (uint32_t i = 0; i < count; ++i) {
 		// If the distance is greater than the dictionary size,
 		// we can simply mark the hash element as empty.
-		if (mf->hash[i] <= subvalue)
-			mf->hash[i] = EMPTY_HASH_VALUE;
-		else
-			mf->hash[i] -= subvalue;
-	}
-
-	for (uint32_t i = 0; i < mf->sons_count; ++i) {
-		// Do the same for mf->son.
 		//
-		// NOTE: There may be uninitialized elements in mf->son.
-		// Valgrind may complain that the "if" below depends on
-		// an uninitialized value. In this case it is safe to ignore
-		// the warning. See also the comments in lz_encoder_init()
-		// in lz_encoder.c.
-		if (mf->son[i] <= subvalue)
-			mf->son[i] = EMPTY_HASH_VALUE;
+		// NOTE: Only the first mf->hash_size_sum elements are
+		// initialized for sure. There may be uninitialized elements
+		// in mf->son. Since we go through both mf->hash and
+		// mf->son here in normalization, Valgrind may complain
+		// that the "if" below depends on uninitialized value. In
+		// this case it is safe to ignore the warning. See also the
+		// comments in lz_encoder_init() in lz_encoder.c.
+		if (hash[i] <= subvalue)
+			hash[i] = EMPTY_HASH_VALUE;
 		else
-			mf->son[i] -= subvalue;
+			hash[i] -= subvalue;
 	}
 
 	// Update offset to match the new locations.
@@ -271,7 +269,10 @@ hc_find_func(
 				+ (delta > cyclic_pos ? cyclic_size : 0)];
 
 		if (pb[len_best] == cur[len_best] && pb[0] == cur[0]) {
-			uint32_t len = lzma_memcmplen(pb, cur, 1, len_limit);
+			uint32_t len = 0;
+			while (++len != len_limit)
+				if (pb[len] != cur[len])
+					break;
 
 			if (len_best < len) {
 				len_best = len;
@@ -317,8 +318,9 @@ lzma_mf_hc3_find(lzma_mf *mf, lzma_match *matches)
 	uint32_t len_best = 2;
 
 	if (delta2 < mf->cyclic_size && *(cur - delta2) == *cur) {
-		len_best = lzma_memcmplen(cur - delta2, cur,
-				len_best, len_limit);
+		for ( ; len_best != len_limit; ++len_best)
+			if (*(cur + len_best - delta2) != cur[len_best])
+				break;
 
 		matches[0].len = len_best;
 		matches[0].dist = delta2 - 1;
@@ -395,8 +397,9 @@ lzma_mf_hc4_find(lzma_mf *mf, lzma_match *matches)
 	}
 
 	if (matches_count != 0) {
-		len_best = lzma_memcmplen(cur - delta2, cur,
-				len_best, len_limit);
+		for ( ; len_best != len_limit; ++len_best)
+			if (*(cur + len_best - delta2) != cur[len_best])
+				break;
 
 		matches[matches_count - 1].len = len_best;
 
@@ -481,7 +484,9 @@ bt_find_func(
 		uint32_t len = my_min(len0, len1);
 
 		if (pb[len] == cur[len]) {
-			len = lzma_memcmplen(pb, cur, len + 1, len_limit);
+			while (++len != len_limit)
+				if (pb[len] != cur[len])
+					break;
 
 			if (len_best < len) {
 				len_best = len;
@@ -544,7 +549,9 @@ bt_skip_func(
 		uint32_t len = my_min(len0, len1);
 
 		if (pb[len] == cur[len]) {
-			len = lzma_memcmplen(pb, cur, len + 1, len_limit);
+			while (++len != len_limit)
+				if (pb[len] != cur[len])
+					break;
 
 			if (len == len_limit) {
 				*ptr1 = pair[0];
@@ -632,8 +639,9 @@ lzma_mf_bt3_find(lzma_mf *mf, lzma_match *matches)
 	uint32_t len_best = 2;
 
 	if (delta2 < mf->cyclic_size && *(cur - delta2) == *cur) {
-		len_best = lzma_memcmplen(
-				cur, cur - delta2, len_best, len_limit);
+		for ( ; len_best != len_limit; ++len_best)
+			if (*(cur + len_best - delta2) != cur[len_best])
+				break;
 
 		matches[0].len = len_best;
 		matches[0].dist = delta2 - 1;
@@ -704,8 +712,9 @@ lzma_mf_bt4_find(lzma_mf *mf, lzma_match *matches)
 	}
 
 	if (matches_count != 0) {
-		len_best = lzma_memcmplen(
-				cur, cur - delta2, len_best, len_limit);
+		for ( ; len_best != len_limit; ++len_best)
+			if (*(cur + len_best - delta2) != cur[len_best])
+				break;
 
 		matches[matches_count - 1].len = len_best;
 

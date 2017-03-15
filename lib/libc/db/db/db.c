@@ -1,4 +1,4 @@
-/*	$NetBSD: db.c,v 1.18 2015/05/19 13:20:52 christos Exp $	*/
+/*	$NetBSD: db.c,v 1.16.40.2 2015/05/19 14:14:52 martin Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993
@@ -34,7 +34,7 @@
 #endif
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: db.c,v 1.18 2015/05/19 13:20:52 christos Exp $");
+__RCSID("$NetBSD: db.c,v 1.16.40.2 2015/05/19 14:14:52 martin Exp $");
 
 #include "namespace.h"
 #include <sys/types.h>

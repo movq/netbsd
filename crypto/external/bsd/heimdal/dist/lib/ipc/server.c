@@ -1,4 +1,4 @@
-/*	$NetBSD: server.c,v 1.2 2017/01/28 21:31:48 christos Exp $	*/
+/*	$NetBSD: server.c,v 1.1.1.2 2014/04/24 12:45:48 pettai Exp $	*/
 
 /*
  * Copyright (c) 2009 Kungliga Tekniska Högskolan
@@ -37,7 +37,6 @@
 
 #include "hi_locl.h"
 #include <assert.h>
-#include <err.h>
 
 #define MAX_PACKET_SIZE (128 * 1024)
 
@@ -339,14 +338,14 @@ mach_init(const char *service, mach_port_t sport, heim_sipc ctx)
 	});
 
     dispatch_source_set_cancel_handler(s->source, ^{
-	    heim_sipc sctx = dispatch_get_context(dispatch_get_current_queue());
-	    struct mach_service *st = sctx->mech;
+	    heim_sipc ctx = dispatch_get_context(dispatch_get_current_queue());
+	    struct mach_service *st = ctx->mech;
 	    mach_port_mod_refs(mach_task_self(), st->sport,
 			       MACH_PORT_RIGHT_RECEIVE, -1);
 	    dispatch_release(st->queue);
 	    dispatch_release(st->source);
 	    free(st);
-	    free(sctx);
+	    free(ctx);
 	});
 
     dispatch_resume(s->source);
@@ -825,7 +824,7 @@ handle_http_tcp(struct client *c)
 	free(data);
 	return NULL;
     }
-    len = rk_base64_decode(t, data);
+    len = base64_decode(t, data);
     if(len <= 0){
 	const char *msg =
 	    " 404 Not found\r\n"
@@ -983,7 +982,7 @@ process_loop(void)
     unsigned n;
     unsigned num_fds;
 
-    while (num_clients > 0) {
+    while(num_clients > 0) {
 
 	fds = malloc(num_clients * sizeof(fds[0]));
 	if(fds == NULL)
@@ -1002,11 +1001,7 @@ process_loop(void)
 	    fds[n].revents = 0;
 	}
 
-	while (poll(fds, num_fds, -1) == -1) {
-            if (errno == EINTR || errno == EAGAIN)
-                continue;
-            err(1, "poll(2) failed");
-        }
+	poll(fds, num_fds, -1);
 
 	for (n = 0 ; n < num_fds; n++) {
 	    if (clients[n] == NULL)

@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.25 2016/12/23 10:19:57 mrg Exp $
+#	$NetBSD: Makefile,v 1.23 2011/09/10 18:34:54 christos Exp $
 #	from: @(#)Makefile	8.1 (Berkeley) 6/6/93
 
 .include <bsd.own.mk>
@@ -16,11 +16,8 @@ CPPFLAGS+= -I${NETBSDSRCDIR}/sys
 .if (${USE_INET6} != "no")
 CPPFLAGS+=-DINET6
 .endif
-CPPFLAGS+=-D_KMEMUSER
 
 LDADD+=-lutil
 DPADD+=${LIBUTIL}
-
-.include "../../compat/exec.mk"
 
 .include <bsd.prog.mk>

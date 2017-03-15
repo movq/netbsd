@@ -16,16 +16,16 @@
 
 #include "llvm/ADT/StringRef.h"
 #include "llvm/CodeGen/MachineValueType.h"
-#include "llvm/Support/SMLoc.h"
+#include "llvm/Support/SourceMgr.h"
 #include <string>
 #include <utility>
 #include <vector>
 
 namespace llvm {
-template <typename T> class ArrayRef;
   class Record;
   class DagInit;
   class CodeGenTarget;
+  class StringRef;
 
   class CGIOperandList {
   public:
@@ -230,7 +230,6 @@ template <typename T> class ArrayRef;
     bool isSelect : 1;
     bool isBarrier : 1;
     bool isCall : 1;
-    bool isAdd : 1;
     bool canFoldAsLoad : 1;
     bool mayLoad : 1;
     bool mayLoad_Unset : 1;
@@ -256,8 +255,6 @@ template <typename T> class ArrayRef;
     bool isRegSequence : 1;
     bool isExtractSubreg : 1;
     bool isInsertSubreg : 1;
-    bool isConvergent : 1;
-    bool hasNoSchedulingInfo : 1;
 
     std::string DeprecatedReason;
     bool HasComplexDeprecationPredicate;
@@ -317,8 +314,7 @@ template <typename T> class ArrayRef;
         K_Reg
       } Kind;
 
-      ResultOperand(std::string N, Record *r)
-          : Name(std::move(N)), R(r), Kind(K_Record) {}
+      ResultOperand(std::string N, Record *r) : Name(N), R(r), Kind(K_Record) {}
       ResultOperand(int64_t I) : Imm(I), Kind(K_Imm) {}
       ResultOperand(Record *r) : R(r), Kind(K_Reg) {}
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: msdosfs_vnops.c,v 1.97 2017/03/01 10:41:28 hannken Exp $	*/
+/*	$NetBSD: msdosfs_vnops.c,v 1.91 2014/07/25 08:20:51 dholland Exp $	*/
 
 /*-
  * Copyright (C) 1994, 1995, 1997 Wolfgang Solfrank.
@@ -48,7 +48,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: msdosfs_vnops.c,v 1.97 2017/03/01 10:41:28 hannken Exp $");
+__KERNEL_RCSID(0, "$NetBSD: msdosfs_vnops.c,v 1.91 2014/07/25 08:20:51 dholland Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -60,6 +60,7 @@ __KERNEL_RCSID(0, "$NetBSD: msdosfs_vnops.c,v 1.97 2017/03/01 10:41:28 hannken E
 #include <sys/buf.h>
 #include <sys/proc.h>
 #include <sys/mount.h>
+#include <sys/fstrans.h>
 #include <sys/vnode.h>
 #include <sys/signalvar.h>
 #include <sys/malloc.h>
@@ -119,6 +120,7 @@ msdosfs_create(void *v)
 	printf("msdosfs_create(cnp %p, vap %p\n", cnp, ap->a_vap);
 #endif
 
+	fstrans_start(ap->a_dvp->v_mount, FSTRANS_SHARED);
 	/*
 	 * If this is the root directory and there is no space left we
 	 * can't do anything.  This is because the root directory can not
@@ -151,11 +153,13 @@ msdosfs_create(void *v)
 	DETIMES(&ndirent, NULL, NULL, NULL, pdep->de_pmp->pm_gmtoff);
 	if ((error = createde(&ndirent, pdep, &dep, cnp)) != 0)
 		goto bad;
+	fstrans_done(ap->a_dvp->v_mount);
 	VN_KNOTE(ap->a_dvp, NOTE_WRITE);
 	*ap->a_vpp = DETOV(dep);
 	return (0);
 
 bad:
+	fstrans_done(ap->a_dvp->v_mount);
 	return (error);
 }
 
@@ -170,10 +174,12 @@ msdosfs_close(void *v)
 	struct vnode *vp = ap->a_vp;
 	struct denode *dep = VTODE(vp);
 
+	fstrans_start(vp->v_mount, FSTRANS_SHARED);
 	mutex_enter(vp->v_interlock);
 	if (vp->v_usecount > 1)
 		DETIMES(dep, NULL, NULL, NULL, dep->de_pmp->pm_gmtoff);
 	mutex_exit(vp->v_interlock);
+	fstrans_done(vp->v_mount);
 	return (0);
 }
 
@@ -256,6 +262,7 @@ msdosfs_getattr(void *v)
 	u_long dirsperblk = pmp->pm_BytesPerSec / sizeof(struct direntry);
 	ino_t fileid;
 
+	fstrans_start(ap->a_vp->v_mount, FSTRANS_SHARED);
 	DETIMES(dep, NULL, NULL, NULL, pmp->pm_gmtoff);
 	vap->va_fsid = dep->de_dev;
 	/*
@@ -306,6 +313,7 @@ msdosfs_getattr(void *v)
 	vap->va_bytes =
 	    (dep->de_FileSize + pmp->pm_crbomask) & ~pmp->pm_crbomask;
 	vap->va_type = ap->a_vp->v_type;
+	fstrans_done(ap->a_vp->v_mount);
 	return (0);
 }
 
@@ -353,6 +361,7 @@ msdosfs_setattr(void *v)
 	if (ap->a_vp->v_type == VDIR)
 		return 0;
 
+	fstrans_start(vp->v_mount, FSTRANS_SHARED);
 	if (vap->va_size != VNOVAL) {
 		if (vp->v_mount->mnt_flag & MNT_RDONLY) {
 			error = EROFS;
@@ -432,6 +441,7 @@ msdosfs_setattr(void *v)
 	}
 
 bad:
+	fstrans_done(vp->v_mount);
 	return error;
 }
 
@@ -468,6 +478,7 @@ msdosfs_read(void *v)
 	if (uio->uio_offset >= dep->de_FileSize)
 		return (0);
 
+	fstrans_start(vp->v_mount, FSTRANS_SHARED);
 	if (vp->v_type == VREG) {
 		const int advice = IO_ADV_DECODE(ap->a_ioflag);
 
@@ -492,6 +503,7 @@ msdosfs_read(void *v)
 		on = uio->uio_offset & pmp->pm_crbomask;
 		n = MIN(pmp->pm_bpcluster - on, uio->uio_resid);
 		if (uio->uio_offset >= dep->de_FileSize) {
+			fstrans_done(vp->v_mount);
 			return (0);
 		}
 		/* file size (and hence diff) may be up to 4GB */
@@ -510,7 +522,7 @@ msdosfs_read(void *v)
 		 * vnode for the directory.
 		 */
 		error = bread(pmp->pm_devvp, de_bn2kb(pmp, lbn), blsize,
-		    0, &bp);
+		    NOCRED, 0, &bp);
 		if (error) {
 			goto bad;
 		}
@@ -520,14 +532,10 @@ msdosfs_read(void *v)
 	} while (error == 0 && uio->uio_resid > 0 && n != 0);
 
 out:
-	if ((ap->a_ioflag & IO_SYNC) == IO_SYNC) {
-		int uerror;
-
-		uerror = deupdat(dep, 1);
-		if (error == 0)
-			error = uerror;
-	}
+	if ((ap->a_ioflag & IO_SYNC) == IO_SYNC)
+		error = deupdat(dep, 1);
 bad:
+	fstrans_done(vp->v_mount);
 	return (error);
 }
 
@@ -586,6 +594,7 @@ msdosfs_write(void *v)
 	if (uio->uio_offset + uio->uio_resid > MSDOSFS_FILESIZE_MAX)
 		return (EFBIG);
 
+	fstrans_start(vp->v_mount, FSTRANS_SHARED);
 	/*
 	 * If the offset we are starting the write at is beyond the end of
 	 * the file, then they've done a seek.  Unix filesystems allow
@@ -594,6 +603,7 @@ msdosfs_write(void *v)
 	 */
 	if (uio->uio_offset > dep->de_FileSize) {
 		if ((error = deextend(dep, uio->uio_offset, cred)) != 0) {
+			fstrans_done(vp->v_mount);
 			return (error);
 		}
 	}
@@ -670,6 +680,7 @@ errexit:
 		uio->uio_resid = resid;
 	} else if ((ioflag & IO_SYNC) == IO_SYNC)
 		error = deupdat(dep, 1);
+	fstrans_done(vp->v_mount);
 	KASSERT(vp->v_size == dep->de_FileSize);
 	return (error);
 }
@@ -724,6 +735,7 @@ msdosfs_remove(void *v)
 	struct denode *ddep = VTODE(ap->a_dvp);
 	int error;
 
+	fstrans_start(ap->a_dvp->v_mount, FSTRANS_SHARED);
 	if (ap->a_vp->v_type == VDIR)
 		error = EPERM;
 	else
@@ -740,6 +752,7 @@ msdosfs_remove(void *v)
 		vput(ap->a_vp);	/* causes msdosfs_inactive() to be called
 				 * via vrele() */
 	vput(ap->a_dvp);
+	fstrans_done(ap->a_dvp->v_mount);
 	return (error);
 }
 
@@ -814,6 +827,7 @@ msdosfs_rename(void *v)
 	struct vnode *tdvp = ap->a_tdvp;
 	struct vnode *fvp = ap->a_fvp;
 	struct vnode *fdvp = ap->a_fdvp;
+	struct mount *mp = fdvp->v_mount;
 	struct componentname *tcnp = ap->a_tcnp;
 	struct componentname *fcnp = ap->a_fcnp;
 	struct denode *ip, *xp, *dp, *zp;
@@ -891,6 +905,7 @@ abortit:
 	}
 	VN_KNOTE(fdvp, NOTE_WRITE);		/* XXXLUKEM/XXX: right place? */
 
+	fstrans_start(mp, FSTRANS_SHARED);
 	/*
 	 * When the target exists, both the directory
 	 * and target vnodes are returned locked.
@@ -977,6 +992,7 @@ abortit:
 	 * file/directory.
 	 */
 	if ((error = uniqdosname(VTODE(tdvp), tcnp, toname)) != 0) {
+		fstrans_done(mp);
 		goto abortit;
 	}
 
@@ -992,6 +1008,7 @@ abortit:
 		VOP_UNLOCK(fdvp);
 		vrele(ap->a_fvp);
 		vrele(tdvp);
+		fstrans_done(mp);
 		return (error);
 	}
 	if (fvp == NULL) {
@@ -1003,6 +1020,7 @@ abortit:
 		vput(fdvp);
 		vrele(ap->a_fvp);
 		vrele(tdvp);
+		fstrans_done(mp);
 		return 0;
 	}
 	VOP_UNLOCK(fdvp);
@@ -1087,7 +1105,7 @@ abortit:
 		} else
 			bn = cntobn(pmp, cn);
 		error = bread(pmp->pm_devvp, de_bn2kb(pmp, bn),
-		    pmp->pm_bpcluster, B_MODIFY, &bp);
+		    pmp->pm_bpcluster, NOCRED, B_MODIFY, &bp);
 		if (error) {
 			/* XXX should really panic here, fs is corrupt */
 			VOP_UNLOCK(fvp);
@@ -1117,6 +1135,7 @@ bad:
 	ip->de_flag &= ~DE_RENAME;
 	vrele(fdvp);
 	vrele(fvp);
+	fstrans_done(mp);
 	return (error);
 
 	/* XXX: uuuh */
@@ -1173,6 +1192,7 @@ msdosfs_mkdir(void *v)
 	struct buf *bp;
 	int async = pdep->de_pmp->pm_mountp->mnt_flag & MNT_ASYNC;
 
+	fstrans_start(ap->a_dvp->v_mount, FSTRANS_SHARED);
 	/*
 	 * If this is the root directory and there is no space left we
 	 * can't do anything.  This is because the root directory can not
@@ -1255,11 +1275,13 @@ msdosfs_mkdir(void *v)
 		goto bad;
 	VN_KNOTE(ap->a_dvp, NOTE_WRITE | NOTE_LINK);
 	*ap->a_vpp = DETOV(dep);
+	fstrans_done(ap->a_dvp->v_mount);
 	return (0);
 
 bad:
 	clusterfree(pmp, newcluster, NULL);
 bad2:
+	fstrans_done(ap->a_dvp->v_mount);
 	return (error);
 }
 
@@ -1273,6 +1295,7 @@ msdosfs_rmdir(void *v)
 	} */ *ap = v;
 	struct vnode *vp = ap->a_vp;
 	struct vnode *dvp = ap->a_dvp;
+	struct mount *mp = dvp->v_mount;
 	struct componentname *cnp = ap->a_cnp;
 	struct denode *ip, *dp;
 	int error;
@@ -1287,6 +1310,7 @@ msdosfs_rmdir(void *v)
 		vput(vp);
 		return (EINVAL);
 	}
+	fstrans_start(mp, FSTRANS_SHARED);
 	/*
 	 * Verify the directory is empty (and valid).
 	 * (Rmdir ".." won't be valid since
@@ -1328,6 +1352,7 @@ out:
 	if (dvp)
 		vput(dvp);
 	vput(vp);
+	fstrans_done(mp);
 	return (error);
 }
 
@@ -1364,7 +1389,6 @@ msdosfs_readdir(void *v)
 	int ncookies = 0, nc = 0;
 	off_t offset, uio_off;
 	int chksum = -1;
-	uint16_t namlen;
 
 #ifdef MSDOSFS_DEBUG
 	printf("msdosfs_readdir(): vp %p, uio %p, cred %p, eofflagp %p\n",
@@ -1394,6 +1418,7 @@ msdosfs_readdir(void *v)
 	uio->uio_resid = count;
 	uio_off = uio->uio_offset;
 	
+	fstrans_start(ap->a_vp->v_mount, FSTRANS_SHARED);
 
 	/* Allocate a temporary dirent buffer. */
 	dirbuf = malloc(sizeof(struct dirent), M_MSDOSFSTMP, M_WAITOK | M_ZERO);
@@ -1471,7 +1496,7 @@ msdosfs_readdir(void *v)
 		if ((error = pcbmap(dep, lbn, &bn, &cn, &blsize)) != 0)
 			break;
 		error = bread(pmp->pm_devvp, de_bn2kb(pmp, bn), blsize,
-		    0, &bp);
+		    NOCRED, 0, &bp);
 		if (error) {
 			goto bad;
 		}
@@ -1511,10 +1536,7 @@ msdosfs_readdir(void *v)
 				if (pmp->pm_flags & MSDOSFSMNT_SHORTNAME)
 					continue;
 				chksum = win2unixfn((struct winentry *)dentp,
-				    dirbuf, chksum, &namlen,
-				    pmp->pm_flags & MSDOSFSMNT_UTF8);
-				if (chksum != -1)
-					dirbuf->d_namlen = namlen;
+				    dirbuf, chksum);
 				continue;
 			}
 
@@ -1557,7 +1579,6 @@ msdosfs_readdir(void *v)
 				    pmp->pm_flags & MSDOSFSMNT_SHORTNAME);
 			else
 				dirbuf->d_name[dirbuf->d_namlen] = 0;
-			namlen = dirbuf->d_namlen;
 			chksum = -1;
 			dirbuf->d_reclen = _DIRENT_SIZE(dirbuf);
 			if (uio->uio_resid < dirbuf->d_reclen) {
@@ -1601,6 +1622,7 @@ out:
 
 bad:
 	free(dirbuf, M_MSDOSFSTMP);
+	fstrans_done(ap->a_vp->v_mount);
 	return (error);
 }
 
@@ -1787,6 +1809,7 @@ msdosfs_fsync(void *v)
 	int wait;
 	int error;
 
+	fstrans_start(vp->v_mount, FSTRANS_LAZY);
 	wait = (ap->a_flags & FSYNC_WAIT) != 0;
 	error = vflushbuf(vp, ap->a_flags);
 	if (error == 0 && (ap->a_flags & FSYNC_DATAONLY) == 0)
@@ -1800,6 +1823,7 @@ msdosfs_fsync(void *v)
 		error = VOP_IOCTL(devvp, DIOCCACHESYNC, &l, FWRITE,
 					  curlwp->l_cred);
 	}
+	fstrans_done(vp->v_mount);
 
 	return (error);
 }

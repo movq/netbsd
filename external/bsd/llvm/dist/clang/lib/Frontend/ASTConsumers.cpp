@@ -19,7 +19,9 @@
 #include "clang/AST/RecordLayout.h"
 #include "clang/AST/RecursiveASTVisitor.h"
 #include "clang/Basic/Diagnostic.h"
+#include "clang/Basic/FileManager.h"
 #include "clang/Basic/SourceManager.h"
+#include "llvm/IR/Module.h"
 #include "llvm/Support/Path.h"
 #include "llvm/Support/Timer.h"
 #include "llvm/Support/raw_ostream.h"
@@ -34,9 +36,9 @@ namespace {
     typedef RecursiveASTVisitor<ASTPrinter> base;
 
   public:
-    ASTPrinter(std::unique_ptr<raw_ostream> Out = nullptr, bool Dump = false,
+    ASTPrinter(raw_ostream *Out = nullptr, bool Dump = false,
                StringRef FilterString = "", bool DumpLookups = false)
-        : Out(Out ? *Out : llvm::outs()), OwnedOut(std::move(Out)), Dump(Dump),
+        : Out(Out ? *Out : llvm::outs()), Dump(Dump),
           FilterString(FilterString), DumpLookups(DumpLookups) {}
 
     void HandleTranslationUnit(ASTContext &Context) override {
@@ -93,7 +95,6 @@ namespace {
     }
 
     raw_ostream &Out;
-    std::unique_ptr<raw_ostream> OwnedOut;
     bool Dump;
     std::string FilterString;
     bool DumpLookups;
@@ -122,11 +123,9 @@ namespace {
   };
 } // end anonymous namespace
 
-std::unique_ptr<ASTConsumer>
-clang::CreateASTPrinter(std::unique_ptr<raw_ostream> Out,
-                        StringRef FilterString) {
-  return llvm::make_unique<ASTPrinter>(std::move(Out), /*Dump=*/false,
-                                       FilterString);
+std::unique_ptr<ASTConsumer> clang::CreateASTPrinter(raw_ostream *Out,
+                                                     StringRef FilterString) {
+  return llvm::make_unique<ASTPrinter>(Out, /*Dump=*/false, FilterString);
 }
 
 std::unique_ptr<ASTConsumer> clang::CreateASTDumper(StringRef FilterString,
@@ -270,7 +269,7 @@ void DeclContextPrinter::PrintDeclContext(const DeclContext* DC,
     // Print the parameters.
     Out << "(";
     bool PrintComma = false;
-    for (auto I : FD->parameters()) {
+    for (auto I : FD->params()) {
       if (PrintComma)
         Out << ", ";
       else
@@ -292,12 +291,13 @@ void DeclContextPrinter::PrintDeclContext(const DeclContext* DC,
     // Print the parameters.
     Out << "(";
     bool PrintComma = false;
-    for (ParmVarDecl *Parameter : D->parameters()) {
+    for (FunctionDecl::param_const_iterator I = D->param_begin(),
+           E = D->param_end(); I != E; ++I) {
       if (PrintComma)
         Out << ", ";
       else
         PrintComma = true;
-      Out << *Parameter;
+      Out << **I;
     }
     Out << ")";
 
@@ -321,12 +321,13 @@ void DeclContextPrinter::PrintDeclContext(const DeclContext* DC,
     // Print the parameters.
     Out << "(";
     bool PrintComma = false;
-    for (ParmVarDecl *Parameter : D->parameters()) {
+    for (FunctionDecl::param_const_iterator I = D->param_begin(),
+           E = D->param_end(); I != E; ++I) {
       if (PrintComma)
         Out << ", ";
       else
         PrintComma = true;
-      Out << *Parameter;
+      Out << **I;
     }
     Out << ")";
 
@@ -370,26 +371,6 @@ void DeclContextPrinter::PrintDeclContext(const DeclContext* DC,
     break;
   }
 
-  case Decl::ClassTemplateSpecialization: {
-    const auto *CTSD = cast<ClassTemplateSpecializationDecl>(DC);
-    if (CTSD->isCompleteDefinition())
-      Out << "[class template specialization] ";
-    else
-      Out << "<class template specialization> ";
-    Out << *CTSD;
-    break;
-  }
-
-  case Decl::ClassTemplatePartialSpecialization: {
-    const auto *CTPSD = cast<ClassTemplatePartialSpecializationDecl>(DC);
-    if (CTPSD->isCompleteDefinition())
-      Out << "[class template partial specialization] ";
-    else
-      Out << "<class template partial specialization> ";
-    Out << *CTPSD;
-    break;
-  }
-
   default:
     llvm_unreachable("a decl that inherits DeclContext isn't handled");
   }
@@ -420,8 +401,7 @@ void DeclContextPrinter::PrintDeclContext(const DeclContext* DC,
     case Decl::CXXConstructor:
     case Decl::CXXDestructor:
     case Decl::CXXConversion:
-    case Decl::ClassTemplateSpecialization:
-    case Decl::ClassTemplatePartialSpecialization: {
+    {
       DeclContext* DC = cast<DeclContext>(I);
       PrintDeclContext(DC, Indentation+2);
       break;
@@ -497,37 +477,6 @@ void DeclContextPrinter::PrintDeclContext(const DeclContext* DC,
     }
     case Decl::OMPThreadPrivate: {
       Out << "<omp threadprivate> " << '"' << I << "\"\n";
-      break;
-    }
-    case Decl::Friend: {
-      Out << "<friend>";
-      if (const NamedDecl *ND = cast<FriendDecl>(I)->getFriendDecl())
-        Out << ' ' << *ND;
-      Out << "\n";
-      break;
-    }
-    case Decl::Using: {
-      Out << "<using> " << *cast<UsingDecl>(I) << "\n";
-      break;
-    }
-    case Decl::UsingShadow: {
-      Out << "<using shadow> " << *cast<UsingShadowDecl>(I) << "\n";
-      break;
-    }
-    case Decl::Empty: {
-      Out << "<empty>\n";
-      break;
-    }
-    case Decl::AccessSpec: {
-      Out << "<access specifier>\n";
-      break;
-    }
-    case Decl::VarTemplate: {
-      Out << "<var template> " << *cast<VarTemplateDecl>(I) << "\n";
-      break;
-    }
-    case Decl::StaticAssert: {
-      Out << "<static assert>\n";
       break;
     }
     default:

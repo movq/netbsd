@@ -1,4 +1,4 @@
-/*	$NetBSD: pmap.h,v 1.61 2016/11/04 05:41:01 macallan Exp $	*/
+/*	$NetBSD: pmap.h,v 1.58 2014/04/14 10:54:08 martin Exp $	*/
 
 /*-
  * Copyright (C) 1995, 1996 Wolfgang Solfrank.
@@ -40,9 +40,6 @@
 #include <uvm/uvm_object.h>
 #ifdef _KERNEL
 #include <machine/cpuset.h>
-#ifdef SUN4V
-#include <machine/hypervisor.h>
-#endif
 #endif
 #endif
 
@@ -164,7 +161,7 @@ struct prom_map {
 	uint64_t	tte;
 };
 
-#define PMAP_NC		0x001	/* Don't cache, set the E bit in the page */
+#define PMAP_NC		0x001	/* Set the E bit in the page */
 #define PMAP_NVC	0x002	/* Don't enable the virtual cache */
 #define PMAP_LITTLE	0x004	/* Map in little endian mode */
 /* Large page size hints --
@@ -177,7 +174,6 @@ struct prom_map {
 /* If these bits are different in va's to the same PA
    then there is an aliasing in the d$ */
 #define VA_ALIAS_MASK   (1 << 13)
-#define PMAP_WC		0x20	/* allow write combinimg */
 
 #ifdef	_KERNEL
 #ifdef PMAP_COUNT_DEBUG
@@ -238,7 +234,7 @@ void		pmap_zero_page_phys(paddr_t);
 #ifdef SUN4V
 /* sun4v specific */
 void		pmap_setup_intstack_sun4v(paddr_t);
-void		pmap_setup_tsb_sun4v(struct tsb_desc*);
+void		pmap_setup_tsb_sun4v(void);
 #endif
 
 /* Installed physical memory, as discovered during bootstrap. */

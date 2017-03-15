@@ -85,16 +85,15 @@ static void http_client_tx_ready(int sock, void *eloop_ctx, void *sock_ctx)
 {
 	struct http_client *c = eloop_ctx;
 	int res;
-	size_t send_len;
 
-	send_len = wpabuf_len(c->req) - c->req_pos;
 	wpa_printf(MSG_DEBUG, "HTTP: Send client request to %s:%d (%lu of %lu "
 		   "bytes remaining)",
 		   inet_ntoa(c->dst.sin_addr), ntohs(c->dst.sin_port),
 		   (unsigned long) wpabuf_len(c->req),
-		   (unsigned long) send_len);
+		   (unsigned long) wpabuf_len(c->req) - c->req_pos);
 
-	res = send(c->sd, wpabuf_head_u8(c->req) + c->req_pos, send_len, 0);
+	res = send(c->sd, wpabuf_head_u8(c->req) + c->req_pos,
+		   wpabuf_len(c->req) - c->req_pos, 0);
 	if (res < 0) {
 		wpa_printf(MSG_DEBUG, "HTTP: Failed to send buffer: %s",
 			   strerror(errno));
@@ -103,11 +102,12 @@ static void http_client_tx_ready(int sock, void *eloop_ctx, void *sock_ctx)
 		return;
 	}
 
-	if ((size_t) res < send_len) {
+	if ((size_t) res < wpabuf_len(c->req) - c->req_pos) {
 		wpa_printf(MSG_DEBUG, "HTTP: Sent %d of %lu bytes; %lu bytes "
 			   "remaining",
 			   res, (unsigned long) wpabuf_len(c->req),
-			   (unsigned long) send_len - res);
+			   (unsigned long) wpabuf_len(c->req) - c->req_pos -
+			   res);
 		c->req_pos += res;
 		return;
 	}
@@ -146,20 +146,24 @@ struct http_client * http_client_addr(struct sockaddr_in *dst,
 	c->cb_ctx = cb_ctx;
 
 	c->sd = socket(AF_INET, SOCK_STREAM, 0);
-	if (c->sd < 0)
-		goto fail;
+	if (c->sd < 0) {
+		http_client_free(c);
+		return NULL;
+	}
 
 	if (fcntl(c->sd, F_SETFL, O_NONBLOCK) != 0) {
 		wpa_printf(MSG_DEBUG, "HTTP: fnctl(O_NONBLOCK) failed: %s",
 			   strerror(errno));
-		goto fail;
+		http_client_free(c);
+		return NULL;
 	}
 
 	if (connect(c->sd, (struct sockaddr *) dst, sizeof(*dst))) {
 		if (errno != EINPROGRESS) {
 			wpa_printf(MSG_DEBUG, "HTTP: Failed to connect: %s",
 				   strerror(errno));
-			goto fail;
+			http_client_free(c);
+			return NULL;
 		}
 
 		/*
@@ -169,18 +173,20 @@ struct http_client * http_client_addr(struct sockaddr_in *dst,
 	}
 
 	if (eloop_register_sock(c->sd, EVENT_TYPE_WRITE, http_client_tx_ready,
-				c, NULL) ||
-	    eloop_register_timeout(HTTP_CLIENT_TIMEOUT_SEC, 0,
-				   http_client_timeout, c, NULL))
-		goto fail;
+				c, NULL)) {
+		http_client_free(c);
+		return NULL;
+	}
+
+	if (eloop_register_timeout(HTTP_CLIENT_TIMEOUT_SEC, 0,
+				   http_client_timeout, c, NULL)) {
+		http_client_free(c);
+		return NULL;
+	}
 
 	c->req = req;
 
 	return c;
-
-fail:
-	http_client_free(c);
-	return NULL;
 }
 
 

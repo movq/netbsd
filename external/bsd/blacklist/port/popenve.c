@@ -1,4 +1,4 @@
-/*	$NetBSD: popenve.c,v 1.2 2015/01/22 03:10:50 christos Exp $	*/
+/*	$NetBSD: popenve.c,v 1.2.2.2 2015/04/30 06:07:34 riz Exp $	*/
 
 /*
  * Copyright (c) 1988, 1993
@@ -41,7 +41,7 @@
 #if 0
 static char sccsid[] = "@(#)popen.c	8.3 (Berkeley) 5/3/95";
 #else
-__RCSID("$NetBSD: popenve.c,v 1.2 2015/01/22 03:10:50 christos Exp $");
+__RCSID("$NetBSD: popenve.c,v 1.2.2.2 2015/04/30 06:07:34 riz Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 

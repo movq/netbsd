@@ -5,7 +5,7 @@
    This code has no license restrictions, and is considered public
    domain.
 
-   Changes copyright (C) 2005-2015 Free Software Foundation, Inc.
+   Changes copyright (C) 2005-2013 Free Software Foundation, Inc.
    Contributed by Sebastian Pop <sebastian.pop@inria.fr>
 
 This file is part of GCC.
@@ -33,16 +33,6 @@ along with GCC; see the file COPYING3.  If not see
 #include "config.h"
 #include "system.h"
 #include "coretypes.h"
-#include "hash-set.h"
-#include "machmode.h"
-#include "vec.h"
-#include "double-int.h"
-#include "input.h"
-#include "alias.h"
-#include "symtab.h"
-#include "options.h"
-#include "wide-int.h"
-#include "inchash.h"
 #include "tree.h"
 #include "diagnostic-core.h"
 #include "dumpfile.h"
@@ -317,23 +307,6 @@ omega_print_vars (FILE *file, omega_pb pb)
     }
 
   fprintf (file, "\n");
-}
-
-/* Dump problem PB.  */
-
-DEBUG_FUNCTION void
-debug (omega_pb_d &ref)
-{
-  omega_print_problem (stderr, &ref);
-}
-
-DEBUG_FUNCTION void
-debug (omega_pb_d *ptr)
-{
-  if (ptr)
-    debug (*ptr);
-  else
-    fprintf (stderr, "<nil>\n");
 }
 
 /* Debug problem PB.  */
@@ -2601,10 +2574,7 @@ omega_eliminate_red (omega_pb pb, bool eliminate_all)
 
   for (red_found = 0, e = pb->num_geqs - 1; e >= 0; e--)
     if (pb->geqs[e].color == omega_red)
-      {
-	red_found = 1;
-	break;
-      }
+      red_found = 1;
 
   if (!red_found)
     {
@@ -4866,10 +4836,7 @@ omega_problem_has_red_equations (omega_pb pb)
 
   for (e = pb->num_geqs - 1; e >= 0; e--)
     if (pb->geqs[e].color == omega_red)
-      {
-	result = true;
-	break;
-      }
+      result = true;
 
   if (!result)
     return false;
@@ -4922,10 +4889,7 @@ omega_problem_has_red_equations (omega_pb pb)
 
   for (e = pb->num_geqs - 1; e >= 0; e--)
     if (pb->geqs[e].color == omega_red)
-      {
-	result = true;
-	break;
-      }
+      result = true;
 
   if (dump_file && (dump_flags & TDF_DETAILS))
     {
@@ -5270,10 +5234,7 @@ omega_query_variable (omega_pb pb, int i, int *lower_bound, int *upper_bound)
 
   for (e = pb->num_subs - 1; e >= 0; e--)
     if (pb->subs[e].coef[i] != 0)
-      {
-	coupled = true;
-	break;
-      }
+      coupled = true;
 
   for (e = pb->num_eqs - 1; e >= 0; e--)
     if (pb->eqs[e].coef[i] != 0)

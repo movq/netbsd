@@ -1,14 +1,13 @@
-/*	$NetBSD: subr_pool.c,v 1.207 2017/03/14 03:13:50 riastradh Exp $	*/
+/*	$NetBSD: subr_pool.c,v 1.203.2.1 2016/03/06 17:32:02 martin Exp $	*/
 
 /*-
- * Copyright (c) 1997, 1999, 2000, 2002, 2007, 2008, 2010, 2014, 2015
+ * Copyright (c) 1997, 1999, 2000, 2002, 2007, 2008, 2010, 2014
  *     The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
  * by Paul Kranenburg; by Jason R. Thorpe of the Numerical Aerospace
- * Simulation Facility, NASA Ames Research Center; by Andrew Doran, and by
- * Maxime Villard.
+ * Simulation Facility, NASA Ames Research Center, and by Andrew Doran.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,12 +32,10 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: subr_pool.c,v 1.207 2017/03/14 03:13:50 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: subr_pool.c,v 1.203.2.1 2016/03/06 17:32:02 martin Exp $");
 
-#ifdef _KERNEL_OPT
 #include "opt_ddb.h"
 #include "opt_lockdebug.h"
-#endif
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -83,17 +80,6 @@ static struct pool phpool[PHPOOL_MAX];
 #ifdef POOL_SUBPAGE
 /* Pool of subpages for use by normal pools. */
 static struct pool psppool;
-#endif
-
-#ifdef POOL_REDZONE
-# define POOL_REDZONE_SIZE 2
-static void pool_redzone_init(struct pool *, size_t);
-static void pool_redzone_fill(struct pool *, void *);
-static void pool_redzone_check(struct pool *, void *);
-#else
-# define pool_redzone_init(pp, sz)	/* NOTHING */
-# define pool_redzone_fill(pp, ptr)	/* NOTHING */
-# define pool_redzone_check(pp, ptr)	/* NOTHING */
 #endif
 
 static void *pool_page_alloc_meta(struct pool *, int);
@@ -382,10 +368,12 @@ pr_rmpage(struct pool *pp, struct pool_item_header *ph,
 	 * If the page was idle, decrement the idle page count.
 	 */
 	if (ph->ph_nmissing == 0) {
-		KASSERT(pp->pr_nidle != 0);
-		KASSERTMSG((pp->pr_nitems >= pp->pr_itemsperpage),
-		    "nitems=%u < itemsperpage=%u",
-		    pp->pr_nitems, pp->pr_itemsperpage);
+#ifdef DIAGNOSTIC
+		if (pp->pr_nidle == 0)
+			panic("pr_rmpage: nidle inconsistent");
+		if (pp->pr_nitems < pp->pr_itemsperpage)
+			panic("pr_rmpage: nitems inconsistent");
+#endif
 		pp->pr_nidle--;
 	}
 
@@ -471,7 +459,7 @@ pool_init(struct pool *pp, size_t size, u_int align, u_int ioff, int flags,
     const char *wchan, struct pool_allocator *palloc, int ipl)
 {
 	struct pool *pp1;
-	size_t trysize, phsize, prsize;
+	size_t trysize, phsize;
 	int off, slack;
 
 #ifdef DEBUG
@@ -518,14 +506,14 @@ pool_init(struct pool *pp, size_t size, u_int align, u_int ioff, int flags,
 	if (align == 0)
 		align = ALIGN(1);
 
-	prsize = size;
-	if ((flags & PR_NOTOUCH) == 0 && prsize < sizeof(struct pool_item))
-		prsize = sizeof(struct pool_item);
+	if ((flags & PR_NOTOUCH) == 0 && size < sizeof(struct pool_item))
+		size = sizeof(struct pool_item);
 
-	prsize = roundup(prsize, align);
-	KASSERTMSG((prsize <= palloc->pa_pagesz),
-	    "pool_init: pool item size (%zu) larger than page size (%u)",
-	    prsize, palloc->pa_pagesz);
+	size = roundup(size, align);
+#ifdef DIAGNOSTIC
+	if (size > palloc->pa_pagesz)
+		panic("pool_init: pool item size (%zu) too large", size);
+#endif
 
 	/*
 	 * Initialize the pool structure.
@@ -541,7 +529,7 @@ pool_init(struct pool *pp, size_t size, u_int align, u_int ioff, int flags,
 	pp->pr_maxpages = UINT_MAX;
 	pp->pr_roflags = flags;
 	pp->pr_flags = 0;
-	pp->pr_size = prsize;
+	pp->pr_size = size;
 	pp->pr_align = align;
 	pp->pr_wchan = wchan;
 	pp->pr_alloc = palloc;
@@ -556,7 +544,6 @@ pool_init(struct pool *pp, size_t size, u_int align, u_int ioff, int flags,
 	pp->pr_drain_hook = NULL;
 	pp->pr_drain_hook_arg = NULL;
 	pp->pr_freecheck = NULL;
-	pool_redzone_init(pp, size);
 
 	/*
 	 * Decide whether to put the page header off page to avoid
@@ -695,8 +682,14 @@ pool_destroy(struct pool *pp)
 	mutex_enter(&pp->pr_lock);
 
 	KASSERT(pp->pr_cache == NULL);
-	KASSERTMSG((pp->pr_nout == 0),
-	    "pool_destroy: pool busy: still out: %u", pp->pr_nout);
+
+#ifdef DIAGNOSTIC
+	if (pp->pr_nout != 0) {
+		panic("pool_destroy: pool busy: still out: %u",
+		    pp->pr_nout);
+	}
+#endif
+
 	KASSERT(LIST_EMPTY(&pp->pr_fullpages));
 	KASSERT(LIST_EMPTY(&pp->pr_partpages));
 
@@ -717,8 +710,10 @@ pool_set_drain_hook(struct pool *pp, void (*fn)(void *, int), void *arg)
 {
 
 	/* XXX no locking -- must be used just after pool_init() */
-	KASSERTMSG((pp->pr_drain_hook == NULL),
-	    "pool_set_drain_hook(%s): already set", pp->pr_wchan);
+#ifdef DIAGNOSTIC
+	if (pp->pr_drain_hook != NULL)
+		panic("pool_set_drain_hook(%s): already set", pp->pr_wchan);
+#endif
 	pp->pr_drain_hook = fn;
 	pp->pr_drain_hook_arg = arg;
 }
@@ -746,13 +741,15 @@ pool_get(struct pool *pp, int flags)
 	struct pool_item_header *ph;
 	void *v;
 
-	KASSERTMSG((pp->pr_itemsperpage != 0),
-	    "pool_get: pool '%s': pr_itemsperpage is zero, "
-	    "pool not initialized?", pp->pr_wchan);
-	KASSERTMSG((!(cpu_intr_p() || cpu_softintr_p())
-		|| pp->pr_ipl != IPL_NONE || cold || panicstr != NULL),
-	    "pool '%s' is IPL_NONE, but called from interrupt context",
-	    pp->pr_wchan);
+#ifdef DIAGNOSTIC
+	if (pp->pr_itemsperpage == 0)
+		panic("pool_get: pool '%s': pr_itemsperpage is zero, "
+		    "pool not initialized?", pp->pr_wchan);
+	if ((cpu_intr_p() || cpu_softintr_p()) && pp->pr_ipl == IPL_NONE &&
+	    !cold && panicstr == NULL)
+		panic("pool '%s' is IPL_NONE, but called from "
+		    "interrupt context\n", pp->pr_wchan);
+#endif
 	if (flags & PR_WAITOK) {
 		ASSERT_SLEEPABLE();
 	}
@@ -764,8 +761,12 @@ pool_get(struct pool *pp, int flags)
 	 * and we can wait, then wait until an item has been returned to
 	 * the pool.
 	 */
-	KASSERTMSG((pp->pr_nout <= pp->pr_hardlimit),
-	    "pool_get: %s: crossed hard limit", pp->pr_wchan);
+#ifdef DIAGNOSTIC
+	if (__predict_false(pp->pr_nout > pp->pr_hardlimit)) {
+		mutex_exit(&pp->pr_lock);
+		panic("pool_get: %s: crossed hard limit", pp->pr_wchan);
+	}
+#endif
 	if (__predict_false(pp->pr_nout == pp->pr_hardlimit)) {
 		if (pp->pr_drain_hook != NULL) {
 			/*
@@ -813,10 +814,14 @@ pool_get(struct pool *pp, int flags)
 	if ((ph = pp->pr_curpage) == NULL) {
 		int error;
 
-		KASSERTMSG((pp->pr_nitems == 0),
-		    "pool_get: nitems inconsistent"
-		    ": %s: curpage NULL, nitems %u",
-		    pp->pr_wchan, pp->pr_nitems);
+#ifdef DIAGNOSTIC
+		if (pp->pr_nitems != 0) {
+			mutex_exit(&pp->pr_lock);
+			printf("pool_get: %s: curpage NULL, nitems %u\n",
+			    pp->pr_wchan, pp->pr_nitems);
+			panic("pool_get: nitems inconsistent");
+		}
+#endif
 
 		/*
 		 * Call the back-end page allocator for more memory.
@@ -843,8 +848,12 @@ pool_get(struct pool *pp, int flags)
 		goto startover;
 	}
 	if (pp->pr_roflags & PR_NOTOUCH) {
-		KASSERTMSG((ph->ph_nmissing < pp->pr_itemsperpage),
-		    "pool_get: %s: page empty", pp->pr_wchan);
+#ifdef DIAGNOSTIC
+		if (__predict_false(ph->ph_nmissing == pp->pr_itemsperpage)) {
+			mutex_exit(&pp->pr_lock);
+			panic("pool_get: %s: page empty", pp->pr_wchan);
+		}
+#endif
 		v = pr_item_notouch_get(pp, ph);
 	} else {
 		v = pi = LIST_FIRST(&ph->ph_itemlist);
@@ -852,14 +861,22 @@ pool_get(struct pool *pp, int flags)
 			mutex_exit(&pp->pr_lock);
 			panic("pool_get: %s: page empty", pp->pr_wchan);
 		}
-		KASSERTMSG((pp->pr_nitems > 0),
-		    "pool_get: nitems inconsistent"
-		    ": %s: items on itemlist, nitems %u",
-		    pp->pr_wchan, pp->pr_nitems);
-		KASSERTMSG((pi->pi_magic == PI_MAGIC),
-		    "pool_get(%s): free list modified: "
-		    "magic=%x; page %p; item addr %p",
-		    pp->pr_wchan, pi->pi_magic, ph->ph_page, pi);
+#ifdef DIAGNOSTIC
+		if (__predict_false(pp->pr_nitems == 0)) {
+			mutex_exit(&pp->pr_lock);
+			printf("pool_get: %s: items on itemlist, nitems %u\n",
+			    pp->pr_wchan, pp->pr_nitems);
+			panic("pool_get: nitems inconsistent");
+		}
+#endif
+
+#ifdef DIAGNOSTIC
+		if (__predict_false(pi->pi_magic != PI_MAGIC)) {
+			panic("pool_get(%s): free list modified: "
+			    "magic=%x; page %p; item addr %p\n",
+			    pp->pr_wchan, pi->pi_magic, ph->ph_page, pi);
+		}
+#endif
 
 		/*
 		 * Remove from item list.
@@ -869,7 +886,10 @@ pool_get(struct pool *pp, int flags)
 	pp->pr_nitems--;
 	pp->pr_nout++;
 	if (ph->ph_nmissing == 0) {
-		KASSERT(pp->pr_nidle > 0);
+#ifdef DIAGNOSTIC
+		if (__predict_false(pp->pr_nidle == 0))
+			panic("pool_get: nidle inconsistent");
+#endif
 		pp->pr_nidle--;
 
 		/*
@@ -881,9 +901,14 @@ pool_get(struct pool *pp, int flags)
 	}
 	ph->ph_nmissing++;
 	if (ph->ph_nmissing == pp->pr_itemsperpage) {
-		KASSERTMSG(((pp->pr_roflags & PR_NOTOUCH) ||
-			LIST_EMPTY(&ph->ph_itemlist)),
-		    "pool_get: %s: nmissing inconsistent", pp->pr_wchan);
+#ifdef DIAGNOSTIC
+		if (__predict_false((pp->pr_roflags & PR_NOTOUCH) == 0 &&
+		    !LIST_EMPTY(&ph->ph_itemlist))) {
+			mutex_exit(&pp->pr_lock);
+			panic("pool_get: %s: nmissing inconsistent",
+			    pp->pr_wchan);
+		}
+#endif
 		/*
 		 * This page is now full.  Move it to the full list
 		 * and select a new current page.
@@ -910,7 +935,6 @@ pool_get(struct pool *pp, int flags)
 	mutex_exit(&pp->pr_lock);
 	KASSERT((((vaddr_t)v + pp->pr_itemoffset) & (pp->pr_align - 1)) == 0);
 	FREECHECK_OUT(&pp->pr_freecheck, v);
-	pool_redzone_fill(pp, v);
 	return (v);
 }
 
@@ -924,12 +948,16 @@ pool_do_put(struct pool *pp, void *v, struct pool_pagelist *pq)
 	struct pool_item_header *ph;
 
 	KASSERT(mutex_owned(&pp->pr_lock));
-	pool_redzone_check(pp, v);
 	FREECHECK_IN(&pp->pr_freecheck, v);
 	LOCKDEBUG_MEM_CHECK(v, pp->pr_size);
 
-	KASSERTMSG((pp->pr_nout > 0),
-	    "pool_put: pool %s: putting with none out", pp->pr_wchan);
+#ifdef DIAGNOSTIC
+	if (__predict_false(pp->pr_nout == 0)) {
+		printf("pool %s: putting with none out\n",
+		    pp->pr_wchan);
+		panic("pool_put");
+	}
+#endif
 
 	if (__predict_false((ph = pr_find_pagehead(pp, v)) == NULL)) {
 		panic("pool_put: %s: page header missing", pp->pr_wchan);
@@ -1110,9 +1138,12 @@ pool_prime_page(struct pool *pp, void *storage, struct pool_item_header *ph)
 	int n;
 
 	KASSERT(mutex_owned(&pp->pr_lock));
-	KASSERTMSG(((pp->pr_roflags & PR_NOALIGN) ||
-		(((uintptr_t)cp & (pp->pr_alloc->pa_pagesz - 1)) == 0)),
-	    "pool_prime_page: %s: unaligned page: %p", pp->pr_wchan, cp);
+
+#ifdef DIAGNOSTIC
+	if ((pp->pr_roflags & PR_NOALIGN) == 0 &&
+	    ((uintptr_t)cp & (pp->pr_alloc->pa_pagesz - 1)) != 0)
+		panic("pool_prime_page: %s: unaligned page", pp->pr_wchan);
+#endif
 
 	/*
 	 * Insert page header.
@@ -1438,7 +1469,9 @@ pool_print_pagelist(struct pool *pp, struct pool_pagelist *pl,
     void (*pr)(const char *, ...))
 {
 	struct pool_item_header *ph;
-	struct pool_item *pi __diagused;
+#ifdef DIAGNOSTIC
+	struct pool_item *pi;
+#endif
 
 	LIST_FOREACH(ph, pl, ph_pagelist) {
 		(*pr)("\t\tpage %p, nmissing %d, time %" PRIu32 "\n",
@@ -2155,7 +2188,6 @@ pool_cache_get_slow(pool_cache_cpu_t *cc, int s, void **objectp,
 	}
 
 	FREECHECK_OUT(&pc->pc_freecheck, object);
-	pool_redzone_fill(&pc->pc_pool, object);
 	return false;
 }
 
@@ -2201,7 +2233,6 @@ pool_cache_get_paddr(pool_cache_t pc, int flags, paddr_t *pap)
 			cc->cc_hits++;
 			splx(s);
 			FREECHECK_OUT(&pc->pc_freecheck, object);
-			pool_redzone_fill(&pc->pc_pool, object);
 			return object;
 		}
 
@@ -2345,7 +2376,6 @@ pool_cache_put_paddr(pool_cache_t pc, void *object, paddr_t pa)
 	int s;
 
 	KASSERT(object != NULL);
-	pool_redzone_check(&pc->pc_pool, object);
 	FREECHECK_IN(&pc->pc_freecheck, object);
 
 	/* Lock out interrupts and disable preemption. */
@@ -2566,120 +2596,6 @@ pool_page_free_meta(struct pool *pp, void *v)
 
 	vmem_free(kmem_meta_arena, (vmem_addr_t)v, pp->pr_alloc->pa_pagesz);
 }
-
-#ifdef POOL_REDZONE
-#if defined(_LP64)
-# define PRIME 0x9e37fffffffc0000UL
-#else /* defined(_LP64) */
-# define PRIME 0x9e3779b1
-#endif /* defined(_LP64) */
-#define STATIC_BYTE	0xFE
-CTASSERT(POOL_REDZONE_SIZE > 1);
-
-static inline uint8_t
-pool_pattern_generate(const void *p)
-{
-	return (uint8_t)(((uintptr_t)p) * PRIME
-	   >> ((sizeof(uintptr_t) - sizeof(uint8_t))) * CHAR_BIT);
-}
-
-static void
-pool_redzone_init(struct pool *pp, size_t requested_size)
-{
-	size_t nsz;
-
-	if (pp->pr_roflags & PR_NOTOUCH) {
-		pp->pr_reqsize = 0;
-		pp->pr_redzone = false;
-		return;
-	}
-
-	/*
-	 * We may have extended the requested size earlier; check if
-	 * there's naturally space in the padding for a red zone.
-	 */
-	if (pp->pr_size - requested_size >= POOL_REDZONE_SIZE) {
-		pp->pr_reqsize = requested_size;
-		pp->pr_redzone = true;
-		return;
-	}
-
-	/*
-	 * No space in the natural padding; check if we can extend a
-	 * bit the size of the pool.
-	 */
-	nsz = roundup(pp->pr_size + POOL_REDZONE_SIZE, pp->pr_align);
-	if (nsz <= pp->pr_alloc->pa_pagesz) {
-		/* Ok, we can */
-		pp->pr_size = nsz;
-		pp->pr_reqsize = requested_size;
-		pp->pr_redzone = true;
-	} else {
-		/* No space for a red zone... snif :'( */
-		pp->pr_reqsize = 0;
-		pp->pr_redzone = false;
-		printf("pool redzone disabled for '%s'\n", pp->pr_wchan);
-	}
-}
-
-static void
-pool_redzone_fill(struct pool *pp, void *p)
-{
-	uint8_t *cp, pat;
-	const uint8_t *ep;
-
-	if (!pp->pr_redzone)
-		return;
-
-	cp = (uint8_t *)p + pp->pr_reqsize;
-	ep = cp + POOL_REDZONE_SIZE;
-
-	/*
-	 * We really don't want the first byte of the red zone to be '\0';
-	 * an off-by-one in a string may not be properly detected.
-	 */
-	pat = pool_pattern_generate(cp);
-	*cp = (pat == '\0') ? STATIC_BYTE: pat;
-	cp++;
-
-	while (cp < ep) {
-		*cp = pool_pattern_generate(cp);
-		cp++;
-	}
-}
-
-static void
-pool_redzone_check(struct pool *pp, void *p)
-{
-	uint8_t *cp, pat, expected;
-	const uint8_t *ep;
-
-	if (!pp->pr_redzone)
-		return;
-
-	cp = (uint8_t *)p + pp->pr_reqsize;
-	ep = cp + POOL_REDZONE_SIZE;
-
-	pat = pool_pattern_generate(cp);
-	expected = (pat == '\0') ? STATIC_BYTE: pat;
-	if (expected != *cp) {
-		panic("%s: %p: 0x%02x != 0x%02x\n",
-		   __func__, cp, *cp, expected);
-	}
-	cp++;
-
-	while (cp < ep) {
-		expected = pool_pattern_generate(cp);
-		if (*cp != expected) {
-			panic("%s: %p: 0x%02x != 0x%02x\n",
-			   __func__, cp, *cp, expected);
-		}
-		cp++;
-	}
-}
-
-#endif /* POOL_REDZONE */
-
 
 #ifdef POOL_SUBPAGE
 /* Sub-page allocator, for machines with large hardware pages. */

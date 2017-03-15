@@ -1,4 +1,4 @@
-/* $NetBSD: amlogic_io.c,v 1.13 2015/11/21 00:54:57 jmcneill Exp $ */
+/* $NetBSD: amlogic_io.c,v 1.7.2.4 2015/04/30 19:34:40 snj Exp $ */
 
 /*-
  * Copyright (c) 2015 Jared D. McNeill <jmcneill@invisible.ca>
@@ -29,7 +29,7 @@
 #include "opt_amlogic.h"
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: amlogic_io.c,v 1.13 2015/11/21 00:54:57 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: amlogic_io.c,v 1.7.2.4 2015/04/30 19:34:40 snj Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -75,10 +75,10 @@ static const struct amlogic_locators amlogic_locators[] = {
     AMLOGIC_USB1_OFFSET, AMLOGIC_USB_SIZE, 1, AMLOGIC_INTR_USB1 },
   { "awge",
     AMLOGIC_GMAC_OFFSET, AMLOGIC_GMAC_SIZE, NOPORT, AMLOGIC_INTR_GMAC },
-  { "amlogicsdio",
-    AMLOGIC_SDIO_OFFSET, AMLOGIC_SDIO_SIZE, NOPORT, AMLOGIC_INTR_SDIO },
   { "amlogicsdhc",
-    AMLOGIC_SDHC_OFFSET, AMLOGIC_SDHC_SIZE, NOPORT, AMLOGIC_INTR_SDHC },
+    AMLOGIC_SDHC_OFFSET, AMLOGIC_SDHC_SIZE, 1, AMLOGIC_INTR_SDHC },
+  { "amlogicsdhc",
+    AMLOGIC_SDHC_OFFSET, AMLOGIC_SDHC_SIZE, 2, AMLOGIC_INTR_SDHC },
   { "amlogicrtc",
     AMLOGIC_RTC_OFFSET, AMLOGIC_RTC_SIZE, NOPORT, AMLOGIC_INTR_RTC },
 };
@@ -99,7 +99,6 @@ amlogicio_attach(device_t parent, device_t self, void *aux)
 	aprint_naive("\n");
 	aprint_normal("\n");
 
-	amlogic_wdog_init();
 	amlogic_usbphy_init(0);
 	amlogic_usbphy_init(1);
 
@@ -110,8 +109,8 @@ amlogicio_attach(device_t parent, device_t self, void *aux)
 	     loc++) {
 		struct amlogicio_attach_args aio = {
 			.aio_loc = *loc,
-			.aio_core_bst = &armv7_generic_bs_tag,
-			.aio_core_a4x_bst = &armv7_generic_a4x_bs_tag,
+			.aio_core_bst = &amlogic_bs_tag,
+			.aio_core_a4x_bst = &amlogic_a4x_bs_tag,
 			.aio_bsh = amlogic_core_bsh,
 			.aio_dmat = &amlogic_dma_tag,
 		};

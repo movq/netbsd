@@ -1,4 +1,4 @@
-/*	$NetBSD: iscsid_driverif.c,v 1.8 2016/05/29 13:35:45 mlelstv Exp $	*/
+/*	$NetBSD: iscsid_driverif.c,v 1.6 2012/12/29 08:28:20 mlelstv Exp $	*/
 
 /*-
  * Copyright (c) 2005,2006,2011 The NetBSD Foundation, Inc.
@@ -70,13 +70,18 @@ set_node_name(iscsid_set_node_name_req_t * par)
 
 	node_name = *par;
 
+#ifdef ISCSI_DEBUG				/* DEBUG ONLY: Allow op without driver present */
+	if (driver < 0)
+		return ISCSID_STATUS_SUCCESS;
+#endif
+
 	strlcpy((char *)snp.InitiatorName, (char *)par->InitiatorName,
 		sizeof(snp.InitiatorName));
 	strlcpy((char *)snp.InitiatorAlias, (char *)par->InitiatorAlias,
 		sizeof(snp.InitiatorAlias));
 	memcpy(snp.ISID, par->ISID, 6);
 
-	DEB(10, ("Setting Node Name: %s (%s)",
+	DEB(10, ("Setting Node Name: %s (%s)\n",
 			 snp.InitiatorName, snp.InitiatorAlias));
 	(void)ioctl(driver, ISCSI_SET_NODE_NAME, &snp);
 	return snp.status;
@@ -101,7 +106,7 @@ bind_socket(int sock, uint8_t * addr)
 	struct sockaddr_in serverAddress;
 	struct hostent *host;
 
-	DEB(8, ("Binding to <%s>", addr));
+	DEB(8, ("Binding to <%s>\n", addr));
 	(void) memset(&serverAddress, 0x0, sizeof(serverAddress));
 	host = gethostbyname((char *)addr);
 	if (host == NULL)
@@ -187,7 +192,7 @@ make_connection(session_t * sess, iscsid_login_req_t * req,
 	struct hostent *host;
 	initiator_t *init;
 
-	DEB(9, ("Make Connection sess=%p, req=%p, res=%p, stid=%p",
+	DEB(9, ("Make Connection sess=%p, req=%p, res=%p, stid=%p\n",
 			 sess, req, res, stid));
 	(void) memset(&loginp, 0x0, sizeof(loginp));
 	(void) memset(&serverAddress, 0x0, sizeof(serverAddress));
@@ -245,7 +250,7 @@ make_connection(session_t * sess, iscsid_login_req_t * req,
 				res->status = ISCSID_STATUS_INVALID_PORTAL_ID;
 				return NULL;
 			}
-			DEB(1, ("find_free_portal returns pid=%d", portal->entry.sid.id));
+			DEB(1, ("find_free_portal returns pid=%d\n", portal->entry.sid.id));
 		} else
 			target = portal->target;
 
@@ -275,7 +280,7 @@ make_connection(session_t * sess, iscsid_login_req_t * req,
 		init = select_initiator();
 
 	/* translate target address */
-	DEB(8, ("Connecting to <%s>, port %d", addr->address, addr->port));
+	DEB(8, ("Connecting to <%s>, port %d\n", addr->address, addr->port));
 
 	host = gethostbyname((char *)addr->address);
 	if (host == NULL) {
@@ -296,7 +301,7 @@ make_connection(session_t * sess, iscsid_login_req_t * req,
 		res->status = ISCSID_STATUS_HOST_ERROR;
 		return NULL;
 	}
-	DEB(8, ("Gethostbyname OK, addrtype %d, len %d, addr %x",
+	DEB(8, ("Gethostbyname OK, addrtype %d, len %d, addr %x\n",
 			host->h_addrtype, host->h_length, *((int *) host->h_addr_list[0])));
 	serverAddress.sin_family = host->h_addrtype;
 	serverAddress.sin_port = htons((addr->port)
@@ -327,13 +332,13 @@ make_connection(session_t * sess, iscsid_login_req_t * req,
 		}
 	}
 
-	DEB(8, ("Connecting socket"));
+	DEB(8, ("Connecting socket\n"));
 	if (connect(sock, (struct sockaddr *)(void *)&serverAddress,
 		(socklen_t)sizeof(serverAddress)) < 0) {
 		close(sock);
 		free(conn);
 		res->status = ISCSID_STATUS_CONNECT_ERROR;
-		DEB(1, ("Connecting to socket failed (error %d), returning %d",
+		DEB(1, ("Connecting to socket failed (error %d), returning %d\n",
 				errno, res->status));
 		return NULL;
 	}
@@ -417,7 +422,7 @@ make_connection(session_t * sess, iscsid_login_req_t * req,
 	} else
 		loginp.login_type = ISCSI_LOGINTYPE_DISCOVERY;
 
-	DEB(5, ("Calling Login..."));
+	DEB(5, ("Calling Login...\n"));
 
 	ret = ioctl(driver, (sess != NULL && sess->num_connections)
 				? ISCSI_ADD_CONNECTION : ISCSI_LOGIN, &loginp);
@@ -509,7 +514,7 @@ event_recover_connection(uint32_t sid, uint32_t cid)
 	struct sockaddr_in serverAddress;
 	struct hostent *host;
 
-	DEB(1, ("Event_Recover_Connection sid=%d, cid=%d", sid, cid));
+	DEB(1, ("Event_Recover_Connection sid=%d, cid=%d\n", sid, cid));
 	(void) memset(&serverAddress, 0x0, sizeof(serverAddress));
 
 	LOCK_SESSIONS;
@@ -540,15 +545,15 @@ event_recover_connection(uint32_t sid, uint32_t cid)
 	conn->portal.addr = *addr;
 
 	/* translate target address */
-	DEB(1, ("Event_Recover_Connection Connecting to <%s>, port %d",
+	DEB(1, ("Event_Recover_Connection Connecting to <%s>, port %d\n",
 			addr->address, addr->port));
 
 	if ((host = gethostbyname((char *)addr->address)) == NULL) {
-		DEB(1, ("GetHostByName failed (error %d)", h_errno));
+		DEB(1, ("GetHostByName failed (error %d)\n", h_errno));
 		return;
 	}
 	if (host->h_length > (int)sizeof(serverAddress.sin_addr)) {
-		DEB(1, ("Host address length invalid (%d)", host->h_length));
+		DEB(1, ("Host address length invalid (%d)\n", host->h_length));
 		return;
 	}
 
@@ -561,15 +566,15 @@ event_recover_connection(uint32_t sid, uint32_t cid)
 	/* create and connect the socket */
 	sock = socket(AF_INET, SOCK_STREAM, 0);
 	if (sock < 0) {
-		DEB(1, ("Creating socket failed (error %d)", errno));
+		DEB(1, ("Creating socket failed (error %d)\n", errno));
 		return;
 	}
 
-	DEB(1, ("recover_connection: Socket = %d", sock));
+	DEB(1, ("recover_connection: Socket = %d\n", sock));
 
 	if (init) {
 		if (!bind_socket(sock, init->address)) {
-			DEB(1, ("Binding to interface failed (error %d)", errno));
+			DEB(1, ("Binding to interface failed (error %d)\n", errno));
 			close(sock);
 			return;
 		}
@@ -577,7 +582,7 @@ event_recover_connection(uint32_t sid, uint32_t cid)
 
 	if (connect(sock, (struct sockaddr *)(void *)&serverAddress,
 		(socklen_t)sizeof(serverAddress)) < 0) {
-		DEB(1, ("Connecting to socket failed (error %d)", errno));
+		DEB(1, ("Connecting to socket failed (error %d)\n", errno));
 		close(sock);
 		return;
 	}
@@ -604,7 +609,7 @@ event_recover_connection(uint32_t sid, uint32_t cid)
  */
 
 void
-log_in(iscsid_login_req_t * req, iscsid_response_t * res)
+login(iscsid_login_req_t * req, iscsid_response_t * res)
 {
 	session_t *sess;
 	connection_t *conn;
@@ -671,7 +676,7 @@ add_connection(iscsid_login_req_t * req, iscsid_response_t * res)
  */
 
 uint32_t
-log_out(iscsid_sym_id_t * req)
+logout(iscsid_sym_id_t * req)
 {
 	iscsi_logout_parameters_t logoutp;
 	session_t *sess;
@@ -689,7 +694,7 @@ log_out(iscsid_sym_id_t * req)
 	UNLOCK_SESSIONS;
 
 	ret = ioctl(driver, ISCSI_LOGOUT, &logoutp);
-	DEB(9, ("Logout returns %d, status = %d", ret, logoutp.status));
+	DEB(9, ("Logout returns %d, status = %d\n", ret, logoutp.status));
 
 	return logoutp.status;
 }
@@ -730,7 +735,7 @@ remove_connection(iscsid_remove_connection_req_t * req)
 	UNLOCK_SESSIONS;
 
 	ret = ioctl(driver, ISCSI_REMOVE_CONNECTION, &removep);
-	DEB(9, ("Remove Connection returns %d, status=%d", ret, removep.status));
+	DEB(9, ("Remove Connection returns %d, status=%d\n", ret, removep.status));
 
 	return removep.status;
 }
@@ -769,7 +774,7 @@ send_targets(uint32_t stid, uint8_t **response_buffer, uint32_t *response_size)
 	(void) memset(&logoutp, 0x0, sizeof(logoutp));
 	(void) memset(&res, 0x0, sizeof(res));
 	conn = make_connection(NULL, NULL, &res, &stid);
-	DEB(9, ("Make connection returns, status = %d", res.status));
+	DEB(9, ("Make connection returns, status = %d\n", res.status));
 
 	if (conn == NULL)
 		return res.status;
@@ -845,6 +850,10 @@ get_version(iscsid_response_t ** prsp, int *prsp_temp)
 	ver->minor = VERSION_MINOR;
 	strlcpy ((char *)ver->version_string, VERSION_STRING, sizeof(ver->version_string));
 
+#ifdef ISCSI_DEBUG				/* DEBUG ONLY: Allow op without driver present */
+	if (driver < 0)
+		return;
+#endif
 	ioctl(driver, ISCSI_GET_VERSION, &drv_ver);
 	ver->driver_interface_version = drv_ver.interface_version;
 	ver->driver_major = drv_ver.major;
@@ -905,24 +914,26 @@ void *
 /*ARGSUSED*/
 event_handler(void *par)
 {
-	void (*termf)(void) = par;
 	iscsi_wait_event_parameters_t evtp;
 	int rc;
 
-	DEB(10, ("Event handler starts"));
+	DEB(99, ("Event handler starts\n"));
 	(void) memset(&evtp, 0x0, sizeof(evtp));
 
 	evtp.event_id = event_reg.event_id;
 
 	do {
-		rc = ioctl(driver, ISCSI_WAIT_EVENT, &evtp);
+		if (nothreads)
+			rc = ioctl(driver, ISCSI_POLL_EVENT, &evtp);
+		else
+			rc = ioctl(driver, ISCSI_WAIT_EVENT, &evtp);
+
 		if (rc != 0) {
-			DEB(10, ("event_handler ioctl failed: %s",
-				strerror(errno)));
+			perror("ioctl");
 			break;
 		}
 
-		DEB(10, ("Got Event: kind %d, status %d, sid %d, cid %d, reason %d",
+		DEB(1, ("Got Event: kind %d, status %d, sid %d, cid %d, reason %d\n",
 				evtp.event_kind, evtp.status, evtp.session_id,
 				evtp.connection_id, evtp.reason));
 
@@ -941,15 +952,14 @@ event_handler(void *par)
 		case ISCSI_RECOVER_CONNECTION:
 			event_recover_connection(evtp.session_id, evtp.connection_id);
 			break;
+
 		default:
 			break;
 		}
 	} while (evtp.event_kind != ISCSI_DRIVER_TERMINATING);
 
-	if (termf != NULL)
-		(*termf)();
-
-	DEB(10, ("Event handler exits"));
+	if (nothreads && evtp.event_kind == ISCSI_DRIVER_TERMINATING)
+		exit_daemon();
 
 	return NULL;
 }
@@ -980,7 +990,7 @@ verify_connection(connection_t * conn)
 		sess->num_connections--;
 		free(conn);
 	}
-	DEB(9, ("Verify connection returns status %d", req.status));
+	DEB(9, ("Verify connection returns status %d\n", req.status));
 	return req.status;
 }
 

@@ -1,6 +1,6 @@
 /* Xtensa GNU/Linux native support.
 
-   Copyright (C) 2007-2016 Free Software Foundation, Inc.
+   Copyright (C) 2007-2014 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -18,12 +18,16 @@
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #include "defs.h"
+#include <string.h>
 #include "frame.h"
 #include "inferior.h"
 #include "gdbcore.h"
 #include "regcache.h"
+#include "gdb_assert.h"
 #include "target.h"
 #include "linux-nat.h"
+
+#include <stdint.h>
 #include <sys/types.h>
 #include <signal.h>
 #include <sys/user.h>
@@ -31,19 +35,26 @@
 #include "gdb_wait.h"
 #include <fcntl.h>
 #include <sys/procfs.h>
-#include "nat/gdb_ptrace.h"
+#include <sys/ptrace.h>
 #include <asm/ptrace.h>
 
 #include "gregset.h"
 #include "xtensa-tdep.h"
 
-/* Defines ps_err_e, struct ps_prochandle.  */
-#include "gdb_proc_service.h"
-
 /* Extended register set depends on hardware configs.
    Keeping these definitions separately allows to introduce
    hardware-specific overlays.  */
 #include "xtensa-xtregs.c"
+
+static int
+get_thread_id (ptid_t ptid)
+{
+  int tid = ptid_get_lwp (ptid);
+  if (0 == tid)
+    tid = ptid_get_pid (ptid);
+  return tid;
+}
+#define GET_THREAD_ID(PTID)	get_thread_id (PTID)
 
 void
 fill_gregset (const struct regcache *regcache,
@@ -96,7 +107,7 @@ fill_gregset (const struct regcache *regcache,
     }
 }
 
-static void
+void
 supply_gregset_reg (struct regcache *regcache,
 		    const gdb_gregset_t *gregsetp, int regnum)
 {
@@ -174,7 +185,7 @@ supply_fpregset (struct regcache *regcache,
 static void
 fetch_gregs (struct regcache *regcache, int regnum)
 {
-  int tid = ptid_get_lwp (inferior_ptid);
+  int tid = GET_THREAD_ID (inferior_ptid);
   const gdb_gregset_t regs;
   int areg;
   
@@ -193,7 +204,7 @@ fetch_gregs (struct regcache *regcache, int regnum)
 static void
 store_gregs (struct regcache *regcache, int regnum)
 {
-  int tid = ptid_get_lwp (inferior_ptid);
+  int tid = GET_THREAD_ID (inferior_ptid);
   gdb_gregset_t regs;
   int areg;
 
@@ -221,7 +232,7 @@ static int xtreg_high;
 static void
 fetch_xtregs (struct regcache *regcache, int regnum)
 {
-  int tid = ptid_get_lwp (inferior_ptid);
+  int tid = GET_THREAD_ID (inferior_ptid);
   const xtensa_regtable_t *ptr;
   char xtregs [XTENSA_ELF_XTREG_SIZE];
 
@@ -237,7 +248,7 @@ fetch_xtregs (struct regcache *regcache, int regnum)
 static void
 store_xtregs (struct regcache *regcache, int regnum)
 {
-  int tid = ptid_get_lwp (inferior_ptid);
+  int tid = GET_THREAD_ID (inferior_ptid);
   const xtensa_regtable_t *ptr;
   char xtregs [XTENSA_ELF_XTREG_SIZE];
 
@@ -253,7 +264,7 @@ store_xtregs (struct regcache *regcache, int regnum)
     perror_with_name (_("Couldn't write extended registers"));
 }
 
-static void
+void
 xtensa_linux_fetch_inferior_registers (struct target_ops *ops,
 				       struct regcache *regcache, int regnum)
 {
@@ -268,7 +279,7 @@ xtensa_linux_fetch_inferior_registers (struct target_ops *ops,
     fetch_xtregs (regcache, regnum);
 }
 
-static void
+void
 xtensa_linux_store_inferior_registers (struct target_ops *ops,
 				       struct regcache *regcache, int regnum)
 {
@@ -281,25 +292,6 @@ xtensa_linux_store_inferior_registers (struct target_ops *ops,
     store_gregs (regcache, regnum);
   else
     store_xtregs (regcache, regnum);
-}
-
-/* Called by libthread_db.  */
-
-ps_err_e
-ps_get_thread_area (struct ps_prochandle *ph,
-                    lwpid_t lwpid, int idx, void **base)
-{
-  xtensa_elf_gregset_t regs;
-
-  if (ptrace (PTRACE_GETREGS, lwpid, NULL, &regs) != 0)
-    return PS_ERR;
-
-  /* IDX is the bias from the thread pointer to the beginning of the
-     thread descriptor.  It has to be subtracted due to implementation
-     quirks in libthread_db.  */
-  *base = (void *) ((char *) regs.threadptr - idx);
-
-  return PS_OK;
 }
 
 void _initialize_xtensa_linux_nat (void);

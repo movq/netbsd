@@ -1,4 +1,4 @@
-/*	$NetBSD: i915_module.c,v 1.5 2014/11/12 03:14:00 christos Exp $	*/
+/*	$NetBSD: i915_module.c,v 1.3.2.1 2015/01/11 05:59:17 snj Exp $	*/
 
 /*-
  * Copyright (c) 2013 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: i915_module.c,v 1.5 2014/11/12 03:14:00 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: i915_module.c,v 1.3.2.1 2015/01/11 05:59:17 snj Exp $");
 
 #include <sys/types.h>
 #include <sys/module.h>

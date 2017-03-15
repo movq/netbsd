@@ -1,4 +1,4 @@
-/*	$NetBSD: queue.h,v 1.70 2015/11/02 15:21:23 christos Exp $	*/
+/*	$NetBSD: queue.h,v 1.67 2014/05/17 21:22:56 rmind Exp $	*/
 
 /*
  * Copyright (c) 1991, 1993
@@ -421,9 +421,9 @@ struct {								\
 #define	TAILQ_END(head)			(NULL)
 #define	TAILQ_NEXT(elm, field)		((elm)->field.tqe_next)
 #define	TAILQ_LAST(head, headname) \
-	(*(((struct headname *)(void *)((head)->tqh_last))->tqh_last))
+	(*(((struct headname *)((head)->tqh_last))->tqh_last))
 #define	TAILQ_PREV(elm, headname, field) \
-	(*(((struct headname *)(void *)((elm)->field.tqe_prev))->tqh_last))
+	(*(((struct headname *)((elm)->field.tqe_prev))->tqh_last))
 #define	TAILQ_EMPTY(head)		(TAILQ_FIRST(head) == TAILQ_END(head))
 
 
@@ -438,9 +438,9 @@ struct {								\
 	    ((next) = TAILQ_NEXT(var, field), 1); (var) = (next))
 
 #define	TAILQ_FOREACH_REVERSE(var, head, headname, field)		\
-	for ((var) = TAILQ_LAST((head), headname);			\
+	for ((var) = (*(((struct headname *)((head)->tqh_last))->tqh_last));\
 	    (var) != TAILQ_END(head);					\
-	    (var) = TAILQ_PREV((var), headname, field))
+	    (var) = (*(((struct headname *)((var)->field.tqe_prev))->tqh_last)))
 
 #define	TAILQ_FOREACH_REVERSE_SAFE(var, head, headname, field, prev)	\
 	for ((var) = TAILQ_LAST((head), headname);			\
@@ -541,15 +541,15 @@ struct {								\
 	QUEUEDEBUG_TAILQ_POSTREMOVE((elm), field);			\
 } while (/*CONSTCOND*/0)
 
-#define TAILQ_REPLACE(head, elm, elm2, field) do {			\
+#define TAILQ_REPLACE(head, elm, elm2, field) do {                      \
         if (((elm2)->field.tqe_next = (elm)->field.tqe_next) != 	\
 	    TAILQ_END(head))   						\
-                (elm2)->field.tqe_next->field.tqe_prev =		\
-                    &(elm2)->field.tqe_next;				\
-        else								\
-                (head)->tqh_last = &(elm2)->field.tqe_next;		\
-        (elm2)->field.tqe_prev = (elm)->field.tqe_prev;			\
-        *(elm2)->field.tqe_prev = (elm2);				\
+                (elm2)->field.tqe_next->field.tqe_prev =                \
+                    &(elm2)->field.tqe_next;                            \
+        else                                                            \
+                (head)->tqh_last = &(elm2)->field.tqe_next;             \
+        (elm2)->field.tqe_prev = (elm)->field.tqe_prev;                 \
+        *(elm2)->field.tqe_prev = (elm2);                               \
 	QUEUEDEBUG_TAILQ_POSTREMOVE((elm), field);			\
 } while (/*CONSTCOND*/0)
 

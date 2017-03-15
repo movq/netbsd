@@ -1,4 +1,4 @@
-/*	$NetBSD: if_cs_ofisa.c,v 1.27 2016/12/09 17:18:35 christos Exp $	*/
+/*	$NetBSD: if_cs_ofisa.c,v 1.25 2012/02/02 19:43:04 tls Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -31,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_cs_ofisa.c,v 1.27 2016/12/09 17:18:35 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_cs_ofisa.c,v 1.25 2012/02/02 19:43:04 tls Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -39,7 +39,7 @@ __KERNEL_RCSID(0, "$NetBSD: if_cs_ofisa.c,v 1.27 2016/12/09 17:18:35 christos Ex
 #include <sys/device.h>
 #include <sys/malloc.h>
 
-#include <sys/rndsource.h>
+#include <sys/rnd.h>
 
 #include <net/if.h>
 #include <net/if_ether.h>
@@ -98,6 +98,7 @@ cs_ofisa_attach(device_t parent, device_t self, void *aux)
 	struct ofisa_dma_desc dma;
 	int i, n, *media, nmedia, defmedia;
 	bus_addr_t io_addr, mem_addr;
+	char *model = NULL;
 	const char *message = NULL;
 	u_int8_t enaddr[6];
 
@@ -125,29 +126,29 @@ cs_ofisa_attach(device_t parent, device_t self, void *aux)
 	n = cs_ofisa_md_reg_fixup(parent, self, aux, reg, 2, n);
 #endif
 	if (n < 1 || n > 2) {
-		aprint_error(": error getting register data\n");
+		printf(": error getting register data\n");
 		return;
 	}
 
 	for (i = 0; i < n; i++) {
 		if (reg[i].type == OFISA_REG_TYPE_IO) {
 			if (io_addr != (bus_addr_t) -1) {
-				aprint_error(": multiple I/O regions\n");
+				printf(": multiple I/O regions\n");
 				return;
 			}
 			if (reg[i].len != CS8900_IOSIZE) {
-				aprint_error(": weird register size (%lu, expected %d)\n",
+				printf(": weird register size (%lu, expected %d)\n",
 				    (unsigned long)reg[i].len, CS8900_IOSIZE);
 				return;
 			}
 			io_addr = reg[i].addr;
 		} else {
 			if (mem_addr != (bus_addr_t) -1) {
-				aprint_error(": multiple memory regions\n");
+				printf(": multiple memory regions\n");
 				return;
 			}
 			if (reg[i].len != CS8900_MEMSIZE) {
-				aprint_error(": weird register size (%lu, expected %d)\n",
+				printf(": weird register size (%lu, expected %d)\n",
 				    (unsigned long)reg[i].len, CS8900_MEMSIZE);
 				return;
 			}
@@ -160,13 +161,13 @@ cs_ofisa_attach(device_t parent, device_t self, void *aux)
 	n = cs_ofisa_md_intr_fixup(parent, self, aux, &intr, 1, n);
 #endif
 	if (n != 1) {
-		aprint_error(": error getting interrupt data\n");
+		printf(": error getting interrupt data\n");
 		return;
 	}
 	sc->sc_irq = intr.irq;
 
 	if (CS8900_IRQ_ISVALID(sc->sc_irq) == 0) {
-		aprint_error(": invalid IRQ %d\n", sc->sc_irq);
+		printf(": invalid IRQ %d\n", sc->sc_irq);
 		return;
 	}
 
@@ -179,12 +180,12 @@ cs_ofisa_attach(device_t parent, device_t self, void *aux)
 		isc->sc_drq = dma.drq;
 
 	if (io_addr == (bus_addr_t) -1) {
-		aprint_error(": no I/O space\n");
+		printf(": no I/O space\n");
 		return;
 	}
 	if (bus_space_map(sc->sc_iot, io_addr, CS8900_IOSIZE, 0,
 	    &sc->sc_ioh)) {
-		aprint_error(": unable to map register space\n");
+		printf(": unable to map register space\n");
 		return;
 	}
 
@@ -201,7 +202,7 @@ cs_ofisa_attach(device_t parent, device_t self, void *aux)
 	/* Dig MAC address out of the firmware. */
 	if (OF_getprop(aa->oba.oba_phandle, "mac-address", enaddr,
 	    sizeof(enaddr)) < 0) {
-		aprint_error(": unable to get Ethernet address\n");
+		printf(": unable to get Ethernet address\n");
 		return;
 	}
 
@@ -213,13 +214,23 @@ cs_ofisa_attach(device_t parent, device_t self, void *aux)
 	    &defmedia);
 #endif
 	if (media == NULL) {
-		aprint_error(": unable to get media information\n");
+		printf(": unable to get media information\n");
 		return;
 	}
 
-	ofisa_print_model(self, aa->oba.oba_phandle);
+	n = OF_getproplen(aa->oba.oba_phandle, "model");
+	if (n > 0) {
+		model = alloca(n);
+		if (OF_getprop(aa->oba.oba_phandle, "model", model, n) != n)
+			model = NULL;	/* Safe; alloca is on-stack */
+	}
+	if (model != NULL)
+		printf(": %s\n", model);
+	else
+		printf("\n");
+
 	if (message != NULL)
-		aprint_normal(": %s\n", message);
+		printf("%s: %s\n", device_xname(self), message);
 
 	if (defmedia == -1) {
 		aprint_error_dev(self, "unable to get default media\n");

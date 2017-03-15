@@ -1,4 +1,4 @@
-# $NetBSD: Makefile.inc,v 1.31 2016/03/30 07:25:33 martin Exp $
+# $NetBSD: Makefile.inc,v 1.24.2.2 2015/02/04 22:00:24 martin Exp $
 
 COMPILER_RT_SRCDIR=	${NETBSDSRCDIR}/sys/external/bsd/compiler_rt/dist
 
@@ -84,6 +84,7 @@ GENERIC_SRCS+= \
 	fixunssfsi.c \
 	fixunsxfdi.c \
 	fixunsxfsi.c \
+	fixxfdi.c \
 	floatdidf.c \
 	floatdisf.c \
 	floatdixf.c \
@@ -119,12 +120,6 @@ GENERIC_SRCS+= \
 	udivti3.c \
 	umodti3.c
 
-.if ${MACHINE_ARCH} != "m68k"
-GENERIC_SRCS+= \
-	fixxfdi.c
-.endif
-
-
 .if ${MACHINE_ARCH} != "aarch64"
 GENERIC_SRCS+= \
 	fixunsdfti.c \
@@ -140,24 +135,17 @@ GENERIC_SRCS+= \
 .endif
 
 # These have h/w instructions which are always used.
-.if ${LIBC_MACHINE_ARCH} != "alpha" && ${LIBC_MACHINE_CPU} != "aarch64" \
-    && ${LIBC_MACHINE_CPU} != "powerpc" && ${LIBC_MACHINE_CPU} != "or1k"
+.if ${LIBC_MACHINE_ARCH} != "alpha" && ${LIBC_MACHINE_CPU} != "powerpc" \
+    && ${LIBC_MACHINE_CPU} != "aarch64"
 GENERIC_SRCS+= \
 	clzsi2.c
-.endif
-
-# These have h/w instructions which are always used.
-.if ${LIBC_MACHINE_ARCH} != "alpha" && ${LIBC_MACHINE_ARCH} != "vax" \
-    && ${LIBC_MACHINE_CPU} != "aarch64" && ${LIBC_MACHINE_CPU} != "powerpc" \
-    && ${LIBC_MACHINE_CPU} != "or1k"
-GENERIC_SRCS+= \
-	ctzsi2.c
 .endif
 
 # These have h/w instructions which are always used.
 .if ${LIBC_MACHINE_ARCH} != "alpha" && ${LIBC_MACHINE_CPU} != "powerpc" \
     && ${LIBC_MACHINE_CPU} != "aarch64" && ${LIBC_MACHINE_ARCH} != "vax"
 GENERIC_SRCS+= \
+	ctzsi2.c \
 	divmodsi4.c \
 	divsi3.c \
 	modsi3.c \
@@ -186,7 +174,7 @@ GENERIC_SRCS+= \
 
 # These have h/w instructions which are always used.
 .if ${LIBC_MACHINE_ARCH} != "alpha" && ${LIBC_MACHINE_CPU} != "powerpc64" \
-    && ${LIBC_MACHINE_ARCH} != "aarch64" && ${LIBC_MACHINE_CPU} != "or1k"
+    && ${LIBC_MACHINE_ARCH} != "aarch64"
 GENERIC_SRCS+= \
 	clzdi2.c \
 	ctzdi2.c \
@@ -216,14 +204,7 @@ GENERIC_SRCS+= \
 	InstrProfiling.c \
 	InstrProfilingBuffer.c \
 	InstrProfilingFile.c \
-	InstrProfilingPlatformLinux.c \
-	InstrProfilingUtil.c \
-	InstrProfilingValue.c \
-	InstrProfilingWriter.c
-
-.if ${MKPROFILE} != "no"
-POBJS+= InstrProfilingRuntime.po
-.endif
+	InstrProfilingPlatformOther.c
 
 .if ${LIBC_MACHINE_ARCH} == "powerpc" || ${LIBC_MACHINE_ARCH} == "powerpc64"
 GENERIC_SRCS+= \
@@ -275,7 +256,4 @@ COPTS.${src}+=	-Wno-missing-prototypes \
 		-Wno-cast-qual
 .    endif
 .  endif
-.if ${MKSOFTFLOAT:Uno} != "no"
-COPTS.${src}+=	-D__SOFT_FP__
-.endif
 .endfor

@@ -1,4 +1,4 @@
-/* $NetBSD: disk.c,v 1.9 2014/09/30 15:25:18 mlelstv Exp $ */
+/* $NetBSD: disk.c,v 1.8.10.1 2015/05/15 04:00:50 snj Exp $ */
 
 /*-
  * Copyright (c) 2006, 2007, 2008, 2009 The NetBSD Foundation, Inc.

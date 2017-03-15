@@ -1,4 +1,4 @@
-/*	$NetBSD: ttm_page_alloc.h,v 1.2 2016/04/24 04:26:12 riastradh Exp $	*/
+/*	$NetBSD: ttm_page_alloc.h,v 1.1.4.1 2016/12/12 09:13:43 msaitoh Exp $	*/
 
 /*-
  * Copyright (c) 2014 The NetBSD Foundation, Inc.

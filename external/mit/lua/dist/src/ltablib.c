@@ -1,4 +1,4 @@
-/*	$NetBSD: ltablib.c,v 1.6 2016/09/08 02:21:31 salazar Exp $	*/
+/*	$NetBSD: ltablib.c,v 1.2.2.4 2016/09/25 11:16:02 bouyer Exp $	*/
 
 /*
 ** Id: ltablib.c,v 1.93 2016/02/25 19:41:54 roberto Exp 

@@ -103,12 +103,9 @@
 #	define UINT64_MAX UINT64_C(18446744073709551615)
 #endif
 
-// Incorrect(?) SIZE_MAX:
-//   - Interix headers typedef size_t to unsigned long,
-//     but a few lines later define SIZE_MAX to INT32_MAX.
-//   - SCO OpenServer (x86) headers typedef size_t to unsigned int
-//     but define SIZE_MAX to INT32_MAX.
-#if defined(__INTERIX) || defined(_SCO_DS)
+// Interix has broken header files, which typedef size_t to unsigned long,
+// but a few lines later define SIZE_MAX to INT32_MAX.
+#ifdef __INTERIX
 #	undef SIZE_MAX
 #endif
 
@@ -165,16 +162,6 @@ typedef unsigned char _Bool;
 #	include <memory.h>
 #endif
 
-// As of MSVC 2013, inline and restrict are supported with
-// non-standard keywords.
-#if defined(_WIN32) && defined(_MSC_VER)
-#	ifndef inline
-#		define inline __inline
-#	endif
-#	ifndef restrict
-#		define restrict __restrict
-#	endif
-#endif
 
 ////////////
 // Macros //

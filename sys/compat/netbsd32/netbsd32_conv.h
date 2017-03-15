@@ -1,4 +1,4 @@
-/*	$NetBSD: netbsd32_conv.h,v 1.31 2016/11/13 13:59:45 rin Exp $	*/
+/*	$NetBSD: netbsd32_conv.h,v 1.28.4.1 2015/11/04 17:46:21 riz Exp $	*/
 
 /*
  * Copyright (c) 1998, 2001 Matthew R. Green
@@ -63,7 +63,7 @@ netbsd32_from_timeval50(const struct timeval *tv,
     struct netbsd32_timeval50 *tv32)
 {
 
-	tv32->tv_sec = (netbsd32_time50_t)tv->tv_sec;
+	tv32->tv_sec = (netbsd32_long)tv->tv_sec;
 	tv32->tv_usec = (netbsd32_long)tv->tv_usec;
 }
 
@@ -72,8 +72,8 @@ netbsd32_from_timeval(const struct timeval *tv,
     struct netbsd32_timeval *tv32)
 {
 
-	tv32->tv_sec = (netbsd32_time_t)tv->tv_sec;
-	tv32->tv_usec = tv->tv_usec;
+	tv32->tv_sec = (time_t)tv->tv_sec;
+	tv32->tv_usec = (suseconds_t)tv->tv_usec;
 }
 
 static __inline void
@@ -82,7 +82,7 @@ netbsd32_to_timeval50(const struct netbsd32_timeval50 *tv32,
 {
 
 	tv->tv_sec = (time_t)tv32->tv_sec;
-	tv->tv_usec = tv32->tv_usec;
+	tv->tv_usec = (suseconds_t)tv32->tv_usec;
 }
 
 static __inline void
@@ -91,7 +91,7 @@ netbsd32_to_timeval(const struct netbsd32_timeval *tv32,
 {
 
 	tv->tv_sec = (time_t)tv32->tv_sec;
-	tv->tv_usec = tv32->tv_usec;
+	tv->tv_usec = (suseconds_t)tv32->tv_usec;
 }
 
 static __inline void
@@ -157,7 +157,7 @@ netbsd32_from_timespec50(const struct timespec *p,
     struct netbsd32_timespec50 *s32p)
 {
 
-	s32p->tv_sec = (netbsd32_time50_t)p->tv_sec;
+	s32p->tv_sec = (netbsd32_long)p->tv_sec;
 	s32p->tv_nsec = (netbsd32_long)p->tv_nsec;
 }
 
@@ -166,7 +166,7 @@ netbsd32_from_timespec(const struct timespec *p,
     struct netbsd32_timespec *s32p)
 {
 
-	s32p->tv_sec = (netbsd32_time_t)p->tv_sec;
+	s32p->tv_sec = (netbsd32_long)p->tv_sec;
 	s32p->tv_nsec = (netbsd32_long)p->tv_nsec;
 }
 
@@ -785,26 +785,6 @@ netbsd32_copyout_plistref(netbsd32_pointer_t n32p, struct plistref *p)
 	n32plist.pref_len = p->pref_len;
 	return copyout(&n32plist, NETBSD32PTR64(n32p),
 	    sizeof(struct netbsd32_plistref));
-}
-
-static __inline void
-netbsd32_to_mq_attr(const struct netbsd32_mq_attr *a32,
-    struct mq_attr *attr)
-{
-	attr->mq_flags = a32->mq_flags;
-	attr->mq_maxmsg = a32->mq_maxmsg;
-	attr->mq_msgsize = a32->mq_msgsize;
-	attr->mq_curmsgs = a32->mq_curmsgs;
-}
-
-static __inline void
-netbsd32_from_mq_attr(const struct mq_attr *attr,
-	struct netbsd32_mq_attr *a32)
-{
-	a32->mq_flags = attr->mq_flags;
-	a32->mq_maxmsg = attr->mq_maxmsg;
-	a32->mq_msgsize = attr->mq_msgsize;
-	a32->mq_curmsgs = attr->mq_curmsgs;
 }
 
 #endif /* _COMPAT_NETBSD32_NETBSD32_CONV_H_ */

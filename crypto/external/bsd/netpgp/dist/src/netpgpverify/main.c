@@ -49,11 +49,10 @@ ptime(int64_t secs)
 static void
 pentry(pgpv_t *pgp, int n, const char *modifiers)
 {
-	size_t	 cc;
 	char	*s;
 
-	cc = pgpv_get_entry(pgp, (unsigned)n, &s, modifiers);
-	fwrite(s, 1, cc, stdout);
+	pgpv_get_entry(pgp, (unsigned)n, &s, modifiers);
+	printf("%s", s);
 	free(s);
 }
 
@@ -102,12 +101,6 @@ verify_data(pgpv_t *pgp, const char *cmd, const char *inname, char *in, ssize_t 
 			if ((size = pgpv_get_verified(&cursor, cookie, &data)) > 0) {
 				write(STDOUT_FILENO, data, size);
 			}
-			return 1;
-		}
-	} else if (strcasecmp(cmd, "dump") == 0) {
-		if ((cookie = pgpv_verify(&cursor, pgp, in, cc)) != 0) {
-			size = pgpv_dump(pgp, &data);
-			write(STDOUT_FILENO, data, size);
 			return 1;
 		}
 	} else if (strcasecmp(cmd, "verify") == 0 || strcasecmp(cmd, "trust") == 0) {

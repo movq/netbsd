@@ -1,4 +1,4 @@
-# $NetBSD: rc.subr,v 1.98 2016/03/06 18:49:42 christos Exp $
+# $NetBSD: rc.subr,v 1.94.2.1 2015/11/08 00:45:22 riz Exp $
 #
 # Copyright (c) 1997-2011 The NetBSD Foundation, Inc.
 # All rights reserved.
@@ -42,10 +42,10 @@ nl='
 
 #
 # checkyesno var
-#	Test $1 variable.
-#	Return 0 if it's "yes" (et al), 1 if it's "no" (et al), 2 otherwise.
+#	Test $1 variable, and warn if not set to YES or NO.
+#	Return 0 if it's "yes" (et al), nonzero otherwise.
 #
-checkyesnox()
+checkyesno()
 {
 	eval _value=\$${1}
 	case $_value in
@@ -60,25 +60,10 @@ checkyesnox()
 		return 1
 		;;
 	*)
-		return 2
+		warn "\$${1} is not set properly - see ${rcvar_manpage}."
+		return 1
 		;;
 	esac
-}
-
-#
-# checkyesno var
-#	Test $1 variable, and warn if not set to YES or NO.
-#	Return 0 if it's "yes" (et al), nonzero otherwise.
-#
-checkyesno()
-{
-	local var
-
-	checkyesnox $1
-	var=$?
-	[ $var = 0 -o $var = 1 ] && return $var
-	warn "\$${1} is not set properly - see ${rcvar_manpage}."
-	return 1
 }
 
 #
@@ -322,13 +307,10 @@ wait_for_pids()
 		if [ -z "$_nlist" ]; then
 			break
 		fi
-		if [ "$_list" != "$_nlist" ]; then
-			_list=$_nlist
-			echo -n ${_prefix:-"Waiting for PIDS: "}$_list
-			_prefix=", "
-		fi
-		# We want this to be a tight loop for a fast exit
-		sleep 0.05
+		_list=$_nlist
+		echo -n ${_prefix:-"Waiting for PIDS: "}$_list
+		_prefix=", "
+		sleep 2
 	done
 	if [ -n "$_prefix" ]; then
 		echo "."
@@ -1344,20 +1326,6 @@ printf()
 	*'\n')	: ;;
 	*)	_flush_rc_output ;;
 	esac
-}
-
-kat() {
-	local i
-	local v
-	for i; do
-		while read -r v; do
-			v="${v%%#*}"
-			if [ -z "$v" ]; then
-				continue
-			fi
-			echo "$v"
-		done < "$i"
-	done
 }
 
 _rc_subr_loaded=:

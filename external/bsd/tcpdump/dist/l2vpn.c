@@ -15,7 +15,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: l2vpn.c,v 1.6 2017/02/05 04:05:05 spz Exp $");
+__RCSID("$NetBSD: l2vpn.c,v 1.3.6.1 2017/02/19 05:01:15 snj Exp $");
 #endif
 
 #ifdef HAVE_CONFIG_H

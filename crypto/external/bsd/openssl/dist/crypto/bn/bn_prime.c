@@ -283,8 +283,7 @@ int BN_is_prime_fasttest_ex(const BIGNUM *a, int checks, BN_CTX *ctx_passed,
         BIGNUM *t;
         if ((t = BN_CTX_get(ctx)) == NULL)
             goto err;
-        if (BN_copy(t, a) == NULL)
-            goto err;
+        BN_copy(t, a);
         t->neg = 0;
         A = t;
     } else

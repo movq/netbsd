@@ -1,4 +1,4 @@
-/*	$NetBSD: vnconfig.c,v 1.44 2016/04/10 09:04:09 martin Exp $	*/
+/*	$NetBSD: vnconfig.c,v 1.42.2.1 2016/04/10 09:43:37 martin Exp $	*/
 
 /*-
  * Copyright (c) 1997 The NetBSD Foundation, Inc.

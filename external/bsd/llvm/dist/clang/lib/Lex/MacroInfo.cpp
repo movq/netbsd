@@ -126,7 +126,7 @@ bool MacroInfo::isIdenticalTo(const MacroInfo &Other, Preprocessor &PP,
   return true;
 }
 
-LLVM_DUMP_METHOD void MacroInfo::dump() const {
+void MacroInfo::dump() const {
   llvm::raw_ostream &Out = llvm::errs();
 
   // FIXME: Dump locations.
@@ -154,20 +154,16 @@ LLVM_DUMP_METHOD void MacroInfo::dump() const {
     Out << ")";
   }
 
-  bool First = true;
   for (const Token &Tok : ReplacementTokens) {
-    // Leading space is semantically meaningful in a macro definition,
-    // so preserve it in the dump output.
-    if (First || Tok.hasLeadingSpace())
-      Out << " ";
-    First = false;
-
+    Out << " ";
     if (const char *Punc = tok::getPunctuatorSpelling(Tok.getKind()))
       Out << Punc;
+    else if (const char *Kwd = tok::getKeywordSpelling(Tok.getKind()))
+      Out << Kwd;
+    else if (Tok.is(tok::identifier))
+      Out << Tok.getIdentifierInfo()->getName();
     else if (Tok.isLiteral() && Tok.getLiteralData())
       Out << StringRef(Tok.getLiteralData(), Tok.getLength());
-    else if (auto *II = Tok.getIdentifierInfo())
-      Out << II->getName();
     else
       Out << Tok.getName();
   }
@@ -209,7 +205,7 @@ MacroDirective::findDirectiveAtLoc(SourceLocation L, SourceManager &SM) const {
   return DefInfo();
 }
 
-LLVM_DUMP_METHOD void MacroDirective::dump() const {
+void MacroDirective::dump() const {
   llvm::raw_ostream &Out = llvm::errs();
 
   switch (getKind()) {
@@ -222,9 +218,13 @@ LLVM_DUMP_METHOD void MacroDirective::dump() const {
   if (auto *Prev = getPrevious())
     Out << " prev " << Prev;
   if (IsFromPCH) Out << " from_pch";
+  if (IsImported) Out << " imported";
+  if (IsAmbiguous) Out << " ambiguous";
 
-  if (isa<VisibilityMacroDirective>(this))
-    Out << (IsPublic ? " public" : " private");
+  if (IsPublic)
+    Out << " public";
+  else if (isa<VisibilityMacroDirective>(this))
+    Out << " private";
 
   if (auto *DMD = dyn_cast<DefMacroDirective>(this)) {
     if (auto *Info = DMD->getInfo()) {
@@ -233,13 +233,4 @@ LLVM_DUMP_METHOD void MacroDirective::dump() const {
     }
   }
   Out << "\n";
-}
-
-ModuleMacro *ModuleMacro::create(Preprocessor &PP, Module *OwningModule,
-                                 IdentifierInfo *II, MacroInfo *Macro,
-                                 ArrayRef<ModuleMacro *> Overrides) {
-  void *Mem = PP.getPreprocessorAllocator().Allocate(
-      sizeof(ModuleMacro) + sizeof(ModuleMacro *) * Overrides.size(),
-      alignof(ModuleMacro));
-  return new (Mem) ModuleMacro(OwningModule, II, Macro, Overrides);
 }

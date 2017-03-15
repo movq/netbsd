@@ -1,4 +1,4 @@
-/*	$NetBSD: interface.h,v 1.8 2017/02/05 04:05:05 spz Exp $	*/
+/*	$NetBSD: interface.h,v 1.4.4.1 2017/02/19 05:01:15 snj Exp $	*/
 
 /*
  * Copyright (c) 1988-2002

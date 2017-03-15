@@ -1,5 +1,7 @@
 /* BFD back-end for MIPS PE COFF files.
-   Copyright (C) 1990-2016 Free Software Foundation, Inc.
+   Copyright 1990, 1991, 1992, 1993, 1994, 1995, 1996, 1997, 1998, 1999,
+   2000, 2001, 2002, 2003, 2004, 2005, 2007, 2008, 2009, 2010, 2011
+   Free Software Foundation, Inc.
    Modified from coff-i386.c by DJ Delorie, dj@cygnus.com
 
    This file is part of BFD, the Binary File Descriptor library.
@@ -95,44 +97,44 @@ coff_mips_reloc (bfd *abfd,
 #define DOIT(x) \
   x = ((x & ~howto->dst_mask) | (((x & howto->src_mask) + (diff >> howto->rightshift)) & howto->dst_mask))
 
-  if (diff != 0)
-    {
-      reloc_howto_type *howto = reloc_entry->howto;
-      unsigned char *addr = (unsigned char *) data + reloc_entry->address;
+    if (diff != 0)
+      {
+	reloc_howto_type *howto = reloc_entry->howto;
+	unsigned char *addr = (unsigned char *) data + reloc_entry->address;
 
-      switch (howto->size)
-	{
-	case 0:
+	switch (howto->size)
 	  {
-	    char x = bfd_get_8 (abfd, addr);
+	  case 0:
+	    {
+	      char x = bfd_get_8 (abfd, addr);
 
-	    DOIT (x);
-	    bfd_put_8 (abfd, x, addr);
+	      DOIT (x);
+	      bfd_put_8 (abfd, x, addr);
+	    }
+	    break;
+
+	  case 1:
+	    {
+	      short x = bfd_get_16 (abfd, addr);
+
+	      DOIT (x);
+	      bfd_put_16 (abfd, (bfd_vma) x, addr);
+	    }
+	    break;
+
+	  case 2:
+	    {
+	      long x = bfd_get_32 (abfd, addr);
+
+	      DOIT (x);
+	      bfd_put_32 (abfd, (bfd_vma) x, addr);
+	    }
+	    break;
+
+	  default:
+	    abort ();
 	  }
-	  break;
-
-	case 1:
-	  {
-	    short x = bfd_get_16 (abfd, addr);
-
-	    DOIT (x);
-	    bfd_put_16 (abfd, (bfd_vma) x, addr);
-	  }
-	  break;
-
-	case 2:
-	  {
-	    long x = bfd_get_32 (abfd, addr);
-
-	    DOIT (x);
-	    bfd_put_32 (abfd, (bfd_vma) x, addr);
-	  }
-	  break;
-
-	default:
-	  abort ();
-	}
-    }
+      }
 
   /* Now let bfd_perform_relocation finish everything up.  */
   return bfd_reloc_continue;
@@ -339,8 +341,6 @@ static reloc_howto_type howto_table[] =
 	 FALSE),                /* Pcrel_offset. */
 };
 
-#define NUM_HOWTOS (sizeof (howto_table) / sizeof (howto_table[0]))
-
 /* Turn a howto into a reloc nunmber.  */
 
 #define SELECT_RELOC(x, howto) { x.r_type = howto->type; }
@@ -349,11 +349,8 @@ static reloc_howto_type howto_table[] =
 /* Customize coffcode.h.  */
 #define MIPS 1
 
-#define RTYPE2HOWTO(cache_ptr, dst)				\
-  ((cache_ptr)->howto =						\
-   ((dst)->r_type < NUM_HOWTOS					\
-    ? howto_table + (dst)->r_type				\
-    : NULL))
+#define RTYPE2HOWTO(cache_ptr, dst) \
+	    (cache_ptr)->howto = howto_table + (dst)->r_type;
 
 /* Compute the addend of a reloc.  If the reloc is to a common symbol,
    the object file contains the value of the common symbol.  By the
@@ -375,7 +372,7 @@ static reloc_howto_type howto_table[] =
       coffsym = (obj_symbols (abfd)				\
 	         + (cache_ptr->sym_ptr_ptr - symbols));		\
     else if (ptr)						\
-      coffsym = coff_symbol_from (ptr);				\
+      coffsym = coff_symbol_from (abfd, ptr);			\
     if (coffsym != NULL						\
 	&& coffsym->native->u.syment.n_scnum == 0)		\
       cache_ptr->addend = - coffsym->native->u.syment.n_value;	\
@@ -384,8 +381,7 @@ static reloc_howto_type howto_table[] =
       cache_ptr->addend = - (ptr->section->vma + ptr->value);	\
     else							\
       cache_ptr->addend = 0;					\
-    if (ptr && reloc.r_type < NUM_HOWTOS			\
-	&& howto_table[reloc.r_type].pc_relative)		\
+    if (ptr && howto_table[reloc.r_type].pc_relative)		\
       cache_ptr->addend += asect->vma;				\
   }
 
@@ -515,7 +511,9 @@ coff_mips_reloc_name_lookup (bfd *abfd ATTRIBUTE_UNUSED,
 {
   unsigned int i;
 
-  for (i = 0; i < NUM_HOWTOS; i++)
+  for (i = 0;
+       i < sizeof (howto_table) / sizeof (howto_table[0]);
+       i++)
     if (howto_table[i].name != NULL
 	&& strcasecmp (howto_table[i].name, r_name) == 0)
       return &howto_table[i];
@@ -603,7 +601,7 @@ coff_pe_mips_relocate_section (bfd *output_bfd,
   struct internal_reloc *rel_end;
   unsigned int i;
 
-  if (bfd_link_relocatable (info))
+  if (info->relocatable)
     {
       (*_bfd_error_handler)
 	(_("%B: `ld -r' not supported with PE MIPS objects\n"), input_bfd);
@@ -661,7 +659,7 @@ coff_pe_mips_relocate_section (bfd *output_bfd,
          then we should ignore the symbol value.  */
       if (howto->pc_relative && howto->pcrel_offset)
 	{
-	  if (bfd_link_relocatable (info))
+	  if (info->relocatable)
 	    continue;
 	  if (sym != NULL && sym->n_scnum != 0)
 	    addend += sym->n_value;
@@ -701,10 +699,13 @@ coff_pe_mips_relocate_section (bfd *output_bfd,
 		     + sec->output_offset);
 	      }
 
-	  else if (! bfd_link_relocatable (info))
-	    (*info->callbacks->undefined_symbol)
-	      (info, h->root.root.string, input_bfd, input_section,
-	       rel->r_vaddr - input_section->vma, TRUE);
+	  else if (! info->relocatable)
+	    {
+	      if (! ((*info->callbacks->undefined_symbol)
+		     (info, h->root.root.string, input_bfd, input_section,
+		      rel->r_vaddr - input_section->vma, TRUE)))
+		return FALSE;
+	    }
 	}
 
       src = rel->r_vaddr + input_section->output_section->vma
@@ -857,7 +858,7 @@ const bfd_target
 #ifdef TARGET_SYM
   TARGET_SYM =
 #else
-  mips_pe_le_vec =
+  mipslpe_vec =
 #endif
 {
 #ifdef TARGET_NAME

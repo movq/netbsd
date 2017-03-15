@@ -2,10 +2,6 @@ set(LLVM_LINK_COMPONENTS
   Support
   )
 
-if (MSVC)
-  set_source_files_properties(SemaExpr.cpp PROPERTIES COMPILE_FLAGS /bigobj)
-endif()
-
 add_clang_library(clangSema
   AnalysisBasedWarnings.cpp
   AttributeList.cpp
@@ -25,7 +21,6 @@ add_clang_library(clangSema
   SemaChecking.cpp
   SemaCodeComplete.cpp
   SemaConsumer.cpp
-  SemaCoroutine.cpp
   SemaCUDA.cpp
   SemaDecl.cpp
   SemaDeclAttr.cpp

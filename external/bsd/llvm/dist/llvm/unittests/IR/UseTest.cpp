@@ -50,7 +50,7 @@ TEST(UseTest, sort) {
   });
   unsigned I = 0;
   for (User *U : X.users()) {
-    format("v%u", I++).snprint(vnbuf, sizeof(vnbuf));
+    snprintf(vnbuf, sizeof(vnbuf), "v%u", I++);
     EXPECT_EQ(vnbuf, U->getName());
   }
   ASSERT_EQ(8u, I);
@@ -60,7 +60,7 @@ TEST(UseTest, sort) {
   });
   I = 0;
   for (User *U : X.users()) {
-    format("v%u", (7 - I++)).snprint(vnbuf, sizeof(vnbuf));
+    snprintf(vnbuf, sizeof(vnbuf), "v%u", (7 - I++));
     EXPECT_EQ(vnbuf, U->getName());
   }
   ASSERT_EQ(8u, I);
@@ -95,7 +95,7 @@ TEST(UseTest, reverse) {
   });
   unsigned I = 0;
   for (User *U : X.users()) {
-    format("v%u", I++).snprint(vnbuf, sizeof(vnbuf));
+    snprintf(vnbuf, sizeof(vnbuf), "v%u", I++);
     EXPECT_EQ(vnbuf, U->getName());
   }
   ASSERT_EQ(8u, I);
@@ -103,7 +103,7 @@ TEST(UseTest, reverse) {
   X.reverseUseList();
   I = 0;
   for (User *U : X.users()) {
-    format("v%u", (7 - I++)).snprint(vnbuf, sizeof(vnbuf));
+    snprintf(vnbuf, sizeof(vnbuf), "v%u", (7 - I++));
     EXPECT_EQ(vnbuf, U->getName());
   }
   ASSERT_EQ(8u, I);

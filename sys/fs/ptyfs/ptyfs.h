@@ -1,4 +1,4 @@
-/*	$NetBSD: ptyfs.h,v 1.14 2014/08/15 13:40:39 hannken Exp $	*/
+/*	$NetBSD: ptyfs.h,v 1.12.4.1 2014/08/17 03:34:02 riz Exp $	*/
 
 /*
  * Copyright (c) 1993

@@ -1,4 +1,4 @@
-/*	$NetBSD: syscall.c,v 1.14 2016/07/07 06:55:40 msaitoh Exp $	*/
+/*	$NetBSD: syscall.c,v 1.12 2013/06/26 17:18:52 matt Exp $	*/
 
 /*-
  * Copyright (c) 1998, 2000, 2009 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: syscall.c,v 1.14 2016/07/07 06:55:40 msaitoh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: syscall.c,v 1.12 2013/06/26 17:18:52 matt Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -46,8 +46,6 @@ __KERNEL_RCSID(0, "$NetBSD: syscall.c,v 1.14 2016/07/07 06:55:40 msaitoh Exp $")
 #include <machine/cpu.h>
 #include <machine/psl.h>
 #include <machine/userret.h>
-
-#include "opt_dtrace.h"
 
 #ifndef __x86_64__
 #include "opt_vm86.h"
@@ -73,7 +71,7 @@ child_return(void *arg)
 		mutex_enter(proc_lock);
                 KSI_INIT_EMPTY(&ksi);
                 ksi.ksi_signo = SIGTRAP;
-                ksi.ksi_lid = l->l_lid;
+                ksi.ksi_lid = l->l_lid; 
                 kpsignal(p, &ksi, NULL);
 		mutex_exit(proc_lock);
 	}
@@ -95,17 +93,19 @@ cpu_spawn_return(struct lwp *l)
 	userret(l);
 }
 	
+void
+syscall_intern(struct proc *p)
+{
+
+	p->p_md.md_syscall = syscall;
+}
+
 /*
  * syscall(frame):
  *	System call request from POSIX system call gate interface to kernel.
  *	Like trap(), argument is call by reference.
  */
-#ifdef KDTRACE_HOOKS
-void syscall(struct trapframe *);
-#else
-static
-#endif
-void
+static void
 syscall(struct trapframe *frame)
 {
 	const struct sysent *callp;
@@ -182,13 +182,6 @@ syscall(struct trapframe *frame)
 
 	SYSCALL_TIME_SYS_EXIT(l);
 	userret(l);
-}
-
-void
-syscall_intern(struct proc *p)
-{
-
-	p->p_md.md_syscall = syscall;
 }
 
 #ifdef VM86

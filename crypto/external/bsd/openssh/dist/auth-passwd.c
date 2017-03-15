@@ -1,5 +1,5 @@
-/*	$NetBSD: auth-passwd.c,v 1.6 2016/12/25 00:07:46 christos Exp $	*/
-/* $OpenBSD: auth-passwd.c,v 1.45 2016/07/21 01:39:35 dtucker Exp $ */
+/*	$NetBSD: auth-passwd.c,v 1.2.26.1 2015/04/30 06:07:30 riz Exp $	*/
+/* $OpenBSD: auth-passwd.c,v 1.44 2014/07/15 15:54:14 millert Exp $ */
 /*
  * Author: Tatu Ylonen <ylo@cs.hut.fi>
  * Copyright (c) 1995 Tatu Ylonen <ylo@cs.hut.fi>, Espoo, Finland
@@ -38,7 +38,7 @@
  */
 
 #include "includes.h"
-__RCSID("$NetBSD: auth-passwd.c,v 1.6 2016/12/25 00:07:46 christos Exp $");
+__RCSID("$NetBSD: auth-passwd.c,v 1.2.26.1 2015/04/30 06:07:30 riz Exp $");
 #include <sys/types.h>
 
 #include <login_cap.h>
@@ -69,8 +69,6 @@ extern login_cap_t *lc;
 #define DAY		(24L * 60 * 60) /* 1 day in seconds */
 #define TWO_WEEKS	(2L * 7 * DAY)	/* 2 weeks in seconds */
 
-#define MAX_PASSWORD_LEN	1024
-
 #if defined(BSD_AUTH) || defined(USE_PAM)
 void
 disable_forwarding(void)
@@ -91,25 +89,21 @@ auth_password(Authctxt *authctxt, const char *password)
 	struct passwd * pw = authctxt->pw;
 	int ok = authctxt->valid;
 
-	if (strlen(password) > MAX_PASSWORD_LEN)
-		return 0;
-
 	if (pw->pw_uid == 0 && options.permit_root_login != PERMIT_YES)
 		ok = 0;
 	if (*password == '\0' && options.permit_empty_passwd == 0)
 		return 0;
-#ifdef KRB5
-	if (options.kerberos_authentication == 1) {
-		int ret = auth_krb5_password(authctxt, password);
- 		if (ret == 1 || ret == 0)
- 			return ret && ok;
- 		/* Fall back to ordinary passwd authentication. */
-	}
-#endif
-
 #ifdef USE_PAM
 	if (options.use_pam)
 		return (sshpam_auth_passwd(authctxt, password) && ok);
+#endif
+#ifdef KRB5
+	if (options.kerberos_authentication == 1) {
+		int ret = auth_krb5_password(authctxt, password);
+		if (ret == 1 || ret == 0)
+			return ret && ok;
+		/* Fall back to ordinary passwd authentication. */
+	}
 #endif
 	return (sys_auth_passwd(authctxt, password) && ok);
 }

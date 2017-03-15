@@ -1,4 +1,4 @@
-/*	$NetBSD: netaddr_multicast.c,v 1.5 2015/12/17 04:00:42 christos Exp $	*/
+/*	$NetBSD: netaddr_multicast.c,v 1.3.12.1 2016/03/13 08:06:05 martin Exp $	*/
 
 /*
  * Copyright (C) 2004, 2007, 2015  Internet Systems Consortium, Inc. ("ISC")

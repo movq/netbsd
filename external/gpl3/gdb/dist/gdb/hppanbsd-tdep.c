@@ -1,6 +1,6 @@
 /* Target-dependent code for NetBSD/hppa
 
-   Copyright (C) 2008-2016 Free Software Foundation, Inc.
+   Copyright (C) 2008-2014 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -24,6 +24,9 @@
 
 #include "trad-frame.h"
 #include "tramp-frame.h"
+
+#include "gdb_assert.h"
+#include <string.h>
 
 #include "hppa-tdep.h"
 #include "hppabsd-tdep.h"
@@ -114,6 +117,8 @@ hppanbsd_sigtramp_cache_init (const struct tramp_frame *self,
                              struct trad_frame_cache *this_cache,
                              CORE_ADDR func)
 {
+  struct gdbarch *gdbarch = get_frame_arch (this_frame);
+  struct gdbarch_tdep *tdep = gdbarch_tdep (gdbarch);
   CORE_ADDR sp = get_frame_register_unsigned (this_frame, HPPA_SP_REGNUM);
   CORE_ADDR base;
   int *reg_offset;
@@ -141,7 +146,7 @@ hppanbsd_sigtramp_cache_init (const struct tramp_frame *self,
 /* Core file support.  */
 
 /* Sizeof `struct reg' in <machine/reg.h>.  */
-#define HPPANBSD_SIZEOF_GREGS	(47 * 4)
+#define HPPANBSD_SIZEOF_GREGS	(46 * 4)
 
 static int hppanbsd_reg_offset[] =
 {
@@ -195,7 +200,7 @@ hppanbsd_supply_gregset (const struct regset *regset,
 			 struct regcache *regcache,
 			 int regnum, const void *gregs, size_t len)
 {
-  const gdb_byte *regs = (const gdb_byte *) gregs;
+  const gdb_byte *regs = gregs;
   int i;
 
   gdb_assert (len >= HPPANBSD_SIZEOF_GREGS);
@@ -208,21 +213,23 @@ hppanbsd_supply_gregset (const struct regset *regset,
 
 /* NetBSD/hppa register set.  */
 
-static const struct regset hppanbsd_gregset =
+static struct regset hppanbsd_gregset =
 {
   NULL,
   hppanbsd_supply_gregset
 };
 
-/* Iterate over supported core file register note sections. */
+/* Return the appropriate register set for the core section identified
+   by SECT_NAME and SECT_SIZE.  */
 
-static void
-hppanbsd_iterate_over_regset_sections (struct gdbarch *gdbarch,
-				       iterate_over_regset_sections_cb *cb,
-				       void *cb_data,
-				       const struct regcache *regcache)
+static const struct regset *
+hppanbsd_regset_from_core_section (struct gdbarch *gdbarch,
+				  const char *sect_name, size_t sect_size)
 {
-  cb (".reg", HPPANBSD_SIZEOF_GREGS, &hppanbsd_gregset, NULL, cb_data);
+  if (strcmp (sect_name, ".reg") == 0 && sect_size >= HPPANBSD_SIZEOF_GREGS)
+    return &hppanbsd_gregset;
+
+  return NULL;
 }
 
 static void
@@ -232,8 +239,8 @@ hppanbsd_init_abi (struct gdbarch_info info, struct gdbarch *gdbarch)
   hppabsd_init_abi (info, gdbarch);
 
   /* Core file support.  */
-  set_gdbarch_iterate_over_regset_sections
-    (gdbarch, hppanbsd_iterate_over_regset_sections);
+  set_gdbarch_regset_from_core_section
+    (gdbarch, hppanbsd_regset_from_core_section);
 
   tramp_frame_prepend_unwinder (gdbarch, &hppanbsd_sigtramp_si4);
 }

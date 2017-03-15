@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.2 2016/10/14 16:09:44 spz Exp $
+#	$NetBSD: Makefile,v 1.1 2014/03/02 09:02:43 nakayama Exp $
 
 .include "bsd.own.mk"
 
@@ -6,9 +6,7 @@ CRYPTODIST=${NETBSDSRCDIR}/crypto
 .include "${NETBSDSRCDIR}/crypto/Makefile.openssl"
 
 regen:
-	for i in $$(find ${OPENSSLSRC} -name \*sparcv9\*.pl) \
-		 ${OPENSSLSRC}/crypto/bn/asm/sparct4-mont.pl \
-		 ${OPENSSLSRC}/crypto/bn/asm/vis3-mont.pl; do \
+	for i in $$(find ${OPENSSLSRC} -name \*sparcv9\*.pl); do \
 		j=$$(basename $$i .pl).S; \
 		case $$j in \
 		ghash*|sha*) perl $$i $$j;; \

@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile.inc,v 1.68 2015/03/07 07:28:37 mrg Exp $
+#	$NetBSD: Makefile.inc,v 1.67.12.3 2015/03/18 03:57:15 snj Exp $
 #
 #	etc.i386/Makefile.inc -- i386-specific etc Makefile targets
 #

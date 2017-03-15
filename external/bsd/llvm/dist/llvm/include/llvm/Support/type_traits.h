@@ -17,8 +17,6 @@
 #include <type_traits>
 #include <utility>
 
-#include "llvm/Support/Compiler.h"
-
 #ifndef __has_feature
 #define LLVM_DEFINED_HAS_FEATURE
 #define __has_feature(x) 0
@@ -30,17 +28,9 @@ namespace llvm {
 /// type can be copied around with memcpy instead of running ctors etc.
 template <typename T>
 struct isPodLike {
-  // std::is_trivially_copyable is available in libc++ with clang, libstdc++
-  // that comes with GCC 5.
-#if (__has_feature(is_trivially_copyable) && defined(_LIBCPP_VERSION)) ||      \
-    (defined(__GNUC__) && __GNUC__ >= 5)
+#if __has_feature(is_trivially_copyable)
   // If the compiler supports the is_trivially_copyable trait use it, as it
   // matches the definition of isPodLike closely.
-  static const bool value = std::is_trivially_copyable<T>::value;
-#elif __has_feature(is_trivially_copyable)
-  // Use the internal name if the compiler supports is_trivially_copyable but we
-  // don't know if the standard library does. This is the case for clang in
-  // conjunction with libstdc++ from GCC 4.x.
   static const bool value = __is_trivially_copyable(T);
 #else
   // If we don't know anything else, we can (at least) assume that all non-class
@@ -56,12 +46,11 @@ struct isPodLike<std::pair<T, U> > {
 };
 
 /// \brief Metafunction that determines whether the given type is either an
-/// integral type or an enumeration type, including enum classes.
+/// integral type or an enumeration type.
 ///
 /// Note that this accepts potentially more integral types than is_integral
-/// because it is based on being implicitly convertible to an integral type.
-/// Also note that enum classes aren't implicitly convertible to integral types,
-/// the value may therefore need to be explicitly converted before being used.
+/// because it is based on merely being convertible implicitly to an integral
+/// type.
 template <typename T> class is_integral_or_enum {
   typedef typename std::remove_reference<T>::type UnderlyingT;
 
@@ -70,8 +59,7 @@ public:
       !std::is_class<UnderlyingT>::value && // Filter conversion operators.
       !std::is_pointer<UnderlyingT>::value &&
       !std::is_floating_point<UnderlyingT>::value &&
-      (std::is_enum<UnderlyingT>::value ||
-       std::is_convertible<UnderlyingT, unsigned long long>::value);
+      std::is_convertible<UnderlyingT, unsigned long long>::value;
 };
 
 /// \brief If T is a pointer, just return it. If it is not, return T&.
@@ -96,15 +84,6 @@ struct add_const_past_pointer<
 };
 
 }
-
-// If the compiler supports detecting whether a class is final, define
-// an LLVM_IS_FINAL macro. If it cannot be defined properly, this
-// macro will be left undefined.
-#if __cplusplus >= 201402L
-#define LLVM_IS_FINAL(Ty) std::is_final<Ty>()
-#elif __has_feature(is_final) || LLVM_GNUC_PREREQ(4, 7, 0)
-#define LLVM_IS_FINAL(Ty) __is_final(Ty)
-#endif
 
 #ifdef LLVM_DEFINED_HAS_FEATURE
 #undef __has_feature

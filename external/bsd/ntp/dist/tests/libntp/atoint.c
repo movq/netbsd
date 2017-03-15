@@ -1,4 +1,4 @@
-/*	$NetBSD: atoint.c,v 1.1.1.5 2016/01/08 21:21:33 christos Exp $	*/
+/*	$NetBSD: atoint.c,v 1.1.1.3.8.2 2015/11/08 01:51:15 riz Exp $	*/
 
 #include "config.h"
 

@@ -1,6 +1,6 @@
 /* Support for complaint handling during symbol reading in GDB.
 
-   Copyright (C) 1990-2016 Free Software Foundation, Inc.
+   Copyright (C) 1990-2014 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -19,6 +19,7 @@
 
 #include "defs.h"
 #include "complaints.h"
+#include "gdb_assert.h"
 #include "command.h"
 #include "gdbcmd.h"
 
@@ -27,17 +28,18 @@ extern void _initialize_complaints (void);
 /* Should each complaint message be self explanatory, or should we
    assume that a series of complaints is being produced?  */
 
+/* case 1: First message of a series that must
+   start off with explanation.  case 2: Subsequent message of a series
+   that needs no explanation (the user already knows we have a problem
+   so we can just state our piece).  */
 enum complaint_series {
   /* Isolated self explanatory message.  */
   ISOLATED_MESSAGE,
-
   /* First message of a series, includes an explanation.  */
   FIRST_MESSAGE,
-
   /* First message of a series, but does not need to include any sort
      of explanation.  */
   SHORT_FIRST_MESSAGE,
-
   /* Subsequent message of a series that needs no explanation (the
      user already knows we have a problem so we can just state our
      piece).  */
@@ -68,7 +70,13 @@ struct complaints
 {
   struct complain *root;
 
-  enum complaint_series series;
+  /* Should each complaint be self explanatory, or should we assume
+     that a series of complaints is being produced?  case 0: Isolated
+     self explanatory message.  case 1: First message of a series that
+     must start off with explanation.  case 2: Subsequent message of a
+     series that needs no explanation (the user already knows we have
+     a problem so we can just state our piece).  */
+  int series;
 
   /* The explanatory messages that should accompany the complaint.
      NOTE: cagney/2002-08-14: In a desperate attempt at being vaguely
@@ -92,7 +100,7 @@ static struct explanation symfile_explanations[] = {
 
 static struct complaints symfile_complaint_book = {
   &complaint_sentinel,
-  ISOLATED_MESSAGE,
+  0,
   symfile_explanations
 };
 struct complaints *symfile_complaints = &symfile_complaint_book;
@@ -104,7 +112,7 @@ get_complaints (struct complaints **c)
 {
   if ((*c) != NULL)
     return (*c);
-  (*c) = XNEW (struct complaints);
+  (*c) = XMALLOC (struct complaints);
   (*c)->root = &complaint_sentinel;
   (*c)->series = ISOLATED_MESSAGE;
   (*c)->explanation = NULL;
@@ -132,7 +140,7 @@ find_complaint (struct complaints *complaints, const char *file,
     }
 
   /* Oops not seen before, fill in a new complaint.  */
-  complaint = XNEW (struct complain);
+  complaint = XMALLOC (struct complain);
   complaint->fmt = fmt;
   complaint->file = file;
   complaint->line = line;
@@ -176,27 +184,21 @@ vcomplaint (struct complaints **c, const char *file,
   else
     series = complaints->series;
 
-  /* Pass 'fmt' instead of 'complaint->fmt' to printf-like callees
-     from here on, to avoid "format string is not a string literal"
-     warnings.  'fmt' is this function's printf-format parameter, so
-     the compiler can assume the passed in argument is a literal
-     string somewhere up the call chain.  */
-  gdb_assert (complaint->fmt == fmt);
-
   if (complaint->file != NULL)
-    internal_vwarning (complaint->file, complaint->line, fmt, args);
+    internal_vwarning (complaint->file, complaint->line, 
+		       complaint->fmt, args);
   else if (deprecated_warning_hook)
-    (*deprecated_warning_hook) (fmt, args);
+    (*deprecated_warning_hook) (complaint->fmt, args);
   else
     {
       if (complaints->explanation == NULL)
 	/* A [v]warning() call always appends a newline.  */
-	vwarning (fmt, args);
+	vwarning (complaint->fmt, args);
       else
 	{
 	  char *msg;
 	  struct cleanup *cleanups;
-	  msg = xstrvprintf (fmt, args);
+	  msg = xstrvprintf (complaint->fmt, args);
 	  cleanups = make_cleanup (xfree, msg);
 	  wrap_here ("");
 	  if (series != SUBSEQUENT_MESSAGE)

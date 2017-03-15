@@ -1,4 +1,4 @@
-/* $NetBSD: secmodel.c,v 1.2 2014/11/04 16:01:58 maxv Exp $ */
+/* $NetBSD: secmodel.c,v 1.1.26.1 2014/11/07 08:21:31 martin Exp $ */
 /*-
  * Copyright (c) 2011 Elad Efrat <elad@NetBSD.org>
  * All rights reserved.

@@ -7,7 +7,7 @@
 //
 //===----------------------------------------------------------------------===//
 //
-//  This file defines TypeLocBuilder, a class for building TypeLocs
+//  This files defines TypeLocBuilder, a class for building TypeLocs
 //  bottom-up.
 //
 //===----------------------------------------------------------------------===//
@@ -39,7 +39,7 @@ class TypeLocBuilder {
 #endif
     
   /// The inline buffer.
-  enum { BufferMaxAlignment = alignof(void *) };
+  enum { BufferMaxAlignment = llvm::AlignOf<void*>::Alignment };
   llvm::AlignedCharArray<BufferMaxAlignment, InlineCapacity> InlineBuffer;
   unsigned NumBytesAtAlign4, NumBytesAtAlign8;
 

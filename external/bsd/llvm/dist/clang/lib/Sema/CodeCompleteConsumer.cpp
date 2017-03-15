@@ -17,7 +17,6 @@
 #include "clang/AST/DeclTemplate.h"
 #include "clang/Sema/Scope.h"
 #include "clang/Sema/Sema.h"
-#include "clang/Lex/Preprocessor.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/SmallString.h"
 #include "llvm/ADT/Twine.h"
@@ -252,16 +251,19 @@ const char *CodeCompletionString::getTypedText() const {
   return nullptr;
 }
 
-const char *CodeCompletionAllocator::CopyString(const Twine &String) {
-  SmallString<128> Data;
-  StringRef Ref = String.toStringRef(Data);
+const char *CodeCompletionAllocator::CopyString(StringRef String) {
+  char *Mem = (char *)Allocate(String.size() + 1, 1);
+  std::copy(String.begin(), String.end(), Mem);
+  Mem[String.size()] = 0;
+  return Mem;
+}
+
+const char *CodeCompletionAllocator::CopyString(Twine String) {
   // FIXME: It would be more efficient to teach Twine to tell us its size and
   // then add a routine there to fill in an allocated char* with the contents
   // of the string.
-  char *Mem = (char *)Allocate(Ref.size() + 1, 1);
-  std::copy(Ref.begin(), Ref.end(), Mem);
-  Mem[Ref.size()] = 0;
-  return Mem;
+  SmallString<128> Data;
+  return CopyString(String.toStringRef(Data));
 }
 
 StringRef CodeCompletionTUInfo::getParentName(const DeclContext *DC) {
@@ -310,7 +312,7 @@ StringRef CodeCompletionTUInfo::getParentName(const DeclContext *DC) {
         if (!Interface) {
           // Assign an empty StringRef but with non-null data to distinguish
           // between empty because we didn't process the DeclContext yet.
-          CachedParentName = StringRef((const char *)(uintptr_t)~0U, 0);
+          CachedParentName = StringRef((const char *)~0U, 0);
           return StringRef();
         }
         
@@ -328,9 +330,9 @@ StringRef CodeCompletionTUInfo::getParentName(const DeclContext *DC) {
 
 CodeCompletionString *CodeCompletionBuilder::TakeString() {
   void *Mem = getAllocator().Allocate(
-      sizeof(CodeCompletionString) + sizeof(Chunk) * Chunks.size() +
-          sizeof(const char *) * Annotations.size(),
-      alignof(CodeCompletionString));
+                  sizeof(CodeCompletionString) + sizeof(Chunk) * Chunks.size()
+                                    + sizeof(const char *) * Annotations.size(),
+                                 llvm::alignOf<CodeCompletionString>());
   CodeCompletionString *Result 
     = new (Mem) CodeCompletionString(Chunks.data(), Chunks.size(),
                                      Priority, Availability,
@@ -429,26 +431,6 @@ CodeCompleteConsumer::OverloadCandidate::getFunctionType() const {
 
 CodeCompleteConsumer::~CodeCompleteConsumer() { }
 
-bool PrintingCodeCompleteConsumer::isResultFilteredOut(StringRef Filter,
-                                                CodeCompletionResult Result) {
-  switch (Result.Kind) {
-  case CodeCompletionResult::RK_Declaration: {
-    return !(Result.Declaration->getIdentifier() &&
-            Result.Declaration->getIdentifier()->getName().startswith(Filter));
-  }
-  case CodeCompletionResult::RK_Keyword: {
-    return !StringRef(Result.Keyword).startswith(Filter);
-  }
-  case CodeCompletionResult::RK_Macro: {
-    return !Result.Macro->getName().startswith(Filter);
-  }
-  case CodeCompletionResult::RK_Pattern: {
-    return !StringRef(Result.Pattern->getAsString()).startswith(Filter);
-  }
-  }
-  llvm_unreachable("Unknown code completion result Kind.");
-}
-
 void 
 PrintingCodeCompleteConsumer::ProcessCodeCompleteResults(Sema &SemaRef,
                                                  CodeCompletionContext Context,
@@ -456,12 +438,8 @@ PrintingCodeCompleteConsumer::ProcessCodeCompleteResults(Sema &SemaRef,
                                                          unsigned NumResults) {
   std::stable_sort(Results, Results + NumResults);
   
-  StringRef Filter = SemaRef.getPreprocessor().getCodeCompletionFilter();
-
   // Print the results.
   for (unsigned I = 0; I != NumResults; ++I) {
-    if(!Filter.empty() && isResultFilteredOut(Filter, Results[I]))
-      continue;
     OS << "COMPLETION: ";
     switch (Results[I].Kind) {
     case CodeCompletionResult::RK_Declaration:
@@ -469,8 +447,7 @@ PrintingCodeCompleteConsumer::ProcessCodeCompleteResults(Sema &SemaRef,
       if (Results[I].Hidden)
         OS << " (Hidden)";
       if (CodeCompletionString *CCS 
-            = Results[I].CreateCodeCompletionString(SemaRef, Context,
-                                                    getAllocator(),
+            = Results[I].CreateCodeCompletionString(SemaRef, getAllocator(),
                                                     CCTUInfo,
                                                     includeBriefComments())) {
         OS << " : " << CCS->getAsString();
@@ -488,8 +465,7 @@ PrintingCodeCompleteConsumer::ProcessCodeCompleteResults(Sema &SemaRef,
     case CodeCompletionResult::RK_Macro: {
       OS << Results[I].Macro->getName();
       if (CodeCompletionString *CCS 
-            = Results[I].CreateCodeCompletionString(SemaRef, Context,
-                                                    getAllocator(),
+            = Results[I].CreateCodeCompletionString(SemaRef, getAllocator(),
                                                     CCTUInfo,
                                                     includeBriefComments())) {
         OS << " : " << CCS->getAsString();
@@ -507,31 +483,6 @@ PrintingCodeCompleteConsumer::ProcessCodeCompleteResults(Sema &SemaRef,
   }
 }
 
-// This function is used solely to preserve the former presentation of overloads
-// by "clang -cc1 -code-completion-at", since CodeCompletionString::getAsString
-// needs to be improved for printing the newer and more detailed overload
-// chunks.
-static std::string getOverloadAsString(const CodeCompletionString &CCS) {
-  std::string Result;
-  llvm::raw_string_ostream OS(Result);
-
-  for (auto &C : CCS) {
-    switch (C.Kind) {
-    case CodeCompletionString::CK_Informative:
-    case CodeCompletionString::CK_ResultType:
-      OS << "[#" << C.Text << "#]";
-      break;
-
-    case CodeCompletionString::CK_CurrentParameter:
-      OS << "<#" << C.Text << "#>";
-      break;
-
-    default: OS << C.Text; break;
-    }
-  }
-  return OS.str();
-}
-
 void 
 PrintingCodeCompleteConsumer::ProcessOverloadCandidates(Sema &SemaRef,
                                                         unsigned CurrentArg,
@@ -540,9 +491,8 @@ PrintingCodeCompleteConsumer::ProcessOverloadCandidates(Sema &SemaRef,
   for (unsigned I = 0; I != NumCandidates; ++I) {
     if (CodeCompletionString *CCS
           = Candidates[I].CreateSignatureString(CurrentArg, SemaRef,
-                                                getAllocator(), CCTUInfo,
-                                                includeBriefComments())) {
-      OS << "OVERLOAD: " << getOverloadAsString(*CCS) << "\n";
+                                                getAllocator(), CCTUInfo)) {
+      OS << "OVERLOAD: " << CCS->getAsString() << "\n";
     }
   }
 }

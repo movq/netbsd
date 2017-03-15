@@ -1,4 +1,4 @@
-/*	$NetBSD: trap.c,v 1.88 2015/03/04 20:30:00 martin Exp $	*/
+/*	$NetBSD: trap.c,v 1.87 2014/03/24 20:01:03 christos Exp $	*/
 
 /*
  * This file was taken from mvme68k/mvme68k/trap.c
@@ -46,7 +46,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: trap.c,v 1.88 2015/03/04 20:30:00 martin Exp $");
+__KERNEL_RCSID(0, "$NetBSD: trap.c,v 1.87 2014/03/24 20:01:03 christos Exp $");
 
 #include "opt_ddb.h"
 #include "opt_execfmt.h"
@@ -620,26 +620,14 @@ trap(struct frame *fp, int type, unsigned code, unsigned v)
 			goto dopanic;
 		}
 		ksi.ksi_addr = (void *)v;
-		switch (rv) {
-		case ENOMEM:
+		if (rv == ENOMEM) {
 			printf("UVM: pid %d (%s), uid %d killed: out of swap\n",
 			       p->p_pid, p->p_comm,
 			       l->l_cred ?
 			       kauth_cred_geteuid(l->l_cred) : -1);
 			ksi.ksi_signo = SIGKILL;
-			break;
-		case EINVAL:
-			ksi.ksi_signo = SIGBUS;
-			ksi.ksi_code = BUS_ADRERR;
-			break;
-		case EACCES:
+		} else {
 			ksi.ksi_signo = SIGSEGV;
-			ksi.ksi_code = SEGV_ACCERR;
-			break;
-		default:
-			ksi.ksi_signo = SIGSEGV;
-			ksi.ksi_code = SEGV_MAPERR;
-			break;
 		}
 		break;
 	    }

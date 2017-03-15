@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.27 2017/01/11 12:02:30 joerg Exp $
+#	$NetBSD: Makefile,v 1.24.2.1 2015/06/04 20:05:44 snj Exp $
 
 LIB=	LLVMMipsCodeGen
 
@@ -20,7 +20,6 @@ SRCS+=	Mips16ISelDAGToDAG.cpp \
 	MipsDelaySlotFiller.cpp \
 	MipsFastISel.cpp \
 	MipsFrameLowering.cpp \
-	MipsHazardSchedule.cpp \
 	MipsInstrInfo.cpp \
 	MipsISelDAGToDAG.cpp \
 	MipsISelLowering.cpp \
@@ -38,7 +37,9 @@ SRCS+=	Mips16ISelDAGToDAG.cpp \
 	MipsSERegisterInfo.cpp \
 	MipsSubtarget.cpp \
 	MipsTargetMachine.cpp \
-	MipsTargetObjectFile.cpp
+	MipsTargetObjectFile.cpp \
+	MipsSelectionDAGInfo.cpp
+
 
 TABLEGEN_SRC=		Mips.td
 TABLEGEN_INCLUDES=	-I${LLVM_SRCDIR}/lib/Target/Mips

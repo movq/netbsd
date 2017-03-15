@@ -1,4 +1,4 @@
-/*	$NetBSD: res_init.c,v 1.30 2015/02/24 17:56:20 christos Exp $	*/
+/*	$NetBSD: res_init.c,v 1.28 2014/01/08 22:58:50 christos Exp $	*/
 
 /*
  * Copyright (c) 1985, 1989, 1993
@@ -12,7 +12,11 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. Neither the name of the University nor the names of its contributors
+ * 3. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgement:
+ * 	This product includes software developed by the University of
+ * 	California, Berkeley and its contributors.
+ * 4. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  * 
@@ -72,7 +76,7 @@
 static const char sccsid[] = "@(#)res_init.c	8.1 (Berkeley) 6/7/93";
 static const char rcsid[] = "Id: res_init.c,v 1.26 2008/12/11 09:59:00 marka Exp";
 #else
-__RCSID("$NetBSD: res_init.c,v 1.30 2015/02/24 17:56:20 christos Exp $");
+__RCSID("$NetBSD: res_init.c,v 1.28 2014/01/08 22:58:50 christos Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 
@@ -495,7 +499,7 @@ __res_vinit(res_state statp, int preinit) {
 #ifdef RESOLVSORT
 	    statp->nsort = nsort;
 #endif
-	    statp->_u._ext.ext->resfd = fcntl(fileno(fp), F_DUPFD_CLOEXEC);
+	    statp->_u._ext.ext->resfd = dup(fileno(fp));
 	    (void) fclose(fp);
 	    if (fstat(statp->_u._ext.ext->resfd, &st) != -1)
 		    __res_conf_time = statp->_u._ext.ext->res_conf_time =

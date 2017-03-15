@@ -1,4 +1,4 @@
-/*	$NetBSD: net.c,v 1.23 2016/12/13 19:03:49 roy Exp $	*/
+/*	$NetBSD: net.c,v 1.2.4.5 2015/05/14 07:58:49 snj Exp $	*/
 
 /*
  * Copyright 1997 Piermont Information Systems Inc.
@@ -200,6 +200,7 @@ url_encode(char *dst, const char *src, const char *ep,
 }
 
 static const char *ignored_if_names[] = {
+	"eon",			/* netiso */
 	"gre",			/* net */
 	"ipip",			/* netinet */
 	"gif",			/* netinet6 */
@@ -209,6 +210,7 @@ static const char *ignored_if_names[] = {
 #if 0
 	"mdecap",		/* netinet -- never in IF list (?) XXX */
 #endif
+	"nsip",			/* netns */
 	"ppp",			/* net */
 #if 0
 	"sl",			/* net */
@@ -833,17 +835,30 @@ done:
 	}
 
 	/*
-	 * wait for addresses to become valid
+	 * wait a couple of seconds for the interface to go live.
 	 */
 	if (!nfs_root) {
 		msg_display_add(MSG_wait_network);
-		network_up = !run_program(RUN_DISPLAY | RUN_PROGRESS,
-		    "/sbin/ifconfig -w 15 -W 5");
-	} else {
-		/* Assume network is up. */
-		network_up = 1;
+		sleep(5);
 	}
 
+	/*
+	 * ping should be verbose, so users can see the cause
+	 * of a network failure.
+	 */
+	if (net_defroute[0] != '\0' && network_up)
+		network_up = !run_program(RUN_DISPLAY | RUN_PROGRESS,
+		    "/sbin/ping -v -c 5 -w 5 -o -n %s", net_defroute);
+	if (net_namesvr[0] != '\0' && network_up) {
+#ifdef INET6
+		if (strchr(net_namesvr, ':'))
+			network_up = !run_program(RUN_DISPLAY | RUN_PROGRESS,
+			    "/sbin/ping6 -v -c 3 -n %s", net_namesvr);
+		else
+#endif
+			network_up = !run_program(RUN_DISPLAY | RUN_PROGRESS,
+			    "/sbin/ping -v -c 5 -w 5 -o -n %s", net_namesvr);
+	}
 	fflush(NULL);
 
 	return network_up;

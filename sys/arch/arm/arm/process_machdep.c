@@ -1,4 +1,4 @@
-/*	$NetBSD: process_machdep.c,v 1.31 2017/02/21 07:40:28 skrll Exp $	*/
+/*	$NetBSD: process_machdep.c,v 1.29 2014/01/04 00:10:02 dsl Exp $	*/
 
 /*
  * Copyright (c) 1993 The Regents of the University of California.
@@ -133,7 +133,7 @@
 
 #include <sys/param.h>
 
-__KERNEL_RCSID(0, "$NetBSD: process_machdep.c,v 1.31 2017/02/21 07:40:28 skrll Exp $");
+__KERNEL_RCSID(0, "$NetBSD: process_machdep.c,v 1.29 2014/01/04 00:10:02 dsl Exp $");
 
 #include <sys/proc.h>
 #include <sys/ptrace.h>
@@ -158,14 +158,17 @@ process_read_regs(struct lwp *l, struct reg *regs)
 	regs->r_pc = tf->tf_pc;
 	regs->r_cpsr = tf->tf_spsr;
 
-	KASSERT(VALID_R15_PSR(tf->tf_pc, tf->tf_spsr));
-
 #ifdef THUMB_CODE
 	if (tf->tf_spsr & PSR_T_bit)
 		regs->r_pc |= 1;
 #endif
+#ifdef DIAGNOSTIC
+	if ((tf->tf_spsr & PSR_MODE) == PSR_USR32_MODE
+	     && (tf->tf_spsr & IF32_bits))
+		panic("process_read_regs: IRQs/FIQs blocked in user process");
+#endif
 
-	return 0;
+	return(0);
 }
 
 int
@@ -201,7 +204,11 @@ process_write_regs(struct lwp *l, const struct reg *regs)
 	if ((regs->r_pc & 1) || (regs->r_cpsr & PSR_T_bit))
 		tf->tf_spsr |= PSR_T_bit;
 #endif
-	KASSERT(VALID_R15_PSR(tf->tf_pc, tf->tf_spsr));
+#ifdef DIAGNOSTIC
+	if ((tf->tf_spsr & PSR_MODE) == PSR_USR32_MODE
+	     && (tf->tf_spsr & IF32_bits))
+		panic("process_read_regs: IRQs/FIQs blocked in user process");
+#endif
 #else /* __PROG26 */
 	if ((regs->r_pc & (R15_MODE | R15_IRQ_DISABLE | R15_FIQ_DISABLE)) != 0)
 		return EPERM;
@@ -209,7 +216,7 @@ process_write_regs(struct lwp *l, const struct reg *regs)
 	tf->tf_r15 = regs->r_pc;
 #endif
 
-	return 0;
+	return(0);
 }
 
 int
@@ -224,7 +231,7 @@ process_write_fpregs(struct lwp *l, const struct fpreg *regs, size_t sz)
 	pcb->pcb_vfp = regs->fpr_vfp;
 	pcb->pcb_vfp.vfp_fpexc &= ~VFP_FPEXC_EN;
 #endif
-	return 0;
+	return(0);
 }
 
 int
@@ -248,5 +255,5 @@ process_set_pc(struct lwp *l, void *addr)
 	tf->tf_r15 = (tf->tf_r15 & ~R15_PC) | (register_t)addr;
 #endif
 
-	return 0;
+	return (0);
 }

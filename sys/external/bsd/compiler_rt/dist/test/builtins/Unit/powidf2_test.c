@@ -17,7 +17,7 @@
 
 // Returns: a ^ b
 
-COMPILER_RT_ABI double __powidf2(double a, si_int b);
+double __powidf2(double a, si_int b);
 
 int test__powidf2(double a, si_int b, double expected)
 {

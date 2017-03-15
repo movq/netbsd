@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.21 2017/02/14 09:59:16 rin Exp $
+#	$NetBSD: Makefile,v 1.13.4.1 2015/04/30 06:07:31 riz Exp $
 
 .include <bsd.own.mk>
 
@@ -60,6 +60,8 @@ packet.c \
 poly1305.c \
 progressmeter.c \
 readpass.c \
+reallocarray.c \
+roaming_dummy.c \
 rsa.c \
 sc25519.c \
 smult_curve25519_ref.c \
@@ -71,11 +73,11 @@ ssherr.c \
 sshkey.c \
 ssh-ed25519.c \
 ssh-pkcs11.c \
+strtonum.c \
 ttymodes.c \
 uidswap.c \
 umac.c \
 umac128.c \
-utf8.c \
 uuencode.c \
 verify.c \
 xmalloc.c
@@ -114,11 +116,5 @@ COPTS.${f}.c+=	-Wno-pointer-sign
 
 # XXX
 COPTS.channels.c+=	-fno-strict-aliasing
-
-# XXX
-.if ${MACHINE} == "vax"
-COPTS.poly1305.c+=	-O0
-COPTS.umac.c+=		-O0
-.endif
 
 .include <bsd.lib.mk>

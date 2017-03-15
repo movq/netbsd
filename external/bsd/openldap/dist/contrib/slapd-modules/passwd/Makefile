@@ -1,7 +1,7 @@
 # $OpenLDAP$
 
 LDAP_SRC = ../../..
-LDAP_BUILD = $(LDAP_SRC)
+LDAP_BUILD = ../../..
 LDAP_INC = -I$(LDAP_BUILD)/include -I$(LDAP_SRC)/include -I$(LDAP_SRC)/servers/slapd
 LDAP_LIB = $(LDAP_BUILD)/libraries/libldap_r/libldap_r.la \
 	$(LDAP_BUILD)/libraries/liblber/liblber.la
@@ -33,19 +33,19 @@ all: $(PROGRAMS)
 
 pw-kerberos.la:	kerberos.lo
 	$(LIBTOOL) --mode=link $(CC) $(OPT) -version-info $(LTVER) \
-	-rpath $(moduledir) -module -o $@ $? -lkrb5
+	-rpath $(PREFIX)/lib -module -o $@ $? -lkrb5
 
 pw-netscape.la:	netscape.lo
 	$(LIBTOOL) --mode=link $(CC) $(OPT) -version-info $(LTVER) \
-	-rpath $(moduledir) -module -o $@ $?
+	-rpath $(PREFIX)/lib -module -o $@ $? 
 
 pw-radius.la:	radius.lo
 	$(LIBTOOL) --mode=link $(CC) $(OPT) -version-info $(LTVER) \
-	-rpath $(moduledir) -module -o $@ $? -lradius
+	-rpath $(PREFIX)/lib -module -o $@ $? -lradius
 
 pw-apr1.la:	apr1.lo
 	$(LIBTOOL) --mode=link $(CC) $(OPT) -version-info $(LTVER) \
-	-rpath $(moduledir) -module -o $@ $?
+	-rpath $(PREFIX)/lib -module -o $@ $?
 
 clean:
 	rm -rf *.o *.lo *.la .libs

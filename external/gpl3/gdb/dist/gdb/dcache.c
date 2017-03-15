@@ -1,6 +1,6 @@
 /* Caching code for GDB, the GNU debugger.
 
-   Copyright (C) 1992-2016 Free Software Foundation, Inc.
+   Copyright (C) 1992-2014 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -20,6 +20,7 @@
 #include "defs.h"
 #include "dcache.h"
 #include "gdbcmd.h"
+#include <string.h>
 #include "gdbcore.h"
 #include "target-dcache.h"
 #include "inferior.h"
@@ -370,9 +371,8 @@ dcache_alloc (DCACHE *dcache, CORE_ADDR addr)
       if (db)
 	remove_block (&dcache->freelist, db);
       else
-	db = ((struct dcache_block *)
-	      xmalloc (offsetof (struct dcache_block, data)
-		       + dcache->line_size));
+	db = xmalloc (offsetof (struct dcache_block, data) +
+		      dcache->line_size);
 
       dcache->size++;
     }
@@ -445,7 +445,9 @@ dcache_splay_tree_compare (splay_tree_key a, splay_tree_key b)
 DCACHE *
 dcache_init (void)
 {
-  DCACHE *dcache = XNEW (DCACHE);
+  DCACHE *dcache;
+
+  dcache = (DCACHE *) xmalloc (sizeof (*dcache));
 
   dcache->tree = splay_tree_new (dcache_splay_tree_compare,
 				 NULL,
@@ -466,10 +468,9 @@ dcache_init (void)
    fills the cache.  Arguments/return are like the target_xfer_partial
    interface.  */
 
-enum target_xfer_status
+int
 dcache_read_memory_partial (struct target_ops *ops, DCACHE *dcache,
-			    CORE_ADDR memaddr, gdb_byte *myaddr,
-			    ULONGEST len, ULONGEST *xfered_len)
+			    CORE_ADDR memaddr, gdb_byte *myaddr, ULONGEST len)
 {
   ULONGEST i;
 
@@ -493,18 +494,7 @@ dcache_read_memory_partial (struct target_ops *ops, DCACHE *dcache,
 	}
     }
 
-  if (i == 0)
-    {
-      /* Even though reading the whole line failed, we may be able to
-	 read a piece starting where the caller wanted.  */
-      return raw_memory_xfer_partial (ops, myaddr, NULL, memaddr, len,
-				      xfered_len);
-    }
-  else
-    {
-      *xfered_len = i;
-      return TARGET_XFER_OK;
-    }
+  return i == 0 ? -1 : i;
 }
 
 /* FIXME: There would be some benefit to making the cache write-back and
@@ -521,14 +511,14 @@ dcache_read_memory_partial (struct target_ops *ops, DCACHE *dcache,
    memory.  */
 
 void
-dcache_update (DCACHE *dcache, enum target_xfer_status status,
+dcache_update (DCACHE *dcache, int status,
 	       CORE_ADDR memaddr, const gdb_byte *myaddr,
 	       ULONGEST len)
 {
   ULONGEST i;
 
   for (i = 0; i < len; i++)
-    if (status == TARGET_XFER_OK)
+    if (status > 0)
       dcache_poke_byte (dcache, memaddr + i, myaddr + i);
     else
       {
@@ -678,7 +668,7 @@ set_dcache_command (char *arg, int from_tty)
 {
   printf_unfiltered (
      "\"set dcache\" must be followed by the name of a subcommand.\n");
-  help_list (dcache_set_list, "set dcache ", all_commands, gdb_stdout);
+  help_list (dcache_set_list, "set dcache ", -1, gdb_stdout);
 }
 
 static void

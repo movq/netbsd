@@ -21,7 +21,6 @@
 #include "clang/StaticAnalyzer/Core/PathSensitive/BasicValueFactory.h"
 #include "clang/StaticAnalyzer/Core/PathSensitive/MemRegion.h"
 #include "clang/StaticAnalyzer/Core/PathSensitive/SVals.h"
-#include "clang/StaticAnalyzer/Core/PathSensitive/SymbolManager.h"
 
 namespace clang {
 
@@ -66,7 +65,7 @@ public:
       SymMgr(context, BasicVals, alloc),
       MemMgr(context, alloc),
       StateMgr(stateMgr),
-      ArrayIndexTy(context.LongLongTy),
+      ArrayIndexTy(context.IntTy),
       ArrayIndexWidth(context.getTypeSize(ArrayIndexTy)) {}
 
   virtual ~SValBuilder() {}
@@ -84,11 +83,7 @@ public:
   }
 
   SVal evalCast(SVal val, QualType castTy, QualType originalType);
-
-  // Handles casts of type CK_IntegralCast.
-  SVal evalIntegralCast(ProgramStateRef state, SVal val, QualType castTy,
-                        QualType originalType);
-
+  
   virtual SVal evalMinus(NonLoc val) = 0;
 
   virtual SVal evalComplement(NonLoc val) = 0;
@@ -198,13 +193,9 @@ public:
   DefinedOrUnknownSVal getDerivedRegionValueSymbolVal(
       SymbolRef parentSymbol, const TypedValueRegion *region);
 
-  DefinedSVal getMetadataSymbolVal(const void *symbolTag,
-                                   const MemRegion *region,
-                                   const Expr *expr, QualType type,
-                                   const LocationContext *LCtx,
-                                   unsigned count);
-
-  DefinedSVal getMemberPointer(const DeclaratorDecl *DD);
+  DefinedSVal getMetadataSymbolVal(
+      const void *symbolTag, const MemRegion *region,
+      const Expr *expr, QualType type, unsigned count);
 
   DefinedSVal getFunctionPointer(const FunctionDecl *func);
   
@@ -226,14 +217,6 @@ public:
                              const TypedValueRegion *region) {
     return nonloc::LazyCompoundVal(
         BasicVals.getLazyCompoundValData(store, region));
-  }
-
-  NonLoc makePointerToMember(const DeclaratorDecl *DD) {
-    return nonloc::PointerToMember(DD);
-  }
-
-  NonLoc makePointerToMember(const PointerToMemberData *PTMD) {
-    return nonloc::PointerToMember(PTMD);
   }
 
   NonLoc makeZeroArrayIndex() {

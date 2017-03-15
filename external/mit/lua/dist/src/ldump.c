@@ -1,4 +1,4 @@
-/*	$NetBSD: ldump.c,v 1.6 2016/09/08 02:21:31 salazar Exp $	*/
+/*	$NetBSD: ldump.c,v 1.2.2.3 2016/07/01 06:35:02 snj Exp $	*/
 
 /*
 ** Id: ldump.c,v 2.37 2015/10/08 15:53:49 roberto Exp 

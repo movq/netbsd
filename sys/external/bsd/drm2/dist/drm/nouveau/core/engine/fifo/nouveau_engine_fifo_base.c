@@ -1,4 +1,4 @@
-/*	$NetBSD: nouveau_engine_fifo_base.c,v 1.5 2016/05/11 02:28:33 riastradh Exp $	*/
+/*	$NetBSD: nouveau_engine_fifo_base.c,v 1.2.4.3 2016/12/12 09:13:42 msaitoh Exp $	*/
 
 /*
  * Copyright 2012 Red Hat Inc.
@@ -25,7 +25,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: nouveau_engine_fifo_base.c,v 1.5 2016/05/11 02:28:33 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: nouveau_engine_fifo_base.c,v 1.2.4.3 2016/12/12 09:13:42 msaitoh Exp $");
 
 #include <core/client.h>
 #include <core/object.h>

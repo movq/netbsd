@@ -1,4 +1,4 @@
-/*	$NetBSD: bha_isa.c,v 1.37 2016/07/14 04:19:27 msaitoh Exp $	*/
+/*	$NetBSD: bha_isa.c,v 1.35 2012/10/27 17:18:24 chs Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: bha_isa.c,v 1.37 2016/07/14 04:19:27 msaitoh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: bha_isa.c,v 1.35 2012/10/27 17:18:24 chs Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -58,7 +58,7 @@ CFATTACH_DECL_NEW(bha_isa, sizeof(struct bha_softc),
 
 /*
  * Check the slots looking for a board we recognise
- * If we find one, note its address (slot) and call
+ * If we find one, note it's address (slot) and call
  * the actual probe routine to check it out.
  */
 int
@@ -146,8 +146,7 @@ bha_isa_attach(device_t parent, device_t self, void *aux)
 	sc->sc_dmaflags = 0;
 	if (bpd.sc_drq != -1) {
 		if ((error = isa_dmacascade(ic, bpd.sc_drq)) != 0) {
-			aprint_error_dev(sc->sc_dev,
-			    " unable to cascade DRQ, error = %d\n", error);
+			aprint_error_dev(sc->sc_dev, " unable to cascade DRQ, error = %d\n", error);
 			return;
 		}
 	} else {

@@ -1,5 +1,5 @@
-/*	Id: local2.c,v 1.42 2015/01/04 19:17:23 ragge Exp 	*/	
-/*	$NetBSD: local2.c,v 1.1.1.7 2016/02/09 20:28:36 plunky Exp $	*/
+/*	Id: local2.c,v 1.37 2012/12/21 21:44:27 ragge Exp 	*/	
+/*	$NetBSD: local2.c,v 1.1.1.6 2014/07/24 19:21:48 plunky Exp $	*/
 /*
  * Copyright(C) Caldera International Inc. 2001-2002. All rights reserved.
  *
@@ -557,15 +557,6 @@ zzzcode(NODE *p, int c)
 		return;
 		}
 
-	case 'l': /* print out long long constant as hex */
-	case 'r': /* works around a bug in gas */
-		l = getlr(p, c == 'l' ? 'L' : 'R');
-		if (l->n_op == ICON && ISLONGLONG(l->n_type)) {
-			printf("$0x%llx", l->n_lval);
-		} else
-			adrput(stdout, l);
-		break;
-
 	case 'O': /* print out emulated ops */
 		expand(p, FOREFF, "\tmovq	AR,-(%sp)\n");
 		expand(p, FOREFF, "\tmovq	AL,-(%sp)\n");
@@ -580,7 +571,7 @@ zzzcode(NODE *p, int c)
 
 
 	case 'Z':	/* complement mask for bit instr */
-		printf("$%lld", ~p->n_right->n_lval);
+		printf("$%Ld", ~p->n_right->n_lval);
 		return;
 
 	case 'U':	/* 32 - n, for unsigned right shifts */
@@ -593,7 +584,7 @@ zzzcode(NODE *p, int c)
 		{
 		int size;
 
-		size = attr_find(p->n_ap, ATTR_P2STRUCT)->iarg(0);
+		size = p->n_stsize;
 		SETOFF( size, 4);
 		printf("$%d", size);
 		return;
@@ -603,8 +594,7 @@ zzzcode(NODE *p, int c)
 		{
 			register int size;
 
-			size = attr_find(p->n_ap, ATTR_P2STRUCT)->iarg(0);
-			SETOFF(size, 4);
+			size = p->n_stsize;
 			l = r = NULL; /* XXX gcc */
 			if( p->n_op == STASG ){
 				l = p->n_left;
@@ -667,9 +657,9 @@ zzzcode(NODE *p, int c)
 void
 rmove(int rt, int rs, TWORD t)
 {
-	char c = (t == FLOAT ? 'f' : t == DOUBLE ? 'd' :
-	    t == LONGLONG || t == ULONGLONG ? 'q' : 'l');
-	printf("	mov%c	%s,%s\n", c, rnames[rt], rnames[rs]);
+	printf( "	%s	%s,%s\n",
+		(t==FLOAT ? "movf" : (t==DOUBLE ? "movd" : "movl")),
+		rnames[rt], rnames[rs] );
 }
 
 int
@@ -870,7 +860,6 @@ shumul( p, shape ) register NODE *p; int shape; {
 void
 adrcon(CONSZ val)
 {
-	comperr("adrcon");
 	printf( "$" );
 	printf( CONFMT, val );
 }
@@ -922,7 +911,7 @@ upput(NODE *p, int size)
 		p->n_lval -= size;
 		break;
 	case ICON:
-		printf("$" CONFMT, (p->n_lval >> 32) & 0xffffffff);
+		printf("$" CONFMT, p->n_lval >> 32);
 		break;
 	default:
 		comperr("upput bad op %d size %d", p->n_op, size);
@@ -948,10 +937,7 @@ adrput(FILE *fp, NODE *p)
 		/* addressable value of the constant */
 		if (p->n_name[0] == '\0') /* uses xxxab */
 			printf("$");
-		if (ISLONGLONG(p->n_type))
-			printf("0x%llx", p->n_lval);
-		else
-			acon(p);
+		acon(p);
 		return;
 
 	case REG:
@@ -1040,16 +1026,14 @@ adrput(FILE *fp, NODE *p)
 void
 acon(NODE *p)
 {
-	int u = (int)p->n_lval;;
-	CONSZ v = u;
 
 	if (p->n_name[0] == '\0') {
-		printf(CONFMT, v);
+		printf(CONFMT, p->n_lval);
 	} else if( p->n_lval == 0 ) {
 		printf("%s", p->n_name);
 	} else {
 		printf("%s+", p->n_name);
-		printf(CONFMT, v);
+		printf(CONFMT, p->n_lval);
 	}
 }
 
@@ -1344,7 +1328,7 @@ argsiz(NODE *p)
 	TWORD t = p->n_type;
 
 	if (t == STRTY || t == UNIONTY)
-		return (attr_find(p->n_ap, ATTR_P2STRUCT)->iarg(0)+3)/4;
+		return p->n_stsize/(SZINT/SZCHAR);
 	return szty(t);
 }
 

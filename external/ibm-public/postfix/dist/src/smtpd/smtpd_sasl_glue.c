@@ -1,4 +1,4 @@
-/*	$NetBSD: smtpd_sasl_glue.c,v 1.2 2017/02/14 01:16:48 christos Exp $	*/
+/*	$NetBSD: smtpd_sasl_glue.c,v 1.1.1.4 2014/07/06 19:27:57 tron Exp $	*/
 
 /*++
 /* NAME
@@ -117,11 +117,6 @@
 /*	IBM T.J. Watson Research
 /*	P.O. Box 704
 /*	Yorktown Heights, NY 10598, USA
-/*
-/*	Wietse Venema
-/*	Google, Inc.
-/*	111 8th Avenue
-/*	New York, NY 10011, USA
 /*--*/
 
 /* System library. */
@@ -323,12 +318,8 @@ int     smtpd_sasl_authenticate(SMTPD_STATE *state,
 		 state->namaddr, sasl_method,
 		 STR(state->sasl_reply));
 	/* RFC 4954 Section 6. */
-	if (status == XSASL_AUTH_TEMP)
-	    smtpd_chat_reply(state, "454 4.7.0 Temporary authentication failure: %s",
-			     STR(state->sasl_reply));
-	else
-	    smtpd_chat_reply(state, "535 5.7.8 Error: authentication failed: %s",
-			     STR(state->sasl_reply));
+	smtpd_chat_reply(state, "535 5.7.8 Error: authentication failed: %s",
+			 STR(state->sasl_reply));
 	return (-1);
     }
     /* RFC 4954 Section 6. */

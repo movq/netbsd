@@ -1,6 +1,6 @@
 /* Generic serial interface routines
 
-   Copyright (C) 1992-2016 Free Software Foundation, Inc.
+   Copyright (C) 1992-2014 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -20,6 +20,7 @@
 #include "defs.h"
 #include <ctype.h>
 #include "serial.h"
+#include <string.h>
 #include "gdbcmd.h"
 #include "cli/cli-utils.h"
 
@@ -129,7 +130,7 @@ serial_logchar (struct ui_file *stream, int ch_type, int ch, int timeout)
 }
 
 void
-serial_log_command (struct target_ops *self, const char *cmd)
+serial_log_command (const char *cmd)
 {
   if (!serial_logfp)
     return;
@@ -179,27 +180,6 @@ serial_for_fd (int fd)
   return NULL;
 }
 
-/* Create a new serial for OPS.  */
-
-static struct serial *
-new_serial (const struct serial_ops *ops)
-{
-  struct serial *scb;
-
-  scb = XCNEW (struct serial);
-
-  scb->ops = ops;
-
-  scb->bufp = scb->buf;
-  scb->error_fd = -1;
-  scb->refcnt = 1;
-
-  return scb;
-}
-
-static struct serial *serial_open_ops_1 (const struct serial_ops *ops,
-					 const char *open_name);
-
 /* Open up a device or a network socket, depending upon the syntax of NAME.  */
 
 struct serial *
@@ -211,9 +191,9 @@ serial_open (const char *name)
 
   if (strcmp (name, "pc") == 0)
     ops = serial_interface_lookup ("pc");
-  else if (startswith (name, "lpt"))
+  else if (strncmp (name, "lpt", 3) == 0)
     ops = serial_interface_lookup ("parallel");
-  else if (startswith (name, "|"))
+  else if (strncmp (name, "|", 1) == 0)
     {
       ops = serial_interface_lookup ("pipe");
       /* Discard ``|'' and any space before the command itself.  */
@@ -231,17 +211,14 @@ serial_open (const char *name)
   if (!ops)
     return NULL;
 
-  return serial_open_ops_1 (ops, open_name);
-}
+  scb = XMALLOC (struct serial);
 
-/* Open up a serial for OPS, passing OPEN_NAME to the open method.  */
+  scb->ops = ops;
 
-static struct serial *
-serial_open_ops_1 (const struct serial_ops *ops, const char *open_name)
-{
-  struct serial *scb;
-
-  scb = new_serial (ops);
+  scb->bufcnt = 0;
+  scb->bufp = scb->buf;
+  scb->error_fd = -1;
+  scb->refcnt = 1;
 
   /* `...->open (...)' would get expanded by the open(2) syscall macro.  */
   if ((*scb->ops->open) (scb, open_name))
@@ -250,7 +227,12 @@ serial_open_ops_1 (const struct serial_ops *ops, const char *open_name)
       return NULL;
     }
 
+  scb->name = xstrdup (name);
   scb->next = scb_base;
+  scb->debug_p = 0;
+  scb->async_state = 0;
+  scb->async_handler = NULL;
+  scb->async_context = NULL;
   scb_base = scb;
 
   if (serial_logfile != NULL)
@@ -261,14 +243,6 @@ serial_open_ops_1 (const struct serial_ops *ops, const char *open_name)
     }
 
   return scb;
-}
-
-/* See serial.h.  */
-
-struct serial *
-serial_open_ops (const struct serial_ops *ops)
-{
-  return serial_open_ops_1 (ops, NULL);
 }
 
 /* Open a new serial stream using a file handle, using serial
@@ -289,9 +263,21 @@ serial_fdopen_ops (const int fd, const struct serial_ops *ops)
   if (!ops)
     return NULL;
 
-  scb = new_serial (ops);
+  scb = XCALLOC (1, struct serial);
 
+  scb->ops = ops;
+
+  scb->bufcnt = 0;
+  scb->bufp = scb->buf;
+  scb->error_fd = -1;
+  scb->refcnt = 1;
+
+  scb->name = NULL;
   scb->next = scb_base;
+  scb->debug_p = 0;
+  scb->async_state = 0;
+  scb->async_handler = NULL;
+  scb->async_context = NULL;
   scb_base = scb;
 
   if ((ops->fdopen) != NULL)
@@ -329,6 +315,9 @@ do_serial_close (struct serial *scb, int really_close)
 
   if (really_close)
     scb->ops->close (scb);
+
+  if (scb->name)
+    xfree (scb->name);
 
   /* For serial_is_open.  */
   scb->bufp = NULL;
@@ -416,7 +405,7 @@ serial_write (struct serial *scb, const void *buf, size_t count)
 {
   if (serial_logfp != NULL)
     {
-      const char *str = (const char *) buf;
+      const char *str = buf;
       size_t c;
 
       for (c = 0; c < count; c++)
@@ -428,13 +417,13 @@ serial_write (struct serial *scb, const void *buf, size_t count)
     }
   if (serial_debug_p (scb))
     {
-      const char *str = (const char *) buf;
+      const char *str = buf;
       size_t c;
 
       for (c = 0; c < count; c++)
 	{
 	  fprintf_unfiltered (gdb_stdlog, "[");
-	  serial_logchar (gdb_stdlog, 'w', str[c] & 0xff, 0);
+	  serial_logchar (gdb_stdlog, 'w', str[count] & 0xff, 0);
 	  fprintf_unfiltered (gdb_stdlog, "]");
 	}
       gdb_flush (gdb_stdlog);
@@ -536,14 +525,6 @@ serial_setstopbits (struct serial *scb, int num)
   return scb->ops->setstopbits (scb, num);
 }
 
-/* See serial.h.  */
-
-int
-serial_setparity (struct serial *scb, int parity)
-{
-  return scb->ops->setparity (scb, parity);
-}
-
 int
 serial_can_async_p (struct serial *scb)
 {
@@ -634,7 +615,7 @@ serial_set_cmd (char *args, int from_tty)
 {
   printf_unfiltered ("\"set serial\" must be followed "
 		     "by the name of a command.\n");
-  help_list (serial_set_cmdlist, "set serial ", all_commands, gdb_stdout);
+  help_list (serial_set_cmdlist, "set serial ", -1, gdb_stdout);
 }
 
 static void
@@ -656,30 +637,6 @@ serial_baud_show_cmd (struct ui_file *file, int from_tty,
 {
   fprintf_filtered (file, _("Baud rate for remote serial I/O is %s.\n"),
 		    value);
-}
-
-/* Parity for serial port.  */
-
-int serial_parity = GDBPARITY_NONE;
-
-static const char parity_none[] = "none";
-static const char parity_odd[] = "odd";
-static const char parity_even[] = "even";
-static const char *const parity_enums[] =
-  {parity_none, parity_odd, parity_even,  NULL};
-static const char *parity = parity_none;
-
-/* Set serial_parity value.  */
-
-static void
-set_parity (char *ignore_args, int from_tty, struct cmd_list_element *c)
-{
-  if (parity == parity_odd)
-    serial_parity = GDBPARITY_ODD;
-  else if (parity == parity_even)
-    serial_parity = GDBPARITY_EVEN;
-  else
-    serial_parity = GDBPARITY_NONE;
 }
 
 void
@@ -714,13 +671,33 @@ using remote targets."),
 			    serial_baud_show_cmd,
 			    &serial_set_cmdlist, &serial_show_cmdlist);
 
-  add_setshow_enum_cmd ("parity", no_class, parity_enums,
-                        &parity, _("\
-Set parity for remote serial I/O"), _("\
-Show parity for remote serial I/O"), NULL,
-                        set_parity,
-                        NULL, /* FIXME: i18n: */
-                        &serial_set_cmdlist, &serial_show_cmdlist);
+  /* The commands "set/show serial baud" used to have a different name.
+     Add aliases to those names to facilitate the transition, and mark
+     them as deprecated, in order to make users aware of the fact that
+     the command names have been changed.  */
+    {
+      const char *cmd_name;
+      struct cmd_list_element *cmd;
+
+      /* FIXME: There is a limitation in the deprecation mechanism,
+	 and the warning ends up not being displayed for prefixed
+	 aliases.  So use a real command instead of an alias.  */
+      add_setshow_zinteger_cmd ("remotebaud", class_alias, &baud_rate, _("\
+Set baud rate for remote serial I/O."), _("\
+Show baud rate for remote serial I/O."), _("\
+This value is used to set the speed of the serial port when debugging\n\
+using remote targets."),
+				NULL,
+				serial_baud_show_cmd,
+				&setlist, &showlist);
+      cmd_name = "remotebaud";
+      cmd = lookup_cmd (&cmd_name, setlist, "", -1, 1);
+      deprecate_cmd (cmd, "set serial baud");
+      cmd_name
+	= "remotebaud"; /* needed because lookup_cmd updates the pointer */
+      cmd = lookup_cmd (&cmd_name, showlist, "", -1, 1);
+      deprecate_cmd (cmd, "show serial baud");
+    }
 
   add_setshow_filename_cmd ("remotelogfile", no_class, &serial_logfile, _("\
 Set filename for remote session recording."), _("\

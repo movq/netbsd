@@ -81,7 +81,11 @@ void marker6 ()
 {
 }
 
+#ifdef PROTOTYPES
 void recurser (int  x)
+#else
+void recurser (x) int  x;
+#endif
 {
   int  local_x = 0;
 

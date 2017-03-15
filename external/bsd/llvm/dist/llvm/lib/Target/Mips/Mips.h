@@ -20,18 +20,13 @@
 
 namespace llvm {
   class MipsTargetMachine;
-  class ModulePass;
   class FunctionPass;
 
-  ModulePass *createMipsOs16Pass(MipsTargetMachine &TM);
-  ModulePass *createMips16HardFloatPass(MipsTargetMachine &TM);
-
-  FunctionPass *createMipsModuleISelDagPass(MipsTargetMachine &TM);
+  FunctionPass *createMipsISelDag(MipsTargetMachine &TM);
   FunctionPass *createMipsOptimizePICCallPass(MipsTargetMachine &TM);
   FunctionPass *createMipsDelaySlotFillerPass(MipsTargetMachine &TM);
-  FunctionPass *createMipsHazardSchedule();
   FunctionPass *createMipsLongBranchPass(MipsTargetMachine &TM);
-  FunctionPass *createMipsConstantIslandPass();
+  FunctionPass *createMipsConstantIslandPass(MipsTargetMachine &tm);
 } // end namespace llvm;
 
 #endif

@@ -1,4 +1,4 @@
-/*	$NetBSD: acpi_wakecode.S,v 1.13 2016/07/24 13:04:58 maxv Exp $	*/
+/*	$NetBSD: acpi_wakecode.S,v 1.12 2014/01/15 22:24:41 joerg Exp $	*/
 
 /*-
  * Copyright (c) 2007 Joerg Sonnenberger <joerg@netbsd.org>
@@ -30,6 +30,7 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
+
 
 /*
  * This code is derived from FreeBSD.  Original copyrights:
@@ -143,7 +144,7 @@ wakeup_16:
 	data32 addr32 lgdt	tmp_gdt
 #endif
 
-	/* Enable protected mode without paging */
+	/* Enable protected mode w/o paging */
 	mov	%cr0,%eax
 	orl	$(CR0_PE),%eax
 	mov	%eax,%cr0
@@ -163,10 +164,10 @@ wakeup_32:
 	/*
 	 * Switched to protected mode w/o paging
 	 */
-	nop
 
+	nop
 	/* Set up segment registers and initial stack for protected mode */
-	movw	$0x10,%ax
+	movw	$0x10, %ax
 	movw	%ax,%ds
 	movw	%ax,%ss
 
@@ -192,7 +193,7 @@ wakeup_32:
 	movl	WAKEUP_efer + ACPI_WAKEUP_ADDR,%ebx
 	movl	$MSR_EFER,%ecx
 	rdmsr
-	orl	$EFER_LME,%eax
+	orl	$EFER_LME, %eax
 	wrmsr
 
 	/* Load temporary PML4, code will switch to full PML4 later */
@@ -203,11 +204,9 @@ wakeup_32:
 	movl	%cr0,%eax
 	orl	$(CR0_PE|CR0_PG|CR0_NE|CR0_TS|CR0_MP|CR0_WP|CR0_AM),%eax
 	movl	%eax,%cr0
-
-	/* Flush the prefetch queue */
+	/* Flush prefetch queue */
 	jmp	1f
 1:
-
 	/* Switch to temporary 64bit GDT */
 	lgdt	tmp_gdt64 + ACPI_WAKEUP_ADDR
 
@@ -221,7 +220,7 @@ wakeup_64:
 	 * Load the normal system value of MSR EFER.  This includes
 	 * enabling the SYSCALL extension and NXE (if supported).
 	 */
-	movl	%ebx,%eax
+	movl	%ebx, %eax
 	movl	$MSR_EFER,%ecx
 	wrmsr
 
@@ -229,7 +228,6 @@ wakeup_64:
 	movw	$GSEL(GDATA_SEL, SEL_KPL),%ax
 	movw	%ax,%ds
 
-	/* Restore registers */
 	movq	WAKEUP_curcpu + ACPI_WAKEUP_ADDR,%r8
 	movq	WAKEUP_restorecpu + ACPI_WAKEUP_ADDR,%rbx
 
@@ -272,7 +270,7 @@ WAKEUP_restorecpu:	.quad 0
 	.global WAKEUP_vbios_reset
 WAKEUP_vbios_reset:	.byte 0
 	.global WAKEUP_vesa_modenum
-WAKEUP_vesa_modenum:	.word 0
+WAKEUP_vesa_modenum:    .word 0
 	.global WAKEUP_beep_on_reset
 WAKEUP_beep_on_reset:	.byte 0
 

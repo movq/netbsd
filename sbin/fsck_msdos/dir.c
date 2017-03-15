@@ -1,4 +1,4 @@
-/*	$NetBSD: dir.c,v 1.28 2016/03/07 14:47:25 christos Exp $	*/
+/*	$NetBSD: dir.c,v 1.26 2014/07/07 17:45:42 christos Exp $	*/
 
 /*
  * Copyright (C) 1995, 1996, 1997 Wolfgang Solfrank
@@ -30,7 +30,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: dir.c,v 1.28 2016/03/07 14:47:25 christos Exp $");
+__RCSID("$NetBSD: dir.c,v 1.26 2014/07/07 17:45:42 christos Exp $");
 #endif /* not lint */
 
 #include <stdio.h>
@@ -326,7 +326,7 @@ delete(int f, struct bootblock *boot, struct fatEntry *fat, cl_t startcl,
 				break;
 			e = delbuf + endoff;
 		}
-		off = (startcl - CLUST_FIRST) * boot->SecPerClust + boot->FirstCluster;
+		off = startcl * boot->SecPerClust + boot->ClusterOffset;
 		off *= boot->BytesPerSec;
 		if (lseek(f, off, SEEK_SET) != off
 		    || read(f, delbuf, clsz) != clsz) {
@@ -491,7 +491,7 @@ readDosDirSection(int f, struct bootblock *boot, struct fatEntry *fat,
 			off = boot->ResSectors + boot->FATs * boot->FATsecs;
 		} else {
 			last = boot->SecPerClust * boot->BytesPerSec;
-			off = (cl - CLUST_FIRST) * boot->SecPerClust + boot->FirstCluster;
+			off = cl * boot->SecPerClust + boot->ClusterOffset;
 		}
 
 		off *= boot->BytesPerSec;
@@ -929,7 +929,6 @@ int
 reconnect(int dosfs, struct bootblock *boot, struct fatEntry *fat, cl_t head)
 {
 	struct dosDirEntry d;
-	int len;
 	u_char *p;
 
 	if (!ask(1, "Reconnect"))
@@ -968,8 +967,8 @@ reconnect(int dosfs, struct bootblock *boot, struct fatEntry *fat, cl_t head)
 			pwarn("No space in %s\n", LOSTDIR);
 			return FSERROR;
 		}
-		lfoff = (lfcl - CLUST_FIRST) * boot->ClusterSize
-		    + boot->FirstCluster * boot->BytesPerSec;
+		lfoff = lfcl * boot->ClusterSize
+		    + boot->ClusterOffset * boot->BytesPerSec;
 		if (lseek(dosfs, lfoff, SEEK_SET) != lfoff
 		    || (size_t)read(dosfs, lfbuf, boot->ClusterSize) != boot->ClusterSize) {
 			perr("could not read LOST.DIR");
@@ -981,15 +980,14 @@ reconnect(int dosfs, struct bootblock *boot, struct fatEntry *fat, cl_t head)
 	boot->NumFiles++;
 	/* Ensure uniqueness of entry here!				XXX */
 	memset(&d, 0, sizeof d);
-	/* worst case -1 = 4294967295, 10 digits */
-	len = snprintf(d.name, sizeof(d.name), "%u", head);
+	(void)snprintf(d.name, sizeof(d.name), "%u", head);
 	d.flags = 0;
 	d.head = head;
 	d.size = fat[head].length * boot->ClusterSize;
 
-	memcpy(p, d.name, len);
-	memset(p + len, ' ', 11 - len);
-	memset(p + 11, 0, 32 - 11);
+	memset(p, 0, 32);
+	memset(p, ' ', 11);
+	memcpy(p, d.name, strlen(d.name));
 	p[26] = (u_char)d.head;
 	p[27] = (u_char)(d.head >> 8);
 	if (boot->ClustMask == CLUST32_MASK) {

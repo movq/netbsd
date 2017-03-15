@@ -1,4 +1,4 @@
-/*	$NetBSD: p2k.c,v 1.68 2016/01/25 11:45:58 pooka Exp $	*/
+/*	$NetBSD: p2k.c,v 1.64 2014/03/10 22:47:27 pooka Exp $	*/
 
 /*
  * Copyright (c) 2007, 2008, 2009  Antti Kantee.  All Rights Reserved.
@@ -46,6 +46,7 @@
 #include <sys/cdefs.h>
 #include <sys/mount.h>
 #include <sys/param.h>
+#include <sys/vnode.h>
 #include <sys/lock.h>
 #include <sys/namei.h>
 #include <sys/dirent.h>
@@ -58,11 +59,8 @@
 #include <stdio.h>
 
 #include <rump/rump.h>
-#include <rump/rumpvnode_if.h>
 #include <rump/p2k.h>
 #include <rump/ukfs.h>
-
-#include <uvm/uvm_pager.h>
 
 /* NetBSD-5 compat */
 #ifndef MOUNT_RUMPFS
@@ -805,7 +803,6 @@ do_makenode(struct puffs_usermount *pu, struct p2k_node *p2n_dir,
 	} else {
 		rv = symfn(dvp, &vp, cn, va_x, link_target);
 	}
-	rump_pub_vp_rele(dvp);
 	RUMP_VOP_UNLOCK(dvp);
 	freecn(cn);
 
@@ -1056,8 +1053,6 @@ p2k_node_link(struct puffs_usermount *pu, puffs_cookie_t opc,
 	RUMP_VOP_LOCK(dvp, LK_EXCLUSIVE);
 	rump_pub_vp_incref(dvp);
 	rv = RUMP_VOP_LINK(dvp, OPC2VP(targ), cn);
-	rump_pub_vp_rele(dvp);
-	RUMP_VOP_UNLOCK(dvp);
 	freecn(cn);
 
 	return rv;

@@ -15,7 +15,6 @@
 #ifndef LLVM_SUPPORT_SMLOC_H
 #define LLVM_SUPPORT_SMLOC_H
 
-#include "llvm/ADT/None.h"
 #include <cassert>
 
 namespace llvm {
@@ -23,7 +22,6 @@ namespace llvm {
 /// Represents a location in source code.
 class SMLoc {
   const char *Ptr;
-
 public:
   SMLoc() : Ptr(nullptr) {}
 
@@ -50,16 +48,16 @@ class SMRange {
 public:
   SMLoc Start, End;
 
-  SMRange() = default;
-  SMRange(NoneType) {}
+  SMRange() {}
   SMRange(SMLoc St, SMLoc En) : Start(St), End(En) {
     assert(Start.isValid() == End.isValid() &&
            "Start and end should either both be valid or both be invalid!");
   }
-
+  
   bool isValid() const { return Start.isValid(); }
 };
-
+  
 } // end namespace llvm
 
-#endif // LLVM_SUPPORT_SMLOC_H
+#endif
+

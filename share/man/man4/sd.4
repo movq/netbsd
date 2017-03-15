@@ -1,4 +1,4 @@
-.\"	$NetBSD: sd.4,v 1.20 2016/06/10 08:05:13 wiz Exp $
+.\"	$NetBSD: sd.4,v 1.18 2010/03/22 18:58:31 joerg Exp $
 .\"
 .\" Copyright (c) 1996
 .\"     Julian Elischer <julian@freebsd.org>.  All rights reserved.
@@ -25,7 +25,7 @@
 .\" OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
 .\" SUCH DAMAGE.
 .\"
-.Dd June 9, 2016
+.Dd January 18, 1996
 .Dt SD 4
 .Os
 .Sh NAME
@@ -129,12 +129,11 @@ to partition the disk into a
 .Tn BIOS
 level partition.
 This allows sharing the disk with other operating systems.
-.\".Pp
+.Pp
 .\"If an uninitialized disk is opened, the slice table will be
 .\"initialized with a fictitious
 .\".Tn FreeBSD
-.\"slice spanning the entire disk.
-.\"Similarly, if an uninitialized
+.\"slice spanning the entire disk.  Similarly, if an uninitialized
 .\"(or
 .\".No non- Ns Tn FreeBSD )
 .\"slice is opened, its disklabel will be initialized with parameters returned
@@ -158,13 +157,12 @@ disks as well as to other disks.
 .Bl -tag -width SD_IO_TIMEOUT
 .It Dv SDRETRIES
 Set the number of retries that will be performed for operations it
-makes sense to retry (e.g., normal reads and writes).
-The default is four (4).
+makes sense to retry (e.g., normal reads and writes). The default
+is four (4).
 .It Dv SD_IO_TIMEOUT
 Set amount of time, in milliseconds, a normal read or write is expected
-to take.
-The defaults is sixty seconds (60000 milliseconds).
-This is used to set watchdog timers in the
+to take. The defaults is sixty seconds (60000 milliseconds). This is used
+to set watchdog timers in the
 .Tn SCSI
 HBA driver to catch commands that might have died on the device.
 .El
@@ -175,9 +173,7 @@ calls apply to
 .Tn SCSI
 disks as well as to other disks.
 They are defined in the header file
-.In sys/dkio.h
-and use data structures defined in
-.In sys/disklabel.h .
+.In disklabel.h .
 .Pp
 .Bl -tag -width DIOCSDINFO
 .\".It Dv DIOCSBAD

@@ -1,4 +1,4 @@
-/*	$NetBSD: kern_todr.c,v 1.39 2015/04/13 16:36:54 riastradh Exp $	*/
+/*	$NetBSD: kern_todr.c,v 1.35 2013/08/29 01:05:29 tls Exp $	*/
 
 /*
  * Copyright (c) 1988 University of Utah.
@@ -38,10 +38,8 @@
  *	@(#)clock.c	8.1 (Berkeley) 6/10/93
  */
 
-#include "opt_todr.h"
-
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: kern_todr.c,v 1.39 2015/04/13 16:36:54 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: kern_todr.c,v 1.35 2013/08/29 01:05:29 tls Exp $");
 
 #include <sys/param.h>
 #include <sys/kernel.h>
@@ -49,7 +47,7 @@ __KERNEL_RCSID(0, "$NetBSD: kern_todr.c,v 1.39 2015/04/13 16:36:54 riastradh Exp
 #include <sys/device.h>
 #include <sys/timetc.h>
 #include <sys/intr.h>
-#include <sys/rndsource.h>
+#include <sys/rnd.h>
 
 #include <dev/clock_subr.h>	/* hmm.. this should probably move to sys */
 
@@ -87,7 +85,7 @@ inittodr(time_t base)
 
 	rnd_add_data(NULL, &base, sizeof(base), 0);
 
-	if (base < 5 * SECS_PER_COMMON_YEAR) {
+	if (base < 5 * SECYR) {
 		struct clock_ymdhms basedate;
 
 		/*
@@ -115,7 +113,7 @@ inittodr(time_t base)
 
 	if ((todr_handle == NULL) ||
 	    (todr_gettime(todr_handle, &tv) != 0) ||
-	    (tv.tv_sec < (25 * SECS_PER_COMMON_YEAR))) {
+	    (tv.tv_sec < (25 * SECYR))) {
 
 		if (todr_handle != NULL)
 			printf("WARNING: preposterous TOD clock time\n");
@@ -128,7 +126,7 @@ inittodr(time_t base)
 		if (deltat < 0)
 			deltat = -deltat;
 
-		if (!badbase && deltat >= 2 * SECS_PER_DAY) {
+		if (!badbase && deltat >= 2 * SECDAY) {
 			
 			if (tv.tv_sec < base) {
 				/*
@@ -138,11 +136,11 @@ inittodr(time_t base)
 				 * believe the filesystem.
 				 */
 				printf("WARNING: clock lost %" PRId64 " days\n",
-				    deltat / SECS_PER_DAY);
+				    deltat / SECDAY);
 				badrtc = true;
 			} else {
 				aprint_verbose("WARNING: clock gained %" PRId64
-				    " days\n", deltat / SECS_PER_DAY);
+				    " days\n", deltat / SECDAY);
 				goodtime = true;
 			}
 		} else {
@@ -181,8 +179,8 @@ inittodr(time_t base)
  * Reset the TODR based on the time value; used when the TODR
  * has a preposterous value and also when the time is reset
  * by the stime system call.  Also called when the TODR goes past
- * TODRZERO + 100*(SECS_PER_COMMON_YEAR+2*SECS_PER_DAY)
- * (e.g. on Jan 2 just after midnight) to wrap the TODR around.
+ * TODRZERO + 100*(SECYEAR+2*SECDAY) (e.g. on Jan 2 just after midnight)
+ * to wrap the TODR around.
  */
 void
 resettodr(void)
@@ -228,7 +226,7 @@ todr_debug(const char *prefix, int rv, struct clock_ymdhms *dt,
 	printf("%s: rtc_offset = %d\n", prefix, rtc_offset);
 	printf("%s: %4u/%02u/%02u %02u:%02u:%02u, (wday %d) (epoch %u.%06u)\n",
 	    prefix,
-	    (unsigned)dt->dt_year, dt->dt_mon, dt->dt_day,
+	    dt->dt_year, dt->dt_mon, dt->dt_day,
 	    dt->dt_hour, dt->dt_min, dt->dt_sec,
 	    dt->dt_wday, (unsigned)tvp->tv_sec, (unsigned)tvp->tv_usec);
 }

@@ -1,4 +1,4 @@
-/* $NetBSD: cpowl.c,v 1.1 2014/10/10 00:48:18 christos Exp $ */
+/* $NetBSD: cpowl.c,v 1.1.2.2 2014/10/13 19:34:58 martin Exp $ */
 
 /*-
  * Copyright (c) 2007 The NetBSD Foundation, Inc.

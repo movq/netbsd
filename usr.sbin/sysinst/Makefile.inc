@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile.inc,v 1.9 2016/06/08 02:00:40 christos Exp $
+#	$NetBSD: Makefile.inc,v 1.5.4.1 2015/05/11 07:26:05 msaitoh Exp $
 #
 # Makefile for sysinst
 
@@ -47,11 +47,8 @@ CATALOGDIR=	/usr/share/sysinst/catalog
 CPPFLAGS+=	-I. -I${.CURDIR}/../.. -I${.CURDIR} \
 		-DREL=\"${DISTRIBVER}\" -DMACH=\"${MACHINE}\" \
 		-DMACH_${MACHINE} -DARCH_${MACHINE_ARCH} \
-		${NODISKLABEL:D-DNO_DISKLABEL}
-
-.if !defined(DEBUG)
-CPPFLAGS+=	-DCATALOG_DIR=\"${CATALOGDIR}\"
-.endif
+		${NODISKLABEL:D-DNO_DISKLABEL} \
+		-DCATALOG_DIR=\"${CATALOGDIR}\"
 
 .if (defined(DEBUG))
 .if ${ACTIVE_CC} == "gcc"
@@ -83,7 +80,7 @@ COPTS.mbr.c += -Wno-format-nonliteral
 COPTS.msg_defs.c += -Wno-format-nonliteral
 COPTS.bsddisklabel.c += -Wno-format-nonliteral
 COPTS.md.c += -Wno-format-nonliteral
-COPTS.partman.c += -Wno-format-nonliteral -Wno-stack-protector
+COPTS.partman.c += -Wno-format-nonliteral
 
 # Host to ftp from.  Default:
 #	"ftp.NetBSD.org"

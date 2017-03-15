@@ -1,4 +1,4 @@
-/*	$NetBSD: getdate.c,v 1.3 2014/09/18 13:58:20 christos Exp $	*/
+/*	$NetBSD: getdate.c,v 1.2.24.1 2015/01/25 09:11:03 martin Exp $	*/
 /*
  * Copyright (c) 2009 The NetBSD Foundation, Inc.
  * All rights reserved.

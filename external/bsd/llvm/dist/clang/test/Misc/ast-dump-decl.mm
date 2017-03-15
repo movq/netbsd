@@ -21,13 +21,3 @@
 // CHECK-NEXT:     CXXConstructExpr
 // CHECK-NEXT:   ObjCIvarDecl{{.*}} X
 // CHECK-NEXT:   ObjCMethodDecl{{.*}} foo
-
-// @() boxing expressions.
-template <typename T>
-struct BoxingTest {
-  static id box(T value) {
-    return @(value);
-  }
-};
-
-// CHECK: ObjCBoxedExpr{{.*}} '<dependent type>'{{$}}

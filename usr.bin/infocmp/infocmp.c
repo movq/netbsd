@@ -1,4 +1,4 @@
-/* $NetBSD: infocmp.c,v 1.11 2016/03/16 21:01:28 christos Exp $ */
+/* $NetBSD: infocmp.c,v 1.8 2013/10/01 09:01:49 roy Exp $ */
 
 /*
  * Copyright (c) 2009, 2010 The NetBSD Foundation, Inc.
@@ -28,7 +28,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: infocmp.c,v 1.11 2016/03/16 21:01:28 christos Exp $");
+__RCSID("$NetBSD: infocmp.c,v 1.8 2013/10/01 09:01:49 roy Exp $");
 
 #include <sys/ioctl.h>
 
@@ -40,7 +40,6 @@ __RCSID("$NetBSD: infocmp.c,v 1.11 2016/03/16 21:01:28 christos Exp $");
 #include <term_private.h>
 #include <term.h>
 #include <unistd.h>
-#include <util.h>
 
 #define SW 8
 
@@ -103,7 +102,7 @@ outstr(FILE *f, const char *str)
 			}
 			goto prnt;
 		}
-
+		
 		if (f != NULL)
 			fputc('\\', f);
 		r++;
@@ -143,11 +142,11 @@ static void
 print_ent(const TIENT *ents, size_t nents)
 {
 	size_t col, i, l;
-	char nbuf[64];
+	char nbuf[64];	
 
 	if (nents == 0)
 		return;
-
+	
 	col = SW;
 	printf("\t");
 	for (i = 0; i < nents; i++) {
@@ -181,7 +180,7 @@ print_ent(const TIENT *ents, size_t nents)
 				l = strlen(ents[i].id) + 3;
 			break;
 		default:
-			errx(EXIT_FAILURE, "invalid type");
+			errx(1, "invalid type");
 		}
 		if (col != SW) {
 			if (col + l > cols) {
@@ -231,7 +230,7 @@ load_ents(TIENT *ents, TERMINAL *t, char type)
 	default:
 		max = TISTRMAX;
 	}
-
+	
 	n = 0;
 	for (i = 0; i <= max; i++) {
 		switch (type) {
@@ -264,7 +263,7 @@ load_ents(TIENT *ents, TERMINAL *t, char type)
 			break;
 		}
 	}
-
+	
 	if (xflag != 0 && t->_nuserdefs != 0) {
 		for (i = 0; i < t->_nuserdefs; i++) {
 			ud = &t->_userdefs[i];
@@ -294,7 +293,7 @@ load_ents(TIENT *ents, TERMINAL *t, char type)
 			}
 		}
 	}
-
+	
 	qsort(ents, n, sizeof(TIENT), ent_compare);
 	return n;
 }
@@ -309,7 +308,7 @@ cprint_ent(TIENT *ent)
 		else
 			printf("-");
 	}
-
+	
 	switch (ent->type) {
 	case 'f':
 		if (VALID_BOOLEAN(ent->flag))
@@ -352,7 +351,7 @@ compare_ents(TIENT *ents1, size_t n1, TIENT *ents2, size_t n2)
 	size_t i1, i2;
 	TIENT *e1, *e2, ee;
 	int c;
-
+	
 	i1 = i2 = 0;
 	ee.type = 'f';
 	ee.flag = ABSENT_BOOLEAN;
@@ -432,7 +431,9 @@ load_term(const char *name)
 {
 	TERMINAL *t;
 
-	t = ecalloc(1, sizeof(*t));
+	t = calloc(1, sizeof(*t));
+	if (t == NULL)
+		err(1, "calloc");
 	if (name == NULL)
 		name = getenv("TERM");
 	if (name == NULL)
@@ -441,9 +442,9 @@ load_term(const char *name)
 		return t;
 
 	if (_ti_database == NULL)
-		errx(EXIT_FAILURE, "no terminal definition found in internal database");
+		errx(1, "no terminal definition found in internal database");
 	else
-		errx(EXIT_FAILURE, "no terminal definition found in %s.db", _ti_database);
+		errx(1, "no terminal definition found in %s.db", _ti_database);
 }
 
 static void
@@ -451,7 +452,7 @@ show_missing(TERMINAL *t1, TERMINAL *t2, char type)
 {
 	ssize_t i, max;
 	const char *id;
-
+	
 	switch (type) {
 	case 'f':
 		max = TIFLAGMAX;
@@ -506,16 +507,18 @@ use_terms(TERMINAL *term, size_t nuse, char **uterms)
 	TERMUSERDEF *ud, *tud;
 	size_t i, j, agree, absent, data;
 
-	terms = ecalloc(nuse, sizeof(*terms));
+	terms = malloc(sizeof(**terms) * nuse);
+	if (terms == NULL)
+		err(1, "malloc");
 	for (i = 0; i < nuse; i++) {
 		if (strcmp(term->name, *uterms) == 0)
-			errx(EXIT_FAILURE, "cannot use same terminal");
+			errx(1, "cannot use same terminal");
 		for (j = 0; j < i; j++)
 			if (strcmp(terms[j]->name, *uterms) == 0)
-				errx(EXIT_FAILURE, "cannot use same terminal");
+				errx(1, "cannot use same terminal");
 		terms[i] = load_term(*uterms++);
 	}
-
+	
 	for (i = 0; i < TIFLAGMAX + 1; i++) {
 		agree = absent = data = 0;
 		for (j = 0; j < nuse; j++) {
@@ -535,7 +538,7 @@ use_terms(TERMINAL *term, size_t nuse, char **uterms)
 		else if (term->flags[i] == ABSENT_BOOLEAN)
 			term->flags[i] = CANCELLED_BOOLEAN;
 	}
-
+	
 	for (i = 0; i < TINUMMAX + 1; i++) {
 		agree = absent = data = 0;
 		for (j = 0; j < nuse; j++) {
@@ -555,7 +558,7 @@ use_terms(TERMINAL *term, size_t nuse, char **uterms)
 		else if (term->nums[i] == ABSENT_NUMERIC)
 			term->nums[i] = CANCELLED_NUMERIC;
 	}
-
+	
 	for (i = 0; i < TISTRMAX + 1; i++) {
 		agree = absent = data = 0;
 		for (j = 0; j < nuse; j++) {
@@ -625,8 +628,10 @@ use_terms(TERMINAL *term, size_t nuse, char **uterms)
 			ud = find_userdef(term, terms[i]->_userdefs[j].id);
 			if (ud != NULL)
 				continue; /* We have handled this */
-			term->_userdefs = erealloc(term->_userdefs,
+			term->_userdefs = realloc(term->_userdefs,
 			    sizeof(*term->_userdefs) * (term->_nuserdefs + 1));
+			if (term->_userdefs == NULL)
+				err(1, "malloc");
 			tud = &term->_userdefs[term->_nuserdefs++];
 			tud->id = terms[i]->_userdefs[j].id;
 			tud->type = terms[i]->_userdefs[j].flag;

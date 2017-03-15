@@ -1,11 +1,11 @@
-#	$NetBSD: Makefile,v 1.22 2017/02/09 15:24:08 joerg Exp $
+#	$NetBSD: Makefile,v 1.17.2.1 2015/01/17 12:16:34 martin Exp $
 
 .include <bsd.own.mk>
 .include "${NETBSDSRCDIR}/distrib/common/Makefile.distrib"
 
 IMAGE=		ramdisk.fs
-IMAGESIZE=	3280k
-MAKEFS_FLAGS+=	-f 15
+IMAGESIZE=	2880k
+MAKEFS_FLAGS=	-f 15
 
 WARNS=		1
 DBG=		-Os
@@ -32,7 +32,6 @@ HACKSRC=	${DISTRIBDIR}/utils/libhack
 ${CRUNCHBIN}:	libhack.o
 
 .include "${DISTRIBDIR}/common/Makefile.crunch"
-.include "${DISTRIBDIR}/common/Makefile.dhcpcd"
 .include "${DISTRIBDIR}/common/Makefile.makedev"
 .include "${DISTRIBDIR}/common/Makefile.image"
 

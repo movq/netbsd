@@ -22,20 +22,27 @@
 #include "NVPTXGenRegisterInfo.inc"
 
 namespace llvm {
+
+// Forward Declarations.
+class TargetInstrInfo;
+class NVPTXSubtarget;
+
 class NVPTXRegisterInfo : public NVPTXGenRegisterInfo {
 private:
+  bool Is64Bit;
   // Hold Strings that can be free'd all together with NVPTXRegisterInfo
   ManagedStringPool ManagedStrPool;
 
 public:
-  NVPTXRegisterInfo();
+  NVPTXRegisterInfo(const NVPTXSubtarget &st);
 
   //------------------------------------------------------
   // Pure virtual functions from TargetRegisterInfo
   //------------------------------------------------------
 
   // NVPTX callee saved registers
-  const MCPhysReg *getCalleeSavedRegs(const MachineFunction *MF) const override;
+  const MCPhysReg *
+  getCalleeSavedRegs(const MachineFunction *MF = nullptr) const override;
 
   BitVector getReservedRegs(const MachineFunction &MF) const override;
 

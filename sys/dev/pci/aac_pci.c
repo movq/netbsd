@@ -1,4 +1,4 @@
-/*	$NetBSD: aac_pci.c,v 1.38 2016/09/27 03:33:32 pgoyette Exp $	*/
+/*	$NetBSD: aac_pci.c,v 1.36 2014/03/29 19:28:24 christos Exp $	*/
 
 /*-
  * Copyright (c) 2002 The NetBSD Foundation, Inc.
@@ -65,7 +65,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: aac_pci.c,v 1.38 2016/09/27 03:33:32 pgoyette Exp $");
+__KERNEL_RCSID(0, "$NetBSD: aac_pci.c,v 1.36 2014/03/29 19:28:24 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -562,7 +562,8 @@ aac_pci_attach(device_t parent, device_t self, void *aux)
 	m = aac_find_ident(pa);
 	aprint_normal("%s\n", m->prodstr);
 	if (intrstr != NULL)
-		aprint_normal_dev(self, "interrupting at %s\n", intrstr);
+		aprint_normal_dev(self, "interrupting at %s\n",
+		    intrstr);
 
 	sc->sc_hwif = m->hwif;
 	sc->sc_quirks = m->quirks;
@@ -598,16 +599,8 @@ aac_pci_attach(device_t parent, device_t self, void *aux)
 		bus_space_unmap(sc->sc_memt, sc->sc_memh, memsize);
 }
 
-/* ARGSUSED */
-static int
-aac_pci_rescan(device_t self, const char *attr, const int *flags)
-{
-
-	return aac_devscan(device_private(self));
-}
-
-CFATTACH_DECL3_NEW(aac_pci, sizeof(struct aac_pci_softc),
-    aac_pci_match, aac_pci_attach, NULL, NULL, aac_pci_rescan, NULL, 0);
+CFATTACH_DECL_NEW(aac_pci, sizeof(struct aac_pci_softc),
+    aac_pci_match, aac_pci_attach, NULL, NULL);
 
 /*
  * Read the current firmware status word.

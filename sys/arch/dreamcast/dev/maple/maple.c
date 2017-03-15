@@ -1,4 +1,4 @@
-/*	$NetBSD: maple.c,v 1.52 2015/12/06 02:04:10 tsutsui Exp $	*/
+/*	$NetBSD: maple.c,v 1.51 2014/07/25 08:10:32 dholland Exp $	*/
 
 /*-
  * Copyright (c) 2002 The NetBSD Foundation, Inc.
@@ -62,7 +62,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: maple.c,v 1.52 2015/12/06 02:04:10 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: maple.c,v 1.51 2014/07/25 08:10:32 dholland Exp $");
 
 #include <sys/param.h>
 #include <sys/device.h>
@@ -76,8 +76,6 @@ __KERNEL_RCSID(0, "$NetBSD: maple.c,v 1.52 2015/12/06 02:04:10 tsutsui Exp $");
 #include <sys/systm.h>
 #include <sys/conf.h>
 #include <sys/bus.h>
-#include <sys/mutex.h>
-#include <sys/condvar.h>
 
 #include <uvm/uvm.h>
 
@@ -248,11 +246,6 @@ mapleattach(device_t parent, device_t self, void *aux)
 
 	maple_polling = 1;
 	maple_scanbus(sc);
-
-	mutex_init(&sc->sc_dma_lock, MUTEX_DEFAULT, IPL_MAPLE);
-	cv_init(&sc->sc_dma_cv, device_xname(self));
-	mutex_init(&sc->sc_event_lock, MUTEX_DEFAULT, IPL_SOFTCLOCK);
-	cv_init(&sc->sc_event_cv, device_xname(self));
 
 	callout_init(&sc->maple_callout_ch, 0);
 
@@ -842,12 +835,13 @@ maple_command(device_t dev, struct maple_unit *u, int func,
 {
 	struct maple_softc *sc = device_private(dev);
 	struct maple_func *fn;
+	int s;
 
 	KASSERT(func >= 0 && func < 32);
 	KASSERT(command);
 	KASSERT((flags & ~MAPLE_FLAG_CMD_PERIODIC_TIMING) == 0);
 
-	mutex_enter(&sc->sc_event_lock);
+	s = splsoftclock();
 
 	fn = &u->u_func[func];
 #if 1 /*def DIAGNOSTIC*/
@@ -866,9 +860,9 @@ maple_command(device_t dev, struct maple_unit *u, int func,
 	} else {
 		fn->f_cmdstat = MAPLE_CMDSTAT_ASYNC;
 		TAILQ_INSERT_TAIL(&sc->sc_acmdq, fn, f_cmdq);
-		cv_broadcast(&sc->sc_event_cv);	/* wake for async event */
+		wakeup(&sc->sc_event);	/* wake for async event */
 	}
-	mutex_exit(&sc->sc_event_lock);
+	splx(s);
 }
 
 static void
@@ -1428,6 +1422,7 @@ maple_event_thread(void *arg)
 {
 	struct maple_softc *sc = arg;
 	unsigned cnt = 1;	/* timing counter */
+	int s;
 #if defined(MAPLE_DEBUG) && MAPLE_DEBUG > 1
 	int noreq = 0;
 #endif
@@ -1490,19 +1485,19 @@ maple_event_thread(void *arg)
 			/*
 			 * start DMA
 			 */
-			mutex_enter(&sc->sc_dma_lock);
+			s = splmaple();
 			maple_start(sc);
 
 			/*
 			 * wait until DMA done
 			 */
-			if (cv_timedwait(&sc->sc_dma_cv, &sc->sc_dma_lock, hz)
+			if (tsleep(&sc->sc_dmadone, PWAIT, "mdma", hz)
 			    == EWOULDBLOCK) {
 				/* was DDB active? */
 				printf("%s: timed out\n",
 				    device_xname(sc->sc_dev));
 			}
-			mutex_exit(&sc->sc_dma_lock);
+			splx(s);
 
 			/*
 			 * call handlers
@@ -1527,17 +1522,17 @@ maple_event_thread(void *arg)
 		/*
 		 * wait for an event
 		 */
-		mutex_enter(&sc->sc_event_lock);
+		s = splsoftclock();
 		if (TAILQ_EMPTY(&sc->sc_acmdq) && sc->sc_event == 0 &&
 		    TAILQ_EMPTY(&sc->sc_periodicdeferq)) {
-			if (cv_timedwait(&sc->sc_event_cv, &sc->sc_event_lock,
-			    hz) == EWOULDBLOCK) {
+			if (tsleep(&sc->sc_event, PWAIT, "mslp", hz)
+			    == EWOULDBLOCK) {
 				printf("%s: event timed out\n",
 				    device_xname(sc->sc_dev));
 			}
 
 		}
-		mutex_exit(&sc->sc_event_lock);
+		splx(s);
 
 	}
 
@@ -1552,9 +1547,7 @@ maple_intr(void *arg)
 {
 	struct maple_softc *sc = arg;
 
-	mutex_enter(&sc->sc_dma_lock);
-	cv_broadcast(&sc->sc_dma_cv);
-	mutex_exit(&sc->sc_dma_lock);
+	wakeup(&sc->sc_dmadone);
 
 	return 1;
 }
@@ -1564,10 +1557,8 @@ maple_callout(void *ctx)
 {
 	struct maple_softc *sc = ctx;
 
-	mutex_enter(&sc->sc_event_lock);
 	sc->sc_event = 1;	/* mark as periodic event */
-	cv_broadcast(&sc->sc_event_cv);
-	mutex_exit(&sc->sc_event_lock);
+	wakeup(&sc->sc_event);
 }
 
 /*

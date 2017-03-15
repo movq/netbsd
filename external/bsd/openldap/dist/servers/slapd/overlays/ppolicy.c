@@ -1,9 +1,9 @@
-/*	$NetBSD: ppolicy.c,v 1.1.1.6 2017/02/09 01:47:02 christos Exp $	*/
+/*	$NetBSD: ppolicy.c,v 1.1.1.5 2014/05/28 09:58:52 tron Exp $	*/
 
 /* $OpenLDAP$ */
 /* This work is part of OpenLDAP Software <http://www.openldap.org/>.
  *
- * Copyright 2004-2016 The OpenLDAP Foundation.
+ * Copyright 2004-2014 The OpenLDAP Foundation.
  * Portions Copyright 2004-2005 Howard Chu, Symas Corporation.
  * Portions Copyright 2004 Hewlett-Packard Company.
  * All rights reserved.
@@ -21,9 +21,6 @@
  * OpenLDAP Software, based on prior work by Neil Dunbar (HP).
  * This work was sponsored by the Hewlett-Packard Company.
  */
-
-#include <sys/cdefs.h>
-__RCSID("$NetBSD: ppolicy.c,v 1.1.1.6 2017/02/09 01:47:02 christos Exp $");
 
 #include "portable.h"
 
@@ -48,10 +45,6 @@ __RCSID("$NetBSD: ppolicy.c,v 1.1.1.6 2017/02/09 01:47:02 christos Exp $");
 
 #ifndef MODULE_NAME_SZ
 #define MODULE_NAME_SZ 256
-#endif
-
-#ifndef PPOLICY_DEFAULT_MAXRECORDED_FAILURE
-#define PPOLICY_DEFAULT_MAXRECORDED_FAILURE	5
 #endif
 
 /* Per-instance configuration information */
@@ -88,7 +81,6 @@ typedef struct pass_policy {
 	int pwdLockout; /* 0 = do not lockout passwords, 1 = lock them out */
 	int pwdLockoutDuration; /* time in seconds a password is locked out for */
 	int pwdMaxFailure; /* number of failed binds allowed before lockout */
-	int pwdMaxRecordedFailure;	/* number of failed binds to store */
 	int pwdFailureCountInterval; /* number of seconds before failure
 									counts are zeroed */
 	int pwdMustChange; /* 0 = users can use admin set password
@@ -189,7 +181,7 @@ static AttributeDescription *ad_pwdMinAge, *ad_pwdMaxAge, *ad_pwdInHistory,
 	*ad_pwdGraceAuthNLimit, *ad_pwdExpireWarning, *ad_pwdLockoutDuration,
 	*ad_pwdFailureCountInterval, *ad_pwdCheckModule, *ad_pwdLockout,
 	*ad_pwdMustChange, *ad_pwdAllowUserChange, *ad_pwdSafeModify,
-	*ad_pwdAttribute, *ad_pwdMaxRecordedFailure;
+	*ad_pwdAttribute;
 
 #define TAB(name)	{ #name, &ad_##name }
 
@@ -201,7 +193,6 @@ static struct schema_info pwd_UsSchema[] = {
 	TAB(pwdCheckQuality),
 	TAB(pwdMinLength),
 	TAB(pwdMaxFailure),
-	TAB(pwdMaxRecordedFailure),
 	TAB(pwdGraceAuthNLimit),
 	TAB(pwdExpireWarning),
 	TAB(pwdLockout),
@@ -389,7 +380,6 @@ create_passcontrol( Operation *op, int exptime, int grace, LDAPPasswordPolicyErr
 	BerElement *ber = (BerElement *) &berbuf, *b2 = (BerElement *) &bb2;
 	LDAPControl c = { 0 }, *cp;
 	struct berval bv;
-	int rc;
 
 	BER_BVZERO( &c.ldctl_value );
 
@@ -399,23 +389,15 @@ create_passcontrol( Operation *op, int exptime, int grace, LDAPPasswordPolicyErr
 	if ( exptime >= 0 ) {
 		ber_init2( b2, NULL, LBER_USE_DER );
 		ber_printf( b2, "ti", PPOLICY_EXPIRE, exptime );
-		rc = ber_flatten2( b2, &bv, 1 );
+		ber_flatten2( b2, &bv, 1 );
 		(void)ber_free_buf(b2);
-		if (rc == -1) {
-			cp = NULL;
-			goto fail;
-		}
 		ber_printf( ber, "tO", PPOLICY_WARNING, &bv );
 		ch_free( bv.bv_val );
 	} else if ( grace > 0 ) {
 		ber_init2( b2, NULL, LBER_USE_DER );
 		ber_printf( b2, "ti", PPOLICY_GRACE, grace );
-		rc = ber_flatten2( b2, &bv, 1 );
+		ber_flatten2( b2, &bv, 1 );
 		(void)ber_free_buf(b2);
-		if (rc == -1) {
-			cp = NULL;
-			goto fail;
-		}
 		ber_printf( ber, "tO", PPOLICY_WARNING, &bv );
 		ch_free( bv.bv_val );
 	}
@@ -434,7 +416,6 @@ create_passcontrol( Operation *op, int exptime, int grace, LDAPPasswordPolicyErr
 	cp->ldctl_value.bv_val = (char *)&cp[1];
 	cp->ldctl_value.bv_len = c.ldctl_value.bv_len;
 	AC_MEMCPY( cp->ldctl_value.bv_val, c.ldctl_value.bv_val, c.ldctl_value.bv_len );
-fail:
 	(void)ber_free_buf(ber);
 	
 	return cp;
@@ -470,20 +451,6 @@ add_passcontrol( Operation *op, SlapReply *rs, LDAPControl *ctrl )
 }
 
 static void
-ppolicy_get_default( PassPolicy *pp )
-{
-	memset( pp, 0, sizeof(PassPolicy) );
-
-	pp->ad = slap_schema.si_ad_userPassword;
-
-	/* Users can change their own password by default */
-	pp->pwdAllowUserChange = 1;
-	if ( !pp->pwdMaxRecordedFailure )
-		pp->pwdMaxRecordedFailure = PPOLICY_DEFAULT_MAXRECORDED_FAILURE;
-}
-
-
-static void
 ppolicy_get( Operation *op, Entry *e, PassPolicy *pp )
 {
 	slap_overinst *on = (slap_overinst *)op->o_bd->bd_info;
@@ -496,7 +463,12 @@ ppolicy_get( Operation *op, Entry *e, PassPolicy *pp )
 	const char *text;
 #endif
 
-	ppolicy_get_default( pp );
+	memset( pp, 0, sizeof(PassPolicy) );
+
+	pp->ad = slap_schema.si_ad_userPassword;
+
+	/* Users can change their own password by default */
+    	pp->pwdAllowUserChange = 1;
 
 	if ((a = attr_find( e->e_attrs, ad_pwdPolicySubentry )) == NULL) {
 		/*
@@ -543,9 +515,6 @@ ppolicy_get( Operation *op, Entry *e, PassPolicy *pp )
 	if ( ( a = attr_find( pe->e_attrs, ad_pwdMaxFailure ) )
 			&& lutil_atoi( &pp->pwdMaxFailure, a->a_vals[0].bv_val ) != 0 )
 		goto defaultpol;
-	if ( ( a = attr_find( pe->e_attrs, ad_pwdMaxRecordedFailure ) )
-			&& lutil_atoi( &pp->pwdMaxRecordedFailure, a->a_vals[0].bv_val ) != 0 )
-		goto defaultpol;
 	if ( ( a = attr_find( pe->e_attrs, ad_pwdGraceAuthNLimit ) )
 			&& lutil_atoi( &pp->pwdGraceAuthNLimit, a->a_vals[0].bv_val ) != 0 )
 		goto defaultpol;
@@ -574,11 +543,6 @@ ppolicy_get( Operation *op, Entry *e, PassPolicy *pp )
 	if ((a = attr_find( pe->e_attrs, ad_pwdSafeModify )))
 	    	pp->pwdSafeModify = bvmatch( &a->a_nvals[0], &slap_true_bv );
     
-	if ( pp->pwdMaxRecordedFailure < pp->pwdMaxFailure )
-		pp->pwdMaxRecordedFailure = pp->pwdMaxFailure;
-	if ( !pp->pwdMaxRecordedFailure )
-		pp->pwdMaxRecordedFailure = PPOLICY_DEFAULT_MAXRECORDED_FAILURE;
-
 	op->o_bd->bd_info = (BackendInfo *)on->on_info;
 	be_entry_release_r( op, pe );
 	op->o_bd->bd_info = (BackendInfo *)on;
@@ -586,17 +550,8 @@ ppolicy_get( Operation *op, Entry *e, PassPolicy *pp )
 	return;
 
 defaultpol:
-	if ( pe ) {
-		op->o_bd->bd_info = (BackendInfo *)on->on_info;
-		be_entry_release_r( op, pe );
-		op->o_bd->bd_info = (BackendInfo *)on;
-	}
-
 	Debug( LDAP_DEBUG_TRACE,
 		"ppolicy_get: using default policy\n", 0, 0, 0 );
-
-	ppolicy_get_default( pp );
-
 	return;
 }
 
@@ -954,11 +909,8 @@ ppolicy_bind_response( Operation *op, SlapReply *rs )
 	int ngut = -1, warn = -1, age, rc;
 	Attribute *a;
 	time_t now, pwtime = (time_t)-1;
-	struct lutil_tm now_tm;
-	struct lutil_timet now_usec;
 	char nowstr[ LDAP_LUTIL_GENTIME_BUFSIZE ];
-	char nowstr_usec[ LDAP_LUTIL_GENTIME_BUFSIZE+8 ];
-	struct berval timestamp, timestamp_usec;
+	struct berval timestamp;
 	BackendInfo *bi = op->o_bd->bd_info;
 	Entry *e;
 
@@ -975,19 +927,10 @@ ppolicy_bind_response( Operation *op, SlapReply *rs )
 		return SLAP_CB_CONTINUE;
 	}
 
-	ldap_pvt_gettime(&now_tm); /* stored for later consideration */
-	lutil_tm2time(&now_tm, &now_usec);
-	now = now_usec.tt_sec;
+	now = slap_get_time(); /* stored for later consideration */
 	timestamp.bv_val = nowstr;
 	timestamp.bv_len = sizeof(nowstr);
 	slap_timestamp( &now, &timestamp );
-
-	/* Separate timestamp for pwdFailureTime with microsecond granularity */
-	strcpy(nowstr_usec, nowstr);
-	timestamp_usec.bv_val = nowstr_usec;
-	timestamp_usec.bv_len = timestamp.bv_len;
-	snprintf( timestamp_usec.bv_val + timestamp_usec.bv_len-1, sizeof(".123456Z"), ".%06dZ", now_usec.tt_usec );
-	timestamp_usec.bv_len += STRLENOF(".123456");
 
 	if ( rs->sr_err == LDAP_INVALID_CREDENTIALS ) {
 		int i = 0, fc = 0;
@@ -1001,8 +944,8 @@ ppolicy_bind_response( Operation *op, SlapReply *rs )
 		m->sml_values = ch_calloc( sizeof(struct berval), 2 );
 		m->sml_nvalues = ch_calloc( sizeof(struct berval), 2 );
 
-		ber_dupbv( &m->sml_values[0], &timestamp_usec );
-		ber_dupbv( &m->sml_nvalues[0], &timestamp_usec );
+		ber_dupbv( &m->sml_values[0], &timestamp );
+		ber_dupbv( &m->sml_nvalues[0], &timestamp );
 		m->sml_next = mod;
 		mod = m;
 
@@ -1031,50 +974,6 @@ ppolicy_bind_response( Operation *op, SlapReply *rs )
 				 * We only count those failures
 				 * which are not due to expire.
 				 */
-			}
-			/* Do we have too many timestamps? If so, delete some values.
-			 * We don't bother to sort the values here. OpenLDAP keeps the
-			 * values in order by default. Fundamentally, relying on the
-			 * information here is wrong anyway; monitoring systems should
-			 * be tracking Bind failures in syslog, not here.
-			 */
-			if (a->a_numvals >= ppb->pp.pwdMaxRecordedFailure) {
-				int j = ppb->pp.pwdMaxRecordedFailure-1;
-				/* If more than 2x, cheaper to perform a Replace */
-				if (a->a_numvals >= 2 * ppb->pp.pwdMaxRecordedFailure) {
-					struct berval v, nv;
-
-					/* Change the mod we constructed above */
-					m->sml_op = LDAP_MOD_REPLACE;
-					m->sml_numvals = ppb->pp.pwdMaxRecordedFailure;
-					v = m->sml_values[0];
-					nv = m->sml_nvalues[0];
-					ch_free(m->sml_values);
-					ch_free(m->sml_nvalues);
-					m->sml_values = ch_calloc( sizeof(struct berval), ppb->pp.pwdMaxRecordedFailure+1 );
-					m->sml_nvalues = ch_calloc( sizeof(struct berval), ppb->pp.pwdMaxRecordedFailure+1 );
-					for (i=0; i<j; i++) {
-						ber_dupbv(&m->sml_values[i], &a->a_vals[a->a_numvals-j+i]);
-						ber_dupbv(&m->sml_nvalues[i], &a->a_nvals[a->a_numvals-j+i]);
-					}
-					m->sml_values[i] = v;
-					m->sml_nvalues[i] = nv;
-				} else {
-				/* else just delete some */
-					m = ch_calloc( sizeof(Modifications), 1 );
-					m->sml_op = LDAP_MOD_DELETE;
-					m->sml_type = ad_pwdFailureTime->ad_cname;
-					m->sml_desc = ad_pwdFailureTime;
-					m->sml_numvals = a->a_numvals - j;
-					m->sml_values = ch_calloc( sizeof(struct berval), m->sml_numvals+1 );
-					m->sml_nvalues = ch_calloc( sizeof(struct berval), m->sml_numvals+1 );
-					for (i=0; i<m->sml_numvals; i++) {
-						ber_dupbv(&m->sml_values[i], &a->a_vals[i]);
-						ber_dupbv(&m->sml_nvalues[i], &a->a_nvals[i]);
-					}
-					m->sml_next = mod;
-					mod = m;
-				}
 			}
 		}
 		
@@ -1360,7 +1259,7 @@ ppolicy_bind( Operation *op, SlapReply *rs )
 static int
 ppolicy_connection_destroy( BackendDB *bd, Connection *conn )
 {
-	if ( pwcons && !BER_BVISEMPTY( &pwcons[conn->c_conn_idx].dn )) {
+	if ( !BER_BVISEMPTY( &pwcons[conn->c_conn_idx].dn )) {
 		ch_free( pwcons[conn->c_conn_idx].dn.bv_val );
 		BER_BVZERO( &pwcons[conn->c_conn_idx].dn );
 	}
@@ -1642,8 +1541,6 @@ ppolicy_modify( Operation *op, SlapReply *rs )
 	LDAPControl		*ctrl = NULL;
 	LDAPControl 		**oldctrls = NULL;
 	int			is_pwdexop = 0;
-	int got_del_grace = 0, got_del_lock = 0, got_pw = 0, got_del_fail = 0;
-	int got_changed = 0, got_history = 0;
 
 	op->o_bd->bd_info = (BackendInfo *)on->on_info;
 	rc = be_entry_get_rw( op, &op->o_req_ndn, NULL, NULL, 0, &e );
@@ -1656,6 +1553,7 @@ ppolicy_modify( Operation *op, SlapReply *rs )
 	 */
 	if ( be_shadow_update( op )) {
 		Modifications **prev;
+		int got_del_grace = 0, got_del_lock = 0, got_pw = 0, got_del_fail = 0;
 		Attribute *a_grace, *a_lock, *a_fail;
 
 		a_grace = attr_find( e->e_attrs, ad_pwdGraceUseTime );
@@ -1674,25 +1572,19 @@ ppolicy_modify( Operation *op, SlapReply *rs )
 				int drop = 0;
 
 				if ( ml->sml_desc == ad_pwdGraceUseTime ) {
-					if ( !a_grace || got_del_grace ) {
+					got_del_grace = 1;
+					if ( !a_grace )
 						drop = 1;
-					} else {
-						got_del_grace = 1;
-					}
 				} else
 				if ( ml->sml_desc == ad_pwdAccountLockedTime ) {
-					if ( !a_lock || got_del_lock ) {
+					got_del_lock = 1;
+					if ( !a_lock )
 						drop = 1;
-					} else {
-						got_del_lock = 1;
-					}
 				} else
 				if ( ml->sml_desc == ad_pwdFailureTime ) {
-					if ( !a_fail || got_del_fail ) {
+					got_del_fail = 1;
+					if ( !a_fail )
 						drop = 1;
-					} else {
-						got_del_fail = 1;
-					}
 				}
 				if ( drop ) {
 					*prev = ml->sml_next;
@@ -1843,20 +1735,6 @@ ppolicy_modify( Operation *op, SlapReply *rs )
 			if ((ml->sml_op == LDAP_MOD_ADD) ||
 				(ml->sml_op == LDAP_MOD_REPLACE))
 				zapReset = 0;
-		}
-		if ( ml->sml_op == LDAP_MOD_DELETE ) {
-			if ( ml->sml_desc == ad_pwdGraceUseTime ) {
-				got_del_grace = 1;
-			} else if ( ml->sml_desc == ad_pwdAccountLockedTime ) {
-				got_del_lock = 1;
-			} else if ( ml->sml_desc == ad_pwdFailureTime ) {
-				got_del_fail = 1;
-			}
-		}
-		if ( ml->sml_desc == ad_pwdChangedTime ) {
-			got_changed = 1;
-		} else if (ml->sml_desc == ad_pwdHistory ) {
-			got_history = 1;
 		}
 	}
 	
@@ -2094,34 +1972,32 @@ do_modify:
 		 * up to date.
 		 */
 
-		if (!got_changed) {
-			timestamp.bv_val = timebuf;
-			timestamp.bv_len = sizeof(timebuf);
-			slap_timestamp( &now, &timestamp );
+		timestamp.bv_val = timebuf;
+		timestamp.bv_len = sizeof(timebuf);
+		slap_timestamp( &now, &timestamp );
 
-			mods = NULL;
-			if (pwmop != LDAP_MOD_DELETE) {
-				mods = (Modifications *) ch_calloc( sizeof( Modifications ), 1 );
-				mods->sml_op = LDAP_MOD_REPLACE;
-				mods->sml_numvals = 1;
-				mods->sml_values = (BerVarray) ch_malloc( 2 * sizeof( struct berval ) );
-				ber_dupbv( &mods->sml_values[0], &timestamp );
-				BER_BVZERO( &mods->sml_values[1] );
-				assert( !BER_BVISNULL( &mods->sml_values[0] ) );
-			} else if (attr_find(e->e_attrs, ad_pwdChangedTime )) {
-				mods = (Modifications *) ch_calloc( sizeof( Modifications ), 1 );
-				mods->sml_op = LDAP_MOD_DELETE;
-			}
-			if (mods) {
-				mods->sml_desc = ad_pwdChangedTime;
-				mods->sml_flags = SLAP_MOD_INTERNAL;
-				mods->sml_next = NULL;
-				modtail->sml_next = mods;
-				modtail = mods;
-			}
+		mods = NULL;
+		if (pwmop != LDAP_MOD_DELETE) {
+			mods = (Modifications *) ch_calloc( sizeof( Modifications ), 1 );
+			mods->sml_op = LDAP_MOD_REPLACE;
+			mods->sml_numvals = 1;
+			mods->sml_values = (BerVarray) ch_malloc( 2 * sizeof( struct berval ) );
+			ber_dupbv( &mods->sml_values[0], &timestamp );
+			BER_BVZERO( &mods->sml_values[1] );
+			assert( !BER_BVISNULL( &mods->sml_values[0] ) );
+		} else if (attr_find(e->e_attrs, ad_pwdChangedTime )) {
+			mods = (Modifications *) ch_calloc( sizeof( Modifications ), 1 );
+			mods->sml_op = LDAP_MOD_DELETE;
+		}
+		if (mods) {
+			mods->sml_desc = ad_pwdChangedTime;
+			mods->sml_flags = SLAP_MOD_INTERNAL;
+			mods->sml_next = NULL;
+			modtail->sml_next = mods;
+			modtail = mods;
 		}
 
-		if (!got_del_grace && attr_find(e->e_attrs, ad_pwdGraceUseTime )) {
+		if (attr_find(e->e_attrs, ad_pwdGraceUseTime )) {
 			mods = (Modifications *) ch_calloc( sizeof( Modifications ), 1 );
 			mods->sml_op = LDAP_MOD_DELETE;
 			mods->sml_desc = ad_pwdGraceUseTime;
@@ -2131,7 +2007,7 @@ do_modify:
 			modtail = mods;
 		}
 
-		if (!got_del_lock && attr_find(e->e_attrs, ad_pwdAccountLockedTime )) {
+		if (attr_find(e->e_attrs, ad_pwdAccountLockedTime )) {
 			mods = (Modifications *) ch_calloc( sizeof( Modifications ), 1 );
 			mods->sml_op = LDAP_MOD_DELETE;
 			mods->sml_desc = ad_pwdAccountLockedTime;
@@ -2141,7 +2017,7 @@ do_modify:
 			modtail = mods;
 		}
 
-		if (!got_del_fail && attr_find(e->e_attrs, ad_pwdFailureTime )) {
+		if (attr_find(e->e_attrs, ad_pwdFailureTime )) {
 			mods = (Modifications *) ch_calloc( sizeof( Modifications ), 1 );
 			mods->sml_op = LDAP_MOD_DELETE;
 			mods->sml_desc = ad_pwdFailureTime;
@@ -2162,7 +2038,7 @@ do_modify:
 			modtail = mods;
 		}
 
-		if (!got_history && pp.pwdInHistory > 0) {
+		if (pp.pwdInHistory > 0) {
 			if (hsize >= pp.pwdInHistory) {
 				/*
 				 * We use the >= operator, since we are going to add
@@ -2415,8 +2291,6 @@ ppolicy_db_init(
 		pwcons++;
 	}
 
-	ov_count++;
-
 	return 0;
 }
 
@@ -2426,24 +2300,12 @@ ppolicy_db_open(
 	ConfigReply *cr
 )
 {
+	ov_count++;
 	return overlay_register_control( be, LDAP_CONTROL_PASSWORDPOLICYREQUEST );
 }
 
 static int
-ppolicy_db_close(
-	BackendDB *be,
-	ConfigReply *cr
-)
-{
-#ifdef SLAP_CONFIG_DELETE
-	overlay_unregister_control( be, LDAP_CONTROL_PASSWORDPOLICYREQUEST );
-#endif /* SLAP_CONFIG_DELETE */
-
-	return 0;
-}
-
-static int
-ppolicy_db_destroy(
+ppolicy_close(
 	BackendDB *be,
 	ConfigReply *cr
 )
@@ -2451,17 +2313,20 @@ ppolicy_db_destroy(
 	slap_overinst *on = (slap_overinst *) be->bd_info;
 	pp_info *pi = on->on_bi.bi_private;
 
-	on->on_bi.bi_private = NULL;
+#ifdef SLAP_CONFIG_DELETE
+	overlay_unregister_control( be, LDAP_CONTROL_PASSWORDPOLICYREQUEST );
+#endif /* SLAP_CONFIG_DELETE */
+
+	/* Perhaps backover should provide bi_destroy hooks... */
+	ov_count--;
+	if ( ov_count <=0 && pwcons ) {
+		pwcons--;
+		free( pwcons );
+		pwcons = NULL;
+	}
 	free( pi->def_policy.bv_val );
 	free( pi );
 
-	ov_count--;
-	if ( ov_count <=0 && pwcons ) {
-		pw_conn *pwc = pwcons;
-		pwcons = NULL;
-		pwc--;
-		ch_free( pwc );
-	}
 	return 0;
 }
 
@@ -2503,8 +2368,7 @@ int ppolicy_initialize()
 	ppolicy.on_bi.bi_type = "ppolicy";
 	ppolicy.on_bi.bi_db_init = ppolicy_db_init;
 	ppolicy.on_bi.bi_db_open = ppolicy_db_open;
-	ppolicy.on_bi.bi_db_close = ppolicy_db_close;
-	ppolicy.on_bi.bi_db_destroy = ppolicy_db_destroy;
+	ppolicy.on_bi.bi_db_close = ppolicy_close;
 
 	ppolicy.on_bi.bi_op_add = ppolicy_add;
 	ppolicy.on_bi.bi_op_bind = ppolicy_bind;

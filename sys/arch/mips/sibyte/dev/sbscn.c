@@ -1,4 +1,4 @@
-/* $NetBSD: sbscn.c,v 1.42 2016/07/21 17:02:47 christos Exp $ */
+/* $NetBSD: sbscn.c,v 1.40 2014/08/10 16:44:34 tls Exp $ */
 
 /*
  * Copyright 2000, 2001
@@ -109,15 +109,16 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sbscn.c,v 1.42 2016/07/21 17:02:47 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sbscn.c,v 1.40 2014/08/10 16:44:34 tls Exp $");
 
 #define	SBSCN_DEBUG
 
 #include "opt_ddb.h"
 #include "ioconf.h"
 
+#include "rnd.h"
 #ifdef RND_SBSCN
-#include <sys/rndsource.h>
+#include <sys/rnd.h>
 #endif
 
 #include <sys/param.h>
@@ -242,8 +243,8 @@ static void	sbscn_attach(device_t, device_t, void *);
 CFATTACH_DECL_NEW(sbscn, sizeof(struct sbscn_softc),
     sbscn_match, sbscn_attach, NULL, NULL);
 
-#define	READ_REG(rp)		(mips3_ld((register_t)(rp)))
-#define	WRITE_REG(rp, val)	(mips3_sd((register_t)(rp), (val)))
+#define	READ_REG(rp)		(mips3_ld((volatile uint64_t *)(rp)))
+#define	WRITE_REG(rp, val)	(mips3_sd((volatile uint64_t *)(rp), (val)))
 
 /*
  * input and output signals are actually the _inverse_ of the bits in the

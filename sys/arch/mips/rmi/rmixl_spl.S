@@ -1,4 +1,4 @@
-/*	$NetBSD: rmixl_spl.S,v 1.4 2015/06/19 06:32:08 matt Exp $	*/
+/*	$NetBSD: rmixl_spl.S,v 1.3 2011/04/14 05:16:54 cliff Exp $	*/
 
 /*-
  * Copyright (c) 2009, 2010 The NetBSD Foundation, Inc.
@@ -33,10 +33,11 @@
 
 #include <sys/cdefs.h>
 
+#include <machine/param.h>
 #include <mips/asm.h>
 #include <mips/cpuregs.h>
 
-RCSID("$NetBSD: rmixl_spl.S,v 1.4 2015/06/19 06:32:08 matt Exp $");
+RCSID("$NetBSD: rmixl_spl.S,v 1.3 2011/04/14 05:16:54 cliff Exp $");
 
 #include "assym.h"
 

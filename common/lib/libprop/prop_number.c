@@ -1,4 +1,4 @@
-/*	$NetBSD: prop_number.c,v 1.30 2016/06/28 06:47:35 pgoyette Exp $	*/
+/*	$NetBSD: prop_number.c,v 1.26 2014/03/26 18:12:46 christos Exp $	*/
 
 /*-
  * Copyright (c) 2006 The NetBSD Foundation, Inc.
@@ -29,9 +29,9 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include <sys/rbtree.h>
 #include <prop/prop_number.h>
 #include "prop_object_impl.h"
+#include "prop_rb_impl.h"
 
 #if defined(_KERNEL)
 #include <sys/systm.h>
@@ -43,21 +43,19 @@
 #include <stdlib.h>
 #endif
 
-struct _prop_number_value {
-	union {
-		int64_t  pnu_signed;
-		uint64_t pnu_unsigned;
-	} pnv_un;
-#define	pnv_signed	pnv_un.pnu_signed
-#define	pnv_unsigned	pnv_un.pnu_unsigned
-	unsigned int	pnv_is_unsigned	:1,
-					:31;
-};
-
 struct _prop_number {
 	struct _prop_object	pn_obj;
 	struct rb_node		pn_link;
-	struct _prop_number_value pn_value;
+	struct _prop_number_value {
+		union {
+			int64_t  pnu_signed;
+			uint64_t pnu_unsigned;
+		} pnv_un;
+#define	pnv_signed	pnv_un.pnu_signed
+#define	pnv_unsigned	pnv_un.pnu_unsigned
+		unsigned int	pnv_is_unsigned	:1,
+						:31;
+	} pn_value;
 };
 
 _PROP_POOL_INIT(_prop_number_pool, sizeof(struct _prop_number), "propnmbr")
@@ -157,7 +155,7 @@ _prop_number_free(prop_stack_t stack, prop_object_t *obj)
 {
 	prop_number_t pn = *obj;
 
-	rb_tree_remove_node(&_prop_number_tree, pn);
+	_prop_rb_tree_remove_node(&_prop_number_tree, pn);
 
 	_PROP_POOL_PUT(_prop_number_pool, pn);
 
@@ -171,7 +169,7 @@ _prop_number_init(void)
 {
 
 	_PROP_MUTEX_INIT(_prop_number_tree_mutex);
-	rb_tree_init(&_prop_number_tree, &_prop_number_rb_tree_ops);
+	_prop_rb_tree_init(&_prop_number_tree, &_prop_number_rb_tree_ops);
 	return 0;
 }
 
@@ -283,7 +281,7 @@ _prop_number_alloc(const struct _prop_number_value *pnv)
 	 * we just retain it and return it.
 	 */
 	_PROP_MUTEX_LOCK(_prop_number_tree_mutex);
-	opn = rb_tree_find_node(&_prop_number_tree, pnv);
+	opn = _prop_rb_tree_find(&_prop_number_tree, pnv);
 	if (opn != NULL) {
 		prop_object_retain(opn);
 		_PROP_MUTEX_UNLOCK(_prop_number_tree_mutex);
@@ -308,14 +306,14 @@ _prop_number_alloc(const struct _prop_number_value *pnv)
 	 * we have to check again if it is in the tree.
 	 */
 	_PROP_MUTEX_LOCK(_prop_number_tree_mutex);
-	opn = rb_tree_find_node(&_prop_number_tree, pnv);
+	opn = _prop_rb_tree_find(&_prop_number_tree, pnv);
 	if (opn != NULL) {
 		prop_object_retain(opn);
 		_PROP_MUTEX_UNLOCK(_prop_number_tree_mutex);
 		_PROP_POOL_PUT(_prop_number_pool, pn);
 		return (opn);
 	}
-	rpn = rb_tree_insert_node(&_prop_number_tree, pn);
+	rpn = _prop_rb_tree_insert_node(&_prop_number_tree, pn);
 	_PROP_ASSERT(rpn == pn);
 	_PROP_MUTEX_UNLOCK(_prop_number_tree_mutex);
 	return (rpn);

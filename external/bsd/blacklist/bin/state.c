@@ -1,4 +1,4 @@
-/*	$NetBSD: state.c,v 1.19 2016/09/26 19:43:43 christos Exp $	*/
+/*	$NetBSD: state.c,v 1.15.2.3 2015/08/07 04:10:23 snj Exp $	*/
 
 /*-
  * Copyright (c) 2015 The NetBSD Foundation, Inc.
@@ -33,7 +33,7 @@
 #endif
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: state.c,v 1.19 2016/09/26 19:43:43 christos Exp $");
+__RCSID("$NetBSD: state.c,v 1.15.2.3 2015/08/07 04:10:23 snj Exp $");
 
 #include <sys/types.h>
 #include <sys/socket.h>
@@ -103,7 +103,7 @@ static void
 dumpkey(const struct conf *k)
 {
 	char buf[10240];
-	blhexdump(buf, sizeof(buf), __func__, k, sizeof(*k));
+	hexdump(buf, sizeof(buf), __func__, k, sizeof(*k));
 	(*lfun)(LOG_DEBUG, "%s", buf);
 	(*lfun)(LOG_DEBUG, "%s: %s", __func__,
 	    conf_print(buf, sizeof(buf), "", "", k));
@@ -200,10 +200,8 @@ state_iterate(DB *db, struct conf *c, struct dbinfo *dbi, unsigned int first)
 	int rv;
 	DBT k, v;
 
-	if (db == NULL) {
-		(*lfun)(LOG_ERR, "%s: called with no database file", __func__);
+	if (db == NULL)
 		return -1;
-	}
 
 	first = first ? R_FIRST : R_NEXT;
 

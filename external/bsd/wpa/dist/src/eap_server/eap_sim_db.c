@@ -66,7 +66,6 @@ struct eap_sim_db_data {
 	struct eap_sim_pseudonym *pseudonyms;
 	struct eap_sim_reauth *reauths;
 	struct eap_sim_db_pending *pending;
-	unsigned int eap_sim_db_timeout;
 #ifdef CONFIG_SQLITE
 	sqlite3 *sqlite_db;
 	char db_tmp_identity[100];
@@ -75,10 +74,6 @@ struct eap_sim_db_data {
 	struct eap_sim_reauth db_tmp_reauth;
 #endif /* CONFIG_SQLITE */
 };
-
-
-static void eap_sim_db_del_timeout(void *eloop_ctx, void *user_ctx);
-static void eap_sim_db_query_timeout(void *eloop_ctx, void *user_ctx);
 
 
 #ifdef CONFIG_SQLITE
@@ -402,57 +397,6 @@ static void eap_sim_db_add_pending(struct eap_sim_db_data *data,
 }
 
 
-static void eap_sim_db_free_pending(struct eap_sim_db_data *data,
-				    struct eap_sim_db_pending *entry)
-{
-	eloop_cancel_timeout(eap_sim_db_query_timeout, data, entry);
-	eloop_cancel_timeout(eap_sim_db_del_timeout, data, entry);
-	os_free(entry);
-}
-
-
-static void eap_sim_db_del_pending(struct eap_sim_db_data *data,
-				   struct eap_sim_db_pending *entry)
-{
-	struct eap_sim_db_pending **pp = &data->pending;
-
-	while (*pp != NULL) {
-		if (*pp == entry) {
-			*pp = entry->next;
-			eap_sim_db_free_pending(data, entry);
-			return;
-		}
-		pp = &(*pp)->next;
-	}
-}
-
-
-static void eap_sim_db_del_timeout(void *eloop_ctx, void *user_ctx)
-{
-	struct eap_sim_db_data *data = eloop_ctx;
-	struct eap_sim_db_pending *entry = user_ctx;
-
-	wpa_printf(MSG_DEBUG, "EAP-SIM DB: Delete query timeout for %p", entry);
-	eap_sim_db_del_pending(data, entry);
-}
-
-
-static void eap_sim_db_query_timeout(void *eloop_ctx, void *user_ctx)
-{
-	struct eap_sim_db_data *data = eloop_ctx;
-	struct eap_sim_db_pending *entry = user_ctx;
-
-	/*
-	 * Report failure and allow some time for EAP server to process it
-	 * before deleting the query.
-	 */
-	wpa_printf(MSG_DEBUG, "EAP-SIM DB: Query timeout for %p", entry);
-	entry->state = FAILURE;
-	data->get_complete_cb(data->ctx, entry->cb_session_ctx);
-	eloop_register_timeout(1, 0, eap_sim_db_del_timeout, data, entry);
-}
-
-
 static void eap_sim_db_sim_resp_auth(struct eap_sim_db_data *data,
 				     const char *imsi, char *buf)
 {
@@ -528,7 +472,7 @@ static void eap_sim_db_sim_resp_auth(struct eap_sim_db_data *data,
 
 parse_fail:
 	wpa_printf(MSG_DEBUG, "EAP-SIM DB: Failed to parse response string");
-	eap_sim_db_free_pending(data, entry);
+	os_free(entry);
 }
 
 
@@ -619,7 +563,7 @@ static void eap_sim_db_aka_resp_auth(struct eap_sim_db_data *data,
 
 parse_fail:
 	wpa_printf(MSG_DEBUG, "EAP-SIM DB: Failed to parse response string");
-	eap_sim_db_free_pending(data, entry);
+	os_free(entry);
 }
 
 
@@ -746,13 +690,12 @@ static void eap_sim_db_close_socket(struct eap_sim_db_data *data)
 /**
  * eap_sim_db_init - Initialize EAP-SIM DB / authentication gateway interface
  * @config: Configuration data (e.g., file name)
- * @db_timeout: Database lookup timeout
  * @get_complete_cb: Callback function for reporting availability of triplets
  * @ctx: Context pointer for get_complete_cb
  * Returns: Pointer to a private data structure or %NULL on failure
  */
 struct eap_sim_db_data *
-eap_sim_db_init(const char *config, unsigned int db_timeout,
+eap_sim_db_init(const char *config,
 		void (*get_complete_cb)(void *ctx, void *session_ctx),
 		void *ctx)
 {
@@ -766,7 +709,6 @@ eap_sim_db_init(const char *config, unsigned int db_timeout,
 	data->sock = -1;
 	data->get_complete_cb = get_complete_cb;
 	data->ctx = ctx;
-	data->eap_sim_db_timeout = db_timeout;
 	data->fname = os_strdup(config);
 	if (data->fname == NULL)
 		goto fail;
@@ -854,7 +796,7 @@ void eap_sim_db_deinit(void *priv)
 	while (pending) {
 		prev_pending = pending;
 		pending = pending->next;
-		eap_sim_db_free_pending(data, prev_pending);
+		os_free(prev_pending);
 	}
 
 	os_free(data);
@@ -891,11 +833,11 @@ static int eap_sim_db_send(struct eap_sim_db_data *data, const char *msg,
 }
 
 
-static void eap_sim_db_expire_pending(struct eap_sim_db_data *data,
-				      struct eap_sim_db_pending *entry)
+static void eap_sim_db_expire_pending(struct eap_sim_db_data *data)
 {
-	eloop_register_timeout(data->eap_sim_db_timeout, 0,
-			       eap_sim_db_query_timeout, data, entry);
+	/* TODO: add limit for maximum length for pending list; remove latest
+	 * (i.e., last) entry from the list if the limit is reached; could also
+	 * use timeout to expire pending entries */
 }
 
 
@@ -949,7 +891,7 @@ int eap_sim_db_get_gsm_triplets(struct eap_sim_db_data *data,
 		if (entry->state == FAILURE) {
 			wpa_printf(MSG_DEBUG, "EAP-SIM DB: Pending entry -> "
 				   "failure");
-			eap_sim_db_free_pending(data, entry);
+			os_free(entry);
 			return EAP_SIM_DB_FAILURE;
 		}
 
@@ -969,7 +911,7 @@ int eap_sim_db_get_gsm_triplets(struct eap_sim_db_data *data,
 		os_memcpy(sres, entry->u.sim.sres,
 			  num_chal * EAP_SIM_SRES_LEN);
 		os_memcpy(kc, entry->u.sim.kc, num_chal * EAP_SIM_KC_LEN);
-		eap_sim_db_free_pending(data, entry);
+		os_free(entry);
 		return num_chal;
 	}
 
@@ -1003,8 +945,7 @@ int eap_sim_db_get_gsm_triplets(struct eap_sim_db_data *data,
 	entry->cb_session_ctx = cb_session_ctx;
 	entry->state = PENDING;
 	eap_sim_db_add_pending(data, entry);
-	eap_sim_db_expire_pending(data, entry);
-	wpa_printf(MSG_DEBUG, "EAP-SIM DB: Added query %p", entry);
+	eap_sim_db_expire_pending(data);
 
 	return EAP_SIM_DB_PENDING;
 }
@@ -1415,7 +1356,7 @@ int eap_sim_db_get_aka_auth(struct eap_sim_db_data *data, const char *username,
 	entry = eap_sim_db_get_pending(data, imsi, 1);
 	if (entry) {
 		if (entry->state == FAILURE) {
-			eap_sim_db_free_pending(data, entry);
+			os_free(entry);
 			wpa_printf(MSG_DEBUG, "EAP-SIM DB: Failure");
 			return EAP_SIM_DB_FAILURE;
 		}
@@ -1434,7 +1375,7 @@ int eap_sim_db_get_aka_auth(struct eap_sim_db_data *data, const char *username,
 		os_memcpy(ck, entry->u.aka.ck, EAP_AKA_CK_LEN);
 		os_memcpy(res, entry->u.aka.res, EAP_AKA_RES_MAX_LEN);
 		*res_len = entry->u.aka.res_len;
-		eap_sim_db_free_pending(data, entry);
+		os_free(entry);
 		return 0;
 	}
 
@@ -1465,8 +1406,7 @@ int eap_sim_db_get_aka_auth(struct eap_sim_db_data *data, const char *username,
 	entry->cb_session_ctx = cb_session_ctx;
 	entry->state = PENDING;
 	eap_sim_db_add_pending(data, entry);
-	eap_sim_db_expire_pending(data, entry);
-	wpa_printf(MSG_DEBUG, "EAP-SIM DB: Added query %p", entry);
+	eap_sim_db_expire_pending(data);
 
 	return EAP_SIM_DB_PENDING;
 }

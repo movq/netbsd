@@ -1,4 +1,4 @@
-/*	$NetBSD: printw.c,v 1.24 2017/01/06 13:53:18 roy Exp $	*/
+/*	$NetBSD: printw.c,v 1.22 2011/07/17 20:54:34 joerg Exp $	*/
 
 /*
  * Copyright (c) 1981, 1993, 1994
@@ -34,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)printw.c	8.3 (Berkeley) 5/4/94";
 #else
-__RCSID("$NetBSD: printw.c,v 1.24 2017/01/06 13:53:18 roy Exp $");
+__RCSID("$NetBSD: printw.c,v 1.22 2011/07/17 20:54:34 joerg Exp $");
 #endif
 #endif				/* not lint */
 
@@ -46,6 +46,8 @@ __RCSID("$NetBSD: printw.c,v 1.24 2017/01/06 13:53:18 roy Exp $");
 /*
  * printw and friends.
  */
+
+static int __winwrite __P((void *, const char *, int));
 
 /*
  * printw --
@@ -60,7 +62,7 @@ printw(const char *fmt,...)
 	va_start(ap, fmt);
 	ret = vw_printw(stdscr, fmt, ap);
 	va_end(ap);
-	return ret;
+	return (ret);
 }
 /*
  * wprintw --
@@ -75,7 +77,7 @@ wprintw(WINDOW *win, const char *fmt,...)
 	va_start(ap, fmt);
 	ret = vw_printw(win, fmt, ap);
 	va_end(ap);
-	return ret;
+	return (ret);
 }
 /*
  * mvprintw, mvwprintw --
@@ -89,11 +91,11 @@ mvprintw(int y, int x, const char *fmt,...)
 	int     ret;
 
 	if (move(y, x) != OK)
-		return ERR;
+		return (ERR);
 	va_start(ap, fmt);
 	ret = vw_printw(stdscr, fmt, ap);
 	va_end(ap);
-	return ret;
+	return (ret);
 }
 
 int
@@ -103,31 +105,34 @@ mvwprintw(WINDOW * win, int y, int x, const char *fmt,...)
 	int     ret;
 
 	if (wmove(win, y, x) != OK)
-		return ERR;
+		return (ERR);
 
 	va_start(ap, fmt);
 	ret = vw_printw(win, fmt, ap);
 	va_end(ap);
-	return ret;
+	return (ret);
 }
 /*
  * Internal write-buffer-to-window function.
  */
-static ssize_t
-winwrite(void   *cookie, const void *vbuf, size_t n)
+static int
+__winwrite(cookie, buf, n)
+	void   *cookie;
+	const char *buf;
+	int     n;
 {
 	WINDOW *win;
-	size_t     c;
-	const char *buf = vbuf;
+	int     c;
 
-	for (c = 0, win = cookie; c < n; c++) {
+	for (c = n, win = cookie; --c >= 0;)
+	{
 #ifdef DEBUG
 		__CTRACE(__CTRACE_MISC, "__winwrite: %c\n", *buf);
 #endif
 		if (waddch(win, (chtype) (*buf++ & __CHARTEXT)) == ERR)
-			return -1;
+			return (-1);
 	}
-	return (ssize_t)n;
+	return (n);
 }
 /*
  * vw_printw --
@@ -136,14 +141,12 @@ winwrite(void   *cookie, const void *vbuf, size_t n)
 int
 vw_printw(WINDOW *win, const char *fmt, va_list ap)
 {
-	if (win->fp == NULL) {
-		win->fp = funopen2(win, NULL, winwrite, NULL, NULL, NULL);
-		if (win->fp == NULL)
-			return ERR;
-	}
-	vfprintf(win->fp, fmt, ap);
-	fflush(win->fp);
-	return OK;
+	FILE   *f;
+
+	if ((f = funopen(win, NULL, __winwrite, NULL, NULL)) == NULL)
+		return (ERR);
+	(void) vfprintf(f, fmt, ap);
+	return (fclose(f) ? ERR : OK);
 }
 
 __strong_alias(vwprintw, vw_printw)

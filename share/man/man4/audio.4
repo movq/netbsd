@@ -1,4 +1,4 @@
-.\"	$NetBSD: audio.4,v 1.75 2017/02/12 14:44:20 wiz Exp $
+.\"	$NetBSD: audio.4,v 1.72 2011/09/06 01:17:48 jmcneill Exp $
 .\"
 .\" Copyright (c) 1996 The NetBSD Foundation, Inc.
 .\" All rights reserved.
@@ -27,7 +27,7 @@
 .\" ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 .\" POSSIBILITY OF SUCH DAMAGE.
 .\"
-.Dd December 11, 2016
+.Dd September 5, 2011
 .Dt AUDIO 4
 .Os
 .Sh NAME
@@ -67,16 +67,11 @@ operations as
 .Pa /dev/sound ,
 but no other operations.
 .Pp
+In contrast to
 .Pa /dev/sound
-and
-.Pa /dev/audio
-can be opened at
-.Em any
-time and audio sources of different precision and playback
-parameters i.e frequency will be mixed and played back simultaneously.
-.Pp
+which has the exclusive open property
 .Pa /dev/audioctl
-can be used to manipulate the audio device
+can be opened at any time and can be used to manipulate the audio device
 while it is in use.
 .Sh SAMPLING DEVICES
 When
@@ -89,79 +84,16 @@ recording (playing) unpaused and playing (recording) paused.
 When
 .Pa /dev/sound
 is opened, it maintains the previous audio sample mode and
-record/playback mode most recently set on
-.Pa /dev/sound
-by any open channel.
+record/playback mode.
 In all other respects
 .Pa /dev/audio
 and
 .Pa /dev/sound
 are identical.
-.Sh VIRTUAL CHANNELS
-Any process may open a sampling device at a given time.
-Any number of devices per process and file descriptors may be shared between
-processes.
 .Pp
-Virtual channels are converted to a common format, signed linear encoding,
-frequency channels and precision.
-These can be modified to taste by the following
-.Xr sysctl 8
-variables.
-.Pp
-.Bl -tag -width -compact
-.It hw.driverN.precision
-.It hw.driverN.frequency
-.It hw.driverN.channels
-.It hw.driverN.saturate
-.It hw.driverN.multiuser
-.El
-.Pp
-Where
-.Em driverN
-corresponds to the underlying audio device driver and device number.
-e.g In the case of an hdafg supported device the variables would be:
-hw.hdafg0.channels, hw.hdafg0.precision, hw.hdafg0.frequency.
-.Pp
-For best results, values close to the underlying hardware should be chosen.
-These variables may only be changed when the sampling device is not in use.
-.Pp
-An additional
-.Xr sysctl 8
-variable controls how the samples are combined, hw.driverN.saturate.
-.Pp
-By default it is set to true.
-This means that volumes are not adjusted for each channel to be mixed.
-All virtual channels will use the
-.Em maximum
-set master volume unless the virtual channel volume is lowered by the user.
-.Pp
-If set to false the channels are
-.Em divided
-evenly in volume with respect to the master volume.
-.Pp
-An additional
-.Xr sysctl 8
-variable determines if multiple users are allowed to access the sampling
-device, hw.driverN.multiuser.
-.Pp
-By default it is set to false.
-This means that the sampling device may be only used by
-.Em one
-user at a time.
-Other users (except root) attempting to open the sampling device will be
-denied.
-.Pp
-If set to true, all users may access the sampling device at any time.
-.Pp
-Each virtual channel has a corresponding mixer:
-.Bl -tag -width -compact
-.It vchan.dacN  Output volume
-.It vchan.micN  Recording volume
-.El
-.Pp
-Where N is the virtual channel number.
-e.g vchan.dac0 controlling playback volume and vchan.mic0 controlling
-recording volume for the first virtual channel.
+Only one process may hold open a sampling device at a given time
+(although file descriptors may be shared between processes once the
+first open completes).
 .Pp
 On a half-duplex device, writes while recording is in progress will be
 immediately discarded.
@@ -245,8 +177,6 @@ The following
 commands are supported on the sample devices:
 .Pp
 .Bl -tag -width indent
-.It Dv AUDIO_SETPROC (int)
-This command will select the audio channel for subsequent ioctl calls.
 .It Dv AUDIO_FLUSH
 This command stops all playback and recording, clears all queued
 buffers, resets error counters, and restarts recording and playback as
@@ -752,8 +682,7 @@ string values.
 .Xr ioctl 2 ,
 .Xr ossaudio 3 ,
 .Xr midi 4 ,
-.Xr radio 4 ,
-.Xr sysctl 8
+.Xr radio 4
 .Ss ISA bus
 .Xr aria 4 ,
 .Xr ess 4 ,
@@ -786,9 +715,8 @@ string values.
 .Xr bba 4
 .Ss USB
 .Xr uaudio 4
-.Sh HISTORY
-Support for virtual channels and mixing first appeared in
-.Nx 8.0 .
 .Sh BUGS
+If the device is used in
 .Xr mmap 2
-currently does not work and should be avoided.
+it is currently always mapped for writing (playing) due to
+VM system weirdness.

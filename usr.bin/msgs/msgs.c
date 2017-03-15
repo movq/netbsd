@@ -1,4 +1,4 @@
-/*	$NetBSD: msgs.c,v 1.25 2016/09/05 00:40:29 sevan Exp $	*/
+/*	$NetBSD: msgs.c,v 1.23 2013/10/18 20:47:06 christos Exp $	*/
 
 /*-
  * Copyright (c) 1980, 1993
@@ -39,7 +39,7 @@ __COPYRIGHT("@(#) Copyright (c) 1980, 1993\
 #if 0
 static char sccsid[] = "@(#)msgs.c	8.2 (Berkeley) 4/28/95";
 #else
-__RCSID("$NetBSD: msgs.c,v 1.25 2016/09/05 00:40:29 sevan Exp $");
+__RCSID("$NetBSD: msgs.c,v 1.23 2013/10/18 20:47:06 christos Exp $");
 #endif
 #endif /* not lint */
 
@@ -142,6 +142,7 @@ time_t	keep;
 void	ask(const char *);
 void	gfrsub(FILE *);
 int	linecnt(FILE *);
+int	main(int, char *[]);
 int	next(char *, size_t);
 char	*nxtfld(char *);
 void	onintr(int);
@@ -799,7 +800,6 @@ ask(const char *prompt)
 			perror(fname);
 			mailing = NO;
 			fseek(newmsg, oldpos, 0);
-			fclose(cpfrom);
 			ask(prompt);
 			return;
 		}

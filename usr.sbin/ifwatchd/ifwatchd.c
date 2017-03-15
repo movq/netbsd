@@ -1,6 +1,4 @@
-/*	$NetBSD: ifwatchd.c,v 1.41 2016/10/07 15:49:58 christos Exp $	*/
-#include <sys/cdefs.h>
-__RCSID("$NetBSD: ifwatchd.c,v 1.41 2016/10/07 15:49:58 christos Exp $");
+/*	$NetBSD: ifwatchd.c,v 1.26 2011/08/30 18:57:38 joerg Exp $	*/
 
 /*-
  * Copyright (c) 2002, 2003 The NetBSD Foundation, Inc.
@@ -31,6 +29,11 @@ __RCSID("$NetBSD: ifwatchd.c,v 1.41 2016/10/07 15:49:58 christos Exp $");
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
+/*
+ * Define this for special treatment of sys/net/if_spppsubr.c based interfaces.
+ */
+#define SPPP_IF_SUPPORT
+
 #include <sys/types.h>
 #include <sys/param.h>
 #include <sys/ioctl.h>
@@ -40,9 +43,11 @@ __RCSID("$NetBSD: ifwatchd.c,v 1.41 2016/10/07 15:49:58 christos Exp $");
 #include <net/if.h>
 #include <net/if_dl.h>
 #include <net/if_media.h>
+#ifdef SPPP_IF_SUPPORT
+#include <net/if_sppp.h>
+#endif
 #include <net/route.h>
 #include <netinet/in.h>
-#include <netinet/in_var.h>
 #include <arpa/inet.h>
 
 #include <paths.h>
@@ -56,21 +61,28 @@ __RCSID("$NetBSD: ifwatchd.c,v 1.41 2016/10/07 15:49:58 christos Exp $");
 #include <syslog.h>
 
 enum event { ARRIVAL, DEPARTURE, UP, DOWN, CARRIER, NO_CARRIER };
-enum addrflag { NOTREADY, DETACHED, READY };
 
 /* local functions */
 __dead static void usage(void);
-static void dispatch(const void *, size_t);
-static enum addrflag check_addrflags(int af, int addrflags);
-static void check_addrs(const struct ifa_msghdr *ifam);
-static void invoke_script(const char *ifname, enum event ev,
-    const struct sockaddr *sa, const struct sockaddr *dst);
+static void dispatch(void*, size_t);
+static void check_addrs(char *cp, int addrs, enum event ev);
+static void invoke_script(struct sockaddr *sa, struct sockaddr *dst, enum event ev, int ifindex, const char *ifname_hint);
 static void list_interfaces(const char *ifnames);
-static void check_announce(const struct if_announcemsghdr *ifan);
-static void check_carrier(const struct if_msghdr *ifm);
+static void check_announce(struct if_announcemsghdr *ifan);
+static void check_carrier(int if_index, int carrier);
+static void rescan_interfaces(void);
 static void free_interfaces(void);
-static struct interface_data * find_interface(int index);
+static int find_interface(int index);
 static void run_initial_ups(void);
+
+#ifdef SPPP_IF_SUPPORT
+static int check_is_connected(const char * ifname, int def_retvalue);
+#define if_is_connected(X)	(check_is_connected((X), 1))
+#define if_is_not_connected(X)	(!check_is_connected((X), 0))
+#else
+#define	if_is_connected(X)	1
+#define	if_is_not_connected(X)	1
+#endif
 
 /* global variables */
 static int verbose = 0, quiet = 0;
@@ -105,9 +117,7 @@ main(int argc, char **argv)
 {
 	int c, s, n;
 	int errs = 0;
-	struct msghdr msg;
-	struct iovec iov[1];
-	char buf[2048];
+	char msg[2048], *msgp;
 
 	openlog(argv[0], LOG_PID|LOG_CONS, LOG_DAEMON);
 	while ((c = getopt(argc, argv, "qvhic:n:u:d:A:D:")) != -1) {
@@ -189,26 +199,20 @@ main(int argc, char **argv)
 	s = socket(PF_ROUTE, SOCK_RAW, 0);
 	if (s < 0) {
 		syslog(LOG_ERR, "error opening routing socket: %m");
+		perror("open routing socket");
 		exit(EXIT_FAILURE);
 	}
 
 	if (!inhibit_initial)
 		run_initial_ups();
 
-	iov[0].iov_base = buf;
-	iov[0].iov_len = sizeof(buf);
-	memset(&msg, 0, sizeof(msg));
-	msg.msg_iov = iov;
-	msg.msg_iovlen = 1;
-
 	for (;;) {
-		n = recvmsg(s, &msg, 0);
-		if (n == -1) {
-			syslog(LOG_ERR, "recvmsg: %m");
-			exit(EXIT_FAILURE);
-		}
-		if (n != 0)
-			dispatch(iov[0].iov_base, n);
+		n = read(s, msg, sizeof msg);
+		msgp = msg;
+		for (msgp = msg; n > 0;
+		     n -= ((struct rt_msghdr*)msgp)->rtm_msglen,
+		     msgp += ((struct rt_msghdr*)msgp)->rtm_msglen)
+			dispatch(msgp, n);
 	}
 
 	close(s);
@@ -242,24 +246,28 @@ usage(void)
 }
 
 static void
-dispatch(const void *msg, size_t len)
+dispatch(void *msg, size_t len)
 {
-	const struct rt_msghdr *hd = msg;
-
-	if (hd->rtm_version != RTM_VERSION)
-		return;
+	struct rt_msghdr *hd = msg;
+	struct if_msghdr *ifmp;
+	struct ifa_msghdr *ifam;
+	enum event ev;
 
 	switch (hd->rtm_type) {
 	case RTM_NEWADDR:
+		ev = UP;
+		goto work;
 	case RTM_DELADDR:
-		check_addrs(msg);
-		break;
+		ev = DOWN;
+		goto work;
 	case RTM_IFANNOUNCE:
-		check_announce(msg);
-		break;
+		rescan_interfaces();
+		check_announce((struct if_announcemsghdr *)msg);
+		return;
 	case RTM_IFINFO:
-		check_carrier(msg);
-		break;
+		ifmp = (struct if_msghdr*)msg;
+		check_carrier(ifmp->ifm_index, ifmp->ifm_data.ifi_link_state);
+		return;
 	case RTM_ADD:
 	case RTM_DELETE:
 	case RTM_CHANGE:
@@ -267,63 +275,37 @@ dispatch(const void *msg, size_t len)
 	case RTM_REDIRECT:
 	case RTM_MISS:
 	case RTM_IEEE80211:
-	case RTM_ONEWADDR:
-	case RTM_ODELADDR:
-	case RTM_OCHGADDR:
-		break;
-	default:
-		if (verbose)
-			printf("unknown message ignored (%d)\n", hd->rtm_type);
-		break;
+		return;
 	}
-}
+	if (verbose)
+		printf("unknown message ignored (%d)\n", hd->rtm_type);
+	return;
 
-static enum addrflag
-check_addrflags(int af, int addrflags)
-{
-
-	switch (af) {
-	case AF_INET:
-		if (addrflags & IN_IFF_NOTREADY)
-			return NOTREADY;
-		if (addrflags & IN_IFF_DETACHED)
-			return DETACHED;
-		break;
-	case AF_INET6:
-		if (addrflags & IN6_IFF_NOTREADY)
-			return NOTREADY;
-		if (addrflags & IN6_IFF_DETACHED)
-			return DETACHED;
-		break;
-	}
-	return READY;
+work:
+	ifam = (struct ifa_msghdr *)msg;
+	check_addrs((char *)(ifam + 1), ifam->ifam_addrs, ev);
 }
 
 static void
-check_addrs(const struct ifa_msghdr *ifam)
+check_addrs(char *cp, int addrs, enum event ev)
 {
-	const char *cp = (const char *)(ifam + 1);
-	const struct sockaddr *sa, *ifa = NULL, *brd = NULL;
-	unsigned i;
-	struct interface_data *ifd = NULL;
-	int aflag;
-	enum event ev;
+	struct sockaddr *sa, *ifa = NULL, *brd = NULL;
+	char ifname_buf[IFNAMSIZ];
+	const char *ifname;
+	int ifndx = 0, i;
 
-	if (ifam->ifam_addrs == 0)
+	if (addrs == 0)
 		return;
 	for (i = 1; i; i <<= 1) {
-		if ((i & ifam->ifam_addrs) == 0)
+		if ((i & addrs) == 0)
 			continue;
-		sa = (const struct sockaddr *)cp;
+		sa = (struct sockaddr *)cp;
 		if (i == RTA_IFP) {
-			const struct sockaddr_dl *li;
-
-			li = (const struct sockaddr_dl *)sa;
-			if ((ifd = find_interface(li->sdl_index)) == NULL) {
+			struct sockaddr_dl * li = (struct sockaddr_dl*)sa;
+			ifndx = li->sdl_index;
+			if (!find_interface(ifndx)) {
 				if (verbose)
-					printf("ignoring change"
-					    " on interface #%d\n",
-					    li->sdl_index);
+					printf("ignoring change on interface #%d\n", ifndx);
 				return;
 			}
 		} else if (i == RTA_IFA)
@@ -332,55 +314,48 @@ check_addrs(const struct ifa_msghdr *ifam)
 			brd = sa;
 		RT_ADVANCE(cp, sa);
 	}
-	if (ifa != NULL && ifd != NULL) {
-		ev = ifam->ifam_type == RTM_DELADDR ? DOWN : UP;
-		aflag = check_addrflags(ifa->sa_family, ifam->ifam_addrflags);
-		if ((ev == UP && aflag == READY) || ev == DOWN)
-			invoke_script(ifd->ifname, ev, ifa, brd);
+	if (ifa != NULL) {
+		ifname = if_indextoname(ifndx, ifname_buf);
+		if (ifname == NULL || ev < UP)
+			invoke_script(ifa, brd, ev, ifndx, ifname);
+		else if (ev == UP) {
+			if (if_is_connected(ifname))
+				invoke_script(ifa, brd, ev, ifndx, ifname);
+		} else if (ev == DOWN) {
+			if (if_is_not_connected(ifname))
+				invoke_script(ifa, brd, ev, ifndx, ifname);
+		}
 	}
 }
 
 static void
-invoke_script(const char *ifname, enum event ev,
-    const struct sockaddr *sa, const struct sockaddr *dest)
+invoke_script(struct sockaddr *sa, struct sockaddr *dest, enum event ev,
+    int ifindex, const char *ifname_hint)
 {
-	char addr[NI_MAXHOST], daddr[NI_MAXHOST];
+	char addr[NI_MAXHOST], daddr[NI_MAXHOST], ifname_buf[IFNAMSIZ];
+	const char * volatile ifname;
 	const char *script;
 	int status;
 
+	if (sa != NULL && sa->sa_len == 0) {
+		fprintf(stderr, "illegal socket address (sa_len == 0)\n");
+		return;
+	}
+	if (sa != NULL && sa->sa_family == AF_INET6) {
+		struct sockaddr_in6 sin6;
+
+		(void) memcpy(&sin6, (struct sockaddr_in6 *)sa, sizeof (sin6));
+		if (IN6_IS_ADDR_LINKLOCAL(&sin6.sin6_addr))
+			return;
+	}
+
+	addr[0] = daddr[0] = 0;
+	ifname = if_indextoname(ifindex, ifname_buf);
+	ifname = ifname ? ifname : ifname_hint;
 	if (ifname == NULL)
 		return;
 
-	script = *scripts[ev];
-	if (script == NULL)
-		return;
-
-	addr[0] = daddr[0] = 0;
 	if (sa != NULL) {
-		const struct sockaddr_in *sin;
-		const struct sockaddr_in6 *sin6;
-
-		if (sa->sa_len == 0) {
-			syslog(LOG_ERR,
-			    "illegal socket address (sa_len == 0)");
-			return;
-		}
-		switch (sa->sa_family) {
-		case AF_INET:
-			sin = (const struct sockaddr_in *)sa;
-			if (sin->sin_addr.s_addr == INADDR_ANY ||
-			    sin->sin_addr.s_addr == INADDR_BROADCAST)
-				return;
-			break;
-		case AF_INET6:
-			sin6 = (const struct sockaddr_in6 *)sa;
-			if (IN6_IS_ADDR_LINKLOCAL(&sin6->sin6_addr))
-				return;
-			break;
-		default:
-			break;
-		}
-
 		if (getnameinfo(sa, sa->sa_len, addr, sizeof addr, NULL, 0,
 		    NI_NUMERICHOST)) {
 			if (verbose)
@@ -388,7 +363,6 @@ invoke_script(const char *ifname, enum event ev,
 			return;	/* this address can not be handled */
 		}
 	}
-
 	if (dest != NULL) {
 		if (getnameinfo(dest, dest->sa_len, daddr, sizeof daddr,
 		    NULL, 0, NI_NUMERICHOST)) {
@@ -397,6 +371,9 @@ invoke_script(const char *ifname, enum event ev,
 			return;	/* this address can not be handled */
 		}
 	}
+
+	script = *scripts[ev];
+	if (script == NULL) return;
 
 	if (verbose)
 		(void) printf("calling: %s %s %s %s %s %s\n",
@@ -407,13 +384,14 @@ invoke_script(const char *ifname, enum event ev,
 
 	switch (vfork()) {
 	case -1:
-		syslog(LOG_ERR, "cannot fork: %m");
+		fprintf(stderr, "cannot fork\n");
 		break;
 	case 0:
 		if (execl(script, script, ifname, DummyTTY, DummySpeed,
 		    addr, daddr, NULL) == -1) {
 			syslog(LOG_ERR, "could not execute \"%s\": %m",
 			    script);
+			perror(script);
 		}
 		_exit(EXIT_FAILURE);
 	default:
@@ -447,14 +425,13 @@ list_interfaces(const char *ifnames)
 }
 
 static void
-check_carrier(const struct if_msghdr *ifm)
+check_carrier(int if_index, int carrier_status)
 {
 	struct interface_data * p;
-	int carrier_status;
 	enum event ev;
 
 	SLIST_FOREACH(p, &ifs, next)
-		if (p->index == ifm->ifm_index)
+		if (p->index == if_index)
 			break;
 
 	if (p == NULL)
@@ -466,8 +443,9 @@ check_carrier(const struct if_msghdr *ifm)
 	 * - this is the first time we've been called, and
 	 * inhibit_initial is not set
 	 */
-	carrier_status = ifm->ifm_data.ifi_link_state;
-	if (carrier_status != p->last_carrier_status) {
+
+	if ((carrier_status != p->last_carrier_status) ||
+	    ((p->last_carrier_status == -1) && !inhibit_initial)) {
 		switch (carrier_status) {
 		case LINK_STATE_UP:
 			ev = CARRIER;
@@ -480,13 +458,13 @@ check_carrier(const struct if_msghdr *ifm)
 				printf("unknown link status ignored\n");
 			return;
 		}
-		invoke_script(p->ifname, ev, NULL, NULL);
+		invoke_script(NULL, NULL, ev, if_index, p->ifname);
 		p->last_carrier_status = carrier_status;
 	}
 }
 
 static void
-check_announce(const struct if_announcemsghdr *ifan)
+check_announce(struct if_announcemsghdr *ifan)
 {
 	struct interface_data * p;
 	const char *ifname = ifan->ifan_name;
@@ -497,13 +475,12 @@ check_announce(const struct if_announcemsghdr *ifan)
 
 		switch (ifan->ifan_what) {
 		case IFAN_ARRIVAL:
-			p->index = ifan->ifan_index;
-			invoke_script(p->ifname, ARRIVAL, NULL, NULL);
+			invoke_script(NULL, NULL, ARRIVAL, p->index,
+			    NULL);
 			break;
 		case IFAN_DEPARTURE:
-			p->index = -1;
-			p->last_carrier_status = -1;
-			invoke_script(p->ifname, DEPARTURE, NULL, NULL);
+			invoke_script(NULL, NULL, DEPARTURE, p->index,
+			    p->ifname);
 			break;
 		default:
 			if (verbose)
@@ -512,6 +489,19 @@ check_announce(const struct if_announcemsghdr *ifan)
 			break;
 		}
 		return;
+	}
+}
+
+static void
+rescan_interfaces(void)
+{
+	struct interface_data * p;
+
+	SLIST_FOREACH(p, &ifs, next) {
+		p->index = if_nametoindex(p->ifname);
+		if (verbose)
+			printf("interface \"%s\" has index %d\n", p->ifname,
+			    p->index);
 	}
 }
 
@@ -528,15 +518,15 @@ free_interfaces(void)
 	}
 }
 
-static struct interface_data *
+static int
 find_interface(int idx)
 {
 	struct interface_data * p;
 
 	SLIST_FOREACH(p, &ifs, next)
 		if (p->index == idx)
-			return p;
-	return NULL;
+			return 1;
+	return 0;
 }
 
 static void
@@ -544,8 +534,7 @@ run_initial_ups(void)
 {
 	struct interface_data * ifd;
 	struct ifaddrs *res = NULL, *p;
-	struct sockaddr *ifa;
-	int s, aflag;
+	int s;
 
 	s = socket(AF_INET, SOCK_DGRAM, 0);
 	if (s < 0)
@@ -562,15 +551,15 @@ run_initial_ups(void)
 		if (ifd == NULL)
 			continue;
 
-		ifa = p->ifa_addr;
-		if (ifa != NULL && ifa->sa_family == AF_LINK)
-			invoke_script(ifd->ifname, ARRIVAL, NULL, NULL);
+		if (p->ifa_addr && p->ifa_addr->sa_family == AF_LINK)
+			invoke_script(NULL, NULL, ARRIVAL, ifd->index,
+			    NULL);
 
 		if ((p->ifa_flags & IFF_UP) == 0)
 			continue;
-		if (ifa == NULL)
+		if (p->ifa_addr == NULL)
 			continue;
-		if (ifa->sa_family == AF_LINK) {
+		if (p->ifa_addr->sa_family == AF_LINK) {
 			struct ifmediareq ifmr;
 
 			memset(&ifmr, 0, sizeof(ifmr));
@@ -579,18 +568,62 @@ run_initial_ups(void)
 			if (ioctl(s, SIOCGIFMEDIA, &ifmr) != -1
 			    && (ifmr.ifm_status & IFM_AVALID)
 			    && (ifmr.ifm_status & IFM_ACTIVE)) {
-				invoke_script(ifd->ifname, CARRIER, NULL, NULL);
+				invoke_script(NULL, NULL, CARRIER,
+				    ifd->index, ifd->ifname);
 				ifd->last_carrier_status =
 				    LINK_STATE_UP;
 			    }
 			continue;
 		}
-		aflag = check_addrflags(ifa->sa_family, p->ifa_addrflags);
-		if (aflag != READY)
-			continue;
-		invoke_script(ifd->ifname, UP, ifa, p->ifa_dstaddr);
+		if (if_is_connected(ifd->ifname))
+			invoke_script(p->ifa_addr, p->ifa_dstaddr, UP,
+			    ifd->index, ifd->ifname);
 	}
 	freeifaddrs(res);
 out:
 	close(s);
 }
+
+#ifdef SPPP_IF_SUPPORT
+/*
+ * Special case support for in-kernel PPP interfaces.
+ * If these are IFF_UP, but have not yet connected or completed authentication
+ * we don't want to call the up script in the initial interface scan (there
+ * will be an UP event generated later, when IPCP completes, anyway).
+ *
+ * If this is no if_spppsubr.c based interface, this ioctl just fails and we
+ * treat is as connected.
+ */
+static int
+check_is_connected(const char *ifname, int def_retval)
+{
+	int s, error;
+	struct spppstatus oldstatus;
+	struct spppstatusncp status;
+
+	memset(&status, 0, sizeof status);
+	strncpy(status.ifname, ifname, sizeof status.ifname);
+	memset(&oldstatus, 0, sizeof oldstatus);
+	strncpy(oldstatus.ifname, ifname, sizeof oldstatus.ifname);
+
+	s = socket(AF_INET, SOCK_DGRAM, 0);
+	if (s < 0)
+		return 1;	/* no idea how to handle this... */
+	error = ioctl(s, SPPPGETSTATUSNCP, &status);
+	if (error != 0) {
+		error = ioctl(s, SPPPGETSTATUS, &oldstatus);
+		if (error != 0) {
+			/* not if_spppsubr.c based - return default */
+			close(s);
+			return def_retval;
+		} else {
+			/* can't query NCPs, so use default */
+			status.phase = oldstatus.phase;
+			status.ncpup = def_retval;
+		}
+	}
+	close(s);
+
+	return status.phase == SPPP_PHASE_NETWORK && status.ncpup > 0;
+}
+#endif

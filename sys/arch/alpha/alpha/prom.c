@@ -1,4 +1,4 @@
-/* $NetBSD: prom.c,v 1.49 2016/10/13 16:18:20 flxd Exp $ */
+/* $NetBSD: prom.c,v 1.48.22.1 2016/11/01 20:28:32 snj Exp $ */
 
 /*
  * Copyright (c) 1992, 1994, 1995, 1996 Carnegie Mellon University
@@ -27,7 +27,7 @@
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
 
-__KERNEL_RCSID(0, "$NetBSD: prom.c,v 1.49 2016/10/13 16:18:20 flxd Exp $");
+__KERNEL_RCSID(0, "$NetBSD: prom.c,v 1.48.22.1 2016/11/01 20:28:32 snj Exp $");
 
 #include "opt_multiprocessor.h"
 

@@ -1,6 +1,6 @@
 /* Serial interface for raw TCP connections on Un*x like systems.
 
-   Copyright (C) 1992-2016 Free Software Foundation, Inc.
+   Copyright (C) 1992-2014 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -35,7 +35,7 @@
 #include <sys/ioctl.h>  /* For FIONBIO.  */
 #endif
 
-#include "gdb_sys_time.h"
+#include <sys/time.h>
 
 #ifdef USE_WIN32API
 #include <winsock2.h>
@@ -53,6 +53,7 @@
 #endif
 
 #include <signal.h>
+#include <string.h>
 #include "gdb_select.h"
 
 #ifndef HAVE_SOCKLEN_T
@@ -155,8 +156,7 @@ wait_for_connect (struct serial *scb, unsigned int *polls)
 int
 net_open (struct serial *scb, const char *name)
 {
-  char hostname[100];
-  const char *port_str;
+  char *port_str, hostname[100];
   int n, port, tmp;
   int use_udp;
   struct hostent *hostent;
@@ -169,12 +169,12 @@ net_open (struct serial *scb, const char *name)
   unsigned int polls = 0;
 
   use_udp = 0;
-  if (startswith (name, "udp:"))
+  if (strncmp (name, "udp:", 4) == 0)
     {
       use_udp = 1;
       name = name + 4;
     }
-  else if (startswith (name, "tcp:"))
+  else if (strncmp (name, "tcp:", 4) == 0)
     name = name + 4;
 
   port_str = strchr (name, ':');
@@ -280,10 +280,10 @@ net_open (struct serial *scb, const char *name)
 
     len = sizeof (err);
     /* On Windows, the fourth parameter to getsockopt is a "char *";
-       on UNIX systems it is generally "void *".  The cast to "char *"
-       is OK everywhere, since in C++ any data pointer type can be
-       implicitly converted to "void *".  */
-    res = getsockopt (scb->fd, SOL_SOCKET, SO_ERROR, (char *) &err, &len);
+       on UNIX systems it is generally "void *".  The cast to "void *"
+       is OK everywhere, since in C "void *" can be implicitly
+       converted to any pointer type.  */
+    res = getsockopt (scb->fd, SOL_SOCKET, SO_ERROR, (void *) &err, &len);
     if (res < 0 || err)
       {
 	/* Maybe the target still isn't ready to accept the connection.  */
@@ -342,17 +342,13 @@ net_read_prim (struct serial *scb, size_t count)
   /* Need to cast to silence -Wpointer-sign on MinGW, as Winsock's
      'recv' takes 'char *' as second argument, while 'scb->buf' is
      'unsigned char *'.  */
-  return recv (scb->fd, (char *) scb->buf, count, 0);
+  return recv (scb->fd, (void *) scb->buf, count, 0);
 }
 
 int
 net_write_prim (struct serial *scb, const void *buf, size_t count)
 {
-  /* On Windows, the second parameter to send is a "const char *"; on
-     UNIX systems it is generally "const void *".  The cast to "const
-     char *" is OK everywhere, since in C++ any data pointer type can
-     be implicitly converted to "const void *".  */
-  return send (scb->fd, (const char *) buf, count, 0);
+  return send (scb->fd, buf, count, 0);
 }
 
 int
@@ -367,13 +363,13 @@ ser_tcp_send_break (struct serial *scb)
 static void
 set_tcp_cmd (char *args, int from_tty)
 {
-  help_list (tcp_set_cmdlist, "set tcp ", all_commands, gdb_stdout);
+  help_list (tcp_set_cmdlist, "set tcp ", -1, gdb_stdout);
 }
 
 static void
 show_tcp_cmd (char *args, int from_tty)
 {
-  help_list (tcp_show_cmdlist, "show tcp ", all_commands, gdb_stdout);
+  help_list (tcp_show_cmdlist, "show tcp ", -1, gdb_stdout);
 }
 
 #ifndef USE_WIN32API
@@ -399,7 +395,6 @@ static const struct serial_ops tcp_ops =
   ser_base_noflush_set_tty_state,
   ser_base_setbaudrate,
   ser_base_setstopbits,
-  ser_base_setparity,
   ser_base_drain_output,
   ser_base_async,
   net_read_prim,

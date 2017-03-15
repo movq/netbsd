@@ -1,4 +1,4 @@
-/*	$NetBSD: dlv_32769.h,v 1.5 2016/05/26 16:49:59 christos Exp $	*/
+/*	$NetBSD: dlv_32769.h,v 1.3.12.1 2016/10/14 12:01:30 martin Exp $	*/
 
 /*
  * Copyright (C) 2004, 2006, 2007, 2015  Internet Systems Consortium, Inc. ("ISC")

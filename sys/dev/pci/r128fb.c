@@ -1,4 +1,4 @@
-/*	$NetBSD: r128fb.c,v 1.40 2017/01/20 12:25:07 maya Exp $	*/
+/*	$NetBSD: r128fb.c,v 1.38 2013/10/09 17:18:23 macallan Exp $	*/
 
 /*
  * Copyright (c) 2007, 2012 Michael Lorenz
@@ -31,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: r128fb.c,v 1.40 2017/01/20 12:25:07 maya Exp $");
+__KERNEL_RCSID(0, "$NetBSD: r128fb.c,v 1.38 2013/10/09 17:18:23 macallan Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -201,7 +201,7 @@ r128fb_attach(device_t parent, device_t self, void *aux)
 	struct wsemuldisplaydev_attach_args aa;
 	prop_dictionary_t	dict;
 	unsigned long		defattr;
-	bool			is_console = FALSE;
+	bool			is_console;
 	int			i, j;
 	uint32_t		reg, flags;
 	uint8_t			cmap[768];
@@ -332,9 +332,7 @@ r128fb_attach(device_t parent, device_t self, void *aux)
 	}
 
 	/* no suspend/resume support yet */
-	if (!pmf_device_register(sc->sc_dev, NULL, NULL))
-		aprint_error_dev(sc->sc_dev,
-		    "couldn't establish power handler\n");
+	pmf_device_register(sc->sc_dev, NULL, NULL);
 
 	reg = bus_space_read_4(sc->sc_memt, sc->sc_regh, R128_LVDS_GEN_CNTL);
 	DPRINTF("R128_LVDS_GEN_CNTL: %08x\n", reg);

@@ -51,12 +51,11 @@ bool FoldingSetNodeIDRef::operator<(FoldingSetNodeIDRef RHS) const {
 ///
 void FoldingSetNodeID::AddPointer(const void *Ptr) {
   // Note: this adds pointers to the hash using sizes and endianness that
-  // depend on the host. It doesn't matter, however, because hashing on
-  // pointer values is inherently unstable. Nothing should depend on the
+  // depend on the host.  It doesn't matter however, because hashing on
+  // pointer values in inherently unstable.  Nothing  should depend on the 
   // ordering of nodes in the folding set.
-  static_assert(sizeof(uintptr_t) <= sizeof(unsigned long long),
-                "unexpected pointer size");
-  AddInteger(reinterpret_cast<uintptr_t>(Ptr));
+  Bits.append(reinterpret_cast<unsigned *>(&Ptr),
+              reinterpret_cast<unsigned *>(&Ptr+1));
 }
 void FoldingSetNodeID::AddInteger(signed I) {
   Bits.push_back(I);
@@ -81,7 +80,8 @@ void FoldingSetNodeID::AddInteger(long long I) {
 }
 void FoldingSetNodeID::AddInteger(unsigned long long I) {
   AddInteger(unsigned(I));
-  AddInteger(unsigned(I >> 32));
+  if ((uint64_t)(unsigned)I != I)
+    Bits.push_back(unsigned(I >> 32));
 }
 
 void FoldingSetNodeID::AddString(StringRef String) {
@@ -101,8 +101,6 @@ void FoldingSetNodeID::AddString(StringRef String) {
     // Otherwise do it the hard way.
     // To be compatible with above bulk transfer, we need to take endianness
     // into account.
-    static_assert(sys::IsBigEndianHost || sys::IsLittleEndianHost,
-                  "Unexpected host endianness");
     if (sys::IsBigEndianHost) {
       for (Pos += 4; Pos <= Size; Pos += 4) {
         unsigned V = ((unsigned char)String[Pos - 4] << 24) |
@@ -111,7 +109,8 @@ void FoldingSetNodeID::AddString(StringRef String) {
                       (unsigned char)String[Pos - 1];
         Bits.push_back(V);
       }
-    } else {  // Little-endian host
+    } else {
+      assert(sys::IsLittleEndianHost && "Unexpected host endianness");
       for (Pos += 4; Pos <= Size; Pos += 4) {
         unsigned V = ((unsigned char)String[Pos - 1] << 24) |
                      ((unsigned char)String[Pos - 2] << 16) |
@@ -127,8 +126,8 @@ void FoldingSetNodeID::AddString(StringRef String) {
   // Pos will have overshot size by 4 - #bytes left over.
   // No need to take endianness into account here - this is always executed.
   switch (Pos - Size) {
-  case 1: V = (V << 8) | (unsigned char)String[Size - 3]; LLVM_FALLTHROUGH;
-  case 2: V = (V << 8) | (unsigned char)String[Size - 2]; LLVM_FALLTHROUGH;
+  case 1: V = (V << 8) | (unsigned char)String[Size - 3]; // Fall thru.
+  case 2: V = (V << 8) | (unsigned char)String[Size - 2]; // Fall thru.
   case 3: V = (V << 8) | (unsigned char)String[Size - 1]; break;
   default: return; // Nothing left.
   }
@@ -223,8 +222,6 @@ static void **AllocateBuckets(unsigned NumBuckets) {
 //===----------------------------------------------------------------------===//
 // FoldingSetImpl Implementation
 
-void FoldingSetImpl::anchor() {}
-
 FoldingSetImpl::FoldingSetImpl(unsigned Log2InitSize) {
   assert(5 < Log2InitSize && Log2InitSize < 32 &&
          "Initial hash table size out of range");
@@ -232,29 +229,9 @@ FoldingSetImpl::FoldingSetImpl(unsigned Log2InitSize) {
   Buckets = AllocateBuckets(NumBuckets);
   NumNodes = 0;
 }
-
-FoldingSetImpl::FoldingSetImpl(FoldingSetImpl &&Arg)
-    : Buckets(Arg.Buckets), NumBuckets(Arg.NumBuckets), NumNodes(Arg.NumNodes) {
-  Arg.Buckets = nullptr;
-  Arg.NumBuckets = 0;
-  Arg.NumNodes = 0;
-}
-
-FoldingSetImpl &FoldingSetImpl::operator=(FoldingSetImpl &&RHS) {
-  free(Buckets); // This may be null if the set is in a moved-from state.
-  Buckets = RHS.Buckets;
-  NumBuckets = RHS.NumBuckets;
-  NumNodes = RHS.NumNodes;
-  RHS.Buckets = nullptr;
-  RHS.NumBuckets = 0;
-  RHS.NumNodes = 0;
-  return *this;
-}
-
 FoldingSetImpl::~FoldingSetImpl() {
   free(Buckets);
 }
-
 void FoldingSetImpl::clear() {
   // Set all but the last bucket to null pointers.
   memset(Buckets, 0, NumBuckets*sizeof(void*));
@@ -266,12 +243,12 @@ void FoldingSetImpl::clear() {
   NumNodes = 0;
 }
 
-void FoldingSetImpl::GrowBucketCount(unsigned NewBucketCount) {
-  assert((NewBucketCount > NumBuckets) && "Can't shrink a folding set with GrowBucketCount");
-  assert(isPowerOf2_32(NewBucketCount) && "Bad bucket count!");
+/// GrowHashTable - Double the size of the hash table and rehash everything.
+///
+void FoldingSetImpl::GrowHashTable() {
   void **OldBuckets = Buckets;
   unsigned OldNumBuckets = NumBuckets;
-  NumBuckets = NewBucketCount;
+  NumBuckets <<= 1;
   
   // Clear out new buckets.
   Buckets = AllocateBuckets(NumBuckets);
@@ -296,21 +273,6 @@ void FoldingSetImpl::GrowBucketCount(unsigned NewBucketCount) {
   }
   
   free(OldBuckets);
-}
-
-/// GrowHashTable - Double the size of the hash table and rehash everything.
-///
-void FoldingSetImpl::GrowHashTable() {
-  GrowBucketCount(NumBuckets * 2);
-}
-
-void FoldingSetImpl::reserve(unsigned EltCount) {
-  // This will give us somewhere between EltCount / 2 and
-  // EltCount buckets.  This puts us in the load factor
-  // range of 1.0 - 2.0.
-  if(EltCount < capacity())
-    return;
-  GrowBucketCount(PowerOf2Floor(EltCount));
 }
 
 /// FindNodeOrInsertPos - Look up the node specified by ID.  If it exists,
@@ -345,7 +307,7 @@ FoldingSetImpl::Node
 void FoldingSetImpl::InsertNode(Node *N, void *InsertPos) {
   assert(!N->getNextInBucket());
   // Do we need to grow the hashtable?
-  if (NumNodes+1 > capacity()) {
+  if (NumNodes+1 > NumBuckets*2) {
     GrowHashTable();
     FoldingSetNodeID TempID;
     InsertPos = GetBucketFor(ComputeNodeHash(N, TempID), Buckets, NumBuckets);

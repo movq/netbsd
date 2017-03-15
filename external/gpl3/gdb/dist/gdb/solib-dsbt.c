@@ -1,5 +1,5 @@
 /* Handle TIC6X (DSBT) shared libraries for GDB, the GNU Debugger.
-   Copyright (C) 2010-2016 Free Software Foundation, Inc.
+   Copyright (C) 2010-2014 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -18,6 +18,7 @@
 
 
 #include "defs.h"
+#include <string.h>
 #include "inferior.h"
 #include "gdbcore.h"
 #include "solib.h"
@@ -28,6 +29,7 @@
 #include "command.h"
 #include "gdbcmd.h"
 #include "elf-bfd.h"
+#include "exceptions.h"
 #include "gdb_bfd.h"
 
 #define GOT_MODULE_OFFSET 4
@@ -175,12 +177,11 @@ get_dsbt_info (void)
 {
   struct dsbt_info *info;
 
-  info = (struct dsbt_info *) program_space_data (current_program_space,
-						  solib_dsbt_pspace_data);
+  info = program_space_data (current_program_space, solib_dsbt_pspace_data);
   if (info != NULL)
     return info;
 
-  info = XCNEW (struct dsbt_info);
+  info = XZALLOC (struct dsbt_info);
   set_program_space_data (current_program_space, solib_dsbt_pspace_data, info);
 
   info->lm_base_cache = 0;
@@ -252,7 +253,7 @@ decode_loadmap (gdb_byte *buf)
      external loadsegs.  I.e, allocate the internal loadsegs.  */
   int_ldmbuf_size = (sizeof (struct int_elf32_dsbt_loadmap)
 		     + (nsegs - 1) * sizeof (struct int_elf32_dsbt_loadseg));
-  int_ldmbuf = (struct int_elf32_dsbt_loadmap *) xmalloc (int_ldmbuf_size);
+  int_ldmbuf = xmalloc (int_ldmbuf_size);
 
   /* Place extracted information in internal structs.  */
   int_ldmbuf->version = version;
@@ -356,7 +357,7 @@ fetch_loadmap (CORE_ADDR ldmaddr)
   /* Allocate space for the complete (external) loadmap.  */
   ext_ldmbuf_size = sizeof (struct ext_elf32_dsbt_loadmap)
     + (nsegs - 1) * sizeof (struct ext_elf32_dsbt_loadseg);
-  ext_ldmbuf = (struct ext_elf32_dsbt_loadmap *) xmalloc (ext_ldmbuf_size);
+  ext_ldmbuf = xmalloc (ext_ldmbuf_size);
 
   /* Copy over the portion of the loadmap that's already been read.  */
   memcpy (ext_ldmbuf, &ext_ldmbuf_partial, sizeof ext_ldmbuf_partial);
@@ -375,7 +376,7 @@ fetch_loadmap (CORE_ADDR ldmaddr)
      external loadsegs.  I.e, allocate the internal loadsegs.  */
   int_ldmbuf_size = sizeof (struct int_elf32_dsbt_loadmap)
     + (nsegs - 1) * sizeof (struct int_elf32_dsbt_loadseg);
-  int_ldmbuf = (struct int_elf32_dsbt_loadmap *) xmalloc (int_ldmbuf_size);
+  int_ldmbuf = xmalloc (int_ldmbuf_size);
 
   /* Place extracted information in internal structs.  */
   int_ldmbuf->version = version;
@@ -453,7 +454,7 @@ scan_dyntag (int dyntag, bfd *abfd, CORE_ADDR *ptr)
   /* Read in .dynamic from the BFD.  We will get the actual value
      from memory later.  */
   sect_size = bfd_section_size (abfd, sect);
-  buf = bufstart = (gdb_byte *) alloca (sect_size);
+  buf = bufstart = alloca (sect_size);
   if (!bfd_get_section_contents (abfd, sect,
 				 buf, 0, sect_size))
     return 0;
@@ -549,7 +550,7 @@ static CORE_ADDR
 lm_base (void)
 {
   enum bfd_endian byte_order = gdbarch_byte_order (target_gdbarch ());
-  struct bound_minimal_symbol got_sym;
+  struct minimal_symbol *got_sym;
   CORE_ADDR addr;
   gdb_byte buf[TIC6X_PTR_SIZE];
   struct dsbt_info *info = get_dsbt_info ();
@@ -569,9 +570,9 @@ lm_base (void)
   got_sym = lookup_minimal_symbol ("_GLOBAL_OFFSET_TABLE_", NULL,
 				   symfile_objfile);
 
-  if (got_sym.minsym != 0)
+  if (got_sym != 0)
     {
-      addr = BMSYMBOL_VALUE_ADDRESS (got_sym);
+      addr = SYMBOL_VALUE_ADDRESS (got_sym);
       if (solib_dsbt_debug)
 	fprintf_unfiltered (gdb_stdlog,
 			    "lm_base: get addr %x by _GLOBAL_OFFSET_TABLE_.\n",
@@ -710,8 +711,8 @@ dsbt_current_sos (void)
 	      break;
 	    }
 
-	  sop = XCNEW (struct so_list);
-	  sop->lm_info = XCNEW (struct lm_info);
+	  sop = xcalloc (1, sizeof (struct so_list));
+	  sop->lm_info = xcalloc (1, sizeof (struct lm_info));
 	  sop->lm_info->map = loadmap;
 	  /* Fetch the name.  */
 	  addr = extract_unsigned_integer (lm_buf.l_name,
@@ -777,7 +778,7 @@ enable_break_failure_warning (void)
 /* Helper function for gdb_bfd_lookup_symbol.  */
 
 static int
-cmp_name (const asymbol *sym, const void *data)
+cmp_name (asymbol *sym, void *data)
 {
   return (strcmp (sym->name, (const char *) data) == 0);
 }
@@ -793,6 +794,7 @@ cmp_name (const asymbol *sym, const void *data)
 static int
 enable_break (void)
 {
+  enum bfd_endian byte_order = gdbarch_byte_order (target_gdbarch ());
   asection *interp_sect;
   struct dsbt_info *info;
 
@@ -818,13 +820,15 @@ enable_break (void)
       char *buf;
       bfd *tmp_bfd = NULL;
       CORE_ADDR addr;
+      gdb_byte addr_buf[TIC6X_PTR_SIZE];
       struct int_elf32_dsbt_loadmap *ldm;
+      volatile struct gdb_exception ex;
       int ret;
 
       /* Read the contents of the .interp section into a local buffer;
 	 the contents specify the dynamic linker this program uses.  */
       interp_sect_size = bfd_section_size (exec_bfd, interp_sect);
-      buf = (char *) alloca (interp_sect_size);
+      buf = alloca (interp_sect_size);
       bfd_get_section_contents (exec_bfd, interp_sect,
 				buf, 0, interp_sect_size);
 
@@ -832,15 +836,10 @@ enable_break (void)
 	 loaded so that we can load its symbols and place a breakpoint
 	 in the dynamic linker itself.  */
 
-      TRY
+      TRY_CATCH (ex, RETURN_MASK_ALL)
 	{
 	  tmp_bfd = solib_bfd_open (buf);
 	}
-      CATCH (ex, RETURN_MASK_ALL)
-	{
-	}
-      END_CATCH
-
       if (tmp_bfd == NULL)
 	{
 	  enable_break_failure_warning ();
@@ -940,11 +939,11 @@ dsbt_relocate_main_executable (void)
   ldm = info->exec_loadmap;
 
   xfree (info->main_executable_lm_info);
-  info->main_executable_lm_info = XCNEW (struct lm_info);
+  info->main_executable_lm_info = xcalloc (1, sizeof (struct lm_info));
   info->main_executable_lm_info->map = ldm;
 
-  new_offsets = XCNEWVEC (struct section_offsets,
-			  symfile_objfile->num_sections);
+  new_offsets = xcalloc (symfile_objfile->num_sections,
+			 sizeof (struct section_offsets));
   old_chain = make_cleanup (xfree, new_offsets);
   changed = 0;
 

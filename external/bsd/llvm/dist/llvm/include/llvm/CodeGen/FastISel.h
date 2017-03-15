@@ -16,14 +16,13 @@
 #define LLVM_CODEGEN_FASTISEL_H
 
 #include "llvm/ADT/DenseMap.h"
+#include "llvm/CodeGen/CallingConvLower.h"
 #include "llvm/CodeGen/MachineBasicBlock.h"
 #include "llvm/IR/CallingConv.h"
 #include "llvm/IR/IntrinsicInst.h"
 #include "llvm/Target/TargetLowering.h"
 
 namespace llvm {
-
-class MachineConstantPool;
 
 /// \brief This is a fast-path instruction selection class that generates poor
 /// code and doesn't support illegal types or non-trivial lowering, but runs
@@ -41,15 +40,12 @@ public:
     bool IsByVal : 1;
     bool IsInAlloca : 1;
     bool IsReturned : 1;
-    bool IsSwiftSelf : 1;
-    bool IsSwiftError : 1;
     uint16_t Alignment;
 
     ArgListEntry()
         : Val(nullptr), Ty(nullptr), IsSExt(false), IsZExt(false),
           IsInReg(false), IsSRet(false), IsNest(false), IsByVal(false),
-          IsInAlloca(false), IsReturned(false), IsSwiftSelf(false),
-          IsSwiftError(false), Alignment(0) {}
+          IsInAlloca(false), IsReturned(false), Alignment(0) {}
 
     /// \brief Set CallLoweringInfo attribute flags based on a call instruction
     /// and called function attributes.
@@ -73,7 +69,7 @@ public:
     unsigned NumFixedArgs;
     CallingConv::ID CallConv;
     const Value *Callee;
-    MCSymbol *Symbol;
+    const char *SymName;
     ArgListTy Args;
     ImmutableCallSite *CS;
     MachineInstr *Call;
@@ -92,7 +88,7 @@ public:
         : RetTy(nullptr), RetSExt(false), RetZExt(false), IsVarArg(false),
           IsInReg(false), DoesNotReturn(false), IsReturnValueUsed(true),
           IsTailCall(false), NumFixedArgs(-1), CallConv(CallingConv::C),
-          Callee(nullptr), Symbol(nullptr), CS(nullptr), Call(nullptr),
+          Callee(nullptr), SymName(nullptr), CS(nullptr), Call(nullptr),
           ResultReg(0), NumResultRegs(0), IsPatchPoint(false) {}
 
     CallLoweringInfo &setCallee(Type *ResultTy, FunctionType *FuncTy,
@@ -118,12 +114,12 @@ public:
     }
 
     CallLoweringInfo &setCallee(Type *ResultTy, FunctionType *FuncTy,
-                                MCSymbol *Target, ArgListTy &&ArgsList,
+                                const char *Target, ArgListTy &&ArgsList,
                                 ImmutableCallSite &Call,
                                 unsigned FixedArgs = ~0U) {
       RetTy = ResultTy;
       Callee = Call.getCalledValue();
-      Symbol = Target;
+      SymName = Target;
 
       IsInReg = Call.paramHasAttr(0, Attribute::InReg);
       DoesNotReturn = Call.doesNotReturn();
@@ -152,16 +148,11 @@ public:
       return *this;
     }
 
-    CallLoweringInfo &setCallee(const DataLayout &DL, MCContext &Ctx,
-                                CallingConv::ID CC, Type *ResultTy,
-                                StringRef Target, ArgListTy &&ArgsList,
-                                unsigned FixedArgs = ~0U);
-
     CallLoweringInfo &setCallee(CallingConv::ID CC, Type *ResultTy,
-                                MCSymbol *Target, ArgListTy &&ArgsList,
+                                const char *Target, ArgListTy &&ArgsList,
                                 unsigned FixedArgs = ~0U) {
       RetTy = ResultTy;
-      Symbol = Target;
+      SymName = Target;
       CallConv = CC;
       Args = std::move(ArgsList);
       NumFixedArgs = (FixedArgs == ~0U) ? Args.size() : FixedArgs;
@@ -356,6 +347,19 @@ protected:
   virtual unsigned fastEmit_ri(MVT VT, MVT RetVT, unsigned Opcode, unsigned Op0,
                                bool Op0IsKill, uint64_t Imm);
 
+  /// \brief This method is called by target-independent code to request that an
+  /// instruction with the given type, opcode, and register and floating-point
+  /// immediate operands be emitted.
+  virtual unsigned fastEmit_rf(MVT VT, MVT RetVT, unsigned Opcode, unsigned Op0,
+                               bool Op0IsKill, const ConstantFP *FPImm);
+
+  /// \brief This method is called by target-independent code to request that an
+  /// instruction with the given type, opcode, and register and immediate
+  /// operands be emitted.
+  virtual unsigned fastEmit_rri(MVT VT, MVT RetVT, unsigned Opcode,
+                                unsigned Op0, bool Op0IsKill, unsigned Op1,
+                                bool Op1IsKill, uint64_t Imm);
+
   /// \brief This method is a wrapper of fastEmit_ri.
   ///
   /// It first tries to emit an instruction with an immediate operand using
@@ -410,11 +414,11 @@ protected:
                             const TargetRegisterClass *RC, unsigned Op0,
                             bool Op0IsKill, uint64_t Imm1, uint64_t Imm2);
 
-  /// \brief Emit a MachineInstr with a floating point immediate, and a result
+  /// \brief Emit a MachineInstr with two register operands and a result
   /// register in the given register class.
-  unsigned fastEmitInst_f(unsigned MachineInstOpcode,
-                          const TargetRegisterClass *RC,
-                          const ConstantFP *FPImm);
+  unsigned fastEmitInst_rf(unsigned MachineInstOpcode,
+                           const TargetRegisterClass *RC, unsigned Op0,
+                           bool Op0IsKill, const ConstantFP *FPImm);
 
   /// \brief Emit a MachineInstr with two register operands, an immediate, and a
   /// result register in the given register class.
@@ -423,10 +427,22 @@ protected:
                             bool Op0IsKill, unsigned Op1, bool Op1IsKill,
                             uint64_t Imm);
 
+  /// \brief Emit a MachineInstr with two register operands, two immediates
+  /// operands, and a result register in the given register class.
+  unsigned fastEmitInst_rrii(unsigned MachineInstOpcode,
+                             const TargetRegisterClass *RC, unsigned Op0,
+                             bool Op0IsKill, unsigned Op1, bool Op1IsKill,
+                             uint64_t Imm1, uint64_t Imm2);
+
   /// \brief Emit a MachineInstr with a single immediate operand, and a result
   /// register in the given register class.
   unsigned fastEmitInst_i(unsigned MachineInstrOpcode,
                           const TargetRegisterClass *RC, uint64_t Imm);
+
+  /// \brief Emit a MachineInstr with a two immediate operands.
+  unsigned fastEmitInst_ii(unsigned MachineInstrOpcode,
+                           const TargetRegisterClass *RC, uint64_t Imm1,
+                           uint64_t Imm2);
 
   /// \brief Emit a MachineInstr for an extract_subreg from a specified index of
   /// a superregister to a specified type.
@@ -439,12 +455,7 @@ protected:
 
   /// \brief Emit an unconditional branch to the given block, unless it is the
   /// immediate (fall-through) successor, and update the CFG.
-  void fastEmitBranch(MachineBasicBlock *MBB, const DebugLoc &DL);
-
-  /// Emit an unconditional branch to \p FalseMBB, obtains the branch weight
-  /// and adds TrueMBB and FalseMBB to the successor list.
-  void finishCondBranch(const BasicBlock *BranchBB, MachineBasicBlock *TrueMBB,
-                        MachineBasicBlock *FalseMBB);
+  void fastEmitBranch(MachineBasicBlock *MBB, DebugLoc DL);
 
   /// \brief Update the value map to include the new mapping for this
   /// instruction, or insert an extra copy to get the result in a previous
@@ -493,9 +504,7 @@ protected:
 
   CmpInst::Predicate optimizeCmpPredicate(const CmpInst *CI) const;
 
-  bool lowerCallTo(const CallInst *CI, MCSymbol *Symbol, unsigned NumArgs);
-  bool lowerCallTo(const CallInst *CI, const char *SymbolName,
-                   unsigned NumArgs);
+  bool lowerCallTo(const CallInst *CI, const char *SymName, unsigned NumArgs);
   bool lowerCallTo(CallLoweringInfo &CLI);
 
   bool isCommutativeIntrinsic(IntrinsicInst const *II) {
@@ -549,9 +558,6 @@ private:
   /// to the beginning of the block. It helps to avoid spilling cached variables
   /// across heavy instructions like calls.
   void flushLocalValueMap();
-
-  /// \brief Removes dead local value instructions after SavedLastLocalvalue.
-  void removeDeadLocalValueCode(MachineInstr *SavedLastLocalValue);
 
   /// \brief Insertion point before trying to select the current instruction.
   MachineBasicBlock::iterator SavedInsertPt;

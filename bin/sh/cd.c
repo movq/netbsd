@@ -1,4 +1,4 @@
-/*	$NetBSD: cd.c,v 1.47 2016/12/26 02:27:57 christos Exp $	*/
+/*	$NetBSD: cd.c,v 1.44 2011/08/31 16:24:54 plunky Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993
@@ -37,7 +37,7 @@
 #if 0
 static char sccsid[] = "@(#)cd.c	8.2 (Berkeley) 5/4/95";
 #else
-__RCSID("$NetBSD: cd.c,v 1.47 2016/12/26 02:27:57 christos Exp $");
+__RCSID("$NetBSD: cd.c,v 1.44 2011/08/31 16:24:54 plunky Exp $");
 #endif
 #endif /* not lint */
 
@@ -190,7 +190,9 @@ docd(const char *dest, int print)
 		if (equal(component, ".."))
 			continue;
 		STACKSTRNUL(p);
-		if (lstat(stackblock(), &statb) < 0) {
+		if ((lstat(stackblock(), &statb) < 0)
+		    || (S_ISLNK(statb.st_mode)))  {
+			/* print = 1; */
 			badstat = 1;
 			break;
 		}
@@ -425,7 +427,11 @@ find_curdir(int noerror)
 		jp = makejob(NULL, 1);
 		if (forkshell(jp, NULL, FORK_NOJOB) == 0) {
 			(void) close(pip[0]);
-			movefd(pip[1], 1);
+			if (pip[1] != 1) {
+				close(1);
+				copyfd(pip[1], 1, 1);
+				close(pip[1]);
+			}
 			(void) execl("/bin/pwd", "pwd", (char *)0);
 			error("Cannot exec /bin/pwd");
 		}

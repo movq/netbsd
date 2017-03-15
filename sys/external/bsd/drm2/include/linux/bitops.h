@@ -1,4 +1,4 @@
-/*	$NetBSD: bitops.h,v 1.11 2015/10/13 00:42:59 riastradh Exp $	*/
+/*	$NetBSD: bitops.h,v 1.7.2.3 2015/11/06 22:58:20 riz Exp $	*/
 
 /*-
  * Copyright (c) 2013 The NetBSD Foundation, Inc.

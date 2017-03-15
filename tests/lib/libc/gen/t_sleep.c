@@ -1,4 +1,4 @@
-/* $NetBSD: t_sleep.c,v 1.11 2017/01/10 15:43:59 maya Exp $ */
+/* $NetBSD: t_sleep.c,v 1.8 2014/07/15 14:56:34 gson Exp $ */
 
 /*-
  * Copyright (c) 2006 Frank Kardel
@@ -26,20 +26,18 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
-#include <sys/event.h>
-#include <sys/signal.h>
-#include <sys/time.h>		/* for TIMESPEC_TO_TIMEVAL on FreeBSD */
-
 #include <atf-c.h>
 #include <errno.h>
-#include <inttypes.h>
 #include <poll.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
 #include <unistd.h>
+
+#include <sys/cdefs.h>
+#include <sys/event.h>
+#include <sys/signal.h>
 
 #include "isqemu.h"
 
@@ -173,8 +171,7 @@ do_kevent(struct timespec *delay, struct timespec *remain)
 	(void)close(kq);
 
 	if (rtc == -1) {
-		ATF_REQUIRE_MSG(kerrno == EINTR, "kevent: %s",
-		    strerror(kerrno));
+		ATF_REQUIRE_MSG(kerrno == EINTR, "kevent: %s", strerror(errno));
 		return 0;
 	}
 

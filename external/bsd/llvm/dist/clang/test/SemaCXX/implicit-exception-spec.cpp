@@ -17,31 +17,33 @@ namespace InClassInitializers {
   // is false.
   bool ThrowSomething() noexcept(false);
   struct ConstExpr {
-    bool b = // expected-note {{declared here}}
-      noexcept(ConstExpr()) && ThrowSomething(); // expected-error {{default member initializer for 'b' needed}}
+    bool b = noexcept(ConstExpr()) && ThrowSomething(); // expected-error {{cannot use defaulted default constructor of 'ConstExpr' within the class outside of member functions}}
+  // expected-note@-1 {{implicit default constructor for 'InClassInitializers::ConstExpr' first required here}}
   };
 
   // Much more obviously broken: we can't parse the initializer without already
   // knowing whether it produces a noexcept expression.
   struct TemplateArg {
-    int n = // expected-note {{declared here}}
-      ExceptionIf<noexcept(TemplateArg())>::f(); // expected-error {{default member initializer for 'n' needed}}
+    int n = ExceptionIf<noexcept(TemplateArg())>::f(); // expected-error {{cannot use defaulted default constructor of 'TemplateArg' within the class outside of member functions}}
+    // expected-note@-1 {{implicit default constructor for 'InClassInitializers::TemplateArg' first required here}}
   };
 
   // And within a nested class.
-  struct Nested {
+  struct Nested { // expected-note {{implicit default constructor for 'InClassInitializers::Nested::Inner' first required here}}
     struct Inner {
-      int n = // expected-note {{declared here}}
-        ExceptionIf<noexcept(Nested())>::f();
-    } inner; // expected-error {{default member initializer for 'n' needed}}
+      // expected-error@+1 {{cannot use defaulted default constructor of 'Inner' within 'Nested' outside of member functions}}
+      int n = ExceptionIf<noexcept(Nested())>::f(); // expected-note {{implicit default constructor for 'InClassInitializers::Nested' first required here}}
+    } inner;
   };
 
-  struct Nested2 {
+  struct Nested2 { // expected-error {{implicit default constructor for 'InClassInitializers::Nested2' must explicitly initialize the member 'inner' which does not have a default constructor}}
     struct Inner;
-    int n = Inner().n; // expected-error {{initializer for 'n' needed}}
-    struct Inner {
-      int n = ExceptionIf<noexcept(Nested2())>::f(); // expected-note {{declared here}}
-    } inner;
+    int n = Inner().n; // expected-note {{implicit default constructor for 'InClassInitializers::Nested2::Inner' first required here}}
+    struct Inner { // expected-note {{declared here}}
+      // expected-error@+1 {{cannot use defaulted default constructor of 'Inner' within 'Nested2' outside of member functions}}
+      int n = ExceptionIf<noexcept(Nested2())>::f();
+      // expected-note@-1 {{implicit default constructor for 'InClassInitializers::Nested2' first required here}}
+    } inner; // expected-note {{member is declared here}}
   };
 }
 

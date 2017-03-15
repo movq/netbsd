@@ -1,4 +1,4 @@
-# $NetBSD: Makefile,v 1.18 2014/10/25 00:57:59 joerg Exp $
+# $NetBSD: Makefile,v 1.16.4.2 2015/06/08 20:33:21 snj Exp $
 #-
 # Copyright (c) 1998 Juniper Networks, Inc.
 # All rights reserved.

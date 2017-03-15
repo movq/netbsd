@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.136 2016/12/01 14:29:15 christos Exp $
+#	$NetBSD: Makefile,v 1.127 2014/08/10 05:57:31 matt Exp $
 #
 # NOTE: when changing ld.so, ensure that ldd still compiles.
 #
@@ -34,9 +34,7 @@ M=		${.CURDIR}/arch/${ARCHSUBDIR}
      (${LDELFSO_MACHINE_ARCH} == "i386") ||				\
      (${LDELFSO_MACHINE_ARCH} == "m68k") ||				\
      (${MACHINE_CPU} == "mips") ||					\
-     (${MACHINE_CPU} == "or1k") ||					\
      (${MACHINE_CPU} == "powerpc") ||					\
-     (${MACHINE_CPU} == "riscv") ||					\
      (${MACHINE_CPU} == "sh3") ||					\
      (${LDELFSO_MACHINE_ARCH} == "sparc") ||				\
      (${LDELFSO_MACHINE_ARCH} == "sparc64") ||				\
@@ -62,8 +60,6 @@ COPTS+=		-fvisibility=hidden
 .if defined(MLIBDIR)
 PROG=		ld.elf_so-${MLIBDIR}
 CPPFLAGS+=	-DRTLD_ARCH_SUBDIR=\"${MLIBDIR}\"
-.	if ${MLIBDIR} == "o32"
-.	endif
 .else
 PROG=		ld.elf_so
 .endif
@@ -93,9 +89,8 @@ CLEANFILES+=	errlist_concat.h ${PROG}.map
 BINDIR=		${SHLINKINSTALLDIR}
 
 CPPFLAGS+=	-DLIBDIR=\"${LIBDIR}\" -D_PATH_RTLD=\"${BINDIR}/${PROG}\"
-CPPFLAGS+=	-I${.CURDIR} -I. -D_KERNTYPES
+CPPFLAGS+=	-I${.CURDIR} -I.
 CPPFLAGS+=	-DRTLD_LOADER
-CPPFLAGS+=	-DGNU_RELRO
 CPPFLAGS+=	-D_RTLD_SOURCE
 CPPFLAGS+=	-DCOMBRELOC
 #CPPFLAGS+=	-DDEBUG
@@ -124,7 +119,6 @@ CPPFLAGS+=	-DRTLD_DEFAULT_LIBRARY_PATH=\"${SHLIBDIR}:${LIBDIR}\"
 COPTS.rtld.c+=	-Wno-stack-protector
 COPTS.symbol.c+=-Wno-stack-protector
 
-LDADD+=		-Wl,--version-script=${.CURDIR}/symbols.map
 LDADD+=		-L${CLIBOBJ} -L${DESTDIR}${LIBDIR}
 .if ${MKPICLIB} != "no"
 LDADD+=		-lc_pic

@@ -1,4 +1,4 @@
-/*	$NetBSD: firewire.c,v 1.47 2016/11/20 22:47:39 riastradh Exp $	*/
+/*	$NetBSD: firewire.c,v 1.44 2014/02/25 18:30:09 pooka Exp $	*/
 /*-
  * Copyright (c) 2003 Hidetoshi Shimokawa
  * Copyright (c) 1998-2002 Katsushi Kobayashi and Hidetoshi Shimokawa
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: firewire.c,v 1.47 2016/11/20 22:47:39 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: firewire.c,v 1.44 2014/02/25 18:30:09 pooka Exp $");
 
 #include <sys/param.h>
 #include <sys/bus.h>
@@ -579,7 +579,7 @@ fw_busreset(struct firewire_comm *fc, uint32_t new_status)
 	 * A generation of 0 indicates a device
 	 * that is not 1394a-2000 compliant.
 	 * A generation of 1 indicates a device that
-	 * does not change its Bus Info Block or
+	 * does not change it's Bus Info Block or
 	 * Configuration ROM.
 	 */
 #define FW_MAX_GENERATION	0xF
@@ -622,10 +622,32 @@ fw_init(struct firewire_comm *fc)
 	mutex_init(&fc->atq->q_mtx, MUTEX_DEFAULT, IPL_VM);
 	mutex_init(&fc->ats->q_mtx, MUTEX_DEFAULT, IPL_VM);
 
+	for (i = 0; i < fc->nisodma; i++) {
+		fc->it[i]->queued = 0;
+		fc->ir[i]->queued = 0;
+
+		fc->it[i]->start = NULL;
+		fc->ir[i]->start = NULL;
+
+		fc->it[i]->buf = NULL;
+		fc->ir[i]->buf = NULL;
+
+		fc->it[i]->flag = FWXFERQ_STREAM;
+		fc->ir[i]->flag = FWXFERQ_STREAM;
+
+		STAILQ_INIT(&fc->it[i]->q);
+		STAILQ_INIT(&fc->ir[i]->q);
+	}
+
 	fc->arq->maxq = FWMAXQUEUE;
 	fc->ars->maxq = FWMAXQUEUE;
 	fc->atq->maxq = FWMAXQUEUE;
 	fc->ats->maxq = FWMAXQUEUE;
+
+	for (i = 0; i < fc->nisodma; i++) {
+		fc->ir[i]->maxq = FWMAXQUEUE;
+		fc->it[i]->maxq = FWMAXQUEUE;
+	}
 
 	CSRARC(fc, TOPO_MAP) = 0x3f1 << 16;
 	CSRARC(fc, TOPO_MAP + 4) = 1;
@@ -653,50 +675,6 @@ fw_init(struct firewire_comm *fc)
 #endif
 
 	fc->crom_src_buf = NULL;
-}
-
-/*
- * Called by HCI driver when it has determined the number of
- * isochronous DMA channels.
- */
-void
-fw_init_isodma(struct firewire_comm *fc)
-{
-	unsigned i;
-
-	for (i = 0; i < fc->nisodma; i++) {
-		fc->it[i]->queued = 0;
-		fc->ir[i]->queued = 0;
-
-		fc->it[i]->start = NULL;
-		fc->ir[i]->start = NULL;
-
-		fc->it[i]->buf = NULL;
-		fc->ir[i]->buf = NULL;
-
-		fc->it[i]->flag = FWXFERQ_STREAM;
-		fc->ir[i]->flag = FWXFERQ_STREAM;
-
-		STAILQ_INIT(&fc->it[i]->q);
-		STAILQ_INIT(&fc->ir[i]->q);
-
-		fc->ir[i]->maxq = FWMAXQUEUE;
-		fc->it[i]->maxq = FWMAXQUEUE;
-
-		cv_init(&fc->ir[i]->cv, "fw_read");
-		cv_init(&fc->it[i]->cv, "fw_write");
-	}
-}
-
-void
-fw_destroy_isodma(struct firewire_comm *fc)
-{
-	unsigned i;
-
-	for (i = 0; i < fc->nisodma; i++) {
-		cv_destroy(&fc->ir[i]->cv);
-		cv_destroy(&fc->it[i]->cv);
-	}
 }
 
 void

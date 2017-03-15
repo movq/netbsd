@@ -1,4 +1,4 @@
-/* $NetBSD: auixp.c,v 1.42 2016/07/07 06:55:41 msaitoh Exp $ */
+/* $NetBSD: auixp.c,v 1.40 2014/03/29 19:28:24 christos Exp $ */
 
 /*
  * Copyright (c) 2004, 2005 Reinoud Zandijk <reinoud@netbsd.org>
@@ -50,7 +50,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: auixp.c,v 1.42 2016/07/07 06:55:41 msaitoh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: auixp.c,v 1.40 2014/03/29 19:28:24 christos Exp $");
 
 #include <sys/types.h>
 #include <sys/errno.h>
@@ -665,7 +665,7 @@ auixp_allocate_dma_chain(struct auixp_softc *sc, struct auixp_dma **dmap)
 }
 
 
-/* program dma chain in its link address descriptor */
+/* program dma chain in it's link address descriptor */
 static void
 auixp_program_dma_chain(struct auixp_softc *sc, struct auixp_dma *dma)
 {
@@ -795,7 +795,7 @@ auixp_trigger_output(void *hdl, void *start, void *end, int blksize,
 }
 
 
-/* halt output of audio, just disable its dma and update bus state */
+/* halt output of audio, just disable it's dma and update bus state */
 static int
 auixp_halt_output(void *hdl)
 {
@@ -870,7 +870,7 @@ auixp_trigger_input(void *hdl, void *start, void *end, int blksize,
 }
 
 
-/* halt sampling audio, just disable its dma and update bus state */
+/* halt sampling audio, just disable it's dma and update bus state */
 static int
 auixp_halt_input(void *hdl)
 {
@@ -1189,8 +1189,7 @@ auixp_attach(device_t parent, device_t self, void *aux)
 
 	/* init chip */
 	if (auixp_init(sc) == -1) {
-		aprint_error_dev(sc->sc_dev,
-		    "auixp_attach: unable to initialize the card\n");
+		aprint_error_dev(sc->sc_dev, "auixp_attach: unable to initialize the card\n");
 		return;
 	}
 

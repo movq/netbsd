@@ -1,4 +1,4 @@
-/*	$NetBSD: nouveau_subdev_pwr_base.c,v 1.4 2015/02/25 22:12:00 riastradh Exp $	*/
+/*	$NetBSD: nouveau_subdev_pwr_base.c,v 1.1.1.1.4.2 2015/03/06 21:39:09 snj Exp $	*/
 
 /*
  * Copyright 2013 Red Hat Inc.
@@ -25,7 +25,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: nouveau_subdev_pwr_base.c,v 1.4 2015/02/25 22:12:00 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: nouveau_subdev_pwr_base.c,v 1.1.1.1.4.2 2015/03/06 21:39:09 snj Exp $");
 
 #include <subdev/pwr.h>
 #include <subdev/timer.h>

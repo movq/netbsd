@@ -1,4 +1,4 @@
-/*	$NetBSD: rf_configure.c,v 1.26 2016/03/09 19:53:32 christos Exp $	*/
+/*	$NetBSD: rf_configure.c,v 1.25 2010/01/27 18:34:02 christos Exp $	*/
 
 /*
  * Copyright (c) 1995 Carnegie-Mellon University.
@@ -49,7 +49,7 @@
 #include <sys/cdefs.h>
 
 #ifndef lint
-__RCSID("$NetBSD: rf_configure.c,v 1.26 2016/03/09 19:53:32 christos Exp $");
+__RCSID("$NetBSD: rf_configure.c,v 1.25 2010/01/27 18:34:02 christos Exp $");
 #endif
 
 
@@ -495,19 +495,21 @@ rf_ReadSpareTable(RF_SparetWait_t *req, char *fname)
 	    spareDisk, spareBlkOffset;
 	char buf[1024], targString[100], errString[100];
 	RF_SpareTableEntry_t **table;
-	FILE *fp = NULL;
+	FILE *fp;
 
 	/* allocate and initialize the table */
-	table = calloc(req->TablesPerSpareRegion, sizeof(*table));
+	table = malloc(req->TablesPerSpareRegion * 
+		       sizeof(RF_SpareTableEntry_t *));
 	if (table == NULL) {
-		warn("%s: Unable to allocate table", __func__);
-		return NULL;
+		warnx("rf_ReadSpareTable: Unable to allocate table");
+		return (NULL);
 	}
 	for (i = 0; i < req->TablesPerSpareRegion; i++) {
-		table[i] = calloc(req->BlocksPerTable, sizeof(**table));
+		table[i] = malloc(req->BlocksPerTable * 
+				  sizeof(RF_SpareTableEntry_t));
 		if (table[i] == NULL) {
-			warn("%s: Unable to allocate table", __func__);
-			goto out;
+			warnx("rf_ReadSpareTable: Unable to allocate table");
+			return (NULL);  /* XXX should cleanup too! */
 		}
 		for (j = 0; j < req->BlocksPerTable; j++)
 			table[i][j].spareDisk =
@@ -516,22 +518,22 @@ rf_ReadSpareTable(RF_SparetWait_t *req, char *fname)
 
 	/* 2.  open sparemap file, sanity check */
 	if ((fp = fopen(fname, "r")) == NULL) {
-		warn("%s: Can't open sparemap file %s", __func__, fname);
-		goto out;
+		warn("rf_ReadSpareTable: Can't open sparemap file %s", fname);
+		return (NULL);
 	}
 	if (rf_get_next_nonblank_line(buf, 1024, fp,
-	    "Invalid sparemap file:  can't find header line\n"))
-		goto out;
-
-	size_t len = strlen(buf);
-	if (len != 0 && buf[len - 1] == '\n')
-		buf[len - 1] = '\0';
+	    "Invalid sparemap file:  can't find header line\n")) {
+		fclose(fp);
+		return (NULL);
+	}
+	if (buf[strlen(buf) - 1] == '\n')
+		buf[strlen(buf) - 1] = '\0';
 
 	snprintf(targString, sizeof(targString), "fdisk %d\n", req->fcol);
 	snprintf(errString, sizeof(errString),
 	    "Invalid sparemap file:  can't find \"fdisk %d\" line\n",
 	    req->fcol);
-	for (;;) {
+	while (1) {
 		rf_get_next_nonblank_line(buf, 1024, fp, errString);
 		if (!strncmp(buf, targString, strlen(targString)))
 			break;
@@ -545,7 +547,8 @@ rf_ReadSpareTable(RF_SparetWait_t *req, char *fname)
 		if (numFound != 4) {
 			warnx("Sparemap file prematurely exhausted after %d "
 			    "of %d lines", i, linecount);
-			goto out;
+			fclose(fp);
+			return (NULL);
 		}
 
 		table[tableNum][tupleNum].spareDisk = spareDisk;
@@ -555,11 +558,4 @@ rf_ReadSpareTable(RF_SparetWait_t *req, char *fname)
 
 	fclose(fp);
 	return ((void *) table);
-out:
-	if (fp)
-		fclose(fp);
-	for (i = 0; i < req->TablesPerSpareRegion; i++)
-		free(table[i]);
-	free(table);
-	return NULL;
 }

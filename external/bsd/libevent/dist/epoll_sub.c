@@ -1,4 +1,4 @@
-/*	$NetBSD: epoll_sub.c,v 1.1.1.3 2017/01/31 21:14:52 christos Exp $	*/
+/*	$NetBSD: epoll_sub.c,v 1.1.1.1.12.1 2015/02/03 08:23:39 bouyer Exp $	*/
 /*
  * Copyright 2003-2009 Niels Provos <provos@citi.umich.edu>
  * Copyright 2009-2012 Niels Provos and Nick Mathewson
@@ -25,7 +25,6 @@
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
-#include "evconfig-private.h"
 #include <stdint.h>
 
 #include <sys/param.h>

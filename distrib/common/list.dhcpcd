@@ -1,4 +1,4 @@
-#	$NetBSD: list.dhcpcd,v 1.3 2014/09/12 20:42:13 roy Exp $
+#	$NetBSD: list.dhcpcd,v 1.2.24.1 2015/05/14 07:11:53 snj Exp $
 #
 # list file (c.f. parselist.awk) for DHCP-enabled install media.
 #

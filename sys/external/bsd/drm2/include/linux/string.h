@@ -1,4 +1,4 @@
-/*	$NetBSD: string.h,v 1.4 2015/02/25 14:55:57 riastradh Exp $	*/
+/*	$NetBSD: string.h,v 1.3.2.1 2015/03/06 21:39:10 snj Exp $	*/
 
 /*-
  * Copyright (c) 2013 The NetBSD Foundation, Inc.

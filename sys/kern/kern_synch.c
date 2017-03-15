@@ -1,4 +1,4 @@
-/*	$NetBSD: kern_synch.c,v 1.311 2016/07/03 14:24:58 christos Exp $	*/
+/*	$NetBSD: kern_synch.c,v 1.308.4.1 2015/11/05 09:04:55 snj Exp $	*/
 
 /*-
  * Copyright (c) 1999, 2000, 2004, 2006, 2007, 2008, 2009
@@ -69,7 +69,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: kern_synch.c,v 1.311 2016/07/03 14:24:58 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: kern_synch.c,v 1.308.4.1 2015/11/05 09:04:55 snj Exp $");
 
 #include "opt_kstack.h"
 #include "opt_perfctrs.h"
@@ -907,7 +907,7 @@ setrunnable(struct lwp *l)
 		 * If we're being traced (possibly because someone attached us
 		 * while we were stopped), check for a signal from the debugger.
 		 */
-		if ((p->p_slflag & PSL_TRACED) != 0 && p->p_xsig != 0)
+		if ((p->p_slflag & PSL_TRACED) != 0 && p->p_xstat != 0)
 			signotify(l);
 		p->p_nrlwps++;
 		break;
@@ -1085,11 +1085,9 @@ sched_lendpri(struct lwp *l, pri_t pri)
 		KASSERT(lwp_locked(l, l->l_cpu->ci_schedstate.spc_mutex));
 		sched_dequeue(l);
 		l->l_inheritedprio = pri;
-		l->l_auxprio = MAX(l->l_inheritedprio, l->l_protectprio);
 		sched_enqueue(l, false);
 	} else {
 		l->l_inheritedprio = pri;
-		l->l_auxprio = MAX(l->l_inheritedprio, l->l_protectprio);
 	}
 	resched_cpu(l);
 }

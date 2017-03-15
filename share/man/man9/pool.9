@@ -1,4 +1,4 @@
-.\"	$NetBSD: pool.9,v 1.46 2016/12/24 14:04:10 abhinav Exp $
+.\"	$NetBSD: pool.9,v 1.44 2011/11/14 02:38:05 jym Exp $
 .\"
 .\" Copyright (c) 1997, 1998, 2007 The NetBSD Foundation, Inc.
 .\" All rights reserved.
@@ -27,7 +27,7 @@
 .\" ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 .\" POSSIBILITY OF SUCH DAMAGE.
 .\"
-.Dd August 15, 2015
+.Dd November 14, 2011
 .Dt POOL 9
 .Os
 .Sh NAME
@@ -82,6 +82,7 @@ The function
 .Fn pool_init
 initializes a resource pool.
 The arguments are:
+.Pp
 .Bl -tag -offset indent -width "align_offset"
 .It Fa pp
 The handle identifying the pool resource instance.
@@ -125,6 +126,16 @@ when the pool will never be accessed from interrupt context.
 Specifies an interrupt priority level that will block all interrupt
 handlers that could potentially access the pool.
 .El
+.Pp
+The
+.Fn POOL_INIT
+macro can be used to both declare and initialize a resource pool.
+The
+.Fn POOL_INIT
+macro has the same arguments as the
+.Fn pool_init
+function and the resource pool will be initialized automatically
+during system startup.
 .Ss DESTROYING A POOL
 The function
 .Fn pool_destroy

@@ -1,4 +1,4 @@
-/*	$NetBSD: wapbl.h,v 1.20 2016/11/10 20:56:32 jdolecek Exp $	*/
+/*	$NetBSD: wapbl.h,v 1.15 2013/09/30 18:58:00 hannken Exp $	*/
 
 /*-
  * Copyright (c) 2003,2008 The NetBSD Foundation, Inc.
@@ -34,9 +34,7 @@
 
 #include <sys/mutex.h>
 
-#if defined(_KERNEL) || defined(_KMEMUSER)
 #include <miscfs/specfs/specdev.h>
-#endif
 
 /* This header file describes the api and data structures for
  * write ahead physical block logging (WAPBL) support.
@@ -94,13 +92,7 @@ struct wapbl_entry;
 struct wapbl_replay;
 struct wapbl;
 
-struct wapbl_dealloc {
-	TAILQ_ENTRY(wapbl_dealloc) wd_entries;
-	daddr_t wd_blkno;	/* address of block */
-	int wd_len;		/* size of block */
-};
-
-typedef void (*wapbl_flush_fn_t)(struct mount *, struct wapbl_dealloc *);
+typedef void (*wapbl_flush_fn_t)(struct mount *, daddr_t *, int *, int);
 
 /*
  * This structure holds per transaction log information
@@ -173,9 +165,7 @@ void	wapbl_unregister_inode(struct wapbl *, ino_t, mode_t);
  * the corresponding blocks from being reused as data
  * blocks until the log is on disk.
  */
-int	wapbl_register_deallocation(struct wapbl *, daddr_t, int, bool,
-		void **);
-void	wapbl_unregister_deallocation(struct wapbl *, void *);
+void	wapbl_register_deallocation(struct wapbl *, daddr_t, int);
 
 void	wapbl_jlock_assert(struct wapbl *wl);
 void	wapbl_junlock_assert(struct wapbl *wl);
@@ -225,7 +215,6 @@ wapbl_vphaswapbl(struct vnode *vp)
 /* Replay support */
 
 #ifdef WAPBL_INTERNAL
-LIST_HEAD(wapbl_blk_head, wapbl_blk);
 struct wapbl_replay {
 	struct vnode *wr_logvp;
 	struct vnode *wr_devvp;
@@ -239,7 +228,7 @@ struct wapbl_replay {
 
 	void *wr_scratch;
 
-	struct wapbl_blk_head *wr_blkhash;
+	LIST_HEAD(wapbl_blk_head, wapbl_blk) *wr_blkhash;
 	u_long wr_blkhashmask;
 	int wr_blkhashcnt;
 

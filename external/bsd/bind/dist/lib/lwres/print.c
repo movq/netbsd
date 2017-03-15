@@ -1,4 +1,4 @@
-/*	$NetBSD: print.c,v 1.7 2015/12/17 04:00:46 christos Exp $	*/
+/*	$NetBSD: print.c,v 1.5.4.2 2016/03/13 08:06:16 martin Exp $	*/
 
 /*
  * Copyright (C) 2004, 2005, 2007, 2011, 2012, 2014, 2015  Internet Systems Consortium, Inc. ("ISC")

@@ -11,7 +11,7 @@
 
 /*
  * from: @(#)fdlibm.h 5.1 93/09/24
- * $NetBSD: math_private.h,v 1.23 2016/09/19 22:05:05 christos Exp $
+ * $NetBSD: math_private.h,v 1.21 2014/03/14 22:21:31 dsl Exp $
  */
 
 #ifndef _MATH_PRIVATE_H_
@@ -223,57 +223,6 @@ typedef union {
 #define	REAL_PART(z)	((z).parts[0])
 #define	IMAG_PART(z)	((z).parts[1])
 
-/*
- * Inline functions that can be used to construct complex values.
- *
- * The C99 standard intends x+I*y to be used for this, but x+I*y is
- * currently unusable in general since gcc introduces many overflow,
- * underflow, sign and efficiency bugs by rewriting I*y as
- * (0.0+I)*(y+0.0*I) and laboriously computing the full complex product.
- * In particular, I*Inf is corrupted to NaN+I*Inf, and I*-0 is corrupted
- * to -0.0+I*0.0.
- *
- * The C11 standard introduced the macros CMPLX(), CMPLXF() and CMPLXL()
- * to construct complex values.  Compilers that conform to the C99
- * standard require the following functions to avoid the above issues.
- */
-
-#ifndef CMPLXF
-static __inline float complex
-CMPLXF(float x, float y)
-{
-	float_complex z;
-
-	REAL_PART(z) = x;
-	IMAG_PART(z) = y;
-	return (z.z);
-}
-#endif
-
-#ifndef CMPLX
-static __inline double complex
-CMPLX(double x, double y)
-{
-	double_complex z;
-
-	REAL_PART(z) = x;
-	IMAG_PART(z) = y;
-	return (z.z);
-}
-#endif
-
-#ifndef CMPLXL
-static __inline long double complex
-CMPLXL(long double x, long double y)
-{
-	long_double_complex z;
-
-	REAL_PART(z) = x;
-	IMAG_PART(z) = y;
-	return (z.z);
-}
-#endif
-
 #endif	/* _COMPLEX_H */
 
 /* ieee style elementary functions */
@@ -303,7 +252,7 @@ extern double __ieee754_y1 __P((double));
 extern double __ieee754_jn __P((int,double));
 extern double __ieee754_yn __P((int,double));
 extern double __ieee754_remainder __P((double,double));
-extern int32_t __ieee754_rem_pio2 __P((double,double*));
+extern int    __ieee754_rem_pio2 __P((double,double*));
 extern double __ieee754_scalb __P((double,double));
 
 /* fdlibm kernel function */
@@ -311,7 +260,7 @@ extern double __kernel_standard __P((double,double,int));
 extern double __kernel_sin __P((double,double,int));
 extern double __kernel_cos __P((double,double));
 extern double __kernel_tan __P((double,double,int));
-extern int    __kernel_rem_pio2 __P((double*,double*,int,int,int,const int32_t*));
+extern int    __kernel_rem_pio2 __P((double*,double*,int,int,int,const int*));
 
 
 /* ieee style elementary float functions */
@@ -341,14 +290,14 @@ extern float __ieee754_y1f __P((float));
 extern float __ieee754_jnf __P((int,float));
 extern float __ieee754_ynf __P((int,float));
 extern float __ieee754_remainderf __P((float,float));
-extern int32_t __ieee754_rem_pio2f __P((float,float*));
+extern int   __ieee754_rem_pio2f __P((float,float*));
 extern float __ieee754_scalbf __P((float,float));
 
 /* float versions of fdlibm kernel functions */
 extern float __kernel_sinf __P((float,float,int));
 extern float __kernel_cosf __P((float,float));
 extern float __kernel_tanf __P((float,float,int));
-extern int   __kernel_rem_pio2f __P((float*,float*,int,int,int,const int32_t*));
+extern int   __kernel_rem_pio2f __P((float*,float*,int,int,int,const int*));
 
 /* ieee style elementary long double functions */
 extern long double __ieee754_fmodl(long double, long double);

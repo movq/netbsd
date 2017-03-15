@@ -1,7 +1,7 @@
 /* Generate information regarding function declarations and definitions based
    on information stored in GCC's tree structure.  This code implements the
    -aux-info option.
-   Copyright (C) 1989-2015 Free Software Foundation, Inc.
+   Copyright (C) 1989-2013 Free Software Foundation, Inc.
    Contributed by Ron Guilmette (rfg@segfault.us.com).
 
 This file is part of GCC.
@@ -25,14 +25,6 @@ along with GCC; see the file COPYING3.  If not see
 #include "coretypes.h"
 #include "tm.h"
 #include "flags.h"
-#include "hash-set.h"
-#include "vec.h"
-#include "symtab.h"
-#include "input.h"
-#include "alias.h"
-#include "double-int.h"
-#include "machmode.h"
-#include "inchash.h"
 #include "tree.h"
 #include "c-tree.h"
 
@@ -293,8 +285,6 @@ gen_type (const char *ret_val, tree t, formals_style style)
       switch (TREE_CODE (t))
 	{
 	case POINTER_TYPE:
-	  if (TYPE_ATOMIC (t))
-	    ret_val = concat ("_Atomic ", ret_val, NULL);
 	  if (TYPE_READONLY (t))
 	    ret_val = concat ("const ", ret_val, NULL);
 	  if (TYPE_VOLATILE (t))
@@ -318,10 +308,9 @@ gen_type (const char *ret_val, tree t, formals_style style)
 				TREE_TYPE (t), style);
 	  else
 	    {
-	      char buff[23];
-	      sprintf (buff, "["HOST_WIDE_INT_PRINT_DEC"]",
-		       int_size_in_bytes (t)
-		       / int_size_in_bytes (TREE_TYPE (t)));
+	      int size = (int_size_in_bytes (t) / int_size_in_bytes (TREE_TYPE (t)));
+	      char buff[10];
+	      sprintf (buff, "[%d]", size);
 	      ret_val = gen_type (concat (ret_val, buff, NULL),
 				  TREE_TYPE (t), style);
 	    }
@@ -436,8 +425,6 @@ gen_type (const char *ret_val, tree t, formals_style style)
 	  gcc_unreachable ();
 	}
     }
-  if (TYPE_ATOMIC (t))
-    ret_val = concat ("_Atomic ", ret_val, NULL);
   if (TYPE_READONLY (t))
     ret_val = concat ("const ", ret_val, NULL);
   if (TYPE_VOLATILE (t))

@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile.inc,v 1.27 2016/04/19 21:11:05 christos Exp $
+#	$NetBSD: Makefile.inc,v 1.25 2014/07/27 04:16:09 dholland Exp $
 
 .ifndef _EXTERNAL_GPL3_GCC_USR_BIN_MAKEFILE_INC_
 _EXTERNAL_GPL3_GCC_USR_BIN_MAKEFILE_INC_=1
@@ -40,9 +40,6 @@ BUILD_PREFIX=	${C_BUILD_PREFIX}
 
 HOSTLIBIBERTYOBJ!=	cd ${.CURDIR}/../host-libiberty && ${PRINTOBJDIR}
 HOSTLIBIBERTY=		${HOSTLIBIBERTYOBJ}/libiberty/libiberty.a
-
-HOSTLIBCPPOBJ!=		cd ${.CURDIR}/../host-libcpp && ${PRINTOBJDIR}
-HOSTLIBCPP=		${HOSTLIBCPPOBJ}/libcpp/libcpp.a
 
 BASEVER!=		cat ${GNUHOSTDIST}/gcc/BASE-VER
 .if exists(${GNUHOSTDIST}/gcc/DEV-PHASE)
@@ -99,8 +96,5 @@ CPPFLAGS+=	-DNO_SHARED_LIBGCC_MULTILIB
 .endif
 
 NOCLANGERROR=	# defined
-
-WARNS=1
-COPTS+=-Wno-narrowing -Wno-unused
 
 .endif

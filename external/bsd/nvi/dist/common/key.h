@@ -1,4 +1,4 @@
-/*	$NetBSD: key.h,v 1.3 2016/01/07 14:07:01 christos Exp $ */
+/*	$NetBSD: key.h,v 1.2.6.1 2016/12/18 06:37:30 snj Exp $ */
 /*-
  * Copyright (c) 1991, 1993, 1994
  *	The Regents of the University of California.  All rights reserved.

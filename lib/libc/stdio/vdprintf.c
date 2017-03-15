@@ -1,4 +1,4 @@
-/*	$NetBSD: vdprintf.c,v 1.5 2017/01/10 17:45:12 christos Exp $	*/
+/*	$NetBSD: vdprintf.c,v 1.4 2013/05/17 12:55:57 joerg Exp $	*/
 
 /*-
  * Copyright (c) 1990, 1993
@@ -34,12 +34,11 @@
 
 #include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-__RCSID("$NetBSD: vdprintf.c,v 1.5 2017/01/10 17:45:12 christos Exp $");
+__RCSID("$NetBSD: vdprintf.c,v 1.4 2013/05/17 12:55:57 joerg Exp $");
 #endif /* LIBC_SCCS and not lint */
 
 #include "namespace.h"
 #include <sys/types.h>
-#include <sys/stat.h>
 
 #include <assert.h>
 #include <errno.h>

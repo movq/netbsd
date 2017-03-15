@@ -45,21 +45,25 @@
 
 using namespace llvm;
 
-ARMBaseRegisterInfo::ARMBaseRegisterInfo()
-    : ARMGenRegisterInfo(ARM::LR, 0, 0, ARM::PC), BasePtr(ARM::R6) {}
-
-static unsigned getFramePointerReg(const ARMSubtarget &STI) {
-  return STI.useR7AsFramePointer() ? ARM::R7 : ARM::R11;
+ARMBaseRegisterInfo::ARMBaseRegisterInfo(const ARMSubtarget &sti)
+    : ARMGenRegisterInfo(ARM::LR, 0, 0, ARM::PC), STI(sti), BasePtr(ARM::R6) {
+  if (STI.isTargetMachO()) {
+    if (STI.isTargetDarwin() || STI.isThumb1Only())
+      FramePtr = ARM::R7;
+    else
+      FramePtr = ARM::R11;
+  } else if (STI.isTargetWindows())
+    FramePtr = ARM::R11;
+  else // ARM EABI
+    FramePtr = STI.isThumb() ? ARM::R7 : ARM::R11;
 }
 
 const MCPhysReg*
 ARMBaseRegisterInfo::getCalleeSavedRegs(const MachineFunction *MF) const {
-  const ARMSubtarget &STI = MF->getSubtarget<ARMSubtarget>();
-  bool UseSplitPush = STI.splitFramePushPop(*MF);
   const MCPhysReg *RegList =
-      STI.isTargetDarwin()
-          ? CSR_iOS_SaveList
-          : (UseSplitPush ? CSR_AAPCS_SplitPush_SaveList : CSR_AAPCS_SaveList);
+      STI.isTargetDarwin() ? CSR_iOS_SaveList : CSR_AAPCS_SaveList;
+
+  if (!MF) return RegList;
 
   const Function *F = MF->getFunction();
   if (F->getCallingConv() == CallingConv::GHC) {
@@ -70,7 +74,7 @@ ARMBaseRegisterInfo::getCalleeSavedRegs(const MachineFunction *MF) const {
     if (STI.isMClass()) {
       // M-class CPUs have hardware which saves the registers needed to allow a
       // function conforming to the AAPCS to function as a handler.
-      return UseSplitPush ? CSR_AAPCS_SplitPush_SaveList : CSR_AAPCS_SaveList;
+      return CSR_AAPCS_SaveList;
     } else if (F->getFnAttribute("interrupt").getValueAsString() == "FIQ") {
       // Fast interrupt mode gives the handler a private copy of R8-R14, so less
       // need to be saved to restore user-mode state.
@@ -82,40 +86,14 @@ ARMBaseRegisterInfo::getCalleeSavedRegs(const MachineFunction *MF) const {
     }
   }
 
-  if (STI.isTargetDarwin() && STI.getTargetLowering()->supportSwiftError() &&
-      F->getAttributes().hasAttrSomewhere(Attribute::SwiftError))
-    return CSR_iOS_SwiftError_SaveList;
-
-  if (STI.isTargetDarwin() && F->getCallingConv() == CallingConv::CXX_FAST_TLS)
-    return MF->getInfo<ARMFunctionInfo>()->isSplitCSR()
-               ? CSR_iOS_CXX_TLS_PE_SaveList
-               : CSR_iOS_CXX_TLS_SaveList;
   return RegList;
 }
 
-const MCPhysReg *ARMBaseRegisterInfo::getCalleeSavedRegsViaCopy(
-    const MachineFunction *MF) const {
-  assert(MF && "Invalid MachineFunction pointer.");
-  if (MF->getFunction()->getCallingConv() == CallingConv::CXX_FAST_TLS &&
-      MF->getInfo<ARMFunctionInfo>()->isSplitCSR())
-    return CSR_iOS_CXX_TLS_ViaCopy_SaveList;
-  return nullptr;
-}
-
-const uint32_t *
-ARMBaseRegisterInfo::getCallPreservedMask(const MachineFunction &MF,
-                                          CallingConv::ID CC) const {
-  const ARMSubtarget &STI = MF.getSubtarget<ARMSubtarget>();
+const uint32_t*
+ARMBaseRegisterInfo::getCallPreservedMask(CallingConv::ID CC) const {
   if (CC == CallingConv::GHC)
     // This is academic becase all GHC calls are (supposed to be) tail calls
     return CSR_NoRegs_RegMask;
-
-  if (STI.isTargetDarwin() && STI.getTargetLowering()->supportSwiftError() &&
-      MF.getFunction()->getAttributes().hasAttrSomewhere(Attribute::SwiftError))
-    return CSR_iOS_SwiftError_RegMask;
-
-  if (STI.isTargetDarwin() && CC == CallingConv::CXX_FAST_TLS)
-    return CSR_iOS_CXX_TLS_RegMask;
   return STI.isTargetDarwin() ? CSR_iOS_RegMask : CSR_AAPCS_RegMask;
 }
 
@@ -124,27 +102,8 @@ ARMBaseRegisterInfo::getNoPreservedMask() const {
   return CSR_NoRegs_RegMask;
 }
 
-const uint32_t *
-ARMBaseRegisterInfo::getTLSCallPreservedMask(const MachineFunction &MF) const {
-  assert(MF.getSubtarget<ARMSubtarget>().isTargetDarwin() &&
-         "only know about special TLS call on Darwin");
-  return CSR_iOS_TLSCall_RegMask;
-}
-
-const uint32_t *
-ARMBaseRegisterInfo::getSjLjDispatchPreservedMask(const MachineFunction &MF) const {
-  const ARMSubtarget &STI = MF.getSubtarget<ARMSubtarget>();
-  if (!STI.useSoftFloat() && STI.hasVFP2() && !STI.isThumb1Only())
-    return CSR_NoRegs_RegMask;
-  else
-    return CSR_FPRegs_RegMask;
-}
-
-
-const uint32_t *
-ARMBaseRegisterInfo::getThisReturnPreservedMask(const MachineFunction &MF,
-                                                CallingConv::ID CC) const {
-  const ARMSubtarget &STI = MF.getSubtarget<ARMSubtarget>();
+const uint32_t*
+ARMBaseRegisterInfo::getThisReturnPreservedMask(CallingConv::ID CC) const {
   // This should return a register mask that is the same as that returned by
   // getCallPreservedMask but that additionally preserves the register used for
   // the first i32 argument (which must also be the register used to return a
@@ -162,40 +121,38 @@ ARMBaseRegisterInfo::getThisReturnPreservedMask(const MachineFunction &MF,
 
 BitVector ARMBaseRegisterInfo::
 getReservedRegs(const MachineFunction &MF) const {
-  const ARMSubtarget &STI = MF.getSubtarget<ARMSubtarget>();
-  const ARMFrameLowering *TFI = getFrameLowering(MF);
+  const TargetFrameLowering *TFI = MF.getSubtarget().getFrameLowering();
 
   // FIXME: avoid re-calculating this every time.
   BitVector Reserved(getNumRegs());
-  markSuperRegs(Reserved, ARM::SP);
-  markSuperRegs(Reserved, ARM::PC);
-  markSuperRegs(Reserved, ARM::FPSCR);
-  markSuperRegs(Reserved, ARM::APSR_NZCV);
+  Reserved.set(ARM::SP);
+  Reserved.set(ARM::PC);
+  Reserved.set(ARM::FPSCR);
+  Reserved.set(ARM::APSR_NZCV);
   if (TFI->hasFP(MF))
-    markSuperRegs(Reserved, getFramePointerReg(STI));
+    Reserved.set(FramePtr);
   if (hasBasePointer(MF))
-    markSuperRegs(Reserved, BasePtr);
+    Reserved.set(BasePtr);
   // Some targets reserve R9.
   if (STI.isR9Reserved())
-    markSuperRegs(Reserved, ARM::R9);
+    Reserved.set(ARM::R9);
   // Reserve D16-D31 if the subtarget doesn't support them.
   if (!STI.hasVFP3() || STI.hasD16()) {
-    static_assert(ARM::D31 == ARM::D16 + 15, "Register list not consecutive!");
-    for (unsigned R = 0; R < 16; ++R)
-      markSuperRegs(Reserved, ARM::D16 + R);
+    assert(ARM::D31 == ARM::D16 + 15);
+    for (unsigned i = 0; i != 16; ++i)
+      Reserved.set(ARM::D16 + i);
   }
   const TargetRegisterClass *RC  = &ARM::GPRPairRegClass;
   for(TargetRegisterClass::iterator I = RC->begin(), E = RC->end(); I!=E; ++I)
     for (MCSubRegIterator SI(*I, this); SI.isValid(); ++SI)
-      if (Reserved.test(*SI)) markSuperRegs(Reserved, *I);
+      if (Reserved.test(*SI)) Reserved.set(*I);
 
-  assert(checkAllSuperRegsMarked(Reserved));
   return Reserved;
 }
 
-const TargetRegisterClass *
-ARMBaseRegisterInfo::getLargestLegalSuperClass(const TargetRegisterClass *RC,
-                                               const MachineFunction &) const {
+const TargetRegisterClass*
+ARMBaseRegisterInfo::getLargestLegalSuperClass(const TargetRegisterClass *RC)
+                                                                         const {
   const TargetRegisterClass *Super = RC;
   TargetRegisterClass::sc_iterator I = RC->getSuperClasses();
   do {
@@ -230,8 +187,7 @@ ARMBaseRegisterInfo::getCrossCopyRegClass(const TargetRegisterClass *RC) const {
 unsigned
 ARMBaseRegisterInfo::getRegPressureLimit(const TargetRegisterClass *RC,
                                          MachineFunction &MF) const {
-  const ARMSubtarget &STI = MF.getSubtarget<ARMSubtarget>();
-  const ARMFrameLowering *TFI = getFrameLowering(MF);
+  const TargetFrameLowering *TFI = MF.getSubtarget().getFrameLowering();
 
   switch (RC->getID()) {
   default:
@@ -262,8 +218,7 @@ ARMBaseRegisterInfo::getRegAllocationHints(unsigned VirtReg,
                                            ArrayRef<MCPhysReg> Order,
                                            SmallVectorImpl<MCPhysReg> &Hints,
                                            const MachineFunction &MF,
-                                           const VirtRegMap *VRM,
-                                           const LiveRegMatrix *Matrix) const {
+                                           const VirtRegMap *VRM) const {
   const MachineRegisterInfo &MRI = MF.getRegInfo();
   std::pair<unsigned, unsigned> Hint = MRI.getRegAllocationHint(VirtReg);
 
@@ -283,19 +238,16 @@ ARMBaseRegisterInfo::getRegAllocationHints(unsigned VirtReg,
   // This register should preferably be even (Odd == 0) or odd (Odd == 1).
   // Check if the other part of the pair has already been assigned, and provide
   // the paired register as the first hint.
-  unsigned Paired = Hint.second;
-  if (Paired == 0)
-    return;
-
   unsigned PairedPhys = 0;
-  if (TargetRegisterInfo::isPhysicalRegister(Paired)) {
-    PairedPhys = Paired;
-  } else if (VRM && VRM->hasPhys(Paired)) {
-    PairedPhys = getPairedGPR(VRM->getPhys(Paired), Odd, this);
+  if (VRM && VRM->hasPhys(Hint.second)) {
+    PairedPhys = getPairedGPR(VRM->getPhys(Hint.second), Odd, this);
+    if (PairedPhys && MRI.isReserved(PairedPhys))
+      PairedPhys = 0;
   }
 
   // First prefer the paired physreg.
-  if (PairedPhys && is_contained(Order, PairedPhys))
+  if (PairedPhys &&
+      std::find(Order.begin(), Order.end(), PairedPhys) != Order.end())
     Hints.push_back(PairedPhys);
 
   // Then prefer even or odd registers.
@@ -312,7 +264,7 @@ ARMBaseRegisterInfo::getRegAllocationHints(unsigned VirtReg,
 }
 
 void
-ARMBaseRegisterInfo::updateRegAllocHint(unsigned Reg, unsigned NewReg,
+ARMBaseRegisterInfo::UpdateRegAllocHint(unsigned Reg, unsigned NewReg,
                                         MachineFunction &MF) const {
   MachineRegisterInfo *MRI = &MF.getRegInfo();
   std::pair<unsigned, unsigned> Hint = MRI->getRegAllocationHint(Reg);
@@ -325,21 +277,39 @@ ARMBaseRegisterInfo::updateRegAllocHint(unsigned Reg, unsigned NewReg,
     // change.
     unsigned OtherReg = Hint.second;
     Hint = MRI->getRegAllocationHint(OtherReg);
-    // Make sure the pair has not already divorced.
-    if (Hint.second == Reg) {
+    if (Hint.second == Reg)
+      // Make sure the pair has not already divorced.
       MRI->setRegAllocationHint(OtherReg, Hint.first, NewReg);
-      if (TargetRegisterInfo::isVirtualRegister(NewReg))
-        MRI->setRegAllocationHint(NewReg,
-            Hint.first == (unsigned)ARMRI::RegPairOdd ? ARMRI::RegPairEven
-            : ARMRI::RegPairOdd, OtherReg);
-    }
+  }
+}
+
+bool
+ARMBaseRegisterInfo::avoidWriteAfterWrite(const TargetRegisterClass *RC) const {
+  // CortexA9 has a Write-after-write hazard for NEON registers.
+  if (!STI.isLikeA9())
+    return false;
+
+  switch (RC->getID()) {
+  case ARM::DPRRegClassID:
+  case ARM::DPR_8RegClassID:
+  case ARM::DPR_VFP2RegClassID:
+  case ARM::QPRRegClassID:
+  case ARM::QPR_8RegClassID:
+  case ARM::QPR_VFP2RegClassID:
+  case ARM::SPRRegClassID:
+  case ARM::SPR_8RegClassID:
+    // Avoid reusing S, D, and Q registers.
+    // Don't increase register pressure for QQ and QQQQ.
+    return true;
+  default:
+    return false;
   }
 }
 
 bool ARMBaseRegisterInfo::hasBasePointer(const MachineFunction &MF) const {
-  const MachineFrameInfo &MFI = MF.getFrameInfo();
+  const MachineFrameInfo *MFI = MF.getFrameInfo();
   const ARMFunctionInfo *AFI = MF.getInfo<ARMFunctionInfo>();
-  const ARMFrameLowering *TFI = getFrameLowering(MF);
+  const TargetFrameLowering *TFI = MF.getSubtarget().getFrameLowering();
 
   // When outgoing call frames are so large that we adjust the stack pointer
   // around the call, we can no longer use the stack pointer to reach the
@@ -352,14 +322,14 @@ bool ARMBaseRegisterInfo::hasBasePointer(const MachineFunction &MF) const {
   // It's going to be better to use the SP or Base Pointer instead. When there
   // are variable sized objects, we can't reference off of the SP, so we
   // reserve a Base Pointer.
-  if (AFI->isThumbFunction() && MFI.hasVarSizedObjects()) {
+  if (AFI->isThumbFunction() && MFI->hasVarSizedObjects()) {
     // Conservatively estimate whether the negative offset from the frame
     // pointer will be sufficient to reach. If a function has a smallish
     // frame, it's less likely to have lots of spills and callee saved
     // space, so it's all more likely to be within range of the frame pointer.
     // If it's wrong, the scavenger will still enable access to work, it just
     // won't be optimal.
-    if (AFI->isThumb2Function() && MFI.getLocalFrameSize() < 128)
+    if (AFI->isThumb2Function() && MFI->getLocalFrameSize() < 128)
       return false;
     return true;
   }
@@ -370,22 +340,24 @@ bool ARMBaseRegisterInfo::hasBasePointer(const MachineFunction &MF) const {
 bool ARMBaseRegisterInfo::canRealignStack(const MachineFunction &MF) const {
   const MachineRegisterInfo *MRI = &MF.getRegInfo();
   const ARMFunctionInfo *AFI = MF.getInfo<ARMFunctionInfo>();
-  const ARMFrameLowering *TFI = getFrameLowering(MF);
   // We can't realign the stack if:
   // 1. Dynamic stack realignment is explicitly disabled,
   // 2. This is a Thumb1 function (it's not useful, so we don't bother), or
   // 3. There are VLAs in the function and the base pointer is disabled.
-  if (!TargetRegisterInfo::canRealignStack(MF))
+  if (MF.getFunction()->hasFnAttribute("no-realign-stack"))
     return false;
   if (AFI->isThumb1OnlyFunction())
     return false;
   // Stack realignment requires a frame pointer.  If we already started
   // register allocation with frame pointer elimination, it is too late now.
-  if (!MRI->canReserveReg(getFramePointerReg(MF.getSubtarget<ARMSubtarget>())))
+  if (!MRI->canReserveReg(FramePtr))
     return false;
   // We may also need a base pointer if there are dynamic allocas or stack
   // pointer adjustments around calls.
-  if (TFI->hasReservedCallFrame(MF))
+  if (MF.getTarget()
+          .getSubtargetImpl()
+          ->getFrameLowering()
+          ->hasReservedCallFrame(MF))
     return true;
   // A base pointer is required and allowed.  Check that it isn't too late to
   // reserve it.
@@ -393,30 +365,48 @@ bool ARMBaseRegisterInfo::canRealignStack(const MachineFunction &MF) const {
 }
 
 bool ARMBaseRegisterInfo::
+needsStackRealignment(const MachineFunction &MF) const {
+  const MachineFrameInfo *MFI = MF.getFrameInfo();
+  const Function *F = MF.getFunction();
+  unsigned StackAlign = MF.getTarget()
+                            .getSubtargetImpl()
+                            ->getFrameLowering()
+                            ->getStackAlignment();
+  bool requiresRealignment =
+    ((MFI->getMaxAlignment() > StackAlign) ||
+     F->getAttributes().hasAttribute(AttributeSet::FunctionIndex,
+                                     Attribute::StackAlignment));
+
+  return requiresRealignment && canRealignStack(MF);
+}
+
+bool ARMBaseRegisterInfo::
 cannotEliminateFrame(const MachineFunction &MF) const {
-  const MachineFrameInfo &MFI = MF.getFrameInfo();
-  if (MF.getTarget().Options.DisableFramePointerElim(MF) && MFI.adjustsStack())
+  const MachineFrameInfo *MFI = MF.getFrameInfo();
+  if (MF.getTarget().Options.DisableFramePointerElim(MF) && MFI->adjustsStack())
     return true;
-  return MFI.hasVarSizedObjects() || MFI.isFrameAddressTaken()
+  return MFI->hasVarSizedObjects() || MFI->isFrameAddressTaken()
     || needsStackRealignment(MF);
 }
 
 unsigned
 ARMBaseRegisterInfo::getFrameRegister(const MachineFunction &MF) const {
-  const ARMSubtarget &STI = MF.getSubtarget<ARMSubtarget>();
-  const ARMFrameLowering *TFI = getFrameLowering(MF);
+  const TargetFrameLowering *TFI = MF.getSubtarget().getFrameLowering();
 
   if (TFI->hasFP(MF))
-    return getFramePointerReg(STI);
+    return FramePtr;
   return ARM::SP;
 }
 
 /// emitLoadConstPool - Emits a load from constpool to materialize the
 /// specified immediate.
-void ARMBaseRegisterInfo::emitLoadConstPool(
-    MachineBasicBlock &MBB, MachineBasicBlock::iterator &MBBI,
-    const DebugLoc &dl, unsigned DestReg, unsigned SubIdx, int Val,
-    ARMCC::CondCodes Pred, unsigned PredReg, unsigned MIFlags) const {
+void ARMBaseRegisterInfo::
+emitLoadConstPool(MachineBasicBlock &MBB,
+                  MachineBasicBlock::iterator &MBBI,
+                  DebugLoc dl,
+                  unsigned DestReg, unsigned SubIdx, int Val,
+                  ARMCC::CondCodes Pred,
+                  unsigned PredReg, unsigned MIFlags) const {
   MachineFunction &MF = *MBB.getParent();
   const TargetInstrInfo &TII = *MF.getSubtarget().getInstrInfo();
   MachineConstantPool *ConstantPool = MF.getConstantPool();
@@ -540,8 +530,8 @@ needsFrameBaseReg(MachineInstr *MI, int64_t Offset) const {
   // Note that the incoming offset is based on the SP value at function entry,
   // so it'll be negative.
   MachineFunction &MF = *MI->getParent()->getParent();
-  const ARMFrameLowering *TFI = getFrameLowering(MF);
-  MachineFrameInfo &MFI = MF.getFrameInfo();
+  const TargetFrameLowering *TFI = MF.getSubtarget().getFrameLowering();
+  MachineFrameInfo *MFI = MF.getFrameInfo();
   ARMFunctionInfo *AFI = MF.getInfo<ARMFunctionInfo>();
 
   // Estimate an offset from the frame pointer.
@@ -556,20 +546,21 @@ needsFrameBaseReg(MachineInstr *MI, int64_t Offset) const {
   // The incoming offset is relating to the SP at the start of the function,
   // but when we access the local it'll be relative to the SP after local
   // allocation, so adjust our SP-relative offset by that allocation size.
-  Offset += MFI.getLocalFrameSize();
+  Offset = -Offset;
+  Offset += MFI->getLocalFrameSize();
   // Assume that we'll have at least some spill slots allocated.
   // FIXME: This is a total SWAG number. We should run some statistics
   //        and pick a real one.
   Offset += 128; // 128 bytes of spill slots
 
-  // If there's a frame pointer and the addressing mode allows it, try using it.
+  // If there is a frame pointer, try using it.
   // The FP is only available if there is no dynamic realignment. We
   // don't know for sure yet whether we'll need that, so we guess based
   // on whether there are any local variables that would trigger it.
   unsigned StackAlign = TFI->getStackAlignment();
-  if (TFI->hasFP(MF) && 
-      !((MFI.getLocalFrameMaxAlign() > StackAlign) && canRealignStack(MF))) {
-    if (isFrameOffsetLegal(MI, getFrameRegister(MF), FPOffset))
+  if (TFI->hasFP(MF) &&
+      !((MFI->getLocalFrameMaxAlign() > StackAlign) && canRealignStack(MF))) {
+    if (isFrameOffsetLegal(MI, FPOffset))
       return false;
   }
   // If we can reference via the stack pointer, try that.
@@ -577,7 +568,7 @@ needsFrameBaseReg(MachineInstr *MI, int64_t Offset) const {
   //        to only disallow SP relative references in the live range of
   //        the VLA(s). In practice, it's unclear how much difference that
   //        would make, but it may be worth doing.
-  if (!MFI.hasVarSizedObjects() && isFrameOffsetLegal(MI, ARM::SP, Offset))
+  if (!MFI->hasVarSizedObjects() && isFrameOffsetLegal(MI, Offset))
     return false;
 
   // The offset likely isn't legal, we want to allocate a virtual base register.
@@ -640,7 +631,7 @@ void ARMBaseRegisterInfo::resolveFrameIndex(MachineInstr &MI, unsigned BaseReg,
   (void)Done;
 }
 
-bool ARMBaseRegisterInfo::isFrameOffsetLegal(const MachineInstr *MI, unsigned BaseReg,
+bool ARMBaseRegisterInfo::isFrameOffsetLegal(const MachineInstr *MI,
                                              int64_t Offset) const {
   const MCInstrDesc &Desc = MI->getDesc();
   unsigned AddrMode = (Desc.TSFlags & ARMII::AddrModeMask);
@@ -684,7 +675,7 @@ bool ARMBaseRegisterInfo::isFrameOffsetLegal(const MachineInstr *MI, unsigned Ba
     NumBits = 8;
     break;
   case ARMII::AddrModeT1_s:
-    NumBits = (BaseReg == ARM::SP ? 8 : 5);
+    NumBits = 5;
     Scale = 4;
     isSigned = false;
     break;
@@ -717,7 +708,8 @@ ARMBaseRegisterInfo::eliminateFrameIndex(MachineBasicBlock::iterator II,
   MachineFunction &MF = *MBB.getParent();
   const ARMBaseInstrInfo &TII =
       *static_cast<const ARMBaseInstrInfo *>(MF.getSubtarget().getInstrInfo());
-  const ARMFrameLowering *TFI = getFrameLowering(MF);
+  const ARMFrameLowering *TFI = static_cast<const ARMFrameLowering *>(
+      MF.getSubtarget().getFrameLowering());
   ARMFunctionInfo *AFI = MF.getInfo<ARMFunctionInfo>();
   assert(!AFI->isThumb1OnlyFunction() &&
          "This eliminateFrameIndex does not support Thumb1!");
@@ -735,7 +727,7 @@ ARMBaseRegisterInfo::eliminateFrameIndex(MachineBasicBlock::iterator II,
     assert(TFI->hasReservedCallFrame(MF) &&
            "Cannot use SP to access the emergency spill slot in "
            "functions without a reserved call frame");
-    assert(!MF.getFrameInfo().hasVarSizedObjects() &&
+    assert(!MF.getFrameInfo()->hasVarSizedObjects() &&
            "Cannot use SP to access the emergency spill slot in "
            "functions with variable sized frame objects");
   }

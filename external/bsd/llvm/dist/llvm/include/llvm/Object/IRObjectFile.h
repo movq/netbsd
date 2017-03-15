@@ -14,35 +14,42 @@
 #ifndef LLVM_OBJECT_IROBJECTFILE_H
 #define LLVM_OBJECT_IROBJECTFILE_H
 
-#include "llvm/ADT/PointerUnion.h"
-#include "llvm/Object/ModuleSymbolTable.h"
 #include "llvm/Object/SymbolicFile.h"
 
 namespace llvm {
 class Mangler;
 class Module;
 class GlobalValue;
-class Triple;
 
 namespace object {
 class ObjectFile;
 
 class IRObjectFile : public SymbolicFile {
-  std::vector<std::unique_ptr<Module>> Mods;
-  ModuleSymbolTable SymTab;
-  IRObjectFile(MemoryBufferRef Object,
-               std::vector<std::unique_ptr<Module>> Mods);
+  std::unique_ptr<Module> M;
+  std::unique_ptr<Mangler> Mang;
+  std::vector<std::pair<std::string, uint32_t>> AsmSymbols;
 
 public:
-  ~IRObjectFile() override;
+  IRObjectFile(MemoryBufferRef Object, std::unique_ptr<Module> M);
+  ~IRObjectFile();
   void moveSymbolNext(DataRefImpl &Symb) const override;
   std::error_code printSymbolName(raw_ostream &OS,
                                   DataRefImpl Symb) const override;
   uint32_t getSymbolFlags(DataRefImpl Symb) const override;
-  basic_symbol_iterator symbol_begin() const override;
-  basic_symbol_iterator symbol_end() const override;
+  GlobalValue *getSymbolGV(DataRefImpl Symb);
+  const GlobalValue *getSymbolGV(DataRefImpl Symb) const {
+    return const_cast<IRObjectFile *>(this)->getSymbolGV(Symb);
+  }
+  basic_symbol_iterator symbol_begin_impl() const override;
+  basic_symbol_iterator symbol_end_impl() const override;
 
-  StringRef getTargetTriple() const;
+  const Module &getModule() const {
+    return const_cast<IRObjectFile*>(this)->getModule();
+  }
+  Module &getModule() {
+    return *M;
+  }
+  std::unique_ptr<Module> takeModule();
 
   static inline bool classof(const Binary *v) {
     return v->isIR();
@@ -58,8 +65,8 @@ public:
   static ErrorOr<MemoryBufferRef>
   findBitcodeInMemBuffer(MemoryBufferRef Object);
 
-  static Expected<std::unique_ptr<IRObjectFile>> create(MemoryBufferRef Object,
-                                                        LLVMContext &Context);
+  static ErrorOr<std::unique_ptr<IRObjectFile>> create(MemoryBufferRef Object,
+                                                       LLVMContext &Context);
 };
 }
 }

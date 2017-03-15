@@ -1,57 +1,49 @@
-// RUN: llvm-mc -filetype=obj -triple x86_64-pc-linux-gnu %s -o - | llvm-readobj -s -t -sd | FileCheck %s
+// RUN: llvm-mc -filetype=obj -triple x86_64-pc-linux-gnu %s -o - | llvm-readobj -s -t | FileCheck %s
 
-// Test that we produce the group sections and that they are before the members
+// Test that we produce the group sections and that they are at the beginning
+// of the file.
 
 // CHECK:        Section {
-// CHECK:          Index: 3
+// CHECK:          Index: 1
 // CHECK-NEXT:     Name: .group
 // CHECK-NEXT:     Type: SHT_GROUP
 // CHECK-NEXT:     Flags [
 // CHECK-NEXT:     ]
 // CHECK-NEXT:     Address: 0x0
-// CHECK-NEXT:     Offset:
+// CHECK-NEXT:     Offset: 0x40
 // CHECK-NEXT:     Size: 12
-// CHECK-NEXT:     Link:
+// CHECK-NEXT:     Link: 13
 // CHECK-NEXT:     Info: 1
 // CHECK-NEXT:     AddressAlignment: 4
 // CHECK-NEXT:     EntrySize: 4
-// CHECK-NEXT:     SectionData (
-// CHECK-NEXT:       0000:    01000000 04000000 05000000
-// CHECK-NEXT:     )
 // CHECK-NEXT:   }
-// CHECK:        Section {
-// CHECK:          Index: 6
+// CHECK-NEXT:   Section {
+// CHECK-NEXT:     Index: 2
 // CHECK-NEXT:     Name: .group
 // CHECK-NEXT:     Type: SHT_GROUP
 // CHECK-NEXT:     Flags [
 // CHECK-NEXT:     ]
 // CHECK-NEXT:     Address: 0x0
-// CHECK-NEXT:     Offset:
+// CHECK-NEXT:     Offset: 0x4C
 // CHECK-NEXT:     Size: 8
-// CHECK-NEXT:     Link:
+// CHECK-NEXT:     Link: 13
 // CHECK-NEXT:     Info: 2
 // CHECK-NEXT:     AddressAlignment: 4
 // CHECK-NEXT:     EntrySize: 4
-// CHECK-NEXT:     SectionData (
-// CHECK-NEXT:       0000:    01000000 07000000
-// CHECK-NEXT:     )
 // CHECK-NEXT:   }
-// CHECK:        Section {
-// CHECK:          Index: 8
+// CHECK-NEXT:   Section {
+// CHECK-NEXT:     Index: 3
 // CHECK-NEXT:     Name: .group
 // CHECK-NEXT:     Type: SHT_GROUP
 // CHECK-NEXT:     Flags [
 // CHECK-NEXT:     ]
 // CHECK-NEXT:     Address: 0x0
-// CHECK-NEXT:     Offset:
+// CHECK-NEXT:     Offset: 0x54
 // CHECK-NEXT:     Size: 12
-// CHECK-NEXT:     Link:
-// CHECK-NEXT:     Info: 3
+// CHECK-NEXT:     Link: 13
+// CHECK-NEXT:     Info: 10
 // CHECK-NEXT:     AddressAlignment: 4
 // CHECK-NEXT:     EntrySize: 4
-// CHECK-NEXT:     SectionData (
-// CHECK-NEXT:       0000:    01000000 09000000 0A000000
-// CHECK-NEXT:     )
 // CHECK-NEXT:   }
 
 // Test that g1 and g2 are local, but g3 is an undefined global.
@@ -63,7 +55,7 @@
 // CHECK-NEXT:     Binding: Local
 // CHECK-NEXT:     Type: None
 // CHECK-NEXT:     Other: 0
-// CHECK-NEXT:     Section: .foo
+// CHECK-NEXT:     Section: .foo (0x7)
 // CHECK-NEXT:   }
 // CHECK-NEXT:   Symbol {
 // CHECK-NEXT:     Name: g2
@@ -72,7 +64,7 @@
 // CHECK-NEXT:     Binding: Local
 // CHECK-NEXT:     Type: None
 // CHECK-NEXT:     Other: 0
-// CHECK-NEXT:     Section: .group
+// CHECK-NEXT:     Section: .group (0x2)
 // CHECK-NEXT:   }
 
 // CHECK:        Symbol {

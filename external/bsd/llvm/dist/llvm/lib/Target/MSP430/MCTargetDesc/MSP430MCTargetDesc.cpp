@@ -14,6 +14,7 @@
 #include "MSP430MCTargetDesc.h"
 #include "InstPrinter/MSP430InstPrinter.h"
 #include "MSP430MCAsmInfo.h"
+#include "llvm/MC/MCCodeGenInfo.h"
 #include "llvm/MC/MCInstrInfo.h"
 #include "llvm/MC/MCRegisterInfo.h"
 #include "llvm/MC/MCSubtargetInfo.h"
@@ -36,22 +37,33 @@ static MCInstrInfo *createMSP430MCInstrInfo() {
   return X;
 }
 
-static MCRegisterInfo *createMSP430MCRegisterInfo(const Triple &TT) {
+static MCRegisterInfo *createMSP430MCRegisterInfo(StringRef TT) {
   MCRegisterInfo *X = new MCRegisterInfo();
   InitMSP430MCRegisterInfo(X, MSP430::PC);
   return X;
 }
 
-static MCSubtargetInfo *
-createMSP430MCSubtargetInfo(const Triple &TT, StringRef CPU, StringRef FS) {
-  return createMSP430MCSubtargetInfoImpl(TT, CPU, FS);
+static MCSubtargetInfo *createMSP430MCSubtargetInfo(StringRef TT, StringRef CPU,
+                                                    StringRef FS) {
+  MCSubtargetInfo *X = new MCSubtargetInfo();
+  InitMSP430MCSubtargetInfo(X, TT, CPU, FS);
+  return X;
 }
 
-static MCInstPrinter *createMSP430MCInstPrinter(const Triple &T,
+static MCCodeGenInfo *createMSP430MCCodeGenInfo(StringRef TT, Reloc::Model RM,
+                                                CodeModel::Model CM,
+                                                CodeGenOpt::Level OL) {
+  MCCodeGenInfo *X = new MCCodeGenInfo();
+  X->InitMCCodeGenInfo(RM, CM, OL);
+  return X;
+}
+
+static MCInstPrinter *createMSP430MCInstPrinter(const Target &T,
                                                 unsigned SyntaxVariant,
                                                 const MCAsmInfo &MAI,
                                                 const MCInstrInfo &MII,
-                                                const MCRegisterInfo &MRI) {
+                                                const MCRegisterInfo &MRI,
+                                                const MCSubtargetInfo &STI) {
   if (SyntaxVariant == 0)
     return new MSP430InstPrinter(MAI, MII, MRI);
   return nullptr;
@@ -59,21 +71,24 @@ static MCInstPrinter *createMSP430MCInstPrinter(const Triple &T,
 
 extern "C" void LLVMInitializeMSP430TargetMC() {
   // Register the MC asm info.
-  RegisterMCAsmInfo<MSP430MCAsmInfo> X(getTheMSP430Target());
+  RegisterMCAsmInfo<MSP430MCAsmInfo> X(TheMSP430Target);
+
+  // Register the MC codegen info.
+  TargetRegistry::RegisterMCCodeGenInfo(TheMSP430Target,
+                                        createMSP430MCCodeGenInfo);
 
   // Register the MC instruction info.
-  TargetRegistry::RegisterMCInstrInfo(getTheMSP430Target(),
-                                      createMSP430MCInstrInfo);
+  TargetRegistry::RegisterMCInstrInfo(TheMSP430Target, createMSP430MCInstrInfo);
 
   // Register the MC register info.
-  TargetRegistry::RegisterMCRegInfo(getTheMSP430Target(),
+  TargetRegistry::RegisterMCRegInfo(TheMSP430Target,
                                     createMSP430MCRegisterInfo);
 
   // Register the MC subtarget info.
-  TargetRegistry::RegisterMCSubtargetInfo(getTheMSP430Target(),
+  TargetRegistry::RegisterMCSubtargetInfo(TheMSP430Target,
                                           createMSP430MCSubtargetInfo);
 
   // Register the MCInstPrinter.
-  TargetRegistry::RegisterMCInstPrinter(getTheMSP430Target(),
+  TargetRegistry::RegisterMCInstPrinter(TheMSP430Target,
                                         createMSP430MCInstPrinter);
 }

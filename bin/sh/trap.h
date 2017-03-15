@@ -1,4 +1,4 @@
-/*	$NetBSD: trap.h,v 1.22 2015/08/22 12:12:47 christos Exp $	*/
+/*	$NetBSD: trap.h,v 1.20.12.1 2015/11/04 17:58:38 riz Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993

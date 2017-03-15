@@ -1,4 +1,4 @@
-/*	$OpenBSD: sshbuf.c,v 1.8 2016/11/25 23:22:04 djm Exp $	*/
+/*	$OpenBSD: sshbuf.c,v 1.3 2015/01/20 23:14:00 deraadt Exp $	*/
 /*
  * Copyright (c) 2011 Damien Miller
  *
@@ -15,8 +15,9 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 #include "includes.h"
-__RCSID("$NetBSD: sshbuf.c,v 1.6 2016/12/25 00:07:47 christos Exp $");
+__RCSID("$NetBSD: sshbuf.c,v 1.3.2.2 2015/04/30 06:07:31 riz Exp $");
 
+#include <sys/param.h>	/* roundup */
 #include <sys/types.h>
 #include <signal.h>
 #include <stdlib.h>
@@ -26,7 +27,6 @@ __RCSID("$NetBSD: sshbuf.c,v 1.6 2016/12/25 00:07:47 christos Exp $");
 #include "ssherr.h"
 #define SSHBUF_INTERNAL
 #include "sshbuf.h"
-#include "misc.h"
 
 static inline int
 sshbuf_check_sanity(const struct sshbuf *buf)
@@ -134,7 +134,7 @@ sshbuf_fromb(struct sshbuf *buf)
 void
 sshbuf_init(struct sshbuf *ret)
 {
-	explicit_bzero(ret, sizeof(*ret));
+	bzero(ret, sizeof(*ret));
 	ret->alloc = SSHBUF_SIZE_INIT;
 	ret->max_size = SSHBUF_SIZE_MAX;
 	ret->readonly = 0;
@@ -163,8 +163,10 @@ sshbuf_free(struct sshbuf *buf)
 	 * If we are a child, the free our parent to decrement its reference
 	 * count and possibly free it.
 	 */
-	sshbuf_free(buf->parent);
-	buf->parent = NULL;
+	if (buf->parent != NULL) {
+		sshbuf_free(buf->parent);
+		buf->parent = NULL;
+	}
 	/*
 	 * If we are a parent with still-extant children, then don't free just
 	 * yet. The last child's call to sshbuf_free should decrement our
@@ -175,10 +177,10 @@ sshbuf_free(struct sshbuf *buf)
 		return;
 	dont_free = buf->dont_free;
 	if (!buf->readonly) {
-		explicit_bzero(buf->d, buf->alloc);
+		bzero(buf->d, buf->alloc);
 		free(buf->d);
 	}
-	explicit_bzero(buf, sizeof(*buf));
+	bzero(buf, sizeof(*buf));
 	if (!dont_free)
 		free(buf);
 }
@@ -194,7 +196,7 @@ sshbuf_reset(struct sshbuf *buf)
 		return;
 	}
 	if (sshbuf_check_sanity(buf) == 0)
-		explicit_bzero(buf->d, buf->alloc);
+		bzero(buf->d, buf->alloc);
 	buf->off = buf->size = 0;
 	if (buf->alloc != SSHBUF_SIZE_INIT) {
 		if ((d = realloc(buf->d, SSHBUF_SIZE_INIT)) != NULL) {
@@ -250,10 +252,10 @@ sshbuf_set_max_size(struct sshbuf *buf, size_t max_size)
 		if (buf->size < SSHBUF_SIZE_INIT)
 			rlen = SSHBUF_SIZE_INIT;
 		else
-			rlen = ROUNDUP(buf->size, SSHBUF_SIZE_INC);
+			rlen = roundup(buf->size, SSHBUF_SIZE_INC);
 		if (rlen > max_size)
 			rlen = max_size;
-		explicit_bzero(buf->d + buf->size, buf->alloc - buf->size);
+		bzero(buf->d + buf->size, buf->alloc - buf->size);
 		SSHBUF_DBG(("new alloc = %zu", rlen));
 		if ((dp = realloc(buf->d, rlen)) == NULL)
 			return SSH_ERR_ALLOC_FAIL;
@@ -316,51 +318,9 @@ sshbuf_check_reserve(const struct sshbuf *buf, size_t len)
 }
 
 int
-sshbuf_allocate(struct sshbuf *buf, size_t len)
-{
-	size_t rlen, need;
-	u_char *dp;
-	int r;
-
-	SSHBUF_DBG(("allocate buf = %p len = %zu", buf, len));
-	if ((r = sshbuf_check_reserve(buf, len)) != 0)
-		return r;
-	/*
-	 * If the requested allocation appended would push us past max_size
-	 * then pack the buffer, zeroing buf->off.
-	 */
-	sshbuf_maybe_pack(buf, buf->size + len > buf->max_size);
-	SSHBUF_TELL("allocate");
-	if (len + buf->size <= buf->alloc)
-		return 0; /* already have it. */
-
-	/*
-	 * Prefer to alloc in SSHBUF_SIZE_INC units, but
-	 * allocate less if doing so would overflow max_size.
-	 */
-	need = len + buf->size - buf->alloc;
-	rlen = ROUNDUP(buf->alloc + need, SSHBUF_SIZE_INC);
-	SSHBUF_DBG(("need %zu initial rlen %zu", need, rlen));
-	if (rlen > buf->max_size)
-		rlen = buf->alloc + need;
-	SSHBUF_DBG(("adjusted rlen %zu", rlen));
-	if ((dp = realloc(buf->d, rlen)) == NULL) {
-		SSHBUF_DBG(("realloc fail"));
-		return SSH_ERR_ALLOC_FAIL;
-	}
-	buf->alloc = rlen;
-	buf->cd = buf->d = dp;
-	if ((r = sshbuf_check_reserve(buf, len)) < 0) {
-		/* shouldn't fail */
-		return r;
-	}
-	SSHBUF_TELL("done");
-	return 0;
-}
-
-int
 sshbuf_reserve(struct sshbuf *buf, size_t len, u_char **dpp)
 {
+	size_t rlen, need;
 	u_char *dp;
 	int r;
 
@@ -368,11 +328,43 @@ sshbuf_reserve(struct sshbuf *buf, size_t len, u_char **dpp)
 		*dpp = NULL;
 
 	SSHBUF_DBG(("reserve buf = %p len = %zu", buf, len));
-	if ((r = sshbuf_allocate(buf, len)) != 0)
+	if ((r = sshbuf_check_reserve(buf, len)) != 0)
 		return r;
-
+	/*
+	 * If the requested allocation appended would push us past max_size
+	 * then pack the buffer, zeroing buf->off.
+	 */
+	sshbuf_maybe_pack(buf, buf->size + len > buf->max_size);
+	SSHBUF_TELL("reserve");
+	if (len + buf->size > buf->alloc) {
+		/*
+		 * Prefer to alloc in SSHBUF_SIZE_INC units, but
+		 * allocate less if doing so would overflow max_size.
+		 */
+		need = len + buf->size - buf->alloc;
+		rlen = roundup(buf->alloc + need, SSHBUF_SIZE_INC);
+		SSHBUF_DBG(("need %zu initial rlen %zu", need, rlen));
+		if (rlen > buf->max_size)
+			rlen = buf->alloc + need;
+		SSHBUF_DBG(("adjusted rlen %zu", rlen));
+		if ((dp = realloc(buf->d, rlen)) == NULL) {
+			SSHBUF_DBG(("realloc fail"));
+			if (dpp != NULL)
+				*dpp = NULL;
+			return SSH_ERR_ALLOC_FAIL;
+		}
+		buf->alloc = rlen;
+		buf->cd = buf->d = dp;
+		if ((r = sshbuf_check_reserve(buf, len)) < 0) {
+			/* shouldn't fail */
+			if (dpp != NULL)
+				*dpp = NULL;
+			return r;
+		}
+	}
 	dp = buf->d + buf->size;
 	buf->size += len;
+	SSHBUF_TELL("done");
 	if (dpp != NULL)
 		*dpp = dp;
 	return 0;

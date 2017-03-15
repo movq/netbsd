@@ -1,4 +1,4 @@
-/*	$NetBSD: kern_stub.c,v 1.43 2016/11/02 00:11:59 pgoyette Exp $	*/
+/*	$NetBSD: kern_stub.c,v 1.38 2013/12/09 18:06:27 pooka Exp $	*/
 
 /*-
  * Copyright (c) 2007, 2008 The NetBSD Foundation, Inc.
@@ -62,11 +62,10 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: kern_stub.c,v 1.43 2016/11/02 00:11:59 pgoyette Exp $");
+__KERNEL_RCSID(0, "$NetBSD: kern_stub.c,v 1.38 2013/12/09 18:06:27 pooka Exp $");
 
-#ifdef _KERNEL_OPT
+#include "opt_ptrace.h"
 #include "opt_ktrace.h"
-#endif
 
 #include <sys/param.h>
 #include <sys/kernel.h>
@@ -84,6 +83,14 @@ __KERNEL_RCSID(0, "$NetBSD: kern_stub.c,v 1.43 2016/11/02 00:11:59 pgoyette Exp 
 bool default_bus_space_is_equal(bus_space_tag_t, bus_space_tag_t);
 bool default_bus_space_handle_is_equal(bus_space_tag_t, bus_space_handle_t,
     bus_space_handle_t);
+
+/*
+ * Nonexistent system call-- signal process (may want to handle it).  Flag
+ * error in case process won't see signal immediately (blocked or ignored).
+ */
+#ifndef PTRACE
+__strong_alias(sys_ptrace,sys_nosys);
+#endif	/* PTRACE */
 
 /*
  * ktrace stubs.  ktruser() goes to enosys as we want to fail the syscall,
@@ -139,15 +146,6 @@ __weak_alias(userconf_init, voidop);
 __weak_alias(userconf_prompt, voidop);
 
 __weak_alias(kobj_renamespace, nullop);
-
-__weak_alias(interrupt_get_count, nullop);
-__weak_alias(interrupt_get_assigned, voidop);
-__weak_alias(interrupt_get_available, voidop);
-__weak_alias(interrupt_get_devname, voidop);
-__weak_alias(interrupt_construct_intrids, nullret);
-__weak_alias(interrupt_destruct_intrids, voidop);
-__weak_alias(interrupt_distribute, eopnotsupp);
-__weak_alias(interrupt_distribute_handler, eopnotsupp);
 
 /*
  * Scheduler activations system calls.  These need to remain until libc's
@@ -275,16 +273,6 @@ nullop(void *v)
 {
 
 	return (0);
-}
-
-/*
- * Generic null operation, always returns null.
- */
-void *
-nullret(void)
-{
-
-	return (NULL);
 }
 
 bool

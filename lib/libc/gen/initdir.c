@@ -1,4 +1,4 @@
-/*	$NetBSD: initdir.c,v 1.4 2016/12/16 04:45:04 mrg Exp $	*/
+/*	$NetBSD: initdir.c,v 1.3 2012/03/13 21:13:36 christos Exp $	*/
 
 /*
  * Copyright (c) 1983, 1993
@@ -31,7 +31,7 @@
 
 #include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-__RCSID("$NetBSD: initdir.c,v 1.4 2016/12/16 04:45:04 mrg Exp $");
+__RCSID("$NetBSD: initdir.c,v 1.3 2012/03/13 21:13:36 christos Exp $");
 #endif /* LIBC_SCCS and not lint */
 
 #include "namespace.h"
@@ -201,8 +201,7 @@ retry:
 					 * This sort must be stable.
 					 */
 					mergesort(dpv, (size_t)n, sizeof(*dpv),
-					    (int (*)(const void *,
-						     const void *))alphasort);
+					    alphasort);
 
 					dpv[n] = NULL;
 					xp = NULL;

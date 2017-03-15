@@ -5,7 +5,7 @@
  *****************************************************************************/
 
 /*
- * Copyright (C) 2000 - 2017, Intel Corp.
+ * Copyright (C) 2000 - 2013, Intel Corp.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -44,9 +44,7 @@
 #ifndef __ACHAIKU_H__
 #define __ACHAIKU_H__
 
-#define ACPI_USE_STANDARD_HEADERS
-#define ACPI_USE_SYSTEM_CLIBRARY
-
+#include "acgcc.h"
 #include <KernelExport.h>
 
 struct mutex;
@@ -54,13 +52,15 @@ struct mutex;
 
 /* Host-dependent types and defines for user- and kernel-space ACPICA */
 
+#define ACPI_USE_SYSTEM_CLIBRARY
+#define ACPI_USE_STANDARD_HEADERS
+
 #define ACPI_MUTEX_TYPE             ACPI_OSL_MUTEX
 #define ACPI_MUTEX                  struct mutex *
 
 #define ACPI_USE_NATIVE_DIVIDE
 
-/* #define ACPI_THREAD_ID               thread_id */
-
+// #define ACPI_THREAD_ID               thread_id
 #define ACPI_SEMAPHORE              sem_id
 #define ACPI_SPINLOCK               spinlock *
 #define ACPI_CPU_FLAGS              cpu_status

@@ -1,4 +1,4 @@
-/*	$NetBSD: ikphy.c,v 1.12 2016/11/02 07:01:54 msaitoh Exp $	*/
+/*	$NetBSD: ikphy.c,v 1.10.2.1 2016/12/12 07:04:31 snj Exp $	*/
 
 /*******************************************************************************
 Copyright (c) 2001-2005, Intel Corporation 
@@ -59,7 +59,7 @@ POSSIBILITY OF SUCH DAMAGE.
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ikphy.c,v 1.12 2016/11/02 07:01:54 msaitoh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ikphy.c,v 1.10.2.1 2016/12/12 07:04:31 snj Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -135,7 +135,8 @@ ikphyattach(device_t parent, device_t self, void *aux)
 
 	PHY_RESET(sc);
 
-	sc->mii_capabilities = PHY_READ(sc, MII_BMSR) & ma->mii_capmask;
+	sc->mii_capabilities =
+	    PHY_READ(sc, MII_BMSR) & ma->mii_capmask;
 	if (sc->mii_capabilities & BMSR_EXTSTAT)
 	    sc->mii_extcapabilities = PHY_READ(sc, MII_EXTSR);
 	aprint_normal_dev(self, "");

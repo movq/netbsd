@@ -1,4 +1,4 @@
-/*	$NetBSD: isakmp_frag.c,v 1.6 2017/01/24 19:23:31 christos Exp $	*/
+/*	$NetBSD: isakmp_frag.c,v 1.5 2009/04/22 11:24:20 tteras Exp $	*/
 
 /* Id: isakmp_frag.c,v 1.4 2004/11/13 17:31:36 manubsd Exp */
 
@@ -173,38 +173,6 @@ vendorid_frag_cap(gen)
 	return ntohl(hp[MD5_DIGEST_LENGTH / sizeof(*hp)]);
 }
 
-static int 
-isakmp_frag_insert(struct ph1handle *iph1, struct isakmp_frag_item *item)
-{
-	struct isakmp_frag_item *pitem = NULL;
-	struct isakmp_frag_item *citem = iph1->frag_chain;
-
-	if (iph1->frag_chain == NULL) {
-		iph1->frag_chain = item;
-		return 0;
-	}
-
-	do {
-		if (citem->frag_num == item->frag_num)
-			return -1;
-
-		if (citem->frag_num > item->frag_num) {
-			if (pitem)
-				pitem->frag_next = item;
-			item->frag_next = citem;
-			break;
-		}
-
-		pitem = citem;
-		citem = citem->frag_next;
-	} while (citem != NULL);
-
-	/* we reached the end of the list, insert */
-	if (citem == NULL)
-	      pitem->frag_next = item;
-	return 0;
-}
-
 int 
 isakmp_frag_extract(iph1, msg)
 	struct ph1handle *iph1;
@@ -256,43 +224,39 @@ isakmp_frag_extract(iph1, msg)
 	item->frag_next = NULL;
 	item->frag_packet = buf;
 
-	/* Check for the last frag before inserting the new item in the chain */
-	if (item->frag_last) {
-		/* if we have the last fragment, indices must match */
-		if (iph1->frag_last_index != 0 &&
-		    item->frag_last != iph1->frag_last_index) {
-			plog(LLV_ERROR, LOCATION, NULL,
-			     "Repeated last fragment index mismatch\n");
-			racoon_free(item);
-			vfree(buf);
-			return -1;
+	/* Look for the last frag while inserting the new item in the chain */
+	if (item->frag_last)
+		last_frag = item->frag_num;
+
+	if (iph1->frag_chain == NULL) {
+		iph1->frag_chain = item;
+	} else {
+		struct isakmp_frag_item *current;
+
+		current = iph1->frag_chain;
+		while (current->frag_next) {
+			if (current->frag_last)
+				last_frag = item->frag_num;
+			current = current->frag_next;
 		}
-
-		last_frag = iph1->frag_last_index = item->frag_num;
+		current->frag_next = item;
 	}
 
-	/* insert fragment into chain */
-	if (isakmp_frag_insert(iph1, item) == -1) {
-		plog(LLV_ERROR, LOCATION, NULL,
-		    "Repeated fragment index mismatch\n");
-		racoon_free(item);
-		vfree(buf);
-		return -1;
-	}
-
-	/* If we saw the last frag, check if the chain is complete
-	 * we have a sorted list now, so just walk through */
+	/* If we saw the last frag, check if the chain is complete */
 	if (last_frag != 0) {
-		item = iph1->frag_chain;
 		for (i = 1; i <= last_frag; i++) {
-			if (item->frag_num != i)
-				break;
-			item = item->frag_next;
+			item = iph1->frag_chain;
+			do {
+				if (item->frag_num == i)
+					break;
+				item = item->frag_next;
+			} while (item != NULL);
+
 			if (item == NULL) /* Not found */
 				break;
 		}
 
-		if (i > last_frag) /* It is complete */
+		if (item != NULL) /* It is complete */
 			return 1;
 	}
 		
@@ -327,9 +291,15 @@ isakmp_frag_reassembly(iph1)
 	}
 	data = buf->v;
 
-	item = iph1->frag_chain;
 	for (i = 1; i <= frag_count; i++) {
-		if (item->frag_num != i) {
+		item = iph1->frag_chain;
+		do {
+			if (item->frag_num == i)
+				break;
+			item = item->frag_next;
+		} while (item != NULL);
+
+		if (item == NULL) {
 			plog(LLV_ERROR, LOCATION, NULL, 
 			    "Missing fragment #%d\n", i);
 			vfree(buf);
@@ -338,7 +308,6 @@ isakmp_frag_reassembly(iph1)
 		}
 		memcpy(data, item->frag_packet->v, item->frag_packet->l);
 		data += item->frag_packet->l;
-		item = item->frag_next;
 	}
 
 out:

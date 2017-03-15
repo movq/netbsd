@@ -7,8 +7,8 @@
 define void @test0() {
   ret void
 
-; CHECK:          .p2align  4
-; CHECK-NOT:      .p2align
+; CHECK:          .align  4
+; CHECK-NOT:      .align
 ; CHECK-LABEL:    test0:
 
 }
@@ -40,21 +40,22 @@ default:
 
 ; CHECK-LABEL:       test1:
 
-; CHECK:             .p2align  4
+; CHECK:             .align  4
 ; CHECK-NEXT:    ${{BB[0-9]+_[0-9]+}}:
 ; CHECK-NEXT:        jr      $ra
 ; CHECK-NEXT:        addiu   $2, $zero, 111
-; CHECK-NEXT:    ${{BB[0-9]+_[0-9]+}}:
-; CHECK-NEXT:        jr      $ra
-; CHECK-NEXT:        addiu   $2, $zero, 555
-; CHECK-NEXT:        .p2align  4
+; CHECK-NEXT:        .align  4
 ; CHECK-NEXT:    ${{BB[0-9]+_[0-9]+}}:
 ; CHECK-NEXT:        jr      $ra
 ; CHECK-NEXT:        addiu   $2, $zero, 222
-; CHECK-NEXT:        .p2align  4
+; CHECK-NEXT:        .align  4
 ; CHECK-NEXT:    ${{BB[0-9]+_[0-9]+}}:
 ; CHECK-NEXT:        jr      $ra
 ; CHECK-NEXT:        addiu   $2, $zero, 333
+; CHECK-NEXT:        .align  4
+; CHECK-NEXT:    ${{BB[0-9]+_[0-9]+}}:
+; CHECK-NEXT:        jr      $ra
+; CHECK-NEXT:        addiu   $2, $zero, 444
 
 }
 
@@ -66,8 +67,8 @@ default:
 
 define i32 @test2(i32 %i) {
 entry:
-  %elementptr = getelementptr inbounds [2 x i8*], [2 x i8*]* @bb_array, i32 0, i32 %i
-  %0 = load i8*, i8** %elementptr, align 4
+  %elementptr = getelementptr inbounds [2 x i8*]* @bb_array, i32 0, i32 %i
+  %0 = load i8** %elementptr, align 4
   indirectbr i8* %0, [label %bb1, label %bb2]
 
 bb1:
@@ -81,12 +82,12 @@ bb2:
 ; Note that there are two consecutive labels - one temporary and one for
 ; basic block.
 
-; CHECK:             .p2align  4
+; CHECK:             .align  4
 ; CHECK-NEXT:    ${{[a-zA-Z0-9]+}}:
 ; CHECK-NEXT:    ${{BB[0-9]+_[0-9]+}}:
 ; CHECK-NEXT:        jr      $ra
 ; CHECK-NEXT:        addiu   $2, $zero, 111
-; CHECK-NEXT:        .p2align  4
+; CHECK-NEXT:        .align  4
 ; CHECK-NEXT:    ${{[a-zA-Z0-9]+}}:
 ; CHECK-NEXT:    ${{BB[0-9]+_[0-9]+}}:
 ; CHECK-NEXT:        jr      $ra

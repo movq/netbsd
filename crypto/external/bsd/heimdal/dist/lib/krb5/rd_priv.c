@@ -1,4 +1,4 @@
-/*	$NetBSD: rd_priv.c,v 1.2 2017/01/28 21:31:49 christos Exp $	*/
+/*	$NetBSD: rd_priv.c,v 1.1.1.1 2011/04/13 18:15:37 elric Exp $	*/
 
 /*
  * Copyright (c) 1997-2007 Kungliga Tekniska Högskolan
@@ -138,7 +138,7 @@ krb5_rd_priv(krb5_context context,
 	krb5_timeofday (context, &sec);
 	if (part.timestamp == NULL ||
 	    part.usec      == NULL ||
-	    labs(*part.timestamp - sec) > context->max_skew) {
+	    abs(*part.timestamp - sec) > context->max_skew) {
 	    krb5_clear_error_message (context);
 	    ret = KRB5KRB_AP_ERR_SKEW;
 	    goto failure_part;

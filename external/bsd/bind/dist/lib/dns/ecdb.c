@@ -1,4 +1,4 @@
-/*	$NetBSD: ecdb.c,v 1.9 2015/07/08 17:28:58 christos Exp $	*/
+/*	$NetBSD: ecdb.c,v 1.7.2.1 2015/07/17 04:31:33 snj Exp $	*/
 
 /*
  * Copyright (C) 2009-2014  Internet Systems Consortium, Inc. ("ISC")

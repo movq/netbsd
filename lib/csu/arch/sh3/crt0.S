@@ -1,4 +1,4 @@
-/* $NetBSD: crt0.S,v 1.6 2016/08/29 21:27:03 uwe Exp $ */
+/* $NetBSD: crt0.S,v 1.4 2012/01/31 20:17:57 uwe Exp $ */
 
 /*
  * Copyright (c) 1998 Christos Zoulas
@@ -37,7 +37,7 @@
 
 #include <machine/asm.h>
 
-RCSID("$NetBSD: crt0.S,v 1.6 2016/08/29 21:27:03 uwe Exp $")
+RCSID("$NetBSD: crt0.S,v 1.4 2012/01/31 20:17:57 uwe Exp $")
 
 STRONG_ALIAS(_start,__start)
 
@@ -52,9 +52,8 @@ _ENTRY(__start)
 	mov.l	.L___start, r0
 	mov	r7, r4		! void (*cleanup)(void)
 	mov	r8, r5		! const Obj_Entry *obj
-1:	JUMP	r0
+	jmp	@r0
 	 mov	r9, r6		! struct ps_strings *ps_strings
 
 	.p2align 2
-.L___start:
-	CALL_DATUM_LOCAL(___start, 1b)
+.L___start:	.long	_C_LABEL(___start)

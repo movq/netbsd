@@ -1,4 +1,4 @@
-/*	$NetBSD: union_vnops.c,v 1.64 2017/03/06 10:08:49 hannken Exp $	*/
+/*	$NetBSD: union_vnops.c,v 1.62 2014/07/25 08:20:52 dholland Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993, 1994, 1995
@@ -72,7 +72,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: union_vnops.c,v 1.64 2017/03/06 10:08:49 hannken Exp $");
+__KERNEL_RCSID(0, "$NetBSD: union_vnops.c,v 1.62 2014/07/25 08:20:52 dholland Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -616,11 +616,6 @@ union_open(void *v)
 			error = union_copyup(un, (mode&O_TRUNC) == 0, cred, l);
 			if (error == 0)
 				error = VOP_OPEN(un->un_uppervp, mode, cred);
-			if (error == 0) {
-				mutex_enter(un->un_uppervp->v_interlock);
-				un->un_uppervp->v_writecount++;
-				mutex_exit(un->un_uppervp->v_interlock);
-			}
 			return (error);
 		}
 
@@ -645,11 +640,6 @@ union_open(void *v)
 		return ENXIO;
 
 	error = VOP_OPEN(tvp, mode, cred);
-	if (error == 0 && (ap->a_mode & FWRITE)) {
-		mutex_enter(tvp->v_interlock);
-		tvp->v_writecount++;
-		mutex_exit(tvp->v_interlock);
-	}
 
 	return (error);
 }
@@ -679,12 +669,6 @@ union_close(void *v)
 
 	KASSERT(vp != NULLVP);
 	ap->a_vp = vp;
-	if ((ap->a_fflag & FWRITE)) {
-		KASSERT(vp == un->un_uppervp);
-		mutex_enter(vp->v_interlock);
-		vp->v_writecount--;
-		mutex_exit(vp->v_interlock);
-	}
 	if (do_lock)
 		vn_lock(vp, LK_EXCLUSIVE | LK_RETRY);
 	error = VCALL(vp, VOFFSET(vop_close), ap);
@@ -1064,13 +1048,8 @@ union_revoke(void *v)
 	} */ *ap = v;
 	struct vnode *vp = ap->a_vp;
 
-	if (UPPERVP(vp)) {
-		mutex_enter(UPPERVP(vp)->v_interlock);
-		KASSERT(vp->v_interlock == UPPERVP(vp)->v_interlock);
-		UPPERVP(vp)->v_writecount -= vp->v_writecount;
-		mutex_exit(UPPERVP(vp)->v_interlock);
+	if (UPPERVP(vp))
 		VOP_REVOKE(UPPERVP(vp), ap->a_flags);
-	}
 	if (LOWERVP(vp))
 		VOP_REVOKE(LOWERVP(vp), ap->a_flags);
 	vgone(vp);	/* XXXAD?? */
@@ -1197,7 +1176,7 @@ union_remove(void *v)
 int
 union_link(void *v)
 {
-	struct vop_link_v2_args /* {
+	struct vop_link_args /* {
 		struct vnode *a_dvp;
 		struct vnode *a_vp;
 		struct componentname *a_cnp;
@@ -1254,6 +1233,7 @@ union_link(void *v)
 					 */
 					error = EEXIST;
 					VOP_UNLOCK(ap->a_vp);
+					vput(ap->a_dvp);
 					vput(vp);
 					return (error);
 				}
@@ -1267,10 +1247,20 @@ union_link(void *v)
 	if (dvp == NULLVP)
 		error = EROFS;
 
-	if (error)
+	if (error) {
+		vput(ap->a_dvp);
 		return (error);
+	}
 
-	return VOP_LINK(dvp, vp, cnp);
+	/*
+	 * Account for VOP_LINK to vrele dvp.
+	 * Note: VOP_LINK will unlock dvp.
+	 */
+	vref(dvp);
+	error = VOP_LINK(dvp, vp, cnp);
+	vrele(ap->a_dvp);
+
+	return error;
 }
 
 int

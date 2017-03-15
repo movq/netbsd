@@ -1,4 +1,4 @@
-/*	$NetBSD: config_reg.c,v 1.2 2017/01/28 21:31:49 christos Exp $	*/
+/*	$NetBSD: config_reg.c,v 1.1.1.2 2014/04/24 12:45:49 pettai Exp $	*/
 
 /***********************************************************************
  * Copyright (c) 2010, Secure Endpoints Inc.
@@ -88,7 +88,7 @@
  * krb5_set_error_message().
  *
  */
-KRB5_LIB_FUNCTION int KRB5_LIB_CALL
+int
 _krb5_store_string_to_reg_value(krb5_context context,
                                 HKEY key, const char * valuename,
                                 DWORD type, const char *data, DWORD cb_data,
@@ -158,6 +158,7 @@ _krb5_store_string_to_reg_value(krb5_context context,
     case REG_MULTI_SZ:
         if (separator && *separator)
         {
+            int i;
             char *cp;
 
             if (data != static_buffer)
@@ -191,7 +192,7 @@ _krb5_store_string_to_reg_value(krb5_context context,
                                        GetLastError());
         }
 
-	rcode = RegSetValueEx(key, valuename, 0, type, (BYTE *)&dwData, sizeof(DWORD));
+        rcode = RegSetValueEx(key, valuename, 0, type, dwData, sizeof(DWORD));
         if (rcode)
         {
             if (context)
@@ -214,7 +215,7 @@ _krb5_store_string_to_reg_value(krb5_context context,
  *
  * @see _krb5_parse_reg_value_as_multi_string()
  */
-KRB5_LIB_FUNCTION char * KRB5_LIB_CALL
+char *
 _krb5_parse_reg_value_as_string(krb5_context context,
                                 HKEY key, const char * valuename,
                                 DWORD type, DWORD cb_data)
@@ -253,7 +254,7 @@ _krb5_parse_reg_value_as_string(krb5_context context,
  * If NULL is returned, an error message has been set using
  * krb5_set_error_message().
  */
-KRB5_LIB_FUNCTION char * KRB5_LIB_CALL
+char *
 _krb5_parse_reg_value_as_multi_string(krb5_context context,
                                       HKEY key, const char * valuename,
                                       DWORD type, DWORD cb_data, char *separator)
@@ -580,8 +581,10 @@ parse_reg_root(krb5_context context,
     krb5_error_code     code = 0;
 
     libdefaults = _krb5_config_get_entry(parent, "libdefaults", krb5_config_list);
-    if (libdefaults == NULL)
-        return krb5_enomem(context);
+    if (libdefaults == NULL) {
+        krb5_set_error_message(context, ENOMEM, "Out of memory while parsing configuration");
+        return ENOMEM;
+    }
 
     code = parse_reg_values(context, key, &libdefaults->u.list);
     if (code)
@@ -622,7 +625,7 @@ load_config_from_regpath(krb5_context context,
  *
  * @see parse_reg_value() for details about how each type of value is handled.
  */
-KRB5_LIB_FUNCTION krb5_error_code KRB5_LIB_CALL
+krb5_error_code
 _krb5_load_config_from_registry(krb5_context context,
                                 krb5_config_section ** res)
 {

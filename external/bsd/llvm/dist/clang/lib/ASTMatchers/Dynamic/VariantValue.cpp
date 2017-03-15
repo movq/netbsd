@@ -72,7 +72,7 @@ VariantMatcher::MatcherOps::constructVariadicOperator(
       return llvm::None;
     DynMatchers.push_back(*Inner);
   }
-  return DynTypedMatcher::constructVariadic(Op, NodeKind, DynMatchers);
+  return DynTypedMatcher::constructVariadic(Op, DynMatchers);
 }
 
 VariantMatcher::Payload::~Payload() {}
@@ -216,20 +216,18 @@ private:
 VariantMatcher::VariantMatcher() {}
 
 VariantMatcher VariantMatcher::SingleMatcher(const DynTypedMatcher &Matcher) {
-  return VariantMatcher(std::make_shared<SinglePayload>(Matcher));
+  return VariantMatcher(new SinglePayload(Matcher));
 }
 
 VariantMatcher
 VariantMatcher::PolymorphicMatcher(std::vector<DynTypedMatcher> Matchers) {
-  return VariantMatcher(
-      std::make_shared<PolymorphicPayload>(std::move(Matchers)));
+  return VariantMatcher(new PolymorphicPayload(std::move(Matchers)));
 }
 
 VariantMatcher VariantMatcher::VariadicOperatorMatcher(
     DynTypedMatcher::VariadicOperator Op,
     std::vector<VariantMatcher> Args) {
-  return VariantMatcher(
-      std::make_shared<VariadicOpPayload>(Op, std::move(Args)));
+  return VariantMatcher(new VariadicOpPayload(Op, std::move(Args)));
 }
 
 llvm::Optional<DynTypedMatcher> VariantMatcher::getSingleMatcher() const {
@@ -251,7 +249,7 @@ VariantValue::VariantValue(unsigned Unsigned) : Type(VT_Nothing) {
   setUnsigned(Unsigned);
 }
 
-VariantValue::VariantValue(StringRef String) : Type(VT_Nothing) {
+VariantValue::VariantValue(const std::string &String) : Type(VT_Nothing) {
   setString(String);
 }
 
@@ -321,7 +319,7 @@ const std::string &VariantValue::getString() const {
   return *Value.String;
 }
 
-void VariantValue::setString(StringRef NewValue) {
+void VariantValue::setString(const std::string &NewValue) {
   reset();
   Type = VT_String;
   Value.String = new std::string(NewValue);

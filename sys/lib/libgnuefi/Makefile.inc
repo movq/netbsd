@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile.inc,v 1.4 2017/01/24 11:09:14 nonaka Exp $
+#	$NetBSD: Makefile.inc,v 1.1 2014/04/28 19:09:29 jakllsch Exp $
 #
 #	Configuration variables (default values are below):
 #
@@ -47,7 +47,6 @@ GNUEFIMAKE= \
 	    MACHINE=${MACHINE} MACHINE_ARCH=${MACHINE_ARCH:Q} \
 	    GNUEFICPPFLAGS=${CPPFLAGS:S@^-I.@-I${GNUEFIDOTDIR}@g:Q} \
 	    GNUEFIMISCCPPFLAGS=${GNUEFIMISCCPPFLAGS:Q} \
-	    LIBGNUEFI_ARCH=${LIBGNUEFI_ARCH:Q} \
 	    ${GNUEFIMISCMAKEFLAGS}
 
 ${GNUEFILIB}:		.NOTMAIN .MAKE __always_make_gnuefilib

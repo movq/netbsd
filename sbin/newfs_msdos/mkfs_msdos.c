@@ -1,4 +1,4 @@
-/*	$NetBSD: mkfs_msdos.c,v 1.12 2017/02/16 22:42:25 christos Exp $	*/
+/*	$NetBSD: mkfs_msdos.c,v 1.9 2014/01/05 12:52:39 martin Exp $	*/
 
 /*
  * Copyright (c) 1998 Robert Nordier
@@ -37,7 +37,7 @@
 static const char rcsid[] =
   "$FreeBSD: src/sbin/newfs_msdos/newfs_msdos.c,v 1.15 2000/10/10 01:49:37 wollman Exp $";
 #else
-__RCSID("$NetBSD: mkfs_msdos.c,v 1.12 2017/02/16 22:42:25 christos Exp $");
+__RCSID("$NetBSD: mkfs_msdos.c,v 1.9 2014/01/05 12:52:39 martin Exp $");
 #endif
 #endif /* not lint */
 
@@ -335,26 +335,16 @@ mkfs_msdos(const char *fname, const char *dtype, const struct msdos_options *op)
 	    return -1;
 	bpb.bsec -= (o.offset / bpb.bps);
 	if (bpb.spc == 0) {     /* set defaults */
-	    /* minimum cluster size */
-	    switch (o.fat_type) {
-	    case 12:
-		bpb.spc = 1;            /* use 512 bytes */
-		x = 2;                  /* up to 2MB */
-		break;
-	    case 16:
-		bpb.spc = 1;            /* use 512 bytes */
-		x = 32;                 /* up to 32MB */
-		break;
-	    default:
-		bpb.spc = 8;            /* use 4k */
-		x = 8192;               /* up to 8GB */
-		break;
-	    }
-	    x1 = howmany(bpb.bsec, (1048576 / 512)); /* -> MB */
-	    while (bpb.spc < 128 && x < x1) {
-		x *= 2;
-		bpb.spc *= 2;
-	    }
+	    if (bpb.bsec <= 6000)       /* about 3MB -> 512 bytes */
+		bpb.spc = 1;
+	    else if (bpb.bsec <= (1<<17)) /* 64M -> 4k */
+		bpb.spc = 8;
+	    else if (bpb.bsec <= (1<<19)) /* 256M -> 8k */
+		bpb.spc = 16;
+	    else if (bpb.bsec <= (1<<21)) /* 1G -> 16k */
+		bpb.spc = 32;
+	    else
+		bpb.spc = 64;           /* otherwise 32k */
 	}
     }
 
@@ -621,15 +611,9 @@ mkfs_msdos(const char *fname, const char *dtype, const struct msdos_options *op)
 	printf("MBR type: %d\n", ch);
     print_bpb(&bpb);
     if (!o.no_create) {
-	if (o.timestamp_set) {
-		tv.tv_sec = now = o.timestamp;
-		tv.tv_usec = 0;
-		tm = gmtime(&now);
-	} else {
-		gettimeofday(&tv, NULL);
-		now = tv.tv_sec;
-		tm = localtime(&now);
-	}
+	gettimeofday(&tv, NULL);
+	now = tv.tv_sec;
+	tm = localtime(&now);
 	if (!(img = malloc(bpb.bps)))
 	    err(1, NULL);
 	dir = bpb.res + (bpb.spf ? bpb.spf : bpb.bspf) * bpb.nft;

@@ -1,4 +1,4 @@
-/*	$NetBSD: _libelf_config.h,v 1.5 2016/02/20 02:43:42 christos Exp $	*/
+/*	$NetBSD: _libelf_config.h,v 1.2 2014/03/09 16:58:04 christos Exp $	*/
 
 /*-
  * Copyright (c) 2008-2011 Joseph Koshy
@@ -25,10 +25,10 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- * Id: _libelf_config.h 3396 2016-02-10 21:50:05Z emaste 
+ * Id: _libelf_config.h 2287 2011-12-04 06:45:47Z jkoshy 
  */
 
-#if defined(__APPLE__) || defined(__DragonFly__)
+#ifdef	__DragonFly__
 
 #if	defined(__amd64__)
 #define	LIBELF_ARCH		EM_X86_64
@@ -52,12 +52,6 @@
 #if	defined(__amd64__)
 
 #define	LIBELF_ARCH		EM_X86_64
-#define	LIBELF_BYTEORDER	ELFDATA2LSB
-#define	LIBELF_CLASS		ELFCLASS64
-
-#elif	defined(__aarch64__)
-
-#define	LIBELF_ARCH		EM_AARCH64
 #define	LIBELF_BYTEORDER	ELFDATA2LSB
 #define	LIBELF_CLASS		ELFCLASS64
 
@@ -99,12 +93,6 @@
 #define	LIBELF_BYTEORDER	ELFDATA2MSB
 #define	LIBELF_CLASS		ELFCLASS32
 
-#elif	defined(__riscv64)
-
-#define	LIBELF_ARCH		EM_RISCV
-#define	LIBELF_BYTEORDER	ELFDATA2LSB
-#define	LIBELF_CLASS		ELFCLASS64
-
 #elif	defined(__sparc__)
 
 #define	LIBELF_ARCH		EM_SPARCV9
@@ -127,7 +115,7 @@
 
 #endif	/* __minix */
 
-#if defined(__NetBSD__) || defined(HAVE_NBTOOL_CONFIG_H)
+#ifdef __NetBSD__
 
 #include <machine/elf_machdep.h>
 
@@ -147,7 +135,7 @@
 #define	Elf_Note		Elf64_Nhdr
 #endif
 
-#endif	/* __NetBSD__ || HAVE_NBTOOL_CONFIG_H */
+#endif	/* __NetBSD__ */
 
 #if defined(__OpenBSD__)
 
@@ -168,7 +156,6 @@
  *     kernel such as GNU/kFreeBSD.
  */
 
-#ifndef HAVE_NBTOOL_CONFIG_H
 #if defined(__linux__) || defined(__GNU__) || defined(__GLIBC__)
 
 #if defined(__linux__)
@@ -190,4 +177,3 @@
 #endif
 
 #endif /* defined(__linux__) || defined(__GNU__) || defined(__GLIBC__) */
-#endif /* HAVE_NBTOOL_CONFIG_H */

@@ -1,4 +1,4 @@
-/*	$NetBSD: ieee80211.c,v 1.29 2016/09/22 18:22:51 christos Exp $	*/
+/*	$NetBSD: ieee80211.c,v 1.27 2014/01/08 01:56:20 christos Exp $	*/
 
 /*
  * Copyright (c) 1983, 1993
@@ -31,7 +31,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: ieee80211.c,v 1.29 2016/09/22 18:22:51 christos Exp $");
+__RCSID("$NetBSD: ieee80211.c,v 1.27 2014/01/08 01:56:20 christos Exp $");
 #endif /* not lint */
 
 #include <sys/param.h>
@@ -482,7 +482,6 @@ scan_exec(prop_dictionary_t env, prop_dictionary_t oenv)
 static void
 ieee80211_statistics(prop_dictionary_t env)
 {
-#ifndef SMALL
 	struct ieee80211_stats stats;
 	struct ifreq ifr;
 
@@ -585,7 +584,6 @@ ieee80211_statistics(prop_dictionary_t env)
 	STAT_PRINT(is_ff_decap, "fast frames decap'd");
 	STAT_PRINT(is_ff_encap, "fast frames encap'd for tx");
 	STAT_PRINT(is_rx_badbintval, "rx frame w/ bogus bintval");
-#endif
 }
 
 static void
@@ -765,36 +763,14 @@ scan_and_wait(prop_dictionary_t env)
 	prog_close(sroute);
 }
 
-static int
-calc_len(const u_int8_t *cp, int len)
-{
-	int maxlen = 0, curlen;
-	const struct ieee80211req_scan_result *sr;
-	char buf[IEEE80211_NWID_LEN];
-
-	while (len >= (int)sizeof(*sr)) {
-		sr = (const struct ieee80211req_scan_result *)cp;
-		cp += sr->isr_len;
-		len -= sr->isr_len;
-		curlen = copy_essid(buf, sizeof(buf),
-		    (const u_int8_t *)(sr + 1), sr->isr_ssid_len);
-		if (curlen >= IEEE80211_NWID_LEN)
-			return IEEE80211_NWID_LEN;
-		if (curlen > maxlen)
-			maxlen = curlen;
-	}
-	return maxlen;
-}
-
 static void
 list_scan(prop_dictionary_t env)
 {
-	u_int8_t buf[64*1024 - 1];
+	u_int8_t buf[24*1024];
 	struct ieee80211req ireq;
 	char ssid[IEEE80211_NWID_LEN+1];
 	const u_int8_t *cp;
 	int len, ssidmax;
-	const struct ieee80211req_scan_result *sr;
 
 	memset(&ireq, 0, sizeof(ireq));
 	ireq.i_type = IEEE80211_IOC_SCAN_RESULTS;
@@ -803,11 +779,10 @@ list_scan(prop_dictionary_t env)
 	if (direct_ioctl(env, SIOCG80211, &ireq) < 0)
 		errx(EXIT_FAILURE, "unable to get scan results");
 	len = ireq.i_len;
-	if (len < (int)sizeof(*sr))
+	if (len < (int)sizeof(struct ieee80211req_scan_result))
 		return;
 
-	ssidmax = calc_len(buf, len);
-
+	ssidmax = IEEE80211_NWID_LEN;
 	printf("%-*.*s  %-17.17s  %4s %4s  %-7s %3s %4s\n"
 		, ssidmax, ssidmax, "SSID"
 		, "BSSID"
@@ -818,14 +793,16 @@ list_scan(prop_dictionary_t env)
 		, "CAPS"
 	);
 	cp = buf;
-	while (len >= (int)sizeof(*sr)) {
+	do {
+		const struct ieee80211req_scan_result *sr;
 		const uint8_t *vp;
 
 		sr = (const struct ieee80211req_scan_result *) cp;
 		vp = (const u_int8_t *)(sr+1);
-		(void)copy_essid(ssid, sizeof(ssid), vp, sr->isr_ssid_len);
 		printf("%-*.*s  %s  %3d  %3dM %3d:%-3d  %3d %-4.4s"
-			, ssidmax, ssidmax, ssid
+			, ssidmax
+			  , copy_essid(ssid, ssidmax, vp, sr->isr_ssid_len)
+			  , ssid
 			, ether_ntoa((const struct ether_addr *) sr->isr_bssid)
 			, ieee80211_mhz2ieee(sr->isr_freq, sr->isr_flags)
 			, getmaxrate(sr->isr_rates, sr->isr_nrates)
@@ -836,7 +813,7 @@ list_scan(prop_dictionary_t env)
 		printies(vp + sr->isr_ssid_len, sr->isr_ie_len, 24);
 		printf("\n");
 		cp += sr->isr_len, len -= sr->isr_len;
-	}
+	} while (len >= (int)sizeof(struct ieee80211req_scan_result));
 }
 /*
  * Convert MHz frequency to IEEE channel number.
@@ -1165,22 +1142,18 @@ static int
 copy_essid(char buf[], size_t bufsize, const u_int8_t *essid, size_t essid_len)
 {
 	const u_int8_t *p;
-	int printable;
 	size_t maxlen, i;
 
-	if (essid_len + 1 > bufsize)
+	if (essid_len > bufsize)
 		maxlen = bufsize;
 	else
-		maxlen = essid_len + 1;
+		maxlen = essid_len;
 	/* determine printable or not */
-	printable = 1;
-	for (i = 0, p = essid; i < essid_len; i++, p++) {
-		if (*p < ' ' || *p > 0x7e) {
-			printable = 0;
+	for (i = 0, p = essid; i < maxlen; i++, p++) {
+		if (*p < ' ' || *p > 0x7e)
 			break;
-		}
 	}
-	if (!printable) {		/* not printable, print as hex */
+	if (i != maxlen) {		/* not printable, print as hex */
 		if (bufsize < 3)
 			return 0;
 		strlcpy(buf, "0x", bufsize);
@@ -1190,14 +1163,14 @@ copy_essid(char buf[], size_t bufsize, const u_int8_t *essid, size_t essid_len)
 			sprintf(&buf[2+2*i], "%02x", p[i]);
 			bufsize -= 2;
 		}
-		maxlen = i;
-	} else{
-		/* printable, truncate as needed */
-		strlcpy(buf, (const char *)essid, maxlen);
+		if (i != essid_len)
+			memcpy(&buf[2+2*i-3], "...", 3);
+	} else {			/* printable, truncate as needed */
+		memcpy(buf, essid, maxlen);
+		if (maxlen != essid_len)
+			memcpy(&buf[maxlen-3], "...", 3);
 	}
-	if (maxlen != essid_len + 1)
-		memcpy(&buf[maxlen - 4], "...", 4);
-	return (int)strlen(buf);
+	return maxlen;
 }
 
 static void

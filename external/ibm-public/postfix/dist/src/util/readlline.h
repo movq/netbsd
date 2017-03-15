@@ -1,4 +1,4 @@
-/*	$NetBSD: readlline.h,v 1.2 2017/02/14 01:16:49 christos Exp $	*/
+/*	$NetBSD: readlline.h,v 1.1.1.1 2009/06/23 10:09:00 tron Exp $	*/
 
 #ifndef _READLINE_H_INCLUDED_
 #define _READLINE_H_INCLUDED_
@@ -22,9 +22,7 @@
  /*
   * External interface.
   */
-extern VSTRING *readllines(VSTRING *, VSTREAM *, int *, int *);
-
-#define readlline(bp, fp, lp) readllines((bp), (fp), (lp), (int *) 0)
+extern VSTRING *readlline(VSTRING *, VSTREAM *, int *);
 
 /* LICENSE
 /* .ad

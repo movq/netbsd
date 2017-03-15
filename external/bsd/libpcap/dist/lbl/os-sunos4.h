@@ -1,4 +1,4 @@
-/*	$NetBSD: os-sunos4.h,v 1.3 2017/01/24 22:29:29 christos Exp $	*/
+/*	$NetBSD: os-sunos4.h,v 1.1.1.3 2013/04/06 15:57:52 christos Exp $	*/
 
 /*
  * Copyright (c) 1989, 1990, 1993, 1994, 1995, 1996
@@ -19,6 +19,8 @@
  * THIS SOFTWARE IS PROVIDED ``AS IS'' AND WITHOUT ANY EXPRESS OR IMPLIED
  * WARRANTIES, INCLUDING, WITHOUT LIMITATION, THE IMPLIED WARRANTIES OF
  * MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE.
+ *
+ * @(#) Header: /tcpdump/master/libpcap/lbl/os-sunos4.h,v 1.32 1999-10-07 23:46:41 mcr Exp  (LBL)
  */
 
 /* Prototypes missing in SunOS 4 */
@@ -67,6 +69,7 @@ int	fchmod(int, int);
 int	fchown(int, int, int);
 void	endgrent(void);
 void	endpwent(void);
+void	endservent(void);
 #ifdef __STDC__
 struct	ether_addr;
 #endif
@@ -147,6 +150,7 @@ int	select(int, fd_set *, fd_set *, fd_set *, struct timeval *);
 int	setpgrp(int, int);
 void	setpwent(void);
 int	setrlimit(int, struct rlimit *);
+void	setservent(int);
 int	setsockopt(int, int, int, char *, int);
 int	shutdown(int, int);
 int	sigblock(int);
@@ -157,7 +161,7 @@ int	sigsetmask(int);
 struct	sigvec;
 #endif
 int	sigvec(int, struct sigvec *, struct sigvec*);
-int	pcap_snprintf(char *, size_t, const char *, ...);
+int	snprintf(char *, size_t, const char *, ...);
 int	socket(int, int, int);
 int	socketpair(int, int, int, int *);
 int	symlink(const char *, const char *);

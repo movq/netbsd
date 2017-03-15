@@ -1,5 +1,7 @@
+/* Id */
+
 /*
- * Copyright (c) 2007 Nicholas Marriott <nicholas.marriott@gmail.com>
+ * Copyright (c) 2007 Nicholas Marriott <nicm@users.sourceforge.net>
  *
  * Permission to use, copy, modify, and distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -21,9 +23,6 @@
 #define __attribute__(a)
 #endif
 
-#ifndef __unused
-#define __unused __attribute__ ((__unused__))
-#endif
 #ifndef __dead
 #define __dead __attribute__ ((__noreturn__))
 #endif
@@ -177,15 +176,9 @@ typedef uint64_t u_int64_t;
 #define TTY_NAME_MAX 32
 #endif
 
-#ifndef HOST_NAME_MAX
-#define HOST_NAME_MAX 255
-#endif
-
-#ifndef HAVE_FLOCK
-#define LOCK_SH 0
-#define LOCK_EX 0
-#define LOCK_NB 0
-#define flock(fd, op) (0)
+#ifndef HAVE_BZERO
+#undef bzero
+#define bzero(buf, len) memset(buf, 0, len);
 #endif
 
 #ifndef HAVE_CLOSEFROM
@@ -246,10 +239,6 @@ int		 vasprintf(char **, const char *, va_list);
 char		*fgetln(FILE *, size_t *);
 #endif
 
-#ifndef HAVE_FPARSELN
-char		*fparseln(FILE *, size_t *, size_t *, const char *, int);
-#endif
-
 #ifndef HAVE_SETENV
 /* setenv.c */
 int		 setenv(const char *, const char *, int);
@@ -258,18 +247,13 @@ int		 unsetenv(const char *);
 
 #ifndef HAVE_CFMAKERAW
 /* cfmakeraw.c */
-void		 cfmakeraw(struct termios *);
+void		cfmakeraw(struct termios *);
 #endif
 
 #ifndef HAVE_OPENAT
 /* openat.c */
 #define AT_FDCWD -100
-int		 openat(int, const char *, int, ...);
-#endif
-
-#ifndef HAVE_REALLOCARRAY
-/* reallocarray.c */
-void		*reallocarray(void *, size_t, size_t size);
+int		openat(int, const char *, int, ...);
 #endif
 
 #ifdef HAVE_GETOPT

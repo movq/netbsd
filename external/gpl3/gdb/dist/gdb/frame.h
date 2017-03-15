@@ -1,6 +1,6 @@
 /* Definitions for dealing with stack frames, for GDB, the GNU debugger.
 
-   Copyright (C) 1986-2016 Free Software Foundation, Inc.
+   Copyright (C) 1986-2014 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -69,15 +69,12 @@
 
    */
 
-#include "language.h"
-
 struct symtab_and_line;
 struct frame_unwind;
 struct frame_base;
 struct block;
 struct gdbarch;
 struct ui_file;
-struct ui_out;
 
 /* Status of a given frame's stack.  */
 
@@ -196,14 +193,6 @@ extern struct frame_id frame_id_build_special (CORE_ADDR stack_addr,
    address is set to indicate a wild card.  */
 extern struct frame_id frame_id_build_unavailable_stack (CORE_ADDR code_addr);
 
-/* Construct a frame ID representing a frame where the stack address
-   exists, but is unavailable.  CODE_ADDR is the frame's constant code
-   address (typically the entry point).  SPECIAL_ADDR is the special
-   identifier address.  */
-extern struct frame_id
-  frame_id_build_unavailable_stack_special (CORE_ADDR code_addr,
-					    CORE_ADDR special_addr);
-
 /* Construct a wild card frame ID.  The parameter is the frame's constant
    stack address (typically the outer-bound).  The code address as well
    as the special identifier address are set to indicate wild cards.  */
@@ -310,13 +299,6 @@ extern void select_frame (struct frame_info *);
 extern struct frame_info *get_prev_frame (struct frame_info *);
 extern struct frame_info *get_next_frame (struct frame_info *);
 
-/* Return a "struct frame_info" corresponding to the frame that called
-   THIS_FRAME.  Returns NULL if there is no such frame.
-
-   Unlike get_prev_frame, this function always tries to unwind the
-   frame.  */
-extern struct frame_info *get_prev_frame_always (struct frame_info *);
-
 /* Given a frame's ID, relocate the frame.  Returns NULL if the frame
    is not found.  */
 extern struct frame_info *frame_find_by_id (struct frame_id id);
@@ -398,9 +380,10 @@ extern void find_frame_sal (struct frame_info *frame,
 			    struct symtab_and_line *sal);
 
 /* Set the current source and line to the location given by frame
-   FRAME, if possible.  */
+   FRAME, if possible.  When CENTER is true, adjust so the relevant
+   line is in the center of the next 'list'.  */
 
-void set_current_sal_from_frame (struct frame_info *);
+void set_current_sal_from_frame (struct frame_info *, int);
 
 /* Return the frame base (what ever that is) (DEPRECATED).
 
@@ -504,22 +487,9 @@ enum unwind_stop_reason
 
 enum unwind_stop_reason get_frame_unwind_stop_reason (struct frame_info *);
 
-/* Translate a reason code to an informative string.  This converts the
-   generic stop reason codes into a generic string describing the code.
-   For a possibly frame specific string explaining the stop reason, use
-   FRAME_STOP_REASON_STRING instead.  */
+/* Translate a reason code to an informative string.  */
 
-const char *unwind_stop_reason_to_string (enum unwind_stop_reason);
-
-/* Return a possibly frame specific string explaining why the unwind
-   stopped here.  E.g., if unwinding tripped on a memory error, this
-   will return the error description string, which includes the address
-   that we failed to access.  If there's no specific reason stored for
-   a frame then a generic reason string will be returned.
-
-   Should only be called for frames that don't have a previous frame.  */
-
-const char *frame_stop_reason_string (struct frame_info *);
+const char *frame_stop_reason_string (enum unwind_stop_reason);
 
 /* Unwind the stack frame so that the value of REGNUM, in the previous
    (up, older) frame is returned.  If VALUEP is NULL, don't
@@ -668,8 +638,8 @@ extern void *frame_obstack_zalloc (unsigned long size);
 /* Create a regcache, and copy the frame's registers into it.  */
 struct regcache *frame_save_as_regcache (struct frame_info *this_frame);
 
-extern const struct block *get_frame_block (struct frame_info *,
-					    CORE_ADDR *addr_in_block);
+extern struct block *get_frame_block (struct frame_info *,
+                                      CORE_ADDR *addr_in_block);
 
 /* Return the `struct block' that belongs to the selected thread's
    selected frame.  If the inferior has no state, return NULL.
@@ -697,21 +667,13 @@ extern const struct block *get_frame_block (struct frame_info *,
    it occurs in the CLI code and makes it possible for commands to
    work, even when the inferior has no state.  */
 
-extern const struct block *get_selected_block (CORE_ADDR *addr_in_block);
+extern struct block *get_selected_block (CORE_ADDR *addr_in_block);
 
 extern struct symbol *get_frame_function (struct frame_info *);
 
 extern CORE_ADDR get_pc_function_start (CORE_ADDR);
 
 extern struct frame_info *find_relative_frame (struct frame_info *, int *);
-
-/* Wrapper over print_stack_frame modifying current_uiout with UIOUT for
-   the function call.  */
-
-extern void print_stack_frame_to_uiout (struct ui_out *uiout,
-					struct frame_info *, int print_level,
-					enum print_what print_what,
-					int set_current_sal);
 
 extern void print_stack_frame (struct frame_info *, int print_level,
 			       enum print_what print_what,
@@ -774,6 +736,8 @@ extern void args_info (char *, int);
 
 extern void locals_info (char *, int);
 
+extern void (*deprecated_selected_frame_level_changed_hook) (int);
+
 extern void return_command (char *, int);
 
 /* Set FRAME's unwinder temporarily, so that we can call a sniffer.
@@ -824,20 +788,5 @@ extern struct frame_info *create_new_frame (CORE_ADDR base, CORE_ADDR pc);
 
 extern int frame_unwinder_is (struct frame_info *fi,
 			      const struct frame_unwind *unwinder);
-
-/* Return the language of FRAME.  */
-
-extern enum language get_frame_language (struct frame_info *frame);
-
-/* Return the first non-tailcall frame above FRAME or FRAME if it is not a
-   tailcall frame.  Return NULL if FRAME is the start of a tailcall-only
-   chain.  */
-
-extern struct frame_info *skip_tailcall_frames (struct frame_info *frame);
-
-/* Return the first frame above FRAME or FRAME of which the code is
-   writable.  */
-
-extern struct frame_info *skip_unwritable_frames (struct frame_info *frame);
 
 #endif /* !defined (FRAME_H)  */

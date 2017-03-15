@@ -1,4 +1,4 @@
-#	$NetBSD: P5064,v 1.84 2016/12/13 20:42:15 christos Exp $
+#	$NetBSD: P5064,v 1.80 2014/07/20 10:06:10 alnsn Exp $
 #
 # Algorithmics P-5064 kernel.
 #
@@ -7,7 +7,7 @@ include	"arch/algor/conf/std.algor"
 
 #options 	INCLUDE_CONFIG_FILE	# embed config file in kernel binary
 
-#ident 		"P5064-$Revision: 1.84 $"
+#ident 		"P5064-$Revision: 1.80 $"
 
 maxusers 32
 
@@ -23,10 +23,9 @@ options 	NTP			# kernel PLL for NTP
 # Diagnostic/debugging support options
 options 	DIAGNOSTIC		# Cheap kernel consistency checks
 options 	DDB			# kernel debugger
-pseudo-device	ksyms
 makeoptions	DEBUG="-g"
 #makeoptions	DEBUGLIST="pattern1 pattern2 ..."
-makeoptions	COPY_SYMTAB=1
+options 	SYMTAB_SPACE=485000
 
 # File systems
 file-system	FFS		# Fast file system
@@ -60,17 +59,17 @@ options 	IPSEC		# IP security
 options 	COMPAT_43
 
 # Binary compatibility with previous versions of NetBSD.
-#options 	COMPAT_09	# NetBSD 0.9,
-options 	COMPAT_10	# NetBSD 1.0,
-options 	COMPAT_11	# NetBSD 1.1,
-options 	COMPAT_12	# NetBSD 1.2,
-options 	COMPAT_13	# NetBSD 1.3,
-options 	COMPAT_14	# NetBSD 1.4,
-options 	COMPAT_15	# NetBSD 1.5,
-options 	COMPAT_16	# NetBSD 1.6,
-options 	COMPAT_20	# NetBSD 2.0,
-options 	COMPAT_30	# NetBSD 3.0, and
-options 	COMPAT_40	# NetBSD 4.0 binary compatibility.
+#options 	COMPAT_09
+options 	COMPAT_10
+options 	COMPAT_11
+options 	COMPAT_12
+options 	COMPAT_13
+options 	COMPAT_14
+options 	COMPAT_15
+options 	COMPAT_16
+options 	COMPAT_20
+options 	COMPAT_30	# NetBSD 3.0 compatibility.
+options 	COMPAT_40	# NetBSD 4.0 compatibility.
 options		COMPAT_BSDPTY	# /dev/[pt]ty?? ptys.
 
 # System V-like message queues
@@ -217,7 +216,7 @@ mcclock* at	isa? port 0x70
 #pms*	at	pckbc?				# PS/2-style mouse (aux port)
 #attimer*	at	isa?			# AT Timer
 #pcppi*	at	isa?				# PC prog. periph. interface
-#spkr*	at	pcppi?				# IBM BASIC emulation
+#spkr0	at	pcppi?				# IBM BASIC emulation
 #isabeep0 at	pcppi?				# "keyboard" beep
 #midi*	at	pcppi?
 com*	at	isa? port 0x3f8 irq 4		# standard serial ports
@@ -244,7 +243,6 @@ fdc0	at	isa? port 0x3f0 irq 6 drq 2	# floppy controller
 #wss*	at	isa? port 0x530 irq 9 drq 0	# Windows Sound System
 #wss*	at	isapnp?
 #audio*	at	wss?
-#spkr*	at	audio?               		# PC speaker (synthesized)
 #midi*	at	wss?
 #sb*	at	isa? port 0x220 irq 5 drq 1	# SoundBlaster
 #sb*	at	isapnp?

@@ -1,9 +1,9 @@
-/*	$NetBSD: config.c,v 1.1.1.5 2017/02/09 01:47:07 christos Exp $	*/
+/*	$NetBSD: config.c,v 1.1.1.4 2014/05/28 09:58:51 tron Exp $	*/
 
 /* $OpenLDAP$ */
 /* This work is part of OpenLDAP Software <http://www.openldap.org/>.
  *
- * Copyright 1999-2016 The OpenLDAP Foundation.
+ * Copyright 1999-2014 The OpenLDAP Foundation.
  * Portions Copyright 1999 Dmitry Kovalev.
  * Portions Copyright 2002 Pierangelo Masarati.
  * Portions Copyright 2004 Mark Adamson.
@@ -22,9 +22,6 @@
  * by OpenLDAP Software.  Additional significant contributors include
  * Pierangelo Masarati.
  */
-
-#include <sys/cdefs.h>
-__RCSID("$NetBSD: config.c,v 1.1.1.5 2017/02/09 01:47:07 christos Exp $");
 
 #include "portable.h"
 
@@ -215,14 +212,9 @@ static ConfigTable sqlcfg[] = {
 			"DESC 'Quoting char of the aliasing keyword' "
 			"SYNTAX OMsDirectoryString SINGLE-VALUE )", NULL, NULL },
 	{ "autocommit", "yes|no", 2, 2, 0,
-		ARG_ON_OFF|ARG_MAGIC|BSQL_AUTOCOMMIT, (void *)sql_cf_gen,
+		ARG_ON_OFF|ARG_MAGIC|SQL_AUTOCOMMIT, (void *)sql_cf_gen,
 		"( OLcfgDbAt:6.45 NAME 'olcSqlAutocommit' "
 			"SYNTAX OMsBoolean SINGLE-VALUE )", NULL, NULL },
-	{ "id_query", "SQL expression", 2, 0, 0, ARG_STRING|ARG_QUOTE|ARG_OFFSET,
-		(void *)offsetof(struct backsql_info, sql_id_query),
-		"( OLcfgDbAt:6.46 NAME 'olcSqlIdQuery' "
-			"DESC 'Query used to collect entryID mapping data' "
-			"SYNTAX OMsDirectoryString SINGLE-VALUE )", NULL, NULL },
 	{ NULL, NULL, 0, 0, 0, ARG_IGNORED,
 		NULL, NULL, NULL, NULL }
 };
@@ -243,7 +235,7 @@ static ConfigOCs sqlocs[] = {
 		"olcSqlFailIfNoMapping $ olcSqlAllowOrphans $ olcSqlBaseObject $ "
 		"olcSqlLayer $ olcSqlUseSubtreeShortcut $ olcSqlFetchAllAttrs $ "
 		"olcSqlFetchAttrs $ olcSqlCheckSchema $ olcSqlAliasingKeyword $ "
-		"olcSqlAliasingQuote $ olcSqlAutocommit $ olcSqlIdQuery ) )",
+		"olcSqlAliasingQuote $ olcSqlAutocommit ) )",
 			Cft_Database, sqlcfg },
 	{ NULL, Cft_Abstract, NULL }
 };

@@ -1,4 +1,4 @@
-/*	$NetBSD: md4.c,v 1.2 2017/01/28 21:31:47 christos Exp $	*/
+/*	$NetBSD: md4.c,v 1.1.1.1 2011/04/13 18:14:50 elric Exp $	*/
 
 /*
  * Copyright (c) 1995 - 2001 Kungliga Tekniska Högskolan
@@ -33,8 +33,7 @@
  * SUCH DAMAGE.
  */
 
-#include <config.h>
-#include <krb5/roken.h>
+#include "config.h"
 
 #include "hash.h"
 #include "md4.h"
@@ -45,7 +44,7 @@
 #define D m->counter[3]
 #define X data
 
-int
+void
 MD4_Init (struct md4 *m)
 {
   m->sz[0] = 0;
@@ -54,7 +53,6 @@ MD4_Init (struct md4 *m)
   C = 0x98badcfe;
   B = 0xefcdab89;
   A = 0x67452301;
-  return 1;
 }
 
 #define F(x,y,z) CRAYFIX((x & y) | (~x & z))
@@ -174,7 +172,7 @@ struct x32{
   unsigned int b:32;
 };
 
-int
+void
 MD4_Update (struct md4 *m, const void *v, size_t len)
 {
     const unsigned char *p = v;
@@ -207,10 +205,9 @@ MD4_Update (struct md4 *m, const void *v, size_t len)
 	    offset = 0;
 	}
     }
-    return 1;
 }
 
-int
+void
 MD4_Final (void *res, struct md4 *m)
 {
   unsigned char zeros[72];
@@ -248,5 +245,4 @@ MD4_Final (void *res, struct md4 *m)
       r[i] = swap_uint32_t (m->counter[i]);
   }
 #endif
-  return 1;
 }

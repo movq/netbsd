@@ -1,6 +1,6 @@
 /* Low-level I/O routines for BFDs.
 
-   Copyright (C) 1990-2016 Free Software Foundation, Inc.
+   Copyright 1990-2013 Free Software Foundation, Inc.
 
    Written by Cygnus Support.
 
@@ -234,8 +234,7 @@ bfd_tell (bfd *abfd)
       bfd *parent_bfd = abfd;
       ptr = abfd->iovec->btell (abfd);
 
-      while (parent_bfd->my_archive != NULL
-	     && !bfd_is_thin_archive (parent_bfd->my_archive))
+      while (parent_bfd->my_archive != NULL)
 	{
 	  ptr -= parent_bfd->origin;
 	  parent_bfd = parent_bfd->my_archive;
@@ -290,7 +289,7 @@ bfd_seek (bfd *abfd, file_ptr position, int direction)
   if (direction == SEEK_CUR && position == 0)
     return 0;
 
-  if (abfd->my_archive == NULL || bfd_is_thin_archive (abfd->my_archive))
+  if (abfd->format != bfd_archive && abfd->my_archive == 0)
     {
       if (direction == SEEK_SET && (bfd_vma) position == abfd->where)
 	return 0;
@@ -315,8 +314,7 @@ bfd_seek (bfd *abfd, file_ptr position, int direction)
     {
       bfd *parent_bfd = abfd;
 
-      while (parent_bfd->my_archive != NULL
-	     && !bfd_is_thin_archive (parent_bfd->my_archive))
+      while (parent_bfd->my_archive != NULL)
         {
           file_position += parent_bfd->origin;
           parent_bfd = parent_bfd->my_archive;

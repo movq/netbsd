@@ -488,6 +488,7 @@ static int eap_wsc_getTimeout(struct eap_sm *sm, void *priv)
 int eap_server_wsc_register(void)
 {
 	struct eap_method *eap;
+	int ret;
 
 	eap = eap_server_method_alloc(EAP_SERVER_METHOD_INTERFACE_VERSION,
 				      EAP_VENDOR_WFA, EAP_VENDOR_TYPE_WSC,
@@ -504,5 +505,8 @@ int eap_server_wsc_register(void)
 	eap->isSuccess = eap_wsc_isSuccess;
 	eap->getTimeout = eap_wsc_getTimeout;
 
-	return eap_server_method_register(eap);
+	ret = eap_server_method_register(eap);
+	if (ret)
+		eap_server_method_free(eap);
+	return ret;
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: dh-tfm.c,v 1.2 2017/01/28 21:31:47 christos Exp $	*/
+/*	$NetBSD: dh-tfm.c,v 1.1.1.2 2014/04/24 12:45:30 pettai Exp $	*/
 
 /*
  * Copyright (c) 2006 Kungliga Tekniska Högskolan
@@ -34,9 +34,12 @@
  */
 
 #include <config.h>
-#include <krb5/roken.h>
 
+#include <stdio.h>
+#include <stdlib.h>
 #include <dh.h>
+
+#include <krb5/roken.h>
 
 #ifdef USE_HCRYPTO_TFM
 

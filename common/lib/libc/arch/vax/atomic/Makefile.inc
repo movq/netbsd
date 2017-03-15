@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile.inc,v 1.7 2014/10/12 17:53:33 martin Exp $
+#	$NetBSD: Makefile.inc,v 1.6.4.1 2014/11/12 19:20:06 snj Exp $
 
 .if defined(LIB) && (${LIB} == "kern" || ${LIB} == "c" || ${LIB} == "pthread" \
 	|| ${LIB} == "rump")

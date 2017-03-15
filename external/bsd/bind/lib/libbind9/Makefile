@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.3 2016/11/01 21:56:13 christos Exp $
+#	$NetBSD: Makefile,v 1.2.4.1 2016/11/05 17:54:09 martin Exp $
 
 LIB=bind9
 

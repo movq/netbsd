@@ -1,9 +1,5 @@
 set(LLVM_LINK_COMPONENTS
-  AllTargetsAsmPrinters
-  AllTargetsAsmParsers
-  AllTargetsDescs
-  AllTargetsDisassemblers
-  AllTargetsInfos
+  ${LLVM_TARGETS_TO_BUILD}
   MC
   MCParser
   Support

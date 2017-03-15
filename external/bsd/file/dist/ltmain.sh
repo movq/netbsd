@@ -6900,11 +6900,7 @@ func_mode_link ()
 	    # Finalize command for both is simple: just hardcode it.
 	    if test "$hardcode_direct" = yes &&
 	       test "$hardcode_direct_absolute" = no; then
-	      if test -f "$inst_prefix_dir$libdir/$linklib"; then
-	        add="$inst_prefix_dir$libdir/$linklib"
-	      else
-	        add="$libdir/$linklib"
-	      fi
+	      add="$libdir/$linklib"
 	    elif test "$hardcode_minus_L" = yes; then
 	      add_dir="-L$libdir"
 	      add="-l$name"
@@ -9432,8 +9428,7 @@ dlpreopen='$dlprefiles'
 
 # Directory that this library needs to be installed in:
 libdir='$install_libdir'"
-	  if test "$installed" = no && test "$need_relink" = yes && \
-	     test -n "$relink_command"; then
+	  if test "$installed" = no && test "$need_relink" = yes; then
 	    $ECHO >> $output "\
 relink_command=\"$relink_command\""
 	  fi

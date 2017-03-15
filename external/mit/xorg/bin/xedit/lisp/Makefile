@@ -1,6 +1,6 @@
-#	$NetBSD: Makefile,v 1.6 2015/07/23 08:03:25 mrg Exp $
+#	$NetBSD: Makefile,v 1.3 2011/08/11 23:15:35 joerg Exp $
 
-LIBISPRIVATE=	yes
+MKPRIVATELIB=	yes
 
 .include <bsd.own.mk>
 
@@ -13,7 +13,8 @@ SRCS=		bytecode.c core.c debugger.c format.c hash.c helper.c \
 CPPFLAGS+=	-DLISP  -DLISPDIR=\"${X11LIBDIR}/xedit/lisp\" \
 		-I${X11SRCDIR.xedit}/lisp/mp \
 		-I${X11SRCDIR.xedit}/lisp/re \
-		-I${X11SRCDIR.xedit}
+		-I${X11SRCDIR.xedit} \
+		-I${X11SRCDIR.xc}/programs
 
 .if defined(HAVE_PCC)
 # code uses gcc-specific "label as values" feature
@@ -23,10 +24,6 @@ CPPFLAGS+=	-DANSI_SOURCE
 .PATH:		${X11SRCDIR.xedit}/lisp
 
 CWARNFLAGS.clang+=	-Wno-format
-
-# Ugh. writes to const char *
-COPTS.format.c+=	-Wno-error
-COPTS.lisp.c+=		-Wno-error
 
 .include <bsd.x11.mk>
 .include <bsd.lib.mk>

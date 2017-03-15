@@ -1,4 +1,4 @@
-/*	$NetBSD: rwlock.h,v 1.9 2015/02/25 13:52:42 joerg Exp $	*/
+/*	$NetBSD: rwlock.h,v 1.8.2.1 2015/05/27 05:33:29 msaitoh Exp $	*/
 
 /*-
  * Copyright (c) 2002, 2006 The NetBSD Foundation, Inc.

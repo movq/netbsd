@@ -1,4 +1,4 @@
-/*	$NetBSD: rpcb_svc_com.c,v 1.18 2015/11/10 18:04:51 christos Exp $	*/
+/*	$NetBSD: rpcb_svc_com.c,v 1.16 2011/08/31 16:25:00 plunky Exp $	*/
 
 /*
  * Sun RPC is a product of Sun Microsystems, Inc. and is provided for
@@ -58,16 +58,8 @@
 #include <string.h>
 #include <stdlib.h>
 
-#ifdef RPCBIND_RUMP
-#include <rump/rump.h>
-#include <rump/rump_syscalls.h>
-#endif
-
 #include "rpcbind.h"
 #include "svc_dg.h"
-#ifdef RPCBIND_RUMP
-#include "svc_fdset.h"
-#endif
 
 #define RPC_BUF_MAX	65536	/* can be raised if required */
 
@@ -295,7 +287,7 @@ void
 delete_prog(rpcprog_t prog)
 {
 	RPCB reg;
-	rpcblist_ptr rbl;
+	register rpcblist_ptr rbl;
 
 	for (rbl = list_rbl; rbl != NULL; rbl = rbl->rpcb_next) {
 		if ((rbl->rpcb_map.r_prog != prog))
@@ -526,7 +518,10 @@ create_rmtcall_fd(struct netconfig *nconf)
 		rmttail->next = rmt;
 		rmttail = rmt;
 	}
-	svc_fdset_set(fd);
+	/* XXX not threadsafe */
+	if (fd > svc_maxfd)
+		svc_maxfd = fd;
+	FD_SET(fd, &svc_fdset);
 	return (fd);
 }
 
@@ -599,7 +594,7 @@ void
 rpcbproc_callit_com(struct svc_req *rqstp, SVCXPRT *transp,
 		    rpcproc_t reply_type, rpcvers_t versnum)
 {
-	rpcblist_ptr rbl;
+	register rpcblist_ptr rbl;
 	struct netconfig *nconf;
 	struct netbuf *caller;
 	struct r_rmtcall_args a;
@@ -1033,8 +1028,8 @@ free_slot_by_index(int idx)
 	if (fi->flag & FINFO_ACTIVE) {
 		netbuffree(fi->caller_addr);
 		/* XXX may be too big, but can't access xprt array here */
-		if (fi->forward_fd >= *svc_fdset_getmax())
-			(*svc_fdset_getmax())--;
+		if (fi->forward_fd >= svc_maxfd)
+			svc_maxfd--;
 		free((void *) fi->uaddr);
 		fi->flag &= ~FINFO_ACTIVE;
 		rpcb_rmtcalls--;
@@ -1077,34 +1072,19 @@ void
 my_svc_run(void)
 {
 	size_t nfds;
-	struct pollfd *pollfds;
-	int npollfds;
+	struct pollfd pollfds[FD_SETSIZE];
 	int poll_ret, check_ret;
-	int n, *m;
+	int n;
 #ifdef SVC_RUN_DEBUG
 	int i;
 #endif
-	struct pollfd	*p;
-
-	pollfds = NULL;
-	npollfds = 0;
+	register struct pollfd	*p;
+	fd_set cleanfds;
 
 	for (;;) {
-		if (svc_fdset_getsize(0) != npollfds) {
-			npollfds = svc_fdset_getsize(0);
-			pollfds = realloc(pollfds, npollfds * sizeof(*pollfds));
-		}
 		p = pollfds;
-		if (p == NULL) {
-out:
-			syslog(LOG_ERR, "Cannot allocate pollfds");
-			sleep(1);
-			continue;
-		}
-		if ((m = svc_fdset_getmax()) == NULL)
-			goto out;
-		for (n = 0; n <= *m; n++) {
-			if (svc_fdset_isset(n)) {
+		for (n = 0; n <= svc_maxfd; n++) {
+			if (FD_ISSET(n, &svc_fdset)) {
 				p->fd = n;
 				p->events = MASKVAL;
 				p++;
@@ -1121,26 +1101,16 @@ out:
 			fprintf(stderr, ">\n");
 		}
 #endif
-#ifdef RPCBIND_RUMP
-		poll_ret = rump_sys_poll(pollfds, nfds, 30 * 1000);
-#else
-		poll_ret = poll(pollfds, nfds, 30 * 1000);
-#endif
-		switch (poll_ret) {
+		switch (poll_ret = poll(pollfds, nfds, 30 * 1000)) {
 		case -1:
 			/*
 			 * We ignore all errors, continuing with the assumption
 			 * that it was set by the signal handlers (or any
 			 * other outside event) and not caused by poll().
 			 */
-#ifdef SVC_RUN_DEBUG
-			if (debugging) {
-				fprintf(stderr, "poll returned %d (%s)\n",
-				    poll_ret, strerror(errno));
-			}
-#endif
 		case 0:
-			__svc_clean_idle(NULL, 30, FALSE);
+			cleanfds = svc_fdset;
+			__svc_clean_idle(&cleanfds, 30, FALSE);
 			continue;
 		default:
 #ifdef SVC_RUN_DEBUG
@@ -1148,8 +1118,7 @@ out:
 				fprintf(stderr, "poll returned read fds < ");
 				for (i = 0, p = pollfds; i < nfds; i++, p++)
 					if (p->revents)
-						fprintf(stderr, "%d (0x%x)",
-						    p->fd, p->revents);
+						fprintf(stderr, "%d ", p->fd);
 				fprintf(stderr, ">\n");
 			}
 #endif
@@ -1167,8 +1136,7 @@ out:
 		}
 #ifdef SVC_RUN_DEBUG
 		if (debugging) {
-			fprintf(stderr, "svc_maxfd now %u\n",
-			    *svc_fdset_getmax());
+			fprintf(stderr, "svc_maxfd now %u\n", svc_maxfd);
 		}
 #endif
 	}
@@ -1326,7 +1294,7 @@ done:
 static void
 find_versions(rpcprog_t prog, char *netid, rpcvers_t *lowvp, rpcvers_t *highvp)
 {
-	rpcblist_ptr rbl;
+	register rpcblist_ptr rbl;
 	rpcvers_t lowv = 0;
 	rpcvers_t highv = 0;
 
@@ -1363,8 +1331,8 @@ find_versions(rpcprog_t prog, char *netid, rpcvers_t *lowvp, rpcvers_t *highvp)
 static rpcblist_ptr
 find_service(rpcprog_t prog, rpcvers_t vers, char *netid)
 {
-	rpcblist_ptr hit = NULL;
-	rpcblist_ptr rbl;
+	register rpcblist_ptr hit = NULL;
+	register rpcblist_ptr rbl;
 
 	for (rbl = list_rbl; rbl != NULL; rbl = rbl->rpcb_next) {
 		if ((rbl->rpcb_map.r_prog != prog) ||

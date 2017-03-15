@@ -6,12 +6,6 @@ struct A
    int a[];  /* expected-warning {{flexible array member 'a' in otherwise empty struct is a Microsoft extension}} */
 };
 
-struct PR28407
-{
-  int : 1;
-  int a[]; /* expected-warning {{flexible array member 'a' in otherwise empty struct is a Microsoft extension}} */
-};
-
 struct C {
    int l;
    union {
@@ -27,8 +21,6 @@ struct D {
 };
 
 struct __declspec(uuid("00000000-0000-0000-C000-000000000046")) IUnknown {}; /* expected-error {{'uuid' attribute is not supported in C}} */
-
-[uuid("00000000-0000-0000-C000-000000000046")] struct IUnknown2 {}; /* expected-error {{'uuid' attribute is not supported in C}} */
 
 typedef struct notnested {
   long bad1;
@@ -178,13 +170,3 @@ void myprintf(const char *f, ...) {
     __va_start(ap, f); // expected-warning {{incompatible pointer types passing 'my_va_list'}}
   }
 }
-
-// __unaligned handling
-void test_unaligned() {
-  __unaligned int *p1 = 0;
-  int *p2 = p1; // expected-warning {{initializing 'int *' with an expression of type '__unaligned int *' discards qualifiers}}
-  __unaligned int *p3 = p2;
-}
-
-void test_unaligned2(int x[__unaligned 4]) {}
-

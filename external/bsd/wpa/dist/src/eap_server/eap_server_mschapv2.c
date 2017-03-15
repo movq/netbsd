@@ -360,19 +360,6 @@ static void eap_mschapv2_process_response(struct eap_sm *sm,
 		}
 	}
 
-#ifdef CONFIG_TESTING_OPTIONS
-	{
-		u8 challenge[8];
-
-		if (challenge_hash(peer_challenge, data->auth_challenge,
-				   username, username_len, challenge) == 0) {
-			eap_server_mschap_rx_callback(sm, "EAP-MSCHAPV2",
-						      username, username_len,
-						      challenge, nt_response);
-		}
-	}
-#endif /* CONFIG_TESTING_OPTIONS */
-
 	if (username_len != user_len ||
 	    os_memcmp(username, user, username_len) != 0) {
 		wpa_printf(MSG_DEBUG, "EAP-MSCHAPV2: Mismatch in user names");
@@ -571,6 +558,7 @@ static Boolean eap_mschapv2_isSuccess(struct eap_sm *sm, void *priv)
 int eap_server_mschapv2_register(void)
 {
 	struct eap_method *eap;
+	int ret;
 
 	eap = eap_server_method_alloc(EAP_SERVER_METHOD_INTERFACE_VERSION,
 				      EAP_VENDOR_IETF, EAP_TYPE_MSCHAPV2,
@@ -587,5 +575,8 @@ int eap_server_mschapv2_register(void)
 	eap->getKey = eap_mschapv2_getKey;
 	eap->isSuccess = eap_mschapv2_isSuccess;
 
-	return eap_server_method_register(eap);
+	ret = eap_server_method_register(eap);
+	if (ret)
+		eap_server_method_free(eap);
+	return ret;
 }

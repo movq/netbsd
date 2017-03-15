@@ -58,10 +58,10 @@ void NSErrorMethodChecker::checkASTDecl(const ObjCMethodDecl *D,
     return;
 
   if (!II)
-    II = &D->getASTContext().Idents.get("NSError");
+    II = &D->getASTContext().Idents.get("NSError"); 
 
   bool hasNSError = false;
-  for (const auto *I : D->parameters())  {
+  for (const auto *I : D->params())  {
     if (IsNSError(I->getType(), II)) {
       hasNSError = true;
       break;
@@ -105,10 +105,10 @@ void CFErrorFunctionChecker::checkASTDecl(const FunctionDecl *D,
     return;
 
   if (!II)
-    II = &D->getASTContext().Idents.get("CFErrorRef");
+    II = &D->getASTContext().Idents.get("CFErrorRef"); 
 
   bool hasCFError = false;
-  for (auto I : D->parameters())  {
+  for (auto I : D->params())  {
     if (IsCFError(I->getType(), II)) {
       hasCFError = true;
       break;
@@ -275,7 +275,8 @@ void NSOrCFErrorDerefChecker::checkEvent(ImplicitNullDerefEvent event) const {
       CFBT.reset(new CFErrorDerefBug(this));
     bug = CFBT.get();
   }
-  BR.emitReport(llvm::make_unique<BugReport>(*bug, os.str(), event.SinkNode));
+  BugReport *report = new BugReport(*bug, os.str(), event.SinkNode);
+  BR.emitReport(report);
 }
 
 static bool IsNSError(QualType T, IdentifierInfo *II) {

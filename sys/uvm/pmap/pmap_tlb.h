@@ -1,4 +1,4 @@
-/*	$NetBSD: pmap_tlb.h,v 1.9 2016/07/11 16:06:09 matt Exp $	*/
+/*	$NetBSD: pmap_tlb.h,v 1.6 2014/04/03 14:46:25 matt Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993
@@ -74,7 +74,6 @@
 #ifndef	_COMMON_PMAP_TLB_H_
 #define	_COMMON_PMAP_TLB_H_
 
-#include <sys/evcnt.h>
 #include <sys/kcpuset.h>
 
 #if !defined(PMAP_TLB_MAX)
@@ -145,7 +144,7 @@ struct pmap_tlb_info {
 #ifdef	_KERNEL
 extern struct pmap_tlb_info pmap_tlb0_info;
 #ifdef MULTIPROCESSOR
-extern struct pmap_tlb_info *pmap_tlbs[PMAP_TLB_MAX];
+extern struct pmap_tlb_info *pmap_tlbs[MAXCPUS];
 extern u_int pmap_ntlbs;
 #endif
 
@@ -171,7 +170,7 @@ void	pmap_tlb_info_evcnt_attach(struct pmap_tlb_info *);
 void	pmap_tlb_asid_acquire(pmap_t, struct lwp *l);
 void	pmap_tlb_asid_deactivate(pmap_t);
 void	pmap_tlb_asid_release_all(pmap_t);
-int	pmap_tlb_update_addr(pmap_t, vaddr_t, pt_entry_t, u_int);
+int	pmap_tlb_update_addr(pmap_t, vaddr_t, uint32_t, u_int);
 #define	PMAP_TLB_NEED_IPI	0x01
 #define	PMAP_TLB_INSERT		0x02
 void	pmap_tlb_invalidate_addr(pmap_t, vaddr_t);

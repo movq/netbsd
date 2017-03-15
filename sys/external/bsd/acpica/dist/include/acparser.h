@@ -5,7 +5,7 @@
  *****************************************************************************/
 
 /*
- * Copyright (C) 2000 - 2017, Intel Corp.
+ * Copyright (C) 2000 - 2013, Intel Corp.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -41,6 +41,7 @@
  * POSSIBILITY OF SUCH DAMAGES.
  */
 
+
 #ifndef __ACPARSER_H__
 #define __ACPARSER_H__
 
@@ -72,19 +73,12 @@
  *
  *****************************************************************************/
 
-extern const UINT8      AcpiGbl_ShortOpIndex[];
-extern const UINT8      AcpiGbl_LongOpIndex[];
-
 
 /*
  * psxface - Parser external interfaces
  */
 ACPI_STATUS
 AcpiPsExecuteMethod (
-    ACPI_EVALUATE_INFO      *Info);
-
-ACPI_STATUS
-AcpiPsExecuteTable (
     ACPI_EVALUATE_INFO      *Info);
 
 
@@ -110,12 +104,7 @@ AcpiPsGetNextNamepath (
     ACPI_WALK_STATE         *WalkState,
     ACPI_PARSE_STATE        *ParserState,
     ACPI_PARSE_OBJECT       *Arg,
-    BOOLEAN                 PossibleMethodCall);
-
-/* Values for BOOLEAN above */
-
-#define ACPI_NOT_METHOD_CALL            FALSE
-#define ACPI_POSSIBLE_METHOD_CALL       TRUE
+    BOOLEAN                 MethodCall);
 
 ACPI_STATUS
 AcpiPsGetNextArg (
@@ -175,7 +164,7 @@ const ACPI_OPCODE_INFO *
 AcpiPsGetOpcodeInfo (
     UINT16                  Opcode);
 
-const char *
+char *
 AcpiPsGetOpcodeName (
     UINT16                  Opcode);
 
@@ -315,7 +304,7 @@ AcpiPsDeleteParseTree (
  */
 ACPI_PARSE_OBJECT *
 AcpiPsCreateScopeOp (
-    UINT8                   *Aml);
+    void);
 
 void
 AcpiPsInitOp (
@@ -324,8 +313,7 @@ AcpiPsInitOp (
 
 ACPI_PARSE_OBJECT *
 AcpiPsAllocOp (
-    UINT16                  Opcode,
-    UINT8                   *Aml);
+    UINT16                  opcode);
 
 void
 AcpiPsFreeOp (

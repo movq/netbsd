@@ -1,5 +1,4 @@
-# THIS FILE IS GENERATED.  -*- buffer-read-only: t -*- vi :set ro:
-# Generated from: i386/x32.xml
+# DO NOT EDIT: generated from i386/x32.xml
 name:x32
 xmltarget:x32.xml
 expedite:rbp,rsp,rip

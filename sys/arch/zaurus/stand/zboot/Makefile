@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.19 2017/02/22 12:51:38 maya Exp $
+#	$NetBSD: Makefile,v 1.16 2014/01/12 15:26:31 tsutsui Exp $
 
 PROG=		zboot
 
@@ -12,7 +12,7 @@ SRCS+=		pathfs.c
 
 NOMAN=		# defined
 
-.include <bsd.init.mk>
+.include <bsd.own.mk>
 
 CFLAGS+=	-Wall -Wno-main
 CFLAGS+=	-Wmissing-prototypes -Wstrict-prototypes -Wpointer-arith
@@ -22,7 +22,11 @@ CPPFLAGS+=	-nostdinc -I. -I${.CURDIR} -I${.OBJDIR} -I${S}
 CPPFLAGS+=	-D_STANDALONE -DHEAP_VARIABLE
 CPPFLAGS+=	-DLIBSA_ENABLE_LS_OP
 CPPFLAGS+=	${ARM_APCS_FLAGS} -mcpu=xscale
+.if ${HAVE_LLVM:Uno} != "no" || ${HAVE_GCC:U0} >= 48
 CPPFLAGS+=	-marm
+.else
+CPPFLAGS+=	-mno-thumb -mno-thumb-interwork
+.endif
 CPUFLAGS=
 AFLAGS+=	-D_LOCORE
 LDFLAGS+=	-nostdlib -Bstatic
@@ -57,7 +61,7 @@ LIBSA=		${SALIB}
 ${PROG}: ${OBJS} ${LIBSA} ${LIBZ} ${LIBKERN} ${VERSIONFILE}
 	${_MKTARGET_LINK}
 	${HOST_SH} ${S}/conf/newvers_stand.sh ${${MKREPRO} == "yes" :?:-D} \
-	    ${VERSIONFILE} zaurus ${NEWVERSWHAT}
+	    ${VERSIONFILE} ${MACHINE} ${NEWVERSWHAT}
 	${CC} ${CFLAGS} ${CPPFLAGS} -c vers.c
 	${LD} ${LDFLAGS} -o ${PROG} ${OBJS} vers.o ${LIBSA} ${LIBZ} ${LIBKERN}
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: n_support.S,v 1.10 2014/11/14 14:53:17 joerg Exp $	*/
+/*	$NetBSD: n_support.S,v 1.9.4.1 2015/05/25 09:05:25 msaitoh Exp $	*/
 /*
  * Copyright (c) 1985, 1993
  *	The Regents of the University of California.  All rights reserved.

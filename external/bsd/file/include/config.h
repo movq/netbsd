@@ -33,23 +33,14 @@
 /* Define to 1 if you have the <dlfcn.h> header file. */
 #define HAVE_DLFCN_H 1
 
-/* Define to 1 if you have the `dprintf' function. */
-#define HAVE_DPRINTF 1
-
 /* Define to 1 if you have the <err.h> header file. */
 #define HAVE_ERR_H 1
 
 /* Define to 1 if you have the <fcntl.h> header file. */
 #define HAVE_FCNTL_H 1
 
-/* Define to 1 if you have the `fmtcheck' function. */
-#define HAVE_FMTCHECK 1
-
 /* Define to 1 if you have the `fork' function. */
 #define HAVE_FORK 1
-
-/* Define to 1 if you have the `freelocale' function. */
-#define HAVE_FREELOCALE 1
 
 /* Define to 1 if fseeko (and presumably ftello) exists and is declared. */
 #define HAVE_FSEEKO 1
@@ -66,12 +57,6 @@
 /* Define to 1 if you have the `getpagesize' function. */
 #define HAVE_GETPAGESIZE 1
 
-/* Define to 1 if you have the `gmtime_r' function. */
-#define HAVE_GMTIME_R 1
-
-/* Define to 1 if the system has the type `intptr_t'. */
-#define HAVE_INTPTR_T 1
-
 /* Define to 1 if you have the <inttypes.h> header file. */
 #define HAVE_INTTYPES_H 1
 
@@ -87,9 +72,6 @@
 /* Define to 1 if you have the <locale.h> header file. */
 #define HAVE_LOCALE_H 1
 
-/* Define to 1 if you have the `localtime_r' function. */
-#define HAVE_LOCALTIME_R 1
-
 /* Define to 1 if mbrtowc and mbstate_t are properly declared. */
 #define HAVE_MBRTOWC 1
 
@@ -100,7 +82,7 @@
 #define HAVE_MEMORY_H 1
 
 /* Define to 1 if you have the `mkostemp' function. */
-#define HAVE_MKOSTEMP 1
+/* #undef HAVE_MKOSTEMP */
 
 /* Define to 1 if you have the `mkstemp' function. */
 #define HAVE_MKSTEMP 1
@@ -108,20 +90,8 @@
 /* Define to 1 if you have a working `mmap' system call. */
 #define HAVE_MMAP 1
 
-/* Define to 1 if you have the `newlocale' function. */
-#define HAVE_NEWLOCALE 1
-
 /* Define to 1 if you have the `pread' function. */
 #define HAVE_PREAD 1
-
-/* Define to 1 if you have the `setlocale' function. */
-#define HAVE_SETLOCALE 1
-
-/* Define to 1 if you have the <signal.h> header file. */
-#define HAVE_SIGNAL_H 1
-
-/* Have sig_t type */
-#define HAVE_SIG_T 1
 
 /* Define to 1 if you have the <stddef.h> header file. */
 #define HAVE_STDDEF_H 1
@@ -131,9 +101,6 @@
 
 /* Define to 1 if you have the <stdlib.h> header file. */
 #define HAVE_STDLIB_H 1
-
-/* Define to 1 if you have the `strcasestr' function. */
-#define HAVE_STRCASESTR 1
 
 /* Define to 1 if you have the `strerror' function. */
 #define HAVE_STRERROR 1
@@ -201,14 +168,8 @@
 /* HAVE_TZNAME */
 #define HAVE_TZNAME 1
 
-/* Define to 1 if the system has the type `uintptr_t'. */
-#define HAVE_UINTPTR_T 1
-
 /* Define to 1 if you have the <unistd.h> header file. */
 #define HAVE_UNISTD_H 1
-
-/* Define to 1 if you have the `uselocale' function. */
-/* #undef HAVE_USELOCALE */
 
 /* Define to 1 if you have the `utime' function. */
 #define HAVE_UTIME 1
@@ -247,9 +208,6 @@
 /* Define to 1 if `vfork' works. */
 #define HAVE_WORKING_VFORK 1
 
-/* Define to 1 if you have the <xlocale.h> header file. */
-/* #undef HAVE_XLOCALE_H */
-
 /* Define to 1 if you have the <zlib.h> header file. */
 #define HAVE_ZLIB_H 1
 
@@ -265,6 +223,9 @@
    <sysmacros.h>. */
 /* #undef MAJOR_IN_SYSMACROS */
 
+/* Define to 1 if your C compiler doesn't accept -c and -o together. */
+/* #undef NO_MINUS_C_MINUS_O */
+
 /* Name of package */
 #define PACKAGE "file"
 
@@ -275,7 +236,7 @@
 #define PACKAGE_NAME "file"
 
 /* Define to the full name and version of this package. */
-#define PACKAGE_STRING "file 5.30"
+#define PACKAGE_STRING "file 5.14"
 
 /* Define to the one symbol short name of this package. */
 #define PACKAGE_TARNAME "file"
@@ -284,7 +245,9 @@
 #define PACKAGE_URL ""
 
 /* Define to the version of this package. */
-#define PACKAGE_VERSION "5.30"
+#if 0
+#define PACKAGE_VERSION "5.14"
+#endif
 
 /* Define to 1 if you have the ANSI C header files. */
 #define STDC_HEADERS 1
@@ -314,8 +277,10 @@
 #endif
 
 
+#if 0
 /* Version number of package */
-#define VERSION "5.30"
+#define VERSION "5.14"
+#endif
 
 /* Define WORDS_BIGENDIAN to 1 if your processor stores words with the most
    significant byte first (like Motorola and SPARC, unlike Intel). */
@@ -328,9 +293,6 @@
 /* #  undef WORDS_BIGENDIAN */
 # endif
 #endif
-
-/* Enable zlib compression support */
-#define ZLIBSUPPORT 1
 
 /* Enable large inode numbers on Mac OS X 10.5.  */
 #ifndef _DARWIN_USE_64_BIT_INODE
@@ -382,10 +344,6 @@
    such a type exists and the standard includes do not define it. */
 /* #undef int64_t */
 
-/* Define to the type of a signed integer type wide enough to hold a pointer,
-   if such a type exists, and if the system does not define it. */
-/* #undef intptr_t */
-
 /* Define to a type if <wchar.h> does not define. */
 /* #undef mbstate_t */
 
@@ -413,10 +371,6 @@
 /* Define to the type of an unsigned integer type of width exactly 8 bits if
    such a type exists and the standard includes do not define it. */
 /* #undef uint8_t */
-
-/* Define to the type of an unsigned integer type wide enough to hold a
-   pointer, if such a type exists, and if the system does not define it. */
-/* #undef uintptr_t */
 
 /* Define as `fork' if `vfork' does not work. */
 /* #undef vfork */

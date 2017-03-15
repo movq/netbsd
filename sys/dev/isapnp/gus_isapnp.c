@@ -1,4 +1,4 @@
-/*	$NetBSD: gus_isapnp.c,v 1.38 2016/07/14 10:19:06 msaitoh Exp $	*/
+/*	$NetBSD: gus_isapnp.c,v 1.37 2012/10/27 17:18:26 chs Exp $	*/
 
 /*
  * Copyright (c) 1997, 1999, 2008 The NetBSD Foundation, Inc.
@@ -29,7 +29,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: gus_isapnp.c,v 1.38 2016/07/14 10:19:06 msaitoh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: gus_isapnp.c,v 1.37 2012/10/27 17:18:26 chs Exp $");
 
 #include "guspnp.h"
 #if NGUSPNP > 0
@@ -134,8 +134,7 @@ gus_isapnp_attach(device_t parent, device_t self, void *aux)
 
 	sc = device_private(self);
 	ipa = aux;
-	aprint_naive("\n");
-	aprint_normal("\n");
+	printf("\n");
 
 	if (!gus_0)
 		return;
@@ -207,7 +206,8 @@ gus_isapnp_attach(device_t parent, device_t self, void *aux)
 	sc->iw_cd = &guspnp_cd;
 	sc->iw_hw_if = &guspnp_hw_if;
 
-	aprint_normal_dev(self, "%s %s", ipa->ipa_devident, ipa->ipa_devclass);
+	printf("%s: %s %s", device_xname(self), ipa->ipa_devident,
+	       ipa->ipa_devclass);
 
 	iwattach(sc);
 }

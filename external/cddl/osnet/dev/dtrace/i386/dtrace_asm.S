@@ -1,4 +1,4 @@
-/*	$NetBSD: dtrace_asm.S,v 1.6 2017/02/27 06:47:00 chs Exp $	*/
+/*	$NetBSD: dtrace_asm.S,v 1.3 2010/03/13 22:31:15 christos Exp $	*/
 
 /*
  * CDDL HEADER START
@@ -30,45 +30,17 @@
 
 #define _ASM
 
-#include "assym.h"
-
 #include <sys/cpuvar_defs.h>
 #include <sys/dtrace.h>
 #include <machine/asm.h>
 #include <machine/frameasm.h>
-#include <machine/trap.h>
-
-#define INTR_POP		\
-	addl	$16, %esp;	\
-	popl	%edi;		\
-	popl	%esi;		\
-	popl	%ebp;		\
-	popl	%ebx;		\
-	popl	%edx;		\
-	popl	%ecx;		\
-	popl	%eax;		\
-	addl	$8, %esp
 
 	ENTRY(dtrace_invop_start)
-	
-	/* Store a trapframe for dtrace. */
-	pushl	$0
-	pushl	$T_PRIVINFLT
-	pushl	%eax
-	pushl	%ecx
-	pushl	%edx
-	pushl	%ebx
-	pushl	%ebp
-	pushl	%esi
-	pushl	%edi
-	subl	$16,%esp		/* dummy for segment regs */
-	cld
 
-	/* Store the args to dtrace_invop(). */
 	pushl	%eax			/* push %eax -- may be return value */
 	pushl	%esp			/* push stack pointer */
-	addl	$4, (%esp)		/* skip first arg and segment regs */
-	pushl	TF_EIP+8(%esp)		/* push calling EIP */
+	addl	$48, (%esp)		/* adjust to incoming args */
+	pushl	40(%esp)		/* push calling EIP */
 
 	/*
 	 * Call dtrace_invop to let it check if the exception was
@@ -76,8 +48,14 @@
 	 * dtrace_invop wants us to do.
 	 */
 	call	dtrace_invop
-	ALTENTRY(dtrace_invop_callsite)
+
+	/*
+	 * We pushed 3 times for the arguments to dtrace_invop,
+	 * so we need to increment the stack pointer to get rid of
+	 * those values.
+	 */
 	addl	$12, %esp
+//	ALTENTRY(dtrace_invop_callsite)
 	cmpl	$DTRACE_INVOP_PUSHL_EBP, %eax
 	je	invop_push
 	cmpl	$DTRACE_INVOP_POPL_EBP, %eax
@@ -95,7 +73,7 @@ invop_push:
 	 * We must emulate a "pushl %ebp".  To do this, we pull the stack
 	 * down 4 bytes, and then store the base pointer.
 	 */
-	INTR_POP
+	popal
 	subl	$4, %esp		/* make room for %ebp */
 	pushl	%eax			/* push temp */
 	movl	8(%esp), %eax		/* load calling EIP */
@@ -114,7 +92,7 @@ invop_pop:
 	 * the above:  we remove the %ebp from the stack, and squeeze up the
 	 * saved state from the trap.
 	 */
-	INTR_POP
+	popal
 	pushl	%eax			/* push temp */
 	movl	16(%esp), %ebp		/* pop %ebp */
 	movl	12(%esp), %eax		/* load calling EFLAGS */
@@ -134,7 +112,7 @@ invop_leave:
 	 * requires two temporaries:  one for the new base pointer, and one
 	 * for the staging register.
 	 */
-	INTR_POP
+	popa
 	pushl	%eax			/* push temp */
 	pushl	%ebx			/* push temp */
 	movl	%ebp, %ebx		/* set temp to old %ebp */
@@ -157,7 +135,7 @@ invop_nop:
 	 * We must emulate a "nop".  This is obviously not hard:  we need only
 	 * advance the %eip by one.
 	 */
-	INTR_POP
+	popa
 	incl	(%esp)
 	iret				/* return from interrupt */
 
@@ -394,3 +372,167 @@ void dtrace_interrupt_enable(dtrace_icookie_t cookie)
 	popfl
 	ret
 	END(dtrace_interrupt_enable)
+
+/*
+ * The panic() and cmn_err() functions invoke vpanic() as a common entry point
+ * into the panic code implemented in panicsys().  vpanic() is responsible
+ * for passing through the format string and arguments, and constructing a
+ * regs structure on the stack into which it saves the current register
+ * values.  If we are not dying due to a fatal trap, these registers will
+ * then be preserved in panicbuf as the current processor state.  Before
+ * invoking panicsys(), vpanic() activates the first panic trigger (see
+ * common/os/panic.c) and switches to the panic_stack if successful.  Note that
+ * DTrace takes a slightly different panic path if it must panic from probe
+ * context.  Instead of calling panic, it calls into dtrace_vpanic(), which
+ * sets up the initial stack as vpanic does, calls dtrace_panic_trigger(), and
+ * branches back into vpanic().
+ */
+/*
+void vpanic(const char *format, va_list alist)
+*/
+	ENTRY(vpanic)				/* Initial stack layout: */
+
+	pushl	%ebp				/* | %eip | 20 */
+	movl	%esp, %ebp			/* | %ebp | 16 */
+	pushl	%eax				/* | %eax | 12 */
+	pushl	%ebx				/* | %ebx |  8 */
+	pushl	%ecx				/* | %ecx |  4 */
+	pushl	%edx				/* | %edx |  0 */
+
+	movl	%esp, %ebx			/* %ebx = current stack pointer */
+
+	lea	panic_quiesce, %eax		/* %eax = &panic_quiesce */
+	pushl	%eax				/* push &panic_quiesce */
+	call	panic_trigger			/* %eax = panic_trigger() */
+	addl	$4, %esp			/* reset stack pointer */
+
+vpanic_common:
+	cmpl	$0, %eax			/* if (%eax == 0) */
+	je	0f				/*   goto 0f; */
+
+	/*
+	 * If panic_trigger() was successful, we are the first to initiate a
+	 * panic: we now switch to the reserved panic_stack before continuing.
+	 */
+	lea	panic_stack, %esp		/* %esp  = panic_stack */
+	addl	$PANICSTKSIZE, %esp		/* %esp += PANICSTKSIZE */
+
+0:	subl	$REGSIZE, %esp			/* allocate struct regs */
+
+	/*
+	 * Now that we've got everything set up, store the register values as
+	 * they were when we entered vpanic() to the designated location in
+	 * the regs structure we allocated on the stack. 
+	 */
+#ifdef notyet
+	mov	%gs, %edx
+	mov	%edx, REGOFF_GS(%esp)
+	mov	%fs, %edx
+	mov	%edx, REGOFF_FS(%esp)
+	mov	%es, %edx
+	mov	%edx, REGOFF_ES(%esp)
+	mov	%ds, %edx
+	mov	%edx, REGOFF_DS(%esp)
+	movl	%edi, REGOFF_EDI(%esp)
+	movl	%esi, REGOFF_ESI(%esp)
+	movl	16(%ebx), %ecx
+	movl	%ecx, REGOFF_EBP(%esp)
+	movl	%ebx, %ecx
+	addl	$20, %ecx
+	movl	%ecx, REGOFF_ESP(%esp)
+	movl	8(%ebx), %ecx
+	movl	%ecx, REGOFF_EBX(%esp)
+	movl	0(%ebx), %ecx
+	movl	%ecx, REGOFF_EDX(%esp)
+	movl	4(%ebx), %ecx
+	movl	%ecx, REGOFF_ECX(%esp)
+	movl	12(%ebx), %ecx
+	movl	%ecx, REGOFF_EAX(%esp)
+	movl	$0, REGOFF_TRAPNO(%esp)
+	movl	$0, REGOFF_ERR(%esp)
+	lea	vpanic, %ecx
+	movl	%ecx, REGOFF_EIP(%esp)
+	mov	%cs, %edx
+	movl	%edx, REGOFF_CS(%esp)
+	pushfl
+	popl	%ecx
+	movl	%ecx, REGOFF_EFL(%esp)
+	movl	$0, REGOFF_UESP(%esp)
+	mov	%ss, %edx
+	movl	%edx, REGOFF_SS(%esp)
+
+	movl	%esp, %ecx			/* %ecx = &regs */
+	pushl	%eax				/* push on_panic_stack */
+	pushl	%ecx				/* push &regs */
+	movl	12(%ebp), %ecx			/* %ecx = alist */
+	pushl	%ecx				/* push alist */
+	movl	8(%ebp), %ecx			/* %ecx = format */
+	pushl	%ecx				/* push format */
+	call	panicsys			/* panicsys(); */
+	addl	$16, %esp			/* pop arguments */
+
+	addl	$REGSIZE, %esp
+#endif
+	popl	%edx
+	popl	%ecx
+	popl	%ebx
+	popl	%eax
+	leave
+	ret
+	END(vpanic)
+
+/*
+void dtrace_vpanic(const char *format, va_list alist)
+*/
+	ENTRY(dtrace_vpanic)			/* Initial stack layout: */
+
+	pushl	%ebp				/* | %eip | 20 */
+	movl	%esp, %ebp			/* | %ebp | 16 */
+	pushl	%eax				/* | %eax | 12 */
+	pushl	%ebx				/* | %ebx |  8 */
+	pushl	%ecx				/* | %ecx |  4 */
+	pushl	%edx				/* | %edx |  0 */
+
+	movl	%esp, %ebx			/* %ebx = current stack pointer */
+
+	lea	panic_quiesce, %eax		/* %eax = &panic_quiesce */
+	pushl	%eax				/* push &panic_quiesce */
+	call	dtrace_panic_trigger		/* %eax = dtrace_panic_trigger() */
+	addl	$4, %esp			/* reset stack pointer */
+	jmp	vpanic_common			/* jump back to common code */
+
+	END(dtrace_vpanic)
+
+/*
+int
+panic_trigger(int *tp)
+*/
+	ENTRY(panic_trigger)
+	xorl	%eax, %eax
+	movl	$0xdefacedd, %edx
+	lock
+	  xchgl	%edx, (%edi)
+	cmpl	$0, %edx
+	je	0f 
+	movl	$0, %eax
+	ret
+0:	movl	$1, %eax
+	ret
+	END(panic_trigger)
+	
+/*
+int
+dtrace_panic_trigger(int *tp)
+*/
+	ENTRY(dtrace_panic_trigger)
+	xorl	%eax, %eax
+	movl	$0xdefacedd, %edx
+	lock
+	  xchgl	%edx, (%edi)
+	cmpl	$0, %edx
+	je	0f
+	movl	$0, %eax
+	ret
+0:	movl	$1, %eax
+	ret
+	END(dtrace_panic_trigger)

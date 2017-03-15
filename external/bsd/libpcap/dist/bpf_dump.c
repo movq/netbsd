@@ -1,4 +1,4 @@
-/*	$NetBSD: bpf_dump.c,v 1.3 2017/01/24 22:29:28 christos Exp $	*/
+/*	$NetBSD: bpf_dump.c,v 1.1.1.3 2013/04/06 15:57:46 christos Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993, 1994, 1995, 1996
@@ -20,9 +20,10 @@
  * WARRANTIES, INCLUDING, WITHOUT LIMITATION, THE IMPLIED WARRANTIES OF
  * MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE.
  */
-
-#include <sys/cdefs.h>
-__RCSID("$NetBSD: bpf_dump.c,v 1.3 2017/01/24 22:29:28 christos Exp $");
+#ifndef lint
+static const char rcsid[] _U_ =
+    "@(#) Header: /tcpdump/master/libpcap/bpf_dump.c,v 1.15 2008-01-02 04:16:46 guy Exp  (LBL)";
+#endif
 
 #ifdef HAVE_CONFIG_H
 #include "config.h"
@@ -56,10 +57,7 @@ bpf_dump(const struct bpf_program *p, int option)
 	for (i = 0; i < n; ++insn, ++i) {
 #ifdef BDEBUG
 		extern int bids[];
-		if (bids[i] > 0)
-			printf("[%02d]", bids[i] - 1);
-		else
-			printf(" -- ");
+		printf(bids[i] > 0 ? "[%02d]" : " -- ", bids[i] - 1);
 #endif
 		puts(bpf_image(insn, i));
 	}

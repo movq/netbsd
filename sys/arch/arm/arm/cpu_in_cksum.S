@@ -1,4 +1,4 @@
-/*	$NetBSD: cpu_in_cksum.S,v 1.11 2015/02/15 17:21:08 skrll Exp $	*/
+/*	$NetBSD: cpu_in_cksum.S,v 1.8.4.2 2015/02/17 15:30:34 martin Exp $	*/
 
 /*
  * Copyright 2003 Wasabi Systems, Inc.
@@ -40,7 +40,7 @@
  */
 
 #include <machine/asm.h>
-RCSID("$NetBSD: cpu_in_cksum.S,v 1.11 2015/02/15 17:21:08 skrll Exp $")
+RCSID("$NetBSD: cpu_in_cksum.S,v 1.8.4.2 2015/02/17 15:30:34 martin Exp $")
 	
 #include "assym.h"
 

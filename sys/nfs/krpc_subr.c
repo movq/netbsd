@@ -1,4 +1,4 @@
-/*	$NetBSD: krpc_subr.c,v 1.42 2016/06/10 13:27:16 ozaki-r Exp $	*/
+/*	$NetBSD: krpc_subr.c,v 1.37.38.2 2015/04/21 04:55:15 snj Exp $	*/
 
 /*
  * Copyright (c) 1995 Gordon Ross, Adam Glass
@@ -43,7 +43,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: krpc_subr.c,v 1.42 2016/06/10 13:27:16 ozaki-r Exp $");
+__KERNEL_RCSID(0, "$NetBSD: krpc_subr.c,v 1.37.38.2 2015/04/21 04:55:15 snj Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -219,8 +219,8 @@ krpc_call(struct sockaddr_in *sa, u_int prog, u_int vers, u_int func, struct mbu
 	/* from_p:	 output */
 {
 	struct socket *so;
-	struct sockaddr_in sin;
-	struct mbuf *m, *mhead, *from;
+	struct sockaddr_in *sin;
+	struct mbuf *m, *nam, *mhead, *from;
 	struct rpc_call *call;
 	struct rpc_reply *reply;
 	int error, len;
@@ -235,7 +235,7 @@ krpc_call(struct sockaddr_in *sa, u_int prog, u_int vers, u_int func, struct mbu
 		return (EAFNOSUPPORT);
 
 	/* Free at end if not null. */
-	mhead = NULL;
+	nam = mhead = NULL;
 	from = NULL;
 
 	/*
@@ -274,7 +274,10 @@ krpc_call(struct sockaddr_in *sa, u_int prog, u_int vers, u_int func, struct mbu
 	/*
 	 * Setup socket address for the server.
 	 */
-	sin = *sa;
+	nam = m_get(M_WAIT, MT_SONAME);
+	sin = mtod(nam, struct sockaddr_in *);
+	memcpy((void *)sin, (void *)sa,
+		  (nam->m_len = sa->sin_len));
 
 	/*
 	 * Prepend RPC message header.
@@ -309,9 +312,9 @@ krpc_call(struct sockaddr_in *sa, u_int prog, u_int vers, u_int func, struct mbu
 		m = m->m_next;
 	}
 	mhead->m_pkthdr.len = len;
-	m_reset_rcvif(mhead);
+	mhead->m_pkthdr.rcvif = NULL;
 
-	error = nfs_boot_sendrecv(so, &sin, NULL, mhead, krpccheck, &m, &from,
+	error = nfs_boot_sendrecv(so, nam, 0, mhead, krpccheck, &m, &from,
 	    &xid, l);
 	if (error)
 		goto out;
@@ -380,6 +383,7 @@ krpc_call(struct sockaddr_in *sa, u_int prog, u_int vers, u_int func, struct mbu
 	}
 
  out:
+	if (nam) m_freem(nam);
 	if (mhead) m_freem(mhead);
 	if (from) m_freem(from);
 	soclose(so);

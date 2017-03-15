@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.40 2017/01/11 12:02:28 joerg Exp $
+#	$NetBSD: Makefile,v 1.32.2.1 2015/06/04 20:05:43 snj Exp $
 
 .include <bsd.init.mk>
 
@@ -11,38 +11,25 @@ INCS=	__wmmintrin_aes.h \
 	ammintrin.h \
 	avx2intrin.h \
 	avx512bwintrin.h \
-	avx512cdintrin.h \
-	avx512dqintrin.h \
 	avx512fintrin.h \
 	avx512erintrin.h \
-	avx512ifmaintrin.h \
-	avx512ifmavlintrin.h \
-	avx512pfintrin.h \
-	avx512vbmiintrin.h \
-	avx512vbmivlintrin.h \
 	avx512vlbwintrin.h \
-	avx512vlcdintrin.h \
-	avx512vldqintrin.h \
 	avx512vlintrin.h \
 	avxintrin.h \
 	bmi2intrin.h \
 	bmiintrin.h \
-	clflushoptintrin.h \
 	cpuid.h \
 	emmintrin.h \
 	f16cintrin.h \
 	fmaintrin.h \
 	fma4intrin.h \
-	fxsrintrin.h \
 	ia32intrin.h \
 	immintrin.h \
 	lzcntintrin.h \
 	mm3dnow.h \
 	mmintrin.h \
 	mm_malloc.h \
-	mwaitxintrin.h \
 	nmmintrin.h \
-	pkuintrin.h \
 	pmmintrin.h \
 	popcntintrin.h \
 	prfchwintrin.h \
@@ -55,43 +42,29 @@ INCS=	__wmmintrin_aes.h \
 	wmmintrin.h \
 	x86intrin.h \
 	xmmintrin.h \
-	xopintrin.h \
-	xsavesintrin.h \
-	xsaveintrin.h \
-	xsaveoptintrin.h \
-	xsavecintrin.h \
-	xtestintrin.h
-
+	xopintrin.h
 .elif ${MACHINE_ARCH} == "powerpc" || ${MACHINE_ARCH} == "powerpc64"
-INCS=	altivec.h \
-	htmintrin.h \
-	htmxlintrin.h
+INCS=	altivec.h
 .elif ${MACHINE_CPU} == "arm"
 INCS=	arm_acle.h \
 	arm_neon.h
-.elif ${MACHINE_CPU} == "mips" || ${MACHINE_CPU} == "mips64"
-INCS=	msa.h
 .endif
-INCS+=	stdalign.h stdatomic.h stdnoreturn.h
+INCS+=	stdatomic.h
 INCSDIR=	/usr/include/clang-${CLANG_VERSION:R}
 
 .PATH:	${LLVM_SRCDIR}/include/llvm/IR \
 	${CLANG_SRCDIR}/include/clang/AST \
 	${CLANG_SRCDIR}/include/clang/Basic \
-	${CLANG_SRCDIR}/include/clang/Driver \
-	${CLANG_SRCDIR}/include/clang/StaticAnalyzer/Checkers
+	${CLANG_SRCDIR}/include/clang/Driver
 
-TABLEGEN_SRC=	Attributes.td Intrinsics.td Options.td
-
-TABLEGEN_OUTPUT.Attributes.td= \
-	llvm/IR/Attributes.gen|-gen-attrs
+TABLEGEN_SRC=	Intrinsics.td Options.td
 
 TABLEGEN_OUTPUT.Intrinsics.td= \
 	llvm/IR/Intrinsics.gen|-gen-intrinsic
 
 CLANG_TABLEGEN_SRC=	Attr.td CommentCommands.td CommentHTMLTags.td \
 	CommentNodes.td CommentHTMLNamedCharacterReferences.td DeclNodes.td \
-	StmtNodes.td Diagnostic.td arm_neon.td Checkers.td
+	StmtNodes.td Diagnostic.td arm_neon.td
 
 CLANG_TABLEGEN_INCLUDES.Attr.td=	-I${CLANG_SRCDIR}/include
 CLANG_TABLEGEN_OUTPUT.Attr.td= \
@@ -149,10 +122,6 @@ CLANG_TABLEGEN_OUTPUT.arm_neon.td= \
 	clang/Basic/arm_neon.inc|-gen-arm-neon-sema \
 	arm_neon.h|-gen-arm-neon
 
-CLANG_TABLEGEN_INCLUDES.Checkers.td=	-I${CLANG_SRCDIR}/include
-CLANG_TABLEGEN_OUTPUT.Checkers.td= \
-	clang/StaticAnalyzer/Checkers/Checkers.inc|-gen-clang-sa-checkers
-
 TABLEGEN_INCLUDES.Options.td=	-I${CLANG_SRCDIR}/include/clang/Driver
 TABLEGEN_OUTPUT.Options.td= \
 	clang/Driver/Options.inc|-gen-opt-parser-defs
@@ -165,10 +134,8 @@ CLEANFILES+=	clang/Basic/Version.inc
 clang/Basic/Version.inc: ${LLVM_TOPLEVEL}/Makefile.inc
 	mkdir -p ${.TARGET:H}
 	printf '#define CLANG_VERSION ${CLANG_VERSION}\n' > ${.TARGET}.tmp
-	printf '#define CLANG_VERSION_STRING "${CLANG_VERSION}"\n' >> ${.TARGET}.tmp
 	printf '#define CLANG_VERSION_MAJOR ${CLANG_VERSION:R:R}\n' >> ${.TARGET}.tmp
 	printf '#define CLANG_VERSION_MINOR ${CLANG_VERSION:R:E}\n' >> ${.TARGET}.tmp
-	printf '#define CLANG_VERSION_PATCHLEVEL ${CLANG_VERSION:R:R}\n' >> ${.TARGET}.tmp
 	mv ${.TARGET}.tmp ${.TARGET}
 
 lld/Config/Version.inc: ${LLVM_TOPLEVEL}/Makefile.inc
@@ -192,8 +159,6 @@ lld/Config/Version.inc: ${LLVM_TOPLEVEL}/Makefile.inc
 DPSRCS+=	llvm/Config/config.h llvm/Config/llvm-config.h
 CLEANFILES+=	llvm/Config/config.h llvm/Config/llvm-config.h
 
-NATIVE_LIBS=	-lm -lexecinfo
-
 llvm/Config/config.h: ${LLVM_TOPLEVEL}/Makefile.inc ${LLVM_TOPLEVEL}/config/llvm/Config/config.h.in
 	mkdir -p ${.TARGET:H}
 	${TOOL_SED} -e /LLVM_DEFAULT_TARGET_TRIPLE/d -e /LLVM_NATIVE_/d \
@@ -204,8 +169,6 @@ llvm/Config/config.h: ${LLVM_TOPLEVEL}/Makefile.inc ${LLVM_TOPLEVEL}/config/llvm
 	printf '#define PACKAGE_VERSION "${LLVM_VERSION} (trunk ${LLVM_REVISION})"\n' >> ${.TARGET}.tmp
 	printf '#define LLVM_VERSION_MAJOR ${LLVM_VERSION:R:R}\n' >> ${.TARGET}.tmp
 	printf '#define LLVM_VERSION_MINOR ${LLVM_VERSION:R:E}\n' >> ${.TARGET}.tmp
-	printf '#define LLVM_VERSION_PATCH ${LLVM_VERSION:E}\n' >> ${.TARGET}.tmp
-	printf '#define LLVM_VERSION_STRING "${LLVM_VERSION}"\n' >> ${.TARGET}.tmp
 	printf '#endif\n' >> ${.TARGET}.tmp
 	mv ${.TARGET}.tmp ${.TARGET}
 
@@ -218,25 +181,23 @@ llvm/Config/llvm-config.h: ${LLVM_TOPLEVEL}/Makefile.inc ${LLVM_TOPLEVEL}/config
 	printf '#define LLVM_DEFAULT_TARGET_TRIPLE "${MACHINE_GNU_PLATFORM}"\n' >> ${.TARGET}.tmp
 	printf '#define LLVM_VERSION_MAJOR ${LLVM_VERSION:R:R}\n' >> ${.TARGET}.tmp
 	printf '#define LLVM_VERSION_MINOR ${LLVM_VERSION:R:E}\n' >> ${.TARGET}.tmp
-	printf '#define LLVM_VERSION_PATCH ${LLVM_VERSION:E}\n' >> ${.TARGET}.tmp
-	printf '#define LLVM_VERSION_STRING "${LLVM_VERSION}"\n' >> ${.TARGET}.tmp
 	printf '#endif\n' >> ${.TARGET}.tmp
 	mv ${.TARGET}.tmp ${.TARGET}
 
 run-configure:
 	[ ! -d tmp ] || rm -r tmp
 	mkdir -p tmp
-	cd tmp && CONFIG_SITE= ${CONFIG_DIR}/configure ${LLVM_CONFIGURE_ARGS} \
+	cd tmp && ${LLVM_SRCDIR}/configure ${LLVM_CONFIGURE_ARGS} \
 	    CC=${CC:Q} CFLAGS=${CFLAGS:N-Werror:Q} CXX=${CXX:Q} CXXFLAGS=${CXXFLAGS:N-Werror:Q} \
-	    CPPFLAGS=${CPPFLAGS:N-std=c++11:Q} LDFLAGS=${LDFLAGS:Q} LD=${LD:Q} LIBS=${NATIVE_LIBS:Q} \
-	    BUILD_CC=${CC:Q} BUILD_CXX=${CXX:Q}
+	    CPPFLAGS=${CPPFLAGS:N-std=c++11:Q} LDFLAGS=${LDFLAGS:Q} LD=${LD:Q} LIBS=-lm \
+	    ac_cv_func_mmap_fixed_mapped=yes ac_cv_func_mmap_file=yes llvm_cv_c_printf_a=yes
 	cp -r tmp/include/llvm/* ${LLVM_INCLUDE_CONFIG}/llvm/
+	mv ${LLVM_INCLUDE_CONFIG}/llvm/Config/config.h \
+	   ${LLVM_INCLUDE_CONFIG}/llvm/Config/config.h.in
 	mv ${LLVM_INCLUDE_CONFIG}/llvm/Config/llvm-config.h \
 	   ${LLVM_INCLUDE_CONFIG}/llvm/Config/llvm-config.h.in
-	cp -r tmp/include/clang/* ${CLANG_INCLUDE_CONFIG}/clang/
+	cp -r tmp/tools/clang/include/clang/* ${CLANG_INCLUDE_CONFIG}/clang/
 	rm -r tmp
-	mv ${LLVM_INCLUDE_CONFIG}/llvm/Config/config.h \
-	    ${LLVM_INCLUDE_CONFIG}/llvm/Config/config.h.in
 .endif
 
 depend dependall all: ${DPSRCS}

@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.8 2016/01/05 13:07:47 christos Exp $
+#	$NetBSD: Makefile,v 1.7 2010/11/22 21:05:29 mrg Exp $
 
 .include <bsd.own.mk>
 
@@ -69,7 +69,8 @@ LIBDPLIBS=	Xi	${.CURDIR}/../libXi \
 		GL	${.CURDIR}/../libGL \
 		GLU	${.CURDIR}/../libGLU
 
-LIBDPLIBS+=	m ${NETBSDSRCDIR}/lib/libm
+LDADD+=		-lm
+DPADD+=		${LIBM}
 
 PKGCONFIG=	glut
 PKGDIST.glut=	${X11SRCDIR.MesaGLUT}/src/glut/glx

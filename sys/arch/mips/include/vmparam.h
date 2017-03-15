@@ -1,4 +1,4 @@
-/*	$NetBSD: vmparam.h,v 1.57 2016/11/22 11:01:50 skrll Exp $	*/
+/*	$NetBSD: vmparam.h,v 1.52.4.1 2016/12/03 12:08:36 martin Exp $	*/
 
 /*
  * Copyright (c) 1988 University of Utah.
@@ -42,18 +42,13 @@
 #define	_MIPS_VMPARAM_H_
 
 #ifdef _KERNEL_OPT
-#include "opt_cputype.h"
 #include "opt_multiprocessor.h"
-#include "opt_modular.h"
+#include "opt_cputype.h"
 #endif
 
 /*
  * Machine dependent VM constants for MIPS.
  */
-#if !defined(_RUMPKERNEL) && (defined(MODULAR) || defined(_MODULE))
-#define MAX_PAGE_SIZE	16384
-#define MIN_PAGE_SIZE	4096
-#endif
 
 /*
  * We normally use a 4K page but may use 16K on MIPS systems.
@@ -61,11 +56,10 @@
  */
 #ifdef ENABLE_MIPS_16KB_PAGE
 #define	PAGE_SHIFT	14
-#elif defined(ENABLE_MIPS_8KB_PAGE) \
-    || (!defined(ENABLE_MIPS_4KB_PAGE) && __mips >= 3)
-#define	PAGE_SHIFT	13
-#else /* defined(ENABLE_MIPS_4KB_PAGE) */
+#elif defined(ENABLE_MIPS_4KB_PAGE) || 1
 #define	PAGE_SHIFT	12
+#else
+#error ENABLE_MIPS_xKB_PAGE not defined
 #endif
 #define	PAGE_SIZE	(1 << PAGE_SHIFT)
 #define	PAGE_MASK	(PAGE_SIZE - 1)
@@ -164,7 +158,8 @@
 #else
 #define VM_MAXUSER_ADDRESS	MIPS_VM_MAXUSER_ADDRESS
 #endif
-#define VM_MAX_ADDRESS		VM_MAXUSER_ADDRESS	/* 0x0000010000000000 */
+							/* 0x0000010000000000 */
+#define VM_MAX_ADDRESS		VM_MAXUSER_ADDRESS
 #define VM_MIN_KERNEL_ADDRESS	((vaddr_t) 3L << 62)	/* 0xC000000000000000 */
 #define VM_MAX_KERNEL_ADDRESS	((vaddr_t) -1L << 31)	/* 0xFFFFFFFF80000000 */
 #else
@@ -177,7 +172,7 @@
 #define VM_MAX_KERNEL_ADDRESS	((vaddr_t)-0x00004000)	/* 0xFFFFFFFFFFFFC000 */
 #endif
 #endif
-#define VM_MAXUSER32_ADDRESS	((vaddr_t)(1UL << 31))	/* 0x0000000080000000 */
+#define VM_MAXUSER32_ADDRESS	((vaddr_t)(1UL << 31))/* 0x0000000080000000 */
 
 /*
  * The address to which unspecified mapping requests default

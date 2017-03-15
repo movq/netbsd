@@ -1,4 +1,4 @@
-/*	$NetBSD: ns16550reg.h,v 1.11 2016/05/27 20:01:49 bouyer Exp $	*/
+/*	$NetBSD: ns16550reg.h,v 1.10.4.1 2016/06/22 08:26:05 snj Exp $	*/
 
 /*-
  * Copyright (c) 1991 The Regents of the University of California.

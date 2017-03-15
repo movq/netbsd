@@ -56,14 +56,6 @@ if (LLVM_ENABLE_DOXYGEN)
     set(llvm_doxygen_qhp_cust_filter_attrs "")
   endif()
   
-  option(LLVM_DOXYGEN_SVG
-    "Use svg instead of png files for doxygen graphs." OFF)
-  if (LLVM_DOXYGEN_SVG)
-    set(DOT_IMAGE_FORMAT "svg")
-  else()
-    set(DOT_IMAGE_FORMAT "png")
-  endif()
-
   configure_file(${CMAKE_CURRENT_SOURCE_DIR}/doxygen.cfg.in
     ${CMAKE_CURRENT_BINARY_DIR}/doxygen.cfg @ONLY)
 
@@ -81,7 +73,6 @@ if (LLVM_ENABLE_DOXYGEN)
   set(llvm_doxygen_qhelpgenerator_path)
   set(llvm_doxygen_qhp_cust_filter_name)
   set(llvm_doxygen_qhp_cust_filter_attrs)
-  set(DOT_IMAGE_FORMAT)
 
   add_custom_target(doxygen-llvm
     COMMAND ${DOXYGEN_EXECUTABLE} ${CMAKE_CURRENT_BINARY_DIR}/doxygen.cfg
@@ -93,11 +84,8 @@ if (LLVM_ENABLE_DOXYGEN)
   endif()
 
   if (NOT LLVM_INSTALL_TOOLCHAIN_ONLY)
-    # ./ suffix is needed to copy the contents of html directory without
-    # appending html/ into LLVM_INSTALL_DOXYGEN_HTML_DIR.
-    install(DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/doxygen/html/.
-      COMPONENT doxygen-html
-      DESTINATION "${LLVM_INSTALL_DOXYGEN_HTML_DIR}")
+    install(DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/doxygen/html
+      DESTINATION docs/html)
   endif()
 endif()
 endif()
@@ -118,7 +106,7 @@ if (LLVM_ENABLE_SPHINX)
 endif()
 
 list(FIND LLVM_BINDINGS_LIST ocaml uses_ocaml)
-if( NOT uses_ocaml LESS 0 AND LLVM_ENABLE_OCAMLDOC )
+if( NOT uses_ocaml LESS 0 )
   set(doc_targets
         ocaml_llvm
         ocaml_llvm_all_backends
@@ -150,17 +138,12 @@ if( NOT uses_ocaml LESS 0 AND LLVM_ENABLE_OCAMLDOC )
     COMMAND ${CMAKE_COMMAND} -E remove_directory ${CMAKE_CURRENT_BINARY_DIR}/ocamldoc/html
     COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_CURRENT_BINARY_DIR}/ocamldoc/html
     COMMAND ${OCAMLFIND} ocamldoc -d ${CMAKE_CURRENT_BINARY_DIR}/ocamldoc/html
-                                  -sort -colorize-code -html ${odoc_files}
-    COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_CURRENT_SOURCE_DIR}/_ocamldoc/style.css
-                                     ${CMAKE_CURRENT_BINARY_DIR}/ocamldoc/html)
+                                  -sort -colorize-code -html ${odoc_files})
 
   add_dependencies(ocaml_doc ${doc_targets})
 
   if (NOT LLVM_INSTALL_TOOLCHAIN_ONLY)
-    # ./ suffix is needed to copy the contents of html directory without
-    # appending html/ into LLVM_INSTALL_OCAMLDOC_HTML_DIR.
-    install(DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/ocamldoc/html/.
-      COMPONENT ocamldoc-html
-      DESTINATION "${LLVM_INSTALL_OCAMLDOC_HTML_DIR}")
+    install(DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/ocamldoc/html
+      DESTINATION docs/ocaml/html)
   endif()
 endif()

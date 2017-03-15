@@ -1,4 +1,4 @@
-/*	$NetBSD: mips_reloc.c,v 1.65 2016/02/20 15:20:23 christos Exp $	*/
+/*	$NetBSD: mips_reloc.c,v 1.62.22.1 2016/03/06 18:17:55 martin Exp $	*/
 
 /*
  * Copyright 1997 Michael L. Hitch <mhitch@montana.edu>
@@ -30,7 +30,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: mips_reloc.c,v 1.65 2016/02/20 15:20:23 christos Exp $");
+__RCSID("$NetBSD: mips_reloc.c,v 1.62.22.1 2016/03/06 18:17:55 martin Exp $");
 #endif /* not lint */
 
 #include <sys/types.h>

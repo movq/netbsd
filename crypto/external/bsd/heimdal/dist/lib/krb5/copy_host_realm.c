@@ -1,4 +1,4 @@
-/*	$NetBSD: copy_host_realm.c,v 1.2 2017/01/28 21:31:49 christos Exp $	*/
+/*	$NetBSD: copy_host_realm.c,v 1.1.1.1 2011/04/13 18:15:32 elric Exp $	*/
 
 /*
  * Copyright (c) 1999 - 2001 Kungliga Tekniska Högskolan
@@ -60,14 +60,19 @@ krb5_copy_host_realm(krb5_context context,
 	++n;
 
     *to = calloc (n, sizeof(**to));
-    if (*to == NULL)
-	return krb5_enomem(context);
+    if (*to == NULL) {
+	krb5_set_error_message (context, ENOMEM,
+				N_("malloc: out of memory", ""));
+	return ENOMEM;
+    }
 
     for (i = 0, p = from; *p != NULL; ++p, ++i) {
 	(*to)[i] = strdup(*p);
 	if ((*to)[i] == NULL) {
 	    krb5_free_host_realm (context, *to);
-	    return krb5_enomem(context);
+	    krb5_set_error_message (context, ENOMEM,
+				    N_("malloc: out of memory", ""));
+	    return ENOMEM;
 	}
     }
     return 0;

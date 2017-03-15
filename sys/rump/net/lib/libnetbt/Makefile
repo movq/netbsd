@@ -1,14 +1,11 @@
-#	$NetBSD: Makefile,v 1.7 2017/02/22 12:17:16 maya Exp $
+#	$NetBSD: Makefile,v 1.4 2014/03/13 02:06:16 pooka Exp $
 #
-
-NOLINT=	#defined
 
 .include <bsd.own.mk>
 
 .PATH:	${.CURDIR}/../../../../netbt
 
 LIB=	rumpnet_netbt
-COMMENT=BlueTooth (PF_BLUETOOTH)
 
 SRCS=	bt_proto.c bt_sysctl.c						\
 	hci_event.c hci_ioctl.c hci_link.c hci_misc.c hci_socket.c	\
@@ -18,6 +15,11 @@ SRCS=	bt_proto.c bt_sysctl.c						\
 	rfcomm_dlc.c rfcomm_session.c rfcomm_socket.c rfcomm_upper.c	\
 	sco_socket.c sco_upper.c
 
+.if ${HAVE_GCC:U} == "48"
+.if ${MACHINE_ARCH} == "sh3eb" || ${MACHINE_ARCH} == "sh3el"
+COPTS.l2cap_signal.c=	-O0
+.endif
+.endif
 SRCS+=	netbt_component.c
 
 .include <bsd.lib.mk>

@@ -24,22 +24,15 @@ class AArch64_ELFTargetObjectFile : public TargetLoweringObjectFileELF {
 /// AArch64_MachoTargetObjectFile - This TLOF implementation is used for Darwin.
 class AArch64_MachoTargetObjectFile : public TargetLoweringObjectFileMachO {
 public:
-  AArch64_MachoTargetObjectFile();
-
   const MCExpr *getTTypeGlobalReference(const GlobalValue *GV,
-                                        unsigned Encoding,
+                                        unsigned Encoding, Mangler &Mang,
                                         const TargetMachine &TM,
                                         MachineModuleInfo *MMI,
                                         MCStreamer &Streamer) const override;
 
-  MCSymbol *getCFIPersonalitySymbol(const GlobalValue *GV,
+  MCSymbol *getCFIPersonalitySymbol(const GlobalValue *GV, Mangler &Mang,
                                     const TargetMachine &TM,
                                     MachineModuleInfo *MMI) const override;
-
-  const MCExpr *getIndirectSymViaGOTPCRel(const MCSymbol *Sym,
-                                          const MCValue &MV, int64_t Offset,
-                                          MachineModuleInfo *MMI,
-                                          MCStreamer &Streamer) const override;
 };
 
 } // end namespace llvm

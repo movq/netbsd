@@ -1,4 +1,4 @@
-#	$NetBSD: list.ramdisk,v 1.26 2015/10/07 14:09:05 martin Exp $
+#	$NetBSD: list.ramdisk,v 1.25.2.1 2015/10/15 20:30:57 snj Exp $
 
 SRCDIRS	external/bsd/less/bin
 SRCDIRS	bin sbin usr.bin usr.sbin libexec

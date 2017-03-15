@@ -14,15 +14,8 @@
 if test $gcc_cv_have_tls = yes ; then
   case "${target}" in
 
-    *-*-k*bsd*-gnu*)
-	;;
-
-    *-*-linux* | *-*-gnu*)
+    *-*-linux*)
 	XCFLAGS="${XCFLAGS} -ftls-model=initial-exec"
-	;;
-
-    *-*-rtems*)
-	XCFLAGS="${XCFLAGS} -ftls-model=local-exec"
 	;;
   esac
 fi
@@ -31,7 +24,7 @@ fi
 config_path="posix"
 
 # Check for futex enabled all at once.
-if test x$enable_linux_futex = xyes; then
+if test $enable_linux_futex = yes; then
   case "${target}" in
 
     aarch64*-*-linux*)
@@ -117,7 +110,6 @@ fi
 case "${target}" in
 
   *-*-hpux*)
-	config_path="hpux posix"
 	case "${target}" in
 	  *-*-hpux11*)
 	     # HPUX v11.x requires -lrt to resolve sem_init in libgomp.la
@@ -137,16 +129,10 @@ case "${target}" in
 	;;
 
   *-*-darwin*)
-	config_path="bsd darwin posix"
+	config_path="bsd posix"
 	;;
 
   *-*-freebsd*)
-	# Need to link with -lpthread so libgomp.so is self-contained.
-	XLDFLAGS="${XLDFLAGS} -lpthread"
-	;;
-
-  *-*-aix*)
-	config_path="posix"
 	# Need to link with -lpthread so libgomp.so is self-contained.
 	XLDFLAGS="${XLDFLAGS} -lpthread"
 	;;

@@ -1,8 +1,6 @@
-// RUN: %clang_cc1 -fsyntax-only -verify -std=c++98 %s
-// RUN: %clang_cc1 -fsyntax-only -verify -std=c++11 %s
 // RUN: %clang_cc1 -fsyntax-only -verify %s
 
-struct IntHolder { // expected-note 0-1{{here}} expected-note 2-4{{candidate constructor (the implicit}}
+struct IntHolder { // expected-note{{here}} // expected-note 2{{candidate constructor (the implicit copy constructor)}}
   IntHolder(int); // expected-note 2{{candidate constructor}}
 };
 
@@ -14,13 +12,8 @@ struct X { // expected-note{{here}}
 
   void g() { }
   
-  struct Inner {
-#if __cplusplus >= 201103L
-    T value; 	// expected-note {{has no default constructor}}
-#else
-    // expected-error@-4 {{implicit default}}
+  struct Inner {  // expected-error{{implicit default}}
     T value; 	// expected-note {{member is declared here}}
-#endif
   };
   
   static T value;
@@ -33,12 +26,7 @@ IntHolder &test_X_IntHolderInt(X<IntHolder, int> xih) {
   xih.g(); // okay
   xih.f(); // expected-note{{instantiation}}
   
-  X<IntHolder, int>::Inner inner;
-#if __cplusplus >= 201103L
-  // expected-error@-2 {{call to implicitly-deleted}}
-#else
-  // expected-note@-4 {{first required here}}
-#endif
+  X<IntHolder, int>::Inner inner; // expected-note {{first required here}}
   
   return X<IntHolder, int>::value; // expected-note{{instantiation}}
 }

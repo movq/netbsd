@@ -1,5 +1,5 @@
 /* SSA Dominator optimizations for trees
-   Copyright (C) 2001-2015 Free Software Foundation, Inc.
+   Copyright (C) 2001-2013 Free Software Foundation, Inc.
    Contributed by Diego Novillo <dnovillo@redhat.com>
 
 This file is part of GCC.
@@ -21,60 +21,20 @@ along with GCC; see the file COPYING3.  If not see
 #include "config.h"
 #include "system.h"
 #include "coretypes.h"
-#include "hash-table.h"
 #include "tm.h"
-#include "hash-set.h"
-#include "machmode.h"
-#include "vec.h"
-#include "double-int.h"
-#include "input.h"
-#include "alias.h"
-#include "symtab.h"
-#include "wide-int.h"
-#include "inchash.h"
-#include "real.h"
 #include "tree.h"
-#include "fold-const.h"
-#include "stor-layout.h"
 #include "flags.h"
 #include "tm_p.h"
-#include "predict.h"
-#include "hard-reg-set.h"
-#include "input.h"
-#include "function.h"
-#include "dominance.h"
-#include "cfg.h"
-#include "cfganal.h"
 #include "basic-block.h"
 #include "cfgloop.h"
-#include "inchash.h"
+#include "function.h"
 #include "gimple-pretty-print.h"
-#include "tree-ssa-alias.h"
-#include "internal-fn.h"
-#include "gimple-fold.h"
-#include "tree-eh.h"
-#include "gimple-expr.h"
-#include "is-a.h"
-#include "gimple.h"
-#include "gimple-iterator.h"
-#include "gimple-ssa.h"
-#include "tree-cfg.h"
-#include "tree-phinodes.h"
-#include "ssa-iterators.h"
-#include "stringpool.h"
-#include "tree-ssanames.h"
-#include "tree-into-ssa.h"
+#include "tree-flow.h"
 #include "domwalk.h"
 #include "tree-pass.h"
 #include "tree-ssa-propagate.h"
-#include "tree-ssa-threadupdate.h"
 #include "langhooks.h"
 #include "params.h"
-#include "tree-ssa-threadedge.h"
-#include "tree-ssa-dom.h"
-#include "inchash.h"
-#include "gimplify.h"
-#include "tree-cfgcleanup.h"
 
 /* This file implements optimizations on the dominator tree.  */
 
@@ -100,7 +60,7 @@ struct hashable_expr
     struct { enum tree_code op;  tree opnd; } unary;
     struct { enum tree_code op;  tree opnd0, opnd1; } binary;
     struct { enum tree_code op;  tree opnd0, opnd1, opnd2; } ternary;
-    struct { gcall *fn_from; bool pure; size_t nargs; tree *args; } call;
+    struct { gimple fn_from; bool pure; size_t nargs; tree *args; } call;
     struct { size_t nargs; tree *args; } phi;
   } ops;
 };
@@ -141,6 +101,15 @@ struct edge_info
   vec<cond_equivalence> cond_equivalences;
 };
 
+/* Hash table with expressions made available during the renaming process.
+   When an assignment of the form X_i = EXPR is found, the statement is
+   stored in this table.  If the same expression EXPR is later found on the
+   RHS of another statement, it is replaced with X_i (thus performing
+   global redundancy elimination).  Similarly as we pass through conditionals
+   we record the conditional itself as having either a true or false value
+   in this table.  */
+static htab_t avail_exprs;
+
 /* Stack of available expressions in AVAIL_EXPRs.  Each block pushes any
    expressions it enters into the hash table along with a marker entry
    (null).  When we finish processing the block, we pop off entries and
@@ -148,7 +117,7 @@ struct edge_info
    marker.  */
 typedef struct expr_hash_elt * expr_hash_elt_t;
 
-static vec<std::pair<expr_hash_elt_t, expr_hash_elt_t> > avail_exprs_stack;
+static vec<expr_hash_elt_t> avail_exprs_stack;
 
 /* Structure for entries in the expression hash table.  */
 
@@ -160,9 +129,8 @@ struct expr_hash_elt
   /* The expression (rhs) we want to record.  */
   struct hashable_expr expr;
 
-  /* The virtual operand associated with the nearest dominating stmt
-     loading from or storing to expr.  */
-  tree vop;
+  /* The stmt pointer if this element corresponds to a statement.  */
+  gimple stmt;
 
   /* The hash value for RHS.  */
   hashval_t hash;
@@ -171,69 +139,6 @@ struct expr_hash_elt
      element itself, used in removing entries from the table.  */
   struct expr_hash_elt *stamp;
 };
-
-/* Hashtable helpers.  */
-
-static bool hashable_expr_equal_p (const struct hashable_expr *,
-				   const struct hashable_expr *);
-static void free_expr_hash_elt (void *);
-
-struct expr_elt_hasher
-{
-  typedef expr_hash_elt *value_type;
-  typedef expr_hash_elt *compare_type;
-  typedef int store_values_directly;
-  static inline hashval_t hash (const value_type &);
-  static inline bool equal (const value_type &, const compare_type &);
-  static inline void remove (value_type &);
-};
-
-inline hashval_t
-expr_elt_hasher::hash (const value_type &p)
-{
-  return p->hash;
-}
-
-inline bool
-expr_elt_hasher::equal (const value_type &p1, const compare_type &p2)
-{
-  const struct hashable_expr *expr1 = &p1->expr;
-  const struct expr_hash_elt *stamp1 = p1->stamp;
-  const struct hashable_expr *expr2 = &p2->expr;
-  const struct expr_hash_elt *stamp2 = p2->stamp;
-
-  /* This case should apply only when removing entries from the table.  */
-  if (stamp1 == stamp2)
-    return true;
-
-  if (p1->hash != p2->hash)
-    return false;
-
-  /* In case of a collision, both RHS have to be identical and have the
-     same VUSE operands.  */
-  if (hashable_expr_equal_p (expr1, expr2)
-      && types_compatible_p (expr1->type, expr2->type))
-    return true;
-
-  return false;
-}
-
-/* Delete an expr_hash_elt and reclaim its storage.  */
-
-inline void
-expr_elt_hasher::remove (value_type &element)
-{
-  free_expr_hash_elt (element);
-}
-
-/* Hash table with expressions made available during the renaming process.
-   When an assignment of the form X_i = EXPR is found, the statement is
-   stored in this table.  If the same expression EXPR is later found on the
-   RHS of another statement, it is replaced with X_i (thus performing
-   global redundancy elimination).  Similarly as we pass through conditionals
-   we record the conditional itself as having either a true or false value
-   in this table.  */
-static hash_table<expr_elt_hasher> *avail_exprs;
 
 /* Stack of dest,src pairs that need to be restored during finalization.
 
@@ -247,7 +152,6 @@ static bool cfg_altered;
 /* Bitmap of blocks that have had EH statements cleaned.  We should
    remove their dead edges eventually.  */
 static bitmap need_eh_cleanup;
-static vec<gimple> need_noreturn_fixup;
 
 /* Statistics for dominator optimizations.  */
 struct opt_stats_d
@@ -263,10 +167,11 @@ static struct opt_stats_d opt_stats;
 
 /* Local functions.  */
 static void optimize_stmt (basic_block, gimple_stmt_iterator);
-static tree lookup_avail_expr (gimple, bool, bool = true);
+static tree lookup_avail_expr (gimple, bool);
 static hashval_t avail_expr_hash (const void *);
-static void htab_statistics (FILE *,
-			     const hash_table<expr_elt_hasher> &);
+static hashval_t real_avail_expr_hash (const void *);
+static int avail_expr_eq (const void *, const void *);
+static void htab_statistics (FILE *, htab_t);
 static void record_cond (cond_equivalence *);
 static void record_const_or_copy (tree, tree);
 static void record_equality (tree, tree);
@@ -274,6 +179,9 @@ static void record_equivalences_from_phis (basic_block);
 static void record_equivalences_from_incoming_edge (basic_block);
 static void eliminate_redundant_computations (gimple_stmt_iterator *);
 static void record_equivalences_from_stmt (gimple, int);
+static void dom_thread_across_edge (struct dom_walk_data *, edge);
+static void dom_opt_leave_block (struct dom_walk_data *, basic_block);
+static void dom_opt_enter_block (struct dom_walk_data *, basic_block);
 static void remove_local_expressions_from_table (void);
 static void restore_vars_to_original_value (void);
 static edge single_incoming_edge_ignoring_loop_edges (basic_block);
@@ -303,8 +211,6 @@ initialize_hash_element (gimple stmt, tree lhs,
         case GIMPLE_UNARY_RHS:
 	  expr->kind = EXPR_UNARY;
 	  expr->type = TREE_TYPE (gimple_assign_lhs (stmt));
-	  if (CONVERT_EXPR_CODE_P (subcode))
-	    subcode = NOP_EXPR;
 	  expr->ops.unary.op = subcode;
 	  expr->ops.unary.opnd = gimple_assign_rhs1 (stmt);
 	  break;
@@ -335,18 +241,18 @@ initialize_hash_element (gimple stmt, tree lhs,
       expr->ops.binary.opnd0 = gimple_cond_lhs (stmt);
       expr->ops.binary.opnd1 = gimple_cond_rhs (stmt);
     }
-  else if (gcall *call_stmt = dyn_cast <gcall *> (stmt))
+  else if (code == GIMPLE_CALL)
     {
-      size_t nargs = gimple_call_num_args (call_stmt);
+      size_t nargs = gimple_call_num_args (stmt);
       size_t i;
 
-      gcc_assert (gimple_call_lhs (call_stmt));
+      gcc_assert (gimple_call_lhs (stmt));
 
-      expr->type = TREE_TYPE (gimple_call_lhs (call_stmt));
+      expr->type = TREE_TYPE (gimple_call_lhs (stmt));
       expr->kind = EXPR_CALL;
-      expr->ops.call.fn_from = call_stmt;
+      expr->ops.call.fn_from = stmt;
 
-      if (gimple_call_flags (call_stmt) & (ECF_CONST | ECF_PURE))
+      if (gimple_call_flags (stmt) & (ECF_CONST | ECF_PURE))
         expr->ops.call.pure = true;
       else
         expr->ops.call.pure = false;
@@ -354,13 +260,13 @@ initialize_hash_element (gimple stmt, tree lhs,
       expr->ops.call.nargs = nargs;
       expr->ops.call.args = XCNEWVEC (tree, nargs);
       for (i = 0; i < nargs; i++)
-        expr->ops.call.args[i] = gimple_call_arg (call_stmt, i);
+        expr->ops.call.args[i] = gimple_call_arg (stmt, i);
     }
-  else if (gswitch *swtch_stmt = dyn_cast <gswitch *> (stmt))
+  else if (code == GIMPLE_SWITCH)
     {
-      expr->type = TREE_TYPE (gimple_switch_index (swtch_stmt));
+      expr->type = TREE_TYPE (gimple_switch_index (stmt));
       expr->kind = EXPR_SINGLE;
-      expr->ops.single.rhs = gimple_switch_index (swtch_stmt);
+      expr->ops.single.rhs = gimple_switch_index (stmt);
     }
   else if (code == GIMPLE_GOTO)
     {
@@ -385,7 +291,7 @@ initialize_hash_element (gimple stmt, tree lhs,
     gcc_unreachable ();
 
   element->lhs = lhs;
-  element->vop = gimple_vuse (stmt);
+  element->stmt = stmt;
   element->hash = avail_expr_hash (element);
   element->stamp = element;
 }
@@ -427,7 +333,7 @@ initialize_hash_element_from_expr (struct hashable_expr *expr,
 {
   element->expr = *expr;
   element->lhs = lhs;
-  element->vop = NULL_TREE;
+  element->stmt = NULL;
   element->hash = avail_expr_hash (element);
   element->stamp = element;
 }
@@ -536,14 +442,6 @@ hashable_expr_equal_p (const struct hashable_expr *expr0,
                                  expr1->ops.call.args[i], 0))
             return false;
 
-	if (stmt_could_throw_p (expr0->ops.call.fn_from))
-	  {
-	    int lp0 = lookup_stmt_eh_lp (expr0->ops.call.fn_from);
-	    int lp1 = lookup_stmt_eh_lp (expr1->ops.call.fn_from);
-	    if ((lp0 > 0 || lp1 > 0) && lp0 != lp1)
-	      return false;
-	  }
-
         return true;
       }
 
@@ -567,43 +465,23 @@ hashable_expr_equal_p (const struct hashable_expr *expr0,
     }
 }
 
-/* Generate a hash value for a pair of expressions.  This can be used
-   iteratively by passing a previous result in HSTATE.
-
-   The same hash value is always returned for a given pair of expressions,
-   regardless of the order in which they are presented.  This is useful in
-   hashing the operands of commutative functions.  */
-
-namespace inchash
-{
-
-static void
-add_expr_commutative (const_tree t1, const_tree t2, hash &hstate)
-{
-  hash one, two;
-
-  inchash::add_expr (t1, one);
-  inchash::add_expr (t2, two);
-  hstate.add_commutative (one, two);
-}
-
 /* Compute a hash value for a hashable_expr value EXPR and a
    previously accumulated hash value VAL.  If two hashable_expr
    values compare equal with hashable_expr_equal_p, they must
    hash to the same value, given an identical value of VAL.
-   The logic is intended to follow inchash::add_expr in tree.c.  */
+   The logic is intended to follow iterative_hash_expr in tree.c.  */
 
-static void
-add_hashable_expr (const struct hashable_expr *expr, hash &hstate)
+static hashval_t
+iterative_hash_hashable_expr (const struct hashable_expr *expr, hashval_t val)
 {
   switch (expr->kind)
     {
     case EXPR_SINGLE:
-      inchash::add_expr (expr->ops.single.rhs, hstate);
+      val = iterative_hash_expr (expr->ops.single.rhs, val);
       break;
 
     case EXPR_UNARY:
-      hstate.add_object (expr->ops.unary.op);
+      val = iterative_hash_object (expr->ops.unary.op, val);
 
       /* Make sure to include signedness in the hash computation.
          Don't hash the type, that can lead to having nodes which
@@ -611,50 +489,51 @@ add_hashable_expr (const struct hashable_expr *expr, hash &hstate)
          have different hash codes.  */
       if (CONVERT_EXPR_CODE_P (expr->ops.unary.op)
           || expr->ops.unary.op == NON_LVALUE_EXPR)
-        hstate.add_int (TYPE_UNSIGNED (expr->type));
+        val += TYPE_UNSIGNED (expr->type);
 
-      inchash::add_expr (expr->ops.unary.opnd, hstate);
+      val = iterative_hash_expr (expr->ops.unary.opnd, val);
       break;
 
     case EXPR_BINARY:
-      hstate.add_object (expr->ops.binary.op);
+      val = iterative_hash_object (expr->ops.binary.op, val);
       if (commutative_tree_code (expr->ops.binary.op))
-	inchash::add_expr_commutative (expr->ops.binary.opnd0,
-					  expr->ops.binary.opnd1, hstate);
+	val = iterative_hash_exprs_commutative (expr->ops.binary.opnd0,
+						expr->ops.binary.opnd1, val);
       else
         {
-          inchash::add_expr (expr->ops.binary.opnd0, hstate);
-          inchash::add_expr (expr->ops.binary.opnd1, hstate);
+          val = iterative_hash_expr (expr->ops.binary.opnd0, val);
+          val = iterative_hash_expr (expr->ops.binary.opnd1, val);
         }
       break;
 
     case EXPR_TERNARY:
-      hstate.add_object (expr->ops.ternary.op);
+      val = iterative_hash_object (expr->ops.ternary.op, val);
       if (commutative_ternary_tree_code (expr->ops.ternary.op))
-	inchash::add_expr_commutative (expr->ops.ternary.opnd0,
-					  expr->ops.ternary.opnd1, hstate);
+	val = iterative_hash_exprs_commutative (expr->ops.ternary.opnd0,
+						expr->ops.ternary.opnd1, val);
       else
         {
-          inchash::add_expr (expr->ops.ternary.opnd0, hstate);
-          inchash::add_expr (expr->ops.ternary.opnd1, hstate);
+          val = iterative_hash_expr (expr->ops.ternary.opnd0, val);
+          val = iterative_hash_expr (expr->ops.ternary.opnd1, val);
         }
-      inchash::add_expr (expr->ops.ternary.opnd2, hstate);
+      val = iterative_hash_expr (expr->ops.ternary.opnd2, val);
       break;
 
     case EXPR_CALL:
       {
         size_t i;
         enum tree_code code = CALL_EXPR;
-        gcall *fn_from;
+        gimple fn_from;
 
-        hstate.add_object (code);
+        val = iterative_hash_object (code, val);
         fn_from = expr->ops.call.fn_from;
         if (gimple_call_internal_p (fn_from))
-          hstate.merge_hash ((hashval_t) gimple_call_internal_fn (fn_from));
+          val = iterative_hash_hashval_t
+            ((hashval_t) gimple_call_internal_fn (fn_from), val);
         else
-          inchash::add_expr (gimple_call_fn (fn_from), hstate);
+          val = iterative_hash_expr (gimple_call_fn (fn_from), val);
         for (i = 0; i < expr->ops.call.nargs; i++)
-          inchash::add_expr (expr->ops.call.args[i], hstate);
+          val = iterative_hash_expr (expr->ops.call.args[i], val);
       }
       break;
 
@@ -663,15 +542,15 @@ add_hashable_expr (const struct hashable_expr *expr, hash &hstate)
         size_t i;
 
         for (i = 0; i < expr->ops.phi.nargs; i++)
-          inchash::add_expr (expr->ops.phi.args[i], hstate);
+          val = iterative_hash_expr (expr->ops.phi.args[i], val);
       }
       break;
 
     default:
       gcc_unreachable ();
     }
-}
 
+  return val;
 }
 
 /* Print a diagnostic dump of an expression hash table entry.  */
@@ -679,7 +558,10 @@ add_hashable_expr (const struct hashable_expr *expr, hash &hstate)
 static void
 print_expr_hash_elt (FILE * stream, const struct expr_hash_elt *element)
 {
-  fprintf (stream, "STMT ");
+  if (element->stmt)
+    fprintf (stream, "STMT ");
+  else
+    fprintf (stream, "COND ");
 
   if (element->lhs)
     {
@@ -694,18 +576,18 @@ print_expr_hash_elt (FILE * stream, const struct expr_hash_elt *element)
         break;
 
       case EXPR_UNARY:
-	fprintf (stream, "%s ", get_tree_code_name (element->expr.ops.unary.op));
+        fprintf (stream, "%s ", tree_code_name[element->expr.ops.unary.op]);
         print_generic_expr (stream, element->expr.ops.unary.opnd, 0);
         break;
 
       case EXPR_BINARY:
         print_generic_expr (stream, element->expr.ops.binary.opnd0, 0);
-	fprintf (stream, " %s ", get_tree_code_name (element->expr.ops.binary.op));
+        fprintf (stream, " %s ", tree_code_name[element->expr.ops.binary.op]);
         print_generic_expr (stream, element->expr.ops.binary.opnd1, 0);
         break;
 
       case EXPR_TERNARY:
-	fprintf (stream, " %s <", get_tree_code_name (element->expr.ops.ternary.op));
+        fprintf (stream, " %s <", tree_code_name[element->expr.ops.ternary.op]);
         print_generic_expr (stream, element->expr.ops.ternary.opnd0, 0);
 	fputs (", ", stream);
         print_generic_expr (stream, element->expr.ops.ternary.opnd1, 0);
@@ -718,7 +600,7 @@ print_expr_hash_elt (FILE * stream, const struct expr_hash_elt *element)
         {
           size_t i;
           size_t nargs = element->expr.ops.call.nargs;
-          gcall *fn_from;
+          gimple fn_from;
 
           fn_from = element->expr.ops.call.fn_from;
           if (gimple_call_internal_p (fn_from))
@@ -753,14 +635,13 @@ print_expr_hash_elt (FILE * stream, const struct expr_hash_elt *element)
         }
         break;
     }
-
-  if (element->vop)
-    {
-      fprintf (stream, " with ");
-      print_generic_expr (stream, element->vop, 0);
-    }
-
   fprintf (stream, "\n");
+
+  if (element->stmt)
+    {
+      fprintf (stream, "          ");
+      print_gimple_stmt (stream, element->stmt, 0, 0);
+    }
 }
 
 /* Delete variable sized pieces of the expr_hash_elt ELEMENT.  */
@@ -811,7 +692,7 @@ free_all_edge_infos (void)
   edge_iterator ei;
   edge e;
 
-  FOR_EACH_BB_FN (bb, cfun)
+  FOR_EACH_BB (bb)
     {
       FOR_EACH_EDGE (e, ei, bb->preds)
         {
@@ -827,67 +708,38 @@ free_all_edge_infos (void)
     }
 }
 
-class dom_opt_dom_walker : public dom_walker
-{
-public:
-  dom_opt_dom_walker (cdi_direction direction)
-    : dom_walker (direction), m_dummy_cond (NULL) {}
-
-  virtual void before_dom_children (basic_block);
-  virtual void after_dom_children (basic_block);
-
-private:
-  void thread_across_edge (edge);
-
-  gcond *m_dummy_cond;
-};
-
 /* Jump threading, redundancy elimination and const/copy propagation.
 
    This pass may expose new symbols that need to be renamed into SSA.  For
    every new symbol exposed, its corresponding bit will be set in
    VARS_TO_RENAME.  */
 
-namespace {
-
-const pass_data pass_data_dominator =
+static unsigned int
+tree_ssa_dominator_optimize (void)
 {
-  GIMPLE_PASS, /* type */
-  "dom", /* name */
-  OPTGROUP_NONE, /* optinfo_flags */
-  TV_TREE_SSA_DOMINATOR_OPTS, /* tv_id */
-  ( PROP_cfg | PROP_ssa ), /* properties_required */
-  0, /* properties_provided */
-  0, /* properties_destroyed */
-  0, /* todo_flags_start */
-  ( TODO_cleanup_cfg | TODO_update_ssa ), /* todo_flags_finish */
-};
+  struct dom_walk_data walk_data;
 
-class pass_dominator : public gimple_opt_pass
-{
-public:
-  pass_dominator (gcc::context *ctxt)
-    : gimple_opt_pass (pass_data_dominator, ctxt)
-  {}
-
-  /* opt_pass methods: */
-  opt_pass * clone () { return new pass_dominator (m_ctxt); }
-  virtual bool gate (function *) { return flag_tree_dom != 0; }
-  virtual unsigned int execute (function *);
-
-}; // class pass_dominator
-
-unsigned int
-pass_dominator::execute (function *fun)
-{
   memset (&opt_stats, 0, sizeof (opt_stats));
 
   /* Create our hash tables.  */
-  avail_exprs = new hash_table<expr_elt_hasher> (1024);
+  avail_exprs = htab_create (1024, real_avail_expr_hash, avail_expr_eq, free_expr_hash_elt);
   avail_exprs_stack.create (20);
   const_and_copies_stack.create (20);
   need_eh_cleanup = BITMAP_ALLOC (NULL);
-  need_noreturn_fixup.create (0);
+
+  /* Setup callbacks for the generic dominator tree walker.  */
+  walk_data.dom_direction = CDI_DOMINATORS;
+  walk_data.initialize_block_local_data = NULL;
+  walk_data.before_dom_children = dom_opt_enter_block;
+  walk_data.after_dom_children = dom_opt_leave_block;
+  /* Right now we only attach a dummy COND_EXPR to the global data pointer.
+     When we attach more stuff we'll need to fill this out with a real
+     structure.  */
+  walk_data.global_data = NULL;
+  walk_data.block_local_data_size = 0;
+
+  /* Now initialize the dominator walker.  */
+  init_walk_dominator_tree (&walk_data);
 
   calculate_dominance_info (CDI_DOMINATORS);
   cfg_altered = false;
@@ -895,14 +747,8 @@ pass_dominator::execute (function *fun)
   /* We need to know loop structures in order to avoid destroying them
      in jump threading.  Note that we still can e.g. thread through loop
      headers to an exit edge, or through loop header to the loop body, assuming
-     that we update the loop info.
-
-     TODO: We don't need to set LOOPS_HAVE_PREHEADERS generally, but due
-     to several overly conservative bail-outs in jump threading, case
-     gcc.dg/tree-ssa/pr21417.c can't be threaded if loop preheader is
-     missing.  We should improve jump threading in future then
-     LOOPS_HAVE_PREHEADERS won't be needed here.  */
-  loop_optimizer_init (LOOPS_HAVE_PREHEADERS | LOOPS_HAVE_SIMPLE_LATCHES);
+     that we update the loop info.  */
+  loop_optimizer_init (LOOPS_HAVE_SIMPLE_LATCHES);
 
   /* Initialize the value-handle array.  */
   threadedge_initialize_values ();
@@ -913,12 +759,12 @@ pass_dominator::execute (function *fun)
   mark_dfs_back_edges ();
 
   /* Recursively walk the dominator tree optimizing statements.  */
-  dom_opt_dom_walker (CDI_DOMINATORS).walk (fun->cfg->x_entry_block_ptr);
+  walk_dominator_tree (&walk_data, ENTRY_BLOCK_PTR);
 
   {
     gimple_stmt_iterator gsi;
     basic_block bb;
-    FOR_EACH_BB_FN (bb, fun)
+    FOR_EACH_BB (bb)
       {
 	for (gsi = gsi_start_bb (bb); !gsi_end_p (gsi); gsi_next (&gsi))
 	  update_stmt_if_modified (gsi_stmt (gsi));
@@ -954,13 +800,13 @@ pass_dominator::execute (function *fun)
 	 iterator.  */
       EXECUTE_IF_SET_IN_BITMAP (need_eh_cleanup, 0, i, bi)
 	{
-	  basic_block bb = BASIC_BLOCK_FOR_FN (fun, i);
+	  basic_block bb = BASIC_BLOCK (i);
 	  if (bb == NULL)
 	    continue;
 	  while (single_succ_p (bb)
 		 && (single_succ_edge (bb)->flags & EDGE_EH) == 0)
 	    bb = single_succ (bb);
-	  if (bb == EXIT_BLOCK_PTR_FOR_FN (fun))
+	  if (bb == EXIT_BLOCK_PTR)
 	    continue;
 	  if ((unsigned) bb->index != i)
 	    bitmap_set_bit (need_eh_cleanup, bb->index);
@@ -970,28 +816,11 @@ pass_dominator::execute (function *fun)
       bitmap_clear (need_eh_cleanup);
     }
 
-  /* Fixup stmts that became noreturn calls.  This may require splitting
-     blocks and thus isn't possible during the dominator walk or before
-     jump threading finished.  Do this in reverse order so we don't
-     inadvertedly remove a stmt we want to fixup by visiting a dominating
-     now noreturn call first.  */
-  while (!need_noreturn_fixup.is_empty ())
-    {
-      gimple stmt = need_noreturn_fixup.pop ();
-      if (dump_file && dump_flags & TDF_DETAILS)
-	{
-	  fprintf (dump_file, "Fixing up noreturn call ");
-	  print_gimple_stmt (dump_file, stmt, 0, 0);
-	  fprintf (dump_file, "\n");
-	}
-      fixup_noreturn_call (stmt);
-    }
-
-  statistics_counter_event (fun, "Redundant expressions eliminated",
+  statistics_counter_event (cfun, "Redundant expressions eliminated",
 			    opt_stats.num_re);
-  statistics_counter_event (fun, "Constants propagated",
+  statistics_counter_event (cfun, "Constants propagated",
 			    opt_stats.num_const_prop);
-  statistics_counter_event (fun, "Copies propagated",
+  statistics_counter_event (cfun, "Copies propagated",
 			    opt_stats.num_copy_prop);
 
   /* Debugging dumps.  */
@@ -1001,35 +830,59 @@ pass_dominator::execute (function *fun)
   loop_optimizer_finalize ();
 
   /* Delete our main hashtable.  */
-  delete avail_exprs;
-  avail_exprs = NULL;
+  htab_delete (avail_exprs);
+
+  /* And finalize the dominator walker.  */
+  fini_walk_dominator_tree (&walk_data);
 
   /* Free asserted bitmaps and stacks.  */
   BITMAP_FREE (need_eh_cleanup);
-  need_noreturn_fixup.release ();
+
   avail_exprs_stack.release ();
   const_and_copies_stack.release ();
 
   /* Free the value-handle array.  */
   threadedge_finalize_values ();
+  ssa_name_values.release ();
 
   return 0;
 }
 
-} // anon namespace
-
-gimple_opt_pass *
-make_pass_dominator (gcc::context *ctxt)
+static bool
+gate_dominator (void)
 {
-  return new pass_dominator (ctxt);
+  return flag_tree_dom != 0;
 }
+
+struct gimple_opt_pass pass_dominator =
+{
+ {
+  GIMPLE_PASS,
+  "dom",				/* name */
+  OPTGROUP_NONE,                        /* optinfo_flags */
+  gate_dominator,			/* gate */
+  tree_ssa_dominator_optimize,		/* execute */
+  NULL,					/* sub */
+  NULL,					/* next */
+  0,					/* static_pass_number */
+  TV_TREE_SSA_DOMINATOR_OPTS,		/* tv_id */
+  PROP_cfg | PROP_ssa,			/* properties_required */
+  0,					/* properties_provided */
+  0,					/* properties_destroyed */
+  0,					/* todo_flags_start */
+  TODO_cleanup_cfg
+    | TODO_update_ssa
+    | TODO_verify_ssa
+    | TODO_verify_flow			/* todo_flags_finish */
+ }
+};
 
 
 /* Given a conditional statement CONDSTMT, convert the
    condition to a canonical form.  */
 
 static void
-canonicalize_comparison (gcond *condstmt)
+canonicalize_comparison (gimple condstmt)
 {
   tree op0;
   tree op1;
@@ -1081,11 +934,10 @@ remove_local_expressions_from_table (void)
   /* Remove all the expressions made available in this block.  */
   while (avail_exprs_stack.length () > 0)
     {
-      std::pair<expr_hash_elt_t, expr_hash_elt_t> victim
-	= avail_exprs_stack.pop ();
-      expr_hash_elt **slot;
+      expr_hash_elt_t victim = avail_exprs_stack.pop ();
+      void **slot;
 
-      if (victim.first == NULL)
+      if (victim == NULL)
 	break;
 
       /* This must precede the actual removal from the hash table,
@@ -1094,18 +946,13 @@ remove_local_expressions_from_table (void)
       if (dump_file && (dump_flags & TDF_DETAILS))
         {
           fprintf (dump_file, "<<<< ");
-          print_expr_hash_elt (dump_file, victim.first);
+          print_expr_hash_elt (dump_file, victim);
         }
 
-      slot = avail_exprs->find_slot (victim.first, NO_INSERT);
-      gcc_assert (slot && *slot == victim.first);
-      if (victim.second != NULL)
-	{
-	  free_expr_hash_elt (*slot);
-	  *slot = victim.second;
-	}
-      else
-	avail_exprs->clear_slot (slot);
+      slot = htab_find_slot_with_hash (avail_exprs,
+				       victim, victim->hash, NO_INSERT);
+      gcc_assert (slot && *slot == (void *) victim);
+      htab_clear_slot (avail_exprs, slot);
     }
 }
 
@@ -1148,70 +995,25 @@ simplify_stmt_for_jump_threading (gimple stmt,
   return lookup_avail_expr (stmt, false);
 }
 
-/* Record into the equivalence tables any equivalences implied by
-   traversing edge E (which are cached in E->aux).
-
-   Callers are responsible for managing the unwinding markers.  */
-static void
-record_temporary_equivalences (edge e)
-{
-  int i;
-  struct edge_info *edge_info = (struct edge_info *) e->aux;
-
-  /* If we have info associated with this edge, record it into
-     our equivalence tables.  */
-  if (edge_info)
-    {
-      cond_equivalence *eq;
-      tree lhs = edge_info->lhs;
-      tree rhs = edge_info->rhs;
-
-      /* If we have a simple NAME = VALUE equivalence, record it.  */
-      if (lhs && TREE_CODE (lhs) == SSA_NAME)
-	record_const_or_copy (lhs, rhs);
-
-      /* If we have 0 = COND or 1 = COND equivalences, record them
-	 into our expression hash tables.  */
-      for (i = 0; edge_info->cond_equivalences.iterate (i, &eq); ++i)
-	record_cond (eq);
-    }
-}
-
 /* Wrapper for common code to attempt to thread an edge.  For example,
    it handles lazily building the dummy condition and the bookkeeping
    when jump threading is successful.  */
 
-void
-dom_opt_dom_walker::thread_across_edge (edge e)
+static void
+dom_thread_across_edge (struct dom_walk_data *walk_data, edge e)
 {
-  if (! m_dummy_cond)
-    m_dummy_cond =
+  if (! walk_data->global_data)
+  {
+    gimple dummy_cond =
         gimple_build_cond (NE_EXPR,
                            integer_zero_node, integer_zero_node,
                            NULL, NULL);
+    walk_data->global_data = dummy_cond;
+  }
 
-  /* Push a marker on both stacks so we can unwind the tables back to their
-     current state.  */
-  avail_exprs_stack.safe_push
-    (std::pair<expr_hash_elt_t, expr_hash_elt_t> (NULL, NULL));
-  const_and_copies_stack.safe_push (NULL_TREE);
-
-  /* Traversing E may result in equivalences we can utilize.  */
-  record_temporary_equivalences (e);
-
-  /* With all the edge equivalences in the tables, go ahead and attempt
-     to thread through E->dest.  */
-  ::thread_across_edge (m_dummy_cond, e, false,
-		        &const_and_copies_stack,
-		        simplify_stmt_for_jump_threading);
-
-  /* And restore the various tables to their state before
-     we threaded this edge. 
-
-     XXX The code in tree-ssa-threadedge.c will restore the state of
-     the const_and_copies table.  We we just have to restore the expression
-     table.  */
-  remove_local_expressions_from_table ();
+  thread_across_edge ((gimple) walk_data->global_data, e, false,
+		      &const_and_copies_stack,
+		      simplify_stmt_for_jump_threading);
 }
 
 /* PHI nodes can create equivalences too.
@@ -1223,11 +1025,11 @@ dom_opt_dom_walker::thread_across_edge (edge e)
 static void
 record_equivalences_from_phis (basic_block bb)
 {
-  gphi_iterator gsi;
+  gimple_stmt_iterator gsi;
 
   for (gsi = gsi_start_phis (bb); !gsi_end_p (gsi); gsi_next (&gsi))
     {
-      gphi *phi = gsi.phi ();
+      gimple phi = gsi_stmt (gsi);
 
       tree lhs = gimple_phi_result (phi);
       tree rhs = NULL;
@@ -1265,8 +1067,7 @@ record_equivalences_from_phis (basic_block bb)
 	 this, since this is a true assignment and not an equivalence
 	 inferred from a comparison.  All uses of this ssa name are dominated
 	 by this assignment, so unwinding just costs time and space.  */
-      if (i == gimple_phi_num_args (phi)
-	  && may_propagate_copy (lhs, rhs))
+      if (i == gimple_phi_num_args (phi) && may_propagate_copy (lhs, rhs))
 	set_ssa_name_value (lhs, rhs);
     }
 }
@@ -1334,39 +1135,6 @@ record_equivalences_from_incoming_edge (basic_block bb)
 	  if (lhs)
 	    record_equality (lhs, rhs);
 
-	  /* If LHS is an SSA_NAME and RHS is a constant integer and LHS was
-	     set via a widening type conversion, then we may be able to record
-	     additional equivalences.  */
-	  if (lhs
-	      && TREE_CODE (lhs) == SSA_NAME
-	      && is_gimple_constant (rhs)
-	      && TREE_CODE (rhs) == INTEGER_CST)
-	    {
-	      gimple defstmt = SSA_NAME_DEF_STMT (lhs);
-
-	      if (defstmt
-		  && is_gimple_assign (defstmt)
-		  && CONVERT_EXPR_CODE_P (gimple_assign_rhs_code (defstmt)))
-		{
-		  tree old_rhs = gimple_assign_rhs1 (defstmt);
-
-		  /* If the conversion widens the original value and
-		     the constant is in the range of the type of OLD_RHS,
-		     then convert the constant and record the equivalence.
-
-		     Note that int_fits_type_p does not check the precision
-		     if the upper and lower bounds are OK.  */
-		  if (INTEGRAL_TYPE_P (TREE_TYPE (old_rhs))
-		      && (TYPE_PRECISION (TREE_TYPE (lhs))
-			  > TYPE_PRECISION (TREE_TYPE (old_rhs)))
-		      && int_fits_type_p (rhs, TREE_TYPE (old_rhs)))
-		    {
-		      tree newval = fold_convert (TREE_TYPE (old_rhs), rhs);
-		      record_equality (old_rhs, newval);
-		    }
-		}
-	    }
-
 	  for (i = 0; edge_info->cond_equivalences.iterate (i, &eq); ++i)
 	    record_cond (eq);
 	}
@@ -1386,7 +1154,7 @@ dump_dominator_optimization_stats (FILE *file)
   fprintf (file, "\nHash table statistics:\n");
 
   fprintf (file, "    avail_exprs: ");
-  htab_statistics (file, *avail_exprs);
+  htab_statistics (file, avail_exprs);
 }
 
 
@@ -1402,12 +1170,12 @@ debug_dominator_optimization_stats (void)
 /* Dump statistics for the hash table HTAB.  */
 
 static void
-htab_statistics (FILE *file, const hash_table<expr_elt_hasher> &htab)
+htab_statistics (FILE *file, htab_t htab)
 {
   fprintf (file, "size %ld, %ld elements, %f collision/search ratio\n",
-	   (long) htab.size (),
-	   (long) htab.elements (),
-	   htab.collisions ());
+	   (long) htab_size (htab),
+	   (long) htab_elements (htab),
+	   htab_collisions (htab));
 }
 
 
@@ -1419,14 +1187,15 @@ static void
 record_cond (cond_equivalence *p)
 {
   struct expr_hash_elt *element = XCNEW (struct expr_hash_elt);
-  expr_hash_elt **slot;
+  void **slot;
 
   initialize_hash_element_from_expr (&p->cond, p->value, element);
 
-  slot = avail_exprs->find_slot_with_hash (element, element->hash, INSERT);
+  slot = htab_find_slot_with_hash (avail_exprs, (void *)element,
+				   element->hash, INSERT);
   if (*slot == NULL)
     {
-      *slot = element;
+      *slot = (void *) element;
 
       if (dump_file && (dump_flags & TDF_DETAILS))
         {
@@ -1434,8 +1203,7 @@ record_cond (cond_equivalence *p)
           print_expr_hash_elt (dump_file, element);
         }
 
-      avail_exprs_stack.safe_push
-	(std::pair<expr_hash_elt_t, expr_hash_elt_t> (element, NULL));
+      avail_exprs_stack.safe_push (element);
     }
   else
     free_expr_hash_elt (element);
@@ -1602,33 +1370,13 @@ record_const_or_copy_1 (tree x, tree y, tree prev_x)
   const_and_copies_stack.quick_push (x);
 }
 
-/* Record that X is equal to Y in const_and_copies.  Record undo
-   information in the block-local vector.  */
-
-static void
-record_const_or_copy (tree x, tree y)
-{
-  tree prev_x = SSA_NAME_VALUE (x);
-
-  gcc_assert (TREE_CODE (x) == SSA_NAME);
-
-  if (TREE_CODE (y) == SSA_NAME)
-    {
-      tree tmp = SSA_NAME_VALUE (y);
-      if (tmp)
-	y = tmp;
-    }
-
-  record_const_or_copy_1 (x, y, prev_x);
-}
-
 /* Return the loop depth of the basic block of the defining statement of X.
    This number should not be treated as absolutely correct because the loop
    information may not be completely up-to-date when dom runs.  However, it
    will be relatively correct, and as more passes are taught to keep loop info
    up to date, the result will become more and more accurate.  */
 
-static int
+int
 loop_depth_of_name (tree x)
 {
   gimple defstmt;
@@ -1647,6 +1395,26 @@ loop_depth_of_name (tree x)
     return 0;
 
   return bb_loop_depth (defbb);
+}
+
+/* Record that X is equal to Y in const_and_copies.  Record undo
+   information in the block-local vector.  */
+
+static void
+record_const_or_copy (tree x, tree y)
+{
+  tree prev_x = SSA_NAME_VALUE (x);
+
+  gcc_assert (TREE_CODE (x) == SSA_NAME);
+
+  if (TREE_CODE (y) == SSA_NAME)
+    {
+      tree tmp = SSA_NAME_VALUE (y);
+      if (tmp)
+	y = tmp;
+    }
+
+  record_const_or_copy_1 (x, y, prev_x);
 }
 
 /* Similarly, but assume that X and Y are the two operands of an EQ_EXPR.
@@ -1669,8 +1437,6 @@ record_equality (tree x, tree y)
   if (is_gimple_min_invariant (y))
     ;
   else if (is_gimple_min_invariant (x)
-	   /* ???  When threading over backedges the following is important
-	      for correctness.  See PR61757.  */
 	   || (loop_depth_of_name (x) <= loop_depth_of_name (y)))
     prev_x = x, x = y, y = prev_x, prev_x = prev_y;
   else if (prev_x && is_gimple_min_invariant (prev_x))
@@ -1686,7 +1452,7 @@ record_equality (tree x, tree y)
      variable compared against zero.  If we're honoring signed zeros,
      then we cannot record this value unless we know that the value is
      nonzero.  */
-  if (HONOR_SIGNED_ZEROS (x)
+  if (HONOR_SIGNED_ZEROS (TYPE_MODE (TREE_TYPE (x)))
       && (TREE_CODE (y) != REAL_CST
 	  || REAL_VALUES_EQUAL (dconst0, TREE_REAL_CST (y))))
     return;
@@ -1751,7 +1517,7 @@ cprop_into_successor_phis (basic_block bb)
   FOR_EACH_EDGE (e, ei, bb->succs)
     {
       int indx;
-      gphi_iterator gsi;
+      gimple_stmt_iterator gsi;
 
       /* If this is an abnormal edge, then we do not want to copy propagate
 	 into the PHI alternative associated with this edge.  */
@@ -1762,35 +1528,13 @@ cprop_into_successor_phis (basic_block bb)
       if (gsi_end_p (gsi))
 	continue;
 
-      /* We may have an equivalence associated with this edge.  While
-	 we can not propagate it into non-dominated blocks, we can
-	 propagate them into PHIs in non-dominated blocks.  */
-
-      /* Push the unwind marker so we can reset the const and copies
-	 table back to its original state after processing this edge.  */
-      const_and_copies_stack.safe_push (NULL_TREE);
-
-      /* Extract and record any simple NAME = VALUE equivalences.
-
-	 Don't bother with [01] = COND equivalences, they're not useful
-	 here.  */
-      struct edge_info *edge_info = (struct edge_info *) e->aux;
-      if (edge_info)
-	{
-	  tree lhs = edge_info->lhs;
-	  tree rhs = edge_info->rhs;
-
-	  if (lhs && TREE_CODE (lhs) == SSA_NAME)
-	    record_const_or_copy (lhs, rhs);
-	}
-
       indx = e->dest_idx;
       for ( ; !gsi_end_p (gsi); gsi_next (&gsi))
 	{
 	  tree new_val;
 	  use_operand_p orig_p;
 	  tree orig_val;
-          gphi *phi = gsi.phi ();
+          gimple phi = gsi_stmt (gsi);
 
 	  /* The alternative may be associated with a constant, so verify
 	     it is an SSA_NAME before doing anything with it.  */
@@ -1809,8 +1553,6 @@ cprop_into_successor_phis (basic_block bb)
 	      && may_propagate_copy (orig_val, new_val))
 	    propagate_value (orig_p, new_val);
 	}
-
-      restore_vars_to_original_value ();
     }
 }
 
@@ -1830,20 +1572,19 @@ record_edge_info (basic_block bb)
 
       if (gimple_code (stmt) == GIMPLE_SWITCH)
 	{
-	  gswitch *switch_stmt = as_a <gswitch *> (stmt);
-	  tree index = gimple_switch_index (switch_stmt);
+	  tree index = gimple_switch_index (stmt);
 
 	  if (TREE_CODE (index) == SSA_NAME)
 	    {
 	      int i;
-              int n_labels = gimple_switch_num_labels (switch_stmt);
-	      tree *info = XCNEWVEC (tree, last_basic_block_for_fn (cfun));
+              int n_labels = gimple_switch_num_labels (stmt);
+	      tree *info = XCNEWVEC (tree, last_basic_block);
 	      edge e;
 	      edge_iterator ei;
 
 	      for (i = 0; i < n_labels; i++)
 		{
-		  tree label = gimple_switch_label (switch_stmt, i);
+		  tree label = gimple_switch_label (stmt, i);
 		  basic_block target_bb = label_to_block (CASE_LABEL (label));
 		  if (CASE_HIGH (label)
 		      || !CASE_LOW (label)
@@ -1927,7 +1668,7 @@ record_edge_info (basic_block bb)
               tree cond = build2 (code, boolean_type_node, op0, op1);
               tree inverted = invert_truthvalue_loc (loc, cond);
               bool can_infer_simple_equiv
-                = !(HONOR_SIGNED_ZEROS (op0)
+                = !(HONOR_SIGNED_ZEROS (TYPE_MODE (TREE_TYPE (op0)))
                     && real_zerop (op0));
               struct edge_info *edge_info;
 
@@ -1957,7 +1698,7 @@ record_edge_info (basic_block bb)
               tree cond = build2 (code, boolean_type_node, op0, op1);
               tree inverted = invert_truthvalue_loc (loc, cond);
               bool can_infer_simple_equiv
-                = !(HONOR_SIGNED_ZEROS (op1)
+                = !(HONOR_SIGNED_ZEROS (TYPE_MODE (TREE_TYPE (op1)))
                     && (TREE_CODE (op1) == SSA_NAME || real_zerop (op1)));
               struct edge_info *edge_info;
 
@@ -1985,8 +1726,9 @@ record_edge_info (basic_block bb)
     }
 }
 
-void
-dom_opt_dom_walker::before_dom_children (basic_block bb)
+static void
+dom_opt_enter_block (struct dom_walk_data *walk_data ATTRIBUTE_UNUSED,
+		     basic_block bb)
 {
   gimple_stmt_iterator gsi;
 
@@ -1995,8 +1737,7 @@ dom_opt_dom_walker::before_dom_children (basic_block bb)
 
   /* Push a marker on the stacks of local information so that we know how
      far to unwind when we finalize this block.  */
-  avail_exprs_stack.safe_push
-    (std::pair<expr_hash_elt_t, expr_hash_elt_t> (NULL, NULL));
+  avail_exprs_stack.safe_push (NULL);
   const_and_copies_stack.safe_push (NULL_TREE);
 
   record_equivalences_from_incoming_edge (bb);
@@ -2007,8 +1748,7 @@ dom_opt_dom_walker::before_dom_children (basic_block bb)
   /* Create equivalences from redundant PHIs.  PHIs are only truly
      redundant when they exist in the same block, so push another
      marker and unwind right afterwards.  */
-  avail_exprs_stack.safe_push
-    (std::pair<expr_hash_elt_t, expr_hash_elt_t> (NULL, NULL));
+  avail_exprs_stack.safe_push (NULL);
   for (gsi = gsi_start_phis (bb); !gsi_end_p (gsi); gsi_next (&gsi))
     eliminate_redundant_computations (&gsi);
   remove_local_expressions_from_table ();
@@ -2025,8 +1765,8 @@ dom_opt_dom_walker::before_dom_children (basic_block bb)
    any finalization actions in preparation for leaving this node in
    the dominator tree.  */
 
-void
-dom_opt_dom_walker::after_dom_children (basic_block bb)
+static void
+dom_opt_leave_block (struct dom_walk_data *walk_data, basic_block bb)
 {
   gimple last;
 
@@ -2038,7 +1778,10 @@ dom_opt_dom_walker::after_dom_children (basic_block bb)
       && (single_succ_edge (bb)->flags & EDGE_ABNORMAL) == 0
       && potentially_threadable_block (single_succ (bb)))
     {
-      thread_across_edge (single_succ_edge (bb));
+      /* Push a marker on the stack, which thread_across_edge expects
+	 and will remove.  */
+      const_and_copies_stack.safe_push (NULL_TREE);
+      dom_thread_across_edge (walk_data, single_succ_edge (bb));
     }
   else if ((last = last_stmt (bb))
 	   && gimple_code (last) == GIMPLE_COND
@@ -2053,15 +1796,79 @@ dom_opt_dom_walker::after_dom_children (basic_block bb)
       /* Only try to thread the edge if it reaches a target block with
 	 more than one predecessor and more than one successor.  */
       if (potentially_threadable_block (true_edge->dest))
-	thread_across_edge (true_edge);
+	{
+	  struct edge_info *edge_info;
+	  unsigned int i;
+
+	  /* Push a marker onto the available expression stack so that we
+	     unwind any expressions related to the TRUE arm before processing
+	     the false arm below.  */
+          avail_exprs_stack.safe_push (NULL);
+	  const_and_copies_stack.safe_push (NULL_TREE);
+
+	  edge_info = (struct edge_info *) true_edge->aux;
+
+	  /* If we have info associated with this edge, record it into
+	     our equivalence tables.  */
+	  if (edge_info)
+	    {
+	      cond_equivalence *eq;
+	      tree lhs = edge_info->lhs;
+	      tree rhs = edge_info->rhs;
+
+	      /* If we have a simple NAME = VALUE equivalence, record it.  */
+	      if (lhs && TREE_CODE (lhs) == SSA_NAME)
+		record_const_or_copy (lhs, rhs);
+
+	      /* If we have 0 = COND or 1 = COND equivalences, record them
+		 into our expression hash tables.  */
+	      for (i = 0; edge_info->cond_equivalences.iterate (i, &eq); ++i)
+		record_cond (eq);
+	    }
+
+	  dom_thread_across_edge (walk_data, true_edge);
+
+	  /* And restore the various tables to their state before
+	     we threaded this edge.  */
+	  remove_local_expressions_from_table ();
+	}
 
       /* Similarly for the ELSE arm.  */
       if (potentially_threadable_block (false_edge->dest))
-	thread_across_edge (false_edge);
+	{
+	  struct edge_info *edge_info;
+	  unsigned int i;
 
+	  const_and_copies_stack.safe_push (NULL_TREE);
+	  edge_info = (struct edge_info *) false_edge->aux;
+
+	  /* If we have info associated with this edge, record it into
+	     our equivalence tables.  */
+	  if (edge_info)
+	    {
+	      cond_equivalence *eq;
+	      tree lhs = edge_info->lhs;
+	      tree rhs = edge_info->rhs;
+
+	      /* If we have a simple NAME = VALUE equivalence, record it.  */
+	      if (lhs && TREE_CODE (lhs) == SSA_NAME)
+		record_const_or_copy (lhs, rhs);
+
+	      /* If we have 0 = COND or 1 = COND equivalences, record them
+		 into our expression hash tables.  */
+	      for (i = 0; edge_info->cond_equivalences.iterate (i, &eq); ++i)
+		record_cond (eq);
+	    }
+
+	  /* Now thread the edge.  */
+	  dom_thread_across_edge (walk_data, false_edge);
+
+	  /* No need to remove local expressions from our tables
+	     or restore vars to their original value as that will
+	     be done immediately below.  */
+	}
     }
 
-  /* These remove expressions local to BB from the tables.  */
   remove_local_expressions_from_table ();
   restore_vars_to_original_value ();
 }
@@ -2118,8 +1925,8 @@ eliminate_redundant_computations (gimple_stmt_iterator* gsi)
       expr_type = TREE_TYPE (gimple_call_lhs (stmt));
       assigns_var_p = true;
     }
-  else if (gswitch *swtch_stmt = dyn_cast <gswitch *> (stmt))
-    expr_type = TREE_TYPE (gimple_switch_index (swtch_stmt));
+  else if (gimple_code (stmt) == GIMPLE_SWITCH)
+    expr_type = TREE_TYPE (gimple_switch_index (stmt));
   else if (gimple_code (stmt) == GIMPLE_PHI)
     /* We can't propagate into a phi, so the logic below doesn't apply.
        Instead record an equivalence between the cached LHS and the
@@ -2218,32 +2025,6 @@ record_equivalences_from_stmt (gimple stmt, int may_optimize_p)
       }
     }
 
-  /* Make sure we can propagate &x + CST.  */
-  if (lhs_code == SSA_NAME
-      && gimple_assign_rhs_code (stmt) == POINTER_PLUS_EXPR
-      && TREE_CODE (gimple_assign_rhs1 (stmt)) == ADDR_EXPR
-      && TREE_CODE (gimple_assign_rhs2 (stmt)) == INTEGER_CST)
-    {
-      tree op0 = gimple_assign_rhs1 (stmt);
-      tree op1 = gimple_assign_rhs2 (stmt);
-      tree new_rhs
-	= build_fold_addr_expr (fold_build2 (MEM_REF,
-					     TREE_TYPE (TREE_TYPE (op0)),
-					     unshare_expr (op0),
-					     fold_convert (ptr_type_node,
-							   op1)));
-      if (dump_file && (dump_flags & TDF_DETAILS))
-	{
-	  fprintf (dump_file, "==== ASGN ");
-	  print_generic_expr (dump_file, lhs, 0);
-	  fprintf (dump_file, " = ");
-	  print_generic_expr (dump_file, new_rhs, 0);
-	  fprintf (dump_file, "\n");
-	}
-
-      set_ssa_name_value (lhs, new_rhs);
-    }
-
   /* A memory store, even an aliased store, creates a useful
      equivalence.  By exchanging the LHS and RHS, creating suitable
      vops and recording the result in the available expression table,
@@ -2256,7 +2037,7 @@ record_equivalences_from_stmt (gimple stmt, int may_optimize_p)
       && !is_gimple_reg (lhs))
     {
       tree rhs = gimple_assign_rhs1 (stmt);
-      gassign *new_stmt;
+      gimple new_stmt;
 
       /* Build a new statement with the RHS and LHS exchanged.  */
       if (TREE_CODE (rhs) == SSA_NAME)
@@ -2311,16 +2092,27 @@ cprop_operand (gimple stmt, use_operand_p op_p)
       if (!may_propagate_copy (op, val))
 	return;
 
-      /* Do not propagate copies into BIVs.
-         See PR23821 and PR62217 for how this can disturb IV and
-	 number of iteration analysis.  */
-      if (TREE_CODE (val) != INTEGER_CST)
-	{
-	  gimple def = SSA_NAME_DEF_STMT (op);
-	  if (gimple_code (def) == GIMPLE_PHI
-	      && gimple_bb (def)->loop_father->header == gimple_bb (def))
-	    return;
-	}
+      /* Do not propagate addresses that point to volatiles into memory
+	 stmts without volatile operands.  */
+      if (POINTER_TYPE_P (TREE_TYPE (val))
+	  && TYPE_VOLATILE (TREE_TYPE (TREE_TYPE (val)))
+	  && gimple_has_mem_ops (stmt)
+	  && !gimple_has_volatile_ops (stmt))
+	return;
+
+      /* Do not propagate copies if the propagated value is at a deeper loop
+	 depth than the propagatee.  Otherwise, this may move loop variant
+	 variables outside of their loops and prevent coalescing
+	 opportunities.  If the value was loop invariant, it will be hoisted
+	 by LICM and exposed for copy propagation.  */
+      if (loop_depth_of_name (val) > loop_depth_of_name (op))
+	return;
+
+      /* Do not propagate copies into simple IV increment statements.
+         See PR23821 for how this can disturb IV analysis.  */
+      if (TREE_CODE (val) != INTEGER_CST
+	  && simple_iv_increment_p (stmt))
+	return;
 
       /* Dump details.  */
       if (dump_file && (dump_flags & TDF_DETAILS))
@@ -2384,10 +2176,8 @@ optimize_stmt (basic_block bb, gimple_stmt_iterator si)
   gimple stmt, old_stmt;
   bool may_optimize_p;
   bool modified_p = false;
-  bool was_noreturn;
 
   old_stmt = stmt = gsi_stmt (si);
-  was_noreturn = is_gimple_call (stmt) && gimple_call_noreturn_p (stmt);
 
   if (dump_file && (dump_flags & TDF_DETAILS))
     {
@@ -2396,7 +2186,7 @@ optimize_stmt (basic_block bb, gimple_stmt_iterator si)
     }
 
   if (gimple_code (stmt) == GIMPLE_COND)
-    canonicalize_comparison (as_a <gcond *> (stmt));
+    canonicalize_comparison (stmt);
 
   update_stmt_if_modified (stmt);
   opt_stats.num_stmts++;
@@ -2429,9 +2219,9 @@ optimize_stmt (basic_block bb, gimple_stmt_iterator si)
         rhs = gimple_assign_rhs1 (stmt);
       else if (gimple_code (stmt) == GIMPLE_GOTO)
         rhs = gimple_goto_dest (stmt);
-      else if (gswitch *swtch_stmt = dyn_cast <gswitch *> (stmt))
+      else if (gimple_code (stmt) == GIMPLE_SWITCH)
         /* This should never be an ADDR_EXPR.  */
-        rhs = gimple_switch_index (swtch_stmt);
+        rhs = gimple_switch_index (stmt);
 
       if (rhs && TREE_CODE (rhs) == ADDR_EXPR)
         recompute_tree_invariant_for_addr_expr (rhs);
@@ -2479,7 +2269,7 @@ optimize_stmt (basic_block bb, gimple_stmt_iterator si)
 	  tree lhs = gimple_assign_lhs (stmt);
 	  tree rhs = gimple_assign_rhs1 (stmt);
 	  tree cached_lhs;
-	  gassign *new_stmt;
+	  gimple new_stmt;
 	  if (TREE_CODE (rhs) == SSA_NAME)
 	    {
 	      tree tem = SSA_NAME_VALUE (rhs);
@@ -2496,7 +2286,7 @@ optimize_stmt (basic_block bb, gimple_stmt_iterator si)
 	  else
 	    new_stmt = gimple_build_assign (rhs, lhs);
 	  gimple_set_vuse (new_stmt, gimple_vuse (stmt));
-	  cached_lhs = lookup_avail_expr (new_stmt, false, false);
+	  cached_lhs = lookup_avail_expr (new_stmt, false);
 	  if (cached_lhs
 	      && rhs == cached_lhs)
 	    {
@@ -2553,8 +2343,8 @@ optimize_stmt (basic_block bb, gimple_stmt_iterator si)
         val = fold_binary_loc (gimple_location (stmt),
 			   gimple_cond_code (stmt), boolean_type_node,
                            gimple_cond_lhs (stmt),  gimple_cond_rhs (stmt));
-      else if (gswitch *swtch_stmt = dyn_cast <gswitch *> (stmt))
-	val = gimple_switch_index (swtch_stmt);
+      else if (gimple_code (stmt) == GIMPLE_SWITCH)
+	val = gimple_switch_index (stmt);
 
       if (val && TREE_CODE (val) == INTEGER_CST && find_taken_edge (bb, val))
 	cfg_altered = true;
@@ -2567,31 +2357,7 @@ optimize_stmt (basic_block bb, gimple_stmt_iterator si)
 	  if (dump_file && (dump_flags & TDF_DETAILS))
 	    fprintf (dump_file, "  Flagged to clear EH edges.\n");
 	}
-
-      if (!was_noreturn
-	  && is_gimple_call (stmt) && gimple_call_noreturn_p (stmt))
-	need_noreturn_fixup.safe_push (stmt);
     }
-}
-
-/* Helper for walk_non_aliased_vuses.  Determine if we arrived at
-   the desired memory state.  */
-
-static void *
-vuse_eq (ao_ref *, tree vuse1, unsigned int cnt, void *data)
-{
-  tree vuse2 = (tree) data;
-  if (vuse1 == vuse2)
-    return data;
-
-  /* This bounds the stmt walks we perform on reference lookups
-     to O(1) instead of O(N) where N is the number of dominating
-     stores leading to a candidate.  We re-use the SCCVN param
-     for this as it is basically the same complexity.  */
-  if (cnt > (unsigned) PARAM_VALUE (PARAM_SCCVN_MAX_ALIAS_QUERIES_PER_ACCESS))
-    return (void *)-1;
-
-  return NULL;
 }
 
 /* Search for an existing instance of STMT in the AVAIL_EXPRS table.
@@ -2603,9 +2369,9 @@ vuse_eq (ao_ref *, tree vuse1, unsigned int cnt, void *data)
    we finish processing this block and its children.  */
 
 static tree
-lookup_avail_expr (gimple stmt, bool insert, bool tbaa_p)
+lookup_avail_expr (gimple stmt, bool insert)
 {
-  expr_hash_elt **slot;
+  void **slot;
   tree lhs;
   tree temp;
   struct expr_hash_elt element;
@@ -2633,7 +2399,8 @@ lookup_avail_expr (gimple stmt, bool insert, bool tbaa_p)
     return NULL_TREE;
 
   /* Finally try to find the expression in the main expression hash table.  */
-  slot = avail_exprs->find_slot (&element, (insert ? INSERT : NO_INSERT));
+  slot = htab_find_slot_with_hash (avail_exprs, &element, element.hash,
+				   (insert ? INSERT : NO_INSERT));
   if (slot == NULL)
     {
       free_expr_hash_elt_contents (&element);
@@ -2644,7 +2411,7 @@ lookup_avail_expr (gimple stmt, bool insert, bool tbaa_p)
       struct expr_hash_elt *element2 = XNEW (struct expr_hash_elt);
       *element2 = element;
       element2->stamp = element2;
-      *slot = element2;
+      *slot = (void *) element2;
 
       if (dump_file && (dump_flags & TDF_DETAILS))
         {
@@ -2652,56 +2419,15 @@ lookup_avail_expr (gimple stmt, bool insert, bool tbaa_p)
           print_expr_hash_elt (dump_file, element2);
         }
 
-      avail_exprs_stack.safe_push
-	(std::pair<expr_hash_elt_t, expr_hash_elt_t> (element2, NULL));
+      avail_exprs_stack.safe_push (element2);
       return NULL_TREE;
     }
-
-  /* If we found a redundant memory operation do an alias walk to
-     check if we can re-use it.  */
-  if (gimple_vuse (stmt) != (*slot)->vop)
-    {
-      tree vuse1 = (*slot)->vop;
-      tree vuse2 = gimple_vuse (stmt);
-      /* If we have a load of a register and a candidate in the
-	 hash with vuse1 then try to reach its stmt by walking
-	 up the virtual use-def chain using walk_non_aliased_vuses.
-	 But don't do this when removing expressions from the hash.  */
-      ao_ref ref;
-      if (!(vuse1 && vuse2
-	    && gimple_assign_single_p (stmt)
-	    && TREE_CODE (gimple_assign_lhs (stmt)) == SSA_NAME
-	    && (ao_ref_init (&ref, gimple_assign_rhs1 (stmt)),
-		ref.base_alias_set = ref.ref_alias_set = tbaa_p ? -1 : 0, true)
-	    && walk_non_aliased_vuses (&ref, vuse2,
-				       vuse_eq, NULL, NULL, vuse1) != NULL))
-	{
-	  if (insert)
-	    {
-	      struct expr_hash_elt *element2 = XNEW (struct expr_hash_elt);
-	      *element2 = element;
-	      element2->stamp = element2;
-
-	      /* Insert the expr into the hash by replacing the current
-		 entry and recording the value to restore in the
-		 avail_exprs_stack.  */
-	      avail_exprs_stack.safe_push (std::make_pair (element2, *slot));
-	      *slot = element2;
-	      if (dump_file && (dump_flags & TDF_DETAILS))
-		{
-		  fprintf (dump_file, "2>>> ");
-		  print_expr_hash_elt (dump_file, *slot);
-		}
-	    }
-	  return NULL_TREE;
-	}
-    }
-
-  free_expr_hash_elt_contents (&element);
+  else
+    free_expr_hash_elt_contents (&element);
 
   /* Extract the LHS of the assignment so that it can be used as the current
      definition of another variable.  */
-  lhs = (*slot)->lhs;
+  lhs = ((struct expr_hash_elt *)*slot)->lhs;
 
   /* See if the LHS appears in the CONST_AND_COPIES table.  If it does, then
      use the value from the const_and_copies table.  */
@@ -2729,16 +2455,110 @@ lookup_avail_expr (gimple stmt, bool insert, bool tbaa_p)
 static hashval_t
 avail_expr_hash (const void *p)
 {
+  gimple stmt = ((const struct expr_hash_elt *)p)->stmt;
   const struct hashable_expr *expr = &((const struct expr_hash_elt *)p)->expr;
-  inchash::hash hstate;
+  tree vuse;
+  hashval_t val = 0;
 
-  inchash::add_hashable_expr (expr, hstate);
+  val = iterative_hash_hashable_expr (expr, val);
 
-  return hstate.end ();
+  /* If the hash table entry is not associated with a statement, then we
+     can just hash the expression and not worry about virtual operands
+     and such.  */
+  if (!stmt)
+    return val;
+
+  /* Add the SSA version numbers of the vuse operand.  This is important
+     because compound variables like arrays are not renamed in the
+     operands.  Rather, the rename is done on the virtual variable
+     representing all the elements of the array.  */
+  if ((vuse = gimple_vuse (stmt)))
+    val = iterative_hash_expr (vuse, val);
+
+  return val;
+}
+
+static hashval_t
+real_avail_expr_hash (const void *p)
+{
+  return ((const struct expr_hash_elt *)p)->hash;
+}
+
+static int
+avail_expr_eq (const void *p1, const void *p2)
+{
+  gimple stmt1 = ((const struct expr_hash_elt *)p1)->stmt;
+  const struct hashable_expr *expr1 = &((const struct expr_hash_elt *)p1)->expr;
+  const struct expr_hash_elt *stamp1 = ((const struct expr_hash_elt *)p1)->stamp;
+  gimple stmt2 = ((const struct expr_hash_elt *)p2)->stmt;
+  const struct hashable_expr *expr2 = &((const struct expr_hash_elt *)p2)->expr;
+  const struct expr_hash_elt *stamp2 = ((const struct expr_hash_elt *)p2)->stamp;
+
+  /* This case should apply only when removing entries from the table.  */
+  if (stamp1 == stamp2)
+    return true;
+
+  /* FIXME tuples:
+     We add stmts to a hash table and them modify them. To detect the case
+     that we modify a stmt and then search for it, we assume that the hash
+     is always modified by that change.
+     We have to fully check why this doesn't happen on trunk or rewrite
+     this in a more  reliable (and easier to understand) way. */
+  if (((const struct expr_hash_elt *)p1)->hash
+      != ((const struct expr_hash_elt *)p2)->hash)
+    return false;
+
+  /* In case of a collision, both RHS have to be identical and have the
+     same VUSE operands.  */
+  if (hashable_expr_equal_p (expr1, expr2)
+      && types_compatible_p (expr1->type, expr2->type))
+    {
+      /* Note that STMT1 and/or STMT2 may be NULL.  */
+      return ((stmt1 ? gimple_vuse (stmt1) : NULL_TREE)
+	      == (stmt2 ? gimple_vuse (stmt2) : NULL_TREE));
+    }
+
+  return false;
 }
 
 /* PHI-ONLY copy and constant propagation.  This pass is meant to clean
    up degenerate PHIs created by or exposed by jump threading.  */
+
+/* Given PHI, return its RHS if the PHI is a degenerate, otherwise return
+   NULL.  */
+
+tree
+degenerate_phi_result (gimple phi)
+{
+  tree lhs = gimple_phi_result (phi);
+  tree val = NULL;
+  size_t i;
+
+  /* Ignoring arguments which are the same as LHS, if all the remaining
+     arguments are the same, then the PHI is a degenerate and has the
+     value of that common argument.  */
+  for (i = 0; i < gimple_phi_num_args (phi); i++)
+    {
+      tree arg = gimple_phi_arg_def (phi, i);
+
+      if (arg == lhs)
+	continue;
+      else if (!arg)
+	break;
+      else if (!val)
+	val = arg;
+      else if (arg == val)
+	continue;
+      /* We bring in some of operand_equal_p not only to speed things
+	 up, but also to avoid crashing when dereferencing the type of
+	 a released SSA name.  */
+      else if (TREE_CODE (val) != TREE_CODE (arg)
+	       || TREE_CODE (val) == SSA_NAME
+	       || !operand_equal_p (arg, val, 0))
+	break;
+    }
+  return (i == gimple_phi_num_args (phi) ? val : NULL);
+}
 
 /* Given a statement STMT, which is either a PHI node or an assignment,
    remove it from the IL.  */
@@ -2765,7 +2585,7 @@ static tree
 get_rhs_or_phi_arg (gimple stmt)
 {
   if (gimple_code (stmt) == GIMPLE_PHI)
-    return degenerate_phi_result (as_a <gphi *> (stmt));
+    return degenerate_phi_result (stmt);
   else if (gimple_assign_single_p (stmt))
     return gimple_assign_rhs1 (stmt);
   else
@@ -2801,8 +2621,13 @@ get_lhs_or_phi_result (gimple stmt)
 static void
 propagate_rhs_into_lhs (gimple stmt, tree lhs, tree rhs, bitmap interesting_names)
 {
-  /* First verify that propagation is valid.  */
-  if (may_propagate_copy (lhs, rhs))
+  /* First verify that propagation is valid and isn't going to move a
+     loop variant variable outside its loop.  */
+  if (! SSA_NAME_OCCURS_IN_ABNORMAL_PHI (lhs)
+      && (TREE_CODE (rhs) != SSA_NAME
+	  || ! SSA_NAME_OCCURS_IN_ABNORMAL_PHI (rhs))
+      && may_propagate_copy (lhs, rhs)
+      && loop_depth_of_name (lhs) >= loop_depth_of_name (rhs))
     {
       use_operand_p use_p;
       imm_use_iterator iter;
@@ -2956,7 +2781,7 @@ propagate_rhs_into_lhs (gimple stmt, tree lhs, tree rhs, bitmap interesting_name
                                    gimple_cond_lhs (use_stmt),
                                    gimple_cond_rhs (use_stmt));
               else if (gimple_code (use_stmt) == GIMPLE_SWITCH)
-		val = gimple_switch_index (as_a <gswitch *> (use_stmt));
+		val = gimple_switch_index (use_stmt);
 	      else
 		val = gimple_goto_dest  (use_stmt);
 
@@ -2969,8 +2794,7 @@ propagate_rhs_into_lhs (gimple stmt, tree lhs, tree rhs, bitmap interesting_name
 
 		  edge_iterator ei;
 		  edge e;
-		  gimple_stmt_iterator gsi;
-		  gphi_iterator psi;
+		  gimple_stmt_iterator gsi, psi;
 
 		  /* Remove all outgoing edges except TE.  */
 		  for (ei = ei_start (bb->succs); (e = ei_safe_edge (ei));)
@@ -2983,7 +2807,7 @@ propagate_rhs_into_lhs (gimple stmt, tree lhs, tree rhs, bitmap interesting_name
                                !gsi_end_p (psi);
                                gsi_next (&psi))
                             {
-                              gphi *phi = psi.phi ();
+                              gimple phi = gsi_stmt (psi);
 
 			      tree result = gimple_phi_result (phi);
 			      int version = SSA_NAME_VERSION (result);
@@ -3062,22 +2886,7 @@ eliminate_const_or_copy (gimple stmt, bitmap interesting_names)
       return;
     }
 
-  if (!virtual_operand_p (lhs))
-    propagate_rhs_into_lhs (stmt, lhs, rhs, interesting_names);
-  else
-    {
-      gimple use_stmt;
-      imm_use_iterator iter;
-      use_operand_p use_p;
-      /* For virtual operands we have to propagate into all uses as
-         otherwise we will create overlapping life-ranges.  */
-      FOR_EACH_IMM_USE_STMT (use_stmt, iter, lhs)
-	FOR_EACH_IMM_USE_ON_STMT (use_p, iter)
-	  SET_USE (use_p, rhs);
-      if (SSA_NAME_OCCURS_IN_ABNORMAL_PHI (lhs))
-	SSA_NAME_OCCURS_IN_ABNORMAL_PHI (rhs) = 1;
-      remove_stmt_or_phi (stmt);
-    }
+  propagate_rhs_into_lhs (stmt, lhs, rhs, interesting_names);
 
   /* Note that STMT may well have been deleted by now, so do
      not access it, instead use the saved version # to clear
@@ -3093,12 +2902,12 @@ eliminate_const_or_copy (gimple stmt, bitmap interesting_names)
 static void
 eliminate_degenerate_phis_1 (basic_block bb, bitmap interesting_names)
 {
-  gphi_iterator gsi;
+  gimple_stmt_iterator gsi;
   basic_block son;
 
   for (gsi = gsi_start_phis (bb); !gsi_end_p (gsi); gsi_next (&gsi))
     {
-      gphi *phi = gsi.phi ();
+      gimple phi = gsi_stmt (gsi);
 
       eliminate_const_or_copy (phi, interesting_names);
     }
@@ -3137,37 +2946,8 @@ eliminate_degenerate_phis_1 (basic_block bb, bitmap interesting_names)
    pick up the secondary optimization opportunities with minimal
    cost.  */
 
-namespace {
-
-const pass_data pass_data_phi_only_cprop =
-{
-  GIMPLE_PASS, /* type */
-  "phicprop", /* name */
-  OPTGROUP_NONE, /* optinfo_flags */
-  TV_TREE_PHI_CPROP, /* tv_id */
-  ( PROP_cfg | PROP_ssa ), /* properties_required */
-  0, /* properties_provided */
-  0, /* properties_destroyed */
-  0, /* todo_flags_start */
-  ( TODO_cleanup_cfg | TODO_update_ssa ), /* todo_flags_finish */
-};
-
-class pass_phi_only_cprop : public gimple_opt_pass
-{
-public:
-  pass_phi_only_cprop (gcc::context *ctxt)
-    : gimple_opt_pass (pass_data_phi_only_cprop, ctxt)
-  {}
-
-  /* opt_pass methods: */
-  opt_pass * clone () { return new pass_phi_only_cprop (m_ctxt); }
-  virtual bool gate (function *) { return flag_tree_dom != 0; }
-  virtual unsigned int execute (function *);
-
-}; // class pass_phi_only_cprop
-
-unsigned int
-pass_phi_only_cprop::execute (function *fun)
+static unsigned int
+eliminate_degenerate_phis (void)
 {
   bitmap interesting_names;
   bitmap interesting_names1;
@@ -3200,8 +2980,7 @@ pass_phi_only_cprop::execute (function *fun)
      phase in dominator order.  Presumably this is because walking
      in dominator order leaves fewer PHIs for later examination
      by the worklist phase.  */
-  eliminate_degenerate_phis_1 (ENTRY_BLOCK_PTR_FOR_FN (fun),
-			       interesting_names);
+  eliminate_degenerate_phis_1 (ENTRY_BLOCK_PTR, interesting_names);
 
   /* Second phase.  Eliminate second order degenerate PHIs as well
      as trivial copies or constant initializations identified by
@@ -3233,7 +3012,8 @@ pass_phi_only_cprop::execute (function *fun)
     {
       free_dominance_info (CDI_DOMINATORS);
       /* If we changed the CFG schedule loops for fixup by cfgcleanup.  */
-      loops_state_set (LOOPS_NEED_FIXUP);
+      if (current_loops)
+	loops_state_set (LOOPS_NEED_FIXUP);
     }
 
   /* Propagation of const and copies may make some EH edges dead.  Purge
@@ -3249,10 +3029,26 @@ pass_phi_only_cprop::execute (function *fun)
   return 0;
 }
 
-} // anon namespace
-
-gimple_opt_pass *
-make_pass_phi_only_cprop (gcc::context *ctxt)
+struct gimple_opt_pass pass_phi_only_cprop =
 {
-  return new pass_phi_only_cprop (ctxt);
-}
+ {
+  GIMPLE_PASS,
+  "phicprop",                           /* name */
+  OPTGROUP_NONE,                        /* optinfo_flags */
+  gate_dominator,                       /* gate */
+  eliminate_degenerate_phis,            /* execute */
+  NULL,                                 /* sub */
+  NULL,                                 /* next */
+  0,                                    /* static_pass_number */
+  TV_TREE_PHI_CPROP,                    /* tv_id */
+  PROP_cfg | PROP_ssa,			/* properties_required */
+  0,                                    /* properties_provided */
+  0,		                        /* properties_destroyed */
+  0,                                    /* todo_flags_start */
+  TODO_cleanup_cfg
+    | TODO_ggc_collect
+    | TODO_verify_ssa
+    | TODO_verify_stmts
+    | TODO_update_ssa			/* todo_flags_finish */
+ }
+};

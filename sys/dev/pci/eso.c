@@ -1,4 +1,4 @@
-/*	$NetBSD: eso.c,v 1.66 2016/07/07 06:55:41 msaitoh Exp $	*/
+/*	$NetBSD: eso.c,v 1.65 2014/03/29 19:28:24 christos Exp $	*/
 
 /*-
  * Copyright (c) 2008 The NetBSD Foundation, Inc.
@@ -62,7 +62,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: eso.c,v 1.66 2016/07/07 06:55:41 msaitoh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: eso.c,v 1.65 2014/03/29 19:28:24 christos Exp $");
 
 #include "mpu.h"
 
@@ -402,7 +402,8 @@ eso_attach(device_t parent, device_t self, void *aux)
 		mutex_destroy(&sc->sc_intr_lock);
 		return;
 	}
-	aprint_normal_dev(sc->sc_dev, "interrupting at %s\n", intrstring);
+	aprint_normal_dev(sc->sc_dev, "interrupting at %s\n",
+	    intrstring);
 
 	cv_init(&sc->sc_pcv, "esoho");
 	cv_init(&sc->sc_rcv, "esohi");

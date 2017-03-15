@@ -1,4 +1,4 @@
-/*	$NetBSD: nouveau_core_object.c,v 1.3 2015/10/18 14:49:24 jmcneill Exp $	*/
+/*	$NetBSD: nouveau_core_object.c,v 1.2.4.1 2016/12/12 09:13:42 msaitoh Exp $	*/
 
 /*
  * Copyright 2012 Red Hat Inc.
@@ -25,7 +25,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: nouveau_core_object.c,v 1.3 2015/10/18 14:49:24 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: nouveau_core_object.c,v 1.2.4.1 2016/12/12 09:13:42 msaitoh Exp $");
 
 #include <core/object.h>
 #include <core/parent.h>

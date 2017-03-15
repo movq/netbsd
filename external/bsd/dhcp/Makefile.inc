@@ -1,4 +1,4 @@
-# $NetBSD: Makefile.inc,v 1.17 2017/01/28 23:59:15 christos Exp $
+# $NetBSD: Makefile.inc,v 1.11.2.1 2014/10/11 16:22:28 snj Exp $
 
 WARNS?=	1	# XXX -Wshadow -Wcast-qual -Wsign-compare
 
@@ -15,6 +15,7 @@ BIND:=	${.PARSEDIR}/../bind/dist
 
 COBJDIR!=cd ${.PARSEDIR}/lib/common && ${PRINTOBJDIR}
 OMOBJDIR!=cd ${.PARSEDIR}/lib/omapip && ${PRINTOBJDIR}
+DSTOBJDIR!=cd ${.PARSEDIR}/lib/dst && ${PRINTOBJDIR}
 
 .if (${USE_INET6} != "no")
 CPPFLAGS+=	-DDHCPv6
@@ -29,7 +30,7 @@ CPPFLAGS+= -I${BIND}/lib/${dir}/pthreads/include
 .endfor
 CPPFLAGS+= -DLOCALSTATEDIR='"/var"'
 LDADD+= ${COBJDIR}/libdhcp.a
-LDADD+= ${OMOBJDIR}/libomapi.a
+LDADD+= ${OMOBJDIR}/libomapi.a ${DSTOBJDIR}/libdst.a
 .if defined(PROG) && ${PROG} == "dhclient"
 LDADD+=-Wl,-Bstatic
 .endif
@@ -38,9 +39,9 @@ LDADD+=-lpthread
 .if (${MKCRYPTO} != "no")
 .if (${MKKERBEROS} != "no")
 LDADD+= -lgssapi -lkrb5 -lhx509 -lheimntlm -lheimbase \
-	-lcom_err  -lroken -lasn1 -lwind -lsqlite3
+	-lcom_err  -lroken -lasn1 -lwind
 DPADD+= ${LIBGSSAPI} ${LIBKRB5} ${LIBHX509} ${LIBHEIMNTLM} ${LIBHEIMBASE} \
-	${LIBCOM_ERR} ${LIBROKEN} ${LIBASN1} ${LIBWIND} ${LIBSQLITE3}
+	${LIBCOM_ERR} ${LIBROKEN} ${LIBASN1} ${LIBWIND}
 .endif
 .if defined(PROG) && ${PROG} == "dhclient"
 LDADD+=-Wl,-Bdynamic
@@ -48,10 +49,7 @@ LDADD+=-Wl,-Bdynamic
 LDADD+= -lcrypto -lipsec -lcrypt
 DPADD+= ${LIBCRYPTO} ${LIBIPSEC} ${LIBCRYPT}
 .endif
-.if defined(PROG) && ${PROG} == "dhclient"
-LDADD+=-Wl,-Bdynamic
-.endif
 DPADD+= ${COBJDIR}/libdhcp.a
-DPADD+= ${OMOBJDIR}/libomapi.a
+DPADD+= ${OMOBJDIR}/libomapi.a ${DSTOBJDIR}/libdst.a
 DPADD+=	${LIBDNS} ${LIBISC}
 DPADD+= ${LIBPTHREAD}

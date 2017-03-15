@@ -161,8 +161,10 @@ using tuple_element_t = typename tuple_element <_Ip, _Tp...>::type;
 
 // __tuple_leaf
 
-template <size_t _Ip, class _Hp,
-          bool=is_empty<_Hp>::value && !__libcpp_is_final<_Hp>::value
+template <size_t _Ip, class _Hp, bool=is_empty<_Hp>::value
+#if __has_feature(is_final)
+                                 && !__is_final(_Hp)
+#endif
          >
 class __tuple_leaf;
 
@@ -374,18 +376,19 @@ template <class ..._Tp>
 _LIBCPP_INLINE_VISIBILITY
 void __swallow(_Tp&&...) _NOEXCEPT {}
 
-template <bool ..._Pred>
-struct __all
-    : is_same<__all<_Pred...>, __all<(_Pred, true)...>>
-{ };
+template <bool ...> struct __all;
 
-template <class _Tp>
-struct __all_default_constructible;
+template <>
+struct __all<>
+{
+    static const bool value = true;
+};
 
-template <class ..._Tp>
-struct __all_default_constructible<__tuple_types<_Tp...>>
-    : __all<is_default_constructible<_Tp>::value...>
-{ };
+template <bool _B0, bool ... _Bp>
+struct __all<_B0, _Bp...>
+{
+    static const bool value = _B0 && __all<_Bp...>::value;
+};
 
 // __tuple_impl
 
@@ -509,9 +512,6 @@ class _LIBCPP_TYPE_VIS_ONLY tuple
         typename tuple_element<_Jp, tuple<_Up...> >::type&& get(tuple<_Up...>&&) _NOEXCEPT;
 public:
 
-    template <bool _Dummy = true, class = typename enable_if<
-        __all<__dependent_type<is_default_constructible<_Tp>, _Dummy>::value...>::value
-    >::type>
     _LIBCPP_INLINE_VISIBILITY
     _LIBCPP_CONSTEXPR tuple()
         _NOEXCEPT_(__all<is_nothrow_default_constructible<_Tp>::value...>::value) {}
@@ -547,12 +547,6 @@ public:
                                      sizeof...(_Up) < sizeof...(_Tp) ?
                                         sizeof...(_Up) :
                                         sizeof...(_Tp)>::type
-                         >::value &&
-                         __all_default_constructible<
-                            typename __make_tuple_types<tuple, sizeof...(_Tp),
-                                sizeof...(_Up) < sizeof...(_Tp) ?
-                                    sizeof...(_Up) :
-                                    sizeof...(_Tp)>::type
                          >::value,
                          bool
                       >::type = false
@@ -560,7 +554,7 @@ public:
         _LIBCPP_INLINE_VISIBILITY _LIBCPP_CONSTEXPR_AFTER_CXX11
         tuple(_Up&&... __u)
             _NOEXCEPT_((
-                is_nothrow_constructible<base,
+                is_nothrow_constructible<
                     typename __make_tuple_indices<sizeof...(_Up)>::type,
                     typename __make_tuple_types<tuple, sizeof...(_Up)>::type,
                     typename __make_tuple_indices<sizeof...(_Tp), sizeof...(_Up)>::type,
@@ -593,12 +587,6 @@ public:
                                      sizeof...(_Up) < sizeof...(_Tp) ?
                                         sizeof...(_Up) :
                                         sizeof...(_Tp)>::type
-                         >::value &&
-                         __all_default_constructible<
-                            typename __make_tuple_types<tuple, sizeof...(_Tp),
-                                sizeof...(_Up) < sizeof...(_Tp) ?
-                                    sizeof...(_Up) :
-                                    sizeof...(_Tp)>::type
                          >::value,
                          bool
                       >::type =false
@@ -607,7 +595,7 @@ public:
         explicit
         tuple(_Up&&... __u)
             _NOEXCEPT_((
-                is_nothrow_constructible<base,
+                is_nothrow_constructible<
                     typename __make_tuple_indices<sizeof...(_Up)>::type,
                     typename __make_tuple_types<tuple, sizeof...(_Up)>::type,
                     typename __make_tuple_indices<sizeof...(_Tp), sizeof...(_Up)>::type,
@@ -632,12 +620,6 @@ public:
                                      sizeof...(_Up) < sizeof...(_Tp) ?
                                         sizeof...(_Up) :
                                         sizeof...(_Tp)>::type
-                         >::value &&
-                         __all_default_constructible<
-                            typename __make_tuple_types<tuple, sizeof...(_Tp),
-                                sizeof...(_Up) < sizeof...(_Tp) ?
-                                    sizeof...(_Up) :
-                                    sizeof...(_Tp)>::type
                          >::value
                       >::type
              >
@@ -844,6 +826,8 @@ struct __ignore_t
 
 namespace { const __ignore_t<unsigned char> ignore = __ignore_t<unsigned char>(); }
 
+template <class _Tp> class _LIBCPP_TYPE_VIS_ONLY reference_wrapper;
+
 template <class _Tp>
 struct __make_tuple_return_impl
 {
@@ -923,12 +907,8 @@ struct __tuple_less
     _LIBCPP_INLINE_VISIBILITY _LIBCPP_CONSTEXPR_AFTER_CXX11
     bool operator()(const _Tp& __x, const _Up& __y)
     {
-        const size_t __idx = tuple_size<_Tp>::value - _Ip;
-        if (_VSTD::get<__idx>(__x) < _VSTD::get<__idx>(__y))
-            return true;
-        if (_VSTD::get<__idx>(__y) < _VSTD::get<__idx>(__x))
-            return false;
-        return __tuple_less<_Ip-1>()(__x, __y);
+        return __tuple_less<_Ip-1>()(__x, __y) ||
+             (!__tuple_less<_Ip-1>()(__y, __x) && _VSTD::get<_Ip-1>(__x) < _VSTD::get<_Ip-1>(__y));
     }
 };
 

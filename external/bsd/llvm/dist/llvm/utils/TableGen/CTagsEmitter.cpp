@@ -24,6 +24,8 @@ using namespace llvm;
 
 #define DEBUG_TYPE "ctags-emitter"
 
+namespace llvm { extern SourceMgr SrcMgr; }
+
 namespace {
 
 class Tag {
@@ -37,7 +39,7 @@ public:
   void emit(raw_ostream &OS) const {
     const MemoryBuffer *CurMB =
         SrcMgr.getMemoryBuffer(SrcMgr.FindBufferContainingLoc(Loc));
-    auto BufferName = CurMB->getBufferIdentifier();
+    const char *BufferName = CurMB->getBufferIdentifier();
     std::pair<unsigned, unsigned> LineAndColumn = SrcMgr.getLineAndColumn(Loc);
     OS << *Id << "\t" << BufferName << "\t" << LineAndColumn.first << "\n";
   }
@@ -59,7 +61,11 @@ private:
 
 SMLoc CTagsEmitter::locate(const Record *R) {
   ArrayRef<SMLoc> Locs = R->getLoc();
-  return !Locs.empty() ? Locs.front() : SMLoc();
+  if (Locs.empty()) {
+    SMLoc NullLoc;
+    return NullLoc;
+  }
+  return Locs.front();
 }
 
 void CTagsEmitter::run(raw_ostream &OS) {
@@ -76,8 +82,9 @@ void CTagsEmitter::run(raw_ostream &OS) {
   std::sort(Tags.begin(), Tags.end());
   OS << "!_TAG_FILE_FORMAT\t1\t/original ctags format/\n";
   OS << "!_TAG_FILE_SORTED\t1\t/0=unsorted, 1=sorted, 2=foldcase/\n";
-  for (const Tag &T : Tags)
-    T.emit(OS);
+  for (std::vector<Tag>::const_iterator I = Tags.begin(), E = Tags.end();
+       I != E; ++I)
+    I->emit(OS);
 }
 
 namespace llvm {

@@ -1,6 +1,6 @@
 /* Output generating routines for GDB.
 
-   Copyright (C) 1999-2016 Free Software Foundation, Inc.
+   Copyright (C) 1999-2014 Free Software Foundation, Inc.
 
    Contributed by Cygnus Solutions.
    Written by Fernando Nasser for Cygnus.
@@ -21,9 +21,11 @@
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #include "defs.h"
+#include <string.h>
 #include "expression.h"		/* For language.h */
 #include "language.h"
 #include "ui-out.h"
+#include "gdb_assert.h"
 
 /* table header structures */
 
@@ -31,11 +33,17 @@ struct ui_out_hdr
   {
     int colno;
     int width;
-    enum ui_align alignment;
+    int alignment;
     char *col_name;
     char *colhdr;
     struct ui_out_hdr *next;
   };
+
+/* Maintain a stack so that the info applicable to the inner most list
+   is always available.  Stack/nested level 0 is reserved for the
+   top-level result.  */
+
+enum { MAX_UI_OUT_LEVELS = 8 };
 
 struct ui_out_level
   {
@@ -94,7 +102,7 @@ struct ui_out
   {
     int flags;
     /* Specific implementation of ui-out.  */
-    const struct ui_out_impl *impl;
+    struct ui_out_impl *impl;
     void *data;
 
     /* Current level.  */
@@ -123,7 +131,7 @@ push_level (struct ui_out *uiout,
   struct ui_out_level *current;
 
   uiout->level++;
-  current = XNEW (struct ui_out_level);
+  current = XMALLOC (struct ui_out_level);
   current->field_count = 0;
   current->type = type;
   VEC_safe_push (ui_out_level_p, uiout->levels, current);
@@ -146,6 +154,85 @@ pop_level (struct ui_out *uiout,
   uiout->level--;
   return uiout->level + 1;
 }
+
+
+/* These are the default implementation functions.  */
+
+static void default_table_begin (struct ui_out *uiout, int nbrofcols,
+				 int nr_rows, const char *tblid);
+static void default_table_body (struct ui_out *uiout);
+static void default_table_end (struct ui_out *uiout);
+static void default_table_header (struct ui_out *uiout, int width,
+				  enum ui_align alig, const char *col_name,
+				  const char *colhdr);
+static void default_begin (struct ui_out *uiout,
+			   enum ui_out_type type,
+			   int level, const char *id);
+static void default_end (struct ui_out *uiout,
+			 enum ui_out_type type,
+			 int level);
+static void default_field_int (struct ui_out *uiout, int fldno, int width,
+			       enum ui_align alig,
+			       const char *fldname,
+			       int value);
+static void default_field_skip (struct ui_out *uiout, int fldno, int width,
+				enum ui_align alig,
+				const char *fldname);
+static void default_field_string (struct ui_out *uiout, int fldno, int width,
+				  enum ui_align align,
+				  const char *fldname,
+				  const char *string);
+static void default_field_fmt (struct ui_out *uiout, int fldno,
+			       int width, enum ui_align align,
+			       const char *fldname,
+			       const char *format,
+			       va_list args) ATTRIBUTE_PRINTF (6, 0);
+static void default_spaces (struct ui_out *uiout, int numspaces);
+static void default_text (struct ui_out *uiout, const char *string);
+static void default_message (struct ui_out *uiout, int verbosity,
+			     const char *format,
+			     va_list args) ATTRIBUTE_PRINTF (3, 0);
+static void default_wrap_hint (struct ui_out *uiout, char *identstring);
+static void default_flush (struct ui_out *uiout);
+static void default_data_destroy (struct ui_out *uiout);
+
+/* This is the default ui-out implementation functions vector.  */
+
+struct ui_out_impl default_ui_out_impl =
+{
+  default_table_begin,
+  default_table_body,
+  default_table_end,
+  default_table_header,
+  default_begin,
+  default_end,
+  default_field_int,
+  default_field_skip,
+  default_field_string,
+  default_field_fmt,
+  default_spaces,
+  default_text,
+  default_message,
+  default_wrap_hint,
+  default_flush,
+  NULL,
+  default_data_destroy,
+  0, /* Does not need MI hacks.  */
+};
+
+/* The default ui_out */
+
+struct ui_out def_uiout =
+{
+  0,				/* flags */
+  &default_ui_out_impl,		/* impl */
+};
+
+/* Pointer to current ui_out */
+/* FIXME: This should not be a global, but something passed down from main.c
+   or top.c.  */
+
+struct ui_out *current_uiout = &def_uiout;
 
 /* These are the interfaces to implementation functions.  */
 
@@ -184,14 +271,14 @@ static void uo_data_destroy (struct ui_out *uiout);
 
 extern void _initialize_ui_out (void);
 static void append_header_to_list (struct ui_out *uiout, int width,
-				   enum ui_align alignment, const char *col_name,
+				   int alignment, const char *col_name,
 				   const char *colhdr);
 static int get_next_header (struct ui_out *uiout, int *colno, int *width,
-			    enum ui_align *alignment, char **colhdr);
+			    int *alignment, char **colhdr);
 static void clear_header_list (struct ui_out *uiout);
 static void clear_table (struct ui_out *uiout);
 static void verify_field (struct ui_out *uiout, int *fldno, int *width,
-			  enum ui_align *align);
+			  int *align);
 
 /* exported functions (ui_out API) */
 
@@ -275,7 +362,7 @@ and before table_body."));
 static void
 do_cleanup_table_end (void *data)
 {
-  struct ui_out *ui_out = (struct ui_out *) data;
+  struct ui_out *ui_out = data;
 
   ui_out_table_end (ui_out);
 }
@@ -310,7 +397,7 @@ specified after table_body."));
   {
     int fldno;
     int width;
-    enum ui_align align;
+    int align;
 
     verify_field (uiout, &fldno, &width, &align);
   }
@@ -344,8 +431,7 @@ struct ui_out_end_cleanup_data
 static void
 do_cleanup_end (void *data)
 {
-  struct ui_out_end_cleanup_data *end_cleanup_data
-    = (struct ui_out_end_cleanup_data *) data;
+  struct ui_out_end_cleanup_data *end_cleanup_data = data;
 
   ui_out_end (end_cleanup_data->uiout, end_cleanup_data->type);
   xfree (end_cleanup_data);
@@ -357,7 +443,7 @@ make_cleanup_ui_out_end (struct ui_out *uiout,
 {
   struct ui_out_end_cleanup_data *end_cleanup_data;
 
-  end_cleanup_data = XNEW (struct ui_out_end_cleanup_data);
+  end_cleanup_data = XMALLOC (struct ui_out_end_cleanup_data);
   end_cleanup_data->uiout = uiout;
   end_cleanup_data->type = type;
   return make_cleanup (do_cleanup_end, end_cleanup_data);
@@ -386,7 +472,7 @@ ui_out_field_int (struct ui_out *uiout,
 {
   int fldno;
   int width;
-  enum ui_align align;
+  int align;
 
   verify_field (uiout, &fldno, &width, &align);
 
@@ -402,7 +488,7 @@ ui_out_field_fmt_int (struct ui_out *uiout,
 {
   int fldno;
   int width;
-  enum ui_align align;
+  int align;
 
   verify_field (uiout, &fldno, &width, &align);
 
@@ -446,7 +532,7 @@ ui_out_field_skip (struct ui_out *uiout,
 {
   int fldno;
   int width;
-  enum ui_align align;
+  int align;
 
   verify_field (uiout, &fldno, &width, &align);
 
@@ -460,7 +546,7 @@ ui_out_field_string (struct ui_out *uiout,
 {
   int fldno;
   int width;
-  enum ui_align align;
+  int align;
 
   verify_field (uiout, &fldno, &width, &align);
 
@@ -476,7 +562,7 @@ ui_out_field_fmt (struct ui_out *uiout,
   va_list args;
   int fldno;
   int width;
-  enum ui_align align;
+  int align;
 
   /* Will not align, but has to call anyway.  */
   verify_field (uiout, &fldno, &width, &align);
@@ -573,6 +659,111 @@ ui_out_is_mi_like_p (struct ui_out *uiout)
   return uiout->impl->is_mi_like_p;
 }
 
+/* Default gdb-out hook functions.  */
+
+static void
+default_table_begin (struct ui_out *uiout, int nbrofcols,
+		     int nr_rows,
+		     const char *tblid)
+{
+}
+
+static void
+default_table_body (struct ui_out *uiout)
+{
+}
+
+static void
+default_table_end (struct ui_out *uiout)
+{
+}
+
+static void
+default_table_header (struct ui_out *uiout, int width, enum ui_align alignment,
+		      const char *col_name,
+		      const char *colhdr)
+{
+}
+
+static void
+default_begin (struct ui_out *uiout,
+	       enum ui_out_type type,
+	       int level,
+	       const char *id)
+{
+}
+
+static void
+default_end (struct ui_out *uiout,
+	     enum ui_out_type type,
+	     int level)
+{
+}
+
+static void
+default_field_int (struct ui_out *uiout, int fldno, int width,
+		   enum ui_align align,
+		   const char *fldname, int value)
+{
+}
+
+static void
+default_field_skip (struct ui_out *uiout, int fldno, int width,
+		    enum ui_align align, const char *fldname)
+{
+}
+
+static void
+default_field_string (struct ui_out *uiout,
+		      int fldno,
+		      int width,
+		      enum ui_align align,
+		      const char *fldname,
+		      const char *string)
+{
+}
+
+static void
+default_field_fmt (struct ui_out *uiout, int fldno, int width,
+		   enum ui_align align,
+		   const char *fldname,
+		   const char *format,
+		   va_list args)
+{
+}
+
+static void
+default_spaces (struct ui_out *uiout, int numspaces)
+{
+}
+
+static void
+default_text (struct ui_out *uiout, const char *string)
+{
+}
+
+static void
+default_message (struct ui_out *uiout, int verbosity,
+		 const char *format,
+		 va_list args)
+{
+}
+
+static void
+default_wrap_hint (struct ui_out *uiout, char *identstring)
+{
+}
+
+static void
+default_flush (struct ui_out *uiout)
+{
+}
+
+static void
+default_data_destroy (struct ui_out *uiout)
+{
+}
+
 /* Interface to the implementation functions.  */
 
 void
@@ -616,8 +807,8 @@ uo_table_header (struct ui_out *uiout, int width, enum ui_align align,
 static void
 clear_table (struct ui_out *uiout)
 {
-  xfree (uiout->table.id);
-  uiout->table.id = NULL;
+  if (uiout->table.id)
+    xfree (uiout->table.id);
   clear_header_list (uiout);
 }
 
@@ -767,13 +958,13 @@ clear_header_list (struct ui_out *uiout)
 static void
 append_header_to_list (struct ui_out *uiout,
 		       int width,
-		       enum ui_align alignment,
+		       int alignment,
 		       const char *col_name,
 		       const char *colhdr)
 {
   struct ui_out_hdr *temphdr;
 
-  temphdr = XNEW (struct ui_out_hdr);
+  temphdr = XMALLOC (struct ui_out_hdr);
   temphdr->width = width;
   temphdr->alignment = alignment;
   /* We have to copy the column title as the original may be an
@@ -813,7 +1004,7 @@ static int
 get_next_header (struct ui_out *uiout,
 		 int *colno,
 		 int *width,
-		 enum ui_align *alignment,
+		 int *alignment,
 		 char **colhdr)
 {
   /* There may be no headers at all or we may have used all columns.  */
@@ -834,8 +1025,7 @@ get_next_header (struct ui_out *uiout,
    available/applicable).  */
 
 static void
-verify_field (struct ui_out *uiout, int *fldno, int *width,
-	      enum ui_align *align)
+verify_field (struct ui_out *uiout, int *fldno, int *width, int *align)
 {
   struct ui_out_level *current = current_level (uiout);
   char *text;
@@ -905,11 +1095,11 @@ ui_out_query_field (struct ui_out *uiout, int colno,
 /* Initalize private members at startup.  */
 
 struct ui_out *
-ui_out_new (const struct ui_out_impl *impl, void *data,
+ui_out_new (struct ui_out_impl *impl, void *data,
 	    int flags)
 {
-  struct ui_out *uiout = XNEW (struct ui_out);
-  struct ui_out_level *current = XNEW (struct ui_out_level);
+  struct ui_out *uiout = XMALLOC (struct ui_out);
+  struct ui_out_level *current = XMALLOC (struct ui_out_level);
 
   uiout->data = data;
   uiout->impl = impl;
@@ -924,7 +1114,6 @@ ui_out_new (const struct ui_out_impl *impl, void *data,
   current->field_count = 0;
   VEC_safe_push (ui_out_level_p, uiout->levels, current);
 
-  uiout->table.id = NULL;
   uiout->table.header_first = NULL;
   uiout->table.header_last = NULL;
   uiout->table.header_next = NULL;
@@ -951,24 +1140,6 @@ ui_out_destroy (struct ui_out *uiout)
   uo_data_destroy (uiout);
   clear_table (uiout);
   xfree (uiout);
-}
-
-/* Cleanup that restores a previous current uiout.  */
-
-static void
-restore_current_uiout_cleanup (void *arg)
-{
-  struct ui_out *saved_uiout = (struct ui_out *) arg;
-
-  current_uiout = saved_uiout;
-}
-
-/* See ui-out.h.  */
-
-struct cleanup *
-make_cleanup_restore_current_uiout (void)
-{
-  return make_cleanup (restore_current_uiout_cleanup, current_uiout);
 }
 
 /* Standard gdb initialization hook.  */

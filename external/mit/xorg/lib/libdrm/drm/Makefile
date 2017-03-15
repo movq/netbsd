@@ -1,22 +1,19 @@
-#	$NetBSD: Makefile,v 1.8 2016/08/17 03:10:23 mrg Exp $
+#	$NetBSD: Makefile,v 1.6.4.1 2016/12/12 09:32:35 msaitoh Exp $
 
 # install include/libdrm files
 
 .include <bsd.own.mk>
 
 .PATH:	${X11SRCDIR.drm}/include/drm
-.PATH:	${X11SRCDIR.drm}/amdgpu
 .PATH:	${X11SRCDIR.drm}/intel
-.PATH:	${X11SRCDIR.drm}/nouveau
 .PATH:	${X11SRCDIR.drm}/radeon
+.PATH:	${X11SRCDIR.drm}/nouveau
 
 INCS=	drm.h \
 	drm_fourcc.h \
 	drm_mode.h \
 	drm_sarea.h \
 	i915_drm.h \
-	amdgpu.h \
-	amdgpu_drm.h \
 	intel_aub.h \
 	intel_bufmgr.h \
 	intel_debug.h \
@@ -37,7 +34,6 @@ INCS=	drm.h \
 	savage_drm.h \
 	sis_drm.h \
 	via_drm.h \
-	virtgpu_drm.h \
 	qxl_drm.h
 
 INCSDIR=${X11INCDIR}/libdrm

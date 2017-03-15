@@ -1,4 +1,4 @@
-/*	$NetBSD: drm_irq_netbsd.h,v 1.4 2015/01/01 01:15:42 mrg Exp $	*/
+/*	$NetBSD: drm_irq_netbsd.h,v 1.2 2014/03/18 18:20:43 riastradh Exp $	*/
 
 /*-
  * Copyright (c) 2013 The NetBSD Foundation, Inc.

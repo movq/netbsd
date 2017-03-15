@@ -1,4 +1,4 @@
-/*	$NetBSD: mb86950.c,v 1.26 2017/02/20 07:43:29 ozaki-r Exp $	*/
+/*	$NetBSD: mb86950.c,v 1.21 2014/08/10 16:44:35 tls Exp $	*/
 
 /*
  * All Rights Reserved, Copyright (C) Fujitsu Limited 1995
@@ -67,7 +67,7 @@
   */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: mb86950.c,v 1.26 2017/02/20 07:43:29 ozaki-r Exp $");
+__KERNEL_RCSID(0, "$NetBSD: mb86950.c,v 1.21 2014/08/10 16:44:35 tls Exp $");
 
 /*
  * Device driver for Fujitsu mb86950 based Ethernet cards.
@@ -129,7 +129,7 @@ __KERNEL_RCSID(0, "$NetBSD: mb86950.c,v 1.26 2017/02/20 07:43:29 ozaki-r Exp $")
 #include <sys/socket.h>
 #include <sys/syslog.h>
 #include <sys/device.h>
-#include <sys/rndsource.h>
+#include <sys/rnd.h>
 
 #include <net/if.h>
 #include <net/if_dl.h>
@@ -287,7 +287,6 @@ mb86950_config(struct mb86950_softc *sc, int *media,
 
 	/* Attach the interface. */
 	if_attach(ifp);
-	if_deferred_start_init(ifp, NULL);
 
 	/* Feed the chip the station address. */
 	bus_space_write_region_1(bst, bsh, DLCR_NODE_ID, sc->sc_enaddr, ETHER_ADDR_LEN);
@@ -721,7 +720,7 @@ mb86950_intr(void *arg)
 	 */
 
 	if ((ifp->if_flags & IFF_OACTIVE) == 0)
-		if_schedule_deferred_start(ifp);
+		mb86950_start(ifp);
 
 	/* Set receive interrupts back */
 	bus_space_write_1(bst, bsh, DLCR_RX_INT_EN, RX_MASK);
@@ -833,13 +832,16 @@ mb86950_rint(struct mb86950_softc *sc, u_int8_t rstat)
 			mb86950_drain_fifo(sc);
 			return;
 		}
+
+		/* Successfully received a packet.  Update stat. */
+		ifp->if_ipackets++;
 	}
 }
 
 /*
  * Receive packet.
  * Retrieve packet from receive buffer and send to the next level up via
- * ether_input().
+ * ether_input(). If there is a BPF listener, give a copy to BPF, too.
  * Returns 0 if success, -1 if error (i.e., mbuf allocation failure).
  */
 int
@@ -861,7 +863,7 @@ mb86950_get_fifo(struct mb86950_softc *sc, u_int len)
 	if (len & 1)
 		len++;
 
-	m_set_rcvif(m, ifp);
+	m->m_pkthdr.rcvif = ifp;
 	m->m_pkthdr.len = len;
 
 	/* The following silliness is to make NFS happy. */
@@ -900,7 +902,13 @@ mb86950_get_fifo(struct mb86950_softc *sc, u_int len)
 	/* Get a packet. */
 	bus_space_read_multi_stream_2(bst, bsh, BMPR_FIFO, mtod(m, u_int16_t *), (len + 1) >> 1);
 
-	if_percpuq_enqueue(ifp->if_percpuq, m);
+	/*
+	 * Check if there's a BPF listener on this interface.  If so, hand off
+	 * the raw packet to bpf.
+	 */
+	bpf_mtap(ifp, m);
+
+	(*ifp->if_input)(ifp, m);
 	return (0);
 }
 

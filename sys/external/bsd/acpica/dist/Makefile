@@ -10,13 +10,7 @@
 # code directories. This prevents collisions between different
 # compilations of the same source file with different compile options.
 #
+BUILD_DIRECTORY_PATH = "generate/unix"
 
-ifeq ($(OS),efi)
-	BUILD_DIRECTORY_PATH = "generate/efi"
-	include generate/efi/Makefile.config
-	include generate/efi/Makefile.common
-else
-	BUILD_DIRECTORY_PATH = "generate/unix"
-	include generate/unix/Makefile.config
-	include generate/unix/Makefile.common
-endif
+include generate/unix/Makefile.config
+include generate/unix/Makefile.common

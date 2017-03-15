@@ -44,7 +44,3 @@ struct S
 #pragma pack()
   int e;
 };
-
-_Pragma("pack(push, 1)") struct PR28094 {
-  int a;
-} _Pragma("pack(pop)");

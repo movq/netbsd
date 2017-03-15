@@ -1,4 +1,4 @@
-/* $NetBSD: omrasopsvar.h,v 1.3 2014/10/04 16:58:17 tsutsui Exp $ */
+/* $NetBSD: omrasopsvar.h,v 1.2.4.1 2014/10/05 20:12:49 martin Exp $ */
 /*
  * Copyright (c) 2013 Kenji Aoyama
  *

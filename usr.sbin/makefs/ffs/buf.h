@@ -1,4 +1,4 @@
-/*	$NetBSD: buf.h,v 1.12 2017/02/16 22:10:50 christos Exp $	*/
+/*	$NetBSD: buf.h,v 1.9 2013/01/30 19:19:19 christos Exp $	*/
 
 /*
  * Copyright (c) 2001 Wasabi Systems, Inc.
@@ -40,7 +40,6 @@
 
 #include <sys/param.h>
 #include <sys/queue.h>
-#include <sys/stat.h>
 
 #include <stdio.h>
 #include <string.h>
@@ -76,7 +75,8 @@ struct buf {
 
 struct kauth_cred;
 void		bcleanup(void);
-int		bread(struct vnode *, daddr_t, int, int, struct buf **);
+int		bread(struct vnode *, daddr_t, int, struct kauth_cred *,
+    int, struct buf **);
 void		brelse(struct buf *, int);
 int		bwrite(struct buf *);
 struct buf *	getblk(struct vnode *, daddr_t, int, int, int);
@@ -88,20 +88,7 @@ struct buf *	getblk(struct vnode *, daddr_t, int, int, int);
 #define	BC_AGE		0
 
 #define min(a, b) MIN((a), (b))
-
-static inline void
-microtime(struct timeval *tv)
-{
-	extern struct stat stampst;
-
-	if (stampst.st_ino) {
-		tv->tv_sec = stampst.st_mtime;
-		tv->tv_usec = 0;
-	} else {
-	    gettimeofday((tv), NULL);
-	}
-}
-
+#define microtime(tv) gettimeofday((tv), NULL)
 #define KASSERT(a)
 #define IO_SYNC	1
 

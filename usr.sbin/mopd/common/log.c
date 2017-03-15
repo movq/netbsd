@@ -1,4 +1,4 @@
-/*	$NetBSD: log.c,v 1.4 2016/06/08 01:11:49 christos Exp $	*/
+/*	$NetBSD: log.c,v 1.3 2014/07/27 04:38:03 dholland Exp $	*/
 
 /*-
  * Copyright (c) 2003 The NetBSD Foundation, Inc.
@@ -29,9 +29,9 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "port.h"
+#include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: log.c,v 1.4 2016/06/08 01:11:49 christos Exp $");
+__RCSID("$NetBSD: log.c,v 1.3 2014/07/27 04:38:03 dholland Exp $");
 #endif
 
 #include <err.h>

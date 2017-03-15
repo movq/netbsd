@@ -1,4 +1,4 @@
-/*	$NetBSD: boot.c,v 1.30 2016/06/11 06:43:16 dholland Exp $ */
+/*	$NetBSD: boot.c,v 1.28 2012/05/28 19:24:29 martin Exp $ */
 
 /*-
  * Copyright (c) 1982, 1986, 1990, 1993
@@ -285,13 +285,13 @@ main(void)
 		if (boothowto & RB_ASKNAME) {
 			printf("device[%s] (\"halt\" to halt): ",
 					prom_bootdevice);
-			kgets(dbuf, sizeof(dbuf));
+			gets(dbuf);
 			if (strcmp(dbuf, "halt") == 0)
 				_rtt();
 			if (dbuf[0])
 				strcpy(prom_bootdevice, dbuf);
 			printf("boot (press RETURN to try default list): ");
-			kgets(fbuf, sizeof(fbuf));
+			gets(fbuf);
 			if (fbuf[0])
 				strcpy(kernel, fbuf);
 			else {
@@ -348,7 +348,7 @@ main(void)
 	if (i < BOOTINFO_SIZE / 2) {
 		union {
 			struct btinfo_kernelfile bi_file;
-			char x[BOOTINFO_SIZE / 2];
+			char x[i];
 		} U;
 		strcpy(U.bi_file.name, kernel);
 		bi_add(&U.bi_file, BTINFO_KERNELFILE, i);

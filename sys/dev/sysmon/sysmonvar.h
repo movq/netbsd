@@ -1,4 +1,4 @@
-/*	$NetBSD: sysmonvar.h,v 1.49 2015/04/23 23:22:03 pgoyette Exp $	*/
+/*	$NetBSD: sysmonvar.h,v 1.44.12.2 2015/04/06 18:45:30 snj Exp $	*/
 
 /*-
  * Copyright (c) 2000 Zembu Labs, Inc.
@@ -44,7 +44,7 @@
 #include <sys/callout.h>
 #include <sys/mutex.h>
 #include <sys/condvar.h>
-#include <sys/rndsource.h>
+#include <sys/rnd.h>
 
 struct lwp;
 struct proc;
@@ -104,7 +104,7 @@ struct envsys_data {
 	int32_t		value_min;	/* min value */
 	int32_t		private;	/* private data for drivers */
 	sysmon_envsys_lim_t limits;	/* thresholds for monitoring */
-	uint32_t	upropset;	/* userland property set? */
+	int		upropset;	/* userland property set? */
 	krndsource_t	rnd_src;	/* source element for rnd(4) */
 	char		desc[ENVSYS_DESCLEN];	/* sensor description */
 };
@@ -242,8 +242,7 @@ void	sysmon_envsys_foreach_sensor(sysmon_envsys_callback_t, void *, bool);
 
 int	sysmon_envsys_update_limits(struct sysmon_envsys *, envsys_data_t *);
 
-int	sysmon_envsys_init(void);
-int	sysmon_envsys_fini(void);
+void	sysmon_envsys_init(void);
 
 /*****************************************************************************
  * Watchdog timer support
@@ -271,8 +270,7 @@ int     sysmon_wdog_setmode(struct sysmon_wdog *, int, u_int);
 int     sysmon_wdog_register(struct sysmon_wdog *);
 int     sysmon_wdog_unregister(struct sysmon_wdog *);
 
-int	sysmon_wdog_init(void);
-int	sysmon_wdog_fini(void);
+void	sysmon_wdog_init(void);
 
 /*****************************************************************************
  * Power management support
@@ -300,23 +298,6 @@ void	sysmon_pswitch_unregister(struct sysmon_pswitch *);
 void	sysmon_pswitch_event(struct sysmon_pswitch *, int);
 void	sysmon_penvsys_event(struct penvsys_state *, int);
 
-int	sysmon_power_init(void);
-int	sysmon_power_fini(void);
-
-/*
- * Interface to sysmon common code used for autoloading
- */
-struct sysmon_opvec {
-	int (*so_open)(dev_t, int, int, struct lwp*);
-	int (*so_close)(dev_t, int, int, struct lwp*);
-	int (*so_ioctl)(dev_t, u_long, void *, int, struct lwp*);
-	int (*so_read)(dev_t, struct uio*, int);
-	int (*so_poll)(dev_t, int, struct lwp*);
-	int (*so_filter)(dev_t, struct knote*);
-};
-
-int	sysmon_init(void);
-int	sysmon_fini(void);
-int	sysmon_attach_minor(int, struct sysmon_opvec*);
+void	sysmon_power_init(void);
 
 #endif /* _DEV_SYSMON_SYSMONVAR_H_ */

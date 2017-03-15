@@ -1,4 +1,4 @@
-/*	$NetBSD: authfile.h,v 1.7 2016/12/25 00:07:47 christos Exp $	*/
+/*	$NetBSD: authfile.h,v 1.4.22.1 2015/04/30 06:07:30 riz Exp $	*/
 /* $OpenBSD: authfile.h,v 1.21 2015/01/08 10:14:08 djm Exp $ */
 
 /*

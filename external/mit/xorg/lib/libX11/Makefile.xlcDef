@@ -1,4 +1,4 @@
-# $NetBSD: Makefile.xlcDef,v 1.2 2016/06/02 22:41:26 mrg Exp $
+# $NetBSD: Makefile.xlcDef,v 1.1.42.1 2016/12/23 08:04:04 snj Exp $
 
 .PATH:		${X11SRCDIR.X11}/modules/lc/def
 SRCS.xlcDef=	lcDefConv.c

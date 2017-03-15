@@ -1,5 +1,5 @@
 ;; RUN: llc -mtriple=hexagon-unknown-elf -filetype=obj %s -o - \
-;; RUN: | llvm-objdump -d - | FileCheck %s
+;; RUN: | llvm-objdump -s - | FileCheck %s
 
 define i1 @foo (i32 %a)
 {
@@ -7,6 +7,4 @@ define i1 @foo (i32 %a)
   ret i1 %1
 }
 
-; CHECK: p0 = cmp.gtu(r0, #42)
-; CHECK: r0 = p0
-; CHECK: jumpr r31
+; CHECK:  0000 40458075 00404089 00c09f52

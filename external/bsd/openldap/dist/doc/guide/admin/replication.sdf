@@ -1,5 +1,5 @@
 # $OpenLDAP$
-# Copyright 1999-2016 The OpenLDAP Foundation, All Rights Reserved.
+# Copyright 1999-2014 The OpenLDAP Foundation, All Rights Reserved.
 # COPYING RESTRICTIONS APPLY, see COPYRIGHT.
 
 H1: Replication
@@ -226,7 +226,7 @@ in the replication context.
 The syncrepl engine, which is a consumer-side replication engine,
 can work with any backends. The LDAP Sync provider can be configured
 as an overlay on any backend, but works best with the {{back-bdb}}
-{{back-hdb}}, or {{back-mdb}} backends.
+or {{back-hdb}} backend.
 
 The LDAP Sync provider maintains a {{EX:contextCSN}} for each
 database as the current synchronization state indicator of the
@@ -545,8 +545,7 @@ the performance of the session log on the provider.
 
 A more complete example of the {{slapd.conf}}(5) content is thus:
 
->	database mdb
->	maxsize 1073741824
+>	database bdb
 >	suffix dc=Example,dc=com
 >	rootdn dc=Example,dc=com
 >	directory /var/ldap/db
@@ -564,8 +563,7 @@ The syncrepl replication is specified in the database section of
 is backend independent and the directive can be defined with any
 database type.
 
->	database mdb
->	maxsize 1073741824
+>	database hdb
 >	suffix dc=Example,dc=com
 >	rootdn dc=Example,dc=com
 >	directory /var/ldap/db

@@ -14,7 +14,7 @@
 #include "int_lib.h"
 #include <stdio.h>
 
-COMPILER_RT_ABI di_int __muldi3(di_int a, di_int b);
+di_int __muldi3(di_int a, di_int b);
 
 int test__muldi3(di_int a, di_int b, di_int expected)
 {

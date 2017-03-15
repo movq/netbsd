@@ -1,6 +1,5 @@
-/*	$NetBSD: sftp-server.c,v 1.15 2016/12/25 00:07:47 christos Exp $	*/
-/* $OpenBSD: sftp-server.c,v 1.110 2016/09/12 01:22:38 deraadt Exp $ */
-
+/*	$NetBSD: sftp-server.c,v 1.9.4.1 2015/04/30 06:07:30 riz Exp $	*/
+/* $OpenBSD: sftp-server.c,v 1.105 2015/01/20 23:14:00 deraadt Exp $ */
 /*
  * Copyright (c) 2000-2004 Markus Friedl.  All rights reserved.
  *
@@ -18,8 +17,7 @@
  */
 
 #include "includes.h"
-__RCSID("$NetBSD: sftp-server.c,v 1.15 2016/12/25 00:07:47 christos Exp $");
-
+__RCSID("$NetBSD: sftp-server.c,v 1.9.4.1 2015/04/30 06:07:30 riz Exp $");
 #include <sys/param.h>	/* MIN */
 #include <sys/types.h>
 #include <sys/stat.h>
@@ -303,7 +301,7 @@ handle_new(int use, const char *name, int fd, int flags, DIR *dirp)
 		if (num_handles + 1 <= num_handles)
 			return -1;
 		num_handles++;
-		handles = xreallocarray(handles, num_handles, sizeof(Handle));
+		handles = xrealloc(handles, num_handles, sizeof(Handle));
 		handle_unused(num_handles - 1);
 	}
 
@@ -502,7 +500,7 @@ status_to_message(u_int32_t status)
 		"Operation unsupported",	/* SSH_FX_OP_UNSUPPORTED */
 		"Unknown error"			/* Others */
 	};
-	return (status_messages[MINIMUM(status,SSH2_FX_MAX)]);
+	return (status_messages[MIN(status,SSH2_FX_MAX)]);
 }
 
 static void
@@ -1044,7 +1042,7 @@ process_readdir(u_int32_t id)
 		while ((dp = readdir(dirp)) != NULL) {
 			if (count >= nstats) {
 				nstats *= 2;
-				stats = xreallocarray(stats, nstats, sizeof(Stat));
+				stats = xrealloc(stats, nstats, sizeof(Stat));
 			}
 /* XXX OVERFLOW ? */
 			snprintf(pathname, sizeof pathname, "%s%s%s", path,
@@ -1488,7 +1486,6 @@ sftp_server_main(int argc, char **argv, struct passwd *user_pw)
 	extern char *optarg;
 	extern char *__progname;
 
-	ssh_malloc_init();	/* must be called before any mallocs */
 	log_init(__progname, log_level, log_facility, log_stderr);
 
 	pw = pwcopy(user_pw);
@@ -1590,8 +1587,9 @@ sftp_server_main(int argc, char **argv, struct passwd *user_pw)
 	if ((oqueue = sshbuf_new()) == NULL)
 		fatal("%s: sshbuf_new failed", __func__);
 
-	rset = xcalloc(howmany(max + 1, NFDBITS), sizeof(fd_mask));
-	wset = xcalloc(howmany(max + 1, NFDBITS), sizeof(fd_mask));
+	set_size = howmany(max + 1, NFDBITS) * sizeof(fd_mask);
+	rset = (fd_set *)xmalloc(set_size);
+	wset = (fd_set *)xmalloc(set_size);
 
 	if (homedir != NULL) {
 		if (chdir(homedir) != 0) {
@@ -1600,7 +1598,6 @@ sftp_server_main(int argc, char **argv, struct passwd *user_pw)
 		}
 	}
 
-	set_size = howmany(max + 1, NFDBITS) * sizeof(fd_mask);
 	for (;;) {
 		memset(rset, 0, set_size);
 		memset(wset, 0, set_size);

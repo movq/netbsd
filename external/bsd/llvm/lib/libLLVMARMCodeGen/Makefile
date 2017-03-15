@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.16 2017/01/11 12:02:28 joerg Exp $
+#	$NetBSD: Makefile,v 1.13.2.1 2015/06/04 20:05:43 snj Exp $
 
 LIB=	LLVMARMCodeGen
 
@@ -6,16 +6,9 @@ LIB=	LLVMARMCodeGen
 
 .PATH: ${LLVM_SRCDIR}/lib/Target/ARM
 
-# Used only with GlobalISel:
-#	ARMCallLowering.cpp
-#	ARMInstructionSelector.cpp
-#	ARMLegalizerInfo.cpp
-#	ARMRegisterBankInfo.cpp
-
 SRCS+=	ARMAsmPrinter.cpp \
 	ARMBaseInstrInfo.cpp \
 	ARMBaseRegisterInfo.cpp \
-	ARMComputeBlockSize.cpp \
 	ARMConstantIslandPass.cpp \
 	ARMConstantPoolValue.cpp \
 	ARMExpandPseudoInsts.cpp \
@@ -37,11 +30,12 @@ SRCS+=	ARMAsmPrinter.cpp \
 	ARMTargetTransformInfo.cpp \
 	A15SDOptimizer.cpp \
 	MLxExpansionPass.cpp \
-	ThumbRegisterInfo.cpp \
 	Thumb1InstrInfo.cpp \
 	Thumb1FrameLowering.cpp \
+	Thumb1RegisterInfo.cpp \
 	Thumb2ITBlockPass.cpp \
 	Thumb2InstrInfo.cpp \
+	Thumb2RegisterInfo.cpp \
 	Thumb2SizeReduction.cpp
 
 TABLEGEN_SRC=		ARM.td

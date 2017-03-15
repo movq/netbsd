@@ -5,7 +5,7 @@
  *****************************************************************************/
 
 /*
- * Copyright (C) 2000 - 2017, Intel Corp.
+ * Copyright (C) 2000 - 2013, Intel Corp.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -44,24 +44,25 @@
 #ifndef _ACAPPS
 #define _ACAPPS
 
-#ifdef ACPI_USE_STANDARD_HEADERS
-#include <sys/stat.h>
-#endif /* ACPI_USE_STANDARD_HEADERS */
+
+#ifdef _MSC_VER                 /* disable some level-4 warnings */
+#pragma warning(disable:4100)   /* warning C4100: unreferenced formal parameter */
+#endif
 
 /* Common info for tool signons */
 
 #define ACPICA_NAME                 "Intel ACPI Component Architecture"
-#define ACPICA_COPYRIGHT            "Copyright (c) 2000 - 2017 Intel Corporation"
+#define ACPICA_COPYRIGHT            "Copyright (c) 2000 - 2013 Intel Corporation"
 
 #if ACPI_MACHINE_WIDTH == 64
-#define ACPI_WIDTH          " (64-bit version)"
+#define ACPI_WIDTH          "-64"
 
 #elif ACPI_MACHINE_WIDTH == 32
-#define ACPI_WIDTH          " (32-bit version)"
+#define ACPI_WIDTH          "-32"
 
 #else
 #error unknown ACPI_MACHINE_WIDTH
-#define ACPI_WIDTH          " (unknown bit width, not 32 or 64)"
+#define ACPI_WIDTH          "-??"
 
 #endif
 
@@ -73,15 +74,15 @@
 #endif
 
 #define ACPI_COMMON_SIGNON(UtilityName) \
-    "\n%s\n%s version %8.8X\n%s\n\n", \
+    "\n%s\n%s version %8.8X%s [%s]\n%s\n\n", \
     ACPICA_NAME, \
-    UtilityName, ((UINT32) ACPI_CA_VERSION), \
+    UtilityName, ((UINT32) ACPI_CA_VERSION), ACPI_WIDTH, ACPI_DATE, \
     ACPICA_COPYRIGHT
 
 #define ACPI_COMMON_HEADER(UtilityName, Prefix) \
-    "%s%s\n%s%s version %8.8X%s\n%s%s\n%s\n", \
+    "%s%s\n%s%s version %8.8X%s [%s]\n%s%s\n%s\n", \
     Prefix, ACPICA_NAME, \
-    Prefix, UtilityName, ((UINT32) ACPI_CA_VERSION), ACPI_WIDTH, \
+    Prefix, UtilityName, ((UINT32) ACPI_CA_VERSION), ACPI_WIDTH, ACPI_DATE, \
     Prefix, ACPICA_COPYRIGHT, \
     Prefix
 
@@ -90,53 +91,12 @@
 #define ACPI_USAGE_HEADER(Usage) \
     printf ("Usage: %s\nOptions:\n", Usage);
 
-#define ACPI_USAGE_TEXT(Description) \
-    printf (Description);
-
 #define ACPI_OPTION(Name, Description) \
-    printf ("  %-20s%s\n", Name, Description);
+    printf ("  %-18s%s\n", Name, Description);
 
-
-/* Check for unexpected exceptions */
-
-#define ACPI_CHECK_STATUS(Name, Status, Expected) \
-    if (Status != Expected) \
-    { \
-        AcpiOsPrintf ("Unexpected %s from %s (%s-%d)\n", \
-            AcpiFormatException (Status), #Name, _AcpiModuleName, __LINE__); \
-    }
-
-/* Check for unexpected non-AE_OK errors */
-
-
-#define ACPI_CHECK_OK(Name, Status)   ACPI_CHECK_STATUS (Name, Status, AE_OK);
 
 #define FILE_SUFFIX_DISASSEMBLY     "dsl"
-#define FILE_SUFFIX_BINARY_TABLE    ".dat" /* Needs the dot */
-
-
-/* acfileio */
-
-ACPI_STATUS
-AcGetAllTablesFromFile (
-    char                    *Filename,
-    UINT8                   GetOnlyAmlTables,
-    ACPI_NEW_TABLE_DESC     **ReturnListHead);
-
-BOOLEAN
-AcIsFileBinary (
-    FILE                    *File);
-
-ACPI_STATUS
-AcValidateTableHeader (
-    FILE                    *File,
-    long                    TableOffset);
-
-
-/* Values for GetOnlyAmlTables */
-
-#define ACPI_GET_ONLY_AML_TABLES    TRUE
-#define ACPI_GET_ALL_TABLES         FALSE
+#define ACPI_TABLE_FILE_SUFFIX      ".dat"
 
 
 /*
@@ -159,12 +119,51 @@ extern int                  AcpiGbl_SubOptChar;
 extern char                 *AcpiGbl_Optarg;
 
 
+#ifndef ACPI_DUMP_APP
 /*
- * cmfsize - Common get file size function
+ * adisasm
  */
-UINT32
-CmGetFileSize (
-    ACPI_FILE               File);
+ACPI_STATUS
+AdAmlDisassemble (
+    BOOLEAN                 OutToFile,
+    char                    *Filename,
+    char                    *Prefix,
+    char                    **OutFilename,
+    BOOLEAN                 GetAllTables);
+
+void
+AdPrintStatistics (
+    void);
+
+ACPI_STATUS
+AdFindDsdt(
+    UINT8                   **DsdtPtr,
+    UINT32                  *DsdtLength);
+
+void
+AdDumpTables (
+    void);
+
+ACPI_STATUS
+AdGetLocalTables (
+    char                    *Filename,
+    BOOLEAN                 GetAllTables);
+
+ACPI_STATUS
+AdParseTable (
+    ACPI_TABLE_HEADER       *Table,
+    ACPI_OWNER_ID           *OwnerId,
+    BOOLEAN                 LoadTable,
+    BOOLEAN                 External);
+
+ACPI_STATUS
+AdDisplayTables (
+    char                    *Filename,
+    ACPI_TABLE_HEADER       *Table);
+
+ACPI_STATUS
+AdDisplayStatistics (
+    void);
 
 
 /*
@@ -225,5 +224,6 @@ AdWriteTable (
     UINT32                  Length,
     char                    *TableName,
     char                    *OemTableId);
+#endif
 
 #endif /* _ACAPPS */

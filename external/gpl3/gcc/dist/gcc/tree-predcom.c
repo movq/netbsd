@@ -1,5 +1,5 @@
 /* Predictive commoning.
-   Copyright (C) 2005-2015 Free Software Foundation, Inc.
+   Copyright (C) 2005-2013 Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -188,61 +188,11 @@ along with GCC; see the file COPYING3.  If not see
 #include "system.h"
 #include "coretypes.h"
 #include "tm.h"
-#include "hash-set.h"
-#include "machmode.h"
-#include "vec.h"
-#include "double-int.h"
-#include "input.h"
-#include "alias.h"
-#include "symtab.h"
-#include "wide-int.h"
-#include "inchash.h"
 #include "tree.h"
-#include "fold-const.h"
 #include "tm_p.h"
 #include "cfgloop.h"
-#include "predict.h"
-#include "hard-reg-set.h"
-#include "function.h"
-#include "dominance.h"
-#include "cfg.h"
-#include "basic-block.h"
-#include "tree-ssa-alias.h"
-#include "internal-fn.h"
-#include "tree-eh.h"
-#include "gimple-expr.h"
-#include "is-a.h"
-#include "gimple.h"
-#include "gimplify.h"
-#include "gimple-iterator.h"
-#include "gimplify-me.h"
-#include "gimple-ssa.h"
-#include "tree-phinodes.h"
-#include "ssa-iterators.h"
-#include "stringpool.h"
-#include "tree-ssanames.h"
-#include "tree-ssa-loop-ivopts.h"
-#include "tree-ssa-loop-manip.h"
-#include "tree-ssa-loop-niter.h"
-#include "tree-ssa-loop.h"
-#include "tree-into-ssa.h"
-#include "hashtab.h"
-#include "rtl.h"
-#include "flags.h"
-#include "statistics.h"
-#include "real.h"
-#include "fixed-value.h"
-#include "insn-config.h"
-#include "expmed.h"
-#include "dojump.h"
-#include "explow.h"
-#include "calls.h"
-#include "emit-rtl.h"
-#include "varasm.h"
-#include "stmt.h"
-#include "expr.h"
-#include "tree-dfa.h"
-#include "tree-ssa.h"
+#include "tree-flow.h"
+#include "ggc.h"
 #include "tree-data-ref.h"
 #include "tree-scalar-evolution.h"
 #include "tree-chrec.h"
@@ -251,7 +201,6 @@ along with GCC; see the file COPYING3.  If not see
 #include "tree-pass.h"
 #include "tree-affine.h"
 #include "tree-inline.h"
-#include "wide-int-print.h"
 
 /* The maximum number of iterations between the considered memory
    references.  */
@@ -279,7 +228,7 @@ typedef struct dref_d
   unsigned distance;
 
   /* Number of iterations offset from the first reference in the component.  */
-  widest_int offset;
+  double_int offset;
 
   /* Number of the reference in a component, in dominance ordering.  */
   unsigned pos;
@@ -379,7 +328,7 @@ static bitmap looparound_phis;
 
 /* Cache used by tree_to_aff_combination_expand.  */
 
-static hash_map<tree, name_expansion *> *name_expansions;
+static struct pointer_map_t *name_expansions;
 
 /* Dumps data reference REF to FILE.  */
 
@@ -395,7 +344,7 @@ dump_dref (FILE *file, dref ref)
 	       DR_IS_READ (ref->ref) ? "" : ", write");
 
       fprintf (file, "      offset ");
-      print_decs (ref->offset, file);
+      dump_double_int (file, ref->offset, false);
       fprintf (file, "\n");
 
       fprintf (file, "      distance %u\n", ref->distance);
@@ -668,7 +617,7 @@ aff_combination_dr_offset (struct data_reference *dr, aff_tree *offset)
 
   tree_to_aff_combination_expand (DR_OFFSET (dr), type, offset,
 				  &name_expansions);
-  aff_combination_const (&delta, type, wi::to_widest (DR_INIT (dr)));
+  aff_combination_const (&delta, type, tree_to_double_int (DR_INIT (dr)));
   aff_combination_add (offset, &delta);
 }
 
@@ -680,7 +629,7 @@ aff_combination_dr_offset (struct data_reference *dr, aff_tree *offset)
 
 static bool
 determine_offset (struct data_reference *a, struct data_reference *b,
-		  widest_int *off)
+		  double_int *off)
 {
   aff_tree diff, baseb, step;
   tree typea, typeb;
@@ -701,7 +650,7 @@ determine_offset (struct data_reference *a, struct data_reference *b,
     {
       /* If the references have loop invariant address, check that they access
 	 exactly the same location.  */
-      *off = 0;
+      *off = double_int_zero;
       return (operand_equal_p (DR_OFFSET (a), DR_OFFSET (b), 0)
 	      && operand_equal_p (DR_INIT (a), DR_INIT (b), 0));
     }
@@ -710,7 +659,7 @@ determine_offset (struct data_reference *a, struct data_reference *b,
      is a multiple of step.  */
   aff_combination_dr_offset (a, &diff);
   aff_combination_dr_offset (b, &baseb);
-  aff_combination_scale (&baseb, -1);
+  aff_combination_scale (&baseb, double_int_minus_one);
   aff_combination_add (&diff, &baseb);
 
   tree_to_aff_combination_expand (DR_STEP (a), TREE_TYPE (DR_STEP (a)),
@@ -762,9 +711,6 @@ split_data_refs_to_components (struct loop *loop,
 	     just fail.  */
 	  goto end;
 	}
-      /* predcom pass isn't prepared to handle calls with data references.  */
-      if (is_gimple_call (DR_STMT (dr)))
-	goto end;
       dr->aux = (void *) (size_t) i;
       comp_father[i] = i;
       comp_size[i] = 1;
@@ -787,7 +733,7 @@ split_data_refs_to_components (struct loop *loop,
 
   FOR_EACH_VEC_ELT (depends, i, ddr)
     {
-      widest_int dummy_off;
+      double_int dummy_off;
 
       if (DDR_ARE_DEPENDENT (ddr) == chrec_known)
 	continue;
@@ -802,37 +748,10 @@ split_data_refs_to_components (struct loop *loop,
       bad = component_of (comp_father, n);
 
       /* If both A and B are reads, we may ignore unsuitable dependences.  */
-      if (DR_IS_READ (dra) && DR_IS_READ (drb))
-	{
-	  if (ia == bad || ib == bad
-	      || !determine_offset (dra, drb, &dummy_off))
-	    continue;
-	}
-      /* If A is read and B write or vice versa and there is unsuitable
-	 dependence, instead of merging both components into a component
-	 that will certainly not pass suitable_component_p, just put the
-	 read into bad component, perhaps at least the write together with
-	 all the other data refs in it's component will be optimizable.  */
-      else if (DR_IS_READ (dra) && ib != bad)
-	{
-	  if (ia == bad)
-	    continue;
-	  else if (!determine_offset (dra, drb, &dummy_off))
-	    {
-	      merge_comps (comp_father, comp_size, bad, ia);
-	      continue;
-	    }
-	}
-      else if (DR_IS_READ (drb) && ia != bad)
-	{
-	  if (ib == bad)
-	    continue;
-	  else if (!determine_offset (dra, drb, &dummy_off))
-	    {
-	      merge_comps (comp_father, comp_size, bad, ib);
-	      continue;
-	    }
-	}
+      if (DR_IS_READ (dra) && DR_IS_READ (drb)
+	  && (ia == bad || ib == bad
+	      || !determine_offset (dra, drb, &dummy_off)))
+	continue;
 
       merge_comps (comp_father, comp_size, ia, ib);
     }
@@ -857,7 +776,7 @@ split_data_refs_to_components (struct loop *loop,
       dataref = XCNEW (struct dref_d);
       dataref->ref = dr;
       dataref->stmt = DR_STMT (dr);
-      dataref->offset = 0;
+      dataref->offset = double_int_zero;
       dataref->distance = 0;
 
       dataref->always_accessed
@@ -913,7 +832,7 @@ suitable_component_p (struct loop *loop, struct component *comp)
   first = comp->refs[0];
   ok = suitable_reference_p (first->ref, &comp->comp_step);
   gcc_assert (ok);
-  first->offset = 0;
+  first->offset = double_int_zero;
 
   for (i = 1; comp->refs.iterate (i, &a); i++)
     {
@@ -977,7 +896,7 @@ order_drefs (const void *a, const void *b)
 {
   const dref *const da = (const dref *) a;
   const dref *const db = (const dref *) b;
-  int offcmp = wi::cmps ((*da)->offset, (*db)->offset);
+  int offcmp = (*da)->offset.scmp ((*db)->offset);
 
   if (offcmp != 0)
     return offcmp;
@@ -999,15 +918,16 @@ static void
 add_ref_to_chain (chain_p chain, dref ref)
 {
   dref root = get_chain_root (chain);
+  double_int dist;
 
-  gcc_assert (wi::les_p (root->offset, ref->offset));
-  widest_int dist = ref->offset - root->offset;
-  if (wi::leu_p (MAX_DISTANCE, dist))
+  gcc_assert (root->offset.sle (ref->offset));
+  dist = ref->offset - root->offset;
+  if (double_int::from_uhwi (MAX_DISTANCE).ule (dist))
     {
       free (ref);
       return;
     }
-  gcc_assert (wi::fits_uhwi_p (dist));
+  gcc_assert (dist.fits_uhwi ());
 
   chain->refs.safe_push (ref);
 
@@ -1102,7 +1022,7 @@ valid_initializer_p (struct data_reference *ref,
 		     unsigned distance, struct data_reference *root)
 {
   aff_tree diff, base, step;
-  widest_int off;
+  double_int off;
 
   /* Both REF and ROOT must be accessing the same object.  */
   if (!operand_equal_p (DR_BASE_ADDRESS (ref), DR_BASE_ADDRESS (root), 0))
@@ -1122,7 +1042,7 @@ valid_initializer_p (struct data_reference *ref,
      -DISTANCE-th iteration.  */
   aff_combination_dr_offset (root, &diff);
   aff_combination_dr_offset (ref, &base);
-  aff_combination_scale (&base, -1);
+  aff_combination_scale (&base, double_int_minus_one);
   aff_combination_add (&diff, &base);
 
   tree_to_aff_combination_expand (DR_STEP (root), TREE_TYPE (DR_STEP (root)),
@@ -1130,7 +1050,7 @@ valid_initializer_p (struct data_reference *ref,
   if (!aff_combination_constant_multiple_p (&diff, &step, &off))
     return false;
 
-  if (off != distance)
+  if (off != double_int::from_uhwi (distance))
     return false;
 
   return true;
@@ -1141,15 +1061,14 @@ valid_initializer_p (struct data_reference *ref,
    iteration), returns the phi node.  Otherwise, NULL_TREE is returned.  ROOT
    is the root of the current chain.  */
 
-static gphi *
+static gimple
 find_looparound_phi (struct loop *loop, dref ref, dref root)
 {
   tree name, init, init_ref;
-  gphi *phi = NULL;
-  gimple init_stmt;
+  gimple phi = NULL, init_stmt;
   edge latch = loop_latch_edge (loop);
   struct data_reference init_dr;
-  gphi_iterator psi;
+  gimple_stmt_iterator psi;
 
   if (is_gimple_assign (ref->stmt))
     {
@@ -1165,7 +1084,7 @@ find_looparound_phi (struct loop *loop, dref ref, dref root)
 
   for (psi = gsi_start_phis (loop->header); !gsi_end_p (psi); gsi_next (&psi))
     {
-      phi = psi.phi ();
+      phi = gsi_stmt (psi);
       if (PHI_ARG_DEF_FROM_EDGE (phi, latch) == name)
 	break;
     }
@@ -1203,7 +1122,7 @@ find_looparound_phi (struct loop *loop, dref ref, dref root)
 /* Adds a reference for the looparound copy of REF in PHI to CHAIN.  */
 
 static void
-insert_looparound_copy (chain_p chain, dref ref, gphi *phi)
+insert_looparound_copy (chain_p chain, dref ref, gimple phi)
 {
   dref nw = XCNEW (struct dref_d), aref;
   unsigned i;
@@ -1234,7 +1153,7 @@ add_looparound_copies (struct loop *loop, chain_p chain)
 {
   unsigned i;
   dref ref, root = get_chain_root (chain);
-  gphi *phi;
+  gimple phi;
 
   FOR_EACH_VEC_ELT (chain->refs, i, ref)
     {
@@ -1259,7 +1178,7 @@ determine_roots_comp (struct loop *loop,
   unsigned i;
   dref a;
   chain_p chain = NULL;
-  widest_int last_ofs = 0;
+  double_int last_ofs = double_int_zero;
 
   /* Invariants are handled specially.  */
   if (comp->comp_step == RS_INVARIANT)
@@ -1274,7 +1193,7 @@ determine_roots_comp (struct loop *loop,
   FOR_EACH_VEC_ELT (comp->refs, i, a)
     {
       if (!chain || DR_IS_WRITE (a->ref)
-	  || wi::leu_p (MAX_DISTANCE, a->offset - last_ofs))
+	  || double_int::from_uhwi (MAX_DISTANCE).ule (a->offset - last_ofs))
 	{
 	  if (nontrivial_chain_p (chain))
 	    {
@@ -1322,7 +1241,7 @@ static void
 replace_ref_with (gimple stmt, tree new_tree, bool set, bool in_lhs)
 {
   tree val;
-  gassign *new_stmt;
+  gimple new_stmt;
   gimple_stmt_iterator bsi, psi;
 
   if (gimple_code (stmt) == GIMPLE_PHI)
@@ -1421,8 +1340,8 @@ ref_at_iteration (data_reference_p dr, int iter, gimple_seq *stmts)
     off = size_binop (PLUS_EXPR, off,
 		      size_binop (MULT_EXPR, DR_STEP (dr), ssize_int (iter)));
   tree addr = fold_build_pointer_plus (DR_BASE_ADDRESS (dr), off);
-  addr = force_gimple_operand_1 (unshare_expr (addr), stmts,
-				 is_gimple_mem_ref_addr, NULL_TREE);
+  addr = force_gimple_operand_1 (addr, stmts, is_gimple_mem_ref_addr,
+				 NULL_TREE);
   tree alias_ptr = fold_convert (reference_alias_ptr_type (DR_REF (dr)), coff);
   /* While data-ref analysis punts on bit offsets it still handles
      bitfield accesses at byte boundaries.  Cope with that.  Note that
@@ -1486,7 +1405,7 @@ initialize_root_vars (struct loop *loop, chain_p chain, bitmap tmp_vars)
   dref root = get_chain_root (chain);
   bool reuse_first = !chain->has_max_use_after;
   tree ref, init, var, next;
-  gphi *phi;
+  gimple phi;
   gimple_seq stmts;
   edge entry = loop_preheader_edge (loop), latch = loop_latch_edge (loop);
 
@@ -1510,7 +1429,7 @@ initialize_root_vars (struct loop *loop, chain_p chain, bitmap tmp_vars)
     chain->vars.quick_push (chain->vars[0]);
 
   FOR_EACH_VEC_ELT (chain->vars, i, var)
-    chain->vars[i] = make_ssa_name (var);
+    chain->vars[i] = make_ssa_name (var, NULL);
 
   for (i = 0; i < n; i++)
     {
@@ -1560,7 +1479,7 @@ initialize_root_vars_lm (struct loop *loop, dref root, bool written,
   unsigned i;
   tree ref = DR_REF (root->ref), init, var, next;
   gimple_seq stmts;
-  gphi *phi;
+  gimple phi;
   edge entry = loop_preheader_edge (loop), latch = loop_latch_edge (loop);
 
   /* Find the initializer for the variable, and check that it cannot
@@ -1574,7 +1493,7 @@ initialize_root_vars_lm (struct loop *loop, dref root, bool written,
     vars->quick_push ((*vars)[0]);
 
   FOR_EACH_VEC_ELT (*vars, i, var)
-    (*vars)[i] = make_ssa_name (var);
+    (*vars)[i] = make_ssa_name (var, NULL);
 
   var = (*vars)[0];
 
@@ -1591,7 +1510,7 @@ initialize_root_vars_lm (struct loop *loop, dref root, bool written,
     }
   else
     {
-      gassign *init_stmt = gimple_build_assign (var, init);
+      gimple init_stmt = gimple_build_assign (var, init);
       gsi_insert_on_edge_immediate (entry, init_stmt);
     }
 }
@@ -1603,7 +1522,7 @@ initialize_root_vars_lm (struct loop *loop, dref root, bool written,
 static void
 execute_load_motion (struct loop *loop, chain_p chain, bitmap tmp_vars)
 {
-  auto_vec<tree> vars;
+  vec<tree> vars;
   dref a;
   unsigned n_writes = 0, ridx, i;
   tree var;
@@ -1632,7 +1551,7 @@ execute_load_motion (struct loop *loop, chain_p chain, bitmap tmp_vars)
 	  if (n_writes)
 	    {
 	      var = vars[0];
-	      var = make_ssa_name (SSA_NAME_VAR (var));
+	      var = make_ssa_name (SSA_NAME_VAR (var), NULL);
 	      vars[0] = var;
 	    }
 	  else
@@ -1642,6 +1561,8 @@ execute_load_motion (struct loop *loop, chain_p chain, bitmap tmp_vars)
       replace_ref_with (a->stmt, vars[ridx],
 			!is_read, !is_read);
     }
+
+  vars.release ();
 }
 
 /* Returns the single statement in that NAME is used, excepting
@@ -1943,15 +1864,14 @@ static void
 eliminate_temp_copies (struct loop *loop, bitmap tmp_vars)
 {
   edge e;
-  gphi *phi;
-  gimple stmt;
+  gimple phi, stmt;
   tree name, use, var;
-  gphi_iterator psi;
+  gimple_stmt_iterator psi;
 
   e = loop_latch_edge (loop);
   for (psi = gsi_start_phis (loop->header); !gsi_end_p (psi); gsi_next (&psi))
     {
-      phi = psi.phi ();
+      phi = gsi_stmt (psi);
       name = PHI_RESULT (phi);
       var = SSA_NAME_VAR (name);
       if (!var || !bitmap_bit_p (tmp_vars, DECL_UID (var)))
@@ -2184,7 +2104,7 @@ static gimple
 reassociate_to_the_same_stmt (tree name1, tree name2)
 {
   gimple stmt1, stmt2, root1, root2, s1, s2;
-  gassign *new_stmt, *tmp_stmt;
+  gimple new_stmt, tmp_stmt;
   tree new_name, tmp_name, var, r1, r2;
   unsigned dist1, dist2;
   enum tree_code code;
@@ -2236,18 +2156,19 @@ reassociate_to_the_same_stmt (tree name1, tree name2)
   /* Insert the new statement combining NAME1 and NAME2 before S1, and
      combine it with the rhs of S1.  */
   var = create_tmp_reg (type, "predreastmp");
-  new_name = make_ssa_name (var);
-  new_stmt = gimple_build_assign (new_name, code, name1, name2);
+  new_name = make_ssa_name (var, NULL);
+  new_stmt = gimple_build_assign_with_ops (code, new_name, name1, name2);
 
   var = create_tmp_reg (type, "predreastmp");
-  tmp_name = make_ssa_name (var);
+  tmp_name = make_ssa_name (var, NULL);
 
   /* Rhs of S1 may now be either a binary expression with operation
      CODE, or gimple_val (in case that stmt1 == s1 or stmt2 == s1,
      so that name1 or name2 was removed from it).  */
-  tmp_stmt = gimple_build_assign (tmp_name, gimple_assign_rhs_code (s1),
-				  gimple_assign_rhs1 (s1),
-				  gimple_assign_rhs2 (s1));
+  tmp_stmt = gimple_build_assign_with_ops (gimple_assign_rhs_code (s1),
+					   tmp_name,
+					   gimple_assign_rhs1 (s1),
+					   gimple_assign_rhs2 (s1));
 
   bsi = gsi_for_stmt (s1);
   gimple_assign_set_rhs_with_ops (&bsi, code, new_name, tmp_name);
@@ -2361,7 +2282,7 @@ try_combine_chains (vec<chain_p> *chains)
 {
   unsigned i, j;
   chain_p ch1, ch2, cch;
-  auto_vec<chain_p> worklist;
+  vec<chain_p> worklist = vNULL;
 
   FOR_EACH_VEC_ELT (*chains, i, ch1)
     if (chain_can_be_combined_p (ch1))
@@ -2387,6 +2308,8 @@ try_combine_chains (vec<chain_p> *chains)
 	    }
 	}
     }
+
+  worklist.release ();
 }
 
 /* Prepare initializers for CHAIN in LOOP.  Returns false if this is
@@ -2398,6 +2321,7 @@ prepare_initializers_chain (struct loop *loop, chain_p chain)
   unsigned i, n = (chain->type == CT_INVARIANT) ? 1 : chain->length;
   struct data_reference *dr = get_chain_root (chain)->ref;
   tree init;
+  gimple_seq stmts;
   dref laref;
   edge entry = loop_preheader_edge (loop);
 
@@ -2421,17 +2345,12 @@ prepare_initializers_chain (struct loop *loop, chain_p chain)
 
   for (i = 0; i < n; i++)
     {
-      gimple_seq stmts = NULL;
-
       if (chain->inits[i] != NULL_TREE)
 	continue;
 
       init = ref_at_iteration (dr, (int) i - n, &stmts);
       if (!chain->all_always_accessed && tree_could_trap_p (init))
-	{
-	  gimple_seq_discard (stmts);
-	  return false;
-	}
+	return false;
 
       if (stmts)
 	gsi_insert_seq_on_edge_immediate (entry, stmts);
@@ -2470,6 +2389,7 @@ prepare_initializers (struct loop *loop, vec<chain_p> chains)
 static bool
 tree_predictive_commoning_loop (struct loop *loop)
 {
+  vec<loop_p> loop_nest;
   vec<data_reference_p> datarefs;
   vec<ddr_p> dependences;
   struct component *components;
@@ -2485,14 +2405,15 @@ tree_predictive_commoning_loop (struct loop *loop)
 
   /* Find the data references and split them into components according to their
      dependence relations.  */
-  auto_vec<loop_p, 3> loop_nest;
-  dependences.create (10);
   datarefs.create (10);
+  dependences.create (10);
+  loop_nest.create (3);
   if (! compute_data_dependences_for_loop (loop, true, &loop_nest, &datarefs,
 					   &dependences))
     {
       if (dump_file && (dump_flags & TDF_DETAILS))
 	fprintf (dump_file, "Cannot analyze data dependencies\n");
+      loop_nest.release ();
       free_data_refs (datarefs);
       free_dependence_relations (dependences);
       return false;
@@ -2603,10 +2524,11 @@ tree_predictive_commoning (void)
 {
   bool unrolled = false;
   struct loop *loop;
+  loop_iterator li;
   unsigned ret = 0;
 
   initialize_original_copy_tables ();
-  FOR_EACH_LOOP (loop, LI_ONLY_INNERMOST)
+  FOR_EACH_LOOP (li, loop, LI_ONLY_INNERMOST)
     if (optimize_loop_for_speed_p (loop))
       {
 	unrolled |= tree_predictive_commoning_loop (loop);
@@ -2621,55 +2543,3 @@ tree_predictive_commoning (void)
 
   return ret;
 }
-
-/* Predictive commoning Pass.  */
-
-static unsigned
-run_tree_predictive_commoning (struct function *fun)
-{
-  if (number_of_loops (fun) <= 1)
-    return 0;
-
-  return tree_predictive_commoning ();
-}
-
-namespace {
-
-const pass_data pass_data_predcom =
-{
-  GIMPLE_PASS, /* type */
-  "pcom", /* name */
-  OPTGROUP_LOOP, /* optinfo_flags */
-  TV_PREDCOM, /* tv_id */
-  PROP_cfg, /* properties_required */
-  0, /* properties_provided */
-  0, /* properties_destroyed */
-  0, /* todo_flags_start */
-  TODO_update_ssa_only_virtuals, /* todo_flags_finish */
-};
-
-class pass_predcom : public gimple_opt_pass
-{
-public:
-  pass_predcom (gcc::context *ctxt)
-    : gimple_opt_pass (pass_data_predcom, ctxt)
-  {}
-
-  /* opt_pass methods: */
-  virtual bool gate (function *) { return flag_predictive_commoning != 0; }
-  virtual unsigned int execute (function *fun)
-    {
-      return run_tree_predictive_commoning (fun);
-    }
-
-}; // class pass_predcom
-
-} // anon namespace
-
-gimple_opt_pass *
-make_pass_predcom (gcc::context *ctxt)
-{
-  return new pass_predcom (ctxt);
-}
-
-

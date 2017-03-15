@@ -447,12 +447,12 @@ static long conn_ctrl(BIO *b, int cmd, long num, void *ptr)
         if (b->init) {
             if (pptr != NULL) {
                 ret = 1;
-                if (num == 0) {
-                    *pptr = data->param_hostname;
-                } else if (num == 1) {
-                    *pptr = data->param_port;
-                } else if (num == 2) {
-                    *pptr = (char *)&(data->ip[0]);
+            if (num == 0) {
+                *pptr = data->param_hostname;
+            } else if (num == 1) {
+                *pptr = data->param_port;
+            } else if (num == 2) {
+                *pptr = (char *)&(data->ip[0]);
                 } else {
                     ret = 0;
                 }
@@ -594,7 +594,7 @@ static int conn_puts(BIO *bp, const char *str)
     return (ret);
 }
 
-BIO *BIO_new_connect(const char *str)
+BIO *BIO_new_connect(char *str)
 {
     BIO *ret;
 

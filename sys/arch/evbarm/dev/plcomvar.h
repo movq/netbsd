@@ -1,4 +1,4 @@
-/*	$NetBSD: plcomvar.h,v 1.16 2015/04/13 21:18:41 riastradh Exp $	*/
+/*	$NetBSD: plcomvar.h,v 1.15 2014/02/21 16:08:19 skrll Exp $	*/
 
 /*
  * Copyright (c) 1996 Christopher G. Demetriou.  All rights reserved.
@@ -30,13 +30,14 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include "rnd.h"
 #include "opt_multiprocessor.h"
 #include "opt_lockdebug.h"
 #include "opt_plcom.h"
 #include "opt_kgdb.h"
 
 #ifdef RND_COM
-#include <sys/rndsource.h>
+#include <sys/rnd.h>
 #endif
 
 #include <sys/callout.h>

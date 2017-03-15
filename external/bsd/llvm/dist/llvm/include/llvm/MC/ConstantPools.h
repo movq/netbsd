@@ -17,7 +17,6 @@
 
 #include "llvm/ADT/MapVector.h"
 #include "llvm/ADT/SmallVector.h"
-#include "llvm/Support/SMLoc.h"
 
 namespace llvm {
 class MCContext;
@@ -25,15 +24,13 @@ class MCExpr;
 class MCSection;
 class MCStreamer;
 class MCSymbol;
-class MCSymbolRefExpr;
 
 struct ConstantPoolEntry {
-  ConstantPoolEntry(MCSymbol *L, const MCExpr *Val, unsigned Sz, SMLoc Loc_)
-    : Label(L), Value(Val), Size(Sz), Loc(Loc_) {}
+  ConstantPoolEntry(MCSymbol *L, const MCExpr *Val, unsigned Sz)
+    : Label(L), Value(Val), Size(Sz) {}
   MCSymbol *Label;
   const MCExpr *Value;
   unsigned Size;
-  SMLoc Loc;
 };
 
 // A class to keep track of assembler-generated constant pools that are use to
@@ -41,7 +38,6 @@ struct ConstantPoolEntry {
 class ConstantPool {
   typedef SmallVector<ConstantPoolEntry, 4> EntryVecTy;
   EntryVecTy Entries;
-  DenseMap<int64_t, const MCSymbolRefExpr *> CachedEntries;
 
 public:
   // Initialize a new empty constant pool
@@ -53,7 +49,7 @@ public:
   //
   // \returns a MCExpr that references the newly inserted value
   const MCExpr *addEntry(const MCExpr *Value, MCContext &Context,
-                         unsigned Size, SMLoc Loc);
+                         unsigned Size);
 
   // Emit the contents of the constant pool using the provided streamer.
   void emitEntries(MCStreamer &Streamer);
@@ -77,18 +73,21 @@ class AssemblerConstantPools {
   // sections in a stable order to ensure that we have print the
   // constant pools in a deterministic order when printing an assembly
   // file.
-  typedef MapVector<MCSection *, ConstantPool> ConstantPoolMapTy;
+  typedef MapVector<const MCSection *, ConstantPool> ConstantPoolMapTy;
   ConstantPoolMapTy ConstantPools;
 
 public:
+  AssemblerConstantPools() {}
+  ~AssemblerConstantPools() {}
+
   void emitAll(MCStreamer &Streamer);
   void emitForCurrentSection(MCStreamer &Streamer);
   const MCExpr *addEntry(MCStreamer &Streamer, const MCExpr *Expr,
-                         unsigned Size, SMLoc Loc);
+                         unsigned Size);
 
 private:
-  ConstantPool *getConstantPool(MCSection *Section);
-  ConstantPool &getOrCreateConstantPool(MCSection *Section);
+  ConstantPool *getConstantPool(const MCSection *Section);
+  ConstantPool &getOrCreateConstantPool(const MCSection *Section);
 };
 } // end namespace llvm
 

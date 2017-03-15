@@ -1,4 +1,4 @@
-/*	$NetBSD: ptrace.h,v 1.18 2017/02/23 03:34:22 kamil Exp $	*/
+/*	$NetBSD: ptrace.h,v 1.13 2006/03/05 07:17:21 christos Exp $	*/
 
 /*
  * Copyright (c) 2001 Wasabi Systems, Inc.
@@ -84,10 +84,8 @@
 #define	__HAVE_PROCFS_MACHDEP
 
 /* The machine-dependent ptrace(2) requests. */
-#define	PT_GETXMMREGS		(PT_FIRSTMACH + 5)
-#define	PT_SETXMMREGS		(PT_FIRSTMACH + 6)
-#define	PT_GETDBREGS		(PT_FIRSTMACH + 7)
-#define	PT_SETDBREGS		(PT_FIRSTMACH + 8)
+#define	PT_GETXMMREGS	(PT_FIRSTMACH + 5)
+#define	PT_SETXMMREGS	(PT_FIRSTMACH + 6)
 
 #define PT_MACHDEP_STRINGS \
 	"PT_STEP", \
@@ -96,20 +94,7 @@
 	"PT_GETFPREGS", \
 	"PT_SETFPREGS", \
 	"PT_GETXMMREGS", \
-	"PT_SETXMMREGS", \
-	"PT_GETDBREGS", \
-	"PT_SETDBREGS",
-
-
-#include <machine/reg.h>
-#define PTRACE_REG_PC(r)	(r)->r_eip
-#define PTRACE_REG_SET_PC(r, v)	(r)->r_eip = (v)
-#define PTRACE_REG_SP(r)	(r)->r_esp
-#define PTRACE_REG_INTRV(r)	(r)->r_eax
-
-#define PTRACE_BREAKPOINT	((const uint8_t[]) { 0xcc })
-#define PTRACE_BREAKPOINT_SIZE	1
-#define PTRACE_BREAKPOINT_ADJ	sizeof(PTRACE_BREAKPOINT)
+	"PT_SETXMMREGS",
 
 #ifdef _KERNEL
 

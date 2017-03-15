@@ -1,5 +1,5 @@
 /* Low level interface to ptrace, for GDB when running under Unix.
-   Copyright (C) 1986-2016 Free Software Foundation, Inc.
+   Copyright (C) 1986-2014 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -25,6 +25,8 @@
 #include "target.h"
 #include "gdbthread.h"
 #include "observer.h"
+
+#include <string.h>
 #include <signal.h>
 #include <fcntl.h>
 #include "gdb_select.h"
@@ -44,7 +46,7 @@ extern void _initialize_inflow (void);
 
 static void pass_signal (int);
 
-static void child_terminal_ours_1 (int);
+static void terminal_ours_1 (int);
 
 /* Record terminal status separately for debugger and inferior.  */
 
@@ -74,18 +76,10 @@ struct terminal_info
 };
 
 /* Our own tty state, which we restore every time we need to deal with
-   the terminal.  This is set once, when GDB first starts, and then
-   whenever we enter/leave TUI mode (gdb_save_tty_state).  The
-   settings of flags which readline saves and restores are
+   the terminal.  This is only set once, when GDB first starts.  The
+   settings of flags which readline saves and restores and
    unimportant.  */
 static struct terminal_info our_terminal_info;
-
-/* Snapshot of the initial tty state taken during initialization of
-   GDB, before readline/ncurses have had a chance to change it.  This
-   is used as the initial tty state given to each new spawned
-   inferior.  Unlike our_terminal_info, this is only ever set
-   once.  */
-static serial_ttystate initial_gdb_ttystate;
 
 static struct terminal_info *get_inflow_inferior_data (struct inferior *);
 
@@ -105,8 +99,8 @@ inferior_process_group (void)
    we save our handlers in these two variables and set SIGINT and SIGQUIT
    to SIG_IGN.  */
 
-static sighandler_t sigint_ours;
-static sighandler_t sigquit_ours;
+static void (*sigint_ours) ();
+static void (*sigquit_ours) ();
 
 /* The name of the tty (from the `tty' command) that we're giving to
    the inferior when starting it up.  This is only (and should only
@@ -140,35 +134,72 @@ gdb_getpgrp (void)
 }
 #endif
 
-/* See terminal.h.  */
+enum
+  {
+    yes, no, have_not_checked
+  }
+gdb_has_a_terminal_flag = have_not_checked;
 
-void
-set_initial_gdb_ttystate (void)
+/* The value of the "interactive-mode" setting.  */
+static enum auto_boolean interactive_mode = AUTO_BOOLEAN_AUTO;
+
+/* Implement the "show interactive-mode" option.  */
+
+static void
+show_interactive_mode (struct ui_file *file, int from_tty,
+                       struct cmd_list_element *c,
+                       const char *value)
 {
-  /* Note we can't do any of this in _initialize_inflow because at
-     that point stdin_serial has not been created yet.  */
-
-  initial_gdb_ttystate = serial_get_tty_state (stdin_serial);
-
-  if (initial_gdb_ttystate != NULL)
-    {
-      our_terminal_info.ttystate
-	= serial_copy_tty_state (stdin_serial, initial_gdb_ttystate);
-#ifdef F_GETFL
-      our_terminal_info.tflags = fcntl (0, F_GETFL, 0);
-#endif
-#ifdef PROCESS_GROUP_TYPE
-      our_terminal_info.process_group = gdb_getpgrp ();
-#endif
-    }
+  if (interactive_mode == AUTO_BOOLEAN_AUTO)
+    fprintf_filtered (file, "Debugger's interactive mode "
+		            "is %s (currently %s).\n",
+                      value, gdb_has_a_terminal () ? "on" : "off");
+  else
+    fprintf_filtered (file, "Debugger's interactive mode is %s.\n", value);
 }
 
 /* Does GDB have a terminal (on stdin)?  */
-
-static int
+int
 gdb_has_a_terminal (void)
 {
-  return initial_gdb_ttystate != NULL;
+  if (interactive_mode != AUTO_BOOLEAN_AUTO)
+    return interactive_mode == AUTO_BOOLEAN_TRUE;
+
+  switch (gdb_has_a_terminal_flag)
+    {
+    case yes:
+      return 1;
+    case no:
+      return 0;
+    case have_not_checked:
+      /* Get all the current tty settings (including whether we have a
+         tty at all!).  Can't do this in _initialize_inflow because
+         serial_fdopen() won't work until the serial_ops_list is
+         initialized.  */
+
+#ifdef F_GETFL
+      our_terminal_info.tflags = fcntl (0, F_GETFL, 0);
+#endif
+
+      gdb_has_a_terminal_flag = no;
+      if (stdin_serial != NULL)
+	{
+	  our_terminal_info.ttystate = serial_get_tty_state (stdin_serial);
+
+	  if (our_terminal_info.ttystate != NULL)
+	    {
+	      gdb_has_a_terminal_flag = yes;
+#ifdef PROCESS_GROUP_TYPE
+	      our_terminal_info.process_group = gdb_getpgrp ();
+#endif
+	    }
+	}
+
+      return gdb_has_a_terminal_flag == yes;
+    default:
+      /* "Can't happen".  */
+      return 0;
+    }
 }
 
 /* Macro for printing errors from ioctl operations */
@@ -178,11 +209,13 @@ gdb_has_a_terminal (void)
     fprintf_unfiltered(gdb_stderr, "[%s failed in terminal_inferior: %s]\n", \
 	    what, safe_strerror (errno))
 
+static void terminal_ours_1 (int);
+
 /* Initialize the terminal settings we record for the inferior,
    before we actually run the inferior.  */
 
 void
-child_terminal_init_with_pgrp (int pgrp)
+terminal_init_inferior_with_pgrp (int pgrp)
 {
   struct inferior *inf = current_inferior ();
   struct terminal_info *tinfo = get_inflow_inferior_data (inf);
@@ -198,7 +231,7 @@ child_terminal_init_with_pgrp (int pgrp)
     {
       xfree (tinfo->ttystate);
       tinfo->ttystate = serial_copy_tty_state (stdin_serial,
-					       initial_gdb_ttystate);
+					       our_terminal_info.ttystate);
 
       /* Make sure that next time we call terminal_inferior (which will be
          before the program runs, as it needs to be), we install the new
@@ -212,7 +245,7 @@ child_terminal_init_with_pgrp (int pgrp)
    and gdb must be able to restore it correctly.  */
 
 void
-gdb_save_tty_state (void)
+terminal_save_ours (void)
 {
   if (gdb_has_a_terminal ())
     {
@@ -222,28 +255,24 @@ gdb_save_tty_state (void)
 }
 
 void
-child_terminal_init (struct target_ops *self)
+terminal_init_inferior (void)
 {
 #ifdef PROCESS_GROUP_TYPE
-  /* This is for Lynx, and should be cleaned up by having Lynx be a
-     separate debugging target with a version of target_terminal_init
-     which passes in the process group to a generic routine which does
-     all the work (and the non-threaded child_terminal_init can just
-     pass in inferior_ptid to the same routine).  */
+  /* This is for Lynx, and should be cleaned up by having Lynx be a separate
+     debugging target with a version of target_terminal_init_inferior which
+     passes in the process group to a generic routine which does all the work
+     (and the non-threaded child_terminal_init_inferior can just pass in
+     inferior_ptid to the same routine).  */
   /* We assume INFERIOR_PID is also the child's process group.  */
-  child_terminal_init_with_pgrp (ptid_get_pid (inferior_ptid));
+  terminal_init_inferior_with_pgrp (ptid_get_pid (inferior_ptid));
 #endif /* PROCESS_GROUP_TYPE */
 }
 
 /* Put the inferior's terminal settings into effect.
-   This is preparation for starting or resuming the inferior.
-
-   N.B. Targets that want to use this with async support must build that
-   support on top of this (e.g., the caller still needs to remove stdin
-   from the event loop).  E.g., see linux_nat_terminal_inferior.  */
+   This is preparation for starting or resuming the inferior.  */
 
 void
-child_terminal_inferior (struct target_ops *self)
+terminal_inferior (void)
 {
   struct inferior *inf;
   struct terminal_info *tinfo;
@@ -278,9 +307,9 @@ child_terminal_inferior (struct target_ops *self)
 
       if (!job_control)
 	{
-	  sigint_ours = signal (SIGINT, SIG_IGN);
+	  sigint_ours = (void (*)()) signal (SIGINT, SIG_IGN);
 #ifdef SIGQUIT
-	  sigquit_ours = signal (SIGQUIT, SIG_IGN);
+	  sigquit_ours = (void (*)()) signal (SIGQUIT, SIG_IGN);
 #endif
 	}
 
@@ -321,29 +350,22 @@ child_terminal_inferior (struct target_ops *self)
    so that no input is discarded.
 
    After doing this, either terminal_ours or terminal_inferior
-   should be called to get back to a normal state of affairs.
-
-   N.B. The implementation is (currently) no different than
-   child_terminal_ours.  See child_terminal_ours_1.  */
+   should be called to get back to a normal state of affairs.  */
 
 void
-child_terminal_ours_for_output (struct target_ops *self)
+terminal_ours_for_output (void)
 {
-  child_terminal_ours_1 (1);
+  terminal_ours_1 (1);
 }
 
 /* Put our terminal settings into effect.
    First record the inferior's terminal settings
-   so they can be restored properly later.
-
-   N.B. Targets that want to use this with async support must build that
-   support on top of this (e.g., the caller still needs to add stdin to the
-   event loop).  E.g., see linux_nat_terminal_ours.  */
+   so they can be restored properly later.  */
 
 void
-child_terminal_ours (struct target_ops *self)
+terminal_ours (void)
 {
-  child_terminal_ours_1 (0);
+  terminal_ours_1 (0);
 }
 
 /* output_only is not used, and should not be used unless we introduce
@@ -351,7 +373,7 @@ child_terminal_ours (struct target_ops *self)
    flags.  */
 
 static void
-child_terminal_ours_1 (int output_only)
+terminal_ours_1 (int output_only)
 {
   struct inferior *inf;
   struct terminal_info *tinfo;
@@ -371,18 +393,18 @@ child_terminal_ours_1 (int output_only)
 
   if (tinfo->run_terminal != NULL || gdb_has_a_terminal () == 0)
     return;
-  else
+
     {
 #ifdef SIGTTOU
       /* Ignore this signal since it will happen when we try to set the
          pgrp.  */
-      sighandler_t osigttou = NULL;
+      void (*osigttou) () = NULL;
 #endif
-      int result ATTRIBUTE_UNUSED;
+      int result;
 
 #ifdef SIGTTOU
       if (job_control)
-	osigttou = signal (SIGTTOU, SIG_IGN);
+	osigttou = (void (*)()) signal (SIGTTOU, SIG_IGN);
 #endif
 
       xfree (tinfo->ttystate);
@@ -424,7 +446,7 @@ child_terminal_ours_1 (int output_only)
 	     such situations as well.  */
 	  if (result == -1)
 	    fprintf_unfiltered (gdb_stderr,
-				"[tcsetpgrp failed in child_terminal_ours: %s]\n",
+				"[tcsetpgrp failed in terminal_ours: %s]\n",
 				safe_strerror (errno));
 #endif
 #endif /* termios */
@@ -465,7 +487,7 @@ static const struct inferior_data *inflow_inferior_data;
 static void
 inflow_inferior_data_cleanup (struct inferior *inf, void *arg)
 {
-  struct terminal_info *info = (struct terminal_info *) arg;
+  struct terminal_info *info = arg;
 
   xfree (info->run_terminal);
   xfree (info->ttystate);
@@ -480,10 +502,10 @@ get_inflow_inferior_data (struct inferior *inf)
 {
   struct terminal_info *info;
 
-  info = (struct terminal_info *) inferior_data (inf, inflow_inferior_data);
+  info = inferior_data (inf, inflow_inferior_data);
   if (info == NULL)
     {
-      info = XCNEW (struct terminal_info);
+      info = XZALLOC (struct terminal_info);
       set_inferior_data (inf, inflow_inferior_data, info);
     }
 
@@ -501,7 +523,7 @@ inflow_inferior_exit (struct inferior *inf)
 {
   struct terminal_info *info;
 
-  info = (struct terminal_info *) inferior_data (inf, inflow_inferior_data);
+  info = inferior_data (inf, inflow_inferior_data);
   if (info != NULL)
     {
       xfree (info->run_terminal);
@@ -540,7 +562,7 @@ term_info (char *arg, int from_tty)
 }
 
 void
-child_terminal_info (struct target_ops *self, const char *args, int from_tty)
+child_terminal_info (const char *args, int from_tty)
 {
   struct inferior *inf;
   struct terminal_info *tinfo;
@@ -670,9 +692,9 @@ new_tty (void)
   tty = open ("/dev/tty", O_RDWR);
   if (tty > 0)
     {
-      sighandler_t osigttou;
+      void (*osigttou) ();
 
-      osigttou = signal (SIGTTOU, SIG_IGN);
+      osigttou = (void (*)()) signal (SIGTTOU, SIG_IGN);
       ioctl (tty, TIOCNOTTY, 0);
       close (tty);
       signal (SIGTTOU, osigttou);
@@ -747,7 +769,7 @@ pass_signal (int signo)
 #endif
 }
 
-static sighandler_t osig;
+static void (*osig) ();
 static int osig_set;
 
 void
@@ -758,7 +780,7 @@ set_sigint_trap (void)
 
   if (inf->attach_flag || tinfo->run_terminal)
     {
-      osig = signal (SIGINT, pass_signal);
+      osig = (void (*)()) signal (SIGINT, pass_signal);
       osig_set = 1;
     }
   else
@@ -857,6 +879,20 @@ _initialize_inflow (void)
 {
   add_info ("terminal", term_info,
 	    _("Print inferior's saved terminal status."));
+
+  add_setshow_auto_boolean_cmd ("interactive-mode", class_support,
+                                &interactive_mode, _("\
+Set whether GDB's standard input is a terminal."), _("\
+Show whether GDB's standard input is a terminal."), _("\
+If on, GDB assumes that standard input is a terminal.  In practice, it\n\
+means that GDB should wait for the user to answer queries associated to\n\
+commands entered at the command prompt.  If off, GDB assumes that standard\n\
+input is not a terminal, and uses the default answer to all queries.\n\
+If auto (the default), determine which mode to use based on the standard\n\
+input settings."),
+                        NULL,
+                        show_interactive_mode,
+                        &setlist, &showlist);
 
   terminal_is_ours = 1;
 

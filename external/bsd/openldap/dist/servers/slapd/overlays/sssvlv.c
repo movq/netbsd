@@ -1,10 +1,10 @@
-/*	$NetBSD: sssvlv.c,v 1.1.1.4 2017/02/09 01:47:03 christos Exp $	*/
+/*	$NetBSD: sssvlv.c,v 1.1.1.3 2014/05/28 09:58:52 tron Exp $	*/
 
 /* sssvlv.c - server side sort / virtual list view */
 /* $OpenLDAP$ */
 /* This work is part of OpenLDAP Software <http://www.openldap.org/>.
  *
- * Copyright 2009-2016 The OpenLDAP Foundation.
+ * Copyright 2009-2014 The OpenLDAP Foundation.
  * Portions copyright 2009 Symas Corporation.
  * All rights reserved.
  *
@@ -21,9 +21,6 @@
  * OpenLDAP Software. Support for multiple sorts per connection added
  * by Raphael Ouazana.
  */
-
-#include <sys/cdefs.h>
-__RCSID("$NetBSD: sssvlv.c,v 1.1.1.4 2017/02/09 01:47:03 christos Exp $");
 
 #include "portable.h"
 
@@ -1287,7 +1284,7 @@ static ConfigOCs sssvlv_ocs[] = {
 		"NAME 'olcSssVlvConfig' "
 		"DESC 'SSS VLV configuration' "
 		"SUP olcOverlayConfig "
-		"MAY ( olcSssVlvMax $ olcSssVlvMaxKeys $ olcSssVlvMaxPerConn ) )",
+		"MAY ( olcSssVlvMax $ olcSssVlvMaxKeys ) )",
 		Cft_Overlay, sssvlv_cfg, NULL, NULL },
 	{ NULL, 0, NULL }
 };

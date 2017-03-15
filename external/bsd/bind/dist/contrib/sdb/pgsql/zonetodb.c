@@ -1,4 +1,4 @@
-/*	$NetBSD: zonetodb.c,v 1.4 2014/12/10 04:37:57 christos Exp $	*/
+/*	$NetBSD: zonetodb.c,v 1.3.12.1 2014/12/22 03:28:43 msaitoh Exp $	*/
 
 /*
  * Copyright (C) 2004, 2005, 2007-2009, 2014  Internet Systems Consortium, Inc. ("ISC")

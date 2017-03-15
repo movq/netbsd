@@ -17,6 +17,7 @@
 #include "llvm/Support/ManagedStatic.h"
 #include "llvm/Support/Mutex.h"
 #include "llvm/Support/MutexGuard.h"
+#include "llvm/Support/TimeValue.h"
 #if HAVE_FCNTL_H
 #include <fcntl.h>
 #endif
@@ -38,9 +39,6 @@
     !defined(__OpenBSD__) && !defined(__Bitrig__)
 #include <malloc.h>
 #endif
-#if defined(HAVE_MALLCTL)
-#include <malloc_np.h>
-#endif
 #ifdef HAVE_MALLOC_MALLOC_H
 #include <malloc/malloc.h>
 #endif
@@ -59,14 +57,22 @@
 using namespace llvm;
 using namespace sys;
 
-static std::pair<std::chrono::microseconds, std::chrono::microseconds> getRUsageTimes() {
+static std::pair<TimeValue, TimeValue> getRUsageTimes() {
 #if defined(HAVE_GETRUSAGE)
   struct rusage RU;
   ::getrusage(RUSAGE_SELF, &RU);
-  return { toDuration(RU.ru_utime), toDuration(RU.ru_stime) };
+  return std::make_pair(
+      TimeValue(
+          static_cast<TimeValue::SecondsType>(RU.ru_utime.tv_sec),
+          static_cast<TimeValue::NanoSecondsType>(
+              RU.ru_utime.tv_usec * TimeValue::NANOSECONDS_PER_MICROSECOND)),
+      TimeValue(
+          static_cast<TimeValue::SecondsType>(RU.ru_stime.tv_sec),
+          static_cast<TimeValue::NanoSecondsType>(
+              RU.ru_stime.tv_usec * TimeValue::NANOSECONDS_PER_MICROSECOND)));
 #else
 #warning Cannot get usage times on this platform
-  return { std::chrono::microseconds::zero(), std::chrono::microseconds::zero() };
+  return std::make_pair(TimeValue(), TimeValue());
 #endif
 }
 
@@ -92,12 +98,6 @@ size_t Process::GetMallocUsage() {
   malloc_statistics_t Stats;
   malloc_zone_statistics(malloc_default_zone(), &Stats);
   return Stats.size_in_use;   // darwin
-#elif defined(HAVE_MALLCTL)
-  size_t alloc, sz;
-  sz = sizeof(size_t);
-  if (mallctl("stats.allocated", &alloc, &sz, NULL, 0) == 0)
-    return alloc;
-  return 0;
 #elif defined(HAVE_SBRK)
   // Note this is only an approximation and more closely resembles
   // the value returned by mallinfo in the arena field.
@@ -105,16 +105,17 @@ size_t Process::GetMallocUsage() {
   char *EndOfMemory = (char*)sbrk(0);
   if (EndOfMemory != ((char*)-1) && StartOfMemory != ((char*)-1))
     return EndOfMemory - StartOfMemory;
-  return 0;
+  else
+    return 0;
 #else
 #warning Cannot get malloc info on this platform
   return 0;
 #endif
 }
 
-void Process::GetTimeUsage(TimePoint<> &elapsed, std::chrono::nanoseconds &user_time,
-                           std::chrono::nanoseconds &sys_time) {
-  elapsed = std::chrono::system_clock::now();
+void Process::GetTimeUsage(TimeValue &elapsed, TimeValue &user_time,
+                           TimeValue &sys_time) {
+  elapsed = TimeValue::now();
   std::tie(user_time, sys_time) = getRUsageTimes();
 }
 
@@ -160,8 +161,6 @@ void Process::PreventCoreFiles() {
   signal(SIGSEGV, _exit);
   signal(SIGBUS,  _exit);
 #endif
-
-  coreFilesPrevented = true;
 }
 
 Optional<std::string> Process::GetEnv(StringRef Name) {
@@ -192,8 +191,8 @@ public:
   }
 
 private:
-  FDCloser(const FDCloser &) = delete;
-  void operator=(const FDCloser &) = delete;
+  FDCloser(const FDCloser &) LLVM_DELETED_FUNCTION;
+  void operator=(const FDCloser &) LLVM_DELETED_FUNCTION;
 
   int &FD;
   bool KeepOpen;
@@ -420,36 +419,31 @@ const char *Process::ResetColor() {
   return "\033[0m";
 }
 
-#if !HAVE_DECL_ARC4RANDOM
+#if !defined(HAVE_DECL_ARC4RANDOM) || !HAVE_DECL_ARC4RANDOM
 static unsigned GetRandomNumberSeed() {
   // Attempt to get the initial seed from /dev/urandom, if possible.
-  int urandomFD = open("/dev/urandom", O_RDONLY);
-
-  if (urandomFD != -1) {
+  if (FILE *RandomSource = ::fopen("/dev/urandom", "r")) {
     unsigned seed;
-    // Don't use a buffered read to avoid reading more data
-    // from /dev/urandom than we need.
-    int count = read(urandomFD, (void *)&seed, sizeof(seed));
-
-    close(urandomFD);
+    int count = ::fread((void *)&seed, sizeof(seed), 1, RandomSource);
+    ::fclose(RandomSource);
 
     // Return the seed if the read was successful.
-    if (count == sizeof(seed))
+    if (count == 1)
       return seed;
   }
 
   // Otherwise, swizzle the current time and the process ID to form a reasonable
   // seed.
-  const auto Now = std::chrono::high_resolution_clock::now();
-  return hash_combine(Now.time_since_epoch().count(), ::getpid());
+  TimeValue Now = TimeValue::now();
+  return hash_combine(Now.seconds(), Now.nanoseconds(), ::getpid());
 }
 #endif
 
 unsigned llvm::sys::Process::GetRandomNumber() {
-#if HAVE_DECL_ARC4RANDOM
+#if defined(HAVE_DECL_ARC4RANDOM) && HAVE_DECL_ARC4RANDOM
   return arc4random();
 #else
-  static int x = (static_cast<void>(::srand(GetRandomNumberSeed())), 0);
+  static int x = (::srand(GetRandomNumberSeed()), 0);
   (void)x;
   return ::rand();
 #endif

@@ -1,6 +1,6 @@
 /* Target-dependent code for NetBSD/amd64.
 
-   Copyright (C) 2003-2016 Free Software Foundation, Inc.
+   Copyright (C) 2003-2014 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -23,6 +23,8 @@
 #include "gdbcore.h"
 #include "osabi.h"
 #include "symtab.h"
+
+#include "gdb_assert.h"
 
 #include "amd64-tdep.h"
 #include "nbsd-tdep.h"
@@ -136,7 +138,7 @@ amd64nbsd_trapframe_cache(struct frame_info *this_frame, void **this_cache)
   enum bfd_endian byte_order = gdbarch_byte_order (gdbarch);
 
   if (*this_cache)
-    return (struct trad_frame_cache *)*this_cache;
+    return *this_cache;
 
   cache = trad_frame_cache_zalloc (this_frame);
   *this_cache = cache;
@@ -228,16 +230,12 @@ amd64nbsd_trapframe_sniffer (const struct frame_unwind *self,
   const char *name;
   volatile struct gdb_exception ex;
 
-  TRY
+  TRY_CATCH (ex, RETURN_MASK_ERROR)
     {
       cs = get_frame_register_unsigned (this_frame, AMD64_CS_REGNUM);
     }
-  CATCH (ex, RETURN_MASK_ERROR)
-    {
-      if (ex.reason < 0 && ex.error != NOT_AVAILABLE_ERROR)
-	throw_exception (ex);
-    }
-  END_CATCH
+  if (ex.reason < 0 && ex.error != NOT_AVAILABLE_ERROR)
+    throw_exception (ex);
   if ((cs & I386_SEL_RPL) == I386_SEL_UPL)
     return 0;
 

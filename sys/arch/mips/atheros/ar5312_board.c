@@ -1,4 +1,4 @@
-/* $NetBSD: ar5312_board.c,v 1.5 2015/06/09 22:50:50 matt Exp $ */
+/* $NetBSD: ar5312_board.c,v 1.4 2011/07/07 05:06:44 matt Exp $ */
 /*
  * Copyright (c) 2006 Urbana-Champaign Independent Media Center.
  * Copyright (c) 2006 Garrett D'Amore.
@@ -40,15 +40,13 @@
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ar5312_board.c,v 1.5 2015/06/09 22:50:50 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ar5312_board.c,v 1.4 2011/07/07 05:06:44 matt Exp $");
 
 #include <sys/param.h>
-#include <sys/bus.h>
-#include <sys/device.h>
 #include <sys/systm.h>
+#include <sys/device.h>
 
-#include <mips/cpuregs.h>
-
+#include <sys/bus.h>
 #include <mips/atheros/include/ar5312reg.h>
 #include <mips/atheros/include/platform.h>
 

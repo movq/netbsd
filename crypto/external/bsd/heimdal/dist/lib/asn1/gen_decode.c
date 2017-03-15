@@ -1,4 +1,4 @@
-/*	$NetBSD: gen_decode.c,v 1.2 2017/01/28 21:31:45 christos Exp $	*/
+/*	$NetBSD: gen_decode.c,v 1.1.1.2 2014/04/24 12:45:28 pettai Exp $	*/
 
 /*
  * Copyright (c) 1997 - 2006 Kungliga Tekniska Högskolan
@@ -36,7 +36,7 @@
 #include "gen_locl.h"
 #include "lex.h"
 
-__RCSID("$NetBSD: gen_decode.c,v 1.2 2017/01/28 21:31:45 christos Exp $");
+__RCSID("NetBSD");
 
 static void
 decode_primitive (const char *typename, const char *name, const char *forwstr)
@@ -191,22 +191,22 @@ range_check(const char *name,
 {
     if (r->min == r->max + 2 || r->min < r->max)
 	fprintf (codefile,
-		 "if ((%s)->%s > %lld) {\n"
+		 "if ((%s)->%s > %d) {\n"
 		 "e = ASN1_MAX_CONSTRAINT; %s;\n"
 		 "}\n",
-		 name, length, (long long)r->max, forwstr);
-    if ((r->min - 1 == r->max || r->min < r->max) && r->min > 0)
+		 name, length, r->max, forwstr);
+    if (r->min - 1 == r->max || r->min < r->max)
 	fprintf (codefile,
-		 "if ((%s)->%s < %lld) {\n"
+		 "if ((%s)->%s < %d) {\n"
 		 "e = ASN1_MIN_CONSTRAINT; %s;\n"
 		 "}\n",
-		 name, length, (long long)r->min, forwstr);
+		 name, length, r->min, forwstr);
     if (r->max == r->min)
 	fprintf (codefile,
-		 "if ((%s)->%s != %lld) {\n"
+		 "if ((%s)->%s != %d) {\n"
 		 "e = ASN1_EXACT_CONSTRAINT; %s;\n"
 		 "}\n",
-		 name, length, (long long)r->min, forwstr);
+		 name, length, r->min, forwstr);
 }
 
 static int
@@ -244,14 +244,6 @@ decode_type (const char *name, const Type *t, int optional,
     }
     case TInteger:
 	if(t->members) {
-	    /*
-	     * This will produce a worning, how its hard to fix since:
-	     * if its enum to an NameType, we can add appriate
-	     * type-cast. If its not though, we have to figure out if
-	     * there is negative enum enum and use appropriate
-	     * signness and size on the intertype we cast the result
-	     * too.
-	     */
 	    fprintf(codefile,
 		    "{\n"
 		    "int enumint;\n");
@@ -262,17 +254,15 @@ decode_type (const char *name, const Type *t, int optional,
 		    name);
 	} else if (t->range == NULL) {
 	    decode_primitive ("heim_integer", name, forwstr);
-	} else if (t->range->min < INT_MIN && t->range->max <= INT64_MAX) {
-	    decode_primitive ("integer64", name, forwstr);
-	} else if (t->range->min >= 0 && t->range->max > UINT_MAX) {
-	    decode_primitive ("unsigned64", name, forwstr);
-	} else if (t->range->min >= INT_MIN && t->range->max <= INT_MAX) {
+	} else if (t->range->min == INT_MIN && t->range->max == INT_MAX) {
 	    decode_primitive ("integer", name, forwstr);
-	} else if (t->range->min >= 0 && t->range->max <= UINT_MAX) {
+	} else if (t->range->min == 0 && t->range->max == UINT_MAX) {
+	    decode_primitive ("unsigned", name, forwstr);
+	} else if (t->range->min == 0 && t->range->max == INT_MAX) {
 	    decode_primitive ("unsigned", name, forwstr);
 	} else
-	    errx(1, "%s: unsupported range %lld -> %lld",
-		 name, (long long)t->range->min, (long long)t->range->max);
+	    errx(1, "%s: unsupported range %d -> %d",
+		 name, t->range->min, t->range->max);
 	break;
     case TBoolean:
       decode_primitive ("boolean", name, forwstr);

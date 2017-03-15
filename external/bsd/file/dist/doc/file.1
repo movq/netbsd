@@ -1,7 +1,7 @@
-.\"	$NetBSD: file.1,v 1.18 2017/02/10 17:53:24 christos Exp $
+.\"	$NetBSD: file.1,v 1.14 2014/06/13 02:08:06 christos Exp $
 .\"
-.\" $File: file.man,v 1.125 2017/01/03 11:24:46 christos Exp $
-.Dd October 19, 2016
+.\" $File: file.man,v 1.106 2014/03/07 23:11:51 christos Exp $
+.Dd January 30, 2014
 .Dt FILE 1
 .Os
 .Sh NAME
@@ -10,16 +10,14 @@
 .Sh SYNOPSIS
 .Nm
 .Bk -words
-.Op Fl bcdEhiklLNnprsvzZ0
+.Op Fl bcEhiklLNnprsvz0
 .Op Fl Fl apple
-.Op Fl Fl extension
 .Op Fl Fl mime-encoding
 .Op Fl Fl mime-type
 .Op Fl e Ar testname
 .Op Fl F Ar separator
 .Op Fl f Ar namefile
 .Op Fl m Ar magicfiles
-.Op Fl P Ar name=value
 .Ar
 .Ek
 .Nm
@@ -28,7 +26,7 @@
 .Nm
 .Op Fl Fl help
 .Sh DESCRIPTION
-This manual page documents version 5.30 of the
+This manual page documents version 5.19 of the
 .Nm
 command.
 .Pp
@@ -183,8 +181,6 @@ Cause a checking printout of the parsed form of the magic file.
 This is usually used in conjunction with the
 .Fl m
 flag to debug a new magic file before installing it.
-.It Fl d
-Prints internal debugging information to stderr.
 .It Fl E
 On filesystem errors (file not found etc), instead of handling the error
 as regular output as POSIX mandates and keep going, issue an error message
@@ -212,18 +208,12 @@ Prints details of Compound Document Files.
 .It compress
 Checks for, and looks inside, compressed files.
 .It elf
-Prints ELF file details, provided soft magic tests are enabled and the
-elf magic is found.
+Prints ELF file details.
 .It soft
 Consults magic files.
 .It tar
 Examines tar files.
-.It text
-A synonym for
-.Sq ascii .
 .El
-.It Fl Fl extension 
-Print a slash-separated list of valid extensions for the file type found.
 .It Fl F , Fl Fl separator Ar separator
 Use the specified string as the separator between the filename and the
 file result returned.
@@ -240,8 +230,8 @@ or at least one filename argument must be present;
 to test the standard input, use
 .Sq -
 as a filename argument.
-Please note that
-.Ar namefile
+Please note that 
+.Ar namefile 
 is unwrapped and the enclosed filenames are processed when this option is
 encountered and before any further options processing is done.
 This allows one to process multiple lists of files with different command line
@@ -315,18 +305,6 @@ or
 attempt to preserve the access time of files analyzed, to pretend that
 .Nm
 never read them.
-.It Fl P , Fl Fl parameter Ar name=value
-Set various parameter limits.
-.Bl -column "elf_phnum" "Default" "XXXXXXXXXXXXXXXXXXXXXXXXXXX" -offset indent
-.It Sy "Name" Ta Sy "Default" Ta Sy "Explanation"
-.It Li indir Ta 15 Ta recursion limit for indirect magic
-.It Li name Ta 30 Ta use count limit for name/use magic
-.It Li elf_notes Ta 256 Ta max ELF notes processed
-.It Li elf_phnum Ta 128 Ta max ELF program sections processed
-.It Li elf_shnum Ta 32768 Ta max ELF sections processed
-.It Li regex Ta 8192 Ta length limit for regex searches
-.It Li bytes Ta 1048576 Ta max number of bytes to read from file
-.El
 .It Fl r , Fl Fl raw
 Don't translate unprintable characters to \eooo.
 Normally
@@ -356,9 +334,6 @@ since on some systems it reports a zero size for raw disk partitions.
 Print the version of the program and exit.
 .It Fl z , Fl Fl uncompress
 Try to look inside compressed files.
-.It Fl Z , Fl Fl uncompress-noreport
-Try to look inside compressed files, but report information about the contents
-only not the compression.
 .It Fl 0 , Fl Fl print0
 Output a null character
 .Sq \e0
@@ -367,11 +342,6 @@ Nice to
 .Xr cut 1
 the output.
 This does not affect the separator, which is still printed.
-.Pp
-If this option is repeated more than once, then 
-.Nm
-prints just the filename followed by a NUL followed by the description
-(or ERROR: text) followed by a second NUL for each entry.
 .It Fl -help
 Print a help message and exit.
 .El
@@ -413,10 +383,10 @@ and
 .Fl h
 options.
 .Sh SEE ALSO
+.Xr magic 5 ,
 .Xr hexdump 1 ,
 .Xr od 1 ,
 .Xr strings 1 ,
-.Xr magic 5
 .Sh STANDARDS CONFORMANCE
 This program is believed to exceed the System V Interface Definition
 of FILE(CMD), as near as one can determine from the vague language
@@ -532,15 +502,16 @@ John Gilmore revised the code extensively, making it better than
 the first version.
 Geoff Collyer found several inadequacies
 and provided some magic file entries.
-Contributions of the
+Contributions by the
 .Sq \*[Am]
-operator by Rob McMahon,
+operator by Rob McMahon, 
 .Aq cudcv@warwick.ac.uk ,
 1989.
 .Pp
-Guy Harris,
+Guy Harris, 
 .Aq guy@netapp.com ,
 made many changes from 1993 to the present.
+1989.
 .Pp
 Primary development and maintenance from 1990 to the present by
 Christos Zoulas
@@ -588,6 +559,7 @@ program, and are not covered by the above license.
 .Nm
 returns 0 on success, and non-zero on error.
 .Sh BUGS
+.Pp
 Please report bugs and send patches to the bug tracker at
 .Pa http://bugs.gw.com/
 or the mailing list at
@@ -596,6 +568,7 @@ or the mailing list at
 .Pa http://mx.gw.com/mailman/listinfo/file
 first to subscribe).
 .Sh TODO
+.Pp
 Fix output so that tests for MIME and APPLE flags are not needed all
 over the place, and actual output is only done in one place.
 This needs a design.
@@ -604,30 +577,20 @@ last-pushed (most specific, one hopes) value at the end, or
 use a default if the list is empty.
 This should not slow down evaluation.
 .Pp
-The handling of
-.Dv MAGIC_CONTINUE
-and printing \e012- between entries is clumsy and complicated; refactor
-and centralize.
-.Pp
-Some of the encoding logic is hard-coded in encoding.c and can be moved
-to the magic files if we had a !:charset annotation
-.Pp
 Continue to squash all magic bugs.
 See Debian BTS for a good source.
 .Pp
 Store arbitrarily long strings, for example for %s patterns, so that
 they can be printed out.
 Fixes Debian bug #271672.
-This can be done by allocating strings in a string pool, storing the
-string pool at the end of the magic file and converting all the string
-pointers to relative offsets from the string pool.
+Would require more complex store/load code in apprentice.
 .Pp
 Add syntax for relative offsets after current level (Debian bug #466037).
 .Pp
 Make file -ki work, i.e. give multiple MIME types.
 .Pp
 Add a zip library so we can peek inside Office2007 documents to
-print more details about their contents.
+figure out what they are.
 .Pp
 Add an option to print URLs for the sources of the file descriptions.
 .Pp
@@ -637,35 +600,23 @@ string to be looked up in a table).
 This would avoid adding the same magic repeatedly for each new
 hash-bang interpreter.
 .Pp
-When a file descriptor is available, we can skip and adjust the buffer
-instead of the hacky buffer management we do now.
-.Pp
 Fix
 .Dq name
 and
 .Dq use
-to check for consistency at compile time (duplicate
+to check for consistency at compile time (duplicate 
 .Dq name ,
 .Dq use
 pointing to undefined
 .Dq name
 ).
-Make
+Make 
 .Dq name
 /
-.Dq use
+.Dq use 
 more efficient by keeping a sorted list of names.
 Special-case ^ to flip endianness in the parser so that it does not
 have to be escaped, and document it.
-.Pp
-If the offsets specified internally in the file exceed the buffer size
-(
-.Dv HOWMANY
-variable in file.h), then we don't seek to that offset, but we give up.
-It would be better if buffer managements was done when the file descriptor
-is available so move around the file.
-One must be careful though because this has performance (and thus security
-considerations).
 .Sh AVAILABILITY
 You can obtain the original author's latest version by anonymous FTP
 on

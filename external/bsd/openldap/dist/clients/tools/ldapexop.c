@@ -1,10 +1,10 @@
-/*	$NetBSD: ldapexop.c,v 1.1.1.5 2017/02/09 01:46:43 christos Exp $	*/
+/*	$NetBSD: ldapexop.c,v 1.1.1.4 2014/05/28 09:58:20 tron Exp $	*/
 
 /* ldapexop.c -- a tool for performing well-known extended operations */
 /* $OpenLDAP$ */
 /* This work is part of OpenLDAP Software <http://www.openldap.org/>.
  *
- * Copyright 2005-2016 The OpenLDAP Foundation.
+ * Copyright 2005-2014 The OpenLDAP Foundation.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -19,9 +19,6 @@
  * This work was originally developed by Pierangelo Masarati for inclusion
  * in OpenLDAP Software based, in part, on other client tools.
  */
-
-#include <sys/cdefs.h>
-__RCSID("$NetBSD: ldapexop.c,v 1.1.1.5 2017/02/09 01:46:43 christos Exp $");
 
 #include "portable.h"
 
@@ -135,7 +132,7 @@ main( int argc, char *argv[] )
 		}
 
 	} else if ( strcasecmp( argv[ 0 ], "passwd" ) == 0 ) {
-		fprintf( stderr, "use ldappasswd(1) instead.\n\n" );
+		fprintf( stderr, "use ldappasswd(1) instead.\n\n", argv[ 0 ] );
 		usage();
 		/* TODO? */
 

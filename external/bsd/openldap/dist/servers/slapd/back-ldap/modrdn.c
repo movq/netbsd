@@ -1,10 +1,10 @@
-/*	$NetBSD: modrdn.c,v 1.1.1.5 2017/02/09 01:47:06 christos Exp $	*/
+/*	$NetBSD: modrdn.c,v 1.1.1.4 2014/05/28 09:58:49 tron Exp $	*/
 
 /* modrdn.c - ldap backend modrdn function */
 /* $OpenLDAP$ */
 /* This work is part of OpenLDAP Software <http://www.openldap.org/>.
  *
- * Copyright 1999-2016 The OpenLDAP Foundation.
+ * Copyright 1999-2014 The OpenLDAP Foundation.
  * Portions Copyright 1999-2003 Howard Chu.
  * Portions Copyright 2000-2003 Pierangelo Masarati.
  * All rights reserved.
@@ -22,9 +22,6 @@
  * in OpenLDAP Software and subsequently enhanced by Pierangelo
  * Masarati.
  */
-
-#include <sys/cdefs.h>
-__RCSID("$NetBSD: modrdn.c,v 1.1.1.5 2017/02/09 01:47:06 christos Exp $");
 
 #include "portable.h"
 
@@ -90,6 +87,7 @@ retry:
 	rc = ldap_back_controls_add( op, rs, lc, &ctrls );
 	if ( rc != LDAP_SUCCESS ) {
 		send_ldap_result( op, rs );
+		rc = -1;
 		goto cleanup;
 	}
 
@@ -123,6 +121,6 @@ cleanup:
 		ldap_back_release_conn( li, lc );
 	}
 
-	return rs->sr_err;
+	return rc;
 }
 

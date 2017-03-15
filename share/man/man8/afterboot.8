@@ -1,4 +1,4 @@
-.\"	$NetBSD: afterboot.8,v 1.56 2017/03/14 13:34:10 kre Exp $
+.\"	$NetBSD: afterboot.8,v 1.52 2012/10/05 21:28:38 wiz Exp $
 .\"	$OpenBSD: afterboot.8,v 1.72 2002/02/22 02:02:33 miod Exp $
 .\"
 .\" Originally created by Marshall M. Midden -- 1997-10-20, m4@umn.edu
@@ -59,7 +59,7 @@
 .\" (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
 .\" THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 .\"
-.Dd March 14, 2017
+.Dd October 2, 2012
 .Dt AFTERBOOT 8
 .Os
 .Sh NAME
@@ -327,7 +327,7 @@ or in the file
 If you need to edit this file, a painless way to reconfigure the network
 afterwards is to issue
 .Bd -literal -offset indent
-.Ic service network restart
+.Ic /etc/rc.d/network restart
 .Ed
 .Pp
 Or, you may prefer to manually configure using a series of
@@ -337,10 +337,17 @@ and
 commands (see
 .Xr route 8 ) .
 If you run
+.Xr dhclient 8
+you will have to kill it by running
+.Bd -literal -offset indent
+.Ic /etc/rc.d/dhclient stop
+.Ed
+.Pp
+If you run
 .Xr dhcpcd 8
 you will have to kill it by running
 .Bd -literal -offset indent
-.Ic service dhcpcd stop
+.Ic /etc/rc.d/dhcpcd stop
 .Ed
 .Pp
 before you flush the routes.
@@ -368,7 +375,7 @@ in
 .Pa /etc/rc.conf
 and then starting the server with the command
 .Bd -literal -offset indent
-.Ic service sshd start
+.Ic /etc/rc.d/sshd start
 .Ed
 .Pp
 The first time the server is started, it will generate a new keypair,
@@ -390,7 +397,7 @@ in
 .Pa /etc/rc.conf
 and either rebooting or running the following command:
 .Bd -literal -offset indent
-.Ic service named start
+.Ic /etc/rc.d/named start
 .Ed
 .Pp
 .Xr named 8
@@ -402,22 +409,6 @@ Then, to make the system use it, put the following in
 .Bd -literal -offset indent
 nameserver 127.0.0.1
 .Ed
-.Ss Wireless networking
-You may scan for nearby wireless networks using:
-.Bd -literal -offset indent
-.Ic ifconfig iwm0 up list scan
-.Ic ifconfig iwm0 down
-.Ed
-.Pp
-To connect to a network using WPA, you may use:
-.Bd -literal -offset indent
-.Ic echo ctrl_interface=/var/run/wpa_supplicant > /etc/wpa_supplicant.conf
-.Ic wpa_passphrase networkname password >> /etc/wpa_supplicant.conf
-.Ed
-.Pp
-After creating /etc/wpa_supplicant.conf, using
-.Xr dhcpcd 8
-on the wireless interface will connect to the network.
 .Ss RPC-based network services
 Several services depend on the RPC portmapper
 .Xr rpcbind 8
@@ -769,9 +760,9 @@ Edit
 and get it correct.
 After this, you can start the server by issuing:
 .Bd -literal -offset indent
-.Ic service rpcbind start
-.Ic service mountd start
-.Ic service nfsd start
+.Ic /etc/rc.d/rpcbind start
+.Ic /etc/rc.d/mountd start
+.Ic /etc/rc.d/nfsd start
 .Ed
 which will also start dependencies.
 .Ss HP remote boot server
@@ -992,6 +983,7 @@ for details on how to do so.
 .Xr ccd 4 ,
 .Xr aliases 5 ,
 .Xr crontab 5 ,
+.Xr dhclient.conf 5 ,
 .Xr dhcpcd.conf 5 ,
 .Xr exports 5 ,
 .Xr fstab 5 ,
@@ -1014,6 +1006,7 @@ for details on how to do so.
 .Xr amd 8 ,
 .Xr ccdconfig 8 ,
 .Xr chown 8 ,
+.Xr dhclient 8 ,
 .Xr dhcpcd 8 ,
 .Xr dhcpd 8 ,
 .Xr dmesg 8 ,
@@ -1041,8 +1034,6 @@ for details on how to do so.
 .Xr umount 8 ,
 .Xr useradd 8 ,
 .Xr vipw 8 ,
-.Xr wpa_supplicant 8 ,
-.Xr wpa_supplicant.conf 5 ,
 .Xr yp 8 ,
 .Xr ypbind 8
 .Sh HISTORY

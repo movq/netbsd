@@ -1,5 +1,5 @@
 /* Disassembler code for Renesas RL78.
-   Copyright (C) 2011-2016 Free Software Foundation, Inc.
+   Copyright 2011, 2012 Free Software Foundation, Inc.
    Contributed by Red Hat.
    Written by DJ Delorie.
 
@@ -24,10 +24,8 @@
 #include <stdio.h>
 
 #include "bfd.h"
-#include "elf-bfd.h"
 #include "dis-asm.h"
 #include "opcode/rl78.h"
-#include "elf/rl78.h"
 
 #define DEBUG_SEMANTICS 0
 
@@ -82,8 +80,8 @@ indirect_type (int t)
     }
 }
 
-static int
-print_insn_rl78_common (bfd_vma addr, disassemble_info * dis, RL78_Dis_Isa isa)
+int
+print_insn_rl78 (bfd_vma addr, disassemble_info * dis)
 {
   int rv;
   RL78_Data rl78_data;
@@ -96,7 +94,7 @@ print_insn_rl78_common (bfd_vma addr, disassemble_info * dis, RL78_Dis_Isa isa)
   rl78_data.pc = addr;
   rl78_data.dis = dis;
 
-  rv = rl78_decode_opcode (addr, &opcode, rl78_get_byte, &rl78_data, isa);
+  rv = rl78_decode_opcode (addr, &opcode, rl78_get_byte, &rl78_data);
 
   dis->bytes_per_line = 10;
 
@@ -204,7 +202,7 @@ print_insn_rl78_common (bfd_vma addr, disassemble_info * dis, RL78_Dis_Isa isa)
 		{
 		  char *comma = "";
 		  PR (PS, "  \033[35m");
-
+	      
 		  if (opcode.flags & RL78_PSW_Z)
 		    { PR (PS, "Z"); comma = ","; }
 		  if (opcode.flags & RL78_PSW_AC)
@@ -227,18 +225,7 @@ print_insn_rl78_common (bfd_vma addr, disassemble_info * dis, RL78_Dis_Isa isa)
 	      }
 
 	    if (do_bang)
-	      {
-		/* If we are going to display SP by name, we must omit the bang.  */
-		if ((oper->type == RL78_Operand_Indirect
-		     || oper->type == RL78_Operand_BitIndirect)
-		    && oper->reg == RL78_Reg_None
-		    && do_sfr
-		    && ((oper->addend == 0xffff8 && opcode.size == RL78_Word)
-			|| (oper->addend == 0x0fff8 && do_es && opcode.size == RL78_Word)))
-		  ;
-		else
-		  PC ('!');
-	      }
+	      PC ('!');
 
 	    if (do_cond)
 	      {
@@ -276,20 +263,6 @@ print_insn_rl78_common (bfd_vma addr, disassemble_info * dis, RL78_Dis_Isa isa)
 		      PR (PS, "psw");
 		    else if (oper->addend == 0xffff8 && do_sfr && opcode.size == RL78_Word)
 		      PR (PS, "sp");
-		    else if (oper->addend == 0x0fff8 && do_sfr && do_es && opcode.size == RL78_Word)
-		      PR (PS, "sp");
-                    else if (oper->addend == 0xffff8 && do_sfr && opcode.size == RL78_Byte)
-                      PR (PS, "spl");
-                    else if (oper->addend == 0xffff9 && do_sfr && opcode.size == RL78_Byte)
-                      PR (PS, "sph");
-                    else if (oper->addend == 0xffffc && do_sfr && opcode.size == RL78_Byte)
-                      PR (PS, "cs");
-                    else if (oper->addend == 0xffffd && do_sfr && opcode.size == RL78_Byte)
-                      PR (PS, "es");
-                    else if (oper->addend == 0xffffe && do_sfr && opcode.size == RL78_Byte)
-                      PR (PS, "pmc");
-                    else if (oper->addend == 0xfffff && do_sfr && opcode.size == RL78_Byte)
-                      PR (PS, "mem");
 		    else if (oper->addend >= 0xffe20)
 		      PR (PS, "%#x", oper->addend);
 		    else
@@ -311,11 +284,11 @@ print_insn_rl78_common (bfd_vma addr, disassemble_info * dis, RL78_Dis_Isa isa)
 		    PR (PS, "[%s", register_names[oper->reg]);
 		    if (oper->reg2 != RL78_Reg_None)
 		      PR (PS, "+%s", register_names[oper->reg2]);
-		    if (oper->addend || do_addr)
+		    if (oper->addend)
 		      PR (PS, "+%d", oper->addend);
 		    PC (']');
 		    break;
-
+		      
 		  }
 		if (oper->type == RL78_Operand_BitIndirect)
 		  PR (PS, ".%d", oper->bit_number);
@@ -353,45 +326,4 @@ print_insn_rl78_common (bfd_vma addr, disassemble_info * dis, RL78_Dis_Isa isa)
 #endif
 
   return rv;
-}
-
-int
-print_insn_rl78 (bfd_vma addr, disassemble_info * dis)
-{
-  return print_insn_rl78_common (addr, dis, RL78_ISA_DEFAULT);
-}
-
-int
-print_insn_rl78_g10 (bfd_vma addr, disassemble_info * dis)
-{
-  return print_insn_rl78_common (addr, dis, RL78_ISA_G10);
-}
-
-int
-print_insn_rl78_g13 (bfd_vma addr, disassemble_info * dis)
-{
-  return print_insn_rl78_common (addr, dis, RL78_ISA_G13);
-}
-
-int
-print_insn_rl78_g14 (bfd_vma addr, disassemble_info * dis)
-{
-  return print_insn_rl78_common (addr, dis, RL78_ISA_G14);
-}
-
-disassembler_ftype
-rl78_get_disassembler (bfd *abfd)
-{
-  int cpu = abfd->tdata.elf_obj_data->elf_header->e_flags & E_FLAG_RL78_CPU_MASK;
-  switch (cpu)
-    {
-    case E_FLAG_RL78_G10:
-      return print_insn_rl78_g10;
-    case E_FLAG_RL78_G13:
-      return print_insn_rl78_g13;
-    case E_FLAG_RL78_G14:
-      return print_insn_rl78_g14;
-    default:
-      return print_insn_rl78;
-    }
 }

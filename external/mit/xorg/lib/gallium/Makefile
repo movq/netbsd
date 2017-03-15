@@ -1,4 +1,4 @@
-# $NetBSD: Makefile,v 1.17 2016/11/29 23:17:22 dholland Exp $
+# $NetBSD: Makefile,v 1.6.2.5 2016/12/14 10:50:52 martin Exp $
 
 # Link the gallium mega driver.
 
@@ -13,7 +13,6 @@ LIB=		gallium_dri
 DRIDIR=		${X11USRLIBDIR}/modules/dri
 DRIDEBUGDIR=	${DEBUGDIR}${X11USRLIBDIR}/modules/dri
 
-CXXFLAGS+=	-std=c++11
 CPPFLAGS+=	-I${DESTDIR}${X11INCDIR}/libdrm
 
 GALLIUM_SUBDIRS= \
@@ -61,7 +60,7 @@ BUILD_NOUVEAU=0
 .if ${MACHINE_ARCH} == "i386" || ${MACHINE_ARCH} == "x86_64"
 BUILD_RADEON=1
 .endif
-.if ${MACHINE_ARCH} == "i386" || ${MACHINE_ARCH} == "x86_64" || ${MACHINE} == "evbarm"
+.if ${MACHINE_ARCH} == "i386" || ${MACHINE_ARCH} == "x86_64"
 BUILD_NOUVEAU=1
 .endif
 
@@ -74,6 +73,8 @@ GALLIUM_SUBDIRS+=	${GALLIUM_SUBDIRS_ATI}
 DRIVERS+=		nouveau
 GALLIUM_SUBDIRS+=	${GALLIUM_SUBDIRS_NOUVEAU}
 .endif
+
+GALLIUM_NAMES=	kms_swrast r600 swrant
 
 GALLIUM_SOURCES.auxiliary/cso_cache= \
 	cso_cache.c \
@@ -535,7 +536,7 @@ CPPFLAGS.${_f} +=	-I${X11SRCDIR.MesaLib}/src/gallium/state_trackers/dri/common
 CPPFLAGS+=	\
 	-DGALLIUM_SOFTPIPE \
 	-DGALLIUM_STATIC_TARGETS=1 \
-	-DMESA_EGL_NO_X11_HEADERS
+	-DMESA_EGL_NO_X11_HEADERS \
 
 .for _d in ${GALLIUM_SUBDIRS}
 SRCS+=	${GALLIUM_SOURCES.${_d}}
@@ -548,11 +549,6 @@ SRCS+=	${GALLIUM_SOURCES.${_d}}
 
 .include "../libloader.mk"
 
-.if ${BUILD_RADEON} == 1
-CFLAGS+=	-pthread
-LDFLAGS+=	-pthread
-LIBDPLIBS+=	pthread		${.CURDIR}/../../../../../lib/libpthread
-.endif
 
 LIBDPLIBS+=	m		${.CURDIR}/../../../../../lib/libm
 .if ${BUILD_RADEON} == 1 || ${BUILD_NOUVEAU} == 1
@@ -623,8 +619,7 @@ CWARNFLAGS.clang+=	-Wno-error=constant-conversion \
 			-Wno-error=switch \
 			-Wno-error=absolute-value \
 			-Wno-error=tautological-compare \
-			-Wno-error=static-in-inline \
-			-Wno-error=logical-not-parentheses
+			-Wno-error=static-in-inline
 
 .include <bsd.x11.mk>
 LIBDIR=		${X11USRLIBDIR}/modules/dri
@@ -636,10 +631,6 @@ SYMLINKS+= gallium_dri.so.${SHLIB_MAJOR} ${DRIDIR}/${_d}_dri.so.${SHLIB_MAJOR}
 SYMLINKS+= gallium_dri.so.${SHLIB_MAJOR}.debug ${DRIDEBUGDIR}/${_d}_dri.so.${SHLIB_MAJOR}.debug
 .endif
 .endfor
-
-.if ${MACHINE_ARCH} == "sparc" || ${COMMON_MACHINE_ARCH:U} == "sparc"
-COPTS+=	${${ACTIVE_CC} == "clang":? -Wa,-Av8plus  :}
-.endif
 
 .include <bsd.lib.mk>
 # Don't regenerate c files

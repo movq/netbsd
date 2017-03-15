@@ -1,4 +1,4 @@
-/*  $NetBSD: msg.c,v 1.24 2016/10/19 01:31:05 christos Exp $ */
+/*  $NetBSD: msg.c,v 1.21.10.2 2016/11/01 19:49:04 snj Exp $ */
 
 /*-
  *  Copyright (c) 2010 Emmanuel Dreyfus. All rights reserved.

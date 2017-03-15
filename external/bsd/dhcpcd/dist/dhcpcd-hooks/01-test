@@ -1,10 +1,10 @@
-# $NetBSD: 01-test,v 1.8 2015/07/09 10:15:34 roy Exp $
+# $NetBSD: 01-test,v 1.1.1.6.4.1 2014/12/29 16:18:05 martin Exp $
 
-# Echo the interface flags, reason and message options
+# Just echo our DHCP options we have
 
 if [ "$reason" = "TEST" ]; then
 	set | grep "^\(interface\|pid\|reason\|profile\|skip_hooks\)=" | sort
 	set | grep "^if\(carrier\|flags\|mtu\|wireless\|ssid\)=" | sort
-	set | grep "^\(new_\|old_\|nd[0-9]*_\)" | sort
+	set | grep "^\(new_\|old_\|ra_count=\|ra[0-9]*_\)" | sort
 	exit 0
 fi

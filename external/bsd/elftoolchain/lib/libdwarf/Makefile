@@ -84,9 +84,10 @@ GENSRCS=	dwarf_pubnames.c dwarf_pubtypes.c dwarf_weaks.c \
 CLEANFILES=	${GENSRCS}
 CPPFLAGS+=	-I. -I${SRCDIR} -I${TOP}/common -I${TOP}/libelf
 
-LIBDPLIBS+=	elf ${.CURDIR}/../libelf
+LDADD+=		-lelf
+DPADD+=		${LIBELF}
 
-SHLIB_MAJOR=	2
+SHLIB_MAJOR=	1
 SHLIB_MINOR=	0
 
 MAN=	dwarf.3                                         \

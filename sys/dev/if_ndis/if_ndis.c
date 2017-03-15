@@ -1,4 +1,4 @@
-/*	$NetBSD: if_ndis.c,v 1.38 2016/12/15 09:28:05 ozaki-r Exp $	*/
+/*	$NetBSD: if_ndis.c,v 1.34 2012/10/27 17:18:23 chs Exp $	*/
 
 /*-
  * Copyright (c) 2003
@@ -37,7 +37,7 @@
 __FBSDID("$FreeBSD: src/sys/dev/if_ndis/if_ndis.c,v 1.69.2.6 2005/03/31 04:24:36 wpaul Exp $");
 #endif
 #ifdef __NetBSD__
-__KERNEL_RCSID(0, "$NetBSD: if_ndis.c,v 1.38 2016/12/15 09:28:05 ozaki-r Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_ndis.c,v 1.34 2012/10/27 17:18:23 chs Exp $");
 #endif
 
 
@@ -1020,7 +1020,8 @@ ndis_rxeof(ndis_handle adapter, ndis_packet **packets, uint32_t pktcnt)
 					m0 = m;
 			} else
 				p->np_oob.npo_status = NDIS_STATUS_PENDING;
-			m_set_rcvif(m0, ifp);
+			m0->m_pkthdr.rcvif = ifp;
+			ifp->if_ipackets++;
 
 			/* Deal with checksum offload. */
 /* 
@@ -1043,9 +1044,11 @@ ndis_rxeof(ndis_handle adapter, ndis_packet **packets, uint32_t pktcnt)
 					  //  CSUM_DATA_VALID|CSUM_PSEUDO_HDR;
 					m0->m_pkthdr.csum_data = 0xFFFF;
 				}
-			}
+			}			
 
-			if_percpuq_enqueue(ifp->if_percpuq, m0);
+			bpf_mtap(ifp, m0);
+
+			(*ifp->if_input)(ifp, m0);
 		}
 	}
 
@@ -1964,7 +1967,7 @@ ndis_getstate_80211(struct ndis_softc *sc)
 			break;
 		default:
 			aprint_error_dev(sc->ndis_dev, "unknown nettype %d\n", 
-				(int)bs->nwbx_nettype);
+				     arg);
 			break;
 		}
 		free(bs, M_TEMP);

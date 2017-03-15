@@ -1,4 +1,4 @@
-/*	$NetBSD: rf_kintf.h,v 1.24 2016/01/03 08:17:24 mlelstv Exp $	*/
+/*	$NetBSD: rf_kintf.h,v 1.23 2011/08/03 14:44:38 oster Exp $	*/
 /*
  * rf_kintf.h
  *
@@ -42,7 +42,6 @@ int rf_reasonable_label(RF_ComponentLabel_t *, uint64_t);
 
 void    raidstart(RF_Raid_t * raidPtr);
 int     rf_DispatchKernelIO(RF_DiskQueue_t * queue, RF_DiskQueueData_t * req);
-void    raiddone(RF_Raid_t * raidPtr, struct buf * bp);
 
 int raidfetch_component_label(RF_Raid_t *, RF_RowCol_t);
 RF_ComponentLabel_t *raidget_component_label(RF_Raid_t *, RF_RowCol_t);
@@ -60,6 +59,7 @@ void raid_init_component_label(RF_Raid_t *, RF_ComponentLabel_t *);
 void rf_print_component_label(RF_ComponentLabel_t *);
 void rf_UnconfigureVnodes( RF_Raid_t * );
 void rf_close_component( RF_Raid_t *, struct vnode *, int);
+void rf_disk_unbusy(RF_RaidAccessDesc_t *);
 int rf_getdisksize(struct vnode *, RF_RaidDisk_t *);
 int rf_sync_component_caches(RF_Raid_t *raidPtr);
 #endif				/* _RF__RF_KINTF_H_ */

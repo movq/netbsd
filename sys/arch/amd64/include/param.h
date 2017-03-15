@@ -1,4 +1,4 @@
-/*	$NetBSD: param.h,v 1.21 2017/02/02 19:09:08 maxv Exp $	*/
+/*	$NetBSD: param.h,v 1.18 2012/04/20 22:23:24 rmind Exp $	*/
 
 #ifdef __x86_64__
 
@@ -27,18 +27,16 @@
 #define	PGOFSET		(NBPG-1)	/* byte offset into page */
 #define	NPTEPG		(NBPG/(sizeof (pt_entry_t)))
 
-#define	MAXIOMEM	0xffffffffffff
-
 /*
  * XXXfvdl change this (after bootstrap) to take # of bits from
  * config info into account.
  */
 #define	KERNBASE	0xffffffff80000000 /* start of kernel virtual space */
-#define	KERNTEXTOFF	0xffffffff80200000 /* start of kernel text */
+#define	KERNTEXTOFF	0xffffffff80100000 /* start of kernel text */
 #define	BTOPKERNBASE	((u_long)KERNBASE >> PGSHIFT)
 
 #define KERNTEXTOFF_HI	0xffffffff
-#define KERNTEXTOFF_LO	0x80200000
+#define KERNTEXTOFF_LO	0x80100000
 
 #define KERNBASE_HI	0xffffffff
 #define KERNBASE_LO	0x80000000
@@ -61,7 +59,7 @@
 #define	INTRSTACKSIZE	4096
 
 #ifndef MSGBUFSIZE
-#define MSGBUFSIZE	(8*NBPG)	/* default message buffer size */
+#define MSGBUFSIZE	8*NBPG		/* default message buffer size */
 #endif
 
 /*

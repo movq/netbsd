@@ -1,4 +1,4 @@
-/*	$NetBSD: if_shmem.c,v 1.72 2016/12/22 12:55:28 ozaki-r Exp $	*/
+/*	$NetBSD: if_shmem.c,v 1.62.2.1 2014/08/17 03:26:51 riz Exp $	*/
 
 /*
  * Copyright (c) 2009, 2010 Antti Kantee.  All Rights Reserved.
@@ -28,7 +28,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_shmem.c,v 1.72 2016/12/22 12:55:28 ozaki-r Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_shmem.c,v 1.62.2.1 2014/08/17 03:26:51 riz Exp $");
 
 #include <sys/param.h>
 #include <sys/atomic.h>
@@ -47,12 +47,11 @@ __KERNEL_RCSID(0, "$NetBSD: if_shmem.c,v 1.72 2016/12/22 12:55:28 ozaki-r Exp $"
 #include <netinet/in.h>
 #include <netinet/in_var.h>
 
-#include <rump-sys/kern.h>
-#include <rump-sys/net.h>
-
 #include <rump/rump.h>
 #include <rump/rumpuser.h>
 
+#include "rump_private.h"
+#include "rump_net_private.h"
 #include "shmif_user.h"
 
 static int shmif_clone(struct if_clone *, int);
@@ -187,9 +186,8 @@ allocif(int unit, struct shmif_sc **scp)
 	mutex_init(&sc->sc_mtx, MUTEX_DEFAULT, IPL_NONE);
 	cv_init(&sc->sc_cv, "shmifcv");
 
-	if_initialize(ifp);
+	if_attach(ifp);
 	ether_ifattach(ifp, enaddr);
-	if_register(ifp);
 
 	aprint_verbose("shmif%d: Ethernet address %s\n",
 	    unit, ether_sprintf(enaddr));
@@ -230,7 +228,7 @@ initbackend(struct shmif_sc *sc, int memfd)
 	    && sc->sc_busmem->shm_magic != SHMIF_MAGIC) {
 		printf("bus is not magical");
 		rumpuser_unmap(sc->sc_busmem, BUSMEM_SIZE);
-		return ENOEXEC;
+		return ENOEXEC; 
 	}
 
 	/*
@@ -374,6 +372,7 @@ shmif_unclone(struct ifnet *ifp)
 
 	shmif_stop(ifp, 1);
 	if_down(ifp);
+	finibackend(sc);
 
 	mutex_enter(&sc->sc_mtx);
 	sc->sc_dying = true;
@@ -383,13 +382,6 @@ shmif_unclone(struct ifnet *ifp)
 	if (sc->sc_rcvl)
 		kthread_join(sc->sc_rcvl);
 	sc->sc_rcvl = NULL;
-
-	/*
-	 * Need to be called after the kthread left, otherwise closing kqueue
-	 * (sc_kq) hangs sometimes perhaps because of a race condition between
-	 * close and kevent in the kthread on the kqueue.
-	 */
-	finibackend(sc);
 
 	vmem_xfree(shmif_units, sc->sc_unit+1, 1);
 
@@ -691,7 +683,8 @@ shmif_rcv(void *arg)
 		    shmif_nextpktoff(busmem, busmem->shm_last)
 		     == sc->sc_nextpacket) {
 			shmif_unlockbus(busmem);
-			error = rumpcomp_shmif_watchwait(sc->sc_kq);
+			error = 0;
+			rumpcomp_shmif_watchwait(sc->sc_kq);
 			if (__predict_false(error))
 				printf("shmif_rcv: wait failed %d\n", error);
 			membar_consumer();
@@ -748,7 +741,7 @@ shmif_rcv(void *arg)
 		}
 
 		m->m_len = m->m_pkthdr.len = sp.sp_len;
-		m_set_rcvif(m, ifp);
+		m->m_pkthdr.rcvif = ifp;
 
 		/*
 		 * Test if we want to pass the packet upwards
@@ -769,12 +762,10 @@ shmif_rcv(void *arg)
 		}
 
 		if (passup) {
-			int bound;
+			ifp->if_ipackets++;
 			KERNEL_LOCK(1, NULL);
-			/* Prevent LWP migrations between CPUs for psref(9) */
-			bound = curlwp_bind();
-			if_input(ifp, m);
-			curlwp_bindx(bound);
+			bpf_mtap(ifp, m);
+			ifp->if_input(ifp, m);
 			KERNEL_UNLOCK_ONE(NULL);
 			m = NULL;
 		}

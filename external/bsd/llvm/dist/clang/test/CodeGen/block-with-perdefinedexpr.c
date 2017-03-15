@@ -5,7 +5,6 @@ void syslog(const char *, ...);
 
 void handler( );
 
-__attribute__((used))
 static void (^spd)() = ^()
 {
  handler( ^(){ syslog("%s", __FUNCTION__); } );

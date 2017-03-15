@@ -1,11 +1,14 @@
-# $NetBSD: Makefile.inc,v 1.17 2015/12/17 22:31:01 christos Exp $
+# $NetBSD: Makefile.inc,v 1.16 2014/01/05 19:49:57 joerg Exp $
 
 .include <bsd.own.mk>
 
 
 .if (${HOSTPROG:U} == "")
+CPPFLAGS+=	-DHAVE_FGETLN -DHAVE_MMAP -DHAVE_GETSUBOPT \
+		-DHAVE_STRCASESTR -DHAVE_STRLCAT -DHAVE_STRLCPY \
+		-DHAVE_STRNLEN -DHAVE_STRPTIME -DHAVE_STRSEP
 VERSION!=	cd ${.PARSEDIR}/dist && ${MAKE} -V VERSION
-CPPFLAGS+=	-DVERSION=\"${VERSION}\" -I${DISTDIR}/../include
+CPPFLAGS+=	-DVERSION=\"${VERSION}\"
 .endif
 
 DISTDIR:=	${.PARSEDIR}/dist

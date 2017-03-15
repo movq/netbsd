@@ -1,4 +1,4 @@
-/*	$NetBSD: aclconf.c,v 1.9 2016/05/26 16:50:00 christos Exp $	*/
+/*	$NetBSD: aclconf.c,v 1.7.2.2 2016/10/14 12:01:33 martin Exp $	*/
 
 /*
  * Copyright (C) 2004-2016  Internet Systems Consortium, Inc. ("ISC")

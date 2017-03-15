@@ -15,14 +15,11 @@
 #ifndef LLVM_TRANSFORMS_IPO_PASSMANAGERBUILDER_H
 #define LLVM_TRANSFORMS_IPO_PASSMANAGERBUILDER_H
 
-#include <functional>
-#include <memory>
-#include <string>
 #include <vector>
 
 namespace llvm {
 class Pass;
-class TargetLibraryInfoImpl;
+class TargetLibraryInfo;
 class TargetMachine;
 
 // The old pass manager infrastructure is hidden in a legacy namespace now.
@@ -30,6 +27,8 @@ namespace legacy {
 class FunctionPassManager;
 class PassManagerBase;
 }
+using legacy::FunctionPassManager;
+using legacy::PassManagerBase;
 
 /// PassManagerBuilder - This class is used to set up a standard optimization
 /// sequence for languages like C and C++, allowing some APIs to customize the
@@ -59,9 +58,8 @@ class PassManagerBuilder {
 public:
   /// Extensions are passed the builder itself (so they can see how it is
   /// configured) as well as the pass manager to add stuff to.
-  typedef std::function<void(const PassManagerBuilder &Builder,
-                             legacy::PassManagerBase &PM)>
-      ExtensionFn;
+  typedef void (*ExtensionFn)(const PassManagerBuilder &Builder,
+                              PassManagerBase &PM);
   enum ExtensionPointTy {
     /// EP_EarlyAsPossible - This extension point allows adding passes before
     /// any other transformations, allowing them to see the code as it is coming
@@ -85,11 +83,6 @@ public:
     /// run after everything else.
     EP_OptimizerLast,
 
-    /// EP_VectorizerStart - This extension point allows adding optimization
-    /// passes before the vectorizer and other highly target specific
-    /// optimization passes are executed.
-    EP_VectorizerStart,
-
     /// EP_EnabledOnOptLevel0 - This extension point allows adding passes that
     /// should not be disabled by O0 optimization level. The passes will be
     /// inserted after the inlining pass.
@@ -99,11 +92,6 @@ public:
     /// peephole optimizations similar to the instruction combiner. These passes
     /// will be inserted after each instance of the instruction combiner pass.
     EP_Peephole,
-
-    /// EP_CGSCCOptimizerLate - This extension point allows adding CallGraphSCC
-    /// passes at the end of the main CallGraphSCC passes and before any
-    /// function simplification passes run by CGPassManager.
-    EP_CGSCCOptimizerLate,
   };
 
   /// The Optimization Level - Specify the basic optimization level.
@@ -117,7 +105,7 @@ public:
   /// LibraryInfo - Specifies information about the runtime library for the
   /// optimizer.  If this is non-null, it is added to both the function and
   /// per-module pass pipeline.
-  TargetLibraryInfoImpl *LibraryInfo;
+  TargetLibraryInfo *LibraryInfo;
 
   /// Inliner - Specifies the inliner to use.  If this is non-null, it is
   /// added to the per-module passes.
@@ -131,27 +119,15 @@ public:
   bool LoopVectorize;
   bool RerollLoops;
   bool LoadCombine;
-  bool NewGVN;
   bool DisableGVNLoadPRE;
   bool VerifyInput;
   bool VerifyOutput;
+  bool StripDebug;
   bool MergeFunctions;
-  bool PrepareForLTO;
-  bool PrepareForThinLTO;
-  bool PerformThinLTO;
-
-  /// Enable profile instrumentation pass.
-  bool EnablePGOInstrGen;
-  /// Profile data file name that the instrumentation will be written to.
-  std::string PGOInstrGen;
-  /// Path of the profile data file.
-  std::string PGOInstrUse;
-  /// Path of the sample Profile data file.
-  std::string PGOSampleUse;
 
 private:
   /// ExtensionList - This is list of all of the extensions that are registered.
-  std::vector<std::pair<ExtensionPointTy, ExtensionFn>> Extensions;
+  std::vector<std::pair<ExtensionPointTy, ExtensionFn> > Extensions;
 
 public:
   PassManagerBuilder();
@@ -163,25 +139,19 @@ public:
   void addExtension(ExtensionPointTy Ty, ExtensionFn Fn);
 
 private:
-  void addExtensionsToPM(ExtensionPointTy ETy,
-                         legacy::PassManagerBase &PM) const;
-  void addInitialAliasAnalysisPasses(legacy::PassManagerBase &PM) const;
-  void addLTOOptimizationPasses(legacy::PassManagerBase &PM);
-  void addLateLTOOptimizationPasses(legacy::PassManagerBase &PM);
-  void addPGOInstrPasses(legacy::PassManagerBase &MPM);
-  void addFunctionSimplificationPasses(legacy::PassManagerBase &MPM);
-  void addInstructionCombiningPass(legacy::PassManagerBase &MPM) const;
+  void addExtensionsToPM(ExtensionPointTy ETy, PassManagerBase &PM) const;
+  void addInitialAliasAnalysisPasses(PassManagerBase &PM) const;
+  void addLTOOptimizationPasses(PassManagerBase &PM);
 
 public:
   /// populateFunctionPassManager - This fills in the function pass manager,
   /// which is expected to be run on each function immediately as it is
   /// generated.  The idea is to reduce the size of the IR in memory.
-  void populateFunctionPassManager(legacy::FunctionPassManager &FPM);
+  void populateFunctionPassManager(FunctionPassManager &FPM);
 
   /// populateModulePassManager - This sets up the primary pass manager.
-  void populateModulePassManager(legacy::PassManagerBase &MPM);
-  void populateLTOPassManager(legacy::PassManagerBase &PM);
-  void populateThinLTOPassManager(legacy::PassManagerBase &PM);
+  void populateModulePassManager(PassManagerBase &MPM);
+  void populateLTOPassManager(PassManagerBase &PM, TargetMachine *TM = nullptr);
 };
 
 /// Registers a function for adding a standard set of passes.  This should be
@@ -191,7 +161,7 @@ public:
 struct RegisterStandardPasses {
   RegisterStandardPasses(PassManagerBuilder::ExtensionPointTy Ty,
                          PassManagerBuilder::ExtensionFn Fn) {
-    PassManagerBuilder::addGlobalExtension(Ty, std::move(Fn));
+    PassManagerBuilder::addGlobalExtension(Ty, Fn);
   }
 };
 

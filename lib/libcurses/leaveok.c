@@ -1,4 +1,4 @@
-/*	$NetBSD: leaveok.c,v 1.7 2017/01/06 13:53:18 roy Exp $	*/
+/*	$NetBSD: leaveok.c,v 1.5 2008/04/28 20:23:01 martin Exp $	*/
 
 /*-
  * Copyright (c) 1999 The NetBSD Foundation, Inc.
@@ -31,7 +31,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: leaveok.c,v 1.7 2017/01/06 13:53:18 roy Exp $");
+__RCSID("$NetBSD: leaveok.c,v 1.5 2008/04/28 20:23:01 martin Exp $");
 #endif				/* not lint */
 
 #include "curses.h"
@@ -48,16 +48,5 @@ leaveok(WINDOW *win, bool bf)
 		win->flags |= __LEAVEOK;
 	else
 		win->flags &= ~__LEAVEOK;
-	return OK;
-}
-
-/*
- * is_leaveok --
- *	Return true if window is set for leaveok.
- */
-bool
-is_leaveok(const WINDOW *win)
-{
-
-	return win->flags & __LEAVEOK ? true : false;
+	return (OK);
 }

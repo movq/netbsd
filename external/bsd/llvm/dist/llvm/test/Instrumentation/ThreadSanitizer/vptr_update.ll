@@ -36,5 +36,5 @@ entry:
 }
 
 !0 = !{!2, !2, i64 0}
-!1 = !{!"Simple C/C++ TBAA"}
+!1 = !{!"Simple C/C++ TBAA", null}
 !2 = !{!"vtable pointer", !1}

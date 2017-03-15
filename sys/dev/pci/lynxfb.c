@@ -1,4 +1,4 @@
-/*	$NetBSD: lynxfb.c,v 1.5 2016/07/10 21:40:45 jmcneill Exp $	*/
+/*	$NetBSD: lynxfb.c,v 1.4.16.1 2016/07/11 10:39:42 martin Exp $	*/
 /*	$OpenBSD: smfb.c,v 1.13 2011/07/21 20:36:12 miod Exp $	*/
 
 /*
@@ -26,7 +26,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: lynxfb.c,v 1.5 2016/07/10 21:40:45 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: lynxfb.c,v 1.4.16.1 2016/07/11 10:39:42 martin Exp $");
 
 #include "opt_wsemul.h"
 

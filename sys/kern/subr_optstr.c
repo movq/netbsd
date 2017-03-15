@@ -1,4 +1,4 @@
-/*	$NetBSD: subr_optstr.c,v 1.6 2016/05/30 11:24:40 martin Exp $	*/
+/*	$NetBSD: subr_optstr.c,v 1.5 2008/04/28 20:24:04 martin Exp $	*/
 
 /*-
  * Copyright (c) 2006 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: subr_optstr.c,v 1.6 2016/05/30 11:24:40 martin Exp $");
+__KERNEL_RCSID(0, "$NetBSD: subr_optstr.c,v 1.5 2008/04/28 20:24:04 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/optstr.h>
@@ -51,7 +51,7 @@ optstr_get(const char *optstr, const char *key, char *buf, size_t bufsize)
 	found = false;
 
 	/* Skip any initial spaces until we find a word. */
-	while (*optstr == ' ')
+	while (*optstr == ' ' && *optstr != '\0')
 		optstr++;
 
 	/* Search for the given key within the option string. */
@@ -73,7 +73,7 @@ optstr_get(const char *optstr, const char *key, char *buf, size_t bufsize)
 				optstr++;
 
 			/* And now skip until next word. */
-			while (*optstr == ' ')
+			while (*optstr == ' ' && *optstr != '\0')
 				optstr++;
 		}
 	}

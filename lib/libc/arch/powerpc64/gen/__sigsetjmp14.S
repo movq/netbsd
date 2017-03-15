@@ -1,10 +1,10 @@
-/*	$NetBSD: __sigsetjmp14.S,v 1.3 2014/08/23 02:24:22 matt Exp $	*/
+/*	$NetBSD: __sigsetjmp14.S,v 1.2.24.1 2015/02/04 22:00:24 martin Exp $	*/
 
 #include "SYS.h"
 
 #if defined(LIBC_SCCS)
 	.text
-	.asciz "$NetBSD: __sigsetjmp14.S,v 1.3 2014/08/23 02:24:22 matt Exp $"
+	.asciz "$NetBSD: __sigsetjmp14.S,v 1.2.24.1 2015/02/04 22:00:24 martin Exp $"
 #endif
 
 ENTRY(__sigsetjmp14)

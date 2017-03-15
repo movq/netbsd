@@ -1,4 +1,4 @@
-/* $NetBSD: if_bce.c,v 1.44 2016/12/15 09:28:05 ozaki-r Exp $	 */
+/* $NetBSD: if_bce.c,v 1.39 2014/08/10 16:44:36 tls Exp $	 */
 
 /*
  * Copyright (c) 2003 Clifford Wright. All rights reserved.
@@ -35,7 +35,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_bce.c,v 1.44 2016/12/15 09:28:05 ozaki-r Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_bce.c,v 1.39 2014/08/10 16:44:36 tls Exp $");
 
 #include "vlan.h"
 
@@ -55,7 +55,7 @@ __KERNEL_RCSID(0, "$NetBSD: if_bce.c,v 1.44 2016/12/15 09:28:05 ozaki-r Exp $");
 #include <net/if_ether.h>
 
 #include <net/bpf.h>
-#include <sys/rndsource.h>
+#include <sys/rnd.h>
 
 #include <dev/pci/pcireg.h>
 #include <dev/pci/pcivar.h>
@@ -445,7 +445,6 @@ bce_attach(device_t parent, device_t self, void *aux)
 
 	/* Attach the interface */
 	if_attach(ifp);
-	if_deferred_start_init(ifp, NULL);
 	sc->enaddr[0] = bus_space_read_1(sc->bce_btag, sc->bce_bhandle,
 	    BCE_MAGIC_ENET0);
 	sc->enaddr[1] = bus_space_read_1(sc->bce_btag, sc->bce_bhandle,
@@ -714,7 +713,7 @@ bce_intr(void *xsc)
 			bce_init(ifp);
 		rnd_add_uint32(&sc->rnd_source, intstatus);
 		/* Try to get more packets going. */
-		if_schedule_deferred_start(ifp);
+		bce_start(ifp);
 	}
 	return (handled);
 }
@@ -805,11 +804,18 @@ bce_rxintr(struct bce_softc *sc)
 			}
 		}
 
-		m_set_rcvif(m, ifp);
+		m->m_pkthdr.rcvif = ifp;
 		m->m_pkthdr.len = m->m_len = len;
+		ifp->if_ipackets++;
+
+		/*
+		 * Pass this up to any BPF listeners, but only
+		 * pass it up the stack if it's for us.
+		 */
+		bpf_mtap(ifp, m);
 
 		/* Pass it on. */
-		if_percpuq_enqueue(ifp->if_percpuq, m);
+		(*ifp->if_input) (ifp, m);
 
 		/* re-check current in case it changed */
 		curr = (bus_space_read_4(sc->bce_btag, sc->bce_bhandle,

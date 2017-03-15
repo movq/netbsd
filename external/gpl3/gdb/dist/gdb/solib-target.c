@@ -1,6 +1,6 @@
 /* Definitions for targets which report shared library events.
 
-   Copyright (C) 2007-2016 Free Software Foundation, Inc.
+   Copyright (C) 2007-2014 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -25,6 +25,8 @@
 #include "target.h"
 #include "vec.h"
 #include "solib-target.h"
+
+#include <string.h>
 
 /* Private data for each loaded library.  */
 struct lm_info
@@ -80,10 +82,9 @@ library_list_start_segment (struct gdb_xml_parser *parser,
 			    const struct gdb_xml_element *element,
 			    void *user_data, VEC(gdb_xml_value_s) *attributes)
 {
-  VEC(lm_info_p) **list = (VEC(lm_info_p) **) user_data;
+  VEC(lm_info_p) **list = user_data;
   struct lm_info *last = VEC_last (lm_info_p, *list);
-  ULONGEST *address_p
-    = (ULONGEST *) xml_find_attribute (attributes, "address")->value;
+  ULONGEST *address_p = xml_find_attribute (attributes, "address")->value;
   CORE_ADDR address = (CORE_ADDR) *address_p;
 
   if (last->section_bases != NULL)
@@ -98,10 +99,9 @@ library_list_start_section (struct gdb_xml_parser *parser,
 			    const struct gdb_xml_element *element,
 			    void *user_data, VEC(gdb_xml_value_s) *attributes)
 {
-  VEC(lm_info_p) **list = (VEC(lm_info_p) **) user_data;
+  VEC(lm_info_p) **list = user_data;
   struct lm_info *last = VEC_last (lm_info_p, *list);
-  ULONGEST *address_p
-    = (ULONGEST *) xml_find_attribute (attributes, "address")->value;
+  ULONGEST *address_p = xml_find_attribute (attributes, "address")->value;
   CORE_ADDR address = (CORE_ADDR) *address_p;
 
   if (last->segment_bases != NULL)
@@ -118,10 +118,9 @@ library_list_start_library (struct gdb_xml_parser *parser,
 			    const struct gdb_xml_element *element,
 			    void *user_data, VEC(gdb_xml_value_s) *attributes)
 {
-  VEC(lm_info_p) **list = (VEC(lm_info_p) **) user_data;
-  struct lm_info *item = XCNEW (struct lm_info);
-  const char *name
-    = (const char *) xml_find_attribute (attributes, "name")->value;
+  VEC(lm_info_p) **list = user_data;
+  struct lm_info *item = XZALLOC (struct lm_info);
+  const char *name = xml_find_attribute (attributes, "name")->value;
 
   item->name = xstrdup (name);
   VEC_safe_push (lm_info_p, *list, item);
@@ -132,7 +131,7 @@ library_list_end_library (struct gdb_xml_parser *parser,
 			  const struct gdb_xml_element *element,
 			  void *user_data, const char *body_text)
 {
-  VEC(lm_info_p) **list = (VEC(lm_info_p) **) user_data;
+  VEC(lm_info_p) **list = user_data;
   struct lm_info *lm_info = VEC_last (lm_info_p, *list);
 
   if (lm_info->segment_bases == NULL
@@ -149,18 +148,12 @@ library_list_start_list (struct gdb_xml_parser *parser,
 			 const struct gdb_xml_element *element,
 			 void *user_data, VEC(gdb_xml_value_s) *attributes)
 {
-  struct gdb_xml_value *version = xml_find_attribute (attributes, "version");
+  char *version = xml_find_attribute (attributes, "version")->value;
 
-  /* #FIXED attribute may be omitted, Expat returns NULL in such case.  */
-  if (version != NULL)
-    {
-      const char *string = (const char *) version->value;
-
-      if (strcmp (string, "1.0") != 0)
-	gdb_xml_error (parser,
-		       _("Library list has unsupported version \"%s\""),
-		       version);
-    }
+  if (strcmp (version, "1.0") != 0)
+    gdb_xml_error (parser,
+		   _("Library list has unsupported version \"%s\""),
+		   version);
 }
 
 /* Discard the constructed library list.  */
@@ -168,7 +161,7 @@ library_list_start_list (struct gdb_xml_parser *parser,
 static void
 solib_target_free_library_list (void *p)
 {
-  VEC(lm_info_p) **result = (VEC(lm_info_p) **) p;
+  VEC(lm_info_p) **result = p;
   struct lm_info *info;
   int ix;
 
@@ -219,7 +212,7 @@ static const struct gdb_xml_element library_list_children[] = {
 };
 
 static const struct gdb_xml_attribute library_list_attributes[] = {
-  { "version", GDB_XML_AF_OPTIONAL, NULL, NULL },
+  { "version", GDB_XML_AF_NONE, NULL, NULL },
   { NULL, GDB_XML_AF_NONE, NULL, NULL }
 };
 
@@ -281,7 +274,7 @@ solib_target_current_sos (void)
   /* Build a struct so_list for each entry on the list.  */
   for (ix = 0; VEC_iterate (lm_info_p, library_list, ix, info); ix++)
     {
-      new_solib = XCNEW (struct so_list);
+      new_solib = XZALLOC (struct so_list);
       strncpy (new_solib->so_name, info->name, SO_NAME_MAX_PATH_SIZE - 1);
       new_solib->so_name[SO_NAME_MAX_PATH_SIZE - 1] = '\0';
       strncpy (new_solib->so_original_name, info->name,
@@ -348,9 +341,7 @@ solib_target_relocate_section_addresses (struct so_list *so,
     {
       int num_sections = gdb_bfd_count_sections (so->abfd);
 
-      so->lm_info->offsets
-	= ((struct section_offsets *)
-	   xzalloc (SIZEOF_N_SECTION_OFFSETS (num_sections)));
+      so->lm_info->offsets = xzalloc (SIZEOF_N_SECTION_OFFSETS (num_sections));
 
       if (so->lm_info->section_bases)
 	{

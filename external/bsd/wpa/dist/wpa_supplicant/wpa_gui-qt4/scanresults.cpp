@@ -15,7 +15,7 @@
 #include "scanresultsitem.h"
 
 
-ScanResults::ScanResults(QWidget *parent, const char *, bool, Qt::WindowFlags)
+ScanResults::ScanResults(QWidget *parent, const char *, bool, Qt::WFlags)
 	: QDialog(parent)
 {
 	setupUi(this);
@@ -27,8 +27,8 @@ ScanResults::ScanResults(QWidget *parent, const char *, bool, Qt::WindowFlags)
 		SLOT(bssSelected(QTreeWidgetItem *)));
 
 	wpagui = NULL;
-	scanResultsWidget->setItemsExpandable(false);
-	scanResultsWidget->setRootIsDecorated(false);
+	scanResultsWidget->setItemsExpandable(FALSE);
+	scanResultsWidget->setRootIsDecorated(FALSE);
 	scanResultsWidget->setItemDelegate(new SignalBar(scanResultsWidget));
 }
 

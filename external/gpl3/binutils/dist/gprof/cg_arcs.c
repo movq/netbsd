@@ -245,7 +245,7 @@ propagate_time (Sym *parent)
  * its members.
  */
 static void
-cycle_time (void)
+cycle_time ()
 {
   Sym *member, *cyc;
 
@@ -269,7 +269,7 @@ cycle_time (void)
 
 
 static void
-cycle_link (void)
+cycle_link ()
 {
   Sym *sym, *cyc, *member;
   Arc *arc;

@@ -1,7 +1,7 @@
-/*	$NetBSD: swapctl.c,v 1.40 2015/10/11 23:58:16 mrg Exp $	*/
+/*	$NetBSD: swapctl.c,v 1.39 2013/01/01 19:01:10 dsl Exp $	*/
 
 /*
- * Copyright (c) 1996, 1997, 1999, 2015 Matthew R. Green
+ * Copyright (c) 1996, 1997, 1999 Matthew R. Green
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -64,7 +64,7 @@
 #include <sys/cdefs.h>
 
 #ifndef lint
-__RCSID("$NetBSD: swapctl.c,v 1.40 2015/10/11 23:58:16 mrg Exp $");
+__RCSID("$NetBSD: swapctl.c,v 1.39 2013/01/01 19:01:10 dsl Exp $");
 #endif
 
 
@@ -151,7 +151,7 @@ static int	pri;		/* uses 0 as default pri */
 static	void change_priority(char *);
 static	int  add_swap(char *, int);
 static	int  delete_swap(char *);
-static	int set_dumpdev1(char *);
+static	void set_dumpdev1(char *);
 static	void set_dumpdev(char *);
 static	int get_dumpdev(void);
 __dead static	void do_fstab(int);
@@ -475,10 +475,9 @@ add_swap(char *path, int priority)
 
 	if (swapctl(SWAP_ON, spec, priority) < 0) {
 oops:
-		warn("%s", path);
-		return 0;
+		err(1, "%s", path);
 	}
-	return 1;
+	return (1);
 }
 
 /*
@@ -490,23 +489,19 @@ delete_swap(char *path)
 	char buf[MAXPATHLEN];
 	char *spec;
 
-	if (getfsspecname(buf, sizeof(buf), path) == NULL) {
-		warn("%s", path);
-		return 0;
-	}
+	if (getfsspecname(buf, sizeof(buf), path) == NULL)
+		err(1, "%s", path);
 	spec = buf;
 
 	if (nflag)
 		return 1;
 
-	if (swapctl(SWAP_OFF, spec, pri) < 0) {
-		warn("%s", path);
-		return 0;
-	}
-	return 1;
+	if (swapctl(SWAP_OFF, spec, pri) < 0) 
+		err(1, "%s", path);
+	return (1);
 }
 
-static int
+static void
 set_dumpdev1(char *spec)
 {
 	int rv = 0;
@@ -519,11 +514,9 @@ set_dumpdev1(char *spec)
 	}
 
 	if (rv == -1)
-		warn("could not set dump device to %s", spec);
+		err(1, "could not set dump device to %s", spec);
 	else
 		printf("%s: setting dump device to %s\n", getprogname(), spec);
-
-	return rv == -1 ? 0 : 1;
 }
 
 static void
@@ -536,8 +529,7 @@ set_dumpdev(char *path)
 		err(1, "%s", path);
 	spec = buf;
 
-	if (! set_dumpdev1(spec))
-		exit(1);
+	return set_dumpdev1(spec);
 }
 
 static int

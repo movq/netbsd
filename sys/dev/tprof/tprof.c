@@ -1,4 +1,4 @@
-/*	$NetBSD: tprof.c,v 1.13 2015/08/20 14:40:18 christos Exp $	*/
+/*	$NetBSD: tprof.c,v 1.12 2014/07/25 08:10:39 dholland Exp $	*/
 
 /*-
  * Copyright (c)2008,2009,2010 YAMAMOTO Takashi,
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: tprof.c,v 1.13 2015/08/20 14:40:18 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: tprof.c,v 1.12 2014/07/25 08:10:39 dholland Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -44,8 +44,6 @@ __KERNEL_RCSID(0, "$NetBSD: tprof.c,v 1.13 2015/08/20 14:40:18 christos Exp $");
 
 #include <dev/tprof/tprof.h>
 #include <dev/tprof/tprof_ioctl.h>
-
-#include "ioconf.h"
 
 /*
  * locking order:
@@ -503,6 +501,8 @@ tprof_backend_unregister(const char *name)
 }
 
 /* -------------------- cdevsw interfaces */
+
+void tprofattach(int);
 
 static int
 tprof_open(dev_t dev, int flags, int type, struct lwp *l)

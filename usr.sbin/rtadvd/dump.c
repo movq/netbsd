@@ -1,4 +1,4 @@
-/*	$NetBSD: dump.c,v 1.14 2016/06/15 13:57:39 riastradh Exp $	*/
+/*	$NetBSD: dump.c,v 1.11 2013/07/09 09:34:59 roy Exp $	*/
 /*	$KAME: dump.c,v 1.34 2004/06/14 05:35:59 itojun Exp $	*/
 
 /*
@@ -59,7 +59,6 @@
 #include "timer.h"
 #include "if.h"
 #include "dump.h"
-#include "prog_ops.h"
 
 static FILE *fp;
 
@@ -100,9 +99,9 @@ if_dump(void)
 	struct dnssl_domain *dnsd;
 	char *p, len;
 	char prefixbuf[INET6_ADDRSTRLEN];
-	struct timespec now;
+	struct timeval now;
 
-	prog_clock_gettime(CLOCK_MONOTONIC, &now); /* XXX: unused in most cases */
+	gettimeofday(&now, NULL); /* XXX: unused in most cases */
 	TAILQ_FOREACH(rai, &ralist, next) {
 		fprintf(fp, "%s:\n", rai->ifname);
 
@@ -113,11 +112,11 @@ if_dump(void)
 		if (rai->lastsent.tv_sec) {
 			/* note that ctime() appends CR by itself */
 			fprintf(fp, "  Last RA sent: %s",
-				ctime(&rai->lastsent.tv_sec));
+				ctime((time_t *)&rai->lastsent.tv_sec));
 		}
 		if (rai->timer) {
 			fprintf(fp, "  Next RA will be sent: %s",
-				ctime(&rai->timer->tm.tv_sec));
+				ctime((time_t *)&rai->timer->tm.tv_sec));
 		}
 		else
 			fprintf(fp, "  RA timer is stopped");
@@ -199,7 +198,7 @@ if_dump(void)
 				pfx->autoconfflg ? "A" : "",
 				"");
 			if (pfx->timer) {
-				struct timespec *rest;
+				struct timeval *rest;
 
 				rest = rtadvd_timer_rest(pfx->timer);
 				if (rest) { /* XXX: what if not? */

@@ -1,4 +1,4 @@
-/*	$NetBSD: ntp_random.c,v 1.4 2016/01/08 21:35:38 christos Exp $	*/
+/*	$NetBSD: ntp_random.c,v 1.1.1.2.4.1 2014/12/24 00:05:20 riz Exp $	*/
 
 /*
  * Copyright (c) 1983, 1993

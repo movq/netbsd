@@ -1,4 +1,4 @@
-/*	$NetBSD: h_db.c,v 1.3 2016/09/24 21:18:22 christos Exp $	*/
+/*	$NetBSD: h_db.c,v 1.1 2011/01/07 15:05:58 pgoyette Exp $	*/
 
 /*-
  * Copyright (c) 1992, 1993, 1994
@@ -39,7 +39,7 @@ __COPYRIGHT("@(#) Copyright (c) 1992, 1993, 1994\
 #if 0
 static char sccsid[] = "@(#)dbtest.c	8.17 (Berkeley) 9/1/94";
 #else
-__RCSID("$NetBSD: h_db.c,v 1.3 2016/09/24 21:18:22 christos Exp $");
+__RCSID("$NetBSD: h_db.c,v 1.1 2011/01/07 15:05:58 pgoyette Exp $");
 #endif
 #endif /* not lint */
 
@@ -57,13 +57,12 @@ __RCSID("$NetBSD: h_db.c,v 1.3 2016/09/24 21:18:22 christos Exp $");
 #include <unistd.h>
 #include <err.h>
 #include <db.h>
-#include "btree.h"
 
 enum S { COMMAND, COMPARE, GET, PUT, REMOVE, SEQ, SEQFLAG, KEY, DATA };
 
 static void	 compare(DBT *, DBT *);
 static DBTYPE	 dbtype(const char *);
-static void	 dump(DB *, int, int);
+static void	 dump(DB *, int);
 static void	 get(DB *, DBT *);
 static void	 getdata(DB *, DBT *, DBT *);
 static void	 put(DB *, DBT *, DBT *);
@@ -74,7 +73,6 @@ static void	*rfile(char *, size_t *);
 static void	 seq(DB *, DBT *);
 static u_int	 setflags(char *);
 static void	*setinfo(DBTYPE, char *);
-static void	 unlinkpg(DB *);
 static void	 usage(void) __attribute__((__noreturn__));
 static void	*xcopy(void *, size_t);
 static void	 chkcmd(enum S);
@@ -84,7 +82,6 @@ static void	 chkkey(enum S);
 #ifdef STATISTICS
 extern void __bt_stat(DB *);
 #endif
-extern int __bt_relink(BTREE *, PAGE *);
 
 static DBTYPE type;			/* Database type. */
 static void *infop;			/* Iflags. */
@@ -318,13 +315,7 @@ lkey:			switch (command) {
 			}
 			break;
 		case 'o':
-			dump(dbp, p[1] == 'r', 0);
-			break;
-		case 'O':
-			dump(dbp, p[1] == 'r', 1);
-			break;
-		case 'u':
-			unlinkpg(dbp);
+			dump(dbp, p[1] == 'r');
 			break;
 		default:
 			errx(1, "line %zu: %s: unknown command character",
@@ -492,17 +483,17 @@ seq(DB *dbp, DBT *kp)
 }
 
 static void
-dump(DB *dbp, int rev, int recurse)
+dump(DB *dbp, int rev)
 {
 	DBT key, data;
 	int xflags, nflags;
 
 	if (rev) {
 		xflags = R_LAST;
-		nflags = recurse ? R_RPREV : R_PREV;
+		nflags = R_PREV;
 	} else {
 		xflags = R_FIRST;
-		nflags = recurse ? R_RNEXT : R_NEXT;
+		nflags = R_NEXT;
 	}
 	for (;; xflags = nflags)
 		switch (dbp->seq(dbp, &key, &data, xflags)) {
@@ -520,40 +511,6 @@ dump(DB *dbp, int rev, int recurse)
 done:	return;
 }
 	
-void
-unlinkpg(DB *dbp)
-{
-	BTREE *t = dbp->internal;
-	PAGE *h = NULL;
-	pgno_t pg;
-
-	for (pg = P_ROOT; pg < t->bt_mp->npages;
-	     mpool_put(t->bt_mp, h, 0), pg++) {
-		if ((h = mpool_get(t->bt_mp, pg, 0)) == NULL)
-			break;
-		/* Look for a nonempty leaf page that has both left
-		 * and right siblings. */
-		if (h->prevpg == P_INVALID || h->nextpg == P_INVALID)
-			continue;
-		if (NEXTINDEX(h) == 0)
-			continue;
-		if ((h->flags & (P_BLEAF | P_RLEAF)))
-			break;
-	}
-	if (h == NULL || pg == t->bt_mp->npages) {
-		errx(1, "%s: no appropriate page found", __func__);
-		return;
-	}
-	if (__bt_relink(t, h) != 0) {
-		perror("unlinkpg");
-		goto cleanup;
-	}
-	h->prevpg = P_INVALID;
-	h->nextpg = P_INVALID;
-cleanup:
-	mpool_put(t->bt_mp, h, MPOOL_DIRTY);
-}
-
 static u_int
 setflags(char *s)
 {
@@ -768,7 +725,7 @@ static void
 usage(void)
 {
 	(void)fprintf(stderr,
-	    "Usage: %s [-lu] [-f file] [-i info] [-o file] [-O file] "
-		"type script\n", getprogname());
+	    "Usage: %s [-l] [-f file] [-i info] [-o file] type script\n",
+	    getprogname());
 	exit(1);
 }

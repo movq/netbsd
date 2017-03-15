@@ -1,5 +1,5 @@
-/*	$NetBSD: ulfs_extattr.c,v 1.14 2016/11/09 05:44:42 dholland Exp $	*/
-/*  from NetBSD: ulfs_extattr.c,v 1.48 2016/11/09 05:08:35 dholland Exp  */
+/*	$NetBSD: ulfs_extattr.c,v 1.7 2014/02/07 15:29:23 hannken Exp $	*/
+/*  from NetBSD: ufs_extattr.c,v 1.41 2012/12/08 13:42:36 manu Exp  */
 
 /*-
  * Copyright (c) 1999-2002 Robert N. M. Watson
@@ -49,7 +49,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ulfs_extattr.c,v 1.14 2016/11/09 05:44:42 dholland Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ulfs_extattr.c,v 1.7 2014/02/07 15:29:23 hannken Exp $");
 
 #ifdef _KERNEL_OPT
 #include "opt_lfs.h"
@@ -168,13 +168,7 @@ static void
 ulfs_extattr_uepm_lock(struct ulfsmount *ump)
 {
 
-	/*
-	 * XXX This needs to be recursive for the following reasons:
-	 *   - it is taken in ulfs_extattr_vnode_inactive
-	 *   - which is called from VOP_INACTIVE
-	 *   - which can be triggered by any vrele, vput, or vn_close
-	 *   - several of these can happen while it's held
-	 */
+	/* XXX Why does this need to be recursive? */
 	if (mutex_owned(&ump->um_extattr.uepm_lock)) {
 		ump->um_extattr.uepm_lockcnt++;
 		return;
@@ -216,9 +210,9 @@ ulfs_extattr_valid_attrname(int attrnamespace, const char *attrname)
 /*
  * Autocreate an attribute storage
  */
-static int
+static struct ulfs_extattr_list_entry *
 ulfs_extattr_autocreate_attr(struct vnode *vp, int attrnamespace,
-    const char *attrname, struct lwp *l, struct ulfs_extattr_list_entry **uelep)
+    const char *attrname, struct lwp *l)
 {
 	struct mount *mp = vp->v_mount;
 	struct ulfsmount *ump = VFSTOULFS(mp);
@@ -252,19 +246,9 @@ ulfs_extattr_autocreate_attr(struct vnode *vp, int attrnamespace,
 		break;
 	default:
 		PNBUF_PUT(path);
-		*uelep = NULL;
-		return EINVAL;
+		return NULL;
 		break;
 	}
-
-	/*
-	 * Release extended attribute mount lock, otherwise
-	 * we can deadlock with another thread that would lock 
-	 * vp after we unlock it below, and call 
-	 * ulfs_extattr_uepm_lock(ump), for instance
-	 * in ulfs_getextattr().
-	 */
-	ulfs_extattr_uepm_unlock(ump);
 
 	/*
 	 * XXX unlock/lock should only be done when setting extattr
@@ -277,12 +261,7 @@ ulfs_extattr_autocreate_attr(struct vnode *vp, int attrnamespace,
 	pb = pathbuf_create(path);
 	NDINIT(&nd, CREATE, LOCKPARENT, pb);
 	
-	/*
-	 * Since we do not hold ulfs_extattr_uepm_lock anymore,
-	 * another thread may race with us for backend creation,
-	 * but only one can succeed here thanks to O_EXCL
-	 */
-	error = vn_open(&nd, O_CREAT|O_EXCL|O_RDWR, 0600);
+	error = vn_open(&nd, O_CREAT|O_RDWR, 0600);
 
 	/*
 	 * Reacquire the lock on the vnode
@@ -290,13 +269,10 @@ ulfs_extattr_autocreate_attr(struct vnode *vp, int attrnamespace,
 	KASSERT(VOP_ISLOCKED(vp) == 0);
 	vn_lock(vp, LK_EXCLUSIVE | LK_RETRY);
 
-	ulfs_extattr_uepm_lock(ump);
-
 	if (error != 0) {
 		pathbuf_destroy(pb);
 		PNBUF_PUT(path);
-		*uelep = NULL;
-		return error;
+		return NULL;
 	}
 
 	KASSERT(nd.ni_vp != NULL);
@@ -324,8 +300,7 @@ ulfs_extattr_autocreate_attr(struct vnode *vp, int attrnamespace,
 		printf("%s: write uef header failed for %s, error = %d\n", 
 		       __func__, attrname, error);
 		vn_close(backing_vp, FREAD|FWRITE, l->l_cred);
-		*uelep = NULL;
-		return error;
+		return NULL;
 	}
 
 	/*
@@ -338,8 +313,7 @@ ulfs_extattr_autocreate_attr(struct vnode *vp, int attrnamespace,
 		printf("%s: enable %s failed, error %d\n", 
 		       __func__, attrname, error);
 		vn_close(backing_vp, FREAD|FWRITE, l->l_cred);
-		*uelep = NULL;
-		return error;
+		return NULL;
 	}
 
 	uele = ulfs_extattr_find_attr(ump, attrnamespace, attrname);
@@ -347,15 +321,13 @@ ulfs_extattr_autocreate_attr(struct vnode *vp, int attrnamespace,
 		printf("%s: atttribute %s created but not found!\n",
 		       __func__, attrname);
 		vn_close(backing_vp, FREAD|FWRITE, l->l_cred);
-		*uelep = NULL;
-		return ESRCH; /* really internal error */
+		return NULL;
 	}
 
 	printf("%s: EA backing store autocreated for %s\n",
 	       mp->mnt_stat.f_mntonname, attrname);
 
-	*uelep = uele;
-	return 0;
+	return uele;
 }
 
 /*
@@ -412,11 +384,10 @@ ulfs_extattr_uepm_destroy(struct ulfs_extattr_per_mount *uepm)
 		panic("ulfs_extattr_uepm_destroy: called while still started");
 
 	/*
-	 * It's not clear that either order for the next three lines is
+	 * It's not clear that either order for the next two lines is
 	 * ideal, and it should never be a problem if this is only called
 	 * during unmount, and with vfs_busy().
 	 */
-	uepm->uepm_flags &= ~ULFS_EXTATTR_UEPM_STARTED;
 	uepm->uepm_flags &= ~ULFS_EXTATTR_UEPM_INITIALIZED;
 	mutex_destroy(&uepm->uepm_lock);
 }
@@ -431,9 +402,6 @@ ulfs_extattr_start(struct mount *mp, struct lwp *l)
 	int error = 0;
 
 	ump = VFSTOULFS(mp);
-
-	if (!(ump->um_extattr.uepm_flags & ULFS_EXTATTR_UEPM_INITIALIZED))
-		ulfs_extattr_uepm_init(&ump->um_extattr);
 
 	ulfs_extattr_uepm_lock(ump);
 
@@ -1109,9 +1077,6 @@ vop_getextattr {
 	struct ulfsmount *ump = VFSTOULFS(mp);
 	int error;
 
-	if (!(ump->um_extattr.uepm_flags & ULFS_EXTATTR_UEPM_STARTED))
-		return (EOPNOTSUPP);
-
 	ulfs_extattr_uepm_lock(ump);
 
 	error = ulfs_extattr_get(ap->a_vp, ap->a_attrnamespace, ap->a_name,
@@ -1137,6 +1102,9 @@ ulfs_extattr_get(struct vnode *vp, int attrnamespace, const char *name,
 	off_t base_offset;
 	size_t len, old_len;
 	int error = 0;
+
+	if (!(ump->um_extattr.uepm_flags & ULFS_EXTATTR_UEPM_STARTED))
+		return (EOPNOTSUPP);
 
 	if (strlen(name) == 0)
 		return (EINVAL);
@@ -1227,9 +1195,6 @@ vop_listextattr {
 	struct ulfsmount *ump = VFSTOULFS(mp);
 	int error;
 
-	if (!(ump->um_extattr.uepm_flags & ULFS_EXTATTR_UEPM_STARTED))
-		return (EOPNOTSUPP);
-
 	ulfs_extattr_uepm_lock(ump);
 
 	error = ulfs_extattr_list(ap->a_vp, ap->a_attrnamespace,
@@ -1256,6 +1221,9 @@ ulfs_extattr_list(struct vnode *vp, int attrnamespace,
 	size_t listsize = 0;
 	int error = 0;
 
+	if (!(ump->um_extattr.uepm_flags & ULFS_EXTATTR_UEPM_STARTED))
+		return (EOPNOTSUPP);
+
 	/*
 	 * XXX: We can move this inside the loop and iterate on individual
 	 *	attributes.
@@ -1273,7 +1241,7 @@ ulfs_extattr_list(struct vnode *vp, int attrnamespace,
 
 		error = ulfs_extattr_get_header(vp, uele, &ueh, NULL);
 		if (error == ENODATA)
-			continue;
+			continue;	
 		if (error != 0)
 			return error;
 
@@ -1307,16 +1275,16 @@ ulfs_extattr_list(struct vnode *vp, int attrnamespace,
 				/* Copy leading name length */
 				error = uiomove(&len, sizeof(len), uio);
 				if (error != 0)
-					break;
+					break;	
 			} else {
 				/* Include trailing NULL */
-				attrnamelen++;
+				attrnamelen++; 
 			}
 
 			error = uiomove(uele->uele_attrname, 
 					(size_t)attrnamelen, uio);
 			if (error != 0)
-				break;
+				break;	
 		}
 
 		if (uele->uele_backing_vnode != vp)
@@ -1351,11 +1319,8 @@ vop_deleteextattr {
 */
 {
 	struct mount *mp = ap->a_vp->v_mount;
-	struct ulfsmount *ump = VFSTOULFS(mp);
+	struct ulfsmount *ump = VFSTOULFS(mp); 
 	int error;
-
-	if (!(ump->um_extattr.uepm_flags & ULFS_EXTATTR_UEPM_STARTED))
-		return (EOPNOTSUPP);
 
 	ulfs_extattr_uepm_lock(ump);
 
@@ -1383,11 +1348,8 @@ vop_setextattr {
 */
 {
 	struct mount *mp = ap->a_vp->v_mount;
-	struct ulfsmount *ump = VFSTOULFS(mp);
+	struct ulfsmount *ump = VFSTOULFS(mp); 
 	int error;
-
-	if (!(ump->um_extattr.uepm_flags & ULFS_EXTATTR_UEPM_STARTED))
-		return (EOPNOTSUPP);
 
 	ulfs_extattr_uepm_lock(ump);
 
@@ -1427,7 +1389,8 @@ ulfs_extattr_set(struct vnode *vp, int attrnamespace, const char *name,
 
 	if (vp->v_mount->mnt_flag & MNT_RDONLY)
 		return (EROFS);
-
+	if (!(ump->um_extattr.uepm_flags & ULFS_EXTATTR_UEPM_STARTED))
+		return (EOPNOTSUPP);
 	if (!ulfs_extattr_valid_attrname(attrnamespace, name))
 		return (EINVAL);
 
@@ -1438,17 +1401,10 @@ ulfs_extattr_set(struct vnode *vp, int attrnamespace, const char *name,
 
 	attribute = ulfs_extattr_find_attr(ump, attrnamespace, name);
 	if (!attribute) {
-		error = ulfs_extattr_autocreate_attr(vp, attrnamespace, 
-						    name, l, &attribute);
-		if (error == EEXIST) {
-			/* Another thread raced us for backend creation */
-			error = 0;
-			attribute = 
-			    ulfs_extattr_find_attr(ump, attrnamespace, name);
-		}
-
-		if (error || !attribute)
-			return ENODATA;
+		attribute =  ulfs_extattr_autocreate_attr(vp, attrnamespace, 
+							 name, l);
+		if  (!attribute)
+			return (ENODATA);
 	}
 
 	/*
@@ -1546,7 +1502,8 @@ ulfs_extattr_rm(struct vnode *vp, int attrnamespace, const char *name,
 
 	if (vp->v_mount->mnt_flag & MNT_RDONLY)  
 		return (EROFS);
-
+	if (!(ump->um_extattr.uepm_flags & ULFS_EXTATTR_UEPM_STARTED))
+		return (EOPNOTSUPP);
 	if (!ulfs_extattr_valid_attrname(attrnamespace, name))
 		return (EINVAL);
 
@@ -1619,10 +1576,12 @@ ulfs_extattr_vnode_inactive(struct vnode *vp, struct lwp *l)
 	if (!(ump->um_extattr.uepm_flags & ULFS_EXTATTR_UEPM_INITIALIZED))
 		return;
 
-	if (!(ump->um_extattr.uepm_flags & ULFS_EXTATTR_UEPM_STARTED))
-		return;
-
 	ulfs_extattr_uepm_lock(ump);
+
+	if (!(ump->um_extattr.uepm_flags & ULFS_EXTATTR_UEPM_STARTED)) {
+		ulfs_extattr_uepm_unlock(ump);
+		return;
+	}
 
 	LIST_FOREACH(uele, &ump->um_extattr.uepm_list, uele_entries)
 		ulfs_extattr_rm(vp, uele->uele_attrnamespace,

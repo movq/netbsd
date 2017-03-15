@@ -1,4 +1,4 @@
-/* Copyright (C) 2001-2002, 2004-2015 Free Software Foundation, Inc.
+/* Copyright (C) 2001-2002, 2004-2012 Free Software Foundation, Inc.
    Written by Paul Eggert, Bruno Haible, Sam Steingold, Peter Burwood.
    This file is part of gnulib.
 
@@ -38,7 +38,8 @@
    other system header files; just include the system's <stdint.h>.
    Ideally we should test __BIONIC__ here, but it is only defined after
    <sys/cdefs.h> has been included; hence test __ANDROID__ instead.  */
-#if defined __ANDROID__ && defined _GL_INCLUDING_SYS_TYPES_H
+#if defined __ANDROID__ \
+    && defined _SYS_TYPES_H_ && !defined _SSIZE_T_DEFINED_
 # @INCLUDE_NEXT@ @NEXT_STDINT_H@
 #else
 

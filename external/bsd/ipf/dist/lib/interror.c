@@ -1,4 +1,4 @@
-/*	$NetBSD: interror.c,v 1.4 2015/04/02 00:12:58 khorben Exp $	*/
+/*	$NetBSD: interror.c,v 1.3.6.1 2015/04/10 20:26:46 snj Exp $	*/
 
 /*
  * Copyright (C) 2012 by Darren Reed.

@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile.obs405.inc,v 1.13 2016/07/28 22:46:48 maya Exp $
+#	$NetBSD: Makefile.obs405.inc,v 1.12.2.1 2016/08/27 15:19:09 bouyer Exp $
 
 CFLAGS+=-mcpu=405
 AFLAGS+=-mcpu=405

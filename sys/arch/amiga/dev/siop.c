@@ -1,4 +1,4 @@
-/*	$NetBSD: siop.c,v 1.69 2014/09/21 15:44:17 christos Exp $ */
+/*	$NetBSD: siop.c,v 1.68.4.1 2014/10/30 12:14:37 martin Exp $ */
 
 /*
  * Copyright (c) 1990 The Regents of the University of California.
@@ -70,7 +70,7 @@
 #include "opt_ddb.h"
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: siop.c,v 1.69 2014/09/21 15:44:17 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: siop.c,v 1.68.4.1 2014/10/30 12:14:37 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

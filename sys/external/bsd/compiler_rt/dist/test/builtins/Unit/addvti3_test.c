@@ -20,7 +20,7 @@
 
 // Effects: aborts if a + b overflows
 
-COMPILER_RT_ABI ti_int __addvti3(ti_int a, ti_int b);
+ti_int __addvti3(ti_int a, ti_int b);
 
 int test__addvti3(ti_int a, ti_int b)
 {

@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.4 2017/03/05 09:27:53 mrg Exp $
+#	$NetBSD: Makefile,v 1.2 2014/03/17 07:25:34 mrg Exp $
 
 SUBDIR=	libxcb .WAIT
 
@@ -18,13 +18,13 @@ SUBDIR+= \
 	shape \
 	shm \
 	sync \
+	xevie \
 	xf86dri \
 	xfixes \
 	xinerama \
-	xinput \
 	xkb \
 	xtest \
 	xv \
-	xvmc
+	xvmc \
 
 .include <bsd.subdir.mk>

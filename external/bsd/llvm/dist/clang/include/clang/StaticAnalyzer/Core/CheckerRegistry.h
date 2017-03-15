@@ -64,9 +64,6 @@
 #endif
 
 namespace clang {
-class DiagnosticsEngine;
-class AnalyzerOptions;
-
 namespace ento {
 
 class CheckerOptInfo;
@@ -121,15 +118,9 @@ public:
   void initializeManager(CheckerManager &mgr,
                          SmallVectorImpl<CheckerOptInfo> &opts) const;
 
-  /// Check if every option corresponds to a specific checker or package.
-  void validateCheckerOptions(const AnalyzerOptions &opts,
-                              DiagnosticsEngine &diags) const;
-
   /// Prints the name and description of all checkers in this registry.
   /// This output is not intended to be machine-parseable.
-  void printHelp(raw_ostream &out, size_t maxNameChars = 30) const;
-  void printList(raw_ostream &out,
-                 SmallVectorImpl<CheckerOptInfo> &opts) const;
+  void printHelp(raw_ostream &out, size_t maxNameChars = 30) const ;
 
 private:
   mutable CheckerInfoList Checkers;

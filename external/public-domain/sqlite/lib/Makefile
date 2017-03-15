@@ -1,4 +1,4 @@
-# $NetBSD: Makefile,v 1.8 2016/10/04 14:25:02 christos Exp $
+# $NetBSD: Makefile,v 1.6 2014/03/07 18:37:48 christos Exp $
 
 LIB=		sqlite3
 INCS=		sqlite3.h sqlite3ext.h
@@ -15,17 +15,6 @@ FILESMODE_sqlite3.pc=	${NONBINMODE}
 FILESDIR_sqlite3.pc=	/usr/lib/pkgconfig
 
 CLEANFILES+=sqlite3.pc
-
-.include <bsd.own.mk>
-
-.if ${MACHINE_CPU} == "m68k"
-CWARNFLAGS+=	-Wa,--warn
-.endif
-
-.if ${MACHINE_ARCH} == "powerpc64"
-# call to `' lacks nop, can't restore toc; recompile with -fPIC
-COPTS.sqlite3.c += -O0
-.endif
 
 .include <bsd.lib.mk>
 

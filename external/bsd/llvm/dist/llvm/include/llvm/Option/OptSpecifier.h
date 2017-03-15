@@ -21,11 +21,11 @@ namespace opt {
     unsigned ID;
 
   private:
-    explicit OptSpecifier(bool) = delete;
+    explicit OptSpecifier(bool) LLVM_DELETED_FUNCTION;
 
   public:
     OptSpecifier() : ID(0) {}
-    /*implicit*/ OptSpecifier(unsigned ID) : ID(ID) {}
+    /*implicit*/ OptSpecifier(unsigned _ID) : ID(_ID) {}
     /*implicit*/ OptSpecifier(const Option *Opt);
 
     bool isValid() const { return ID != 0; }

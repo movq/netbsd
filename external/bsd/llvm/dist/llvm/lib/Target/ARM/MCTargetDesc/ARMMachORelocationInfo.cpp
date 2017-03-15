@@ -12,7 +12,7 @@
 #include "llvm-c/Disassembler.h"
 #include "llvm/MC/MCContext.h"
 #include "llvm/MC/MCExpr.h"
-#include "llvm/MC/MCDisassembler/MCRelocationInfo.h"
+#include "llvm/MC/MCRelocationInfo.h"
 
 using namespace llvm;
 using namespace object;
@@ -26,9 +26,9 @@ public:
                                              unsigned VariantKind) override {
     switch(VariantKind) {
     case LLVMDisassembler_VariantKind_ARM_HI16:
-      return ARMMCExpr::createUpper16(SubExpr, Ctx);
+      return ARMMCExpr::CreateUpper16(SubExpr, Ctx);
     case LLVMDisassembler_VariantKind_ARM_LO16:
-      return ARMMCExpr::createLower16(SubExpr, Ctx);
+      return ARMMCExpr::CreateLower16(SubExpr, Ctx);
     default:
       return MCRelocationInfo::createExprForCAPIVariantKind(SubExpr,
                                                             VariantKind);

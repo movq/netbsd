@@ -1,4 +1,4 @@
-/*	$NetBSD: sel-lex.l,v 1.2 2017/01/28 21:31:48 christos Exp $	*/
+/*	$NetBSD: sel-lex.l,v 1.1.1.3 2014/04/24 12:45:42 pettai Exp $	*/
 
 %{
 /*
@@ -36,11 +36,6 @@
 
 /* Id */
 
-#ifdef __GNUC__
-#pragma GCC diagnostic ignored "-Wunused-function"
-#endif
-
-
 #ifdef HAVE_CONFIG_H
 #include <config.h>
 #endif
@@ -57,6 +52,7 @@ unsigned lineno = 1;
 
 static char * handle_string(void);
 static int lex_input(char *, int);
+static int lex_classic_input(void);
 
 struct hx_expr_input _hx509_expr_input;
 

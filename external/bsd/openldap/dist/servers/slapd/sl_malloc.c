@@ -1,10 +1,10 @@
-/*	$NetBSD: sl_malloc.c,v 1.1.1.5 2017/02/09 01:46:58 christos Exp $	*/
+/*	$NetBSD: sl_malloc.c,v 1.1.1.4 2014/05/28 09:58:47 tron Exp $	*/
 
 /* sl_malloc.c - malloc routines using a per-thread slab */
 /* $OpenLDAP$ */
 /* This work is part of OpenLDAP Software <http://www.openldap.org/>.
  *
- * Copyright 2003-2016 The OpenLDAP Foundation.
+ * Copyright 2003-2014 The OpenLDAP Foundation.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -15,9 +15,6 @@
  * top-level directory of the distribution or, alternatively, at
  * <http://www.OpenLDAP.org/license.html>.
  */
-
-#include <sys/cdefs.h>
-__RCSID("$NetBSD: sl_malloc.c,v 1.1.1.5 2017/02/09 01:46:58 christos Exp $");
 
 #include "portable.h"
 
@@ -284,17 +281,16 @@ slap_sl_mem_create(
 }
 
 /*
- * Assign memory context to thread context. Use NULL to detach
- * current memory context from thread. Future users must
+ * Separate memory context from thread context.  Future users must
  * know the context, since ch_free/slap_sl_context() cannot find it.
  */
 void
-slap_sl_mem_setctx(
+slap_sl_mem_detach(
 	void *thrctx,
 	void *memctx
 )
 {
-	SET_MEMCTX(thrctx, memctx, slap_sl_mem_destroy);
+	SET_MEMCTX(thrctx, NULL, 0);
 }
 
 void *

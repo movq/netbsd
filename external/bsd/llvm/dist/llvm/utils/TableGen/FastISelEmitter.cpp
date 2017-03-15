@@ -18,13 +18,13 @@
 //===----------------------------------------------------------------------===//
 
 #include "CodeGenDAGPatterns.h"
+#include "llvm/ADT/SmallString.h"
 #include "llvm/ADT/StringSwitch.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/TableGen/Error.h"
 #include "llvm/TableGen/Record.h"
 #include "llvm/TableGen/TableGenBackend.h"
-#include <utility>
 using namespace llvm;
 
 
@@ -417,7 +417,9 @@ static std::string getLegalCName(std::string OpName) {
   return OpName;
 }
 
-FastISelMap::FastISelMap(std::string instns) : InstNS(std::move(instns)) {}
+FastISelMap::FastISelMap(std::string instns)
+  : InstNS(instns) {
+}
 
 static std::string PhyRegForNode(TreePatternNode *Op,
                                  const CodeGenTarget &Target) {
@@ -564,7 +566,8 @@ void FastISelMap::collectPatterns(CodeGenDAGPatterns &CGP) {
     Operands.PrintManglingSuffix(SuffixOS, ImmediatePredicates, true);
     SuffixOS.flush();
     if (!StringSwitch<bool>(ManglingSuffix)
-        .Cases("", "r", "rr", "ri", "i", "f", true)
+        .Cases("", "r", "rr", "ri", "rf", true)
+        .Cases("rri", "i", "f", true)
         .Default(false))
       continue;
 
@@ -873,7 +876,7 @@ void EmitFastISel(RecordKeeper &RK, raw_ostream &OS) {
   CodeGenDAGPatterns CGP(RK);
   const CodeGenTarget &Target = CGP.getTargetInfo();
   emitSourceFileHeader("\"Fast\" Instruction Selector for the " +
-                       Target.getName().str() + " target", OS);
+                       Target.getName() + " target", OS);
 
   // Determine the target's namespace name.
   std::string InstNS = Target.getInstNamespace() + "::";

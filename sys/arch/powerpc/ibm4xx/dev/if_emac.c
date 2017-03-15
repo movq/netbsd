@@ -1,4 +1,4 @@
-/*	$NetBSD: if_emac.c,v 1.47 2016/12/15 09:28:04 ozaki-r Exp $	*/
+/*	$NetBSD: if_emac.c,v 1.42 2014/06/26 07:50:29 msaitoh Exp $	*/
 
 /*
  * Copyright 2001, 2002 Wasabi Systems, Inc.
@@ -52,7 +52,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_emac.c,v 1.47 2016/12/15 09:28:04 ozaki-r Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_emac.c,v 1.42 2014/06/26 07:50:29 msaitoh Exp $");
 
 #include "opt_emac.h"
 
@@ -550,7 +550,6 @@ emac_attach(device_t parent, device_t self, void *aux)
 	 * Attach the interface.
 	 */
 	if_attach(ifp);
-	if_deferred_start_init(ifp, NULL);
 	ether_ifattach(ifp, enaddr);
 
 #ifdef EMAC_EVENT_COUNTERS
@@ -1560,7 +1559,7 @@ emac_txeob_intr(void *arg)
 	handled |= emac_txreap(sc);
 
 	/* try to get more packets going */
-	if_schedule_deferred_start(&sc->sc_ethercom.ec_if);
+	emac_start(&sc->sc_ethercom.ec_if);
 
 	return handled;
 }
@@ -1666,11 +1665,18 @@ emac_rxeob_intr(void *arg)
 			}
 		}
 
-		m_set_rcvif(m, ifp);
+		ifp->if_ipackets++;
+		m->m_pkthdr.rcvif = ifp;
 		m->m_pkthdr.len = m->m_len = len;
 
+		/*
+		 * Pass this up to any BPF listeners, but only
+		 * pass if up the stack if it's for us.
+		 */
+		bpf_mtap(ifp, m);
+
 		/* Pass it on. */
-		if_percpuq_enqueue(ifp->if_percpuq, m);
+		(*ifp->if_input)(ifp, m);
 	}
 
 	/* Update the receive pointer. */

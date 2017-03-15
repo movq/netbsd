@@ -21,7 +21,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: vfprintf.c,v 1.5 2017/01/24 23:29:14 christos Exp $");
+__RCSID("$NetBSD: vfprintf.c,v 1.3.6.1 2017/02/19 05:01:17 snj Exp $");
 #endif
 
 #ifdef HAVE_CONFIG_H

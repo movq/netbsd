@@ -1,4 +1,4 @@
-/*	$NetBSD: rtl8169.c,v 1.149 2017/02/20 06:46:41 ozaki-r Exp $	*/
+/*	$NetBSD: rtl8169.c,v 1.140.2.2 2015/05/15 04:12:07 snj Exp $	*/
 
 /*
  * Copyright (c) 1997, 1998-2003
@@ -33,7 +33,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: rtl8169.c,v 1.149 2017/02/20 06:46:41 ozaki-r Exp $");
+__KERNEL_RCSID(0, "$NetBSD: rtl8169.c,v 1.140.2.2 2015/05/15 04:12:07 snj Exp $");
 /* $FreeBSD: /repoman/r/ncvs/src/sys/dev/re/if_re.c,v 1.20 2004/04/11 20:34:08 ru Exp $ */
 
 /*
@@ -134,7 +134,7 @@ __KERNEL_RCSID(0, "$NetBSD: rtl8169.c,v 1.149 2017/02/20 06:46:41 ozaki-r Exp $"
 #include <netinet/ip.h>		/* XXX for IP_MAXPACKET */
 
 #include <net/bpf.h>
-#include <sys/rndsource.h>
+#include <sys/rnd.h>
 
 #include <sys/bus.h>
 
@@ -602,8 +602,6 @@ re_attach(struct rtk_softc *sc)
 			sc->sc_quirk |= RTKQ_NOJUMBO;
 			break;
 		case RTK_HWREV_8168E:
-		case RTK_HWREV_8168H:
-		case RTK_HWREV_8168H_SPIN1:
 			sc->sc_quirk |= RTKQ_DESCV2 | RTKQ_NOEECMD |
 			    RTKQ_MACSTAT | RTKQ_CMDSTOP | RTKQ_PHYWAKE_PM |
 			    RTKQ_NOJUMBO;
@@ -612,14 +610,6 @@ re_attach(struct rtk_softc *sc)
 		case RTK_HWREV_8168F:
 			sc->sc_quirk |= RTKQ_DESCV2 | RTKQ_NOEECMD |
 			    RTKQ_MACSTAT | RTKQ_CMDSTOP | RTKQ_NOJUMBO;
-			break;
-		case RTK_HWREV_8168G:
-		case RTK_HWREV_8168G_SPIN1:
-		case RTK_HWREV_8168G_SPIN2:
-		case RTK_HWREV_8168G_SPIN4:
-			sc->sc_quirk |= RTKQ_DESCV2 | RTKQ_NOEECMD |
-			    RTKQ_MACSTAT | RTKQ_CMDSTOP | RTKQ_NOJUMBO | 
-			    RTKQ_RXDV_GATED;
 			break;
 		case RTK_HWREV_8100E:
 		case RTK_HWREV_8100E_SPIN2:
@@ -869,7 +859,6 @@ re_attach(struct rtk_softc *sc)
 	 * Call MI attach routine.
 	 */
 	if_attach(ifp);
-	if_deferred_start_init(ifp, NULL);
 	ether_ifattach(ifp, eaddr);
 
 	rnd_attach_source(&sc->rnd_source, device_xname(sc->sc_dev),
@@ -1294,7 +1283,8 @@ re_rxeof(struct rtk_softc *sc)
 			m->m_pkthdr.len = m->m_len =
 			    (total_len - ETHER_CRC_LEN);
 
-		m_set_rcvif(m, ifp);
+		ifp->if_ipackets++;
+		m->m_pkthdr.rcvif = ifp;
 
 		/* Do RX checksumming */
 		if ((sc->sc_quirk & RTKQ_DESCV2) == 0) {
@@ -1357,7 +1347,8 @@ re_rxeof(struct rtk_softc *sc)
 			     bswap16(rxvlan & RE_RDESC_VLANCTL_DATA),
 			     continue);
 		}
-		if_percpuq_enqueue(ifp->if_percpuq, m);
+		bpf_mtap(ifp, m);
+		(*ifp->if_input)(ifp, m);
 	}
 
 	sc->re_ldata.re_rx_prodidx = i;
@@ -1497,8 +1488,8 @@ re_intr(void *arg)
 		}
 	}
 
-	if (handled)
-		if_schedule_deferred_start(ifp);
+	if (handled && !IFQ_IS_EMPTY(&ifp->if_snd))
+		re_start(ifp);
 
 	rnd_add_uint32(&sc->rnd_source, status);
 
@@ -1853,11 +1844,6 @@ re_init(struct ifnet *ifp)
 	CSR_WRITE_4(sc, RTK_TXLIST_ADDR_LO,
 	    RE_ADDR_LO(sc->re_ldata.re_tx_list_map->dm_segs[0].ds_addr));
 
-	if (sc->sc_quirk & RTKQ_RXDV_GATED) {
-		CSR_WRITE_4(sc, RTK_MISC,
-		    CSR_READ_4(sc, RTK_MISC) & ~RTK_MISC_RXDV_GATED_EN);
-	}
-		
 	/*
 	 * Enable transmit and receive.
 	 */

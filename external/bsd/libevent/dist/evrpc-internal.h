@@ -1,4 +1,4 @@
-/*	$NetBSD: evrpc-internal.h,v 1.1.1.3 2017/01/31 21:14:52 christos Exp $	*/
+/*	$NetBSD: evrpc-internal.h,v 1.1.1.2 2013/04/11 16:43:20 christos Exp $	*/
 /*
  * Copyright (c) 2006-2007 Niels Provos <provos@citi.umich.edu>
  * Copyright (c) 2007-2012 Niels Provos and Nick Mathewson
@@ -25,10 +25,9 @@
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
-#ifndef EVRPC_INTERNAL_H_INCLUDED_
-#define EVRPC_INTERNAL_H_INCLUDED_
+#ifndef _EVRPC_INTERNAL_H_
+#define _EVRPC_INTERNAL_H_
 
-#include "event2/http.h"
 #include "http-internal.h"
 
 struct evrpc;
@@ -58,7 +57,7 @@ TAILQ_HEAD(evrpc_hook_list, evrpc_hook);
 struct evrpc_hook_ctx;
 TAILQ_HEAD(evrpc_pause_list, evrpc_hook_ctx);
 
-struct evrpc_hooks_ {
+struct _evrpc_hooks {
 	/* hooks for processing outbound and inbound rpcs */
 	struct evrpc_hook_list in_hooks;
 	struct evrpc_hook_list out_hooks;
@@ -71,7 +70,7 @@ struct evrpc_hooks_ {
 #define paused_requests common.pause_requests
 
 struct evrpc_base {
-	struct evrpc_hooks_ common;
+	struct _evrpc_hooks common;
 
 	/* the HTTP server under which we register our RPC calls */
 	struct evhttp* http_server;
@@ -81,11 +80,11 @@ struct evrpc_base {
 };
 
 struct evrpc_req_generic;
-void evrpc_reqstate_free_(struct evrpc_req_generic* rpc_state);
+void evrpc_reqstate_free(struct evrpc_req_generic* rpc_state);
 
 /* A pool for holding evhttp_connection objects */
 struct evrpc_pool {
-	struct evrpc_hooks_ common;
+	struct _evrpc_hooks common;
 
 	struct event_base *base;
 
@@ -119,14 +118,14 @@ struct evrpc_hook_meta {
 };
 
 /* allows association of meta data with a request */
-static void evrpc_hook_associate_meta_(struct evrpc_hook_meta **pctx,
+static void evrpc_hook_associate_meta(struct evrpc_hook_meta **pctx,
     struct evhttp_connection *evcon);
 
 /* creates a new meta data store */
-static struct evrpc_hook_meta *evrpc_hook_meta_new_(void);
+static struct evrpc_hook_meta *evrpc_hook_meta_new(void);
 
 /* frees the meta data associated with a request */
-static void evrpc_hook_context_free_(struct evrpc_hook_meta *ctx);
+static void evrpc_hook_context_free(struct evrpc_hook_meta *ctx);
 
 /* the server side of an rpc */
 
@@ -203,4 +202,4 @@ struct evrpc_request_wrapper {
 	int (*reply_unmarshal)(void *, struct evbuffer*);
 };
 
-#endif /* EVRPC_INTERNAL_H_INCLUDED_ */
+#endif /* _EVRPC_INTERNAL_H_ */

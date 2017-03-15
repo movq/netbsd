@@ -1,4 +1,4 @@
-/*	$NetBSD: vm_machdep.c,v 1.28 2017/02/23 03:34:22 kamil Exp $	*/
+/*	$NetBSD: vm_machdep.c,v 1.25.4.1 2016/12/18 07:01:57 snj Exp $	*/
 
 /*-
  * Copyright (c) 1982, 1986 The Regents of the University of California.
@@ -80,7 +80,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: vm_machdep.c,v 1.28 2017/02/23 03:34:22 kamil Exp $");
+__KERNEL_RCSID(0, "$NetBSD: vm_machdep.c,v 1.25.4.1 2016/12/18 07:01:57 snj Exp $");
 
 #include "opt_mtrr.h"
 
@@ -105,9 +105,6 @@ __KERNEL_RCSID(0, "$NetBSD: vm_machdep.c,v 1.28 2017/02/23 03:34:22 kamil Exp $"
 #endif
 
 #include <x86/fpu.h>
-#include <x86/dbregs.h>
-
-extern struct pool x86_dbregspl;
 
 void
 cpu_proc_fork(struct proc *p1, struct proc *p2)
@@ -159,9 +156,6 @@ cpu_lwp_fork(struct lwp *l1, struct lwp *l2, void *stack, size_t stacksize,
 	memcpy(pcb2, pcb1, sizeof(struct pcb));
 	/* Copy any additional fpu state */
 	fpu_save_area_fork(pcb2, pcb1);
-
-	/* Never inherit CPU Debug Registers */
-	pcb2->pcb_dbregs = NULL;
 
 #if defined(XEN)
 	pcb2->pcb_iopl = SEL_KPL;
@@ -270,17 +264,9 @@ cpu_lwp_free(struct lwp *l, int proc)
 void
 cpu_lwp_free2(struct lwp *l)
 {
-	struct pcb *pcb;
 
 	KASSERT(l->l_md.md_gc_ptp == NULL);
 	KASSERT(l->l_md.md_gc_pmap == NULL);
-
-	pcb = lwp_getpcb(l);
-
-	if (pcb->pcb_dbregs) {
-		pool_put(&x86_dbregspl, pcb->pcb_dbregs);
-		pcb->pcb_dbregs = NULL;
-	}
 }
 
 /*

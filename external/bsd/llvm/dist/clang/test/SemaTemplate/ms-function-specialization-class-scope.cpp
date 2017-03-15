@@ -75,12 +75,3 @@ namespace Duplicates {
   // here.
   template struct A<int>;
 }
-
-namespace PR28082 {
-struct S {
-  template <int>
-  int f(int = 0);
-  template <>
-  int f<0>(int); // expected-warning {{Microsoft extension}}
-};
-}

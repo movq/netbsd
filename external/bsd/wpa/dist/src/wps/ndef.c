@@ -29,8 +29,8 @@ struct ndef_record {
 	u32 total_length;
 };
 
-static const char wifi_handover_type[] = "application/vnd.wfa.wsc";
-static const char p2p_handover_type[] = "application/vnd.wfa.p2p";
+static char wifi_handover_type[] = "application/vnd.wfa.wsc";
+static char p2p_handover_type[] = "application/vnd.wfa.p2p";
 
 static int ndef_parse_record(const u8 *data, u32 size,
 			     struct ndef_record *record)
@@ -45,14 +45,9 @@ static int ndef_parse_record(const u8 *data, u32 size,
 			return -1;
 		record->payload_length = *pos++;
 	} else {
-		u32 len;
-
 		if (size < 6)
 			return -1;
-		len = WPA_GET_BE32(pos);
-		if (len > size - 6 || len > 20000)
-			return -1;
-		record->payload_length = len;
+		record->payload_length = ntohl(*(u32 *)pos);
 		pos += sizeof(u32);
 	}
 
@@ -73,8 +68,7 @@ static int ndef_parse_record(const u8 *data, u32 size,
 	pos += record->payload_length;
 
 	record->total_length = pos - data;
-	if (record->total_length > size ||
-	    record->total_length < record->payload_length)
+	if (record->total_length > size)
 		return -1;
 	return 0;
 }
@@ -103,7 +97,7 @@ static struct wpabuf * ndef_parse_records(const struct wpabuf *buf,
 }
 
 
-static struct wpabuf * ndef_build_record(u8 flags, const void *type,
+static struct wpabuf * ndef_build_record(u8 flags, void *type,
 					 u8 type_length, void *id,
 					 u8 id_length,
 					 const struct wpabuf *payload)

@@ -1,4 +1,4 @@
-/*	$NetBSD: sign.c,v 1.1.1.5 2015/12/17 03:21:55 christos Exp $	*/
+/*	$NetBSD: sign.c,v 1.1.1.2.2.1 2016/03/13 08:06:05 martin Exp $	*/
 
 /*
  * Copyright (C) 2014, 2015  Internet Systems Consortium, Inc. ("ISC")

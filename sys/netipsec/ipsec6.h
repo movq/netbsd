@@ -1,4 +1,4 @@
-/*	$NetBSD: ipsec6.h,v 1.15 2017/03/03 07:13:06 ozaki-r Exp $	*/
+/*	$NetBSD: ipsec6.h,v 1.13 2011/06/09 19:54:18 drochner Exp $	*/
 /*	$FreeBSD: src/sys/netipsec/ipsec6.h,v 1.1.4.1 2003/01/24 05:11:35 sam Exp $	*/
 /*	$KAME: ipsec.h,v 1.44 2001/03/23 08:08:47 itojun Exp $	*/
 
@@ -67,7 +67,7 @@ int ipsec6_get_policy (struct in6pcb *, const void *, size_t, struct mbuf **);
 struct secpolicy *ipsec6_checkpolicy (struct mbuf *, u_int, 
     u_int, int *, struct in6pcb *);
 struct secpolicy * ipsec6_check_policy(struct mbuf *, 
-				struct in6pcb *, int, int*,int*);
+				const struct socket *, int, int*,int*);
 int ipsec6_in_reject (struct mbuf *, struct in6pcb *);
 /*
  * KAME ipsec6_in_reject_so(struct mbuf*, struct so)  compatibility shim
@@ -99,7 +99,7 @@ int ipsec6_common_input_cb(struct mbuf *, struct secasvar *,
 void esp6_ctlinput(int, struct sockaddr *, void *);
 #endif /* __FreeBSD__ */
 
-int ipsec6_process_packet (struct mbuf*,struct ipsecrequest *);
+int ipsec6_process_packet (struct mbuf*,struct ipsecrequest *); 
 #endif /*_KERNEL*/
 
 #endif /* !_NETIPSEC_IPSEC6_H_ */

@@ -19,11 +19,8 @@
 #include "llvm/MC/MCContext.h"
 #include "llvm/MC/MCExpr.h"
 #include "llvm/MC/MCInst.h"
-#include "llvm/MC/MCInstrInfo.h"
 #include "llvm/MC/MCRegisterInfo.h"
 #include "llvm/MC/MCSymbol.h"
-#include "llvm/MC/MCAsmInfo.h"
-#include "llvm/Support/EndianStream.h"
 #include "llvm/Support/raw_ostream.h"
 
 using namespace llvm;
@@ -34,18 +31,16 @@ STATISTIC(MCNumEmitted, "Number of MC instructions emitted");
 
 namespace {
 class SparcMCCodeEmitter : public MCCodeEmitter {
-  SparcMCCodeEmitter(const SparcMCCodeEmitter &) = delete;
-  void operator=(const SparcMCCodeEmitter &) = delete;
-  const MCInstrInfo &MCII;
+  SparcMCCodeEmitter(const SparcMCCodeEmitter &) LLVM_DELETED_FUNCTION;
+  void operator=(const SparcMCCodeEmitter &) LLVM_DELETED_FUNCTION;
   MCContext &Ctx;
 
 public:
-  SparcMCCodeEmitter(const MCInstrInfo &mcii, MCContext &ctx)
-      : MCII(mcii), Ctx(ctx) {}
+  SparcMCCodeEmitter(MCContext &ctx): Ctx(ctx) {}
 
-  ~SparcMCCodeEmitter() override {}
+  ~SparcMCCodeEmitter() {}
 
-  void encodeInstruction(const MCInst &MI, raw_ostream &OS,
+  void EncodeInstruction(const MCInst &MI, raw_ostream &OS,
                          SmallVectorImpl<MCFixup> &Fixups,
                          const MCSubtargetInfo &STI) const override;
 
@@ -74,33 +69,26 @@ public:
                                        SmallVectorImpl<MCFixup> &Fixups,
                                        const MCSubtargetInfo &STI) const;
 
-private:
-  uint64_t computeAvailableFeatures(const FeatureBitset &FB) const;
-  void verifyInstructionPredicates(const MCInst &MI,
-                                   uint64_t AvailableFeatures) const;
 };
 } // end anonymous namespace
 
 MCCodeEmitter *llvm::createSparcMCCodeEmitter(const MCInstrInfo &MCII,
                                               const MCRegisterInfo &MRI,
+                                              const MCSubtargetInfo &STI,
                                               MCContext &Ctx) {
-  return new SparcMCCodeEmitter(MCII, Ctx);
+  return new SparcMCCodeEmitter(Ctx);
 }
 
-void SparcMCCodeEmitter::encodeInstruction(const MCInst &MI, raw_ostream &OS,
-                                           SmallVectorImpl<MCFixup> &Fixups,
-                                           const MCSubtargetInfo &STI) const {
-  verifyInstructionPredicates(MI,
-                              computeAvailableFeatures(STI.getFeatureBits()));
-
+void SparcMCCodeEmitter::
+EncodeInstruction(const MCInst &MI, raw_ostream &OS,
+                  SmallVectorImpl<MCFixup> &Fixups,
+                  const MCSubtargetInfo &STI) const {
   unsigned Bits = getBinaryCodeForInstr(MI, Fixups, STI);
 
-  if (Ctx.getAsmInfo()->isLittleEndian()) {
-    // Output the bits in little-endian byte order.
-    support::endian::Writer<support::little>(OS).write<uint32_t>(Bits);
-  } else {
-    // Output the bits in big-endian byte order.
-    support::endian::Writer<support::big>(OS).write<uint32_t>(Bits);
+  // Output the constant in big endian byte order.
+  for (unsigned i = 0; i != 4; ++i) {
+    OS << (char)(Bits >> 24);
+    Bits <<= 8;
   }
   unsigned tlsOpNo = 0;
   switch (MI.getOpcode()) {
@@ -137,12 +125,12 @@ getMachineOpValue(const MCInst &MI, const MCOperand &MO,
   const MCExpr *Expr = MO.getExpr();
   if (const SparcMCExpr *SExpr = dyn_cast<SparcMCExpr>(Expr)) {
     MCFixupKind Kind = (MCFixupKind)SExpr->getFixupKind();
-    Fixups.push_back(MCFixup::create(0, Expr, Kind));
+    Fixups.push_back(MCFixup::Create(0, Expr, Kind));
     return 0;
   }
 
   int64_t Res;
-  if (Expr->evaluateAsAbsolute(Res))
+  if (Expr->EvaluateAsAbsolute(Res))
     return Res;
 
   llvm_unreachable("Unhandled expression!");
@@ -159,7 +147,7 @@ getCallTargetOpValue(const MCInst &MI, unsigned OpNo,
 
   if (MI.getOpcode() == SP::TLS_CALL) {
     // No fixups for __tls_get_addr. Will emit for fixups for tls_symbol in
-    // encodeInstruction.
+    // EncodeInstruction.
 #ifndef NDEBUG
     // Verify that the callee is actually __tls_get_addr.
     const SparcMCExpr *SExpr = dyn_cast<SparcMCExpr>(MO.getExpr());
@@ -179,7 +167,7 @@ getCallTargetOpValue(const MCInst &MI, unsigned OpNo,
       fixupKind = (MCFixupKind)Sparc::fixup_sparc_wplt30;
   }
 
-  Fixups.push_back(MCFixup::create(0, MO.getExpr(), fixupKind));
+  Fixups.push_back(MCFixup::Create(0, MO.getExpr(), fixupKind));
 
   return 0;
 }
@@ -192,7 +180,7 @@ getBranchTargetOpValue(const MCInst &MI, unsigned OpNo,
   if (MO.isReg() || MO.isImm())
     return getMachineOpValue(MI, MO, Fixups, STI);
 
-  Fixups.push_back(MCFixup::create(0, MO.getExpr(),
+  Fixups.push_back(MCFixup::Create(0, MO.getExpr(),
                                    (MCFixupKind)Sparc::fixup_sparc_br22));
   return 0;
 }
@@ -205,7 +193,7 @@ getBranchPredTargetOpValue(const MCInst &MI, unsigned OpNo,
   if (MO.isReg() || MO.isImm())
     return getMachineOpValue(MI, MO, Fixups, STI);
 
-  Fixups.push_back(MCFixup::create(0, MO.getExpr(),
+  Fixups.push_back(MCFixup::Create(0, MO.getExpr(),
                                    (MCFixupKind)Sparc::fixup_sparc_br19));
   return 0;
 }
@@ -217,13 +205,14 @@ getBranchOnRegTargetOpValue(const MCInst &MI, unsigned OpNo,
   if (MO.isReg() || MO.isImm())
     return getMachineOpValue(MI, MO, Fixups, STI);
 
-  Fixups.push_back(MCFixup::create(0, MO.getExpr(),
+  Fixups.push_back(MCFixup::Create(0, MO.getExpr(),
                                    (MCFixupKind)Sparc::fixup_sparc_br16_2));
-  Fixups.push_back(MCFixup::create(0, MO.getExpr(),
+  Fixups.push_back(MCFixup::Create(0, MO.getExpr(),
                                    (MCFixupKind)Sparc::fixup_sparc_br16_14));
 
   return 0;
 }
 
-#define ENABLE_INSTR_PREDICATE_VERIFIER
+
+
 #include "SparcGenMCCodeEmitter.inc"

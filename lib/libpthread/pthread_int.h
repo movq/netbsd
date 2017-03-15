@@ -1,4 +1,4 @@
-/*	$NetBSD: pthread_int.h,v 1.93 2017/02/08 03:44:41 kamil Exp $	*/
+/*	$NetBSD: pthread_int.h,v 1.89.8.1 2015/11/24 17:37:16 martin Exp $	*/
 
 /*-
  * Copyright (c) 2001, 2002, 2003, 2006, 2007, 2008 The NetBSD Foundation, Inc.
@@ -27,6 +27,11 @@
  * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
+ */
+
+/*
+ * NOTE: when changing anything in this file, please ensure that
+ * libpthread_dbg still compiles.
  */
 
 #ifndef _LIB_PTHREAD_INT_H
@@ -143,10 +148,18 @@ struct	__pthread_st {
 
 	/* Thread-specific data.  Large so it sits close to the end. */
 	int		pt_havespecific;
+
+	/*
+	 * Context for thread creation.  At the end as it's cached
+	 * and then only ever passed to _lwp_create(). 
+	 */
+	ucontext_t	pt_uc;
+
 	struct pt_specific {
 		void *pts_value;
 		PTQ_ENTRY(pt_specific) pts_next;
 	} pt_specific[];
+
 };
 
 /* Thread states */
@@ -255,16 +268,10 @@ int	pthread__find(pthread_t) PTHREAD_HIDE;
 #error Either __HAVE_TLS_VARIANT_I or __HAVE_TLS_VARIANT_II must be defined
 #endif
 
-#ifdef _PTHREAD_GETTCB_EXT
-struct tls_tcb *_PTHREAD_GETTCB_EXT(void);
-#endif
-
 static inline pthread_t __constfunc
 pthread__self(void)
 {
-#if defined(_PTHREAD_GETTCB_EXT)
-	struct tls_tcb * const tcb = _PTHREAD_GETTCB_EXT();
-#elif defined(__HAVE___LWP_GETTCB_FAST)
+#ifdef __HAVE___LWP_GETTCB_FAST
 	struct tls_tcb * const tcb = __lwp_gettcb_fast();
 #else
 	struct tls_tcb * const tcb = __lwp_getprivate_fast();

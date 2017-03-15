@@ -1,4 +1,4 @@
-/*	$NetBSD: arm32_machdep.c,v 1.112 2016/07/16 01:49:42 mrg Exp $	*/
+/*	$NetBSD: arm32_machdep.c,v 1.105.2.1 2014/11/09 16:05:25 martin Exp $	*/
 
 /*
  * Copyright (c) 1994-1998 Mark Brinicombe.
@@ -42,7 +42,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: arm32_machdep.c,v 1.112 2016/07/16 01:49:42 mrg Exp $");
+__KERNEL_RCSID(0, "$NetBSD: arm32_machdep.c,v 1.105.2.1 2014/11/09 16:05:25 martin Exp $");
 
 #include "opt_modular.h"
 #include "opt_md.h"
@@ -75,6 +75,7 @@ __KERNEL_RCSID(0, "$NetBSD: arm32_machdep.c,v 1.112 2016/07/16 01:49:42 mrg Exp 
 
 #include <arm/locore.h>
 
+#include <arm/arm32/katelib.h>
 #include <arm/arm32/machdep.h>
 
 #include <machine/bootconfig.h>
@@ -108,7 +109,6 @@ int cpu_simd_present;
 int cpu_simdex_present;
 int cpu_umull_present;
 int cpu_synchprim_present;
-int cpu_unaligned_sigbus;
 const char *cpu_arch = "";
 
 int cpu_instruction_set_attributes[6];
@@ -505,13 +505,6 @@ SYSCTL_SETUP(sysctl_machdep_setup, "sysctl machdep subtree setup")
 		       CTLTYPE_INT, "printfataltraps", NULL,
 		       NULL, 0, &cpu_printfataltraps, 0,
 		       CTL_MACHDEP, CTL_CREATE, CTL_EOL);
-	cpu_unaligned_sigbus = !CPU_IS_ARMV6_P() && !CPU_IS_ARMV7_P();
-	sysctl_createv(clog, 0, NULL, NULL,
-		       CTLFLAG_PERMANENT|CTLFLAG_READONLY,
-		       CTLTYPE_INT, "unaligned_sigbus",
-		       SYSCTL_DESCR("Do SIGBUS for fixed unaligned accesses"),
-		       NULL, 0, &cpu_unaligned_sigbus, 0,
-		       CTL_MACHDEP, CTL_CREATE, CTL_EOL);
 
 
 	/*
@@ -575,10 +568,6 @@ parse_mi_bootargs(char *args)
 	    || get_bootconf_option(args, "-v", BOOTOPT_TYPE_BOOLEAN, &integer))
 		if (integer)
 			boothowto |= AB_VERBOSE;
-	if (get_bootconf_option(args, "debug", BOOTOPT_TYPE_BOOLEAN, &integer)
-	    || get_bootconf_option(args, "-x", BOOTOPT_TYPE_BOOLEAN, &integer))
-		if (integer)
-			boothowto |= AB_DEBUG;
 }
 
 #ifdef __HAVE_FAST_SOFTINTS
@@ -680,11 +669,8 @@ module_init_md(void)
 int
 mm_md_physacc(paddr_t pa, vm_prot_t prot)
 {
-	if (pa >= physical_start && pa < physical_end)
-		return 0;
 
-	return kauth_authorize_machdep(kauth_cred_get(),
-	    KAUTH_MACHDEP_UNMANAGEDMEM, NULL, NULL, NULL, NULL);
+	return (pa < ctob(physmem)) ? 0 : EFAULT;
 }
 
 #ifdef __HAVE_CPU_UAREA_ALLOC_IDLELWP
@@ -746,17 +732,3 @@ mm_md_direct_mapped_phys(paddr_t pa, vaddr_t *vap)
 	return rv;
 }
 #endif
-
-bool
-mm_md_page_color(paddr_t pa, int *colorp)
-{
-#if (ARM_MMU_V6 + ARM_MMU_V7) != 0
-	*colorp = atop(pa & arm_cache_prefer_mask);
-
-	return arm_cache_prefer_mask ? false : true;
-#else
-	*colorp = 0;
-
-	return true;
-#endif
-}

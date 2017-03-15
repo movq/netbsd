@@ -11,12 +11,10 @@
 //
 //===----------------------------------------------------------------------===//
 #include "clang/Basic/LangOptions.h"
-#include "llvm/ADT/StringRef.h"
 
 using namespace clang;
 
-LangOptions::LangOptions()
-  : IsHeaderFile(false) {
+LangOptions::LangOptions() {
 #define LANGOPT(Name, Bits, Default, Description) Name = Default;
 #define ENUM_LANGOPT(Name, Type, Bits, Default, Description) set##Name(Default);
 #include "clang/Basic/LangOptions.def"
@@ -32,15 +30,9 @@ void LangOptions::resetNonModularOptions() {
   // FIXME: This should not be reset; modules can be different with different
   // sanitizer options (this affects __has_feature(address_sanitizer) etc).
   Sanitize.clear();
-  SanitizerBlacklistFiles.clear();
+  SanitizerBlacklistFile.clear();
 
   CurrentModule.clear();
-  IsHeaderFile = false;
+  ImplementationOfModule.clear();
 }
 
-bool LangOptions::isNoBuiltinFunc(StringRef FuncName) const {
-  for (unsigned i = 0, e = NoBuiltinFuncs.size(); i != e; ++i)
-    if (FuncName.equals(NoBuiltinFuncs[i]))
-      return true;
-  return false;
-}

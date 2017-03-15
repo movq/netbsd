@@ -1,4 +1,4 @@
-#	$NetBSD: bsd.obj.mk,v 1.51 2016/12/10 23:12:39 christos Exp $
+#	$NetBSD: bsd.obj.mk,v 1.49 2010/01/25 00:43:00 christos Exp $
 
 .if !defined(_BSD_OBJ_MK_)
 _BSD_OBJ_MK_=1
@@ -37,11 +37,10 @@ obj:
 .else
 PAWD?=		/bin/pwd
 
-__objdirsuffix=	${OBJMACHINE:D.${MACHINE}${OBJMACHINE_ARCH:D-${MACHINE_ARCH}}}
-__objdir=	obj${__objdirsuffix}
+__objdir=	obj${OBJMACHINE:D.${MACHINE}}
 
 __usrobjdir=	${BSDOBJDIR}${USR_OBJMACHINE:D.${MACHINE}}
-__usrobjdirpf=	${USR_OBJMACHINE:D:U${__objdirsuffix}}
+__usrobjdirpf=	${USR_OBJMACHINE:D:U${OBJMACHINE:D.${MACHINE}}}
 
 .if defined(BUILDID)
 __objdir:=	${__objdir}.${BUILDID}

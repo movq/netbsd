@@ -1,4 +1,4 @@
-/*	$NetBSD: dtrace_asm.S,v 1.7 2017/02/27 06:46:59 chs Exp $	*/
+/*	$NetBSD: dtrace_asm.S,v 1.4.10.1 2016/07/10 10:00:20 martin Exp $	*/
 
 /*
  * CDDL HEADER START
@@ -35,6 +35,7 @@
 #include <sys/cpuvar_defs.h>
 #include <sys/dtrace.h>
 #include <machine/asm.h>
+#define END(a)
 #define MEXITCOUNT
 
 #include "assym.h"
@@ -72,10 +73,13 @@
 	 */
 	movq	TF_RIP(%rsp), %rdi
 	decq	%rdi
-	movq	%rsp, %rsi
+	movq	TF_RSP(%rsp), %rsi
 	movq	TF_RAX(%rsp), %rdx
+	pushq	(%rsi)
+	movq	%rsp, %rsi
 	call	dtrace_invop
 	ALTENTRY(dtrace_invop_callsite)
+	addq	$8, %rsp
 	cmpl	$DTRACE_INVOP_PUSHL_EBP, %eax
 	je	bp_push
 	cmpl	$DTRACE_INVOP_LEAVE, %eax

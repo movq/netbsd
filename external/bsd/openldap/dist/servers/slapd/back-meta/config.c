@@ -1,9 +1,9 @@
-/*	$NetBSD: config.c,v 1.1.1.6 2017/02/09 01:47:04 christos Exp $	*/
+/*	$NetBSD: config.c,v 1.1.1.5 2014/05/28 09:58:50 tron Exp $	*/
 
 /* $OpenLDAP$ */
 /* This work is part of OpenLDAP Software <http://www.openldap.org/>.
  *
- * Copyright 1999-2016 The OpenLDAP Foundation.
+ * Copyright 1999-2014 The OpenLDAP Foundation.
  * Portions Copyright 2001-2003 Pierangelo Masarati.
  * Portions Copyright 1999-2003 Howard Chu.
  * All rights reserved.
@@ -21,9 +21,6 @@
  * in OpenLDAP Software and subsequently enhanced by Pierangelo
  * Masarati.
  */
-
-#include <sys/cdefs.h>
-__RCSID("$NetBSD: config.c,v 1.1.1.6 2017/02/09 01:47:04 christos Exp $");
 
 #include "portable.h"
 
@@ -1797,7 +1794,7 @@ meta_back_cf_gen( ConfigArgs *c )
 		case LDAP_BACK_CFG_IDASSERT_AUTHZFROM: {
 			BerVarray *bvp;
 
-			bvp = &mt->mt_idassert_authz;
+			bvp = &mt->mt_idassert_authz; break;
 			if ( c->valx < 0 ) {
 				if ( *bvp != NULL ) {
 					ber_bvarray_free( *bvp );
@@ -2455,7 +2452,7 @@ meta_back_cf_gen( ConfigArgs *c )
 			return 1;
 		}
 		mc->mc_flags &= ~LDAP_BACK_F_CANCEL_MASK2;
-		mc->mc_flags |= cancel_mode[i].mask;
+		mc->mc_flags |= t_f_mode[i].mask;
 		break;
 
 	case LDAP_BACK_CFG_TIMEOUT:
@@ -2664,7 +2661,6 @@ idassert-authzFrom	"dn:<rootdn>"
 
 			/* re-parse all rewrite rules, up to the one
 			 * that needs to be added */
-			ca.be = c->be;
 			ca.fname = c->fname;
 			ca.lineno = c->lineno;
 			for ( i = 0; i < ix; i++ ) {

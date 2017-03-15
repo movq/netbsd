@@ -1,4 +1,4 @@
-/*	$NetBSD: bozohttpd.h,v 1.47 2017/01/31 14:36:09 mrg Exp $	*/
+/*	$NetBSD: bozohttpd.h,v 1.33.2.6 2017/02/12 22:07:17 snj Exp $	*/
 
 /*	$eterna: bozohttpd.h,v 1.39 2011/11/18 09:21:15 mrg Exp $	*/
 

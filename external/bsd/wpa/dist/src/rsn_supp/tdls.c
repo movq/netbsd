@@ -12,7 +12,6 @@
 #include "utils/eloop.h"
 #include "utils/os.h"
 #include "common/ieee802_11_defs.h"
-#include "common/ieee802_11_common.h"
 #include "crypto/sha256.h"
 #include "crypto/crypto.h"
 #include "crypto/aes_wrap.h"
@@ -627,15 +626,9 @@ static void wpa_tdls_tpk_timeout(void *eloop_ctx, void *timeout_ctx)
 	 */
 
 	if (peer->initiator) {
-		u8 addr[ETH_ALEN];
-
 		wpa_printf(MSG_DEBUG, "TDLS: TPK lifetime expired for " MACSTR
 			   " - try to renew", MAC2STR(peer->addr));
-		/* cache the peer address before do_teardown */
-		os_memcpy(addr, peer->addr, ETH_ALEN);
-		wpa_tdls_do_teardown(sm, peer,
-				     WLAN_REASON_TDLS_TEARDOWN_UNSPECIFIED);
-		wpa_tdls_start(sm, addr);
+		wpa_tdls_start(sm, peer->addr);
 	} else {
 		wpa_printf(MSG_DEBUG, "TDLS: TPK lifetime expired for " MACSTR
 			   " - tear down", MAC2STR(peer->addr));
@@ -1584,7 +1577,9 @@ static int copy_supp_rates(const struct wpa_eapol_ie_parse *kde,
 static int copy_peer_ht_capab(const struct wpa_eapol_ie_parse *kde,
 			      struct wpa_tdls_peer *peer)
 {
-	if (!kde->ht_capabilities) {
+	if (!kde->ht_capabilities ||
+	    kde->ht_capabilities_len <
+	    sizeof(struct ieee80211_ht_capabilities) ) {
 		wpa_printf(MSG_DEBUG, "TDLS: No supported ht capabilities "
 			   "received");
 		return 0;
@@ -1610,7 +1605,9 @@ static int copy_peer_ht_capab(const struct wpa_eapol_ie_parse *kde,
 static int copy_peer_vht_capab(const struct wpa_eapol_ie_parse *kde,
 			      struct wpa_tdls_peer *peer)
 {
-	if (!kde->vht_capabilities) {
+	if (!kde->vht_capabilities ||
+	    kde->vht_capabilities_len <
+	    sizeof(struct ieee80211_vht_capabilities) ) {
 		wpa_printf(MSG_DEBUG, "TDLS: No supported vht capabilities "
 			   "received");
 		return 0;
@@ -2176,14 +2173,6 @@ static int wpa_tdls_process_tpk_m2(struct wpa_sm *sm, const u8 *src_addr,
 			   "ignore TPK M2 from " MACSTR, MAC2STR(src_addr));
 		return -1;
 	}
-
-	if (peer->tpk_success) {
-		wpa_printf(MSG_INFO, "TDLS: Ignore incoming TPK M2 retry, from "
-			   MACSTR " as TPK M3 was already sent",
-			   MAC2STR(src_addr));
-		return 0;
-	}
-
 	wpa_tdls_tpk_retry_timeout_cancel(sm, peer, WLAN_TDLS_SETUP_REQUEST);
 
 	if (len < 3 + 2 + 1) {
@@ -2339,7 +2328,7 @@ static int wpa_tdls_process_tpk_m2(struct wpa_sm *sm, const u8 *src_addr,
 		    kde.ftie, sizeof(*ftie));
 	ftie = (struct wpa_tdls_ftie *) kde.ftie;
 
-	if (os_memcmp(peer->inonce, ftie->Snonce, WPA_NONCE_LEN) != 0) {
+	if (!os_memcmp(peer->inonce, ftie->Snonce, WPA_NONCE_LEN) == 0) {
 		wpa_printf(MSG_INFO, "TDLS: FTIE SNonce in TPK M2 does "
 			   "not match with FTIE SNonce used in TPK M1");
 		/* Silently discard the frame */
@@ -2400,7 +2389,7 @@ skip_rsn:
 	wpa_printf(MSG_DEBUG, "TDLS: Sending TDLS Setup Confirm / "
 		   "TPK Handshake Message 3");
 	if (wpa_tdls_send_tpk_m3(sm, src_addr, dtoken, lnkid, peer) < 0)
-		goto error_no_msg;
+		goto error;
 
 	if (!peer->tpk_success) {
 		/*
@@ -2421,7 +2410,6 @@ skip_rsn:
 error:
 	wpa_tdls_send_error(sm, src_addr, WLAN_TDLS_SETUP_CONFIRM, dtoken, 1,
 			    status);
-error_no_msg:
 	wpa_tdls_disable_peer_link(sm, peer);
 	return -1;
 }
@@ -2518,13 +2506,13 @@ static int wpa_tdls_process_tpk_m3(struct wpa_sm *sm, const u8 *src_addr,
 		goto error;
 	}
 
-	if (os_memcmp(peer->rnonce, ftie->Anonce, WPA_NONCE_LEN) != 0) {
+	if (!os_memcmp(peer->rnonce, ftie->Anonce, WPA_NONCE_LEN) == 0) {
 		wpa_printf(MSG_INFO, "TDLS: FTIE ANonce in TPK M3 does "
 			   "not match with FTIE ANonce used in TPK M2");
 		goto error;
 	}
 
-	if (os_memcmp(peer->inonce, ftie->Snonce, WPA_NONCE_LEN) != 0) {
+	if (!os_memcmp(peer->inonce, ftie->Snonce, WPA_NONCE_LEN) == 0) {
 		wpa_printf(MSG_INFO, "TDLS: FTIE SNonce in TPK M3 does not "
 			   "match with FTIE SNonce used in TPK M1");
 		goto error;
@@ -2875,14 +2863,14 @@ void wpa_tdls_disassoc(struct wpa_sm *sm)
 }
 
 
-static int wpa_tdls_prohibited(struct ieee802_11_elems *elems)
+static int wpa_tdls_prohibited(struct wpa_eapol_ie_parse *elems)
 {
 	/* bit 38 - TDLS Prohibited */
 	return !!(elems->ext_capab[2 + 4] & 0x40);
 }
 
 
-static int wpa_tdls_chan_switch_prohibited(struct ieee802_11_elems *elems)
+static int wpa_tdls_chan_switch_prohibited(struct wpa_eapol_ie_parse *elems)
 {
 	/* bit 39 - TDLS Channel Switch Prohibited */
 	return !!(elems->ext_capab[2 + 4] & 0x80);
@@ -2891,13 +2879,12 @@ static int wpa_tdls_chan_switch_prohibited(struct ieee802_11_elems *elems)
 
 void wpa_tdls_ap_ies(struct wpa_sm *sm, const u8 *ies, size_t len)
 {
-	struct ieee802_11_elems elems;
+	struct wpa_eapol_ie_parse elems;
 
 	sm->tdls_prohibited = 0;
 	sm->tdls_chan_switch_prohibited = 0;
 
-	if (ies == NULL ||
-	    ieee802_11_parse_elems(ies, len, &elems, 0) == ParseFailed ||
+	if (ies == NULL || wpa_supplicant_parse_ies(ies, len, &elems) < 0 ||
 	    elems.ext_capab == NULL || elems.ext_capab_len < 2 + 5)
 		return;
 
@@ -2913,10 +2900,9 @@ void wpa_tdls_ap_ies(struct wpa_sm *sm, const u8 *ies, size_t len)
 
 void wpa_tdls_assoc_resp_ies(struct wpa_sm *sm, const u8 *ies, size_t len)
 {
-	struct ieee802_11_elems elems;
+	struct wpa_eapol_ie_parse elems;
 
-	if (ies == NULL ||
-	    ieee802_11_parse_elems(ies, len, &elems, 0) == ParseFailed ||
+	if (ies == NULL || wpa_supplicant_parse_ies(ies, len, &elems) < 0 ||
 	    elems.ext_capab == NULL || elems.ext_capab_len < 2 + 5)
 		return;
 

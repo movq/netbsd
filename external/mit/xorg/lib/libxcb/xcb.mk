@@ -1,4 +1,4 @@
-#	$NetBSD: xcb.mk,v 1.4 2015/02/03 21:31:31 jmcneill Exp $
+#	$NetBSD: xcb.mk,v 1.2.6.2 2015/02/04 06:46:33 snj Exp $
 
 # define XCBEXT to something before including this
 

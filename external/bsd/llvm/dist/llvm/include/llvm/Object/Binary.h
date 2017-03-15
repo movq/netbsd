@@ -28,8 +28,8 @@ namespace object {
 
 class Binary {
 private:
-  Binary() = delete;
-  Binary(const Binary &other) = delete;
+  Binary() LLVM_DELETED_FUNCTION;
+  Binary(const Binary &other) LLVM_DELETED_FUNCTION;
 
   unsigned int TypeID;
 
@@ -41,9 +41,7 @@ protected:
   enum {
     ID_Archive,
     ID_MachOUniversalBinary,
-    ID_COFFImportFile,
-    ID_IR,                 // LLVM IR
-    ID_ModuleSummaryIndex, // Module summary index
+    ID_IR, // LLVM IR
 
     // Object and children.
     ID_StartObjects,
@@ -58,8 +56,6 @@ protected:
     ID_MachO32B, // MachO 32-bit, big endian
     ID_MachO64L, // MachO 64-bit, little endian
     ID_MachO64B, // MachO 64-bit, big endian
-
-    ID_Wasm,
 
     ID_EndObjects
   };
@@ -117,17 +113,9 @@ public:
     return TypeID == ID_COFF;
   }
 
-  bool isWasm() const { return TypeID == ID_Wasm; }
-
-  bool isCOFFImportFile() const {
-    return TypeID == ID_COFFImportFile;
-  }
-
   bool isIR() const {
     return TypeID == ID_IR;
   }
-
-  bool isModuleSummaryIndex() const { return TypeID == ID_ModuleSummaryIndex; }
 
   bool isLittleEndian() const {
     return !(TypeID == ID_ELF32B || TypeID == ID_ELF64B ||
@@ -138,8 +126,8 @@ public:
 /// @brief Create a Binary from Source, autodetecting the file type.
 ///
 /// @param Source The data to create the Binary from.
-Expected<std::unique_ptr<Binary>> createBinary(MemoryBufferRef Source,
-                                               LLVMContext *Context = nullptr);
+ErrorOr<std::unique_ptr<Binary>> createBinary(MemoryBufferRef Source,
+                                              LLVMContext *Context = nullptr);
 
 template <typename T> class OwningBinary {
   std::unique_ptr<T> Bin;
@@ -189,7 +177,7 @@ template <typename T> const T* OwningBinary<T>::getBinary() const {
   return Bin.get();
 }
 
-Expected<OwningBinary<Binary>> createBinary(StringRef Path);
+ErrorOr<OwningBinary<Binary>> createBinary(StringRef Path);
 }
 }
 

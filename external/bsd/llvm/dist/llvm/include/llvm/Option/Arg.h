@@ -29,8 +29,8 @@ class ArgList;
 /// The Arg class encodes just enough information to be able to
 /// derive the argument values efficiently.
 class Arg {
-  Arg(const Arg &) = delete;
-  void operator=(const Arg &) = delete;
+  Arg(const Arg &) LLVM_DELETED_FUNCTION;
+  void operator=(const Arg &) LLVM_DELETED_FUNCTION;
 
 private:
   /// \brief The option this argument is an instance of.
@@ -78,7 +78,9 @@ public:
   const Arg &getBaseArg() const {
     return BaseArg ? *BaseArg : *this;
   }
-  void setBaseArg(const Arg *BaseArg) { this->BaseArg = BaseArg; }
+  void setBaseArg(const Arg *_BaseArg) {
+    BaseArg = _BaseArg;
+  }
 
   bool getOwnsValues() const { return OwnsValues; }
   void setOwnsValues(bool Value) const { OwnsValues = Value; }
@@ -93,8 +95,9 @@ public:
     return Values[N];
   }
 
-  SmallVectorImpl<const char *> &getValues() { return Values; }
-  const SmallVectorImpl<const char *> &getValues() const { return Values; }
+  SmallVectorImpl<const char*> &getValues() {
+    return Values;
+  }
 
   bool containsValue(StringRef Value) const {
     for (unsigned i = 0, e = getNumValues(); i != e; ++i)
@@ -113,7 +116,6 @@ public:
   /// when rendered as a input (e.g., Xlinker).
   void renderAsInput(const ArgList &Args, ArgStringList &Output) const;
 
-  void print(raw_ostream &O) const;
   void dump() const;
 
   /// \brief Return a formatted version of the argument and

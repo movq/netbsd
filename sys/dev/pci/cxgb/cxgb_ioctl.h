@@ -29,9 +29,6 @@ POSSIBILITY OF SUCH DAMAGE.
 #ifndef __CHIOCTL_H__
 #define __CHIOCTL_H__
 
-#include <sys/ioccom.h>
-
-
 /*
  * Ioctl commands specific to this driver.
  */

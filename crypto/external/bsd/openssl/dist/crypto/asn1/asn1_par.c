@@ -196,7 +196,7 @@ static int asn1_parse2(BIO *bp, const unsigned char **pp, long length,
                     if ((r == 2) || (p >= tot)) {
                         len = p - sp;
                         break;
-                    }
+                }
                 }
             } else {
                 long tmp = len;
@@ -211,7 +211,7 @@ static int asn1_parse2(BIO *bp, const unsigned char **pp, long length,
                     }
                     tmp -= p - sp;
                 }
-            }
+                }
         } else if (xclass != 0) {
             p += len;
             if (BIO_write(bp, "\n", 1) <= 0)

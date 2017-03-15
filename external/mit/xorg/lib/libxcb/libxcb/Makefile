@@ -1,10 +1,9 @@
-#	$NetBSD: Makefile,v 1.9 2017/03/05 09:27:53 mrg Exp $
+#	$NetBSD: Makefile,v 1.5.22.2 2015/02/21 19:30:41 martin Exp $
 
 .include <bsd.own.mk>
 
 LIB=	xcb
 .PATH:	${X11SRCDIR.${LIB}}/src
-.PATH:	${X11SRCDIR.${LIB}}/man
 .PATH:	${X11SRCDIR.${LIB}}
 .PATH:	${.CURDIR}/../files
 
@@ -56,6 +55,7 @@ INCS=	\
 	xc_misc.h \
 	xcb.h \
 	xcbext.h \
+	xevie.h \
 	xf86dri.h \
 	xfixes.h \
 	xinerama.h \

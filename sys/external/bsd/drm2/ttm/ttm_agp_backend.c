@@ -1,4 +1,4 @@
-/*	$NetBSD: ttm_agp_backend.c,v 1.6 2017/03/09 08:27:18 maya Exp $	*/
+/*	$NetBSD: ttm_agp_backend.c,v 1.1.4.2 2015/07/30 15:41:44 snj Exp $	*/
 
 /*-
  * Copyright (c) 2014 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ttm_agp_backend.c,v 1.6 2017/03/09 08:27:18 maya Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ttm_agp_backend.c,v 1.1.4.2 2015/07/30 15:41:44 snj Exp $");
 
 #include <sys/types.h>
 #include <sys/kmem.h>
@@ -41,8 +41,6 @@ __KERNEL_RCSID(0, "$NetBSD: ttm_agp_backend.c,v 1.6 2017/03/09 08:27:18 maya Exp
 
 #include <ttm/ttm_bo_driver.h>
 #include <ttm/ttm_page_alloc.h>
-
-#if __OS_HAS_AGP
 
 struct ttm_agp {
 	struct ttm_dma_tt ttm_dma;
@@ -78,9 +76,9 @@ int
 ttm_agp_tt_populate(struct ttm_tt *ttm)
 {
 
-	KASSERTMSG((ttm->state == tt_unpopulated),
-	    "ttm_agp_tt_populate: ttm %p state is not tt_unpopulated: %d",
-	    ttm, (int)ttm->state);
+	if (ttm->state != tt_unpopulated)
+		return 0;
+
 	return ttm_bus_dma_populate(container_of(ttm, struct ttm_dma_tt, ttm));
 }
 
@@ -88,9 +86,6 @@ void
 ttm_agp_tt_unpopulate(struct ttm_tt *ttm)
 {
 
-	KASSERTMSG((ttm->state == tt_unbound),
-	    "ttm_agp_tt_unpopulate: ttm %p state is not tt_unbound: %d",
-	    ttm, (int)ttm->state);
 	ttm_bus_dma_unpopulate(container_of(ttm, struct ttm_dma_tt, ttm));
 }
 
@@ -169,5 +164,3 @@ static const struct ttm_backend_func ttm_agp_backend_func = {
 	.unbind = &ttm_agp_unbind,
 	.destroy = &ttm_agp_destroy,
 };
-
-#endif

@@ -9,7 +9,7 @@
 
 #include "obj2yaml.h"
 #include "llvm/Object/COFF.h"
-#include "llvm/ObjectYAML/COFFYAML.h"
+#include "llvm/Object/COFFYAML.h"
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/YAMLTraits.h"
 
@@ -109,7 +109,6 @@ void COFFDumper::dumpSections(unsigned NumSections) {
     NewYAMLSection.Header.VirtualAddress = ObjSection.getAddress();
     NewYAMLSection.Header.VirtualSize = COFFSection->VirtualSize;
     NewYAMLSection.Alignment = ObjSection.getAlignment();
-    assert(NewYAMLSection.Alignment <= 8192);
 
     ArrayRef<uint8_t> sectionData;
     if (!ObjSection.isBSS())
@@ -121,15 +120,7 @@ void COFFDumper::dumpSections(unsigned NumSections) {
       const object::coff_relocation *reloc = Obj.getCOFFRelocation(Reloc);
       COFFYAML::Relocation Rel;
       object::symbol_iterator Sym = Reloc.getSymbol();
-      Expected<StringRef> SymbolNameOrErr = Sym->getName();
-      if (!SymbolNameOrErr) {
-       std::string Buf;
-       raw_string_ostream OS(Buf);
-       logAllUnhandledErrors(SymbolNameOrErr.takeError(), OS, "");
-       OS.flush();
-       report_fatal_error(Buf);
-      }
-      Rel.SymbolName = *SymbolNameOrErr;
+      Sym->getName(Rel.SymbolName);
       Rel.VirtualAddress = reloc->VirtualAddress;
       Rel.Type = reloc->Type;
       Relocations.push_back(Rel);
@@ -280,5 +271,5 @@ std::error_code coff2yaml(raw_ostream &Out, const object::COFFObjectFile &Obj) {
   yaml::Output Yout(Out);
   Yout << Dumper.getYAMLObj();
 
-  return std::error_code();
+  return object::object_error::success;
 }

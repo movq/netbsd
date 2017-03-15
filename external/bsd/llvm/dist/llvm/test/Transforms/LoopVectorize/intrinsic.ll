@@ -1,6 +1,7 @@
 ; RUN: opt < %s  -loop-vectorize -force-vector-interleave=1 -force-vector-width=4 -dce -instcombine -S | FileCheck %s
 
 target datalayout = "e-p:64:64:64-i1:8:8-i8:8:8-i16:16:16-i32:32:32-i64:64:64-f32:32:32-f64:64:64-v64:64:64-v128:128:128-a0:0:64-s0:64:64-f80:128:128-n8:16:32:64-S128"
+target triple = "x86_64-unknown-linux-gnu"
 
 ;CHECK-LABEL: @sqrt_f32(
 ;CHECK: llvm.sqrt.v4f32
@@ -12,10 +13,10 @@ entry:
 
 for.body:                                         ; preds = %entry, %for.body
   %indvars.iv = phi i64 [ %indvars.iv.next, %for.body ], [ 0, %entry ]
-  %arrayidx = getelementptr inbounds float, float* %y, i64 %indvars.iv
-  %0 = load float, float* %arrayidx, align 4
+  %arrayidx = getelementptr inbounds float* %y, i64 %indvars.iv
+  %0 = load float* %arrayidx, align 4
   %call = tail call float @llvm.sqrt.f32(float %0) nounwind readnone
-  %arrayidx2 = getelementptr inbounds float, float* %x, i64 %indvars.iv
+  %arrayidx2 = getelementptr inbounds float* %x, i64 %indvars.iv
   store float %call, float* %arrayidx2, align 4
   %indvars.iv.next = add i64 %indvars.iv, 1
   %lftr.wideiv = trunc i64 %indvars.iv.next to i32
@@ -38,10 +39,10 @@ entry:
 
 for.body:                                         ; preds = %entry, %for.body
   %indvars.iv = phi i64 [ %indvars.iv.next, %for.body ], [ 0, %entry ]
-  %arrayidx = getelementptr inbounds double, double* %y, i64 %indvars.iv
-  %0 = load double, double* %arrayidx, align 8
+  %arrayidx = getelementptr inbounds double* %y, i64 %indvars.iv
+  %0 = load double* %arrayidx, align 8
   %call = tail call double @llvm.sqrt.f64(double %0) nounwind readnone
-  %arrayidx2 = getelementptr inbounds double, double* %x, i64 %indvars.iv
+  %arrayidx2 = getelementptr inbounds double* %x, i64 %indvars.iv
   store double %call, double* %arrayidx2, align 8
   %indvars.iv.next = add i64 %indvars.iv, 1
   %lftr.wideiv = trunc i64 %indvars.iv.next to i32
@@ -64,10 +65,10 @@ entry:
 
 for.body:                                         ; preds = %entry, %for.body
   %indvars.iv = phi i64 [ %indvars.iv.next, %for.body ], [ 0, %entry ]
-  %arrayidx = getelementptr inbounds float, float* %y, i64 %indvars.iv
-  %0 = load float, float* %arrayidx, align 4
+  %arrayidx = getelementptr inbounds float* %y, i64 %indvars.iv
+  %0 = load float* %arrayidx, align 4
   %call = tail call float @llvm.sin.f32(float %0) nounwind readnone
-  %arrayidx2 = getelementptr inbounds float, float* %x, i64 %indvars.iv
+  %arrayidx2 = getelementptr inbounds float* %x, i64 %indvars.iv
   store float %call, float* %arrayidx2, align 4
   %indvars.iv.next = add i64 %indvars.iv, 1
   %lftr.wideiv = trunc i64 %indvars.iv.next to i32
@@ -90,10 +91,10 @@ entry:
 
 for.body:                                         ; preds = %entry, %for.body
   %indvars.iv = phi i64 [ %indvars.iv.next, %for.body ], [ 0, %entry ]
-  %arrayidx = getelementptr inbounds double, double* %y, i64 %indvars.iv
-  %0 = load double, double* %arrayidx, align 8
+  %arrayidx = getelementptr inbounds double* %y, i64 %indvars.iv
+  %0 = load double* %arrayidx, align 8
   %call = tail call double @llvm.sin.f64(double %0) nounwind readnone
-  %arrayidx2 = getelementptr inbounds double, double* %x, i64 %indvars.iv
+  %arrayidx2 = getelementptr inbounds double* %x, i64 %indvars.iv
   store double %call, double* %arrayidx2, align 8
   %indvars.iv.next = add i64 %indvars.iv, 1
   %lftr.wideiv = trunc i64 %indvars.iv.next to i32
@@ -116,10 +117,10 @@ entry:
 
 for.body:                                         ; preds = %entry, %for.body
   %indvars.iv = phi i64 [ %indvars.iv.next, %for.body ], [ 0, %entry ]
-  %arrayidx = getelementptr inbounds float, float* %y, i64 %indvars.iv
-  %0 = load float, float* %arrayidx, align 4
+  %arrayidx = getelementptr inbounds float* %y, i64 %indvars.iv
+  %0 = load float* %arrayidx, align 4
   %call = tail call float @llvm.cos.f32(float %0) nounwind readnone
-  %arrayidx2 = getelementptr inbounds float, float* %x, i64 %indvars.iv
+  %arrayidx2 = getelementptr inbounds float* %x, i64 %indvars.iv
   store float %call, float* %arrayidx2, align 4
   %indvars.iv.next = add i64 %indvars.iv, 1
   %lftr.wideiv = trunc i64 %indvars.iv.next to i32
@@ -142,10 +143,10 @@ entry:
 
 for.body:                                         ; preds = %entry, %for.body
   %indvars.iv = phi i64 [ %indvars.iv.next, %for.body ], [ 0, %entry ]
-  %arrayidx = getelementptr inbounds double, double* %y, i64 %indvars.iv
-  %0 = load double, double* %arrayidx, align 8
+  %arrayidx = getelementptr inbounds double* %y, i64 %indvars.iv
+  %0 = load double* %arrayidx, align 8
   %call = tail call double @llvm.cos.f64(double %0) nounwind readnone
-  %arrayidx2 = getelementptr inbounds double, double* %x, i64 %indvars.iv
+  %arrayidx2 = getelementptr inbounds double* %x, i64 %indvars.iv
   store double %call, double* %arrayidx2, align 8
   %indvars.iv.next = add i64 %indvars.iv, 1
   %lftr.wideiv = trunc i64 %indvars.iv.next to i32
@@ -168,10 +169,10 @@ entry:
 
 for.body:                                         ; preds = %entry, %for.body
   %indvars.iv = phi i64 [ %indvars.iv.next, %for.body ], [ 0, %entry ]
-  %arrayidx = getelementptr inbounds float, float* %y, i64 %indvars.iv
-  %0 = load float, float* %arrayidx, align 4
+  %arrayidx = getelementptr inbounds float* %y, i64 %indvars.iv
+  %0 = load float* %arrayidx, align 4
   %call = tail call float @llvm.exp.f32(float %0) nounwind readnone
-  %arrayidx2 = getelementptr inbounds float, float* %x, i64 %indvars.iv
+  %arrayidx2 = getelementptr inbounds float* %x, i64 %indvars.iv
   store float %call, float* %arrayidx2, align 4
   %indvars.iv.next = add i64 %indvars.iv, 1
   %lftr.wideiv = trunc i64 %indvars.iv.next to i32
@@ -194,10 +195,10 @@ entry:
 
 for.body:                                         ; preds = %entry, %for.body
   %indvars.iv = phi i64 [ %indvars.iv.next, %for.body ], [ 0, %entry ]
-  %arrayidx = getelementptr inbounds double, double* %y, i64 %indvars.iv
-  %0 = load double, double* %arrayidx, align 8
+  %arrayidx = getelementptr inbounds double* %y, i64 %indvars.iv
+  %0 = load double* %arrayidx, align 8
   %call = tail call double @llvm.exp.f64(double %0) nounwind readnone
-  %arrayidx2 = getelementptr inbounds double, double* %x, i64 %indvars.iv
+  %arrayidx2 = getelementptr inbounds double* %x, i64 %indvars.iv
   store double %call, double* %arrayidx2, align 8
   %indvars.iv.next = add i64 %indvars.iv, 1
   %lftr.wideiv = trunc i64 %indvars.iv.next to i32
@@ -220,10 +221,10 @@ entry:
 
 for.body:                                         ; preds = %entry, %for.body
   %indvars.iv = phi i64 [ %indvars.iv.next, %for.body ], [ 0, %entry ]
-  %arrayidx = getelementptr inbounds float, float* %y, i64 %indvars.iv
-  %0 = load float, float* %arrayidx, align 4
+  %arrayidx = getelementptr inbounds float* %y, i64 %indvars.iv
+  %0 = load float* %arrayidx, align 4
   %call = tail call float @llvm.exp2.f32(float %0) nounwind readnone
-  %arrayidx2 = getelementptr inbounds float, float* %x, i64 %indvars.iv
+  %arrayidx2 = getelementptr inbounds float* %x, i64 %indvars.iv
   store float %call, float* %arrayidx2, align 4
   %indvars.iv.next = add i64 %indvars.iv, 1
   %lftr.wideiv = trunc i64 %indvars.iv.next to i32
@@ -246,10 +247,10 @@ entry:
 
 for.body:                                         ; preds = %entry, %for.body
   %indvars.iv = phi i64 [ %indvars.iv.next, %for.body ], [ 0, %entry ]
-  %arrayidx = getelementptr inbounds double, double* %y, i64 %indvars.iv
-  %0 = load double, double* %arrayidx, align 8
+  %arrayidx = getelementptr inbounds double* %y, i64 %indvars.iv
+  %0 = load double* %arrayidx, align 8
   %call = tail call double @llvm.exp2.f64(double %0) nounwind readnone
-  %arrayidx2 = getelementptr inbounds double, double* %x, i64 %indvars.iv
+  %arrayidx2 = getelementptr inbounds double* %x, i64 %indvars.iv
   store double %call, double* %arrayidx2, align 8
   %indvars.iv.next = add i64 %indvars.iv, 1
   %lftr.wideiv = trunc i64 %indvars.iv.next to i32
@@ -272,10 +273,10 @@ entry:
 
 for.body:                                         ; preds = %entry, %for.body
   %indvars.iv = phi i64 [ %indvars.iv.next, %for.body ], [ 0, %entry ]
-  %arrayidx = getelementptr inbounds float, float* %y, i64 %indvars.iv
-  %0 = load float, float* %arrayidx, align 4
+  %arrayidx = getelementptr inbounds float* %y, i64 %indvars.iv
+  %0 = load float* %arrayidx, align 4
   %call = tail call float @llvm.log.f32(float %0) nounwind readnone
-  %arrayidx2 = getelementptr inbounds float, float* %x, i64 %indvars.iv
+  %arrayidx2 = getelementptr inbounds float* %x, i64 %indvars.iv
   store float %call, float* %arrayidx2, align 4
   %indvars.iv.next = add i64 %indvars.iv, 1
   %lftr.wideiv = trunc i64 %indvars.iv.next to i32
@@ -298,10 +299,10 @@ entry:
 
 for.body:                                         ; preds = %entry, %for.body
   %indvars.iv = phi i64 [ %indvars.iv.next, %for.body ], [ 0, %entry ]
-  %arrayidx = getelementptr inbounds double, double* %y, i64 %indvars.iv
-  %0 = load double, double* %arrayidx, align 8
+  %arrayidx = getelementptr inbounds double* %y, i64 %indvars.iv
+  %0 = load double* %arrayidx, align 8
   %call = tail call double @llvm.log.f64(double %0) nounwind readnone
-  %arrayidx2 = getelementptr inbounds double, double* %x, i64 %indvars.iv
+  %arrayidx2 = getelementptr inbounds double* %x, i64 %indvars.iv
   store double %call, double* %arrayidx2, align 8
   %indvars.iv.next = add i64 %indvars.iv, 1
   %lftr.wideiv = trunc i64 %indvars.iv.next to i32
@@ -324,10 +325,10 @@ entry:
 
 for.body:                                         ; preds = %entry, %for.body
   %indvars.iv = phi i64 [ %indvars.iv.next, %for.body ], [ 0, %entry ]
-  %arrayidx = getelementptr inbounds float, float* %y, i64 %indvars.iv
-  %0 = load float, float* %arrayidx, align 4
+  %arrayidx = getelementptr inbounds float* %y, i64 %indvars.iv
+  %0 = load float* %arrayidx, align 4
   %call = tail call float @llvm.log10.f32(float %0) nounwind readnone
-  %arrayidx2 = getelementptr inbounds float, float* %x, i64 %indvars.iv
+  %arrayidx2 = getelementptr inbounds float* %x, i64 %indvars.iv
   store float %call, float* %arrayidx2, align 4
   %indvars.iv.next = add i64 %indvars.iv, 1
   %lftr.wideiv = trunc i64 %indvars.iv.next to i32
@@ -350,10 +351,10 @@ entry:
 
 for.body:                                         ; preds = %entry, %for.body
   %indvars.iv = phi i64 [ %indvars.iv.next, %for.body ], [ 0, %entry ]
-  %arrayidx = getelementptr inbounds double, double* %y, i64 %indvars.iv
-  %0 = load double, double* %arrayidx, align 8
+  %arrayidx = getelementptr inbounds double* %y, i64 %indvars.iv
+  %0 = load double* %arrayidx, align 8
   %call = tail call double @llvm.log10.f64(double %0) nounwind readnone
-  %arrayidx2 = getelementptr inbounds double, double* %x, i64 %indvars.iv
+  %arrayidx2 = getelementptr inbounds double* %x, i64 %indvars.iv
   store double %call, double* %arrayidx2, align 8
   %indvars.iv.next = add i64 %indvars.iv, 1
   %lftr.wideiv = trunc i64 %indvars.iv.next to i32
@@ -376,10 +377,10 @@ entry:
 
 for.body:                                         ; preds = %entry, %for.body
   %indvars.iv = phi i64 [ %indvars.iv.next, %for.body ], [ 0, %entry ]
-  %arrayidx = getelementptr inbounds float, float* %y, i64 %indvars.iv
-  %0 = load float, float* %arrayidx, align 4
+  %arrayidx = getelementptr inbounds float* %y, i64 %indvars.iv
+  %0 = load float* %arrayidx, align 4
   %call = tail call float @llvm.log2.f32(float %0) nounwind readnone
-  %arrayidx2 = getelementptr inbounds float, float* %x, i64 %indvars.iv
+  %arrayidx2 = getelementptr inbounds float* %x, i64 %indvars.iv
   store float %call, float* %arrayidx2, align 4
   %indvars.iv.next = add i64 %indvars.iv, 1
   %lftr.wideiv = trunc i64 %indvars.iv.next to i32
@@ -402,10 +403,10 @@ entry:
 
 for.body:                                         ; preds = %entry, %for.body
   %indvars.iv = phi i64 [ %indvars.iv.next, %for.body ], [ 0, %entry ]
-  %arrayidx = getelementptr inbounds double, double* %y, i64 %indvars.iv
-  %0 = load double, double* %arrayidx, align 8
+  %arrayidx = getelementptr inbounds double* %y, i64 %indvars.iv
+  %0 = load double* %arrayidx, align 8
   %call = tail call double @llvm.log2.f64(double %0) nounwind readnone
-  %arrayidx2 = getelementptr inbounds double, double* %x, i64 %indvars.iv
+  %arrayidx2 = getelementptr inbounds double* %x, i64 %indvars.iv
   store double %call, double* %arrayidx2, align 8
   %indvars.iv.next = add i64 %indvars.iv, 1
   %lftr.wideiv = trunc i64 %indvars.iv.next to i32
@@ -428,10 +429,10 @@ entry:
 
 for.body:                                         ; preds = %entry, %for.body
   %indvars.iv = phi i64 [ %indvars.iv.next, %for.body ], [ 0, %entry ]
-  %arrayidx = getelementptr inbounds float, float* %y, i64 %indvars.iv
-  %0 = load float, float* %arrayidx, align 4
+  %arrayidx = getelementptr inbounds float* %y, i64 %indvars.iv
+  %0 = load float* %arrayidx, align 4
   %call = tail call float @llvm.fabs.f32(float %0) nounwind readnone
-  %arrayidx2 = getelementptr inbounds float, float* %x, i64 %indvars.iv
+  %arrayidx2 = getelementptr inbounds float* %x, i64 %indvars.iv
   store float %call, float* %arrayidx2, align 4
   %indvars.iv.next = add i64 %indvars.iv, 1
   %lftr.wideiv = trunc i64 %indvars.iv.next to i32
@@ -451,10 +452,10 @@ entry:
 
 for.body:                                         ; preds = %entry, %for.body
   %indvars.iv = phi i64 [ %indvars.iv.next, %for.body ], [ 0, %entry ]
-  %arrayidx = getelementptr inbounds double, double* %y, i64 %indvars.iv
-  %0 = load double, double* %arrayidx, align 8
+  %arrayidx = getelementptr inbounds double* %y, i64 %indvars.iv
+  %0 = load double* %arrayidx, align 8
   %call = tail call double @llvm.fabs(double %0) nounwind readnone
-  %arrayidx2 = getelementptr inbounds double, double* %x, i64 %indvars.iv
+  %arrayidx2 = getelementptr inbounds double* %x, i64 %indvars.iv
   store double %call, double* %arrayidx2, align 8
   %indvars.iv.next = add i64 %indvars.iv, 1
   %lftr.wideiv = trunc i64 %indvars.iv.next to i32
@@ -477,12 +478,12 @@ entry:
 
 for.body:                                         ; preds = %entry, %for.body
   %indvars.iv = phi i64 [ %indvars.iv.next, %for.body ], [ 0, %entry ]
-  %arrayidx = getelementptr inbounds float, float* %y, i64 %indvars.iv
-  %0 = load float, float* %arrayidx, align 4
-  %arrayidx1 = getelementptr inbounds float, float* %z, i64 %indvars.iv
-  %1 = load float, float* %arrayidx1, align 4
+  %arrayidx = getelementptr inbounds float* %y, i64 %indvars.iv
+  %0 = load float* %arrayidx, align 4
+  %arrayidx1 = getelementptr inbounds float* %z, i64 %indvars.iv
+  %1 = load float* %arrayidx1, align 4
   %call = tail call float @llvm.copysign.f32(float %0, float %1) nounwind readnone
-  %arrayidx2 = getelementptr inbounds float, float* %x, i64 %indvars.iv
+  %arrayidx2 = getelementptr inbounds float* %x, i64 %indvars.iv
   store float %call, float* %arrayidx2, align 4
   %indvars.iv.next = add i64 %indvars.iv, 1
   %lftr.wideiv = trunc i64 %indvars.iv.next to i32
@@ -502,12 +503,12 @@ entry:
 
 for.body:                                         ; preds = %entry, %for.body
   %indvars.iv = phi i64 [ %indvars.iv.next, %for.body ], [ 0, %entry ]
-  %arrayidx = getelementptr inbounds double, double* %y, i64 %indvars.iv
-  %0 = load double, double* %arrayidx, align 8
-  %arrayidx1 = getelementptr inbounds double, double* %z, i64 %indvars.iv
-  %1 = load double, double* %arrayidx, align 8
+  %arrayidx = getelementptr inbounds double* %y, i64 %indvars.iv
+  %0 = load double* %arrayidx, align 8
+  %arrayidx1 = getelementptr inbounds double* %z, i64 %indvars.iv
+  %1 = load double* %arrayidx, align 8
   %call = tail call double @llvm.copysign(double %0, double %1) nounwind readnone
-  %arrayidx2 = getelementptr inbounds double, double* %x, i64 %indvars.iv
+  %arrayidx2 = getelementptr inbounds double* %x, i64 %indvars.iv
   store double %call, double* %arrayidx2, align 8
   %indvars.iv.next = add i64 %indvars.iv, 1
   %lftr.wideiv = trunc i64 %indvars.iv.next to i32
@@ -530,10 +531,10 @@ entry:
 
 for.body:                                         ; preds = %entry, %for.body
   %indvars.iv = phi i64 [ %indvars.iv.next, %for.body ], [ 0, %entry ]
-  %arrayidx = getelementptr inbounds float, float* %y, i64 %indvars.iv
-  %0 = load float, float* %arrayidx, align 4
+  %arrayidx = getelementptr inbounds float* %y, i64 %indvars.iv
+  %0 = load float* %arrayidx, align 4
   %call = tail call float @llvm.floor.f32(float %0) nounwind readnone
-  %arrayidx2 = getelementptr inbounds float, float* %x, i64 %indvars.iv
+  %arrayidx2 = getelementptr inbounds float* %x, i64 %indvars.iv
   store float %call, float* %arrayidx2, align 4
   %indvars.iv.next = add i64 %indvars.iv, 1
   %lftr.wideiv = trunc i64 %indvars.iv.next to i32
@@ -556,10 +557,10 @@ entry:
 
 for.body:                                         ; preds = %entry, %for.body
   %indvars.iv = phi i64 [ %indvars.iv.next, %for.body ], [ 0, %entry ]
-  %arrayidx = getelementptr inbounds double, double* %y, i64 %indvars.iv
-  %0 = load double, double* %arrayidx, align 8
+  %arrayidx = getelementptr inbounds double* %y, i64 %indvars.iv
+  %0 = load double* %arrayidx, align 8
   %call = tail call double @llvm.floor.f64(double %0) nounwind readnone
-  %arrayidx2 = getelementptr inbounds double, double* %x, i64 %indvars.iv
+  %arrayidx2 = getelementptr inbounds double* %x, i64 %indvars.iv
   store double %call, double* %arrayidx2, align 8
   %indvars.iv.next = add i64 %indvars.iv, 1
   %lftr.wideiv = trunc i64 %indvars.iv.next to i32
@@ -582,10 +583,10 @@ entry:
 
 for.body:                                         ; preds = %entry, %for.body
   %indvars.iv = phi i64 [ %indvars.iv.next, %for.body ], [ 0, %entry ]
-  %arrayidx = getelementptr inbounds float, float* %y, i64 %indvars.iv
-  %0 = load float, float* %arrayidx, align 4
+  %arrayidx = getelementptr inbounds float* %y, i64 %indvars.iv
+  %0 = load float* %arrayidx, align 4
   %call = tail call float @llvm.ceil.f32(float %0) nounwind readnone
-  %arrayidx2 = getelementptr inbounds float, float* %x, i64 %indvars.iv
+  %arrayidx2 = getelementptr inbounds float* %x, i64 %indvars.iv
   store float %call, float* %arrayidx2, align 4
   %indvars.iv.next = add i64 %indvars.iv, 1
   %lftr.wideiv = trunc i64 %indvars.iv.next to i32
@@ -608,10 +609,10 @@ entry:
 
 for.body:                                         ; preds = %entry, %for.body
   %indvars.iv = phi i64 [ %indvars.iv.next, %for.body ], [ 0, %entry ]
-  %arrayidx = getelementptr inbounds double, double* %y, i64 %indvars.iv
-  %0 = load double, double* %arrayidx, align 8
+  %arrayidx = getelementptr inbounds double* %y, i64 %indvars.iv
+  %0 = load double* %arrayidx, align 8
   %call = tail call double @llvm.ceil.f64(double %0) nounwind readnone
-  %arrayidx2 = getelementptr inbounds double, double* %x, i64 %indvars.iv
+  %arrayidx2 = getelementptr inbounds double* %x, i64 %indvars.iv
   store double %call, double* %arrayidx2, align 8
   %indvars.iv.next = add i64 %indvars.iv, 1
   %lftr.wideiv = trunc i64 %indvars.iv.next to i32
@@ -634,10 +635,10 @@ entry:
 
 for.body:                                         ; preds = %entry, %for.body
   %indvars.iv = phi i64 [ %indvars.iv.next, %for.body ], [ 0, %entry ]
-  %arrayidx = getelementptr inbounds float, float* %y, i64 %indvars.iv
-  %0 = load float, float* %arrayidx, align 4
+  %arrayidx = getelementptr inbounds float* %y, i64 %indvars.iv
+  %0 = load float* %arrayidx, align 4
   %call = tail call float @llvm.trunc.f32(float %0) nounwind readnone
-  %arrayidx2 = getelementptr inbounds float, float* %x, i64 %indvars.iv
+  %arrayidx2 = getelementptr inbounds float* %x, i64 %indvars.iv
   store float %call, float* %arrayidx2, align 4
   %indvars.iv.next = add i64 %indvars.iv, 1
   %lftr.wideiv = trunc i64 %indvars.iv.next to i32
@@ -660,10 +661,10 @@ entry:
 
 for.body:                                         ; preds = %entry, %for.body
   %indvars.iv = phi i64 [ %indvars.iv.next, %for.body ], [ 0, %entry ]
-  %arrayidx = getelementptr inbounds double, double* %y, i64 %indvars.iv
-  %0 = load double, double* %arrayidx, align 8
+  %arrayidx = getelementptr inbounds double* %y, i64 %indvars.iv
+  %0 = load double* %arrayidx, align 8
   %call = tail call double @llvm.trunc.f64(double %0) nounwind readnone
-  %arrayidx2 = getelementptr inbounds double, double* %x, i64 %indvars.iv
+  %arrayidx2 = getelementptr inbounds double* %x, i64 %indvars.iv
   store double %call, double* %arrayidx2, align 8
   %indvars.iv.next = add i64 %indvars.iv, 1
   %lftr.wideiv = trunc i64 %indvars.iv.next to i32
@@ -686,10 +687,10 @@ entry:
 
 for.body:                                         ; preds = %entry, %for.body
   %indvars.iv = phi i64 [ %indvars.iv.next, %for.body ], [ 0, %entry ]
-  %arrayidx = getelementptr inbounds float, float* %y, i64 %indvars.iv
-  %0 = load float, float* %arrayidx, align 4
+  %arrayidx = getelementptr inbounds float* %y, i64 %indvars.iv
+  %0 = load float* %arrayidx, align 4
   %call = tail call float @llvm.rint.f32(float %0) nounwind readnone
-  %arrayidx2 = getelementptr inbounds float, float* %x, i64 %indvars.iv
+  %arrayidx2 = getelementptr inbounds float* %x, i64 %indvars.iv
   store float %call, float* %arrayidx2, align 4
   %indvars.iv.next = add i64 %indvars.iv, 1
   %lftr.wideiv = trunc i64 %indvars.iv.next to i32
@@ -712,10 +713,10 @@ entry:
 
 for.body:                                         ; preds = %entry, %for.body
   %indvars.iv = phi i64 [ %indvars.iv.next, %for.body ], [ 0, %entry ]
-  %arrayidx = getelementptr inbounds double, double* %y, i64 %indvars.iv
-  %0 = load double, double* %arrayidx, align 8
+  %arrayidx = getelementptr inbounds double* %y, i64 %indvars.iv
+  %0 = load double* %arrayidx, align 8
   %call = tail call double @llvm.rint.f64(double %0) nounwind readnone
-  %arrayidx2 = getelementptr inbounds double, double* %x, i64 %indvars.iv
+  %arrayidx2 = getelementptr inbounds double* %x, i64 %indvars.iv
   store double %call, double* %arrayidx2, align 8
   %indvars.iv.next = add i64 %indvars.iv, 1
   %lftr.wideiv = trunc i64 %indvars.iv.next to i32
@@ -738,10 +739,10 @@ entry:
 
 for.body:                                         ; preds = %entry, %for.body
   %indvars.iv = phi i64 [ %indvars.iv.next, %for.body ], [ 0, %entry ]
-  %arrayidx = getelementptr inbounds float, float* %y, i64 %indvars.iv
-  %0 = load float, float* %arrayidx, align 4
+  %arrayidx = getelementptr inbounds float* %y, i64 %indvars.iv
+  %0 = load float* %arrayidx, align 4
   %call = tail call float @llvm.nearbyint.f32(float %0) nounwind readnone
-  %arrayidx2 = getelementptr inbounds float, float* %x, i64 %indvars.iv
+  %arrayidx2 = getelementptr inbounds float* %x, i64 %indvars.iv
   store float %call, float* %arrayidx2, align 4
   %indvars.iv.next = add i64 %indvars.iv, 1
   %lftr.wideiv = trunc i64 %indvars.iv.next to i32
@@ -764,10 +765,10 @@ entry:
 
 for.body:                                         ; preds = %entry, %for.body
   %indvars.iv = phi i64 [ %indvars.iv.next, %for.body ], [ 0, %entry ]
-  %arrayidx = getelementptr inbounds double, double* %y, i64 %indvars.iv
-  %0 = load double, double* %arrayidx, align 8
+  %arrayidx = getelementptr inbounds double* %y, i64 %indvars.iv
+  %0 = load double* %arrayidx, align 8
   %call = tail call double @llvm.nearbyint.f64(double %0) nounwind readnone
-  %arrayidx2 = getelementptr inbounds double, double* %x, i64 %indvars.iv
+  %arrayidx2 = getelementptr inbounds double* %x, i64 %indvars.iv
   store double %call, double* %arrayidx2, align 8
   %indvars.iv.next = add i64 %indvars.iv, 1
   %lftr.wideiv = trunc i64 %indvars.iv.next to i32
@@ -790,10 +791,10 @@ entry:
 
 for.body:                                         ; preds = %entry, %for.body
   %indvars.iv = phi i64 [ %indvars.iv.next, %for.body ], [ 0, %entry ]
-  %arrayidx = getelementptr inbounds float, float* %y, i64 %indvars.iv
-  %0 = load float, float* %arrayidx, align 4
+  %arrayidx = getelementptr inbounds float* %y, i64 %indvars.iv
+  %0 = load float* %arrayidx, align 4
   %call = tail call float @llvm.round.f32(float %0) nounwind readnone
-  %arrayidx2 = getelementptr inbounds float, float* %x, i64 %indvars.iv
+  %arrayidx2 = getelementptr inbounds float* %x, i64 %indvars.iv
   store float %call, float* %arrayidx2, align 4
   %indvars.iv.next = add i64 %indvars.iv, 1
   %lftr.wideiv = trunc i64 %indvars.iv.next to i32
@@ -816,10 +817,10 @@ entry:
 
 for.body:                                         ; preds = %entry, %for.body
   %indvars.iv = phi i64 [ %indvars.iv.next, %for.body ], [ 0, %entry ]
-  %arrayidx = getelementptr inbounds double, double* %y, i64 %indvars.iv
-  %0 = load double, double* %arrayidx, align 8
+  %arrayidx = getelementptr inbounds double* %y, i64 %indvars.iv
+  %0 = load double* %arrayidx, align 8
   %call = tail call double @llvm.round.f64(double %0) nounwind readnone
-  %arrayidx2 = getelementptr inbounds double, double* %x, i64 %indvars.iv
+  %arrayidx2 = getelementptr inbounds double* %x, i64 %indvars.iv
   store double %call, double* %arrayidx2, align 8
   %indvars.iv.next = add i64 %indvars.iv, 1
   %lftr.wideiv = trunc i64 %indvars.iv.next to i32
@@ -842,14 +843,14 @@ entry:
 
 for.body:                                         ; preds = %entry, %for.body
   %indvars.iv = phi i64 [ %indvars.iv.next, %for.body ], [ 0, %entry ]
-  %arrayidx = getelementptr inbounds float, float* %y, i64 %indvars.iv
-  %0 = load float, float* %arrayidx, align 4
-  %arrayidx2 = getelementptr inbounds float, float* %w, i64 %indvars.iv
-  %1 = load float, float* %arrayidx2, align 4
-  %arrayidx4 = getelementptr inbounds float, float* %z, i64 %indvars.iv
-  %2 = load float, float* %arrayidx4, align 4
+  %arrayidx = getelementptr inbounds float* %y, i64 %indvars.iv
+  %0 = load float* %arrayidx, align 4
+  %arrayidx2 = getelementptr inbounds float* %w, i64 %indvars.iv
+  %1 = load float* %arrayidx2, align 4
+  %arrayidx4 = getelementptr inbounds float* %z, i64 %indvars.iv
+  %2 = load float* %arrayidx4, align 4
   %3 = tail call float @llvm.fma.f32(float %0, float %2, float %1)
-  %arrayidx6 = getelementptr inbounds float, float* %x, i64 %indvars.iv
+  %arrayidx6 = getelementptr inbounds float* %x, i64 %indvars.iv
   store float %3, float* %arrayidx6, align 4
   %indvars.iv.next = add i64 %indvars.iv, 1
   %lftr.wideiv = trunc i64 %indvars.iv.next to i32
@@ -872,14 +873,14 @@ entry:
 
 for.body:                                         ; preds = %entry, %for.body
   %indvars.iv = phi i64 [ %indvars.iv.next, %for.body ], [ 0, %entry ]
-  %arrayidx = getelementptr inbounds double, double* %y, i64 %indvars.iv
-  %0 = load double, double* %arrayidx, align 8
-  %arrayidx2 = getelementptr inbounds double, double* %w, i64 %indvars.iv
-  %1 = load double, double* %arrayidx2, align 8
-  %arrayidx4 = getelementptr inbounds double, double* %z, i64 %indvars.iv
-  %2 = load double, double* %arrayidx4, align 8
+  %arrayidx = getelementptr inbounds double* %y, i64 %indvars.iv
+  %0 = load double* %arrayidx, align 8
+  %arrayidx2 = getelementptr inbounds double* %w, i64 %indvars.iv
+  %1 = load double* %arrayidx2, align 8
+  %arrayidx4 = getelementptr inbounds double* %z, i64 %indvars.iv
+  %2 = load double* %arrayidx4, align 8
   %3 = tail call double @llvm.fma.f64(double %0, double %2, double %1)
-  %arrayidx6 = getelementptr inbounds double, double* %x, i64 %indvars.iv
+  %arrayidx6 = getelementptr inbounds double* %x, i64 %indvars.iv
   store double %3, double* %arrayidx6, align 8
   %indvars.iv.next = add i64 %indvars.iv, 1
   %lftr.wideiv = trunc i64 %indvars.iv.next to i32
@@ -902,14 +903,14 @@ entry:
 
 for.body:                                         ; preds = %entry, %for.body
   %indvars.iv = phi i64 [ %indvars.iv.next, %for.body ], [ 0, %entry ]
-  %arrayidx = getelementptr inbounds float, float* %y, i64 %indvars.iv
-  %0 = load float, float* %arrayidx, align 4
-  %arrayidx2 = getelementptr inbounds float, float* %w, i64 %indvars.iv
-  %1 = load float, float* %arrayidx2, align 4
-  %arrayidx4 = getelementptr inbounds float, float* %z, i64 %indvars.iv
-  %2 = load float, float* %arrayidx4, align 4
+  %arrayidx = getelementptr inbounds float* %y, i64 %indvars.iv
+  %0 = load float* %arrayidx, align 4
+  %arrayidx2 = getelementptr inbounds float* %w, i64 %indvars.iv
+  %1 = load float* %arrayidx2, align 4
+  %arrayidx4 = getelementptr inbounds float* %z, i64 %indvars.iv
+  %2 = load float* %arrayidx4, align 4
   %3 = tail call float @llvm.fmuladd.f32(float %0, float %2, float %1)
-  %arrayidx6 = getelementptr inbounds float, float* %x, i64 %indvars.iv
+  %arrayidx6 = getelementptr inbounds float* %x, i64 %indvars.iv
   store float %3, float* %arrayidx6, align 4
   %indvars.iv.next = add i64 %indvars.iv, 1
   %lftr.wideiv = trunc i64 %indvars.iv.next to i32
@@ -932,14 +933,14 @@ entry:
 
 for.body:                                         ; preds = %entry, %for.body
   %indvars.iv = phi i64 [ %indvars.iv.next, %for.body ], [ 0, %entry ]
-  %arrayidx = getelementptr inbounds double, double* %y, i64 %indvars.iv
-  %0 = load double, double* %arrayidx, align 8
-  %arrayidx2 = getelementptr inbounds double, double* %w, i64 %indvars.iv
-  %1 = load double, double* %arrayidx2, align 8
-  %arrayidx4 = getelementptr inbounds double, double* %z, i64 %indvars.iv
-  %2 = load double, double* %arrayidx4, align 8
+  %arrayidx = getelementptr inbounds double* %y, i64 %indvars.iv
+  %0 = load double* %arrayidx, align 8
+  %arrayidx2 = getelementptr inbounds double* %w, i64 %indvars.iv
+  %1 = load double* %arrayidx2, align 8
+  %arrayidx4 = getelementptr inbounds double* %z, i64 %indvars.iv
+  %2 = load double* %arrayidx4, align 8
   %3 = tail call double @llvm.fmuladd.f64(double %0, double %2, double %1)
-  %arrayidx6 = getelementptr inbounds double, double* %x, i64 %indvars.iv
+  %arrayidx6 = getelementptr inbounds double* %x, i64 %indvars.iv
   store double %3, double* %arrayidx6, align 8
   %indvars.iv.next = add i64 %indvars.iv, 1
   %lftr.wideiv = trunc i64 %indvars.iv.next to i32
@@ -962,12 +963,12 @@ entry:
 
 for.body:                                         ; preds = %entry, %for.body
   %indvars.iv = phi i64 [ %indvars.iv.next, %for.body ], [ 0, %entry ]
-  %arrayidx = getelementptr inbounds float, float* %y, i64 %indvars.iv
-  %0 = load float, float* %arrayidx, align 4
-  %arrayidx2 = getelementptr inbounds float, float* %z, i64 %indvars.iv
-  %1 = load float, float* %arrayidx2, align 4
+  %arrayidx = getelementptr inbounds float* %y, i64 %indvars.iv
+  %0 = load float* %arrayidx, align 4
+  %arrayidx2 = getelementptr inbounds float* %z, i64 %indvars.iv
+  %1 = load float* %arrayidx2, align 4
   %call = tail call float @llvm.pow.f32(float %0, float %1) nounwind readnone
-  %arrayidx4 = getelementptr inbounds float, float* %x, i64 %indvars.iv
+  %arrayidx4 = getelementptr inbounds float* %x, i64 %indvars.iv
   store float %call, float* %arrayidx4, align 4
   %indvars.iv.next = add i64 %indvars.iv, 1
   %lftr.wideiv = trunc i64 %indvars.iv.next to i32
@@ -990,12 +991,12 @@ entry:
 
 for.body:                                         ; preds = %entry, %for.body
   %indvars.iv = phi i64 [ %indvars.iv.next, %for.body ], [ 0, %entry ]
-  %arrayidx = getelementptr inbounds double, double* %y, i64 %indvars.iv
-  %0 = load double, double* %arrayidx, align 8
-  %arrayidx2 = getelementptr inbounds double, double* %z, i64 %indvars.iv
-  %1 = load double, double* %arrayidx2, align 8
+  %arrayidx = getelementptr inbounds double* %y, i64 %indvars.iv
+  %0 = load double* %arrayidx, align 8
+  %arrayidx2 = getelementptr inbounds double* %z, i64 %indvars.iv
+  %1 = load double* %arrayidx2, align 8
   %call = tail call double @llvm.pow.f64(double %0, double %1) nounwind readnone
-  %arrayidx4 = getelementptr inbounds double, double* %x, i64 %indvars.iv
+  %arrayidx4 = getelementptr inbounds double* %x, i64 %indvars.iv
   store double %call, double* %arrayidx4, align 8
   %indvars.iv.next = add i64 %indvars.iv, 1
   %lftr.wideiv = trunc i64 %indvars.iv.next to i32
@@ -1015,8 +1016,8 @@ entry:
 
 for.body:                                         ; preds = %entry, %for.body
   %indvars.iv = phi i64 [ 0, %entry ], [ %indvars.iv.next, %for.body ]
-  %arrayidx = getelementptr inbounds float, float* %x, i64 %indvars.iv
-  %0 = load float, float* %arrayidx, align 4
+  %arrayidx = getelementptr inbounds float* %x, i64 %indvars.iv
+  %0 = load float* %arrayidx, align 4
   %call = tail call float @fabsf(float %0) nounwind readnone
   store float %call, float* %arrayidx, align 4
   %indvars.iv.next = add i64 %indvars.iv, 1
@@ -1049,8 +1050,8 @@ entry:
 
 for.body:                                         ; preds = %entry, %for.body
   %indvars.iv = phi i64 [ 0, %entry ], [ %indvars.iv.next, %for.body ]
-  %arrayidx = getelementptr inbounds float, float* %x, i64 %indvars.iv
-  %0 = load float, float* %arrayidx, align 4
+  %arrayidx = getelementptr inbounds float* %x, i64 %indvars.iv
+  %0 = load float* %arrayidx, align 4
   %call = tail call float @roundf(float %0) nounwind readnone
   store float %call, float* %arrayidx, align 4
   %indvars.iv.next = add i64 %indvars.iv, 1
@@ -1076,8 +1077,8 @@ entry:
 
 for.body:                                         ; preds = %entry, %for.body
   %indvars.iv = phi i64 [ 0, %entry ], [ %indvars.iv.next, %for.body ]
-  %arrayidx = getelementptr inbounds double, double* %x, i64 %indvars.iv
-  %0 = load double, double* %arrayidx, align 4
+  %arrayidx = getelementptr inbounds double* %x, i64 %indvars.iv
+  %0 = load double* %arrayidx, align 4
   store double %0, double* %arrayidx, align 4
   tail call void @round(double %0) nounwind readnone
   %indvars.iv.next = add i64 %indvars.iv, 1
@@ -1101,10 +1102,10 @@ entry:
 
 for.body:                                         ; preds = %entry, %for.body
   %indvars.iv = phi i64 [ %indvars.iv.next, %for.body ], [ 0, %entry ]
-  %arrayidx = getelementptr inbounds double, double* %y, i64 %indvars.iv
-  %0 = load double, double* %arrayidx, align 8
+  %arrayidx = getelementptr inbounds double* %y, i64 %indvars.iv
+  %0 = load double* %arrayidx, align 8
   %call = tail call double @llvm.powi.f64(double %0, i32  %P) nounwind readnone
-  %arrayidx4 = getelementptr inbounds double, double* %x, i64 %indvars.iv
+  %arrayidx4 = getelementptr inbounds double* %x, i64 %indvars.iv
   store double %call, double* %arrayidx4, align 8
   %indvars.iv.next = add i64 %indvars.iv, 1
   %lftr.wideiv = trunc i64 %indvars.iv.next to i32
@@ -1125,11 +1126,11 @@ entry:
 
 for.body:                                         ; preds = %entry, %for.body
   %indvars.iv = phi i64 [ %indvars.iv.next, %for.body ], [ 0, %entry ]
-  %arrayidx = getelementptr inbounds double, double* %y, i64 %indvars.iv
-  %0 = load double, double* %arrayidx, align 8
+  %arrayidx = getelementptr inbounds double* %y, i64 %indvars.iv
+  %0 = load double* %arrayidx, align 8
   %1 = trunc i64 %indvars.iv to i32
   %call = tail call double @llvm.powi.f64(double %0, i32  %1) nounwind readnone
-  %arrayidx4 = getelementptr inbounds double, double* %x, i64 %indvars.iv
+  %arrayidx4 = getelementptr inbounds double* %x, i64 %indvars.iv
   store double %call, double* %arrayidx4, align 8
   %indvars.iv.next = add i64 %indvars.iv, 1
   %lftr.wideiv = trunc i64 %indvars.iv.next to i32
@@ -1152,10 +1153,10 @@ entry:
 
 for.body:                                         ; preds = %entry, %for.body
   %indvars.iv = phi i64 [ %indvars.iv.next, %for.body ], [ 0, %entry ]
-  %arrayidx = getelementptr inbounds i64, i64* %y, i64 %indvars.iv
-  %0 = load i64, i64* %arrayidx, align 8
+  %arrayidx = getelementptr inbounds i64* %y, i64 %indvars.iv
+  %0 = load i64* %arrayidx, align 8
   %call = tail call i64 @llvm.cttz.i64(i64 %0, i1 true) nounwind readnone
-  %arrayidx4 = getelementptr inbounds i64, i64* %x, i64 %indvars.iv
+  %arrayidx4 = getelementptr inbounds i64* %x, i64 %indvars.iv
   store i64 %call, i64* %arrayidx4, align 8
   %indvars.iv.next = add i64 %indvars.iv, 1
   %lftr.wideiv = trunc i64 %indvars.iv.next to i32
@@ -1178,10 +1179,10 @@ entry:
 
 for.body:                                         ; preds = %entry, %for.body
   %indvars.iv = phi i64 [ %indvars.iv.next, %for.body ], [ 0, %entry ]
-  %arrayidx = getelementptr inbounds i64, i64* %y, i64 %indvars.iv
-  %0 = load i64, i64* %arrayidx, align 8
+  %arrayidx = getelementptr inbounds i64* %y, i64 %indvars.iv
+  %0 = load i64* %arrayidx, align 8
   %call = tail call i64 @llvm.ctlz.i64(i64 %0, i1 true) nounwind readnone
-  %arrayidx4 = getelementptr inbounds i64, i64* %x, i64 %indvars.iv
+  %arrayidx4 = getelementptr inbounds i64* %x, i64 %indvars.iv
   store i64 %call, i64* %arrayidx4, align 8
   %indvars.iv.next = add i64 %indvars.iv, 1
   %lftr.wideiv = trunc i64 %indvars.iv.next to i32
@@ -1204,12 +1205,12 @@ entry:
 
 for.body:                                         ; preds = %entry, %for.body
   %indvars.iv = phi i64 [ %indvars.iv.next, %for.body ], [ 0, %entry ]
-  %arrayidx = getelementptr inbounds float, float* %y, i64 %indvars.iv
-  %0 = load float, float* %arrayidx, align 4
-  %arrayidx2 = getelementptr inbounds float, float* %z, i64 %indvars.iv
-  %1 = load float, float* %arrayidx2, align 4
+  %arrayidx = getelementptr inbounds float* %y, i64 %indvars.iv
+  %0 = load float* %arrayidx, align 4
+  %arrayidx2 = getelementptr inbounds float* %z, i64 %indvars.iv
+  %1 = load float* %arrayidx2, align 4
   %call = tail call float @llvm.minnum.f32(float %0, float %1) nounwind readnone
-  %arrayidx4 = getelementptr inbounds float, float* %x, i64 %indvars.iv
+  %arrayidx4 = getelementptr inbounds float* %x, i64 %indvars.iv
   store float %call, float* %arrayidx4, align 4
   %indvars.iv.next = add i64 %indvars.iv, 1
   %lftr.wideiv = trunc i64 %indvars.iv.next to i32
@@ -1232,12 +1233,12 @@ entry:
 
 for.body:                                         ; preds = %entry, %for.body
   %indvars.iv = phi i64 [ %indvars.iv.next, %for.body ], [ 0, %entry ]
-  %arrayidx = getelementptr inbounds float, float* %y, i64 %indvars.iv
-  %0 = load float, float* %arrayidx, align 4
-  %arrayidx2 = getelementptr inbounds float, float* %z, i64 %indvars.iv
-  %1 = load float, float* %arrayidx2, align 4
+  %arrayidx = getelementptr inbounds float* %y, i64 %indvars.iv
+  %0 = load float* %arrayidx, align 4
+  %arrayidx2 = getelementptr inbounds float* %z, i64 %indvars.iv
+  %1 = load float* %arrayidx2, align 4
   %call = tail call float @llvm.maxnum.f32(float %0, float %1) nounwind readnone
-  %arrayidx4 = getelementptr inbounds float, float* %x, i64 %indvars.iv
+  %arrayidx4 = getelementptr inbounds float* %x, i64 %indvars.iv
   store float %call, float* %arrayidx4, align 4
   %indvars.iv.next = add i64 %indvars.iv, 1
   %lftr.wideiv = trunc i64 %indvars.iv.next to i32

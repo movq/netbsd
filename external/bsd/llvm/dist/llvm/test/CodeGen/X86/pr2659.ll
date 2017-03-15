@@ -14,17 +14,16 @@ forcond.preheader:              ; preds = %entry
   br i1 %cmp44, label %afterfor, label %forbody
 
 ; CHECK: %forcond.preheader
-; CHECK: testl
+; CHECK: movl $1
 ; CHECK-NOT: xorl
 ; CHECK-NOT: movl
 ; CHECK-NOT: LBB
 ; CHECK: je
 
 ; There should be no moves required in the for loop body.
-; CHECK: %forbody{{$}}
+; CHECK: %forbody
 ; CHECK-NOT: mov
 ; CHECK: jbe
-; CHECK: movl $1
 
 ifthen:         ; preds = %entry
   ret i32 0

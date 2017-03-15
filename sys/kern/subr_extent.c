@@ -1,4 +1,4 @@
-/*	$NetBSD: subr_extent.c,v 1.80 2016/12/19 13:02:14 cherry Exp $	*/
+/*	$NetBSD: subr_extent.c,v 1.76 2014/07/10 21:13:52 christos Exp $	*/
 
 /*-
  * Copyright (c) 1996, 1998, 2007 The NetBSD Foundation, Inc.
@@ -34,12 +34,10 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: subr_extent.c,v 1.80 2016/12/19 13:02:14 cherry Exp $");
+__KERNEL_RCSID(0, "$NetBSD: subr_extent.c,v 1.76 2014/07/10 21:13:52 christos Exp $");
 
 #ifdef _KERNEL
-#ifdef _KERNEL_OPT
 #include "opt_lockdebug.h"
-#endif
 
 #include <sys/param.h>
 #include <sys/extent.h>
@@ -52,7 +50,6 @@ __KERNEL_RCSID(0, "$NetBSD: subr_extent.c,v 1.80 2016/12/19 13:02:14 cherry Exp 
 #include <uvm/uvm_extern.h>
 
 #elif defined(_EXTENT_TESTING)
-
 /*
  * user-land definitions, so it can fit into a testing harness.
  */
@@ -81,7 +78,7 @@ pool_get(pool, flags)		kmem_alloc((pool)->pr_size,0)
 #define	\
 pool_put(pool, rp)		kmem_free(rp,0)
 #define	\
-panic(a ...)			printf(a)
+panic(a)			printf(a)
 #define	mutex_init(a, b, c)
 #define	mutex_destroy(a)
 #define	mutex_enter(l)

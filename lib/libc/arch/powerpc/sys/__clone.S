@@ -1,4 +1,4 @@
-/*	$NetBSD: __clone.S,v 1.6 2014/08/23 02:24:22 matt Exp $	*/
+/*	$NetBSD: __clone.S,v 1.5.4.1 2015/02/04 22:00:24 martin Exp $	*/
 
 /*-
  * Copyright (c) 2001 Tsubai Masanari.  All rights reserved.
@@ -30,7 +30,7 @@
 #include "SYS.h"
 
 #if defined(LIBC_SCCS) && !defined(lint)
-__RCSID("$NetBSD: __clone.S,v 1.6 2014/08/23 02:24:22 matt Exp $")
+__RCSID("$NetBSD: __clone.S,v 1.5.4.1 2015/02/04 22:00:24 martin Exp $")
 #endif /* LIBC_SCCS && !lint */
 
 #ifdef WEAK_ALIAS

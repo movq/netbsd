@@ -1,4 +1,4 @@
-/*  $NetBSD: ops.c,v 1.84 2015/06/03 14:07:05 manu Exp $ */
+/*  $NetBSD: ops.c,v 1.66.2.16 2015/06/08 20:49:54 snj Exp $ */
 
 /*-
  *  Copyright (c) 2010-2011 Emmanuel Dreyfus. All rights reserved.

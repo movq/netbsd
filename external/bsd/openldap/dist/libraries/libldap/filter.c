@@ -1,10 +1,10 @@
-/*	$NetBSD: filter.c,v 1.1.1.5 2017/02/09 01:46:46 christos Exp $	*/
+/*	$NetBSD: filter.c,v 1.1.1.4 2014/05/28 09:58:41 tron Exp $	*/
 
 /* search.c */
 /* $OpenLDAP$ */
 /* This work is part of OpenLDAP Software <http://www.openldap.org/>.
  *
- * Copyright 1998-2016 The OpenLDAP Foundation.
+ * Copyright 1998-2014 The OpenLDAP Foundation.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -18,9 +18,6 @@
 /* Portions Copyright (c) 1990 Regents of the University of Michigan.
  * All rights reserved.
  */
-
-#include <sys/cdefs.h>
-__RCSID("$NetBSD: filter.c,v 1.1.1.5 2017/02/09 01:46:46 christos Exp $");
 
 #include "portable.h"
 
@@ -82,6 +79,7 @@ static int ldap_is_oid ( const char *str )
 				dot=0;
 
 			} else if ( str[i] == '.' ) {
+				if( dot ) return 0;
 				if( ++dot > 1 ) return 0;
 
 			} else {
@@ -124,6 +122,7 @@ static int ldap_is_desc ( const char *str )
 				dot=0;
 
 			} else if ( str[i] == '.' ) {
+				if( dot ) return 0;
 				if( ++dot > 1 ) return 0;
 
 			} else {
@@ -941,7 +940,7 @@ ldap_put_vrFilter( BerElement *ber, const char *str_in )
 	int rc =0;
 	
 	if ( ber_printf( ber, "{" /*"}"*/ ) == -1 ) {
-		return -1;
+		rc = -1;
 	}
 	
 	rc = put_vrFilter( ber, str_in );

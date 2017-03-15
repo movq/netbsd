@@ -1,4 +1,4 @@
-/* $NetBSD: t_setrlimit.c,v 1.6 2017/01/13 21:16:38 christos Exp $ */
+/* $NetBSD: t_setrlimit.c,v 1.4 2012/06/12 23:56:19 christos Exp $ */
 
 /*-
  * Copyright (c) 2011 The NetBSD Foundation, Inc.
@@ -29,7 +29,7 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: t_setrlimit.c,v 1.6 2017/01/13 21:16:38 christos Exp $");
+__RCSID("$NetBSD: t_setrlimit.c,v 1.4 2012/06/12 23:56:19 christos Exp $");
 
 #include <sys/resource.h>
 #include <sys/mman.h>
@@ -122,7 +122,6 @@ out:
 
 	if (lim != 0)
 		atf_tc_fail("failed to set limit (%d)", lim);
-	free(buf);
 }
 
 ATF_TC(setrlimit_current);
@@ -505,25 +504,6 @@ ATF_TC_BODY(setrlimit_perm, tc)
 	}
 }
 
-ATF_TC(setrlimit_stack);
-ATF_TC_HEAD(setrlimit_stack, tc)
-{
-	atf_tc_set_md_var(tc, "descr", "Test setrlimit(2), RLIMIT_STACK");
-	atf_tc_set_md_var(tc, "require.user", "unprivileged");
-}
-
-ATF_TC_BODY(setrlimit_stack, tc)
-{
-	struct rlimit res;
-
-	/* Ensure soft limit is not bigger than hard limit */
-	res.rlim_cur = res.rlim_max = 4192256;
-	ATF_REQUIRE(setrlimit(RLIMIT_STACK, &res) == 0);
-	ATF_REQUIRE(getrlimit(RLIMIT_STACK, &res) == 0);
-	ATF_CHECK(res.rlim_cur <= res.rlim_max);
-
-}
-
 ATF_TP_ADD_TCS(tp)
 {
 
@@ -537,7 +517,6 @@ ATF_TP_ADD_TCS(tp)
 	ATF_TP_ADD_TC(tp, setrlimit_nproc);
 	ATF_TP_ADD_TC(tp, setrlimit_perm);
 	ATF_TP_ADD_TC(tp, setrlimit_nthr);
-	ATF_TP_ADD_TC(tp, setrlimit_stack);
 
 	return atf_no_error();
 }

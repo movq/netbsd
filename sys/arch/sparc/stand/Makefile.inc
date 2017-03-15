@@ -1,15 +1,15 @@
-#	$NetBSD: Makefile.inc,v 1.14 2016/10/01 13:57:44 christos Exp $
+#	$NetBSD: Makefile.inc,v 1.10 2005/12/11 12:19:08 christos Exp $
 
-NOSSP=		# defined
-NOPIE=		# defined
-NOMAN=		# defined
+.ifndef __INCLUDED_STAND_MAKEFILE_INC
+__INCLUDED_STAND_MAKEFILE_INC=
 
 BINDIR=		/usr/mdec
-NOPIE=		yes
 
 CPPFLAGS+=	-DSTANDALONE -I.
-CFLAGS+=	-ffreestanding ${${ACTIVE_CC} == "gcc":? -msoft-float :}
+CFLAGS+=	-msoft-float -ffreestanding
 
 .if ${MACHINE} == "sparc64"
 CPPFLAGS+=	-DSUN4U
+.endif
+
 .endif

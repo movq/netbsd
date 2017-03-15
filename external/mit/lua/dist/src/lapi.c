@@ -1,4 +1,4 @@
-/*	$NetBSD: lapi.c,v 1.7 2016/09/08 02:21:31 salazar Exp $	*/
+/*	$NetBSD: lapi.c,v 1.2.2.5 2016/09/25 11:16:02 bouyer Exp $	*/
 
 /*
 ** Id: lapi.c,v 2.259 2016/02/29 14:27:14 roberto Exp 

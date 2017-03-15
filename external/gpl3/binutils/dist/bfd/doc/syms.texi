@@ -49,7 +49,7 @@ excerpt from an application which reads the symbol table:
 
          if (storage_needed == 0)
            return;
-
+         
          symbol_table = xmalloc (storage_needed);
            ...
          number_of_symbols =
@@ -178,7 +178,8 @@ typedef struct bfd_symbol
 #define BSF_EXPORT     BSF_GLOBAL /* No real difference.  */
 
   /* A normal C symbol would be one of:
-     @code{BSF_LOCAL}, @code{BSF_UNDEFINED} or @code{BSF_GLOBAL}.  */
+     @code{BSF_LOCAL}, @code{BSF_COMMON},  @code{BSF_UNDEFINED} or
+     @code{BSF_GLOBAL}.  */
 
   /* The symbol is a debugging record. The value has an arbitrary
      meaning, unless BSF_DEBUGGING_RELOC is also set.  */
@@ -190,9 +191,7 @@ typedef struct bfd_symbol
 
   /* Used by the linker.  */
 #define BSF_KEEP               (1 << 5)
-
-  /* An ELF common symbol.  */
-#define BSF_ELF_COMMON         (1 << 6)
+#define BSF_KEEP_G             (1 << 6)
 
   /* A weak global symbol, overridable without warnings by
      a regular global symbol of the same name.  */

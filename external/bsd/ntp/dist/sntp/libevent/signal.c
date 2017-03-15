@@ -1,4 +1,4 @@
-/*	$NetBSD: signal.c,v 1.4 2016/01/08 21:35:40 christos Exp $	*/
+/*	$NetBSD: signal.c,v 1.1.1.1.6.1 2014/12/24 00:05:25 riz Exp $	*/
 
 /*	$OpenBSD: select.c,v 1.2 2002/06/25 15:50:15 mickey Exp $	*/
 

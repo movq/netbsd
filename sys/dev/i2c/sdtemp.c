@@ -1,4 +1,4 @@
-/*      $NetBSD: sdtemp.c,v 1.32 2016/08/03 03:35:24 msaitoh Exp $        */
+/*      $NetBSD: sdtemp.c,v 1.23.4.2 2016/12/08 07:34:34 snj Exp $        */
 
 /*
  * Copyright (c) 2009 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sdtemp.c,v 1.32 2016/08/03 03:35:24 msaitoh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sdtemp.c,v 1.23.4.2 2016/12/08 07:34:34 snj Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -693,7 +693,7 @@ sdtemp_config_idt(struct sdtemp_softc *sc)
 		    device_xname(sc->sc_dev), rv);
 }
 
-MODULE(MODULE_CLASS_DRIVER, sdtemp, "i2cexec,sysmon_envsys");
+MODULE(MODULE_CLASS_DRIVER, sdtemp, "i2cexec");
 
 #ifdef _MODULE
 #include "ioconf.c"

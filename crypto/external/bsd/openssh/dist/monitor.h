@@ -1,5 +1,5 @@
-/*	$NetBSD: monitor.h,v 1.8 2016/12/25 00:07:47 christos Exp $	*/
-/* $OpenBSD: monitor.h,v 1.20 2016/09/28 16:33:07 djm Exp $ */
+/*	$NetBSD: monitor.h,v 1.5.8.1 2015/04/30 06:07:30 riz Exp $	*/
+/* $OpenBSD: monitor.h,v 1.19 2015/01/19 19:52:16 markus Exp $ */
 
 /*
  * Copyright 2002 Niels Provos <provos@citi.umich.edu>
@@ -76,17 +76,21 @@ enum monitor_reqtype {
 
 };
 
+struct mm_master;
 struct monitor {
 	int			 m_recvfd;
 	int			 m_sendfd;
 	int			 m_log_recvfd;
 	int			 m_log_sendfd;
+	struct mm_master	*m_zback;
+	struct mm_master	*m_zlib;
 	struct kex		**m_pkex;
 	pid_t			 m_pid;
 };
 
 struct monitor *monitor_init(void);
 void monitor_reinit(struct monitor *);
+void monitor_sync(struct monitor *);
 
 struct Authctxt;
 void monitor_child_preauth(struct Authctxt *, struct monitor *);

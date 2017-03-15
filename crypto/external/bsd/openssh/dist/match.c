@@ -1,6 +1,5 @@
-/*	$NetBSD: match.c,v 1.7 2016/12/25 00:07:47 christos Exp $	*/
-/* $OpenBSD: match.c,v 1.33 2016/11/06 05:46:37 djm Exp $ */
-
+/*	$NetBSD: match.c,v 1.3.4.1 2015/04/30 06:07:30 riz Exp $	*/
+/* $OpenBSD: match.c,v 1.29 2013/11/20 20:54:10 deraadt Exp $ */
 /*
  * Author: Tatu Ylonen <ylo@cs.hut.fi>
  * Copyright (c) 1995 Tatu Ylonen <ylo@cs.hut.fi>, Espoo, Finland
@@ -38,7 +37,7 @@
  */
 
 #include "includes.h"
-__RCSID("$NetBSD: match.c,v 1.7 2016/12/25 00:07:47 christos Exp $");
+__RCSID("$NetBSD: match.c,v 1.3.4.1 2015/04/30 06:07:30 riz Exp $");
 #include <sys/types.h>
 
 #include <ctype.h>
@@ -117,13 +116,15 @@ match_pattern(const char *s, const char *pattern)
  * indicate negation).  Returns -1 if negation matches, 1 if there is
  * a positive match, 0 if there is no match at all.
  */
+
 int
-match_pattern_list(const char *string, const char *pattern, int dolower)
+match_pattern_list(const char *string, const char *pattern, u_int len,
+    int dolower)
 {
 	char sub[1024];
 	int negated;
 	int got_positive;
-	u_int i, subi, len = strlen(pattern);
+	u_int i, subi;
 
 	got_positive = 0;
 	for (i = 0; i < len;) {
@@ -177,9 +178,9 @@ match_pattern_list(const char *string, const char *pattern, int dolower)
  * a positive match, 0 if there is no match at all.
  */
 int
-match_hostname(const char *host, const char *pattern)
+match_hostname(const char *host, const char *pattern, u_int len)
 {
-	return match_pattern_list(host, pattern, 1);
+	return match_pattern_list(host, pattern, len, 1);
 }
 
 /*
@@ -193,13 +194,14 @@ match_host_and_ip(const char *host, const char *ipaddr,
 {
 	int mhost, mip;
 
+	/* error in ipaddr match */
 	if ((mip = addr_match_list(ipaddr, patterns)) == -2)
-		return -1; /* error in ipaddr match */
-	else if (host == NULL || ipaddr == NULL || mip == -1)
-		return 0; /* negative ip address match, or testing pattern */
+		return -1;
+	else if (mip == -1) /* negative ip address match */
+		return 0;
 
 	/* negative hostname match */
-	if ((mhost = match_hostname(host, patterns)) == -1)
+	if ((mhost = match_hostname(host, patterns, strlen(patterns))) == -1)
 		return 0;
 	/* no match at all */
 	if (mhost == 0 && mip == 0)
@@ -208,9 +210,7 @@ match_host_and_ip(const char *host, const char *ipaddr,
 }
 
 /*
- * Match user, user@host_or_ip, user@host_or_ip_list against pattern.
- * If user, host and ipaddr are all NULL then validate pattern/
- * Returns -1 on invalid pattern, 0 on no match, 1 on match.
+ * match user, user@host_or_ip, user@host_or_ip_list against pattern
  */
 int
 match_user(const char *user, const char *host, const char *ipaddr,
@@ -218,14 +218,6 @@ match_user(const char *user, const char *host, const char *ipaddr,
 {
 	char *p, *pat;
 	int ret;
-
-	/* test mode */
-	if (user == NULL && host == NULL && ipaddr == NULL) {
-		if ((p = strchr(pattern, '@')) != NULL &&
-		    match_host_and_ip(NULL, NULL, p + 1) < 0)
-			return -1;
-		return 0;
-	}
 
 	if ((p = strchr(pattern,'@')) == NULL)
 		return match_pattern(user, pattern);

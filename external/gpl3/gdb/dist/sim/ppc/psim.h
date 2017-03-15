@@ -23,7 +23,6 @@
 
 #include "basics.h"
 
-#include "gdb/remote-sim.h"
 
 /* the system object */
 /* typedef struct _psim psim; */
@@ -49,8 +48,7 @@ extern device *psim_tree
 
 extern char **psim_options
 (device *root,
- char **argv,
- SIM_OPEN_KIND kind);
+ char **argv);
 
 extern void psim_command
 (device *root,
@@ -62,7 +60,7 @@ extern void psim_merge_device_file
  const char *file_name);
 
 extern void psim_usage
-(int verbose, int help, SIM_OPEN_KIND kind);
+(int verbose, int help);
 
 
 /* create a new simulator from the device tree */

@@ -1,4 +1,4 @@
-/*	$NetBSD: ssl-bozo.c,v 1.22 2015/12/28 07:37:59 mrg Exp $	*/
+/*	$NetBSD: ssl-bozo.c,v 1.18.2.1 2016/04/10 10:33:11 martin Exp $	*/
 
 /*	$eterna: ssl-bozo.c,v 1.15 2011/11/18 09:21:15 mrg Exp $	*/
 

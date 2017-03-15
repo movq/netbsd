@@ -1,4 +1,4 @@
-/*	$NetBSD: rpi.h,v 1.4 2015/02/28 09:34:34 skrll Exp $	*/
+/*	$NetBSD: rpi.h,v 1.3.2.1 2015/03/11 20:22:56 snj Exp $	*/
 
 /*-
  * Copyright (c) 2012 The NetBSD Foundation, Inc.

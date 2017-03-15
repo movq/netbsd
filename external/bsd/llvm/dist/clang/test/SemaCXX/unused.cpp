@@ -1,6 +1,4 @@
 // RUN: %clang_cc1 -fsyntax-only -verify %s
-// RUN: %clang_cc1 -fsyntax-only -verify -std=c++98 %s
-// RUN: %clang_cc1 -fsyntax-only -verify -std=c++11 %s
 
 // PR4103 : Make sure we don't get a bogus unused expression warning
 namespace PR4103 {
@@ -30,14 +28,8 @@ namespace PR4103 {
 
 namespace derefvolatile {
   void f(volatile char* x) {
-    *x;
-#if __cplusplus <= 199711L
-    // expected-warning@-2 {{expression result unused; assign into a variable to force a volatile load}}
-#endif
-    (void)*x;
-#if __cplusplus <= 199711L
-    // expected-warning@-2 {{expression result unused; assign into a variable to force a volatile load}}
-#endif
+    *x; // expected-warning {{expression result unused; assign into a variable to force a volatile load}}
+    (void)*x; // expected-warning {{expression result unused; assign into a variable to force a volatile load}}
     volatile char y = 10;
     (void)y; // don't warn here, because it's a common pattern.
   }

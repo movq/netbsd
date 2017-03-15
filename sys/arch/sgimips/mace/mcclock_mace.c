@@ -1,4 +1,4 @@
-/*	$NetBSD: mcclock_mace.c,v 1.17 2015/02/18 16:47:59 macallan Exp $	*/
+/*	$NetBSD: mcclock_mace.c,v 1.15 2013/12/16 15:45:29 mrg Exp $	*/
 
 /*
  * Copyright (c) 2001 Antti Kantee.  All Rights Reserved.
@@ -65,7 +65,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: mcclock_mace.c,v 1.17 2015/02/18 16:47:59 macallan Exp $");
+__KERNEL_RCSID(0, "$NetBSD: mcclock_mace.c,v 1.15 2013/12/16 15:45:29 mrg Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -165,7 +165,7 @@ ds1687_read(void *arg, unsigned int addr)
 {
 	struct mcclock_mace_softc *sc = arg;
 
-	return bus_space_read_1(sc->sc_st, sc->sc_sh, (addr << 8) + 7);
+	return bus_space_read_1(sc->sc_st, sc->sc_sh, addr);
 }
 
 void
@@ -173,7 +173,7 @@ ds1687_write(void *arg, unsigned int addr, unsigned int data)
 {
 	struct mcclock_mace_softc *sc = arg;
 
-	bus_space_write_1(sc->sc_st, sc->sc_sh, (addr << 8) + 7, data);
+	bus_space_write_1(sc->sc_st, sc->sc_sh, addr, data);
 }
 
 static int
@@ -187,14 +187,14 @@ mcclock_mace_gettime_ymdhms(todr_chip_handle_t todrch, struct clock_ymdhms *dt)
 	DS1687_GETTOD(sc, &regs);
 	splx(s);
 
-	dt->dt_sec = bcdtobin(regs[DS1687_SOFT_SEC]);
-	dt->dt_min = bcdtobin(regs[DS1687_SOFT_MIN]);
-	dt->dt_hour = bcdtobin(regs[DS1687_SOFT_HOUR]);
-	dt->dt_wday = bcdtobin(regs[DS1687_SOFT_DOW]);
-	dt->dt_day = bcdtobin(regs[DS1687_SOFT_DOM]);
-	dt->dt_mon = bcdtobin(regs[DS1687_SOFT_MONTH]);
-	dt->dt_year = bcdtobin(regs[DS1687_SOFT_YEAR]) +
-	    (100 * bcdtobin(regs[DS1687_SOFT_CENTURY]));
+	dt->dt_sec = FROMBCD(regs[DS1687_SOFT_SEC]);
+	dt->dt_min = FROMBCD(regs[DS1687_SOFT_MIN]);
+	dt->dt_hour = FROMBCD(regs[DS1687_SOFT_HOUR]);
+	dt->dt_wday = FROMBCD(regs[DS1687_SOFT_DOW]);
+	dt->dt_day = FROMBCD(regs[DS1687_SOFT_DOM]);
+	dt->dt_mon = FROMBCD(regs[DS1687_SOFT_MONTH]);
+	dt->dt_year = FROMBCD(regs[DS1687_SOFT_YEAR]) +
+	    (100 * FROMBCD(regs[DS1687_SOFT_CENTURY]));
 
 	return 0;
 }
@@ -208,14 +208,14 @@ mcclock_mace_settime_ymdhms(todr_chip_handle_t todrch, struct clock_ymdhms *dt)
 
 	memset(&regs, 0, sizeof(regs));
 
-	regs[DS1687_SOFT_SEC] = bintobcd(dt->dt_sec);
-	regs[DS1687_SOFT_MIN] = bintobcd(dt->dt_min);
-	regs[DS1687_SOFT_HOUR] = bintobcd(dt->dt_hour);
-	regs[DS1687_SOFT_DOW] = bintobcd(dt->dt_wday);
-	regs[DS1687_SOFT_DOM] = bintobcd(dt->dt_day);
-	regs[DS1687_SOFT_MONTH] = bintobcd(dt->dt_mon);
-	regs[DS1687_SOFT_YEAR] = bintobcd(dt->dt_year % 100);
-	regs[DS1687_SOFT_CENTURY] = bintobcd(dt->dt_year / 100);
+	regs[DS1687_SOFT_SEC] = TOBCD(dt->dt_sec);
+	regs[DS1687_SOFT_MIN] = TOBCD(dt->dt_min);
+	regs[DS1687_SOFT_HOUR] = TOBCD(dt->dt_hour);
+	regs[DS1687_SOFT_DOW] = TOBCD(dt->dt_wday);
+	regs[DS1687_SOFT_DOM] = TOBCD(dt->dt_day);
+	regs[DS1687_SOFT_MONTH] = TOBCD(dt->dt_mon);
+	regs[DS1687_SOFT_YEAR] = TOBCD(dt->dt_year % 100);
+	regs[DS1687_SOFT_CENTURY] = TOBCD(dt->dt_year / 100);
 	s = splhigh();
 	DS1687_PUTTOD(sc, &regs);
 	splx(s);

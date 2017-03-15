@@ -1,4 +1,4 @@
-/*	$NetBSD: mld6.c,v 1.15 2016/07/20 23:19:18 christos Exp $	*/
+/*	$NetBSD: mld6.c,v 1.14.20.1 2016/12/12 07:49:01 snj Exp $	*/
 /*	$KAME: mld6.c,v 1.9 2000/12/04 06:29:37 itojun Exp $	*/
 
 /*

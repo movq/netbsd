@@ -1,4 +1,4 @@
-/*	$NetBSD: subr_copy.c,v 1.7 2016/05/25 17:43:58 christos Exp $	*/
+/*	$NetBSD: subr_copy.c,v 1.1 2009/11/04 16:54:00 pooka Exp $	*/
 
 /*-
  * Copyright (c) 1997, 1998, 1999, 2002, 2007, 2008 The NetBSD Foundation, Inc.
@@ -79,7 +79,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: subr_copy.c,v 1.7 2016/05/25 17:43:58 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: subr_copy.c,v 1.1 2009/11/04 16:54:00 pooka Exp $");
 
 #include <sys/param.h>
 #include <sys/fcntl.h>
@@ -106,7 +106,10 @@ uiomove(void *buf, size_t n, struct uio *uio)
 
 	ASSERT_SLEEPABLE();
 
-	KASSERT(uio->uio_rw == UIO_READ || uio->uio_rw == UIO_WRITE);
+#ifdef DIAGNOSTIC
+	if (uio->uio_rw != UIO_READ && uio->uio_rw != UIO_WRITE)
+		panic("uiomove: mode");
+#endif
 	while (n > 0 && uio->uio_resid) {
 		iov = uio->uio_iov;
 		cnt = iov->iov_len;
@@ -223,7 +226,7 @@ copyin_vmspace(struct vmspace *vm, const void *uaddr, void *kaddr, size_t len)
 	uio.uio_resid = len;
 	uio.uio_rw = UIO_READ;
 	UIO_SETUP_SYSSPACE(&uio);
-	error = uvm_io(&vm->vm_map, &uio, 0);
+	error = uvm_io(&vm->vm_map, &uio);
 
 	return (error);
 }
@@ -256,7 +259,7 @@ copyout_vmspace(struct vmspace *vm, const void *kaddr, void *uaddr, size_t len)
 	uio.uio_resid = len;
 	uio.uio_rw = UIO_WRITE;
 	UIO_SETUP_SYSSPACE(&uio);
-	error = uvm_io(&vm->vm_map, &uio, 0);
+	error = uvm_io(&vm->vm_map, &uio);
 
 	return (error);
 }

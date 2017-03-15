@@ -11,13 +11,12 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "int_lib.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <math.h>
 
 
-extern COMPILER_RT_ABI double __extendsfdf2vfp(float a);
+extern double __extendsfdf2vfp(float a);
 
 #if __arm__
 int test__extendsfdf2vfp(float a)

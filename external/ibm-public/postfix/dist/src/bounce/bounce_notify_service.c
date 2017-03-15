@@ -1,4 +1,4 @@
-/*	$NetBSD: bounce_notify_service.c,v 1.2 2017/02/14 01:16:44 christos Exp $	*/
+/*	$NetBSD: bounce_notify_service.c,v 1.1.1.1 2009/06/23 10:08:42 tron Exp $	*/
 
 /*++
 /* NAME
@@ -8,15 +8,12 @@
 /* SYNOPSIS
 /*	#include "bounce_service.h"
 /*
-/*	int     bounce_notify_service(flags, service, queue_name, queue_id,
-/*					encoding, smtputf8, sender, dsn_envid,
-/*					dsn_ret, templates)
+/*	int     bounce_notify_service(flags, queue_name, queue_id, encoding,
+/*					sender, dsn_envid, dsn_ret, templates)
 /*	int	flags;
-/*	char	*service;
 /*	char	*queue_name;
 /*	char	*queue_id;
 /*	char	*encoding;
-/*	int	smtputf8;
 /*	char	*sender;
 /*	char	*dsn_envid;
 /*	int	dsn_ret;
@@ -58,12 +55,15 @@
 #include <string.h>
 #include <ctype.h>
 
+#ifdef STRCASECMP_IN_STRINGS_H
+#include <strings.h>
+#endif
+
 /* Utility library. */
 
 #include <msg.h>
 #include <vstream.h>
 #include <name_mask.h>
-#include <stringops.h>
 
 /* Global library. */
 
@@ -74,7 +74,6 @@
 #include <mail_error.h>
 #include <bounce.h>
 #include <dsn_mask.h>
-#include <rec_type.h>
 
 /* Application-specific. */
 
@@ -86,9 +85,8 @@
 
 int     bounce_notify_service(int flags, char *service, char *queue_name,
 			              char *queue_id, char *encoding,
-			              int smtputf8, char *recipient,
-			              char *dsn_envid, int dsn_ret,
-			              BOUNCE_TEMPLATES *ts)
+			              char *recipient, char *dsn_envid,
+			              int dsn_ret, BOUNCE_TEMPLATES *ts)
 {
     BOUNCE_INFO *bounce_info;
     int     bounce_status = 1;
@@ -133,8 +131,7 @@ int     bounce_notify_service(int flags, char *service, char *queue_name,
      * notification is enabled.
      */
     bounce_info = bounce_mail_init(service, queue_name, queue_id,
-				   encoding, smtputf8, dsn_envid,
-				   ts->failure);
+				   encoding, dsn_envid, ts->failure);
 
 #define NULL_SENDER		MAIL_ADDR_EMPTY	/* special address */
 #define NULL_TRACE_FLAGS	0
@@ -159,7 +156,7 @@ int     bounce_notify_service(int flags, char *service, char *queue_name,
      * every delivery agent must recognize the double-bounce sender address
      * and substitute something else so mail does not come back at us.
      */
-    if (strcasecmp_utf8(recipient, mail_addr_double_bounce()) == 0) {
+    if (strcasecmp(recipient, mail_addr_double_bounce()) == 0) {
 	msg_warn("%s: undeliverable postmaster notification discarded",
 		 queue_id);
 	bounce_status = 0;
@@ -179,9 +176,8 @@ int     bounce_notify_service(int flags, char *service, char *queue_name,
 	    postmaster = var_2bounce_rcpt;
 	    if ((bounce = post_mail_fopen_nowait(mail_addr_double_bounce(),
 						 postmaster,
-						 MAIL_SRC_MASK_BOUNCE,
+						 INT_FILT_MASK_BOUNCE,
 						 NULL_TRACE_FLAGS,
-						 smtputf8,
 						 new_id)) != 0) {
 
 		/*
@@ -219,9 +215,8 @@ int     bounce_notify_service(int flags, char *service, char *queue_name,
      */
     else {
 	if ((bounce = post_mail_fopen_nowait(NULL_SENDER, recipient,
-					     MAIL_SRC_MASK_BOUNCE,
+					     INT_FILT_MASK_BOUNCE,
 					     NULL_TRACE_FLAGS,
-					     smtputf8,
 					     new_id)) != 0) {
 
 	    /*
@@ -262,7 +257,7 @@ int     bounce_notify_service(int flags, char *service, char *queue_name,
 #define SEND_POSTMASTER_SINGLE_BOUNCE_NOTICE (notify_mask & MAIL_ERROR_BOUNCE)
 
 	if (bounce_status == 0 && SEND_POSTMASTER_SINGLE_BOUNCE_NOTICE
-	    && strcasecmp_utf8(recipient, mail_addr_double_bounce()) != 0) {
+	    && strcasecmp(recipient, mail_addr_double_bounce()) != 0) {
 
 	    /*
 	     * Send the text with reason for the bounce, and the headers of
@@ -274,9 +269,8 @@ int     bounce_notify_service(int flags, char *service, char *queue_name,
 	    postmaster = var_bounce_rcpt;
 	    if ((bounce = post_mail_fopen_nowait(mail_addr_double_bounce(),
 						 postmaster,
-						 MAIL_SRC_MASK_BOUNCE,
+						 INT_FILT_MASK_BOUNCE,
 						 NULL_TRACE_FLAGS,
-						 smtputf8,
 						 new_id)) != 0) {
 		count = -1;
 		if (bounce_header(bounce, bounce_info, postmaster,

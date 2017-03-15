@@ -1,4 +1,4 @@
-/*	$NetBSD: refidsmear.c,v 1.1.1.4 2016/01/08 21:21:24 christos Exp $	*/
+/*	$NetBSD: refidsmear.c,v 1.1.1.2.8.2 2015/11/08 01:51:07 riz Exp $	*/
 
 #include <config.h>
 

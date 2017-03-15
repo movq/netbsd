@@ -1,4 +1,4 @@
-/* $NetBSD: t_assert.c,v 1.3 2017/01/10 15:17:57 christos Exp $ */
+/* $NetBSD: t_assert.c,v 1.2 2011/06/14 05:28:00 jruoho Exp $ */
 
 /*-
  * Copyright (c) 2011 The NetBSD Foundation, Inc.
@@ -29,11 +29,8 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: t_assert.c,v 1.3 2017/01/10 15:17:57 christos Exp $");
+__RCSID("$NetBSD: t_assert.c,v 1.2 2011/06/14 05:28:00 jruoho Exp $");
 
-#include <sys/types.h>
-#include <sys/resource.h>
-#include <sys/time.h>
 #include <sys/wait.h>
 
 #include <assert.h>
@@ -42,17 +39,6 @@ __RCSID("$NetBSD: t_assert.c,v 1.3 2017/01/10 15:17:57 christos Exp $");
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
-
-static void
-disable_corefile(void)
-{
-	struct rlimit limits;
-
-	limits.rlim_cur = 0;
-	limits.rlim_max = 0;
-
-	ATF_REQUIRE(setrlimit(RLIMIT_CORE, &limits) == 0);
-}
 
 static void		handler(int);
 
@@ -79,7 +65,6 @@ ATF_TC_BODY(assert_false, tc)
 
 	if (pid == 0) {
 
-		disable_corefile();
 		(void)closefrom(0);
 		(void)memset(&sa, 0, sizeof(struct sigaction));
 
@@ -117,7 +102,6 @@ ATF_TC_BODY(assert_true, tc)
 
 	if (pid == 0) {
 
-		disable_corefile();
 		(void)closefrom(0);
 		(void)memset(&sa, 0, sizeof(struct sigaction));
 

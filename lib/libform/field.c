@@ -1,4 +1,4 @@
-/*	$NetBSD: field.c,v 1.31 2016/03/09 19:47:13 christos Exp $	*/
+/*	$NetBSD: field.c,v 1.27.4.1 2015/11/05 05:24:11 riz Exp $	*/
 /*-
  * Copyright (c) 1998-1999 Brett Lymn
  *                         (blymn@baea.com.au, brett_lymn@yahoo.com.au)
@@ -29,7 +29,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: field.c,v 1.31 2016/03/09 19:47:13 christos Exp $");
+__RCSID("$NetBSD: field.c,v 1.27.4.1 2015/11/05 05:24:11 riz Exp $");
 
 #include <sys/param.h>
 #include <stdlib.h>
@@ -425,19 +425,26 @@ set_field_buffer(FIELD *field, int buffer, const char *value)
 	    && ((field->rows + field->nrows) == 1))
 		len = field->cols;
 
-	_formi_dbg_printf( "%s: len = %d, value = %s, buffer=%d\n", __func__,
-	    len, value, buffer);
+#ifdef DEBUG
+	if (_formi_create_dbg_file() != E_OK)
+		return E_SYSTEM_ERROR;
+
+	fprintf(dbg,
+		"set_field_buffer: entry: len = %d, value = %s, buffer=%d\n",
+		len, value, buffer);
+	fprintf(dbg, "set_field_buffer: entry: string = ");
 	if (field->buffers[buffer].string != NULL)
-		_formi_dbg_printf("%s: string=%s, len = %d\n", __func__,
-		    field->buffers[buffer].string,
-		    field->buffers[buffer].length);
+		fprintf(dbg, "%s, len = %d\n", field->buffers[buffer].string,
+			field->buffers[buffer].length);
 	else
-		_formi_dbg_printf("%s: string=(null), len = 0\n", __func__);
-	_formi_dbg_printf("%s: lines.len = %d\n", __func__,
-	    field->alines[0].length);
+		fprintf(dbg, "(null), len = 0\n");
+	fprintf(dbg, "set_field_buffer: entry: lines.len = %d\n",
+		field->alines[0].length);
+#endif
 	
-	if ((field->buffers[buffer].string = realloc(
-	    field->buffers[buffer].string, (size_t) len + 1)) == NULL)
+	if ((field->buffers[buffer].string =
+	     (char *) realloc(field->buffers[buffer].string,
+			      (size_t) len + 1)) == NULL)
 		return E_SYSTEM_ERROR;
 
 	strlcpy(field->buffers[buffer].string, value, (size_t) len + 1);
@@ -445,11 +452,14 @@ set_field_buffer(FIELD *field, int buffer, const char *value)
 	field->buffers[buffer].allocated = len + 1;
 	status = field_buffer_init(field, buffer, len);
 
-	_formi_dbg_printf("%s: len = %d, value = %s\n", __func__, len, value);
-	_formi_dbg_printf("%s: string = %s, len = %d\n", __func__,
-	    field->buffers[buffer].string, field->buffers[buffer].length);
-	_formi_dbg_printf("%s: lines.len = %d\n", __func__,
+#ifdef DEBUG
+	fprintf(dbg, "set_field_buffer: exit: len = %d, value = %s\n",
+		len, value);
+	fprintf(dbg, "set_field_buffer: exit: string = %s, len = %d\n",
+		field->buffers[buffer].string, field->buffers[buffer].length);
+	fprintf(dbg, "set_field_buffer: exit: lines.len = %d\n",
 		field->alines[0].length);
+#endif
 
 	return status;
 }
@@ -825,7 +835,7 @@ new_field(int rows, int cols, int frow, int fcol, int nrows, int nbuf)
 }
 
 /*
- * Duplicate the given field, including its buffers.
+ * Duplicate the given field, including it's buffers.
  */
 FIELD *
 dup_field(FIELD *field, int frow, int fcol)
@@ -890,7 +900,7 @@ int
 free_field(FIELD *field)
 {
 	FIELD *flink;
-	unsigned int i;
+	int i;
 	_formi_tab_t *ts, *nts;
 	
 	if (field == NULL)
@@ -903,7 +913,7 @@ free_field(FIELD *field)
 		  /* no it is not - release the buffers */
 		free(field->buffers);
 		  /* free the tab structures */
-		for (i = 0; i + 1 < field->row_count; i++) {
+		for (i = 0; i < field->row_count - 1; i++) {
 			if (field->alines[i].tabs != NULL) {
 				ts = field->alines[i].tabs;
 				while (ts != NULL) {

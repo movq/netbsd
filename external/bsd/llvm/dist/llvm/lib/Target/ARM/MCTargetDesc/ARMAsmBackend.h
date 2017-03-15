@@ -11,22 +11,21 @@
 #define LLVM_LIB_TARGET_ARM_ARMASMBACKEND_H
 
 #include "MCTargetDesc/ARMFixupKinds.h"
-#include "MCTargetDesc/ARMMCTargetDesc.h"
 #include "llvm/MC/MCAsmBackend.h"
 #include "llvm/MC/MCSubtargetInfo.h"
-#include "llvm/Support/TargetRegistry.h"
 
-namespace llvm {
+using namespace llvm;
+
+namespace {
 
 class ARMAsmBackend : public MCAsmBackend {
   const MCSubtargetInfo *STI;
   bool isThumbMode;    // Currently emitting Thumb code.
   bool IsLittleEndian; // Big or little endian.
 public:
-  ARMAsmBackend(const Target &T, const Triple &TT, bool IsLittle)
+  ARMAsmBackend(const Target &T, StringRef TT, bool IsLittle)
       : MCAsmBackend(), STI(ARM_MC::createARMMCSubtargetInfo(TT, "", "")),
-        isThumbMode(TT.getArchName().startswith("thumb")),
-        IsLittleEndian(IsLittle) {}
+        isThumbMode(TT.startswith("thumb")), IsLittleEndian(IsLittle) {}
 
   ~ARMAsmBackend() override { delete STI; }
 
@@ -34,7 +33,7 @@ public:
     return ARM::NumTargetFixupKinds;
   }
 
-  bool hasNOP() const { return STI->getFeatureBits()[ARM::HasV6T2Ops]; }
+  bool hasNOP() const { return (STI->getFeatureBits() & ARM::HasV6T2Ops) != 0; }
 
   const MCFixupKindInfo &getFixupKindInfo(MCFixupKind Kind) const override;
 
@@ -45,26 +44,16 @@ public:
                          const MCValue &Target, uint64_t &Value,
                          bool &IsResolved) override;
 
-  unsigned adjustFixupValue(const MCFixup &Fixup, uint64_t Value, bool IsPCRel,
-                            MCContext *Ctx, bool IsLittleEndian,
-                            bool IsResolved) const;
-
   void applyFixup(const MCFixup &Fixup, char *Data, unsigned DataSize,
                   uint64_t Value, bool IsPCRel) const override;
 
-  unsigned getRelaxedOpcode(unsigned Op) const;
-
   bool mayNeedRelaxation(const MCInst &Inst) const override;
-
-  const char *reasonForFixupRelaxation(const MCFixup &Fixup,
-                                       uint64_t Value) const;
 
   bool fixupNeedsRelaxation(const MCFixup &Fixup, uint64_t Value,
                             const MCRelaxableFragment *DF,
                             const MCAsmLayout &Layout) const override;
 
-  void relaxInstruction(const MCInst &Inst, const MCSubtargetInfo &STI,
-                        MCInst &Res) const override;
+  void relaxInstruction(const MCInst &Inst, MCInst &Res) const override;
 
   bool writeNopData(uint64_t Count, MCObjectWriter *OW) const override;
 
@@ -75,6 +64,6 @@ public:
   void setIsThumb(bool it) { isThumbMode = it; }
   bool isLittle() const { return IsLittleEndian; }
 };
-} // end namespace llvm
+} // end anonymous namespace
 
 #endif

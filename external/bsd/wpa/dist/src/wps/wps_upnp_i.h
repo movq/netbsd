@@ -109,7 +109,8 @@ struct upnp_wps_device_interface {
 	struct wps_context *wps;
 	void *priv;
 
-	struct dl_list peers; /* active UPnP peer sessions */
+	/* FIX: maintain separate structures for each UPnP peer */
+	struct upnp_wps_peer peer;
 };
 
 /*

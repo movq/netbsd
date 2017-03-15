@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.19 2016/09/27 19:18:42 joerg Exp $
+#	$NetBSD: Makefile,v 1.17 2014/07/16 14:05:04 nakayama Exp $
 
 .include <bsd.own.mk>
 
@@ -90,8 +90,6 @@ MAN=	FcAtomicCreate.3 FcAtomicDeleteNew.3 FcAtomicDestroy.3 FcAtomicLock.3 \
 
 MAN+=	fonts-conf.5
 
-MLINKS= fonts-conf.5 fonts.conf.5
-
 LIBDPLIBS=\
 	expat		${NETBSDSRCDIR}/external/mit/expat/lib/libexpat \
 	freetype	${.CURDIR}/../../freetype
@@ -134,15 +132,6 @@ PKGCONFIG_SED_FLAGS= \
 CPPFLAGS.fcxml.c=	-Wno-error
 
 CWARNFLAGS.clang+=	-Wno-pointer-sign -Wno-switch
-
-.if ${MACHINE_ARCH} == "sparc" || ${COMMON_MACHINE_ARCH:U} == "sparc"
-COPTS.fccache.c+=	${${ACTIVE_CC} == "clang":? -Wa,-Av8plus  :}
-COPTS.fccfg.c+=	${${ACTIVE_CC} == "clang":? -Wa,-Av8plus  :}
-COPTS.fccharset.c+=	${${ACTIVE_CC} == "clang":? -Wa,-Av8plus  :}
-COPTS.fcobjs.c+=	${${ACTIVE_CC} == "clang":? -Wa,-Av8plus  :}
-COPTS.fcpat.c+=	${${ACTIVE_CC} == "clang":? -Wa,-Av8plus  :}
-COPTS.fcstr.c+=	${${ACTIVE_CC} == "clang":? -Wa,-Av8plus  :}
-.endif
 
 .include <bsd.x11.mk>
 .include <bsd.lib.mk>
