@@ -1,4 +1,4 @@
-/*	$NetBSD: test_add_store_cred.c,v 1.2 2017/01/28 21:31:46 christos Exp $	*/
+/*	$NetBSD: test_add_store_cred.c,v 1.2.2.2 2017/03/20 06:51:42 pgoyette Exp $	*/
 
 /*
  * Copyright (c) 2015 Cryptonector LLC.

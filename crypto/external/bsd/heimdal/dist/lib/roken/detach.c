@@ -1,4 +1,4 @@
-/*	$NetBSD: detach.c,v 1.2 2017/01/28 21:31:50 christos Exp $	*/
+/*	$NetBSD: detach.c,v 1.2.2.2 2017/03/20 06:51:47 pgoyette Exp $	*/
 
 /*-
  * Copyright (c) 2015

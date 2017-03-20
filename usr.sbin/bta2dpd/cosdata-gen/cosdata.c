@@ -1,4 +1,4 @@
-/* $NetBSD: cosdata.c,v 1.3 2017/01/30 15:50:21 christos Exp $ */
+/* $NetBSD: cosdata.c,v 1.3.2.2 2017/03/20 06:58:07 pgoyette Exp $ */
 
 /*-
  * Copyright (c) 2015 - 2016 Nathanial Sloss <nathanialsloss@yahoo.com.au>

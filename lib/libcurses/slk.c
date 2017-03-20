@@ -1,4 +1,4 @@
-/*	$NetBSD: slk.c,v 1.2 2017/01/30 17:15:52 roy Exp $	*/
+/*	$NetBSD: slk.c,v 1.2.2.2 2017/03/20 06:56:59 pgoyette Exp $	*/
 
 /*-
  * Copyright (c) 2017 The NetBSD Foundation, Inc.
@@ -31,7 +31,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: slk.c,v 1.2 2017/01/30 17:15:52 roy Exp $");
+__RCSID("$NetBSD: slk.c,v 1.2.2.2 2017/03/20 06:56:59 pgoyette Exp $");
 #endif				/* not lint */
 
 #include <ctype.h>

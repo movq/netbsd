@@ -1,4 +1,4 @@
-/*	$NetBSD: startprog32.S,v 1.2 2017/02/24 12:24:25 nonaka Exp $	*/
+/*	$NetBSD: startprog32.S,v 1.2.2.2 2017/03/20 06:57:15 pgoyette Exp $	*/
 /*	NetBSD: startprog.S,v 1.4 2016/12/04 08:21:08 maxv Exp	*/
 
 /*

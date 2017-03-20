@@ -1,4 +1,4 @@
-/*	$NetBSD: l2tp.c,v 1.1 2017/02/16 08:28:03 knakahara Exp $	*/
+/*	$NetBSD: l2tp.c,v 1.1.2.2 2017/03/20 06:57:02 pgoyette Exp $	*/
 
 /*
  * Copyright (c) 2017 Internet Initiative Japan Inc.
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: l2tp.c,v 1.1 2017/02/16 08:28:03 knakahara Exp $");
+__RCSID("$NetBSD: l2tp.c,v 1.1.2.2 2017/03/20 06:57:02 pgoyette Exp $");
 
 #include <sys/param.h>
 #include <sys/ioctl.h>

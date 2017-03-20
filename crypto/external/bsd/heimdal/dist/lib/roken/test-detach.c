@@ -1,4 +1,4 @@
-/*	$NetBSD: test-detach.c,v 1.2 2017/01/28 21:31:50 christos Exp $	*/
+/*	$NetBSD: test-detach.c,v 1.2.2.2 2017/03/20 06:51:48 pgoyette Exp $	*/
 
 /***********************************************************************
  * Copyright (c) 2015, Cryptonector LLC

@@ -1,4 +1,4 @@
-/*	$NetBSD: mvsocpmuvar.h,v 1.1 2017/01/07 16:19:28 kiyohara Exp $	*/
+/*	$NetBSD: mvsocpmuvar.h,v 1.1.6.2 2017/03/20 06:57:11 pgoyette Exp $	*/
 /*
  * Copyright (c) 2016 KIYOHARA Takashi
  * All rights reserved.

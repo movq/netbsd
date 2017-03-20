@@ -1,4 +1,4 @@
-# $NetBSD: Makefile,v 1.1 2017/02/08 16:11:39 rin Exp $
+# $NetBSD: Makefile,v 1.1.2.2 2017/03/20 06:52:10 pgoyette Exp $
 # Build a smaller fsck_ffs (i.e. for boot media).
 # Support for Endian-Independent FFS and Apple UFS is dropped unless FFS_EI=1
 # and APPLE_UFS=1 are added to CRUNCHENV, respectively.

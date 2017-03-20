@@ -1,4 +1,4 @@
-/*	$NetBSD: syslog_private.h,v 1.2 2017/01/12 01:58:39 christos Exp $	*/
+/*	$NetBSD: syslog_private.h,v 1.2.4.2 2017/03/20 06:56:57 pgoyette Exp $	*/
 
 /*-
  * Copyright (c) 2016 The NetBSD Foundation, Inc.

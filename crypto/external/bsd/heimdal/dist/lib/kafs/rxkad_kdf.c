@@ -1,4 +1,4 @@
-/*	$NetBSD: rxkad_kdf.c,v 1.2 2017/01/28 21:31:49 christos Exp $	*/
+/*	$NetBSD: rxkad_kdf.c,v 1.2.2.2 2017/03/20 06:51:46 pgoyette Exp $	*/
 
 /*
  * Copyright (c) 1995-2003 Kungliga Tekniska Högskolan

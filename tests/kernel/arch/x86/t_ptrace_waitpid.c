@@ -1,4 +1,4 @@
-/*	$NetBSD: t_ptrace_waitpid.c,v 1.1 2017/02/22 01:07:13 kamil Exp $	*/
+/*	$NetBSD: t_ptrace_waitpid.c,v 1.1.2.2 2017/03/20 06:57:57 pgoyette Exp $	*/
 
 /*-
  * Copyright (c) 2016 The NetBSD Foundation, Inc.

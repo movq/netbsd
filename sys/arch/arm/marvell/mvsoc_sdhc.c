@@ -1,4 +1,4 @@
-/*	$NetBSD: mvsoc_sdhc.c,v 1.1 2017/01/07 16:19:28 kiyohara Exp $	*/
+/*	$NetBSD: mvsoc_sdhc.c,v 1.1.6.2 2017/03/20 06:57:11 pgoyette Exp $	*/
 /*
  * Copyright (c) 2016 KIYOHARA Takashi
  * All rights reserved.
@@ -26,7 +26,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: mvsoc_sdhc.c,v 1.1 2017/01/07 16:19:28 kiyohara Exp $");
+__KERNEL_RCSID(0, "$NetBSD: mvsoc_sdhc.c,v 1.1.6.2 2017/03/20 06:57:11 pgoyette Exp $");
 
 #include <sys/param.h>
 #include <sys/bus.h>

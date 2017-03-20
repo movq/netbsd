@@ -1,4 +1,4 @@
-/*	$NetBSD: mdb_load.c,v 1.1.1.1 2017/02/09 01:46:44 christos Exp $	*/
+/*	$NetBSD: mdb_load.c,v 1.1.1.1.2.2 2017/03/20 06:56:14 pgoyette Exp $	*/
 
 /* mdb_load.c - memory-mapped database load tool */
 /*

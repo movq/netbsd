@@ -1,3 +1,3 @@
-/*	$NetBSD: l2tp.h,v 1.1 2017/02/16 08:39:10 knakahara Exp $	*/
+/*	$NetBSD: l2tp.h,v 1.1.2.2 2017/03/20 06:57:52 pgoyette Exp $	*/
 
 /* dummy */

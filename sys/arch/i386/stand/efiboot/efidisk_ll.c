@@ -1,4 +1,4 @@
-/*	$NetBSD: efidisk_ll.c,v 1.1 2017/01/24 11:09:14 nonaka Exp $	 */
+/*	$NetBSD: efidisk_ll.c,v 1.1.4.2 2017/03/20 06:57:15 pgoyette Exp $	 */
 /*	NetBSD: biosdisk_ll.c,v 1.31 2011/02/21 02:58:02 jakllsch Exp	 */
 
 /*-

@@ -1,4 +1,4 @@
-/*	$NetBSD: expr.oxout.tab.c,v 1.2 2017/02/11 19:33:12 christos Exp $	*/
+/*	$NetBSD: expr.oxout.tab.c,v 1.2.2.2 2017/03/20 06:52:18 pgoyette Exp $	*/
 
 /* original parser id follows */
 /* yysccsid[] = "@(#)yaccpar	1.9 (Berkeley) 02/21/93" */

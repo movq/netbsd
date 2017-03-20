@@ -1,4 +1,4 @@
-/*	$NetBSD: dns_rr_filter.c,v 1.2 2017/02/14 01:16:44 christos Exp $	*/
+/*	$NetBSD: dns_rr_filter.c,v 1.2.2.2 2017/03/20 06:56:36 pgoyette Exp $	*/
 
 /*++
 /* NAME

@@ -1,4 +1,4 @@
-/*	$NetBSD: localtime_r.c,v 1.1.1.1 2017/02/10 17:42:57 christos Exp $	*/
+/*	$NetBSD: localtime_r.c,v 1.1.1.1.2.2 2017/03/20 06:52:20 pgoyette Exp $	*/
 
 /*	$File: localtime_r.c,v 1.2 2015/07/11 14:41:37 christos Exp $	*/
 
@@ -7,7 +7,7 @@
 #if 0
 FILE_RCSID("@(#)$File: localtime_r.c,v 1.2 2015/07/11 14:41:37 christos Exp $")
 #else
-__RCSID("$NetBSD: localtime_r.c,v 1.1.1.1 2017/02/10 17:42:57 christos Exp $");
+__RCSID("$NetBSD: localtime_r.c,v 1.1.1.1.2.2 2017/03/20 06:52:20 pgoyette Exp $");
 #endif
 #endif	/* lint */
 #include <time.h>

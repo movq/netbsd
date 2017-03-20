@@ -1,4 +1,4 @@
-/*	$NetBSD: regress_finalize.c,v 1.1.1.1 2017/01/31 21:14:53 christos Exp $	*/
+/*	$NetBSD: regress_finalize.c,v 1.1.1.1.2.2 2017/03/20 06:52:23 pgoyette Exp $	*/
 /*
  * Copyright (c) 2013 Niels Provos and Nick Mathewson
  *
@@ -27,7 +27,7 @@
 
 #include "event2/event-config.h"
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: regress_finalize.c,v 1.1.1.1 2017/01/31 21:14:53 christos Exp $");
+__RCSID("$NetBSD: regress_finalize.c,v 1.1.1.1.2.2 2017/03/20 06:52:23 pgoyette Exp $");
 #include "evconfig-private.h"
 #include "tinytest.h"
 #include "tinytest_macros.h"

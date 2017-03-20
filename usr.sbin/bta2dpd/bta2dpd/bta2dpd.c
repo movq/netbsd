@@ -1,4 +1,4 @@
-/* $NetBSD: bta2dpd.c,v 1.2 2017/02/12 08:25:31 nat Exp $ */
+/* $NetBSD: bta2dpd.c,v 1.2.2.2 2017/03/20 06:58:06 pgoyette Exp $ */
 
 /*-
  * Copyright (c) 2015 - 2016 Nathanial Sloss <nathanialsloss@yahoo.com.au>

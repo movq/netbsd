@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.1 2017/01/11 12:02:26 joerg Exp $
+#	$NetBSD: Makefile,v 1.1.4.2 2017/03/20 06:52:28 pgoyette Exp $
 
 PROG_CXX=	llvm-cxxfilt
 NOMAN=		yes

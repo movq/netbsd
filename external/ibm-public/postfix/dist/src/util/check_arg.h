@@ -1,4 +1,4 @@
-/*	$NetBSD: check_arg.h,v 1.2 2017/02/14 01:16:49 christos Exp $	*/
+/*	$NetBSD: check_arg.h,v 1.2.2.2 2017/03/20 06:56:41 pgoyette Exp $	*/
 
 #ifndef _CHECK_ARG_INCLUDED_
 #define _CHECK_ARG_INCLUDED_

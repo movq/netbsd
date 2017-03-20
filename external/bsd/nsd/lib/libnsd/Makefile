@@ -1,4 +1,4 @@
-# $NetBSD: Makefile,v 1.1 2017/01/07 19:51:21 christos Exp $
+# $NetBSD: Makefile,v 1.1.4.2 2017/03/20 06:56:06 pgoyette Exp $
 
 LIBISPRIVATE=yes
 .include <bsd.init.mk>
