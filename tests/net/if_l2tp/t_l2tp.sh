@@ -1,4 +1,4 @@
-#	$NetBSD: t_l2tp.sh,v 1.2 2017/02/17 00:51:25 ozaki-r Exp $
+#	$NetBSD: t_l2tp.sh,v 1.2.2.2 2017/03/20 06:58:01 pgoyette Exp $
 #
 # Copyright (c) 2017 Internet Initiative Japan Inc.
 # All rights reserved.

@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile.bootimage,v 1.6 2017/02/16 03:47:23 christos Exp $
+#	$NetBSD: Makefile.bootimage,v 1.6.2.2 2017/03/20 06:52:03 pgoyette Exp $
 #
 # Copyright (c) 2009, 2010, 2011 Izumi Tsutsui.  All rights reserved.
 #

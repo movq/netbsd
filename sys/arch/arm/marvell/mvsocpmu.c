@@ -1,4 +1,4 @@
-/*	$NetBSD: mvsocpmu.c,v 1.1 2017/01/07 16:19:28 kiyohara Exp $	*/
+/*	$NetBSD: mvsocpmu.c,v 1.1.6.2 2017/03/20 06:57:11 pgoyette Exp $	*/
 /*
  * Copyright (c) 2016 KIYOHARA Takashi
  * All rights reserved.
@@ -25,7 +25,7 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: mvsocpmu.c,v 1.1 2017/01/07 16:19:28 kiyohara Exp $");
+__KERNEL_RCSID(0, "$NetBSD: mvsocpmu.c,v 1.1.6.2 2017/03/20 06:57:11 pgoyette Exp $");
 
 #include "opt_mvsoc.h"
 

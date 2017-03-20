@@ -1,4 +1,4 @@
-/*	$NetBSD: panic.c,v 1.4 2017/02/11 10:15:55 nonaka Exp $	*/
+/*	$NetBSD: panic.c,v 1.4.2.2 2017/03/20 06:57:15 pgoyette Exp $	*/
 
 /*-
  * Copyright (c) 2016 Kimihiro Nonaka <nonaka@netbsd.org>

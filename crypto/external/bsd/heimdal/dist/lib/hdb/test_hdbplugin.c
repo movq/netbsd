@@ -1,4 +1,4 @@
-/*	$NetBSD: test_hdbplugin.c,v 1.2 2017/01/28 21:31:48 christos Exp $	*/
+/*	$NetBSD: test_hdbplugin.c,v 1.2.2.2 2017/03/20 06:51:44 pgoyette Exp $	*/
 
 /*
  * Copyright (c) 2013 Jeffrey Clark

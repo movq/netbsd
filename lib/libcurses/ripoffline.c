@@ -1,4 +1,4 @@
-/*	$NetBSD: ripoffline.c,v 1.3 2017/01/24 17:27:30 roy Exp $	*/
+/*	$NetBSD: ripoffline.c,v 1.3.2.2 2017/03/20 06:56:59 pgoyette Exp $	*/
 
 /*-
  * Copyright (c) 2017 The NetBSD Foundation, Inc.
@@ -31,7 +31,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: ripoffline.c,v 1.3 2017/01/24 17:27:30 roy Exp $");
+__RCSID("$NetBSD: ripoffline.c,v 1.3.2.2 2017/03/20 06:56:59 pgoyette Exp $");
 #endif				/* not lint */
 
 #include "curses.h"

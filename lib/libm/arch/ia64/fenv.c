@@ -1,4 +1,4 @@
-/*	$NetBSD: fenv.c,v 1.1 2017/02/23 02:05:30 scole Exp $	*/
+/*	$NetBSD: fenv.c,v 1.1.2.2 2017/03/20 06:56:59 pgoyette Exp $	*/
 
 /*-
  * Copyright (c) 2004 David Schultz <das@FreeBSD.ORG>
@@ -29,7 +29,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: fenv.c,v 1.1 2017/02/23 02:05:30 scole Exp $");
+__RCSID("$NetBSD: fenv.c,v 1.1.2.2 2017/03/20 06:56:59 pgoyette Exp $");
 
 #define	__fenv_static
 #include "fenv.h"

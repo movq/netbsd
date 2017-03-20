@@ -1,4 +1,4 @@
-$NetBSD: TODO.smpnet,v 1.9 2017/03/11 07:23:13 msaitoh Exp $
+$NetBSD: TODO.smpnet,v 1.9.2.2 2017/03/20 06:52:12 pgoyette Exp $
 
 MP-safe components
 ==================

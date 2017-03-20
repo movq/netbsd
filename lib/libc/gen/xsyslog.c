@@ -1,4 +1,4 @@
-/*	$NetBSD: xsyslog.c,v 1.2 2017/01/12 01:58:39 christos Exp $	*/
+/*	$NetBSD: xsyslog.c,v 1.2.4.2 2017/03/20 06:56:57 pgoyette Exp $	*/
 
 /*
  * Copyright (c) 1983, 1988, 1993
@@ -34,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)syslog.c	8.5 (Berkeley) 4/29/95";
 #else
-__RCSID("$NetBSD: xsyslog.c,v 1.2 2017/01/12 01:58:39 christos Exp $");
+__RCSID("$NetBSD: xsyslog.c,v 1.2.4.2 2017/03/20 06:56:57 pgoyette Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 

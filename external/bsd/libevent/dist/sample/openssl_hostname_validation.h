@@ -1,4 +1,4 @@
-/*	$NetBSD: openssl_hostname_validation.h,v 1.1.1.1 2017/01/31 21:14:53 christos Exp $	*/
+/*	$NetBSD: openssl_hostname_validation.h,v 1.1.1.1.2.2 2017/03/20 06:52:23 pgoyette Exp $	*/
 /* Obtained from: https://github.com/iSECPartners/ssl-conservatory */
 
 /*

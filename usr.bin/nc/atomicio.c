@@ -26,7 +26,7 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: atomicio.c,v 1.2 2017/02/06 16:03:40 christos Exp $");
+__RCSID("$NetBSD: atomicio.c,v 1.2.2.2 2017/03/20 06:58:05 pgoyette Exp $");
 
 #include <errno.h>
 #include <poll.h>

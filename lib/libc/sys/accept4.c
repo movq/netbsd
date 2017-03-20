@@ -1,4 +1,4 @@
-/*	$NetBSD: accept4.c,v 1.2 2017/02/08 18:03:57 maya Exp $	*/
+/*	$NetBSD: accept4.c,v 1.2.2.2 2017/03/20 06:56:58 pgoyette Exp $	*/
 
 /*-
  * Copyright (c) 2017 The NetBSD Foundation, Inc.
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: accept4.c,v 1.2 2017/02/08 18:03:57 maya Exp $");
+__RCSID("$NetBSD: accept4.c,v 1.2.2.2 2017/03/20 06:56:58 pgoyette Exp $");
 
 #include "namespace.h"
 #include <sys/socket.h>

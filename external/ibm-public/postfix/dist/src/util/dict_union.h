@@ -1,4 +1,4 @@
-/*	$NetBSD: dict_union.h,v 1.2 2017/02/14 01:16:49 christos Exp $	*/
+/*	$NetBSD: dict_union.h,v 1.2.2.2 2017/03/20 06:56:41 pgoyette Exp $	*/
 
 #ifndef _DICT_UNION_H_INCLUDED_
 #define _DICT_UNION_H_INCLUDED_

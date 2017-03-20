@@ -1,4 +1,4 @@
-/*	$NetBSD: strerror_ss.c,v 1.2 2017/01/12 00:43:55 christos Exp $	*/
+/*	$NetBSD: strerror_ss.c,v 1.2.4.2 2017/03/20 06:56:58 pgoyette Exp $	*/
 
 /*-
  * Copyright (c) 2017 The NetBSD Foundation, Inc.
@@ -29,7 +29,7 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: strerror_ss.c,v 1.2 2017/01/12 00:43:55 christos Exp $");
+__RCSID("$NetBSD: strerror_ss.c,v 1.2.4.2 2017/03/20 06:56:58 pgoyette Exp $");
 
 #include "namespace.h"
 

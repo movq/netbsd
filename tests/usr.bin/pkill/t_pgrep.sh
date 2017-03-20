@@ -1,4 +1,4 @@
-# $NetBSD: t_pgrep.sh,v 1.2 2017/02/21 21:22:45 kre Exp $
+# $NetBSD: t_pgrep.sh,v 1.2.2.2 2017/03/20 06:58:02 pgoyette Exp $
 #
 # Copyright (c) 2016 The NetBSD Foundation, Inc.
 # All rights reserved.

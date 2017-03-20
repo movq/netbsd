@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.2 2017/02/21 10:53:37 nonaka Exp $
+#	$NetBSD: Makefile,v 1.2.2.2 2017/03/20 06:57:15 pgoyette Exp $
 
 PROG=		bootia32.efi
 OBJFMT=		pei-i386

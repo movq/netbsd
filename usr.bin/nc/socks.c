@@ -25,7 +25,7 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: socks.c,v 1.3 2017/02/09 20:37:58 joerg Exp $");
+__RCSID("$NetBSD: socks.c,v 1.3.2.2 2017/03/20 06:58:05 pgoyette Exp $");
 
 #include <sys/types.h>
 #include <sys/socket.h>

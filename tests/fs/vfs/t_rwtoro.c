@@ -1,4 +1,4 @@
-/*	$NetBSD: t_rwtoro.c,v 1.1 2017/01/27 10:45:11 hannken Exp $	*/
+/*	$NetBSD: t_rwtoro.c,v 1.1.2.2 2017/03/20 06:57:57 pgoyette Exp $	*/
 
 /*-
  * Copyright (c) 2017 The NetBSD Foundation, Inc.

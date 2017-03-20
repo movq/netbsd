@@ -1,4 +1,4 @@
-/*	$NetBSD: valid_utf8_string.c,v 1.2 2017/02/14 01:16:49 christos Exp $	*/
+/*	$NetBSD: valid_utf8_string.c,v 1.2.2.2 2017/03/20 06:56:42 pgoyette Exp $	*/
 
 /*++
 /* NAME

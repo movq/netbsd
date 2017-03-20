@@ -1,4 +1,4 @@
-/*	$NetBSD: load_lib.c,v 1.2 2017/02/14 01:16:49 christos Exp $	*/
+/*	$NetBSD: load_lib.c,v 1.2.2.2 2017/03/20 06:56:41 pgoyette Exp $	*/
 
 /*++
 /* NAME

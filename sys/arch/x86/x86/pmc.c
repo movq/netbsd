@@ -1,4 +1,4 @@
-/*	$NetBSD: pmc.c,v 1.3 2017/03/11 14:13:39 maxv Exp $	*/
+/*	$NetBSD: pmc.c,v 1.3.2.2 2017/03/20 06:57:22 pgoyette Exp $	*/
 
 /*
  * Copyright (c) 2017 The NetBSD Foundation, Inc.
@@ -67,7 +67,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pmc.c,v 1.3 2017/03/11 14:13:39 maxv Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pmc.c,v 1.3.2.2 2017/03/20 06:57:22 pgoyette Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

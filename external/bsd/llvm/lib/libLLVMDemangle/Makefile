@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.1 2017/01/11 12:02:29 joerg Exp $
+#	$NetBSD: Makefile,v 1.1.4.2 2017/03/20 06:56:00 pgoyette Exp $
 
 LIB=	LLVMDemangle
 

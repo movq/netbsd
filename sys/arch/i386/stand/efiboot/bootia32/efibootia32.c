@@ -1,4 +1,4 @@
-/*	$NetBSD: efibootia32.c,v 1.2 2017/02/21 10:53:37 nonaka Exp $	*/
+/*	$NetBSD: efibootia32.c,v 1.2.2.2 2017/03/20 06:57:15 pgoyette Exp $	*/
 
 /*-
  * Copyright (c) 2016 Kimihiro Nonaka <nonaka@netbsd.org>

@@ -27,7 +27,7 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: netcat.c,v 1.5 2017/02/09 21:23:48 christos Exp $");
+__RCSID("$NetBSD: netcat.c,v 1.5.2.2 2017/03/20 06:58:05 pgoyette Exp $");
 
 /*
  * Re-written nc(1) for OpenBSD. Original implementation by
