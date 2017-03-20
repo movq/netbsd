@@ -1,4 +1,4 @@
-/*	$NetBSD: libssl_compat.h,v 1.1.1.1 2016/11/22 01:34:58 christos Exp $	*/
+/*	$NetBSD: libssl_compat.h,v 1.1.1.1.8.2 2017/03/20 10:56:54 martin Exp $	*/
 
 /*
  * libssl_compat.h -- OpenSSL v1.1 compatibility shims
