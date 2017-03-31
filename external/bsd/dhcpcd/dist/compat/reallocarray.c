@@ -1,4 +1,4 @@
-/* $NetBSD: reallocarray.c,v 1.1 2017/03/31 20:51:15 roy Exp $ */
+/* $NetBSD: reallocarray.c,v 1.1.1.1 2017/03/31 20:51:15 roy Exp $ */
 
 /*-
  * Copyright (c) 2015 Joerg Sonnenberger <joerg@NetBSD.org>.
