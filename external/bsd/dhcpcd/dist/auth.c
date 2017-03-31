@@ -1,9 +1,9 @@
 #include <sys/cdefs.h>
- __RCSID("$NetBSD: auth.c,v 1.11 2016/05/09 10:15:59 roy Exp $");
+ __RCSID("$NetBSD: auth.c,v 1.1 2014/02/25 13:14:30 roy Exp $");
 
 /*
  * dhcpcd - DHCP client daemon
- * Copyright (c) 2006-2015 Roy Marples <roy@marples.name>
+ * Copyright (c) 2006-2014 Roy Marples <roy@marples.name>
  * All rights reserved
 
  * Redistribution and use in source and binary forms, with or without
@@ -29,12 +29,14 @@
  */
 
 #include <sys/file.h>
+#include <sys/queue.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <inttypes.h>
 #include <stddef.h>
 #include <stdlib.h>
 #include <string.h>
+#include <syslog.h>
 #include <time.h>
 #include <unistd.h>
 
@@ -45,11 +47,6 @@
 #include "dhcp6.h"
 #include "dhcpcd.h"
 
-#ifdef __sun
-#define htonll
-#define ntohll
-#endif
-
 #ifndef htonll
 #if (BYTE_ORDER == LITTLE_ENDIAN)
 static inline uint64_t
@@ -57,7 +54,7 @@ htonll(uint64_t x)
 {
 
 	return (uint64_t)htonl((uint32_t)(x >> 32)) |
-	    (uint64_t)htonl((uint32_t)(x & 0xffffffff)) << 32;
+	    (int64_t)htonl((uint32_t)(x & 0xffffffff)) << 32;
 }
 #else	/* (BYTE_ORDER == LITTLE_ENDIAN) */
 #define htonll(x) (x)
@@ -71,7 +68,7 @@ ntohll(uint64_t x)
 {
 
 	return (uint64_t)ntohl((uint32_t)(x >> 32)) |
-	    (uint64_t)ntohl((uint32_t)(x & 0xffffffff)) << 32;
+	    (int64_t)ntohl((uint32_t)(x & 0xffffffff)) << 32;
 }
 #else	/* (BYTE_ORDER == LITTLE_ENDIAN) */
 #define ntohll(x) (x)
@@ -107,14 +104,14 @@ dhcp_auth_reset(struct authstate *state)
  */
 const struct token *
 dhcp_auth_validate(struct authstate *state, const struct auth *auth,
-    const uint8_t *m, size_t mlen, int mp,  int mt,
-    const uint8_t *data, size_t dlen)
+    const uint8_t *m, unsigned int mlen, int mp,  int mt,
+    const uint8_t *data, unsigned int dlen)
 {
 	uint8_t protocol, algorithm, rdm, *mm, type;
 	uint64_t replay;
 	uint32_t secretid;
 	const uint8_t *d, *realm;
-	size_t realm_len;
+	unsigned int realm_len;
 	const struct token *t;
 	time_t now;
 	uint8_t hmac[HMAC_LENGTH];
@@ -145,14 +142,8 @@ dhcp_auth_validate(struct authstate *state, const struct auth *auth,
 		    algorithm != auth->algorithm ||
 		    rdm != auth->rdm)
 	{
-		/* As we don't require authentication, we should still
-		 * accept a reconfigure key */
-		if (protocol != AUTH_PROTO_RECONFKEY ||
-		    auth->options & DHCPCD_AUTH_REQUIRE)
-		{
-			errno = EPERM;
-			return NULL;
-		}
+		errno = EPERM;
+		return NULL;
 	}
 	dlen -= 3;
 
@@ -243,11 +234,6 @@ dhcp_auth_validate(struct authstate *state, const struct auth *auth,
 			}
 			if (state->reconf == NULL)
 				errno = ENOENT;
-			/* Free the old token so we log acceptance */
-			if (state->token) {
-				free(state->token);
-				state->token = NULL;
-			}
 			/* Nothing to validate, just accepting the key */
 			return state->reconf;
 		case 2:
@@ -323,8 +309,8 @@ gottoken:
 
 	/* RFC3318, section 5.2 - zero giaddr and hops */
 	if (mp == 4) {
-		*(mm + offsetof(struct bootp, hops)) = '\0';
-		memset(mm + offsetof(struct bootp, giaddr), 0, 4);
+		*(mm + offsetof(struct dhcp_message, hwopcount)) = '\0';
+		memset(mm + offsetof(struct dhcp_message, giaddr), 0, 4);
 	}
 
 	memset(hmac, 0, sizeof(hmac));
@@ -360,20 +346,18 @@ finish:
 			} else {
 				free(state->token);
 				state->token = NULL;
-				return NULL;
 			}
-			if (t->realm_len) {
+			if (t->realm) {
 				state->token->realm = malloc(t->realm_len);
 				if (state->token->realm) {
 					state->token->realm_len = t->realm_len;
 					memcpy(state->token->realm, t->realm,
 					    t->realm_len);
-				} else {
+			    } else {
 					free(state->token->key);
 					free(state->token);
 					state->token = NULL;
-					return NULL;
-				}
+			    }
 			} else {
 				state->token->realm = NULL;
 				state->token->realm_len = 0;
@@ -392,9 +376,7 @@ get_next_rdm_monotonic_counter(struct auth *auth)
 {
 	FILE *fp;
 	uint64_t rdm;
-#ifdef LOCK_EX
 	int flocked;
-#endif
 
 	fp = fopen(RDM_MONOFILE, "r+");
 	if (fp == NULL) {
@@ -403,14 +385,10 @@ get_next_rdm_monotonic_counter(struct auth *auth)
 		fp = fopen(RDM_MONOFILE, "w");
 		if (fp == NULL)
 			return ++auth->last_replay; /* report error? */
-#ifdef LOCK_EX
 		flocked = flock(fileno(fp), LOCK_EX);
-#endif
 		rdm = 0;
 	} else {
-#ifdef LOCK_EX
 		flocked = flock(fileno(fp), LOCK_EX);
-#endif
 		if (fscanf(fp, "0x%016" PRIu64, &rdm) != 1)
 			rdm = 0; /* truncated? report error? */
 	}
@@ -418,8 +396,7 @@ get_next_rdm_monotonic_counter(struct auth *auth)
 	rdm++;
 	if (fseek(fp, 0, SEEK_SET) == -1 ||
 	    ftruncate(fileno(fp), 0) == -1 ||
-	    fprintf(fp, "0x%016" PRIu64 "\n", rdm) != 19 ||
-	    fflush(fp) == EOF)
+	    fprintf(fp, "0x%016" PRIu64 "\n", rdm) != 19)
 	{
 		if (!auth->last_replay_set) {
 			auth->last_replay = rdm;
@@ -428,15 +405,14 @@ get_next_rdm_monotonic_counter(struct auth *auth)
 			rdm = ++auth->last_replay;
 		/* report error? */
 	}
-#ifdef LOCK_EX
+	fflush(fp);
 	if (flocked == 0)
 		flock(fileno(fp), LOCK_UN);
-#endif
 	fclose(fp);
 	return rdm;
 }
 
-#define JAN_1970       2208988800U    /* 1970 - 1900 in seconds */
+#define JAN_1970	2208988800UL	/* 1970 - 1900 in seconds */
 static uint64_t
 get_next_rdm_monotonic_clock(struct auth *auth)
 {
@@ -448,7 +424,7 @@ get_next_rdm_monotonic_clock(struct auth *auth)
 	if (clock_gettime(CLOCK_REALTIME, &ts) != 0)
 		return ++auth->last_replay; /* report error? */
 	pack[0] = htonl((uint32_t)ts.tv_sec + JAN_1970);
-	frac = ((double)ts.tv_nsec / 1e9 * 0x100000000ULL);
+	frac = (ts.tv_nsec / 1e9 * 0x100000000ULL);
 	pack[1] = htonl((uint32_t)frac);
 
 	memcpy(&rdm, &pack, sizeof(rdm));
@@ -474,10 +450,10 @@ get_next_rdm_monotonic(struct auth *auth)
  * mt is the DHCP message type.
  * data and dlen refer to the authentication option within the message.
  */
-ssize_t
+int
 dhcp_auth_encode(struct auth *auth, const struct token *t,
-    uint8_t *m, size_t mlen, int mp, int mt,
-    uint8_t *data, size_t dlen)
+    uint8_t *m, unsigned int mlen, int mp, int mt,
+    uint8_t *data, unsigned int dlen)
 {
 	uint64_t rdm;
 	uint8_t hmac[HMAC_LENGTH];
@@ -556,7 +532,7 @@ dhcp_auth_encode(struct auth *auth, const struct token *t,
 				dlen += sizeof(t->secretid) + sizeof(hmac);
 			break;
 		}
-		return (ssize_t)dlen;
+		return dlen;
 	}
 
 	if (dlen < 1 + 1 + 1 + 8) {
@@ -600,12 +576,12 @@ dhcp_auth_encode(struct auth *auth, const struct token *t,
 			return -1;
 		}
 		memcpy(data, t->key, t->key_len);
-		return (ssize_t)(dlen - t->key_len);
+		return dlen - t->key_len;
 	}
 
 	/* DISCOVER or INFORM messages don't write auth info */
 	if (!info)
-		return (ssize_t)dlen;
+		return dlen;
 
 	/* Loading a saved lease without an authentication option */
 	if (t == NULL)
@@ -641,10 +617,10 @@ dhcp_auth_encode(struct auth *auth, const struct token *t,
 
 	/* RFC3318, section 5.2 - zero giaddr and hops */
 	if (mp == 4) {
-		p = m + offsetof(struct bootp, hops);
+		p = m + offsetof(struct dhcp_message, hwopcount);
 		hops = *p;
 		*p = '\0';
-		p = m + offsetof(struct bootp, giaddr);
+		p = m + offsetof(struct dhcp_message, giaddr);
 		memcpy(&giaddr, p, sizeof(giaddr));
 		memset(p, 0, sizeof(giaddr));
 	} else {
@@ -663,12 +639,12 @@ dhcp_auth_encode(struct auth *auth, const struct token *t,
 
 	/* RFC3318, section 5.2 - restore giaddr and hops */
 	if (mp == 4) {
-		p = m + offsetof(struct bootp, hops);
+		p = m + offsetof(struct dhcp_message, hwopcount);
 		*p = hops;
-		p = m + offsetof(struct bootp, giaddr);
+		p = m + offsetof(struct dhcp_message, giaddr);
 		memcpy(p, &giaddr, sizeof(giaddr));
 	}
 
 	/* Done! */
-	return (int)(dlen - sizeof(hmac)); /* should be zero */
+	return dlen - sizeof(hmac); /* should be zero */
 }
