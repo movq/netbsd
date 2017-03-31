@@ -1,5 +1,5 @@
-#	$NetBSD: Makefile,v 1.2 2017/03/31 21:02:08 roy Exp $
+#	$NetBSD: Makefile,v 1.1 2008/07/27 19:31:03 joerg Exp $
 
-SUBDIR=		sbin libexec
+SUBDIR=		sbin
 
 .include <bsd.subdir.mk>

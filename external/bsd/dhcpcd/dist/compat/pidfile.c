@@ -1,4 +1,4 @@
-/*	$NetBSD: pidfile.c,v 1.1.1.1 2017/03/31 20:51:15 roy Exp $	*/
+/*	$NetBSD: pidfile.c,v 1.1 2017/03/31 20:51:15 roy Exp $	*/
 
 /*-
  * Copyright (c) 1999, 2016 The NetBSD Foundation, Inc.

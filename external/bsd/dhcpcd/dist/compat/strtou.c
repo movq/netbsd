@@ -1,4 +1,4 @@
-/*	$NetBSD: strtou.c,v 1.1.1.1 2017/03/31 20:51:15 roy Exp $	*/
+/*	$NetBSD: strtou.c,v 1.1 2017/03/31 20:51:15 roy Exp $	*/
 
 /*-
  * Copyright (c) 2005 The DragonFly Project.  All rights reserved.
