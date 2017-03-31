@@ -1,9 +1,6 @@
-/*	$NetBSD: strtoi.c,v 1.1.1.1 2017/03/31 20:51:15 roy Exp $	*/
-
-/*-
- * Copyright (c) 2005 The DragonFly Project.  All rights reserved.
- * Copyright (c) 2003 Citrus Project,
- * All rights reserved.
+/*
+ * dhcpcd - DHCP client daemon
+ * Copyright (c) 2006-2017 Roy Marples <roy@marples.name>
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -25,44 +22,39 @@
  * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
- *
- * Created by Kamil Rytarowski, based on ID:
- * NetBSD: src/common/lib/libc/stdlib/strtoul.c,v 1.3 2008/08/20 19:58:34 oster Exp
  */
 
-#if HAVE_NBTOOL_CONFIG_H
-#include "nbtool_config.h"
-#endif
+#ifndef DEV_H
+#define DEV_H
 
-#ifdef _LIBC
-#include "namespace.h"
-#endif
+// dev plugin setup
+struct dev {
+	const char *name;
+	int (*initialized)(const char *);
+	int (*listening)(void);
+	int (*handle_device)(void *);
+	int (*start)(void);
+	void (*stop)(void);
+};
 
-#if defined(_KERNEL)
-#include <sys/param.h>
-#include <sys/types.h>
-#include <lib/libkern/libkern.h>
-#elif defined(_STANDALONE)
-#include <sys/param.h>
-#include <sys/types.h>
-#include <lib/libkern/libkern.h>
-#include <lib/libsa/stand.h>
+struct dev_dhcpcd {
+	int (*handle_interface)(void *, int, const char *);
+};
+
+int dev_init(struct dev *, const struct dev_dhcpcd *);
+
+// hooks for dhcpcd
+#ifdef PLUGIN_DEV
+#include "dhcpcd.h"
+int dev_initialized(struct dhcpcd_ctx *, const char *);
+int dev_listening(struct dhcpcd_ctx *);
+int dev_start(struct dhcpcd_ctx *);
+void dev_stop(struct dhcpcd_ctx *);
 #else
-#include <stddef.h>
-#include <assert.h>
-#include <errno.h>
-#include <inttypes.h>
+#define dev_initialized(a, b) (1)
+#define dev_listening(a) (0)
+#define dev_start(a) {}
+#define dev_stop(a) {}
 #endif
 
-#include "strtoi.h"
-
-#define	_FUNCNAME	strtoi
-#define	__TYPE		intmax_t
-#define	__WRAPPED	strtoimax
-
-#include "_strtoi.h"
-
-#ifdef _LIBC
-__weak_alias(strtoi, _strtoi)
-__weak_alias(strtoi_l, _strtoi_l)
 #endif

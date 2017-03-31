@@ -1,10 +1,8 @@
-/*	$NetBSD: strtoi.c,v 1.1.1.1 2017/03/31 20:51:15 roy Exp $	*/
+/*
+ * Socket Address handling for dhcpcd
+ * Copyright (c) 2015-2017 Roy Marples <roy@marples.name>
+ * All rights reserved
 
-/*-
- * Copyright (c) 2005 The DragonFly Project.  All rights reserved.
- * Copyright (c) 2003 Citrus Project,
- * All rights reserved.
- *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
  * are met:
@@ -25,44 +23,46 @@
  * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
- *
- * Created by Kamil Rytarowski, based on ID:
- * NetBSD: src/common/lib/libc/stdlib/strtoul.c,v 1.3 2008/08/20 19:58:34 oster Exp
  */
 
-#if HAVE_NBTOOL_CONFIG_H
-#include "nbtool_config.h"
+#ifndef SA_H
+#define SA_H
+
+#include <sys/socket.h>
+
+union sa_ss {
+	struct sockaddr		sa;
+	struct sockaddr_in	sin;
+	struct sockaddr_in6	sin6;
+};
+
+#ifdef BSD
+#define HAVE_SA_LEN
 #endif
 
-#ifdef _LIBC
-#include "namespace.h"
+/* Allow for a sockaddr_dl being printed too. */
+#define INET_MAX_ADDRSTRLEN	(20 * 3)
+
+#ifdef INET
+#define satosin(sa) ((struct sockaddr_in *)(void *)(sa))
+#define satocsin(sa) ((const struct sockaddr_in *)(const void *)(sa))
+#endif
+#ifdef INET6
+#define satosin6(sa) ((struct sockaddr_in6 *)(void *)(sa))
+#define satocsin6(sa) ((const struct sockaddr_in6 *)(const void *)(sa))
 #endif
 
-#if defined(_KERNEL)
-#include <sys/param.h>
-#include <sys/types.h>
-#include <lib/libkern/libkern.h>
-#elif defined(_STANDALONE)
-#include <sys/param.h>
-#include <sys/types.h>
-#include <lib/libkern/libkern.h>
-#include <lib/libsa/stand.h>
-#else
-#include <stddef.h>
-#include <assert.h>
-#include <errno.h>
-#include <inttypes.h>
-#endif
+socklen_t sa_addroffset(const struct sockaddr *sa);
+socklen_t sa_addrlen(const struct sockaddr *sa);
+bool sa_is_unspecified(const struct sockaddr *);
+bool sa_is_allones(const struct sockaddr *);
+bool sa_is_loopback(const struct sockaddr *);
+void *sa_toaddr(struct sockaddr *);
+int sa_toprefix(const struct sockaddr *);
+int sa_fromprefix(struct sockaddr *, int);
+const char *sa_addrtop(const struct sockaddr *, char *, socklen_t);
+int sa_cmp(const struct sockaddr *, const struct sockaddr *);
+void sa_in_init(struct sockaddr *, const struct in_addr *);
+void sa_in6_init(struct sockaddr *, const struct in6_addr *);
 
-#include "strtoi.h"
-
-#define	_FUNCNAME	strtoi
-#define	__TYPE		intmax_t
-#define	__WRAPPED	strtoimax
-
-#include "_strtoi.h"
-
-#ifdef _LIBC
-__weak_alias(strtoi, _strtoi)
-__weak_alias(strtoi_l, _strtoi_l)
 #endif

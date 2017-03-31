@@ -1,10 +1,8 @@
-/*	$NetBSD: strtoi.c,v 1.1.1.1 2017/03/31 20:51:15 roy Exp $	*/
+/*
+ * dhcpcd: BPF arp and bootp filtering
+ * Copyright (c) 2006-2017 Roy Marples <roy@marples.name>
+ * All rights reserved
 
-/*-
- * Copyright (c) 2005 The DragonFly Project.  All rights reserved.
- * Copyright (c) 2003 Citrus Project,
- * All rights reserved.
- *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
  * are met:
@@ -25,44 +23,23 @@
  * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
- *
- * Created by Kamil Rytarowski, based on ID:
- * NetBSD: src/common/lib/libc/stdlib/strtoul.c,v 1.3 2008/08/20 19:58:34 oster Exp
  */
 
-#if HAVE_NBTOOL_CONFIG_H
-#include "nbtool_config.h"
-#endif
+#ifndef BPF_HEADER
+#define BPF_HEADER
 
-#ifdef _LIBC
-#include "namespace.h"
-#endif
+#define BPF_EOF			1 << 0
+#define BPF_PARTIALCSUM		2 << 0
 
-#if defined(_KERNEL)
-#include <sys/param.h>
-#include <sys/types.h>
-#include <lib/libkern/libkern.h>
-#elif defined(_STANDALONE)
-#include <sys/param.h>
-#include <sys/types.h>
-#include <lib/libkern/libkern.h>
-#include <lib/libsa/stand.h>
-#else
-#include <stddef.h>
-#include <assert.h>
-#include <errno.h>
-#include <inttypes.h>
-#endif
+#include "dhcpcd.h"
 
-#include "strtoi.h"
-
-#define	_FUNCNAME	strtoi
-#define	__TYPE		intmax_t
-#define	__WRAPPED	strtoimax
-
-#include "_strtoi.h"
-
-#ifdef _LIBC
-__weak_alias(strtoi, _strtoi)
-__weak_alias(strtoi_l, _strtoi_l)
+extern const char *bpf_name;
+size_t bpf_frame_header_len(const struct interface *);
+int bpf_open(struct interface *, int (*)(struct interface *, int));
+int bpf_attach(int, void *, unsigned int);
+#define	bpf_close	close
+ssize_t bpf_send(const struct interface *, int, uint16_t, const void *, size_t);
+ssize_t bpf_read(struct interface *, int, void *, size_t, int *);
+int bpf_arp(struct interface *, int);
+int bpf_bootp(struct interface *, int);
 #endif

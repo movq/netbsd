@@ -1,9 +1,6 @@
-/*	$NetBSD: strtoi.c,v 1.1.1.1 2017/03/31 20:51:15 roy Exp $	*/
-
-/*-
- * Copyright (c) 2005 The DragonFly Project.  All rights reserved.
- * Copyright (c) 2003 Citrus Project,
- * All rights reserved.
+/*
+ * dhcpcd - DHCP client daemon
+ * Copyright (c) 2006-2017 Roy Marples <roy@marples.name>
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -25,44 +22,55 @@
  * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
- *
- * Created by Kamil Rytarowski, based on ID:
- * NetBSD: src/common/lib/libc/stdlib/strtoul.c,v 1.3 2008/08/20 19:58:34 oster Exp
  */
 
-#if HAVE_NBTOOL_CONFIG_H
-#include "nbtool_config.h"
+#ifndef CONFIG_H
+#define CONFIG_H
+
+#define PACKAGE			"dhcpcd"
+#define VERSION			"7.0.0-beta1"
+
+#ifndef CONFIG
+# define CONFIG			SYSCONFDIR "/" PACKAGE ".conf"
+#endif
+#ifndef SCRIPT
+# define SCRIPT			LIBEXECDIR "/" PACKAGE "-run-hooks"
+#endif
+#ifndef DEVDIR
+# define DEVDIR			LIBDIR "/" PACKAGE "/dev"
+#endif
+#ifndef DUID
+# define DUID			DBDIR "/duid"
+#endif
+#ifndef SECRET
+# define SECRET			DBDIR "/secret"
+#endif
+#ifndef LEASEFILE
+# define LEASEFILE		DBDIR "/%s%s.lease"
+#endif
+#ifndef LEASEFILE6
+# define LEASEFILE6		LEASEFILE "6"
+#endif
+#ifndef PIDFILE
+# define PIDFILE		RUNDIR "/" PACKAGE "%s%s%s.pid"
+#endif
+#ifndef CONTROLSOCKET
+# define CONTROLSOCKET		RUNDIR "/" PACKAGE "%s%s.sock"
+#endif
+#ifndef UNPRIVSOCKET
+# define UNPRIVSOCKET		RUNDIR "/" PACKAGE ".unpriv.sock"
+#endif
+#ifndef RDM_MONOFILE
+# define RDM_MONOFILE		DBDIR "/rdm_monotonic"
 #endif
 
-#ifdef _LIBC
-#include "namespace.h"
+#ifndef NO_SIGNALS
+#  define USE_SIGNALS
+#endif
+#ifndef USE_SIGNALS
+#  ifndef THERE_IS_NO_FORK
+#    define THERE_IS_NO_FORK
+#  endif
 #endif
 
-#if defined(_KERNEL)
-#include <sys/param.h>
-#include <sys/types.h>
-#include <lib/libkern/libkern.h>
-#elif defined(_STANDALONE)
-#include <sys/param.h>
-#include <sys/types.h>
-#include <lib/libkern/libkern.h>
-#include <lib/libsa/stand.h>
-#else
-#include <stddef.h>
-#include <assert.h>
-#include <errno.h>
-#include <inttypes.h>
-#endif
-
-#include "strtoi.h"
-
-#define	_FUNCNAME	strtoi
-#define	__TYPE		intmax_t
-#define	__WRAPPED	strtoimax
-
-#include "_strtoi.h"
-
-#ifdef _LIBC
-__weak_alias(strtoi, _strtoi)
-__weak_alias(strtoi_l, _strtoi_l)
 #endif

@@ -1,10 +1,8 @@
-/*	$NetBSD: strtoi.c,v 1.1.1.1 2017/03/31 20:51:15 roy Exp $	*/
+/*
+ * dhcpcd - DHCP client daemon
+ * Copyright (c) 2006-2015 Roy Marples <roy@marples.name>
+ * All rights reserved
 
-/*-
- * Copyright (c) 2005 The DragonFly Project.  All rights reserved.
- * Copyright (c) 2003 Citrus Project,
- * All rights reserved.
- *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
  * are met:
@@ -25,44 +23,13 @@
  * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
- *
- * Created by Kamil Rytarowski, based on ID:
- * NetBSD: src/common/lib/libc/stdlib/strtoul.c,v 1.3 2008/08/20 19:58:34 oster Exp
  */
 
-#if HAVE_NBTOOL_CONFIG_H
-#include "nbtool_config.h"
-#endif
+#ifndef DUID_H
+#define DUID_H
 
-#ifdef _LIBC
-#include "namespace.h"
-#endif
+#define DUID_LEN	128 + 2
 
-#if defined(_KERNEL)
-#include <sys/param.h>
-#include <sys/types.h>
-#include <lib/libkern/libkern.h>
-#elif defined(_STANDALONE)
-#include <sys/param.h>
-#include <sys/types.h>
-#include <lib/libkern/libkern.h>
-#include <lib/libsa/stand.h>
-#else
-#include <stddef.h>
-#include <assert.h>
-#include <errno.h>
-#include <inttypes.h>
-#endif
+size_t duid_init(const struct interface *);
 
-#include "strtoi.h"
-
-#define	_FUNCNAME	strtoi
-#define	__TYPE		intmax_t
-#define	__WRAPPED	strtoimax
-
-#include "_strtoi.h"
-
-#ifdef _LIBC
-__weak_alias(strtoi, _strtoi)
-__weak_alias(strtoi_l, _strtoi_l)
 #endif

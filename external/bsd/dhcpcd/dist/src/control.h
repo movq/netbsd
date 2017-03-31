@@ -1,10 +1,8 @@
-/*	$NetBSD: strtoi.c,v 1.1.1.1 2017/03/31 20:51:15 roy Exp $	*/
+/*
+ * dhcpcd - DHCP client daemon
+ * Copyright (c) 2006-2017 Roy Marples <roy@marples.name>
+ * All rights reserved
 
-/*-
- * Copyright (c) 2005 The DragonFly Project.  All rights reserved.
- * Copyright (c) 2003 Citrus Project,
- * All rights reserved.
- *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
  * are met:
@@ -25,44 +23,42 @@
  * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
- *
- * Created by Kamil Rytarowski, based on ID:
- * NetBSD: src/common/lib/libc/stdlib/strtoul.c,v 1.3 2008/08/20 19:58:34 oster Exp
  */
 
-#if HAVE_NBTOOL_CONFIG_H
-#include "nbtool_config.h"
-#endif
+#ifndef CONTROL_H
+#define CONTROL_H
 
-#ifdef _LIBC
-#include "namespace.h"
-#endif
+#include "dhcpcd.h"
 
-#if defined(_KERNEL)
-#include <sys/param.h>
-#include <sys/types.h>
-#include <lib/libkern/libkern.h>
-#elif defined(_STANDALONE)
-#include <sys/param.h>
-#include <sys/types.h>
-#include <lib/libkern/libkern.h>
-#include <lib/libsa/stand.h>
-#else
-#include <stddef.h>
-#include <assert.h>
-#include <errno.h>
-#include <inttypes.h>
-#endif
+/* Limit queue size per fd */
+#define CONTROL_QUEUE_MAX	100
 
-#include "strtoi.h"
+struct fd_data {
+	TAILQ_ENTRY(fd_data) next;
+	char *data;
+	size_t data_len;
+	uint8_t freeit;
+};
+TAILQ_HEAD(fd_data_head, fd_data);
 
-#define	_FUNCNAME	strtoi
-#define	__TYPE		intmax_t
-#define	__WRAPPED	strtoimax
+struct fd_list {
+	TAILQ_ENTRY(fd_list) next;
+	struct dhcpcd_ctx *ctx;
+	int fd;
+	unsigned int flags;
+	struct fd_data_head queue;
+	struct fd_data_head free_queue;
+};
+TAILQ_HEAD(fd_list_head, fd_list);
 
-#include "_strtoi.h"
+#define FD_LISTEN	(1<<0)
+#define FD_UNPRIV	(1<<1)
 
-#ifdef _LIBC
-__weak_alias(strtoi, _strtoi)
-__weak_alias(strtoi_l, _strtoi_l)
+int control_start(struct dhcpcd_ctx *, const char *);
+int control_stop(struct dhcpcd_ctx *);
+int control_open(const char *);
+ssize_t control_send(struct dhcpcd_ctx *, int, char * const *);
+int control_queue(struct fd_list *fd, char *data, size_t data_len, uint8_t fit);
+void control_close(struct dhcpcd_ctx *ctx);
+
 #endif
