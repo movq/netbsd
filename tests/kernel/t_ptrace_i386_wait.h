@@ -1,4 +1,4 @@
-/*	$NetBSD: t_ptrace_i386_wait.h,v 1.1 2017/04/02 00:40:12 kamil Exp $	*/
+/*	$NetBSD: t_ptrace_i386_wait.h,v 1.2 2017/04/02 01:14:35 kamil Exp $	*/
 
 /*-
  * Copyright (c) 2016 The NetBSD Foundation, Inc.
@@ -27,14 +27,14 @@
  */
 
 #if defined(__i386__)
-ATF_TC(regs1);
-ATF_TC_HEAD(regs1, tc)
+ATF_TC(i386_regs1);
+ATF_TC_HEAD(i386_regs1, tc)
 {
 	atf_tc_set_md_var(tc, "descr",
 	    "Call PT_GETREGS and iterate over General Purpose registers");
 }
 
-ATF_TC_BODY(regs1, tc)
+ATF_TC_BODY(i386_regs1, tc)
 {
 	const int exitval = 5;
 	const int sigval = SIGSTOP;
@@ -101,7 +101,7 @@ ATF_TC_BODY(regs1, tc)
 	TWAIT_REQUIRE_FAILURE(ECHILD, wpid = TWAIT_GENERIC(child, &status, 0));
 }
 #define ATF_TP_ADD_TCS_PTRACE_WAIT_I386() \
-	ATF_TP_ADD_TC_HAVE_GPREGS(tp, regs1);
+	ATF_TP_ADD_TC_HAVE_GPREGS(tp, i386_regs1);
 #else
 #define ATF_TP_ADD_TCS_PTRACE_WAIT_I386()
 #endif
