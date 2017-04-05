@@ -1,11 +1,11 @@
-/*	$NetBSD: err.h,v 1.3 2014/07/16 20:56:25 riastradh Exp $	*/
+/* $NetBSD: usbroothub.h,v 1.2.4.4 2017/04/05 19:54:21 snj Exp $ */
 
 /*-
- * Copyright (c) 2013 The NetBSD Foundation, Inc.
+ * Copyright (c) 2014 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
- * by Taylor R. Campbell.
+ * by Nick Hudson
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -29,59 +29,29 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef _LINUX_ERR_H_
-#define _LINUX_ERR_H_
+int usb_makestrdesc(usb_string_descriptor_t *, int, const char *);
+int usb_makelangtbl(usb_string_descriptor_t *, int);
 
-/* XXX Linux uses long and int inconsistently here.  Hope this works out.  */
+struct usb_roothub_descriptors {
+	usb_config_descriptor_t urh_confd;
+	usb_interface_descriptor_t urh_ifcd;
+	usb_endpoint_descriptor_t urh_endpd;
+};
 
-#include <sys/types.h>
-#include <sys/errno.h>
-#include <sys/systm.h>
+struct usb3_roothub_descriptors {
+	usb_config_descriptor_t urh_confd;
+	usb_interface_descriptor_t urh_ifcd;
+	usb_endpoint_descriptor_t urh_endpd;
+	usb_endpoint_ss_comp_descriptor_t urh_endpssd;
+};
 
-#define	MAX_ERRNO	ELAST
+struct usb3_roothub_bos_descriptors {
+	usb_bos_descriptor_t urh_bosd;
+	usb_devcap_usb2ext_descriptor_t urh_usb2extd;
+	usb_devcap_ss_descriptor_t urh_ssd;
+	usb_devcap_container_id_descriptor_t urh_containerd;
+};
 
-static inline bool
-IS_ERR_VALUE(uintptr_t n)
-{
-	return (n >= (uintptr_t)-MAX_ERRNO);
-}
+#define	USBROOTHUB_INTR_ENDPT	1
 
-static inline void *
-ERR_PTR(long error)
-{
-	KASSERT(error < 0);
-	return (void *)(intptr_t)error;
-}
-
-static inline long
-PTR_ERR(const void *ptr)
-{
-	KASSERT(ptr == (void *)(intptr_t)(long)(intptr_t)ptr); /* XXX Hurk!  */
-	return (long)(intptr_t)ptr;
-}
-
-static inline bool
-IS_ERR(const void *ptr)
-{
-	return IS_ERR_VALUE((uintptr_t)ptr);
-}
-
-static inline bool
-IS_ERR_OR_NULL(const void *ptr)
-{
-	return ((ptr == NULL) || IS_ERR(ptr));
-}
-
-static inline void *
-ERR_CAST(void *ptr)		/* XXX Linux declares with const.  */
-{
-	return ptr;
-}
-
-static inline long
-PTR_RET(const void *ptr)
-{
-	return (IS_ERR(ptr)? PTR_ERR(ptr) : 0);
-}
-
-#endif  /* _LINUX_ERR_H_ */
+extern const struct usbd_pipe_methods roothub_ctrl_methods;
