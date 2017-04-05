@@ -1,4 +1,4 @@
-/*	$NetBSD: linux_work.c,v 1.1 2016/02/24 22:04:15 skrll Exp $	*/
+/*	$NetBSD: linux_work.c,v 1.1.10.2 2017/04/05 19:54:21 snj Exp $	*/
 
 /*-
  * Copyright (c) 2013 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: linux_work.c,v 1.1 2016/02/24 22:04:15 skrll Exp $");
+__KERNEL_RCSID(0, "$NetBSD: linux_work.c,v 1.1.10.2 2017/04/05 19:54:21 snj Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>

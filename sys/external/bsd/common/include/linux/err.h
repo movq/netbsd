@@ -1,4 +1,4 @@
-/*	$NetBSD: err.h,v 1.1 2015/08/18 21:10:56 skrll Exp $	*/
+/*	$NetBSD: err.h,v 1.1.10.2 2017/04/05 19:54:21 snj Exp $	*/
 
 /*-
  * Copyright (c) 2013 The NetBSD Foundation, Inc.
