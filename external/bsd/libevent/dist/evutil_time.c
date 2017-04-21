@@ -1,4 +1,4 @@
-/*	$NetBSD: evutil_time.c,v 1.1.1.1 2017/01/31 21:14:52 christos Exp $	*/
+/*	$NetBSD: evutil_time.c,v 1.1.1.1.4.2 2017/04/21 16:51:31 bouyer Exp $	*/
 /*
  * Copyright (c) 2007-2012 Niels Provos and Nick Mathewson
  *
@@ -27,7 +27,7 @@
 
 #include "event2/event-config.h"
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: evutil_time.c,v 1.1.1.1 2017/01/31 21:14:52 christos Exp $");
+__RCSID("$NetBSD: evutil_time.c,v 1.1.1.1.4.2 2017/04/21 16:51:31 bouyer Exp $");
 #include "evconfig-private.h"
 
 #ifdef _WIN32

@@ -1,4 +1,4 @@
-#	$NetBSD: t_ping_opts.sh,v 1.1 2017/03/31 06:41:40 ozaki-r Exp $
+#	$NetBSD: t_ping_opts.sh,v 1.1.2.2 2017/04/21 16:54:13 bouyer Exp $
 #
 # Copyright (c) 2017 Internet Initiative Japan Inc.
 # All rights reserved.

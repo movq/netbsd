@@ -1,4 +1,4 @@
-/*	$NetBSD: kdc-tester.c,v 1.2 2017/01/28 21:31:44 christos Exp $	*/
+/*	$NetBSD: kdc-tester.c,v 1.2.4.2 2017/04/21 16:50:44 bouyer Exp $	*/
 
 /*
  * Copyright (c) 1997-2005 Kungliga Tekniska Högskolan

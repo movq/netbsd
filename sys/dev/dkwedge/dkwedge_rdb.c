@@ -1,4 +1,4 @@
-/*	$NetBSD: dkwedge_rdb.c,v 1.4 2017/02/28 04:47:41 rin Exp $	*/
+/*	$NetBSD: dkwedge_rdb.c,v 1.4.6.2 2017/04/21 16:53:45 bouyer Exp $	*/
 
 /*
  * Adapted from arch/amiga/amiga/disksubr.c:
@@ -68,7 +68,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: dkwedge_rdb.c,v 1.4 2017/02/28 04:47:41 rin Exp $");
+__KERNEL_RCSID(0, "$NetBSD: dkwedge_rdb.c,v 1.4.6.2 2017/04/21 16:53:45 bouyer Exp $");
 
 #include <sys/param.h>
 #include <sys/disklabel_rdb.h>

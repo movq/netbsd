@@ -1,4 +1,4 @@
-/*	$NetBSD: in6_l2tp.c,v 1.5 2017/04/04 23:49:18 knakahara Exp $	*/
+/*	$NetBSD: in6_l2tp.c,v 1.5.4.2 2017/04/21 16:54:06 bouyer Exp $	*/
 
 /*
  * Copyright (c) 2017 Internet Initiative Japan Inc.
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: in6_l2tp.c,v 1.5 2017/04/04 23:49:18 knakahara Exp $");
+__KERNEL_RCSID(0, "$NetBSD: in6_l2tp.c,v 1.5.4.2 2017/04/21 16:54:06 bouyer Exp $");
 
 #ifdef _KERNEL_OPT
 #include "opt_l2tp.h"

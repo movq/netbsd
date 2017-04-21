@@ -1,4 +1,4 @@
-/*	$NetBSD: attr_override.c,v 1.2 2017/02/14 01:16:45 christos Exp $	*/
+/*	$NetBSD: attr_override.c,v 1.2.4.2 2017/04/21 16:52:48 bouyer Exp $	*/
 
 /*++
 /* NAME

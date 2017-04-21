@@ -1,4 +1,4 @@
-#	$NetBSD: t_basic.sh,v 1.4 2017/02/27 08:26:53 ozaki-r Exp $
+#	$NetBSD: t_basic.sh,v 1.4.4.2 2017/04/21 16:54:12 bouyer Exp $
 #
 # Copyright (c) 2017 Internet Initiative Japan Inc.
 # All rights reserved.

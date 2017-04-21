@@ -1,4 +1,4 @@
-#	$NetBSD: t_rtable.sh,v 1.1 2017/03/11 04:24:52 ozaki-r Exp $
+#	$NetBSD: t_rtable.sh,v 1.1.4.2 2017/04/21 16:54:12 bouyer Exp $
 #
 # Copyright (c) 2017 Internet Initiative Japan Inc.
 # All rights reserved.

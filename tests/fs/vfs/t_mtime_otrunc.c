@@ -27,7 +27,7 @@
 #include <sys/cdefs.h>
 __COPYRIGHT("@(#) Copyright (c) 2013\
  The NetBSD Foundation, inc. All rights reserved.");
-__RCSID("$NetBSD: t_mtime_otrunc.c,v 1.1 2017/02/02 22:07:05 martin Exp $");
+__RCSID("$NetBSD: t_mtime_otrunc.c,v 1.1.4.2 2017/04/21 16:54:10 bouyer Exp $");
 
 #include <errno.h>
 #include <unistd.h>

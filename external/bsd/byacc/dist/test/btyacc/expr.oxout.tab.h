@@ -1,4 +1,4 @@
-/*	$NetBSD: expr.oxout.tab.h,v 1.2 2017/02/11 19:33:12 christos Exp $	*/
+/*	$NetBSD: expr.oxout.tab.h,v 1.2.4.2 2017/04/21 16:51:22 bouyer Exp $	*/
 
 #ifndef _expr.oxout__defines_h_
 #define _expr.oxout__defines_h_

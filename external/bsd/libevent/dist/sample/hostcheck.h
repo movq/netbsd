@@ -1,4 +1,4 @@
-/*	$NetBSD: hostcheck.h,v 1.1.1.1 2017/01/31 21:14:53 christos Exp $	*/
+/*	$NetBSD: hostcheck.h,v 1.1.1.1.4.2 2017/04/21 16:51:32 bouyer Exp $	*/
 #ifndef HEADER_CURL_HOSTCHECK_H
 #define HEADER_CURL_HOSTCHECK_H
 /***************************************************************************

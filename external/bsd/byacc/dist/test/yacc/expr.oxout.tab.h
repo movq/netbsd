@@ -1,4 +1,4 @@
-/*	$NetBSD: expr.oxout.tab.h,v 1.2 2017/02/11 19:33:13 christos Exp $	*/
+/*	$NetBSD: expr.oxout.tab.h,v 1.2.4.2 2017/04/21 16:51:22 bouyer Exp $	*/
 
 #define ID 257
 #define CONST 258

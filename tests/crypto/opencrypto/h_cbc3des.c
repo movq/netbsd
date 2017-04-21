@@ -1,4 +1,4 @@
-/* $NetBSD: h_cbc3des.c,v 1.1 2017/04/17 03:59:37 knakahara Exp $ */
+/* $NetBSD: h_cbc3des.c,v 1.1.2.2 2017/04/21 16:54:09 bouyer Exp $ */
 
 /*-
  * Copyright (c) 2017 Internet Initiative Japan Inc.
