@@ -1,4 +1,4 @@
-/*	$NetBSD: midna_adomain.h,v 1.2 2017/02/14 01:16:45 christos Exp $	*/
+/*	$NetBSD: midna_adomain.h,v 1.2.4.2 2017/04/21 16:52:48 bouyer Exp $	*/
 
 #ifndef _MIDNA_ADOMAIN_H_INCLUDED_
 #define _MIDNA_ADOMAIN_H_INCLUDED_

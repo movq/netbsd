@@ -1,4 +1,4 @@
-#	$NetBSD: newvers_stand.mk,v 1.2 2017/04/09 14:52:14 christos Exp $
+#	$NetBSD: newvers_stand.mk,v 1.2.4.2 2017/04/21 16:53:44 bouyer Exp $
 
 VERSIONFILE?=version
 VERSIONMACHINE?=${MACHINE}

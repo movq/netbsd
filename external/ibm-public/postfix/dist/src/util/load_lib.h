@@ -1,4 +1,4 @@
-/*	$NetBSD: load_lib.h,v 1.2 2017/02/14 01:16:49 christos Exp $	*/
+/*	$NetBSD: load_lib.h,v 1.2.4.2 2017/04/21 16:52:53 bouyer Exp $	*/
 
 #ifndef _LOAD_LIB_H_INCLUDED_
 #define _LOAD_LIB_H_INCLUDED_

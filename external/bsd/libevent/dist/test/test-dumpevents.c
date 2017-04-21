@@ -1,4 +1,4 @@
-/*	$NetBSD: test-dumpevents.c,v 1.1.1.1 2017/01/31 21:14:53 christos Exp $	*/
+/*	$NetBSD: test-dumpevents.c,v 1.1.1.1.4.2 2017/04/21 16:51:33 bouyer Exp $	*/
 /*
  * Copyright (c) 2012 Niels Provos and Nick Mathewson
  *
@@ -27,7 +27,7 @@
 #include "util-internal.h"
 #include "event2/event-config.h"
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: test-dumpevents.c,v 1.1.1.1 2017/01/31 21:14:53 christos Exp $");
+__RCSID("$NetBSD: test-dumpevents.c,v 1.1.1.1.4.2 2017/04/21 16:51:33 bouyer Exp $");
 
 #ifdef _WIN32
 #include <winsock2.h>

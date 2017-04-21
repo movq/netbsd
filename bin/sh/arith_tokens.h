@@ -1,4 +1,4 @@
-/*	$NetBSD: arith_tokens.h,v 1.1 2017/03/20 11:26:07 kre Exp $	*/
+/*	$NetBSD: arith_tokens.h,v 1.1.2.2 2017/04/21 16:50:42 bouyer Exp $	*/
 
 /*-
  * Copyright (c) 1993

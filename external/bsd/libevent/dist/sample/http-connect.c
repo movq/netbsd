@@ -1,7 +1,7 @@
-/*	$NetBSD: http-connect.c,v 1.1.1.1 2017/01/31 21:14:53 christos Exp $	*/
+/*	$NetBSD: http-connect.c,v 1.1.1.1.4.2 2017/04/21 16:51:32 bouyer Exp $	*/
 #include "event2/event-config.h"
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: http-connect.c,v 1.1.1.1 2017/01/31 21:14:53 christos Exp $");
+__RCSID("$NetBSD: http-connect.c,v 1.1.1.1.4.2 2017/04/21 16:51:32 bouyer Exp $");
 
 #include <event2/event.h>
 #include <event2/http.h>

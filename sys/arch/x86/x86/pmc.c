@@ -1,4 +1,4 @@
-/*	$NetBSD: pmc.c,v 1.6 2017/04/18 15:14:28 maya Exp $	*/
+/*	$NetBSD: pmc.c,v 1.6.2.2 2017/04/21 16:53:39 bouyer Exp $	*/
 
 /*
  * Copyright (c) 2017 The NetBSD Foundation, Inc.
@@ -67,7 +67,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pmc.c,v 1.6 2017/04/18 15:14:28 maya Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pmc.c,v 1.6.2.2 2017/04/21 16:53:39 bouyer Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

@@ -1,4 +1,4 @@
-/*	$NetBSD: argv_splitq.c,v 1.2 2017/02/14 01:16:48 christos Exp $	*/
+/*	$NetBSD: argv_splitq.c,v 1.2.4.2 2017/04/21 16:52:52 bouyer Exp $	*/
 
 /*++
 /* NAME

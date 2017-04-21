@@ -1,4 +1,4 @@
-/*	$NetBSD: bignum.c,v 1.1 2017/02/13 11:16:46 nonaka Exp $	*/
+/*	$NetBSD: bignum.c,v 1.1.4.2 2017/04/21 16:53:14 bouyer Exp $	*/
 
 /*-
  * Copyright (c) 2012 Alistair Crooks <agc@NetBSD.org>

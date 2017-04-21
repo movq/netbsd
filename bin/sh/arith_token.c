@@ -1,4 +1,4 @@
-/*	$NetBSD: arith_token.c,v 1.3 2017/03/20 13:12:35 kre Exp $	*/
+/*	$NetBSD: arith_token.c,v 1.3.2.2 2017/04/21 16:50:42 bouyer Exp $	*/
 
 /*-
  * Copyright (c) 2002
@@ -39,7 +39,7 @@
 #include <sys/cdefs.h>
 
 #ifndef lint
-__RCSID("$NetBSD: arith_token.c,v 1.3 2017/03/20 13:12:35 kre Exp $");
+__RCSID("$NetBSD: arith_token.c,v 1.3.2.2 2017/04/21 16:50:42 bouyer Exp $");
 #endif /* not lint */
 
 #include <inttypes.h>

@@ -1,4 +1,4 @@
-/*	$NetBSD: fuzzer.c,v 1.2 2017/01/28 21:31:45 christos Exp $	*/
+/*	$NetBSD: fuzzer.c,v 1.2.4.2 2017/04/21 16:50:45 bouyer Exp $	*/
 
 /*
  * Copyright (c) 2009 Kungliga Tekniska Högskolan

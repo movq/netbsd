@@ -1,4 +1,4 @@
-/*	$NetBSD: an2ln_plugin.h,v 1.2 2017/01/28 21:31:49 christos Exp $	*/
+/*	$NetBSD: an2ln_plugin.h,v 1.2.4.2 2017/04/21 16:50:49 bouyer Exp $	*/
 
 /*
  * Copyright (c) 2006 Kungliga Tekniska Högskolan

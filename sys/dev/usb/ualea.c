@@ -1,4 +1,4 @@
-/*	$NetBSD: ualea.c,v 1.6 2017/04/19 00:01:38 riastradh Exp $	*/
+/*	$NetBSD: ualea.c,v 1.6.2.2 2017/04/21 16:53:53 bouyer Exp $	*/
 
 /*-
  * Copyright (c) 2017 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ualea.c,v 1.6 2017/04/19 00:01:38 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ualea.c,v 1.6.2.2 2017/04/21 16:53:53 bouyer Exp $");
 
 #include <sys/types.h>
 #include <sys/atomic.h>

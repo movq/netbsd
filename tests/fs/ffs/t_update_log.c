@@ -1,4 +1,4 @@
-/*	$NetBSD: t_update_log.c,v 1.1 2017/03/22 21:33:53 jdolecek Exp $	*/
+/*	$NetBSD: t_update_log.c,v 1.1.2.2 2017/04/21 16:54:10 bouyer Exp $	*/
 
 /*
  * Check log behaviour on mount updates
