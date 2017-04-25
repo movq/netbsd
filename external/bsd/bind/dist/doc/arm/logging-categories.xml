@@ -246,6 +246,11 @@
 	</entry>
 	<entry colname="2">
 	  <para>
+	    (Only available when <acronym>BIND</acronym> 9 is
+	    configured with the <userinput>--enable-rrl</userinput>
+	    option at compile time.)
+	  </para>
+	  <para>
 	    The start, periodic, and final notices of the
 	    rate limiting of a stream of responses are logged at
 	    <command>info</command> severity in this category.
