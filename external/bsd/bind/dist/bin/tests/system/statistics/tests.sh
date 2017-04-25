@@ -1,6 +1,6 @@
 #!/bin/sh
 #
-# Copyright (C) 2012, 2015  Internet Systems Consortium, Inc. ("ISC")
+# Copyright (C) 2015  Internet Systems Consortium, Inc. ("ISC")
 #
 # Permission to use, copy, modify, and/or distribute this software for any
 # purpose with or without fee is hereby granted, provided that the above
@@ -27,91 +27,23 @@ status=0
 t=0
 
 ret=0
-echo "I:fetching a.example from ns2's initial configuration"
-$DIGCMD +noauth a.example. @10.53.0.2 any > dig.out.ns2.1 || ret=1
-if [ $ret != 0 ]; then echo "I: failed"; fi
-status=`expr $status + $ret`
-
-ret=0
-echo "I:verifying adb records in named.stats"
-$RNDCCMD -s 10.53.0.2 stats > /dev/null 2>&1
-echo "I: checking for 1 entry in adb hash table"
-grep "1 Addresses in hash table" ns2/named.stats > /dev/null || ret=1
-if [ $ret != 0 ]; then echo "I:failed"; fi
-status=`expr $status + $ret`
-
-ret=0
-echo "I: verifying cache statistics in named.stats"
-grep "Cache Statistics" ns2/named.stats > /dev/null || ret=1
-if [ $ret != 0 ]; then echo "I:failed"; fi
-status=`expr $status + $ret`
-
-ret=0
-echo "I: checking for 2 entries in adb hash table"
-$DIGCMD a.example.info. @10.53.0.2 any > /dev/null 2>&1
-$RNDCCMD -s 10.53.0.2 stats > /dev/null 2>&1
-grep "2 Addresses in hash table" ns2/named.stats > /dev/null || ret=1
-if [ $ret != 0 ]; then echo "I: failed"; fi
-status=`expr $status + $ret`
-
-ret=0
-echo "I:dumping initial stats for ns3"
-rm -f ns3/named.stats
-$RNDCCMD -s 10.53.0.3 stats > /dev/null 2>&1
-[ -f ns3/named.stats ] || ret=1
-nsock0=`grep "UDP/IPv4 sockets active" ns3/named.stats | awk '{print $1}'`
-echo "I:sending queries to ns3"
-$DIGCMD +tries=2 +time=1 +recurse @10.53.0.3 foo.info. any > /dev/null 2>&1
-#$DIGCMD +tries=2 +time=1 +recurse @10.53.0.3 foo.info. any
-echo "I:dumping updated stats for ns3"
-rm -f ns3/named.stats
-$RNDCCMD -s 10.53.0.3 stats > /dev/null 2>&1
-[ -f ns3/named.stats ] || ret=1
-if [ $ret != 0 ]; then echo "I: failed"; fi
-status=`expr $status + $ret`
-
-ret=0
-echo "I: verifying recursing clients output"
-grep "2 recursing clients" ns3/named.stats > /dev/null || ret=1
-if [ $ret != 0 ]; then echo "I: failed"; fi
-status=`expr $status + $ret`
-
-ret=0
-echo "I: verifying active fetches output"
-grep "1 active fetches" ns3/named.stats > /dev/null || ret=1
-if [ $ret != 0 ]; then echo "I: failed"; fi
-status=`expr $status + $ret`
-
-ret=0
-echo "I: verifying active sockets output"
-nsock1=`grep "UDP/IPv4 sockets active" ns3/named.stats | awk '{print $1}'`
-[ `expr $nsock1 - $nsock0` -eq 1 ] || ret=1
-if [ $ret != 0 ]; then echo "I: failed"; fi
-status=`expr $status + $ret`
-
-ret=0
-# there should be 1 UDP and no TCP queries.  As the TCP counter is zero
-# no status line is emitted.
-echo "I: verifying queries in progress"
-grep "1 UDP queries in progress" ns3/named.stats > /dev/null || ret=1
-grep "TCP queries in progress" ns3/named.stats > /dev/null && ret=1
-if [ $ret != 0 ]; then echo "I: failed"; fi
-status=`expr $status + $ret`
-
-ret=0
-echo "I: verifying bucket size output"
-grep "bucket size" ns3/named.stats > /dev/null || ret=1
-if [ $ret != 0 ]; then echo "I: failed"; fi
-status=`expr $status + $ret`
-
-ret=0
 t=`expr $t + 1`
 echo "I:checking that zones with slash are properly shown in XML output (${t})"
 if ./xmlstats && [ -x ${CURL} ] ; then
-    ${CURL} http://10.53.0.1:8053/xml/v3/zones > curl.out.${t} 2>/dev/null || ret=1
-    grep '<zone name="32/1.0.0.127-in-addr.example" rdataclass="IN">' curl.out.${t} > /dev/null || ret=1
+    if ./newstats
+    then
+        ${CURL} http://10.53.0.1:8053/xml/v3 > curl.out.${t} 2>/dev/null || ret=1
+        grep '<zone name="32/1.0.0.127-in-addr.example" rdataclass="IN">' curl.out.${t} > /dev/null || ret=1
+    else
+        ${CURL} http://10.53.0.1:8053/xml > curl.out.${t} 2>/dev/null || ret=1
+awk '/<zone>/ { count=1 ; next }
+     /<name>32\/1.0.0.127-in-addr.example<\/name>/ && count == 1 { count = 2 ; next}
+     /<rdataclass>IN<\/rdataclass>/ && count == 2 { good = 1 }
+     {count=0}
+     END { if (good) exit (0); exit (1) }' curl.out.${t} || ret=1
+    fi
 else
-    echo "I:skipping test as libxml2 and/or curl was not found"
+  echo "I:skipping test as libxml2 and/or curl was not found"
 fi
 if [ $ret != 0 ]; then echo "I:failed"; fi
 status=`expr $status + $ret`
