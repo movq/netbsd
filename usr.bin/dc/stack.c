@@ -1,4 +1,4 @@
-/*	$NetBSD: stack.c,v 1.2 2017/04/10 16:37:48 christos Exp $	*/
+/*	$NetBSD: stack.c,v 1.2.4.2 2017/04/26 02:53:34 pgoyette Exp $	*/
 /*	$OpenBSD: stack.c,v 1.14 2016/03/27 15:55:13 otto Exp $	*/
 
 /*
@@ -17,7 +17,7 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: stack.c,v 1.2 2017/04/10 16:37:48 christos Exp $");
+__RCSID("$NetBSD: stack.c,v 1.2.4.2 2017/04/26 02:53:34 pgoyette Exp $");
 
 #include <err.h>
 #include <stdlib.h>

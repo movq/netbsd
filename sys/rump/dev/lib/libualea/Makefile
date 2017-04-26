@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.2 2017/04/19 00:01:38 riastradh Exp $
+#	$NetBSD: Makefile,v 1.2.4.2 2017/04/26 02:53:30 pgoyette Exp $
 #
 
 .PATH:	${.CURDIR}/../../../../dev/usb

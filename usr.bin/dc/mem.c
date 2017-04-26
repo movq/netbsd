@@ -1,4 +1,4 @@
-/*	$NetBSD: mem.c,v 1.2 2017/04/10 16:37:48 christos Exp $	*/
+/*	$NetBSD: mem.c,v 1.2.4.2 2017/04/26 02:53:34 pgoyette Exp $	*/
 /*	$OpenBSD: mem.c,v 1.7 2015/02/16 20:53:34 jca Exp $	*/
 
 /*
@@ -17,7 +17,7 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: mem.c,v 1.2 2017/04/10 16:37:48 christos Exp $");
+__RCSID("$NetBSD: mem.c,v 1.2.4.2 2017/04/26 02:53:34 pgoyette Exp $");
 
 #include <openssl/err.h>
 

@@ -1,4 +1,4 @@
-#	$NetBSD: UALEA.ioconf,v 1.2 2017/04/18 19:41:27 riastradh Exp $
+#	$NetBSD: UALEA.ioconf,v 1.2.4.2 2017/04/26 02:53:30 pgoyette Exp $
 #
 
 ioconf ualea
