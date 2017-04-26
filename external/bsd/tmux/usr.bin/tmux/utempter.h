@@ -1,4 +1,4 @@
-/*	$NetBSD: utempter.h,v 1.1 2017/04/23 02:02:00 christos Exp $	*/
+/*	$NetBSD: utempter.h,v 1.1.2.2 2017/04/26 02:52:52 pgoyette Exp $	*/
 
 /*-
  * Copyright (c) 2017 The NetBSD Foundation, Inc.

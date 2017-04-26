@@ -1,4 +1,4 @@
-/*	$NetBSD: misc.c,v 1.1 2017/04/10 16:37:48 christos Exp $	*/
+/*	$NetBSD: misc.c,v 1.1.4.2 2017/04/26 02:53:34 pgoyette Exp $	*/
 
 /*-
  * Copyright (c) 2017 The NetBSD Foundation, Inc.
@@ -26,7 +26,7 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: misc.c,v 1.1 2017/04/10 16:37:48 christos Exp $")
+__RCSID("$NetBSD: misc.c,v 1.1.4.2 2017/04/26 02:53:34 pgoyette Exp $")
 
 #include <stdlib.h>
 #include <err.h>

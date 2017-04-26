@@ -1,4 +1,4 @@
-/*	$NetBSD: msg.h,v 1.1 2017/04/02 21:44:00 kamil Exp $	*/
+/*	$NetBSD: msg.h,v 1.1.4.2 2017/04/26 02:53:33 pgoyette Exp $	*/
 
 /*-
  * Copyright (c) 2016 The NetBSD Foundation, Inc.

@@ -1,4 +1,4 @@
-/*	$NetBSD: arithmetic.c,v 1.1 2017/03/20 11:26:07 kre Exp $	*/
+/*	$NetBSD: arithmetic.c,v 1.1.4.2 2017/04/26 02:52:13 pgoyette Exp $	*/
 
 /*-
  * Copyright (c) 1993
@@ -39,7 +39,7 @@
 #include <sys/cdefs.h>
 
 #ifndef lint
-__RCSID("$NetBSD: arithmetic.c,v 1.1 2017/03/20 11:26:07 kre Exp $");
+__RCSID("$NetBSD: arithmetic.c,v 1.1.4.2 2017/04/26 02:52:13 pgoyette Exp $");
 #endif /* not lint */
 
 #include <limits.h>

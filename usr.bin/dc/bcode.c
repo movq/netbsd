@@ -1,4 +1,4 @@
-/*	$NetBSD: bcode.c,v 1.2 2017/04/10 16:37:48 christos Exp $	*/
+/*	$NetBSD: bcode.c,v 1.2.4.2 2017/04/26 02:53:34 pgoyette Exp $	*/
 /*	$OpenBSD: bcode.c,v 1.51 2017/02/26 11:29:55 otto Exp $	*/
 
 /*
@@ -17,7 +17,7 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: bcode.c,v 1.2 2017/04/10 16:37:48 christos Exp $");
+__RCSID("$NetBSD: bcode.c,v 1.2.4.2 2017/04/26 02:53:34 pgoyette Exp $");
 
 #include <err.h>
 #include <limits.h>

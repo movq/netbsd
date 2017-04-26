@@ -1,4 +1,4 @@
-/*	$NetBSD: storage.c,v 1.1 2017/04/10 02:28:23 phil Exp $ */
+/*	$NetBSD: storage.c,v 1.1.4.2 2017/04/26 02:52:19 pgoyette Exp $ */
 
 /*
  * Copyright (C) 1991-1994, 1997, 2006, 2008, 2012-2017 Free Software Foundation, Inc.

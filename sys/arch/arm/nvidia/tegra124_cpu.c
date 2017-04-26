@@ -1,4 +1,4 @@
-/* $NetBSD: tegra124_cpu.c,v 1.1 2017/04/23 12:31:38 jmcneill Exp $ */
+/* $NetBSD: tegra124_cpu.c,v 1.1.2.2 2017/04/26 02:53:00 pgoyette Exp $ */
 
 /*-
  * Copyright (c) 2015 Jared D. McNeill <jmcneill@invisible.ca>
@@ -30,7 +30,7 @@
 #include "opt_multiprocessor.h"
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: tegra124_cpu.c,v 1.1 2017/04/23 12:31:38 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: tegra124_cpu.c,v 1.1.2.2 2017/04/26 02:53:00 pgoyette Exp $");
 
 #include <sys/param.h>
 #include <sys/bus.h>

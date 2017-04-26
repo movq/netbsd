@@ -1,4 +1,4 @@
-/*	$NetBSD: proto.h,v 1.2 2017/04/10 15:13:22 christos Exp $ */
+/*	$NetBSD: proto.h,v 1.2.4.2 2017/04/26 02:52:19 pgoyette Exp $ */
 
 /*
  * Copyright (C) 1991-1994, 1997, 2006, 2008, 2012-2017 Free Software Foundation, Inc.

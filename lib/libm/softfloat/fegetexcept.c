@@ -1,4 +1,4 @@
-/*	$NetBSD: fegetexcept.c,v 1.1 2017/03/22 23:11:09 chs Exp $	*/
+/*	$NetBSD: fegetexcept.c,v 1.1.4.2 2017/04/26 02:52:56 pgoyette Exp $	*/
 
 /*-
  * Copyright (c) 2017 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: fegetexcept.c,v 1.1 2017/03/22 23:11:09 chs Exp $");
+__RCSID("$NetBSD: fegetexcept.c,v 1.1.4.2 2017/04/26 02:52:56 pgoyette Exp $");
 
 #include "namespace.h"
 

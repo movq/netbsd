@@ -1,4 +1,4 @@
-/*	$NetBSD: utempter.c,v 1.1 2017/04/23 02:02:00 christos Exp $	*/
+/*	$NetBSD: utempter.c,v 1.1.2.2 2017/04/26 02:52:52 pgoyette Exp $	*/
 
 /*-
  * Copyright (c) 2011, 2017 The NetBSD Foundation, Inc.
@@ -36,7 +36,7 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: utempter.c,v 1.1 2017/04/23 02:02:00 christos Exp $");
+__RCSID("$NetBSD: utempter.c,v 1.1.2.2 2017/04/26 02:52:52 pgoyette Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>

@@ -1,4 +1,4 @@
-/*	$NetBSD: arithmetic.h,v 1.1 2017/03/20 11:26:07 kre Exp $	*/
+/*	$NetBSD: arithmetic.h,v 1.1.4.2 2017/04/26 02:52:13 pgoyette Exp $	*/
 
 /*-
  * Copyright (c) 1995

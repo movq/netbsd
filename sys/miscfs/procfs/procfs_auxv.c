@@ -1,4 +1,4 @@
-/*	$NetBSD: procfs_auxv.c,v 1.2 2017/03/30 20:21:00 christos Exp $	*/
+/*	$NetBSD: procfs_auxv.c,v 1.2.6.2 2017/04/26 02:53:28 pgoyette Exp $	*/
 
 /*-
  * Copyright (c) 2017 The NetBSD Foundation, Inc.
@@ -29,7 +29,7 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: procfs_auxv.c,v 1.2 2017/03/30 20:21:00 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: procfs_auxv.c,v 1.2.6.2 2017/04/26 02:53:28 pgoyette Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
