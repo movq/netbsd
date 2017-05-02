@@ -1,4 +1,4 @@
-#	$NetBSD: t_ipsec_l2tp.sh,v 1.2 2017/04/27 10:17:12 ozaki-r Exp $
+#	$NetBSD: t_ipsec_l2tp.sh,v 1.2.2.2 2017/05/02 03:19:23 pgoyette Exp $
 #
 # Copyright (c) 2017 Internet Initiative Japan Inc.
 # All rights reserved.

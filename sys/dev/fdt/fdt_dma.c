@@ -1,4 +1,4 @@
-/* $NetBSD: fdt_dma.c,v 1.1 2017/04/29 11:00:56 jmcneill Exp $ */
+/* $NetBSD: fdt_dma.c,v 1.1.2.2 2017/05/02 03:19:18 pgoyette Exp $ */
 
 /*-
  * Copyright (c) 2015 Jared D. McNeill <jmcneill@invisible.ca>
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: fdt_dma.c,v 1.1 2017/04/29 11:00:56 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: fdt_dma.c,v 1.1.2.2 2017/05/02 03:19:18 pgoyette Exp $");
 
 #include <sys/param.h>
 #include <sys/bus.h>
