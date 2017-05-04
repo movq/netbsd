@@ -1,4 +1,4 @@
-/*	$NetBSD: libssl_compat.c,v 1.1.1.2 2017/04/13 19:17:27 christos Exp $	*/
+/*	$NetBSD: libssl_compat.c,v 1.1.1.2.4.2 2017/05/04 05:53:47 snj Exp $	*/
 
 /*
  * libssl_compat.c -- OpenSSL v1.1 compatibility functions
