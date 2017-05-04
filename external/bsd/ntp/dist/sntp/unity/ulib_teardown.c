@@ -1,4 +1,4 @@
-/*	$NetBSD: ulib_teardown.c,v 1.1.1.1 2016/11/22 01:35:10 christos Exp $	*/
+/*	$NetBSD: ulib_teardown.c,v 1.1.1.1.16.2 2017/05/04 06:01:08 snj Exp $	*/
 
 /* default / lib implementation of 'tearDown()'
  *
