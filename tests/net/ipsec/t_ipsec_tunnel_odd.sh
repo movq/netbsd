@@ -1,4 +1,4 @@
-#	$NetBSD: t_ipsec_tunnel_odd.sh,v 1.1 2017/05/10 09:08:25 ozaki-r Exp $
+#	$NetBSD: t_ipsec_tunnel_odd.sh,v 1.1.2.2 2017/05/11 02:58:42 pgoyette Exp $
 #
 # Copyright (c) 2017 Internet Initiative Japan Inc.
 # All rights reserved.
