@@ -2,7 +2,7 @@
 #ifdef __FreeBSD__
 __FBSDID("$FreeBSD: head/lib/msun/src/s_lroundl.c 144772 2005-04-08 01:24:08Z das $");
 #else
-__RCSID("$NetBSD: s_lroundl.c,v 1.1 2017/05/06 18:03:24 christos Exp $");
+__RCSID("$NetBSD: s_lroundl.c,v 1.1.2.2 2017/05/11 02:58:33 pgoyette Exp $");
 #endif
 
 #define stype		long double

@@ -1,4 +1,4 @@
-/* $NetBSD: signalnumber.c,v 1.1 2017/05/09 11:14:16 kre Exp $ */
+/* $NetBSD: signalnumber.c,v 1.1.2.2 2017/05/11 02:58:33 pgoyette Exp $ */
 
 /*
  * Software available to all and sundry without limitations
