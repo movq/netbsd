@@ -1,4 +1,4 @@
-#	$NetBSD: t_ipsec_misc.sh,v 1.3 2017/05/18 14:43:42 ozaki-r Exp $
+#	$NetBSD: t_ipsec_misc.sh,v 1.3.2.2 2017/05/19 00:22:59 pgoyette Exp $
 #
 # Copyright (c) 2017 Internet Initiative Japan Inc.
 # All rights reserved.
