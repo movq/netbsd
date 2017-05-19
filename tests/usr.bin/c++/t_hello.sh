@@ -1,4 +1,4 @@
-#	$NetBSD: t_hello.sh,v 1.2 2017/05/18 10:29:47 martin Exp $
+#	$NetBSD: t_hello.sh,v 1.2.2.2 2017/05/19 00:22:59 pgoyette Exp $
 #
 # Copyright (c) 2011 The NetBSD Foundation, Inc.
 # All rights reserved.

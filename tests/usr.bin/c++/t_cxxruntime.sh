@@ -1,4 +1,4 @@
-#	$NetBSD: t_cxxruntime.sh,v 1.2 2017/05/14 01:13:44 kamil Exp $
+#	$NetBSD: t_cxxruntime.sh,v 1.2.2.2 2017/05/19 00:22:59 pgoyette Exp $
 #
 # Copyright (c) 2017 The NetBSD Foundation, Inc.
 # All rights reserved.
