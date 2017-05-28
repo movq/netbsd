@@ -1,4 +1,4 @@
-/* $NetBSD: platform.h,v 1.2 2015/05/31 22:15:52 matt Exp $ */
+/* $NetBSD: platform.h,v 1.3 2017/05/28 23:39:30 jmcneill Exp $ */
 
 /*-
  * Copyright (c) 2015 Jared D. McNeill <jmcneill@invisible.ca>
@@ -38,7 +38,5 @@
 #define KERNEL_VM_BASE		0x90000000
 #define KERNEL_VM_SIZE		0x50000000 /* 0x50000000 = 1.25GB */
 #endif
-
-#define CONSADDR_VA     (CONSADDR - TEGRA_APB_BASE + TEGRA_APB_VBASE)
 
 #endif /* _EVBARM_TEGRA_PLATFORM_H */
