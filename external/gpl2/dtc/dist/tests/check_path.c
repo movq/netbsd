@@ -1,4 +1,4 @@
-/*	$NetBSD: check_path.c,v 1.1 2017/06/08 15:59:26 skrll Exp $	*/
+/*	$NetBSD: check_path.c,v 1.1.1.1 2017/06/08 15:59:26 skrll Exp $	*/
 
 /*
  * libfdt - Flat Device Tree manipulation
