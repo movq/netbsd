@@ -1,4 +1,4 @@
-/* $NetBSD: pl041.c,v 1.3 2017/06/08 11:05:16 jmcneill Exp $ */
+/* $NetBSD: pl041.c,v 1.3.2.2 2017/06/09 16:59:20 snj Exp $ */
 
 /*-
  * Copyright (c) 2017 Jared McNeill <jmcneill@invisible.ca>
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pl041.c,v 1.3 2017/06/08 11:05:16 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pl041.c,v 1.3.2.2 2017/06/09 16:59:20 snj Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
