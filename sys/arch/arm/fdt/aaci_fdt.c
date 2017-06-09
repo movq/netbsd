@@ -1,4 +1,4 @@
-/* $NetBSD: aaci_fdt.c,v 1.1 2017/06/08 10:03:59 jmcneill Exp $ */
+/* $NetBSD: aaci_fdt.c,v 1.1.2.2 2017/06/09 16:59:20 snj Exp $ */
 
 /*-
  * Copyright (c) 2017 Jared McNeill <jmcneill@invisible.ca>
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: aaci_fdt.c,v 1.1 2017/06/08 10:03:59 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: aaci_fdt.c,v 1.1.2.2 2017/06/09 16:59:20 snj Exp $");
 
 #include <sys/param.h>
 #include <sys/bus.h>
