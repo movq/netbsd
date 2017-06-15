@@ -1,4 +1,4 @@
-/*	$NetBSD: exynos3250.h,v 1.1 2017/06/15 20:14:23 jmcneill Exp $	*/
+/*	$NetBSD: exynos3250.h,v 1.1.1.1 2017/06/15 20:14:23 jmcneill Exp $	*/
 
 /*
  * Copyright (c) 2014 Samsung Electronics Co., Ltd.

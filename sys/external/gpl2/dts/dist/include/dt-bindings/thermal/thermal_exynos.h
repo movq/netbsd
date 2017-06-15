@@ -1,4 +1,4 @@
-/*	$NetBSD: thermal_exynos.h,v 1.1 2017/06/15 20:14:23 jmcneill Exp $	*/
+/*	$NetBSD: thermal_exynos.h,v 1.1.1.1 2017/06/15 20:14:23 jmcneill Exp $	*/
 
 /*
  * thermal_exynos.h - Samsung EXYNOS TMU device tree definitions

@@ -1,4 +1,4 @@
-/*	$NetBSD: s5pv210-audss.h,v 1.1 2017/06/15 20:14:23 jmcneill Exp $	*/
+/*	$NetBSD: s5pv210-audss.h,v 1.1.1.1 2017/06/15 20:14:23 jmcneill Exp $	*/
 
 /*
  * Copyright (c) 2014 Tomasz Figa <tomasz.figa@gmail.com>

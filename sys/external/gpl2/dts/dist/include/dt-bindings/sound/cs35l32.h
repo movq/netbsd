@@ -1,4 +1,4 @@
-/*	$NetBSD: cs35l32.h,v 1.1 2017/06/15 20:14:23 jmcneill Exp $	*/
+/*	$NetBSD: cs35l32.h,v 1.1.1.1 2017/06/15 20:14:23 jmcneill Exp $	*/
 
 #ifndef __DT_CS35L32_H
 #define __DT_CS35L32_H

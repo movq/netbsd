@@ -1,4 +1,4 @@
-/*	$NetBSD: lsi,axm5516-clks.h,v 1.1 2017/06/15 20:14:23 jmcneill Exp $	*/
+/*	$NetBSD: lsi,axm5516-clks.h,v 1.1.1.1 2017/06/15 20:14:23 jmcneill Exp $	*/
 
 /*
  * Copyright (c) 2014 LSI Corporation

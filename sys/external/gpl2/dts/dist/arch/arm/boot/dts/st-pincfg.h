@@ -1,4 +1,4 @@
-/*	$NetBSD: st-pincfg.h,v 1.1 2017/06/15 20:14:25 jmcneill Exp $	*/
+/*	$NetBSD: st-pincfg.h,v 1.1.1.1 2017/06/15 20:14:25 jmcneill Exp $	*/
 
 #ifndef _ST_PINCFG_H_
 #define _ST_PINCFG_H_

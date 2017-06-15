@@ -1,4 +1,4 @@
-/*	$NetBSD: r8a7793-clock.h,v 1.1 2017/06/15 20:14:23 jmcneill Exp $	*/
+/*	$NetBSD: r8a7793-clock.h,v 1.1.1.1 2017/06/15 20:14:23 jmcneill Exp $	*/
 
 /*
  * r8a7793 clock definition

@@ -1,4 +1,4 @@
-/*	$NetBSD: qcom-rpm.h,v 1.1 2017/06/15 20:14:23 jmcneill Exp $	*/
+/*	$NetBSD: qcom-rpm.h,v 1.1.1.1 2017/06/15 20:14:23 jmcneill Exp $	*/
 
 /*
  * This header provides constants for the Qualcomm RPM bindings.

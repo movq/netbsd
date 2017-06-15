@@ -1,4 +1,4 @@
-/*	$NetBSD: r8a7778-clock.h,v 1.1 2017/06/15 20:14:23 jmcneill Exp $	*/
+/*	$NetBSD: r8a7778-clock.h,v 1.1.1.1 2017/06/15 20:14:23 jmcneill Exp $	*/
 
 /*
  * Copyright (C) 2014 Ulrich Hecht

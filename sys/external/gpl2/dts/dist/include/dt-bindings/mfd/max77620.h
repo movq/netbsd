@@ -1,4 +1,4 @@
-/*	$NetBSD: max77620.h,v 1.1 2017/06/15 20:14:23 jmcneill Exp $	*/
+/*	$NetBSD: max77620.h,v 1.1.1.1 2017/06/15 20:14:23 jmcneill Exp $	*/
 
 /*
  * This header provides macros for MAXIM MAX77620 device bindings.
