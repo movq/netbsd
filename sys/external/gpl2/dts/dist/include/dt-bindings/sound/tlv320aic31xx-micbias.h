@@ -1,4 +1,4 @@
-/*	$NetBSD: tlv320aic31xx-micbias.h,v 1.1 2017/06/15 20:14:23 jmcneill Exp $	*/
+/*	$NetBSD: tlv320aic31xx-micbias.h,v 1.1.1.1 2017/06/15 20:14:23 jmcneill Exp $	*/
 
 #ifndef __DT_TLV320AIC31XX_MICBIAS_H
 #define __DT_TLV320AIC31XX_MICBIAS_H

@@ -1,4 +1,4 @@
-/*	$NetBSD: clps711x-clock.h,v 1.1 2017/06/15 20:14:23 jmcneill Exp $	*/
+/*	$NetBSD: clps711x-clock.h,v 1.1.1.1 2017/06/15 20:14:23 jmcneill Exp $	*/
 
 /*
  * Copyright (C) 2014 Alexander Shiyan <shc_work@mail.ru>

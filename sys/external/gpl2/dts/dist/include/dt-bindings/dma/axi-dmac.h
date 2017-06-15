@@ -1,4 +1,4 @@
-/*	$NetBSD: axi-dmac.h,v 1.1 2017/06/15 20:14:23 jmcneill Exp $	*/
+/*	$NetBSD: axi-dmac.h,v 1.1.1.1 2017/06/15 20:14:23 jmcneill Exp $	*/
 
 /*
  * This file is dual-licensed: you can use it either under the terms

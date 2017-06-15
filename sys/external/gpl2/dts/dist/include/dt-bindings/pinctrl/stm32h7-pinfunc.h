@@ -1,4 +1,4 @@
-/*	$NetBSD: stm32h7-pinfunc.h,v 1.1 2017/06/15 20:14:23 jmcneill Exp $	*/
+/*	$NetBSD: stm32h7-pinfunc.h,v 1.1.1.1 2017/06/15 20:14:23 jmcneill Exp $	*/
 
 #ifndef _DT_BINDINGS_STM32H7_PINFUNC_H
 #define _DT_BINDINGS_STM32H7_PINFUNC_H

@@ -1,4 +1,4 @@
-/*	$NetBSD: meson8b-clkc.h,v 1.1 2017/06/15 20:14:23 jmcneill Exp $	*/
+/*	$NetBSD: meson8b-clkc.h,v 1.1.1.1 2017/06/15 20:14:23 jmcneill Exp $	*/
 
 /*
  * Meson8b clock tree IDs

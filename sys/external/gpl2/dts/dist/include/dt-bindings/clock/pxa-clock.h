@@ -1,4 +1,4 @@
-/*	$NetBSD: pxa-clock.h,v 1.1 2017/06/15 20:14:23 jmcneill Exp $	*/
+/*	$NetBSD: pxa-clock.h,v 1.1.1.1 2017/06/15 20:14:23 jmcneill Exp $	*/
 
 /*
  * Inspired by original work from pxa2xx-regs.h by Nicolas Pitre

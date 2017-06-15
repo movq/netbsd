@@ -1,4 +1,4 @@
-/*	$NetBSD: as3722.h,v 1.1 2017/06/15 20:14:23 jmcneill Exp $	*/
+/*	$NetBSD: as3722.h,v 1.1.1.1 2017/06/15 20:14:23 jmcneill Exp $	*/
 
 /*
  * This header provides macros for ams AS3722 device bindings.

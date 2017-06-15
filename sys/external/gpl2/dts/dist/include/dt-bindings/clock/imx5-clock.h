@@ -1,4 +1,4 @@
-/*	$NetBSD: imx5-clock.h,v 1.1 2017/06/15 20:14:23 jmcneill Exp $	*/
+/*	$NetBSD: imx5-clock.h,v 1.1.1.1 2017/06/15 20:14:23 jmcneill Exp $	*/
 
 /*
  * Copyright 2013 Lucas Stach, Pengutronix <l.stach@pengutronix.de>

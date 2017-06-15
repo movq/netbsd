@@ -1,4 +1,4 @@
-/*	$NetBSD: qcom,gcc-msm8994.h,v 1.1 2017/06/15 20:14:23 jmcneill Exp $	*/
+/*	$NetBSD: qcom,gcc-msm8994.h,v 1.1.1.1 2017/06/15 20:14:23 jmcneill Exp $	*/
 
 /*
  * Copyright (c) 2016, The Linux Foundation. All rights reserved.

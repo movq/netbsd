@@ -1,4 +1,4 @@
-/*	$NetBSD: leds-ns2.h,v 1.1 2017/06/15 20:14:23 jmcneill Exp $	*/
+/*	$NetBSD: leds-ns2.h,v 1.1.1.1 2017/06/15 20:14:23 jmcneill Exp $	*/
 
 #ifndef _DT_BINDINGS_LEDS_NS2_H
 #define _DT_BINDINGS_LEDS_NS2_H

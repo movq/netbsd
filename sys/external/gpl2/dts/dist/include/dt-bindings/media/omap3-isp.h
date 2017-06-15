@@ -1,4 +1,4 @@
-/*	$NetBSD: omap3-isp.h,v 1.1 2017/06/15 20:14:23 jmcneill Exp $	*/
+/*	$NetBSD: omap3-isp.h,v 1.1.1.1 2017/06/15 20:14:23 jmcneill Exp $	*/
 
 /*
  * include/dt-bindings/media/omap3-isp.h

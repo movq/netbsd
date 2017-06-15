@@ -1,4 +1,4 @@
-/*	$NetBSD: tegra186-powergate.h,v 1.1 2017/06/15 20:14:23 jmcneill Exp $	*/
+/*	$NetBSD: tegra186-powergate.h,v 1.1.1.1 2017/06/15 20:14:23 jmcneill Exp $	*/
 
 /*
  * Copyright (c) 2015-2016, NVIDIA CORPORATION.  All rights reserved.

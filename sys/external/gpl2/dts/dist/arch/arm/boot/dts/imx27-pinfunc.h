@@ -1,4 +1,4 @@
-/*	$NetBSD: imx27-pinfunc.h,v 1.1 2017/06/15 20:14:24 jmcneill Exp $	*/
+/*	$NetBSD: imx27-pinfunc.h,v 1.1.1.1 2017/06/15 20:14:24 jmcneill Exp $	*/
 
 /*
  * Copyright 2013 Markus Pargmann <mpa@pengutronix.de>, Pengutronix

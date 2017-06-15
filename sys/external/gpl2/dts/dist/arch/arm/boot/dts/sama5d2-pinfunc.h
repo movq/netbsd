@@ -1,4 +1,4 @@
-/*	$NetBSD: sama5d2-pinfunc.h,v 1.1 2017/06/15 20:14:25 jmcneill Exp $	*/
+/*	$NetBSD: sama5d2-pinfunc.h,v 1.1.1.1 2017/06/15 20:14:25 jmcneill Exp $	*/
 
 #define PINMUX_PIN(no, func, ioset) \
 (((no) & 0xffff) | (((func) & 0xf) << 16) | (((ioset) & 0xff) << 20))

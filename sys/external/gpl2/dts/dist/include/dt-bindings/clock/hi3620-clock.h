@@ -1,4 +1,4 @@
-/*	$NetBSD: hi3620-clock.h,v 1.1 2017/06/15 20:14:23 jmcneill Exp $	*/
+/*	$NetBSD: hi3620-clock.h,v 1.1.1.1 2017/06/15 20:14:23 jmcneill Exp $	*/
 
 /*
  * Copyright (c) 2012-2013 Hisilicon Limited.

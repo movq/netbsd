@@ -1,4 +1,4 @@
-/*	$NetBSD: rk1108-cru.h,v 1.1 2017/06/15 20:14:23 jmcneill Exp $	*/
+/*	$NetBSD: rk1108-cru.h,v 1.1.1.1 2017/06/15 20:14:23 jmcneill Exp $	*/
 
 /*
  * Copyright (c) 2016 Rockchip Electronics Co. Ltd.
