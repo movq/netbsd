@@ -1,4 +1,4 @@
-/*	$NetBSD: feature-test.c,v 1.1.1.1 2017/06/15 15:22:40 christos Exp $	*/
+/*	$NetBSD: feature-test.c,v 1.1.1.1.6.2 2017/06/20 17:09:31 snj Exp $	*/
 
 /*
  * Copyright (C) 2016  Internet Systems Consortium, Inc. ("ISC")
