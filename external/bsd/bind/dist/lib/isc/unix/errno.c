@@ -1,4 +1,4 @@
-/*	$NetBSD: errno.c,v 1.1.1.1 2017/06/15 15:22:50 christos Exp $	*/
+/*	$NetBSD: errno.c,v 1.1.1.1.6.2 2017/06/20 17:09:54 snj Exp $	*/
 
 /*
  * Copyright (C) 2016  Internet Systems Consortium, Inc. ("ISC")
