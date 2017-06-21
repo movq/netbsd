@@ -1,4 +1,4 @@
-/*	$NetBSD: netaddr_test.c,v 1.1.1.1 2017/06/15 15:22:50 christos Exp $	*/
+/*	$NetBSD: netaddr_test.c,v 1.1.1.1.8.2 2017/06/21 18:03:47 snj Exp $	*/
 
 /*
  * Copyright (C) 2016  Internet Systems Consortium, Inc. ("ISC")

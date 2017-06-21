@@ -1,4 +1,4 @@
-/*	$NetBSD: rsa_test.c,v 1.1.1.1 2017/06/15 15:22:49 christos Exp $	*/
+/*	$NetBSD: rsa_test.c,v 1.1.1.1.8.2 2017/06/21 18:03:44 snj Exp $	*/
 
 /*
  * Copyright (C) 2016  Internet Systems Consortium, Inc. ("ISC")
