@@ -1,4 +1,4 @@
-/* $NetBSD: sunxi_mmc.c,v 1.1 2017/06/29 09:26:06 jmcneill Exp $ */
+/* $NetBSD: sunxi_mmc.c,v 1.3 2017/07/17 23:31:05 jmcneill Exp $ */
 
 /*-
  * Copyright (c) 2014-2017 Jared McNeill <jmcneill@invisible.ca>
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sunxi_mmc.c,v 1.1 2017/06/29 09:26:06 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sunxi_mmc.c,v 1.3 2017/07/17 23:31:05 jmcneill Exp $");
 
 #include <sys/param.h>
 #include <sys/bus.h>
@@ -44,6 +44,27 @@ __KERNEL_RCSID(0, "$NetBSD: sunxi_mmc.c,v 1.1 2017/06/29 09:26:06 jmcneill Exp $
 #include <dev/fdt/fdtvar.h>
 
 #include <arm/sunxi/sunxi_mmc.h>
+
+enum sunxi_mmc_timing {
+	SUNXI_MMC_TIMING_400K,
+	SUNXI_MMC_TIMING_25M,
+	SUNXI_MMC_TIMING_50M,
+	SUNXI_MMC_TIMING_50M_DDR,
+	SUNXI_MMC_TIMING_50M_DDR_8BIT,
+};
+
+struct sunxi_mmc_delay {
+	u_int	output_phase;
+	u_int	sample_phase;
+};
+
+static const struct sunxi_mmc_delay sunxi_mmc_delays[] = {
+	[SUNXI_MMC_TIMING_400K]		= { 180,	180 },
+	[SUNXI_MMC_TIMING_25M]		= { 180,	 75 },
+	[SUNXI_MMC_TIMING_50M]		= {  90,	120 },
+	[SUNXI_MMC_TIMING_50M_DDR]	= {  60,	120 },
+	[SUNXI_MMC_TIMING_50M_DDR_8BIT]	= {  90,	180 },
+};
 
 #define SUNXI_MMC_NDESC		16
 #define	SUNXI_MMC_DMA_XFERLEN	0x10000
@@ -64,9 +85,10 @@ static int	sunxi_mmc_host_maxblklen(sdmmc_chipset_handle_t);
 static int	sunxi_mmc_card_detect(sdmmc_chipset_handle_t);
 static int	sunxi_mmc_write_protect(sdmmc_chipset_handle_t);
 static int	sunxi_mmc_bus_power(sdmmc_chipset_handle_t, uint32_t);
-static int	sunxi_mmc_bus_clock(sdmmc_chipset_handle_t, int);
+static int	sunxi_mmc_bus_clock(sdmmc_chipset_handle_t, int, bool);
 static int	sunxi_mmc_bus_width(sdmmc_chipset_handle_t, int);
 static int	sunxi_mmc_bus_rod(sdmmc_chipset_handle_t, int);
+static int	sunxi_mmc_signal_voltage(sdmmc_chipset_handle_t, int);
 static void	sunxi_mmc_exec_command(sdmmc_chipset_handle_t,
 				      struct sdmmc_command *);
 static void	sunxi_mmc_card_enable_intr(sdmmc_chipset_handle_t, int);
@@ -79,9 +101,10 @@ static struct sdmmc_chip_functions sunxi_mmc_chip_functions = {
 	.card_detect = sunxi_mmc_card_detect,
 	.write_protect = sunxi_mmc_write_protect,
 	.bus_power = sunxi_mmc_bus_power,
-	.bus_clock = sunxi_mmc_bus_clock,
+	.bus_clock_ddr = sunxi_mmc_bus_clock,
 	.bus_width = sunxi_mmc_bus_width,
 	.bus_rod = sunxi_mmc_bus_rod,
+	.signal_voltage = sunxi_mmc_signal_voltage,
 	.exec_command = sunxi_mmc_exec_command,
 	.card_enable_intr = sunxi_mmc_card_enable_intr,
 	.card_intr_ack = sunxi_mmc_card_intr_ack,
@@ -129,6 +152,8 @@ struct sunxi_mmc_softc {
 	int sc_gpio_cd_inverted;
 	struct fdtbus_gpio_pin *sc_gpio_wp;
 	int sc_gpio_wp_inverted;
+
+	struct fdtbus_regulator *sc_reg_vqmmc;
 };
 
 CFATTACH_DECL_NEW(sunxi_mmc, sizeof(struct sunxi_mmc_softc),
@@ -187,6 +212,8 @@ sunxi_mmc_attach(device_t parent, device_t self, void *aux)
 		aprint_error(": couldn't get resets\n");
 		return;
 	}
+
+	sc->sc_reg_vqmmc = fdtbus_regulator_acquire(phandle, "vqmmc-supply");
 
 	if (clk_enable(sc->sc_clk_ahb) != 0 ||
 	    clk_enable(sc->sc_clk_mmc) != 0) {
@@ -287,9 +314,44 @@ free:
 }
 
 static int
-sunxi_mmc_set_clock(struct sunxi_mmc_softc *sc, u_int freq)
+sunxi_mmc_set_clock(struct sunxi_mmc_softc *sc, u_int freq, bool ddr)
 {
-	return clk_set_rate(sc->sc_clk_mmc, freq * 1000);
+	const struct sunxi_mmc_delay *delays;
+	int error, timing;
+
+	if (freq <= 400) {
+		timing = SUNXI_MMC_TIMING_400K;
+	} else if (freq <= 25000) {
+		timing = SUNXI_MMC_TIMING_25M;
+	} else if (freq <= 52000) {
+		if (ddr) {
+			timing = sc->sc_mmc_width == 8 ?
+			    SUNXI_MMC_TIMING_50M_DDR_8BIT :
+			    SUNXI_MMC_TIMING_50M_DDR;
+		} else {
+			timing = SUNXI_MMC_TIMING_50M;
+		}
+	} else
+		return EINVAL;
+
+	delays = &sunxi_mmc_delays[timing];
+
+	error = clk_set_rate(sc->sc_clk_mmc, (freq * 1000) << ddr);
+	if (error != 0)
+		return error;
+
+	if (sc->sc_clk_sample) {
+		error = clk_set_rate(sc->sc_clk_sample, delays->sample_phase);
+		if (error != 0)
+			return error;
+	}
+	if (sc->sc_clk_output) {
+		error = clk_set_rate(sc->sc_clk_output, delays->output_phase);
+		if (error != 0)
+			return error;
+	}
+
+	return 0;
 }
 
 static void
@@ -301,7 +363,7 @@ sunxi_mmc_attach_i(device_t self)
 
 	sunxi_mmc_host_reset(sc);
 	sunxi_mmc_bus_width(sc, 1);
-	sunxi_mmc_set_clock(sc, 400);
+	sunxi_mmc_set_clock(sc, 400, false);
 
 	if (of_getprop_uint32(sc->sc_phandle, "bus-width", &width) != 0)
 		width = 4;
@@ -317,7 +379,9 @@ sunxi_mmc_attach_i(device_t self)
 		       SMC_CAPS_MULTI_SEG_DMA |
 		       SMC_CAPS_AUTO_STOP |
 		       SMC_CAPS_SD_HIGHSPEED |
-		       SMC_CAPS_MMC_HIGHSPEED;
+		       SMC_CAPS_MMC_HIGHSPEED |
+		       SMC_CAPS_MMC_DDR52 |
+		       SMC_CAPS_POLLING;
 	if (width == 4)
 		saa.saa_caps |= SMC_CAPS_4BIT_MODE;
 	if (width == 8)
@@ -368,7 +432,8 @@ sunxi_mmc_intr(void *priv)
 }
 
 static int
-sunxi_mmc_wait_rint(struct sunxi_mmc_softc *sc, uint32_t mask, int timeout)
+sunxi_mmc_wait_rint(struct sunxi_mmc_softc *sc, uint32_t mask,
+    int timeout, bool poll)
 {
 	int retry;
 	int error;
@@ -378,15 +443,24 @@ sunxi_mmc_wait_rint(struct sunxi_mmc_softc *sc, uint32_t mask, int timeout)
 	if (sc->sc_intr_rint & mask)
 		return 0;
 
-	retry = timeout / hz;
+	if (poll)
+		retry = timeout / hz * 1000;
+	else
+		retry = timeout / hz;
 
 	while (retry > 0) {
-		error = cv_timedwait(&sc->sc_intr_cv,
-		    &sc->sc_intr_lock, hz);
-		if (error && error != EWOULDBLOCK)
-			return error;
+		if (poll) {
+			sc->sc_intr_rint |= MMC_READ(sc, SUNXI_MMC_RINT);
+		} else {
+			error = cv_timedwait(&sc->sc_intr_cv,
+			    &sc->sc_intr_lock, hz);
+			if (error && error != EWOULDBLOCK)
+				return error;
+		}
 		if (sc->sc_intr_rint & mask)
 			return 0;
+		if (poll)
+			delay(1000);	
 		--retry;
 	}
 
@@ -419,7 +493,6 @@ sunxi_mmc_host_reset(sdmmc_chipset_handle_t sch)
 
 	MMC_WRITE(sc, SUNXI_MMC_GCTRL,
 	    MMC_READ(sc, SUNXI_MMC_GCTRL) | SUNXI_MMC_GCTRL_INTEN);
-
 
 	return 0;
 }
@@ -525,10 +598,10 @@ sunxi_mmc_update_clock(struct sunxi_mmc_softc *sc)
 }
 
 static int
-sunxi_mmc_bus_clock(sdmmc_chipset_handle_t sch, int freq)
+sunxi_mmc_bus_clock(sdmmc_chipset_handle_t sch, int freq, bool ddr)
 {
 	struct sunxi_mmc_softc *sc = sch;
-	uint32_t clkcr;
+	uint32_t clkcr, gctrl;
 
 	clkcr = MMC_READ(sc, SUNXI_MMC_CLKCR);
 	if (clkcr & SUNXI_MMC_CLKCR_CARDCLKON) {
@@ -541,11 +614,19 @@ sunxi_mmc_bus_clock(sdmmc_chipset_handle_t sch, int freq)
 	if (freq) {
 
 		clkcr &= ~SUNXI_MMC_CLKCR_DIV;
+		clkcr |= __SHIFTIN(ddr, SUNXI_MMC_CLKCR_DIV);
 		MMC_WRITE(sc, SUNXI_MMC_CLKCR, clkcr);
 		if (sunxi_mmc_update_clock(sc) != 0)
 			return 1;
 
-		if (sunxi_mmc_set_clock(sc, freq) != 0)
+		gctrl = MMC_READ(sc, SUNXI_MMC_GCTRL);
+		if (ddr)
+			gctrl |= SUNXI_MMC_GCTRL_DDR_MODE;
+		else
+			gctrl &= ~SUNXI_MMC_GCTRL_DDR_MODE;
+		MMC_WRITE(sc, SUNXI_MMC_GCTRL, gctrl);
+
+		if (sunxi_mmc_set_clock(sc, freq, ddr) != 0)
 			return 1;
 
 		clkcr |= SUNXI_MMC_CLKCR_CARDCLKON;
@@ -589,6 +670,34 @@ static int
 sunxi_mmc_bus_rod(sdmmc_chipset_handle_t sch, int on)
 {
 	return -1;
+}
+
+static int
+sunxi_mmc_signal_voltage(sdmmc_chipset_handle_t sch, int signal_voltage)
+{
+	struct sunxi_mmc_softc *sc = sch;
+	u_int uvol;
+	int error;
+
+	if (sc->sc_reg_vqmmc == NULL)
+		return 0;
+
+	switch (signal_voltage) {
+	case SDMMC_SIGNAL_VOLTAGE_330:
+		uvol = 3300000;
+		break;
+	case SDMMC_SIGNAL_VOLTAGE_180:
+		uvol = 1800000;
+		break;
+	default:
+		return EINVAL;
+	}
+
+	error = fdtbus_regulator_set_voltage(sc->sc_reg_vqmmc, uvol, uvol);
+	if (error != 0)
+		return error;
+
+	return fdtbus_regulator_enable(sc->sc_reg_vqmmc);
 }
 
 static int
@@ -680,13 +789,14 @@ sunxi_mmc_exec_command(sdmmc_chipset_handle_t sch, struct sdmmc_command *cmd)
 {
 	struct sunxi_mmc_softc *sc = sch;
 	uint32_t cmdval = SUNXI_MMC_CMD_START;
+	const bool poll = (cmd->c_flags & SCF_POLL) != 0;
 	int retry;
 
 #ifdef SUNXI_MMC_DEBUG
 	aprint_normal_dev(sc->sc_dev,
-	    "opcode %d flags 0x%x data %p datalen %d blklen %d\n",
+	    "opcode %d flags 0x%x data %p datalen %d blklen %d poll %d\n",
 	    cmd->c_opcode, cmd->c_flags, cmd->c_data, cmd->c_datalen,
-	    cmd->c_blklen);
+	    cmd->c_blklen, poll);
 #endif
 
 	mutex_enter(&sc->sc_intr_lock);
@@ -766,7 +876,7 @@ sunxi_mmc_exec_command(sdmmc_chipset_handle_t sch, struct sdmmc_command *cmd)
 	}
 
 	cmd->c_error = sunxi_mmc_wait_rint(sc,
-	    SUNXI_MMC_INT_ERROR|SUNXI_MMC_INT_CMD_DONE, hz * 10);
+	    SUNXI_MMC_INT_ERROR|SUNXI_MMC_INT_CMD_DONE, hz * 10, poll);
 	if (cmd->c_error == 0 && (sc->sc_intr_rint & SUNXI_MMC_INT_ERROR)) {
 		if (sc->sc_intr_rint & SUNXI_MMC_INT_RESP_TIMEOUT) {
 			cmd->c_error = ETIMEDOUT;
@@ -787,7 +897,7 @@ sunxi_mmc_exec_command(sdmmc_chipset_handle_t sch, struct sdmmc_command *cmd)
 		    SUNXI_MMC_INT_ERROR|
 		    SUNXI_MMC_INT_AUTO_CMD_DONE|
 		    SUNXI_MMC_INT_DATA_OVER,
-		    hz*10);
+		    hz*10, poll);
 		if (cmd->c_error == 0 &&
 		    (sc->sc_intr_rint & SUNXI_MMC_INT_ERROR)) {
 			cmd->c_error = ETIMEDOUT;
