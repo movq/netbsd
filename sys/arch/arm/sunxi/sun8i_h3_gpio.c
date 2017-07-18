@@ -1,4 +1,4 @@
-/* $NetBSD: sun8i_h3_gpio.c,v 1.1 2017/07/02 13:36:46 jmcneill Exp $ */
+/* $NetBSD: sun8i_h3_gpio.c,v 1.1.4.2 2017/07/18 19:13:08 snj Exp $ */
 
 /*-
  * Copyright (c) 2016 Emmanuel Vadot <manu@freebsd.org>
@@ -28,7 +28,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sun8i_h3_gpio.c,v 1.1 2017/07/02 13:36:46 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sun8i_h3_gpio.c,v 1.1.4.2 2017/07/18 19:13:08 snj Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

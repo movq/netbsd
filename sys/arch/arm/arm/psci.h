@@ -1,4 +1,4 @@
-/* $NetBSD: psci.h,v 1.1 2017/06/28 23:48:23 jmcneill Exp $ */
+/* $NetBSD: psci.h,v 1.1.4.2 2017/07/18 19:13:08 snj Exp $ */
 
 /*-
  * Copyright (c) 2017 Jared McNeill <jmcneill@invisible.ca>

@@ -1,4 +1,4 @@
-/* $NetBSD: sunxi_gpio.h,v 1.3 2017/07/06 22:10:14 jmcneill Exp $ */
+/* $NetBSD: sunxi_gpio.h,v 1.3.4.2 2017/07/18 19:13:08 snj Exp $ */
 
 /*-
  * Copyright (c) 2017 Jared McNeill <jmcneill@invisible.ca>

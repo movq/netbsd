@@ -1,4 +1,4 @@
-/* $NetBSD: sunxi_platform.h,v 1.1 2017/06/28 23:51:29 jmcneill Exp $ */
+/* $NetBSD: sunxi_platform.h,v 1.1.4.2 2017/07/18 19:13:09 snj Exp $ */
 
 /*-
  * Copyright (c) 2017 Jared McNeill <jmcneill@invisible.ca>

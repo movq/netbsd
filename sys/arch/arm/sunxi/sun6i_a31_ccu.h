@@ -1,4 +1,4 @@
-/* $NetBSD: sun6i_a31_ccu.h,v 1.1 2017/07/02 00:14:09 jmcneill Exp $ */
+/* $NetBSD: sun6i_a31_ccu.h,v 1.1.4.2 2017/07/18 19:13:08 snj Exp $ */
 
 /*-
  * Copyright (c) 2017 Emmanuel Vadot <manu@freebsd.org>

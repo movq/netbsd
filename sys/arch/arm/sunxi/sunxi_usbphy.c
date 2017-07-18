@@ -1,4 +1,4 @@
-/* $NetBSD: sunxi_usbphy.c,v 1.3 2017/07/02 00:14:09 jmcneill Exp $ */
+/* $NetBSD: sunxi_usbphy.c,v 1.3.4.2 2017/07/18 19:13:09 snj Exp $ */
 
 /*-
  * Copyright (c) 2017 Jared McNeill <jmcneill@invisible.ca>
@@ -28,7 +28,7 @@
 
 #include <sys/cdefs.h>
 
-__KERNEL_RCSID(0, "$NetBSD: sunxi_usbphy.c,v 1.3 2017/07/02 00:14:09 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sunxi_usbphy.c,v 1.3.4.2 2017/07/18 19:13:09 snj Exp $");
 
 #include <sys/param.h>
 #include <sys/bus.h>
