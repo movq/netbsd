@@ -1,4 +1,4 @@
-/*	$NetBSD: gxbb-clkc.h,v 1.1.1.1 2017/06/15 20:14:23 jmcneill Exp $	*/
+/*	$NetBSD: gxbb-clkc.h,v 1.1.1.1.4.2 2017/07/18 16:08:56 snj Exp $	*/
 
 /*
  * GXBB clock tree IDs

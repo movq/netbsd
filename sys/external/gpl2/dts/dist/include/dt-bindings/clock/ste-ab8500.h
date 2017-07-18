@@ -1,4 +1,4 @@
-/*	$NetBSD: ste-ab8500.h,v 1.1.1.1 2017/06/15 20:14:23 jmcneill Exp $	*/
+/*	$NetBSD: ste-ab8500.h,v 1.1.1.1.4.2 2017/07/18 16:08:57 snj Exp $	*/
 
 #ifndef __STE_CLK_AB8500_H__
 #define __STE_CLK_AB8500_H__

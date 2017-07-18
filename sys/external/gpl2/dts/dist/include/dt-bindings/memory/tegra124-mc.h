@@ -1,4 +1,4 @@
-/*	$NetBSD: tegra124-mc.h,v 1.1.1.1 2017/06/15 20:14:23 jmcneill Exp $	*/
+/*	$NetBSD: tegra124-mc.h,v 1.1.1.1.4.2 2017/07/18 16:08:58 snj Exp $	*/
 
 #ifndef DT_BINDINGS_MEMORY_TEGRA124_MC_H
 #define DT_BINDINGS_MEMORY_TEGRA124_MC_H

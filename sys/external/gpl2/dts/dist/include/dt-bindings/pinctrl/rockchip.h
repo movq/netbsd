@@ -1,4 +1,4 @@
-/*	$NetBSD: rockchip.h,v 1.1.1.1 2017/06/15 20:14:23 jmcneill Exp $	*/
+/*	$NetBSD: rockchip.h,v 1.1.1.1.4.2 2017/07/18 16:08:59 snj Exp $	*/
 
 /*
  * Header providing constants for Rockchip pinctrl bindings.

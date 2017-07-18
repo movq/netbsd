@@ -1,4 +1,4 @@
-/*	$NetBSD: marvell,mmp2.h,v 1.1.1.1 2017/06/15 20:14:23 jmcneill Exp $	*/
+/*	$NetBSD: marvell,mmp2.h,v 1.1.1.1.4.2 2017/07/18 16:08:56 snj Exp $	*/
 
 #ifndef __DTS_MARVELL_MMP2_CLOCK_H
 #define __DTS_MARVELL_MMP2_CLOCK_H

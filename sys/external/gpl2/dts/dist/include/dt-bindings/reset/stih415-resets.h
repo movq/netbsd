@@ -1,4 +1,4 @@
-/*	$NetBSD: stih415-resets.h,v 1.1.1.1 2017/06/15 20:14:23 jmcneill Exp $	*/
+/*	$NetBSD: stih415-resets.h,v 1.1.1.1.4.2 2017/07/18 16:09:00 snj Exp $	*/
 
 /*
  * This header provides constants for the reset controller
