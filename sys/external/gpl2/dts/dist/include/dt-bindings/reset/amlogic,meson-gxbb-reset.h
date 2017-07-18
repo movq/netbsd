@@ -1,4 +1,4 @@
-/*	$NetBSD: amlogic,meson-gxbb-reset.h,v 1.1.1.1 2017/06/15 20:14:23 jmcneill Exp $	*/
+/*	$NetBSD: amlogic,meson-gxbb-reset.h,v 1.1.1.1.4.2 2017/07/18 16:08:59 snj Exp $	*/
 
 /*
  * This file is provided under a dual BSD/GPLv2 license.  When using or

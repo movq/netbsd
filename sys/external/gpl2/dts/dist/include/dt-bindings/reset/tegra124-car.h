@@ -1,4 +1,4 @@
-/*	$NetBSD: tegra124-car.h,v 1.1.1.1 2017/06/15 20:14:23 jmcneill Exp $	*/
+/*	$NetBSD: tegra124-car.h,v 1.1.1.1.4.2 2017/07/18 16:09:00 snj Exp $	*/
 
 /*
  * This header provides Tegra124-specific constants for binding

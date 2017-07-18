@@ -1,4 +1,4 @@
-/*	$NetBSD: c8sectpfe.h,v 1.1.1.1 2017/06/15 20:14:23 jmcneill Exp $	*/
+/*	$NetBSD: c8sectpfe.h,v 1.1.1.1.4.2 2017/07/18 16:08:58 snj Exp $	*/
 
 #ifndef __DT_C8SECTPFE_H
 #define __DT_C8SECTPFE_H

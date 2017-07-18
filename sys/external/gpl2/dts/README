@@ -1,4 +1,4 @@
-$NetBSD: README,v 1.1 2017/06/16 21:45:05 jmcneill Exp $
+$NetBSD: README,v 1.1.4.2 2017/07/18 16:08:36 snj Exp $
 
 The headers in this directory are mostly either GPLv2 or GPLv2/X11 dual
 licensed. To be safe, DO NOT include dt-bindings headers from kernel sources.

@@ -1,4 +1,4 @@
-/*	$NetBSD: imx23-pinfunc.h,v 1.1.1.1 2017/06/15 20:14:24 jmcneill Exp $	*/
+/*	$NetBSD: imx23-pinfunc.h,v 1.1.1.1.4.2 2017/07/18 16:08:40 snj Exp $	*/
 
 /*
  * Header providing constants for i.MX23 pinctrl bindings.

@@ -1,4 +1,4 @@
-/*	$NetBSD: apq8016-lpass.h,v 1.1.1.1 2017/06/15 20:14:23 jmcneill Exp $	*/
+/*	$NetBSD: apq8016-lpass.h,v 1.1.1.1.4.2 2017/07/18 16:09:00 snj Exp $	*/
 
 #ifndef __DT_APQ8016_LPASS_H
 #define __DT_APQ8016_LPASS_H

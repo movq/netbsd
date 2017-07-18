@@ -1,4 +1,4 @@
-/*	$NetBSD: rockchip,boot-mode.h,v 1.1.1.1 2017/06/15 20:14:23 jmcneill Exp $	*/
+/*	$NetBSD: rockchip,boot-mode.h,v 1.1.1.1.4.2 2017/07/18 16:09:00 snj Exp $	*/
 
 #ifndef __ROCKCHIP_BOOT_MODE_H
 #define __ROCKCHIP_BOOT_MODE_H
