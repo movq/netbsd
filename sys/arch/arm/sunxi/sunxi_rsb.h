@@ -1,4 +1,4 @@
-/* $NetBSD: sunxi_rsb.h,v 1.1 2017/07/02 18:06:45 jmcneill Exp $ */
+/* $NetBSD: sunxi_rsb.h,v 1.1.4.2 2017/07/18 19:13:09 snj Exp $ */
 
 /*-
  * Copyright (c) 2017 Jared McNeill <jmcneill@invisible.ca>

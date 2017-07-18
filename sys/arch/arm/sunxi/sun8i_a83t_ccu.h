@@ -1,4 +1,4 @@
-/* $NetBSD: sun8i_a83t_ccu.h,v 1.1 2017/07/06 22:10:14 jmcneill Exp $ */
+/* $NetBSD: sun8i_a83t_ccu.h,v 1.1.4.2 2017/07/18 19:13:08 snj Exp $ */
 
 /*-
  * Copyright (c) 2017 Jared McNeill <jmcneill@invisible.ca>

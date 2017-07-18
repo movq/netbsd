@@ -1,4 +1,4 @@
-/* $NetBSD: sunxi_start.S,v 1.1 2017/06/28 23:51:29 jmcneill Exp $ */
+/* $NetBSD: sunxi_start.S,v 1.1.4.2 2017/07/18 19:13:09 snj Exp $ */
 
 /*-
  * Copyright (c) 2014, 2015 The NetBSD Foundation, Inc.
@@ -42,7 +42,7 @@
 
 #include <arch/arm/sunxi/sunxi_platform.h>
 
-RCSID("$NetBSD: sunxi_start.S,v 1.1 2017/06/28 23:51:29 jmcneill Exp $")
+RCSID("$NetBSD: sunxi_start.S,v 1.1.4.2 2017/07/18 19:13:09 snj Exp $")
 
 #if defined(VERBOSE_INIT_ARM) && defined(CONSADDR)
 #define	XPUTC(n)	mov r0, n; bl xputc

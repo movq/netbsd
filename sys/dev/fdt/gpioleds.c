@@ -1,4 +1,4 @@
-/* $NetBSD: gpioleds.c,v 1.1 2017/07/08 00:55:02 jmcneill Exp $ */
+/* $NetBSD: gpioleds.c,v 1.1.4.2 2017/07/18 19:13:09 snj Exp $ */
 
 /*-
  * Copyright (c) 2017 Jared McNeill <jmcneill@invisible.ca>
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: gpioleds.c,v 1.1 2017/07/08 00:55:02 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: gpioleds.c,v 1.1.4.2 2017/07/18 19:13:09 snj Exp $");
 
 #include <sys/param.h>
 #include <sys/kernel.h>

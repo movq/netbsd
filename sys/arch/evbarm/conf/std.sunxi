@@ -1,4 +1,4 @@
-#	$NetBSD: std.sunxi,v 1.3 2017/07/05 01:08:44 jmcneill Exp $
+#	$NetBSD: std.sunxi,v 1.3.4.2 2017/07/18 19:13:09 snj Exp $
 #
 
 machine	evbarm arm

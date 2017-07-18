@@ -1,4 +1,4 @@
-/* $NetBSD: exynos5410_clock.c,v 1.2 2017/06/20 17:43:51 skrll Exp $ */
+/* $NetBSD: exynos5410_clock.c,v 1.2.4.2 2017/07/18 19:13:08 snj Exp $ */
 
 /*-
  * Copyright (c) 2015-2017 Jared McNeill <jmcneill@invisible.ca>
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: exynos5410_clock.c,v 1.2 2017/06/20 17:43:51 skrll Exp $");
+__KERNEL_RCSID(0, "$NetBSD: exynos5410_clock.c,v 1.2.4.2 2017/07/18 19:13:08 snj Exp $");
 
 #include <sys/param.h>
 #include <sys/bus.h>
