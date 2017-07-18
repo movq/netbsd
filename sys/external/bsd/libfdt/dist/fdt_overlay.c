@@ -1,4 +1,4 @@
-/*	$NetBSD: fdt_overlay.c,v 1.1.1.1 2017/06/08 15:53:12 skrll Exp $	*/
+/*	$NetBSD: fdt_overlay.c,v 1.1.1.1.4.2 2017/07/18 17:08:08 snj Exp $	*/
 
 #include "libfdt_env.h"
 
