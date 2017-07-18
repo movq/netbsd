@@ -1,4 +1,4 @@
-/*	$NetBSD: overlay.c,v 1.1.1.1 2017/06/08 15:59:27 skrll Exp $	*/
+/*	$NetBSD: overlay.c,v 1.1.1.1.4.2 2017/07/18 17:17:53 snj Exp $	*/
 
 /*
  * libfdt - Flat Device Tree manipulation
