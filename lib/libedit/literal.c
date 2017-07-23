@@ -1,4 +1,4 @@
-/*	$NetBSD: literal.c,v 1.3 2017/06/30 20:26:52 kre Exp $	*/
+/*	$NetBSD: literal.c,v 1.3.4.2 2017/07/23 14:41:26 snj Exp $	*/
 
 /*-
  * Copyright (c) 2017 The NetBSD Foundation, Inc.
@@ -31,7 +31,7 @@
 
 #include "config.h"
 #if !defined(lint) && !defined(SCCSID)
-__RCSID("$NetBSD: literal.c,v 1.3 2017/06/30 20:26:52 kre Exp $");
+__RCSID("$NetBSD: literal.c,v 1.3.4.2 2017/07/23 14:41:26 snj Exp $");
 #endif /* not lint && not SCCSID */
 
 /*
