@@ -1,4 +1,4 @@
-/*	$NetBSD: literal.h,v 1.2 2017/06/30 20:26:52 kre Exp $	*/
+/*	$NetBSD: literal.h,v 1.2.4.2 2017/07/23 14:41:26 snj Exp $	*/
 
 /*-
  * Copyright (c) 2017 The NetBSD Foundation, Inc.
