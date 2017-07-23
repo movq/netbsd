@@ -1,4 +1,4 @@
-/*	$NetBSD: regsub.c,v 1.1 2016/01/09 02:00:14 christos Exp $	*/
+/*	$NetBSD: regsub.c,v 1.1.1.1 2017/07/23 01:04:41 mrg Exp $	*/
 
 /*-
  * Copyright (c) 2015 The NetBSD Foundation, Inc.
@@ -28,11 +28,10 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
-#include <sys/cdefs.h>
-__RCSID("$NetBSD: regsub.c,v 1.1 2016/01/09 02:00:14 christos Exp $");
+
+extern "C" {
 
 #include <sys/param.h>
-
 #include <ctype.h>
 #include <stdlib.h>
 #include <string.h>
@@ -45,6 +44,8 @@ struct str {
 	int s_fixed;
 };
 
+#define	REINCR	64
+
 static int
 addspace(struct str *s, size_t len)
 {
@@ -56,7 +57,7 @@ addspace(struct str *s, size_t len)
 	if (s->s_fixed)
 		return -1;
 
-	s->s_max += MAX(len, 64);
+	s->s_max += len + REINCR;
 
 	v = realloc(s->s_ptr, s->s_max);
 	if (v == NULL)
@@ -91,7 +92,7 @@ static int
 initstr(struct str *s, char *buf, size_t len)
 {
 	s->s_max = len;
-	s->s_ptr = buf == NULL ? (char *)malloc(len) : buf;
+	s->s_ptr = (char *)(buf == NULL ? malloc(len) : buf);
 	s->s_fixed = buf != NULL;
 	s->s_len = 0;
 	return s->s_ptr == NULL ? -1 : 0;
@@ -101,7 +102,7 @@ static ssize_t
 regsub1(char **buf, size_t len, const char *sub,
     const regmatch_t *rm, const char *str)
 {
-        ssize_t i;                 
+        ssize_t i;
         char c; 
 	struct str s;
 
@@ -147,15 +148,17 @@ regsub1(char **buf, size_t len, const char *sub,
 }
 
 ssize_t
-regsub(char *buf, size_t len, const char *sub, const regmatch_t *rm,
+regnsub(char *buf, size_t len, const char *sub, const regmatch_t *rm,
     const char *str)
 {
 	return regsub1(&buf, len, sub, rm, str);
 }
 
 ssize_t
-aregsub(char **buf, const char *sub, const regmatch_t *rm, const char *str)
+regasub(char **buf, const char *sub, const regmatch_t *rm, const char *str)
 {
 	*buf = NULL;
-	return regsub1(buf, 64, sub, rm, str);
+	return regsub1(buf, REINCR, sub, rm, str);
+}
+
 }

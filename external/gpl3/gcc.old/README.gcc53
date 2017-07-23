@@ -1,4 +1,4 @@
-$NetBSD: README.gcc53,v 1.1 2017/07/23 01:04:23 mrg Exp $
+$NetBSD: README.gcc53,v 1.1.1.1 2017/07/23 01:04:23 mrg Exp $
 
 lib:
 	libasan is disabled currently (haven't tried yet)
