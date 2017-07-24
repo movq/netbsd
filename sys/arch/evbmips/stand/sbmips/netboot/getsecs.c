@@ -1,4 +1,4 @@
-/* $NetBSD: getsecs.c,v 1.1 2017/07/24 08:56:29 mrg Exp $ */
+/* $NetBSD: getsecs.c,v 1.1.1.1 2017/07/24 08:56:29 mrg Exp $ */
 
 /*
  * Copyright 2001
