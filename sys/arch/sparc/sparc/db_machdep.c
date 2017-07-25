@@ -1,4 +1,4 @@
-/*	$NetBSD: db_machdep.c,v 1.1 2017/07/21 20:56:10 nakayama Exp $ */
+/*	$NetBSD: db_machdep.c,v 1.1.2.2 2017/07/25 02:11:14 snj Exp $ */
 
 /*
  * Mach Operating System
@@ -33,7 +33,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: db_machdep.c,v 1.1 2017/07/21 20:56:10 nakayama Exp $");
+__KERNEL_RCSID(0, "$NetBSD: db_machdep.c,v 1.1.2.2 2017/07/25 02:11:14 snj Exp $");
 
 #ifdef _KERNEL_OPT
 #include "opt_ddb.h"
