@@ -1,4 +1,4 @@
-# $NetBSD: dts.mk,v 1.2 2017/07/15 15:53:48 christos Exp $
+# $NetBSD: dts.mk,v 1.2.4.2 2017/07/25 01:58:09 snj Exp $
 
 DTSINC?=$S/external/gpl2/dts/dist/include
 DTSGNUPATH?=$S/external/gpl2/dts/dist/arch/${MACHINE_CPU}/boot/dts
