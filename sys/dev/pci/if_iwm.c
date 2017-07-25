@@ -1,4 +1,4 @@
-/*	$NetBSD: if_iwm.c,v 1.75 2017/07/23 10:55:00 para Exp $	*/
+/*	$NetBSD: if_iwm.c,v 1.75.2.2 2017/07/25 19:43:03 snj Exp $	*/
 /*	OpenBSD: if_iwm.c,v 1.148 2016/11/19 21:07:08 stsp Exp	*/
 #define IEEE80211_NO_HT
 /*
@@ -106,7 +106,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_iwm.c,v 1.75 2017/07/23 10:55:00 para Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_iwm.c,v 1.75.2.2 2017/07/25 19:43:03 snj Exp $");
 
 #include <sys/param.h>
 #include <sys/conf.h>
@@ -490,6 +490,13 @@ static void	iwm_wakeup(struct iwm_softc *);
 static void	iwm_radiotap_attach(struct iwm_softc *);
 static int	iwm_sysctl_fw_loaded_handler(SYSCTLFN_PROTO);
 
+/* XXX needed by iwn_scan */
+static u_int8_t	*ieee80211_add_ssid(u_int8_t *, const u_int8_t *, u_int);
+static u_int8_t	*ieee80211_add_rates(u_int8_t *,
+		    const struct ieee80211_rateset *);
+static u_int8_t	*ieee80211_add_xrates(u_int8_t *,
+		    const struct ieee80211_rateset *);
+
 static int iwm_sysctl_root_num;
 static int iwm_lar_disable;
 
@@ -534,6 +541,12 @@ iwm_firmload(struct iwm_softc *sc)
 
 	/* Read the firmware. */
 	fw->fw_rawdata = kmem_alloc(fw->fw_rawsize, KM_SLEEP);
+	if (fw->fw_rawdata == NULL) {
+		aprint_error_dev(sc->sc_dev,
+		    "not enough memory to stock firmware %s\n", sc->sc_fwname);
+		err = ENOMEM;
+		goto out;
+	}
 	err = firmware_read(fwh, 0, fw->fw_rawdata, fw->fw_rawsize);
 	if (err) {
 		aprint_error_dev(sc->sc_dev,
@@ -547,6 +560,58 @@ iwm_firmload(struct iwm_softc *sc)
 
 	firmware_close(fwh);
 	return err;
+}
+
+/*
+ * XXX code from OpenBSD src/sys/net80211/ieee80211_output.c
+ * Copyright (c) 2001 Atsushi Onoe
+ * Copyright (c) 2002, 2003 Sam Leffler, Errno Consulting
+ * Copyright (c) 2007-2009 Damien Bergamini
+ * All rights reserved.
+ */
+
+/*
+ * Add an SSID element to a frame (see 7.3.2.1).
+ */
+static u_int8_t *
+ieee80211_add_ssid(u_int8_t *frm, const u_int8_t *ssid, u_int len)
+{
+	*frm++ = IEEE80211_ELEMID_SSID;
+	*frm++ = len;
+	memcpy(frm, ssid, len);
+	return frm + len;
+}
+
+/*
+ * Add a supported rates element to a frame (see 7.3.2.2).
+ */
+static u_int8_t *
+ieee80211_add_rates(u_int8_t *frm, const struct ieee80211_rateset *rs)
+{
+	int nrates;
+
+	*frm++ = IEEE80211_ELEMID_RATES;
+	nrates = min(rs->rs_nrates, IEEE80211_RATE_SIZE);
+	*frm++ = nrates;
+	memcpy(frm, rs->rs_rates, nrates);
+	return frm + nrates;
+}
+
+/*
+ * Add an extended supported rates element to a frame (see 7.3.2.14).
+ */
+static u_int8_t *
+ieee80211_add_xrates(u_int8_t *frm, const struct ieee80211_rateset *rs)
+{
+	int nrates;
+
+	KASSERT(rs->rs_nrates > IEEE80211_RATE_SIZE);
+
+	*frm++ = IEEE80211_ELEMID_XRATES;
+	nrates = rs->rs_nrates - IEEE80211_RATE_SIZE;
+	*frm++ = nrates;
+	memcpy(frm, rs->rs_rates + IEEE80211_RATE_SIZE, nrates);
+	return frm + nrates;
 }
 
 /*
@@ -3044,7 +3109,7 @@ iwm_send_paging_cmd(struct iwm_softc *sc, const struct iwm_fw_sects *fws)
 			fw_paging_cmd.device_phy_addr.addr32[blk_idx] =
 			    htole32(dev_phy_addr);
 		}
-		dmap = sc->fw_paging_db[blk_idx].fw_paging_block.map;
+		dmap = sc->fw_paging_db[blk_idx].fw_paging_block.map,
 		bus_dmamap_sync(sc->sc_dmat, dmap, 0, dmap->dm_mapsize,
 		    BUS_DMASYNC_PREWRITE | BUS_DMASYNC_PREREAD);
 	}
@@ -3255,6 +3320,8 @@ iwm_nvm_init(struct iwm_softc *sc)
 	memset(nvm_sections, 0, sizeof(nvm_sections));
 
 	buf = kmem_alloc(bufsz, KM_SLEEP);
+	if (buf == NULL)
+		return ENOMEM;
 
 	for (i = 0; i < __arraycount(iwm_nvm_to_read); i++) {
 		section = iwm_nvm_to_read[i];
@@ -3266,6 +3333,10 @@ iwm_nvm_init(struct iwm_softc *sc)
 			continue;
 		}
 		nvm_sections[section].data = kmem_alloc(len, KM_SLEEP);
+		if (nvm_sections[section].data == NULL) {
+			err = ENOMEM;
+			break;
+		}
 		memcpy(nvm_sections[section].data, buf, len);
 		nvm_sections[section].length = len;
 	}
@@ -3950,7 +4021,7 @@ iwm_rx_rx_mpdu(struct iwm_softc *sc, struct iwm_rx_packet *pkt,
 	if (iwm_rx_addbuf(sc, IWM_RBUF_SIZE, sc->rxq.cur) != 0)
 		return;
 
-	m_set_rcvif(m, IC2IFP(ic));
+	m->m_pkthdr.rcvif = IC2IFP(ic);
 
 	if (le32toh(phy_info->channel) < __arraycount(ic->ic_channels))
 		c = &ic->ic_channels[le32toh(phy_info->channel)];
@@ -5353,6 +5424,9 @@ iwm_lmac_scan(struct iwm_softc *sc)
 	if (req_len > IWM_MAX_CMD_PAYLOAD_SIZE)
 		return ENOMEM;
 	req = kmem_zalloc(req_len, KM_SLEEP);
+	if (req == NULL)
+		return ENOMEM;
+
 	hcmd.len[0] = (uint16_t)req_len;
 	hcmd.data[0] = (void *)req;
 
@@ -5457,6 +5531,9 @@ iwm_config_umac_scan(struct iwm_softc *sc)
 	cmd_size = sizeof(*scan_config) + sc->sc_capa_n_scan_channels;
 
 	scan_config = kmem_zalloc(cmd_size, KM_SLEEP);
+	if (scan_config == NULL)
+		return ENOMEM;
+
 	scan_config->tx_chains = htole32(iwm_fw_valid_tx_ant(sc));
 	scan_config->rx_chains = htole32(iwm_fw_valid_rx_ant(sc));
 	scan_config->legacy_rates = htole32(rates |
@@ -5530,6 +5607,8 @@ iwm_umac_scan(struct iwm_softc *sc)
 	if (req_len > IWM_MAX_CMD_PAYLOAD_SIZE)
 		return ENOMEM;
 	req = kmem_zalloc(req_len, KM_SLEEP);
+	if (req == NULL)
+		return ENOMEM;
 
 	hcmd.len[0] = (uint16_t)req_len;
 	hcmd.data[0] = (void *)req;
@@ -6321,7 +6400,7 @@ iwm_newstate_cb(struct work *wk, void *v)
 	int arg = iwmns->ns_arg;
 	int s;
 
-	kmem_intr_free(iwmns, sizeof(*iwmns));
+	kmem_free(iwmns, sizeof(*iwmns));
 
 	s = splnet();
 
@@ -6809,7 +6888,7 @@ iwm_start(struct ifnet *ifp)
 		IF_DEQUEUE(&ic->ic_mgtq, m);
 		if (m) {
 			ni = M_GETCTX(m, struct ieee80211_node *);
-			M_CLEARCTX(m);
+			m->m_pkthdr.rcvif = NULL;
 			ac = WME_AC_BE;
 			goto sendit;
 		}
@@ -7556,7 +7635,7 @@ iwm_intr(void *arg)
 	/* Disable interrupts */
 	IWM_WRITE(sc, IWM_CSR_INT_MASK, 0);
 
-	softint_schedule(sc->sc_soft_ih);
+	iwm_softintr(arg);
 	return 1;
 }
 
@@ -7705,7 +7784,6 @@ static const pci_product_id_t iwm_devices[] = {
 	PCI_PRODUCT_INTEL_WIFI_LINK_8260_2,
 	PCI_PRODUCT_INTEL_WIFI_LINK_4165_1,
 	PCI_PRODUCT_INTEL_WIFI_LINK_4165_2,
-	PCI_PRODUCT_INTEL_WIFI_LINK_8265,
 };
 
 static int
@@ -7789,6 +7867,7 @@ iwm_attach(device_t parent, device_t self, void *aux)
 	struct ieee80211com *ic = &sc->sc_ic;
 	struct ifnet *ifp = &sc->sc_ec.ec_if;
 	pcireg_t reg, memtype;
+	pci_intr_handle_t ih;
 	char intrbuf[PCI_INTRSTR_LEN];
 	const char *intrstr;
 	int err;
@@ -7807,9 +7886,6 @@ iwm_attach(device_t parent, device_t self, void *aux)
 	    iwm_newstate_cb, sc, PRI_NONE, IPL_NET, 0))
 		panic("%s: could not create workqueue: newstate",
 		    device_xname(self));
-	sc->sc_soft_ih = softint_establish(SOFTINT_NET, iwm_softintr, sc);
-	if (sc->sc_soft_ih == NULL)
-		panic("%s: could not establish softint", device_xname(self));
 
 	/*
 	 * Get the offset of the PCI Express Capability Structure in PCI
@@ -7841,21 +7917,16 @@ iwm_attach(device_t parent, device_t self, void *aux)
 	}
 
 	/* Install interrupt handler. */
-	err = pci_intr_alloc(pa, &sc->sc_pihp, NULL, 0);
+	err = pci_intr_map(pa, &ih);
 	if (err) {
 		aprint_error_dev(self, "can't allocate interrupt\n");
 		return;
 	}
 	reg = pci_conf_read(sc->sc_pct, sc->sc_pcitag, PCI_COMMAND_STATUS_REG);
-	if (pci_intr_type(sc->sc_pct, sc->sc_pihp[0]) == PCI_INTR_TYPE_INTX)
-		CLR(reg, PCI_COMMAND_INTERRUPT_DISABLE);
-	else
-		SET(reg, PCI_COMMAND_INTERRUPT_DISABLE);
+	CLR(reg, PCI_COMMAND_INTERRUPT_DISABLE);
 	pci_conf_write(sc->sc_pct, sc->sc_pcitag, PCI_COMMAND_STATUS_REG, reg);
-	intrstr = pci_intr_string(sc->sc_pct, sc->sc_pihp[0], intrbuf,
-	    sizeof(intrbuf));
-	sc->sc_ih = pci_intr_establish_xname(sc->sc_pct, sc->sc_pihp[0],
-	    IPL_NET, iwm_intr, sc, device_xname(self));
+	intrstr = pci_intr_string(sc->sc_pct, ih, intrbuf, sizeof(intrbuf));
+	sc->sc_ih = pci_intr_establish(sc->sc_pct, ih, IPL_NET, iwm_intr, sc);
 	if (sc->sc_ih == NULL) {
 		aprint_error_dev(self, "can't establish interrupt");
 		if (intrstr != NULL)
@@ -8122,15 +8193,12 @@ iwm_attach(device_t parent, device_t self, void *aux)
 	IFQ_SET_READY(&ifp->if_snd);
 	memcpy(ifp->if_xname, DEVNAME(sc), IFNAMSIZ);
 
-	if_initialize(ifp);
+	if_attach(ifp);
 #if 0
 	ieee80211_ifattach(ic);
 #else
 	ether_ifattach(ifp, ic->ic_myaddr);	/* XXX */
 #endif
-	/* Use common softint-based if_input */
-	ifp->if_percpuq = if_percpuq_create(ifp);
-	if_register(ifp);
 
 	callout_init(&sc->sc_calib_to, 0);
 	callout_setfunc(&sc->sc_calib_to, iwm_calib_timeout, sc);

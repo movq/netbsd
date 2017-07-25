@@ -1,4 +1,4 @@
-/*	$NetBSD: if_iwmvar.h,v 1.18 2017/03/14 23:59:26 nonaka Exp $	*/
+/*	$NetBSD: if_iwmvar.h,v 1.18.10.2 2017/07/25 19:43:03 snj Exp $	*/
 /*	OpenBSD: if_iwmvar.h,v 1.24 2016/09/21 13:53:18 stsp Exp 	*/
 
 /*
@@ -383,7 +383,6 @@ struct iwm_softc {
 	pcitag_t sc_pcitag;
 	pcireg_t sc_pciid;
 	const void *sc_ih;
-	void *sc_soft_ih;
 
 	/* TX scheduler rings. */
 	struct iwm_dma_info		sched_dma;

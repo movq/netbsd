@@ -1,4 +1,4 @@
-/*	$NetBSD: if_iwmreg.h,v 1.6 2017/03/14 23:59:26 nonaka Exp $	*/
+/*	$NetBSD: if_iwmreg.h,v 1.6.10.2 2017/07/25 19:43:03 snj Exp $	*/
 /*	OpenBSD: if_iwmreg.h,v 1.19 2016/09/20 11:46:09 stsp Exp 	*/
 
 /*-
