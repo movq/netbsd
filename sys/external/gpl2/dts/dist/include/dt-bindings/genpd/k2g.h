@@ -1,4 +1,4 @@
-/*	$NetBSD: k2g.h,v 1.1 2017/07/27 18:10:50 jmcneill Exp $	*/
+/*	$NetBSD: k2g.h,v 1.1.1.1 2017/07/27 18:10:50 jmcneill Exp $	*/
 
 /*
  * TI K2G SoC Device definitions
