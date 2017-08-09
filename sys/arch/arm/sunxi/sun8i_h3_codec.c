@@ -1,4 +1,4 @@
-/* $NetBSD: sun8i_h3_codec.c,v 1.2 2017/08/07 21:50:34 jmcneill Exp $ */
+/* $NetBSD: sun8i_h3_codec.c,v 1.2.2.2 2017/08/09 05:49:50 snj Exp $ */
 
 /*-
  * Copyright (c) 2014-2017 Jared McNeill <jmcneill@invisible.ca>
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sun8i_h3_codec.c,v 1.2 2017/08/07 21:50:34 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sun8i_h3_codec.c,v 1.2.2.2 2017/08/09 05:49:50 snj Exp $");
 
 #include <sys/param.h>
 #include <sys/bus.h>
