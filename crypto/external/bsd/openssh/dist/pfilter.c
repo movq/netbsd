@@ -4,9 +4,13 @@
 #include "packet.h"
 #include "log.h"
 #include "pfilter.h"
-#include <blacklist.h>
+
+/* XXXMRG netbsd-6 ssh */
+#define SMALL
 
 #ifndef SMALL
+#include <blacklist.h>
+
 static struct blacklist *blstate;
 #endif
 
@@ -35,6 +39,6 @@ pfilter_notify(int a)
 		blstate = NULL;
 	}
 #else
-	__USE(a);
+	/*__USE(a);*/
 #endif
 }

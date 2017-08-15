@@ -6,7 +6,7 @@
  * Copied from supercop-20130419/crypto_sign/ed25519/ref/sc25519.c
  */
 #include "includes.h"
-__RCSID("$NetBSD: sc25519.c,v 1.5 2017/04/18 18:41:46 christos Exp $");
+__RCSID("$NetBSD: sc25519.c,v 1.5.10.2 2017/08/15 05:17:58 snj Exp $");
 
 #include "sc25519.h"
 

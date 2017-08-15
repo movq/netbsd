@@ -1,4 +1,4 @@
-/*	$NetBSD: ssh_api.h,v 1.4 2017/04/18 18:41:46 christos Exp $	*/
+/*	$NetBSD: ssh_api.h,v 1.4.10.2 2017/08/15 05:17:58 snj Exp $	*/
 /* $OpenBSD: ssh_api.h,v 1.1 2015/01/19 20:30:23 markus Exp $ */
 /*
  * Copyright (c) 2012 Markus Friedl.  All rights reserved.
