@@ -1,4 +1,4 @@
-/*	$NetBSD: krl.c,v 1.10 2017/04/18 18:41:46 christos Exp $	*/
+/*	$NetBSD: krl.c,v 1.10.12.2 2017/08/15 05:27:52 snj Exp $	*/
 
 /*
  * Copyright (c) 2012 Damien Miller <djm@mindrot.org>

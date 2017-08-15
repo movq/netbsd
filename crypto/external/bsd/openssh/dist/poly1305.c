@@ -5,7 +5,7 @@
 
 /* $OpenBSD: poly1305.c,v 1.3 2013/12/19 22:57:13 djm Exp $ */
 #include "includes.h"
-__RCSID("$NetBSD: poly1305.c,v 1.5 2017/04/18 18:41:46 christos Exp $");
+__RCSID("$NetBSD: poly1305.c,v 1.5.12.2 2017/08/15 05:27:52 snj Exp $");
 
 #include <sys/types.h>
 #include <stdint.h>
