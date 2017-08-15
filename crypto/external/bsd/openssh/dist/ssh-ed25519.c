@@ -16,7 +16,7 @@
  */
 #define SSHKEY_INTERNAL
 #include "includes.h"
-__RCSID("$NetBSD: ssh-ed25519.c,v 1.6 2017/04/18 18:41:46 christos Exp $");
+__RCSID("$NetBSD: ssh-ed25519.c,v 1.6.10.2 2017/08/15 05:17:58 snj Exp $");
 
 #include <sys/types.h>
 #include <limits.h>
