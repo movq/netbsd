@@ -8,7 +8,7 @@ D. J. Bernstein
 Public domain.
 */
 #include "includes.h"
-__RCSID("$NetBSD: hash.c,v 1.5 2017/04/18 18:41:46 christos Exp $");
+__RCSID("$NetBSD: hash.c,v 1.5.12.2 2017/08/15 05:27:52 snj Exp $");
 
 #include "crypto_api.h"
 

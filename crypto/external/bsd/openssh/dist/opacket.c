@@ -1,8 +1,8 @@
-/*	$NetBSD: opacket.c,v 1.7 2017/04/18 18:41:46 christos Exp $	*/
+/*	$NetBSD: opacket.c,v 1.7.12.2 2017/08/15 05:27:52 snj Exp $	*/
 /* Written by Markus Friedl. Placed in the public domain.  */
 
 #include "includes.h"
-__RCSID("$NetBSD: opacket.c,v 1.7 2017/04/18 18:41:46 christos Exp $");
+__RCSID("$NetBSD: opacket.c,v 1.7.12.2 2017/08/15 05:27:52 snj Exp $");
 
 #include "ssherr.h"
 #include "packet.h"
