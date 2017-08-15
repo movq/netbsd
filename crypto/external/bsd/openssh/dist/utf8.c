@@ -1,4 +1,4 @@
-/*	$NetBSD: utf8.c,v 1.5 2017/04/18 18:41:46 christos Exp $	*/
+/*	$NetBSD: utf8.c,v 1.5.8.2 2017/08/15 04:53:01 snj Exp $	*/
 /*
  * Copyright (c) 2016 Ingo Schwarze <schwarze@openbsd.org>
  *
@@ -16,7 +16,7 @@
  */
 
 #include "includes.h"
-__RCSID("$NetBSD: utf8.c,v 1.5 2017/04/18 18:41:46 christos Exp $");
+__RCSID("$NetBSD: utf8.c,v 1.5.8.2 2017/08/15 04:53:01 snj Exp $");
 /*
  * Utility functions for multibyte-character handling,
  * in particular to sanitize untrusted strings for terminal output.
