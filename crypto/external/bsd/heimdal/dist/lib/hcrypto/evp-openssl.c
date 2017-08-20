@@ -1,4 +1,4 @@
-/*	$NetBSD: evp-openssl.c,v 1.2 2017/01/28 21:31:47 christos Exp $	*/
+/*	$NetBSD: evp-openssl.c,v 1.2.14.2 2017/08/20 05:44:18 snj Exp $	*/
 
 /*
  * Copyright (c) 2016, Kungliga Tekniska Högskolan

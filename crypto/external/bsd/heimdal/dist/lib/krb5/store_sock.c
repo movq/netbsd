@@ -1,4 +1,4 @@
-/*	$NetBSD: store_sock.c,v 1.2 2017/01/28 21:31:49 christos Exp $	*/
+/*	$NetBSD: store_sock.c,v 1.2.14.2 2017/08/20 05:44:22 snj Exp $	*/
 
 /*
  * Copyright (c) 1997 - 2004 Kungliga Tekniska Högskolan
