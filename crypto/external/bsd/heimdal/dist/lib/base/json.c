@@ -1,4 +1,4 @@
-/*	$NetBSD: json.c,v 1.2 2017/01/28 21:31:45 christos Exp $	*/
+/*	$NetBSD: json.c,v 1.2.12.2 2017/08/20 05:42:02 snj Exp $	*/
 
 /*
  * Copyright (c) 2010 Kungliga Tekniska Högskolan
