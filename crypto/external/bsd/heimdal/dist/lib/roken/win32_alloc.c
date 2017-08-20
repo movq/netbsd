@@ -1,4 +1,4 @@
-/*	$NetBSD: win32_alloc.c,v 1.2 2017/01/28 21:31:50 christos Exp $	*/
+/*	$NetBSD: win32_alloc.c,v 1.2.16.2 2017/08/20 05:46:43 snj Exp $	*/
 
 /***********************************************************************
  * Copyright (c) 2012, Secure Endpoints Inc.

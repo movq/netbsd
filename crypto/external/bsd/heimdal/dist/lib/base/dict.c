@@ -1,4 +1,4 @@
-/*	$NetBSD: dict.c,v 1.2 2017/01/28 21:31:45 christos Exp $	*/
+/*	$NetBSD: dict.c,v 1.2.16.2 2017/08/20 05:46:35 snj Exp $	*/
 
 /*
  * Copyright (c) 2002, 1997 Kungliga Tekniska Högskolan

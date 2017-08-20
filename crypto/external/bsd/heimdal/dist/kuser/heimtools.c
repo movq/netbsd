@@ -1,4 +1,4 @@
-/*	$NetBSD: heimtools.c,v 1.2 2017/01/28 21:31:45 christos Exp $	*/
+/*	$NetBSD: heimtools.c,v 1.2.16.2 2017/08/20 05:46:34 snj Exp $	*/
 
 /*
  * Copyright (c) 2010 Kungliga Tekniska Högskolan

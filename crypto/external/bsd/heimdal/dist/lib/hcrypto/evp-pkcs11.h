@@ -1,4 +1,4 @@
-/*	$NetBSD: evp-pkcs11.h,v 1.2 2017/01/28 21:31:47 christos Exp $	*/
+/*	$NetBSD: evp-pkcs11.h,v 1.2.16.2 2017/08/20 05:46:37 snj Exp $	*/
 
 /*
  * Copyright (c) 2015, Secure Endpoints Inc.
