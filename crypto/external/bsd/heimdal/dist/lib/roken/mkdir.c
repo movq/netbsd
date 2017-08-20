@@ -1,4 +1,4 @@
-/*	$NetBSD: mkdir.c,v 1.2 2017/01/28 21:31:50 christos Exp $	*/
+/*	$NetBSD: mkdir.c,v 1.2.14.2 2017/08/20 05:44:23 snj Exp $	*/
 
 /*
  * Copyright (c) 2013 Kungliga Tekniska Högskolan
