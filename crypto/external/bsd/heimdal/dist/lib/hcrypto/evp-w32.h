@@ -1,4 +1,4 @@
-/*	$NetBSD: evp-w32.h,v 1.2 2017/01/28 21:31:47 christos Exp $	*/
+/*	$NetBSD: evp-w32.h,v 1.2.12.2 2017/08/20 05:42:04 snj Exp $	*/
 
 /*
  * Copyright (c) 2015, Secure Endpoints Inc.

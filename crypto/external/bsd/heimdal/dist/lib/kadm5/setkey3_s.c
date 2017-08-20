@@ -1,4 +1,4 @@
-/*	$NetBSD: setkey3_s.c,v 1.2 2017/01/28 21:31:49 christos Exp $	*/
+/*	$NetBSD: setkey3_s.c,v 1.2.12.2 2017/08/20 05:42:06 snj Exp $	*/
 
 /*
  * Copyright (c) 1997-2001, 2003, 2005-2006 Kungliga Tekniska Högskolan
