@@ -1,4 +1,4 @@
-/*	$NetBSD: axis,artpec6-clkctrl.h,v 1.1.1.1 2017/06/15 20:14:23 jmcneill Exp $	*/
+/*	$NetBSD: axis,artpec6-clkctrl.h,v 1.1.1.1.6.2 2017/08/28 17:53:00 skrll Exp $	*/
 
 /*
  * ARTPEC-6 clock controller indexes

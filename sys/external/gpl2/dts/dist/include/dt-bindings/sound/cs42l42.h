@@ -1,4 +1,4 @@
-/*	$NetBSD: cs42l42.h,v 1.1.1.1 2017/06/15 20:14:23 jmcneill Exp $	*/
+/*	$NetBSD: cs42l42.h,v 1.1.1.1.6.2 2017/08/28 17:53:05 skrll Exp $	*/
 
 /*
  * cs42l42.h -- CS42L42 ALSA SoC audio driver DT bindings header

@@ -1,4 +1,4 @@
-/*	$NetBSD: umodeswitch.c,v 1.3 2017/08/05 12:38:08 khorben Exp $	*/
+/*	$NetBSD: umodeswitch.c,v 1.3.2.2 2017/08/28 17:52:28 skrll Exp $	*/
 
 /*-
  * Copyright (c) 2009, 2017 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
 
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: umodeswitch.c,v 1.3 2017/08/05 12:38:08 khorben Exp $");
+__KERNEL_RCSID(0, "$NetBSD: umodeswitch.c,v 1.3.2.2 2017/08/28 17:52:28 skrll Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

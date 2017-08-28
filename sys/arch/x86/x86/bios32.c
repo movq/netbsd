@@ -1,4 +1,4 @@
-/*	$NetBSD: bios32.c,v 1.2 2017/08/15 06:37:50 maxv Exp $	*/
+/*	$NetBSD: bios32.c,v 1.2.2.2 2017/08/28 17:51:56 skrll Exp $	*/
 
 /*
  * Copyright (c) 1999 The NetBSD Foundation, Inc.
@@ -86,7 +86,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: bios32.c,v 1.2 2017/08/15 06:37:50 maxv Exp $");
+__KERNEL_RCSID(0, "$NetBSD: bios32.c,v 1.2.2.2 2017/08/28 17:51:56 skrll Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

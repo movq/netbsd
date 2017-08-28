@@ -1,4 +1,4 @@
-/* $NetBSD: sun50i_a64_gpio.c,v 1.1 2017/07/23 10:16:08 jmcneill Exp $ */
+/* $NetBSD: sun50i_a64_gpio.c,v 1.1.2.2 2017/08/28 17:51:32 skrll Exp $ */
 
 /*-
  * Copyright (c) 2016 Jared McNeill <jmcneill@invisible.ca>
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sun50i_a64_gpio.c,v 1.1 2017/07/23 10:16:08 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sun50i_a64_gpio.c,v 1.1.2.2 2017/08/28 17:51:32 skrll Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

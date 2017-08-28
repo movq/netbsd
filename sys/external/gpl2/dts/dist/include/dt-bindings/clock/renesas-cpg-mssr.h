@@ -1,4 +1,4 @@
-/*	$NetBSD: renesas-cpg-mssr.h,v 1.1.1.1 2017/06/15 20:14:23 jmcneill Exp $	*/
+/*	$NetBSD: renesas-cpg-mssr.h,v 1.1.1.1.6.2 2017/08/28 17:53:01 skrll Exp $	*/
 
 /*
  * Copyright (C) 2015 Renesas Electronics Corp.

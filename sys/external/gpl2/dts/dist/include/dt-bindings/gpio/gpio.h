@@ -1,4 +1,4 @@
-/*	$NetBSD: gpio.h,v 1.1.1.2 2017/07/27 18:10:50 jmcneill Exp $	*/
+/*	$NetBSD: gpio.h,v 1.1.1.2.2.2 2017/08/28 17:53:02 skrll Exp $	*/
 
 /*
  * This header provides constants for most GPIO bindings.

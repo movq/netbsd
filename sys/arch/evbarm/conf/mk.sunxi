@@ -1,4 +1,4 @@
-#	$NetBSD: mk.sunxi,v 1.2 2017/07/24 19:37:41 joerg Exp $
+#	$NetBSD: mk.sunxi,v 1.2.2.2 2017/08/28 17:51:34 skrll Exp $
 
 SYSTEM_FIRST_OBJ=	sunxi_start.o
 SYSTEM_FIRST_SFILE=	${THISARM}/sunxi/sunxi_start.S

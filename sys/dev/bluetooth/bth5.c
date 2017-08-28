@@ -1,4 +1,4 @@
-/*	$NetBSD: bth5.c,v 1.4 2017/08/14 12:51:11 nat Exp $	*/
+/*	$NetBSD: bth5.c,v 1.4.2.2 2017/08/28 17:52:01 skrll Exp $	*/
 /*
  * Copyright (c) 2017 Nathanial Sloss <nathanialsloss@yahoo.com.au>
  * All rights reserved.
@@ -29,7 +29,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: bth5.c,v 1.4 2017/08/14 12:51:11 nat Exp $");
+__KERNEL_RCSID(0, "$NetBSD: bth5.c,v 1.4.2.2 2017/08/28 17:52:01 skrll Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>

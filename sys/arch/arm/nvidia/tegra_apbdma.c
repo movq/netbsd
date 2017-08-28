@@ -1,4 +1,4 @@
-/* $NetBSD: tegra_apbdma.c,v 1.3 2017/05/03 13:13:12 jakllsch Exp $ */
+/* $NetBSD: tegra_apbdma.c,v 1.3.6.2 2017/08/28 17:51:31 skrll Exp $ */
 
 /*-
  * Copyright (c) 2017 Jared D. McNeill <jmcneill@invisible.ca>
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: tegra_apbdma.c,v 1.3 2017/05/03 13:13:12 jakllsch Exp $");
+__KERNEL_RCSID(0, "$NetBSD: tegra_apbdma.c,v 1.3.6.2 2017/08/28 17:51:31 skrll Exp $");
 
 #include <sys/param.h>
 #include <sys/bus.h>

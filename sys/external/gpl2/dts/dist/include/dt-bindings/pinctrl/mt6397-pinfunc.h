@@ -1,4 +1,4 @@
-/*	$NetBSD: mt6397-pinfunc.h,v 1.1.1.1 2017/06/15 20:14:23 jmcneill Exp $	*/
+/*	$NetBSD: mt6397-pinfunc.h,v 1.1.1.1.6.2 2017/08/28 17:53:03 skrll Exp $	*/
 
 #ifndef __DTS_MT6397_PINFUNC_H
 #define __DTS_MT6397_PINFUNC_H

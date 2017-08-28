@@ -1,4 +1,4 @@
-/*	$NetBSD: locore_ingenic.S,v 1.1 2017/05/21 06:49:13 skrll Exp $	*/
+/*	$NetBSD: locore_ingenic.S,v 1.1.6.2 2017/08/28 17:51:45 skrll Exp $	*/
 
 /*-
  * Copyright (c) 2017 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <mips/asm.h>
-RCSID("$NetBSD: locore_ingenic.S,v 1.1 2017/05/21 06:49:13 skrll Exp $")
+RCSID("$NetBSD: locore_ingenic.S,v 1.1.6.2 2017/08/28 17:51:45 skrll Exp $")
 
 #include <mips/cpuregs.h>
 #include <mips/ingenic/ingenic_coreregs.h>

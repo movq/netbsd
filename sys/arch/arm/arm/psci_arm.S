@@ -1,4 +1,4 @@
-/* $NetBSD: psci_arm.S,v 1.1 2017/06/28 23:48:23 jmcneill Exp $ */
+/* $NetBSD: psci_arm.S,v 1.1.6.2 2017/08/28 17:51:29 skrll Exp $ */
 
 /*-
  * Copyright (c) 2017 Jared McNeill <jmcneill@invisible.ca>
@@ -28,7 +28,7 @@
 
 #include <machine/asm.h>
 
-RCSID("$NetBSD: psci_arm.S,v 1.1 2017/06/28 23:48:23 jmcneill Exp $");
+RCSID("$NetBSD: psci_arm.S,v 1.1.6.2 2017/08/28 17:51:29 skrll Exp $");
 
 	.arch		armv7a
 	.arch_extension	sec

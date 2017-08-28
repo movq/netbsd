@@ -1,4 +1,4 @@
-/*	$NetBSD: tegra124-car-common.h,v 1.1.1.2 2017/07/27 18:10:51 jmcneill Exp $	*/
+/*	$NetBSD: tegra124-car-common.h,v 1.1.1.2.2.2 2017/08/28 17:53:01 skrll Exp $	*/
 
 /*
  * This header provides constants for binding nvidia,tegra124-car or

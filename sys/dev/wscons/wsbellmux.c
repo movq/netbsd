@@ -1,4 +1,4 @@
-/* $NetBSD: wsbellmux.c,v 1.1 2017/06/11 03:55:56 nat Exp $ */
+/* $NetBSD: wsbellmux.c,v 1.1.4.2 2017/08/28 17:52:31 skrll Exp $ */
 /*-
  * Copyright (c) 2017 Nathanial Sloss <nathanialsloss@yahoo.com.au>
  * All rights reserved.
@@ -26,7 +26,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: wsbellmux.c,v 1.1 2017/06/11 03:55:56 nat Exp $");
+__KERNEL_RCSID(0, "$NetBSD: wsbellmux.c,v 1.1.4.2 2017/08/28 17:52:31 skrll Exp $");
 
 #include <sys/param.h>
 #include <sys/conf.h>

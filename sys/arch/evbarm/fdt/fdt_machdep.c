@@ -1,4 +1,4 @@
-/* $NetBSD: fdt_machdep.c,v 1.13 2017/08/24 11:33:28 jmcneill Exp $ */
+/* $NetBSD: fdt_machdep.c,v 1.13.2.2 2017/08/28 17:51:34 skrll Exp $ */
 
 /*-
  * Copyright (c) 2015-2017 Jared McNeill <jmcneill@invisible.ca>
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: fdt_machdep.c,v 1.13 2017/08/24 11:33:28 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: fdt_machdep.c,v 1.13.2.2 2017/08/28 17:51:34 skrll Exp $");
 
 #include "opt_machdep.h"
 #include "opt_ddb.h"

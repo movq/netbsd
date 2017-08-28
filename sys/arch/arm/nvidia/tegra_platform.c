@@ -1,4 +1,4 @@
-/* $NetBSD: tegra_platform.c,v 1.7 2017/07/20 01:46:15 jmcneill Exp $ */
+/* $NetBSD: tegra_platform.c,v 1.7.2.2 2017/08/28 17:51:31 skrll Exp $ */
 
 /*-
  * Copyright (c) 2017 Jared D. McNeill <jmcneill@invisible.ca>
@@ -33,7 +33,7 @@
 #include "ukbd.h"
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: tegra_platform.c,v 1.7 2017/07/20 01:46:15 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: tegra_platform.c,v 1.7.2.2 2017/08/28 17:51:31 skrll Exp $");
 
 #include <sys/param.h>
 #include <sys/bus.h>

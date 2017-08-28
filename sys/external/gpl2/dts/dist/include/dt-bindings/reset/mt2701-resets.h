@@ -1,4 +1,4 @@
-/*	$NetBSD: mt2701-resets.h,v 1.1.1.2 2017/07/27 18:10:50 jmcneill Exp $	*/
+/*	$NetBSD: mt2701-resets.h,v 1.1.1.2.2.2 2017/08/28 17:53:04 skrll Exp $	*/
 
 /*
  * Copyright (c) 2015 MediaTek, Shunli Wang <shunli.wang@mediatek.com>

@@ -1,4 +1,4 @@
-/* $NetBSD: wsbellvar.h,v 1.3 2017/06/13 00:54:37 nat Exp $ */
+/* $NetBSD: wsbellvar.h,v 1.3.4.2 2017/08/28 17:52:31 skrll Exp $ */
 /*-
  * Copyright (c) 2017 Nathanial Sloss <nathanialsloss@yahoo.com.au>
  * All rights reserved.

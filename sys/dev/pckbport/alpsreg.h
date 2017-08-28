@@ -1,4 +1,4 @@
-/* $NetBSD: alpsreg.h,v 1.1 2017/08/13 08:49:27 christos Exp $ */
+/* $NetBSD: alpsreg.h,v 1.1.2.2 2017/08/28 17:52:26 skrll Exp $ */
 
 /*-
  * Copyright (c) 2017 Ryo ONODERA <ryo@tetera.org>

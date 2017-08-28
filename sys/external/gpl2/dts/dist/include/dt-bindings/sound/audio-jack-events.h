@@ -1,4 +1,4 @@
-/*	$NetBSD: audio-jack-events.h,v 1.1.1.1 2017/06/15 20:14:23 jmcneill Exp $	*/
+/*	$NetBSD: audio-jack-events.h,v 1.1.1.1.6.2 2017/08/28 17:53:05 skrll Exp $	*/
 
 #ifndef __AUDIO_JACK_EVENTS_H
 #define __AUDIO_JACK_EVENTS_H

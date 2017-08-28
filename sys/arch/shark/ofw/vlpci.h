@@ -1,4 +1,4 @@
-/* $NetBSD: vlpci.h,v 1.1 2017/04/18 14:11:42 flxd Exp $ */
+/* $NetBSD: vlpci.h,v 1.1.12.2 2017/08/28 17:51:52 skrll Exp $ */
 
 /*-
  * Copyright (c) 2017, Felix Deichmann

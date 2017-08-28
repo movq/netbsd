@@ -1,4 +1,4 @@
-/* $NetBSD: booted_dev.c,v 1.2 2017/07/24 10:34:54 mrg Exp $ */
+/* $NetBSD: booted_dev.c,v 1.2.2.2 2017/08/28 17:51:37 skrll Exp $ */
 
 /*
  * Copyright 2000, 2001

@@ -1,4 +1,4 @@
-/* $NetBSD: fixedclock.c,v 1.2 2017/04/21 19:18:05 jmcneill Exp $ */
+/* $NetBSD: fixedclock.c,v 1.2.10.2 2017/08/28 17:52:02 skrll Exp $ */
 
 /*-
  * Copyright (c) 2017 Jared D. McNeill <jmcneill@invisible.ca>
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: fixedclock.c,v 1.2 2017/04/21 19:18:05 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: fixedclock.c,v 1.2.10.2 2017/08/28 17:52:02 skrll Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

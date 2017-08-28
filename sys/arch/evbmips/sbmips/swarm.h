@@ -1,4 +1,4 @@
-/* $NetBSD: swarm.h,v 1.1.1.1 2017/07/24 09:21:50 mrg Exp $ */
+/* $NetBSD: swarm.h,v 1.1.1.1.2.2 2017/08/28 17:51:36 skrll Exp $ */
 
 /*
  * I/O Address assignments for the CSWARM board
