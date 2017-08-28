@@ -1,4 +1,4 @@
-/*	$NetBSD: can_link.h,v 1.2 2017/05/27 21:02:56 bouyer Exp $	*/
+/*	$NetBSD: can_link.h,v 1.2.6.2 2017/08/28 17:53:12 skrll Exp $	*/
 
 /*-
  * Copyright (c) 2017 The NetBSD Foundation, Inc.

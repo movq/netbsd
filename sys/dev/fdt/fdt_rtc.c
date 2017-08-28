@@ -1,4 +1,4 @@
-/* $NetBSD: fdt_rtc.c,v 1.1 2017/04/22 13:24:20 jmcneill Exp $ */
+/* $NetBSD: fdt_rtc.c,v 1.1.10.2 2017/08/28 17:52:02 skrll Exp $ */
 
 /*-
  * Copyright (c) 2017 Jared D. McNeill <jmcneill@invisible.ca>
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: fdt_rtc.c,v 1.1 2017/04/22 13:24:20 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: fdt_rtc.c,v 1.1.10.2 2017/08/28 17:52:02 skrll Exp $");
 
 #include <sys/param.h>
 #include <sys/bus.h>

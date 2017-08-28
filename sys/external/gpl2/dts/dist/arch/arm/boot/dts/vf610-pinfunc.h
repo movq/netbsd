@@ -1,4 +1,4 @@
-/*	$NetBSD: vf610-pinfunc.h,v 1.1.1.1 2017/06/15 20:14:25 jmcneill Exp $	*/
+/*	$NetBSD: vf610-pinfunc.h,v 1.1.1.1.6.2 2017/08/28 17:52:53 skrll Exp $	*/
 
 /*
  * Copyright 2013 Freescale Semiconductor, Inc.

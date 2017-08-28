@@ -1,4 +1,4 @@
-/* $NetBSD: sunxi_ccu_gate.c,v 1.2 2017/06/29 17:06:21 jmcneill Exp $ */
+/* $NetBSD: sunxi_ccu_gate.c,v 1.2.6.2 2017/08/28 17:51:32 skrll Exp $ */
 
 /*-
  * Copyright (c) 2017 Jared McNeill <jmcneill@invisible.ca>
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sunxi_ccu_gate.c,v 1.2 2017/06/29 17:06:21 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sunxi_ccu_gate.c,v 1.2.6.2 2017/08/28 17:51:32 skrll Exp $");
 
 #include <sys/param.h>
 #include <sys/bus.h>

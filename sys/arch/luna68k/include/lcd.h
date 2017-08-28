@@ -1,4 +1,4 @@
-/* $NetBSD: lcd.h,v 1.1 2017/03/09 14:05:58 tsutsui Exp $ */
+/* $NetBSD: lcd.h,v 1.1.14.2 2017/08/28 17:51:43 skrll Exp $ */
 /* $OpenBSD: lcd.h,v 1.2 2011/03/23 16:54:35 pirofti Exp $ */
 
 /* 

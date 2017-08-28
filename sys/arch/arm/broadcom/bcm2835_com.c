@@ -1,4 +1,4 @@
-/* $NetBSD: bcm2835_com.c,v 1.3 2017/07/31 23:54:19 jmcneill Exp $ */
+/* $NetBSD: bcm2835_com.c,v 1.3.2.2 2017/08/28 17:51:29 skrll Exp $ */
 
 /*-
  * Copyright (c) 2017 Jared McNeill <jmcneill@invisible.ca>
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: bcm2835_com.c,v 1.3 2017/07/31 23:54:19 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: bcm2835_com.c,v 1.3.2.2 2017/08/28 17:51:29 skrll Exp $");
 
 #include <sys/param.h>
 #include <sys/bus.h>

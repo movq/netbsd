@@ -1,4 +1,4 @@
-/*	$NetBSD: if_l2tp.c,v 1.11 2017/06/01 02:45:14 chs Exp $	*/
+/*	$NetBSD: if_l2tp.c,v 1.11.6.2 2017/08/28 17:53:11 skrll Exp $	*/
 
 /*
  * Copyright (c) 2017 Internet Initiative Japan Inc.
@@ -31,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_l2tp.c,v 1.11 2017/06/01 02:45:14 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_l2tp.c,v 1.11.6.2 2017/08/28 17:53:11 skrll Exp $");
 
 #ifdef _KERNEL_OPT
 #include "opt_inet.h"

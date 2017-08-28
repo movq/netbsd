@@ -1,4 +1,4 @@
-/* $NetBSD: vmtvar.h,v 1.1 2017/05/23 08:48:34 nonaka Exp $ */
+/* $NetBSD: vmtvar.h,v 1.1.6.2 2017/08/28 17:51:56 skrll Exp $ */
 /* NetBSD: vmt.c,v 1.15 2016/11/10 03:32:04 ozaki-r Exp */
 /* $OpenBSD: vmt.c,v 1.11 2011/01/27 21:29:25 dtucker Exp $ */
 

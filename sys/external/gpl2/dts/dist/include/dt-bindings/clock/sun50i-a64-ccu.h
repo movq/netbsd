@@ -1,4 +1,4 @@
-/*	$NetBSD: sun50i-a64-ccu.h,v 1.1.1.2 2017/07/27 18:10:51 jmcneill Exp $	*/
+/*	$NetBSD: sun50i-a64-ccu.h,v 1.1.1.2.2.2 2017/08/28 17:53:01 skrll Exp $	*/
 
 /*
  * Copyright (C) 2016 Maxime Ripard <maxime.ripard@free-electrons.com>

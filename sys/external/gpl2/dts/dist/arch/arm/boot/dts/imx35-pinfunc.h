@@ -1,4 +1,4 @@
-/*	$NetBSD: imx35-pinfunc.h,v 1.1.1.1 2017/06/15 20:14:24 jmcneill Exp $	*/
+/*	$NetBSD: imx35-pinfunc.h,v 1.1.1.1.6.2 2017/08/28 17:52:41 skrll Exp $	*/
 
 /*
  * Copyright 2013 Freescale Semiconductor, Inc.

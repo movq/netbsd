@@ -1,4 +1,4 @@
-/*	$NetBSD: marvell,pxa910.h,v 1.1.1.1 2017/06/15 20:14:23 jmcneill Exp $	*/
+/*	$NetBSD: marvell,pxa910.h,v 1.1.1.1.6.2 2017/08/28 17:53:00 skrll Exp $	*/
 
 #ifndef __DTS_MARVELL_PXA910_CLOCK_H
 #define __DTS_MARVELL_PXA910_CLOCK_H

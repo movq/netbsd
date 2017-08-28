@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.1 2017/02/16 08:39:10 knakahara Exp $
+#	$NetBSD: Makefile,v 1.1.14.2 2017/08/28 17:53:15 skrll Exp $
 #
 
 .PATH:	${.CURDIR}/../../../../net ${.CURDIR}/../../../../netinet	\

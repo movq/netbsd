@@ -1,4 +1,4 @@
-/*	$NetBSD: mt8173-pinfunc.h,v 1.1.1.1 2017/06/15 20:14:25 jmcneill Exp $	*/
+/*	$NetBSD: mt8173-pinfunc.h,v 1.1.1.1.6.2 2017/08/28 17:52:56 skrll Exp $	*/
 
 /*
  * Copyright (c) 2014 MediaTek Inc.

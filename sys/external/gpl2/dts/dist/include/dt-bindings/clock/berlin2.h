@@ -1,4 +1,4 @@
-/*	$NetBSD: berlin2.h,v 1.1.1.1 2017/06/15 20:14:23 jmcneill Exp $	*/
+/*	$NetBSD: berlin2.h,v 1.1.1.1.6.2 2017/08/28 17:53:00 skrll Exp $	*/
 
 /*
  * Berlin2 BG2/BG2CD clock tree IDs

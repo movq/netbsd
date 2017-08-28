@@ -1,4 +1,4 @@
-/*	$NetBSD: stm32f746-pinfunc.h,v 1.1.1.1 2017/06/15 20:14:23 jmcneill Exp $	*/
+/*	$NetBSD: stm32f746-pinfunc.h,v 1.1.1.1.6.2 2017/08/28 17:53:03 skrll Exp $	*/
 
 #ifndef _DT_BINDINGS_STM32F746_PINFUNC_H
 #define _DT_BINDINGS_STM32F746_PINFUNC_H

@@ -1,4 +1,4 @@
-/* $NetBSD: rtc.c,v 1.2 2017/07/24 09:56:45 mrg Exp $ */
+/* $NetBSD: rtc.c,v 1.2.2.2 2017/08/28 17:51:36 skrll Exp $ */
 
 /*
  * Copyright 2002 Wasabi Systems, Inc.
@@ -36,7 +36,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: rtc.c,v 1.2 2017/07/24 09:56:45 mrg Exp $");
+__KERNEL_RCSID(0, "$NetBSD: rtc.c,v 1.2.2.2 2017/08/28 17:51:36 skrll Exp $");
 
 #include <sys/param.h>
 #include <sys/device.h>

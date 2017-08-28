@@ -1,4 +1,4 @@
-/* $NetBSD: armv7_generic_dma.c,v 1.1 2017/05/28 00:34:51 jmcneill Exp $ */
+/* $NetBSD: armv7_generic_dma.c,v 1.1.6.2 2017/08/28 17:51:29 skrll Exp $ */
 
 /*-
  * Copyright (c) 2017 Jared McNeill <jmcneill@invisible.ca>
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: armv7_generic_dma.c,v 1.1 2017/05/28 00:34:51 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: armv7_generic_dma.c,v 1.1.6.2 2017/08/28 17:51:29 skrll Exp $");
 
 #define	_ARM32_BUS_DMA_PRIVATE
 #include <sys/param.h>

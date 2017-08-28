@@ -1,4 +1,4 @@
-/*	$NetBSD: linux-event-codes.h,v 1.3 2017/07/29 23:09:10 jmcneill Exp $	*/
+/*	$NetBSD: linux-event-codes.h,v 1.3.2.2 2017/08/28 17:53:02 skrll Exp $	*/
 
 /*
  * Input event codes

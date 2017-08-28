@@ -1,4 +1,4 @@
-/*	$NetBSD: mt7623-pinfunc.h,v 1.1.1.2 2017/07/27 18:10:50 jmcneill Exp $	*/
+/*	$NetBSD: mt7623-pinfunc.h,v 1.1.1.2.2.2 2017/08/28 17:53:03 skrll Exp $	*/
 
 #ifndef __DTS_MT7623_PINFUNC_H
 #define __DTS_MT7623_PINFUNC_H

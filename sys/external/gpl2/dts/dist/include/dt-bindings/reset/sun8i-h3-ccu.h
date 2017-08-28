@@ -1,4 +1,4 @@
-/*	$NetBSD: sun8i-h3-ccu.h,v 1.1.1.2 2017/07/27 18:10:50 jmcneill Exp $	*/
+/*	$NetBSD: sun8i-h3-ccu.h,v 1.1.1.2.2.2 2017/08/28 17:53:04 skrll Exp $	*/
 
 /*
  * Copyright (C) 2016 Maxime Ripard <maxime.ripard@free-electrons.com>

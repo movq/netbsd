@@ -1,4 +1,4 @@
-/* $NetBSD: fdt_phy.c,v 1.1 2017/06/29 17:04:17 jmcneill Exp $ */
+/* $NetBSD: fdt_phy.c,v 1.1.6.2 2017/08/28 17:52:02 skrll Exp $ */
 
 /*-
  * Copyright (c) 2015-2017 Jared McNeill <jmcneill@invisible.ca>
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: fdt_phy.c,v 1.1 2017/06/29 17:04:17 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: fdt_phy.c,v 1.1.6.2 2017/08/28 17:52:02 skrll Exp $");
 
 #include <sys/param.h>
 #include <sys/bus.h>

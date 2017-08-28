@@ -1,4 +1,4 @@
-/* $NetBSD: tegra210_car.c,v 1.1 2017/07/21 01:01:22 jmcneill Exp $ */
+/* $NetBSD: tegra210_car.c,v 1.1.2.2 2017/08/28 17:51:31 skrll Exp $ */
 
 /*-
  * Copyright (c) 2015-2017 Jared McNeill <jmcneill@invisible.ca>
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: tegra210_car.c,v 1.1 2017/07/21 01:01:22 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: tegra210_car.c,v 1.1.2.2 2017/08/28 17:51:31 skrll Exp $");
 
 #include <sys/param.h>
 #include <sys/bus.h>

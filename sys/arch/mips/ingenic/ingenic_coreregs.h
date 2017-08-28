@@ -1,4 +1,4 @@
-/*	$NetBSD: ingenic_coreregs.h,v 1.1 2017/05/21 06:49:13 skrll Exp $ */
+/*	$NetBSD: ingenic_coreregs.h,v 1.1.6.2 2017/08/28 17:51:45 skrll Exp $ */
 
 /*-
  * Copyright (c) 2014 Michael Lorenz

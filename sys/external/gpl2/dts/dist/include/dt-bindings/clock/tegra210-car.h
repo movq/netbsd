@@ -1,4 +1,4 @@
-/*	$NetBSD: tegra210-car.h,v 1.1.1.2 2017/07/27 18:10:51 jmcneill Exp $	*/
+/*	$NetBSD: tegra210-car.h,v 1.1.1.2.2.2 2017/08/28 17:53:01 skrll Exp $	*/
 
 /*
  * This header provides constants for binding nvidia,tegra210-car.

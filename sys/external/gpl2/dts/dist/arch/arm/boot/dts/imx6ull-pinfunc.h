@@ -1,4 +1,4 @@
-/*	$NetBSD: imx6ull-pinfunc.h,v 1.1.1.1 2017/06/15 20:14:24 jmcneill Exp $	*/
+/*	$NetBSD: imx6ull-pinfunc.h,v 1.1.1.1.6.2 2017/08/28 17:52:43 skrll Exp $	*/
 
 /*
  * Copyright (C) 2016 Freescale Semiconductor, Inc.

@@ -1,4 +1,4 @@
-/*	$NetBSD: localcount.h,v 1.4 2017/06/02 00:32:12 chs Exp $	*/
+/*	$NetBSD: localcount.h,v 1.4.6.2 2017/08/28 17:53:16 skrll Exp $	*/
 
 /*-
  * Copyright (c) 2016 The NetBSD Foundation, Inc.
