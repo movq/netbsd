@@ -1,7 +1,7 @@
-/*	$NetBSD: zonetodb.c,v 1.4 2014/12/10 04:37:57 christos Exp $	*/
+/*	$NetBSD: zonetodb.c,v 1.1 2009/03/22 14:58:12 christos Exp $	*/
 
 /*
- * Copyright (C) 2004, 2005, 2007-2009, 2014  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2004, 2005, 2007, 2008  Internet Systems Consortium, Inc. ("ISC")
  * Copyright (C) 2000-2002  Internet Software Consortium.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -17,7 +17,7 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* Id: zonetodb.c,v 1.23 2009/09/02 23:48:01 tbox Exp  */
+/* Id: zonetodb.c,v 1.20 2008/09/25 04:02:38 tbox Exp */
 
 #include <stdlib.h>
 #include <string.h>
@@ -76,7 +76,7 @@ check_result(isc_result_t result, const char *message) {
  * "dest" must be an array of at least size 2*strlen(source) + 1.
  */
 static void
-quotestring(const unsigned char *source, unsigned char *dest) {
+quotestring(const char *source, char *dest) {
 	while (*source != 0) {
 		if (*source == '\'')
 			*dest++ = '\'';
@@ -103,19 +103,19 @@ addrdata(dns_name_t *name, dns_ttl_t ttl, dns_rdata_t *rdata) {
 	result = dns_name_totext(name, ISC_TRUE, &b);
 	check_result(result, "dns_name_totext");
 	namearray[isc_buffer_usedlength(&b)] = 0;
-	quotestring((const unsigned char *)namearray, canonnamearray);
+	quotestring(namearray, canonnamearray);
 
 	isc_buffer_init(&b, typearray, sizeof(typearray) - 1);
 	result = dns_rdatatype_totext(rdata->type, &b);
 	check_result(result, "dns_rdatatype_totext");
 	typearray[isc_buffer_usedlength(&b)] = 0;
-	quotestring((const unsigned char *)typearray, canontypearray);
+	quotestring(typearray, canontypearray);
 
 	isc_buffer_init(&b, dataarray, sizeof(dataarray) - 1);
 	result = dns_rdata_totext(rdata, NULL, &b);
 	check_result(result, "dns_rdata_totext");
 	dataarray[isc_buffer_usedlength(&b)] = 0;
-	quotestring((const unsigned char *)dataarray, canondataarray);
+	quotestring(dataarray, canondataarray);
 
 	snprintf(str, sizeof(str),
 		 "INSERT INTO %s (NAME, TTL, RDTYPE, RDATA)"
@@ -167,16 +167,16 @@ main(int argc, char **argv) {
 	check_result(result, "isc_mem_create");
 
 	result = isc_entropy_create(mctx, &ectx);
-	check_result(result, "isc_entropy_create");
+	result_check (result, "isc_entropy_create");
 
 	result = isc_hash_create(mctx, ectx, DNS_NAME_MAXWIRE);
-	check_result(result, "isc_hash_create");
+	check_result (result, "isc_hash_create");
 
 	isc_buffer_init(&b, porigin, strlen(porigin));
 	isc_buffer_add(&b, strlen(porigin));
 	dns_fixedname_init(&forigin);
 	origin = dns_fixedname_name(&forigin);
-	result = dns_name_fromtext(origin, &b, dns_rootname, 0, NULL);
+	result = dns_name_fromtext(origin, &b, dns_rootname, ISC_FALSE, NULL);
 	check_result(result, "dns_name_fromtext");
 
 	db = NULL;

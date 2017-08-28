@@ -1,7 +1,7 @@
-/*	$NetBSD: t_mem.c,v 1.5 2014/12/10 04:37:53 christos Exp $	*/
+/*	$NetBSD: t_mem.c,v 1.1 2009/03/22 14:56:33 christos Exp $	*/
 
 /*
- * Copyright (C) 2004, 2007, 2009, 2013  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2004, 2007, 2009  Internet Systems Consortium, Inc. ("ISC")
  * Copyright (C) 1999-2001  Internet Software Consortium.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -17,7 +17,7 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* Id: t_mem.c,v 1.15 2009/01/22 23:47:54 tbox Exp  */
+/* Id: t_mem.c,v 1.13.332.2 2009/01/22 23:47:05 tbox Exp */
 
 #include <config.h>
 
@@ -204,14 +204,7 @@ t1(void) {
 }
 
 testspec_t	T_testlist[] = {
-	{	(PFV) t1,	"basic memory subsystem"	},
-	{	(PFV) 0,	NULL				}
+	{	t1,	"basic memory subsystem"	},
+	{	NULL,	NULL				}
 };
 
-#ifdef WIN32
-int
-main(int argc, char **argv) {
-	t_settests(T_testlist);
-	return (t_main(argc, argv));
-}
-#endif

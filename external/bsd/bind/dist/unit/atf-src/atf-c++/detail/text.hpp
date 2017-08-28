@@ -1,7 +1,7 @@
 //
 // Automated Testing Framework (atf)
 //
-// Copyright (c) 2007 The NetBSD Foundation, Inc.
+// Copyright (c) 2007, 2008, 2010 The NetBSD Foundation, Inc.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -29,10 +29,6 @@
 
 #if !defined(_ATF_CXX_TEXT_HPP_)
 #define _ATF_CXX_TEXT_HPP_
-
-extern "C" {
-#include <stdint.h>
-}
 
 #include <sstream>
 #include <stdexcept>
@@ -102,11 +98,6 @@ std::string trim(const std::string&);
 bool to_bool(const std::string&);
 
 //!
-//! \brief Converts the given string to a bytes size.
-//!
-int64_t to_bytes(std::string);
-
-//!
 //! \brief Changes the case of a string to lowercase.
 //!
 //! Returns a new string that is a lowercased version of the original
@@ -142,7 +133,7 @@ to_type(const std::string& str)
     std::istringstream ss(str);
     T value;
     ss >> value;
-    if (!ss.eof() || (ss.eof() && (ss.fail() || ss.bad())))
+    if (!ss.eof() || (!ss.eof() && !ss.good()))
         throw std::runtime_error("Cannot convert string to requested type");
     return value;
 }

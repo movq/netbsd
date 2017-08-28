@@ -1,7 +1,7 @@
-/*	$NetBSD: rbt_test.c,v 1.8 2016/05/26 16:49:57 christos Exp $	*/
+/*	$NetBSD: rbt_test.c,v 1.1 2009/03/22 14:56:24 christos Exp $	*/
 
 /*
- * Copyright (C) 2004, 2005, 2007, 2009, 2011, 2012, 2014, 2015  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2004, 2005, 2007  Internet Systems Consortium, Inc. ("ISC")
  * Copyright (C) 1999-2001  Internet Software Consortium.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -17,7 +17,7 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* Id: rbt_test.c,v 1.52 2011/08/28 23:46:41 tbox Exp  */
+/* Id: rbt_test.c,v 1.48 2007/06/19 23:46:59 tbox Exp */
 
 #include <config.h>
 
@@ -25,7 +25,6 @@
 
 #include <isc/commandline.h>
 #include <isc/mem.h>
-#include <isc/print.h>
 #include <isc/string.h>
 #include <isc/util.h>
 
@@ -33,7 +32,7 @@
 #include <dns/fixedname.h>
 #include <dns/result.h>
 
-const char *progname;
+char *progname;
 isc_mem_t *mctx;
 
 #define DNSNAMELEN 255
@@ -74,7 +73,8 @@ create_name(char *s) {
 	dns_name_init(name, NULL);
 	isc_buffer_init(&target, name + 1, DNSNAMELEN);
 
-	result = dns_name_fromtext(name, &source, dns_rootname, 0, &target);
+	result = dns_name_fromtext(name, &source, dns_rootname,
+				   ISC_FALSE, &target);
 
 	if (result != ISC_R_SUCCESS) {
 		printf("dns_name_fromtext(%s) failed: %s\n",
@@ -91,7 +91,7 @@ delete_name(void *data, void *arg) {
 
 	UNUSED(arg);
 	name = data;
-	isc_mem_put(mctx, name, sizeof(*name) + DNSNAMELEN);
+	isc_mem_put(mctx, data, sizeof(dns_name_t) + DNSNAMELEN);
 }
 
 static void
@@ -283,7 +283,6 @@ main(int argc, char **argv) {
 
 	argc -= isc_commandline_index;
 	argv += isc_commandline_index;
-	POST(argv);
 
 	if (argc > 1) {
 		printf("Usage: %s [-m]\n", progname);
@@ -433,7 +432,7 @@ main(int argc, char **argv) {
 
 			} else if (CMDCHECK("print")) {
 				if (arg == NULL || *arg == '\0')
-					dns_rbt_printtext(rbt, NULL, stdout);
+					dns_rbt_printall(rbt);
 				else
 					printf("usage: print\n");
 

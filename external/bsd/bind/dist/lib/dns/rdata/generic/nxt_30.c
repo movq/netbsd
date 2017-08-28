@@ -1,7 +1,7 @@
-/*	$NetBSD: nxt_30.c,v 1.6 2016/05/26 16:49:59 christos Exp $	*/
+/*	$NetBSD: nxt_30.c,v 1.1 2009/03/22 15:01:54 christos Exp $	*/
 
 /*
- * Copyright (C) 2004, 2005, 2007, 2009, 2015  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2004, 2005, 2007  Internet Systems Consortium, Inc. ("ISC")
  * Copyright (C) 1999-2003  Internet Software Consortium.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -17,7 +17,7 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* Id: nxt_30.c,v 1.65 2009/12/04 22:06:37 tbox Exp  */
+/* Id: nxt_30.c,v 1.63 2007/06/19 23:47:17 tbox Exp */
 
 /* reviewed: Wed Mar 15 18:21:15 PST 2000 by brister */
 
@@ -44,7 +44,7 @@ fromtext_nxt(ARGS_FROMTEXT) {
 	isc_boolean_t first = ISC_TRUE;
 	long n;
 
-	REQUIRE(type == dns_rdatatype_nxt);
+	REQUIRE(type == 30);
 
 	UNUSED(type);
 	UNUSED(rdclass);
@@ -57,8 +57,7 @@ fromtext_nxt(ARGS_FROMTEXT) {
 				      ISC_FALSE));
 	dns_name_init(&name, NULL);
 	buffer_fromregion(&buffer, &token.value.as_region);
-	if (origin == NULL)
-		origin = dns_rootname;
+	origin = (origin != NULL) ? origin : dns_rootname;
 	RETTOK(dns_name_fromtext(&name, &buffer, origin, options, target));
 
 	memset(bm, 0, sizeof(bm));
@@ -98,7 +97,7 @@ totext_nxt(ARGS_TOTEXT) {
 	dns_name_t prefix;
 	isc_boolean_t sub;
 
-	REQUIRE(rdata->type == dns_rdatatype_nxt);
+	REQUIRE(rdata->type == 30);
 	REQUIRE(rdata->length != 0);
 
 	dns_name_init(&name, NULL);
@@ -134,7 +133,7 @@ fromwire_nxt(ARGS_FROMWIRE) {
 	isc_region_t sr;
 	dns_name_t name;
 
-	REQUIRE(type == dns_rdatatype_nxt);
+	REQUIRE(type == 30);
 
 	UNUSED(type);
 	UNUSED(rdclass);
@@ -159,7 +158,7 @@ towire_nxt(ARGS_TOWIRE) {
 	dns_name_t name;
 	dns_offsets_t offsets;
 
-	REQUIRE(rdata->type == dns_rdatatype_nxt);
+	REQUIRE(rdata->type == 30);
 	REQUIRE(rdata->length != 0);
 
 	dns_compress_setmethods(cctx, DNS_COMPRESS_NONE);
@@ -182,7 +181,7 @@ compare_nxt(ARGS_COMPARE) {
 
 	REQUIRE(rdata1->type == rdata2->type);
 	REQUIRE(rdata1->rdclass == rdata2->rdclass);
-	REQUIRE(rdata1->type == dns_rdatatype_nxt);
+	REQUIRE(rdata1->type == 30);
 	REQUIRE(rdata1->length != 0);
 	REQUIRE(rdata2->length != 0);
 
@@ -204,7 +203,7 @@ fromstruct_nxt(ARGS_FROMSTRUCT) {
 	dns_rdata_nxt_t *nxt = source;
 	isc_region_t region;
 
-	REQUIRE(type == dns_rdatatype_nxt);
+	REQUIRE(type == 30);
 	REQUIRE(source != NULL);
 	REQUIRE(nxt->common.rdtype == type);
 	REQUIRE(nxt->common.rdclass == rdclass);
@@ -229,7 +228,7 @@ tostruct_nxt(ARGS_TOSTRUCT) {
 	dns_rdata_nxt_t *nxt = target;
 	dns_name_t name;
 
-	REQUIRE(rdata->type == dns_rdatatype_nxt);
+	REQUIRE(rdata->type == 30);
 	REQUIRE(target != NULL);
 	REQUIRE(rdata->length != 0);
 
@@ -263,7 +262,7 @@ freestruct_nxt(ARGS_FREESTRUCT) {
 	dns_rdata_nxt_t *nxt = source;
 
 	REQUIRE(source != NULL);
-	REQUIRE(nxt->common.rdtype == dns_rdatatype_nxt);
+	REQUIRE(nxt->common.rdtype == 30);
 
 	if (nxt->mctx == NULL)
 		return;
@@ -276,7 +275,7 @@ freestruct_nxt(ARGS_FREESTRUCT) {
 
 static inline isc_result_t
 additionaldata_nxt(ARGS_ADDLDATA) {
-	REQUIRE(rdata->type == dns_rdatatype_nxt);
+	REQUIRE(rdata->type == 30);
 
 	UNUSED(rdata);
 	UNUSED(add);
@@ -291,7 +290,7 @@ digest_nxt(ARGS_DIGEST) {
 	dns_name_t name;
 	isc_result_t result;
 
-	REQUIRE(rdata->type == dns_rdatatype_nxt);
+	REQUIRE(rdata->type == 30);
 
 	dns_rdata_toregion(rdata, &r);
 	dns_name_init(&name, NULL);
@@ -307,7 +306,7 @@ digest_nxt(ARGS_DIGEST) {
 static inline isc_boolean_t
 checkowner_nxt(ARGS_CHECKOWNER) {
 
-	REQUIRE(type == dns_rdatatype_nxt);
+	REQUIRE(type == 30);
 
 	UNUSED(name);
 	UNUSED(type);
@@ -320,7 +319,7 @@ checkowner_nxt(ARGS_CHECKOWNER) {
 static inline isc_boolean_t
 checknames_nxt(ARGS_CHECKNAMES) {
 
-	REQUIRE(rdata->type == dns_rdatatype_nxt);
+	REQUIRE(rdata->type == 30);
 
 	UNUSED(rdata);
 	UNUSED(owner);
@@ -329,8 +328,4 @@ checknames_nxt(ARGS_CHECKNAMES) {
 	return (ISC_TRUE);
 }
 
-static inline int
-casecompare_nxt(ARGS_COMPARE) {
-	return (compare_nxt(rdata1, rdata2));
-}
 #endif	/* RDATA_GENERIC_NXT_30_C */

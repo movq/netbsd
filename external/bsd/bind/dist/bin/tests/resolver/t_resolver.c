@@ -1,7 +1,7 @@
-/*	$NetBSD: t_resolver.c,v 1.11 2014/12/10 04:37:53 christos Exp $	*/
+/*	$NetBSD: t_resolver.c,v 1.1 2011/02/15 19:31:06 christos Exp $	*/
 
 /*
- * Copyright (C) 2011-2014  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2011  Internet Systems Consortium, Inc. ("ISC")
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -16,7 +16,7 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* Id: t_resolver.c,v 1.3 2011/02/03 12:18:11 tbox Exp  */
+/* Id: t_resolver.c,v 1.2.2.2 2011-02-03 05:50:06 marka Exp */
 
 #include <config.h>
 
@@ -54,10 +54,10 @@ setup_create_dispatch_v4(void)
 {
 	isc_sockaddr_t local_address;
 	isc_sockaddr_any(&local_address);
-
-	CHECK(dns_dispatch_getudp(dispatch_manager, socket_manager,
-				  task_manager, &local_address,
-				  4096, 100, 100, 100, 500, 0, 0,
+	
+	CHECK(dns_dispatch_getudp(dispatch_manager, socket_manager, task_manager,
+				  &local_address, 4096, 100, 100, 100, 500,
+				  0, 0, /* unsigned int attributes, unsigned int mask, */
 				  &dispatch_v4));
 }
 static void
@@ -85,9 +85,9 @@ teardown(void) {
 static isc_result_t
 make_resolver(dns_resolver_t **resolverp) {
 	isc_result_t result;
-
+	
 	result = dns_resolver_create(view,
-			    task_manager, 1, 1,
+			    task_manager, 1,
 			    socket_manager,
 			    timer_manager,
 			    0, /* unsigned int options, */
@@ -106,7 +106,7 @@ destroy_resolver(dns_resolver_t **resolverp) {
 }
 
 static void
-test_dns_resolver_create(void) {
+test_dns_resolver_create() {
 	dns_resolver_t *resolver = NULL;
 
 	t_assert("test_dns_resolver_create", 1, T_REQUIRED, "%s",
@@ -130,7 +130,7 @@ test_dns_resolver_gettimeout(void) {
 		 "The default timeout is returned from _gettimeout()");
 	setup();
 	CHECK(make_resolver(&resolver));
-
+	
 	timeout = dns_resolver_gettimeout(resolver);
 	t_info("The default timeout is %d second%s\n", timeout, (timeout == 1 ? "" : "s"));
 	test_result = (timeout > 0) ? T_PASS : T_FAIL;
@@ -151,20 +151,20 @@ test_dns_resolver_settimeout(void) {
 		 "_settimeout() can change the timeout to a non-default");
 	setup();
 	CHECK(make_resolver(&resolver));
-
+	
 	default_timeout = dns_resolver_gettimeout(resolver);
 	t_info("The default timeout is %d second%s\n", default_timeout,
 	       (default_timeout == 1 ? "" : "s"));
 
-	dns_resolver_settimeout(resolver, default_timeout + 1);
+	dns_resolver_settimeout(resolver, default_timeout - 1);
 	timeout = dns_resolver_gettimeout(resolver);
 	t_info("The new timeout is %d second%s\n", timeout,
 	       (timeout == 1 ? "" : "s"));
-	test_result = (timeout == default_timeout + 1) ? T_PASS : T_FAIL;
+	test_result = (timeout == default_timeout - 1) ? T_PASS : T_FAIL;
 
 	destroy_resolver(&resolver);
 	teardown();
-
+	
 	t_result(test_result);
 }
 
@@ -179,7 +179,7 @@ test_dns_resolver_settimeout_to_default(void) {
 		 " by specifying 0 as the timeout.");
 	setup();
 	CHECK(make_resolver(&resolver));
-
+	
 	default_timeout = dns_resolver_gettimeout(resolver);
 	t_info("The default timeout is %d second%s\n", default_timeout,
 	       (default_timeout == 1 ? "" : "s"));
@@ -195,7 +195,7 @@ test_dns_resolver_settimeout_to_default(void) {
 
 	destroy_resolver(&resolver);
 	teardown();
-
+	
 	t_result(test_result);
 }
 
@@ -209,7 +209,7 @@ test_dns_resolver_settimeout_over_maximum(void) {
 		 "_settimeout() cannot set the value larger than the maximum.");
 	setup();
 	CHECK(make_resolver(&resolver));
-
+	
 	dns_resolver_settimeout(resolver, 4000000);
 	timeout = dns_resolver_gettimeout(resolver);
 	t_info("The new timeout is %d second%s\n", timeout,
@@ -219,24 +219,17 @@ test_dns_resolver_settimeout_over_maximum(void) {
 
 	destroy_resolver(&resolver);
 	teardown();
-
+	
 	t_result(test_result);
 }
 
 
 testspec_t T_testlist[] = {
-	{ (PFV) test_dns_resolver_create,	"dns_resolver_create"		},
-	{ (PFV) test_dns_resolver_settimeout,	"dns_resolver_settimeout"	},
-	{ (PFV) test_dns_resolver_gettimeout,	"dns_resolver_gettimeout"	},
-	{ (PFV) test_dns_resolver_settimeout_to_default, "test_dns_resolver_settimeout_to_default" },
-	{ (PFV) test_dns_resolver_settimeout_over_maximum, "test_dns_resolver_settimeout_over_maximum" },
-	{ (PFV) 0,	NULL }
+	{ test_dns_resolver_create,	"dns_resolver_create"		},
+	{ test_dns_resolver_settimeout,	"dns_resolver_settimeout"	},
+	{ test_dns_resolver_gettimeout,	"dns_resolver_gettimeout"	},
+	{ test_dns_resolver_settimeout_to_default, "test_dns_resolver_settimeout_to_default" },
+	{ test_dns_resolver_settimeout_over_maximum, "test_dns_resolver_settimeout_over_maximum" },
+	{ NULL,	NULL }
 };
 
-#ifdef WIN32
-int
-main(int argc, char **argv) {
-	t_settests(T_testlist);
-	return (t_main(argc, argv));
-}
-#endif

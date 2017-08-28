@@ -1,7 +1,7 @@
-/*	$NetBSD: lwconfig.c,v 1.5 2014/12/10 04:38:02 christos Exp $	*/
+/*	$NetBSD: lwconfig.c,v 1.1 2009/03/22 15:02:48 christos Exp $	*/
 
 /*
- * Copyright (C) 2004, 2006, 2007, 2013  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2004, 2006, 2007  Internet Systems Consortium, Inc. ("ISC")
  * Copyright (C) 2002  Internet Software Consortium.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -17,7 +17,7 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* Id: lwconfig.c,v 1.7 2007/12/14 01:40:42 marka Exp  */
+/* Id: lwconfig.c,v 1.7 2007/12/14 01:40:42 marka Exp */
 
 /*
  * We do this so that we may incorporate everything in the main routines
@@ -62,7 +62,7 @@ get_win32_searchlist(lwres_context_t *ctx) {
 	if (RegOpenKeyEx(HKEY_LOCAL_MACHINE, TCPIP_SUBKEY, 0, KEY_READ, &hKey)
 		!= ERROR_SUCCESS)
 		keyFound = FALSE;
-
+	
 	if (keyFound == TRUE) {
 		/* Get the named directory */
 		if (RegQueryValueEx(hKey, "SearchList", NULL, NULL,
@@ -72,10 +72,6 @@ get_win32_searchlist(lwres_context_t *ctx) {
 	}
 
 	confdata->searchnxt = 0;
-
-	if (!keyFound)
-		return;
-
 	cp = strtok((char *)searchlist, ", \0");
 	while (cp != NULL) {
 		if (confdata->searchnxt == LWRES_CONFMAXSEARCH)
@@ -91,7 +87,8 @@ get_win32_searchlist(lwres_context_t *ctx) {
 
 lwres_result_t
 lwres_conf_parse(lwres_context_t *ctx, const char *filename) {
-	lwres_result_t ret;
+	lwres_result_t ret = LWRES_R_SUCCESS;
+	lwres_result_t res;
 	lwres_conf_t *confdata;
 	FIXED_INFO * FixedInfo;
 	ULONG    BufLen = sizeof(FIXED_INFO);
@@ -142,11 +139,11 @@ lwres_conf_parse(lwres_context_t *ctx, const char *filename) {
 		if (confdata->nsnext >= LWRES_CONFMAXNAMESERVERS)
 			break;
 
-		ret = lwres_create_addr(pIPAddr->IpAddress.String,
+		res = lwres_create_addr(pIPAddr->IpAddress.String,
 				&confdata->nameservers[confdata->nsnext++], 1);
-		if (ret != LWRES_R_SUCCESS) {
+		if (res != LWRES_R_SUCCESS) {
 			GlobalFree(FixedInfo);
-			return (ret);
+			return (res);
 		}
 		pIPAddr = pIPAddr ->Next;
 	}

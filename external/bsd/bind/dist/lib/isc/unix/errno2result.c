@@ -1,7 +1,7 @@
-/*	$NetBSD: errno2result.c,v 1.6 2017/06/15 15:59:41 christos Exp $	*/
+/*	$NetBSD: errno2result.c,v 1.1 2009/03/22 15:02:17 christos Exp $	*/
 
 /*
- * Copyright (C) 2004, 2005, 2007, 2011-2013, 2016  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2004, 2005, 2007  Internet Systems Consortium, Inc. ("ISC")
  * Copyright (C) 2000-2002  Internet Software Consortium.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -17,7 +17,7 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* Id */
+/* Id: errno2result.c,v 1.17 2007/06/19 23:47:18 tbox Exp */
 
 /*! \file */
 
@@ -36,9 +36,7 @@
  * not already there.
  */
 isc_result_t
-isc___errno2result(int posixerrno, isc_boolean_t dolog,
-		   const char *file, unsigned int line)
-{
+isc__errno2result(int posixerrno) {
 	char strbuf[ISC_STRERRORSIZE];
 
 	switch (posixerrno) {
@@ -59,13 +57,9 @@ isc___errno2result(int posixerrno, isc_boolean_t dolog,
 		return (ISC_R_IOERROR);
 	case ENOMEM:
 		return (ISC_R_NOMEMORY);
-	case ENFILE:
+	case ENFILE:	
 	case EMFILE:
 		return (ISC_R_TOOMANYOPENFILES);
-#ifdef EOVERFLOW
-	case EOVERFLOW:
-		return (ISC_R_RANGE);
-#endif
 	case EPIPE:
 #ifdef ECONNRESET
 	case ECONNRESET:
@@ -115,12 +109,11 @@ isc___errno2result(int posixerrno, isc_boolean_t dolog,
 	case ECONNREFUSED:
 		return (ISC_R_CONNREFUSED);
 	default:
-		if (dolog) {
-			isc__strerror(posixerrno, strbuf, sizeof(strbuf));
-			UNEXPECTED_ERROR(file, line, "unable to convert errno "
-					 "to isc_result: %d: %s",
-					 posixerrno, strbuf);
-		}
+		isc__strerror(posixerrno, strbuf, sizeof(strbuf));
+		UNEXPECTED_ERROR(__FILE__, __LINE__,
+				 "unable to convert errno "
+				 "to isc_result: %d: %s",
+				 posixerrno, strbuf);
 		/*
 		 * XXXDCL would be nice if perhaps this function could
 		 * return the system's error string, so the caller

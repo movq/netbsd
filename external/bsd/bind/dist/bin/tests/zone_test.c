@@ -1,7 +1,7 @@
-/*	$NetBSD: zone_test.c,v 1.9 2015/12/17 04:00:42 christos Exp $	*/
+/*	$NetBSD: zone_test.c,v 1.1 2009/03/22 14:56:26 christos Exp $	*/
 
 /*
- * Copyright (C) 2004, 2005, 2007, 2009, 2012, 2014, 2015  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2004, 2005, 2007  Internet Systems Consortium, Inc. ("ISC")
  * Copyright (C) 1999-2002  Internet Software Consortium.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -17,7 +17,7 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* Id: zone_test.c,v 1.35 2009/09/02 23:48:01 tbox Exp  */
+/* Id: zone_test.c,v 1.33 2007/06/19 23:46:59 tbox Exp */
 
 #include <config.h>
 
@@ -31,7 +31,6 @@
 #include <isc/app.h>
 #include <isc/commandline.h>
 #include <isc/mem.h>
-#include <isc/print.h>
 #include <isc/socket.h>
 #include <isc/string.h>
 #include <isc/task.h>
@@ -68,7 +67,7 @@ isc_sockaddr_t addr;
 				function, dns_result_totext(result)); \
 			return; \
 		} \
-	} while (/*CONSTCOND*/0)
+	} while (0)
 
 #define ERRCONT(result, function) \
 		if (result != ISC_R_SUCCESS) { \
@@ -79,7 +78,7 @@ isc_sockaddr_t addr;
 			(void)NULL
 
 static void
-usage(void) {
+usage() {
 	fprintf(stderr,
 		"usage: zone_test [-dqsSM] [-c class] [-f file] zone\n");
 	exit(1);
@@ -103,11 +102,11 @@ setup(const char *zonename, const char *filename, const char *classname) {
 
 	dns_zone_settype(zone, zonetype);
 
-	isc_buffer_constinit(&buffer, zonename, strlen(zonename));
+	isc_buffer_init(&buffer, zonename, strlen(zonename));
 	isc_buffer_add(&buffer, strlen(zonename));
 	dns_fixedname_init(&fixorigin);
 	result = dns_name_fromtext(dns_fixedname_name(&fixorigin),
-				   &buffer, dns_rootname, 0, NULL);
+			  	   &buffer, dns_rootname, ISC_FALSE, NULL);
 	ERRRET(result, "dns_name_fromtext");
 	origin = dns_fixedname_name(&fixorigin);
 
@@ -140,19 +139,19 @@ setup(const char *zonename, const char *filename, const char *classname) {
 
 static void
 print_rdataset(dns_name_t *name, dns_rdataset_t *rdataset) {
-	isc_buffer_t text;
-	char t[1000];
-	isc_result_t result;
-	isc_region_t r;
+        isc_buffer_t text;
+        char t[1000];
+        isc_result_t result;
+        isc_region_t r;
 
-	isc_buffer_init(&text, t, sizeof(t));
-	result = dns_rdataset_totext(rdataset, name, ISC_FALSE, ISC_FALSE,
+        isc_buffer_init(&text, t, sizeof(t));
+        result = dns_rdataset_totext(rdataset, name, ISC_FALSE, ISC_FALSE,
 				     &text);
-	isc_buffer_usedregion(&text, &r);
-	if (result == ISC_R_SUCCESS)
-		printf("%.*s", (int)r.length, (char *)r.base);
-	else
-		printf("%s\n", dns_result_totext(result));
+        isc_buffer_usedregion(&text, &r);
+        if (result == ISC_R_SUCCESS)
+                printf("%.*s", (int)r.length, (char *)r.base);
+        else
+                printf("%s\n", dns_result_totext(result));
 }
 
 static void
@@ -209,7 +208,7 @@ query(void) {
 		isc_buffer_init(&buffer, buf, strlen(buf));
 		isc_buffer_add(&buffer, strlen(buf));
 		result = dns_name_fromtext(dns_fixedname_name(&name),
-				  &buffer, dns_rootname, 0, NULL);
+				  &buffer, dns_rootname, ISC_FALSE, NULL);
 		ERRCONT(result, "dns_name_fromtext");
 
 		result = dns_db_find(db, dns_fixedname_name(&name),
@@ -264,12 +263,8 @@ main(int argc, char **argv) {
 		case 'm':
 			memset(&addr, 0, sizeof(addr));
 			addr.type.sin.sin_family = AF_INET;
-			if (inet_pton(AF_INET, isc_commandline_argument,
-				      &addr.type.sin.sin_addr) != 1) {
-				fprintf(stderr, "bad master address '%s'\n",
-					isc_commandline_argument);
-				exit(1);
-			}
+			inet_pton(AF_INET, isc_commandline_argument,
+				  &addr.type.sin.sin_addr);
 			addr.type.sin.sin_port = htons(53);
 			break;
 		case 'q':

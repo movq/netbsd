@@ -1,6 +1,6 @@
 #!/usr/bin/perl
 #
-# Copyright (C) 2011, 2012  Internet Systems Consortium, Inc. ("ISC")
+# Copyright (C) 2011  Internet Systems Consortium, Inc. ("ISC")
 #
 # Permission to use, copy, modify, and/or distribute this software for any
 # purpose with or without fee is hereby granted, provided that the above
@@ -98,16 +98,9 @@ $SIG{TERM} = \&rmpid;
 my @rules;
 sub handleUDP {
         my ($buf) = @_;
-	my $packet;
 
-	if ($Net::DNS::VERSION > 0.68) {
-		$packet = new Net::DNS::Packet(\$buf, 0);
-		$@ and die $@;
-	} else {
-		my $err;
-		($packet, $err) = new Net::DNS::Packet(\$buf, 0);
-		$err and die $err;
-	}
+        my ($packet, $err) = new Net::DNS::Packet(\$buf, 0);
+        $err and die $err;
 
         $packet->header->qr(1);
         $packet->header->aa(1);
@@ -250,16 +243,9 @@ sub sign_tcp_continuation {
 
 sub handleTCP {
 	my ($buf) = @_;
-	my $packet;
 
-	if ($Net::DNS::VERSION > 0.68) {
-		$packet = new Net::DNS::Packet(\$buf, 0);
-		$@ and die $@;
-	} else {
-		my $err;
-		($packet, $err) = new Net::DNS::Packet(\$buf, 0);
-		$err and die $err;
-	}
+	my ($packet, $err) = new Net::DNS::Packet(\$buf, 0);
+	$err and die $err;
 	
 	$packet->header->qr(1);
 	$packet->header->aa(1);

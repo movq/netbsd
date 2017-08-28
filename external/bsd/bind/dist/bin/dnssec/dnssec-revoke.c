@@ -1,7 +1,7 @@
-/*	$NetBSD: dnssec-revoke.c,v 1.10 2016/05/26 16:49:55 christos Exp $	*/
+/*	$NetBSD: dnssec-revoke.c,v 1.1 2009/10/25 00:01:32 christos Exp $	*/
 
 /*
- * Copyright (C) 2009-2012, 2014, 2015  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2009  Internet Systems Consortium, Inc. ("ISC")
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -16,10 +16,13 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
+/* Id: dnssec-revoke.c,v 1.16 2009/10/12 20:48:10 each Exp */
+
 /*! \file */
 
 #include <config.h>
 
+#include <libgen.h>
 #include <stdlib.h>
 #include <unistd.h>
 
@@ -38,10 +41,6 @@
 
 #include <dst/dst.h>
 
-#ifdef PKCS11CRYPTO
-#include <pk11/result.h>
-#endif
-
 #include "dnssectool.h"
 
 const char *program = "dnssec-revoke";
@@ -57,14 +56,12 @@ usage(void) {
 	fprintf(stderr, "Usage:\n");
 	fprintf(stderr,	"    %s [options] keyfile\n\n", program);
 	fprintf(stderr, "Version: %s\n", VERSION);
-#if defined(PKCS11CRYPTO)
-	fprintf(stderr, "    -E engine:    specify PKCS#11 provider "
-					"(default: %s)\n", PK11_LIB_LOCATION);
-#elif defined(USE_PKCS11)
-	fprintf(stderr, "    -E engine:    specify OpenSSL engine "
-					   "(default \"pkcs11\")\n");
+	fprintf(stderr, "\t-E engine:\n");
+#ifdef USE_PKCS11
+	fprintf(stderr, "\t\tname of an OpenSSL engine to use "
+				"(default is \"pkcs11\")\n");
 #else
-	fprintf(stderr, "    -E engine:    specify OpenSSL engine\n");
+	fprintf(stderr, "\t\tname of an OpenSSL engine to use\n");
 #endif
 	fprintf(stderr, "    -f:	   force overwrite\n");
 	fprintf(stderr, "    -K directory: use directory for key files\n");
@@ -72,7 +69,6 @@ usage(void) {
 	fprintf(stderr, "    -r:	   remove old keyfiles after "
 					   "creating revoked version\n");
 	fprintf(stderr, "    -v level:	   set level of verbosity\n");
-	fprintf(stderr, "    -V: print version information\n");
 	fprintf(stderr, "Output:\n");
 	fprintf(stderr, "     K<name>+<alg>+<new id>.key, "
 			     "K<name>+<alg>+<new id>.private\n");
@@ -84,12 +80,11 @@ int
 main(int argc, char **argv) {
 	isc_result_t result;
 #ifdef USE_PKCS11
-	const char *engine = PKCS11_ENGINE;
+	const char *engine = "pkcs11";
 #else
 	const char *engine = NULL;
 #endif
-	char const *filename = NULL;
-	char *dir = NULL;
+	char *filename = NULL, *dir = NULL;
 	char newname[1024], oldname[1024];
 	char keystr[DST_KEY_FORMATSIZE];
 	char *endp;
@@ -99,8 +94,7 @@ main(int argc, char **argv) {
 	isc_uint32_t flags;
 	isc_buffer_t buf;
 	isc_boolean_t force = ISC_FALSE;
-	isc_boolean_t removefile = ISC_FALSE;
-	isc_boolean_t id = ISC_FALSE;
+	isc_boolean_t remove = ISC_FALSE;
 
 	if (argc == 1)
 		usage();
@@ -109,14 +103,11 @@ main(int argc, char **argv) {
 	if (result != ISC_R_SUCCESS)
 		fatal("Out of memory");
 
-#ifdef PKCS11CRYPTO
-	pk11_result_register();
-#endif
 	dns_result_register();
 
 	isc_commandline_errprint = ISC_FALSE;
 
-	while ((ch = isc_commandline_parse(argc, argv, "E:fK:rRhv:V")) != -1) {
+	while ((ch = isc_commandline_parse(argc, argv, "E:fK:rhv:")) != -1) {
 		switch (ch) {
 		    case 'E':
 			engine = isc_commandline_argument;
@@ -136,10 +127,7 @@ main(int argc, char **argv) {
 			}
 			break;
 		    case 'r':
-			removefile = ISC_TRUE;
-			break;
-		    case 'R':
-			id = ISC_TRUE;
+			remove = ISC_TRUE;
 			break;
 		    case 'v':
 			verbose = strtol(isc_commandline_argument, &endp, 0);
@@ -152,12 +140,7 @@ main(int argc, char **argv) {
 					program, isc_commandline_option);
 			/* Falls into */
 		    case 'h':
-			/* Does not return. */
 			usage();
-
-		    case 'V':
-			/* Does not return. */
-			version(program);
 
 		    default:
 			fprintf(stderr, "%s: unhandled option -%c\n",
@@ -175,16 +158,8 @@ main(int argc, char **argv) {
 	if (dir != NULL) {
 		filename = argv[isc_commandline_index];
 	} else {
-		result = isc_file_splitpath(mctx, argv[isc_commandline_index],
-					    &dir, &filename);
-		if (result != ISC_R_SUCCESS)
-			fatal("cannot process filename %s: %s",
-			      argv[isc_commandline_index],
-			      isc_result_totext(result));
-		if (strcmp(dir, ".") == 0) {
-			isc_mem_free(mctx, dir);
-			dir = NULL;
-		}
+		isc_file_splitpath(mctx, argv[isc_commandline_index],
+				   &dir, &filename);
 	}
 
 	if (ectx == NULL)
@@ -206,24 +181,17 @@ main(int argc, char **argv) {
 		fatal("Invalid keyfile name %s: %s",
 		      filename, isc_result_totext(result));
 
-	if (id) {
-		fprintf(stdout, "%u\n", dst_key_rid(key));
-		goto cleanup;
-	}
-	dst_key_format(key, keystr, sizeof(keystr));
+	if (verbose > 2) {
+		char keystr[DST_KEY_FORMATSIZE];
 
-	if (verbose > 2)
+		dst_key_format(key, keystr, sizeof(keystr));
 		fprintf(stderr, "%s: %s\n", program, keystr);
-
-	if (force)
-		set_keyversion(key);
-	else
-		check_keyversion(key, keystr);
-
+	}
 
 	flags = dst_key_flags(key);
 	if ((flags & DNS_KEYFLAG_REVOKE) == 0) {
 		isc_stdtime_t now;
+
 
 		if ((flags & DNS_KEYFLAG_KSK) == 0)
 			fprintf(stderr, "%s: warning: Key is not flagged "
@@ -252,24 +220,28 @@ main(int argc, char **argv) {
 			      isc_result_totext(result));
 		}
 
+		printf("%s\n", newname);
+
 		isc_buffer_clear(&buf);
-		dst_key_buildfilename(key, 0, dir, &buf);
+		dst_key_buildfilename(key, DST_TYPE_PRIVATE, dir, &buf);
 		printf("%s\n", newname);
 
 		/*
 		 * Remove old key file, if told to (and if
 		 * it isn't the same as the new file)
 		 */
-		if (removefile && dst_key_alg(key) != DST_ALG_RSAMD5) {
+		if (remove && dst_key_alg(key) != DST_ALG_RSAMD5) {
 			isc_buffer_init(&buf, oldname, sizeof(oldname));
 			dst_key_setflags(key, flags & ~DNS_KEYFLAG_REVOKE);
 			dst_key_buildfilename(key, DST_TYPE_PRIVATE, dir, &buf);
 			if (strcmp(oldname, newname) == 0)
 				goto cleanup;
-			(void)unlink(oldname);
+			if (access(oldname, F_OK) == 0)
+				unlink(oldname);
 			isc_buffer_clear(&buf);
 			dst_key_buildfilename(key, DST_TYPE_PUBLIC, dir, &buf);
-			(void)unlink(oldname);
+			if (access(oldname, F_OK) == 0)
+				unlink(oldname);
 		}
 	} else {
 		dst_key_format(key, keystr, sizeof(keystr));
@@ -283,8 +255,7 @@ cleanup:
 	cleanup_entropy(&ectx);
 	if (verbose > 10)
 		isc_mem_stats(mctx, stdout);
-	if (dir != NULL)
-		isc_mem_free(mctx, dir);
+	isc_mem_free(mctx, dir);
 	isc_mem_destroy(&mctx);
 
 	return (0);

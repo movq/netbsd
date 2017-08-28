@@ -1,7 +1,7 @@
-/*	$NetBSD: lwres_gabn.c,v 1.5 2014/12/10 04:38:02 christos Exp $	*/
+/*	$NetBSD: lwres_gabn.c,v 1.1 2009/03/22 15:02:38 christos Exp $	*/
 
 /*
- * Copyright (C) 2004, 2005, 2007, 2013  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2004, 2005, 2007  Internet Systems Consortium, Inc. ("ISC")
  * Copyright (C) 2000, 2001  Internet Software Consortium.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -17,7 +17,7 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* Id: lwres_gabn.c,v 1.33 2007/06/19 23:47:22 tbox Exp  */
+/* Id: lwres_gabn.c,v 1.33 2007/06/19 23:47:22 tbox Exp */
 
 /*! \file lwres_gabn.c
    These are low-level routines for creating and parsing lightweight
@@ -42,23 +42,23 @@ typedef struct lwres_addr lwres_addr_t;
 typedef LWRES_LIST(lwres_addr_t) lwres_addrlist_t;
 
 typedef struct {
-	lwres_uint32_t  flags;
-	lwres_uint32_t  addrtypes;
-	lwres_uint16_t  namelen;
-	char           *name;
+        lwres_uint32_t  flags;
+        lwres_uint32_t  addrtypes;
+        lwres_uint16_t  namelen;
+        char           *name;
 } lwres_gabnrequest_t;
 
 typedef struct {
-	lwres_uint32_t          flags;
-	lwres_uint16_t          naliases;
-	lwres_uint16_t          naddrs;
-	char                   *realname;
-	char                  **aliases;
-	lwres_uint16_t          realnamelen;
-	lwres_uint16_t         *aliaslen;
-	lwres_addrlist_t        addrs;
-	void                   *base;
-	size_t                  baselen;
+        lwres_uint32_t          flags;
+        lwres_uint16_t          naliases;
+        lwres_uint16_t          naddrs;
+        char                   *realname;
+        char                  **aliases;
+        lwres_uint16_t          realnamelen;
+        lwres_uint16_t         *aliaslen;
+        lwres_addrlist_t        addrs;
+        void                   *base;
+        size_t                  baselen;
 } lwres_gabnresponse_t;
 \endcode
 
@@ -144,9 +144,9 @@ lwres_gabnrequest_render(lwres_context_t *ctx, lwres_gabnrequest_t *req,
 	if (buf == NULL)
 		return (LWRES_R_NOMEMORY);
 
-	lwres_buffer_init(b, buf, (unsigned int)buflen);
+	lwres_buffer_init(b, buf, buflen);
 
-	pkt->length = (lwres_uint32_t)buflen;
+	pkt->length = buflen;
 	pkt->version = LWRES_LWPACKETVERSION_0;
 	pkt->pktflags &= ~LWRES_LWPACKETFLAG_RESPONSE;
 	pkt->opcode = LWRES_OPCODE_GETADDRSBYNAME;
@@ -225,9 +225,9 @@ lwres_gabnresponse_render(lwres_context_t *ctx, lwres_gabnresponse_t *req,
 	buf = CTXMALLOC(buflen);
 	if (buf == NULL)
 		return (LWRES_R_NOMEMORY);
-	lwres_buffer_init(b, buf, (unsigned int)buflen);
+	lwres_buffer_init(b, buf, buflen);
 
-	pkt->length = (lwres_uint32_t)buflen;
+	pkt->length = buflen;
 	pkt->version = LWRES_LWPACKETVERSION_0;
 	pkt->pktflags |= LWRES_LWPACKETFLAG_RESPONSE;
 	pkt->opcode = LWRES_OPCODE_GETADDRSBYNAME;

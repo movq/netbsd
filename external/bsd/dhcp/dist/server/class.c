@@ -1,11 +1,11 @@
-/*	$NetBSD: class.c,v 1.1.1.4 2016/01/10 19:44:44 christos Exp $	*/
+/*	$NetBSD: class.c,v 1.1 2013/03/24 15:46:02 christos Exp $	*/
+
 /* class.c
 
    Handling for client classes. */
 
 /*
- * Copyright (c) 2009,2012-2015 by Internet Systems Consortium, Inc. ("ISC")
- * Copyright (c) 2004,2007 by Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (c) 2004,2007,2009 by Internet Systems Consortium, Inc. ("ISC")
  * Copyright (c) 1998-2003 by Internet Software Consortium
  *
  * Permission to use, copy, modify, and distribute this software for any
@@ -26,10 +26,16 @@
  *   <info@isc.org>
  *   https://www.isc.org/
  *
+ * This software has been written for Internet Systems Consortium
+ * by Ted Lemon in cooperation with Vixie Enterprises and Nominum, Inc.
+ * To learn more about Internet Systems Consortium, see
+ * ``https://www.isc.org/''.  To learn more about Vixie Enterprises,
+ * see ``http://www.vix.com''.   To learn more about Nominum, Inc., see
+ * ``http://www.nominum.com''.
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: class.c,v 1.1.1.4 2016/01/10 19:44:44 christos Exp $");
+__RCSID("$NetBSD: class.c,v 1.1 2013/03/24 15:46:02 christos Exp $");
 
 #include "dhcpd.h"
 
@@ -67,8 +73,10 @@ void classification_setup ()
 void classify_client (packet)
 	struct packet *packet;
 {
-	execute_statements (NULL, packet, NULL, NULL, packet->options, NULL,
-			    &global_scope, default_classification_rules, NULL);
+	execute_statements ((struct binding_value **)0, packet,
+			    (struct lease *)0, (struct client_state *)0,
+			    packet -> options, (struct option_state *)0,
+			    &global_scope, default_classification_rules);
 }
 
 int check_collection (packet, lease, collection)
@@ -182,7 +190,7 @@ int check_collection (packet, lease, collection)
 					}
 					memset (nc -> billed_leases, 0,
 						(nc -> lease_limit *
-						 sizeof (struct lease *)));
+						 sizeof nc -> billed_leases));
 				}
 				data_string_copy (&nc -> hash_string, &data,
 						  MDL);
@@ -239,7 +247,7 @@ isc_result_t unlink_class(struct class **class) {
 	return ISC_R_NOTFOUND;
 }
 
-
+	
 isc_result_t find_class (struct class **class, const char *name,
 			 const char *file, int line)
 {
@@ -255,53 +263,24 @@ isc_result_t find_class (struct class **class, const char *name,
 	return ISC_R_NOTFOUND;
 }
 
-/* Removes the billing class from a lease
- *
- * Note that because classes can be created and removed dynamically, it is
- * possible that the class to which a lease was billed has since been deleted.
- * To cover the case where the lease is the last reference to a deleted class
- * we remove the lease reference from the class first, then the class from the
- * lease.  To protect ourselves from the reverse situation, where the class is
- * the last reference to the lease (unlikely), we create a guard reference to
- * the lease, then remove it at the end.
- */
-void unbill_class (lease)
+int unbill_class (lease, class)
 	struct lease *lease;
+	struct class *class;
 {
 	int i;
-	struct class* class = lease->billing_class;
-	struct lease* refholder = NULL;
 
-	/* if there's no billing to remove, nothing to do */
-	if (class == NULL) {
-		return;
-	}
-
-	/* Find the lease in the list of the class's billed leases */
-	for (i = 0; i < class->lease_limit; i++) {
-		if (class->billed_leases[i] == lease)
+	for (i = 0; i < class -> lease_limit; i++)
+		if (class -> billed_leases [i] == lease)
 			break;
-	}
-
-	/* Create guard reference, so class cannot be last reference to lease */
-	lease_reference(&refholder, lease, MDL);
-
-	/* If the class doesn't have the lease, then something is broken
-	 * programmatically.  We'll log it but skip the lease dereference. */
-	if (i == class->lease_limit) {
+	if (i == class -> lease_limit) {
 		log_error ("lease %s unbilled with no billing arrangement.",
-			   piaddr(lease->ip_addr));
-	} else {
-		/* Remove the lease from the class */
-		lease_dereference(&class->billed_leases[i], MDL);
-		class->leases_consumed--;
+		      piaddr (lease -> ip_addr));
+		return 0;
 	}
-
-	/* Remove the class from the lease */
-	class_dereference(&lease->billing_class, MDL);
-
-	/* Ditch our guard reference */
-	lease_dereference(&refholder, MDL);
+	class_dereference (&lease -> billing_class, MDL);
+	lease_dereference (&class -> billed_leases [i], MDL);
+	class -> leases_consumed--;
+	return 1;
 }
 
 int bill_class (lease, class)
@@ -312,7 +291,7 @@ int bill_class (lease, class)
 
 	if (lease -> billing_class) {
 		log_error ("lease billed with existing billing arrangement.");
-		unbill_class (lease);
+		unbill_class (lease, lease -> billing_class);
 	}
 
 	if (class -> leases_consumed == class -> lease_limit)

@@ -1,5 +1,3 @@
-/*	$NetBSD: misc.c,v 1.5 2017/08/17 08:53:00 christos Exp $	*/
-
 /* Copyright 1988,1990,1993,1994 by Paul Vixie
  * All rights reserved
  */
@@ -20,13 +18,9 @@
  * ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT
  * OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
-#include <sys/cdefs.h>
+
 #if !defined(lint) && !defined(LINT)
-#if 0
 static char rcsid[] = "Id: misc.c,v 1.16 2004/01/23 18:56:43 vixie Exp";
-#else
-__RCSID("$NetBSD: misc.c,v 1.5 2017/08/17 08:53:00 christos Exp $");
-#endif
 #endif
 
 /* vix 26jan87 [RCS has the rest of the log]
@@ -35,7 +29,6 @@ __RCSID("$NetBSD: misc.c,v 1.5 2017/08/17 08:53:00 christos Exp $");
 
 #include "cron.h"
 #include <limits.h>
-#include <vis.h>
 
 #if defined(SYSLOG) && defined(LOG_FILE)
 # undef LOG_FILE
@@ -55,8 +48,6 @@ static int LogFD = ERR;
 static int syslog_open = FALSE;
 #endif
 
-static void mkprint(char *, char *, size_t);
-
 /*
  * glue_strings is the overflow-safe equivalent of
  *		sprintf(buffer, "%s%c%s", a, separator, b);
@@ -71,7 +62,7 @@ glue_strings(char *buffer, size_t buffer_size, const char *a, const char *b,
 	char *buf;
 	char *buf_end;
 
-	if (buffer_size == 0)
+	if (buffer_size <= 0)
 		return (0);
 	buf_end = buffer + buffer_size;
 	buf = buffer;
@@ -106,7 +97,6 @@ strcmp_until(const char *left, const char *right, char until) {
 	return (*left - *right);
 }
 
-#ifdef notdef
 /* strdtb(s) - delete trailing blanks in string 's' and return new length
  */
 int
@@ -132,9 +122,8 @@ strdtb(char *s) {
 	/* the difference between the position of the null character and
 	 * the position of the first character of the string is the length.
 	 */
-	return (int)(x - s);
+	return (x - s);
 }
-#endif
 
 int
 set_debug_flags(const char *flags) {
@@ -156,7 +145,7 @@ set_debug_flags(const char *flags) {
 	DebugFlags = 0;
 
 	while (*pc) {
-		const char	* const *test;
+		const char	**test;
 		int		mask;
 
 		/* try to find debug flag name in our list.
@@ -164,10 +153,12 @@ set_debug_flags(const char *flags) {
 		for (test = DebugFlagNames, mask = 1;
 		     *test != NULL && strcmp_until(*test, pc, ',');
 		     test++, mask <<= 1)
-			continue;
+			NULL;
 
 		if (!*test) {
-			warnx("unrecognized debug flag <%s> <%s>\n", flags, pc);
+			fprintf(stderr,
+				"unrecognized debug flag <%s> <%s>\n",
+				flags, pc);
 			return (FALSE);
 		}
 
@@ -184,12 +175,12 @@ set_debug_flags(const char *flags) {
 	if (DebugFlags) {
 		int flag;
 
-		(void)fprintf(stderr, "debug flags enabled:");
+		fprintf(stderr, "debug flags enabled:");
 
 		for (flag = 0;  DebugFlagNames[flag];  flag++)
 			if (DebugFlags & (1 << flag))
-				(void)fprintf(stderr, " %s", DebugFlagNames[flag]);
-		(void)fprintf(stderr, "\n");
+				fprintf(stderr, " %s", DebugFlagNames[flag]);
+		fprintf(stderr, "\n");
 	}
 
 	return (TRUE);
@@ -201,11 +192,13 @@ void
 set_cron_uid(void) {
 #if defined(BSD) || defined(POSIX)
 	if (seteuid(ROOT_UID) < OK) {
-		err(ERROR_EXIT, "cannot seteuid");
+		perror("seteuid");
+		exit(ERROR_EXIT);
 	}
 #else
 	if (setuid(ROOT_UID) < OK) {
-		err(ERROR_EXIT, "cannot setuid");
+		perror("setuid");
+		exit(ERROR_EXIT);
 	}
 #endif
 }
@@ -220,66 +213,51 @@ set_cron_cwd(void) {
 #endif
 	/* first check for CRONDIR ("/var/cron" or some such)
 	 */
-#ifdef ENABLE_FIX_DIRECTORIES
 	if (stat(CRONDIR, &sb) < OK && errno == ENOENT) {
-		warn("Cannot stat `%s'", CRONDIR);
+		perror(CRONDIR);
 		if (OK == mkdir(CRONDIR, 0710)) {
-			(void)fprintf(stderr, "%s: created\n", CRONDIR);
-			if (stat(CRONDIR, &sb) == -1)
-				err(ERROR_EXIT, "cannot stat `%s'", CRONDIR);
+			fprintf(stderr, "%s: created\n", CRONDIR);
+			stat(CRONDIR, &sb);
 		} else {
-			err(ERROR_EXIT, "cannot create `%s'", CRONDIR);
+			fprintf(stderr, "%s: ", CRONDIR);
+			perror("mkdir");
+			exit(ERROR_EXIT);
 		}
 	}
 	if (!S_ISDIR(sb.st_mode)) {
-		errx(ERROR_EXIT, "`%s' is not a directory, bailing out.",
+		fprintf(stderr, "'%s' is not a directory, bailing out.\n",
 			CRONDIR);
+		exit(ERROR_EXIT);
 	}
-#endif /* ENABLE_FIX_DIRECTORIES */
 	if (chdir(CRONDIR) < OK) {
-		err(ERROR_EXIT, "cannot chdir `%s', bailing out.\n", CRONDIR);
+		fprintf(stderr, "cannot chdir(%s), bailing out.\n", CRONDIR);
+		perror(CRONDIR);
+		exit(ERROR_EXIT);
 	}
 
 	/* CRONDIR okay (now==CWD), now look at SPOOL_DIR ("tabs" or some such)
 	 */
-#ifdef ENABLE_FIX_DIRECTORIES
 	if (stat(SPOOL_DIR, &sb) < OK && errno == ENOENT) {
-		warn("cannot stat `%s'", SPOOL_DIR);
+		perror(SPOOL_DIR);
 		if (OK == mkdir(SPOOL_DIR, 0700)) {
-			(void)fprintf(stderr, "%s: created\n", SPOOL_DIR);
-			if (stat(SPOOL_DIR, &sb) == -1)
-				err(ERROR_EXIT, "cannot stat `%s'", CRONDIR);
+			fprintf(stderr, "%s: created\n", SPOOL_DIR);
+			stat(SPOOL_DIR, &sb);
 		} else {
-			err(ERROR_EXIT, "cannot create `%s'", SPOOL_DIR);
+			fprintf(stderr, "%s: ", SPOOL_DIR);
+			perror("mkdir");
+			exit(ERROR_EXIT);
 		}
 	}
-#else
-	if (stat(SPOOL_DIR, &sb)) {
-		err(ERROR_EXIT, "cannot stat `%s'", SPOOL_DIR);
-	}
-#endif /* ENABLE_FIX_DIRECTORIES */
 	if (!S_ISDIR(sb.st_mode)) {
-		errx(ERROR_EXIT, "`%s' is not a directory, bailing out.",
+		fprintf(stderr, "'%s' is not a directory, bailing out.\n",
 			SPOOL_DIR);
+		exit(ERROR_EXIT);
 	}
 	if (grp != NULL) {
-		if (sb.st_gid != grp->gr_gid) {
-#ifdef ENABLE_FIX_DIRECTORIES
-			errx(ERROR_EXIT, "Bad group %d != %d for `%s'",
-			    (int)sb.st_gid, (int)grp->gr_gid, SPOOL_DIR);
-#else				
-			if (chown(SPOOL_DIR, (uid_t)-1, grp->gr_gid) == -1)
-			    err(ERROR_EXIT, "cannot chown `%s'", SPOOL_DIR);
-#endif
-		}
+		if (sb.st_gid != grp->gr_gid)
+			chown(SPOOL_DIR, -1, grp->gr_gid);
 		if (sb.st_mode != 01730)
-#ifdef ENABLE_FIX_DIRECTORIES
-			errx(ERROR_EXIT, "Bad mode %#o != %#o for `%s'",
-			    (int)sb.st_mode, 01730, SPOOL_DIR);
-#else				
-			if (chmod(SPOOL_DIR, 01730) == -1)
-			    err(ERROR_EXIT, "cannot chmod `%s'", SPOOL_DIR);
-#endif
+			chmod(SPOOL_DIR, 01730);
 	}
 }
 
@@ -302,7 +280,7 @@ acquire_daemonlock(int closeflag) {
 	if (closeflag) {
 		/* close stashed fd for child so we don't leak it. */
 		if (fd != -1) {
-			(void)close(fd);
+			close(fd);
 			fd = -1;
 		}
 		return;
@@ -312,44 +290,39 @@ acquire_daemonlock(int closeflag) {
 		pidfile = _PATH_CRON_PID;
 		/* Initial mode is 0600 to prevent flock() race/DoS. */
 		if ((fd = open(pidfile, O_RDWR|O_CREAT, 0600)) == -1) {
-			log_itx("CRON", getpid(), "DEATH",
-			    "can't open or create %s: %s",
-			    pidfile, strerror(errno));
+			sprintf(buf, "can't open or create %s: %s",
+				pidfile, strerror(errno));
+			fprintf(stderr, "%s: %s\n", ProgramName, buf);
+			log_it("CRON", getpid(), "DEATH", buf);
 			exit(ERROR_EXIT);
-		}
-		/* fd must be > STDERR since we dup fd 0-2 to /dev/null */
-		if (fd <= STDERR) {
-			if (dup2(fd, STDERR + 1) < 0) {
-				log_itx("CRON", getpid(), "DEATH",
-				    "can't dup pid fd: %s", strerror(errno));
- 				exit(ERROR_EXIT);
- 			}
-			close(fd);
-			fd = STDERR + 1;
 		}
 
 		if (flock(fd, LOCK_EX|LOCK_NB) < OK) {
 			int save_errno = errno;
 
-			memset(buf, 0, sizeof(buf));
+			bzero(buf, sizeof(buf));
 			if ((num = read(fd, buf, sizeof(buf) - 1)) > 0 &&
 			    (otherpid = strtol(buf, &ep, 10)) > 0 &&
 			    ep != buf && *ep == '\n' && otherpid != LONG_MAX) {
-				log_itx("CRON", getpid(), "DEATH",
+				sprintf(buf,
 				    "can't lock %s, otherpid may be %ld: %s",
 				    pidfile, otherpid, strerror(save_errno));
 			} else {
-				log_itx("CRON", getpid(), "DEATH",
+				sprintf(buf,
 				    "can't lock %s, otherpid unknown: %s",
 				    pidfile, strerror(save_errno));
 			}
+			sprintf(buf, "can't lock %s, otherpid may be %ld: %s",
+				pidfile, otherpid, strerror(save_errno));
+			fprintf(stderr, "%s: %s\n", ProgramName, buf);
+			log_it("CRON", getpid(), "DEATH", buf);
 			exit(ERROR_EXIT);
 		}
 		(void) fchmod(fd, 0644);
 		(void) fcntl(fd, F_SETFD, 1);
 	}
 
-	(void)snprintf(buf, sizeof(buf), "%ld\n", (long)getpid());
+	sprintf(buf, "%ld\n", (long)getpid());
 	(void) lseek(fd, (off_t)0, SEEK_SET);
 	num = write(fd, buf, strlen(buf));
 	(void) ftruncate(fd, num);
@@ -367,7 +340,7 @@ get_char(FILE *file) {
 
 	ch = getc(file);
 	if (ch == '\n')
-		Set_LineNum(LineNumber + 1);
+		Set_LineNum(LineNumber + 1)
 	return (ch);
 }
 
@@ -375,9 +348,9 @@ get_char(FILE *file) {
  */
 void
 unget_char(int ch, FILE *file) {
-	(void)ungetc(ch, file);
+	ungetc(ch, file);
 	if (ch == '\n')
-		Set_LineNum(LineNumber - 1);
+		Set_LineNum(LineNumber - 1)
 }
 
 /* get_string(str, max, file, termstr) : like fgets() but
@@ -387,7 +360,7 @@ unget_char(int ch, FILE *file) {
  *		(4) returns EOF or terminating character, whichever
  */
 int
-get_string(char *string, int size, FILE *file, const char *terms) {
+get_string(char *string, int size, FILE *file, char *terms) {
 	int ch;
 
 	while (EOF != (ch = get_char(file)) && !strchr(terms, ch)) {
@@ -440,19 +413,54 @@ skip_comments(FILE *file) {
 		unget_char(ch, file);
 }
 
-void
-log_itx(const char *username, PID_T xpid, const char *event, const char *fmt,
-    ...)
+/* int in_file(const char *string, FILE *file, int error)
+ *	return TRUE if one of the lines in file matches string exactly,
+ *	FALSE if no lines match, and error on error.
+ */
+static int
+in_file(const char *string, FILE *file, int error)
 {
-	char *detail;
-	va_list ap;
-	va_start(ap, fmt);
-	if (vasprintf(&detail, fmt, ap) == -1) {
-		va_end(ap);
-		return;
+	char line[MAX_TEMPSTR];
+	char *endp;
+
+	if (fseek(file, 0L, SEEK_SET))
+		return (error);
+	while (fgets(line, MAX_TEMPSTR, file)) {
+		if (line[0] != '\0') {
+			endp = &line[strlen(line) - 1];
+			if (*endp != '\n')
+				return (error);
+			*endp = '\0';
+			if (0 == strcmp(line, string))
+				return (TRUE);
+		}
 	}
-	log_it(username, xpid, event, detail);
-	free(detail);
+	if (ferror(file))
+		return (error);
+	return (FALSE);
+}
+
+/* int allowed(const char *username, const char *allow_file, const char *deny_file)
+ *	returns TRUE if (allow_file exists and user is listed)
+ *	or (deny_file exists and user is NOT listed).
+ *	root is always allowed.
+ */
+int
+allowed(const char *username, const char *allow_file, const char *deny_file) {
+	FILE	*fp;
+	int	isallowed;
+
+	if (strcmp(username, ROOT_USER) == 0)
+		return (TRUE);
+	isallowed = FALSE;
+	if ((fp = fopen(allow_file, "r")) != NULL) {
+		isallowed = in_file(username, fp, FALSE);
+		fclose(fp);
+	} else if ((fp = fopen(deny_file, "r")) != NULL) {
+		isallowed = !in_file(username, fp, FALSE);
+		fclose(fp);
+	}
+	return (isallowed);
 }
 
 void
@@ -462,16 +470,28 @@ log_it(const char *username, PID_T xpid, const char *event, const char *detail) 
 #endif
 #if defined(LOG_FILE)
 	char *msg;
-	int msglen;
 	TIME_T now = time((TIME_T) 0);
 	struct tm *t = localtime(&now);
+#endif /*LOG_FILE*/
+
+#if defined(LOG_FILE)
+	/* we assume that MAX_TEMPSTR will hold the date, time, &punctuation.
+	 */
+	msg = malloc(strlen(username)
+		     + strlen(event)
+		     + strlen(detail)
+		     + MAX_TEMPSTR);
+	if (msg == NULL)
+		return;
 
 	if (LogFD < OK) {
 		LogFD = open(LOG_FILE, O_WRONLY|O_APPEND|O_CREAT, 0600);
 		if (LogFD < OK) {
-			warn("can't open log file `%s'", LOG_FILE);
+			fprintf(stderr, "%s: can't open log file\n",
+				ProgramName);
+			perror(LOG_FILE);
 		} else {
-			(void) fcntl(LogFD, F_SETFD, FD_CLOEXEC);
+			(void) fcntl(LogFD, F_SETFD, 1);
 		}
 	}
 
@@ -479,16 +499,18 @@ log_it(const char *username, PID_T xpid, const char *event, const char *detail) 
 	 * everything out in one chunk and this has to be atomically appended
 	 * to the log file.
 	 */
-	msglen = asprintf(&msg,
-	    "%s (%02d/%02d-%02d:%02d:%02d-%d) %s (%s)\n", username,
-	    t->tm_mon + 1, t->tm_mday, t->tm_hour, t->tm_min, t->tm_sec, pid,
-	    event, detail);
-	if (msglen == -1)
-		return;
+	sprintf(msg, "%s (%02d/%02d-%02d:%02d:%02d-%d) %s (%s)\n",
+		username,
+		t->tm_mon+1, t->tm_mday, t->tm_hour, t->tm_min, t->tm_sec, pid,
+		event, detail);
 
-	if (LogFD < OK || write(LogFD, msg, (size_t)msglen) < OK) {
-		warn("can't write to log file");
-		write(STDERR, msg, (size_t)msglen);
+	/* we have to run strlen() because sprintf() returns (char*) on old BSD
+	 */
+	if (LogFD < OK || write(LogFD, msg, strlen(msg)) < OK) {
+		if (LogFD >= OK)
+			perror(LOG_FILE);
+		fprintf(stderr, "%s: can't write to log file\n", ProgramName);
+		write(STDERR, msg, strlen(msg));
 	}
 
 	free(msg);
@@ -497,9 +519,9 @@ log_it(const char *username, PID_T xpid, const char *event, const char *detail) 
 #if defined(SYSLOG)
 	if (!syslog_open) {
 # ifdef LOG_DAEMON
-		openlog(getprogname(), LOG_PID, FACILITY);
+		openlog(ProgramName, LOG_PID, FACILITY);
 # else
-		openlog(getprogname(), LOG_PID);
+		openlog(ProgramName, LOG_PID);
 # endif
 		syslog_open = TRUE;		/* assume openlog success */
 	}
@@ -510,7 +532,7 @@ log_it(const char *username, PID_T xpid, const char *event, const char *detail) 
 
 #if DEBUGGING
 	if (DebugFlags) {
-		(void)fprintf(stderr, "log_it: (%s %ld) %s (%s)\n",
+		fprintf(stderr, "log_it: (%s %ld) %s (%s)\n",
 			username, (long)pid, event, detail);
 	}
 #endif
@@ -519,7 +541,7 @@ log_it(const char *username, PID_T xpid, const char *event, const char *detail) 
 void
 log_close(void) {
 	if (LogFD != ERR) {
-		(void)close(LogFD);
+		close(LogFD);
 		LogFD = ERR;
 	}
 #if defined(SYSLOG)
@@ -528,23 +550,82 @@ log_close(void) {
 #endif /*SYSLOG*/
 }
 
+/* char *first_word(char *s, char *t)
+ *	return pointer to first word
+ * parameters:
+ *	s - string we want the first word of
+ *	t - terminators, implicitly including \0
+ * warnings:
+ *	(1) this routine is fairly slow
+ *	(2) it returns a pointer to static storage
+ */
+char *
+first_word(char *s, char *t) {
+	static char retbuf[2][MAX_TEMPSTR + 1];	/* sure wish C had GC */
+	static int retsel = 0;
+	char *rb, *rp;
+
+	/* select a return buffer */
+	retsel = 1-retsel;
+	rb = &retbuf[retsel][0];
+	rp = rb;
+
+	/* skip any leading terminators */
+	while (*s && (NULL != strchr(t, *s))) {
+		s++;
+	}
+
+	/* copy until next terminator or full buffer */
+	while (*s && (NULL == strchr(t, *s)) && (rp < &rb[MAX_TEMPSTR])) {
+		*rp++ = *s++;
+	}
+
+	/* finish the return-string and return it */
+	*rp = '\0';
+	return (rb);
+}
+
 /* warning:
  *	heavily ascii-dependent.
  */
-static void
-mkprint(char *dst, char *src, size_t len)
+void
+mkprint(dst, src, len)
+	char *dst;
+	unsigned char *src;
+	int len;
 {
-	while(len > 0 && isblank((unsigned char) *src))
-		len--, src++;
+	/*
+	 * XXX
+	 * We know this routine can't overflow the dst buffer because mkprints()
+	 * allocated enough space for the worst case.
+	 */
+	while (len-- > 0)
+	{
+		unsigned char ch = *src++;
 
-	(void)strvisx(dst, src, len, VIS_TAB|VIS_NL);
+		if (ch < ' ') {			/* control character */
+			*dst++ = '^';
+			*dst++ = ch + '@';
+		} else if (ch < 0177) {		/* printable */
+			*dst++ = ch;
+		} else if (ch == 0177) {	/* delete/rubout */
+			*dst++ = '^';
+			*dst++ = '?';
+		} else {			/* parity character */
+			sprintf(dst, "\\%03o", ch);
+			dst += 4;
+		}
+	}
+	*dst = '\0';
 }
 
 /* warning:
  *	returns a pointer to malloc'd storage, you must call free yourself.
  */
 char *
-mkprints(char *src, size_t len)
+mkprints(src, len)
+	unsigned char *src;
+	unsigned int len;
 {
 	char *dst = malloc(len*4 + 1);
 
@@ -559,7 +640,8 @@ mkprints(char *src, size_t len)
  * 1234567890123456789012345678901234567
  */
 char *
-arpadate(time_t *clock)
+arpadate(clock)
+	time_t *clock;
 {
 	time_t t = clock ? *clock : time((TIME_T) 0);
 	struct tm tm = *localtime(&t);
@@ -567,16 +649,47 @@ arpadate(time_t *clock)
 	int hours = gmtoff / SECONDS_PER_HOUR;
 	int minutes = (gmtoff - (hours * SECONDS_PER_HOUR)) / SECONDS_PER_MINUTE;
 	static char ret[64];	/* zone name might be >3 chars */
-
-	if (minutes < 0)
-		minutes = -minutes;
 	
-	(void)strftime(ret, sizeof(ret), "%a, %e %b %Y %T ????? (%Z)", &tm);
-	(void)snprintf(strchr(ret, '?'), "% .2d%.2d", hours, minutes);
-	ret[sizeof(ret) - 1] = '\0';
-	return ret;
+	(void) sprintf(ret, "%s, %2d %s %2d %02d:%02d:%02d %.2d%.2d (%s)",
+		       DowNames[tm.tm_wday],
+		       tm.tm_mday,
+		       MonthNames[tm.tm_mon],
+		       tm.tm_year + 1900,
+		       tm.tm_hour,
+		       tm.tm_min,
+		       tm.tm_sec,
+		       hours,
+		       minutes,
+		       TZONE(*tm));
+	return (ret);
 }
 #endif /*MAIL_DATE*/
+
+#ifdef HAVE_SAVED_UIDS
+static uid_t save_euid;
+static gid_t save_egid;
+
+int swap_uids(void) {
+	save_egid = getegid();
+	save_euid = geteuid();
+	return ((setegid(getgid()) || seteuid(getuid())) ? -1 : 0);
+}
+
+int swap_uids_back(void) {
+	return ((setegid(getgid()) || seteuid(getuid())) ? -1 : 0);
+}
+
+#else /*HAVE_SAVED_UIDS*/
+
+int swap_uids(void) {
+	return ((setregid(getegid(), getgid()) || setreuid(geteuid(), getuid()))
+	    ? -1 : 0);
+}
+
+int swap_uids_back(void) {
+	return (swap_uids());
+}
+#endif /*HAVE_SAVED_UIDS*/
 
 size_t
 strlens(const char *last, ...) {

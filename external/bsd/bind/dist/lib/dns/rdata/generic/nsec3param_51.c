@@ -1,7 +1,7 @@
-/*	$NetBSD: nsec3param_51.c,v 1.5 2015/12/17 04:00:44 christos Exp $	*/
+/*	$NetBSD: nsec3param_51.c,v 1.1 2009/03/22 15:01:51 christos Exp $	*/
 
 /*
- * Copyright (C) 2008, 2009, 2015  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2008, 2009  Internet Systems Consortium, Inc. ("ISC")
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -16,7 +16,7 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* Id: nsec3param_51.c,v 1.7 2009/12/04 21:09:34 marka Exp  */
+/* Id: nsec3param_51.c,v 1.4.48.2 2009/01/18 23:47:41 tbox Exp */
 
 /*
  * Copyright (C) 2004  Nominet, Ltd.
@@ -50,7 +50,7 @@ fromtext_nsec3param(ARGS_FROMTEXT) {
 	unsigned int flags = 0;
 	unsigned char hashalg;
 
-	REQUIRE(type == dns_rdatatype_nsec3param);
+	REQUIRE(type == 51);
 
 	UNUSED(type);
 	UNUSED(rdclass);
@@ -103,7 +103,7 @@ totext_nsec3param(ARGS_TOTEXT) {
 	char buf[sizeof("65535 ")];
 	isc_uint32_t iterations;
 
-	REQUIRE(rdata->type == dns_rdatatype_nsec3param);
+	REQUIRE(rdata->type == 51);
 	REQUIRE(rdata->length != 0);
 
 	UNUSED(tctx);
@@ -148,7 +148,7 @@ fromwire_nsec3param(ARGS_FROMWIRE) {
 	isc_region_t sr, rr;
 	unsigned int saltlen;
 
-	REQUIRE(type == dns_rdatatype_nsec3param);
+	REQUIRE(type == 51);
 
 	UNUSED(type);
 	UNUSED(rdclass);
@@ -176,7 +176,7 @@ static inline isc_result_t
 towire_nsec3param(ARGS_TOWIRE) {
 	isc_region_t sr;
 
-	REQUIRE(rdata->type == dns_rdatatype_nsec3param);
+	REQUIRE(rdata->type == 51);
 	REQUIRE(rdata->length != 0);
 
 	UNUSED(cctx);
@@ -192,7 +192,7 @@ compare_nsec3param(ARGS_COMPARE) {
 
 	REQUIRE(rdata1->type == rdata2->type);
 	REQUIRE(rdata1->rdclass == rdata2->rdclass);
-	REQUIRE(rdata1->type == dns_rdatatype_nsec3param);
+	REQUIRE(rdata1->type == 51);
 	REQUIRE(rdata1->length != 0);
 	REQUIRE(rdata2->length != 0);
 
@@ -205,7 +205,7 @@ static inline isc_result_t
 fromstruct_nsec3param(ARGS_FROMSTRUCT) {
 	dns_rdata_nsec3param_t *nsec3param = source;
 
-	REQUIRE(type == dns_rdatatype_nsec3param);
+	REQUIRE(type == 51);
 	REQUIRE(source != NULL);
 	REQUIRE(nsec3param->common.rdtype == type);
 	REQUIRE(nsec3param->common.rdclass == rdclass);
@@ -227,7 +227,7 @@ tostruct_nsec3param(ARGS_TOSTRUCT) {
 	isc_region_t region;
 	dns_rdata_nsec3param_t *nsec3param = target;
 
-	REQUIRE(rdata->type == dns_rdatatype_nsec3param);
+	REQUIRE(rdata->type == 51);
 	REQUIRE(target != NULL);
 	REQUIRE(rdata->length != 0);
 
@@ -257,7 +257,7 @@ freestruct_nsec3param(ARGS_FREESTRUCT) {
 	dns_rdata_nsec3param_t *nsec3param = source;
 
 	REQUIRE(source != NULL);
-	REQUIRE(nsec3param->common.rdtype == dns_rdatatype_nsec3param);
+	REQUIRE(nsec3param->common.rdtype == 51);
 
 	if (nsec3param->mctx == NULL)
 		return;
@@ -269,7 +269,7 @@ freestruct_nsec3param(ARGS_FREESTRUCT) {
 
 static inline isc_result_t
 additionaldata_nsec3param(ARGS_ADDLDATA) {
-	REQUIRE(rdata->type == dns_rdatatype_nsec3param);
+	REQUIRE(rdata->type == 51);
 
 	UNUSED(rdata);
 	UNUSED(add);
@@ -282,7 +282,7 @@ static inline isc_result_t
 digest_nsec3param(ARGS_DIGEST) {
 	isc_region_t r;
 
-	REQUIRE(rdata->type == dns_rdatatype_nsec3param);
+	REQUIRE(rdata->type == 51);
 
 	dns_rdata_toregion(rdata, &r);
 	return ((digest)(arg, &r));
@@ -291,7 +291,7 @@ digest_nsec3param(ARGS_DIGEST) {
 static inline isc_boolean_t
 checkowner_nsec3param(ARGS_CHECKOWNER) {
 
-       REQUIRE(type == dns_rdatatype_nsec3param);
+       REQUIRE(type == 51);
 
        UNUSED(name);
        UNUSED(type);
@@ -304,18 +304,13 @@ checkowner_nsec3param(ARGS_CHECKOWNER) {
 static inline isc_boolean_t
 checknames_nsec3param(ARGS_CHECKNAMES) {
 
-	REQUIRE(rdata->type == dns_rdatatype_nsec3param);
+	REQUIRE(rdata->type == 51);
 
 	UNUSED(rdata);
 	UNUSED(owner);
 	UNUSED(bad);
 
 	return (ISC_TRUE);
-}
-
-static inline int
-casecompare_nsec3param(ARGS_COMPARE) {
-	return (compare_nsec3param(rdata1, rdata2));
 }
 
 #endif	/* RDATA_GENERIC_NSEC3PARAM_51_C */

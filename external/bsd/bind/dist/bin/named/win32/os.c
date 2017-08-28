@@ -1,7 +1,7 @@
-/*	$NetBSD: os.c,v 1.10 2016/05/26 16:49:56 christos Exp $	*/
+/*	$NetBSD: os.c,v 1.1 2009/03/22 14:56:15 christos Exp $	*/
 
 /*
- * Copyright (C) 2004, 2005, 2007-2009, 2012-2016  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2004, 2005, 2007, 2008  Internet Systems Consortium, Inc. ("ISC")
  * Copyright (C) 1999-2002  Internet Software Consortium.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -17,10 +17,11 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
+/* Id: os.c,v 1.31 2008/11/17 05:41:10 marka Exp */
+
 #include <config.h>
 #include <stdarg.h>
 
-#include <sys/types.h>
 #include <sys/stat.h>
 
 #include <ctype.h>
@@ -56,7 +57,7 @@ static char *version_error =
 	"named requires Windows 2000 Service Pack 2 or later to run correctly";
 
 void
-ns_paths_init(void) {
+ns_paths_init() {
 	if (!Initialized)
 		isc_ntpaths_init();
 
@@ -67,7 +68,6 @@ ns_paths_init(void) {
 	ns_g_defaultpidfile = isc_ntpaths_get(NAMED_PID_PATH);
 	lwresd_g_defaultpidfile = isc_ntpaths_get(LWRESD_PID_PATH);
 	ns_g_keyfile = isc_ntpaths_get(RNDC_KEY_PATH);
-	ns_g_defaultsessionkeyfile = isc_ntpaths_get(SESSION_KEY_PATH);
 
 	Initialized = TRUE;
 }
@@ -80,10 +80,9 @@ ns_paths_init(void) {
 static void
 version_check(const char *progname) {
 
-	if ((isc_win32os_versioncheck(4, 0, 0, 0) >= 0) &&
-	    (isc_win32os_versioncheck(5, 0, 0, 0) < 0))
+	if(isc_win32os_majorversion() < 5)
 		return;	/* No problem with Version 4.0 */
-	if (isc_win32os_versioncheck(5, 0, 2, 0) < 0)
+	if(isc_win32os_versioncheck(5, 0, 2, 0) < 0)
 		if (ntservice_isservice())
 			NTReportError(progname, version_error);
 		else
@@ -179,7 +178,7 @@ ns_os_minprivs(void) {
 }
 
 static int
-safe_open(const char *filename, int mode, isc_boolean_t append) {
+safe_open(const char *filename, isc_boolean_t append) {
 	int fd;
 	struct stat sb;
 
@@ -190,10 +189,12 @@ safe_open(const char *filename, int mode, isc_boolean_t append) {
 		return (-1);
 
 	if (append)
-		fd = open(filename, O_WRONLY|O_CREAT|O_APPEND, mode);
+		fd = open(filename, O_WRONLY|O_CREAT|O_APPEND,
+			  S_IRUSR|S_IWUSR|S_IRGRP|S_IROTH);
 	else {
 		(void)unlink(filename);
-		fd = open(filename, O_WRONLY|O_CREAT|O_EXCL, mode);
+		fd = open(filename, O_WRONLY|O_CREAT|O_EXCL,
+			  S_IRUSR|S_IWUSR|S_IRGRP|S_IROTH);
 	}
 	return (fd);
 }
@@ -207,35 +208,11 @@ cleanup_pidfile(void) {
 	pidfile = NULL;
 }
 
-FILE *
-ns_os_openfile(const char *filename, int mode, isc_boolean_t switch_user) {
-	char strbuf[ISC_STRERRORSIZE];
-	FILE *fp;
-	int fd;
-
-	UNUSED(switch_user);
-	fd = safe_open(filename, mode, ISC_FALSE);
-	if (fd < 0) {
-		isc__strerror(errno, strbuf, sizeof(strbuf));
-		ns_main_earlywarning("could not open file '%s': %s",
-				     filename, strbuf);
-		return (NULL);
-	}
-
-	fp = fdopen(fd, "w");
-	if (fp == NULL) {
-		isc__strerror(errno, strbuf, sizeof(strbuf));
-		ns_main_earlywarning("could not fdopen() file '%s': %s",
-				     filename, strbuf);
-		close(fd);
-	}
-
-	return (fp);
-}
-
 void
 ns_os_writepidfile(const char *filename, isc_boolean_t first_time) {
+	int fd;
 	FILE *lockfile;
+	size_t len;
 	pid_t pid;
 	char strbuf[ISC_STRERRORSIZE];
 	void (*report)(const char *, ...);
@@ -250,19 +227,31 @@ ns_os_writepidfile(const char *filename, isc_boolean_t first_time) {
 
 	if (filename == NULL)
 		return;
-
-	pidfile = strdup(filename);
+	len = strlen(filename);
+	pidfile = malloc(len + 1);
 	if (pidfile == NULL) {
 		isc__strerror(errno, strbuf, sizeof(strbuf));
-		(*report)("couldn't strdup() '%s': %s", filename, strbuf);
+		(*report)("couldn't malloc '%s': %s", filename, strbuf);
 		return;
 	}
+	/* This is safe. */
+	strcpy(pidfile, filename);
 
-	lockfile = ns_os_openfile(filename, S_IRUSR|S_IWUSR|S_IRGRP|S_IROTH,
-				  ISC_FALSE);
-	if (lockfile == NULL) {
+	fd = safe_open(filename, ISC_FALSE);
+	if (fd < 0) {
+		isc__strerror(errno, strbuf, sizeof(strbuf));
+		(*report)("couldn't open pid file '%s': %s", filename, strbuf);
 		free(pidfile);
 		pidfile = NULL;
+		return;
+	}
+	lockfile = fdopen(fd, "w");
+	if (lockfile == NULL) {
+		isc__strerror(errno, strbuf, sizeof(strbuf));
+		(*report)("could not fdopen() pid file '%s': %s",
+			  filename, strbuf);
+		(void)close(fd);
+		cleanup_pidfile();
 		return;
 	}
 
@@ -294,7 +283,7 @@ isc_result_t
 ns_os_gethostname(char *buf, size_t len) {
 	int n;
 
-	n = gethostname(buf, (int)len);
+	n = gethostname(buf, len);
 	return ((n == 0) ? ISC_R_SUCCESS : ISC_R_FAILURE);
 }
 
@@ -314,81 +303,4 @@ ns_os_tzset(void) {
 void
 ns_os_started(void) {
 	ntservice_init();
-}
-
-static char unamebuf[BUFSIZ];
-static char *unamep = NULL;
-
-static void
-getuname(void) {
-	DWORD fvilen;
-	char *fvi;
-	VS_FIXEDFILEINFO *ffi;
-	UINT ffilen;
-	SYSTEM_INFO sysinfo;
-	char *arch;
-
-	fvi = NULL;
-	fvilen = GetFileVersionInfoSize("kernel32.dll", 0);
-	if (fvilen == 0) {
-		goto err;
-	}
-	fvi = (char *)malloc(fvilen);
-	if (fvi == NULL) {
-		goto err;
-	}
-	memset(fvi, 0, fvilen);
-	if (GetFileVersionInfo("kernel32.dll", 0, fvilen, fvi) == 0) {
-		goto err;
-	}
-	ffi = NULL;
-	ffilen = 0;
-	if ((VerQueryValue(fvi, "\\", &ffi, &ffilen) == 0) ||
-	    (ffi == NULL) || (ffilen == 0)) {
-		goto err;
-	}
-	memset(&sysinfo, 0, sizeof(sysinfo));
-	GetSystemInfo(&sysinfo);
-	switch (sysinfo.wProcessorArchitecture) {
-	case PROCESSOR_ARCHITECTURE_INTEL:
-		arch = "x86";
-		break;
-	case PROCESSOR_ARCHITECTURE_ARM:
-		arch = "arm";
-		break;
-	case PROCESSOR_ARCHITECTURE_IA64:
-		arch = "ia64";
-		break;
-	case PROCESSOR_ARCHITECTURE_AMD64:
-		arch = "x64";
-		break;
-	default:
-		arch = "unknown architecture";
-		break;
-	}
-
-	snprintf(unamebuf, sizeof(unamebuf),
-		 "Windows %d %d build %d %d for %s\n",
-		 (ffi->dwProductVersionMS >> 16) & 0xffff,
-		 ffi->dwProductVersionMS & 0xffff,
-		 (ffi->dwProductVersionLS >> 16) & 0xffff,
-		 ffi->dwProductVersionLS & 0xffff,
-		 arch);
-
-    err:
-	if (fvi != NULL) {
-		free(fvi);
-	}
-	unamep = unamebuf;
-}
-
-/*
- * GetVersionEx() returns 6.2 (aka Windows 8.1) since it was obsoleted
- * so we had to switch to the recommended way to get the Windows version.
- */
-char *
-ns_os_uname(void) {
-	if (unamep == NULL)
-		getuname();
-	return (unamep);
 }

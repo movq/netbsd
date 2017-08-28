@@ -1,7 +1,7 @@
-/*	$NetBSD: byaddr_test.c,v 1.8 2015/12/17 04:00:42 christos Exp $	*/
+/*	$NetBSD: byaddr_test.c,v 1.1 2009/03/22 14:56:21 christos Exp $	*/
 
 /*
- * Copyright (C) 2004, 2005, 2007, 2012, 2015  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2004, 2005, 2007  Internet Systems Consortium, Inc. ("ISC")
  * Copyright (C) 2000-2002  Internet Software Consortium.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -17,7 +17,7 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* Id: byaddr_test.c,v 1.28 2007/06/19 23:46:59 tbox Exp  */
+/* Id: byaddr_test.c,v 1.28 2007/06/19 23:46:59 tbox Exp */
 
 /*! \file
  * \author
@@ -32,7 +32,6 @@
 #include <isc/commandline.h>
 #include <isc/mem.h>
 #include <isc/netaddr.h>
-#include <isc/print.h>
 #include <isc/task.h>
 #include <isc/timer.h>
 #include <isc/util.h>
@@ -167,7 +166,7 @@ main(int argc, char *argv[]) {
 							  512, 6, 1024,
 							  17, 19, attrs,
 							  attrs, &disp4)
-				      == ISC_R_SUCCESS);
+			 	      == ISC_R_SUCCESS);
 			INSIST(disp4 != NULL);
 		}
 
@@ -187,16 +186,16 @@ main(int argc, char *argv[]) {
 			INSIST(disp6 != NULL);
 		}
 
-		RUNTIME_CHECK(dns_view_createresolver(view, taskmgr, 10, 1,
+		RUNTIME_CHECK(dns_view_createresolver(view, taskmgr, 10,
 						      socketmgr,
 						      timermgr, 0,
 						      dispatchmgr,
 						      disp4, disp6) ==
 		      ISC_R_SUCCESS);
 
-		if (disp4 != NULL)
+	        if (disp4 != NULL)
 		    dns_dispatch_detach(&disp4);
-		if (disp6 != NULL)
+	        if (disp6 != NULL)
 		    dns_dispatch_detach(&disp6);
 	}
 

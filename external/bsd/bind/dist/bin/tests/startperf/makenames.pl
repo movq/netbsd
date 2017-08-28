@@ -1,6 +1,6 @@
 #!/usr/bin/perl
 #
-# Copyright (C) 2011, 2012  Internet Systems Consortium, Inc. ("ISC")
+# Copyright (C) 2011  Internet Systems Consortium, Inc. ("ISC")
 #
 # Permission to use, copy, modify, and/or distribute this software for any
 # purpose with or without fee is hereby granted, provided that the above
@@ -14,19 +14,17 @@
 # OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR
 # PERFORMANCE OF THIS SOFTWARE.
 
-# Id: makenames.pl,v 1.3 2011/09/02 21:15:35 each Exp 
+# Id: makenames.pl,v 1.2 2011-07-06 05:05:51 each Exp
 use strict;
 
-die "Usage: makenames.pl <num> [<len>]" if (@ARGV == 0 || @ARGV > 2);
-my $len = 10;
-$len = @ARGV[1] if (@ARGV == 2);
+die "Usage: makenames.pl <num>" if (@ARGV == 0);
 
 my @chars = split("", "abcdefghijklmnopqrstuvwxyz123456789");
 
 srand; 
 for (my $i = 0; $i < @ARGV[0]; $i++) {
         my $name = "";
-        for (my $j = 0; $j < $len; $j++) {
+        for (my $j = 0; $j < 10; $j++) {
                 my $r = rand 35;
                 $name .= $chars[$r];
         }

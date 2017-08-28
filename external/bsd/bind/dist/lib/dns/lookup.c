@@ -1,7 +1,7 @@
-/*	$NetBSD: lookup.c,v 1.6 2014/12/10 04:37:58 christos Exp $	*/
+/*	$NetBSD: lookup.c,v 1.1 2009/03/22 15:01:07 christos Exp $	*/
 
 /*
- * Copyright (C) 2004, 2005, 2007, 2013  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2004, 2005, 2007  Internet Systems Consortium, Inc. ("ISC")
  * Copyright (C) 2000, 2001, 2003  Internet Software Consortium.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -17,7 +17,7 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* Id: lookup.c,v 1.21 2007/06/18 23:47:40 tbox Exp  */
+/* Id: lookup.c,v 1.21 2007/06/18 23:47:40 tbox Exp */
 
 /*! \file */
 
@@ -347,7 +347,7 @@ lookup_find(dns_lookup_t *lookup, dns_fetchevent_t *event) {
 		lookup->event->result = result;
 		lookup->event->ev_sender = lookup;
 		isc_task_sendanddetach(&lookup->task,
-				       (isc_event_t **)(void *)&lookup->event);
+				       (isc_event_t **)&lookup->event);
 		dns_view_detach(&lookup->view);
 	}
 
@@ -358,7 +358,7 @@ static void
 levent_destroy(isc_event_t *event) {
 	dns_lookupevent_t *levent;
 	isc_mem_t *mctx;
-
+ 
 	REQUIRE(event->ev_type == DNS_EVENT_LOOKUPDONE);
 	mctx = event->ev_destroy_arg;
 	levent = (dns_lookupevent_t *)event;
@@ -395,8 +395,7 @@ dns_lookup_create(isc_mem_t *mctx, dns_name_t *name, dns_rdatatype_t type,
 	lookup = isc_mem_get(mctx, sizeof(*lookup));
 	if (lookup == NULL)
 		return (ISC_R_NOMEMORY);
-	lookup->mctx = NULL;
-	isc_mem_attach(mctx, &lookup->mctx);
+	lookup->mctx = mctx;
 	lookup->options = options;
 
 	ievent = isc_event_allocate(mctx, lookup, DNS_EVENT_LOOKUPDONE,
@@ -455,7 +454,7 @@ dns_lookup_create(isc_mem_t *mctx, dns_name_t *name, dns_rdatatype_t type,
 	isc_task_detach(&lookup->task);
 
  cleanup_lookup:
-	isc_mem_putanddetach(&mctx, lookup, sizeof(*lookup));
+	isc_mem_put(mctx, lookup, sizeof(*lookup));
 
 	return (result);
 }
@@ -494,7 +493,7 @@ dns_lookup_destroy(dns_lookup_t **lookupp) {
 
 	DESTROYLOCK(&lookup->lock);
 	lookup->magic = 0;
-	isc_mem_putanddetach(&lookup->mctx, lookup, sizeof(*lookup));
+	isc_mem_put(lookup->mctx, lookup, sizeof(*lookup));
 
 	*lookupp = NULL;
 }

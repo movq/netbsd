@@ -1,4 +1,4 @@
-/*	$NetBSD: dlz_filesystem_dynamic.c,v 1.1.1.5 2017/06/15 15:22:42 christos Exp $	*/
+/*	$NetBSD: dlz_filesystem_dynamic.c,v 1.1 2014/02/28 17:40:09 christos Exp $	*/
 
 /*
  * Copyright (C) 2002 Stichting NLnet, Netherlands, stichting@nlnet.nl.
@@ -619,8 +619,7 @@ dlz_allnodes(const char *zone, void *dbdata, dns_sdlzallnodes_t *allnodes) {
 	DLZ_LIST_INIT(*dir_list);
 
 	if (create_path(zone, NULL, NULL, cd, &basepath) != ISC_R_SUCCESS) {
-		result = ISC_R_NOTFOUND;
-		goto complete_allnds;
+		return (ISC_R_NOTFOUND);
 	}
 
 	/* remove path separator at end of path so stat works properly */
@@ -827,7 +826,6 @@ isc_result_t
 dlz_create(const char *dlzname, unsigned int argc, char *argv[],
 	   void **dbdata, ...)
 {
-	isc_result_t result = ISC_R_NOMEMORY;
 	config_data_t *cd;
 	char *endp;
 	int len;
@@ -856,16 +854,14 @@ dlz_create(const char *dlzname, unsigned int argc, char *argv[],
 		cd->log(ISC_LOG_ERROR,
 			"Filesystem driver requires "
 			"6 command line args.");
-		result = ISC_R_FAILURE;
-		goto free_cd;
+		return (ISC_R_FAILURE);
 	}
 
 	if (strlen(argv[5]) > 1) {
 		cd->log(ISC_LOG_ERROR,
 			"Filesystem driver can only "
 			"accept a single character for separator.");
-		result = ISC_R_FAILURE;
-		goto free_cd;
+		return (ISC_R_FAILURE);
 	}
 
 	/* verify base dir ends with '/' or '\' */
@@ -875,8 +871,7 @@ dlz_create(const char *dlzname, unsigned int argc, char *argv[],
 			"Base dir parameter for filesystem driver "
 			"should end with %s",
 			"either '/' or '\\' ");
-		result = ISC_R_FAILURE;
-		goto free_cd;
+		return (ISC_R_FAILURE);
 	}
 
 	/* determine and save path separator for later */
@@ -930,13 +925,12 @@ dlz_create(const char *dlzname, unsigned int argc, char *argv[],
 			"filesystem_dynamic: Filesystem driver unable to "
 			"allocate memory for config data.");
 
- free_cd:
 	/* if we allocated a config data object clean it up */
 	if (cd != NULL)
 		dlz_destroy(cd);
 
 	/* return error */
-	return (result);
+	return (ISC_R_NOMEMORY);
 }
 
 void

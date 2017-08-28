@@ -1,6 +1,6 @@
 #!/bin/sh
 #
-# Copyright (C) 2004, 2007, 2011-2014  Internet Systems Consortium, Inc. ("ISC")
+# Copyright (C) 2004, 2007  Internet Systems Consortium, Inc. ("ISC")
 # Copyright (C) 2001  Internet Software Consortium.
 #
 # Permission to use, copy, modify, and/or distribute this software for any
@@ -15,10 +15,9 @@
 # OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR
 # PERFORMANCE OF THIS SOFTWARE.
 
-SYSTEMTESTTOP=..
-. $SYSTEMTESTTOP/conf.sh
+# Id: setup.sh,v 1.4 2007/06/19 23:47:03 tbox Exp
 
-rm -f ns1/*.db ns1/*.jnl ns3/*.jnl ns4/*.db ns4/*.jnl
+rm -f ns1/*.db ns1/*.jnl
 
 cat <<EOF >ns1/named.conf
 options {
@@ -35,16 +34,10 @@ options {
 
 key rndc_key {
 	secret "1234abcd8765";
-	algorithm hmac-sha256;
+	algorithm hmac-md5;
 };
 
 controls {
 	inet 10.53.0.1 port 9953 allow { any; } keys { rndc_key; };
 };
 EOF
-
-# Setup initial db files for ns3
-cp ns3/mytest0.db ns3/mytest.db
-cp ns3/subtest0.db ns3/subtest.db
-$SHELL ../genzone.sh 3 > ns3/large.db
-awk 'END { for (i = 0; i < 10000; i++) printf("record%d 10 IN TXT this is record %d\n", i, i) }' < /dev/null >> ns3/large.db

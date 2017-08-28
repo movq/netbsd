@@ -1,7 +1,7 @@
-/*	$NetBSD: atomic.h,v 1.6 2016/05/26 16:50:00 christos Exp $	*/
+/*	$NetBSD: atomic.h,v 1.1 2009/03/22 15:02:29 christos Exp $	*/
 
 /*
- * Copyright (C) 2005, 2007, 2008, 2015, 2016  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2005, 2007, 2008  Internet Systems Consortium, Inc. ("ISC")
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -16,7 +16,7 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* Id: atomic.h,v 1.6 2008/01/24 23:47:00 tbox Exp  */
+/* Id: atomic.h,v 1.6 2008/01/24 23:47:00 tbox Exp */
 
 #ifndef ISC_ATOMIC_H
 #define ISC_ATOMIC_H 1
@@ -39,7 +39,7 @@
  */
 #include <isc/util.h>		/* for 'UNUSED' macro */
 
-static __inline isc_int32_t
+static isc_int32_t
 isc_atomic_xadd(isc_int32_t *p, isc_int32_t val) {
 	UNUSED(p);
 	UNUSED(val);
@@ -77,7 +77,7 @@ isc_atomic_xaddq(isc_int64_t *p, isc_int64_t val) {
 }
 #endif
 
-static __inline void
+static void
 isc_atomic_store(isc_int32_t *p, isc_int32_t val) {
 	UNUSED(p);
 	UNUSED(val);
@@ -89,25 +89,11 @@ isc_atomic_store(isc_int32_t *p, isc_int32_t val) {
 		"lock;"
 #endif
 		"xchgl (%rax), %edx\n"
+		/*
+		 * XXX: assume %rax will be used as the return value.
+		 */
 		);
 }
-
-#ifdef ISC_PLATFORM_HAVEATOMICSTOREQ
-static void
-isc_atomic_storeq(isc_int64_t *p, isc_int64_t val) {
-	UNUSED(p);
-	UNUSED(val);
-
-	__asm (
-		"movq %rdi, %rax\n"
-		"movq %rsi, %rdx\n"
-#ifdef ISC_PLATFORM_USETHREADS
-		"lock;"
-#endif
-		"xchgq (%rax), %rdx\n"
-		);
-}
-#endif
 
 static isc_int32_t
 isc_atomic_cmpxchg(isc_int32_t *p, isc_int32_t cmpval, isc_int32_t val) {
@@ -116,9 +102,6 @@ isc_atomic_cmpxchg(isc_int32_t *p, isc_int32_t cmpval, isc_int32_t val) {
 	UNUSED(val);
 
 	__asm (
-		/*
-		 * p is %rdi, cmpval is %esi, val is %edx.
-		 */
 		"movl %edx, %ecx\n"
 		"movl %esi, %eax\n"
 		"movq %rdi, %rdx\n"
@@ -127,12 +110,8 @@ isc_atomic_cmpxchg(isc_int32_t *p, isc_int32_t cmpval, isc_int32_t val) {
 		"lock;"
 #endif
 		/*
-		 * If [%rdi] == %eax then [%rdi] := %ecx (equal to %edx
-		 * from above), and %eax is untouched (equal to %esi)
-		 * from above.
-		 *
-		 * Else if [%rdi] != %eax then [%rdi] := [%rdi]
-		 * (rewritten in write cycle) and %eax := [%rdi].
+		 * If (%rdi) == %eax then (%rdi) := %edx.
+		 * %eax is set to old (%ecx), which will be the return value.
 		 */
 		"cmpxchgl %ecx, (%rdx)"
 		);

@@ -1,4 +1,4 @@
-/*	$NetBSD: context.h,v 1.4 2014/12/10 04:37:59 christos Exp $	*/
+/*	$NetBSD: context.h,v 1.1 2009/10/25 00:02:42 christos Exp $	*/
 
 /*
  * Copyright (C) 2009  Internet Systems Consortium, Inc. ("ISC")
@@ -16,7 +16,7 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* Id: context.h,v 1.3 2009/09/02 23:48:02 tbox Exp  */
+/* Id: context.h,v 1.3 2009/09/02 23:48:02 tbox Exp */
 
 #ifndef IRS_CONTEXT_H
 #define IRS_CONTEXT_H 1

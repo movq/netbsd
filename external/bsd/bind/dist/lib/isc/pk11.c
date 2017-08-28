@@ -1,7 +1,7 @@
-/*	$NetBSD: pk11.c,v 1.1.1.7 2017/06/15 15:22:50 christos Exp $	*/
+/*	$NetBSD: pk11.c,v 1.1 2014/02/28 17:40:15 christos Exp $	*/
 
 /*
- * Copyright (C) 2014-2017  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2014  Internet Systems Consortium, Inc. ("ISC")
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -16,6 +16,99 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
+/*
+ * Portions copyright (c) 2008 Nominet UK.  All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
+ * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
+ * OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
+ * IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT,
+ * INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
+ * NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+ * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+ * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+ * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
+ * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ */
+
+/*
+ * Copyright 2009 Sun Microsystems, Inc.  All rights reserved.
+ * Use is subject to license terms.
+ */
+
+/*
+ * This product includes software developed by the OpenSSL Project for
+ * use in the OpenSSL Toolkit (http://www.openssl.org/).
+ *
+ * This project also referenced hw_pkcs11-0.9.7b.patch written by
+ * Afchine Madjlessi.
+ */
+/*
+ * ====================================================================
+ * Copyright (c) 2000-2001 The OpenSSL Project.  All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ *
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ *
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in
+ *    the documentation and/or other materials provided with the
+ *    distribution.
+ *
+ * 3. All advertising materials mentioning features or use of this
+ *    software must display the following acknowledgment:
+ *    "This product includes software developed by the OpenSSL Project
+ *    for use in the OpenSSL Toolkit. (http://www.OpenSSL.org/)"
+ *
+ * 4. The names "OpenSSL Toolkit" and "OpenSSL Project" must not be used to
+ *    endorse or promote products derived from this software without
+ *    prior written permission. For written permission, please contact
+ *    licensing@OpenSSL.org.
+ *
+ * 5. Products derived from this software may not be called "OpenSSL"
+ *    nor may "OpenSSL" appear in their names without prior written
+ *    permission of the OpenSSL Project.
+ *
+ * 6. Redistributions of any form whatsoever must retain the following
+ *    acknowledgment:
+ *    "This product includes software developed by the OpenSSL Project
+ *    for use in the OpenSSL Toolkit (http://www.OpenSSL.org/)"
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE OpenSSL PROJECT ``AS IS'' AND ANY
+ * EXPRESSED OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
+ * PURPOSE ARE DISCLAIMED.  IN NO EVENT SHALL THE OpenSSL PROJECT OR
+ * ITS CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+ * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
+ * NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+ * LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+ * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
+ * STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED
+ * OF THE POSSIBILITY OF SUCH DAMAGE.
+ * ====================================================================
+ *
+ * This product includes cryptographic software written by Eric Young
+ * (eay@cryptsoft.com).  This product includes software written by Tim
+ * Hudson (tjh@cryptsoft.com).
+ *
+ */
+
+/* Id */
+
 #include <config.h>
 
 #include <stdio.h>
@@ -25,8 +118,6 @@
 #include <isc/log.h>
 #include <isc/mem.h>
 #include <isc/once.h>
-#include <isc/platform.h>
-#include <isc/print.h>
 #include <isc/stdio.h>
 #include <isc/thread.h>
 #include <isc/util.h>
@@ -35,22 +126,18 @@
 
 #include <pk11/pk11.h>
 #include <pk11/internal.h>
-#include <pk11/result.h>
-#include <pk11/site.h>
 
 #include <pkcs11/cryptoki.h>
 #include <pkcs11/pkcs11.h>
 
-/* was 32 octets, Petr Spacek suggested 1024, SoftHSMv2 uses 256... */
-#ifndef PINLEN
-#define PINLEN	256
-#endif
+void dst__pkcs11_init(isc_mem_t *mctx, const char *engine);
+isc_result_t dst__pkcs11_destroy(void);
+
+#define PINLEN	32
 
 #ifndef PK11_NO_LOGERR
 #define PK11_NO_LOGERR 1
 #endif
-
-LIBISC_EXTERNAL_DATA isc_boolean_t pk11_verbose_init = ISC_FALSE;
 
 static isc_once_t once = ISC_ONCE_INIT;
 static isc_mem_t *pk11_mctx = NULL;
@@ -79,7 +166,7 @@ struct pk11_token {
 	char			manuf[32];
 	char			model[16];
 	char			serial[16];
-	char			pin[PINLEN + 1];
+	char			pin[PINLEN];
 };
 static ISC_LIST(pk11_token_t) tokens;
 
@@ -90,14 +177,13 @@ static pk11_token_t *best_dh_token;
 static pk11_token_t *digest_token;
 static pk11_token_t *best_ec_token;
 static pk11_token_t *best_gost_token;
-static pk11_token_t *aes_token;
 
 static isc_result_t free_all_sessions(void);
 static isc_result_t free_session_list(pk11_sessionlist_t *slist);
 static isc_result_t setup_session(pk11_session_t *sp,
 				  pk11_token_t *token,
 				  isc_boolean_t rw);
-static void scan_slots(void);
+static void choose_slots(void);
 static isc_result_t token_login(pk11_session_t *sp);
 static char *percent_decode(char *x, size_t *len);
 static isc_boolean_t pk11strcmp(const char *x, size_t lenx,
@@ -186,9 +272,8 @@ pk11_mem_put(void *ptr, size_t size) {
 	UNLOCK(&alloclock);
 }
 
-isc_result_t
-pk11_initialize(isc_mem_t *mctx, const char *engine) {
-	isc_result_t result;
+void
+dst__pkcs11_init(isc_mem_t *mctx, const char *engine) {
 	CK_RV rv;
 
 	RUNTIME_CHECK(isc_once_do(&once, initialize) == ISC_R_SUCCESS);
@@ -198,15 +283,12 @@ pk11_initialize(isc_mem_t *mctx, const char *engine) {
 		isc_mem_attach(mctx, &pk11_mctx);
 	if (initialized) {
 		UNLOCK(&alloclock);
-		return (ISC_R_SUCCESS);
+		return;
 	} else {
 		LOCK(&sessionlock);
 		initialized = ISC_TRUE;
 		UNLOCK(&alloclock);
 	}
-
-	ISC_LIST_INIT(tokens);
-	ISC_LIST_INIT(actives);
 
 	if (engine != NULL)
 		lib_name = engine;
@@ -214,42 +296,31 @@ pk11_initialize(isc_mem_t *mctx, const char *engine) {
 	/* Initialize the CRYPTOKI library */
 	rv = pkcs_C_Initialize((CK_VOID_PTR) &pk11_init_args);
 
-	if (rv == 0xfe) {
-		result = PK11_R_NOPROVIDER;
-		fprintf(stderr, "Can't load PKCS#11 provider: %s\n",
-			pk11_get_load_error_message());
-		goto unlock;
-	}
 	if (rv != CKR_OK) {
-		result = PK11_R_INITFAILED;
-		goto unlock;
+		if (rv == 0xfe)
+			FATAL_ERROR(__FILE__, __LINE__,
+				    "Can't load or link module \"%s\"",
+				    lib_name);
+		else
+			FATAL_ERROR(__FILE__, __LINE__,
+				    "pkcs_C_Initialize: Error = 0x%.8lX", rv);
 	}
 
-	scan_slots();
+	ISC_LIST_INIT(tokens);
+	ISC_LIST_INIT(actives);
+
+	choose_slots();
 #ifdef PKCS11CRYPTO
-	if (rand_token == NULL) {
-		result = PK11_R_NORANDOMSERVICE;
-		goto unlock;
-	}
-	if (digest_token == NULL) {
-		result = PK11_R_NODIGESTSERVICE;
-		goto unlock;
-	}
-#if defined(ISC_PLATFORM_USESIT) && defined(AES_SIT)
-	if (aes_token == NULL) {
-		result = PK11_R_NOAESSERVICE;
-		goto unlock;
-	}
-#endif
+	if (rand_token == NULL)
+		FATAL_ERROR(__FILE__, __LINE__, "Can't find random service");
+	if (digest_token == NULL)
+		FATAL_ERROR(__FILE__, __LINE__, "Can't find digest service");
 #endif /* PKCS11CRYPTO */
-	result = ISC_R_SUCCESS;
- unlock:
 	UNLOCK(&sessionlock);
-	return (result);
 }
 
 isc_result_t
-pk11_finalize(void) {
+dst__pkcs11_destroy(void) {
 	pk11_token_t *token, *next;
 	isc_result_t ret;
 
@@ -273,8 +344,6 @@ pk11_finalize(void) {
 			best_ec_token = NULL;
 		if (token == best_gost_token)
 			best_gost_token = NULL;
-		if (token == aes_token)
-			aes_token = NULL;
 		pk11_mem_put(token, sizeof(*token));
 		token = next;
 	}
@@ -284,17 +353,19 @@ pk11_finalize(void) {
 	return (ret);
 }
 
+void
+pk11_shutdown(void) {
+	(void) dst__pkcs11_destroy();
+}
+
 isc_result_t
 pk11_rand_bytes(unsigned char *buf, int num) {
 	isc_result_t ret;
 	CK_RV rv;
 	pk11_context_t ctx;
 
-	ret = pk11_get_session(&ctx, OP_RAND, ISC_FALSE, ISC_FALSE,
-			       ISC_FALSE, NULL, 0);
-	if ((ret != ISC_R_SUCCESS) &&
-	    (ret != PK11_R_NODIGESTSERVICE) &&
-	    (ret != PK11_R_NOAESSERVICE))
+	ret = pk11_get_session(&ctx, OP_RAND, ISC_FALSE, ISC_FALSE, NULL, 0);
+	if (ret != ISC_R_SUCCESS)
 		return (ret);
 	RUNTIME_CHECK(ctx.session != CK_INVALID_HANDLE);
 	rv = pkcs_C_GenerateRandom(ctx.session,
@@ -317,11 +388,8 @@ pk11_rand_seed_fromfile(const char *randomfile) {
 	size_t cc = 0;
 	isc_result_t ret;
 
-	ret = pk11_get_session(&ctx, OP_RAND, ISC_FALSE, ISC_FALSE,
-			       ISC_FALSE, NULL, 0);
-	if ((ret != ISC_R_SUCCESS) &&
-	    (ret != PK11_R_NODIGESTSERVICE) &&
-	    (ret != PK11_R_NOAESSERVICE))
+	ret = pk11_get_session(&ctx, OP_RAND, ISC_FALSE, ISC_FALSE, NULL, 0);
+	if (ret != ISC_R_SUCCESS)
 		return;
 	RUNTIME_CHECK(ctx.session != CK_INVALID_HANDLE);
 	ret = isc_stdio_open(randomfile, "r", &stream);
@@ -344,41 +412,22 @@ pk11_rand_seed_fromfile(const char *randomfile) {
 
 isc_result_t
 pk11_get_session(pk11_context_t *ctx, pk11_optype_t optype,
-		 isc_boolean_t need_services, isc_boolean_t rw,
-		 isc_boolean_t logon, const char *pin, CK_SLOT_ID slot)
+		 isc_boolean_t rw, isc_boolean_t logon,
+		 const char *pin, CK_SLOT_ID slot)
 {
 	pk11_token_t *token = NULL;
 	pk11_sessionlist_t *freelist;
 	pk11_session_t *sp;
-	isc_result_t ret;
-#ifdef PKCS11CRYPTO
-	isc_result_t service_ret = ISC_R_SUCCESS;
-#else
-	UNUSED(need_services);
-#endif
+	isc_result_t ret = ISC_R_SUCCESS;
 
-	memset(ctx, 0, sizeof(pk11_context_t));
-	ctx->handle = NULL;
-	ctx->session = CK_INVALID_HANDLE;
-
-	ret = pk11_initialize(NULL, NULL);
-#ifdef PKCS11CRYPTO
-	if (ret == PK11_R_NORANDOMSERVICE ||
-	    ret == PK11_R_NODIGESTSERVICE ||
-	    ret == PK11_R_NOAESSERVICE) {
-		if (need_services)
-			return (ret);
-		service_ret = ret;
-	}
-	else
-#endif /* PKCS11CRYPTO */
-	if (ret != ISC_R_SUCCESS)
-		return (ret);
-
+	dst__pkcs11_init(NULL, NULL);
 	LOCK(&sessionlock);
 	/* wait for initialization to finish */
 	UNLOCK(&sessionlock);
 
+	memset(ctx, 0, sizeof(pk11_context_t));
+	ctx->handle = NULL;
+	ctx->session = CK_INVALID_HANDLE;
 	switch(optype) {
 #ifdef PKCS11CRYPTO
 	case OP_RAND:
@@ -386,9 +435,6 @@ pk11_get_session(pk11_context_t *ctx, pk11_optype_t optype,
 		break;
 	case OP_DIGEST:
 		token = digest_token;
-		break;
-	case OP_AES:
-		token = aes_token;
 		break;
 	case OP_ANY:
 		for (token = ISC_LIST_HEAD(tokens);
@@ -416,9 +462,7 @@ pk11_get_session(pk11_context_t *ctx, pk11_optype_t optype,
 
 	/* Override the token's PIN */
 	if (logon && pin != NULL && *pin != '\0') {
-		if (strlen(pin) > PINLEN)
-			return ISC_R_RANGE;
-		memset(token->pin, 0, PINLEN + 1);
+		memset(token->pin, 0, PINLEN);
 		strncpy(token->pin, pin, PINLEN);
 	}
 
@@ -453,10 +497,6 @@ pk11_get_session(pk11_context_t *ctx, pk11_optype_t optype,
 	UNLOCK(&sessionlock);
 	ctx->handle = sp;
 	ctx->session = sp->session;
-#ifdef PKCS11CRYPTO
-	if (ret == ISC_R_SUCCESS)
-		ret = service_ret;
-#endif
 	return (ret);
 }
 
@@ -570,17 +610,8 @@ token_login(pk11_session_t *sp) {
 	return (ret);
 }
 
-#define PK11_TRACE(fmt) \
-	if (pk11_verbose_init) fprintf(stderr, fmt)
-#define PK11_TRACE1(fmt, arg) \
-	if (pk11_verbose_init) fprintf(stderr, fmt, arg)
-#define PK11_TRACE2(fmt, arg1, arg2) \
-	if (pk11_verbose_init) fprintf(stderr, fmt, arg1, arg2)
-#define PK11_TRACEM(mech) \
-	if (pk11_verbose_init) fprintf(stderr, #mech ": 0x%lx\n", rv)
-
 static void
-scan_slots(void) {
+choose_slots(void) {
 	CK_MECHANISM_INFO mechInfo;
 	CK_TOKEN_INFO tokenInfo;
 	CK_RV rv;
@@ -589,11 +620,9 @@ scan_slots(void) {
 	CK_ULONG slotCount;
 	pk11_token_t *token;
 	unsigned int i;
-	isc_boolean_t bad;
 
 	slotCount = 0;
 	PK11_FATALCHECK(pkcs_C_GetSlotList, (CK_FALSE, NULL_PTR, &slotCount));
-	PK11_TRACE1("slotCount=%lu\n", slotCount);
 	/* it's not an error if we didn't find any providers */
 	if (slotCount == 0)
 		return;
@@ -603,7 +632,6 @@ scan_slots(void) {
 
 	for (i = 0; i < slotCount; i++) {
 		slot = slotList[i];
-		PK11_TRACE2("slot#%u=0x%lx\n", i, slot);
 
 		rv = pkcs_C_GetTokenInfo(slot, &tokenInfo);
 		if (rv != CKR_OK)
@@ -619,285 +647,163 @@ scan_slots(void) {
 		memmove(token->model, tokenInfo.model, 16);
 		memmove(token->serial, tokenInfo.serialNumber, 16);
 		ISC_LIST_APPEND(tokens, token, link);
-		if ((tokenInfo.flags & CKF_RNG) == 0) {
-			PK11_TRACE("no CKF_RNG\n");
+		if ((tokenInfo.flags & CKF_RNG) == 0)
 			goto try_rsa;
-		}
 		token->operations |= 1 << OP_RAND;
 		if (rand_token == NULL)
 			rand_token = token;
 
 	try_rsa:
-		bad = ISC_FALSE;
 		rv = pkcs_C_GetMechanismInfo(slot, CKM_RSA_PKCS_KEY_PAIR_GEN,
 					     &mechInfo);
 		if ((rv != CKR_OK) ||
-		    ((mechInfo.flags & CKF_GENERATE_KEY_PAIR) == 0)) {
-			bad = ISC_TRUE;
-			PK11_TRACEM(CKM_RSA_PKCS_KEY_PAIR_GEN);
-		}
+		    ((mechInfo.flags & CKF_GENERATE_KEY_PAIR) == 0))
+			goto try_dsa;
 		rv = pkcs_C_GetMechanismInfo(slot, CKM_MD5_RSA_PKCS,
 					     &mechInfo);
 		if ((rv != CKR_OK) ||
 		    ((mechInfo.flags & CKF_SIGN) == 0) ||
-		    ((mechInfo.flags & CKF_VERIFY) == 0)) {
-#if !defined(PK11_MD5_DISABLE) && !defined(PK11_RSA_PKCS_REPLACE)
-			bad = ISC_TRUE;
-#endif
-			PK11_TRACEM(CKM_MD5_RSA_PKCS);
-		}
+		    ((mechInfo.flags & CKF_VERIFY) == 0))
+			goto try_dsa;
 		rv = pkcs_C_GetMechanismInfo(slot, CKM_SHA1_RSA_PKCS,
 					     &mechInfo);
 		if ((rv != CKR_OK) ||
 		    ((mechInfo.flags & CKF_SIGN) == 0) ||
-		    ((mechInfo.flags & CKF_VERIFY) == 0)) {
-#ifndef PK11_RSA_PKCS_REPLACE
-			bad = ISC_TRUE;
-#endif
-			PK11_TRACEM(CKM_SHA1_RSA_PKCS);
-		}
+		    ((mechInfo.flags & CKF_VERIFY) == 0))
+			goto try_dsa;
 		rv = pkcs_C_GetMechanismInfo(slot, CKM_SHA256_RSA_PKCS,
 					     &mechInfo);
 		if ((rv != CKR_OK) ||
 		    ((mechInfo.flags & CKF_SIGN) == 0) ||
-		    ((mechInfo.flags & CKF_VERIFY) == 0)) {
-#ifndef PK11_RSA_PKCS_REPLACE
-			bad = ISC_TRUE;
-#endif
-			PK11_TRACEM(CKM_SHA256_RSA_PKCS);
-		}
+		    ((mechInfo.flags & CKF_VERIFY) == 0))
+			goto try_dsa;
 		rv = pkcs_C_GetMechanismInfo(slot, CKM_SHA512_RSA_PKCS,
 					     &mechInfo);
 		if ((rv != CKR_OK) ||
 		    ((mechInfo.flags & CKF_SIGN) == 0) ||
-		    ((mechInfo.flags & CKF_VERIFY) == 0)) {
-#ifndef PK11_RSA_PKCS_REPLACE
-			bad = ISC_TRUE;
-#endif
-			PK11_TRACEM(CKM_SHA512_RSA_PKCS);
-		}
-		rv = pkcs_C_GetMechanismInfo(slot, CKM_RSA_PKCS, &mechInfo);
-		if ((rv != CKR_OK) ||
-		    ((mechInfo.flags & CKF_SIGN) == 0) ||
-		    ((mechInfo.flags & CKF_VERIFY) == 0)) {
-#ifdef PK11_RSA_PKCS_REPLACE
-			bad = ISC_TRUE;
-#endif
-			PK11_TRACEM(CKM_RSA_PKCS);
-		}
-		if (bad)
+		    ((mechInfo.flags & CKF_VERIFY) == 0))
 			goto try_dsa;
 		token->operations |= 1 << OP_RSA;
 		if (best_rsa_token == NULL)
 			best_rsa_token = token;
 
 	try_dsa:
-		bad = ISC_FALSE;
 		rv = pkcs_C_GetMechanismInfo(slot, CKM_DSA_PARAMETER_GEN,
 					     &mechInfo);
-		if ((rv != CKR_OK) || ((mechInfo.flags & CKF_GENERATE) == 0)) {
-#ifndef PK11_DSA_PARAMETER_GEN_SKIP
-			bad = ISC_TRUE;
-#endif
-			PK11_TRACEM(CKM_DSA_PARAMETER_GEN);
-		}
+		if ((rv != CKR_OK) || ((mechInfo.flags & CKF_GENERATE) == 0))
+			goto try_dh;
 		rv = pkcs_C_GetMechanismInfo(slot, CKM_DSA_KEY_PAIR_GEN,
 					     &mechInfo);
 		if ((rv != CKR_OK) ||
-		    ((mechInfo.flags & CKF_GENERATE_KEY_PAIR) == 0)) {
-			bad = ISC_TRUE;
-			PK11_TRACEM(CKM_DSA_PARAMETER_GEN);
-		}
+		    ((mechInfo.flags & CKF_GENERATE_KEY_PAIR) == 0))
+			goto try_dh;
 		rv = pkcs_C_GetMechanismInfo(slot, CKM_DSA_SHA1, &mechInfo);
 		if ((rv != CKR_OK) ||
 		    ((mechInfo.flags & CKF_SIGN) == 0) ||
-		    ((mechInfo.flags & CKF_VERIFY) == 0)) {
-			bad = ISC_TRUE;
-			PK11_TRACEM(CKM_DSA_SHA1);
-		}
-		if (bad)
+		    ((mechInfo.flags & CKF_VERIFY) == 0))
 			goto try_dh;
-#ifndef PK11_DSA_DISABLE
 		token->operations |= 1 << OP_DSA;
 		if (best_dsa_token == NULL)
 			best_dsa_token = token;
-#endif
 
 	try_dh:
-		bad = ISC_FALSE;
+#ifdef notdef
 		rv = pkcs_C_GetMechanismInfo(slot, CKM_DH_PKCS_PARAMETER_GEN,
 					     &mechInfo);
-		if ((rv != CKR_OK) || ((mechInfo.flags & CKF_GENERATE) == 0)) {
-			PK11_TRACEM(CKM_DH_PKCS_PARAMETER_GEN);
-		}
+		if ((rv != CKR_OK) || ((mechInfo.flags & CKF_GENERATE) == 0))
+			goto try_digest;
+#endif
 		rv = pkcs_C_GetMechanismInfo(slot, CKM_DH_PKCS_KEY_PAIR_GEN,
 					     &mechInfo);
 		if ((rv != CKR_OK) ||
-		    ((mechInfo.flags & CKF_GENERATE_KEY_PAIR) == 0)) {
-#ifndef PK11_DH_PKCS_PARAMETER_GEN_SKIP
-			bad = ISC_TRUE;
-#endif
-			PK11_TRACEM(CKM_DH_PKCS_KEY_PAIR_GEN);
-		}
+		    ((mechInfo.flags & CKF_GENERATE_KEY_PAIR) == 0))
+			goto try_digest;
 		rv = pkcs_C_GetMechanismInfo(slot, CKM_DH_PKCS_DERIVE,
 					     &mechInfo);
-		if ((rv != CKR_OK) || ((mechInfo.flags & CKF_DERIVE) == 0)) {
-			bad = ISC_TRUE;
-			PK11_TRACEM(CKM_DH_PKCS_DERIVE);
-		}
-		if (bad)
+		if ((rv != CKR_OK) || ((mechInfo.flags & CKF_DERIVE) == 0))
 			goto try_digest;
-#ifndef PK11_DH_DISABLE
 		token->operations |= 1 << OP_DH;
 		if (best_dh_token == NULL)
 			best_dh_token = token;
-#endif
 
 	try_digest:
-		bad = ISC_FALSE;
 		rv = pkcs_C_GetMechanismInfo(slot, CKM_MD5, &mechInfo);
-		if ((rv != CKR_OK) || ((mechInfo.flags & CKF_DIGEST) == 0)) {
-#ifndef PK11_MD5_DISABLE
-			bad = ISC_TRUE;
-#endif
-			PK11_TRACEM(CKM_MD5);
-		}
+		if ((rv != CKR_OK) || ((mechInfo.flags & CKF_DIGEST) == 0))
+			continue;
 		rv = pkcs_C_GetMechanismInfo(slot, CKM_SHA_1, &mechInfo);
-		if ((rv != CKR_OK) || ((mechInfo.flags & CKF_DIGEST) == 0)) {
-			bad = ISC_TRUE;
-			PK11_TRACEM(CKM_SHA_1);
-		}
+		if ((rv != CKR_OK) || ((mechInfo.flags & CKF_DIGEST) == 0))
+			continue;
 		rv = pkcs_C_GetMechanismInfo(slot, CKM_SHA224, &mechInfo);
-		if ((rv != CKR_OK) || ((mechInfo.flags & CKF_DIGEST) == 0)) {
-			bad = ISC_TRUE;
-			PK11_TRACEM(CKM_SHA224);
-		}
+		if ((rv != CKR_OK) || ((mechInfo.flags & CKF_DIGEST) == 0))
+			continue;
 		rv = pkcs_C_GetMechanismInfo(slot, CKM_SHA256, &mechInfo);
-		if ((rv != CKR_OK) || ((mechInfo.flags & CKF_DIGEST) == 0)) {
-			bad = ISC_TRUE;
-			PK11_TRACEM(CKM_SHA256);
-		}
+		if ((rv != CKR_OK) || ((mechInfo.flags & CKF_DIGEST) == 0))
+			continue;
 		rv = pkcs_C_GetMechanismInfo(slot, CKM_SHA384, &mechInfo);
-		if ((rv != CKR_OK) || ((mechInfo.flags & CKF_DIGEST) == 0)) {
-			bad = ISC_TRUE;
-			PK11_TRACEM(CKM_SHA384);
-		}
+		if ((rv != CKR_OK) || ((mechInfo.flags & CKF_DIGEST) == 0))
+			continue;
 		rv = pkcs_C_GetMechanismInfo(slot, CKM_SHA512, &mechInfo);
-		if ((rv != CKR_OK) || ((mechInfo.flags & CKF_DIGEST) == 0)) {
-			bad = ISC_TRUE;
-			PK11_TRACEM(CKM_SHA512);
-		}
+		if ((rv != CKR_OK) || ((mechInfo.flags & CKF_DIGEST) == 0))
+			continue;
+#ifdef PKCS11CRYPTOWITHHMAC
 		rv = pkcs_C_GetMechanismInfo(slot, CKM_MD5_HMAC, &mechInfo);
-		if ((rv != CKR_OK) || ((mechInfo.flags & CKF_SIGN) == 0)) {
-#if !defined(PK11_MD5_DISABLE) && !defined(PK11_MD5_HMAC_REPLACE)
-			bad = ISC_TRUE;
+		if ((rv != CKR_OK) || ((mechInfo.flags & CKF_SIGN) == 0))
+			continue;
 #endif
-			PK11_TRACEM(CKM_MD5_HMAC);
-		}
 		rv = pkcs_C_GetMechanismInfo(slot, CKM_SHA_1_HMAC, &mechInfo);
-		if ((rv != CKR_OK) || ((mechInfo.flags & CKF_SIGN) == 0)) {
-#ifndef PK11_SHA_1_HMAC_REPLACE
-			bad = ISC_TRUE;
-#endif
-			PK11_TRACEM(CKM_SHA_1_HMAC);
-		}
+		if ((rv != CKR_OK) || ((mechInfo.flags & CKF_SIGN) == 0))
+			continue;
 		rv = pkcs_C_GetMechanismInfo(slot, CKM_SHA224_HMAC, &mechInfo);
-		if ((rv != CKR_OK) || ((mechInfo.flags & CKF_SIGN) == 0)) {
-#ifndef PK11_SHA224_HMAC_REPLACE
-			bad = ISC_TRUE;
-#endif
-			PK11_TRACEM(CKM_SHA224_HMAC);
-		}
+		if ((rv != CKR_OK) || ((mechInfo.flags & CKF_SIGN) == 0))
+			continue;
 		rv = pkcs_C_GetMechanismInfo(slot, CKM_SHA256_HMAC, &mechInfo);
-		if ((rv != CKR_OK) || ((mechInfo.flags & CKF_SIGN) == 0)) {
-#ifndef PK11_SHA256_HMAC_REPLACE
-			bad = ISC_TRUE;
-#endif
-			PK11_TRACEM(CKM_SHA256_HMAC);
-		}
+		if ((rv != CKR_OK) || ((mechInfo.flags & CKF_SIGN) == 0))
+			continue;
 		rv = pkcs_C_GetMechanismInfo(slot, CKM_SHA384_HMAC, &mechInfo);
-		if ((rv != CKR_OK) || ((mechInfo.flags & CKF_SIGN) == 0)) {
-#ifndef PK11_SHA384_HMAC_REPLACE
-			bad = ISC_TRUE;
-#endif
-			PK11_TRACEM(CKM_SHA384_HMAC);
-		}
+		if ((rv != CKR_OK) || ((mechInfo.flags & CKF_SIGN) == 0))
+			continue;
 		rv = pkcs_C_GetMechanismInfo(slot, CKM_SHA512_HMAC, &mechInfo);
-		if ((rv != CKR_OK) || ((mechInfo.flags & CKF_SIGN) == 0)) {
-#ifndef PK11_SHA512_HMAC_REPLACE
-			bad = ISC_TRUE;
-#endif
-			PK11_TRACEM(CKM_SHA512_HMAC);
-		}
-		if (!bad) {
-			token->operations |= 1 << OP_DIGEST;
-			if (digest_token == NULL)
-				digest_token = token;
-		}
+		if ((rv != CKR_OK) || ((mechInfo.flags & CKF_SIGN) == 0))
+			continue;
+		token->operations |= 1 << OP_DIGEST;
+		if (digest_token == NULL)
+			digest_token = token;
 
 		/* ECDSA requires digest */
 		rv = pkcs_C_GetMechanismInfo(slot, CKM_EC_KEY_PAIR_GEN,
 					     &mechInfo);
 		if ((rv != CKR_OK) ||
-		    ((mechInfo.flags & CKF_GENERATE_KEY_PAIR) == 0)) {
-			bad = ISC_TRUE;
-			PK11_TRACEM(CKM_EC_KEY_PAIR_GEN);
-		}
+		    ((mechInfo.flags & CKF_GENERATE_KEY_PAIR) == 0))
+			goto try_gost;
 		rv = pkcs_C_GetMechanismInfo(slot, CKM_ECDSA, &mechInfo);
 		if ((rv != CKR_OK) ||
 		    ((mechInfo.flags & CKF_SIGN) == 0) ||
-		    ((mechInfo.flags & CKF_VERIFY) == 0)) {
-			bad = ISC_TRUE;
-			PK11_TRACEM(CKM_ECDSA);
-		}
-		if (bad)
+		    ((mechInfo.flags & CKF_VERIFY) == 0))
 			goto try_gost;
 		token->operations |= 1 << OP_EC;
 		if (best_ec_token == NULL)
 			best_ec_token = token;
 
 	try_gost:
-		bad = ISC_FALSE;
 		/* does GOST require digest too? */
 		rv = pkcs_C_GetMechanismInfo(slot, CKM_GOSTR3411, &mechInfo);
-		if ((rv != CKR_OK) || ((mechInfo.flags & CKF_DIGEST) == 0)) {
-			bad = ISC_TRUE;
-			PK11_TRACEM(CKM_GOSTR3411);
-		}
+		if ((rv != CKR_OK) || ((mechInfo.flags & CKF_DIGEST) == 0))
+			continue;
 		rv = pkcs_C_GetMechanismInfo(slot, CKM_GOSTR3410_KEY_PAIR_GEN,
 					     &mechInfo);
 		if ((rv != CKR_OK) ||
-		    ((mechInfo.flags & CKF_GENERATE_KEY_PAIR) == 0)) {
-			bad = ISC_TRUE;
-			PK11_TRACEM(CKM_GOSTR3410_KEY_PAIR_GEN);
-		}
+		    ((mechInfo.flags & CKF_GENERATE_KEY_PAIR) == 0))
+			continue;
 		rv = pkcs_C_GetMechanismInfo(slot,
 					     CKM_GOSTR3410_WITH_GOSTR3411,
 					     &mechInfo);
 		if ((rv != CKR_OK) ||
 		    ((mechInfo.flags & CKF_SIGN) == 0) ||
-		    ((mechInfo.flags & CKF_VERIFY) == 0)) {
-			bad = ISC_TRUE;
-			PK11_TRACEM(CKM_GOSTR3410_WITH_GOSTR3411);
-		}
-		if (bad)
-			goto try_aes;
+		    ((mechInfo.flags & CKF_VERIFY) == 0))
+			continue;
 		token->operations |= 1 << OP_GOST;
 		if (best_gost_token == NULL)
 			best_gost_token = token;
-
-	try_aes:
-		bad = ISC_FALSE;
-		rv = pkcs_C_GetMechanismInfo(slot, CKM_AES_ECB, &mechInfo);
-		if ((rv != CKR_OK) || ((mechInfo.flags & CKF_ENCRYPT) == 0)) {
-			bad = ISC_TRUE;
-			PK11_TRACEM(CKM_AES_ECB);
-		}
-		if (bad)
-			continue;
-		token->operations |= 1 << OP_AES;
-		if (aes_token == NULL)
-			aes_token = token;
 	}
 
 	if (slotList != NULL)
@@ -929,9 +835,6 @@ pk11_get_best_token(pk11_optype_t optype) {
 		break;
 	case OP_GOST:
 		token = best_gost_token;
-		break;
-	case OP_AES:
-		token = aes_token;
 		break;
 	default:
 		break;
@@ -1145,7 +1048,7 @@ pk11_parse_uri(pk11_object_t *obj, const char *label,
 	char *uri, *p, *a, *na, *v;
 	size_t len, l;
 	FILE *stream = NULL;
-	char pin[PINLEN + 1];
+	char pin[PINLEN];
 	isc_boolean_t gotpin = ISC_FALSE;
 	isc_result_t ret;
 
@@ -1159,10 +1062,10 @@ pk11_parse_uri(pk11_object_t *obj, const char *label,
 	/* get the URI scheme */
 	p = strchr(uri, ':');
 	if (p == NULL)
-		DST_RET(PK11_R_NOPROVIDER);
+		DST_RET(DST_R_NOENGINE);
 	*p++ = '\0';
 	if (strcmp(uri, "pkcs11") != 0)
-		DST_RET(PK11_R_NOPROVIDER);
+		DST_RET(DST_R_NOENGINE);
 
 	/* get attributes */
 	for (na = p; na != NULL;) {
@@ -1184,12 +1087,12 @@ pk11_parse_uri(pk11_object_t *obj, const char *label,
 		l = 0;
 		v = percent_decode(v, &l);
 		if (v == NULL)
-			DST_RET(PK11_R_NOPROVIDER);
+			DST_RET(DST_R_NOENGINE);
 		if ((a == v) || (strcmp(a, "object") == 0)) {
 			/* object: CKA_LABEL */
 			attr = pk11_attribute_bytype(obj, CKA_LABEL);
 			if (attr != NULL)
-				DST_RET(PK11_R_NOPROVIDER);
+				DST_RET(DST_R_NOENGINE);
 			attr = push_attribute(obj, mctx, l);
 			if (attr == NULL)
 				DST_RET(ISC_R_NOMEMORY);
@@ -1237,12 +1140,12 @@ pk11_parse_uri(pk11_object_t *obj, const char *label,
 			/* object-type: CKA_CLASS */
 			/* only private makes sense */
 			if (strcmp(v, "private") != 0)
-				DST_RET(PK11_R_NOPROVIDER);
+				DST_RET(DST_R_NOENGINE);
 		} else if (strcmp(a, "id") == 0) {
 			/* id: CKA_ID */
 			attr = pk11_attribute_bytype(obj, CKA_ID);
 			if (attr != NULL)
-				DST_RET(PK11_R_NOPROVIDER);
+				DST_RET(DST_R_NOENGINE);
 			attr = push_attribute(obj, mctx, l);
 			if (attr == NULL)
 				DST_RET(ISC_R_NOMEMORY);
@@ -1253,19 +1156,17 @@ pk11_parse_uri(pk11_object_t *obj, const char *label,
 			ret = isc_stdio_open(v, "r", &stream);
 			if (ret != ISC_R_SUCCESS)
 				goto err;
-			memset(pin, 0, PINLEN + 1);
-			ret = isc_stdio_read(pin, 1, PINLEN + 1, stream, &l);
+			memset(pin, 0, PINLEN);
+			ret = isc_stdio_read(pin, 1, PINLEN - 1, stream, NULL);
 			if ((ret != ISC_R_SUCCESS) && (ret != ISC_R_EOF))
 				goto err;
-			if (l > PINLEN)
-				DST_RET(ISC_R_RANGE);
 			ret = isc_stdio_close(stream);
 			stream = NULL;
 			if (ret != ISC_R_SUCCESS)
 				goto err;
 			gotpin = ISC_TRUE;
 		} else
-			DST_RET(PK11_R_NOPROVIDER);
+			DST_RET(DST_R_NOENGINE);
 	}
 
 	if ((pk11_attribute_bytype(obj, CKA_LABEL) == NULL) &&
@@ -1286,7 +1187,7 @@ pk11_parse_uri(pk11_object_t *obj, const char *label,
 		DST_RET(ISC_R_NOTFOUND);
 	obj->slot = token->slotid;
 	if (gotpin) {
-		memmove(token->pin, pin, PINLEN + 1);
+		memmove(token->pin, pin, PINLEN);
 		obj->reqlogon = ISC_TRUE;
 	}
 
@@ -1307,7 +1208,8 @@ pk11_error_fatalcheck(const char *file, int line,
 }
 
 void
-pk11_dump_tokens(void) {
+pk11_dump_tokens(void)
+{
 	pk11_token_t *token;
 	isc_boolean_t first;
 
@@ -1318,8 +1220,6 @@ pk11_dump_tokens(void) {
 	printf("\tbest_dh_token=%p\n", best_dh_token);
 	printf("\tdigest_token=%p\n", digest_token);
 	printf("\tbest_ec_token=%p\n", best_ec_token);
-	printf("\tbest_gost_token=%p\n", best_gost_token);
-	printf("\taes_token=%p\n", aes_token);
 
 	for (token = ISC_LIST_HEAD(tokens);
 	     token != NULL;
@@ -1368,12 +1268,6 @@ pk11_dump_tokens(void) {
 				printf(",");
 			first = ISC_FALSE;
 			printf("EC");
-		}
-		if (token->operations & (1 << OP_AES)) {
-			if (!first)
-				printf(",");
-			first = ISC_FALSE;
-			printf("AES");
 		}
 		printf(")\n");
 	}

@@ -1,7 +1,7 @@
-/*	$NetBSD: rrl.c,v 1.5 2015/12/17 04:00:43 christos Exp $	*/
+/*	$NetBSD: rrl.c,v 1.1 2013/12/31 20:11:14 christos Exp $	*/
 
 /*
- * Copyright (C) 2012-2015  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2013  Internet Systems Consortium, Inc. ("ISC")
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -255,7 +255,6 @@ expand_entries(dns_rrl_t *rrl, int new) {
 
 static inline dns_rrl_bin_t *
 get_bin(dns_rrl_hash_t *hash, unsigned int hval) {
-	INSIST(hash != NULL);
 	return (&hash->bins[hval % hash->length]);
 }
 
@@ -378,7 +377,7 @@ hash_key(const dns_rrl_key_t *key) {
 	int i;
 
 	hval = key->w[0];
-	for (i = sizeof(key->w) / sizeof(key->w[0]) - 1; i >= 0; --i) {
+	for (i = sizeof(*key) / sizeof(key->w[0]) - 1; i >= 0; --i) {
 		hval = key->w[i] + (hval<<1);
 	}
 	return (hval);
@@ -442,8 +441,8 @@ make_key(const dns_rrl_t *rrl, dns_rrl_key_t *key,
 		break;
 	case AF_INET6:
 		key->s.ipv6 = ISC_TRUE;
-		memmove(key->s.ip, &client_addr->type.sin6.sin6_addr,
-			sizeof(key->s.ip));
+		memcpy(key->s.ip, &client_addr->type.sin6.sin6_addr,
+		       sizeof(key->s.ip));
 		for (i = 0; i < DNS_RRL_MAX_PREFIX/32; ++i)
 			key->s.ip[i] &= rrl->ipv6_mask[i];
 		break;
@@ -779,7 +778,7 @@ add_log_str(isc_buffer_t *lb, const char *str, unsigned int str_len) {
 			return;
 		str_len = region.length;
 	}
-	memmove(region.base, str, str_len);
+	memcpy(region.base, str, str_len);
 	isc_buffer_add(lb, str_len);
 }
 
@@ -866,7 +865,7 @@ make_log_buf(dns_rrl_t *rrl, dns_rrl_entry_t *e,
 		snprintf(strbuf, sizeof(strbuf), "/%d", rrl->ipv6_prefixlen);
 		cidr.family = AF_INET6;
 		memset(&cidr.type.in6, 0,  sizeof(cidr.type.in6));
-		memmove(&cidr.type.in6, e->key.s.ip, sizeof(e->key.s.ip));
+		memcpy(&cidr.type.in6, e->key.s.ip, sizeof(e->key.s.ip));
 	} else {
 		snprintf(strbuf, sizeof(strbuf), "/%d", rrl->ipv4_prefixlen);
 		cidr.family = AF_INET;
@@ -1163,17 +1162,22 @@ dns_rrl(dns_view_t *view,
 						 client_addr, now,
 						 log_buf, log_buf_len);
 		if (rrl_all_result != DNS_RRL_RESULT_OK) {
+			int level;
+
 			e = e_all;
 			rrl_result = rrl_all_result;
-			if (isc_log_wouldlog(dns_lctx, DNS_RRL_LOG_DEBUG1)) {
+			if (rrl_result == DNS_RRL_RESULT_OK)
+				level = DNS_RRL_LOG_DEBUG2;
+			else
+				level = DNS_RRL_LOG_DEBUG1;
+			if (isc_log_wouldlog(dns_lctx, level)) {
 				make_log_buf(rrl, e,
 					     "prefer all-per-second limiting ",
 					     NULL, ISC_TRUE, qname, ISC_FALSE,
 					     DNS_RRL_RESULT_OK, resp_result,
 					     log_buf, log_buf_len);
 				isc_log_write(dns_lctx, DNS_LOGCATEGORY_RRL,
-					      DNS_LOGMODULE_REQUEST,
-					      DNS_RRL_LOG_DEBUG1,
+					      DNS_LOGMODULE_REQUEST, level,
 					      "%s", log_buf);
 			}
 		}

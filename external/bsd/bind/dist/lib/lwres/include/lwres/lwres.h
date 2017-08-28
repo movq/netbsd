@@ -1,7 +1,7 @@
-/*	$NetBSD: lwres.h,v 1.8 2014/12/10 04:38:02 christos Exp $	*/
+/*	$NetBSD: lwres.h,v 1.1 2009/03/22 15:02:40 christos Exp $	*/
 
 /*
- * Copyright (C) 2004-2007, 2014  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2004-2007  Internet Systems Consortium, Inc. ("ISC")
  * Copyright (C) 2000, 2001  Internet Software Consortium.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -17,7 +17,7 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* Id: lwres.h,v 1.57 2007/06/19 23:47:23 tbox Exp  */
+/* Id: lwres.h,v 1.57 2007/06/19 23:47:23 tbox Exp */
 
 #ifndef LWRES_LWRES_H
 #define LWRES_LWRES_H 1
@@ -123,7 +123,6 @@ struct lwres_addr {
 	lwres_uint32_t			family;
 	lwres_uint16_t			length;
 	unsigned char			address[LWRES_ADDR_MAXLEN];
-	lwres_uint32_t			zone;
 	LWRES_LINK(lwres_addr_t)	link;
 };
 
@@ -216,9 +215,9 @@ typedef struct {
  * resolv.conf data
  */
 
-#define LWRES_CONFMAXNAMESERVERS 3	/*%< max 3 nameserver entries */
-#define LWRES_CONFMAXLWSERVERS 1	/*%< max 1 lwserver entry */
-#define LWRES_CONFMAXSEARCH 8		/*%< max 8 domains in search entry */
+#define LWRES_CONFMAXNAMESERVERS 3	/*%< max 3 "nameserver" entries */
+#define LWRES_CONFMAXLWSERVERS 1	/*%< max 1 "lwserver" entry */
+#define LWRES_CONFMAXSEARCH 8		/*%< max 8 domains in "search" entry */
 #define LWRES_CONFMAXLINELEN 256	/*%< max size of a line */
 #define LWRES_CONFMAXSORTLIST 10	/*%< max 10 */
 

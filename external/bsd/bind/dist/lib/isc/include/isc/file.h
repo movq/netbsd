@@ -1,7 +1,7 @@
-/*	$NetBSD: file.h,v 1.10 2016/05/26 16:50:00 christos Exp $	*/
+/*	$NetBSD: file.h,v 1.1 2009/03/22 15:02:11 christos Exp $	*/
 
 /*
- * Copyright (C) 2004-2007, 2009, 2011, 2012, 2014, 2015  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2004-2007, 2009  Internet Systems Consortium, Inc. ("ISC")
  * Copyright (C) 2000, 2001  Internet Software Consortium.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -17,7 +17,7 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* Id */
+/* Id: file.h,v 1.33.332.2 2009/01/18 23:47:41 tbox Exp */
 
 #ifndef ISC_FILE_H
 #define ISC_FILE_H 1
@@ -27,16 +27,12 @@
 #include <stdio.h>
 
 #include <isc/lang.h>
-#include <isc/stat.h>
 #include <isc/types.h>
 
 ISC_LANG_BEGINDECLS
 
 isc_result_t
 isc_file_settime(const char *file, isc_time_t *time);
-
-isc_result_t
-isc_file_mode(const char *file, mode_t *modep);
 
 isc_result_t
 isc_file_getmodtime(const char *file, isc_time_t *time);
@@ -64,7 +60,7 @@ isc_file_getmodtime(const char *file, isc_time_t *time);
  *\li	#ISC_R_NOPERM
  *		The file's metainformation could not be retrieved because
  *		permission was denied to some part of the file's path.
- *\li	#ISC_R_IOERROR
+ *\li	#ISC_R_EIO
  *		Hardware error interacting with the filesystem.
  *\li	#ISC_R_UNEXPECTED
  *		Something totally unexpected happened.
@@ -103,22 +99,11 @@ isc_file_mktemplate(const char *path, char *buf, size_t buflen);
  *				of the path with the internal template string.
  */
 
+
 isc_result_t
 isc_file_openunique(char *templet, FILE **fp);
-isc_result_t
-isc_file_openuniqueprivate(char *templet, FILE **fp);
-isc_result_t
-isc_file_openuniquemode(char *templet, int mode, FILE **fp);
-isc_result_t
-isc_file_bopenunique(char *templet, FILE **fp);
-isc_result_t
-isc_file_bopenuniqueprivate(char *templet, FILE **fp);
-isc_result_t
-isc_file_bopenuniquemode(char *templet, int mode, FILE **fp);
 /*!<
  * \brief Create and open a file with a unique name based on 'templet'.
- *	isc_file_bopen*() open the file in binary mode in Windows.
- *	isc_file_open*() open the file in text mode in Windows.
  *
  * Notes:
  *\li	'template' is a reserved work in C++.  If you want to complain
@@ -198,46 +183,6 @@ isc_file_isabsolute(const char *filename);
  * \brief Return #ISC_TRUE if the given file name is absolute.
  */
 
-isc_result_t
-isc_file_isplainfile(const char *name);
-
-isc_result_t
-isc_file_isplainfilefd(int fd);
-/*!<
- * \brief Check that the file is a plain file
- *
- * Returns:
- *\li	#ISC_R_SUCCESS
- *		Success. The file is a plain file.
- *\li	#ISC_R_INVALIDFILE
- *		The path specified was not usable by the operating system.
- *\li	#ISC_R_FILENOTFOUND
- *		The file does not exist. This return code comes from
- *		errno=ENOENT when stat returns -1. This code is mentioned
- *		here, because in logconf.c, it is the one rcode that is
- *		permitted in addition to ISC_R_SUCCESS. This is done since
- *		the next call in logconf.c is to isc_stdio_open(), which
- *		will create the file if it can.
- *\li	other ISC_R_* errors translated from errno
- *		These occur when stat returns -1 and an errno.
- */
-
-isc_result_t
-isc_file_isdirectory(const char *name);
-/*!<
- * \brief Check that 'name' exists and is a directory.
- *
- * Returns:
- *\li	#ISC_R_SUCCESS
- *		Success, file is a directory.
- *\li	#ISC_R_INVALIDFILE
- *		File is not a directory.
- *\li	#ISC_R_FILENOTFOUND
- *		File does not exist.
- *\li	other ISC_R_* errors translated from errno
- *		These occur when stat returns -1 and an errno.
- */
-
 isc_boolean_t
 isc_file_iscurrentdir(const char *filename);
 /*!<
@@ -306,65 +251,6 @@ isc_result_t
 isc_file_truncate(const char *filename, isc_offset_t size);
 /*%<
  * Truncate/extend the file specified to 'size' bytes.
- */
-
-isc_result_t
-isc_file_safecreate(const char *filename, FILE **fp);
-/*%<
- * Open 'filename' for writing, truncating if necessary.  Ensure that
- * if it existed it was a normal file.  If creating the file, ensure
- * that only the owner can read/write it.
- */
-
-isc_result_t
-isc_file_splitpath(isc_mem_t *mctx, const char *path,
-		   char **dirname, char const **basename);
-/*%<
- * Split a path into dirname and basename.  If 'path' contains no slash
- * (or, on windows, backslash), then '*dirname' is set to ".".
- *
- * Allocates memory for '*dirname', which can be freed with isc_mem_free().
- *
- * Returns:
- * - ISC_R_SUCCESS on success
- * - ISC_R_INVALIDFILE if 'path' is empty or ends with '/'
- * - ISC_R_NOMEMORY if unable to allocate memory
- */
-
-isc_result_t
-isc_file_getsize(const char *file, off_t *size);
-/*%<
- * Return the size of the file (stored in the parameter pointed
- * to by 'size') in bytes.
- *
- * Returns:
- * - ISC_R_SUCCESS on success
- */
-
-isc_result_t
-isc_file_getsizefd(int fd, off_t *size);
-/*%<
- * Return the size of the file (stored in the parameter pointed
- * to by 'size') in bytes.
- *
- * Returns:
- * - ISC_R_SUCCESS on success
- */
-
-void *
-isc_file_mmap(void *addr, size_t len, int prot,
-	      int flags, int fd, off_t offset);
-/*%<
- * Portable front-end to mmap().  If mmap() is not defined on this
- * platform, then we simulate it by calling malloc() and read().
- * (In this event, the addr, prot, and flags parameters are ignored).
- */
-
-int
-isc_file_munmap(void *addr, size_t len);
-/*%<
- * Portable front-end to munmap().  If munmap() is not defined on
- * this platform, then we simply free the memory.
  */
 
 ISC_LANG_ENDDECLS

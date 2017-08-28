@@ -1,7 +1,7 @@
-/*	$NetBSD: hash_test.c,v 1.1.1.10 2017/06/15 15:22:50 christos Exp $	*/
+/*	$NetBSD: hash_test.c,v 1.1 2011/09/11 17:19:37 christos Exp $	*/
 
 /*
- * Copyright (C) 2011-2016  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2011  Internet Systems Consortium, Inc. ("ISC")
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -16,6 +16,8 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
+/* Id: hash_test.c,v 1.3 2011-07-29 23:47:52 tbox Exp */
+
 /* ! \file */
 
 #include <config.h>
@@ -25,18 +27,12 @@
 #include <stdio.h>
 #include <string.h>
 
-#include <isc/hash.h>
-
-#include <isc/crc64.h>
 #include <isc/hmacmd5.h>
 #include <isc/hmacsha.h>
 #include <isc/md5.h>
 #include <isc/sha1.h>
 #include <isc/util.h>
-#include <isc/print.h>
 #include <isc/string.h>
-
-#include <pk11/site.h>
 
 /*
  * Test data from RFC6234
@@ -45,8 +41,9 @@
 unsigned char digest[ISC_SHA512_DIGESTLENGTH];
 unsigned char buffer[1024];
 const char *s;
-char str[2 * ISC_SHA512_DIGESTLENGTH + 3];
+char str[ISC_SHA512_DIGESTLENGTH];
 unsigned char key[20];
+int i = 0;
 
 isc_result_t
 tohexstr(unsigned char *d, unsigned int len, char *out);
@@ -56,7 +53,7 @@ tohexstr(unsigned char *d, unsigned int len, char *out);
  * Postcondition: A String representation of the given hexadecimal number is
  *   placed into the array *out
  *
- * 'out' MUST point to an array of at least len * 2 + 1
+ * 'out' MUST point to an array of at least len / 2 + 1
  *
  * Return values: ISC_R_SUCCESS if the operation is sucessful
  */
@@ -99,7 +96,6 @@ ATF_TC_HEAD(isc_sha1, tc) {
 }
 ATF_TC_BODY(isc_sha1, tc) {
 	isc_sha1_t sha1;
-	int i;
 
 	UNUSED(tc);
 
@@ -222,13 +218,13 @@ ATF_TC_BODY(isc_sha1, tc) {
 	}
 }
 
+
 ATF_TC(isc_sha224);
 ATF_TC_HEAD(isc_sha224, tc) {
 	atf_tc_set_md_var(tc, "descr", "sha224 examples from RFC4634");
 }
 ATF_TC_BODY(isc_sha224, tc) {
 	isc_sha224_t sha224;
-	int i;
 
 	UNUSED(tc);
 
@@ -353,6 +349,7 @@ ATF_TC_BODY(isc_sha224, tc) {
 
 		testcase++;
 	}
+
 }
 
 ATF_TC(isc_sha256);
@@ -361,7 +358,6 @@ ATF_TC_HEAD(isc_sha256, tc) {
 }
 ATF_TC_BODY(isc_sha256, tc) {
 	isc_sha256_t sha256;
-	int i;
 
 	UNUSED(tc);
 
@@ -485,6 +481,7 @@ ATF_TC_BODY(isc_sha256, tc) {
 
 		testcase++;
 	}
+
 }
 
 ATF_TC(isc_sha384);
@@ -493,7 +490,6 @@ ATF_TC_HEAD(isc_sha384, tc) {
 }
 ATF_TC_BODY(isc_sha384, tc) {
 	isc_sha384_t sha384;
-	int i;
 
 	UNUSED(tc);
 
@@ -631,6 +627,7 @@ ATF_TC_BODY(isc_sha384, tc) {
 
 		testcase++;
 	}
+
 }
 
 ATF_TC(isc_sha512);
@@ -639,7 +636,6 @@ ATF_TC_HEAD(isc_sha512, tc) {
 }
 ATF_TC_BODY(isc_sha512, tc) {
 	isc_sha512_t sha512;
-	int i;
 
 	UNUSED(tc);
 
@@ -778,16 +774,15 @@ ATF_TC_BODY(isc_sha512, tc) {
 
 		testcase++;
 	}
+
 }
 
-#ifndef PK11_MD5_DISABLE
 ATF_TC(isc_md5);
 ATF_TC_HEAD(isc_md5, tc) {
 	atf_tc_set_md_var(tc, "descr", "md5 example from RFC1321");
 }
 ATF_TC_BODY(isc_md5, tc) {
 	isc_md5_t md5;
-	int i;
 
 	UNUSED(tc);
 
@@ -853,7 +848,6 @@ ATF_TC_BODY(isc_md5, tc) {
 		testcase++;
 	}
 }
-#endif
 
 /* HMAC-SHA1 test */
 ATF_TC(isc_hmacsha1);
@@ -971,7 +965,7 @@ ATF_TC_BODY(isc_hmacsha1, tc) {
 	hash_test_key_t *test_key = test_keys;
 
 	while (testcase->input != NULL && testcase->result != NULL) {
-		memmove(buffer, test_key->key, test_key->len);
+		memcpy(buffer, test_key->key, test_key->len);
 		isc_hmacsha1_init(&hmacsha1, buffer, test_key->len);
 		isc_hmacsha1_update(&hmacsha1,
 				    (const isc_uint8_t *) testcase->input,
@@ -1134,7 +1128,7 @@ ATF_TC_BODY(isc_hmacsha224, tc) {
 	hash_test_key_t *test_key = test_keys;
 
 	while (testcase->input != NULL && testcase->result != NULL) {
-		memmove(buffer, test_key->key, test_key->len);
+		memcpy(buffer, test_key->key, test_key->len);
 		isc_hmacsha224_init(&hmacsha224, buffer, test_key->len);
 		isc_hmacsha224_update(&hmacsha224,
 				      (const isc_uint8_t *) testcase->input,
@@ -1297,7 +1291,7 @@ ATF_TC_BODY(isc_hmacsha256, tc) {
 	hash_test_key_t *test_key = test_keys;
 
 	while (testcase->input != NULL && testcase->result != NULL) {
-		memmove(buffer, test_key->key, test_key->len);
+		memcpy(buffer, test_key->key, test_key->len);
 		isc_hmacsha256_init(&hmacsha256, buffer, test_key->len);
 		isc_hmacsha256_update(&hmacsha256,
 				      (const isc_uint8_t *) testcase->input,
@@ -1466,7 +1460,7 @@ ATF_TC_BODY(isc_hmacsha384, tc) {
 	hash_test_key_t *test_key = test_keys;
 
 	while (testcase->input != NULL && testcase->result != NULL) {
-		memmove(buffer, test_key->key, test_key->len);
+		memcpy(buffer, test_key->key, test_key->len);
 		isc_hmacsha384_init(&hmacsha384, buffer, test_key->len);
 		isc_hmacsha384_update(&hmacsha384,
 				      (const isc_uint8_t *) testcase->input,
@@ -1635,7 +1629,7 @@ ATF_TC_BODY(isc_hmacsha512, tc) {
 	hash_test_key_t *test_key = test_keys;
 
 	while (testcase->input != NULL && testcase->result != NULL) {
-		memmove(buffer, test_key->key, test_key->len);
+		memcpy(buffer, test_key->key, test_key->len);
 		isc_hmacsha512_init(&hmacsha512, buffer, test_key->len);
 		isc_hmacsha512_update(&hmacsha512,
 				      (const isc_uint8_t *) testcase->input,
@@ -1650,7 +1644,6 @@ ATF_TC_BODY(isc_hmacsha512, tc) {
 }
 
 
-#ifndef PK11_MD5_DISABLE
 /* HMAC-MD5 Test */
 ATF_TC(isc_hmacmd5);
 ATF_TC_HEAD(isc_hmacmd5, tc) {
@@ -1779,7 +1772,7 @@ ATF_TC_BODY(isc_hmacmd5, tc) {
 	hash_test_key_t *test_key = test_keys;
 
 	while (testcase->input != NULL && testcase->result != NULL) {
-		memmove(buffer, test_key->key, test_key->len);
+		memcpy(buffer, test_key->key, test_key->len);
 		isc_hmacmd5_init(&hmacmd5, buffer, test_key->len);
 		isc_hmacmd5_update(&hmacmd5,
 				   (const isc_uint8_t *) testcase->input,
@@ -1792,192 +1785,23 @@ ATF_TC_BODY(isc_hmacmd5, tc) {
 		test_key++;
 	}
 }
-#endif
-
-/* CRC64 Test */
-ATF_TC(isc_crc64);
-ATF_TC_HEAD(isc_crc64, tc) {
-	atf_tc_set_md_var(tc, "descr", "64-bit cyclic redundancy check");
-}
-ATF_TC_BODY(isc_crc64, tc) {
-	isc_uint64_t crc;
-	int i;
-
-	UNUSED(tc);
-
-	hash_testcase_t testcases[] = {
-		{
-			TEST_INPUT(""),
-			"0x0000000000000000", 1
-		},
-		{
-			TEST_INPUT("a"),
-			"0x9AA9C0AC27F473CE", 1
-		},
-		{
-			TEST_INPUT("abc"),
-			"0x0297F4F93A818B04", 1
-		},
-		{
-			TEST_INPUT("message digest"),
-			"0xF47B357AEAF97352", 1
-		},
-		{
-			TEST_INPUT("abcdefghijklmnopqrstuvwxyz"),
-			"0xA1AA8B21F979F059", 1
-		},
-		{
-			TEST_INPUT("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklm"
-				   "nopqrstuvwxyz0123456789"),
-			"0xFBB6781EF7A86DA3", 1
-		},
-		{
-			TEST_INPUT("123456789012345678901234567890123456789"
-				   "01234567890123456789012345678901234567890"),
-			"0x4A87E7C873EBE581", 1
-		},
-		{ NULL, 0, NULL, 1 }
-	};
-
-	hash_testcase_t *testcase = testcases;
-
-	while (testcase->input != NULL && testcase->result != NULL) {
-		isc_crc64_init(&crc);
-		for(i = 0; i < testcase->repeats; i++) {
-			isc_crc64_update(&crc,
-				       (const isc_uint8_t *) testcase->input,
-				       testcase->input_len);
-		}
-		isc_crc64_final(&crc);
-		tohexstr((unsigned char *) &crc, sizeof(crc), str);
-		ATF_CHECK_STREQ(str, testcase->result);
-
-		testcase++;
-	}
-}
-
-ATF_TC(isc_hash_function);
-ATF_TC_HEAD(isc_hash_function, tc) {
-	atf_tc_set_md_var(tc, "descr", "Hash function test");
-}
-ATF_TC_BODY(isc_hash_function, tc) {
-	unsigned int h1;
-	unsigned int h2;
-
-	UNUSED(tc);
-
-	/* Incremental hashing */
-
-	h1 = isc_hash_function(NULL, 0, ISC_TRUE, NULL);
-	h1 = isc_hash_function("This ", 5, ISC_TRUE, &h1);
-	h1 = isc_hash_function("is ", 3, ISC_TRUE, &h1);
-	h1 = isc_hash_function("a long test", 12, ISC_TRUE, &h1);
-
-	h2 = isc_hash_function("This is a long test", 20,
-			       ISC_TRUE, NULL);
-
-	ATF_CHECK_EQ(h1, h2);
-
-	/* Immutability of hash function */
-	h1 = isc_hash_function(NULL, 0, ISC_TRUE, NULL);
-	h2 = isc_hash_function(NULL, 0, ISC_TRUE, NULL);
-
-	ATF_CHECK_EQ(h1, h2);
-
-	/* Hash function characteristics */
-	h1 = isc_hash_function("Hello world", 12, ISC_TRUE, NULL);
-	h2 = isc_hash_function("Hello world", 12, ISC_TRUE, NULL);
-
-	ATF_CHECK_EQ(h1, h2);
-
-	/* Case */
-	h1 = isc_hash_function("Hello world", 12, ISC_FALSE, NULL);
-	h2 = isc_hash_function("heLLo WorLd", 12, ISC_FALSE, NULL);
-
-	ATF_CHECK_EQ(h1, h2);
-
-	/* Unequal */
-	h1 = isc_hash_function("Hello world", 12, ISC_TRUE, NULL);
-	h2 = isc_hash_function("heLLo WorLd", 12, ISC_TRUE, NULL);
-
-	ATF_CHECK(h1 != h2);
-}
-
-
-ATF_TC(isc_hash_function_reverse);
-ATF_TC_HEAD(isc_hash_function_reverse, tc) {
-	atf_tc_set_md_var(tc, "descr", "Reverse hash function test");
-}
-ATF_TC_BODY(isc_hash_function_reverse, tc) {
-	unsigned int h1;
-	unsigned int h2;
-
-	UNUSED(tc);
-
-	/* Incremental hashing */
-
-	h1 = isc_hash_function_reverse(NULL, 0, ISC_TRUE, NULL);
-	h1 = isc_hash_function_reverse("\000", 1, ISC_TRUE, &h1);
-	h1 = isc_hash_function_reverse("\003org", 4, ISC_TRUE, &h1);
-	h1 = isc_hash_function_reverse("\007example", 8, ISC_TRUE, &h1);
-
-	h2 = isc_hash_function_reverse("\007example\003org\000", 13,
-				       ISC_TRUE, NULL);
-
-	ATF_CHECK_EQ(h1, h2);
-
-	/* Immutability of hash function */
-	h1 = isc_hash_function_reverse(NULL, 0, ISC_TRUE, NULL);
-	h2 = isc_hash_function_reverse(NULL, 0, ISC_TRUE, NULL);
-
-	ATF_CHECK_EQ(h1, h2);
-
-	/* Hash function characteristics */
-	h1 = isc_hash_function_reverse("Hello world", 12, ISC_TRUE, NULL);
-	h2 = isc_hash_function_reverse("Hello world", 12, ISC_TRUE, NULL);
-
-	ATF_CHECK_EQ(h1, h2);
-
-	/* Case */
-	h1 = isc_hash_function_reverse("Hello world", 12, ISC_FALSE, NULL);
-	h2 = isc_hash_function_reverse("heLLo WorLd", 12, ISC_FALSE, NULL);
-
-	ATF_CHECK_EQ(h1, h2);
-
-	/* Unequal */
-	h1 = isc_hash_function_reverse("Hello world", 12, ISC_TRUE, NULL);
-	h2 = isc_hash_function_reverse("heLLo WorLd", 12, ISC_TRUE, NULL);
-
-	ATF_CHECK(h1 != h2);
-}
 
 /*
  * Main
  */
 ATF_TP_ADD_TCS(tp) {
-	/*
-	 * Tests of hash functions, including isc_hash and the
-	 * various cryptographic hashes.
-	 */
-	ATF_TP_ADD_TC(tp, isc_hash_function);
-	ATF_TP_ADD_TC(tp, isc_hash_function_reverse);
-#ifndef PK11_MD5_DISABLE
 	ATF_TP_ADD_TC(tp, isc_hmacmd5);
-#endif
 	ATF_TP_ADD_TC(tp, isc_hmacsha1);
 	ATF_TP_ADD_TC(tp, isc_hmacsha224);
 	ATF_TP_ADD_TC(tp, isc_hmacsha256);
 	ATF_TP_ADD_TC(tp, isc_hmacsha384);
 	ATF_TP_ADD_TC(tp, isc_hmacsha512);
-#ifndef PK11_MD5_DISABLE
 	ATF_TP_ADD_TC(tp, isc_md5);
-#endif
 	ATF_TP_ADD_TC(tp, isc_sha1);
 	ATF_TP_ADD_TC(tp, isc_sha224);
 	ATF_TP_ADD_TC(tp, isc_sha256);
 	ATF_TP_ADD_TC(tp, isc_sha384);
 	ATF_TP_ADD_TC(tp, isc_sha512);
-	ATF_TP_ADD_TC(tp, isc_crc64);
-
 	return (atf_no_error());
 }
+

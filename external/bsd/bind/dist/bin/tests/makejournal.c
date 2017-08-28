@@ -1,7 +1,7 @@
-/*	$NetBSD: makejournal.c,v 1.4 2015/12/17 04:00:42 christos Exp $	*/
+/*	$NetBSD: makejournal.c,v 1.1 2014/02/28 17:40:07 christos Exp $	*/
 
 /*
- * Copyright (C) 2013, 2015  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2013  Internet Systems Consortium, Inc. ("ISC")
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -30,7 +30,6 @@
 #include <dns/journal.h>
 #include <dns/log.h>
 #include <dns/name.h>
-#include <isc/print.h>
 #include <dns/result.h>
 #include <dns/types.h>
 
@@ -41,7 +40,7 @@
 		result = (r); \
 		if (result != ISC_R_SUCCESS) \
 		goto cleanup; \
-	} while (/*CONSTCOND*/0)
+	} while (0)
 
 isc_mem_t *mctx = NULL;
 isc_log_t *lctx = NULL;

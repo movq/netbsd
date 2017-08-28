@@ -1,10 +1,11 @@
-/*	$NetBSD: dlpi.c,v 1.2 2017/06/28 02:46:30 manu Exp $	*/
+/*	$NetBSD: dlpi.c,v 1.1 2013/03/24 15:45:52 christos Exp $	*/
+
 /* dlpi.c
  
    Data Link Provider Interface (DLPI) network interface code. */
 
 /*
- * Copyright (c) 2009-2011,2014 by Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (c) 2009-2011 by Internet Systems Consortium, Inc. ("ISC")
  * Copyright (c) 2004,2007 by Internet Systems Consortium, Inc. ("ISC")
  * Copyright (c) 1996-2003 by Internet Software Consortium
  *
@@ -34,9 +35,6 @@
  * support on Solaris and getting this code to work properly on a variety
  * of different Solaris platforms.
  */
-
-#include <sys/cdefs.h>
-__RCSID("$NetBSD: dlpi.c,v 1.2 2017/06/28 02:46:30 manu Exp $");
 
 /*
  * Based largely in part to the existing NIT code in nit.c.
@@ -456,7 +454,7 @@ void if_register_receive (info)
         offset = ETHER_H_PREFIX + sizeof (iphdr) + sizeof (u_int16_t);
         pf.Pf_Filter [pf.Pf_FilterLen++] = ENF_PUSHWORD + (offset / 2);
         pf.Pf_Filter [pf.Pf_FilterLen++] = ENF_PUSHLIT | ENF_CAND;
-        pf.Pf_Filter [pf.Pf_FilterLen++] = *libdhcp_callbacks.local_port;
+        pf.Pf_Filter [pf.Pf_FilterLen++] = local_port;
 
         /*
          * protocol should be udp. this is a byte compare, test for
@@ -530,7 +528,6 @@ ssize_t send_packet (interface, packet, raw, len, from, to, hto)
 {
 #ifdef USE_DLPI_RAW
 	double hh [32];
-	int fudge;
 #endif
 	double ih [1536 / sizeof (double)];
 	unsigned char *dbuf = (unsigned char *)ih;
@@ -538,6 +535,7 @@ ssize_t send_packet (interface, packet, raw, len, from, to, hto)
 	unsigned char dstaddr [DLPI_MAXDLADDR];
 	unsigned addrlen;
 	int result;
+	int fudge;
 
 	if (!strcmp (interface -> name, "fallback"))
 		return send_fallback (interface, packet, raw,
@@ -556,6 +554,8 @@ ssize_t send_packet (interface, packet, raw, len, from, to, hto)
 	fudge = dbuflen % 4; /* IP header must be word-aligned. */
 	memcpy (dbuf + fudge, (unsigned char *)hh, dbuflen);
 	dbuflen += fudge;
+#else
+	fudge = 0;
 #endif
 	assemble_udp_ip_header (interface, dbuf, &dbuflen, from.s_addr,
 				to -> sin_addr.s_addr, to -> sin_port,
@@ -695,7 +695,7 @@ ssize_t receive_packet (interface, buf, len, from, hfrom)
 	length -= offset;
 #endif
 	offset = decode_udp_ip_header (interface, dbuf, bufix,
-				       from, length, &paylen, 1);
+				       from, length, &paylen);
 
 	/*
 	 * If the IP or UDP checksum was bad, skip the packet...

@@ -1,7 +1,7 @@
-/*	$NetBSD: pkcs11gost_link.c,v 1.1.1.7 2017/06/15 15:22:47 christos Exp $	*/
+/*	$NetBSD: pkcs11gost_link.c,v 1.1 2014/02/28 17:40:13 christos Exp $	*/
 
 /*
- * Copyright (C) 2014-2017  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2014  Internet Systems Consortium, Inc. ("ISC")
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -16,13 +16,14 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
+/* Id */
+
 #include <config.h>
 
 #if defined(PKCS11CRYPTO) && defined(HAVE_PKCS11_GOST)
 
 #include <isc/entropy.h>
 #include <isc/mem.h>
-#include <isc/safe.h>
 #include <isc/sha2.h>
 #include <isc/string.h>
 #include <isc/util.h>
@@ -74,7 +75,6 @@
 
 #define ISC_GOST_SIGNATURELENGTH	64
 #define ISC_GOST_PUBKEYLENGTH		64
-#define ISC_GOST_KEYSIZE		256
 
 /* HASH methods */
 
@@ -84,8 +84,7 @@ isc_gost_init(isc_gost_t *ctx) {
 	CK_MECHANISM mech = { CKM_GOSTR3411, NULL, 0 };
 	int ret = ISC_R_SUCCESS;
 
-	ret = pk11_get_session(ctx, OP_GOST, ISC_TRUE, ISC_FALSE,
-			       ISC_FALSE, NULL, 0);
+	ret = pk11_get_session(ctx, OP_GOST, ISC_FALSE, ISC_FALSE, NULL, 0);
 	if (ret != ISC_R_SUCCESS)
 		return (ret);
 	PK11_CALL(pkcs_C_DigestInit, (ctx->session, &mech), ISC_R_FAILURE);
@@ -166,20 +165,16 @@ pkcs11gost_createctx_sign(dst_key_t *key, dst_context_t *dctx) {
 	isc_result_t ret;
 	unsigned int i;
 
-	REQUIRE(key != NULL);
-	gost = key->keydata.pkey;
-	REQUIRE(gost != NULL);
-
 	pk11_ctx = (pk11_context_t *) isc_mem_get(dctx->mctx,
 						  sizeof(*pk11_ctx));
 	if (pk11_ctx == NULL)
 		return (ISC_R_NOMEMORY);
-	ret = pk11_get_session(pk11_ctx, OP_GOST, ISC_TRUE, ISC_FALSE,
-			       gost->reqlogon, NULL,
+	ret = pk11_get_session(pk11_ctx, OP_GOST, ISC_FALSE, ISC_FALSE, NULL,
 			       pk11_get_best_token(OP_GOST));
 	if (ret != ISC_R_SUCCESS)
 		goto err;
 
+	gost = key->keydata.pkey;
 	if (gost->ontoken && (gost->object != CK_INVALID_HANDLE)) {
 		pk11_ctx->ontoken = gost->ontoken;
 		pk11_ctx->object = gost->object;
@@ -271,20 +266,16 @@ pkcs11gost_createctx_verify(dst_key_t *key, dst_context_t *dctx) {
 	isc_result_t ret;
 	unsigned int i;
 
-	REQUIRE(key != NULL);
-	gost = key->keydata.pkey;
-	REQUIRE(gost != NULL);
-
 	pk11_ctx = (pk11_context_t *) isc_mem_get(dctx->mctx,
 						  sizeof(*pk11_ctx));
 	if (pk11_ctx == NULL)
 		return (ISC_R_NOMEMORY);
-	ret = pk11_get_session(pk11_ctx, OP_GOST, ISC_TRUE, ISC_FALSE,
-			       gost->reqlogon, NULL,
+	ret = pk11_get_session(pk11_ctx, OP_GOST, ISC_FALSE, ISC_FALSE, NULL,
 			       pk11_get_best_token(OP_GOST));
 	if (ret != ISC_R_SUCCESS)
 		goto err;
 
+	gost = key->keydata.pkey;
 	if (gost->ontoken && (gost->object != CK_INVALID_HANDLE)) {
 		pk11_ctx->ontoken = gost->ontoken;
 		pk11_ctx->object = gost->object;
@@ -453,8 +444,7 @@ pkcs11gost_compare(const dst_key_t *key1, const dst_key_t *key2) {
 		return (ISC_TRUE);
 	else if ((attr1 == NULL) || (attr2 == NULL) ||
 		 (attr1->ulValueLen != attr2->ulValueLen) ||
-		 !isc_safe_memequal(attr1->pValue, attr2->pValue,
-				    attr1->ulValueLen))
+		 memcmp(attr1->pValue, attr2->pValue, attr1->ulValueLen))
 		return (ISC_FALSE);
 
 	attr1 = pk11_attribute_bytype(gost1, CKA_VALUE2);
@@ -462,8 +452,7 @@ pkcs11gost_compare(const dst_key_t *key1, const dst_key_t *key2) {
 	if (((attr1 != NULL) || (attr2 != NULL)) &&
 	    ((attr1 == NULL) || (attr2 == NULL) ||
 	     (attr1->ulValueLen != attr2->ulValueLen) ||
-	     !isc_safe_memequal(attr1->pValue, attr2->pValue,
-				attr1->ulValueLen)))
+	     memcmp(attr1->pValue, attr2->pValue, attr1->ulValueLen)))
 		return (ISC_FALSE);
 
 	if (!gost1->ontoken && !gost2->ontoken)
@@ -518,8 +507,8 @@ pkcs11gost_generate(dst_key_t *key, int unused, void (*callback)(int)) {
 						  sizeof(*pk11_ctx));
 	if (pk11_ctx == NULL)
 		return (ISC_R_NOMEMORY);
-	ret = pk11_get_session(pk11_ctx, OP_GOST, ISC_TRUE, ISC_FALSE,
-			       ISC_FALSE, NULL, pk11_get_best_token(OP_GOST));
+	ret = pk11_get_session(pk11_ctx, OP_GOST, ISC_FALSE, ISC_FALSE, NULL,
+			       pk11_get_best_token(OP_GOST));
 	if (ret != ISC_R_SUCCESS)
 		goto err;
 
@@ -535,7 +524,6 @@ pkcs11gost_generate(dst_key_t *key, int unused, void (*callback)(int)) {
 		DST_RET(ISC_R_NOMEMORY);
 	memset(gost, 0, sizeof(*gost));
 	key->keydata.pkey = gost;
-	key->key_size = ISC_GOST_KEYSIZE;
 	gost->repr = (CK_ATTRIBUTE *) isc_mem_get(key->mctx,
 						  sizeof(*attr) * 2);
 	if (gost->repr == NULL)
@@ -693,7 +681,6 @@ pkcs11gost_fromdns(dst_key_t *key, isc_buffer_t *data) {
 
 	isc_buffer_forward(data, ISC_GOST_PUBKEYLENGTH);
 	key->keydata.pkey = gost;
-	key->key_size = ISC_GOST_KEYSIZE;
 	return (ISC_R_SUCCESS);
 
  nomemory:
@@ -867,7 +854,7 @@ pkcs11gost_parse(dst_key_t *key, isc_lex_t *lexer, dst_key_t *pub) {
 			buf[36] += adj;
 			buf[38] += adj;
 		}
-		if (!isc_safe_memequal(priv.elements[0].data, buf, 39))
+		if (memcmp(priv.elements[0].data, buf, 39) != 0)
 			DST_RET(DST_R_INVALIDPRIVATEKEY);
 		priv.elements[0].tag = TAG_GOST_PRIVRAW;
 		priv.elements[0].length -= 39;
@@ -881,7 +868,6 @@ pkcs11gost_parse(dst_key_t *key, isc_lex_t *lexer, dst_key_t *pub) {
 		DST_RET(ISC_R_NOMEMORY);
 	memset(gost, 0, sizeof(*gost));
 	key->keydata.pkey = gost;
-	key->key_size = ISC_GOST_KEYSIZE;
 
 	gost->repr = (CK_ATTRIBUTE *) isc_mem_get(key->mctx,
 						  sizeof(*attr) * 2);

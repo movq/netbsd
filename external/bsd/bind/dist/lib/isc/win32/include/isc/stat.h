@@ -1,7 +1,7 @@
-/*	$NetBSD: stat.h,v 1.5 2014/12/10 04:38:01 christos Exp $	*/
+/*	$NetBSD: stat.h,v 1.1 2009/03/22 15:02:29 christos Exp $	*/
 
 /*
- * Copyright (C) 2004, 2007, 2009, 2012  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2004, 2007  Internet Systems Consortium, Inc. ("ISC")
  * Copyright (C) 2000, 2001, 2003  Internet Software Consortium.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -17,21 +17,16 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* Id: stat.h,v 1.9 2009/10/01 23:48:08 tbox Exp  */
+/* Id: stat.h,v 1.7 2007/06/19 23:47:20 tbox Exp */
 
 #ifndef ISC_STAT_H
 #define ISC_STAT_H 1
 
 #include <sys/stat.h>
 
-/*
- * Windows doesn't typedef this.
- */
-typedef unsigned short mode_t;
-
 /* open() under unix allows setting of read/write permissions
  * at the owner, group and other levels.  These don't exist in NT
- * We'll just map them all to the NT equivalent
+ * We'll just map them all to the NT equivalent 
  */
 
 #define S_IREAD	_S_IREAD	/* read permission, owner */
@@ -42,19 +37,6 @@ typedef unsigned short mode_t;
 #define S_IWGRP _S_IWRITE	/* Group write permission */
 #define S_IROTH _S_IREAD	/* Other read permission */
 #define S_IWOTH _S_IWRITE	/* Other write permission */
-
-#ifndef S_IFMT
-# define S_IFMT   _S_IFMT
-#endif
-#ifndef S_IFDIR
-# define S_IFDIR  _S_IFDIR
-#endif
-#ifndef S_IFCHR
-# define S_IFCHR  _S_IFCHR
-#endif
-#ifndef S_IFREG
-# define S_IFREG  _S_IFREG
-#endif
 
 #ifndef S_ISDIR
 # define S_ISDIR(m)	(((m) & S_IFMT) == S_IFDIR)

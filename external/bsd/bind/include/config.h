@@ -1,7 +1,7 @@
 /* config.h.  Generated from config.h.in by configure.  */
 /* config.h.in.  Generated from configure.in by autoheader.  */
 /*
- * Copyright (C) 2004, 2005, 2007, 2008, 2012, 2014, 2016  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2004, 2005, 2007, 2009  Internet Systems Consortium, Inc. ("ISC")
  * Copyright (C) 1999-2003  Internet Software Consortium.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -17,7 +17,7 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* Id: acconfig.h,v 1.53 2008/12/01 23:47:44 tbox Exp  */
+/* Id: config.h.in,v 1.106.40.6 2009/03/13 05:35:43 marka Exp */
 
 /*! \file */
 
@@ -66,6 +66,9 @@
 /** define if you have the NET_RT_IFLIST sysctl variable and sys/sysctl.h */
 #define HAVE_IFLIST_SYSCTL 1
 
+/** define if chroot() is available */
+#define HAVE_CHROOT 1
+
 /** define if tzset() is available */
 #define HAVE_TZSET 1
 
@@ -78,14 +81,16 @@
 /** define if gai_strerror() exists */
 #define HAVE_GAISTRERROR 1
 
+/** define if arc4random() exists */
+#define HAVE_ARC4RANDOM 1
+
 /**
  * define if pthread_setconcurrency() should be called to tell the
  * OS how many threads we might want to run.
  */
 /* #undef CALL_PTHREAD_SETCONCURRENCY */
 
-#ifndef __NetBSD__
-/* defined by the build process */
+#if 0	/* We'll define this in each Makefile as necessary */
 /** define if IPv6 is not disabled */
 #define WANT_IPV6 1
 #endif
@@ -117,7 +122,7 @@ int sigwait(const unsigned int *set, int *sig);
  * The silly continuation line is to keep configure from
  * commenting out the #undef.
  */
-
+ 
 #undef \
 	va_start
 #define	va_start(ap, last) \
@@ -125,7 +130,7 @@ int sigwait(const unsigned int *set, int *sig);
 		union { const void *konst; long *var; } _u; \
 		_u.konst = &(last); \
 		ap = (va_list)(_u.var + __va_words(__typeof(last))); \
-	} while (/*CONSTCOND*/0)
+	} while (0)
 #endif /** SHUTUP_STDARG_CAST && __GNUC__ */
 
 /** define if the system has a random number generating device */
@@ -140,34 +145,17 @@ int sigwait(const unsigned int *set, int *sig);
 /** define if you have strerror in the C library. */
 #define HAVE_STRERROR 1
 
+/** Define if you are running under Compaq TruCluster. */
+/* #undef HAVE_TRUCLUSTER */
+
 /* Define if OpenSSL includes DSA support */
 #define HAVE_OPENSSL_DSA 1
-
-/* Define if you have getpassphrase in the C library. */
-/* #undef HAVE_GETPASSPHRASE */
 
 /* Define to the length type used by the socket API (socklen_t, size_t, int). */
 #define ISC_SOCKADDR_LEN_T socklen_t
 
 /* Define if threads need PTHREAD_SCOPE_SYSTEM */
 /* #undef NEED_PTHREAD_SCOPE_SYSTEM */
-
-/* Define to 1 if you have the uname library function. */
-#define HAVE_UNAME 1
-
-/* Define if building universal (internal helper macro) */
-/* #undef AC_APPLE_UNIVERSAL_BUILD */
-
-/* Use AES for Source Identity Token generation */
-/* In Makefile */
-/* #undef AES_SIT */
-
-/* Define to enable the "filter-aaaa-on-v4" and "filter-aaaa-on-v6" options.
-   */
-/* #undef ALLOW_FILTER_AAAA */
-
-/* define if ATF unit tests are to be built. */
-/* #undef ATF_TEST */
 
 /* Define if recvmsg() does not meet all of the BSD socket API specifications.
    */
@@ -179,147 +167,20 @@ int sigwait(const unsigned int *set, int *sig);
 /* Define to enable "rrset-order fixed" syntax. */
 #define DNS_RDATASET_FIXED 1
 
-/* Define to enable the "fetches-per-server" and "fetches-per-zone" options.
-   */
-#define ENABLE_FETCHLIMIT 1
-
-/* Define to enable rpz-nsdname rules. */
-#define ENABLE_RPZ_NSDNAME 1
-
-/* Define to enable rpz-nsip rules. */
-#define ENABLE_RPZ_NSIP 1
-
-/* Solaris hack to get select_large_fdset. */
-/* #undef FD_SETSIZE */
-
-/* Define to nothing if C supports flexible array members, and to 1 if it does
-   not. That way, with a declaration like `struct s { int n; double
-   d[FLEXIBLE_ARRAY_MEMBER]; };', the struct hack can be used with pre-C99
-   compilers. When computing the size of such an object, don't use 'sizeof
-   (struct s)' as it overestimates the size. Use 'offsetof (struct s, d)'
-   instead. Don't use 'offsetof (struct s, d[0])', as this doesn't work with
-   MSVC and with C++ compilers. */
-#define FLEXIBLE_ARRAY_MEMBER /**/
-
-/* Define to 1 if you have the `arc4random' function. */
-#define HAVE_ARC4RANDOM 1
-
-/* Define to 1 if you have the `arc4random_addrandom' function. */
-#define HAVE_ARC4RANDOM_ADDRANDOM 1
-
-/* Define to 1 if you have the `arc4random_stir' function. */
-#define HAVE_ARC4RANDOM_STIR 1
-
-/* Define to 1 if the compiler supports __builtin_clz. */
-#define HAVE_BUILTIN_CLZ 1
-
-/* Define to 1 if the compiler supports __builtin_expect. */
-#define HAVE_BUILTIN_EXPECT 1
-
-/* Define to 1 if you have the `chroot' function. */
-#define HAVE_CHROOT 1
-
-/* Define if clock_gettime is available. */
-#define HAVE_CLOCK_GETTIME 1
-
-/* Define to 1 if you have the <devpoll.h> header file. */
-/* #undef HAVE_DEVPOLL_H */
-
-/* Define to 1 if you have the `dlclose' function. */
-#define HAVE_DLCLOSE 1
-
-/* Define to 1 if you have the <dlfcn.h> header file. */
-#define HAVE_DLFCN_H 1
-
-/* Define to 1 if you have the `dlopen' function. */
-#define HAVE_DLOPEN 1
-
-/* Define to 1 if you have the `dlsym' function. */
-#define HAVE_DLSYM 1
-
-/* Define to 1 if you have the <editline/readline.h> header file. */
-/* #undef HAVE_EDITLINE_READLINE_H */
-
-/* Define to 1 if you have the <edit/readline/history.h> header file. */
-/* #undef HAVE_EDIT_READLINE_HISTORY_H */
-
-/* Define to 1 if you have the <edit/readline/readline.h> header file. */
-/* #undef HAVE_EDIT_READLINE_READLINE_H */
-
-/* Define to 1 if you have the `EVP_sha256' function. */
-#define HAVE_EVP_SHA256 1
-
-/* Define to 1 if you have the `EVP_sha384' function. */
-#define HAVE_EVP_SHA384 1
-
-/* Define to 1 if you have the `EVP_sha512' function. */
-#define HAVE_EVP_SHA512 1
-
-/* Define to 1 if you have the <fcntl.h> header file. */
-#define HAVE_FCNTL_H 1
-
-/* Define to 1 if you have the `fseeko' function. */
-#define HAVE_FSEEKO 1
-
-/* Define to 1 if you have the `ftello' function. */
-#define HAVE_FTELLO 1
-
-/* Build with GeoIP support */
-/* #undef HAVE_GEOIP */
-
-/* Build with GeoIP City IPv6 support */
-/* #undef HAVE_GEOIP_CITY_V6 */
-
-/* Build with GeoIP Country IPv6 support */
-/* #undef HAVE_GEOIP_V6 */
-
-/* Define to 1 if you have the `getrandom' function. */
-/* #undef HAVE_GETRANDOM */
-
-/* Define to use gperftools CPU profiler. */
-/* #undef HAVE_GPERFTOOLS_PROFILER */
-
 /* Define to 1 if you have the <gssapi/gssapi.h> header file. */
 #define HAVE_GSSAPI_GSSAPI_H 1
-
-/* Define to 1 if you have the <gssapi/gssapi_krb5.h> header file. */
-#define HAVE_GSSAPI_GSSAPI_KRB5_H 1
 
 /* Define to 1 if you have the <gssapi.h> header file. */
 #define HAVE_GSSAPI_H 1
 
-/* Define to 1 if you have the <gssapi_krb5.h> header file. */
-/* #undef HAVE_GSSAPI_KRB5_H */
-
-/* Define to 1 if you have the if_nametoindex function. */
-#define HAVE_IF_NAMETOINDEX 1
-
 /* Define to 1 if you have the <inttypes.h> header file. */
 #define HAVE_INTTYPES_H 1
-
-/* Define if libjson was found */
-/* #undef HAVE_JSON */
-
-/* Define if json-c was found */
-/* #undef HAVE_JSON_C */
-
-/* Define to 1 if you have the <kerberosv5/krb5.h> header file. */
-/* #undef HAVE_KERBEROSV5_KRB5_H */
-
-/* Define to 1 if you have the <krb5.h> header file. */
-#define HAVE_KRB5_H 1
-
-/* Define to 1 if you have the <krb5/krb5.h> header file. */
-#define HAVE_KRB5_KRB5_H 1
 
 /* Define to 1 if you have the `c' library (-lc). */
 /* #undef HAVE_LIBC */
 
 /* Define to 1 if you have the `cap' library (-lcap). */
 /* #undef HAVE_LIBCAP */
-
-/* if system have backtrace function */
-/* #undef HAVE_LIBCTRACE */
 
 /* Define to 1 if you have the `c_r' library (-lc_r). */
 /* #undef HAVE_LIBC_R */
@@ -328,16 +189,10 @@ int sigwait(const unsigned int *set, int *sig);
 /* #undef HAVE_LIBNSL */
 
 /* Define to 1 if you have the `pthread' library (-lpthread). */
-#define HAVE_LIBPTHREAD 1
-
-/* Define to 1 if you have the `rt' library (-lrt). */
-#define HAVE_LIBRT 1
+/* #undef HAVE_LIBPTHREAD */
 
 /* Define to 1 if you have the `scf' library (-lscf). */
 /* #undef HAVE_LIBSCF */
-
-/* Define to use libseccomp system call filtering. */
-/* #undef HAVE_LIBSECCOMP */
 
 /* Define to 1 if you have the `socket' library (-lsocket). */
 /* #undef HAVE_LIBSOCKET */
@@ -351,23 +206,17 @@ int sigwait(const unsigned int *set, int *sig);
 /* Define to 1 if you have the <linux/capability.h> header file. */
 /* #undef HAVE_LINUX_CAPABILITY_H */
 
-/* Define to 1 if you have the <linux/netlink.h> header file. */
-/* #undef HAVE_LINUX_NETLINK_H */
-
-/* Define to 1 if you have the <linux/rtnetlink.h> header file. */
-/* #undef HAVE_LINUX_RTNETLINK_H */
-
-/* Define to 1 if you have the <linux/types.h> header file. */
-/* #undef HAVE_LINUX_TYPES_H */
-
 /* Define to 1 if you have the <locale.h> header file. */
 #define HAVE_LOCALE_H 1
 
 /* Define to 1 if you have the <memory.h> header file. */
 #define HAVE_MEMORY_H 1
 
-/* Define to 1 if you have the `mmap' function. */
-#define HAVE_MMAP 1
+/* Define to 1 if you have the <dlfcn.h> header file. */
+#define HAVE_DLFCN_H 1
+
+/* Define to 1 if you have the <fcntl.h> header file. */
+#define HAVE_FCNTL_H 1
 
 /* Define to 1 if you have the `nanosleep' function. */
 #define HAVE_NANOSLEEP 1
@@ -375,69 +224,8 @@ int sigwait(const unsigned int *set, int *sig);
 /* Define to 1 if you have the <net/if6.h> header file. */
 /* #undef HAVE_NET_IF6_H */
 
-/* Define to 1 if you have the <net/route.h> header file. */
-#define HAVE_NET_ROUTE_H 1
-
-/* Define if your OpenSSL version supports AES */
-#define HAVE_OPENSSL_AES 1
-
-/* Define if your OpenSSL version supports ECDSA. */
-#define HAVE_OPENSSL_ECDSA 1
-
-/* Define if your OpenSSL version supports EVP AES */
-#define HAVE_OPENSSL_EVP_AES 1
-
-/* Define if your OpenSSL version supports GOST. */
-/* In Makefile */
-/* #undef HAVE_OPENSSL_GOST */
-
-/* Define if your PKCS11 provider supports ECDSA. */
-/* #undef HAVE_PKCS11_ECDSA */
-
-/* Define if your PKCS11 provider supports GOST. */
-/* #undef HAVE_PKCS11_GOST */
-
-/* Support for PTHREAD_MUTEX_ADAPTIVE_NP */
-/* #undef HAVE_PTHREAD_MUTEX_ADAPTIVE_NP */
-
-/* Define to 1 if you have the `pthread_yield' function. */
-/* #undef HAVE_PTHREAD_YIELD */
-
-/* Define to 1 if you have the `pthread_yield_np' function. */
-/* #undef HAVE_PTHREAD_YIELD_NP */
-
-/* Define to 1 if you have the `readline' function. */
-#define HAVE_READLINE 1
-
-/* Define to 1 if you have the <readline/history.h> header file. */
-#define HAVE_READLINE_HISTORY_H 1
-
-/* Define to 1 if you have the <readline/readline.h> header file. */
-#define HAVE_READLINE_READLINE_H 1
-
-/* Define to 1 if you have the <regex.h> header file. */
-#define HAVE_REGEX_H 1
-
-/* Define to 1 if you have the <sched.h> header file. */
-#define HAVE_SCHED_H 1
-
-/* Define to 1 if you have the `sched_yield' function. */
-#define HAVE_SCHED_YIELD 1
-
-/* Define to 1 if you have the `setegid' function. */
-#define HAVE_SETEGID 1
-
-/* Define to 1 if you have the `seteuid' function. */
-#define HAVE_SETEUID 1
-
 /* Define to 1 if you have the `setlocale' function. */
 #define HAVE_SETLOCALE 1
-
-/* Define to 1 if you have the `setresgid' function. */
-/* #undef HAVE_SETRESGID */
-
-/* Define to 1 if you have the `setresuid' function. */
-/* #undef HAVE_SETRESUID */
 
 /* Define to 1 if you have the <stdint.h> header file. */
 #define HAVE_STDINT_H 1
@@ -460,9 +248,6 @@ int sigwait(const unsigned int *set, int *sig);
 /* Define to 1 if you have the <sys/dyntune.h> header file. */
 /* #undef HAVE_SYS_DYNTUNE_H */
 
-/* Define to 1 if you have the <sys/mman.h> header file. */
-#define HAVE_SYS_MMAN_H 1
-
 /* Define to 1 if you have the <sys/param.h> header file. */
 #define HAVE_SYS_PARAM_H 1
 
@@ -471,9 +256,6 @@ int sigwait(const unsigned int *set, int *sig);
 
 /* Define to 1 if you have the <sys/select.h> header file. */
 #define HAVE_SYS_SELECT_H 1
-
-/* Define to 1 if you have the <sys/socket.h> header file. */
-#define HAVE_SYS_SOCKET_H 1
 
 /* Define to 1 if you have the <sys/sockio.h> header file. */
 #define HAVE_SYS_SOCKIO_H 1
@@ -499,34 +281,6 @@ int sigwait(const unsigned int *set, int *sig);
 /* Define to 1 if you have the <unistd.h> header file. */
 #define HAVE_UNISTD_H 1
 
-/* Define to 1 if you have the `usleep' function. */
-#define HAVE_USLEEP 1
-
-/* Use HMAC-SHA1 for Source Identity Token generation */
-/* #undef HMAC_SHA1_SIT */
-
-/* Use HMAC-SHA256 for Source Identity Token generation */
-/* #undef HMAC_SHA256_SIT */
-
-/* return type of gai_strerror */
-#define IRS_GAISTRERROR_RETURN_T const char *
-
-/* Define to the buffer length type used by getnameinfo(3). */
-#define IRS_GETNAMEINFO_BUFLEN_T socklen_t
-
-/* Define to the flags type used by getnameinfo(3). */
-#define IRS_GETNAMEINFO_FLAGS_T int
-
-/* Define to the sockaddr length type used by getnameinfo(3). */
-#define IRS_GETNAMEINFO_SOCKLEN_T socklen_t
-
-/* Define to allow building of objects for dlopen(). */
-#define ISC_DLZ_DLOPEN 1
-
-/* Define to the sub-directory in which libtool stores uninstalled libraries.
-   */
-#define LT_OBJDIR ".libs/"
-
 /* Defined if extern char *optarg is not declared. */
 /* #undef NEED_OPTARG */
 
@@ -535,32 +289,23 @@ int sigwait(const unsigned int *set, int *sig);
 /* #undef NEED_SECURE_DIRECTORY */
 
 /* Define to the address where bug reports for this package should be sent. */
-#define PACKAGE_BUGREPORT "bind9-bugs@isc.org"
+#define PACKAGE_BUGREPORT ""
 
 /* Define to the full name of this package. */
-#define PACKAGE_NAME "BIND"
+#define PACKAGE_NAME ""
 
 /* Define to the full name and version of this package. */
-#define PACKAGE_STRING "BIND 9.10"
+#define PACKAGE_STRING ""
 
 /* Define to the one symbol short name of this package. */
-#define PACKAGE_TARNAME "bind"
-
-/* Define to the home page for this package. */
-#define PACKAGE_URL "https://www.isc.org/downloads/BIND/"
+#define PACKAGE_TARNAME ""
 
 /* Define to the version of this package. */
-#define PACKAGE_VERSION "9.10"
+#define PACKAGE_VERSION ""
 
 /* Sets which flag to pass to open/fcntl to make non-blocking
    (O_NDELAY/O_NONBLOCK). */
 #define PORT_NONBLOCK O_NONBLOCK
-
-/* Define if GOST private keys are encoded in ASN.1. */
-/* #undef PREFER_GOSTASN1 */
-
-/* The size of `void *', as computed by sizeof. */
-#define SIZEOF_VOID_P 8
 
 /* Define to 1 if you have the ANSI C header files. */
 #define STDC_HEADERS 1
@@ -568,39 +313,28 @@ int sigwait(const unsigned int *set, int *sig);
 /* Define to 1 if you can safely include both <sys/time.h> and <time.h>. */
 #define TIME_WITH_SYS_TIME 1
 
-/* Define to use large-system tuning. */
-/* #undef TUNE_LARGE */
-
 /* Defined if you need to use ioctl(FIONBIO) instead a fcntl call to make
    non-blocking. */
 /* #undef USE_FIONBIO_IOCTL */
-
-/* Define to enable very verbose query trace logging. */
-#define WANT_QUERYTRACE 1
 
 /* define if idnkit support is to be included. */
 /* #undef WITH_IDN */
 
 /* Define WORDS_BIGENDIAN to 1 if your processor stores words with the most
-   significant byte first (like Motorola and SPARC, unlike Intel). */
-#ifndef __NetBSD__
-/* Defined by the build process */
-#if defined AC_APPLE_UNIVERSAL_BUILD
-# if defined __BIG_ENDIAN__
-#  define WORDS_BIGENDIAN 1
-# endif
-#else
-# ifndef WORDS_BIGENDIAN
-/* #  undef WORDS_BIGENDIAN */
-# endif
-#endif
+   significant byte first (like Motorola and SPARC, unlike Intel and VAX). */
+#include <sys/endian.h>
+#if _BYTE_ORDER == _BIG_ENDIAN
+#define WORDS_BIGENDIAN
 #endif
 
 /* Define to empty if `const' does not conform to ANSI C. */
 /* #undef const */
 
-/* Define to empty if your compiler does not support "static inline". */
+/* Define to `__inline__' or `__inline' if that's what the C compiler
+   calls it, or to nothing if 'inline' is not supported under any name.  */
+#ifndef __cplusplus
 /* #undef inline */
+#endif
 
 /* Define to `unsigned int' if <sys/types.h> does not define. */
 /* #undef size_t */

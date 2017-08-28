@@ -1,7 +1,7 @@
-/*	$NetBSD: netaddr_multicast.c,v 1.5 2015/12/17 04:00:42 christos Exp $	*/
+/*	$NetBSD: netaddr_multicast.c,v 1.1 2009/03/22 14:56:33 christos Exp $	*/
 
 /*
- * Copyright (C) 2004, 2007, 2015  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2004, 2007  Internet Systems Consortium, Inc. ("ISC")
  * Copyright (C) 2000, 2001  Internet Software Consortium.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -17,7 +17,7 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* Id: netaddr_multicast.c,v 1.12 2007/06/19 23:47:00 tbox Exp  */
+/* Id: netaddr_multicast.c,v 1.12 2007/06/19 23:47:00 tbox Exp */
 
 #include <config.h>
 
@@ -26,7 +26,6 @@
 
 #include <isc/net.h>
 #include <isc/netaddr.h>
-#include <isc/print.h>
 #include <isc/string.h>
 #include <isc/types.h>
 #include <isc/util.h>

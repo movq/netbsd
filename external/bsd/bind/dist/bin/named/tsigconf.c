@@ -1,7 +1,7 @@
-/*	$NetBSD: tsigconf.c,v 1.5 2014/12/10 04:37:52 christos Exp $	*/
+/*	$NetBSD: tsigconf.c,v 1.1 2009/03/22 14:56:09 christos Exp $	*/
 
 /*
- * Copyright (C) 2004-2007, 2009, 2011, 2012  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2004-2007  Internet Systems Consortium, Inc. ("ISC")
  * Copyright (C) 1999-2001  Internet Software Consortium.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -17,7 +17,7 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* Id: tsigconf.c,v 1.35 2011/01/11 23:47:12 tbox Exp  */
+/* Id: tsigconf.c,v 1.30 2007/06/19 23:46:59 tbox Exp */
 
 /*! \file */
 
@@ -80,11 +80,11 @@ add_initial_keys(const cfg_obj_t *list, dns_tsig_keyring_t *ring,
 		 * Create the key name.
 		 */
 		dns_name_init(&keyname, NULL);
-		isc_buffer_constinit(&keynamesrc, keyid, strlen(keyid));
+		isc_buffer_init(&keynamesrc, keyid, strlen(keyid));
 		isc_buffer_add(&keynamesrc, strlen(keyid));
 		isc_buffer_init(&keynamebuf, keynamedata, sizeof(keynamedata));
 		ret = dns_name_fromtext(&keyname, &keynamesrc, dns_rootname,
-					DNS_NAME_DOWNCASE, &keynamebuf);
+					ISC_TRUE, &keynamebuf);
 		if (ret != ISC_R_SUCCESS)
 			goto failure;
 
@@ -151,8 +151,6 @@ ns_tsigkeyring_fromconfig(const cfg_obj_t *config, const cfg_obj_t *vconfig,
 	isc_result_t result;
 	int i;
 
-	REQUIRE(ringp != NULL && *ringp == NULL);
-
 	i = 0;
 	if (config != NULL)
 		maps[i++] = config;
@@ -180,6 +178,6 @@ ns_tsigkeyring_fromconfig(const cfg_obj_t *config, const cfg_obj_t *vconfig,
 	return (ISC_R_SUCCESS);
 
  failure:
-	dns_tsigkeyring_detach(&ring);
+	dns_tsigkeyring_destroy(&ring);
 	return (result);
 }

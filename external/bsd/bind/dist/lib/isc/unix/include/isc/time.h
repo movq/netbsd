@@ -1,7 +1,7 @@
-/*	$NetBSD: time.h,v 1.7 2015/07/08 17:29:00 christos Exp $	*/
+/*	$NetBSD: time.h,v 1.1 2009/03/22 15:02:23 christos Exp $	*/
 
 /*
- * Copyright (C) 2004-2009, 2012, 2014, 2015  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2004-2009  Internet Systems Consortium, Inc. ("ISC")
  * Copyright (C) 1998-2001  Internet Software Consortium.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -17,7 +17,7 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* Id: time.h,v 1.40 2009/01/05 23:47:54 tbox Exp  */
+/* Id: time.h,v 1.38.56.2 2009/01/05 23:47:23 tbox Exp */
 
 #ifndef ISC_TIME_H
 #define ISC_TIME_H 1
@@ -43,14 +43,7 @@ struct isc_interval {
 	unsigned int nanoseconds;
 };
 
-extern const isc_interval_t * const isc_interval_zero;
-
-/*
- * ISC_FORMATHTTPTIMESTAMP_SIZE needs to be 30 in C locale and potentially
- * more for other locales to handle longer national abbreviations when
- * expanding strftime's %a and %b.
- */
-#define ISC_FORMATHTTPTIMESTAMP_SIZE 50
+extern isc_interval_t *isc_interval_zero;
 
 ISC_LANG_BEGINDECLS
 
@@ -94,7 +87,7 @@ struct isc_time {
 	unsigned int	nanoseconds;
 };
 
-extern const isc_time_t * const isc_time_epoch;
+extern isc_time_t *isc_time_epoch;
 
 void
 isc_time_set(isc_time_t *t, unsigned int seconds, unsigned int nanoseconds);
@@ -322,16 +315,6 @@ isc_time_formathttptimestamp(const isc_time_t *t, char *buf, unsigned int len);
  *\li      'len' > 0
  *\li      'buf' points to an array of at least len chars
  *
- */
-
-isc_result_t
-isc_time_parsehttptimestamp(char *input, isc_time_t *t);
-/*%<
- * Parse the time in 'input' into the isc_time_t pointed to by 't',
- * expecting a format like "Mon, 30 Aug 2000 04:06:47 GMT"
- *
- *  Requires:
- *\li      'buf' and 't' are not NULL.
  */
 
 void

@@ -1,7 +1,7 @@
-/*	$NetBSD: getnameinfo.c,v 1.7 2015/07/08 17:28:59 christos Exp $	*/
+/*	$NetBSD: getnameinfo.c,v 1.1 2009/10/25 00:02:42 christos Exp $	*/
 
 /*
- * Copyright (C) 2009, 2011-2014  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2009  Internet Systems Consortium, Inc. ("ISC")
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -16,7 +16,7 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* Id */
+/* Id: getnameinfo.c,v 1.4 2009/09/02 23:48:02 tbox Exp */
 
 /*! \file */
 
@@ -142,22 +142,21 @@ static struct afd {
 #define ERR(code) \
 	do { result = (code);			\
 		if (result != 0) goto cleanup;	\
-	} while (/*CONSTCOND*/0)
+	} while (0)
 
 int
-getnameinfo(const struct sockaddr *sa, IRS_GETNAMEINFO_SOCKLEN_T salen,
-	    char *host, IRS_GETNAMEINFO_BUFLEN_T hostlen,
-	    char *serv, IRS_GETNAMEINFO_BUFLEN_T servlen,
-	    IRS_GETNAMEINFO_FLAGS_T flags)
+getnameinfo(const struct sockaddr *sa, socklen_t salen, char *host,
+	    IRS_GETNAMEINFO_BUFLEN_T hostlen, char *serv,
+	    IRS_GETNAMEINFO_BUFLEN_T servlen, IRS_GETNAMEINFO_FLAGS_T flags)
 {
-	struct afd *afd = NULL;
+	struct afd *afd;
 	struct servent *sp;
-	unsigned short port = 0;
+	unsigned short port;
 #ifdef IRS_PLATFORM_HAVESALEN
 	size_t len;
 #endif
 	int family, i;
-	const void *addr = NULL;
+	const void *addr;
 	char *p;
 #if 0
 	unsigned long v4a;
@@ -202,6 +201,8 @@ getnameinfo(const struct sockaddr *sa, IRS_GETNAMEINFO_SOCKLEN_T salen,
 		break;
 
 	default:
+		port = 0;
+		addr = NULL;
 		INSIST(0);
 	}
 	proto = (flags & NI_DGRAM) ? "udp" : "tcp";
@@ -331,7 +332,6 @@ getnameinfo(const struct sockaddr *sa, IRS_GETNAMEINFO_SOCKLEN_T salen,
 		case DNS_R_NOVALIDDS:
 		case DNS_R_NOVALIDSIG:
 			ERR(EAI_INSECUREDATA);
-			break;
 		default:
 			ERR(EAI_FAIL);
 		}

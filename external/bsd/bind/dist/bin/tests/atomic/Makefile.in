@@ -1,4 +1,4 @@
-# Copyright (C) 2011, 2012, 2014  Internet Systems Consortium, Inc. ("ISC")
+# Copyright (C) 2011  Internet Systems Consortium, Inc. ("ISC")
 #
 # Permission to use, copy, modify, and/or distribute this software for any
 # purpose with or without fee is hereby granted, provided that the above
@@ -12,7 +12,7 @@
 # OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR
 # PERFORMANCE OF THIS SOFTWARE.
 
-# Id: Makefile.in,v 1.2 2011/01/11 23:47:12 tbox Exp 
+# Id: Makefile.in,v 1.2 2011-01-11 23:47:12 tbox Exp
 
 srcdir =	@srcdir@
 VPATH =		@srcdir@
@@ -25,13 +25,16 @@ CINCLUDES =	${TEST_INCLUDES} ${DNS_INCLUDES} ${ISC_INCLUDES}
 CDEFINES =
 CWARNINGS =
 
-ISCLIBS =	../../../lib/isc/libisc.@A@ @ISC_OPENSSL_LIBS@
+# Note that we do not want to use libtool for libt_api
+DNSLIBS =	../../../lib/dns/libdns.@A@ @DNS_CRYPTO_LIBS@
+ISCLIBS =	../../../lib/isc/libisc.@A@
 
+DNSDEPLIBS =	../../../lib/dns/libdns.@A@
 ISCDEPLIBS =	../../../lib/isc/libisc.@A@
 
-DEPLIBS =	${ISCDEPLIBS}
+DEPLIBS =	${DNSDEPLIBS} ${ISCDEPLIBS}
 
-LIBS =		${ISCLIBS} @LIBS@
+LIBS =		${DNSLIBS} ${ISCLIBS} @LIBS@
 
 TLIB =		../../../lib/tests/libt_api.@A@
 

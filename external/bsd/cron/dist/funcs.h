@@ -1,5 +1,3 @@
-/*	$NetBSD: funcs.h,v 1.5 2017/08/17 08:53:00 christos Exp $	*/
-
 /*
  * Id: funcs.h,v 1.9 2004/01/23 18:56:42 vixie Exp
  */
@@ -31,7 +29,7 @@ void		set_cron_uid(void),
 		load_database(cron_db *),
 		open_logfile(void),
 		sigpipe_func(void),
-		job_add(entry *, user *, time_t),
+		job_add(entry *, user *),
 		do_command(entry *, user *),
 		link_user(cron_db *, user *),
 		unlink_user(cron_db *, user *),
@@ -44,26 +42,25 @@ void		set_cron_uid(void),
 		log_it(const char *, int, const char *, const char *),
 		log_close(void);
 
-
-void
-		log_itx(const char *, int, const char *, const char *, ...)
-		    __printflike(4, 5);
-
 int		job_runqueue(void),
 		set_debug_flags(const char *),
 		get_char(FILE *),
-		get_string(char *, int, FILE *, const char *),
+		get_string(char *, int, FILE *, char *),
+		swap_uids(void),
+		swap_uids_back(void),
 		load_env(char *, FILE *),
 		cron_pclose(FILE *),
 		glue_strings(char *, size_t, const char *, const char *, char),
 		strcmp_until(const char *, const char *, char),
+		allowed(const char * ,const char * ,const char *),
 		strdtb(char *);
 
 size_t		strlens(const char *, ...);
 
-char		*env_get(const char *, char **),
+char		*env_get(char *, char **),
 		*arpadate(time_t *),
-		*mkprints(char *, size_t),
+		*mkprints(unsigned char *, unsigned int),
+		*first_word(char *, char *),
 		**env_init(void),
 		**env_copy(char **),
 		**env_set(char **, char *);
@@ -71,21 +68,12 @@ char		*env_get(const char *, char **),
 user		*load_user(int, struct passwd *, const char *),
 		*find_user(cron_db *, const char *);
 
-entry		*load_entry(FILE *, void (*)(const char *), struct passwd *, char **);
+entry		*load_entry(FILE *, void (*)(), struct passwd *, char **);
 
-FILE		*cron_popen(char *, const char *, struct passwd *);
+FILE		*cron_popen(char *, char *, struct passwd *);
 
 struct passwd	*pw_dup(const struct passwd *);
 
 #ifndef HAVE_TM_GMTOFF
 long		get_gmtoff(time_t *, struct tm *);
-#endif
-
-extern int close_all(int);
-#ifdef USE_PAM
-extern int cron_pam_start (const char *user);
-extern int cron_pam_setcred (void);
-extern void cron_pam_finish (void);
-extern void cron_pam_child_close (void);
-extern char **cron_pam_getenvlist (char **envp);
 #endif

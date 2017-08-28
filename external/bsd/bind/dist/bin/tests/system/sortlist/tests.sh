@@ -1,6 +1,6 @@
 #!/bin/sh
 #
-# Copyright (C) 2004, 2007, 2012, 2016  Internet Systems Consortium, Inc. ("ISC")
+# Copyright (C) 2004, 2007  Internet Systems Consortium, Inc. ("ISC")
 # Copyright (C) 2000, 2001  Internet Software Consortium.
 #
 # Permission to use, copy, modify, and/or distribute this software for any
@@ -15,7 +15,7 @@
 # OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR
 # PERFORMANCE OF THIS SOFTWARE.
 
-# Id: tests.sh,v 1.9 2007/09/14 01:46:05 marka Exp 
+# Id: tests.sh,v 1.9 2007/09/14 01:46:05 marka Exp
 
 SYSTEMTESTTOP=..
 . $SYSTEMTESTTOP/conf.sh
@@ -36,7 +36,7 @@ $DIG +tcp +noadd +nosea +nostat +noquest +noauth +nocomm +nocmd a.example. \
 	@10.53.0.1 -b 10.53.0.1 -p 5300 >test1.dig
 # Note that this can't use digcomp.pl because here, the ordering of the
 # result RRs is significant.
-$DIFF test1.dig test1.good || status=1
+diff test1.dig test1.good || status=1
 
 echo "I:test 1-element sortlist statement and undocumented BIND 8 features"
 	cat <<EOF >test2.good
@@ -57,4 +57,4 @@ $DIG +tcp +noadd +nosea +nostat +noquest +noauth +nocomm +nocmd \
         egrep '10.53.0.5$' >> test2.out || status=1
 
 echo "I:exit status: $status"
-[ $status -eq 0 ] || exit 1
+exit $status

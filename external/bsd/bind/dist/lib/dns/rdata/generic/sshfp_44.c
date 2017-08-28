@@ -1,7 +1,7 @@
-/*	$NetBSD: sshfp_44.c,v 1.7 2015/12/17 04:00:44 christos Exp $	*/
+/*	$NetBSD: sshfp_44.c,v 1.1 2009/03/22 15:01:56 christos Exp $	*/
 
 /*
- * Copyright (C) 2004, 2006, 2007, 2009, 2011-2013, 2015  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2004, 2006, 2007  Internet Systems Consortium, Inc. ("ISC")
  * Copyright (C) 2003  Internet Software Consortium.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -17,7 +17,7 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* Id */
+/* Id: sshfp_44.c,v 1.7 2007/06/19 23:47:17 tbox Exp */
 
 /* RFC 4255 */
 
@@ -30,7 +30,7 @@ static inline isc_result_t
 fromtext_sshfp(ARGS_FROMTEXT) {
 	isc_token_t token;
 
-	REQUIRE(type == dns_rdatatype_sshfp);
+	REQUIRE(type == 44);
 
 	UNUSED(type);
 	UNUSED(rdclass);
@@ -55,6 +55,7 @@ fromtext_sshfp(ARGS_FROMTEXT) {
 	if (token.value.as_ulong > 0xffU)
 		RETTOK(ISC_R_RANGE);
 	RETERR(uint8_tobuffer(token.value.as_ulong, target));
+	type = (isc_uint16_t) token.value.as_ulong;
 
 	/*
 	 * Digest.
@@ -68,7 +69,7 @@ totext_sshfp(ARGS_TOTEXT) {
 	char buf[sizeof("64000 ")];
 	unsigned int n;
 
-	REQUIRE(rdata->type == dns_rdatatype_sshfp);
+	REQUIRE(rdata->type == 44);
 	REQUIRE(rdata->length != 0);
 
 	UNUSED(tctx);
@@ -97,11 +98,7 @@ totext_sshfp(ARGS_TOTEXT) {
 	if ((tctx->flags & DNS_STYLEFLAG_MULTILINE) != 0)
 		RETERR(str_totext(" (", target));
 	RETERR(str_totext(tctx->linebreak, target));
-	if (tctx->width == 0) /* No splitting */
-		RETERR(isc_hex_totext(&sr, 0, "", target));
-	else
-		RETERR(isc_hex_totext(&sr, tctx->width - 2,
-				      tctx->linebreak, target));
+	RETERR(isc_hex_totext(&sr, tctx->width - 2, tctx->linebreak, target));
 	if ((tctx->flags & DNS_STYLEFLAG_MULTILINE) != 0)
 		RETERR(str_totext(" )", target));
 	return (ISC_R_SUCCESS);
@@ -111,7 +108,7 @@ static inline isc_result_t
 fromwire_sshfp(ARGS_FROMWIRE) {
 	isc_region_t sr;
 
-	REQUIRE(type == dns_rdatatype_sshfp);
+	REQUIRE(type == 44);
 
 	UNUSED(type);
 	UNUSED(rdclass);
@@ -130,7 +127,7 @@ static inline isc_result_t
 towire_sshfp(ARGS_TOWIRE) {
 	isc_region_t sr;
 
-	REQUIRE(rdata->type == dns_rdatatype_sshfp);
+	REQUIRE(rdata->type == 44);
 	REQUIRE(rdata->length != 0);
 
 	UNUSED(cctx);
@@ -146,7 +143,7 @@ compare_sshfp(ARGS_COMPARE) {
 
 	REQUIRE(rdata1->type == rdata2->type);
 	REQUIRE(rdata1->rdclass == rdata2->rdclass);
-	REQUIRE(rdata1->type == dns_rdatatype_sshfp);
+	REQUIRE(rdata1->type == 44);
 	REQUIRE(rdata1->length != 0);
 	REQUIRE(rdata2->length != 0);
 
@@ -159,7 +156,7 @@ static inline isc_result_t
 fromstruct_sshfp(ARGS_FROMSTRUCT) {
 	dns_rdata_sshfp_t *sshfp = source;
 
-	REQUIRE(type == dns_rdatatype_sshfp);
+	REQUIRE(type == 44);
 	REQUIRE(source != NULL);
 	REQUIRE(sshfp->common.rdtype == type);
 	REQUIRE(sshfp->common.rdclass == rdclass);
@@ -178,7 +175,7 @@ tostruct_sshfp(ARGS_TOSTRUCT) {
 	dns_rdata_sshfp_t *sshfp = target;
 	isc_region_t region;
 
-	REQUIRE(rdata->type == dns_rdatatype_sshfp);
+	REQUIRE(rdata->type == 44);
 	REQUIRE(target != NULL);
 	REQUIRE(rdata->length != 0);
 
@@ -207,7 +204,7 @@ freestruct_sshfp(ARGS_FREESTRUCT) {
 	dns_rdata_sshfp_t *sshfp = source;
 
 	REQUIRE(sshfp != NULL);
-	REQUIRE(sshfp->common.rdtype == dns_rdatatype_sshfp);
+	REQUIRE(sshfp->common.rdtype == 44);
 
 	if (sshfp->mctx == NULL)
 		return;
@@ -219,7 +216,7 @@ freestruct_sshfp(ARGS_FREESTRUCT) {
 
 static inline isc_result_t
 additionaldata_sshfp(ARGS_ADDLDATA) {
-	REQUIRE(rdata->type == dns_rdatatype_sshfp);
+	REQUIRE(rdata->type == 44);
 
 	UNUSED(rdata);
 	UNUSED(add);
@@ -232,7 +229,7 @@ static inline isc_result_t
 digest_sshfp(ARGS_DIGEST) {
 	isc_region_t r;
 
-	REQUIRE(rdata->type == dns_rdatatype_sshfp);
+	REQUIRE(rdata->type == 44);
 
 	dns_rdata_toregion(rdata, &r);
 
@@ -242,7 +239,7 @@ digest_sshfp(ARGS_DIGEST) {
 static inline isc_boolean_t
 checkowner_sshfp(ARGS_CHECKOWNER) {
 
-	REQUIRE(type == dns_rdatatype_sshfp);
+	REQUIRE(type == 44);
 
 	UNUSED(name);
 	UNUSED(type);
@@ -255,18 +252,13 @@ checkowner_sshfp(ARGS_CHECKOWNER) {
 static inline isc_boolean_t
 checknames_sshfp(ARGS_CHECKNAMES) {
 
-	REQUIRE(rdata->type == dns_rdatatype_sshfp);
+	REQUIRE(rdata->type == 44);
 
 	UNUSED(rdata);
 	UNUSED(owner);
 	UNUSED(bad);
 
 	return (ISC_TRUE);
-}
-
-static inline int
-casecompare_sshfp(ARGS_COMPARE) {
-	return (compare_sshfp(rdata1, rdata2));
 }
 
 #endif	/* RDATA_GENERIC_SSHFP_44_C */

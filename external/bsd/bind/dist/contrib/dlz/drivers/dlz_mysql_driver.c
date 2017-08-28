@@ -1,4 +1,4 @@
-/*	$NetBSD: dlz_mysql_driver.c,v 1.6 2014/12/10 04:37:55 christos Exp $	*/
+/*	$NetBSD: dlz_mysql_driver.c,v 1.1 2009/03/22 14:57:11 christos Exp $	*/
 
 /*
  * Copyright (C) 2002 Stichting NLnet, Netherlands, stichting@nlnet.nl.
@@ -505,16 +505,13 @@ mysql_process_rs(dns_sdlzlookup_t *lookup, MYSQL_RES *rs)
 /*% determine if the zone is supported by (in) the database */
 
 static isc_result_t
-mysql_findzone(void *driverarg, void *dbdata, const char *name,
-	       dns_clientinfomethods_t *methods, dns_clientinfo_t *clientinfo)
+mysql_findzone(void *driverarg, void *dbdata, const char *name)
 {
 	isc_result_t result;
 	MYSQL_RES *rs = NULL;
 	my_ulonglong rows;
 
 	UNUSED(driverarg);
-	UNUSED(methods);
-	UNUSED(clientinfo);
 
 	/* run the query and get the result set from the database. */
 	result = mysql_get_resultset(name, NULL, NULL, FINDZONE, dbdata, &rs);
@@ -555,7 +552,7 @@ mysql_allowzonexfr(void *driverarg, void *dbdata, const char *name,
 	UNUSED(driverarg);
 
 	/* first check if the zone is supported by the database. */
-	result = mysql_findzone(driverarg, dbdata, name, NULL, NULL);
+	result = mysql_findzone(driverarg, dbdata, name);
 	if (result != ISC_R_SUCCESS)
 		return (ISC_R_NOTFOUND);
 
@@ -748,15 +745,12 @@ mysql_authority(const char *zone, void *driverarg, void *dbdata,
 /*% if zone is supported, lookup up a (or multiple) record(s) in it */
 static isc_result_t
 mysql_lookup(const char *zone, const char *name, void *driverarg,
-	     void *dbdata, dns_sdlzlookup_t *lookup,
-	     dns_clientinfomethods_t *methods, dns_clientinfo_t *clientinfo)
+	     void *dbdata, dns_sdlzlookup_t *lookup)
 {
 	isc_result_t result;
 	MYSQL_RES *rs = NULL;
 
 	UNUSED(driverarg);
-	UNUSED(methods);
-	UNUSED(clientinfo);
 
 	/* run the query and get the result set from the database. */
 	result = mysql_get_resultset(zone, name, NULL, LOOKUP, dbdata, &rs);
@@ -800,9 +794,6 @@ mysql_create(const char *dlzname, unsigned int argc, char *argv[],
 	char *endp;
 	int j;
 	unsigned int flags = 0;
-#if MYSQL_VERSION_ID >= 50000
-        my_bool auto_reconnect = 1;
-#endif
 
 	UNUSED(driverarg);
 	UNUSED(dlzname);
@@ -891,7 +882,7 @@ mysql_create(const char *dlzname, unsigned int argc, char *argv[],
 			      "mysql driver could not create "
 			      "database instance object.");
 		result = ISC_R_FAILURE;
-		goto cleanup;
+		goto full_cleanup;
 	}
 
 	/* create and set db connection */
@@ -934,17 +925,6 @@ mysql_create(const char *dlzname, unsigned int argc, char *argv[],
 	pass = getParameterValue(argv[1], "pass=");
 	socket = getParameterValue(argv[1], "socket=");
 
-#if MYSQL_VERSION_ID >= 50000
-	/* enable automatic reconnection. */
-        if (mysql_options((MYSQL *) dbi->dbconn, MYSQL_OPT_RECONNECT,
-			  &auto_reconnect) != 0) {
-		isc_log_write(dns_lctx, DNS_LOGCATEGORY_DATABASE,
-			      DNS_LOGMODULE_DLZ, ISC_LOG_WARNING,
-			      "mysql driver failed to set "
-			      "MYSQL_OPT_RECONNECT option, continuing");
-	}
-#endif
-
 	for (j=0; dbc == NULL && j < 4; j++)
 		dbc = mysql_real_connect((MYSQL *) dbi->dbconn, host,
 					 user, pass, dbname, port, socket,
@@ -968,8 +948,7 @@ mysql_create(const char *dlzname, unsigned int argc, char *argv[],
 
  full_cleanup:
 
-	if (dbi != NULL)
-		destroy_sqldbinstance(dbi);
+	destroy_sqldbinstance(dbi);
 
  cleanup:
 
@@ -1022,14 +1001,7 @@ static dns_sdlzmethods_t dlz_mysql_methods = {
 	mysql_lookup,
 	mysql_authority,
 	mysql_allnodes,
-	mysql_allowzonexfr,
-	NULL,
-	NULL,
-	NULL,
-	NULL,
-	NULL,
-	NULL,
-	NULL,
+	mysql_allowzonexfr
 };
 
 /*%

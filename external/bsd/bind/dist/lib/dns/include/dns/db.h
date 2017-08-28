@@ -1,7 +1,7 @@
-/*	$NetBSD: db.h,v 1.10 2017/06/15 15:59:40 christos Exp $	*/
+/*	$NetBSD: db.h,v 1.1 2009/03/22 15:01:41 christos Exp $	*/
 
 /*
- * Copyright (C) 2004-2009, 2011-2016  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2004-2009  Internet Systems Consortium, Inc. ("ISC")
  * Copyright (C) 1999-2003  Internet Software Consortium.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -17,7 +17,7 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* Id */
+/* Id: db.h,v 1.93.50.3 2009/01/18 23:25:17 marka Exp */
 
 #ifndef DNS_DB_H
 #define DNS_DB_H 1
@@ -59,15 +59,9 @@
 #include <isc/lang.h>
 #include <isc/magic.h>
 #include <isc/ondestroy.h>
-#include <isc/stats.h>
 #include <isc/stdtime.h>
 
-#include <dns/clientinfo.h>
-#include <dns/fixedname.h>
 #include <dns/name.h>
-#include <dns/rdata.h>
-#include <dns/rdataset.h>
-#include <dns/rpz.h>
 #include <dns/types.h>
 
 ISC_LANG_BEGINDECLS
@@ -79,12 +73,9 @@ ISC_LANG_BEGINDECLS
 typedef struct dns_dbmethods {
 	void		(*attach)(dns_db_t *source, dns_db_t **targetp);
 	void		(*detach)(dns_db_t **dbp);
-	isc_result_t	(*beginload)(dns_db_t *db,
-				     dns_rdatacallbacks_t *callbacks);
-	isc_result_t	(*endload)(dns_db_t *db,
-				     dns_rdatacallbacks_t *callbacks);
-	isc_result_t	(*serialize)(dns_db_t *db,
-				     dns_dbversion_t *version, FILE *file);
+	isc_result_t	(*beginload)(dns_db_t *db, dns_addrdatasetfunc_t *addp,
+				     dns_dbload_t **dbloadp);
+	isc_result_t	(*endload)(dns_db_t *db, dns_dbload_t **dbloadp);
 	isc_result_t	(*dump)(dns_db_t *db, dns_dbversion_t *version,
 				const char *filename,
 				dns_masterformat_t masterformat);
@@ -178,27 +169,6 @@ typedef struct dns_dbmethods {
 					   dns_dbversion_t *version);
 	isc_boolean_t	(*isdnssec)(dns_db_t *db);
 	dns_stats_t	*(*getrrsetstats)(dns_db_t *db);
-	void		(*rpz_attach)(dns_db_t *db, dns_rpz_zones_t *rpzs,
-				      dns_rpz_num_t rpz_num);
-	isc_result_t	(*rpz_ready)(dns_db_t *db);
-	isc_result_t	(*findnodeext)(dns_db_t *db, dns_name_t *name,
-				     isc_boolean_t create,
-				     dns_clientinfomethods_t *methods,
-				     dns_clientinfo_t *clientinfo,
-				     dns_dbnode_t **nodep);
-	isc_result_t	(*findext)(dns_db_t *db, dns_name_t *name,
-				   dns_dbversion_t *version,
-				   dns_rdatatype_t type, unsigned int options,
-				   isc_stdtime_t now,
-				   dns_dbnode_t **nodep, dns_name_t *foundname,
-				   dns_clientinfomethods_t *methods,
-				   dns_clientinfo_t *clientinfo,
-				   dns_rdataset_t *rdataset,
-				   dns_rdataset_t *sigrdataset);
-	isc_result_t	(*setcachestats)(dns_db_t *db, isc_stats_t *stats);
-	size_t		(*hashsize)(dns_db_t *db);
-	isc_result_t	(*getsize)(dns_db_t *db, dns_dbversion_t *version,
-				   isc_uint64_t *records, isc_uint64_t *bytes);
 } dns_dbmethods_t;
 
 typedef isc_result_t
@@ -237,15 +207,14 @@ struct dns_db {
 /*%
  * Options that can be specified for dns_db_find().
  */
-#define DNS_DBFIND_GLUEOK		0x0001
-#define DNS_DBFIND_VALIDATEGLUE		0x0002
-#define DNS_DBFIND_NOWILD		0x0004
-#define DNS_DBFIND_PENDINGOK		0x0008
-#define DNS_DBFIND_NOEXACT		0x0010
-#define DNS_DBFIND_FORCENSEC		0x0020
-#define DNS_DBFIND_COVERINGNSEC		0x0040
-#define DNS_DBFIND_FORCENSEC3		0x0080
-#define DNS_DBFIND_ADDITIONALOK		0x0100
+#define DNS_DBFIND_GLUEOK		0x01
+#define DNS_DBFIND_VALIDATEGLUE		0x02
+#define DNS_DBFIND_NOWILD		0x04
+#define DNS_DBFIND_PENDINGOK		0x08
+#define DNS_DBFIND_NOEXACT		0x10
+#define DNS_DBFIND_FORCENSEC		0x20
+#define DNS_DBFIND_COVERINGNSEC		0x40
+#define DNS_DBFIND_FORCENSEC3		0x80
 /*@}*/
 
 /*@{*/
@@ -256,7 +225,6 @@ struct dns_db {
 #define DNS_DBADD_FORCE			0x02
 #define DNS_DBADD_EXACT			0x04
 #define DNS_DBADD_EXACTTTL		0x08
-#define DNS_DBADD_PREFETCH		0x10
 /*@}*/
 
 /*%
@@ -465,7 +433,8 @@ dns_db_class(dns_db_t *db);
  */
 
 isc_result_t
-dns_db_beginload(dns_db_t *db, dns_rdatacallbacks_t *callbacks);
+dns_db_beginload(dns_db_t *db, dns_addrdatasetfunc_t *addp,
+		 dns_dbload_t **dbloadp);
 /*%<
  * Begin loading 'db'.
  *
@@ -475,17 +444,15 @@ dns_db_beginload(dns_db_t *db, dns_rdatacallbacks_t *callbacks);
  *
  * \li	This is the first attempt to load 'db'.
  *
- * \li  'callbacks' is a pointer to an initialized dns_rdatacallbacks_t
- *       structure.
+ * \li	addp != NULL && *addp == NULL
+ *
+ * \li	dbloadp != NULL && *dbloadp == NULL
  *
  * Ensures:
  *
- * \li	On success, callbacks->add will be a valid dns_addrdatasetfunc_t
- *      suitable for loading records into 'db' from a raw or text zone
- *      file. callbacks->add_private will be a valid DB load context
- *      which should be used as 'arg' when callbacks->add is called.
- *      callbacks->deserialize will be a valid dns_deserialize_func_t
- *      suitable for loading 'db' from a map format zone file.
+ * \li	On success, *addp will be a valid dns_addrdatasetfunc_t suitable
+ *	for loading 'db'.  *dbloadp will be a valid DB load context which
+ *	should be used as 'arg' when *addp is called.
  *
  * Returns:
  *
@@ -497,7 +464,7 @@ dns_db_beginload(dns_db_t *db, dns_rdatacallbacks_t *callbacks);
  */
 
 isc_result_t
-dns_db_endload(dns_db_t *db, dns_rdatacallbacks_t *callbacks);
+dns_db_endload(dns_db_t *db, dns_dbload_t **dbloadp);
 /*%<
  * Finish loading 'db'.
  *
@@ -505,13 +472,11 @@ dns_db_endload(dns_db_t *db, dns_rdatacallbacks_t *callbacks);
  *
  * \li	'db' is a valid database that is being loaded.
  *
- * \li	'callbacks' is a valid dns_rdatacallbacks_t structure.
- *
- * \li	callbacks->add_private is not NULL and is a valid database load context.
+ * \li	dbloadp != NULL and *dbloadp is a valid database load context.
  *
  * Ensures:
  *
- * \li	'callbacks' is returned to its state prior to calling dns_db_beginload()
+ * \li	*dbloadp == NULL
  *
  * Returns:
  *
@@ -527,10 +492,6 @@ dns_db_load(dns_db_t *db, const char *filename);
 
 isc_result_t
 dns_db_load2(dns_db_t *db, const char *filename, dns_masterformat_t format);
-
-isc_result_t
-dns_db_load3(dns_db_t *db, const char *filename, dns_masterformat_t format,
-	     unsigned int options);
 /*%<
  * Load master file 'filename' into 'db'.
  *
@@ -556,26 +517,6 @@ dns_db_load3(dns_db_t *db, const char *filename, dns_masterformat_t format,
  *
  * \li	Other results are possible, depending upon the database
  *	implementation used, syntax errors in the master file, etc.
- */
-
-isc_result_t
-dns_db_serialize(dns_db_t *db, dns_dbversion_t *version, FILE *rbtfile);
-/*%<
- * Dump version 'version' of 'db' to map-format file 'filename'.
- *
- * Requires:
- *
- * \li	'db' is a valid database.
- *
- * \li	'version' is a valid version.
- *
- * Returns:
- *
- * \li	#ISC_R_SUCCESS
- * \li	#ISC_R_NOMEMORY
- *
- * \li	Other results are possible, depending upon the database
- *	implementation used, OS file errors, etc.
  */
 
 isc_result_t
@@ -674,7 +615,7 @@ dns_db_closeversion(dns_db_t *db, dns_dbversion_t **versionp,
  *
  * Note: if '*versionp' is a read-write version and 'commit' is ISC_TRUE,
  * then all changes made in the version will take effect, otherwise they
- * will be rolled back.  The value of 'commit' is ignored for read-only
+ * will be rolled back.  The value if 'commit' is ignored for read-only
  * versions.
  *
  * Requires:
@@ -704,18 +645,8 @@ dns_db_closeversion(dns_db_t *db, dns_dbversion_t **versionp,
 isc_result_t
 dns_db_findnode(dns_db_t *db, dns_name_t *name, isc_boolean_t create,
 		dns_dbnode_t **nodep);
-
-isc_result_t
-dns_db_findnodeext(dns_db_t *db, dns_name_t *name, isc_boolean_t create,
-		   dns_clientinfomethods_t *methods,
-		   dns_clientinfo_t *clientinfo, dns_dbnode_t **nodep);
 /*%<
  * Find the node with name 'name'.
- *
- * dns_db_findnodeext() (findnode extended) also accepts parameters
- * 'methods' and 'clientinfo', which, when provided, enable the database to
- * retreive information about the client from the caller, and modify its
- * response on the basis of that information.
  *
  * Notes:
  * \li	If 'create' is ISC_TRUE and no node with name 'name' exists, then
@@ -753,20 +684,8 @@ dns_db_find(dns_db_t *db, dns_name_t *name, dns_dbversion_t *version,
 	    dns_rdatatype_t type, unsigned int options, isc_stdtime_t now,
 	    dns_dbnode_t **nodep, dns_name_t *foundname,
 	    dns_rdataset_t *rdataset, dns_rdataset_t *sigrdataset);
-
-isc_result_t
-dns_db_findext(dns_db_t *db, dns_name_t *name, dns_dbversion_t *version,
-	       dns_rdatatype_t type, unsigned int options, isc_stdtime_t now,
-	       dns_dbnode_t **nodep, dns_name_t *foundname,
-	       dns_clientinfomethods_t *methods, dns_clientinfo_t *clientinfo,
-	       dns_rdataset_t *rdataset, dns_rdataset_t *sigrdataset);
 /*%<
  * Find the best match for 'name' and 'type' in version 'version' of 'db'.
- *
- * dns_db_findext() (find extended) also accepts parameters 'methods'
- * and 'clientinfo', which when provided enable the database to retreive
- * information about the client from the caller, and modify its response
- * on the basis of this information.
  *
  * Notes:
  *
@@ -776,10 +695,6 @@ dns_db_findext(dns_db_t *db, dns_name_t *name, dns_dbversion_t *version,
  *	be returned.  For zone databases, glue is as defined in RFC2181.
  *	For cache databases, glue is any rdataset with a trust of
  *	dns_trust_glue.
- *
- * \li	If 'options' does not have #DNS_DBFIND_ADDITIONALOK set, then no
- *	additional records will be returned.  Only caches can have
- *	rdataset with trust dns_trust_additional.
  *
  * \li	If 'options' does not have #DNS_DBFIND_PENDINGOK set, then no
  *	pending data will be returned.  This option is only meaningful for
@@ -798,10 +713,6 @@ dns_db_findext(dns_db_t *db, dns_name_t *name, dns_dbversion_t *version,
  *	be found.  Note the returned NSEC needs to be checked to ensure
  *	that it is correct.  This only affects answers returned from the
  *	cache.
- *
- * \li	In the #DNS_DBFIND_FORCENSEC3 option is set, then we are looking
- *	in the NSEC3 tree and not the main tree.  Without this option being
- *	set NSEC3 records will not be found.
  *
  * \li	To respond to a query for SIG records, the caller should create a
  *	rdataset iterator and extract the signatures from each rdataset.
@@ -926,9 +837,6 @@ dns_db_findext(dns_db_t *db, dns_name_t *name, dns_dbversion_t *version,
  *
  *	\li	#DNS_R_COVERINGNSEC		The returned data is a NSEC
  *						that potentially covers 'name'.
- *
- *	\li	#DNS_R_EMPTYWILD		The name is a wildcard without
- *						resource records.
  *
  *	Error results:
  *
@@ -1118,7 +1026,6 @@ dns_db_findrdataset(dns_db_t *db, dns_dbnode_t *node, dns_dbversion_t *version,
 		    dns_rdatatype_t type, dns_rdatatype_t covers,
 		    isc_stdtime_t now, dns_rdataset_t *rdataset,
 		    dns_rdataset_t *sigrdataset);
-
 /*%<
  * Search for an rdataset of type 'type' at 'node' that are in version
  * 'version' of 'db'.  If found, make 'rdataset' refer to it.
@@ -1370,21 +1277,6 @@ dns_db_nodecount(dns_db_t *db);
  * \li	The number of nodes in the database
  */
 
-size_t
-dns_db_hashsize(dns_db_t *db);
-/*%<
- * For database implementations using a hash table, report the
- * current number of buckets.
- *
- * Requires:
- *
- * \li	'db' is a valid database.
- *
- * Returns:
- * \li	The number of buckets in the database's hash table, or
- *      0 if not implemented.
- */
-
 void
 dns_db_settask(dns_db_t *db, isc_task_t *task);
 /*%<
@@ -1489,24 +1381,6 @@ dns_db_getnsec3parameters(dns_db_t *db, dns_dbversion_t *version,
  */
 
 isc_result_t
-dns_db_getsize(dns_db_t *db, dns_dbversion_t *version, isc_uint64_t *records,
-	       isc_uint64_t *bytes);
-/*%<
- * Get the number of records in the given version of the database as well
- * as the number bytes used to store those records.
- *
- * Requires:
- * \li	'db' is a valid zone database.
- * \li	'version' is NULL or a valid version.
- * \li	'records' is NULL or a pointer to return the record count in.
- * \li	'bytes' is NULL or a pointer to return the byte count in.
- *
- * Returns:
- * \li	#ISC_R_SUCCESS
- * \li	#ISC_R_NOTIMPLEMENTED
- */
-
-isc_result_t
 dns_db_findnsec3node(dns_db_t *db, dns_name_t *name,
 		     isc_boolean_t create, dns_dbnode_t **nodep);
 /*%<
@@ -1546,9 +1420,7 @@ dns_db_setsigningtime(dns_db_t *db, dns_rdataset_t *rdataset,
  *
  * Requires:
  * \li	'db' is a valid zone database.
- * \li	'rdataset' is or is to be associated with 'db'.
- * \li  'rdataset' is not pending removed from the heap via an
- *       uncommitted call to dns_db_resigned().
+ * \li	'rdataset' to be associated with 'db'.
  *
  * Returns:
  * \li	#ISC_R_SUCCESS
@@ -1579,9 +1451,7 @@ dns_db_resigned(dns_db_t *db, dns_rdataset_t *rdataset,
  * Mark 'rdataset' as not being available to be returned by
  * dns_db_getsigningtime().  If the changes associated with 'version'
  * are committed this will be permanent.  If the version is not committed
- * this change will be rolled back when the version is closed.  Until
- * 'version' is either committed or rolled back, 'rdataset' can no longer
- * be acted upon by dns_db_setsigningtime().
+ * this change will be rolled back when the version is closed.
  *
  * Requires:
  * \li	'db' is a valid zone database.
@@ -1597,39 +1467,11 @@ dns_db_getrrsetstats(dns_db_t *db);
  *
  * Requires:
  *
- * \li	'db' is a valid database (cache only).
+ * \li	'db' is a valid database (zone or cache).
  *
  * Returns:
  * \li	when available, a pointer to a statistics object created by
  *	dns_rdatasetstats_create(); otherwise NULL.
- */
-
-isc_result_t
-dns_db_setcachestats(dns_db_t *db, isc_stats_t *stats);
-/*%<
- * Set the location in which to collect cache statistics.
- * This option may not exist depending on the DB implementation.
- *
- * Requires:
- *
- * \li	'db' is a valid database (cache only).
- *
- * Returns:
- * \li	when available, a pointer to a statistics object created by
- *	dns_rdatasetstats_create(); otherwise NULL.
- */
-
-void
-dns_db_rpz_attach(dns_db_t *db, dns_rpz_zones_t *rpzs, dns_rpz_num_t rpz_num);
-/*%<
- * Attach the response policy information for a view to a database for a
- * zone for the view.
- */
-
-isc_result_t
-dns_db_rpz_ready(dns_db_t *db);
-/*%<
- * Finish loading a response policy zone.
  */
 
 ISC_LANG_ENDDECLS

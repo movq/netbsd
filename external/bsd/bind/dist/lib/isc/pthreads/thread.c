@@ -1,7 +1,7 @@
-/*	$NetBSD: thread.c,v 1.6 2014/12/10 04:38:00 christos Exp $	*/
+/*	$NetBSD: thread.c,v 1.1 2009/03/22 15:02:17 christos Exp $	*/
 
 /*
- * Copyright (C) 2004, 2005, 2007, 2013  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2004, 2005, 2007  Internet Systems Consortium, Inc. ("ISC")
  * Copyright (C) 2000, 2001, 2003  Internet Software Consortium.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -17,21 +17,17 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* Id: thread.c,v 1.17 2007/06/19 23:47:18 tbox Exp  */
+/* Id: thread.c,v 1.17 2007/06/19 23:47:18 tbox Exp */
 
 /*! \file */
 
 #include <config.h>
 
-#if defined(HAVE_SCHED_H)
-#include <sched.h>
-#endif
-
 #include <isc/thread.h>
 #include <isc/util.h>
 
 #ifndef THREAD_MINSTACKSIZE
-#define THREAD_MINSTACKSIZE		(1024U * 1024)
+#define THREAD_MINSTACKSIZE		(64U * 1024)
 #endif
 
 isc_result_t
@@ -78,16 +74,5 @@ isc_thread_setconcurrency(unsigned int level) {
 	(void)pthread_setconcurrency(level);
 #else
 	UNUSED(level);
-#endif
-}
-
-void
-isc_thread_yield(void) {
-#if defined(HAVE_SCHED_YIELD)
-	sched_yield();
-#elif defined( HAVE_PTHREAD_YIELD)
-	pthread_yield();
-#elif defined( HAVE_PTHREAD_YIELD_NP)
-	pthread_yield_np();
 #endif
 }

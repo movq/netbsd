@@ -1,11 +1,12 @@
-/*	$NetBSD: nit.c,v 1.2 2017/06/28 02:46:30 manu Exp $	*/
+/*	$NetBSD: nit.c,v 1.1 2013/03/24 15:45:53 christos Exp $	*/
+
 /* nit.c
 
    Network Interface Tap (NIT) network interface code, by Ted Lemon
    with one crucial tidbit of help from Stu Grossmen. */
 
 /*
- * Copyright (c) 2004,2007,2009,2014 by Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (c) 2004,2007,2009 by Internet Systems Consortium, Inc. ("ISC")
  * Copyright (c) 1996-2003 by Internet Software Consortium
  *
  * Permission to use, copy, modify, and distribute this software for any
@@ -26,10 +27,16 @@
  *   <info@isc.org>
  *   https://www.isc.org/
  *
+ * This software has been written for Internet Systems Consortium
+ * by Ted Lemon in cooperation with Vixie Enterprises and Nominum, Inc.
+ * To learn more about Internet Systems Consortium, see
+ * ``https://www.isc.org/''.  To learn more about Vixie Enterprises,
+ * see ``http://www.vix.com''.   To learn more about Nominum, Inc., see
+ * ``http://www.nominum.com''.
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: nit.c,v 1.2 2017/06/28 02:46:30 manu Exp $");
+__RCSID("$NetBSD: nit.c,v 1.1 2013/03/24 15:45:53 christos Exp $");
 
 #include "dhcpd.h"
 #if defined (USE_NIT_SEND) || defined (USE_NIT_RECEIVE)
@@ -234,7 +241,7 @@ void if_register_receive (info)
 	pf.Pf_Filter [pf.Pf_FilterLen++] = ENF_CAND;
 	pf.Pf_Filter [pf.Pf_FilterLen++] = ENF_PUSHWORD + 18;
 	pf.Pf_Filter [pf.Pf_FilterLen++] = ENF_PUSHLIT + ENF_CAND;
-	pf.Pf_Filter [pf.Pf_FilterLen++] = *libdhcp_callbacks.local_port;
+	pf.Pf_Filter [pf.Pf_FilterLen++] = local_port;
 
 	/* Install the filter... */
 	sio.ic_cmd = NIOCSETF;
@@ -367,7 +374,7 @@ ssize_t receive_packet (interface, buf, len, from, hfrom)
 
 	/* Decode the IP and UDP headers... */
 	offset = decode_udp_ip_header (interface, ibuf, bufix,
-				       from, length, &paylen, 1);
+				       from, length, &paylen);
 
 	/* If the IP or UDP checksum was bad, skip the packet... */
 	if (offset < 0)

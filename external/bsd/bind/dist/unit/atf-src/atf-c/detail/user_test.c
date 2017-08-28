@@ -1,9 +1,9 @@
-/*	$NetBSD: user_test.c,v 1.3 2014/12/10 04:38:03 christos Exp $	*/
+/*	$NetBSD: user_test.c,v 1.1 2011/09/11 17:20:34 christos Exp $	*/
 
 /*
  * Automated Testing Framework (atf)
  *
- * Copyright (c) 2007 The NetBSD Foundation, Inc.
+ * Copyright (c) 2007, 2008, 2009 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -66,7 +66,6 @@ ATF_TC_BODY(is_member_of_group, tc)
     gid_t gids[NGROUPS_MAX];
     gid_t g, maxgid;
     int ngids;
-    const gid_t maxgid_limit = 1 << 16;
 
     {
         int i;
@@ -76,18 +75,11 @@ ATF_TC_BODY(is_member_of_group, tc)
             atf_tc_fail("Call to getgroups failed");
         maxgid = 0;
         for (i = 0; i < ngids; i++) {
-            printf("User group %d is %u\n", i, gids[i]);
             if (maxgid < gids[i])
                 maxgid = gids[i];
         }
         printf("User belongs to %d groups\n", ngids);
-        printf("Last GID is %u\n", maxgid);
-    }
-
-    if (maxgid > maxgid_limit) {
-        printf("Test truncated from %u groups to %u to keep the run time "
-               "reasonable enough\n", maxgid, maxgid_limit);
-        maxgid = maxgid_limit;
+        printf("Last GID is %d\n", maxgid);
     }
 
     for (g = 0; g < maxgid; g++) {

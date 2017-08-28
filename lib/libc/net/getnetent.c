@@ -1,8 +1,6 @@
-/*	$NetBSD: getnetent.c,v 1.21 2012/03/20 17:44:18 matt Exp $	*/
-
 /*
- * Copyright (c) 1983, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1983 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -12,7 +10,11 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. Neither the name of the University nor the names of its contributors
+ * 3. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgement:
+ *	This product includes software developed by the University of
+ *	California, Berkeley and its contributors.
+ * 4. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -27,28 +29,12 @@
  * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
- *
- * Portions Copyright (c) 1993 Carlos Leandro and Rui Salgueiro
- *    Dep. Matematica Universidade de Coimbra, Portugal, Europe
- *
- * Permission to use, copy, modify, and distribute this software for any
- * purpose with or without fee is hereby granted, provided that the above
- * copyright notice and this permission notice appear in all copies.
- *
- * from getnetent.c   1.1 (Coimbra) 93/06/02
  */
 
-#include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-#if 0
-static char sccsid[] = "@(#)getnetent.c	8.1 (Berkeley) 6/4/93";
-static char rcsid[] = "Id: getnetent.c,v 8.4 1997/06/01 20:34:37 vixie Exp ";
-#else
-__RCSID("$NetBSD: getnetent.c,v 1.21 2012/03/20 17:44:18 matt Exp $");
-#endif
+static char sccsid[] = "@(#)getnetent.c	5.8 (Berkeley) 2/24/91";
 #endif /* LIBC_SCCS and not lint */
 
-#include "namespace.h"
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
@@ -56,12 +42,6 @@ __RCSID("$NetBSD: getnetent.c,v 1.21 2012/03/20 17:44:18 matt Exp $");
 #include <netdb.h>
 #include <stdio.h>
 #include <string.h>
-
-#ifdef __weak_alias
-__weak_alias(endnetent,_endnetent)
-__weak_alias(getnetent,_getnetent)
-__weak_alias(setnetent,_setnetent)
-#endif
 
 #define	MAXALIASES	35
 
@@ -71,40 +51,20 @@ static struct netent net;
 static char *net_aliases[MAXALIASES];
 int _net_stayopen;
 
-static void __setnetent(int);
-static void __endnetent(void);
-
 void
-setnetent(int stayopen)
+setnetent(f)
+	int f;
 {
-
-	sethostent(stayopen);
-	__setnetent(stayopen);
-}
-
-void
-endnetent(void)
-{
-
-	endhostent();
-	__endnetent();
-}
-
-static void
-__setnetent(int f)
-{
-
 	if (netf == NULL)
-		netf = fopen(_PATH_NETWORKS, "re");
+		netf = fopen(_PATH_NETWORKS, "r" );
 	else
 		rewind(netf);
 	_net_stayopen |= f;
 }
 
-static void
-__endnetent(void)
+void
+endnetent()
 {
-
 	if (netf) {
 		fclose(netf);
 		netf = NULL;
@@ -113,21 +73,15 @@ __endnetent(void)
 }
 
 struct netent *
-getnetent(void)
+getnetent()
 {
 	char *p;
 	register char *cp, **q;
 
-	if (netf == NULL && (netf = fopen(_PATH_NETWORKS, "re")) == NULL)
+	if (netf == NULL && (netf = fopen(_PATH_NETWORKS, "r" )) == NULL)
 		return (NULL);
-#if (defined(__sparc__) && defined(_LP64)) ||		\
-    defined(__alpha__) ||				\
-    (defined(__i386__) && defined(_LP64)) ||		\
-    (defined(__sh__) && defined(_LP64))
-	net.__n_pad0 = 0;
-#endif
 again:
-	p = fgets(line, (int)sizeof line, netf);
+	p = fgets(line, BUFSIZ, netf);
 	if (p == NULL)
 		return (NULL);
 	if (*p == '#')
@@ -149,19 +103,18 @@ again:
 	net.n_net = inet_network(cp);
 	net.n_addrtype = AF_INET;
 	q = net.n_aliases = net_aliases;
-	if (p != NULL) {
+	if (p != NULL) 
 		cp = p;
-		while (cp && *cp) {
-			if (*cp == ' ' || *cp == '\t') {
-				cp++;
-				continue;
-			}
-			if (q < &net_aliases[MAXALIASES - 1])
-				*q++ = cp;
-			cp = strpbrk(cp, " \t");
-			if (cp != NULL)
-				*cp++ = '\0';
+	while (cp && *cp) {
+		if (*cp == ' ' || *cp == '\t') {
+			cp++;
+			continue;
 		}
+		if (q < &net_aliases[MAXALIASES - 1])
+			*q++ = cp;
+		cp = strpbrk(cp, " \t");
+		if (cp != NULL)
+			*cp++ = '\0';
 	}
 	*q = NULL;
 	return (&net);

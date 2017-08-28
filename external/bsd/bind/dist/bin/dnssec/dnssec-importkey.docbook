@@ -1,5 +1,8 @@
+<!DOCTYPE book PUBLIC "-//OASIS//DTD DocBook XML V4.2//EN"
+               "http://www.oasis-open.org/docbook/xml/4.2/docbookx.dtd"
+               [<!ENTITY mdash "&#8212;">]>
 <!--
- - Copyright (C) 2013-2016  Internet Systems Consortium, Inc. ("ISC")
+ - Copyright (C) 2013  Internet Systems Consortium, Inc. ("ISC")
  -
  - Permission to use, copy, modify, and/or distribute this software for any
  - purpose with or without fee is hereby granted, provided that the above
@@ -14,14 +17,10 @@
  - PERFORMANCE OF THIS SOFTWARE.
 -->
 
-<!-- Converted by db4-upgrade version 1.0 -->
-<refentry xmlns:db="http://docbook.org/ns/docbook" version="5.0" xml:id="man.dnssec-importkey">
-  <info>
-    <date>2014-02-20</date>
-  </info>
+<!-- Id: dnssec-importkey.docbook,v 1.15 2011/11/03 20:21:37 each Exp  -->
+<refentry id="man.dnssec-importkey">
   <refentryinfo>
-    <corpname>ISC</corpname>
-    <corpauthor>Internet Systems Consortium, Inc.</corpauthor>
+    <date>August 30, 2013</date>
   </refentryinfo>
 
   <refmeta>
@@ -32,47 +31,42 @@
 
   <refnamediv>
     <refname><application>dnssec-importkey</application></refname>
-    <refpurpose>import DNSKEY records from external systems so they can be managed</refpurpose>
+    <refpurpose>Import DNSKEY records from external systems so they can be managed.</refpurpose>
   </refnamediv>
 
   <docinfo>
     <copyright>
       <year>2013</year>
-      <year>2014</year>
-      <year>2015</year>
-      <year>2016</year>
       <holder>Internet Systems Consortium, Inc. ("ISC")</holder>
     </copyright>
   </docinfo>
 
   <refsynopsisdiv>
-    <cmdsynopsis sepchar=" ">
+    <cmdsynopsis>
       <command>dnssec-importkey</command>
-      <arg choice="opt" rep="norepeat"><option>-K <replaceable class="parameter">directory</replaceable></option></arg>
-      <arg choice="opt" rep="norepeat"><option>-L <replaceable class="parameter">ttl</replaceable></option></arg>
-      <arg choice="opt" rep="norepeat"><option>-P <replaceable class="parameter">date/offset</replaceable></option></arg>
-      <arg choice="opt" rep="norepeat"><option>-D <replaceable class="parameter">date/offset</replaceable></option></arg>
-      <arg choice="opt" rep="norepeat"><option>-h</option></arg>
-      <arg choice="opt" rep="norepeat"><option>-v <replaceable class="parameter">level</replaceable></option></arg>
-      <arg choice="opt" rep="norepeat"><option>-V</option></arg>
-      <arg choice="req" rep="norepeat"><option>keyfile</option></arg>
+      <arg><option>-K <replaceable class="parameter">directory</replaceable></option></arg>
+      <arg><option>-L <replaceable class="parameter">ttl</replaceable></option></arg>
+      <arg><option>-P <replaceable class="parameter">date/offset</replaceable></option></arg>
+      <arg><option>-D <replaceable class="parameter">date/offset</replaceable></option></arg>
+      <arg><option>-h</option></arg>
+      <arg><option>-v <replaceable class="parameter">level</replaceable></option></arg>
+      <arg choice="req"><option>keyfile</option></arg>
     </cmdsynopsis>
-    <cmdsynopsis sepchar=" ">
+    <cmdsynopsis>
       <command>dnssec-importkey</command>
-      <arg choice="req" rep="norepeat"><option>-f <replaceable class="parameter">filename</replaceable></option></arg>
-      <arg choice="opt" rep="norepeat"><option>-K <replaceable class="parameter">directory</replaceable></option></arg>
-      <arg choice="opt" rep="norepeat"><option>-L <replaceable class="parameter">ttl</replaceable></option></arg>
-      <arg choice="opt" rep="norepeat"><option>-P <replaceable class="parameter">date/offset</replaceable></option></arg>
-      <arg choice="opt" rep="norepeat"><option>-D <replaceable class="parameter">date/offset</replaceable></option></arg>
-      <arg choice="opt" rep="norepeat"><option>-h</option></arg>
-      <arg choice="opt" rep="norepeat"><option>-v <replaceable class="parameter">level</replaceable></option></arg>
-      <arg choice="opt" rep="norepeat"><option>-V</option></arg>
-      <arg choice="opt" rep="norepeat"><option>dnsname</option></arg>
+      <arg choice="req"><option>-f <replaceable class="parameter">filename</replaceable></option></arg>
+      <arg><option>-K <replaceable class="parameter">directory</replaceable></option></arg>
+      <arg><option>-L <replaceable class="parameter">ttl</replaceable></option></arg>
+      <arg><option>-P <replaceable class="parameter">date/offset</replaceable></option></arg>
+      <arg><option>-D <replaceable class="parameter">date/offset</replaceable></option></arg>
+      <arg><option>-h</option></arg>
+      <arg><option>-v <replaceable class="parameter">level</replaceable></option></arg>
+      <arg><option>dnsname</option></arg>
     </cmdsynopsis>
   </refsynopsisdiv>
 
-  <refsection><info><title>DESCRIPTION</title></info>
-
+  <refsect1>
+    <title>DESCRIPTION</title>
     <para><command>dnssec-importkey</command>
       reads a public DNSKEY record and generates a pair of
       .key/.private files.  The DNSKEY record may be read from an
@@ -82,7 +76,7 @@
       files will be generated.
     </para>
     <para>
-      The newly-created .private file does <emphasis>not</emphasis>
+      The newly-created .private file does <emphasis>not</command>
       contain private key data, and cannot be used for signing.
       However, having a .private file makes it possible to set
       publication (<option>-P</option>) and deletion
@@ -90,10 +84,10 @@
       public key can be added to and removed from the DNSKEY RRset
       on schedule even if the true private key is stored offline.
     </para>
-  </refsection>
+  </refsect1>
 
-  <refsection><info><title>OPTIONS</title></info>
-
+  <refsect1>
+    <title>OPTIONS</title>
 
     <variablelist>
       <varlistentry>
@@ -111,7 +105,7 @@
           </para>
         </listitem>
       </varlistentry>
-
+  
       <varlistentry>
         <term>-K <replaceable class="parameter">directory</replaceable></term>
         <listitem>
@@ -143,7 +137,7 @@
 	  </para>
         </listitem>
       </varlistentry>
-
+  
       <varlistentry>
         <term>-v <replaceable class="parameter">level</replaceable></term>
         <listitem>
@@ -153,20 +147,11 @@
         </listitem>
       </varlistentry>
 
-      <varlistentry>
-	<term>-V</term>
-        <listitem>
-	  <para>
-	    Prints version information.
-	  </para>
-        </listitem>
-      </varlistentry>
-
     </variablelist>
-  </refsection>
+  </refsect1>
 
-  <refsection><info><title>TIMING OPTIONS</title></info>
-
+  <refsect1>
+    <title>TIMING OPTIONS</title>
     <para>
       Dates can be expressed in the format YYYYMMDD or YYYYMMDDHHMMSS.
       If the argument begins with a '+' or '-', it is interpreted as
@@ -175,8 +160,7 @@
       then the offset is computed in years (defined as 365 24-hour days,
       ignoring leap years), months (defined as 30 24-hour days), weeks,
       days, hours, or minutes, respectively.  Without a suffix, the offset
-      is computed in seconds.  To explicitly prevent a date from being
-      set, use 'none' or 'never'.
+      is computed in seconds.  To unset a date, use 'none'.
     </para>
 
     <variablelist>
@@ -203,20 +187,20 @@
       </varlistentry>
 
     </variablelist>
-  </refsection>
+  </refsect1>
 
-  <refsection><info><title>FILES</title></info>
-
+  <refsect1>
+    <title>FILES</title>
     <para>
       A keyfile can be designed by the key identification
       <filename>Knnnn.+aaa+iiiii</filename> or the full file name
       <filename>Knnnn.+aaa+iiiii.key</filename> as generated by
       <refentrytitle>dnssec-keygen</refentrytitle><manvolnum>8</manvolnum>.
     </para>
-  </refsection>
+  </refsect1>
 
-  <refsection><info><title>SEE ALSO</title></info>
-
+  <refsect1>
+    <title>SEE ALSO</title>
     <para><citerefentry>
         <refentrytitle>dnssec-keygen</refentrytitle><manvolnum>8</manvolnum>
       </citerefentry>,
@@ -226,6 +210,16 @@
       <citetitle>BIND 9 Administrator Reference Manual</citetitle>,
       <citetitle>RFC 5011</citetitle>.
     </para>
-  </refsection>
+  </refsect1>
 
-</refentry>
+  <refsect1>
+    <title>AUTHOR</title>
+    <para><corpauthor>Internet Systems Consortium</corpauthor>
+    </para>
+  </refsect1>
+
+</refentry><!--
+ - Local variables:
+ - mode: sgml
+ - End:
+-->

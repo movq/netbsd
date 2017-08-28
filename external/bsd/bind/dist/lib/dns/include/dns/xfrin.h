@@ -1,7 +1,7 @@
-/*	$NetBSD: xfrin.h,v 1.5 2014/12/10 04:37:58 christos Exp $	*/
+/*	$NetBSD: xfrin.h,v 1.1 2009/03/22 15:01:49 christos Exp $	*/
 
 /*
- * Copyright (C) 2004-2007, 2009, 2013  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2004-2007, 2009  Internet Systems Consortium, Inc. ("ISC")
  * Copyright (C) 1999-2001, 2003  Internet Software Consortium.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -17,7 +17,7 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* Id: xfrin.h,v 1.30 2009/01/17 23:47:43 tbox Exp  */
+/* Id: xfrin.h,v 1.28.332.2 2009/01/18 23:47:41 tbox Exp */
 
 #ifndef DNS_XFRIN_H
 #define DNS_XFRIN_H 1
@@ -66,14 +66,6 @@ isc_result_t
 dns_xfrin_create2(dns_zone_t *zone, dns_rdatatype_t xfrtype,
 		  isc_sockaddr_t *masteraddr, isc_sockaddr_t *sourceaddr,
 		  dns_tsigkey_t *tsigkey, isc_mem_t *mctx,
-		  isc_timermgr_t *timermgr, isc_socketmgr_t *socketmgr,
-		  isc_task_t *task, dns_xfrindone_t done,
-		  dns_xfrin_ctx_t **xfrp);
-
-isc_result_t
-dns_xfrin_create3(dns_zone_t *zone, dns_rdatatype_t xfrtype,
-		  isc_sockaddr_t *masteraddr, isc_sockaddr_t *sourceaddr,
-		  isc_dscp_t dscp, dns_tsigkey_t *tsigkey, isc_mem_t *mctx,
 		  isc_timermgr_t *timermgr, isc_socketmgr_t *socketmgr,
 		  isc_task_t *task, dns_xfrindone_t done,
 		  dns_xfrin_ctx_t **xfrp);

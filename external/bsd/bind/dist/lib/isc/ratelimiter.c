@@ -1,7 +1,7 @@
-/*	$NetBSD: ratelimiter.c,v 1.7 2017/06/15 15:59:41 christos Exp $	*/
+/*	$NetBSD: ratelimiter.c,v 1.1 2009/03/22 15:02:06 christos Exp $	*/
 
 /*
- * Copyright (C) 2004, 2005, 2007, 2012, 2014, 2015, 2017  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2004, 2005, 2007  Internet Systems Consortium, Inc. ("ISC")
  * Copyright (C) 1999-2002  Internet Software Consortium.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -16,6 +16,8 @@
  * OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR
  * PERFORMANCE OF THIS SOFTWARE.
  */
+
+/* Id: ratelimiter.c,v 1.25 2007/06/19 23:47:17 tbox Exp */
 
 /*! \file */
 
@@ -79,7 +81,6 @@ isc_ratelimiter_create(isc_mem_t *mctx, isc_timermgr_t *timermgr,
 	result = isc_mutex_init(&rl->lock);
 	if (result != ISC_R_SUCCESS)
 		goto free_mem;
-
 	result = isc_timer_create(timermgr, isc_timertype_inactive,
 				  NULL, NULL, rl->task, ratelimiter_tick,
 				  rl, &rl->timer);
@@ -110,16 +111,12 @@ free_mem:
 isc_result_t
 isc_ratelimiter_setinterval(isc_ratelimiter_t *rl, isc_interval_t *interval) {
 	isc_result_t result = ISC_R_SUCCESS;
-
-	REQUIRE(rl != NULL);
-	REQUIRE(interval != NULL);
-
 	LOCK(&rl->lock);
 	rl->interval = *interval;
 	/*
 	 * If the timer is currently running, change its rate.
 	 */
-	if (rl->state == isc_ratelimiter_ratelimited) {
+        if (rl->state == isc_ratelimiter_ratelimited) {
 		result = isc_timer_reset(rl->timer, isc_timertype_ticker, NULL,
 					 &rl->interval, ISC_FALSE);
 	}
@@ -129,9 +126,6 @@ isc_ratelimiter_setinterval(isc_ratelimiter_t *rl, isc_interval_t *interval) {
 
 void
 isc_ratelimiter_setpertic(isc_ratelimiter_t *rl, isc_uint32_t pertic) {
-
-	REQUIRE(rl != NULL);
-
 	if (pertic == 0)
 		pertic = 1;
 	rl->pertic = pertic;
@@ -144,19 +138,19 @@ isc_ratelimiter_enqueue(isc_ratelimiter_t *rl, isc_task_t *task,
 	isc_result_t result = ISC_R_SUCCESS;
 	isc_event_t *ev;
 
-	REQUIRE(rl != NULL);
-	REQUIRE(task != NULL);
 	REQUIRE(eventp != NULL && *eventp != NULL);
+	REQUIRE(task != NULL);
 	ev = *eventp;
 	REQUIRE(ev->ev_sender == NULL);
 
 	LOCK(&rl->lock);
-	if (rl->state == isc_ratelimiter_ratelimited ||
+        if (rl->state == isc_ratelimiter_ratelimited ||
 	    rl->state == isc_ratelimiter_stalled) {
+		isc_event_t *ev = *eventp;
 		ev->ev_sender = task;
+                ISC_LIST_APPEND(rl->pending, ev, ev_link);
 		*eventp = NULL;
-		ISC_LIST_APPEND(rl->pending, ev, ev_ratelink);
-	} else if (rl->state == isc_ratelimiter_idle) {
+        } else if (rl->state == isc_ratelimiter_idle) {
 		result = isc_timer_reset(rl->timer, isc_timertype_ticker, NULL,
 					 &rl->interval, ISC_FALSE);
 		if (result == ISC_R_SUCCESS) {
@@ -173,23 +167,6 @@ isc_ratelimiter_enqueue(isc_ratelimiter_t *rl, isc_task_t *task,
 	return (result);
 }
 
-isc_result_t
-isc_ratelimiter_dequeue(isc_ratelimiter_t *rl, isc_event_t *event) {
-	isc_result_t result = ISC_R_SUCCESS;
-
-	REQUIRE(rl != NULL);
-	REQUIRE(event != NULL);
-
-	LOCK(&rl->lock);
-	if (ISC_LINK_LINKED(event, ev_ratelink)) {
-		ISC_LIST_UNLINK(rl->pending, event, ev_ratelink);
-		event->ev_sender = NULL;
-	} else
-		result = ISC_R_NOTFOUND;
-	UNLOCK(&rl->lock);
-	return (result);
-}
-
 static void
 ratelimiter_tick(isc_task_t *task, isc_event_t *event) {
 	isc_result_t result = ISC_R_SUCCESS;
@@ -202,7 +179,7 @@ ratelimiter_tick(isc_task_t *task, isc_event_t *event) {
 	isc_event_free(&event);
 
 	pertic = rl->pertic;
-	while (pertic != 0) {
+        while (pertic != 0) {
 		pertic--;
 		LOCK(&rl->lock);
 		p = ISC_LIST_HEAD(rl->pending);
@@ -210,7 +187,7 @@ ratelimiter_tick(isc_task_t *task, isc_event_t *event) {
 			/*
 			 * There is work to do.  Let's do it after unlocking.
 			 */
-			ISC_LIST_UNLINK(rl->pending, p, ev_ratelink);
+			ISC_LIST_UNLINK(rl->pending, p, ev_link);
 		} else {
 			/*
 			 * No work left to do.  Stop the timer so that we don't
@@ -236,21 +213,17 @@ void
 isc_ratelimiter_shutdown(isc_ratelimiter_t *rl) {
 	isc_event_t *ev;
 	isc_task_t *task;
-
-	REQUIRE(rl != NULL);
-
 	LOCK(&rl->lock);
 	rl->state = isc_ratelimiter_shuttingdown;
 	(void)isc_timer_reset(rl->timer, isc_timertype_inactive,
 			      NULL, NULL, ISC_FALSE);
 	while ((ev = ISC_LIST_HEAD(rl->pending)) != NULL) {
-		ISC_LIST_UNLINK(rl->pending, ev, ev_ratelink);
+		ISC_LIST_UNLINK(rl->pending, ev, ev_link);
 		ev->ev_attributes |= ISC_EVENTATTR_CANCELED;
 		task = ev->ev_sender;
 		isc_task_send(task, &ev);
 	}
 	isc_timer_detach(&rl->timer);
-
 	/*
 	 * Send an event to our task.  The delivery of this event
 	 * indicates that no more timer events will be delivered.
@@ -278,7 +251,6 @@ ratelimiter_free(isc_ratelimiter_t *rl) {
 
 void
 isc_ratelimiter_attach(isc_ratelimiter_t *source, isc_ratelimiter_t **target) {
-
 	REQUIRE(source != NULL);
 	REQUIRE(target != NULL && *target == NULL);
 
@@ -292,12 +264,8 @@ isc_ratelimiter_attach(isc_ratelimiter_t *source, isc_ratelimiter_t **target) {
 
 void
 isc_ratelimiter_detach(isc_ratelimiter_t **rlp) {
-	isc_ratelimiter_t *rl;
+	isc_ratelimiter_t *rl = *rlp;
 	isc_boolean_t free_now = ISC_FALSE;
-
-	REQUIRE(rlp != NULL && *rlp != NULL);
-
-	rl = *rlp;
 
 	LOCK(&rl->lock);
 	REQUIRE(rl->refs > 0);
@@ -316,8 +284,6 @@ isc_result_t
 isc_ratelimiter_stall(isc_ratelimiter_t *rl) {
 	isc_result_t result = ISC_R_SUCCESS;
 
-	REQUIRE(rl != NULL);
-
 	LOCK(&rl->lock);
 	switch (rl->state) {
 	case isc_ratelimiter_shuttingdown:
@@ -325,9 +291,8 @@ isc_ratelimiter_stall(isc_ratelimiter_t *rl) {
 		break;
 	case isc_ratelimiter_ratelimited:
 		result = isc_timer_reset(rl->timer, isc_timertype_inactive,
-					 NULL, NULL, ISC_FALSE);
+				 	 NULL, NULL, ISC_FALSE);
 		RUNTIME_CHECK(result == ISC_R_SUCCESS);
-		/* FALLTHROUGH */
 	case isc_ratelimiter_idle:
 	case isc_ratelimiter_stalled:
 		rl->state = isc_ratelimiter_stalled;
@@ -341,8 +306,6 @@ isc_result_t
 isc_ratelimiter_release(isc_ratelimiter_t *rl) {
 	isc_result_t result = ISC_R_SUCCESS;
 
-	REQUIRE(rl != NULL);
-
 	LOCK(&rl->lock);
 	switch (rl->state) {
 	case isc_ratelimiter_shuttingdown:
@@ -355,7 +318,7 @@ isc_ratelimiter_release(isc_ratelimiter_t *rl) {
 						 &rl->interval, ISC_FALSE);
 			if (result == ISC_R_SUCCESS)
 				rl->state = isc_ratelimiter_ratelimited;
-		} else
+		} else 
 			rl->state = isc_ratelimiter_idle;
 		break;
 	case isc_ratelimiter_ratelimited:

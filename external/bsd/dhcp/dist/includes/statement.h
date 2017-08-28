@@ -1,10 +1,10 @@
-/*	$NetBSD: statement.h,v 1.1.1.4 2016/01/10 19:44:43 christos Exp $	*/
+/*	$NetBSD: statement.h,v 1.1 2013/03/24 15:45:50 christos Exp $	*/
+
 /* statement.h
 
    Definitions for executable statements... */
 
 /*
- * Copyright (c) 2014-2015 by Internet Systems Consortium, Inc. ("ISC")
  * Copyright (c) 2004,2007,2009 by Internet Systems Consortium, Inc. ("ISC")
  * Copyright (c) 1996-2003 by Internet Software Consortium
  *
@@ -26,7 +26,16 @@
  *   <info@isc.org>
  *   https://www.isc.org/
  *
+ * This software has been written for Internet Systems Consortium
+ * by Ted Lemon in cooperation with Vixie Enterprises and Nominum, Inc.
+ * To learn more about Internet Systems Consortium, see
+ * ``https://www.isc.org/''.  To learn more about Vixie Enterprises,
+ * see ``http://www.vix.com''.   To learn more about Nominum, Inc., see
+ * ``http://www.nominum.com''.
  */
+
+#include <sys/cdefs.h>
+__RCSID("$NetBSD: statement.h,v 1.1 2013/03/24 15:45:50 christos Exp $");
 
 struct executable_statement {
 	int refcnt;
@@ -53,8 +62,7 @@ struct executable_statement {
 		define_statement,
 		log_statement,
 		return_statement,
-		execute_statement,
-		vendor_opt_statement
+		execute_statement
 	} op;
 	union {
 		struct {

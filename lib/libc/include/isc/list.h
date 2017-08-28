@@ -1,4 +1,4 @@
-/*	$NetBSD: list.h,v 1.5 2009/04/12 17:07:16 christos Exp $	*/
+/*	$NetBSD: list.h,v 1.1 2004/05/20 19:49:41 christos Exp $	*/
 
 /*
  * Copyright (c) 2004 by Internet Systems Consortium, Inc. ("ISC")
@@ -23,18 +23,17 @@
 
 #define LIST(type) struct { type *head, *tail; }
 #define INIT_LIST(list) \
-	do { (list).head = NULL; (list).tail = NULL; } while (/*CONSTCOND*/0)
+	do { (list).head = NULL; (list).tail = NULL; } while (0)
 
 #define LINK(type) struct { type *prev, *next; }
 #define INIT_LINK_TYPE(elt, link, type) \
 	do { \
 		(elt)->link.prev = (type *)(-1); \
 		(elt)->link.next = (type *)(-1); \
-	} while (/*CONSTCOND*/0)
+	} while (0)
 #define INIT_LINK(elt, link) \
 	INIT_LINK_TYPE(elt, link, void)
-#define LINKED(elt, link) ((void *)((elt)->link.prev) != (void *)(-1) && \
-			   (void *)((elt)->link.next) != (void *)(-1))
+#define LINKED(elt, link) ((void *)((elt)->link.prev) != (void *)(-1))
 
 #define HEAD(list) ((list).head)
 #define TAIL(list) ((list).tail)
@@ -50,7 +49,7 @@
 		(elt)->link.prev = NULL; \
 		(elt)->link.next = (list).head; \
 		(list).head = (elt); \
-	} while (/*CONSTCOND*/0)
+	} while (0)
 
 #define APPEND(list, elt, link) \
 	do { \
@@ -62,25 +61,21 @@
 		(elt)->link.prev = (list).tail; \
 		(elt)->link.next = NULL; \
 		(list).tail = (elt); \
-	} while (/*CONSTCOND*/0)
+	} while (0)
 
 #define UNLINK_TYPE(list, elt, link, type) \
 	do { \
 		INSIST(LINKED(elt, link));\
 		if ((elt)->link.next != NULL) \
 			(elt)->link.next->link.prev = (elt)->link.prev; \
-		else { \
-			INSIST((list).tail == (elt)); \
+		else \
 			(list).tail = (elt)->link.prev; \
-		} \
 		if ((elt)->link.prev != NULL) \
 			(elt)->link.prev->link.next = (elt)->link.next; \
-		else { \
-			INSIST((list).head == (elt)); \
+		else \
 			(list).head = (elt)->link.next; \
-		} \
 		INIT_LINK_TYPE(elt, link, type); \
-	} while (/*CONSTCOND*/0)
+	} while (0)
 #define UNLINK(list, elt, link) \
 	UNLINK_TYPE(list, elt, link, void)
 
@@ -98,7 +93,7 @@
 			(elt)->link.prev->link.next = (elt); \
 			(elt)->link.next = (before); \
 		} \
-	} while (/*CONSTCOND*/0)
+	} while (0)
 
 #define INSERT_AFTER(list, after, elt, link) \
 	do { \
@@ -111,10 +106,9 @@
 			(elt)->link.next->link.prev = (elt); \
 			(elt)->link.prev = (after); \
 		} \
-	} while (/*CONSTCOND*/0)
+	} while (0)
 
 #define ENQUEUE(list, elt, link) APPEND(list, elt, link)
 #define DEQUEUE(list, elt, link) UNLINK(list, elt, link)
 
 #endif /* LIST_H */
-/*! \file */

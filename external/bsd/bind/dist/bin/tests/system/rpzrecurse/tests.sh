@@ -1,6 +1,6 @@
 #!/bin/sh
 #
-# Copyright (C) 2015, 2016  Internet Systems Consortium, Inc. ("ISC")
+# Copyright (C) 2015  Internet Systems Consortium, Inc. ("ISC")
 #
 # Permission to use, copy, modify, and/or distribute this software for any
 # purpose with or without fee is hereby granted, provided that the above
@@ -38,7 +38,7 @@ run_query() {
     TESTNAME=$1
     LINE=$2
 
-    NAME=`sed -n -e "$LINE,"'$p' ns2/$TESTNAME.queries | head -n 1`
+    NAME=`tail -n +"$LINE" ns2/$TESTNAME.queries | head -n 1`
     $DIG $DIGOPTS $NAME a @10.53.0.2 -p 5300 -b 127.0.0.1 > dig.out.${t}
     grep "status: SERVFAIL" dig.out.${t} > /dev/null 2>&1 && return 1
     return 0
@@ -50,7 +50,7 @@ expect_norecurse() {
     TESTNAME=$1
     LINE=$2
 
-    NAME=`sed -n -e "$LINE,"'$p' ns2/$TESTNAME.queries | head -n 1`
+    NAME=`tail -n +"$LINE" ns2/$TESTNAME.queries | head -n 1`
     t=`expr $t + 1`
     echo "I:testing $NAME doesn't recurse (${t})"
     run_query $TESTNAME $LINE || {
@@ -65,7 +65,7 @@ expect_recurse() {
     TESTNAME=$1
     LINE=$2
 
-    NAME=`sed -n -e "$LINE,"'$p' ns2/$TESTNAME.queries | head -n 1`
+    NAME=`tail -n +"$LINE" ns2/$TESTNAME.queries | head -n 1`
     t=`expr $t + 1`
     echo "I:testing $NAME recurses (${t})"
     run_query $TESTNAME $LINE && {
@@ -173,13 +173,7 @@ echo "I:running dig to cache CNAME record (${t})"
 $DIG $DIGOPTS @10.53.0.2 -p 5300 www.test.example.org CNAME > dig.out.${t}
 sleep 1
 echo "I:suspending authority server"
-if [ "$CYGWIN" ]; then
-    WINPID=`cat ns1/named.pid`
-    PID=`ps | sed 's/^..//' | awk '$4 == '$WINPID | awk '{print $1}'`
-else
-    PID=`cat ns1/named.pid`
-fi
-kill -TSTP $PID
+kill -TSTP `cat ns1/named.pid`
 echo "I:adding an NSDNAME policy"
 cp ns2/db.6a.00.policy.local ns2/saved.policy.local
 cp ns2/db.6b.00.policy.local ns2/db.6a.00.policy.local
@@ -194,13 +188,7 @@ cp ns2/db.6c.00.policy.local ns2/db.6a.00.policy.local
 $RNDC -c ../common/rndc.conf -s 10.53.0.2 -p 9953 reload 6a.00.policy.local 2>&1 | sed 's/^/I:ns2 /'
 sleep 1
 echo "I:resuming authority server"
-if [ "$CYGWIN" ]; then
-    WINPID=`cat ns1/named.pid`
-    PID=`ps | sed 's/^..//' | awk '$4 == '$WINPID | awk '{print $1}'`
-else
-    PID=`cat ns1/named.pid`
-fi
-kill -CONT $PID
+kill -CONT `cat ns1/named.pid`
 for n in 1 2 3 4 5 6 7 8 9; do
     sleep 1
     [ -s dig.out.${t} ] || continue
@@ -219,13 +207,7 @@ echo "I:running dig to cache CNAME record (${t})"
 $DIG $DIGOPTS @10.53.0.2 -p 5300 www.test.example.org CNAME > dig.out.${t}
 sleep 1
 echo "I:suspending authority server"
-if [ "$CYGWIN" ]; then
-    WINPID=`cat ns1/named.pid`
-    PID=`ps | sed 's/^..//' | awk '$4 == '$WINPID | awk '{print $1}'`
-else
-    PID=`cat ns1/named.pid`
-fi
-kill -TSTP $PID
+kill -TSTP `cat ns1/named.pid`
 echo "I:adding an NSDNAME policy"
 cp ns2/db.6b.00.policy.local ns2/db.6a.00.policy.local
 $RNDC -c ../common/rndc.conf -s 10.53.0.2 -p 9953 reload 6a.00.policy.local 2>&1 | sed 's/^/I:ns2 /'
@@ -235,17 +217,11 @@ echo "I:running dig to follow CNAME (blocks, so runs in the background) (${t})"
 $DIG $DIGOPTS @10.53.0.2 -p 5300 www.test.example.org A > dig.out.${t} &
 sleep 1
 echo "I:removing the policy zone"
-cp ns2/named.default.conf ns2/named.conf
-$RNDC -c ../common/rndc.conf -s 10.53.0.2 -p 9953 reconfig 2>&1 | sed 's/^/I:ns2 /'
+cp ns2/named.default.conf ns2/db.6a.00.policy.local
+$RNDC -c ../common/rndc.conf -s 10.53.0.2 -p 9953 reload 6a.00.policy.local 2>&1 | sed 's/^/I:ns2 /'
 sleep 1
 echo "I:resuming authority server"
-if [ "$CYGWIN" ]; then
-    WINPID=`cat ns1/named.pid`
-    PID=`ps | sed 's/^..//' | awk '$4 == '$WINPID | awk '{print $1}'`
-else
-    PID=`cat ns1/named.pid`
-fi
-kill -CONT $PID
+kill -CONT `cat ns1/named.pid`
 for n in 1 2 3 4 5 6 7 8 9; do
     sleep 1
     [ -s dig.out.${t} ] || continue
@@ -269,78 +245,4 @@ grep "^l2.l1.l0.[[:space:]]*[0-9]*[[:space:]]*IN[[:space:]]*A[[:space:]]*10.53.0
     status=1
 }
 
-# Check CLIENT-IP behavior #2
-t=`expr $t + 1`
-echo "I:testing CLIENT-IP behavior #2 (${t})"
-run_server clientip2
-$DIG $DIGOPTS l2.l1.l0 a @10.53.0.2 -p 5300 -b 10.53.0.1 > dig.out.${t}.1
-grep "status: SERVFAIL" dig.out.${t}.1 > /dev/null 2>&1 || {
-    echo "I:test $t failed: query failed"
-    status=1
-}
-$DIG $DIGOPTS l2.l1.l0 a @10.53.0.2 -p 5300 -b 10.53.0.2 > dig.out.${t}.2
-grep "status: NXDOMAIN" dig.out.${t}.2 > /dev/null 2>&1 || {
-    echo "I:test $t failed: query failed"
-    status=1
-}
-$DIG $DIGOPTS l2.l1.l0 a @10.53.0.2 -p 5300 -b 10.53.0.3 > dig.out.${t}.3
-grep "status: NOERROR" dig.out.${t}.3 > /dev/null 2>&1 || {
-    echo "I:test $t failed: query failed"
-    status=1
-}
-grep "^l2.l1.l0.[ 	]*[0-9]*[ 	]*IN[ 	]*A[ 	]*10.53.0.1" dig.out.${t}.3 > /dev/null 2>&1 || {
-    echo "I:test $t failed: didn't get expected answer"
-    status=1
-}
-$DIG $DIGOPTS l2.l1.l0 a @10.53.0.2 -p 5300 -b 10.53.0.4 > dig.out.${t}.4
-grep "status: SERVFAIL" dig.out.${t}.4 > /dev/null 2>&1 || {
-    echo "I:test $t failed: query failed"
-    status=1
-}
-
-# Check wildcard behavior
-
-t=`expr $t + 1`
-echo "I:testing wildcard behavior with 1 RPZ zone (${t})"
-run_server wildcard1
-$DIG $DIGOPTS www.test1.example.net a @10.53.0.2 -p 5300 > dig.out.${t}.1
-grep "status: NXDOMAIN" dig.out.${t}.1 > /dev/null || {
-    echo "I:test ${t} failed"
-    status=1
-}
-$DIG $DIGOPTS test1.example.net a @10.53.0.2 -p 5300 > dig.out.${t}.2
-grep "status: NXDOMAIN" dig.out.${t}.2 > /dev/null || {
-    echo "I:test ${t} failed"
-    status=1
-}
-
-t=`expr $t + 1`
-echo "I:testing wildcard behavior with 2 RPZ zones (${t})"
-run_server wildcard2
-$DIG $DIGOPTS www.test1.example.net a @10.53.0.2 -p 5300 > dig.out.${t}.1
-grep "status: NXDOMAIN" dig.out.${t}.1 > /dev/null || {
-    echo "I:test ${t} failed"
-    status=1
-}
-$DIG $DIGOPTS test1.example.net a @10.53.0.2 -p 5300 > dig.out.${t}.2
-grep "status: NXDOMAIN" dig.out.${t}.2 > /dev/null || {
-    echo "I:test ${t} failed"
-    status=1
-}
-
-t=`expr $t + 1`
-echo "I:testing wildcard behavior with 1 RPZ zone and no non-wildcard triggers (${t})"
-run_server wildcard3
-$DIG $DIGOPTS www.test1.example.net a @10.53.0.2 -p 5300 > dig.out.${t}.1
-grep "status: NXDOMAIN" dig.out.${t}.1 > /dev/null || {
-    echo "I:test ${t} failed"
-    status=1
-}
-$DIG $DIGOPTS test1.example.net a @10.53.0.2 -p 5300 > dig.out.${t}.2
-grep "status: NOERROR" dig.out.${t}.2 > /dev/null || {
-    echo "I:test ${t} failed"
-    status=1
-}
-
-echo "I:exit status: $status"
-[ $status -eq 0 ] || exit 1
+exit $status

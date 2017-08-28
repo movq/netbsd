@@ -1,7 +1,7 @@
-/*	$NetBSD: net.c,v 1.9 2015/12/17 04:00:45 christos Exp $	*/
+/*	$NetBSD: net.c,v 1.1 2009/03/22 15:02:24 christos Exp $	*/
 
 /*
- * Copyright (C) 2004, 2005, 2007-2009, 2011-2015  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2004, 2005, 2007, 2008  Internet Systems Consortium, Inc. ("ISC")
  * Copyright (C) 1999-2003  Internet Software Consortium.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -17,7 +17,7 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* Id */
+/* Id: net.c,v 1.18 2008/08/08 05:06:49 marka Exp */
 
 #include <config.h>
 
@@ -66,6 +66,7 @@ void InitSockets(void);
 static isc_result_t
 try_proto(int domain) {
 	SOCKET s;
+	isc_result_t result = ISC_R_SUCCESS;
 	char strbuf[ISC_STRERRORSIZE];
 	int errval;
 
@@ -167,8 +168,7 @@ try_ipv6only(void) {
 	}
 
 	on = 1;
-	if (setsockopt(s, IPPROTO_IPV6, IPV6_V6ONLY, (const char *)&on,
-		       sizeof(on)) < 0) {
+	if (setsockopt(s, IPPROTO_IPV6, IPV6_V6ONLY, &on, sizeof(on)) < 0) {
 		ipv6only_result = ISC_R_NOTFOUND;
 		goto close;
 	}
@@ -191,8 +191,7 @@ try_ipv6only(void) {
 	}
 
 	on = 1;
-	if (setsockopt(s, IPPROTO_IPV6, IPV6_V6ONLY, (const char *)&on,
-		       sizeof(on)) < 0) {
+	if (setsockopt(s, IPPROTO_IPV6, IPV6_V6ONLY, &on, sizeof(on)) < 0) {
 		ipv6only_result = ISC_R_NOTFOUND;
 		goto close;
 	}
@@ -200,7 +199,7 @@ try_ipv6only(void) {
 	ipv6only_result = ISC_R_SUCCESS;
 
 close:
-	closesocket(s);
+	closeocket(s);
 	return;
 #endif /* IPV6_V6ONLY */
 }
@@ -211,16 +210,9 @@ initialize_ipv6only(void) {
 				  try_ipv6only) == ISC_R_SUCCESS);
 }
 
-#ifdef __notyet__
-/*
- * XXXMPA requires win32/socket.c to be updated to support
- * WSASendMsg and WSARecvMsg which are themselves Winsock
- * and compiler version dependent.
- */
 static void
 try_ipv6pktinfo(void) {
-	SOCKET s;
-	int on;
+	int s, on;
 	char strbuf[ISC_STRERRORSIZE];
 	isc_result_t result;
 	int optname;
@@ -270,7 +262,6 @@ initialize_ipv6pktinfo(void) {
 	RUNTIME_CHECK(isc_once_do(&once_ipv6pktinfo,
 				  try_ipv6pktinfo) == ISC_R_SUCCESS);
 }
-#endif /* __notyet__ */
 #endif /* WANT_IPV6 */
 #endif /* ISC_PLATFORM_HAVEIPV6 */
 
@@ -288,7 +279,6 @@ isc_net_probe_ipv6only(void) {
 
 isc_result_t
 isc_net_probe_ipv6pktinfo(void) {
-#ifdef __notyet__
 #ifdef ISC_PLATFORM_HAVEIPV6
 #ifdef WANT_IPV6
 	initialize_ipv6pktinfo();
@@ -296,7 +286,6 @@ isc_net_probe_ipv6pktinfo(void) {
 	ipv6pktinfo_result = ISC_R_NOTFOUND;
 #endif
 #endif
-#endif /* __notyet__ */
 	return (ipv6pktinfo_result);
 }
 
@@ -342,9 +331,4 @@ isc_net_enableipv6(void) {
 	initialize();
 	if (ipv6_result == ISC_R_DISABLED)
 		ipv6_result = ISC_R_SUCCESS;
-}
-
-unsigned int
-isc_net_probedscp(void) {
-	return (0);
 }

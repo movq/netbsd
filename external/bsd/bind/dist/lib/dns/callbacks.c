@@ -1,7 +1,7 @@
-/*	$NetBSD: callbacks.c,v 1.6 2015/12/17 04:00:43 christos Exp $	*/
+/*	$NetBSD: callbacks.c,v 1.1 2009/03/22 15:00:59 christos Exp $	*/
 
 /*
- * Copyright (C) 2004, 2005, 2007, 2011, 2012, 2015  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2004, 2005, 2007  Internet Systems Consortium, Inc. ("ISC")
  * Copyright (C) 1999-2001  Internet Software Consortium.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -17,13 +17,12 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* Id: callbacks.c,v 1.19.40.1 2012/02/07 00:44:13 each Exp  */
+/* Id: callbacks.c,v 1.17 2007/06/19 23:47:16 tbox Exp */
 
 /*! \file */
 
 #include <config.h>
 
-#include <isc/print.h>
 #include <isc/util.h>
 
 #include <dns/callbacks.h>
@@ -90,10 +89,7 @@ static void
 dns_rdatacallbacks_initcommon(dns_rdatacallbacks_t *callbacks) {
 	REQUIRE(callbacks != NULL);
 
-	callbacks->magic = DNS_CALLBACK_MAGIC;
 	callbacks->add = NULL;
-	callbacks->rawdata = NULL;
-	callbacks->zone = NULL;
 	callbacks->add_private = NULL;
 	callbacks->error_private = NULL;
 	callbacks->warn_private = NULL;

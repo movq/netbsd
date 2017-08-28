@@ -1,6 +1,6 @@
 #!/bin/sh
 #
-# Copyright (C) 2010-2012, 2014, 2016  Internet Systems Consortium, Inc. ("ISC")
+# Copyright (C) 2010  Internet Systems Consortium, Inc. ("ISC")
 #
 # Permission to use, copy, modify, and/or distribute this software for any
 # purpose with or without fee is hereby granted, provided that the above
@@ -14,11 +14,20 @@
 # OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR
 # PERFORMANCE OF THIS SOFTWARE.
 
-SYSTEMTESTTOP=..
-. $SYSTEMTESTTOP/conf.sh
+# Id: prereq.sh,v 1.4 2010-12-20 23:47:20 tbox Exp
 
-$FEATURETEST --have-dlopen ||  {
-        echo "I:dlopen() not supported - skipping dlzexternal test"
-        exit 255
+TOP=${SYSTEMTESTTOP:=.}/../../../..
+
+# enable the dlzexternal test only if it builds and dlz-dlopen was enabled
+$TOP/bin/named/named -V | grep with.dlz.dlopen | grep -v with.dlz.dlopen=no > /dev/null || {
+    echo "I:not built with --with-dlz-dlopen=yes - skipping dlzexternal test"
+    exit 255
+}
+
+cd ../../../../contrib/dlz/example && make all > /dev/null || {
+    echo "I:build of dlz_example.so failed - skipping dlzexternal test"
+    exit 1
 }
 exit 0
+
+

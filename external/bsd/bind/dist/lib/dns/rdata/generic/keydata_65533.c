@@ -1,7 +1,7 @@
-/*	$NetBSD: keydata_65533.c,v 1.9 2015/12/17 04:00:44 christos Exp $	*/
+/*	$NetBSD: keydata_65533.c,v 1.1 2009/10/25 00:02:40 christos Exp $	*/
 
 /*
- * Copyright (C) 2009, 2011-2013, 2015  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2009  Internet Systems Consortium, Inc. ("ISC")
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -16,26 +16,24 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
+/* Id: keydata_65533.c,v 1.2 2009/06/30 02:52:32 each Exp */
+
 #ifndef GENERIC_KEYDATA_65533_C
 #define GENERIC_KEYDATA_65533_C 1
 
-#include <isc/time.h>
-#include <isc/stdtime.h>
-
 #include <dst/dst.h>
 
-#define RRTYPE_KEYDATA_ATTRIBUTES (0)
+#define RRTYPE_KEYDATA_ATTRIBUTES (DNS_RDATATYPEATTR_DNSSEC)
 
 static inline isc_result_t
 fromtext_keydata(ARGS_FROMTEXT) {
-	isc_result_t result;
 	isc_token_t token;
 	dns_secalg_t alg;
 	dns_secproto_t proto;
 	dns_keyflags_t flags;
 	isc_uint32_t refresh, addhd, removehd;
 
-	REQUIRE(type == dns_rdatatype_keydata);
+	REQUIRE(type == 65533);
 
 	UNUSED(type);
 	UNUSED(rdclass);
@@ -83,15 +81,7 @@ fromtext_keydata(ARGS_FROMTEXT) {
 	if ((flags & 0xc000) == 0xc000)
 		return (ISC_R_SUCCESS);
 
-	result = isc_base64_tobuffer(lexer, target, -1);
-	if (result != ISC_R_SUCCESS)
-		return (result);
-
-	/* Ensure there's at least enough data to compute a key ID for MD5 */
-	if (alg == DST_ALG_RSAMD5 && isc_buffer_usedlength(target) < 19)
-		return (ISC_R_UNEXPECTEDEND);
-
-	return (ISC_R_SUCCESS);
+	return (isc_base64_tobuffer(lexer, target, -1));
 }
 
 static inline isc_result_t
@@ -100,33 +90,29 @@ totext_keydata(ARGS_TOTEXT) {
 	char buf[sizeof("64000")];
 	unsigned int flags;
 	unsigned char algorithm;
-	unsigned long refresh, add, delete;
-	char algbuf[DNS_NAME_FORMATSIZE];
-	const char *keyinfo;
+	unsigned long when;
 
-	REQUIRE(rdata->type == dns_rdatatype_keydata);
-
-	if ((tctx->flags & DNS_STYLEFLAG_KEYDATA) == 0 || rdata->length < 16)
-		return (unknown_totext(rdata, tctx, target));
+	REQUIRE(rdata->type == 65533);
+	REQUIRE(rdata->length != 0);
 
 	dns_rdata_toregion(rdata, &sr);
 
 	/* refresh timer */
-	refresh = uint32_fromregion(&sr);
+	when = uint32_fromregion(&sr);
 	isc_region_consume(&sr, 4);
-	RETERR(dns_time32_totext(refresh, target));
+	RETERR(dns_time32_totext(when, target));
 	RETERR(str_totext(" ", target));
 
 	/* add hold-down */
-	add = uint32_fromregion(&sr);
+	when = uint32_fromregion(&sr);
 	isc_region_consume(&sr, 4);
-	RETERR(dns_time32_totext(add, target));
+	RETERR(dns_time32_totext(when, target));
 	RETERR(str_totext(" ", target));
 
 	/* remove hold-down */
-	delete = uint32_fromregion(&sr);
+	when = uint32_fromregion(&sr);
 	isc_region_consume(&sr, 4);
-	RETERR(dns_time32_totext(delete, target));
+	RETERR(dns_time32_totext(when, target));
 	RETERR(str_totext(" ", target));
 
 	/* flags */
@@ -135,13 +121,6 @@ totext_keydata(ARGS_TOTEXT) {
 	sprintf(buf, "%u", flags);
 	RETERR(str_totext(buf, target));
 	RETERR(str_totext(" ", target));
-	if ((flags & DNS_KEYFLAG_KSK) != 0) {
-		if (flags & DNS_KEYFLAG_REVOKE)
-			keyinfo = "revoked KSK";
-		else
-			keyinfo = "KSK";
-	} else
-		keyinfo = "ZSK";
 
 	/* protocol */
 	sprintf(buf, "%u", sr.base[0]);
@@ -163,13 +142,10 @@ totext_keydata(ARGS_TOTEXT) {
 	if ((tctx->flags & DNS_STYLEFLAG_MULTILINE) != 0)
 		RETERR(str_totext(" (", target));
 	RETERR(str_totext(tctx->linebreak, target));
-	if (tctx->width == 0)   /* No splitting */
-		RETERR(isc_base64_totext(&sr, 60, "", target));
-	else
-		RETERR(isc_base64_totext(&sr, tctx->width - 2,
-					 tctx->linebreak, target));
+	RETERR(isc_base64_totext(&sr, tctx->width - 2,
+				 tctx->linebreak, target));
 
-	if ((tctx->flags & DNS_STYLEFLAG_RRCOMMENT) != 0)
+	if ((tctx->flags & DNS_STYLEFLAG_COMMENT) != 0)
 		RETERR(str_totext(tctx->linebreak, target));
 	else if ((tctx->flags & DNS_STYLEFLAG_MULTILINE) != 0)
 		RETERR(str_totext(" ", target));
@@ -177,66 +153,15 @@ totext_keydata(ARGS_TOTEXT) {
 	if ((tctx->flags & DNS_STYLEFLAG_MULTILINE) != 0)
 		RETERR(str_totext(")", target));
 
-	if ((tctx->flags & DNS_STYLEFLAG_RRCOMMENT) != 0) {
+	if ((tctx->flags & DNS_STYLEFLAG_COMMENT) != 0) {
 		isc_region_t tmpr;
-		char rbuf[ISC_FORMATHTTPTIMESTAMP_SIZE];
-		char abuf[ISC_FORMATHTTPTIMESTAMP_SIZE];
-		char dbuf[ISC_FORMATHTTPTIMESTAMP_SIZE];
-		isc_time_t t;
 
-		RETERR(str_totext(" ; ", target));
-		RETERR(str_totext(keyinfo, target));
-		dns_secalg_format((dns_secalg_t) algorithm, algbuf,
-				  sizeof(algbuf));
-		RETERR(str_totext("; alg = ", target));
-		RETERR(str_totext(algbuf, target));
-		RETERR(str_totext("; key id = ", target));
+		RETERR(str_totext(" ; key id = ", target));
 		dns_rdata_toregion(rdata, &tmpr);
 		/* Skip over refresh, addhd, and removehd */
 		isc_region_consume(&tmpr, 12);
 		sprintf(buf, "%u", dst_region_computeid(&tmpr, algorithm));
 		RETERR(str_totext(buf, target));
-
-		if ((tctx->flags & DNS_STYLEFLAG_MULTILINE) != 0) {
-			isc_stdtime_t now;
-
-			isc_stdtime_get(&now);
-
-			RETERR(str_totext(tctx->linebreak, target));
-			RETERR(str_totext("; next refresh: ", target));
-			isc_time_set(&t, refresh, 0);
-			isc_time_formathttptimestamp(&t, rbuf, sizeof(rbuf));
-			RETERR(str_totext(rbuf, target));
-
-			if (add == 0U) {
-				RETERR(str_totext(tctx->linebreak, target));
-				RETERR(str_totext("; no trust", target));
-			} else {
-				RETERR(str_totext(tctx->linebreak, target));
-				if (add < now) {
-					RETERR(str_totext("; trusted since: ",
-							  target));
-				} else {
-					RETERR(str_totext("; trust pending: ",
-							  target));
-				}
-				isc_time_set(&t, add, 0);
-				isc_time_formathttptimestamp(&t, abuf,
-							     sizeof(abuf));
-				RETERR(str_totext(abuf, target));
-			}
-
-			if (delete != 0U) {
-				RETERR(str_totext(tctx->linebreak, target));
-				RETERR(str_totext("; removal pending: ",
-						  target));
-				isc_time_set(&t, delete, 0);
-				isc_time_formathttptimestamp(&t, dbuf,
-							     sizeof(dbuf));
-				RETERR(str_totext(dbuf, target));
-			}
-		}
-
 	}
 	return (ISC_R_SUCCESS);
 }
@@ -245,7 +170,7 @@ static inline isc_result_t
 fromwire_keydata(ARGS_FROMWIRE) {
 	isc_region_t sr;
 
-	REQUIRE(type == dns_rdatatype_keydata);
+	REQUIRE(type == 65533);
 
 	UNUSED(type);
 	UNUSED(rdclass);
@@ -253,6 +178,9 @@ fromwire_keydata(ARGS_FROMWIRE) {
 	UNUSED(options);
 
 	isc_buffer_activeregion(source, &sr);
+	if (sr.length < 4)
+		return (ISC_R_UNEXPECTEDEND);
+
 	isc_buffer_forward(source, sr.length);
 	return (mem_tobuffer(target, sr.base, sr.length));
 }
@@ -261,7 +189,8 @@ static inline isc_result_t
 towire_keydata(ARGS_TOWIRE) {
 	isc_region_t sr;
 
-	REQUIRE(rdata->type == dns_rdatatype_keydata);
+	REQUIRE(rdata->type == 65533);
+	REQUIRE(rdata->length != 0);
 
 	UNUSED(cctx);
 
@@ -276,7 +205,9 @@ compare_keydata(ARGS_COMPARE) {
 
 	REQUIRE(rdata1->type == rdata2->type);
 	REQUIRE(rdata1->rdclass == rdata2->rdclass);
-	REQUIRE(rdata1->type == dns_rdatatype_keydata);
+	REQUIRE(rdata1->type == 65533);
+	REQUIRE(rdata1->length != 0);
+	REQUIRE(rdata2->length != 0);
 
 	dns_rdata_toregion(rdata1, &r1);
 	dns_rdata_toregion(rdata2, &r2);
@@ -287,7 +218,7 @@ static inline isc_result_t
 fromstruct_keydata(ARGS_FROMSTRUCT) {
 	dns_rdata_keydata_t *keydata = source;
 
-	REQUIRE(type == dns_rdatatype_keydata);
+	REQUIRE(type == 65533);
 	REQUIRE(source != NULL);
 	REQUIRE(keydata->common.rdtype == type);
 	REQUIRE(keydata->common.rdclass == rdclass);
@@ -322,8 +253,9 @@ tostruct_keydata(ARGS_TOSTRUCT) {
 	dns_rdata_keydata_t *keydata = target;
 	isc_region_t sr;
 
-	REQUIRE(rdata->type == dns_rdatatype_keydata);
+	REQUIRE(rdata->type == 65533);
 	REQUIRE(target != NULL);
+	REQUIRE(rdata->length != 0);
 
 	keydata->common.rdclass = rdata->rdclass;
 	keydata->common.rdtype = rdata->type;
@@ -382,7 +314,7 @@ freestruct_keydata(ARGS_FREESTRUCT) {
 	dns_rdata_keydata_t *keydata = (dns_rdata_keydata_t *) source;
 
 	REQUIRE(source != NULL);
-	REQUIRE(keydata->common.rdtype == dns_rdatatype_keydata);
+	REQUIRE(keydata->common.rdtype == 65533);
 
 	if (keydata->mctx == NULL)
 		return;
@@ -394,7 +326,7 @@ freestruct_keydata(ARGS_FREESTRUCT) {
 
 static inline isc_result_t
 additionaldata_keydata(ARGS_ADDLDATA) {
-	REQUIRE(rdata->type == dns_rdatatype_keydata);
+	REQUIRE(rdata->type == 65533);
 
 	UNUSED(rdata);
 	UNUSED(add);
@@ -407,7 +339,7 @@ static inline isc_result_t
 digest_keydata(ARGS_DIGEST) {
 	isc_region_t r;
 
-	REQUIRE(rdata->type == dns_rdatatype_keydata);
+	REQUIRE(rdata->type == 65533);
 
 	dns_rdata_toregion(rdata, &r);
 
@@ -417,7 +349,7 @@ digest_keydata(ARGS_DIGEST) {
 static inline isc_boolean_t
 checkowner_keydata(ARGS_CHECKOWNER) {
 
-	REQUIRE(type == dns_rdatatype_keydata);
+	REQUIRE(type == 65533);
 
 	UNUSED(name);
 	UNUSED(type);
@@ -430,18 +362,13 @@ checkowner_keydata(ARGS_CHECKOWNER) {
 static inline isc_boolean_t
 checknames_keydata(ARGS_CHECKNAMES) {
 
-	REQUIRE(rdata->type == dns_rdatatype_keydata);
+	REQUIRE(rdata->type == 65533);
 
 	UNUSED(rdata);
 	UNUSED(owner);
 	UNUSED(bad);
 
 	return (ISC_TRUE);
-}
-
-static inline int
-casecompare_keydata(ARGS_COMPARE) {
-	return (compare_keydata(rdata1, rdata2));
 }
 
 #endif /* GENERIC_KEYDATA_65533_C */

@@ -1,6 +1,6 @@
 #!/bin/sh -e
 #
-# Copyright (C) 2010-2014  Internet Systems Consortium, Inc. ("ISC")
+# Copyright (C) 2010  Internet Systems Consortium, Inc. ("ISC")
 #
 # Permission to use, copy, modify, and/or distribute this software for any
 # purpose with or without fee is hereby granted, provided that the above
@@ -14,13 +14,8 @@
 # OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR
 # PERFORMANCE OF THIS SOFTWARE.
 
-SYSTEMTESTTOP=..
-. $SYSTEMTESTTOP/conf.sh
+# Id: setup.sh,v 1.2.2.3 2010/11/17 23:46:50 tbox Exp
 
-test -r $RANDFILE || $GENRANDOM 400 $RANDFILE
+../../../tools/genrandom 400 random.data
 
-cp ns4/tld1.db ns4/tld.db
-cp ns6/to-be-removed.tld.db.in ns6/to-be-removed.tld.db
-cp ns7/server.db.in ns7/server.db
-cp ns7/named1.conf ns7/named.conf
-(cd ns6 && $SHELL keygen.sh)
+(cd ns6 && sh keygen.sh)

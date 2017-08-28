@@ -1,7 +1,7 @@
-/*	$NetBSD: backtrace.c,v 1.8 2015/12/17 04:00:45 christos Exp $	*/
+/*	$NetBSD: backtrace.c,v 1.1 2009/10/25 00:02:42 christos Exp $	*/
 
 /*
- * Copyright (C) 2009, 2013-2015  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2009  Internet Systems Consortium, Inc. ("ISC")
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -16,7 +16,7 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* Id: backtrace.c,v 1.3 2009/09/02 23:48:02 tbox Exp  */
+/* Id: backtrace.c,v 1.3 2009/09/02 23:48:02 tbox Exp */
 
 /*! \file */
 
@@ -53,8 +53,6 @@
 #define BACKTRACE_LIBC
 #elif defined(__GNUC__) && (defined(__x86_64__) || defined(__ia64__))
 #define BACKTRACE_GCC
-#elif defined(WIN32)
-#define BACKTRACE_WIN32
 #elif defined(__x86_64__) || defined(__i386__)
 #define BACKTRACE_X86STACK
 #else
@@ -131,18 +129,10 @@ isc_backtrace_gettrace(void **addrs, int maxaddrs, int *nframes) {
 
 	return (ISC_R_SUCCESS);
 }
-#elif defined(BACKTRACE_WIN32)
-isc_result_t
-isc_backtrace_gettrace(void **addrs, int maxaddrs, int *nframes) {
-	unsigned long ftc = (unsigned long)maxaddrs;
-
-	*nframes = (int)CaptureStackBackTrace(1, ftc, addrs, NULL);
-	return ISC_R_SUCCESS;
-}
 #elif defined(BACKTRACE_X86STACK)
 #ifdef __x86_64__
 static unsigned long
-getrbp(void) {
+getrbp() {
 	__asm("movq %rbp, %rax\n");
 }
 #endif
@@ -197,7 +187,7 @@ isc_backtrace_gettrace(void **addrs, int maxaddrs, int *nframes) {
 	 * first argument.  Note that the body of this function cannot be
 	 * inlined since it depends on the address of the function argument.
 	 */
-	sp = (void **)(void *)&addrs - 2;
+	sp = (void **)&addrs - 2;
 #endif
 
 	while (sp != NULL && i < maxaddrs) {
@@ -223,17 +213,17 @@ isc_backtrace_gettrace(void **addrs, int maxaddrs, int *nframes) {
 #endif
 
 isc_result_t
-isc_backtrace_getsymbolfromindex(int idx, const void **addrp,
+isc_backtrace_getsymbolfromindex(int index, const void **addrp,
 				 const char **symbolp)
 {
 	REQUIRE(addrp != NULL && *addrp == NULL);
 	REQUIRE(symbolp != NULL && *symbolp == NULL);
 
-	if (idx < 0 || idx >= isc__backtrace_nsymbols)
+	if (index < 0 || index >= isc__backtrace_nsymbols)
 		return (ISC_R_RANGE);
 
-	*addrp = isc__backtrace_symtable[idx].addr;
-	*symbolp = isc__backtrace_symtable[idx].symbol;
+	*addrp = isc__backtrace_symtable[index].addr;
+	*symbolp = isc__backtrace_symtable[index].symbol;
 	return (ISC_R_SUCCESS);
 }
 
@@ -290,8 +280,7 @@ isc_backtrace_getsymbol(const void *addr, const char **symbolp,
 		result = ISC_R_NOTFOUND;
 	else {
 		*symbolp = found->symbol;
-		*offsetp = (unsigned long) ((const char *)addr -
-					    (char *)found->addr);
+		*offsetp = (const char *)addr - (char *)found->addr;
 	}
 
 	return (result);

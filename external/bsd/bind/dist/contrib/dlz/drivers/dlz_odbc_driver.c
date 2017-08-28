@@ -1,4 +1,4 @@
-/*	$NetBSD: dlz_odbc_driver.c,v 1.5 2014/12/10 04:37:55 christos Exp $	*/
+/*	$NetBSD: dlz_odbc_driver.c,v 1.1 2009/03/22 14:57:12 christos Exp $	*/
 
 /*
  * Copyright (C) 2002 Stichting NLnet, Netherlands, stichting@nlnet.nl.
@@ -736,7 +736,7 @@ odbc_get_resultset(const char *zone, const char *record,
 static isc_result_t
 odbc_getField(SQLHSTMT *stmnt, SQLSMALLINT field, char **data) {
 
-	SQLLEN size;
+	SQLINTEGER size;
 
 	REQUIRE(data != NULL && *data == NULL);
 
@@ -765,7 +765,7 @@ odbc_getManyFields(SQLHSTMT *stmnt, SQLSMALLINT startField,
 		   SQLSMALLINT endField, char **retData) {
 
 	isc_result_t result;
-	SQLLEN size;
+	SQLINTEGER size;
 	int totSize = 0;
 	SQLSMALLINT i;
 	int j = 0;
@@ -965,16 +965,13 @@ odbc_process_rs(dns_sdlzlookup_t *lookup, dbinstance_t *dbi)
 /*% determine if the zone is supported by (in) the database */
 
 static isc_result_t
-odbc_findzone(void *driverarg, void *dbdata, const char *name,
-	      dns_clientinfomethods_t *methods, dns_clientinfo_t *clientinfo)
+odbc_findzone(void *driverarg, void *dbdata, const char *name)
 {
 
 	isc_result_t result;
 	dbinstance_t *dbi = NULL;
 
 	UNUSED(driverarg);
-	UNUSED(methods);
-	UNUSED(clientinfo);
 
 	/* run the query and get the result set from the database. */
 	/* if result != ISC_R_SUCCESS cursor and mutex already cleaned up. */
@@ -1012,7 +1009,7 @@ odbc_allowzonexfr(void *driverarg, void *dbdata, const char *name,
 	UNUSED(driverarg);
 
 	/* first check if the zone is supported by the database. */
-	result = odbc_findzone(driverarg, dbdata, name, NULL, NULL);
+	result = odbc_findzone(driverarg, dbdata, name);
 	if (result != ISC_R_SUCCESS)
 		return (ISC_R_NOTFOUND);
 
@@ -1224,15 +1221,12 @@ odbc_authority(const char *zone, void *driverarg, void *dbdata,
 
 static isc_result_t
 odbc_lookup(const char *zone, const char *name, void *driverarg,
-	    void *dbdata, dns_sdlzlookup_t *lookup,
-	    dns_clientinfomethods_t *methods, dns_clientinfo_t *clientinfo)
+	    void *dbdata, dns_sdlzlookup_t *lookup)
 {
 	isc_result_t result;
 	dbinstance_t *dbi = NULL;
 
 	UNUSED(driverarg);
-	UNUSED(methods);
-	UNUSED(clientinfo);
 
 	/* run the query and get the result set from the database. */
 	result = odbc_get_resultset(zone, name, NULL, LOOKUP, dbdata, &dbi);
@@ -1514,14 +1508,7 @@ static dns_sdlzmethods_t dlz_odbc_methods = {
 	odbc_lookup,
 	odbc_authority,
 	odbc_allnodes,
-	odbc_allowzonexfr,
-	NULL,
-	NULL,
-	NULL,
-	NULL,
-	NULL,
-	NULL,
-	NULL,
+	odbc_allowzonexfr
 };
 
 /*%

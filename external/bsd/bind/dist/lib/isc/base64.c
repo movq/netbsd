@@ -1,7 +1,7 @@
-/*	$NetBSD: base64.c,v 1.7 2016/05/26 16:49:59 christos Exp $	*/
+/*	$NetBSD: base64.c,v 1.1 2009/03/22 15:02:01 christos Exp $	*/
 
 /*
- * Copyright (C) 2004, 2005, 2007, 2009, 2013-2015  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2004, 2005, 2007  Internet Systems Consortium, Inc. ("ISC")
  * Copyright (C) 1998-2001, 2003  Internet Software Consortium.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -17,7 +17,7 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* Id: base64.c,v 1.34 2009/10/21 23:48:05 tbox Exp  */
+/* Id: base64.c,v 1.32 2007/06/19 23:47:17 tbox Exp */
 
 /*! \file */
 
@@ -33,7 +33,7 @@
 	isc_result_t _r = (x); \
 	if (_r != ISC_R_SUCCESS) \
 		return (_r); \
-	} while (/*CONSTCOND*/0)
+	} while (0)
 
 
 /*@{*/
@@ -87,13 +87,11 @@ isc_base64_totext(isc_region_t *source, int wordlength,
 		buf[2] = base64[((source->base[1]<<2)&0x3c)];
 		buf[3] = '=';
 		RETERR(str_totext(buf, target));
-		isc_region_consume(source, 2);
 	} else if (source->length == 1) {
 		buf[0] = base64[(source->base[0]>>2)&0x3f];
 		buf[1] = base64[((source->base[0]<<4)&0x30)];
 		buf[2] = buf[3] = '=';
 		RETERR(str_totext(buf, target));
-		isc_region_consume(source, 1);
 	}
 	return (ISC_R_SUCCESS);
 }
@@ -120,13 +118,13 @@ base64_decode_init(base64_decode_ctx_t *ctx, int length, isc_buffer_t *target)
 
 static inline isc_result_t
 base64_decode_char(base64_decode_ctx_t *ctx, int c) {
-	const char *s;
+	char *s;
 
 	if (ctx->seen_end)
 		return (ISC_R_BADBASE64);
 	if ((s = strchr(base64, c)) == NULL)
 		return (ISC_R_BADBASE64);
-	ctx->val[ctx->digits++] = (int)(s - base64);
+	ctx->val[ctx->digits++] = s - base64;
 	if (ctx->digits == 4) {
 		int n;
 		unsigned char buf[3];
@@ -221,7 +219,7 @@ isc_base64_decodestring(const char *cstr, isc_buffer_t *target) {
 			continue;
 		RETERR(base64_decode_char(&ctx, c));
 	}
-	RETERR(base64_decode_finish(&ctx));
+	RETERR(base64_decode_finish(&ctx));	
 	return (ISC_R_SUCCESS);
 }
 
@@ -236,7 +234,7 @@ str_totext(const char *source, isc_buffer_t *target) {
 	if (l > region.length)
 		return (ISC_R_NOSPACE);
 
-	memmove(region.base, source, l);
+	memcpy(region.base, source, l);
 	isc_buffer_add(target, l);
 	return (ISC_R_SUCCESS);
 }
@@ -248,7 +246,7 @@ mem_tobuffer(isc_buffer_t *target, void *base, unsigned int length) {
 	isc_buffer_availableregion(target, &tr);
 	if (length > tr.length)
 		return (ISC_R_NOSPACE);
-	memmove(tr.base, base, length);
+	memcpy(tr.base, base, length);
 	isc_buffer_add(target, length);
 	return (ISC_R_SUCCESS);
 }

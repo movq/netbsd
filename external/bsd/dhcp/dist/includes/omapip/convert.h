@@ -1,10 +1,11 @@
-/*	$NetBSD: convert.h,v 1.1.1.3 2014/07/12 11:57:57 spz Exp $	*/
+/*	$NetBSD: convert.h,v 1.1 2013/03/24 15:45:50 christos Exp $	*/
+
 /* convert.h
 
    Safe copying of integers into and out of a non-aligned memory buffer. */
 
 /*
- * Copyright (c) 2004,2009,2014 by Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (c) 2004,2009 by Internet Systems Consortium, Inc. ("ISC")
  * Copyright (c) 1996-2003 by Internet Software Consortium
  *
  * Permission to use, copy, modify, and distribute this software for any
@@ -25,7 +26,16 @@
  *   <info@isc.org>
  *   https://www.isc.org/
  *
+ * This software has been written for Internet Systems Consortium
+ * by Ted Lemon in cooperation with Vixie Enterprises and Nominum, Inc.
+ * To learn more about Internet Systems Consortium, see
+ * ``https://www.isc.org/''.  To learn more about Vixie Enterprises,
+ * see ``http://www.vix.com''.   To learn more about Nominum, Inc., see
+ * ``http://www.nominum.com''.
  */
+
+#include <sys/cdefs.h>
+__RCSID("$NetBSD: convert.h,v 1.1 2013/03/24 15:45:50 christos Exp $");
 
 #ifndef OMAPI_CONVERT_H
 #define OMAPI_CONVERT_H

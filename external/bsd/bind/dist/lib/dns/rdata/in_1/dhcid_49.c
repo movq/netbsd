@@ -1,7 +1,7 @@
-/*	$NetBSD: dhcid_49.c,v 1.6 2015/12/17 04:00:44 christos Exp $	*/
+/*	$NetBSD: dhcid_49.c,v 1.1 2009/03/22 15:01:57 christos Exp $	*/
 
 /*
- * Copyright (C) 2006, 2007, 2009, 2011, 2012, 2015  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2006, 2007  Internet Systems Consortium, Inc. ("ISC")
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -16,7 +16,7 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* Id */
+/* Id: dhcid_49.c,v 1.5 2007/06/19 23:47:17 tbox Exp */
 
 /* RFC 4701 */
 
@@ -28,8 +28,8 @@
 static inline isc_result_t
 fromtext_in_dhcid(ARGS_FROMTEXT) {
 
-	REQUIRE(type == dns_rdatatype_dhcid);
-	REQUIRE(rdclass == dns_rdataclass_in);
+	REQUIRE(type == 49);
+	REQUIRE(rdclass == 1);
 
 	UNUSED(type);
 	UNUSED(rdclass);
@@ -46,19 +46,16 @@ totext_in_dhcid(ARGS_TOTEXT) {
 	char buf[sizeof(" ; 64000 255 64000")];
 	size_t n;
 
-	REQUIRE(rdata->type == dns_rdatatype_dhcid);
-	REQUIRE(rdata->rdclass == dns_rdataclass_in);
+	REQUIRE(rdata->type == 49);
+	REQUIRE(rdata->rdclass == 1);
 	REQUIRE(rdata->length != 0);
 
 	dns_rdata_toregion(rdata, &sr);
 
 	if ((tctx->flags & DNS_STYLEFLAG_MULTILINE) != 0)
-		RETERR(str_totext("( " /*)*/, target));
-	if (tctx->width == 0)   /* No splitting */
-		RETERR(isc_base64_totext(&sr, 60, "", target));
-	else
-		RETERR(isc_base64_totext(&sr, tctx->width - 2,
-					 tctx->linebreak, target));
+		RETERR(str_totext("( " /*)*/, target)); 
+	RETERR(isc_base64_totext(&sr, tctx->width - 2, tctx->linebreak,
+				 target));
 	if ((tctx->flags & DNS_STYLEFLAG_MULTILINE) != 0) {
 		RETERR(str_totext(/* ( */ " )", target));
 		if (rdata->length > 2) {
@@ -76,8 +73,8 @@ static inline isc_result_t
 fromwire_in_dhcid(ARGS_FROMWIRE) {
 	isc_region_t sr;
 
-	REQUIRE(type == dns_rdatatype_dhcid);
-	REQUIRE(rdclass == dns_rdataclass_in);
+	REQUIRE(type == 49);
+	REQUIRE(rdclass == 1);
 
 	UNUSED(type);
 	UNUSED(rdclass);
@@ -96,8 +93,8 @@ static inline isc_result_t
 towire_in_dhcid(ARGS_TOWIRE) {
 	isc_region_t sr;
 
-	REQUIRE(rdata->type == dns_rdatatype_dhcid);
-	REQUIRE(rdata->rdclass == dns_rdataclass_in);
+	REQUIRE(rdata->type == 49);
+	REQUIRE(rdata->rdclass == 1);
 	REQUIRE(rdata->length != 0);
 
 	UNUSED(cctx);
@@ -113,8 +110,8 @@ compare_in_dhcid(ARGS_COMPARE) {
 
 	REQUIRE(rdata1->type == rdata2->type);
 	REQUIRE(rdata1->rdclass == rdata2->rdclass);
-	REQUIRE(rdata1->type == dns_rdatatype_dhcid);
-	REQUIRE(rdata1->rdclass == dns_rdataclass_in);
+	REQUIRE(rdata1->type == 49);
+	REQUIRE(rdata1->rdclass == 1);
 	REQUIRE(rdata1->length != 0);
 	REQUIRE(rdata2->length != 0);
 
@@ -127,8 +124,8 @@ static inline isc_result_t
 fromstruct_in_dhcid(ARGS_FROMSTRUCT) {
 	dns_rdata_in_dhcid_t *dhcid = source;
 
-	REQUIRE(type == dns_rdatatype_dhcid);
-	REQUIRE(rdclass == dns_rdataclass_in);
+	REQUIRE(type == 49);
+	REQUIRE(rdclass == 1);
 	REQUIRE(source != NULL);
 	REQUIRE(dhcid->common.rdtype == type);
 	REQUIRE(dhcid->common.rdclass == rdclass);
@@ -145,8 +142,8 @@ tostruct_in_dhcid(ARGS_TOSTRUCT) {
 	dns_rdata_in_dhcid_t *dhcid = target;
 	isc_region_t region;
 
-	REQUIRE(rdata->type == dns_rdatatype_dhcid);
-	REQUIRE(rdata->rdclass == dns_rdataclass_in);
+	REQUIRE(rdata->type == 49);
+	REQUIRE(rdata->rdclass == 1);
 	REQUIRE(target != NULL);
 	REQUIRE(rdata->length != 0);
 
@@ -169,8 +166,8 @@ freestruct_in_dhcid(ARGS_FREESTRUCT) {
 	dns_rdata_in_dhcid_t *dhcid = source;
 
 	REQUIRE(dhcid != NULL);
-	REQUIRE(dhcid->common.rdtype == dns_rdatatype_dhcid);
-	REQUIRE(dhcid->common.rdclass == dns_rdataclass_in);
+	REQUIRE(dhcid->common.rdtype == 49);
+	REQUIRE(dhcid->common.rdclass == 1);
 
 	if (dhcid->mctx == NULL)
 		return;
@@ -182,8 +179,8 @@ freestruct_in_dhcid(ARGS_FREESTRUCT) {
 
 static inline isc_result_t
 additionaldata_in_dhcid(ARGS_ADDLDATA) {
-	REQUIRE(rdata->type == dns_rdatatype_dhcid);
-	REQUIRE(rdata->rdclass == dns_rdataclass_in);
+	REQUIRE(rdata->type == 49);
+	REQUIRE(rdata->rdclass == 1);
 
 	UNUSED(rdata);
 	UNUSED(add);
@@ -196,8 +193,8 @@ static inline isc_result_t
 digest_in_dhcid(ARGS_DIGEST) {
 	isc_region_t r;
 
-	REQUIRE(rdata->type == dns_rdatatype_dhcid);
-	REQUIRE(rdata->rdclass == dns_rdataclass_in);
+	REQUIRE(rdata->type == 49);
+	REQUIRE(rdata->rdclass == 1);
 
 	dns_rdata_toregion(rdata, &r);
 
@@ -207,8 +204,8 @@ digest_in_dhcid(ARGS_DIGEST) {
 static inline isc_boolean_t
 checkowner_in_dhcid(ARGS_CHECKOWNER) {
 
-	REQUIRE(type == dns_rdatatype_dhcid);
-	REQUIRE(rdclass == dns_rdataclass_in);
+	REQUIRE(type == 49);
+	REQUIRE(rdclass == 1);
 
 	UNUSED(name);
 	UNUSED(type);
@@ -221,19 +218,14 @@ checkowner_in_dhcid(ARGS_CHECKOWNER) {
 static inline isc_boolean_t
 checknames_in_dhcid(ARGS_CHECKNAMES) {
 
-	REQUIRE(rdata->type == dns_rdatatype_dhcid);
-	REQUIRE(rdata->rdclass == dns_rdataclass_in);
+	REQUIRE(rdata->type == 49);
+	REQUIRE(rdata->rdclass == 1);
 
 	UNUSED(rdata);
 	UNUSED(owner);
 	UNUSED(bad);
 
 	return (ISC_TRUE);
-}
-
-static inline int
-casecompare_in_dhcid(ARGS_COMPARE) {
-	return (compare_in_dhcid(rdata1, rdata2));
 }
 
 #endif	/* RDATA_IN_1_DHCID_49_C */

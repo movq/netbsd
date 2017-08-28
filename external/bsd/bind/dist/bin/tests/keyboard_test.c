@@ -1,7 +1,7 @@
-/*	$NetBSD: keyboard_test.c,v 1.7 2015/12/17 04:00:42 christos Exp $	*/
+/*	$NetBSD: keyboard_test.c,v 1.1 2009/03/22 14:56:22 christos Exp $	*/
 
 /*
- * Copyright (C) 2004, 2005, 2007, 2015  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2004, 2005, 2007  Internet Systems Consortium, Inc. ("ISC")
  * Copyright (C) 2000, 2001  Internet Software Consortium.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -17,7 +17,7 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* Id: keyboard_test.c,v 1.13 2007/06/19 23:46:59 tbox Exp  */
+/* Id: keyboard_test.c,v 1.13 2007/06/19 23:46:59 tbox Exp */
 
 /*! \file */
 #include <config.h>
@@ -26,7 +26,6 @@
 #include <stdlib.h>
 
 #include <isc/keyboard.h>
-#include <isc/print.h>
 #include <isc/util.h>
 
 static void

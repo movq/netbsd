@@ -1,7 +1,7 @@
-/*	$NetBSD: backtrace_test.c,v 1.8 2015/12/17 04:00:42 christos Exp $	*/
+/*	$NetBSD: backtrace_test.c,v 1.1 2009/10/25 00:01:35 christos Exp $	*/
 
 /*
- * Copyright (C) 2009, 2013, 2015  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2009  Internet Systems Consortium, Inc. ("ISC")
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -16,7 +16,7 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* Id: backtrace_test.c,v 1.4 2009/09/02 23:48:01 tbox Exp  */
+/* Id: backtrace_test.c,v 1.4 2009/09/02 23:48:01 tbox Exp */
 
 #include <config.h>
 
@@ -24,7 +24,6 @@
 #include <string.h>
 
 #include <isc/backtrace.h>
-#include <isc/print.h>
 #include <isc/result.h>
 
 const char *expected_symbols[] = {
@@ -75,8 +74,8 @@ func3() {
 			if (result == ISC_R_SUCCESS)
 				printf("  [%d] %s\n", i, fname);
 			else {
-				printf("  [%d] %p getsymbol failed: %s\n", i,
-				       tracebuf[i], isc_result_totext(result));
+				printf("  [%d] getsymbol failed: %s\n", i,
+				       isc_result_totext(result));
 			}
 		}
 	}

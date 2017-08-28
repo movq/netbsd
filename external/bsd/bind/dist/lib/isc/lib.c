@@ -1,7 +1,7 @@
-/*	$NetBSD: lib.c,v 1.8 2015/12/17 04:00:45 christos Exp $	*/
+/*	$NetBSD: lib.c,v 1.1 2009/03/22 15:02:04 christos Exp $	*/
 
 /*
- * Copyright (C) 2004, 2005, 2007, 2009, 2013-2015  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2004, 2005, 2007  Internet Systems Consortium, Inc. ("ISC")
  * Copyright (C) 1999-2001  Internet Software Consortium.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -17,7 +17,7 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* Id: lib.c,v 1.16 2009/09/02 23:48:02 tbox Exp  */
+/* Id: lib.c,v 1.14 2007/06/19 23:47:17 tbox Exp */
 
 /*! \file */
 
@@ -26,16 +26,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-#include <isc/app.h>
-#include <isc/lib.h>
-#include <isc/mem.h>
-#include <isc/msgs.h>
 #include <isc/once.h>
-#include <isc/print.h>
-#include <isc/socket.h>
-#include <isc/task.h>
-#include <isc/timer.h>
-#include <isc/util.h>
+#include <isc/msgs.h>
+#include <isc/lib.h>
 
 /***
  *** Globals
@@ -49,6 +42,7 @@ LIBISC_EXTERNAL_DATA isc_msgcat_t *		isc_msgcat = NULL;
  ***/
 
 static isc_once_t		msgcat_once = ISC_ONCE_INIT;
+
 
 /***
  *** Functions
@@ -84,23 +78,4 @@ isc_lib_initmsgcat(void) {
 				       ISC_MSG_FAILED, "failed"));
 		abort();
 	}
-}
-
-static isc_once_t		register_once = ISC_ONCE_INIT;
-
-static void
-do_register(void) {
-	isc_bind9 = ISC_FALSE;
-
-	RUNTIME_CHECK(isc__mem_register() == ISC_R_SUCCESS);
-	RUNTIME_CHECK(isc__app_register() == ISC_R_SUCCESS);
-	RUNTIME_CHECK(isc__task_register() == ISC_R_SUCCESS);
-	RUNTIME_CHECK(isc__socket_register() == ISC_R_SUCCESS);
-	RUNTIME_CHECK(isc__timer_register() == ISC_R_SUCCESS);
-}
-
-void
-isc_lib_register(void) {
-	RUNTIME_CHECK(isc_once_do(&register_once, do_register)
-		      == ISC_R_SUCCESS);
 }

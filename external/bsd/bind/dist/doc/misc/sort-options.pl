@@ -1,6 +1,6 @@
 #!/bin/perl
 #
-# Copyright (C) 2007, 2012, 2016  Internet Systems Consortium, Inc. ("ISC")
+# Copyright (C) 2007  Internet Systems Consortium, Inc. ("ISC")
 #
 # Permission to use, copy, modify, and/or distribute this software for any
 # purpose with or without fee is hereby granted, provided that the above
@@ -14,14 +14,14 @@
 # OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR
 # PERFORMANCE OF THIS SOFTWARE.
 
-# Id: sort-options.pl,v 1.3 2007/09/24 23:46:48 tbox Exp 
+# Id: sort-options.pl,v 1.3 2007/09/24 23:46:48 tbox Exp
 
 sub sortlevel() {
 	my @options = ();
 	my $fin = "";
 	my $i = 0;
 	while (<>) {
-		if (/^\s*};$/ || /^\s*}; \/\/.*$/) {
+		if (/^\s*};$/) {
 			$fin = $_;
 			# print 2, $_;
 			last;

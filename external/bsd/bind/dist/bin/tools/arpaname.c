@@ -1,7 +1,7 @@
-/*	$NetBSD: arpaname.c,v 1.5 2015/12/17 04:00:43 christos Exp $	*/
+/*	$NetBSD: arpaname.c,v 1.1 2009/10/25 00:01:38 christos Exp $	*/
 
 /*
- * Copyright (C) 2009, 2015  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2009  Internet Systems Consortium, Inc. ("ISC")
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -16,16 +16,17 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* Id: arpaname.c,v 1.4 2009/10/27 03:05:33 marka Exp  */
+/* Id: arpaname.c,v 1.3 2009/06/18 16:02:25 each Exp */
 
 #include "config.h"
 
-#include <isc/net.h>
-#include <isc/print.h>
-
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
 #include <stdio.h>
 
-#define UNUSED(x) (void)&(x)
+#define UNUSED(x) (void)(x)
 
 int
 main(int argc, char *argv[]) {

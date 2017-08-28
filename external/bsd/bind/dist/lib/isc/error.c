@@ -1,7 +1,7 @@
-/*	$NetBSD: error.c,v 1.5 2015/12/17 04:00:45 christos Exp $	*/
+/*	$NetBSD: error.c,v 1.1 2009/03/22 15:02:00 christos Exp $	*/
 
 /*
- * Copyright (C) 2004, 2005, 2007, 2015  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2004, 2005, 2007  Internet Systems Consortium, Inc. ("ISC")
  * Copyright (C) 1998-2001  Internet Software Consortium.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -17,7 +17,7 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* Id: error.c,v 1.21 2007/06/19 23:47:17 tbox Exp  */
+/* Id: error.c,v 1.21 2007/06/19 23:47:17 tbox Exp */
 
 /*! \file */
 
@@ -28,7 +28,6 @@
 
 #include <isc/error.h>
 #include <isc/msgs.h>
-#include <isc/print.h>
 
 /*% Default unexpected callback. */
 static void

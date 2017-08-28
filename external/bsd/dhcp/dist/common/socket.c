@@ -1,10 +1,11 @@
-/*	$NetBSD: socket.c,v 1.2 2017/06/28 02:46:30 manu Exp $	*/
+/*	$NetBSD: socket.c,v 1.1 2013/03/24 15:45:55 christos Exp $	*/
+
 /* socket.c
 
    BSD socket interface code... */
 
 /*
- * Copyright (c) 2004-2015 by Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (c) 2004-2011 by Internet Systems Consortium, Inc. ("ISC")
  * Copyright (c) 1995-2003 by Internet Software Consortium
  *
  * Permission to use, copy, modify, and distribute this software for any
@@ -25,10 +26,16 @@
  *   <info@isc.org>
  *   https://www.isc.org/
  *
+ * This software has been written for Internet Systems Consortium
+ * by Ted Lemon in cooperation with Vixie Enterprises and Nominum, Inc.
+ * To learn more about Internet Systems Consortium, see
+ * ``https://www.isc.org/''.  To learn more about Vixie Enterprises,
+ * see ``http://www.vix.com''.   To learn more about Nominum, Inc., see
+ * ``http://www.nominum.com''.
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: socket.c,v 1.2 2017/06/28 02:46:30 manu Exp $");
+__RCSID("$NetBSD: socket.c,v 1.1 2013/03/24 15:45:55 christos Exp $");
 
 /* SO_BINDTODEVICE support added by Elliot Poger (poger@leland.stanford.edu).
  * This sockopt allows a socket to be bound to a particular interface,
@@ -49,7 +56,6 @@ __RCSID("$NetBSD: socket.c,v 1.2 2017/06/28 02:46:30 manu Exp $");
 #include <net/if.h>
 #include <sys/sockio.h>
 #include <net/if_dl.h>
-#include <sys/dlpi.h>
 #endif
 
 #ifdef USE_SOCKET_FALLBACK
@@ -65,7 +71,6 @@ __RCSID("$NetBSD: socket.c,v 1.2 2017/06/28 02:46:30 manu Exp $");
  * XXX: this is gross.  we need to go back and overhaul the API for socket
  * handling.
  */
-static int no_global_v6_socket = 0;
 static unsigned int global_v6_socket_references = 0;
 static int global_v6_socket = -1;
 
@@ -126,7 +131,7 @@ void if_reinitialize_receive (info)
 /* Generic interface registration routine... */
 int
 if_register_socket(struct interface_info *info, int family,
-		   int *do_multicast, struct in6_addr *linklocal6)
+		   int *do_multicast)
 {
 	struct sockaddr_storage name;
 	int name_len;
@@ -159,13 +164,11 @@ if_register_socket(struct interface_info *info, int family,
 	case AF_INET6:
 		addr6 = (struct sockaddr_in6 *)&name; 
 		addr6->sin6_family = AF_INET6;
-		addr6->sin6_port = *libdhcp_callbacks.local_port;
-		if (linklocal6) {
-			memcpy(&addr6->sin6_addr,
-			       linklocal6,
-			       sizeof(addr6->sin6_addr));
-			addr6->sin6_scope_id = if_nametoindex(info->name);
-		}
+		addr6->sin6_port = local_port;
+		/* XXX: What will happen to multicasts if this is nonzero? */
+		memcpy(&addr6->sin6_addr,
+		       &local_address6, 
+		       sizeof(addr6->sin6_addr));
 #ifdef HAVE_SA_LEN
 		addr6->sin6_len = sizeof(*addr6);
 #endif
@@ -181,7 +184,7 @@ if_register_socket(struct interface_info *info, int family,
 	default:
 		addr = (struct sockaddr_in *)&name; 
 		addr->sin_family = AF_INET;
-		addr->sin_port = *libdhcp_callbacks.local_port;
+		addr->sin_port = local_port;
 		memcpy(&addr->sin_addr,
 		       &local_address,
 		       sizeof(addr->sin_addr));
@@ -222,9 +225,9 @@ if_register_socket(struct interface_info *info, int family,
 	 * daemons can bind to their own sockets and get data for their
 	 * respective interfaces.  This does not (and should not) affect
 	 * DHCPv4 sockets; we can't yet support BSD sockets well, much
-	 * less multiple sockets. Make sense only with multicast.
+	 * less multiple sockets.
 	 */
-	if ((local_family == AF_INET6) && *do_multicast) {
+	if (local_family == AF_INET6) {
 		flag = 1;
 		if (setsockopt(sock, SOL_SOCKET, SO_REUSEPORT,
 			       (char *)&flag, sizeof(flag)) < 0) {
@@ -304,24 +307,18 @@ if_register_socket(struct interface_info *info, int family,
 #endif
 	}
 
+	if ((family == AF_INET6) &&
+	    ((info->flags & INTERFACE_UPSTREAM) != 0)) {
+		int hop_limit = 32;
+		if (setsockopt(sock, IPPROTO_IPV6, IPV6_MULTICAST_HOPS,
+			       &hop_limit, sizeof(int)) < 0) {
+			log_fatal("setsockopt: IPV6_MULTICAST_HOPS: %m");
+		}
+	}
 #endif /* DHCPv6 */
 
 	return sock;
 }
-
-#ifdef DHCPv6
-void set_multicast_hop_limit(struct interface_info* info, int hop_limit) {
-	if (setsockopt(info->wfdesc, IPPROTO_IPV6, IPV6_MULTICAST_HOPS,
-		       &hop_limit, sizeof(int)) < 0) {
-		log_fatal("setMulticaseHopLimit: IPV6_MULTICAST_HOPS: %m");
-	}
-
-	log_debug("Setting hop count limit to %d for interface %s",
-		  hop_limit, info->name);
-
-}
-#endif /* DHCPv6 */
-
 #endif /* USE_SOCKET_SEND || USE_SOCKET_RECEIVE || USE_SOCKET_FALLBACK */
 
 #if defined (USE_SOCKET_SEND) || defined (USE_SOCKET_FALLBACK)
@@ -329,7 +326,7 @@ void if_register_send (info)
 	struct interface_info *info;
 {
 #ifndef USE_SOCKET_RECEIVE
-	info->wfdesc = if_register_socket(info, AF_INET, 0, NULL);
+	info->wfdesc = if_register_socket(info, AF_INET, 0);
 	/* If this is a normal IPv4 address, get the hardware address. */
 	if (strcmp(info->name, "fallback") != 0)
 		get_hw_addr(info->name, &info->hw_address);
@@ -375,7 +372,7 @@ void if_register_receive (info)
 
 #if defined(IP_PKTINFO) && defined(IP_RECVPKTINFO) && defined(USE_V4_PKTINFO)
 	if (global_v4_socket_references == 0) {
-		global_v4_socket = if_register_socket(info, AF_INET, 0, NULL);
+		global_v4_socket = if_register_socket(info, AF_INET, 0);
 		if (global_v4_socket < 0) {
 			/*
 			 * if_register_socket() fatally logs if it fails to
@@ -391,7 +388,7 @@ void if_register_receive (info)
 #else
 	/* If we're using the socket API for sending and receiving,
 	   we don't need to register this interface twice. */
-	info->rfdesc = if_register_socket(info, AF_INET, 0, NULL);
+	info->rfdesc = if_register_socket(info, AF_INET, 0);
 #endif /* IP_PKTINFO... */
 	/* If this is a normal IPv4 address, get the hardware address. */
 	if (strcmp(info->name, "fallback") != 0)
@@ -484,13 +481,9 @@ if_register6(struct interface_info *info, int do_multicast) {
 	/* Bounce do_multicast to a stack variable because we may change it. */
 	int req_multi = do_multicast;
 
-	if (no_global_v6_socket) {
-		log_fatal("Impossible condition at %s:%d", MDL);
-	}
-
 	if (global_v6_socket_references == 0) {
 		global_v6_socket = if_register_socket(info, AF_INET6,
-						      &req_multi, NULL);
+						      &req_multi);
 		if (global_v6_socket < 0) {
 			/*
 			 * if_register_socket() fatally logs if it fails to
@@ -498,8 +491,7 @@ if_register6(struct interface_info *info, int do_multicast) {
 			 */
 			log_fatal("Impossible condition at %s:%d", MDL);
 		} else {
-			log_info("Bound to *:%d",
-				 ntohs(*libdhcp_callbacks.local_port));
+			log_info("Bound to *:%d", ntohs(local_port));
 		}
 	}
 		
@@ -527,73 +519,12 @@ if_register6(struct interface_info *info, int do_multicast) {
 	}
 }
 
-/*
- * Register an IPv6 socket bound to the link-local address of
- * the argument interface (used by clients on a multiple interface box,
- * vs. a server or a relay using the global IPv6 socket and running
- * *only* in a single instance).
- */
-void
-if_register_linklocal6(struct interface_info *info) {
-	int sock;
-	int count;
-	struct in6_addr *addr6 = NULL;
-	int req_multi = 0;
-
-	if (global_v6_socket >= 0) {
-		log_fatal("Impossible condition at %s:%d", MDL);
-	}
-		
-	no_global_v6_socket = 1;
-
-	/* get the (?) link-local address */
-	for (count = 0; count < info->v6address_count; count++) {
-		addr6 = &info->v6addresses[count];
-		if (IN6_IS_ADDR_LINKLOCAL(addr6))
-			break;
-	}
-
-	if (!addr6) {
-		log_fatal("no link-local IPv6 address for %s", info->name);
-	}
-
-	sock = if_register_socket(info, AF_INET6, &req_multi, addr6);
-
-	if (sock < 0) {
-		log_fatal("if_register_socket for %s fails", info->name);
-	}
-
-	info->rfdesc = sock;
-	info->wfdesc = sock;
-
-	get_hw_addr(info->name, &info->hw_address);
-
-	if (!quiet_interface_discovery) {
-		if (info->shared_network != NULL) {
-			log_info("Listening on Socket/%d/%s/%s",
-				 global_v6_socket, info->name, 
-				 info->shared_network->name);
-			log_info("Sending on   Socket/%d/%s/%s",
-				 global_v6_socket, info->name,
-				 info->shared_network->name);
-		} else {
-			log_info("Listening on Socket/%s", info->name);
-			log_info("Sending on   Socket/%s", info->name);
-		}
-	}
-}
-
 void 
 if_deregister6(struct interface_info *info) {
-	/* client case */
-	if (no_global_v6_socket) {
-		close(info->rfdesc);
-		info->rfdesc = -1;
-		info->wfdesc = -1;
-	} else if ((info->rfdesc == global_v6_socket) &&
-		   (info->wfdesc == global_v6_socket) &&
-		   (global_v6_socket_references > 0)) {
-		/* Dereference the global v6 socket. */
+	/* Dereference the global v6 socket. */
+	if ((info->rfdesc == global_v6_socket) &&
+	    (info->wfdesc == global_v6_socket) &&
+	    (global_v6_socket_references > 0)) {
 		global_v6_socket_references--;
 		info->rfdesc = -1;
 		info->wfdesc = -1;
@@ -613,13 +544,11 @@ if_deregister6(struct interface_info *info) {
 		}
 	}
 
-	if (!no_global_v6_socket &&
-	    (global_v6_socket_references == 0)) {
+	if (global_v6_socket_references == 0) {
 		close(global_v6_socket);
 		global_v6_socket = -1;
 
-		log_info("Unbound from *:%d",
-			 ntohs(*libdhcp_callbacks.local_port));
+		log_info("Unbound from *:%d", ntohs(local_port));
 	}
 }
 #endif /* DHCPv6 */
@@ -767,11 +696,9 @@ ssize_t send_packet6(struct interface_info *interface,
 		     struct sockaddr_in6 *to) {
 	struct msghdr m;
 	struct iovec v;
-	struct sockaddr_in6 dst;
 	int result;
 	struct in6_pktinfo *pktinfo;
 	struct cmsghdr *cmsg;
-	unsigned int ifindex;
 
 	/*
 	 * If necessary allocate space for the control message header.
@@ -794,14 +721,9 @@ ssize_t send_packet6(struct interface_info *interface,
 
 	/*
 	 * Set the target address we're sending to.
-	 * Enforce the scope ID for bogus BSDs.
 	 */
-	memcpy(&dst, to, sizeof(dst));
-	m.msg_name = &dst;
-	m.msg_namelen = sizeof(dst);
-	ifindex = if_nametoindex(interface->name);
-	if (no_global_v6_socket)
-		dst.sin6_scope_id = ifindex;
+	m.msg_name = to;
+	m.msg_namelen = sizeof(*to);
 
 	/*
 	 * Set the data buffer we're sending. (Using this wacky 
@@ -824,13 +746,13 @@ ssize_t send_packet6(struct interface_info *interface,
 	m.msg_control = control_buf;
 	m.msg_controllen = control_buf_len;
 	cmsg = CMSG_FIRSTHDR(&m);
-	INSIST(cmsg != NULL);
 	cmsg->cmsg_level = IPPROTO_IPV6;
 	cmsg->cmsg_type = IPV6_PKTINFO;
 	cmsg->cmsg_len = CMSG_LEN(sizeof(*pktinfo));
 	pktinfo = (struct in6_pktinfo *)CMSG_DATA(cmsg);
 	memset(pktinfo, 0, sizeof(*pktinfo));
-	pktinfo->ipi6_ifindex = ifindex;
+	pktinfo->ipi6_ifindex = if_nametoindex(interface->name);
+	m.msg_controllen = cmsg->cmsg_len;
 
 	result = sendmsg(interface->wfdesc, &m, 0);
 	if (result < 0) {
@@ -848,7 +770,7 @@ ssize_t receive_packet (interface, buf, len, from, hfrom)
 	struct sockaddr_in *from;
 	struct hardware *hfrom;
 {
-#if !(defined(IP_PKTINFO) && defined(IP_RECVPKTINFO) && defined(USE_V4_PKTINFO))
+#if !defined(USE_V4_PKTINFO)
 	SOCKLEN_T flen = sizeof *from;
 #endif
 	int result;
@@ -871,6 +793,7 @@ ssize_t receive_packet (interface, buf, len, from, hfrom)
 	struct cmsghdr *cmsg;
 	struct in_pktinfo *pktinfo;
 	unsigned int ifindex;
+	int found_pktinfo;
 
 	/*
 	 * If necessary allocate space for the control message header.
@@ -913,7 +836,7 @@ ssize_t receive_packet (interface, buf, len, from, hfrom)
 	 * We set up some space for a "control message". We have 
 	 * previously asked the kernel to give us packet 
 	 * information (when we initialized the interface), so we
-	 * should get the interface index from that.
+	 * should get the destination address from that.
 	 */
 	m.msg_control = control_buf;
 	m.msg_controllen = control_buf_len;
@@ -924,8 +847,12 @@ ssize_t receive_packet (interface, buf, len, from, hfrom)
 		/*
 		 * If we did read successfully, then we need to loop
 		 * through the control messages we received and 
-		 * find the one with our inteface index.
+		 * find the one with our destination address.
+		 *
+		 * We also keep a flag to see if we found it. If we 
+		 * didn't, then we consider this to be an error.
 		 */
+		found_pktinfo = 0;
 		cmsg = CMSG_FIRSTHDR(&m);
 		while (cmsg != NULL) {
 			if ((cmsg->cmsg_level == IPPROTO_IP) && 
@@ -939,21 +866,18 @@ ssize_t receive_packet (interface, buf, len, from, hfrom)
 				 * the discover code.
 				 */
 				memcpy(hfrom->hbuf, &ifindex, sizeof(ifindex));
-				return (result);
+				found_pktinfo = 1;
 			}
 			cmsg = CMSG_NXTHDR(&m, cmsg);
 		}
-
-		/*
-		 * We didn't find the necessary control message
-		 * flag it as an error
-		 */
-		result = -1;
-		errno = EIO;
+		if (!found_pktinfo) {
+			result = -1;
+			errno = EIO;
+		}
 	}
 #else
-		result = recvfrom(interface -> rfdesc, (char *)buf, len, 0,
-				  (struct sockaddr *)from, &flen);
+		result = recvfrom (interface -> rfdesc, (char *)buf, len, 0,
+				   (struct sockaddr *)from, &flen);
 #endif /* IP_PKTINFO ... */
 #ifdef IGNORE_HOSTUNREACH
 	} while (result < 0 &&
@@ -961,7 +885,7 @@ ssize_t receive_packet (interface, buf, len, from, hfrom)
 		  errno == ECONNREFUSED) &&
 		 retry++ < 10);
 #endif
-	return (result);
+	return result;
 }
 
 #endif /* USE_SOCKET_RECEIVE */
@@ -978,6 +902,7 @@ receive_packet6(struct interface_info *interface,
 	int result;
 	struct cmsghdr *cmsg;
 	struct in6_pktinfo *pktinfo;
+	int found_pktinfo;
 
 	/*
 	 * If necessary allocate space for the control message header.
@@ -1032,7 +957,11 @@ receive_packet6(struct interface_info *interface,
 		 * If we did read successfully, then we need to loop
 		 * through the control messages we received and 
 		 * find the one with our destination address.
+		 *
+		 * We also keep a flag to see if we found it. If we 
+		 * didn't, then we consider this to be an error.
 		 */
+		found_pktinfo = 0;
 		cmsg = CMSG_FIRSTHDR(&m);
 		while (cmsg != NULL) {
 			if ((cmsg->cmsg_level == IPPROTO_IPV6) && 
@@ -1040,21 +969,17 @@ receive_packet6(struct interface_info *interface,
 				pktinfo = (struct in6_pktinfo *)CMSG_DATA(cmsg);
 				*to_addr = pktinfo->ipi6_addr;
 				*if_idx = pktinfo->ipi6_ifindex;
-
-				return (result);
+				found_pktinfo = 1;
 			}
 			cmsg = CMSG_NXTHDR(&m, cmsg);
 		}
-
-		/*
-		 * We didn't find the necessary control message
-		 * flag is as an error
-		 */
-		result = -1;
-		errno = EIO;
+		if (!found_pktinfo) {
+			result = -1;
+			errno = EIO;
+		}
 	}
 
-	return (result);
+	return result;
 }
 #endif /* DHCPv6 */
 
@@ -1082,9 +1007,6 @@ isc_result_t fallback_discard (object)
 		log_error ("fallback_discard: %m");
 		return ISC_R_UNEXPECTED;
 	}
-#else
-        /* ignore the fact that status value is never used */
-        IGNORE_UNUSED(status);
 #endif
 	return ISC_R_SUCCESS;
 }
@@ -1128,7 +1050,7 @@ void maybe_setup_fallback ()
 	isc_result_t status;
 	struct interface_info *fbi = (struct interface_info *)0;
 	if (setup_fallback (&fbi, MDL)) {
-		fbi -> wfdesc = if_register_socket (fbi, AF_INET, 0, NULL);
+		fbi -> wfdesc = if_register_socket (fbi, AF_INET, 0);
 		fbi -> rfdesc = fbi -> wfdesc;
 		log_info ("Sending on   Socket/%s%s%s",
 		      fbi -> name,
@@ -1153,7 +1075,7 @@ void maybe_setup_fallback ()
 void
 get_hw_addr(const char *name, struct hardware *hw) {
 	struct sockaddr_dl *dladdrp;
-	int sock, i;
+	int rv, sock, i;
 	struct lifreq lifr;
 
 	memset(&lifr, 0, sizeof (lifr));
@@ -1187,8 +1109,7 @@ get_hw_addr(const char *name, struct hardware *hw) {
 		hw->hlen = sizeof (hw->hbuf);
 		srandom((long)gethrtime());
 
-		hw->hbuf[0] = HTYPE_IPMP;
-		for (i = 1; i < hw->hlen; ++i) {
+		for (i = 0; i < hw->hlen; ++i) {
 			hw->hbuf[i] = random() % 256;
 		}
 
@@ -1201,27 +1122,8 @@ get_hw_addr(const char *name, struct hardware *hw) {
 		log_fatal("Couldn't get interface hardware address for %s: %m",
 			  name);
 	dladdrp = (struct sockaddr_dl *)&lifr.lifr_addr;
-	hw->hlen = dladdrp->sdl_alen+1;
-	switch (dladdrp->sdl_type) {
-		case DL_CSMACD: /* IEEE 802.3 */
-		case DL_ETHER:
-			hw->hbuf[0] = HTYPE_ETHER;
-			break;
-		case DL_TPR:
-			hw->hbuf[0] = HTYPE_IEEE802;
-			break;
-		case DL_FDDI:
-			hw->hbuf[0] = HTYPE_FDDI;
-			break;
-		case DL_IB:
-			hw->hbuf[0] = HTYPE_INFINIBAND;
-			break;
-		default:
-			log_fatal("%s: unsupported DLPI MAC type %lu", name,
-				  (unsigned long)dladdrp->sdl_type);
-	}
-
-	memcpy(hw->hbuf+1, LLADDR(dladdrp), hw->hlen-1);
+	hw->hlen = dladdrp->sdl_alen;
+	memcpy(hw->hbuf, LLADDR(dladdrp), hw->hlen);
 
 	if (sock != -1)
 		(void) close(sock);

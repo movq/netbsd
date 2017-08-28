@@ -1,7 +1,7 @@
-/*	$NetBSD: print.c,v 1.7 2015/12/17 04:00:46 christos Exp $	*/
+/*	$NetBSD: print.c,v 1.1 2009/03/22 15:02:39 christos Exp $	*/
 
 /*
- * Copyright (C) 2004, 2005, 2007, 2011, 2012, 2014, 2015  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2004, 2005, 2007  Internet Systems Consortium, Inc. ("ISC")
  * Copyright (C) 1999-2001, 2003  Internet Software Consortium.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -17,6 +17,8 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
+/* Id: print.c,v 1.10 2007/06/19 23:47:22 tbox Exp */
+
 #include <config.h>
 
 #include <ctype.h>
@@ -26,7 +28,6 @@
 #define	LWRES__PRINT_SOURCE	/* Used to get the lwres_print_* prototypes. */
 
 #include <lwres/stdlib.h>
-#include <lwres/string.h>
 
 #include "assert_p.h"
 #include "print_p.h"
@@ -68,7 +69,6 @@ lwres__print_vsnprintf(char *str, size_t size, const char *format, va_list ap) {
 	int h;
 	int l;
 	int q;
-	int z;
 	int alt;
 	int zero;
 	int left;
@@ -113,11 +113,10 @@ lwres__print_vsnprintf(char *str, size_t size, const char *format, va_list ap) {
 		/*
 		 * Reset flags.
 		 */
-		dot = space = plus = left = zero = alt = h = l = q = z = 0;
+		dot = space = plus = left = zero = alt = h = l = q = 0;
 		width = precision = 0;
 		head = "";
 		length = pad = zeropad = 0;
-		POST(length);
 
 		do {
 			if (*format == '#') {
@@ -197,10 +196,6 @@ lwres__print_vsnprintf(char *str, size_t size, const char *format, va_list ap) {
 				format++;
 			}
 			goto doint;
-		case 'z':
-			z = 1;
-			format++;
-			goto doint;
 		case 'n':
 		case 'i':
 		case 'd':
@@ -223,11 +218,6 @@ lwres__print_vsnprintf(char *str, size_t size, const char *format, va_list ap) {
 					p = va_arg(ap, long *);
 					REQUIRE(p != NULL);
 					*p = str - save;
-				} else if (z) {
-					size_t *p;
-					p = va_arg(ap, size_t *);
-					REQUIRE(p != NULL);
-					*p = str - save;
 				} else {
 					int *p;
 					p = va_arg(ap, int *);
@@ -241,8 +231,6 @@ lwres__print_vsnprintf(char *str, size_t size, const char *format, va_list ap) {
 					tmpi = va_arg(ap, long long int);
 				else if (l)
 					tmpi = va_arg(ap, long int);
-				else if (z)
-					tmpi = va_arg(ap, size_t);
 				else
 					tmpi = va_arg(ap, int);
 				if (tmpi < 0) {
@@ -266,8 +254,6 @@ lwres__print_vsnprintf(char *str, size_t size, const char *format, va_list ap) {
 						       unsigned long long int);
 				else if (l)
 					tmpui = va_arg(ap, long int);
-				else if (z)
-					tmpui = va_arg(ap, size_t);
 				else
 					tmpui = va_arg(ap, int);
 				sprintf(buf,
@@ -281,8 +267,6 @@ lwres__print_vsnprintf(char *str, size_t size, const char *format, va_list ap) {
 						       unsigned long long int);
 				else if (l)
 					tmpui = va_arg(ap, unsigned long int);
-				else if (z)
-					tmpui = va_arg(ap, size_t);
 				else
 					tmpui = va_arg(ap, unsigned int);
 				sprintf(buf, "%" LWRES_PRINT_QUADFORMAT "u",
@@ -294,8 +278,6 @@ lwres__print_vsnprintf(char *str, size_t size, const char *format, va_list ap) {
 						       unsigned long long int);
 				else if (l)
 					tmpui = va_arg(ap, unsigned long int);
-				else if (z)
-					tmpui = va_arg(ap, size_t);
 				else
 					tmpui = va_arg(ap, unsigned int);
 				if (alt) {
@@ -312,8 +294,6 @@ lwres__print_vsnprintf(char *str, size_t size, const char *format, va_list ap) {
 						       unsigned long long int);
 				else if (l)
 					tmpui = va_arg(ap, unsigned long int);
-				else if (z)
-					tmpui = va_arg(ap, size_t);
 				else
 					tmpui = va_arg(ap, unsigned int);
 				if (alt) {
@@ -491,16 +471,12 @@ lwres__print_vsnprintf(char *str, size_t size, const char *format, va_list ap) {
 				pad--;
 			}
 			break;
-
 		case 'D':	/*deprecated*/
 			INSIST("use %ld instead of %D" == NULL);
-			break;
 		case 'O':	/*deprecated*/
 			INSIST("use %lo instead of %O" == NULL);
-			break;
 		case 'U':	/*deprecated*/
 			INSIST("use %lu instead of %U" == NULL);
-			break;
 
 		case 'L':
 #ifdef HAVE_LONG_DOUBLE

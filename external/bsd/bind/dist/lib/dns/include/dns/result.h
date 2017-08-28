@@ -1,7 +1,7 @@
-/*	$NetBSD: result.h,v 1.8 2017/06/15 15:59:40 christos Exp $	*/
+/*	$NetBSD: result.h,v 1.1 2009/03/22 15:01:47 christos Exp $	*/
 
 /*
- * Copyright (C) 2004-2013, 2015, 2016  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2004-2008  Internet Systems Consortium, Inc. ("ISC")
  * Copyright (C) 1998-2003  Internet Software Consortium.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -17,7 +17,7 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* Id: result.h,v 1.123 2011/03/21 07:22:14 each Exp  */
+/* Id: result.h,v 1.116 2008/09/25 04:02:39 tbox Exp */
 
 #ifndef DNS_RESULT_H
 #define DNS_RESULT_H 1
@@ -150,21 +150,8 @@
 #define DNS_R_MXISADDRESS		(ISC_RESULTCLASS_DNS + 102)
 #define DNS_R_DUPLICATE			(ISC_RESULTCLASS_DNS + 103)
 #define DNS_R_INVALIDNSEC3		(ISC_RESULTCLASS_DNS + 104)
-#define DNS_R_NOTMASTER 		(ISC_RESULTCLASS_DNS + 105)
-#define DNS_R_BROKENCHAIN		(ISC_RESULTCLASS_DNS + 106)
-#define DNS_R_EXPIRED			(ISC_RESULTCLASS_DNS + 107)
-#define DNS_R_NOTDYNAMIC 		(ISC_RESULTCLASS_DNS + 108)
-#define DNS_R_BADEUI	 		(ISC_RESULTCLASS_DNS + 109)
-#define DNS_R_NTACOVERED		(ISC_RESULTCLASS_DNS + 110)
-#define DNS_R_BADCDS			(ISC_RESULTCLASS_DNS + 111)
-#define DNS_R_BADCDNSKEY		(ISC_RESULTCLASS_DNS + 112)
-#define DNS_R_OPTERR			(ISC_RESULTCLASS_DNS + 113)
-#define DNS_R_BADDNSTAP			(ISC_RESULTCLASS_DNS + 114)
-#define DNS_R_BADTSIG			(ISC_RESULTCLASS_DNS + 115)
-#define DNS_R_BADSIG0			(ISC_RESULTCLASS_DNS + 116)
-#define DNS_R_TOOMANYRECORDS		(ISC_RESULTCLASS_DNS + 117)
 
-#define DNS_R_NRESULTS			118	/*%< Number of results */
+#define DNS_R_NRESULTS			105	/*%< Number of results */
 
 /*
  * DNS wire format rcodes.

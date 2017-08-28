@@ -1,7 +1,7 @@
-/*	$NetBSD: pkcs11dsa_link.c,v 1.1.1.7 2017/06/15 15:22:47 christos Exp $	*/
+/*	$NetBSD: pkcs11dsa_link.c,v 1.1 2014/02/28 17:40:13 christos Exp $	*/
 
 /*
- * Copyright (C) 2014-2017  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2014  Internet Systems Consortium, Inc. ("ISC")
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -16,19 +16,16 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
+/* Id */
+
 #ifdef PKCS11CRYPTO
 
 #include <config.h>
-
-#include <pk11/site.h>
-
-#ifndef PK11_DSA_DISABLE
 
 #include <string.h>
 
 #include <isc/entropy.h>
 #include <isc/mem.h>
-#include <isc/safe.h>
 #include <isc/sha1.h>
 #include <isc/util.h>
 
@@ -105,20 +102,16 @@ pkcs11dsa_createctx_sign(dst_key_t *key, dst_context_t *dctx) {
 	isc_result_t ret;
 	unsigned int i;
 
-	REQUIRE(key != NULL);
-	dsa = key->keydata.pkey;
-	REQUIRE(dsa != NULL);
-
 	pk11_ctx = (pk11_context_t *) isc_mem_get(dctx->mctx,
 						  sizeof(*pk11_ctx));
 	if (pk11_ctx == NULL)
 		return (ISC_R_NOMEMORY);
-	ret = pk11_get_session(pk11_ctx, OP_DSA, ISC_TRUE, ISC_FALSE,
-			       dsa->reqlogon, NULL,
+	ret = pk11_get_session(pk11_ctx, OP_DSA, ISC_FALSE, ISC_FALSE, NULL,
 			       pk11_get_best_token(OP_DSA));
 	if (ret != ISC_R_SUCCESS)
 		goto err;
 
+	dsa = key->keydata.pkey;
 	if (dsa->ontoken && (dsa->object != CK_INVALID_HANDLE)) {
 		pk11_ctx->ontoken = dsa->ontoken;
 		pk11_ctx->object = dsa->object;
@@ -239,18 +232,16 @@ pkcs11dsa_createctx_verify(dst_key_t *key, dst_context_t *dctx) {
 	isc_result_t ret;
 	unsigned int i;
 
-	dsa = key->keydata.pkey;
-	REQUIRE(dsa != NULL);
 	pk11_ctx = (pk11_context_t *) isc_mem_get(dctx->mctx,
 						  sizeof(*pk11_ctx));
 	if (pk11_ctx == NULL)
 		return (ISC_R_NOMEMORY);
-	ret = pk11_get_session(pk11_ctx, OP_DSA, ISC_TRUE, ISC_FALSE,
-			       dsa->reqlogon, NULL,
+	ret = pk11_get_session(pk11_ctx, OP_DSA, ISC_FALSE, ISC_FALSE, NULL,
 			       pk11_get_best_token(OP_DSA));
 	if (ret != ISC_R_SUCCESS)
 		goto err;
 
+	dsa = key->keydata.pkey;
 	if (dsa->ontoken && (dsa->object != CK_INVALID_HANDLE)) {
 		pk11_ctx->ontoken = dsa->ontoken;
 		pk11_ctx->object = dsa->object;
@@ -399,7 +390,6 @@ pkcs11dsa_sign(dst_context_t *dctx, isc_buffer_t *sig) {
 	isc_region_t r;
 	pk11_context_t *pk11_ctx = dctx->ctxdata.pk11_ctx;
 	isc_result_t ret = ISC_R_SUCCESS;
-	unsigned int klen;
 
 	isc_buffer_availableregion(sig, &r);
 	if (r.length < ISC_SHA1_DIGESTLENGTH * 2 + 1)
@@ -411,10 +401,7 @@ pkcs11dsa_sign(dst_context_t *dctx, isc_buffer_t *sig) {
 	if (siglen != ISC_SHA1_DIGESTLENGTH * 2)
 		return (DST_R_SIGNFAILURE);
 
-	klen = (dctx->key->key_size - 512)/64;
-	if (klen > 255)
-		return (ISC_R_FAILURE);
-	*r.base = klen;
+	*r.base = (dctx->key->key_size - 512)/64;
 	isc_buffer_add(sig, ISC_SHA1_DIGESTLENGTH * 2 + 1);
 
     err:
@@ -454,8 +441,7 @@ pkcs11dsa_compare(const dst_key_t *key1, const dst_key_t *key2) {
 		return (ISC_TRUE);
 	else if ((attr1 == NULL) || (attr2 == NULL) ||
 		 (attr1->ulValueLen != attr2->ulValueLen) ||
-		 !isc_safe_memequal(attr1->pValue, attr2->pValue,
-				    attr1->ulValueLen))
+		 memcmp(attr1->pValue, attr2->pValue, attr1->ulValueLen))
 		return (ISC_FALSE);
 
 	attr1 = pk11_attribute_bytype(dsa1, CKA_SUBPRIME);
@@ -464,8 +450,7 @@ pkcs11dsa_compare(const dst_key_t *key1, const dst_key_t *key2) {
 		return (ISC_TRUE);
 	else if ((attr1 == NULL) || (attr2 == NULL) ||
 		 (attr1->ulValueLen != attr2->ulValueLen) ||
-		 !isc_safe_memequal(attr1->pValue, attr2->pValue,
-				    attr1->ulValueLen))
+		 memcmp(attr1->pValue, attr2->pValue, attr1->ulValueLen))
 		return (ISC_FALSE);
 
 	attr1 = pk11_attribute_bytype(dsa1, CKA_BASE);
@@ -474,8 +459,7 @@ pkcs11dsa_compare(const dst_key_t *key1, const dst_key_t *key2) {
 		return (ISC_TRUE);
 	else if ((attr1 == NULL) || (attr2 == NULL) ||
 		 (attr1->ulValueLen != attr2->ulValueLen) ||
-		 !isc_safe_memequal(attr1->pValue, attr2->pValue,
-				    attr1->ulValueLen))
+		 memcmp(attr1->pValue, attr2->pValue, attr1->ulValueLen))
 		return (ISC_FALSE);
 
 	attr1 = pk11_attribute_bytype(dsa1, CKA_VALUE);
@@ -484,8 +468,7 @@ pkcs11dsa_compare(const dst_key_t *key1, const dst_key_t *key2) {
 		return (ISC_TRUE);
 	else if ((attr1 == NULL) || (attr2 == NULL) ||
 		 (attr1->ulValueLen != attr2->ulValueLen) ||
-		 !isc_safe_memequal(attr1->pValue, attr2->pValue,
-				    attr1->ulValueLen))
+		 memcmp(attr1->pValue, attr2->pValue, attr1->ulValueLen))
 		return (ISC_FALSE);
 
 	attr1 = pk11_attribute_bytype(dsa1, CKA_VALUE2);
@@ -493,8 +476,7 @@ pkcs11dsa_compare(const dst_key_t *key1, const dst_key_t *key2) {
 	if (((attr1 != NULL) || (attr2 != NULL)) &&
 	    ((attr1 == NULL) || (attr2 == NULL) ||
 	     (attr1->ulValueLen != attr2->ulValueLen) ||
-	     !isc_safe_memequal(attr1->pValue, attr2->pValue,
-				attr1->ulValueLen)))
+	     memcmp(attr1->pValue, attr2->pValue, attr1->ulValueLen)))
 		return (ISC_FALSE);
 
 	if (!dsa1->ontoken && !dsa2->ontoken)
@@ -560,8 +542,8 @@ pkcs11dsa_generate(dst_key_t *key, int unused, void (*callback)(int)) {
 						  sizeof(*pk11_ctx));
 	if (pk11_ctx == NULL)
 		return (ISC_R_NOMEMORY);
-	ret = pk11_get_session(pk11_ctx, OP_DSA, ISC_TRUE, ISC_FALSE,
-			       ISC_FALSE, NULL, pk11_get_best_token(OP_DSA));
+	ret = pk11_get_session(pk11_ctx, OP_DSA, ISC_FALSE, ISC_FALSE, NULL,
+			       pk11_get_best_token(OP_DSA));
 	if (ret != ISC_R_SUCCESS)
 		goto err;
 
@@ -764,25 +746,23 @@ pkcs11dsa_todns(const dst_key_t *key, isc_buffer_t *data) {
 		return (ISC_R_NOSPACE);
 
 	memset(r.base, 0, dnslen);
-	*r.base = t;
-	isc_region_consume(&r, 1);
-
+	*r.base++ = t;
 	cp = (CK_BYTE *) subprime->pValue;
 	memmove(r.base + ISC_SHA1_DIGESTLENGTH - subprime->ulValueLen,
 		cp, subprime->ulValueLen);
-	isc_region_consume(&r, ISC_SHA1_DIGESTLENGTH);
+	r.base += ISC_SHA1_DIGESTLENGTH;
 	cp = (CK_BYTE *) prime->pValue;
 	memmove(r.base + key->key_size/8 - prime->ulValueLen,
 		cp, prime->ulValueLen);
-	isc_region_consume(&r, p_bytes);
+	r.base += p_bytes;
 	cp = (CK_BYTE *) base->pValue;
 	memmove(r.base + key->key_size/8 - base->ulValueLen,
 		cp, base->ulValueLen);
-	isc_region_consume(&r, p_bytes);
+	r.base += p_bytes;
 	cp = (CK_BYTE *) pub_key->pValue;
 	memmove(r.base + key->key_size/8 - pub_key->ulValueLen,
 		cp, pub_key->ulValueLen);
-	isc_region_consume(&r, p_bytes);
+	r.base += p_bytes;
 
 	isc_buffer_add(data, dnslen);
 
@@ -806,8 +786,7 @@ pkcs11dsa_fromdns(dst_key_t *key, isc_buffer_t *data) {
 		return (ISC_R_NOMEMORY);
 	memset(dsa, 0, sizeof(*dsa));
 
-	t = (unsigned int) *r.base;
-	isc_region_consume(&r, 1);
+	t = (unsigned int) *r.base++;
 	if (t > 8) {
 		memset(dsa, 0, sizeof(*dsa));
 		isc_mem_put(key->mctx, dsa, sizeof(*dsa));
@@ -815,23 +794,23 @@ pkcs11dsa_fromdns(dst_key_t *key, isc_buffer_t *data) {
 	}
 	p_bytes = 64 + 8 * t;
 
-	if (r.length < ISC_SHA1_DIGESTLENGTH + 3 * p_bytes) {
+	if (r.length < 1 + ISC_SHA1_DIGESTLENGTH + 3 * p_bytes) {
 		memset(dsa, 0, sizeof(*dsa));
 		isc_mem_put(key->mctx, dsa, sizeof(*dsa));
 		return (DST_R_INVALIDPUBLICKEY);
 	}
 
 	subprime = r.base;
-	isc_region_consume(&r, ISC_SHA1_DIGESTLENGTH);
+	r.base += ISC_SHA1_DIGESTLENGTH;
 
 	prime = r.base;
-	isc_region_consume(&r, p_bytes);
+	r.base += p_bytes;
 
 	base = r.base;
-	isc_region_consume(&r, p_bytes);
+	r.base += p_bytes;
 
 	pub_key = r.base;
-	isc_region_consume(&r, p_bytes);
+	r.base += p_bytes;
 
 	key->key_size = p_bytes * 8;
 
@@ -1118,7 +1097,6 @@ dst__pkcs11dsa_init(dst_func_t **funcp) {
 		*funcp = &pkcs11dsa_functions;
 	return (ISC_R_SUCCESS);
 }
-#endif /* !PK11_DSA_DISABLE */
 
 #else /* PKCS11CRYPTO */
 

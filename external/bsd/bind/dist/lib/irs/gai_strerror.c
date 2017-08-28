@@ -1,7 +1,7 @@
-/*	$NetBSD: gai_strerror.c,v 1.5 2014/12/10 04:37:59 christos Exp $	*/
+/*	$NetBSD: gai_strerror.c,v 1.1 2009/10/25 00:02:42 christos Exp $	*/
 
 /*
- * Copyright (C) 2009, 2014  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2009  Internet Systems Consortium, Inc. ("ISC")
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -16,7 +16,7 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* Id: gai_strerror.c,v 1.5 2009/09/02 23:48:02 tbox Exp  */
+/* Id: gai_strerror.c,v 1.5 2009/09/02 23:48:02 tbox Exp */
 
 /*! \file gai_strerror.c
  * gai_strerror() returns an error message corresponding to an
@@ -52,8 +52,6 @@
  * strerror(), getaddrinfo(), getnameinfo(), RFC3493.
  */
 #include <config.h>
-
-#include <isc/net.h>
 
 #include <irs/netdb.h>
 

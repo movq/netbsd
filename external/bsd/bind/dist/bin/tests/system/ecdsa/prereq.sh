@@ -14,7 +14,4 @@
 # OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR
 # PERFORMANCE OF THIS SOFTWARE.
 
-SYSTEMTESTTOP=..
-. $SYSTEMTESTTOP/conf.sh
-
-exec $SHELL ../testcrypto.sh ecdsa
+exec sh ../testcrypto.sh ecdsa

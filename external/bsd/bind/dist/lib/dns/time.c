@@ -1,7 +1,7 @@
-/*	$NetBSD: time.c,v 1.6 2014/12/10 04:37:58 christos Exp $	*/
+/*	$NetBSD: time.c,v 1.1 2009/03/22 15:01:30 christos Exp $	*/
 
 /*
- * Copyright (C) 2004, 2005, 2007, 2009-2012, 2014  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2004, 2005, 2007, 2009  Internet Systems Consortium, Inc. ("ISC")
  * Copyright (C) 1998-2003  Internet Software Consortium.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -17,7 +17,7 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* Id */
+/* Id: time.c,v 1.31.332.2 2009/01/18 23:47:40 tbox Exp */
 
 /*! \file */
 
@@ -26,18 +26,16 @@
 #include <stdio.h>
 #include <isc/string.h>		/* Required for HP/UX (and others?) */
 #include <time.h>
-#include <ctype.h>
 
 #include <isc/print.h>
 #include <isc/region.h>
-#include <isc/serial.h>
 #include <isc/stdtime.h>
 #include <isc/util.h>
 
 #include <dns/result.h>
 #include <dns/time.h>
 
-static const int days[12] = { 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31 };
+static int days[12] = { 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31 };
 
 isc_result_t
 dns_time64_totext(isc_int64_t t, isc_buffer_t *target) {
@@ -47,21 +45,13 @@ dns_time64_totext(isc_int64_t t, isc_buffer_t *target) {
 	unsigned int l;
 	isc_region_t region;
 
-/*
- * Warning. Do NOT use arguments with side effects with these macros.
- */
+	REQUIRE(t >= 0);
+
 #define is_leap(y) ((((y) % 4) == 0 && ((y) % 100) != 0) || ((y) % 400) == 0)
 #define year_secs(y) ((is_leap(y) ? 366 : 365 ) * 86400)
 #define month_secs(m,y) ((days[m] + ((m == 1 && is_leap(y)) ? 1 : 0 )) * 86400)
 
 	tm.tm_year = 70;
-	while (t < 0) {
-		if (tm.tm_year == 0)
-			return (ISC_R_RANGE);
-		tm.tm_year--;
-		secs = year_secs(tm.tm_year + 1900);
-		t += secs;
-	}
 	while ((secs = year_secs(tm.tm_year + 1900)) <= t) {
 		t -= secs;
 		tm.tm_year++;
@@ -100,15 +90,16 @@ dns_time64_totext(isc_int64_t t, isc_buffer_t *target) {
 	if (l > region.length)
 		return (ISC_R_NOSPACE);
 
-	memmove(region.base, buf, l);
+	memcpy(region.base, buf, l);
 	isc_buffer_add(target, l);
 	return (ISC_R_SUCCESS);
 }
 
-isc_int64_t
-dns_time64_from32(isc_uint32_t value) {
+isc_result_t
+dns_time32_totext(isc_uint32_t value, isc_buffer_t *target) {
 	isc_stdtime_t now;
 	isc_int64_t start;
+	isc_int64_t base;
 	isc_int64_t t;
 
 	/*
@@ -119,17 +110,13 @@ dns_time64_from32(isc_uint32_t value) {
 	 */
 	isc_stdtime_get(&now);
 	start = (isc_int64_t) now;
-	if (isc_serial_gt(value, now))
-		t = start + (value - now);
-	else
-		t = start - (now - value);
-
-	return (t);
-}
-
-isc_result_t
-dns_time32_totext(isc_uint32_t value, isc_buffer_t *target) {
-	return (dns_time64_totext(dns_time64_from32(value), target));
+	start -= 0x7fffffff;
+	base = 0;
+	while ((t = (base + value)) < start) {
+		base += 0x80000000;
+		base += 0x80000000;
+	}
+	return (dns_time64_totext(t, target));
 }
 
 isc_result_t
@@ -143,57 +130,33 @@ dns_time64_fromtext(const char *source, isc_int64_t *target) {
 	do { \
 		if (value < (min) || value > (max)) \
 			return (ISC_R_RANGE); \
-	} while (/*CONSTCOND*/0)
+	} while (0)
 
 	if (strlen(source) != 14U)
 		return (DNS_R_SYNTAX);
-	/*
-	 * Confirm the source only consists digits.  sscanf() allows some
-	 * minor exceptions.
-	 */
-	for (i = 0; i < 14; i++) {
-		if (!isdigit((unsigned char)source[i]))
-			return (DNS_R_SYNTAX);
-	}
 	if (sscanf(source, "%4d%2d%2d%2d%2d%2d",
 		   &year, &month, &day, &hour, &minute, &second) != 6)
 		return (DNS_R_SYNTAX);
 
-	RANGE(0, 9999, year);
+	RANGE(1970, 9999, year);
 	RANGE(1, 12, month);
 	RANGE(1, days[month - 1] +
 		 ((month == 2 && is_leap(year)) ? 1 : 0), day);
-#ifdef __COVERITY__
-	/*
-	 * Use a simplified range to silence Coverity warning (in
-	 * arithmetic with day below).
-	 */
-	RANGE(1, 31, day);
-#endif /* __COVERITY__ */
-
 	RANGE(0, 23, hour);
 	RANGE(0, 59, minute);
 	RANGE(0, 60, second);		/* 60 == leap second. */
 
 	/*
-	 * Calculate seconds from epoch.
-	 * Note: this uses a idealized calendar.
+	 * Calculate seconds since epoch.
 	 */
 	value = second + (60 * minute) + (3600 * hour) + ((day - 1) * 86400);
 	for (i = 0; i < (month - 1); i++)
 		value += days[i] * 86400;
 	if (is_leap(year) && month > 2)
 		value += 86400;
-	if (year < 1970) {
-		for (i = 1969; i >= year; i--) {
-			secs = (is_leap(i) ? 366 : 365) * 86400;
-			value -= secs;
-		}
-	} else {
-		for (i = 1970; i < year; i++) {
-			secs = (is_leap(i) ? 366 : 365) * 86400;
-			value += secs;
-		}
+	for (i = 1970; i < year; i++) {
+		secs = (is_leap(i) ? 366 : 365) * 86400;
+		value += secs;
 	}
 
 	*target = value;

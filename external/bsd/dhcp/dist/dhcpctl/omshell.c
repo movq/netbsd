@@ -1,10 +1,11 @@
-/*	$NetBSD: omshell.c,v 1.2 2017/06/28 02:46:30 manu Exp $	*/
+/*	$NetBSD: omshell.c,v 1.1 2013/03/24 15:45:48 christos Exp $	*/
+
 /* omshell.c
 
    Examine and modify omapi objects. */
 
 /*
- * Copyright (c) 2009-2011,2013,2014 by Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (c) 2009-2011 by Internet Systems Consortium, Inc. ("ISC")
  * Copyright (c) 2004-2007 by Internet Systems Consortium, Inc. ("ISC")
  * Copyright (c) 2001-2003 by Internet Software Consortium
  *
@@ -26,10 +27,16 @@
  *   <info@isc.org>
  *   https://www.isc.org/
  *
+ * This software has been written for Internet Systems Consortium
+ * by Ted Lemon in cooperation with Vixie Enterprises and Nominum, Inc.
+ * To learn more about Internet Systems Consortium, see
+ * ``https://www.isc.org/''.  To learn more about Vixie Enterprises,
+ * see ``http://www.vix.com''.   To learn more about Nominum, Inc., see
+ * ``http://www.nominum.com''.
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: omshell.c,v 1.2 2017/06/28 02:46:30 manu Exp $");
+__RCSID("$NetBSD: omshell.c,v 1.1 2013/03/24 15:45:48 christos Exp $");
 
 #include "config.h"
 
@@ -43,23 +50,6 @@ __RCSID("$NetBSD: omshell.c,v 1.2 2017/06/28 02:46:30 manu Exp $");
 #include <syslog.h>
 #include "dhcpctl.h"
 #include "dhcpd.h"
-
-uint16_t local_port = 0;
-uint16_t remote_port = 0;
-libdhcp_callbacks_t omshell_callbacks = {
-	&local_port,
-	&remote_port,
-	classify,
-	check_collection,
-	dhcp,
-#ifdef DHCPv6
-	dhcpv6,
-#endif /* DHCPv6 */
-	bootp,
-	find_class,
-	parse_allow_deny,
-	dhcp_set_control_state,
-};
 
 /* Fixups */
 isc_result_t find_class (struct class **c, const char *n, const char *f, int l)
@@ -116,14 +106,12 @@ main(int argc, char **argv) {
 	int connected = 0;
 	char hex_buf[1025];
 
-	libdhcp_callbacks_register(&omshell_callbacks);
-
 	for (i = 1; i < argc; i++) {
 		usage(argv[0]);
 	}
 
 	/* Initially, log errors to stderr as well as to syslogd. */
-	openlog ("omshell", DHCP_LOG_OPTIONS, DHCPD_LOG_FACILITY);
+	openlog ("omshell", LOG_NDELAY, DHCPD_LOG_FACILITY);
 	status = dhcpctl_initialize ();
 	if (status != ISC_R_SUCCESS) {
 		fprintf (stderr, "dhcpctl_initialize: %s\n",
@@ -483,12 +471,8 @@ main(int argc, char **argv) {
 			    break;
 		    }
 
-#ifdef HAVE_STRLCPY
-		    strlcpy (s1, val, sizeof(s1));
-#else
-		    s1[0] = 0;
-		    strncat (s1, val, sizeof(s1)-strlen(s1)-1);
-#endif
+		    s1[0] = '\0';
+		    strncat (s1, val, sizeof(s1)-1);
 		    
 		    token = next_token (&val, (unsigned *)0, cfile);
 		    if (token != EQUAL)
@@ -591,12 +575,8 @@ main(int argc, char **argv) {
 			    break;
 		    }
 
-#if HAVE_STRLCPY
-		    strlcpy (s1, val, sizeof(s1));
-#else
-		    s1[0] = 0;
-		    strncat (s1, val, sizeof(s1)-strlen(s1)-1);
-#endif
+		    s1[0] = '\0';
+		    strncat (s1, val, sizeof(s1)-1);
 		    
 		    token = next_token (&val, (unsigned *)0, cfile);
 		    if (token != END_OF_FILE && token != EOL)
@@ -755,7 +735,5 @@ main(int argc, char **argv) {
 isc_result_t dhcp_set_control_state (control_object_state_t oldstate,
 				     control_object_state_t newstate)
 {
-	if (newstate != server_shutdown)
-		return ISC_R_SUCCESS;
-	exit (0);
+	return ISC_R_SUCCESS;
 }

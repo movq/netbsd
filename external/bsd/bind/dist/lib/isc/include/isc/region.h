@@ -1,7 +1,7 @@
-/*	$NetBSD: region.h,v 1.6 2014/12/10 04:38:00 christos Exp $	*/
+/*	$NetBSD: region.h,v 1.1 2009/03/22 15:02:14 christos Exp $	*/
 
 /*
- * Copyright (C) 2004-2007, 2013  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2004-2007  Internet Systems Consortium, Inc. ("ISC")
  * Copyright (C) 1998-2002  Internet Software Consortium.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -17,7 +17,7 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* Id: region.h,v 1.25 2007/06/19 23:47:18 tbox Exp  */
+/* Id: region.h,v 1.25 2007/06/19 23:47:18 tbox Exp */
 
 #ifndef ISC_REGION_H
 #define ISC_REGION_H 1
@@ -25,7 +25,6 @@
 /*! \file isc/region.h */
 
 #include <isc/types.h>
-#include <isc/lang.h>
 
 struct isc_region {
 	unsigned char *	base;
@@ -63,7 +62,7 @@ struct isc_consttextregion {
 		INSIST(_r->length >= _l); \
 		_r->base += _l; \
 		_r->length -= _l; \
-	} while (/*CONSTCOND*/0)
+	} while (0)
 
 #define isc_textregion_consume(r,l) \
 	do { \
@@ -72,7 +71,7 @@ struct isc_consttextregion {
 		INSIST(_r->length >= _l); \
 		_r->base += _l; \
 		_r->length -= _l; \
-	} while (/*CONSTCOND*/0)
+	} while (0)
 
 #define isc_constregion_consume(r,l) \
 	do { \
@@ -81,17 +80,15 @@ struct isc_consttextregion {
 		INSIST(_r->length >= _l); \
 		_r->base += _l; \
 		_r->length -= _l; \
-	} while (/*CONSTCOND*/0)
+	} while (0)
 /*@}*/
-
-ISC_LANG_BEGINDECLS
 
 int
 isc_region_compare(isc_region_t *r1, isc_region_t *r2);
 /*%<
- * Compares the contents of two regions
+ * Compares the contents of two regions 
  *
- * Requires:
+ * Requires: 
  *\li	'r1' is a valid region
  *\li	'r2' is a valid region
  *
@@ -100,7 +97,5 @@ isc_region_compare(isc_region_t *r1, isc_region_t *r2);
  *\li	 = 0 if r1 is lexicographically identical to r2
  *\li	 > 0 if r1 is lexicographically greater than r2
  */
-
-ISC_LANG_ENDDECLS
 
 #endif /* ISC_REGION_H */

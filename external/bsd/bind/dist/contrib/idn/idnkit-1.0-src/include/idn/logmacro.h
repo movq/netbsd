@@ -1,6 +1,6 @@
-/*	$NetBSD: logmacro.h,v 1.5 2014/12/10 04:37:55 christos Exp $	*/
+/*	$NetBSD: logmacro.h,v 1.1 2009/03/22 14:57:22 christos Exp $	*/
 
-/* Id: logmacro.h,v 1.1 2003/06/04 00:25:38 marka Exp  */
+/* Id: logmacro.h,v 1.1.1.1 2003/06/04 00:25:38 marka Exp */
 /*
  * Copyright (c) 2000 Japan Network Information Center.  All rights reserved.
  *  
@@ -64,7 +64,7 @@ extern "C" {
 #define DUMP(x)
 #endif /* DEBUG */
 
-#define LOG_AT_LEVEL(lv, fun, x) do {if (LOGLEVEL >= (lv)) fun x; } while (/*CONSTCOND*/0)
+#define LOG_AT_LEVEL(lv, fun, x) do {if (LOGLEVEL >= (lv)) fun x; } while (0)
 #define LOGLEVEL	idn_log_getlevel()
 
 #ifdef __cplusplus

@@ -1,7 +1,7 @@
-/*	$NetBSD: delv.c,v 1.6 2017/06/15 15:59:36 christos Exp $	*/
+/*	$NetBSD: delv.c,v 1.1 2014/07/08 04:45:12 spz Exp $	*/
 
 /*
- * Copyright (C) 2014-2016  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2014  Internet Systems Consortium, Inc. ("ISC")
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -86,7 +86,7 @@
 		result = (r); \
 		if (result != ISC_R_SUCCESS) \
 			goto cleanup; \
-	} while (/*CONSTCOND*/0)
+	} while (0)
 
 #define MAXNAME (DNS_NAME_MAXTEXT+1)
 
@@ -169,8 +169,7 @@ usage(void) {
 "                 -p port             (specify port number)\n"
 "                 -q name             (specify query name)\n"
 "                 -t type             (specify query type)\n"
-"                 -c class            (option included for compatibility;\n"
-"                                      only IN is supported)\n"
+"                 -c class            (specify query class)\n"
 "                 -4                  (use IPv4 query transport only)\n"
 "                 -6                  (use IPv6 query transport only)\n"
 "                 -i                  (disable DNSSEC validation)\n"
@@ -447,6 +446,8 @@ printdata(dns_rdataset_t *rdataset, dns_name_t *owner,
 			     result == ISC_R_SUCCESS;
 			     result = dns_rdataset_next(rdataset))
 			{
+				isc_region_t r;
+
 				if ((rdataset->attributes &
 				     DNS_RDATASETATTR_NEGATIVE) != 0)
 					continue;
@@ -454,18 +455,20 @@ printdata(dns_rdataset_t *rdataset, dns_name_t *owner,
 				dns_rdataset_current(rdataset, &rdata);
 				result = dns_rdata_tofmttext(&rdata,
 							     dns_rootname,
-							     styleflags, 0,
-							     splitwidth, " ",
+							     styleflags,
+							     0, 60, " ",
 							     &target);
 				if (result != ISC_R_SUCCESS)
 					break;
 
-				if (isc_buffer_availablelength(&target) < 1) {
+				isc_buffer_availableregion(&target, &r);
+				if (r.length < 1) {
 					result = ISC_R_NOSPACE;
 					break;
 				}
 
-				isc_buffer_putstr(&target, "\n");
+				r.base[0] = '\n';
+				isc_buffer_add(&target, 1);
 
 				dns_rdata_reset(&rdata);
 			}
@@ -701,7 +704,7 @@ setup_dnsseckeys(dns_client_t *client) {
 
 	if (filename == NULL) {
 #ifndef WIN32
-		filename = NS_SYSCONFDIR "/bind.keys";
+		filename = SYSCONFDIR "/bind.keys";
 #else
 		static char buf[MAX_PATH];
 		strlcpy(buf, isc_ntpaths_get(SYS_CONF_DIR), sizeof(buf));
@@ -710,17 +713,10 @@ setup_dnsseckeys(dns_client_t *client) {
 #endif
 	}
 
-	if (trust_anchor == NULL) {
+	if (trust_anchor == NULL)
 		trust_anchor = isc_mem_strdup(mctx, ".");
-		if (trust_anchor == NULL)
-			fatal("out of memory");
-	}
-
-	if (dlv_anchor == NULL) {
+	if (dlv_anchor == NULL)
 		dlv_anchor = isc_mem_strdup(mctx, "dlv.isc.org");
-		if (dlv_anchor == NULL)
-			fatal("out of memory");
-	}
 
 	CHECK(convert_name(&afn, &anchor_name, trust_anchor));
 	CHECK(convert_name(&dfn, &dlv_name, dlv_anchor));
@@ -776,7 +772,7 @@ setup_dnsseckeys(dns_client_t *client) {
 static isc_result_t
 addserver(dns_client_t *client) {
 	struct addrinfo hints, *res, *cur;
-	int gaierror;
+	int gai_error;
 	struct in_addr in4;
 	struct in6_addr in6;
 	isc_sockaddr_t *sa;
@@ -815,11 +811,11 @@ addserver(dns_client_t *client) {
 			hints.ai_family = AF_UNSPEC;
 		hints.ai_socktype = SOCK_DGRAM;
 		hints.ai_protocol = IPPROTO_UDP;
-		gaierror = getaddrinfo(server, port, &hints, &res);
-		if (gaierror != 0) {
+		gai_error = getaddrinfo(server, port, &hints, &res);
+		if (gai_error != 0) {
 			delv_log(ISC_LOG_ERROR,
 				  "getaddrinfo failed: %s",
-				  gai_strerror(gaierror));
+				  gai_strerror(gai_error));
 			return (ISC_R_FAILURE);
 		}
 
@@ -994,7 +990,7 @@ plus_option(char *option) {
 		size_t _l = strlen(cmd); \
 		if (_l >= sizeof(A) || strncasecmp(cmd, A, _l) != 0) \
 			goto invalid_option; \
-	} while (/*CONSTCOND*/0)
+	} while (0)
 
 	switch (cmd[0]) {
 	case 'a': /* all */
@@ -1032,11 +1028,8 @@ plus_option(char *option) {
 			if (state && no_sigs)
 				break;
 			dlv_validation = state;
-			if (value != NULL) {
+			if (value != NULL)
 				dlv_anchor = isc_mem_strdup(mctx, value);
-				if (dlv_anchor == NULL)
-					fatal("out of memory");
-			}
 			break;
 		case 'n': /* dnssec */
 			FULLCHECK("dnssec");
@@ -1068,11 +1061,8 @@ plus_option(char *option) {
 			if (state && no_sigs)
 				break;
 			root_validation = state;
-			if (value != NULL) {
+			if (value != NULL)
 				trust_anchor = isc_mem_strdup(mctx, value);
-				if (trust_anchor == NULL)
-					fatal("out of memory");
-			}
 			break;
 		case 'r': /* rrcomments */
 			FULLCHECK("rrcomments");
@@ -1243,8 +1233,6 @@ dash_option(char *option, char *next, isc_boolean_t *open_type_class) {
 	switch (opt) {
 	case 'a':
 		anchorfile = isc_mem_strdup(mctx, value);
-		if (anchorfile == NULL)
-			fatal("out of memory");
 		return (value_from_next);
 	case 'b':
 		hash = strchr(value, '#');
@@ -1303,13 +1291,11 @@ dash_option(char *option, char *next, isc_boolean_t *open_type_class) {
 		port = value;
 		return (value_from_next);
 	case 'q':
-		if (curqname != NULL) {
+		if (qname != NULL) {
 			warn("extra query name");
-			isc_mem_free(mctx, curqname);
+			isc_mem_free(mctx, qname);
 		}
-		curqname = isc_mem_strdup(mctx, value);
-		if (curqname == NULL)
-			fatal("out of memory");
+		curqname = value;
 		return (value_from_next);
 	case 't':
 		*open_type_class = ISC_FALSE;
@@ -1332,13 +1318,9 @@ dash_option(char *option, char *next, isc_boolean_t *open_type_class) {
 		result = get_reverse(textname, sizeof(textname), value,
 				     ISC_FALSE);
 		if (result == ISC_R_SUCCESS) {
-			if (curqname != NULL) {
-				isc_mem_free(mctx, curqname);
+			if (curqname != NULL)
 				warn("extra query name");
-			}
 			curqname = isc_mem_strdup(mctx, textname);
-			if (curqname == NULL)
-				fatal("out of memory");
 			if (typeset)
 				warn("extra query type");
 			qtype = dns_rdatatype_ptr;
@@ -1446,11 +1428,8 @@ parse_args(int argc, char **argv) {
 				}
 			}
 
-			if (curqname == NULL) {
-				curqname = isc_mem_strdup(mctx, argv[0]);
-				if (curqname == NULL)
-					fatal("out of memory");
-			}
+			if (curqname == NULL)
+				curqname = argv[0];
 		}
 	}
 
@@ -1463,13 +1442,10 @@ parse_args(int argc, char **argv) {
 
 	if (curqname == NULL) {
 		qname = isc_mem_strdup(mctx, ".");
-		if (qname == NULL)
-			fatal("out of memory");
-
 		if (!typeset)
 			qtype = dns_rdatatype_ns;
 	} else
-		qname = curqname;
+		qname = isc_mem_strdup(mctx, curqname);
 }
 
 static isc_result_t

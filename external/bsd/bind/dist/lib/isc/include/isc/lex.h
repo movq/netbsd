@@ -1,7 +1,7 @@
-/*	$NetBSD: lex.h,v 1.6 2017/06/15 15:59:41 christos Exp $	*/
+/*	$NetBSD: lex.h,v 1.1 2009/03/22 15:02:13 christos Exp $	*/
 
 /*
- * Copyright (C) 2004, 2005, 2007, 2008, 2017  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2004, 2005, 2007, 2008  Internet Systems Consortium, Inc. ("ISC")
  * Copyright (C) 1998-2002  Internet Software Consortium.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -17,7 +17,7 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* Id: lex.h,v 1.37 2008/05/30 23:47:01 tbox Exp  */
+/* Id: lex.h,v 1.37 2008/05/30 23:47:01 tbox Exp */
 
 #ifndef ISC_LEX_H
 #define ISC_LEX_H 1
@@ -153,6 +153,8 @@ isc_lex_create(isc_mem_t *mctx, size_t max_token, isc_lex_t **lexp);
  *
  * Requires:
  *\li	'*lexp' is a valid lexer.
+ *
+ *\li	max_token > 0.
  *
  * Ensures:
  *\li	On success, *lexp is attached to the newly created lexer.

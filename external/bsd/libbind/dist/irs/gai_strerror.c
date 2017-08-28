@@ -1,4 +1,4 @@
-/*	$NetBSD: gai_strerror.c,v 1.1.1.1 2009/04/12 15:33:35 christos Exp $	*/
+/*	$NetBSD: gai_strerror.c,v 1.1 2009/04/12 15:33:35 christos Exp $	*/
 
 /*
  * Copyright (c) 2004 by Internet Systems Consortium, Inc. ("ISC")

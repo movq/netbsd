@@ -1,4 +1,4 @@
-/*	$NetBSD: mdig.c,v 1.1.1.1 2017/06/15 15:22:39 christos Exp $	*/
+/*	$NetBSD: mdig.c,v 1.1 2017/06/15 15:22:39 christos Exp $	*/
 
 /*
  * Copyright (C) 2016, 2017  Internet Systems Consortium, Inc. ("ISC")

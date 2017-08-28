@@ -1,10 +1,11 @@
-/*	$NetBSD: print.c,v 1.1.1.3 2014/07/12 11:57:46 spz Exp $	*/
+/*	$NetBSD: print.c,v 1.1 2013/03/24 15:45:54 christos Exp $	*/
+
 /* print.c
 
    Turn data structures into printable text. */
 
 /*
- * Copyright (c) 2009-2014 by Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (c) 2009-2011 by Internet Systems Consortium, Inc. ("ISC")
  * Copyright (c) 2004-2007 by Internet Systems Consortium, Inc. ("ISC")
  * Copyright (c) 1995-2003 by Internet Software Consortium
  *
@@ -26,10 +27,16 @@
  *   <info@isc.org>
  *   https://www.isc.org/
  *
+ * This software has been written for Internet Systems Consortium
+ * by Ted Lemon in cooperation with Vixie Enterprises and Nominum, Inc.
+ * To learn more about Internet Systems Consortium, see
+ * ``https://www.isc.org/''.  To learn more about Vixie Enterprises,
+ * see ``http://www.vix.com''.   To learn more about Nominum, Inc., see
+ * ``http://www.nominum.com''.
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: print.c,v 1.1.1.3 2014/07/12 11:57:46 spz Exp $");
+__RCSID("$NetBSD: print.c,v 1.1 2013/03/24 15:45:54 christos Exp $");
 
 #include "dhcpd.h"
 
@@ -477,9 +484,10 @@ char *print_dotted_quads (len, data)
 {
 	static char dq_buf [DQLEN + 1];
 	int i;
-	char *s;
+	char *s, *last;
 
 	s = &dq_buf [0];
+	last = s;
 	
 	i = 0;
 
@@ -1132,7 +1140,6 @@ static unsigned print_subexpression (expr, buf, len)
 			buf [rv] = 0;
 			return rv;
 		}
-		break;
 
 	      case expr_gethostname:
 		if (len > 13) {
@@ -1191,7 +1198,7 @@ int token_print_indent_concat (FILE *file, int col,  int indent,
 	}
 	va_end (list);
 	
-	col = token_print_indent (file, col, indent,
+	len = token_print_indent (file, col, indent,
 				  prefix, suffix, t);
 	dfree (t, MDL);
 	return col;
@@ -1244,12 +1251,7 @@ int token_print_indent (FILE *file, int col, int indent,
 			const char *prefix,
 			const char *suffix, const char *buf)
 {
-	int len = 0;
-	if (prefix != NULL)
-		len += strlen (prefix);
-	if (buf != NULL)
-		len += strlen (buf);
-
+	int len = strlen (buf) + strlen (prefix);
 	if (col + len > 79) {
 		if (indent + len < 79) {
 			indent_spaces (file, indent);
@@ -1262,10 +1264,8 @@ int token_print_indent (FILE *file, int col, int indent,
 		fputs (prefix, file);
 		col += strlen (prefix);
 	}
-	if ((buf != NULL) && (*buf != 0)) {
-		fputs (buf, file);
-		col += strlen(buf);
-	}
+	fputs (buf, file);
+	col += len;
 	if (suffix && *suffix) {
 		if (col + strlen (suffix) > 79) {
 			indent_spaces (file, indent);

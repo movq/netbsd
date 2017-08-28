@@ -1,7 +1,7 @@
-/*	$NetBSD: fsaccess.c,v 1.5 2014/12/10 04:38:01 christos Exp $	*/
+/*	$NetBSD: fsaccess.c,v 1.1 2009/03/22 15:02:24 christos Exp $	*/
 
 /*
- * Copyright (C) 2004, 2007, 2013  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2004, 2007  Internet Systems Consortium, Inc. ("ISC")
  * Copyright (C) 2000-2002  Internet Software Consortium.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -17,7 +17,7 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* Id: fsaccess.c,v 1.15 2007/06/19 23:47:19 tbox Exp  */
+/* Id: fsaccess.c,v 1.15 2007/06/19 23:47:19 tbox Exp */
 
 /*
  * Note that Win32 does not have the concept of files having access
@@ -78,7 +78,7 @@ is_ntfs(const char * file) {
 	 * Look for c:\path\... style, c:/path/... or \\computer\shar\path...
 	 * the UNC style file specs
 	 */
-	if (isalpha(filename[0]) && filename[1] == ':' &&
+	if (isalpha(filename[0]) && filename[1] == ':' && 
 		(filename[2] == '\\' || filename[2] == '/')) {
 		strncpy(drive, filename, 3);
 		drive[3] = '\0';
@@ -98,7 +98,7 @@ is_ntfs(const char * file) {
 	}
 	else /* Not determinable */
 		return (FALSE);
-
+		
 	GetVolumeInformation(drive, NULL, 0, NULL, 0, NULL, FSType,
 			     sizeof(FSType));
 	if(strcmp(FSType,"NTFS") == 0)
@@ -170,6 +170,7 @@ NTFS_Access_Control(const char *filename, const char *user, int access,
 	char domainBuffer[100];
 	DWORD domainBufferSize = sizeof(domainBuffer);
 	SID_NAME_USE snu;
+	int errval;
 	DWORD NTFSbits;
 	int caccess;
 
@@ -185,13 +186,13 @@ NTFS_Access_Control(const char *filename, const char *user, int access,
 	domainBufferSize = sizeof(domainBuffer);
 	if (!LookupAccountName(0, "Administrators", padminsid,
 		&adminSidBufferSize, domainBuffer, &domainBufferSize, &snu)) {
-		(void)GetLastError();
+		errval = GetLastError();
 		return (ISC_R_NOPERM);
 	}
 	domainBufferSize = sizeof(domainBuffer);
 	if (!LookupAccountName(0, "Everyone", pothersid,
 		&otherSidBufferSize, domainBuffer, &domainBufferSize, &snu)) {
-		(void)GetLastError();
+		errval = GetLastError();
 		return (ISC_R_NOPERM);
 	}
 
@@ -288,7 +289,7 @@ NTFS_fsaccess_set(const char *path, isc_fsaccess_t access,
 	 * For NTFS we first need to get the name of the account under
 	 * which BIND is running
 	 */
-	if (namelen == 0) {
+	if (namelen <= 0) {
 		namelen = sizeof(username);
 		if (GetUserName(username, &namelen) == 0)
 			return (ISC_R_FAILURE);

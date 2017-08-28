@@ -1,7 +1,7 @@
-/*	$NetBSD: keydata.c,v 1.5 2014/12/10 04:37:58 christos Exp $	*/
+/*	$NetBSD: keydata.c,v 1.1 2009/10/25 00:02:30 christos Exp $	*/
 
 /*
- * Copyright (C) 2009, 2014  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2009  Internet Systems Consortium, Inc. ("ISC")
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -16,7 +16,7 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* Id: keydata.c,v 1.3 2009/07/01 23:47:36 tbox Exp  */
+/* Id: keydata.c,v 1.3 2009/07/01 23:47:36 tbox Exp */
 
 /*! \file */
 
@@ -53,7 +53,7 @@ dns_keydata_todnskey(dns_rdata_keydata_t *keydata,
 		dnskey->data = isc_mem_allocate(mctx, dnskey->datalen);
 		if (dnskey->data == NULL)
 			return (ISC_R_NOMEMORY);
-		memmove(dnskey->data, keydata->data, dnskey->datalen);
+		memcpy(dnskey->data, keydata->data, dnskey->datalen);
 	}
 
 	return (ISC_R_SUCCESS);
@@ -84,7 +84,7 @@ dns_keydata_fromdnskey(dns_rdata_keydata_t *keydata,
 		keydata->data = isc_mem_allocate(mctx, keydata->datalen);
 		if (keydata->data == NULL)
 			return (ISC_R_NOMEMORY);
-		memmove(keydata->data, dnskey->data, keydata->datalen);
+		memcpy(keydata->data, dnskey->data, keydata->datalen);
 	}
 
 	return (ISC_R_SUCCESS);

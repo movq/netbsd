@@ -1,9 +1,9 @@
-/*	$NetBSD: macros.h,v 1.4 2014/12/10 04:38:03 christos Exp $	*/
+/*	$NetBSD: macros.h,v 1.1 2011/09/11 17:20:28 christos Exp $	*/
 
 /*
  * Automated Testing Framework (atf)
  *
- * Copyright (c) 2008 The NetBSD Foundation, Inc.
+ * Copyright (c) 2008, 2009, 2010 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -32,10 +32,6 @@
 #if !defined(ATF_C_MACROS_H)
 #define ATF_C_MACROS_H
 
-#include <string.h>
-
-#include <atf-c/defs.h>
-#include <atf-c/error.h>
 #include <atf-c/tc.h>
 #include <atf-c/tp.h>
 #include <atf-c/utils.h>
@@ -82,7 +78,7 @@
 #define ATF_TC_HEAD(tc, tcptr) \
     static \
     void \
-    atfu_ ## tc ## _head(atf_tc_t *tcptr ATF_DEFS_ATTRIBUTE_UNUSED)
+    atfu_ ## tc ## _head(atf_tc_t *tcptr)
 
 #define ATF_TC_HEAD_NAME(tc) \
     (atfu_ ## tc ## _head)
@@ -90,7 +86,7 @@
 #define ATF_TC_BODY(tc, tcptr) \
     static \
     void \
-    atfu_ ## tc ## _body(const atf_tc_t *tcptr ATF_DEFS_ATTRIBUTE_UNUSED)
+    atfu_ ## tc ## _body(const atf_tc_t *tcptr)
 
 #define ATF_TC_BODY_NAME(tc) \
     (atfu_ ## tc ## _body)
@@ -98,7 +94,7 @@
 #define ATF_TC_CLEANUP(tc, tcptr) \
     static \
     void \
-    atfu_ ## tc ## _cleanup(const atf_tc_t *tcptr ATF_DEFS_ATTRIBUTE_UNUSED)
+    atfu_ ## tc ## _cleanup(const atf_tc_t *tcptr)
 
 #define ATF_TC_CLEANUP_NAME(tc) \
     (atfu_ ## tc ## _cleanup)
@@ -131,31 +127,31 @@
         atfu_err = atf_tp_add_tc(tp, &atfu_ ## tc ## _tc); \
         if (atf_is_error(atfu_err)) \
             return atfu_err; \
-    } while (/*CONSTCOND*/0)
+    } while (0)
 
 #define ATF_REQUIRE_MSG(x, fmt, ...) \
     do { \
         if (!(x)) \
             atf_tc_fail_requirement(__FILE__, __LINE__, fmt, ##__VA_ARGS__); \
-    } while(/*CONSTCOND*/0)
+    } while(0)
 
 #define ATF_CHECK_MSG(x, fmt, ...) \
     do { \
         if (!(x)) \
             atf_tc_fail_check(__FILE__, __LINE__, fmt, ##__VA_ARGS__); \
-    } while(/*CONSTCOND*/0)
+    } while(0)
 
 #define ATF_REQUIRE(x) \
     do { \
         if (!(x)) \
             atf_tc_fail_requirement(__FILE__, __LINE__, "%s", #x " not met"); \
-    } while(/*CONSTCOND*/0)
+    } while(0)
 
 #define ATF_CHECK(x) \
     do { \
         if (!(x)) \
             atf_tc_fail_check(__FILE__, __LINE__, "%s", #x " not met"); \
-    } while(/*CONSTCOND*/0)
+    } while(0)
 
 #define ATF_REQUIRE_EQ(x, y) \
     ATF_REQUIRE_MSG((x) == (y), "%s != %s", #x, #y)
@@ -182,24 +178,6 @@
 #define ATF_CHECK_STREQ_MSG(x, y, fmt, ...) \
     ATF_CHECK_MSG(strcmp(x, y) == 0, "%s != %s (%s != %s): " fmt, \
                     #x, #y, x, y, ##__VA_ARGS__)
-
-#define ATF_REQUIRE_MATCH(regexp, string) \
-    ATF_REQUIRE_MSG(atf_utils_grep_string("%s", string, regexp), \
-                    "'%s' not matched in '%s'", regexp, string);
-
-#define ATF_CHECK_MATCH(regexp, string) \
-    ATF_CHECK_MSG(atf_utils_grep_string("%s", string, regexp), \
-                  "'%s' not matched in '%s'", regexp, string);
-
-#define ATF_REQUIRE_MATCH_MSG(regexp, string, fmt, ...) \
-    ATF_REQUIRE_MSG(atf_utils_grep_string("%s", string, regexp), \
-                    "'%s' not matched in '%s': " fmt, regexp, string, \
-                    ##__VA_ARGS__);
-
-#define ATF_CHECK_MATCH_MSG(regexp, string, fmt, ...) \
-    ATF_CHECK_MSG(atf_utils_grep_string("%s", string, regexp), \
-                  "'%s' not matched in '%s': " fmt, regexp, string, \
-                  ##__VA_ARGS__);
 
 #define ATF_CHECK_ERRNO(exp_errno, bool_expr) \
     atf_tc_check_errno(__FILE__, __LINE__, exp_errno, #bool_expr, bool_expr)

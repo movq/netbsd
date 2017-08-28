@@ -1,4 +1,4 @@
-# Copyright (C) 2009, 2012, 2014-2016  Internet Systems Consortium, Inc. ("ISC")
+# Copyright (C) 2009  Internet Systems Consortium, Inc. ("ISC")
 #
 # Permission to use, copy, modify, and/or distribute this software for any
 # purpose with or without fee is hereby granted, provided that the above
@@ -12,23 +12,22 @@
 # OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR
 # PERFORMANCE OF THIS SOFTWARE.
 
-# Id: Makefile.in,v 1.3 2009/09/02 23:48:02 tbox Exp 
+# Id: Makefile.in,v 1.3 2009/09/02 23:48:02 tbox Exp
 
 srcdir =	@srcdir@
 VPATH =		@srcdir@
 top_srcdir =	@top_srcdir@
 
-VERSION=@BIND9_VERSION@
+@BIND9_VERSION@
 
 @LIBIRS_API@
 
 @BIND9_MAKE_INCLUDES@
 
 CINCLUDES =	-I. -I./include -I${srcdir}/include \
-		${DNS_INCLUDES} ${ISC_INCLUDES} \
-		@ISC_OPENSSL_INC@ ${ISCCFG_INCLUDES}
+		${DNS_INCLUDES} ${ISC_INCLUDES} ${ISCCFG_INCLUDES}
 
-CDEFINES =	@CRYPTO@
+CDEFINES =
 CWARNINGS =
 
 # Alphabetically
@@ -40,13 +39,12 @@ OBJS =		context.@O@ \
 # Alphabetically
 SRCS =		context.c \
 		dnsconf.c \
-		gai_strerror.c getaddrinfo.c getnameinfo.c \
+		gai_sterror.c getaddrinfo.c getnameinfo.c \
 		resconf.c
 
 LIBS =		@LIBS@
 
 SUBDIRS =	include
-TESTDIRS =	@UNITTESTS@
 TARGETS =	timestamp
 
 @BIND9_MAKE_RULES@
@@ -76,10 +74,7 @@ installdirs:
 	$(SHELL) ${top_srcdir}/mkinstalldirs ${DESTDIR}${libdir}
 
 install:: timestamp installdirs
-	${LIBTOOL_MODE_INSTALL} ${INSTALL_LIBRARY} libirs.@A@ ${DESTDIR}${libdir}
-
-uninstall::
-	${LIBTOOL_MODE_UNINSTALL} rm -f ${DESTDIR}${libdir}/libirs.@A@
+	${LIBTOOL_MODE_INSTALL} ${INSTALL_DATA} libirs.@A@ ${DESTDIR}${libdir}
 
 clean distclean::
 	rm -f libirs.@A@ libirs.la timestamp

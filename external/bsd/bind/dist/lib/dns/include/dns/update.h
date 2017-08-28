@@ -1,7 +1,7 @@
-/*	$NetBSD: update.h,v 1.1.1.5 2015/12/17 03:22:09 christos Exp $	*/
+/*	$NetBSD: update.h,v 1.1 2011/09/11 17:18:50 christos Exp $	*/
 
 /*
- * Copyright (C) 2011, 2015  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2011  Internet Systems Consortium, Inc. ("ISC")
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -16,7 +16,7 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* Id: update.h,v 1.5 2011/08/30 23:46:53 tbox Exp  */
+/* Id: update.h,v 1.2 2011-07-01 02:25:48 marka Exp */
 
 #ifndef DNS_UPDATE_H
 #define DNS_UPDATE_H 1
@@ -30,13 +30,6 @@
 #include <isc/lang.h>
 
 #include <dns/types.h>
-#include <dns/diff.h>
-
-typedef struct {
-	void (*func)(void *arg, dns_zone_t *zone, int level,
-		     const char *message);
-	void *arg;
-} dns_update_log_t;
 
 ISC_LANG_BEGINDECLS
 
@@ -55,17 +48,6 @@ dns_update_soaserial(isc_uint32_t serial, dns_updatemethod_t method);
  *	  time (seconds since UNIX epoch) if possible, or increments by one
  *	  if not.
  */
-
-isc_result_t
-dns_update_signatures(dns_update_log_t *log, dns_zone_t *zone, dns_db_t *db,
-		      dns_dbversion_t *oldver, dns_dbversion_t *newver,
-		      dns_diff_t *diff, isc_uint32_t sigvalidityinterval);
-
-isc_result_t
-dns_update_signaturesinc(dns_update_log_t *log, dns_zone_t *zone, dns_db_t *db,
-			 dns_dbversion_t *oldver, dns_dbversion_t *newver,
-			 dns_diff_t *diff, isc_uint32_t sigvalidityinterval,
-			 dns_update_state_t **state);
 
 ISC_LANG_ENDDECLS
 

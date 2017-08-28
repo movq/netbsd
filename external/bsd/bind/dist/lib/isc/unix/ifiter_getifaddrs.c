@@ -1,7 +1,7 @@
-/*	$NetBSD: ifiter_getifaddrs.c,v 1.5 2014/12/10 04:38:01 christos Exp $	*/
+/*	$NetBSD: ifiter_getifaddrs.c,v 1.1 2009/03/22 15:02:17 christos Exp $	*/
 
 /*
- * Copyright (C) 2004, 2005, 2007-2009, 2014  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2004, 2005, 2007, 2008  Internet Systems Consortium, Inc. ("ISC")
  * Copyright (C) 2003  Internet Software Consortium.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -17,7 +17,7 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* Id: ifiter_getifaddrs.c,v 1.13 2009/09/24 23:48:13 tbox Exp  */
+/* Id: ifiter_getifaddrs.c,v 1.11 2008/03/20 23:47:00 tbox Exp */
 
 /*! \file
  * \brief
@@ -161,7 +161,7 @@ internal_current(isc_interfaceiter_t *iter) {
 		namelen = sizeof(iter->current.name) - 1;
 
 	memset(iter->current.name, 0, sizeof(iter->current.name));
-	memmove(iter->current.name, ifa->ifa_name, namelen);
+	memcpy(iter->current.name, ifa->ifa_name, namelen);
 
 	iter->current.flags = 0;
 
@@ -183,7 +183,7 @@ internal_current(isc_interfaceiter_t *iter) {
 			 ifa->ifa_name);
 
 	if (ifa->ifa_dstaddr != NULL &&
-	    (iter->current.flags & INTERFACE_F_POINTTOPOINT) != 0)
+	    (iter->current.flags & IFF_POINTOPOINT) != 0)
 		get_addr(family, &iter->current.dstaddress, ifa->ifa_dstaddr,
 			 ifa->ifa_name);
 

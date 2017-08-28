@@ -1,7 +1,7 @@
-/*	$NetBSD: ssu_external.c,v 1.7 2014/12/10 04:37:58 christos Exp $	*/
+/*	$NetBSD: ssu_external.c,v 1.1 2011/02/15 19:37:21 christos Exp $	*/
 
 /*
- * Copyright (C) 2011-2013  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2011  Internet Systems Consortium, Inc. ("ISC")
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -16,7 +16,7 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* Id */
+/* Id: ssu_external.c,v 1.7 2011-01-13 07:05:57 marka Exp */
 
 /*
  * This implements external update-policy rules.  This allows permission
@@ -81,7 +81,7 @@ ux_socket_connect(const char *path) {
 
 	memset(&addr, 0, sizeof(addr));
 	addr.sun_family = AF_UNIX;
-	strlcpy(addr.sun_path, path, sizeof(addr.sun_path));
+	strncpy(addr.sun_path, path, sizeof(addr.sun_path));
 
 	fd = socket(AF_UNIX, SOCK_STREAM, 0);
 	if (fd == -1) {
@@ -130,10 +130,10 @@ dns_ssu_external_match(dns_name_t *identity,
 	char b_addr[ISC_NETADDR_FORMATSIZE];
 	char b_type[DNS_RDATATYPE_FORMATSIZE];
 	char b_key[DST_KEY_FORMATSIZE];
-	isc_buffer_t *tkey_token = NULL;
+	isc_buffer_t *tkey_token;
 	int fd;
 	const char *sock_path;
-	unsigned int req_len;
+	size_t req_len;
 	isc_region_t token_region;
 	unsigned char *data;
 	isc_buffer_t buf;
@@ -156,31 +156,32 @@ dns_ssu_external_match(dns_name_t *identity,
 	if (fd == -1)
 		return (ISC_FALSE);
 
-	if (key != NULL) {
-		dst_key_format(key, b_key, sizeof(b_key));
-		tkey_token = dst_key_tkeytoken(key);
-	} else
-		b_key[0] = 0;
-
-	if (tkey_token != NULL) {
-		isc_buffer_region(tkey_token, &token_region);
-		token_len = token_region.length;
-	}
+	tkey_token = dst_key_tkeytoken(key);
 
 	/* Format the request elements */
-	if (signer != NULL)
+	if (signer)
 		dns_name_format(signer, b_signer, sizeof(b_signer));
 	else
 		b_signer[0] = 0;
 
 	dns_name_format(name, b_name, sizeof(b_name));
 
-	if (tcpaddr != NULL)
+	if (tcpaddr)
 		isc_netaddr_format(tcpaddr, b_addr, sizeof(b_addr));
 	else
 		b_addr[0] = 0;
 
 	dns_rdatatype_format(type, b_type, sizeof(b_type));
+
+	if (key)
+		dst_key_format(key, b_key, sizeof(b_key));
+	else
+		b_key[0] = 0;
+
+	if (tkey_token) {
+		isc_buffer_region(tkey_token, &token_region);
+		token_len = token_region.length;
+	}
 
 	/* Work out how big the request will be */
 	req_len = sizeof(isc_uint32_t)     + /* Format version */

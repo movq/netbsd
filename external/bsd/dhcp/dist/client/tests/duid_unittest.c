@@ -1,4 +1,4 @@
-/*	$NetBSD: duid_unittest.c,v 1.1.1.1 2016/01/10 19:44:38 christos Exp $	*/
+/*	$NetBSD: duid_unittest.c,v 1.1 2016/01/10 19:44:38 christos Exp $	*/
 /*
  * Copyright (c) 2014 by Internet Systems Consortium, Inc. ("ISC")
  *
@@ -23,7 +23,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: duid_unittest.c,v 1.1.1.1 2016/01/10 19:44:38 christos Exp $");
+__RCSID("$NetBSD: duid_unittest.c,v 1.1 2016/01/10 19:44:38 christos Exp $");
 
 #include "config.h"
 #include <atf-c.h>

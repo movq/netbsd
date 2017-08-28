@@ -1,7 +1,7 @@
-/*	$NetBSD: heap.c,v 1.8 2015/12/17 04:00:45 christos Exp $	*/
+/*	$NetBSD: heap.c,v 1.1 2009/03/22 15:02:02 christos Exp $	*/
 
 /*
- * Copyright (C) 2004-2007, 2010-2015  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2004-2007  Internet Systems Consortium, Inc. ("ISC")
  * Copyright (C) 1997-2001  Internet Software Consortium.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -17,7 +17,7 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* Id */
+/* Id: heap.c,v 1.37 2007/10/19 17:15:53 explorer Exp */
 
 /*! \file
  * Heap implementation of priority queues adapted from the following:
@@ -34,7 +34,7 @@
 #include <isc/heap.h>
 #include <isc/magic.h>
 #include <isc/mem.h>
-#include <isc/string.h>		/* Required for memmove. */
+#include <isc/string.h>		/* Required for memcpy. */
 #include <isc/util.h>
 
 /*@{*/
@@ -76,7 +76,7 @@ struct isc_heap {
 
 isc_result_t
 isc_heap_create(isc_mem_t *mctx, isc_heapcompare_t compare,
-		isc_heapindex_t idx, unsigned int size_increment,
+		isc_heapindex_t index, unsigned int size_increment,
 		isc_heap_t **heapp)
 {
 	isc_heap_t *heap;
@@ -88,9 +88,8 @@ isc_heap_create(isc_mem_t *mctx, isc_heapcompare_t compare,
 	if (heap == NULL)
 		return (ISC_R_NOMEMORY);
 	heap->magic = HEAP_MAGIC;
+	heap->mctx = mctx;
 	heap->size = 0;
-	heap->mctx = NULL;
-	isc_mem_attach(mctx, &heap->mctx);
 	if (size_increment == 0)
 		heap->size_increment = SIZE_INCREMENT;
 	else
@@ -98,7 +97,7 @@ isc_heap_create(isc_mem_t *mctx, isc_heapcompare_t compare,
 	heap->last = 0;
 	heap->array = NULL;
 	heap->compare = compare;
-	heap->index = idx;
+	heap->index = index;
 
 	*heapp = heap;
 
@@ -117,7 +116,7 @@ isc_heap_destroy(isc_heap_t **heapp) {
 		isc_mem_put(heap->mctx, heap->array,
 			    heap->size * sizeof(void *));
 	heap->magic = 0;
-	isc_mem_putanddetach(&heap->mctx, heap, sizeof(*heap));
+	isc_mem_put(heap->mctx, heap, sizeof(*heap));
 
 	*heapp = NULL;
 }
@@ -125,7 +124,7 @@ isc_heap_destroy(isc_heap_t **heapp) {
 static isc_boolean_t
 resize(isc_heap_t *heap) {
 	void **new_array;
-	unsigned int new_size;
+	size_t new_size;
 
 	REQUIRE(VALID_HEAP(heap));
 
@@ -134,7 +133,7 @@ resize(isc_heap_t *heap) {
 	if (new_array == NULL)
 		return (ISC_FALSE);
 	if (heap->array != NULL) {
-		memmove(new_array, heap->array, heap->size * sizeof(void *));
+		memcpy(new_array, heap->array, heap->size * sizeof(void *));
 		isc_mem_put(heap->mctx, heap->array,
 			    heap->size * sizeof(void *));
 	}
@@ -189,30 +188,28 @@ sink_down(isc_heap_t *heap, unsigned int i, void *elt) {
 
 isc_result_t
 isc_heap_insert(isc_heap_t *heap, void *elt) {
-	unsigned int new_last;
+	unsigned int i;
 
 	REQUIRE(VALID_HEAP(heap));
 
-	new_last = heap->last + 1;
-	RUNTIME_CHECK(new_last > 0); /* overflow check */
-	if (new_last >= heap->size && !resize(heap))
+	i = ++heap->last;
+	if (heap->last >= heap->size && !resize(heap))
 		return (ISC_R_NOMEMORY);
-	heap->last = new_last;
 
-	float_up(heap, new_last, elt);
+	float_up(heap, i, elt);
 
 	return (ISC_R_SUCCESS);
 }
 
 void
-isc_heap_delete(isc_heap_t *heap, unsigned int idx) {
+isc_heap_delete(isc_heap_t *heap, unsigned int index) {
 	void *elt;
 	isc_boolean_t less;
 
 	REQUIRE(VALID_HEAP(heap));
-	REQUIRE(idx >= 1 && idx <= heap->last);
+	REQUIRE(index >= 1 && index <= heap->last);
 
-	if (idx == heap->last) {
+	if (index == heap->last) {
 		heap->array[heap->last] = NULL;
 		heap->last--;
 	} else {
@@ -220,38 +217,38 @@ isc_heap_delete(isc_heap_t *heap, unsigned int idx) {
 		heap->array[heap->last] = NULL;
 		heap->last--;
 
-		less = heap->compare(elt, heap->array[idx]);
-		heap->array[idx] = elt;
+		less = heap->compare(elt, heap->array[index]);
+		heap->array[index] = elt;
 		if (less)
-			float_up(heap, idx, heap->array[idx]);
+			float_up(heap, index, heap->array[index]);
 		else
-			sink_down(heap, idx, heap->array[idx]);
+			sink_down(heap, index, heap->array[index]);
 	}
 }
 
 void
-isc_heap_increased(isc_heap_t *heap, unsigned int idx) {
+isc_heap_increased(isc_heap_t *heap, unsigned int index) {
 	REQUIRE(VALID_HEAP(heap));
-	REQUIRE(idx >= 1 && idx <= heap->last);
+	REQUIRE(index >= 1 && index <= heap->last);
 
-	float_up(heap, idx, heap->array[idx]);
+	float_up(heap, index, heap->array[index]);
 }
 
 void
-isc_heap_decreased(isc_heap_t *heap, unsigned int idx) {
+isc_heap_decreased(isc_heap_t *heap, unsigned int index) {
 	REQUIRE(VALID_HEAP(heap));
-	REQUIRE(idx >= 1 && idx <= heap->last);
+	REQUIRE(index >= 1 && index <= heap->last);
 
-	sink_down(heap, idx, heap->array[idx]);
+	sink_down(heap, index, heap->array[index]);
 }
 
 void *
-isc_heap_element(isc_heap_t *heap, unsigned int idx) {
+isc_heap_element(isc_heap_t *heap, unsigned int index) {
 	REQUIRE(VALID_HEAP(heap));
-	REQUIRE(idx >= 1);
+	REQUIRE(index >= 1);
 
-	if (idx <= heap->last)
-		return (heap->array[idx]);
+	if (index <= heap->last)
+		return (heap->array[index]);
 	return (NULL);
 }
 

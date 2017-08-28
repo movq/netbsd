@@ -1,7 +1,7 @@
-/*	$NetBSD: dbiterator_test.c,v 1.1.1.6 2016/05/26 15:45:51 christos Exp $	*/
+/*	$NetBSD: dbiterator_test.c,v 1.1 2011/09/11 17:19:02 christos Exp $	*/
 
 /*
- * Copyright (C) 2011, 2012, 2016  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2011  Internet Systems Consortium, Inc. ("ISC")
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -16,7 +16,7 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* Id */
+/* Id: dbiterator_test.c,v 1.4 2011-08-23 23:54:00 tbox Exp */
 
 /*! \file */
 
@@ -42,9 +42,49 @@
 #define TEST_ORIGIN	"test"
 
 static isc_result_t
+setup_db(const char *testfile, dns_dbtype_t dbtype, dns_db_t **db) {
+	isc_result_t		result;
+	int			len;
+	char			origin[sizeof(TEST_ORIGIN)];
+	dns_name_t		dns_origin;
+	isc_buffer_t		source;
+	isc_buffer_t		target;
+	unsigned char		name_buf[BUFLEN];
+
+	strcpy(origin, TEST_ORIGIN);
+	len = strlen(origin);
+	isc_buffer_init(&source, origin, len);
+	isc_buffer_add(&source, len);
+	isc_buffer_setactive(&source, len);
+	isc_buffer_init(&target, name_buf, BUFLEN);
+	dns_name_init(&dns_origin, NULL);
+
+	result = dns_name_fromtext(&dns_origin, &source, dns_rootname,
+				   0, &target);
+	if (result != ISC_R_SUCCESS)
+		return(result);
+
+	result = dns_db_create(mctx, "rbt", &dns_origin, dbtype,
+			       dns_rdataclass_in, 0, NULL, db);
+	if (result != ISC_R_SUCCESS)
+		return (result);
+
+	/*
+	 * atf-run changes us to a /tmp directory, so tests
+	 * that access test data files must first chdir to the proper
+	 * location.
+	 */
+	if (chdir(TESTS) == -1)
+		return (ISC_R_FAILURE);
+
+	result = dns_db_load(*db, testfile);
+	return (result);
+}
+
+static isc_result_t
 make_name(const char *src, dns_name_t *name) {
 	isc_buffer_t b;
-	isc_buffer_constinit(&b, src, strlen(src));
+	isc_buffer_init(&b, src, strlen(src));
 	isc_buffer_add(&b, strlen(src));
 	return (dns_name_fromtext(name, &b, dns_rootname, 0, NULL));
 }
@@ -63,8 +103,8 @@ test_create(const atf_tc_t *tc) {
 	result = dns_test_begin(NULL, ISC_FALSE);
 	ATF_REQUIRE_EQ(result, ISC_R_SUCCESS);
 
-	result = dns_test_loaddb(&db, dns_dbtype_cache, TEST_ORIGIN,
-				 atf_tc_get_md_var(tc, "X-filename"));
+	result = setup_db(atf_tc_get_md_var(tc, "X-filename"),
+			  dns_dbtype_cache, &db);
 	ATF_REQUIRE_EQ(result, ISC_R_SUCCESS);
 
 	result = dns_db_createiterator(db, 0, &iter);
@@ -112,8 +152,8 @@ test_walk(const atf_tc_t *tc) {
 	result = dns_test_begin(NULL, ISC_FALSE);
 	ATF_REQUIRE_EQ(result, ISC_R_SUCCESS);
 
-	result = dns_test_loaddb(&db, dns_dbtype_cache, TEST_ORIGIN,
-				 atf_tc_get_md_var(tc, "X-filename"));
+	result = setup_db(atf_tc_get_md_var(tc, "X-filename"),
+			  dns_dbtype_cache, &db);
 	ATF_REQUIRE_EQ(result, ISC_R_SUCCESS);
 
 	result = dns_db_createiterator(db, 0, &iter);
@@ -123,9 +163,6 @@ test_walk(const atf_tc_t *tc) {
 	     result == ISC_R_SUCCESS;
 	     result = dns_dbiterator_next(iter)) {
 		result = dns_dbiterator_current(iter, &node, name);
-		if (result == DNS_R_NEWORIGIN)
-			result = ISC_R_SUCCESS;
-		ATF_REQUIRE_EQ(result, ISC_R_SUCCESS);
 		dns_db_detachnode(db, &node);
 		i++;
 	}
@@ -175,8 +212,8 @@ static void test_reverse(const atf_tc_t *tc) {
 	result = dns_test_begin(NULL, ISC_FALSE);
 	ATF_REQUIRE_EQ(result, ISC_R_SUCCESS);
 
-	result = dns_test_loaddb(&db, dns_dbtype_cache, TEST_ORIGIN,
-				 atf_tc_get_md_var(tc, "X-filename"));
+	result = setup_db(atf_tc_get_md_var(tc, "X-filename"),
+			  dns_dbtype_cache, &db);
 	ATF_REQUIRE_EQ(result, ISC_R_SUCCESS);
 
 	result = dns_db_createiterator(db, 0, &iter);
@@ -186,9 +223,6 @@ static void test_reverse(const atf_tc_t *tc) {
 	     result == ISC_R_SUCCESS;
 	     result = dns_dbiterator_prev(iter)) {
 		result = dns_dbiterator_current(iter, &node, name);
-		if (result == DNS_R_NEWORIGIN)
-			result = ISC_R_SUCCESS;
-		ATF_CHECK_EQ(result, ISC_R_SUCCESS);
 		dns_db_detachnode(db, &node);
 		i++;
 	}
@@ -238,8 +272,8 @@ static void test_seek(const atf_tc_t *tc) {
 	result = dns_test_begin(NULL, ISC_FALSE);
 	ATF_REQUIRE_EQ(result, ISC_R_SUCCESS);
 
-	result = dns_test_loaddb(&db, dns_dbtype_cache, TEST_ORIGIN,
-				 atf_tc_get_md_var(tc, "X-filename"));
+	result = setup_db(atf_tc_get_md_var(tc, "X-filename"),
+			  dns_dbtype_cache, &db);
 	ATF_REQUIRE_EQ(result, ISC_R_SUCCESS);
 
 	result = dns_db_createiterator(db, 0, &iter);
@@ -253,9 +287,6 @@ static void test_seek(const atf_tc_t *tc) {
 
 	while (result == ISC_R_SUCCESS) {
 		result = dns_dbiterator_current(iter, &node, name);
-		if (result == DNS_R_NEWORIGIN)
-			result = ISC_R_SUCCESS;
-		ATF_CHECK_EQ(result, ISC_R_SUCCESS);
 		dns_db_detachnode(db, &node);
 		result = dns_dbiterator_next(iter);
 		i++;
@@ -309,8 +340,8 @@ static void test_seek_empty(const atf_tc_t *tc) {
 	result = dns_test_begin(NULL, ISC_FALSE);
 	ATF_REQUIRE_EQ(result, ISC_R_SUCCESS);
 
-	result = dns_test_loaddb(&db, dns_dbtype_cache, TEST_ORIGIN,
-				 atf_tc_get_md_var(tc, "X-filename"));
+	result = setup_db(atf_tc_get_md_var(tc, "X-filename"),
+			  dns_dbtype_cache, &db);
 	ATF_REQUIRE_EQ(result, ISC_R_SUCCESS);
 
 	result = dns_db_createiterator(db, 0, &iter);
@@ -320,7 +351,7 @@ static void test_seek_empty(const atf_tc_t *tc) {
 	ATF_REQUIRE_EQ(result, ISC_R_SUCCESS);
 
 	result = dns_dbiterator_seek(iter, seekname);
-	ATF_CHECK_EQ(result, DNS_R_PARTIALMATCH);
+	ATF_CHECK_EQ(result, ISC_R_NOTFOUND);
 
 	dns_dbiterator_destroy(&iter);
 	dns_db_detach(&db);
@@ -366,20 +397,14 @@ static void test_seek_nx(const atf_tc_t *tc) {
 	result = dns_test_begin(NULL, ISC_FALSE);
 	ATF_REQUIRE_EQ(result, ISC_R_SUCCESS);
 
-	result = dns_test_loaddb(&db, dns_dbtype_cache, TEST_ORIGIN,
-				 atf_tc_get_md_var(tc, "X-filename"));
+	result = setup_db(atf_tc_get_md_var(tc, "X-filename"),
+			  dns_dbtype_cache, &db);
 	ATF_REQUIRE_EQ(result, ISC_R_SUCCESS);
 
 	result = dns_db_createiterator(db, 0, &iter);
 	ATF_REQUIRE_EQ(result, ISC_R_SUCCESS);
 
 	result = make_name("nonexistent." TEST_ORIGIN, seekname);
-	ATF_REQUIRE_EQ(result, ISC_R_SUCCESS);
-
-	result = dns_dbiterator_seek(iter, seekname);
-	ATF_CHECK_EQ(result, DNS_R_PARTIALMATCH);
-
-	result = make_name("nonexistent.", seekname);
 	ATF_REQUIRE_EQ(result, ISC_R_SUCCESS);
 
 	result = dns_dbiterator_seek(iter, seekname);

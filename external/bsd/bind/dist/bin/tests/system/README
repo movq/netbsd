@@ -1,4 +1,4 @@
-Copyright (C) 2004, 2010, 2011, 2013, 2015  Internet Systems Consortium, Inc. ("ISC")
+Copyright (C) 2004  Internet Systems Consortium, Inc. ("ISC")
 Copyright (C) 2000, 2001  Internet Software Consortium.
 See COPYRIGHT in the source root or http://isc.org/copyright.html for terms.
 
@@ -17,9 +17,6 @@ involving a different DNS setup.  They are:
   nsupdate/	Dynamic update and IXFR tests
   resolver/     Regression tests for resolver bugs that have been fixed
 		(not a complete resolver test suite)
-  rrl/		query rate limiting
-  rpz/		Tests of response policy zone (RPZ) rewriting
-  rpzrecurse/	Another set of RPZ tests to check recursion behavior
   stub/		Tests of stub zone functionality
   unknown/	Unknown type and class tests
   upforwd/	Update forwarding tests
@@ -42,13 +39,6 @@ separate virtual IP address on the loopback interface.  ns1 runs on
 10.53.0.1, ns2 on 10.53.0.2, etc.  Before running any tests, you must
 set up these addresses by running "ifconfig.sh up" as root.
 
-Mac OS X:
-If you wish to make the interfaces survive across reboots
-copy org.isc.bind.system and org.isc.bind.system to
-/Library/LaunchDaemons then run
-"launchctl load /Library/LaunchDaemons/org.isc.bind.system.plist" as
-root.
-
 The servers use port 5300 instead of the usual port 53, so they can be
 run without root privileges once the interfaces have been set up.
 
@@ -60,9 +50,5 @@ The tests can be run individually like this:
 
 To run all the tests, just type "make test".
 
-When running system tests, named and lwresd can be run under
-Valgrind. The output from Valgrind are sent to per-process files that
-can be reviewed after the test has completed. To enable this, set the
-USE_VALGRIND environment variable to "helgrind" to run the Helgrind
-tool, or any other value to run the Memcheck tool. To use "helgrind"
-effectively, build BIND with --disable-atomic.
+
+Id: README,v 1.12 2004/03/05 04:59:12 marka Exp

@@ -1,7 +1,7 @@
-/*	$NetBSD: a6_38.c,v 1.7 2016/05/26 16:49:59 christos Exp $	*/
+/*	$NetBSD: a6_38.c,v 1.1 2009/03/22 15:01:57 christos Exp $	*/
 
 /*
- * Copyright (C) 2004, 2007, 2009, 2014, 2015  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2004, 2007  Internet Systems Consortium, Inc. ("ISC")
  * Copyright (C) 1999-2003  Internet Software Consortium.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -17,7 +17,7 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* Id: a6_38.c,v 1.56 2009/12/04 22:06:37 tbox Exp  */
+/* Id: a6_38.c,v 1.54 2007/06/19 23:47:17 tbox Exp */
 
 /* RFC2874 */
 
@@ -39,8 +39,8 @@ fromtext_in_a6(ARGS_FROMTEXT) {
 	isc_buffer_t buffer;
 	isc_boolean_t ok;
 
-	REQUIRE(type == dns_rdatatype_a6);
-	REQUIRE(rdclass == dns_rdataclass_in);
+	REQUIRE(type == 38);
+	REQUIRE(rdclass == 1);
 
 	UNUSED(type);
 	UNUSED(rdclass);
@@ -85,8 +85,7 @@ fromtext_in_a6(ARGS_FROMTEXT) {
 				      ISC_FALSE));
 	dns_name_init(&name, NULL);
 	buffer_fromregion(&buffer, &token.value.as_region);
-	if (origin == NULL)
-		origin = dns_rootname;
+	origin = (origin != NULL) ? origin : dns_rootname;
 	RETTOK(dns_name_fromtext(&name, &buffer, origin, options, target));
 	ok = ISC_TRUE;
 	if ((options & DNS_RDATA_CHECKNAMES) != 0)
@@ -110,8 +109,8 @@ totext_in_a6(ARGS_TOTEXT) {
 	dns_name_t prefix;
 	isc_boolean_t sub;
 
-	REQUIRE(rdata->type == dns_rdatatype_a6);
-	REQUIRE(rdata->rdclass == dns_rdataclass_in);
+	REQUIRE(rdata->type == 38);
+	REQUIRE(rdata->rdclass == 1);
 	REQUIRE(rdata->length != 0);
 
 	dns_rdata_toregion(rdata, &sr);
@@ -125,7 +124,7 @@ totext_in_a6(ARGS_TOTEXT) {
 	if (prefixlen != 128) {
 		octets = prefixlen/8;
 		memset(addr, 0, sizeof(addr));
-		memmove(&addr[octets], sr.base, 16 - octets);
+		memcpy(&addr[octets], sr.base, 16 - octets);
 		mask = 0xff >> (prefixlen % 8);
 		addr[octets] &= mask;
 		ar.base = addr;
@@ -153,8 +152,8 @@ fromwire_in_a6(ARGS_FROMWIRE) {
 	unsigned char mask;
 	dns_name_t name;
 
-	REQUIRE(type == dns_rdatatype_a6);
-	REQUIRE(rdclass == dns_rdataclass_in);
+	REQUIRE(type == 38);
+	REQUIRE(rdclass == 1);
 
 	UNUSED(type);
 	UNUSED(rdclass);
@@ -202,8 +201,8 @@ towire_in_a6(ARGS_TOWIRE) {
 	unsigned char prefixlen;
 	unsigned char octets;
 
-	REQUIRE(rdata->type == dns_rdatatype_a6);
-	REQUIRE(rdata->rdclass == dns_rdataclass_in);
+	REQUIRE(rdata->type == 38);
+	REQUIRE(rdata->rdclass == 1);
 	REQUIRE(rdata->length != 0);
 
 	dns_compress_setmethods(cctx, DNS_COMPRESS_NONE);
@@ -235,8 +234,8 @@ compare_in_a6(ARGS_COMPARE) {
 
 	REQUIRE(rdata1->type == rdata2->type);
 	REQUIRE(rdata1->rdclass == rdata2->rdclass);
-	REQUIRE(rdata1->type == dns_rdatatype_a6);
-	REQUIRE(rdata1->rdclass == dns_rdataclass_in);
+	REQUIRE(rdata1->type == 38);
+	REQUIRE(rdata1->rdclass == 1);
 	REQUIRE(rdata1->length != 0);
 	REQUIRE(rdata2->length != 0);
 
@@ -286,8 +285,8 @@ fromstruct_in_a6(ARGS_FROMSTRUCT) {
 	isc_uint8_t first;
 	isc_uint8_t mask;
 
-	REQUIRE(type == dns_rdatatype_a6);
-	REQUIRE(rdclass == dns_rdataclass_in);
+	REQUIRE(type == 38);
+	REQUIRE(rdclass == 1);
 	REQUIRE(source != NULL);
 	REQUIRE(a6->common.rdtype == type);
 	REQUIRE(a6->common.rdclass == rdclass);
@@ -329,8 +328,8 @@ tostruct_in_a6(ARGS_TOSTRUCT) {
 	dns_name_t name;
 	isc_region_t r;
 
-	REQUIRE(rdata->type == dns_rdatatype_a6);
-	REQUIRE(rdata->rdclass == dns_rdataclass_in);
+	REQUIRE(rdata->type == 38);
+	REQUIRE(rdata->rdclass == 1);
 	REQUIRE(target != NULL);
 	REQUIRE(rdata->length != 0);
 
@@ -350,7 +349,7 @@ tostruct_in_a6(ARGS_TOSTRUCT) {
 	if (a6->prefixlen != 128) {
 		octets = 16 - a6->prefixlen / 8;
 		INSIST(r.length >= octets);
-		memmove(a6->in6_addr.s6_addr + 16 - octets, r.base, octets);
+		memcpy(a6->in6_addr.s6_addr + 16 - octets, r.base, octets);
 		isc_region_consume(&r, octets);
 	}
 
@@ -372,8 +371,8 @@ freestruct_in_a6(ARGS_FREESTRUCT) {
 	dns_rdata_in_a6_t *a6 = source;
 
 	REQUIRE(source != NULL);
-	REQUIRE(a6->common.rdclass == dns_rdataclass_in);
-	REQUIRE(a6->common.rdtype == dns_rdatatype_a6);
+	REQUIRE(a6->common.rdclass == 1);
+	REQUIRE(a6->common.rdtype == 38);
 
 	if (a6->mctx == NULL)
 		return;
@@ -385,8 +384,8 @@ freestruct_in_a6(ARGS_FREESTRUCT) {
 
 static inline isc_result_t
 additionaldata_in_a6(ARGS_ADDLDATA) {
-	REQUIRE(rdata->type == dns_rdatatype_a6);
-	REQUIRE(rdata->rdclass == dns_rdataclass_in);
+	REQUIRE(rdata->type == 38);
+	REQUIRE(rdata->rdclass == 1);
 
 	UNUSED(rdata);
 	UNUSED(add);
@@ -402,8 +401,8 @@ digest_in_a6(ARGS_DIGEST) {
 	isc_result_t result;
 	dns_name_t name;
 
-	REQUIRE(rdata->type == dns_rdatatype_a6);
-	REQUIRE(rdata->rdclass == dns_rdataclass_in);
+	REQUIRE(rdata->type == 38);
+	REQUIRE(rdata->rdclass == 1);
 
 	dns_rdata_toregion(rdata, &r1);
 	r2 = r1;
@@ -426,8 +425,8 @@ digest_in_a6(ARGS_DIGEST) {
 static inline isc_boolean_t
 checkowner_in_a6(ARGS_CHECKOWNER) {
 
-	REQUIRE(type == dns_rdatatype_a6);
-	REQUIRE(rdclass == dns_rdataclass_in);
+	REQUIRE(type == 38);
+	REQUIRE(rdclass == 1);
 
 	UNUSED(type);
 	UNUSED(rdclass);
@@ -441,8 +440,8 @@ checknames_in_a6(ARGS_CHECKNAMES) {
 	dns_name_t name;
 	unsigned int prefixlen;
 
-	REQUIRE(rdata->type == dns_rdatatype_a6);
-	REQUIRE(rdata->rdclass == dns_rdataclass_in);
+	REQUIRE(rdata->type == 38);
+	REQUIRE(rdata->rdclass == 1);
 
 	UNUSED(owner);
 
@@ -459,11 +458,6 @@ checknames_in_a6(ARGS_CHECKNAMES) {
 		return (ISC_FALSE);
 	}
 	return (ISC_TRUE);
-}
-
-static inline int
-casecompare_in_a6(ARGS_COMPARE) {
-	return (compare_in_a6(rdata1, rdata2));
 }
 
 #endif	/* RDATA_IN_1_A6_38_C */

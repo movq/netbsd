@@ -1,7 +1,7 @@
-/*	$NetBSD: wks_11.c,v 1.8 2017/06/15 15:59:41 christos Exp $	*/
+/*	$NetBSD: wks_11.c,v 1.1 2009/03/22 15:01:58 christos Exp $	*/
 
 /*
- * Copyright (C) 2004, 2007, 2009, 2011-2016  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2004, 2007, 2009  Internet Systems Consortium, Inc. ("ISC")
  * Copyright (C) 1999-2002  Internet Software Consortium.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -17,7 +17,7 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* Id */
+/* Id: wks_11.c,v 1.54.332.2 2009/02/16 23:47:15 tbox Exp */
 
 /* Reviewed: Fri Mar 17 15:01:49 PST 2000 by explorer */
 
@@ -29,52 +29,16 @@
 
 #include <isc/net.h>
 #include <isc/netdb.h>
-#include <isc/once.h>
 
 #define RRTYPE_WKS_ATTRIBUTES (0)
 
-static isc_mutex_t wks_lock;
-
-static void init_lock(void) {
-	RUNTIME_CHECK(isc_mutex_init(&wks_lock) == ISC_R_SUCCESS);
-}
-
-static isc_boolean_t
-mygetprotobyname(const char *name, long *proto) {
-	struct protoent *pe;
-
-	LOCK(&wks_lock);
-	pe = getprotobyname(name);
-	if (pe != NULL)
-		*proto = pe->p_proto;
-	UNLOCK(&wks_lock);
-	return (ISC_TF(pe != NULL));
-}
-
-static isc_boolean_t
-mygetservbyname(const char *name, const char *proto, long *port) {
-	struct servent *se;
-
-	LOCK(&wks_lock);
-	se = getservbyname(name, proto);
-	if (se != NULL)
-		*port = ntohs(se->s_port);
-	UNLOCK(&wks_lock);
-	return (ISC_TF(se != NULL));
-}
-
-#ifdef _WIN32
-#include <windows.h>
-#include <winsock2.h>
-#include <ws2tcpip.h>
-#endif
-
 static inline isc_result_t
 fromtext_in_wks(ARGS_FROMTEXT) {
-	static isc_once_t once = ISC_ONCE_INIT;
 	isc_token_t token;
 	isc_region_t region;
 	struct in_addr addr;
+	struct protoent *pe;
+	struct servent *se;
 	char *e;
 	long proto;
 	unsigned char bm[8*1024]; /* 64k bits */
@@ -84,71 +48,55 @@ fromtext_in_wks(ARGS_FROMTEXT) {
 	unsigned int n;
 	char service[32];
 	int i;
-	isc_result_t result;
 
-	REQUIRE(type == dns_rdatatype_wks);
-	REQUIRE(rdclass == dns_rdataclass_in);
+	REQUIRE(type == 11);
+	REQUIRE(rdclass == 1);
 
 	UNUSED(type);
 	UNUSED(origin);
 	UNUSED(options);
 	UNUSED(rdclass);
 
-	RUNTIME_CHECK(isc_once_do(&once, init_lock) == ISC_R_SUCCESS);
-
-#ifdef _WIN32
-	{
-		WORD wVersionRequested;
-		WSADATA wsaData;
-		int err;
-
-		wVersionRequested = MAKEWORD(2, 0);
-
-		err = WSAStartup(wVersionRequested, &wsaData );
-		if (err != 0)
-			return (ISC_R_FAILURE);
-	}
-#endif
-
 	/*
 	 * IPv4 dotted quad.
 	 */
-	CHECK(isc_lex_getmastertoken(lexer, &token, isc_tokentype_string,
+	RETERR(isc_lex_getmastertoken(lexer, &token, isc_tokentype_string,
 				      ISC_FALSE));
 
 	isc_buffer_availableregion(target, &region);
 	if (getquad(DNS_AS_STR(token), &addr, lexer, callbacks) != 1)
-		CHECKTOK(DNS_R_BADDOTTEDQUAD);
+		RETTOK(DNS_R_BADDOTTEDQUAD);
 	if (region.length < 4)
 		return (ISC_R_NOSPACE);
-	memmove(region.base, &addr, 4);
+	memcpy(region.base, &addr, 4);
 	isc_buffer_add(target, 4);
 
 	/*
 	 * Protocol.
 	 */
-	CHECK(isc_lex_getmastertoken(lexer, &token, isc_tokentype_string,
+	RETERR(isc_lex_getmastertoken(lexer, &token, isc_tokentype_string,
 				      ISC_FALSE));
 
 	proto = strtol(DNS_AS_STR(token), &e, 10);
 	if (*e == 0)
 		;
-	else if (!mygetprotobyname(DNS_AS_STR(token), &proto))
-		CHECKTOK(DNS_R_UNKNOWNPROTO);
-
+	else if ((pe = getprotobyname(DNS_AS_STR(token))) != NULL)
+		proto = pe->p_proto;
+	else
+		RETTOK(DNS_R_UNKNOWNPROTO);
 	if (proto < 0 || proto > 0xff)
-		CHECKTOK(ISC_R_RANGE);
+		RETTOK(ISC_R_RANGE);
 
 	if (proto == IPPROTO_TCP)
 		ps = "tcp";
 	else if (proto == IPPROTO_UDP)
 		ps = "udp";
 
-	CHECK(uint8_tobuffer(proto, target));
+	RETERR(uint8_tobuffer(proto, target));
 
 	memset(bm, 0, sizeof(bm));
 	do {
-		CHECK(isc_lex_getmastertoken(lexer, &token,
+		RETERR(isc_lex_getmastertoken(lexer, &token,
 					      isc_tokentype_string, ISC_TRUE));
 		if (token.type != isc_tokentype_string)
 			break;
@@ -166,11 +114,15 @@ fromtext_in_wks(ARGS_FROMTEXT) {
 		port = strtol(DNS_AS_STR(token), &e, 10);
 		if (*e == 0)
 			;
-		else if (!mygetservbyname(service, ps, &port) &&
-			 !mygetservbyname(DNS_AS_STR(token), ps, &port))
-			CHECKTOK(DNS_R_UNKNOWNSERVICE);
+		else if ((se = getservbyname(service, ps)) != NULL)
+			port = ntohs(se->s_port);
+		else if ((se = getservbyname(DNS_AS_STR(token), ps))
+			  != NULL)
+			port = ntohs(se->s_port);
+		else
+			RETTOK(DNS_R_UNKNOWNSERVICE);
 		if (port < 0 || port > 0xffff)
-			CHECKTOK(ISC_R_RANGE);
+			RETTOK(ISC_R_RANGE);
 		if (port > maxport)
 			maxport = port;
 		bm[port / 8] |= (0x80 >> (port % 8));
@@ -182,14 +134,7 @@ fromtext_in_wks(ARGS_FROMTEXT) {
 	isc_lex_ungettoken(lexer, &token);
 
 	n = (maxport + 8) / 8;
-	result = mem_tobuffer(target, bm, n);
-
- cleanup:
-#ifdef _WIN32
-	WSACleanup();
-#endif
-
-	return (result);
+	return (mem_tobuffer(target, bm, n));
 }
 
 static inline isc_result_t
@@ -201,8 +146,8 @@ totext_in_wks(ARGS_TOTEXT) {
 
 	UNUSED(tctx);
 
-	REQUIRE(rdata->type == dns_rdatatype_wks);
-	REQUIRE(rdata->rdclass == dns_rdataclass_in);
+	REQUIRE(rdata->type == 11);
+	REQUIRE(rdata->rdclass == 1);
 	REQUIRE(rdata->length >= 5);
 
 	dns_rdata_toregion(rdata, &sr);
@@ -234,8 +179,8 @@ fromwire_in_wks(ARGS_FROMWIRE) {
 	isc_region_t sr;
 	isc_region_t tr;
 
-	REQUIRE(type == dns_rdatatype_wks);
-	REQUIRE(rdclass == dns_rdataclass_in);
+	REQUIRE(type == 11);
+	REQUIRE(rdclass == 1);
 
 	UNUSED(type);
 	UNUSED(dctx);
@@ -252,7 +197,7 @@ fromwire_in_wks(ARGS_FROMWIRE) {
 	if (tr.length < sr.length)
 		return (ISC_R_NOSPACE);
 
-	memmove(tr.base, sr.base, sr.length);
+	memcpy(tr.base, sr.base, sr.length);
 	isc_buffer_add(target, sr.length);
 	isc_buffer_forward(source, sr.length);
 
@@ -265,8 +210,8 @@ towire_in_wks(ARGS_TOWIRE) {
 
 	UNUSED(cctx);
 
-	REQUIRE(rdata->type == dns_rdatatype_wks);
-	REQUIRE(rdata->rdclass == dns_rdataclass_in);
+	REQUIRE(rdata->type == 11);
+	REQUIRE(rdata->rdclass == 1);
 	REQUIRE(rdata->length != 0);
 
 	dns_rdata_toregion(rdata, &sr);
@@ -280,8 +225,8 @@ compare_in_wks(ARGS_COMPARE) {
 
 	REQUIRE(rdata1->type == rdata2->type);
 	REQUIRE(rdata1->rdclass == rdata2->rdclass);
-	REQUIRE(rdata1->type == dns_rdatatype_wks);
-	REQUIRE(rdata1->rdclass == dns_rdataclass_in);
+	REQUIRE(rdata1->type == 11);
+	REQUIRE(rdata1->rdclass == 1);
 	REQUIRE(rdata1->length != 0);
 	REQUIRE(rdata2->length != 0);
 
@@ -295,8 +240,8 @@ fromstruct_in_wks(ARGS_FROMSTRUCT) {
 	dns_rdata_in_wks_t *wks = source;
 	isc_uint32_t a;
 
-	REQUIRE(type == dns_rdatatype_wks);
-	REQUIRE(rdclass == dns_rdataclass_in);
+	REQUIRE(type == 11);
+	REQUIRE(rdclass == 1);
 	REQUIRE(source != NULL);
 	REQUIRE(wks->common.rdtype == type);
 	REQUIRE(wks->common.rdclass == rdclass);
@@ -308,7 +253,7 @@ fromstruct_in_wks(ARGS_FROMSTRUCT) {
 
 	a = ntohl(wks->in_addr.s_addr);
 	RETERR(uint32_tobuffer(a, target));
-	RETERR(uint8_tobuffer(wks->protocol, target));
+	RETERR(uint16_tobuffer(wks->protocol, target));
 	return (mem_tobuffer(target, wks->map, wks->map_len));
 }
 
@@ -318,8 +263,8 @@ tostruct_in_wks(ARGS_TOSTRUCT) {
 	isc_uint32_t n;
 	isc_region_t region;
 
-	REQUIRE(rdata->type == dns_rdatatype_wks);
-	REQUIRE(rdata->rdclass == dns_rdataclass_in);
+	REQUIRE(rdata->type == 11);
+	REQUIRE(rdata->rdclass == 1);
 	REQUIRE(rdata->length != 0);
 
 	wks->common.rdclass = rdata->rdclass;
@@ -330,8 +275,8 @@ tostruct_in_wks(ARGS_TOSTRUCT) {
 	n = uint32_fromregion(&region);
 	wks->in_addr.s_addr = htonl(n);
 	isc_region_consume(&region, 4);
-	wks->protocol = uint8_fromregion(&region);
-	isc_region_consume(&region, 1);
+	wks->protocol = uint16_fromregion(&region);
+	isc_region_consume(&region, 2);
 	wks->map_len = region.length;
 	wks->map = mem_maybedup(mctx, region.base, region.length);
 	if (wks->map == NULL)
@@ -345,8 +290,8 @@ freestruct_in_wks(ARGS_FREESTRUCT) {
 	dns_rdata_in_wks_t *wks = source;
 
 	REQUIRE(source != NULL);
-	REQUIRE(wks->common.rdtype == dns_rdatatype_wks);
-	REQUIRE(wks->common.rdclass == dns_rdataclass_in);
+	REQUIRE(wks->common.rdtype == 11);
+	REQUIRE(wks->common.rdclass == 1);
 
 	if (wks->mctx == NULL)
 		return;
@@ -362,8 +307,8 @@ additionaldata_in_wks(ARGS_ADDLDATA) {
 	UNUSED(add);
 	UNUSED(arg);
 
-	REQUIRE(rdata->type == dns_rdatatype_wks);
-	REQUIRE(rdata->rdclass == dns_rdataclass_in);
+	REQUIRE(rdata->type == 11);
+	REQUIRE(rdata->rdclass == 1);
 
 	return (ISC_R_SUCCESS);
 }
@@ -372,8 +317,8 @@ static inline isc_result_t
 digest_in_wks(ARGS_DIGEST) {
 	isc_region_t r;
 
-	REQUIRE(rdata->type == dns_rdatatype_wks);
-	REQUIRE(rdata->rdclass == dns_rdataclass_in);
+	REQUIRE(rdata->type == 11);
+	REQUIRE(rdata->rdclass == 1);
 
 	dns_rdata_toregion(rdata, &r);
 
@@ -383,8 +328,8 @@ digest_in_wks(ARGS_DIGEST) {
 static inline isc_boolean_t
 checkowner_in_wks(ARGS_CHECKOWNER) {
 
-	REQUIRE(type == dns_rdatatype_wks);
-	REQUIRE(rdclass == dns_rdataclass_in);
+	REQUIRE(type == 11);
+	REQUIRE(rdclass == 1);
 
 	UNUSED(type);
 	UNUSED(rdclass);
@@ -395,19 +340,14 @@ checkowner_in_wks(ARGS_CHECKOWNER) {
 static inline isc_boolean_t
 checknames_in_wks(ARGS_CHECKNAMES) {
 
-	REQUIRE(rdata->type == dns_rdatatype_wks);
-	REQUIRE(rdata->rdclass == dns_rdataclass_in);
+	REQUIRE(rdata->type == 11);
+	REQUIRE(rdata->rdclass == 1);
 
 	UNUSED(rdata);
 	UNUSED(owner);
 	UNUSED(bad);
 
 	return (ISC_TRUE);
-}
-
-static inline int
-casecompare_in_wks(ARGS_COMPARE) {
-	return (compare_in_wks(rdata1, rdata2));
 }
 
 #endif	/* RDATA_IN_1_WKS_11_C */

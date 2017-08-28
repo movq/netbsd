@@ -1,7 +1,7 @@
-/*	$NetBSD: lwres_grbn.c,v 1.6 2017/06/15 15:59:42 christos Exp $	*/
+/*	$NetBSD: lwres_grbn.c,v 1.1 2009/03/22 15:02:39 christos Exp $	*/
 
 /*
- * Copyright (C) 2004, 2005, 2007, 2013, 2016  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2004, 2005, 2007  Internet Systems Consortium, Inc. ("ISC")
  * Copyright (C) 2000, 2001  Internet Software Consortium.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -17,7 +17,7 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* Id: lwres_grbn.c,v 1.10 2007/06/19 23:47:22 tbox Exp  */
+/* Id: lwres_grbn.c,v 1.10 2007/06/19 23:47:22 tbox Exp */
 
 /*! \file lwres_grbn.c
 
@@ -63,9 +63,9 @@ lwres_grbnrequest_render(lwres_context_t *ctx, lwres_grbnrequest_t *req,
 	if (buf == NULL)
 		return (LWRES_R_NOMEMORY);
 
-	lwres_buffer_init(b, buf, (unsigned int)buflen);
+	lwres_buffer_init(b, buf, buflen);
 
-	pkt->length = (lwres_uint32_t)buflen;
+	pkt->length = buflen;
 	pkt->version = LWRES_LWPACKETVERSION_0;
 	pkt->pktflags &= ~LWRES_LWPACKETFLAG_RESPONSE;
 	pkt->opcode = LWRES_OPCODE_GETRDATABYNAME;
@@ -141,9 +141,9 @@ lwres_grbnresponse_render(lwres_context_t *ctx, lwres_grbnresponse_t *req,
 	buf = CTXMALLOC(buflen);
 	if (buf == NULL)
 		return (LWRES_R_NOMEMORY);
-	lwres_buffer_init(b, buf, (unsigned int)buflen);
+	lwres_buffer_init(b, buf, buflen);
 
-	pkt->length = (lwres_uint32_t)buflen;
+	pkt->length = buflen;
 	pkt->version = LWRES_LWPACKETVERSION_0;
 	pkt->pktflags |= LWRES_LWPACKETFLAG_RESPONSE;
 	pkt->opcode = LWRES_OPCODE_GETRDATABYNAME;
@@ -252,7 +252,7 @@ lwres_grbnrequest_parse(lwres_context_t *ctx, lwres_buffer_t *b,
 	return (LWRES_R_SUCCESS);
 }
 
-/*% Thread-safe equivalent to \link lwres_gabn.c lwres_gabn* \endlink routines. */
+/*% Thread-save equivalent to \link lwres_gabn.c lwres_gabn* \endlink routines. */
 lwres_result_t
 lwres_grbnresponse_parse(lwres_context_t *ctx, lwres_buffer_t *b,
 			lwres_lwpacket_t *pkt, lwres_grbnresponse_t **structp)

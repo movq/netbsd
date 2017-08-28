@@ -1,10 +1,10 @@
-/*	$NetBSD: discover.c,v 1.6 2017/06/28 02:46:30 manu Exp $	*/
+/*	$NetBSD: discover.c,v 1.1 2013/03/24 15:45:52 christos Exp $	*/
+
 /* discover.c
 
    Find and identify the network interfaces. */
 
 /*
- * Copyright (c) 2013-2014 by Internet Systems Consortium, Inc. ("ISC")
  * Copyright (c) 2004-2009,2011 by Internet Systems Consortium, Inc. ("ISC")
  * Copyright (c) 1995-2003 by Internet Software Consortium
  *
@@ -26,15 +26,18 @@
  *   <info@isc.org>
  *   https://www.isc.org/
  *
+ * This software has been written for Internet Systems Consortium
+ * by Ted Lemon in cooperation with Vixie Enterprises and Nominum, Inc.
+ * To learn more about Internet Systems Consortium, see
+ * ``https://www.isc.org/''.  To learn more about Vixie Enterprises,
+ * see ``http://www.vix.com''.   To learn more about Nominum, Inc., see
+ * ``http://www.nominum.com''.
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: discover.c,v 1.6 2017/06/28 02:46:30 manu Exp $");
+__RCSID("$NetBSD: discover.c,v 1.1 2013/03/24 15:45:52 christos Exp $");
 
 #include "dhcpd.h"
-
-/* length of line we can read from the IF file, 256 is too small in some cases */
-#define IF_LINE_LENGTH 1024
 
 #define BSD_COMP		/* needed on Solaris for SIOCGLIFNUM */
 #include <sys/ioctl.h>
@@ -47,6 +50,8 @@ __RCSID("$NetBSD: discover.c,v 1.6 2017/06/28 02:46:30 manu Exp $");
 struct interface_info *interfaces, *dummy_interfaces, *fallback_interface;
 int interfaces_invalidated;
 int quiet_interface_discovery;
+u_int16_t local_port;
+u_int16_t remote_port;
 int (*dhcp_interface_setup_hook) (struct interface_info *, struct iaddr *);
 int (*dhcp_interface_discovery_hook) (struct interface_info *);
 isc_result_t (*dhcp_interface_startup_hook) (struct interface_info *);
@@ -56,6 +61,10 @@ struct in_addr limited_broadcast;
 
 int local_family = AF_INET;
 struct in_addr local_address;
+
+#ifdef DHCPv6
+struct in6_addr local_address6;
+#endif /* DHCPv6 */
 
 void (*bootp_packet_handler) (struct interface_info *,
 			      struct dhcp_packet *, unsigned,
@@ -237,7 +246,7 @@ struct iface_info {
  *
  * The iface_conf_list structure maintains state for this process.
  */
-static int 
+int 
 begin_iface_scan(struct iface_conf_list *ifaces) {
 #ifdef ISC_PLATFORM_HAVELIFNUM
 	struct lifnum lifnum;
@@ -301,7 +310,7 @@ begin_iface_scan(struct iface_conf_list *ifaces) {
  * Returns information in the info structure. 
  * Sets err to 1 if there is an error, otherwise 0.
  */
-static int
+int
 next_iface(struct iface_info *info, int *err, struct iface_conf_list *ifaces) {
 	struct LIFREQ *p;
 	struct LIFREQ tmp;
@@ -368,7 +377,7 @@ next_iface(struct iface_info *info, int *err, struct iface_conf_list *ifaces) {
 /*
  * End scan of interfaces.
  */
-static void
+void
 end_iface_scan(struct iface_conf_list *ifaces) {
 	dfree(ifaces->conf.lifc_buf, MDL);
 	close(ifaces->sock);
@@ -411,9 +420,9 @@ struct iface_info {
  *
  * The iface_conf_list structure maintains state for this process.
  */
-static int 
+int 
 begin_iface_scan(struct iface_conf_list *ifaces) {
-	char buf[IF_LINE_LENGTH];
+	char buf[256];
 	int len;
 	int i;
 
@@ -486,7 +495,7 @@ begin_iface_scan(struct iface_conf_list *ifaces) {
  */
 static int
 next_iface4(struct iface_info *info, int *err, struct iface_conf_list *ifaces) {
-	char buf[IF_LINE_LENGTH];
+	char buf[256];
 	int len;
 	char *p;
 	char *name;
@@ -549,7 +558,7 @@ next_iface4(struct iface_info *info, int *err, struct iface_conf_list *ifaces) {
 				log_error("Interface name '%s' too long", name);
 				return 0;
 			}
-			strncpy(info->name, name, sizeof(info->name) - 1);
+			strcpy(info->name, name);
 
 #ifdef ALIAS_NAMED_PERMUTED
 			/* interface aliases look like "eth0:1" or "wlan1:3" */
@@ -566,7 +575,7 @@ next_iface4(struct iface_info *info, int *err, struct iface_conf_list *ifaces) {
 #endif
 
 		memset(&tmp, 0, sizeof(tmp));
-		strncpy(tmp.ifr_name, name, sizeof(tmp.ifr_name) - 1);
+		strcpy(tmp.ifr_name, name);
 		if (ioctl(ifaces->sock, SIOCGIFADDR, &tmp) < 0) {
 			if (errno == EADDRNOTAVAIL) {
 				continue;
@@ -579,7 +588,7 @@ next_iface4(struct iface_info *info, int *err, struct iface_conf_list *ifaces) {
 		memcpy(&info->addr, &tmp.ifr_addr, sizeof(tmp.ifr_addr));
 
 		memset(&tmp, 0, sizeof(tmp));
-		strncpy(tmp.ifr_name, name, sizeof(tmp.ifr_name) - 1);
+		strcpy(tmp.ifr_name, name);
 		if (ioctl(ifaces->sock, SIOCGIFFLAGS, &tmp) < 0) {
 			log_error("Error getting interface flags for '%s'; %m", 
 			  	name);
@@ -610,7 +619,7 @@ next_iface4(struct iface_info *info, int *err, struct iface_conf_list *ifaces) {
  */
 static int
 next_iface6(struct iface_info *info, int *err, struct iface_conf_list *ifaces) {
-	char buf[IF_LINE_LENGTH];
+	char buf[256];
 	int len;
 	char *p;
 	char *name;
@@ -723,7 +732,7 @@ next_iface6(struct iface_info *info, int *err, struct iface_conf_list *ifaces) {
  * Returns information in the info structure. 
  * Sets err to 1 if there is an error, otherwise 0.
  */
-static int
+int
 next_iface(struct iface_info *info, int *err, struct iface_conf_list *ifaces) {
 	if (next_iface4(info, err, ifaces)) {
 		return 1;
@@ -740,7 +749,7 @@ next_iface(struct iface_info *info, int *err, struct iface_conf_list *ifaces) {
 /*
  * End scan of interfaces.
  */
-static void
+void
 end_iface_scan(struct iface_conf_list *ifaces) {
 	fclose(ifaces->fp);
 	ifaces->fp = NULL;
@@ -789,7 +798,7 @@ struct iface_info {
  *
  * The iface_conf_list structure maintains state for this process.
  */
-static int 
+int 
 begin_iface_scan(struct iface_conf_list *ifaces) {
 	if (getifaddrs(&ifaces->head) != 0) {
 		log_error("Error getting interfaces; %m");
@@ -805,7 +814,7 @@ begin_iface_scan(struct iface_conf_list *ifaces) {
  * Returns information in the info structure. 
  * Sets err to 1 if there is an error, otherwise 0.
  */
-static int
+int
 next_iface(struct iface_info *info, int *err, struct iface_conf_list *ifaces) {
 	if (ifaces->next == NULL) {
 		*err = 0;
@@ -829,7 +838,7 @@ next_iface(struct iface_info *info, int *err, struct iface_conf_list *ifaces) {
 /*
  * End scan of interfaces.
  */
-static void
+void
 end_iface_scan(struct iface_conf_list *ifaces) {
 	freeifaddrs(ifaces->head);
 	ifaces->head = NULL;
@@ -838,7 +847,7 @@ end_iface_scan(struct iface_conf_list *ifaces) {
 #endif 
 
 /* XXX: perhaps create drealloc() rather than do it manually */
-static void
+void
 add_ipv4_addr_to_interface(struct interface_info *iface, 
 			   const struct in_addr *addr) {
 	/*
@@ -875,7 +884,7 @@ add_ipv4_addr_to_interface(struct interface_info *iface,
 
 #ifdef DHCPv6
 /* XXX: perhaps create drealloc() rather than do it manually */
-static void
+void
 add_ipv6_addr_to_interface(struct interface_info *iface, 
 			   const struct in6_addr *addr) {
 	/*
@@ -1237,7 +1246,7 @@ discover_interfaces(int state) {
 			    (state == DISCOVER_RELAY)) {
 				if_register6(tmp, 1);
 			} else {
-				if_register_linklocal6(tmp);
+				if_register6(tmp, 0);
 			}
 #endif /* DHCPv6 */
 		}
@@ -1293,14 +1302,13 @@ discover_interfaces(int state) {
 				   tmp -> name, isc_result_totext (status));
 
 #if defined(DHCPv6)
-		/* Only register the first interface for V6, since
-		 * servers and relays all use the same socket.
-		 * XXX: This has some messy side effects if we start
-		 * dynamically adding and removing interfaces, but
-		 * we're well beyond that point in terms of mess.
+		/* Only register the first interface for V6, since they all
+		 * use the same socket.  XXX: This has some messy side
+		 * effects if we start dynamically adding and removing
+		 * interfaces, but we're well beyond that point in terms of
+		 * mess.
 		 */
-		if (((state == DISCOVER_SERVER) || (state == DISCOVER_RELAY)) &&
-		    (local_family == AF_INET6))
+		if (local_family == AF_INET6)
 			break;
 #endif
 	} /* for (tmp = interfaces; ... */
@@ -1572,7 +1580,7 @@ isc_result_t dhcp_interface_destroy (omapi_object_t *h,
 		interface -> client = (struct client_state *)0;
 
 	if (interface -> shared_network)
-		omapi_object_dereference ((void *)
+		omapi_object_dereference ((omapi_object_t **)
 					  &interface -> shared_network, MDL);
 
 	return ISC_R_SUCCESS;

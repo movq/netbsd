@@ -1,7 +1,7 @@
-/*	$NetBSD: atomic.h,v 1.6 2014/12/10 04:38:01 christos Exp $	*/
+/*	$NetBSD: atomic.h,v 1.1 2009/03/22 15:02:17 christos Exp $	*/
 
 /*
- * Copyright (C) 2005, 2007, 2013  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2005, 2007  Internet Systems Consortium, Inc. ("ISC")
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -16,7 +16,7 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* Id: atomic.h,v 1.5 2007/06/19 23:47:18 tbox Exp  */
+/* Id: atomic.h,v 1.5 2007/06/19 23:47:18 tbox Exp */
 
 /*
  * This code was written based on FreeBSD's kernel source whose copyright
@@ -67,16 +67,16 @@
  * This routine atomically increments the value stored in 'p' by 'val', and
  * returns the previous value.
  */
-static __inline isc_int32_t
+static inline isc_int32_t
 isc_atomic_xadd(isc_int32_t *p, isc_int32_t val) {
 	isc_int32_t prev, swapped;
 
 	for (prev = *(volatile isc_int32_t *)p; ; prev = swapped) {
 		swapped = prev + val;
 		__asm__ volatile(
-			"casa [%2] %3, %4, %0"
-			: "+r"(swapped), "=m"(*p)
-			: "r"(p), "n"(ASI_P), "r"(prev), "m"(*p));
+			"casa [%1] %2, %3, %0"
+			: "+r"(swapped)
+			: "r"(p), "n"(ASI_P), "r"(prev));
 		if (swapped == prev)
 			break;
 	}
@@ -87,16 +87,17 @@ isc_atomic_xadd(isc_int32_t *p, isc_int32_t val) {
 /*
  * This routine atomically stores the value 'val' in 'p'.
  */
-static __inline void
+static inline void
 isc_atomic_store(isc_int32_t *p, isc_int32_t val) {
 	isc_int32_t prev, swapped;
 
 	for (prev = *(volatile isc_int32_t *)p; ; prev = swapped) {
 		swapped = val;
 		__asm__ volatile(
-			"casa [%2] %3, %4, %0"
-			: "+r"(swapped), "=m"(*p)
-			: "r"(p), "n"(ASI_P), "r"(prev), "m"(*p));
+			"casa [%1] %2, %3, %0"
+			: "+r"(swapped)
+			: "r"(p), "n"(ASI_P), "r"(prev)
+			: "memory");
 		if (swapped == prev)
 			break;
 	}
@@ -107,14 +108,14 @@ isc_atomic_store(isc_int32_t *p, isc_int32_t val) {
  * original value is equal to 'cmpval'.  The original value is returned in any
  * case.
  */
-static __inline isc_int32_t
+static inline isc_int32_t
 isc_atomic_cmpxchg(isc_int32_t *p, isc_int32_t cmpval, isc_int32_t val) {
 	isc_int32_t temp = val;
 
 	__asm__ volatile(
-		"casa [%2] %3, %4, %0"
-		: "+r"(temp), "=m"(*p)
-		: "r"(p), "n"(ASI_P), "r"(cmpval), "m"(*p));
+		"casa [%1] %2, %3, %0"
+		: "+r"(temp)
+		: "r"(p), "n"(ASI_P), "r"(cmpval));
 
 	return (temp);
 }

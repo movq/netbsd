@@ -1,7 +1,7 @@
-/*	$NetBSD: resolve.c,v 1.1.1.6 2017/06/15 15:22:51 christos Exp $	*/
+/*	$NetBSD: resolve.c,v 1.1 2014/02/28 17:40:16 christos Exp $	*/
 
 /*
- * Copyright (C) 2009, 2012-2016  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2009, 2012-2014  Internet Systems Consortium, Inc. ("ISC")
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -18,7 +18,6 @@
 
 #include <config.h>
 
-#ifndef WIN32
 #include <sys/types.h>
 #include <sys/socket.h>
 
@@ -26,20 +25,16 @@
 
 #include <arpa/inet.h>
 
-#include <netdb.h>
 #include <unistd.h>
-#endif
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <netdb.h>
 
 #include <isc/base64.h>
 #include <isc/buffer.h>
-#include <isc/commandline.h>
 #include <isc/lib.h>
 #include <isc/mem.h>
-#include <isc/print.h>
 #include <isc/sockaddr.h>
 #include <isc/util.h>
 #include <isc/app.h>
@@ -109,7 +104,7 @@ set_key(dns_client_t *client, char *keynamestr, char *keystr,
 {
 	isc_result_t result;
 	dns_fixedname_t fkeyname;
-	unsigned int namelen;
+	size_t namelen;
 	dns_name_t *keyname;
 	dns_rdata_dnskey_t keystruct;
 	unsigned char keydata[4096];
@@ -188,11 +183,11 @@ addserver(dns_client_t *client, const char *addrstr, const char *port,
 	  const char *namespace)
 {
 	struct addrinfo hints, *res;
-	int gaierror;
+	int gai_error;
 	isc_sockaddr_t sa;
 	isc_sockaddrlist_t servers;
 	isc_result_t result;
-	unsigned int namelen;
+	size_t namelen;
 	isc_buffer_t b;
 	dns_fixedname_t fname;
 	dns_name_t *name = NULL;
@@ -202,15 +197,15 @@ addserver(dns_client_t *client, const char *addrstr, const char *port,
 	hints.ai_socktype = SOCK_DGRAM;
 	hints.ai_protocol = IPPROTO_UDP;
 	hints.ai_flags = AI_NUMERICHOST;
-	gaierror = getaddrinfo(addrstr, port, &hints, &res);
-	if (gaierror != 0) {
+	gai_error = getaddrinfo(addrstr, port, &hints, &res);
+	if (gai_error != 0) {
 		fprintf(stderr, "getaddrinfo failed: %s\n",
-			gai_strerror(gaierror));
+			gai_strerror(gai_error));
 		exit(1);
 	}
 	INSIST(res->ai_addrlen <= sizeof(sa.type));
 	memmove(&sa.type, res->ai_addr, res->ai_addrlen);
-	sa.length = (unsigned int)res->ai_addrlen;
+	sa.length = res->ai_addrlen;
 	freeaddrinfo(res);
 	ISC_LINK_INIT(&sa, link);
 	ISC_LIST_INIT(servers);
@@ -252,7 +247,7 @@ main(int argc, char *argv[]) {
 	isc_result_t result;
 	isc_buffer_t b;
 	dns_fixedname_t qname0;
-	unsigned int namelen;
+	size_t namelen;
 	dns_name_t *qname, *name;
 	dns_rdatatype_t type = dns_rdatatype_a;
 	dns_rdataset_t *rdataset;
@@ -271,26 +266,23 @@ main(int argc, char *argv[]) {
 	isc_sockaddr_t a4, a6;
 	isc_sockaddr_t *addr4 = NULL, *addr6 = NULL;
 
-	while ((ch = isc_commandline_parse(argc, argv,
-					   "a:b:es:t:k:K:p:S:")) != -1) {
+	while ((ch = getopt(argc, argv, "a:b:es:t:k:K:p:S:")) != -1) {
 		switch (ch) {
 		case 't':
-			tr.base = isc_commandline_argument;
-			tr.length = strlen(isc_commandline_argument);
+			tr.base = optarg;
+			tr.length = strlen(optarg);
 			result = dns_rdatatype_fromtext(&type, &tr);
 			if (result != ISC_R_SUCCESS) {
 				fprintf(stderr,
-					"invalid RRtype: %s\n",
-					isc_commandline_argument);
+					"invalid RRtype: %s\n", optarg);
 				exit(1);
 			}
 			break;
 		case 'a':
-			algname = isc_commandline_argument;
+			algname = optarg;
 			break;
 		case 'b':
-			if (inet_pton(AF_INET,
-				      isc_commandline_argument, &in4) == 1) {
+			if (inet_pton(AF_INET, optarg, &in4) == 1) {
 				if (addr4 != NULL) {
 					fprintf(stderr, "only one local "
 							"address per family "
@@ -299,9 +291,7 @@ main(int argc, char *argv[]) {
 				}
 				isc_sockaddr_fromin(&a4, &in4, 0);
 				addr4 = &a4;
-			} else if (inet_pton(AF_INET6,
-					     isc_commandline_argument,
-					     &in6) == 1) {
+			} else if (inet_pton(AF_INET6, optarg, &in6) == 1) {
 				if (addr6 != NULL) {
 					fprintf(stderr, "only one local "
 							"address per family "
@@ -311,8 +301,7 @@ main(int argc, char *argv[]) {
 				isc_sockaddr_fromin6(&a6, &in6, 0);
 				addr6 = &a6;
 			} else {
-				fprintf(stderr, "invalid address %s\n",
-					isc_commandline_argument);
+				fprintf(stderr, "invalid address %s\n", optarg);
 				exit(1);
 			}
 			break;
@@ -326,7 +315,7 @@ main(int argc, char *argv[]) {
 					altserver);
 				exit(1);
 			}
-			altserver = isc_commandline_argument;
+			altserver = optarg;
 			break;
 		case 's':
 			if (server != NULL) {
@@ -335,24 +324,24 @@ main(int argc, char *argv[]) {
 					server);
 				exit(1);
 			}
-			server = isc_commandline_argument;
+			server = optarg;
 			break;
 		case 'k':
-			keynamestr = isc_commandline_argument;
+			keynamestr = optarg;
 			break;
 		case 'K':
-			keystr = isc_commandline_argument;
+			keystr = optarg;
 			break;
 		case 'p':
-			port = isc_commandline_argument;
+			port = optarg;
 			break;
 		default:
 			usage();
 		}
 	}
 
-	argc -= isc_commandline_index;
-	argv += isc_commandline_index;
+	argc -= optind;
+	argv += optind;
 	if (argc < 1)
 		usage();
 

@@ -1,7 +1,7 @@
-/*	$NetBSD: t_api.c,v 1.8 2017/06/15 15:59:42 christos Exp $	*/
+/*	$NetBSD: t_api.c,v 1.1 2009/03/22 15:02:49 christos Exp $	*/
 
 /*
- * Copyright (C) 2004, 2005, 2007-2010, 2013, 2014, 2016  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2004, 2005, 2007-2009  Internet Systems Consortium, Inc. ("ISC")
  * Copyright (C) 1999-2003  Internet Software Consortium.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -17,7 +17,7 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* Id: t_api.c,v 1.68 2010/12/21 04:20:23 marka Exp  */
+/* Id: t_api.c,v 1.63.156.2 2009/03/02 23:47:11 tbox Exp */
 
 /*! \file */
 
@@ -33,11 +33,7 @@
 #include <time.h>
 #include <unistd.h>
 
-#ifndef WIN32
 #include <sys/wait.h>
-#else
-#include <direct.h>
-#endif
 
 #include <isc/boolean.h>
 #include <isc/commandline.h>
@@ -90,9 +86,6 @@ static char		T_tvec[T_MAXTESTS / 8];
 static char *		T_env[T_MAXENV + 1];
 static char		T_buf[T_BIGBUF];
 static char *		T_dir;
-#ifdef WIN32
-static testspec_t	T_testlist[T_MAXTESTS];
-#endif
 
 static int
 t_initconf(const char *path);
@@ -120,31 +113,20 @@ t_sighandler(int sig) {
 }
 
 int
-#ifndef WIN32
-main(int argc, char **argv)
-#else
-t_main(int argc, char **argv)
-#endif
-{
+main(int argc, char **argv) {
 	int			c;
 	int			tnum;
-#ifndef WIN32
 	int			subprocs;
 	pid_t			deadpid;
 	int			status;
-#endif
 	int			len;
 	isc_boolean_t		first;
 	testspec_t		*pts;
-#ifndef WIN32
 	struct sigaction	sa;
-#endif
 
 	isc_mem_debugging = ISC_MEM_DEBUGRECORD;
 	first = ISC_TRUE;
-#ifndef WIN32
 	subprocs = 1;
-#endif
 	T_timeout = T_TCTOUT;
 
 	/*
@@ -223,9 +205,7 @@ t_main(int argc, char **argv)
 			exit(0);
 		}
 		else if (c == 'x') {
-#ifndef WIN32
 			subprocs = 0;
-#endif
 		}
 		else if (c == 'q') {
 			T_timeout = atoi(isc_commandline_argument);
@@ -262,14 +242,21 @@ t_main(int argc, char **argv)
 	 * Setup signals.
 	 */
 
-#ifndef WIN32
 	sa.sa_flags = 0;
 	sigfillset(&sa.sa_mask);
+
+#ifdef SIGCHLD
+	/*
+	 * This is mostly here for NetBSD's pthread implementation, until
+	 * people catch up to the latest unproven-pthread package.
+	 */
+	sa.sa_handler = SIG_DFL;
+	(void)sigaction(SIGCHLD, &sa, NULL);
+#endif
 
 	sa.sa_handler = t_sighandler;
 	(void)sigaction(SIGINT,  &sa, NULL);
 	(void)sigaction(SIGALRM, &sa, NULL);
-#endif
 
 	/*
 	 * Output start stanza to journal.
@@ -297,9 +284,8 @@ t_main(int argc, char **argv)
 
 	tnum = 0;
 	pts = &T_testlist[0];
-	while (pts->pfv != NULL) {
+	while (*pts->pfv != NULL) {
 		if (T_tvec[tnum / 8] & (0x01 << (tnum % 8))) {
-#ifndef WIN32
 			if (subprocs) {
 				T_pid = fork();
 				if (T_pid == 0) {
@@ -352,9 +338,6 @@ t_main(int argc, char **argv)
 			else {
 				(*pts->pfv)();
 			}
-#else
-			(*pts->pfv)();
-#endif
 		}
 		++pts;
 		++tnum;
@@ -371,7 +354,6 @@ t_main(int argc, char **argv)
 void
 t_assert(const char *component, int anum, int class, const char *what, ...) {
 	va_list	args;
-	char buf[T_BIGBUF];
 
 	(void)printf("T:%s:%d:%s\n", component, anum, class == T_REQUIRED ?
 		     "A" : "C");
@@ -380,22 +362,21 @@ t_assert(const char *component, int anum, int class, const char *what, ...) {
 	 * Format text to a buffer.
 	 */
 	va_start(args, what);
-	(void)vsnprintf(buf, sizeof(buf), what, args);
+	(void)vsnprintf(T_buf, sizeof(T_buf), what, args);
 	va_end(args);
 
-	(void)t_putinfo("A", buf);
+	(void)t_putinfo("A", T_buf);
 	(void)printf("\n");
 }
 
 void
 t_info(const char *format, ...) {
 	va_list	args;
-	char buf[T_BIGBUF];
 
 	va_start(args, format);
-	(void) vsnprintf(buf, sizeof(buf), format, args);
+	(void) vsnprintf(T_buf, sizeof(T_buf), format, args);
 	va_end(args);
-	(void) t_putinfo("I", buf);
+	(void) t_putinfo("I", T_buf);
 }
 
 void
@@ -412,17 +393,14 @@ t_result(int result) {
 		case T_UNRESOLVED:
 			p = "UNRESOLVED";
 			break;
-		case T_SKIPPED:
-			p = "SKIPPED";
+		case T_UNSUPPORTED:
+			p = "UNSUPPORTED";
 			break;
 		case T_UNTESTED:
 			p = "UNTESTED";
 			break;
 		case T_THREADONLY:
 			p = "THREADONLY";
-			break;
-		case T_PKCS11ONLY:
-			p = "PKCS11ONLY";
 			break;
 		default:
 			p = "UNKNOWN";
@@ -542,18 +520,18 @@ t_fgetbs(FILE *fp) {
 	int	c;
 	size_t	n;
 	size_t	size;
-	char	*buf, *old;
+	char	*buf;
 	char	*p;
 
-	n = 0;
-	size = T_BUFSIZ;
-	old = buf = (char *) malloc(T_BUFSIZ * sizeof(char));
+	n	= 0;
+	size	= T_BUFSIZ;
+	buf	= (char *) malloc(T_BUFSIZ * sizeof(char));
 
 	if (buf != NULL) {
 		p = buf;
 		while ((c = fgetc(fp)) != EOF) {
 
-			if ((c == '\r') || (c == '\n'))
+			if (c == '\n')
 				break;
 
 			*p++ = c;
@@ -563,8 +541,7 @@ t_fgetbs(FILE *fp) {
 				buf = (char *)realloc(buf,
 						      size * sizeof(char));
 				if (buf == NULL)
-					goto err;
-				old = buf;
+					break;
 				p = buf + n;
 			}
 		}
@@ -575,10 +552,7 @@ t_fgetbs(FILE *fp) {
 		}
 		return (buf);
 	} else {
- err:
-		if (old != NULL)
-			free(old);
-		fprintf(stderr, "malloc/realloc failed %d", errno);
+		fprintf(stderr, "malloc failed %d", errno);
 		return(NULL);
 	}
 }
@@ -617,7 +591,7 @@ t_getdate(char *buf, size_t buflen) {
 /*
  * Some generally used utilities.
  */
-static const struct dns_errormap {
+struct dns_errormap {
 	isc_result_t	result;
 	const char *text;
 } dns_errormap[] = {
@@ -671,8 +645,8 @@ static const struct dns_errormap {
 isc_result_t
 t_dns_result_fromtext(char *name) {
 
-	isc_result_t			result;
-	const struct dns_errormap	*pmap;
+	isc_result_t		result;
+	struct dns_errormap	*pmap;
 
 	result = ISC_R_UNEXPECTED;
 
@@ -689,7 +663,7 @@ t_dns_result_fromtext(char *name) {
 	return (result);
 }
 
-static const struct dc_method_map {
+struct dc_method_map {
 	unsigned int	dc_method;
 	const char 	*text;
 } dc_method_map[] = {
@@ -702,8 +676,8 @@ static const struct dc_method_map {
 
 unsigned int
 t_dc_method_fromtext(char *name) {
-	unsigned int			dc_method;
-	const struct dc_method_map	*pmap;
+	unsigned int		dc_method;
+	struct dc_method_map	*pmap;
 
 	dc_method = DNS_COMPRESS_NONE;
 
@@ -764,13 +738,11 @@ t_eval(const char *filename, int (*func)(char **), int nargs) {
 	int		line;
 	int		cnt;
 	int		result;
-	int		tresult;
 	int		nfails;
 	int		nprobs;
 	int		npass;
 	char		*tokens[T_MAXTOKS + 1];
 
-	tresult = T_UNTESTED;
 	npass = 0;
 	nfails = 0;
 	nprobs = 0;
@@ -792,15 +764,14 @@ t_eval(const char *filename, int (*func)(char **), int nargs) {
 
 			cnt = t_bustline(p, tokens);
 			if (cnt == nargs) {
-				tresult = func(tokens);
-				switch (tresult) {
+				result = func(tokens);
+				switch (result) {
 				case T_PASS:
 					++npass;
 					break;
 				case T_FAIL:
 					++nfails;
 					break;
-				case T_SKIPPED:
 				case T_UNTESTED:
 					break;
 				default:
@@ -828,24 +799,7 @@ t_eval(const char *filename, int (*func)(char **), int nargs) {
 	else if (nfails > 0)
 		result = T_FAIL;
 	else if (npass == 0)
-		result = tresult;
+		result = T_UNTESTED;
 
 	return (result);
 }
-
-#ifdef WIN32
-void
-t_settests(const testspec_t list[]) {
-	int			tnum;
-	const testspec_t	*pts;
-
-	memset(T_testlist, 0, sizeof(T_testlist));
-
-	pts = &list[0];
-	for (tnum = 0; tnum < T_MAXTESTS - 1; pts++, tnum++) {
-		if (pts->pfv == NULL)
-			break;
-		T_testlist[tnum] = *pts;
-	}
-}
-#endif

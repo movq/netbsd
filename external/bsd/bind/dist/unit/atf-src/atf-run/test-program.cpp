@@ -1,7 +1,7 @@
 //
 // Automated Testing Framework (atf)
 //
-// Copyright (c) 2007 The NetBSD Foundation, Inc.
+// Copyright (c) 2007, 2008, 2009, 2010 The NetBSD Foundation, Inc.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -30,9 +30,7 @@
 extern "C" {
 #include <sys/types.h>
 #include <sys/stat.h>
-#include <sys/time.h>
 
-#include <fcntl.h>
 #include <signal.h>
 #include <unistd.h>
 }
@@ -42,8 +40,6 @@ extern "C" {
 #include <cstring>
 #include <fstream>
 #include <iostream>
-
-#include "atf-c/defs.h"
 
 #include "atf-c++/detail/env.hpp"
 #include "atf-c++/detail/parser.hpp"
@@ -114,7 +110,7 @@ class metadata_reader : public detail::atf_tp_reader {
             m_tcs[ident].insert(std::make_pair("has.cleanup", "false"));
 
         if (m_tcs[ident].find("timeout") == m_tcs[ident].end())
-            m_tcs[ident].insert(std::make_pair("timeout", "300"));
+            m_tcs[ident].insert(std::make_pair("timeout", "30"));
     }
 
 public:
@@ -171,24 +167,6 @@ struct test_case_params {
 };
 
 static
-std::string
-generate_timestamp(void)
-{
-    struct timeval tv;
-    if (gettimeofday(&tv, NULL) == -1)
-        return "0.0";
-
-    char buf[32];
-    const int len = snprintf(buf, sizeof(buf), "%ld.%ld",
-                             static_cast< long >(tv.tv_sec),
-                             static_cast< long >(tv.tv_usec));
-    if (len >= static_cast< int >(sizeof(buf)) || len < 0)
-        return "0.0";
-    else
-        return buf;
-}
-
-static
 void
 append_to_vector(std::vector< std::string >& v1,
                  const std::vector< std::string >& v2)
@@ -242,17 +220,6 @@ config_to_args(const atf::tests::vars_map& config)
 
 static
 void
-silence_stdin(void)
-{
-    ::close(STDIN_FILENO);
-    int fd = ::open("/dev/null", O_RDONLY);
-    if (fd == -1)
-        throw std::runtime_error("Could not open /dev/null");
-    INV(fd == STDIN_FILENO);
-}
-
-static
-void
 prepare_child(const atf::fs::path& workdir)
 {
     const int ret = ::setpgid(::getpid(), 0);
@@ -272,13 +239,9 @@ prepare_child(const atf::fs::path& workdir)
     atf::env::unset("LC_MONETARY");
     atf::env::unset("LC_NUMERIC");
     atf::env::unset("LC_TIME");
-    atf::env::set("TZ", "UTC");
-
-    atf::env::set("__RUNNING_INSIDE_ATF_RUN", "internal-yes-value");
+    atf::env::unset("TZ");
 
     impl::change_directory(workdir);
-
-    silence_stdin();
 }
 
 static
@@ -416,9 +379,8 @@ detail::atf_tp_reader::~atf_tp_reader(void)
 }
 
 void
-detail::atf_tp_reader::got_tc(
-    const std::string& ident ATF_DEFS_ATTRIBUTE_UNUSED,
-    const std::map< std::string, std::string >& md ATF_DEFS_ATTRIBUTE_UNUSED)
+detail::atf_tp_reader::got_tc(const std::string& ident,
+                              const std::map< std::string, std::string >& md)
 {
 }
 
@@ -456,15 +418,7 @@ detail::atf_tp_reader::validate_and_insert(const std::string& name,
                               ident_regex + "; was '" + value + "'");
     } else if (name == "require.arch") {
     } else if (name == "require.config") {
-    } else if (name == "require.files") {
     } else if (name == "require.machine") {
-    } else if (name == "require.memory") {
-        try {
-            (void)atf::text::to_bytes(value);
-        } catch (const std::runtime_error&) {
-            throw parse_error(lineno, "The require.memory property requires an "
-                              "integer value representing an amount of bytes");
-        }
     } else if (name == "require.progs") {
     } else if (name == "require.user") {
     } else if (name == "timeout") {
@@ -567,7 +521,7 @@ impl::atf_tps_writer::atf_tps_writer(std::ostream& os) :
 {
     atf::parser::headers_map hm;
     atf::parser::attrs_map ct_attrs;
-    ct_attrs["version"] = "3";
+    ct_attrs["version"] = "2";
     hm["Content-Type"] =
         atf::parser::header_entry("Content-Type", "application/X-atf-tps",
                                   ct_attrs);
@@ -592,8 +546,7 @@ void
 impl::atf_tps_writer::start_tp(const std::string& tp, size_t ntcs)
 {
     m_tpname = tp;
-    m_os << "tp-start: " << generate_timestamp() << ", " << tp << ", "
-         << ntcs << "\n";
+    m_os << "tp-start: " << tp << ", " << ntcs << "\n";
     m_os.flush();
 }
 
@@ -602,10 +555,9 @@ impl::atf_tps_writer::end_tp(const std::string& reason)
 {
     PRE(reason.find('\n') == std::string::npos);
     if (reason.empty())
-        m_os << "tp-end: " << generate_timestamp() << ", " << m_tpname << "\n";
+        m_os << "tp-end: " << m_tpname << "\n";
     else
-        m_os << "tp-end: " << generate_timestamp() << ", " << m_tpname
-             << ", " << reason << "\n";
+        m_os << "tp-end: " << m_tpname << ", " << reason << "\n";
     m_os.flush();
 }
 
@@ -613,7 +565,7 @@ void
 impl::atf_tps_writer::start_tc(const std::string& tcname)
 {
     m_tcname = tcname;
-    m_os << "tc-start: " << generate_timestamp() << ", " << tcname << "\n";
+    m_os << "tc-start: " << tcname << "\n";
     m_os.flush();
 }
 
@@ -639,10 +591,10 @@ void
 impl::atf_tps_writer::end_tc(const std::string& state,
                              const std::string& reason)
 {
-    std::string str =  ", " + m_tcname + ", " + state;
+    std::string str = "tc-end: " + m_tcname + ", " + state;
     if (!reason.empty())
         str += ", " + reason;
-    m_os << "tc-end: " << generate_timestamp() << str << "\n";
+    m_os << str << "\n";
     m_os.flush();
 }
 
@@ -695,7 +647,7 @@ namespace {
 static volatile bool terminate_poll;
 
 static void
-sigchld_handler(const int signo ATF_DEFS_ATTRIBUTE_UNUSED)
+sigchld_handler(const int signo)
 {
     terminate_poll = true;
 }
@@ -772,9 +724,10 @@ impl::run_test_case(const atf::fs::path& executable,
         UNREACHABLE;
     }
 
-    ::killpg(child_pid, SIGKILL);
+    ::killpg(child_pid, SIGTERM);
     mux.flush();
     atf::process::status status = child.wait();
+    ::killpg(child_pid, SIGKILL);
 
     std::string reason;
 

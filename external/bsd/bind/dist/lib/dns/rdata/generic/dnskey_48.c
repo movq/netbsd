@@ -1,7 +1,7 @@
-/*	$NetBSD: dnskey_48.c,v 1.9 2016/05/26 16:49:59 christos Exp $	*/
+/*	$NetBSD: dnskey_48.c,v 1.1 2009/03/22 15:01:51 christos Exp $	*/
 
 /*
- * Copyright (C) 2004, 2005, 2007, 2009, 2011-2013, 2015  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2004, 2005, 2007  Internet Systems Consortium, Inc. ("ISC")
  * Copyright (C) 2003  Internet Software Consortium.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -17,7 +17,7 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* Id */
+/* Id: dnskey_48.c,v 1.8 2007/06/19 23:47:17 tbox Exp */
 
 /*
  * Reviewed: Wed Mar 15 16:47:10 PST 2000 by halley.
@@ -34,37 +34,129 @@
 
 static inline isc_result_t
 fromtext_dnskey(ARGS_FROMTEXT) {
+	isc_token_t token;
+	dns_secalg_t alg;
+	dns_secproto_t proto;
+	dns_keyflags_t flags;
 
-	REQUIRE(type == dns_rdatatype_dnskey);
+	REQUIRE(type == 48);
 
-	return (generic_fromtext_key(rdclass, type, lexer, origin,
-				     options, target, callbacks));
+	UNUSED(type);
+	UNUSED(rdclass);
+	UNUSED(origin);
+	UNUSED(options);
+	UNUSED(callbacks);
+
+	/* flags */
+	RETERR(isc_lex_getmastertoken(lexer, &token, isc_tokentype_string,
+				      ISC_FALSE));
+	RETTOK(dns_keyflags_fromtext(&flags, &token.value.as_textregion));
+	RETERR(uint16_tobuffer(flags, target));
+
+	/* protocol */
+	RETERR(isc_lex_getmastertoken(lexer, &token, isc_tokentype_string,
+				      ISC_FALSE));
+	RETTOK(dns_secproto_fromtext(&proto, &token.value.as_textregion));
+	RETERR(mem_tobuffer(target, &proto, 1));
+
+	/* algorithm */
+	RETERR(isc_lex_getmastertoken(lexer, &token, isc_tokentype_string,
+				      ISC_FALSE));
+	RETTOK(dns_secalg_fromtext(&alg, &token.value.as_textregion));
+	RETERR(mem_tobuffer(target, &alg, 1));
+
+	/* No Key? */
+	if ((flags & 0xc000) == 0xc000)
+		return (ISC_R_SUCCESS);
+
+	return (isc_base64_tobuffer(lexer, target, -1));
 }
 
 static inline isc_result_t
 totext_dnskey(ARGS_TOTEXT) {
+	isc_region_t sr;
+	char buf[sizeof("64000")];
+	unsigned int flags;
+	unsigned char algorithm;
 
-	REQUIRE(rdata != NULL);
-	REQUIRE(rdata->type == dns_rdatatype_dnskey);
+	REQUIRE(rdata->type == 48);
+	REQUIRE(rdata->length != 0);
 
-	return (generic_totext_key(rdata, tctx, target));
+	dns_rdata_toregion(rdata, &sr);
+
+	/* flags */
+	flags = uint16_fromregion(&sr);
+	isc_region_consume(&sr, 2);
+	sprintf(buf, "%u", flags);
+	RETERR(str_totext(buf, target));
+	RETERR(str_totext(" ", target));
+
+	/* protocol */
+	sprintf(buf, "%u", sr.base[0]);
+	isc_region_consume(&sr, 1);
+	RETERR(str_totext(buf, target));
+	RETERR(str_totext(" ", target));
+
+	/* algorithm */
+	algorithm = sr.base[0];
+	sprintf(buf, "%u", algorithm);
+	isc_region_consume(&sr, 1);
+	RETERR(str_totext(buf, target));
+
+	/* No Key? */
+	if ((flags & 0xc000) == 0xc000)
+		return (ISC_R_SUCCESS);
+
+	/* key */
+	if ((tctx->flags & DNS_STYLEFLAG_MULTILINE) != 0)
+		RETERR(str_totext(" (", target));
+	RETERR(str_totext(tctx->linebreak, target));
+	RETERR(isc_base64_totext(&sr, tctx->width - 2,
+				 tctx->linebreak, target));
+
+	if ((tctx->flags & DNS_STYLEFLAG_COMMENT) != 0)
+		RETERR(str_totext(tctx->linebreak, target));
+	else if ((tctx->flags & DNS_STYLEFLAG_MULTILINE) != 0)
+		RETERR(str_totext(" ", target));
+
+	if ((tctx->flags & DNS_STYLEFLAG_MULTILINE) != 0)
+		RETERR(str_totext(")", target));
+
+	if ((tctx->flags & DNS_STYLEFLAG_COMMENT) != 0) {
+		isc_region_t tmpr;
+
+		RETERR(str_totext(" ; key id = ", target));
+		dns_rdata_toregion(rdata, &tmpr);
+		sprintf(buf, "%u", dst_region_computeid(&tmpr, algorithm));
+		RETERR(str_totext(buf, target));
+	}
+	return (ISC_R_SUCCESS);
 }
 
 static inline isc_result_t
 fromwire_dnskey(ARGS_FROMWIRE) {
+	isc_region_t sr;
 
-	REQUIRE(type == dns_rdatatype_dnskey);
+	REQUIRE(type == 48);
 
-	return (generic_fromwire_key(rdclass, type, source, dctx,
-				     options, target));
+	UNUSED(type);
+	UNUSED(rdclass);
+	UNUSED(dctx);
+	UNUSED(options);
+
+	isc_buffer_activeregion(source, &sr);
+	if (sr.length < 4)
+		return (ISC_R_UNEXPECTEDEND);
+
+	isc_buffer_forward(source, sr.length);
+	return (mem_tobuffer(target, sr.base, sr.length));
 }
 
 static inline isc_result_t
 towire_dnskey(ARGS_TOWIRE) {
 	isc_region_t sr;
 
-	REQUIRE(rdata != NULL);
-	REQUIRE(rdata->type == dns_rdatatype_dnskey);
+	REQUIRE(rdata->type == 48);
 	REQUIRE(rdata->length != 0);
 
 	UNUSED(cctx);
@@ -78,11 +170,9 @@ compare_dnskey(ARGS_COMPARE) {
 	isc_region_t r1;
 	isc_region_t r2;
 
-	REQUIRE(rdata1 != NULL);
-	REQUIRE(rdata2 != NULL);
 	REQUIRE(rdata1->type == rdata2->type);
 	REQUIRE(rdata1->rdclass == rdata2->rdclass);
-	REQUIRE(rdata1->type == dns_rdatatype_dnskey);
+	REQUIRE(rdata1->type == 48);
 	REQUIRE(rdata1->length != 0);
 	REQUIRE(rdata2->length != 0);
 
@@ -93,41 +183,90 @@ compare_dnskey(ARGS_COMPARE) {
 
 static inline isc_result_t
 fromstruct_dnskey(ARGS_FROMSTRUCT) {
+	dns_rdata_dnskey_t *dnskey = source;
 
-	REQUIRE(type == dns_rdatatype_dnskey);
+	REQUIRE(type == 48);
+	REQUIRE(source != NULL);
+	REQUIRE(dnskey->common.rdtype == type);
+	REQUIRE(dnskey->common.rdclass == rdclass);
 
-	return (generic_fromstruct_key(rdclass, type, source, target));
+	UNUSED(type);
+	UNUSED(rdclass);
+
+	/* Flags */
+	RETERR(uint16_tobuffer(dnskey->flags, target));
+
+	/* Protocol */
+	RETERR(uint8_tobuffer(dnskey->protocol, target));
+
+	/* Algorithm */
+	RETERR(uint8_tobuffer(dnskey->algorithm, target));
+
+	/* Data */
+	return (mem_tobuffer(target, dnskey->data, dnskey->datalen));
 }
 
 static inline isc_result_t
 tostruct_dnskey(ARGS_TOSTRUCT) {
 	dns_rdata_dnskey_t *dnskey = target;
+	isc_region_t sr;
 
-	REQUIRE(dnskey != NULL);
-	REQUIRE(rdata != NULL);
-	REQUIRE(rdata->type == dns_rdatatype_dnskey);
+	REQUIRE(rdata->type == 48);
+	REQUIRE(target != NULL);
+	REQUIRE(rdata->length != 0);
 
 	dnskey->common.rdclass = rdata->rdclass;
 	dnskey->common.rdtype = rdata->type;
 	ISC_LINK_INIT(&dnskey->common, link);
 
-	return (generic_tostruct_key(rdata, target, mctx));
+	dns_rdata_toregion(rdata, &sr);
+
+	/* Flags */
+	if (sr.length < 2)
+		return (ISC_R_UNEXPECTEDEND);
+	dnskey->flags = uint16_fromregion(&sr);
+	isc_region_consume(&sr, 2);
+
+	/* Protocol */
+	if (sr.length < 1)
+		return (ISC_R_UNEXPECTEDEND);
+	dnskey->protocol = uint8_fromregion(&sr);
+	isc_region_consume(&sr, 1);
+
+	/* Algorithm */
+	if (sr.length < 1)
+		return (ISC_R_UNEXPECTEDEND);
+	dnskey->algorithm = uint8_fromregion(&sr);
+	isc_region_consume(&sr, 1);
+
+	/* Data */
+	dnskey->datalen = sr.length;
+	dnskey->data = mem_maybedup(mctx, sr.base, dnskey->datalen);
+	if (dnskey->data == NULL)
+		return (ISC_R_NOMEMORY);
+
+	dnskey->mctx = mctx;
+	return (ISC_R_SUCCESS);
 }
 
 static inline void
 freestruct_dnskey(ARGS_FREESTRUCT) {
 	dns_rdata_dnskey_t *dnskey = (dns_rdata_dnskey_t *) source;
 
-	REQUIRE(dnskey != NULL);
-	REQUIRE(dnskey->common.rdtype == dns_rdatatype_dnskey);
+	REQUIRE(source != NULL);
+	REQUIRE(dnskey->common.rdtype == 48);
 
-	generic_freestruct_key(source);
+	if (dnskey->mctx == NULL)
+		return;
+
+	if (dnskey->data != NULL)
+		isc_mem_free(dnskey->mctx, dnskey->data);
+	dnskey->mctx = NULL;
 }
 
 static inline isc_result_t
 additionaldata_dnskey(ARGS_ADDLDATA) {
-
-	REQUIRE(rdata->type == dns_rdatatype_dnskey);
+	REQUIRE(rdata->type == 48);
 
 	UNUSED(rdata);
 	UNUSED(add);
@@ -140,8 +279,7 @@ static inline isc_result_t
 digest_dnskey(ARGS_DIGEST) {
 	isc_region_t r;
 
-	REQUIRE(rdata != NULL);
-	REQUIRE(rdata->type == dns_rdatatype_dnskey);
+	REQUIRE(rdata->type == 48);
 
 	dns_rdata_toregion(rdata, &r);
 
@@ -151,7 +289,7 @@ digest_dnskey(ARGS_DIGEST) {
 static inline isc_boolean_t
 checkowner_dnskey(ARGS_CHECKOWNER) {
 
-	REQUIRE(type == dns_rdatatype_dnskey);
+	REQUIRE(type == 48);
 
 	UNUSED(name);
 	UNUSED(type);
@@ -164,23 +302,13 @@ checkowner_dnskey(ARGS_CHECKOWNER) {
 static inline isc_boolean_t
 checknames_dnskey(ARGS_CHECKNAMES) {
 
-	REQUIRE(rdata != NULL);
-	REQUIRE(rdata->type == dns_rdatatype_dnskey);
+	REQUIRE(rdata->type == 48);
 
 	UNUSED(rdata);
 	UNUSED(owner);
 	UNUSED(bad);
 
 	return (ISC_TRUE);
-}
-
-static inline int
-casecompare_dnskey(ARGS_COMPARE) {
-
-	/*
-	 * Treat ALG 253 (private DNS) subtype name case sensistively.
-	 */
-	return (compare_dnskey(rdata1, rdata2));
 }
 
 #endif	/* RDATA_GENERIC_DNSKEY_48_C */

@@ -1,7 +1,7 @@
-/*	$NetBSD: keygen.c,v 1.8 2017/06/15 15:59:36 christos Exp $	*/
+/*	$NetBSD: keygen.c,v 1.1 2009/10/25 00:01:29 christos Exp $	*/
 
 /*
- * Copyright (C) 2009, 2012-2016  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2009  Internet Systems Consortium, Inc. ("ISC")
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -16,7 +16,7 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* Id: keygen.c,v 1.4 2009/11/12 14:02:38 marka Exp  */
+/* Id: keygen.c,v 1.3 2009/06/11 23:47:55 tbox Exp */
 
 /*! \file */
 
@@ -31,11 +31,8 @@
 #include <isc/file.h>
 #include <isc/keyboard.h>
 #include <isc/mem.h>
-#include <isc/print.h>
 #include <isc/result.h>
 #include <isc/string.h>
-
-#include <pk11/site.h>
 
 #include <dns/keyvalues.h>
 #include <dns/name.h>
@@ -52,10 +49,8 @@
 const char *
 alg_totext(dns_secalg_t alg) {
 	switch (alg) {
-#ifndef PK11_MD5_DISABLE
 	    case DST_ALG_HMACMD5:
 		return "hmac-md5";
-#endif
 	    case DST_ALG_HMACSHA1:
 		return "hmac-sha1";
 	    case DST_ALG_HMACSHA224:
@@ -76,23 +71,17 @@ alg_totext(dns_secalg_t alg) {
  */
 dns_secalg_t
 alg_fromtext(const char *name) {
-	const char *p = name;
-	if (strncasecmp(p, "hmac-", 5) == 0)
-		p = &name[5];
-
-#ifndef PK11_MD5_DISABLE
-	if (strcasecmp(p, "md5") == 0)
+	if (strcmp(name, "hmac-md5") == 0)
 		return DST_ALG_HMACMD5;
-#endif
-	if (strcasecmp(p, "sha1") == 0)
+	if (strcmp(name, "hmac-sha1") == 0)
 		return DST_ALG_HMACSHA1;
-	if (strcasecmp(p, "sha224") == 0)
+	if (strcmp(name, "hmac-sha224") == 0)
 		return DST_ALG_HMACSHA224;
-	if (strcasecmp(p, "sha256") == 0)
+	if (strcmp(name, "hmac-sha256") == 0)
 		return DST_ALG_HMACSHA256;
-	if (strcasecmp(p, "sha384") == 0)
+	if (strcmp(name, "hmac-sha384") == 0)
 		return DST_ALG_HMACSHA384;
-	if (strcasecmp(p, "sha512") == 0)
+	if (strcmp(name, "hmac-sha512") == 0)
 		return DST_ALG_HMACSHA512;
 	return DST_ALG_UNKNOWN;
 }
@@ -138,20 +127,14 @@ generate_key(isc_mem_t *mctx, const char *randomfile, dns_secalg_t alg,
 	dst_key_t *key = NULL;
 
 	switch (alg) {
-#ifndef PK11_MD5_DISABLE
 	    case DST_ALG_HMACMD5:
-#endif
-	    case DST_ALG_HMACSHA1:
-	    case DST_ALG_HMACSHA224:
-	    case DST_ALG_HMACSHA256:
 		if (keysize < 1 || keysize > 512)
 			fatal("keysize %d out of range (must be 1-512)\n",
 			      keysize);
 		break;
-	    case DST_ALG_HMACSHA384:
-	    case DST_ALG_HMACSHA512:
-		if (keysize < 1 || keysize > 1024)
-			fatal("keysize %d out of range (must be 1-1024)\n",
+	    case DST_ALG_HMACSHA256:
+		if (keysize < 1 || keysize > 256)
+			fatal("keysize %d out of range (must be 1-256)\n",
 			      keysize);
 		break;
 	    default:
@@ -213,7 +196,7 @@ write_key_file(const char *keyfile, const char *user,
 	       dns_secalg_t alg) {
 	isc_result_t result;
 	const char *algname = alg_totext(alg);
-	FILE *fd = NULL;
+	FILE *fd;
 
 	DO("create keyfile", isc_file_safecreate(keyfile, &fd));
 

@@ -1,7 +1,7 @@
-/*	$NetBSD: backtrace.h,v 1.5 2017/06/15 15:59:41 christos Exp $	*/
+/*	$NetBSD: backtrace.h,v 1.1 2009/10/25 00:02:44 christos Exp $	*/
 
 /*
- * Copyright (C) 2009, 2016  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2009  Internet Systems Consortium, Inc. ("ISC")
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -16,7 +16,7 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* Id: backtrace.h,v 1.2 2009/09/01 18:40:25 jinmei Exp  */
+/* Id: backtrace.h,v 1.2 2009/09/01 18:40:25 jinmei Exp */
 
 /*! \file isc/backtrace.h
  * \brief provide a back trace of the running process to help debug problems.
@@ -56,9 +56,8 @@ struct isc_backtrace_symmap {
 	const char	*symbol;
 };
 
-LIBISC_EXTERNAL_DATA extern const int isc__backtrace_nsymbols;
-LIBISC_EXTERNAL_DATA extern const
-	isc_backtrace_symmap_t isc__backtrace_symtable[];
+extern const int isc__backtrace_nsymbols;
+extern const isc_backtrace_symmap_t isc__backtrace_symtable[];
 
 /***
  *** Functions

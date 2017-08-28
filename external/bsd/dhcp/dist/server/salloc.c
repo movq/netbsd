@@ -1,11 +1,11 @@
-/*	$NetBSD: salloc.c,v 1.1.1.3 2014/07/12 11:58:16 spz Exp $	*/
+/*	$NetBSD: salloc.c,v 1.1 2013/03/24 15:46:03 christos Exp $	*/
+
 /* salloc.c
 
    Memory allocation for the DHCP server... */
 
 /*
- * Copyright (c) 2009,2012,2014 by Internet Systems Consortium, Inc. ("ISC")
- * Copyright (c) 2004-2007 by Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (c) 2004-2007,2009 by Internet Systems Consortium, Inc. ("ISC")
  * Copyright (c) 1996-2003 by Internet Software Consortium
  *
  * Permission to use, copy, modify, and distribute this software for any
@@ -26,10 +26,16 @@
  *   <info@isc.org>
  *   https://www.isc.org/
  *
+ * This software has been written for Internet Systems Consortium
+ * by Ted Lemon in cooperation with Vixie Enterprises and Nominum, Inc.
+ * To learn more about Internet Systems Consortium, see
+ * ``https://www.isc.org/''.  To learn more about Vixie Enterprises,
+ * see ``http://www.vix.com''.   To learn more about Nominum, Inc., see
+ * ``http://www.nominum.com''.
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: salloc.c,v 1.1.1.3 2014/07/12 11:58:16 spz Exp $");
+__RCSID("$NetBSD: salloc.c,v 1.1 2013/03/24 15:46:03 christos Exp $");
 
 #include "dhcpd.h"
 #include <omapip/omapip_p.h>
@@ -37,50 +43,48 @@ __RCSID("$NetBSD: salloc.c,v 1.1.1.3 2014/07/12 11:58:16 spz Exp $");
 #if defined (COMPACT_LEASES)
 struct lease *free_leases;
 
-#if defined (DEBUG_MEMORY_LEAKAGE_ON_EXIT)
+# if defined (DEBUG_MEMORY_LEAKAGE_ON_EXIT)
 struct lease *lease_hunks;
 
 void relinquish_lease_hunks ()
 {
-	struct lease *c, *n, **p;
+	struct lease *c, *n, **p, *f;
 	int i;
 
 	/* Account for all the leases on the free list. */
-	for (n = lease_hunks; n; n = n->next) {
-	    for (i = 1; i < n->starts + 1; i++) {
+	for (n = lease_hunks; n; n = n -> next) {
+	    for (i = 1; i < n -> starts + 1; i++) {
 		p = &free_leases;
-		for (c = free_leases; c; c = c->next) {
-		    if (c == &n[i]) {
-			*p = c->next;
-			n->ends++;
+		for (c = free_leases; c; c = c -> next) {
+		    if (c == &n [i]) {
+			*p = c -> next;
+			n -> ends++;
 			break;
 		    }
-		    p = &c->next;
+		    p = &c -> next;
 		}
 		if (!c) {
-		    log_info("lease %s refcnt %d",
-			     piaddr (n[i].ip_addr), n[i].refcnt);
-#if defined (DEBUG_RC_HISTORY)
-		    dump_rc_history(&n[i]);
-#endif
+		    log_info ("lease %s refcnt %d",
+			      piaddr (n [i].ip_addr), n [i].refcnt);
+		    dump_rc_history (&n [i]);
 		}
 	    }
 	}
-
+		
 	for (c = lease_hunks; c; c = n) {
-		n = c->next;
-		if (c->ends != c->starts) {
-			log_info("lease hunk %lx leases %ld free %ld",
-				 (unsigned long)c, (unsigned long)(c->starts),
-				 (unsigned long)(c->ends));
+		n = c -> next;
+		if (c -> ends != c -> starts) {
+			log_info ("lease hunk %lx leases %ld free %ld",
+				  (unsigned long)c, (unsigned long)c -> starts,
+				  (unsigned long)c -> ends);
 		}
-		dfree(c, MDL);
+		dfree (c, MDL);
 	}
 
 	/* Free all the rogue leases. */
 	for (c = free_leases; c; c = n) {
-		n = c->next;
-		dfree(c, MDL);
+		n = c -> next;
+		dfree (c, MDL);
 	}
 }
 #endif

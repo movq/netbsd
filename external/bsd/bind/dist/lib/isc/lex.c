@@ -1,7 +1,7 @@
-/*	$NetBSD: lex.c,v 1.9 2017/06/15 15:59:41 christos Exp $	*/
+/*	$NetBSD: lex.c,v 1.1 2009/03/22 15:02:04 christos Exp $	*/
 
 /*
- * Copyright (C) 2004, 2005, 2007, 2013-2015, 2017  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2004, 2005, 2007  Internet Systems Consortium, Inc. ("ISC")
  * Copyright (C) 1998-2003  Internet Software Consortium.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -17,7 +17,7 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* Id: lex.c,v 1.86 2007/09/17 09:56:29 shane Exp  */
+/* Id: lex.c,v 1.86 2007/09/17 09:56:29 shane Exp */
 
 /*! \file */
 
@@ -43,7 +43,6 @@ typedef struct inputsource {
 	isc_boolean_t			is_file;
 	isc_boolean_t			need_close;
 	isc_boolean_t			at_eof;
-	isc_boolean_t			last_was_eol;
 	isc_buffer_t *			pushback;
 	unsigned int			ignored;
 	void *				input;
@@ -78,7 +77,7 @@ grow_data(isc_lex_t *lex, size_t *remainingp, char **currp, char **prevp) {
 	new = isc_mem_get(lex->mctx, lex->max_token * 2 + 1);
 	if (new == NULL)
 		return (ISC_R_NOMEMORY);
-	memmove(new, lex->data, lex->max_token + 1);
+	memcpy(new, lex->data, lex->max_token + 1);
 	*currp = new + (*currp - lex->data);
 	if (*prevp != NULL)
 		*prevp = new + (*prevp - lex->data);
@@ -96,10 +95,9 @@ isc_lex_create(isc_mem_t *mctx, size_t max_token, isc_lex_t **lexp) {
 	/*
 	 * Create a lexer.
 	 */
-	REQUIRE(lexp != NULL && *lexp == NULL);
 
-	if (max_token == 0U)
-		max_token = 1;
+	REQUIRE(lexp != NULL && *lexp == NULL);
+	REQUIRE(max_token > 0U);
 
 	lex = isc_mem_get(mctx, sizeof(*lex));
 	if (lex == NULL)
@@ -177,7 +175,7 @@ isc_lex_getspecials(isc_lex_t *lex, isc_lexspecials_t specials) {
 
 	REQUIRE(VALID_LEX(lex));
 
-	memmove(specials, lex->specials, 256);
+	memcpy(specials, lex->specials, 256);
 }
 
 void
@@ -189,7 +187,7 @@ isc_lex_setspecials(isc_lex_t *lex, isc_lexspecials_t specials) {
 
 	REQUIRE(VALID_LEX(lex));
 
-	memmove(lex->specials, specials, 256);
+	memcpy(lex->specials, specials, 256);
 }
 
 static inline isc_result_t
@@ -206,7 +204,6 @@ new_source(isc_lex_t *lex, isc_boolean_t is_file, isc_boolean_t need_close,
 	source->is_file = is_file;
 	source->need_close = need_close;
 	source->at_eof = ISC_FALSE;
-	source->last_was_eol = lex->last_was_eol;
 	source->input = input;
 	source->name = isc_mem_strdup(lex->mctx, name);
 	if (source->name == NULL) {
@@ -215,7 +212,7 @@ new_source(isc_lex_t *lex, isc_boolean_t is_file, isc_boolean_t need_close,
 	}
 	source->pushback = NULL;
 	result = isc_buffer_allocate(lex->mctx, &source->pushback,
-				     (unsigned int)lex->max_token);
+				     lex->max_token);
 	if (result != ISC_R_SUCCESS) {
 		isc_mem_free(lex->mctx, source->name);
 		isc_mem_put(lex->mctx, source, sizeof(*source));
@@ -294,7 +291,6 @@ isc_lex_close(isc_lex_t *lex) {
 		return (ISC_R_NOMORE);
 
 	ISC_LIST_UNLINK(lex->sources, source, link);
-	lex->last_was_eol = source->last_was_eol;
 	if (source->is_file) {
 		if (source->need_close)
 			(void)fclose((FILE *)(source->input));
@@ -451,7 +447,7 @@ isc_lex_gettoken(isc_lex_t *lex, unsigned int options, isc_token_t *tokenp) {
 					c = EOF;
 					source->at_eof = ISC_TRUE;
 				} else {
-					c = *((unsigned char *)buffer->base +
+					c = *((char *)buffer->base +
 					      buffer->current);
 					buffer->current++;
 				}
@@ -528,7 +524,7 @@ isc_lex_gettoken(isc_lex_t *lex, unsigned int options, isc_token_t *tokenp) {
 				    != 0) {
 					lex->last_was_eol = ISC_FALSE;
 					tokenp->type = isc_tokentype_initialws;
-					tokenp->value.as_char = c;
+ 					tokenp->value.as_char = c;
 					done = ISC_TRUE;
 				}
 			} else if (c == '\n') {
@@ -621,9 +617,8 @@ isc_lex_gettoken(isc_lex_t *lex, unsigned int options, isc_token_t *tokenp) {
 						v->as_textregion.base =
 							lex->data;
 						v->as_textregion.length =
-							(unsigned int)
-							(lex->max_token -
-							 remaining);
+							lex->max_token -
+							remaining;
 					} else
 						goto done;
 					done = ISC_TRUE;
@@ -666,8 +661,7 @@ isc_lex_gettoken(isc_lex_t *lex, unsigned int options, isc_token_t *tokenp) {
 				tokenp->type = isc_tokentype_string;
 				tokenp->value.as_textregion.base = lex->data;
 				tokenp->value.as_textregion.length =
-					(unsigned int)
-					(lex->max_token - remaining);
+					lex->max_token - remaining;
 				done = ISC_TRUE;
 				continue;
 			}
@@ -752,8 +746,7 @@ isc_lex_gettoken(isc_lex_t *lex, unsigned int options, isc_token_t *tokenp) {
 					tokenp->value.as_textregion.base =
 						lex->data;
 					tokenp->value.as_textregion.length =
-						(unsigned int)
-						(lex->max_token - remaining);
+						lex->max_token - remaining;
 					no_comments = ISC_FALSE;
 					done = ISC_TRUE;
 				}

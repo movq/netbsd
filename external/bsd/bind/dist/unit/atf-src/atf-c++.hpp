@@ -1,7 +1,7 @@
 //
 // Automated Testing Framework (atf)
 //
-// Copyright (c) 2007 The NetBSD Foundation, Inc.
+// Copyright (c) 2007, 2008 The NetBSD Foundation, Inc.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -31,6 +31,5 @@
 #define _ATF_CXX_HPP_
 
 #include <atf-c++/macros.hpp>
-#include <atf-c++/utils.hpp>
 
 #endif // !defined(_ATF_CXX_HPP_)

@@ -1,4 +1,5 @@
-/*	$NetBSD: trace.c,v 1.1.1.4 2016/01/10 19:44:43 christos Exp $	*/
+/*	$NetBSD: trace.c,v 1.1 2013/03/24 15:45:57 christos Exp $	*/
+
 /* trace.c
 
    Subroutines that support tracing of OMAPI wire transactions and
@@ -6,7 +7,6 @@
    transactions... */
 
 /*
- * Copyright (c) 2012,2014 by Internet Systems Consortium, Inc. ("ISC")
  * Copyright (c) 2009-2010 by Internet Systems Consortium, Inc. ("ISC")
  * Copyright (c) 2004-2007 by Internet Systems Consortium, Inc. ("ISC")
  * Copyright (c) 2001-2003 by Internet Software Consortium
@@ -29,10 +29,14 @@
  *   <info@isc.org>
  *   https://www.isc.org/
  *
+ * This software has been written for Internet Systems Consortium
+ * by Ted Lemon, as part of a project for Nominum, Inc.   To learn more
+ * about Internet Systems Consortium, see https://www.isc.org/.  To
+ * learn more about Nominum, Inc., see ``http://www.nominum.com''.
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: trace.c,v 1.1.1.4 2016/01/10 19:44:43 christos Exp $");
+__RCSID("$NetBSD: trace.c,v 1.1 2013/03/24 15:45:57 christos Exp $");
 
 #include "dhcpd.h"
 #include <omapip/omapip_p.h>
@@ -236,7 +240,6 @@ isc_result_t trace_write_packet_iov (trace_type_t *ttype,
 
 	/* We have to swap out the data, because it may be read back on a
 	   machine of different endianness. */
-	memset(&tmp, 0, sizeof(tmp));
 	tmp.type_index = htonl (ttype -> index);
 	tmp.when = htonl (time ((time_t *)0)); /* XXX */
 	tmp.length = htonl (length);
@@ -610,9 +613,7 @@ isc_result_t trace_get_next_packet (trace_type_t **ttp,
 	paylen = tpkt -> length;
 	if (paylen % 8)
 		paylen += 8 - (tpkt -> length % 8);
-
-	/* allocate a buffer if we need one or current buffer is too small */
-	if ((*buf == NULL) || (paylen > (*bufmax))) {
+	if (paylen > (*bufmax)) {
 		if ((*buf))
 			dfree ((*buf), MDL);
 		(*bufmax) = ((paylen + 1023) & ~1023U);
@@ -623,7 +624,7 @@ isc_result_t trace_get_next_packet (trace_type_t **ttp,
 			return ISC_R_NOMEMORY;
 		}
 	}
-
+	
 	status = fread ((*buf), 1, paylen, traceinfile);
 	if (status < paylen) {
 		if (ferror (traceinfile))
@@ -694,30 +695,27 @@ isc_result_t trace_get_file (trace_type_t *ttype,
 	}
 
 	result = trace_get_next_packet (&ttype, tpkt, buf, len, &max);
-	/* done with tpkt, free it */
-	dfree (tpkt, MDL);
 	if (result != ISC_R_SUCCESS) {
-		if (*buf) {
+		dfree (tpkt, MDL);
+		if (*buf)
 			dfree (*buf, MDL);
-			*buf = NULL;
-		}
 		return result;
 	}
 
 	/* Make sure the filename is right. */
 	if (strcmp (filename, *buf)) {
 		log_error ("Read file %s when expecting %s", *buf, filename);
-		dfree (*buf, MDL);
-		*buf = NULL;
-
 		status = fsetpos (traceinfile, &curpos);
 		if (status < 0) {
 			log_error ("fsetpos in tracefile failed: %m");
+			dfree (tpkt, MDL);
+			dfree (*buf, MDL);
 			return DHCP_R_PROTOCOLERROR;
 		}
 		return ISC_R_UNEXPECTEDTOKEN;
 	}
 
+	dfree (tpkt, MDL);
 	return ISC_R_SUCCESS;
 }
 #endif /* TRACING */

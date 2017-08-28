@@ -1,4 +1,4 @@
-/*	$NetBSD: rdatastructpre.h,v 1.5 2014/12/10 04:37:58 christos Exp $	*/
+/*	$NetBSD: rdatastructpre.h,v 1.1 2009/03/22 15:01:50 christos Exp $	*/
 
 /*
  * Copyright (C) 2004, 2007  Internet Systems Consortium, Inc. ("ISC")
@@ -17,7 +17,7 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* Id: rdatastructpre.h,v 1.16 2007/06/19 23:47:17 tbox Exp  */
+/* Id: rdatastructpre.h,v 1.16 2007/06/19 23:47:17 tbox Exp */
 
 #ifndef DNS_RDATASTRUCT_H
 #define DNS_RDATASTRUCT_H 1
@@ -41,4 +41,4 @@ typedef struct dns_rdatacommon {
 		(_data)->common.rdtype = (_rdtype); \
 		(_data)->common.rdclass = (_rdclass); \
 		ISC_LINK_INIT(&(_data)->common, link); \
-	} while (/*CONSTCOND*/0)
+	} while (0)

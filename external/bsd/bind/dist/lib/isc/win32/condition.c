@@ -1,7 +1,7 @@
-/*	$NetBSD: condition.c,v 1.5 2017/06/15 15:59:41 christos Exp $	*/
+/*	$NetBSD: condition.c,v 1.1 2009/03/22 15:02:23 christos Exp $	*/
 
 /*
- * Copyright (C) 2004, 2006, 2007, 2016  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2004, 2006, 2007  Internet Systems Consortium, Inc. ("ISC")
  * Copyright (C) 1998-2001  Internet Software Consortium.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -17,7 +17,7 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* Id: condition.c,v 1.23 2007/06/18 23:47:49 tbox Exp  */
+/* Id: condition.c,v 1.23 2007/06/18 23:47:49 tbox Exp */
 
 #include <config.h>
 
@@ -91,7 +91,6 @@ register_thread(unsigned long thrd, isc_condition_t *gblcond,
 	/*
 	 * The thread is holding the manager lock so this is safe
 	 */
-	ISC_LINK_INIT(newthread, link);
 	ISC_LIST_APPEND(gblcond->threadlist, newthread, link);
 	*localcond = newthread;
 	return (ISC_R_SUCCESS);

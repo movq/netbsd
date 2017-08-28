@@ -1,11 +1,12 @@
-/*	$NetBSD: icmp.c,v 1.3 2014/07/12 12:09:37 spz Exp $	*/
+/*	$NetBSD: icmp.c,v 1.1 2013/03/24 15:45:53 christos Exp $	*/
+
 /* dhcp.c
 
    ICMP Protocol engine - for sending out pings and receiving
    responses. */
 
 /*
- * Copyright (c) 2011,2013,2014 by Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (c) 2011 by Internet Systems Consortium, Inc. ("ISC")
  * Copyright (c) 2004,2007,2009 by Internet Systems Consortium, Inc. ("ISC")
  * Copyright (c) 1996-2003 by Internet Software Consortium
  *
@@ -27,10 +28,16 @@
  *   <info@isc.org>
  *   https://www.isc.org/
  *
+ * This software has been written for Internet Systems Consortium
+ * by Ted Lemon in cooperation with Vixie Enterprises and Nominum, Inc.
+ * To learn more about Internet Systems Consortium, see
+ * ``https://www.isc.org/''.  To learn more about Vixie Enterprises,
+ * see ``http://www.vix.com''.   To learn more about Nominum, Inc., see
+ * ``http://www.nominum.com''.
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: icmp.c,v 1.3 2014/07/12 12:09:37 spz Exp $");
+__RCSID("$NetBSD: icmp.c,v 1.1 2013/03/24 15:45:53 christos Exp $");
 
 #include "dhcpd.h"
 #include "netinet/ip.h"
@@ -157,7 +164,7 @@ int icmp_echorequest (addr)
 	icmp.icmp_code = 0;
 	icmp.icmp_cksum = 0;
 	icmp.icmp_seq = 0;
-#ifdef _LP64
+#if SIZEOF_STRUCT_IADDR_P == 8
 	icmp.icmp_id = (((u_int32_t)(u_int64_t)addr) ^
   			(u_int32_t)(((u_int64_t)addr) >> 32));
 #else
@@ -287,15 +294,17 @@ void trace_icmp_input_stop (trace_type_t *ttype) { }
 
 void trace_icmp_output_input (trace_type_t *ttype, unsigned length, char *buf)
 {
+	struct icmp *icmp;
 	struct iaddr ia;
 
-	if (length != (sizeof (struct icmp) + sizeof (ia))) {
+	if (length != (sizeof (*icmp) + (sizeof ia))) {
 		log_error ("trace_icmp_output_input: data size mismatch %d:%d",
-			   length, (int)(sizeof (struct icmp) + sizeof (ia)));
+			   length, (int)((sizeof (*icmp)) + (sizeof ia)));
 		return;
 	}
 	ia.len = 4;
 	memcpy (ia.iabuf, buf, 4);
+	icmp = (struct icmp *)(buf + 1);
 
 	log_error ("trace_icmp_output_input: unsent ping to %s", piaddr (ia));
 }

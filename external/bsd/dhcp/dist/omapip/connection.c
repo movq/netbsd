@@ -1,10 +1,11 @@
-/*	$NetBSD: connection.c,v 1.1.1.3 2014/07/12 11:57:58 spz Exp $	*/
+/*	$NetBSD: connection.c,v 1.1 2013/03/24 15:45:57 christos Exp $	*/
+
 /* connection.c
 
    Subroutines for dealing with connections. */
 
 /*
- * Copyright (c) 2009-2014 by Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (c) 2009-2011 by Internet Systems Consortium, Inc. ("ISC")
  * Copyright (c) 2004,2007 by Internet Systems Consortium, Inc. ("ISC")
  * Copyright (c) 1999-2003 by Internet Software Consortium
  *
@@ -26,10 +27,16 @@
  *   <info@isc.org>
  *   https://www.isc.org/
  *
+ * This software has been written for Internet Systems Consortium
+ * by Ted Lemon in cooperation with Vixie Enterprises and Nominum, Inc.
+ * To learn more about Internet Systems Consortium, see
+ * ``https://www.isc.org/''.  To learn more about Vixie Enterprises,
+ * see ``http://www.vix.com''.   To learn more about Nominum, Inc., see
+ * ``http://www.nominum.com''.
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: connection.c,v 1.1.1.3 2014/07/12 11:57:58 spz Exp $");
+__RCSID("$NetBSD: connection.c,v 1.1 2013/03/24 15:45:57 christos Exp $");
 
 #include "dhcpd.h"
 
@@ -97,6 +104,7 @@ isc_result_t omapi_connect (omapi_object_t *c,
 		addrs -> addresses [0].addrlen = sizeof foo;
 		memcpy (addrs -> addresses [0].address, &foo, sizeof foo);
 		addrs -> addresses [0].port = port;
+		hix = 1;
 	}
 	status = omapi_connect_list (c, addrs, (omapi_addr_t *)0);
 	omapi_addr_list_dereference (&addrs, MDL);
@@ -352,7 +360,6 @@ static void trace_connect_input (trace_type_t *ttype,
 	s += sizeof remote.sin_addr;
 	memcpy (&local.sin_addr, s, sizeof local.sin_addr);
 	s += sizeof local.sin_addr;
-	POST(s);
 
 	connect_index = ntohl (connect_index);
 	listener_index = ntohl (listener_index);
@@ -394,23 +401,22 @@ static void trace_connect_input (trace_type_t *ttype,
 	/* Find the matching connect object, if there is one. */
 	omapi_array_foreach_begin (omapi_connections,
 				   omapi_connection_object_t, lp) {
-	    for (i = 0; (lp->connect_list &&
-			 i < lp->connect_list->count); i++) {
+	    for (i = 0; (lp -> connect_list &&
+			 i < lp -> connect_list -> count); i++) {
 		    if (!memcmp (&remote.sin_addr,
-				 &lp->connect_list->addresses[i].address,
+				 &lp -> connect_list -> addresses [i].address,
 				 sizeof remote.sin_addr) &&
 			(ntohs (remote.sin_port) ==
-			 lp->connect_list->addresses[i].port)) {
-			    lp->state = omapi_connection_connected;
-			    lp->remote_addr = remote;
-			    lp->remote_addr.sin_family = AF_INET;
-			    omapi_addr_list_dereference(&lp->connect_list, MDL);
-			    lp->index = connect_index;
-			    status = omapi_signal_in((omapi_object_t *)lp,
-						     "connect");
-			    omapi_connection_dereference (&lp, MDL);
-			    return;
-		    }
+			 lp -> connect_list -> addresses [i].port))
+			lp -> state = omapi_connection_connected;
+			lp -> remote_addr = remote;
+			lp -> remote_addr.sin_family = AF_INET;
+			omapi_addr_list_dereference (&lp -> connect_list, MDL);
+			lp -> index = connect_index;
+			status = omapi_signal_in ((omapi_object_t *)lp,
+						  "connect");
+			omapi_connection_dereference (&lp, MDL);
+			return;
 		}
 	} omapi_array_foreach_end (omapi_connections,
 				   omapi_connection_object_t, lp);
@@ -627,7 +633,7 @@ isc_result_t omapi_connection_connect (omapi_object_t *h)
 
 static isc_result_t omapi_connection_connect_internal (omapi_object_t *h)
 {
-	int error = 0;
+	int error;
 	omapi_connection_object_t *c;
 	socklen_t sl;
 	isc_result_t status;

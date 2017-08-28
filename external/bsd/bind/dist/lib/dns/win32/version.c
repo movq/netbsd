@@ -1,7 +1,7 @@
-/*	$NetBSD: version.c,v 1.6 2014/12/10 04:37:59 christos Exp $	*/
+/*	$NetBSD: version.c,v 1.1 2009/03/22 15:01:58 christos Exp $	*/
 
 /*
- * Copyright (C) 2004, 2007, 2013  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2004, 2007  Internet Systems Consortium, Inc. ("ISC")
  * Copyright (C) 1998-2001  Internet Software Consortium.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -17,15 +17,13 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* Id: version.c,v 1.6 2007/06/19 23:47:17 tbox Exp  */
+/* Id: version.c,v 1.6 2007/06/19 23:47:17 tbox Exp */
 
 #include <versions.h>
 
 #include <dns/version.h>
 
 LIBDNS_EXTERNAL_DATA const char dns_version[] = VERSION;
-LIBDNS_EXTERNAL_DATA const char dns_major[] = MAJOR;
-LIBDNS_EXTERNAL_DATA const char dns_mapapi[] = MAPAPI;
 
 LIBDNS_EXTERNAL_DATA const unsigned int dns_libinterface = LIBINTERFACE;
 LIBDNS_EXTERNAL_DATA const unsigned int dns_librevision = LIBREVISION;

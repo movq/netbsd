@@ -1,7 +1,7 @@
-/*	$NetBSD: refcount.h,v 1.6 2014/12/10 04:38:00 christos Exp $	*/
+/*	$NetBSD: refcount.h,v 1.1 2009/03/22 15:02:14 christos Exp $	*/
 
 /*
- * Copyright (C) 2004-2007, 2009  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2004-2007  Internet Systems Consortium, Inc. ("ISC")
  * Copyright (C) 2001, 2003  Internet Software Consortium.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -17,7 +17,7 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* Id: refcount.h,v 1.17 2009/09/29 23:48:04 tbox Exp  */
+/* Id: refcount.h,v 1.15 2007/06/19 23:47:18 tbox Exp */
 
 #ifndef ISC_REFCOUNT_H
 #define ISC_REFCOUNT_H 1
@@ -30,7 +30,7 @@
 #include <isc/util.h>
 
 /*! \file isc/refcount.h
- * \brief Implements a locked reference counter.
+ * \brief Implements a locked reference counter.  
  *
  * These functions may actually be
  * implemented using macros, and implementations of these macros are below.
@@ -44,7 +44,7 @@ ISC_LANG_BEGINDECLS
  * Function prototypes
  */
 
-/*
+/* 
  * isc_result_t
  * isc_refcount_init(isc_refcount_t *ref, unsigned int n);
  *
@@ -105,7 +105,7 @@ typedef struct isc_refcount {
 	isc_int32_t refs;
 } isc_refcount_t;
 
-#define isc_refcount_destroy(rp) REQUIRE((rp)->refs == 0)
+#define isc_refcount_destroy(rp) (REQUIRE((rp)->refs == 0))
 #define isc_refcount_current(rp) ((unsigned int)((rp)->refs))
 
 #define isc_refcount_increment0(rp, tp)				\
@@ -115,7 +115,7 @@ typedef struct isc_refcount {
 		prev = isc_atomic_xadd(&(rp)->refs, 1);		\
 		if (_tmp != NULL)				\
 			*_tmp = prev + 1;			\
-	} while (/*CONSTCOND*/0)
+	} while (0)
 
 #define isc_refcount_increment(rp, tp)				\
 	do {							\
@@ -125,7 +125,7 @@ typedef struct isc_refcount {
 		REQUIRE(prev > 0);				\
 		if (_tmp != NULL)				\
 			*_tmp = prev + 1;			\
-	} while (/*CONSTCOND*/0)
+	} while (0)
 
 #define isc_refcount_decrement(rp, tp)				\
 	do {							\
@@ -135,7 +135,7 @@ typedef struct isc_refcount {
 		REQUIRE(prev > 0);				\
 		if (_tmp != NULL)				\
 			*_tmp = prev - 1;			\
-	} while (/*CONSTCOND*/0)
+	} while (0)
 
 #else  /* ISC_PLATFORM_HAVEXADD */
 
@@ -149,7 +149,7 @@ typedef struct isc_refcount {
 	do {						\
 		REQUIRE((rp)->refs == 0);		\
 		DESTROYLOCK(&(rp)->lock);		\
-	} while (/*CONSTCOND*/0)
+	} while (0)
 
 #define isc_refcount_current(rp) ((unsigned int)((rp)->refs))
 
@@ -162,7 +162,7 @@ typedef struct isc_refcount {
 		if (_tmp != NULL)				\
 			*_tmp = ((rp)->refs);			\
 		UNLOCK(&(rp)->lock);				\
-	} while (/*CONSTCOND*/0)
+	} while (0)
 
 #define isc_refcount_increment(rp, tp)				\
 	do {							\
@@ -173,7 +173,7 @@ typedef struct isc_refcount {
 		if (_tmp != NULL)				\
 			*_tmp = ((rp)->refs);			\
 		UNLOCK(&(rp)->lock);				\
-	} while (/*CONSTCOND*/0)
+	} while (0)
 
 /*% Decrements the reference count,  returning the new value in targetp if it's not NULL. */
 #define isc_refcount_decrement(rp, tp)				\
@@ -185,7 +185,7 @@ typedef struct isc_refcount {
 		if (_tmp != NULL)				\
 			*_tmp = ((rp)->refs);			\
 		UNLOCK(&(rp)->lock);				\
-	} while (/*CONSTCOND*/0)
+	} while (0)
 
 #endif /* ISC_PLATFORM_HAVEXADD */
 #else  /* ISC_PLATFORM_USETHREADS */
@@ -194,7 +194,7 @@ typedef struct isc_refcount {
 	int refs;
 } isc_refcount_t;
 
-#define isc_refcount_destroy(rp) REQUIRE((rp)->refs == 0)
+#define isc_refcount_destroy(rp) (REQUIRE((rp)->refs == 0))
 #define isc_refcount_current(rp) ((unsigned int)((rp)->refs))
 
 #define isc_refcount_increment0(rp, tp)					\
@@ -203,7 +203,7 @@ typedef struct isc_refcount {
 		int _n = ++(rp)->refs;					\
 		if (_tmp != NULL)					\
 			*_tmp = _n;					\
-	} while (/*CONSTCOND*/0)
+	} while (0)
 
 #define isc_refcount_increment(rp, tp)					\
 	do {								\
@@ -213,7 +213,7 @@ typedef struct isc_refcount {
 		_n = ++(rp)->refs;					\
 		if (_tmp != NULL)					\
 			*_tmp = _n;					\
-	} while (/*CONSTCOND*/0)
+	} while (0)
 
 #define isc_refcount_decrement(rp, tp)					\
 	do {								\
@@ -223,7 +223,7 @@ typedef struct isc_refcount {
 		_n = --(rp)->refs;					\
 		if (_tmp != NULL)					\
 			*_tmp = _n;					\
-	} while (/*CONSTCOND*/0)
+	} while (0)
 
 #endif /* ISC_PLATFORM_USETHREADS */
 

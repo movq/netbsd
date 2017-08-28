@@ -1,4 +1,4 @@
-/*	$NetBSD: dlz_bdb_driver.c,v 1.5 2014/12/10 04:37:55 christos Exp $	*/
+/*	$NetBSD: dlz_bdb_driver.c,v 1.1 2009/03/22 14:57:09 christos Exp $	*/
 
 /*
  * Copyright (C) 2002 Stichting NLnet, Netherlands, stichting@nlnet.nl.
@@ -116,8 +116,7 @@ typedef struct parsed_data {
 /* forward reference */
 
 static isc_result_t
-bdb_findzone(void *driverarg, void *dbdata, const char *name,
-	     dns_clientinfomethods_t *methods, dns_clientinfo_t *clientinfo);
+bdb_findzone(void *driverarg, void *dbdata, const char *name);
 
 /*%
  * Parses the DBT from the Berkeley DB into a parsed_data record
@@ -229,7 +228,7 @@ bdb_allowzonexfr(void *driverarg, void *dbdata, const char *name,
 	DBT key, data;
 
 	/* check to see if we are authoritative for the zone first. */
-	result = bdb_findzone(driverarg, dbdata, name, NULL, NULL);
+	result = bdb_findzone(driverarg, dbdata, name);
 	if (result != ISC_R_SUCCESS)
 		return (ISC_R_NOTFOUND);
 
@@ -396,8 +395,7 @@ bdb_cleanup(bdb_instance_t *db) {
 }
 
 static isc_result_t
-bdb_findzone(void *driverarg, void *dbdata, const char *name,
-	     dns_clientinfomethods_t *methods, dns_clientinfo_t *clientinfo)
+bdb_findzone(void *driverarg, void *dbdata, const char *name)
 {
 
 	isc_result_t result;
@@ -406,8 +404,6 @@ bdb_findzone(void *driverarg, void *dbdata, const char *name,
 	DBT key, data;
 
 	UNUSED(driverarg);
-	UNUSED(methods);
-	UNUSED(clientinfo);
 
 	memset(&key, 0, sizeof(DBT));
 	memset(&data, 0, sizeof(DBT));
@@ -457,8 +453,7 @@ bdb_findzone(void *driverarg, void *dbdata, const char *name,
 
 static isc_result_t
 bdb_lookup(const char *zone, const char *name, void *driverarg,
-	   void *dbdata, dns_sdlzlookup_t *lookup,
-	   dns_clientinfomethods_t *methods, dns_clientinfo_t *clientinfo)
+	   void *dbdata, dns_sdlzlookup_t *lookup)
 {
 
 	isc_result_t result = ISC_R_NOTFOUND;
@@ -474,8 +469,6 @@ bdb_lookup(const char *zone, const char *name, void *driverarg,
 	char *tmp = NULL;
 
 	UNUSED(driverarg);
-	UNUSED(methods);
-	UNUSED(clientinfo);
 
 	memset(&key, 0, sizeof(DBT));
 	memset(&data, 0, sizeof(DBT));
@@ -567,6 +560,8 @@ bdb_lookup(const char *zone, const char *name, void *driverarg,
 		host_cursor->c_close(host_cursor);
 
 	return result;
+
+	return ISC_R_NOTFOUND;
 }
 
 
@@ -751,14 +746,7 @@ static dns_sdlzmethods_t dlz_bdb_methods = {
 	bdb_lookup,
 	NULL,
 	bdb_allnodes,
-	bdb_allowzonexfr,
-	NULL,
-	NULL,
-	NULL,
-	NULL,
-	NULL,
-	NULL,
-	NULL,
+	bdb_allowzonexfr
 };
 
 /*%

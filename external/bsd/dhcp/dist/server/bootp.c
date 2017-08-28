@@ -1,11 +1,11 @@
-/*	$NetBSD: bootp.c,v 1.1.1.4 2016/01/10 19:44:44 christos Exp $	*/
+/*	$NetBSD: bootp.c,v 1.1 2013/03/24 15:46:01 christos Exp $	*/
+
 /* bootp.c
 
    BOOTP Protocol support. */
 
 /*
- * Copyright (c) 2009,2012-2014 by Internet Systems Consortium, Inc. ("ISC")
- * Copyright (c) 2004,2005,2007 by Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (c) 2004,2005,2007,2009 by Internet Systems Consortium, Inc. ("ISC")
  * Copyright (c) 1995-2003 by Internet Software Consortium
  *
  * Permission to use, copy, modify, and distribute this software for any
@@ -26,10 +26,16 @@
  *   <info@isc.org>
  *   https://www.isc.org/
  *
+ * This software has been written for Internet Systems Consortium
+ * by Ted Lemon in cooperation with Vixie Enterprises and Nominum, Inc.
+ * To learn more about Internet Systems Consortium, see
+ * ``https://www.isc.org/''.  To learn more about Vixie Enterprises,
+ * see ``http://www.vix.com''.   To learn more about Nominum, Inc., see
+ * ``http://www.nominum.com''.
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: bootp.c,v 1.1.1.4 2016/01/10 19:44:44 christos Exp $");
+__RCSID("$NetBSD: bootp.c,v 1.1 2013/03/24 15:46:01 christos Exp $");
 
 #include "dhcpd.h"
 #include <errno.h>
@@ -158,45 +164,46 @@ void bootp (packet)
 	option_state_allocate (&options, MDL);
 
 	/* Execute the subnet statements. */
-	execute_statements_in_scope (NULL, packet, lease, NULL,
-				     packet->options, options,
-				     &lease->scope, lease->subnet->group,
-				     NULL, NULL);
+	execute_statements_in_scope ((struct binding_value **)0,
+				     packet, lease, (struct client_state *)0,
+				     packet -> options, options,
+				     &lease -> scope, lease -> subnet -> group,
+				     (struct group *)0);
 
 	/* Execute statements from class scopes. */
 	for (i = packet -> class_count; i > 0; i--) {
-		execute_statements_in_scope(NULL, packet, lease, NULL,
-					    packet->options, options,
-					    &lease->scope,
-					    packet->classes[i - 1]->group,
-					    lease->subnet->group, NULL);
+		execute_statements_in_scope
+			((struct binding_value **)0,
+			 packet, lease, (struct client_state *)0,
+			 packet -> options, options,
+			 &lease -> scope, packet -> classes [i - 1] -> group,
+			 lease -> subnet -> group);
 	}
 
 	/* Execute the host statements. */
-	if (hp != NULL) {
-		execute_statements_in_scope(NULL, packet, lease, NULL,
-					    packet->options, options,
-					    &lease->scope, hp->group,
-					    lease->subnet->group, NULL);
-	}
+	execute_statements_in_scope ((struct binding_value **)0,
+				     packet, lease, (struct client_state *)0,
+				     packet -> options, options,
+				     &lease -> scope,
+				     hp -> group, lease -> subnet -> group);
 	
 	/* Drop the request if it's not allowed for this client. */
 	if ((oc = lookup_option (&server_universe, options, SV_ALLOW_BOOTP)) &&
-	    !evaluate_boolean_option_cache(&ignorep, packet, lease,
-					   NULL,
-					   packet->options, options,
-					   &lease->scope, oc, MDL)) {
+	    !evaluate_boolean_option_cache (&ignorep, packet, lease,
+					    (struct client_state *)0,
+					    packet -> options, options,
+					    &lease -> scope, oc, MDL)) {
 		if (!ignorep)
 			log_info ("%s: bootp disallowed", msgbuf);
 		goto out;
 	} 
 
-	if ((oc = lookup_option(&server_universe,
+	if ((oc = lookup_option (&server_universe,
 				 options, SV_ALLOW_BOOTING)) &&
-	    !evaluate_boolean_option_cache(&ignorep, packet, lease,
-					   NULL,
-					   packet->options, options,
-					   &lease->scope, oc, MDL)) {
+	    !evaluate_boolean_option_cache (&ignorep, packet, lease,
+					    (struct client_state *)0,
+					    packet -> options, options,
+					    &lease -> scope, oc, MDL)) {
 		if (!ignorep)
 			log_info ("%s: booting disallowed", msgbuf);
 		goto out;
@@ -209,26 +216,20 @@ void bootp (packet)
 
 	/* If we didn't get a known vendor magic number on the way in,
 	   just copy the input options to the output. */
-	i = SV_ALWAYS_REPLY_RFC1048;
-	if (!packet->options_valid &&
-	    !(evaluate_boolean_option_cache(&ignorep, packet, lease, NULL,
-					    packet->options, options,
-					    &lease->scope,
-					    lookup_option (&server_universe,
-							   options, i), MDL))) {
-		if (packet->packet_length > DHCP_FIXED_NON_UDP) {
-			memcpy(outgoing.raw->options, packet->raw->options,
-			packet->packet_length - DHCP_FIXED_NON_UDP);
-		}
-
-		outgoing.packet_length =
-			(packet->packet_length < BOOTP_MIN_LEN)
-					       ? BOOTP_MIN_LEN
-					       : packet->packet_length;
+	if (!packet -> options_valid &&
+	    !(evaluate_boolean_option_cache
+	      (&ignorep, packet, lease, (struct client_state *)0,
+	       packet -> options, options, &lease -> scope,
+	       lookup_option (&server_universe, options,
+			      SV_ALWAYS_REPLY_RFC1048), MDL))) {
+		memcpy (outgoing.raw -> options,
+			packet -> raw -> options, DHCP_MAX_OPTION_LEN);
+		outgoing.packet_length = BOOTP_MIN_LEN;
 	} else {
 
 		/* Use the subnet mask from the subnet declaration if no other
 		   mask has been provided. */
+
 		oc = (struct option_cache *)0;
 		i = DHO_SUBNET_MASK;
 		if (!lookup_option (&dhcp_universe, options, i)) {
@@ -247,11 +248,6 @@ void bootp (packet)
 				option_cache_dereference (&oc, MDL);
 			}
 		}
-
-		/* If use-host-decl-names is enabled and there is a hostname
-		 * defined in the host delcartion, send it back in hostname
-		 * option */
-		use_host_decl_name(packet, lease, options);
 
 		/* Pack the options into the buffer.  Unlike DHCP, we
 		   can't pack options into the filename and server
@@ -347,9 +343,10 @@ void bootp (packet)
 	}
 
 	/* Execute the commit statements, if there are any. */
-	execute_statements (NULL, packet, lease, NULL, packet->options,
-			    options, &lease->scope, lease->on_star.on_commit,
-			    NULL);
+	execute_statements ((struct binding_value **)0,
+			    packet, lease, (struct client_state *)0,
+			    packet -> options,
+			    options, &lease -> scope, lease -> on_commit);
 
 	/* We're done with the option state. */
 	option_state_dereference (&options, MDL);
@@ -369,16 +366,15 @@ void bootp (packet)
 	}
 
 	/* Report what we're doing... */
-	log_info("%s", msgbuf);
-	log_info("BOOTREPLY for %s to %s (%s) via %s",
-		 piaddr(lease->ip_addr),
-		 ((hp != NULL) && (hp->name != NULL)) ? hp -> name : "unknown",
-		 print_hw_addr (packet->raw->htype,
-				packet->raw->hlen,
-				packet->raw->chaddr),
-		 packet->raw->giaddr.s_addr
-		 ? inet_ntoa (packet->raw->giaddr)
-		 : packet->interface->name);
+	log_info ("%s", msgbuf);
+	log_info ("BOOTREPLY for %s to %s (%s) via %s",
+	      piaddr (lease->ip_addr), hp -> name,
+	      print_hw_addr (packet -> raw -> htype,
+			     packet -> raw -> hlen,
+			     packet -> raw -> chaddr),
+	      packet -> raw -> giaddr.s_addr
+	      ? inet_ntoa (packet -> raw -> giaddr)
+	      : packet -> interface -> name);
 
 	/* Set up the parts of the address that are in common. */
 	to.sin_family = AF_INET;
@@ -393,16 +389,10 @@ void bootp (packet)
 		to.sin_port = local_port;
 
 		if (fallback_interface) {
-			result = send_packet (fallback_interface, NULL, &raw,
-					      outgoing.packet_length, from,
-					      &to, &hto);
-			if (result < 0) {
-				log_error ("%s:%d: Failed to send %d byte long "
-					   "packet over %s interface.", MDL,
-					   outgoing.packet_length,
-					   fallback_interface->name);
-			}
-
+			result = send_packet (fallback_interface,
+					      (struct packet *)0,
+					      &raw, outgoing.packet_length,
+					      from, &to, &hto);
 			goto out;
 		}
 
@@ -422,16 +412,10 @@ void bootp (packet)
 	}
 
 	errno = 0;
-	result = send_packet(packet->interface, packet, &raw,
-			     outgoing.packet_length, from, &to, &hto);
-	if (result < 0) {
-		log_error ("%s:%d: Failed to send %d byte long packet over %s"
-			   " interface.", MDL, outgoing.packet_length,
-			   packet->interface->name);
-	}
-
+	result = send_packet (packet -> interface,
+			      packet, &raw, outgoing.packet_length,
+			      from, &to, &hto);
       out:
-
 	if (options)
 		option_state_dereference (&options, MDL);
 	if (lease)

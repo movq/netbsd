@@ -1,7 +1,7 @@
-/*	$NetBSD: result.h,v 1.6 2014/12/10 04:37:58 christos Exp $	*/
+/*	$NetBSD: result.h,v 1.1 2009/03/22 15:01:50 christos Exp $	*/
 
 /*
- * Copyright (C) 2004-2008, 2012, 2014  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2004-2008  Internet Systems Consortium, Inc. ("ISC")
  * Copyright (C) 1999-2001  Internet Software Consortium.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -17,7 +17,7 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* Id: result.h,v 1.9 2008/04/01 23:47:10 tbox Exp  */
+/* Id: result.h,v 1.9 2008/04/01 23:47:10 tbox Exp */
 
 #ifndef DST_RESULT_H
 #define DST_RESULT_H 1
@@ -36,9 +36,7 @@
 #include <isc/result.h>		/* Contractual promise. */
 
 #define DST_R_UNSUPPORTEDALG		(ISC_RESULTCLASS_DST + 0)
-#define DST_R_CRYPTOFAILURE		(ISC_RESULTCLASS_DST + 1)
-/* compat */
-#define DST_R_OPENSSLFAILURE		DST_R_CRYPTOFAILURE
+#define DST_R_OPENSSLFAILURE		(ISC_RESULTCLASS_DST + 1)
 #define DST_R_NOCRYPTO			(ISC_RESULTCLASS_DST + 2)
 #define DST_R_NULLKEY			(ISC_RESULTCLASS_DST + 3)
 #define DST_R_INVALIDPUBLICKEY		(ISC_RESULTCLASS_DST + 4)
@@ -59,9 +57,8 @@
 #define DST_R_NORANDOMNESS		(ISC_RESULTCLASS_DST + 19)
 #define DST_R_BADKEYTYPE		(ISC_RESULTCLASS_DST + 20)
 #define DST_R_NOENGINE			(ISC_RESULTCLASS_DST + 21)
-#define DST_R_EXTERNALKEY		(ISC_RESULTCLASS_DST + 22)
 
-#define DST_R_NRESULTS			23	/* Number of results */
+#define DST_R_NRESULTS			22	/* Number of results */
 
 ISC_LANG_BEGINDECLS
 

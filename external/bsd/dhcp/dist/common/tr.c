@@ -1,4 +1,5 @@
-/*	$NetBSD: tr.c,v 1.2 2017/06/28 02:46:30 manu Exp $	*/
+/*	$NetBSD: tr.c,v 1.1 2013/03/24 15:45:54 christos Exp $	*/
+
 /* tr.c
 
    token ring interface support
@@ -27,9 +28,6 @@
  *   <info@isc.org>
  *   https://www.isc.org/
  */
-
-#include <sys/cdefs.h>
-__RCSID("$NetBSD: tr.c,v 1.2 2017/06/28 02:46:30 manu Exp $");
 
 #include "dhcpd.h"
 
@@ -179,7 +177,7 @@ ssize_t decode_tr_header (interface, buf, bufix, from)
                         || ntohs(llc->ethertype) != ETHERTYPE_IP
                         || ip->ip_p != IPPROTO_UDP
                         || (ntohs (ip->ip_off) & IP_OFFMASK) != 0
-                        || udp->uh_dport != *libdhcp_callbacks.local_port)
+                        || udp->uh_dport != local_port)
                 return -1;
 
         /* only save source routing information for packets from valued hosts */

@@ -1,7 +1,7 @@
-/*	$NetBSD: sha1.c,v 1.1.1.6 2017/06/15 15:22:40 christos Exp $	*/
+/*	$NetBSD: sha1.c,v 1.1 2014/02/28 17:40:07 christos Exp $	*/
 
 /*
- * Copyright (C) 2014-2016  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2014  Internet Systems Consortium, Inc. ("ISC")
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -55,31 +55,21 @@
 #include <unistd.h>
 
 #include <isc/commandline.h>
-#include <isc/print.h>
 #include <isc/result.h>
 #include <isc/types.h>
-#include <isc/util.h>
 
 #include <pk11/pk11.h>
-#include <pk11/result.h>
 
 #ifndef HAVE_CLOCK_GETTIME
-
-#include <sys/time.h>
-
 #ifndef CLOCK_REALTIME
 #define CLOCK_REALTIME 0
 #endif
 
-static int clock_gettime(int32_t id, struct timespec *tp);
-
-static int
+int
 clock_gettime(int32_t id, struct timespec *tp)
 {
 	struct timeval tv;
 	int result;
-
-	UNUSED(id);
 
 	result = gettimeofday(&tv, NULL);
 	if (result)
@@ -101,7 +91,6 @@ main(int argc, char *argv[]) {
 	CK_MECHANISM mech = { CKM_SHA_1, NULL, 0 };
 	CK_ULONG len = sizeof(buf);
 	pk11_context_t pctx;
-	pk11_optype_t op_type = OP_DIGEST;
 	char *lib_name = NULL;
 	int error = 0;
 	int c, errflg = 0;
@@ -117,7 +106,6 @@ main(int argc, char *argv[]) {
 			break;
 		case 's':
 			slot = atoi(isc_commandline_argument);
-			op_type = OP_ANY;
 			break;
 		case 'n':
 			count = atoi(isc_commandline_argument);
@@ -143,17 +131,13 @@ main(int argc, char *argv[]) {
 		exit(1);
 	}
 
-	pk11_result_register();
-
 	/* Initialize the CRYPTOKI library */
 	if (lib_name != NULL)
 		pk11_set_lib_name(lib_name);
 
-	result = pk11_get_session(&pctx, op_type, ISC_FALSE, ISC_FALSE,
-				  ISC_FALSE, NULL, slot);
-	if ((result != ISC_R_SUCCESS) &&
-	    (result != PK11_R_NORANDOMSERVICE) &&
-	    (result != PK11_R_NOAESSERVICE)) {
+	result = pk11_get_session(&pctx, OP_ANY, ISC_FALSE, ISC_FALSE,
+				  NULL, slot);
+	if (result != ISC_R_SUCCESS) {
 		fprintf(stderr, "Error initializing PKCS#11: %s\n",
 			isc_result_totext(result));
 		exit(1);
@@ -219,7 +203,7 @@ main(int argc, char *argv[]) {
 
     exit_session:
 	pk11_return_session(&pctx);
-	(void) pk11_finalize();
+	pk11_shutdown();
 
 	exit(error);
 }

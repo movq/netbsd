@@ -1,4 +1,4 @@
-/*	$NetBSD: encoding.c,v 1.3 2014/12/10 04:37:56 christos Exp $	*/
+/*	$NetBSD: encoding.c,v 1.1 2009/03/22 14:57:51 christos Exp $	*/
 
 /*
  * encoding.c - get DNS/Local encodings

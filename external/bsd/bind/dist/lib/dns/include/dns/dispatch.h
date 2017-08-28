@@ -1,7 +1,7 @@
-/*	$NetBSD: dispatch.h,v 1.8 2015/07/08 17:28:59 christos Exp $	*/
+/*	$NetBSD: dispatch.h,v 1.1 2009/03/22 15:01:42 christos Exp $	*/
 
 /*
- * Copyright (C) 2004-2009, 2011-2014  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2004-2009  Internet Systems Consortium, Inc. ("ISC")
  * Copyright (C) 1999-2003  Internet Software Consortium.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -17,7 +17,7 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* Id: dispatch.h,v 1.64 2011/07/28 23:47:58 tbox Exp  */
+/* Id: dispatch.h,v 1.60.82.2 2009/01/29 23:47:44 tbox Exp */
 
 #ifndef DNS_DISPATCH_H
 #define DNS_DISPATCH_H 1
@@ -56,7 +56,6 @@
 
 #include <isc/buffer.h>
 #include <isc/lang.h>
-#include <isc/mutex.h>
 #include <isc/socket.h>
 #include <isc/types.h>
 
@@ -89,18 +88,6 @@ struct dns_dispatchevent {
 	struct in6_pktinfo	pktinfo;	/*%< reply info for v6 */
 	isc_buffer_t	        buffer;		/*%< data buffer */
 	isc_uint32_t		attributes;	/*%< mirrored from socket.h */
-};
-
-/*%
- * This is a set of one or more dispatches which can be retrieved
- * round-robin fashion.
- */
-struct dns_dispatchset {
-	isc_mem_t		*mctx;
-	dns_dispatch_t		**dispatches;
-	int			ndisp;
-	int			cur;
-	isc_mutex_t		lock;
 };
 
 /*@{*/
@@ -145,13 +132,9 @@ struct dns_dispatchset {
 #define DNS_DISPATCHATTR_NOLISTEN	0x00000020U
 #define DNS_DISPATCHATTR_MAKEQUERY	0x00000040U
 #define DNS_DISPATCHATTR_CONNECTED	0x00000080U
-#define DNS_DISPATCHATTR_FIXEDID	0x00000100U
+/*#define DNS_DISPATCHATTR_RANDOMPORT	0x00000100U*/
 #define DNS_DISPATCHATTR_EXCLUSIVE	0x00000200U
 /*@}*/
-
-/*
- */
-#define DNS_DISPATCHOPT_FIXEDID		0x00000001U
 
 isc_result_t
 dns_dispatchmgr_create(isc_mem_t *mctx, isc_entropy_t *entropy,
@@ -264,15 +247,6 @@ dns_dispatch_getudp(dns_dispatchmgr_t *mgr, isc_socketmgr_t *sockmgr,
 		    unsigned int buckets, unsigned int increment,
 		    unsigned int attributes, unsigned int mask,
 		    dns_dispatch_t **dispp);
-
-isc_result_t
-dns_dispatch_getudp_dup(dns_dispatchmgr_t *mgr, isc_socketmgr_t *sockmgr,
-		    isc_taskmgr_t *taskmgr, isc_sockaddr_t *localaddr,
-		    unsigned int buffersize,
-		    unsigned int maxbuffers, unsigned int maxrequests,
-		    unsigned int buckets, unsigned int increment,
-		    unsigned int attributes, unsigned int mask,
-		    dns_dispatch_t **dispp, dns_dispatch_t *dup);
 /*%<
  * Attach to existing dns_dispatch_t if one is found with dns_dispatchmgr_find,
  * otherwise create a new UDP dispatch.
@@ -374,13 +348,6 @@ dns_dispatch_starttcp(dns_dispatch_t *disp);
  * Requires:
  *\li	'disp' is valid.
  */
-
-isc_result_t
-dns_dispatch_addresponse3(dns_dispatch_t *disp, unsigned int options,
-			  isc_sockaddr_t *dest, isc_task_t *task,
-			  isc_taskaction_t action, void *arg,
-			  isc_uint16_t *idp, dns_dispentry_t **resp,
-			  isc_socketmgr_t *sockmgr);
 
 isc_result_t
 dns_dispatch_addresponse2(dns_dispatch_t *disp, isc_sockaddr_t *dest,
@@ -529,58 +496,6 @@ dns_dispatch_importrecv(dns_dispatch_t *disp, isc_event_t *event);
  * Requires:
  *\li 	disp is valid, and the attribute DNS_DISPATCHATTR_NOLISTEN is set.
  * 	event != NULL
- */
-
-dns_dispatch_t *
-dns_dispatchset_get(dns_dispatchset_t *dset);
-/*%<
- * Retrieve the next dispatch from dispatch set 'dset', and increment
- * the round-robin counter.
- *
- * Requires:
- *\li 	dset != NULL
- */
-
-isc_result_t
-dns_dispatchset_create(isc_mem_t *mctx, isc_socketmgr_t *sockmgr,
-		       isc_taskmgr_t *taskmgr, dns_dispatch_t *source,
-		       dns_dispatchset_t **dsetp, int n);
-/*%<
- * Given a valid dispatch 'source', create a dispatch set containing
- * 'n' UDP dispatches, with the remainder filled out by clones of the
- * source.
- *
- * Requires:
- *\li 	source is a valid UDP dispatcher
- *\li 	dsetp != NULL, *dsetp == NULL
- */
-
-void
-dns_dispatchset_cancelall(dns_dispatchset_t *dset, isc_task_t *task);
-/*%<
- * Cancel socket operations for the dispatches in 'dset'.
- */
-
-void
-dns_dispatchset_destroy(dns_dispatchset_t **dsetp);
-/*%<
- * Dereference all the dispatches in '*dsetp', free the dispatchset
- * memory, and set *dsetp to NULL.
- *
- * Requires:
- *\li 	dset is valid
- */
-
-void
-dns_dispatch_setdscp(dns_dispatch_t *disp, isc_dscp_t dscp);
-isc_dscp_t
-dns_dispatch_getdscp(dns_dispatch_t *disp);
-/*%<
- * Set/get the DSCP value to be used when sending responses to clients,
- * as defined in the "listen-on" or "listen-on-v6" statements.
- *
- * Requires:
- *\li	disp is valid.
  */
 
 ISC_LANG_ENDDECLS

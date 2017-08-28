@@ -1,6 +1,6 @@
 #!/usr/bin/perl
 #
-# Copyright (C) 2004, 2007, 2012, 2013, 2016  Internet Systems Consortium, Inc. ("ISC")
+# Copyright (C) 2004, 2007  Internet Systems Consortium, Inc. ("ISC")
 # Copyright (C) 2000, 2001  Internet Software Consortium.
 #
 # Permission to use, copy, modify, and/or distribute this software for any
@@ -15,17 +15,12 @@
 # OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR
 # PERFORMANCE OF THIS SOFTWARE.
 
-# Id: digcomp.pl,v 1.14 2007/06/19 23:47:00 tbox Exp 
+# Id: digcomp.pl,v 1.14 2007/06/19 23:47:00 tbox Exp
 
 # Compare two files, each with the output from dig, for differences.
 # Ignore "unimportant" differences, like ordering of NS lines, TTL's,
 # etc...
 
-$lc = 0;
-if ($ARGV[0] eq "--lc") {
-	$lc = 1;
-	shift;
-}
 $file1 = $ARGV[0];
 $file2 = $ARGV[1];
 
@@ -37,8 +32,7 @@ $rcode2 = "none";
 
 open(FILE1, $file1) || die("open: $file1: $!\n");
 while (<FILE1>) {
-	~ s/\r\n//g;
-	~ s/\n//g;
+	chomp;
 	if (/^;.+status:\s+(\S+).+$/) {
 		$rcode1 = $1;
 	}
@@ -48,10 +42,6 @@ while (<FILE1>) {
 		$class = $2;
 		$type = $3;
 		$value = $4;
-		if ($lc) {
-			$name = lc($name);
-			$value = lc($value);
-		}
 		if ($type eq "SOA") {
 			$firstname = $name if ($firstname eq "");
 			if ($name eq $firstname) {
@@ -73,8 +63,7 @@ $printed = 0;
 
 open(FILE2, $file2) || die("open: $file2: $!\n");
 while (<FILE2>) {
-	~ s/\r\n//g;
-	~ s/\n//g;
+	chomp;
 	if (/^;.+status:\s+(\S+).+$/) {
 		$rcode2 = $1;
 	}
@@ -84,10 +73,6 @@ while (<FILE2>) {
 		$class = $2;
 		$type = $3;
 		$value = $4;
-		if ($lc) {
-			$name = lc($name);
-			$value = lc($value);
-		}
 		if (($name eq $firstname) && ($type eq "SOA")) {
 			$count--;
 			$name = "$name$count";

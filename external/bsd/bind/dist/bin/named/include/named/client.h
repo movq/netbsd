@@ -1,7 +1,7 @@
-/*	$NetBSD: client.h,v 1.6 2014/12/10 04:37:52 christos Exp $	*/
+/*	$NetBSD: client.h,v 1.1 2009/03/22 14:56:13 christos Exp $	*/
 
 /*
- * Copyright (C) 2004-2009, 2011-2014  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2004-2009  Internet Systems Consortium, Inc. ("ISC")
  * Copyright (C) 1999-2003  Internet Software Consortium.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -17,7 +17,7 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* Id: client.h,v 1.96 2012/01/31 23:47:31 tbox Exp  */
+/* Id: client.h,v 1.86.120.2 2009/01/18 23:47:34 tbox Exp */
 
 #ifndef NAMED_CLIENT_H
 #define NAMED_CLIENT_H 1
@@ -68,9 +68,7 @@
 #include <isc/magic.h>
 #include <isc/stdtime.h>
 #include <isc/quota.h>
-#include <isc/queue.h>
 
-#include <dns/db.h>
 #include <dns/fixedname.h>
 #include <dns/name.h>
 #include <dns/rdataclass.h>
@@ -84,6 +82,8 @@
 /***
  *** Types
  ***/
+
+typedef ISC_LIST(ns_client_t) client_list_t;
 
 /*% nameserver client structure */
 struct ns_client {
@@ -117,7 +117,6 @@ struct ns_client {
 	dns_tcpmsg_t		tcpmsg;
 	isc_boolean_t		tcpmsg_valid;
 	isc_timer_t *		timer;
-	isc_timer_t *		delaytimer;
 	isc_boolean_t 		timerset;
 	dns_message_t *		message;
 	isc_socketevent_t *	sendevent;
@@ -141,13 +140,8 @@ struct ns_client {
 	ns_interface_t		*interface;
 	isc_sockaddr_t		peeraddr;
 	isc_boolean_t		peeraddr_valid;
-	isc_netaddr_t		destaddr;
 	struct in6_pktinfo	pktinfo;
-	isc_dscp_t		dscp;
 	isc_event_t		ctlevent;
-#ifdef ALLOW_FILTER_AAAA
-	dns_aaaa_t		filter_aaaa;
-#endif
 	/*%
 	 * Information about recent FORMERR response(s), for
 	 * FORMERR loop avoidance.  This is separate for each
@@ -159,36 +153,22 @@ struct ns_client {
 		isc_stdtime_t		time;
 		dns_messageid_t		id;
 	} formerrcache;
-
 	ISC_LINK(ns_client_t)	link;
-	ISC_LINK(ns_client_t)	rlink;
-	ISC_QLINK(ns_client_t)	ilink;
-	unsigned char		cookie[8];
-	isc_uint32_t		expire;
+	/*%
+	 * The list 'link' is part of, or NULL if not on any list.
+	 */
+	client_list_t		*list;
 };
-
-typedef ISC_QUEUE(ns_client_t) client_queue_t;
-typedef ISC_LIST(ns_client_t) client_list_t;
 
 #define NS_CLIENT_MAGIC			ISC_MAGIC('N','S','C','c')
 #define NS_CLIENT_VALID(c)		ISC_MAGIC_VALID(c, NS_CLIENT_MAGIC)
 
-#define NS_CLIENTATTR_TCP		0x0001
-#define NS_CLIENTATTR_RA		0x0002 /*%< Client gets recursive service */
-#define NS_CLIENTATTR_PKTINFO		0x0004 /*%< pktinfo is valid */
-#define NS_CLIENTATTR_MULTICAST		0x0008 /*%< recv'd from multicast */
-#define NS_CLIENTATTR_WANTDNSSEC	0x0010 /*%< include dnssec records */
-#define NS_CLIENTATTR_WANTNSID          0x0020 /*%< include nameserver ID */
-#ifdef ALLOW_FILTER_AAAA
-#define NS_CLIENTATTR_FILTER_AAAA	0x0040 /*%< suppress AAAAs */
-#define NS_CLIENTATTR_FILTER_AAAA_RC	0x0080 /*%< recursing for A against AAAA */
-#endif
-#define NS_CLIENTATTR_WANTAD		0x0100 /*%< want AD in response if possible */
-#define NS_CLIENTATTR_WANTSIT		0x0200 /*%< include SIT */
-#define NS_CLIENTATTR_HAVESIT		0x0400 /*%< has a valid SIT */
-#define NS_CLIENTATTR_WANTEXPIRE	0x0800 /*%< return seconds to expire */
-#define NS_CLIENTATTR_HAVEEXPIRE	0x1000 /*%< return seconds to expire */
-#define NS_CLIENTATTR_WANTOPT		0x2000 /*%< add opt to reply */
+#define NS_CLIENTATTR_TCP		0x01
+#define NS_CLIENTATTR_RA		0x02 /*%< Client gets recursive service */
+#define NS_CLIENTATTR_PKTINFO		0x04 /*%< pktinfo is valid */
+#define NS_CLIENTATTR_MULTICAST		0x08 /*%< recv'd from multicast */
+#define NS_CLIENTATTR_WANTDNSSEC	0x10 /*%< include dnssec records */
+#define NS_CLIENTATTR_WANTNSID          0x20 /*%< include nameserver ID */
 
 extern unsigned int ns_client_requests;
 
@@ -296,8 +276,10 @@ ns_client_getsockaddr(ns_client_t *client);
  */
 
 isc_result_t
-ns_client_checkaclsilent(ns_client_t *client, isc_netaddr_t *netaddr,
-			 dns_acl_t *acl, isc_boolean_t default_allow);
+ns_client_checkaclsilent(ns_client_t *client,
+			 isc_sockaddr_t *sockaddr,
+			 dns_acl_t *acl,
+			 isc_boolean_t default_allow);
 
 /*%
  * Convenience function for client request ACL checking.
@@ -316,12 +298,12 @@ ns_client_checkaclsilent(ns_client_t *client, isc_netaddr_t *netaddr,
  *
  * Requires:
  *\li	'client' points to a valid client.
- *\li	'netaddr' points to a valid address, or is NULL.
+ *\li	'sockaddr' points to a valid address, or is NULL.
  *\li	'acl' points to a valid ACL, or is NULL.
  *
  * Returns:
  *\li	ISC_R_SUCCESS	if the request should be allowed
- * \li	DNS_R_REFUSED	if the request should be denied
+ * \li	ISC_R_REFUSED	if the request should be denied
  *\li	No other return values are possible.
  */
 
@@ -391,12 +373,5 @@ ns_client_isself(dns_view_t *myview, dns_tsigkey_t *mykey,
 /*%
  * Isself callback.
  */
-
-isc_result_t
-ns_client_sourceip(dns_clientinfo_t *ci, isc_sockaddr_t **addrp);
-
-isc_result_t
-ns_client_addopt(ns_client_t *client, dns_message_t *message,
-		 dns_rdataset_t **opt);
 
 #endif /* NAMED_CLIENT_H */

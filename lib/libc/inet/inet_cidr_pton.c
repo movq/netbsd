@@ -1,4 +1,4 @@
-/*	$NetBSD: inet_cidr_pton.c,v 1.8 2012/03/20 17:08:13 matt Exp $	*/
+/*	$NetBSD: inet_cidr_pton.c,v 1.1 2004/05/20 22:29:02 christos Exp $	*/
 
 /*
  * Copyright (c) 2004 by Internet Systems Consortium, Inc. ("ISC")
@@ -17,18 +17,12 @@
  * OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
-#include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-#if 0
-static const char rcsid[] = "Id: inet_cidr_pton.c,v 1.6 2005/04/27 04:56:19 sra Exp";
-#else
-__RCSID("$NetBSD: inet_cidr_pton.c,v 1.8 2012/03/20 17:08:13 matt Exp $");
-#endif
+static const char rcsid[] = "Id: inet_cidr_pton.c,v 1.2.2.1.8.2 2004/03/17 00:29:46 marka Exp";
 #endif
 
 #include "port_before.h"
 
-#include "namespace.h"
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
@@ -40,7 +34,6 @@ __RCSID("$NetBSD: inet_cidr_pton.c,v 1.8 2012/03/20 17:08:13 matt Exp $");
 #include <errno.h>
 #include <stdio.h>
 #include <string.h>
-#include <stddef.h>
 #include <stdlib.h>
 
 #include "port_after.h"
@@ -51,17 +44,14 @@ __RCSID("$NetBSD: inet_cidr_pton.c,v 1.8 2012/03/20 17:08:13 matt Exp $");
 # define SPRINTF(x) ((size_t)sprintf x)
 #endif
 
-#ifdef __weak_alias
-__weak_alias(inet_cidr_pton,_inet_cidr_pton)
-#endif
-
-static int	inet_cidr_pton_ipv4(const char *src, u_char *dst,
-					 int *bits, int ipv6);
-static int	inet_cidr_pton_ipv6(const char *src, u_char *dst, int *bits);
+static int	inet_cidr_pton_ipv4 __P((const char *src, u_char *dst,
+					 int *bits, int ipv6));
+static int	inet_cidr_pton_ipv6 __P((const char *src, u_char *dst,
+					 int *bits));
 
 static int	getbits(const char *, int ipv6);
 
-/*%
+/*
  * int
  * inet_cidr_pton(af, src, dst, *bits)
  *	convert network address from presentation to network format.
@@ -96,8 +86,7 @@ static const char digits[] = "0123456789";
 static int
 inet_cidr_pton_ipv4(const char *src, u_char *dst, int *pbits, int ipv6) {
 	const u_char *odst = dst;
-	int ch, bits;
-	ptrdiff_t n, tmp;
+	int n, ch, tmp, bits;
 	size_t size = 4;
 
 	/* Get the mantissa. */
@@ -189,7 +178,7 @@ inet_cidr_pton_ipv6(const char *src, u_char *dst, int *pbits) {
 			pch = strchr((xdigits = xdigits_u), ch);
 		if (pch != NULL) {
 			val <<= 4;
-			val |= (int)(pch - xdigits);
+			val |= (pch - xdigits);
 			if (val > 0xffff)
 				return (0);
 			saw_xdigit = 1;
@@ -217,7 +206,7 @@ inet_cidr_pton_ipv6(const char *src, u_char *dst, int *pbits) {
 		    inet_cidr_pton_ipv4(curtok, tp, &bits, 1) == 0) {
 			tp += NS_INADDRSZ;
 			saw_xdigit = 0;
-			break;	/*%< '\\0' was seen by inet_pton4(). */
+			break;	/* '\0' was seen by inet_pton4(). */
 		}
 		if (ch == '/') {
 			bits = getbits(src, 1);
@@ -238,7 +227,7 @@ inet_cidr_pton_ipv6(const char *src, u_char *dst, int *pbits) {
 		 * Since some memmove()'s erroneously fail to handle
 		 * overlapping regions, we'll do the shift by hand.
 		 */
-		const ptrdiff_t n = tp - colonp;
+		const int n = tp - colonp;
 		int i;
 
 		if (tp == endp)
@@ -269,22 +258,20 @@ getbits(const char *src, int ipv6) {
 	int bits = 0;
 	char *cp, ch;
 	
-	if (*src == '\0')			/*%< syntax */
+	if (*src == '\0')			/* syntax */
 		return (-2);
 	do {
 		ch = *src++;
 		cp = strchr(digits, ch);
-		if (cp == NULL)			/*%< syntax */
+		if (cp == NULL)			/* syntax */
 			return (-2);
 		bits *= 10;
-		bits += (int)(cp - digits);
-		if (bits == 0 && *src != '\0')	/*%< no leading zeros */
+		bits += cp - digits;
+		if (bits == 0 && *src != '\0')	/* no leading zeros */
 			return (-2);
-		if (bits > (ipv6 ? 128 : 32))	/*%< range error */
+		if (bits > (ipv6 ? 128 : 32))	/* range error */
 			return (-2);
 	} while (*src != '\0');
 
 	return (bits);
 }
-
-/*! \file */

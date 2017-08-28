@@ -1,7 +1,7 @@
-/*	$NetBSD: main.h,v 1.6 2015/12/17 04:00:41 christos Exp $	*/
+/*	$NetBSD: main.h,v 1.1 2009/03/22 14:56:13 christos Exp $	*/
 
 /*
- * Copyright (C) 2004, 2005, 2007, 2009, 2013, 2015  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2004, 2005, 2007  Internet Systems Consortium, Inc. ("ISC")
  * Copyright (C) 1999-2002  Internet Software Consortium.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -17,23 +17,15 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
+/* Id: main.h,v 1.15 2007/06/19 23:46:59 tbox Exp */
+
 #ifndef NAMED_MAIN_H
 #define NAMED_MAIN_H 1
 
 /*! \file */
 
-#ifdef ISC_MAIN_HOOK
-#define main(argc, argv) bindmain(argc, argv)
-#endif
-
-/*
- * Commandline arguments for named; also referenced in win32/ntservice.c
- */
-#define NS_MAIN_ARGS "46c:C:d:D:E:fFgi:lM:m:n:N:p:P:sS:t:T:U:u:vVx:"
-
-ISC_PLATFORM_NORETURN_PRE void
-ns_main_earlyfatal(const char *format, ...)
-ISC_FORMAT_PRINTF(1, 2) ISC_PLATFORM_NORETURN_POST;
+void
+ns_main_earlyfatal(const char *format, ...) ISC_FORMAT_PRINTF(1, 2);
 
 void
 ns_main_earlywarning(const char *format, ...) ISC_FORMAT_PRINTF(1, 2);

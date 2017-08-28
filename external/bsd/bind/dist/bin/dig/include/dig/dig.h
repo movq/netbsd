@@ -1,7 +1,7 @@
-/*	$NetBSD: dig.h,v 1.13 2017/06/15 15:59:36 christos Exp $	*/
+/*	$NetBSD: dig.h,v 1.1 2009/03/22 14:55:49 christos Exp $	*/
 
 /*
- * Copyright (C) 2004-2009, 2011-2016  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2004-2009  Internet Systems Consortium, Inc. ("ISC")
  * Copyright (C) 2000-2003  Internet Software Consortium.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -16,6 +16,8 @@
  * OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR
  * PERFORMANCE OF THIS SOFTWARE.
  */
+
+/* Id: dig.h,v 1.107.120.2 2009/01/06 23:47:26 tbox Exp */
 
 #ifndef DIG_H
 #define DIG_H
@@ -117,7 +119,6 @@ struct dig_lookup {
 		trace, /*% dig +trace */
 		trace_root, /*% initial query for either +trace or +nssearch */
 		tcp_mode,
-		tcp_mode_set,
 		ip6_int,
 		comments,
 		stats,
@@ -131,14 +132,7 @@ struct dig_lookup {
 		done_as_is,
 		besteffort,
 		dnssec,
-		expire,
-#ifdef ISC_PLATFORM_USESIT
-		sit,
-#endif
-		nsid,   /*% Name Server ID (RFC 5001) */
-		ednsneg,
-		mapped,
-		idnout;
+		nsid;   /*% Name Server ID (RFC 5001) */
 #ifdef DIG_SIGCHASE
 isc_boolean_t	sigchase;
 #if DIG_SIGCHASE_TD
@@ -170,12 +164,12 @@ isc_boolean_t	sigchase;
 	isc_buffer_t renderbuf;
 	char *sendspace;
 	dns_name_t *name;
+	isc_timer_t *timer;
 	isc_interval_t interval;
 	dns_message_t *sendmsg;
 	dns_name_t *oname;
 	ISC_LINK(dig_lookup_t) link;
 	ISC_LIST(dig_query_t) q;
-	ISC_LIST(dig_query_t) connecting;
 	dig_query_t *current_query;
 	dig_serverlist_t my_server_list;
 	dig_searchlist_t *origin;
@@ -191,14 +185,6 @@ isc_boolean_t	sigchase;
 	isc_buffer_t *querysig;
 	isc_uint32_t msgcounter;
 	dns_fixedname_t fdomain;
-	isc_sockaddr_t *ecs_addr;
-#ifdef ISC_PLATFORM_USESIT
-	char *sitvalue;
-#endif
-	dns_ednsopt_t *ednsopts;
-	unsigned int ednsoptscnt;
-	unsigned int ednsflags;
-	dns_opcode_t opcode;
 };
 
 /*% The dig_query structure */
@@ -212,13 +198,11 @@ struct dig_query {
 		second_rr_rcvd,
 		first_repeat_rcvd,
 		recv_made,
-		warn_id,
-		timedout;
+		warn_id;
 	isc_uint32_t first_rr_serial;
 	isc_uint32_t second_rr_serial;
 	isc_uint32_t msg_count;
 	isc_uint32_t rr_count;
-	isc_boolean_t ixfr_axfr;
 	char *servname;
 	char *userarg;
 	isc_bufferlist_t sendlist,
@@ -232,13 +216,10 @@ struct dig_query {
 		slspace[4];
 	isc_socket_t *sock;
 	ISC_LINK(dig_query_t) link;
-	ISC_LINK(dig_query_t) clink;
 	isc_sockaddr_t sockaddr;
 	isc_time_t time_sent;
-	isc_time_t time_recv;
 	isc_uint64_t byte_count;
 	isc_buffer_t sendbuf;
-	isc_timer_t *timer;
 };
 
 struct dig_server {
@@ -275,6 +256,7 @@ extern isc_boolean_t check_ra, have_ipv4, have_ipv6, specified_source,
 extern in_port_t port;
 extern unsigned int timeout;
 extern isc_mem_t *mctx;
+extern dns_messageid_t id;
 extern int sendcount;
 extern int ndots;
 extern int lookup_counter;
@@ -293,10 +275,9 @@ extern isc_boolean_t validated;
 extern isc_taskmgr_t *taskmgr;
 extern isc_task_t *global_task;
 extern isc_boolean_t free_now;
-extern isc_boolean_t debugging, debugtiming, memdebugging;
-extern isc_boolean_t keep_open;
+extern isc_boolean_t debugging, memdebugging;
 
-extern const char *progname;
+extern char *progname;
 extern int tries;
 extern int fatalexit;
 #ifdef WITH_IDN
@@ -309,16 +290,12 @@ extern int idnoptions;
 isc_result_t
 get_address(char *host, in_port_t port, isc_sockaddr_t *sockaddr);
 
-int
-getaddresses(dig_lookup_t *lookup, const char *host, isc_result_t *resultp);
-
 isc_result_t
 get_reverse(char *reverse, size_t len, char *value, isc_boolean_t ip6_int,
 	    isc_boolean_t strict);
 
-ISC_PLATFORM_NORETURN_PRE void
-fatal(const char *format, ...)
-ISC_FORMAT_PRINTF(1, 2) ISC_PLATFORM_NORETURN_POST;
+void
+fatal(const char *format, ...) ISC_FORMAT_PRINTF(1, 2);
 
 void
 debug(const char *format, ...) ISC_FORMAT_PRINTF(1, 2);
@@ -326,7 +303,7 @@ debug(const char *format, ...) ISC_FORMAT_PRINTF(1, 2);
 void
 check_result(isc_result_t result, const char *msg);
 
-isc_boolean_t
+void
 setup_lookup(dig_lookup_t *lookup);
 
 void
@@ -349,20 +326,6 @@ setup_libs(void);
 
 void
 setup_system(void);
-
-isc_result_t
-parse_uint(isc_uint32_t *uip, const char *value, isc_uint32_t max,
-	   const char *desc);
-
-isc_result_t
-parse_xint(isc_uint32_t *uip, const char *value, isc_uint32_t max,
-	   const char *desc);
-
-isc_result_t
-parse_netprefix(isc_sockaddr_t **sap, const char *value);
-
-void
-parse_hmac(const char *hmacstr);
 
 dig_lookup_t *
 requeue_lookup(dig_lookup_t *lookold, isc_boolean_t servers);
@@ -439,8 +402,6 @@ chase_scanname(dns_name_t *name, dns_rdatatype_t type, dns_rdatatype_t covers);
 void
 chase_sig(dns_message_t *msg);
 #endif
-
-void save_opt(dig_lookup_t *lookup, char *code, char *value);
 
 ISC_LANG_ENDDECLS
 

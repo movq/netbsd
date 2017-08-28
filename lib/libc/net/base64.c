@@ -1,20 +1,18 @@
-/*	$NetBSD: base64.c,v 1.16 2014/11/24 15:43:21 christos Exp $	*/
-
 /*
- * Copyright (c) 2004 by Internet Systems Consortium, Inc. ("ISC")
- * Copyright (c) 1996-1999 by Internet Software Consortium.
+ * Copyright (c) 1996 by Internet Software Consortium.
  *
  * Permission to use, copy, modify, and distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
  * copyright notice and this permission notice appear in all copies.
  *
- * THE SOFTWARE IS PROVIDED "AS IS" AND ISC DISCLAIMS ALL WARRANTIES
- * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
- * MERCHANTABILITY AND FITNESS.  IN NO EVENT SHALL ISC BE LIABLE FOR
- * ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
- * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
- * ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT
- * OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+ * THE SOFTWARE IS PROVIDED "AS IS" AND INTERNET SOFTWARE CONSORTIUM DISCLAIMS
+ * ALL WARRANTIES WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES
+ * OF MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL INTERNET SOFTWARE
+ * CONSORTIUM BE LIABLE FOR ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL
+ * DAMAGES OR ANY DAMAGES WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR
+ * PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS
+ * ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS
+ * SOFTWARE.
  */
 
 /*
@@ -42,33 +40,23 @@
  * IF IBM IS APPRISED OF THE POSSIBILITY OF SUCH DAMAGES.
  */
 
-#include <sys/cdefs.h>
-#if defined(LIBC_SCCS) && !defined(lint)
-#if 0
-static const char rcsid[] = "Id: base64.c,v 1.4 2005/04/27 04:56:34 sra Exp";
-#else
-__RCSID("$NetBSD: base64.c,v 1.16 2014/11/24 15:43:21 christos Exp $");
-#endif
-#endif /* LIBC_SCCS and not lint */
-
-#include "port_before.h"
-
 #include <sys/types.h>
 #include <sys/param.h>
 #include <sys/socket.h>
-
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <arpa/nameser.h>
 
-#include <assert.h>
 #include <ctype.h>
 #include <resolv.h>
 #include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
 
-#include "port_after.h"
+#if defined(BSD) && (BSD >= 199103) && defined(AF_INET6)
+# include <stdlib.h>
+# include <string.h>
+#else
+# include "../conf/portability.h"
+#endif
 
 #define Assert(Cond) if (!(Cond)) abort()
 
@@ -77,7 +65,7 @@ static const char Base64[] =
 static const char Pad64 = '=';
 
 /* (From RFC1521 and draft-ietf-dnssec-secext-03.txt)
-   The following encoding technique is taken from RFC1521 by Borenstein
+   The following encoding technique is taken from RFC 1521 by Borenstein
    and Freed.  It is reproduced here in a slightly edited form for
    convenience.
 
@@ -140,26 +128,26 @@ static const char Pad64 = '=';
    */
 
 int
-b64_ntop(u_char const *src, size_t srclength, char *target, size_t targsize) {
+b64_ntop(src, srclength, target, targsize)
+	u_char const *src;
+	size_t srclength;
+	char *target;
+	size_t targsize;
+{
 	size_t datalength = 0;
 	u_char input[3];
 	u_char output[4];
-	size_t i;
+	int i;
 
-	_DIAGASSERT(src != NULL);
-	_DIAGASSERT(target != NULL);
-
-	while (2U < srclength) {
+	while (2 < srclength) {
 		input[0] = *src++;
 		input[1] = *src++;
 		input[2] = *src++;
 		srclength -= 3;
 
-		output[0] = (uint32_t)input[0] >> 2;
-		output[1] = ((uint32_t)(input[0] & 0x03) << 4) +
-		    ((uint32_t)input[1] >> 4);
-		output[2] = ((uint32_t)(input[1] & 0x0f) << 2) +
-		    ((uint32_t)input[2] >> 6);
+		output[0] = input[0] >> 2;
+		output[1] = ((input[0] & 0x03) << 4) + (input[1] >> 4);
+		output[2] = ((input[1] & 0x0f) << 2) + (input[2] >> 6);
 		output[3] = input[2] & 0x3f;
 		Assert(output[0] < 64);
 		Assert(output[1] < 64);
@@ -167,7 +155,7 @@ b64_ntop(u_char const *src, size_t srclength, char *target, size_t targsize) {
 		Assert(output[3] < 64);
 
 		if (datalength + 4 > targsize)
-			return -1;
+			return (-1);
 		target[datalength++] = Base64[output[0]];
 		target[datalength++] = Base64[output[1]];
 		target[datalength++] = Base64[output[2]];
@@ -175,36 +163,33 @@ b64_ntop(u_char const *src, size_t srclength, char *target, size_t targsize) {
 	}
     
 	/* Now we worry about padding. */
-	if (0U != srclength) {
+	if (0 != srclength) {
 		/* Get what's left. */
 		input[0] = input[1] = input[2] = '\0';
 		for (i = 0; i < srclength; i++)
 			input[i] = *src++;
 	
-		output[0] = (uint32_t)input[0] >> 2;
-		output[1] = ((uint32_t)(input[0] & 0x03) << 4) +
-		    ((uint32_t)input[1] >> 4);
-		output[2] = ((uint32_t)(input[1] & 0x0f) << 2) +
-		    ((uint32_t)input[2] >> 6);
+		output[0] = input[0] >> 2;
+		output[1] = ((input[0] & 0x03) << 4) + (input[1] >> 4);
+		output[2] = ((input[1] & 0x0f) << 2) + (input[2] >> 6);
 		Assert(output[0] < 64);
 		Assert(output[1] < 64);
 		Assert(output[2] < 64);
 
 		if (datalength + 4 > targsize)
-			return -1;
+			return (-1);
 		target[datalength++] = Base64[output[0]];
 		target[datalength++] = Base64[output[1]];
-		if (srclength == 1U)
+		if (srclength == 1)
 			target[datalength++] = Pad64;
 		else
 			target[datalength++] = Base64[output[2]];
 		target[datalength++] = Pad64;
 	}
 	if (datalength >= targsize)
-		return -1;
-	target[datalength] = '\0';	/*%< Returned value doesn't count \\0. */
-	_DIAGASSERT(__type_fit(int, datalength));
-	return (int)datalength;
+		return (-1);
+	target[datalength] = '\0';	/* Returned value doesn't count \0. */
+	return (datalength);
 }
 
 /* skips all whitespace anywhere.
@@ -214,74 +199,64 @@ b64_ntop(u_char const *src, size_t srclength, char *target, size_t targsize) {
  */
 
 int
-b64_pton(char const *src, u_char *target, size_t targsize)
+b64_pton(src, target, targsize)
+	char const *src;
+	u_char *target;
+	size_t targsize;
 {
-	size_t tarindex;
-	int state, ch;
-	u_char nextbyte;
+	int tarindex, state, ch;
 	char *pos;
-
-	_DIAGASSERT(src != NULL);
-	_DIAGASSERT(target != NULL);
 
 	state = 0;
 	tarindex = 0;
 
-	while ((ch = (u_char) *src++) != '\0') {
-		if (isspace(ch))	/*%< Skip whitespace anywhere. */
+	while ((ch = *src++) != '\0') {
+		if (isspace(ch))	/* Skip whitespace anywhere. */
 			continue;
 
 		if (ch == Pad64)
 			break;
 
 		pos = strchr(Base64, ch);
-		if (pos == NULL) 	/*%< A non-base64 character. */
-			return -1;
+		if (pos == 0) 		/* A non-base64 character. */
+			return (-1);
 
 		switch (state) {
 		case 0:
 			if (target) {
 				if (tarindex >= targsize)
-					return -1;
-				target[tarindex] = (u_char)(pos - Base64) << 2;
+					return (-1);
+				target[tarindex] = (pos - Base64) << 2;
 			}
 			state = 1;
 			break;
 		case 1:
 			if (target) {
-				if (tarindex >= targsize)
-					return -1;
-				target[tarindex] |= 
-				    (uint32_t)(pos - Base64) >> 4;
-				nextbyte = (u_char)((pos - Base64) & 0x0f) << 4;
-				if (tarindex + 1 < targsize)
-					target[tarindex + 1] = nextbyte;
-				else if (nextbyte)
-					return -1;
+				if (tarindex + 1 >= targsize)
+					return (-1);
+				target[tarindex]   |=  (pos - Base64) >> 4;
+				target[tarindex+1]  = ((pos - Base64) & 0x0f)
+							<< 4 ;
 			}
 			tarindex++;
 			state = 2;
 			break;
 		case 2:
 			if (target) {
-				if (tarindex >= targsize)
-					return -1;
-				target[tarindex] |= 
-					(uint32_t)(pos - Base64) >> 2;
-				nextbyte = (u_char)((pos - Base64) & 0x03) << 6;
-				if (tarindex + 1 < targsize)
-					target[tarindex + 1] = nextbyte;
-				else if (nextbyte)
-					return -1;
+				if (tarindex + 1 >= targsize)
+					return (-1);
+				target[tarindex]   |=  (pos - Base64) >> 2;
+				target[tarindex+1]  = ((pos - Base64) & 0x03)
+							<< 6;
 			}
 			tarindex++;
 			state = 3;
 			break;
 		case 3:
 			if (target) {
-				if ((size_t)tarindex >= targsize)
-					return -1;
-				target[tarindex] |= (u_char)(pos - Base64);
+				if (tarindex >= targsize)
+					return (-1);
+				target[tarindex] |= (pos - Base64);
 			}
 			tarindex++;
 			state = 0;
@@ -296,33 +271,33 @@ b64_pton(char const *src, u_char *target, size_t targsize)
 	 * on a byte boundary, and/or with erroneous trailing characters.
 	 */
 
-	if (ch == Pad64) {		/*%< We got a pad char. */
-		ch = *src++;		/*%< Skip it, get next. */
+	if (ch == Pad64) {		/* We got a pad char. */
+		ch = *src++;		/* Skip it, get next. */
 		switch (state) {
-		case 0:		/*%< Invalid = in first position */
-		case 1:		/*%< Invalid = in second position */
-			return -1;
+		case 0:		/* Invalid = in first position */
+		case 1:		/* Invalid = in second position */
+			return (-1);
 
-		case 2:		/*%< Valid, means one byte of info */
+		case 2:		/* Valid, means one byte of info */
 			/* Skip any number of spaces. */
-			for (; ch != '\0'; ch = (u_char) *src++)
+			for (NULL; ch != '\0'; ch = *src++)
 				if (!isspace(ch))
 					break;
 			/* Make sure there is another trailing = sign. */
 			if (ch != Pad64)
-				return -1;
-			ch = *src++;		/*%< Skip the = */
+				return (-1);
+			ch = *src++;		/* Skip the = */
 			/* Fall through to "single trailing =" case. */
 			/* FALLTHROUGH */
 
-		case 3:		/*%< Valid, means two bytes of info */
+		case 3:		/* Valid, means two bytes of info */
 			/*
 			 * We know this char is an =.  Is there anything but
 			 * whitespace after it?
 			 */
-			for (; ch != '\0'; ch = (u_char) *src++)
+			for (NULL; ch != '\0'; ch = *src++)
 				if (!isspace(ch))
-					return -1;
+					return (-1);
 
 			/*
 			 * Now make sure for cases 2 and 3 that the "extra"
@@ -330,9 +305,8 @@ b64_pton(char const *src, u_char *target, size_t targsize)
 			 * zeros.  If we don't check them, they become a
 			 * subliminal channel.
 			 */
-			if (target && tarindex < targsize &&
-			    target[tarindex] != 0)
-				return -1;
+			if (target && target[tarindex] != 0)
+				return (-1);
 		}
 	} else {
 		/*
@@ -340,11 +314,8 @@ b64_pton(char const *src, u_char *target, size_t targsize)
 		 * have no partial bytes lying around.
 		 */
 		if (state != 0)
-			return -1;
+			return (-1);
 	}
 
-	_DIAGASSERT(__type_fit(int, tarindex));
-	return (int)tarindex;
+	return (tarindex);
 }
-
-/*! \file */

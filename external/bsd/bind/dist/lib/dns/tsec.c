@@ -1,7 +1,7 @@
-/*	$NetBSD: tsec.c,v 1.5 2017/06/15 15:59:40 christos Exp $	*/
+/*	$NetBSD: tsec.c,v 1.1 2009/10/25 00:02:35 christos Exp $	*/
 
 /*
- * Copyright (C) 2009, 2010, 2016  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2009  Internet Systems Consortium, Inc. ("ISC")
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -16,13 +16,11 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* Id: tsec.c,v 1.7 2010/12/09 00:54:34 marka Exp  */
+/* Id: tsec.c,v 1.4 2009/09/02 23:48:02 tbox Exp */
 
 #include <config.h>
 
 #include <isc/mem.h>
-
-#include <pk11/site.h>
 
 #include <dns/tsec.h>
 #include <dns/tsig.h>
@@ -69,11 +67,9 @@ dns_tsec_create(isc_mem_t *mctx, dns_tsectype_t type, dst_key_t *key,
 	switch (type) {
 	case dns_tsectype_tsig:
 		switch (dst_key_alg(key)) {
-#ifndef PK11_MD5_DISABLE
 		case DST_ALG_HMACMD5:
 			algname = dns_tsig_hmacmd5_name;
 			break;
-#endif
 		case DST_ALG_HMACSHA1:
 			algname = dns_tsig_hmacsha1_name;
 			break;
@@ -113,6 +109,7 @@ dns_tsec_create(isc_mem_t *mctx, dns_tsectype_t type, dst_key_t *key,
 	tsec->magic = DNS_TSEC_MAGIC;
 
 	*tsecp = tsec;
+
 	return (ISC_R_SUCCESS);
 }
 

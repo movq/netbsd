@@ -1,7 +1,7 @@
-/*	$NetBSD: hash.c,v 1.11 2017/06/15 15:59:41 christos Exp $	*/
+/*	$NetBSD: hash.c,v 1.1 2009/03/22 15:02:02 christos Exp $	*/
 
 /*
- * Copyright (C) 2004-2007, 2009, 2013-2016  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2004-2007  Internet Systems Consortium, Inc. ("ISC")
  * Copyright (C) 2003  Internet Software Consortium.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -17,11 +17,11 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* Id: hash.c,v 1.16 2009/09/01 00:22:28 jinmei Exp  */
+/* Id: hash.c,v 1.13 2007/06/19 23:47:17 tbox Exp */
 
 /*! \file
  * Some portion of this code was derived from universal hash function
- * libraries of Rice University.
+ * libraries of Rice University. 
 \section license UH Universal Hashing Library
 
 Copyright ((c)) 2002, Rice University
@@ -96,7 +96,7 @@ struct isc_hash {
 	isc_boolean_t	initialized;
 	isc_refcount_t	refcnt;
 	isc_entropy_t	*entropy; /*%< entropy source */
-	size_t		limit;	/*%< upper limit of key length */
+	unsigned int	limit;	/*%< upper limit of key length */
 	size_t		vectorlen; /*%< size of the vector below */
 	hash_random_t	*rndvector; /*%< random vector for universal hashing */
 };
@@ -142,7 +142,7 @@ static unsigned char maptolower[] = {
 
 isc_result_t
 isc_hash_ctxcreate(isc_mem_t *mctx, isc_entropy_t *entropy,
-		   size_t limit, isc_hash_t **hctxp)
+		   unsigned int limit, isc_hash_t **hctxp)
 {
 	isc_result_t result;
 	isc_hash_t *hctx;
@@ -238,22 +238,21 @@ isc_hash_create(isc_mem_t *mctx, isc_entropy_t *entropy, size_t limit) {
 
 void
 isc_hash_ctxinit(isc_hash_t *hctx) {
+	isc_result_t result;
+
 	LOCK(&hctx->lock);
 
 	if (hctx->initialized == ISC_TRUE)
 		goto out;
 
-	if (hctx->entropy != NULL) {
-		isc_result_t result;
-
-		result = isc_entropy_getdata(hctx->entropy,
-					     hctx->rndvector,
-					     (unsigned int)hctx->vectorlen,
+	if (hctx->entropy) {
+		result = isc_entropy_getdata(hctx->entropy, 
+					     hctx->rndvector, hctx->vectorlen,
 					     NULL, 0);
 		INSIST(result == ISC_R_SUCCESS);
 	} else {
 		isc_uint32_t pr;
-		size_t i, copylen;
+		unsigned int i, copylen;
 		unsigned char *p;
 
 		p = (unsigned char *)hctx->rndvector;
@@ -264,7 +263,7 @@ isc_hash_ctxinit(isc_hash_t *hctx) {
 			else
 				copylen = hctx->vectorlen - i;
 
-			memmove(p, &pr, copylen);
+			memcpy(p, &pr, copylen);
 		}
 		INSIST(p == (unsigned char *)hctx->rndvector +
 		       hctx->vectorlen);
@@ -277,9 +276,9 @@ isc_hash_ctxinit(isc_hash_t *hctx) {
 }
 
 void
-isc_hash_init(void) {
+isc_hash_init() {
 	INSIST(hash != NULL && VALID_HASH(hash));
-
+	
 	isc_hash_ctxinit(hash);
 }
 
@@ -336,7 +335,7 @@ isc_hash_ctxdetach(isc_hash_t **hctxp) {
 }
 
 void
-isc_hash_destroy(void) {
+isc_hash_destroy() {
 	unsigned int refs;
 
 	INSIST(hash != NULL && VALID_HASH(hash));
@@ -390,167 +389,4 @@ isc_hash_calc(const unsigned char *key, unsigned int keylen,
 	REQUIRE(keylen <= hash->limit);
 
 	return (hash_calc(hash, key, keylen, case_sensitive));
-}
-
-void
-isc__hash_setvec(const isc_uint16_t *vec) {
-	int i;
-	hash_random_t *p;
-
-	if (hash == NULL)
-		return;
-
-	p = hash->rndvector;
-	for (i = 0; i < 256; i++) {
-		p[i] = vec[i];
-	}
-}
-
-static isc_uint32_t fnv_offset_basis;
-static isc_once_t fnv_once = ISC_ONCE_INIT;
-
-static void
-fnv_initialize(void) {
-	/*
-	 * This function should not leave fnv_offset_basis set to
-	 * 0. Also, after this function has been called, if it is called
-	 * again, it should not change fnv_offset_basis.
-	 */
-	while (fnv_offset_basis == 0) {
-		isc_random_get(&fnv_offset_basis);
-	}
-}
-
-isc_uint32_t
-isc_hash_function(const void *data, size_t length,
-		  isc_boolean_t case_sensitive,
-		  const isc_uint32_t *previous_hashp)
-{
-	isc_uint32_t hval;
-	const unsigned char *bp;
-	const unsigned char *be;
-
-	REQUIRE(length == 0 || data != NULL);
-	RUNTIME_CHECK(isc_once_do(&fnv_once, fnv_initialize) == ISC_R_SUCCESS);
-
-	hval = ISC_UNLIKELY(previous_hashp != NULL) ?
-		*previous_hashp : fnv_offset_basis;
-
-	if (length == 0)
-		return (hval);
-
-	bp = (const unsigned char *) data;
-	be = bp + length;
-
-	/*
-	 * Fowler-Noll-Vo FNV-1a hash function.
-	 *
-	 * NOTE: A random fnv_offset_basis is used by default to avoid
-	 * collision attacks as the hash function is reversible. This
-	 * makes the mapping non-deterministic, but the distribution in
-	 * the domain is still uniform.
-	 */
-
-	if (case_sensitive) {
-		while (bp < be - 4) {
-			hval ^= (isc_uint32_t) bp[0];
-			hval *= 16777619;
-			hval ^= (isc_uint32_t) bp[1];
-			hval *= 16777619;
-			hval ^= (isc_uint32_t) bp[2];
-			hval *= 16777619;
-			hval ^= (isc_uint32_t) bp[3];
-			hval *= 16777619;
-			bp += 4;
-		}
-		while (bp < be) {
-			hval ^= (isc_uint32_t) *bp++;
-			hval *= 16777619;
-		}
-	} else {
-		while (bp < be - 4) {
-			hval ^= (isc_uint32_t) maptolower[bp[0]];
-			hval *= 16777619;
-			hval ^= (isc_uint32_t) maptolower[bp[1]];
-			hval *= 16777619;
-			hval ^= (isc_uint32_t) maptolower[bp[2]];
-			hval *= 16777619;
-			hval ^= (isc_uint32_t) maptolower[bp[3]];
-			hval *= 16777619;
-			bp += 4;
-		}
-		while (bp < be) {
-			hval ^= (isc_uint32_t) maptolower[*bp++];
-			hval *= 16777619;
-		}
-	}
-
-	return (hval);
-}
-
-isc_uint32_t
-isc_hash_function_reverse(const void *data, size_t length,
-			  isc_boolean_t case_sensitive,
-			  const isc_uint32_t *previous_hashp)
-{
-	isc_uint32_t hval;
-	const unsigned char *bp;
-	const unsigned char *be;
-
-	REQUIRE(length == 0 || data != NULL);
-	RUNTIME_CHECK(isc_once_do(&fnv_once, fnv_initialize) == ISC_R_SUCCESS);
-
-	hval = ISC_UNLIKELY(previous_hashp != NULL) ?
-		*previous_hashp : fnv_offset_basis;
-
-	if (length == 0)
-		return (hval);
-
-	bp = (const unsigned char *) data;
-	be = bp + length;
-
-	/*
-	 * Fowler-Noll-Vo FNV-1a hash function.
-	 *
-	 * NOTE: A random fnv_offset_basis is used by default to avoid
-	 * collision attacks as the hash function is reversible. This
-	 * makes the mapping non-deterministic, but the distribution in
-	 * the domain is still uniform.
-	 */
-
-	if (case_sensitive) {
-		while (be >= bp + 4) {
-			be -= 4;
-			hval ^= (isc_uint32_t) be[3];
-			hval *= 16777619;
-			hval ^= (isc_uint32_t) be[2];
-			hval *= 16777619;
-			hval ^= (isc_uint32_t) be[1];
-			hval *= 16777619;
-			hval ^= (isc_uint32_t) be[0];
-			hval *= 16777619;
-		}
-		while (--be >= bp) {
-			hval ^= (isc_uint32_t) *be;
-			hval *= 16777619;
-		}
-	} else {
-		while (be >= bp + 4) {
-			be -= 4;
-			hval ^= (isc_uint32_t) maptolower[be[3]];
-			hval *= 16777619;
-			hval ^= (isc_uint32_t) maptolower[be[2]];
-			hval *= 16777619;
-			hval ^= (isc_uint32_t) maptolower[be[1]];
-			hval *= 16777619;
-			hval ^= (isc_uint32_t) maptolower[be[0]];
-			hval *= 16777619;
-		}
-		while (--be >= bp) {
-			hval ^= (isc_uint32_t) maptolower[*be];
-			hval *= 16777619;
-		}
-	}
-
-	return (hval);
 }

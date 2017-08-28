@@ -1,10 +1,11 @@
-/*	$NetBSD: dhcrelay.c,v 1.8 2017/06/28 02:46:30 manu Exp $	*/
+/*	$NetBSD: dhcrelay.c,v 1.1 2013/03/24 15:46:00 christos Exp $	*/
+
 /* dhcrelay.c
 
    DHCP/BOOTP Relay Agent. */
 
 /*
- * Copyright(c) 2004-2015 by Internet Systems Consortium, Inc.("ISC")
+ * Copyright(c) 2004-2011 by Internet Systems Consortium, Inc.("ISC")
  * Copyright(c) 1997-2003 by Internet Software Consortium
  *
  * Permission to use, copy, modify, and distribute this software for any
@@ -25,14 +26,19 @@
  *   <info@isc.org>
  *   https://www.isc.org/
  *
+ * This software has been written for Internet Systems Consortium
+ * by Ted Lemon in cooperation with Vixie Enterprises and Nominum, Inc.
+ * To learn more about Internet Systems Consortium, see
+ * ``https://www.isc.org/''.  To learn more about Vixie Enterprises,
+ * see ``http://www.vix.com''.   To learn more about Nominum, Inc., see
+ * ``http://www.nominum.com''.
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: dhcrelay.c,v 1.8 2017/06/28 02:46:30 manu Exp $");
+__RCSID("$NetBSD: dhcrelay.c,v 1.1 2013/03/24 15:46:00 christos Exp $");
 
 #include "dhcpd.h"
 #include <syslog.h>
-#include <signal.h>
 #include <sys/time.h>
 
 TIME default_lease_time = 43200; /* 12 hours... */
@@ -94,8 +100,8 @@ enum { forward_and_append,	/* Forward and append our own relay option. */
        forward_untouched,	/* Forward without changes. */
        discard } agent_relay_mode = forward_and_replace;
 
-u_int16_t local_port = 0;
-u_int16_t remote_port = 0;
+u_int16_t local_port;
+u_int16_t remote_port;
 
 /* Relay agent server list. */
 struct server_list {
@@ -114,30 +120,7 @@ struct stream_list {
 static struct stream_list *parse_downstream(char *);
 static struct stream_list *parse_upstream(char *);
 static void setup_streams(void);
-
-/*
- * A pointer to a subscriber id to add to the message we forward.
- * This is primarily for testing purposes as we only have one id
- * for the entire relay and don't determine one per client which
- * would be more useful.
- */
-char *dhcrelay_sub_id = NULL;
 #endif
-
-libdhcp_callbacks_t dhcrelay_callbacks = {
-	&local_port,
-	&remote_port,
-	classify,
-	check_collection,
-	dhcp,
-#ifdef DHCPv6
-	dhcpv6,
-#endif /* DHCPv6 */
-	bootp,
-	find_class,
-	parse_allow_deny,
-	dhcp_set_control_state,
-};
 
 static void do_relay4(struct interface_info *, struct dhcp_packet *,
 	              unsigned int, unsigned int, struct iaddr,
@@ -152,7 +135,7 @@ static int strip_relay_agent_options(struct interface_info *,
 				     struct dhcp_packet *, unsigned);
 
 static const char copyright[] =
-"Copyright 2004-2015 Internet Systems Consortium.";
+"Copyright 2004-2011 Internet Systems Consortium.";
 static const char arr[] = "All rights reserved.";
 static const char message[] =
 "Internet Systems Consortium DHCP Relay Agent";
@@ -168,8 +151,7 @@ static const char url[] =
 "                     [-i interface0 [ ... -i interfaceN]\n" \
 "                     server0 [ ... serverN]\n\n" \
 "       dhcrelay -6   [-d] [-q] [-I] [-c <hops>] [-p <port>]\n" \
-"                     [-pf <pid-file>] [--no-pid]\n" \
-"                     [-s <subscriber-id>]\n" \
+"                     [-pf <pid-file>] [--no-pid]\n"\
 "                     -l lower0 [ ... -l lowerN]\n" \
 "                     -u upper0 [ ... -u upperN]\n" \
 "       lower (client link): [address%%]interface[#index]\n" \
@@ -177,13 +159,13 @@ static const char url[] =
 #else
 #define DHCRELAY_USAGE \
 "Usage: dhcrelay [-d] [-q] [-a] [-D] [-A <length>] [-c <hops>] [-p <port>]\n" \
-"                [-pf <pid-file>] [--no-pid]\n" \
+"                [-pf <pid-file>] [--no-pid]\n"\
 "                [-m append|replace|forward|discard]\n" \
 "                [-i interface0 [ ... -i interfaceN]\n" \
 "                server0 [ ... serverN]\n\n"
 #endif
 
-static void usage(void) {
+static void usage() {
 	log_fatal(DHCRELAY_USAGE);
 }
 
@@ -203,8 +185,6 @@ main(int argc, char **argv) {
 	int local_family_set = 0;
 #endif
 
-	libdhcp_callbacks_register(&dhcrelay_callbacks);
-
 	/* Make sure that file descriptors 0(stdin), 1,(stdout), and
 	   2(stderr) are open. To do this, we assume that when we
 	   open a file the lowest available file descriptor is used. */
@@ -218,11 +198,17 @@ main(int argc, char **argv) {
 	else if (fd != -1)
 		close(fd);
 
-	openlog("dhcrelay", DHCP_LOG_OPTIONS, LOG_DAEMON);
+	openlog("dhcrelay", LOG_NDELAY, LOG_DAEMON);
 
 #if !defined(DEBUG)
 	setlogmask(LOG_UPTO(LOG_INFO));
 #endif	
+
+	/* Set up the isc and dns library managers */
+	status = dhcp_context_create();
+	if (status != ISC_R_SUCCESS)
+		log_fatal("Can't initialize context: %s",
+			  isc_result_totext(status));
 
 	/* Set up the OMAPI. */
 	status = omapi_init();
@@ -276,19 +262,13 @@ main(int argc, char **argv) {
 			local_family_set = 1;
 			local_family = AF_INET;
 #endif
-			if (++i == argc) {
-				usage();
-			}
-			if (strlen(argv[i]) >= sizeof(tmp->name)) {
-				log_fatal("%s: interface name too long "
-					  "(is %ld)",
-					  argv[i], (long)strlen(argv[i]));
-			}
 			status = interface_allocate(&tmp, MDL);
-			if (status != ISC_R_SUCCESS) {
+			if (status != ISC_R_SUCCESS)
 				log_fatal("%s: interface_allocate: %s",
 					  argv[i],
 					  isc_result_totext(status));
+			if (++i == argc) {
+				usage();
 			}
 			strcpy(tmp->name, argv[i]);
 			interface_snorf(tmp, INTERFACE_REQUESTED);
@@ -380,15 +360,6 @@ main(int argc, char **argv) {
 			sl = parse_upstream(argv[i]);
 			sl->next = upstreams;
 			upstreams = sl;
-		} else if (!strcmp(argv[i], "-s")) {
-			if (local_family_set && (local_family == AF_INET)) {
-				usage();
-			}
-			local_family_set = 1;
-			local_family = AF_INET6;
-			if (++i == argc)
-				usage();
-			dhcrelay_sub_id = argv[i];
 #endif
 		} else if (!strcmp(argv[i], "-pf")) {
 			if (++i == argc)
@@ -465,8 +436,10 @@ main(int argc, char **argv) {
 		log_info(copyright);
 		log_info(arr);
 		log_info(url);
-	} else 
+	} else {
+		quiet = 0;
 		log_perror = 0;
+	}
 
 	/* Set default port */
 	if (local_family == AF_INET) {
@@ -546,6 +519,17 @@ main(int argc, char **argv) {
 	}
 #endif
 
+	/* Get the current time... */
+	gettimeofday(&cur_tv, NULL);
+
+	/* Discover all the network interfaces. */
+	discover_interfaces(DISCOVER_RELAY);
+
+#ifdef DHCPv6
+	if (local_family == AF_INET6)
+		setup_streams();
+#endif
+
 	/* Become a daemon... */
 	if (!no_daemon) {
 		int pid;
@@ -578,31 +562,13 @@ main(int argc, char **argv) {
 			}
 		}
 
-		(void) close(0);
-		(void) close(1);
-		(void) close(2);
-		(void) setsid();
+		close(0);
+		close(1);
+		close(2);
+		pid = setsid();
 
 		IGNORE_RET (chdir("/"));
 	}
-
-	/* Set up the isc and dns library managers */
-	status = dhcp_context_create(DHCP_CONTEXT_PRE_DB | DHCP_CONTEXT_POST_DB,
-				     NULL, NULL);
-	if (status != ISC_R_SUCCESS)
-		log_fatal("Can't initialize context: %s",
-			  isc_result_totext(status));
-
-	/* Get the current time... */
-	gettimeofday(&cur_tv, NULL);
-
-	/* Discover all the network interfaces. */
-	discover_interfaces(DISCOVER_RELAY);
-
-#ifdef DHCPv6
-	if (local_family == AF_INET6)
-		setup_streams();
-#endif
 
 	/* Set up the packet handler... */
 	if (local_family == AF_INET)
@@ -612,17 +578,10 @@ main(int argc, char **argv) {
 		dhcpv6_packet_handler = do_packet6;
 #endif
 
-#if defined(ENABLE_GENTLE_SHUTDOWN)
-	/* no signal handlers until we deal with the side effects */
-        /* install signal handlers */
-	signal(SIGINT, dhcp_signal_handler);   /* control-c */
-	signal(SIGTERM, dhcp_signal_handler);  /* kill */
-#endif
-
 	/* Start dispatching packets and timeouts... */
 	dispatch();
 
-	/* In fact dispatch() never returns. */
+	/* Not reached */
 	return (0);
 }
 
@@ -636,15 +595,15 @@ do_relay4(struct interface_info *ip, struct dhcp_packet *packet,
 	struct hardware hto, *htop;
 
 	if (packet->hlen > sizeof packet->chaddr) {
-		log_info("Discarding packet with invalid hlen, received on "
-			 "%s interface.", ip->name);
+		log_info("Discarding packet with invalid hlen.");
 		return;
 	}
+
 	if (ip->address_count < 1 || ip->addresses == NULL) {
 		log_info("Discarding packet received on %s interface that "
 			 "has no IPv4 address assigned.", ip->name);
-		return;
-	}
+ 		return;
+ 	}
 
 	/* Find the interface that corresponds to the giaddr
 	   in the packet. */
@@ -654,10 +613,9 @@ do_relay4(struct interface_info *ip, struct dhcp_packet *packet,
 
 			for (i = 0 ; i < out->address_count ; i++ ) {
 				if (out->addresses[i].s_addr ==
-				    packet->giaddr.s_addr) {
+				    packet->giaddr.s_addr)
 					i = -1;
 					break;
-				}
 			}
 
 			if (i == -1)
@@ -963,9 +921,6 @@ find_interface_by_agent_option(struct dhcp_packet *packet,
  * Agent Information option tacked onto its tail.   If it is, tack
  * the option on.
  */
-
-#include <sys/cdefs.h>
-__RCSID("$NetBSD: dhcrelay.c,v 1.8 2017/06/28 02:46:30 manu Exp $");
 static int
 add_relay_agent_options(struct interface_info *ip, struct dhcp_packet *packet,
 			unsigned length, struct in_addr giaddr) {
@@ -1095,11 +1050,9 @@ add_relay_agent_options(struct interface_info *ip, struct dhcp_packet *packet,
 	if (end_pad != NULL)
 		sp = end_pad;
 
-#if 0
 	/* Remember where the end of the packet was after parsing
 	   it. */
 	op = sp;
-#endif
 
 	/* Sanity check.  Had better not ever happen. */
 	if ((ip->circuit_id_len > 255) ||(ip->circuit_id_len < 1))
@@ -1216,8 +1169,8 @@ parse_downstream(char *arg) {
 	/* Share with up side? */
 	for (up = upstreams; up; up = up->next) {
 		if (strcmp(ifname, up->ifp->name) == 0) {
-			log_info("parse_downstream: Interface '%s' is "
-				 "both down and up.", ifname);
+			log_info("Interface '%s' is both down and up.",
+				 ifname);
 			ifp = up->ifp;
 			break;
 		}
@@ -1235,8 +1188,8 @@ parse_downstream(char *arg) {
 			interface_dereference(&interfaces, MDL);
 		}
 		interface_reference(&interfaces, ifp, MDL);
+		ifp->flags |= INTERFACE_REQUESTED | INTERFACE_DOWNSTREAM;
 	}
-	ifp->flags |= INTERFACE_REQUESTED | INTERFACE_DOWNSTREAM;
 
 	/* New downstream. */
 	dp = (struct stream_list *) dmalloc(sizeof(*dp), MDL);
@@ -1287,8 +1240,6 @@ parse_upstream(char *arg) {
 	}
 	for (dp = downstreams; dp; dp = dp->next) {
 		if (strcmp(ifname, dp->ifp->name) == 0) {
-			log_info("parse_upstream: Interface '%s' is "
-				 "both down and up.", ifname);
 			ifp = dp->ifp;
 			break;
 		}
@@ -1306,8 +1257,8 @@ parse_upstream(char *arg) {
 			interface_dereference(&interfaces, MDL);
 		}
 		interface_reference(&interfaces, ifp, MDL);
+		ifp->flags |= INTERFACE_REQUESTED | INTERFACE_UPSTREAM;
 	}
-	ifp->flags |= INTERFACE_REQUESTED | INTERFACE_UPSTREAM;
 
 	/* New upstream. */
 	up = (struct stream_list *) dmalloc(sizeof(*up), MDL);
@@ -1353,8 +1304,8 @@ setup_streams(void) {
 				break;
 		}
 		if (i == dp->ifp->v6address_count)
-			log_fatal("Interface %s does not have global IPv6 "
-				  "address assigned.", dp->ifp->name);
+			log_fatal("Can't find link address for interface '%s'.",
+				  dp->ifp->name);
 		if (!link_is_set)
 			memcpy(&dp->link.sin6_addr,
 			       &dp->ifp->v6addresses[i],
@@ -1375,13 +1326,6 @@ setup_streams(void) {
 		if (up->ifp->v6address_count == 0)
 			log_fatal("Interface '%s' has no IPv6 addresses.",
 				  up->ifp->name);
-
-		/* RFC 3315 Sec 20 - "If the relay agent relays messages to
-		 * the All_DHCP_Servers address or other multicast addresses,
-		 * it sets the Hop Limit field to 32." */
-		if (IN6_IS_ADDR_MULTICAST(&up->link.sin6_addr)) {
-			set_multicast_hop_limit(up->ifp, HOP_COUNT_LIMIT);
-		}
 	}
 }
 
@@ -1390,7 +1334,6 @@ setup_streams(void) {
  */
 static const int required_forw_opts[] = {
 	D6O_INTERFACE_ID,
-	D6O_SUBSCRIBER_ID,
 	D6O_RELAY_MSG,
 	0
 };
@@ -1500,20 +1443,6 @@ process_up6(struct packet *packet, struct stream_list *dp) {
 			return;
 		}
 	}
-
-	/* Add a subscriber-id if desired. */
-	/* This is for testing rather than general use */
-	if (dhcrelay_sub_id != NULL) {
-		if (!save_option_buffer(&dhcpv6_universe, opts, NULL,
-					(unsigned char *) dhcrelay_sub_id,
-					strlen(dhcrelay_sub_id),
-					D6O_SUBSCRIBER_ID, 0)) {
-			log_error("Can't save subsriber-id.");
-			option_state_dereference(&opts, MDL);
-			return;
-		}
-	}
-		
 
 	/* Add the relay-msg carrying the packet. */
 	if (!save_option_buffer(&dhcpv6_universe, opts,
@@ -1626,7 +1555,7 @@ process_down6(struct packet *packet) {
 		}
 	}
 	/* Why bother when there is no choice. */
-	if (!dp && downstreams && !downstreams->next)
+	if (!dp && !downstreams->next)
 		dp = downstreams;
 	if (!dp) {
 		log_info("Can't find the down interface.");
@@ -1751,11 +1680,5 @@ parse_allow_deny(struct option_cache **oc, struct parse *p, int i) {
 isc_result_t
 dhcp_set_control_state(control_object_state_t oldstate,
 		       control_object_state_t newstate) {
-	if (newstate != server_shutdown)
-		return ISC_R_SUCCESS;
-
-	if (no_pid_file == ISC_FALSE)
-		(void) unlink(path_dhcrelay_pid);
-
-	exit(0);
+	return ISC_R_SUCCESS;
 }

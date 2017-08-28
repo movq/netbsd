@@ -1,7 +1,7 @@
-/*	$NetBSD: thread.h,v 1.6 2014/12/10 04:38:01 christos Exp $	*/
+/*	$NetBSD: thread.h,v 1.1 2009/03/22 15:02:29 christos Exp $	*/
 
 /*
- * Copyright (C) 2004, 2005, 2007, 2009, 2013  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2004, 2005, 2007  Internet Systems Consortium, Inc. ("ISC")
  * Copyright (C) 1998-2001  Internet Software Consortium.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -17,7 +17,7 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* Id: thread.h,v 1.25 2009/09/29 04:37:08 marka Exp  */
+/* Id: thread.h,v 1.22 2007/06/19 23:47:20 tbox Exp */
 
 #ifndef ISC_THREAD_H
 #define ISC_THREAD_H 1
@@ -28,7 +28,7 @@
 #include <isc/result.h>
 
 /*
- * Inlines to help with wait return checking
+ * Inlines to help with wait retrun checking
  */
 
 /* check handle for NULL and INVALID_HANDLE */
@@ -39,18 +39,18 @@ inline BOOL IsValidHandle( HANDLE hHandle) {
 /* validate wait return codes... */
 inline BOOL WaitSucceeded( DWORD dwWaitResult, DWORD dwHandleCount) {
     return ((dwWaitResult >= WAIT_OBJECT_0) &&
-	    (dwWaitResult < WAIT_OBJECT_0 + dwHandleCount));
+            (dwWaitResult < WAIT_OBJECT_0 + dwHandleCount));
 }
 
 inline BOOL WaitAbandoned( DWORD dwWaitResult, DWORD dwHandleCount) {
     return ((dwWaitResult >= WAIT_ABANDONED_0) &&
-	    (dwWaitResult < WAIT_ABANDONED_0 + dwHandleCount));
+            (dwWaitResult < WAIT_ABANDONED_0 + dwHandleCount));
 }
 
 inline BOOL WaitTimeout( DWORD dwWaitResult) {
     return (dwWaitResult == WAIT_TIMEOUT);
 }
-
+    
 inline BOOL WaitFailed( DWORD dwWaitResult) {
     return (dwWaitResult == WAIT_FAILED);
 }
@@ -67,7 +67,7 @@ inline DWORD WaitAbandonedIndex( DWORD dwWaitResult) {
 
 
 typedef HANDLE isc_thread_t;
-typedef DWORD isc_threadresult_t;
+typedef unsigned int isc_threadresult_t;
 typedef void * isc_threadarg_t;
 typedef isc_threadresult_t (WINAPI *isc_threadfunc_t)(isc_threadarg_t);
 typedef DWORD isc_thread_key_t;
@@ -92,12 +92,10 @@ int
 isc_thread_key_delete(isc_thread_key_t key);
 
 void *
-isc_thread_key_getspecific(isc_thread_key_t);
+isc_thread_key_getspecific(isc_thread_key);
 
 int
 isc_thread_key_setspecific(isc_thread_key_t key, void *value);
-
-#define isc_thread_yield() Sleep(0)
 
 ISC_LANG_ENDDECLS
 

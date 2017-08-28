@@ -1,4 +1,4 @@
-/*	$NetBSD: lwderror.c,v 1.4 2014/12/10 04:37:51 christos Exp $	*/
+/*	$NetBSD: lwderror.c,v 1.1 2009/03/22 14:56:00 christos Exp $	*/
 
 /*
  * Copyright (C) 2004, 2005, 2007  Internet Systems Consortium, Inc. ("ISC")
@@ -17,7 +17,7 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* Id: lwderror.c,v 1.12 2007/06/19 23:46:59 tbox Exp  */
+/* Id: lwderror.c,v 1.12 2007/06/19 23:46:59 tbox Exp */
 
 /*! \file */
 

@@ -1,6 +1,6 @@
 #!/bin/sh
 #
-# Copyright (C) 2004, 2007, 2012, 2014-2016  Internet Systems Consortium, Inc. ("ISC")
+# Copyright (C) 2004, 2007  Internet Systems Consortium, Inc. ("ISC")
 # Copyright (C) 2000, 2001  Internet Software Consortium.
 #
 # Permission to use, copy, modify, and/or distribute this software for any
@@ -15,13 +15,23 @@
 # OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR
 # PERFORMANCE OF THIS SOFTWARE.
 
+# Id: tests.sh,v 1.5 2007/06/19 23:47:05 tbox Exp
+
 SYSTEMTESTTOP=..
 . $SYSTEMTESTTOP/conf.sh
 
 status=0
 
+if $PERL -e 'use Net::DNS;' 2>/dev/null
+then
+    :
+else
+    echo "I:This test requires the Net::DNS library." >&2
+    exit 1
+fi
+
 (
-$SHELL -c "while true
+sh -c "while true
            do $RNDC -c ../common/rndc.conf -s 10.53.0.3 -p 9953 reload 2>&1 |
 	       sed 's/^/I:ns3 /';
 	   sleep 1
@@ -40,4 +50,4 @@ echo "I:killing reload loop"
 kill `cat reload.pid`
 
 echo "I:exit status: $status"
-[ $status -eq 0 ] || exit 1
+exit $status

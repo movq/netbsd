@@ -1,6 +1,6 @@
-/*	$NetBSD: minires.h,v 1.1.1.3 2016/01/10 19:44:43 christos Exp $	*/
+/*	$NetBSD: minires.h,v 1.1 2013/03/24 15:45:50 christos Exp $	*/
+
 /*
- * Copyright (c) 2014 by Internet Systems Consortium, Inc. ("ISC")
  * Copyright (c) 2004,2007-2009 by Internet Systems Consortium, Inc. ("ISC")
  * Copyright (c) 2001-2003 by Internet Software Consortium
  *
@@ -41,7 +41,5 @@ int MRns_name_pack (const unsigned char *, unsigned char *,
 		    unsigned, const unsigned char **, const unsigned char **);
 int MRns_name_ntop(const unsigned char *, char *, size_t);
 int MRns_name_pton(const char *, u_char *, size_t);
-int MRns_name_uncompress_list(const unsigned char*, int buflen, char*, size_t);
-int MRns_name_compress_list(const char*, int buflen, unsigned char*, size_t);
 
 #endif /* MINIRES_H */

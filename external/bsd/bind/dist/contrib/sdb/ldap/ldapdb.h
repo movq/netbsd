@@ -1,4 +1,4 @@
-/*	$NetBSD: ldapdb.h,v 1.3 2014/12/10 04:37:57 christos Exp $	*/
+/*	$NetBSD: ldapdb.h,v 1.1 2009/03/22 14:58:12 christos Exp $	*/
 
 #include <isc/types.h>
 

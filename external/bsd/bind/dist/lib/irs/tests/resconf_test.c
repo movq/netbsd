@@ -1,4 +1,4 @@
-/*	$NetBSD: resconf_test.c,v 1.1.1.1 2017/06/15 15:22:49 christos Exp $	*/
+/*	$NetBSD: resconf_test.c,v 1.1 2017/06/15 15:22:49 christos Exp $	*/
 
 /*
  * Copyright (C) 2016  Internet Systems Consortium, Inc. ("ISC")

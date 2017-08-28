@@ -1,7 +1,7 @@
-/*	$NetBSD: buffer.c,v 1.7 2016/05/26 16:49:59 christos Exp $	*/
+/*	$NetBSD: buffer.c,v 1.1 2009/03/22 15:02:01 christos Exp $	*/
 
 /*
- * Copyright (C) 2004-2008, 2012, 2014, 2015  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2004-2008  Internet Systems Consortium, Inc. ("ISC")
  * Copyright (C) 1998-2002  Internet Software Consortium.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -17,7 +17,7 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* Id: buffer.c,v 1.49 2008/09/25 04:02:39 tbox Exp  */
+/* Id: buffer.c,v 1.49 2008/09/25 04:02:39 tbox Exp */
 
 /*! \file */
 
@@ -30,7 +30,7 @@
 #include <isc/util.h>
 
 void
-isc__buffer_init(isc_buffer_t *b, void *base, unsigned int length) {
+isc__buffer_init(isc_buffer_t *b, const void *base, unsigned int length) {
 	/*
 	 * Make 'b' refer to the 'length'-byte region starting at 'base'.
 	 * XXXDCL see the comment in buffer.h about base being const.
@@ -422,7 +422,7 @@ isc__buffer_putstr(isc_buffer_t *b, const char *source) {
 	REQUIRE(l <= isc_buffer_availablelength(b));
 
 	cp = isc_buffer_used(b);
-	memmove(cp, source, l);
+	memcpy(cp, source, l);
 	b->used += l;
 }
 
@@ -441,7 +441,7 @@ isc_buffer_copyregion(isc_buffer_t *b, const isc_region_t *r) {
 	available = isc_buffer_availablelength(b);
 	if (r->length > available)
 		return (ISC_R_NOSPACE);
-	memmove(base, r->base, r->length);
+	memcpy(base, r->base, r->length);
 	b->used += r->length;
 
 	return (ISC_R_SUCCESS);
@@ -463,8 +463,6 @@ isc_buffer_allocate(isc_mem_t *mctx, isc_buffer_t **dynbuffer,
 	isc_buffer_init(dbuf, ((unsigned char *)dbuf) + sizeof(isc_buffer_t),
 			length);
 	dbuf->mctx = mctx;
-
-	ENSURE(ISC_BUFFER_VALID(dbuf));
 
 	*dynbuffer = dbuf;
 

@@ -1,7 +1,7 @@
-/*	$NetBSD: win32os.h,v 1.5 2015/07/08 17:29:00 christos Exp $	*/
+/*	$NetBSD: win32os.h,v 1.1 2009/03/22 15:02:29 christos Exp $	*/
 
 /*
- * Copyright (C) 2004, 2007, 2009, 2015  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2004, 2007  Internet Systems Consortium, Inc. ("ISC")
  * Copyright (C) 2002  Internet Software Consortium.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -17,7 +17,7 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* Id: win32os.h,v 1.7 2009/06/25 23:48:02 tbox Exp  */
+/* Id: win32os.h,v 1.5 2007/06/19 23:47:20 tbox Exp */
 
 #ifndef ISC_WIN32OS_H
 #define ISC_WIN32OS_H 1
@@ -29,6 +29,30 @@ ISC_LANG_BEGINDECLS
 /*
  * Return the number of CPUs available on the system, or 1 if this cannot
  * be determined.
+ */
+
+unsigned int
+isc_win32os_majorversion(void);
+/*
+ * Major Version of the O/S.
+ */
+
+unsigned int
+isc_win32os_minorversion(void);
+/*
+ * Minor Version of the O/S.
+ */
+
+unsigned int
+isc_win32os_servicepackmajor(void);
+/*
+ * Major Version of the Service Pack for O/S.
+ */
+
+unsigned int
+isc_win32os_servicepackminor(void);
+/*
+ * Minor Version of the Service Pack for O/S.
  */
 
 int
@@ -46,4 +70,4 @@ isc_win32os_versioncheck(unsigned int major, unsigned int minor,
 
 ISC_LANG_ENDDECLS
 
-#endif /* ISC_WIN32OS_H */
+#endif /* ISC_OS_H */

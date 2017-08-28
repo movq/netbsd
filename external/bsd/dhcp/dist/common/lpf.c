@@ -1,13 +1,12 @@
-/*	$NetBSD: lpf.c,v 1.2 2017/06/28 02:46:30 manu Exp $	*/
+/*	$NetBSD: lpf.c,v 1.1 2013/03/24 15:45:53 christos Exp $	*/
+
 /* lpf.c
 
    Linux packet filter code, contributed by Brian Murrel at Interlinx
    Support Services in Vancouver, B.C. */
 
 /*
- * Copyright (c) 2014-2015 by Internet Systems Consortium, Inc. ("ISC")
- * Copyright (c) 2009,2012 by Internet Systems Consortium, Inc. ("ISC")
- * Copyright (c) 2004,2007 by Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (c) 2004,2007,2009 by Internet Systems Consortium, Inc. ("ISC")
  * Copyright (c) 1996-2003 by Internet Software Consortium
  *
  * Permission to use, copy, modify, and distribute this software for any
@@ -29,31 +28,22 @@
  *   https://www.isc.org/
  */
 
-#include <sys/cdefs.h>
-__RCSID("$NetBSD: lpf.c,v 1.2 2017/06/28 02:46:30 manu Exp $");
-
 #include "dhcpd.h"
 #if defined (USE_LPF_SEND) || defined (USE_LPF_RECEIVE)
+#include <sys/ioctl.h>
 #include <sys/uio.h>
 #include <errno.h>
 
 #include <asm/types.h>
 #include <linux/filter.h>
 #include <linux/if_ether.h>
-#include <linux/if_packet.h>
 #include <netinet/in_systm.h>
+#include <net/if_packet.h>
 #include "includes/netinet/ip.h"
 #include "includes/netinet/udp.h"
 #include "includes/netinet/if_ether.h"
-#endif
-
-#if defined (USE_LPF_RECEIVE) || defined (USE_LPF_HWADDR)
-#include <sys/ioctl.h>
-#include <sys/socket.h>
 #include <net/if.h>
-#endif
 
-#if defined (USE_LPF_SEND) || defined (USE_LPF_RECEIVE)
 /* Reinitializes the specified interface after an address change.   This
    is not required for packet-filter APIs. */
 
@@ -79,14 +69,10 @@ int if_register_lpf (info)
 	struct interface_info *info;
 {
 	int sock;
-	union {
-		struct sockaddr_ll ll;
-		struct sockaddr common;
-		} sa;
-	struct ifreq ifr;
+	struct sockaddr sa;
 
 	/* Make an LPF socket. */
-	if ((sock = socket(PF_PACKET, SOCK_RAW,
+	if ((sock = socket(PF_PACKET, SOCK_PACKET,
 			   htons((short)ETH_P_ALL))) < 0) {
 		if (errno == ENOPROTOOPT || errno == EPROTONOSUPPORT ||
 		    errno == ESOCKTNOSUPPORT || errno == EPFNOSUPPORT ||
@@ -101,17 +87,11 @@ int if_register_lpf (info)
 		log_fatal ("Open a socket for LPF: %m");
 	}
 
-	memset (&ifr, 0, sizeof ifr);
-	strncpy (ifr.ifr_name, (const char *)info -> ifp, sizeof ifr.ifr_name);
-	ifr.ifr_name[IFNAMSIZ-1] = '\0';
-	if (ioctl (sock, SIOCGIFINDEX, &ifr))
-		log_fatal ("Failed to get interface index: %m");
-
 	/* Bind to the interface name */
 	memset (&sa, 0, sizeof sa);
-	sa.ll.sll_family = AF_PACKET;
-	sa.ll.sll_ifindex = ifr.ifr_ifindex;
-	if (bind (sock, &sa.common, sizeof sa)) {
+	sa.sa_family = AF_PACKET;
+	strncpy (sa.sa_data, (const char *)info -> ifp, sizeof sa.sa_data);
+	if (bind (sock, &sa, sizeof sa)) {
 		if (errno == ENOPROTOOPT || errno == EPROTONOSUPPORT ||
 		    errno == ESOCKTNOSUPPORT || errno == EPFNOSUPPORT ||
 		    errno == EAFNOSUPPORT || errno == EINVAL) {
@@ -123,7 +103,6 @@ int if_register_lpf (info)
 			log_fatal ("configuration!");
 		}
 		log_fatal ("Bind socket to interface: %m");
-
 	}
 
 	get_hw_addr(info->name, &info->hw_address);
@@ -197,20 +176,6 @@ void if_register_receive (info)
 	/* Open a LPF device and hang it on this interface... */
 	info -> rfdesc = if_register_lpf (info);
 
-#ifdef PACKET_AUXDATA
-	{
-	int val = 1;
-
-	if (setsockopt(info->rfdesc, SOL_PACKET, PACKET_AUXDATA,
-		       &val, sizeof(val)) < 0) {
-		if (errno != ENOPROTOOPT) {
-			log_fatal ("Failed to set auxiliary packet data: %m");
-		}
-	}
-	}
-#endif
-
-
 #if defined (HAVE_TR_SUPPORT)
 	if (info -> hw_address.hbuf [0] == HTYPE_IEEE802)
 		lpf_tr_filter_setup (info);
@@ -262,7 +227,7 @@ static void lpf_gen_filter_setup (info)
         /* Patch the server port into the LPF  program...
 	   XXX changes to filter program may require changes
 	   to the insn number(s) used below! XXX */
-	dhcp_bpf_filter [8].k = ntohs ((short)*libdhcp_callbacks.local_port);
+	dhcp_bpf_filter [8].k = ntohs ((short)local_port);
 
 	if (setsockopt (info -> rfdesc, SOL_SOCKET, SO_ATTACH_FILTER, &p,
 			sizeof p) < 0) {
@@ -298,7 +263,7 @@ static void lpf_tr_filter_setup (info)
 	   XXX to the insn number(s) used below!
 	   XXX Token ring filter is null - when/if we have a filter 
 	   XXX that's not, we'll need this code.
-	   XXX dhcp_bpf_filter [?].k = ntohs (*libdhcp_callbacks.local_port); */
+	   XXX dhcp_bpf_filter [?].k = ntohs (local_port); */
 
 	if (setsockopt (info -> rfdesc, SOL_SOCKET, SO_ATTACH_FILTER, &p,
 			sizeof p) < 0) {
@@ -332,6 +297,7 @@ ssize_t send_packet (interface, packet, raw, len, from, to, hto)
 	double hh [16];
 	double ih [1536 / sizeof (double)];
 	unsigned char *buf = (unsigned char *)ih;
+	struct sockaddr_pkt sa;
 	int result;
 	int fudge;
 
@@ -351,7 +317,18 @@ ssize_t send_packet (interface, packet, raw, len, from, to, hto)
 				to -> sin_addr.s_addr, to -> sin_port,
 				(unsigned char *)raw, len);
 	memcpy (buf + ibufp, raw, len);
-	result = write(interface->wfdesc, buf + fudge, ibufp + len - fudge);
+
+	/* For some reason, SOCK_PACKET sockets can't be connected,
+	   so we have to do a sentdo every time. */
+	memset (&sa, 0, sizeof sa);
+	sa.spkt_family = AF_PACKET;
+	strncpy ((char *)sa.spkt_device,
+		 (const char *)interface -> ifp, sizeof sa.spkt_device);
+	sa.spkt_protocol = htons(ETH_P_IP);
+
+	result = sendto (interface -> wfdesc,
+			 buf + fudge, ibufp + len - fudge, 0, 
+			 (const struct sockaddr *)&sa, sizeof sa);
 	if (result < 0)
 		log_error ("send_packet: %m");
 	return result;
@@ -368,78 +345,13 @@ ssize_t receive_packet (interface, buf, len, from, hfrom)
 {
 	int length = 0;
 	int offset = 0;
-	int csum_ready = 1;
 	unsigned char ibuf [1536];
 	unsigned bufix = 0;
 	unsigned paylen;
-	struct iovec iov = {
-		.iov_base = ibuf,
-		.iov_len = sizeof ibuf,
-	};
-#ifdef PACKET_AUXDATA
-	/*
-	 * We only need cmsgbuf if we are getting the aux data and we
-	 * only get the auxdata if it is actually defined
-	 */
-	unsigned char cmsgbuf[CMSG_LEN(sizeof(struct tpacket_auxdata))];
-	struct msghdr msg = {
-		.msg_iov = &iov,
-		.msg_iovlen = 1,
-		.msg_control = cmsgbuf,
-		.msg_controllen = sizeof(cmsgbuf),
-	};
-#else
-	struct msghdr msg = {
-		.msg_iov = &iov,
-		.msg_iovlen = 1,
-		.msg_control = NULL,
-		.msg_controllen = 0,
-	};
-#endif /* PACKET_AUXDATA */
 
-	length = recvmsg (interface->rfdesc, &msg, 0);
+	length = read (interface -> rfdesc, ibuf, sizeof ibuf);
 	if (length <= 0)
 		return length;
-
-#ifdef PACKET_AUXDATA
-	{
-	/*  Use auxiliary packet data to:
-	 *
-	 *  a. Weed out extraneous VLAN-tagged packets - If the NIC driver is
-	 *  handling VLAN encapsulation (i.e. stripping/adding VLAN tags),
-	 *  then an inbound VLAN packet will be seen twice: Once by
-	 *  the parent interface (e.g. eth0) with a VLAN tag != 0; and once
-	 *  by the vlan interface (e.g. eth0.n) with a VLAN tag of 0 (i.e none).
-	 *  We want to discard the packet sent to the parent and thus respond
-	 *  only over the vlan interface.  (Drivers for Intel PRO/1000 series
-	 *  NICs perform VLAN encapsulation, while drivers for PCnet series
-	 *  do not, for example. The linux kernel makes stripped vlan info
-	 *  visible to user space via CMSG/auxdata, this appears to not be
-	 *  true for BSD OSs.).  NOTE: this is only supported on linux flavors
-	 *  which define the tpacket_auxdata.tp_vlan_tci.
-	 *
-	 *  b. Determine if checksum is valid for use. It may not be if
-	 *  checksum offloading is enabled on the interface.  */
-	struct cmsghdr *cmsg;
-
-	for (cmsg = CMSG_FIRSTHDR(&msg); cmsg; cmsg = CMSG_NXTHDR(&msg, cmsg)) {
-		if (cmsg->cmsg_level == SOL_PACKET &&
-		    cmsg->cmsg_type == PACKET_AUXDATA) {
-			struct tpacket_auxdata *aux = (void *)CMSG_DATA(cmsg);
-			/* Discard packets with stripped vlan id */
-
-#ifdef VLAN_TCI_PRESENT
-			if (aux->tp_vlan_tci != 0)
-				return 0;
-#endif
-
-			csum_ready = ((aux->tp_status & TP_STATUS_CSUMNOTREADY)
-				      ? 0 : 1);
-		}
-	}
-
-	}
-#endif /* PACKET_AUXDATA */
 
 	bufix = 0;
 	/* Decode the physical header... */
@@ -457,7 +369,7 @@ ssize_t receive_packet (interface, buf, len, from, hfrom)
 
 	/* Decode the IP and UDP headers... */
 	offset = decode_udp_ip_header (interface, ibuf, bufix, from,
-				       (unsigned)length, &paylen, csum_ready);
+				       (unsigned)length, &paylen);
 
 	/* If the IP or UDP checksum was bad, skip the packet... */
 	if (offset < 0)
@@ -507,9 +419,7 @@ void maybe_setup_fallback ()
 		interface_dereference (&fbi, MDL);
 	}
 }
-#endif
 
-#if defined (USE_LPF_RECEIVE) || defined (USE_LPF_HWADDR)
 void
 get_hw_addr(const char *name, struct hardware *hw) {
 	int sock;
@@ -548,9 +458,9 @@ get_hw_addr(const char *name, struct hardware *hw) {
 			memcpy(&hw->hbuf[1], sa->sa_data, 6);
 			break;
 		case ARPHRD_FDDI:
-			hw->hlen = 7;
+			hw->hlen = 17;
 			hw->hbuf[0] = HTYPE_FDDI;
-			memcpy(&hw->hbuf[1], sa->sa_data, 6);
+			memcpy(&hw->hbuf[1], sa->sa_data, 16);
 			break;
 		default:
 			log_fatal("Unsupported device type %ld for \"%s\"",

@@ -1,5 +1,3 @@
-/*	$NetBSD: pathnames.h,v 1.4 2011/10/12 16:39:48 christos Exp $	*/
-
 /* Copyright 1993,1994 by Paul Vixie
  * All rights reserved
  */
@@ -50,14 +48,11 @@
 			 */
 #define SPOOL_DIR	"tabs"
 
-			/* File containing maximum crontab size, in bytes. */
-#define MAXTABSIZE_FILE	"maxtabsize"
-
 			/* cron allow/deny file.  At least cron.deny must
 			 * exist for ordinary users to run crontab.
 			 */
-#define	CRON_ALLOW	"allow"
-#define	CRON_DENY	"deny"
+#define	CRON_ALLOW	"cron.allow"
+#define	CRON_DENY	"cron.deny"
 
 			/* undefining this turns off logging to a file.  If
 			 * neither LOG_FILE or SYSLOG is defined, we don't log.
@@ -65,9 +60,7 @@
 			 * LOG_CRON is defined by <syslog.h>, LOG_FILE will not
 			 * be used.
 			 */
-#if 0
 #define LOG_FILE	"log"
-#endif
 
 			/* where should the daemon stick its PID?
 			 * PIDDIR must end in '/'.
@@ -86,8 +79,6 @@
 			/* what editor to use if no EDITOR or VISUAL
 			 * environment variable specified.
 			 */
-			/* system V cron dir */
-#define	CROND_DIR	"/etc/cron.d"
 #if defined(_PATH_VI)
 # define EDITOR _PATH_VI
 #else

@@ -1,4 +1,4 @@
-/*	$NetBSD: wrapcommon.h,v 1.3 2014/12/10 04:37:56 christos Exp $	*/
+/*	$NetBSD: wrapcommon.h,v 1.1 2009/03/22 14:57:52 christos Exp $	*/
 
 /*
  * wrapcommon.h

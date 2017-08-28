@@ -1,7 +1,7 @@
-/*	$NetBSD: getaddresses.c,v 1.6 2015/07/08 17:28:58 christos Exp $	*/
+/*	$NetBSD: getaddresses.c,v 1.1 2009/03/22 15:00:55 christos Exp $	*/
 
 /*
- * Copyright (C) 2004, 2005, 2007, 2014, 2015  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2004, 2005, 2007  Internet Systems Consortium, Inc. ("ISC")
  * Copyright (C) 2001, 2002  Internet Software Consortium.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -17,7 +17,7 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* Id: getaddresses.c,v 1.22 2007/06/19 23:47:16 tbox Exp  */
+/* Id: getaddresses.c,v 1.22 2007/06/19 23:47:16 tbox Exp */
 
 /*! \file */
 
@@ -105,18 +105,18 @@ bind9_getaddresses(const char *hostname, in_port_t port,
 
 			if (d != NULL) {
 #ifdef ISC_PLATFORM_HAVESCOPEID
-				isc_result_t iresult;
+				isc_result_t result;
 
-				iresult = isc_netscope_pton(AF_INET6, d + 1,
-							    &in6, &zone);
-
-				if (iresult != ISC_R_SUCCESS)
-					return (iresult);
+				result = isc_netscope_pton(AF_INET6, d + 1,
+							   &in6, &zone);
+				    
+				if (result != ISC_R_SUCCESS)
+					return (result);
 #else
 				/*
 				 * The extended format is specified while the
 				 * system does not provide the ability to use
-				 * it.	Throw an explicit error instead of
+				 * it.  Throw an explicit error instead of
 				 * ignoring the specified value.
 				 */
 				return (ISC_R_BADADDRESSFORM);
@@ -131,6 +131,7 @@ bind9_getaddresses(const char *hostname, in_port_t port,
 
 			*addrcount = 1;
 			return (ISC_R_SUCCESS);
+			
 		}
 	}
 #ifdef USE_GETADDRINFO

@@ -1,7 +1,7 @@
-/*	$NetBSD: byname_test.c,v 1.9 2017/06/15 15:59:37 christos Exp $	*/
+/*	$NetBSD: byname_test.c,v 1.1 2009/03/22 14:56:20 christos Exp $	*/
 
 /*
- * Copyright (C) 2004, 2005, 2007, 2009, 2012, 2015, 2017  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2004, 2005, 2007  Internet Systems Consortium, Inc. ("ISC")
  * Copyright (C) 2000, 2001  Internet Software Consortium.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -16,6 +16,8 @@
  * OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR
  * PERFORMANCE OF THIS SOFTWARE.
  */
+
+/* Id: byname_test.c,v 1.31 2007/06/19 23:46:59 tbox Exp */
 
 /*! \file
  * \author
@@ -32,7 +34,6 @@
 #include <isc/entropy.h>
 #include <isc/hash.h>
 #include <isc/netaddr.h>
-#include <isc/print.h>
 #include <isc/task.h>
 #include <isc/timer.h>
 #include <isc/util.h>
@@ -52,7 +53,7 @@ static isc_taskmgr_t *taskmgr;
 static dns_view_t *view = NULL;
 static dns_adbfind_t *find = NULL;
 static isc_task_t *task = NULL;
-static dns_fixedname_t fixed;
+static dns_fixedname_t name;
 static dns_fixedname_t target;
 static isc_log_t *lctx;
 static isc_logconfig_t *lcfg;
@@ -92,10 +93,10 @@ log_init(void) {
 }
 
 static void
-print_addresses(dns_adbfind_t *adbfind) {
+print_addresses(dns_adbfind_t *find) {
 	dns_adbaddrinfo_t *address;
 
-	for (address = ISC_LIST_HEAD(adbfind->list);
+	for (address = ISC_LIST_HEAD(find->list);
 	     address != NULL;
 	     address = ISC_LIST_NEXT(address, publink)) {
 		isc_netaddr_t netaddr;
@@ -125,7 +126,7 @@ do_find(isc_boolean_t want_event) {
 		options |= DNS_ADBFIND_WANTEVENT | DNS_ADBFIND_EMPTYEVENT;
 	dns_fixedname_init(&target);
 	result = dns_adb_createfind(view->adb, task, adb_callback, NULL,
-				    dns_fixedname_name(&fixed),
+				    dns_fixedname_name(&name),
 				    dns_rootname, 0, options, 0,
 				    dns_fixedname_name(&target), 0,
 				    &find);
@@ -192,8 +193,8 @@ adb_callback(isc_task_t *etask, isc_event_t *event) {
 }
 
 static void
-run(isc_task_t *xtask, isc_event_t *event) {
-	UNUSED(xtask);
+run(isc_task_t *task, isc_event_t *event) {
+	UNUSED(task);
 	do_find(ISC_TRUE);
 	isc_event_free(&event);
 }
@@ -304,7 +305,7 @@ main(int argc, char *argv[]) {
 			INSIST(disp6 != NULL);
 		}
 
-		RUNTIME_CHECK(dns_view_createresolver(view, taskmgr, 10, 1,
+		RUNTIME_CHECK(dns_view_createresolver(view, taskmgr, 10,
 						      socketmgr,
 						      timermgr, 0,
 						      dispatchmgr,
@@ -341,10 +342,10 @@ main(int argc, char *argv[]) {
 	isc_buffer_init(&b, argv[isc_commandline_index],
 			strlen(argv[isc_commandline_index]));
 	isc_buffer_add(&b, strlen(argv[isc_commandline_index]));
-	dns_fixedname_init(&fixed);
+	dns_fixedname_init(&name);
 	dns_fixedname_init(&target);
-	RUNTIME_CHECK(dns_name_fromtext(dns_fixedname_name(&fixed), &b,
-					dns_rootname, 0, NULL) ==
+	RUNTIME_CHECK(dns_name_fromtext(dns_fixedname_name(&name), &b,
+					dns_rootname, ISC_FALSE, NULL) ==
 		      ISC_R_SUCCESS);
 
 	RUNTIME_CHECK(isc_app_onrun(mctx, task, run, NULL) == ISC_R_SUCCESS);

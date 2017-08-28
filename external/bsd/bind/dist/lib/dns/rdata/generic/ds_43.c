@@ -1,7 +1,7 @@
-/*	$NetBSD: ds_43.c,v 1.9 2016/05/26 16:49:59 christos Exp $	*/
+/*	$NetBSD: ds_43.c,v 1.1 2009/03/22 15:01:52 christos Exp $	*/
 
 /*
- * Copyright (C) 2004, 2005, 2007, 2009-2015  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2004, 2005, 2007  Internet Systems Consortium, Inc. ("ISC")
  * Copyright (C) 2002  Internet Software Consortium.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -17,9 +17,9 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* Id */
+/* Id: ds_43.c,v 1.12 2007/06/18 23:47:43 tbox Exp */
 
-/* RFC3658 */
+/* draft-ietf-dnsext-delegation-signer-05.txt */
 
 #ifndef RDATA_GENERIC_DS_43_C
 #define RDATA_GENERIC_DS_43_C
@@ -32,13 +32,13 @@
 
 #include <dns/ds.h>
 
-#include "dst_gost.h"
-
 static inline isc_result_t
-generic_fromtext_ds(ARGS_FROMTEXT) {
+fromtext_ds(ARGS_FROMTEXT) {
 	isc_token_t token;
 	unsigned char c;
 	int length;
+
+	REQUIRE(type == 43);
 
 	UNUSED(type);
 	UNUSED(rdclass);
@@ -66,51 +66,32 @@ generic_fromtext_ds(ARGS_FROMTEXT) {
 	/*
 	 * Digest type.
 	 */
-	RETERR(isc_lex_getmastertoken(lexer, &token, isc_tokentype_string,
+	RETERR(isc_lex_getmastertoken(lexer, &token, isc_tokentype_number,
 				      ISC_FALSE));
-	RETTOK(dns_dsdigest_fromtext(&c, &token.value.as_textregion));
-	RETERR(mem_tobuffer(target, &c, 1));
+	if (token.value.as_ulong > 0xffU)
+		RETTOK(ISC_R_RANGE);
+	RETERR(uint8_tobuffer(token.value.as_ulong, target));
+	c = (unsigned char) token.value.as_ulong;
 
 	/*
 	 * Digest.
 	 */
-	switch (c) {
-	case DNS_DSDIGEST_SHA1:
+	if (c == DNS_DSDIGEST_SHA1)
 		length = ISC_SHA1_DIGESTLENGTH;
-		break;
-	case DNS_DSDIGEST_SHA256:
+	else if (c == DNS_DSDIGEST_SHA256)
 		length = ISC_SHA256_DIGESTLENGTH;
-		break;
-#ifdef ISC_GOST_DIGESTLENGTH
-	case DNS_DSDIGEST_GOST:
-		length = ISC_GOST_DIGESTLENGTH;
-		break;
-#endif
-	case DNS_DSDIGEST_SHA384:
-		length = ISC_SHA384_DIGESTLENGTH;
-		break;
-	default:
+	else
 		length = -1;
-		break;
-	}
 	return (isc_hex_tobuffer(lexer, target, length));
 }
 
 static inline isc_result_t
-fromtext_ds(ARGS_FROMTEXT) {
-
-	REQUIRE(type == dns_rdatatype_ds);
-
-	return (generic_fromtext_ds(rdclass, type, lexer, origin, options,
-				    target, callbacks));
-}
-
-static inline isc_result_t
-generic_totext_ds(ARGS_TOTEXT) {
+totext_ds(ARGS_TOTEXT) {
 	isc_region_t sr;
 	char buf[sizeof("64000 ")];
 	unsigned int n;
 
+	REQUIRE(rdata->type == 43);
 	REQUIRE(rdata->length != 0);
 
 	UNUSED(tctx);
@@ -147,30 +128,17 @@ generic_totext_ds(ARGS_TOTEXT) {
 	if ((tctx->flags & DNS_STYLEFLAG_MULTILINE) != 0)
 		RETERR(str_totext(" (", target));
 	RETERR(str_totext(tctx->linebreak, target));
-	if ((tctx->flags & DNS_STYLEFLAG_NOCRYPTO) == 0) {
-		if (tctx->width == 0) /* No splitting */
-			RETERR(isc_hex_totext(&sr, 0, "", target));
-		else
-			RETERR(isc_hex_totext(&sr, tctx->width - 2,
-					      tctx->linebreak, target));
-	} else
-		RETERR(str_totext("[omitted]", target));
+	RETERR(isc_hex_totext(&sr, tctx->width - 2, tctx->linebreak, target));
 	if ((tctx->flags & DNS_STYLEFLAG_MULTILINE) != 0)
 		RETERR(str_totext(" )", target));
 	return (ISC_R_SUCCESS);
 }
 
 static inline isc_result_t
-totext_ds(ARGS_TOTEXT) {
-
-	REQUIRE(rdata->type == dns_rdatatype_ds);
-
-	return (generic_totext_ds(rdata, tctx, target));
-}
-
-static inline isc_result_t
-generic_fromwire_ds(ARGS_FROMWIRE) {
+fromwire_ds(ARGS_FROMWIRE) {
 	isc_region_t sr;
+
+	REQUIRE(type == 43);
 
 	UNUSED(type);
 	UNUSED(rdclass);
@@ -186,13 +154,7 @@ generic_fromwire_ds(ARGS_FROMWIRE) {
 	    (sr.base[3] == DNS_DSDIGEST_SHA1 &&
 	     sr.length < 4 + ISC_SHA1_DIGESTLENGTH) ||
 	    (sr.base[3] == DNS_DSDIGEST_SHA256 &&
-	     sr.length < 4 + ISC_SHA256_DIGESTLENGTH) ||
-#ifdef ISC_GOST_DIGESTLENGTH
-	    (sr.base[3] == DNS_DSDIGEST_GOST &&
-	     sr.length < 4 + ISC_GOST_DIGESTLENGTH) ||
-#endif
-	    (sr.base[3] == DNS_DSDIGEST_SHA384 &&
-	     sr.length < 4 + ISC_SHA384_DIGESTLENGTH))
+	     sr.length < 4 + ISC_SHA256_DIGESTLENGTH))
 		return (ISC_R_UNEXPECTEDEND);
 
 	/*
@@ -204,31 +166,16 @@ generic_fromwire_ds(ARGS_FROMWIRE) {
 		sr.length = 4 + ISC_SHA1_DIGESTLENGTH;
 	else if (sr.base[3] == DNS_DSDIGEST_SHA256)
 		sr.length = 4 + ISC_SHA256_DIGESTLENGTH;
-#ifdef ISC_GOST_DIGESTLENGTH
-	else if (sr.base[3] == DNS_DSDIGEST_GOST)
-		sr.length = 4 + ISC_GOST_DIGESTLENGTH;
-#endif
-	else if (sr.base[3] == DNS_DSDIGEST_SHA384)
-		sr.length = 4 + ISC_SHA384_DIGESTLENGTH;
 
 	isc_buffer_forward(source, sr.length);
 	return (mem_tobuffer(target, sr.base, sr.length));
 }
 
 static inline isc_result_t
-fromwire_ds(ARGS_FROMWIRE) {
-
-	REQUIRE(type == dns_rdatatype_ds);
-
-	return (generic_fromwire_ds(rdclass, type, source, dctx, options,
-				    target));
-}
-
-static inline isc_result_t
 towire_ds(ARGS_TOWIRE) {
 	isc_region_t sr;
 
-	REQUIRE(rdata->type == dns_rdatatype_ds);
+	REQUIRE(rdata->type == 43);
 	REQUIRE(rdata->length != 0);
 
 	UNUSED(cctx);
@@ -244,7 +191,7 @@ compare_ds(ARGS_COMPARE) {
 
 	REQUIRE(rdata1->type == rdata2->type);
 	REQUIRE(rdata1->rdclass == rdata2->rdclass);
-	REQUIRE(rdata1->type == dns_rdatatype_ds);
+	REQUIRE(rdata1->type == 43);
 	REQUIRE(rdata1->length != 0);
 	REQUIRE(rdata2->length != 0);
 
@@ -254,16 +201,13 @@ compare_ds(ARGS_COMPARE) {
 }
 
 static inline isc_result_t
-generic_fromstruct_ds(ARGS_FROMSTRUCT) {
+fromstruct_ds(ARGS_FROMSTRUCT) {
 	dns_rdata_ds_t *ds = source;
 
+	REQUIRE(type == 43);
 	REQUIRE(source != NULL);
 	REQUIRE(ds->common.rdtype == type);
 	REQUIRE(ds->common.rdclass == rdclass);
-
-	UNUSED(type);
-	UNUSED(rdclass);
-
 	switch (ds->digest_type) {
 	case DNS_DSDIGEST_SHA1:
 		REQUIRE(ds->length == ISC_SHA1_DIGESTLENGTH);
@@ -271,15 +215,10 @@ generic_fromstruct_ds(ARGS_FROMSTRUCT) {
 	case DNS_DSDIGEST_SHA256:
 		REQUIRE(ds->length == ISC_SHA256_DIGESTLENGTH);
 		break;
-#ifdef ISC_GOST_DIGESTLENGTH
-	case DNS_DSDIGEST_GOST:
-		REQUIRE(ds->length == ISC_GOST_DIGESTLENGTH);
-		break;
-#endif
-	case DNS_DSDIGEST_SHA384:
-		REQUIRE(ds->length == ISC_SHA384_DIGESTLENGTH);
-		break;
 	}
+
+	UNUSED(type);
+	UNUSED(rdclass);
 
 	RETERR(uint16_tobuffer(ds->key_tag, target));
 	RETERR(uint8_tobuffer(ds->algorithm, target));
@@ -289,23 +228,17 @@ generic_fromstruct_ds(ARGS_FROMSTRUCT) {
 }
 
 static inline isc_result_t
-fromstruct_ds(ARGS_FROMSTRUCT) {
-
-	REQUIRE(type == dns_rdatatype_ds);
-
-	return (generic_fromstruct_ds(rdclass, type, source, target));
-}
-
-static inline isc_result_t
-generic_tostruct_ds(ARGS_TOSTRUCT) {
+tostruct_ds(ARGS_TOSTRUCT) {
 	dns_rdata_ds_t *ds = target;
 	isc_region_t region;
 
+	REQUIRE(rdata->type == 43);
 	REQUIRE(target != NULL);
 	REQUIRE(rdata->length != 0);
-	REQUIRE(ds->common.rdtype == rdata->type);
-	REQUIRE(ds->common.rdclass == rdata->rdclass);
-	REQUIRE(!ISC_LINK_LINKED(&ds->common, link));
+
+	ds->common.rdclass = rdata->rdclass;
+	ds->common.rdtype = rdata->type;
+	ISC_LINK_INIT(&ds->common, link);
 
 	dns_rdata_toregion(rdata, &region);
 
@@ -325,26 +258,12 @@ generic_tostruct_ds(ARGS_TOSTRUCT) {
 	return (ISC_R_SUCCESS);
 }
 
-static inline isc_result_t
-tostruct_ds(ARGS_TOSTRUCT) {
-	dns_rdata_ds_t *ds = target;
-
-	REQUIRE(rdata->type == dns_rdatatype_ds);
-	REQUIRE(target != NULL);
-
-	ds->common.rdclass = rdata->rdclass;
-	ds->common.rdtype = rdata->type;
-	ISC_LINK_INIT(&ds->common, link);
-
-	return (generic_tostruct_ds(rdata, target, mctx));
-}
-
 static inline void
 freestruct_ds(ARGS_FREESTRUCT) {
 	dns_rdata_ds_t *ds = source;
 
 	REQUIRE(ds != NULL);
-	REQUIRE(ds->common.rdtype == dns_rdatatype_ds);
+	REQUIRE(ds->common.rdtype == 43);
 
 	if (ds->mctx == NULL)
 		return;
@@ -356,7 +275,7 @@ freestruct_ds(ARGS_FREESTRUCT) {
 
 static inline isc_result_t
 additionaldata_ds(ARGS_ADDLDATA) {
-	REQUIRE(rdata->type == dns_rdatatype_ds);
+	REQUIRE(rdata->type == 43);
 
 	UNUSED(rdata);
 	UNUSED(add);
@@ -369,7 +288,7 @@ static inline isc_result_t
 digest_ds(ARGS_DIGEST) {
 	isc_region_t r;
 
-	REQUIRE(rdata->type == dns_rdatatype_ds);
+	REQUIRE(rdata->type == 43);
 
 	dns_rdata_toregion(rdata, &r);
 
@@ -379,7 +298,7 @@ digest_ds(ARGS_DIGEST) {
 static inline isc_boolean_t
 checkowner_ds(ARGS_CHECKOWNER) {
 
-	REQUIRE(type == dns_rdatatype_ds);
+	REQUIRE(type == 43);
 
 	UNUSED(name);
 	UNUSED(type);
@@ -392,18 +311,13 @@ checkowner_ds(ARGS_CHECKOWNER) {
 static inline isc_boolean_t
 checknames_ds(ARGS_CHECKNAMES) {
 
-	REQUIRE(rdata->type == dns_rdatatype_ds);
+	REQUIRE(rdata->type == 43);
 
 	UNUSED(rdata);
 	UNUSED(owner);
 	UNUSED(bad);
 
 	return (ISC_TRUE);
-}
-
-static inline int
-casecompare_ds(ARGS_COMPARE) {
-	return (compare_ds(rdata1, rdata2));
 }
 
 #endif	/* RDATA_GENERIC_DS_43_C */

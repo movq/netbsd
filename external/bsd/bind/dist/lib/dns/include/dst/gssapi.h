@@ -1,7 +1,7 @@
-/*	$NetBSD: gssapi.h,v 1.6 2017/06/15 15:59:40 christos Exp $	*/
+/*	$NetBSD: gssapi.h,v 1.1 2009/03/22 15:01:50 christos Exp $	*/
 
 /*
- * Copyright (C) 2004-2007, 2009-2011, 2013, 2016  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2004-2007, 2009  Internet Systems Consortium, Inc. ("ISC")
  * Copyright (C) 2000, 2001  Internet Software Consortium.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -17,7 +17,7 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* Id: gssapi.h,v 1.16 2011/01/08 23:47:01 tbox Exp  */
+/* Id: gssapi.h,v 1.9.332.2 2009/01/18 23:47:41 tbox Exp */
 
 #ifndef DST_GSSAPI_H
 #define DST_GSSAPI_H 1
@@ -31,17 +31,13 @@
 #include <dns/types.h>
 
 #ifdef GSSAPI
-#ifdef WIN32
+#ifdef _WINDOWS
 /*
  * MSVC does not like macros in #include lines.
  */
 #include <gssapi/gssapi.h>
-#include <gssapi/gssapi_krb5.h>
 #else
 #include ISC_PLATFORM_GSSAPIHEADER
-#ifdef ISC_PLATFORM_GSSAPI_KRB5_HEADER
-#include ISC_PLATFORM_GSSAPI_KRB5_HEADER
-#endif
 #endif
 #ifndef GSS_SPNEGO_MECHANISM
 #define GSS_SPNEGO_MECHANISM ((void*)0)
@@ -96,8 +92,7 @@ dst_gssapi_releasecred(gss_cred_id_t *cred);
 
 isc_result_t
 dst_gssapi_initctx(dns_name_t *name, isc_buffer_t *intoken,
-		   isc_buffer_t *outtoken, gss_ctx_id_t *gssctx,
-		   isc_mem_t *mctx, char **err_message);
+		   isc_buffer_t *outtoken, gss_ctx_id_t *gssctx);
 /*
  *	Initiates a GSS context.
  *
@@ -115,12 +110,10 @@ dst_gssapi_initctx(dns_name_t *name, isc_buffer_t *intoken,
  *		ISC_R_SUCCESS   msg was successfully updated to include the
  * 				query to be sent
  *		other		an error occurred while building the message
- *		*err_message	optional error message
  */
 
 isc_result_t
 dst_gssapi_acceptctx(gss_cred_id_t cred,
-		     const char *gssapi_keytab,
 		     isc_region_t *intoken, isc_buffer_t **outtoken,
 		     gss_ctx_id_t *context, dns_name_t *principal,
 		     isc_mem_t *mctx);
@@ -147,7 +140,6 @@ dst_gssapi_acceptctx(gss_cred_id_t cred,
  *	Returns:
  *		ISC_R_SUCCESS   msg was successfully updated to include the
  * 				query to be sent
- *		DNS_R_CONTINUE	transaction still in progress
  *		other 		an error occurred while building the message
  */
 

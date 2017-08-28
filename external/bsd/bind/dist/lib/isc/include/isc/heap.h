@@ -1,7 +1,7 @@
-/*	$NetBSD: heap.h,v 1.5 2014/12/10 04:38:00 christos Exp $	*/
+/*	$NetBSD: heap.h,v 1.1 2009/03/22 15:02:12 christos Exp $	*/
 
 /*
- * Copyright (C) 2004-2007, 2009, 2012  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2004-2007, 2009  Internet Systems Consortium, Inc. ("ISC")
  * Copyright (C) 1997-2001  Internet Software Consortium.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -17,7 +17,7 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* Id: heap.h,v 1.26 2009/01/17 23:47:43 tbox Exp  */
+/* Id: heap.h,v 1.24.332.2 2009/01/18 23:47:41 tbox Exp */
 
 #ifndef ISC_HEAP_H
 #define ISC_HEAP_H 1
@@ -61,8 +61,6 @@ isc_heap_create(isc_mem_t *mctx, isc_heapcompare_t compare,
  * \brief Create a new heap.  The heap is implemented using a space-efficient
  * storage method.  When the heap elements are deleted space is not freed
  * but will be reused when new elements are inserted.
- *
- * Heap elements are indexed from 1.
  *
  * Requires:
  *\li	"mctx" is valid.

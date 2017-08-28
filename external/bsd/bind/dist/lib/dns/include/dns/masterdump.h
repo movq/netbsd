@@ -1,7 +1,7 @@
-/*	$NetBSD: masterdump.h,v 1.9 2017/06/15 15:59:40 christos Exp $	*/
+/*	$NetBSD: masterdump.h,v 1.1 2009/03/22 15:01:43 christos Exp $	*/
 
 /*
- * Copyright (C) 2004-2008, 2011, 2013, 2014, 2017  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2004-2008  Internet Systems Consortium, Inc. ("ISC")
  * Copyright (C) 1999-2002  Internet Software Consortium.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -16,6 +16,8 @@
  * OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR
  * PERFORMANCE OF THIS SOFTWARE.
  */
+
+/* Id: masterdump.h,v 1.42 2008/09/24 02:46:23 marka Exp */
 
 #ifndef DNS_MASTERDUMP_H
 #define DNS_MASTERDUMP_H 1
@@ -49,7 +51,7 @@ typedef struct dns_master_style dns_master_style_t;
  */
 
 /*% Omit the owner name when possible. */
-#define	DNS_STYLEFLAG_OMIT_OWNER        0x000010000ULL
+#define	DNS_STYLEFLAG_OMIT_OWNER        0x00010000U
 
 /*%
  * Omit the TTL when possible.  If DNS_STYLEFLAG_TTL is
@@ -67,44 +69,38 @@ typedef struct dns_master_style dns_master_style_t;
  * versions of BIND which use the SOA MINTTL as a
  * default TTL value.
  */
-#define	DNS_STYLEFLAG_OMIT_TTL		0x000020000ULL
+#define	DNS_STYLEFLAG_OMIT_TTL		0x00020000U
 
 /*% Omit the class when possible. */
-#define	DNS_STYLEFLAG_OMIT_CLASS	0x000040000ULL
+#define	DNS_STYLEFLAG_OMIT_CLASS	0x00040000U
 
 /*% Output $TTL directives. */
-#define	DNS_STYLEFLAG_TTL		0x000080000ULL
+#define	DNS_STYLEFLAG_TTL		0x00080000U
 
 /*%
  * Output $ORIGIN directives and print owner names relative to
  * the origin when possible.
  */
-#define	DNS_STYLEFLAG_REL_OWNER		0x000100000ULL
+#define	DNS_STYLEFLAG_REL_OWNER		0x00100000U
 
 /*% Print domain names in RR data in relative form when possible.
    For this to take effect, DNS_STYLEFLAG_REL_OWNER must also be set. */
-#define	DNS_STYLEFLAG_REL_DATA		0x000200000ULL
+#define	DNS_STYLEFLAG_REL_DATA		0x00200000U
 
 /*% Print the trust level of each rdataset. */
-#define	DNS_STYLEFLAG_TRUST		0x000400000ULL
+#define	DNS_STYLEFLAG_TRUST		0x00400000U
 
 /*% Print negative caching entries. */
-#define	DNS_STYLEFLAG_NCACHE		0x000800000ULL
+#define	DNS_STYLEFLAG_NCACHE		0x00800000U
 
 /*% Never print the TTL. */
-#define	DNS_STYLEFLAG_NO_TTL		0x001000000ULL
+#define	DNS_STYLEFLAG_NO_TTL		0x01000000U
 
 /*% Never print the CLASS. */
-#define	DNS_STYLEFLAG_NO_CLASS		0x002000000ULL
+#define	DNS_STYLEFLAG_NO_CLASS		0x02000000U
 
 /*% Report re-signing time. */
-#define	DNS_STYLEFLAG_RESIGN		0x004000000ULL
-
-/*% Don't printout the cryptographic parts of DNSSEC records. */
-#define	DNS_STYLEFLAG_NOCRYPTO		0x008000000ULL
-
-/*% Comment out data by prepending with ";" */
-#define	DNS_STYLEFLAG_COMMENTDATA	0x010000000ULL
+#define	DNS_STYLEFLAG_RESIGN		0x04000000U
 
 ISC_LANG_BEGINDECLS
 
@@ -153,16 +149,6 @@ LIBDNS_EXTERNAL_DATA extern const dns_master_style_t dns_master_style_simple;
  * The style used for debugging, "dig" output, etc.
  */
 LIBDNS_EXTERNAL_DATA extern const dns_master_style_t dns_master_style_debug;
-
-/*%
- * Similar to dns_master_style_debug but data is prepended with ";"
- */
-LIBDNS_EXTERNAL_DATA extern const dns_master_style_t dns_master_style_comment;
-
-/*%
- * The style used for dumping "key" zones.
- */
-LIBDNS_EXTERNAL_DATA extern const dns_master_style_t dns_master_style_keyzone;
 
 /***
  ***	Functions
@@ -236,25 +222,13 @@ dns_master_dumptostream2(isc_mem_t *mctx, dns_db_t *db,
 			 dns_dbversion_t *version,
 			 const dns_master_style_t *style,
 			 dns_masterformat_t format, FILE *f);
-
-isc_result_t
-dns_master_dumptostream3(isc_mem_t *mctx, dns_db_t *db,
-			 dns_dbversion_t *version,
-			 const dns_master_style_t *style,
-			 dns_masterformat_t format,
-			 dns_masterrawheader_t *header, FILE *f);
 /*%<
  * Dump the database 'db' to the steam 'f' in the specified format by
  * 'format'.  If the format is dns_masterformat_text (the RFC1035 format),
  * 'style' specifies the file style (e.g., &dns_master_style_default).
  *
- * dns_master_dumptostream() is an old form of dns_master_dumptostream3(),
+ * dns_master_dumptostream() is an old form of dns_master_dumptostream2(),
  * which always specifies the dns_masterformat_text format.
- * dns_master_dumptostream2() is an old form which always specifies
- * a NULL header.
- *
- * If 'format' is dns_masterformat_raw, then 'header' can contain
- * information to be written to the file header.
  *
  * Temporary dynamic memory may be allocated from 'mctx'.
  *
@@ -285,13 +259,6 @@ dns_master_dumpinc2(isc_mem_t *mctx, dns_db_t *db, dns_dbversion_t *version,
 		    isc_task_t *task, dns_dumpdonefunc_t done, void *done_arg,			    dns_dumpctx_t **dctxp, dns_masterformat_t format);
 
 isc_result_t
-dns_master_dumpinc3(isc_mem_t *mctx, dns_db_t *db, dns_dbversion_t *version,
-		    const dns_master_style_t *style, const char *filename,
-		    isc_task_t *task, dns_dumpdonefunc_t done, void
-		    *done_arg, dns_dumpctx_t **dctxp,
-		    dns_masterformat_t format, dns_masterrawheader_t *header);
-
-isc_result_t
 dns_master_dump(isc_mem_t *mctx, dns_db_t *db,
 		dns_dbversion_t *version,
 		const dns_master_style_t *style, const char *filename);
@@ -302,24 +269,14 @@ dns_master_dump2(isc_mem_t *mctx, dns_db_t *db,
 		 const dns_master_style_t *style, const char *filename,
 		 dns_masterformat_t format);
 
-isc_result_t
-dns_master_dump3(isc_mem_t *mctx, dns_db_t *db,
-		 dns_dbversion_t *version,
-		 const dns_master_style_t *style, const char *filename,
-		 dns_masterformat_t format, dns_masterrawheader_t *header);
-
 /*%<
  * Dump the database 'db' to the file 'filename' in the specified format by
  * 'format'.  If the format is dns_masterformat_text (the RFC1035 format),
  * 'style' specifies the file style (e.g., &dns_master_style_default).
  *
- * dns_master_dumpinc() and dns_master_dump() are old forms of _dumpinc3()
- * and _dump3(), respectively, which always specify the dns_masterformat_text
- * format.  dns_master_dumpinc2() and dns_master_dump2() are old forms which
- * always specify a NULL header.
- *
- * If 'format' is dns_masterformat_raw, then 'header' can contain
- * information to be written to the file header.
+ * dns_master_dumpinc() and dns_master_dump() are old forms of _dumpinc2()
+ * and _dump2(), respectively, which always specify the dns_masterformat_text
+ * format.
  *
  * Temporary dynamic memory may be allocated from 'mctx'.
  *
@@ -374,14 +331,11 @@ dns_master_stylecreate(dns_master_style_t **style, unsigned int flags,
 		       unsigned int line_length, unsigned int tab_width,
 		       isc_mem_t *mctx);
 
-isc_result_t
-dns_master_stylecreate2(dns_master_style_t **style, unsigned int flags,
-		       unsigned int ttl_column, unsigned int class_column,
-		       unsigned int type_column, unsigned int rdata_column,
-		       unsigned int line_length, unsigned int tab_width,
-		       unsigned int split_width, isc_mem_t *mctx);
 void
 dns_master_styledestroy(dns_master_style_t **style, isc_mem_t *mctx);
+
+const char *
+dns_trust_totext(dns_trust_t trust);
 
 ISC_LANG_ENDDECLS
 

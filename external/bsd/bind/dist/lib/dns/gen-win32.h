@@ -1,7 +1,7 @@
-/*	$NetBSD: gen-win32.h,v 1.5 2014/12/10 04:37:58 christos Exp $	*/
+/*	$NetBSD: gen-win32.h,v 1.1 2009/03/22 15:01:04 christos Exp $	*/
 
 /*
- * Copyright (C) 2004-2007, 2009, 2014  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2004-2007, 2009  Internet Systems Consortium, Inc. ("ISC")
  * Copyright (C) 1999-2001  Internet Software Consortium.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -29,7 +29,11 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. Neither the name of the University nor the names of its contributors
+ * 3. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgement:
+ *	This product includes software developed by the University of
+ *	California, Berkeley and its contributors.
+ * 4. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -46,7 +50,7 @@
  * SUCH DAMAGE.
  */
 
-/* Id: gen-win32.h,v 1.25 2009/01/17 23:47:42 tbox Exp  */
+/* Id: gen-win32.h,v 1.23.332.2 2009/01/18 23:47:35 tbox Exp */
 
 /*! \file
  * \author Principal Authors: Computer Systems Research Group at UC Berkeley

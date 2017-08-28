@@ -1,7 +1,7 @@
-/*	$NetBSD: gen.c,v 1.8 2016/05/26 16:49:58 christos Exp $	*/
+/*	$NetBSD: gen.c,v 1.1 2009/03/22 15:01:04 christos Exp $	*/
 
 /*
- * Copyright (C) 2004-2009, 2012-2015  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2004-2008  Internet Systems Consortium, Inc. ("ISC")
  * Copyright (C) 1998-2003  Internet Software Consortium.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -17,6 +17,8 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
+/* Id: gen.c,v 1.83 2008/09/25 04:02:38 tbox Exp */
+
 /*! \file */
 
 #ifdef WIN32
@@ -24,12 +26,6 @@
  * Silence compiler warnings about using strcpy and friends.
  */
 #define _CRT_SECURE_NO_DEPRECATE 1
-/*
- * We use snprintf which was defined late in Windows even it is in C99.
- */
-#if _MSC_VER < 1900
-#define snprintf _snprintf
-#endif
 #endif
 
 #include <sys/types.h>
@@ -47,12 +43,7 @@
 #include "gen-unix.h"
 #endif
 
-#define INSIST(cond) \
-	if (!(cond)) { \
-		fprintf(stderr, "%s:%d: INSIST(%s)\n", \
-			 __FILE__, __LINE__, #cond); \
-		abort(); \
-	}
+#define TYPECLASSLEN 21
 
 #define FROMTEXTARGS "rdclass, type, lexer, origin, options, target, callbacks"
 #define FROMTEXTCLASS "rdclass"
@@ -114,7 +105,7 @@
 #define CHECKNAMESTYPE "rdata->type"
 #define CHECKNAMESDEF "result = ISC_TRUE"
 
-static const char copyright[] =
+const char copyright[] =
 "/*\n"
 " * Copyright (C) 2004%s Internet Systems Consortium, Inc. (\"ISC\")\n"
 " * Copyright (C) 1998-2003 Internet Software Consortium.\n"
@@ -142,59 +133,53 @@ static const char copyright[] =
 "/*! \\file */\n"
 "\n";
 
-#define STR_EXPAND(tok) #tok
-#define STR(tok) STR_EXPAND(tok)
-
 #define TYPENAMES 256
-#define TYPECLASSLEN 20		/* DNS mnemonic size. Must be less than 100. */
-#define TYPECLASSBUF (TYPECLASSLEN + 1)
-#define TYPECLASSFMT "%" STR(TYPECLASSLEN) "[-0-9a-z]_%d"
-#define ATTRIBUTESIZE 256
-#define DIRNAMESIZE 256
 
-static struct cc {
+struct cc {
 	struct cc *next;
 	int rdclass;
-	char classname[TYPECLASSBUF];
+	char classname[TYPECLASSLEN];
 } *classes;
 
-static struct tt {
+struct tt {
 	struct tt *next;
 	int rdclass;
 	int type;
-	char classname[TYPECLASSBUF];
-	char typename[TYPECLASSBUF];
-	char dirname[DIRNAMESIZE];	/* XXX Should be max path length */
+	char classname[TYPECLASSLEN];
+	char typename[TYPECLASSLEN];
+	char dirname[256];		/* XXX Should be max path length */
 } *types;
 
-static struct ttnam {
-	char typename[TYPECLASSBUF];
-	char macroname[TYPECLASSBUF];
-	char attr[ATTRIBUTESIZE];
+struct ttnam {
+	char typename[TYPECLASSLEN];
+	char macroname[TYPECLASSLEN];
+	char attr[256];
 	unsigned int sorted;
 	int type;
 } typenames[TYPENAMES];
 
-static int maxtype = -1;
+int maxtype = -1;
 
-static char *
+char *
 upper(char *);
-static char *
+char *
 funname(const char *, char *);
-static void
+void
 doswitch(const char *, const char *, const char *, const char *,
 	 const char *, const char *);
-static void
+void
+dodecl(char *, char *, char *);
+void
 add(int, const char *, int, const char *, const char *);
-static void
+void
 sd(int, const char *, const char *, char);
-static void
+void
 insert_into_typenames(int, const char *, const char *);
 
 /*%
  * If you use more than 10 of these in, say, a printf(), you'll have problems.
  */
-static char *
+char *
 upper(char *s) {
 	static int buf_to_use = 0;
 	static char buf[10][256];
@@ -214,12 +199,11 @@ upper(char *s) {
 	return (buf[buf_to_use]);
 }
 
-static char *
+char *
 funname(const char *s, char *buf) {
 	char *b = buf;
 	char c;
 
-	INSIST(strlen(s) < TYPECLASSBUF);
 	while ((c = *s++)) {
 		*b++ = (c == '-') ? '_' : c;
 	}
@@ -227,7 +211,7 @@ funname(const char *s, char *buf) {
 	return (buf);
 }
 
-static void
+void
 doswitch(const char *name, const char *function, const char *args,
 	 const char *tsw, const char *csw, const char *res)
 {
@@ -235,7 +219,7 @@ doswitch(const char *name, const char *function, const char *args,
 	int first = 1;
 	int lasttype = 0;
 	int subswitch = 0;
-	char buf1[TYPECLASSBUF], buf2[TYPECLASSBUF];
+	char buf1[TYPECLASSLEN], buf2[TYPECLASSLEN];
 	const char *result = " result =";
 
 	if (res == NULL)
@@ -298,6 +282,26 @@ doswitch(const char *name, const char *function, const char *args,
 	}
 }
 
+void
+dodecl(char *type, char *function, char *args) {
+	struct tt *tt;
+	char buf1[TYPECLASSLEN], buf2[TYPECLASSLEN];
+
+	fputs("\n", stdout);
+	for (tt = types; tt; tt = tt->next)
+		if (tt->rdclass)
+			fprintf(stdout,
+				"static inline %s %s_%s_%s(%s);\n",
+				type, function,
+				funname(tt->classname, buf1),
+				funname(tt->typename, buf2), args);
+		else
+			fprintf(stdout,
+				"static inline %s %s_%s(%s);\n",
+				type, function,
+				funname(tt->typename, buf1), args);
+}
+
 static struct ttnam *
 find_typename(int type) {
 	int i;
@@ -310,14 +314,12 @@ find_typename(int type) {
 	return (NULL);
 }
 
-static void
+void
 insert_into_typenames(int type, const char *typename, const char *attr) {
 	struct ttnam *ttn = NULL;
-	size_t c;
-	int i, n;
+	int c, i;
 	char tmp[256];
 
-	INSIST(strlen(typename) < TYPECLASSBUF);
 	for (i = 0; i < TYPENAMES; i++) {
 		if (typenames[i].typename[0] != 0 &&
 		    typenames[i].type == type &&
@@ -335,20 +337,15 @@ insert_into_typenames(int type, const char *typename, const char *attr) {
 		exit(1);
 	}
 
-	/* XXXMUKS: This is redundant due to the INSIST above. */
 	if (strlen(typename) > sizeof(ttn->typename) - 1) {
 		fprintf(stderr, "Error:  type name %s is too long\n",
 			typename);
 		exit(1);
 	}
-
-	strncpy(ttn->typename, typename, sizeof(ttn->typename));
-	ttn->typename[sizeof(ttn->typename) - 1] = '\0';
-
-	strncpy(ttn->macroname, ttn->typename, sizeof(ttn->macroname));
-	ttn->macroname[sizeof(ttn->macroname) - 1] = '\0';
-
+	strcpy(ttn->typename, typename);
 	ttn->type = type;
+
+	strcpy(ttn->macroname, ttn->typename);
 	c = strlen(ttn->macroname);
 	while (c > 0) {
 		if (ttn->macroname[c - 1] == '-')
@@ -357,9 +354,7 @@ insert_into_typenames(int type, const char *typename, const char *attr) {
 	}
 
 	if (attr == NULL) {
-		n = snprintf(tmp, sizeof(tmp),
-			     "RRTYPE_%s_ATTRIBUTES", upper(ttn->macroname));
-		INSIST(n > 0 && (unsigned)n < sizeof(tmp));
+		sprintf(tmp, "RRTYPE_%s_ATTRIBUTES", upper(ttn->macroname));
 		attr = tmp;
 	}
 
@@ -374,16 +369,13 @@ insert_into_typenames(int type, const char *typename, const char *attr) {
 			attr, typename);
 		exit(1);
 	}
-
-	strncpy(ttn->attr, attr, sizeof(ttn->attr));
-	ttn->attr[sizeof(ttn->attr) - 1] = '\0';
-
+	strcpy(ttn->attr, attr);
 	ttn->sorted = 0;
 	if (maxtype < type)
 		maxtype = type;
 }
 
-static void
+void
 add(int rdclass, const char *classname, int type, const char *typename,
     const char *dirname)
 {
@@ -391,10 +383,6 @@ add(int rdclass, const char *classname, int type, const char *typename,
 	struct tt *tt, *oldtt;
 	struct cc *newcc;
 	struct cc *cc, *oldcc;
-
-	INSIST(strlen(typename) < TYPECLASSBUF);
-	INSIST(strlen(classname) < TYPECLASSBUF);
-	INSIST(strlen(dirname) < DIRNAMESIZE);
 
 	insert_into_typenames(type, typename, NULL);
 
@@ -406,17 +394,11 @@ add(int rdclass, const char *classname, int type, const char *typename,
 	newtt->next = NULL;
 	newtt->rdclass = rdclass;
 	newtt->type = type;
-
-	strncpy(newtt->classname, classname, sizeof(newtt->classname));
-	newtt->classname[sizeof(newtt->classname) - 1] = '\0';
-
-	strncpy(newtt->typename, typename, sizeof(newtt->typename));
-	newtt->typename[sizeof(newtt->typename) - 1] = '\0';
-
+	strcpy(newtt->classname, classname);
+	strcpy(newtt->typename, typename);
 	if (strncmp(dirname, "./", 2) == 0)
 		dirname += 2;
-	strncpy(newtt->dirname, dirname, sizeof(newtt->dirname));
-	newtt->dirname[sizeof(newtt->dirname) - 1] = '\0';
+	strcpy(newtt->dirname, dirname);
 
 	tt = types;
 	oldtt = NULL;
@@ -449,13 +431,8 @@ add(int rdclass, const char *classname, int type, const char *typename,
 		return;
 
 	newcc = (struct cc *)malloc(sizeof(*newcc));
-	if (newcc == NULL) {
-		fprintf(stderr, "malloc() failed\n");
-		exit(1);
-	}
 	newcc->rdclass = rdclass;
-	strncpy(newcc->classname, classname, sizeof(newcc->classname));
-	newcc->classname[sizeof(newcc->classname) - 1] = '\0';
+	strcpy(newcc->classname, classname);
 	cc = classes;
 	oldcc = NULL;
 
@@ -476,25 +453,25 @@ add(int rdclass, const char *classname, int type, const char *typename,
 		classes = newcc;
 }
 
-static void
+void
 sd(int rdclass, const char *classname, const char *dirname, char filetype) {
-	char buf[TYPECLASSLEN + sizeof("_65535.h")];
-	char typename[TYPECLASSBUF];
-	int type, n;
+	char buf[sizeof("01234567890123456789_65535.h")];
+	char fmt[sizeof("%20[-0-9a-z]_%d.h")];
+	int type;
+	char typename[TYPECLASSLEN];
 	isc_dir_t dir;
 
 	if (!start_directory(dirname, &dir))
 		return;
 
+	sprintf(fmt,"%s%c", "%20[-0-9a-z]_%d.", filetype);
 	while (next_file(&dir)) {
-		if (sscanf(dir.filename, TYPECLASSFMT, typename, &type) != 2)
+		if (sscanf(dir.filename, fmt, typename, &type) != 2)
 			continue;
 		if ((type > 65535) || (type < 0))
 			continue;
 
-		n = snprintf(buf, sizeof(buf), "%s_%d.%c", typename,
-			     type, filetype);
-		INSIST(n > 0 && (unsigned)n < sizeof(buf));
+		sprintf(buf, "%s_%d.%c", typename, type, filetype);
 		if (strcmp(buf, dir.filename) != 0)
 			continue;
 		add(rdclass, classname, type, typename, dirname);
@@ -505,7 +482,7 @@ sd(int rdclass, const char *classname, const char *dirname, char filetype) {
 
 static unsigned int
 HASH(char *string) {
-	size_t n;
+	unsigned int n;
 	unsigned char a, b;
 
 	n = strlen(string);
@@ -521,10 +498,10 @@ HASH(char *string) {
 
 int
 main(int argc, char **argv) {
-	char buf[DIRNAMESIZE];		/* XXX Should be max path length */
-	char srcdir[DIRNAMESIZE];	/* XXX Should be max path length */
+	char buf[256];			/* XXX Should be max path length */
+	char srcdir[256];		/* XXX Should be max path length */
 	int rdclass;
-	char classname[TYPECLASSBUF];
+	char classname[TYPECLASSLEN];
 	struct tt *tt;
 	struct cc *cc;
 	struct ttnam *ttn, *ttn2;
@@ -538,8 +515,8 @@ main(int argc, char **argv) {
 	int type_enum = 0;
 	int structs = 0;
 	int depend = 0;
-	int c, i, j, n;
-	char buf1[TYPECLASSBUF];
+	int c, i, j;
+	char buf1[TYPECLASSLEN];
 	char filetype = 'c';
 	FILE *fd;
 	char *prefix = NULL;
@@ -586,16 +563,7 @@ main(int argc, char **argv) {
 			filetype = 'h';
 			break;
 		case 's':
-			if (strlen(isc_commandline_argument) >
-			    DIRNAMESIZE - 2 * TYPECLASSLEN  -
-			    sizeof("/rdata/_65535_65535")) {
-				fprintf(stderr, "\"%s\" too long\n",
-					isc_commandline_argument);
-				exit(1);
-			}
-			n = snprintf(srcdir, sizeof(srcdir), "%s/",
-				     isc_commandline_argument);
-			INSIST(n > 0 && (unsigned)n < sizeof(srcdir));
+			sprintf(srcdir, "%s/", isc_commandline_argument);
 			break;
 		case 'F':
 			file = isc_commandline_argument;
@@ -610,37 +578,31 @@ main(int argc, char **argv) {
 			exit(1);
 		}
 
-	n = snprintf(buf, sizeof(buf), "%srdata", srcdir);
-	INSIST(n > 0 && (unsigned)n < sizeof(srcdir));
+	sprintf(buf, "%srdata", srcdir);
 
 	if (!start_directory(buf, &dir))
 		exit(1);
 
 	while (next_file(&dir)) {
-		if (sscanf(dir.filename, TYPECLASSFMT, classname,
-			   &rdclass) != 2)
+		if (sscanf(dir.filename, "%10[0-9a-z]_%d",
+			   classname, &rdclass) != 2)
 			continue;
 		if ((rdclass > 65535) || (rdclass < 0))
 			continue;
 
-		n = snprintf(buf, sizeof(buf), "%srdata/%s_%d",
-			     srcdir, classname, rdclass);
-		INSIST(n > 0 && (unsigned)n < sizeof(buf));
+		sprintf(buf, "%srdata/%s_%d", srcdir, classname, rdclass);
 		if (strcmp(buf + 6 + strlen(srcdir), dir.filename) != 0)
 			continue;
 		sd(rdclass, classname, buf, filetype);
 	}
 	end_directory(&dir);
-	n = snprintf(buf, sizeof(buf), "%srdata/generic", srcdir);
-	INSIST(n > 0 && (unsigned)n < sizeof(srcdir));
+	sprintf(buf, "%srdata/generic", srcdir);
 	sd(0, "", buf, filetype);
 
 	if (time(&now) != -1) {
-		if ((tm = localtime(&now)) != NULL && tm->tm_year > 104) {
-			n = snprintf(year, sizeof(year), "-%d",
-				     tm->tm_year + 1900);
-			INSIST(n > 0 && (unsigned)n < sizeof(year));
-		} else
+		if ((tm = localtime(&now)) != NULL && tm->tm_year > 104)
+			sprintf(year, "-%d", tm->tm_year + 1900);
+		else
 			year[0] = 0;
 	} else
 		year[0] = 0;
@@ -670,8 +632,6 @@ main(int argc, char **argv) {
 		doswitch("TOWIRESWITCH", "towire", TOWIREARGS,
 			 TOWIRETYPE, TOWIRECLASS, TOWIREDEF);
 		doswitch("COMPARESWITCH", "compare", COMPAREARGS,
-			  COMPARETYPE, COMPARECLASS, COMPAREDEF);
-		doswitch("CASECOMPARESWITCH", "casecompare", COMPAREARGS,
 			  COMPARETYPE, COMPARECLASS, COMPAREDEF);
 		doswitch("FROMSTRUCTSWITCH", "fromstruct", FROMSTRUCTARGS,
 			  FROMSTRUCTTYPE, FROMSTRUCTCLASS, FROMSTRUCTDEF);
@@ -743,7 +703,7 @@ main(int argc, char **argv) {
 		fprintf(stdout, "\t\t\t*(_tp) = _d; \\\n");
 		fprintf(stdout, "\t\t\treturn (ISC_R_SUCCESS); \\\n");
 		fprintf(stdout, "\t\t} \\\n");
-		fprintf(stdout, "\t} while (/*CONSTCOND*/0)\n\n");
+		fprintf(stdout, "\t} while (0)\n\n");
 
 		fprintf(stdout, "#define RDATATYPE_FROMTEXT_SW(_hash,"
 				"_typename,_length,_typep) \\\n");
@@ -772,7 +732,7 @@ main(int argc, char **argv) {
 					continue;
 				if (hash == HASH(ttn2->typename)) {
 					fprintf(stdout, "\t\t\tRDATATYPE_COMPARE"
-					       "(\"%s\", %d, "
+					       "(\"%s\", %u, "
 					       "_typename, _length, _typep); \\\n",
 					       ttn2->typename, ttn2->type);
 					ttn2->sorted = 1;
@@ -788,7 +748,7 @@ main(int argc, char **argv) {
 			ttn = find_typename(i);
 			if (ttn == NULL)
 				continue;
-			fprintf(stdout, "\tcase %d: return (%s); \\\n",
+			fprintf(stdout, "\tcase %u: return (%s); \\\n",
 				i, upper(ttn->attr));
 		}
 		fprintf(stdout, "\t}\n");
@@ -799,15 +759,7 @@ main(int argc, char **argv) {
 			ttn = find_typename(i);
 			if (ttn == NULL)
 				continue;
-			/*
-			 * Remove KEYDATA (65533) from the type to memonic
-			 * translation as it is internal use only.  This
-			 * stops the tools from displaying KEYDATA instead
-			 * of TYPE65533.
-			 */
-			if (i == 65533U)
-				continue;
-			fprintf(stdout, "\tcase %d: return "
+			fprintf(stdout, "\tcase %u: return "
 				"(str_totext(\"%s\", target)); \\\n",
 				i, upper(ttn->typename));
 		}
@@ -887,7 +839,7 @@ main(int argc, char **argv) {
 		       classnum != 255 ? "," : ""); \
 		fprintf(stdout, "#define dns_rdataclass_%s\t" \
 		       "((dns_rdataclass_t)dns_rdataclass_%s)\n", s, s); \
-	} while (/*CONSTCOND*/0)
+	} while (0)
 
 		for (cc = classes; cc != NULL; cc = cc->next) {
 			if (cc->rdclass == 3)
@@ -910,7 +862,7 @@ main(int argc, char **argv) {
 			}
 		}
 		for (tt = types; tt != NULL; tt = tt->next) {
-			snprintf(buf, sizeof(buf), "%s/%s_%d.h",
+			sprintf(buf, "%s/%s_%d.h",
 				tt->dirname, tt->typename, tt->type);
 			if ((fd = fopen(buf,"r")) != NULL) {
 				while (fgets(buf, sizeof(buf), fd) != NULL)

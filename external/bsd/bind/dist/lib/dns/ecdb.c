@@ -1,7 +1,7 @@
-/*	$NetBSD: ecdb.c,v 1.10 2017/06/15 15:59:40 christos Exp $	*/
+/*	$NetBSD: ecdb.c,v 1.1 2009/10/25 00:02:29 christos Exp $	*/
 
 /*
- * Copyright (C) 2009-2014, 2016  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2009  Internet Systems Consortium, Inc. ("ISC")
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -15,6 +15,8 @@
  * OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR
  * PERFORMANCE OF THIS SOFTWARE.
  */
+
+/* Id: ecdb.c,v 1.3 2009/09/02 23:48:02 tbox Exp */
 
 #include "config.h"
 
@@ -36,6 +38,10 @@
 
 #define ECDBNODE_MAGIC		ISC_MAGIC('E', 'C', 'D', 'N')
 #define VALID_ECDBNODE(ecdbn)	ISC_MAGIC_VALID(ecdbn, ECDBNODE_MAGIC)
+
+#if DNS_RDATASET_FIXED
+#error "Fixed rdataset isn't supported in this implementation"
+#endif
 
 /*%
  * The 'ephemeral' cache DB (ecdb) implementation.  An ecdb just provides
@@ -80,11 +86,8 @@ typedef struct rdatasetheader {
 
 /* Copied from rbtdb.c */
 #define RDATASET_ATTR_NXDOMAIN		0x0010
-#define RDATASET_ATTR_NEGATIVE		0x0100
 #define NXDOMAIN(header) \
 	(((header)->attributes & RDATASET_ATTR_NXDOMAIN) != 0)
-#define NEGATIVE(header) \
-	(((header)->attributes & RDATASET_ATTR_NEGATIVE) != 0)
 
 static isc_result_t dns_ecdb_create(isc_mem_t *mctx, dns_name_t *origin,
 				    dns_dbtype_t type,
@@ -98,7 +101,6 @@ static isc_result_t rdataset_next(dns_rdataset_t *rdataset);
 static void rdataset_current(dns_rdataset_t *rdataset, dns_rdata_t *rdata);
 static void rdataset_clone(dns_rdataset_t *source, dns_rdataset_t *target);
 static unsigned int rdataset_count(dns_rdataset_t *rdataset);
-static void rdataset_settrust(dns_rdataset_t *rdataset, dns_trust_t trust);
 
 static dns_rdatasetmethods_t rdataset_methods = {
 	rdataset_disassociate,
@@ -113,10 +115,7 @@ static dns_rdatasetmethods_t rdataset_methods = {
 	NULL,			/* getclosest */
 	NULL,			/* getadditional */
 	NULL,			/* setadditional */
-	NULL,			/* putadditional */
-	rdataset_settrust,	/* settrust */
-	NULL,			/* expire */
-	NULL			/* clearprefetch */
+	NULL			/* putadditional */
 };
 
 typedef struct ecdb_rdatasetiter {
@@ -410,8 +409,6 @@ bind_rdataset(dns_ecdb_t *ecdb, dns_ecdbnode_t *node,
 	rdataset->trust = header->trust;
 	if (NXDOMAIN(header))
 		rdataset->attributes |= DNS_RDATASETATTR_NXDOMAIN;
-	if (NEGATIVE(header))
-		rdataset->attributes |= DNS_RDATASETATTR_NEGATIVE;
 
 	rdataset->private1 = ecdb;
 	rdataset->private2 = node;
@@ -475,8 +472,6 @@ addrdataset(dns_db_t *db, dns_dbnode_t *node, dns_dbversion_t *version,
 	header->attributes = 0;
 	if ((rdataset->attributes & DNS_RDATASETATTR_NXDOMAIN) != 0)
 		header->attributes |= RDATASET_ATTR_NXDOMAIN;
-	if ((rdataset->attributes & DNS_RDATASETATTR_NEGATIVE) != 0)
-		header->attributes |= RDATASET_ATTR_NEGATIVE;
 	ISC_LINK_INIT(header, link);
 	ISC_LIST_APPEND(ecdbnode->rdatasets, header, link);
 
@@ -505,11 +500,11 @@ deleterdataset(dns_db_t *db, dns_dbnode_t *node, dns_dbversion_t *version,
 }
 
 static isc_result_t
-createiterator(dns_db_t *db, unsigned int options,
+createiterator(dns_db_t *db, isc_boolean_t relative_names,
 	       dns_dbiterator_t **iteratorp)
 {
 	UNUSED(db);
-	UNUSED(options);
+	UNUSED(relative_names);
 	UNUSED(iteratorp);
 
 	return (ISC_R_NOTIMPLEMENTED);
@@ -551,7 +546,6 @@ static dns_dbmethods_t ecdb_methods = {
 	detach,
 	NULL,			/* beginload */
 	NULL,			/* endload */
-	NULL,			/* serialize */
 	NULL,			/* dump */
 	NULL,			/* currentversion */
 	NULL,			/* newversion */
@@ -583,14 +577,7 @@ static dns_dbmethods_t ecdb_methods = {
 	NULL,			/* getsigningtime */
 	NULL,			/* resigned */
 	NULL,			/* isdnssec */
-	NULL,			/* getrrsetstats */
-	NULL,			/* rpz_attach */
-	NULL,			/* rpz_ready */
-	NULL,			/* findnodeext */
-	NULL,			/* findext */
-	NULL,			/* setcachestats */
-	NULL,			/* hashsize */
-	NULL			/* getsize */
+	NULL			/* getrrsetstats */
 };
 
 static isc_result_t
@@ -670,11 +657,7 @@ rdataset_first(dns_rdataset_t *rdataset) {
 		rdataset->private5 = NULL;
 		return (ISC_R_NOMORE);
 	}
-#if DNS_RDATASET_FIXED
-	raw += 2 + (4 * count);
-#else
 	raw += 2;
-#endif
 	/*
 	 * The privateuint4 field is the number of rdata beyond the cursor
 	 * position, so we decrement the total count by one before storing
@@ -700,11 +683,7 @@ rdataset_next(dns_rdataset_t *rdataset) {
 	rdataset->privateuint4 = count;
 	raw = rdataset->private5;
 	length = raw[0] * 256 + raw[1];
-#if DNS_RDATASET_FIXED
-	raw += length + 4;
-#else
 	raw += length + 2;
-#endif
 	rdataset->private5 = raw;
 
 	return (ISC_R_SUCCESS);
@@ -720,11 +699,7 @@ rdataset_current(dns_rdataset_t *rdataset, dns_rdata_t *rdata) {
 	REQUIRE(raw != NULL);
 
 	length = raw[0] * 256 + raw[1];
-#if DNS_RDATASET_FIXED
-	raw += 4;
-#else
 	raw += 2;
-#endif
 	if (rdataset->type == dns_rdatatype_rrsig) {
 		if (*raw & DNS_RDATASLAB_OFFLINE)
 			flags |= DNS_RDATA_OFFLINE;
@@ -763,38 +738,25 @@ rdataset_count(dns_rdataset_t *rdataset) {
 	return (count);
 }
 
-static void
-rdataset_settrust(dns_rdataset_t *rdataset, dns_trust_t trust) {
-	rdatasetheader_t *header = rdataset->private3;
-
-	header--;
-	header->trust = rdataset->trust = trust;
-}
-
 /*
  * Rdataset Iterator Methods
  */
 
 static void
 rdatasetiter_destroy(dns_rdatasetiter_t **iteratorp) {
+	ecdb_rdatasetiter_t *ecdbiterator;
 	isc_mem_t *mctx;
-	union {
-		dns_rdatasetiter_t *rdatasetiterator;
-		ecdb_rdatasetiter_t *ecdbiterator;
-	} u;
 
 	REQUIRE(iteratorp != NULL);
-	REQUIRE(DNS_RDATASETITER_VALID(*iteratorp));
+	ecdbiterator = (ecdb_rdatasetiter_t *)*iteratorp;
+	REQUIRE(DNS_RDATASETITER_VALID(&ecdbiterator->common));
 
-	u.rdatasetiterator = *iteratorp;
+	mctx = ecdbiterator->common.db->mctx;
 
-	mctx = u.ecdbiterator->common.db->mctx;
-	u.ecdbiterator->common.magic = 0;
+	ecdbiterator->common.magic = 0;
 
-	dns_db_detachnode(u.ecdbiterator->common.db,
-			  &u.ecdbiterator->common.node);
-	isc_mem_put(mctx, u.ecdbiterator,
-		    sizeof(ecdb_rdatasetiter_t));
+	dns_db_detachnode(ecdbiterator->common.db, &ecdbiterator->common.node);
+	isc_mem_put(mctx, ecdbiterator, sizeof(ecdb_rdatasetiter_t));
 
 	*iteratorp = NULL;
 }

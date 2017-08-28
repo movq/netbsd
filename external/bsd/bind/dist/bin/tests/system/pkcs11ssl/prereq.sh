@@ -14,8 +14,5 @@
 # OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR
 # PERFORMANCE OF THIS SOFTWARE.
 
-SYSTEMTESTTOP=..
-. $SYSTEMTESTTOP/conf.sh
-
 echo "I:(PKCS#11 via OpenSSL)" >&2
-exec $SHELL ../testcrypto.sh rsa
+exec sh ../testcrypto.sh rsa

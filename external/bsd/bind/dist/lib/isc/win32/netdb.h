@@ -1,7 +1,7 @@
-/*	$NetBSD: netdb.h,v 1.5 2014/12/10 04:38:01 christos Exp $	*/
+/*	$NetBSD: netdb.h,v 1.1 2009/03/22 15:02:24 christos Exp $	*/
 
 /*
- * Copyright (C) 2004, 2006, 2007, 2009, 2013  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2004, 2006, 2007, 2009  Internet Systems Consortium, Inc. ("ISC")
  * Copyright (C) 2000, 2001  Internet Software Consortium.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -17,7 +17,7 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* Id: netdb.h,v 1.9 2009/01/18 23:48:14 tbox Exp  */
+/* Id: netdb.h,v 1.7.332.2 2009/01/18 23:47:41 tbox Exp */
 
 #ifndef NETDB_H
 #define NETDB_H 1
@@ -29,7 +29,6 @@
  * Define if <netdb.h> does not declare struct addrinfo.
  */
 
-#if _MSC_VER < 1600
 struct addrinfo {
 	int		ai_flags;      /* AI_PASSIVE, AI_CANONNAME */
 	int		ai_family;     /* PF_xxx */
@@ -40,7 +39,6 @@ struct addrinfo {
 	struct sockaddr	*ai_addr;      /* Binary address */
 	struct addrinfo	*ai_next;      /* Next structure in linked list */
 };
-#endif
 
 
 /*
