@@ -1,26 +1,9 @@
-/*	$NetBSD: res_query.c,v 1.16 2015/02/24 17:56:20 christos Exp $	*/
-
-/*
- * Portions Copyright (C) 2004, 2005, 2008  Internet Systems Consortium, Inc. ("ISC")
- * Portions Copyright (C) 1996-2001, 2003  Internet Software Consortium.
- *
- * Permission to use, copy, modify, and/or distribute this software for any
- * purpose with or without fee is hereby granted, provided that the above
- * copyright notice and this permission notice appear in all copies.
- *
- * THE SOFTWARE IS PROVIDED "AS IS" AND ISC DISCLAIMS ALL WARRANTIES WITH
- * REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF MERCHANTABILITY
- * AND FITNESS.  IN NO EVENT SHALL ISC BE LIABLE FOR ANY SPECIAL, DIRECT,
- * INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES WHATSOEVER RESULTING FROM
- * LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE
- * OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR
- * PERFORMANCE OF THIS SOFTWARE.
- */
+/*	$NetBSD: res_query.c,v 1.1 2004/05/20 17:18:54 christos Exp $	*/
 
 /*
  * Copyright (c) 1988, 1993
  *    The Regents of the University of California.  All rights reserved.
- *
+ * 
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
  * are met:
@@ -29,10 +12,14 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. Neither the name of the University nor the names of its contributors
+ * 3. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgement:
+ * 	This product includes software developed by the University of
+ * 	California, Berkeley and its contributors.
+ * 4. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
- *
+ * 
  * THIS SOFTWARE IS PROVIDED BY THE REGENTS AND CONTRIBUTORS ``AS IS'' AND
  * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
  * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
@@ -48,14 +35,14 @@
 
 /*
  * Portions Copyright (c) 1993 by Digital Equipment Corporation.
- *
+ * 
  * Permission to use, copy, modify, and distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
  * copyright notice and this permission notice appear in all copies, and that
  * the name of Digital Equipment Corporation not be used in advertising or
  * publicity pertaining to distribution of the document or software without
  * specific, written prior permission.
- *
+ * 
  * THE SOFTWARE IS PROVIDED "AS IS" AND DIGITAL EQUIPMENT CORP. DISCLAIMS ALL
  * WARRANTIES WITH REGARD TO THIS SOFTWARE, INCLUDING ALL IMPLIED WARRANTIES
  * OF MERCHANTABILITY AND FITNESS.   IN NO EVENT SHALL DIGITAL EQUIPMENT
@@ -83,19 +70,12 @@
  * OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
-#include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-#ifdef notdef
 static const char sccsid[] = "@(#)res_query.c	8.1 (Berkeley) 6/4/93";
-static const char rcsid[] = "Id: res_query.c,v 1.11 2008/11/14 02:36:51 marka Exp";
-#else
-__RCSID("$NetBSD: res_query.c,v 1.16 2015/02/24 17:56:20 christos Exp $");
-#endif
+static const char rcsid[] = "Id: res_query.c,v 1.2.2.3.4.2 2004/03/16 12:34:19 marka Exp";
 #endif /* LIBC_SCCS and not lint */
 
 #include "port_before.h"
-
-#include "namespace.h"
 #include <sys/types.h>
 #include <sys/param.h>
 #include <netinet/in.h>
@@ -107,23 +87,11 @@ __RCSID("$NetBSD: res_query.c,v 1.16 2015/02/24 17:56:20 christos Exp $");
 #include <resolv.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <unistd.h>
 #include <string.h>
 #include "port_after.h"
 
-#if 0
-#ifdef __weak_alias
-__weak_alias(res_nquery,_res_nquery)
-__weak_alias(res_nsearch,_res_nsearch)
-__weak_alias(res_nquerydomain,__res_nquerydomain)
-__weak_alias(res_hostalias,__res_hostalias)
-#endif
-#endif
-
 /* Options.  Leave them on. */
-#ifndef DEBUG
 #define DEBUG
-#endif
 
 #if PACKETSZ > 1024
 #define MAXPACKET	PACKETSZ
@@ -131,7 +99,7 @@ __weak_alias(res_hostalias,__res_hostalias)
 #define MAXPACKET	1024
 #endif
 
-/*%
+/*
  * Formulate a normal query, send, and await answer.
  * Returned answer is placed in supplied buffer "answer".
  * Perform preliminary check of answer, returning success only
@@ -143,38 +111,32 @@ __weak_alias(res_hostalias,__res_hostalias)
  */
 int
 res_nquery(res_state statp,
-	   const char *name,	/*%< domain name */
-	   int class, int type,	/*%< class and type of query */
-	   u_char *answer,	/*%< buffer to put answer */
-	   int anslen)		/*%< size of answer buffer */
+	   const char *name,	/* domain name */
+	   int class, int type,	/* class and type of query */
+	   u_char *answer,	/* buffer to put answer */
+	   int anslen)		/* size of answer buffer */
 {
 	u_char buf[MAXPACKET];
-	HEADER *hp = (HEADER *)(void *)answer;
-	u_int oflags;
-	u_char *rdata;
+	HEADER *hp = (HEADER *) answer;
 	int n;
+	u_int oflags;
 
 	oflags = statp->_flags;
 
 again:
-	hp->rcode = NOERROR;	/*%< default */
+	hp->rcode = NOERROR;	/* default */
+
 #ifdef DEBUG
 	if (statp->options & RES_DEBUG)
 		printf(";; res_query(%s, %d, %d)\n", name, class, type);
 #endif
 
 	n = res_nmkquery(statp, QUERY, name, class, type, NULL, 0, NULL,
-			 buf, (int)sizeof(buf));
+			 buf, sizeof(buf));
 #ifdef RES_USE_EDNS0
 	if (n > 0 && (statp->_flags & RES_F_EDNS0ERR) == 0 &&
-	    (statp->options & (RES_USE_EDNS0|RES_USE_DNSSEC|RES_NSID)) != 0U) {
-		n = res_nopt(statp, n, buf, (int)sizeof(buf), anslen);
-		rdata = &buf[n];
-		if (n > 0 && (statp->options & RES_NSID) != 0U) {
-			n = res_nopt_rdata(statp, n, buf, (int)sizeof(buf),
-			    rdata, NS_OPT_NSID, 0, NULL);
-		}
-	}
+	    (statp->options & (RES_USE_EDNS0|RES_USE_DNSSEC)) != 0U)
+		n = res_nopt(statp, n, buf, sizeof(buf), anslen);
 #endif
 	if (n <= 0) {
 #ifdef DEBUG
@@ -184,7 +146,6 @@ again:
 		RES_SET_H_ERRNO(statp, NO_RECOVERY);
 		return (n);
 	}
-
 	n = res_nsend(statp, buf, n, answer, anslen);
 	if (n < 0) {
 #ifdef RES_USE_EDNS0
@@ -236,7 +197,7 @@ again:
 	return (n);
 }
 
-/*%
+/*
  * Formulate a normal query, send, and retrieve answer in supplied buffer.
  * Return the size of the response on success, -1 on error.
  * If enabled, implement search rules until answer or unrecoverable failure
@@ -244,13 +205,13 @@ again:
  */
 int
 res_nsearch(res_state statp,
-	    const char *name,	/*%< domain name */
-	    int class, int type,	/*%< class and type of query */
-	    u_char *answer,	/*%< buffer to put answer */
-	    int anslen)		/*%< size of answer */
+	    const char *name,	/* domain name */
+	    int class, int type,	/* class and type of query */
+	    u_char *answer,	/* buffer to put answer */
+	    int anslen)		/* size of answer */
 {
 	const char *cp, * const *domain;
-	HEADER *hp = (HEADER *)(void *)answer;
+	HEADER *hp = (HEADER *) answer;
 	char tmp[NS_MAXDNAME];
 	u_int dots;
 	int trailing_dot, ret, saved_herrno;
@@ -259,7 +220,8 @@ res_nsearch(res_state statp,
 	int searched = 0;
 
 	errno = 0;
-	RES_SET_H_ERRNO(statp, HOST_NOT_FOUND);  /*%< True if we never query. */
+	RES_SET_H_ERRNO(statp, HOST_NOT_FOUND);  /* True if we never query. */
+
 	dots = 0;
 	for (cp = name; *cp != '\0'; cp++)
 		dots += (*cp == '.');
@@ -384,7 +346,7 @@ res_nsearch(res_state statp,
 	return (-1);
 }
 
-/*%
+/*
  * Perform a call on res_query on the concatenation of name and domain,
  * removing a trailing dot from name if domain is NULL.
  */
@@ -392,13 +354,13 @@ int
 res_nquerydomain(res_state statp,
 	    const char *name,
 	    const char *domain,
-	    int class, int type,	/*%< class and type of query */
-	    u_char *answer,		/*%< buffer to put answer */
-	    int anslen)		/*%< size of answer */
+	    int class, int type,	/* class and type of query */
+	    u_char *answer,		/* buffer to put answer */
+	    int anslen)		/* size of answer */
 {
 	char nbuf[MAXDNAME];
 	const char *longname = nbuf;
-	size_t n, d;
+	int n, d;
 
 #ifdef DEBUG
 	if (statp->options & RES_DEBUG)
@@ -415,7 +377,8 @@ res_nquerydomain(res_state statp,
 			RES_SET_H_ERRNO(statp, NO_RECOVERY);
 			return (-1);
 		}
-		if (n && name[--n] == '.') {
+		n--;
+		if (n >= 0 && name[n] == '.') {
 			strncpy(nbuf, name, n);
 			nbuf[n] = '\0';
 		} else
@@ -440,17 +403,12 @@ res_hostalias(const res_state statp, const char *name, char *dst, size_t siz) {
 
 	if (statp->options & RES_NOALIASES)
 		return (NULL);
-	/*
-	 * forbid hostaliases for setuid binary, due to possible security
-	 * breach.
-	 */
-	if (issetugid())
-		return (NULL);
 	file = getenv("HOSTALIASES");
-	if (file == NULL || (fp = fopen(file, "re")) == NULL)
+	if (file == NULL || (fp = fopen(file, "r")) == NULL)
 		return (NULL);
+	setbuf(fp, NULL);
 	buf[sizeof(buf) - 1] = '\0';
-	while (fgets(buf, (int)sizeof(buf), fp)) {
+	while (fgets(buf, sizeof(buf), fp)) {
 		for (cp1 = buf; *cp1 && !isspace((unsigned char)*cp1); ++cp1)
 			;
 		if (!*cp1)
@@ -474,5 +432,3 @@ res_hostalias(const res_state statp, const char *name, char *dst, size_t siz) {
 	fclose(fp);
 	return (NULL);
 }
-
-/*! \file */

@@ -1,7 +1,7 @@
-/*	$NetBSD: rbt.h,v 1.13 2017/06/15 15:59:40 christos Exp $	*/
+/*	$NetBSD: rbt.h,v 1.1 2009/03/22 15:01:46 christos Exp $	*/
 
 /*
- * Copyright (C) 2004-2009, 2012-2016  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2004-2009  Internet Systems Consortium, Inc. ("ISC")
  * Copyright (C) 1999-2002  Internet Software Consortium.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -17,14 +17,13 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* Id: rbt.h,v 1.77.666.4 2012/02/08 19:53:30 each Exp  */
+/* Id: rbt.h,v 1.71.48.2 2009/01/18 23:47:41 tbox Exp */
 
 #ifndef DNS_RBT_H
 #define DNS_RBT_H 1
 
 /*! \file dns/rbt.h */
 
-#include <isc/crc64.h>
 #include <isc/lang.h>
 #include <isc/magic.h>
 #include <isc/refcount.h>
@@ -52,8 +51,6 @@ ISC_LANG_BEGINDECLS
 #endif
 #endif
 
-#define DNS_RBT_USEMAGIC 1
-
 /*
  * These should add up to 30.
  */
@@ -75,68 +72,17 @@ ISC_LANG_BEGINDECLS
  * multiple dns_rbtnode structures will not work.
  */
 typedef struct dns_rbtnode dns_rbtnode_t;
-enum {
-	DNS_RBT_NSEC_NORMAL=0,      /* in main tree */
-	DNS_RBT_NSEC_HAS_NSEC=1,    /* also has node in nsec tree */
-	DNS_RBT_NSEC_NSEC=2,        /* in nsec tree */
-	DNS_RBT_NSEC_NSEC3=3        /* in nsec3 tree */
-};
 struct dns_rbtnode {
 #if DNS_RBT_USEMAGIC
 	unsigned int magic;
-#endif
-	/*@{*/
-	/*!
-	 * The following bitfields add up to a total bitwidth of 32.
-	 * The range of values necessary for each item is indicated,
-	 * but in the case of "attributes" the field is wider to accommodate
-	 * possible future expansion.
-	 *
-	 * In each case below the "range" indicated is what's _necessary_ for
-	 * the bitfield to hold, not what it actually _can_ hold.
-	 *
-	 * Note: Tree lock must be held before modifying these
-	 * bit-fields.
-	 *
-	 * Note: The two "unsigned int :0;" unnamed bitfields on either
-	 * side of the bitfields below are scaffolding that border the
-	 * set of bitfields which are accessed after acquiring the tree
-	 * lock. Please don't insert any other bitfield members between
-	 * the unnamed bitfields unless they should also be accessed
-	 * after acquiring the tree lock.
-	 */
-	unsigned int :0;                /* start of bitfields c/o tree lock */
-	unsigned int is_root : 1;       /*%< range is 0..1 */
-	unsigned int color : 1;         /*%< range is 0..1 */
-	unsigned int find_callback : 1; /*%< range is 0..1 */
-	unsigned int attributes : 3;    /*%< range is 0..2 */
-	unsigned int nsec : 2;          /*%< range is 0..3 */
-	unsigned int namelen : 8;       /*%< range is 1..255 */
-	unsigned int offsetlen : 8;     /*%< range is 1..128 */
-	unsigned int oldnamelen : 8;    /*%< range is 1..255 */
-	/*@}*/
-
-	/* flags needed for serialization to file*/
-	unsigned int is_mmapped : 1;
-	unsigned int parent_is_relative : 1;
-	unsigned int left_is_relative : 1;
-	unsigned int right_is_relative : 1;
-	unsigned int down_is_relative : 1;
-	unsigned int data_is_relative : 1;
-
-	/* node needs to be cleaned from rpz */
-	unsigned int rpz : 1;
-	unsigned int :0;                /* end of bitfields c/o tree lock */
-
-#ifdef DNS_RBT_USEHASH
-	unsigned int hashval;
-	dns_rbtnode_t *uppernode;
-	dns_rbtnode_t *hashnext;
 #endif
 	dns_rbtnode_t *parent;
 	dns_rbtnode_t *left;
 	dns_rbtnode_t *right;
 	dns_rbtnode_t *down;
+#ifdef DNS_RBT_USEHASH
+	dns_rbtnode_t *hashnext;
+#endif
 
 	/*%
 	 * Used for LRU cache.  This linked list is used to mark nodes which
@@ -147,32 +93,43 @@ struct dns_rbtnode {
 
 	/*@{*/
 	/*!
+	 * The following bitfields add up to a total bitwidth of 32.
+	 * The range of values necessary for each item is indicated,
+	 * but in the case of "attributes" the field is wider to accommodate
+	 * possible future expansion.  "offsetlen" could be one bit
+	 * narrower by always adjusting its value by 1 to find the real
+	 * offsetlen, but doing so does not gain anything (except perhaps
+	 * another bit for "attributes", which doesn't yet need any more).
+	 *
+	 * In each case below the "range" indicated is what's _necessary_ for
+	 * the bitfield to hold, not what it actually _can_ hold.
+	 */
+	unsigned int is_root : 1;       /*%< range is 0..1 */
+	unsigned int color : 1;         /*%< range is 0..1 */
+	unsigned int find_callback : 1; /*%< range is 0..1 */
+	unsigned int attributes : 3;    /*%< range is 0..2 */
+	unsigned int nsec3 : 1;    	/*%< range is 0..1 */
+	unsigned int namelen : 8;       /*%< range is 1..255 */
+	unsigned int offsetlen : 8;     /*%< range is 1..128 */
+	unsigned int padbytes : 9;      /*%< range is 0..380 */
+	/*@}*/
+
+#ifdef DNS_RBT_USEHASH
+	unsigned int hashval;
+#endif
+
+	/*@{*/
+	/*!
 	 * These values are used in the RBT DB implementation.  The appropriate
 	 * node lock must be held before accessing them.
-	 *
-	 * Note: The two "unsigned int :0;" unnamed bitfields on either
-	 * side of the bitfields below are scaffolding that border the
-	 * set of bitfields which are accessed after acquiring the node
-	 * lock. Please don't insert any other bitfield members between
-	 * the unnamed bitfields unless they should also be accessed
-	 * after acquiring the node lock.
-	 *
-	 * NOTE: Do not merge these fields into bitfields above, as
-	 * they'll all be put in the same qword that could be accessed
-	 * without the node lock as it shares the qword with other
-	 * members. Leave these members here so that they occupy a
-	 * separate region of memory.
 	 */
 	void *data;
-	unsigned int :0;                /* start of bitfields c/o node lock */
 	unsigned int dirty:1;
 	unsigned int wild:1;
 	unsigned int locknum:DNS_RBT_LOCKLENGTH;
 #ifndef DNS_RBT_USEISCREFCOUNT
 	unsigned int references:DNS_RBT_REFLENGTH;
-#endif
-	unsigned int :0;                /* end of bitfields c/o node lock */
-#ifdef DNS_RBT_USEISCREFCOUNT
+#else
 	isc_refcount_t references; /* note that this is not in the bitfield */
 #endif
 	/*@}*/
@@ -181,17 +138,6 @@ struct dns_rbtnode {
 typedef isc_result_t (*dns_rbtfindcallback_t)(dns_rbtnode_t *node,
 					      dns_name_t *name,
 					      void *callback_arg);
-
-typedef isc_result_t (*dns_rbtdatawriter_t)(FILE *file,
-					    unsigned char *data,
-					    void *arg,
-					    isc_uint64_t *crc);
-
-typedef isc_result_t (*dns_rbtdatafixer_t)(dns_rbtnode_t *rbtnode,
-					   void *base, size_t offset,
-					   void *arg, isc_uint64_t *crc);
-
-typedef void (*dns_rbtdeleter_t)(void *, void *);
 
 /*****
  *****  Chain Info
@@ -289,7 +235,7 @@ typedef struct dns_rbtnodechain {
  ***** Public interfaces.
  *****/
 isc_result_t
-dns_rbt_create(isc_mem_t *mctx, dns_rbtdeleter_t deleter,
+dns_rbt_create(isc_mem_t *mctx, void (*deleter)(void *, void *),
 	       void *deleter_arg, dns_rbt_t **rbtp);
 /*%<
  * Initialize a red-black tree of trees.
@@ -393,7 +339,7 @@ dns_rbt_addnode(dns_rbt_t *rbt, dns_name_t *name, dns_rbtnode_t **nodep);
  */
 
 isc_result_t
-dns_rbt_findname(dns_rbt_t *rbt, const dns_name_t *name, unsigned int options,
+dns_rbt_findname(dns_rbt_t *rbt, dns_name_t *name, unsigned int options,
 		 dns_name_t *foundname, void **data);
 /*%<
  * Get the data pointer associated with 'name'.
@@ -432,7 +378,7 @@ dns_rbt_findname(dns_rbt_t *rbt, const dns_name_t *name, unsigned int options,
  */
 
 isc_result_t
-dns_rbt_findnode(dns_rbt_t *rbt, const dns_name_t *name, dns_name_t *foundname,
+dns_rbt_findnode(dns_rbt_t *rbt, dns_name_t *name, dns_name_t *foundname,
 		 dns_rbtnode_t **node, dns_rbtnodechain_t *chain,
 		 unsigned int options, dns_rbtfindcallback_t callback,
 		 void *callback_arg);
@@ -685,15 +631,6 @@ dns_rbt_nodecount(dns_rbt_t *rbt);
  * \li  rbt is a valid rbt manager.
  */
 
-size_t
-dns_rbt_hashsize(dns_rbt_t *rbt);
-/*%<
- * Obtain the current number of buckets in the 'rbt' hash table.
- *
- * Requires:
- * \li  rbt is a valid rbt manager.
- */
-
 void
 dns_rbt_destroy(dns_rbt_t **rbtp);
 isc_result_t
@@ -720,123 +657,17 @@ dns_rbt_destroy2(dns_rbt_t **rbtp, unsigned int quantum);
  * \li  ISC_R_QUOTA if 'quantum' nodes have been destroyed.
  */
 
-off_t
-dns_rbt_serialize_align(off_t target);
-/*%<
- * Align the provided integer to a pointer-size boundary.
- * This should be used if, during serialization of data to a will-be
- * mmap()ed file, a pointer alignment is needed for some data.
- */
-
-isc_result_t
-dns_rbt_serialize_tree(FILE *file, dns_rbt_t *rbt,
-		       dns_rbtdatawriter_t datawriter,
-		       void *writer_arg, off_t *offset);
-/*%<
- * Write out the RBT structure and its data to a file.
- *
- * Notes:
- * \li  The file must be an actual file which allows seek() calls, so it cannot
- *      be a stream.  Returns ISC_R_INVALIDFILE if not.
- */
-
-isc_result_t
-dns_rbt_deserialize_tree(void *base_address, size_t filesize,
-			 off_t header_offset, isc_mem_t *mctx,
-			 dns_rbtdeleter_t deleter, void *deleter_arg,
-			 dns_rbtdatafixer_t datafixer, void *fixer_arg,
-			 dns_rbtnode_t **originp, dns_rbt_t **rbtp);
-/*%<
- * Read a RBT structure and its data from a file.
- *
- * If 'originp' is not NULL, then it is pointed to the root node of the RBT.
- *
- * Notes:
- * \li  The file must be an actual file which allows seek() calls, so it cannot
- *      be a stream.  This condition is not checked in the code.
- */
-
 void
-dns_rbt_printtext(dns_rbt_t *rbt,
-		  void (*data_printer)(FILE *, void *), FILE *f);
+dns_rbt_printall(dns_rbt_t *rbt);
 /*%<
  * Print an ASCII representation of the internal structure of the red-black
- * tree of trees to the passed stream.
- *
- * data_printer is a callback function that is called to print the data
- * in a node. It should print it to the passed FILE stream.
+ * tree of trees.
  *
  * Notes:
  * \li  The name stored at each node, along with the node's color, is printed.
  *      Then the down pointer, left and right pointers are displayed
  *      recursively in turn.  NULL down pointers are silently omitted;
  *      NULL left and right pointers are printed.
- */
-
-void
-dns_rbt_printdot(dns_rbt_t *rbt, isc_boolean_t show_pointers, FILE *f);
-/*%<
- * Print a GraphViz dot representation of the internal structure of the
- * red-black tree of trees to the passed stream.
- *
- * If show_pointers is TRUE, pointers are also included in the generated
- * graph.
- *
- * Notes:
- * \li	The name stored at each node, along with the node's color is displayed.
- *	Then the down pointer, left and right pointers are displayed
- *	recursively in turn.  NULL left, right and down pointers are
- *	silently omitted.
- */
-
-void
-dns_rbt_printnodeinfo(dns_rbtnode_t *n, FILE *f);
-/*%<
- * Print out various information about a node
- *
- * Requires:
- *\li	'n' is a valid pointer.
- *
- *\li	'f' points to a valid open FILE structure that allows writing.
- */
-
-
-size_t
-dns__rbt_getheight(dns_rbt_t *rbt);
-/*%<
- * Return the maximum height of sub-root nodes found in the red-black
- * forest.
- *
- * The height of a node is defined as the number of nodes in the longest
- * path from the node to a leaf. For each subtree in the forest, this
- * function determines the height of its root node. Then it returns the
- * maximum such height in the forest.
- *
- * Note: This function exists for testing purposes. Non-test code must
- * not use it.
- *
- * Requires:
- * \li  rbt is a valid rbt manager.
- */
-
-isc_boolean_t
-dns__rbt_checkproperties(dns_rbt_t *rbt);
-/*%<
- * Check red-black properties of the forest.
- *
- * Note: This function exists for testing purposes. Non-test code must
- * not use it.
- *
- * Requires:
- * \li  rbt is a valid rbt manager.
- */
-
-size_t
-dns__rbtnode_getdistance(dns_rbtnode_t *node);
-/*%<
- * Return the distance (in nodes) from the node to its upper node of its
- * subtree. The root node has a distance of 1. A child of the root node
- * has a distance of 2.
  */
 
 /*****
@@ -1059,83 +890,51 @@ dns_rbtnodechain_nextflat(dns_rbtnodechain_t *chain, dns_name_t *name);
 #define dns_rbtnode_refinit(node, n)                            \
 	do {                                                    \
 		isc_refcount_init(&(node)->references, (n));    \
-	} while (/*CONSTCOND*/0)
+	} while (0)
 #define dns_rbtnode_refdestroy(node)                            \
 	do {                                                    \
 		isc_refcount_destroy(&(node)->references);      \
-	} while (/*CONSTCOND*/0)
+	} while (0)
 #define dns_rbtnode_refcurrent(node)                            \
 	isc_refcount_current(&(node)->references)
 #define dns_rbtnode_refincrement0(node, refs)                   \
 	do {                                                    \
 		isc_refcount_increment0(&(node)->references, (refs)); \
-	} while (/*CONSTCOND*/0)
+	} while (0)
 #define dns_rbtnode_refincrement(node, refs)                    \
 	do {                                                    \
 		isc_refcount_increment(&(node)->references, (refs)); \
-	} while (/*CONSTCOND*/0)
+	} while (0)
 #define dns_rbtnode_refdecrement(node, refs)                    \
 	do {                                                    \
 		isc_refcount_decrement(&(node)->references, (refs)); \
-	} while (/*CONSTCOND*/0)
+	} while (0)
 #else  /* DNS_RBT_USEISCREFCOUNT */
 #define dns_rbtnode_refinit(node, n)    ((node)->references = (n))
-#define dns_rbtnode_refdestroy(node)    REQUIRE((node)->references == 0)
+#define dns_rbtnode_refdestroy(node)    (REQUIRE((node)->references == 0))
 #define dns_rbtnode_refcurrent(node)    ((node)->references)
-
-#if (__STDC_VERSION__ + 0) >= 199901L || defined __GNUC__
-static inline void
-dns_rbtnode_refincrement0(dns_rbtnode_t *node, unsigned int *refs) {
-	node->references++;
-	if (refs != NULL)
-		*refs = node->references;
-}
-
-static inline void
-dns_rbtnode_refincrement(dns_rbtnode_t *node, unsigned int *refs) {
-	REQUIRE(node->references > 0);
-	node->references++;
-	if (refs != NULL)
-		*refs = node->references;
-}
-
-static inline void
-dns_rbtnode_refdecrement(dns_rbtnode_t *node, unsigned int *refs) {
-	REQUIRE(node->references > 0);
-	node->references--;
-	if (refs != NULL)
-		*refs = node->references;
-}
-#else
 #define dns_rbtnode_refincrement0(node, refs)                   \
 	do {                                                    \
 		unsigned int *_tmp = (unsigned int *)(refs);    \
 		(node)->references++;                           \
 		if ((_tmp) != NULL)                             \
 			(*_tmp) = (node)->references;           \
-	} while (/*CONSTCOND*/0)
+	} while (0)
 #define dns_rbtnode_refincrement(node, refs)                    \
 	do {                                                    \
 		REQUIRE((node)->references > 0);                \
 		(node)->references++;                           \
 		if ((refs) != NULL)                             \
 			(*refs) = (node)->references;           \
-	} while (/*CONSTCOND*/0)
+	} while (0)
 #define dns_rbtnode_refdecrement(node, refs)                    \
 	do {                                                    \
 		REQUIRE((node)->references > 0);                \
 		(node)->references--;                           \
 		if ((refs) != NULL)                             \
 			(*refs) = (node)->references;           \
-	} while (/*CONSTCOND*/0)
-#endif
+	} while (0)
 #endif /* DNS_RBT_USEISCREFCOUNT */
-
-void
-dns_rbtnode_nodename(dns_rbtnode_t *node, dns_name_t *name);
-
-dns_rbtnode_t *
-dns_rbt_root(dns_rbt_t *rbt);
 
 ISC_LANG_ENDDECLS
 

@@ -1,7 +1,7 @@
-/*	$NetBSD: util.h,v 1.12 2016/05/26 16:50:00 christos Exp $	*/
+/*	$NetBSD: util.h,v 1.1 2009/03/22 15:02:16 christos Exp $	*/
 
 /*
- * Copyright (C) 2004-2007, 2010-2012, 2015, 2016  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2004-2007  Internet Systems Consortium, Inc. ("ISC")
  * Copyright (C) 1998-2001  Internet Software Consortium.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -17,7 +17,7 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* Id */
+/* Id: util.h,v 1.30 2007/06/19 23:47:18 tbox Exp */
 
 #ifndef ISC_UTIL_H
 #define ISC_UTIL_H 1
@@ -48,17 +48,10 @@
  * }
  * \endcode
  */
-#define UNUSED(x)      (void)&(x)
-
-/*%
- * The opposite: silent warnings about stored values which are never read.
- */
-#define POST(x)        (void)(x)
+#define UNUSED(x)      (void)(x)
 
 #define ISC_MAX(a, b)  ((a) > (b) ? (a) : (b))
 #define ISC_MIN(a, b)  ((a) < (b) ? (a) : (b))
-
-#define ISC_CLAMP(v, x, y) ((v) < (x) ? (x) : ((v) > (y) ? (y) : (v)))
 
 /*%
  * Use this to remove the const qualifier of a variable to assign it to
@@ -73,13 +66,13 @@
 		union { const void *k; void *v; } _u; \
 		_u.k = konst; \
 		var = _u.v; \
-	} while (/*CONSTCOND*/0)
+	} while (0)
 
 /*%
  * Use this in translation units that would otherwise be empty, to
  * suppress compiler warnings.
  */
-#define EMPTY_TRANSLATION_UNIT static void __used isc__empty(void) { isc__empty(); }
+#define EMPTY_TRANSLATION_UNIT static void isc__empty(void) { isc__empty(); }
 
 /*%
  * We use macros instead of calling the routines directly because
@@ -108,14 +101,14 @@
 			       isc_msgcat_get(isc_msgcat, ISC_MSGSET_UTIL, \
 					      ISC_MSG_LOCKED, "LOCKED"), \
 			       (lp), __FILE__, __LINE__)); \
-	} while (/*CONSTCOND*/0)
+	} while (0)
 #define UNLOCK(lp) do { \
 	RUNTIME_CHECK(isc_mutex_unlock((lp)) == ISC_R_SUCCESS); \
 	ISC_UTIL_TRACE(fprintf(stderr, "%s %p %s %d\n", \
 			       isc_msgcat_get(isc_msgcat, ISC_MSGSET_UTIL, \
 					      ISC_MSG_UNLOCKED, "UNLOCKED"), \
 			       (lp), __FILE__, __LINE__)); \
-	} while (/*CONSTCOND*/0)
+	} while (0)
 #define ISLOCKED(lp) (1)
 #define DESTROYLOCK(lp) \
 	RUNTIME_CHECK(isc_mutex_destroy((lp)) == ISC_R_SUCCESS)
@@ -127,14 +120,14 @@
 					      ISC_MSG_BROADCAST, "BROADCAST"),\
 			       (cvp), __FILE__, __LINE__)); \
 	RUNTIME_CHECK(isc_condition_broadcast((cvp)) == ISC_R_SUCCESS); \
-	} while (/*CONSTCOND*/0)
+	} while (0)
 #define SIGNAL(cvp) do { \
 	ISC_UTIL_TRACE(fprintf(stderr, "%s %p %s %d\n", \
 			       isc_msgcat_get(isc_msgcat, ISC_MSGSET_UTIL, \
 					      ISC_MSG_SIGNAL, "SIGNAL"), \
 			       (cvp), __FILE__, __LINE__)); \
 	RUNTIME_CHECK(isc_condition_signal((cvp)) == ISC_R_SUCCESS); \
-	} while (/*CONSTCOND*/0)
+	} while (0)
 #define WAIT(cvp, lp) do { \
 	ISC_UTIL_TRACE(fprintf(stderr, "%s %p %s %p %s %d\n", \
 			       isc_msgcat_get(isc_msgcat, ISC_MSGSET_UTIL, \
@@ -151,7 +144,7 @@
 			       isc_msgcat_get(isc_msgcat, ISC_MSGSET_UTIL, \
 					      ISC_MSG_LOCKED, "LOCKED"), \
 			       (lp), __FILE__, __LINE__)); \
-	} while (/*CONSTCOND*/0)
+	} while (0)
 
 /*
  * isc_condition_waituntil can return ISC_R_TIMEDOUT, so we
@@ -173,14 +166,14 @@
 			       isc_msgcat_get(isc_msgcat, ISC_MSGSET_UTIL, \
 					      ISC_MSG_RWLOCKED, "RWLOCKED"), \
 			       (lp), (t), __FILE__, __LINE__)); \
-	} while (/*CONSTCOND*/0)
+	} while (0)
 #define RWUNLOCK(lp, t) do { \
 	ISC_UTIL_TRACE(fprintf(stderr, "%s %p, %d %s %d\n", \
 			       isc_msgcat_get(isc_msgcat, ISC_MSGSET_UTIL, \
 					      ISC_MSG_RWUNLOCK, "RWUNLOCK"), \
 			       (lp), (t), __FILE__, __LINE__)); \
 	RUNTIME_CHECK(isc_rwlock_unlock((lp), (t)) == ISC_R_SUCCESS); \
-	} while (/*CONSTCOND*/0)
+	} while (0)
 
 #define DESTROYMUTEXBLOCK(bp, n) \
 	RUNTIME_CHECK(isc_mutexblock_destroy((bp), (n)) == ISC_R_SUCCESS)
@@ -207,17 +200,6 @@
 #define INSERTBEFORE(li, b, e, ln)	ISC_LIST_INSERTBEFORE(li, b, e, ln)
 #define INSERTAFTER(li, a, e, ln)	ISC_LIST_INSERTAFTER(li, a, e, ln)
 #define APPENDLIST(list1, list2, link)	ISC_LIST_APPENDLIST(list1, list2, link)
-
-/*%
- * Performance
- */
-#ifdef HAVE_BUILTIN_EXPECT
-#define ISC_LIKELY(x)            __builtin_expect(!!(x), 1)
-#define ISC_UNLIKELY(x)          __builtin_expect(!!(x), 0)
-#else
-#define ISC_LIKELY(x)            (x)
-#define ISC_UNLIKELY(x)          (x)
-#endif
 
 /*
  * Assertions
@@ -249,16 +231,5 @@
  * Time
  */
 #define TIME_NOW(tp) 	RUNTIME_CHECK(isc_time_now((tp)) == ISC_R_SUCCESS)
-
-/*%
- * Prevent Linux spurious warnings
- */
-#if defined(__linux__) && defined(__GNUC__) && (__GNUC__ > 3)
-#define isc_util_fwrite(a, b, c, d)    \
-	__builtin_expect(fwrite((a), (b), (c), (d)), (c))
-#else
-#define isc_util_fwrite(a, b, c, d)    fwrite((a), (b), (c), (d))
-#endif
-
 
 #endif /* ISC_UTIL_H */

@@ -1,6 +1,6 @@
 #!/bin/sh
 #
-# Copyright (C) 2010, 2012, 2014, 2016  Internet Systems Consortium, Inc. ("ISC")
+# Copyright (C) 2010  Internet Systems Consortium, Inc. ("ISC")
 #
 # Permission to use, copy, modify, and/or distribute this software for any
 # purpose with or without fee is hereby granted, provided that the above
@@ -14,11 +14,12 @@
 # OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR
 # PERFORMANCE OF THIS SOFTWARE.
 
-SYSTEMTESTTOP=..
-. $SYSTEMTESTTOP/conf.sh
+# Id: prereq.sh,v 1.2.2.2 2010/06/22 04:02:40 marka Exp
 
-$FEATURETEST --enable-filter-aaaa || {
+if ./filter-aaaa
+then
+    :
+else
     echo "I:This test requires --enable-filter-aaaa at compile time." >&2
-    exit 255
-}
-exit 0
+    exit 1
+fi

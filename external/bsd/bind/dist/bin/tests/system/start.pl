@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (C) 2004-2008, 2010-2016  Internet Systems Consortium, Inc. ("ISC")
+# Copyright (C) 2004-2008  Internet Systems Consortium, Inc. ("ISC")
 # Copyright (C) 2001  Internet Software Consortium.
 #
 # Permission to use, copy, modify, and/or distribute this software for any
@@ -15,7 +15,7 @@
 # OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR
 # PERFORMANCE OF THIS SOFTWARE.
 
-# Id: start.pl,v 1.30 2012/02/06 23:46:44 tbox Exp 
+# Id: start.pl,v 1.13 2008/01/02 23:47:01 tbox Exp
 
 # Framework for starting test servers.
 # Based on the type of server specified, check for port availability, remove
@@ -23,7 +23,6 @@
 # If a server is specified, start it. Otherwise, start all servers for test.
 
 use strict;
-use Cwd;
 use Cwd 'abs_path';
 use Getopt::Long;
 
@@ -34,19 +33,10 @@ use Getopt::Long;
 #   test - name of the test directory
 #   server - name of the server directory
 #   options - alternate options for the server
-#             NOTE: options must be specified with '-- "<option list>"',
-#              for instance: start.pl . ns1 -- "-c n.conf -d 43"
-#             ALSO NOTE: this variable will be filled with the
-#		contents of the first non-commented/non-blank line of args
-#		in a file called "named.args" in an ns*/ subdirectory only
-#		the FIRST non-commented/non-blank line is used (everything
-#		else in the file is ignored. If "options" is already set,
-#		then "named.args" is ignored.
 
-my $usage = "usage: $0 [--noclean] [--restart] test-directory [server-directory [server-options]]";
-my $noclean = '';
-my $restart = '';
-GetOptions('noclean' => \$noclean, 'restart' => \$restart);
+my $usage = "usage: $0 [--noclean] test-directory [server-directory [server-options]]";
+my $noclean;
+GetOptions('noclean' => \$noclean);
 my $test = $ARGV[0];
 my $server = $ARGV[1];
 my $options = $ARGV[2];
@@ -68,7 +58,6 @@ my $NAMED = $ENV{'NAMED'};
 my $LWRESD = $ENV{'LWRESD'};
 my $DIG = $ENV{'DIG'};
 my $PERL = $ENV{'PERL'};
-my $PYTHON = $ENV{'PYTHON'};
 
 # Start the server(s)
 
@@ -89,14 +78,14 @@ if ($server) {
 	my @ns = grep /^ns[0-9]*$/, @files;
 	my @lwresd = grep /^lwresd[0-9]*$/, @files;
 	my @ans = grep /^ans[0-9]*$/, @files;
-	my $name;
 
 	# Start the servers we found.
 	&check_ports();
-	foreach $name(@ns, @lwresd, @ans) {
-		&start_server($name);
-		&verify_server($name) if ($name =~ /^ns/);
-		
+	foreach (@ns, @lwresd, @ans) {
+		&start_server($_);
+	}
+	foreach (@ns) {
+		&verify_server($_);
 	}
 }
 
@@ -105,33 +94,19 @@ if ($server) {
 sub check_ports {
 	my $server = shift;
 	my $options = "";
-	my $port = 5300;
-	my $file = "";
-
-	$file = $testdir . "/" . $server . "/named.port" if ($server);
 
 	if ($server && $server =~ /(\d+)$/) {
 		$options = "-i $1";
 	}
 
-	if ($file ne "" && -e $file) {
-		open(FH, "<", $file);
-		while(my $line=<FH>) {
-			chomp $line;
-			$port = $line;
-			last;
-		}
-		close FH;
-	}
-
 	my $tries = 0;
 	while (1) {
-		my $return = system("$PERL $topdir/testsock.pl -p $port $options");
+		my $return = system("$PERL $topdir/testsock.pl -p 5300 $options");
 		last if ($return == 0);
 		if (++$tries > 4) {
 			print "$0: could not bind to server addresses, still running?\n";
 			print "I:server sockets not available\n";
-			print "I:failed\n";
+			print "R:FAIL\n";
 			system("$PERL $topdir/stop.pl $testdir"); # Is this the correct behavior?
 			exit 1;
 		}
@@ -147,119 +122,50 @@ sub start_server {
 	my $cleanup_files;
 	my $command;
 	my $pid_file;
-        my $cwd = getcwd();
-	my $args_file = $cwd . "/" . $test . "/" . $server . "/" . "named.args";
 
 	if ($server =~ /^ns/) {
 		$cleanup_files = "{*.jnl,*.bk,*.st,named.run}";
-		if ($ENV{'USE_VALGRIND'}) {
-			$command = "valgrind -q --gen-suppressions=all --num-callers=48 --fullpath-after= --log-file=named-$server-valgrind-%p.log ";
-			if ($ENV{'USE_VALGRIND'} eq 'helgrind') {
-				$command .= "--tool=helgrind ";
-			} else {
-				$command .= "--tool=memcheck --track-origins=yes --leak-check=full ";
-			}
-			$command .= "$NAMED -m none -M external ";
-		} else {
-			$command = "$NAMED ";
-		}
+		$command = "$NAMED ";
 		if ($options) {
 			$command .= "$options";
-		} elsif (-e $args_file) {
-			open(FH, "<", $args_file);
-			while(my $line=<FH>)
-			{
-				#$line =~ s/\R//g;
-				chomp $line;
-				next if ($line =~ /^\s*$/); #discard blank lines
-				next if ($line =~ /^\s*#/); #discard comment lines
-				$line =~ s/#.*$//g;
-				$options = $line;
-				last;
-			}
-			close FH;
-			$command .= "$options";
 		} else {
-			$command .= "-D $server ";
 			$command .= "-m record,size,mctx ";
 			$command .= "-T clienttest ";
-			$command .= "-T nosoa " 
-				if (-e "$testdir/$server/named.nosoa");
-			$command .= "-T noaa " 
-				if (-e "$testdir/$server/named.noaa");
-			$command .= "-T noedns " 
-				if (-e "$testdir/$server/named.noedns");
-			$command .= "-T dropedns " 
-				if (-e "$testdir/$server/named.dropedns");
-			$command .= "-T maxudp512 " 
-				if (-e "$testdir/$server/named.maxudp512");
-			$command .= "-T maxudp1460 " 
-				if (-e "$testdir/$server/named.maxudp1460");
-			$command .= "-c named.conf -d 99 -g -U 4";
+			$command .= "-c named.conf -d 99 -g";
 		}
-		$command .= " -T notcp"
-			if (-e "$testdir/$server/named.notcp");
-		if ($restart) {
-			$command .= " >>named.run 2>&1 &";
-		} else {
-			$command .= " >named.run 2>&1 &";
-		}
+		$command .= " >named.run 2>&1 &";
 		$pid_file = "named.pid";
 	} elsif ($server =~ /^lwresd/) {
 		$cleanup_files = "{lwresd.run}";
-		if ($ENV{'USE_VALGRIND'}) {
-			$command = "valgrind -q --gen-suppressions=all --num-callers=48 --fullpath-after= --log-file=lwresd-valgrind-%p.log ";
-			if ($ENV{'USE_VALGRIND'} eq 'helgrind') {
-				$command .= "--tool=helgrind ";
-			} else {
-				$command .= "--tool=memcheck --track-origins=yes --leak-check=full ";
-			}
-			$command .= "$LWRESD -m none -M external ";
-		} else {
-			$command = "$LWRESD ";
-		}
+		$command = "$LWRESD ";
 		if ($options) {
 			$command .= "$options";
 		} else {
 			$command .= "-m record,size,mctx ";
 			$command .= "-T clienttest ";
-			$command .= "-C resolv.conf -d 99 -g -U 4 ";
+			$command .= "-C resolv.conf -d 99 -g ";
 			$command .= "-i lwresd.pid -P 9210 -p 5300";
 		}
-		if ($restart) {
-			$command .= " >>lwresd.run 2>&1 &";
-		} else {
-			$command .= " >lwresd.run 2>&1 &";
-		}
+		$command .= " >lwresd.run 2>&1 &";
 		$pid_file = "lwresd.pid";
 	} elsif ($server =~ /^ans/) {
 		$cleanup_files = "{ans.run}";
-                if (-e "$testdir/$server/ans.py") {
-                        $command = "$PYTHON ans.py 10.53.0.$' 5300";
-                } elsif (-e "$testdir/$server/ans.pl") {
-                        $command = "$PERL ans.pl";
-                } else {
-                        $command = "$PERL $topdir/ans.pl 10.53.0.$'";
-                }
+		$command = "$PERL ./ans.pl ";
 		if ($options) {
 			$command .= "$options";
 		} else {
 			$command .= "";
 		}
-		if ($restart) {
-			$command .= " >>ans.run 2>&1 &";
-		} else {
-			$command .= " >ans.run 2>&1 &";
-		}
+		$command .= " >ans.run 2>&1 &";
 		$pid_file = "ans.pid";
 	} else {
 		print "I:Unknown server type $server\n";
-		print "I:failed\n";
+		print "R:FAIL\n";
 		system "$PERL $topdir/stop.pl $testdir";
 		exit 1;
 	}
 
-	# print "I:starting server %s\n",$server;
+	#               print "I:starting server $server\n";
 
 	chdir "$testdir/$server";
 
@@ -267,61 +173,33 @@ sub start_server {
 		unlink glob $cleanup_files;
 	}
 
-	# get the shell to report the pid of the server ($!)
-	$command .= "echo \$!";
+	system "$command";
 
-	# start the server
-	my $child = `$command`;
-	$child =~ s/\s+$//g;
-
-	# wait up to 14 seconds for the server to start and to write the
-	# pid file otherwise kill this server and any others that have
-	# already been started
 	my $tries = 0;
-	while (!-s $pid_file) {
-		if (++$tries > 140) {
-			print "I:Couldn't start server $server (pid=$child)\n";
-			print "I:failed\n";
-			system "kill -9 $child" if ("$child" ne "");
+	while (!-f $pid_file) {
+		if (++$tries > 14) {
+			print "I:Couldn't start server $server\n";
+			print "R:FAIL\n";
 			system "$PERL $topdir/stop.pl $testdir";
 			exit 1;
 		}
-		# sleep for 0.1 seconds
-		select undef,undef,undef,0.1;
+		sleep 1;
 	}
-
-        # go back to the top level directory
-	chdir $cwd;
 }
 
 sub verify_server {
 	my $server = shift;
 	my $n = $server;
-	my $port = 5300;
-	my $tcp = "+tcp";
-
 	$n =~ s/^ns//;
-
-	if (-e "$testdir/$server/named.port") {
-		open(FH, "<", "$testdir/$server/named.port");
-		while(my $line=<FH>) {
-			chomp $line;
-			$port = $line;
-			last;
-		}
-		close FH;
-	}
-
-	$tcp = "" if (-e "$testdir/$server/named.notcp");
 
 	my $tries = 0;
 	while (1) {
-		my $return = system("$DIG $tcp +noadd +nosea +nostat +noquest +nocomm +nocmd +noedns -p $port version.bind. chaos txt \@10.53.0.$n > dig.out");
+		my $return = system("$DIG +tcp +noadd +nosea +nostat +noquest +nocomm +nocmd -p 5300 version.bind. chaos txt \@10.53.0.$n > dig.out");
 		last if ($return == 0);
+		print `grep ";" dig.out`;
 		if (++$tries >= 30) {
-			print `grep ";" dig.out > /dev/null`;
 			print "I:no response from $server\n";
-			print "I:failed\n";
+			print "R:FAIL\n";
 			system("$PERL $topdir/stop.pl $testdir");
 			exit 1;
 		}

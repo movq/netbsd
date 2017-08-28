@@ -1,7 +1,7 @@
-/*	$NetBSD: config.h,v 1.6 2017/06/15 15:59:37 christos Exp $	*/
+/*	$NetBSD: config.h,v 1.1 2009/03/22 14:56:13 christos Exp $	*/
 
 /*
- * Copyright (C) 2004-2007, 2009, 2013, 2016  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2004-2007  Internet Systems Consortium, Inc. ("ISC")
  * Copyright (C) 2001, 2002  Internet Software Consortium.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -17,7 +17,7 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* Id: config.h,v 1.16 2009/06/11 23:47:55 tbox Exp  */
+/* Id: config.h,v 1.14 2007/06/19 23:46:59 tbox Exp */
 
 #ifndef NAMED_CONFIG_H
 #define NAMED_CONFIG_H 1
@@ -33,11 +33,10 @@ isc_result_t
 ns_config_parsedefaults(cfg_parser_t *parser, cfg_obj_t **conf);
 
 isc_result_t
-ns_config_get(cfg_obj_t const * const *maps, const char *name,
-	      const cfg_obj_t **obj);
+ns_config_get(const cfg_obj_t **maps, const char* name, const cfg_obj_t **obj);
 
 isc_result_t
-ns_checknames_get(const cfg_obj_t **maps, const char *name,
+ns_checknames_get(const cfg_obj_t **maps, const char* name,
 		  const cfg_obj_t **obj);
 
 int
@@ -57,23 +56,20 @@ ns_config_getzonetype(const cfg_obj_t *zonetypeobj);
 isc_result_t
 ns_config_getiplist(const cfg_obj_t *config, const cfg_obj_t *list,
 		    in_port_t defport, isc_mem_t *mctx,
-		    isc_sockaddr_t **addrsp, isc_dscp_t **dscpsp,
-		    isc_uint32_t *countp);
+		    isc_sockaddr_t **addrsp, isc_uint32_t *countp);
 
 void
 ns_config_putiplist(isc_mem_t *mctx, isc_sockaddr_t **addrsp,
-		    isc_dscp_t **dscpsp, isc_uint32_t count);
+		    isc_uint32_t count);
 
 isc_result_t
 ns_config_getipandkeylist(const cfg_obj_t *config, const cfg_obj_t *list,
 			  isc_mem_t *mctx, isc_sockaddr_t **addrsp,
-			  isc_dscp_t **dscpp, dns_name_t ***keys,
-			  isc_uint32_t *countp);
+			  dns_name_t ***keys, isc_uint32_t *countp);
 
 void
 ns_config_putipandkeylist(isc_mem_t *mctx, isc_sockaddr_t **addrsp,
-			  isc_dscp_t **dscpsp, dns_name_t ***keys,
-			  isc_uint32_t count);
+			  dns_name_t ***keys, isc_uint32_t count);
 
 isc_result_t
 ns_config_getport(const cfg_obj_t *config, in_port_t *portp);
@@ -81,11 +77,5 @@ ns_config_getport(const cfg_obj_t *config, in_port_t *portp);
 isc_result_t
 ns_config_getkeyalgorithm(const char *str, dns_name_t **name,
 			  isc_uint16_t *digestbits);
-isc_result_t
-ns_config_getkeyalgorithm2(const char *str, dns_name_t **name,
-			   unsigned int *typep, isc_uint16_t *digestbits);
-
-isc_result_t
-ns_config_getdscp(const cfg_obj_t *config, isc_dscp_t *dscpp);
 
 #endif /* NAMED_CONFIG_H */

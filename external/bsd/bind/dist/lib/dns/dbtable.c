@@ -1,7 +1,7 @@
-/*	$NetBSD: dbtable.c,v 1.6 2017/06/15 15:59:40 christos Exp $	*/
+/*	$NetBSD: dbtable.c,v 1.1 2009/03/22 15:01:00 christos Exp $	*/
 
 /*
- * Copyright (C) 2004, 2005, 2007, 2013, 2016  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2004, 2005, 2007  Internet Systems Consortium, Inc. ("ISC")
  * Copyright (C) 1999-2001  Internet Software Consortium.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -18,7 +18,7 @@
  */
 
 /*
- * Id: dbtable.c,v 1.33 2007/06/19 23:47:16 tbox Exp 
+ * Id: dbtable.c,v 1.33 2007/06/19 23:47:16 tbox Exp
  */
 
 /*! \file
@@ -91,8 +91,7 @@ dns_dbtable_create(isc_mem_t *mctx, dns_rdataclass_t rdclass,
 		goto clean3;
 
 	dbtable->default_db = NULL;
-	dbtable->mctx = NULL;
-	isc_mem_attach(mctx, &dbtable->mctx);
+	dbtable->mctx = mctx;
 	dbtable->rdclass = rdclass;
 	dbtable->magic = DBTABLE_MAGIC;
 	dbtable->references = 1;
@@ -108,7 +107,7 @@ dns_dbtable_create(isc_mem_t *mctx, dns_rdataclass_t rdclass,
 	dns_rbt_destroy(&dbtable->rbt);
 
  clean1:
-	isc_mem_putanddetach(&mctx, dbtable, sizeof(*dbtable));
+	isc_mem_put(mctx, dbtable, sizeof(*dbtable));
 
 	return (result);
 }
@@ -132,7 +131,7 @@ dbtable_free(dns_dbtable_t *dbtable) {
 
 	dbtable->magic = 0;
 
-	isc_mem_putanddetach(&dbtable->mctx, dbtable, sizeof(*dbtable));
+	isc_mem_put(dbtable->mctx, dbtable, sizeof(*dbtable));
 }
 
 void
@@ -178,16 +177,16 @@ dns_dbtable_detach(dns_dbtable_t **dbtablep) {
 isc_result_t
 dns_dbtable_add(dns_dbtable_t *dbtable, dns_db_t *db) {
 	isc_result_t result;
-	dns_db_t *dbclone;
+	dns_db_t *clone;
 
 	REQUIRE(VALID_DBTABLE(dbtable));
 	REQUIRE(dns_db_class(db) == dbtable->rdclass);
 
-	dbclone = NULL;
-	dns_db_attach(db, &dbclone);
+	clone = NULL;
+	dns_db_attach(db, &clone);
 
 	RWLOCK(&dbtable->tree_lock, isc_rwlocktype_write);
-	result = dns_rbt_addname(dbtable->rbt, dns_db_origin(dbclone), dbclone);
+	result = dns_rbt_addname(dbtable->rbt, dns_db_origin(clone), clone);
 	RWUNLOCK(&dbtable->tree_lock, isc_rwlocktype_write);
 
 	return (result);

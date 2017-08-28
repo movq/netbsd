@@ -1,7 +1,7 @@
-/*	$NetBSD: sdb.c,v 1.11 2017/06/15 15:59:40 christos Exp $	*/
+/*	$NetBSD: sdb.c,v 1.1 2009/03/22 15:01:28 christos Exp $	*/
 
 /*
- * Copyright (C) 2004-2016  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2004-2008  Internet Systems Consortium, Inc. ("ISC")
  * Copyright (C) 2000, 2001, 2003  Internet Software Consortium.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -17,7 +17,7 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* Id */
+/* Id: sdb.c,v 1.66 2008/09/24 03:16:58 tbox Exp */
 
 /*! \file */
 
@@ -132,14 +132,14 @@ typedef struct sdb_rdatasetiter {
 		unsigned int flags = sdb->implementation->flags;	\
 		if ((flags & DNS_SDBFLAG_THREADSAFE) == 0)		\
 			LOCK(&sdb->implementation->driverlock);		\
-	} while (/*CONSTCOND*/0)
+	} while (0)
 
 #define MAYBE_UNLOCK(sdb)						\
 	do {								\
 		unsigned int flags = sdb->implementation->flags;	\
 		if ((flags & DNS_SDBFLAG_THREADSAFE) == 0)		\
 			UNLOCK(&sdb->implementation->driverlock);	\
-	} while (/*CONSTCOND*/0)
+	} while (0)
 #endif
 
 static int dummy;
@@ -218,13 +218,12 @@ dns_sdb_register(const char *drivername, const dns_sdbmethods_t *methods,
 
 	REQUIRE(drivername != NULL);
 	REQUIRE(methods != NULL);
-	REQUIRE(methods->lookup != NULL || methods->lookup2 != NULL);
+	REQUIRE(methods->lookup != NULL);
 	REQUIRE(mctx != NULL);
 	REQUIRE(sdbimp != NULL && *sdbimp == NULL);
 	REQUIRE((flags & ~(DNS_SDBFLAG_RELATIVEOWNER |
 			   DNS_SDBFLAG_RELATIVERDATA |
-			   DNS_SDBFLAG_THREADSAFE|
-			   DNS_SDBFLAG_DNS64)) == 0);
+			   DNS_SDBFLAG_THREADSAFE)) == 0);
 
 	imp = isc_mem_get(mctx, sizeof(dns_sdbimplementation_t));
 	if (imp == NULL)
@@ -283,9 +282,8 @@ initial_size(unsigned int len) {
 }
 
 isc_result_t
-dns_sdb_putrdata(dns_sdblookup_t *lookup, dns_rdatatype_t typeval,
-		 dns_ttl_t ttl, const unsigned char *rdatap,
-		 unsigned int rdlen)
+dns_sdb_putrdata(dns_sdblookup_t *lookup, dns_rdatatype_t typeval, dns_ttl_t ttl,
+		 const unsigned char *rdatap, unsigned int rdlen)
 {
 	dns_rdatalist_t *rdatalist;
 	dns_rdata_t *rdata;
@@ -307,10 +305,12 @@ dns_sdb_putrdata(dns_sdblookup_t *lookup, dns_rdatatype_t typeval,
 		rdatalist = isc_mem_get(mctx, sizeof(dns_rdatalist_t));
 		if (rdatalist == NULL)
 			return (ISC_R_NOMEMORY);
-		dns_rdatalist_init(rdatalist);
 		rdatalist->rdclass = lookup->sdb->common.rdclass;
 		rdatalist->type = typeval;
+		rdatalist->covers = 0;
 		rdatalist->ttl = ttl;
+		ISC_LIST_INIT(rdatalist->rdata);
+		ISC_LINK_INIT(rdatalist, link);
 		ISC_LIST_APPEND(lookup->lists, rdatalist, link);
 	} else
 		if (rdatalist->ttl != ttl)
@@ -339,6 +339,7 @@ dns_sdb_putrdata(dns_sdblookup_t *lookup, dns_rdatatype_t typeval,
 		isc_mem_put(mctx, rdata, sizeof(dns_rdata_t));
 	return (result);
 }
+
 
 isc_result_t
 dns_sdb_putrr(dns_sdblookup_t *lookup, const char *type, dns_ttl_t ttl,
@@ -382,7 +383,7 @@ dns_sdb_putrr(dns_sdblookup_t *lookup, const char *type, dns_ttl_t ttl,
 	datalen = strlen(data);
 	size = initial_size(datalen);
 	do {
-		isc_buffer_constinit(&b, data, datalen);
+		isc_buffer_init(&b, data, datalen);
 		isc_buffer_add(&b, datalen);
 		result = isc_lex_openbuffer(lex, &b);
 		if (result != ISC_R_SUCCESS)
@@ -448,10 +449,10 @@ getnode(dns_sdballnodes_t *allnodes, const char *name, dns_sdbnode_t **nodep) {
 		origin = &sdb->common.origin;
 	else
 		origin = dns_rootname;
-	isc_buffer_constinit(&b, name, strlen(name));
+	isc_buffer_init(&b, name, strlen(name));
 	isc_buffer_add(&b, strlen(name));
 
-	result = dns_name_fromtext(newname, &b, origin, 0, NULL);
+	result = dns_name_fromtext(newname, &b, origin, ISC_FALSE, NULL);
 	if (result != ISC_R_SUCCESS)
 		return (result);
 
@@ -596,16 +597,17 @@ detach(dns_db_t **dbp) {
 }
 
 static isc_result_t
-beginload(dns_db_t *db, dns_rdatacallbacks_t *callbacks) {
+beginload(dns_db_t *db, dns_addrdatasetfunc_t *addp, dns_dbload_t **dbloadp) {
 	UNUSED(db);
-	UNUSED(callbacks);
+	UNUSED(addp);
+	UNUSED(dbloadp);
 	return (ISC_R_NOTIMPLEMENTED);
 }
 
 static isc_result_t
-endload(dns_db_t *db, dns_rdatacallbacks_t *callbacks) {
+endload(dns_db_t *db, dns_dbload_t **dbloadp) {
 	UNUSED(db);
-	UNUSED(callbacks);
+	UNUSED(dbloadp);
 	return (ISC_R_NOTIMPLEMENTED);
 }
 
@@ -670,7 +672,7 @@ createnode(dns_sdb_t *sdb, dns_sdbnode_t **nodep) {
 		return (ISC_R_NOMEMORY);
 
 	node->sdb = NULL;
-	attach((dns_db_t *)sdb, (dns_db_t **)(void *)&node->sdb);
+	attach((dns_db_t *)sdb, (dns_db_t **)&node->sdb);
 	ISC_LIST_INIT(node->lists);
 	ISC_LIST_INIT(node->buffers);
 	ISC_LINK_INIT(node, link);
@@ -727,9 +729,8 @@ destroynode(dns_sdbnode_t *node) {
 }
 
 static isc_result_t
-findnodeext(dns_db_t *db, dns_name_t *name, isc_boolean_t create,
-	    dns_clientinfomethods_t *methods, dns_clientinfo_t *clientinfo,
-	    dns_dbnode_t **nodep)
+findnode(dns_db_t *db, dns_name_t *name, isc_boolean_t create,
+	 dns_dbnode_t **nodep)
 {
 	dns_sdb_t *sdb = (dns_sdb_t *)db;
 	dns_sdbnode_t *node = NULL;
@@ -738,8 +739,6 @@ findnodeext(dns_db_t *db, dns_name_t *name, isc_boolean_t create,
 	char namestr[DNS_NAME_MAXTEXT + 1];
 	isc_boolean_t isorigin;
 	dns_sdbimplementation_t *imp;
-	dns_name_t relname;
-	unsigned int labels;
 
 	REQUIRE(VALID_SDB(sdb));
 	REQUIRE(create == ISC_FALSE);
@@ -750,47 +749,33 @@ findnodeext(dns_db_t *db, dns_name_t *name, isc_boolean_t create,
 
 	imp = sdb->implementation;
 
-	isorigin = dns_name_equal(name, &sdb->common.origin);
+	isc_buffer_init(&b, namestr, sizeof(namestr));
+	if ((imp->flags & DNS_SDBFLAG_RELATIVEOWNER) != 0) {
+		dns_name_t relname;
+		unsigned int labels;
 
-	if (imp->methods->lookup2 != NULL) {
-		if ((imp->flags & DNS_SDBFLAG_RELATIVEOWNER) != 0) {
-			labels = dns_name_countlabels(name) -
-				 dns_name_countlabels(&db->origin);
-			dns_name_init(&relname, NULL);
-			dns_name_getlabelsequence(name, 0, labels, &relname);
-			name = &relname;
-		}
+		labels = dns_name_countlabels(name) -
+			 dns_name_countlabels(&db->origin);
+		dns_name_init(&relname, NULL);
+		dns_name_getlabelsequence(name, 0, labels, &relname);
+		result = dns_name_totext(&relname, ISC_TRUE, &b);
+		if (result != ISC_R_SUCCESS)
+			return (result);
 	} else {
-		isc_buffer_init(&b, namestr, sizeof(namestr));
-		if ((imp->flags & DNS_SDBFLAG_RELATIVEOWNER) != 0) {
-
-			labels = dns_name_countlabels(name) -
-				 dns_name_countlabels(&db->origin);
-			dns_name_init(&relname, NULL);
-			dns_name_getlabelsequence(name, 0, labels, &relname);
-			result = dns_name_totext(&relname, ISC_TRUE, &b);
-			if (result != ISC_R_SUCCESS)
-				return (result);
-		} else {
-			result = dns_name_totext(name, ISC_TRUE, &b);
-			if (result != ISC_R_SUCCESS)
-				return (result);
-		}
-		isc_buffer_putuint8(&b, 0);
+		result = dns_name_totext(name, ISC_TRUE, &b);
+		if (result != ISC_R_SUCCESS)
+			return (result);
 	}
+	isc_buffer_putuint8(&b, 0);
 
 	result = createnode(sdb, &node);
 	if (result != ISC_R_SUCCESS)
 		return (result);
 
+	isorigin = dns_name_equal(name, &sdb->common.origin);
+
 	MAYBE_LOCK(sdb);
-	if (imp->methods->lookup2 != NULL)
-		result = imp->methods->lookup2(&sdb->common.origin, name,
-					       sdb->dbdata, node, methods,
-					       clientinfo);
-	else
-		result = imp->methods->lookup(sdb->zone, namestr, sdb->dbdata,
-					      node, methods, clientinfo);
+	result = imp->methods->lookup(sdb->zone, namestr, sdb->dbdata, node);
 	MAYBE_UNLOCK(sdb);
 	if (result != ISC_R_SUCCESS &&
 	    !(result == ISC_R_NOTFOUND &&
@@ -815,11 +800,10 @@ findnodeext(dns_db_t *db, dns_name_t *name, isc_boolean_t create,
 }
 
 static isc_result_t
-findext(dns_db_t *db, dns_name_t *name, dns_dbversion_t *version,
-	dns_rdatatype_t type, unsigned int options, isc_stdtime_t now,
-	dns_dbnode_t **nodep, dns_name_t *foundname,
-	dns_clientinfomethods_t *methods, dns_clientinfo_t *clientinfo,
-	dns_rdataset_t *rdataset, dns_rdataset_t *sigrdataset)
+find(dns_db_t *db, dns_name_t *name, dns_dbversion_t *version,
+     dns_rdatatype_t type, unsigned int options, isc_stdtime_t now,
+     dns_dbnode_t **nodep, dns_name_t *foundname,
+     dns_rdataset_t *rdataset, dns_rdataset_t *sigrdataset)
 {
 	dns_sdb_t *sdb = (dns_sdb_t *)db;
 	dns_dbnode_t *node = NULL;
@@ -829,13 +813,13 @@ findext(dns_db_t *db, dns_name_t *name, dns_dbversion_t *version,
 	unsigned int nlabels, olabels;
 	isc_result_t result;
 	unsigned int i;
-	unsigned int flags;
 
 	REQUIRE(VALID_SDB(sdb));
 	REQUIRE(nodep == NULL || *nodep == NULL);
 	REQUIRE(version == NULL || version == (void *) &dummy);
 
 	UNUSED(options);
+	UNUSED(sdb);
 
 	if (!dns_name_issubdomain(name, &db->origin))
 		return (DNS_R_NXDOMAIN);
@@ -852,38 +836,24 @@ findext(dns_db_t *db, dns_name_t *name, dns_dbversion_t *version,
 	}
 
 	result = DNS_R_NXDOMAIN;
-	flags = sdb->implementation->flags;
-	i = (flags & DNS_SDBFLAG_DNS64) != 0 ? nlabels : olabels;
-	for (; i <= nlabels; i++) {
+
+	for (i = olabels; i <= nlabels; i++) {
+		/*
+		 * Unless this is an explicit lookup at the origin, don't
+		 * look at the origin.
+		 */
+		if (i == olabels && i != nlabels)
+			continue;
+
 		/*
 		 * Look up the next label.
 		 */
 		dns_name_getlabelsequence(name, nlabels - i, i, xname);
-		result = findnodeext(db, xname, ISC_FALSE, methods,
-				     clientinfo, &node);
-		if (result == ISC_R_NOTFOUND) {
-			/*
-			 * No data at zone apex?
-			 */
-			if (i == olabels)
-				return (DNS_R_BADDB);
+		result = findnode(db, xname, ISC_FALSE, &node);
+		if (result != ISC_R_SUCCESS) {
 			result = DNS_R_NXDOMAIN;
 			continue;
 		}
-		if (result != ISC_R_SUCCESS)
-			return (result);
-
-		/*
-		 * DNS64 zone's don't have DNAME or NS records.
-		 */
-		if ((flags & DNS_SDBFLAG_DNS64) != 0)
-			goto skip;
-
-		/*
-		 * DNS64 zone's don't have DNAME or NS records.
-		 */
-		if ((flags & DNS_SDBFLAG_DNS64) != 0)
-			goto skip;
 
 		/*
 		 * Look for a DNAME at the current label, unless this is
@@ -912,12 +882,9 @@ findext(dns_db_t *db, dns_name_t *name, dns_dbversion_t *version,
 				{
 					result = DNS_R_ZONECUT;
 					dns_rdataset_disassociate(rdataset);
-					if (sigrdataset != NULL &&
-					    dns_rdataset_isassociated
-							(sigrdataset)) {
+					if (sigrdataset != NULL)
 						dns_rdataset_disassociate
 								(sigrdataset);
-					}
 				} else
 					result = DNS_R_DELEGATION;
 				break;
@@ -934,7 +901,6 @@ findext(dns_db_t *db, dns_name_t *name, dns_dbversion_t *version,
 			continue;
 		}
 
- skip:
 		/*
 		 * If we're looking for ANY, we're done.
 		 */
@@ -1245,9 +1211,9 @@ ispersistent(dns_db_t *db) {
 }
 
 static void
-overmem(dns_db_t *db, isc_boolean_t over) {
+overmem(dns_db_t *db, isc_boolean_t overmem) {
 	UNUSED(db);
-	UNUSED(over);
+	UNUSED(overmem);
 }
 
 static void
@@ -1262,14 +1228,13 @@ static dns_dbmethods_t sdb_methods = {
 	detach,
 	beginload,
 	endload,
-	NULL,
 	dump,
 	currentversion,
 	newversion,
 	attachversion,
 	closeversion,
-	NULL,
-	NULL,
+	findnode,
+	find,
 	findzonecut,
 	attachnode,
 	detachnode,
@@ -1286,22 +1251,15 @@ static dns_dbmethods_t sdb_methods = {
 	ispersistent,
 	overmem,
 	settask,
-	NULL,			/* getoriginnode */
-	NULL,			/* transfernode */
-	NULL,			/* getnsec3parameters */
-	NULL,			/* findnsec3node */
-	NULL,			/* setsigningtime */
-	NULL,			/* getsigningtime */
-	NULL,			/* resigned */
-	NULL,			/* isdnssec */
-	NULL,			/* getrrsetstats */
-	NULL,			/* rpz_attach */
-	NULL,			/* rpz_ready */
-	findnodeext,
-	findext,
-	NULL,			/* setcachestats */
-	NULL,			/* hashsize */
-	NULL			/* getsize */
+	NULL,
+	NULL,
+	NULL,
+	NULL,
+	NULL,
+	NULL,
+	NULL,
+	NULL,
+	NULL
 };
 
 static isc_result_t
@@ -1380,7 +1338,7 @@ dns_sdb_create(isc_mem_t *mctx, dns_name_t *origin, dns_dbtype_t type,
  cleanup_origin:
 	dns_name_free(&sdb->common.origin, mctx);
  cleanup_lock:
-	(void)isc_mutex_destroy(&sdb->lock);
+	isc_mutex_destroy(&sdb->lock);
  cleanup_mctx:
 	isc_mem_put(mctx, sdb, sizeof(dns_sdb_t));
 	isc_mem_detach(&mctx);
@@ -1424,9 +1382,6 @@ static dns_rdatasetmethods_t methods = {
 	isc__rdatalist_count,
 	isc__rdatalist_addnoqname,
 	isc__rdatalist_getnoqname,
-	NULL,
-	NULL,
-	NULL,
 	NULL,
 	NULL,
 	NULL,
@@ -1502,11 +1457,9 @@ dbiterator_seek(dns_dbiterator_t *iterator, dns_name_t *name) {
 	sdb_dbiterator_t *sdbiter = (sdb_dbiterator_t *)iterator;
 
 	sdbiter->current = ISC_LIST_HEAD(sdbiter->nodelist);
-	while (sdbiter->current != NULL) {
+	while (sdbiter->current != NULL)
 		if (dns_name_equal(sdbiter->current->name, name))
 			return (ISC_R_SUCCESS);
-		sdbiter->current = ISC_LIST_NEXT(sdbiter->current, link);
-	}
 	return (ISC_R_NOTFOUND);
 }
 

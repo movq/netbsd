@@ -1,4 +1,5 @@
-/*	$NetBSD: result.c,v 1.1.1.3 2014/07/12 11:58:00 spz Exp $	*/
+/*	$NetBSD: result.c,v 1.1 2013/03/24 15:45:57 christos Exp $	*/
+
 /* result.c
  */
 
@@ -25,9 +26,6 @@
  *   https://www.isc.org/
  *
  */
-
-#include <sys/cdefs.h>
-__RCSID("$NetBSD: result.c,v 1.1.1.3 2014/07/12 11:58:00 spz Exp $");
 
 #include "dhcpd.h"
 

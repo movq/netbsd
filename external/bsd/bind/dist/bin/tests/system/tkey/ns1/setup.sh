@@ -1,6 +1,6 @@
 #!/bin/sh
 #
-# Copyright (C) 2004, 2007, 2009, 2012, 2014  Internet Systems Consortium, Inc. ("ISC")
+# Copyright (C) 2004, 2007  Internet Systems Consortium, Inc. ("ISC")
 # Copyright (C) 2001  Internet Software Consortium.
 #
 # Permission to use, copy, modify, and/or distribute this software for any
@@ -15,10 +15,11 @@
 # OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR
 # PERFORMANCE OF THIS SOFTWARE.
 
-SYSTEMTESTTOP=../..
-. $SYSTEMTESTTOP/conf.sh
+# Id: setup.sh,v 1.8 2007/06/19 23:47:06 tbox Exp
 
-keyname=`$KEYGEN -T KEY -a DH -b 768 -n host -r $RANDFILE server`
+RANDFILE=../random.data
+
+keyname=`$KEYGEN -k -a DH -b 768 -n host -r $RANDFILE server`
 keyid=`echo $keyname | $PERL -p -e 's/^.*\+0*//;'`
 rm -f named.conf
-sed -e "s;KEYID;$keyid;" -e "s;RANDFILE;$RANDFILE;" < named.conf.in > named.conf
+perl -p -e "s/KEYID/$keyid/;" < named.conf.in > named.conf

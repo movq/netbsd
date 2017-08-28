@@ -1,4 +1,4 @@
-/*	$NetBSD: leaseq_unittest.c,v 1.1.1.1 2016/01/10 19:44:48 christos Exp $	*/
+/*	$NetBSD: leaseq_unittest.c,v 1.1 2016/01/10 19:44:48 christos Exp $	*/
 /*
  * Copyright (C) 2015 Internet Systems Consortium, Inc. ("ISC")
  *

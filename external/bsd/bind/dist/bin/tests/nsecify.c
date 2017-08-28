@@ -1,7 +1,7 @@
-/*	$NetBSD: nsecify.c,v 1.7 2016/05/26 16:49:57 christos Exp $	*/
+/*	$NetBSD: nsecify.c,v 1.1 2009/03/22 14:56:24 christos Exp $	*/
 
 /*
- * Copyright (C) 2004, 2007-2009, 2011, 2015  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2004, 2007, 2008  Internet Systems Consortium, Inc. ("ISC")
  * Copyright (C) 1999-2001, 2003  Internet Software Consortium.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -17,7 +17,7 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* Id: nsecify.c,v 1.12 2011/08/29 23:46:44 tbox Exp  */
+/* Id: nsecify.c,v 1.8 2008/09/25 04:02:38 tbox Exp */
 
 #include <config.h>
 
@@ -120,7 +120,7 @@ nsecify(char *filename) {
 	dns_db_t *db;
 	dns_dbversion_t *wversion;
 	dns_dbnode_t *node, *nextnode;
-	const char *origintext;
+	char *origintext;
 	dns_fixedname_t fname, fnextname;
 	dns_name_t *name, *nextname, *target;
 	isc_buffer_t b;
@@ -139,9 +139,9 @@ nsecify(char *filename) {
 	else
 		origintext++;	/* Skip '/'. */
 	len = strlen(origintext);
-	isc_buffer_constinit(&b, origintext, len);
+	isc_buffer_init(&b, origintext, len);
 	isc_buffer_add(&b, len);
-	result = dns_name_fromtext(name, &b, dns_rootname, 0, NULL);
+	result = dns_name_fromtext(name, &b, dns_rootname, ISC_FALSE, NULL);
 	check_result(result, "dns_name_fromtext()");
 
 	db = NULL;
@@ -159,7 +159,6 @@ nsecify(char *filename) {
 	result = dns_db_createiterator(db, 0, &dbiter);
 	check_result(result, "dns_db_createiterator()");
 	result = dns_dbiterator_first(dbiter);
-	check_result(result, "dns_dbiterator_first()");
 	node = NULL;
 	result = next_active(db, wversion, dbiter, name, &node);
 	while (result == ISC_R_SUCCESS) {

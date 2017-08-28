@@ -1,6 +1,6 @@
 #!/bin/sh
 #
-# Copyright (C) 2004, 2007, 2012, 2016  Internet Systems Consortium, Inc. ("ISC")
+# Copyright (C) 2004, 2007  Internet Systems Consortium, Inc. ("ISC")
 # Copyright (C) 2000, 2001  Internet Software Consortium.
 #
 # Permission to use, copy, modify, and/or distribute this software for any
@@ -15,7 +15,7 @@
 # OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR
 # PERFORMANCE OF THIS SOFTWARE.
 
-# Id: tests.sh,v 1.25 2007/06/19 23:47:07 tbox Exp 
+# Id: tests.sh,v 1.25 2007/06/19 23:47:07 tbox Exp
 
 SYSTEMTESTTOP=..
 . $SYSTEMTESTTOP/conf.sh
@@ -30,12 +30,7 @@ while [ $count != 300 ]; do
         if [ $ticks = 1 ]; then
 	        echo "I:Changing test zone..."
 		cp -f ns1/changing2.db ns1/changing.db
-		if [ ! "$CYGWIN" ]; then
-			$KILL -HUP `cat ns1/named.pid`
-		else
-			$RDNC -c ../common/rndc.conf -s 10.53.0.1 \
-			    -p 9953 reloade > /dev/null 2>&1
-		fi
+		kill -HUP `cat ns1/named.pid`
 	fi
 	sleep 1
 	ticks=`expr $ticks + 1`
@@ -73,4 +68,4 @@ grep ";" dig.out.ns2
 $PERL ../digcomp.pl dig.out.ns1 dig.out.ns2 || status=1
 
 echo "I:exit status: $status"
-[ $status -eq 0 ] || exit 1
+exit $status

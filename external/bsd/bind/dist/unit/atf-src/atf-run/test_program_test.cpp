@@ -98,11 +98,11 @@ print_indented(const std::string& str)
 // at the moment will be bogus if there are some.
 static
 void
-check_match(const atf::tests::tc& tc, const std::string& str,
+check_equal(const atf::tests::tc& tc, const std::string& str,
             const std::string& exp)
 {
-    if (!atf::text::match(str, exp)) {
-        std::cout << "String match check failed.\n"
+    if (str != exp) {
+        std::cout << "String equality check failed.\n"
                   << "Adding >> and << to delimit the string boundaries "
                      "below.\n";
         std::cout << "GOT:\n";
@@ -190,7 +190,7 @@ ATF_TEST_CASE_BODY(tp_2)
         "\n"
         "ident: test_case_1\n"
         "descr: This is the description\n"
-        "timeout: 300\n"
+        "timeout: 30\n"
         "\n"
         "ident: test_case_2\n"
         "\n"
@@ -201,7 +201,7 @@ ATF_TEST_CASE_BODY(tp_2)
 
     // NO_CHECK_STYLE_BEGIN
     const char* exp_calls[] = {
-        "got_tc(test_case_1, {descr=This is the description, ident=test_case_1, timeout=300})",
+        "got_tc(test_case_1, {descr=This is the description, ident=test_case_1, timeout=30})",
         "got_tc(test_case_2, {ident=test_case_2})",
         "got_tc(test_case_3, {X-prop1=A custom property, descr=Third test case, ident=test_case_3})",
         "got_eof()",
@@ -224,10 +224,9 @@ ATF_TEST_CASE_BODY(tp_3)
         "\n"
         "ident: single_test\n"
         "descr: Some description\n"
-        "timeout: 300\n"
+        "timeout: 30\n"
         "require.arch: thearch\n"
         "require.config: foo-bar\n"
-        "require.files: /a/1 /b/2\n"
         "require.machine: themachine\n"
         "require.progs: /bin/cp mv\n"
         "require.user: root\n"
@@ -235,7 +234,7 @@ ATF_TEST_CASE_BODY(tp_3)
 
     // NO_CHECK_STYLE_BEGIN
     const char* exp_calls[] = {
-        "got_tc(single_test, {descr=Some description, ident=single_test, require.arch=thearch, require.config=foo-bar, require.files=/a/1 /b/2, require.machine=themachine, require.progs=/bin/cp mv, require.user=root, timeout=300})",
+        "got_tc(single_test, {descr=Some description, ident=single_test, require.arch=thearch, require.config=foo-bar, require.machine=themachine, require.progs=/bin/cp mv, require.user=root, timeout=30})",
         "got_eof()",
         NULL
     };
@@ -475,7 +474,7 @@ ATF_TEST_CASE_BODY(tp_59)
         "\n"
         "\n"
         "ident: test\n"
-        "timeout: 300\n"
+        "timeout: 30\n"
     ;
 
     const char* exp_calls[] = {
@@ -484,29 +483,6 @@ ATF_TEST_CASE_BODY(tp_59)
 
     const char* exp_errors[] = {
         "3: Unexpected token `<<NEWLINE>>'; expected property name",
-        NULL
-    };
-
-    do_parser_test< tp_reader >(input, exp_calls, exp_errors);
-}
-
-ATF_TEST_CASE_WITHOUT_HEAD(tp_60);
-ATF_TEST_CASE_BODY(tp_60)
-{
-    const char* input =
-        "Content-Type: application/X-atf-tp; version=\"1\"\n"
-        "\n"
-        "ident: test\n"
-        "require.memory: 12345D\n"
-    ;
-
-    const char* exp_calls[] = {
-        NULL
-    };
-
-    const char* exp_errors[] = {
-        "4: The require.memory property requires an integer value representing"
-        " an amount of bytes",
         NULL
     };
 
@@ -526,20 +502,19 @@ ATF_TEST_CASE_BODY(atf_tps_writer)
 {
     std::ostringstream expss;
     std::ostringstream ss;
-    const char *ts_regex = "[0-9]+\\.[0-9]{1,6}, ";
 
 #define RESET \
     expss.str(""); \
     ss.str("")
 
 #define CHECK \
-    check_match(*this, ss.str(), expss.str())
+    check_equal(*this, ss.str(), expss.str())
 
     {
         RESET;
 
         impl::atf_tps_writer w(ss);
-        expss << "Content-Type: application/X-atf-tps; version=\"3\"\n\n";
+        expss << "Content-Type: application/X-atf-tps; version=\"2\"\n\n";
         CHECK;
     }
 
@@ -547,7 +522,7 @@ ATF_TEST_CASE_BODY(atf_tps_writer)
         RESET;
 
         impl::atf_tps_writer w(ss);
-        expss << "Content-Type: application/X-atf-tps; version=\"3\"\n\n";
+        expss << "Content-Type: application/X-atf-tps; version=\"2\"\n\n";
         CHECK;
 
         w.info("foo", "bar");
@@ -563,7 +538,7 @@ ATF_TEST_CASE_BODY(atf_tps_writer)
         RESET;
 
         impl::atf_tps_writer w(ss);
-        expss << "Content-Type: application/X-atf-tps; version=\"3\"\n\n";
+        expss << "Content-Type: application/X-atf-tps; version=\"2\"\n\n";
         CHECK;
 
         w.ntps(0);
@@ -575,7 +550,7 @@ ATF_TEST_CASE_BODY(atf_tps_writer)
         RESET;
 
         impl::atf_tps_writer w(ss);
-        expss << "Content-Type: application/X-atf-tps; version=\"3\"\n\n";
+        expss << "Content-Type: application/X-atf-tps; version=\"2\"\n\n";
         CHECK;
 
         w.ntps(123);
@@ -587,7 +562,7 @@ ATF_TEST_CASE_BODY(atf_tps_writer)
         RESET;
 
         impl::atf_tps_writer w(ss);
-        expss << "Content-Type: application/X-atf-tps; version=\"3\"\n\n";
+        expss << "Content-Type: application/X-atf-tps; version=\"2\"\n\n";
         CHECK;
 
         w.ntps(2);
@@ -595,19 +570,19 @@ ATF_TEST_CASE_BODY(atf_tps_writer)
         CHECK;
 
         w.start_tp("foo", 0);
-        expss << "tp-start: " << ts_regex << "foo, 0\n";
+        expss << "tp-start: foo, 0\n";
         CHECK;
 
         w.end_tp("");
-        expss << "tp-end: " << ts_regex << "foo\n";
+        expss << "tp-end: foo\n";
         CHECK;
 
         w.start_tp("bar", 0);
-        expss << "tp-start: " << ts_regex << "bar, 0\n";
+        expss << "tp-start: bar, 0\n";
         CHECK;
 
         w.end_tp("failed program");
-        expss << "tp-end: " << ts_regex << "bar, failed program\n";
+        expss << "tp-end: bar, failed program\n";
         CHECK;
     }
 
@@ -615,7 +590,7 @@ ATF_TEST_CASE_BODY(atf_tps_writer)
         RESET;
 
         impl::atf_tps_writer w(ss);
-        expss << "Content-Type: application/X-atf-tps; version=\"3\"\n\n";
+        expss << "Content-Type: application/X-atf-tps; version=\"2\"\n\n";
         CHECK;
 
         w.ntps(1);
@@ -623,15 +598,15 @@ ATF_TEST_CASE_BODY(atf_tps_writer)
         CHECK;
 
         w.start_tp("foo", 1);
-        expss << "tp-start: " << ts_regex << "foo, 1\n";
+        expss << "tp-start: foo, 1\n";
         CHECK;
 
         w.start_tc("brokentc");
-        expss << "tc-start: " << ts_regex << "brokentc\n";
+        expss << "tc-start: brokentc\n";
         CHECK;
 
         w.end_tp("aborted");
-        expss << "tp-end: " << ts_regex << "foo, aborted\n";
+        expss << "tp-end: foo, aborted\n";
         CHECK;
     }
 
@@ -639,7 +614,7 @@ ATF_TEST_CASE_BODY(atf_tps_writer)
         RESET;
 
         impl::atf_tps_writer w(ss);
-        expss << "Content-Type: application/X-atf-tps; version=\"3\"\n\n";
+        expss << "Content-Type: application/X-atf-tps; version=\"2\"\n\n";
         CHECK;
 
         w.ntps(1);
@@ -647,35 +622,35 @@ ATF_TEST_CASE_BODY(atf_tps_writer)
         CHECK;
 
         w.start_tp("thetp", 3);
-        expss << "tp-start: " << ts_regex << "thetp, 3\n";
+        expss << "tp-start: thetp, 3\n";
         CHECK;
 
         w.start_tc("passtc");
-        expss << "tc-start: " << ts_regex << "passtc\n";
+        expss << "tc-start: passtc\n";
         CHECK;
 
         w.end_tc("passed", "");
-        expss << "tc-end: " << ts_regex << "passtc, passed\n";
+        expss << "tc-end: passtc, passed\n";
         CHECK;
 
         w.start_tc("failtc");
-        expss << "tc-start: " << ts_regex << "failtc\n";
+        expss << "tc-start: failtc\n";
         CHECK;
 
         w.end_tc("failed", "The reason");
-        expss << "tc-end: " << ts_regex << "failtc, failed, The reason\n";
+        expss << "tc-end: failtc, failed, The reason\n";
         CHECK;
 
         w.start_tc("skiptc");
-        expss << "tc-start: " << ts_regex << "skiptc\n";
+        expss << "tc-start: skiptc\n";
         CHECK;
 
         w.end_tc("skipped", "The reason");
-        expss << "tc-end: " << ts_regex << "skiptc, skipped, The reason\n";
+        expss << "tc-end: skiptc, skipped, The reason\n";
         CHECK;
 
         w.end_tp("");
-        expss << "tp-end: " << ts_regex << "thetp\n";
+        expss << "tp-end: thetp\n";
         CHECK;
     }
 
@@ -683,7 +658,7 @@ ATF_TEST_CASE_BODY(atf_tps_writer)
         RESET;
 
         impl::atf_tps_writer w(ss);
-        expss << "Content-Type: application/X-atf-tps; version=\"3\"\n\n";
+        expss << "Content-Type: application/X-atf-tps; version=\"2\"\n\n";
         CHECK;
 
         w.ntps(1);
@@ -691,11 +666,11 @@ ATF_TEST_CASE_BODY(atf_tps_writer)
         CHECK;
 
         w.start_tp("thetp", 1);
-        expss << "tp-start: " << ts_regex << "thetp, 1\n";
+        expss << "tp-start: thetp, 1\n";
         CHECK;
 
         w.start_tc("thetc");
-        expss << "tc-start: " << ts_regex << "thetc\n";
+        expss << "tc-start: thetc\n";
         CHECK;
 
         w.stdout_tc("a line");
@@ -711,11 +686,11 @@ ATF_TEST_CASE_BODY(atf_tps_writer)
         CHECK;
 
         w.end_tc("passed", "");
-        expss << "tc-end: " << ts_regex << "thetc, passed\n";
+        expss << "tc-end: thetc, passed\n";
         CHECK;
 
         w.end_tp("");
-        expss << "tp-end: " << ts_regex << "thetp\n";
+        expss << "tp-end: thetp\n";
         CHECK;
     }
 
@@ -723,7 +698,7 @@ ATF_TEST_CASE_BODY(atf_tps_writer)
         RESET;
 
         impl::atf_tps_writer w(ss);
-        expss << "Content-Type: application/X-atf-tps; version=\"3\"\n\n";
+        expss << "Content-Type: application/X-atf-tps; version=\"2\"\n\n";
         CHECK;
 
         w.ntps(1);
@@ -731,11 +706,11 @@ ATF_TEST_CASE_BODY(atf_tps_writer)
         CHECK;
 
         w.start_tp("thetp", 0);
-        expss << "tp-start: " << ts_regex << "thetp, 0\n";
+        expss << "tp-start: thetp, 0\n";
         CHECK;
 
         w.end_tp("");
-        expss << "tp-end: " << ts_regex << "thetp\n";
+        expss << "tp-end: thetp\n";
         CHECK;
 
         w.info("foo", "bar");
@@ -787,7 +762,7 @@ ATF_TEST_CASE_BODY(get_metadata_several_tcs) {
         check_property((*iter).second, "descr", "Description 1");
         check_property((*iter).second, "has.cleanup", "false");
         check_property((*iter).second, "ident", "first");
-        check_property((*iter).second, "timeout", "300");
+        check_property((*iter).second, "timeout", "30");
     }
 
     {
@@ -811,7 +786,7 @@ ATF_TEST_CASE_BODY(get_metadata_several_tcs) {
         ATF_REQUIRE_EQ(3, (*iter).second.size());
         check_property((*iter).second, "has.cleanup", "false");
         check_property((*iter).second, "ident", "third");
-        check_property((*iter).second, "timeout", "300");
+        check_property((*iter).second, "timeout", "30");
     }
 }
 
@@ -990,7 +965,6 @@ ATF_INIT_TEST_CASES(tcs)
     ATF_ADD_TEST_CASE(tcs, tp_57);
     ATF_ADD_TEST_CASE(tcs, tp_58);
     ATF_ADD_TEST_CASE(tcs, tp_59);
-    ATF_ADD_TEST_CASE(tcs, tp_60);
 
     ATF_ADD_TEST_CASE(tcs, atf_tps_writer);
 
@@ -1008,8 +982,6 @@ ATF_INIT_TEST_CASES(tcs)
     ATF_ADD_TEST_CASE(tcs, parse_test_case_result_skipped);
     ATF_ADD_TEST_CASE(tcs, parse_test_case_result_unknown);
 
-    ATF_ADD_TEST_CASE(tcs, read_test_case_result_failed);
-    ATF_ADD_TEST_CASE(tcs, read_test_case_result_skipped);
     ATF_ADD_TEST_CASE(tcs, read_test_case_result_no_file);
     ATF_ADD_TEST_CASE(tcs, read_test_case_result_empty_file);
     ATF_ADD_TEST_CASE(tcs, read_test_case_result_multiline);

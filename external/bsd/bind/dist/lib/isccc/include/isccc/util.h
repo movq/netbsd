@@ -1,7 +1,7 @@
-/*	$NetBSD: util.h,v 1.6 2014/12/10 04:38:01 christos Exp $	*/
+/*	$NetBSD: util.h,v 1.1 2009/03/22 15:02:31 christos Exp $	*/
 
 /*
- * Portions Copyright (C) 2004-2007, 2014  Internet Systems Consortium, Inc. ("ISC")
+ * Portions Copyright (C) 2004-2007  Internet Systems Consortium, Inc. ("ISC")
  * Portions Copyright (C) 2001  Internet Software Consortium.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -31,7 +31,7 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* Id: util.h,v 1.11 2007/08/28 07:20:43 tbox Exp  */
+/* Id: util.h,v 1.11 2007/08/28 07:20:43 tbox Exp */
 
 #ifndef ISCCC_UTIL_H
 #define ISCCC_UTIL_H 1
@@ -49,71 +49,71 @@
 	do { \
 		v = *w; \
 		w++; \
-	} while (/*CONSTCOND*/0)
+	} while (0)
 
 #define GET16(v, w) \
 	do { \
 		v = (unsigned int)w[0] << 8; \
-		v |= (unsigned int)w[1]; \
+ 		v |= (unsigned int)w[1]; \
 		w += 2; \
-	} while (/*CONSTCOND*/0)
+	} while (0)
 
 #define GET24(v, w) \
 	do { \
-		v = (unsigned int)w[0] << 16; \
-		v |= (unsigned int)w[1] << 8; \
-		v |= (unsigned int)w[2]; \
+ 		v = (unsigned int)w[0] << 16; \
+ 		v |= (unsigned int)w[1] << 8; \
+ 		v |= (unsigned int)w[2]; \
 		w += 3; \
-	} while (/*CONSTCOND*/0)
+	} while (0)
 
 #define GET32(v, w) \
 	do { \
 		v = (unsigned int)w[0] << 24; \
-		v |= (unsigned int)w[1] << 16; \
-		v |= (unsigned int)w[2] << 8; \
-		v |= (unsigned int)w[3]; \
+ 		v |= (unsigned int)w[1] << 16; \
+ 		v |= (unsigned int)w[2] << 8; \
+ 		v |= (unsigned int)w[3]; \
 		w += 4; \
-	} while (/*CONSTCOND*/0)
+	} while (0)
 
 #define GET64(v, w) \
 	do { \
 		v = (isc_uint64_t)w[0] << 56; \
-		v |= (isc_uint64_t)w[1] << 48; \
-		v |= (isc_uint64_t)w[2] << 40; \
-		v |= (isc_uint64_t)w[3] << 32; \
-		v |= (isc_uint64_t)w[4] << 24; \
-		v |= (isc_uint64_t)w[5] << 16; \
-		v |= (isc_uint64_t)w[6] << 8; \
-		v |= (isc_uint64_t)w[7]; \
+ 		v |= (isc_uint64_t)w[1] << 48; \
+ 		v |= (isc_uint64_t)w[2] << 40; \
+ 		v |= (isc_uint64_t)w[3] << 32; \
+ 		v |= (isc_uint64_t)w[4] << 24; \
+ 		v |= (isc_uint64_t)w[5] << 16; \
+ 		v |= (isc_uint64_t)w[6] << 8; \
+ 		v |= (isc_uint64_t)w[7]; \
 		w += 8; \
-	} while (/*CONSTCOND*/0)
+	} while (0)
 
 #define GETC16(v, w, d) \
 	do { \
 		GET8(v, w); \
 		if (v == 0) \
 			d = ISCCC_TRUE; \
-		else { \
+ 		else { \
 			d = ISCCC_FALSE; \
 			if (v == 255) \
 				GET16(v, w); \
 		} \
-	} while (/*CONSTCOND*/0)
+	} while (0)
 
 #define GETC32(v, w) \
 	do { \
 		GET24(v, w); \
-		if (v == 0xffffffu) \
+ 		if (v == 0xffffffu) \
 			GET32(v, w); \
-	} while (/*CONSTCOND*/0)
+	} while (0)
 
 #define GET_OFFSET(v, w)		GET32(v, w)
 
 #define GET_MEM(v, c, w) \
 	do { \
-		memmove(v, w, c); \
+		memcpy(v, w, c); \
 		w += c; \
-	} while (/*CONSTCOND*/0)
+	} while (0)
 
 #define GET_TYPE(v, w) \
 	do { \
@@ -124,20 +124,20 @@
 			else \
 				GET32(v, w); \
 		} \
-	} while (/*CONSTCOND*/0)
+	} while (0)
 
 #define PUT8(v, w) \
 	do { \
 		*w = (v & 0x000000ffU); \
 		w++; \
-	} while (/*CONSTCOND*/0)
+	} while (0)
 
 #define PUT16(v, w) \
 	do { \
 		w[0] = (v & 0x0000ff00U) >> 8; \
 		w[1] = (v & 0x000000ffU); \
 		w += 2; \
-	} while (/*CONSTCOND*/0)
+	} while (0)
 
 #define PUT24(v, w) \
 	do { \
@@ -145,7 +145,7 @@
 		w[1] = (v & 0x0000ff00U) >> 8; \
 		w[2] = (v & 0x000000ffU); \
 		w += 3; \
-	} while (/*CONSTCOND*/0)
+	} while (0)
 
 #define PUT32(v, w) \
 	do { \
@@ -154,7 +154,7 @@
 		w[2] = (v & 0x0000ff00U) >> 8; \
 		w[3] = (v & 0x000000ffU); \
 		w += 4; \
-	} while (/*CONSTCOND*/0)
+	} while (0)
 
 #define PUT64(v, w) \
 	do { \
@@ -167,7 +167,7 @@
 		w[6] = (v & 0x000000000000ff00ULL) >> 8; \
 		w[7] = (v & 0x00000000000000ffULL); \
 		w += 8; \
-	} while (/*CONSTCOND*/0)
+	} while (0)
 
 #define PUTC16(v, w) \
 	do { \
@@ -177,7 +177,7 @@
 			PUT8(255, w); \
 			PUT16(v, w); \
 		} \
-	} while (/*CONSTCOND*/0)
+	} while (0)
 
 #define PUTC32(v, w) \
 	do { \
@@ -187,7 +187,7 @@
 			PUT24(0xffffffU, w); \
 			PUT32(v, w); \
 		} \
-	} while (/*CONSTCOND*/0)
+	} while (0)
 
 #define PUT_OFFSET(v, w)		PUT32(v, w)
 
@@ -195,9 +195,9 @@
 
 #define PUT_MEM(s, c, w) \
 	do { \
-		memmove(w, s, c); \
+		memcpy(w, s, c); \
 		w += c; \
-	} while (/*CONSTCOND*/0)
+	} while (0)
 
 /*
  * Regions.
@@ -207,7 +207,7 @@
 #define REGION_FROMSTRING(r, s) do { \
 	(r).rstart = (unsigned char *)s; \
 	(r).rend = (r).rstart + strlen(s); \
-} while (/*CONSTCOND*/0)
+} while (0)
 
 /*%
  * Use this to remove the const qualifier of a variable to assign it to
@@ -222,6 +222,6 @@
 		union { const void *k; void *v; } _u; \
 		_u.k = konst; \
 		var = _u.v; \
-	} while (/*CONSTCOND*/0)
+	} while (0)
 
 #endif /* ISCCC_UTIL_H */

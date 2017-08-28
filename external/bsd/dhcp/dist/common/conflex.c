@@ -1,10 +1,11 @@
-/*	$NetBSD: conflex.c,v 1.5 2016/01/10 20:10:44 christos Exp $	*/
+/*	$NetBSD: conflex.c,v 1.1 2013/03/24 15:45:52 christos Exp $	*/
+
 /* conflex.c
 
    Lexical scanner for dhcpd config file... */
 
 /*
- * Copyright (c) 2004-2015 by Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (c) 2004-2011 by Internet Systems Consortium, Inc. ("ISC")
  * Copyright (c) 1995-2003 by Internet Software Consortium
  *
  * Permission to use, copy, modify, and distribute this software for any
@@ -25,10 +26,16 @@
  *   <info@isc.org>
  *   https://www.isc.org/
  *
+ * This software has been written for Internet Systems Consortium
+ * by Ted Lemon in cooperation with Vixie Enterprises and Nominum, Inc.
+ * To learn more about Internet Systems Consortium, see
+ * ``https://www.isc.org/''.  To learn more about Vixie Enterprises,
+ * see ``http://www.vix.com''.   To learn more about Nominum, Inc., see
+ * ``http://www.nominum.com''.
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: conflex.c,v 1.5 2016/01/10 20:10:44 christos Exp $");
+__RCSID("$NetBSD: conflex.c,v 1.1 2013/03/24 15:45:52 christos Exp $");
 
 #include "dhcpd.h"
 #include <ctype.h>
@@ -151,21 +158,13 @@ save_parse_state(struct parse *cfile) {
 /*
  * Return the parser to the previous saved state.
  *
- * You must call save_parse_state() every time before calling
- * restore_parse_state().
- *
- * Note: When the read function callback is in use in ldap mode,
- * a call to get_char() may reallocate the buffer and will append
- * config data to the buffer until a state restore.
- * Do not restore to the (freed) pointer and size, but use new one.
+ * You must call save_parse_state() before calling 
+ * restore_parse_state(), but you can call restore_parse_state() any
+ * number of times after that.
  */
 isc_result_t
 restore_parse_state(struct parse *cfile) {
 	struct parse *saved_state;
-#if defined(LDAP_CONFIGURATION)
-	char *inbuf = cfile->inbuf;
-	size_t size = cfile->bufsiz;
-#endif
 
 	if (cfile->saved_state == NULL) {
 		return DHCP_R_NOTYET;
@@ -173,13 +172,7 @@ restore_parse_state(struct parse *cfile) {
 
 	saved_state = cfile->saved_state;
 	memcpy(cfile, saved_state, sizeof(*cfile));
-	dfree(saved_state, MDL);
-	cfile->saved_state = NULL;
-
-#if defined(LDAP_CONFIGURATION)
-	cfile->inbuf = inbuf;
-	cfile->bufsiz = size;
-#endif
+	cfile->saved_state = saved_state;
 	return ISC_R_SUCCESS;
 }
 
@@ -395,7 +388,7 @@ next_raw_token(const char **rval, unsigned *rlen, struct parse *cfile) {
  * warning in the GENERAL NOTES ABOUT TOKENS above though.)
  */
 
-static enum dhcp_token
+enum dhcp_token
 do_peek_token(const char **rval, unsigned int *rlen,
 	      struct parse *cfile, isc_boolean_t raw) {
 	int x;
@@ -482,20 +475,8 @@ read_whitespace(int c, struct parse *cfile) {
 	 */
 	ofs = 0;
 	do {
-		if (ofs >= (sizeof(cfile->tokbuf) - 1)) {
-			/*
-			 * As the file includes a huge amount of whitespace,
-			 * it's probably broken.
-			 * Print out a warning and bail out.
-			 */
-			parse_warn(cfile,
-				   "whitespace too long, buffer overflow.");
-			log_fatal("Exiting");
-		}
 		cfile->tokbuf[ofs++] = c;
 		c = get_char(cfile);
-		if (c == EOF)
-			return END_OF_FILE;
 	} while (!((c == '\n') && cfile->eol_token) && 
 		 isascii(c) && isspace(c));
 
@@ -558,6 +539,7 @@ static enum dhcp_token read_string (cfile)
 				goto again;
 			      default:
 				cfile -> tokbuf [i] = c;
+				bs = 0;
 				break;
 			}
 			bs = 0;
@@ -900,6 +882,10 @@ intern(char *atom, enum dhcp_token dfv) {
 	      case 'd':
 		if (!strcasecmp(atom + 1, "b-time-format"))
 			return DB_TIME_FORMAT;
+		if (!strcasecmp (atom + 1, "ns-update"))
+			return DNS_UPDATE;
+		if (!strcasecmp (atom + 1, "ns-delete"))
+			return DNS_DELETE;
 		if (!strcasecmp (atom + 1, "omain"))
 			return DOMAIN;
 		if (!strncasecmp (atom + 1, "omain-", 6)) {
@@ -908,9 +894,6 @@ intern(char *atom, enum dhcp_token dfv) {
 			if (!strcasecmp(atom + 7, "list"))
 				return DOMAIN_LIST;
 		}
-		if (!strcasecmp (atom + 1, "o-forward-updates"))
-			return DO_FORWARD_UPDATE;
-		/* do-forward-update is included for historical reasons */
 		if (!strcasecmp (atom + 1, "o-forward-update"))
 			return DO_FORWARD_UPDATE;
 		if (!strcasecmp (atom + 1, "ebug"))
@@ -1065,8 +1048,6 @@ intern(char *atom, enum dhcp_token dfv) {
 			return INCLUDE;
 		if (!strcasecmp (atom + 1, "nteger"))
 			return INTEGER;
-		if (!strcasecmp (atom  + 1, "nfiniband"))
-			return TOKEN_INFINIBAND;
 		if (!strcasecmp (atom + 1, "nfinite"))
 			return INFINITE;
 		if (!strcasecmp (atom + 1, "nfo"))
@@ -1077,8 +1058,8 @@ intern(char *atom, enum dhcp_token dfv) {
 			return IP6_ADDRESS;
 		if (!strcasecmp (atom + 1, "nitial-interval"))
 			return INITIAL_INTERVAL;
-		if (!strcasecmp (atom + 1, "nitial-delay"))
-			return INITIAL_DELAY;
+                if (!strcasecmp (atom + 1, "nitial-delay"))
+                        return INITIAL_DELAY;
 		if (!strcasecmp (atom + 1, "nterface"))
 			return INTERFACE;
 		if (!strcasecmp (atom + 1, "dentifier"))
@@ -1196,6 +1177,8 @@ intern(char *atom, enum dhcp_token dfv) {
 			return TOKEN_NOT;
 		if (!strcasecmp (atom + 1, "o"))
 			return TOKEN_NO;
+		if (!strcasecmp (atom + 1, "s-update"))
+			return NS_UPDATE;
 		if (!strcasecmp (atom + 1, "oerror"))
 			return NS_NOERROR;
 		if (!strcasecmp (atom + 1, "otauth"))
@@ -1234,8 +1217,6 @@ intern(char *atom, enum dhcp_token dfv) {
 			return OWNER;
 		break;
 	      case 'p':
-		if (!strcasecmp (atom + 1, "arse-vendor-option"))
-			return PARSE_VENDOR_OPT;
 		if (!strcasecmp (atom + 1, "repend"))
 			return PREPEND;
 		if (!strcasecmp(atom + 1, "referred-life"))
@@ -1244,8 +1225,6 @@ intern(char *atom, enum dhcp_token dfv) {
 			return PACKET;
 		if (!strcasecmp (atom + 1, "ool"))
 			return POOL;
-		if (!strcasecmp (atom + 1, "ool6"))
-			return POOL6;
 		if (!strcasecmp (atom + 1, "refix6"))
 			return PREFIX6;
 		if (!strcasecmp (atom + 1, "seudo"))
@@ -1516,14 +1495,12 @@ intern(char *atom, enum dhcp_token dfv) {
 		}
 		if (!strcasecmp (atom + 1, "nauthenticated"))
 			return UNAUTHENTICATED;
+		if (!strcasecmp (atom + 1, "pdated-dns-rr"))
+			return UPDATED_DNS_RR;
 		if (!strcasecmp (atom + 1, "pdate"))
 			return UPDATE;
 		break;
 	      case 'v':
-		if (!strcasecmp (atom + 1, "6relay"))
-			return V6RELAY;
-		if (!strcasecmp (atom + 1, "6relopt"))
-			return V6RELOPT;
 		if (!strcasecmp (atom + 1, "endor-class"))
 			return VENDOR_CLASS;
 		if (!strcasecmp (atom + 1, "endor"))

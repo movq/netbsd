@@ -5,7 +5,7 @@
 # this means this Makefile is not portable, so the testsuite
 # skips this test on platforms where it doesn't build
 
-CFLAGS=-Wall -fPIC -g
+CFLAGS=-fPIC -g
 
 all: dlz_example.so
 

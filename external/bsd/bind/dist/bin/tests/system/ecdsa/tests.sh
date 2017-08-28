@@ -1,6 +1,6 @@
 #!/bin/sh
 #
-# Copyright (C) 2012, 2013, 2015, 2016  Internet Systems Consortium, Inc. ("ISC")
+# Copyright (C) 2012  Internet Systems Consortium, Inc. ("ISC")
 #
 # Permission to use, copy, modify, and/or distribute this software for any
 # purpose with or without fee is hereby granted, provided that the above
@@ -24,11 +24,11 @@ n=0
 
 rm -f dig.out.*
 
-DIGOPTS="+tcp +noau +noadd +nosea +nostat +nocmd +dnssec -p 5300"
+DIGOPTS="+tcp +noadd +nosea +nostat +nocmd +dnssec -p 5300"
 
 # Check the example. domain
 
-echo "I:checking that positive validation works ($n)"
+echo "I:checking that positive validation works works ($n)"
 ret=0
 $DIG $DIGOPTS . @10.53.0.1 soa > dig.out.ns1.test$n || ret=1
 $DIG $DIGOPTS . @10.53.0.2 soa > dig.out.ns2.test$n || ret=1
@@ -39,4 +39,4 @@ if [ $ret != 0 ]; then echo "I:failed"; fi
 status=`expr $status + $ret`
 
 echo "I:exit status: $status"
-[ $status -eq 0 ] || exit 1
+exit $status

@@ -1,7 +1,7 @@
-/*	$NetBSD: sample-request.c,v 1.1.1.7 2017/06/15 15:22:51 christos Exp $	*/
+/*	$NetBSD: sample-request.c,v 1.1 2014/02/28 17:40:16 christos Exp $	*/
 
 /*
- * Copyright (C) 2009, 2012-2016  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2009, 2012-2014  Internet Systems Consortium, Inc. ("ISC")
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -20,7 +20,6 @@
 
 #include <config.h>
 
-#ifndef WIN32
 #include <sys/types.h>
 #include <sys/socket.h>
 
@@ -28,20 +27,16 @@
 
 #include <arpa/inet.h>
 
-#include <netdb.h>
 #include <unistd.h>
-#endif
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <netdb.h>
 
 #include <isc/base64.h>
 #include <isc/buffer.h>
-#include <isc/commandline.h>
 #include <isc/lib.h>
 #include <isc/mem.h>
-#include <isc/print.h>
 #include <isc/sockaddr.h>
 #include <isc/util.h>
 
@@ -82,7 +77,7 @@ make_querymessage(dns_message_t *message, const char *namestr,
 	dns_rdataset_t *qrdataset = NULL;
 	isc_result_t result;
 	isc_buffer_t b;
-	unsigned int namelen;
+	size_t namelen;
 
 	REQUIRE(message != NULL);
 	REQUIRE(namestr != NULL);
@@ -113,6 +108,7 @@ make_querymessage(dns_message_t *message, const char *namestr,
 
 	dns_name_init(qname, NULL);
 	dns_name_clone(qname0, qname);
+	dns_rdataset_init(qrdataset);
 	dns_rdataset_makequestion(qrdataset, message->rdclass, rdtype);
 	ISC_LIST_APPEND(qname->list, qrdataset, link);
 	dns_message_addname(message, qname, DNS_SECTION_QUESTION);
@@ -149,7 +145,7 @@ print_section(dns_message_t *message, int section, isc_buffer_t *buf) {
 
 int
 main(int argc, char *argv[]) {
-	int ch, i, gaierror;
+	int ch, i, gai_error;
 	struct addrinfo hints, *res;
 	isc_textregion_t tr;
 	dns_client_t *client = NULL;
@@ -159,16 +155,15 @@ main(int argc, char *argv[]) {
 	dns_rdatatype_t type = dns_rdatatype_a;
 	isc_buffer_t *outputbuf;
 
-	while ((ch = isc_commandline_parse(argc, argv, "t:")) != -1) {
+	while ((ch = getopt(argc, argv, "t:")) != -1) {
 		switch (ch) {
 		case 't':
-			tr.base = isc_commandline_argument;
-			tr.length = strlen(isc_commandline_argument);
+			tr.base = optarg;
+			tr.length = strlen(optarg);
 			result = dns_rdatatype_fromtext(&type, &tr);
 			if (result != ISC_R_SUCCESS) {
 				fprintf(stderr,
-					"invalid RRtype: %s\n",
-					isc_commandline_argument);
+					"invalid RRtype: %s\n", optarg);
 				exit(1);
 			}
 			break;
@@ -177,8 +172,8 @@ main(int argc, char *argv[]) {
 		}
 	}
 
-	argc -= isc_commandline_index;
-	argv += isc_commandline_index;
+	argc -= optind;
+	argv += optind;
 	if (argc < 2)
 		usage();
 
@@ -220,19 +215,17 @@ main(int argc, char *argv[]) {
 	hints.ai_family = AF_UNSPEC;
 	hints.ai_socktype = SOCK_DGRAM;
 	hints.ai_protocol = IPPROTO_UDP;
-#ifdef AI_NUMERICHOST
 	hints.ai_flags = AI_NUMERICHOST;
-#endif
-	gaierror = getaddrinfo(argv[0], "53", &hints, &res);
-	if (gaierror != 0) {
+	gai_error = getaddrinfo(argv[0], "53", &hints, &res);
+	if (gai_error != 0) {
 		fprintf(stderr, "getaddrinfo failed: %s\n",
-			gai_strerror(gaierror));
+			gai_strerror(gai_error));
 		exit(1);
 	}
 	INSIST(res->ai_addrlen <= sizeof(sa.type));
 	memmove(&sa.type, res->ai_addr, res->ai_addrlen);
 	freeaddrinfo(res);
-	sa.length = (unsigned int)res->ai_addrlen;
+	sa.length = res->ai_addrlen;
 	ISC_LINK_INIT(&sa, link);
 
 	/* Construct qname */

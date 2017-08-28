@@ -1,6 +1,6 @@
 #!/bin/sh -e
 #
-# Copyright (C) 2012, 2014, 2016  Internet Systems Consortium, Inc. ("ISC")
+# Copyright (C) 2012, 2014  Internet Systems Consortium, Inc. ("ISC")
 #
 # Permission to use, copy, modify, and/or distribute this software for any
 # purpose with or without fee is hereby granted, provided that the above
@@ -14,6 +14,8 @@
 # OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR
 # PERFORMANCE OF THIS SOFTWARE.
 
+# Id
+
 SYSTEMTESTTOP=../..
 . $SYSTEMTESTTOP/conf.sh
 
@@ -21,10 +23,10 @@ zone=.
 infile=root.db.in
 zonefile=root.db
 
-(cd ../ns2 && $SHELL sign.sh)
+(cd ../ns2 && sh sign.sh)
 
-cp ../ns2/dsset-good$TP .
-cp ../ns2/dsset-bad$TP .
+cp ../ns2/dsset-good. .
+cp ../ns2/dsset-bad. .
 
 key1=`$KEYGEN -q -r $RANDFILE -a RSASHA1 -b 1024 -n zone $zone`
 key2=`$KEYGEN -q -r $RANDFILE -a RSASHA1 -b 2048 -n zone -f KSK $zone`

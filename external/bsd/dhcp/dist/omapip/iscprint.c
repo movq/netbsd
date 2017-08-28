@@ -1,4 +1,5 @@
-/*	$NetBSD: iscprint.c,v 1.1.1.4 2014/07/12 11:57:59 spz Exp $	*/
+/*	$NetBSD: iscprint.c,v 1.1 2013/03/24 15:45:57 christos Exp $	*/
+
 /*
  * Copyright (C) 2004  Internet Systems Consortium, Inc. ("ISC")
  * Copyright (C) 1999-2001, 2003  Internet Software Consortium.
@@ -16,10 +17,7 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-#include <sys/cdefs.h>
-__RCSID("$NetBSD: iscprint.c,v 1.1.1.4 2014/07/12 11:57:59 spz Exp $");
-
-/* Id: iscprint.c,v 1.2 2005/03/17 20:30:41 dhankins Exp  */
+/* Id: iscprint.c,v 1.2 2005-03-17 20:30:41 dhankins Exp  */
 
 #include "dhcpd.h"
 
@@ -27,7 +25,7 @@ __RCSID("$NetBSD: iscprint.c,v 1.1.1.4 2014/07/12 11:57:59 spz Exp $");
 
 #ifndef LINT
 static char copyright[] =
-"Id: iscprint.c,v 1.2 2005/03/17 20:30:41 dhankins Exp  Copyright (c) 2004 Internet Systems Consortium, Inc.  All rights reserved.";
+"Id: iscprint.c,v 1.2 2005-03-17 20:30:41 dhankins Exp  Copyright (c) 2004 Internet Systems Consortium, Inc.  All rights reserved.";
 #endif
 
 #define INSIST(cond)	REQUIRE(cond)

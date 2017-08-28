@@ -1,7 +1,7 @@
-/*	$NetBSD: rdataset.h,v 1.9 2015/07/08 17:28:59 christos Exp $	*/
+/*	$NetBSD: rdataset.h,v 1.1 2009/03/22 15:01:46 christos Exp $	*/
 
 /*
- * Copyright (C) 2004-2012, 2014  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2004-2009  Internet Systems Consortium, Inc. ("ISC")
  * Copyright (C) 1999-2003  Internet Software Consortium.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -17,7 +17,7 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* Id: rdataset.h,v 1.72 2011/06/08 22:13:51 each Exp  */
+/* Id: rdataset.h,v 1.65.50.2 2009/01/18 23:47:41 tbox Exp */
 
 #ifndef DNS_RDATASET_H
 #define DNS_RDATASET_H 1
@@ -58,7 +58,6 @@
 #include <isc/stdtime.h>
 
 #include <dns/types.h>
-#include <dns/rdatastruct.h>
 
 ISC_LANG_BEGINDECLS
 
@@ -113,10 +112,6 @@ typedef struct dns_rdatasetmethods {
 						 dns_rdataset_t *rdataset,
 						 dns_rdatasetadditional_t type,
 						 dns_rdatatype_t qtype);
-	void			(*settrust)(dns_rdataset_t *rdataset,
-					    dns_trust_t trust);
-	void			(*expire)(dns_rdataset_t *rdataset);
-	void			(*clearprefetch)(dns_rdataset_t *rdataset);
 } dns_rdatasetmethods_t;
 
 #define DNS_RDATASET_MAGIC	       ISC_MAGIC('D','N','S','R')
@@ -202,14 +197,11 @@ struct dns_rdataset {
 #define DNS_RDATASETATTR_NXDOMAIN	0x00002000
 #define DNS_RDATASETATTR_NOQNAME	0x00004000
 #define DNS_RDATASETATTR_CHECKNAMES	0x00008000	/*%< Used by resolver. */
-#define DNS_RDATASETATTR_REQUIRED	0x00010000
-#define DNS_RDATASETATTR_REQUIREDGLUE	DNS_RDATASETATTR_REQUIRED
+#define DNS_RDATASETATTR_REQUIREDGLUE	0x00010000
 #define DNS_RDATASETATTR_LOADORDER	0x00020000
 #define DNS_RDATASETATTR_RESIGN		0x00040000
 #define DNS_RDATASETATTR_CLOSEST	0x00080000
 #define DNS_RDATASETATTR_OPTOUT		0x00100000	/*%< OPTOUT proof */
-#define DNS_RDATASETATTR_NEGATIVE	0x00200000
-#define DNS_RDATASETATTR_PREFETCH	0x00400000
 
 /*%
  * _OMITDNSSEC:
@@ -642,55 +634,6 @@ dns_rdataset_putadditional(dns_acache_t *acache,
  * \li	#ISC_R_FAILURE	- additional information caching is not supported.
  * \li	#ISC_R_NOTFOUND	- the corresponding DB node has not cached additional
  *			  information for 'rdataset.'
- */
-
-void
-dns_rdataset_settrust(dns_rdataset_t *rdataset, dns_trust_t trust);
-/*%<
- * Set the trust of the 'rdataset' to trust in any in the backing database.
- * The local trust level of 'rdataset' is also set.
- */
-
-void
-dns_rdataset_expire(dns_rdataset_t *rdataset);
-/*%<
- * Mark the rdataset to be expired in the backing database.
- */
-
-void
-dns_rdataset_clearprefetch(dns_rdataset_t *rdataset);
-/*%<
- * Clear the PREFETCH attribute for the given rdataset in the
- * underlying database.
- *
- * In the cache database, this signals that the rdataset is not
- * eligible to be prefetched when the TTL is close to expiring.
- * It has no function in other databases.
- */
-
-void
-dns_rdataset_trimttl(dns_rdataset_t *rdataset, dns_rdataset_t *sigrdataset,
-		     dns_rdata_rrsig_t *rrsig, isc_stdtime_t now,
-		     isc_boolean_t acceptexpired);
-/*%<
- * Trim the ttl of 'rdataset' and 'sigrdataset' so that they will expire
- * at or before 'rrsig->expiretime'.  If 'acceptexpired' is true and the
- * signature has expired or will expire in the next 120 seconds, limit
- * the ttl to be no more than 120 seconds.
- *
- * The ttl is further limited by the original ttl as stored in 'rrsig'
- * and the original ttl values of 'rdataset' and 'sigrdataset'.
- *
- * Requires:
- * \li	'rdataset' is a valid rdataset.
- * \li	'sigrdataset' is a valid rdataset.
- * \li	'rrsig' is non NULL.
- */
-
-const char *
-dns_trust_totext(dns_trust_t trust);
-/*%<
- * Display trust in textual form.
  */
 
 ISC_LANG_ENDDECLS

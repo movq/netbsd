@@ -1,4 +1,5 @@
-/*	$NetBSD: raw.c,v 1.2 2017/06/28 02:46:30 manu Exp $	*/
+/*	$NetBSD: raw.c,v 1.1 2013/03/24 15:45:54 christos Exp $	*/
+
 /* raw.c
 
    BSD raw socket interface code... */
@@ -17,7 +18,7 @@
    Sigh. */
 
 /*
- * Copyright (c) 2004,2007,2009,2014 by Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (c) 2004,2007,2009 by Internet Systems Consortium, Inc. ("ISC")
  * Copyright (c) 1995-2003 by Internet Software Consortium
  *
  * Permission to use, copy, modify, and distribute this software for any
@@ -38,10 +39,16 @@
  *   <info@isc.org>
  *   https://www.isc.org/
  *
+ * This software has been written for Internet Systems Consortium
+ * by Ted Lemon in cooperation with Vixie Enterprises and Nominum, Inc.
+ * To learn more about Internet Systems Consortium, see
+ * ``https://www.isc.org/''.  To learn more about Vixie Enterprises,
+ * see ``http://www.vix.com''.   To learn more about Nominum, Inc., see
+ * ``http://www.nominum.com''.
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: raw.c,v 1.2 2017/06/28 02:46:30 manu Exp $");
+__RCSID("$NetBSD: raw.c,v 1.1 2013/03/24 15:45:54 christos Exp $");
 
 #include "dhcpd.h"
 
@@ -59,15 +66,14 @@ void if_register_send (info)
 
 	/* Set up the address we're going to connect to. */
 	name.sin_family = AF_INET;
-	name.sin_port = *libdhcp_callbacks.local_port;
+	name.sin_port = local_port;
 	name.sin_addr.s_addr = htonl (INADDR_BROADCAST);
 	memset (name.sin_zero, 0, sizeof (name.sin_zero));
 
 	/* List addresses on which we're listening. */
         if (!quiet_interface_discovery)
 		log_info ("Sending on %s, port %d",
-		      piaddr (info -> address),
-		      htons (*libdhcp_callbacks.local_port));
+		      piaddr (info -> address), htons (local_port));
 	if ((sock = socket (AF_INET, SOCK_RAW, IPPROTO_RAW)) < 0)
 		log_fatal ("Can't create dhcp socket: %m");
 

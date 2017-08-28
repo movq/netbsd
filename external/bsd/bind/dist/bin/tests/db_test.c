@@ -1,7 +1,7 @@
-/*	$NetBSD: db_test.c,v 1.9 2016/05/26 16:49:57 christos Exp $	*/
+/*	$NetBSD: db_test.c,v 1.1 2009/03/22 14:56:22 christos Exp $	*/
 
 /*
- * Copyright (C) 2004, 2005, 2007-2009, 2011-2013, 2015  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2004, 2005, 2007, 2008  Internet Systems Consortium, Inc. ("ISC")
  * Copyright (C) 1999-2001  Internet Software Consortium.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -17,7 +17,7 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* Id: db_test.c,v 1.70 2011/08/29 23:46:44 tbox Exp  */
+/* Id: db_test.c,v 1.66 2008/09/25 04:02:38 tbox Exp */
 
 /*! \file
  * \author
@@ -31,7 +31,6 @@
 #include <isc/commandline.h>
 #include <isc/log.h>
 #include <isc/mem.h>
-#include <isc/print.h>
 #include <isc/time.h>
 #include <isc/string.h>
 #include <isc/util.h>
@@ -73,10 +72,14 @@ static isc_boolean_t		ascending = ISC_TRUE;
 
 static void
 print_result(const char *message, isc_result_t result) {
+	size_t len;
 
-	if (message == NULL)
+	if (message == NULL) {
+		len = 0;
 		message = "";
-	printf("%s%sresult %08x: %s\n", message, (*message == '\0') ? "" : " ",
+	}
+	len = strlen(message);
+	printf("%s%sresult %08x: %s\n", message, (len == 0U) ? "" : " ",
 	       result, isc_result_totext(result));
 }
 
@@ -133,7 +136,8 @@ select_db(char *origintext) {
 	isc_buffer_add(&source, len);
 	dns_fixedname_init(&forigin);
 	origin = dns_fixedname_name(&forigin);
-	result = dns_name_fromtext(origin, &source, dns_rootname, 0, NULL);
+	result = dns_name_fromtext(origin, &source, dns_rootname, ISC_FALSE,
+				   NULL);
 	if (result != ISC_R_SUCCESS) {
 		print_result("bad name", result);
 		return (NULL);
@@ -186,7 +190,8 @@ list(dbinfo *dbi, char *seektext) {
 				result = dns_name_fromtext(seekname, &source,
 							   dns_db_origin(
 								 dbi->db),
-							   0, NULL);
+							   ISC_FALSE,
+							   NULL);
 				if (result == ISC_R_SUCCESS)
 					result = dns_dbiterator_seek(
 							     dbi->dbiterator,
@@ -264,15 +269,14 @@ load(const char *filename, const char *origintext, isc_boolean_t cache) {
 	ISC_LINK_INIT(dbi, link);
 
 	len = strlen(origintext);
-	isc_buffer_constinit(&source, origintext, len);
+	isc_buffer_init(&source, origintext, len);
 	isc_buffer_add(&source, len);
 	dns_fixedname_init(&forigin);
 	origin = dns_fixedname_name(&forigin);
-	result = dns_name_fromtext(origin, &source, dns_rootname, 0, NULL);
-	if (result != ISC_R_SUCCESS) {
-		isc_mem_put(mctx, dbi, sizeof(*dbi));
+	result = dns_name_fromtext(origin, &source, dns_rootname, ISC_FALSE,
+				   NULL);
+	if (result != ISC_R_SUCCESS)
 		return (result);
-	}
 
 	result = dns_db_create(mctx, dbtype, origin,
 			       cache ? dns_dbtype_cache : dns_dbtype_zone,
@@ -297,8 +301,7 @@ load(const char *filename, const char *origintext, isc_boolean_t cache) {
 		dns_dbtable_adddefault(dbtable, dbi->db);
 		cache_dbi = dbi;
 	} else {
-		result = dns_dbtable_add(dbtable, dbi->db);
-		if (result != ISC_R_SUCCESS) {
+		if (dns_dbtable_add(dbtable, dbi->db) != ISC_R_SUCCESS) {
 			dns_db_detach(&dbi->db);
 			isc_mem_put(mctx, dbi, sizeof(*dbi));
 			return (result);
@@ -369,7 +372,7 @@ main(int argc, char *argv[]) {
 	dns_name_t *fname;
 	unsigned int options = 0, zcoptions;
 	isc_time_t start, finish;
-	const char *origintext;
+	char *origintext;
 	dbinfo *dbi;
 	dns_dbversion_t *version;
 	dns_name_t *origin;
@@ -377,7 +380,6 @@ main(int argc, char *argv[]) {
 	dns_trust_t trust = 0;
 	unsigned int addopts;
 	isc_log_t *lctx = NULL;
-	size_t n;
 
 	dns_result_register();
 
@@ -399,13 +401,7 @@ main(int argc, char *argv[]) {
 				       isc_result_totext(result));
 			break;
 		case 'd':
-			n = strlcpy(dbtype, isc_commandline_argument,
-				    sizeof(dbtype));
-			if (n >= sizeof(dbtype)) {
-				fprintf(stderr, "bad db type '%s'\n",
-					isc_commandline_argument);
-				exit(1);
-			}
+			strcpy(dbtype, isc_commandline_argument);
 			break;
 		case 'g':
 			options |= (DNS_DBFIND_GLUEOK|DNS_DBFIND_VALIDATEGLUE);
@@ -458,7 +454,6 @@ main(int argc, char *argv[]) {
 
 	argc -= isc_commandline_index;
 	argv += isc_commandline_index;
-	POST(argv);
 
 	if (argc != 0)
 		printf("ignoring trailing arguments\n");
@@ -616,11 +611,10 @@ main(int argc, char *argv[]) {
 		} else if (strstr(s, "!V") == s) {
 			DBI_CHECK(dbi);
 			v = atoi(&s[2]);
-			if (v >= dbi->rcount || v < 0) {
+			if (v >= dbi->rcount) {
 				printf("unknown open version %d\n", v);
 				continue;
-			}
-			if (dbi->rversions[v] == NULL) {
+			} else if (dbi->rversions[v] == NULL) {
 				printf("version %d is not open\n", v);
 				continue;
 			}
@@ -744,7 +738,8 @@ main(int argc, char *argv[]) {
 		isc_buffer_init(&source, s, len);
 		isc_buffer_add(&source, len);
 		isc_buffer_init(&target, b, sizeof(b));
-		result = dns_name_fromtext(&name, &source, origin, 0, &target);
+		result = dns_name_fromtext(&name, &source, origin,
+					   ISC_FALSE, &target);
 		if (result != ISC_R_SUCCESS) {
 			print_result("bad name: ", result);
 			continue;

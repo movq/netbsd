@@ -1,7 +1,7 @@
-/*	$NetBSD: time.c,v 1.9 2015/07/08 17:29:00 christos Exp $	*/
+/*	$NetBSD: time.c,v 1.1 2009/03/22 15:02:23 christos Exp $	*/
 
 /*
- * Copyright (C) 2004-2008, 2011, 2012, 2014, 2015  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2004-2008  Internet Systems Consortium, Inc. ("ISC")
  * Copyright (C) 1998-2001, 2003  Internet Software Consortium.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -17,7 +17,7 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* Id */
+/* Id: time.c,v 1.56 2008/02/15 23:46:51 tbox Exp */
 
 /*! \file */
 
@@ -25,7 +25,6 @@
 
 #include <errno.h>
 #include <limits.h>
-#include <stdlib.h>
 #include <syslog.h>
 #include <time.h>
 
@@ -36,7 +35,6 @@
 #include <isc/strerror.h>
 #include <isc/string.h>
 #include <isc/time.h>
-#include <isc/tm.h>
 #include <isc/util.h>
 
 #define NS_PER_S	1000000000	/*%< Nanoseconds per second. */
@@ -58,8 +56,8 @@
  *** Intervals
  ***/
 
-static const isc_interval_t zero_interval = { 0, 0 };
-const isc_interval_t * const isc_interval_zero = &zero_interval;
+static isc_interval_t zero_interval = { 0, 0 };
+isc_interval_t *isc_interval_zero = &zero_interval;
 
 #if ISC_FIX_TV_USEC
 static inline void
@@ -114,8 +112,8 @@ isc_interval_iszero(const isc_interval_t *i) {
  *** Absolute Times
  ***/
 
-static const isc_time_t epoch = { 0, 0 };
-const isc_time_t * const isc_time_epoch = &epoch;
+static isc_time_t epoch = { 0, 0 };
+isc_time_t *isc_time_epoch = &epoch;
 
 void
 isc_time_set(isc_time_t *t, unsigned int seconds, unsigned int nanoseconds) {
@@ -323,7 +321,7 @@ isc_time_microdiff(const isc_time_t *t1, const isc_time_t *t2) {
 	/*
 	 * Convert to microseconds.
 	 */
-	i3 /= NS_PER_US;
+	i3 = (i1 - i2) / NS_PER_US;
 
 	return (i3);
 }
@@ -338,7 +336,8 @@ isc_time_seconds(const isc_time_t *t) {
 
 isc_result_t
 isc_time_secondsastimet(const isc_time_t *t, time_t *secondsp) {
-	time_t seconds, i;
+	isc_uint64_t i;
+	time_t seconds;
 
 	REQUIRE(t != NULL);
 	INSIST(t->nanoseconds < NS_PER_S);
@@ -357,8 +356,13 @@ isc_time_secondsastimet(const isc_time_t *t, time_t *secondsp) {
 	 * pretty much only true if time_t is a signed integer of the same
 	 * size as the return value of isc_time_seconds.
 	 *
-	 * If the paradox in the if clause below is true, t->seconds is out
-	 * of range for time_t.
+	 * The use of the 64 bit integer ``i'' takes advantage of C's
+	 * conversion rules to either zero fill or sign extend the widened
+	 * type.
+	 *
+	 * Solaris 5.6 gives this warning about the left shift:
+	 *	warning: integer overflow detected: op "<<"
+	 * if the U(nsigned) qualifier is not on the 1.
 	 */
 	seconds = (time_t)t->seconds;
 
@@ -369,7 +373,7 @@ isc_time_secondsastimet(const isc_time_t *t, time_t *secondsp) {
 	    (time_t)0.5 != 0.5 &&	       /* Not a floating point type. */
 	    (i = (time_t)-1) != 4294967295u &&		       /* Is signed. */
 	    (seconds &
-	     (1ULL << (sizeof(time_t) * CHAR_BIT - 1))) != 0ULL) {   /* Negative. */
+	     (1U << (sizeof(time_t) * CHAR_BIT - 1))) != 0U) {   /* Negative. */
 		/*
 		 * This UNUSED() is here to shut up the IRIX compiler:
 		 *	variable "i" was set but never used
@@ -418,30 +422,9 @@ isc_time_formathttptimestamp(const isc_time_t *t, char *buf, unsigned int len) {
 
 	REQUIRE(len > 0);
 
-	/*
-	 * 5 spaces, 1 comma, 3 GMT, 2 %d, 4 %Y, 8 %H:%M:%S, 3+ %a, 3+ %b (29+)
-	 */
 	now = (time_t)t->seconds;
 	flen = strftime(buf, len, "%a, %d %b %Y %H:%M:%S GMT", gmtime(&now));
 	INSIST(flen < len);
-}
-
-isc_result_t
-isc_time_parsehttptimestamp(char *buf, isc_time_t *t) {
-	struct tm t_tm;
-	time_t when;
-	char *p;
-
-	REQUIRE(buf != NULL);
-	REQUIRE(t != NULL);
-	p = isc_tm_strptime(buf, "%a, %d %b %Y %H:%M:%S", &t_tm);
-	if (p == NULL)
-		return (ISC_R_UNEXPECTED);
-	when = isc_tm_timegm(&t_tm);
-	if (when == -1)
-		return (ISC_R_UNEXPECTED);
-	isc_time_set(t, when, 0);
-	return (ISC_R_SUCCESS);
 }
 
 void

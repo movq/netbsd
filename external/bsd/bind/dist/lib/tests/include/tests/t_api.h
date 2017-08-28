@@ -1,7 +1,7 @@
-/*	$NetBSD: t_api.h,v 1.6 2014/12/10 04:38:02 christos Exp $	*/
+/*	$NetBSD: t_api.h,v 1.1 2009/03/22 15:02:49 christos Exp $	*/
 
 /*
- * Copyright (C) 2004-2007, 2010, 2013, 2014  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2004-2007  Internet Systems Consortium, Inc. ("ISC")
  * Copyright (C) 1999-2001  Internet Software Consortium.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -17,7 +17,7 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* Id: t_api.h,v 1.24 2010/06/08 23:50:24 tbox Exp  */
+/* Id: t_api.h,v 1.22 2007/06/19 23:47:24 tbox Exp */
 
 #ifndef TESTS_T_API_H
 #define TESTS_T_API_H 1
@@ -27,7 +27,6 @@
 #include <stdio.h>
 
 #include <isc/lang.h>
-#include <isc/platform.h>
 #include <isc/result.h>
 #include <isc/formatcheck.h>
 
@@ -40,10 +39,9 @@
 #define	T_PASS		0x1
 #define	T_FAIL		0x2
 #define	T_UNRESOLVED	0x3
-#define	T_SKIPPED	0x4
+#define	T_UNSUPPORTED	0x4
 #define	T_UNTESTED	0x5
 #define	T_THREADONLY	0x6
-#define	T_PKCS11ONLY	0x7
 
 /*
  *
@@ -68,20 +66,10 @@ typedef struct {
 	const char	*func_name;
 } testspec_t;
 
-LIBTESTS_EXTERNAL_DATA extern	int	T_debug;
-#ifndef WIN32
+extern	int	T_debug;
 extern	testspec_t T_testlist[];
-#endif
 
 ISC_LANG_BEGINDECLS
-
-#ifdef WIN32
-void
-t_settests(const testspec_t list[]);
-
-int
-t_main(int argc, char **argv);
-#endif
 
 void
 t_assert(const char *component, int anum, int class, const char *what, ...)

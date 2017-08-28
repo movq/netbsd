@@ -1,7 +1,7 @@
-/*	$NetBSD: lwdclient.c,v 1.5 2015/12/17 04:00:41 christos Exp $	*/
+/*	$NetBSD: lwdclient.c,v 1.1 2009/03/22 14:56:00 christos Exp $	*/
 
 /*
- * Copyright (C) 2004, 2005, 2007, 2015  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2004, 2005, 2007  Internet Systems Consortium, Inc. ("ISC")
  * Copyright (C) 2000, 2001  Internet Software Consortium.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -17,7 +17,7 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* Id: lwdclient.c,v 1.22 2007/06/18 23:47:18 tbox Exp  */
+/* Id: lwdclient.c,v 1.22 2007/06/18 23:47:18 tbox Exp */
 
 /*! \file */
 
@@ -61,15 +61,11 @@ ns_lwdclientmgr_create(ns_lwreslistener_t *listener, unsigned int nclients,
 	ns_lwdclientmgr_t *cm;
 	ns_lwdclient_t *client;
 	unsigned int i;
-	isc_result_t result;
+	isc_result_t result = ISC_R_FAILURE;
 
 	cm = isc_mem_get(lwresd->mctx, sizeof(ns_lwdclientmgr_t));
 	if (cm == NULL)
 		return (ISC_R_NOMEMORY);
-
-	result = isc_mutex_init(&cm->lock);
-	if (result != ISC_R_SUCCESS)
-		goto freecm;
 
 	cm->listener = NULL;
 	ns_lwreslistener_attach(listener, &cm->listener);
@@ -84,10 +80,10 @@ ns_lwdclientmgr_create(ns_lwreslistener_t *listener, unsigned int nclients,
 	ISC_LIST_INIT(cm->idle);
 	ISC_LIST_INIT(cm->running);
 
-	result = lwres_context_create(&cm->lwctx, cm->mctx,
-				      ns__lwresd_memalloc, ns__lwresd_memfree,
-				      LWRES_CONTEXT_SERVERMODE);
-	 if (result != ISC_R_SUCCESS)
+	if (lwres_context_create(&cm->lwctx, cm->mctx,
+				 ns__lwresd_memalloc, ns__lwresd_memfree,
+				 LWRES_CONTEXT_SERVERMODE)
+	    != ISC_R_SUCCESS)
 		goto errout;
 
 	for (i = 0; i < nclients; i++) {
@@ -102,10 +98,8 @@ ns_lwdclientmgr_create(ns_lwreslistener_t *listener, unsigned int nclients,
 	/*
 	 * If we could create no clients, clean up and return.
 	 */
-	if (ISC_LIST_EMPTY(cm->idle)) {
-		result = ISC_R_NOMEMORY;
+	if (ISC_LIST_EMPTY(cm->idle))
 		goto errout;
-	}
 
 	result = isc_task_create(taskmgr, 0, &cm->task);
 	if (result != ISC_R_SUCCESS)
@@ -138,9 +132,6 @@ ns_lwdclientmgr_create(ns_lwreslistener_t *listener, unsigned int nclients,
 	if (cm->lwctx != NULL)
 		lwres_context_destroy(&cm->lwctx);
 
-	DESTROYLOCK(&cm->lock);
-
- freecm:
 	isc_mem_put(lwresd->mctx, cm, sizeof(*cm));
 	return (result);
 }
@@ -150,14 +141,11 @@ lwdclientmgr_destroy(ns_lwdclientmgr_t *cm) {
 	ns_lwdclient_t *client;
 	ns_lwreslistener_t *listener;
 
-	LOCK(&cm->lock);
-	if (!SHUTTINGDOWN(cm)) {
-		UNLOCK(&cm->lock);
+	if (!SHUTTINGDOWN(cm))
 		return;
-	}
 
 	/*
-	 * Run through the idle list and free the clients there.  Idle
+	 * run through the idle list and free the clients there.  Idle
 	 * clients do not have a recv running nor do they have any finds
 	 * or similar running.
 	 */
@@ -170,19 +158,13 @@ lwdclientmgr_destroy(ns_lwdclientmgr_t *cm) {
 		client = ISC_LIST_HEAD(cm->idle);
 	}
 
-	if (!ISC_LIST_EMPTY(cm->running)) {
-		UNLOCK(&cm->lock);
+	if (!ISC_LIST_EMPTY(cm->running))
 		return;
-	}
-
-	UNLOCK(&cm->lock);
 
 	lwres_context_destroy(&cm->lwctx);
 	cm->view = NULL;
 	isc_socket_detach(&cm->sock);
 	isc_task_detach(&cm->task);
-
-	DESTROYLOCK(&cm->lock);
 
 	listener = cm->listener;
 	ns_lwreslistener_unlinkcm(listener, cm);
@@ -245,10 +227,8 @@ ns_lwdclient_recv(isc_task_t *task, isc_event_t *ev) {
 
 	NS_LWDCLIENT_SETRECVDONE(client);
 
-	LOCK(&cm->lock);
 	INSIST((cm->flags & NS_LWDCLIENTMGR_FLAGRECVPENDING) != 0);
 	cm->flags &= ~NS_LWDCLIENTMGR_FLAGRECVPENDING;
-	UNLOCK(&cm->lock);
 
 	ns_lwdclient_log(50,
 			 "event received: task %p, length %u, result %u (%s)",
@@ -296,41 +276,25 @@ ns_lwdclient_startrecv(ns_lwdclientmgr_t *cm) {
 	ns_lwdclient_t *client;
 	isc_result_t result;
 	isc_region_t r;
-	isc_boolean_t destroy = ISC_FALSE;
 
-
-	LOCK(&cm->lock);
 	if (SHUTTINGDOWN(cm)) {
-		destroy = ISC_TRUE;
-		result = ISC_R_SUCCESS;
-		goto unlock;
+		lwdclientmgr_destroy(cm);
+		return (ISC_R_SUCCESS);
 	}
 
 	/*
 	 * If a recv is already running, don't bother.
 	 */
-	if ((cm->flags & NS_LWDCLIENTMGR_FLAGRECVPENDING) != 0) {
-		result = ISC_R_SUCCESS;
-		goto unlock;
-	}
+	if ((cm->flags & NS_LWDCLIENTMGR_FLAGRECVPENDING) != 0)
+		return (ISC_R_SUCCESS);
 
 	/*
 	 * If we have no idle slots, just return success.
 	 */
 	client = ISC_LIST_HEAD(cm->idle);
-	if (client == NULL) {
-		result = ISC_R_SUCCESS;
-		goto unlock;
-	}
-
+	if (client == NULL)
+		return (ISC_R_SUCCESS);
 	INSIST(NS_LWDCLIENT_ISIDLE(client));
-
-	/*
-	 * Set the flag to say there is a recv pending.  If isc_socket_recv
-	 * fails we will clear the flag otherwise it will be cleared by
-	 * ns_lwdclient_recv.
-	 */
-	cm->flags |= NS_LWDCLIENTMGR_FLAGRECVPENDING;
 
 	/*
 	 * Issue the recv.  If it fails, return that it did.
@@ -339,10 +303,13 @@ ns_lwdclient_startrecv(ns_lwdclientmgr_t *cm) {
 	r.length = LWRES_RECVLENGTH;
 	result = isc_socket_recv(cm->sock, &r, 0, cm->task, ns_lwdclient_recv,
 				 client);
-	if (result != ISC_R_SUCCESS) {
-		cm->flags &= ~NS_LWDCLIENTMGR_FLAGRECVPENDING;
-		goto unlock;
-	}
+	if (result != ISC_R_SUCCESS)
+		return (result);
+
+	/*
+	 * Set the flag to say we've issued a recv() call.
+	 */
+	cm->flags |= NS_LWDCLIENTMGR_FLAGRECVPENDING;
 
 	/*
 	 * Remove the client from the idle list, and put it on the running
@@ -352,13 +319,7 @@ ns_lwdclient_startrecv(ns_lwdclientmgr_t *cm) {
 	ISC_LIST_UNLINK(cm->idle, client, link);
 	ISC_LIST_APPEND(cm->running, client, link);
 
- unlock:
-	UNLOCK(&cm->lock);
-
-	if (destroy)
-		lwdclientmgr_destroy(cm);
-
-	return (result);
+	return (ISC_R_SUCCESS);
 }
 
 static void
@@ -376,7 +337,6 @@ lwdclientmgr_shutdown_callback(isc_task_t *task, isc_event_t *ev) {
 	 * clients do not have a recv running nor do they have any finds
 	 * or similar running.
 	 */
-	LOCK(&cm->lock);
 	client = ISC_LIST_HEAD(cm->idle);
 	while (client != NULL) {
 		ns_lwdclient_log(50, "destroying client %p, manager %p",
@@ -385,7 +345,6 @@ lwdclientmgr_shutdown_callback(isc_task_t *task, isc_event_t *ev) {
 		isc_mem_put(cm->mctx, client, sizeof(*client));
 		client = ISC_LIST_HEAD(cm->idle);
 	}
-	UNLOCK(&cm->lock);
 
 	/*
 	 * Cancel any pending I/O.
@@ -396,7 +355,6 @@ lwdclientmgr_shutdown_callback(isc_task_t *task, isc_event_t *ev) {
 	 * Run through the running client list and kill off any finds
 	 * in progress.
 	 */
-	LOCK(&cm->lock);
 	client = ISC_LIST_HEAD(cm->running);
 	while (client != NULL) {
 		if (client->find != client->v4find
@@ -410,8 +368,6 @@ lwdclientmgr_shutdown_callback(isc_task_t *task, isc_event_t *ev) {
 	}
 
 	cm->flags |= NS_LWDCLIENTMGR_FLAGSHUTTINGDOWN;
-
-	UNLOCK(&cm->lock);
 
 	isc_event_free(&ev);
 }
@@ -433,10 +389,8 @@ ns_lwdclient_stateidle(ns_lwdclient_t *client) {
 	INSIST(client->v4find == NULL);
 	INSIST(client->v6find == NULL);
 
-	LOCK(&cm->lock);
 	ISC_LIST_UNLINK(cm->running, client, link);
 	ISC_LIST_PREPEND(cm->idle, client, link);
-	UNLOCK(&cm->lock);
 
 	NS_LWDCLIENT_SETIDLE(client);
 
@@ -512,7 +466,5 @@ ns_lwdclient_initialize(ns_lwdclient_t *client, ns_lwdclientmgr_t *cmgr) {
 
 	client->pktinfo_valid = ISC_FALSE;
 
-	LOCK(&cmgr->lock);
 	ISC_LIST_APPEND(cmgr->idle, client, link);
-	UNLOCK(&cmgr->lock);
 }

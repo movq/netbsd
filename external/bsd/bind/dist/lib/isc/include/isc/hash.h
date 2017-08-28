@@ -1,7 +1,7 @@
-/*	$NetBSD: hash.h,v 1.6 2016/05/26 16:50:00 christos Exp $	*/
+/*	$NetBSD: hash.h,v 1.1 2009/03/22 15:02:12 christos Exp $	*/
 
 /*
- * Copyright (C) 2004-2007, 2009, 2013-2016  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2004-2007, 2009  Internet Systems Consortium, Inc. ("ISC")
  * Copyright (C) 2003  Internet Software Consortium.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -17,12 +17,10 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* Id: hash.h,v 1.12 2009/01/17 23:47:43 tbox Exp  */
+/* Id: hash.h,v 1.10.332.2 2009/01/18 23:47:41 tbox Exp */
 
 #ifndef ISC_HASH_H
 #define ISC_HASH_H 1
-
-#include <isc/types.h>
 
 /*****
  ***** Module Info
@@ -86,7 +84,7 @@
 ISC_LANG_BEGINDECLS
 
 isc_result_t
-isc_hash_ctxcreate(isc_mem_t *mctx, isc_entropy_t *entropy, size_t limit,
+isc_hash_ctxcreate(isc_mem_t *mctx, isc_entropy_t *entropy, unsigned int limit,
 		   isc_hash_t **hctx);
 isc_result_t
 isc_hash_create(isc_mem_t *mctx, isc_entropy_t *entropy, size_t limit);
@@ -183,61 +181,6 @@ isc_hash_calc(const unsigned char *key, unsigned int keylen,
  * is a DNS name.
  */
 /*@}*/
-
-void
-isc__hash_setvec(const isc_uint16_t *vec);
-
-/*!<
- * \brief Set the contents of the random vector used in hashing.
- *
- * WARNING: This function is meant to be used only in testing code. It
- * must not be used anywhere in normally running code.
- *
- * The hash context must have been created beforehand, otherwise this
- * function is a nop.
- *
- * 'vec' is not documented here on purpose. You should know what you are
- * doing before using this function.
- */
-
-isc_uint32_t
-isc_hash_function(const void *data, size_t length,
-		  isc_boolean_t case_sensitive,
-		  const isc_uint32_t *previous_hashp);
-isc_uint32_t
-isc_hash_function_reverse(const void *data, size_t length,
-			  isc_boolean_t case_sensitive,
-			  const isc_uint32_t *previous_hashp);
-/*!<
- * \brief Calculate a hash over data.
- *
- * This hash function is useful for hashtables. The hash function is
- * opaque and not important to the caller. The returned hash values are
- * non-deterministic and will have different mapping every time a
- * process using this library is run, but will have uniform
- * distribution.
- *
- * isc_hash_function() calculates the hash from start to end over the
- * input data. isc_hash_function_reverse() calculates the hash from the
- * end to the start over the input data. The difference in order is
- * useful in incremental hashing; for example, a previously hashed
- * value for 'com' can be used as input when hashing 'example.com'.
- *
- * This is a new variant of isc_hash_calc() and will supercede
- * isc_hash_calc() eventually.
- *
- * 'data' is the data to be hashed.
- *
- * 'length' is the size of the data to be hashed.
- *
- * 'case_sensitive' specifies whether the hash key should be treated as
- * case_sensitive values.  It should typically be ISC_FALSE if the hash key
- * is a DNS name.
- *
- * 'previous_hashp' is a pointer to a previous hash value returned by
- * this function. It can be used to perform incremental hashing. NULL
- * must be passed during first calls.
- */
 
 ISC_LANG_ENDDECLS
 

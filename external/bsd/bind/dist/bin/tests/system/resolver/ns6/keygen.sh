@@ -1,6 +1,6 @@
 #!/bin/sh -e
 #
-# Copyright (C) 2010, 2012, 2014, 2016  Internet Systems Consortium, Inc. ("ISC")
+# Copyright (C) 2010  Internet Systems Consortium, Inc. ("ISC")
 #
 # Permission to use, copy, modify, and/or distribute this software for any
 # purpose with or without fee is hereby granted, provided that the above
@@ -14,19 +14,12 @@
 # OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR
 # PERFORMANCE OF THIS SOFTWARE.
 
-# Id: keygen.sh,v 1.2 2010/11/16 06:46:44 marka Exp 
+# Id: keygen.sh,v 1.2.2.2 2010/11/16 07:04:08 marka Exp
 
 SYSTEMTESTTOP=../..
 . $SYSTEMTESTTOP/conf.sh
 
-zone=ds.example.net
-zonefile="${zone}.db"
-infile="${zonefile}.in"
-cp $infile $zonefile
-ksk=`$KEYGEN -q -3 -r $RANDFILE -fk $zone`
-zsk=`$KEYGEN -q -3 -r $RANDFILE $zone`
-cat $ksk.key $zsk.key >> $zonefile
-$SIGNER -P -r $RANDFILE -o $zone $zonefile > /dev/null 2>&1
+RANDFILE=../random.data
 
 zone=example.net
 zonefile="${zone}.db"
@@ -34,16 +27,5 @@ infile="${zonefile}.in"
 cp $infile $zonefile
 ksk=`$KEYGEN -q -3 -r $RANDFILE -fk $zone`
 zsk=`$KEYGEN -q -3 -r $RANDFILE $zone`
-cat $ksk.key $zsk.key dsset-ds.example.net$TP >> $zonefile
+cat $ksk.key $zsk.key >> $zonefile
 $SIGNER -P -r $RANDFILE -o $zone $zonefile > /dev/null 2>&1
-
-# Configure a trusted key statement (used by delve)
-cat $ksk.key | grep -v '^; ' | $PERL -n -e '
-local ($dn, $class, $type, $flags, $proto, $alg, @rest) = split;
-local $key = join("", @rest);
-print <<EOF
-trusted-keys {
-    "$dn" $flags $proto $alg "$key";
-};
-EOF
-' > ../ns5/trusted.conf

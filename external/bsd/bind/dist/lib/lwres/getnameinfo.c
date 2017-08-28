@@ -1,7 +1,7 @@
-/*	$NetBSD: getnameinfo.c,v 1.7 2014/12/10 04:38:02 christos Exp $	*/
+/*	$NetBSD: getnameinfo.c,v 1.1 2009/03/22 15:02:37 christos Exp $	*/
 
 /*
- * Portions Copyright (C) 2004, 2005, 2007, 2011-2013  Internet Systems Consortium, Inc. ("ISC")
+ * Portions Copyright (C) 2004, 2005, 2007  Internet Systems Consortium, Inc. ("ISC")
  * Portions Copyright (C) 1999-2001, 2003  Internet Software Consortium.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -17,7 +17,7 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* Id */
+/* Id: getnameinfo.c,v 1.39 2007/06/19 23:47:22 tbox Exp */
 
 /*! \file */
 
@@ -64,51 +64,51 @@
  *    sockaddr sa which is salen bytes long. The hostname is of length
  *    hostlen and is returned via *host. The maximum length of the hostname
  *    is 1025 bytes: #NI_MAXHOST.
- *
+ * 
  *    The name of the service associated with the port number in sa is
  *    returned in *serv. It is servlen bytes long. The maximum length of the
  *    service name is #NI_MAXSERV - 32 bytes.
- *
+ * 
  *    The flags argument sets the following bits:
- *
+ * 
  * \li   #NI_NOFQDN:
  *           A fully qualified domain name is not required for local hosts.
  *           The local part of the fully qualified domain name is returned
  *           instead.
- *
+ * 
  * \li   #NI_NUMERICHOST
  *           Return the address in numeric form, as if calling inet_ntop(),
  *           instead of a host name.
- *
+ * 
  * \li   #NI_NAMEREQD
  *           A name is required. If the hostname cannot be found in the DNS
  *           and this flag is set, a non-zero error code is returned. If the
  *           hostname is not found and the flag is not set, the address is
  *           returned in numeric form.
- *
+ * 
  * \li   #NI_NUMERICSERV
  *           The service name is returned as a digit string representing the
  *           port number.
- *
+ * 
  * \li   #NI_DGRAM
  *           Specifies that the service being looked up is a datagram
  *           service, and causes getservbyport() to be called with a second
  *           argument of "udp" instead of its default of "tcp". This is
  *           required for the few ports (512-514) that have different
  *           services for UDP and TCP.
- *
+ * 
  * \section getnameinfo_return Return Values
- *
+ * 
  *    lwres_getnameinfo() returns 0 on success or a non-zero error code if
  *    an error occurs.
- *
+ * 
  * \section getname_see See Also
- *
- *    RFC2133, getservbyport(),
+ * 
+ *    RFC2133, getservbyport(), 
  *    lwres_getnamebyaddr(). lwres_net_ntop().
- *
+ * 
  * \section getnameinfo_bugs Bugs
- *
+ * 
  *    RFC2133 fails to define what the nonzero return values of
  *    getnameinfo() are.
  */
@@ -155,15 +155,15 @@ static struct afd {
  */
 #define ERR(code) \
 	do { result = (code);			\
-		goto cleanup;	\
-	} while (/*CONSTCOND*/0)
+		if (result != 0) goto cleanup;	\
+	} while (0)
 
 /*% lightweight resolver socket address structure to hostname and service name */
 int
 lwres_getnameinfo(const struct sockaddr *sa, size_t salen, char *host,
 		  size_t hostlen, char *serv, size_t servlen, int flags)
 {
-	struct afd *afd = NULL;
+	struct afd *afd;
 	struct servent *sp;
 	unsigned short port;
 #ifdef LWRES_PLATFORM_HAVESALEN
@@ -221,7 +221,6 @@ lwres_getnameinfo(const struct sockaddr *sa, size_t salen, char *host,
 	default:
 		port = 0;
 		addr = NULL;
-		POST(port); POST(addr);
 		INSIST(0);
 	}
 	proto = (flags & NI_DGRAM) ? "udp" : "tcp";

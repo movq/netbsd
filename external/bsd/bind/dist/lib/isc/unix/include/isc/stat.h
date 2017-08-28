@@ -1,7 +1,7 @@
-/*	$NetBSD: stat.h,v 1.5 2014/12/10 04:38:01 christos Exp $	*/
+/*	$NetBSD: stat.h,v 1.1 2009/03/22 15:02:23 christos Exp $	*/
 
 /*
- * Copyright (C) 2004, 2007, 2014  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2004, 2007  Internet Systems Consortium, Inc. ("ISC")
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -16,7 +16,7 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* Id: stat.h,v 1.5 2007/06/19 23:47:19 tbox Exp  */
+/* Id: stat.h,v 1.5 2007/06/19 23:47:19 tbox Exp */
 
 #ifndef ISC_STAT_H
 #define ISC_STAT_H 1
@@ -26,7 +26,7 @@
  *****/
 
 /*
- * Portable <sys/stat.h> support.
+ * Portable netdb.h support.
  *
  * This module is responsible for defining S_IS??? macros.
  *

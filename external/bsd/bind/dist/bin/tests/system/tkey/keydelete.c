@@ -1,7 +1,7 @@
-/*	$NetBSD: keydelete.c,v 1.8 2017/06/15 15:59:39 christos Exp $	*/
+/*	$NetBSD: keydelete.c,v 1.1 2009/03/22 14:56:59 christos Exp $	*/
 
 /*
- * Copyright (C) 2004, 2005, 2007, 2009-2011, 2014-2016  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2004, 2005, 2007  Internet Systems Consortium, Inc. ("ISC")
  * Copyright (C) 2001  Internet Software Consortium.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -17,7 +17,7 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* Id: keydelete.c,v 1.18 2011/01/11 23:47:13 tbox Exp  */
+/* Id: keydelete.c,v 1.11 2007/06/19 23:47:06 tbox Exp */
 
 #include <config.h>
 
@@ -30,14 +30,11 @@
 #include <isc/hash.h>
 #include <isc/log.h>
 #include <isc/mem.h>
-#include <isc/print.h>
 #include <isc/sockaddr.h>
 #include <isc/socket.h>
 #include <isc/task.h>
 #include <isc/timer.h>
 #include <isc/util.h>
-
-#include <pk11/site.h>
 
 #include <dns/dispatch.h>
 #include <dns/fixedname.h>
@@ -137,8 +134,8 @@ sendquery(isc_task_t *task, isc_event_t *event) {
 
 	request = NULL;
 	result = dns_request_create(requestmgr, query, &address,
-				    DNS_REQUESTOPT_TCP, tsigkey, TIMEOUT,
-				    task, recvquery, query, &request);
+				    0, tsigkey, TIMEOUT, task,
+				    recvquery, query, &request);
 	CHECK("dns_request_create", result);
 }
 
@@ -178,7 +175,7 @@ main(int argc, char **argv) {
 
 	ectx = NULL;
 	RUNCHECK(isc_entropy_create(mctx, &ectx));
-	RUNCHECK(isc_entropy_createfilesource(ectx, "../random.data"));
+	RUNCHECK(isc_entropy_createfilesource(ectx, "random.data"));
 	RUNCHECK(isc_hash_create(mctx, ectx, DNS_NAME_MAXWIRE));
 
 	log = NULL;
@@ -231,19 +228,13 @@ main(int argc, char **argv) {
 
 	dstkey = NULL;
 	type = DST_TYPE_PUBLIC | DST_TYPE_PRIVATE | DST_TYPE_KEY;
-	result = dst_key_fromnamedfile(keyname, NULL, type, mctx, &dstkey);
+	result = dst_key_fromnamedfile(keyname, type, mctx, &dstkey);
 	CHECK("dst_key_fromnamedfile", result);
-#ifndef PK11_MD5_DISABLE
 	result = dns_tsigkey_createfromkey(dst_key_name(dstkey),
 					   DNS_TSIG_HMACMD5_NAME,
 					   dstkey, ISC_TRUE, NULL, 0, 0,
 					   mctx, ring, &tsigkey);
-	dst_key_free(&dstkey);
 	CHECK("dns_tsigkey_createfromkey", result);
-#else
-	dst_key_free(&dstkey);
-	CHECK("MD5 was disabled", ISC_R_NOTIMPLEMENTED);
-#endif
 
 	(void)isc_app_run();
 
@@ -257,8 +248,6 @@ main(int argc, char **argv) {
 	isc_socket_detach(&sock);
 	isc_socketmgr_destroy(&socketmgr);
 	isc_timermgr_destroy(&timermgr);
-
-	dns_tsigkeyring_detach(&ring);
 
 	dns_tsigkey_detach(&tsigkey);
 

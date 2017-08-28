@@ -1,7 +1,7 @@
-/*	$NetBSD: print.c,v 1.7 2017/06/15 15:59:41 christos Exp $	*/
+/*	$NetBSD: print.c,v 1.1 2009/03/22 15:02:06 christos Exp $	*/
 
 /*
- * Copyright (C) 2004-2008, 2010, 2014-2016  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2004-2008  Internet Systems Consortium, Inc. ("ISC")
  * Copyright (C) 1999-2001, 2003  Internet Software Consortium.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -17,6 +17,8 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
+/* Id: print.c,v 1.35 2008/02/18 23:46:59 tbox Exp */
+
 /*! \file */
 
 #include <config.h>
@@ -24,7 +26,6 @@
 #include <ctype.h>
 #include <stdio.h>		/* for sprintf() */
 #include <string.h>		/* for strlen() */
-#include <assert.h>		/* for assert() */
 
 #define	ISC__PRINT_SOURCE	/* Used to get the isc_print_* prototypes. */
 
@@ -35,79 +36,14 @@
 #include <isc/stdlib.h>
 #include <isc/util.h>
 
-/*
- * We use the system's sprintf so we undef it here.
- */
-#undef sprintf
-
-static int
-isc__print_printf(void (*emit)(char, void *), void *arg,
-		  const char *format, va_list ap);
-
-static void
-file_emit(char c, void *arg) {
-	FILE *fp = arg;
-	int i = c & 0xff;
-
-	putc(i, fp);
-}
-
-#if 0
-static int
-isc_print_vfprintf(FILE *fp, const char *format, va_list ap) {
-	assert(fp != NULL);
-	assert(format != NULL);
-
-	return (isc__print_printf(file_emit, fp, format, ap));
-}
-#endif
-
-int
-isc_print_printf(const char *format, ...) {
-	va_list ap;
-	int n;
-
-	assert(format != NULL);
-
-	va_start(ap, format);
-	n = isc__print_printf(file_emit, stdout, format, ap);
-	va_end(ap);
-	return (n);
-}
-
-int
-isc_print_fprintf(FILE *fp, const char *format, ...) {
-	va_list ap;
-	int n;
-
-	assert(fp != NULL);
-	assert(format != NULL);
-
-	va_start(ap, format);
-	n = isc__print_printf(file_emit, fp, format, ap);
-	va_end(ap);
-	return (n);
-}
-
-static void
-nocheck_emit(char c, void *arg) {
-	struct { char *str; } *a = arg;
-
-	*(a->str)++ = c;
-}
-
 int
 isc_print_sprintf(char *str, const char *format, ...) {
-	struct { char *str; } arg;
-	int n;
 	va_list ap;
 
-	arg.str = str;
-
 	va_start(ap, format);
-	n = isc__print_printf(nocheck_emit, &arg, format, ap);
+	vsprintf(str, format, ap);
 	va_end(ap);
-	return (n);
+	return (strlen(str));
 }
 
 /*!
@@ -120,7 +56,7 @@ isc_print_snprintf(char *str, size_t size, const char *format, ...) {
 	int ret;
 
 	va_start(ap, format);
-	ret = isc_print_vsnprintf(str, size, format, ap);
+	ret = vsnprintf(str, size, format, ap);
 	va_end(ap);
 	return (ret);
 
@@ -130,40 +66,10 @@ isc_print_snprintf(char *str, size_t size, const char *format, ...) {
  * Return length of string that would have been written if not truncated.
  */
 
-static void
-string_emit(char c, void *arg) {
-	struct { char *str; size_t size; } *p = arg;
-
-	if (p->size > 0) {
-		*(p->str)++ = c;
-		p->size--;
-	}
-}
-
 int
 isc_print_vsnprintf(char *str, size_t size, const char *format, va_list ap) {
-	struct { char *str; size_t size; } arg;
-	int n;
-
-	assert(str != NULL);
-	assert(format != NULL);
-
-	arg.str = str;
-	arg.size = size;
-
-	n = isc__print_printf(string_emit, &arg, format, ap);
-	if (arg.size > 0)
-		*arg.str = '\0';
-	return (n);
-}
-
-static int
-isc__print_printf(void (*emit)(char, void *), void *arg,
-		  const char *format, va_list ap)
-{
 	int h;
 	int l;
-	int z;
 	int q;
 	int alt;
 	int zero;
@@ -179,6 +85,7 @@ isc__print_printf(void (*emit)(char, void *), void *arg,
 	char buf[1024];
 	char c;
 	void *v;
+	char *save = str;
 	const char *cp;
 	const char *head;
 	int count = 0;
@@ -186,20 +93,22 @@ isc__print_printf(void (*emit)(char, void *), void *arg,
 	int zeropad;
 	int dot;
 	double dbl;
-	isc_boolean_t precision_set;
 #ifdef HAVE_LONG_DOUBLE
 	long double ldbl;
 #endif
 	char fmt[32];
 
-	assert(emit != NULL);
-	assert(arg != NULL);
-	assert(format != NULL);
+	INSIST(str != NULL);
+	INSIST(format != NULL);
 
 	while (*format != '\0') {
 		if (*format != '%') {
-			emit(*format++, arg);
+			if (size > 1) {
+				*str++ = *format;
+				size--;
+			}
 			count++;
+			format++;
 			continue;
 		}
 		format++;
@@ -207,11 +116,10 @@ isc__print_printf(void (*emit)(char, void *), void *arg,
 		/*
 		 * Reset flags.
 		 */
-		dot = neg = space = plus = left = zero = alt = h = l = q = z = 0;
+		dot = neg = space = plus = left = zero = alt = h = l = q = 0;
 		width = precision = 0;
 		head = "";
-		pad = zeropad = 0;
-		precision_set = ISC_FALSE;
+		length = pad = zeropad = 0;
 
 		do {
 			if (*format == '#') {
@@ -257,12 +165,10 @@ isc__print_printf(void (*emit)(char, void *), void *arg,
 			dot = 1;
 			if (*format == '*') {
 				precision = va_arg(ap, int);
-				precision_set = ISC_TRUE;
 				format++;
 			} else if (isdigit((unsigned char)*format)) {
 				char *e;
 				precision = strtoul(format, &e, 10);
-				precision_set = ISC_TRUE;
 				format = e;
 			}
 		}
@@ -271,7 +177,10 @@ isc__print_printf(void (*emit)(char, void *), void *arg,
 		case '\0':
 			continue;
 		case '%':
-			emit(*format, arg);
+			if (size > 1) {
+				*str++ = *format;
+				size--;
+			}
 			count++;
 			break;
 		case 'q':
@@ -290,20 +199,6 @@ isc__print_printf(void (*emit)(char, void *), void *arg,
 				format++;
 			}
 			goto doint;
-		case 'z':
-			z = 1;
-			format++;
-			goto doint;
-#ifdef WIN32
-		case 'I':
-			/* Windows has I64 as a modifier for a quad. */
-			if (format[1] == '6' && format[2] == '4') {
-				q = 1;
-				format += 3;
-				goto doint;
-			}
-			continue;
-#endif
 		case 'n':
 		case 'i':
 		case 'd':
@@ -319,23 +214,18 @@ isc__print_printf(void (*emit)(char, void *), void *arg,
 				if (h) {
 					short int *p;
 					p = va_arg(ap, short *);
-					assert(p != NULL);
-					*p = count;
+					REQUIRE(p != NULL);
+					*p = str - save;
 				} else if (l) {
 					long int *p;
 					p = va_arg(ap, long *);
-					assert(p != NULL);
-					*p = count;
-				} else if (z) {
-					size_t *p;
-					p = va_arg(ap, size_t *);
-					assert(p != NULL);
-					*p = count;
+					REQUIRE(p != NULL);
+					*p = str - save;
 				} else {
 					int *p;
 					p = va_arg(ap, int *);
-					assert(p != NULL);
-					*p = count;
+					REQUIRE(p != NULL);
+					*p = str - save;
 				}
 				break;
 			case 'i':
@@ -344,8 +234,6 @@ isc__print_printf(void (*emit)(char, void *), void *arg,
 					tmpi = va_arg(ap, isc_int64_t);
 				else if (l)
 					tmpi = va_arg(ap, long int);
-				else if (z)
-					tmpi = va_arg(ap, ssize_t);
 				else
 					tmpi = va_arg(ap, int);
 				if (tmpi < 0) {
@@ -371,14 +259,12 @@ isc__print_printf(void (*emit)(char, void *), void *arg,
 					tmpui /= 1000000000;
 					mid = tmpui % 1000000000;
 					hi = tmpui / 1000000000;
-					if (hi != 0U) {
+					if (hi != 0)
 						sprintf(buf, "%lu", hi);
-						sprintf(buf + strlen(buf),
-							"%09lu", mid);
-					} else
-						sprintf(buf, "%lu", mid);
-					sprintf(buf + strlen(buf), "%09lu",
-						lo);
+					else
+						buf[0] = '\n';
+					sprintf(buf + strlen(buf), "%lu", mid);
+					sprintf(buf + strlen(buf), "%lu", lo);
 				}
 				goto printint;
 			case 'o':
@@ -386,8 +272,6 @@ isc__print_printf(void (*emit)(char, void *), void *arg,
 					tmpui = va_arg(ap, isc_uint64_t);
 				else if (l)
 					tmpui = va_arg(ap, long int);
-				else if (z)
-					tmpui = va_arg(ap, size_t);
 				else
 					tmpui = va_arg(ap, int);
 				if (tmpui <= 0xffffffffU)
@@ -406,12 +290,12 @@ isc__print_printf(void (*emit)(char, void *), void *arg,
 							alt ?  "%#lo" : "%lo",
 							hi);
 						sprintf(buf + strlen(buf),
-							"%09lo", mid);
+							"%lo", mid);
 					} else
 						sprintf(buf,
 							alt ?  "%#lo" : "%lo",
 							mid);
-					sprintf(buf + strlen(buf), "%09lo", lo);
+					sprintf(buf + strlen(buf), "%lo", lo);
 				}
 				goto printint;
 			case 'u':
@@ -419,8 +303,6 @@ isc__print_printf(void (*emit)(char, void *), void *arg,
 					tmpui = va_arg(ap, isc_uint64_t);
 				else if (l)
 					tmpui = va_arg(ap, unsigned long int);
-				else if (z)
-					tmpui = va_arg(ap, size_t);
 				else
 					tmpui = va_arg(ap, unsigned int);
 				if (tmpui <= 0xffffffffU)
@@ -434,14 +316,12 @@ isc__print_printf(void (*emit)(char, void *), void *arg,
 					tmpui /= 1000000000;
 					mid = tmpui % 1000000000;
 					hi = tmpui / 1000000000;
-					if (hi != 0U) {
+					if (hi != 0)
 						sprintf(buf, "%lu", hi);
-						sprintf(buf + strlen(buf),
-							"%09lu", mid);
-					 } else
-						sprintf(buf, "%lu", mid);
-					sprintf(buf + strlen(buf), "%09lu",
-						lo);
+					else
+						buf[0] = '\n';
+					sprintf(buf + strlen(buf), "%lu", mid);
+					sprintf(buf + strlen(buf), "%lu", lo);
 				}
 				goto printint;
 			case 'x':
@@ -449,8 +329,6 @@ isc__print_printf(void (*emit)(char, void *), void *arg,
 					tmpui = va_arg(ap, isc_uint64_t);
 				else if (l)
 					tmpui = va_arg(ap, unsigned long int);
-				else if (z)
-					tmpui = va_arg(ap, size_t);
 				else
 					tmpui = va_arg(ap, unsigned int);
 				if (alt) {
@@ -465,7 +343,7 @@ isc__print_printf(void (*emit)(char, void *), void *arg,
 					unsigned long hi = tmpui>>32;
 					unsigned long lo = tmpui & 0xffffffff;
 					sprintf(buf, "%lx", hi);
-					sprintf(buf + strlen(buf), "%08lx", lo);
+					sprintf(buf + strlen(buf), "%lx", lo);
 				}
 				goto printint;
 			case 'X':
@@ -473,8 +351,6 @@ isc__print_printf(void (*emit)(char, void *), void *arg,
 					tmpui = va_arg(ap, isc_uint64_t);
 				else if (l)
 					tmpui = va_arg(ap, unsigned long int);
-				else if (z)
-					tmpui = va_arg(ap, size_t);
 				else
 					tmpui = va_arg(ap, unsigned int);
 				if (alt) {
@@ -489,11 +365,11 @@ isc__print_printf(void (*emit)(char, void *), void *arg,
 					unsigned long hi = tmpui>>32;
 					unsigned long lo = tmpui & 0xffffffff;
 					sprintf(buf, "%lX", hi);
-					sprintf(buf + strlen(buf), "%08lX", lo);
+					sprintf(buf + strlen(buf), "%lX", lo);
 				}
 				goto printint;
 			printint:
-				if (precision_set || width != 0U) {
+				if (precision != 0 || width != 0) {
 					length = strlen(buf);
 					if (length < precision)
 						zeropad = precision - length;
@@ -509,23 +385,30 @@ isc__print_printf(void (*emit)(char, void *), void *arg,
 				count += strlen(head) + strlen(buf) + pad +
 					 zeropad;
 				if (!left) {
-					while (pad > 0) {
-						emit(' ', arg);
+					while (pad > 0 && size > 1) {
+						*str++ = ' ';
+						size--;
 						pad--;
 					}
 				}
 				cp = head;
-				while (*cp != '\0')
-					emit(*cp++, arg);
-				while (zeropad > 0) {
-					emit('0', arg);
+				while (*cp != '\0' && size > 1) {
+					*str++ = *cp++;
+					size--;
+				}
+				while (zeropad > 0 && size > 1) {
+					*str++ = '0';
+					size--;
 					zeropad--;
 				}
 				cp = buf;
-				while (*cp != '\0')
-					emit(*cp++, arg);
-				while (pad > 0) {
-					emit(' ', arg);
+				while (*cp != '\0' && size > 1) {
+					*str++ = *cp++;
+					size--;
+				}
+				while (pad > 0 && size > 1) {
+					*str++ = ' ';
+					size--;
 					pad--;
 				}
 				break;
@@ -535,23 +418,21 @@ isc__print_printf(void (*emit)(char, void *), void *arg,
 			break;
 		case 's':
 			cp = va_arg(ap, char *);
+			REQUIRE(cp != NULL);
 
-			if (precision_set) {
+			if (precision != 0) {
 				/*
 				 * cp need not be NULL terminated.
 				 */
 				const char *tp;
 				unsigned long n;
 
-				if (precision != 0U)
-					assert(cp != NULL);
 				n = precision;
 				tp = cp;
 				while (n != 0 && *tp != '\0')
 					n--, tp++;
 				length = precision - n;
 			} else {
-				assert(cp != NULL);
 				length = strlen(cp);
 			}
 			if (width != 0) {
@@ -561,20 +442,26 @@ isc__print_printf(void (*emit)(char, void *), void *arg,
 			}
 			count += pad + length;
 			if (!left)
-				while (pad > 0) {
-					emit(' ', arg);
+				while (pad > 0 && size > 1) {
+					*str++ = ' ';
+					size--;
 					pad--;
 				}
-			if (precision_set)
-				while (precision > 0U && *cp != '\0') {
-					emit(*cp++, arg);
+			if (precision != 0)
+				while (precision > 0 && *cp != '\0' &&
+				       size > 1) {
+					*str++ = *cp++;
+					size--;
 					precision--;
 				}
 			else
-				while (*cp != '\0')
-					emit(*cp++, arg);
-			while (pad > 0) {
-				emit(' ', arg);
+				while (*cp != '\0' && size > 1) {
+					*str++ = *cp++;
+					size--;
+				}
+			while (pad > 0 && size > 1) {
+				*str++ = ' ';
+				size--;
 				pad--;
 			}
 			break;
@@ -583,15 +470,24 @@ isc__print_printf(void (*emit)(char, void *), void *arg,
 			if (width > 0) {
 				count += width;
 				width--;
-				if (left)
-					emit(c, arg);
-				while (width-- > 0)
-					emit(' ', arg);
-				if (!left)
-					emit(c, arg);
+				if (left) {
+					*str++ = c;
+					size--;
+				}
+				while (width-- > 0 && size > 1) {
+					*str++ = ' ';
+					size--;
+				}
+				if (!left && size > 1) {
+					*str++ = c;
+					size--;
+				}
 			} else {
 				count++;
-				emit(c, arg);
+				if (size > 1) {
+					*str++ = c;
+					size--;
+				}
 			}
 			break;
 		case 'p':
@@ -607,39 +503,50 @@ isc__print_printf(void (*emit)(char, void *), void *arg,
 			}
 			count += length + pad + zeropad;
 			if (!left)
-				while (pad > 0) {
-					emit(' ', arg);
+				while (pad > 0 && size > 1) {
+					*str++ = ' ';
+					size--;
 					pad--;
 				}
 			cp = buf;
 			if (zeropad > 0 && buf[0] == '0' &&
 			    (buf[1] == 'x' || buf[1] == 'X')) {
-				emit(*cp++, arg);
-				emit(*cp++, arg);
-				while (zeropad > 0) {
-					emit('0', arg);
+				if (size > 1) {
+					*str++ = *cp++;
+					size--;
+				}
+				if (size > 1) {
+					*str++ = *cp++;
+					size--;
+				}
+				while (zeropad > 0 && size > 1) {
+					*str++ = '0';
+					size--;
 					zeropad--;
 				}
 			}
-			while (*cp != '\0')
-				emit(*cp++, arg);
-			while (pad > 0) {
-				emit(' ', arg);
+			while (*cp != '\0' && size > 1) {
+				*str++ = *cp++;
+				size--;
+			}
+			while (pad > 0 && size > 1) {
+				*str++ = ' ';
+				size--;
 				pad--;
 			}
 			break;
 		case 'D':	/*deprecated*/
-			assert("use %ld instead of %D" == NULL);
+			INSIST("use %ld instead of %D" == NULL);
 		case 'O':	/*deprecated*/
-			assert("use %lo instead of %O" == NULL);
+			INSIST("use %lo instead of %O" == NULL);
 		case 'U':	/*deprecated*/
-			assert("use %lu instead of %U" == NULL);
+			INSIST("use %lu instead of %U" == NULL);
 
 		case 'L':
 #ifdef HAVE_LONG_DOUBLE
 			l = 1;
 #else
-			assert("long doubles are not supported" == NULL);
+			INSIST("long doubles are not supported" == NULL);
 #endif
 			/*FALLTHROUGH*/
 		case 'e':
@@ -688,15 +595,19 @@ isc__print_printf(void (*emit)(char, void *), void *arg,
 				}
 				count += length + pad;
 				if (!left)
-					while (pad > 0) {
-						emit(' ', arg);
+					while (pad > 0 && size > 1) {
+						*str++ = ' ';
+						size--;
 						pad--;
 					}
 				cp = buf;
-				while (*cp != ' ')
-					emit(*cp++, arg);
-				while (pad > 0) {
-					emit(' ', arg);
+				while (*cp != ' ' && size > 1) {
+					*str++ = *cp++;
+					size--;
+				}
+				while (pad > 0 && size > 1) {
+					*str++ = ' ';
+					size--;
 					pad--;
 				}
 				break;
@@ -709,5 +620,7 @@ isc__print_printf(void (*emit)(char, void *), void *arg,
 		}
 		format++;
 	}
+	if (size > 0)
+		*str = '\0';
 	return (count);
 }

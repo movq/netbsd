@@ -1,4 +1,5 @@
-/*	$NetBSD: t_api.c,v 1.2 2017/06/28 02:46:31 manu Exp $	*/
+/*	$NetBSD: t_api.c,v 1.1 2013/03/24 15:45:50 christos Exp $	*/
+
 /*
  * Copyright (C) 2004, 2005, 2007, 2009  Internet Systems Consortium, Inc. ("ISC")
  * Copyright (C) 1999-2003  Internet Software Consortium.
@@ -16,7 +17,7 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* Id: t_api.c,v 1.4 2009/10/28 04:12:30 sar Exp  */
+/* Id: t_api.c,v 1.4 2009-10-28 04:12:30 sar Exp  */
 
 /*! \file */
 
@@ -125,23 +126,6 @@ printusage(void);
 
 static int	T_int;
 
-uint16_t local_port = 0;
-uint16_t remote_port = 0;
-libdhcp_callbacks_t t_api_callbacks = {
-	&local_port,
-	&remote_port,
-	classify,
-	check_collection,
-	dhcp,
-#ifdef DHCPv6
-	dhcpv6,
-#endif /* DHCPv6 */
-	bootp,
-	find_class,
-	parse_allow_deny,
-	dhcp_set_control_state,
-};
-
 static void
 t_sighandler(int sig) {
 	T_int = sig;
@@ -165,8 +149,6 @@ main(int argc, char **argv) {
 	first = ISC_TRUE;
 	subprocs = 1;
 	T_timeout = T_TCTOUT;
-
-	libdhcp_callbacks_register(&t_api_callbacks);
 
 	/*
 	 * -a option is now default.
@@ -557,12 +539,12 @@ t_fgetbs(FILE *fp) {
 	int	c;
 	size_t	n;
 	size_t	size;
-	char	*buf, *old;
+	char	*buf;
 	char	*p;
 
-	n = 0;
-	size = T_BUFSIZ;
-	old = buf = (char *) malloc(T_BUFSIZ * sizeof(char));
+	n	= 0;
+	size	= T_BUFSIZ;
+	buf	= (char *) malloc(T_BUFSIZ * sizeof(char));
 
 	if (buf != NULL) {
 		p = buf;
@@ -578,8 +560,7 @@ t_fgetbs(FILE *fp) {
 				buf = (char *)realloc(buf,
 						      size * sizeof(char));
 				if (buf == NULL)
-					goto err;
-				old = buf;
+					break;
 				p = buf + n;
 			}
 		}
@@ -590,10 +571,7 @@ t_fgetbs(FILE *fp) {
 		}
 		return (buf);
 	} else {
- err:
-		if (old != NULL)
-			free(old);
-		fprintf(stderr, "malloc/realloc failed %d", errno);
+		fprintf(stderr, "malloc failed %d", errno);
 		return(NULL);
 	}
 }

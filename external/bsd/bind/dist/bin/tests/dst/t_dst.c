@@ -1,7 +1,7 @@
-/*	$NetBSD: t_dst.c,v 1.11 2017/06/15 15:59:38 christos Exp $	*/
+/*	$NetBSD: t_dst.c,v 1.1 2009/03/22 14:56:28 christos Exp $	*/
 
 /*
- * Copyright (C) 2004, 2005, 2007-2009, 2011-2014, 2016  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2004, 2005, 2007-2009  Internet Systems Consortium, Inc. ("ISC")
  * Copyright (C) 1999-2001  Internet Software Consortium.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -17,20 +17,20 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* Id: t_dst.c,v 1.60 2011/03/17 23:47:29 tbox Exp  */
+/* Id: t_dst.c,v 1.55.158.2 2009/01/22 23:47:05 tbox Exp */
 
 #include <config.h>
 
+#include <sys/types.h>		/* Required for dirent.h */
+#include <sys/stat.h>
+
+#include <dirent.h>		/* XXX */
 #include <errno.h>
 #include <fcntl.h>
 #include <limits.h>
 #include <stdlib.h>
 
-#ifndef WIN32
 #include <unistd.h>		/* XXX */
-#else
-#include <direct.h>
-#endif
 
 #include <isc/buffer.h>
 #include <isc/dir.h>
@@ -38,7 +38,6 @@
 #include <isc/file.h>
 #include <isc/mem.h>
 #include <isc/region.h>
-#include <isc/stdio.h>
 #include <isc/string.h>
 #include <isc/util.h>
 
@@ -56,41 +55,34 @@
 
 /*
  * Adapted from the original dst_test.c program.
+ * XXXDCL should use isc_dir_*.
  */
 
 static void
 cleandir(char *path) {
-	isc_dir_t	dir;
+	DIR		*dirp;
+	struct dirent	*pe;
 	char		fullname[PATH_MAX + 1];
-	size_t		l;
-	isc_result_t	ret;
 
-	isc_dir_init(&dir);
-	ret = isc_dir_open(&dir, path);
-	if (ret != ISC_R_SUCCESS) {
-		t_info("isc_dir_open(%s) failed %s\n",
-		       path, isc_result_totext(ret));
+	dirp = opendir(path);
+	if (dirp == NULL) {
+		t_info("opendir(%s) failed %d\n", path, errno);
 		return;
 	}
 
-	while (isc_dir_read(&dir) == ISC_R_SUCCESS) {
-		if (!strcmp(dir.entry.name, "."))
+	while ((pe = readdir(dirp)) != NULL) {
+		if (! strcmp(pe->d_name, "."))
 			continue;
-		if (!strcmp(dir.entry.name, ".."))
+		if (! strcmp(pe->d_name, ".."))
 			continue;
-		(void)strlcpy(fullname, path, sizeof(fullname));
-		(void)strlcat(fullname, "/", sizeof(fullname));
-		l = strlcat(fullname, dir.entry.name, sizeof(fullname));
-		if (l < sizeof(fullname)) {
-			if (remove(fullname))
-				t_info("remove(%s) failed %d\n", fullname,
-				       errno);
-		} else
-		       t_info("unable to remove '%s/%s': path too long\n",
-			      path, dir.entry.name);
+		strcpy(fullname, path);
+		strcat(fullname, "/");
+		strcat(fullname, pe->d_name);
+		if (remove(fullname))
+			t_info("remove(%s) failed %d\n", fullname, errno);
 
 	}
-	isc_dir_close(&dir);
+	(void)closedir(dirp);
 	if (rmdir(path))
 		t_info("rmdir(%s) failed %d\n", path, errno);
 
@@ -108,12 +100,11 @@ use(dst_key_t *key, isc_mem_t *mctx, isc_result_t exp_result, int *nfails) {
 	dst_context_t *ctx = NULL;
 
 	isc_buffer_init(&sigbuf, sig, sizeof(sig));
-	isc_buffer_constinit(&databuf, data, strlen(data));
+	isc_buffer_init(&databuf, data, strlen(data));
 	isc_buffer_add(&databuf, strlen(data));
 	isc_buffer_usedregion(&databuf, &datareg);
 
-	ret = dst_context_create3(key, mctx,
-				  DNS_LOGCATEGORY_GENERAL, ISC_TRUE, &ctx);
+	ret = dst_context_create(key, mctx, &ctx);
 	if (ret != exp_result) {
 		t_info("dst_context_create(%d) returned (%s) expected (%s)\n",
 		       dst_key_alg(key), dst_result_totext(ret),
@@ -142,8 +133,7 @@ use(dst_key_t *key, isc_mem_t *mctx, isc_result_t exp_result, int *nfails) {
 	dst_context_destroy(&ctx);
 
 	isc_buffer_remainingregion(&sigbuf, &sigreg);
-	ret = dst_context_create3(key, mctx,
-				  DNS_LOGCATEGORY_GENERAL, ISC_FALSE, &ctx);
+	ret = dst_context_create(key, mctx, &ctx);
 	if (ret != ISC_R_SUCCESS) {
 		t_info("dst_context_create(%d) returned (%s)\n",
 		       dst_key_alg(key), dst_result_totext(ret));
@@ -191,7 +181,7 @@ dh(dns_name_t *name1, int id1, dns_name_t *name2, int id2, isc_mem_t *mctx,
 	if (p == NULL) {
 		t_info("getcwd failed %d\n", errno);
 		++*nprobs;
-		goto cleanup;
+		return;
 	}
 
 	ret = dst_key_fromfile(name1, id1, alg, type, current, mctx, &key1);
@@ -199,7 +189,7 @@ dh(dns_name_t *name1, int id1, dns_name_t *name2, int id2, isc_mem_t *mctx,
 		t_info("dst_key_fromfile(%d) returned: %s\n",
 		       alg, dst_result_totext(ret));
 		++*nfails;
-		goto cleanup;
+		return;
 	}
 
 	ret = dst_key_fromfile(name2, id2, alg, type, current, mctx, &key2);
@@ -207,19 +197,15 @@ dh(dns_name_t *name1, int id1, dns_name_t *name2, int id2, isc_mem_t *mctx,
 		t_info("dst_key_fromfile(%d) returned: %s\n",
 		       alg, dst_result_totext(ret));
 		++*nfails;
-		goto cleanup;
+		return;
 	}
 
-#ifndef WIN32
 	ret = isc_file_mktemplate("/tmp/", tmp, sizeof(tmp));
-#else
-	ret = isc_file_mktemplate(getenv("TEMP"), tmp, sizeof(tmp));
-#endif
 	if (ret != ISC_R_SUCCESS) {
 		t_info("isc_file_mktemplate failed %s\n",
 		       isc_result_totext(ret));
 		++*nprobs;
-		goto cleanup;
+		return;
 	}
 
 	ret = isc_dir_createunique(tmp);
@@ -227,7 +213,7 @@ dh(dns_name_t *name1, int id1, dns_name_t *name2, int id2, isc_mem_t *mctx,
 		t_info("isc_dir_createunique failed %s\n",
 		       isc_result_totext(ret));
 		++*nprobs;
-		goto cleanup;
+		return;
 	}
 
 	ret = dst_key_tofile(key1, type, tmp);
@@ -235,7 +221,7 @@ dh(dns_name_t *name1, int id1, dns_name_t *name2, int id2, isc_mem_t *mctx,
 		t_info("dst_key_tofile(%d) returned: %s\n",
 		       alg, dst_result_totext(ret));
 		++*nfails;
-		goto cleanup;
+		return;
 	}
 
 	ret = dst_key_tofile(key2, type, tmp);
@@ -243,7 +229,7 @@ dh(dns_name_t *name1, int id1, dns_name_t *name2, int id2, isc_mem_t *mctx,
 		t_info("dst_key_tofile(%d) returned: %s\n",
 		       alg, dst_result_totext(ret));
 		++*nfails;
-		goto cleanup;
+		return;
 	}
 
 	cleandir(tmp);
@@ -254,7 +240,7 @@ dh(dns_name_t *name1, int id1, dns_name_t *name2, int id2, isc_mem_t *mctx,
 		t_info("dst_computesecret() returned: %s\n",
 		       dst_result_totext(ret));
 		++*nfails;
-		goto cleanup;
+		return;
 	}
 
 	isc_buffer_init(&b2, array2, sizeof(array2));
@@ -263,7 +249,7 @@ dh(dns_name_t *name1, int id1, dns_name_t *name2, int id2, isc_mem_t *mctx,
 		t_info("dst_computesecret() returned: %s\n",
 		       dst_result_totext(ret));
 		++*nfails;
-		goto cleanup;
+		return;
 	}
 
 	isc_buffer_usedregion(&b1, &r1);
@@ -272,19 +258,16 @@ dh(dns_name_t *name1, int id1, dns_name_t *name2, int id2, isc_mem_t *mctx,
 	{
 		t_info("computed secrets don't match\n");
 		++*nfails;
-		goto cleanup;
+		return;
 	}
 
- cleanup:
-	if (key1 != NULL)
-		dst_key_free(&key1);
-	if (key2 != NULL)
-		dst_key_free(&key2);
+	dst_key_free(&key1);
+	dst_key_free(&key2);
 }
 
 static void
-io(dns_name_t *name, isc_uint16_t id, isc_uint16_t alg, int type,
-   isc_mem_t *mctx, isc_result_t exp_result, int *nfails, int *nprobs)
+io(dns_name_t *name, int id, int alg, int type, isc_mem_t *mctx,
+   isc_result_t exp_result, int *nfails, int *nprobs)
 {
 	dst_key_t	*key = NULL;
 	isc_result_t	ret;
@@ -296,7 +279,7 @@ io(dns_name_t *name, isc_uint16_t id, isc_uint16_t alg, int type,
 	if (p == NULL) {
 		t_info("getcwd failed %d\n", errno);
 		++*nprobs;
-		goto failure;
+		return;
 	}
 
 	ret = dst_key_fromfile(name, id, alg, type, current, mctx, &key);
@@ -304,44 +287,22 @@ io(dns_name_t *name, isc_uint16_t id, isc_uint16_t alg, int type,
 		t_info("dst_key_fromfile(%d) returned: %s\n",
 		       alg, dst_result_totext(ret));
 		++*nfails;
-		goto failure;
+		return;
 	}
 
-	if (dst_key_id(key) != id) {
-		t_info("key ID incorrect\n");
-		++*nfails;
-		goto failure;
-	}
-
-	if (dst_key_alg(key) != alg) {
-		t_info("key algorithm incorrect\n");
-		++*nfails;
-		goto failure;
-	}
-
-	if (dst_key_getttl(key) != 0) {
-		t_info("initial key TTL incorrect\n");
-		++*nfails;
-		goto failure;
-	}
-
-#ifndef WIN32
 	ret = isc_file_mktemplate("/tmp/", tmp, sizeof(tmp));
-#else
-	ret = isc_file_mktemplate(getenv("TEMP"), tmp, sizeof(tmp));
-#endif
 	if (ret != ISC_R_SUCCESS) {
 		t_info("isc_file_mktemplate failed %s\n",
 		       isc_result_totext(ret));
 		++*nprobs;
-		goto failure;
+		return;
 	}
 
 	ret = isc_dir_createunique(tmp);
 	if (ret != ISC_R_SUCCESS) {
 		t_info("mkdir failed %d\n", errno);
 		++*nprobs;
-		goto failure;
+		return;
 	}
 
 	ret = dst_key_tofile(key, type, tmp);
@@ -349,48 +310,14 @@ io(dns_name_t *name, isc_uint16_t id, isc_uint16_t alg, int type,
 		t_info("dst_key_tofile(%d) returned: %s\n",
 		       alg, dst_result_totext(ret));
 		++*nfails;
-		goto failure;
+		return;
 	}
 
 	if (dst_key_alg(key) != DST_ALG_DH)
 		use(key, mctx, exp_result, nfails);
 
-	/*
-	 * Skip the rest of this test if we weren't expecting
-	 * the read to be successful.
-	 */
-	if (exp_result != ISC_R_SUCCESS)
-		goto cleanup;
-
-	dst_key_setttl(key, 3600);
-	ret = dst_key_tofile(key, type, tmp);
-	if (ret != 0) {
-		t_info("dst_key_tofile(%d) returned: %s\n",
-		       alg, dst_result_totext(ret));
-		++*nfails;
-		goto failure;
-	}
-
-	/* Reread key to confirm TTL was changed */
-	dst_key_free(&key);
-	ret = dst_key_fromfile(name, id, alg, type, tmp, mctx, &key);
-	if (ret != ISC_R_SUCCESS) {
-		t_info("dst_key_fromfile(%d) returned: %s\n",
-		       alg, dst_result_totext(ret));
-		++*nfails;
-		goto failure;
-	}
-
-	if (dst_key_getttl(key) != 3600) {
-		t_info("modified key TTL incorrect\n");
-		++*nfails;
-		goto failure;
-	}
-
- cleanup:
 	cleandir(tmp);
 
- failure:
 	dst_key_free(&key);
 }
 
@@ -405,14 +332,12 @@ generate(int alg, isc_mem_t *mctx, int size, int *nfails) {
 		t_info("dst_key_generate(%d) returned: %s\n", alg,
 		       dst_result_totext(ret));
 		++*nfails;
-		goto cleanup;
+		return;
 	}
 
 	if (alg != DST_ALG_DH)
 		use(key, mctx, ISC_R_SUCCESS, nfails);
- cleanup:
-	if (key != NULL)
-		dst_key_free(&key);
+	dst_key_free(&key);
 }
 
 #define	DBUFSIZ	25
@@ -472,7 +397,7 @@ t1(void) {
 	if (!dst_algorithm_supported(DST_ALG_RSAMD5)) {
 		dst_lib_destroy();
 		t_info("library built without crypto support\n");
-		t_result(T_SKIPPED);
+		t_result(T_UNTESTED);
 		return;
 	}
 
@@ -480,9 +405,9 @@ t1(void) {
 
 	dns_fixedname_init(&fname);
 	name = dns_fixedname_name(&fname);
-	isc_buffer_constinit(&b, "test.", 5);
+	isc_buffer_init(&b, "test.", 5);
 	isc_buffer_add(&b, 5);
-	isc_result = dns_name_fromtext(name, &b, NULL, 0, NULL);
+	isc_result = dns_name_fromtext(name, &b, NULL, ISC_FALSE, NULL);
 	if (isc_result != ISC_R_SUCCESS) {
 		t_info("dns_name_fromtext failed %s\n",
 		       isc_result_totext(isc_result));
@@ -502,9 +427,9 @@ t1(void) {
 	io(name, 2, DST_ALG_RSAMD5, DST_TYPE_PRIVATE|DST_TYPE_PUBLIC,
 			mctx, DST_R_NULLKEY, &nfails, &nprobs);
 
-	isc_buffer_constinit(&b, "dh.", 3);
+	isc_buffer_init(&b, "dh.", 3);
 	isc_buffer_add(&b, 3);
-	isc_result = dns_name_fromtext(name, &b, NULL, 0, NULL);
+	isc_result = dns_name_fromtext(name, &b, NULL, ISC_FALSE, NULL);
 	if (isc_result != ISC_R_SUCCESS) {
 		t_info("dns_name_fromtext failed %s\n",
 		       isc_result_totext(isc_result));
@@ -624,88 +549,75 @@ sig_tofile(char *path, isc_buffer_t *buf) {
  */
 static int
 sig_fromfile(char *path, isc_buffer_t *iscbuf) {
-	size_t		rval;
-	size_t		len;
-	FILE		*fp;
+	int		rval;
+	int		len;
+	int		fd;
 	unsigned char	val;
+	struct stat	sb;
 	char		*p;
 	char		*buf;
-	isc_result_t	isc_result;
-	off_t		size;
 
-	isc_result = isc_stdio_open(path, "rb", &fp);
-	if (isc_result != ISC_R_SUCCESS) {
-		t_info("open failed, result: %s\n",
-		       isc_result_totext(isc_result));
+	rval = stat(path, &sb);
+	if (rval != 0) {
+		t_info("stat %s failed, errno == %d\n", path, errno);
 		return(1);
 	}
 
-	isc_result = isc_file_getsizefd(fileno(fp), &size);
-	if (isc_result != ISC_R_SUCCESS) {
-		t_info("stat %s failed, result: %s\n",
-		       path, isc_result_totext(isc_result));
-		isc_stdio_close(fp);
-		return(1);
-	}
-
-	buf = (char *) malloc((size + 1) * sizeof(char));
+	buf = (char *) malloc((sb.st_size + 1) * sizeof(unsigned char));
 	if (buf == NULL) {
 		t_info("malloc failed, errno == %d\n", errno);
-		isc_stdio_close(fp);
 		return(1);
 	}
 
-	len = (size_t)size;
+	fd = open(path, O_RDONLY);
+	if (fd < 0) {
+		t_info("open failed, errno == %d\n", errno);
+		(void) free(buf);
+		return(1);
+	}
+
+	len = sb.st_size;
 	p = buf;
-	while (len != 0U) {
-		isc_result = isc_stdio_read(p, 1, len, fp, &rval);
-		if (isc_result == ISC_R_SUCCESS) {
+	while (len) {
+		rval = read(fd, p, len);
+		if (rval > 0) {
 			len -= rval;
 			p += rval;
-		} else {
-			t_info("read failed %d, result: %s\n",
-			       (int)rval, isc_result_totext(isc_result));
+		}
+		else {
+			t_info("read failed %d, errno == %d\n", rval, errno);
 			(void) free(buf);
-			(void) isc_stdio_close(fp);
+			(void) close(fd);
 			return(1);
 		}
 	}
-	isc_stdio_close(fp);
+	close(fd);
 
 	p = buf;
-	len = size;
-	while (len > 0U) {
-		if ((*p == '\r') || (*p == '\n')) {
+	len = sb.st_size;
+	while(len) {
+		if (*p == '\n') {
 			++p;
 			--len;
 			continue;
-		} else if (len < 2U)
-		       goto err;
+		}
 		if (('0' <= *p) && (*p <= '9'))
 			val = *p - '0';
-		else if (('A' <= *p) && (*p <= 'F'))
-			val = *p - 'A' + 10;
 		else
-			goto err;
+			val = *p - 'A' + 10;
 		++p;
 		val <<= 4;
 		--len;
 		if (('0' <= *p) && (*p <= '9'))
 			val |= (*p - '0');
-		else if (('A' <= *p) && (*p <= 'F'))
-			val |= (*p - 'A' + 10);
 		else
-			goto err;
+			val |= (*p - 'A' + 10);
 		++p;
 		--len;
 		isc_buffer_putuint8(iscbuf, val);
 	}
 	(void) free(buf);
 	return(0);
-
- err:
-	(void) free(buf);
-	return (1);
 }
 
 static void
@@ -714,15 +626,15 @@ t2_sigchk(char *datapath, char *sigpath, char *keyname,
 		isc_mem_t *mctx, char *expected_result,
 		int *nfails, int *nprobs)
 {
-	size_t		rval;
-	size_t		len;
-	FILE		*fp;
+	int		rval;
+	int		len;
+	int		fd;
 	int		exp_res;
 	dst_key_t	*key = NULL;
 	unsigned char	sig[T_SIGMAX];
 	unsigned char	*p;
 	unsigned char	*data;
-	off_t		size;
+	struct stat	sb;
 	isc_result_t	isc_result;
 	isc_buffer_t	databuf;
 	isc_buffer_t	sigbuf;
@@ -736,50 +648,47 @@ t2_sigchk(char *datapath, char *sigpath, char *keyname,
 	/*
 	 * Read data from file in a form usable by dst_verify.
 	 */
-	isc_result = isc_stdio_open(datapath, "rb", &fp);
-	if (isc_result != ISC_R_SUCCESS) {
-		t_info("t2_sigchk: open failed %s\n",
-		       isc_result_totext(isc_result));
+	rval = stat(datapath, &sb);
+	if (rval != 0) {
+		t_info("t2_sigchk: stat (%s) failed %d\n", datapath, errno);
 		++*nprobs;
 		return;
 	}
 
-	isc_result = isc_file_getsizefd(fileno(fp), &size);
-	if (isc_result != ISC_R_SUCCESS) {
-		t_info("t2_sigchk: stat (%s) failed %s\n",
-		       datapath, isc_result_totext(isc_result));
-		++*nprobs;
-		isc_stdio_close(fp);
-		return;
-	}
-
-	data = (unsigned char *) malloc(size * sizeof(unsigned char));
+	data = (unsigned char *) malloc(sb.st_size * sizeof(char));
 	if (data == NULL) {
 		t_info("t2_sigchk: malloc failed %d\n", errno);
 		++*nprobs;
-		isc_stdio_close(fp);
+		return;
+	}
+
+	fd = open(datapath, O_RDONLY);
+	if (fd < 0) {
+		t_info("t2_sigchk: open failed %d\n", errno);
+		(void) free(data);
+		++*nprobs;
 		return;
 	}
 
 	p = data;
-	len = (size_t)size;
+	len = sb.st_size;
 	do {
-		isc_result = isc_stdio_read(p, 1, len, fp, &rval);
-		if (isc_result == ISC_R_SUCCESS) {
+		rval = read(fd, p, len);
+		if (rval > 0) {
 			len -= rval;
 			p += rval;
 		}
 	} while (len);
-	(void) isc_stdio_close(fp);
+	(void) close(fd);
 
 	/*
 	 * Read key from file in a form usable by dst_verify.
 	 */
 	dns_fixedname_init(&fname);
 	name = dns_fixedname_name(&fname);
-	isc_buffer_constinit(&b, keyname, strlen(keyname));
+	isc_buffer_init(&b, keyname, strlen(keyname));
 	isc_buffer_add(&b, strlen(keyname));
-	isc_result = dns_name_fromtext(name, &b, dns_rootname, 0, NULL);
+	isc_result = dns_name_fromtext(name, &b, dns_rootname, ISC_FALSE, NULL);
 	if (isc_result != ISC_R_SUCCESS) {
 		t_info("dns_name_fromtext failed %s\n",
 			isc_result_totext(isc_result));
@@ -796,8 +705,8 @@ t2_sigchk(char *datapath, char *sigpath, char *keyname,
 		return;
 	}
 
-	isc_buffer_init(&databuf, data, (unsigned int)size);
-	isc_buffer_add(&databuf, (unsigned int)size);
+	isc_buffer_init(&databuf, data, sb.st_size);
+	isc_buffer_add(&databuf, sb.st_size);
 	isc_buffer_usedregion(&databuf, &datareg);
 
 #ifdef	NEWSIG
@@ -810,9 +719,7 @@ t2_sigchk(char *datapath, char *sigpath, char *keyname,
 	memset(sig, 0, sizeof(sig));
 	isc_buffer_init(&sigbuf, sig, sizeof(sig));
 
-	isc_result = dst_context_create3(key, mctx,
-					 DNS_LOGCATEGORY_GENERAL,
-					 ISC_TRUE, &ctx);
+	isc_result = dst_context_create(key, mctx, &ctx);
 	if (isc_result != ISC_R_SUCCESS) {
 		t_info("dst_context_create(%d) failed %s\n",
 		       dst_result_totext(isc_result));
@@ -861,7 +768,7 @@ t2_sigchk(char *datapath, char *sigpath, char *keyname,
 	 * Read precomputed signature from file in a form usable by dst_verify.
 	 */
 	rval = sig_fromfile(sigpath, &sigbuf);
-	if (rval != 0U) {
+	if (rval != 0) {
 		t_info("sig_fromfile failed\n");
 		(void) free(data);
 		dst_key_free(&key);
@@ -878,26 +785,18 @@ t2_sigchk(char *datapath, char *sigpath, char *keyname,
 	if (strstr(expected_result, "!"))
 		exp_res = 1;
 
-	isc_result = dst_context_create3(key, mctx,
-					 DNS_LOGCATEGORY_GENERAL,
-					 ISC_FALSE, &ctx);
+	isc_result = dst_context_create(key, mctx, &ctx);
 	if (isc_result != ISC_R_SUCCESS) {
 		t_info("dst_context_create returned %s\n",
 			isc_result_totext(isc_result));
-		(void) free(data);
-		dst_key_free(&key);
 		++*nfails;
-		return;
 	}
 	isc_result = dst_context_adddata(ctx, &datareg);
 	if (isc_result != ISC_R_SUCCESS) {
 		t_info("dst_context_adddata returned %s\n",
 			isc_result_totext(isc_result));
-		(void) free(data);
 		dst_context_destroy(&ctx);
-		dst_key_free(&key);
 		++*nfails;
-		return;
 	}
 	isc_result = dst_context_verify(ctx, &sigreg);
 	if (	((exp_res == 0) && (isc_result != ISC_R_SUCCESS))	||
@@ -906,6 +805,7 @@ t2_sigchk(char *datapath, char *sigpath, char *keyname,
 		t_info("dst_context_verify returned %s, expected %s\n",
 			isc_result_totext(isc_result),
 			expected_result);
+		dst_context_destroy(&ctx);
 		++*nfails;
 	}
 
@@ -921,42 +821,9 @@ t2_sigchk(char *datapath, char *sigpath, char *keyname,
  * signed at some earlier time, possibly with an entire different
  * version or implementation of the DSA and RSA algorithms
  */
-
-isc_mem_t *t2_mctx = NULL;
-isc_entropy_t *t2_ectx = NULL;
-
-static int
-t2_vfy_init(void) {
-	isc_result_t	isc_result;
-
-	t2_mctx = NULL;
-	isc_result = isc_mem_create(0, 0, &t2_mctx);
-	if (isc_result != ISC_R_SUCCESS) {
-		t_info("isc_mem_create failed %s\n",
-		       isc_result_totext(isc_result));
-		return(0);
-	}
-	t2_ectx = NULL;
-	isc_result = isc_entropy_create(t2_mctx, &t2_ectx);
-	if (isc_result != ISC_R_SUCCESS) {
-		t_info("isc_entropy_create failed %s\n",
-		       isc_result_totext(isc_result));
-		return(0);
-	}
-	isc_result = isc_entropy_createfilesource(t2_ectx, "randomfile");
-	if (isc_result != ISC_R_SUCCESS) {
-		t_info("isc_entropy_create failed %s\n",
-		       isc_result_totext(isc_result));
-		return(0);
-	}
-	isc_result = dst_lib_init(t2_mctx, t2_ectx, ISC_ENTROPY_BLOCKING);
-	if (isc_result != ISC_R_SUCCESS) {
-		t_info("dst_lib_init failed %s\n",
-		       isc_result_totext(isc_result));
-		return(0);
-	}
-	return(1);
-}
+static const char *a2 =
+		"the dst module provides the capability to "
+		"verify data signed with the RSA and DSA algorithms";
 
 /*
  * av ==  datafile, sigpath, keyname, keyid, alg, exp_result.
@@ -973,6 +840,9 @@ t2_vfy(char **av) {
 	char		*exp_result;
 	int		nfails;
 	int		nprobs;
+	isc_mem_t	*mctx;
+	isc_entropy_t	*ectx;
+	isc_result_t	isc_result;
 	int		result;
 
 	datapath	= *av++;
@@ -994,17 +864,51 @@ t2_vfy(char **av) {
 		return(T_UNRESOLVED);
 	}
 
+	mctx = NULL;
+	isc_result = isc_mem_create(0, 0, &mctx);
+	if (isc_result != ISC_R_SUCCESS) {
+		t_info("isc_mem_create failed %s\n",
+		       isc_result_totext(isc_result));
+		return(T_UNRESOLVED);
+	}
+	ectx = NULL;
+	isc_result = isc_entropy_create(mctx, &ectx);
+	if (isc_result != ISC_R_SUCCESS) {
+		t_info("isc_entropy_create failed %s\n",
+		       isc_result_totext(isc_result));
+		return(T_UNRESOLVED);
+	}
+	isc_result = isc_entropy_createfilesource(ectx, "randomfile");
+	if (isc_result != ISC_R_SUCCESS) {
+		t_info("isc_entropy_create failed %s\n",
+		       isc_result_totext(isc_result));
+		return(T_UNRESOLVED);
+	}
+	isc_result = dst_lib_init(mctx, ectx, ISC_ENTROPY_BLOCKING);
+	if (isc_result != ISC_R_SUCCESS) {
+		t_info("dst_lib_init failed %s\n",
+		       isc_result_totext(isc_result));
+		return(T_UNRESOLVED);
+	}
+
 	if (!dst_algorithm_supported(DST_ALG_RSAMD5)) {
+		dst_lib_destroy();
 		t_info("library built without crypto support\n");
-		return (T_SKIPPED);
+		return (T_UNTESTED);
 	}
 
 	t_info("testing %s, %s, %s, %s, %s, %s\n",
 			datapath, sigpath, keyname, key, alg, exp_result);
 	t2_sigchk(datapath, sigpath, keyname, keyid,
 			algid, DST_TYPE_PRIVATE|DST_TYPE_PUBLIC,
-			t2_mctx, exp_result,
+			mctx, exp_result,
 			&nfails, &nprobs);
+
+	dst_lib_destroy();
+
+	isc_entropy_detach(&ectx);
+
+	isc_mem_destroy(&mctx);
 
 	result = T_UNRESOLVED;
 	if (nfails)
@@ -1015,37 +919,17 @@ t2_vfy(char **av) {
 	return(result);
 }
 
-static const char *a2 =
-		"the dst module provides the capability to "
-		"verify data signed with the RSA and DSA algorithms";
-
 static void
 t2(void) {
 	int	result;
 	t_assert("dst", 2, T_REQUIRED, "%s", a2);
-	if (!t2_vfy_init()) {
-		result = T_UNRESOLVED;
-	} else {
-		result = t_eval("dst_2_data", t2_vfy, 6);
-		dst_lib_destroy();
-	}
-	if (t2_ectx)
-		isc_entropy_detach(&t2_ectx);
-	if (t2_mctx)
-		isc_mem_destroy(&t2_mctx);
+	result = t_eval("dst_2_data", t2_vfy, 6);
 	t_result(result);
 }
 
 testspec_t	T_testlist[] = {
-	{	(PFV) t1,	"basic dst module verification"	},
-	{	(PFV) t2,	"signature ineffability"	},
-	{	(PFV) 0,	NULL				}
+	{	t1,	"basic dst module verification"	},
+	{	t2,	"signature ineffability"	},
+	{	NULL,	NULL				}
 };
 
-#ifdef WIN32
-int
-main(int argc, char **argv) {
-	t_settests(T_testlist);
-	return (t_main(argc, argv));
-}
-#endif

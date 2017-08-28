@@ -1,4 +1,4 @@
-# Copyright (C) 2012, 2013, 2016  Internet Systems Consortium, Inc. ("ISC")
+# Copyright (C) 2012  Internet Systems Consortium, Inc. ("ISC")
 #
 # Permission to use, copy, modify, and/or distribute this software for any
 # purpose with or without fee is hereby granted, provided that the above
@@ -69,7 +69,7 @@ do
 		expect1="unexpected NSEC RRset at"
 		;;
 	*.nsec.broken-chain)
-		expect1="Bad NSEC record for.*, next name mismatch"
+		expect1="Bad record NSEC record for.*, next name mismatch"
 		;;
 	*.bad-bitmap)
 		expect1="bit map mismatch"
@@ -93,6 +93,4 @@ do
 	[ $ret = 0 ] || failed
 	[ $dumpit = 1 ] && cat verify.out.$n
 done
-
-echo "I:exit status: $status"
-[ $status -eq 0 ] || exit 1
+exit $status

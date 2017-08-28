@@ -1,4 +1,4 @@
-/*	$NetBSD: md5.h,v 1.1.1.1 2009/04/12 15:33:31 christos Exp $	*/
+/*	$NetBSD: md5.h,v 1.1 2009/04/12 15:33:31 christos Exp $	*/
 
 /* crypto/md/md5.h */
 /* Copyright (C) 1995-1997 Eric Young (eay@cryptsoft.com)

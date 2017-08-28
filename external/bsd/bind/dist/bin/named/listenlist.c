@@ -1,7 +1,7 @@
-/*	$NetBSD: listenlist.c,v 1.5 2014/12/10 04:37:51 christos Exp $	*/
+/*	$NetBSD: listenlist.c,v 1.1 2009/03/22 14:56:00 christos Exp $	*/
 
 /*
- * Copyright (C) 2004, 2005, 2007, 2013  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2004, 2005, 2007  Internet Systems Consortium, Inc. ("ISC")
  * Copyright (C) 2000, 2001  Internet Software Consortium.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -17,7 +17,7 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* Id: listenlist.c,v 1.14 2007/06/19 23:46:59 tbox Exp  */
+/* Id: listenlist.c,v 1.14 2007/06/19 23:46:59 tbox Exp */
 
 /*! \file */
 
@@ -34,7 +34,7 @@ static void
 destroy(ns_listenlist_t *list);
 
 isc_result_t
-ns_listenelt_create(isc_mem_t *mctx, in_port_t port, isc_dscp_t dscp,
+ns_listenelt_create(isc_mem_t *mctx, in_port_t port,
 		    dns_acl_t *acl, ns_listenelt_t **target)
 {
 	ns_listenelt_t *elt = NULL;
@@ -45,7 +45,6 @@ ns_listenelt_create(isc_mem_t *mctx, in_port_t port, isc_dscp_t dscp,
 	elt->mctx = mctx;
 	ISC_LINK_INIT(elt, link);
 	elt->port = port;
-	elt->dscp = dscp;
 	elt->acl = acl;
 	*target = elt;
 	return (ISC_R_SUCCESS);
@@ -103,7 +102,7 @@ ns_listenlist_detach(ns_listenlist_t **listp) {
 }
 
 isc_result_t
-ns_listenlist_default(isc_mem_t *mctx, in_port_t port, isc_dscp_t dscp,
+ns_listenlist_default(isc_mem_t *mctx, in_port_t port,
 		      isc_boolean_t enabled, ns_listenlist_t **target)
 {
 	isc_result_t result;
@@ -119,7 +118,7 @@ ns_listenlist_default(isc_mem_t *mctx, in_port_t port, isc_dscp_t dscp,
 	if (result != ISC_R_SUCCESS)
 		goto cleanup;
 
-	result = ns_listenelt_create(mctx, port, dscp, acl, &elt);
+	result = ns_listenelt_create(mctx, port, acl, &elt);
 	if (result != ISC_R_SUCCESS)
 		goto cleanup_acl;
 

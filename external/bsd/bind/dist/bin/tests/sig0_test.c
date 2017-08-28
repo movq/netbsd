@@ -1,7 +1,7 @@
-/*	$NetBSD: sig0_test.c,v 1.9 2015/12/17 04:00:42 christos Exp $	*/
+/*	$NetBSD: sig0_test.c,v 1.1 2009/03/22 14:56:25 christos Exp $	*/
 
 /*
- * Copyright (C) 2004, 2005, 2007-2009, 2012, 2015  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2004, 2005, 2007, 2008  Internet Systems Consortium, Inc. ("ISC")
  * Copyright (C) 2000, 2001  Internet Software Consortium.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -17,7 +17,7 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* Id: sig0_test.c,v 1.19 2009/09/02 23:48:01 tbox Exp  */
+/* Id: sig0_test.c,v 1.17 2008/07/22 23:47:04 tbox Exp */
 
 #include <config.h>
 
@@ -35,7 +35,6 @@
 #include <isc/mem.h>
 #include <isc/mutex.h>
 #include <isc/net.h>
-#include <isc/print.h>
 #include <isc/task.h>
 #include <isc/timer.h>
 #include <isc/socket.h>
@@ -151,6 +150,7 @@ buildquery(void) {
 
 	result = dns_message_gettemprdataset(query, &question);
 	CHECK("dns_message_gettemprdataset", result);
+	dns_rdataset_init(question);
 	dns_rdataset_makequestion(question, dns_rdataclass_in,
 				  dns_rdatatype_a);
 	result = dns_message_gettempname(query, &qname);
@@ -159,7 +159,8 @@ buildquery(void) {
 	isc_buffer_add(&namesrc, strlen(nametext));
 	isc_buffer_init(&namedst, namedata, sizeof(namedata));
 	dns_name_init(qname, NULL);
-	result = dns_name_fromtext(qname, &namesrc, dns_rootname, 0, &namedst);
+	result = dns_name_fromtext(qname, &namesrc, dns_rootname, ISC_FALSE,
+				   &namedst);
 	CHECK("dns_name_fromtext", result);
 	ISC_LIST_APPEND(qname->list, question, link);
 	dns_message_addname(query, qname, DNS_SECTION_QUESTION);
@@ -263,9 +264,9 @@ main(int argc, char *argv[]) {
 
 	dns_fixedname_init(&fname);
 	name = dns_fixedname_name(&fname);
-	isc_buffer_constinit(&b, "child.example.", strlen("child.example."));
+	isc_buffer_init(&b, "child.example.", strlen("child.example."));
 	isc_buffer_add(&b, strlen("child.example."));
-	result = dns_name_fromtext(name, &b, dns_rootname, 0, NULL);
+	result = dns_name_fromtext(name, &b, dns_rootname, ISC_FALSE, NULL);
 	CHECK("dns_name_fromtext", result);
 
 	key = NULL;

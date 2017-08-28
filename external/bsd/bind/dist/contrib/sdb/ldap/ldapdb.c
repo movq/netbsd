@@ -1,4 +1,4 @@
-/*	$NetBSD: ldapdb.c,v 1.5 2015/07/08 17:28:56 christos Exp $	*/
+/*	$NetBSD: ldapdb.c,v 1.1 2009/03/22 14:58:12 christos Exp $	*/
 
 /*
  * ldapdb.c version 1.0-beta
@@ -135,6 +135,7 @@ ldapdb_getconn(struct ldapdb_data *data)
 			free(threaddata->index);
 			while (threaddata->data != NULL) {
 				conndata = threaddata->data;
+				free(conndata->index);
 				if (conndata->data != NULL)
 					ldap_unbind((LDAP *)conndata->data);
 				threaddata->data = conndata->next;
@@ -218,15 +219,8 @@ ldapdb_bind(struct ldapdb_data *data, LDAP **ldp)
 	}
 }
 
-#ifdef DNS_CLIENTINFO_VERSION
 static isc_result_t
-ldapdb_search(const char *zone, const char *name, void *dbdata, void *retdata,
-	      dns_clientinfomethods_t *methods, dns_clientinfo_t *clientinfo)
-#else
-static isc_result_t
-ldapdb_search(const char *zone, const char *name, void *dbdata, void *retdata,
-	      void *methods, void *clientinfo)
-#endif /* DNS_CLIENTINFO_VERSION */
+ldapdb_search(const char *zone, const char *name, void *dbdata, void *retdata)
 {
 	struct ldapdb_data *data = dbdata;
 	isc_result_t result = ISC_R_NOTFOUND;
@@ -240,9 +234,6 @@ ldapdb_search(const char *zone, const char *name, void *dbdata, void *retdata,
 	BerElement *ptr;
 #endif
 	int i, j, errno, msgid;
-
-	UNUSED(methods);
-	UNUSED(clientinfo);
 
 	ldp = ldapdb_getconn(data);
 	if (ldp == NULL)
@@ -381,31 +372,18 @@ ldapdb_search(const char *zone, const char *name, void *dbdata, void *retdata,
 
 
 /* callback routines */
-#ifdef DNS_CLIENTINFO_VERSION
-static isc_result_t
-ldapdb_lookup(const char *zone, const char *name, void *dbdata,
-	      dns_sdblookup_t *lookup, dns_clientinfomethods_t *methods,
-	      dns_clientinfo_t *clientinfo)
-{
-	UNUSED(methods);
-	UNUSED(clientinfo);
-	return (ldapdb_search(zone, name, dbdata, lookup, NULL, NULL));
-}
-#else
 static isc_result_t
 ldapdb_lookup(const char *zone, const char *name, void *dbdata,
 	      dns_sdblookup_t *lookup)
 {
-	return (ldapdb_search(zone, name, dbdata, lookup, methods,
-			      clientinfo));
+	return ldapdb_search(zone, name, dbdata, lookup);
 }
-#endif /* DNS_CLIENTINFO_VERSION */
 
 static isc_result_t
 ldapdb_allnodes(const char *zone, void *dbdata,
 		dns_sdballnodes_t *allnodes)
 {
-	return (ldapdb_search(zone, NULL, dbdata, allnodes, NULL, NULL));
+	return ldapdb_search(zone, NULL, dbdata, allnodes);
 }
 
 static char *
@@ -664,8 +642,7 @@ static dns_sdbmethods_t ldapdb_methods = {
 	NULL, /* authority */
 	ldapdb_allnodes,
 	ldapdb_create,
-	ldapdb_destroy,
-	NULL /* lookup2 */
+	ldapdb_destroy
 };
 
 /* Wrapper around dns_sdb_register() */

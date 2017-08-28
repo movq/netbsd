@@ -1,7 +1,7 @@
-/*	$NetBSD: interfacemgr.h,v 1.6 2014/12/10 04:37:52 christos Exp $	*/
+/*	$NetBSD: interfacemgr.h,v 1.1 2009/03/22 14:56:12 christos Exp $	*/
 
 /*
- * Copyright (C) 2004, 2005, 2007, 2011, 2013, 2014  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2004, 2005, 2007  Internet Systems Consortium, Inc. ("ISC")
  * Copyright (C) 1999-2002  Internet Software Consortium.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -17,7 +17,7 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* Id: interfacemgr.h,v 1.35 2011/07/28 23:47:58 tbox Exp  */
+/* Id: interfacemgr.h,v 1.33 2007/06/19 23:46:59 tbox Exp */
 
 #ifndef NAMED_INTERFACEMGR_H
 #define NAMED_INTERFACEMGR_H 1
@@ -67,8 +67,7 @@
 #define NS_INTERFACE_VALID(t)	ISC_MAGIC_VALID(t, IFACE_MAGIC)
 
 #define NS_INTERFACEFLAG_ANYADDR	0x01U	/*%< bound to "any" address */
-#define MAX_UDP_DISPATCH 128		/*%< Maximum number of UDP dispatchers
-						     to start per interface */
+
 /*% The nameserver interface structure */
 struct ns_interface {
 	unsigned int		magic;		/*%< Magic number. */
@@ -79,14 +78,11 @@ struct ns_interface {
 	isc_sockaddr_t		addr;           /*%< Address and port. */
 	unsigned int		flags;		/*%< Interface characteristics */
 	char 			name[32];	/*%< Null terminated. */
-	dns_dispatch_t *	udpdispatch[MAX_UDP_DISPATCH];
-						/*%< UDP dispatchers. */
+	dns_dispatch_t *	udpdispatch;	/*%< UDP dispatcher. */
 	isc_socket_t *		tcpsocket;	/*%< TCP socket. */
-	isc_dscp_t		dscp;		/*%< "listen-on" DSCP value */
 	int			ntcptarget;	/*%< Desired number of concurrent
 						     TCP accepts */
 	int			ntcpcurrent;	/*%< Current ditto, locked */
-	int			nudpdispatch;	/*%< Number of UDP dispatches */
 	ns_clientmgr_t *	clientmgr;	/*%< Client manager. */
 	ISC_LINK(ns_interface_t) link;
 };
@@ -99,7 +95,7 @@ isc_result_t
 ns_interfacemgr_create(isc_mem_t *mctx, isc_taskmgr_t *taskmgr,
 		       isc_socketmgr_t *socketmgr,
 		       dns_dispatchmgr_t *dispatchmgr,
-		       isc_task_t *task, ns_interfacemgr_t **mgrp);
+		       ns_interfacemgr_t **mgrp);
 /*%
  * Create a new interface manager.
  *

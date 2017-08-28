@@ -1,7 +1,7 @@
-/*	$NetBSD: isctest.h,v 1.4 2014/12/10 04:38:01 christos Exp $	*/
+/*	$NetBSD: isctest.h,v 1.1 2011/09/11 17:19:37 christos Exp $	*/
 
 /*
- * Copyright (C) 2011, 2012  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2011  Internet Systems Consortium, Inc. ("ISC")
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -16,7 +16,7 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* Id */
+/* Id: isctest.h,v 1.3 2011-07-28 04:04:37 each Exp */
 
 /*! \file */
 
@@ -27,7 +27,6 @@
 #include <isc/hash.h>
 #include <isc/log.h>
 #include <isc/mem.h>
-#include <isc/print.h>
 #include <isc/result.h>
 #include <isc/string.h>
 #include <isc/task.h>
@@ -39,14 +38,14 @@
 		result = (r); \
 		if (result != ISC_R_SUCCESS) \
 			goto cleanup; \
-	} while (/*CONSTCOND*/0)
+	} while (0)
 
 extern isc_mem_t *mctx;
 extern isc_entropy_t *ectx;
 extern isc_log_t *lctx;
 extern isc_taskmgr_t *taskmgr;
-extern isc_timermgr_t *timermgr;
-extern isc_socketmgr_t *socketmgr;
+isc_timermgr_t *timermgr;
+isc_socketmgr_t *socketmgr;
 extern int ncpus;
 
 isc_result_t
@@ -55,5 +54,3 @@ isc_test_begin(FILE *logfile, isc_boolean_t start_managers);
 void
 isc_test_end(void);
 
-void
-isc_test_nap(isc_uint32_t usec);

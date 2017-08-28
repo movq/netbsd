@@ -1,7 +1,7 @@
-/*	$NetBSD: dir.c,v 1.6 2017/06/15 15:59:41 christos Exp $	*/
+/*	$NetBSD: dir.c,v 1.1 2009/03/22 15:02:18 christos Exp $	*/
 
 /*
- * Copyright (C) 2004, 2005, 2007-2009, 2011, 2012, 2017  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2004, 2005, 2007, 2009  Internet Systems Consortium, Inc. ("ISC")
  * Copyright (C) 1999-2001  Internet Software Consortium.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -17,6 +17,8 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
+/* Id: dir.c,v 1.25.332.3 2009/02/16 23:47:15 tbox Exp */
+
 /*! \file
  * \author  Principal Authors: DCL */
 
@@ -31,7 +33,6 @@
 
 #include <isc/dir.h>
 #include <isc/magic.h>
-#include <isc/netdb.h>
 #include <isc/string.h>
 #include <isc/util.h>
 
@@ -80,7 +81,7 @@ isc_dir_open(isc_dir_t *dir, const char *dirname) {
 	if (dir->dirname < p && *(p - 1) != '/')
 		*p++ = '/';
 	*p++ = '*';
-	*p = '\0';
+	*p++ = '\0';
 
 	/*
 	 * Open stream.
@@ -169,23 +170,10 @@ isc_dir_chdir(const char *dirname) {
 
 isc_result_t
 isc_dir_chroot(const char *dirname) {
-#ifdef HAVE_CHROOT
-	void *tmp;
-#endif
 
 	REQUIRE(dirname != NULL);
 
 #ifdef HAVE_CHROOT
-	/*
-	 * Try to use getservbyname and getprotobyname before chroot.
-	 * If WKS records are used in a zone under chroot, Name Service Switch
-	 * may fail to load library in chroot.
-	 * Do not report errors if it fails, we do not need any result now.
-	 */
-	tmp = getprotobyname("udp");
-	if (tmp != NULL)
-		(void) getservbyname("domain", "udp");
-
 	if (chroot(dirname) < 0 || chdir("/") < 0)
 		return (isc__errno2result(errno));
 

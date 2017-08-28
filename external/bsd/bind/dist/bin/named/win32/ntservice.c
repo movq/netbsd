@@ -1,7 +1,7 @@
-/*	$NetBSD: ntservice.c,v 1.7 2015/12/17 04:00:41 christos Exp $	*/
+/*	$NetBSD: ntservice.c,v 1.1 2009/03/22 14:56:14 christos Exp $	*/
 
 /*
- * Copyright (C) 2004, 2006, 2007, 2009, 2011, 2013-2015  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2004, 2006, 2007  Internet Systems Consortium, Inc. ("ISC")
  * Copyright (C) 1999-2002  Internet Software Consortium.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -17,15 +17,13 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* Id: ntservice.c,v 1.16 2011/01/13 08:50:29 tbox Exp  */
+/* Id: ntservice.c,v 1.12 2007/06/19 23:46:59 tbox Exp */
 
 #include <config.h>
 #include <stdio.h>
 
 #include <isc/app.h>
-#include <isc/commandline.h>
 #include <isc/log.h>
-#include <isc/print.h>
 
 #include <named/globals.h>
 #include <named/ntservice.h>
@@ -41,13 +39,69 @@ static char ConsoleTitle[128];
  * Forward declarations
  */
 void ServiceControl(DWORD dwCtrlCode);
-int bindmain(int, char *[]); /* From main.c */
+void GetArgs(int *, char ***, char ***);
+int main(int, char *[], char *[]); /* From ns_main.c */
+
+/*
+ * Here we change the entry point for the executable to bindmain() from main()
+ * This allows us to invoke as a service or from the command line easily.
+ */
+#pragma comment(linker, "/entry:bindmain")
+
+/*
+ * This is the entry point for the executable 
+ * We can now call main() explicitly or via StartServiceCtrlDispatcher()
+ * as we need to.
+ */
+int bindmain()
+{
+	int rc,
+	i = 1;
+
+	int argc;
+	char **envp, **argv;
+
+	/*
+	 * We changed the entry point function, so we must initialize argv,
+	 * etc. ourselves.  Ick.
+	 */
+	GetArgs(&argc, &argv, &envp);
+
+	/* Command line users should put -f in the options */
+	while (argv[i]) {
+		if (!strcmp(argv[i], "-f") || !strcmp(argv[i], "-g")) {
+			foreground = TRUE;
+			break;
+		}
+		i++;
+	}
+
+	if (foreground) {
+		/* run in console window */
+		exit(main(argc, argv, envp));
+	} else {
+		/* Start up as service */
+		char *SERVICE_NAME = BIND_SERVICE_NAME;
+
+		SERVICE_TABLE_ENTRY dispatchTable[] = {
+			{ TEXT(SERVICE_NAME), (LPSERVICE_MAIN_FUNCTION)main },
+			{ NULL, NULL }
+		};
+
+		rc = StartServiceCtrlDispatcher(dispatchTable);
+		if (!rc) {
+			fprintf(stderr, "Use -f to run from the command line.\n");
+			exit(GetLastError());
+		}
+	}
+	exit(0);
+}
 
 /*
  * Initialize the Service by registering it.
  */
 void
-ntservice_init(void) {
+ntservice_init() {
 	if (!foreground) {
 		/* Register handler with the SCM */
 		hServiceStatus = RegisterServiceCtrlHandler(BIND_SERVICE_NAME,
@@ -67,17 +121,17 @@ ntservice_init(void) {
 }
 
 void
-ntservice_shutdown(void) {
+ntservice_shutdown() {
 	UpdateSCM(SERVICE_STOPPED);
 }
 /*
  * Routine to check if this is a service or a foreground program
  */
 BOOL
-ntservice_isservice(void) {
+ntservice_isservice() {
 	return(!foreground);
 }
-/*
+/* 
  * ServiceControl(): Handles requests from the SCM and passes them on
  * to named.
  */
@@ -85,17 +139,17 @@ void
 ServiceControl(DWORD dwCtrlCode) {
 	/* Handle the requested control code */
 	switch(dwCtrlCode) {
-	case SERVICE_CONTROL_INTERROGATE:
+        case SERVICE_CONTROL_INTERROGATE:
 		UpdateSCM(0);
 		break;
 
-	case SERVICE_CONTROL_SHUTDOWN:
-	case SERVICE_CONTROL_STOP:
+        case SERVICE_CONTROL_SHUTDOWN:
+        case SERVICE_CONTROL_STOP:
 		ns_server_flushonshutdown(ns_g_server, ISC_TRUE);
 		isc_app_shutdown();
 		UpdateSCM(SERVICE_STOPPED);
 		break;
-	default:
+        default:
 		break;
 	}
 }
@@ -128,55 +182,60 @@ void UpdateSCM(DWORD state) {
 	}
 }
 
-/* unhook main */
+/*
+ * C-runtime stuff used to initialize the app and
+ * get argv, argc, envp.
+ */
 
-#undef main
+typedef struct 
+{
+	int newmode;
+} _startupinfo;
+
+_CRTIMP void __cdecl __set_app_type(int);
+_CRTIMP void __cdecl __getmainargs(int *, char ***, char ***, int,
+				   _startupinfo *);
+void __cdecl _setargv(void);
+
+#ifdef _M_IX86
+/* Pentium FDIV adjustment */
+extern int _adjust_fdiv;
+extern int * _imp___adjust_fdiv;
+/* Floating point precision */
+extern void _setdefaultprecision();
+#endif
+
+extern int _newmode;		/* malloc new() handler mode */
+extern int _dowildcard;		/* passed to __getmainargs() */
+
+typedef void (__cdecl *_PVFV)(void);
+extern void __cdecl _initterm(_PVFV *, _PVFV *);
+extern _PVFV *__onexitbegin;
+extern _PVFV *__onexitend;
+extern _CRTIMP char **__initenv;
 
 /*
- * This is the entry point for the executable
- * We can now call bindmain() explicitly or via StartServiceCtrlDispatcher()
- * as we need to.
+ * Do the work that mainCRTStartup() would normally do
  */
-int main(int argc, char *argv[])
+void GetArgs(int *argc, char ***argv, char ***envp)
 {
-	int rc, ch;
+	_startupinfo startinfo;
+    
+	/*
+	 * Set the app type to Console (check CRT/SRC/INTERNAL.H:
+	 * \#define _CONSOLE_APP 1)
+	 */
+	__set_app_type(1);
+	
+	/* Mark this module as an EXE file */
+	__onexitbegin = __onexitend = (_PVFV *)(-1);
 
-	/* Command line users should put -f in the options. */
-	isc_commandline_errprint = ISC_FALSE;
-	while ((ch = isc_commandline_parse(argc, argv, NS_MAIN_ARGS)) != -1) {
-		switch (ch) {
-		case 'f':
-		case 'g':
-		case 'v':
-		case 'V':
-			foreground = TRUE;
-			break;
-		default:
-			break;
-		}
-	}
-	isc_commandline_reset = ISC_TRUE;
+	startinfo.newmode = _newmode;
+	__getmainargs(argc, argv, envp, _dowildcard, &startinfo);
+	__initenv = *envp;
 
-	if (foreground) {
-		/* run in console window */
-		exit(bindmain(argc, argv));
-	} else {
-		/* Start up as service */
-		char *SERVICE_NAME = BIND_SERVICE_NAME;
-
-		SERVICE_TABLE_ENTRY dispatchTable[] = {
-			{ TEXT(SERVICE_NAME),
-			  (LPSERVICE_MAIN_FUNCTION)bindmain },
-			{ NULL, NULL }
-		};
-
-		rc = StartServiceCtrlDispatcher(dispatchTable);
-		if (!rc) {
-			fprintf(stderr,
-				"Use -f to run from the command line.\n");
-			/* will be 1063 when launched as a console app */
-			exit(GetLastError());
-		}
-	}
-	exit(0);
+#ifdef _M_IX86
+	_adjust_fdiv = * _imp___adjust_fdiv;
+	_setdefaultprecision();
+#endif
 }

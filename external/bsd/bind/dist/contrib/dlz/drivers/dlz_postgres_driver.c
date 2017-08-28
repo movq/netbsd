@@ -1,4 +1,4 @@
-/*	$NetBSD: dlz_postgres_driver.c,v 1.5 2014/12/10 04:37:55 christos Exp $	*/
+/*	$NetBSD: dlz_postgres_driver.c,v 1.1 2009/03/22 14:57:10 christos Exp $	*/
 
 /*
  * Copyright (C) 2002 Stichting NLnet, Netherlands, stichting@nlnet.nl.
@@ -294,10 +294,8 @@ postgres_get_resultset(const char *zone, const char *record,
 	unsigned int i = 0;
 	unsigned int j = 0;
 
-#if 0
 	/* temporarily get a unique thread # */
 	unsigned int dlz_thread_num = 1+(int) (1000.0*rand()/(RAND_MAX+1.0));
-#endif
 
 	REQUIRE(*rs == NULL);
 
@@ -579,7 +577,6 @@ postgres_get_resultset(const char *zone, const char *record,
 #endif
 			PQclear(*rs);	/* get rid of it */
 			/* in case this was the last attempt */
-			*rs = NULL;
 			result = ISC_R_FAILURE;
 		}
 	}
@@ -775,17 +772,12 @@ postgres_process_rs(dns_sdlzlookup_t *lookup, PGresult *rs)
 /*% determine if the zone is supported by (in) the database */
 
 static isc_result_t
-postgres_findzone(void *driverarg, void *dbdata, const char *name,
-		  dns_clientinfomethods_t *methods,
-		  dns_clientinfo_t *clientinfo)
+postgres_findzone(void *driverarg, void *dbdata, const char *name)
 {
 	isc_result_t result;
 	PGresult *rs = NULL;
 	unsigned int rows;
-
 	UNUSED(driverarg);
-	UNUSED(methods);
-	UNUSED(clientinfo);
 
 	/* run the query and get the result set from the database. */
 	result = postgres_get_resultset(name, NULL, NULL,
@@ -824,7 +816,7 @@ postgres_allowzonexfr(void *driverarg, void *dbdata, const char *name,
 	UNUSED(driverarg);
 
 	/* first check if the zone is supported by the database. */
-	result = postgres_findzone(driverarg, dbdata, name, NULL, NULL);
+	result = postgres_findzone(driverarg, dbdata, name);
 	if (result != ISC_R_SUCCESS)
 		return (ISC_R_NOTFOUND);
 
@@ -1026,15 +1018,12 @@ postgres_authority(const char *zone, void *driverarg, void *dbdata,
 /*% if zone is supported, lookup up a (or multiple) record(s) in it */
 static isc_result_t
 postgres_lookup(const char *zone, const char *name, void *driverarg,
-		void *dbdata, dns_sdlzlookup_t *lookup,
-		dns_clientinfomethods_t *methods, dns_clientinfo_t *clientinfo)
+		void *dbdata, dns_sdlzlookup_t *lookup)
 {
 	isc_result_t result;
 	PGresult *rs = NULL;
 
 	UNUSED(driverarg);
-	UNUSED(methods);
-	UNUSED(clientinfo);
 
 	/* run the query and get the result set from the database. */
 	result = postgres_get_resultset(zone, name, NULL, LOOKUP, dbdata, &rs);
@@ -1323,14 +1312,7 @@ static dns_sdlzmethods_t dlz_postgres_methods = {
 	postgres_lookup,
 	postgres_authority,
 	postgres_allnodes,
-	postgres_allowzonexfr,
-	NULL,
-	NULL,
-	NULL,
-	NULL,
-	NULL,
-	NULL,
-	NULL,
+	postgres_allowzonexfr
 };
 
 /*%

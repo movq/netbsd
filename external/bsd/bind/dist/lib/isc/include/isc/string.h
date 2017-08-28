@@ -1,7 +1,7 @@
-/*	$NetBSD: string.h,v 1.5 2014/12/10 04:38:00 christos Exp $	*/
+/*	$NetBSD: string.h,v 1.1 2009/03/22 15:02:15 christos Exp $	*/
 
 /*
- * Copyright (C) 2004-2007, 2014  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2004-2007  Internet Systems Consortium, Inc. ("ISC")
  * Copyright (C) 2000, 2001, 2003  Internet Software Consortium.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -17,7 +17,7 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* Id: string.h,v 1.23 2007/09/13 04:48:16 each Exp  */
+/* Id: string.h,v 1.23 2007/09/13 04:48:16 each Exp */
 
 #ifndef ISC_STRING_H
 #define ISC_STRING_H 1
@@ -226,13 +226,6 @@ isc_string_strlcat(char *dst, const char *src, size_t size);
 
 #ifdef ISC_PLATFORM_NEEDSTRLCAT
 #define strlcat isc_string_strlcat
-#endif
-
-char *
-isc_string_strcasestr(const char *big, const char *little);
-
-#ifdef ISC_PLATFORM_NEEDSTRCASESTR
-#define strcasestr isc_string_strcasestr
 #endif
 
 ISC_LANG_ENDDECLS

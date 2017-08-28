@@ -1,4 +1,4 @@
-/*	$NetBSD: list.h,v 1.5 2014/12/10 04:38:02 christos Exp $	*/
+/*	$NetBSD: list.h,v 1.1 2009/03/22 15:02:39 christos Exp $	*/
 
 /*
  * Copyright (C) 2004-2007  Internet Systems Consortium, Inc. ("ISC")
@@ -17,7 +17,7 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* Id: list.h,v 1.14 2007/06/19 23:47:23 tbox Exp  */
+/* Id: list.h,v 1.14 2007/06/19 23:47:23 tbox Exp */
 
 #ifndef LWRES_LIST_H
 #define LWRES_LIST_H 1
@@ -26,14 +26,14 @@
 
 #define LWRES_LIST(type) struct { type *head, *tail; }
 #define LWRES_LIST_INIT(list) \
-	do { (list).head = NULL; (list).tail = NULL; } while (/*CONSTCOND*/0)
+	do { (list).head = NULL; (list).tail = NULL; } while (0)
 
 #define LWRES_LINK(type) struct { type *prev, *next; }
 #define LWRES_LINK_INIT(elt, link) \
 	do { \
 		(elt)->link.prev = (void *)(-1); \
 		(elt)->link.next = (void *)(-1); \
-	} while (/*CONSTCOND*/0)
+	} while (0)
 #define LWRES_LINK_LINKED(elt, link) \
 	((void *)((elt)->link.prev) != (void *)(-1))
 
@@ -50,7 +50,7 @@
 		(elt)->link.prev = NULL; \
 		(elt)->link.next = (list).head; \
 		(list).head = (elt); \
-	} while (/*CONSTCOND*/0)
+	} while (0)
 
 #define LWRES_LIST_APPEND(list, elt, link) \
 	do { \
@@ -61,7 +61,7 @@
 		(elt)->link.prev = (list).tail; \
 		(elt)->link.next = NULL; \
 		(list).tail = (elt); \
-	} while (/*CONSTCOND*/0)
+	} while (0)
 
 #define LWRES_LIST_UNLINK(list, elt, link) \
 	do { \
@@ -75,7 +75,7 @@
 			(list).head = (elt)->link.next; \
 		(elt)->link.prev = (void *)(-1); \
 		(elt)->link.next = (void *)(-1); \
-	} while (/*CONSTCOND*/0)
+	} while (0)
 
 #define LWRES_LIST_PREV(elt, link) ((elt)->link.prev)
 #define LWRES_LIST_NEXT(elt, link) ((elt)->link.next)
@@ -90,7 +90,7 @@
 			(elt)->link.prev->link.next = (elt); \
 			(elt)->link.next = (before); \
 		} \
-	} while (/*CONSTCOND*/0)
+	} while (0)
 
 #define LWRES_LIST_INSERTAFTER(list, after, elt, link) \
 	do { \
@@ -102,7 +102,7 @@
 			(elt)->link.next->link.prev = (elt); \
 			(elt)->link.prev = (after); \
 		} \
-	} while (/*CONSTCOND*/0)
+	} while (0)
 
 #define LWRES_LIST_APPENDLIST(list1, list2, link) \
 	do { \
@@ -115,7 +115,7 @@
 		} \
 		(list2).head = NULL; \
 		(list2).tail = NULL; \
-	} while (/*CONSTCOND*/0)
+	} while (0)
 
 #define LWRES_LIST_ENQUEUE(list, elt, link) LWRES_LIST_APPEND(list, elt, link)
 #define LWRES_LIST_DEQUEUE(list, elt, link) LWRES_LIST_UNLINK(list, elt, link)

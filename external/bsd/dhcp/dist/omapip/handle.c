@@ -1,10 +1,11 @@
-/*	$NetBSD: handle.c,v 1.1.1.3 2014/07/12 11:57:59 spz Exp $	*/
+/*	$NetBSD: handle.c,v 1.1 2013/03/24 15:45:57 christos Exp $	*/
+
 /* handle.c
 
    Functions for maintaining handles on objects. */
 
 /*
- * Copyright (c) 2009-2010,2012,2014 by Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (c) 2009-2010 by Internet Systems Consortium, Inc. ("ISC")
  * Copyright (c) 2004-2007 by Internet Systems Consortium, Inc. ("ISC")
  * Copyright (c) 1999-2003 by Internet Software Consortium
  *
@@ -26,10 +27,16 @@
  *   <info@isc.org>
  *   https://www.isc.org/
  *
+ * This software has been written for Internet Systems Consortium
+ * by Ted Lemon in cooperation with Vixie Enterprises and Nominum, Inc.
+ * To learn more about Internet Systems Consortium, see
+ * ``https://www.isc.org/''.  To learn more about Vixie Enterprises,
+ * see ``http://www.vix.com''.   To learn more about Nominum, Inc., see
+ * ``http://www.nominum.com''.
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: handle.c,v 1.1.1.3 2014/07/12 11:57:59 spz Exp $");
+__RCSID("$NetBSD: handle.c,v 1.1 2013/03/24 15:45:57 christos Exp $");
 
 #include "dhcpd.h"
 
@@ -250,6 +257,7 @@ static isc_result_t omapi_handle_lookup_in (omapi_object_t **o,
 					    omapi_handle_table_t *table,
 					    int op)
 {
+	omapi_handle_table_t *inner;
 	omapi_handle_t scale, index;
 
 	if (!table || table->first > h || table->limit <= h)
@@ -279,6 +287,7 @@ static isc_result_t omapi_handle_lookup_in (omapi_object_t **o,
 	   handle must be the subtable of this table whose index into this
 	   table's array of children is the handle divided by the scale. */
 	index = (h - table->first) / scale;
+	inner = table->children[index].table;
 
 	return(omapi_handle_lookup_in(o, h, table->children[index].table, op));
 }

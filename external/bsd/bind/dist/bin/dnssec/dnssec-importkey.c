@@ -1,7 +1,7 @@
-/*	$NetBSD: dnssec-importkey.c,v 1.6 2015/07/08 17:28:55 christos Exp $	*/
+/*	$NetBSD: dnssec-importkey.c,v 1.1 2013/12/31 20:09:51 christos Exp $	*/
 
 /*
- * Copyright (C) 2013-2015  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2013  Internet Systems Consortium, Inc. ("ISC")
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -49,10 +49,6 @@
 
 #include <dst/dst.h>
 
-#ifdef PKCS11CRYPTO
-#include <pk11/result.h>
-#endif
-
 #include "dnssectool.h"
 
 #ifndef PATH_MAX
@@ -91,7 +87,7 @@ db_load_from_stream(dns_db_t *db, FILE *fp) {
 	dns_rdatacallbacks_t callbacks;
 
 	dns_rdatacallbacks_init(&callbacks);
-	result = dns_db_beginload(db, &callbacks);
+	result = dns_db_beginload(db, &callbacks.add, &callbacks.add_private);
 	if (result != ISC_R_SUCCESS)
 		fatal("dns_db_beginload failed: %s", isc_result_totext(result));
 
@@ -100,7 +96,7 @@ db_load_from_stream(dns_db_t *db, FILE *fp) {
 	if (result != ISC_R_SUCCESS)
 		fatal("can't load from input: %s", isc_result_totext(result));
 
-	result = dns_db_endload(db, &callbacks);
+	result = dns_db_endload(db, &callbacks.add_private);
 	if (result != ISC_R_SUCCESS)
 		fatal("dns_db_endload failed: %s", isc_result_totext(result));
 }
@@ -275,7 +271,6 @@ usage(void) {
 				"the key files\n");
 	fprintf(stderr, "    -L ttl:             set default key TTL\n");
 	fprintf(stderr, "    -v <verbose level>\n");
-	fprintf(stderr, "    -V: print version information\n");
 	fprintf(stderr, "    -h: print usage and exit\n");
 	fprintf(stderr, "Timing options:\n");
 	fprintf(stderr, "    -P date/[+-]offset/none: set/unset key "
@@ -309,22 +304,19 @@ main(int argc, char **argv) {
 	if (result != ISC_R_SUCCESS)
 		fatal("out of memory");
 
-#ifdef PKCS11CRYPTO
-	pk11_result_register();
-#endif
 	dns_result_register();
 
 	isc_commandline_errprint = ISC_FALSE;
 
-#define CMDLINE_FLAGS "D:f:hK:L:P:v:V"
+#define CMDLINE_FLAGS "D:f:hK:L:P:v:"
 	while ((ch = isc_commandline_parse(argc, argv, CMDLINE_FLAGS)) != -1) {
 		switch (ch) {
 		case 'D':
 			if (setdel)
 				fatal("-D specified more than once");
 
-			del = strtotime(isc_commandline_argument,
-					now, now, &setdel);
+			setdel = ISC_TRUE;
+			del = strtotime(isc_commandline_argument, now, now);
 			break;
 		case 'K':
 			dir = isc_commandline_argument;
@@ -332,15 +324,17 @@ main(int argc, char **argv) {
 				fatal("directory must be non-empty string");
 			break;
 		case 'L':
-			ttl = strtottl(isc_commandline_argument);
+			if (strcmp(isc_commandline_argument, "none") == 0)
+				ttl = 0;
+			else
+				ttl = strtottl(isc_commandline_argument);
 			setttl = ISC_TRUE;
 			break;
 		case 'P':
 			if (setpub)
 				fatal("-P specified more than once");
-
-			pub = strtotime(isc_commandline_argument,
-					now, now, &setpub);
+			setpub = ISC_TRUE;
+			pub = strtotime(isc_commandline_argument, now, now);
 			break;
 		case 'f':
 			filename = isc_commandline_argument;
@@ -356,12 +350,7 @@ main(int argc, char **argv) {
 					program, isc_commandline_option);
 			/* FALLTHROUGH */
 		case 'h':
-			/* Does not return. */
 			usage();
-
-		case 'V':
-			/* Does not return. */
-			version(program);
 
 		default:
 			fprintf(stderr, "%s: unhandled option -%c\n",
@@ -389,7 +378,7 @@ main(int argc, char **argv) {
 		      isc_result_totext(result));
 	isc_entropy_stopcallbacksources(ectx);
 
-	setup_logging(mctx, &log);
+	setup_logging(verbose, mctx, &log);
 
 	dns_rdataset_init(&rdataset);
 

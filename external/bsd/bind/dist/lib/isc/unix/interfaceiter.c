@@ -1,7 +1,7 @@
-/*	$NetBSD: interfaceiter.c,v 1.5 2014/12/10 04:38:01 christos Exp $	*/
+/*	$NetBSD: interfaceiter.c,v 1.1 2009/03/22 15:02:19 christos Exp $	*/
 
 /*
- * Copyright (C) 2004, 2005, 2007, 2008, 2014  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2004, 2005, 2007-2009  Internet Systems Consortium, Inc. ("ISC")
  * Copyright (C) 1999-2003  Internet Software Consortium.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -17,7 +17,7 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* Id: interfaceiter.c,v 1.45 2008/12/01 03:51:47 marka Exp  */
+/* Id: interfaceiter.c,v 1.44.120.2 2009/02/16 23:47:15 tbox Exp */
 
 /*! \file */
 
@@ -81,14 +81,14 @@ get_addr(unsigned int family, isc_netaddr_t *dst, struct sockaddr *src,
 	dst->family = family;
 	switch (family) {
 	case AF_INET:
-		memmove(&dst->type.in,
-			&((struct sockaddr_in *) src)->sin_addr,
-			sizeof(struct in_addr));
+		memcpy(&dst->type.in,
+		       &((struct sockaddr_in *) src)->sin_addr,
+		       sizeof(struct in_addr));
 		break;
 	case AF_INET6:
 		sa6 = (struct sockaddr_in6 *)src;
-		memmove(&dst->type.in6, &sa6->sin6_addr,
-			sizeof(struct in6_addr));
+		memcpy(&dst->type.in6, &sa6->sin6_addr,
+		       sizeof(struct in6_addr));
 #ifdef ISC_PLATFORM_HAVESCOPEID
 		if (sa6->sin6_scope_id != 0)
 			isc_netaddr_setzone(dst, sa6->sin6_scope_id);
@@ -107,8 +107,8 @@ get_addr(unsigned int family, isc_netaddr_t *dst, struct sockaddr *src,
 			if (IN6_IS_ADDR_LINKLOCAL(&sa6->sin6_addr)) {
 				isc_uint16_t zone16;
 
-				memmove(&zone16, &sa6->sin6_addr.s6_addr[2],
-					sizeof(zone16));
+				memcpy(&zone16, &sa6->sin6_addr.s6_addr[2],
+				       sizeof(zone16));
 				zone16 = ntohs(zone16);
 				if (zone16 != 0) {
 					/* the zone ID is embedded */
@@ -254,7 +254,7 @@ isc_interfaceiter_current(isc_interfaceiter_t *iter,
 			  isc_interface_t *ifdata)
 {
 	REQUIRE(iter->result == ISC_R_SUCCESS);
-	memmove(ifdata, &iter->current, sizeof(*ifdata));
+	memcpy(ifdata, &iter->current, sizeof(*ifdata));
 	return (ISC_R_SUCCESS);
 }
 

@@ -1,7 +1,7 @@
-/*	$NetBSD: dnsconf.c,v 1.5 2014/12/10 04:37:59 christos Exp $	*/
+/*	$NetBSD: dnsconf.c,v 1.1 2009/10/25 00:02:42 christos Exp $	*/
 
 /*
- * Copyright (C) 2009, 2012  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2009  Internet Systems Consortium, Inc. ("ISC")
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -16,7 +16,7 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* Id: dnsconf.c,v 1.3 2009/09/02 23:48:02 tbox Exp  */
+/* Id: dnsconf.c,v 1.3 2009/09/02 23:48:02 tbox Exp */
 
 /*! \file */
 
@@ -146,8 +146,8 @@ configure_dnsseckeys(irs_dnsconf_t *conf, cfg_obj_t *cfgobj,
 			/* Configure key name */
 			dns_fixedname_init(&fkeyname);
 			keyname_base = dns_fixedname_name(&fkeyname);
-			isc_buffer_constinit(&namebuf, keynamestr,
-					     strlen(keynamestr));
+			isc_buffer_init(&namebuf, keynamestr,
+					strlen(keynamestr));
 			isc_buffer_add(&namebuf, strlen(keynamestr));
 			result = dns_name_fromtext(keyname_base, &namebuf,
 						   dns_rootname, 0, NULL);

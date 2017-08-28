@@ -1,4 +1,4 @@
-/*	$NetBSD: queryperf.c,v 1.6 2014/12/10 04:37:56 christos Exp $	*/
+/*	$NetBSD: queryperf.c,v 1.1 2009/03/22 14:58:11 christos Exp $	*/
 
 /*
  * Copyright (C) 2000, 2001  Nominum, Inc.
@@ -20,12 +20,10 @@
 /***
  ***	DNS Query Performance Testing Tool  (queryperf.c)
  ***
- ***	Version Id: queryperf.c,v 1.12 2007/09/05 07:36:04 marka Exp 
+ ***	Version Id: queryperf.c,v 1.12 2007/09/05 07:36:04 marka Exp
  ***
  ***	Stephen Jacob <sj@nominum.com>
  ***/
-
-#define BIND_8_COMPAT	/* Pull in <arpa/nameser_compat.h> */
 
 #include <sys/time.h>
 #include <sys/types.h>
@@ -76,7 +74,6 @@
 #define HARD_TIMEOUT_EXTRA		5		/* in seconds */
 #define RESPONSE_BLOCKING_WAIT_TIME	0.1		/* in seconds */
 #define EDNSLEN				11
-#define DNS_HEADERLEN			12
 
 #define FALSE				0
 #define TRUE				1
@@ -88,26 +85,15 @@ enum directives_enum	{ V_SERVER, V_PORT, V_MAXQUERIES, V_MAXWAIT };
 #define DIR_VALUES	{ V_SERVER, V_PORT, V_MAXQUERIES, V_MAXWAIT }
 
 #define QTYPE_STRINGS { \
-	"A", "NS", "MD", "MF", "CNAME", "SOA", "MB", "MG", "MR", \
-	"NULL", "WKS", "PTR", "HINFO", "MINFO", "MX", "TXT", "RP", \
-	"AFSDB", "X25", "ISDN", "RT", "NSAP", "NSAP-PTR", "SIG", \
-	"KEY", "PX", "GPOS", "AAAA", "LOC", "NXT", "EID", "NIMLOC", \
-	"SRV", "ATMA", "NAPTR", "KX", "CERT", "A6", "DNAME", "SINK", \
-	"OPT", "APL", "DS", "SSHFP", "IPSECKEY", "RRSIG", "NSEC", \
-	"DNSKEY", "DHCID", "NSEC3", "NSEC3PARAM", "TLSA", "HIP", \
-	"NINFO", "RKEY", "TALINK", "CDS", "SPF", "UINFO", "UID", \
-	"GID", "UNSPEC", "NID", "L32", "L64", "LP", "TKEY", "TSIG", \
-	"IXFR", "AXFR", "MAILB", "MAILA", "URI", "CAA", "*", "ANY", \
-	"TA", "DLV" \
+	"A", "NS", "MD", "MF", "CNAME", "SOA", "MB", "MG", \
+	"MR", "NULL", "WKS", "PTR", "HINFO", "MINFO", "MX", "TXT", \
+	"AAAA", "SRV", "NAPTR", "A6", "AXFR", "MAILB", "MAILA", "*", "ANY" \
 }
 
 #define QTYPE_CODES { \
-	1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, \
-	19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, \
-	34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, \
-	49, 50, 51, 52, 55, 56, 57, 58, 59, 99, 100, 101, 102, 103, \
-	104, 105, 106, 107, 249, 250, 251, 252, 253, 254, 255, 255, \
-	256, 257, 32768, 32769 \
+	1, 2, 3, 4, 5, 6, 7, 8, \
+	9, 10, 11, 12, 13, 14, 15, 16, \
+	28, 33, 35, 38, 252, 253, 254, 255, 255 \
 }
 
 #define RCODE_STRINGS { \
@@ -131,20 +117,7 @@ struct query_status {
 	unsigned short int id;
 	struct timeval sent_timestamp;
 	char *desc;
-	int qtype;
-	char qname[MAX_DOMAIN_LEN + 1];
 };
-
-struct query_mininfo {		/* minimum info for timeout queries */
-	int qtype;		/* use -1 if N/A */
-	struct timeval sent_timestamp;
-	char qname[MAX_DOMAIN_LEN + 1];
-};
-
-/*
- * Forward declarations.
- */
-int is_uint(char *test_int, unsigned int *result);
 
 /*
  * Configuration options (global)
@@ -177,7 +150,6 @@ int countrcodes = FALSE;
 int rcodecounts[16] = {0};
 
 int verbose = FALSE;
-int recurse = 1;
 
 /*
  * Other global stuff
@@ -219,8 +191,6 @@ unsigned int *rttarray = NULL;
 unsigned int *rttarray_interval = NULL;
 unsigned int rtt_overflows;
 unsigned int rtt_overflows_interval;
-unsigned int rtt_counted;
-unsigned int rtt_counted_interval;
 char *rtt_histogram_file = NULL;
 
 struct query_status *status;				/* init NULL */
@@ -230,8 +200,6 @@ int query_socket = -1;
 int socket4 = -1, socket6 = -1;
 
 static char *rcode_strings[] = RCODE_STRINGS;
-
-static struct query_mininfo *timeout_queries;
 
 /*
  * get_uint16:
@@ -254,7 +222,7 @@ void
 show_startup_info(void) {
 	printf("\n"
 "DNS Query Performance Testing Tool\n"
-"Version: Id: queryperf.c,v 1.12 2007/09/05 07:36:04 marka Exp \n"
+"Version: Id: queryperf.c,v 1.12 2007/09/05 07:36:04 marka Exp\n"
 "\n");
 }
 
@@ -269,7 +237,7 @@ show_usage(void) {
 "Usage: queryperf [-d datafile] [-s server_addr] [-p port] [-q num_queries]\n"
 "                 [-b bufsize] [-t timeout] [-n] [-l limit] [-f family] [-1]\n"
 "                 [-i interval] [-r arraysize] [-u unit] [-H histfile]\n"
-"                 [-T qps] [-e] [-D] [-R] [-c] [-v] [-h]\n"
+"                 [-T qps] [-e] [-D] [-c] [-v] [-h]\n"
 "  -d specifies the input data file (default: stdin)\n"
 "  -s sets the server to query (default: %s)\n"
 "  -p sets the port on which to query the server (default: %s)\n"
@@ -287,7 +255,6 @@ show_usage(void) {
 "  -T specify the target qps (default: 0=unspecified)\n"
 "  -e enable EDNS 0\n"
 "  -D set the DNSSEC OK bit (implies EDNS)\n"
-"  -R disable recursion\n"
 "  -c print the number of packets with each rcode\n"
 "  -v verbose: report the RCODE of each response on stdout\n"
 "  -h print this usage\n"
@@ -497,6 +464,12 @@ set_max_queries(unsigned int new_max) {
 	struct query_status *temp_stat;
 	unsigned int count;
 
+	if (new_max < 0) {
+		fprintf(stderr, "Unable to change max outstanding queries: "
+		        "must be positive and non-zero: %u\n", new_max);
+		return (-1);
+	}
+
 	if (new_max > query_status_allocated) {
 		temp_stat = realloc(status, new_max * size_qs);
 
@@ -543,7 +516,7 @@ parse_args(int argc, char **argv) {
 	unsigned int uint_arg_val;
 
 	while ((c = getopt(argc, argv,
-			   "f:q:t:i:nd:s:p:1l:b:eDcvr:RT:u:H:h")) != -1) {
+			   "f:q:t:i:nd:s:p:1l:b:eDcvr:T::u:H:h")) != -1) {
 		switch (c) {
 		case 'f':
 			if (strcmp(optarg, "inet") == 0)
@@ -666,9 +639,6 @@ parse_args(int argc, char **argv) {
 					optarg);
 				return (-1);
 			}
-			break;
-		case 'R':
-			recurse = 0;
 			break;
 		case 'r':
 			if (is_uint(optarg, &uint_arg_val) == TRUE)
@@ -1345,10 +1315,10 @@ update_config(char *config_change_desc) {
  *   Return a non-negative integer otherwise
  */
 int
-parse_query(char *input, char *qname, unsigned int qnlen, int *qtype) {
+parse_query(char *input, char *qname, int qnlen, int *qtype) {
 	static char *qtype_strings[] = QTYPE_STRINGS;
 	static int qtype_codes[] = QTYPE_CODES;
-	unsigned int num_types, index;
+	int num_types, index;
 	int found = FALSE;
 	char incopy[MAX_INPUT_LEN + 1];
 	char *domain_str, *type_str;
@@ -1397,15 +1367,13 @@ parse_query(char *input, char *qname, unsigned int qnlen, int *qtype) {
  *   Return a non-negative integer otherwise
  */
 int
-dispatch_query(unsigned short int id, char *dom, int qt, u_char **pktp,
-	       int *pktlenp)
-{
+dispatch_query(unsigned short int id, char *dom, int qt) {
 	static u_char packet_buffer[PACKETSZ + 1];
+	static socklen_t sockaddrlen = sizeof(struct sockaddr);
 	int buffer_len = PACKETSZ;
 	int bytes_sent;
 	unsigned short int net_id = htons(id);
 	char *id_ptr = (char *)&net_id;
-	HEADER *hp = (HEADER *)packet_buffer;
 
 	buffer_len = res_mkquery(QUERY, dom, C_IN, qt, NULL, 0,
 				 NULL, packet_buffer, PACKETSZ);
@@ -1414,7 +1382,6 @@ dispatch_query(unsigned short int id, char *dom, int qt, u_char **pktp,
 		        dom, qt);
 		return (-1);
 	}
-	hp->rd = recurse;
 	if (edns) {
 		unsigned char *p;
 		if (buffer_len + EDNSLEN >= PACKETSZ) {
@@ -1455,9 +1422,6 @@ dispatch_query(unsigned short int id, char *dom, int qt, u_char **pktp,
 		fprintf(stderr, "Warning: incomplete packet sent: %s %d\n",
 		        dom, qt);
 
-	*pktp = packet_buffer;
-	*pktlenp = buffer_len;
-
 	return (0);
 }
 
@@ -1470,9 +1434,8 @@ send_query(char *query_desc) {
 	static unsigned short int use_query_id = 0;
 	static int qname_len = MAX_DOMAIN_LEN;
 	static char domain[MAX_DOMAIN_LEN + 1];
-	u_char *qpkt;
 	char serveraddr[NI_MAXHOST];
-	int query_type, qpkt_len;
+	int query_type;
 	unsigned int count;
 
 	use_query_id++;
@@ -1482,8 +1445,7 @@ send_query(char *query_desc) {
 		return;
 	}
 
-	if (dispatch_query(use_query_id, domain, query_type,
-			   &qpkt, &qpkt_len) == -1) {
+	if (dispatch_query(use_query_id, domain, query_type) == -1) {
 		char *addrstr;
 
 		if (getnameinfo(server_ai->ai_addr, server_ai->ai_addrlen,
@@ -1523,18 +1485,11 @@ send_query(char *query_desc) {
 	}
 
 	/* Register the query in status[] */
+	status[count].in_use = TRUE;
 	status[count].id = use_query_id;
 	if (verbose)
 		status[count].desc = strdup(query_desc);
 	set_timenow(&status[count].sent_timestamp);
-	status[count].qtype = query_type;
-	if (dn_expand(qpkt, qpkt + qpkt_len, qpkt + DNS_HEADERLEN,
-		      status[count].qname, MAX_DOMAIN_LEN) == -1) {
-		fprintf(stderr, "Unexpected error: "
-			"query message doesn't have qname?\n");
-		return;
-	}
-	status[count].in_use = TRUE;
 
 	if (num_queries_sent_interval == 0)
 		set_timenow(&time_of_first_query_interval);
@@ -1545,9 +1500,7 @@ send_query(char *query_desc) {
 }
 
 void
-register_rtt(struct timeval *timestamp, char *qname, int qtype,
-	     unsigned int rcode)
-{
+register_rtt(struct timeval *timestamp) {
 	int i;
 	int oldquery = FALSE;
 	struct timeval now;
@@ -1566,7 +1519,6 @@ register_rtt(struct timeval *timestamp, char *qname, int qtype,
 		rtt_min = rtt;
 
 	rtt_total += rtt;
-	rtt_counted++;
 
 	if (!oldquery) {
 		if (rtt_max_interval < 0 || rtt_max_interval < rtt)
@@ -1576,7 +1528,6 @@ register_rtt(struct timeval *timestamp, char *qname, int qtype,
 			rtt_min_interval = rtt;
 
 		rtt_total_interval += rtt;
-		rtt_counted_interval++;
 	}
 
 	if (rttarray == NULL)
@@ -1588,8 +1539,8 @@ register_rtt(struct timeval *timestamp, char *qname, int qtype,
 		if (!oldquery)
 			rttarray_interval[i]++;
 	} else {
-		fprintf(stderr, "Warning: RTT is out of range: %.6lf "
-			"[query=%s/%d, rcode=%u]\n", rtt, qname, qtype, rcode);
+		fprintf(stderr, "Warning: RTT is out of range: %.6lf\n",
+			rtt);
 		rtt_overflows++;
 		if (!oldquery)
 			rtt_overflows_interval++;
@@ -1604,53 +1555,36 @@ register_rtt(struct timeval *timestamp, char *qname, int qtype,
  *   status[] if any exists.
  */
 void
-register_response(unsigned short int id, unsigned int rcode, char *qname,
-	int qtype)
-{
+register_response(unsigned short int id, unsigned int rcode) {
 	unsigned int ct = 0;
 	int found = FALSE;
 	struct timeval now;
 	double rtt;
 
-	if (timeout_queries != NULL) {
-		struct query_mininfo *qi = &timeout_queries[id];
-
-		if (qi->qtype == qtype && strcasecmp(qi->qname, qname) == 0) {
-			register_rtt(&qi->sent_timestamp, qname, qtype, rcode);
-			qi->qtype = -1;
-			found = TRUE;
-		}
-	}
-
 	for (; (ct < query_status_allocated) && (found == FALSE); ct++) {
-		if (status[ct].in_use == TRUE && status[ct].id == id &&
-		    status[ct].qtype == qtype &&
-		    strcasecmp(status[ct].qname, qname) == 0) {
+		if ((status[ct].in_use == TRUE) && (status[ct].id == id)) {
 			status[ct].in_use = FALSE;
 			num_queries_outstanding--;
 			found = TRUE;
 
-			register_rtt(&status[ct].sent_timestamp, qname, qtype,
-				     rcode);
+			register_rtt(&status[ct].sent_timestamp);
 
 			if (status[ct].desc) {
 				printf("> %s %s\n", rcode_strings[rcode],
 				       status[ct].desc);
 				free(status[ct].desc);
 			}
+			if (countrcodes)
+				rcodecounts[rcode]++;
 		}
 	}
-
-	if (countrcodes && (found == TRUE || target_qps > 0))
-		rcodecounts[rcode]++;
 
 	if (found == FALSE) {
 		if (target_qps > 0) {
 			num_queries_possiblydelayed++;
 			num_queries_possiblydelayed_interval++;
 		} else {
-			fprintf(stderr,
-				"Warning: Received a response with an "
+			fprintf(stderr, "Warning: Received a response with an "
 				"unexpected (maybe timed out) id: %u\n", id);
 		}
 	}
@@ -1667,9 +1601,8 @@ process_single_response(int sockfd) {
 	struct sockaddr_storage from_addr_ss;
 	struct sockaddr *from_addr;
 	static unsigned char in_buf[MAX_BUFFER_LEN];
- 	char qname[MAX_DOMAIN_LEN + 1];
- 	int numbytes, addr_len, resp_id, qnamelen;
- 	int qtype, flags;
+	int numbytes, addr_len, resp_id;
+	int flags;
 
 	memset(&from_addr_ss, 0, sizeof(from_addr_ss));
 	from_addr = (struct sockaddr *)&from_addr_ss;
@@ -1681,29 +1614,10 @@ process_single_response(int sockfd) {
 		return;
 	}
 
-	if (numbytes < DNS_HEADERLEN) {
-		if (verbose)
-			fprintf(stderr, "Malformed response\n");
-		return;
-	}
 	resp_id = get_uint16(in_buf);
 	flags = get_uint16(in_buf + 2);
-	qnamelen = dn_expand(in_buf, in_buf + numbytes, in_buf + DNS_HEADERLEN,
-			     qname, MAX_DOMAIN_LEN);
-	if (qnamelen == -1) {
-		if (verbose)
-			fprintf(stderr,
-				"Failed to retrieve qname from response\n");
-		return;
-	}
-	if (numbytes < DNS_HEADERLEN + qnamelen + 2) {
-		if (verbose)
-			fprintf(stderr, "Malformed response\n");
-		return;
-	}
-	qtype = get_uint16(in_buf + DNS_HEADERLEN + qnamelen);
 
-	register_response(resp_id, flags & 0xF, qname, qtype);
+	register_response(resp_id, flags & 0xF);
 }
 
 /*
@@ -1854,30 +1768,15 @@ retire_old_queries(int sending) {
 	set_timenow(&curr_time);
 
 	for (; count < query_status_allocated; count++) {
-		if ((status[count].in_use == TRUE) &&
-		    (difftv(curr_time,
-			    status[count].sent_timestamp) >= (double)timeout))
-		{
+
+		if ((status[count].in_use == TRUE)
+		    && (difftv(curr_time, status[count].sent_timestamp)
+		    >= (double)timeout)) {
+
 			status[count].in_use = FALSE;
 			num_queries_outstanding--;
-
-			if (timeout_queries != NULL) {
-				struct query_mininfo *qi;
-
-				qi = &timeout_queries[status[count].id];
-				if (qi->qtype != -1) {
-					/* now really retire this query */
-					num_queries_timed_out++;
-					num_queries_timed_out_interval++;
-				}
-				qi->qtype = status[count].qtype;
-				qi->sent_timestamp =
-					status[count].sent_timestamp;
-				strcpy(qi->qname, status[count].qname);
-			} else {
-				num_queries_timed_out++;
-				num_queries_timed_out_interval++;
-			}
+			num_queries_timed_out++;
+			num_queries_timed_out_interval++;
 
 			if (timeout_reduced == FALSE) {
 				if (status[count].desc) {
@@ -1934,7 +1833,7 @@ print_statistics(int intermediate, unsigned int sent, unsigned int timed_out,
 		 struct timeval *first_query,
 		 struct timeval *program_start,
 		 struct timeval *end_perf, struct timeval *end_query,
-		 unsigned int rcounted, double rmax, double rmin, double rtotal,
+		 double rmax, double rmin, double rtotal,
 		 unsigned int roverflows, unsigned int *rarray)
 {
 	unsigned int num_queries_completed;
@@ -1980,11 +1879,11 @@ print_statistics(int intermediate, unsigned int sent, unsigned int timed_out,
 			difftv(*end_query, *first_query);
 	}
 
-	if (rcounted > 0) {
+	if (num_queries_completed > 0) {
 		int i;
 		double sum = 0;
 
-		rtt_average = rtotal / (double)rcounted;
+		rtt_average = rtt_total / (double)num_queries_completed;
 		for (i = 0; i < rttarray_size; i++) {
 			if (rarray[i] != 0) {
 				double mean, diff;
@@ -1995,7 +1894,7 @@ print_statistics(int intermediate, unsigned int sent, unsigned int timed_out,
 				sum += (diff * diff) * rarray[i];
 			}
 		}
-		rtt_stddev = sqrt(sum / (double)rcounted);
+		rtt_stddev = sqrt(sum / (double)num_queries_completed);
 	} else {
 		rtt_average = 0.0;
 		rtt_stddev = 0.0;
@@ -2112,9 +2011,9 @@ print_interval_statistics() {
 			 num_queries_possiblydelayed_interval,
 			 &time_of_first_query_interval,
 			 &time_of_first_query_interval, &time_now, &time_now,
-			 rtt_counted_interval, rtt_max_interval,
-			 rtt_min_interval, rtt_total_interval,
-			 rtt_overflows_interval, rttarray_interval);
+			 rtt_max_interval, rtt_min_interval,
+			 rtt_total_interval, rtt_overflows_interval,
+			 rttarray_interval);
 
 	/* Reset intermediate counters */
 	num_queries_sent_interval = 0;
@@ -2123,7 +2022,6 @@ print_interval_statistics() {
 	rtt_max_interval = -1;
 	rtt_min_interval = -1;
 	rtt_total_interval = 0.0;
-	rtt_counted_interval = 0.0;
 	rtt_overflows_interval = 0;
 	if (rttarray_interval != NULL) {
 		memset(rttarray_interval, 0,
@@ -2157,36 +2055,15 @@ main(int argc, char **argv) {
 	if (setup(argc, argv) == -1)
 		return (-1);
 
-	/* XXX: move this to setup: */
-	timeout_queries = malloc(sizeof(struct query_mininfo) * 65536);
-	if (timeout_queries == NULL) {
-		fprintf(stderr,
-			"failed to allocate memory for timeout queries\n");
-		return (-1);
-	} else {
-		int i;
-		for (i = 0; i < 65536; i++)
-			timeout_queries[i].qtype = -1;
-	}
-
 	printf("[Status] Processing input data\n");
 
 	while ((sending = keep_sending(&got_eof)) == TRUE ||
-	       queries_outstanding() > 0)
-	{
-		if (num_queries_sent_interval > 0){
-			/*
-			 * After statistics are printed, send_query()
-			 * needs to be called at least once so that
-			 * time_of_first_query_interval is reset
-			 */
-			print_interval_statistics();
-		}
+	       queries_outstanding() > 0) {
+		print_interval_statistics();
 		adjust_rate = FALSE;
 
 		while ((sending = keep_sending(&got_eof)) == TRUE &&
-		       queries_outstanding() < max_queries_outstanding)
-		{
+		       queries_outstanding() < max_queries_outstanding) {
 			int len = next_input_line(input_line, input_length);
 			if (len == 0) {
 				got_eof = TRUE;
@@ -2232,8 +2109,7 @@ main(int argc, char **argv) {
 			 num_queries_possiblydelayed,
 			 &time_of_first_query, &time_of_program_start,
 			 &time_of_end_of_run, &time_of_stop_sending,
-			 rtt_counted, rtt_max, rtt_min, rtt_total,
-			 rtt_overflows, rttarray);
+			 rtt_max, rtt_min, rtt_total, rtt_overflows, rttarray);
 
 	return (0);
 }

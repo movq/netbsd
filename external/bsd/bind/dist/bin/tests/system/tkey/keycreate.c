@@ -1,7 +1,7 @@
-/*	$NetBSD: keycreate.c,v 1.9 2017/06/15 15:59:39 christos Exp $	*/
+/*	$NetBSD: keycreate.c,v 1.1 2009/03/22 14:56:59 christos Exp $	*/
 
 /*
- * Copyright (C) 2004, 2005, 2007, 2009, 2011, 2012, 2014-2016  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2004, 2005, 2007  Internet Systems Consortium, Inc. ("ISC")
  * Copyright (C) 2001  Internet Software Consortium.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -17,7 +17,7 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* Id: keycreate.c,v 1.20 2011/01/11 23:47:13 tbox Exp  */
+/* Id: keycreate.c,v 1.15 2007/06/19 23:47:06 tbox Exp */
 
 #include <config.h>
 
@@ -30,14 +30,11 @@
 #include <isc/hash.h>
 #include <isc/log.h>
 #include <isc/mem.h>
-#include <isc/print.h>
 #include <isc/sockaddr.h>
 #include <isc/socket.h>
 #include <isc/task.h>
 #include <isc/timer.h>
 #include <isc/util.h>
-
-#include <pk11/site.h>
 
 #include <dns/dispatch.h>
 #include <dns/fixedname.h>
@@ -73,7 +70,6 @@ static isc_buffer_t nonce;
 static dns_requestmgr_t *requestmgr;
 static const char *ownername_str = ".";
 
-#ifndef PK11_MD5_DISABLE
 static void
 recvquery(isc_task_t *task, isc_event_t *event) {
 	dns_requestevent_t *reqev = (dns_requestevent_t *)event;
@@ -133,17 +129,15 @@ recvquery(isc_task_t *task, isc_event_t *event) {
 	isc_app_shutdown();
 	return;
 }
-#endif
 
 static void
 sendquery(isc_task_t *task, isc_event_t *event) {
-#ifndef PK11_MD5_DISABLE
 	struct in_addr inaddr;
 	isc_sockaddr_t address;
 	isc_region_t r;
 	isc_result_t result;
 	dns_fixedname_t keyname;
-	dns_fixedname_t ownername;
+	dns_fixedname_t ownername;	
 	isc_buffer_t namestr, keybuf;
 	unsigned char keydata[9];
 	dns_message_t *query;
@@ -158,17 +152,17 @@ sendquery(isc_task_t *task, isc_event_t *event) {
 	isc_sockaddr_fromin(&address, &inaddr, PORT);
 
 	dns_fixedname_init(&keyname);
-	isc_buffer_constinit(&namestr, "tkeytest.", 9);
+	isc_buffer_init(&namestr, "tkeytest.", 9);
 	isc_buffer_add(&namestr, 9);
 	result = dns_name_fromtext(dns_fixedname_name(&keyname), &namestr,
-				   NULL, 0, NULL);
+				   NULL, ISC_FALSE, NULL);
 	CHECK("dns_name_fromtext", result);
 
 	dns_fixedname_init(&ownername);
-	isc_buffer_constinit(&namestr, ownername_str, strlen(ownername_str));
+	isc_buffer_init(&namestr, ownername_str, strlen(ownername_str));
 	isc_buffer_add(&namestr, strlen(ownername_str));
 	result = dns_name_fromtext(dns_fixedname_name(&ownername), &namestr,
-				   NULL, 0, NULL);
+				   NULL, ISC_FALSE, NULL);
 	CHECK("dns_name_fromtext", result);
 
 	isc_buffer_init(&keybuf, keydata, 9);
@@ -197,16 +191,9 @@ sendquery(isc_task_t *task, isc_event_t *event) {
 
 	request = NULL;
 	result = dns_request_create(requestmgr, query, &address,
-				    DNS_REQUESTOPT_TCP, initialkey,
-				    TIMEOUT, task, recvquery, query,
-				    &request);
+				    0, initialkey, TIMEOUT, task,
+				    recvquery, query, &request);
 	CHECK("dns_request_create", result);
-#else
-	UNUSED(task);
-
-	isc_event_free(&event);
-	CHECK("MD5 was disabled", ISC_R_NOTIMPLEMENTED);
-#endif
 }
 
 int
@@ -243,12 +230,11 @@ main(int argc, char *argv[]) {
 	dns_result_register();
 
 	mctx = NULL;
-	isc_mem_debugging = ISC_MEM_DEBUGRECORD;
 	RUNCHECK(isc_mem_create(0, 0, &mctx));
 
 	ectx = NULL;
 	RUNCHECK(isc_entropy_create(mctx, &ectx));
-	RUNCHECK(isc_entropy_createfilesource(ectx, "../random.data"));
+	RUNCHECK(isc_entropy_createfilesource(ectx, "random.data"));
 	RUNCHECK(isc_hash_create(mctx, ectx, DNS_NAME_MAXWIRE));
 
 	log = NULL;
@@ -292,7 +278,6 @@ main(int argc, char *argv[]) {
 	view = NULL;
 	RUNCHECK(dns_view_create(mctx, 0, "_test", &view));
 	dns_view_setkeyring(view, ring);
-	dns_tsigkeyring_detach(&ring);
 
 	sock = NULL;
 	RUNCHECK(isc_socket_create(socketmgr, PF_INET, isc_sockettype_udp,
@@ -302,7 +287,7 @@ main(int argc, char *argv[]) {
 
 	ourkey = NULL;
 	type = DST_TYPE_PUBLIC | DST_TYPE_PRIVATE | DST_TYPE_KEY;
-	result = dst_key_fromnamedfile(ourkeyname, NULL, type, mctx, &ourkey);
+	result = dst_key_fromnamedfile(ourkeyname, type, mctx, &ourkey);
 	CHECK("dst_key_fromnamedfile", result);
 
 	isc_buffer_init(&nonce, noncedata, sizeof(noncedata));

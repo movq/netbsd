@@ -1,4 +1,4 @@
-/*	$NetBSD: ev_timers.c,v 1.11 2012/03/21 00:34:54 christos Exp $	*/
+/*	$NetBSD: ev_timers.c,v 1.1 2004/05/20 19:34:32 christos Exp $	*/
 
 /*
  * Copyright (c) 2004 by Internet Systems Consortium, Inc. ("ISC")
@@ -21,13 +21,8 @@
  * vix 09sep95 [initial]
  */
 
-#include <sys/cdefs.h>
-#if !defined(LINT) && !defined(CODECENTER) && !defined(lint)
-#ifdef notdef
-static const char rcsid[] = "Id: ev_timers.c,v 1.6 2005/04/27 04:56:36 sra Exp";
-#else
-__RCSID("$NetBSD: ev_timers.c,v 1.11 2012/03/21 00:34:54 christos Exp $");
-#endif
+#if !defined(LINT) && !defined(CODECENTER)
+static const char rcsid[] = "Id: ev_timers.c,v 1.2.2.1.4.5 2004/03/17 02:39:13 marka Exp";
 #endif
 
 /* Import. */
@@ -50,7 +45,6 @@ __RCSID("$NetBSD: ev_timers.c,v 1.11 2012/03/21 00:34:54 christos Exp $");
 
 /* Forward. */
 
-#ifndef _LIBC
 static int due_sooner(void *, void *);
 static void set_index(void *, int);
 static void free_timer(void *, void *);
@@ -66,7 +60,6 @@ typedef struct {
 	struct timespec	max_idle;
 	evTimer *	timer;
 } idle_timer;
-#endif
 
 /* Public. */
 
@@ -108,41 +101,34 @@ evSubTime(struct timespec minuend, struct timespec subtrahend) {
 
 int
 evCmpTime(struct timespec a, struct timespec b) {
-#define SGN(x) ((x) < 0 ? (-1) : (x) > 0 ? (1) : (0));
-	time_t s = a.tv_sec - b.tv_sec;
-	long n;
+	long x = a.tv_sec - b.tv_sec;
 
-	if (s != 0)
-		return SGN(s);
-
-	n = a.tv_nsec - b.tv_nsec;
-	return SGN(n);
+	if (x == 0L)
+		x = a.tv_nsec - b.tv_nsec;
+	return (x < 0L ? (-1) : x > 0L ? (1) : (0));
 }
 
 struct timespec
-evNowTime(void)
-{
+evNowTime() {
 	struct timeval now;
 #ifdef CLOCK_REALTIME
 	struct timespec tsnow;
 	int m = CLOCK_REALTIME;
 
 #ifdef CLOCK_MONOTONIC
-#ifndef _LIBC
 	if (__evOptMonoTime)
 		m = CLOCK_MONOTONIC;
-#endif
 #endif
 	if (clock_gettime(m, &tsnow) == 0)
 		return (tsnow);
 #endif
 	if (gettimeofday(&now, NULL) < 0)
-		return (evConsTime((time_t)0, 0L));
+		return (evConsTime(0, 0));
 	return (evTimeSpec(now));
 }
 
 struct timespec
-evUTCTime(void) {
+evUTCTime() {
 	struct timeval now;
 #ifdef CLOCK_REALTIME
 	struct timespec tsnow;
@@ -150,18 +136,16 @@ evUTCTime(void) {
 		return (tsnow);
 #endif
 	if (gettimeofday(&now, NULL) < 0)
-		return (evConsTime((time_t)0, 0L));
+		return (evConsTime(0, 0));
 	return (evTimeSpec(now));
 }
 
-#ifndef _LIBC
 struct timespec
 evLastEventTime(evContext opaqueCtx) {
 	evContext_p *ctx = opaqueCtx.opaque;
 
 	return (ctx->lastEventTime);
 }
-#endif
 
 struct timespec
 evTimeSpec(struct timeval tv) {
@@ -177,11 +161,10 @@ evTimeVal(struct timespec ts) {
 	struct timeval tv;
 
 	tv.tv_sec = ts.tv_sec;
-	tv.tv_usec = (suseconds_t)(ts.tv_nsec / 1000);
+	tv.tv_usec = ts.tv_nsec / 1000;
 	return (tv);
 }
 
-#ifndef _LIBC
 int
 evSetTimer(evContext opaqueCtx,
 	   evTimerFunc func,
@@ -457,11 +440,11 @@ due_sooner(void *a, void *b) {
 }
 
 static void
-set_index(void *what, int idx) {
+set_index(void *what, int index) {
 	evTimer *timer;
 
 	timer = what;
-	timer->index = idx;
+	timer->index = index;
 }
 
 static void
@@ -507,13 +490,10 @@ idle_timeout(evContext opaqueCtx,
 		 * Setting the interval to zero will cause the timer to
 		 * be cleaned up in evDrop().
 		 */
-		this->timer->inter = evConsTime(0L, 0L);
+		this->timer->inter = evConsTime(0, 0);
 		FREE(this);
 	} else {
 		/* evDrop() will reschedule the timer. */
 		this->timer->inter = evSubTime(this->max_idle, idle);
 	}
 }
-#endif
-
-/*! \file */

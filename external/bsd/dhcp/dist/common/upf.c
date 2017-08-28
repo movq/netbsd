@@ -1,10 +1,11 @@
-/*	$NetBSD: upf.c,v 1.2 2017/06/28 02:46:30 manu Exp $	*/
+/*	$NetBSD: upf.c,v 1.1 2013/03/24 15:45:55 christos Exp $	*/
+
 /* upf.c
 
    Ultrix PacketFilter interface code. */
 
 /*
- * Copyright (c) 2004,2007,2009,2014 by Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (c) 2004,2007,2009 by Internet Systems Consortium, Inc. ("ISC")
  * Copyright (c) 1996-2003 by Internet Software Consortium
  *
  * Permission to use, copy, modify, and distribute this software for any
@@ -25,10 +26,16 @@
  *   <info@isc.org>
  *   https://www.isc.org/
  *
+ * This software has been written for Internet Systems Consortium
+ * by Ted Lemon in cooperation with Vixie Enterprises and Nominum, Inc.
+ * To learn more about Internet Systems Consortium, see
+ * ``https://www.isc.org/''.  To learn more about Vixie Enterprises,
+ * see ``http://www.vix.com''.   To learn more about Nominum, Inc., see
+ * ``http://www.nominum.com''.
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: upf.c,v 1.2 2017/06/28 02:46:30 manu Exp $");
+__RCSID("$NetBSD: upf.c,v 1.1 2013/03/24 15:45:55 christos Exp $");
 
 #include "dhcpd.h"
 #if defined (USE_UPF_SEND) || defined (USE_UPF_RECEIVE)
@@ -205,7 +212,7 @@ void if_register_receive (info)
 	pf.enf_Filter [pf.enf_FilterLen++] = ENF_CAND;
 	pf.enf_Filter [pf.enf_FilterLen++] = ENF_PUSHWORD + 18;
 	pf.enf_Filter [pf.enf_FilterLen++] = ENF_PUSHLIT + ENF_CAND;
-	pf.enf_Filter [pf.enf_FilterLen++] = *libdhcp_callbacks.local_port;
+	pf.enf_Filter [pf.enf_FilterLen++] = local_port;
 
 	if (ioctl (info -> rfdesc, EIOCSETF, &pf) < 0)
 		log_fatal ("Can't install packet filter program: %m");
@@ -318,7 +325,7 @@ ssize_t receive_packet (interface, buf, len, from, hfrom)
 
 	/* Decode the IP and UDP headers... */
 	offset = decode_udp_ip_header (interface, ibuf, bufix,
-				       from, length, &paylen, 1);
+				       from, length, &paylen);
 
 	/* If the IP or UDP checksum was bad, skip the packet... */
 	if (offset < 0)

@@ -1,7 +1,7 @@
-/*	$NetBSD: util.h,v 1.6 2014/12/10 04:37:52 christos Exp $	*/
+/*	$NetBSD: util.h,v 1.1 2009/03/22 14:56:20 christos Exp $	*/
 
 /*
- * Copyright (C) 2004, 2005, 2007, 2009  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2004, 2005, 2007  Internet Systems Consortium, Inc. ("ISC")
  * Copyright (C) 2000, 2001  Internet Software Consortium.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -17,7 +17,7 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* Id: util.h,v 1.12 2009/09/29 23:48:03 tbox Exp  */
+/* Id: util.h,v 1.10 2007/06/19 23:46:59 tbox Exp */
 
 #ifndef RNDC_UTIL_H
 #define RNDC_UTIL_H 1
@@ -25,7 +25,6 @@
 /*! \file */
 
 #include <isc/lang.h>
-#include <isc/platform.h>
 
 #include <isc/formatcheck.h>
 
@@ -39,16 +38,15 @@
 			fatal("%s: %s", name, isc_result_totext(result)); \
 		else \
 			notify("%s", name); \
-	} while (/*CONSTCOND*/0)
+	} while (0)
 
 ISC_LANG_BEGINDECLS
 
 void
 notify(const char *fmt, ...) ISC_FORMAT_PRINTF(1, 2);
 
-ISC_PLATFORM_NORETURN_PRE void
-fatal(const char *format, ...)
-ISC_FORMAT_PRINTF(1, 2) ISC_PLATFORM_NORETURN_POST;
+void            
+fatal(const char *format, ...) ISC_FORMAT_PRINTF(1, 2);
 
 ISC_LANG_ENDDECLS
 

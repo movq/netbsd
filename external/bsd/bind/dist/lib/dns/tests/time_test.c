@@ -1,7 +1,7 @@
-/*	$NetBSD: time_test.c,v 1.1.1.4 2014/12/10 03:34:43 christos Exp $	*/
+/*	$NetBSD: time_test.c,v 1.1 2011/09/11 17:19:03 christos Exp $	*/
 
 /*
- * Copyright (C) 2011, 2012  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2011  Internet Systems Consortium, Inc. ("ISC")
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -16,7 +16,7 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* Id */
+/* Id: time_test.c,v 1.3 2011-07-06 01:36:32 each Exp */
 
 /*! \file */
 

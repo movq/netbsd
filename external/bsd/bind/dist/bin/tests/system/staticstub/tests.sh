@@ -1,6 +1,6 @@
 #!/bin/sh
 #
-# Copyright (C) 2010-2013, 2015, 2016  Internet Systems Consortium, Inc. ("ISC")
+# Copyright (C) 2010, 2011  Internet Systems Consortium, Inc. ("ISC")
 #
 # Permission to use, copy, modify, and/or distribute this software for any
 # purpose with or without fee is hereby granted, provided that the above
@@ -14,7 +14,7 @@
 # OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR
 # PERFORMANCE OF THIS SOFTWARE.
 
-# Id: tests.sh,v 1.5 2011/01/11 23:47:12 tbox Exp 
+# Id: tests.sh,v 1.5 2011-01-11 23:47:12 tbox Exp
 
 SYSTEMTESTTOP=..
 . $SYSTEMTESTTOP/conf.sh
@@ -80,7 +80,7 @@ status=`expr $status + $ret`
 n=`expr $n + 1`
 echo "I:look for static-stub zone data with recursion (should be found) ($n)"
 ret=0
-$DIG +tcp +noauth data.example. @10.53.0.2 txt -p 5300 > dig.out.ns2.test$n || ret=1
+$DIG +tcp data.example. @10.53.0.2 txt -p 5300 > dig.out.ns2.test$n || ret=1
 $PERL ../digcomp.pl knowngood.dig.out.rec dig.out.ns2.test$n || ret=1
 if [ $ret != 0 ]; then echo "I:failed"; fi
 status=`expr $status + $ret`
@@ -108,12 +108,7 @@ sed 's/EXAMPLE_ZONE_PLACEHOLDER//' ns3/named.conf.in > ns3/named.conf
 $RNDC -c ../common/rndc.conf -s 10.53.0.3 -p 9953 reload 2>&1 | sed 's/^/I:ns3 /'
 # query the child zone again.  this should directly go to the child and
 # succeed.
-for i in 0 1 2 3 4 5 6 7 8 9
-do
-	$DIG +tcp data2.sub.example. @10.53.0.2 txt -p 5300 > dig.out.ns2.test2.$n || ret=1
-	grep "2nd sub test data" dig.out.ns2.test2.$n > /dev/null && break
-	sleep 1
-done
+$DIG +tcp data2.sub.example. @10.53.0.2 txt -p 5300 > dig.out.ns2.test2.$n || ret=1
 grep "2nd sub test data" dig.out.ns2.test2.$n > /dev/null || ret=1
 # re-enable the parent
 sed 's/EXAMPLE_ZONE_PLACEHOLDER/zone "example" { type master; file "example.db.signed"; };/' ns3/named.conf.in > ns3/named.conf
@@ -162,7 +157,7 @@ n=`expr $n + 1`
 # Note: for a short term workaround we use ::1, assuming it's configured and
 # usable for our tests.  We should eventually use the test ULA and available
 # checks introduced in change 2916.
-if $TESTSOCK6 ../testsock6.pl ::1 2> /dev/null
+if $PERL ../testsock6.pl ::1
 then
     echo "I:checking IPv6 static-stub address ($n)"
     ret=0
@@ -203,15 +198,5 @@ grep "2nd example org data" dig.out.ns2.test$n > /dev/null || ret=1
 if [ $ret != 0 ]; then echo "I:failed"; fi
 status=`expr $status + $ret`
 
-n=`expr $n + 1`
-echo "I:checking static-stub of a undelegated tld resolves after DS query ($n)"
-ret=0
-$DIG undelegated. @10.53.0.2 ds -p 5300 > dig.out.ns2.ds.test$n
-$DIG undelegated. @10.53.0.2 soa -p 5300 > dig.out.ns2.soa.test$n
-grep "status: NXDOMAIN" dig.out.ns2.ds.test$n > /dev/null || ret=1
-grep "status: NOERROR" dig.out.ns2.soa.test$n > /dev/null || ret=1
-if [ $ret != 0 ]; then echo "I:failed"; fi
-status=`expr $status + $ret`
-
 echo "I:exit status: $status"
-[ $status -eq 0 ] || exit 1
+exit $status

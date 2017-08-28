@@ -1,7 +1,7 @@
-/*	$NetBSD: srv_33.c,v 1.6 2016/05/26 16:49:59 christos Exp $	*/
+/*	$NetBSD: srv_33.c,v 1.1 2009/03/22 15:01:58 christos Exp $	*/
 
 /*
- * Copyright (C) 2004, 2005, 2007, 2009, 2015  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2004, 2005, 2007  Internet Systems Consortium, Inc. ("ISC")
  * Copyright (C) 1999-2001, 2003  Internet Software Consortium.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -17,7 +17,7 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* Id: srv_33.c,v 1.47 2009/12/04 22:06:37 tbox Exp  */
+/* Id: srv_33.c,v 1.45 2007/06/19 23:47:17 tbox Exp */
 
 /* Reviewed: Fri Mar 17 13:01:00 PST 2000 by bwelling */
 
@@ -35,8 +35,8 @@ fromtext_in_srv(ARGS_FROMTEXT) {
 	isc_buffer_t buffer;
 	isc_boolean_t ok;
 
-	REQUIRE(type == dns_rdatatype_srv);
-	REQUIRE(rdclass == dns_rdataclass_in);
+	REQUIRE(type == 33);
+	REQUIRE(rdclass == 1);
 
 	UNUSED(type);
 	UNUSED(rdclass);
@@ -76,8 +76,7 @@ fromtext_in_srv(ARGS_FROMTEXT) {
 				      ISC_FALSE));
 	dns_name_init(&name, NULL);
 	buffer_fromregion(&buffer, &token.value.as_region);
-	if (origin == NULL)
-		origin = dns_rootname;
+	origin = (origin != NULL) ? origin : dns_rootname;
 	RETTOK(dns_name_fromtext(&name, &buffer, origin, options, target));
 	ok = ISC_TRUE;
 	if ((options & DNS_RDATA_CHECKNAMES) != 0)
@@ -98,8 +97,8 @@ totext_in_srv(ARGS_TOTEXT) {
 	char buf[sizeof("64000")];
 	unsigned short num;
 
-	REQUIRE(rdata->type == dns_rdatatype_srv);
-	REQUIRE(rdata->rdclass == dns_rdataclass_in);
+	REQUIRE(rdata->type == 33);
+	REQUIRE(rdata->rdclass == 1);
 	REQUIRE(rdata->length != 0);
 
 	dns_name_init(&name, NULL);
@@ -143,18 +142,18 @@ totext_in_srv(ARGS_TOTEXT) {
 
 static inline isc_result_t
 fromwire_in_srv(ARGS_FROMWIRE) {
-	dns_name_t name;
+        dns_name_t name;
 	isc_region_t sr;
 
-	REQUIRE(type == dns_rdatatype_srv);
-	REQUIRE(rdclass == dns_rdataclass_in);
+	REQUIRE(type == 33);
+	REQUIRE(rdclass == 1);
 
 	UNUSED(type);
 	UNUSED(rdclass);
 
 	dns_decompress_setmethods(dctx, DNS_COMPRESS_NONE);
 
-	dns_name_init(&name, NULL);
+        dns_name_init(&name, NULL);
 
 	/*
 	 * Priority, weight, port.
@@ -177,7 +176,7 @@ towire_in_srv(ARGS_TOWIRE) {
 	dns_offsets_t offsets;
 	isc_region_t sr;
 
-	REQUIRE(rdata->type == dns_rdatatype_srv);
+	REQUIRE(rdata->type == 33);
 	REQUIRE(rdata->length != 0);
 
 	dns_compress_setmethods(cctx, DNS_COMPRESS_NONE);
@@ -206,8 +205,8 @@ compare_in_srv(ARGS_COMPARE) {
 
 	REQUIRE(rdata1->type == rdata2->type);
 	REQUIRE(rdata1->rdclass == rdata2->rdclass);
-	REQUIRE(rdata1->type == dns_rdatatype_srv);
-	REQUIRE(rdata1->rdclass == dns_rdataclass_in);
+	REQUIRE(rdata1->type == 33);
+	REQUIRE(rdata1->rdclass == 1);
 	REQUIRE(rdata1->length != 0);
 	REQUIRE(rdata2->length != 0);
 
@@ -241,8 +240,8 @@ fromstruct_in_srv(ARGS_FROMSTRUCT) {
 	dns_rdata_in_srv_t *srv = source;
 	isc_region_t region;
 
-	REQUIRE(type == dns_rdatatype_srv);
-	REQUIRE(rdclass == dns_rdataclass_in);
+	REQUIRE(type == 33);
+	REQUIRE(rdclass == 1);
 	REQUIRE(source != NULL);
 	REQUIRE(srv->common.rdtype == type);
 	REQUIRE(srv->common.rdclass == rdclass);
@@ -263,8 +262,8 @@ tostruct_in_srv(ARGS_TOSTRUCT) {
 	dns_rdata_in_srv_t *srv = target;
 	dns_name_t name;
 
-	REQUIRE(rdata->rdclass == dns_rdataclass_in);
-	REQUIRE(rdata->type == dns_rdatatype_srv);
+	REQUIRE(rdata->rdclass == 1);
+	REQUIRE(rdata->type == 33);
 	REQUIRE(target != NULL);
 	REQUIRE(rdata->length != 0);
 
@@ -292,8 +291,8 @@ freestruct_in_srv(ARGS_FREESTRUCT) {
 	dns_rdata_in_srv_t *srv = source;
 
 	REQUIRE(source != NULL);
-	REQUIRE(srv->common.rdclass == dns_rdataclass_in);
-	REQUIRE(srv->common.rdtype == dns_rdatatype_srv);
+	REQUIRE(srv->common.rdclass == 1);
+	REQUIRE(srv->common.rdtype == 33);
 
 	if (srv->mctx == NULL)
 		return;
@@ -308,8 +307,8 @@ additionaldata_in_srv(ARGS_ADDLDATA) {
 	dns_offsets_t offsets;
 	isc_region_t region;
 
-	REQUIRE(rdata->type == dns_rdatatype_srv);
-	REQUIRE(rdata->rdclass == dns_rdataclass_in);
+	REQUIRE(rdata->type == 33);
+	REQUIRE(rdata->rdclass == 1);
 
 	dns_name_init(&name, offsets);
 	dns_rdata_toregion(rdata, &region);
@@ -324,8 +323,8 @@ digest_in_srv(ARGS_DIGEST) {
 	isc_region_t r1, r2;
 	dns_name_t name;
 
-	REQUIRE(rdata->type == dns_rdatatype_srv);
-	REQUIRE(rdata->rdclass == dns_rdataclass_in);
+	REQUIRE(rdata->type == 33);
+	REQUIRE(rdata->rdclass == 1);
 
 	dns_rdata_toregion(rdata, &r1);
 	r2 = r1;
@@ -340,8 +339,8 @@ digest_in_srv(ARGS_DIGEST) {
 static inline isc_boolean_t
 checkowner_in_srv(ARGS_CHECKOWNER) {
 
-	REQUIRE(type == dns_rdatatype_srv);
-	REQUIRE(rdclass == dns_rdataclass_in);
+	REQUIRE(type == 33);
+	REQUIRE(rdclass == 1);
 
 	UNUSED(name);
 	UNUSED(type);
@@ -356,8 +355,8 @@ checknames_in_srv(ARGS_CHECKNAMES) {
 	isc_region_t region;
 	dns_name_t name;
 
-	REQUIRE(rdata->type == dns_rdatatype_srv);
-	REQUIRE(rdata->rdclass == dns_rdataclass_in);
+	REQUIRE(rdata->type == 33);
+	REQUIRE(rdata->rdclass == 1);
 
 	UNUSED(owner);
 
@@ -371,11 +370,6 @@ checknames_in_srv(ARGS_CHECKNAMES) {
 		return (ISC_FALSE);
 	}
 	return (ISC_TRUE);
-}
-
-static inline int
-casecompare_in_srv(ARGS_COMPARE) {
-	return (compare_in_srv(rdata1, rdata2));
 }
 
 #endif	/* RDATA_IN_1_SRV_33_C */

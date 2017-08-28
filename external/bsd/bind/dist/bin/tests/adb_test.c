@@ -1,7 +1,7 @@
-/*	$NetBSD: adb_test.c,v 1.9 2015/12/17 04:00:42 christos Exp $	*/
+/*	$NetBSD: adb_test.c,v 1.1 2009/03/22 14:56:21 christos Exp $	*/
 
 /*
- * Copyright (C) 2004, 2005, 2007, 2009, 2011-2013, 2015  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2004, 2005, 2007  Internet Systems Consortium, Inc. ("ISC")
  * Copyright (C) 1999-2001  Internet Software Consortium.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -17,7 +17,7 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* Id: adb_test.c,v 1.73 2011/08/30 23:46:51 tbox Exp  */
+/* Id: adb_test.c,v 1.68 2007/06/19 23:46:59 tbox Exp */
 
 /*! \file */
 
@@ -31,7 +31,6 @@
 #include <isc/buffer.h>
 #include <isc/entropy.h>
 #include <isc/hash.h>
-#include <isc/print.h>
 #include <isc/socket.h>
 #include <isc/task.h>
 #include <isc/timer.h>
@@ -207,21 +206,19 @@ create_view(void) {
 
 		attrs = DNS_DISPATCHATTR_IPV4 | DNS_DISPATCHATTR_UDP;
 		RUNTIME_CHECK(dns_dispatch_getudp(dispatchmgr, socketmgr,
-						  taskmgr, &any4,
-						  512, 6, 1024, 17, 19,
-						  attrs, attrs, &disp4)
+						  taskmgr, &any4, 512, 6, 1024,
+						  17, 19, attrs, attrs, &disp4)
 			      == ISC_R_SUCCESS);
 		INSIST(disp4 != NULL);
 
 		attrs = DNS_DISPATCHATTR_IPV6 | DNS_DISPATCHATTR_UDP;
 		RUNTIME_CHECK(dns_dispatch_getudp(dispatchmgr, socketmgr,
-						  taskmgr, &any6,
-						  512, 6, 1024, 17, 19,
-						  attrs, attrs, &disp6)
+						  taskmgr, &any6, 512, 6, 1024,
+						  17, 19, attrs, attrs, &disp6)
 			      == ISC_R_SUCCESS);
 		INSIST(disp6 != NULL);
 
-		RUNTIME_CHECK(dns_view_createresolver(view, taskmgr, 10, 1,
+		RUNTIME_CHECK(dns_view_createresolver(view, taskmgr, 10,
 						      socketmgr,
 						      timermgr, 0,
 						      dispatchmgr,
@@ -250,11 +247,12 @@ lookup(const char *target) {
 	INSIST(target != NULL);
 
 	client = new_client();
-	isc_buffer_constinit(&t, target, strlen(target));
+	isc_buffer_init(&t, target, strlen(target));
 	isc_buffer_add(&t, strlen(target));
 	isc_buffer_init(&namebuf, namedata, sizeof(namedata));
 	dns_name_init(&name, NULL);
-	result = dns_name_fromtext(&name, &t, dns_rootname, 0, &namebuf);
+	result = dns_name_fromtext(&name, &t, dns_rootname, ISC_FALSE,
+				   &namebuf);
 	check_result(result, "dns_name_fromtext %s", target);
 
 	result = dns_name_dup(&name, mctx, &client->name);
@@ -269,8 +267,9 @@ lookup(const char *target) {
 	result = dns_adb_createfind(adb, t2, lookup_callback, client,
 				    &client->name, dns_rootname, 0, options,
 				    now, NULL, view->dstport, &client->find);
-	if (result != ISC_R_SUCCESS)
-		printf("DNS_ADB_CREATEFIND -> %s\n", dns_result_totext(result));
+#if 0
+	check_result(result, "dns_adb_createfind()");
+#endif
 	dns_adb_dumpfind(client->find, stderr);
 
 	if ((client->find->options & DNS_ADBFIND_WANTEVENT) != 0) {
@@ -418,9 +417,7 @@ main(int argc, char **argv) {
 	dns_view_detach(&view);
 	adb = NULL;
 
-	fprintf(stderr, "Destroying socket manager\n");
 	isc_socketmgr_destroy(&socketmgr);
-	fprintf(stderr, "Destroying timer manager\n");
 	isc_timermgr_destroy(&timermgr);
 
 	fprintf(stderr, "Destroying task manager\n");

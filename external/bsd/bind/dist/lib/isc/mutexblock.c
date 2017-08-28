@@ -1,7 +1,7 @@
-/*	$NetBSD: mutexblock.c,v 1.4 2014/12/10 04:37:59 christos Exp $	*/
+/*	$NetBSD: mutexblock.c,v 1.1 2009/03/22 15:02:04 christos Exp $	*/
 
 /*
- * Copyright (C) 2004, 2005, 2007, 2011, 2012  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2004, 2005, 2007  Internet Systems Consortium, Inc. ("ISC")
  * Copyright (C) 1999-2001  Internet Software Consortium.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -17,7 +17,7 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* Id */
+/* Id: mutexblock.c,v 1.20 2007/06/19 23:47:17 tbox Exp */
 
 /*! \file */
 
@@ -34,9 +34,10 @@ isc_mutexblock_init(isc_mutex_t *block, unsigned int count) {
 	for (i = 0; i < count; i++) {
 		result = isc_mutex_init(&block[i]);
 		if (result != ISC_R_SUCCESS) {
-			while (i > 0U) {
-				i--;
+			i--;
+			while (i > 0) {
 				DESTROYLOCK(&block[i]);
+				i--;
 			}
 			return (result);
 		}

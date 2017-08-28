@@ -1,4 +1,4 @@
-/*	$NetBSD: herror.c,v 1.10 2015/02/24 17:56:20 christos Exp $	*/
+/*	$NetBSD: herror.c,v 1.1 2004/05/20 17:18:55 christos Exp $	*/
 
 /*
  * Copyright (c) 1987, 1993
@@ -12,7 +12,11 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. Neither the name of the University nor the names of its contributors
+ * 3. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgement:
+ * 	This product includes software developed by the University of
+ * 	California, Berkeley and its contributors.
+ * 4. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  * 
@@ -46,19 +50,13 @@
  * OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
-#include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-#ifdef notdef
 static const char sccsid[] = "@(#)herror.c	8.1 (Berkeley) 6/4/93";
-static const char rcsid[] = "Id: herror.c,v 1.4 2005/04/27 04:56:41 sra Exp";
-#else
-__RCSID("$NetBSD: herror.c,v 1.10 2015/02/24 17:56:20 christos Exp $");
-#endif
+static const char rcsid[] = "Id: herror.c,v 1.2.206.1 2004/03/09 08:33:54 marka Exp";
 #endif /* LIBC_SCCS and not lint */
 
 #include "port_before.h"
 
-#include "namespace.h"
 #include <sys/types.h>
 #include <sys/param.h>
 #include <sys/uio.h>
@@ -70,15 +68,16 @@ __RCSID("$NetBSD: herror.c,v 1.10 2015/02/24 17:56:20 christos Exp $");
 #include <resolv.h>
 #include <string.h>
 #include <unistd.h>
+#include <irs.h>
 
 #include "port_after.h"
 
 const char *h_errlist[] = {
 	"Resolver Error 0 (no error)",
-	"Unknown host",				/*%< 1 HOST_NOT_FOUND */
-	"Host name lookup failure",		/*%< 2 TRY_AGAIN */
-	"Unknown server error",			/*%< 3 NO_RECOVERY */
-	"No address associated with name",	/*%< 4 NO_ADDRESS */
+	"Unknown host",				/* 1 HOST_NOT_FOUND */
+	"Host name lookup failure",		/* 2 TRY_AGAIN */
+	"Unknown server error",			/* 3 NO_RECOVERY */
+	"No address associated with name",	/* 4 NO_ADDRESS */
 };
 int	h_nerr = { sizeof h_errlist / sizeof h_errlist[0] };
 
@@ -87,11 +86,7 @@ int	h_nerr = { sizeof h_errlist / sizeof h_errlist[0] };
 int	h_errno;
 #endif
 
-#ifdef __weak_alias
-__weak_alias(herror,_herror)
-#endif
-
-/*%
+/*
  * herror --
  *	print the error indicated by the h_errno value.
  */
@@ -117,10 +112,10 @@ herror(const char *s) {
 	DE_CONST("\n", t);
 	v->iov_base = t;
 	v->iov_len = 1;
-	(void)writev(STDERR_FILENO, iov, (int)((v - iov) + 1));
+	writev(STDERR_FILENO, iov, (v - iov) + 1);
 }
 
-/*%
+/*
  * hstrerror --
  *	return the string associated with a given "host" errno value.
  */
@@ -132,5 +127,3 @@ hstrerror(int err) {
 		return (h_errlist[err]);
 	return ("Unknown resolver error");
 }
-
-/*! \file */

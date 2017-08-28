@@ -1,7 +1,7 @@
-/*	$NetBSD: context.c,v 1.7 2014/12/10 04:38:02 christos Exp $	*/
+/*	$NetBSD: context.c,v 1.1 2009/03/22 15:02:36 christos Exp $	*/
 
 /*
- * Copyright (C) 2004, 2005, 2007-2009, 2012-2014  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2004, 2005, 2007, 2008  Internet Systems Consortium, Inc. ("ISC")
  * Copyright (C) 2000, 2001, 2003  Internet Software Consortium.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -17,7 +17,7 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* Id: context.c,v 1.55 2009/09/02 23:48:03 tbox Exp  */
+/* Id: context.c,v 1.50.332.2 2008/12/30 23:46:49 tbox Exp */
 
 /*! \file context.c
    lwres_context_create() creates a #lwres_context_t structure for use in
@@ -127,7 +127,7 @@ do { \
 		retval |= O_NONBLOCK; \
 		retval = fcntl(sd, F_SETFL, retval); \
 	} \
-} while (/*CONSTCOND*/0)
+} while (0)
 #endif
 
 LIBLWRES_EXTERNAL_DATA lwres_uint16_t lwres_udp_port = LWRES_UDP_PORT;
@@ -183,11 +183,7 @@ lwres_context_create(lwres_context_t **contextp, void *arg,
 	ctx->sock = -1;
 
 	ctx->timeout = LWRES_DEFAULT_TIMEOUT;
-#ifndef WIN32
 	ctx->serial = time(NULL); /* XXXMLG or BEW */
-#else
-	ctx->serial = _time32(NULL);
-#endif
 
 	ctx->use_ipv4 = 1;
 	ctx->use_ipv6 = 1;
@@ -292,11 +288,7 @@ lwres_free(void *arg, void *mem, size_t len) {
 
 static lwres_result_t
 context_connect(lwres_context_t *ctx) {
-#ifndef WIN32
 	int s;
-#else
-	SOCKET s;
-#endif
 	int ret;
 	struct sockaddr_in sin;
 	struct sockaddr_in6 sin6;
@@ -305,8 +297,8 @@ context_connect(lwres_context_t *ctx) {
 	int domain;
 
 	if (ctx->confdata.lwnext != 0) {
-		memmove(&ctx->address, &ctx->confdata.lwservers[0],
-			sizeof(lwres_addr_t));
+		memcpy(&ctx->address, &ctx->confdata.lwservers[0],
+		       sizeof(lwres_addr_t));
 		LWRES_LINK_INIT(&ctx->address, link);
 	} else {
 		/* The default is the IPv4 loopback address 127.0.0.1. */
@@ -320,16 +312,16 @@ context_connect(lwres_context_t *ctx) {
 	}
 
 	if (ctx->address.family == LWRES_ADDRTYPE_V4) {
-		memmove(&sin.sin_addr, ctx->address.address,
-			sizeof(sin.sin_addr));
+		memcpy(&sin.sin_addr, ctx->address.address,
+		       sizeof(sin.sin_addr));
 		sin.sin_port = htons(lwres_udp_port);
 		sin.sin_family = AF_INET;
 		sa = (struct sockaddr *)&sin;
 		salen = sizeof(sin);
 		domain = PF_INET;
 	} else if (ctx->address.family == LWRES_ADDRTYPE_V6) {
-		memmove(&sin6.sin6_addr, ctx->address.address,
-			sizeof(sin6.sin6_addr));
+		memcpy(&sin6.sin6_addr, ctx->address.address,
+		       sizeof(sin6.sin6_addr));
 		sin6.sin6_port = htons(lwres_udp_port);
 		sin6.sin6_family = AF_INET6;
 		sa = (struct sockaddr *)&sin6;
@@ -342,16 +334,12 @@ context_connect(lwres_context_t *ctx) {
 	InitSockets();
 #endif
 	s = socket(domain, SOCK_DGRAM, IPPROTO_UDP);
-#ifndef WIN32
 	if (s < 0) {
-		return (LWRES_R_IOERROR);
-	}
-#else
-	if (s == INVALID_SOCKET) {
+#ifdef WIN32
 		DestroySockets();
+#endif
 		return (LWRES_R_IOERROR);
 	}
-#endif
 
 	ret = connect(s, sa, salen);
 	if (ret != 0) {
@@ -371,7 +359,7 @@ context_connect(lwres_context_t *ctx) {
 		return (LWRES_R_IOERROR);
 	}
 
-	ctx->sock = (int)s;
+	ctx->sock = s;
 
 	return (LWRES_R_SUCCESS);
 }
@@ -391,7 +379,6 @@ lwres_context_send(lwres_context_t *ctx,
 		lwresult = context_connect(ctx);
 		if (lwresult != LWRES_R_SUCCESS)
 			return (lwresult);
-		INSIST(ctx->sock >= 0);
 	}
 
 	ret = sendto(ctx->sock, sendbase, sendlen, 0, NULL, 0);
@@ -486,17 +473,6 @@ lwres_context_sendrecv(lwres_context_t *ctx,
 	result = lwres_context_send(ctx, sendbase, sendlen);
 	if (result != LWRES_R_SUCCESS)
 		return (result);
-
-	/*
-	 * If this is not checked, select() can overflow,
-	 * causing corruption elsewhere.
-	 */
-	if (ctx->sock >= (int)FD_SETSIZE) {
-		close(ctx->sock);
-		ctx->sock = -1;
-		return (LWRES_R_IOERROR);
-	}
-
  again:
 	FD_ZERO(&readfds);
 	FD_SET(ctx->sock, &readfds);

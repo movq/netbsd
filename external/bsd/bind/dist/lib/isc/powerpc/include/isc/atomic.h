@@ -1,7 +1,7 @@
-/*	$NetBSD: atomic.h,v 1.7 2014/12/10 04:38:00 christos Exp $	*/
+/*	$NetBSD: atomic.h,v 1.1 2009/03/22 15:02:17 christos Exp $	*/
 
 /*
- * Copyright (C) 2005, 2007, 2009, 2011, 2012  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2005, 2007  Internet Systems Consortium, Inc. ("ISC")
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -16,7 +16,7 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* Id */
+/* Id: atomic.h,v 1.6 2007/06/18 23:47:47 tbox Exp */
 
 #ifndef ISC_ATOMIC_H
 #define ISC_ATOMIC_H 1
@@ -48,60 +48,29 @@
 
 #include <sys/atomic_op.h>
 
+#define isc_atomic_xadd(p, v) fetch_and_add(p, v)
 #define isc_atomic_store(p, v) _clear_lock(p, v)
 
 #ifdef __GNUC__
-static __inline isc_int32_t
-#else
-static isc_int32_t
-#endif
-isc_atomic_xadd(isc_int32_t *p, isc_int32_t val) {
-	int ret;
-
-#ifdef __GNUC__
-	asm("ics");
-#else
-	 __isync();
-#endif
-
-	ret = fetch_and_add((atomic_p)p, (int)val);
-
-#ifdef __GNUC__
-	asm("ics");
-#else
-	 __isync();
-#endif
-
-	 return (ret);
-}
-
-#ifdef __GNUC__
-static __inline int
+static inline int
 #else
 static int
 #endif
 isc_atomic_cmpxchg(atomic_p p, int old, int new) {
-	int orig = old;
+        int orig = old;
 
 #ifdef __GNUC__
-	asm("ics");
+        asm("ics");
 #else
-	 __isync();
+         __isync();
 #endif
-	if (compare_and_swap(p, &orig, new))
-		orig = old;
-
-#ifdef __GNUC__
-	asm("ics");
-#else
-	 __isync();
-#endif
-
-	return (orig);
+        if (compare_and_swap(p, &orig, new))
+		return (old);
+        return (orig);
 }
 
 #elif defined(ISC_PLATFORM_USEGCCASM) || defined(ISC_PLATFORM_USEMACASM)
-static __inline isc_int32_t
+static inline isc_int32_t
 isc_atomic_xadd(isc_int32_t *p, isc_int32_t val) {
 	isc_int32_t orig;
 
@@ -109,19 +78,17 @@ isc_atomic_xadd(isc_int32_t *p, isc_int32_t val) {
 #ifdef ISC_PLATFORM_USEMACASM
 		"1:"
 		"lwarx r6, 0, %1\n"
-		"mr %0, r6\n"
+	    	"mr %0, r6\n"
 		"add r6, r6, %2\n"
 		"stwcx. r6, 0, %1\n"
-		"bne- 1b\n"
-		"sync"
+		"bne- 1b"
 #else
 		"1:"
 		"lwarx 6, 0, %1\n"
-		"mr %0, 6\n"
+	    	"mr %0, 6\n"
 		"add 6, 6, %2\n"
 		"stwcx. 6, 0, %1\n"
-		"bne- 1b\n"
-		"sync"
+		"bne- 1b"
 #endif
 		: "=&r"(orig)
 		: "r"(p), "r"(val)
@@ -131,7 +98,7 @@ isc_atomic_xadd(isc_int32_t *p, isc_int32_t val) {
 	return (orig);
 }
 
-static __inline void
+static inline void
 isc_atomic_store(void *p, isc_int32_t val) {
 	__asm__ volatile (
 #ifdef ISC_PLATFORM_USEMACASM
@@ -139,15 +106,13 @@ isc_atomic_store(void *p, isc_int32_t val) {
 		"lwarx r6, 0, %0\n"
 		"lwz r6, %1\n"
 		"stwcx. r6, 0, %0\n"
-		"bne- 1b\n"
-		"sync"
+		"bne- 1b"
 #else
 		"1:"
 		"lwarx 6, 0, %0\n"
 		"lwz 6, %1\n"
 		"stwcx. 6, 0, %0\n"
-		"bne- 1b\n"
-		"sync"
+		"bne- 1b"
 #endif
 		:
 		: "r"(p), "m"(val)
@@ -155,7 +120,7 @@ isc_atomic_store(void *p, isc_int32_t val) {
 		);
 }
 
-static __inline isc_int32_t
+static inline isc_int32_t
 isc_atomic_cmpxchg(isc_int32_t *p, isc_int32_t cmpval, isc_int32_t val) {
 	isc_int32_t orig;
 
@@ -169,8 +134,7 @@ isc_atomic_cmpxchg(isc_int32_t *p, isc_int32_t cmpval, isc_int32_t val) {
 		"mr r6, %3\n"
 		"stwcx. r6, 0, %1\n"
 		"bne- 1b\n"
-		"2:\n"
-		"sync"
+		"2:"
 #else
 		"1:"
 		"lwarx 6, 0, %1\n"
@@ -180,8 +144,7 @@ isc_atomic_cmpxchg(isc_int32_t *p, isc_int32_t cmpval, isc_int32_t val) {
 		"mr 6, %3\n"
 		"stwcx. 6, 0, %1\n"
 		"bne- 1b\n"
-		"2:\n"
-		"sync"
+		"2:"
 #endif
 		: "=&r" (orig)
 		: "r"(p), "r"(cmpval), "r"(val)

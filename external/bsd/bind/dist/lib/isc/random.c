@@ -1,7 +1,7 @@
-/*	$NetBSD: random.c,v 1.6 2017/06/15 15:59:41 christos Exp $	*/
+/*	$NetBSD: random.c,v 1.1 2009/03/22 15:02:07 christos Exp $	*/
 
 /*
- * Copyright (C) 2004, 2005, 2007, 2009, 2013, 2014, 2016  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2004, 2005, 2007  Internet Systems Consortium, Inc. ("ISC")
  * Copyright (C) 1999-2003  Internet Software Consortium.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -17,7 +17,7 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* Id: random.c,v 1.28 2009/07/16 05:52:46 marka Exp  */
+/* Id: random.c,v 1.25 2007/06/19 23:47:17 tbox Exp */
 
 /*! \file */
 
@@ -45,14 +45,14 @@ initialize_rand(void)
 {
 #ifndef HAVE_ARC4RANDOM
 	unsigned int pid = getpid();
-
+	
 	/*
 	 * The low bits of pid generally change faster.
 	 * Xor them with the high bits of time which change slowly.
 	 */
 	pid = ((pid << 16) & 0xffff0000) | ((pid >> 16) & 0xffff);
 
-	srand((unsigned)time(NULL) ^ pid);
+	srand(time(NULL) ^ pid);
 #endif
 }
 
@@ -69,21 +69,8 @@ isc_random_seed(isc_uint32_t seed)
 
 #ifndef HAVE_ARC4RANDOM
 	srand(seed);
-#elif defined(HAVE_ARC4RANDOM_STIR)
-	/* Formally not necessary... */
-	UNUSED(seed);
-	arc4random_stir();
-#elif defined(HAVE_ARC4RANDOM_ADDRANDOM)
-	arc4random_addrandom((u_char *) &seed, sizeof(isc_uint32_t));
 #else
-       /*
-	* If arc4random() is available and no corresponding seeding
-	* function arc4random_addrandom() is available, no seeding is
-	* done on such platforms (e.g., OpenBSD 5.5).  This is because
-	* the OS itself is supposed to seed the RNG and it is assumed
-	* that no explicit seeding is required.
-	*/
-       UNUSED(seed);
+	arc4random_addrandom((u_char *) &seed, sizeof(isc_uint32_t));
 #endif
 }
 
@@ -99,16 +86,7 @@ isc_random_get(isc_uint32_t *val)
 	 * rand()'s lower bits are not random.
 	 * rand()'s upper bit is zero.
 	 */
-#if RAND_MAX >= 0xfffff
-	/* We have at least 20 bits.  Use lower 16 excluding lower most 4 */
 	*val = ((rand() >> 4) & 0xffff) | ((rand() << 12) & 0xffff0000);
-#elif RAND_MAX >= 0x7fff
-	/* We have at least 15 bits.  Use lower 10/11 excluding lower most 4 */
-	*val = ((rand() >> 4) & 0x000007ff) | ((rand() << 7) & 0x003ff800) |
-		((rand() << 18) & 0xffc00000);
-#else
-#error RAND_MAX is too small
-#endif
 #else
 	*val = arc4random();
 #endif
@@ -116,13 +94,13 @@ isc_random_get(isc_uint32_t *val)
 
 isc_uint32_t
 isc_random_jitter(isc_uint32_t max, isc_uint32_t jitter) {
-	isc_uint32_t rnd;
-
-	REQUIRE(jitter < max || (jitter == 0 && max == 0));
-
+	REQUIRE(jitter < max);
 	if (jitter == 0)
 		return (max);
-
-	isc_random_get(&rnd);
-	return (max - rnd % jitter);
+	else
+#ifndef HAVE_ARC4RANDOM
+		return (max - rand() % jitter);
+#else
+		return (max - arc4random() % jitter);
+#endif
 }

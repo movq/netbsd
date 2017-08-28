@@ -1,7 +1,7 @@
-/*	$NetBSD: rriterator.c,v 1.4 2014/12/10 04:37:58 christos Exp $	*/
+/*	$NetBSD: rriterator.c,v 1.1 2009/10/25 00:02:34 christos Exp $	*/
 
 /*
- * Copyright (C) 2009, 2011, 2012  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2009  Internet Systems Consortium, Inc. ("ISC")
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -16,7 +16,7 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* Id */
+/* Id: rriterator.c,v 1.2 2009/06/30 02:52:32 each Exp */
 
 /*! \file */
 
@@ -189,8 +189,6 @@ dns_rriterator_current(dns_rriterator_t *it, dns_name_t **name,
 	REQUIRE(name != NULL && *name == NULL);
 	REQUIRE(VALID_RRITERATOR(it));
 	REQUIRE(it->result == ISC_R_SUCCESS);
-	REQUIRE(rdataset == NULL || *rdataset == NULL);
-	REQUIRE(rdata == NULL || *rdata == NULL);
 
 	*name = dns_fixedname_name(&it->fixedname);
 	*ttl = it->rdataset.ttl;
@@ -198,9 +196,9 @@ dns_rriterator_current(dns_rriterator_t *it, dns_name_t **name,
 	dns_rdata_reset(&it->rdata);
 	dns_rdataset_current(&it->rdataset, &it->rdata);
 
-	if (rdataset != NULL)
+	if (rdataset)
 		*rdataset = &it->rdataset;
 
-	if (rdata != NULL)
+	if (rdata)
 		*rdata = &it->rdata;
 }

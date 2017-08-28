@@ -1,6 +1,6 @@
 #!/bin/sh
 #
-# Copyright (C) 2004, 2006, 2007, 2009, 2012, 2014, 2015  Internet Systems Consortium, Inc. ("ISC")
+# Copyright (C) 2004, 2006, 2007  Internet Systems Consortium, Inc. ("ISC")
 # Copyright (C) 2000-2002  Internet Software Consortium.
 #
 # Permission to use, copy, modify, and/or distribute this software for any
@@ -15,18 +15,14 @@
 # OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR
 # PERFORMANCE OF THIS SOFTWARE.
 
-SYSTEMTESTTOP=..
-. $SYSTEMTESTTOP/conf.sh
+# Id: prereq.sh,v 1.10 2007/06/19 23:47:02 tbox Exp
 
-if $PERL -e 'use Net::DNS;' 2>/dev/null
+../../genrandom 400 random.data
+
+if $KEYGEN -a RSAMD5 -b 512 -n zone -r random.data foo > /dev/null 2>&1
 then
-    if $PERL -e 'use Net::DNS; die if ($Net::DNS::VERSION >= 0.69 && $Net::DNS::VERSION <= 0.70);' 2>/dev/null
-    then
-        :
-    else
-        echo "I:Net::DNS versions 0.69 to 0.70 have bugs that cause this test to fail: please update." >&2
-        exit 1
-    fi
+    rm -f Kfoo*
+else
+    echo "I:This test requires that --with-openssl was used." >&2
+    exit 1
 fi
-
-exec $SHELL ../testcrypto.sh

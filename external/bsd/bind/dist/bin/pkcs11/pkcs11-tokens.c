@@ -1,7 +1,7 @@
-/*	$NetBSD: pkcs11-tokens.c,v 1.1.1.6 2017/06/15 15:22:39 christos Exp $	*/
+/*	$NetBSD: pkcs11-tokens.c,v 1.1 2014/02/28 17:40:07 christos Exp $	*/
 
 /*
- * Copyright (C) 2014-2016  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2014  Internet Systems Consortium, Inc. ("ISC")
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -33,28 +33,23 @@
 
 #include <isc/commandline.h>
 #include <isc/mem.h>
-#include <isc/print.h>
 #include <isc/result.h>
 #include <isc/types.h>
 
 #include <pk11/pk11.h>
-#include <pk11/result.h>
+
+extern void dst__pkcs11_init(isc_mem_t *mctx, const char *engine);
 
 int
 main(int argc, char *argv[]) {
-	isc_result_t result;
 	char *lib_name = NULL;
 	int c, errflg = 0;
 	isc_mem_t *mctx = NULL;
-	pk11_context_t pctx;
 
-	while ((c = isc_commandline_parse(argc, argv, ":m:v")) != -1) {
+	while ((c = isc_commandline_parse(argc, argv, ":m:")) != -1) {
 		switch (c) {
 		case 'm':
 			lib_name = isc_commandline_argument;
-			break;
-		case 'v':
-			pk11_verbose_init = ISC_TRUE;
 			break;
 		case ':':
 			fprintf(stderr, "Option -%c requires an operand\n",
@@ -71,7 +66,7 @@ main(int argc, char *argv[]) {
 
 	if (errflg) {
 		fprintf(stderr, "Usage:\n");
-		fprintf(stderr, "\tpkcs11-tokens [-v] [-m module]\n");
+		fprintf(stderr, "\tpkcs11-tokens [-m module]\n");
 		exit(1);
 	}
 
@@ -80,31 +75,11 @@ main(int argc, char *argv[]) {
 		exit(1);
 	}
 
-	pk11_result_register();
-
-	/* Initialize the CRYPTOKI library */
-	if (lib_name != NULL)
-		pk11_set_lib_name(lib_name);
-
-	result = pk11_get_session(&pctx, OP_ANY, ISC_TRUE, ISC_FALSE,
-				  ISC_FALSE, NULL, 0);
-	if (result == PK11_R_NORANDOMSERVICE ||
-	    result == PK11_R_NODIGESTSERVICE ||
-	    result == PK11_R_NOAESSERVICE) {
-		fprintf(stderr, "Warning: %s\n", isc_result_totext(result));
-		fprintf(stderr, "This HSM will not work with BIND 9 "
-				"using native PKCS#11.\n\n");
-	} else if ((result != ISC_R_SUCCESS) && (result != ISC_R_NOTFOUND)) {
-		fprintf(stderr, "Unrecoverable error initializing "
-				"PKCS#11: %s\n", isc_result_totext(result));
-		exit(1);
-	}
+	dst__pkcs11_init(mctx, lib_name);
 
 	pk11_dump_tokens();
 
-	if (pctx.handle != NULL)
-		pk11_return_session(&pctx);
-	(void) pk11_finalize();
+	pk11_shutdown();
 
 	isc_mem_destroy(&mctx);
 

@@ -1,7 +1,7 @@
-/*	$NetBSD: byaddr.c,v 1.7 2014/12/10 04:37:58 christos Exp $	*/
+/*	$NetBSD: byaddr.c,v 1.1 2009/03/22 15:00:56 christos Exp $	*/
 
 /*
- * Copyright (C) 2004, 2005, 2007, 2009, 2013  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2004, 2005, 2007  Internet Systems Consortium, Inc. ("ISC")
  * Copyright (C) 2000-2003  Internet Software Consortium.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -17,7 +17,7 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* Id: byaddr.c,v 1.41 2009/09/02 23:48:02 tbox Exp  */
+/* Id: byaddr.c,v 1.39 2007/06/19 23:47:16 tbox Exp */
 
 /*! \file */
 
@@ -44,6 +44,25 @@
 /*
  * XXXRTH  We could use a static event...
  */
+
+struct dns_byaddr {
+	/* Unlocked. */
+	unsigned int		magic;
+	isc_mem_t *		mctx;
+	isc_mutex_t		lock;
+	dns_fixedname_t		name;
+	/* Locked by lock. */
+	unsigned int		options;
+	dns_lookup_t *		lookup;
+	isc_task_t *		task;
+	dns_byaddrevent_t *	event;
+	isc_boolean_t		canceled;
+};
+
+#define BYADDR_MAGIC			ISC_MAGIC('B', 'y', 'A', 'd')
+#define VALID_BYADDR(b)			ISC_MAGIC_VALID(b, BYADDR_MAGIC)
+
+#define MAX_RESTARTS 16
 
 static char hex_digits[] = {
 	'0', '1', '2', '3', '4', '5', '6', '7',
@@ -108,27 +127,9 @@ dns_byaddr_createptrname2(isc_netaddr_t *address, unsigned int options,
 	len = (unsigned int)strlen(textname);
 	isc_buffer_init(&buffer, textname, len);
 	isc_buffer_add(&buffer, len);
-	return (dns_name_fromtext(name, &buffer, dns_rootname, 0, NULL));
+	return (dns_name_fromtext(name, &buffer, dns_rootname,
+				  ISC_FALSE, NULL));
 }
-
-struct dns_byaddr {
-	/* Unlocked. */
-	unsigned int		magic;
-	isc_mem_t *		mctx;
-	isc_mutex_t		lock;
-	dns_fixedname_t		name;
-	/* Locked by lock. */
-	unsigned int		options;
-	dns_lookup_t *		lookup;
-	isc_task_t *		task;
-	dns_byaddrevent_t *	event;
-	isc_boolean_t		canceled;
-};
-
-#define BYADDR_MAGIC			ISC_MAGIC('B', 'y', 'A', 'd')
-#define VALID_BYADDR(b)			ISC_MAGIC_VALID(b, BYADDR_MAGIC)
-
-#define MAX_RESTARTS 16
 
 static inline isc_result_t
 copy_ptr_targets(dns_byaddr_t *byaddr, dns_rdataset_t *rdataset) {
@@ -189,7 +190,7 @@ lookup_done(isc_task_t *task, isc_event_t *event) {
 	} else
 		byaddr->event->result = levent->result;
 	isc_event_free(&event);
-	isc_task_sendanddetach(&byaddr->task, (isc_event_t **)(void *)&byaddr->event);
+	isc_task_sendanddetach(&byaddr->task, (isc_event_t **)&byaddr->event);
 }
 
 static void
@@ -225,8 +226,7 @@ dns_byaddr_create(isc_mem_t *mctx, isc_netaddr_t *address, dns_view_t *view,
 	byaddr = isc_mem_get(mctx, sizeof(*byaddr));
 	if (byaddr == NULL)
 		return (ISC_R_NOMEMORY);
-	byaddr->mctx = NULL;
-	isc_mem_attach(mctx, &byaddr->mctx);
+	byaddr->mctx = mctx;
 	byaddr->options = options;
 
 	byaddr->event = isc_mem_get(mctx, sizeof(*byaddr->event));
@@ -279,7 +279,7 @@ dns_byaddr_create(isc_mem_t *mctx, isc_netaddr_t *address, dns_view_t *view,
 	isc_task_detach(&byaddr->task);
 
  cleanup_byaddr:
-	isc_mem_putanddetach(&mctx, byaddr, sizeof(*byaddr));
+	isc_mem_put(mctx, byaddr, sizeof(*byaddr));
 
 	return (result);
 }
@@ -312,7 +312,7 @@ dns_byaddr_destroy(dns_byaddr_t **byaddrp) {
 
 	DESTROYLOCK(&byaddr->lock);
 	byaddr->magic = 0;
-	isc_mem_putanddetach(&byaddr->mctx, byaddr, sizeof(*byaddr));
+	isc_mem_put(byaddr->mctx, byaddr, sizeof(*byaddr));
 
 	*byaddrp = NULL;
 }

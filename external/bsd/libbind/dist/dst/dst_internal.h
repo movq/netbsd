@@ -1,4 +1,4 @@
-/*	$NetBSD: dst_internal.h,v 1.1.1.1 2009/04/12 15:33:31 christos Exp $	*/
+/*	$NetBSD: dst_internal.h,v 1.1 2009/04/12 15:33:31 christos Exp $	*/
 
 #ifndef DST_INTERNAL_H
 #define DST_INTERNAL_H

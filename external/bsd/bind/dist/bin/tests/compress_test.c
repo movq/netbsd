@@ -1,7 +1,7 @@
-/*	$NetBSD: compress_test.c,v 1.7 2015/12/17 04:00:42 christos Exp $	*/
+/*	$NetBSD: compress_test.c,v 1.1 2009/03/22 14:56:22 christos Exp $	*/
 
 /*
- * Copyright (C) 2004-2007, 2015  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2004-2007  Internet Systems Consortium, Inc. ("ISC")
  * Copyright (C) 1999-2001  Internet Software Consortium.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -17,7 +17,7 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* Id: compress_test.c,v 1.34 2007/06/18 23:47:26 tbox Exp  */
+/* Id: compress_test.c,v 1.34 2007/06/18 23:47:26 tbox Exp */
 
 /*! \file */
 
@@ -29,7 +29,6 @@
 #include <isc/buffer.h>
 #include <isc/commandline.h>
 #include <isc/mem.h>
-#include <isc/print.h>
 #include <isc/util.h>
 
 #include <dns/compress.h>

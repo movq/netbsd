@@ -1,7 +1,7 @@
-/*	$NetBSD: sample-async.c,v 1.1.1.5 2015/12/17 03:22:13 christos Exp $	*/
+/*	$NetBSD: sample-async.c,v 1.1 2014/02/28 17:40:16 christos Exp $	*/
 
 /*
- * Copyright (C) 2009, 2013-2015  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2009, 2013  Internet Systems Consortium, Inc. ("ISC")
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -20,7 +20,6 @@
 
 #include <config.h>
 
-#ifndef WIN32
 #include <sys/types.h>
 #include <sys/socket.h>
 
@@ -29,18 +28,14 @@
 #include <arpa/inet.h>
 
 #include <unistd.h>
-#endif
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
 #include <isc/app.h>
 #include <isc/buffer.h>
-#include <isc/commandline.h>
 #include <isc/lib.h>
 #include <isc/mem.h>
-#include <isc/print.h>
 #include <isc/socket.h>
 #include <isc/sockaddr.h>
 #include <isc/task.h>
@@ -209,7 +204,7 @@ process_answer(isc_task_t *task, isc_event_t *event) {
 static isc_result_t
 dispatch_query(struct query_trans *trans) {
 	isc_result_t result;
-	unsigned int namelen;
+	size_t namelen;
 	isc_buffer_t b;
 	char buf[4096];	/* XXX ad hoc constant, but should be enough */
 	char *cp;
@@ -282,16 +277,15 @@ main(int argc, char *argv[]) {
 	isc_result_t result;
 	int i;
 
-	while ((ch = isc_commandline_parse(argc, argv, "s:t:")) != -1) {
+	while ((ch = getopt(argc, argv, "s:t:")) != -1) {
 		switch (ch) {
 		case 't':
-			tr.base = isc_commandline_argument;
-			tr.length = strlen(isc_commandline_argument);
+			tr.base = optarg;
+			tr.length = strlen(optarg);
 			result = dns_rdatatype_fromtext(&type, &tr);
 			if (result != ISC_R_SUCCESS) {
 				fprintf(stderr,
-					"invalid RRtype: %s\n",
-					isc_commandline_argument);
+					"invalid RRtype: %s\n", optarg);
 				exit(1);
 			}
 			break;
@@ -302,16 +296,15 @@ main(int argc, char *argv[]) {
 					MAX_SERVERS);
 				exit(1);
 			}
-			serveraddr[nservers++] =
-				(const char *)isc_commandline_argument;
+			serveraddr[nservers++] = (const char *)optarg;
 			break;
 		default:
 			usage();
 		}
 	}
 
-	argc -= isc_commandline_index;
-	argv += isc_commandline_index;
+	argc -= optind;
+	argv += optind;
 	if (argc < 1)
 		usage();
 

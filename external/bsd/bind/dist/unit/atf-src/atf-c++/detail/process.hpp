@@ -1,7 +1,7 @@
 //
 // Automated Testing Framework (atf)
 //
-// Copyright (c) 2008 The NetBSD Foundation, Inc.
+// Copyright (c) 2008, 2009, 2010 The NetBSD Foundation, Inc.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -41,9 +41,10 @@ extern "C" {
 #include <string>
 #include <vector>
 
-#include "auto_array.hpp"
 #include "exceptions.hpp"
 #include "fs.hpp"
+
+#include "../utils.hpp"
 
 namespace atf {
 namespace process {
@@ -63,7 +64,7 @@ class argv_array {
     // std::tr1::shared_array instead when it becomes widely available.
     // The reason would be to remove all copy constructors and assignment
     // operators from this class.
-    auto_array< const char* > m_exec_argv;
+    utils::auto_array< const char* > m_exec_argv;
     void ctor_init_exec_argv(void);
 
 public:
@@ -117,7 +118,7 @@ class stream_capture : basic_stream {
     child fork(void (*)(void*), const OutStream&, const ErrStream&, void*);
     template< class OutStream, class ErrStream > friend
     status exec(const atf::fs::path&, const argv_array&,
-                const OutStream&, const ErrStream&, void (*)(void));
+                const OutStream&, const ErrStream&);
 
 public:
     stream_capture(void);
@@ -129,7 +130,7 @@ class stream_connect : basic_stream {
     child fork(void (*)(void*), const OutStream&, const ErrStream&, void*);
     template< class OutStream, class ErrStream > friend
     status exec(const atf::fs::path&, const argv_array&,
-                const OutStream&, const ErrStream&, void (*)(void));
+                const OutStream&, const ErrStream&);
 
 public:
     stream_connect(const int, const int);
@@ -141,7 +142,7 @@ class stream_inherit : basic_stream {
     child fork(void (*)(void*), const OutStream&, const ErrStream&, void*);
     template< class OutStream, class ErrStream > friend
     status exec(const atf::fs::path&, const argv_array&,
-                const OutStream&, const ErrStream&, void (*)(void));
+                const OutStream&, const ErrStream&);
 
 public:
     stream_inherit(void);
@@ -153,7 +154,7 @@ class stream_redirect_fd : basic_stream {
     child fork(void (*)(void*), const OutStream&, const ErrStream&, void*);
     template< class OutStream, class ErrStream > friend
     status exec(const atf::fs::path&, const argv_array&,
-                const OutStream&, const ErrStream&, void (*)(void));
+                const OutStream&, const ErrStream&);
 
 public:
     stream_redirect_fd(const int);
@@ -165,7 +166,7 @@ class stream_redirect_path : basic_stream {
     child fork(void (*)(void*), const OutStream&, const ErrStream&, void*);
     template< class OutStream, class ErrStream > friend
     status exec(const atf::fs::path&, const argv_array&,
-                const OutStream&, const ErrStream&, void (*)(void));
+                const OutStream&, const ErrStream&);
 
 public:
     stream_redirect_path(const fs::path&);
@@ -181,7 +182,7 @@ class status {
     friend class child;
     template< class OutStream, class ErrStream > friend
     status exec(const atf::fs::path&, const argv_array&,
-                const OutStream&, const ErrStream&, void (*)(void));
+                const OutStream&, const ErrStream&);
 
     status(atf_process_status_t&);
 
@@ -248,8 +249,7 @@ fork(void (*start)(void*), const OutStream& outsb,
 template< class OutStream, class ErrStream >
 status
 exec(const atf::fs::path& prog, const argv_array& argv,
-     const OutStream& outsb, const ErrStream& errsb,
-     void (*prehook)(void))
+     const OutStream& outsb, const ErrStream& errsb)
 {
     atf_process_status_t s;
 
@@ -257,20 +257,11 @@ exec(const atf::fs::path& prog, const argv_array& argv,
     atf_error_t err = atf_process_exec_array(&s, prog.c_path(),
                                              argv.exec_argv(),
                                              outsb.get_sb(),
-                                             errsb.get_sb(),
-                                             prehook);
+                                             errsb.get_sb());
     if (atf_is_error(err))
         throw_atf_error(err);
 
     return status(s);
-}
-
-template< class OutStream, class ErrStream >
-status
-exec(const atf::fs::path& prog, const argv_array& argv,
-     const OutStream& outsb, const ErrStream& errsb)
-{
-    return exec(prog, argv, outsb, errsb, NULL);
 }
 
 } // namespace process

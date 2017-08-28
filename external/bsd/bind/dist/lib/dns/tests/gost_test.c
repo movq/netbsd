@@ -1,7 +1,7 @@
-/*	$NetBSD: gost_test.c,v 1.1.1.7 2015/12/17 03:22:10 christos Exp $	*/
+/*	$NetBSD: gost_test.c,v 1.1 2014/02/28 17:40:15 christos Exp $	*/
 
 /*
- * Copyright (C) 2014, 2015  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2014  Internet Systems Consortium, Inc. ("ISC")
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -28,7 +28,6 @@
 #include <string.h>
 
 #include <isc/util.h>
-#include <isc/print.h>
 #include <isc/string.h>
 
 #include "dnstest.h"
@@ -39,7 +38,6 @@
 #include <openssl/objects.h>
 #include <openssl/rsa.h>
 #include <openssl/engine.h>
-#include <openssl/bn.h>
 #endif
 
 #ifdef HAVE_PKCS11_GOST
@@ -58,7 +56,7 @@
 unsigned char digest[ISC_GOST_DIGESTLENGTH];
 unsigned char buffer[1024];
 const char *s;
-char str[2 * ISC_GOST_DIGESTLENGTH + 1];
+char str[ISC_GOST_DIGESTLENGTH];
 int i = 0;
 
 isc_result_t
@@ -69,7 +67,7 @@ tohexstr(unsigned char *d, unsigned int len, char *out);
  * Postcondition: A String representation of the given hexadecimal number is
  *   placed into the array *out
  *
- * 'out' MUST point to an array of at least len * 2 + 1
+ * 'out' MUST point to an array of at least len / 2 + 1
  *
  * Return values: ISC_R_SUCCESS if the operation is sucessful
  */
@@ -79,10 +77,10 @@ tohexstr(unsigned char *d, unsigned int len, char *out) {
 
 	out[0]='\0';
 	char c_ret[] = "AA";
-	unsigned int j;
+	unsigned int i;
 	strcat(out, "0x");
-	for (j = 0; j < len; j++) {
-		sprintf(c_ret, "%02X", d[j]);
+	for (i = 0; i < len; i++) {
+		sprintf(c_ret, "%02X", d[i]);
 		strcat(out, c_ret);
 	}
 	strcat(out, "\0");
@@ -341,9 +339,8 @@ ATF_TC_BODY(isc_gost_private, tc) {
 
 	/* create the private key */
 	memset(&pk11_ctx, 0, sizeof(pk11_ctx));
-	ATF_REQUIRE(pk11_get_session(&pk11_ctx, OP_GOST, ISC_TRUE,
-				     ISC_FALSE, ISC_FALSE, NULL,
-				     pk11_get_best_token(OP_GOST)) ==
+	ATF_REQUIRE(pk11_get_session(&pk11_ctx, OP_GOST, ISC_FALSE, ISC_FALSE,
+				     NULL, pk11_get_best_token(OP_GOST)) ==
 		    ISC_R_SUCCESS);
 	pk11_ctx.object = CK_INVALID_HANDLE;
 	pk11_ctx.ontoken = ISC_FALSE;

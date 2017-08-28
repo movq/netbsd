@@ -1,7 +1,7 @@
-/*	$NetBSD: commandline.c,v 1.7 2016/05/26 16:49:59 christos Exp $	*/
+/*	$NetBSD: commandline.c,v 1.1 2009/03/22 15:02:00 christos Exp $	*/
 
 /*
- * Portions Copyright (C) 2004, 2005, 2007, 2008, 2014, 2015  Internet Systems Consortium, Inc. ("ISC")
+ * Portions Copyright (C) 2004, 2005, 2007, 2008  Internet Systems Consortium, Inc. ("ISC")
  * Portions Copyright (C) 1999-2001  Internet Software Consortium.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -29,7 +29,11 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. Neither the name of the University nor the names of its contributors
+ * 3. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgement:
+ *	This product includes software developed by the University of
+ *	California, Berkeley and its contributors.
+ * 4. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -46,7 +50,7 @@
  * SUCH DAMAGE.
  */
 
-/* Id: commandline.c,v 1.22 2008/09/25 04:02:39 tbox Exp  */
+/* Id: commandline.c,v 1.22 2008/09/25 04:02:39 tbox Exp */
 
 /*! \file
  * This file was adapted from the NetBSD project's source tree, RCS ID:
@@ -67,7 +71,6 @@
 
 #include <isc/commandline.h>
 #include <isc/msgs.h>
-#include <isc/print.h>
 #include <isc/string.h>
 #include <isc/util.h>
 
@@ -97,7 +100,7 @@ static char endopt = '\0';
 int
 isc_commandline_parse(int argc, char * const *argv, const char *options) {
 	static char *place = ENDOPT;
-	const char *option;		/* Index into *options of option. */
+	char *option;			/* Index into *options of option. */
 
 	REQUIRE(argc >= 0 && argv != NULL && options != NULL);
 

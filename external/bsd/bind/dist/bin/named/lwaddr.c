@@ -1,7 +1,7 @@
-/*	$NetBSD: lwaddr.c,v 1.5 2014/12/10 04:37:51 christos Exp $	*/
+/*	$NetBSD: lwaddr.c,v 1.1 2009/03/22 14:56:00 christos Exp $	*/
 
 /*
- * Copyright (C) 2004, 2005, 2007, 2008, 2014  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2004, 2005, 2007, 2008  Internet Systems Consortium, Inc. ("ISC")
  * Copyright (C) 2000, 2001  Internet Software Consortium.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -17,7 +17,7 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* Id: lwaddr.c,v 1.10 2008/01/11 23:46:56 tbox Exp  */
+/* Id: lwaddr.c,v 1.10 2008/01/11 23:46:56 tbox Exp */
 
 /*! \file */
 
@@ -43,11 +43,11 @@ lwaddr_netaddr_fromlwresaddr(isc_netaddr_t *na, lwres_addr_t *la) {
 
 	if (la->family == LWRES_ADDRTYPE_V4) {
 		struct in_addr ina;
-		memmove(&ina.s_addr, la->address, 4);
+		memcpy(&ina.s_addr, la->address, 4);
 		isc_netaddr_fromin(na, &ina);
 	} else {
 		struct in6_addr ina6;
-		memmove(&ina6.s6_addr, la->address, 16);
+		memcpy(&ina6.s6_addr, la->address, 16);
 		isc_netaddr_fromin6(na, &ina6);
 	}
 	return (ISC_R_SUCCESS);
@@ -79,11 +79,11 @@ lwaddr_lwresaddr_fromnetaddr(lwres_addr_t *la, isc_netaddr_t *na) {
 	if (na->family == AF_INET) {
 		la->family = LWRES_ADDRTYPE_V4;
 		la->length = 4;
-		memmove(la->address, &na->type.in, 4);
+		memcpy(la->address, &na->type.in, 4);
 	} else {
 		la->family = LWRES_ADDRTYPE_V6;
 		la->length = 16;
-		memmove(la->address, &na->type.in6, 16);
+		memcpy(la->address, &na->type.in6, 16);
 	}
 	return (ISC_R_SUCCESS);
 }

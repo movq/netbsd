@@ -1,10 +1,11 @@
-/*	$NetBSD: dispatch.c,v 1.5 2017/06/28 02:46:30 manu Exp $	*/
+/*	$NetBSD: dispatch.c,v 1.1 2013/03/24 15:45:52 christos Exp $	*/
+
 /* dispatch.c
 
    Network input dispatcher... */
 
 /*
- * Copyright (c) 2004-2011,2013 by Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (c) 2004-2011 by Internet Systems Consortium, Inc. ("ISC")
  * Copyright (c) 1995-2003 by Internet Software Consortium
  *
  * Permission to use, copy, modify, and distribute this software for any
@@ -27,17 +28,12 @@
  *
  */
 
-#include <sys/cdefs.h>
-__RCSID("$NetBSD: dispatch.c,v 1.5 2017/06/28 02:46:30 manu Exp $");
-
 #include "dhcpd.h"
 
 #include <sys/time.h>
 
 struct timeout *timeouts;
 static struct timeout *free_timeouts;
-
-libdhcp_callbacks_t libdhcp_callbacks;
 
 void set_time(TIME t)
 {
@@ -116,32 +112,13 @@ dispatch(void)
 {
 	isc_result_t status;
 
-	do {
-		status = isc_app_ctxrun(dhcp_gbl_ctx.actx);
-
-		/*
-		 * isc_app_ctxrun can be stopped by receiving a
-		 * signal. It will return ISC_R_RELOAD in that
-		 * case. That is a normal behavior.
-		 */
-
-		if (status == ISC_R_RELOAD) {
-			/*
-			 * dhcp_set_control_state() will do the job.
-			 * Note its first argument is ignored.
-			 */
-			status = libdhcp_callbacks.dhcp_set_control_state
-					(server_shutdown, server_shutdown);
-			if (status == ISC_R_SUCCESS)
-				status = ISC_R_RELOAD;
-		}
-	} while (status == ISC_R_RELOAD);
+	status = isc_app_ctxrun(dhcp_gbl_ctx.actx);
 
 	log_fatal ("Dispatch routine failed: %s -- exiting",
 		   isc_result_totext (status));
 }
 
-static void
+void
 isclib_timer_callback(isc_task_t  *taskp,
 		      isc_event_t *eventp)
 {
@@ -439,10 +416,3 @@ void relinquish_timeouts ()
 	}
 }
 #endif
-
-void libdhcp_callbacks_register(cb)
-	libdhcp_callbacks_t *cb;
-{
-	memcpy(&libdhcp_callbacks, cb, sizeof(libdhcp_callbacks));
-	return;
-}

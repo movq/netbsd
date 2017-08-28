@@ -1,6 +1,6 @@
 #!/bin/sh
 #
-# Copyright (C) 2010, 2012, 2014  Internet Systems Consortium, Inc. ("ISC")
+# Copyright (C) 2010  Internet Systems Consortium, Inc. ("ISC")
 #
 # Permission to use, copy, modify, and/or distribute this software for any
 # purpose with or without fee is hereby granted, provided that the above
@@ -14,22 +14,14 @@
 # OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR
 # PERFORMANCE OF THIS SOFTWARE.
 
-SYSTEMTESTTOP=..
-. $SYSTEMTESTTOP/conf.sh
+# Id: prereq.sh,v 1.2.2.2 2010/06/08 23:49:11 tbox Exp
 
-echo "I:(Native PKCS#11)" >&2
-rsafail=0 eccfail=0
+../../../tools/genrandom 400 random.data
 
-$SHELL ../testcrypto.sh -q rsa || rsafail=1
-$SHELL ../testcrypto.sh -q ecdsa || eccfail=1
-
-if [ $rsafail = 0 -a $eccfail = 0 ]; then
-	echo both > supported
-elif [ $rsafail = 1 -a $eccfail = 1 ]; then
-	echo "I:This test requires PKCS#11 support for either RSA or ECDSA cryptography." >&2
-	exit 255
-elif [ $rsafail = 0 ]; then
-	echo rsaonly > supported
+if $KEYGEN -q -a RSAMD5 -b 512 -n zone -r random.data foo > /dev/null 2>&1
+then
+    rm -f Kfoo*
 else
-        echo ecconly > supported
+    echo "I:This test requires that --with-openssl was used." >&2
+    exit 1
 fi

@@ -1,7 +1,7 @@
-/*	$NetBSD: netaddr.h,v 1.6 2017/06/15 15:59:41 christos Exp $	*/
+/*	$NetBSD: netaddr.h,v 1.1 2009/03/22 15:02:13 christos Exp $	*/
 
 /*
- * Copyright (C) 2004-2007, 2009, 2015, 2016  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2004-2007, 2009  Internet Systems Consortium, Inc. ("ISC")
  * Copyright (C) 1998-2002  Internet Software Consortium.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -17,7 +17,7 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* Id: netaddr.h,v 1.37 2009/01/17 23:47:43 tbox Exp  */
+/* Id: netaddr.h,v 1.35.332.2 2009/01/18 23:47:41 tbox Exp */
 
 #ifndef ISC_NETADDR_H
 #define ISC_NETADDR_H 1
@@ -68,7 +68,7 @@ isc_result_t
 isc_netaddr_masktoprefixlen(const isc_netaddr_t *s, unsigned int *lenp);
 /*%<
  * Convert a netmask in 's' into a prefix length in '*lenp'.
- * The mask should consist of zero or more '1' bits in the
+ * The mask should consist of zero or more '1' bits in the most
  * most significant part of the address, followed by '0' bits.
  * If this is not the case, #ISC_R_MASKNONCONTIG is returned.
  *
@@ -155,12 +155,6 @@ isc_boolean_t
 isc_netaddr_issitelocal(isc_netaddr_t *na);
 /*%<
  * Returns #ISC_TRUE if the address is a site local address.
- */
-
-isc_boolean_t
-isc_netaddr_isnetzero(isc_netaddr_t *na);
-/*%<
- * Returns #ISC_TRUE if the address is in net zero.
  */
 
 void

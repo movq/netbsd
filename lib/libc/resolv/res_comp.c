@@ -1,4 +1,4 @@
-/*	$NetBSD: res_comp.c,v 1.13 2015/02/24 17:56:20 christos Exp $	*/
+/*	$NetBSD: res_comp.c,v 1.1 2004/05/20 17:18:55 christos Exp $	*/
 
 /*
  * Copyright (c) 1985, 1993
@@ -12,7 +12,11 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. Neither the name of the University nor the names of its contributors
+ * 3. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgement:
+ * 	This product includes software developed by the University of
+ * 	California, Berkeley and its contributors.
+ * 4. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  * 
@@ -65,24 +69,17 @@
  * ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT
  * OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
-#include <sys/cdefs.h>
+
 #if defined(LIBC_SCCS) && !defined(lint)
-#ifdef notdef
 static const char sccsid[] = "@(#)res_comp.c	8.1 (Berkeley) 6/4/93";
-static const char rcsid[] = "Id: res_comp.c,v 1.5 2005/07/28 06:51:50 marka Exp";
-#else
-__RCSID("$NetBSD: res_comp.c,v 1.13 2015/02/24 17:56:20 christos Exp $");
-#endif
+static const char rcsid[] = "Id: res_comp.c,v 1.1.2.1.4.1 2004/03/09 08:33:54 marka Exp";
 #endif /* LIBC_SCCS and not lint */
 
 #include "port_before.h"
-
-#include "namespace.h"
 #include <sys/types.h>
 #include <sys/param.h>
 #include <netinet/in.h>
 #include <arpa/nameser.h>
-#include <assert.h>
 #include <ctype.h>
 #include <resolv.h>
 #include <stdio.h>
@@ -90,25 +87,12 @@ __RCSID("$NetBSD: res_comp.c,v 1.13 2015/02/24 17:56:20 christos Exp $");
 #include <unistd.h>
 #include "port_after.h"
 
-#ifdef __weak_alias
-__weak_alias(dn_expand,_dn_expand)
-__weak_alias(dn_comp,__dn_comp)
-#if 0
-__weak_alias(dn_skipname,__dn_skipname)
-__weak_alias(res_hnok,__res_hnok)
-__weak_alias(res_ownok,__res_ownok)
-__weak_alias(res_mailok,__res_mailok)
-__weak_alias(res_dnok,__res_dnok)
-#endif
-#endif
-
-/*%
+/*
  * Expand compressed domain name 'src' to full domain name.
- *
- * \li 'msg' is a pointer to the begining of the message,
- * \li 'eom' points to the first location after the message,
- * \li 'dst' is a pointer to a buffer of size 'dstsiz' for the result.
- * \li Return size of compressed name or -1 if there was an error.
+ * 'msg' is a pointer to the begining of the message,
+ * 'eom' points to the first location after the message,
+ * 'dst' is a pointer to a buffer of size 'dstsiz' for the result.
+ * Return size of compressed name or -1 if there was an error.
  */
 int
 dn_expand(const u_char *msg, const u_char *eom, const u_char *src,
@@ -121,22 +105,21 @@ dn_expand(const u_char *msg, const u_char *eom, const u_char *src,
 	return (n);
 }
 
-/*%
+/*
  * Pack domain name 'exp_dn' in presentation form into 'comp_dn'.
- *
- * \li Return the size of the compressed name or -1.
- * \li 'length' is the size of the array pointed to by 'comp_dn'.
+ * Return the size of the compressed name or -1.
+ * 'length' is the size of the array pointed to by 'comp_dn'.
  */
 int
 dn_comp(const char *src, u_char *dst, int dstsiz,
 	u_char **dnptrs, u_char **lastdnptr)
 {
 	return (ns_name_compress(src, dst, (size_t)dstsiz,
-				 (void *)dnptrs,
-				 (void *)lastdnptr));
+				 (const u_char **)dnptrs,
+				 (const u_char **)lastdnptr));
 }
 
-/*%
+/*
  * Skip over a compressed domain name. Return the size or -1.
  */
 int
@@ -145,13 +128,14 @@ dn_skipname(const u_char *ptr, const u_char *eom) {
 
 	if (ns_name_skip(&ptr, eom) == -1)
 		return (-1);
-	_DIAGASSERT(__type_fit(int, ptr - saveptr));
-	return (int)(ptr - saveptr);
+	return (ptr - saveptr);
 }
 
-/*%
+/*
  * Verify that a domain name uses an acceptable character set.
- *
+ */
+
+/*
  * Note the conspicuous absence of ctype macros in these definitions.  On
  * non-ASCII hosts, we can't depend on string literals or ctype macros to
  * tell us anything about network-format data.  The rest of the BIND system
@@ -178,7 +162,7 @@ res_hnok(const char *dn) {
 		int nch = *dn++;
 
 		if (periodchar(ch)) {
-			;
+			(void)NULL;
 		} else if (periodchar(pch)) {
 			if (!borderchar(ch))
 				return (0);
@@ -194,7 +178,7 @@ res_hnok(const char *dn) {
 	return (1);
 }
 
-/*%
+/*
  * hostname-like (A, MX, WKS) owners can have "*" as their first label
  * but must otherwise be as a host name.
  */
@@ -209,7 +193,7 @@ res_ownok(const char *dn) {
 	return (res_hnok(dn));
 }
 
-/*%
+/*
  * SOA RNAMEs and RP RNAMEs can have any printable character in their first
  * label, but the rest of the name has to look like a host name.
  */
@@ -237,8 +221,8 @@ res_mailok(const char *dn) {
 	return (0);
 }
 
-/*%
- * This function is quite liberal, since RFC1034's character sets are only
+/*
+ * This function is quite liberal, since RFC 1034's character sets are only
  * recommendations.
  */
 int
@@ -252,7 +236,7 @@ res_dnok(const char *dn) {
 }
 
 #ifdef BIND_4_COMPAT
-/*%
+/*
  * This module must export the following externally-visible symbols:
  *	___putlong
  *	___putshort
@@ -260,18 +244,6 @@ res_dnok(const char *dn) {
  *	__getshort
  * Note that one _ comes from C and the others come from us.
  */
-
-#ifdef SOLARIS2
-#ifdef  __putlong
-#undef  __putlong
-#endif
-#ifdef  __putshort
-#undef  __putshort
-#endif
-#pragma weak    putlong         =       __putlong
-#pragma weak    putshort        =       __putshort
-#endif /* SOLARIS2 */
-
 void __putlong(u_int32_t src, u_char *dst) { ns_put32(src, dst); }
 void __putshort(u_int16_t src, u_char *dst) { ns_put16(src, dst); }
 #ifndef __ultrix__
@@ -279,5 +251,3 @@ u_int32_t _getlong(const u_char *src) { return (ns_get32(src)); }
 u_int16_t _getshort(const u_char *src) { return (ns_get16(src)); }
 #endif /*__ultrix__*/
 #endif /*BIND_4_COMPAT*/
-
-/*! \file */

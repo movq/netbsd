@@ -1,4 +1,6 @@
-# Copyright (C) 2004, 2007, 2010, 2012, 2015  Internet Systems Consortium, Inc. ("ISC")
+#!/bin/sh
+#
+# Copyright (C) 2004, 2007  Internet Systems Consortium, Inc. ("ISC")
 # Copyright (C) 2001  Internet Software Consortium.
 #
 # Permission to use, copy, modify, and/or distribute this software for any
@@ -13,6 +15,7 @@
 # OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR
 # PERFORMANCE OF THIS SOFTWARE.
 
-rm -f */named.run
-rm -f checkzone.out*
-rm -f dig.out.*
+# Id: clean.sh,v 1.5 2007/09/26 03:22:44 marka Exp
+
+rm -f dig.out
+rm -f */named.memstats

@@ -1,5 +1,3 @@
-/*	$NetBSD: popen.c,v 1.5 2017/06/09 17:36:30 christos Exp $	*/
-
 /*
  * Copyright (c) 1988, 1993, 1994
  *	The Regents of the University of California.  All rights reserved.
@@ -38,13 +36,11 @@
  * globbing stuff since we don't need it.  also execvp instead of execv.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
 #if 0
 static sccsid[] = "@(#)popen.c	8.3 (Berkeley) 4/6/94";
-static char rcsid[] = "Id: popen.c,v 1.6 2003/02/16 04:40:01 vixie Exp";
 #else
-__RCSID("$NetBSD: popen.c,v 1.5 2017/06/09 17:36:30 christos Exp $");
+static char rcsid[] = "Id: popen.c,v 1.6 2003/02/16 04:40:01 vixie Exp";
 #endif
 #endif /* not lint */
 
@@ -59,9 +55,10 @@ __RCSID("$NetBSD: popen.c,v 1.5 2017/06/09 17:36:30 christos Exp $");
  * command.
  */
 static PID_T *pids;
+static int fds;
 
 FILE *
-cron_popen(char *program, const char *type, struct passwd *pw) {
+cron_popen(char *program, char *type, struct passwd *pw) {
 	char *cp;
 	FILE *iop;
 	int argc, pdes[2];
@@ -72,14 +69,11 @@ cron_popen(char *program, const char *type, struct passwd *pw) {
 		return (NULL);
 
 	if (!pids) {
-		size_t len;
-		long fds;
 		if ((fds = sysconf(_SC_OPEN_MAX)) <= 0)
 			return (NULL);
-		len = (size_t)fds * sizeof(*pids);
-		if ((pids = malloc(len)) == NULL)
+		if (!(pids = (PID_T *)malloc((size_t)(fds * sizeof(PID_T)))))
 			return (NULL);
-		(void)memset(pids, 0, len);
+		bzero(pids, fds * sizeof(PID_T));
 	}
 	if (pipe(pdes) < 0)
 		return (NULL);
@@ -98,56 +92,48 @@ cron_popen(char *program, const char *type, struct passwd *pw) {
 		/* NOTREACHED */
 	case 0:				/* child */
 		if (pw) {
-			if (setsid() == -1)
-				warn("setsid() failed for %s", pw->pw_name);
 #ifdef LOGIN_CAP
-			if (setusercontext(0, pw, pw->pw_uid, LOGIN_SETALL) < 0)
-			{
-				warn("setusercontext() failed for %s",
+			if (setusercontext(0, pw, pw->pw_uid, LOGIN_SETALL) < 0) {
+				fprintf(stderr,
+				    "setusercontext failed for %s\n",
 				    pw->pw_name);
 				_exit(ERROR_EXIT);
 			}
 #else
 			if (setgid(pw->pw_gid) < 0 ||
 			    initgroups(pw->pw_name, pw->pw_gid) < 0) {
-				warn("unable to set groups for %s",
+				fprintf(stderr,
+				    "unable to set groups for %s\n",
 				    pw->pw_name);
-				_exit(ERROR_EXIT);
+				_exit(1);
 			}
 #if (defined(BSD)) && (BSD >= 199103)
-			if (setlogin(pw->pw_name) < 0) {
-				warn("setlogin() failed for %s",
-				    pw->pw_name);
-				_exit(ERROR_EXIT);
-			}
+			setlogin(pw->pw_name);
 #endif /* BSD */
-#ifdef USE_PAM
-			if (!cron_pam_setcred())
-				_exit(1);
-			cron_pam_child_close();
-#endif
 			if (setuid(pw->pw_uid)) {
-				warn("unable to set uid for %s", pw->pw_name);
-				_exit(ERROR_EXIT);
+				fprintf(stderr,
+				    "unable to set uid for %s\n",
+				    pw->pw_name);
+				_exit(1);
 			}
 #endif /* LOGIN_CAP */
 		}
 		if (*type == 'r') {
 			if (pdes[1] != STDOUT) {
-				(void)dup2(pdes[1], STDOUT);
+				dup2(pdes[1], STDOUT);
 				(void)close(pdes[1]);
 			}
-			(void)dup2(STDOUT, STDERR);	/* stderr too! */
+			dup2(STDOUT, STDERR);	/* stderr too! */
 			(void)close(pdes[0]);
 		} else {
 			if (pdes[0] != STDIN) {
-				(void)dup2(pdes[0], STDIN);
+				dup2(pdes[0], STDIN);
 				(void)close(pdes[0]);
 			}
 			(void)close(pdes[1]);
 		}
-		(void)execvp(argv[0], argv);
-		_exit(ERROR_EXIT);
+		execvp(argv[0], argv);
+		_exit(1);
 	}
 
 	/* parent; assume fdopen can't fail...  */
@@ -168,7 +154,7 @@ cron_pclose(FILE *iop) {
 	int fdes;
 	PID_T pid;
 	WAIT_T status;
-	sigset_t sset, osset;
+	sigset_t sigset, osigset;
 
 	/*
 	 * pclose returns -1 if stream is not associated with a
@@ -177,19 +163,18 @@ cron_pclose(FILE *iop) {
 	if (pids == 0 || pids[fdes = fileno(iop)] == 0)
 		return (-1);
 	(void)fclose(iop);
-	(void)sigemptyset(&sset);
-	(void)sigaddset(&sset, SIGINT);
-	(void)sigaddset(&sset, SIGQUIT);
-	(void)sigaddset(&sset, SIGHUP);
-	(void)sigprocmask(SIG_BLOCK, &sset, &osset);
+	sigemptyset(&sigset);
+	sigaddset(&sigset, SIGINT);
+	sigaddset(&sigset, SIGQUIT);
+	sigaddset(&sigset, SIGHUP);
+	sigprocmask(SIG_BLOCK, &sigset, &osigset);
 	while ((pid = waitpid(pids[fdes], &status, 0)) < 0 && errno == EINTR)
 		continue;
-	(void)sigprocmask(SIG_SETMASK, &osset, NULL);
+	sigprocmask(SIG_SETMASK, &osigset, NULL);
 	pids[fdes] = 0;
 	if (pid < 0)
 		return (pid);
 	if (WIFEXITED(status))
 		return (WEXITSTATUS(status));
-	else
-		return WTERMSIG(status);
+	return (1);
 }

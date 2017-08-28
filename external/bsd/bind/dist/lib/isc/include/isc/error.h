@@ -1,7 +1,7 @@
-/*	$NetBSD: error.h,v 1.5 2016/05/26 16:50:00 christos Exp $	*/
+/*	$NetBSD: error.h,v 1.1 2009/03/22 15:02:11 christos Exp $	*/
 
 /*
- * Copyright (C) 2004-2007, 2009, 2016  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2004-2007  Internet Systems Consortium, Inc. ("ISC")
  * Copyright (C) 1998-2001  Internet Software Consortium.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -17,7 +17,7 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* Id: error.h,v 1.22 2009/09/29 23:48:04 tbox Exp  */
+/* Id: error.h,v 1.20 2007/06/19 23:47:18 tbox Exp */
 
 #ifndef ISC_ERROR_H
 #define ISC_ERROR_H 1
@@ -28,7 +28,6 @@
 
 #include <isc/formatcheck.h>
 #include <isc/lang.h>
-#include <isc/platform.h>
 
 ISC_LANG_BEGINDECLS
 
@@ -48,16 +47,16 @@ isc_error_unexpected(const char *, int, const char *, ...)
      ISC_FORMAT_PRINTF(3, 4);
 
 /*% fatal error */
-ISC_PLATFORM_NORETURN_PRE void
+void
 isc_error_fatal(const char *, int, const char *, ...)
-ISC_FORMAT_PRINTF(3, 4) ISC_PLATFORM_NORETURN_POST;
+     ISC_FORMAT_PRINTF(3, 4);
 
 /*% runtimecheck error */
 void
 isc_error_runtimecheck(const char *, int, const char *);
 
 #define ISC_ERROR_RUNTIMECHECK(cond) \
-	((void) (ISC_LIKELY(cond) || \
+	((void) ((cond) || \
 		 ((isc_error_runtimecheck)(__FILE__, __LINE__, #cond), 0)))
 
 ISC_LANG_ENDDECLS

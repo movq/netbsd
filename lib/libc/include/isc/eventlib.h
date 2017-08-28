@@ -1,26 +1,26 @@
-/*	$NetBSD: eventlib.h,v 1.3 2009/04/12 17:07:16 christos Exp $	*/
+/*	$NetBSD: eventlib.h,v 1.1 2004/05/20 19:49:41 christos Exp $	*/
 
 /*
- * Copyright (C) 2004, 2005, 2008  Internet Systems Consortium, Inc. ("ISC")
- * Copyright (C) 1995-1999, 2001, 2003  Internet Software Consortium.
+ * Copyright (c) 2004 by Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (c) 1995-1999 by Internet Software Consortium
  *
- * Permission to use, copy, modify, and/or distribute this software for any
+ * Permission to use, copy, modify, and distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
  * copyright notice and this permission notice appear in all copies.
  *
- * THE SOFTWARE IS PROVIDED "AS IS" AND ISC DISCLAIMS ALL WARRANTIES WITH
- * REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF MERCHANTABILITY
- * AND FITNESS.  IN NO EVENT SHALL ISC BE LIABLE FOR ANY SPECIAL, DIRECT,
- * INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES WHATSOEVER RESULTING FROM
- * LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE
- * OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR
- * PERFORMANCE OF THIS SOFTWARE.
+ * THE SOFTWARE IS PROVIDED "AS IS" AND ISC DISCLAIMS ALL WARRANTIES
+ * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+ * MERCHANTABILITY AND FITNESS.  IN NO EVENT SHALL ISC BE LIABLE FOR
+ * ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+ * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
+ * ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT
+ * OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
 /* eventlib.h - exported interfaces for eventlib
  * vix 09sep95 [initial]
  *
- * Id: eventlib.h,v 1.7 2008/11/14 02:36:51 marka Exp
+ * Id: eventlib.h,v 1.1.2.1.4.1 2004/03/09 08:33:31 marka Exp
  */
 
 #ifndef _EVENTLIB_H
@@ -77,8 +77,6 @@ typedef	struct { unsigned char mask[256/8]; } evByteMask;
 #define	EV_READ		1
 #define	EV_WRITE	2
 #define	EV_EXCEPT	4
-
-#define EV_WASNONBLOCKING 8	/* Internal library use. */
 
 /* eventlib.c */
 #define evCreate	__evCreate
@@ -202,5 +200,3 @@ int evDefer __P((evContext, evWaitFunc, void *));
 #endif
 
 #endif /*_EVENTLIB_H*/
-
-/*! \file */

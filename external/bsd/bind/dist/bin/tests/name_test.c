@@ -1,7 +1,7 @@
-/*	$NetBSD: name_test.c,v 1.7 2015/12/17 04:00:42 christos Exp $	*/
+/*	$NetBSD: name_test.c,v 1.1 2009/03/22 14:56:23 christos Exp $	*/
 
 /*
- * Copyright (C) 2004, 2005, 2007, 2009, 2015  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2004, 2005, 2007  Internet Systems Consortium, Inc. ("ISC")
  * Copyright (C) 1998-2001, 2003  Internet Software Consortium.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -17,14 +17,13 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* Id: name_test.c,v 1.43 2009/09/02 23:48:01 tbox Exp  */
+/* Id: name_test.c,v 1.41 2007/06/19 23:46:59 tbox Exp */
 
 #include <config.h>
 
 #include <stdlib.h>
 
 #include <isc/commandline.h>
-#include <isc/print.h>
 #include <isc/string.h>
 #include <isc/util.h>
 
@@ -76,7 +75,7 @@ main(int argc, char *argv[]) {
 	isc_buffer_t source;
 	isc_region_t r;
 	dns_name_t *name, *origin, *comp, *down;
-	unsigned int downcase = 0;
+	isc_boolean_t downcase = ISC_FALSE;
 	size_t len;
 	isc_boolean_t quiet = ISC_FALSE;
 	isc_boolean_t concatenate = ISC_FALSE;
@@ -131,7 +130,8 @@ main(int argc, char *argv[]) {
 			dns_fixedname_init(&oname);
 			origin = &oname.name;
 			result = dns_name_fromtext(origin, &source,
-						   dns_rootname, 0, NULL);
+						   dns_rootname, ISC_FALSE,
+						   NULL);
 			if (result != 0) {
 				fprintf(stderr,
 					"dns_name_fromtext() failed: %d\n",
@@ -153,8 +153,8 @@ main(int argc, char *argv[]) {
 			isc_buffer_add(&source, len);
 			dns_fixedname_init(&compname);
 			comp = &compname.name;
-			result = dns_name_fromtext(comp, &source, origin,
-						   0, NULL);
+			result = dns_name_fromtext(comp, &source,
+						   origin, ISC_FALSE, NULL);
 			if (result != 0) {
 				fprintf(stderr,
 					"dns_name_fromtext() failed: %d\n",

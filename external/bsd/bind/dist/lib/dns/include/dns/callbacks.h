@@ -1,7 +1,7 @@
-/*	$NetBSD: callbacks.h,v 1.5 2014/12/10 04:37:58 christos Exp $	*/
+/*	$NetBSD: callbacks.h,v 1.1 2009/03/22 15:01:41 christos Exp $	*/
 
 /*
- * Copyright (C) 2004-2007, 2011-2013  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2004-2007  Internet Systems Consortium, Inc. ("ISC")
  * Copyright (C) 1999-2002  Internet Software Consortium.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -17,7 +17,7 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* Id: callbacks.h,v 1.26.40.1 2012/02/07 00:44:16 each Exp  */
+/* Id: callbacks.h,v 1.24 2007/06/19 23:47:16 tbox Exp */
 
 #ifndef DNS_CALLBACKS_H
 #define DNS_CALLBACKS_H 1
@@ -29,7 +29,6 @@
  ***/
 
 #include <isc/lang.h>
-#include <isc/magic.h>
 
 #include <dns/types.h>
 
@@ -39,30 +38,11 @@ ISC_LANG_BEGINDECLS
  ***	Types
  ***/
 
-#define DNS_CALLBACK_MAGIC	ISC_MAGIC('C','L','L','B')
-#define DNS_CALLBACK_VALID(cb)	ISC_MAGIC_VALID(cb, DNS_CALLBACK_MAGIC)
-
 struct dns_rdatacallbacks {
-	unsigned int magic;
-
 	/*%
 	 * dns_load_master calls this when it has rdatasets to commit.
 	 */
 	dns_addrdatasetfunc_t add;
-
-	/*%
-	 * This is called when reading in a database image from a 'map'
-	 * format zone file.
-	 */
-	dns_deserializefunc_t deserialize;
-
-	/*%
-	 * dns_master_load*() call this when loading a raw zonefile,
-	 * to pass back information obtained from the file header
-	 */
-	dns_rawdatafunc_t rawdata;
-	dns_zone_t *zone;
-
 	/*%
 	 * dns_load_master / dns_rdata_fromtext call this to issue a error.
 	 */
@@ -75,7 +55,6 @@ struct dns_rdatacallbacks {
 	 * Private data handles for use by the above callback functions.
 	 */
 	void	*add_private;
-	void	*deserialize_private;
 	void	*error_private;
 	void	*warn_private;
 };
@@ -89,7 +68,6 @@ dns_rdatacallbacks_init(dns_rdatacallbacks_t *callbacks);
 /*%<
  * Initialize 'callbacks'.
  *
- * \li	'magic' is set to DNS_CALLBACK_MAGIC
  *
  * \li	'error' and 'warn' are set to default callbacks that print the
  *	error message through the DNS library log context.

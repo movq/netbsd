@@ -1,10 +1,11 @@
-/*	$NetBSD: tree.h,v 1.1.1.4 2016/01/10 19:44:43 christos Exp $	*/
+/*	$NetBSD: tree.h,v 1.1 2013/03/24 15:45:50 christos Exp $	*/
+
 /* tree.h
 
    Definitions for address trees... */
 
 /*
- * Copyright (c) 2011,2013,2014 by Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (c) 2011 by Internet Systems Consortium, Inc. ("ISC")
  * Copyright (c) 2004,2007-2009 by Internet Systems Consortium, Inc. ("ISC")
  * Copyright (c) 1996-2003 by Internet Software Consortium
  *
@@ -26,7 +27,16 @@
  *   <info@isc.org>
  *   https://www.isc.org/
  *
+ * This software has been written for Internet Systems Consortium
+ * by Ted Lemon in cooperation with Vixie Enterprises and Nominum, Inc.
+ * To learn more about Internet Systems Consortium, see
+ * ``https://www.isc.org/''.  To learn more about Vixie Enterprises,
+ * see ``http://www.vix.com''.   To learn more about Nominum, Inc., see
+ * ``http://www.nominum.com''.
  */
+
+#include <sys/cdefs.h>
+__RCSID("$NetBSD: tree.h,v 1.1 2013/03/24 15:45:50 christos Exp $");
 
 /* A pair of pointers, suitable for making a linked list. */
 typedef struct _pair {
@@ -111,6 +121,9 @@ struct binding_value {
 		struct data_string data;
 		unsigned long intval;
 		int boolean;
+#if defined (NSUPDATE_OLD)
+		ns_updrec *dns;
+#endif
 		struct fundef *fundef;
 		struct binding_value *bv;
 	} value;
@@ -191,9 +204,7 @@ enum expr_op {
 	expr_lcase,
 	expr_regex_match,
 	expr_iregex_match,
-	expr_gethostname,
-	expr_v6relay,
-	expr_concat_dclist
+	expr_gethostname
 };
 
 struct expression {
@@ -276,10 +287,6 @@ struct expression {
 			struct expression *arglist;
 		} funcall;
 		struct fundef *func;
-		struct {
-			struct expression *relay;
-			struct expression *roption;
-		} v6relay;
 	} data;
 	int flags;
 #	define EXPR_EPHEMERAL	1

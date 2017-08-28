@@ -1,6 +1,6 @@
 #!/bin/sh
 #
-# Copyright (C) 2009, 2012, 2014  Internet Systems Consortium, Inc. ("ISC")
+# Copyright (C) 2009  Internet Systems Consortium, Inc. ("ISC")
 #
 # Permission to use, copy, modify, and/or distribute this software for any
 # purpose with or without fee is hereby granted, provided that the above
@@ -14,8 +14,9 @@
 # OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR
 # PERFORMANCE OF THIS SOFTWARE.
 
+# Id: clean.sh,v 1.3 2009/12/03 04:51:41 marka Exp
+
 rm -rf */*.signed
-rm -rf */*.jnl
 rm -rf */K*
 rm -rf */dsset-*
 rm -rf */named.memstats
@@ -23,5 +24,4 @@ rm -rf */named.run
 rm -rf */trusted.conf
 rm -rf ns1/root.db
 rm -rf ns2/example.db
-rm -rf ns2/example.com.db
-rm -rf nsupdate.out.test
+rm -rf random.data

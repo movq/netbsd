@@ -1,7 +1,7 @@
-/*	$NetBSD: dir.c,v 1.6 2014/12/10 04:38:01 christos Exp $	*/
+/*	$NetBSD: dir.c,v 1.1 2009/03/22 15:02:23 christos Exp $	*/
 
 /*
- * Copyright (C) 2004, 2007-2009, 2011-2013  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2004, 2007-2009  Internet Systems Consortium, Inc. ("ISC")
  * Copyright (C) 1999-2001  Internet Software Consortium.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -17,7 +17,7 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* Id */
+/* Id: dir.c,v 1.16.22.2 2009/01/18 23:47:41 tbox Exp */
 
 /* Principal Authors: DCL */
 
@@ -87,7 +87,7 @@ isc_dir_open(isc_dir_t *dir, const char *dirname) {
 	if (dir->dirname < p && *(p - 1) != '\\' && *(p - 1) != ':')
 		*p++ = '\\';
 	*p++ = '*';
-	*p = '\0';
+	*p++ = '\0';
 
 	/*
 	 * Open stream.
@@ -269,8 +269,7 @@ isc_dir_createunique(char *templet) {
 
 	do {
 		i = mkdir(templet);
-		if (i == 0)
-			i = chmod(templet, 0700);
+		i = chmod(templet, 0700);
 
 		if (i == 0 || errno != EEXIST)
 			break;

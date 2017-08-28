@@ -1,7 +1,7 @@
-/*	$NetBSD: dnssec-verify.c,v 1.9 2015/07/08 17:28:55 christos Exp $	*/
+/*	$NetBSD: dnssec-verify.c,v 1.1 2012/12/04 19:21:38 spz Exp $	*/
 
 /*
- * Copyright (C) 2012, 2014, 2015  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2012  Internet Systems Consortium, Inc. ("ISC")
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -15,6 +15,8 @@
  * OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR
  * PERFORMANCE OF THIS SOFTWARE.
  */
+
+/* Id: dnssec-verify.c,v 1.1.2.1 2011/03/16 06:37:51 each Exp  */
 
 /*! \file */
 
@@ -68,10 +70,6 @@
 #include <dns/time.h>
 
 #include <dst/dst.h>
-
-#ifdef PKCS11CRYPTO
-#include <pk11/result.h>
-#endif
 
 #include "dnssectool.h"
 
@@ -135,17 +133,13 @@ usage(void) {
 
 	fprintf(stderr, "Options: (default value in parenthesis) \n");
 	fprintf(stderr, "\t-v debuglevel (0)\n");
-	fprintf(stderr, "\t-V:\tprint version information\n");
 	fprintf(stderr, "\t-o origin:\n");
 	fprintf(stderr, "\t\tzone origin (name of zonefile)\n");
 	fprintf(stderr, "\t-I format:\n");
 	fprintf(stderr, "\t\tfile format of input zonefile (text)\n");
 	fprintf(stderr, "\t-c class (IN)\n");
 	fprintf(stderr, "\t-E engine:\n");
-#if defined(PKCS11CRYPTO)
-	fprintf(stderr, "\t\tpath to PKCS#11 provider library "
-		"(default is %s)\n", PK11_LIB_LOCATION);
-#elif defined(USE_PKCS11)
+#ifdef USE_PKCS11
 	fprintf(stderr, "\t\tname of an OpenSSL engine to use "
 				"(default is \"pkcs11\")\n");
 #else
@@ -164,17 +158,16 @@ main(int argc, char *argv[]) {
 	isc_result_t result;
 	isc_log_t *log = NULL;
 #ifdef USE_PKCS11
-	const char *engine = PKCS11_ENGINE;
+	const char *engine = "pkcs11";
 #else
 	const char *engine = NULL;
 #endif
 	char *classname = NULL;
 	dns_rdataclass_t rdclass;
-	char *endp;
-	int ch;
+	char ch, *endp;
 
 #define CMDLINE_FLAGS \
-	"hm:o:I:c:E:v:Vxz"
+	"m:o:I:c:E:v:xz"
 
 	/*
 	 * Process memory debugging argument first.
@@ -204,9 +197,6 @@ main(int argc, char *argv[]) {
 	if (result != ISC_R_SUCCESS)
 		fatal("out of memory");
 
-#ifdef PKCS11CRYPTO
-	pk11_result_register();
-#endif
 	dns_result_register();
 
 	isc_commandline_errprint = ISC_FALSE;
@@ -219,6 +209,10 @@ main(int argc, char *argv[]) {
 
 		case 'E':
 			engine = isc_commandline_argument;
+			break;
+
+		case 'h':
+			usage();
 			break;
 
 		case 'I':
@@ -251,15 +245,8 @@ main(int argc, char *argv[]) {
 			if (isc_commandline_option != '?')
 				fprintf(stderr, "%s: invalid argument -%c\n",
 					program, isc_commandline_option);
-			/* FALLTHROUGH */
-
-		case 'h':
-			/* Does not return. */
 			usage();
-
-		case 'V':
-			/* Does not return. */
-			version(program);
+			break;
 
 		default:
 			fprintf(stderr, "%s: unhandled option -%c\n",
@@ -284,7 +271,7 @@ main(int argc, char *argv[]) {
 
 	rdclass = strtoclass(classname);
 
-	setup_logging(mctx, &log);
+	setup_logging(verbose, mctx, &log);
 
 	argc -= isc_commandline_index;
 	argv += isc_commandline_index;
@@ -296,9 +283,6 @@ main(int argc, char *argv[]) {
 
 	argc -= 1;
 	argv += 1;
-
-	POST(argc);
-	POST(argv);
 
 	if (origin == NULL)
 		origin = file;

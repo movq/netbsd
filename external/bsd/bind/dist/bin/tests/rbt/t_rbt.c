@@ -1,7 +1,7 @@
-/*	$NetBSD: t_rbt.c,v 1.8 2015/12/17 04:00:42 christos Exp $	*/
+/*	$NetBSD: t_rbt.c,v 1.1 2009/03/22 14:56:35 christos Exp $	*/
 
 /*
- * Copyright (C) 2004, 2005, 2007, 2009, 2011-2013, 2015  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2004, 2005, 2007, 2009  Internet Systems Consortium, Inc. ("ISC")
  * Copyright (C) 1998-2001, 2003  Internet Software Consortium.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -17,7 +17,7 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* Id: t_rbt.c,v 1.35 2011/03/12 04:59:46 tbox Exp  */
+/* Id: t_rbt.c,v 1.30.332.2 2009/01/22 23:47:05 tbox Exp */
 
 #include <config.h>
 
@@ -154,7 +154,7 @@ create_name(char *s, isc_mem_t *mctx, dns_name_t **dns_name) {
 			isc_buffer_init(&target, name + 1, DNSNAMELEN);
 
 			result = dns_name_fromtext(name, &source, dns_rootname,
-						   0, &target);
+						   ISC_FALSE, &target);
 
 			if (result != ISC_R_SUCCESS) {
 				++nfails;
@@ -299,7 +299,6 @@ rbt_init(char *filename, dns_rbt_t **rbt, isc_mem_t *mctx) {
 		if ((rval != 0) || (dns_result != ISC_R_SUCCESS)) {
 			t_info("add of %s failed\n", p);
 			dns_rbt_destroy(rbt);
-			(void) free(p);
 			fclose(fp);
 			return(1);
 		}
@@ -401,7 +400,8 @@ test_rbt_gen(char *filename, char *command, char *testname,
 				result = T_FAIL;
 			}
 		} else {
-			t_info("create_name failed\n");
+			t_info("create_name failed %s\n",
+				dns_result_totext(dns_result));
 			result = T_UNRESOLVED;
 		}
 	} else if ((strcmp(command, "delete") == 0) ||
@@ -707,7 +707,7 @@ t9_walkchain(dns_rbtnodechain_t *chain, dns_rbt_t *rbt) {
 			if (order >= 0) {
 			    t_info("unexpected order %s %s %s\n",
 			       dnsname_totext(dns_fixedname_name(&fullname1)),
-			       order == 0 ? "==" : ">",
+			       order == -1 ? "<" : (order == 0 ? "==" : ">"),
 			       dnsname_totext(dns_fixedname_name(&fullname2)));
 				++nprobs;
 			}
@@ -834,7 +834,7 @@ t_dns_rbtnodechain_init(char *dbfile, char *findname,
 	dns_fixedname_init(&dns_nextname);
 
 	dns_result = dns_name_fromtext(dns_fixedname_name(&dns_findname),
-					&isc_buffer, NULL, 0, NULL);
+					&isc_buffer, NULL, ISC_FALSE, NULL);
 
 	if (dns_result != ISC_R_SUCCESS) {
 		t_info("dns_name_fromtext failed %s\n",
@@ -1059,12 +1059,6 @@ t_dns_rbtnodechain_first(char *dbfile, char *expected_firstname,
 	dns_fixedname_t		dns_origin;
 	isc_result_t		expected_result;
 
-	REQUIRE(dbfile != NULL);
-	REQUIRE(expected_firstname != NULL);
-	REQUIRE(expected_firstorigin != NULL);
-	REQUIRE(expected_nextname != NULL);
-	REQUIRE(expected_nextorigin != NULL);
-
 	result = T_UNRESOLVED;
 
 	nfails = 0;
@@ -1120,8 +1114,8 @@ t_dns_rbtnodechain_first(char *dbfile, char *expected_firstname,
 		t_info("dns_rbtnodechain_first unexpectedly returned %s\n",
 		       dns_result_totext(dns_result));
 
-	nfails += t_namechk(dns_result, &dns_name, expected_firstname,
-			    &dns_origin, expected_firstorigin, DNS_R_NEWORIGIN);
+	nfails = t_namechk(dns_result, &dns_name, expected_firstname,
+			   &dns_origin, expected_firstorigin, DNS_R_NEWORIGIN);
 
 	dns_fixedname_init(&dns_name);
 	dns_result = dns_rbtnodechain_next(&chain,
@@ -1256,12 +1250,6 @@ t_dns_rbtnodechain_last(char *dbfile, char *expected_lastname,
 	dns_fixedname_t		dns_origin;
 	isc_result_t		expected_result;
 
-	REQUIRE(dbfile != NULL);
-	REQUIRE(expected_lastname != NULL);
-	REQUIRE(expected_lastorigin != NULL);
-	REQUIRE(expected_prevname != NULL);
-	REQUIRE(expected_prevorigin != NULL);
-
 	result = T_UNRESOLVED;
 
 	nfails = 0;
@@ -1317,8 +1305,8 @@ t_dns_rbtnodechain_last(char *dbfile, char *expected_lastname,
 		t_info("dns_rbtnodechain_last unexpectedly returned %s\n",
 		       dns_result_totext(dns_result));
 	}
-	nfails += t_namechk(dns_result, &dns_name, expected_lastname,
-			    &dns_origin, expected_lastorigin, DNS_R_NEWORIGIN);
+	nfails = t_namechk(dns_result, &dns_name, expected_lastname,
+			   &dns_origin, expected_lastorigin, DNS_R_NEWORIGIN);
 
 	t_info("testing for previous name of %s, origin of %s\n",
 	       expected_prevname, expected_prevorigin);
@@ -1508,7 +1496,7 @@ t_dns_rbtnodechain_next(char *dbfile, char *findname,
 	dns_fixedname_init(&dns_origin);
 
 	dns_result = dns_name_fromtext(dns_fixedname_name(&dns_findname),
-				       &isc_buffer, NULL, 0, NULL);
+				       &isc_buffer, NULL, ISC_FALSE, NULL);
 
 	if (dns_result != ISC_R_SUCCESS) {
 		t_info("dns_name_fromtext failed %s\n",
@@ -1715,7 +1703,7 @@ t_dns_rbtnodechain_prev(char *dbfile, char *findname, char *prevname,
 	dns_fixedname_init(&dns_origin);
 
 	dns_result = dns_name_fromtext(dns_fixedname_name(&dns_findname),
-				       &isc_buffer, NULL, 0, NULL);
+				       &isc_buffer, NULL, ISC_FALSE, NULL);
 
 	if (dns_result != ISC_R_SUCCESS) {
 		t_info("dns_name_fromtext failed %s\n",
@@ -1850,27 +1838,22 @@ t13() {
 	t_result(result);
 }
 
+
+
 testspec_t	T_testlist[] = {
-	{	(PFV) t1,	"dns_rbt_create"		},
-	{	(PFV) t2,	"dns_rbt_addname 1"		},
-	{	(PFV) t3,	"dns_rbt_addname 2"		},
-	{	(PFV) t4,	"dns_rbt_deletename 1"		},
-	{	(PFV) t5,	"dns_rbt_deletename 2"		},
-	{	(PFV) t6,	"dns_rbt_findname 1"		},
-	{	(PFV) t7,	"dns_rbt_findname 2"		},
-	{	(PFV) t8,	"dns_rbt_findname 3"		},
-	{	(PFV) t9,	"dns_rbtnodechain_init"		},
-	{	(PFV) t10,	"dns_rbtnodechain_first"	},
-	{	(PFV) t11,	"dns_rbtnodechain_last"		},
-	{	(PFV) t12,	"dns_rbtnodechain_next"		},
-	{	(PFV) t13,	"dns_rbtnodechain_prev"		},
-	{	(PFV) 0,	NULL				}
+	{	t1,	"dns_rbt_create"		},
+	{	t2,	"dns_rbt_addname 1"		},
+	{	t3,	"dns_rbt_addname 2"		},
+	{	t4,	"dns_rbt_deletename 1"		},
+	{	t5,	"dns_rbt_deletename 2"		},
+	{	t6,	"dns_rbt_findname 1"		},
+	{	t7,	"dns_rbt_findname 2"		},
+	{	t8,	"dns_rbt_findname 3"		},
+	{	t9,	"dns_rbtnodechain_init"		},
+	{	t10,	"dns_rbtnodechain_first"	},
+	{	t11,	"dns_rbtnodechain_last"		},
+	{	t12,	"dns_rbtnodechain_next"		},
+	{	t13,	"dns_rbtnodechain_prev"		},
+	{	NULL,	NULL				}
 };
 
-#ifdef WIN32
-int
-main(int argc, char **argv) {
-	t_settests(T_testlist);
-	return (t_main(argc, argv));
-}
-#endif

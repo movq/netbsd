@@ -1,7 +1,7 @@
-/*	$NetBSD: net.h,v 1.7 2017/06/15 15:59:41 christos Exp $	*/
+/*	$NetBSD: net.h,v 1.1 2009/03/22 15:02:23 christos Exp $	*/
 
 /*
- * Copyright (C) 2004, 2005, 2007, 2008, 2012-2014, 2016  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2004, 2005, 2007-2009  Internet Systems Consortium, Inc. ("ISC")
  * Copyright (C) 1999-2003  Internet Software Consortium.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -17,7 +17,7 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* Id */
+/* Id: net.h,v 1.48.84.2 2009/02/16 23:47:15 tbox Exp */
 
 #ifndef ISC_NET_H
 #define ISC_NET_H 1
@@ -39,7 +39,6 @@
  *\li		struct sockaddr
  *\li		struct sockaddr_in
  *\li		struct sockaddr_in6
- *\li		struct sockaddr_storage
  *\li		in_port_t
  *
  * It ensures that the AF_ and PF_ macros are defined.
@@ -49,7 +48,7 @@
  * It declares inet_aton(), inet_ntop(), and inet_pton().
  *
  * It ensures that #INADDR_LOOPBACK, #INADDR_ANY, #IN6ADDR_ANY_INIT,
- * IN6ADDR_V4MAPPED_INIT, in6addr_any, and in6addr_loopback are available.
+ * in6addr_any, and in6addr_loopback are available.
  *
  * It ensures that IN_MULTICAST() is available to check for multicast
  * addresses.
@@ -126,15 +125,6 @@
 #endif
 #endif
 
-#ifndef IN6ADDR_V4MAPPED_INIT
-#ifdef s6_addr
-/*% IPv6 v4mapped prefix init */
-#define IN6ADDR_V4MAPPED_INIT { { { 0,0,0,0,0,0,0,0,0,0,0xff,0xff,0,0,0,0 } } }
-#else
-#define IN6ADDR_V4MAPPED_INIT { { 0,0,0,0,0,0,0,0,0,0,0xff,0xff,0,0,0,0 } }
-#endif
-#endif
-
 #ifndef IN6_IS_ADDR_V4MAPPED
 /*% Is IPv6 address V4 mapped? */
 #define IN6_IS_ADDR_V4MAPPED(x) \
@@ -196,33 +186,6 @@
 struct in6_pktinfo {
 	struct in6_addr ipi6_addr;    /*%< src/dst IPv6 address */
 	unsigned int    ipi6_ifindex; /*%< send/recv interface index */
-};
-#endif
-
-
-#ifndef ISC_PLATFORM_HAVESOCKADDRSTORAGE
-#define _SS_MAXSIZE 128
-#define _SS_ALIGNSIZE  (sizeof (isc_uint64_t))
-#ifdef ISC_PLATFORM_HAVESALEN
-#define _SS_PAD1SIZE (_SS_ALIGNSIZE - (2 * sizeof(isc_uint8_t)))
-#define _SS_PAD2SIZE (_SS_MAXSIZE - (_SS_ALIGNSIZE + _SS_PAD1SIZE \
-		       + 2 * sizeof(isc_uint8_t)))
-#else
-#define _SS_PAD1SIZE (_SS_ALIGNSIZE - sizeof(isc_uint16_t))
-#define _SS_PAD2SIZE (_SS_MAXSIZE - (_SS_ALIGNSIZE + _SS_PAD1SIZE \
-			+ sizeof(isc_uint16_t)))
-#endif
-
-struct sockaddr_storage {
-#ifdef ISC_PLATFORM_HAVESALEN
-       isc_uint8_t             ss_len;
-       isc_uint8_t             ss_family;
-#else
-       isc_uint16_t            ss_family;
-#endif
-       char                    __ss_pad1[_SS_PAD1SIZE];
-       isc_uint64_t            __ss_align;  /* field to force desired structure */
-       char                    __ss_pad2[_SS_PAD2SIZE];
 };
 #endif
 
@@ -362,21 +325,6 @@ isc_net_probeunix(void);
 /*
  * Returns whether UNIX domain sockets are supported.
  */
-
-#define ISC_NET_DSCPRECVV4	0x01	/* Can receive sent DSCP value IPv4 */
-#define ISC_NET_DSCPRECVV6	0x02	/* Can receive sent DSCP value IPv6 */
-#define ISC_NET_DSCPSETV4	0x04	/* Can set DSCP on socket IPv4 */
-#define ISC_NET_DSCPSETV6	0x08	/* Can set DSCP on socket IPv6 */
-#define ISC_NET_DSCPPKTV4	0x10	/* Can set DSCP on per packet IPv4 */
-#define ISC_NET_DSCPPKTV6	0x20	/* Can set DSCP on per packet IPv6 */
-#define ISC_NET_DSCPALL		0x3f	/* All valid flags */
-
-unsigned int
-isc_net_probedscp(void);
-/*%<
- * Probe the level of DSCP support.
- */
-
 
 isc_result_t
 isc_net_getudpportrange(int af, in_port_t *low, in_port_t *high);

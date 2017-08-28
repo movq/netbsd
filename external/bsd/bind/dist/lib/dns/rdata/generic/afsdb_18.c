@@ -1,7 +1,7 @@
-/*	$NetBSD: afsdb_18.c,v 1.7 2016/05/26 16:49:59 christos Exp $	*/
+/*	$NetBSD: afsdb_18.c,v 1.1 2009/03/22 15:01:51 christos Exp $	*/
 
 /*
- * Copyright (C) 2004, 2005, 2007, 2009, 2014, 2015  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2004, 2005, 2007  Internet Systems Consortium, Inc. ("ISC")
  * Copyright (C) 1999-2001, 2003  Internet Software Consortium.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -17,7 +17,7 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* Id: afsdb_18.c,v 1.49 2009/12/04 22:06:37 tbox Exp  */
+/* Id: afsdb_18.c,v 1.47 2007/06/19 23:47:17 tbox Exp */
 
 /* Reviewed: Wed Mar 15 14:59:00 PST 2000 by explorer */
 
@@ -35,7 +35,7 @@ fromtext_afsdb(ARGS_FROMTEXT) {
 	dns_name_t name;
 	isc_boolean_t ok;
 
-	REQUIRE(type == dns_rdatatype_afsdb);
+	REQUIRE(type == 18);
 
 	UNUSED(type);
 	UNUSED(rdclass);
@@ -57,8 +57,7 @@ fromtext_afsdb(ARGS_FROMTEXT) {
 				      ISC_FALSE));
 	dns_name_init(&name, NULL);
 	buffer_fromregion(&buffer, &token.value.as_region);
-	if (origin == NULL)
-		origin = dns_rootname;
+	origin = (origin != NULL) ? origin : dns_rootname;
 	RETTOK(dns_name_fromtext(&name, &buffer, origin, options, target));
 	ok = ISC_TRUE;
 	if ((options & DNS_RDATA_CHECKNAMES) != 0)
@@ -79,7 +78,7 @@ totext_afsdb(ARGS_TOTEXT) {
 	isc_boolean_t sub;
 	unsigned int num;
 
-	REQUIRE(rdata->type == dns_rdatatype_afsdb);
+	REQUIRE(rdata->type == 18);
 	REQUIRE(rdata->length != 0);
 
 	dns_name_init(&name, NULL);
@@ -101,7 +100,7 @@ fromwire_afsdb(ARGS_FROMWIRE) {
 	isc_region_t sr;
 	isc_region_t tr;
 
-	REQUIRE(type == dns_rdatatype_afsdb);
+	REQUIRE(type == 18);
 
 	UNUSED(type);
 	UNUSED(rdclass);
@@ -116,7 +115,7 @@ fromwire_afsdb(ARGS_FROMWIRE) {
 		return (ISC_R_NOSPACE);
 	if (sr.length < 2)
 		return (ISC_R_UNEXPECTEDEND);
-	memmove(tr.base, sr.base, 2);
+	memcpy(tr.base, sr.base, 2);
 	isc_buffer_forward(source, 2);
 	isc_buffer_add(target, 2);
 	return (dns_name_fromwire(&name, source, dctx, options, target));
@@ -129,7 +128,7 @@ towire_afsdb(ARGS_TOWIRE) {
 	dns_name_t name;
 	dns_offsets_t offsets;
 
-	REQUIRE(rdata->type == dns_rdatatype_afsdb);
+	REQUIRE(rdata->type == 18);
 	REQUIRE(rdata->length != 0);
 
 	dns_compress_setmethods(cctx, DNS_COMPRESS_NONE);
@@ -137,7 +136,7 @@ towire_afsdb(ARGS_TOWIRE) {
 	dns_rdata_toregion(rdata, &sr);
 	if (tr.length < 2)
 		return (ISC_R_NOSPACE);
-	memmove(tr.base, sr.base, 2);
+	memcpy(tr.base, sr.base, 2);
 	isc_region_consume(&sr, 2);
 	isc_buffer_add(target, 2);
 
@@ -157,7 +156,7 @@ compare_afsdb(ARGS_COMPARE) {
 
 	REQUIRE(rdata1->type == rdata2->type);
 	REQUIRE(rdata1->rdclass == rdata2->rdclass);
-	REQUIRE(rdata1->type == dns_rdatatype_afsdb);
+	REQUIRE(rdata1->type == 18);
 	REQUIRE(rdata1->length != 0);
 	REQUIRE(rdata2->length != 0);
 
@@ -185,7 +184,7 @@ fromstruct_afsdb(ARGS_FROMSTRUCT) {
 	dns_rdata_afsdb_t *afsdb = source;
 	isc_region_t region;
 
-	REQUIRE(type == dns_rdatatype_afsdb);
+	REQUIRE(type == 18);
 	REQUIRE(source != NULL);
 	REQUIRE(afsdb->common.rdclass == rdclass);
 	REQUIRE(afsdb->common.rdtype == type);
@@ -204,7 +203,7 @@ tostruct_afsdb(ARGS_TOSTRUCT) {
 	dns_rdata_afsdb_t *afsdb = target;
 	dns_name_t name;
 
-	REQUIRE(rdata->type == dns_rdatatype_afsdb);
+	REQUIRE(rdata->type == 18);
 	REQUIRE(target != NULL);
 	REQUIRE(rdata->length != 0);
 
@@ -232,7 +231,7 @@ freestruct_afsdb(ARGS_FREESTRUCT) {
 	dns_rdata_afsdb_t *afsdb = source;
 
 	REQUIRE(source != NULL);
-	REQUIRE(afsdb->common.rdtype == dns_rdatatype_afsdb);
+	REQUIRE(afsdb->common.rdtype == 18);
 
 	if (afsdb->mctx == NULL)
 		return;
@@ -247,7 +246,7 @@ additionaldata_afsdb(ARGS_ADDLDATA) {
 	dns_offsets_t offsets;
 	isc_region_t region;
 
-	REQUIRE(rdata->type == dns_rdatatype_afsdb);
+	REQUIRE(rdata->type == 18);
 
 	dns_name_init(&name, offsets);
 	dns_rdata_toregion(rdata, &region);
@@ -262,7 +261,7 @@ digest_afsdb(ARGS_DIGEST) {
 	isc_region_t r1, r2;
 	dns_name_t name;
 
-	REQUIRE(rdata->type == dns_rdatatype_afsdb);
+	REQUIRE(rdata->type == 18);
 
 	dns_rdata_toregion(rdata, &r1);
 	r2 = r1;
@@ -278,7 +277,7 @@ digest_afsdb(ARGS_DIGEST) {
 static inline isc_boolean_t
 checkowner_afsdb(ARGS_CHECKOWNER) {
 
-	REQUIRE(type == dns_rdatatype_afsdb);
+	REQUIRE(type == 18);
 
 	UNUSED(name);
 	UNUSED(type);
@@ -293,7 +292,7 @@ checknames_afsdb(ARGS_CHECKNAMES) {
 	isc_region_t region;
 	dns_name_t name;
 
-	REQUIRE(rdata->type == dns_rdatatype_afsdb);
+	REQUIRE(rdata->type == 18);
 
 	UNUSED(owner);
 
@@ -309,8 +308,4 @@ checknames_afsdb(ARGS_CHECKNAMES) {
 	return (ISC_TRUE);
 }
 
-static inline int
-casecompare_afsdb(ARGS_COMPARE) {
-	return (compare_afsdb(rdata1, rdata2));
-}
 #endif	/* RDATA_GENERIC_AFSDB_18_C */

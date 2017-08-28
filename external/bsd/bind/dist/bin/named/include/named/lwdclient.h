@@ -1,7 +1,7 @@
-/*	$NetBSD: lwdclient.h,v 1.5 2015/12/17 04:00:41 christos Exp $	*/
+/*	$NetBSD: lwdclient.h,v 1.1 2009/03/22 14:56:13 christos Exp $	*/
 
 /*
- * Copyright (C) 2004, 2005, 2007, 2009, 2015  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2004, 2005, 2007, 2009  Internet Systems Consortium, Inc. ("ISC")
  * Copyright (C) 2000, 2001  Internet Software Consortium.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -17,7 +17,7 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* Id: lwdclient.h,v 1.20 2009/01/17 23:47:42 tbox Exp  */
+/* Id: lwdclient.h,v 1.18.332.2 2009/01/18 23:47:34 tbox Exp */
 
 #ifndef NAMED_LWDCLIENT_H
 #define NAMED_LWDCLIENT_H 1
@@ -188,7 +188,6 @@ struct ns_lwdclientmgr {
 	lwres_context_t	       *lwctx;		/*%< lightweight proto context */
 	isc_task_t	       *task;		/*%< owning task */
 	unsigned int		flags;
-	isc_mutex_t		lock;
 	ISC_LINK(ns_lwdclientmgr_t)	link;
 	ISC_LIST(ns_lwdclient_t)	idle;		/*%< idle client slots */
 	ISC_LIST(ns_lwdclient_t)	running;	/*%< running clients */

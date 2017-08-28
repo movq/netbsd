@@ -1,4 +1,4 @@
-/*	$NetBSD: ns_name_test.c,v 1.1.1.1 2016/01/10 19:44:40 christos Exp $	*/
+/*	$NetBSD: ns_name_test.c,v 1.1 2016/01/10 19:44:40 christos Exp $	*/
 /*
  * Copyright (c) 2014 by Internet Systems Consortium, Inc. ("ISC")
  *

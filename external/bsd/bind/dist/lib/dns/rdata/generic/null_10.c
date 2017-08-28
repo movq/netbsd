@@ -1,7 +1,7 @@
-/*	$NetBSD: null_10.c,v 1.5 2015/12/17 04:00:44 christos Exp $	*/
+/*	$NetBSD: null_10.c,v 1.1 2009/03/22 15:01:54 christos Exp $	*/
 
 /*
- * Copyright (C) 2004, 2007, 2009, 2011, 2012, 2015  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2004, 2007  Internet Systems Consortium, Inc. ("ISC")
  * Copyright (C) 1998-2002  Internet Software Consortium.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -17,7 +17,7 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* Id */
+/* Id: null_10.c,v 1.42 2007/06/19 23:47:17 tbox Exp */
 
 /* Reviewed: Thu Mar 16 13:57:50 PST 2000 by explorer */
 
@@ -28,7 +28,7 @@
 
 static inline isc_result_t
 fromtext_null(ARGS_FROMTEXT) {
-	REQUIRE(type == dns_rdatatype_null);
+	REQUIRE(type == 10);
 
 	UNUSED(rdclass);
 	UNUSED(type);
@@ -43,16 +43,20 @@ fromtext_null(ARGS_FROMTEXT) {
 
 static inline isc_result_t
 totext_null(ARGS_TOTEXT) {
-	REQUIRE(rdata->type == dns_rdatatype_null);
+	REQUIRE(rdata->type == 10);
 
-	return (unknown_totext(rdata, tctx, target));
+	UNUSED(rdata);
+	UNUSED(tctx);
+	UNUSED(target);
+
+	return (DNS_R_SYNTAX);
 }
 
 static inline isc_result_t
 fromwire_null(ARGS_FROMWIRE) {
 	isc_region_t sr;
 
-	REQUIRE(type == dns_rdatatype_null);
+	REQUIRE(type == 10);
 
 	UNUSED(type);
 	UNUSED(rdclass);
@@ -66,7 +70,7 @@ fromwire_null(ARGS_FROMWIRE) {
 
 static inline isc_result_t
 towire_null(ARGS_TOWIRE) {
-	REQUIRE(rdata->type == dns_rdatatype_null);
+	REQUIRE(rdata->type == 10);
 
 	UNUSED(cctx);
 
@@ -80,7 +84,7 @@ compare_null(ARGS_COMPARE) {
 
 	REQUIRE(rdata1->type == rdata2->type);
 	REQUIRE(rdata1->rdclass == rdata2->rdclass);
-	REQUIRE(rdata1->type == dns_rdatatype_null);
+	REQUIRE(rdata1->type == 10);
 
 	dns_rdata_toregion(rdata1, &r1);
 	dns_rdata_toregion(rdata2, &r2);
@@ -91,7 +95,7 @@ static inline isc_result_t
 fromstruct_null(ARGS_FROMSTRUCT) {
 	dns_rdata_null_t *null = source;
 
-	REQUIRE(type == dns_rdatatype_null);
+	REQUIRE(type == 10);
 	REQUIRE(source != NULL);
 	REQUIRE(null->common.rdtype == type);
 	REQUIRE(null->common.rdclass == rdclass);
@@ -108,7 +112,7 @@ tostruct_null(ARGS_TOSTRUCT) {
 	dns_rdata_null_t *null = target;
 	isc_region_t r;
 
-	REQUIRE(rdata->type == dns_rdatatype_null);
+	REQUIRE(rdata->type == 10);
 	REQUIRE(target != NULL);
 
 	null->common.rdclass = rdata->rdclass;
@@ -130,7 +134,7 @@ freestruct_null(ARGS_FREESTRUCT) {
 	dns_rdata_null_t *null = source;
 
 	REQUIRE(source != NULL);
-	REQUIRE(null->common.rdtype == dns_rdatatype_null);
+	REQUIRE(null->common.rdtype == 10);
 
 	if (null->mctx == NULL)
 		return;
@@ -146,7 +150,7 @@ additionaldata_null(ARGS_ADDLDATA) {
 	UNUSED(add);
 	UNUSED(arg);
 
-	REQUIRE(rdata->type == dns_rdatatype_null);
+	REQUIRE(rdata->type == 10);
 
 	return (ISC_R_SUCCESS);
 }
@@ -155,7 +159,7 @@ static inline isc_result_t
 digest_null(ARGS_DIGEST) {
 	isc_region_t r;
 
-	REQUIRE(rdata->type == dns_rdatatype_null);
+	REQUIRE(rdata->type == 10);
 
 	dns_rdata_toregion(rdata, &r);
 
@@ -165,7 +169,7 @@ digest_null(ARGS_DIGEST) {
 static inline isc_boolean_t
 checkowner_null(ARGS_CHECKOWNER) {
 
-	REQUIRE(type == dns_rdatatype_null);
+	REQUIRE(type == 10);
 
 	UNUSED(name);
 	UNUSED(type);
@@ -178,18 +182,13 @@ checkowner_null(ARGS_CHECKOWNER) {
 static inline isc_boolean_t
 checknames_null(ARGS_CHECKNAMES) {
 
-	REQUIRE(rdata->type == dns_rdatatype_null);
+	REQUIRE(rdata->type == 10);
 
 	UNUSED(rdata);
 	UNUSED(owner);
 	UNUSED(bad);
 
 	return (ISC_TRUE);
-}
-
-static inline int
-casecompare_null(ARGS_COMPARE) {
-	return (compare_null(rdata1, rdata2));
 }
 
 #endif	/* RDATA_GENERIC_NULL_10_C */

@@ -1,6 +1,6 @@
 #!/bin/sh
 #
-# Copyright (C) 2004, 2007, 2009, 2012-2014  Internet Systems Consortium, Inc. ("ISC")
+# Copyright (C) 2004, 2007  Internet Systems Consortium, Inc. ("ISC")
 # Copyright (C) 2001  Internet Software Consortium.
 #
 # Permission to use, copy, modify, and/or distribute this software for any
@@ -15,11 +15,10 @@
 # OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR
 # PERFORMANCE OF THIS SOFTWARE.
 
-SYSTEMTESTTOP=..
-. $SYSTEMTESTTOP/conf.sh
+# Id: setup.sh,v 1.5 2007/06/19 23:47:06 tbox Exp
 
-$SHELL clean.sh
+RANDFILE=random.data
 
-test -r $RANDFILE || $GENRANDOM 400 $RANDFILE
+../../genrandom 100 $RANDFILE
 
-cd ns1 && $SHELL setup.sh
+cd ns1 && sh setup.sh

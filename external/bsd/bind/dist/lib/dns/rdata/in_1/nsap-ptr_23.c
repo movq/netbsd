@@ -1,7 +1,7 @@
-/*	$NetBSD: nsap-ptr_23.c,v 1.6 2016/05/26 16:49:59 christos Exp $	*/
+/*	$NetBSD: nsap-ptr_23.c,v 1.1 2009/03/22 15:01:56 christos Exp $	*/
 
 /*
- * Copyright (C) 2004, 2005, 2007, 2009, 2015  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2004, 2005, 2007  Internet Systems Consortium, Inc. ("ISC")
  * Copyright (C) 1999-2001  Internet Software Consortium.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -17,7 +17,7 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* Id: nsap-ptr_23.c,v 1.40 2009/12/04 22:06:37 tbox Exp  */
+/* Id: nsap-ptr_23.c,v 1.38 2007/06/19 23:47:17 tbox Exp */
 
 /* Reviewed: Fri Mar 17 10:16:02 PST 2000 by gson */
 
@@ -34,8 +34,8 @@ fromtext_in_nsap_ptr(ARGS_FROMTEXT) {
 	dns_name_t name;
 	isc_buffer_t buffer;
 
-	REQUIRE(type == dns_rdatatype_nsap_ptr);
-	REQUIRE(rdclass == dns_rdataclass_in);
+	REQUIRE(type == 23);
+	REQUIRE(rdclass == 1);
 
 	UNUSED(type);
 	UNUSED(rdclass);
@@ -46,8 +46,7 @@ fromtext_in_nsap_ptr(ARGS_FROMTEXT) {
 
 	dns_name_init(&name, NULL);
 	buffer_fromregion(&buffer, &token.value.as_region);
-	if (origin == NULL)
-		origin = dns_rootname;
+	origin = (origin != NULL) ? origin : dns_rootname;
 	RETTOK(dns_name_fromtext(&name, &buffer, origin, options, target));
 	return (ISC_R_SUCCESS);
 }
@@ -59,8 +58,8 @@ totext_in_nsap_ptr(ARGS_TOTEXT) {
 	dns_name_t prefix;
 	isc_boolean_t sub;
 
-	REQUIRE(rdata->type == dns_rdatatype_nsap_ptr);
-	REQUIRE(rdata->rdclass == dns_rdataclass_in);
+	REQUIRE(rdata->type == 23);
+	REQUIRE(rdata->rdclass == 1);
 	REQUIRE(rdata->length != 0);
 
 	dns_name_init(&name, NULL);
@@ -76,18 +75,18 @@ totext_in_nsap_ptr(ARGS_TOTEXT) {
 
 static inline isc_result_t
 fromwire_in_nsap_ptr(ARGS_FROMWIRE) {
-	dns_name_t name;
+        dns_name_t name;
 
-	REQUIRE(type == dns_rdatatype_nsap_ptr);
-	REQUIRE(rdclass == dns_rdataclass_in);
+	REQUIRE(type == 23);
+	REQUIRE(rdclass == 1);
 
 	UNUSED(type);
 	UNUSED(rdclass);
 
 	dns_decompress_setmethods(dctx, DNS_COMPRESS_NONE);
 
-	dns_name_init(&name, NULL);
-	return (dns_name_fromwire(&name, source, dctx, options, target));
+        dns_name_init(&name, NULL);
+        return (dns_name_fromwire(&name, source, dctx, options, target));
 }
 
 static inline isc_result_t
@@ -96,8 +95,8 @@ towire_in_nsap_ptr(ARGS_TOWIRE) {
 	dns_offsets_t offsets;
 	isc_region_t region;
 
-	REQUIRE(rdata->type == dns_rdatatype_nsap_ptr);
-	REQUIRE(rdata->rdclass == dns_rdataclass_in);
+	REQUIRE(rdata->type == 23);
+	REQUIRE(rdata->rdclass == 1);
 	REQUIRE(rdata->length != 0);
 
 	dns_compress_setmethods(cctx, DNS_COMPRESS_NONE);
@@ -117,8 +116,8 @@ compare_in_nsap_ptr(ARGS_COMPARE) {
 
 	REQUIRE(rdata1->type == rdata2->type);
 	REQUIRE(rdata1->rdclass == rdata2->rdclass);
-	REQUIRE(rdata1->type == dns_rdatatype_nsap_ptr);
-	REQUIRE(rdata1->rdclass == dns_rdataclass_in);
+	REQUIRE(rdata1->type == 23);
+	REQUIRE(rdata1->rdclass == 1);
 	REQUIRE(rdata1->length != 0);
 	REQUIRE(rdata2->length != 0);
 
@@ -139,8 +138,8 @@ fromstruct_in_nsap_ptr(ARGS_FROMSTRUCT) {
 	dns_rdata_in_nsap_ptr_t *nsap_ptr = source;
 	isc_region_t region;
 
-	REQUIRE(type == dns_rdatatype_nsap_ptr);
-	REQUIRE(rdclass == dns_rdataclass_in);
+	REQUIRE(type == 23);
+	REQUIRE(rdclass == 1);
 	REQUIRE(source != NULL);
 	REQUIRE(nsap_ptr->common.rdtype == type);
 	REQUIRE(nsap_ptr->common.rdclass == rdclass);
@@ -158,8 +157,8 @@ tostruct_in_nsap_ptr(ARGS_TOSTRUCT) {
 	dns_rdata_in_nsap_ptr_t *nsap_ptr = target;
 	dns_name_t name;
 
-	REQUIRE(rdata->type == dns_rdatatype_nsap_ptr);
-	REQUIRE(rdata->rdclass == dns_rdataclass_in);
+	REQUIRE(rdata->type == 23);
+	REQUIRE(rdata->rdclass == 1);
 	REQUIRE(target != NULL);
 	REQUIRE(rdata->length != 0);
 
@@ -181,8 +180,8 @@ freestruct_in_nsap_ptr(ARGS_FREESTRUCT) {
 	dns_rdata_in_nsap_ptr_t *nsap_ptr = source;
 
 	REQUIRE(source != NULL);
-	REQUIRE(nsap_ptr->common.rdclass == dns_rdataclass_in);
-	REQUIRE(nsap_ptr->common.rdtype == dns_rdatatype_nsap_ptr);
+	REQUIRE(nsap_ptr->common.rdclass == 1);
+	REQUIRE(nsap_ptr->common.rdtype == 23);
 
 	if (nsap_ptr->mctx == NULL)
 		return;
@@ -193,8 +192,8 @@ freestruct_in_nsap_ptr(ARGS_FREESTRUCT) {
 
 static inline isc_result_t
 additionaldata_in_nsap_ptr(ARGS_ADDLDATA) {
-	REQUIRE(rdata->type == dns_rdatatype_nsap_ptr);
-	REQUIRE(rdata->rdclass == dns_rdataclass_in);
+	REQUIRE(rdata->type == 23);
+	REQUIRE(rdata->rdclass == 1);
 
 	UNUSED(rdata);
 	UNUSED(add);
@@ -208,8 +207,8 @@ digest_in_nsap_ptr(ARGS_DIGEST) {
 	isc_region_t r;
 	dns_name_t name;
 
-	REQUIRE(rdata->type == dns_rdatatype_nsap_ptr);
-	REQUIRE(rdata->rdclass == dns_rdataclass_in);
+	REQUIRE(rdata->type == 23);
+	REQUIRE(rdata->rdclass == 1);
 
 	dns_rdata_toregion(rdata, &r);
 	dns_name_init(&name, NULL);
@@ -221,8 +220,8 @@ digest_in_nsap_ptr(ARGS_DIGEST) {
 static inline isc_boolean_t
 checkowner_in_nsap_ptr(ARGS_CHECKOWNER) {
 
-	REQUIRE(type == dns_rdatatype_nsap_ptr);
-	REQUIRE(rdclass == dns_rdataclass_in);
+	REQUIRE(type == 23);
+	REQUIRE(rdclass == 1);
 
 	UNUSED(name);
 	UNUSED(type);
@@ -235,19 +234,14 @@ checkowner_in_nsap_ptr(ARGS_CHECKOWNER) {
 static inline isc_boolean_t
 checknames_in_nsap_ptr(ARGS_CHECKNAMES) {
 
-	REQUIRE(rdata->type == dns_rdatatype_nsap_ptr);
-	REQUIRE(rdata->rdclass == dns_rdataclass_in);
+	REQUIRE(rdata->type == 23);
+	REQUIRE(rdata->rdclass == 1);
 
 	UNUSED(rdata);
 	UNUSED(owner);
 	UNUSED(bad);
 
 	return (ISC_TRUE);
-}
-
-static inline int
-casecompare_in_nsap_ptr(ARGS_COMPARE) {
-	return (compare_in_nsap_ptr(rdata1, rdata2));
 }
 
 #endif	/* RDATA_IN_1_NSAP_PTR_23_C */

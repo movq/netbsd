@@ -1,8 +1,8 @@
-/*	$NetBSD: loc.c,v 1.6 2016/05/26 16:49:58 christos Exp $	*/
+/*	$NetBSD: loc.c,v 1.1 2009/03/22 14:58:04 christos Exp $	*/
 
 #include "loc.h"
 
-/* Id: loc.c,v 1.1 2008/02/15 01:47:15 marka Exp  */
+/* Id: loc.c,v 1.1 2008/02/15 01:47:15 marka Exp */
 
 /* Global variables */
 
@@ -153,8 +153,7 @@ getlocbyaddr (addr, mask)
   struct in_addr netaddr;
   u_int32_t a;
   struct in_addr themask;
-  char text_addr[sizeof("255.255.255.255")],
-       text_mask[sizeof("255.255.255.255")];
+  char *text_addr, *text_mask;
 
   if (mask == NULL)
     {
@@ -165,12 +164,13 @@ getlocbyaddr (addr, mask)
       themask = *mask;
     }
 
+  text_addr = (char *) malloc (256);
+  text_mask = (char *) malloc (256);
   strcpy (text_addr, inet_ntoa (addr));
   strcpy (text_mask, inet_ntoa (themask));
 
   if (debug >= 2)
     printf ("Testing address %s/%s\n", text_addr, text_mask);
-
   if (mask == NULL)
     {
       a = ntohl (addr.s_addr);
@@ -369,10 +369,6 @@ int responseLen;		/* buffer length */
 
   result = (char *) malloc (256);
   message = (char *) malloc (256);
-  if (result == NULL || message == NULL)
-    {
-      panic ("Malloc failed");
-    }
   /* 
    * Look up the records for the given domain name.
    * We expect the domain to be a fully qualified name, so
@@ -575,10 +571,6 @@ findA (domain)
 	  if (end == NULL)
 	    {
 	      result = (void *) malloc (sizeof (struct list_in_addr));
-	      if (result == NULL)
-		{
-		  panic ("Malloc failed");
-		}
 	      result->addr = addr;
 	      result->next = NULL;
 	      end = result;
@@ -586,10 +578,6 @@ findA (domain)
 	  else
 	    {
 	      end->next = (void *) malloc (sizeof (struct list_in_addr));
-	      if (end->next == NULL)
-		{
-		  panic ("Malloc failed");
-		}
 	      end = end->next;
 	      end->addr = addr;
 	      end->next = NULL;

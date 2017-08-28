@@ -1,7 +1,7 @@
-/*	$NetBSD: forward.h,v 1.6 2016/05/26 16:49:59 christos Exp $	*/
+/*	$NetBSD: forward.h,v 1.1 2009/03/22 15:01:42 christos Exp $	*/
 
 /*
- * Copyright (C) 2004-2007, 2009, 2013, 2016  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2004-2007  Internet Systems Consortium, Inc. ("ISC")
  * Copyright (C) 2000, 2001  Internet Software Consortium.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -17,6 +17,8 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
+/* Id: forward.h,v 1.11 2007/06/19 23:47:16 tbox Exp */
+
 #ifndef DNS_FORWARD_H
 #define DNS_FORWARD_H 1
 
@@ -24,22 +26,13 @@
 
 #include <isc/lang.h>
 #include <isc/result.h>
-#include <isc/sockaddr.h>
 
 #include <dns/types.h>
 
 ISC_LANG_BEGINDECLS
 
-struct dns_forwarder {
-	isc_sockaddr_t			addr;
-	isc_dscp_t			dscp;
-	ISC_LINK(dns_forwarder_t)	link;
-};
-
-typedef ISC_LIST(struct dns_forwarder)	dns_forwarderlist_t;
-
 struct dns_forwarders {
-	dns_forwarderlist_t	fwdrs;
+	isc_sockaddrlist_t	addrs;
 	dns_fwdpolicy_t		fwdpolicy;
 };
 
@@ -58,41 +51,21 @@ dns_fwdtable_create(isc_mem_t *mctx, dns_fwdtable_t **fwdtablep);
  */
 
 isc_result_t
-dns_fwdtable_addfwd(dns_fwdtable_t *fwdtable, dns_name_t *name,
-		    dns_forwarderlist_t *fwdrs, dns_fwdpolicy_t policy);
-isc_result_t
 dns_fwdtable_add(dns_fwdtable_t *fwdtable, dns_name_t *name,
 		 isc_sockaddrlist_t *addrs, dns_fwdpolicy_t policy);
 /*%<
  * Adds an entry to the forwarding table.  The entry associates
  * a domain with a list of forwarders and a forwarding policy.  The
- * addrs/fwdrs list is copied if not empty, so the caller should free
- * its copy.
+ * addrs list is copied if not empty, so the caller should free its copy.
  *
  * Requires:
  * \li	fwdtable is a valid forwarding table.
  * \li	name is a valid name
- * \li	addrs/fwdrs is a valid list of isc_sockaddr/dns_forwarder
- *      structures, which may be empty.
+ * \li	addrs is a valid list of sockaddrs, which may be empty.
  *
  * Returns:
  * \li	#ISC_R_SUCCESS
  * \li	#ISC_R_NOMEMORY
- */
-
-isc_result_t
-dns_fwdtable_delete(dns_fwdtable_t *fwdtable, dns_name_t *name);
-/*%<
- * Removes an entry for 'name' from the forwarding table.  If an entry
- * that exactly matches 'name' does not exist, ISC_R_NOTFOUND will be returned.
- *
- * Requires:
- * \li	fwdtable is a valid forwarding table.
- * \li	name is a valid name
- *
- * Returns:
- * \li	#ISC_R_SUCCESS
- * \li	#ISC_R_NOTFOUND
  */
 
 isc_result_t

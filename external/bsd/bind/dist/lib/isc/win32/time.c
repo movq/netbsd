@@ -1,7 +1,7 @@
-/*	$NetBSD: time.c,v 1.6 2014/12/10 04:38:01 christos Exp $	*/
+/*	$NetBSD: time.c,v 1.1 2009/03/22 15:02:28 christos Exp $	*/
 
 /*
- * Copyright (C) 2004, 2006-2009, 2012-2014  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2004, 2006-2008  Internet Systems Consortium, Inc. ("ISC")
  * Copyright (C) 1998-2001, 2003  Internet Software Consortium.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -17,7 +17,7 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* Id: time.c,v 1.52 2009/08/14 07:51:08 marka Exp  */
+/* Id: time.c,v 1.48 2008/09/08 23:47:10 tbox Exp */
 
 #include <config.h>
 
@@ -32,7 +32,6 @@
 
 #include <isc/assertions.h>
 #include <isc/time.h>
-#include <isc/tm.h>
 #include <isc/util.h>
 
 /*
@@ -50,15 +49,15 @@
  *** Absolute Times
  ***/
 
-static const isc_time_t epoch = { { 0, 0 } };
-LIBISC_EXTERNAL_DATA const isc_time_t * const isc_time_epoch = &epoch;
+static isc_time_t epoch = { { 0, 0 } };
+LIBISC_EXTERNAL_DATA isc_time_t *isc_time_epoch = &epoch;
 
 /***
  *** Intervals
  ***/
 
-static const isc_interval_t zero_interval = { 0 };
-LIBISC_EXTERNAL_DATA const isc_interval_t * const isc_interval_zero = &zero_interval;
+static isc_interval_t zero_interval = { 0 };
+LIBISC_EXTERNAL_DATA isc_interval_t *isc_interval_zero = &zero_interval;
 
 void
 isc_interval_set(isc_interval_t *i, unsigned int seconds,
@@ -94,8 +93,8 @@ isc_time_set(isc_time_t *t, unsigned int seconds, unsigned int nanoseconds) {
 
 	SystemTimeToFileTime(&epoch, &temp);
 
-	i1.LowPart = temp.dwLowDateTime;
-	i1.HighPart = temp.dwHighDateTime;
+	i1.LowPart = t->absolute.dwLowDateTime;
+	i1.HighPart = t->absolute.dwHighDateTime;
 
 	i1.QuadPart += (unsigned __int64)nanoseconds/100;
 	i1.QuadPart += (unsigned __int64)seconds*10000000;
@@ -229,50 +228,28 @@ isc_time_microdiff(const isc_time_t *t1, const isc_time_t *t2) {
 
 isc_uint32_t
 isc_time_seconds(const isc_time_t *t) {
-	SYSTEMTIME epoch = { 1970, 1, 4, 1, 0, 0, 0, 0 };
-	FILETIME temp;
-	ULARGE_INTEGER i1, i2;
-	LONGLONG i3;
+	SYSTEMTIME st;
 
-	SystemTimeToFileTime(&epoch, &temp);
+	/*
+	 * Convert the time to a SYSTEMTIME structure and the grab the
+	 * milliseconds
+	 */
+	FileTimeToSystemTime(&t->absolute, &st);
 
-	i1.LowPart  = t->absolute.dwLowDateTime;
-	i1.HighPart = t->absolute.dwHighDateTime;
-	i2.LowPart  = temp.dwLowDateTime;
-	i2.HighPart = temp.dwHighDateTime;
-
-	i3 = (i1.QuadPart - i2.QuadPart) / 10000000;
-
-	return ((isc_uint32_t)i3);
+	return ((isc_uint32_t)(st.wMilliseconds / 1000));
 }
-
-isc_result_t
-isc_time_secondsastimet(const isc_time_t *t, time_t *secondsp) {
-	time_t seconds;
-
-	REQUIRE(t != NULL);
-
-	seconds = (time_t)isc_time_seconds(t);
-
-	INSIST(sizeof(unsigned int) == sizeof(isc_uint32_t));
-	INSIST(sizeof(time_t) >= sizeof(isc_uint32_t));
-
-	if (isc_time_seconds(t) > (~0U>>1) && seconds <= (time_t)(~0U>>1))
-		return (ISC_R_RANGE);
-
-	*secondsp = seconds;
-
-	return (ISC_R_SUCCESS);
-}
-
 
 isc_uint32_t
 isc_time_nanoseconds(const isc_time_t *t) {
-	ULARGE_INTEGER i;
+	SYSTEMTIME st;
 
-	i.LowPart  = t->absolute.dwLowDateTime;
-	i.HighPart = t->absolute.dwHighDateTime;
-	return ((isc_uint32_t)(i.QuadPart % 10000000) * 100);
+	/*
+	 * Convert the time to a SYSTEMTIME structure and the grab the
+	 * milliseconds
+	 */
+	FileTimeToSystemTime(&t->absolute, &st);
+
+	return ((isc_uint32_t)(st.wMilliseconds * 1000000));
 }
 
 void
@@ -305,56 +282,15 @@ isc_time_formathttptimestamp(const isc_time_t *t, char *buf, unsigned int len) {
 	char DateBuf[50];
 	char TimeBuf[50];
 
-/* strftime() format: "%a, %d %b %Y %H:%M:%S GMT" */
-
 	REQUIRE(len > 0);
 	if (FileTimeToSystemTime(&t->absolute, &st)) {
-		GetDateFormat(LOCALE_USER_DEFAULT, 0, &st,
-			      "ddd',' dd MMM yyyy", DateBuf, 50);
+		GetDateFormat(LOCALE_USER_DEFAULT, 0, &st, "ddd',', dd-MMM-yyyy",
+			      DateBuf, 50);
 		GetTimeFormat(LOCALE_USER_DEFAULT,
 			      TIME_NOTIMEMARKER | TIME_FORCE24HOURFORMAT,
 			      &st, "hh':'mm':'ss", TimeBuf, 50);
 
 		snprintf(buf, len, "%s %s GMT", DateBuf, TimeBuf);
-	} else {
-		buf[0] = 0;
-	}
-}
-
-isc_result_t
-isc_time_parsehttptimestamp(char *buf, isc_time_t *t) {
-	struct tm t_tm;
-	time_t when;
-	char *p;
-
-	REQUIRE(buf != NULL);
-	REQUIRE(t != NULL);
-	p = isc_tm_strptime(buf, "%a, %d %b %Y %H:%M:%S", &t_tm);
-	if (p == NULL)
-		return (ISC_R_UNEXPECTED);
-	when = isc_tm_timegm(&t_tm);
-	if (when == -1)
-		return (ISC_R_UNEXPECTED);
-	isc_time_set(t, (unsigned int)when, 0);
-	return (ISC_R_SUCCESS);
-}
-
-void
-isc_time_formatISO8601(const isc_time_t *t, char *buf, unsigned int len) {
-	SYSTEMTIME st;
-	char DateBuf[50];
-	char TimeBuf[50];
-
-/* strtime() format: "%Y-%m-%dT%H:%M:%SZ" */
-
-	REQUIRE(len > 0);
-	if (FileTimeToSystemTime(&t->absolute, &st)) {
-		GetDateFormat(LOCALE_NEUTRAL, 0, &st, "yyyy-MM-dd",
-			      DateBuf, 50);
-		GetTimeFormat(LOCALE_NEUTRAL,
-			      TIME_NOTIMEMARKER | TIME_FORCE24HOURFORMAT,
-			      &st, "hh':'mm':'ss", TimeBuf, 50);
-		snprintf(buf, len, "%sT%sZ", DateBuf, TimeBuf);
 	} else {
 		buf[0] = 0;
 	}

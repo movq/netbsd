@@ -1,7 +1,7 @@
-/*	$NetBSD: client.c,v 1.13 2017/06/15 15:59:40 christos Exp $	*/
+/*	$NetBSD: client.c,v 1.1 2009/10/25 00:02:28 christos Exp $	*/
 
 /*
- * Copyright (C) 2009-2016  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2009  Internet Systems Consortium, Inc. ("ISC")
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -16,15 +16,13 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
+/* Id: client.c,v 1.5 2009/09/03 21:45:46 jinmei Exp */
+
 #include <config.h>
 
-#include <stddef.h>
-
 #include <isc/app.h>
-#include <isc/buffer.h>
 #include <isc/mem.h>
 #include <isc/mutex.h>
-#include <isc/safe.h>
 #include <isc/sockaddr.h>
 #include <isc/socket.h>
 #include <isc/task.h>
@@ -68,12 +66,6 @@
 #define UCTX_VALID(c)			ISC_MAGIC_VALID(c, UCTX_MAGIC)
 
 #define MAX_RESTARTS 16
-
-#ifdef TUNE_LARGE
-#define RESOLVER_NTASKS 523
-#else
-#define RESOLVER_NTASKS 31
-#endif /* TUNE_LARGE */
 
 /*%
  * DNS client object
@@ -131,8 +123,6 @@ typedef struct resctx {
 	isc_mutex_t		lock;
 	dns_client_t		*client;
 	isc_boolean_t		want_dnssec;
-	isc_boolean_t		want_validation;
-	isc_boolean_t		want_cdflag;
 
 	/* Locked */
 	ISC_LINK(struct resctx)	link;
@@ -259,14 +249,13 @@ static isc_result_t send_update(updatectx_t *uctx);
 static isc_result_t
 getudpdispatch(int family, dns_dispatchmgr_t *dispatchmgr,
 	       isc_socketmgr_t *socketmgr, isc_taskmgr_t *taskmgr,
-	       isc_boolean_t is_shared, dns_dispatch_t **dispp,
-	       isc_sockaddr_t *localaddr)
+	       isc_boolean_t is_shared, dns_dispatch_t **dispp)
 {
 	unsigned int attrs, attrmask;
+	isc_sockaddr_t sa;
 	dns_dispatch_t *disp;
 	unsigned buffersize, maxbuffers, maxrequests, buckets, increment;
 	isc_result_t result;
-	isc_sockaddr_t anyaddr;
 
 	attrs = 0;
 	attrs |= DNS_DISPATCHATTR_UDP;
@@ -286,10 +275,7 @@ getudpdispatch(int family, dns_dispatchmgr_t *dispatchmgr,
 	attrmask |= DNS_DISPATCHATTR_IPV4;
 	attrmask |= DNS_DISPATCHATTR_IPV6;
 
-	if (localaddr == NULL) {
-		localaddr = &anyaddr;
-		isc_sockaddr_anyofpf(localaddr, family);
-	}
+	isc_sockaddr_anyofpf(&sa, family);
 
 	buffersize = 4096;
 	maxbuffers = is_shared ? 1000 : 8;
@@ -299,7 +285,7 @@ getudpdispatch(int family, dns_dispatchmgr_t *dispatchmgr,
 
 	disp = NULL;
 	result = dns_dispatch_getudp(dispatchmgr, socketmgr,
-				     taskmgr, localaddr,
+				     taskmgr, &sa,
 				     buffersize, maxbuffers, maxrequests,
 				     buckets, increment,
 				     attrs, attrmask, &disp);
@@ -310,12 +296,12 @@ getudpdispatch(int family, dns_dispatchmgr_t *dispatchmgr,
 }
 
 static isc_result_t
-createview(isc_mem_t *mctx, dns_rdataclass_t rdclass,
-	   unsigned int options, isc_taskmgr_t *taskmgr,
-	   unsigned int ntasks, isc_socketmgr_t *socketmgr,
-	   isc_timermgr_t *timermgr, dns_dispatchmgr_t *dispatchmgr,
-	   dns_dispatch_t *dispatchv4, dns_dispatch_t *dispatchv6,
-	   dns_view_t **viewp)
+dns_client_createview(isc_mem_t *mctx, dns_rdataclass_t rdclass,
+		      unsigned int options, isc_taskmgr_t *taskmgr,
+		      unsigned int ntasks, isc_socketmgr_t *socketmgr,
+		      isc_timermgr_t *timermgr, dns_dispatchmgr_t *dispatchmgr,
+		      dns_dispatch_t *dispatchv4, dns_dispatch_t *dispatchv6,
+		      dns_view_t **viewp)
 {
 	isc_result_t result;
 	dns_view_t *view = NULL;
@@ -325,16 +311,21 @@ createview(isc_mem_t *mctx, dns_rdataclass_t rdclass,
 	if (result != ISC_R_SUCCESS)
 		return (result);
 
-	/* Initialize view security roots */
-	result = dns_view_initsecroots(view, mctx);
-	if (result != ISC_R_SUCCESS) {
-		dns_view_detach(&view);
-		return (result);
+	/*
+	 * Workaround for a recent change in dns_view_create(): proactively
+	 * create view->secroots if it's not created with view creation.
+	 */
+	if (view->secroots == NULL) {
+		result = dns_keytable_create(mctx, &view->secroots);
+		if (result != ISC_R_SUCCESS) {
+			dns_view_detach(&view);
+			return (result);
+		}
 	}
 
-	result = dns_view_createresolver(view, taskmgr, ntasks, 1,
-					 socketmgr, timermgr, 0,
-					 dispatchmgr, dispatchv4, dispatchv6);
+	result = dns_view_createresolver(view, taskmgr, ntasks, socketmgr,
+					 timermgr, 0, dispatchmgr,
+					 dispatchv4, dispatchv6);
 	if (result != ISC_R_SUCCESS) {
 		dns_view_detach(&view);
 		return (result);
@@ -368,12 +359,6 @@ dns_client_create(dns_client_t **clientp, unsigned int options) {
 	isc_taskmgr_t *taskmgr = NULL;
 	isc_socketmgr_t *socketmgr = NULL;
 	isc_timermgr_t *timermgr = NULL;
-#if 0
-	/* XXXMPA add debug logging support */
-	isc_log_t *lctx = NULL;
-	isc_logconfig_t *logconfig = NULL;
-	unsigned int logdebuglevel = 0;
-#endif
 
 	result = isc_mem_create(0, 0, &mctx);
 	if (result != ISC_R_SUCCESS)
@@ -393,18 +378,7 @@ dns_client_create(dns_client_t **clientp, unsigned int options) {
 	result = isc_timermgr_createinctx(mctx, actx, &timermgr);
 	if (result != ISC_R_SUCCESS)
 		goto cleanup;
-#if 0
-	result = isc_log_create(mctx, &lctx, &logconfig);
-	if (result != ISC_R_SUCCESS)
-		goto cleanup;
-	isc_log_setcontext(lctx);
-	dns_log_init(lctx);
-	dns_log_setcontext(lctx);
-	result = isc_log_usechannel(logconfig, "default_debug", NULL, NULL);
-	if (result != ISC_R_SUCCESS)
-		goto cleanup;
-	isc_log_setdebuglevel(lctx, logdebuglevel);
-#endif
+
 	result = dns_client_createx(mctx, actx, taskmgr, socketmgr, timermgr,
 				    options, clientp);
 	if (result != ISC_R_SUCCESS)
@@ -418,12 +392,12 @@ dns_client_create(dns_client_t **clientp, unsigned int options) {
 	return (ISC_R_SUCCESS);
 
  cleanup:
-	if (taskmgr != NULL)
-		isc_taskmgr_destroy(&taskmgr);
 	if (timermgr != NULL)
 		isc_timermgr_destroy(&timermgr);
 	if (socketmgr != NULL)
 		isc_socketmgr_destroy(&socketmgr);
+	if (taskmgr != NULL)
+		isc_taskmgr_destroy(&taskmgr);
 	if (actx != NULL)
 		isc_appctx_destroy(&actx);
 	isc_mem_detach(&mctx);
@@ -435,19 +409,6 @@ isc_result_t
 dns_client_createx(isc_mem_t *mctx, isc_appctx_t *actx, isc_taskmgr_t *taskmgr,
 		   isc_socketmgr_t *socketmgr, isc_timermgr_t *timermgr,
 		   unsigned int options, dns_client_t **clientp)
-{
-	isc_result_t result;
-	result = dns_client_createx2(mctx, actx, taskmgr, socketmgr, timermgr,
-				     options, clientp, NULL, NULL);
-	return (result);
-}
-
-isc_result_t
-dns_client_createx2(isc_mem_t *mctx, isc_appctx_t *actx,
-		    isc_taskmgr_t *taskmgr, isc_socketmgr_t *socketmgr,
-		    isc_timermgr_t *timermgr, unsigned int options,
-		    dns_client_t **clientp, isc_sockaddr_t *localaddr4,
-		    isc_sockaddr_t *localaddr6)
 {
 	dns_client_t *client;
 	isc_result_t result;
@@ -487,38 +448,23 @@ dns_client_createx2(isc_mem_t *mctx, isc_appctx_t *actx,
 		goto cleanup;
 	client->dispatchmgr = dispatchmgr;
 
-	/*
-	 * If only one address family is specified, use it.
-	 * If neither family is specified, or if both are, use both.
-	 */
-	client->dispatchv4 = NULL;
-	if (localaddr4 != NULL || localaddr6 == NULL) {
-		result = getudpdispatch(AF_INET, dispatchmgr, socketmgr,
-					taskmgr, ISC_TRUE,
-					&dispatchv4, localaddr4);
-		if (result == ISC_R_SUCCESS)
-			client->dispatchv4 = dispatchv4;
-	}
-
-	client->dispatchv6 = NULL;
-	if (localaddr6 != NULL || localaddr4 == NULL) {
-		result = getudpdispatch(AF_INET6, dispatchmgr, socketmgr,
-					taskmgr, ISC_TRUE,
-					&dispatchv6, localaddr6);
-		if (result == ISC_R_SUCCESS)
-			client->dispatchv6 = dispatchv6;
-	}
-
-	/* We need at least one of the dispatchers */
-	if (dispatchv4 == NULL && dispatchv6 == NULL) {
-		INSIST(result != ISC_R_SUCCESS);
+	/* TODO: whether to use dispatch v4 or v6 should be configurable */
+	result = getudpdispatch(AF_INET, dispatchmgr, socketmgr,
+				taskmgr, ISC_TRUE, &dispatchv4);
+	if (result != ISC_R_SUCCESS)
 		goto cleanup;
-	}
+	client->dispatchv4 = dispatchv4;
+	result = getudpdispatch(AF_INET6, dispatchmgr, socketmgr,
+				taskmgr, ISC_TRUE, &dispatchv6);
+	if (result != ISC_R_SUCCESS)
+		goto cleanup;
+	client->dispatchv6 = dispatchv6;
 
 	/* Create the default view for class IN */
-	result = createview(mctx, dns_rdataclass_in, options, taskmgr,
-			    RESOLVER_NTASKS, socketmgr, timermgr,
-			    dispatchmgr, dispatchv4, dispatchv6, &view);
+	result = dns_client_createview(mctx, dns_rdataclass_in, options,
+				       taskmgr, 31, socketmgr, timermgr,
+				       dispatchmgr, dispatchv4, dispatchv6,
+				       &view);
 	if (result != ISC_R_SUCCESS)
 		goto cleanup;
 	ISC_LIST_INIT(client->viewlist);
@@ -538,7 +484,6 @@ dns_client_createx2(isc_mem_t *mctx, isc_appctx_t *actx,
 	client->update_udpretries = DEF_UPDATE_UDPRETRIES;
 	client->find_timeout = DEF_FIND_TIMEOUT;
 	client->find_udpretries = DEF_FIND_UDPRETRIES;
-	client->attributes = 0;
 
 	client->references = 1;
 	client->magic = DNS_CLIENT_MAGIC;
@@ -683,46 +628,6 @@ dns_client_clearservers(dns_client_t *client, dns_rdataclass_t rdclass,
 	return (result);
 }
 
-isc_result_t
-dns_client_setdlv(dns_client_t *client, dns_rdataclass_t rdclass,
-		  const char *dlvname)
-{
-	isc_result_t result;
-	isc_buffer_t b;
-	dns_view_t *view = NULL;
-
-	REQUIRE(DNS_CLIENT_VALID(client));
-
-	LOCK(&client->lock);
-	result = dns_viewlist_find(&client->viewlist, DNS_CLIENTVIEW_NAME,
-				   rdclass, &view);
-	UNLOCK(&client->lock);
-	if (result != ISC_R_SUCCESS)
-		goto cleanup;
-
-	if (dlvname == NULL)
-		view->dlv = NULL;
-	else {
-		dns_name_t *newdlv;
-
-		isc_buffer_constinit(&b, dlvname, strlen(dlvname));
-		isc_buffer_add(&b, strlen(dlvname));
-		newdlv = dns_fixedname_name(&view->dlv_fixed);
-		result = dns_name_fromtext(newdlv, &b, dns_rootname,
-					   DNS_NAME_DOWNCASE, NULL);
-		if (result != ISC_R_SUCCESS)
-			goto cleanup;
-
-		view->dlv = dns_fixedname_name(&view->dlv_fixed);
-	}
-
- cleanup:
-	if (view != NULL)
-		dns_view_detach(&view);
-
-	return (result);
-}
-
 static isc_result_t
 getrdataset(isc_mem_t *mctx, dns_rdataset_t **rdatasetp) {
 	dns_rdataset_t *rdataset;
@@ -773,7 +678,6 @@ fetch_done(isc_task_t *task, isc_event_t *event) {
 static inline isc_result_t
 start_fetch(resctx_t *rctx) {
 	isc_result_t result;
-	int fopts = 0;
 
 	/*
 	 * The caller must be holding the rctx's lock.
@@ -781,15 +685,10 @@ start_fetch(resctx_t *rctx) {
 
 	REQUIRE(rctx->fetch == NULL);
 
-	if (!rctx->want_cdflag)
-		fopts |= DNS_FETCHOPT_NOCDFLAG;
-	if (!rctx->want_validation)
-		fopts |= DNS_FETCHOPT_NOVALIDATE;
-
 	result = dns_resolver_createfetch(rctx->view->resolver,
 					  dns_fixedname_name(&rctx->name),
 					  rctx->type,
-					  NULL, NULL, NULL, fopts,
+					  NULL, NULL, NULL, 0,
 					  rctx->task, fetch_done, rctx,
 					  rctx->rdataset,
 					  rctx->sigrdataset,
@@ -821,7 +720,7 @@ view_find(resctx_t *rctx, dns_db_t **dbp, dns_dbnode_t **nodep,
 static void
 client_resfind(resctx_t *rctx, dns_fetchevent_t *event) {
 	isc_mem_t *mctx;
-	isc_result_t tresult, result = ISC_R_SUCCESS;
+	isc_result_t result, tresult;
 	isc_result_t vresult = ISC_R_SUCCESS;
 	isc_boolean_t want_restart;
 	isc_boolean_t send_event = ISC_FALSE;
@@ -841,6 +740,7 @@ client_resfind(resctx_t *rctx, dns_fetchevent_t *event) {
 
 	mctx = rctx->view->mctx;
 
+	result = ISC_R_SUCCESS;
 	name = dns_fixedname_name(&rctx->name);
 
 	do {
@@ -881,7 +781,6 @@ client_resfind(resctx_t *rctx, dns_fetchevent_t *event) {
 				goto done;
 			}
 		} else {
-			INSIST(event != NULL);
 			INSIST(event->fetch == rctx->fetch);
 			dns_resolver_destroyfetch(&rctx->fetch);
 			db = event->db;
@@ -1065,7 +964,6 @@ client_resfind(resctx_t *rctx, dns_fetchevent_t *event) {
 							      &rctx->rdataset);
 					if (tresult != ISC_R_SUCCESS) {
 						result = tresult;
-						POST(result);
 						break;
 					}
 				}
@@ -1077,7 +975,6 @@ client_resfind(resctx_t *rctx, dns_fetchevent_t *event) {
 				 * implementation).
 				 */
 				result = DNS_R_SERVFAIL; /* better code? */
-				POST(result);
 			} else {
 				ISC_LIST_APPEND(rctx->namelist, ansname, link);
 				ansname = NULL;
@@ -1177,21 +1074,10 @@ client_resfind(resctx_t *rctx, dns_fetchevent_t *event) {
 }
 
 static void
-suspend(isc_task_t *task, isc_event_t *event) {
-	isc_appctx_t *actx = event->ev_arg;
-
-	UNUSED(task);
-
-	isc_app_ctxsuspend(actx);
-	isc_event_free(&event);
-}
-
-static void
 resolve_done(isc_task_t *task, isc_event_t *event) {
 	resarg_t *resarg = event->ev_arg;
 	dns_clientresevent_t *rev = (dns_clientresevent_t *)event;
 	dns_name_t *name;
-	isc_result_t result;
 
 	UNUSED(task);
 
@@ -1210,16 +1096,8 @@ resolve_done(isc_task_t *task, isc_event_t *event) {
 	if (!resarg->canceled) {
 		UNLOCK(&resarg->lock);
 
-		/*
-		 * We may or may not be running.  isc__appctx_onrun will
-		 * fail if we are currently running otherwise we post a
-		 * action to call isc_app_ctxsuspend when we do start
-		 * running.
-		 */
-		result = isc_app_ctxonrun(resarg->actx, resarg->client->mctx,
-					   task, suspend, resarg->actx);
-		if (result == ISC_R_ALREADYRUNNING)
-			isc_app_ctxsuspend(resarg->actx);
+		/* Exit from the internal event loop */
+		isc_app_ctxsuspend(resarg->actx);
 	} else {
 		/*
 		 * We have already exited from the loop (due to some
@@ -1327,11 +1205,11 @@ dns_client_startresolve(dns_client_t *client, dns_name_t *name,
 	dns_view_t *view = NULL;
 	dns_clientresevent_t *event = NULL;
 	resctx_t *rctx = NULL;
-	isc_task_t *tclone = NULL;
+	isc_task_t *clone = NULL;
 	isc_mem_t *mctx;
 	isc_result_t result;
 	dns_rdataset_t *rdataset, *sigrdataset;
-	isc_boolean_t want_dnssec, want_validation, want_cdflag;
+	isc_boolean_t want_dnssec;
 
 	REQUIRE(DNS_CLIENT_VALID(client));
 	REQUIRE(transp != NULL && *transp == NULL);
@@ -1347,16 +1225,14 @@ dns_client_startresolve(dns_client_t *client, dns_name_t *name,
 	rdataset = NULL;
 	sigrdataset = NULL;
 	want_dnssec = ISC_TF((options & DNS_CLIENTRESOPT_NODNSSEC) == 0);
-	want_validation = ISC_TF((options & DNS_CLIENTRESOPT_NOVALIDATE) == 0);
-	want_cdflag = ISC_TF((options & DNS_CLIENTRESOPT_NOCDFLAG) == 0);
 
 	/*
 	 * Prepare some intermediate resources
 	 */
-	tclone = NULL;
-	isc_task_attach(task, &tclone);
+	clone = NULL;
+	isc_task_attach(task, &clone);
 	event = (dns_clientresevent_t *)
-		isc_event_allocate(mctx, tclone, DNS_EVENT_CLIENTRESDONE,
+		isc_event_allocate(mctx, clone, DNS_EVENT_CLIENTRESDONE,
 				   action, arg, sizeof(*event));
 	if (event == NULL) {
 		result = ISC_R_NOMEMORY;
@@ -1404,8 +1280,6 @@ dns_client_startresolve(dns_client_t *client, dns_name_t *name,
 	rctx->restarts = 0;
 	rctx->fetch = NULL;
 	rctx->want_dnssec = want_dnssec;
-	rctx->want_validation = want_validation;
-	rctx->want_cdflag = want_cdflag;
 	ISC_LIST_INIT(rctx->namelist);
 	rctx->event = event;
 
@@ -1415,8 +1289,9 @@ dns_client_startresolve(dns_client_t *client, dns_name_t *name,
 	ISC_LIST_APPEND(client->resctxs, rctx, link);
 	UNLOCK(&client->lock);
 
-	*transp = (dns_clientrestrans_t *)rctx;
 	client_resfind(rctx, NULL);
+
+	*transp = (dns_clientrestrans_t *)rctx;
 
 	return (ISC_R_SUCCESS);
 
@@ -1431,7 +1306,7 @@ dns_client_startresolve(dns_client_t *client, dns_name_t *name,
 	}
 	if (event != NULL)
 		isc_event_free(ISC_EVENT_PTR(&event));
-	isc_task_detach(&tclone);
+	isc_task_detach(&clone);
 	dns_view_detach(&view);
 
 	return (result);
@@ -1493,13 +1368,6 @@ dns_client_destroyrestrans(dns_clientrestrans_t **transp) {
 	mctx = client->mctx;
 	dns_view_detach(&rctx->view);
 
-	/*
-	 * Wait for the lock in client_resfind to be released before
-	 * destroying the lock.
-	 */
-	LOCK(&rctx->lock);
-	UNLOCK(&rctx->lock);
-
 	LOCK(&client->lock);
 
 	INSIST(ISC_LINK_LINKED(rctx, link));
@@ -1532,7 +1400,6 @@ dns_client_addtrustedkey(dns_client_t *client, dns_rdataclass_t rdclass,
 	isc_result_t result;
 	dns_view_t *view = NULL;
 	dst_key_t *dstkey = NULL;
-	dns_keytable_t *secroots = NULL;
 
 	REQUIRE(DNS_CLIENT_VALID(client));
 
@@ -1541,26 +1408,17 @@ dns_client_addtrustedkey(dns_client_t *client, dns_rdataclass_t rdclass,
 				   rdclass, &view);
 	UNLOCK(&client->lock);
 	if (result != ISC_R_SUCCESS)
-		goto cleanup;
-
-	result = dns_view_getsecroots(view, &secroots);
-	if (result != ISC_R_SUCCESS)
-		goto cleanup;
+		return (result);
 
 	result = dst_key_fromdns(keyname, rdclass, keydatabuf, client->mctx,
 				 &dstkey);
 	if (result != ISC_R_SUCCESS)
-		goto cleanup;
+		return (result);
 
-	result = dns_keytable_add(secroots, ISC_FALSE, &dstkey);
+	result = dns_keytable_add(view->secroots, ISC_FALSE, &dstkey);
 
- cleanup:
-	if (dstkey != NULL)
-		dst_key_free(&dstkey);
-	if (view != NULL)
-		dns_view_detach(&view);
-	if (secroots != NULL)
-		dns_keytable_detach(&secroots);
+	dns_view_detach(&view);
+
 	return (result);
 }
 
@@ -1730,7 +1588,7 @@ dns_client_startrequest(dns_client_t *client, dns_message_t *qmessage,
 {
 	isc_result_t result;
 	dns_view_t *view = NULL;
-	isc_task_t *tclone = NULL;
+	isc_task_t *clone = NULL;
 	dns_clientreqevent_t *event = NULL;
 	reqctx_t *ctx = NULL;
 	dns_tsectype_t tsectype = dns_tsectype_none;
@@ -1755,10 +1613,10 @@ dns_client_startrequest(dns_client_t *client, dns_message_t *qmessage,
 	if (result != ISC_R_SUCCESS)
 		return (result);
 
-	tclone = NULL;
-	isc_task_attach(task, &tclone);
+	clone = NULL;
+	isc_task_attach(task, &clone);
 	event = (dns_clientreqevent_t *)
-		isc_event_allocate(client->mctx, tclone,
+		isc_event_allocate(client->mctx, clone,
 				   DNS_EVENT_CLIENTREQDONE,
 				   action, arg, sizeof(*event));
 	if (event == NULL) {
@@ -1817,7 +1675,7 @@ dns_client_startrequest(dns_client_t *client, dns_message_t *qmessage,
 	}
 	if (event != NULL)
 		isc_event_free(ISC_EVENT_PTR(&event));
-	isc_task_detach(&tclone);
+	isc_task_detach(&clone);
 	dns_view_detach(&view);
 
 	return (result);
@@ -1979,21 +1837,8 @@ update_done(isc_task_t *task, isc_event_t *event) {
 	LOCK(&uctx->lock);
 	uctx->currentserver = ISC_LIST_NEXT(uctx->currentserver, link);
 	dns_request_destroy(&uctx->updatereq);
-	/*
-	 * Moving on to the next server shouldn't change the result
-	 * for NXDOMAIN, YXDOMAIN, NXRRSET and YXRRSET as they
-	 * indicate a prerequisite failure.  REFUSED should also
-	 * be consistent across all servers but often isn't as that
-	 * is policy rather that zone content driven (slaves that
-	 * aren't willing to forward should return NOTIMPL).  NOTZONE
-	 * indicates that we stuffed up the request construction so
-	 * don't retry.
-	 */
-	if (result != ISC_R_SUCCESS && result != DNS_R_NXDOMAIN &&
-	    result != DNS_R_YXDOMAIN && result != DNS_R_YXRRSET &&
-	    result != DNS_R_NXRRSET && result != DNS_R_NOTZONE &&
-	    !uctx->canceled && uctx->currentserver != NULL)
-	{
+	if (result != ISC_R_SUCCESS && !uctx->canceled &&
+	    uctx->currentserver != NULL) {
 		dns_message_renderreset(uctx->updatemsg);
 		dns_message_settsigkey(uctx->updatemsg, NULL);
 
@@ -2142,9 +1987,8 @@ resolveaddr_done(isc_task_t *task, isc_event_t *event) {
 				switch (family) {
 				case AF_INET:
 					dns_rdataset_current(rdataset, &rdata);
-					result = dns_rdata_tostruct(&rdata, &rdata_a,
-								    NULL);
-					RUNTIME_CHECK(result == ISC_R_SUCCESS);
+					dns_rdata_tostruct(&rdata, &rdata_a,
+							   NULL);
 					isc_sockaddr_fromin(sa,
 							    &rdata_a.in_addr,
 							    53);
@@ -2152,9 +1996,8 @@ resolveaddr_done(isc_task_t *task, isc_event_t *event) {
 					break;
 				case AF_INET6:
 					dns_rdataset_current(rdataset, &rdata);
-					result = dns_rdata_tostruct(&rdata, &rdata_aaaa,
-								    NULL);
-					RUNTIME_CHECK(result == ISC_R_SUCCESS);
+					dns_rdata_tostruct(&rdata, &rdata_aaaa,
+							   NULL);
 					isc_sockaddr_fromin6(sa,
 							     &rdata_aaaa.in6_addr,
 							     53);
@@ -2277,7 +2120,6 @@ receive_soa(isc_task_t *task, isc_event_t *event) {
 	reqev = (dns_requestevent_t *)event;
 	request = reqev->request;
 	result = eresult = reqev->result;
-	POST(result);
 	uctx = reqev->ev_arg;
 	client = uctx->client;
 	soaquery = uctx->soaquery;
@@ -2324,7 +2166,6 @@ receive_soa(isc_task_t *task, isc_event_t *event) {
 	}
 
 	section = DNS_SECTION_ANSWER;
-	POST(section);
 
 	if (rcvmsg->rcode != dns_rcode_noerror &&
 	    rcvmsg->rcode != dns_rcode_nxdomain) {
@@ -2618,6 +2459,7 @@ copy_name(isc_mem_t *mctx, dns_message_t *msg, dns_name_t *name,
 		result = dns_message_gettemprdataset(msg, &newrdataset);
 		if (result != ISC_R_SUCCESS)
 			goto fail;
+		dns_rdataset_init(newrdataset);
 		dns_rdatalist_tordataset(rdatalist, newrdataset);
 
 		ISC_LIST_APPEND(newname->list, newrdataset, link);
@@ -2745,46 +2587,6 @@ dns_client_update(dns_client_t *client, dns_rdataclass_t rdclass,
 	return (result);
 }
 
-static void
-startupdate(isc_task_t *task, isc_event_t *event) {
-	updatectx_t *uctx;
-	isc_result_t result;
-	unsigned int resoptions;
-
-	REQUIRE(event != NULL);
-
-	UNUSED(task);
-
-	uctx = event->ev_arg;
-
-	if (uctx->zonename != NULL && uctx->currentserver != NULL) {
-		result = send_update(uctx);
-		if (result != ISC_R_SUCCESS)
-			goto fail;
-	} else if (uctx->currentserver != NULL) {
-		result = request_soa(uctx);
-		if (result != ISC_R_SUCCESS)
-			goto fail;
-	} else {
-		resoptions = 0;
-		dns_name_clone(uctx->firstname, &uctx->soaqname);
-		result = dns_client_startresolve(uctx->client, &uctx->soaqname,
-						 uctx->rdclass,
-						 dns_rdatatype_soa, resoptions,
-						 uctx->client->task,
-						 resolvesoa_done, uctx,
-						 &uctx->restrans);
-		if (result != ISC_R_SUCCESS)
-			goto fail;
-	}
-
-	isc_event_free(&event);
-
-fail:
-	if (result != ISC_R_SUCCESS)
-		update_sendevent(uctx, result);
-}
-
 isc_result_t
 dns_client_startupdate(dns_client_t *client, dns_rdataclass_t rdclass,
 		       dns_name_t *zonename, dns_namelist_t *prerequisites,
@@ -2797,7 +2599,7 @@ dns_client_startupdate(dns_client_t *client, dns_rdataclass_t rdclass,
 	isc_result_t result;
 	dns_name_t *name, *newname;
 	updatectx_t *uctx;
-	isc_task_t *tclone = NULL;
+	isc_task_t *clone = NULL;
 	dns_section_t section = DNS_SECTION_UPDATE;
 	isc_sockaddr_t *server, *sa = NULL;
 	dns_tsectype_t tsectype = dns_tsectype_none;
@@ -2822,25 +2624,20 @@ dns_client_startupdate(dns_client_t *client, dns_rdataclass_t rdclass,
 	if (result != ISC_R_SUCCESS)
 		return (result);
 
-	/*
-	 * Create a context and prepare some resources.
-	 */
-
+	/* Create a context and prepare some resources */
 	uctx = isc_mem_get(client->mctx, sizeof(*uctx));
 	if (uctx == NULL) {
 		dns_view_detach(&view);
 		return (ISC_R_NOMEMORY);
 	}
-
 	result = isc_mutex_init(&uctx->lock);
 	if (result != ISC_R_SUCCESS) {
 		dns_view_detach(&view);
 		isc_mem_put(client->mctx, uctx, sizeof(*uctx));
 		return (ISC_R_NOMEMORY);
 	}
-
-	tclone = NULL;
-	isc_task_attach(task, &tclone);
+	clone = NULL;
+	isc_task_attach(task, &clone);
 	uctx->client = client;
 	ISC_LINK_INIT(uctx, link);
 	uctx->state = dns_clientupdatestate_prepare;
@@ -2867,7 +2664,7 @@ dns_client_startupdate(dns_client_t *client, dns_rdataclass_t rdclass,
 	if (tsec != NULL)
 		dns_tsec_getkey(tsec, &uctx->tsigkey);
 	uctx->event = (dns_clientupdateevent_t *)
-		isc_event_allocate(client->mctx, tclone, DNS_EVENT_UPDATEDONE,
+		isc_event_allocate(client->mctx, clone, DNS_EVENT_UPDATEDONE,
 				   action, arg, sizeof(*uctx->event));
 	if (uctx->event == NULL)
 		goto fail;
@@ -2939,12 +2736,28 @@ dns_client_startupdate(dns_client_t *client, dns_rdataclass_t rdclass,
 	ISC_LIST_APPEND(client->updatectxs, uctx, link);
 	UNLOCK(&client->lock);
 
+	if (uctx->zonename != NULL && uctx->currentserver != NULL) {
+		result = send_update(uctx);
+		if (result != ISC_R_SUCCESS)
+			goto fail;
+	} else if (uctx->currentserver != NULL) {
+		result = request_soa(uctx);
+		if (result != ISC_R_SUCCESS)
+			goto fail;
+	} else {
+		dns_name_clone(uctx->firstname, &uctx->soaqname);
+		result = dns_client_startresolve(uctx->client, &uctx->soaqname,
+						 uctx->rdclass,
+						 dns_rdatatype_soa, 0,
+						 client->task, resolvesoa_done,
+						 uctx, &uctx->restrans);
+		if (result != ISC_R_SUCCESS)
+			goto fail;
+	}
+
 	*transp = (dns_clientupdatetrans_t *)uctx;
-	result = isc_app_ctxonrun(client->actx, client->mctx, client->task,
-				  startupdate, uctx);
-	if (result == ISC_R_SUCCESS)
-		return (result);
-	*transp = NULL;
+
+	return (ISC_R_SUCCESS);
 
  fail:
 	if (ISC_LINK_LINKED(uctx, link)) {
@@ -2962,7 +2775,7 @@ dns_client_startupdate(dns_client_t *client, dns_rdataclass_t rdclass,
 		isc_event_free(ISC_EVENT_PTR(&uctx->event));
 	if (uctx->tsigkey != NULL)
 		dns_tsigkey_detach(&uctx->tsigkey);
-	isc_task_detach(&tclone);
+	isc_task_detach(&clone);
 	DESTROYLOCK(&uctx->lock);
 	uctx->magic = 0;
 	isc_mem_put(client->mctx, uctx, sizeof(*uctx));
@@ -2988,9 +2801,9 @@ dns_client_cancelupdate(dns_clientupdatetrans_t *trans) {
 		if (uctx->soareq != NULL)
 			dns_request_cancel(uctx->soareq);
 		if (uctx->restrans != NULL)
-			dns_client_cancelresolve(uctx->restrans);
+			dns_client_cancelresolve(&uctx->restrans);
 		if (uctx->restrans2 != NULL)
-			dns_client_cancelresolve(uctx->restrans2);
+			dns_client_cancelresolve(&uctx->restrans2);
 	}
 
 	UNLOCK(&uctx->lock);
@@ -3058,7 +2871,7 @@ typedef struct {
 	dns_rdata_t	rdata;
 	size_t		size;
 	isc_mem_t *	mctx;
-	unsigned char	data[FLEXIBLE_ARRAY_MEMBER];
+	unsigned char	data[0];
 } dns_client_updaterec_t;
 
 isc_result_t
@@ -3068,8 +2881,9 @@ dns_client_updaterec(dns_client_updateop_t op, dns_name_t *owner,
 		     dns_rdataset_t *rdataset, dns_rdatalist_t *rdatalist,
 		     dns_rdata_t *rdata, isc_mem_t *mctx)
 {
-	dns_client_updaterec_t *updaterec = NULL;
-	size_t size = offsetof(dns_client_updaterec_t, data);
+	dns_client_updaterec_t *updaterec;
+	size_t size = sizeof(dns_client_updaterec_t);
+	isc_buffer_t *b = NULL;
 
 	REQUIRE(op < updateop_max);
 	REQUIRE(owner != NULL);
@@ -3098,17 +2912,16 @@ dns_client_updaterec(dns_client_updateop_t op, dns_name_t *owner,
 		dns_rdataset_init(rdataset);
 		dns_rdatalist_init(&updaterec->rdatalist);
 		dns_rdata_init(&updaterec->rdata);
-		isc_buffer_init(&updaterec->buffer, updaterec->data,
-				(unsigned int)
-				(size -
-				 offsetof(dns_client_updaterec_t, data)));
-		dns_name_copy(owner, target, &updaterec->buffer);
+		isc_buffer_init(b, b + 1,
+				size - sizeof(dns_client_updaterec_t));
+		dns_name_copy(owner, target, b);
 		if (source != NULL) {
 			isc_region_t r;
 			dns_rdata_clone(source, rdata);
 			dns_rdata_toregion(rdata, &r);
-			rdata->data = isc_buffer_used(&updaterec->buffer);
-			isc_buffer_copyregion(&updaterec->buffer, &r);
+			rdata->data = isc_buffer_used(b);
+			isc_buffer_copyregion(b, &r);
+
 		}
 		updaterec->mctx = NULL;
 		isc_mem_attach(mctx, &updaterec->mctx);
@@ -3148,9 +2961,9 @@ dns_client_updaterec(dns_client_updateop_t op, dns_name_t *owner,
 	ISC_LIST_APPEND(rdatalist->rdata, rdata, link);
 	dns_rdatalist_tordataset(rdatalist, rdataset);
 	ISC_LIST_APPEND(target->list, rdataset, link);
-	if (updaterec != NULL) {
+	if (b != NULL) {
 		target->attributes |= DNS_NAMEATTR_HASUPDATEREC;
-		dns_name_setbuffer(target, &updaterec->buffer);
+		dns_name_setbuffer(target, b);
 	}
 	if (op == updateop_add || op == updateop_delete)
 		target->attributes |= DNS_NAMEATTR_UPDATE;

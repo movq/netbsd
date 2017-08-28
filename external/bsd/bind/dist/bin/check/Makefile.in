@@ -1,4 +1,4 @@
-# Copyright (C) 2004-2007, 2009, 2012, 2014-2016  Internet Systems Consortium, Inc. ("ISC")
+# Copyright (C) 2004-2007  Internet Systems Consortium, Inc. ("ISC")
 # Copyright (C) 2000-2003  Internet Software Consortium.
 #
 # Permission to use, copy, modify, and/or distribute this software for any
@@ -13,26 +13,25 @@
 # OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR
 # PERFORMANCE OF THIS SOFTWARE.
 
-# Id: Makefile.in,v 1.36 2009/12/05 23:31:40 each Exp 
+# Id: Makefile.in,v 1.32 2007/06/19 23:46:59 tbox Exp
 
 srcdir =	@srcdir@
 VPATH =		@srcdir@
 top_srcdir =	@top_srcdir@
 
-VERSION=@BIND9_VERSION@
+@BIND9_VERSION@
 
 @BIND9_MAKE_INCLUDES@
 
 CINCLUDES =	${BIND9_INCLUDES} ${DNS_INCLUDES} ${ISCCFG_INCLUDES} \
-		${ISC_INCLUDES} @DST_OPENSSL_INC@
+		${ISC_INCLUDES}
 
-CDEFINES = 	@CRYPTO@ -DNAMED_CONFFILE=\"${sysconfdir}/named.conf\"
+CDEFINES = 	-DNAMED_CONFFILE=\"${sysconfdir}/named.conf\"
 CWARNINGS =
 
 DNSLIBS =	../../lib/dns/libdns.@A@ @DNS_CRYPTO_LIBS@
 ISCCFGLIBS =	../../lib/isccfg/libisccfg.@A@
 ISCLIBS =	../../lib/isc/libisc.@A@
-ISCNOSYMLIBS =	../../lib/isc/libisc-nosymtbl.@A@
 BIND9LIBS =	../../lib/bind9/libbind9.@A@
 
 DNSDEPLIBS =	../../lib/dns/libdns.@A@
@@ -40,8 +39,7 @@ ISCCFGDEPLIBS =	../../lib/isccfg/libisccfg.@A@
 ISCDEPLIBS =	../../lib/isc/libisc.@A@
 BIND9DEPLIBS =	../../lib/bind9/libbind9.@A@
 
-LIBS =		${ISCLIBS} @LIBS@
-NOSYMLIBS =	${ISCNOSYMLIBS} @LIBS@
+LIBS =		@LIBS@
 
 SUBDIRS =
 
@@ -70,15 +68,15 @@ named-checkzone.@O@: named-checkzone.c
 		-c ${srcdir}/named-checkzone.c
 
 named-checkconf@EXEEXT@: named-checkconf.@O@ check-tool.@O@ ${ISCDEPLIBS} \
-		${DNSDEPLIBS} ${ISCCFGDEPLIBS} ${BIND9DEPLIBS}
-	export BASEOBJS="named-checkconf.@O@ check-tool.@O@"; \
-	export LIBS0="${BIND9LIBS} ${ISCCFGLIBS} ${DNSLIBS}"; \
-	${FINALBUILDCMD}
+		${ISCCFGDEPLIBS} ${BIND9DEPLIBS}
+	${LIBTOOL_MODE_LINK} ${PURIFY} ${CC} ${CFLAGS} ${LDFLAGS} -o $@ \
+	named-checkconf.@O@ check-tool.@O@ ${BIND9LIBS} ${ISCCFGLIBS} \
+	${DNSLIBS} ${ISCLIBS} ${LIBS}
 
 named-checkzone@EXEEXT@: named-checkzone.@O@ check-tool.@O@ ${ISCDEPLIBS} ${DNSDEPLIBS}
-	export BASEOBJS="named-checkzone.@O@ check-tool.@O@"; \
-	export LIBS0="${ISCCFGLIBS} ${DNSLIBS}"; \
-	${FINALBUILDCMD}
+	${LIBTOOL_MODE_LINK} ${PURIFY} ${CC} ${CFLAGS} ${LDFLAGS} -o $@ \
+	named-checkzone.@O@ check-tool.@O@ ${ISCCFGLIBS} ${DNSLIBS} \
+	${ISCLIBS} ${LIBS}
 
 doc man:: ${MANOBJS}
 
@@ -95,13 +93,6 @@ install:: named-checkconf@EXEEXT@ named-checkzone@EXEEXT@ installdirs
 	(cd ${DESTDIR}${sbindir}; rm -f named-compilezone@EXEEXT@; ${LINK_PROGRAM} named-checkzone@EXEEXT@ named-compilezone@EXEEXT@)
 	for m in ${MANPAGES}; do ${INSTALL_DATA} ${srcdir}/$$m ${DESTDIR}${mandir}/man8; done
 	(cd ${DESTDIR}${mandir}/man8; rm -f named-compilezone.8; ${LINK_PROGRAM} named-checkzone.8 named-compilezone.8)
-
-uninstall::
-	rm -f ${DESTDIR}${mandir}/man8/named-compilezone.8
-	for m in ${MANPAGES}; do rm -f ${DESTDIR}${mandir}/man8/$$m ; done
-	rm -f ${DESTDIR}${sbindir}/named-compilezone@EXEEXT@
-	${LIBTOOL_MODE_UNINSTALL} rm -f ${DESTDIR}${sbindir}/named-checkconf@EXEEXT@
-	${LIBTOOL_MODE_UNINSTALL} rm -f ${DESTDIR}${sbindir}/named-checkzone@EXEEXT@
 
 clean distclean::
 	rm -f ${TARGETS} r1.htm

@@ -1,7 +1,7 @@
-/*	$NetBSD: stdtime.h,v 1.5 2014/12/10 04:38:01 christos Exp $	*/
+/*	$NetBSD: stdtime.h,v 1.1 2009/03/22 15:02:23 christos Exp $	*/
 
 /*
- * Copyright (C) 2004, 2005, 2007, 2011, 2012  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2004, 2005, 2007  Internet Systems Consortium, Inc. ("ISC")
  * Copyright (C) 1999-2001  Internet Software Consortium.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -17,7 +17,7 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* Id */
+/* Id: stdtime.h,v 1.14 2007/06/19 23:47:19 tbox Exp */
 
 #ifndef ISC_STDTIME_H
 #define ISC_STDTIME_H 1
@@ -33,10 +33,6 @@
  * about its size.
  */
 typedef isc_uint32_t isc_stdtime_t;
-
-/* but this flag helps... */
-#define STDTIME_ON_32BITS	1
-
 /*
  * isc_stdtime32_t is a 32-bit version of isc_stdtime_t.  A variable of this
  * type should only be used as an opaque integer (e.g.,) to compare two

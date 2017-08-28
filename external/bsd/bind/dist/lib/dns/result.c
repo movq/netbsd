@@ -1,7 +1,7 @@
-/*	$NetBSD: result.c,v 1.8 2017/06/15 15:59:40 christos Exp $	*/
+/*	$NetBSD: result.c,v 1.1 2009/03/22 15:01:27 christos Exp $	*/
 
 /*
- * Copyright (C) 2004, 2005, 2007-2013, 2015, 2016  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2004, 2005, 2007, 2008  Internet Systems Consortium, Inc. ("ISC")
  * Copyright (C) 1998-2003  Internet Software Consortium.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -17,7 +17,7 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* Id */
+/* Id: result.c,v 1.125 2008/09/25 04:02:38 tbox Exp */
 
 /*! \file */
 
@@ -107,7 +107,7 @@ static const char *text[DNS_R_NRESULTS] = {
 	"no valid RRSIG",		       /*%< 59 DNS_R_NOVALIDSIG */
 
 	"no valid NSEC",		       /*%< 60 DNS_R_NOVALIDNSEC */
-	"insecurity proof failed",	       /*%< 61 DNS_R_NOTINSECURE */
+	"not insecure",			       /*%< 61 DNS_R_NOTINSECURE */
 	"unknown service",		       /*%< 62 DNS_R_UNKNOWNSERVICE */
 	"recoverable error occurred",	       /*%< 63 DNS_R_RECOVERABLE */
 	"unknown opt attribute record",	       /*%< 64 DNS_R_UNKNOWNOPT */
@@ -159,26 +159,10 @@ static const char *text[DNS_R_NRESULTS] = {
 	"MX is an address",		       /*%< 102 DNS_R_MXISADDRESS */
 	"duplicate query",		       /*%< 103 DNS_R_DUPLICATE */
 	"invalid NSEC3 owner name (wildcard)", /*%< 104 DNS_R_INVALIDNSEC3 */
-
-	"not master",			       /*%< 105 DNS_R_NOTMASTER */
-	"broken trust chain",		       /*%< 106 DNS_R_BROKENCHAIN */
-	"expired",			       /*%< 107 DNS_R_EXPIRED */
-	"not dynamic",			       /*%< 108 DNS_R_NOTDYNAMIC */
-	"bad EUI",			       /*%< 109 DNS_R_BADEUI */
-
-	"covered by negative trust anchor",    /*%< 110 DNS_R_NTACOVERED */
-	"bad CDS",			       /*%< 111 DNS_R_BADCSD */
-	"bad CDNSKEY",			       /*%< 112 DNS_R_BADCDNSKEY */
-	"malformed OPT option",		       /*%< 113 DNS_R_OPTERR */
-	"malformed DNSTAP data",	       /*%< 114 DNS_R_BADDNSTAP */
-
-	"TSIG in wrong location",	       /*%< 115 DNS_R_BADTSIG */
-	"SIG(0) in wrong location",	       /*%< 116 DNS_R_BADSIG0 */
-	"too many records",	               /*%< 117 DNS_R_TOOMANYRECORDS */
 };
 
 static const char *rcode_text[DNS_R_NRCODERESULTS] = {
-	"NOERROR",				/*%< 0 DNS_R_NOERROR */
+	"NOERROR",				/*%< 0 DNS_R_NOEROR */
 	"FORMERR",				/*%< 1 DNS_R_FORMERR */
 	"SERVFAIL",				/*%< 2 DNS_R_SERVFAIL */
 	"NXDOMAIN",				/*%< 3 DNS_R_NXDOMAIN */
@@ -250,7 +234,6 @@ dns_result_torcode(isc_result_t result) {
 		 */
 		return ((dns_rcode_t)((result) & 0xFFF));
 	}
-
 	/*
 	 * Try to supply an appropriate rcode.
 	 */
@@ -279,8 +262,6 @@ dns_result_torcode(isc_result_t result) {
 	case DNS_R_TOOMANYHOPS:
 	case DNS_R_TSIGERRORSET:
 	case DNS_R_UNKNOWN:
-	case DNS_R_NAMETOOLONG:
-	case DNS_R_OPTERR:
 		rcode = dns_rcode_formerr;
 		break;
 	case DNS_R_DISALLOWED:

@@ -1,7 +1,7 @@
-/*	$NetBSD: rrsig_46.c,v 1.9 2016/05/26 16:49:59 christos Exp $	*/
+/*	$NetBSD: rrsig_46.c,v 1.1 2009/03/22 15:01:55 christos Exp $	*/
 
 /*
- * Copyright (C) 2004, 2005, 2007, 2009, 2011-2015  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2004, 2005, 2007  Internet Systems Consortium, Inc. ("ISC")
  * Copyright (C) 2003  Internet Software Consortium.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -17,7 +17,7 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* Id */
+/* Id: rrsig_46.c,v 1.10 2007/06/19 23:47:17 tbox Exp */
 
 /* Reviewed: Fri Mar 17 09:05:02 PST 2000 by gson */
 
@@ -40,7 +40,7 @@ fromtext_rrsig(ARGS_FROMTEXT) {
 	isc_buffer_t buffer;
 	isc_uint32_t time_signed, time_expire;
 
-	REQUIRE(type == dns_rdatatype_rrsig);
+	REQUIRE(type == 46);
 
 	UNUSED(type);
 	UNUSED(rdclass);
@@ -92,20 +92,7 @@ fromtext_rrsig(ARGS_FROMTEXT) {
 	 */
 	RETERR(isc_lex_getmastertoken(lexer, &token, isc_tokentype_string,
 				      ISC_FALSE));
-	if (strlen(DNS_AS_STR(token)) <= 10U &&
-	    *DNS_AS_STR(token) != '-' && *DNS_AS_STR(token) != '+') {
-		char *end;
-		unsigned long u;
-		isc_uint64_t u64;
-
-		u64 = u = strtoul(DNS_AS_STR(token), &end, 10);
-		if (u == ULONG_MAX || *end != 0)
-			RETTOK(DNS_R_SYNTAX);
-		if (u64 > 0xffffffffUL)
-			RETTOK(ISC_R_RANGE);
-		time_expire = u;
-	} else
-		RETTOK(dns_time32_fromtext(DNS_AS_STR(token), &time_expire));
+	RETTOK(dns_time32_fromtext(DNS_AS_STR(token), &time_expire));
 	RETERR(uint32_tobuffer(time_expire, target));
 
 	/*
@@ -113,20 +100,7 @@ fromtext_rrsig(ARGS_FROMTEXT) {
 	 */
 	RETERR(isc_lex_getmastertoken(lexer, &token, isc_tokentype_string,
 				      ISC_FALSE));
-	if (strlen(DNS_AS_STR(token)) <= 10U &&
-	    *DNS_AS_STR(token) != '-' && *DNS_AS_STR(token) != '+') {
-		char *end;
-		unsigned long u;
-		isc_uint64_t u64;
-
-		u64 = u = strtoul(DNS_AS_STR(token), &end, 10);
-		if (u == ULONG_MAX || *end != 0)
-			RETTOK(DNS_R_SYNTAX);
-		if (u64 > 0xffffffffUL)
-			RETTOK(ISC_R_RANGE);
-		time_signed = u;
-	} else
-		RETTOK(dns_time32_fromtext(DNS_AS_STR(token), &time_signed));
+	RETTOK(dns_time32_fromtext(DNS_AS_STR(token), &time_signed));
 	RETERR(uint32_tobuffer(time_signed, target));
 
 	/*
@@ -143,8 +117,7 @@ fromtext_rrsig(ARGS_FROMTEXT) {
 				      ISC_FALSE));
 	dns_name_init(&name, NULL);
 	buffer_fromregion(&buffer, &token.value.as_region);
-	if (origin == NULL)
-		origin = dns_rootname;
+	origin = (origin != NULL) ? origin : dns_rootname;
 	RETTOK(dns_name_fromtext(&name, &buffer, origin, options, target));
 
 	/*
@@ -163,8 +136,10 @@ totext_rrsig(ARGS_TOTEXT) {
 	unsigned long exp;
 	unsigned long foot;
 	dns_name_t name;
+	dns_name_t prefix;
+	isc_boolean_t sub;
 
-	REQUIRE(rdata->type == dns_rdatatype_rrsig);
+	REQUIRE(rdata->type == 46);
 	REQUIRE(rdata->length != 0);
 
 	dns_rdata_toregion(rdata, &sr);
@@ -181,6 +156,7 @@ totext_rrsig(ARGS_TOTEXT) {
 	if (dns_rdatatype_isknown(covered) && covered != 0) {
 		RETERR(dns_rdatatype_totext(covered, target));
 	} else {
+		char buf[sizeof("TYPE65535")];
 		sprintf(buf, "TYPE%u", covered);
 		RETERR(str_totext(buf, target));
 	}
@@ -209,10 +185,7 @@ totext_rrsig(ARGS_TOTEXT) {
 	isc_region_consume(&sr, 4);
 	sprintf(buf, "%lu", ttl);
 	RETERR(str_totext(buf, target));
-
-	if ((tctx->flags & DNS_STYLEFLAG_MULTILINE) != 0)
-		RETERR(str_totext(" (", target));
-	RETERR(str_totext(tctx->linebreak, target));
+	RETERR(str_totext(" ", target));
 
 	/*
 	 * Sig exp.
@@ -220,7 +193,10 @@ totext_rrsig(ARGS_TOTEXT) {
 	exp = uint32_fromregion(&sr);
 	isc_region_consume(&sr, 4);
 	RETERR(dns_time32_totext(exp, target));
-	RETERR(str_totext(" ", target));
+
+	if ((tctx->flags & DNS_STYLEFLAG_MULTILINE) != 0)
+		RETERR(str_totext(" (", target));
+	RETERR(str_totext(tctx->linebreak, target));
 
 	/*
 	 * Time signed.
@@ -243,23 +219,18 @@ totext_rrsig(ARGS_TOTEXT) {
 	 * Signer.
 	 */
 	dns_name_init(&name, NULL);
+	dns_name_init(&prefix, NULL);
 	dns_name_fromregion(&name, &sr);
 	isc_region_consume(&sr, name_length(&name));
-	RETERR(dns_name_totext(&name, ISC_FALSE, target));
+	sub = name_prefix(&name, tctx->origin, &prefix);
+	RETERR(dns_name_totext(&prefix, sub, target));
 
 	/*
 	 * Sig.
 	 */
 	RETERR(str_totext(tctx->linebreak, target));
-	if ((tctx->flags & DNS_STYLEFLAG_NOCRYPTO) == 0) {
-		if (tctx->width == 0)   /* No splitting */
-			RETERR(isc_base64_totext(&sr, 60, "", target));
-		else
-			RETERR(isc_base64_totext(&sr, tctx->width - 2,
-						 tctx->linebreak, target));
-	} else
-		RETERR(str_totext("[omitted]", target));
-
+	RETERR(isc_base64_totext(&sr, tctx->width - 2,
+				    tctx->linebreak, target));
 	if ((tctx->flags & DNS_STYLEFLAG_MULTILINE) != 0)
 		RETERR(str_totext(" )", target));
 
@@ -271,7 +242,7 @@ fromwire_rrsig(ARGS_FROMWIRE) {
 	isc_region_t sr;
 	dns_name_t name;
 
-	REQUIRE(type == dns_rdatatype_rrsig);
+	REQUIRE(type == 46);
 
 	UNUSED(type);
 	UNUSED(rdclass);
@@ -314,7 +285,7 @@ towire_rrsig(ARGS_TOWIRE) {
 	dns_name_t name;
 	dns_offsets_t offsets;
 
-	REQUIRE(rdata->type == dns_rdatatype_rrsig);
+	REQUIRE(rdata->type == 46);
 	REQUIRE(rdata->length != 0);
 
 	dns_compress_setmethods(cctx, DNS_COMPRESS_NONE);
@@ -352,7 +323,7 @@ compare_rrsig(ARGS_COMPARE) {
 
 	REQUIRE(rdata1->type == rdata2->type);
 	REQUIRE(rdata1->rdclass == rdata2->rdclass);
-	REQUIRE(rdata1->type == dns_rdatatype_rrsig);
+	REQUIRE(rdata1->type == 46);
 	REQUIRE(rdata1->length != 0);
 	REQUIRE(rdata2->length != 0);
 
@@ -365,7 +336,7 @@ static inline isc_result_t
 fromstruct_rrsig(ARGS_FROMSTRUCT) {
 	dns_rdata_rrsig_t *sig = source;
 
-	REQUIRE(type == dns_rdatatype_rrsig);
+	REQUIRE(type == 46);
 	REQUIRE(source != NULL);
 	REQUIRE(sig->common.rdtype == type);
 	REQUIRE(sig->common.rdclass == rdclass);
@@ -426,7 +397,7 @@ tostruct_rrsig(ARGS_TOSTRUCT) {
 	dns_rdata_rrsig_t *sig = target;
 	dns_name_t signer;
 
-	REQUIRE(rdata->type == dns_rdatatype_rrsig);
+	REQUIRE(rdata->type == 46);
 	REQUIRE(target != NULL);
 	REQUIRE(rdata->length != 0);
 
@@ -507,7 +478,7 @@ freestruct_rrsig(ARGS_FREESTRUCT) {
 	dns_rdata_rrsig_t *sig = (dns_rdata_rrsig_t *) source;
 
 	REQUIRE(source != NULL);
-	REQUIRE(sig->common.rdtype == dns_rdatatype_rrsig);
+	REQUIRE(sig->common.rdtype == 46);
 
 	if (sig->mctx == NULL)
 		return;
@@ -520,7 +491,7 @@ freestruct_rrsig(ARGS_FREESTRUCT) {
 
 static inline isc_result_t
 additionaldata_rrsig(ARGS_ADDLDATA) {
-	REQUIRE(rdata->type == dns_rdatatype_rrsig);
+	REQUIRE(rdata->type == 46);
 
 	UNUSED(rdata);
 	UNUSED(add);
@@ -532,7 +503,7 @@ additionaldata_rrsig(ARGS_ADDLDATA) {
 static inline isc_result_t
 digest_rrsig(ARGS_DIGEST) {
 
-	REQUIRE(rdata->type == dns_rdatatype_rrsig);
+	REQUIRE(rdata->type == 46);
 
 	UNUSED(rdata);
 	UNUSED(digest);
@@ -546,7 +517,7 @@ covers_rrsig(dns_rdata_t *rdata) {
 	dns_rdatatype_t type;
 	isc_region_t r;
 
-	REQUIRE(rdata->type == dns_rdatatype_rrsig);
+	REQUIRE(rdata->type == 46);
 
 	dns_rdata_toregion(rdata, &r);
 	type = uint16_fromregion(&r);
@@ -557,7 +528,7 @@ covers_rrsig(dns_rdata_t *rdata) {
 static inline isc_boolean_t
 checkowner_rrsig(ARGS_CHECKOWNER) {
 
-	REQUIRE(type == dns_rdatatype_rrsig);
+	REQUIRE(type == 46);
 
 	UNUSED(name);
 	UNUSED(type);
@@ -570,56 +541,13 @@ checkowner_rrsig(ARGS_CHECKOWNER) {
 static inline isc_boolean_t
 checknames_rrsig(ARGS_CHECKNAMES) {
 
-	REQUIRE(rdata->type == dns_rdatatype_rrsig);
+	REQUIRE(rdata->type == 46);
 
 	UNUSED(rdata);
 	UNUSED(owner);
 	UNUSED(bad);
 
 	return (ISC_TRUE);
-}
-
-static inline int
-casecompare_rrsig(ARGS_COMPARE) {
-	isc_region_t r1;
-	isc_region_t r2;
-	dns_name_t name1;
-	dns_name_t name2;
-	int order;
-
-	REQUIRE(rdata1->type == rdata2->type);
-	REQUIRE(rdata1->rdclass == rdata2->rdclass);
-	REQUIRE(rdata1->type == dns_rdatatype_rrsig);
-	REQUIRE(rdata1->length != 0);
-	REQUIRE(rdata2->length != 0);
-
-	dns_rdata_toregion(rdata1, &r1);
-	dns_rdata_toregion(rdata2, &r2);
-
-	INSIST(r1.length > 18);
-	INSIST(r2.length > 18);
-	r1.length = 18;
-	r2.length = 18;
-	order = isc_region_compare(&r1, &r2);
-	if (order != 0)
-		return (order);
-
-	dns_name_init(&name1, NULL);
-	dns_name_init(&name2, NULL);
-	dns_rdata_toregion(rdata1, &r1);
-	dns_rdata_toregion(rdata2, &r2);
-	isc_region_consume(&r1, 18);
-	isc_region_consume(&r2, 18);
-	dns_name_fromregion(&name1, &r1);
-	dns_name_fromregion(&name2, &r2);
-	order = dns_name_rdatacompare(&name1, &name2);
-	if (order != 0)
-		return (order);
-
-	isc_region_consume(&r1, name_length(&name1));
-	isc_region_consume(&r2, name_length(&name2));
-
-	return (isc_region_compare(&r1, &r2));
 }
 
 #endif	/* RDATA_GENERIC_RRSIG_46_C */

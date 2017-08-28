@@ -1,4 +1,4 @@
-/*	$NetBSD: nsap-ptr_23.h,v 1.4 2014/12/10 04:37:59 christos Exp $	*/
+/*	$NetBSD: nsap-ptr_23.h,v 1.1 2009/03/22 15:01:57 christos Exp $	*/
 
 /*
  * Copyright (C) 2004, 2005, 2007  Internet Systems Consortium, Inc. ("ISC")
@@ -20,7 +20,7 @@
 #ifndef IN_1_NSAP_PTR_23_H
 #define IN_1_NSAP_PTR_23_H 1
 
-/* Id: nsap-ptr_23.h,v 1.19 2007/06/19 23:47:17 tbox Exp  */
+/* Id: nsap-ptr_23.h,v 1.19 2007/06/19 23:47:17 tbox Exp */
 
 /*! 
  *  \brief Per RFC1348.  Obsoleted in RFC 1706 - use PTR instead. */

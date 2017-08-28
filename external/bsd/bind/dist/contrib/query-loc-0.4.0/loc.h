@@ -1,6 +1,6 @@
-/*	$NetBSD: loc.h,v 1.5 2016/05/26 16:49:58 christos Exp $	*/
+/*	$NetBSD: loc.h,v 1.1 2009/03/22 14:58:08 christos Exp $	*/
 
-/* Id: loc.h,v 1.1 2008/02/15 01:47:15 marka Exp  */
+/* Id: loc.h,v 1.1 2008/02/15 01:47:15 marka Exp */
 
 #define VERSION "0.4.0"
 
@@ -20,9 +20,6 @@
 #include <string.h>
 #include <signal.h>
 #include <arpa/nameser.h>
-#ifdef HAVE_ARPA_NAMESER_COMPAT_H
-#include <arpa/nameser_compat.h>
-#endif
 #include <resolv.h>
 
 #ifndef FALSE

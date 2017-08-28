@@ -1,10 +1,10 @@
-/*	$NetBSD: comapi.c,v 1.2 2017/06/28 02:46:30 manu Exp $	*/
+/*	$NetBSD: comapi.c,v 1.1 2013/03/24 15:45:52 christos Exp $	*/
+
 /* omapi.c
 
    OMAPI object interfaces for the DHCP server. */
 
 /*
- * Copyright (c) 2012,2014 Internet Systems Consortium, Inc. ("ISC")
  * Copyright (c) 2004-2007,2009 by Internet Systems Consortium, Inc. ("ISC")
  * Copyright (c) 1999-2003 by Internet Software Consortium
  *
@@ -26,10 +26,16 @@
  *   <info@isc.org>
  *   https://www.isc.org/
  *
+ * This software has been written for Internet Systems Consortium
+ * by Ted Lemon in cooperation with Vixie Enterprises and Nominum, Inc.
+ * To learn more about Internet Systems Consortium, see
+ * ``https://www.isc.org/''.  To learn more about Vixie Enterprises,
+ * see ``http://www.vix.com''.   To learn more about Nominum, Inc., see
+ * ``http://www.nominum.com''.
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: comapi.c,v 1.2 2017/06/28 02:46:30 manu Exp $");
+__RCSID("$NetBSD: comapi.c,v 1.1 2013/03/24 15:45:52 christos Exp $");
 
 /* Many, many thanks to Brian Murrell and BCtel for this code - BCtel
    provided the funding that resulted in this code and the entire
@@ -434,7 +440,7 @@ isc_result_t dhcp_group_remove (omapi_object_t *lp,
 
 	status = dhcp_group_destroy ((omapi_object_t *)group, MDL);
 
-	return status;
+	return ISC_R_SUCCESS;
 }
 
 isc_result_t dhcp_control_set_value  (omapi_object_t *h,
@@ -454,8 +460,7 @@ isc_result_t dhcp_control_set_value  (omapi_object_t *h,
 		status = omapi_get_int_value (&newstate, value);
 		if (status != ISC_R_SUCCESS)
 			return status;
-		status = libdhcp_callbacks.dhcp_set_control_state 
-				(control -> state, newstate);
+		status = dhcp_set_control_state (control -> state, newstate);
 		if (status == ISC_R_SUCCESS)
 			control -> state = value -> u.integer;
 		return status;
@@ -511,12 +516,12 @@ isc_result_t dhcp_control_destroy (omapi_object_t *h,
 isc_result_t dhcp_control_signal_handler (omapi_object_t *h,
 					const char *name, va_list ap)
 {
-	/* In this function h should be a (dhcp_control_object_t *) */
-
+	dhcp_control_object_t *control;
 	isc_result_t status;
 
 	if (h -> type != dhcp_type_control)
 		return DHCP_R_INVALIDARG;
+	control = (dhcp_control_object_t *)h;
 
 	/* Try to find some inner object that can take the value. */
 	if (h -> inner && h -> inner -> type -> get_value) {
@@ -572,11 +577,11 @@ isc_result_t dhcp_control_lookup (omapi_object_t **lp,
 		status = omapi_get_value_str (ref, id, "handle", &tv);
 		if (status == ISC_R_SUCCESS) {
 			status = omapi_handle_td_lookup (lp, tv -> value);
-
+			
 			omapi_value_dereference (&tv, MDL);
 			if (status != ISC_R_SUCCESS)
 				return status;
-
+			
 			/* Don't return the object if the type is wrong. */
 			if ((*lp) -> type != dhcp_type_control) {
 				omapi_object_dereference (lp, MDL);
@@ -612,12 +617,12 @@ isc_result_t dhcp_subnet_set_value  (omapi_object_t *h,
 				     omapi_data_string_t *name,
 				     omapi_typed_data_t *value)
 {
-	/* In this function h should be a (struct subnet *) */
-
+	struct subnet *subnet;
 	isc_result_t status;
 
 	if (h -> type != dhcp_type_subnet)
 		return DHCP_R_INVALIDARG;
+	subnet = (struct subnet *)h;
 
 	/* No values to set yet. */
 
@@ -628,7 +633,7 @@ isc_result_t dhcp_subnet_set_value  (omapi_object_t *h,
 		if (status == ISC_R_SUCCESS || status == DHCP_R_UNCHANGED)
 			return status;
 	}
-
+			  
 	return ISC_R_NOTFOUND;
 }
 
@@ -637,12 +642,12 @@ isc_result_t dhcp_subnet_get_value (omapi_object_t *h, omapi_object_t *id,
 				    omapi_data_string_t *name,
 				    omapi_value_t **value)
 {
-	/* In this function h should be a (struct subnet *) */
-
+	struct subnet *subnet;
 	isc_result_t status;
 
 	if (h -> type != dhcp_type_subnet)
 		return DHCP_R_INVALIDARG;
+	subnet = (struct subnet *)h;
 
 	/* No values to get yet. */
 
@@ -658,17 +663,14 @@ isc_result_t dhcp_subnet_get_value (omapi_object_t *h, omapi_object_t *id,
 
 isc_result_t dhcp_subnet_destroy (omapi_object_t *h, const char *file, int line)
 {
-#if defined (DEBUG_MEMORY_LEAKAGE) || \
-		defined (DEBUG_MEMORY_LEAKAGE_ON_EXIT)
 	struct subnet *subnet;
-#endif
 
 	if (h -> type != dhcp_type_subnet)
 		return DHCP_R_INVALIDARG;
+	subnet = (struct subnet *)h;
 
 #if defined (DEBUG_MEMORY_LEAKAGE) || \
 		defined (DEBUG_MEMORY_LEAKAGE_ON_EXIT)
-	subnet = (struct subnet *)h;
 	if (subnet -> next_subnet)
 		subnet_dereference (&subnet -> next_subnet, file, line);
 	if (subnet -> next_sibling)
@@ -688,12 +690,13 @@ isc_result_t dhcp_subnet_destroy (omapi_object_t *h, const char *file, int line)
 isc_result_t dhcp_subnet_signal_handler (omapi_object_t *h,
 					 const char *name, va_list ap)
 {
-	/* In this function h should be a (struct subnet *) */
-
+	struct subnet *subnet;
 	isc_result_t status;
+	int updatep = 0;
 
 	if (h -> type != dhcp_type_subnet)
 		return DHCP_R_INVALIDARG;
+	subnet = (struct subnet *)h;
 
 	/* Can't write subnets yet. */
 
@@ -704,7 +707,8 @@ isc_result_t dhcp_subnet_signal_handler (omapi_object_t *h,
 		if (status == ISC_R_SUCCESS)
 			return status;
 	}
-
+	if (updatep)
+		return ISC_R_SUCCESS;
 	return ISC_R_NOTFOUND;
 }
 
@@ -712,12 +716,12 @@ isc_result_t dhcp_subnet_stuff_values (omapi_object_t *c,
 				       omapi_object_t *id,
 				       omapi_object_t *h)
 {
-	/* In this function h should be a (struct subnet *) */
-
+	struct subnet *subnet;
 	isc_result_t status;
 
 	if (h -> type != dhcp_type_subnet)
 		return DHCP_R_INVALIDARG;
+	subnet = (struct subnet *)h;
 
 	/* Can't stuff subnet values yet. */
 
@@ -762,12 +766,12 @@ isc_result_t dhcp_shared_network_set_value  (omapi_object_t *h,
 					     omapi_data_string_t *name,
 					     omapi_typed_data_t *value)
 {
-	/* In this function h should be a (struct shared_network *) */
-
+	struct shared_network *shared_network;
 	isc_result_t status;
 
 	if (h -> type != dhcp_type_shared_network)
 		return DHCP_R_INVALIDARG;
+	shared_network = (struct shared_network *)h;
 
 	/* No values to set yet. */
 
@@ -778,7 +782,7 @@ isc_result_t dhcp_shared_network_set_value  (omapi_object_t *h,
 		if (status == ISC_R_SUCCESS || status == DHCP_R_UNCHANGED)
 			return status;
 	}
-
+			  
 	return ISC_R_NOTFOUND;
 }
 
@@ -788,12 +792,12 @@ isc_result_t dhcp_shared_network_get_value (omapi_object_t *h,
 					    omapi_data_string_t *name,
 					    omapi_value_t **value)
 {
-	/* In this function h should be a (struct shared_network *) */
-
+	struct shared_network *shared_network;
 	isc_result_t status;
 
 	if (h -> type != dhcp_type_shared_network)
 		return DHCP_R_INVALIDARG;
+	shared_network = (struct shared_network *)h;
 
 	/* No values to get yet. */
 
@@ -810,19 +814,14 @@ isc_result_t dhcp_shared_network_get_value (omapi_object_t *h,
 isc_result_t dhcp_shared_network_destroy (omapi_object_t *h,
 					  const char *file, int line)
 {
-	/* In this function h should be a (struct shared_network *) */
-
-#if defined (DEBUG_MEMORY_LEAKAGE) || \
-    defined (DEBUG_MEMORY_LEAKAGE_ON_EXIT)
 	struct shared_network *shared_network;
-#endif
 
 	if (h -> type != dhcp_type_shared_network)
 		return DHCP_R_INVALIDARG;
+	shared_network = (struct shared_network *)h;
 
 #if defined (DEBUG_MEMORY_LEAKAGE) || \
 		defined (DEBUG_MEMORY_LEAKAGE_ON_EXIT)
-	shared_network = (struct shared_network *)h;
 	if (shared_network -> next)
 		shared_network_dereference (&shared_network -> next,
 					    file, line);
@@ -855,12 +854,13 @@ isc_result_t dhcp_shared_network_signal_handler (omapi_object_t *h,
 						 const char *name,
 						 va_list ap)
 {
-	/* In this function h should be a (struct shared_network *) */
-
+	struct shared_network *shared_network;
 	isc_result_t status;
+	int updatep = 0;
 
 	if (h -> type != dhcp_type_shared_network)
 		return DHCP_R_INVALIDARG;
+	shared_network = (struct shared_network *)h;
 
 	/* Can't write shared_networks yet. */
 
@@ -871,7 +871,8 @@ isc_result_t dhcp_shared_network_signal_handler (omapi_object_t *h,
 		if (status == ISC_R_SUCCESS)
 			return status;
 	}
-
+	if (updatep)
+		return ISC_R_SUCCESS;
 	return ISC_R_NOTFOUND;
 }
 
@@ -879,12 +880,12 @@ isc_result_t dhcp_shared_network_stuff_values (omapi_object_t *c,
 					       omapi_object_t *id,
 					       omapi_object_t *h)
 {
-	/* In this function h should be a (struct shared_network *) */
-
+	struct shared_network *shared_network;
 	isc_result_t status;
 
 	if (h -> type != dhcp_type_shared_network)
 		return DHCP_R_INVALIDARG;
+	shared_network = (struct shared_network *)h;
 
 	/* Can't stuff shared_network values yet. */
 

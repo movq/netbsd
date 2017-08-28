@@ -1,4 +1,4 @@
-/*	$NetBSD: dlz_dlopen_driver.h,v 1.1.1.4 2014/12/10 03:34:25 christos Exp $	*/
+/*	$NetBSD: dlz_dlopen_driver.h,v 1.1 2011/09/11 17:12:22 christos Exp $	*/
 
 /*
  * Copyright (C) 2011  Internet Systems Consortium, Inc. ("ISC")
@@ -16,7 +16,7 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* Id: dlz_dlopen_driver.h,v 1.4 2011/03/17 09:25:53 fdupont Exp  */
+/* Id: dlz_dlopen_driver.h,v 1.4 2011-03-17 09:25:53 fdupont Exp */
 
 #ifndef DLZ_DLOPEN_DRIVER_H
 #define DLZ_DLOPEN_DRIVER_H

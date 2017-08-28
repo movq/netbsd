@@ -1,4 +1,4 @@
-/*	$NetBSD: addrinfo.h,v 1.3 2014/12/10 04:37:56 christos Exp $	*/
+/*	$NetBSD: addrinfo.h,v 1.1 2009/03/22 14:58:11 christos Exp $	*/
 
 /*
  * Copyright (C) 1995, 1996, 1997, 1998, and 1999 WIDE Project.

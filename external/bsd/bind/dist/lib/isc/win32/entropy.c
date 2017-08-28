@@ -1,7 +1,7 @@
-/*	$NetBSD: entropy.c,v 1.6 2014/12/10 04:38:01 christos Exp $	*/
+/*	$NetBSD: entropy.c,v 1.1 2009/03/22 15:02:23 christos Exp $	*/
 
 /*
- * Copyright (C) 2004, 2007, 2009, 2013  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2004, 2007, 2009  Internet Systems Consortium, Inc. ("ISC")
  * Copyright (C) 2000-2002  Internet Software Consortium.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -17,7 +17,7 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* Id: entropy.c,v 1.10 2009/01/18 23:48:14 tbox Exp  */
+/* Id: entropy.c,v 1.8.332.2 2009/01/18 23:47:41 tbox Exp */
 
 /*
  * This is the system dependent part of the ISC entropy API.
@@ -63,17 +63,15 @@ get_from_filesource(isc_entropysource_t *source, isc_uint32_t desired) {
 	added = 0;
 	while (desired > 0) {
 		ndesired = ISC_MIN(desired, sizeof(buf));
-		if (!CryptGenRandom(hcryptprov, (DWORD)ndesired, buf)) {
+		if (!CryptGenRandom(hcryptprov, ndesired, buf)) {
 			CryptReleaseContext(hcryptprov, 0);
 			source->bad = ISC_TRUE;
 			goto out;
 		}
 
-		entropypool_adddata(ent, buf,
-				    (unsigned int)ndesired,
-				    (unsigned int)ndesired * 8);
-		added += (unsigned int)ndesired * 8;
-		desired -= (isc_uint32_t)ndesired;
+		entropypool_adddata(ent, buf, ndesired, ndesired * 8);
+		added += ndesired * 8;
+		desired -= ndesired;
 	}
 
  out:
@@ -246,6 +244,7 @@ isc_entropy_createfilesource(isc_entropy_t *ent, const char *fname) {
 	isc_result_t ret;
 	isc_entropysource_t *source;
 	HCRYPTPROV hcryptprov;
+	DWORD errval;
 	BOOL err;
 
 	REQUIRE(VALID_ENTROPY(ent));
@@ -261,7 +260,7 @@ isc_entropy_createfilesource(isc_entropy_t *ent, const char *fname) {
 	err = CryptAcquireContext(&hcryptprov, NULL, NULL, PROV_RSA_FULL,
 				  CRYPT_VERIFYCONTEXT);
 	if (!err){
-		(void)GetLastError();
+		errval = GetLastError();
 		ret = ISC_R_IOERROR;
 		goto errout;
 	}

@@ -1,7 +1,7 @@
-/*	$NetBSD: stdtime.c,v 1.5 2014/12/10 04:38:01 christos Exp $	*/
+/*	$NetBSD: stdtime.c,v 1.1 2009/03/22 15:02:28 christos Exp $	*/
 
 /*
- * Copyright (C) 2004, 2007, 2013  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2004, 2007  Internet Systems Consortium, Inc. ("ISC")
  * Copyright (C) 1999-2001  Internet Software Consortium.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -17,7 +17,7 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* Id: stdtime.c,v 1.12 2007/06/19 23:47:19 tbox Exp  */
+/* Id: stdtime.c,v 1.12 2007/06/19 23:47:19 tbox Exp */
 
 #include <config.h>
 
@@ -35,5 +35,5 @@ isc_stdtime_get(isc_stdtime_t *t) {
 
 	REQUIRE(t != NULL);
 
-	(void)_time32(t);
+	(void)time(t);
 }

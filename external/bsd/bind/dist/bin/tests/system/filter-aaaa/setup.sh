@@ -1,6 +1,6 @@
 #!/bin/sh
 #
-# Copyright (C) 2010, 2012, 2014  Internet Systems Consortium, Inc. ("ISC")
+# Copyright (C) 2010  Internet Systems Consortium, Inc. ("ISC")
 #
 # Permission to use, copy, modify, and/or distribute this software for any
 # purpose with or without fee is hereby granted, provided that the above
@@ -14,24 +14,11 @@
 # OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR
 # PERFORMANCE OF THIS SOFTWARE.
 
-SYSTEMTESTTOP=..
-. $SYSTEMTESTTOP/conf.sh
+# Id: setup.sh,v 1.2.2.2 2010/06/22 04:02:41 marka Exp
 
-$SHELL clean.sh
+sh clean.sh
 
-test -r $RANDFILE || $GENRANDOM 400 $RANDFILE
+../../../tools/genrandom 400 random.data
 
-cp ns1/named1.conf ns1/named.conf
-cp ns2/named1.conf ns2/named.conf
-cp ns3/named1.conf ns3/named.conf
-cp ns4/named1.conf ns4/named.conf
-
-if $SHELL ../testcrypto.sh -q
-then
-	(cd ns1 && $SHELL -e sign.sh)
-	(cd ns4 && $SHELL -e sign.sh)
-else
-	echo "I:using pre-signed zones"
-	cp -f ns1/signed.db.presigned ns1/signed.db.signed
-	cp -f ns4/signed.db.presigned ns4/signed.db.signed
-fi
+(cd ns1 && sh -e sign.sh)
+(cd ns4 && sh -e sign.sh)

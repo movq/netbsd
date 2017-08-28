@@ -1,7 +1,7 @@
-/*	$NetBSD: entropy.c,v 1.6 2015/12/17 04:00:45 christos Exp $	*/
+/*	$NetBSD: entropy.c,v 1.1 2009/03/22 15:02:02 christos Exp $	*/
 
 /*
- * Copyright (C) 2004-2007, 2009, 2010, 2014, 2015  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2004-2007, 2009  Internet Systems Consortium, Inc. ("ISC")
  * Copyright (C) 2000-2003  Internet Software Consortium.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -17,7 +17,7 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* Id: entropy.c,v 1.22 2010/08/10 23:48:19 tbox Exp  */
+/* Id: entropy.c,v 1.18.332.2 2009/01/18 23:47:41 tbox Exp */
 
 /*! \file
  * \brief
@@ -42,16 +42,12 @@
 #include <isc/msgs.h>
 #include <isc/mutex.h>
 #include <isc/platform.h>
-#include <isc/print.h>
 #include <isc/region.h>
 #include <isc/sha1.h>
 #include <isc/string.h>
 #include <isc/time.h>
 #include <isc/util.h>
 
-#ifdef PKCS11CRYPTO
-#include <pk11/pk11.h>
-#endif
 
 #define ENTROPY_MAGIC		ISC_MAGIC('E', 'n', 't', 'e')
 #define SOURCE_MAGIC		ISC_MAGIC('E', 'n', 't', 's')
@@ -289,11 +285,8 @@ entropypool_add_word(isc_entropypool_t *rp, isc_uint32_t val) {
 	val ^= rp->pool[(rp->cursor + TAP3) & (RND_POOLWORDS - 1)];
 	val ^= rp->pool[(rp->cursor + TAP4) & (RND_POOLWORDS - 1)];
 	val ^= rp->pool[(rp->cursor + TAP5) & (RND_POOLWORDS - 1)];
-	if (rp->rotate == 0)
-		rp->pool[rp->cursor++] ^= val;
-	else
-		rp->pool[rp->cursor++] ^=
-		  ((val << rp->rotate) | (val >> (32 - rp->rotate)));
+	rp->pool[rp->cursor++] ^=
+	  ((val << rp->rotate) | (val >> (32 - rp->rotate)));
 
 	/*
 	 * If we have looped around the pool, increment the rotate
@@ -322,12 +315,7 @@ entropypool_adddata(isc_entropy_t *ent, void *p, unsigned int len,
 	unsigned long addr;
 	isc_uint8_t *buf;
 
-	/* Silly MSVC in 64 bit mode complains here... */
-#ifdef _WIN64
-	addr = (unsigned long)((unsigned long long)p);
-#else
 	addr = (unsigned long)p;
-#endif
 	buf = p;
 
 	if ((addr & 0x03U) != 0U) {
@@ -1246,11 +1234,6 @@ isc_entropy_usebestsource(isc_entropy_t *ectx, isc_entropysource_t **source,
 	REQUIRE(use_keyboard == ISC_ENTROPY_KEYBOARDYES ||
 		use_keyboard == ISC_ENTROPY_KEYBOARDNO  ||
 		use_keyboard == ISC_ENTROPY_KEYBOARDMAYBE);
-
-#ifdef PKCS11CRYPTO
-	if (randomfile != NULL)
-		pk11_rand_seed_fromfile(randomfile);
-#endif
 
 #ifdef PATH_RANDOMDEV
 	if (randomfile == NULL) {

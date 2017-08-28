@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (C) 2004-2007, 2012, 2016  Internet Systems Consortium, Inc. ("ISC")
+# Copyright (C) 2004-2007  Internet Systems Consortium, Inc. ("ISC")
 # Copyright (C) 2001  Internet Software Consortium.
 #
 # Permission to use, copy, modify, and/or distribute this software for any
@@ -15,7 +15,7 @@
 # OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR
 # PERFORMANCE OF THIS SOFTWARE.
 
-# Id: stop.pl,v 1.12 2007/06/19 23:47:00 tbox Exp 
+# Id: stop.pl,v 1.12 2007/06/19 23:47:00 tbox Exp
 
 # Framework for stopping test servers
 # Based on the type of server specified, signal the server to stop, wait
@@ -143,7 +143,7 @@ sub stop_rndc {
 	my $ip = "10.53.0.$1";
 
 	# Ugly, but should work.
-	system("$ENV{RNDC} -c ../common/rndc.conf -s $ip -p 9953 stop | sed 's/^/I:$server /'");
+	system("$ENV{RNDC} -c $testdir/../common/rndc.conf -s $ip -p 9953 stop | sed 's/^/I:$server /'");
 	return;
 }
 
@@ -162,21 +162,11 @@ sub stop_signal {
 		$errors++;
 	}
 
-	my $result;
-	if ($^O eq 'cygwin') {
-		$result = system("/bin/kill -f -$sig $pid");
+	my $result = kill $sig, $pid;
+	if (!$result) {
+		print "I:$server died before a SIG$sig was sent\n";
 		unlink $pid_file;
-		if ($result != 0) {
-			print "I:$server died before a SIG$sig was sent\n";
-			$errors++;
-		}
-	} else {
-		$result = kill $sig, $pid;
-		if (!$result) {
-			print "I:$server died before a SIG$sig was sent\n";
-			unlink $pid_file;
-			$errors++;
-		}
+		$errors++;
 	}
 
 	return;

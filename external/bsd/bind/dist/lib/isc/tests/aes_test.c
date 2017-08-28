@@ -1,4 +1,4 @@
-/*	$NetBSD: aes_test.c,v 1.1.1.4 2014/12/10 03:34:44 christos Exp $	*/
+/*	$NetBSD: aes_test.c,v 1.1 2014/02/28 17:40:15 christos Exp $	*/
 
 /*
  * Copyright (C) 2014  Internet Systems Consortium, Inc. ("ISC")
@@ -35,7 +35,7 @@
 #include <isc/string.h>
 #include <isc/util.h>
 
-#ifdef ISC_PLATFORM_WANTAES
+#ifdef ISC_PLATFORM_OPENSSLAES
 
 /*
  * Test data from NIST KAT
@@ -290,7 +290,7 @@ ATF_TC_BODY(untested, tc) {
  * Main
  */
 ATF_TP_ADD_TCS(tp) {
-#ifdef ISC_PLATFORM_WANTAES
+#ifdef ISC_PLATFORM_OPENSSLAES
 	ATF_TP_ADD_TC(tp, isc_aes128);
 	ATF_TP_ADD_TC(tp, isc_aes192);
 	ATF_TP_ADD_TC(tp, isc_aes256);

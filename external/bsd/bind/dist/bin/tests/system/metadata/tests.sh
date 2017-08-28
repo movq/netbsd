@@ -1,6 +1,6 @@
 #!/bin/sh
 #
-# Copyright (C) 2009, 2011-2014, 2016  Internet Systems Consortium, Inc. ("ISC")
+# Copyright (C) 2009  Internet Systems Consortium, Inc. ("ISC")
 #
 # Permission to use, copy, modify, and/or distribute this software for any
 # purpose with or without fee is hereby granted, provided that the above
@@ -14,11 +14,12 @@
 # OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR
 # PERFORMANCE OF THIS SOFTWARE.
 
-# Id: tests.sh,v 1.9 2011/07/08 01:43:26 each Exp 
+# Id: tests.sh,v 1.5 2009/12/02 17:54:45 each Exp
 
 SYSTEMTESTTOP=..
 . $SYSTEMTESTTOP/conf.sh
 
+RANDFILE=./random.data
 pzone=parent.nil pfile=parent.db
 czone=child.parent.nil cfile=child.db
 status=0
@@ -27,16 +28,16 @@ n=0
 echo "I:setting key timers"
 $SETTIME -A now+15s `cat rolling.key` > /dev/null
 
-inact=`sed 's/^K'${czone}'.+005+0*\([0-9]\)/\1/' < inact.key`
-ksk=`sed 's/^K'${czone}'.+005+0*\([0-9]\)/\1/' < ksk.key`
-pending=`sed 's/^K'${czone}'.+005+0*\([0-9]\)/\1/' < pending.key`
-postrev=`sed 's/^K'${czone}'.+005+0*\([0-9]\)/\1/' < postrev.key`
-prerev=`sed 's/^K'${czone}'.+005+0*\([0-9]\)/\1/' < prerev.key`
-rolling=`sed 's/^K'${czone}'.+005+0*\([0-9]\)/\1/' < rolling.key`
-standby=`sed 's/^K'${czone}'.+005+0*\([0-9]\)/\1/' < standby.key`
-zsk=`sed 's/^K'${czone}'.+005+0*\([0-9]\)/\1/' < zsk.key`
+inact=`sed 's/^K'${czone}'.+005+0*//' < inact.key`
+ksk=`sed 's/^K'${czone}'.+005+0*//' < ksk.key`
+pending=`sed 's/^K'${czone}'.+005+0*//' < pending.key`
+postrev=`sed 's/^K'${czone}'.+005+0*//' < postrev.key`
+prerev=`sed 's/^K'${czone}'.+005+0*//' < prerev.key`
+rolling=`sed 's/^K'${czone}'.+005+0*//' < rolling.key`
+standby=`sed 's/^K'${czone}'.+005+0*//' < standby.key`
+zsk=`sed 's/^K'${czone}'.+005+0*//' < zsk.key`
 
-$GENRANDOM 400 $RANDFILE
+../../../tools/genrandom 400 $RANDFILE
 
 echo "I:signing zones"
 $SIGNER -Sg -o $czone $cfile > /dev/null 2>&1
@@ -45,8 +46,8 @@ $SIGNER -Sg -o $pzone $pfile > /dev/null 2>&1
 awk '$2 ~ /RRSIG/ {
         type = $3;
         getline;
-	id = $3;
-	if ($4 ~ /'${czone}'/) {
+	id = $2;
+	if ($3 ~ /'${czone}'/) {
 		print type, id
 	}
 }' < ${cfile}.signed > sigs
@@ -55,7 +56,7 @@ awk '$2 ~ /DNSKEY/ {
 	flags = $3;
 	while ($0 !~ /key id =/)
 		getline;
-	id = $NF;
+	id = $6;
 	print flags, id;
 }' < ${cfile}.signed > keys
 
@@ -133,69 +134,5 @@ n=`expr $n + 1`
 if [ $ret != 0 ]; then echo "I:failed"; fi
 status=`expr $status + $ret`
 
-echo "I:checking update of an old-style key ($n)"
-ret=0
-# printing metadata should not work with an old-style key
-$SETTIME -pall `cat oldstyle.key` > /dev/null 2>&1 && ret=1
-$SETTIME -f `cat oldstyle.key` > /dev/null 2>&1 || ret=1
-# but now it should
-$SETTIME -pall `cat oldstyle.key` > /dev/null 2>&1 || ret=1
-n=`expr $n + 1`
-if [ $ret != 0 ]; then echo "I:failed"; fi
-status=`expr $status + $ret`
-
-echo "I:checking warning about permissions change on key with dnssec-settime ($n)"
-if [ `uname -o` == Cygwin ]; then
-	echo "I: Cygwin detected, skipping"
-else
-	ret=0
-	# settime should print a warning about changing the permissions
-	chmod 644 `cat oldstyle.key`.private
-	$SETTIME -P none `cat oldstyle.key` > tmp.out 2>&1 || ret=1
-	grep "warning" tmp.out > /dev/null 2>&1 || ret=1
-	cat tmp.out
-	$SETTIME -P none `cat oldstyle.key` > tmp.out 2>&1 || ret=1
-	grep "warning" tmp.out > /dev/null 2>&1 && ret=1
-	cat tmp.out
-	n=`expr $n + 1`
-	if [ $ret != 0 ]; then echo "I:failed"; fi
-	status=`expr $status + $ret`
-fi
-
-echo "I:checking warning about delete date < inactive date with dnssec-settime ($n)"
-ret=0
-# settime should print a warning about delete < inactive
-$SETTIME -I now+15s -D now `cat oldstyle.key` > tmp.out 2>&1 || ret=1
-grep "warning" tmp.out > /dev/null 2>&1 || ret=1
-n=`expr $n + 1`
-if [ $ret != 0 ]; then echo "I:failed"; fi
-status=`expr $status + $ret`
-
-echo "I:checking warning about delete date < inactive date with dnssec-keygen ($n)"
-ret=0
-# keygen should print a warning about delete < inactive
-$KEYGEN -q -r $RANDFILE -I now+15s -D now $czone > tmp.out 2>&1 || ret=1
-grep "warning" tmp.out > /dev/null 2>&1 || ret=1
-n=`expr $n + 1`
-if [ $ret != 0 ]; then echo "I:failed"; fi
-status=`expr $status + $ret`
-
-echo "I:checking correct behavior setting activation without publication date ($n)"
-ret=0
-key=`$KEYGEN -q -r $RANDFILE -A +1w $czone`
-pub=`$SETTIME -upP $key | awk '{print $2}'`
-act=`$SETTIME -upA $key | awk '{print $2}'`
-[ $pub -eq $act ] || ret=1
-key=`$KEYGEN -q -r $RANDFILE -A +1w -i 1d $czone`
-pub=`$SETTIME -upP $key | awk '{print $2}'`
-act=`$SETTIME -upA $key | awk '{print $2}'`
-[ $pub -lt $act ] || ret=1
-key=`$KEYGEN -q -r $RANDFILE -A +1w -P never $czone`
-pub=`$SETTIME -upP $key | awk '{print $2}'`
-[ $pub = "UNSET" ] || ret=1
-n=`expr $n + 1`
-if [ $ret != 0 ]; then echo "I:failed"; fi
-status=`expr $status + $ret`
-
 echo "I:exit status: $status"
-[ $status -eq 0 ] || exit 1
+exit $status

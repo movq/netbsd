@@ -1,7 +1,7 @@
-/*	$NetBSD: ttl.c,v 1.7 2014/12/10 04:37:58 christos Exp $	*/
+/*	$NetBSD: ttl.c,v 1.1 2009/03/22 15:01:31 christos Exp $	*/
 
 /*
- * Copyright (C) 2004, 2005, 2007, 2011-2014  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2004, 2005, 2007  Internet Systems Consortium, Inc. ("ISC")
  * Copyright (C) 1999-2001  Internet Software Consortium.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -17,7 +17,7 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* Id */
+/* Id: ttl.c,v 1.29 2007/06/19 23:47:16 tbox Exp */
 
 /*! \file */
 
@@ -42,7 +42,7 @@
 	isc_result_t _r = (x); \
 	if (_r != ISC_R_SUCCESS) \
 		return (_r); \
-	} while (/*CONSTCOND*/0)
+	} while (0)
 
 
 static isc_result_t bind_ttl(isc_textregion_t *source, isc_uint32_t *ttl);
@@ -55,7 +55,7 @@ ttlfmt(unsigned int t, const char *s, isc_boolean_t verbose,
        isc_boolean_t space, isc_buffer_t *target)
 {
 	char tmp[60];
-	unsigned int len;
+	size_t len;
 	isc_region_t region;
 
 	if (verbose)
@@ -70,7 +70,7 @@ ttlfmt(unsigned int t, const char *s, isc_boolean_t verbose,
 	isc_buffer_availableregion(target, &region);
 	if (len > region.length)
 		return (ISC_R_NOSPACE);
-	memmove(region.base, tmp, len);
+	memcpy(region.base, tmp, len);
 	isc_buffer_add(target, len);
 
 	return (ISC_R_SUCCESS);
@@ -88,7 +88,6 @@ dns_ttl_totext(isc_uint32_t src, isc_boolean_t verbose, isc_buffer_t *target) {
 	hours = src % 24;  src /= 24;
 	days = src % 7;    src /= 7;
 	weeks = src;       src = 0;
-	POST(src);
 
 	x = 0;
 	if (weeks != 0) {
@@ -144,14 +143,14 @@ dns_ttl_fromtext(isc_textregion_t *source, isc_uint32_t *ttl) {
 	isc_result_t result;
 
 	result = bind_ttl(source, ttl);
-	if (result != ISC_R_SUCCESS && result != ISC_R_RANGE)
+	if (result != ISC_R_SUCCESS)
 		result = DNS_R_BADTTL;
 	return (result);
 }
 
 static isc_result_t
 bind_ttl(isc_textregion_t *source, isc_uint32_t *ttl) {
-	isc_uint64_t tmp = 0ULL;
+	isc_uint32_t tmp = 0;
 	isc_uint32_t n;
 	char *s;
 	char buf[64];
@@ -181,32 +180,32 @@ bind_ttl(isc_textregion_t *source, isc_uint32_t *ttl) {
 		switch (*s) {
 		case 'w':
 		case 'W':
-			tmp += (isc_uint64_t) n * 7 * 24 * 3600;
+			tmp += n * 7 * 24 * 3600;
 			s++;
 			break;
 		case 'd':
 		case 'D':
-			tmp += (isc_uint64_t) n * 24 * 3600;
+			tmp += n * 24 * 3600;
 			s++;
 			break;
 		case 'h':
 		case 'H':
-			tmp += (isc_uint64_t) n * 3600;
+			tmp += n * 3600;
 			s++;
 			break;
 		case 'm':
 		case 'M':
-			tmp += (isc_uint64_t) n * 60;
+			tmp += n * 60;
 			s++;
 			break;
 		case 's':
 		case 'S':
-			tmp += (isc_uint64_t) n;
+			tmp += n;
 			s++;
 			break;
 		case '\0':
 			/* Plain number? */
-			if (tmp != 0ULL)
+			if (tmp != 0)
 				return (DNS_R_SYNTAX);
 			tmp = n;
 			break;
@@ -214,10 +213,6 @@ bind_ttl(isc_textregion_t *source, isc_uint32_t *ttl) {
 			return (DNS_R_SYNTAX);
 		}
 	} while (*s != '\0');
-
-	if (tmp > 0xffffffffULL)
-		return (ISC_R_RANGE);
-
-	*ttl = (isc_uint32_t)(tmp & 0xffffffffUL);
+	*ttl = tmp;
 	return (ISC_R_SUCCESS);
 }

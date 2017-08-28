@@ -1,7 +1,7 @@
-/*	$NetBSD: inet_pton.c,v 1.6 2014/12/10 04:37:59 christos Exp $	*/
+/*	$NetBSD: inet_pton.c,v 1.1 2009/03/22 15:02:03 christos Exp $	*/
 
 /*
- * Copyright (C) 2004, 2005, 2007, 2013, 2014  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2004, 2005, 2007  Internet Systems Consortium, Inc. ("ISC")
  * Copyright (C) 1996-2003  Internet Software Consortium.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -21,7 +21,7 @@
 
 #if defined(LIBC_SCCS) && !defined(lint)
 static char rcsid[] =
-	"Id: inet_pton.c,v 1.19 2007/06/19 23:47:17 tbox Exp ";
+	"Id: inet_pton.c,v 1.19 2007/06/19 23:47:17 tbox Exp";
 #endif /* LIBC_SCCS and not lint */
 
 #include <config.h>
@@ -46,7 +46,7 @@ static char rcsid[] =
 static int inet_pton4(const char *src, unsigned char *dst);
 static int inet_pton6(const char *src, unsigned char *dst);
 
-/*%
+/*% 
  *	convert from presentation format (which usually means ASCII printable)
  *	to network format (which is usually some kind of binary format).
  * \return
@@ -93,9 +93,8 @@ inet_pton4(const char *src, unsigned char *dst) {
 		const char *pch;
 
 		if ((pch = strchr(digits, ch)) != NULL) {
-			unsigned int new = *tp * 10;
+			unsigned int new = *tp * 10 + (pch - digits);
 
-			new += (int)(pch - digits);
 			if (saw_digit && *tp == 0)
 				return (0);
 			if (new > 255)
@@ -116,7 +115,7 @@ inet_pton4(const char *src, unsigned char *dst) {
 	}
 	if (octets < 4)
 		return (0);
-	memmove(dst, tmp, NS_INADDRSZ);
+	memcpy(dst, tmp, NS_INADDRSZ);
 	return (1);
 }
 
@@ -199,7 +198,7 @@ inet_pton6(const char *src, unsigned char *dst) {
 		 * Since some memmove()'s erroneously fail to handle
 		 * overlapping regions, we'll do the shift by hand.
 		 */
-		const int n = (int)(tp - colonp);
+		const int n = tp - colonp;
 		int i;
 
 		if (tp == endp)
@@ -212,6 +211,6 @@ inet_pton6(const char *src, unsigned char *dst) {
 	}
 	if (tp != endp)
 		return (0);
-	memmove(dst, tmp, NS_IN6ADDRSZ);
+	memcpy(dst, tmp, NS_IN6ADDRSZ);
 	return (1);
 }

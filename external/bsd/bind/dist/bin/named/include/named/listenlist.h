@@ -1,7 +1,7 @@
-/*	$NetBSD: listenlist.h,v 1.5 2014/12/10 04:37:52 christos Exp $	*/
+/*	$NetBSD: listenlist.h,v 1.1 2009/03/22 14:56:13 christos Exp $	*/
 
 /*
- * Copyright (C) 2004, 2005, 2007, 2013  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2004, 2005, 2007  Internet Systems Consortium, Inc. ("ISC")
  * Copyright (C) 2000, 2001  Internet Software Consortium.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -17,7 +17,7 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* Id: listenlist.h,v 1.15 2007/06/19 23:46:59 tbox Exp  */
+/* Id: listenlist.h,v 1.15 2007/06/19 23:46:59 tbox Exp */
 
 #ifndef NAMED_LISTENLIST_H
 #define NAMED_LISTENLIST_H 1
@@ -48,7 +48,6 @@ typedef struct ns_listenlist ns_listenlist_t;
 struct ns_listenelt {
 	isc_mem_t *	       		mctx;
 	in_port_t			port;
-	isc_dscp_t			dscp;  /* -1 = not set, 0..63 */
 	dns_acl_t *	       		acl;
 	ISC_LINK(ns_listenelt_t)	link;
 };
@@ -64,7 +63,7 @@ struct ns_listenlist {
  ***/
 
 isc_result_t
-ns_listenelt_create(isc_mem_t *mctx, in_port_t port, isc_dscp_t dscp,
+ns_listenelt_create(isc_mem_t *mctx, in_port_t port,
 		    dns_acl_t *acl, ns_listenelt_t **target);
 /*%
  * Create a listen-on list element.
@@ -95,7 +94,7 @@ ns_listenlist_detach(ns_listenlist_t **listp);
  */
 
 isc_result_t
-ns_listenlist_default(isc_mem_t *mctx, in_port_t port, isc_dscp_t dscp,
+ns_listenlist_default(isc_mem_t *mctx, in_port_t port,
 		      isc_boolean_t enabled, ns_listenlist_t **target);
 /*%
  * Create a listen-on list with default contents, matching

@@ -1,7 +1,7 @@
-/*	$NetBSD: lwresd.c,v 1.7 2015/12/17 04:00:41 christos Exp $	*/
+/*	$NetBSD: lwresd.c,v 1.1 2009/03/22 14:56:01 christos Exp $	*/
 
 /*
- * Copyright (C) 2004-2009, 2012, 2013, 2015  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2004-2008  Internet Systems Consortium, Inc. ("ISC")
  * Copyright (C) 2000-2003  Internet Software Consortium.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -17,7 +17,7 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* Id: lwresd.c,v 1.60 2009/09/02 23:48:01 tbox Exp  */
+/* Id: lwresd.c,v 1.58 2008/07/23 23:27:54 marka Exp */
 
 /*! \file
  * \brief
@@ -98,7 +98,7 @@ ns__lwresd_memfree(void *arg, void *mem, size_t size) {
 #define CHECK(op)						\
 	do { result = (op);					\
 		if (result != ISC_R_SUCCESS) goto cleanup;	\
-	} while (/*CONSTCOND*/0)
+	} while (0)
 
 static isc_result_t
 buffer_putstr(isc_buffer_t *b, const char *s) {
@@ -370,11 +370,12 @@ ns_lwdmanager_create(isc_mem_t *mctx, const cfg_obj_t *lwres,
 
 			dns_fixedname_init(&fname);
 			name = dns_fixedname_name(&fname);
-			isc_buffer_constinit(&namebuf, searchstr,
+			isc_buffer_init(&namebuf, searchstr,
 					strlen(searchstr));
 			isc_buffer_add(&namebuf, strlen(searchstr));
 			result = dns_name_fromtext(name, &namebuf,
-						   dns_rootname, 0, NULL);
+						   dns_rootname, ISC_FALSE,
+						   NULL);
 			if (result != ISC_R_SUCCESS) {
 				isc_log_write(ns_g_lctx,
 					      NS_LOGCATEGORY_GENERAL,
@@ -604,7 +605,7 @@ listener_copysock(ns_lwreslistener_t *oldlistener,
 
 static isc_result_t
 listener_startclients(ns_lwreslistener_t *listener) {
-	ns_lwdclientmgr_t *cm, *next;
+	ns_lwdclientmgr_t *cm;
 	unsigned int i;
 	isc_result_t result;
 
@@ -628,7 +629,6 @@ listener_startclients(ns_lwreslistener_t *listener) {
 	LOCK(&listener->lock);
 	cm = ISC_LIST_HEAD(listener->cmgrs);
 	while (cm != NULL) {
-		next = ISC_LIST_NEXT(cm, link);
 		result = ns_lwdclient_startrecv(cm);
 		if (result != ISC_R_SUCCESS)
 			isc_log_write(ns_g_lctx, NS_LOGCATEGORY_GENERAL,
@@ -636,7 +636,7 @@ listener_startclients(ns_lwreslistener_t *listener) {
 				      "could not start lwres "
 				      "client handler: %s",
 				      isc_result_totext(result));
-		cm = next;
+		cm = ISC_LIST_NEXT(cm, link);
 	}
 	UNLOCK(&listener->lock);
 
@@ -815,12 +815,11 @@ ns_lwresd_configure(isc_mem_t *mctx, const cfg_obj_t *config) {
 			isc_uint32_t i;
 
 			CHECK(ns_config_getiplist(config, listenerslist,
-						  port, mctx, &addrs, NULL,
-						  &count));
+						  port, mctx, &addrs, &count));
 			for (i = 0; i < count; i++)
 				CHECK(configure_listener(&addrs[i], lwresd,
 							 mctx, &newlisteners));
-			ns_config_putiplist(mctx, &addrs, NULL, count);
+			ns_config_putiplist(mctx, &addrs, count);
 		}
 		ns_lwdmanager_detach(&lwresd);
 	}
@@ -849,7 +848,7 @@ ns_lwresd_configure(isc_mem_t *mctx, const cfg_obj_t *config) {
 	ISC_LIST_APPENDLIST(listeners, newlisteners, link);
 
 	if (addrs != NULL)
-		ns_config_putiplist(mctx, &addrs, NULL, count);
+		ns_config_putiplist(mctx, &addrs, count);
 
 	if (lwresd != NULL)
 		ns_lwdmanager_detach(&lwresd);

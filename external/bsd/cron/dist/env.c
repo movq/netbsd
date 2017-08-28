@@ -1,5 +1,3 @@
-/*	$NetBSD: env.c,v 1.4 2014/09/07 13:35:27 tron Exp $	*/
-
 /* Copyright 1988,1990,1993,1994 by Paul Vixie
  * All rights reserved
  */
@@ -20,20 +18,16 @@
  * ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT
  * OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
-#include <sys/cdefs.h>
+
 #if !defined(lint) && !defined(LINT)
-#if 0
 static char rcsid[] = "Id: env.c,v 1.10 2004/01/23 18:56:42 vixie Exp";
-#else
-__RCSID("$NetBSD: env.c,v 1.4 2014/09/07 13:35:27 tron Exp $");
-#endif
 #endif
 
 #include "cron.h"
 
 char **
 env_init(void) {
-	char **p = malloc(sizeof(char **));
+	char **p = (char **) malloc(sizeof(char **));
 
 	if (p != NULL)
 		p[0] = NULL;
@@ -51,46 +45,44 @@ env_free(char **envp) {
 
 char **
 env_copy(char **envp) {
-	size_t count, i;
-	int save_errno;
+	int count, i, save_errno;
 	char **p;
 
 	for (count = 0; envp[count] != NULL; count++)
-		continue;
-	p = malloc((count + 1) * sizeof(*p));  /* 1 for the NULL */
-	if (p == NULL)
-		return NULL;
-	for (i = 0; i < count; i++) {
-		if ((p[i] = strdup(envp[i])) == NULL) {
-			save_errno = errno;
-			for (count = 0; count < i; count++)
-				free(p[count]);
-			free(p);
-			errno = save_errno;
-			return NULL;
-		}
+		NULL;
+	p = (char **) malloc((count+1) * sizeof(char *));  /* 1 for the NULL */
+	if (p != NULL) {
+		for (i = 0; i < count; i++)
+			if ((p[i] = strdup(envp[i])) == NULL) {
+				save_errno = errno;
+				while (--i >= 0)
+					free(p[i]);
+				free(p);
+				errno = save_errno;
+				return (NULL);
+			}
+		p[count] = NULL;
 	}
-	p[count] = NULL;
-	return p;
+	return (p);
 }
 
 char **
 env_set(char **envp, char *envstr) {
-	size_t count, found;
+	int count, found;
 	char **p, *envtmp;
 
 	/*
 	 * count the number of elements, including the null pointer;
 	 * also set 'found' to -1 or index of entry if already in here.
 	 */
-	found = (size_t)-1;
+	found = -1;
 	for (count = 0; envp[count] != NULL; count++) {
 		if (!strcmp_until(envp[count], envstr, '='))
 			found = count;
 	}
 	count++;	/* for the NULL */
 
-	if (found != (size_t)-1) {
+	if (found != -1) {
 		/*
 		 * it exists already, so just free the existing setting,
 		 * save our new one there, and return the existing array.
@@ -109,7 +101,8 @@ env_set(char **envp, char *envstr) {
 	 */
 	if ((envtmp = strdup(envstr)) == NULL)
 		return (NULL);
-	p = realloc(envp, (count + 1) * sizeof(*p));
+	p = (char **) realloc((void *) envp,
+			      (size_t) ((count+1) * sizeof(char **)));
 	if (p == NULL) {
 		free(envtmp);
 		return (NULL);
@@ -128,7 +121,7 @@ enum env_state {
 	VALUEI,		/* First char of VALUE, may be quote */
 	VALUE,		/* Subsequent chars of VALUE */
 	FINI,		/* All done, skipping trailing whitespace */
-	ERROR		/* Error */
+	ERROR,		/* Error */
 };
 
 /* return	ERR = end of file
@@ -149,10 +142,10 @@ load_env(char *envstr, FILE *f) {
 	if (EOF == get_string(envstr, MAX_ENVSTR, f, "\n"))
 		return (ERR);
 
-	Debug(DPARS, ("load_env, read <%s>\n", envstr));
+	Debug(DPARS, ("load_env, read <%s>\n", envstr))
 
-	(void)memset(name, 0, sizeof name);
-	(void)memset(val, 0, sizeof val);
+	bzero(name, sizeof name);
+	bzero(val, sizeof val);
 	str = name;
 	state = NAMEI;
 	quotechar = '\0';
@@ -218,8 +211,8 @@ load_env(char *envstr, FILE *f) {
 		}
 	}
 	if (state != FINI && !(state == VALUE && !quotechar)) {
-		Debug(DPARS, ("load_env, not an env var, state = %d\n", state));
-		(void)fseek(f, filepos, 0);
+		Debug(DPARS, ("load_env, not an env var, state = %d\n", state))
+		fseek(f, filepos, 0);
 		Set_LineNum(fileline);
 		return (FALSE);
 	}
@@ -238,19 +231,19 @@ load_env(char *envstr, FILE *f) {
 	 */
 	if (!glue_strings(envstr, MAX_ENVSTR, name, val, '='))
 		return (FALSE);
-	Debug(DPARS, ("load_env, <%s> <%s> -> <%s>\n", name, val, envstr));
+	Debug(DPARS, ("load_env, <%s> <%s> -> <%s>\n", name, val, envstr))
 	return (TRUE);
 }
 
 char *
-env_get(const char *name, char **envp) {
-	size_t len = strlen(name);
+env_get(char *name, char **envp) {
+	int len = strlen(name);
 	char *p, *q;
 
 	while ((p = *envp++) != NULL) {
 		if (!(q = strchr(p, '=')))
 			continue;
-		if ((size_t)(q - p) == len && !strncmp(p, name, len))
+		if ((q - p) == len && !strncmp(p, name, len))
 			return (q+1);
 	}
 	return (NULL);

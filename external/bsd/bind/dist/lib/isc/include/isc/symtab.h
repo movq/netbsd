@@ -1,7 +1,7 @@
-/*	$NetBSD: symtab.h,v 1.5 2014/12/10 04:38:00 christos Exp $	*/
+/*	$NetBSD: symtab.h,v 1.1 2009/03/22 15:02:15 christos Exp $	*/
 
 /*
- * Copyright (C) 2004-2007, 2009, 2011-2013  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2004-2007, 2009  Internet Systems Consortium, Inc. ("ISC")
  * Copyright (C) 1996-2001  Internet Software Consortium.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -17,7 +17,7 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* Id */
+/* Id: symtab.h,v 1.24.332.2 2009/01/18 23:47:41 tbox Exp */
 
 #ifndef ISC_SYMTAB_H
 #define ISC_SYMTAB_H 1
@@ -58,14 +58,6 @@
  * A user-specified action will be called (if provided) when a symbol is
  * undefined.  It can be used to free memory associated with keys and/or
  * values.
- *
- * A symbol table is implemented as a hash table of lists; the size of the
- * hash table is set by the 'size' parameter to isc_symtbl_create().  When
- * the number of entries in the symbol table reaches three quarters of this
- * value, the hash table is reallocated with size doubled, in order to
- * optimize lookup performance.  This has a negative effect on insertion
- * performance, which can be mitigated by sizing the table appropriately
- * when creating it.
  *
  * \li MP:
  *	The callers of this module must ensure any required synchronization.
@@ -136,9 +128,6 @@ isc_symtab_define(isc_symtab_t *symtab, const char *key, unsigned int type,
 isc_result_t
 isc_symtab_undefine(isc_symtab_t *symtab, const char *key, unsigned int type);
 
-/*% Return the number of items in a symbol table. */
-unsigned int
-isc_symtab_count(isc_symtab_t *symtab);
 ISC_LANG_ENDDECLS
 
 #endif /* ISC_SYMTAB_H */

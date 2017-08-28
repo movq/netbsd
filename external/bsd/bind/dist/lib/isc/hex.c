@@ -1,7 +1,7 @@
-/*	$NetBSD: hex.c,v 1.7 2016/05/26 16:49:59 christos Exp $	*/
+/*	$NetBSD: hex.c,v 1.1 2009/03/22 15:02:02 christos Exp $	*/
 
 /*
- * Copyright (C) 2004, 2005, 2007, 2008, 2013-2015  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2004, 2005, 2007, 2008  Internet Systems Consortium, Inc. ("ISC")
  * Copyright (C) 2000-2003  Internet Software Consortium.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -17,7 +17,7 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* Id: hex.c,v 1.20 2008/09/25 04:02:39 tbox Exp  */
+/* Id: hex.c,v 1.20 2008/09/25 04:02:39 tbox Exp */
 
 /*! \file */
 
@@ -35,7 +35,7 @@
 	isc_result_t _r = (x); \
 	if (_r != ISC_R_SUCCESS) \
 		return (_r); \
-	} while (/*CONSTCOND*/0)
+	} while (0)
 
 
 /*
@@ -97,11 +97,11 @@ hex_decode_init(hex_decode_ctx_t *ctx, int length, isc_buffer_t *target)
 
 static inline isc_result_t
 hex_decode_char(hex_decode_ctx_t *ctx, int c) {
-	const char *s;
+	char *s;
 
 	if ((s = strchr(hex, toupper(c))) == NULL)
 		return (ISC_R_BADHEX);
-	ctx->val[ctx->digits++] = (int)(s - hex);
+	ctx->val[ctx->digits++] = s - hex;
 	if (ctx->digits == 2) {
 		unsigned char num;
 
@@ -185,7 +185,7 @@ str_totext(const char *source, isc_buffer_t *target) {
 	if (l > region.length)
 		return (ISC_R_NOSPACE);
 
-	memmove(region.base, source, l);
+	memcpy(region.base, source, l);
 	isc_buffer_add(target, l);
 	return (ISC_R_SUCCESS);
 }
@@ -197,7 +197,7 @@ mem_tobuffer(isc_buffer_t *target, void *base, unsigned int length) {
 	isc_buffer_availableregion(target, &tr);
 	if (length > tr.length)
 		return (ISC_R_NOSPACE);
-	memmove(tr.base, base, length);
+	memcpy(tr.base, base, length);
 	isc_buffer_add(target, length);
 	return (ISC_R_SUCCESS);
 }

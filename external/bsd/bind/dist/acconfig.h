@@ -1,7 +1,7 @@
-/*	$NetBSD: acconfig.h,v 1.10 2017/06/15 15:59:36 christos Exp $	*/
+/*	$NetBSD: acconfig.h,v 1.1 2009/03/22 14:55:11 christos Exp $	*/
 
 /*
- * Copyright (C) 2004, 2005, 2007, 2008, 2012, 2014, 2016  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2004, 2005, 2007, 2009  Internet Systems Consortium, Inc. ("ISC")
  * Copyright (C) 1999-2003  Internet Software Consortium.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -17,7 +17,7 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* Id: acconfig.h,v 1.53 2008/12/01 23:47:44 tbox Exp  */
+/* Id: acconfig.h,v 1.51.334.2 2009/02/16 23:47:15 tbox Exp */
 
 /*! \file */
 
@@ -72,6 +72,9 @@
 /** define if gai_strerror() exists */
 #undef HAVE_GAISTRERROR
 
+/** define if arc4random() exists */
+#undef HAVE_ARC4RANDOM
+
 /**
  * define if pthread_setconcurrency() should be called to tell the
  * OS how many threads we might want to run.
@@ -116,7 +119,7 @@ int sigwait(const unsigned int *set, int *sig);
 		union { const void *konst; long *var; } _u; \
 		_u.konst = &(last); \
 		ap = (va_list)(_u.var + __va_words(__typeof(last))); \
-	} while (/*CONSTCOND*/0)
+	} while (0)
 #endif /** SHUTUP_STDARG_CAST && __GNUC__ */
 
 /** define if the system has a random number generating device */
@@ -131,17 +134,14 @@ int sigwait(const unsigned int *set, int *sig);
 /** define if you have strerror in the C library. */
 #undef HAVE_STRERROR
 
+/** Define if you are running under Compaq TruCluster. */
+#undef HAVE_TRUCLUSTER
+
 /* Define if OpenSSL includes DSA support */
 #undef HAVE_OPENSSL_DSA
-
-/* Define if you have getpassphrase in the C library. */
-#undef HAVE_GETPASSPHRASE
 
 /* Define to the length type used by the socket API (socklen_t, size_t, int). */
 #undef ISC_SOCKADDR_LEN_T
 
 /* Define if threads need PTHREAD_SCOPE_SYSTEM */
 #undef NEED_PTHREAD_SCOPE_SYSTEM
-
-/* Define to 1 if you have the uname library function. */
-#undef HAVE_UNAME

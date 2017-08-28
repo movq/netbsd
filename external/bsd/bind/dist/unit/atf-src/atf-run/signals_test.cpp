@@ -1,7 +1,7 @@
 //
 // Automated Testing Framework (atf)
 //
-// Copyright (c) 2008 The NetBSD Foundation, Inc.
+// Copyright (c) 2008, 2009, 2010 The NetBSD Foundation, Inc.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -37,8 +37,6 @@ extern "C" {
 #include <cstdlib>
 #include <iostream>
 
-#include "atf-c/defs.h"
-
 #include "atf-c++/macros.hpp"
 
 #include "atf-c++/detail/exceptions.hpp"
@@ -55,7 +53,7 @@ namespace sigusr1 {
 
     static
     void
-    handler(int signo ATF_DEFS_ATTRIBUTE_UNUSED)
+    handler(int signo)
     {
         happened = true;
     }
@@ -79,7 +77,7 @@ namespace sigusr1_2 {
 
     static
     void
-    handler(int signo ATF_DEFS_ATTRIBUTE_UNUSED)
+    handler(int signo)
     {
         happened = true;
     }
@@ -225,7 +223,7 @@ ATF_TEST_CASE_BODY(signal_programmer_preserve)
 
 static
 void
-reset_child(void *v ATF_DEFS_ATTRIBUTE_UNUSED)
+reset_child(void *v)
 {
     sigusr1::program();
 

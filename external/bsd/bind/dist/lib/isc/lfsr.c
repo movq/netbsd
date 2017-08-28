@@ -1,4 +1,4 @@
-/*	$NetBSD: lfsr.c,v 1.4 2014/12/10 04:37:59 christos Exp $	*/
+/*	$NetBSD: lfsr.c,v 1.1 2009/03/22 15:02:04 christos Exp $	*/
 
 /*
  * Copyright (C) 2004, 2005, 2007  Internet Systems Consortium, Inc. ("ISC")
@@ -17,7 +17,7 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* Id: lfsr.c,v 1.20 2007/06/19 23:47:17 tbox Exp  */
+/* Id: lfsr.c,v 1.20 2007/06/19 23:47:17 tbox Exp */
 
 /*! \file */
 

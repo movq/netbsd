@@ -1,6 +1,6 @@
 #!/bin/sh
 #
-# Copyright (C) 2004, 2007, 2009, 2011-2016  Internet Systems Consortium, Inc. ("ISC")
+# Copyright (C) 2004, 2007  Internet Systems Consortium, Inc. ("ISC")
 # Copyright (C) 2001-2003  Internet Software Consortium.
 #
 # Permission to use, copy, modify, and/or distribute this software for any
@@ -14,6 +14,8 @@
 # LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE
 # OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR
 # PERFORMANCE OF THIS SOFTWARE.
+
+# Id: genzone.sh,v 1.8 2007/06/19 23:47:00 tbox Exp
 
 #
 # Set up a test zone
@@ -119,9 +121,6 @@ txt09			TXT	foo\010bar
 txt10			TXT	foo\ bar
 txt11			TXT	"\"foo\""
 txt12			TXT	\"foo\"
-txt13			TXT	"foo;"
-txt14			TXT	"foo\;"
-txt15			TXT	"bar\\;"
 
 ; type 17
 rp01			RP	mbox-dname txt-dname
@@ -194,8 +193,8 @@ srv02			SRV 65535 65535 65535  old-slow-box
 
 ; type 35
 naptr01			NAPTR   0 0 "" "" "" . 
-naptr02			NAPTR   65535 65535 blurgh blorf blllbb foo.
-naptr02			NAPTR   65535 65535 "blurgh" "blorf" "blllbb" foo.
+naptr02			NAPTR   65535 65535 blurgh blorf blegh foo.
+naptr02			NAPTR   65535 65535 "blurgh" "blorf" "blegh" foo.
 
 ; type 36
 kx01			KX	10 kdc
@@ -216,10 +215,6 @@ a601			A6	128 .
 dname01			DNAME	dname-target.
 dname02			DNAME	dname-target
 dname03			DNAME	.
-
-; type 40
-sink01			SINK	1 0 0
-sink02			SINK	8 0 2 l4ik
 
 ; type 41
 ; OPT is a meta-type and should never occur in master files.
@@ -242,55 +237,6 @@ dnskey01		DNSKEY	512 ( 255 1 AQMFD5raczCJHViKtLYhWGz8hMY
 				9UGRuniJDBzC7w0aRyzWZriO6i2odGWWQVucZqKV
 				sENW91IOW4vqudngPZsY3GvQ/xVA8/7pyFj6b7Esg
 				a60zyGW6LFe9r8n6paHrlG5ojqf0BaqHT+8= )
-
-; type 56
-ninfo01			NINFO	"foo"
-ninfo02			NINFO	"foo" "bar"
-ninfo03			NINFO	foo
-ninfo04			NINFO	foo bar
-ninfo05			NINFO	"foo bar"
-ninfo06			NINFO	"foo\032bar"
-ninfo07			NINFO	foo\032bar
-ninfo08			NINFO	"foo\010bar"
-ninfo09			NINFO	foo\010bar
-ninfo10			NINFO	foo\ bar
-ninfo11			NINFO	"\"foo\""
-ninfo12			NINFO	\"foo\"
-ninfo13			NINFO	"foo;"
-ninfo14			NINFO	"foo\;"
-ninfo15			NINFO	"bar\\;"
-
-; type 57
-rkey01			RKEY	512 ( 255 1 AQMFD5raczCJHViKtLYhWGz8hMY
-				9UGRuniJDBzC7w0aRyzWZriO6i2odGWWQVucZqKV
-				sENW91IOW4vqudngPZsY3GvQ/xVA8/7pyFj6b7Esg
-				a60zyGW6LFe9r8n6paHrlG5ojqf0BaqHT+8= )
-
-; type 58
-talink0			TALINK	. talink1
-talink1			TALINK	talink0 talink2
-talink2			TALINK	talink2 .
-
-; type 59
-cds01			CDS	30795 1 1 (
-					310D27F4D82C1FC2400704EA9939FE6E1CEA
-					A3B9 )
-
-; type 60
-cdnskey01		CDNSKEY	512 ( 255 1 AQMFD5raczCJHViKtLYhWGz8hMY
-				9UGRuniJDBzC7w0aRyzWZriO6i2odGWWQVucZqKV
-				sENW91IOW4vqudngPZsY3GvQ/xVA8/7pyFj6b7Esg
-				a60zyGW6LFe9r8n6paHrlG5ojqf0BaqHT+8= )
-
-; type 61
-openpgpkey		OPENPGPKEY	( AQMFD5raczCJHViKtLYhWGz8hMY
-				9UGRuniJDBzC7w0aRyzWZriO6i2odGWWQVucZqKV
-				sENW91IOW4vqudngPZsY3GvQ/xVA8/7pyFj6b7Esg
-				a60zyGW6LFe9r8n6paHrlG5ojqf0BaqHT+8= )
-
-;type	62
-csync01			CSYNC	0 0 A NS AAAA
-csync02			CSYNC	0 0
 
 ; type 249
 ; TKEY is a meta-type and should never occur in master files.
@@ -316,65 +262,6 @@ csync02			CSYNC	0 0
 ;						; other data
 ;				)
 
-hip1			HIP	( 2 200100107B1A74DF365639CC39F1D578
-				AwEAAbdxyhNuSutc5EMzxTs9LBPCIkOFH8cIvM4p9+LrV4e19WzK00+CI6zBCQTdtWsuxKbWIy87UOoJTwkUs7lBu+Upr1gsNrut79ryra+bSRGQb1slImA8YVJyuIDsj7kwzG7jnERNqnWxZ48AWkskmdHaVDP4BcelrTI3rMXdXF5D )
-
-
-hip2			HIP	( 2 200100107B1A74DF365639CC39F1D578
-                                AwEAAbdxyhNuSutc5EMzxTs9LBPCIkOFH8cIvM4p9+LrV4e19WzK00+CI6zBCQTdtWsuxKbWIy87UOoJTwkUs7lBu+Upr1gsNrut79ryra+bSRGQb1slImA8YVJyuIDsj7kwzG7jnERNqnWxZ48AWkskmdHaVDP4BcelrTI3rMXdXF5D
-				rvs.example.com. )
-
-tlsa			TLSA	( 1 1 2 92003ba34942dc74152e2f2c408d29ec
-				a5a520e7f2e06bb944f4dca346baf63c
-				1b177615d466f6c4b71c216a50292bd5
-				8c9ebdd2f74e38fe51ffd48c43326cbc )
-
-smimea			SMIMEA	( 1 1 2 92003ba34942dc74152e2f2c408d29ec
-				a5a520e7f2e06bb944f4dca346baf63c
-				1b177615d466f6c4b71c216a50292bd5
-				8c9ebdd2f74e38fe51ffd48c43326cbc )
-
-nid			NID	10 0014:4fff:ff20:ee64
-
-l32			L32	10 1.2.3.4
-
-l64			L64	10 0014:4fff:ff20:ee64
-
-lp			LP	10 example.net.
-
-eui48			EUI48	01-23-45-67-89-ab
-
-eui64			EUI64	01-23-45-67-89-ab-cd-ef
-
 ; type 255
 ; TSIG is a meta-type and should never occur in master files.
-
-; type 256
-uri01			URI	10 20 "https://www.isc.org/"
-uri02			URI	30 40 "https://www.isc.org/HolyCowThisSureIsAVeryLongURIRecordIDontEvenKnowWhatSomeoneWouldEverWantWithSuchAThingButTheSpecificationRequiresThatWesupportItSoHereWeGoTestingItLaLaLaLaLaLaLaSeriouslyThoughWhyWouldYouEvenConsiderUsingAURIThisLongItSeemsLikeASillyIdeaButEnhWhatAreYouGonnaDo/"
-uri03			URI	30 40 ""
-
-; type 257
-caa01			CAA	0 issue "ca.example.net; policy=ev"
-caa02			CAA	128 tbs "Unknown"
-caa03			CAA	128 tbs ""
-
-; type 258
-avc			AVC	foo:bar
-
-; type 32768
-ta			TA	30795 1 1 (
-					310D27F4D82C1FC2400704EA9939FE6E1CEA
-					A3B9 )
-
-; type 32769
-dlv			DLV	30795 1 1 (
-					310D27F4D82C1FC2400704EA9939FE6E1CEA
-					A3B9 )
-
-; keydata (internal type used for managed-keys)
-keydata			TYPE65533	\# 0
-keydata			TYPE65533	\# 6 010203040506 
-keydata			TYPE65533	\# 18 010203040506010203040506010203040506
-
 EOF

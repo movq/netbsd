@@ -1,6 +1,6 @@
-/*	$NetBSD: dhcpleasequery.c,v 1.5 2014/07/12 12:09:38 spz Exp $	*/
+/*	$NetBSD: dhcpleasequery.c,v 1.1 2013/03/24 15:46:00 christos Exp $	*/
+
 /*
- * Copyright (C) 2011-2013 by Internet Systems Consortium, Inc. ("ISC")
  * Copyright (C) 2006-2007,2009 by Internet Systems Consortium, Inc. ("ISC")
  *
  * Permission to use, copy, modify, and distribute this software for any
@@ -15,9 +15,6 @@
  * OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR
  * PERFORMANCE OF THIS SOFTWARE.
  */
-
-#include <sys/cdefs.h>
-__RCSID("$NetBSD: dhcpleasequery.c,v 1.5 2014/07/12 12:09:38 spz Exp $");
 
 #include "dhcpd.h"
 
@@ -63,7 +60,7 @@ next_uid(const struct lease *lease) {
 	return lease->n_uid;
 }
 
-static void
+void
 get_newest_lease(struct lease **retval,
 		 struct lease *lease,
 		 struct lease *(*next)(const struct lease *)) {
@@ -208,16 +205,26 @@ dhcpleasequery(struct packet *packet, int ms_nulltp) {
 		return;
 	}
 
-	execute_statements_in_scope(NULL, packet, NULL, NULL, packet->options,
-				    options, &global_scope, relay_group,
-				    NULL, NULL);
+	execute_statements_in_scope(NULL,
+				    packet,
+				    NULL,
+				    NULL,
+				    packet->options,
+				    options,
+				    &global_scope,
+				    relay_group,
+				    NULL);
 
 	for (i=packet->class_count-1; i>=0; i--) {
-		execute_statements_in_scope(NULL, packet, NULL, NULL,
-					    packet->options, options,
+		execute_statements_in_scope(NULL,
+					    packet,
+					    NULL,
+					    NULL,
+					    packet->options,
+					    options,
 					    &global_scope,
 					    packet->classes[i]->group,
-					    relay_group, NULL);
+					    relay_group);
 	}
 
 	/* 
@@ -449,7 +456,10 @@ dhcpleasequery(struct packet *packet, int ms_nulltp) {
 			(lease_duration / 8);
 
 		if (time_renewal > cur_time) {
-			time_renewal = htonl(time_renewal - cur_time);
+			if (time_renewal < cur_time)
+				time_renewal = 0;
+			else
+				time_renewal = htonl(time_renewal - cur_time);
 
 			if (!add_option(options, 
 					DHO_DHCP_RENEWAL_TIME,
@@ -479,8 +489,15 @@ dhcpleasequery(struct packet *packet, int ms_nulltp) {
 		}
 
 		if (lease->ends > cur_time) {
-			time_expiry = htonl(lease->ends - cur_time);
+			if (time_expiry < cur_time) {
+				log_error("Impossible condition at %s:%d.",
+					  MDL);
 
+				option_state_dereference(&options, MDL);
+				lease_dereference(&lease, MDL);
+				return;
+			}
+			time_expiry = htonl(lease->ends - cur_time);
 			if (!add_option(options, 
 					DHO_DHCP_LEASE_TIME,
 					&time_expiry, 
@@ -610,7 +627,7 @@ dhcpleasequery(struct packet *packet, int ms_nulltp) {
 	/*
 	 * Figure out which address to use to send from.
 	 */
-	get_server_source_address(&siaddr, options, options, packet);
+	get_server_source_address(&siaddr, options, packet);
 
 	/* 
 	 * Set up the option buffer.
@@ -1087,7 +1104,7 @@ dhcpv6_leasequery(struct data_string *reply_ret, struct packet *packet) {
 	}
 	execute_statements_in_scope(NULL, lq.packet, NULL, NULL,
 				    lq.packet->options, lq.reply_opts,
-				    &global_scope, root_group, NULL, NULL);
+				    &global_scope, root_group, NULL);
 
 	lq.buf.reply.msg_type = DHCPV6_LEASEQUERY_REPLY;
 

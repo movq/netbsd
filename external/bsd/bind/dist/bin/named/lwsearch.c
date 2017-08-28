@@ -1,7 +1,7 @@
-/*	$NetBSD: lwsearch.c,v 1.5 2017/06/15 15:59:36 christos Exp $	*/
+/*	$NetBSD: lwsearch.c,v 1.1 2009/03/22 14:56:01 christos Exp $	*/
 
 /*
- * Copyright (C) 2004, 2005, 2007, 2016  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2004, 2005, 2007  Internet Systems Consortium, Inc. ("ISC")
  * Copyright (C) 2000, 2001  Internet Software Consortium.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -17,7 +17,7 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* Id: lwsearch.c,v 1.13 2007/06/19 23:46:59 tbox Exp  */
+/* Id: lwsearch.c,v 1.13 2007/06/19 23:46:59 tbox Exp */
 
 /*! \file */
 
@@ -50,7 +50,7 @@ ns_lwsearchlist_create(isc_mem_t *mctx, ns_lwsearchlist_t **listp) {
 	list = isc_mem_get(mctx, sizeof(ns_lwsearchlist_t));
 	if (list == NULL)
 		return (ISC_R_NOMEMORY);
-
+	
 	result = isc_mutex_init(&list->lock);
 	if (result != ISC_R_SUCCESS) {
 		isc_mem_put(mctx, list, sizeof(ns_lwsearchlist_t));
@@ -166,6 +166,7 @@ ns_lwsearchctx_next(ns_lwsearchctx_t *sctx) {
 		return (ISC_R_NOMORE);
 
 	if (sctx->searchname == NULL) {
+		INSIST (!sctx->exactfirst || sctx->doneexact);
 		if (sctx->exactfirst || sctx->doneexact)
 			return (ISC_R_NOMORE);
 		sctx->doneexact = ISC_TRUE;

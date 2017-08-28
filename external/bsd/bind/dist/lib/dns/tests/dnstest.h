@@ -1,7 +1,7 @@
-/*	$NetBSD: dnstest.h,v 1.4 2016/05/26 16:49:59 christos Exp $	*/
+/*	$NetBSD: dnstest.h,v 1.1 2011/09/11 17:19:03 christos Exp $	*/
 
 /*
- * Copyright (C) 2011, 2012, 2015  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2011  Internet Systems Consortium, Inc. ("ISC")
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -16,7 +16,7 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* Id */
+/* Id: dnstest.h,v 1.3 2011-07-06 01:36:32 each Exp */
 
 /*! \file */
 
@@ -33,26 +33,22 @@
 #include <isc/util.h>
 
 #include <dns/result.h>
-#include <dns/zone.h>
 
 #define CHECK(r) \
 	do { \
 		result = (r); \
 		if (result != ISC_R_SUCCESS) \
 			goto cleanup; \
-	} while (/*CONSTCOND*/0)
+	} while (0)
 
 extern isc_mem_t *mctx;
 extern isc_entropy_t *ectx;
 extern isc_log_t *lctx;
-extern isc_taskmgr_t *taskmgr;
-extern isc_task_t *maintask;
-extern isc_timermgr_t *timermgr;
-extern isc_socketmgr_t *socketmgr;
-extern dns_zonemgr_t *zonemgr;
-extern isc_boolean_t app_running;
-extern int ncpus;
-extern isc_boolean_t debug_mem_record;
+isc_taskmgr_t *taskmgr;
+isc_timermgr_t *timermgr;
+isc_socketmgr_t *socketmgr;
+int ncpus;
+
 
 isc_result_t
 dns_test_begin(FILE *logfile, isc_boolean_t create_managers);
@@ -60,25 +56,3 @@ dns_test_begin(FILE *logfile, isc_boolean_t create_managers);
 void
 dns_test_end(void);
 
-isc_result_t
-dns_test_makezone(const char *name, dns_zone_t **zonep, dns_view_t *view,
-				  isc_boolean_t keepview);
-
-isc_result_t
-dns_test_setupzonemgr(void);
-
-isc_result_t
-dns_test_managezone(dns_zone_t *zone);
-
-void
-dns_test_releasezone(dns_zone_t *zone);
-
-void
-dns_test_closezonemgr(void);
-
-void
-dns_test_nap(isc_uint32_t usec);
-
-isc_result_t
-dns_test_loaddb(dns_db_t **db, dns_dbtype_t dbtype, const char *origin,
-		const char *testfile);

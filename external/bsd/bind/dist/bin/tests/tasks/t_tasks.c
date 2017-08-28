@@ -1,7 +1,7 @@
-/*	$NetBSD: t_tasks.c,v 1.8 2015/12/17 04:00:43 christos Exp $	*/
+/*	$NetBSD: t_tasks.c,v 1.1 2009/03/22 14:57:02 christos Exp $	*/
 
 /*
- * Copyright (C) 2004, 2005, 2007, 2009, 2011, 2013-2015  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2004, 2005, 2007, 2009  Internet Systems Consortium, Inc. ("ISC")
  * Copyright (C) 1998-2001  Internet Software Consortium.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -17,7 +17,7 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* Id: t_tasks.c,v 1.49 2011/07/27 07:45:55 marka Exp  */
+/* Id: t_tasks.c,v 1.40.332.2 2009/01/22 23:47:05 tbox Exp */
 
 #include <config.h>
 
@@ -70,7 +70,6 @@ t1_callback(isc_task_t *task, isc_event_t *event) {
 
 static void
 t1_shutdown(isc_task_t *task, isc_event_t *event) {
-
 	UNUSED(task);
 
 	t_info("shutdown %s\n", (char *)event->ev_arg);
@@ -79,7 +78,6 @@ t1_shutdown(isc_task_t *task, isc_event_t *event) {
 
 static void
 my_tick(isc_task_t *task, isc_event_t *event) {
-
 	UNUSED(task);
 
 	t_info("%s\n", (char *)event->ev_arg);
@@ -89,13 +87,6 @@ my_tick(isc_task_t *task, isc_event_t *event) {
 /*
  * Adapted from RTH's original task_test program
  */
-
-static char one[] = "1";
-static char two[] = "2";
-static char three[] = "3";
-static char four[] = "4";
-static char tick[] = "tick";
-static char tock[] = "tock";
 
 static int
 t_tasks1(void) {
@@ -112,8 +103,8 @@ t_tasks1(void) {
 	isc_timer_t		*ti1;
 	isc_timer_t		*ti2;
 	isc_result_t		isc_result;
-	isc_time_t		absolute;
-	isc_interval_t		interval;
+	struct isc_time		absolute;
+	struct isc_interval	interval;
 
 	manager = NULL;
 	task1 = NULL;
@@ -167,25 +158,25 @@ t_tasks1(void) {
 		return(T_FAIL);
 	}
 
-	isc_result = isc_task_onshutdown(task1, t1_shutdown, one);
+	isc_result = isc_task_onshutdown(task1, t1_shutdown, "1");
 	if (isc_result != ISC_R_SUCCESS) {
 		t_info("isc_task_onshutdown failed %d\n", isc_result);
 		return(T_FAIL);
 	}
 
-	isc_result = isc_task_onshutdown(task2, t1_shutdown, two);
+	isc_result = isc_task_onshutdown(task2, t1_shutdown, "2");
 	if (isc_result != ISC_R_SUCCESS) {
 		t_info("isc_task_onshutdown failed %d\n", isc_result);
 		return(T_FAIL);
 	}
 
-	isc_result = isc_task_onshutdown(task3, t1_shutdown, three);
+	isc_result = isc_task_onshutdown(task3, t1_shutdown, "3");
 	if (isc_result != ISC_R_SUCCESS) {
 		t_info("isc_task_onshutdown failed %d\n", isc_result);
 		return(T_FAIL);
 	}
 
-	isc_result = isc_task_onshutdown(task4, t1_shutdown, four);
+	isc_result = isc_task_onshutdown(task4, t1_shutdown, "4");
 	if (isc_result != ISC_R_SUCCESS) {
 		t_info("isc_task_onshutdown failed %d\n", isc_result);
 		return(T_FAIL);
@@ -203,7 +194,7 @@ t_tasks1(void) {
 	isc_interval_set(&interval, 1, 0);
 	isc_result = isc_timer_create(timgr, isc_timertype_ticker,
 				&absolute, &interval,
-				task1, my_tick, tick, &ti1);
+				task1, my_tick, "tick", &ti1);
 	if (isc_result != ISC_R_SUCCESS) {
 		t_info("isc_timer_create %d\n", isc_result);
 		return(T_UNRESOLVED);
@@ -214,18 +205,14 @@ t_tasks1(void) {
 	isc_interval_set(&interval, 1, 0);
 	isc_result = isc_timer_create(timgr, isc_timertype_ticker,
 				       &absolute, &interval,
-				       task2, my_tick, tock, &ti2);
+				       task2, my_tick, "tock", &ti2);
 	if (isc_result != ISC_R_SUCCESS) {
 		t_info("isc_timer_create %d\n", isc_result);
 		return(T_UNRESOLVED);
 	}
 
 
-#ifndef WIN32
 	sleep(2);
-#else
-	Sleep(2000);
-#endif
 
 	/*
 	 * Note:  (void *)1 is used as a sender here, since some compilers
@@ -235,7 +222,7 @@ t_tasks1(void) {
 	 * structure (socket, timer, task, etc) but this is just a test
 	 * program.
 	 */
-	event = isc_event_allocate(mctx, (void *)1, 1, t1_callback, one,
+	event = isc_event_allocate(mctx, (void *)1, 1, t1_callback, "1",
 				   sizeof(*event));
 	if (event == NULL) {
 		t_info("isc_event_allocate failed\n");
@@ -244,7 +231,7 @@ t_tasks1(void) {
 
 	isc_task_send(task1, &event);
 
-	event = isc_event_allocate(mctx, (void *)1, 1, t1_callback, one,
+	event = isc_event_allocate(mctx, (void *)1, 1, t1_callback, "1",
 				   sizeof(*event));
 	if (event == NULL) {
 		t_info("isc_event_allocate failed\n");
@@ -253,7 +240,7 @@ t_tasks1(void) {
 
 	isc_task_send(task1, &event);
 
-	event = isc_event_allocate(mctx, (void *)1, 1, t1_callback, one,
+	event = isc_event_allocate(mctx, (void *)1, 1, t1_callback, "1",
 				   sizeof(*event));
 	if (event == NULL) {
 		t_info("isc_event_allocate failed\n");
@@ -262,7 +249,7 @@ t_tasks1(void) {
 
 	isc_task_send(task1, &event);
 
-	event = isc_event_allocate(mctx, (void *)1, 1, t1_callback, one,
+	event = isc_event_allocate(mctx, (void *)1, 1, t1_callback, "1",
 				   sizeof(*event));
 	if (event == NULL) {
 		t_info("isc_event_allocate failed\n");
@@ -271,7 +258,7 @@ t_tasks1(void) {
 
 	isc_task_send(task1, &event);
 
-	event = isc_event_allocate(mctx, (void *)1, 1, t1_callback, one,
+	event = isc_event_allocate(mctx, (void *)1, 1, t1_callback, "1",
 				   sizeof(*event));
 	if (event == NULL) {
 		t_info("isc_event_allocate failed\n");
@@ -280,7 +267,7 @@ t_tasks1(void) {
 
 	isc_task_send(task1, &event);
 
-	event = isc_event_allocate(mctx, (void *)1, 1, t1_callback, one,
+	event = isc_event_allocate(mctx, (void *)1, 1, t1_callback, "1",
 				   sizeof(*event));
 	if (event == NULL) {
 		t_info("isc_event_allocate failed\n");
@@ -289,7 +276,7 @@ t_tasks1(void) {
 
 	isc_task_send(task1, &event);
 
-	event = isc_event_allocate(mctx, (void *)1, 1, t1_callback, one,
+	event = isc_event_allocate(mctx, (void *)1, 1, t1_callback, "1",
 				   sizeof(*event));
 	if (event == NULL) {
 		t_info("isc_event_allocate failed\n");
@@ -298,7 +285,7 @@ t_tasks1(void) {
 
 	isc_task_send(task1, &event);
 
-	event = isc_event_allocate(mctx, (void *)1, 1, t1_callback, one,
+	event = isc_event_allocate(mctx, (void *)1, 1, t1_callback, "1",
 				   sizeof(*event));
 	if (event == NULL) {
 		t_info("isc_event_allocate failed\n");
@@ -307,7 +294,7 @@ t_tasks1(void) {
 
 	isc_task_send(task1, &event);
 
-	event = isc_event_allocate(mctx, (void *)1, 1, t1_callback, one,
+	event = isc_event_allocate(mctx, (void *)1, 1, t1_callback, "1",
 				   sizeof(*event));
 	if (event == NULL) {
 		t_info("isc_event_allocate failed\n");
@@ -316,7 +303,7 @@ t_tasks1(void) {
 
 	isc_task_send(task1, &event);
 
-	event = isc_event_allocate(mctx, (void *)1, 1, t1_callback, two,
+	event = isc_event_allocate(mctx, (void *)1, 1, t1_callback, "2",
 				   sizeof(*event));
 	if (event == NULL) {
 		t_info("isc_event_allocate failed\n");
@@ -325,7 +312,7 @@ t_tasks1(void) {
 
 	isc_task_send(task2, &event);
 
-	event = isc_event_allocate(mctx, (void *)1, 1, t1_callback, three,
+	event = isc_event_allocate(mctx, (void *)1, 1, t1_callback, "3",
 				   sizeof(*event));
 	if (event == NULL) {
 		t_info("isc_event_allocate failed\n");
@@ -334,7 +321,7 @@ t_tasks1(void) {
 
 	isc_task_send(task3, &event);
 
-	event = isc_event_allocate(mctx, (void *)1, 1, t1_callback, four,
+	event = isc_event_allocate(mctx, (void *)1, 1, t1_callback, "4",
 				   sizeof(*event));
 	if (event == NULL) {
 		t_info("isc_event_allocate failed\n");
@@ -343,7 +330,7 @@ t_tasks1(void) {
 
 	isc_task_send(task4, &event);
 
-	event = isc_event_allocate(mctx, (void *)1, 1, t1_callback, two,
+	event = isc_event_allocate(mctx, (void *)1, 1, t1_callback, "2",
 				   sizeof(*event));
 	if (event == NULL) {
 		t_info("isc_event_allocate failed\n");
@@ -352,7 +339,7 @@ t_tasks1(void) {
 
 	isc_task_send(task2, &event);
 
-	event = isc_event_allocate(mctx, (void *)1, 1, t1_callback, three,
+	event = isc_event_allocate(mctx, (void *)1, 1, t1_callback, "3",
 				   sizeof(*event));
 	if (event == NULL) {
 		t_info("isc_event_allocate failed\n");
@@ -361,7 +348,7 @@ t_tasks1(void) {
 
 	isc_task_send(task3, &event);
 
-	event = isc_event_allocate(mctx, (void *)1, 1, t1_callback, four,
+	event = isc_event_allocate(mctx, (void *)1, 1, t1_callback, "4",
 				   sizeof(*event));
 	if (event == NULL) {
 		t_info("isc_event_allocate failed\n");
@@ -377,11 +364,7 @@ t_tasks1(void) {
 	isc_task_detach(&task3);
 	isc_task_detach(&task4);
 
-#ifndef WIN32
 	sleep(10);
-#else
-	Sleep(10000);
-#endif
 	isc_timer_detach(&ti1);
 	isc_timer_detach(&ti2);
 	isc_timermgr_destroy(&timgr);
@@ -419,7 +402,7 @@ t2_shutdown(isc_task_t *task, isc_event_t *event) {
 
 	isc_result_t	isc_result;
 
-	UNUSED(task);
+	task = task; /* notused */
 
 	if (event->ev_arg != NULL) {
 		isc_task_destroy((isc_task_t**) &event->ev_arg);
@@ -613,8 +596,7 @@ static	int		T3_nprobs;
 
 static void
 t3_sde1(isc_task_t *task, isc_event_t *event) {
-
-	UNUSED(task);
+	task = task;
 
 	if (T3_nevents != T3_NEVENTS) {
 		t_info("Some events were not processed\n");
@@ -632,7 +614,7 @@ t3_sde1(isc_task_t *task, isc_event_t *event) {
 static void
 t3_sde2(isc_task_t *task, isc_event_t *event) {
 
-	UNUSED(task);
+	task = task;
 
 	if (T3_nevents != T3_NEVENTS) {
 		t_info("Some events were not processed\n");
@@ -651,7 +633,7 @@ static void
 t3_event1(isc_task_t *task, isc_event_t *event) {
 	isc_result_t	isc_result;
 
-	UNUSED(task);
+	task = task;
 
 	isc_result = isc_mutex_lock(&T3_mx);
 	if (isc_result != ISC_R_SUCCESS) {
@@ -674,7 +656,7 @@ t3_event1(isc_task_t *task, isc_event_t *event) {
 
 static void
 t3_event2(isc_task_t *task, isc_event_t *event) {
-	UNUSED(task);
+	task = task;
 
 	++T3_nevents;
 	isc_event_free(&event);
@@ -753,7 +735,7 @@ t_tasks3(void) {
 	if (isc_result != ISC_R_SUCCESS) {
 		t_info("isc_task_create failed %s\n",
 		       isc_result_totext(isc_result));
-		(void) isc_mutex_unlock(&T3_mx);
+		isc_mutex_unlock(&T3_mx);
 		isc_taskmgr_destroy(&tmgr);
 		isc_mem_destroy(&mctx);
 		return(T_UNRESOLVED);
@@ -764,14 +746,6 @@ t_tasks3(void) {
 	 */
 	event = isc_event_allocate(mctx, &senders[1], event_type, t3_event1,
 				   NULL, sizeof(*event));
-	if (event == NULL) {
-		t_info("isc_event_allocate failed\n");
-		(void) isc_mutex_unlock(&T3_mx);
-		isc_task_destroy(&task);
-		isc_taskmgr_destroy(&tmgr);
-		isc_mem_destroy(&mctx);
-		return(T_UNRESOLVED);
-	}
 	isc_task_send(task, &event);
 
 	/*
@@ -780,14 +754,6 @@ t_tasks3(void) {
 	for (cnt = 0; cnt < T3_NEVENTS; ++cnt) {
 		event = isc_event_allocate(mctx, &senders[1], event_type,
 					   t3_event2, NULL, sizeof(*event));
-		if (event == NULL) {
-			t_info("isc_event_allocate failed\n");
-			(void) isc_mutex_unlock(&T3_mx);
-			isc_task_destroy(&task);
-			isc_taskmgr_destroy(&tmgr);
-			isc_mem_destroy(&mctx);
-			return(T_UNRESOLVED);
-		}
 		isc_task_send(task, &event);
 	}
 
@@ -798,7 +764,7 @@ t_tasks3(void) {
 	if (isc_result != ISC_R_SUCCESS) {
 		t_info("isc_task_send failed %s\n",
 				isc_result_totext(isc_result));
-		(void) isc_mutex_unlock(&T3_mx);
+		isc_mutex_unlock(&T3_mx);
 		isc_task_destroy(&task);
 		isc_taskmgr_destroy(&tmgr);
 		isc_mem_destroy(&mctx);
@@ -809,7 +775,7 @@ t_tasks3(void) {
 	if (isc_result != ISC_R_SUCCESS) {
 		t_info("isc_task_send failed %s\n",
 				isc_result_totext(isc_result));
-		(void) isc_mutex_unlock(&T3_mx);
+		isc_mutex_unlock(&T3_mx);
 		isc_task_destroy(&task);
 		isc_taskmgr_destroy(&tmgr);
 		isc_mem_destroy(&mctx);
@@ -824,14 +790,14 @@ t_tasks3(void) {
 	T3_flag = 1;
 	isc_result = isc_condition_signal(&T3_cv);
 	if (isc_result != ISC_R_SUCCESS) {
-		t_info("isc_condition_signal failed %s\n",
+		t_info("isc_task_send failed %s\n",
 				isc_result_totext(isc_result));
 		++T3_nprobs;
 	}
 
 	isc_result = isc_mutex_unlock(&T3_mx);
 	if (isc_result != ISC_R_SUCCESS) {
-		t_info("isc_mutex_unlock failed %s\n",
+		t_info("isc_task_send failed %s\n",
 				isc_result_totext(isc_result));
 		++T3_nprobs;
 	}
@@ -843,6 +809,11 @@ t_tasks3(void) {
 
 	if (T3_nsdevents != 2) {
 		t_info("T3_nsdevents == %d, expected 2\n", T3_nsdevents);
+		++T3_nfails;
+	}
+
+	if (T3_nevents != T3_nevents) {
+		t_info("T3_nevents == %d, expected 2\n", T3_nevents);
 		++T3_nfails;
 	}
 
@@ -928,6 +899,7 @@ t_tasks4(void) {
 	T4_nfails = 0;
 	T4_flag = 0;
 
+	result = T_UNRESOLVED;
 	event_type = 4;
 
 	workers = 2;
@@ -966,7 +938,7 @@ t_tasks4(void) {
 		t_info("isc_taskmgr_create failed %s\n",
 		       isc_result_totext(isc_result));
 		DESTROYLOCK(&T4_mx);
-		(void) isc_condition_destroy(&T4_cv);
+		isc_condition_destroy(&T4_cv);
 		isc_mem_destroy(&mctx);
 		return(T_UNRESOLVED);
 	}
@@ -976,7 +948,7 @@ t_tasks4(void) {
 		t_info("isc_mutex_lock failed %s\n",
 		       isc_result_totext(isc_result));
 		DESTROYLOCK(&T4_mx);
-		(void) isc_condition_destroy(&T4_cv);
+		isc_condition_destroy(&T4_cv);
 		isc_taskmgr_destroy(&tmgr);
 		isc_mem_destroy(&mctx);
 		return(T_UNRESOLVED);
@@ -987,14 +959,8 @@ t_tasks4(void) {
 	if (isc_result != ISC_R_SUCCESS) {
 		t_info("isc_task_create failed %s\n",
 		       isc_result_totext(isc_result));
-		isc_result = isc_mutex_unlock(&T4_mx);
-		if (isc_result != ISC_R_SUCCESS) {
-			t_info("isc_mutex_unlock failed %s\n",
-			       isc_result_totext(isc_result));
-			++T4_nprobs;
-		}
 		DESTROYLOCK(&T4_mx);
-		(void) isc_condition_destroy(&T4_cv);
+		isc_condition_destroy(&T4_cv);
 		isc_taskmgr_destroy(&tmgr);
 		isc_mem_destroy(&mctx);
 		return(T_UNRESOLVED);
@@ -1005,21 +971,6 @@ t_tasks4(void) {
 	 */
 	event = isc_event_allocate(mctx, &senders[1], event_type, t4_event1,
 				   NULL, sizeof(*event));
-	if (event == NULL) {
-		t_info("isc_event_allocate failed\n");
-		isc_result = isc_mutex_unlock(&T4_mx);
-		if (isc_result != ISC_R_SUCCESS) {
-			t_info("isc_mutex_unlock failed %s\n",
-			       isc_result_totext(isc_result));
-			++T4_nprobs;
-		}
-		DESTROYLOCK(&T4_mx);
-		isc_task_destroy(&task);
-		(void) isc_condition_destroy(&T4_cv);
-		isc_taskmgr_destroy(&tmgr);
-		isc_mem_destroy(&mctx);
-		return(T_UNRESOLVED);
-	}
 	isc_task_send(task, &event);
 
 	isc_task_shutdown(task);
@@ -1053,7 +1004,7 @@ t_tasks4(void) {
 	isc_task_detach(&task);
 	isc_taskmgr_destroy(&tmgr);
 	isc_mem_destroy(&mctx);
-	(void) isc_condition_destroy(&T4_cv);
+	isc_condition_destroy(&T4_cv);
 	DESTROYLOCK(&T4_mx);
 
 	result = T_UNRESOLVED;
@@ -1148,6 +1099,7 @@ t_tasks7(void) {
 	T7_sdflag = 0;
 	T7_eflag = 0;
 
+	result = T_UNRESOLVED;
 	event_type = 7;
 
 	workers = 2;
@@ -1186,7 +1138,7 @@ t_tasks7(void) {
 		t_info("isc_taskmgr_create failed %s\n",
 		       isc_result_totext(isc_result));
 		DESTROYLOCK(&T7_mx);
-		(void) isc_condition_destroy(&T7_cv);
+		isc_condition_destroy(&T7_cv);
 		isc_mem_destroy(&mctx);
 		return(T_UNRESOLVED);
 	}
@@ -1196,7 +1148,7 @@ t_tasks7(void) {
 		t_info("isc_mutex_lock failed %s\n",
 		       isc_result_totext(isc_result));
 		DESTROYLOCK(&T7_mx);
-		(void) isc_condition_destroy(&T7_cv);
+		isc_condition_destroy(&T7_cv);
 		isc_taskmgr_destroy(&tmgr);
 		isc_mem_destroy(&mctx);
 		return(T_FAIL);
@@ -1208,7 +1160,7 @@ t_tasks7(void) {
 		t_info("isc_task_create failed %s\n",
 		       isc_result_totext(isc_result));
 		DESTROYLOCK(&T7_mx);
-		(void) isc_condition_destroy(&T7_cv);
+		isc_condition_destroy(&T7_cv);
 		isc_taskmgr_destroy(&tmgr);
 		isc_mem_destroy(&mctx);
 		return(T_FAIL);
@@ -1219,7 +1171,7 @@ t_tasks7(void) {
 		t_info("isc_task_onshutdown returned %s\n",
 		       isc_result_totext(isc_result));
 		DESTROYLOCK(&T7_mx);
-		(void) isc_condition_destroy(&T7_cv);
+		isc_condition_destroy(&T7_cv);
 		isc_task_destroy(&task);
 		isc_taskmgr_destroy(&tmgr);
 		isc_mem_destroy(&mctx);
@@ -1228,20 +1180,12 @@ t_tasks7(void) {
 
 	event = isc_event_allocate(mctx, &senders[1], event_type, t7_event1,
 				   NULL, sizeof(*event));
-	if (event == NULL) {
-		t_info("isc_event_allocate failed\n");
-		DESTROYLOCK(&T7_mx);
-		(void) isc_condition_destroy(&T7_cv);
-		isc_task_destroy(&task);
-		isc_taskmgr_destroy(&tmgr);
-		isc_mem_destroy(&mctx);
-		return(T_UNRESOLVED);
-	}
 	isc_task_send(task, &event);
 
 	isc_task_shutdown(task);
 
-	isc_interval_set(&interval, 5, 0);
+	interval.seconds = 5;
+	interval.nanoseconds = 0;
 
 	while (T7_sdflag == 0) {
 		isc_result = isc_time_nowplusinterval(&now, &interval);
@@ -1249,7 +1193,7 @@ t_tasks7(void) {
 			t_info("isc_time_nowplusinterval failed %s\n",
 			       isc_result_totext(isc_result));
 			DESTROYLOCK(&T7_mx);
-			(void) isc_condition_destroy(&T7_cv);
+			isc_condition_destroy(&T7_cv);
 			isc_task_destroy(&task);
 			isc_taskmgr_destroy(&tmgr);
 			isc_mem_destroy(&mctx);
@@ -1261,7 +1205,7 @@ t_tasks7(void) {
 			t_info("isc_condition_waituntil returned %s\n",
 			       isc_result_totext(isc_result));
 			DESTROYLOCK(&T7_mx);
-			(void) isc_condition_destroy(&T7_cv);
+			isc_condition_destroy(&T7_cv);
 			isc_task_destroy(&task);
 			isc_taskmgr_destroy(&tmgr);
 			isc_mem_destroy(&mctx);
@@ -1279,7 +1223,7 @@ t_tasks7(void) {
 	isc_task_detach(&task);
 	isc_taskmgr_destroy(&tmgr);
 	isc_mem_destroy(&mctx);
-	(void) isc_condition_destroy(&T7_cv);
+	isc_condition_destroy(&T7_cv);
 	DESTROYLOCK(&T7_mx);
 
 	result = T_UNRESOLVED;
@@ -1332,7 +1276,7 @@ static void
 t10_event1(isc_task_t *task, isc_event_t *event) {
 	isc_result_t	isc_result;
 
-	UNUSED(task);
+	task = task;
 
 	isc_result = isc_mutex_lock(&T10_mx);
 	if (isc_result != ISC_R_SUCCESS) {
@@ -1367,7 +1311,7 @@ t10_event2(isc_task_t *task, isc_event_t *event) {
 	int	type_match;
 	int	tag_match;
 
-	UNUSED(task);
+	task = task;
 
 	sender_match = 0;
 	type_match = 0;
@@ -1423,7 +1367,7 @@ static void
 t10_sde(isc_task_t *task, isc_event_t *event) {
 	isc_result_t	isc_result;
 
-	UNUSED(task);
+	task = task;
 
 	isc_result = isc_mutex_lock(&T10_mx);
 	if (isc_result != ISC_R_SUCCESS) {
@@ -1523,7 +1467,7 @@ t_taskpurge_x(int sender, int type, int tag, void *purge_sender,
 		       isc_result_totext(isc_result));
 		isc_mem_destroy(&mctx);
 		DESTROYLOCK(&T10_mx);
-		(void) isc_condition_destroy(&T10_cv);
+		isc_condition_destroy(&T10_cv);
 		++*nprobs;
 		return;
 	}
@@ -1536,7 +1480,7 @@ t_taskpurge_x(int sender, int type, int tag, void *purge_sender,
 		isc_taskmgr_destroy(&tmgr);
 		isc_mem_destroy(&mctx);
 		DESTROYLOCK(&T10_mx);
-		(void) isc_condition_destroy(&T10_cv);
+		isc_condition_destroy(&T10_cv);
 		++*nprobs;
 		return;
 	}
@@ -1549,7 +1493,7 @@ t_taskpurge_x(int sender, int type, int tag, void *purge_sender,
 		isc_taskmgr_destroy(&tmgr);
 		isc_mem_destroy(&mctx);
 		DESTROYLOCK(&T10_mx);
-		(void) isc_condition_destroy(&T10_cv);
+		isc_condition_destroy(&T10_cv);
 		++*nprobs;
 		return;
 	}
@@ -1560,16 +1504,6 @@ t_taskpurge_x(int sender, int type, int tag, void *purge_sender,
 	event = isc_event_allocate(mctx, (void *)1, (isc_eventtype_t)T_CONTROL,
 				   t10_event1, NULL, sizeof(*event));
 
-	if (event == NULL) {
-		t_info("isc_event_allocate failed\n");
-		isc_task_destroy(&task);
-		isc_taskmgr_destroy(&tmgr);
-		isc_mem_destroy(&mctx);
-		DESTROYLOCK(&T10_mx);
-		(void) isc_condition_destroy(&T10_cv);
-		++*nprobs;
-		return;
-	}
 	isc_task_send(task, &event);
 
 	/*
@@ -1586,17 +1520,6 @@ t_taskpurge_x(int sender, int type, int tag, void *purge_sender,
 					    &senders[sender + sender_cnt],
 					    (isc_eventtype_t)(type + type_cnt),
 					    t10_event2, NULL, sizeof(*event));
-
-				if (eventtab[event_cnt] == NULL) {
-					t_info("isc_event_allocate failed\n");
-					isc_task_destroy(&task);
-					isc_taskmgr_destroy(&tmgr);
-					isc_mem_destroy(&mctx);
-					DESTROYLOCK(&T10_mx);
-					(void) isc_condition_destroy(&T10_cv);
-					++*nprobs;
-					return;
-				}
 
 				eventtab[event_cnt]->ev_tag =
 					(void *)((uintptr_t)tag + tag_cnt);
@@ -1656,7 +1579,7 @@ t_taskpurge_x(int sender, int type, int tag, void *purge_sender,
 		isc_taskmgr_destroy(&tmgr);
 		isc_mem_destroy(&mctx);
 		DESTROYLOCK(&T10_mx);
-		(void) isc_condition_destroy(&T10_cv);
+		isc_condition_destroy(&T10_cv);
 		++*nprobs;
 		return;
 	}
@@ -1674,7 +1597,8 @@ t_taskpurge_x(int sender, int type, int tag, void *purge_sender,
 
 	isc_task_shutdown(task);
 
-	isc_interval_set(&interval, 5, 0);
+	interval.seconds = 5;
+	interval.nanoseconds = 0;
 
 	/*
 	 * Wait for shutdown processing to complete.
@@ -1688,7 +1612,7 @@ t_taskpurge_x(int sender, int type, int tag, void *purge_sender,
 			isc_taskmgr_destroy(&tmgr);
 			isc_mem_destroy(&mctx);
 			DESTROYLOCK(&T10_mx);
-			(void) isc_condition_destroy(&T10_cv);
+			isc_condition_destroy(&T10_cv);
 			++*nprobs;
 			return;
 		}
@@ -1701,7 +1625,7 @@ t_taskpurge_x(int sender, int type, int tag, void *purge_sender,
 			isc_taskmgr_destroy(&tmgr);
 			isc_mem_destroy(&mctx);
 			DESTROYLOCK(&T10_mx);
-			(void) isc_condition_destroy(&T10_cv);
+			isc_condition_destroy(&T10_cv);
 			++*nfails;
 			return;
 		}
@@ -1718,7 +1642,7 @@ t_taskpurge_x(int sender, int type, int tag, void *purge_sender,
 	isc_taskmgr_destroy(&tmgr);
 	isc_mem_destroy(&mctx);
 	DESTROYLOCK(&T10_mx);
-	(void) isc_condition_destroy(&T10_cv);
+	isc_condition_destroy(&T10_cv);
 
 	if (T_debug)
 		t_info("task processed %d events\n", T10_eventcnt);
@@ -1810,7 +1734,7 @@ static void
 t11_event1(isc_task_t *task, isc_event_t *event) {
 	isc_result_t	isc_result;
 
-	UNUSED(task);
+	task = task;
 
 	isc_result = isc_mutex_lock(&T11_mx);
 	if (isc_result != ISC_R_SUCCESS) {
@@ -1935,7 +1859,7 @@ t_tasks11(int purgable) {
 		       isc_result_totext(isc_result));
 		isc_mem_destroy(&mctx);
 		DESTROYLOCK(&T11_mx);
-		(void) isc_condition_destroy(&T11_cv);
+		isc_condition_destroy(&T11_cv);
 		return(T_UNRESOLVED);
 	}
 
@@ -1947,7 +1871,7 @@ t_tasks11(int purgable) {
 		isc_taskmgr_destroy(&tmgr);
 		isc_mem_destroy(&mctx);
 		DESTROYLOCK(&T11_mx);
-		(void) isc_condition_destroy(&T11_cv);
+		isc_condition_destroy(&T11_cv);
 		return(T_UNRESOLVED);
 	}
 
@@ -1959,7 +1883,7 @@ t_tasks11(int purgable) {
 		isc_taskmgr_destroy(&tmgr);
 		isc_mem_destroy(&mctx);
 		DESTROYLOCK(&T11_mx);
-		(void) isc_condition_destroy(&T11_cv);
+		isc_condition_destroy(&T11_cv);
 		return(T_UNRESOLVED);
 	}
 
@@ -1968,28 +1892,11 @@ t_tasks11(int purgable) {
 	 */
 	event1 = isc_event_allocate(mctx, (void *)1, (isc_eventtype_t)1,
 				    t11_event1, NULL, sizeof(*event1));
-	if (event1 == NULL) {
-		t_info("isc_event_allocate failed\n");
-		isc_task_destroy(&task);
-		isc_taskmgr_destroy(&tmgr);
-		isc_mem_destroy(&mctx);
-		DESTROYLOCK(&T11_mx);
-		(void) isc_condition_destroy(&T11_cv);
-		return(T_UNRESOLVED);
-	}
+
 	isc_task_send(task, &event1);
 
 	event2 = isc_event_allocate(mctx, (void *)1, (isc_eventtype_t)1,
 				    t11_event2, NULL, sizeof(*event2));
-	if (event2 == NULL) {
-		t_info("isc_event_allocate failed\n");
-		isc_task_destroy(&task);
-		isc_taskmgr_destroy(&tmgr);
-		isc_mem_destroy(&mctx);
-		DESTROYLOCK(&T11_mx);
-		(void) isc_condition_destroy(&T11_cv);
-		return(T_UNRESOLVED);
-	}
 	event2_clone = event2;
 	if (purgable)
 		event2->ev_attributes &= ~ISC_EVENTATTR_NOPURGE;
@@ -2026,7 +1933,8 @@ t_tasks11(int purgable) {
 
 	isc_task_shutdown(task);
 
-	isc_interval_set(&interval, 5, 0);
+	interval.seconds = 5;
+	interval.nanoseconds = 0;
 
 	/*
 	 * Wait for shutdown processing to complete.
@@ -2058,7 +1966,7 @@ t_tasks11(int purgable) {
 	isc_taskmgr_destroy(&tmgr);
 	isc_mem_destroy(&mctx);
 	DESTROYLOCK(&T11_mx);
-	(void) isc_condition_destroy(&T11_cv);
+	isc_condition_destroy(&T11_cv);
 
 	if (T11_eventcnt != (purgable ? 0 : 1)) {
 		t_info("Event was %s purged\n",
@@ -2373,23 +2281,15 @@ t14(void) {
 }
 
 testspec_t	T_testlist[] = {
-	{	(PFV) t1,	"basic task subsystem"	},
-	{	(PFV) t2,	"maxtasks"		},
-	{	(PFV) t3,	"isc_task_shutdown"	},
-	{	(PFV) t4,	"isc_task_shutdown"	},
-	{	(PFV) t7,	"isc_task_create"	},
-	{	(PFV) t10,	"isc_task_purge"	},
-	{	(PFV) t11,	"isc_task_purgeevent"	},
-	{	(PFV) t12,	"isc_task_purgeevent"	},
-	{	(PFV) t13,	"isc_task_purgerange"	},
-	{	(PFV) t14,	"isc_task_beginexclusive" },
-	{	(PFV) 0,	NULL			}
+	{	t1,	"basic task subsystem"	},
+	{	t2,	"maxtasks"		},
+	{	t3,	"isc_task_shutdown"	},
+	{	t4,	"isc_task_shutdown"	},
+	{	t7,	"isc_task_create"	},
+	{	t10,	"isc_task_purge"	},
+	{	t11,	"isc_task_purgeevent"	},
+	{	t12,	"isc_task_purgeevent"	},
+	{	t13,	"isc_task_purgerange"	},
+	{	t14,	"isc_task_beginexclusive" },
+	{	NULL,	NULL			}
 };
-
-#ifdef WIN32
-int
-main(int argc, char **argv) {
-	t_settests(T_testlist);
-	return (t_main(argc, argv));
-}
-#endif

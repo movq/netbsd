@@ -1,7 +1,7 @@
-/*	$NetBSD: types.h,v 1.9 2017/06/15 15:59:41 christos Exp $	*/
+/*	$NetBSD: types.h,v 1.1 2009/03/22 15:02:16 christos Exp $	*/
 
 /*
- * Copyright (C) 2004-2009, 2012-2014, 2016  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2004-2009  Internet Systems Consortium, Inc. ("ISC")
  * Copyright (C) 1999-2003  Internet Software Consortium.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -17,12 +17,10 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* Id */
+/* Id: types.h,v 1.46.84.2 2009/01/29 23:47:44 tbox Exp */
 
 #ifndef ISC_TYPES_H
 #define ISC_TYPES_H 1
-
-#include <isc/bind9.h>
 
 /*! \file isc/types.h
  * \brief
@@ -44,14 +42,11 @@
 
 /* Core Types.  Alphabetized by defined type. */
 
-typedef struct isc_appctx		isc_appctx_t;	 	/*%< Application context */
-typedef struct isc_backtrace_symmap	isc_backtrace_symmap_t; /*%< Symbol Table Entry */
+typedef struct isc_bitstring		isc_bitstring_t; 	/*%< Bitstring */
 typedef struct isc_buffer		isc_buffer_t;		/*%< Buffer */
 typedef ISC_LIST(isc_buffer_t)		isc_bufferlist_t;	/*%< Buffer List */
 typedef struct isc_constregion		isc_constregion_t;	/*%< Const region */
 typedef struct isc_consttextregion	isc_consttextregion_t;	/*%< Const Text Region */
-typedef struct isc_counter		isc_counter_t;		/*%< Counter */
-typedef isc_int16_t			isc_dscp_t;		/*%< Diffserv code point */
 typedef struct isc_entropy		isc_entropy_t;		/*%< Entropy */
 typedef struct isc_entropysource	isc_entropysource_t;	/*%< Entropy Source */
 typedef struct isc_event		isc_event_t;		/*%< Event */
@@ -84,13 +79,8 @@ typedef struct isc_ratelimiter		isc_ratelimiter_t;	/*%< Rate Limiter */
 typedef struct isc_region		isc_region_t;		/*%< Region */
 typedef isc_uint64_t			isc_resourcevalue_t;	/*%< Resource Value */
 typedef unsigned int			isc_result_t;		/*%< Result */
-#ifndef ISC_PLATFORM_USE_NATIVE_RWLOCKS
 typedef struct isc_rwlock		isc_rwlock_t;		/*%< Read Write Lock */
-#else
-typedef pthread_rwlock_t		isc_rwlock_t;		/*%< Read Write Lock */
-#endif
 typedef struct isc_sockaddr		isc_sockaddr_t;		/*%< Socket Address */
-typedef ISC_LIST(isc_sockaddr_t)	isc_sockaddrlist_t;	/*%< Socket Address List */
 typedef struct isc_socket		isc_socket_t;		/*%< Socket */
 typedef struct isc_socketevent		isc_socketevent_t;	/*%< Socket Event */
 typedef struct isc_socketmgr		isc_socketmgr_t;	/*%< Socket Manager */
@@ -106,13 +96,11 @@ typedef struct isc_timer		isc_timer_t;		/*%< Timer */
 typedef struct isc_timermgr		isc_timermgr_t;		/*%< Timer Manager */
 
 typedef void (*isc_taskaction_t)(isc_task_t *, isc_event_t *);
-typedef int (*isc_sockfdwatch_t)(isc_task_t *, isc_socket_t *, void *, int);
+typedef int (*isc_sockfdwatch_t)(isc_task_t *, isc_socket_t *, void *);
 
 /* The following cannot be listed alphabetically due to forward reference */
 typedef isc_result_t (isc_httpdaction_t)(const char *url,
-					 isc_httpdurl_t *urlinfo,
 					 const char *querystring,
-					 const char *headers,
 					 void *arg,
 					 unsigned int *retcode,
 					 const char **retmsg,
@@ -134,12 +122,5 @@ typedef enum {
 	isc_resource_residentsize,
 	isc_resource_stacksize
 } isc_resource_t;
-
-/*% Statistics formats (text file or XML) */
-typedef enum {
-	isc_statsformat_file,
-	isc_statsformat_xml,
-	isc_statsformat_json
-} isc_statsformat_t;
 
 #endif /* ISC_TYPES_H */

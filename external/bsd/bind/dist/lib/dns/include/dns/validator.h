@@ -1,7 +1,7 @@
-/*	$NetBSD: validator.h,v 1.6 2014/12/10 04:37:58 christos Exp $	*/
+/*	$NetBSD: validator.h,v 1.1 2009/03/22 15:01:49 christos Exp $	*/
 
 /*
- * Copyright (C) 2004-2010, 2013, 2014  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2004-2009  Internet Systems Consortium, Inc. ("ISC")
  * Copyright (C) 2000-2003  Internet Software Consortium.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -17,7 +17,7 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* Id: validator.h,v 1.46 2010/02/25 05:08:01 tbox Exp  */
+/* Id: validator.h,v 1.41.48.3 2009/01/18 23:25:17 marka Exp */
 
 #ifndef DNS_VALIDATOR_H
 #define DNS_VALIDATOR_H 1
@@ -106,10 +106,6 @@ typedef struct dns_validatorevent {
 	 * Optout proof seen.
 	 */
 	isc_boolean_t			optout;
-	/*
-	 * Answer is secure.
-	 */
-	isc_boolean_t			secure;
 } dns_validatorevent_t;
 
 #define DNS_VALIDATOR_NOQNAMEPROOF 0
@@ -165,16 +161,13 @@ struct dns_validator {
 	isc_boolean_t			mustbesecure;
 	unsigned int			dlvlabels;
 	unsigned int			depth;
-	unsigned int			authcount;
-	unsigned int			authfail;
 };
 
 /*%
  * dns_validator_create() options.
  */
-#define DNS_VALIDATOR_DLV		0x0001U
-#define DNS_VALIDATOR_DEFER		0x0002U
-#define DNS_VALIDATOR_NOCDFLAG		0x0004U
+#define DNS_VALIDATOR_DLV 1U
+#define DNS_VALIDATOR_DEFER 2U
 
 ISC_LANG_BEGINDECLS
 

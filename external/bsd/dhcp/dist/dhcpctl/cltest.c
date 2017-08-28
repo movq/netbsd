@@ -1,4 +1,5 @@
-/*	$NetBSD: cltest.c,v 1.2 2017/06/28 02:46:30 manu Exp $	*/
+/*	$NetBSD: cltest.c,v 1.1 2013/03/24 15:45:48 christos Exp $	*/
+
 /* cltest.c
 
    Example program that uses the dhcpctl library. */
@@ -29,11 +30,6 @@
  * by Brian Murrell.
  */
 
-#include <sys/cdefs.h>
-__RCSID("$NetBSD: cltest.c,v 1.2 2017/06/28 02:46:30 manu Exp $");
-
-#include "config.h"
-
 #include <time.h>
 #include <sys/time.h>
 #include <stdio.h>
@@ -42,23 +38,6 @@ __RCSID("$NetBSD: cltest.c,v 1.2 2017/06/28 02:46:30 manu Exp $");
 #include <stdarg.h>
 #include "omapip/result.h"
 #include "dhcpctl.h"
-
-uint16_t local_port = 0;
-uint16_t remote_port = 0;
-libdhcp_callbacks_t cltest_callbacks = {
-	&local_port,
-	&remote_port,
-	classify,
-	check_collection,
-	dhcp,
-#ifdef DHCPv6
-	dhcpv6,
-#endif /* DHCPv6 */
-	bootp,
-	find_class,
-	parse_allow_deny,
-	dhcp_set_control_state,
-};
 
 int main (int, char **);
 
@@ -84,8 +63,6 @@ int main (argc, argv)
 	int mode = undefined;
 	const char *interface = 0;
 	const char *action;
-
-	libdhcp_callbacks_register(&cltest_callbacks);
 	
 	for (i = 1; i < argc; i++) {
 		if (!strcmp (argv[i], "-u")) {

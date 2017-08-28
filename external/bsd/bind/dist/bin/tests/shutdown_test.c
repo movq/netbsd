@@ -1,7 +1,7 @@
-/*	$NetBSD: shutdown_test.c,v 1.7 2014/12/10 04:37:53 christos Exp $	*/
+/*	$NetBSD: shutdown_test.c,v 1.1 2009/03/22 14:56:25 christos Exp $	*/
 
 /*
- * Copyright (C) 2004, 2007, 2011, 2013  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2004, 2007  Internet Systems Consortium, Inc. ("ISC")
  * Copyright (C) 1998-2001  Internet Software Consortium.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -17,7 +17,7 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* Id: shutdown_test.c,v 1.25 2011/08/28 23:46:41 tbox Exp  */
+/* Id: shutdown_test.c,v 1.23 2007/06/19 23:46:59 tbox Exp */
 
 #include <config.h>
 
@@ -170,19 +170,15 @@ new_task(isc_mem_t *mctx, const char *name) {
 int
 main(int argc, char *argv[]) {
 	unsigned int workers;
-	t_info *t1, *t2;
+	t_info *t1, *t2, *t3;
 	isc_task_t *task;
 	isc_mem_t *mctx, *mctx2;
 
 	RUNTIME_CHECK(isc_app_start() == ISC_R_SUCCESS);
 
-	if (argc > 1) {
+	if (argc > 1)
 		workers = atoi(argv[1]);
-		if (workers < 1)
-			workers = 1;
-		if (workers > 8192)
-			workers = 8192;
-	} else
+	else
 		workers = 2;
 	printf("%d workers\n", workers);
 
@@ -203,7 +199,7 @@ main(int argc, char *argv[]) {
 	/*
 	 * Test run-triggered shutdown.
 	 */
-	(void)new_task(mctx2, "foo");
+	t3 = new_task(mctx2, "foo");
 
 	/*
 	 * Test implicit shutdown.

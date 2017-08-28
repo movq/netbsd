@@ -1,7 +1,7 @@
-/*	$NetBSD: isctest.c,v 1.1.1.7 2014/12/10 03:34:44 christos Exp $	*/
+/*	$NetBSD: isctest.c,v 1.1 2011/09/11 17:19:37 christos Exp $	*/
 
 /*
- * Copyright (C) 2011-2014  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2011  Internet Systems Consortium, Inc. ("ISC")
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -16,13 +16,11 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* Id */
+/* Id: isctest.c,v 1.3 2011-07-28 04:04:37 each Exp */
 
 /*! \file */
 
 #include <config.h>
-
-#include <time.h>
 
 #include <isc/app.h>
 #include <isc/buffer.h>
@@ -44,7 +42,6 @@ isc_log_t *lctx = NULL;
 isc_taskmgr_t *taskmgr = NULL;
 isc_timermgr_t *timermgr = NULL;
 isc_socketmgr_t *socketmgr = NULL;
-isc_task_t *maintask = NULL;
 int ncpus;
 
 static isc_boolean_t hash_active = ISC_FALSE;
@@ -65,9 +62,7 @@ static isc_logcategory_t categories[] = {
 };
 
 static void
-cleanup_managers(void) {
-	if (maintask != NULL)
-		isc_task_destroy(&maintask);
+cleanup_managers() {
 	if (socketmgr != NULL)
 		isc_socketmgr_destroy(&socketmgr);
 	if (taskmgr != NULL)
@@ -77,7 +72,7 @@ cleanup_managers(void) {
 }
 
 static isc_result_t
-create_managers(void) {
+create_managers() {
 	isc_result_t result;
 #ifdef ISC_PLATFORM_USETHREADS
 	ncpus = isc_os_ncpus();
@@ -86,14 +81,11 @@ create_managers(void) {
 #endif
 
 	CHECK(isc_taskmgr_create(mctx, ncpus, 0, &taskmgr));
-	CHECK(isc_task_create(taskmgr, 0, &maintask));
-	isc_taskmgr_setexcltask(taskmgr, maintask);
-
 	CHECK(isc_timermgr_create(mctx, &timermgr));
 	CHECK(isc_socketmgr_create(mctx, &socketmgr));
 	return (ISC_R_SUCCESS);
 
- cleanup:
+  cleanup:
 	cleanup_managers();
 	return (result);
 }
@@ -145,9 +137,7 @@ isc_test_begin(FILE *logfile, isc_boolean_t start_managers) {
 }
 
 void
-isc_test_end(void) {
-	if (maintask != NULL)
-		isc_task_detach(&maintask);
+isc_test_end() {
 	if (taskmgr != NULL)
 		isc_taskmgr_destroy(&taskmgr);
 	if (lctx != NULL)
@@ -165,24 +155,3 @@ isc_test_end(void) {
 		isc_mem_destroy(&mctx);
 }
 
-/*
- * Sleep for 'usec' microseconds.
- */
-void
-isc_test_nap(isc_uint32_t usec) {
-#ifdef HAVE_NANOSLEEP
-	struct timespec ts;
-
-	ts.tv_sec = usec / 1000000;
-	ts.tv_nsec = (usec % 1000000) * 1000;
-	nanosleep(&ts, NULL);
-#elif HAVE_USLEEP
-	usleep(usec);
-#else
-	/*
-	 * No fractional-second sleep function is available, so we
-	 * round up to the nearest second and sleep instead
-	 */
-	sleep((usec / 1000000) + 1);
-#endif
-}

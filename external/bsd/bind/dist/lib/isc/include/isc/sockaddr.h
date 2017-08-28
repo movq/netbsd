@@ -1,7 +1,7 @@
-/*	$NetBSD: sockaddr.h,v 1.7 2017/06/15 15:59:41 christos Exp $	*/
+/*	$NetBSD: sockaddr.h,v 1.1 2009/03/22 15:02:15 christos Exp $	*/
 
 /*
- * Copyright (C) 2004-2007, 2009, 2012, 2015, 2016  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2004-2007, 2009  Internet Systems Consortium, Inc. ("ISC")
  * Copyright (C) 1998-2003  Internet Software Consortium.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -17,7 +17,7 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* Id: sockaddr.h,v 1.57 2009/01/18 23:48:14 tbox Exp  */
+/* Id: sockaddr.h,v 1.55.332.2 2009/01/18 23:47:41 tbox Exp */
 
 #ifndef ISC_SOCKADDR_H
 #define ISC_SOCKADDR_H 1
@@ -36,7 +36,6 @@ struct isc_sockaddr {
 		struct sockaddr		sa;
 		struct sockaddr_in	sin;
 		struct sockaddr_in6	sin6;
-		struct sockaddr_storage ss;
 #ifdef ISC_PLATFORM_HAVESYSUNH
 		struct sockaddr_un	sunix;
 #endif
@@ -44,6 +43,8 @@ struct isc_sockaddr {
 	unsigned int			length;		/* XXXRTH beginning? */
 	ISC_LINK(struct isc_sockaddr)	link;
 };
+
+typedef ISC_LIST(struct isc_sockaddr)	isc_sockaddrlist_t;
 
 #define ISC_SOCKADDR_CMPADDR	  0x0001	/*%< compare the address
 						 *   sin_addr/sin6_addr */
@@ -218,12 +219,6 @@ isc_boolean_t
 isc_sockaddr_issitelocal(const isc_sockaddr_t *sa);
 /*%<
  * Returns ISC_TRUE if the address is a sitelocal address.
- */
-
-isc_boolean_t
-isc_sockaddr_isnetzero(const isc_sockaddr_t *sa);
-/*%<
- * Returns ISC_TRUE if the address is in net zero.
  */
 
 isc_result_t

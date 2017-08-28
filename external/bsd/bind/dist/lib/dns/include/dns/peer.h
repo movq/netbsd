@@ -1,7 +1,7 @@
-/*	$NetBSD: peer.h,v 1.6 2017/06/15 15:59:40 christos Exp $	*/
+/*	$NetBSD: peer.h,v 1.1 2009/03/22 15:01:45 christos Exp $	*/
 
 /*
- * Copyright (C) 2004-2009, 2013, 2014, 2016  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2004-2009  Internet Systems Consortium, Inc. ("ISC")
  * Copyright (C) 2000, 2001, 2003  Internet Software Consortium.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -17,7 +17,7 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* Id: peer.h,v 1.35 2009/01/17 23:47:43 tbox Exp  */
+/* Id: peer.h,v 1.33.118.2 2009/01/18 23:47:41 tbox Exp */
 
 #ifndef DNS_PEER_H
 #define DNS_PEER_H 1
@@ -76,15 +76,10 @@ struct dns_peer {
 	isc_boolean_t		request_ixfr;
 	isc_boolean_t		support_edns;
 	isc_boolean_t		request_nsid;
-	isc_boolean_t		request_sit;
-	isc_boolean_t		force_tcp;
 	dns_name_t	       *key;
 	isc_sockaddr_t	       *transfer_source;
-	isc_dscp_t		transfer_dscp;
 	isc_sockaddr_t	       *notify_source;
-	isc_dscp_t		notify_dscp;
 	isc_sockaddr_t	       *query_source;
-	isc_dscp_t		query_dscp;
 	isc_uint16_t		udpsize;		/* receive size */
 	isc_uint16_t		maxudp;			/* transmit size */
 
@@ -164,18 +159,6 @@ isc_result_t
 dns_peer_getrequestnsid(dns_peer_t *peer, isc_boolean_t *retval);
 
 isc_result_t
-dns_peer_setrequestsit(dns_peer_t *peer, isc_boolean_t newval);
-
-isc_result_t
-dns_peer_getrequestsit(dns_peer_t *peer, isc_boolean_t *retval);
-
-isc_result_t
-dns_peer_setforcetcp(dns_peer_t *peer, isc_boolean_t newval);
-
-isc_result_t
-dns_peer_getforcetcp(dns_peer_t *peer, isc_boolean_t *retval);
-
-isc_result_t
 dns_peer_setsupportedns(dns_peer_t *peer, isc_boolean_t newval);
 
 isc_result_t
@@ -233,23 +216,6 @@ dns_peer_setquerysource(dns_peer_t *peer, const isc_sockaddr_t *query_source);
 isc_result_t
 dns_peer_getquerysource(dns_peer_t *peer, isc_sockaddr_t *query_source);
 
-isc_result_t
-dns_peer_setnotifydscp(dns_peer_t *peer, isc_dscp_t dscp);
-
-isc_result_t
-dns_peer_getnotifydscp(dns_peer_t *peer, isc_dscp_t *dscpp);
-
-isc_result_t
-dns_peer_settransferdscp(dns_peer_t *peer, isc_dscp_t dscp);
-
-isc_result_t
-dns_peer_gettransferdscp(dns_peer_t *peer, isc_dscp_t *dscpp);
-
-isc_result_t
-dns_peer_setquerydscp(dns_peer_t *peer, isc_dscp_t dscp);
-
-isc_result_t
-dns_peer_getquerydscp(dns_peer_t *peer, isc_dscp_t *dscpp);
 ISC_LANG_ENDDECLS
 
 #endif /* DNS_PEER_H */

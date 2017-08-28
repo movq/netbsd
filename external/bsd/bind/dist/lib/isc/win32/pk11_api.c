@@ -1,7 +1,7 @@
-/*	$NetBSD: pk11_api.c,v 1.1.1.5 2017/06/15 15:22:50 christos Exp $	*/
+/*	$NetBSD: pk11_api.c,v 1.1 2014/02/28 17:40:16 christos Exp $	*/
 
 /*
- * Copyright (C) 2014, 2016  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2014  Internet Systems Consortium, Inc. ("ISC")
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -30,7 +30,6 @@
 #include <isc/log.h>
 #include <isc/mem.h>
 #include <isc/once.h>
-#include <isc/print.h>
 #include <isc/stdio.h>
 #include <isc/thread.h>
 #include <isc/util.h>
@@ -74,7 +73,6 @@ getpassphrase(const char *prompt) {
 /* load PKCS11 DLL */
 
 static HINSTANCE hPK11 = NULL;
-static char loaderrmsg[1024];
 
 CK_RV
 pkcs_C_Initialize(CK_VOID_PTR pReserved) {
@@ -92,21 +90,12 @@ pkcs_C_Initialize(CK_VOID_PTR pReserved) {
 
 	hPK11 = LoadLibraryA(lib_name);
 
-	if (hPK11 == NULL) {
-		const DWORD err = GetLastError();
-		snprintf(loaderrmsg, sizeof(loaderrmsg),
-			 "LoadLibraryA(\"%s\") failed with 0x%X\n",
-			 lib_name, err);
+	if (hPK11 == NULL)
 		return (CKR_LIBRARY_FAILED_TO_LOAD);
-	}
 	sym = (CK_C_Initialize)GetProcAddress(hPK11, "C_Initialize");
 	if (sym == NULL)
 		return (CKR_SYMBOL_RESOLUTION_FAILED);
 	return (*sym)(pReserved);
-}
-
-char *pk11_get_load_error_message(void) {
-	return (loaderrmsg);
 }
 
 CK_RV
@@ -188,13 +177,8 @@ pkcs_C_OpenSession(CK_SLOT_ID slotID,
 
 	if (hPK11 == NULL)
 		hPK11 = LoadLibraryA(pk11_get_lib_name());
-	if (hPK11 == NULL) {
-		const DWORD err = GetLastError();
-		snprintf(loaderrmsg, sizeof(loaderrmsg),
-			 "LoadLibraryA(\"%s\") failed with 0x%X\n",
-			 pk11_get_lib_name(), err);
+	if (hPK11 == NULL)
 		return (CKR_LIBRARY_FAILED_TO_LOAD);
-	}
 	if (sym == NULL)
 		sym = (CK_C_OpenSession)GetProcAddress(hPK11, "C_OpenSession");
 	if (sym == NULL)
@@ -360,41 +344,6 @@ pkcs_C_FindObjectsFinal(CK_SESSION_HANDLE hSession) {
 	if (sym == NULL)
 		return (CKR_SYMBOL_RESOLUTION_FAILED);
 	return (*sym)(hSession);
-}
-
-CK_RV
-pkcs_C_EncryptInit(CK_SESSION_HANDLE hSession,
-		   CK_MECHANISM_PTR pMechanism,
-		   CK_OBJECT_HANDLE hKey)
-{
-	static CK_C_EncryptInit sym = NULL;
-
-	if (hPK11 == NULL)
-		return (CKR_LIBRARY_FAILED_TO_LOAD);
-	if (sym == NULL)
-		sym = (CK_C_EncryptInit)GetProcAddress(hPK11, "C_EncryptInit");
-	if (sym == NULL)
-		return (CKR_SYMBOL_RESOLUTION_FAILED);
-	return (*sym)(hSession, pMechanism, hKey);
-}
-
-CK_RV
-pkcs_C_Encrypt(CK_SESSION_HANDLE hSession,
-	       CK_BYTE_PTR pData,
-	       CK_ULONG ulDataLen,
-	       CK_BYTE_PTR pEncryptedData,
-	       CK_ULONG_PTR pulEncryptedDataLen)
-{
-	static CK_C_Encrypt sym = NULL;
-
-	if (hPK11 == NULL)
-		return (CKR_LIBRARY_FAILED_TO_LOAD);
-	if (sym == NULL)
-		sym = (CK_C_Encrypt)GetProcAddress(hPK11, "C_Encrypt");
-	if (sym == NULL)
-		return (CKR_SYMBOL_RESOLUTION_FAILED);
-	return (*sym)(hSession, pData, ulDataLen,
-		      pEncryptedData, pulEncryptedDataLen);
 }
 
 CK_RV

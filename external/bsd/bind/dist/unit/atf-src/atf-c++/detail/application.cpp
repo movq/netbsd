@@ -1,7 +1,7 @@
 //
 // Automated Testing Framework (atf)
 //
-// Copyright (c) 2007 The NetBSD Foundation, Inc.
+// Copyright (c) 2007, 2008, 2010 The NetBSD Foundation, Inc.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -40,10 +40,6 @@ extern "C" {
 #include <cstdlib>
 #include <cstring>
 #include <iostream>
-
-extern "C" {
-#include "atf-c/defs.h"
-}
 
 #include "application.hpp"
 #include "sanity.hpp"
@@ -155,8 +151,7 @@ impl::app::specific_options(void)
 }
 
 void
-impl::app::process_option(int ch ATF_DEFS_ATTRIBUTE_UNUSED,
-                          const char* arg ATF_DEFS_ATTRIBUTE_UNUSED)
+impl::app::process_option(int ch, const char* arg)
 {
 }
 
@@ -183,7 +178,6 @@ impl::app::process_options(void)
     }
 
     int ch;
-    const int old_opterr = ::opterr;
     ::opterr = 0;
     while ((ch = ::getopt(m_argc, m_argv, optstr.c_str())) != -1) {
         switch (ch) {
@@ -207,7 +201,6 @@ impl::app::process_options(void)
     m_argv += ::optind;
 
     // Clear getopt state just in case the test wants to use it.
-    opterr = old_opterr;
     optind = 1;
 #if defined(HAVE_OPTRESET)
     optreset = 1;

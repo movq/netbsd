@@ -1,7 +1,7 @@
-/*	$NetBSD: pkcs11ecdsa_link.c,v 1.1.1.7 2017/06/15 15:22:47 christos Exp $	*/
+/*	$NetBSD: pkcs11ecdsa_link.c,v 1.1 2014/02/28 17:40:13 christos Exp $	*/
 
 /*
- * Copyright (C) 2014-2017  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2014  Internet Systems Consortium, Inc. ("ISC")
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -16,13 +16,14 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
+/* Id */
+
 #include <config.h>
 
 #if defined(PKCS11CRYPTO) && defined(HAVE_PKCS11_ECDSA)
 
 #include <isc/entropy.h>
 #include <isc/mem.h>
-#include <isc/safe.h>
 #include <isc/sha2.h>
 #include <isc/string.h>
 #include <isc/util.h>
@@ -84,9 +85,9 @@ pkcs11ecdsa_createctx(dst_key_t *key, dst_context_t *dctx) {
 	pk11_object_t *ec = key->keydata.pkey;
 	isc_result_t ret;
 
+	UNUSED(key);
 	REQUIRE(dctx->key->key_alg == DST_ALG_ECDSA256 ||
 		dctx->key->key_alg == DST_ALG_ECDSA384);
-	REQUIRE(ec != NULL);
 
 	if (dctx->key->key_alg == DST_ALG_ECDSA256)
 		mech.mechanism = CKM_SHA256;
@@ -102,8 +103,8 @@ pkcs11ecdsa_createctx(dst_key_t *key, dst_context_t *dctx) {
 		slotid = ec->slot;
 	else
 		slotid = pk11_get_best_token(OP_EC);
-	ret = pk11_get_session(pk11_ctx, OP_EC, ISC_TRUE, ISC_FALSE,
-			       ec->reqlogon, NULL, slotid);
+	ret = pk11_get_session(pk11_ctx, OP_EC, ISC_FALSE, ISC_FALSE,
+			       NULL, slotid);
 	if (ret != ISC_R_SUCCESS)
 		goto err;
 
@@ -358,7 +359,7 @@ pkcs11ecdsa_verify(dst_context_t *dctx, const isc_region_t *sig) {
 		 (pk11_ctx->session,
 		  digest, dgstlen,
 		  (CK_BYTE_PTR) sig->base, (CK_ULONG) sig->length),
-		 DST_R_VERIFYFAILURE);
+		 DST_R_SIGNFAILURE);
 
  err:
 
@@ -399,8 +400,7 @@ pkcs11ecdsa_compare(const dst_key_t *key1, const dst_key_t *key2) {
 		return (ISC_TRUE);
 	else if ((attr1 == NULL) || (attr2 == NULL) ||
 		 (attr1->ulValueLen != attr2->ulValueLen) ||
-		 !isc_safe_memequal(attr1->pValue, attr2->pValue,
-				    attr1->ulValueLen))
+		 memcmp(attr1->pValue, attr2->pValue, attr1->ulValueLen))
 		return (ISC_FALSE);
 
 	attr1 = pk11_attribute_bytype(ec1, CKA_EC_POINT);
@@ -409,8 +409,7 @@ pkcs11ecdsa_compare(const dst_key_t *key1, const dst_key_t *key2) {
 		return (ISC_TRUE);
 	else if ((attr1 == NULL) || (attr2 == NULL) ||
 		 (attr1->ulValueLen != attr2->ulValueLen) ||
-		 !isc_safe_memequal(attr1->pValue, attr2->pValue,
-				    attr1->ulValueLen))
+		 memcmp(attr1->pValue, attr2->pValue, attr1->ulValueLen))
 		return (ISC_FALSE);
 
 	attr1 = pk11_attribute_bytype(ec1, CKA_VALUE);
@@ -418,8 +417,7 @@ pkcs11ecdsa_compare(const dst_key_t *key1, const dst_key_t *key2) {
 	if (((attr1 != NULL) || (attr2 != NULL)) &&
 	    ((attr1 == NULL) || (attr2 == NULL) ||
 	     (attr1->ulValueLen != attr2->ulValueLen) ||
-	     !isc_safe_memequal(attr1->pValue, attr2->pValue,
-				attr1->ulValueLen)))
+	     memcmp(attr1->pValue, attr2->pValue, attr1->ulValueLen)))
 		return (ISC_FALSE);
 
 	if (!ec1->ontoken && !ec2->ontoken)
@@ -499,8 +497,8 @@ pkcs11ecdsa_generate(dst_key_t *key, int unused, void (*callback)(int)) {
 						  sizeof(*pk11_ctx));
 	if (pk11_ctx == NULL)
 		return (ISC_R_NOMEMORY);
-	ret = pk11_get_session(pk11_ctx, OP_EC, ISC_TRUE, ISC_FALSE,
-			       ISC_FALSE, NULL, pk11_get_best_token(OP_EC));
+	ret = pk11_get_session(pk11_ctx, OP_EC, ISC_FALSE, ISC_FALSE, NULL,
+			       pk11_get_best_token(OP_EC));
 	if (ret != ISC_R_SUCCESS)
 		goto err;
 
@@ -565,11 +563,6 @@ pkcs11ecdsa_generate(dst_key_t *key, int unused, void (*callback)(int)) {
 	pk11_return_session(pk11_ctx);
 	memset(pk11_ctx, 0, sizeof(*pk11_ctx));
 	isc_mem_put(key->mctx, pk11_ctx, sizeof(*pk11_ctx));
-
-	if (key->key_alg == DST_ALG_ECDSA256)
-		key->key_size = DNS_KEY_ECDSA256SIZE * 4;
-	else
-		key->key_size = DNS_KEY_ECDSA384SIZE * 4;
 
 	return (ISC_R_SUCCESS);
 
@@ -725,7 +718,6 @@ pkcs11ecdsa_fromdns(dst_key_t *key, isc_buffer_t *data) {
 
 	isc_buffer_forward(data, len);
 	key->keydata.pkey = ec;
-	key->key_size = len * 4;
 	return (ISC_R_SUCCESS);
 
  nomemory:
@@ -866,7 +858,7 @@ pkcs11ecdsa_fetch(dst_key_t *key, const char *engine, const char *label,
 						  sizeof(*pk11_ctx));
 	if (pk11_ctx == NULL)
 		DST_RET(ISC_R_NOMEMORY);
-	ret = pk11_get_session(pk11_ctx, OP_EC, ISC_TRUE, ISC_FALSE,
+	ret = pk11_get_session(pk11_ctx, OP_EC, ISC_FALSE,
 			       ec->reqlogon, NULL, ec->slot);
 	if (ret != ISC_R_SUCCESS)
 		goto err;
@@ -1015,10 +1007,6 @@ pkcs11ecdsa_parse(dst_key_t *key, isc_lex_t *lexer, dst_key_t *pub) {
 
 	dst__privstruct_free(&priv, mctx);
 	memset(&priv, 0, sizeof(priv));
-	if (key->key_alg == DST_ALG_ECDSA256)
-		key->key_size = DNS_KEY_ECDSA256SIZE * 4;
-	else
-		key->key_size = DNS_KEY_ECDSA384SIZE * 4;
 
 	return (ISC_R_SUCCESS);
 
@@ -1079,7 +1067,7 @@ pkcs11ecdsa_fromlabel(dst_key_t *key, const char *engine, const char *label,
 						  sizeof(*pk11_ctx));
 	if (pk11_ctx == NULL)
 		DST_RET(ISC_R_NOMEMORY);
-	ret = pk11_get_session(pk11_ctx, OP_EC, ISC_TRUE, ISC_FALSE,
+	ret = pk11_get_session(pk11_ctx, OP_EC, ISC_FALSE,
 			       ec->reqlogon, NULL, ec->slot);
 	if (ret != ISC_R_SUCCESS)
 		goto err;
@@ -1141,10 +1129,6 @@ pkcs11ecdsa_fromlabel(dst_key_t *key, const char *engine, const char *label,
 	key->label = isc_mem_strdup(key->mctx, label);
 	if (key->label == NULL)
 		DST_RET(ISC_R_NOMEMORY);
-	if (key->key_alg == DST_ALG_ECDSA256)
-		key->key_size = DNS_KEY_ECDSA256SIZE * 4;
-	else
-		key->key_size = DNS_KEY_ECDSA384SIZE * 4;
 
 	pk11_return_session(pk11_ctx);
 	memset(pk11_ctx, 0, sizeof(*pk11_ctx));

@@ -1,7 +1,7 @@
-/*	$NetBSD: md5.h,v 1.6 2017/06/15 15:59:41 christos Exp $	*/
+/*	$NetBSD: md5.h,v 1.1 2009/03/22 15:02:13 christos Exp $	*/
 
 /*
- * Copyright (C) 2004-2007, 2009, 2010, 2014, 2016  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2004-2007  Internet Systems Consortium, Inc. ("ISC")
  * Copyright (C) 2000, 2001  Internet Software Consortium.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -17,7 +17,7 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* Id: md5.h,v 1.20 2010/01/07 23:48:54 tbox Exp  */
+/* Id: md5.h,v 1.16 2007/06/19 23:47:18 tbox Exp */
 
 /*! \file isc/md5.h
  * \brief This is the header file for the MD5 message-digest algorithm.
@@ -45,41 +45,16 @@
 #ifndef ISC_MD5_H
 #define ISC_MD5_H 1
 
-#include <pk11/site.h>
-
-#ifndef PK11_MD5_DISABLE
-
 #include <isc/lang.h>
-#include <isc/platform.h>
 #include <isc/types.h>
 
 #define ISC_MD5_DIGESTLENGTH 16U
-#define ISC_MD5_BLOCK_LENGTH 64U
-
-#ifdef ISC_PLATFORM_OPENSSLHASH
-#include <openssl/opensslv.h>
-#include <openssl/evp.h>
-
-typedef struct {
-	EVP_MD_CTX *ctx;
-#if OPENSSL_VERSION_NUMBER < 0x10100000L
-	EVP_MD_CTX _ctx;
-#endif
-} isc_md5_t;
-
-#elif PKCS11CRYPTO
-#include <pk11/pk11.h>
-
-typedef pk11_context_t isc_md5_t;
-
-#else
 
 typedef struct {
 	isc_uint32_t buf[4];
 	isc_uint32_t bytes[2];
 	isc_uint32_t in[16];
 } isc_md5_t;
-#endif
 
 ISC_LANG_BEGINDECLS
 
@@ -96,7 +71,5 @@ void
 isc_md5_final(isc_md5_t *ctx, unsigned char *digest);
 
 ISC_LANG_ENDDECLS
-
-#endif /* !PK11_MD5_DISABLE */
 
 #endif /* ISC_MD5_H */

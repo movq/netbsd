@@ -1,7 +1,7 @@
-/*	$NetBSD: getipnode.c,v 1.6 2014/12/10 04:38:02 christos Exp $	*/
+/*	$NetBSD: getipnode.c,v 1.1 2009/03/22 15:02:36 christos Exp $	*/
 
 /*
- * Copyright (C) 2004, 2005, 2007, 2009, 2012, 2014  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2004, 2005, 2007  Internet Systems Consortium, Inc. ("ISC")
  * Copyright (C) 1999-2003  Internet Software Consortium.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -17,7 +17,7 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* Id: getipnode.c,v 1.47 2009/09/01 23:47:45 tbox Exp  */
+/* Id: getipnode.c,v 1.42 2007/06/18 23:47:51 tbox Exp */
 
 /*! \file */
 
@@ -25,7 +25,7 @@
  *    These functions perform thread safe, protocol independent
  *    nodename-to-address and address-to-nodename translation as defined in
  *    RFC2553.  This use a struct hostent which is defined in namedb.h:
- *
+ * 
  * \code
  * struct  hostent {
  *         char    *h_name;        // official name of host
@@ -36,90 +36,90 @@
  * };
  * #define h_addr  h_addr_list[0]  // address, for backward compatibility
  * \endcode
- *
+ * 
  *    The members of this structure are:
- *
+ * 
  * \li   h_name:
  *           The official (canonical) name of the host.
- *
+ * 
  * \li   h_aliases:
  *           A NULL-terminated array of alternate names (nicknames) for the
  *           host.
- *
+ * 
  * \li   h_addrtype:
  *           The type of address being returned - usually PF_INET or
  *           PF_INET6.
- *
+ * 
  * \li   h_length:
  *           The length of the address in bytes.
- *
+ * 
  * \li   h_addr_list:
  *           A NULL terminated array of network addresses for the host. Host
  *           addresses are returned in network byte order.
- *
+ * 
  *    lwres_getipnodebyname() looks up addresses of protocol family af for
  *    the hostname name. The flags parameter contains ORed flag bits to
  *    specify the types of addresses that are searched for, and the types of
  *    addresses that are returned. The flag bits are:
- *
+ * 
  * \li   #AI_V4MAPPED:
  *           This is used with an af of #AF_INET6, and causes IPv4 addresses
  *           to be returned as IPv4-mapped IPv6 addresses.
- *
+ * 
  * \li   #AI_ALL:
  *           This is used with an af of #AF_INET6, and causes all known
  *           addresses (IPv6 and IPv4) to be returned. If #AI_V4MAPPED is
  *           also set, the IPv4 addresses are return as mapped IPv6
  *           addresses.
- *
+ * 
  * \li   #AI_ADDRCONFIG:
  *           Only return an IPv6 or IPv4 address if here is an active
  *           network interface of that type. This is not currently
  *           implemented in the BIND 9 lightweight resolver, and the flag is
  *           ignored.
- *
+ * 
  * \li   #AI_DEFAULT:
  *           This default sets the #AI_V4MAPPED and #AI_ADDRCONFIG flag bits.
- *
+ * 
  *    lwres_getipnodebyaddr() performs a reverse lookup of address src which
  *    is len bytes long. af denotes the protocol family, typically PF_INET
  *    or PF_INET6.
- *
+ * 
  *    lwres_freehostent() releases all the memory associated with the struct
  *    hostent pointer. Any memory allocated for the h_name, h_addr_list
  *    and h_aliases is freed, as is the memory for the hostent structure
  *    itself.
- *
+ * 
  * \section getipnode_return Return Values
- *
+ * 
  *    If an error occurs, lwres_getipnodebyname() and
  *    lwres_getipnodebyaddr() set *error_num to an appropriate error code
  *    and the function returns a NULL pointer. The error codes and their
  *    meanings are defined in \link netdb.h <lwres/netdb.h>\endlink:
- *
+ * 
  * \li   #HOST_NOT_FOUND:
  *           No such host is known.
- *
+ * 
  * \li   #NO_ADDRESS:
  *           The server recognised the request and the name but no address
  *           is available. Another type of request to the name server for
  *           the domain might return an answer.
- *
+ * 
  * \li   #TRY_AGAIN:
  *           A temporary and possibly transient error occurred, such as a
  *           failure of a server to respond. The request may succeed if
  *           retried.
- *
+ * 
  * \li   #NO_RECOVERY:
  *           An unexpected failure occurred, and retrying the request is
  *           pointless.
- *
+ * 
  *    lwres_hstrerror() translates these error codes to suitable error
  *    messages.
- *
+ * 
  * \section getipnode_see See Also
- *
- * getaddrinfo.c, gethost.c, getnameinfo.c, herror.c, RFC2553
+ * 
+ * getaddrinfo.c, gethost.c, getnameinfo.c, herror.c, RFC2553  
  */
 
 #include <config.h>
@@ -148,21 +148,21 @@ LIBLWRES_EXTERNAL_DATA const struct in6_addr in6addr_any = IN6ADDR_ANY_INIT;
 
 #ifndef IN6_IS_ADDR_V4COMPAT
 static const unsigned char in6addr_compat[12] = {
-	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
 };
 #define IN6_IS_ADDR_V4COMPAT(x) (!memcmp((x)->s6_addr, in6addr_compat, 12) && \
-				 ((x)->s6_addr[12] != 0 || \
-				  (x)->s6_addr[13] != 0 || \
-				  (x)->s6_addr[14] != 0 || \
-				   ((x)->s6_addr[15] != 0 && \
-				    (x)->s6_addr[15] != 1)))
+                                 ((x)->s6_addr[12] != 0 || \
+                                  (x)->s6_addr[13] != 0 || \
+                                  (x)->s6_addr[14] != 0 || \
+                                   ((x)->s6_addr[15] != 0 && \
+                                    (x)->s6_addr[15] != 1)))
 #endif
 #ifndef IN6_IS_ADDR_V4MAPPED
 #define IN6_IS_ADDR_V4MAPPED(x) (!memcmp((x)->s6_addr, in6addr_mapped, 12))
 #endif
 
 static const unsigned char in6addr_mapped[12] = {
-	0, 0, 0, 0,  0, 0, 0, 0,  0, 0, 0xff, 0xff
+        0, 0, 0, 0,  0, 0, 0, 0,  0, 0, 0xff, 0xff
 };
 
 /***
@@ -204,7 +204,7 @@ lwres_getipnodebyname(const char *name, int af, int flags, int *error_num) {
 	struct in6_addr in6;
 	struct hostent he, *he1 = NULL, *he2 = NULL, *he3 = NULL;
 	int v4 = 0, v6 = 0;
-	int tmp_err = 0;
+	int tmp_err;
 	lwres_context_t *lwrctx = NULL;
 	lwres_gabnresponse_t *by = NULL;
 	int n;
@@ -277,6 +277,7 @@ lwres_getipnodebyname(const char *name, int af, int flags, int *error_num) {
 	(void) lwres_conf_parse(lwrctx, lwres_resolv_conf);
 	tmp_err = NO_RECOVERY;
 	if (have_v6 && af == AF_INET6) {
+
 		n = lwres_getaddrsbyname(lwrctx, name, LWRES_ADDRTYPE_V6, &by);
 		if (n == 0) {
 			he1 = hostfromname(by, AF_INET6);
@@ -286,12 +287,7 @@ lwres_getipnodebyname(const char *name, int af, int flags, int *error_num) {
 				goto cleanup;
 			}
 		} else {
-			if (n == LWRES_R_NOTFOUND)
-				tmp_err = HOST_NOT_FOUND;
-			else {
-				*error_num = NO_RECOVERY;
-				goto cleanup;
-			}
+			tmp_err = HOST_NOT_FOUND;
 		}
 	}
 
@@ -422,7 +418,7 @@ lwres_getipnodebyaddr(const void *src, size_t len, int af, int *error_num) {
 		/*
 		 * Restore original address.
 		 */
-		memmove(he2->h_addr, src, len);
+		memcpy(he2->h_addr, src, len);
 		return (he2);
 	}
 
@@ -443,15 +439,9 @@ lwres_getipnodebyaddr(const void *src, size_t len, int af, int *error_num) {
 	if (n != 0) {
 		lwres_conf_clear(lwrctx);
 		lwres_context_destroy(&lwrctx);
-
-		if (n == LWRES_R_NOTFOUND)
-		       *error_num = HOST_NOT_FOUND;
-		else
-		       *error_num = NO_RECOVERY;
-
+		*error_num = HOST_NOT_FOUND;
 		return (NULL);
 	}
-
 	he1 = hostfromaddr(by, AF_INET6, src);
 	lwres_gnbaresponse_free(lwrctx, &by);
 	if (he1 == NULL)
@@ -467,9 +457,6 @@ lwres_freehostent(struct hostent *he) {
 	char **cpp;
 	int names = 1;
 	int addresses = 1;
-
-	if (he == NULL)
-		return;
 
 	free(he->h_name);
 
@@ -507,7 +494,7 @@ lwres_freehostent(struct hostent *he) {
  */
 
 #if defined(SIOCGLIFCONF) && defined(SIOCGLIFADDR) && \
-    !defined(IRIX_EMUL_IOCTL_SIOCGIFCONF)
+    !defined(IRIX_EMUL_IOCTL_SIOCGIFCONF) 
 
 #ifdef __hpux
 #define lifc_len iflc_len
@@ -519,7 +506,7 @@ lwres_freehostent(struct hostent *he) {
 #define ISC_HAVE_LIFC_FLAGS 1
 #define LIFCONF lifconf
 #endif
-
+ 
 #ifdef __hpux
 #define lifr_addr iflr_addr
 #define lifr_name iflr_name
@@ -572,7 +559,7 @@ scan_interfaces6(int *have_v4, int *have_v6) {
 			/*
 			 * Some OS's just return what will fit rather
 			 * than set EINVAL if the buffer is too small
-			 * to fit all the interfaces in.  If
+			 * to fit all the interfaces in.  If 
 			 * lifc.lifc_len is too near to the end of the
 			 * buffer we will grow it just in case and
 			 * retry.
@@ -597,7 +584,7 @@ scan_interfaces6(int *have_v4, int *have_v6) {
 	for (cp = buf;
 	     (*have_v4 == 0 || *have_v6 == 0) && cp < cplim;
 	     cp += cpsize) {
-		memmove(&lifreq, cp, sizeof(lifreq));
+		memcpy(&lifreq, cp, sizeof(lifreq));
 #ifdef LWRES_PLATFORM_HAVESALEN
 #ifdef FIX_ZERO_SA_LEN
 		if (lifreq.lifr_addr.sa_len == 0)
@@ -622,10 +609,10 @@ scan_interfaces6(int *have_v4, int *have_v6) {
 		switch (lifreq.lifr_addr.ss_family) {
 		case AF_INET:
 			if (*have_v4 == 0) {
-				memmove(&in4,
-					&((struct sockaddr_in *)
-					  &lifreq.lifr_addr)->sin_addr,
-					sizeof(in4));
+				memcpy(&in4,
+				       &((struct sockaddr_in *)
+				       &lifreq.lifr_addr)->sin_addr,
+				       sizeof(in4));
 				if (in4.s_addr == INADDR_ANY)
 					break;
 				n = ioctl(s, SIOCGLIFFLAGS, (char *)&lifreq);
@@ -634,14 +621,14 @@ scan_interfaces6(int *have_v4, int *have_v6) {
 				if ((lifreq.lifr_flags & IFF_UP) == 0)
 					break;
 				*have_v4 = 1;
-			}
+			} 
 			break;
 		case AF_INET6:
 			if (*have_v6 == 0) {
-				memmove(&in6,
-					&((struct sockaddr_in6 *)
-					  &lifreq.lifr_addr)->sin6_addr,
-					sizeof(in6));
+				memcpy(&in6,
+				       &((struct sockaddr_in6 *)
+				       &lifreq.lifr_addr)->sin6_addr, 
+				       sizeof(in6));
 				if (memcmp(&in6, &in6addr_any,
 					   sizeof(in6)) == 0)
 					break;
@@ -690,7 +677,7 @@ scan_interfaces(int *have_v4, int *have_v6) {
 	InitSockets();
 #endif
 #if defined(SIOCGLIFCONF) && defined(SIOCGLIFADDR) && \
-    !defined(IRIX_EMUL_IOCTL_SIOCGIFCONF)
+    !defined(IRIX_EMUL_IOCTL_SIOCGIFCONF) 
 	/*
 	 * Try to scan the interfaces using IPv6 ioctls().
 	 */
@@ -736,7 +723,7 @@ scan_interfaces(int *have_v4, int *have_v6) {
 			/*
 			 * Some OS's just return what will fit rather
 			 * than set EINVAL if the buffer is too small
-			 * to fit all the interfaces in.  If
+			 * to fit all the interfaces in.  If 
 			 * ifc.ifc_len is too near to the end of the
 			 * buffer we will grow it just in case and
 			 * retry.
@@ -762,7 +749,7 @@ scan_interfaces(int *have_v4, int *have_v6) {
 	for (cp = buf;
 	     (*have_v4 == 0 || *have_v6 == 0) && cp < cplim;
 	     cp += cpsize) {
-		memmove(&u.ifreq, cp, sizeof(u.ifreq));
+		memcpy(&u.ifreq, cp, sizeof(u.ifreq));
 #ifdef LWRES_PLATFORM_HAVESALEN
 #ifdef FIX_ZERO_SA_LEN
 		if (u.ifreq.ifr_addr.sa_len == 0)
@@ -777,7 +764,7 @@ scan_interfaces(int *have_v4, int *have_v6) {
 		cpsize = sizeof(u.ifreq.ifr_name) + u.ifreq.ifr_addr.sa_len;
 #endif /* HAVE_MINIMUM_IFREQ */
 		if (cpsize > sizeof(u.ifreq) && cpsize <= sizeof(u))
-			memmove(&u.ifreq, cp, cpsize);
+			memcpy(&u.ifreq, cp, cpsize);
 #elif defined SIOCGIFCONF_ADDR
 		cpsize = sizeof(u.ifreq);
 #else
@@ -789,10 +776,10 @@ scan_interfaces(int *have_v4, int *have_v6) {
 		switch (u.ifreq.ifr_addr.sa_family) {
 		case AF_INET:
 			if (*have_v4 == 0) {
-				memmove(&in4,
-					&((struct sockaddr_in *)
-					  &u.ifreq.ifr_addr)->sin_addr,
-					sizeof(in4));
+				memcpy(&in4,
+				       &((struct sockaddr_in *)
+				       &u.ifreq.ifr_addr)->sin_addr,
+				       sizeof(in4));
 				if (in4.s_addr == INADDR_ANY)
 					break;
 				n = ioctl(s, SIOCGIFFLAGS, (char *)&u.ifreq);
@@ -801,14 +788,14 @@ scan_interfaces(int *have_v4, int *have_v6) {
 				if ((u.ifreq.ifr_flags & IFF_UP) == 0)
 					break;
 				*have_v4 = 1;
-			}
+			} 
 			break;
 		case AF_INET6:
 			if (*have_v6 == 0) {
-				memmove(&in6,
-					&((struct sockaddr_in6 *)
-					  &u.ifreq.ifr_addr)->sin6_addr,
-					sizeof(in6));
+				memcpy(&in6,
+				       &((struct sockaddr_in6 *)
+				       &u.ifreq.ifr_addr)->sin6_addr,
+				       sizeof(in6));
 				if (memcmp(&in6, &in6addr_any,
 					   sizeof(in6)) == 0)
 					break;
@@ -910,13 +897,13 @@ copyandmerge(struct hostent *he1, struct hostent *he2, int af, int *error_num)
 			 * Convert to mapped if required.
 			 */
 			if (af == AF_INET6 && he1->h_addrtype == AF_INET) {
-				memmove(*npp, in6addr_mapped,
-					sizeof(in6addr_mapped));
-				memmove(*npp + sizeof(in6addr_mapped), *cpp,
-					INADDRSZ);
+				memcpy(*npp, in6addr_mapped,
+				       sizeof(in6addr_mapped));
+				memcpy(*npp + sizeof(in6addr_mapped), *cpp,
+				       INADDRSZ);
 			} else {
-				memmove(*npp, *cpp,
-					(af == AF_INET) ? INADDRSZ : IN6ADDRSZ);
+				memcpy(*npp, *cpp,
+				       (af == AF_INET) ? INADDRSZ : IN6ADDRSZ);
 			}
 			cpp++;
 			npp++;
@@ -933,13 +920,13 @@ copyandmerge(struct hostent *he1, struct hostent *he2, int af, int *error_num)
 			 * Convert to mapped if required.
 			 */
 			if (af == AF_INET6 && he2->h_addrtype == AF_INET) {
-				memmove(*npp, in6addr_mapped,
-					sizeof(in6addr_mapped));
-				memmove(*npp + sizeof(in6addr_mapped), *cpp,
-					INADDRSZ);
+				memcpy(*npp, in6addr_mapped,
+				       sizeof(in6addr_mapped));
+				memcpy(*npp + sizeof(in6addr_mapped), *cpp,
+				       INADDRSZ);
 			} else {
-				memmove(*npp, *cpp,
-					(af == AF_INET) ? INADDRSZ : IN6ADDRSZ);
+				memcpy(*npp, *cpp,
+				       (af == AF_INET) ? INADDRSZ : IN6ADDRSZ);
 			}
 			cpp++;
 			npp++;
@@ -955,9 +942,8 @@ copyandmerge(struct hostent *he1, struct hostent *he2, int af, int *error_num)
 	 * Copy aliases.
 	 */
 	npp = he->h_aliases;
-	cpp = (he1 != NULL) ? he1->h_aliases
-		: ((he2 != NULL) ?  he2->h_aliases : NULL);
-	while (cpp != NULL && *cpp != NULL) {
+	cpp = (he1 != NULL) ? he1->h_aliases : he2->h_aliases;
+	while (*cpp != NULL) {
 		len = strlen (*cpp) + 1;
 		*npp = malloc(len);
 		if (*npp == NULL)
@@ -1062,7 +1048,7 @@ hostfromaddr(lwres_gnbaresponse_t *addr, int af, const void *src) {
 	he->h_addr_list[0] = malloc(he->h_length);
 	if (he->h_addr_list[0] == NULL)
 		goto cleanup;
-	memmove(he->h_addr_list[0], src, he->h_length);
+	memcpy(he->h_addr_list[0], src, he->h_length);
 	he->h_addr_list[1] = NULL;
 	return (he);
 
@@ -1121,8 +1107,6 @@ hostfromname(lwres_gabnresponse_t *name, int af) {
 	 * Copy aliases.
 	 */
 	he->h_aliases = malloc(sizeof(char *) * (name->naliases + 1));
-	if (he->h_aliases == NULL)
-		goto cleanup;
 	for (i = 0; i < name->naliases; i++) {
 		he->h_aliases[i] = strdup(name->aliases[i]);
 		if (he->h_aliases[i] == NULL)
@@ -1134,15 +1118,13 @@ hostfromname(lwres_gabnresponse_t *name, int af) {
 	 * Copy addresses.
 	 */
 	he->h_addr_list = malloc(sizeof(char *) * (name->naddrs + 1));
-	if (he->h_addr_list == NULL)
-		goto cleanup;
 	addr = LWRES_LIST_HEAD(name->addrs);
 	i = 0;
 	while (addr != NULL) {
 		he->h_addr_list[i] = malloc(he->h_length);
 		if (he->h_addr_list[i] == NULL)
 			goto cleanup;
-		memmove(he->h_addr_list[i], addr->address, he->h_length);
+		memcpy(he->h_addr_list[i], addr->address, he->h_length);
 		addr = LWRES_LIST_NEXT(addr, link);
 		i++;
 	}

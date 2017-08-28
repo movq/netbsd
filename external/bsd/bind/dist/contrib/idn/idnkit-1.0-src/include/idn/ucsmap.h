@@ -1,6 +1,6 @@
-/*	$NetBSD: ucsmap.h,v 1.4 2014/12/10 04:37:55 christos Exp $	*/
+/*	$NetBSD: ucsmap.h,v 1.1 2009/03/22 14:57:23 christos Exp $	*/
 
-/* Id: ucsmap.h,v 1.1 2003/06/04 00:25:42 marka Exp  */
+/* Id: ucsmap.h,v 1.1.1.1 2003/06/04 00:25:42 marka Exp */
 /*
  * Copyright (c) 2001 Japan Network Information Center.  All rights reserved.
  *  

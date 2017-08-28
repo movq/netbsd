@@ -1,7 +1,7 @@
-/*	$NetBSD: rwlock_test.c,v 1.7 2014/12/10 04:37:53 christos Exp $	*/
+/*	$NetBSD: rwlock_test.c,v 1.1 2009/03/22 14:56:25 christos Exp $	*/
 
 /*
- * Copyright (C) 2004, 2005, 2007, 2013  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2004, 2005, 2007  Internet Systems Consortium, Inc. ("ISC")
  * Copyright (C) 1998-2001  Internet Software Consortium.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -17,7 +17,7 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* Id: rwlock_test.c,v 1.26 2007/06/19 23:46:59 tbox Exp  */
+/* Id: rwlock_test.c,v 1.26 2007/06/19 23:46:59 tbox Exp */
 
 #include <config.h>
 
@@ -31,18 +31,11 @@
 #include <isc/string.h>
 #include <isc/util.h>
 
-#ifdef WIN32
-#define sleep(x)	Sleep(1000 * x)
-#endif
-
 #ifdef ISC_PLATFORM_USETHREADS
 
 isc_rwlock_t lock;
 
-static isc_threadresult_t
-#ifdef WIN32
-WINAPI
-#endif
+static void *
 run1(void *arg) {
 	char *message = arg;
 
@@ -67,13 +60,10 @@ run1(void *arg) {
 	printf("%s giving up WRITE lock\n", message);
 	RUNTIME_CHECK(isc_rwlock_unlock(&lock, isc_rwlocktype_write) ==
 	       ISC_R_SUCCESS);
-	return ((isc_threadresult_t)0);
+	return (NULL);
 }
 
-static isc_threadresult_t
-#ifdef WIN32
-WINAPI
-#endif
+static void *
 run2(void *arg) {
 	char *message = arg;
 
@@ -98,7 +88,7 @@ run2(void *arg) {
 	printf("%s giving up READ lock\n", message);
 	RUNTIME_CHECK(isc_rwlock_unlock(&lock, isc_rwlocktype_read) ==
 	       ISC_R_SUCCESS);
-	return ((isc_threadresult_t)0);
+	return (NULL);
 }
 
 int

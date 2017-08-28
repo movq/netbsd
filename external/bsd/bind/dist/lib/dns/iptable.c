@@ -1,7 +1,7 @@
-/*	$NetBSD: iptable.c,v 1.6 2017/06/15 15:59:40 christos Exp $	*/
+/*	$NetBSD: iptable.c,v 1.1 2009/03/22 15:01:06 christos Exp $	*/
 
 /*
- * Copyright (C) 2007-2009, 2013, 2016  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2007-2009  Internet Systems Consortium, Inc. ("ISC")
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -16,7 +16,7 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* Id: iptable.c,v 1.15 2009/02/18 23:47:48 tbox Exp  */
+/* Id: iptable.c,v 1.12.44.3 2009/02/18 23:47:12 tbox Exp */
 
 #include <config.h>
 
@@ -38,8 +38,7 @@ dns_iptable_create(isc_mem_t *mctx, dns_iptable_t **target) {
 	tab = isc_mem_get(mctx, sizeof(*tab));
 	if (tab == NULL)
 		return (ISC_R_NOMEMORY);
-	tab->mctx = NULL;
-	isc_mem_attach(mctx, &tab->mctx);
+	tab->mctx = mctx;
 	isc_refcount_init(&tab->refcount, 1);
 	tab->radix = NULL;
 	tab->magic = DNS_IPTABLE_MAGIC;
@@ -56,8 +55,8 @@ dns_iptable_create(isc_mem_t *mctx, dns_iptable_t **target) {
 	return (result);
 }
 
-static isc_boolean_t dns_iptable_neg = ISC_FALSE;
-static isc_boolean_t dns_iptable_pos = ISC_TRUE;
+isc_boolean_t dns_iptable_neg = ISC_FALSE;
+isc_boolean_t dns_iptable_pos = ISC_TRUE;
 
 /*
  * Add an IP prefix to an existing IP table
@@ -187,5 +186,5 @@ destroy_iptable(dns_iptable_t *dtab) {
 
 	isc_refcount_destroy(&dtab->refcount);
 	dtab->magic = 0;
-	isc_mem_putanddetach(&dtab->mctx, dtab, sizeof(*dtab));
+	isc_mem_put(dtab->mctx, dtab, sizeof(*dtab));
 }

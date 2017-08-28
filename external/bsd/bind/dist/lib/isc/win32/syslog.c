@@ -1,7 +1,7 @@
-/*	$NetBSD: syslog.c,v 1.5 2014/12/10 04:38:01 christos Exp $	*/
+/*	$NetBSD: syslog.c,v 1.1 2009/03/22 15:02:28 christos Exp $	*/
 
 /*
- * Copyright (C) 2004, 2007, 2014  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2004, 2007  Internet Systems Consortium, Inc. ("ISC")
  * Copyright (C) 2001-2003  Internet Software Consortium.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -17,7 +17,7 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* Id: syslog.c,v 1.10 2007/06/19 23:47:19 tbox Exp  */
+/* Id: syslog.c,v 1.10 2007/06/19 23:47:19 tbox Exp */
 
 #include <config.h>
 
@@ -140,7 +140,7 @@ openlog(const char *name, int flags, ...) {
  * In fact if we failed then we would have nowhere to put the message
  */
 void
-closelog(void) {
+closelog() {
 	DeregisterEventSource(hAppLog);
 }
 
@@ -149,7 +149,7 @@ closelog(void) {
  */
 void
 ModifyLogLevel(int level) {
-	debug_level = level;
+	debug_level = level;	
 }
 
 /*

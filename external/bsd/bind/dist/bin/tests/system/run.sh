@@ -1,6 +1,6 @@
 #!/bin/sh
 #
-# Copyright (C) 2004, 2007, 2010, 2012, 2014-2016  Internet Systems Consortium, Inc. ("ISC")
+# Copyright (C) 2004, 2007  Internet Systems Consortium, Inc. ("ISC")
 # Copyright (C) 2000, 2001  Internet Software Consortium.
 #
 # Permission to use, copy, modify, and/or distribute this software for any
@@ -15,6 +15,8 @@
 # OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR
 # PERFORMANCE OF THIS SOFTWARE.
 
+# Id: run.sh,v 1.42 2007/06/19 23:47:00 tbox Exp
+
 #
 # Run a system test.
 #
@@ -23,14 +25,12 @@ SYSTEMTESTTOP=.
 . $SYSTEMTESTTOP/conf.sh
 
 stopservers=true
-clean=true
 
 case $1 in
-   --keep|-k) stopservers=false; shift ;;
-   --noclean|-n) clean=false; shift ;;
+   --keep) stopservers=false; shift ;;
 esac
 
-test $# -gt 0 || { echo "usage: $0 [--keep|--noclean] test-directory" >&2; exit 1; }
+test $# -gt 0 || { echo "usage: $0 [--keep] test-directory" >&2; exit 1; }
 
 test=$1
 shift
@@ -41,7 +41,7 @@ echo "S:$test:`date`" >&2
 echo "T:$test:1:A" >&2
 echo "A:System test $test" >&2
 
-if [ x${PERL:+set} = x ]
+if [ x$PERL = x ]
 then
     echo "I:Perl not available.  Skipping test." >&2
     echo "R:UNTESTED" >&2
@@ -58,26 +58,14 @@ $PERL testsock.pl || {
 
 
 # Check for test-specific prerequisites.
-test ! -f $test/prereq.sh || ( cd $test && $SHELL prereq.sh "$@" )
-result=$?
-
-if [ $result -eq 0 ]; then
+if
+    test ! -f $test/prereq.sh ||
+    ( cd $test && sh prereq.sh "$@" )
+then
     : prereqs ok
 else
     echo "I:Prerequisites for $test missing, skipping test." >&2
-    [ $result -eq 255 ] && echo "R:SKIPPED" || echo "R:UNTESTED"
-    echo "E:$test:`date`" >&2
-    exit 0
-fi
-
-# Check for PKCS#11 support
-if
-    test ! -f $test/usepkcs11 || $SHELL cleanpkcs11.sh
-then
-    : pkcs11 ok
-else
-    echo "I:Need PKCS#11 for $test, skipping test." >&2
-    echo "R:PKCS11ONLY" >&2
+    echo "R:UNTESTED" >&2
     echo "E:$test:`date`" >&2
     exit 0
 fi
@@ -85,14 +73,14 @@ fi
 # Set up any dynamically generated test data
 if test -f $test/setup.sh
 then
-   ( cd $test && $SHELL setup.sh "$@" )
+   ( cd $test && sh setup.sh "$@" )
 fi
 
 # Start name servers running
-$PERL start.pl $test || { echo "R:FAIL"; echo "E:$test:`date`"; exit 1; }
+$PERL start.pl $test || exit 1
 
 # Run the tests
-( cd $test ; $SHELL tests.sh )
+( cd $test ; sh tests.sh )
 
 status=$?
 
@@ -115,18 +103,10 @@ if [ $status != 0 ]; then
 else
 	echo "R:PASS"
 
-	if $clean
+	# Clean up.
+	if test -f $test/clean.sh
 	then
-		rm -f $SYSTEMTESTTOP/random.data
-		if test -f $test/clean.sh
-		then
-			( cd $test && $SHELL clean.sh "$@" )
-		fi
-		if test -d ../../../.git
-		then
-			git status -su $test |
-			sed -n 's/^?? \(.*\)/I:file \1 not removed/p'
-		fi
+	   ( cd $test && sh clean.sh "$@" )
 	fi
 fi
 
