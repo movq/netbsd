@@ -1,4 +1,4 @@
-# $NetBSD: t_thread_local_dtor.sh,v 1.1 2017/07/11 15:21:36 joerg Exp $
+# $NetBSD: t_thread_local_dtor.sh,v 1.1.4.2 2017/08/29 11:25:50 bouyer Exp $
 #
 # Copyright (c) 2008 The NetBSD Foundation, Inc.
 # All rights reserved.
