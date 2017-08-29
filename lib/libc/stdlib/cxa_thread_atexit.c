@@ -1,4 +1,4 @@
-/* $NetBSD: cxa_thread_atexit.c,v 1.1 2017/07/11 15:21:35 joerg Exp $ */
+/* $NetBSD: cxa_thread_atexit.c,v 1.1.4.2 2017/08/29 09:43:16 bouyer Exp $ */
 
 /*-
  * Copyright (c) 2017 Joerg Sonnenberger <joerg@NetBSD.org>
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: cxa_thread_atexit.c,v 1.1 2017/07/11 15:21:35 joerg Exp $");
+__RCSID("$NetBSD: cxa_thread_atexit.c,v 1.1.4.2 2017/08/29 09:43:16 bouyer Exp $");
 
 #include <sys/queue.h>
 #include <dlfcn.h>

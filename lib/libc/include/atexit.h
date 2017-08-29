@@ -1,4 +1,4 @@
-/*	$NetBSD: atexit.h,v 1.2 2017/07/14 19:24:12 joerg Exp $	*/
+/*	$NetBSD: atexit.h,v 1.2.2.2 2017/08/29 09:43:18 bouyer Exp $	*/
 
 /*-
  * Copyright (c) 2003 The NetBSD Foundation, Inc.
