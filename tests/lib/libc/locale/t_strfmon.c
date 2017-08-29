@@ -1,4 +1,4 @@
-/* $NetBSD: t_strfmon.c,v 1.1 2017/08/16 13:53:20 joerg Exp $ */
+/* $NetBSD: t_strfmon.c,v 1.1.2.2 2017/08/29 11:51:50 martin Exp $ */
 
 /*-
  * Copyright (c) 2017 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: t_strfmon.c,v 1.1 2017/08/16 13:53:20 joerg Exp $");
+__RCSID("$NetBSD: t_strfmon.c,v 1.1.2.2 2017/08/29 11:51:50 martin Exp $");
 
 #include <atf-c.h>
 #include <locale.h>
