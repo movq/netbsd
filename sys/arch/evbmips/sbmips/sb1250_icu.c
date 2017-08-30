@@ -1,4 +1,4 @@
-/* $NetBSD: sb1250_icu.c,v 1.2 2017/07/24 09:56:45 mrg Exp $ */
+/* $NetBSD: sb1250_icu.c,v 1.2.4.2 2017/08/30 15:45:04 martin Exp $ */
 
 /*
  * Copyright 2000, 2001
@@ -33,7 +33,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sb1250_icu.c,v 1.2 2017/07/24 09:56:45 mrg Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sb1250_icu.c,v 1.2.4.2 2017/08/30 15:45:04 martin Exp $");
 
 #define	__INTR_PRIVATE
 
@@ -49,8 +49,8 @@ __KERNEL_RCSID(0, "$NetBSD: sb1250_icu.c,v 1.2 2017/07/24 09:56:45 mrg Exp $");
 
 #include <mips/locore.h>
 
-#include <evbmips/sbmips/cpuvar.h>
-#include <evbmips/sbmips/systemsw.h>
+#include <sbmips/cpuvar.h>
+#include <sbmips/systemsw.h>
 
 #include <mips/sibyte/include/sb1250_regs.h>
 #include <mips/sibyte/include/sb1250_int.h>

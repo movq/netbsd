@@ -1,11 +1,11 @@
-# $NetBSD: Makefile.inc,v 1.3 2017/08/15 10:11:31 mrg Exp $
+# $NetBSD: Makefile.inc,v 1.3.4.2 2017/08/30 15:45:04 martin Exp $
 
 .include <bsd.own.mk>
 
-BINDIR?=		/usr/mdec/sbmips
+BINDIR?=		/usr/mdec
 WARNS?=			1
 
 MKMAN=			no
 
-CPPFLAGS+=		-I${.CURDIR}/../../..
+CPPFLAGS+=		-I${.CURDIR}/../..
 LDSTATIC?=		-static

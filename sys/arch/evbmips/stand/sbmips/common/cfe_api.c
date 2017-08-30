@@ -1,4 +1,4 @@
-/* $NetBSD: cfe_api.c,v 1.1.1.1 2017/07/24 08:56:29 mrg Exp $ */
+/* $NetBSD: cfe_api.c,v 1.1.1.1.4.2 2017/08/30 15:45:04 martin Exp $ */
 /* from: SiByte Id: cfe_api.c,v 1.16 2002/07/09 23:29:11 cgd Exp $ */
 
 /*

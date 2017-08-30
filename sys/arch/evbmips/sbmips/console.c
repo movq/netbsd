@@ -1,4 +1,4 @@
-/* $NetBSD: console.c,v 1.1.1.1 2017/07/24 08:56:29 mrg Exp $ */
+/* $NetBSD: console.c,v 1.1.1.1.4.2 2017/08/30 15:45:04 martin Exp $ */
 
 /*
  * Copyright 2000, 2001
@@ -33,7 +33,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: console.c,v 1.1.1.1 2017/07/24 08:56:29 mrg Exp $");
+__KERNEL_RCSID(0, "$NetBSD: console.c,v 1.1.1.1.4.2 2017/08/30 15:45:04 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
