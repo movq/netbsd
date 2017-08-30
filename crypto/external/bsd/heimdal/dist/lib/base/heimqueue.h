@@ -1,4 +1,4 @@
-/*	$NetBSD: heimqueue.h,v 1.2 2017/01/28 21:31:45 christos Exp $	*/
+/*	$NetBSD: heimqueue.h,v 1.2.20.2 2017/08/30 06:57:27 snj Exp $	*/
 
 /*	NetBSD: queue.h,v 1.38 2004/04/18 14:12:05 lukem Exp	*/
 /*	Id */

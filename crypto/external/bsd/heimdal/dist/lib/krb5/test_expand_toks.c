@@ -1,4 +1,4 @@
-/*	$NetBSD: test_expand_toks.c,v 1.2 2017/01/28 21:31:49 christos Exp $	*/
+/*	$NetBSD: test_expand_toks.c,v 1.2.20.2 2017/08/30 06:57:38 snj Exp $	*/
 
 /*
  * Copyright (c) 2003 Kungliga Tekniska Högskolan

@@ -1,4 +1,4 @@
-/*	$NetBSD: salt-aes-sha2.c,v 1.2 2017/01/28 21:31:49 christos Exp $	*/
+/*	$NetBSD: salt-aes-sha2.c,v 1.2.20.2 2017/08/30 06:57:37 snj Exp $	*/
 
 /*
  * Copyright (c) 1997 - 2008 Kungliga Tekniska Högskolan
