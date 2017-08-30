@@ -1,4 +1,4 @@
-/*	$NetBSD: db.c,v 1.2 2017/01/28 21:31:45 christos Exp $	*/
+/*	$NetBSD: db.c,v 1.2.18.2 2017/08/30 06:54:23 snj Exp $	*/
 
 /*
  * Copyright (c) 2011, Secure Endpoints Inc.

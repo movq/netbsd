@@ -1,4 +1,4 @@
-/*	$NetBSD: crypto-ec.c,v 1.2 2017/01/28 21:31:48 christos Exp $	*/
+/*	$NetBSD: crypto-ec.c,v 1.2.18.2 2017/08/30 06:54:28 snj Exp $	*/
 
 /*
  * Copyright (c) 2016 Kungliga Tekniska Högskolan
