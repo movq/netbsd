@@ -1,4 +1,4 @@
-/*	$NetBSD: test_base.c,v 1.2 2017/01/28 21:31:45 christos Exp $	*/
+/*	$NetBSD: test_base.c,v 1.2.20.2 2017/08/30 06:57:27 snj Exp $	*/
 
 /*
  * Copyright (c) 2010-2016 Kungliga Tekniska Högskolan
