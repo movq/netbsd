@@ -1,4 +1,4 @@
-/*	$NetBSD: fast.c,v 1.2 2017/01/28 21:31:44 christos Exp $	*/
+/*	$NetBSD: fast.c,v 1.2.22.2 2017/08/30 07:10:50 snj Exp $	*/
 
 /*
  * Copyright (c) 1997-2011 Kungliga Tekniska Högskolan

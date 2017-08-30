@@ -1,4 +1,4 @@
-/*	$NetBSD: db_plugin.c,v 1.2 2017/01/28 21:31:49 christos Exp $	*/
+/*	$NetBSD: db_plugin.c,v 1.2.22.2 2017/08/30 07:11:01 snj Exp $	*/
 
 /*
  */
