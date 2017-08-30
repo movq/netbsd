@@ -1,4 +1,4 @@
-/*	$NetBSD: intr.c,v 1.2 2017/01/28 21:31:51 christos Exp $	*/
+/*	$NetBSD: intr.c,v 1.2.22.2 2017/08/30 07:11:06 snj Exp $	*/
 
 #include <config.h>
 

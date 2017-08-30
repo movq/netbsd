@@ -1,4 +1,4 @@
-/*	$NetBSD: pkinit-ec.c,v 1.2 2017/01/28 21:31:49 christos Exp $	*/
+/*	$NetBSD: pkinit-ec.c,v 1.2.22.2 2017/08/30 07:11:01 snj Exp $	*/
 
 /*
  * Copyright (c) 2016 Kungliga Tekniska Högskolan
