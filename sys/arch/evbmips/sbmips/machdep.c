@@ -1,4 +1,4 @@
-/* $NetBSD: machdep.c,v 1.2 2017/07/24 09:56:45 mrg Exp $ */
+/* $NetBSD: machdep.c,v 1.2.4.2 2017/08/30 15:45:04 martin Exp $ */
 
 /*
  * Copyright 2000, 2001
@@ -58,7 +58,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.2 2017/07/24 09:56:45 mrg Exp $");
+__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.2.4.2 2017/08/30 15:45:04 martin Exp $");
 
 #include "opt_ddb.h"
 #include "opt_execfmt.h"
@@ -93,14 +93,13 @@ __KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.2 2017/07/24 09:56:45 mrg Exp $");
 
 #include <mips/cfe/cfe_api.h>
 
-#include <evbmips/sbmips/autoconf.h>
-#include <evbmips/sbmips/swarm.h>
-#include <evbmips/sbmips/systemsw.h>
+#include <sbmips/autoconf.h>
+#include <sbmips/swarm.h>
 
 #if 0 /* XXXCGD */
-#include <evbmips/sbmips/nvram.h>
+#include <sbmips/nvram.h>
 #endif /* XXXCGD */
-#include <evbmips/sbmips/leds.h>
+#include <sbmips/leds.h>
 
 #include <mips/sibyte/dev/sbbuswatchvar.h>
 

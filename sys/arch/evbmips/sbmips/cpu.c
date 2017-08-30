@@ -1,4 +1,4 @@
-/* $NetBSD: cpu.c,v 1.3 2017/08/02 12:23:43 simonb Exp $ */
+/* $NetBSD: cpu.c,v 1.3.4.2 2017/08/30 15:45:04 martin Exp $ */
 
 /*
  * Copyright 2000, 2001
@@ -33,7 +33,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: cpu.c,v 1.3 2017/08/02 12:23:43 simonb Exp $");
+__KERNEL_RCSID(0, "$NetBSD: cpu.c,v 1.3.4.2 2017/08/30 15:45:04 martin Exp $");
 
 #include "opt_multiprocessor.h"
 
@@ -46,8 +46,7 @@ __KERNEL_RCSID(0, "$NetBSD: cpu.c,v 1.3 2017/08/02 12:23:43 simonb Exp $");
 #include <mips/locore.h>
 #include <mips/cache.h>
 
-#include <evbmips/sbmips/cpuvar.h>
-#include <evbmips/sbmips/systemsw.h>
+#include <sbmips/cpuvar.h>
 
 #include <mips/sibyte/include/zbbusvar.h>
 #include <mips/sibyte/include/sb1250_regs.h>
@@ -162,7 +161,6 @@ cpu_attach(device_t parent, device_t self, void *aux)
 			return;
 		}
 #else
-		aprint_normal("\n");
 		aprint_normal_dev(self,
 		    "processor off-line; "
 		    "multiprocessor support not present in kernel\n");

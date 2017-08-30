@@ -1,4 +1,4 @@
-/* $NetBSD: cfe_error.h,v 1.1.1.1 2017/07/24 08:56:29 mrg Exp $ */
+/* $NetBSD: cfe_error.h,v 1.1.1.1.4.2 2017/08/30 15:45:04 martin Exp $ */
 /* from: SiByte Id: cfe_error.h,v 1.2 2002/07/09 19:37:52 cgd Exp $ */
 
 /*
