@@ -1,4 +1,4 @@
-/*	$NetBSD: rd_safe.c,v 1.2 2017/01/28 21:31:49 christos Exp $	*/
+/*	$NetBSD: rd_safe.c,v 1.1 2011/04/13 18:15:37 elric Exp $	*/
 
 /*
  * Copyright (c) 1997 - 2003 Kungliga Tekniska Högskolan
@@ -43,7 +43,7 @@ verify_checksum(krb5_context context,
     krb5_error_code ret;
     u_char *buf;
     size_t buf_size;
-    size_t len = 0;
+    size_t len;
     Checksum c;
     krb5_crypto crypto;
     krb5_keyblock *key;
@@ -161,7 +161,7 @@ krb5_rd_safe(krb5_context context,
 
 	if (safe.safe_body.timestamp == NULL ||
 	    safe.safe_body.usec      == NULL ||
-	    labs(*safe.safe_body.timestamp - sec) > context->max_skew) {
+	    abs(*safe.safe_body.timestamp - sec) > context->max_skew) {
 	    ret = KRB5KRB_AP_ERR_SKEW;
 	    krb5_clear_error_message (context);
 	    goto failure;
@@ -193,7 +193,8 @@ krb5_rd_safe(krb5_context context,
     outbuf->length = safe.safe_body.user_data.length;
     outbuf->data   = malloc(outbuf->length);
     if (outbuf->data == NULL && outbuf->length != 0) {
-	ret = krb5_enomem(context);
+	ret = ENOMEM;
+	krb5_set_error_message(context, ret, N_("malloc: out of memory", ""));
 	krb5_data_zero(outbuf);
 	goto failure;
     }

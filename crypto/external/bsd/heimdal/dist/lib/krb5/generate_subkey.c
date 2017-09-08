@@ -1,4 +1,4 @@
-/*	$NetBSD: generate_subkey.c,v 1.2 2017/01/28 21:31:49 christos Exp $	*/
+/*	$NetBSD: generate_subkey.c,v 1.1 2011/04/13 18:15:33 elric Exp $	*/
 
 /*
  * Copyright (c) 1997 - 2001 Kungliga Tekniska Högskolan
@@ -57,10 +57,12 @@ krb5_generate_subkey_extended(krb5_context context,
     krb5_error_code ret;
 
     ALLOC(*subkey, 1);
-    if (*subkey == NULL)
-	return krb5_enomem(context);
+    if (*subkey == NULL) {
+	krb5_set_error_message(context, ENOMEM,N_("malloc: out of memory", ""));
+	return ENOMEM;
+    }
 
-    if (etype == (krb5_enctype)ETYPE_NULL)
+    if (etype == ETYPE_NULL)
 	etype = key->keytype; /* use session key etype */
 
     /* XXX should we use the session key as input to the RF? */

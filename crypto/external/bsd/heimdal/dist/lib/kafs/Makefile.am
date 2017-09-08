@@ -1,12 +1,12 @@
-# Id
+# $Id: Makefile.am,v 1.1 2011/04/13 18:15:30 elric Exp $
 
 include $(top_srcdir)/Makefile.am.common
 
 AM_CPPFLAGS += $(AFS_EXTRA_DEFS) $(ROKEN_RENAME)
 
 if KRB5
-DEPLIB_krb5 = ../krb5/libkrb5.la $(LIB_hcrypto)
-krb5_am_workaround = -I$(top_srcdir)/lib/krb5
+DEPLIB_krb5 = ../krb5/libkrb5.la 
+krb5_am_workaround = $(INCLUDE_hcrypto) -I$(top_srcdir)/lib/krb5
 else
 DEPLIB_krb5  =
 krb5_am_workaround = 
@@ -61,7 +61,6 @@ endif
 dist_libkafs_la_SOURCES =			\
 	afssys.c				\
 	afskrb5.c				\
-	rxkad_kdf.c				\
 	common.c				\
 	$(AIX_SRC)				\
 	kafs_locl.h				\
@@ -72,7 +71,7 @@ nodist_libkafs_la_SOURCES = $(ROKEN_SRCS)
 
 EXTRA_libkafs_la_SOURCES = afskrb5.c afslib.c
 
-EXTRA_DIST = NTMakefile afsl.exp afslib.exp $(man_MANS)
+EXTRA_DIST = afsl.exp afslib.exp $(man_MANS)
 
 man_MANS = kafs.3
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: crypto-stubs.c,v 1.2 2017/01/28 21:31:49 christos Exp $	*/
+/*	$NetBSD: crypto-stubs.c,v 1.1 2011/04/13 18:15:32 elric Exp $	*/
 
 /*
  * Copyright (c) 1997 - 2008 Kungliga Tekniska Högskolan
@@ -51,7 +51,12 @@ krb5_init_context(krb5_context *context)
     if(!p)
         return ENOMEM;
 
-    HEIMDAL_MUTEX_init(&p->mutex);
+    p->mutex = malloc(sizeof(HEIMDAL_MUTEX));
+    if (p->mutex == NULL) {
+        free(p);
+        return ENOMEM;
+    }
+    HEIMDAL_MUTEX_init(p->mutex);
 
     *context = p;
     return 0;
@@ -62,7 +67,8 @@ krb5_free_context(krb5_context context)
 {
     krb5_clear_error_message(context);
 
-    HEIMDAL_MUTEX_destroy(&context->mutex);
+    HEIMDAL_MUTEX_destroy(context->mutex);
+    free(context->mutex);
     if (context->flags & KRB5_CTX_F_SOCKETS_INITIALIZED) {
         rk_SOCK_EXIT();
     }
@@ -71,7 +77,7 @@ krb5_free_context(krb5_context context)
     free(context);
 }
 
-KRB5_LIB_FUNCTION krb5_boolean KRB5_LIB_CALL
+krb5_boolean
 _krb5_homedir_access(krb5_context context) {
     return 0;
 }
@@ -85,15 +91,6 @@ krb5_log(krb5_context context,
 {
     return 0;
 }
-
-void KRB5_LIB_FUNCTION
-_krb5_debug(krb5_context context,
-	    int level,
-	    const char *fmt,
-	    ...)
-{
-}
-
 
 /* This function is currently just used to get the location of the EGD
  * socket. If we're not using an EGD, then we can just return NULL */

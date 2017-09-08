@@ -1,4 +1,4 @@
-/*	$NetBSD: dh-ltm.c,v 1.2 2017/01/28 21:31:47 christos Exp $	*/
+/*	$NetBSD: dh-ltm.c,v 1.1 2011/04/13 18:14:49 elric Exp $	*/
 
 /*
  * Copyright (c) 2006 Kungliga Tekniska Högskolan
@@ -36,9 +36,12 @@
 #ifdef HAVE_CONFIG_H
 #include <config.h>
 #endif
-#include <krb5/roken.h>
 
+#include <stdio.h>
+#include <stdlib.h>
 #include <dh.h>
+
+#include <krb5/roken.h>
 
 #include "tommath.h"
 
@@ -107,17 +110,15 @@ ltm_dh_generate_key(DH *dh)
 		return 0;
 	    }
 	}
-	if (dh->pub_key) {
+	if (dh->pub_key)
 	    BN_free(dh->pub_key);
-	    dh->pub_key = NULL;
-	}
 
 	mp_init_multi(&pub, &priv_key, &g, &p, NULL);
-
+	
 	BN2mpz(&priv_key, dh->priv_key);
 	BN2mpz(&g, dh->g);
 	BN2mpz(&p, dh->p);
-
+	
 	res = mp_exptmod(&g, &priv_key, &p, &pub);
 
 	mp_clear_multi(&priv_key, &g, &p, NULL);
@@ -128,7 +129,7 @@ ltm_dh_generate_key(DH *dh)
 	mp_clear(&pub);
 	if (dh->pub_key == NULL)
 	    return 0;
-
+	
 	if (DH_check_pubkey(dh, dh->pub_key, &codes) && codes == 0)
 	    break;
 	if (have_private_key)

@@ -1,4 +1,4 @@
-/*	$NetBSD: send_to_kdc_plugin.h,v 1.2 2017/01/28 21:31:49 christos Exp $	*/
+/*	$NetBSD: send_to_kdc_plugin.h,v 1.1 2011/04/13 18:15:38 elric Exp $	*/
 
 /*
  * Copyright (c) 2008 Kungliga Tekniska Högskolan
@@ -33,7 +33,7 @@
  * SUCH DAMAGE.
  */
 
-/* Id */
+/* $Id: send_to_kdc_plugin.h,v 1.1 2011/04/13 18:15:38 elric Exp $ */
 
 #ifndef HEIMDAL_KRB5_SEND_TO_KDC_PLUGIN_H
 #define HEIMDAL_KRB5_SEND_TO_KDC_PLUGIN_H 1
@@ -42,10 +42,6 @@
 
 #define KRB5_PLUGIN_SEND_TO_KDC "send_to_kdc"
 
-#define KRB5_PLUGIN_SEND_TO_KDC_VERSION_0 0
-#define KRB5_PLUGIN_SEND_TO_KDC_VERSION_2 2
-#define KRB5_PLUGIN_SEND_TO_KDC_VERSION KRB5_PLUGIN_SEND_TO_KDC_VERSION_2
-
 typedef krb5_error_code
 (*krb5plugin_send_to_kdc_func)(krb5_context,
 			       void *,
@@ -53,21 +49,12 @@ typedef krb5_error_code
 			       time_t timeout,
 			       const krb5_data *,
 			       krb5_data *);
-typedef krb5_error_code
-(*krb5plugin_send_to_realm_func)(krb5_context,
-				 void *,
-				 krb5_const_realm,
-				 time_t timeout,
-				 const krb5_data *,
-				 krb5_data *);
-
 
 typedef struct krb5plugin_send_to_kdc_ftable {
     int			minor_version;
     krb5_error_code	(*init)(krb5_context, void **);
     void		(*fini)(void *);
     krb5plugin_send_to_kdc_func send_to_kdc;
-    krb5plugin_send_to_realm_func send_to_realm; /* added in version 2 */
 } krb5plugin_send_to_kdc_ftable;
 
 #endif /* HEIMDAL_KRB5_SEND_TO_KDC_PLUGIN_H */

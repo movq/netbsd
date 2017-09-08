@@ -1,4 +1,4 @@
-/*	$NetBSD: afskrb5.c,v 1.2 2017/01/28 21:31:49 christos Exp $	*/
+/*	$NetBSD: afskrb5.c,v 1.1 2011/04/13 18:15:30 elric Exp $	*/
 
 /*
  * Copyright (c) 1995-2003 Kungliga Tekniska Högskolan
@@ -53,6 +53,10 @@ v5_to_kt(krb5_creds *cred, uid_t uid, struct kafs_token *kt, int local524)
 
     kt->ticket = NULL;
 
+    /* check if des key */
+    if (cred->session.keyvalue.length != 8)
+	return EINVAL;
+
     if (local524) {
 	Ticket t;
 	unsigned char *buf;
@@ -96,16 +100,8 @@ v5_to_kt(krb5_creds *cred, uid_t uid, struct kafs_token *kt, int local524)
      * Build a struct ClearToken
      */
 
-    ret = _kafs_derive_des_key(cred->session.keytype,
-			       cred->session.keyvalue.data,
-			       cred->session.keyvalue.length,
-			       kt->ct.HandShakeKey);
-    if (ret) {
-	free(kt->ticket);
-	kt->ticket = NULL;
-	return ret;
-    }
     kt->ct.AuthHandle = kvno;
+    memcpy(kt->ct.HandShakeKey, cred->session.keyvalue.data, 8);
     kt->ct.ViceId = uid;
     kt->ct.BeginTimestamp = cred->times.starttime;
     kt->ct.EndTimestamp = cred->times.endtime;
@@ -169,15 +165,17 @@ get_cred(struct kafs_data *data, const char *name, const char *inst,
 	return ret;
     }
 
+    in_creds.session.keytype = ETYPE_DES_CBC_CRC;
+
     /* check if des is disable, and in that case enable it for afs */
-    invalid = krb5_enctype_valid(d->context, ETYPE_DES_CBC_CRC);
+    invalid = krb5_enctype_valid(d->context, in_creds.session.keytype);
     if (invalid)
-	krb5_enctype_enable(d->context, ETYPE_DES_CBC_CRC);
+	krb5_enctype_enable(d->context, in_creds.session.keytype);
 
     ret = krb5_get_credentials(d->context, 0, d->id, &in_creds, &out_creds);
 
     if (invalid)
-	krb5_enctype_disable(d->context, ETYPE_DES_CBC_CRC);
+	krb5_enctype_disable(d->context, in_creds.session.keytype);
 
     krb5_free_principal(d->context, in_creds.server);
     krb5_free_principal(d->context, in_creds.client);

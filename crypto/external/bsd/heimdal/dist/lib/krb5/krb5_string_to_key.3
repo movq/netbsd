@@ -1,4 +1,4 @@
-.\"	$NetBSD: krb5_string_to_key.3,v 1.4 2017/01/28 21:31:49 christos Exp $
+.\"	$NetBSD: krb5_string_to_key.3,v 1.1 2011/04/13 18:15:36 elric Exp $
 .\"
 .\" Copyright (c) 2004 - 2006 Kungliga Tekniska Högskolan
 .\" (Royal Institute of Technology, Stockholm, Sweden).
@@ -31,7 +31,7 @@
 .\" OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
 .\" SUCH DAMAGE.
 .\"
-.\" Id
+.\" $Id: krb5_string_to_key.3,v 1.1 2011/04/13 18:15:36 elric Exp $
 .\"
 .Dd July 10, 2006
 .Dt KRB5_STRING_TO_KEY 3
@@ -116,7 +116,7 @@ The string to key functions convert a string to a kerberos key.
 .Pp
 .Fn krb5_string_to_key_data_salt_opaque
 is the function that does all the work, the rest of the functions are
-just wrappers around
+just wrapers around
 .Fn krb5_string_to_key_data_salt_opaque
 that calls it with default values.
 .Pp

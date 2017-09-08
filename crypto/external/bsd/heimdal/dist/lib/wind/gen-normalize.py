@@ -1,7 +1,7 @@
 #!/usr/local/bin/python
 # -*- coding: iso-8859-1 -*-
 
-# Id
+# $Id: gen-normalize.py,v 1.1 2011/04/13 18:15:58 elric Exp $
 
 # Copyright (c) 2004 Kungliga Tekniska Högskolan
 # (Royal Institute of Technology, Stockholm, Sweden). 
@@ -97,8 +97,8 @@ extern const unsigned short _wind_canon_next_table[];
 
 normalize_c.file.write(
 '''
-#include "normalize_table.h"
 #include <stdlib.h>
+#include "normalize_table.h"
 
 const struct translation _wind_normalize_table[] = {
 ''')

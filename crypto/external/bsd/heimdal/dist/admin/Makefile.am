@@ -1,12 +1,12 @@
-# Id
+# $Id: Makefile.am,v 1.1 2011/04/13 18:14:31 elric Exp $
 
 include $(top_srcdir)/Makefile.am.common
 
-AM_CPPFLAGS += $(INCLUDE_readline)
+AM_CPPFLAGS += $(INCLUDE_readline) $(INCLUDE_hcrypto)
 
-man_MANS = ktutil.1
+man_MANS = ktutil.8
 
-bin_PROGRAMS = ktutil
+sbin_PROGRAMS = ktutil
 
 dist_ktutil_SOURCES =				\
 	add.c					\
@@ -40,4 +40,4 @@ LDADD = \
 	$(LIB_readline) \
 	$(LIB_roken)
 
-EXTRA_DIST = NTMakefile ktutil-version.rc $(man_MANS) ktutil-commands.in
+EXTRA_DIST = $(man_MANS) ktutil-commands.in

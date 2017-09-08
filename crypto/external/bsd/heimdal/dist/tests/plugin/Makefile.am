@@ -1,4 +1,4 @@
-# Id
+# $Id: Makefile.am,v 1.1 2011/04/13 18:16:02 elric Exp $
 
 include $(top_srcdir)/Makefile.am.common
 
@@ -10,7 +10,6 @@ TESTS = $(SCRIPT_TESTS)
 port = 49188
 
 do_subst = sed -e 's,[@]srcdir[@],$(srcdir),g' \
-	-e 's,[@]env_setup[@],$(top_builddir)/tests/bin/setup-env,g' \
 	-e 's,[@]port[@],$(port),g' \
 	-e 's,[@]objdir[@],$(top_builddir)/tests/plugin,g' \
 	-e 's,[@]EGREP[@],$(EGREP),g' 
@@ -40,6 +39,5 @@ CLEANFILES= \
 	messages.log
 
 EXTRA_DIST = \
-	NTMakefile \
 	check-pac.in \
 	krb5.conf.in

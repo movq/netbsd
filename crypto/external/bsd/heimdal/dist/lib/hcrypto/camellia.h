@@ -1,4 +1,4 @@
-/*	$NetBSD: camellia.h,v 1.2 2017/01/28 21:31:47 christos Exp $	*/
+/*	$NetBSD: camellia.h,v 1.1 2011/04/13 18:14:49 elric Exp $	*/
 
 /*
  * Copyright (c) 2007 Kungliga Tekniska Högskolan
@@ -33,7 +33,7 @@
  * SUCH DAMAGE.
  */
 
-/* Id */
+/* $Id: camellia.h,v 1.1 2011/04/13 18:14:49 elric Exp $ */
 
 #ifndef HEIM_CAMELLIA_H
 #define HEIM_CAMELLIA_H 1

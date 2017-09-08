@@ -1,4 +1,4 @@
-/*	$NetBSD: base64.h,v 1.2 2017/01/28 21:31:50 christos Exp $	*/
+/*	$NetBSD: base64.h,v 1.1 2011/04/13 18:15:40 elric Exp $	*/
 
 /*
  * Copyright (c) 1995, 1996, 1997 Kungliga Tekniska Högskolan
@@ -33,7 +33,7 @@
  * SUCH DAMAGE.
  */
 
-/* Id */
+/* $Id: base64.h,v 1.1 2011/04/13 18:15:40 elric Exp $ */
 
 #ifndef _BASE64_H_
 #define _BASE64_H_
@@ -49,9 +49,9 @@
 #endif
 
 ROKEN_LIB_FUNCTION int ROKEN_LIB_CALL
-rk_base64_encode(const void *, int, char **);
+base64_encode(const void *, int, char **);
 
 ROKEN_LIB_FUNCTION int ROKEN_LIB_CALL
-rk_base64_decode(const char *, void *);
+base64_decode(const char *, void *);
 
 #endif

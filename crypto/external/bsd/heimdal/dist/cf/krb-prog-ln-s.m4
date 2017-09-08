@@ -1,4 +1,4 @@
-dnl Id
+dnl $Id: krb-prog-ln-s.m4,v 1.1 2011/04/13 18:14:32 elric Exp $
 dnl
 dnl
 dnl Better test for ln -s, ln or cp

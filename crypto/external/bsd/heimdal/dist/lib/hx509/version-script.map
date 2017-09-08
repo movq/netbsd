@@ -1,4 +1,4 @@
-# Id
+# $Id: version-script.map,v 1.1 2011/04/13 18:15:13 elric Exp $
 
 HEIMDAL_X509_1.2 {
 	global:
@@ -22,6 +22,7 @@ HEIMDAL_X509_1.2 {
 		_hx509_request_parse;
 		_hx509_request_print;
 		_hx509_request_set_email;
+		_hx509_request_to_pkcs10;
 		_hx509_request_to_pkcs10;
 		_hx509_unmap_file_os;
 		_hx509_write_file;
@@ -208,7 +209,6 @@ HEIMDAL_X509_1.2 {
 		hx509_revoke_init;
 		hx509_revoke_ocsp_print;
 		hx509_revoke_verify;
-		hx509_revoke_print;
 		hx509_set_error_string;
 		hx509_set_error_stringv;
 		hx509_signature_md5;
@@ -246,10 +246,5 @@ HEIMDAL_X509_1.2 {
 		C_GetFunctionList;
 	local:
 		*;
-};
-
-HEIMDAL_X509_1.3 {
-	global:
-		hx509_ca_tbs_set_signature_algorithm;
 };
 

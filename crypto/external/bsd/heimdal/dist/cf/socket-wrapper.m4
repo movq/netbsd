@@ -1,4 +1,4 @@
-dnl Id
+dnl $Id: socket-wrapper.m4,v 1.1 2011/04/13 18:14:33 elric Exp $
 dnl
 AC_DEFUN([samba_SOCKET_WRAPPER], [
 

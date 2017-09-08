@@ -1,5 +1,5 @@
-@c Id
-@c $NetBSD: whatis.texi,v 1.2 2017/01/28 21:31:44 christos Exp $
+@c $Id: whatis.texi,v 1.1 2011/04/13 18:14:34 elric Exp $
+@c $NetBSD: whatis.texi,v 1.1 2011/04/13 18:14:34 elric Exp $
 
 @node What is Kerberos?, Building and Installing, Introduction, Top
 @chapter What is Kerberos?
@@ -36,19 +36,16 @@ services can authenticate each other.
 @end macro
 @end ifinfo
 
-@iftex
-@macro sub{arg}
-@textsubscript{\arg\}
-@end macro
-@end iftex
+@tex
+@def@xsub#1{$_{#1}$}
+@global@let@sub=@xsub
+@end tex
 
 @ifhtml
 @macro sub{arg}
-
 @html
 <sub>\arg\</sub>
 @end html
-
 @end macro
 @end ifhtml
 

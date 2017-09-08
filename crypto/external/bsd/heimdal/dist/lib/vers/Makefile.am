@@ -1,4 +1,4 @@
-# Id
+# $Id: Makefile.am,v 1.1 2011/04/13 18:15:44 elric Exp $
 
 include $(top_srcdir)/Makefile.am.common
 
@@ -10,4 +10,4 @@ CHECK_LOCAL		= no-check-local
 
 libvers_la_SOURCES      = print_version.c
 
-EXTRA_DIST = NTMakefile $(build_HEADERZ) make-print-version.c
+EXTRA_DIST = $(build_HEADERZ)

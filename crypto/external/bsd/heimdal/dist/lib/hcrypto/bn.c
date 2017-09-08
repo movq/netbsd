@@ -1,4 +1,4 @@
-/*	$NetBSD: bn.c,v 1.2 2017/01/28 21:31:47 christos Exp $	*/
+/*	$NetBSD: bn.c,v 1.1 2011/04/13 18:14:49 elric Exp $	*/
 
 /*
  * Copyright (c) 2006 Kungliga Tekniska Högskolan
@@ -34,9 +34,15 @@
  */
 
 #include <config.h>
-#include <krb5/roken.h>
+
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <limits.h>
 
 #include <krb5/krb5-types.h>
+#include <krb5/roken.h>
 #include <krb5/rfc2459_asn1.h> /* XXX */
 #include <krb5/der.h>
 

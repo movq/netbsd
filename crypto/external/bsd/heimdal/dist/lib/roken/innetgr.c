@@ -1,4 +1,4 @@
-/*	$NetBSD: innetgr.c,v 1.2 2017/01/28 21:31:50 christos Exp $	*/
+/*	$NetBSD: innetgr.c,v 1.1 2011/04/13 18:15:42 elric Exp $	*/
 
 /*
  * Copyright (c) 1999 Kungliga Tekniska Högskolan

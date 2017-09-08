@@ -1,4 +1,4 @@
-/*	$NetBSD: validate.c,v 1.2 2017/01/28 21:31:47 christos Exp $	*/
+/*	$NetBSD: validate.c,v 1.1 2011/04/13 18:14:50 elric Exp $	*/
 
 /*
  * Copyright (c) 2010 Kungliga Tekniska Högskolan
@@ -34,6 +34,12 @@
  */
 
 #include <config.h>
+
+#include <sys/types.h>
+#include <limits.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 #include <krb5/roken.h>
 
 #include <evp.h>
@@ -52,7 +58,7 @@ struct tests {
     void *outiv;
 };
 
-static struct tests hc_tests[] = {
+struct tests tests[] = {
     {
 	EVP_aes_256_cbc,
 	"aes-256",
@@ -62,11 +68,10 @@ static struct tests hc_tests[] = {
 	"\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00",
 	16,
 	"\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00",
-	"\xdc\x95\xc0\x78\xa2\x40\x89\x89\xad\x48\xa2\x14\x92\x84\x20\x87",
-        NULL
+	"\xdc\x95\xc0\x78\xa2\x40\x89\x89\xad\x48\xa2\x14\x92\x84\x20\x87"
     },
 #if 0
-    {
+    { 
 	EVP_aes_128_cfb8,
 	"aes-cfb8-128",
 	"\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00",
@@ -87,11 +92,10 @@ static struct tests hc_tests[] = {
 	"\xbf\x9a\x12\xb7\x26\x69\xfd\x05",
 	16,
 	"\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00",
-	"\x55\x95\x97\x76\xa9\x6c\x66\x40\x64\xc7\xf4\x1c\x21\xb7\x14\x1b",
-        NULL
+	"\x55\x95\x97\x76\xa9\x6c\x66\x40\x64\xc7\xf4\x1c\x21\xb7\x14\x1b"
     },
 #if 0
-    {
+    { 
 	EVP_camellia_128_cbc,
 	"camellia128",
 	"\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00",
@@ -103,7 +107,7 @@ static struct tests hc_tests[] = {
 	NULL
     },
 #endif
-    {
+    { 
 	EVP_rc4,
 	"rc4 8",
 	"\x01\x23\x45\x67\x89\xAB\xCD\xEF",
@@ -209,8 +213,7 @@ static struct tests hc_tests[] = {
 	"\x89\x21\xc2\xf5\xa4\x63\x93\x8c"
 	"\xe0\x98\x22\x65\xee\xf7\x01\x79"
 	"\xbc\x55\x3f\x33\x9e\xb1\xa4\xc1"
-	"\xaf\x5f\x6a\x54\x7f",
-        NULL
+	"\xaf\x5f\x6a\x54\x7f"
     }
 };
 
@@ -252,10 +255,8 @@ test_cipher(struct tests *t)
     if (memcmp(d, t->indata, t->datasize) != 0)
 	errx(1, "%s: decrypt not the same", t->name);
 
-#if 0
     if (t->outiv)
 	/* XXXX check  */;
-#endif
 
     EVP_CIPHER_CTX_cleanup(&ectx);
     EVP_CIPHER_CTX_cleanup(&dctx);
@@ -301,8 +302,8 @@ hcrypto_validate(void)
 	return;
     validated++;
 
-    for (i = 0; i < sizeof(hc_tests) / sizeof(hc_tests[0]); i++)
-	test_cipher(&hc_tests[i]);
+    for (i = 0; i < sizeof(tests) / sizeof(tests[0]); i++)
+	test_cipher(&tests[i]);
 
     check_hmac();
 }

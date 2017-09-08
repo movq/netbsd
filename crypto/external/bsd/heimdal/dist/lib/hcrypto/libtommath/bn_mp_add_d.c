@@ -1,4 +1,4 @@
-/*	$NetBSD: bn_mp_add_d.c,v 1.2 2017/01/28 21:31:47 christos Exp $	*/
+/*	$NetBSD: bn_mp_add_d.c,v 1.1 2011/04/13 18:14:54 elric Exp $	*/
 
 #include <tommath.h>
 #ifdef BN_MP_ADD_D_C
@@ -109,6 +109,6 @@ mp_add_d (mp_int * a, mp_digit b, mp_int * c)
 
 #endif
 
-/* Source: /cvs/libtom/libtommath/bn_mp_add_d.c,v  */
-/* Revision: 1.5  */
-/* Date: 2006/12/28 01:25:13  */
+/* Source: /cvs/libtom/libtommath/bn_mp_add_d.c,v */
+/* Revision: 1.5 */
+/* Date: 2006/12/28 01:25:13 */

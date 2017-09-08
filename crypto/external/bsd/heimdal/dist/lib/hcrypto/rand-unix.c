@@ -1,4 +1,4 @@
-/*	$NetBSD: rand-unix.c,v 1.2 2017/01/28 21:31:47 christos Exp $	*/
+/*	$NetBSD: rand-unix.c,v 1.1 2011/04/13 18:14:50 elric Exp $	*/
 
 /*
  * Copyright (c) 2006 Kungliga Tekniska Högskolan
@@ -34,10 +34,13 @@
  */
 
 #include <config.h>
-#include <krb5/roken.h>
 
+#include <stdio.h>
+#include <stdlib.h>
 #include <rand.h>
 #include <heim_threads.h>
+
+#include <krb5/roken.h>
 
 #include "randi.h"
 
@@ -70,33 +73,20 @@ _hc_unix_device_fd(int flags, const char **fn)
 }
 
 static void
-unix_seed(const void *p, int size)
+unix_seed(const void *indata, int size)
 {
-    const unsigned char *indata = p;
-    ssize_t count;
     int fd;
 
-    if (size < 0)
-	return;
-    else if (size == 0)
+    if (size <= 0)
 	return;
 
-    fd = _hc_unix_device_fd(O_RDONLY, NULL);
+    fd = _hc_unix_device_fd(O_WRONLY, NULL);
     if (fd < 0)
 	return;
 
-    while (size > 0) {
-	count = write(fd, indata, size);
-	if (count < 0 && errno == EINTR)
-	    continue;
-	else if (count <= 0) {
-	    close(fd);
-	    return;
-	}
-	indata += count;
-	size -= count;
-    }
+    write(fd, indata, size);
     close(fd);
+
 }
 
 

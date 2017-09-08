@@ -1,4 +1,4 @@
-/*	$NetBSD: compat.c,v 1.2 2017/01/28 21:31:47 christos Exp $	*/
+/*	$NetBSD: compat.c,v 1.1 2011/04/13 18:14:48 elric Exp $	*/
 
 /*
  * Copyright (c) 2004, PADL Software Pty Ltd.
@@ -43,10 +43,10 @@
  * Kerberos mechanism.
  */
 gss_OID_desc _gss_spnego_mskrb_mechanism_oid_desc =
-    {9, rk_UNCONST("\x2a\x86\x48\x82\xf7\x12\x01\x02\x02")};
+	{9, (void *)"\x2a\x86\x48\x82\xf7\x12\x01\x02\x02"};
 
 gss_OID_desc _gss_spnego_krb5_mechanism_oid_desc =
-    {9, rk_UNCONST("\x2a\x86\x48\x86\xf7\x12\x01\x02\x02")};
+	{9, (void *)"\x2a\x86\x48\x86\xf7\x12\x01\x02\x02"};
 
 /*
  * Allocate a SPNEGO context handle
@@ -236,14 +236,14 @@ _gss_spnego_indicate_mechtypelist (OM_uint32 *minor_status,
 				   gss_name_t target_name,
 				   OM_uint32 (*func)(gss_name_t, gss_OID),
 				   int includeMSCompatOID,
-				   gss_const_cred_id_t cred_handle,
+				   const gss_cred_id_t cred_handle,
 				   MechTypeList *mechtypelist,
 				   gss_OID *preferred_mech)
 {
     gss_OID_set supported_mechs = GSS_C_NO_OID_SET;
     gss_OID first_mech = GSS_C_NO_OID;
     OM_uint32 ret;
-    size_t i;
+    int i;
 
     mechtypelist->len = 0;
     mechtypelist->val = NULL;

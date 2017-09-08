@@ -1,4 +1,4 @@
-/*	$NetBSD: gss_krb5.c,v 1.2 2017/01/28 21:31:46 christos Exp $	*/
+/*	$NetBSD: gss_krb5.c,v 1.1 2011/04/13 18:14:46 elric Exp $	*/
 
 /*-
  * Copyright (c) 2005 Doug Rabson
@@ -190,7 +190,7 @@ out:
 GSSAPI_LIB_FUNCTION OM_uint32 GSSAPI_LIB_CALL
 gsskrb5_register_acceptor_identity(const char *identity)
 {
-	gssapi_mech_interface m;
+        struct _gss_mech_switch	*m;
 	gss_buffer_desc buffer;
 	OM_uint32 junk;
 
@@ -199,12 +199,14 @@ gsskrb5_register_acceptor_identity(const char *identity)
 	buffer.value = rk_UNCONST(identity);
 	buffer.length = strlen(identity);
 
-	m = __gss_get_mechanism(GSS_KRB5_MECHANISM);
-	if (m == NULL || m->gm_set_sec_context_option == NULL)
-	    return GSS_S_FAILURE;
+	HEIM_SLIST_FOREACH(m, &_gss_mechs, gm_link) {
+		if (m->gm_mech.gm_set_sec_context_option == NULL)
+			continue;
+		m->gm_mech.gm_set_sec_context_option(&junk, NULL,
+		    GSS_KRB5_REGISTER_ACCEPTOR_IDENTITY_X, &buffer);
+	}
 
-	return m->gm_set_sec_context_option(&junk, NULL,
-	        GSS_KRB5_REGISTER_ACCEPTOR_IDENTITY_X, &buffer);
+	return (GSS_S_COMPLETE);
 }
 
 GSSAPI_LIB_FUNCTION OM_uint32 GSSAPI_LIB_CALL
@@ -441,7 +443,7 @@ gss_krb5_set_allowable_enctypes(OM_uint32 *minor_status,
     gss_buffer_desc buffer;
     krb5_storage *sp;
     krb5_data data;
-    size_t i;
+    int i;
 
     sp = krb5_storage_emem();
     if (sp == NULL) {

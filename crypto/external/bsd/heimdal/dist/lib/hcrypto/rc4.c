@@ -1,4 +1,4 @@
-/*	$NetBSD: rc4.c,v 1.2 2017/01/28 21:31:47 christos Exp $	*/
+/*	$NetBSD: rc4.c,v 1.1 2011/04/13 18:14:51 elric Exp $	*/
 
 /*
  * Copyright (c) 2004 Kungliga Tekniska Högskolan
@@ -35,8 +35,7 @@
 
 /* implemented from description in draft-kaukonen-cipher-arcfour-03.txt */
 
-#include <config.h>
-#include <krb5/roken.h>
+#include "config.h"
 
 #include <rc4.h>
 

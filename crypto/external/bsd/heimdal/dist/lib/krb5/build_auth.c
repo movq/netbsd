@@ -1,4 +1,4 @@
-/*	$NetBSD: build_auth.c,v 1.2 2017/01/28 21:31:49 christos Exp $	*/
+/*	$NetBSD: build_auth.c,v 1.1 2011/04/13 18:15:31 elric Exp $	*/
 
 /*
  * Copyright (c) 1997 - 2003 Kungliga Tekniska Högskolan
@@ -43,12 +43,10 @@ make_etypelist(krb5_context context,
     krb5_error_code ret;
     krb5_authdata ad;
     u_char *buf;
-    size_t len = 0;
+    size_t len;
     size_t buf_size;
 
-    ret = _krb5_init_etype(context, KRB5_PDU_NONE,
-			   &etypes.len, &etypes.val,
-			   NULL);
+    ret = krb5_init_etype(context, &etypes.len, &etypes.val, NULL);
     if (ret)
 	return ret;
 
@@ -64,7 +62,8 @@ make_etypelist(krb5_context context,
     ALLOC_SEQ(&ad, 1);
     if (ad.val == NULL) {
 	free(buf);
-	return krb5_enomem(context);
+	krb5_set_error_message(context, ENOMEM, N_("malloc: out of memory", ""));
+	return ENOMEM;
     }
 
     ad.val[0].ad_type = KRB5_AUTHDATA_GSS_API_ETYPE_NEGOTIATION;
@@ -83,14 +82,16 @@ make_etypelist(krb5_context context,
     ALLOC(*auth_data, 1);
     if (*auth_data == NULL) {
         free(buf);
-	return krb5_enomem(context);
+	krb5_set_error_message(context, ENOMEM, N_("malloc: out of memory", ""));
+	return ENOMEM;
     }
 
     ALLOC_SEQ(*auth_data, 1);
     if ((*auth_data)->val == NULL) {
         free(*auth_data);
 	free(buf);
-	return krb5_enomem(context);
+	krb5_set_error_message(context, ENOMEM, N_("malloc: out of memory", ""));
+	return ENOMEM;
     }
 
     (*auth_data)->val[0].ad_type = KRB5_AUTHDATA_IF_RELEVANT;
@@ -112,7 +113,7 @@ _krb5_build_authenticator (krb5_context context,
     Authenticator auth;
     u_char *buf = NULL;
     size_t buf_size;
-    size_t len = 0;
+    size_t len;
     krb5_error_code ret;
     krb5_crypto crypto;
 
@@ -135,7 +136,7 @@ _krb5_build_authenticator (krb5_context context,
 				      &auth_context->local_seqnumber);
 	ALLOC(auth.seq_number, 1);
 	if(auth.seq_number == NULL) {
-	    ret = krb5_enomem(context);
+	    ret = ENOMEM;
 	    goto fail;
 	}
 	*auth.seq_number = auth_context->local_seqnumber;
@@ -146,7 +147,7 @@ _krb5_build_authenticator (krb5_context context,
     if (cksum) {
 	ALLOC(auth.cksum, 1);
 	if (auth.cksum == NULL) {
-	    ret = krb5_enomem(context);
+	    ret = ENOMEM;
 	    goto fail;
 	}
 	ret = copy_Checksum(cksum, auth.cksum);

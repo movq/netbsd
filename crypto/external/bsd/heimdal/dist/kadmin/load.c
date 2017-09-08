@@ -1,4 +1,4 @@
-/*	$NetBSD: load.c,v 1.2 2017/01/28 21:31:44 christos Exp $	*/
+/*	$NetBSD: load.c,v 1.1 2011/04/13 18:14:35 elric Exp $	*/
 
 /*
  * Copyright (c) 1997-2005 Kungliga Tekniska Högskolan
@@ -155,7 +155,7 @@ parse_keys(hdb_entry *ent, char *str)
     krb5_error_code ret;
     int tmp;
     char *p;
-    size_t i;
+    int i;
 
     p = strsep(&str, ":");
     if (sscanf(p, "%d", &tmp) != 1)
@@ -207,7 +207,7 @@ parse_keys(hdb_entry *ent, char *str)
 	    if (key->salt == NULL)
 		krb5_errx (context, 1, "malloc: out of memory");
 	    key->salt->type = type;
-
+		
 	    if (p_len) {
 		if(*p == '\"') {
 		    ret = krb5_data_copy(&key->salt->salt, p + 1, p_len - 2);
@@ -364,7 +364,7 @@ parse_extensions(char *str, HDB_extensions **e)
 static int
 doit(const char *filename, int mergep)
 {
-    krb5_error_code ret = 0;
+    krb5_error_code ret;
     FILE *f;
     char s[8192]; /* XXX should fix this properly */
     char *p;
@@ -379,22 +379,10 @@ doit(const char *filename, int mergep)
 	krb5_warn(context, errno, "fopen(%s)", filename);
 	return 1;
     }
-    /*
-     * We don't have a version number in the dump, so we don't know which iprop
-     * log entries to keep, if any.  We throw the log away.
-     *
-     * We could merge the ipropd-master/slave dump/load here as an option, in
-     * which case we would first load the dump.
-     *
-     * If we're merging, first recover unconfirmed records in the existing log.
-     */
-    if (mergep)
-        ret = kadm5_log_init(kadm_handle);
-    if (ret == 0)
-        ret = kadm5_log_reinit(kadm_handle, 0);
+    ret = kadm5_log_truncate (kadm_handle);
     if (ret) {
 	fclose (f);
-	krb5_warn(context, ret, "kadm5_log_reinit");
+	krb5_warn(context, ret, "kadm5_log_truncate");
 	return 1;
     }
 
@@ -425,7 +413,7 @@ doit(const char *filename, int mergep)
 	    }
 	}
 	p = skip_next(p);
-
+	
 	e.key = p;
 	p = skip_next(p);
 
@@ -468,14 +456,14 @@ doit(const char *filename, int mergep)
 	    krb5_free_error_message(context, msg);
 	    continue;
 	}
-
+	
 	if (parse_keys(&ent.entry, e.key)) {
 	    fprintf (stderr, "%s:%d:error parsing keys (%s)\n",
 		     filename, line, e.key);
 	    hdb_free_entry (context, &ent);
 	    continue;
 	}
-
+	
 	if (parse_event(&ent.entry.created_by, e.created) == -1) {
 	    fprintf (stderr, "%s:%d:error parsing created event (%s)\n",
 		     filename, line, e.created);
@@ -549,7 +537,6 @@ doit(const char *filename, int mergep)
 	    break;
 	}
     }
-    (void) kadm5_log_end(kadm_handle);
     db->hdb_close(context, db);
     fclose(f);
     return ret != 0;

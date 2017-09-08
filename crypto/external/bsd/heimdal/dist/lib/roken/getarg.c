@@ -1,4 +1,4 @@
-/*	$NetBSD: getarg.c,v 1.5 2017/01/29 19:23:28 christos Exp $	*/
+/*	$NetBSD: getarg.c,v 1.1 2011/04/13 18:15:41 elric Exp $	*/
 
 /*
  * Copyright (c) 1997 - 2002 Kungliga Tekniska Högskolan
@@ -39,7 +39,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <krb5/roken.h>
-#include <getarg.h>
+#include <krb5/getarg.h>
 
 #define ISFLAG(X) ((X).type == arg_flag || (X).type == arg_negative_flag)
 
@@ -116,7 +116,8 @@ mandoc_template(struct getargs *args,
     printf(".Os OPERATING_SYSTEM\n");
     printf(".Sh NAME\n");
     printf(".Nm %s\n", p);
-    printf(".Nd in search of a description\n");
+    printf(".Nd\n");
+    printf("in search of a description\n");
     printf(".Sh SYNOPSIS\n");
     printf(".Nm\n");
     for(i = 0; i < num_args; i++){
@@ -134,7 +135,7 @@ mandoc_template(struct getargs *args,
 	    }
 	    if(args[i].long_name) {
 		print_arg(buf, sizeof(buf), 1, 1, args + i, i18n);
-		printf("Fl Fl %s%s%s",
+		printf("Fl -%s%s%s",
 		       args[i].type == arg_negative_flag ? "no-" : "",
 		       args[i].long_name, buf);
 	    }
@@ -143,7 +144,7 @@ mandoc_template(struct getargs *args,
 	    print_arg(buf, sizeof(buf), 1, 0, args + i, i18n);
 	    printf(".Oo Fl %c%s \\*(Ba Xo\n", args[i].short_name, buf);
 	    print_arg(buf, sizeof(buf), 1, 1, args + i, i18n);
-	    printf(".Fl Fl %s%s\n.Xc\n.Oc\n", args[i].long_name, buf);
+	    printf(".Fl -%s%s\n.Xc\n.Oc\n", args[i].long_name, buf);
 	}
     /*
 	    if(args[i].type == arg_strings)
@@ -166,7 +167,7 @@ mandoc_template(struct getargs *args,
 	    printf("\n");
 	}
 	if(args[i].long_name){
-	    printf(".Fl Fl %s%s",
+	    printf(".Fl -%s%s",
 		   args[i].type == arg_negative_flag ? "no-" : "",
 		   args[i].long_name);
 	    print_arg(buf, sizeof(buf), 1, 1, args + i, i18n);
@@ -229,6 +230,7 @@ arg_printusage_i18n (struct getargs *args,
     size_t i, max_len = 0;
     char buf[128];
     int col = 0, columns;
+    struct winsize ws;
 
     if (progname == NULL)
 	progname = getprogname();
@@ -240,7 +242,9 @@ arg_printusage_i18n (struct getargs *args,
 	mandoc_template(args, num_args, progname, extra_string, i18n);
 	return;
     }
-    if(get_window_size(2, NULL, &columns) == -1)
+    if(get_window_size(2, &ws) == 0)
+	columns = ws.ws_col;
+    else
 	columns = 80;
     col = 0;
     col += fprintf (stderr, "%s: %s", usage, progname);
@@ -350,7 +354,7 @@ static int
 arg_match_long(struct getargs *args, size_t num_args,
 	       char *argv, int argc, char **rargv, int *goptind)
 {
-    size_t i;
+    int i;
     char *goptarg = NULL;
     int negate = 0;
     int partial_match = 0;
@@ -475,7 +479,7 @@ static int
 arg_match_short (struct getargs *args, size_t num_args,
 		 char *argv, int argc, char **rargv, int *goptind)
 {
-    size_t j, k;
+    int j, k;
 
     for(j = 1; j > 0 && j < strlen(rargv[*goptind]); j++) {
 	for(k = 0; k < num_args; k++) {
@@ -498,11 +502,9 @@ arg_match_short (struct getargs *args, size_t num_args,
 		}
 		if(args[k].type == arg_collect) {
 		    struct getarg_collect_info *c = args[k].value;
-		    int a = (int)j;
 
-		    if((*c->func)(TRUE, argc, rargv, goptind, &a, c->data))
+		    if((*c->func)(TRUE, argc, rargv, goptind, &j, c->data))
 			return ARG_ERR_BAD_ARG;
-		    j = a;
 		    break;
 		}
 
@@ -597,7 +599,7 @@ struct getargs args[] = {
 int main(int argc, char **argv)
 {
     int goptind = 0;
-    while (getarg(args, 5, argc, argv, &goptind))
+    while(getarg(args, 5, argc, argv, &goptind))
 	printf("Bad arg: %s\n", argv[goptind]);
     printf("flag1 = %d\n", flag1);
     printf("flag2 = %d\n", flag2);

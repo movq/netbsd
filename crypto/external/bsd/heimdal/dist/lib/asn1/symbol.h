@@ -1,4 +1,4 @@
-/*	$NetBSD: symbol.h,v 1.2 2017/01/28 21:31:45 christos Exp $	*/
+/*	$NetBSD: symbol.h,v 1.1 2011/04/13 18:14:41 elric Exp $	*/
 
 /*
  * Copyright (c) 1997 - 2005 Kungliga Tekniska Högskolan
@@ -33,7 +33,7 @@
  * SUCH DAMAGE.
  */
 
-/* Id */
+/* $Id: symbol.h,v 1.1 2011/04/13 18:14:41 elric Exp $ */
 
 #ifndef _SYMBOL_H
 #define _SYMBOL_H
@@ -80,7 +80,7 @@ struct value {
     } type;
     union {
 	int booleanvalue;
-	int64_t integervalue;
+	int integervalue;
 	char *stringvalue;
 	struct objid *objectidentifiervalue;
     } u;
@@ -111,12 +111,8 @@ struct tagtype {
 };
 
 struct range {
-    /*
-     * We can't represent unsigned 64-bit ranges because max might be
-     * negative...
-     */
-    int64_t min;
-    int64_t max;
+    int min;
+    int max;
 };
 
 enum ctype { CT_CONTENTS, CT_USER } ;
@@ -131,7 +127,6 @@ struct type {
     struct tagtype tag;
     struct range *range;
     struct constraint_spec *constraint;
-    unsigned long id;
 };
 
 typedef struct type Type;

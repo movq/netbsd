@@ -31,7 +31,7 @@
 # OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF 
 # SUCH DAMAGE. 
 #
-# Id
+# $Id: test_ca.in,v 1.1 2011/04/13 18:15:12 elric Exp $
 #
 
 srcdir="@srcdir@"
@@ -417,34 +417,6 @@ ${hxtool} issue-certificate \
 	  --certificate="FILE:cert-ee.pem" || exit 1
 
 echo "verify certificate null subject"
-${hxtool} verify --missing-revoke \
-	cert:FILE:cert-ee.pem \
-	anchor:FILE:cert-ca.pem > /dev/null || exit 1
-
-echo "+++++++++++ test sigalg"
-
-echo "issue cert with sha256"
-${hxtool} issue-certificate \
-	  --ca-certificate=FILE:cert-ca.pem \
-          --signature-algorithm=rsa-with-sha256 \
-	  --subject="cn=foo" \
-	  --req="PKCS10:pkcs10-request.der" \
-	  --certificate="FILE:cert-ee.pem" || exit 1
-
-echo "verify certificate"
-${hxtool} verify --missing-revoke \
-	cert:FILE:cert-ee.pem \
-	anchor:FILE:cert-ca.pem > /dev/null || exit 1
-
-echo "issue cert with sha1"
-${hxtool} issue-certificate \
-	  --ca-certificate=FILE:cert-ca.pem \
-          --signature-algorithm=rsa-with-sha1 \
-	  --subject="cn=foo" \
-	  --req="PKCS10:pkcs10-request.der" \
-	  --certificate="FILE:cert-ee.pem" || exit 1
-
-echo "verify certificate"
 ${hxtool} verify --missing-revoke \
 	cert:FILE:cert-ee.pem \
 	anchor:FILE:cert-ca.pem > /dev/null || exit 1

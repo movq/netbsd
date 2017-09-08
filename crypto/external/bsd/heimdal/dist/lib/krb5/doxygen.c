@@ -1,4 +1,4 @@
-/*	$NetBSD: doxygen.c,v 1.2 2017/01/28 21:31:49 christos Exp $	*/
+/*	$NetBSD: doxygen.c,v 1.1 2011/04/13 18:15:33 elric Exp $	*/
 
 /*
  * Copyright (c) 2007-2008 Kungliga Tekniska Högskolan
@@ -310,8 +310,8 @@
  *
  * In this case, mutual authentication will be tried. That means that the server
  * will authenticate to the client. Using mutual authentication
- * is required to avoid man-in-the-middle attacks, since it enables the user to
- * verify that they are talking to the right server (a server that knows the key).
+ * is good since it enables the user to verify that they are talking to the
+ * right server (a server that knows the key).
  *
  * If you are using a non-blocking socket you will need to do all work of
  * krb5_sendauth() yourself. Basically you need to send over the
@@ -638,7 +638,7 @@
  * @endcode
  *
  * - time
- *
+ * 	
  * Format of the time is: YYYYmmddHHMMSS, corresponding to strftime
  * format "%Y%m%d%k%M%S".
  *

@@ -1,4 +1,4 @@
-/*	$NetBSD: error.c,v 1.2 2017/01/28 21:31:45 christos Exp $	*/
+/*	$NetBSD: error.c,v 1.1 2011/04/13 18:14:43 elric Exp $	*/
 
 /*
  * Copyright (c) 1997, 1998, 2001 Kungliga Tekniska Högskolan
@@ -67,7 +67,7 @@ com_right_r(struct et_list *list, long code, char *str, size_t len)
 	    const char *msg = p->table->msgs[code - p->table->base];
 #ifdef LIBINTL
 	    char domain[12 + 20];
-	    snprintf(domain, sizeof(domain), "heim_com_err%ld", p->table->base);
+	    snprintf(domain, sizeof(domain), "heim_com_err%d", p->table->base);
 #endif
 	    strlcpy(str, dgettext(domain, msg), len);
 	    return str;
@@ -103,7 +103,7 @@ initialize_error_table_r(struct et_list **list,
     et->next = NULL;
     *end = et;
 }
-
+			
 
 KRB5_LIB_FUNCTION void KRB5_LIB_CALL
 free_error_table(struct et_list *et)

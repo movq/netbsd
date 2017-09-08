@@ -1,4 +1,4 @@
-/*	$NetBSD: test_kuserok.c,v 1.2 2017/01/28 21:31:49 christos Exp $	*/
+/*	$NetBSD: test_kuserok.c,v 1.1 2011/04/13 18:15:38 elric Exp $	*/
 
 /*
  * Copyright (c) 2005 Kungliga Tekniska Högskolan
@@ -98,14 +98,9 @@ main(int argc, char **argv)
 
     ret = krb5_kuserok(context, principal, argv[1]);
 
-    krb5_free_principal(context, principal);
     krb5_free_context(context);
 
     printf("%s is %sallowed to login as %s\n", p, ret ? "" : "NOT ", argv[1]);
-    free(p);
 
-    if (ret)
-	return 0;
-
-    return 1;
+    return 0;
 }

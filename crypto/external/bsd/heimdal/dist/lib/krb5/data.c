@@ -1,4 +1,4 @@
-/*	$NetBSD: data.c,v 1.2 2017/01/28 21:31:49 christos Exp $	*/
+/*	$NetBSD: data.c,v 1.1 2011/04/13 18:15:33 elric Exp $	*/
 
 /*
  * Copyright (c) 1997 - 2007 Kungliga Tekniska Högskolan
@@ -64,7 +64,8 @@ krb5_data_zero(krb5_data *p)
 KRB5_LIB_FUNCTION void KRB5_LIB_CALL
 krb5_data_free(krb5_data *p)
 {
-    free(p->data);
+    if(p->data != NULL)
+	free(p->data);
     krb5_data_zero(p);
 }
 
@@ -177,8 +178,10 @@ krb5_copy_data(krb5_context context,
 {
     krb5_error_code ret;
     ALLOC(*outdata, 1);
-    if(*outdata == NULL)
-	return krb5_enomem(context);
+    if(*outdata == NULL) {
+	krb5_set_error_message(context, ENOMEM, "malloc: out of memory");
+	return ENOMEM;
+    }
     ret = der_copy_octet_string(indata, *outdata);
     if(ret) {
 	krb5_clear_error_message (context);

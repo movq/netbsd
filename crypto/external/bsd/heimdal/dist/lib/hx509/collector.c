@@ -1,4 +1,4 @@
-/*	$NetBSD: collector.c,v 1.2 2017/01/28 21:31:48 christos Exp $	*/
+/*	$NetBSD: collector.c,v 1.1 2011/04/13 18:15:10 elric Exp $	*/
 
 /*
  * Copyright (c) 2004 - 2007 Kungliga Tekniska Högskolan
@@ -135,7 +135,7 @@ _hx509_collector_private_key_add(hx509_context context,
 	return ENOMEM;
     }
     c->val.data = d;
-
+	
     ret = copy_AlgorithmIdentifier(alg, &key->alg);
     if (ret) {
 	hx509_set_error_string(context, 0, ret, "Failed to copy "
@@ -194,7 +194,7 @@ match_localkeyid(hx509_context context,
 
     ret = hx509_certs_find(context, certs, &q, &cert);
     if (ret == 0) {
-
+	
 	if (value->private_key)
 	    _hx509_cert_assign_key(cert, value->private_key);
 	hx509_cert_free(cert);
@@ -255,8 +255,7 @@ _hx509_collector_collect_certs(hx509_context context,
 			       hx509_certs *ret_certs)
 {
     hx509_certs certs;
-    int ret;
-    size_t i;
+    int ret, i;
 
     *ret_certs = NULL;
 
@@ -289,7 +288,7 @@ _hx509_collector_collect_private_keys(hx509_context context,
 				      struct hx509_collector *c,
 				      hx509_private_key **keys)
 {
-    size_t i, nkeys;
+    int i, nkeys;
 
     *keys = NULL;
 
@@ -318,7 +317,7 @@ _hx509_collector_collect_private_keys(hx509_context context,
 void
 _hx509_collector_free(struct hx509_collector *c)
 {
-    size_t i;
+    int i;
 
     if (c->unenvelop_certs)
 	hx509_certs_free(&c->unenvelop_certs);

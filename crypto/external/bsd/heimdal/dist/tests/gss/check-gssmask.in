@@ -31,14 +31,11 @@
 # OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF 
 # SUCH DAMAGE. 
 #
-# Id
+# $Id: check-gssmask.in,v 1.1 2011/04/13 18:16:01 elric Exp $
 #
 
-env_setup="@env_setup@"
 srcdir="@srcdir@"
 objdir="@objdir@"
-
-. ${env_setup}
 
 # If there is no useful db support compile in, disable test
 ../db/have-db || exit 77
@@ -88,8 +85,14 @@ echo "Doing database check"
 ${kadmin} check ${R} || exit 1
 
 echo Starting kdc
-${kdc} --detach --testing || { echo "kdc failed to start"; exit 1; }
-kdcpid=`getpid kdc`
+${kdc} &
+kdcpid=$!
+
+sh ${srcdir}/../kdc/wait-kdc.sh
+if [ "$?" != 0 ] ; then
+    kill ${kdcpid}
+    exit 1
+fi
 
 trap "kill ${kdcpid}; echo signal killing kdc; exit 1;" EXIT
 

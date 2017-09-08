@@ -1,4 +1,4 @@
-/*	$NetBSD: client.c,v 1.3 2017/09/08 15:29:43 christos Exp $	*/
+/*	$NetBSD: client.c,v 1.1 2011/04/13 18:14:36 elric Exp $	*/
 
 /*
  * Copyright (c) 2005, PADL Software Pty Ltd.
@@ -45,13 +45,11 @@ kcm_ccache_resolve_client(krb5_context context,
 			  kcm_ccache *ccache)
 {
     krb5_error_code ret;
-    const char *estr;
 
     ret = kcm_ccache_resolve(context, name, ccache);
     if (ret) {
-	estr = krb5_get_error_message(context, ret);
-	kcm_log(1, "Failed to resolve cache %s: %s", name, estr);
-	krb5_free_error_message(context, estr);
+	kcm_log(1, "Failed to resolve cache %s: %s",
+		name, krb5_get_err_text(context, ret));
 	return ret;
     }
 
@@ -71,13 +69,11 @@ kcm_ccache_destroy_client(krb5_context context,
 {
     krb5_error_code ret;
     kcm_ccache ccache;
-    const char *estr;
 
     ret = kcm_ccache_resolve(context, name, &ccache);
     if (ret) {
-	estr = krb5_get_error_message(context, ret);
-	kcm_log(1, "Failed to resolve cache %s: %s", name, estr);
-	krb5_free_error_message(context, estr);
+	kcm_log(1, "Failed to resolve cache %s: %s",
+		name, krb5_get_err_text(context, ret));
 	return ret;
     }
 
@@ -98,7 +94,6 @@ kcm_ccache_new_client(krb5_context context,
 {
     krb5_error_code ret;
     kcm_ccache ccache;
-    const char *estr;
 
     /* We insist the ccache name starts with UID or UID: */
     if (name_constraints != 0) {
@@ -121,7 +116,7 @@ kcm_ccache_new_client(krb5_context context,
 	if (bad && !CLIENT_IS_ROOT(client))
 	    return KRB5_CC_BADNAME;
     }
-
+	
     ret = kcm_ccache_resolve(context, name, &ccache);
     if (ret == 0) {
 	if ((ccache->uid != client->uid ||
@@ -134,9 +129,8 @@ kcm_ccache_new_client(krb5_context context,
     if (ret == KRB5_FCC_NOFILE) {
 	ret = kcm_ccache_new(context, name, &ccache);
 	if (ret) {
-	    estr = krb5_get_error_message(context, ret);
-	    kcm_log(1, "Failed to initialize cache %s: %s", name, estr);
-	    krb5_free_error_message(context, estr);
+	    kcm_log(1, "Failed to initialize cache %s: %s",
+		    name, krb5_get_err_text(context, ret));
 	    return ret;
 	}
 
@@ -147,9 +141,8 @@ kcm_ccache_new_client(krb5_context context,
     } else {
 	ret = kcm_zero_ccache_data(context, ccache);
 	if (ret) {
-	    estr = krb5_get_error_message(context, ret);
-	    kcm_log(1, "Failed to empty cache %s: %s", name, estr);
-	    krb5_free_error_message(context, estr);
+	    kcm_log(1, "Failed to empty cache %s: %s",
+		    name, krb5_get_err_text(context, ret));
 	    kcm_release_ccache(context, ccache);
 	    return ret;
 	}
@@ -174,10 +167,8 @@ kcm_ccache_new_client(krb5_context context,
 	if (matches == 0)
 	    matches = sscanf(name,"%ld",&uid);
 	if (matches == 1) {
-	    struct passwd pw, *pwd = NULL;
-	    char pwbuf[2048];
-
-	    if (rk_getpwuid_r(getuid(), &pw, pwbuf, sizeof(pwbuf), &pwd) == 0) {
+	    struct passwd *pwd = getpwuid(uid);
+	    if (pwd != NULL) {
 		gid_t gid = pwd->pw_gid;
 		kcm_chown(context, client, ccache, uid, gid);
 	    }

@@ -1,4 +1,4 @@
-/*	$NetBSD: spnego_locl.h,v 1.2 2017/01/28 21:31:47 christos Exp $	*/
+/*	$NetBSD: spnego_locl.h,v 1.1 2011/04/13 18:14:48 elric Exp $	*/
 
 /*
  * Copyright (c) 2004, PADL Software Pty Ltd.
@@ -32,7 +32,7 @@
  * SUCH DAMAGE.
  */
 
-/* Id */
+/* $Id: spnego_locl.h,v 1.1 2011/04/13 18:14:48 elric Exp $ */
 
 #ifndef SPNEGO_LOCL_H
 #define SPNEGO_LOCL_H
@@ -72,8 +72,6 @@
 #include "spnego_asn1.h"
 #include "utils.h"
 #include <krb5/der.h>
-
-#include <krb5/heimbase.h>
 
 #define ALLOC(X, N) (X) = calloc((N), sizeof(*(X)))
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: crypto-evp.c,v 1.2 2017/01/28 21:31:49 christos Exp $	*/
+/*	$NetBSD: crypto-evp.c,v 1.1 2011/04/13 18:15:32 elric Exp $	*/
 
 /*
  * Copyright (c) 1997 - 2008 Kungliga Tekniska Högskolan
@@ -74,8 +74,10 @@ _krb5_evp_encrypt(krb5_context context,
 	/* alloca ? */
 	size_t len2 = EVP_CIPHER_CTX_iv_length(c);
 	void *loiv = malloc(len2);
-	if (loiv == NULL)
-	    return krb5_enomem(context);
+	if (loiv == NULL) {
+	    krb5_clear_error_message(context);
+	    return ENOMEM;
+	}
 	memset(loiv, 0, len2);
 	EVP_CipherInit_ex(c, NULL, NULL, NULL, loiv, -1);
 	free(loiv);
@@ -98,7 +100,7 @@ _krb5_evp_encrypt_cts(krb5_context context,
 {
     size_t i, blocksize;
     struct _krb5_evp_schedule *ctx = key->schedule->data;
-    unsigned char tmp[EVP_MAX_BLOCK_LENGTH], ivec2[EVP_MAX_BLOCK_LENGTH];
+    char tmp[EVP_MAX_BLOCK_LENGTH], ivec2[EVP_MAX_BLOCK_LENGTH];
     EVP_CIPHER_CTX *c;
     unsigned char *p;
 
@@ -142,7 +144,7 @@ _krb5_evp_encrypt_cts(krb5_context context,
 	if (ivec)
 	    memcpy(ivec, p, blocksize);
     } else {
-	unsigned char tmp2[EVP_MAX_BLOCK_LENGTH], tmp3[EVP_MAX_BLOCK_LENGTH];
+	char tmp2[EVP_MAX_BLOCK_LENGTH], tmp3[EVP_MAX_BLOCK_LENGTH];
 
 	p = data;
 	if (len > blocksize * 2) {

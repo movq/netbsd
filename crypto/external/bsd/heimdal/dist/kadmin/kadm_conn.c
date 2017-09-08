@@ -1,4 +1,4 @@
-/*	$NetBSD: kadm_conn.c,v 1.2 2017/01/28 21:31:44 christos Exp $	*/
+/*	$NetBSD: kadm_conn.c,v 1.1 2011/04/13 18:14:35 elric Exp $	*/
 
 /*
  * Copyright (c) 2000 - 2004 Kungliga Tekniska Högskolan
@@ -38,8 +38,6 @@
 #include <sys/wait.h>
 #endif
 
-extern int daemon_child;
-
 struct kadm_port {
     char *port;
     unsigned short def_port;
@@ -47,12 +45,12 @@ struct kadm_port {
 } *kadm_ports;
 
 static void
-add_kadm_port(krb5_context contextp, const char *service, unsigned int port)
+add_kadm_port(krb5_context context, const char *service, unsigned int port)
 {
     struct kadm_port *p;
     p = malloc(sizeof(*p));
     if(p == NULL) {
-	krb5_warnx(contextp, "failed to allocate %lu bytes\n",
+	krb5_warnx(context, "failed to allocate %lu bytes\n",
 		   (unsigned long)sizeof(*p));
 	return;
     }
@@ -65,9 +63,9 @@ add_kadm_port(krb5_context contextp, const char *service, unsigned int port)
 }
 
 static void
-add_standard_ports (krb5_context contextp)
+add_standard_ports (krb5_context context)
 {
-    add_kadm_port(contextp, "kerberos-adm", 749);
+    add_kadm_port(context, "kerberos-adm", 749);
 }
 
 /*
@@ -77,15 +75,15 @@ add_standard_ports (krb5_context contextp)
  */
 
 void
-parse_ports(krb5_context contextp, const char *str)
+parse_ports(krb5_context context, const char *str)
 {
     char p[128];
 
     while(strsep_copy(&str, " \t", p, sizeof(p)) != -1) {
 	if(strcmp(p, "+") == 0)
-	    add_standard_ports(contextp);
+	    add_standard_ports(context);
 	else
-	    add_kadm_port(contextp, p, 0);
+	    add_kadm_port(context, p, 0);
     }
 }
 
@@ -124,11 +122,10 @@ terminate(int sig)
 }
 
 static int
-spawn_child(krb5_context contextp, int *socks,
+spawn_child(krb5_context context, int *socks,
 	    unsigned int num_socks, int this_sock)
 {
-    int e;
-    size_t i;
+    int e, i;
     struct sockaddr_storage __ss;
     struct sockaddr *sa = (struct sockaddr *)&__ss;
     socklen_t sa_size = sizeof(__ss);
@@ -140,20 +137,20 @@ spawn_child(krb5_context contextp, int *socks,
 
     s = accept(socks[this_sock], sa, &sa_size);
     if(rk_IS_BAD_SOCKET(s)) {
-	krb5_warn(contextp, rk_SOCK_ERRNO, "accept");
+	krb5_warn(context, rk_SOCK_ERRNO, "accept");
 	return 1;
     }
-    e = krb5_sockaddr2address(contextp, sa, &addr);
+    e = krb5_sockaddr2address(context, sa, &addr);
     if(e)
-	krb5_warn(contextp, e, "krb5_sockaddr2address");
+	krb5_warn(context, e, "krb5_sockaddr2address");
     else {
 	e = krb5_print_address (&addr, buf, sizeof(buf),
 				&buf_len);
 	if(e)
-	    krb5_warn(contextp, e, "krb5_print_address");
+	    krb5_warn(context, e, "krb5_print_address");
 	else
-	    krb5_warnx(contextp, "connection from %s", buf);
-	krb5_free_address(contextp, &addr);
+	    krb5_warnx(context, "connection from %s", buf);
+	krb5_free_address(context, &addr);
     }
 
     pid = fork();
@@ -172,7 +169,7 @@ spawn_child(krb5_context contextp, int *socks,
 }
 
 static void
-wait_for_connection(krb5_context contextp,
+wait_for_connection(krb5_context context,
 		    krb5_socket_t *socks, unsigned int num_socks)
 {
     unsigned int i;
@@ -193,8 +190,7 @@ wait_for_connection(krb5_context contextp,
 
     pgrp = getpid();
 
-    /* systemd may cause setpgid to fail with EPERM */
-    if(setpgid(0, pgrp) < 0 && errno != EPERM)
+    if(setpgid(0, pgrp) < 0)
 	err(1, "setpgid");
 
     signal(SIGTERM, terminate);
@@ -206,13 +202,13 @@ wait_for_connection(krb5_context contextp,
 	e = select(max_fd + 1, &read_set, NULL, NULL, NULL);
 	if(rk_IS_SOCKET_ERROR(e)) {
 	    if(rk_SOCK_ERRNO != EINTR)
-		krb5_warn(contextp, rk_SOCK_ERRNO, "select");
+		krb5_warn(context, rk_SOCK_ERRNO, "select");
 	} else if(e == 0)
-	    krb5_warnx(contextp, "select returned 0");
+	    krb5_warnx(context, "select returned 0");
 	else {
 	    for(i = 0; i < num_socks; i++) {
 		if(FD_ISSET(socks[i], &read_set))
-		    if(spawn_child(contextp, socks, num_socks, i) == 0)
+		    if(spawn_child(context, socks, num_socks, i) == 0)
 			return;
 	    }
 	}
@@ -227,7 +223,7 @@ wait_for_connection(krb5_context contextp,
 
 
 void
-start_server(krb5_context contextp, const char *port_str)
+start_server(krb5_context context, const char *port_str)
 {
     int e;
     struct kadm_port *p;
@@ -239,7 +235,7 @@ start_server(krb5_context contextp, const char *port_str)
     if (port_str == NULL)
 	port_str = "+";
 
-    parse_ports(contextp, port_str);
+    parse_ports(context, port_str);
 
     for(p = kadm_ports; p; p = p->next) {
 	struct addrinfo hints, *ai, *ap;
@@ -255,7 +251,7 @@ start_server(krb5_context contextp, const char *port_str)
 	}
 
 	if(e) {
-	    krb5_warn(contextp, krb5_eai_to_heim_errno(e, errno),
+	    krb5_warn(context, krb5_eai_to_heim_errno(e, errno),
 		      "%s", portstr);
 	    continue;
 	}
@@ -264,16 +260,15 @@ start_server(krb5_context contextp, const char *port_str)
 	    i++;
 	tmp = realloc(socks, (num_socks + i) * sizeof(*socks));
 	if(tmp == NULL) {
-	    krb5_warnx(contextp, "failed to reallocate %lu bytes",
+	    krb5_warnx(context, "failed to reallocate %lu bytes",
 		       (unsigned long)(num_socks + i) * sizeof(*socks));
-            freeaddrinfo(ai);
 	    continue;
 	}
 	socks = tmp;
 	for(ap = ai; ap; ap = ap->ai_next) {
 	    krb5_socket_t s = socket(ap->ai_family, ap->ai_socktype, ap->ai_protocol);
 	    if(rk_IS_BAD_SOCKET(s)) {
-		krb5_warn(contextp, rk_SOCK_ERRNO, "socket");
+		krb5_warn(context, rk_SOCK_ERRNO, "socket");
 		continue;
 	    }
 
@@ -281,12 +276,12 @@ start_server(krb5_context contextp, const char *port_str)
 	    socket_set_ipv6only(s, 1);
 
 	    if (rk_IS_SOCKET_ERROR(bind (s, ap->ai_addr, ap->ai_addrlen))) {
-		krb5_warn(contextp, rk_SOCK_ERRNO, "bind");
+		krb5_warn(context, rk_SOCK_ERRNO, "bind");
 		rk_closesocket(s);
 		continue;
 	    }
 	    if (rk_IS_SOCKET_ERROR(listen (s, SOMAXCONN))) {
-		krb5_warn(contextp, rk_SOCK_ERRNO, "listen");
+		krb5_warn(context, rk_SOCK_ERRNO, "listen");
 		rk_closesocket(s);
 		continue;
 	    }
@@ -295,10 +290,7 @@ start_server(krb5_context contextp, const char *port_str)
 	freeaddrinfo (ai);
     }
     if(num_socks == 0)
-	krb5_errx(contextp, 1, "no sockets to listen to - exiting");
+	krb5_errx(context, 1, "no sockets to listen to - exiting");
 
-    roken_detach_finish(NULL, daemon_child);
-
-    wait_for_connection(contextp, socks, num_socks);
-    free(socks);
+    wait_for_connection(context, socks, num_socks);
 }

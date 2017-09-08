@@ -1,4 +1,4 @@
-/*	$NetBSD: test_pw_quality.c,v 1.2 2017/01/28 21:31:49 christos Exp $	*/
+/*	$NetBSD: test_pw_quality.c,v 1.1 2011/04/13 18:15:30 elric Exp $	*/
 
 /*
  * Copyright (c) 2003, 2005 Kungliga Tekniska Högskolan
@@ -36,7 +36,7 @@
 #include "kadm5_locl.h"
 #include <krb5/getarg.h>
 
-__RCSID("$NetBSD: test_pw_quality.c,v 1.2 2017/01/28 21:31:49 christos Exp $");
+__RCSID("$NetBSD: test_pw_quality.c,v 1.1 2011/04/13 18:15:30 elric Exp $");
 
 static int version_flag;
 static int help_flag;
@@ -44,10 +44,10 @@ static char *principal;
 static char *password;
 
 static struct getargs args[] = {
-    { "principal", 0, arg_string, &principal, NULL, NULL },
-    { "password", 0, arg_string, &password, NULL, NULL },
-    { "version", 0, arg_flag, &version_flag, NULL, NULL },
-    { "help", 0, arg_flag, &help_flag, NULL, NULL }
+    { "principal", 0, arg_string, &principal },
+    { "password", 0, arg_string, &password },
+    { "version", 0, arg_flag, &version_flag },
+    { "help", 0, arg_flag, &help_flag }
 };
 int num_args = sizeof(args) / sizeof(args[0]);
 

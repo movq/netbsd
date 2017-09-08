@@ -1,4 +1,4 @@
-/*	$NetBSD: change.c,v 1.2 2017/01/28 21:31:44 christos Exp $	*/
+/*	$NetBSD: change.c,v 1.1 2011/04/13 18:14:32 elric Exp $	*/
 
 /*
  * Copyright (c) 1997-2005 Kungliga Tekniska Högskolan
@@ -35,7 +35,7 @@
 
 #include "ktutil_locl.h"
 
-__RCSID("$NetBSD: change.c,v 1.2 2017/01/28 21:31:44 christos Exp $");
+__RCSID("$NetBSD: change.c,v 1.1 2011/04/13 18:14:32 elric Exp $");
 
 static krb5_error_code
 change_entry (krb5_keytab keytab,
@@ -75,7 +75,7 @@ change_entry (krb5_keytab keytab,
 	    free(conf.realm);
 	    krb5_set_error_message(context, ENOMEM, "malloc failed");
 	    return ENOMEM;
-	}
+	}	
 	conf.mask |= KADM5_CONFIG_ADMIN_SERVER;
     }
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: ks_p11.c,v 1.2 2017/01/28 21:31:48 christos Exp $	*/
+/*	$NetBSD: ks_p11.c,v 1.1 2011/04/13 18:15:11 elric Exp $	*/
 
 /*
  * Copyright (c) 2004 - 2008 Kungliga Tekniska Högskolan
@@ -40,7 +40,7 @@
 
 #ifdef HAVE_DLOPEN
 
-#include "ref/pkcs11.h"
+#include "pkcs11.h"
 
 struct p11_slot {
     int flags;
@@ -67,7 +67,6 @@ struct p11_module {
     CK_FUNCTION_LIST_PTR funcs;
     CK_ULONG num_slots;
     unsigned int ref;
-    unsigned int selected_slot;
     struct p11_slot *slot;
 };
 
@@ -155,7 +154,7 @@ p11_rsa_private_encrypt(int flen,
     }
 
     ret = P11FUNC(p11rsa->p, Sign,
-		  (session, (CK_BYTE *)(intptr_t)from, flen, to, &ck_sigsize));
+		  (session, (CK_BYTE *)from, flen, to, &ck_sigsize));
     p11_put_session(p11rsa->p, p11rsa->slot, session);
     if (ret != CKR_OK)
 	return -1;
@@ -193,7 +192,7 @@ p11_rsa_private_decrypt(int flen, const unsigned char *from, unsigned char *to,
     }
 
     ret = P11FUNC(p11rsa->p, Decrypt,
-		  (session, (CK_BYTE *)(intptr_t)from, flen, to, &ck_sigsize));
+		  (session, (CK_BYTE *)from, flen, to, &ck_sigsize));
     p11_put_session(p11rsa->p, p11rsa->slot, session);
     if (ret != CKR_OK)
 	return -1;
@@ -227,7 +226,6 @@ static const RSA_METHOD p11_rsa_pkcs1_method = {
     p11_rsa_init,
     p11_rsa_finish,
     0,
-    NULL,
     NULL,
     NULL,
     NULL
@@ -334,10 +332,8 @@ p11_init_slot(hx509_context context,
 	break;
     }
 
-    ret = asprintf(&slot->name, "%.*s", (int)i,
-		   slot_info.slotDescription);
-    if (ret == -1)
-	return ENOMEM;
+    asprintf(&slot->name, "%.*s",
+	     (int)i, slot_info.slotDescription);
 
     if ((slot_info.flags & CKF_TOKEN_PRESENT) == 0)
 	return 0;
@@ -346,7 +342,7 @@ p11_init_slot(hx509_context context,
     if (ret) {
 	hx509_set_error_string(context, 0, HX509_PKCS11_NO_TOKEN,
 			       "Failed to init PKCS11 slot %d "
-			       "with error 0x%08x",
+			       "with error 0x08x",
 			       num, ret);
 	return HX509_PKCS11_NO_TOKEN;
     }
@@ -428,17 +424,12 @@ p11_get_session(hx509_context context,
 
 	    memset(&prompt, 0, sizeof(prompt));
 
-	    ret = asprintf(&str, "PIN code for %s: ", slot->name);
-	    if (ret == -1 || str == NULL) {
-		if (context)
-		    hx509_set_error_string(context, 0, ENOMEM, "out of memory");
-		return ENOMEM;
-	    }
+	    asprintf(&str, "PIN code for %s: ", slot->name);
 	    prompt.prompt = str;
 	    prompt.type = HX509_PROMPT_TYPE_PASSWORD;
 	    prompt.reply.data = pin;
 	    prompt.reply.length = sizeof(pin);
-
+	
 	    ret = hx509_lock_prompt(lock, &prompt);
 	    if (ret) {
 		free(str);
@@ -462,18 +453,7 @@ p11_get_session(hx509_context context,
 				       "Failed to login on slot id %d "
 				       "with error: 0x%08x",
 				       (int)slot->id, ret);
-	    switch(ret) {
-	        case CKR_PIN_LOCKED:
-	            return HX509_PKCS11_PIN_LOCKED;
-	        case CKR_PIN_EXPIRED:
-	            return HX509_PKCS11_PIN_EXPIRED;
-	        case CKR_PIN_INCORRECT:
-	            return HX509_PKCS11_PIN_INCORRECT;
-	        case CKR_USER_PIN_NOT_INITIALIZED:
-	            return HX509_PKCS11_PIN_NOT_INITIALIZED;
-	        default:
-	            return HX509_PKCS11_LOGIN;
-	    }
+	    return HX509_PKCS11_LOGIN;
 	} else
 	    slot->flags |= P11_LOGIN_DONE;
 
@@ -535,7 +515,7 @@ iterate_entries(hx509_context context,
 	}
 	if (object_count == 0)
 	    break;
-
+	
 	for (i = 0; i < num_query; i++)
 	    query[i].pValue = NULL;
 
@@ -557,7 +537,7 @@ iterate_entries(hx509_context context,
 	    ret = -1;
 	    goto out;
 	}
-
+	
 	ret = (*func)(context, p, slot, session, object, ptr, query, num_query);
 	if (ret)
 	    goto out;
@@ -583,7 +563,7 @@ iterate_entries(hx509_context context,
 
     return ret;
 }
-
+		
 static BIGNUM *
 getattr_bn(struct p11_module *p,
 	   struct p11_slot *slot,
@@ -702,7 +682,6 @@ collect_cert(hx509_context context,
 	     void *ptr, CK_ATTRIBUTE *query, int num_query)
 {
     struct hx509_collector *collector = ptr;
-    heim_error_t error = NULL;
     hx509_cert cert;
     int ret;
 
@@ -712,13 +691,10 @@ collect_cert(hx509_context context,
 	return 0;
     }
 
-    cert = hx509_cert_init_data(context, query[1].pValue,
-			       query[1].ulValueLen, &error);
-    if (cert == NULL) {
-	ret = heim_error_get_code(error);
-	heim_release(error);
+    ret = hx509_cert_init_data(context, query[1].pValue,
+			       query[1].ulValueLen, &cert);
+    if (ret)
 	return ret;
-    }
 
     if (p->ref == 0)
 	_hx509_abort("pkcs11 ref == 0 on alloc");
@@ -730,10 +706,10 @@ collect_cert(hx509_context context,
 
     {
 	heim_octet_string data;
-
+	
 	data.data = query[0].pValue;
 	data.length = query[0].ulValueLen;
-
+	
 	_hx509_set_cert_attribute(context,
 				  cert,
 				  &asn1_oid_id_pkcs_9_at_localKeyId,
@@ -743,9 +719,9 @@ collect_cert(hx509_context context,
     if ((CK_LONG)query[2].ulValueLen != -1) {
 	char *str;
 
-	ret = asprintf(&str, "%.*s",
-		       (int)query[2].ulValueLen, (char *)query[2].pValue);
-	if (ret != -1 && str) {
+	asprintf(&str, "%.*s",
+		 (int)query[2].ulValueLen, (char *)query[2].pValue);
+	if (str) {
 	    hx509_cert_set_friendly_name(cert, str);
 	    free(str);
 	}
@@ -836,7 +812,6 @@ p11_init(hx509_context context,
     }
 
     p->ref = 1;
-    p->selected_slot = 0;
 
     str = strchr(list, ',');
     if (str)
@@ -846,12 +821,15 @@ p11_init(hx509_context context,
 	strnext = strchr(str, ',');
 	if (strnext)
 	    *strnext++ = '\0';
+#if 0
 	if (strncasecmp(str, "slot=", 5) == 0)
 	    p->selected_slot = atoi(str + 5);
+#endif
 	str = strnext;
     }
 
     p->dl_handle = dlopen(list, RTLD_NOW);
+    free(list);
     if (p->dl_handle == NULL) {
 	ret = HX509_PKCS11_LOAD;
 	hx509_set_error_string(context, 0, ret,
@@ -902,8 +880,7 @@ p11_init(hx509_context context,
 
     {
 	CK_SLOT_ID_PTR slot_ids;
-	int num_tokens = 0;
-	size_t i;
+	int i, num_tokens = 0;
 
 	slot_ids = malloc(p->num_slots * sizeof(*slot_ids));
 	if (slot_ids == NULL) {
@@ -930,15 +907,13 @@ p11_init(hx509_context context,
 	    ret = ENOMEM;
 	    goto out;
 	}
-
+			
 	for (i = 0; i < p->num_slots; i++) {
-	    if ((p->selected_slot != 0) && (slot_ids[i] != (p->selected_slot - 1)))
-		continue;
 	    ret = p11_init_slot(context, p, lock, slot_ids[i], i, &p->slot[i]);
-	    if (!ret) {
-	        if (p->slot[i].flags & P11_TOKEN_PRESENT)
-	            num_tokens++;
-	    }
+	    if (ret)
+		break;
+	    if (p->slot[i].flags & P11_TOKEN_PRESENT)
+		num_tokens++;
 	}
 	free(slot_ids);
 	if (ret)
@@ -949,14 +924,10 @@ p11_init(hx509_context context,
 	}
     }
 
-    free(list);
-
     *data = p;
 
     return 0;
  out:
-    if (list)
-	free(list);
     p11_release_module(p);
     return ret;
 }
@@ -964,7 +935,7 @@ p11_init(hx509_context context,
 static void
 p11_release_module(struct p11_module *p)
 {
-    size_t i;
+    int i;
 
     if (p->ref == 0)
 	_hx509_abort("pkcs11 ref to low");
@@ -988,7 +959,7 @@ p11_release_module(struct p11_module *p)
 	    free(p->slot[i].mechs.list);
 
 	    if (p->slot[i].mechs.infos) {
-		size_t j;
+		int j;
 
 		for (j = 0 ; j < p->slot[i].mechs.num ; j++)
 		    free(p->slot[i].mechs.infos[j]);
@@ -1012,7 +983,7 @@ static int
 p11_free(hx509_certs certs, void *data)
 {
     struct p11_module *p = data;
-    size_t i;
+    int i;
 
     for (i = 0; i < p->num_slots; i++) {
 	if (p->slot[i].certs)
@@ -1033,8 +1004,7 @@ p11_iter_start(hx509_context context,
 {
     struct p11_module *p = data;
     struct p11_cursor *c;
-    int ret;
-    size_t i;
+    int ret, i;
 
     c = malloc(sizeof(*c));
     if (c == NULL) {
@@ -1135,7 +1105,7 @@ p11_printinfo(hx509_context context,
 	      void *ctx)
 {
     struct p11_module *p = data;
-    size_t i, j;
+    int i, j;
 
     _hx509_pi_printf(func, ctx, "pkcs11 driver with %d slot%s",
 		     p->num_slots, p->num_slots > 1 ? "s" : "");
@@ -1206,9 +1176,7 @@ static struct hx509_keyset_ops keyset_pkcs11 = {
     p11_iter_start,
     p11_iter,
     p11_iter_end,
-    p11_printinfo,
-    NULL,
-    NULL
+    p11_printinfo
 };
 
 #endif /* HAVE_DLOPEN */

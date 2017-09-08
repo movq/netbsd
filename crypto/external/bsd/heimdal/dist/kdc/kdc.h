@@ -1,4 +1,4 @@
-/*	$NetBSD: kdc.h,v 1.2 2017/01/28 21:31:44 christos Exp $	*/
+/*	$NetBSD: kdc.h,v 1.1 2011/04/13 18:14:37 elric Exp $	*/
 
 /*
  * Copyright (c) 1997-2003 Kungliga Tekniska Högskolan
@@ -37,7 +37,7 @@
  */
 
 /*
- * Id
+ * $Id: kdc.h,v 1.1 2011/04/13 18:14:37 elric Exp $
  */
 
 #ifndef __KDC_H__
@@ -59,20 +59,21 @@ typedef struct krb5_kdc_configuration {
     struct HDB **db;
     int num_db;
 
-    int num_kdc_processes;
-
     krb5_boolean encode_as_rep_as_tgs_rep; /* bug compatibility */
-
-    krb5_boolean tgt_use_strongest_session_key;
-    krb5_boolean preauth_use_strongest_session_key;
-    krb5_boolean svc_use_strongest_session_key;
-    krb5_boolean use_strongest_server_key;
-
+	
     krb5_boolean check_ticket_addresses;
     krb5_boolean allow_null_ticket_addresses;
     krb5_boolean allow_anonymous;
-    krb5_boolean strict_nametypes;
     enum krb5_kdc_trpolicy trpolicy;
+
+    char *v4_realm;
+    krb5_boolean enable_v4;
+    krb5_boolean enable_v4_cross_realm;
+    krb5_boolean enable_v4_per_principal;
+
+    krb5_boolean enable_kaserver;
+
+    krb5_boolean enable_524;
 
     krb5_boolean enable_pkinit;
     krb5_boolean pkinit_princ_in_cert;

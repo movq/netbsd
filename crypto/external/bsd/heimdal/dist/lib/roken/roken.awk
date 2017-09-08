@@ -1,4 +1,4 @@
-# Id
+# $Id: roken.awk,v 1.1 2011/04/13 18:15:42 elric Exp $
 
 BEGIN {
 	print "#include <config.h>"
@@ -8,9 +8,6 @@ BEGIN {
 	print "#endif"
 	print "#ifdef HAVE_SYS_SOCKET_H"
 	print "#include <sys/socket.h>"
-	print "#endif"
-	print "#ifdef HAVE_ERRNO_H"
-	print "#include <errno.h>"
 	print "#endif"
 	print ""
 	print "int main(int argc, char **argv)"

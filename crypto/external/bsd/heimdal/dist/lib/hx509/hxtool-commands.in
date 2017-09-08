@@ -30,7 +30,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF 
  * SUCH DAMAGE. 
  */
-/* Id */
+/* $Id: hxtool-commands.in,v 1.1 2011/04/13 18:15:10 elric Exp $ */
 
 command = {
 	name = "cms-create-sd"
@@ -107,7 +107,7 @@ command = {
 	option = {
 		long = "embedded-certs"
 		type = "-flag"
-		help = "don't embed certificates"
+		help = "dont embedded certficiates"
 	}
 	option = {
 		long = "embed-leaf-only"
@@ -409,17 +409,6 @@ command = {
 	help = "Print the OCSP responses"
 }
 command = {
-	name = "revoke-print"
-	option = {
-		long = "verbose"
-		type = "flag"
-		help = "verbose"
-	}
-	min_args="1"
-	argument="ocsp/crl files"
-	help = "Print the OCSP/CRL files"
-}
-command = {
 	name = "request-create"
 	option = {
 		long = "subject"
@@ -635,11 +624,6 @@ command = {
 		help = "Lifetime of certificate"
 	}
 	option = {
-		long = "signature-algorithm"
-		type = "string"
-		help = "Signature algorithm to use"
-	}
-	option = {
 		long = "serial-number"
 		type = "string"
 		help = "serial-number of certificate"
@@ -662,7 +646,7 @@ command = {
 	}
 	option = {
 		long = "pk-init-principal"
-		type = "strings"
+		type = "string"
 		help = "PK-INIT principal (for SAN)"
 	}
 	option = {

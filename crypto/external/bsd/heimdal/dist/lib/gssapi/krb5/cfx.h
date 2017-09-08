@@ -1,4 +1,4 @@
-/*	$NetBSD: cfx.h,v 1.2 2017/01/28 21:31:46 christos Exp $	*/
+/*	$NetBSD: cfx.h,v 1.1 2011/04/13 18:14:44 elric Exp $	*/
 
 /*
  * Copyright (c) 2003, PADL Software Pty Ltd.
@@ -32,7 +32,7 @@
  * SUCH DAMAGE.
  */
 
-/* Id */
+/* $Id: cfx.h,v 1.1 2011/04/13 18:14:44 elric Exp $ */
 
 #ifndef GSSAPI_CFX_H_
 #define GSSAPI_CFX_H_ 1

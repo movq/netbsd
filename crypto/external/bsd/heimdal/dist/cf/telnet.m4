@@ -1,5 +1,5 @@
 dnl
-dnl Id
+dnl $Id: telnet.m4,v 1.1 2011/04/13 18:14:33 elric Exp $
 dnl
 dnl stuff used by telnet
 

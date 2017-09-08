@@ -1,4 +1,4 @@
-/*	$NetBSD: md4.h,v 1.2 2017/01/28 21:31:47 christos Exp $	*/
+/*	$NetBSD: md4.h,v 1.1 2011/04/13 18:14:50 elric Exp $	*/
 
 /*
  * Copyright (c) 1995 - 2001 Kungliga Tekniska Högskolan
@@ -33,7 +33,7 @@
  * SUCH DAMAGE.
  */
 
-/* Id */
+/* $Id: md4.h,v 1.1 2011/04/13 18:14:50 elric Exp $ */
 
 #ifndef HEIM_MD4_H
 #define HEIM_MD4_H 1
@@ -57,8 +57,8 @@ struct md4 {
 
 typedef struct md4 MD4_CTX;
 
-int MD4_Init (struct md4 *m);
-int MD4_Update (struct md4 *m, const void *p, size_t len);
-int MD4_Final (void *res, struct md4 *m);
+void MD4_Init (struct md4 *m);
+void MD4_Update (struct md4 *m, const void *p, size_t len);
+void MD4_Final (void *res, struct md4 *m);
 
 #endif /* HEIM_MD4_H */

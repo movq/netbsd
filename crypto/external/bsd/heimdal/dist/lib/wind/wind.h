@@ -1,4 +1,4 @@
-/*	$NetBSD: wind.h,v 1.2 2017/01/28 21:31:50 christos Exp $	*/
+/*	$NetBSD: wind.h,v 1.1 2011/04/13 18:16:00 elric Exp $	*/
 
 /*
  * Copyright (c) 2004 Kungliga Tekniska Högskolan
@@ -33,7 +33,7 @@
  * SUCH DAMAGE.
  */
 
-/* Id */
+/* $Id: wind.h,v 1.1 2011/04/13 18:16:00 elric Exp $ */
 
 #ifndef _WIND_H_
 #define _WIND_H_

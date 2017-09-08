@@ -1,4 +1,4 @@
-/*	$NetBSD: otp_md.h,v 1.2 2017/01/28 21:31:50 christos Exp $	*/
+/*	$NetBSD: otp_md.h,v 1.1 2011/04/13 18:15:40 elric Exp $	*/
 
 /*
  * Copyright (c) 1995 - 2000 Kungliga Tekniska Högskolan
@@ -33,7 +33,7 @@
  * SUCH DAMAGE.
  */
 
-/* Id */
+/* $Id: otp_md.h,v 1.1 2011/04/13 18:15:40 elric Exp $ */
 
 int otp_md4_init (OtpKey key, const char *pwd, const char *seed);
 int otp_md4_hash (const char *, size_t, unsigned char *res);

@@ -31,16 +31,13 @@
 # OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF 
 # SUCH DAMAGE. 
 #
-# Id
+# $Id: check-dbinfo.in,v 1.1 2011/04/13 18:16:01 elric Exp $
 #
 
 srcdir="@srcdir@"
 objdir="@objdir@"
 
-default_db_type=@default_db_type@
-db_type=${1:-${default_db_type}}
-
-KRB5_CONFIG="${objdir}/krb5.conf-${db_type}"
+KRB5_CONFIG="${objdir}/krb5.conf"
 export KRB5_CONFIG
 
 ../../lib/hdb/test_dbinfo > dbinfo.out || exit 1

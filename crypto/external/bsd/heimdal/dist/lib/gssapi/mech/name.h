@@ -1,4 +1,4 @@
-/*	$NetBSD: name.h,v 1.2 2017/01/28 21:31:46 christos Exp $	*/
+/*	$NetBSD: name.h,v 1.1 2011/04/13 18:14:47 elric Exp $	*/
 
 /*-
  * Copyright (c) 2005 Doug Rabson
@@ -26,7 +26,7 @@
  * SUCH DAMAGE.
  *
  *	$FreeBSD: src/lib/libgssapi/name.h,v 1.1 2005/12/29 14:40:20 dfr Exp $
- *	Id
+ *	$Id: name.h,v 1.1 2011/04/13 18:14:47 elric Exp $
  */
 
 struct _gss_mechanism_name {

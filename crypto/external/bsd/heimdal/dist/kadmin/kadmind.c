@@ -1,4 +1,4 @@
-/*	$NetBSD: kadmind.c,v 1.2 2017/01/28 21:31:44 christos Exp $	*/
+/*	$NetBSD: kadmind.c,v 1.1 2011/04/13 18:14:35 elric Exp $	*/
 
 /*
  * Copyright (c) 1997-2004 Kungliga Tekniska Högskolan
@@ -39,16 +39,12 @@ static char *check_library  = NULL;
 static char *check_function = NULL;
 static getarg_strings policy_libraries = { 0, NULL };
 static char *config_file;
-static char sHDB[] = "HDBGET:";
-static char *keytab_str = sHDB;
+static char *keytab_str = "HDB:";
 static int help_flag;
 static int version_flag;
 static int debug_flag;
 static char *port_str;
 char *realm;
-
-static int detach_from_console = -1;
-int daemon_child = -1;
 
 static struct getargs args[] = {
     {
@@ -71,20 +67,12 @@ static struct getargs args[] = {
       "password check function to load", "function" },
 #endif
     {	"debug",	'd',	arg_flag,   &debug_flag,
-	"enable debugging", NULL
-    },
-    {
-        "detach",       0 ,      arg_flag, &detach_from_console,
-        "detach from console", NULL
-    },
-    {
-        "daemon-child",       0 ,      arg_integer, &daemon_child,
-        "private argument, do not use", NULL
+	"enable debugging"
     },
     {	"ports",	'p',	arg_string, &port_str,
 	"ports to listen to", "port" },
-    {	"help",		'h',	arg_flag,   &help_flag, NULL, NULL },
-    {	"version",	'v',	arg_flag,   &version_flag, NULL, NULL }
+    {	"help",		'h',	arg_flag,   &help_flag },
+    {	"version",	'v',	arg_flag,   &version_flag }
 };
 
 static int num_args = sizeof(args) / sizeof(args[0]);
@@ -111,6 +99,10 @@ main(int argc, char **argv)
 
     setprogname(argv[0]);
 
+    ret = krb5_init_context(&context);
+    if (ret)
+	errx (1, "krb5_init_context failed: %d", ret);
+
     if (getarg(args, num_args, argc, argv, &optidx)) {
 	warnx("error at argument `%s'", argv[optidx]);
 	usage(1);
@@ -124,21 +116,12 @@ main(int argc, char **argv)
 	exit(0);
     }
 
-    if (detach_from_console > 0 && daemon_child == -1)
-        roken_detach_prep(argc, argv, "--daemon-child");
-
-    ret = krb5_init_context(&context);
-    if (ret)
-	errx (1, "krb5_init_context failed: %d", ret);
-
     argc -= optidx;
     argv += optidx;
 
     if (config_file == NULL) {
-	int aret;
-
-	aret = asprintf(&config_file, "%s/kdc.conf", hdb_db_dir(context));
-	if (aret == -1)
+	asprintf(&config_file, "%s/kdc.conf", hdb_db_dir(context));
+	if (config_file == NULL)
 	    errx(1, "out of memory");
     }
 
@@ -158,7 +141,7 @@ main(int argc, char **argv)
     if (ret)
 	krb5_err(context, 1, ret, "krb5_set_warn_dest");
 
-    ret = krb5_kt_register(context, &hdb_get_kt_ops);
+    ret = krb5_kt_register(context, &hdb_kt_ops);
     if(ret)
 	krb5_err(context, 1, ret, "krb5_kt_register");
 
@@ -180,7 +163,7 @@ main(int argc, char **argv)
 
     if(debug_flag) {
 	int debug_port;
-
+	
 	if(port_str == NULL)
 	    debug_port = krb5_getportbyname (context, "kerberos-adm",
 					     "tcp", 749);
@@ -189,6 +172,7 @@ main(int argc, char **argv)
 	mini_inetd(debug_port, &sfd);
     } else {
 #ifdef _WIN32
+	pidfile(NULL);
 	start_server(context, port_str);
 #else
 	struct sockaddr_storage __ss;
@@ -202,6 +186,7 @@ main(int argc, char **argv)
 
 	if(roken_getsockname(STDIN_FILENO, sa, &sa_size) < 0 &&
 	   rk_SOCK_ERRNO == ENOTSOCK) {
+	    pidfile(NULL);
 	    start_server(context, port_str);
 	}
 #endif /* _WIN32 */

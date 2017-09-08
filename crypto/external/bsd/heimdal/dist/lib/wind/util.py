@@ -1,7 +1,7 @@
 #!/usr/local/bin/python
 # -*- coding: iso-8859-1 -*-
 
-# Id
+# $Id: util.py,v 1.1 2011/04/13 18:16:00 elric Exp $
 
 # Copyright (c) 2004 Kungliga Tekniska Högskolan
 # (Royal Institute of Technology, Stockholm, Sweden). 

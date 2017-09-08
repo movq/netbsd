@@ -1,4 +1,4 @@
-/*	$NetBSD: test_keytab.c,v 1.2 2017/01/28 21:31:49 christos Exp $	*/
+/*	$NetBSD: test_keytab.c,v 1.1 2011/04/13 18:15:38 elric Exp $	*/
 
 /*
  * Copyright (c) 2005 Kungliga Tekniska Högskolan
@@ -282,9 +282,9 @@ main(int argc, char **argv)
 
 	test_empty_keytab(context, "MEMORY:foo");
 	test_empty_keytab(context, "FILE:foo");
-
+	
 	test_memory_keytab(context, "MEMORY:foo", "MEMORY:foo2");
-
+	
     }
 
     krb5_free_context(context);

@@ -1,4 +1,4 @@
-/*	$NetBSD: der.c,v 1.2 2017/01/28 21:31:45 christos Exp $	*/
+/*	$NetBSD: der.c,v 1.1 2011/04/13 18:14:40 elric Exp $	*/
 
 /*
  * Copyright (c) 1997 - 2005 Kungliga Tekniska Högskolan
@@ -40,7 +40,7 @@
 #include <krb5/getarg.h>
 #include <err.h>
 
-__RCSID("$NetBSD: der.c,v 1.2 2017/01/28 21:31:45 christos Exp $");
+__RCSID("$NetBSD: der.c,v 1.1 2011/04/13 18:14:40 elric Exp $");
 
 
 static const char *class_names[] = {

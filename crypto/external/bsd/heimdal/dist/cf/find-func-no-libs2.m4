@@ -1,4 +1,4 @@
-dnl Id
+dnl $Id: find-func-no-libs2.m4,v 1.1 2011/04/13 18:14:32 elric Exp $
 dnl
 dnl
 dnl Look for function in any of the specified libraries
@@ -53,6 +53,7 @@ case "$ac_res" in
 	;;
 	*)
 	eval "ac_cv_func_$1=yes"
+	eval "ac_cv_lib_`echo "$ac_res" | sed 's/-l//'`=yes"
 	AC_DEFINE_UNQUOTED($ac_tr_func)
 	AC_DEFINE_UNQUOTED($ac_tr_lib)
 	AC_MSG_RESULT([yes, in $ac_res])

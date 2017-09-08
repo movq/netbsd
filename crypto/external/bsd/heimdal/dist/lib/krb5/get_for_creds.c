@@ -1,4 +1,4 @@
-/*	$NetBSD: get_for_creds.c,v 1.2 2017/01/28 21:31:49 christos Exp $	*/
+/*	$NetBSD: get_for_creds.c,v 1.1 2011/04/13 18:15:33 elric Exp $	*/
 
 /*
  * Copyright (c) 1997 - 2004 Kungliga Tekniska Högskolan
@@ -51,7 +51,8 @@ add_addrs(krb5_context context,
 
     tmp = realloc(addr->val, (addr->len + n) * sizeof(*addr->val));
     if (tmp == NULL && (addr->len + n) != 0) {
-	ret = krb5_enomem(context);
+	ret = ENOMEM;
+	krb5_set_error_message(context, ret, N_("malloc: out of memory", ""));
 	goto fail;
     }
     addr->val = tmp;
@@ -226,7 +227,7 @@ krb5_get_forwarded_creds (krb5_context	    context,
 	if (!noaddr)
 	    paddrs = &addrs;
     }
-
+	
     /*
      * If tickets have addresses, get the address of the remote host.
      */
@@ -242,7 +243,7 @@ krb5_get_forwarded_creds (krb5_context	    context,
 				  hostname, gai_strerror(ret));
 	    return ret2;
 	}
-
+	
 	ret = add_addrs (context, &addrs, ai);
 	freeaddrinfo (ai);
 	if (ret)
@@ -267,7 +268,8 @@ krb5_get_forwarded_creds (krb5_context	    context,
     cred.msg_type = krb_cred;
     ALLOC_SEQ(&cred.tickets, 1);
     if (cred.tickets.val == NULL) {
-	ret = krb5_enomem(context);
+	ret = ENOMEM;
+	krb5_set_error_message(context, ret, N_("malloc: out of memory", ""));
 	goto out2;
     }
     ret = decode_Ticket(out_creds->ticket.data,
@@ -279,25 +281,28 @@ krb5_get_forwarded_creds (krb5_context	    context,
     memset (&enc_krb_cred_part, 0, sizeof(enc_krb_cred_part));
     ALLOC_SEQ(&enc_krb_cred_part.ticket_info, 1);
     if (enc_krb_cred_part.ticket_info.val == NULL) {
-	ret = krb5_enomem(context);
+	ret = ENOMEM;
+	krb5_set_error_message(context, ret, N_("malloc: out of memory", ""));
 	goto out4;
     }
 
     if (auth_context->flags & KRB5_AUTH_CONTEXT_DO_TIME) {
 	krb5_timestamp sec;
 	int32_t usec;
-
+	
 	krb5_us_timeofday (context, &sec, &usec);
-
+	
 	ALLOC(enc_krb_cred_part.timestamp, 1);
 	if (enc_krb_cred_part.timestamp == NULL) {
-	    ret = krb5_enomem(context);
+	    ret = ENOMEM;
+	    krb5_set_error_message(context, ret, N_("malloc: out of memory", ""));
 	    goto out4;
 	}
 	*enc_krb_cred_part.timestamp = sec;
 	ALLOC(enc_krb_cred_part.usec, 1);
 	if (enc_krb_cred_part.usec == NULL) {
-	    ret = krb5_enomem(context);
+	    ret = ENOMEM;
+	    krb5_set_error_message(context, ret, N_("malloc: out of memory", ""));
 	    goto out4;
 	}
 	*enc_krb_cred_part.usec      = usec;
@@ -340,7 +345,9 @@ krb5_get_forwarded_creds (krb5_context	    context,
 	} else {
 	    ALLOC(enc_krb_cred_part.r_address, 1);
 	    if (enc_krb_cred_part.r_address == NULL) {
-		ret = krb5_enomem(context);
+		ret = ENOMEM;
+		krb5_set_error_message(context, ret,
+				       N_("malloc: out of memory", ""));
 		goto out4;
 	    }
 
@@ -402,7 +409,7 @@ krb5_get_forwarded_creds (krb5_context	    context,
      */
 
     if (auth_context->flags & KRB5_AUTH_CONTEXT_CLEAR_FORWARDED_CRED) {
-	cred.enc_part.etype = KRB5_ENCTYPE_NULL;
+	cred.enc_part.etype = ENCTYPE_NULL;
 	cred.enc_part.kvno = NULL;
 	cred.enc_part.cipher.data = buf;
 	cred.enc_part.cipher.length = buf_size;
@@ -413,7 +420,7 @@ krb5_get_forwarded_creds (krb5_context	    context,
 	 * used. Heimdal 0.7.2 and newer have code to try both in the
 	 * receiving end.
 	 */
-
+	
 	ret = krb5_crypto_init(context, auth_context->keyblock, 0, &crypto);
 	if (ret) {
 	    free(buf);

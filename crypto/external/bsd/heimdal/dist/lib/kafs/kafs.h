@@ -1,4 +1,4 @@
-/*	$NetBSD: kafs.h,v 1.2 2017/01/28 21:31:49 christos Exp $	*/
+/*	$NetBSD: kafs.h,v 1.1 2011/04/13 18:15:30 elric Exp $	*/
 
 /*
  * Copyright (c) 1995 - 2001, 2003 Kungliga Tekniska Högskolan
@@ -33,7 +33,7 @@
  * SUCH DAMAGE.
  */
 
-/* Id */
+/* $Id: kafs.h,v 1.1 2011/04/13 18:15:30 elric Exp $ */
 
 #ifndef __KAFS_H
 #define __KAFS_H
@@ -48,9 +48,6 @@
 #define AFSCALL_SETPAG 21
 
 #ifndef _VICEIOCTL
-#ifdef __GNU__
-#define _IOT_ViceIoctl _IOT(_IOTS(caddr_t), 2, _IOTS(short), 2, 0, 0)
-#endif
 #define _VICEIOCTL(id)  ((unsigned int ) _IOW('V', id, struct ViceIoctl))
 #define _AFSCIOCTL(id)  ((unsigned int ) _IOW('C', id, struct ViceIoctl))
 #endif /* _VICEIOCTL */
@@ -94,8 +91,8 @@
 
 struct ViceIoctl {
   caddr_t in, out;
-  unsigned short in_size;
-  unsigned short out_size;
+  short in_size;
+  short out_size;
 };
 
 struct ClearToken {

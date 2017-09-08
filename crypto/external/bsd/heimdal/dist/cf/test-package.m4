@@ -1,6 +1,6 @@
-dnl Id
+dnl $Id: test-package.m4,v 1.1 2011/04/13 18:14:33 elric Exp $
 dnl
-dnl rk_TEST_PACKAGE(package,program,libraries,extra libs,
+dnl rk_TEST_PACKAGE(package,headers,libraries,extra libs,
 dnl			default locations, conditional, config-program, headers)
 
 AC_DEFUN([rk_TEST_PACKAGE],[

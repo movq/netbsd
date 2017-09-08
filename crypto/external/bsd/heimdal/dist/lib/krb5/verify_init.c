@@ -1,4 +1,4 @@
-/*	$NetBSD: verify_init.c,v 1.2 2017/01/28 21:31:49 christos Exp $	*/
+/*	$NetBSD: verify_init.c,v 1.1 2011/04/13 18:15:39 elric Exp $	*/
 
 /*
  * Copyright (c) 1997 - 2008 Kungliga Tekniska Högskolan
@@ -57,19 +57,16 @@ static krb5_boolean
 fail_verify_is_ok (krb5_context context,
 		   krb5_verify_init_creds_opt *options)
 {
-
-    if (options && (options->flags & KRB5_VERIFY_INIT_CREDS_OPT_AP_REQ_NOFAIL)
-	&& options->ap_req_nofail != 0)
+    if ((options->flags & KRB5_VERIFY_INIT_CREDS_OPT_AP_REQ_NOFAIL
+	 && options->ap_req_nofail != 0)
+	|| krb5_config_get_bool (context,
+				 NULL,
+				 "libdefaults",
+				 "verify_ap_req_nofail",
+				 NULL))
 	return FALSE;
-
-    if (krb5_config_get_bool(context,
-			     NULL,
-			     "libdefaults",
-			     "verify_ap_req_nofail",
-			     NULL))
-	return FALSE;
-
-    return TRUE;
+    else
+	return TRUE;
 }
 
 KRB5_LIB_FUNCTION krb5_error_code KRB5_LIB_CALL
@@ -204,11 +201,11 @@ cleanup:
 
 /**
  * Validate the newly fetch credential, see also krb5_verify_init_creds().
- *
+ * 
  * @param context a Kerberos 5 context
  * @param creds the credentials to verify
  * @param client the client name to match up
- * @param ccache the credential cache to use
+ * @param ccache the credential cache to use 
  * @param service a service name to use, used with
  *        krb5_sname_to_principal() to build a hostname to use to
  *        verify.
@@ -234,7 +231,7 @@ krb5_get_validated_creds(krb5_context context,
 	return KRB5_PRINC_NOMATCH;
     }
 
-    ret = krb5_sname_to_principal (context, NULL, service,
+    ret = krb5_sname_to_principal (context, NULL, service, 
 				   KRB5_NT_SRV_HST, &server);
     if(ret)
 	return ret;

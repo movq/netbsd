@@ -1,4 +1,4 @@
-.\"	$NetBSD: krb5_principal.3,v 1.4 2017/01/28 21:31:49 christos Exp $
+.\"	$NetBSD: krb5_principal.3,v 1.1 2011/04/13 18:15:35 elric Exp $
 .\"
 .\" Copyright (c) 2003 - 2007 Kungliga Tekniska Högskolan
 .\" (Royal Institute of Technology, Stockholm, Sweden).
@@ -31,7 +31,7 @@
 .\" OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
 .\" SUCH DAMAGE.
 .\"
-.\" Id
+.\" $Id: krb5_principal.3,v 1.1 2011/04/13 18:15:35 elric Exp $
 .\"
 .Dd May  1, 2006
 .Dt KRB5_PRINCIPAL 3
@@ -157,12 +157,12 @@ takes an extra
 argument the following flags can be passed in
 .Bl -tag -width Ds
 .It Dv KRB5_PRINCIPAL_PARSE_NO_REALM
-requires the input string to be without a realm, and no realm is
+requries the input string to be without a realm, and no realm is
 stored in the
 .Fa principal
 return argument.
 .It Dv KRB5_PRINCIPAL_PARSE_REQUIRE_REALM
-requires the input string to with a realm.
+requries the input string to with a realm.
 .El
 .Pp
 .Fn krb5_unparse_name
@@ -175,7 +175,7 @@ to the string
 .Fa name
 should be freed with
 .Xr free 3 .
-To the
+To the 
 .Fa flags
 argument the following flags can be passed in
 .Bl -tag -width Ds
@@ -364,6 +364,7 @@ On failure the function returns an error code and set the error
 string.
 .\" .Sh EXAMPLES
 .Sh SEE ALSO
+.Xr krb5_425_conv_principal 3 ,
 .Xr krb5_config 3 ,
 .Xr krb5.conf 5
 .Sh BUGS

@@ -1,4 +1,4 @@
-.\"	$NetBSD: com_err.3,v 1.4 2017/01/28 21:31:45 christos Exp $
+.\"	$NetBSD: com_err.3,v 1.1 2011/04/13 18:14:42 elric Exp $
 .\"
 .\" Copyright (c) 2005 Kungliga Tekniska Högskolan
 .\" (Royal Institute of Technology, Stockholm, Sweden).
@@ -31,7 +31,7 @@
 .\" OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
 .\" SUCH DAMAGE.
 .\"
-.\" Id
+.\" $Id: com_err.3,v 1.1 2011/04/13 18:14:42 elric Exp $
 .\"
 .\" This manpage was contributed by Gregory McGarry.
 .\"
@@ -101,7 +101,7 @@ where
 .Em name
 is the name of the error table.
 .Pp
-If a thread-safe version of the library is needed
+If a thread-safe version of the library is needed 
 .Fn initialize_<name>_error_table_r
 that internally calls
 .Fn initialize_error_table_r
@@ -136,11 +136,10 @@ This routine provides an interface, equivalent to
 which may be used by higher-level variadic functions (functions which
 accept variable numbers of arguments).
 .It Fn error_message "code"
-Returns the character string error message associated with
+Returns the character string error message associate with
 .Fa code .
 If
-.Fa code
-is associated with an unknown error table, or if
+.Fa code is associated with an unknown error table, or if
 .Fa code
 is associated with a known error table but is not in the table, a
 string of the form `Unknown code XXXX NN' is returned, where XXXX is

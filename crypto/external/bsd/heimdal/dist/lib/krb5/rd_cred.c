@@ -1,4 +1,4 @@
-/*	$NetBSD: rd_cred.c,v 1.2 2017/01/28 21:31:49 christos Exp $	*/
+/*	$NetBSD: rd_cred.c,v 1.1 2011/04/13 18:15:37 elric Exp $	*/
 
 /*
  * Copyright (c) 1997 - 2007 Kungliga Tekniska Högskolan
@@ -67,10 +67,9 @@ krb5_rd_cred(krb5_context context,
     EncKrbCredPart enc_krb_cred_part;
     krb5_data enc_krb_cred_part_data;
     krb5_crypto crypto;
-    size_t i;
+    int i;
 
     memset(&enc_krb_cred_part, 0, sizeof(enc_krb_cred_part));
-    krb5_data_zero(&enc_krb_cred_part_data);
 
     if ((auth_context->flags &
 	 (KRB5_AUTH_CONTEXT_RET_TIME | KRB5_AUTH_CONTEXT_RET_SEQUENCE)) &&
@@ -98,7 +97,7 @@ krb5_rd_cred(krb5_context context,
 	goto out;
     }
 
-    if (cred.enc_part.etype == (krb5_enctype)ETYPE_NULL) {
+    if (cred.enc_part.etype == ETYPE_NULL) {
 	/* DK: MIT GSS-API Compatibility */
 	enc_krb_cred_part_data.length = cred.enc_part.cipher.length;
 	enc_krb_cred_part_data.data   = cred.enc_part.cipher.data;
@@ -121,7 +120,7 @@ krb5_rd_cred(krb5_context context,
 					     KRB5_KU_KRB_CRED,
 					     &cred.enc_part,
 					     &enc_krb_cred_part_data);
-
+	
 	    krb5_crypto_destroy(context, crypto);
 	}
 
@@ -137,13 +136,13 @@ krb5_rd_cred(krb5_context context,
 
 	    if (ret)
 		goto out;
-
+	
 	    ret = krb5_decrypt_EncryptedData(context,
 					     crypto,
 					     KRB5_KU_KRB_CRED,
 					     &cred.enc_part,
 					     &enc_krb_cred_part_data);
-
+	
 	    krb5_crypto_destroy(context, crypto);
 	}
 	if (ret)
@@ -198,7 +197,7 @@ krb5_rd_cred(krb5_context context,
 				      auth_context->local_port);
 	    if (ret)
 		goto out;
-
+	
 	    ret = compare_addrs(context, a, enc_krb_cred_part.r_address,
 				N_("receiver address is wrong "
 				   "in received creds", ""));
@@ -224,7 +223,7 @@ krb5_rd_cred(krb5_context context,
 
 	if (enc_krb_cred_part.timestamp == NULL ||
 	    enc_krb_cred_part.usec      == NULL ||
-	    labs(*enc_krb_cred_part.timestamp - sec)
+	    abs(*enc_krb_cred_part.timestamp - sec)
 	    > context->max_skew) {
 	    krb5_clear_error_message (context);
 	    ret = KRB5KRB_AP_ERR_SKEW;
@@ -251,7 +250,9 @@ krb5_rd_cred(krb5_context context,
 			sizeof(**ret_creds));
 
     if (*ret_creds == NULL) {
-	ret = krb5_enomem(context);
+	ret = ENOMEM;
+	krb5_set_error_message(context, ret,
+			       N_("malloc: out of memory", ""));
 	goto out;
     }
 
@@ -261,7 +262,9 @@ krb5_rd_cred(krb5_context context,
 
 	creds = calloc(1, sizeof(*creds));
 	if(creds == NULL) {
-	    ret = krb5_enomem(context);
+	    ret = ENOMEM;
+	    krb5_set_error_message(context, ret,
+				   N_("malloc: out of memory", ""));
 	    goto out;
 	}
 
@@ -298,9 +301,9 @@ krb5_rd_cred(krb5_context context,
 	    krb5_copy_addresses (context,
 				 kci->caddr,
 				 &creds->addresses);
-
+	
 	(*ret_creds)[i] = creds;
-
+	
     }
     (*ret_creds)[i] = NULL;
 

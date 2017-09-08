@@ -1,4 +1,4 @@
-/*	$NetBSD: import_sec_context.c,v 1.2 2017/01/28 21:31:46 christos Exp $	*/
+/*	$NetBSD: import_sec_context.c,v 1.1 2011/04/13 18:14:45 elric Exp $	*/
 
 /*
  * Copyright (c) 1999 - 2003 Kungliga Tekniska Högskolan
@@ -194,13 +194,9 @@ _gsskrb5_import_sec_context (
     if (krb5_ret_int32 (sp, &tmp))
 	goto failure;
     ctx->more_flags = tmp;
-    /*
-     * XXX endtime should be a 64-bit int, but we don't have
-     * krb5_ret_int64() yet.
-     */
     if (krb5_ret_int32 (sp, &tmp))
 	goto failure;
-    ctx->endtime = tmp;
+    ctx->lifetime = tmp;
 
     ret = _gssapi_msg_order_import(minor_status, sp, &ctx->order);
     if (ret)

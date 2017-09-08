@@ -1,5 +1,5 @@
 dnl
-dnl Id
+dnl $Id: sunos.m4,v 1.1 2011/04/13 18:14:33 elric Exp $
 dnl
 
 AC_DEFUN([rk_SUNOS],[
@@ -8,12 +8,7 @@ case "$host" in
 *-*-solaris2.7)
 	sunos=57
 	;;
-*-*-solaris2.1[[1-9]])
-	AC_DEFINE([__EXTENSIONS__], [1],
-		  [Enable general extensions on Solaris.])
-	sunos=511
-	;;
-*-*-solaris2.[[89]] | *-*-solaris2.10)
+*-*-solaris2.[[89]] | *-*-solaris2.1[[0-9]])
 	sunos=58
 	;;
 *-*-solaris2*)

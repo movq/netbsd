@@ -1,4 +1,4 @@
-/*	$NetBSD: get_default_realm.c,v 1.2 2017/01/28 21:31:49 christos Exp $	*/
+/*	$NetBSD: get_default_realm.c,v 1.1 2011/04/13 18:15:33 elric Exp $	*/
 
 /*
  * Copyright (c) 1997 - 2001, 2004 Kungliga Tekniska Högskolan
@@ -75,8 +75,11 @@ krb5_get_default_realm(krb5_context context,
     }
 
     res = strdup (context->default_realms[0]);
-    if (res == NULL)
-	return krb5_enomem(context);
+    if (res == NULL) {
+	krb5_set_error_message(context, ENOMEM,
+			       N_("malloc: out of memory", ""));
+	return ENOMEM;
+    }
     *realm = res;
     return 0;
 }

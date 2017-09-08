@@ -1,4 +1,4 @@
-# Id
+# $Id: Makefile.am,v 1.1 2011/04/13 18:16:02 elric Exp $
 
 include $(top_srcdir)/Makefile.am.common
 
@@ -6,16 +6,7 @@ bin_SCRIPTS = krb5-config
 
 pkgconfigdir = $(libdir)/pkgconfig
 
-pkgconfig_DATA = \
-	heimdal-gssapi.pc \
-	heimdal-krb5.pc \
-	heimdal-kadm-client.pc \
-	heimdal-kadm-server.pc \
-	kafs.pc \
-	kadm-client.pc \
-	kadm-server.pc \
-	krb5.pc \
-	krb5-gssapi.pc
+pkgconfig_DATA = heimdal-gssapi.pc
 
 man_MANS = krb5-config.1
 
@@ -25,7 +16,6 @@ endif
 
 subst = sed	-e "s!@PACKAGE\@!$(PACKAGE)!g" \
 		-e "s!@VERSION\@!$(VERSION)!g" \
-		-e "s!@CANONICAL_HOST\@!$(CANONICAL_HOST)!g" \
 		-e "s!@prefix\@!$(prefix)!g" \
 		-e "s!@exec_prefix\@!$(exec_prefix)!g" \
 		-e "s!@libdir\@!$(libdir)!g" \
@@ -33,6 +23,7 @@ subst = sed	-e "s!@PACKAGE\@!$(PACKAGE)!g" \
 		-e "s!@PTHREAD_LIBADD\@!$(PTHREAD_LIBADD)!g" \
 		-e "s!@LIB_crypt\@!$(LIB_crypt)!g" \
 		-e "s!@LIB_dbopen\@!$(LIB_dbopen)!g" \
+		-e "s!@INCLUDE_hcrypto\@!$(INCLUDE_hcrypto)!g" \
 		-e "s!@LIB_hcrypto_appl\@!$(LIB_hcrypto_appl)!g" \
 		-e "s!@LIB_dlopen\@!$(LIB_dlopen)!g" \
 		-e "s!@LIB_door_create\@!$(LIB_door_create)!g" \
@@ -44,22 +35,19 @@ krb5-config: krb5-config.in
 	mv $@.new $@
 	chmod +x $@
 
-.pc.in.pc:
-	$(subst) $< > $@.new
+heimdal-gssapi.pc: heimdal-gssapi.pc.in
+	$(subst) $(srcdir)/heimdal-gssapi.pc.in > $@.new
 	mv $@.new $@
 
 EXTRA_DIST = \
-	NTMakefile \
-	cov.sh \
 	$(man_MANS) \
 	krb5-config.in \
 	heimdal-gssapi.pc.in \
-	kdc-log-analyze.pl \
-	$(pkgconfig_DATA:.pc=.pc.in)
+	kdc-log-analyze.pl
 
 CLEANFILES = \
 	krb5-config \
 	krb5-config.new \
-	$(pkgconfig_DATA) \
-	$(pkgconfig_DATA:.pc=.pc.new)
+	heimdal-gssapi.pc \
+	heimdal-gssapi.pc.new
 

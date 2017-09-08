@@ -1,4 +1,4 @@
-/*	$NetBSD: gss_decapsulate_token.c,v 1.2 2017/01/28 21:31:46 christos Exp $	*/
+/*	$NetBSD: gss_decapsulate_token.c,v 1.1 2011/04/13 18:14:46 elric Exp $	*/
 
 /*
  * Copyright (c) 2006 Kungliga Tekniska Högskolan
@@ -57,7 +57,7 @@ gss_decapsulate_token(gss_const_buffer_t input_token,
     if (ret) {
 	der_free_oid(&o);
 	return GSS_S_FAILURE;
-    }
+    }	
 
     if (der_heim_oid_cmp(&ct.thisMech, &o) == 0) {
 	status = GSS_S_COMPLETE;

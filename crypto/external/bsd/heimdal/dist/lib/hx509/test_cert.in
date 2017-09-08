@@ -31,7 +31,7 @@
 # OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF 
 # SUCH DAMAGE. 
 #
-# Id: test_chain.in 20809 2007-06-03 03:19:06Z lha 
+# Id: test_chain.in 20809 2007-06-03 03:19:06Z lha
 #
 
 srcdir="@srcdir@"
@@ -46,7 +46,7 @@ if ${hxtool} info | grep 'rand: not available' > /dev/null ; then
 fi
 
 echo "print DIR"
-${hxtool} print --content DIR:$srcdir/data > /dev/null 2>/dev/null || exit 1
+${hxtool} print --content DIR:$srcdir/data > /dev/null || exit 1
 
 echo "print FILE"
 for a in $srcdir/data/*.crt; do 
