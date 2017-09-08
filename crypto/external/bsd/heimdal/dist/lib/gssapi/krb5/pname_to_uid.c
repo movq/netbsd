@@ -1,4 +1,4 @@
-/*	$NetBSD: pname_to_uid.c,v 1.2 2017/01/28 21:31:46 christos Exp $	*/
+/*	$NetBSD: pname_to_uid.c,v 1.1 2014/04/24 12:45:29 pettai Exp $	*/
 
 /*
  * Copyright (c) 2011, PADL Software Pty Ltd.
@@ -35,38 +35,53 @@
 #include "gsskrb5_locl.h"
 
 OM_uint32 GSSAPI_CALLCONV
-_gsskrb5_localname(OM_uint32 *minor_status,
-                   gss_const_name_t pname,
-                   const gss_OID mech_type,
-                   gss_buffer_t localname)
+_gsskrb5_pname_to_uid(OM_uint32 *minor_status,
+                      const gss_name_t pname,
+                      const gss_OID mech_type,
+                      uid_t *uidp)
 {
+#ifdef NO_LOCALNAME
+    *minor_status = KRB5_NO_LOCALNAME;
+    return GSS_S_FAILURE;
+#else
     krb5_error_code ret;
     krb5_context context;
     krb5_const_principal princ = (krb5_const_principal)pname;
-    char lnamebuf[256];
+    char localname[256];
+#ifdef POSIX_GETPWNAM_R
+    char pwbuf[2048];
+    struct passwd pw, *pwd;
+#else
+    struct passwd *pwd;
+#endif
 
     GSSAPI_KRB5_INIT(&context);
 
     *minor_status = 0;
 
     ret = krb5_aname_to_localname(context, princ,
-                                  sizeof(lnamebuf), lnamebuf);
+                                  sizeof(localname), localname);
     if (ret != 0) {
         *minor_status = ret;
         return GSS_S_FAILURE;
     }
 
-    localname->length = strlen(lnamebuf);
+#ifdef POSIX_GETPWNAM_R
+    if (getpwnam_r(localname, &pw, pwbuf, sizeof(pwbuf), &pwd) != 0) {
+        *minor_status = KRB5_NO_LOCALNAME;
+        return GSS_S_FAILURE;
+    }
+#else
+    pwd = getpwnam(localname);
+#endif
 
-    localname->value = malloc(localname->length + 1);
-    if (localname->value == NULL) {
-        localname->length = 0;
-        *minor_status = ENOMEM;
+    if (pwd == NULL) {
+        *minor_status = KRB5_NO_LOCALNAME;
         return GSS_S_FAILURE;
     }
 
-    memcpy(localname->value, lnamebuf, localname->length + 1);
-    *minor_status = 0;
+    *uidp = pwd->pw_uid;
 
     return GSS_S_COMPLETE;
+#endif /* NO_LOCALNAME */
 }

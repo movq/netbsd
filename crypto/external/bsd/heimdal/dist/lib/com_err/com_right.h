@@ -1,4 +1,4 @@
-/*	$NetBSD: com_right.h,v 1.2 2017/01/28 21:31:45 christos Exp $	*/
+/*	$NetBSD: com_right.h,v 1.1 2011/04/13 18:14:42 elric Exp $	*/
 
 /*
  * Copyright (c) 1997 - 2000 Kungliga Tekniska Högskolan
@@ -33,7 +33,7 @@
  * SUCH DAMAGE.
  */
 
-/* Id */
+/* $Id: com_right.h,v 1.1 2011/04/13 18:14:42 elric Exp $ */
 
 #ifndef __COM_RIGHT_H__
 #define __COM_RIGHT_H__
@@ -60,7 +60,6 @@
 
 #ifdef __STDC__
 #include <stdarg.h>
-#include <stddef.h>
 #endif
 
 struct error_table {

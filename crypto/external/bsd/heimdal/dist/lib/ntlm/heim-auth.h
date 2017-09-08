@@ -1,9 +1,4 @@
-/*	$NetBSD: heim-auth.h,v 1.1.1.3 2017/01/28 20:46:52 christos Exp $	*/
-
-#ifdef __cplusplus
-extern "C" {
-#endif
-
+/*	$NetBSD: heim-auth.h,v 1.1 2011/04/13 18:15:39 elric Exp $	*/
 
 /*
  * Generate challange for APOP and CRAM-MD5
@@ -31,7 +26,7 @@ typedef struct heim_HMAC_MD5_STATE_s {
     uint32_t ostate[4];
 } heim_CRAM_MD5_STATE;
 
-typedef struct heim_cram_md5_data *heim_cram_md5;
+typedef struct heim_cram_md5 *heim_cram_md5;
 
 char *
 heim_cram_md5_create(const char *challenge, const char *password);
@@ -63,6 +58,7 @@ heim_cram_md5_free(heim_cram_md5 ctx);
  * response = read_from_client();
  *
  * heim_digest_parse_response(d, response);
+ * 
  * const char *user = heim_digest_get_key(d, "username");
  * heim_digest_set_key(d, "password", "sommar17");
  *
@@ -80,15 +76,8 @@ heim_digest_create(int server, int type);
 
 #define HEIM_DIGEST_TYPE_AUTO				0
 #define HEIM_DIGEST_TYPE_RFC2069			1
-#define HEIM_DIGEST_TYPE_RFC2617_MD5			2
-#define HEIM_DIGEST_TYPE_RFC2617_MD5_SESS		4
-#define HEIM_DIGEST_TYPE_RFC2831			8
-
-#define HEIM_DIGEST_TYPE_RFC2617_OR_RFC2831		12
-
-/* old deprecated names, use the two above instead */
 #define HEIM_DIGEST_TYPE_MD5				2
-#define HEIM_DIGEST_TYPE_MD5_SESS			4
+#define HEIM_DIGEST_TYPE_MD5_SESS			3
 
 void
 heim_digest_init_set_key(heim_digest_t context, const char *key, const char *value);
@@ -118,20 +107,10 @@ int
 heim_digest_verify(heim_digest_t context, char **response);
 
 const char *
-heim_digest_create_response(heim_digest_t context, char **response);
+heim_digest_create_response(heim_digest_t context);
 
 void
 heim_digest_get_session_key(heim_digest_t context, void **key, size_t *keySize);
 
 void
 heim_digest_release(heim_digest_t context);
-
-char *
-heim_digest_userhash(const char *user, const char *realm, const char *password);
-
-const char *
-heim_digest_server_response(heim_digest_t context);
-
-#ifdef __cplusplus
-}
-#endif

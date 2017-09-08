@@ -1,4 +1,4 @@
-/*	$NetBSD: inquire_names_for_mech.c,v 1.2 2017/01/28 21:31:46 christos Exp $	*/
+/*	$NetBSD: inquire_names_for_mech.c,v 1.1 2011/04/13 18:14:45 elric Exp $	*/
 
 /*
  * Copyright (c) 2003 Kungliga Tekniska Högskolan
@@ -74,6 +74,6 @@ OM_uint32 GSSAPI_CALLCONV _gsskrb5_inquire_names_for_mech (
 
     if (ret != GSS_S_COMPLETE)
 	gss_release_oid_set(NULL, name_types);
-
+	
     return GSS_S_COMPLETE;
 }

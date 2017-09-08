@@ -1,5 +1,5 @@
 #!/bin/sh
-# Id
+# $Id: mac.sh,v 1.1 2011/04/13 18:16:00 elric Exp $
 
 dbase=`dirname $0`
 base=`cd $dbase && pwd`
@@ -21,28 +21,24 @@ version=`sh ${config} --help 2>/dev/null | head -1 | sed 's/.*Heimdal \([^ ]*\).
 echo "Building Mac universal binary package for Heimdal ${version}"
 echo "Configure"
 env \
-  CFLAGS="-arch i386 -arch x86_64" \
-  LDFLAGS="-arch i386 -arch x86_64" \
+  CFLAGS="-arch i386 -arch ppc -arch x86_64" \
+  LDFLAGS="-arch i386 -arch ppc -arch x86_64" \
   ${config} --disable-dependency-tracking > log || exit 1
-
 echo "Build"
-env \
-  CODE_SIGN_IDENTITY="Developer ID Application:" \
 make all > /dev/null || exit 1
-
 echo "Run regression suite"
 make check > /dev/null || exit 1
 echo "Install"
 make install DESTDIR=${destdir} > /dev/null || exit 1 
 
 echo "Build package"
-xcrun productbuild \
-    --identifier org.h5l.heimdal \
-    --version ${version} \
-    --root ${destdir} / \
+/Developer/usr/bin/packagemaker \
+    --version "${version}" \
+    --root ${destdir} \
+    --info ${base}/Info.plist \
+    --out ${imgdir}/Heimdal.pkg \
     --resources ${base}/Resources \
-    --sign 'Developer ID Installer:' \
-    ${imgdir}/Heimdal-${version}.pkg
+    --domain system || exit 1
 
 cd ..
 echo "Build disk image"

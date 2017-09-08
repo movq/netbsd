@@ -1,4 +1,4 @@
-/*	$NetBSD: print.c,v 1.2 2017/01/28 21:31:48 christos Exp $	*/
+/*	$NetBSD: print.c,v 1.1 2011/04/13 18:15:12 elric Exp $	*/
 
 /*
  * Copyright (c) 2004 - 2007 Kungliga Tekniska Högskolan
@@ -165,7 +165,7 @@ void
 hx509_bitstring_print(const heim_bit_string *b,
 		      hx509_vprint_func func, void *ctx)
 {
-    size_t i;
+    int i;
     print_func(func, ctx, "\tlength: %d\n\t", b->length);
     for (i = 0; i < (b->length + 7) / 8; i++)
 	print_func(func, ctx, "%02x%s%s",
@@ -483,8 +483,7 @@ check_CRLDistributionPoints(hx509_validate_ctx ctx,
 {
     CRLDistributionPoints dp;
     size_t size;
-    int ret;
-    size_t i;
+    int ret, i;
 
     check_Null(ctx, status, cf, e);
 
@@ -502,8 +501,8 @@ check_CRLDistributionPoints(hx509_validate_ctx ctx,
 	if (dp.val[i].distributionPoint) {
 	    DistributionPointName dpname;
 	    heim_any *data = dp.val[i].distributionPoint;
-	    size_t j;
-
+	    int j;
+	
 	    ret = decode_DistributionPointName(data->data, data->length,
 					       &dpname, NULL);
 	    if (ret) {
@@ -515,7 +514,7 @@ check_CRLDistributionPoints(hx509_validate_ctx ctx,
 	    switch (dpname.element) {
 	    case choice_DistributionPointName_fullName:
 		validate_print(ctx, HX509_VALIDATE_F_VERBOSE, "Fullname:\n");
-
+		
 		for (j = 0 ; j < dpname.u.fullName.len; j++) {
 		    char *s;
 		    GeneralName *name = &dpname.u.fullName.val[j];
@@ -568,8 +567,7 @@ check_altName(hx509_validate_ctx ctx,
 {
     GeneralNames gn;
     size_t size;
-    int ret;
-    size_t i;
+    int ret, i;
 
     check_Null(ctx, status, cf, e);
 
@@ -604,7 +602,7 @@ check_altName(hx509_validate_ctx ctx,
 		if (der_heim_oid_cmp(altname_types[j].oid,
 				     &gn.val[i].u.otherName.type_id) != 0)
 		    continue;
-
+		
 		validate_print(ctx, HX509_VALIDATE_F_VERBOSE, "%s: ",
 			       altname_types[j].name);
 		(*altname_types[j].func)(ctx, &gn.val[i].u.otherName.value);
@@ -721,8 +719,7 @@ check_authorityInfoAccess(hx509_validate_ctx ctx,
 {
     AuthorityInfoAccessSyntax aia;
     size_t size;
-    int ret;
-    size_t i;
+    int ret, i;
 
     check_Null(ctx, status, cf, e);
 
@@ -778,7 +775,7 @@ struct {
     { ext(certificateIssuer, Null), M_C },
     { ext(nameConstraints, Null), M_C },
     { ext(cRLDistributionPoints, CRLDistributionPoints), S_N_C },
-    { ext(certificatePolicies, Null), 0 },
+    { ext(certificatePolicies, Null) },
     { ext(policyMappings, Null), M_N_C },
     { ext(authorityKeyIdentifier, authorityKeyIdentifier), M_N_C },
     { ext(policyConstraints, Null), D_C },
@@ -794,7 +791,7 @@ struct {
       check_Null, D_C },
     { "Netscape cert comment", &asn1_oid_id_netscape_cert_comment,
       check_Null, D_C },
-    { NULL, NULL, NULL, 0 }
+    { NULL }
 };
 
 /**
@@ -905,7 +902,7 @@ hx509_validate_cert(hx509_context context,
     if ((t->version == NULL || *t->version < 2) && t->extensions)
 	validate_print(ctx, HX509_VALIDATE_F_VALIDATE,
 		       "Not version 3 certificate with extensions\n");
-
+	
     if (_hx509_cert_get_version(c) >= 3 && t->extensions == NULL)
 	validate_print(ctx, HX509_VALIDATE_F_VALIDATE,
 		       "Version 3 certificate without extensions\n");
@@ -941,7 +938,7 @@ hx509_validate_cert(hx509_context context,
     free(str);
 
     if (t->extensions) {
-	size_t i, j;
+	int i, j;
 
 	if (t->extensions->len == 0) {
 	    validate_print(ctx,
@@ -971,7 +968,7 @@ hx509_validate_cert(hx509_context context,
 	    }
 	    validate_print(ctx,
 			   HX509_VALIDATE_F_VALIDATE|HX509_VALIDATE_F_VERBOSE,
-			   "checking extension: %s\n",
+			   "checking extention: %s\n",
 			   check_extension[j].name);
 	    (*check_extension[j].func)(ctx,
 				       &status,
@@ -979,8 +976,8 @@ hx509_validate_cert(hx509_context context,
 				       &t->extensions->val[i]);
 	}
     } else
-	validate_print(ctx, HX509_VALIDATE_F_VERBOSE, "no extensions\n");
-
+	validate_print(ctx, HX509_VALIDATE_F_VERBOSE, "no extentions\n");
+	
     if (status.isca) {
 	if (!status.haveSKI)
 	    validate_print(ctx, HX509_VALIDATE_F_VALIDATE,
@@ -992,7 +989,7 @@ hx509_validate_cert(hx509_context context,
 			   "Is not CA and doesn't have "
 			   "AuthorityKeyIdentifier\n");
     }
-
+	
 
     if (!status.haveSKI)
 	validate_print(ctx, HX509_VALIDATE_F_VALIDATE,

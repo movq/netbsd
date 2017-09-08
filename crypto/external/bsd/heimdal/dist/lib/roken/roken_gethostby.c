@@ -1,4 +1,4 @@
-/*	$NetBSD: roken_gethostby.c,v 1.2 2017/01/28 21:31:50 christos Exp $	*/
+/*	$NetBSD: roken_gethostby.c,v 1.1 2011/04/13 18:15:43 elric Exp $	*/
 
 /*
  * Copyright (c) 1998 Kungliga Tekniska Högskolan
@@ -79,8 +79,7 @@ setup_int(const char *proxy_host, short proxy_port,
 	if(make_address(dns_host, &dns_addr.sin_addr) != 0)
 	    return -1;
 	dns_addr.sin_port = htons(dns_port);
-	if (asprintf(&dns_req, "%s", dns_path) < 0)
-	    return -1;
+	asprintf(&dns_req, "%s", dns_path);
     }
     dns_addr.sin_family = AF_INET;
     return 0;
@@ -145,7 +144,6 @@ roken_gethostby(const char *hostname)
     int offset = 0;
     int n;
     char *p, *foo;
-    size_t len;
 
     if(dns_addr.sin_family == 0)
 	return NULL; /* no configured host */
@@ -164,9 +162,7 @@ roken_gethostby(const char *hostname)
 	free(request);
 	return NULL;
     }
-
-    len = strlen(request);
-    if(write(s, request, len) != (ssize_t)len) {
+    if(write(s, request, strlen(request)) != strlen(request)) {
 	close(s);
 	free(request);
 	return NULL;
@@ -194,12 +190,12 @@ roken_gethostby(const char *hostname)
 	static char addrs[4 * MAX_ADDRS];
 	static char *addr_list[MAX_ADDRS + 1];
 	int num_addrs = 0;
-
+	
 	he.h_name = p;
 	he.h_aliases = NULL;
 	he.h_addrtype = AF_INET;
 	he.h_length = 4;
-
+	
 	while((p = strtok_r(NULL, " \t\r\n", &foo)) && num_addrs < MAX_ADDRS) {
 	    struct in_addr ip;
 	    inet_aton(p, &ip);

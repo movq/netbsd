@@ -1,4 +1,4 @@
-/*	$NetBSD: creds.c,v 1.3 2017/01/28 21:31:46 christos Exp $	*/
+/*	$NetBSD: creds.c,v 1.1 2011/04/13 18:14:47 elric Exp $	*/
 
 /*
  * Copyright (c) 2006 Kungliga Tekniska Högskolan
@@ -37,10 +37,9 @@
 
 #include "ntlm.h"
 
-OM_uint32 GSSAPI_CALLCONV
-_gss_ntlm_inquire_cred
+OM_uint32 _gss_ntlm_inquire_cred
            (OM_uint32 * minor_status,
-            gss_const_cred_id_t cred_handle,
+            const gss_cred_id_t cred_handle,
             gss_name_t * name,
             OM_uint32 * lifetime,
             gss_cred_usage_t * cred_usage,
@@ -55,22 +54,11 @@ _gss_ntlm_inquire_cred
 	return GSS_S_NO_CRED;
 
     if (name) {
-	ntlm_name n = calloc(1, sizeof(*n));
-	ntlm_cred c = (ntlm_cred)cred_handle;
-	if (n) {
-	    n->user = strdup(c->username);
-	    n->domain = strdup(c->domain);
-	}
-	if (n == NULL || n->user == NULL || n->domain == NULL) {
-	    if (n) {
-		free(n->user);
-		free(n->domain);
-		free(n);
-	    }
-	    *minor_status = ENOMEM;
-	    return GSS_S_FAILURE;
-	}
-	*name = (gss_name_t)n;
+	ret = _gss_ntlm_duplicate_name(minor_status,
+				       (gss_name_t)cred_handle,
+				       name);
+	if (ret)
+	    goto out;
     }
     if (lifetime)
 	*lifetime = GSS_C_INDEFINITE;
@@ -99,21 +87,26 @@ out:
     return ret;
 }
 
-#ifdef HAVE_KCM
-static OM_uint32
-_gss_ntlm_destroy_kcm_cred(gss_cred_id_t *cred_handle)
+OM_uint32
+_gss_ntlm_destroy_cred(OM_uint32 *minor_status,
+		       gss_cred_id_t *cred_handle)
 {
+    krb5_error_code ret;
     krb5_storage *request, *response;
     krb5_data response_data;
     krb5_context context;
-    krb5_error_code ret;
     ntlm_cred cred;
+
+    if (cred_handle == NULL || *cred_handle == GSS_C_NO_CREDENTIAL)
+	return GSS_S_COMPLETE;
 
     cred = (ntlm_cred)*cred_handle;
 
     ret = krb5_init_context(&context);
-    if (ret)
-        return ret;
+    if (ret) {
+	*minor_status = ret;
+	return GSS_S_FAILURE;
+    }
 
     ret = krb5_kcm_storage_request(context, KCM_OP_DEL_NTLM_CRED, &request);
     if (ret)
@@ -137,29 +130,10 @@ _gss_ntlm_destroy_kcm_cred(gss_cred_id_t *cred_handle)
 
  out:
     krb5_free_context(context);
-
-    return ret;
-}
-#endif /* HAVE_KCM */
-
-OM_uint32 GSSAPI_CALLCONV
-_gss_ntlm_destroy_cred(OM_uint32 *minor_status,
-		       gss_cred_id_t *cred_handle)
-{
-#ifdef HAVE_KCM
-    krb5_error_code ret;
-#endif
-
-    if (cred_handle == NULL || *cred_handle == GSS_C_NO_CREDENTIAL)
-	return GSS_S_COMPLETE;
-
-#ifdef HAVE_KCM
-    ret = _gss_ntlm_destroy_kcm_cred(cred_handle);
     if (ret) {
 	*minor_status = ret;
 	return GSS_S_FAILURE;
     }
-#endif
 
     return _gss_ntlm_release_cred(minor_status, cred_handle);
 }

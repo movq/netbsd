@@ -1,4 +1,4 @@
-/*	$NetBSD: context_time.c,v 1.2 2017/01/28 21:31:46 christos Exp $	*/
+/*	$NetBSD: context_time.c,v 1.1 2011/04/13 18:14:47 elric Exp $	*/
 
 /*
  * Copyright (c) 1997 - 2003 Kungliga Tekniska Högskolan
@@ -37,7 +37,7 @@
 
 OM_uint32 GSSAPI_CALLCONV _gss_ntlm_context_time
            (OM_uint32 * minor_status,
-            gss_const_ctx_id_t context_handle,
+            const gss_ctx_id_t context_handle,
             OM_uint32 * time_rec
            )
 {

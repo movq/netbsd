@@ -1,4 +1,4 @@
-/*	$NetBSD: wrap.c,v 1.2 2017/01/28 21:31:46 christos Exp $	*/
+/*	$NetBSD: wrap.c,v 1.1 2011/04/13 18:14:46 elric Exp $	*/
 
 /*
  * Copyright (c) 1997 - 2003 Kungliga Tekniska Högskolan
@@ -139,7 +139,7 @@ sub_wrap_size (
 OM_uint32 GSSAPI_CALLCONV
 _gsskrb5_wrap_size_limit (
             OM_uint32 * minor_status,
-            gss_const_ctx_id_t context_handle,
+            const gss_ctx_id_t context_handle,
             int conf_req_flag,
             gss_qop_t qop_req,
             OM_uint32 req_output_size,
@@ -149,6 +149,7 @@ _gsskrb5_wrap_size_limit (
   krb5_context context;
   krb5_keyblock *key;
   OM_uint32 ret;
+  krb5_keytype keytype;
   const gsskrb5_ctx ctx = (const gsskrb5_ctx) context_handle;
 
   GSSAPI_KRB5_INIT (&context);
@@ -165,25 +166,23 @@ _gsskrb5_wrap_size_limit (
       *minor_status = ret;
       return GSS_S_FAILURE;
   }
+  krb5_enctype_to_keytype (context, key->keytype, &keytype);
 
-  switch (key->keytype) {
-  case KRB5_ENCTYPE_DES_CBC_CRC :
-  case KRB5_ENCTYPE_DES_CBC_MD4 :
-  case KRB5_ENCTYPE_DES_CBC_MD5 :
+  switch (keytype) {
+  case KEYTYPE_DES :
 #ifdef HEIM_WEAK_CRYPTO
       ret = sub_wrap_size(req_output_size, max_input_size, 8, 22);
 #else
       ret = GSS_S_FAILURE;
 #endif
       break;
-  case KRB5_ENCTYPE_ARCFOUR_HMAC_MD5:
-  case KRB5_ENCTYPE_ARCFOUR_HMAC_MD5_56:
+  case KEYTYPE_ARCFOUR:
+  case KEYTYPE_ARCFOUR_56:
       ret = _gssapi_wrap_size_arcfour(minor_status, ctx, context,
 				      conf_req_flag, qop_req,
 				      req_output_size, max_input_size, key);
       break;
-  case KRB5_ENCTYPE_DES3_CBC_MD5 :
-  case KRB5_ENCTYPE_DES3_CBC_SHA1 :
+  case KEYTYPE_DES3 :
       ret = sub_wrap_size(req_output_size, max_input_size, 8, 34);
       break;
   default :
@@ -217,7 +216,7 @@ wrap_des
   EVP_CIPHER_CTX des_ctx;
   DES_cblock deskey;
   DES_cblock zero;
-  size_t i;
+  int i;
   int32_t seq_number;
   size_t len, total_len, padlength, datalen;
 
@@ -530,7 +529,7 @@ wrap_des3
 OM_uint32 GSSAPI_CALLCONV
 _gsskrb5_wrap
            (OM_uint32 * minor_status,
-            gss_const_ctx_id_t context_handle,
+            const gss_ctx_id_t context_handle,
             int conf_req_flag,
             gss_qop_t qop_req,
             const gss_buffer_t input_message_buffer,
@@ -541,6 +540,7 @@ _gsskrb5_wrap
   krb5_context context;
   krb5_keyblock *key;
   OM_uint32 ret;
+  krb5_keytype keytype;
   const gsskrb5_ctx ctx = (const gsskrb5_ctx) context_handle;
 
   output_message_buffer->value = NULL;
@@ -560,11 +560,10 @@ _gsskrb5_wrap
       *minor_status = ret;
       return GSS_S_FAILURE;
   }
+  krb5_enctype_to_keytype (context, key->keytype, &keytype);
 
-  switch (key->keytype) {
-  case KRB5_ENCTYPE_DES_CBC_CRC :
-  case KRB5_ENCTYPE_DES_CBC_MD4 :
-  case KRB5_ENCTYPE_DES_CBC_MD5 :
+  switch (keytype) {
+  case KEYTYPE_DES :
 #ifdef HEIM_WEAK_CRYPTO
       ret = wrap_des (minor_status, ctx, context, conf_req_flag,
 		      qop_req, input_message_buffer, conf_state,
@@ -573,14 +572,13 @@ _gsskrb5_wrap
       ret = GSS_S_FAILURE;
 #endif
       break;
-  case KRB5_ENCTYPE_DES3_CBC_MD5 :
-  case KRB5_ENCTYPE_DES3_CBC_SHA1 :
+  case KEYTYPE_DES3 :
       ret = wrap_des3 (minor_status, ctx, context, conf_req_flag,
 		       qop_req, input_message_buffer, conf_state,
 		       output_message_buffer, key);
       break;
-  case KRB5_ENCTYPE_ARCFOUR_HMAC_MD5:
-  case KRB5_ENCTYPE_ARCFOUR_HMAC_MD5_56:
+  case KEYTYPE_ARCFOUR:
+  case KEYTYPE_ARCFOUR_56:
       ret = _gssapi_wrap_arcfour (minor_status, ctx, context, conf_req_flag,
 				  qop_req, input_message_buffer, conf_state,
 				  output_message_buffer, key);

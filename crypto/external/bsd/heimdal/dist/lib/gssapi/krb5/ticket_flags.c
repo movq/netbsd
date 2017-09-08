@@ -1,4 +1,4 @@
-/*	$NetBSD: ticket_flags.c,v 1.2 2017/01/28 21:31:46 christos Exp $	*/
+/*	$NetBSD: ticket_flags.c,v 1.1 2011/04/13 18:14:46 elric Exp $	*/
 
 /*
  * Copyright (c) 2004 Kungliga Tekniska Högskolan

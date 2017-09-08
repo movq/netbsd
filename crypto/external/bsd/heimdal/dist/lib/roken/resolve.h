@@ -1,4 +1,4 @@
-/*	$NetBSD: resolve.h,v 1.2 2017/01/28 21:31:50 christos Exp $	*/
+/*	$NetBSD: resolve.h,v 1.1 2011/04/13 18:15:42 elric Exp $	*/
 
 /*
  * Copyright (c) 1995 - 2002 Kungliga Tekniska Högskolan
@@ -33,7 +33,7 @@
  * SUCH DAMAGE.
  */
 
-/* Id */
+/* $Id: resolve.h,v 1.1 2011/04/13 18:15:42 elric Exp $ */
 
 #ifndef __RESOLVE_H__
 #define __RESOLVE_H__

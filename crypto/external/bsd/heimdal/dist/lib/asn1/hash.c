@@ -1,4 +1,4 @@
-/*	$NetBSD: hash.c,v 1.2 2017/01/28 21:31:45 christos Exp $	*/
+/*	$NetBSD: hash.c,v 1.1 2011/04/13 18:14:41 elric Exp $	*/
 
 /*
  * Copyright (c) 1997 Kungliga Tekniska Högskolan
@@ -39,7 +39,7 @@
 
 #include "gen_locl.h"
 
-__RCSID("$NetBSD: hash.c,v 1.2 2017/01/28 21:31:45 christos Exp $");
+__RCSID("$NetBSD: hash.c,v 1.1 2011/04/13 18:14:41 elric Exp $");
 
 static Hashentry *_search(Hashtab * htab,	/* The hash table */
 			  void *ptr);	/* And key */

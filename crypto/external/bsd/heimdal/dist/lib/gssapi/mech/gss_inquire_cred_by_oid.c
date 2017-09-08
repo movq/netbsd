@@ -1,4 +1,4 @@
-/*	$NetBSD: gss_inquire_cred_by_oid.c,v 1.2 2017/01/28 21:31:46 christos Exp $	*/
+/*	$NetBSD: gss_inquire_cred_by_oid.c,v 1.1 2011/04/13 18:14:46 elric Exp $	*/
 
 /*
  * Copyright (c) 2004, PADL Software Pty Ltd.
@@ -36,7 +36,7 @@
 
 GSSAPI_LIB_FUNCTION OM_uint32 GSSAPI_LIB_CALL
 gss_inquire_cred_by_oid (OM_uint32 *minor_status,
-			 gss_const_cred_id_t cred_handle,
+			 const gss_cred_id_t cred_handle,
 			 const gss_OID desired_object,
 			 gss_buffer_set_t *data_set)
 {
@@ -54,7 +54,7 @@ gss_inquire_cred_by_oid (OM_uint32 *minor_status,
 
 	HEIM_SLIST_FOREACH(mc, &cred->gc_mc, gmc_link) {
 		gss_buffer_set_t rset = GSS_C_NO_BUFFER_SET;
-		size_t i;
+		int i;
 
 		m = mc->gmc_mech;
 		if (m == NULL) {

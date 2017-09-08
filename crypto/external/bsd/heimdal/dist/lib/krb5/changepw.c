@@ -1,4 +1,4 @@
-/*	$NetBSD: changepw.c,v 1.2 2017/01/28 21:31:49 christos Exp $	*/
+/*	$NetBSD: changepw.c,v 1.1 2011/04/13 18:15:31 elric Exp $	*/
 
 /*
  * Copyright (c) 1997 - 2005 Kungliga Tekniska Högskolan
@@ -33,6 +33,8 @@
  * SUCH DAMAGE.
  */
 
+#define KRB5_DEPRECATED
+
 #include "krb5_locl.h"
 
 #undef __attribute__
@@ -42,7 +44,7 @@
 static void
 str2data (krb5_data *d,
 	  const char *fmt,
-	  ...) __attribute__ ((__format__ (__printf__, 2, 3)));
+	  ...) __attribute__ ((format (printf, 2, 3)));
 
 static void
 str2data (krb5_data *d,
@@ -173,7 +175,7 @@ setpw_send_request (krb5_context context,
     krb5_data krb_priv_data;
     krb5_data pwd_data;
     ChangePasswdDataMS chpw;
-    size_t len = 0;
+    size_t len;
     u_char header[4 + 6];
     u_char *p;
     struct iovec iov[3];
@@ -199,7 +201,7 @@ setpw_send_request (krb5_context context,
 	chpw.targname = NULL;
 	chpw.targrealm = NULL;
     }
-
+	
     ASN1_MALLOC_ENCODE(ChangePasswdDataMS, pwd_data.data, pwd_data.length,
 		       &chpw, &len, ret);
     if (ret) {
@@ -276,7 +278,7 @@ process_reply (krb5_context context,
 {
     krb5_error_code ret;
     u_char reply[1024 * 3];
-    size_t len;
+    ssize_t len;
     uint16_t pkt_len, pkt_ver;
     krb5_data ap_rep_data;
     int save_errno;
@@ -304,11 +306,7 @@ process_reply (krb5_context context,
 	    _krb5_get_int(reply, &size, 4);
 	    if (size + 4 < len)
 		continue;
-	    if (sizeof(reply) - 4 < size) {
-		krb5_set_error_message(context, ERANGE, "size from server too large %s", host);
-		return ERANGE;
-	    }
-	    memmove(reply, reply + 4, size);
+	    memmove(reply, reply + 4, size);		
 	    len = size;
 	    break;
 	}
@@ -332,7 +330,7 @@ process_reply (krb5_context context,
 
     if (len < 6) {
 	str2data (result_string, "server %s sent to too short message "
-		  "(%llu bytes)", host, (unsigned long long)len);
+		  "(%ld bytes)", host, (long)len);
 	*result_code = KRB5_KPASSWD_MALFORMED;
 	return 0;
     }
@@ -500,7 +498,7 @@ static struct kpwd_proc {
 	chgpw_send_request,
 	process_reply
     },
-    { NULL, 0, NULL, NULL }
+    { NULL }
 };
 
 /*
@@ -592,7 +590,7 @@ change_password_loop (krb5_context	context,
 
 		if (!replied) {
 		    replied = 0;
-
+		
 		    ret = (*proc->send_req) (context,
 					     &auth_context,
 					     creds,
@@ -690,6 +688,7 @@ find_chpw_proto(const char *name)
  * @ingroup @krb5_deprecated
  */
 
+KRB5_DEPRECATED
 KRB5_LIB_FUNCTION krb5_error_code KRB5_LIB_CALL
 krb5_change_password (krb5_context	context,
 		      krb5_creds	*creds,
@@ -697,7 +696,6 @@ krb5_change_password (krb5_context	context,
 		      int		*result_code,
 		      krb5_data		*result_code_string,
 		      krb5_data		*result_string)
-    KRB5_DEPRECATED_FUNCTION("Use X instead")
 {
     struct kpwd_proc *p = find_chpw_proto("change password");
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: unwrap.c,v 1.2 2017/01/28 21:31:46 christos Exp $	*/
+/*	$NetBSD: unwrap.c,v 1.1 2011/04/13 18:14:45 elric Exp $	*/
 
 /*
  * Copyright (c) 1997 - 2004 Kungliga Tekniska Högskolan
@@ -56,7 +56,7 @@ unwrap_des
   DES_key_schedule schedule;
   DES_cblock deskey;
   DES_cblock zero;
-  size_t i;
+  int i;
   uint32_t seq_number;
   size_t padlength;
   OM_uint32 ret;
@@ -100,7 +100,6 @@ unwrap_des
   if(cstate) {
       /* decrypt data */
       memcpy (&deskey, key->keyvalue.data, sizeof(deskey));
-      memset (&zero, 0, sizeof(zero));
 
       for (i = 0; i < sizeof(deskey); ++i)
 	  deskey[i] ^= 0xf0;
@@ -384,7 +383,7 @@ unwrap_des3
 
 OM_uint32 GSSAPI_CALLCONV _gsskrb5_unwrap
            (OM_uint32 * minor_status,
-            gss_const_ctx_id_t context_handle,
+            const gss_ctx_id_t context_handle,
             const gss_buffer_t input_message_buffer,
             gss_buffer_t output_message_buffer,
             int * conf_state,
@@ -394,6 +393,7 @@ OM_uint32 GSSAPI_CALLCONV _gsskrb5_unwrap
   krb5_keyblock *key;
   krb5_context context;
   OM_uint32 ret;
+  krb5_keytype keytype;
   gsskrb5_ctx ctx = (gsskrb5_ctx) context_handle;
 
   output_message_buffer->value = NULL;
@@ -415,13 +415,12 @@ OM_uint32 GSSAPI_CALLCONV _gsskrb5_unwrap
       *minor_status = ret;
       return GSS_S_FAILURE;
   }
+  krb5_enctype_to_keytype (context, key->keytype, &keytype);
 
   *minor_status = 0;
 
-  switch (key->keytype) {
-  case KRB5_ENCTYPE_DES_CBC_CRC :
-  case KRB5_ENCTYPE_DES_CBC_MD4 :
-  case KRB5_ENCTYPE_DES_CBC_MD5 :
+  switch (keytype) {
+  case KEYTYPE_DES :
 #ifdef HEIM_WEAK_CRYPTO
       ret = unwrap_des (minor_status, ctx,
 			input_message_buffer, output_message_buffer,
@@ -430,14 +429,13 @@ OM_uint32 GSSAPI_CALLCONV _gsskrb5_unwrap
       ret = GSS_S_FAILURE;
 #endif
       break;
-  case KRB5_ENCTYPE_DES3_CBC_MD5 :
-  case KRB5_ENCTYPE_DES3_CBC_SHA1 :
+  case KEYTYPE_DES3 :
       ret = unwrap_des3 (minor_status, ctx, context,
 			 input_message_buffer, output_message_buffer,
 			 conf_state, qop_state, key);
       break;
-  case KRB5_ENCTYPE_ARCFOUR_HMAC_MD5:
-  case KRB5_ENCTYPE_ARCFOUR_HMAC_MD5_56:
+  case KEYTYPE_ARCFOUR:
+  case KEYTYPE_ARCFOUR_56:
       ret = _gssapi_unwrap_arcfour (minor_status, ctx, context,
 				    input_message_buffer, output_message_buffer,
 				    conf_state, qop_state, key);

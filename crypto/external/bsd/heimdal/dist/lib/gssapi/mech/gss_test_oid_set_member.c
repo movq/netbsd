@@ -1,4 +1,4 @@
-/*	$NetBSD: gss_test_oid_set_member.c,v 1.2 2017/01/28 21:31:46 christos Exp $	*/
+/*	$NetBSD: gss_test_oid_set_member.c,v 1.1 2011/04/13 18:14:47 elric Exp $	*/
 
 /*-
  * Copyright (c) 2005 Doug Rabson
@@ -36,7 +36,7 @@ gss_test_oid_set_member(OM_uint32 *minor_status,
     const gss_OID_set set,
     int *present)
 {
-	size_t i;
+	int i;
 
 	*present = 0;
 	for (i = 0; i < set->count; i++)

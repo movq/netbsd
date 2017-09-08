@@ -1,4 +1,4 @@
-/*	$NetBSD: pkcs12.h,v 1.2 2017/01/28 21:31:47 christos Exp $	*/
+/*	$NetBSD: pkcs12.h,v 1.1 2011/04/13 18:14:50 elric Exp $	*/
 
 /*
  * Copyright (c) 2006 Kungliga Tekniska Högskolan
@@ -34,7 +34,7 @@
  */
 
 /*
- * Id
+ * $Id: pkcs12.h,v 1.1 2011/04/13 18:14:50 elric Exp $
  */
 
 #ifndef _HEIM_PKCS12_H

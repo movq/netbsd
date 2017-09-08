@@ -1,7 +1,7 @@
 #!/usr/local/bin/python
 # -*- coding: iso-8859-1 -*-
 
-# Id
+# $Id: gen-combining.py,v 1.1 2011/04/13 18:15:58 elric Exp $
 
 # Copyright (c) 2004 Kungliga Tekniska Högskolan
 # (Royal Institute of Technology, Stockholm, Sweden). 
@@ -73,8 +73,8 @@ extern const size_t _wind_combining_table_size;
 
 combining_c.file.write(
 '''
-#include "combining_table.h"
 #include <stdlib.h>
+#include "combining_table.h"
 
 const struct translation _wind_combining_table[] = {
 ''')

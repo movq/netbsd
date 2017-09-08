@@ -1,6 +1,6 @@
 #!/usr/pkg/bin/perl
 #
-# Id
+# $Id: gen-des.pl,v 1.1 2011/04/13 18:14:50 elric Exp $
 
 use strict;
 

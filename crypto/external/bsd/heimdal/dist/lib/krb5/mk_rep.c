@@ -1,4 +1,4 @@
-/*	$NetBSD: mk_rep.c,v 1.2 2017/01/28 21:31:49 christos Exp $	*/
+/*	$NetBSD: mk_rep.c,v 1.1 2011/04/13 18:15:36 elric Exp $	*/
 
 /*
  * Copyright (c) 1997 - 2003 Kungliga Tekniska Högskolan
@@ -45,7 +45,7 @@ krb5_mk_rep(krb5_context context,
     EncAPRepPart body;
     u_char *buf = NULL;
     size_t buf_size;
-    size_t len = 0;
+    size_t len;
     krb5_crypto crypto;
 
     ap.pvno = 5;
@@ -69,7 +69,9 @@ krb5_mk_rep(krb5_context context,
 				 &body.subkey);
 	if (ret) {
 	    free_EncAPRepPart(&body);
-	    return krb5_enomem(context);
+	    krb5_set_error_message(context, ENOMEM,
+				   N_("malloc: out of memory", ""));
+	    return ENOMEM;
 	}
     } else
 	body.subkey = NULL;
@@ -80,8 +82,9 @@ krb5_mk_rep(krb5_context context,
 				      &auth_context->local_seqnumber);
 	ALLOC(body.seq_number, 1);
 	if (body.seq_number == NULL) {
+	    krb5_set_error_message(context, ENOMEM, "malloc: out of memory");
 	    free_EncAPRepPart(&body);
-	    return krb5_enomem(context);
+	    return ENOMEM;
 	}
 	*(body.seq_number) = auth_context->local_seqnumber;
     } else

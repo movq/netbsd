@@ -1,4 +1,4 @@
-/*	$NetBSD: lex.l,v 1.2 2017/01/28 21:31:45 christos Exp $	*/
+/*	$NetBSD: lex.l,v 1.1 2011/04/13 18:14:41 elric Exp $	*/
 
 %{
 /*
@@ -34,7 +34,7 @@
  * SUCH DAMAGE.
  */
 
-/* Id */
+/* $Id: lex.l,v 1.1 2011/04/13 18:14:41 elric Exp $ */
 
 #ifdef HAVE_CONFIG_H
 #include <config.h>
@@ -42,7 +42,6 @@
 #include <stdio.h>
 #include <stdarg.h>
 #include <stdlib.h>
-#include <stdint.h>
 #include <string.h>
 #ifdef HAVE_UNISTD_H
 #include <unistd.h>
@@ -219,7 +218,7 @@ WITH			{ return kw_WITH; }
 			    char *p = buf;
 			    int f = 0;
 			    int skip_ws = 0;
-
+		
 			    while((c = input()) != EOF) {
 				if(isspace(c) && skip_ws) {
 				    if(c == '\n')
@@ -227,7 +226,7 @@ WITH			{ return kw_WITH; }
 				    continue;
 				}
 				skip_ws = 0;
-
+			
 				if(c == '"') {
 				    if(f) {
 					*p++ = '"';
@@ -258,7 +257,7 @@ WITH			{ return kw_WITH; }
 			}
 
 -?0x[0-9A-Fa-f]+|-?[0-9]+ { char *e, *y = yytext;
-			  yylval.constant = strtoll((const char *)yytext,
+			  yylval.constant = strtol((const char *)yytext,
 						   &e, 0);
 			  if(e == y)
 			    lex_error_message("malformed constant (%s)", yytext);

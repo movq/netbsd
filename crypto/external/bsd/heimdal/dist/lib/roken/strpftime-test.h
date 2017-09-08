@@ -1,4 +1,4 @@
-/*	$NetBSD: strpftime-test.h,v 1.2 2017/01/28 21:31:50 christos Exp $	*/
+/*	$NetBSD: strpftime-test.h,v 1.1 2011/04/13 18:15:43 elric Exp $	*/
 
 /*
  * Copyright (c) 2007 Kungliga Tekniska Högskolan
@@ -33,7 +33,7 @@
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-/* Id: snprintf-test.h 10377 2001-07-19 18:39:14Z assar  */
+/* Id: snprintf-test.h 10377 2001-07-19 18:39:14Z assar */
 
 #ifndef __STRFTIME_TEST_H__
 #define __STRFTIME_TEST_H__

@@ -1,5 +1,5 @@
 
-@c $NetBSD: copyright.texi,v 1.2 2017/01/28 21:31:44 christos Exp $
+@c $NetBSD: copyright.texi,v 1.1 2011/04/13 18:14:33 elric Exp $
 @macro copynext{} 
 @vskip 20pt plus 1fil
 @end macro
@@ -85,7 +85,7 @@ or implied warranty.
 
 @heading The Regents of the University of California
 
-The parts of the libroken, most of libtelnet, telnet, ftp,
+The parts of the libroken, most of libtelnet, libeditline, telnet, ftp,
 and popper.
 
 @verbatim
@@ -210,17 +210,13 @@ SUCH DAMAGE.
 @heading PADL Software Pty Ltd
 
 @table @asis
-@item GSS-API CFX, SPNEGO, naming extensions, API extensions.
+@item CFX implementation for GSS-API krb5 mech.
 @item KCM credential cache.
-@item HDB LDAP backend.
 @end table
 
 @verbatim
 
-Copyright (c) 2003-2011, PADL Software Pty Ltd.
-Copyright (c) 2004, Andrew Bartlett.
-Copyright (c) 2003 - 2008, Kungliga Tekniska Högskolan
-Copyright (c) 2015, Timothy Pearson.
+Copyright (c) 2003, PADL Software Pty Ltd.
 All rights reserved.
 
 Redistribution and use in source and binary forms, with or without
@@ -447,7 +443,7 @@ Windows support
 
 @verbatim
 
-Copyright (c) 2009-2015, Secure Endpoints Inc.
+Copyright (c) 2009, Secure Endpoints Inc.
 All rights reserved.
 
 Redistribution and use in source and binary forms, with or without

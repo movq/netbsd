@@ -1,4 +1,4 @@
-/*	$NetBSD: bn_mp_shrink.c,v 1.2 2017/01/28 21:31:47 christos Exp $	*/
+/*	$NetBSD: bn_mp_shrink.c,v 1.1 2011/04/13 18:14:54 elric Exp $	*/
 
 #include <tommath.h>
 #ifdef BN_MP_SHRINK_C
@@ -21,22 +21,17 @@
 int mp_shrink (mp_int * a)
 {
   mp_digit *tmp;
-  int used = 1;
-
-  if(a->used > 0)
-    used = a->used;
-
-  if (a->alloc != used) {
-    if ((tmp = OPT_CAST(mp_digit) XREALLOC (a->dp, sizeof (mp_digit) * used)) == NULL) {
+  if (a->alloc != a->used && a->used > 0) {
+    if ((tmp = OPT_CAST(mp_digit) XREALLOC (a->dp, sizeof (mp_digit) * a->used)) == NULL) {
       return MP_MEM;
     }
     a->dp    = tmp;
-    a->alloc = used;
+    a->alloc = a->used;
   }
   return MP_OKAY;
 }
 #endif
 
-/* Source: /cvs/libtom/libtommath/bn_mp_shrink.c,v  */
-/* Revision: 1.4  */
-/* Date: 2006/12/28 01:25:13  */
+/* Source: /cvs/libtom/libtommath/bn_mp_shrink.c,v */
+/* Revision: 1.4 */
+/* Date: 2006/12/28 01:25:13 */

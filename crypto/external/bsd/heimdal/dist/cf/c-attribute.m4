@@ -1,5 +1,5 @@
 dnl
-dnl Id
+dnl $Id: c-attribute.m4,v 1.1 2011/04/13 18:14:32 elric Exp $
 dnl
 
 dnl

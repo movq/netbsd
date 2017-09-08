@@ -1,4 +1,4 @@
-/*	$NetBSD: hprop.h,v 1.2 2017/01/28 21:31:44 christos Exp $	*/
+/*	$NetBSD: hprop.h,v 1.1 2011/04/13 18:14:36 elric Exp $	*/
 
 /*
  * Copyright (c) 1997 - 2000 Kungliga Tekniska Högskolan
@@ -33,7 +33,7 @@
  * SUCH DAMAGE.
  */
 
-/* Id */
+/* $Id: hprop.h,v 1.1 2011/04/13 18:14:36 elric Exp $ */
 
 #ifndef __HPROP_H__
 #define __HPROP_H__
@@ -48,7 +48,7 @@ struct prop_data{
 
 #define HPROP_VERSION "hprop-0.0"
 #define HPROP_NAME "hprop"
-#define HPROP_KEYTAB "HDBGET:"
+#define HPROP_KEYTAB "HDB:"
 #define HPROP_PORT 754
 
 #ifndef NEVERDATE

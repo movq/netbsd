@@ -1,4 +1,4 @@
-/*	$NetBSD: gsskrb5_locl.h,v 1.2 2017/01/28 21:31:46 christos Exp $	*/
+/*	$NetBSD: gsskrb5_locl.h,v 1.1 2011/04/13 18:14:45 elric Exp $	*/
 
 /*
  * Copyright (c) 1997 - 2008 Kungliga Tekniska Högskolan
@@ -33,7 +33,7 @@
  * SUCH DAMAGE.
  */
 
-/* Id */
+/* $Id: gsskrb5_locl.h,v 1.1 2011/04/13 18:14:45 elric Exp $ */
 
 #ifndef GSSKRB5_LOCL_H
 #define GSSKRB5_LOCL_H
@@ -83,7 +83,7 @@ typedef struct gsskrb5_ctx {
   krb5_creds *kcred;
   krb5_ccache ccache;
   struct krb5_ticket *ticket;
-  time_t endtime;
+  OM_uint32 lifetime;
   HEIMDAL_MUTEX ctx_id_mutex;
   struct gss_msg_order *order;
   krb5_keyblock *service_keyblock;
@@ -97,7 +97,7 @@ typedef struct {
 #define GSS_CF_DESTROY_CRED_ON_RELEASE	1
 #define GSS_CF_NO_CI_FLAGS		2
   struct krb5_keytab_data *keytab;
-  time_t endtime;
+  OM_uint32 lifetime;
   gss_cred_usage_t usage;
   gss_OID_set mechanisms;
   struct krb5_ccache_data *ccache;
@@ -135,5 +135,8 @@ extern HEIMDAL_MUTEX gssapi_keytab_mutex;
 #define SC_KEYBLOCK	  0x04
 #define SC_LOCAL_SUBKEY	  0x08
 #define SC_REMOTE_SUBKEY  0x10
+
+/* type to signal that that dns canon maybe should be done */
+#define MAGIC_HOSTBASED_NAME_TYPE 4711
 
 #endif

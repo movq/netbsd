@@ -1,4 +1,4 @@
-/*	$NetBSD: add-random-users.c,v 1.2 2017/01/28 21:31:44 christos Exp $	*/
+/*	$NetBSD: add-random-users.c,v 1.1 2011/04/13 18:14:34 elric Exp $	*/
 
 /*
  * Copyright (c) 2000 - 2001 Kungliga Tekniska Högskolan
@@ -79,7 +79,8 @@ read_words (const char *filename, char ***ret_w)
 }
 
 static void
-add_user (krb5_context ctx, void *hndl, unsigned nwords, char **words)
+add_user (krb5_context context, void *kadm_handle,
+	  unsigned nwords, char **words)
 {
     kadm5_principal_ent_rec princ;
     char name[64];
@@ -95,14 +96,14 @@ add_user (krb5_context ctx, void *hndl, unsigned nwords, char **words)
     mask = KADM5_PRINCIPAL;
 
     memset(&princ, 0, sizeof(princ));
-    ret = krb5_parse_name(ctx, name, &princ.principal);
+    ret = krb5_parse_name(context, name, &princ.principal);
     if (ret)
-	krb5_err(ctx, 1, ret, "krb5_parse_name");
+	krb5_err(context, 1, ret, "krb5_parse_name");
 
-    ret = kadm5_create_principal (hndl, &princ, mask, name);
+    ret = kadm5_create_principal (kadm_handle, &princ, mask, name);
     if (ret)
-	krb5_err (ctx, 1, ret, "kadm5_create_principal");
-    kadm5_free_principal_ent(hndl, &princ);
+	krb5_err (context, 1, ret, "kadm5_create_principal");
+    kadm5_free_principal_ent(kadm_handle, &princ);
     printf ("%s\n", name);
 }
 
@@ -111,38 +112,37 @@ add_users (const char *filename, unsigned n)
 {
     krb5_error_code ret;
     int i;
-    void *hndl;
-    krb5_context ctx;
+    void *kadm_handle;
+    krb5_context context;
     unsigned nwords;
     char **words;
 
-    ret = krb5_init_context(&ctx);
+    ret = krb5_init_context(&context);
     if (ret)
 	errx (1, "krb5_init_context failed: %d", ret);
-    ret = kadm5_s_init_with_password_ctx(ctx,
+    ret = kadm5_s_init_with_password_ctx(context,
 					 KADM5_ADMIN_SERVICE,
 					 NULL,
 					 KADM5_ADMIN_SERVICE,
 					 NULL, 0, 0,
-					 &hndl);
+					 &kadm_handle);
     if(ret)
-	krb5_err(ctx, 1, ret, "kadm5_init_with_password");
+	krb5_err(context, 1, ret, "kadm5_init_with_password");
 
     nwords = read_words (filename, &words);
 
     for (i = 0; i < n; ++i)
-	add_user (ctx, hndl, nwords, words);
-    kadm5_destroy(hndl);
-    krb5_free_context(ctx);
-    free(words);
+	add_user (context, kadm_handle, nwords, words);
+    kadm5_destroy(kadm_handle);
+    krb5_free_context(context);
 }
 
 static int version_flag	= 0;
 static int help_flag	= 0;
 
 static struct getargs args[] = {
-    { "version", 	0,   arg_flag, &version_flag, NULL, NULL },
-    { "help",		0,   arg_flag, &help_flag,    NULL, NULL }
+    { "version", 	0,   arg_flag, &version_flag },
+    { "help",		0,   arg_flag, &help_flag }
 };
 
 static void

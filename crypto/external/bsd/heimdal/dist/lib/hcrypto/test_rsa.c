@@ -1,4 +1,4 @@
-/*	$NetBSD: test_rsa.c,v 1.2 2017/01/28 21:31:47 christos Exp $	*/
+/*	$NetBSD: test_rsa.c,v 1.1 2011/04/13 18:14:51 elric Exp $	*/
 
 /*
  * Copyright (c) 2006 - 2007 Kungliga Tekniska Högskolan
@@ -34,6 +34,9 @@
  */
 
 #include <config.h>
+
+#include <stdio.h>
+
 #include <krb5/roken.h>
 #include <krb5/getarg.h>
 
@@ -148,7 +151,7 @@ cb_func(int a, int b, BN_GENCB *c)
 }
 
 static RSA *
-read_key(ENGINE *engine, const char *keyfile)
+read_key(ENGINE *engine, const char *rsa_key)
 {
     unsigned char buf[1024 * 4];
     const unsigned char *p;
@@ -156,22 +159,22 @@ read_key(ENGINE *engine, const char *keyfile)
     RSA *rsa;
     FILE *f;
 
-    f = fopen(keyfile, "rb");
+    f = fopen(rsa_key, "rb");
     if (f == NULL)
-	err(1, "could not open file %s", keyfile);
+	err(1, "could not open file %s", rsa_key);
     rk_cloexec_file(f);
 
     size = fread(buf, 1, sizeof(buf), f);
     fclose(f);
     if (size == 0)
-	err(1, "failed to read file %s", keyfile);
+	err(1, "failed to read file %s", rsa_key);
     if (size == sizeof(buf))
-	err(1, "key too long in file %s!", keyfile);
+	err(1, "key too long in file %s!", rsa_key);
 
     p = buf;
     rsa = d2i_RSAPrivateKey(NULL, &p, size);
     if (rsa == NULL)
-	err(1, "failed to parse key in file %s", keyfile);
+	err(1, "failed to parse key in file %s", rsa_key);
 
     RSA_set_method(rsa, ENGINE_get_RSA(engine));
 
@@ -333,13 +336,13 @@ main(int argc, char **argv)
 		0x6d, 0x33, 0xf9, 0x40, 0x75, 0x5b, 0x4e, 0xc5, 0x90, 0x35,
 		0x48, 0xab, 0x75, 0x02, 0x09, 0x76, 0x9a, 0xb4, 0x7d, 0x6b
 	    };
-
+	
 	    check_rsa(sha1, sizeof(sha1), rsa, RSA_PKCS1_PADDING);
 	}
-
+	
 	for (i = 0; i < 128; i++) {
 	    unsigned char sha1[20];
-
+	
 	    RAND_bytes(sha1, sizeof(sha1));
 	    check_rsa(sha1, sizeof(sha1), rsa, RSA_PKCS1_PADDING);
 	}
@@ -370,9 +373,9 @@ main(int argc, char **argv)
 
 	e = BN_new();
 	BN_set_word(e, 0x10001);
-
+	
 	BN_GENCB_set(&cb, cb_func, NULL);
-
+	
 	RAND_bytes(&n, sizeof(n));
 	n &= 0x1ff;
 	n += 1024;
@@ -381,7 +384,7 @@ main(int argc, char **argv)
 	    errx(1, "RSA_generate_key_ex");
 
 	BN_free(e);
-
+	
 	for (j = 0; j < 8; j++) {
 	    unsigned char sha1[20];
 	    RAND_bytes(sha1, sizeof(sha1));

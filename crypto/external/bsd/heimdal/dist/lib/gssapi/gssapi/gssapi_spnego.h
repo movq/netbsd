@@ -1,4 +1,4 @@
-/*	$NetBSD: gssapi_spnego.h,v 1.2 2017/01/28 21:31:46 christos Exp $	*/
+/*	$NetBSD: gssapi_spnego.h,v 1.1 2011/04/13 18:14:44 elric Exp $	*/
 
 /*
  * Copyright (c) 1997 - 2006 Kungliga Tekniska Högskolan
@@ -33,7 +33,7 @@
  * SUCH DAMAGE.
  */
 
-/* Id */
+/* $Id: gssapi_spnego.h,v 1.1 2011/04/13 18:14:44 elric Exp $ */
 
 #ifndef GSSAPI_SPNEGO_H_
 #define GSSAPI_SPNEGO_H_

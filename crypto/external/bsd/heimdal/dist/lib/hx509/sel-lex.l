@@ -1,4 +1,4 @@
-/*	$NetBSD: sel-lex.l,v 1.2 2017/01/28 21:31:48 christos Exp $	*/
+/*	$NetBSD: sel-lex.l,v 1.1 2011/04/13 18:15:12 elric Exp $	*/
 
 %{
 /*
@@ -34,12 +34,7 @@
  * SUCH DAMAGE.
  */
 
-/* Id */
-
-#ifdef __GNUC__
-#pragma GCC diagnostic ignored "-Wunused-function"
-#endif
-
+/* $Id: sel-lex.l,v 1.1 2011/04/13 18:15:12 elric Exp $ */
 
 #ifdef HAVE_CONFIG_H
 #include <config.h>

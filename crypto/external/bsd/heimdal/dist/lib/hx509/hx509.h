@@ -1,4 +1,4 @@
-/*	$NetBSD: hx509.h,v 1.2 2017/01/28 21:31:48 christos Exp $	*/
+/*	$NetBSD: hx509.h,v 1.1 2011/04/13 18:15:11 elric Exp $	*/
 
 /*
  * Copyright (c) 2004 - 2007 Kungliga Tekniska Högskolan
@@ -33,7 +33,7 @@
  * SUCH DAMAGE.
  */
 
-/* Id */
+/* $Id: hx509.h,v 1.1 2011/04/13 18:15:11 elric Exp $ */
 
 #ifndef HEIMDAL_HX509_H
 #define HEIMDAL_HX509_H 1
@@ -41,7 +41,6 @@
 #include <krb5/rfc2459_asn1.h>
 #include <stdarg.h>
 #include <stdio.h>
-#include <krb5/heimbase.h>
 
 typedef struct hx509_cert_attribute_data *hx509_cert_attribute;
 typedef struct hx509_cert_data *hx509_cert;

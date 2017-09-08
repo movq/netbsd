@@ -1,4 +1,4 @@
-/*	$NetBSD: compile_et.h,v 1.2 2017/01/28 21:31:45 christos Exp $	*/
+/*	$NetBSD: compile_et.h,v 1.1 2011/04/13 18:14:43 elric Exp $	*/
 
 /*
  * Copyright (c) 1998 - 2000 Kungliga Tekniska Högskolan
@@ -33,7 +33,7 @@
  * SUCH DAMAGE.
  */
 
-/* Id */
+/* $Id: compile_et.h,v 1.1 2011/04/13 18:14:43 elric Exp $ */
 
 #ifndef __COMPILE_ET_H__
 #define __COMPILE_ET_H__

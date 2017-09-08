@@ -1,4 +1,4 @@
-/*	$NetBSD: sample_passwd_check.c,v 1.2 2017/01/28 21:31:49 christos Exp $	*/
+/*	$NetBSD: sample_passwd_check.c,v 1.1 2011/04/13 18:15:30 elric Exp $	*/
 
 /*
  * Copyright (c) 1999 Kungliga Tekniska Högskolan
@@ -32,7 +32,7 @@
  * OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE. */
 
-/* Id */
+/* $Id: sample_passwd_check.c,v 1.1 2011/04/13 18:15:30 elric Exp $ */
 
 #include <string.h>
 #include <stdlib.h>

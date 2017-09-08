@@ -1,7 +1,7 @@
 \input texinfo @c -*- texinfo -*-
-@c $NetBSD: heimdal.texi,v 1.2 2017/01/28 21:31:44 christos Exp $
+@c $NetBSD: heimdal.texi,v 1.1 2011/04/13 18:14:33 elric Exp $
 @c %**start of header
-@c Id
+@c $Id: heimdal.texi,v 1.1 2011/04/13 18:14:33 elric Exp $
 @setfilename heimdal.info
 @settitle HEIMDAL
 @iftex
@@ -85,6 +85,7 @@ Setting up a realm
 * Creating the database::       
 * Modifying the database::      
 * keytabs::                     
+* Serving Kerberos 4/524/kaserver::  
 * Remote administration::       
 * Password changing::           
 * Testing clients and servers::  
@@ -98,7 +99,6 @@ Setting up a realm
 * Using LDAP to store the database::  
 * Providing Kerberos credentials to servers and programs::  
 * Setting up PK-INIT::
-* Debugging Kerberos problems::
 
 Applications
 
@@ -114,6 +114,7 @@ Kerberos 4 issues
 
 * Principal conversion issues::  
 * Converting a version 4 database::  
+* kaserver::                    
 
 Windows compatibility
 

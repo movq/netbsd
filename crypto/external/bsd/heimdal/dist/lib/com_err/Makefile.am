@@ -1,4 +1,4 @@
-# Id
+# $Id: Makefile.am,v 1.1 2011/04/13 18:14:42 elric Exp $
 
 include $(top_srcdir)/Makefile.am.common
 
@@ -13,7 +13,7 @@ endif
 
 libcom_err_la_LIBADD = $(LIB_libintl)
 
-noinst_PROGRAMS = compile_et
+bin_PROGRAMS = compile_et
 
 include_HEADERS = com_err.h com_right.h
 
@@ -25,8 +25,6 @@ dist_libcom_err_la_SOURCES = error.c com_err.c roken_rename.h
 if do_roken_rename
 nodist_libcom_err_la_SOURCES = snprintf.c strlcpy.c
 endif
-
-libcom_err_la_DEPENDENCIES = version-script.map
 
 $(compile_et_OBJECTS): parse.h parse.c ## XXX broken automake 1.4s
 
@@ -40,10 +38,4 @@ snprintf.c:
 strlcpy.c:
 	$(LN_S) $(srcdir)/../roken/strlcpy.c .
 
-EXTRA_DIST = \
-	NTMakefile \
-	com_err.3 \
-	compile_et-version.rc \
-	libcom_err-version.rc \
-	libcom_err-exports.def \
-	version-script.map
+EXTRA_DIST = version-script.map

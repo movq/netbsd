@@ -1,4 +1,4 @@
-/*	$NetBSD: inquire_mechs_for_name.c,v 1.2 2017/01/28 21:31:46 christos Exp $	*/
+/*	$NetBSD: inquire_mechs_for_name.c,v 1.1 2011/04/13 18:14:48 elric Exp $	*/
 
 /*
  * Copyright (c) 2006 Kungliga Tekniska Högskolan
@@ -38,7 +38,7 @@
 OM_uint32 GSSAPI_CALLCONV
 _gss_ntlm_inquire_mechs_for_name (
             OM_uint32 * minor_status,
-            gss_const_name_t input_name,
+            const gss_name_t input_name,
             gss_OID_set * mech_types
            )
 {

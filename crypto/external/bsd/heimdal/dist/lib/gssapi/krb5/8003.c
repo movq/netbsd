@@ -1,4 +1,4 @@
-/*	$NetBSD: 8003.c,v 1.2 2017/01/28 21:31:46 christos Exp $	*/
+/*	$NetBSD: 8003.c,v 1.1 2011/04/13 18:14:44 elric Exp $	*/
 
 /*
  * Copyright (c) 1997 - 2003 Kungliga Tekniska Högskolan
@@ -94,7 +94,7 @@ hash_input_chan_bindings (const gss_channel_bindings_t b,
   _gsskrb5_encode_om_uint32 (b->acceptor_address.length, num);
   EVP_DigestUpdate(ctx, num, sizeof(num));
   if (b->acceptor_address.length)
-      EVP_DigestUpdate(ctx,
+      EVP_DigestUpdate(ctx, 
 		       b->acceptor_address.value,
 		       b->acceptor_address.length);
   _gsskrb5_encode_om_uint32 (b->application_data.length, num);
@@ -159,7 +159,7 @@ _gsskrb5_create_8003_checksum (
 	*p++ = (fwd_data->length >> 8) & 0xFF;    /* Dlgth  */
 	memcpy(p, (unsigned char *) fwd_data->data, fwd_data->length);
 
-	/* p += fwd_data->length; */ /* commented out to quiet warning */
+	p += fwd_data->length;
     }
 
     return GSS_S_COMPLETE;

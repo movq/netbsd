@@ -1,4 +1,4 @@
-/*	$NetBSD: rtbl.c,v 1.2 2017/01/28 21:31:50 christos Exp $	*/
+/*	$NetBSD: rtbl.c,v 1.1 2011/04/13 18:15:43 elric Exp $	*/
 
 /*
  * Copyright (c) 2000, 2002, 2004 Kungliga Tekniska Högskolan
@@ -36,7 +36,6 @@
 #include <config.h>
 
 #include <krb5/roken.h>
-#include <ctype.h>
 #include <krb5/rtbl.h>
 
 struct column_entry {
@@ -171,7 +170,7 @@ rtbl_new_row(rtbl_t table)
 	if(table->columns[c]->num_rows == max_rows)
 	    continue;
 	tmp = realloc(table->columns[c]->rows,
-		      max_rows * sizeof(table->columns[c]->rows[0]));
+		      max_rows * sizeof(table->columns[c]->rows));
 	if(tmp == NULL)
 	    return ENOMEM;
 	table->columns[c]->rows = tmp;
@@ -191,7 +190,7 @@ column_compute_width (rtbl_t table, struct column_data *column)
     if(table->flags & RTBL_HEADER_STYLE_NONE)
 	column->width = 0;
     else
-	column->width = (int)strlen (column->header);
+	column->width = strlen (column->header);
     for (i = 0; i < column->num_rows; i++)
 	column->width = max (column->width, (int) strlen (column->rows[i].data));
 }
@@ -365,18 +364,6 @@ rtbl_add_column_entryv (rtbl_t table, const char *column, const char *fmt, ...)
 ROKEN_LIB_FUNCTION int ROKEN_LIB_CALL
 rtbl_format (rtbl_t table, FILE * f)
 {
-    char *str = rtbl_format_str(table);
-    if (str == NULL)
-	return ENOMEM;
-    fprintf(f, "%s", str);
-    free(str);
-    return 0;
-}
-
-static char *
-rtbl_format_pretty(rtbl_t table)
-{
-    struct rk_strpool *p = NULL;
     size_t i, j;
 
     for (i = 0; i < table->num_columns; i++)
@@ -386,18 +373,16 @@ rtbl_format_pretty(rtbl_t table)
 	    struct column_data *c = table->columns[i];
 
 	    if(table->column_separator != NULL && i > 0)
-		p = rk_strpoolprintf(p, "%s", table->column_separator);
-	    p = rk_strpoolprintf(p, "%s", get_column_prefix (table, c));
-	    if (c == NULL) {
-		/* do nothing if no column */
-	    } else if(i == table->num_columns - 1 && c->suffix == NULL)
+		fprintf (f, "%s", table->column_separator);
+	    fprintf (f, "%s", get_column_prefix (table, c));
+	    if(i == table->num_columns - 1 && c->suffix == NULL)
 		/* last column, so no need to pad with spaces */
-		p = rk_strpoolprintf(p, "%-*s", 0, c->header);
+		fprintf (f, "%-*s", 0, c->header);
 	    else
-		p = rk_strpoolprintf(p, "%-*s", (int)c->width, c->header);
-	    p = rk_strpoolprintf(p, "%s", get_column_suffix (table, c));
+		fprintf (f, "%-*s", (int)c->width, c->header);
+	    fprintf (f, "%s", get_column_suffix (table, c));
 	}
-	p = rk_strpoolprintf(p, "\n");
+	fprintf (f, "\n");
     }
 
     for (j = 0;; j++) {
@@ -420,7 +405,7 @@ rtbl_format_pretty(rtbl_t table)
 	    struct column_data *c = table->columns[i];
 
 	    if(table->column_separator != NULL && i > 0)
-		p = rk_strpoolprintf(p, "%s", table->column_separator);
+		fprintf (f, "%s", table->column_separator);
 
 	    w = c->width;
 
@@ -431,72 +416,16 @@ rtbl_format_pretty(rtbl_t table)
 		else
 		    w = -w;
 	    }
-	    p = rk_strpoolprintf(p, "%s", get_column_prefix (table, c));
+	    fprintf (f, "%s", get_column_prefix (table, c));
 	    if (c->num_rows <= j)
-		p = rk_strpoolprintf(p, "%*s", w, "");
+		fprintf (f, "%*s", w, "");
 	    else
-		p = rk_strpoolprintf(p, "%*s", w, c->rows[j].data);
-	    p = rk_strpoolprintf(p, "%s", get_column_suffix (table, c));
+		fprintf (f, "%*s", w, c->rows[j].data);
+	    fprintf (f, "%s", get_column_suffix (table, c));
 	}
-	p = rk_strpoolprintf(p, "\n");
+	fprintf (f, "\n");
     }
-
-    return rk_strpoolcollect(p);
-}
-
-static char *
-rtbl_format_json(rtbl_t table)
-{
-    struct rk_strpool *p = NULL;
-    size_t i, j;
-    int comma;
-
-    p = rk_strpoolprintf(p, "[");
-    for (j = 0;; j++) {
-	int flag = 0;
-
-	/* are there any more rows left? */
-	for (i = 0; flag == 0 && i < table->num_columns; ++i) {
-	    struct column_data *c = table->columns[i];
-
-	    if (c->num_rows > j) {
-		++flag;
-		break;
-	    }
-	}
-	if (flag == 0)
-	    break;
-
-	p = rk_strpoolprintf(p, "%s{", j > 0 ? "," : "");
-
-	comma = 0;
-	for (i = 0; i < table->num_columns; i++) {
-	    struct column_data *c = table->columns[i];
-
-	    if (c->num_rows > j) {
-		char *header = c->header;
-		while (isspace((int)header[0])) /* trim off prefixed whitespace */
-		    header++;
-		p = rk_strpoolprintf(p, "%s\"%s\" : \"%s\"",
-				     comma ? "," : "", header,
-				     c->rows[j].data);
-		comma = 1;
-	    }
-	}
-	p = rk_strpoolprintf(p, "}");
-    }
-    p = rk_strpoolprintf(p, "]");
-
-    return rk_strpoolcollect(p);
-}
-
-ROKEN_LIB_FUNCTION char * ROKEN_LIB_CALL
-rtbl_format_str (rtbl_t table)
-{
-    if (table->flags & RTBL_JSON)
-	return rtbl_format_json(table);
-
-    return rtbl_format_pretty(table);
+    return 0;
 }
 
 #ifdef TEST

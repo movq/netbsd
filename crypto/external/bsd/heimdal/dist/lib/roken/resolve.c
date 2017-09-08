@@ -1,4 +1,4 @@
-/*	$NetBSD: resolve.c,v 1.5 2017/01/28 21:31:50 christos Exp $	*/
+/*	$NetBSD: resolve.c,v 1.1 2011/04/13 18:15:42 elric Exp $	*/
 
 /*
  * Copyright (c) 1995 - 2006 Kungliga Tekniska Högskolan
@@ -196,7 +196,7 @@ parse_record(const unsigned char *data, const unsigned char *end_data,
 	    dns_free_rr(rr);
 	    return -1;
 	}
-	if ((size_t)status + 2 > size) {
+	if (status + 2 > size) {
 	    dns_free_rr(rr);
 	    return -1;
 	}
@@ -219,7 +219,7 @@ parse_record(const unsigned char *data, const unsigned char *end_data,
 	    dns_free_rr(rr);
 	    return -1;
 	}
-	if ((size_t)status + 6 > size) {
+	if (status + 6 > size) {
 	    dns_free_rr(rr);
 	    return -1;
 	}
@@ -239,7 +239,7 @@ parse_record(const unsigned char *data, const unsigned char *end_data,
 	break;
     }
     case rk_ns_t_txt:{
-	if(size == 0 || size < (unsigned)(*p + 1)) {
+	if(size == 0 || size < *p + 1) {
 	    dns_free_rr(rr);
 	    return -1;
 	}
@@ -286,7 +286,7 @@ parse_record(const unsigned char *data, const unsigned char *end_data,
 	    dns_free_rr(rr);
 	    return -1;
 	}
-	if ((size_t)status + 18 > size) {
+	if (status + 18 > size) {
 	    dns_free_rr(rr);
 	    return -1;
 	}
@@ -411,7 +411,7 @@ parse_reply(const unsigned char *data, size_t len)
 {
     const unsigned char *p;
     int status;
-    size_t i;
+    int i;
     char host[MAXDNAME];
     const unsigned char *end_data = data + len;
     struct rk_dns_reply *r;
@@ -530,7 +530,7 @@ dns_lookup_int(const char *domain, int rr_class, int rr_type)
     struct sockaddr_storage from;
     uint32_t fromsize = sizeof(from);
     dns_handle_t handle;
-
+    
     handle = dns_open(NULL);
     if (handle == NULL)
 	return NULL;
@@ -591,9 +591,6 @@ dns_lookup_int(const char *domain, int rr_class, int rr_type)
     len = min(len, size);
     r = parse_reply(reply, len);
     free(reply);
-
-    resolve_free_handle(handle);
-
     return r;
 }
 
@@ -632,6 +629,11 @@ rk_dns_srv_order(struct rk_dns_reply *r)
     struct rk_resource_record *rr;
     int num_srv = 0;
 
+#if defined(HAVE_INITSTATE) && defined(HAVE_SETSTATE)
+    int state[256 / sizeof(int)];
+    char *oldstate;
+#endif
+
     rk_random_init();
 
     for(rr = r->head; rr; rr = rr->next)
@@ -659,65 +661,53 @@ rk_dns_srv_order(struct rk_dns_reply *r)
     /* sort them by priority and weight */
     qsort(srvs, num_srv, sizeof(*srvs), compare_srv);
 
+#if defined(HAVE_INITSTATE) && defined(HAVE_SETSTATE)
+    oldstate = initstate(time(NULL), (char*)state, sizeof(state));
+#endif
+
     headp = &r->head;
 
-    for (ss = srvs; ss < srvs + num_srv; ) {
-	int sum, zeros, rnd, count; /* zeros -> weight scaling */
+    for(ss = srvs; ss < srvs + num_srv; ) {
+	int sum, rnd, count;
 	struct rk_resource_record **ee, **tt;
-
-	/*
-	 * find the last record with the same priority and count the sum of all
-	 * weights
-	 */
-	for (sum = 0, zeros = 0, tt = ss; tt < srvs + num_srv; tt++) {
+	/* find the last record with the same priority and count the
+           sum of all weights */
+	for(sum = 0, tt = ss; tt < srvs + num_srv; tt++) {
 	    assert(*tt != NULL);
 	    if((*tt)->u.srv->priority != (*ss)->u.srv->priority)
 		break;
 	    sum += (*tt)->u.srv->weight;
-	    if ((*tt)->u.srv->weight == 0)
-		zeros++;
 	}
-	/* make sure scale (`zeros') is > 0 then scale out */
-	sum += zeros ? 1 : zeros++;
-	sum *= zeros;
 	ee = tt;
-
-	/*
-	 * ss is now the first record of this priority and ee is the first of
-	 * the next or the first past the end of srvs
-	 */
-	while (ss < ee) {
-	    rnd = rk_random() % sum + 1;
-	    for (count = 0, tt = ss; tt < ee; tt++) {
-		if (*tt == NULL)
-		    continue;   /* this one's already been picked */
-		if ((*tt)->u.srv->weight == 0)
-		    count++;
-		else
-		    count += (*tt)->u.srv->weight * zeros;
-		if (count >= rnd)
+	/* ss is now the first record of this priority and ee is the
+           first of the next */
+	while(ss < ee) {
+	    rnd = rk_random() % (sum + 1);
+	    for(count = 0, tt = ss; ; tt++) {
+		if(*tt == NULL)
+		    continue;
+		count += (*tt)->u.srv->weight;
+		if(count >= rnd)
 		    break;
 	    }
+
 	    assert(tt < ee);
 
-	    /* push the selected record */
+	    /* insert the selected record at the tail (of the head) of
+               the list */
 	    (*tt)->next = *headp;
 	    *headp = *tt;
 	    headp = &(*tt)->next;
-	    /*
-	     * reduce the sum so the next iteration is sure to reach the random
-	     * total after examining all the remaining records.
-	     */
-	    if ((*tt)->u.srv->weight == 0)
-		sum--;
-	    else
-		sum -= (*tt)->u.srv->weight * zeros;
+	    sum -= (*tt)->u.srv->weight;
 	    *tt = NULL;
-	    while (ss < ee && *ss == NULL)
+	    while(ss < ee && *ss == NULL)
 		ss++;
 	}
     }
 
+#if defined(HAVE_INITSTATE) && defined(HAVE_SETSTATE)
+    setstate(oldstate);
+#endif
     free(srvs);
     return;
 }

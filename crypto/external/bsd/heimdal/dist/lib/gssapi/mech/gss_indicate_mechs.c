@@ -1,4 +1,4 @@
-/*	$NetBSD: gss_indicate_mechs.c,v 1.2 2017/01/28 21:31:46 christos Exp $	*/
+/*	$NetBSD: gss_indicate_mechs.c,v 1.1 2011/04/13 18:14:46 elric Exp $	*/
 
 /*-
  * Copyright (c) 2005 Doug Rabson
@@ -37,15 +37,14 @@ gss_indicate_mechs(OM_uint32 *minor_status,
 	struct _gss_mech_switch *m;
 	OM_uint32 major_status;
 	gss_OID_set set;
-	size_t i;
+	int i;
 
 	_gss_load_mech();
 
 	major_status = gss_create_empty_oid_set(minor_status, mech_set);
 	if (major_status)
 		return (major_status);
-
-        /* XXX We ignore ENOMEM from gss_add_oid_set_member() */
+	
 	HEIM_SLIST_FOREACH(m, &_gss_mechs, gm_link) {
 		if (m->gm_mech.gm_indicate_mechs) {
 			major_status = m->gm_mech.gm_indicate_mechs(
@@ -53,11 +52,11 @@ gss_indicate_mechs(OM_uint32 *minor_status,
 			if (major_status)
 				continue;
 			for (i = 0; i < set->count; i++)
-				gss_add_oid_set_member(
+				major_status = gss_add_oid_set_member(
 				    minor_status, &set->elements[i], mech_set);
 			gss_release_oid_set(minor_status, &set);
 		} else {
-			gss_add_oid_set_member(
+			major_status = gss_add_oid_set_member(
 			    minor_status, &m->gm_mech_oid, mech_set);
 		}
 	}

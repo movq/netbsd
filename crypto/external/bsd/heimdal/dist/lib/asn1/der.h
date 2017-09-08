@@ -1,4 +1,4 @@
-/*	$NetBSD: der.h,v 1.2 2017/01/28 21:31:45 christos Exp $	*/
+/*	$NetBSD: der.h,v 1.1 2011/04/13 18:14:40 elric Exp $	*/
 
 /*
  * Copyright (c) 1997 - 2006 Kungliga Tekniska Högskolan
@@ -33,12 +33,10 @@
  * SUCH DAMAGE.
  */
 
-/* Id */
+/* $Id: der.h,v 1.1 2011/04/13 18:14:40 elric Exp $ */
 
 #ifndef __DER_H__
 #define __DER_H__
-
-#include <stdint.h>
 
 typedef enum {
     ASN1_C_UNIV = 0,

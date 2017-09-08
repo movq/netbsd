@@ -1,4 +1,4 @@
-# Id: Makefile.am 20739 2007-05-31 16:53:21Z lha 
+# Id: Makefile.am 20739 2007-05-31 16:53:21Z lha
 
 include $(top_srcdir)/Makefile.am.common
 
@@ -13,7 +13,6 @@ TESTS = $(SCRIPT_TESTS)
 port = 49188
 
 do_subst = sed -e 's,[@]srcdir[@],$(srcdir),g' \
-	-e 's,[@]env_setup[@],$(top_builddir)/tests/bin/setup-env,g' \
 	-e 's,[@]port[@],$(port),g' \
 	-e 's,[@]objdir[@],$(top_builddir)/tests/java,g'
 
@@ -38,7 +37,6 @@ CLEANFILES= \
 
 
 EXTRA_DIST = \
-	NTMakefile \
 	KerberosInit.java \
 	jaas.conf \
 	check-kinit.in \

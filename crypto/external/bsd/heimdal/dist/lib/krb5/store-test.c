@@ -1,4 +1,4 @@
-/*	$NetBSD: store-test.c,v 1.2 2017/01/28 21:31:49 christos Exp $	*/
+/*	$NetBSD: store-test.c,v 1.1 2011/04/13 18:15:38 elric Exp $	*/
 
 /*
  * Copyright (c) 2001 Kungliga Tekniska Högskolan
@@ -73,7 +73,7 @@ main(int argc, char **argv)
     krb5_storage *sp;
     krb5_context context;
     krb5_principal principal;
-
+	
 
     krb5_init_context(&context);
 

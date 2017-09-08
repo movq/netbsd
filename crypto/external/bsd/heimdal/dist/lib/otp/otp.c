@@ -1,4 +1,4 @@
-/*	$NetBSD: otp.c,v 1.2 2017/01/28 21:31:50 christos Exp $	*/
+/*	$NetBSD: otp.c,v 1.1 2011/04/13 18:15:39 elric Exp $	*/
 
 /*
  * Copyright (c) 1995 - 2000 Kungliga Tekniska Högskolan
@@ -35,7 +35,7 @@
 
 #ifdef HAVE_CONFIG_H
 #include "config.h"
-__RCSID("$NetBSD: otp.c,v 1.2 2017/01/28 21:31:50 christos Exp $");
+__RCSID("$NetBSD: otp.c,v 1.1 2011/04/13 18:15:39 elric Exp $");
 #endif
 
 #include "otp_locl.h"

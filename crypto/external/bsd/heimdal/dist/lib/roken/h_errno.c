@@ -1,4 +1,4 @@
-/*	$NetBSD: h_errno.c,v 1.2 2017/01/28 21:31:50 christos Exp $	*/
+/*	$NetBSD: h_errno.c,v 1.1 2011/04/13 18:15:41 elric Exp $	*/
 
 /*
  * Copyright (c) 2001 Kungliga Tekniska Högskolan

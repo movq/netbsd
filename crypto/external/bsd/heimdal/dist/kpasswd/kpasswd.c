@@ -1,4 +1,4 @@
-/*	$NetBSD: kpasswd.c,v 1.2 2017/01/28 21:31:45 christos Exp $	*/
+/*	$NetBSD: kpasswd.c,v 1.1 2011/04/13 18:14:38 elric Exp $	*/
 
 /*
  * Copyright (c) 1997-2004 Kungliga Tekniska Högskolan
@@ -34,7 +34,7 @@
  */
 
 #include "kpasswd_locl.h"
-__RCSID("$NetBSD: kpasswd.c,v 1.2 2017/01/28 21:31:45 christos Exp $");
+__RCSID("$NetBSD: kpasswd.c,v 1.1 2011/04/13 18:14:38 elric Exp $");
 
 static int version_flag;
 static int help_flag;
@@ -42,11 +42,10 @@ static char *admin_principal_str;
 static char *cred_cache_str;
 
 static struct getargs args[] = {
-    { "admin-principal",	0,   arg_string, &admin_principal_str, NULL,
-   	 NULL },
-    { "cache",			'c', arg_string, &cred_cache_str, NULL, NULL },
-    { "version", 		0,   arg_flag, &version_flag, NULL, NULL },
-    { "help",			0,   arg_flag, &help_flag, NULL, NULL }
+    { "admin-principal",	0,   arg_string, &admin_principal_str },
+    { "cache",			'c', arg_string, &cred_cache_str },
+    { "version", 		0,   arg_flag, &version_flag },
+    { "help",			0,   arg_flag, &help_flag }
 };
 
 static void
@@ -66,23 +65,22 @@ change_password(krb5_context context,
     krb5_error_code ret;
     char pwbuf[BUFSIZ];
     char *msg, *name;
-    int aret;
 
     krb5_data_zero (&result_code_string);
     krb5_data_zero (&result_string);
 
     name = msg = NULL;
     if (principal == NULL)
-	aret = asprintf(&msg, "New password: ");
+	asprintf(&msg, "New password: ");
     else {
 	ret = krb5_unparse_name(context, principal, &name);
 	if (ret)
 	    krb5_err(context, 1, ret, "krb5_unparse_name");
 
-	aret = asprintf(&msg, "New password for %s: ", name);
+	asprintf(&msg, "New password for %s: ", name);
     }
 
-    if (aret == -1 || msg == NULL)
+    if (msg == NULL)
 	krb5_errx (context, 1, "out of memory");
 
     ret = UI_UTIL_read_pw_string (pwbuf, sizeof(pwbuf), msg, 1);
@@ -201,9 +199,9 @@ main (int argc, char **argv)
 	default:
 	    krb5_err(context, 1, ret, "krb5_get_init_creds");
 	}
-
+	
 	krb5_get_init_creds_opt_free(context, opt);
-
+	
 	ret = krb5_cc_initialize(context, id, admin_principal);
 	krb5_free_principal(context, admin_principal);
 	if (ret)
@@ -212,7 +210,7 @@ main (int argc, char **argv)
 	ret = krb5_cc_store_cred(context, id, &cred);
 	if (ret)
 	    krb5_err(context, 1, ret, "krb5_cc_store_cred");
-
+	
 	krb5_free_cred_contents (context, &cred);
     }
 

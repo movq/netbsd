@@ -1,4 +1,4 @@
-/*	$NetBSD: hash.h,v 1.2 2017/01/28 21:31:47 christos Exp $	*/
+/*	$NetBSD: hash.h,v 1.1 2011/04/13 18:14:50 elric Exp $	*/
 
 /*
  * Copyright (c) 1999 Kungliga Tekniska Högskolan
@@ -32,7 +32,7 @@
  * OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE. */
 
-/* Id */
+/* $Id: hash.h,v 1.1 2011/04/13 18:14:50 elric Exp $ */
 
 /* stuff in common between md4, md5, and sha1 */
 
@@ -42,6 +42,7 @@
 #ifdef KRB5
 #include <krb5/krb5-types.h>
 #endif
+#include <krb5/roken.h>
 
 #ifndef min
 #define min(a,b) (((a)>(b))?(b):(a))

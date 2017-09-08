@@ -1,4 +1,4 @@
-/*	$NetBSD: cred.h,v 1.2 2017/01/28 21:31:46 christos Exp $	*/
+/*	$NetBSD: cred.h,v 1.1 2011/04/13 18:14:46 elric Exp $	*/
 
 /*-
  * Copyright (c) 2005 Doug Rabson
@@ -26,7 +26,7 @@
  * SUCH DAMAGE.
  *
  *	$FreeBSD: src/lib/libgssapi/cred.h,v 1.1 2005/12/29 14:40:20 dfr Exp $
- *	Id
+ *	$Id: cred.h,v 1.1 2011/04/13 18:14:46 elric Exp $
  */
 
 struct _gss_mechanism_cred {
@@ -40,20 +40,4 @@ HEIM_SLIST_HEAD(_gss_mechanism_cred_list, _gss_mechanism_cred);
 struct _gss_cred {
 	struct _gss_mechanism_cred_list gc_mc;
 };
-
-struct _gss_mechanism_cred *
-_gss_copy_cred(struct _gss_mechanism_cred *mc);
-
-struct _gss_mechanism_name;
-
-OM_uint32
-_gss_acquire_mech_cred(OM_uint32 *minor_status,
-		       gssapi_mech_interface m,
-		       const struct _gss_mechanism_name *mn,
-		       gss_const_OID credential_type,
-		       const void *credential_data,
-		       OM_uint32 time_req,
-		       gss_const_OID desired_mech,
-		       gss_cred_usage_t cred_usage,
-		       struct _gss_mechanism_cred **output_cred_handle);
 

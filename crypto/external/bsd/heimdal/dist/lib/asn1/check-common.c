@@ -1,4 +1,4 @@
-/*	$NetBSD: check-common.c,v 1.2 2017/01/28 21:31:45 christos Exp $	*/
+/*	$NetBSD: check-common.c,v 1.1 2011/04/13 18:14:39 elric Exp $	*/
 
 /*
  * Copyright (c) 1999 - 2006 Kungliga Tekniska Högskolan
@@ -35,7 +35,9 @@
  * SUCH DAMAGE.
  */
 
+#ifdef HAVE_CONFIG_H
 #include <config.h>
+#endif
 #ifdef HAVE_SYS_MMAN_H
 #include <sys/mman.h>
 #endif
@@ -46,6 +48,8 @@
 
 #include <krb5/asn1-common.h>
 #include "check-common.h"
+
+__RCSID("$NetBSD: check-common.c,v 1.1 2011/04/13 18:14:39 elric Exp $");
 
 struct map_page {
     void *start;
@@ -392,7 +396,7 @@ generic_decode_fail (const struct test_case *tests,
 	    sz = 4096;
 	    bytes = NULL;
 	}
-
+	
 	buf = map_alloc(OVERRUN, bytes, sz, &buf_map);
 
 	if (tests[i].byte_len == -1)

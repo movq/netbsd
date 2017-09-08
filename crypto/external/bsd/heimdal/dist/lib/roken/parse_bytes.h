@@ -1,4 +1,4 @@
-/*	$NetBSD: parse_bytes.h,v 1.2 2017/01/28 21:31:50 christos Exp $	*/
+/*	$NetBSD: parse_bytes.h,v 1.1 2011/04/13 18:15:42 elric Exp $	*/
 
 /*
  * Copyright (c) 1999 - 2001 Kungliga Tekniska Högskolan
@@ -33,7 +33,7 @@
  * SUCH DAMAGE.
  */
 
-/* Id */
+/* $Id: parse_bytes.h,v 1.1 2011/04/13 18:15:42 elric Exp $ */
 
 #ifndef __PARSE_BYTES_H__
 #define __PARSE_BYTES_H__

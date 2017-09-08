@@ -1,4 +1,4 @@
-/*	$NetBSD: external.c,v 1.2 2017/01/28 21:31:46 christos Exp $	*/
+/*	$NetBSD: external.c,v 1.1 2011/04/13 18:14:47 elric Exp $	*/
 
 /*
  * Copyright (c) 2006 Kungliga Tekniska Högskolan
@@ -40,7 +40,7 @@ static gss_mo_desc ntlm_mo[] = {
 	GSS_C_MA_SASL_MECH_NAME,
 	GSS_MO_MA,
 	"SASL mech name",
-	rk_UNCONST("NTLM"),
+	"NTLM",
 	_gss_mo_get_ctx_as_string,
 	NULL
     },
@@ -48,7 +48,7 @@ static gss_mo_desc ntlm_mo[] = {
 	GSS_C_MA_MECH_NAME,
 	GSS_MO_MA,
 	"Mechanism name",
-	rk_UNCONST("NTLMSPP"),
+	"NTLMSPP",
 	_gss_mo_get_ctx_as_string,
 	NULL
     },
@@ -56,7 +56,7 @@ static gss_mo_desc ntlm_mo[] = {
 	GSS_C_MA_MECH_DESCRIPTION,
 	GSS_MO_MA,
 	"Mechanism description",
-	rk_UNCONST("Heimdal NTLMSSP Mechanism"),
+	"Heimdal NTLMSSP Mechanism",
 	_gss_mo_get_ctx_as_string,
 	NULL
     }
@@ -115,16 +115,7 @@ static gssapi_mech_interface_desc ntlm_mech = {
     NULL,
     NULL,
     ntlm_mo,
-    sizeof(ntlm_mo) / sizeof(ntlm_mo[0]),
-    NULL,
-    NULL,
-    NULL,
-    NULL,
-    NULL,
-    NULL,
-    NULL,
-    NULL,
-    NULL,
+    sizeof(ntlm_mo) / sizeof(ntlm_mo[0])
 };
 
 gssapi_mech_interface

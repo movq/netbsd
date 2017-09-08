@@ -1,4 +1,4 @@
-/*	$NetBSD: context.h,v 1.2 2017/01/28 21:31:46 christos Exp $	*/
+/*	$NetBSD: context.h,v 1.1 2011/04/13 18:14:46 elric Exp $	*/
 
 /*-
  * Copyright (c) 2005 Doug Rabson
@@ -26,7 +26,7 @@
  * SUCH DAMAGE.
  *
  *	$FreeBSD: src/lib/libgssapi/context.h,v 1.1 2005/12/29 14:40:20 dfr Exp $
- *	Id
+ *	$Id: context.h,v 1.1 2011/04/13 18:14:46 elric Exp $
  */
 
 #include <gssapi_mech.h>

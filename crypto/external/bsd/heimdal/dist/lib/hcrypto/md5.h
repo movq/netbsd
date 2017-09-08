@@ -1,4 +1,4 @@
-/*	$NetBSD: md5.h,v 1.2 2017/01/28 21:31:47 christos Exp $	*/
+/*	$NetBSD: md5.h,v 1.1 2011/04/13 18:14:50 elric Exp $	*/
 
 /*
  * Copyright (c) 1995 - 2001 Kungliga Tekniska Högskolan
@@ -33,7 +33,7 @@
  * SUCH DAMAGE.
  */
 
-/* Id */
+/* $Id: md5.h,v 1.1 2011/04/13 18:14:50 elric Exp $ */
 
 #ifndef HEIM_MD5_H
 #define HEIM_MD5_H 1
@@ -57,8 +57,8 @@ struct md5 {
 
 typedef struct md5 MD5_CTX;
 
-int MD5_Init (struct md5 *m);
-int MD5_Update (struct md5 *m, const void *p, size_t len);
-int MD5_Final (void *res, struct md5 *m); /* uint32_t res[4] */
+void MD5_Init (struct md5 *m);
+void MD5_Update (struct md5 *m, const void *p, size_t len);
+void MD5_Final (void *res, struct md5 *m); /* uint32_t res[4] */
 
 #endif /* HEIM_MD5_H */

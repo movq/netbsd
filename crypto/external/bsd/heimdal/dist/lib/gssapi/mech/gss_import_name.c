@@ -1,4 +1,4 @@
-/*	$NetBSD: gss_import_name.c,v 1.2 2017/01/28 21:31:46 christos Exp $	*/
+/*	$NetBSD: gss_import_name.c,v 1.1 2011/04/13 18:14:46 elric Exp $	*/
 
 /*-
  * Copyright (c) 2005 Doug Rabson
@@ -43,7 +43,6 @@ _gss_import_export_name(OM_uint32 *minor_status,
 	gssapi_mech_interface m;
 	struct _gss_name *name;
 	gss_name_t new_canonical_name;
-	int composite = 0;
 
 	*minor_status = 0;
 	*output_name = 0;
@@ -53,17 +52,8 @@ _gss_import_export_name(OM_uint32 *minor_status,
 	 */
 	if (len < 2)
 		return (GSS_S_BAD_NAME);
-	if (p[0] != 4)
+	if (p[0] != 4 || p[1] != 1)
 		return (GSS_S_BAD_NAME);
-	switch (p[1]) {
-	case 1:	/* non-composite name */
-		break;
-	case 2:	/* composite name */
-		composite = 1;
-		break;
-	default:
-		return (GSS_S_BAD_NAME);
-	}
 	p += 2;
 	len -= 2;
 
@@ -118,7 +108,7 @@ _gss_import_export_name(OM_uint32 *minor_status,
 	p += 4;
 	len -= 4;
 
-	if (!composite && len != t)
+	if (len != t)
 		return (GSS_S_BAD_NAME);
 
 	m = __gss_get_mechanism(&mech_oid);
@@ -151,7 +141,7 @@ _gss_import_export_name(OM_uint32 *minor_status,
 }
 
 /**
- * Convert a GGS-API name from contiguous string to internal form.
+ * Import a name internal or mechanism name
  *
  * Type of name and their format:
  * - GSS_C_NO_OID
@@ -161,17 +151,17 @@ _gss_import_export_name(OM_uint32 *minor_status,
  * - GSS_C_NT_ANONYMOUS
  * - GSS_KRB5_NT_PRINCIPAL_NAME
  *
- * @sa gss_export_name(), @ref internalVSmechname.
+ * For more information about @ref internalVSmechname.
  *
- * @param minor_status       minor status code
- * @param input_name_buffer  import name buffer
- * @param input_name_type    type of the import name buffer
- * @param output_name        the resulting type, release with
+ * @param minor_status minor status code
+ * @param input_name_buffer import name buffer
+ * @param input_name_type type of the import name buffer
+ * @param output_name the resulting type, release with
  *        gss_release_name(), independent of input_name
  *
  * @returns a gss_error code, see gss_display_status() about printing
  *        the error code.
- *
+ *  
  * @ingroup gssapi
  */
 
@@ -243,7 +233,7 @@ gss_import_name(OM_uint32 *minor_status,
 	HEIM_SLIST_FOREACH(m, &_gss_mechs, gm_link) {
 		int present = 0;
 
-		major_status = gss_test_oid_set_member(minor_status,
+		major_status = gss_test_oid_set_member(minor_status, 
 		    name_type, m->gm_name_types, &present);
 
 		if (major_status || present == 0)

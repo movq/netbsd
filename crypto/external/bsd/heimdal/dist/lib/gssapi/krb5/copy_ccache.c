@@ -1,4 +1,4 @@
-/*	$NetBSD: copy_ccache.c,v 1.2 2017/01/28 21:31:46 christos Exp $	*/
+/*	$NetBSD: copy_ccache.c,v 1.1 2011/04/13 18:14:44 elric Exp $	*/
 
 /*
  * Copyright (c) 2000 - 2001, 2003 Kungliga Tekniska Högskolan
@@ -91,8 +91,6 @@ _gsskrb5_krb5_import_cred(OM_uint32 *minor_status,
     handle->usage = 0;
 
     if (id) {
-	time_t now;
-	OM_uint32 left;
 	char *str;
 
 	handle->usage |= GSS_C_INITIATE;
@@ -104,7 +102,7 @@ _gsskrb5_krb5_import_cred(OM_uint32 *minor_status,
 	    *minor_status = kret;
 	    return GSS_S_FAILURE;
 	}
-
+	
 	if (keytab_principal) {
 	    krb5_boolean match;
 
@@ -120,18 +118,17 @@ _gsskrb5_krb5_import_cred(OM_uint32 *minor_status,
 	    }
 	}
 
-	krb5_timeofday(context, &now);
 	ret = __gsskrb5_ccache_lifetime(minor_status,
 					context,
 					id,
 					handle->principal,
-					&left);
+					&handle->lifetime);
 	if (ret != GSS_S_COMPLETE) {
 	    krb5_free_principal(context, handle->principal);
 	    free(handle);
 	    return ret;
 	}
-	handle->endtime = now + left;
+
 
 	kret = krb5_cc_get_full_name(context, id, &str);
 	if (kret)

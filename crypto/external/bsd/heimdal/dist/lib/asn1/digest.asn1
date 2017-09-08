@@ -1,4 +1,4 @@
--- Id
+-- $Id: digest.asn1,v 1.1 2011/04/13 18:14:40 elric Exp $
 
 DIGEST DEFINITIONS ::=
 BEGIN
@@ -24,7 +24,7 @@ DigestInit ::= SEQUENCE {
 }
 
 DigestInitReply ::= SEQUENCE {
-    nonce		UTF8String,	-- service nonce/challenge
+    nonce		UTF8String,	-- service nonce/challange
     opaque		UTF8String,	-- server state
     identifier		[0] UTF8String OPTIONAL
 }
@@ -78,7 +78,7 @@ NTLMInitReply ::= SEQUENCE {
     flags		[0] INTEGER (0..4294967295),
     opaque		[1] OCTET STRING,
     targetname		[2] UTF8String,
-    challenge		[3] OCTET STRING,
+    challange		[3] OCTET STRING,
     targetinfo		[4] OCTET STRING OPTIONAL
 }
 

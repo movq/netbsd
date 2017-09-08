@@ -1,4 +1,4 @@
-/*	$NetBSD: test_mkey.c,v 1.2 2017/01/28 21:31:48 christos Exp $	*/
+/*	$NetBSD: test_mkey.c,v 1.1 2011/04/13 18:14:42 elric Exp $	*/
 
 
 #include "hdb_locl.h"
@@ -10,9 +10,9 @@ static int help_flag;
 static int version_flag;
 
 struct getargs args[] = {
-    { "mkey-file",	0,      arg_string, &mkey_file,    NULL, NULL },
-    { "help",		'h',	arg_flag,   &help_flag,    NULL, NULL },
-    { "version",	0,	arg_flag,   &version_flag, NULL, NULL }
+    { "mkey-file",	0,      arg_string, &mkey_file },
+    { "help",		'h',	arg_flag,   &help_flag },
+    { "version",	0,	arg_flag,   &version_flag }
 };
 
 static int num_args = sizeof(args) / sizeof(args[0]);
@@ -46,7 +46,7 @@ main(int argc, char **argv)
 	ret = hdb_read_master_key(context, mkey_file, &mkey);
 	if (ret)
 	    krb5_err(context, 1, ret, "failed to read master key %s", mkey_file);
-
+      
 	hdb_free_master_key(context, mkey);
     } else
       krb5_errx(context, 1, "no command option given");

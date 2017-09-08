@@ -1,4 +1,4 @@
-/*	$NetBSD: kcm_locl.h,v 1.2 2017/01/28 21:31:44 christos Exp $	*/
+/*	$NetBSD: kcm_locl.h,v 1.1 2011/04/13 18:14:36 elric Exp $	*/
 
 /*
  * Copyright (c) 2005, PADL Software Pty Ltd.
@@ -35,7 +35,7 @@
  */
 
 /*
- * Id
+ * $Id: kcm_locl.h,v 1.1 2011/04/13 18:14:36 elric Exp $
  */
 
 #ifndef __KCM_LOCL_H__
@@ -171,8 +171,9 @@ extern char *door_path;
 extern size_t max_request;
 extern sig_atomic_t exit_flag;
 extern int name_constraints;
+#ifdef SUPPORT_DETACH
 extern int detach_from_console;
-extern int daemon_child;
+#endif
 extern int launchd_flag;
 extern int disallow_getting_krbtgt;
 

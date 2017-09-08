@@ -1,4 +1,4 @@
-/*	$NetBSD: add.c,v 1.2 2017/01/28 21:31:44 christos Exp $	*/
+/*	$NetBSD: add.c,v 1.1 2011/04/13 18:14:32 elric Exp $	*/
 
 /*
  * Copyright (c) 1997-2005 Kungliga Tekniska Högskolan
@@ -35,7 +35,7 @@
 
 #include "ktutil_locl.h"
 
-__RCSID("$NetBSD: add.c,v 1.2 2017/01/28 21:31:44 christos Exp $");
+__RCSID("$NetBSD: add.c,v 1.1 2011/04/13 18:14:32 elric Exp $");
 
 static char *
 readstring(const char *prompt, char *buf, size_t len)
@@ -106,7 +106,7 @@ kt_add(struct add_options *opt, int argc, char **argv)
 	if (opt->hex_flag) {
 	    size_t len;
 	    void *data;
-
+	
 	    len = (strlen(opt->password_string) + 1) / 2;
 
 	    data = malloc(len);
@@ -115,7 +115,7 @@ kt_add(struct add_options *opt, int argc, char **argv)
 		goto out;
 	    }
 
-	    if ((size_t)hex_decode(opt->password_string, data, len) != len) {
+	    if (hex_decode(opt->password_string, data, len) != len) {
 		free(data);
 		krb5_warn(context, ENOMEM, "hex decode failed");
 		goto out;

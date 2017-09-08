@@ -1,4 +1,4 @@
-/*	$NetBSD: ktutil_locl.h,v 1.2 2017/01/28 21:31:44 christos Exp $	*/
+/*	$NetBSD: ktutil_locl.h,v 1.1 2011/04/13 18:14:32 elric Exp $	*/
 
 /*
  * Copyright (c) 1997-2004 Kungliga Tekniska Högskolan
@@ -34,7 +34,7 @@
  */
 
 /*
- * Id
+ * $Id: ktutil_locl.h,v 1.1 2011/04/13 18:14:32 elric Exp $
  */
 
 #ifndef __KTUTIL_LOCL_H__

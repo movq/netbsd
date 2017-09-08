@@ -1,4 +1,4 @@
-/*	$NetBSD: purge.c,v 1.2 2017/01/28 21:31:44 christos Exp $	*/
+/*	$NetBSD: purge.c,v 1.1 2011/04/13 18:14:32 elric Exp $	*/
 
 /*
  * Copyright (c) 1997-2004 Kungliga Tekniska Högskolan
@@ -35,7 +35,7 @@
 
 #include "ktutil_locl.h"
 
-__RCSID("$NetBSD: purge.c,v 1.2 2017/01/28 21:31:44 christos Exp $");
+__RCSID("$NetBSD: purge.c,v 1.1 2011/04/13 18:14:32 elric Exp $");
 
 /*
  * keep track of the highest version for every principal.

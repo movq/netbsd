@@ -1,4 +1,4 @@
-/*	$NetBSD: kadmin.c,v 1.2 2017/01/28 21:31:44 christos Exp $	*/
+/*	$NetBSD: kadmin.c,v 1.1 2011/04/13 18:14:35 elric Exp $	*/
 
 /*
  * Copyright (c) 1997 - 2004 Kungliga Tekniska Högskolan
@@ -54,9 +54,9 @@ static getarg_strings policy_libraries = { 0, NULL };
 
 static struct getargs args[] = {
     {	"principal", 	'p',	arg_string,	&client_name,
-	"principal to authenticate as", NULL },
+	"principal to authenticate as" },
     {   "keytab",	'K',	arg_string,	&keytab,
-   	"keytab for authentication principal", NULL },
+   	"keytab for authentication principal" },
     {
 	"config-file",	'c',	arg_string,	&config_file,
 	"location of config file",	"file"
@@ -65,20 +65,19 @@ static struct getargs args[] = {
 	"key-file",	'k',	arg_string, &keyfile,
 	"location of master key file", "file"
     },
-    {
+    {	
 	"realm",	'r',	arg_string,   &realm,
 	"realm to use", "realm"
     },
-    {
+    {	
 	"admin-server",	'a',	arg_string,   &admin_server,
 	"server to contact", "host"
     },
-    {
+    {	
 	"server-port",	's',	arg_integer,   &server_port,
 	"port to use", "port number"
     },
-    {	"ad", 		0, arg_flag, &ad_flag, "active directory admin mode",
-	NULL },
+    {	"ad", 		0, arg_flag, &ad_flag, "active directory admin mode" },
 #ifdef HAVE_DLOPEN
     { "check-library", 0, arg_string, &check_library,
       "library to load password check function from", "library" },
@@ -87,9 +86,9 @@ static struct getargs args[] = {
     { "policy-libraries", 0, arg_strings, &policy_libraries,
       "password check function to load", "function" },
 #endif
-    {	"local", 'l', arg_flag, &local_flag, "local admin mode", NULL },
-    {	"help",		'h',	arg_flag,   &help_flag, NULL, NULL },
-    {	"version",	'v',	arg_flag,   &version_flag, NULL, NULL }
+    {	"local", 'l', arg_flag, &local_flag, "local admin mode" },
+    {	"help",		'h',	arg_flag,   &help_flag },
+    {	"version",	'v',	arg_flag,   &version_flag }
 };
 
 static int num_args = sizeof(args) / sizeof(args[0]);
@@ -112,18 +111,6 @@ exit_kadmin (void *opt, int argc, char **argv)
 {
     exit_seen = 1;
     return 0;
-}
-
-int
-lock(void *opt, int argc, char **argv)
-{
-    return kadm5_lock(kadm_handle);
-}
-
-int
-unlock(void *opt, int argc, char **argv)
-{
-    return kadm5_unlock(kadm_handle);
 }
 
 static void
@@ -161,7 +148,6 @@ main(int argc, char **argv)
     kadm5_config_params conf;
     int optidx = 0;
     int exit_status = 0;
-    int aret;
 
     setprogname(argv[0]);
 
@@ -184,8 +170,8 @@ main(int argc, char **argv)
     argv += optidx;
 
     if (config_file == NULL) {
-	aret = asprintf(&config_file, "%s/kdc.conf", hdb_db_dir(context));
-	if (aret == -1)
+	asprintf(&config_file, "%s/kdc.conf", hdb_db_dir(context));
+	if (config_file == NULL)
 	    errx(1, "out of memory");
     }
 
@@ -226,7 +212,7 @@ main(int argc, char **argv)
 
 	kadm5_setup_passwd_quality_check (context,
 					  check_library, check_function);
-
+	
 	for (i = 0; i < policy_libraries.num_strings; i++) {
 	    ret = kadm5_add_passwd_quality_verifier(context,
 						    policy_libraries.strings[i]);
@@ -236,7 +222,7 @@ main(int argc, char **argv)
 	ret = kadm5_add_passwd_quality_verifier(context, NULL);
 	if (ret)
 	    krb5_err(context, 1, ret, "kadm5_add_passwd_quality_verifier");
-
+	
 	ret = kadm5_s_init_with_password_ctx(context,
 					     KADM5_ADMIN_SERVICE,
 					     NULL,
@@ -280,7 +266,7 @@ main(int argc, char **argv)
     if (argc != 0) {
 	ret = sl_command (commands, argc, argv);
 	if(ret == -1)
-	    sl_did_you_mean(commands, argv[0]);
+	    krb5_warnx (context, "unrecognized command: %s", argv[0]);
 	else if (ret == -2)
 	    ret = 0;
 	if(ret != 0)

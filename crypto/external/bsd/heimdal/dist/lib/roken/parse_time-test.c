@@ -1,4 +1,4 @@
-/*	$NetBSD: parse_time-test.c,v 1.2 2017/01/28 21:31:50 christos Exp $	*/
+/*	$NetBSD: parse_time-test.c,v 1.1 2011/04/13 18:15:42 elric Exp $	*/
 
 /*
  * Copyright (c) 2004 Kungliga Tekniska Högskolan
@@ -51,8 +51,7 @@ static struct testcase {
     { 8, 60,		"1 minute" },
     { 6, 3600,	 	"1 hour" },
     { 15, 3601,	 	"1 hour 1 second" },
-    { 16, 3602,	 	"1 hour 2 seconds" },
-    { 9, 300,	 	"5 minutes" },
+    { 16, 3602,	 	"1 hour 2 seconds" }
 };
 
 int
@@ -69,7 +68,7 @@ main(int argc, char **argv)
 	if  (sz != tests[i].size)
 	    errx(1, "sz (%lu) != tests[%d].size (%lu)",
 		 (unsigned long)sz, i, (unsigned long)tests[i].size);
-
+	
 	for (buf_sz = 0; buf_sz < tests[i].size + 2; buf_sz++) {
 
 	    buf = rk_test_mem_alloc(RK_TM_OVERRUN, "overrun",

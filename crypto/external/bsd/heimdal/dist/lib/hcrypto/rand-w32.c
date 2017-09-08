@@ -1,4 +1,4 @@
-/*	$NetBSD: rand-w32.c,v 1.2 2017/01/28 21:31:47 christos Exp $	*/
+/*	$NetBSD: rand-w32.c,v 1.1 2011/04/13 18:14:50 elric Exp $	*/
 
 /*
  * Copyright (c) 2006 Kungliga Tekniska Högskolan
@@ -38,59 +38,44 @@
 
 #include <wincrypt.h>
 
+#include <stdio.h>
+#include <stdlib.h>
 #include <rand.h>
 #include <heim_threads.h>
 
 #include "randi.h"
 
-volatile static HCRYPTPROV g_cryptprovider = NULL;
+volatile static HCRYPTPROV g_cryptprovider = 0;
 
 static HCRYPTPROV
 _hc_CryptProvider(void)
 {
     BOOL rv;
-    HCRYPTPROV cryptprovider = NULL;
+    HCRYPTPROV cryptprovider = 0;
 
-    if (g_cryptprovider != NULL)
-	goto out;
+    if (g_cryptprovider != 0)
+	return g_cryptprovider;
 
     rv = CryptAcquireContext(&cryptprovider, NULL,
 			      MS_ENHANCED_PROV, PROV_RSA_FULL,
-			      CRYPT_VERIFYCONTEXT);
+			      0);
 
     if (GetLastError() == NTE_BAD_KEYSET) {
-        rv = CryptAcquireContext(&cryptprovider, NULL,
-                                 MS_ENHANCED_PROV, PROV_RSA_FULL,
-                                 CRYPT_NEWKEYSET);
-    }
-
-    if (rv) {
-        /* try the default provider */
-        rv = CryptAcquireContext(&cryptprovider, NULL, 0, PROV_RSA_FULL,
-                                 CRYPT_VERIFYCONTEXT);
-
-        if (GetLastError() == NTE_BAD_KEYSET) {
+        if(!rv)
             rv = CryptAcquireContext(&cryptprovider, NULL,
-                                     MS_ENHANCED_PROV, PROV_RSA_FULL,
-                                     CRYPT_NEWKEYSET);
-        }
+                                      MS_ENHANCED_PROV, PROV_RSA_FULL,
+                                      CRYPT_NEWKEYSET);
     }
 
-    if (rv) {
-        /* try just a default random number generator */
-        rv = CryptAcquireContext(&cryptprovider, NULL, 0, PROV_RNG,
-                                 CRYPT_VERIFYCONTEXT);
-    }
-
-    if (rv == 0 &&
+    if (rv &&
         InterlockedCompareExchangePointer((PVOID *) &g_cryptprovider,
-					  (PVOID) cryptprovider, NULL) != 0) {
+					  (PVOID) cryptprovider, 0) != 0) {
 
         CryptReleaseContext(cryptprovider, 0);
+        cryptprovider = g_cryptprovider;
     }
 
-out:
-    return g_cryptprovider;
+    return cryptprovider;
 }
 
 /*
@@ -115,12 +100,6 @@ w32crypto_bytes(unsigned char *outdata, int size)
 static void
 w32crypto_cleanup(void)
 {
-    HCRYPTPROV cryptprovider;
-
-    if (InterlockedCompareExchangePointer((PVOID *) &cryptprovider,
-					  0, (PVOID) g_cryptprovider) == 0) {
-        CryptReleaseContext(cryptprovider, 0);
-    }
 }
 
 static void

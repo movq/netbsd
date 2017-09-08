@@ -1,15 +1,12 @@
-# Id
+# $Id: Makefile.am,v 1.1 2011/04/13 18:15:29 elric Exp $
 
 include $(top_srcdir)/Makefile.am.common
-
-libkadm5srv_la_CPPFLAGS = -I$(srcdir)/../krb5
 
 lib_LTLIBRARIES = libkadm5srv.la libkadm5clnt.la
 libkadm5srv_la_LDFLAGS = -version-info 8:1:0
 libkadm5clnt_la_LDFLAGS = -version-info 7:1:0
 
 if versionscript
-libkadm5clnt_la_LDFLAGS += $(LDFLAGS_VERSION_SCRIPT)$(srcdir)/version-script-client.map
 libkadm5srv_la_LDFLAGS += $(LDFLAGS_VERSION_SCRIPT)$(srcdir)/version-script.map
 endif
 
@@ -36,7 +33,7 @@ kadm5includedir = $(includedir)/kadm5
 buildkadm5include = $(buildinclude)/kadm5
 
 dist_kadm5include_HEADERS = admin.h private.h kadm5-pwcheck.h
-dist_kadm5include_HEADERS += $(srcdir)/kadm5-protos.h $(srcdir)/kadm5-private.h
+dist_kadm5include_HEADERS += kadm5-protos.h kadm5-private.h
 
 nodist_kadm5include_HEADERS = kadm5_err.h
 
@@ -108,7 +105,6 @@ dist_libkadm5srv_la_SOURCES =			\
 	randkey_s.c				\
 	rename_s.c				\
 	server_glue.c				\
-	setkey3_s.c				\
 	set_keys.c				\
 	set_modifier.c				\
 	admin.h
@@ -116,9 +112,6 @@ dist_libkadm5srv_la_SOURCES =			\
 nodist_libkadm5srv_la_SOURCES = 		\
 	kadm5_err.c				\
 	kadm5_err.h
-
-libkadm5srv_la_DEPENDENCIES =			\
-	version-script.map
 
 dist_iprop_log_SOURCES = iprop-log.c
 nodist_iprop_log_SOURCES = iprop-commands.c
@@ -136,7 +129,7 @@ LDADD = \
 	$(top_builddir)/lib/asn1/libasn1.la \
 	$(LIB_hcrypto) \
 	$(LIB_roken) \
-	$(DB3LIB) $(DB1LIB) $(LMDBLIB) $(NDBMLIB) \
+	$(DBLIB) \
 	$(LIB_dlopen) \
 	$(LIB_pidfile)
 
@@ -149,7 +142,7 @@ iprop_log_LDADD = \
 	$(top_builddir)/lib/sl/libsl.la \
 	$(LIB_readline) \
 	$(LIB_roken) \
-	$(DB3LIB) $(DB1LIB) $(LMDBLIB) $(NDBMLIB) \
+	$(DBLIB) \
 	$(LIB_dlopen) \
 	$(LIB_pidfile)
 
@@ -158,7 +151,6 @@ iprop-commands.c iprop-commands.h: iprop-commands.in
 	$(SLC) $(srcdir)/iprop-commands.in
 
 $(libkadm5srv_la_OBJECTS): kadm5_err.h
-$(libkadm5clnt_la_OBJECTS): kadm5_err.h
 $(iprop_log_OBJECTS): iprop-commands.h
 
 client_glue.lo server_glue.lo: $(srcdir)/common_glue.c
@@ -169,30 +161,17 @@ CLEANFILES = kadm5_err.c kadm5_err.h iprop-commands.h iprop-commands.c
 
 kadm5_err.h: kadm5_err.et
 
-ALL_OBJECTS  = $(libkadm5clnt_la_OBJECTS)
-ALL_OBJECTS += $(libkadm5srv_la_OBJECTS)
-ALL_OBJECTS += $(ipropd_master_OBJECTS)
-ALL_OBJECTS += $(ipropd_slave_OBJECTS)
-ALL_OBJECTS += $(iprop_log_OBJECTS)
-ALL_OBJECTS += $(test_pw_quality_OBJECTS)
-ALL_OBJECTS += $(sample_passwd_check_la_OBJECTS)
-ALL_OBJECTS += $(default_keys_OBJECTS)
-
-$(ALL_OBJECTS): $(srcdir)/kadm5-protos.h $(srcdir)/kadm5-private.h
-$(ALL_OBJECTS): kadm5_err.h
-
-KADM5_PROTOS_SRCS  = $(dist_libkadm5clnt_la_SOURCES)
-KADM5_PROTOS_SRCS += $(dist_libkadm5srv_la_SOURCES)
+$(libkadm5clnt_la_OBJECTS) $(libkadm5srv_la_OBJECTS): $(srcdir)/kadm5-protos.h $(srcdir)/kadm5-private.h
 
 proto_opts = -q -R '^(_|kadm5_c_|kadm5_s_|kadm5_log)' -P comment
-$(srcdir)/kadm5-protos.h: $(KADM5_PROTOS_SRCS)
+$(srcdir)/kadm5-protos.h:
 	cd $(srcdir); perl ../../cf/make-proto.pl $(proto_opts) \
 		-o kadm5-protos.h \
 		$(dist_libkadm5clnt_la_SOURCES) \
 		$(dist_libkadm5srv_la_SOURCES) \
 		|| rm -f kadm5-protos.h
 
-$(srcdir)/kadm5-private.h: $(KADM5_PROTOS_SRCS)
+$(srcdir)/kadm5-private.h:
 	cd $(srcdir); perl ../../cf/make-proto.pl $(proto_opts) \
 		-p kadm5-private.h \
 		$(dist_libkadm5clnt_la_SOURCES) \
@@ -200,17 +179,10 @@ $(srcdir)/kadm5-private.h: $(KADM5_PROTOS_SRCS)
 		|| rm -f kadm5-private.h
 
 EXTRA_DIST = \
-	NTMakefile \
-	iprop-log-version.rc \
-	ipropd-master-version.rc \
-	ipropd-slave-version.rc \
-	libkadm5srv-version.rc \
-	libkadm5srv-exports.def \
 	kadm5_err.et \
 	iprop-commands.in \
 	$(man_MANS) \
 	check-cracklib.pl \
 	flush.c \
 	sample_passwd_check.c \
-	version-script.map \
-	version-script-client.map
+	version-script.map

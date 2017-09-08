@@ -30,7 +30,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF 
  * SUCH DAMAGE. 
  */
-/* Id */
+/* $Id: ktutil-commands.in,v 1.1 2011/04/13 18:14:31 elric Exp $ */
 
 command = {
 	name = "add"
@@ -206,7 +206,7 @@ command = {
 		short = "V"
 		type = "integer"
 		help = "key version to remove"
-		argument = "kvno"
+		argument = "enctype"
 		default = "0"
 	}
 	option = {
