@@ -1,4 +1,4 @@
-/*	$NetBSD: t_list.c,v 1.2 2017/10/02 05:14:29 pgoyette Exp $	*/
+/*	$NetBSD: t_list.c,v 1.2.2.2 2017/10/02 13:21:40 martin Exp $	*/
 
 /*-
  * Copyright (c) 2017 The NetBSD Foundation, Inc.
