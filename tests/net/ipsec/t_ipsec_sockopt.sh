@@ -1,4 +1,4 @@
-#	$NetBSD: t_ipsec_sockopt.sh,v 1.2 2017/08/03 03:16:27 ozaki-r Exp $
+#	$NetBSD: t_ipsec_sockopt.sh,v 1.2.2.2 2017/10/21 19:43:55 snj Exp $
 #
 # Copyright (c) 2017 Internet Initiative Japan Inc.
 # All rights reserved.
