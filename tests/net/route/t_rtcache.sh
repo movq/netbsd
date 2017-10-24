@@ -1,4 +1,4 @@
-#	$NetBSD: t_rtcache.sh,v 1.1 2017/09/20 09:36:20 ozaki-r Exp $
+#	$NetBSD: t_rtcache.sh,v 1.1.2.2 2017/10/24 08:55:56 snj Exp $
 #
 # Copyright (c) 2017 Internet Initiative Japan Inc.
 # All rights reserved.
