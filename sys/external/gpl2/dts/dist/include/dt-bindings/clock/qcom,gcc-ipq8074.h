@@ -1,4 +1,4 @@
-/*	$NetBSD: qcom,gcc-ipq8074.h,v 1.1 2017/10/28 10:30:32 jmcneill Exp $	*/
+/*	$NetBSD: qcom,gcc-ipq8074.h,v 1.1.1.1 2017/10/28 10:30:32 jmcneill Exp $	*/
 
 /*
  * Copyright (c) 2016-2017, The Linux Foundation. All rights reserved.

@@ -1,4 +1,4 @@
-/*	$NetBSD: stm32h7-clks.h,v 1.1 2017/10/28 10:30:32 jmcneill Exp $	*/
+/*	$NetBSD: stm32h7-clks.h,v 1.1.1.1 2017/10/28 10:30:32 jmcneill Exp $	*/
 
 /* SYS, CORE AND BUS CLOCKS */
 #define SYS_D1CPRE 0

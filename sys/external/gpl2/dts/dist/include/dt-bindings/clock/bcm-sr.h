@@ -1,4 +1,4 @@
-/*	$NetBSD: bcm-sr.h,v 1.1 2017/10/28 10:30:32 jmcneill Exp $	*/
+/*	$NetBSD: bcm-sr.h,v 1.1.1.1 2017/10/28 10:30:32 jmcneill Exp $	*/
 
 /*
  *  BSD LICENSE
