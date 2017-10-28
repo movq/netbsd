@@ -1,4 +1,4 @@
-/*	$NetBSD: mt7622-power.h,v 1.1 2017/10/28 10:30:32 jmcneill Exp $	*/
+/*	$NetBSD: mt7622-power.h,v 1.1.1.1 2017/10/28 10:30:32 jmcneill Exp $	*/
 
 /*
  * Copyright (C) 2017 MediaTek Inc.

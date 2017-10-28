@@ -1,4 +1,4 @@
-/*	$NetBSD: snps,hsdk-reset.h,v 1.1 2017/10/28 10:30:32 jmcneill Exp $	*/
+/*	$NetBSD: snps,hsdk-reset.h,v 1.1.1.1 2017/10/28 10:30:32 jmcneill Exp $	*/
 
 /**
  * This header provides index for the HSDK reset controller.

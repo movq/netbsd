@@ -1,4 +1,4 @@
-/*	$NetBSD: stm32h7-rcc.h,v 1.1 2017/10/28 10:30:32 jmcneill Exp $	*/
+/*	$NetBSD: stm32h7-rcc.h,v 1.1.1.1 2017/10/28 10:30:32 jmcneill Exp $	*/
 
 /*
  * This header provides constants for the STM32H7 RCC IP

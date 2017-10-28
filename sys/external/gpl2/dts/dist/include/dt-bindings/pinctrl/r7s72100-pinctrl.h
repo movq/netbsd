@@ -1,4 +1,4 @@
-/*	$NetBSD: r7s72100-pinctrl.h,v 1.1 2017/10/28 10:30:32 jmcneill Exp $	*/
+/*	$NetBSD: r7s72100-pinctrl.h,v 1.1.1.1 2017/10/28 10:30:32 jmcneill Exp $	*/
 
 /*
  * Defines macros and constants for Renesas RZ/A1 pin controller pin
