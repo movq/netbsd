@@ -103,7 +103,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: intr.c,v 1.32 2017/07/16 06:14:24 cherry Exp $");
+__KERNEL_RCSID(0, "$NetBSD: intr.c,v 1.33 2017/11/04 09:22:16 cherry Exp $");
 
 #include "opt_multiprocessor.h"
 #include "opt_xen.h"
@@ -130,18 +130,9 @@ __KERNEL_RCSID(0, "$NetBSD: intr.c,v 1.32 2017/07/16 06:14:24 cherry Exp $");
 #include "acpica.h"
 #include "ioapic.h"
 #include "opt_mpbios.h"
-/* for x86/i8259.c */
-struct intrstub i8259_stubs[NUM_LEGACY_IRQS] = {{0,0}};
-#if NIOAPIC > 0
-/* for x86/ioapic.c */
-struct intrstub ioapic_edge_stubs[MAX_INTR_SOURCES] = {{0,0}};
-struct intrstub ioapic_level_stubs[MAX_INTR_SOURCES] = {{0,0}};
-struct intrstub x2apic_edge_stubs[MAX_INTR_SOURCES] = {{0,0}};
-struct intrstub x2apic_level_stubs[MAX_INTR_SOURCES] = {{0,0}};
 
+#if NIOAPIC > 0
 #include <machine/i82093var.h>
-int irq2vect[256] = {0};
-int vect2irq[256] = {0};
 #endif /* NIOAPIC */
 #if NACPICA > 0
 #include <machine/mpconfig.h>
