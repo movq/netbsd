@@ -1,4 +1,4 @@
-#	$NetBSD: t_ipsec_natt.sh,v 1.1 2017/10/30 15:59:23 ozaki-r Exp $
+#	$NetBSD: t_ipsec_natt.sh,v 1.1.2.2 2017/11/17 20:43:11 snj Exp $
 #
 # Copyright (c) 2017 Internet Initiative Japan Inc.
 # All rights reserved.
