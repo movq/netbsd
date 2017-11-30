@@ -1,4 +1,4 @@
-/*	$NetBSD: r8a77970-cpg-mssr.h,v 1.1 2017/11/30 19:40:51 jmcneill Exp $	*/
+/*	$NetBSD: r8a77970-cpg-mssr.h,v 1.1.1.1 2017/11/30 19:40:51 jmcneill Exp $	*/
 
 /*
  * Copyright (C) 2016 Renesas Electronics Corp.

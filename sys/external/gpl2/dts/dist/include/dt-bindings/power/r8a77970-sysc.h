@@ -1,4 +1,4 @@
-/*	$NetBSD: r8a77970-sysc.h,v 1.1 2017/11/30 19:40:51 jmcneill Exp $	*/
+/*	$NetBSD: r8a77970-sysc.h,v 1.1.1.1 2017/11/30 19:40:51 jmcneill Exp $	*/
 
 /*
  * Copyright (C) 2017 Cogent Embedded Inc.
