@@ -1,4 +1,4 @@
-/* $NetBSD: tegra_fb.c,v 1.3 2016/12/17 12:11:38 maya Exp $ */
+/* $NetBSD: tegra_fb.c,v 1.3.14.2 2017/12/03 11:35:54 jdolecek Exp $ */
 
 /*-
  * Copyright (c) 2015 Jared D. McNeill <jmcneill@invisible.ca>
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: tegra_fb.c,v 1.3 2016/12/17 12:11:38 maya Exp $");
+__KERNEL_RCSID(0, "$NetBSD: tegra_fb.c,v 1.3.14.2 2017/12/03 11:35:54 jdolecek Exp $");
 
 #include <sys/param.h>
 #include <sys/bus.h>

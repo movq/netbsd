@@ -1,4 +1,4 @@
-#	$NetBSD: majors.riscv,v 1.2 2016/12/08 11:31:12 nat Exp $
+#	$NetBSD: majors.riscv,v 1.2.14.2 2017/12/03 11:36:38 jdolecek Exp $
 #
 # Device majors for evbmips
 #

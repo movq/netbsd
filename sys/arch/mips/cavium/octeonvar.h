@@ -1,4 +1,4 @@
-/*	$NetBSD: octeonvar.h,v 1.5 2016/07/11 16:15:35 matt Exp $	*/
+/*	$NetBSD: octeonvar.h,v 1.5.16.2 2017/12/03 11:36:27 jdolecek Exp $	*/
 
 /*-
  * Copyright (c) 2001 The NetBSD Foundation, Inc.

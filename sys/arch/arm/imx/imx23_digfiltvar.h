@@ -1,4 +1,4 @@
-/* $Id: imx23_digfiltvar.h,v 1.1 2015/01/10 12:16:28 jmcneill Exp $ */
+/* $Id: imx23_digfiltvar.h,v 1.1.18.2 2017/12/03 11:35:53 jdolecek Exp $ */
 
 /*
  * Copyright (c) 2014 The NetBSD Foundation, Inc.

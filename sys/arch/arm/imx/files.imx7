@@ -1,4 +1,4 @@
-#	$NetBSD: files.imx7,v 1.5 2017/09/08 05:29:12 hkenken Exp $
+#	$NetBSD: files.imx7,v 1.5.2.2 2017/12/03 11:35:53 jdolecek Exp $
 #
 # Configuration info for the Freescale i.MX7
 #

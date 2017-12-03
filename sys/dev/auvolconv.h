@@ -1,4 +1,4 @@
-/* $NetBSD: auvolconv.h,v 1.1 2014/11/18 01:53:17 jmcneill Exp $ */
+/* $NetBSD: auvolconv.h,v 1.1.20.2 2017/12/03 11:36:58 jdolecek Exp $ */
 
 /*-
  * Copyright (c) 2007 Jared D. McNeill <jmcneill@invisible.ca>

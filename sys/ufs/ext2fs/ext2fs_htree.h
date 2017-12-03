@@ -1,4 +1,4 @@
-/*	$NetBSD: ext2fs_htree.h,v 1.1 2016/06/24 17:21:30 christos Exp $	*/
+/*	$NetBSD: ext2fs_htree.h,v 1.1.18.2 2017/12/03 11:39:21 jdolecek Exp $	*/
 
 /*-
  * Copyright (c) 2010, 2012 Zheng Liu <lz@freebsd.org>

@@ -1,4 +1,4 @@
-/*	$NetBSD: vnode_impl.h,v 1.17 2017/09/21 18:19:44 joerg Exp $	*/
+/*	$NetBSD: vnode_impl.h,v 1.17.2.2 2017/12/03 11:39:21 jdolecek Exp $	*/
 
 /*-
  * Copyright (c) 2016 The NetBSD Foundation, Inc.

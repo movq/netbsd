@@ -1,5 +1,5 @@
 #
-# $NetBSD: std.riscv,v 1.1 2015/03/28 16:13:56 matt Exp $
+# $NetBSD: std.riscv,v 1.1.18.2 2017/12/03 11:36:38 jdolecek Exp $
 #
 machine		riscv
 

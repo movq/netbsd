@@ -1,4 +1,4 @@
-/*	$NetBSD: platform.h,v 1.2 2017/06/10 15:13:19 jmcneill Exp $	*/
+/*	$NetBSD: platform.h,v 1.2.4.2 2017/12/03 11:36:04 jdolecek Exp $	*/
 
 /*-
  * Copyright (c) 2014 The NetBSD Foundation, Inc.

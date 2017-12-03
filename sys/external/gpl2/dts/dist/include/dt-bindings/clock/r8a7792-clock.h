@@ -1,4 +1,4 @@
-/*	$NetBSD: r8a7792-clock.h,v 1.1.1.2 2017/07/27 18:10:50 jmcneill Exp $	*/
+/*	$NetBSD: r8a7792-clock.h,v 1.1.1.2.4.2 2017/12/03 11:38:36 jdolecek Exp $	*/
 
 /*
  * Copyright (C) 2016 Cogent Embedded, Inc.

@@ -1,4 +1,4 @@
-/*	$NetBSD: if_mvxpereg.h,v 1.4 2016/02/13 06:33:21 hikaru Exp $	*/
+/*	$NetBSD: if_mvxpereg.h,v 1.4.16.2 2017/12/03 11:37:05 jdolecek Exp $	*/
 /*
  * Copyright (c) 2015 Internet Initiative Japan Inc.
  * All rights reserved.

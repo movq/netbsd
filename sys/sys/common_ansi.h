@@ -1,4 +1,4 @@
-/*	$NetBSD: common_ansi.h,v 1.1 2014/08/19 07:27:31 matt Exp $	*/
+/*	$NetBSD: common_ansi.h,v 1.1.18.2 2017/12/03 11:39:20 jdolecek Exp $	*/
 
 /*-
  * Copyright (c) 2014 The NetBSD Foundation, Inc.

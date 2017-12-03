@@ -1,4 +1,4 @@
-/*	$NetBSD: autoconf.c,v 1.3 2015/06/06 22:23:31 matt Exp $	*/
+/*	$NetBSD: autoconf.c,v 1.3.16.2 2017/12/03 11:36:08 jdolecek Exp $	*/
 
 /*
  * Copyright 2002 Wasabi Systems, Inc.
@@ -36,7 +36,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.3 2015/06/06 22:23:31 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.3.16.2 2017/12/03 11:36:08 jdolecek Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

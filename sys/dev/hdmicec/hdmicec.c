@@ -1,4 +1,4 @@
-/* $NetBSD: hdmicec.c,v 1.2 2017/10/28 04:53:56 riastradh Exp $ */
+/* $NetBSD: hdmicec.c,v 1.2.2.2 2017/12/03 11:37:02 jdolecek Exp $ */
 
 /*-
  * Copyright (c) 2015 Jared D. McNeill <jmcneill@invisible.ca>
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: hdmicec.c,v 1.2 2017/10/28 04:53:56 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: hdmicec.c,v 1.2.2.2 2017/12/03 11:37:02 jdolecek Exp $");
 
 #include <sys/param.h>
 #include <sys/types.h>

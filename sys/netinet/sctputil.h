@@ -1,5 +1,5 @@
 /*	$KAME: sctputil.h,v 1.15 2005/03/06 16:04:19 itojun Exp $	*/
-/*	$NetBSD: sctputil.h,v 1.2 2016/05/22 23:04:27 rjs Exp $ */
+/*	$NetBSD: sctputil.h,v 1.2.16.2 2017/12/03 11:39:04 jdolecek Exp $ */
 
 #ifndef __SCTPUTIL_H__
 #define __SCTPUTIL_H__

@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: adm1026reg.h,v 1.1 2015/12/16 07:56:48 jdc Exp $");
+__KERNEL_RCSID(0, "$NetBSD: adm1026reg.h,v 1.1.18.2 2017/12/03 11:37:02 jdolecek Exp $");
 
 #define	ADM1026_ADDRMASK	0x3f8
 #define ADM1026_ADDR		0x2c

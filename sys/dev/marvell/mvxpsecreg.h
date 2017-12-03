@@ -1,4 +1,4 @@
-/*	$NetBSD: mvxpsecreg.h,v 1.1 2015/06/03 04:20:02 hsuenaga Exp $	*/
+/*	$NetBSD: mvxpsecreg.h,v 1.1.18.2 2017/12/03 11:37:05 jdolecek Exp $	*/
 /*
  * Copyright (c) 2015 Internet Initiative Japan Inc.
  * All rights reserved.

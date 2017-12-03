@@ -1,4 +1,4 @@
-/*	$NetBSD: efi.c,v 1.14 2017/10/22 01:29:26 maya Exp $	*/
+/*	$NetBSD: efi.c,v 1.14.2.2 2017/12/03 11:36:50 jdolecek Exp $	*/
 
 /*-
  * Copyright (c) 2016 The NetBSD Foundation, Inc.
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: efi.c,v 1.14 2017/10/22 01:29:26 maya Exp $");
+__KERNEL_RCSID(0, "$NetBSD: efi.c,v 1.14.2.2 2017/12/03 11:36:50 jdolecek Exp $");
 
 #include <sys/kmem.h>
 #include <sys/param.h>

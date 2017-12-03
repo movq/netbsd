@@ -1,4 +1,4 @@
-/* $NetBSD: awin_fb.c,v 1.9 2014/12/04 11:16:38 jmcneill Exp $ */
+/* $NetBSD: awin_fb.c,v 1.9.16.2 2017/12/03 11:35:51 jdolecek Exp $ */
 
 /*-
  * Copyright (c) 2014 Jared D. McNeill <jmcneill@invisible.ca>
@@ -29,7 +29,7 @@
 #include "awin_mp.h"
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: awin_fb.c,v 1.9 2014/12/04 11:16:38 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: awin_fb.c,v 1.9.16.2 2017/12/03 11:35:51 jdolecek Exp $");
 
 #include <sys/param.h>
 #include <sys/bus.h>

@@ -1,4 +1,4 @@
-/*	$NetBSD: gif_component.c,v 1.2 2016/01/26 23:12:18 pooka Exp $	*/
+/*	$NetBSD: gif_component.c,v 1.2.16.2 2017/12/03 11:39:17 jdolecek Exp $	*/
 
 /*
  * Copyright (c) 2015 Internet Initiative Japan Inc.
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: gif_component.c,v 1.2 2016/01/26 23:12:18 pooka Exp $");
+__KERNEL_RCSID(0, "$NetBSD: gif_component.c,v 1.2.16.2 2017/12/03 11:39:17 jdolecek Exp $");
 
 #include <sys/param.h>
 

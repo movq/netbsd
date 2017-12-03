@@ -1,4 +1,4 @@
-# $NetBSD: ldscript.mk,v 1.2 2015/09/06 15:20:59 uebayasi Exp $
+# $NetBSD: ldscript.mk,v 1.2.18.2 2017/12/03 11:36:57 jdolecek Exp $
 
 # Give MD generated ldscript dependency on ${SYSTEM_OBJ}
 .if defined(KERNLDSCRIPT)

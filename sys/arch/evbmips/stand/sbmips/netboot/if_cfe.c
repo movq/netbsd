@@ -1,4 +1,4 @@
-/* $NetBSD: if_cfe.c,v 1.2 2017/07/24 10:34:55 mrg Exp $ */
+/* $NetBSD: if_cfe.c,v 1.2.6.2 2017/12/03 11:36:11 jdolecek Exp $ */
 
 /*
  * Copyright (c) 1997 Christopher G. Demetriou.  All rights reserved.

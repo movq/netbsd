@@ -1,4 +1,4 @@
-/* $NetBSD: spkrvar.h,v 1.9 2017/06/11 21:54:22 pgoyette Exp $ */
+/* $NetBSD: spkrvar.h,v 1.9.4.2 2017/12/03 11:36:58 jdolecek Exp $ */
 
 #ifndef _SYS_DEV_SPKRVAR_H
 #define _SYS_DEV_SPKRVAR_H

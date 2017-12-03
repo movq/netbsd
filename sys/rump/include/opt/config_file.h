@@ -1,1 +1,1 @@
-/*	$NetBSD: config_file.h,v 1.1 2015/08/24 22:52:15 pooka Exp $	*/
+/*	$NetBSD: config_file.h,v 1.1.18.2 2017/12/03 11:39:14 jdolecek Exp $	*/

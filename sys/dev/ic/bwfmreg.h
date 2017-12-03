@@ -1,4 +1,4 @@
-/* $NetBSD: bwfmreg.h,v 1.2 2017/10/20 23:38:56 jmcneill Exp $ */
+/* $NetBSD: bwfmreg.h,v 1.2.2.2 2017/12/03 11:37:03 jdolecek Exp $ */
 /* $OpenBSD: bwfmreg.h,v 1.4 2017/10/16 22:27:16 patrick Exp $ */
 /*
  * Copyright (c) 2010-2016 Broadcom Corporation

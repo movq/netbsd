@@ -1,4 +1,4 @@
-/* $NetBSD: vmtreg.h,v 1.2 2017/10/17 06:50:00 maya Exp $ */
+/* $NetBSD: vmtreg.h,v 1.2.2.2 2017/12/03 11:36:51 jdolecek Exp $ */
 /* NetBSD: vmt.c,v 1.15 2016/11/10 03:32:04 ozaki-r Exp */
 /* $OpenBSD: vmt.c,v 1.11 2011/01/27 21:29:25 dtucker Exp $ */
 

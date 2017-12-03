@@ -1,4 +1,4 @@
-#	$NetBSD: mk.exynos,v 1.2 2015/12/26 22:53:52 jmcneill Exp $
+#	$NetBSD: mk.exynos,v 1.2.18.2 2017/12/03 11:36:03 jdolecek Exp $
 
 .if !empty(MACHINE_ARCH:M*eb)
 EXTRA_LINKFLAGS+=	--be8

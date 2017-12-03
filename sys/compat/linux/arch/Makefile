@@ -1,4 +1,4 @@
-# $NetBSD: Makefile,v 1.1 2017/01/16 00:11:42 christos Exp $
+# $NetBSD: Makefile,v 1.1.18.2 2017/12/03 11:36:53 jdolecek Exp $
 
 SUBDIR=alpha amd64 arm i386 m68k mips powerpc sparc sparc64
 

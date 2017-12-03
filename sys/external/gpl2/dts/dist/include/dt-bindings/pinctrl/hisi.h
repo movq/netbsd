@@ -1,4 +1,4 @@
-/*	$NetBSD: hisi.h,v 1.1.1.2 2017/07/27 18:10:50 jmcneill Exp $	*/
+/*	$NetBSD: hisi.h,v 1.1.1.2.4.2 2017/12/03 11:38:39 jdolecek Exp $	*/
 
 /*
  * This header provides constants for hisilicon pinctrl bindings.

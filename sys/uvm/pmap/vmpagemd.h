@@ -1,4 +1,4 @@
-/*	$NetBSD: vmpagemd.h,v 1.7 2017/06/24 05:39:53 skrll Exp $	*/
+/*	$NetBSD: vmpagemd.h,v 1.7.4.2 2017/12/03 11:39:23 jdolecek Exp $	*/
 
 /*-
  * Copyright (c) 2011 The NetBSD Foundation, Inc.

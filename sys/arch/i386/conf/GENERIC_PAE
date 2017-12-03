@@ -1,4 +1,4 @@
-# $NetBSD: GENERIC_PAE,v 1.1 2016/03/27 05:14:14 mrg Exp $
+# $NetBSD: GENERIC_PAE,v 1.1.18.2 2017/12/03 11:36:17 jdolecek Exp $
 
 include "arch/i386/conf/GENERIC"
 

@@ -1,4 +1,4 @@
-/* $NetBSD: tegra_lic.c,v 1.5 2017/05/26 20:08:02 jmcneill Exp $ */
+/* $NetBSD: tegra_lic.c,v 1.5.8.2 2017/12/03 11:35:54 jdolecek Exp $ */
 
 /*-
  * Copyright (c) 2015 Jared D. McNeill <jmcneill@invisible.ca>
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: tegra_lic.c,v 1.5 2017/05/26 20:08:02 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: tegra_lic.c,v 1.5.8.2 2017/12/03 11:35:54 jdolecek Exp $");
 
 #include <sys/param.h>
 #include <sys/bus.h>

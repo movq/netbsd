@@ -1,4 +1,4 @@
-/*	$NetBSD: vioscsi.c,v 1.19 2017/05/15 21:30:37 jdolecek Exp $	*/
+/*	$NetBSD: vioscsi.c,v 1.19.8.2 2017/12/03 11:37:29 jdolecek Exp $	*/
 /*	$OpenBSD: vioscsi.c,v 1.3 2015/03/14 03:38:49 jsg Exp $	*/
 
 /*
@@ -18,7 +18,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: vioscsi.c,v 1.19 2017/05/15 21:30:37 jdolecek Exp $");
+__KERNEL_RCSID(0, "$NetBSD: vioscsi.c,v 1.19.8.2 2017/12/03 11:37:29 jdolecek Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

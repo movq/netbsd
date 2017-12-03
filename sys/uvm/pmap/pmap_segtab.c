@@ -1,4 +1,4 @@
-/*	$NetBSD: pmap_segtab.c,v 1.6 2017/05/12 12:18:37 skrll Exp $	*/
+/*	$NetBSD: pmap_segtab.c,v 1.6.8.2 2017/12/03 11:39:23 jdolecek Exp $	*/
 
 /*-
  * Copyright (c) 1998, 2001 The NetBSD Foundation, Inc.
@@ -67,7 +67,7 @@
 
 #include <sys/cdefs.h>
 
-__KERNEL_RCSID(0, "$NetBSD: pmap_segtab.c,v 1.6 2017/05/12 12:18:37 skrll Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pmap_segtab.c,v 1.6.8.2 2017/12/03 11:39:23 jdolecek Exp $");
 
 /*
  *	Manages physical address maps.

@@ -28,7 +28,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: adm1026.c,v 1.2 2016/01/11 18:23:52 jdc Exp $");
+__KERNEL_RCSID(0, "$NetBSD: adm1026.c,v 1.2.16.2 2017/12/03 11:37:02 jdolecek Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

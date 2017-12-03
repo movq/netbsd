@@ -1,4 +1,4 @@
-/*	$NetBSD: lcg.c,v 1.2 2014/12/18 22:46:53 jklos Exp $ */
+/*	$NetBSD: lcg.c,v 1.2.18.2 2017/12/03 11:36:48 jdolecek Exp $ */
 /*
  * LCG accelerated framebuffer driver
  * Copyright (c) 2003, 2004 Blaz Antonic
@@ -34,7 +34,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: lcg.c,v 1.2 2014/12/18 22:46:53 jklos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: lcg.c,v 1.2.18.2 2017/12/03 11:36:48 jdolecek Exp $");
 
 #define LCG_NO_ACCEL
 

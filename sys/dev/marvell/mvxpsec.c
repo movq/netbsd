@@ -1,4 +1,4 @@
-/*	$NetBSD: mvxpsec.c,v 1.2 2017/11/09 22:22:58 christos Exp $	*/
+/*	$NetBSD: mvxpsec.c,v 1.2.2.2 2017/12/03 11:37:05 jdolecek Exp $	*/
 /*
  * Copyright (c) 2015 Internet Initiative Japan Inc.
  * All rights reserved.

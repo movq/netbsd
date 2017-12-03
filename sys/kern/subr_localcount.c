@@ -1,4 +1,4 @@
-/*	$NetBSD: subr_localcount.c,v 1.7 2017/11/17 09:26:36 ozaki-r Exp $	*/
+/*	$NetBSD: subr_localcount.c,v 1.7.2.2 2017/12/03 11:38:45 jdolecek Exp $	*/
 
 /*-
  * Copyright (c) 2016 The NetBSD Foundation, Inc.
@@ -44,7 +44,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: subr_localcount.c,v 1.7 2017/11/17 09:26:36 ozaki-r Exp $");
+__KERNEL_RCSID(0, "$NetBSD: subr_localcount.c,v 1.7.2.2 2017/12/03 11:38:45 jdolecek Exp $");
 
 #include <sys/param.h>
 #include <sys/localcount.h>

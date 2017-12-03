@@ -1,4 +1,4 @@
-/* $NetBSD: dwc_tmr.c,v 1.1 2015/01/17 15:04:47 jmcneill Exp $ */
+/* $NetBSD: dwc_tmr.c,v 1.1.18.2 2017/12/03 11:37:03 jdolecek Exp $ */
 
 /*-
  * Copyright (c) 2015 Jared D. McNeill <jmcneill@invisible.ca>
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: dwc_tmr.c,v 1.1 2015/01/17 15:04:47 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: dwc_tmr.c,v 1.1.18.2 2017/12/03 11:37:03 jdolecek Exp $");
 
 #include <sys/param.h>
 #include <sys/bus.h>

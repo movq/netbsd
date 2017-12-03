@@ -1,4 +1,4 @@
-/*	$NetBSD: sdhc_acpi.c,v 1.4 2017/02/17 10:51:48 nonaka Exp $	*/
+/*	$NetBSD: sdhc_acpi.c,v 1.4.12.2 2017/12/03 11:36:58 jdolecek Exp $	*/
 
 /*
  * Copyright (c) 2016 Kimihiro Nonaka <nonaka@NetBSD.org>
@@ -26,7 +26,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sdhc_acpi.c,v 1.4 2017/02/17 10:51:48 nonaka Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sdhc_acpi.c,v 1.4.12.2 2017/12/03 11:36:58 jdolecek Exp $");
 
 #include <sys/param.h>
 #include <sys/device.h>

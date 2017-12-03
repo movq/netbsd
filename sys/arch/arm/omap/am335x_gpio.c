@@ -1,4 +1,4 @@
-/*	$NetBSD: am335x_gpio.c,v 1.2 2015/12/08 14:42:24 skrll Exp $	*/
+/*	$NetBSD: am335x_gpio.c,v 1.2.18.2 2017/12/03 11:35:55 jdolecek Exp $	*/
 /*-
  * Copyright (c) 2007 The NetBSD Foundation, Inc.
  * All rights reserved.
@@ -28,7 +28,7 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: am335x_gpio.c,v 1.2 2015/12/08 14:42:24 skrll Exp $");
+__KERNEL_RCSID(0, "$NetBSD: am335x_gpio.c,v 1.2.18.2 2017/12/03 11:35:55 jdolecek Exp $");
 
 #define _INTR_PRIVATE
 

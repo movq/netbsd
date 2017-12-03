@@ -1,4 +1,4 @@
-/* $NetBSD: fixedregulator.c,v 1.5 2017/04/24 10:55:26 jmcneill Exp $ */
+/* $NetBSD: fixedregulator.c,v 1.5.10.2 2017/12/03 11:37:01 jdolecek Exp $ */
 
 /*-
  * Copyright (c) 2015 Jared D. McNeill <jmcneill@invisible.ca>
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: fixedregulator.c,v 1.5 2017/04/24 10:55:26 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: fixedregulator.c,v 1.5.10.2 2017/12/03 11:37:01 jdolecek Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

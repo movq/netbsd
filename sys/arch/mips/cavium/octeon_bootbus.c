@@ -1,4 +1,4 @@
-/*	$NetBSD: octeon_bootbus.c,v 1.1 2015/04/29 08:32:00 hikaru Exp $	*/
+/*	$NetBSD: octeon_bootbus.c,v 1.1.18.2 2017/12/03 11:36:27 jdolecek Exp $	*/
 
 /*
  * Copyright (c) 2007
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: octeon_bootbus.c,v 1.1 2015/04/29 08:32:00 hikaru Exp $");
+__KERNEL_RCSID(0, "$NetBSD: octeon_bootbus.c,v 1.1.18.2 2017/12/03 11:36:27 jdolecek Exp $");
 
 #include "locators.h"
 

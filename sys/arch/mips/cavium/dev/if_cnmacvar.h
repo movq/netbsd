@@ -1,4 +1,4 @@
-/*	$NetBSD: if_cnmacvar.h,v 1.1 2015/04/29 08:32:01 hikaru Exp $	*/
+/*	$NetBSD: if_cnmacvar.h,v 1.1.18.2 2017/12/03 11:36:27 jdolecek Exp $	*/
 
 #undef DEBUG
 #undef TENBASET_DBG

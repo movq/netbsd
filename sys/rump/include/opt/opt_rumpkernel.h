@@ -1,4 +1,4 @@
-/*	$NetBSD: opt_rumpkernel.h,v 1.6 2017/05/27 21:02:56 bouyer Exp $	*/
+/*	$NetBSD: opt_rumpkernel.h,v 1.6.8.2 2017/12/03 11:39:14 jdolecek Exp $	*/
 
 #ifndef __NetBSD__
 #define __NetBSD__

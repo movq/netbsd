@@ -1,4 +1,4 @@
-/*	$NetBSD: imx6_usbphy.c,v 1.1 2017/11/09 05:57:23 hkenken Exp $	*/
+/*	$NetBSD: imx6_usbphy.c,v 1.1.2.2 2017/12/03 11:35:53 jdolecek Exp $	*/
 
 /*
  * Copyright (c) 2017  Genetec Corporation.  All rights reserved.
@@ -32,7 +32,7 @@
 
 #include <sys/cdefs.h>
 
-__KERNEL_RCSID(1, "$NetBSD: imx6_usbphy.c,v 1.1 2017/11/09 05:57:23 hkenken Exp $");
+__KERNEL_RCSID(1, "$NetBSD: imx6_usbphy.c,v 1.1.2.2 2017/12/03 11:35:53 jdolecek Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

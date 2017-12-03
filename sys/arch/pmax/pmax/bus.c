@@ -1,4 +1,4 @@
-/*	$NetBSD: bus.c,v 1.3 2017/07/16 17:35:20 christos Exp $	*/
+/*	$NetBSD: bus.c,v 1.3.4.2 2017/12/03 11:36:35 jdolecek Exp $	*/
 
 /*-
  * Copyright (c) 1997, 1998 The NetBSD Foundation, Inc.
@@ -31,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: bus.c,v 1.3 2017/07/16 17:35:20 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: bus.c,v 1.3.4.2 2017/12/03 11:36:35 jdolecek Exp $");
 
 #include "opt_cputype.h"
 

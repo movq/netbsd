@@ -1,4 +1,4 @@
-/*	$NetBSD: drmfb_pci.h,v 1.2 2015/03/05 17:56:39 riastradh Exp $	*/
+/*	$NetBSD: drmfb_pci.h,v 1.2.20.2 2017/12/03 11:37:59 jdolecek Exp $	*/
 
 /*-
  * Copyright (c) 2014 The NetBSD Foundation, Inc.

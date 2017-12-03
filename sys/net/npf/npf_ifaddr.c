@@ -1,4 +1,4 @@
-/*	$NetBSD: npf_ifaddr.c,v 1.2 2017/01/03 00:58:05 rmind Exp $	*/
+/*	$NetBSD: npf_ifaddr.c,v 1.2.18.2 2017/12/03 11:39:03 jdolecek Exp $	*/
 
 /*-
  * Copyright (c) 2014 The NetBSD Foundation, Inc.
@@ -34,7 +34,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: npf_ifaddr.c,v 1.2 2017/01/03 00:58:05 rmind Exp $");
+__KERNEL_RCSID(0, "$NetBSD: npf_ifaddr.c,v 1.2.18.2 2017/12/03 11:39:03 jdolecek Exp $");
 
 #include <sys/param.h>
 #include <sys/types.h>

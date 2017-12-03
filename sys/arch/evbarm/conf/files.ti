@@ -1,4 +1,4 @@
-#	$NetBSD: files.ti,v 1.1 2017/10/26 01:16:32 jakllsch Exp $
+#	$NetBSD: files.ti,v 1.1.2.2 2017/12/03 11:36:03 jdolecek Exp $
 #
 
 include "arch/evbarm/conf/files.fdt"

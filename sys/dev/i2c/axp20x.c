@@ -1,4 +1,4 @@
-/* $NetBSD: axp20x.c,v 1.10 2017/10/22 11:00:28 jmcneill Exp $ */
+/* $NetBSD: axp20x.c,v 1.10.2.2 2017/12/03 11:37:02 jdolecek Exp $ */
 
 /*-
  * Copyright (c) 2014-2017 Jared McNeill <jmcneill@invisible.ca>
@@ -29,7 +29,7 @@
 #include "opt_fdt.h"
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: axp20x.c,v 1.10 2017/10/22 11:00:28 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: axp20x.c,v 1.10.2.2 2017/12/03 11:37:02 jdolecek Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

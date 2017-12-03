@@ -1,4 +1,4 @@
-/*	$NetBSD: efiboot_machdep.h,v 1.1 2017/01/24 11:09:14 nonaka Exp $	*/
+/*	$NetBSD: efiboot_machdep.h,v 1.1.18.2 2017/12/03 11:36:19 jdolecek Exp $	*/
 
 /*-
  * Copyright (c) 2016 Kimihiro Nonaka <nonaka@netbsd.org>

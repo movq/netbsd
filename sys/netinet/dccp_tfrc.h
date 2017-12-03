@@ -1,5 +1,5 @@
 /*	$KAME: dccp_tfrc.h,v 1.10 2005/10/26 11:36:49 nishida Exp $	*/
-/*	$NetBSD: dccp_tfrc.h,v 1.2 2016/07/07 06:55:43 msaitoh Exp $ */
+/*	$NetBSD: dccp_tfrc.h,v 1.2.16.2 2017/12/03 11:39:03 jdolecek Exp $ */
 
 /*
  * Copyright (c) 2003  Nils-Erik Mattsson 

@@ -1,4 +1,4 @@
-/*	$NetBSD: in6_l2tp.h,v 1.1 2017/02/16 08:23:36 knakahara Exp $	*/
+/*	$NetBSD: in6_l2tp.h,v 1.1.18.2 2017/12/03 11:39:04 jdolecek Exp $	*/
 
 /*
  * Copyright (c) 2017 Internet Initiative Japan Inc.

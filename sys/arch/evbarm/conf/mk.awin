@@ -1,4 +1,4 @@
-#	$NetBSD: mk.awin,v 1.4 2014/10/14 22:42:36 jmcneill Exp $
+#	$NetBSD: mk.awin,v 1.4.18.2 2017/12/03 11:36:03 jdolecek Exp $
 
 .if !empty(MACHINE_ARCH:M*eb)
 EXTRA_LINKFLAGS+=	--be8

@@ -1,4 +1,4 @@
-/* $NetBSD: amlogic_rtc.c,v 1.1 2015/03/22 17:28:22 jmcneill Exp $ */
+/* $NetBSD: amlogic_rtc.c,v 1.1.20.2 2017/12/03 11:35:51 jdolecek Exp $ */
 
 /*-
  * Copyright (c) 2015 The NetBSD Foundation, Inc.
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: amlogic_rtc.c,v 1.1 2015/03/22 17:28:22 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: amlogic_rtc.c,v 1.1.20.2 2017/12/03 11:35:51 jdolecek Exp $");
 
 #include <sys/param.h>
 #include <sys/atomic.h>

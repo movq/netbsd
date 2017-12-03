@@ -1,5 +1,5 @@
 /*	$KAME: sctp_header.h,v 1.14 2005/03/06 16:04:17 itojun Exp $	*/
-/*	$NetBSD: sctp_header.h,v 1.2 2017/06/27 11:55:07 rjs Exp $ */
+/*	$NetBSD: sctp_header.h,v 1.2.4.2 2017/12/03 11:39:04 jdolecek Exp $ */
 
 #ifndef __SCTP_HEADER_H__
 #define __SCTP_HEADER_H__

@@ -1,5 +1,5 @@
 /*	$KAME: dccp_cc_sw.h,v 1.6 2005/02/10 04:25:38 itojun Exp $	*/
-/*	$NetBSD: dccp_cc_sw.h,v 1.1 2015/02/10 19:11:52 rjs Exp $ */
+/*	$NetBSD: dccp_cc_sw.h,v 1.1.18.2 2017/12/03 11:39:03 jdolecek Exp $ */
 
 /*
  * Copyright (c) 2003  Nils-Erik Mattsson 

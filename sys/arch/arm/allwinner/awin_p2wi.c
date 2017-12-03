@@ -1,4 +1,4 @@
-/* $NetBSD: awin_p2wi.c,v 1.5 2014/12/07 14:22:32 jmcneill Exp $ */
+/* $NetBSD: awin_p2wi.c,v 1.5.16.2 2017/12/03 11:35:51 jdolecek Exp $ */
 
 /*-
  * Copyright (c) 2014 Jared D. McNeill <jmcneill@invisible.ca>
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: awin_p2wi.c,v 1.5 2014/12/07 14:22:32 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: awin_p2wi.c,v 1.5.16.2 2017/12/03 11:35:51 jdolecek Exp $");
 
 #include <sys/param.h>
 #include <sys/bus.h>

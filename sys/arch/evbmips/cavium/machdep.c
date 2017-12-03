@@ -1,4 +1,4 @@
-/*	$NetBSD: machdep.c,v 1.10 2016/12/28 03:27:08 mrg Exp $	*/
+/*	$NetBSD: machdep.c,v 1.10.14.2 2017/12/03 11:36:08 jdolecek Exp $	*/
 
 /*
  * Copyright 2001, 2002 Wasabi Systems, Inc.
@@ -115,7 +115,7 @@
 #include "opt_cavium.h"
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.10 2016/12/28 03:27:08 mrg Exp $");
+__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.10.14.2 2017/12/03 11:36:08 jdolecek Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

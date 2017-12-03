@@ -1,4 +1,4 @@
-/*	$NetBSD: qvkbd.c,v 1.1 2015/07/05 03:07:21 matt Exp $	*/
+/*	$NetBSD: qvkbd.c,v 1.1.18.2 2017/12/03 11:36:48 jdolecek Exp $	*/
 
 /* Copyright (c) 2015 Charles H. Dickman. All rights reserved.
  * Derived from dzkbd.c

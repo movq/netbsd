@@ -1,4 +1,4 @@
-#	$NetBSD: files.ingenic,v 1.7 2017/05/19 07:30:24 skrll Exp $
+#	$NetBSD: files.ingenic,v 1.7.8.2 2017/12/03 11:36:09 jdolecek Exp $
 
 
 file	kern/subr_disk_mbr.c

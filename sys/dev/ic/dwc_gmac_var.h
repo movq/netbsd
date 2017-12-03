@@ -1,4 +1,4 @@
-/* $NetBSD: dwc_gmac_var.h,v 1.7 2017/01/21 10:30:15 skrll Exp $ */
+/* $NetBSD: dwc_gmac_var.h,v 1.7.12.2 2017/12/03 11:37:03 jdolecek Exp $ */
 
 /*-
  * Copyright (c) 2013, 2014 The NetBSD Foundation, Inc.

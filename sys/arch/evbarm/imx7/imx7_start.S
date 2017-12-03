@@ -1,4 +1,4 @@
-/*	$NetBSD: imx7_start.S,v 1.1 2016/05/17 06:44:46 ryo Exp $	*/
+/*	$NetBSD: imx7_start.S,v 1.1.18.2 2017/12/03 11:36:05 jdolecek Exp $	*/
 
 /*-
  * Copyright (c) 2014 Ryo Shimizu <ryo@nerv.org>
@@ -37,7 +37,7 @@
 #include <arm/cortex/scu_reg.h>
 #include "assym.h"
 
-RCSID("$NetBSD: imx7_start.S,v 1.1 2016/05/17 06:44:46 ryo Exp $")
+RCSID("$NetBSD: imx7_start.S,v 1.1.18.2 2017/12/03 11:36:05 jdolecek Exp $")
 
 #ifndef CONADDR
 #define CONADDR		0x30a60000

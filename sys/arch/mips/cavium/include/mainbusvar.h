@@ -1,4 +1,4 @@
-/*	$NetBSD: mainbusvar.h,v 1.1 2015/04/29 08:32:01 hikaru Exp $	*/
+/*	$NetBSD: mainbusvar.h,v 1.1.18.2 2017/12/03 11:36:27 jdolecek Exp $	*/
 
 /*
  * Copyright (c) 2007

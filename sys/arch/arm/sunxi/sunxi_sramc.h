@@ -1,4 +1,4 @@
-/* $NetBSD: sunxi_sramc.h,v 1.1 2017/10/09 15:53:28 jmcneill Exp $ */
+/* $NetBSD: sunxi_sramc.h,v 1.1.2.2 2017/12/03 11:35:56 jdolecek Exp $ */
 
 /*-
  * Copyright (c) 2017 Jared McNeill <jmcneill@invisible.ca>

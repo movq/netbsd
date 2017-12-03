@@ -1,4 +1,4 @@
-/*	$NetBSD: zynq_uart.c,v 1.2 2015/04/13 21:18:41 riastradh Exp $	*/
+/*	$NetBSD: zynq_uart.c,v 1.2.18.2 2017/12/03 11:35:57 jdolecek Exp $	*/
 
 /*
  * Copyright (c) 2012  Genetec Corporation.  All rights reserved.
@@ -96,7 +96,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: zynq_uart.c,v 1.2 2015/04/13 21:18:41 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: zynq_uart.c,v 1.2.18.2 2017/12/03 11:35:57 jdolecek Exp $");
 
 #include "opt_zynq.h"
 #include "opt_zynquart.h"

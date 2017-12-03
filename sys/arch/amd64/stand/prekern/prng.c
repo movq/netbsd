@@ -1,4 +1,4 @@
-/*	$NetBSD: prng.c,v 1.2 2017/11/26 11:08:34 maxv Exp $	*/
+/*	$NetBSD: prng.c,v 1.2.2.2 2017/12/03 11:35:48 jdolecek Exp $	*/
 
 /*
  * Copyright (c) 2017 The NetBSD Foundation, Inc. All rights reserved.

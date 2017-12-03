@@ -1,4 +1,4 @@
-/*	$NetBSD: imx7ulp-pinfunc.h,v 1.1.1.1 2017/10/28 10:30:31 jmcneill Exp $	*/
+/*	$NetBSD: imx7ulp-pinfunc.h,v 1.1.1.1.2.2 2017/12/03 11:38:15 jdolecek Exp $	*/
 
 /*
  * Copyright 2016 Freescale Semiconductor, Inc.

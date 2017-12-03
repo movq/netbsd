@@ -1,4 +1,4 @@
-/*	$NetBSD: clock.h,v 1.3 2014/11/17 17:11:29 christos Exp $	*/
+/*	$NetBSD: clock.h,v 1.3.18.2 2017/12/03 11:39:20 jdolecek Exp $	*/
 
 /*-
  * Copyright (c) 1996 The NetBSD Foundation, Inc.

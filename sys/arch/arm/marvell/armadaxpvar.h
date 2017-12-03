@@ -1,4 +1,4 @@
-/*	$NetBSD: armadaxpvar.h,v 1.3 2017/01/07 16:19:28 kiyohara Exp $	*/
+/*	$NetBSD: armadaxpvar.h,v 1.3.14.2 2017/12/03 11:35:54 jdolecek Exp $	*/
 /*
  * Copyright (c) 2015 SUENAGA Hiroki
  * All rights reserved.

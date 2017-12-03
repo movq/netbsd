@@ -1,4 +1,4 @@
-/*	$NetBSD: exynos_sysmmu.c,v 1.2 2017/06/19 23:08:05 jmcneill Exp $ */
+/*	$NetBSD: exynos_sysmmu.c,v 1.2.4.2 2017/12/03 11:35:56 jdolecek Exp $ */
 
 /*-
 * Copyright (c) 2015 The NetBSD Foundation, Inc.
@@ -34,7 +34,7 @@
 #include "gpio.h"
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(1, "$NetBSD: exynos_sysmmu.c,v 1.2 2017/06/19 23:08:05 jmcneill Exp $");
+__KERNEL_RCSID(1, "$NetBSD: exynos_sysmmu.c,v 1.2.4.2 2017/12/03 11:35:56 jdolecek Exp $");
 
 #include <sys/param.h>
 #include <sys/bus.h>

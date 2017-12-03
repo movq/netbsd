@@ -1,4 +1,4 @@
-#	$NetBSD: majors.or1k,v 1.2 2015/04/23 23:22:52 pgoyette Exp $
+#	$NetBSD: majors.or1k,v 1.2.16.2 2017/12/03 11:36:34 jdolecek Exp $
 #
 # Device majors for OpenRISC 1000
 #

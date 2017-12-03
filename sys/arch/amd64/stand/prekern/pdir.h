@@ -1,4 +1,4 @@
-/*	$NetBSD: pdir.h,v 1.3 2017/11/17 07:07:52 maxv Exp $	*/
+/*	$NetBSD: pdir.h,v 1.3.2.2 2017/12/03 11:35:48 jdolecek Exp $	*/
 
 /*
  * Copyright (c) 2017 The NetBSD Foundation, Inc. All rights reserved.

@@ -1,4 +1,4 @@
-/*	$NetBSD: qcom,rpmcc.h,v 1.1.1.2 2017/11/30 19:40:51 jmcneill Exp $	*/
+/*	$NetBSD: qcom,rpmcc.h,v 1.1.1.2.2.2 2017/12/03 11:38:36 jdolecek Exp $	*/
 
 /*
  * Copyright 2015 Linaro Limited

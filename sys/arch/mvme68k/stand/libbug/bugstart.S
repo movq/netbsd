@@ -1,4 +1,4 @@
-/*	$NetBSD: bugstart.S,v 1.1 2014/11/21 20:10:28 christos Exp $	*/
+/*	$NetBSD: bugstart.S,v 1.1.18.2 2017/12/03 11:36:30 jdolecek Exp $	*/
 
 #define _LOCORE
 #include <machine/prom.h>

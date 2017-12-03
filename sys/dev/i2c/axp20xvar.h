@@ -1,4 +1,4 @@
-/*      $NetBSD: axp20xvar.h,v 1.3 2017/10/07 18:22:06 jmcneill Exp $       */
+/*      $NetBSD: axp20xvar.h,v 1.3.2.2 2017/12/03 11:37:02 jdolecek Exp $       */
 
 /*
  * Copyright (c) 1998, 2001 Manuel Bouyer.

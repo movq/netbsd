@@ -1,4 +1,4 @@
-/*	$NetBSD: mgxreg.h,v 1.5 2017/07/29 03:29:49 macallan Exp $ */
+/*	$NetBSD: mgxreg.h,v 1.5.2.2 2017/12/03 11:37:32 jdolecek Exp $ */
 
 /* register definitions based on OpenBSD's atxxreg.h: */
 

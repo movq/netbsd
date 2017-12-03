@@ -1,4 +1,4 @@
-/*	$NetBSD: viovar.h,v 1.1 2016/08/19 19:40:27 palle Exp $	*/
+/*	$NetBSD: viovar.h,v 1.1.18.2 2017/12/03 11:36:44 jdolecek Exp $	*/
 /*	$OpenBSD: viovar.h,v 1.2 2009/01/12 19:52:39 kettenis Exp $	*/
 /*
  * Copyright (c) 2009 Mark Kettenis

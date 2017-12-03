@@ -1,4 +1,4 @@
-#	$NetBSD: files.sunxi,v 1.38 2017/11/10 00:09:23 jmcneill Exp $
+#	$NetBSD: files.sunxi,v 1.38.2.2 2017/12/03 11:35:56 jdolecek Exp $
 #
 # Configuration info for Allwinner sunxi family SoCs
 #

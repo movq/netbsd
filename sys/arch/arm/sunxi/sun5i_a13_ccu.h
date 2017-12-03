@@ -1,4 +1,4 @@
-/* $NetBSD: sun5i_a13_ccu.h,v 1.1 2017/08/25 00:07:03 jmcneill Exp $ */
+/* $NetBSD: sun5i_a13_ccu.h,v 1.1.4.2 2017/12/03 11:35:56 jdolecek Exp $ */
 
 /*-
  * Copyright (c) 2017 Jared McNeill <jmcneill@invisible.ca>

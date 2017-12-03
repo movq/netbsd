@@ -1,4 +1,4 @@
-/*	$NetBSD: rk3366-power.h,v 1.1.1.1 2017/10/28 10:30:32 jmcneill Exp $	*/
+/*	$NetBSD: rk3366-power.h,v 1.1.1.1.2.2 2017/12/03 11:38:39 jdolecek Exp $	*/
 
 #ifndef __DT_BINDINGS_POWER_RK3366_POWER_H__
 #define __DT_BINDINGS_POWER_RK3366_POWER_H__

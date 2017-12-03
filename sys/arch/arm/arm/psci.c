@@ -1,4 +1,4 @@
-/* $NetBSD: psci.c,v 1.1 2017/06/28 23:48:23 jmcneill Exp $ */
+/* $NetBSD: psci.c,v 1.1.8.2 2017/12/03 11:35:51 jdolecek Exp $ */
 
 /*-
  * Copyright (c) 2017 Jared McNeill <jmcneill@invisible.ca>
@@ -29,7 +29,7 @@
 #include "opt_diagnostic.h"
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: psci.c,v 1.1 2017/06/28 23:48:23 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: psci.c,v 1.1.8.2 2017/12/03 11:35:51 jdolecek Exp $");
 
 #include <sys/param.h>
 #include <sys/bus.h>

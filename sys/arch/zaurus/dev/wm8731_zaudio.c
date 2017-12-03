@@ -1,4 +1,4 @@
-/*	$NetBSD: wm8731_zaudio.c,v 1.1 2014/09/23 14:49:46 nonaka Exp $	*/
+/*	$NetBSD: wm8731_zaudio.c,v 1.1.18.2 2017/12/03 11:36:52 jdolecek Exp $	*/
 
 /*-
  * Copyright (c) 2013 The NetBSD Foundation, Inc.
@@ -38,7 +38,7 @@
 #include "opt_zaudio.h"
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: wm8731_zaudio.c,v 1.1 2014/09/23 14:49:46 nonaka Exp $");
+__KERNEL_RCSID(0, "$NetBSD: wm8731_zaudio.c,v 1.1.18.2 2017/12/03 11:36:52 jdolecek Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

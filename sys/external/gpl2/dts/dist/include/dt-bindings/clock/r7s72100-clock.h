@@ -1,4 +1,4 @@
-/*	$NetBSD: r7s72100-clock.h,v 1.1.1.4 2017/11/30 19:40:51 jmcneill Exp $	*/
+/*	$NetBSD: r7s72100-clock.h,v 1.1.1.4.2.2 2017/12/03 11:38:36 jdolecek Exp $	*/
 
 /*
  * Copyright (C) 2014 Renesas Solutions Corp.

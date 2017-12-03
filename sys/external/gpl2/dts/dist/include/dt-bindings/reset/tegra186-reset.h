@@ -1,4 +1,4 @@
-/*	$NetBSD: tegra186-reset.h,v 1.1.1.1 2017/06/15 20:14:23 jmcneill Exp $	*/
+/*	$NetBSD: tegra186-reset.h,v 1.1.1.1.8.2 2017/12/03 11:38:40 jdolecek Exp $	*/
 
 /*
  * Copyright (c) 2015, NVIDIA CORPORATION.  All rights reserved.

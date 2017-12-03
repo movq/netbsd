@@ -1,5 +1,5 @@
 #
-#	$NetBSD: ODROID-C1,v 1.22 2017/03/20 14:06:43 skrll Exp $
+#	$NetBSD: ODROID-C1,v 1.22.12.2 2017/12/03 11:36:03 jdolecek Exp $
 #
 #	Hardkernel ODROID-C1 (Amlogic S805) based SBC (Single Board Computer)
 #

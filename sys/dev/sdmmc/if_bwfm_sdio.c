@@ -1,4 +1,4 @@
-/* $NetBSD: if_bwfm_sdio.c,v 1.1 2017/11/07 16:30:32 khorben Exp $ */
+/* $NetBSD: if_bwfm_sdio.c,v 1.1.2.2 2017/12/03 11:37:32 jdolecek Exp $ */
 /* $OpenBSD: if_bwfm_sdio.c,v 1.1 2017/10/11 17:19:50 patrick Exp $ */
 /*
  * Copyright (c) 2010-2016 Broadcom Corporation

@@ -1,5 +1,5 @@
 /*	$KAME: sctp_pcb.h,v 1.21 2005/07/16 01:18:47 suz Exp $	*/
-/*	$NetBSD: sctp_pcb.h,v 1.1 2015/10/13 21:28:35 rjs Exp $ */
+/*	$NetBSD: sctp_pcb.h,v 1.1.18.2 2017/12/03 11:39:04 jdolecek Exp $ */
 
 #ifndef __SCTP_PCB_H__
 #define __SCTP_PCB_H__

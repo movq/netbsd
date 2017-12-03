@@ -1,4 +1,4 @@
-/* $NetBSD: led.h,v 1.1 2017/07/08 00:54:37 jmcneill Exp $ */
+/* $NetBSD: led.h,v 1.1.8.2 2017/12/03 11:36:58 jdolecek Exp $ */
 
 /*-
  * Copyright (c) 2017 Jared McNeill <jmcneill@invisible.ca>

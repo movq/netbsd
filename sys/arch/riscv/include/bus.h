@@ -1,4 +1,4 @@
-/* $NetBSD: bus.h,v 1.1 2014/09/19 17:36:26 matt Exp $ */
+/* $NetBSD: bus.h,v 1.1.18.2 2017/12/03 11:36:39 jdolecek Exp $ */
 
 #ifndef _RISCV_BUS_H_
 typedef paddr_t bus_addr_t;

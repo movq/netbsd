@@ -1,4 +1,4 @@
-/*	$NetBSD: uniphier-gpio.h,v 1.1.1.1 2017/11/30 19:40:51 jmcneill Exp $	*/
+/*	$NetBSD: uniphier-gpio.h,v 1.1.1.1.2.2 2017/12/03 11:38:37 jdolecek Exp $	*/
 
 /*
  * Copyright (C) 2017 Socionext Inc.

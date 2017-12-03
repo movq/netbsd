@@ -1,4 +1,4 @@
-/*	$NetBSD: exynos_ohci.c,v 1.2 2016/04/23 10:15:28 skrll Exp $	*/
+/*	$NetBSD: exynos_ohci.c,v 1.2.16.2 2017/12/03 11:35:56 jdolecek Exp $	*/
 
 /*-
  * Copyright (c) 2014 The NetBSD Foundation, Inc.
@@ -35,7 +35,7 @@
 
 #include <sys/cdefs.h>
 
-__KERNEL_RCSID(1, "$NetBSD: exynos_ohci.c,v 1.2 2016/04/23 10:15:28 skrll Exp $");
+__KERNEL_RCSID(1, "$NetBSD: exynos_ohci.c,v 1.2.16.2 2017/12/03 11:35:56 jdolecek Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

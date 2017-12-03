@@ -1,4 +1,4 @@
-/*	$NetBSD: zynq_usbvar.h,v 1.2 2015/09/10 04:00:32 hkenken Exp $	*/
+/*	$NetBSD: zynq_usbvar.h,v 1.2.16.2 2017/12/03 11:35:57 jdolecek Exp $	*/
 /*-
  * Copyright (c) 2015  Genetec Corporation.  All rights reserved.
  * Written by Hashimoto Kenichi for Genetec Corporation.

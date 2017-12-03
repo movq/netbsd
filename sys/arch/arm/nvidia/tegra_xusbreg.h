@@ -1,4 +1,4 @@
-/* $NetBSD: tegra_xusbreg.h,v 1.1 2016/09/26 20:05:03 jakllsch Exp $ */
+/* $NetBSD: tegra_xusbreg.h,v 1.1.18.2 2017/12/03 11:35:54 jdolecek Exp $ */
 
 /*
  * Copyright (c) 2016 Jonathan A. Kollasch

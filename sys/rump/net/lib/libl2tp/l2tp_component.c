@@ -1,4 +1,4 @@
-/*	$NetBSD: l2tp_component.c,v 1.1 2017/02/16 08:39:10 knakahara Exp $	*/
+/*	$NetBSD: l2tp_component.c,v 1.1.18.2 2017/12/03 11:39:17 jdolecek Exp $	*/
 
 /*
  * Copyright (c) 2017 Internet Initiative Japan Inc.
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: l2tp_component.c,v 1.1 2017/02/16 08:39:10 knakahara Exp $");
+__KERNEL_RCSID(0, "$NetBSD: l2tp_component.c,v 1.1.18.2 2017/12/03 11:39:17 jdolecek Exp $");
 
 #include <sys/param.h>
 

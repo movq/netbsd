@@ -1,4 +1,4 @@
-/*	$NetBSD: netbsd32_module.c,v 1.5 2017/06/01 02:45:08 chs Exp $	*/
+/*	$NetBSD: netbsd32_module.c,v 1.5.8.2 2017/12/03 11:36:56 jdolecek Exp $	*/
 
 /*-
  * Copyright (c) 2008 The NetBSD Foundation, Inc.
@@ -29,7 +29,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: netbsd32_module.c,v 1.5 2017/06/01 02:45:08 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: netbsd32_module.c,v 1.5.8.2 2017/12/03 11:36:56 jdolecek Exp $");
 
 #include <sys/param.h>
 #include <sys/dirent.h>

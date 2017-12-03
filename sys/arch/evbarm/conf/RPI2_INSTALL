@@ -1,4 +1,4 @@
-#	$NetBSD: RPI2_INSTALL,v 1.3 2017/10/28 00:40:46 pgoyette Exp $
+#	$NetBSD: RPI2_INSTALL,v 1.3.2.2 2017/12/03 11:36:03 jdolecek Exp $
 #
 #	RPI2_INSTALL -- RPI2 kernel with installation-sized
 #	ramdisk

@@ -1,3 +1,3 @@
-/*	$NetBSD: fenv.h,v 1.1 2016/08/25 12:14:10 christos Exp $	*/
+/*	$NetBSD: fenv.h,v 1.1.18.2 2017/12/03 11:36:29 jdolecek Exp $	*/
 
 #include <sh3/fenv.h>

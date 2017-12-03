@@ -1,4 +1,4 @@
-/*     $NetBSD: efi.h,v 1.8 2017/10/22 00:59:28 maya Exp $   */
+/*     $NetBSD: efi.h,v 1.8.2.2 2017/12/03 11:36:50 jdolecek Exp $   */
 
 /*-
  * Copyright (c) 2004 Marcel Moolenaar

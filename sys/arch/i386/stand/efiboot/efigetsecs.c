@@ -1,4 +1,4 @@
-/*	$NetBSD: efigetsecs.c,v 1.1 2017/01/24 11:09:14 nonaka Exp $	*/
+/*	$NetBSD: efigetsecs.c,v 1.1.18.2 2017/12/03 11:36:18 jdolecek Exp $	*/
 
 /*
  * Copyright (c) 2015 YASUOKA Masahiko <yasuoka@yasuoka.net>

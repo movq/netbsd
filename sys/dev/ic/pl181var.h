@@ -1,4 +1,4 @@
-/* $NetBSD: pl181var.h,v 1.2 2017/06/02 11:01:15 jmcneill Exp $ */
+/* $NetBSD: pl181var.h,v 1.2.8.2 2017/12/03 11:37:04 jdolecek Exp $ */
 
 /*-
  * Copyright (c) 2015 Jared D. McNeill <jmcneill@invisible.ca>

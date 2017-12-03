@@ -1,4 +1,4 @@
-/*	$NetBSD: zynq_axi.c,v 1.1 2015/01/23 12:34:09 hkenken Exp $	*/
+/*	$NetBSD: zynq_axi.c,v 1.1.20.2 2017/12/03 11:35:57 jdolecek Exp $	*/
 /*-
  * Copyright (c) 2010 SHIMIZU Ryo <ryo@nerv.org>
  * All rights reserved.
@@ -26,7 +26,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: zynq_axi.c,v 1.1 2015/01/23 12:34:09 hkenken Exp $");
+__KERNEL_RCSID(0, "$NetBSD: zynq_axi.c,v 1.1.20.2 2017/12/03 11:35:57 jdolecek Exp $");
 
 #include <sys/param.h>
 #include <sys/bus.h>

@@ -1,4 +1,4 @@
-/*	$NetBSD: msipic.h,v 1.2 2015/05/08 04:27:48 knakahara Exp $	*/
+/*	$NetBSD: msipic.h,v 1.2.18.2 2017/12/03 11:36:50 jdolecek Exp $	*/
 
 /*
  * Copyright (c) 2015 Internet Initiative Japan Inc.

@@ -1,4 +1,4 @@
-/* $NetBSD: tegra_apbdmareg.h,v 1.2 2017/04/29 11:47:32 jmcneill Exp $ */
+/* $NetBSD: tegra_apbdmareg.h,v 1.2.12.2 2017/12/03 11:35:54 jdolecek Exp $ */
 
 /*-
  * Copyright (c) 2017 Jared D. McNeill <jmcneill@invisible.ca>

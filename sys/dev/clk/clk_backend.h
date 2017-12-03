@@ -1,4 +1,4 @@
-/* $NetBSD: clk_backend.h,v 1.2 2017/04/16 12:28:21 jmcneill Exp $ */
+/* $NetBSD: clk_backend.h,v 1.2.10.2 2017/12/03 11:37:00 jdolecek Exp $ */
 
 /*-
  * Copyright (c) 2015 Jared D. McNeill <jmcneill@invisible.ca>

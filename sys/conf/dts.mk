@@ -1,4 +1,4 @@
-# $NetBSD: dts.mk,v 1.3 2017/09/07 21:22:19 jmcneill Exp $
+# $NetBSD: dts.mk,v 1.3.2.2 2017/12/03 11:36:57 jdolecek Exp $
 
 DTSARCH?=${MACHINE_CPU}
 DTSGNUARCH?=${DTSARCH}

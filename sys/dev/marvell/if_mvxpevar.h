@@ -1,4 +1,4 @@
-/*	$NetBSD: if_mvxpevar.h,v 1.3 2016/02/13 08:05:06 hikaru Exp $	*/
+/*	$NetBSD: if_mvxpevar.h,v 1.3.16.2 2017/12/03 11:37:05 jdolecek Exp $	*/
 /*
  * Copyright (c) 2015 Internet Initiative Japan Inc.
  * All rights reserved.

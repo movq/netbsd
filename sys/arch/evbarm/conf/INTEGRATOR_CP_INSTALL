@@ -1,4 +1,4 @@
-#	$NetBSD: INTEGRATOR_CP_INSTALL,v 1.1 2015/01/27 20:26:15 jmcneill Exp $
+#	$NetBSD: INTEGRATOR_CP_INSTALL,v 1.1.18.2 2017/12/03 11:36:03 jdolecek Exp $
 #
 #	INTEGRATOR_CP_INSTALL -- INTEGRATOR_CP kernel with installation-sized
 #	ramdisk

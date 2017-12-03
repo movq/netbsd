@@ -1,4 +1,4 @@
-/* $NetBSD: awin_cnt.c,v 1.3 2015/04/01 07:44:18 skrll Exp $ */
+/* $NetBSD: awin_cnt.c,v 1.3.16.2 2017/12/03 11:35:50 jdolecek Exp $ */
 
 /*-
  * Copyright (c) 2014 Jared D. McNeill <jmcneill@invisible.ca>
@@ -29,7 +29,7 @@
 #include "opt_multiprocessor.h"
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: awin_cnt.c,v 1.3 2015/04/01 07:44:18 skrll Exp $");
+__KERNEL_RCSID(0, "$NetBSD: awin_cnt.c,v 1.3.16.2 2017/12/03 11:35:50 jdolecek Exp $");
 
 #include <sys/param.h>
 #include <sys/bus.h>

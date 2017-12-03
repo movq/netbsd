@@ -1,4 +1,4 @@
-/*	$NetBSD: octeon_iobus.c,v 1.2 2015/06/01 22:55:12 matt Exp $	*/
+/*	$NetBSD: octeon_iobus.c,v 1.2.18.2 2017/12/03 11:36:27 jdolecek Exp $	*/
 
 /*
  * Copyright (c) 2007
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: octeon_iobus.c,v 1.2 2015/06/01 22:55:12 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: octeon_iobus.c,v 1.2.18.2 2017/12/03 11:36:27 jdolecek Exp $");
 
 #include "locators.h"
 

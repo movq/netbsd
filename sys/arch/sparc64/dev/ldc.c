@@ -1,4 +1,4 @@
-/*	$NetBSD: ldc.c,v 1.3 2017/03/03 21:09:25 palle Exp $	*/
+/*	$NetBSD: ldc.c,v 1.3.12.2 2017/12/03 11:36:44 jdolecek Exp $	*/
 /*	$OpenBSD: ldc.c,v 1.12 2015/03/21 18:02:58 kettenis Exp $	*/
 /*
  * Copyright (c) 2009 Mark Kettenis

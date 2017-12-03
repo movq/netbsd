@@ -1,4 +1,4 @@
-/*	$NetBSD: octeon_dma.c,v 1.2 2016/07/11 16:15:35 matt Exp $	*/
+/*	$NetBSD: octeon_dma.c,v 1.2.16.2 2017/12/03 11:36:27 jdolecek Exp $	*/
 
 /*-
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -41,7 +41,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: octeon_dma.c,v 1.2 2016/07/11 16:15:35 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: octeon_dma.c,v 1.2.16.2 2017/12/03 11:36:27 jdolecek Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

@@ -1,4 +1,4 @@
-/* $NetBSD: sun50i-a64-pine64-plus.dts,v 1.2 2017/09/09 12:05:28 jmcneill Exp $ */
+/* $NetBSD: sun50i-a64-pine64-plus.dts,v 1.2.2.2 2017/12/03 11:35:52 jdolecek Exp $ */
 
 /*-
  * Copyright (c) 2017 Jared McNeill <jmcneill@invisible.ca>

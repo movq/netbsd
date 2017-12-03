@@ -1,4 +1,4 @@
-# $NetBSD: majors.ws,v 1.1 2014/09/19 17:32:34 matt Exp $
+# $NetBSD: majors.ws,v 1.1.18.2 2017/12/03 11:36:57 jdolecek Exp $
 #
 # MI major assignments for ws type devices
 device-major	wsdisplay	char 210		wsdisplay

@@ -1,4 +1,4 @@
-/*	$NetBSD: mdesc.h,v 1.5 2016/06/22 20:13:00 palle Exp $	*/
+/*	$NetBSD: mdesc.h,v 1.5.16.2 2017/12/03 11:36:45 jdolecek Exp $	*/
 /*	$OpenBSD: mdesc.h,v 1.3 2014/11/30 22:26:14 kettenis Exp $	*/
 /*
  * Copyright (c) 2009 Mark Kettenis

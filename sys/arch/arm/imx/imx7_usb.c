@@ -1,4 +1,4 @@
-/*	$NetBSD: imx7_usb.c,v 1.2 2017/08/17 09:11:04 hkenken Exp $	*/
+/*	$NetBSD: imx7_usb.c,v 1.2.2.2 2017/12/03 11:35:53 jdolecek Exp $	*/
 
 /*
  * Copyright (c) 2013  Genetec Corporation.  All rights reserved.
@@ -28,7 +28,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: imx7_usb.c,v 1.2 2017/08/17 09:11:04 hkenken Exp $");
+__KERNEL_RCSID(0, "$NetBSD: imx7_usb.c,v 1.2.2.2 2017/12/03 11:35:53 jdolecek Exp $");
 
 #include "locators.h"
 

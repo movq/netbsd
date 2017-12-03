@@ -1,4 +1,4 @@
-/* $NetBSD: ehci_fdt.c,v 1.2 2017/07/08 16:19:56 jmcneill Exp $ */
+/* $NetBSD: ehci_fdt.c,v 1.2.8.2 2017/12/03 11:37:01 jdolecek Exp $ */
 
 /*-
  * Copyright (c) 2015-2017 Jared McNeill <jmcneill@invisible.ca>
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ehci_fdt.c,v 1.2 2017/07/08 16:19:56 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ehci_fdt.c,v 1.2.8.2 2017/12/03 11:37:01 jdolecek Exp $");
 
 #include <sys/param.h>
 #include <sys/bus.h>

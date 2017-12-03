@@ -1,4 +1,4 @@
-/* $NetBSD: sunxi_ccu_prediv.c,v 1.3 2017/08/25 00:07:03 jmcneill Exp $ */
+/* $NetBSD: sunxi_ccu_prediv.c,v 1.3.4.2 2017/12/03 11:35:56 jdolecek Exp $ */
 
 /*-
  * Copyright (c) 2017 Jared McNeill <jmcneill@invisible.ca>
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sunxi_ccu_prediv.c,v 1.3 2017/08/25 00:07:03 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sunxi_ccu_prediv.c,v 1.3.4.2 2017/12/03 11:35:56 jdolecek Exp $");
 
 #include <sys/param.h>
 #include <sys/bus.h>

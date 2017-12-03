@@ -1,4 +1,4 @@
-/* $NetBSD: mmc_pwrseq_simple.c,v 1.1 2017/10/22 13:56:49 jmcneill Exp $ */
+/* $NetBSD: mmc_pwrseq_simple.c,v 1.1.2.2 2017/12/03 11:37:01 jdolecek Exp $ */
 
 /*-
  * Copyright (c) 2017 Jared McNeill <jmcneill@invisible.ca>
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: mmc_pwrseq_simple.c,v 1.1 2017/10/22 13:56:49 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: mmc_pwrseq_simple.c,v 1.1.2.2 2017/12/03 11:37:01 jdolecek Exp $");
 
 #include <sys/param.h>
 #include <sys/kernel.h>

@@ -1,4 +1,4 @@
-/*	$NetBSD: mt7623-pinfunc.h,v 1.1.1.3 2017/11/30 19:40:51 jmcneill Exp $	*/
+/*	$NetBSD: mt7623-pinfunc.h,v 1.1.1.3.2.2 2017/12/03 11:38:39 jdolecek Exp $	*/
 
 /* SPDX-License-Identifier: GPL-2.0 */
 #ifndef __DTS_MT7623_PINFUNC_H

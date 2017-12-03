@@ -29,7 +29,7 @@
 
 #include <sys/cdefs.h>
 
-__RCSID("$NetBSD: kobj_machdep.c,v 1.2 2017/11/03 09:59:08 maxv Exp $");
+__RCSID("$NetBSD: kobj_machdep.c,v 1.2.2.2 2017/12/03 11:36:39 jdolecek Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

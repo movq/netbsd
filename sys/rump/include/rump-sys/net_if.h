@@ -1,4 +1,4 @@
-/*	$NetBSD: net_if.h,v 1.2 2016/01/26 23:25:40 pooka Exp $	*/
+/*	$NetBSD: net_if.h,v 1.2.18.2 2017/12/03 11:39:14 jdolecek Exp $	*/
 
 /*
  * Automatically generated.  DO NOT EDIT.

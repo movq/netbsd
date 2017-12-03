@@ -1,4 +1,4 @@
-#	$NetBSD: files.octeon,v 1.6 2016/12/28 03:27:08 mrg Exp $
+#	$NetBSD: files.octeon,v 1.6.14.2 2017/12/03 11:36:09 jdolecek Exp $
 
 file	arch/evbmips/cavium/autoconf.c
 file	arch/evbmips/cavium/machdep.c

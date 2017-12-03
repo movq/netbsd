@@ -1,4 +1,4 @@
-/* $NetBSD: awin_debe.c,v 1.20 2015/11/22 17:50:48 aymeric Exp $ */
+/* $NetBSD: awin_debe.c,v 1.20.16.2 2017/12/03 11:35:50 jdolecek Exp $ */
 
 /*-
  * Copyright (c) 2014 Jared D. McNeill <jmcneill@invisible.ca>
@@ -38,7 +38,7 @@
 #define AWIN_DEBE_CURMAX	64
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: awin_debe.c,v 1.20 2015/11/22 17:50:48 aymeric Exp $");
+__KERNEL_RCSID(0, "$NetBSD: awin_debe.c,v 1.20.16.2 2017/12/03 11:35:50 jdolecek Exp $");
 
 #include <sys/param.h>
 #include <sys/bus.h>

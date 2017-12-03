@@ -1,4 +1,4 @@
-/*	$NetBSD: startprog64.S,v 1.3 2017/02/11 10:23:39 nonaka Exp $	*/
+/*	$NetBSD: startprog64.S,v 1.3.16.2 2017/12/03 11:36:19 jdolecek Exp $	*/
 /*	NetBSD: startprog.S,v 1.3 2003/02/01 14:48:18 dsl Exp	*/
 
 /* starts program in protected mode / flat space

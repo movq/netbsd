@@ -1,4 +1,4 @@
-/*	$NetBSD: sha3.h,v 1.1 2017/11/30 05:47:24 riastradh Exp $	*/
+/*	$NetBSD: sha3.h,v 1.1.2.2 2017/12/03 11:39:21 jdolecek Exp $	*/
 
 /*-
  * Copyright (c) 2015 Taylor R. Campbell

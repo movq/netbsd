@@ -1,4 +1,4 @@
-/*	$NetBSD: libfdt.h,v 1.1.1.2 2017/06/08 15:53:15 skrll Exp $	*/
+/*	$NetBSD: libfdt.h,v 1.1.1.2.4.2 2017/12/03 11:38:02 jdolecek Exp $	*/
 
 #ifndef _LIBFDT_H
 #define _LIBFDT_H

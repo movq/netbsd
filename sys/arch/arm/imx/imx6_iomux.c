@@ -1,4 +1,4 @@
-/*	$NetBSD: imx6_iomux.c,v 1.1 2014/09/25 05:05:28 ryo Exp $	*/
+/*	$NetBSD: imx6_iomux.c,v 1.1.18.2 2017/12/03 11:35:53 jdolecek Exp $	*/
 
 /*
  * Copyright (c) 2009, 2010  Genetec Corporation.  All rights reserved.
@@ -26,7 +26,7 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: imx6_iomux.c,v 1.1 2014/09/25 05:05:28 ryo Exp $");
+__KERNEL_RCSID(0, "$NetBSD: imx6_iomux.c,v 1.1.18.2 2017/12/03 11:35:53 jdolecek Exp $");
 
 #include <sys/bus.h>
 #include <sys/device.h>

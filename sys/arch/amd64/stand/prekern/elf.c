@@ -1,4 +1,4 @@
-/*	$NetBSD: elf.c,v 1.17 2017/11/21 07:56:05 maxv Exp $	*/
+/*	$NetBSD: elf.c,v 1.17.2.2 2017/12/03 11:35:48 jdolecek Exp $	*/
 
 /*
  * Copyright (c) 2017 The NetBSD Foundation, Inc. All rights reserved.

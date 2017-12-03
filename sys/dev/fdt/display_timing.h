@@ -1,4 +1,4 @@
-/* $NetBSD: display_timing.h,v 1.1 2017/06/03 14:48:02 jmcneill Exp $ */
+/* $NetBSD: display_timing.h,v 1.1.10.2 2017/12/03 11:37:01 jdolecek Exp $ */
 
 /*-
  * Copyright (c) 2017 Jared McNeill <jmcneill@invisible.ca>

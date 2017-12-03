@@ -1,4 +1,4 @@
-/* $NetBSD: dwc_mmc_var.h,v 1.6 2017/06/19 22:03:02 jmcneill Exp $ */
+/* $NetBSD: dwc_mmc_var.h,v 1.6.4.2 2017/12/03 11:37:03 jdolecek Exp $ */
 
 /*-
  * Copyright (c) 2014-2017 Jared McNeill <jmcneill@invisible.ca>

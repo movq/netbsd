@@ -1,4 +1,4 @@
-/* $NetBSD: awin_sysconfig.c,v 1.3 2017/03/08 17:06:35 jakllsch Exp $ */
+/* $NetBSD: awin_sysconfig.c,v 1.3.12.2 2017/12/03 11:36:02 jdolecek Exp $ */
 
 /*-
  * Copyright (c) 2014 Jared D. McNeill <jmcneill@invisible.ca>
@@ -29,7 +29,7 @@
 #include "opt_allwinner.h"
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: awin_sysconfig.c,v 1.3 2017/03/08 17:06:35 jakllsch Exp $");
+__KERNEL_RCSID(0, "$NetBSD: awin_sysconfig.c,v 1.3.12.2 2017/12/03 11:36:02 jdolecek Exp $");
 
 #include <sys/param.h>
 #include <sys/bus.h>

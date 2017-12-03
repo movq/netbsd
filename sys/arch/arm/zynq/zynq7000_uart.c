@@ -1,4 +1,4 @@
-/*	$NetBSD: zynq7000_uart.c,v 1.1 2015/01/23 12:34:09 hkenken Exp $	*/
+/*	$NetBSD: zynq7000_uart.c,v 1.1.20.2 2017/12/03 11:35:57 jdolecek Exp $	*/
 /*-
  * Copyright (c) 2015  Genetec Corporation.  All rights reserved.
  * Written by Hashimoto Kenichi for Genetec Corporation.
@@ -26,7 +26,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: zynq7000_uart.c,v 1.1 2015/01/23 12:34:09 hkenken Exp $");
+__KERNEL_RCSID(0, "$NetBSD: zynq7000_uart.c,v 1.1.20.2 2017/12/03 11:35:57 jdolecek Exp $");
 
 #include "opt_zynq.h"
 #include "opt_zynquart.h"

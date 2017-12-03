@@ -1,4 +1,4 @@
-/*	$NetBSD: ux500_pm_domains.h,v 1.1.1.1 2017/06/15 20:14:23 jmcneill Exp $	*/
+/*	$NetBSD: ux500_pm_domains.h,v 1.1.1.1.8.2 2017/12/03 11:38:34 jdolecek Exp $	*/
 
 /*
  * Copyright (C) 2014 Linaro Ltd.

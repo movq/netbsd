@@ -1,4 +1,4 @@
-/*	$NetBSD: altr,rst-mgr-s10.h,v 1.1.1.1 2017/10/28 10:30:32 jmcneill Exp $	*/
+/*	$NetBSD: altr,rst-mgr-s10.h,v 1.1.1.1.2.2 2017/12/03 11:38:40 jdolecek Exp $	*/
 
 /*
  * Copyright (C) 2016 Intel Corporation. All rights reserved

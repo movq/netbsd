@@ -1,4 +1,4 @@
-/* $NetBSD: bwfm.c,v 1.4 2017/10/23 15:21:10 jmcneill Exp $ */
+/* $NetBSD: bwfm.c,v 1.4.2.2 2017/12/03 11:37:03 jdolecek Exp $ */
 /* $OpenBSD: bwfm.c,v 1.5 2017/10/16 22:27:16 patrick Exp $ */
 /*
  * Copyright (c) 2010-2016 Broadcom Corporation

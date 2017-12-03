@@ -1,4 +1,4 @@
-/* $NetBSD: frame.h,v 1.2 2016/01/29 21:45:00 christos Exp $ */
+/* $NetBSD: frame.h,v 1.2.16.2 2017/12/03 11:36:34 jdolecek Exp $ */
 
 /*-
  * Copyright (c) 2014 The NetBSD Foundation, Inc.

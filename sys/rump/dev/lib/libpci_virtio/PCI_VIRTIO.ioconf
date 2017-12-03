@@ -1,4 +1,4 @@
-#	$NetBSD: PCI_VIRTIO.ioconf,v 1.2 2017/05/10 06:22:15 sevan Exp $
+#	$NetBSD: PCI_VIRTIO.ioconf,v 1.2.8.2 2017/12/03 11:39:08 jdolecek Exp $
 #
 
 ioconf virtio

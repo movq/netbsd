@@ -1,4 +1,4 @@
-/*	$NetBSD: start.S,v 1.2 2017/04/29 00:05:35 nonaka Exp $	*/
+/*	$NetBSD: start.S,v 1.2.8.2 2017/12/03 11:36:19 jdolecek Exp $	*/
 
 /*-
  * Copyright (c) 2008-2010 Rui Paulo <rpaulo@FreeBSD.org>

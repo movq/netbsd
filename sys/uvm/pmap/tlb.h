@@ -1,4 +1,4 @@
-/*	$NetBSD: tlb.h,v 1.4 2017/06/24 05:31:03 skrll Exp $	*/
+/*	$NetBSD: tlb.h,v 1.4.4.2 2017/12/03 11:39:23 jdolecek Exp $	*/
 /*-
  * Copyright (c) 2011 The NetBSD Foundation, Inc.
  * All rights reserved.

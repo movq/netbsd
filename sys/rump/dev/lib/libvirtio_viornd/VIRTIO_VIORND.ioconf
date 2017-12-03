@@ -1,4 +1,4 @@
-#	$NetBSD: VIRTIO_VIORND.ioconf,v 1.1 2014/11/06 00:45:58 pooka Exp $
+#	$NetBSD: VIRTIO_VIORND.ioconf,v 1.1.18.2 2017/12/03 11:39:10 jdolecek Exp $
 #
 
 ioconf virtio_viornd

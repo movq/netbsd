@@ -1,4 +1,4 @@
-/* $NetBSD: dwc_gmac.c,v 1.43 2017/11/16 03:07:17 ozaki-r Exp $ */
+/* $NetBSD: dwc_gmac.c,v 1.43.2.2 2017/12/03 11:37:03 jdolecek Exp $ */
 
 /*-
  * Copyright (c) 2013, 2014 The NetBSD Foundation, Inc.
@@ -41,7 +41,7 @@
 
 #include <sys/cdefs.h>
 
-__KERNEL_RCSID(1, "$NetBSD: dwc_gmac.c,v 1.43 2017/11/16 03:07:17 ozaki-r Exp $");
+__KERNEL_RCSID(1, "$NetBSD: dwc_gmac.c,v 1.43.2.2 2017/12/03 11:37:03 jdolecek Exp $");
 
 /* #define	DWC_GMAC_DEBUG	1 */
 

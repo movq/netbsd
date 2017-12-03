@@ -1,5 +1,5 @@
 #
-#	$NetBSD: ROCKCHIP,v 1.21 2017/11/25 04:53:24 christos Exp $
+#	$NetBSD: ROCKCHIP,v 1.21.2.2 2017/12/03 11:36:03 jdolecek Exp $
 #
 #	Rockchip RK3066/RK3188 based SBC (Single Board Computer)
 #

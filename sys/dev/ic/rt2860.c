@@ -1,4 +1,4 @@
-/*	$NetBSD: rt2860.c,v 1.29 2017/10/23 09:31:17 msaitoh Exp $	*/
+/*	$NetBSD: rt2860.c,v 1.29.2.2 2017/12/03 11:37:04 jdolecek Exp $	*/
 /*	$OpenBSD: rt2860.c,v 1.90 2016/04/13 10:49:26 mpi Exp $	*/
 /*	$FreeBSD: head/sys/dev/ral/rt2860.c 306591 2016-10-02 20:35:55Z avos $ */
 
@@ -25,7 +25,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: rt2860.c,v 1.29 2017/10/23 09:31:17 msaitoh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: rt2860.c,v 1.29.2.2 2017/12/03 11:37:04 jdolecek Exp $");
 
 #include <sys/param.h>
 #include <sys/sockio.h>

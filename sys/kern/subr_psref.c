@@ -1,4 +1,4 @@
-/*	$NetBSD: subr_psref.c,v 1.7 2017/06/01 02:45:13 chs Exp $	*/
+/*	$NetBSD: subr_psref.c,v 1.7.8.2 2017/12/03 11:38:45 jdolecek Exp $	*/
 
 /*-
  * Copyright (c) 2016 The NetBSD Foundation, Inc.
@@ -64,7 +64,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: subr_psref.c,v 1.7 2017/06/01 02:45:13 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: subr_psref.c,v 1.7.8.2 2017/12/03 11:38:45 jdolecek Exp $");
 
 #include <sys/types.h>
 #include <sys/condvar.h>

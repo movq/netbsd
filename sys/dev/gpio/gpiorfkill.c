@@ -1,4 +1,4 @@
-/* $NetBSD: gpiorfkill.c,v 1.1 2015/05/29 23:17:13 jmcneill Exp $ */
+/* $NetBSD: gpiorfkill.c,v 1.1.18.2 2017/12/03 11:37:01 jdolecek Exp $ */
 
 /*-
  * Copyright (c) 2015 Jared D. McNeill <jmcneill@invisible.ca>
@@ -29,7 +29,7 @@
 #include "locators.h"
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: gpiorfkill.c,v 1.1 2015/05/29 23:17:13 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: gpiorfkill.c,v 1.1.18.2 2017/12/03 11:37:01 jdolecek Exp $");
 
 #include <sys/param.h>
 #include <sys/bus.h>

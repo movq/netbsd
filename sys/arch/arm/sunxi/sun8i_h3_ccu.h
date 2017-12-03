@@ -1,4 +1,4 @@
-/* $NetBSD: sun8i_h3_ccu.h,v 1.1 2017/06/28 23:51:29 jmcneill Exp $ */
+/* $NetBSD: sun8i_h3_ccu.h,v 1.1.8.2 2017/12/03 11:35:56 jdolecek Exp $ */
 
 /*-
  * Copyright (c) 2017 Emmanuel Vadot <manu@freebsd.org>

@@ -1,4 +1,4 @@
-/* $NetBSD: flash_mtdparts.c,v 1.1 2017/11/13 17:35:58 jmcneill Exp $ */
+/* $NetBSD: flash_mtdparts.c,v 1.1.2.2 2017/12/03 11:37:01 jdolecek Exp $ */
 
 /*-
  * Copyright (c) 2017 Jared McNeill <jmcneill@invisible.ca>
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: flash_mtdparts.c,v 1.1 2017/11/13 17:35:58 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: flash_mtdparts.c,v 1.1.2.2 2017/12/03 11:37:01 jdolecek Exp $");
 
 #include <sys/param.h>
 #include <sys/bus.h>

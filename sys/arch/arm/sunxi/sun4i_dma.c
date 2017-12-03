@@ -1,4 +1,4 @@
-/* $NetBSD: sun4i_dma.c,v 1.1 2017/08/27 16:05:26 jmcneill Exp $ */
+/* $NetBSD: sun4i_dma.c,v 1.1.2.2 2017/12/03 11:35:56 jdolecek Exp $ */
 
 /*-
  * Copyright (c) 2017 Jared McNeill <jmcneill@invisible.ca>
@@ -29,7 +29,7 @@
 #include "opt_ddb.h"
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sun4i_dma.c,v 1.1 2017/08/27 16:05:26 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sun4i_dma.c,v 1.1.2.2 2017/12/03 11:35:56 jdolecek Exp $");
 
 #include <sys/param.h>
 #include <sys/bus.h>

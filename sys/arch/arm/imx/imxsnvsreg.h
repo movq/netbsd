@@ -1,4 +1,4 @@
-/*	$NetBSD: imxsnvsreg.h,v 1.1 2016/05/17 06:44:45 ryo Exp $	*/
+/*	$NetBSD: imxsnvsreg.h,v 1.1.18.2 2017/12/03 11:35:53 jdolecek Exp $	*/
 
 /*
  * Copyright (c) 2014 Ryo Shimizu <ryo@nerv.org>

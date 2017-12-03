@@ -1,4 +1,4 @@
-/* $NetBSD: rockchip_dwcmmc.c,v 1.6 2017/06/20 19:03:04 jmcneill Exp $ */
+/* $NetBSD: rockchip_dwcmmc.c,v 1.6.4.2 2017/12/03 11:35:55 jdolecek Exp $ */
 
 /*-
  * Copyright (c) 2014 Jared D. McNeill <jmcneill@invisible.ca>
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: rockchip_dwcmmc.c,v 1.6 2017/06/20 19:03:04 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: rockchip_dwcmmc.c,v 1.6.4.2 2017/12/03 11:35:55 jdolecek Exp $");
 
 #include <sys/param.h>
 #include <sys/bus.h>

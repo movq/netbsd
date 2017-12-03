@@ -1,4 +1,4 @@
-/*	$NetBSD: irq-st.h,v 1.1.1.1 2017/06/15 20:14:23 jmcneill Exp $	*/
+/*	$NetBSD: irq-st.h,v 1.1.1.1.8.2 2017/12/03 11:38:37 jdolecek Exp $	*/
 
 /*
  *  include/linux/irqchip/irq-st.h

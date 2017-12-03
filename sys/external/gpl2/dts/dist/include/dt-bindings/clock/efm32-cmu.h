@@ -1,4 +1,4 @@
-/*	$NetBSD: efm32-cmu.h,v 1.1.1.2 2017/11/30 19:40:51 jmcneill Exp $	*/
+/*	$NetBSD: efm32-cmu.h,v 1.1.1.2.2.2 2017/12/03 11:38:35 jdolecek Exp $	*/
 
 /* SPDX-License-Identifier: GPL-2.0 */
 #ifndef __DT_BINDINGS_CLOCK_EFM32_CMU_H

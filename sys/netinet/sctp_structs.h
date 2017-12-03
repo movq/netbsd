@@ -1,5 +1,5 @@
 /*	$KAME: sctp_structs.h,v 1.13 2005/03/06 16:04:18 itojun Exp $	*/
-/*	$NetBSD: sctp_structs.h,v 1.2 2016/04/25 21:21:02 rjs Exp $ */
+/*	$NetBSD: sctp_structs.h,v 1.2.16.2 2017/12/03 11:39:04 jdolecek Exp $ */
 
 #ifndef __SCTP_STRUCTS_H__
 #define __SCTP_STRUCTS_H__

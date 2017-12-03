@@ -1,4 +1,4 @@
-/* $NetBSD: x1input_rdesc.h,v 1.2 2016/04/23 10:15:32 skrll Exp $ */
+/* $NetBSD: x1input_rdesc.h,v 1.2.16.2 2017/12/03 11:37:36 jdolecek Exp $ */
 
 /*-
  * Copyright (C) 2014 Loic Nageleisen

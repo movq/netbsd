@@ -1,4 +1,4 @@
-/* $NetBSD: wsbellmuxvar.h,v 1.1 2017/06/11 03:55:56 nat Exp $ */
+/* $NetBSD: wsbellmuxvar.h,v 1.1.6.2 2017/12/03 11:37:37 jdolecek Exp $ */
 /*-
  * Copyright (c) 2017 Nathanial Sloss <nathanialsloss@yahoo.com.au>
  * All rights reserved.

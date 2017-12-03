@@ -1,4 +1,4 @@
-#	$NetBSD: IMX6UL-STARTER_INSTALL,v 1.1 2017/06/09 18:14:59 ryo Exp $
+#	$NetBSD: IMX6UL-STARTER_INSTALL,v 1.1.6.2 2017/12/03 11:36:03 jdolecek Exp $
 #
 #	IMX6UL-STARTER_INSTALL -- IMX6UL-STARTER kernel with installation-sized
 #	ramdisk

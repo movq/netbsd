@@ -29,7 +29,7 @@
 
 #include <sys/cdefs.h>
 
-__KERNEL_RCSID(0, "$NetBSD: pmap_synci.c,v 1.3 2016/07/11 16:06:09 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pmap_synci.c,v 1.3.16.2 2017/12/03 11:39:23 jdolecek Exp $");
 
 #define __PMAP_PRIVATE
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: vrtc.c,v 1.1 2016/06/17 21:59:06 palle Exp $	*/
+/*	$NetBSD: vrtc.c,v 1.1.18.2 2017/12/03 11:36:44 jdolecek Exp $	*/
 /*	$OpenBSD: vrtc.c,v 1.1 2008/03/08 19:19:43 kettenis Exp $	*/
 /*
  * Copyright (c) 2008 Mark Kettenis

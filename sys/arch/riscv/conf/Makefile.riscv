@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile.riscv,v 1.2 2015/03/31 01:05:52 matt Exp $
+#	$NetBSD: Makefile.riscv,v 1.2.18.2 2017/12/03 11:36:38 jdolecek Exp $
 
 # Makefile for NetBSD
 #

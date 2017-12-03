@@ -1,4 +1,4 @@
-/* $NetBSD: rockchip_i2creg.h,v 1.2 2014/12/30 18:57:36 jmcneill Exp $ */
+/* $NetBSD: rockchip_i2creg.h,v 1.2.18.2 2017/12/03 11:35:55 jdolecek Exp $ */
 
 /*-
  * Copyright (c) 2014 Jared D. McNeill <jmcneill@invisible.ca>

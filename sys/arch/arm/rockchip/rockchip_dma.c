@@ -1,4 +1,4 @@
-/*	$NetBSD: rockchip_dma.c,v 1.1 2014/12/26 16:53:33 jmcneill Exp $	*/
+/*	$NetBSD: rockchip_dma.c,v 1.1.18.2 2017/12/03 11:35:55 jdolecek Exp $	*/
 
 /* adapted from:
  *	NetBSD: pxa2x0_dma.c,v 1.4 2005/12/11 12:16:51 christos Exp
@@ -43,7 +43,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: rockchip_dma.c,v 1.1 2014/12/26 16:53:33 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: rockchip_dma.c,v 1.1.18.2 2017/12/03 11:35:55 jdolecek Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

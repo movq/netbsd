@@ -1,4 +1,4 @@
-/*	$NetBSD: nitrogen6_iomux.c,v 1.4 2017/06/09 18:14:59 ryo Exp $	*/
+/*	$NetBSD: nitrogen6_iomux.c,v 1.4.4.2 2017/12/03 11:36:06 jdolecek Exp $	*/
 
 /*
  * Copyright (c) 2015 Ryo Shimizu <ryo@nerv.org>
@@ -26,7 +26,7 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: nitrogen6_iomux.c,v 1.4 2017/06/09 18:14:59 ryo Exp $");
+__KERNEL_RCSID(0, "$NetBSD: nitrogen6_iomux.c,v 1.4.4.2 2017/12/03 11:36:06 jdolecek Exp $");
 
 #include "opt_evbarm_boardtype.h"
 #include <sys/bus.h>

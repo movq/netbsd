@@ -1,4 +1,4 @@
-/*	$NetBSD: sun8i-r-ccu.h,v 1.1.1.1 2017/07/27 18:10:51 jmcneill Exp $	*/
+/*	$NetBSD: sun8i-r-ccu.h,v 1.1.1.1.4.2 2017/12/03 11:38:36 jdolecek Exp $	*/
 
 /*
  * Copyright (c) 2016 Icenowy Zheng <icenowy@aosc.xyz>

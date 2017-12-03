@@ -1,4 +1,4 @@
-/*	$NetBSD: imx7_uart.c,v 1.2 2017/09/08 05:29:12 hkenken Exp $	*/
+/*	$NetBSD: imx7_uart.c,v 1.2.2.2 2017/12/03 11:35:53 jdolecek Exp $	*/
 
 /*
  * Copyright (c) 2013 Genetec Corporation.  All rights reserved.
@@ -28,7 +28,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: imx7_uart.c,v 1.2 2017/09/08 05:29:12 hkenken Exp $");
+__KERNEL_RCSID(0, "$NetBSD: imx7_uart.c,v 1.2.2.2 2017/12/03 11:35:53 jdolecek Exp $");
 
 #include "opt_imxuart.h"
 

@@ -1,4 +1,4 @@
-# $NetBSD: SBMIPS.MP,v 1.2 2017/07/24 09:56:45 mrg Exp $
+# $NetBSD: SBMIPS.MP,v 1.2.6.2 2017/12/03 11:36:09 jdolecek Exp $
 
 include "arch/evbmips/conf/SBMIPS"
 

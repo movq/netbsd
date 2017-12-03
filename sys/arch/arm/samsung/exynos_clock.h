@@ -1,4 +1,4 @@
-/* $NetBSD: exynos_clock.h,v 1.1 2015/12/05 13:32:27 jmcneill Exp $ */
+/* $NetBSD: exynos_clock.h,v 1.1.18.2 2017/12/03 11:35:56 jdolecek Exp $ */
 
 /*-
  * Copyright (c) 2015 Jared D. McNeill <jmcneill@invisible.ca>

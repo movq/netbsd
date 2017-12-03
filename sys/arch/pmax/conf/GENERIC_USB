@@ -1,4 +1,4 @@
-# $NetBSD: GENERIC_USB,v 1.1 2016/11/04 19:18:50 flxd Exp $
+# $NetBSD: GENERIC_USB,v 1.1.18.2 2017/12/03 11:36:35 jdolecek Exp $
 #
 # GENERIC kernel with USB
 

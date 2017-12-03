@@ -1,4 +1,4 @@
-/*	$NetBSD: imx_genfb.c,v 1.1 2015/12/21 04:26:28 hkenken Exp $	*/
+/*	$NetBSD: imx_genfb.c,v 1.1.18.2 2017/12/03 11:35:53 jdolecek Exp $	*/
 
 /*
  * Copyright (c) 2015 Genetec Corporation.  All rights reserved.
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: imx_genfb.c,v 1.1 2015/12/21 04:26:28 hkenken Exp $");
+__KERNEL_RCSID(0, "$NetBSD: imx_genfb.c,v 1.1.18.2 2017/12/03 11:35:53 jdolecek Exp $");
 
 #include "opt_ddb.h"
 #include "opt_genfb.h"

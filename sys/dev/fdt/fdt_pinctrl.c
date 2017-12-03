@@ -1,4 +1,4 @@
-/* $NetBSD: fdt_pinctrl.c,v 1.4 2017/07/02 15:27:58 jmcneill Exp $ */
+/* $NetBSD: fdt_pinctrl.c,v 1.4.4.2 2017/12/03 11:37:01 jdolecek Exp $ */
 
 /*-
  * Copyright (c) 2017 Jared McNeill <jmcneill@invisible.ca>
@@ -28,7 +28,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: fdt_pinctrl.c,v 1.4 2017/07/02 15:27:58 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: fdt_pinctrl.c,v 1.4.4.2 2017/12/03 11:37:01 jdolecek Exp $");
 
 #include <sys/param.h>
 #include <sys/bus.h>

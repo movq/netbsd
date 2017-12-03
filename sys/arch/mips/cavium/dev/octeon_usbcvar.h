@@ -1,4 +1,4 @@
-/*	$NetBSD: octeon_usbcvar.h,v 1.3 2016/04/26 09:23:33 skrll Exp $	*/
+/*	$NetBSD: octeon_usbcvar.h,v 1.3.16.2 2017/12/03 11:36:27 jdolecek Exp $	*/
 
 /*
  * Copyright (c) 2007 Internet Initiative Japan, Inc.

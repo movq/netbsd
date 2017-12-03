@@ -1,4 +1,4 @@
-/* $NetBSD: wdc_g1.c,v 1.3 2017/10/20 07:06:06 jdolecek Exp $ */
+/* $NetBSD: wdc_g1.c,v 1.3.2.2 2017/12/03 11:36:00 jdolecek Exp $ */
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.

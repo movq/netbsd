@@ -1,4 +1,4 @@
-/* $NetBSD: rockchip_i2c.c,v 1.7 2016/02/14 19:54:20 chs Exp $ */
+/* $NetBSD: rockchip_i2c.c,v 1.7.16.2 2017/12/03 11:35:55 jdolecek Exp $ */
 
 /*-
  * Copyright (c) 2014 Jared D. McNeill <jmcneill@invisible.ca>
@@ -30,7 +30,7 @@
 #include "opt_rkiic.h"
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: rockchip_i2c.c,v 1.7 2016/02/14 19:54:20 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: rockchip_i2c.c,v 1.7.16.2 2017/12/03 11:35:55 jdolecek Exp $");
 
 #include <sys/param.h>
 #include <sys/bus.h>

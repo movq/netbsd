@@ -1,3 +1,3 @@
-# $NetBSD: Makefile,v 1.5 2017/01/16 00:11:41 christos Exp $
+# $NetBSD: Makefile,v 1.5.14.2 2017/12/03 11:36:53 jdolecek Exp $
 SUBDIR= arch
 .include <bsd.subdir.mk>

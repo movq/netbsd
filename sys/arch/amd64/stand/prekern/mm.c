@@ -1,4 +1,4 @@
-/*	$NetBSD: mm.c,v 1.20 2017/11/26 14:29:48 maxv Exp $	*/
+/*	$NetBSD: mm.c,v 1.20.2.2 2017/12/03 11:35:48 jdolecek Exp $	*/
 
 /*
  * Copyright (c) 2017 The NetBSD Foundation, Inc. All rights reserved.

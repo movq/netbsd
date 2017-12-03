@@ -1,4 +1,4 @@
-/*	$NetBSD: locore.S,v 1.6 2017/11/26 10:21:20 maxv Exp $	*/
+/*	$NetBSD: locore.S,v 1.6.2.2 2017/12/03 11:35:48 jdolecek Exp $	*/
 
 /*
  * Copyright (c) 1998, 2000, 2007, 2008, 2016, 2017 The NetBSD Foundation, Inc.

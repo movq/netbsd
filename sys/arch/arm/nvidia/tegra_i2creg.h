@@ -1,4 +1,4 @@
-/* $NetBSD: tegra_i2creg.h,v 1.2 2015/05/16 21:31:39 jmcneill Exp $ */
+/* $NetBSD: tegra_i2creg.h,v 1.2.18.2 2017/12/03 11:35:54 jdolecek Exp $ */
 
 /*-
  * Copyright (c) 2015 Jared D. McNeill <jmcneill@invisible.ca>

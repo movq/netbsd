@@ -1,4 +1,4 @@
-/*	$NetBSD: hdaudiodevs.h,v 1.2 2015/05/30 14:12:57 jmcneill Exp $	*/
+/*	$NetBSD: hdaudiodevs.h,v 1.2.16.2 2017/12/03 11:37:01 jdolecek Exp $	*/
 
 /*
  * THIS FILE AUTOMATICALLY GENERATED.  DO NOT EDIT.

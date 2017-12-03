@@ -1,4 +1,4 @@
-/*	$NetBSD: wm8750_zaudio.c,v 1.1 2014/09/23 14:49:46 nonaka Exp $	*/
+/*	$NetBSD: wm8750_zaudio.c,v 1.1.18.2 2017/12/03 11:36:52 jdolecek Exp $	*/
 /*	$OpenBSD: zaurus_audio.c,v 1.8 2005/08/18 13:23:02 robert Exp $	*/
 
 /*
@@ -51,7 +51,7 @@
 #include "opt_zaudio.h"
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: wm8750_zaudio.c,v 1.1 2014/09/23 14:49:46 nonaka Exp $");
+__KERNEL_RCSID(0, "$NetBSD: wm8750_zaudio.c,v 1.1.18.2 2017/12/03 11:36:52 jdolecek Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

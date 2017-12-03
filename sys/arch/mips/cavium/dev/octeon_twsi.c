@@ -1,4 +1,4 @@
-/*	$NetBSD: octeon_twsi.c,v 1.1 2015/04/29 08:32:01 hikaru Exp $	*/
+/*	$NetBSD: octeon_twsi.c,v 1.1.18.2 2017/12/03 11:36:27 jdolecek Exp $	*/
 
 /*
  * Copyright (c) 2007 Internet Initiative Japan, Inc.
@@ -30,7 +30,7 @@
 #undef	TWSITEST
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: octeon_twsi.c,v 1.1 2015/04/29 08:32:01 hikaru Exp $");
+__KERNEL_RCSID(0, "$NetBSD: octeon_twsi.c,v 1.1.18.2 2017/12/03 11:36:27 jdolecek Exp $");
 
 #include "opt_octeon.h"
 

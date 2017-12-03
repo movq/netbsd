@@ -1,4 +1,4 @@
-/*	$NetBSD: sun5i-ccu.h,v 1.1.1.2 2017/10/28 10:30:32 jmcneill Exp $	*/
+/*	$NetBSD: sun5i-ccu.h,v 1.1.1.2.2.2 2017/12/03 11:38:36 jdolecek Exp $	*/
 
 /*
  * Copyright 2016 Maxime Ripard

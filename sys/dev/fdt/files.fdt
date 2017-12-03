@@ -1,4 +1,4 @@
-# $NetBSD: files.fdt,v 1.22 2017/10/22 13:56:49 jmcneill Exp $
+# $NetBSD: files.fdt,v 1.22.2.2 2017/12/03 11:37:01 jdolecek Exp $
 
 include	"external/bsd/libfdt/conf/files.libfdt"
 

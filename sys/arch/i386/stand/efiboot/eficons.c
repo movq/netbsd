@@ -1,4 +1,4 @@
-/*	$NetBSD: eficons.c,v 1.4 2017/05/01 13:03:01 nonaka Exp $	*/
+/*	$NetBSD: eficons.c,v 1.4.8.2 2017/12/03 11:36:18 jdolecek Exp $	*/
 
 /*-
  * Copyright (c) 2016 Kimihiro Nonaka <nonaka@netbsd.org>

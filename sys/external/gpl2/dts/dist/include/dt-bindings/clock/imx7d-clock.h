@@ -1,4 +1,4 @@
-/*	$NetBSD: imx7d-clock.h,v 1.1.1.3 2017/11/30 19:40:51 jmcneill Exp $	*/
+/*	$NetBSD: imx7d-clock.h,v 1.1.1.3.2.2 2017/12/03 11:38:35 jdolecek Exp $	*/
 
 /*
  * Copyright (C) 2014-2015 Freescale Semiconductor, Inc.

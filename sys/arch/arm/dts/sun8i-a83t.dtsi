@@ -1,4 +1,4 @@
-/* $NetBSD: sun8i-a83t.dtsi,v 1.1 2017/10/28 16:09:14 jmcneill Exp $ */
+/* $NetBSD: sun8i-a83t.dtsi,v 1.1.2.2 2017/12/03 11:35:52 jdolecek Exp $ */
 
 /*-
  * Copyright (c) 2017 Jared McNeill <jmcneill@invisible.ca>

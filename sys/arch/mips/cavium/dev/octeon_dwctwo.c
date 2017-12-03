@@ -1,4 +1,4 @@
-/*	$NetBSD: octeon_dwctwo.c,v 1.9 2016/07/12 03:34:25 matt Exp $	*/
+/*	$NetBSD: octeon_dwctwo.c,v 1.9.16.2 2017/12/03 11:36:27 jdolecek Exp $	*/
 
 /*
  * Copyright (c) 2015 Masao Uebayashi <uebayasi@tombiinc.com>
@@ -43,7 +43,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: octeon_dwctwo.c,v 1.9 2016/07/12 03:34:25 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: octeon_dwctwo.c,v 1.9.16.2 2017/12/03 11:36:27 jdolecek Exp $");
 
 #include "opt_octeon.h"
 #include "opt_usb.h"

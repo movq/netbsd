@@ -1,4 +1,4 @@
-/*	$NetBSD: vcprop_subr.c,v 1.3 2017/11/09 21:39:48 skrll Exp $	*/
+/*	$NetBSD: vcprop_subr.c,v 1.3.2.2 2017/12/03 11:36:06 jdolecek Exp $	*/
 
 /*
  * Copyright (c) 2014 Michael Lorenz

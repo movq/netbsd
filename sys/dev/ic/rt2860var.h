@@ -1,4 +1,4 @@
-/*	$NetBSD: rt2860var.h,v 1.5 2017/07/25 23:17:20 maya Exp $	*/
+/*	$NetBSD: rt2860var.h,v 1.5.2.2 2017/12/03 11:37:04 jdolecek Exp $	*/
 /*	$OpenBSD: rt2860var.h,v 1.23 2016/03/21 21:16:30 stsp Exp $	*/
 
 /*-

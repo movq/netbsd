@@ -1,4 +1,4 @@
-/*	$NetBSD: ext2fs_extents.c,v 1.3 2016/08/13 07:40:10 christos Exp $	*/
+/*	$NetBSD: ext2fs_extents.c,v 1.3.14.2 2017/12/03 11:39:21 jdolecek Exp $	*/
 
 /*-
  * Copyright (c) 2010 Zheng Liu <lz@freebsd.org>
@@ -29,7 +29,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ext2fs_extents.c,v 1.3 2016/08/13 07:40:10 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ext2fs_extents.c,v 1.3.14.2 2017/12/03 11:39:21 jdolecek Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

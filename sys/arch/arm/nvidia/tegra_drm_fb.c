@@ -1,4 +1,4 @@
-/* $NetBSD: tegra_drm_fb.c,v 1.5 2017/06/01 02:45:05 chs Exp $ */
+/* $NetBSD: tegra_drm_fb.c,v 1.5.8.2 2017/12/03 11:35:54 jdolecek Exp $ */
 
 /*-
  * Copyright (c) 2015 Jared D. McNeill <jmcneill@invisible.ca>
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: tegra_drm_fb.c,v 1.5 2017/06/01 02:45:05 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: tegra_drm_fb.c,v 1.5.8.2 2017/12/03 11:35:54 jdolecek Exp $");
 
 #include <drm/drmP.h>
 #include <drm/drm_crtc.h>

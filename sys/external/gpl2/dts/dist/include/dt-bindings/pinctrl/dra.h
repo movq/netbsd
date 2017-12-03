@@ -1,4 +1,4 @@
-/*	$NetBSD: dra.h,v 1.1.1.2 2017/10/28 10:30:32 jmcneill Exp $	*/
+/*	$NetBSD: dra.h,v 1.1.1.2.2.2 2017/12/03 11:38:39 jdolecek Exp $	*/
 
 /*
  * This header provides constants for DRA pinctrl bindings.

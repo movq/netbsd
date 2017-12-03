@@ -1,4 +1,4 @@
-# $NetBSD: splash.mk,v 1.6 2015/09/15 02:22:43 uebayasi Exp $
+# $NetBSD: splash.mk,v 1.6.16.2 2017/12/03 11:37:32 jdolecek Exp $
 
 .if defined(SPLASHSCREEN_IMAGE)
 

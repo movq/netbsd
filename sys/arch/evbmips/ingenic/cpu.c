@@ -1,4 +1,4 @@
-/*	$NetBSD: cpu.c,v 1.4 2017/05/21 06:49:12 skrll Exp $	*/
+/*	$NetBSD: cpu.c,v 1.4.8.2 2017/12/03 11:36:09 jdolecek Exp $	*/
 
 /*
  * Copyright 2002 Wasabi Systems, Inc.
@@ -36,7 +36,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: cpu.c,v 1.4 2017/05/21 06:49:12 skrll Exp $");
+__KERNEL_RCSID(0, "$NetBSD: cpu.c,v 1.4.8.2 2017/12/03 11:36:09 jdolecek Exp $");
 
 #include "opt_ingenic.h"
 #include "opt_multiprocessor.h"

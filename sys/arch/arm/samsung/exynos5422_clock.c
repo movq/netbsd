@@ -1,4 +1,4 @@
-/* $NetBSD: exynos5422_clock.c,v 1.6 2017/06/19 21:59:55 jmcneill Exp $ */
+/* $NetBSD: exynos5422_clock.c,v 1.6.4.2 2017/12/03 11:35:56 jdolecek Exp $ */
 
 /*-
  * Copyright (c) 2015 Jared D. McNeill <jmcneill@invisible.ca>
@@ -29,7 +29,7 @@
 #include "locators.h"
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: exynos5422_clock.c,v 1.6 2017/06/19 21:59:55 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: exynos5422_clock.c,v 1.6.4.2 2017/12/03 11:35:56 jdolecek Exp $");
 
 #include <sys/param.h>
 #include <sys/bus.h>

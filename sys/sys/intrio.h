@@ -1,4 +1,4 @@
-/*	$NetBSD: intrio.h,v 1.2 2016/08/03 08:25:38 knakahara Exp $	*/
+/*	$NetBSD: intrio.h,v 1.2.14.2 2017/12/03 11:39:20 jdolecek Exp $	*/
 
 /*
  * Copyright (c) 2015 Internet Initiative Japan Inc.

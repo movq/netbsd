@@ -1,4 +1,4 @@
-/*	$NetBSD: zynq_usbreg.h,v 1.2 2015/09/04 07:38:05 skrll Exp $	*/
+/*	$NetBSD: zynq_usbreg.h,v 1.2.16.2 2017/12/03 11:35:57 jdolecek Exp $	*/
 /*-
  * Copyright (c) 2015  Genetec Corporation.  All rights reserved.
  * Written by Hashimoto Kenichi for Genetec Corporation.

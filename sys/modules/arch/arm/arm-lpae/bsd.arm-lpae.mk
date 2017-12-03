@@ -1,4 +1,4 @@
-#	$NetBSD: bsd.arm-lpae.mk,v 1.1 2015/04/17 20:13:51 matt Exp $
+#	$NetBSD: bsd.arm-lpae.mk,v 1.1.18.2 2017/12/03 11:38:49 jdolecek Exp $
 
 .ifndef _BSD_ARM_LPAE_MK_
 _BSD_ARM_LPAE_MK_=1

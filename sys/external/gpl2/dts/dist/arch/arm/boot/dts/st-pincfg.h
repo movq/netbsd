@@ -1,4 +1,4 @@
-/*	$NetBSD: st-pincfg.h,v 1.1.1.2 2017/11/30 19:40:50 jmcneill Exp $	*/
+/*	$NetBSD: st-pincfg.h,v 1.1.1.2.2.2 2017/12/03 11:38:22 jdolecek Exp $	*/
 
 /* SPDX-License-Identifier: GPL-2.0 */
 #ifndef _ST_PINCFG_H_

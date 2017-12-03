@@ -1,4 +1,4 @@
-/* $NetBSD: awin_lradc.c,v 1.1 2016/04/25 20:15:46 bouyer Exp $ */
+/* $NetBSD: awin_lradc.c,v 1.1.18.2 2017/12/03 11:35:51 jdolecek Exp $ */
 
 /*-
  * Copyright (c) 2016 Manuel Bouyer
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: awin_lradc.c,v 1.1 2016/04/25 20:15:46 bouyer Exp $");
+__KERNEL_RCSID(0, "$NetBSD: awin_lradc.c,v 1.1.18.2 2017/12/03 11:35:51 jdolecek Exp $");
 
 #include <sys/param.h>
 #include <sys/bus.h>

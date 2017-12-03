@@ -1,4 +1,4 @@
-/*	$NetBSD: imx7var.h,v 1.2 2017/08/17 09:11:04 hkenken Exp $	*/
+/*	$NetBSD: imx7var.h,v 1.2.2.2 2017/12/03 11:35:53 jdolecek Exp $	*/
 
 /*
  * Copyright (c) 2014 Ryo Shimizu <ryo@nerv.org>

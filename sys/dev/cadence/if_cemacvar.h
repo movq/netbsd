@@ -1,4 +1,4 @@
-/*      $NetBSD: if_cemacvar.h,v 1.1 2015/01/23 12:34:09 hkenken Exp $	*/
+/*      $NetBSD: if_cemacvar.h,v 1.1.20.2 2017/12/03 11:36:59 jdolecek Exp $	*/
 /*-
  * Copyright (c) 2015  Genetec Corporation.  All rights reserved.
  * Written by Hashimoto Kenichi for Genetec Corporation.

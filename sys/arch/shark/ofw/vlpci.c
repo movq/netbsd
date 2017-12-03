@@ -1,4 +1,4 @@
-/*	$NetBSD: vlpci.c,v 1.8 2017/04/18 14:11:42 flxd Exp $	*/
+/*	$NetBSD: vlpci.c,v 1.8.14.2 2017/12/03 11:36:42 jdolecek Exp $	*/
 
 /*
  * Copyright (c) 2017 Jonathan A. Kollasch
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: vlpci.c,v 1.8 2017/04/18 14:11:42 flxd Exp $");
+__KERNEL_RCSID(0, "$NetBSD: vlpci.c,v 1.8.14.2 2017/12/03 11:36:42 jdolecek Exp $");
 
 #include "opt_pci.h"
 #include "pci.h"

@@ -1,4 +1,4 @@
-/*	$NetBSD: cbus.c,v 1.2 2016/07/18 19:32:44 palle Exp $	*/
+/*	$NetBSD: cbus.c,v 1.2.14.2 2017/12/03 11:36:44 jdolecek Exp $	*/
 /*	$OpenBSD: cbus.c,v 1.15 2015/09/27 11:29:20 kettenis Exp $	*/
 /*
  * Copyright (c) 2008 Mark Kettenis

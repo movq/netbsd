@@ -1,5 +1,5 @@
 /*	$KAME: sctp_var.h,v 1.24 2005/03/06 16:04:19 itojun Exp $	*/
-/*	$NetBSD: sctp_var.h,v 1.1 2015/10/13 21:28:35 rjs Exp $ */
+/*	$NetBSD: sctp_var.h,v 1.1.18.2 2017/12/03 11:39:04 jdolecek Exp $ */
 
 /*
  * Copyright (c) 2001, 2002, 2003, 2004 Cisco Systems, Inc.

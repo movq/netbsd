@@ -1,5 +1,5 @@
 /*	$KAME: sctp_uio.h,v 1.11 2005/03/06 16:04:18 itojun Exp $	*/
-/*	$NetBSD: sctp_uio.h,v 1.2 2017/06/28 14:39:33 rjs Exp $ */
+/*	$NetBSD: sctp_uio.h,v 1.2.4.2 2017/12/03 11:39:04 jdolecek Exp $ */
 
 #ifndef __SCTP_UIO_H__
 #define __SCTP_UIO_H__

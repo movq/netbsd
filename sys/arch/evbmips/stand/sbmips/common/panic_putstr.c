@@ -1,4 +1,4 @@
-/* $NetBSD: panic_putstr.c,v 1.1.1.1 2017/07/24 08:56:29 mrg Exp $ */
+/* $NetBSD: panic_putstr.c,v 1.1.1.1.6.2 2017/12/03 11:36:11 jdolecek Exp $ */
 
 /*
  * Copyright (c) 1999 Christopher G. Demetriou.  All rights reserved.

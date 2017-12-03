@@ -1,4 +1,4 @@
-/* $NetBSD: tegra_drm.h,v 1.7 2016/12/17 12:11:38 maya Exp $ */
+/* $NetBSD: tegra_drm.h,v 1.7.14.2 2017/12/03 11:35:54 jdolecek Exp $ */
 
 /*-
  * Copyright (c) 2015 Jared D. McNeill <jmcneill@invisible.ca>

@@ -1,4 +1,4 @@
-/* $NetBSD: htif_var.h,v 1.1 2015/03/28 16:13:56 matt Exp $ */
+/* $NetBSD: htif_var.h,v 1.1.18.2 2017/12/03 11:36:39 jdolecek Exp $ */
 /*-
  * Copyright (c) 2014 The NetBSD Foundation, Inc.
  * All rights reserved.

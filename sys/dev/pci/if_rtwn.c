@@ -1,4 +1,4 @@
-/*	$NetBSD: if_rtwn.c,v 1.13 2017/10/23 09:31:18 msaitoh Exp $	*/
+/*	$NetBSD: if_rtwn.c,v 1.13.2.2 2017/12/03 11:37:08 jdolecek Exp $	*/
 /*	$OpenBSD: if_rtwn.c,v 1.5 2015/06/14 08:02:47 stsp Exp $	*/
 #define	IEEE80211_NO_HT
 /*-
@@ -23,7 +23,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_rtwn.c,v 1.13 2017/10/23 09:31:18 msaitoh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_rtwn.c,v 1.13.2.2 2017/12/03 11:37:08 jdolecek Exp $");
 
 #include <sys/param.h>
 #include <sys/sockio.h>

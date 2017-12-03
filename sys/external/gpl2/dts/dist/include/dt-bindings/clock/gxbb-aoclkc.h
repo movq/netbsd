@@ -1,4 +1,4 @@
-/*	$NetBSD: gxbb-aoclkc.h,v 1.1.1.2 2017/10/28 10:30:32 jmcneill Exp $	*/
+/*	$NetBSD: gxbb-aoclkc.h,v 1.1.1.2.2.2 2017/12/03 11:38:35 jdolecek Exp $	*/
 
 /*
  * This file is provided under a dual BSD/GPLv2 license.  When using or

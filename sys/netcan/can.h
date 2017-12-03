@@ -1,4 +1,4 @@
-/*	$NetBSD: can.h,v 1.3 2017/05/30 13:30:51 bouyer Exp $	*/
+/*	$NetBSD: can.h,v 1.3.10.2 2017/12/03 11:39:03 jdolecek Exp $	*/
 
 /*-
  * Copyright (c) 2003, 2017 The NetBSD Foundation, Inc.
