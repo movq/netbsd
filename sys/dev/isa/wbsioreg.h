@@ -1,4 +1,4 @@
-/* $NetBSD: wbsioreg.h,v 1.5 2017/11/15 10:13:11 msaitoh Exp $ */
+/* $NetBSD: wbsioreg.h,v 1.5.4.2 2017/12/03 11:37:05 jdolecek Exp $ */
 
 /* $OpenBSD: wbsioreg.h,v 1.4 2015/01/02 23:02:54 chris Exp $ */
 /*

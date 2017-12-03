@@ -1,4 +1,4 @@
-/* $NetBSD: as3722.c,v 1.12 2017/05/28 15:55:11 jmcneill Exp $ */
+/* $NetBSD: as3722.c,v 1.12.8.2 2017/12/03 11:37:02 jdolecek Exp $ */
 
 /*-
  * Copyright (c) 2015 Jared D. McNeill <jmcneill@invisible.ca>
@@ -29,7 +29,7 @@
 #include "opt_fdt.h"
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: as3722.c,v 1.12 2017/05/28 15:55:11 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: as3722.c,v 1.12.8.2 2017/12/03 11:37:02 jdolecek Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

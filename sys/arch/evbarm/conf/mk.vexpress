@@ -1,4 +1,4 @@
-#	$NetBSD: mk.vexpress,v 1.4 2017/06/16 21:37:11 jmcneill Exp $
+#	$NetBSD: mk.vexpress,v 1.4.4.2 2017/12/03 11:36:03 jdolecek Exp $
 
 .if !empty(MACHINE_ARCH:M*eb)
 EXTRA_LINKFLAGS+=	--be8

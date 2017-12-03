@@ -1,4 +1,4 @@
-/*	$NetBSD: ld_at_virtio.c,v 1.4 2017/05/10 06:22:15 sevan Exp $	*/
+/*	$NetBSD: ld_at_virtio.c,v 1.4.8.2 2017/12/03 11:39:10 jdolecek Exp $	*/
 
 /*
  * Copyright (c) 2010 Antti Kantee.  All Rights Reserved.
@@ -26,7 +26,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ld_at_virtio.c,v 1.4 2017/05/10 06:22:15 sevan Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ld_at_virtio.c,v 1.4.8.2 2017/12/03 11:39:10 jdolecek Exp $");
 
 #include <sys/param.h>
 #include <sys/conf.h>

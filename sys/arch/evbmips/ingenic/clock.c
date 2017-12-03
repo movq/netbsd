@@ -1,4 +1,4 @@
-/*	$NetBSD: clock.c,v 1.10 2017/05/21 06:49:12 skrll Exp $ */
+/*	$NetBSD: clock.c,v 1.10.8.2 2017/12/03 11:36:09 jdolecek Exp $ */
 
 /*-
  * Copyright (c) 2014 Michael Lorenz
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: clock.c,v 1.10 2017/05/21 06:49:12 skrll Exp $");
+__KERNEL_RCSID(0, "$NetBSD: clock.c,v 1.10.8.2 2017/12/03 11:36:09 jdolecek Exp $");
 
 #include "opt_multiprocessor.h"
 

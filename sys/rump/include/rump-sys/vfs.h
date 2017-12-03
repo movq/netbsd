@@ -1,4 +1,4 @@
-/*	$NetBSD: vfs.h,v 1.1 2016/01/26 23:12:17 pooka Exp $	*/
+/*	$NetBSD: vfs.h,v 1.1.18.2 2017/12/03 11:39:14 jdolecek Exp $	*/
 
 /*
  * Copyright (c) 2008 Antti Kantee.  All Rights Reserved.

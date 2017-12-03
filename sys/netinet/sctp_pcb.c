@@ -1,5 +1,5 @@
 /* $KAME: sctp_pcb.c,v 1.39 2005/06/16 18:29:25 jinmei Exp $ */
-/* $NetBSD: sctp_pcb.c,v 1.15 2017/10/17 19:23:42 rjs Exp $ */
+/* $NetBSD: sctp_pcb.c,v 1.15.2.2 2017/12/03 11:39:04 jdolecek Exp $ */
 
 /*
  * Copyright (c) 2001, 2002, 2003, 2004 Cisco Systems, Inc.
@@ -33,7 +33,7 @@
  * SUCH DAMAGE.
  */
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sctp_pcb.c,v 1.15 2017/10/17 19:23:42 rjs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sctp_pcb.c,v 1.15.2.2 2017/12/03 11:39:04 jdolecek Exp $");
 
 #ifdef _KERNEL_OPT
 #include "opt_inet.h"

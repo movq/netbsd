@@ -1,4 +1,4 @@
-/*	$NetBSD: kern_ksyms_buf.c,v 1.4 2015/08/30 01:46:02 uebayasi Exp $	*/
+/*	$NetBSD: kern_ksyms_buf.c,v 1.4.16.2 2017/12/03 11:38:44 jdolecek Exp $	*/
 
 #if defined(_KERNEL_OPT)
 #include "opt_copy_symtab.h"

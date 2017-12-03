@@ -1,4 +1,4 @@
-#	$NetBSD: std.exynos,v 1.5 2017/07/05 01:08:44 jmcneill Exp $
+#	$NetBSD: std.exynos,v 1.5.4.2 2017/12/03 11:36:03 jdolecek Exp $
 #
 
 machine	evbarm arm

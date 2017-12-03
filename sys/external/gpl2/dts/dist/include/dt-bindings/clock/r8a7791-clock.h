@@ -1,4 +1,4 @@
-/*	$NetBSD: r8a7791-clock.h,v 1.1.1.3 2017/10/28 10:30:32 jmcneill Exp $	*/
+/*	$NetBSD: r8a7791-clock.h,v 1.1.1.3.2.2 2017/12/03 11:38:36 jdolecek Exp $	*/
 
 /*
  * Copyright 2013 Ideas On Board SPRL

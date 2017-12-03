@@ -1,6 +1,6 @@
 #!/bin/sh
 
-# $NetBSD: acpica2netbsd,v 1.1 2014/10/25 21:00:06 christos Exp $
+# $NetBSD: acpica2netbsd,v 1.1.18.2 2017/12/03 11:37:37 jdolecek Exp $
 #
 #  Copyright (c) 2014 The NetBSD Foundation.
 #  All rights reserved.

@@ -1,4 +1,4 @@
-/* $NetBSD: rockchip_timer.c,v 1.2 2015/01/17 15:05:24 jmcneill Exp $ */
+/* $NetBSD: rockchip_timer.c,v 1.2.18.2 2017/12/03 11:35:55 jdolecek Exp $ */
 
 /*-
  * Copyright (c) 2015 Jared D. McNeill <jmcneill@invisible.ca>
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: rockchip_timer.c,v 1.2 2015/01/17 15:05:24 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: rockchip_timer.c,v 1.2.18.2 2017/12/03 11:35:55 jdolecek Exp $");
 
 #include <sys/param.h>
 #include <sys/bus.h>

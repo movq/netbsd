@@ -1,4 +1,4 @@
-/*	$NetBSD: imx7_ccm.c,v 1.2 2016/10/20 16:50:11 ryo Exp $	*/
+/*	$NetBSD: imx7_ccm.c,v 1.2.14.2 2017/12/03 11:35:53 jdolecek Exp $	*/
 
 /*
  * Copyright (c) 2010-2012, 2014  Genetec Corporation.  All rights reserved.
@@ -31,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: imx7_ccm.c,v 1.2 2016/10/20 16:50:11 ryo Exp $");
+__KERNEL_RCSID(0, "$NetBSD: imx7_ccm.c,v 1.2.14.2 2017/12/03 11:35:53 jdolecek Exp $");
 
 #include "opt_imx.h"
 

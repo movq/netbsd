@@ -1,4 +1,4 @@
-/*	$NetBSD: if_l2tp.h,v 1.3 2017/10/30 11:24:04 knakahara Exp $	*/
+/*	$NetBSD: if_l2tp.h,v 1.3.2.2 2017/12/03 11:39:02 jdolecek Exp $	*/
 
 /*
  * Copyright (c) 2017 Internet Initiative Japan Inc.

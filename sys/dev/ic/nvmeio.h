@@ -1,4 +1,4 @@
-/*	$NetBSD: nvmeio.h,v 1.1 2016/06/04 16:11:51 nonaka Exp $	*/
+/*	$NetBSD: nvmeio.h,v 1.1.18.2 2017/12/03 11:37:03 jdolecek Exp $	*/
 
 /*-
  * Copyright (C) 2012-2013 Intel Corporation

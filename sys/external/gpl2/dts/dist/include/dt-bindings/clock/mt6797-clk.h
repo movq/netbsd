@@ -1,4 +1,4 @@
-/*	$NetBSD: mt6797-clk.h,v 1.1.1.1 2017/07/27 18:10:50 jmcneill Exp $	*/
+/*	$NetBSD: mt6797-clk.h,v 1.1.1.1.4.2 2017/12/03 11:38:35 jdolecek Exp $	*/
 
 /*
  * Copyright (c) 2017 MediaTek Inc.

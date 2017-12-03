@@ -1,4 +1,4 @@
-/*	$NetBSD: intr.c,v 1.13 2017/05/21 06:49:12 skrll Exp $ */
+/*	$NetBSD: intr.c,v 1.13.8.2 2017/12/03 11:36:09 jdolecek Exp $ */
 
 /*-
  * Copyright (c) 2014 Michael Lorenz
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: intr.c,v 1.13 2017/05/21 06:49:12 skrll Exp $");
+__KERNEL_RCSID(0, "$NetBSD: intr.c,v 1.13.8.2 2017/12/03 11:36:09 jdolecek Exp $");
 
 #define __INTR_PRIVATE
 

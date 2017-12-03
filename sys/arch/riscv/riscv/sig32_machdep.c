@@ -1,7 +1,7 @@
-/*	$NetBSD: sig32_machdep.c,v 1.1 2015/03/28 16:13:56 matt Exp $	*/
+/*	$NetBSD: sig32_machdep.c,v 1.1.18.2 2017/12/03 11:36:39 jdolecek Exp $	*/
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sig32_machdep.c,v 1.1 2015/03/28 16:13:56 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sig32_machdep.c,v 1.1.18.2 2017/12/03 11:36:39 jdolecek Exp $");
 
 #define	COMPATNAME1(x)		__CONCAT(netbsd32_,x)
 #define	COMPATNAME2(x)		__CONCAT(x,32)

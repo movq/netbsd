@@ -1,4 +1,4 @@
-/*	$NetBSD: pmap.c,v 1.40 2017/10/30 03:25:14 pgoyette Exp $	*/
+/*	$NetBSD: pmap.c,v 1.40.2.2 2017/12/03 11:39:23 jdolecek Exp $	*/
 
 /*-
  * Copyright (c) 1998, 2001 The NetBSD Foundation, Inc.
@@ -67,7 +67,7 @@
 
 #include <sys/cdefs.h>
 
-__KERNEL_RCSID(0, "$NetBSD: pmap.c,v 1.40 2017/10/30 03:25:14 pgoyette Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pmap.c,v 1.40.2.2 2017/12/03 11:39:23 jdolecek Exp $");
 
 /*
  *	Manages physical address maps.

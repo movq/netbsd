@@ -1,4 +1,4 @@
-/*	$NetBSD: ingenic_efuse.c,v 1.3 2015/10/14 15:44:57 macallan Exp $ */
+/*	$NetBSD: ingenic_efuse.c,v 1.3.18.2 2017/12/03 11:36:28 jdolecek Exp $ */
 
 /*-
  * Copyright (c) 2015 Michael Lorenz
@@ -34,7 +34,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ingenic_efuse.c,v 1.3 2015/10/14 15:44:57 macallan Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ingenic_efuse.c,v 1.3.18.2 2017/12/03 11:36:28 jdolecek Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

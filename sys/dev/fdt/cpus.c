@@ -1,4 +1,4 @@
-/* $NetBSD: cpus.c,v 1.2 2017/06/02 00:01:00 jmcneill Exp $ */
+/* $NetBSD: cpus.c,v 1.2.10.2 2017/12/03 11:37:01 jdolecek Exp $ */
 
 /*-
  * Copyright (c) 2017 Jared McNeill <jmcneill@invisible.ca>
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: cpus.c,v 1.2 2017/06/02 00:01:00 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: cpus.c,v 1.2.10.2 2017/12/03 11:37:01 jdolecek Exp $");
 
 #include <sys/param.h>
 #include <sys/bus.h>

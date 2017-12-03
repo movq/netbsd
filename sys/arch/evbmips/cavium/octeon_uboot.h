@@ -1,4 +1,4 @@
-/*	$NetBSD: octeon_uboot.h,v 1.1 2015/04/29 08:32:01 hikaru Exp $	*/
+/*	$NetBSD: octeon_uboot.h,v 1.1.18.2 2017/12/03 11:36:08 jdolecek Exp $	*/
 
 #ifndef _EVBMIPS_OCTEON_UBOOT_H_
 #define _EVBMIPS_OCTEON_UBOOT_H_

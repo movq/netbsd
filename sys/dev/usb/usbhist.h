@@ -1,4 +1,4 @@
-/*	$NetBSD: usbhist.h,v 1.4 2016/04/23 10:15:32 skrll Exp $	*/
+/*	$NetBSD: usbhist.h,v 1.4.20.2 2017/12/03 11:37:36 jdolecek Exp $	*/
 
 /*
  * Copyright (c) 2012 Matthew R. Green

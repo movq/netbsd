@@ -1,4 +1,4 @@
-/* $NetBSD: tegra_pinmux.h,v 1.1 2017/09/22 14:36:22 jmcneill Exp $ */
+/* $NetBSD: tegra_pinmux.h,v 1.1.2.2 2017/12/03 11:35:54 jdolecek Exp $ */
 
 /*-
  * Copyright (c) 2017 Jared McNeill <jmcneill@invisible.ca>

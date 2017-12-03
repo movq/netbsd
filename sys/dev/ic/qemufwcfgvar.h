@@ -1,4 +1,4 @@
-/* $NetBSD: qemufwcfgvar.h,v 1.1 2017/11/25 16:31:03 jmcneill Exp $ */
+/* $NetBSD: qemufwcfgvar.h,v 1.1.2.2 2017/12/03 11:37:04 jdolecek Exp $ */
 
 /*-
  * Copyright (c) 2017 Jared McNeill <jmcneill@invisible.ca>

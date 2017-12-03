@@ -1,5 +1,5 @@
 /*	$KAME: sctputil.c,v 1.39 2005/06/16 20:54:06 jinmei Exp $	*/
-/*	$NetBSD: sctputil.c,v 1.12 2017/01/16 15:44:47 christos Exp $	*/
+/*	$NetBSD: sctputil.c,v 1.12.12.2 2017/12/03 11:39:04 jdolecek Exp $	*/
 
 /*
  * Copyright (c) 2001, 2002, 2003, 2004 Cisco Systems, Inc.
@@ -34,7 +34,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sctputil.c,v 1.12 2017/01/16 15:44:47 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sctputil.c,v 1.12.12.2 2017/12/03 11:39:04 jdolecek Exp $");
 
 #ifdef _KERNEL_OPT
 #include "opt_inet.h"

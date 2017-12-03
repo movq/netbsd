@@ -1,4 +1,4 @@
-#	$NetBSD: files.zedboard,v 1.1 2015/01/23 12:34:09 hkenken Exp $
+#	$NetBSD: files.zedboard,v 1.1.20.2 2017/12/03 11:36:03 jdolecek Exp $
 #
 # ZEDBOARD evaluation board configuration info
 #

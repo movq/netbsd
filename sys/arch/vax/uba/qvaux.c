@@ -1,4 +1,4 @@
-/*	$NetBSD: qvaux.c,v 1.2 2016/07/07 06:55:39 msaitoh Exp $	*/
+/*	$NetBSD: qvaux.c,v 1.2.16.2 2017/12/03 11:36:48 jdolecek Exp $	*/
 
 /*-
  * Copyright (c) 2015 The NetBSD Foundation, Inc.

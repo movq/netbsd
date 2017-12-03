@@ -1,4 +1,4 @@
-/*	$NetBSD: mvxpbm.c,v 1.1 2015/06/03 03:55:47 hsuenaga Exp $	*/
+/*	$NetBSD: mvxpbm.c,v 1.1.18.2 2017/12/03 11:37:05 jdolecek Exp $	*/
 /*
  * Copyright (c) 2015 Internet Initiative Japan Inc.
  * All rights reserved.
@@ -25,7 +25,7 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: mvxpbm.c,v 1.1 2015/06/03 03:55:47 hsuenaga Exp $");
+__KERNEL_RCSID(0, "$NetBSD: mvxpbm.c,v 1.1.18.2 2017/12/03 11:37:05 jdolecek Exp $");
 
 #include "opt_multiprocessor.h"
 

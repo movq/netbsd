@@ -1,4 +1,4 @@
-/* $NetBSD: hdafg_dd.h,v 1.1 2015/03/28 14:09:59 jmcneill Exp $ */
+/* $NetBSD: hdafg_dd.h,v 1.1.18.2 2017/12/03 11:37:01 jdolecek Exp $ */
 
 /*
  * Copyright (c) 2011 Jared D. McNeill <jmcneill@invisible.ca>

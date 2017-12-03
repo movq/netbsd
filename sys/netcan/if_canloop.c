@@ -1,4 +1,4 @@
-/*	$NetBSD: if_canloop.c,v 1.3 2017/11/16 03:07:18 ozaki-r Exp $	*/
+/*	$NetBSD: if_canloop.c,v 1.3.2.2 2017/12/03 11:39:03 jdolecek Exp $	*/
 
 /*-
  * Copyright (c) 2017 The NetBSD Foundation, Inc.
@@ -35,7 +35,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_canloop.c,v 1.3 2017/11/16 03:07:18 ozaki-r Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_canloop.c,v 1.3.2.2 2017/12/03 11:39:03 jdolecek Exp $");
 
 #ifdef _KERNEL_OPT
 #include "opt_can.h"

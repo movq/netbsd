@@ -1,4 +1,4 @@
-/* $NetBSD: rockchip_emac.c,v 1.17 2017/02/20 08:25:57 ozaki-r Exp $ */
+/* $NetBSD: rockchip_emac.c,v 1.17.12.2 2017/12/03 11:35:55 jdolecek Exp $ */
 
 /*-
  * Copyright (c) 2015 Jared D. McNeill <jmcneill@invisible.ca>
@@ -29,7 +29,7 @@
 #include "opt_rkemac.h"
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: rockchip_emac.c,v 1.17 2017/02/20 08:25:57 ozaki-r Exp $");
+__KERNEL_RCSID(0, "$NetBSD: rockchip_emac.c,v 1.17.12.2 2017/12/03 11:35:55 jdolecek Exp $");
 
 #include <sys/param.h>
 #include <sys/bus.h>

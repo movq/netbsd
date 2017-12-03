@@ -1,4 +1,4 @@
-/* $NetBSD: amlogic_crureg.h,v 1.13 2015/11/29 19:16:58 jmcneill Exp $ */
+/* $NetBSD: amlogic_crureg.h,v 1.13.16.2 2017/12/03 11:35:51 jdolecek Exp $ */
 
 /*-
  * Copyright (c) 2015 Jared D. McNeill <jmcneill@invisible.ca>

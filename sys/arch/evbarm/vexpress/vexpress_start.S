@@ -1,4 +1,4 @@
-/*	$NetBSD: vexpress_start.S,v 1.5 2017/06/04 19:15:46 jmcneill Exp $	*/
+/*	$NetBSD: vexpress_start.S,v 1.5.4.2 2017/12/03 11:36:07 jdolecek Exp $	*/
 
 /*-
  * Copyright (c) 2015 The NetBSD Foundation, Inc.
@@ -40,7 +40,7 @@
 
 #include <arm/vexpress/vexpress_platform.h>
 
-RCSID("$NetBSD: vexpress_start.S,v 1.5 2017/06/04 19:15:46 jmcneill Exp $")
+RCSID("$NetBSD: vexpress_start.S,v 1.5.4.2 2017/12/03 11:36:07 jdolecek Exp $")
 
 #ifdef VERBOSE_INIT_ARM
 #define	XPUTC(n)	mov r0, n; bl xputc

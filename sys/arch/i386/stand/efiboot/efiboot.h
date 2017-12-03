@@ -1,4 +1,4 @@
-/*	$NetBSD: efiboot.h,v 1.5 2017/05/01 13:03:01 nonaka Exp $	*/
+/*	$NetBSD: efiboot.h,v 1.5.8.2 2017/12/03 11:36:18 jdolecek Exp $	*/
 
 /*-
  * Copyright (c) 2016 Kimihiro Nonaka <nonaka@netbsd.org>

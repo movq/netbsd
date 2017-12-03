@@ -1,4 +1,4 @@
-/*	$NetBSD: leds-netxbig.h,v 1.1.1.1 2017/06/15 20:14:23 jmcneill Exp $	*/
+/*	$NetBSD: leds-netxbig.h,v 1.1.1.1.8.2 2017/12/03 11:38:38 jdolecek Exp $	*/
 
 /*
  * This header provides constants for netxbig LED bindings.

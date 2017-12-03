@@ -1,4 +1,4 @@
-/* $NetBSD: sun6i_a31_codec.c,v 1.1 2017/10/07 21:53:16 jmcneill Exp $ */
+/* $NetBSD: sun6i_a31_codec.c,v 1.1.2.2 2017/12/03 11:35:56 jdolecek Exp $ */
 
 /*-
  * Copyright (c) 2014-2017 Jared McNeill <jmcneill@invisible.ca>
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sun6i_a31_codec.c,v 1.1 2017/10/07 21:53:16 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sun6i_a31_codec.c,v 1.1.2.2 2017/12/03 11:35:56 jdolecek Exp $");
 
 #include <sys/param.h>
 #include <sys/bus.h>

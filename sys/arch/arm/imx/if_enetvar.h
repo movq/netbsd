@@ -1,4 +1,4 @@
-/*	$NetBSD: if_enetvar.h,v 1.2 2017/06/09 18:14:59 ryo Exp $	*/
+/*	$NetBSD: if_enetvar.h,v 1.2.4.2 2017/12/03 11:35:53 jdolecek Exp $	*/
 
 /*
  * Copyright (c) 2014 Ryo Shimizu <ryo@nerv.org>

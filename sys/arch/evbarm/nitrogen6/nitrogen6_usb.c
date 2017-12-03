@@ -1,4 +1,4 @@
-/*	$NetBSD: nitrogen6_usb.c,v 1.3 2017/11/09 05:57:23 hkenken Exp $	*/
+/*	$NetBSD: nitrogen6_usb.c,v 1.3.2.2 2017/12/03 11:36:06 jdolecek Exp $	*/
 
 /*
  * Copyright (c) 2013  Genetec Corporation.  All rights reserved.
@@ -27,7 +27,7 @@
  *
  */
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: nitrogen6_usb.c,v 1.3 2017/11/09 05:57:23 hkenken Exp $");
+__KERNEL_RCSID(0, "$NetBSD: nitrogen6_usb.c,v 1.3.2.2 2017/12/03 11:36:06 jdolecek Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

@@ -1,4 +1,4 @@
-/*	$NetBSD: msipic.c,v 1.11 2017/07/28 14:26:50 maxv Exp $	*/
+/*	$NetBSD: msipic.c,v 1.11.2.2 2017/12/03 11:36:50 jdolecek Exp $	*/
 
 /*
  * Copyright (c) 2015 Internet Initiative Japan Inc.
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: msipic.c,v 1.11 2017/07/28 14:26:50 maxv Exp $");
+__KERNEL_RCSID(0, "$NetBSD: msipic.c,v 1.11.2.2 2017/12/03 11:36:50 jdolecek Exp $");
 
 #include "opt_intrdebug.h"
 

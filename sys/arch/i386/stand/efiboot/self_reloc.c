@@ -1,4 +1,4 @@
-/*	$NetBSD: self_reloc.c,v 1.1 2017/01/24 11:09:14 nonaka Exp $	*/
+/*	$NetBSD: self_reloc.c,v 1.1.18.2 2017/12/03 11:36:18 jdolecek Exp $	*/
 
 /*-
  * Copyright (c) 2008-2010 Rui Paulo <rpaulo@FreeBSD.org>

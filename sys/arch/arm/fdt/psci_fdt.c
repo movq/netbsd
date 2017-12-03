@@ -1,4 +1,4 @@
-/* $NetBSD: psci_fdt.c,v 1.3 2017/09/11 09:21:56 jmcneill Exp $ */
+/* $NetBSD: psci_fdt.c,v 1.3.2.2 2017/12/03 11:35:52 jdolecek Exp $ */
 
 /*-
  * Copyright (c) 2017 Jared McNeill <jmcneill@invisible.ca>
@@ -29,7 +29,7 @@
 #include "opt_multiprocessor.h"
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: psci_fdt.c,v 1.3 2017/09/11 09:21:56 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: psci_fdt.c,v 1.3.2.2 2017/12/03 11:35:52 jdolecek Exp $");
 
 #include <sys/param.h>
 #include <sys/bus.h>

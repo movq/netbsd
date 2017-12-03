@@ -1,4 +1,4 @@
-/* $NetBSD: linux_keymap.c,v 1.2 2017/08/31 19:55:43 jmcneill Exp $ */
+/* $NetBSD: linux_keymap.c,v 1.2.2.2 2017/12/03 11:37:37 jdolecek Exp $ */
 
 /*-
  * Copyright (c) 1997-2017 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: linux_keymap.c,v 1.2 2017/08/31 19:55:43 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: linux_keymap.c,v 1.2.2.2 2017/12/03 11:37:37 jdolecek Exp $");
 
 #include <sys/types.h>
 #include <dev/wscons/linux_keymap.h>

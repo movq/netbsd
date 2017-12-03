@@ -1,4 +1,4 @@
-/*	$NetBSD: procfs_machdep.c,v 1.1 2016/08/05 16:51:56 scole Exp $	*/
+/*	$NetBSD: procfs_machdep.c,v 1.1.18.2 2017/12/03 11:36:20 jdolecek Exp $	*/
 
 /*-
  * Copyright (c) 2016 The NetBSD Foundation, Inc.
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: procfs_machdep.c,v 1.1 2016/08/05 16:51:56 scole Exp $");
+__KERNEL_RCSID(0, "$NetBSD: procfs_machdep.c,v 1.1.18.2 2017/12/03 11:36:20 jdolecek Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

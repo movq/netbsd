@@ -1,4 +1,4 @@
-/*	$NetBSD: nvmereg.h,v 1.9 2017/05/29 02:20:34 nonaka Exp $	*/
+/*	$NetBSD: nvmereg.h,v 1.9.8.2 2017/12/03 11:37:03 jdolecek Exp $	*/
 /*	$OpenBSD: nvmereg.h,v 1.10 2016/04/14 11:18:32 dlg Exp $ */
 
 /*

@@ -1,4 +1,4 @@
-/* $NetBSD: sunxi_emac.c,v 1.11 2017/12/01 17:47:51 jmcneill Exp $ */
+/* $NetBSD: sunxi_emac.c,v 1.11.2.2 2017/12/03 11:35:56 jdolecek Exp $ */
 
 /*-
  * Copyright (c) 2016-2017 Jared McNeill <jmcneill@invisible.ca>
@@ -33,7 +33,7 @@
 #include "opt_net_mpsafe.h"
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sunxi_emac.c,v 1.11 2017/12/01 17:47:51 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sunxi_emac.c,v 1.11.2.2 2017/12/03 11:35:56 jdolecek Exp $");
 
 #include <sys/param.h>
 #include <sys/bus.h>

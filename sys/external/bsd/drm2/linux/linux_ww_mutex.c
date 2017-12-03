@@ -1,4 +1,4 @@
-/*	$NetBSD: linux_ww_mutex.c,v 1.4 2017/09/16 23:56:42 christos Exp $	*/
+/*	$NetBSD: linux_ww_mutex.c,v 1.4.2.2 2017/12/03 11:38:00 jdolecek Exp $	*/
 
 /*-
  * Copyright (c) 2014 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: linux_ww_mutex.c,v 1.4 2017/09/16 23:56:42 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: linux_ww_mutex.c,v 1.4.2.2 2017/12/03 11:38:00 jdolecek Exp $");
 
 #include <sys/types.h>
 #include <sys/atomic.h>

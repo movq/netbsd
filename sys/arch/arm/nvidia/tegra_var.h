@@ -1,4 +1,4 @@
-/* $NetBSD: tegra_var.h,v 1.42 2017/09/24 20:09:53 jmcneill Exp $ */
+/* $NetBSD: tegra_var.h,v 1.42.2.2 2017/12/03 11:35:54 jdolecek Exp $ */
 
 /*-
  * Copyright (c) 2015 Jared D. McNeill <jmcneill@invisible.ca>

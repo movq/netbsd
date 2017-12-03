@@ -1,4 +1,4 @@
-/*	$NetBSD: libfdt_env.h,v 1.3 2017/06/08 15:54:32 skrll Exp $	*/
+/*	$NetBSD: libfdt_env.h,v 1.3.4.2 2017/12/03 11:38:02 jdolecek Exp $	*/
 
 #ifndef _LIBFDT_ENV_H
 #define _LIBFDT_ENV_H

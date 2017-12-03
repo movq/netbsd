@@ -1,5 +1,5 @@
 /*	$KAME: sctp_crc32.c,v 1.12 2005/03/06 16:04:17 itojun Exp $	*/
-/*	$NetBSD: sctp_crc32.c,v 1.2 2016/08/12 19:08:54 jdolecek Exp $ */
+/*	$NetBSD: sctp_crc32.c,v 1.2.14.2 2017/12/03 11:39:04 jdolecek Exp $ */
 
 /*
  * Copyright (c) 2001, 2002, 2003, 2004 Cisco Systems, Inc.
@@ -34,7 +34,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sctp_crc32.c,v 1.2 2016/08/12 19:08:54 jdolecek Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sctp_crc32.c,v 1.2.14.2 2017/12/03 11:39:04 jdolecek Exp $");
 
 #ifdef _KERNEL_OPT
 #include "opt_sctp.h"

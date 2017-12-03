@@ -1,4 +1,4 @@
-|	$NetBSD: vectors.S,v 1.1 2014/08/27 00:18:25 matt Exp $
+|	$NetBSD: vectors.S,v 1.1.18.2 2017/12/03 11:36:08 jdolecek Exp $
 
 | Copyright (c) 1997 Jason R. Thorpe.  All rights reserved.
 | Copyright (c) 1988 University of Utah
@@ -37,7 +37,7 @@
 |
 
 #include <machine/asm.h>
-RCSID("$NetBSD: vectors.S,v 1.1 2014/08/27 00:18:25 matt Exp $")
+RCSID("$NetBSD: vectors.S,v 1.1.18.2 2017/12/03 11:36:08 jdolecek Exp $")
 
 #define	BADTRAP16	\
 	VECTOR(badtrap) ; VECTOR(badtrap) ; \

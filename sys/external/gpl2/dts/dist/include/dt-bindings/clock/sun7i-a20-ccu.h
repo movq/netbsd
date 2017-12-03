@@ -1,4 +1,4 @@
-/*	$NetBSD: sun7i-a20-ccu.h,v 1.1.1.1 2017/10/28 10:30:32 jmcneill Exp $	*/
+/*	$NetBSD: sun7i-a20-ccu.h,v 1.1.1.1.2.2 2017/12/03 11:38:36 jdolecek Exp $	*/
 
 /*
  * Copyright (C) 2017 Priit Laes <plaes@plaes.org>

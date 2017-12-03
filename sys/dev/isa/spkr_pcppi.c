@@ -1,4 +1,4 @@
-/*	$NetBSD: spkr_pcppi.c,v 1.11 2017/06/14 05:01:35 pgoyette Exp $	*/
+/*	$NetBSD: spkr_pcppi.c,v 1.11.4.2 2017/12/03 11:37:05 jdolecek Exp $	*/
 
 /*
  * Copyright (c) 1990 Eric S. Raymond (esr@snark.thyrsus.com)
@@ -43,7 +43,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: spkr_pcppi.c,v 1.11 2017/06/14 05:01:35 pgoyette Exp $");
+__KERNEL_RCSID(0, "$NetBSD: spkr_pcppi.c,v 1.11.4.2 2017/12/03 11:37:05 jdolecek Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

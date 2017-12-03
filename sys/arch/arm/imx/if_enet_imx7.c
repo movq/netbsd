@@ -1,4 +1,4 @@
-/*	$NetBSD: if_enet_imx7.c,v 1.2 2017/06/09 18:14:59 ryo Exp $	*/
+/*	$NetBSD: if_enet_imx7.c,v 1.2.4.2 2017/12/03 11:35:53 jdolecek Exp $	*/
 
 /*
  * Copyright (c) 2014 Ryo Shimizu <ryo@nerv.org>
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_enet_imx7.c,v 1.2 2017/06/09 18:14:59 ryo Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_enet_imx7.c,v 1.2.4.2 2017/12/03 11:35:53 jdolecek Exp $");
 
 #include "locators.h"
 #include "imxccm.h"

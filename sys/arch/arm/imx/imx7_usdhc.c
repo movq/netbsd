@@ -1,4 +1,4 @@
-/*	$NetBSD: imx7_usdhc.c,v 1.2 2017/10/26 05:08:30 ryo Exp $	*/
+/*	$NetBSD: imx7_usdhc.c,v 1.2.2.2 2017/12/03 11:35:53 jdolecek Exp $	*/
 
 /*-
  * Copyright (c) 2012  Genetec Corporation.  All rights reserved.
@@ -29,7 +29,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: imx7_usdhc.c,v 1.2 2017/10/26 05:08:30 ryo Exp $");
+__KERNEL_RCSID(0, "$NetBSD: imx7_usdhc.c,v 1.2.2.2 2017/12/03 11:35:53 jdolecek Exp $");
 
 #include "imxgpio.h"
 

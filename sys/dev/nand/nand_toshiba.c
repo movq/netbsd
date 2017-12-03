@@ -1,4 +1,4 @@
-/*	$NetBSD: nand_toshiba.c,v 1.1 2017/11/09 21:50:15 jmcneill Exp $	*/
+/*	$NetBSD: nand_toshiba.c,v 1.1.2.2 2017/12/03 11:37:06 jdolecek Exp $	*/
 
 /*-
  * Copyright (c) 2012-2017 The NetBSD Foundation, Inc.
@@ -34,7 +34,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: nand_toshiba.c,v 1.1 2017/11/09 21:50:15 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: nand_toshiba.c,v 1.1.2.2 2017/12/03 11:37:06 jdolecek Exp $");
 
 #include "nand.h"
 #include "onfi.h"

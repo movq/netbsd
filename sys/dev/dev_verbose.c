@@ -1,4 +1,4 @@
-/*	$NetBSD: dev_verbose.c,v 1.3 2016/10/26 06:10:39 pgoyette Exp $	*/
+/*	$NetBSD: dev_verbose.c,v 1.3.14.2 2017/12/03 11:36:58 jdolecek Exp $	*/
 
 /*
  * Redistribution and use in source and binary forms, with or without
@@ -23,7 +23,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: dev_verbose.c,v 1.3 2016/10/26 06:10:39 pgoyette Exp $");
+__KERNEL_RCSID(0, "$NetBSD: dev_verbose.c,v 1.3.14.2 2017/12/03 11:36:58 jdolecek Exp $");
 
 #include <sys/param.h>
 

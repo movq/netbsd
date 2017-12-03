@@ -1,4 +1,4 @@
-/*	$NetBSD: ext2fs_xattr.h,v 1.2 2016/08/12 20:30:15 macallan Exp $	*/
+/*	$NetBSD: ext2fs_xattr.h,v 1.2.18.2 2017/12/03 11:39:21 jdolecek Exp $	*/
 
 /*-
  * Copyright (c) 2016 The NetBSD Foundation, Inc.
@@ -33,7 +33,7 @@
 #define _UFS_EXT2FS_EXT2FS_XATTR_H_
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ext2fs_xattr.h,v 1.2 2016/08/12 20:30:15 macallan Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ext2fs_xattr.h,v 1.2.18.2 2017/12/03 11:39:21 jdolecek Exp $");
 
 #ifdef _KERNEL
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: trap.S,v 1.1 2017/10/10 09:29:14 maxv Exp $	*/
+/*	$NetBSD: trap.S,v 1.1.2.2 2017/12/03 11:35:48 jdolecek Exp $	*/
 
 /*
  * Copyright (c) 2017 The NetBSD Foundation, Inc. All rights reserved.

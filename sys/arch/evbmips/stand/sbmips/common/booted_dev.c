@@ -1,4 +1,4 @@
-/* $NetBSD: booted_dev.c,v 1.2 2017/07/24 10:34:54 mrg Exp $ */
+/* $NetBSD: booted_dev.c,v 1.2.6.2 2017/12/03 11:36:11 jdolecek Exp $ */
 
 /*
  * Copyright 2000, 2001

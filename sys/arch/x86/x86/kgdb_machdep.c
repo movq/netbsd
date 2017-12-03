@@ -1,4 +1,4 @@
-/*	$NetBSD: kgdb_machdep.c,v 1.3 2017/09/17 09:41:35 maxv Exp $	*/
+/*	$NetBSD: kgdb_machdep.c,v 1.3.2.2 2017/12/03 11:36:50 jdolecek Exp $	*/
 
 /*
  * Copyright (c) 1997, 2017 The NetBSD Foundation, Inc.
@@ -56,7 +56,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: kgdb_machdep.c,v 1.3 2017/09/17 09:41:35 maxv Exp $");
+__KERNEL_RCSID(0, "$NetBSD: kgdb_machdep.c,v 1.3.2.2 2017/12/03 11:36:50 jdolecek Exp $");
 
 #include "opt_ddb.h"
 

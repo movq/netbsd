@@ -1,4 +1,4 @@
-/* $NetBSD: tcakp.c,v 1.4 2017/08/31 19:55:43 jmcneill Exp $ */
+/* $NetBSD: tcakp.c,v 1.4.2.2 2017/12/03 11:37:02 jdolecek Exp $ */
 
 /*-
  * Copyright (c) 2017 Jared McNeill <jmcneill@invisible.ca>
@@ -29,7 +29,7 @@
 #include "opt_fdt.h"
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: tcakp.c,v 1.4 2017/08/31 19:55:43 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: tcakp.c,v 1.4.2.2 2017/12/03 11:37:02 jdolecek Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

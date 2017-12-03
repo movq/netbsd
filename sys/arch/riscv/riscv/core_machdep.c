@@ -30,7 +30,7 @@
 #include <sys/cdefs.h>
 
 #ifndef CORENAME
-__RCSID("$NetBSD: core_machdep.c,v 1.1 2015/03/28 16:13:56 matt Exp $");
+__RCSID("$NetBSD: core_machdep.c,v 1.1.18.2 2017/12/03 11:36:39 jdolecek Exp $");
 #endif
 
 #include <sys/param.h>

@@ -1,4 +1,4 @@
-# $NetBSD: ssp.mk,v 1.2 2017/01/08 17:10:35 christos Exp $
+# $NetBSD: ssp.mk,v 1.2.14.2 2017/12/03 11:36:57 jdolecek Exp $
 
 .if ${USE_SSP:Uno} == "yes"
 COPTS.kern_ssp.c+=	-fno-stack-protector -D__SSP__

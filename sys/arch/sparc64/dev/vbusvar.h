@@ -1,4 +1,4 @@
-/*	$NetBSD: vbusvar.h,v 1.1 2016/06/17 21:59:06 palle Exp $	*/
+/*	$NetBSD: vbusvar.h,v 1.1.18.2 2017/12/03 11:36:44 jdolecek Exp $	*/
 /*	$OpenBSD: vbusvar.h,v 1.3 2008/12/30 21:23:33 kettenis Exp $	*/
 /*
  * Copyright (c) 2008 Mark Kettenis

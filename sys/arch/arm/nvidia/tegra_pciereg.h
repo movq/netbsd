@@ -1,4 +1,4 @@
-/* $NetBSD: tegra_pciereg.h,v 1.4 2017/09/26 16:12:45 jmcneill Exp $ */
+/* $NetBSD: tegra_pciereg.h,v 1.4.2.2 2017/12/03 11:35:54 jdolecek Exp $ */
 
 /*-
  * Copyright (c) 2015 Jared D. McNeill <jmcneill@invisible.ca>

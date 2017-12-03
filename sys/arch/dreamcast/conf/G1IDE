@@ -1,4 +1,4 @@
-# $NetBSD: G1IDE,v 1.5 2017/09/14 07:58:39 mrg Exp $
+# $NetBSD: G1IDE,v 1.5.2.2 2017/12/03 11:36:00 jdolecek Exp $
 
 include 	"arch/dreamcast/conf/std.dreamcast"
 

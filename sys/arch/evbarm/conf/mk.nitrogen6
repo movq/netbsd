@@ -1,4 +1,4 @@
-#	$NetBSD: mk.nitrogen6,v 1.2 2014/09/27 04:03:24 matt Exp $
+#	$NetBSD: mk.nitrogen6,v 1.2.18.2 2017/12/03 11:36:03 jdolecek Exp $
 
 SYSTEM_FIRST_OBJ=	nitrogen6_start.o
 SYSTEM_FIRST_SFILE=	${THISARM}/nitrogen6/nitrogen6_start.S

@@ -1,4 +1,4 @@
-/*	$NetBSD: rump_x86_abi.c,v 1.2 2016/01/26 23:12:18 pooka Exp $	*/
+/*	$NetBSD: rump_x86_abi.c,v 1.2.16.2 2017/12/03 11:39:16 jdolecek Exp $	*/
 
 /*-
  * Copyright (c) 2015 Antti Kantee.  All Rights Reserved.
@@ -26,7 +26,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: rump_x86_abi.c,v 1.2 2016/01/26 23:12:18 pooka Exp $");
+__KERNEL_RCSID(0, "$NetBSD: rump_x86_abi.c,v 1.2.16.2 2017/12/03 11:39:16 jdolecek Exp $");
 
 #include <rump-sys/kern.h>
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: drm_sysctl.c,v 1.6 2015/07/30 04:36:48 riastradh Exp $	*/
+/*	$NetBSD: drm_sysctl.c,v 1.6.16.2 2017/12/03 11:37:58 jdolecek Exp $	*/
 
 /*-
  * Copyright (c) 2014 The NetBSD Foundation, Inc.
@@ -29,7 +29,7 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: drm_sysctl.c,v 1.6 2015/07/30 04:36:48 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: drm_sysctl.c,v 1.6.16.2 2017/12/03 11:37:58 jdolecek Exp $");
 
 #include <sys/param.h>
 #include <sys/types.h>

@@ -1,4 +1,4 @@
-/* $NetBSD: db_machdep.h,v 1.2 2017/11/06 03:47:48 christos Exp $ */
+/* $NetBSD: db_machdep.h,v 1.2.2.2 2017/12/03 11:36:39 jdolecek Exp $ */
 
 /*-
  * Copyright (c) 2014 The NetBSD Foundation, Inc.

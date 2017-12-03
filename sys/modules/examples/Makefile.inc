@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile.inc,v 1.1 2015/05/13 07:07:36 pgoyette Exp $
+#	$NetBSD: Makefile.inc,v 1.1.20.2 2017/12/03 11:38:53 jdolecek Exp $
 
 # We only build the example modules; we don't want to install them anywhere
 

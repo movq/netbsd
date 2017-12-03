@@ -1,4 +1,4 @@
-/* $NetBSD: arm_fdt.c,v 1.6 2017/09/21 19:28:37 skrll Exp $ */
+/* $NetBSD: arm_fdt.c,v 1.6.2.2 2017/12/03 11:35:52 jdolecek Exp $ */
 
 /*-
  * Copyright (c) 2017 Jared D. McNeill <jmcneill@invisible.ca>
@@ -29,7 +29,7 @@
 #include "opt_arm_timer.h"
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: arm_fdt.c,v 1.6 2017/09/21 19:28:37 skrll Exp $");
+__KERNEL_RCSID(0, "$NetBSD: arm_fdt.c,v 1.6.2.2 2017/12/03 11:35:52 jdolecek Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

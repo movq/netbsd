@@ -1,4 +1,4 @@
-/*	$NetBSD: wqinput.c,v 1.3 2017/06/02 19:10:19 para Exp $	*/
+/*	$NetBSD: wqinput.c,v 1.3.8.2 2017/12/03 11:39:04 jdolecek Exp $	*/
 
 /*-
  * Copyright (c) 2017 Internet Initiative Japan Inc.

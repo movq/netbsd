@@ -1,4 +1,4 @@
-#	$NetBSD: majors.storage,v 1.1 2014/09/19 17:32:34 matt Exp $
+#	$NetBSD: majors.storage,v 1.1.18.2 2017/12/03 11:36:57 jdolecek Exp $
 #
 # MI major assignments for storage (and their children) devices
 #

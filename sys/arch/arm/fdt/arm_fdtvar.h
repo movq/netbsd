@@ -1,4 +1,4 @@
-/* $NetBSD: arm_fdtvar.h,v 1.7 2017/08/24 13:06:23 jmcneill Exp $ */
+/* $NetBSD: arm_fdtvar.h,v 1.7.4.2 2017/12/03 11:35:52 jdolecek Exp $ */
 
 /*-
  * Copyright (c) 2017 Jared D. McNeill <jmcneill@invisible.ca>

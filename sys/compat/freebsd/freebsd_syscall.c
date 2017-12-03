@@ -1,4 +1,4 @@
-/*	$NetBSD: freebsd_syscall.c,v 1.2 2017/08/08 08:04:06 maxv Exp $	*/
+/*	$NetBSD: freebsd_syscall.c,v 1.2.4.2 2017/12/03 11:36:53 jdolecek Exp $	*/
 
 /*-
  * Copyright (c) 1998, 2000 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: freebsd_syscall.c,v 1.2 2017/08/08 08:04:06 maxv Exp $");
+__KERNEL_RCSID(0, "$NetBSD: freebsd_syscall.c,v 1.2.4.2 2017/12/03 11:36:53 jdolecek Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

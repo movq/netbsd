@@ -1,4 +1,4 @@
-#	$NetBSD: files.virtio,v 1.1 2017/08/02 08:39:14 cherry Exp $
+#	$NetBSD: files.virtio,v 1.1.4.2 2017/12/03 11:37:07 jdolecek Exp $
 
 # VirtIO
 device	virtio {}

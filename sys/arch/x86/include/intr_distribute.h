@@ -1,4 +1,4 @@
-/*	$NetBSD: intr_distribute.h,v 1.2 2015/08/17 06:16:02 knakahara Exp $	*/
+/*	$NetBSD: intr_distribute.h,v 1.2.16.2 2017/12/03 11:36:50 jdolecek Exp $	*/
 
 /*
  * Copyright (c) 2015 Internet Initiative Japan Inc.

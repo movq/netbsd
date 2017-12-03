@@ -1,4 +1,4 @@
-/* $NetBSD: titemp.c,v 1.3 2016/08/16 23:47:45 jakllsch Exp $ */
+/* $NetBSD: titemp.c,v 1.3.14.2 2017/12/03 11:37:02 jdolecek Exp $ */
 
 /*-
  * Copyright (c) 2015 Jared D. McNeill <jmcneill@invisible.ca>
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: titemp.c,v 1.3 2016/08/16 23:47:45 jakllsch Exp $");
+__KERNEL_RCSID(0, "$NetBSD: titemp.c,v 1.3.14.2 2017/12/03 11:37:02 jdolecek Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

@@ -1,4 +1,4 @@
-/* $NetBSD: amlogic_reg.h,v 1.12 2015/08/08 13:54:05 jmcneill Exp $ */
+/* $NetBSD: amlogic_reg.h,v 1.12.16.2 2017/12/03 11:35:51 jdolecek Exp $ */
 
 /*-
  * Copyright (c) 2015 Jared D. McNeill <jmcneill@invisible.ca>

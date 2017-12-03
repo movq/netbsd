@@ -1,4 +1,4 @@
-/*	$NetBSD: nitrogen6_start.S,v 1.2 2017/06/09 18:14:59 ryo Exp $	*/
+/*	$NetBSD: nitrogen6_start.S,v 1.2.4.2 2017/12/03 11:36:06 jdolecek Exp $	*/
 
 /*-
  * Copyright (c) 2014 Ryo Shimizu <ryo@nerv.org>
@@ -37,7 +37,7 @@
 #include <arm/cortex/scu_reg.h>
 #include "assym.h"
 
-RCSID("$NetBSD: nitrogen6_start.S,v 1.2 2017/06/09 18:14:59 ryo Exp $")
+RCSID("$NetBSD: nitrogen6_start.S,v 1.2.4.2 2017/12/03 11:36:06 jdolecek Exp $")
 
 #ifndef CONADDR
 #define CONADDR		0x021e8000

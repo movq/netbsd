@@ -1,4 +1,4 @@
-/*	$NetBSD: wm8731reg.h,v 1.1 2014/09/23 14:49:46 nonaka Exp $	*/
+/*	$NetBSD: wm8731reg.h,v 1.1.18.2 2017/12/03 11:36:52 jdolecek Exp $	*/
 /*-
  * Copyright (c) 2013 The NetBSD Foundation, Inc.
  * All rights reserved.

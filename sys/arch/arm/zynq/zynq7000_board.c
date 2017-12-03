@@ -1,4 +1,4 @@
-/*	$NetBSD: zynq7000_board.c,v 1.2 2016/10/20 09:53:07 skrll Exp $	*/
+/*	$NetBSD: zynq7000_board.c,v 1.2.14.2 2017/12/03 11:35:57 jdolecek Exp $	*/
 /*-
  * Copyright (c) 2015  Genetec Corporation.  All rights reserved.
  * Written by Hashimoto Kenichi for Genetec Corporation.
@@ -26,7 +26,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(1, "$NetBSD: zynq7000_board.c,v 1.2 2016/10/20 09:53:07 skrll Exp $");
+__KERNEL_RCSID(1, "$NetBSD: zynq7000_board.c,v 1.2.14.2 2017/12/03 11:35:57 jdolecek Exp $");
 
 #include "opt_zynq.h"
 #include "arml2cc.h"

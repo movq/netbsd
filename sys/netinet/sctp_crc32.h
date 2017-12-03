@@ -1,5 +1,5 @@
 /*	$KAME: sctp_crc32.h,v 1.5 2004/08/17 04:06:16 itojun Exp $	*/
-/*	$NetBSD: sctp_crc32.h,v 1.1 2015/10/13 21:28:35 rjs Exp $ */
+/*	$NetBSD: sctp_crc32.h,v 1.1.18.2 2017/12/03 11:39:04 jdolecek Exp $ */
 
 #ifndef __SCTP_CRC32C_H__
 #define __SCTP_CRC32C_H__

@@ -1,4 +1,4 @@
-/*	$NetBSD: cbusvar.h,v 1.1 2016/06/22 20:13:51 palle Exp $	*/
+/*	$NetBSD: cbusvar.h,v 1.1.18.2 2017/12/03 11:36:44 jdolecek Exp $	*/
 /*	$OpenBSD: cbusvar.h,v 1.5 2015/01/25 21:42:13 kettenis Exp $	*/
 /*
  * Copyright (c) 2008 Mark Kettenis

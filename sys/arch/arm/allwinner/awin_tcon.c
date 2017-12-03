@@ -1,4 +1,4 @@
-/* $NetBSD: awin_tcon.c,v 1.13 2016/01/13 17:07:51 macallan Exp $ */
+/* $NetBSD: awin_tcon.c,v 1.13.16.2 2017/12/03 11:35:51 jdolecek Exp $ */
 
 /*-
  * Copyright (c) 2014 Jared D. McNeill <jmcneill@invisible.ca>
@@ -29,7 +29,7 @@
 #include "opt_allwinner.h"
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: awin_tcon.c,v 1.13 2016/01/13 17:07:51 macallan Exp $");
+__KERNEL_RCSID(0, "$NetBSD: awin_tcon.c,v 1.13.16.2 2017/12/03 11:35:51 jdolecek Exp $");
 
 #include <sys/param.h>
 #include <sys/bus.h>

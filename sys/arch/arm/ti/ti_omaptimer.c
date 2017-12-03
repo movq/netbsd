@@ -1,7 +1,7 @@
-/*	$NetBSD: ti_omaptimer.c,v 1.1 2017/10/26 01:16:32 jakllsch Exp $	*/
+/*	$NetBSD: ti_omaptimer.c,v 1.1.2.2 2017/12/03 11:35:56 jdolecek Exp $	*/
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ti_omaptimer.c,v 1.1 2017/10/26 01:16:32 jakllsch Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ti_omaptimer.c,v 1.1.2.2 2017/12/03 11:35:56 jdolecek Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>

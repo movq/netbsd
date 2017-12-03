@@ -1,4 +1,4 @@
-/* $NetBSD: qemufwcfg_acpi.c,v 1.1 2017/11/25 16:31:03 jmcneill Exp $ */
+/* $NetBSD: qemufwcfg_acpi.c,v 1.1.2.2 2017/12/03 11:36:58 jdolecek Exp $ */
 
 /*-
  * Copyright (c) 2017 Jared McNeill <jmcneill@invisible.ca>
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: qemufwcfg_acpi.c,v 1.1 2017/11/25 16:31:03 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: qemufwcfg_acpi.c,v 1.1.2.2 2017/12/03 11:36:58 jdolecek Exp $");
 
 #include <sys/param.h>
 #include <sys/device.h>

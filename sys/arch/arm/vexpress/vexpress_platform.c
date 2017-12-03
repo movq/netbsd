@@ -1,4 +1,4 @@
-/* $NetBSD: vexpress_platform.c,v 1.5 2017/11/18 00:25:43 jmcneill Exp $ */
+/* $NetBSD: vexpress_platform.c,v 1.5.2.2 2017/12/03 11:35:56 jdolecek Exp $ */
 
 /*-
  * Copyright (c) 2017 Jared McNeill <jmcneill@invisible.ca>
@@ -30,7 +30,7 @@
 #include "opt_fdt_arm.h"
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: vexpress_platform.c,v 1.5 2017/11/18 00:25:43 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: vexpress_platform.c,v 1.5.2.2 2017/12/03 11:35:56 jdolecek Exp $");
 
 #include <sys/param.h>
 #include <sys/bus.h>

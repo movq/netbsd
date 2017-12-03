@@ -1,4 +1,4 @@
-/*	$NetBSD: arcofi_dio.c,v 1.1 2014/08/24 08:17:44 tsutsui Exp $	*/
+/*	$NetBSD: arcofi_dio.c,v 1.1.20.2 2017/12/03 11:36:13 jdolecek Exp $	*/
 /*	$OpenBSD: arcofi_dio.c,v 1.1 2011/12/21 23:12:03 miod Exp $	*/
 
 /*

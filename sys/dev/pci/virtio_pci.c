@@ -1,4 +1,4 @@
-/* $NetBSD: virtio_pci.c,v 1.1 2017/08/02 08:39:14 cherry Exp $ */
+/* $NetBSD: virtio_pci.c,v 1.1.4.2 2017/12/03 11:37:29 jdolecek Exp $ */
 
 /*
  * Copyright (c) 2010 Minoura Makoto.

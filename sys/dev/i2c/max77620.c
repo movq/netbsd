@@ -1,4 +1,4 @@
-/* $NetBSD: max77620.c,v 1.2 2017/09/28 13:08:00 jmcneill Exp $ */
+/* $NetBSD: max77620.c,v 1.2.2.2 2017/12/03 11:37:02 jdolecek Exp $ */
 
 /*-
  * Copyright (c) 2017 Jared McNeill <jmcneill@invisible.ca>
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: max77620.c,v 1.2 2017/09/28 13:08:00 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: max77620.c,v 1.2.2.2 2017/12/03 11:37:02 jdolecek Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

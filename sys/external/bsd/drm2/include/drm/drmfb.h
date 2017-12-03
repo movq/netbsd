@@ -1,4 +1,4 @@
-/*	$NetBSD: drmfb.h,v 1.2 2016/12/12 19:45:56 maya Exp $	*/
+/*	$NetBSD: drmfb.h,v 1.2.14.2 2017/12/03 11:37:59 jdolecek Exp $	*/
 
 /*-
  * Copyright (c) 2014 The NetBSD Foundation, Inc.

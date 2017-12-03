@@ -1,4 +1,4 @@
-/*	$NetBSD: imx7_ccmreg.h,v 1.2 2016/10/17 09:21:51 ryo Exp $	*/
+/*	$NetBSD: imx7_ccmreg.h,v 1.2.14.2 2017/12/03 11:35:53 jdolecek Exp $	*/
 
 /*
  * Copyright (c) 2015 Internet Initiative Japan, Inc.

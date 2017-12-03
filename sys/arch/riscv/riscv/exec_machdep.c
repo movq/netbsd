@@ -1,4 +1,4 @@
-/*	$NetBSD: exec_machdep.c,v 1.1 2015/03/28 16:13:56 matt Exp $	*/
+/*	$NetBSD: exec_machdep.c,v 1.1.18.2 2017/12/03 11:36:39 jdolecek Exp $	*/
 /*-
  * Copyright (c) 2014 The NetBSD Foundation, Inc.
  * All rights reserved.
@@ -29,7 +29,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: exec_machdep.c,v 1.1 2015/03/28 16:13:56 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: exec_machdep.c,v 1.1.18.2 2017/12/03 11:36:39 jdolecek Exp $");
 
 #include "opt_execfmt.h"
 

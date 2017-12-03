@@ -1,4 +1,4 @@
-/*	$NetBSD: ingenic_dwctwo.c,v 1.13 2016/04/23 10:15:30 skrll Exp $ */
+/*	$NetBSD: ingenic_dwctwo.c,v 1.13.16.2 2017/12/03 11:36:28 jdolecek Exp $ */
 
 /*-
  * Copyright (c) 2014 Michael Lorenz
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ingenic_dwctwo.c,v 1.13 2016/04/23 10:15:30 skrll Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ingenic_dwctwo.c,v 1.13.16.2 2017/12/03 11:36:28 jdolecek Exp $");
 
 /*
  * adapted from bcm2835_dwctwo.c

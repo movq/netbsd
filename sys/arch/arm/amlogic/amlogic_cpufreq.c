@@ -1,4 +1,4 @@
-/* $NetBSD: amlogic_cpufreq.c,v 1.5 2015/11/29 19:16:58 jmcneill Exp $ */
+/* $NetBSD: amlogic_cpufreq.c,v 1.5.16.2 2017/12/03 11:35:51 jdolecek Exp $ */
 
 /*-
  * Copyright (c) 2015 Jared D. McNeill <jmcneill@invisible.ca>
@@ -31,7 +31,7 @@
 #include "opt_amlogic.h"
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: amlogic_cpufreq.c,v 1.5 2015/11/29 19:16:58 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: amlogic_cpufreq.c,v 1.5.16.2 2017/12/03 11:35:51 jdolecek Exp $");
 
 #include <sys/param.h>
 #include <sys/bus.h>

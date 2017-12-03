@@ -1,4 +1,4 @@
-/*	$NetBSD: rockchip_machdep.c,v 1.23 2016/10/20 09:53:08 skrll Exp $ */
+/*	$NetBSD: rockchip_machdep.c,v 1.23.14.2 2017/12/03 11:36:06 jdolecek Exp $ */
 
 /*
  * Machine dependent functions for kernel setup for TI OSK5912 board.
@@ -125,7 +125,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: rockchip_machdep.c,v 1.23 2016/10/20 09:53:08 skrll Exp $");
+__KERNEL_RCSID(0, "$NetBSD: rockchip_machdep.c,v 1.23.14.2 2017/12/03 11:36:06 jdolecek Exp $");
 
 #include "opt_machdep.h"
 #include "opt_ddb.h"

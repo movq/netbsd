@@ -1,4 +1,4 @@
-/* $NetBSD: tegra_gpioreg.h,v 1.1 2015/05/02 12:08:32 jmcneill Exp $ */
+/* $NetBSD: tegra_gpioreg.h,v 1.1.18.2 2017/12/03 11:35:54 jdolecek Exp $ */
 
 /*-
  * Copyright (c) 2015 Jared D. McNeill <jmcneill@invisible.ca>

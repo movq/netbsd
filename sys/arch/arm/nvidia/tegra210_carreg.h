@@ -1,4 +1,4 @@
-/* $NetBSD: tegra210_carreg.h,v 1.8 2017/09/25 08:55:07 jmcneill Exp $ */
+/* $NetBSD: tegra210_carreg.h,v 1.8.2.2 2017/12/03 11:35:54 jdolecek Exp $ */
 
 /*-
  * Copyright (c) 2017 Jared McNeill <jmcneill@invisible.ca>

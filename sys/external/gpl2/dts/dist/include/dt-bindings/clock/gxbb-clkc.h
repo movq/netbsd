@@ -1,4 +1,4 @@
-/*	$NetBSD: gxbb-clkc.h,v 1.1.1.4 2017/11/30 19:40:51 jmcneill Exp $	*/
+/*	$NetBSD: gxbb-clkc.h,v 1.1.1.4.2.2 2017/12/03 11:38:35 jdolecek Exp $	*/
 
 /* SPDX-License-Identifier: GPL-2.0 */
 /*

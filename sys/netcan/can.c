@@ -1,4 +1,4 @@
-/*	$NetBSD: can.c,v 1.2 2017/05/27 21:02:56 bouyer Exp $	*/
+/*	$NetBSD: can.c,v 1.2.10.2 2017/12/03 11:39:03 jdolecek Exp $	*/
 
 /*-
  * Copyright (c) 2003, 2017 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: can.c,v 1.2 2017/05/27 21:02:56 bouyer Exp $");
+__KERNEL_RCSID(0, "$NetBSD: can.c,v 1.2.10.2 2017/12/03 11:39:03 jdolecek Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

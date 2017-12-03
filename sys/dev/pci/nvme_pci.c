@@ -1,4 +1,4 @@
-/*	$NetBSD: nvme_pci.c,v 1.19 2017/06/01 02:45:11 chs Exp $	*/
+/*	$NetBSD: nvme_pci.c,v 1.19.8.2 2017/12/03 11:37:08 jdolecek Exp $	*/
 /*	$OpenBSD: nvme_pci.c,v 1.3 2016/04/14 11:18:32 dlg Exp $ */
 
 /*
@@ -43,7 +43,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: nvme_pci.c,v 1.19 2017/06/01 02:45:11 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: nvme_pci.c,v 1.19.8.2 2017/12/03 11:37:08 jdolecek Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

@@ -1,4 +1,4 @@
-/* $NetBSD: sun7i_a20_gpio.c,v 1.1 2017/10/06 21:20:59 jmcneill Exp $ */
+/* $NetBSD: sun7i_a20_gpio.c,v 1.1.2.2 2017/12/03 11:35:56 jdolecek Exp $ */
 
 /*-
  * Copyright (c) 2016 Emmanuel Vadot <manu@freebsd.org>
@@ -28,7 +28,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sun7i_a20_gpio.c,v 1.1 2017/10/06 21:20:59 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sun7i_a20_gpio.c,v 1.1.2.2 2017/12/03 11:35:56 jdolecek Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

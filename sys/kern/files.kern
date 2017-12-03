@@ -1,4 +1,4 @@
-#	$NetBSD: files.kern,v 1.15 2017/05/19 00:01:33 pgoyette Exp $
+#	$NetBSD: files.kern,v 1.15.8.2 2017/12/03 11:38:44 jdolecek Exp $
 
 #
 # kernel sources

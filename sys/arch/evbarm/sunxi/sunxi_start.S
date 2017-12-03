@@ -1,4 +1,4 @@
-/* $NetBSD: sunxi_start.S,v 1.2 2017/11/08 19:49:26 skrll Exp $ */
+/* $NetBSD: sunxi_start.S,v 1.2.2.2 2017/12/03 11:36:07 jdolecek Exp $ */
 
 /*-
  * Copyright (c) 2014, 2015 The NetBSD Foundation, Inc.
@@ -40,7 +40,7 @@
 #include <arm/armreg.h>
 #include "assym.h"
 
-RCSID("$NetBSD: sunxi_start.S,v 1.2 2017/11/08 19:49:26 skrll Exp $")
+RCSID("$NetBSD: sunxi_start.S,v 1.2.2.2 2017/12/03 11:36:07 jdolecek Exp $")
 
 #if defined(VERBOSE_INIT_ARM) && defined(CONSADDR)
 #define	XPUTC(n)	mov r0, n; bl xputc

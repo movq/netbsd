@@ -1,4 +1,4 @@
-/* $NetBSD: omap_edma.c,v 1.4 2017/03/14 15:11:41 skrll Exp $ */
+/* $NetBSD: omap_edma.c,v 1.4.12.2 2017/12/03 11:35:55 jdolecek Exp $ */
 
 /*-
  * Copyright (c) 2014 Jared D. McNeill <jmcneill@invisible.ca>
@@ -26,7 +26,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: omap_edma.c,v 1.4 2017/03/14 15:11:41 skrll Exp $");
+__KERNEL_RCSID(0, "$NetBSD: omap_edma.c,v 1.4.12.2 2017/12/03 11:35:55 jdolecek Exp $");
 
 #include "opt_omap.h"
 

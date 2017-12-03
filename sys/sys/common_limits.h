@@ -1,4 +1,4 @@
-/*	$NetBSD: common_limits.h,v 1.2 2014/08/19 15:46:46 matt Exp $	*/
+/*	$NetBSD: common_limits.h,v 1.2.18.2 2017/12/03 11:39:20 jdolecek Exp $	*/
 
 /*-
  * Copyright (c) 2014 The NetBSD Foundation, Inc.

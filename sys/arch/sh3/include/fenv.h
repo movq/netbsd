@@ -1,4 +1,4 @@
-/*	$NetBSD: fenv.h,v 1.3 2017/03/22 23:11:10 chs Exp $	*/
+/*	$NetBSD: fenv.h,v 1.3.12.2 2017/12/03 11:36:42 jdolecek Exp $	*/
 
 /*-
  * Copyright (c) 2016 The NetBSD Foundation, Inc.

@@ -1,4 +1,4 @@
-/*	$NetBSD: imx6_uart.c,v 1.3 2017/09/08 05:29:12 hkenken Exp $	*/
+/*	$NetBSD: imx6_uart.c,v 1.3.2.2 2017/12/03 11:35:53 jdolecek Exp $	*/
 
 /*
  * Copyright (c) 2013 Genetec Corporation.  All rights reserved.

@@ -1,4 +1,4 @@
-/* $NetBSD: xpio.h,v 1.1 2016/12/03 17:38:02 tsutsui Exp $ */
+/* $NetBSD: xpio.h,v 1.1.22.2 2017/12/03 11:36:23 jdolecek Exp $ */
 
 /*-
  * Copyright (c) 2016 Izumi Tsutsui.  All rights reserved.

@@ -1,4 +1,4 @@
-/*	$NetBSD: dev_verbose.h,v 1.2 2015/11/13 01:37:19 christos Exp $ */
+/*	$NetBSD: dev_verbose.h,v 1.2.16.2 2017/12/03 11:36:58 jdolecek Exp $ */
 
 /*
  * Redistribution and use in source and binary forms, with or without

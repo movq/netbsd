@@ -1,4 +1,4 @@
-#	$NetBSD: files.athn,v 1.1 2014/10/10 12:39:53 uebayasi Exp $
+#	$NetBSD: files.athn,v 1.1.18.2 2017/12/03 11:37:03 jdolecek Exp $
 
 # Atheros AR9k (802.11a/g/n) driver
 defflag opt_athn.h	ATHN_DEBUG

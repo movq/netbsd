@@ -1,4 +1,4 @@
-/*	$NetBSD: nitrogen6_machdep.c,v 1.7 2017/09/08 05:29:12 hkenken Exp $	*/
+/*	$NetBSD: nitrogen6_machdep.c,v 1.7.2.2 2017/12/03 11:36:06 jdolecek Exp $	*/
 
 /*-
  * Copyright (c) 2012 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: nitrogen6_machdep.c,v 1.7 2017/09/08 05:29:12 hkenken Exp $");
+__KERNEL_RCSID(0, "$NetBSD: nitrogen6_machdep.c,v 1.7.2.2 2017/12/03 11:36:06 jdolecek Exp $");
 
 #include "opt_evbarm_boardtype.h"
 #include "opt_arm_debug.h"

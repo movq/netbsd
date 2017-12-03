@@ -1,4 +1,4 @@
-/*	$NetBSD: exynos_start.S,v 1.4 2017/06/10 23:20:56 jmcneill Exp $	*/
+/*	$NetBSD: exynos_start.S,v 1.4.4.2 2017/12/03 11:36:04 jdolecek Exp $	*/
 
 /*-
  * Copyright (c) 2014 The NetBSD Foundation, Inc.
@@ -45,7 +45,7 @@
 
 #include <evbarm/exynos/platform.h>
 
-RCSID("$NetBSD: exynos_start.S,v 1.4 2017/06/10 23:20:56 jmcneill Exp $")
+RCSID("$NetBSD: exynos_start.S,v 1.4.4.2 2017/12/03 11:36:04 jdolecek Exp $")
 
 
 #if defined(VERBOSE_INIT_ARM)

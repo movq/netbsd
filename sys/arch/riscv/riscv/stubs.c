@@ -29,6 +29,6 @@
 
 #include <sys/cdefs.h>
 
-__RCSID("$NetBSD: stubs.c,v 1.1 2015/03/28 16:13:56 matt Exp $");
+__RCSID("$NetBSD: stubs.c,v 1.1.18.2 2017/12/03 11:36:39 jdolecek Exp $");
 
 #include <sys/param.h>

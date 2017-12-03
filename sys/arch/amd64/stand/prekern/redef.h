@@ -1,4 +1,4 @@
-/*	$NetBSD: redef.h,v 1.2 2017/11/14 13:58:07 maxv Exp $	*/
+/*	$NetBSD: redef.h,v 1.2.2.2 2017/12/03 11:35:48 jdolecek Exp $	*/
 
 /*
  * Copyright (c) 2017 The NetBSD Foundation, Inc. All rights reserved.

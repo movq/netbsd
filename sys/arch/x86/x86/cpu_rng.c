@@ -1,4 +1,4 @@
-/* $NetBSD: cpu_rng.c,v 1.5 2016/02/29 00:17:54 riastradh Exp $ */
+/* $NetBSD: cpu_rng.c,v 1.5.18.2 2017/12/03 11:36:50 jdolecek Exp $ */
 
 /*-
  * Copyright (c) 2015 The NetBSD Foundation, Inc.

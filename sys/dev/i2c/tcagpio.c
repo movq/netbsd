@@ -1,4 +1,4 @@
-/* $NetBSD: tcagpio.c,v 1.1 2017/09/22 18:12:31 jmcneill Exp $ */
+/* $NetBSD: tcagpio.c,v 1.1.2.2 2017/12/03 11:37:02 jdolecek Exp $ */
 
 /*-
  * Copyright (c) 2017 Jared McNeill <jmcneill@invisible.ca>
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: tcagpio.c,v 1.1 2017/09/22 18:12:31 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: tcagpio.c,v 1.1.2.2 2017/12/03 11:37:02 jdolecek Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

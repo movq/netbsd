@@ -1,4 +1,4 @@
-/*	$NetBSD: tvp5150.h,v 1.1.1.1 2017/06/15 20:14:23 jmcneill Exp $	*/
+/*	$NetBSD: tvp5150.h,v 1.1.1.1.8.2 2017/12/03 11:38:38 jdolecek Exp $	*/
 
 /*
     tvp5150.h - definition for tvp5150 inputs

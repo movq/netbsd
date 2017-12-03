@@ -1,4 +1,4 @@
-# $NetBSD: Makefile.efiboot,v 1.9 2017/04/29 00:05:35 nonaka Exp $
+# $NetBSD: Makefile.efiboot,v 1.9.8.2 2017/12/03 11:36:18 jdolecek Exp $
 
 S=		${.CURDIR}/../../../../..
 

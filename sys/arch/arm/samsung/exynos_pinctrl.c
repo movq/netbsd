@@ -1,4 +1,4 @@
-/*	$NetBSD: exynos_pinctrl.c,v 1.12 2017/07/02 18:21:52 jmcneill Exp $ */
+/*	$NetBSD: exynos_pinctrl.c,v 1.12.4.2 2017/12/03 11:35:56 jdolecek Exp $ */
 
 /*-
 * Copyright (c) 2015 The NetBSD Foundation, Inc.
@@ -34,7 +34,7 @@
 #include "gpio.h"
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(1, "$NetBSD: exynos_pinctrl.c,v 1.12 2017/07/02 18:21:52 jmcneill Exp $");
+__KERNEL_RCSID(1, "$NetBSD: exynos_pinctrl.c,v 1.12.4.2 2017/12/03 11:35:56 jdolecek Exp $");
 
 #include <sys/param.h>
 #include <sys/bus.h>

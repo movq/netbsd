@@ -1,4 +1,4 @@
-/* $NetBSD: hdaudioreg.h,v 1.2 2017/10/28 06:24:24 riastradh Exp $ */
+/* $NetBSD: hdaudioreg.h,v 1.2.2.2 2017/12/03 11:37:01 jdolecek Exp $ */
 
 /*
  * Copyright (c) 2009 Precedence Technologies Ltd <support@precedence.co.uk>

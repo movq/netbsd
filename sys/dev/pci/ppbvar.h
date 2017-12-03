@@ -1,4 +1,4 @@
-/*	$NetBSD: ppbvar.h,v 1.2 2017/04/18 05:21:34 msaitoh Exp $	*/
+/*	$NetBSD: ppbvar.h,v 1.2.16.2 2017/12/03 11:37:28 jdolecek Exp $	*/
 
 /*
  * Copyright (c) 1996, 1998 Christopher G. Demetriou.  All rights reserved.
@@ -31,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ppbvar.h,v 1.2 2017/04/18 05:21:34 msaitoh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ppbvar.h,v 1.2.16.2 2017/12/03 11:37:28 jdolecek Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

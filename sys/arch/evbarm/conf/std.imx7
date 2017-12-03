@@ -1,4 +1,4 @@
-#	$NetBSD: std.imx7,v 1.2 2016/10/17 10:36:56 ryo Exp $
+#	$NetBSD: std.imx7,v 1.2.14.2 2017/12/03 11:36:03 jdolecek Exp $
 #
 # standard NetBSD/evbarm options for i.MX7 board
 

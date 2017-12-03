@@ -1,4 +1,4 @@
-/*	$NetBSD: zynq_usb.c,v 1.4 2016/04/23 10:15:29 skrll Exp $	*/
+/*	$NetBSD: zynq_usb.c,v 1.4.16.2 2017/12/03 11:35:57 jdolecek Exp $	*/
 /*-
  * Copyright (c) 2015  Genetec Corporation.  All rights reserved.
  * Written by Hashimoto Kenichi for Genetec Corporation.
@@ -26,7 +26,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: zynq_usb.c,v 1.4 2016/04/23 10:15:29 skrll Exp $");
+__KERNEL_RCSID(0, "$NetBSD: zynq_usb.c,v 1.4.16.2 2017/12/03 11:35:57 jdolecek Exp $");
 
 #include "opt_zynq.h"
 

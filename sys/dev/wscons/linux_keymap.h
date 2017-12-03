@@ -1,4 +1,4 @@
-/* $NetBSD: linux_keymap.h,v 1.2 2017/08/31 19:55:43 jmcneill Exp $ */
+/* $NetBSD: linux_keymap.h,v 1.2.2.2 2017/12/03 11:37:37 jdolecek Exp $ */
 
 /*-
  * Copyright (c) 2017 Jared McNeill <jmcneill@invisible.ca>

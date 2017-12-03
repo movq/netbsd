@@ -1,5 +1,5 @@
 /*	$KAME: sctp_asconf.h,v 1.8 2005/03/06 16:04:16 itojun Exp $	*/
-/*	$NetBSD: sctp_asconf.h,v 1.1 2015/10/13 21:28:35 rjs Exp $ */
+/*	$NetBSD: sctp_asconf.h,v 1.1.18.2 2017/12/03 11:39:04 jdolecek Exp $ */
 
 #ifndef _NETINET_SCTP_ASCONF_H_
 #define _NETINET_SCTP_ASCONF_H_

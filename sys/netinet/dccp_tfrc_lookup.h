@@ -1,5 +1,5 @@
 /*	$KAME: dccp_tfrc_lookup.h,v 1.8 2005/10/21 05:33:51 nishida Exp $	*/
-/*	$NetBSD: dccp_tfrc_lookup.h,v 1.1 2015/02/10 19:11:52 rjs Exp $ */
+/*	$NetBSD: dccp_tfrc_lookup.h,v 1.1.18.2 2017/12/03 11:39:03 jdolecek Exp $ */
 
 /*
  * Copyright (c) 2003  Nils-Erik Mattsson 

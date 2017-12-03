@@ -1,4 +1,4 @@
-/* $NetBSD: alpsvar.h,v 1.1 2017/08/13 08:49:27 christos Exp $ */
+/* $NetBSD: alpsvar.h,v 1.1.4.2 2017/12/03 11:37:30 jdolecek Exp $ */
 
 /*-
  * Copyright (c) 2017 Ryo ONODERA <ryo@tetera.org>

@@ -1,4 +1,4 @@
-/* $NetBSD: auvolconv.c,v 1.3 2016/02/26 13:08:28 nat Exp $ */
+/* $NetBSD: auvolconv.c,v 1.3.16.2 2017/12/03 11:36:58 jdolecek Exp $ */
 
 /*-
  * Copyright (c) 2007 Jared D. McNeill <jmcneill@invisible.ca>
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: auvolconv.c,v 1.3 2016/02/26 13:08:28 nat Exp $");
+__KERNEL_RCSID(0, "$NetBSD: auvolconv.c,v 1.3.16.2 2017/12/03 11:36:58 jdolecek Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>

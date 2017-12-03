@@ -1,4 +1,4 @@
---	$NetBSD: happy.lua,v 1.1 2017/04/15 04:27:30 kamil Exp $
+--	$NetBSD: happy.lua,v 1.1.16.2 2017/12/03 11:38:53 jdolecek Exp $
 --
 -- Copyright (c) 2015 The NetBSD Foundation, Inc.
 -- All rights reserved.

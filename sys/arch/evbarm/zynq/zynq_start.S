@@ -1,4 +1,4 @@
-/*	$NetBSD: zynq_start.S,v 1.1 2015/01/23 12:34:09 hkenken Exp $	*/
+/*	$NetBSD: zynq_start.S,v 1.1.20.2 2017/12/03 11:36:08 jdolecek Exp $	*/
 
 /*-
  * Copyright (c) 2012 The NetBSD Foundation, Inc.
@@ -40,7 +40,7 @@
 #include <arm/cortex/scu_reg.h>
 #include "assym.h"
 
-RCSID("$NetBSD: zynq_start.S,v 1.1 2015/01/23 12:34:09 hkenken Exp $")
+RCSID("$NetBSD: zynq_start.S,v 1.1.20.2 2017/12/03 11:36:08 jdolecek Exp $")
 
 #ifndef CONADDR
 #define	CONADDR		0xe0001000

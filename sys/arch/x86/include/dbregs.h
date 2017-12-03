@@ -1,4 +1,4 @@
-/*	$NetBSD: dbregs.h,v 1.4 2017/02/23 03:34:22 kamil Exp $	*/
+/*	$NetBSD: dbregs.h,v 1.4.12.2 2017/12/03 11:36:50 jdolecek Exp $	*/
 
 /*-
  * Copyright (c) 2016 The NetBSD Foundation, Inc.

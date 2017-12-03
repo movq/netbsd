@@ -1,4 +1,4 @@
-/* $NetBSD: sb1250_icu.c,v 1.2 2017/07/24 09:56:45 mrg Exp $ */
+/* $NetBSD: sb1250_icu.c,v 1.2.6.2 2017/12/03 11:36:10 jdolecek Exp $ */
 
 /*
  * Copyright 2000, 2001
@@ -33,7 +33,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sb1250_icu.c,v 1.2 2017/07/24 09:56:45 mrg Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sb1250_icu.c,v 1.2.6.2 2017/12/03 11:36:10 jdolecek Exp $");
 
 #define	__INTR_PRIVATE
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: imx25-pinfunc.h,v 1.1.1.2 2017/07/27 18:10:47 jmcneill Exp $	*/
+/*	$NetBSD: imx25-pinfunc.h,v 1.1.1.2.4.2 2017/12/03 11:38:11 jdolecek Exp $	*/
 
 /*
  * Copyright 2013 Eukréa Electromatique <denis@eukrea.com>

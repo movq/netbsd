@@ -1,4 +1,4 @@
-#	$NetBSD: clockctl.ioconf,v 1.1 2015/12/07 03:25:57 pgoyette Exp $
+#	$NetBSD: clockctl.ioconf,v 1.1.18.2 2017/12/03 11:38:50 jdolecek Exp $
 
 ioconf		clockctl
 

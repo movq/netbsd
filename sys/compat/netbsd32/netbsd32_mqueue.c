@@ -1,4 +1,4 @@
-/*	$NetBSD: netbsd32_mqueue.c,v 1.6 2015/12/01 23:56:43 pgoyette Exp $	*/
+/*	$NetBSD: netbsd32_mqueue.c,v 1.6.16.2 2017/12/03 11:36:56 jdolecek Exp $	*/
 
 /*-
  * Copyright (c) 2008 The NetBSD Foundation, Inc.
@@ -29,7 +29,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: netbsd32_mqueue.c,v 1.6 2015/12/01 23:56:43 pgoyette Exp $");
+__KERNEL_RCSID(0, "$NetBSD: netbsd32_mqueue.c,v 1.6.16.2 2017/12/03 11:36:56 jdolecek Exp $");
 
 #if defined(_KERNEL_OPT)
 #include "opt_compat_netbsd.h"

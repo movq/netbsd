@@ -1,4 +1,4 @@
-/*	$NetBSD: nouveau_vga.c,v 1.1 2015/03/06 01:43:07 riastradh Exp $	*/
+/*	$NetBSD: nouveau_vga.c,v 1.1.20.2 2017/12/03 11:38:00 jdolecek Exp $	*/
 
 /*-
  * Copyright (c) 2015 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: nouveau_vga.c,v 1.1 2015/03/06 01:43:07 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: nouveau_vga.c,v 1.1.20.2 2017/12/03 11:38:00 jdolecek Exp $");
 
 #include "nouveau_vga.h"
 

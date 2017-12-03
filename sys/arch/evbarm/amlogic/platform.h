@@ -1,4 +1,4 @@
-/* $NetBSD: platform.h,v 1.1 2015/02/07 17:20:16 jmcneill Exp $ */
+/* $NetBSD: platform.h,v 1.1.20.2 2017/12/03 11:36:02 jdolecek Exp $ */
 
 /*-
  * Copyright (c) 2015 Jared D. McNeill <jmcneill@invisible.ca>

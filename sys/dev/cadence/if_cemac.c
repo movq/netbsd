@@ -1,4 +1,4 @@
-/*	$NetBSD: if_cemac.c,v 1.11 2017/05/23 02:19:14 ozaki-r Exp $	*/
+/*	$NetBSD: if_cemac.c,v 1.11.8.2 2017/12/03 11:36:59 jdolecek Exp $	*/
 
 /*
  * Copyright (c) 2015  Genetec Corporation.  All rights reserved.
@@ -40,7 +40,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_cemac.c,v 1.11 2017/05/23 02:19:14 ozaki-r Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_cemac.c,v 1.11.8.2 2017/12/03 11:36:59 jdolecek Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>

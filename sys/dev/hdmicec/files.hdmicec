@@ -1,4 +1,4 @@
-# $NetBSD: files.hdmicec,v 1.1 2015/08/01 21:19:24 jmcneill Exp $
+# $NetBSD: files.hdmicec,v 1.1.18.2 2017/12/03 11:37:02 jdolecek Exp $
 
 define	hdmicecbus { }
 

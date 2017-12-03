@@ -1,4 +1,4 @@
-/*	$NetBSD: bth5.h,v 1.2 2017/09/03 23:11:19 nat Exp $	*/
+/*	$NetBSD: bth5.h,v 1.2.2.2 2017/12/03 11:36:59 jdolecek Exp $	*/
 /*
  * Copyright (c) 2017 Nathanial Sloss <nathanialsloss@yahoo.com.au>
  * All rights reserved.

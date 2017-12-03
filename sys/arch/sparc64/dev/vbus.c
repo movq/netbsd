@@ -1,4 +1,4 @@
-/*	$NetBSD: vbus.c,v 1.3 2017/02/17 20:53:17 palle Exp $	*/
+/*	$NetBSD: vbus.c,v 1.3.12.2 2017/12/03 11:36:44 jdolecek Exp $	*/
 /*	$OpenBSD: vbus.c,v 1.8 2015/09/27 11:29:20 kettenis Exp $	*/
 /*
  * Copyright (c) 2008 Mark Kettenis

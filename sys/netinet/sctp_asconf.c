@@ -1,4 +1,4 @@
-/*	$NetBSD: sctp_asconf.c,v 1.11 2017/06/28 14:38:18 rjs Exp $ */
+/*	$NetBSD: sctp_asconf.c,v 1.11.4.2 2017/12/03 11:39:04 jdolecek Exp $ */
 /*	$KAME: sctp_asconf.c,v 1.25 2005/06/16 20:44:24 jinmei Exp $	*/
 
 /*
@@ -30,7 +30,7 @@
  * SUCH DAMAGE.
  */
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sctp_asconf.c,v 1.11 2017/06/28 14:38:18 rjs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sctp_asconf.c,v 1.11.4.2 2017/12/03 11:39:04 jdolecek Exp $");
 
 #ifdef _KERNEL_OPT
 #include "opt_ipsec.h"

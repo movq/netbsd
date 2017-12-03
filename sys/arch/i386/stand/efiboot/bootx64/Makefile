@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.1 2017/01/24 11:09:14 nonaka Exp $
+#	$NetBSD: Makefile,v 1.1.18.2 2017/12/03 11:36:19 jdolecek Exp $
 
 PROG=		bootx64.efi
 OBJFMT=		pei-x86-64

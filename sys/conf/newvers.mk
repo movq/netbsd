@@ -1,4 +1,4 @@
-# $NetBSD: newvers.mk,v 1.2 2017/04/08 18:24:09 christos Exp $
+# $NetBSD: newvers.mk,v 1.2.12.2 2017/12/03 11:36:57 jdolecek Exp $
 
 MKREPRO?=no
 

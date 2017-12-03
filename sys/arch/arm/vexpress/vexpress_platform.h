@@ -1,4 +1,4 @@
-/* $NetBSD: vexpress_platform.h,v 1.1 2017/06/02 20:16:05 jmcneill Exp $ */
+/* $NetBSD: vexpress_platform.h,v 1.1.10.2 2017/12/03 11:35:56 jdolecek Exp $ */
 
 /*-
  * Copyright (c) 2017 Jared McNeill <jmcneill@invisible.ca>

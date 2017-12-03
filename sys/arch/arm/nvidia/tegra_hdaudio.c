@@ -1,4 +1,4 @@
-/* $NetBSD: tegra_hdaudio.c,v 1.9 2017/09/27 10:50:06 jmcneill Exp $ */
+/* $NetBSD: tegra_hdaudio.c,v 1.9.2.2 2017/12/03 11:35:54 jdolecek Exp $ */
 
 /*-
  * Copyright (c) 2015 Jared D. McNeill <jmcneill@invisible.ca>
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: tegra_hdaudio.c,v 1.9 2017/09/27 10:50:06 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: tegra_hdaudio.c,v 1.9.2.2 2017/12/03 11:35:54 jdolecek Exp $");
 
 #include <sys/param.h>
 #include <sys/bus.h>

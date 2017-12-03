@@ -1,4 +1,4 @@
-/* $NetBSD: fdt_regulator.c,v 1.4 2017/09/22 15:33:21 jmcneill Exp $ */
+/* $NetBSD: fdt_regulator.c,v 1.4.2.2 2017/12/03 11:37:01 jdolecek Exp $ */
 
 /*-
  * Copyright (c) 2015 Jared D. McNeill <jmcneill@invisible.ca>
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: fdt_regulator.c,v 1.4 2017/09/22 15:33:21 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: fdt_regulator.c,v 1.4.2.2 2017/12/03 11:37:01 jdolecek Exp $");
 
 #include <sys/param.h>
 #include <sys/bus.h>

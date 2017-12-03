@@ -1,4 +1,4 @@
-/* $NetBSD: sun5i_a13_ccu.c,v 1.5 2017/11/09 21:52:32 jmcneill Exp $ */
+/* $NetBSD: sun5i_a13_ccu.c,v 1.5.2.2 2017/12/03 11:35:56 jdolecek Exp $ */
 
 /*-
  * Copyright (c) 2017 Jared McNeill <jmcneill@invisible.ca>
@@ -28,7 +28,7 @@
 
 #include <sys/cdefs.h>
 
-__KERNEL_RCSID(1, "$NetBSD: sun5i_a13_ccu.c,v 1.5 2017/11/09 21:52:32 jmcneill Exp $");
+__KERNEL_RCSID(1, "$NetBSD: sun5i_a13_ccu.c,v 1.5.2.2 2017/12/03 11:35:56 jdolecek Exp $");
 
 #include <sys/param.h>
 #include <sys/bus.h>

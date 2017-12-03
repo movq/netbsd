@@ -1,4 +1,4 @@
-/*	$NetBSD: imx7-power.h,v 1.1.1.1 2017/07/27 18:10:50 jmcneill Exp $	*/
+/*	$NetBSD: imx7-power.h,v 1.1.1.1.4.2 2017/12/03 11:38:39 jdolecek Exp $	*/
 
 /*
  *  Copyright (C) 2017 Impinj

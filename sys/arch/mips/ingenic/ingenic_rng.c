@@ -1,4 +1,4 @@
-/*	$NetBSD: ingenic_rng.c,v 1.4 2016/02/17 20:12:42 macallan Exp $ */
+/*	$NetBSD: ingenic_rng.c,v 1.4.16.2 2017/12/03 11:36:28 jdolecek Exp $ */
 
 /*-
  * Copyright (c) 2015 Michael McConville
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ingenic_rng.c,v 1.4 2016/02/17 20:12:42 macallan Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ingenic_rng.c,v 1.4.16.2 2017/12/03 11:36:28 jdolecek Exp $");
 
 /*
  * adapted from Jared McNeill's amlogic_rng.c

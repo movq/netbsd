@@ -1,4 +1,4 @@
-/*	$NetBSD: ingenic_com.c,v 1.6 2017/05/19 07:43:31 skrll Exp $ */
+/*	$NetBSD: ingenic_com.c,v 1.6.8.2 2017/12/03 11:36:28 jdolecek Exp $ */
 
 /*-
  * Copyright (c) 2014 Michael Lorenz
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ingenic_com.c,v 1.6 2017/05/19 07:43:31 skrll Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ingenic_com.c,v 1.6.8.2 2017/12/03 11:36:28 jdolecek Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

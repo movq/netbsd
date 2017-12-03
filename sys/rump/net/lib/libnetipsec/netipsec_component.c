@@ -1,4 +1,4 @@
-/*	$NetBSD: netipsec_component.c,v 1.1 2017/04/14 02:43:28 ozaki-r Exp $	*/
+/*	$NetBSD: netipsec_component.c,v 1.1.16.2 2017/12/03 11:39:18 jdolecek Exp $	*/
 
 /*
  * Copyright (c) 2017 Internet Initiative Japan Inc.
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: netipsec_component.c,v 1.1 2017/04/14 02:43:28 ozaki-r Exp $");
+__KERNEL_RCSID(0, "$NetBSD: netipsec_component.c,v 1.1.16.2 2017/12/03 11:39:18 jdolecek Exp $");
 
 #include <sys/domain.h>
 #include <sys/protosw.h>

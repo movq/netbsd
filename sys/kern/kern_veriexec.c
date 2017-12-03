@@ -1,4 +1,4 @@
-/*	$NetBSD: kern_veriexec.c,v 1.18 2017/11/07 18:35:57 christos Exp $	*/
+/*	$NetBSD: kern_veriexec.c,v 1.18.2.2 2017/12/03 11:38:45 jdolecek Exp $	*/
 
 /*-
  * Copyright (c) 2005, 2006 Elad Efrat <elad@NetBSD.org>
@@ -29,7 +29,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: kern_veriexec.c,v 1.18 2017/11/07 18:35:57 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: kern_veriexec.c,v 1.18.2.2 2017/12/03 11:38:45 jdolecek Exp $");
 
 #include "opt_veriexec.h"
 

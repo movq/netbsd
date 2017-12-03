@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile.sysio,v 1.7 2016/11/05 23:30:22 pgoyette Exp $
+#	$NetBSD: Makefile.sysio,v 1.7.16.2 2017/12/03 11:36:53 jdolecek Exp $
 
 # Sources for syscall and ioctl compatibility across the versions.
 

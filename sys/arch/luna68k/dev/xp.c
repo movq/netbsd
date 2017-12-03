@@ -1,4 +1,4 @@
-/* $NetBSD: xp.c,v 1.4 2017/06/01 02:45:06 chs Exp $ */
+/* $NetBSD: xp.c,v 1.4.8.2 2017/12/03 11:36:23 jdolecek Exp $ */
 
 /*-
  * Copyright (c) 2016 Izumi Tsutsui.  All rights reserved.
@@ -29,7 +29,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: xp.c,v 1.4 2017/06/01 02:45:06 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: xp.c,v 1.4.8.2 2017/12/03 11:36:23 jdolecek Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

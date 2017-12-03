@@ -1,4 +1,4 @@
-/* $NetBSD: if_bwfm_usb.c,v 1.3 2017/10/21 20:36:12 jmcneill Exp $ */
+/* $NetBSD: if_bwfm_usb.c,v 1.3.2.2 2017/12/03 11:37:33 jdolecek Exp $ */
 /* $OpenBSD: if_bwfm_usb.c,v 1.2 2017/10/15 14:55:13 patrick Exp $ */
 /*
  * Copyright (c) 2010-2016 Broadcom Corporation

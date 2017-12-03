@@ -1,8 +1,8 @@
-/*	$NetBSD: if_cnmac.c,v 1.7 2017/11/26 18:41:14 jmcneill Exp $	*/
+/*	$NetBSD: if_cnmac.c,v 1.7.2.2 2017/12/03 11:36:27 jdolecek Exp $	*/
 
 #include <sys/cdefs.h>
 #if 0
-__KERNEL_RCSID(0, "$NetBSD: if_cnmac.c,v 1.7 2017/11/26 18:41:14 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_cnmac.c,v 1.7.2.2 2017/12/03 11:36:27 jdolecek Exp $");
 #endif
 
 #include "opt_octeon.h"

@@ -1,4 +1,4 @@
-#	$NetBSD: files.vexpress,v 1.3 2017/08/26 15:05:48 jmcneill Exp $
+#	$NetBSD: files.vexpress,v 1.3.4.2 2017/12/03 11:35:56 jdolecek Exp $
 #
 # Configuration info for ARM Ltd. Versatile Express peripherals
 #

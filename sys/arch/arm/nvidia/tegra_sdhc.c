@@ -1,4 +1,4 @@
-/* $NetBSD: tegra_sdhc.c,v 1.21 2017/07/21 01:00:58 jmcneill Exp $ */
+/* $NetBSD: tegra_sdhc.c,v 1.21.2.2 2017/12/03 11:35:54 jdolecek Exp $ */
 
 /*-
  * Copyright (c) 2015 Jared D. McNeill <jmcneill@invisible.ca>
@@ -31,7 +31,7 @@
 #include "locators.h"
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: tegra_sdhc.c,v 1.21 2017/07/21 01:00:58 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: tegra_sdhc.c,v 1.21.2.2 2017/12/03 11:35:54 jdolecek Exp $");
 
 #include <sys/param.h>
 #include <sys/bus.h>

@@ -1,4 +1,4 @@
-/*	$NetBSD: ldcvar.h,v 1.1 2016/08/19 19:02:07 palle Exp $	*/
+/*	$NetBSD: ldcvar.h,v 1.1.18.2 2017/12/03 11:36:44 jdolecek Exp $	*/
 /*	$OpenBSD: ldcvar.h,v 1.6 2014/09/29 17:43:29 kettenis Exp $	*/
 /*
  * Copyright (c) 2009 Mark Kettenis

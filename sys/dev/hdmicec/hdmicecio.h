@@ -1,4 +1,4 @@
-/* $NetBSD: hdmicecio.h,v 1.1 2015/08/01 21:19:24 jmcneill Exp $ */
+/* $NetBSD: hdmicecio.h,v 1.1.18.2 2017/12/03 11:37:02 jdolecek Exp $ */
 
 /*-
  * Copyright (c) 2015 Jared D. McNeill <jmcneill@invisible.ca>

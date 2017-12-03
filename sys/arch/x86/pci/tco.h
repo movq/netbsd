@@ -1,4 +1,4 @@
-/*	$NetBSD: tco.h,v 1.1 2015/05/03 02:50:59 pgoyette Exp $	*/
+/*	$NetBSD: tco.h,v 1.1.18.2 2017/12/03 11:36:50 jdolecek Exp $	*/
 
 /*-
  * Copyright (c) 2015 The NetBSD Foundation, Inc.

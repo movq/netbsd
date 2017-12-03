@@ -1,4 +1,4 @@
-/*	$NetBSD: interrupt.h,v 1.2 2015/08/17 18:43:37 macallan Exp $	*/
+/*	$NetBSD: interrupt.h,v 1.2.18.2 2017/12/03 11:39:20 jdolecek Exp $	*/
 
 /*
  * Copyright (c) 2015 Internet Initiative Japan Inc.

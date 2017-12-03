@@ -1,4 +1,4 @@
-/* $NetBSD: tegra124_xusbpadreg.h,v 1.3 2017/09/22 20:23:22 jakllsch Exp $ */
+/* $NetBSD: tegra124_xusbpadreg.h,v 1.3.2.2 2017/12/03 11:35:54 jdolecek Exp $ */
 
 /*-
  * Copyright (c) 2015 Jared D. McNeill <jmcneill@invisible.ca>

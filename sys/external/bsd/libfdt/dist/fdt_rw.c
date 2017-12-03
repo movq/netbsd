@@ -1,4 +1,4 @@
-/*	$NetBSD: fdt_rw.c,v 1.1.1.2 2017/06/08 15:53:12 skrll Exp $	*/
+/*	$NetBSD: fdt_rw.c,v 1.1.1.2.4.2 2017/12/03 11:38:02 jdolecek Exp $	*/
 
 /*
  * libfdt - Flat Device Tree manipulation

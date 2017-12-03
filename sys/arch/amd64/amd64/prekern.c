@@ -1,4 +1,4 @@
-/*	$NetBSD: prekern.c,v 1.1 2017/10/08 08:26:01 maxv Exp $	*/
+/*	$NetBSD: prekern.c,v 1.1.2.2 2017/12/03 11:35:47 jdolecek Exp $	*/
 
 /*
  * Copyright (c) 2017 The NetBSD Foundation, Inc. All rights reserved.

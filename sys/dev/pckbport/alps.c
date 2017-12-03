@@ -1,4 +1,4 @@
-/* $NetBSD: alps.c,v 1.4 2017/08/16 21:18:58 nat Exp $ */
+/* $NetBSD: alps.c,v 1.4.4.2 2017/12/03 11:37:30 jdolecek Exp $ */
 
 /*-
  * Copyright (c) 2017 Ryo ONODERA <ryo@tetera.org>
@@ -30,7 +30,7 @@
 #include "opt_pms.h"
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: alps.c,v 1.4 2017/08/16 21:18:58 nat Exp $");
+__KERNEL_RCSID(0, "$NetBSD: alps.c,v 1.4.4.2 2017/12/03 11:37:30 jdolecek Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

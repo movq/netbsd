@@ -29,7 +29,7 @@
 
 #include <sys/cdefs.h>
 
-__RCSID("$NetBSD: process_machdep.c,v 1.2 2017/03/16 16:13:21 chs Exp $");
+__RCSID("$NetBSD: process_machdep.c,v 1.2.12.2 2017/12/03 11:36:39 jdolecek Exp $");
 
 #include <sys/param.h>
 #include <sys/ptrace.h>

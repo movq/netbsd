@@ -1,4 +1,4 @@
-/* $NetBSD: fdt_intr.h,v 1.2 2017/08/25 00:07:02 jmcneill Exp $ */
+/* $NetBSD: fdt_intr.h,v 1.2.4.2 2017/12/03 11:35:52 jdolecek Exp $ */
 
 /*-
  * Copyright (c) 2017 Jared McNeill <jmcneill@invisible.ca>

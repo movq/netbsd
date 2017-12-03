@@ -1,4 +1,4 @@
-/*	$NetBSD: sun4i-a10.h,v 1.1.1.1 2017/06/15 20:14:23 jmcneill Exp $	*/
+/*	$NetBSD: sun4i-a10.h,v 1.1.1.1.8.2 2017/12/03 11:38:39 jdolecek Exp $	*/
 
 /*
  * Copyright 2014 Maxime Ripard

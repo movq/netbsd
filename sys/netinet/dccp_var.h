@@ -1,5 +1,5 @@
 /*	$KAME: dccp_var.h,v 1.29 2005/11/03 14:59:28 nishida Exp $	*/
-/*	$NetBSD: dccp_var.h,v 1.3 2016/07/07 06:55:43 msaitoh Exp $ */
+/*	$NetBSD: dccp_var.h,v 1.3.16.2 2017/12/03 11:39:03 jdolecek Exp $ */
 
 /*
  * Copyright (c) 2003 Joacim Häggmark, Magnus Erixzon, Nils-Erik Mattsson 

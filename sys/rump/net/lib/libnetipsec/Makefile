@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.1 2017/04/14 02:43:28 ozaki-r Exp $
+#	$NetBSD: Makefile,v 1.1.16.2 2017/12/03 11:39:18 jdolecek Exp $
 #
 
 LIB=	rumpnet_netipsec

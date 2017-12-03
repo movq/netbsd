@@ -1,4 +1,4 @@
-/*	$NetBSD: idtype.h,v 1.5 2016/04/09 17:02:51 riastradh Exp $	*/
+/*	$NetBSD: idtype.h,v 1.5.18.2 2017/12/03 11:39:20 jdolecek Exp $	*/
 
 /*-
  * Copyright (c) 2016 The NetBSD Foundation, Inc.

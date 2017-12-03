@@ -1,4 +1,4 @@
-/* $NetBSD: tegra210_pinmux.c,v 1.1 2017/09/22 14:36:22 jmcneill Exp $ */
+/* $NetBSD: tegra210_pinmux.c,v 1.1.2.2 2017/12/03 11:35:54 jdolecek Exp $ */
 
 /*-
  * Copyright (c) 2017 Jared McNeill <jmcneill@invisible.ca>
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: tegra210_pinmux.c,v 1.1 2017/09/22 14:36:22 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: tegra210_pinmux.c,v 1.1.2.2 2017/12/03 11:35:54 jdolecek Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

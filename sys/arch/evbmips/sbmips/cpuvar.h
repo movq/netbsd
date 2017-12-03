@@ -1,4 +1,4 @@
-/* $NetBSD: cpuvar.h,v 1.1.1.1 2017/07/24 09:21:50 mrg Exp $ */
+/* $NetBSD: cpuvar.h,v 1.1.1.1.6.2 2017/12/03 11:36:10 jdolecek Exp $ */
 
 #ifndef _SBMIPS_CPUVAR_H_
 #define _SBMIPS_CPUVAR_H_
