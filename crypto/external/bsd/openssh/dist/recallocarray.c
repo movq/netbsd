@@ -1,4 +1,4 @@
-/*	$NetBSD: recallocarray.c,v 1.1 2017/10/07 21:14:59 christos Exp $	*/
+/*	$NetBSD: recallocarray.c,v 1.1.2.2 2017/12/04 10:55:18 snj Exp $	*/
 /*	$OpenBSD: reallocarray.c,v 1.1 2014/05/08 21:43:49 deraadt Exp $	*/
 
 /*-
@@ -32,7 +32,7 @@
 
 #include "includes.h"
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: recallocarray.c,v 1.1 2017/10/07 21:14:59 christos Exp $");
+__RCSID("$NetBSD: recallocarray.c,v 1.1.2.2 2017/12/04 10:55:18 snj Exp $");
 
 #include <errno.h>
 #include <string.h>
