@@ -1,4 +1,4 @@
-/*	$NetBSD: endian.h,v 1.1 2017/10/16 11:38:25 maya Exp $	 */
+/*	$NetBSD: endian.h,v 1.1.2.2 2017/12/04 19:48:55 snj Exp $	 */
 
 /*-
  * Copyright (c) 2017 The NetBSD Foundation, Inc.
