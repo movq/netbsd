@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.36 2017/02/14 00:20:20 rin Exp $
+#	$NetBSD: Makefile,v 1.36.4.2 2017/09/23 17:30:55 snj Exp $
 
 LIBISPRIVATE=	yes
 
@@ -210,7 +210,7 @@ auto-build.h: gmp.h Makefile
 	mkdir .ab && \
 	(cd .ab && \
 		AWK=${TOOL_AWK:Q} \
-		CC=${ORIGHOST_CC:Q} CFLAGS=${HOST_CFLAGS:Q} \
+		CC=${ORIGHOST_CC:Q} CFLAGS=${HOST_CFLAGS:Q} CXX=${HOST_CXX:Q} \
 		MAKE=${TOOL_GMAKE:Q} \
 		CONFIG_SHELL=${HOST_SH:Q} \
 		gcc_cv_ld=${LD:Q} \
@@ -445,6 +445,7 @@ final.o: target-hooks-def.h c-family/c-target-hooks-def.h common/common-target-h
 
 .if ${GCC_MACHINE_ARCH} == "alpha"
 alpha.d alpha.o: tm-constrs.h tm_p.h insn-opinit.h target-hooks-def.h
+alpha.d: pass-instances.def
 .endif
 
 .if ${MACHINE_CPU} == "arm"

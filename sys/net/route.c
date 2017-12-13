@@ -1,4 +1,4 @@
-/*	$NetBSD: route.c,v 1.194 2017/03/24 03:45:02 ozaki-r Exp $	*/
+/*	$NetBSD: route.c,v 1.194.6.3 2017/10/24 08:55:55 snj Exp $	*/
 
 /*-
  * Copyright (c) 1998, 2008 The NetBSD Foundation, Inc.
@@ -97,7 +97,7 @@
 #endif
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: route.c,v 1.194 2017/03/24 03:45:02 ozaki-r Exp $");
+__KERNEL_RCSID(0, "$NetBSD: route.c,v 1.194.6.3 2017/10/24 08:55:55 snj Exp $");
 
 #include <sys/param.h>
 #ifdef RTFLUSH_DEBUG
@@ -123,6 +123,9 @@ __KERNEL_RCSID(0, "$NetBSD: route.c,v 1.194 2017/03/24 03:45:02 ozaki-r Exp $");
 #include <net/if.h>
 #include <net/if_dl.h>
 #include <net/route.h>
+#if defined(INET) || defined(INET6)
+#include <net/if_llatbl.h>
+#endif
 
 #include <netinet/in.h>
 #include <netinet/in_var.h>
@@ -166,8 +169,12 @@ static void	rt_timer_timer(void *);
  * Locking notes:
  * - The routing table is protected by a global rwlock
  *   - API: RT_RLOCK and friends
- * - rtcaches are protected by a global rwlock
- *   - API: RTCACHE_RLOCK and friends
+ * - rtcaches are NOT protected by the framework
+ *   - Callers must guarantee a rtcache isn't accessed simultaneously
+ *   - How the constraint is guranteed in the wild
+ *     - Protect a rtcache by a mutex (e.g., inp_route)
+ *     - Make rtcache per-CPU and allow only accesses from softint
+ *       (e.g., ipforward_rt_percpu)
  * - References to a rtentry is managed by reference counting and psref
  *   - Reference couting is used for temporal reference when a rtentry
  *     is fetched from the routing table
@@ -200,11 +207,17 @@ static void	rt_timer_timer(void *);
  *     - if the caller runs in softint, the caller fails to fetch
  *     - otherwise, the caller waits for the update completed and retries
  *       to fetch (probably succeed to fetch for the second time)
+ * - rtcache invalidation
+ *   - There is a global generation counter that is incremented when
+ *     any routes have been added or deleted
+ *   - When a rtcache caches a rtentry into itself, it also stores
+ *     a snapshot of the generation counter
+ *   - If the snapshot equals to the global counter, the cache is valid,
+ *     otherwise the cache is invalidated
  */
 
 /*
- * Global locks for the routing table and rtcaches.
- * Locking order: rtcache_lock => rt_lock
+ * Global lock for the routing table.
  */
 static krwlock_t		rt_lock __cacheline_aligned;
 #ifdef NET_MPSAFE
@@ -221,20 +234,7 @@ static krwlock_t		rt_lock __cacheline_aligned;
 #define	RT_ASSERT_WLOCK()	do {} while (0)
 #endif
 
-static krwlock_t		rtcache_lock __cacheline_aligned;
-#ifdef NET_MPSAFE
-#define RTCACHE_RLOCK()		rw_enter(&rtcache_lock, RW_READER)
-#define RTCACHE_WLOCK()		rw_enter(&rtcache_lock, RW_WRITER)
-#define RTCACHE_UNLOCK()	rw_exit(&rtcache_lock)
-#define	RTCACHE_ASSERT_WLOCK()	KASSERT(rw_write_held(&rtcache_lock))
-#define	RTCACHE_WLOCKED()	rw_write_held(&rtcache_lock)
-#else
-#define RTCACHE_RLOCK()		do {} while (0)
-#define RTCACHE_WLOCK()		do {} while (0)
-#define RTCACHE_UNLOCK()	do {} while (0)
-#define	RTCACHE_ASSERT_WLOCK()	do {} while (0)
-#define	RTCACHE_WLOCKED()	false
-#endif
+static uint64_t rtcache_generation;
 
 /*
  * mutex and cv that are used to wait for references to a rtentry left
@@ -268,23 +268,16 @@ static int _rtcache_debug = 0;
 static kauth_listener_t route_listener;
 
 static int rtdeletemsg(struct rtentry *);
-static void rtflushall(int);
 
 static void rt_maskedcopy(const struct sockaddr *,
     struct sockaddr *, const struct sockaddr *);
 
-static void rtcache_clear(struct route *);
-static void rtcache_clear_rtentry(int, struct rtentry *);
-static void rtcache_invalidate(struct dom_rtlist *);
+static void rtcache_invalidate(void);
 
 static void rt_ref(struct rtentry *);
 
 static struct rtentry *
-    rtalloc1_locked(const struct sockaddr *, int, bool);
-static struct rtentry *
-    rtcache_validate_locked(struct route *);
-static void rtcache_free_locked(struct route *);
-static int rtcache_setdst_locked(struct route *, const struct sockaddr *);
+    rtalloc1_locked(const struct sockaddr *, int, bool, bool);
 
 static void rtcache_ref(struct rtentry *, struct route *);
 
@@ -488,38 +481,15 @@ rt_init(void)
 }
 
 static void
-rtflushall(int family)
+rtcache_invalidate(void)
 {
-	struct domain *dom;
+
+	RT_ASSERT_WLOCK();
 
 	if (rtcache_debug())
 		printf("%s: enter\n", __func__);
 
-	if ((dom = pffinddomain(family)) == NULL)
-		return;
-
-	RTCACHE_WLOCK();
-	rtcache_invalidate(&dom->dom_rtcache);
-	RTCACHE_UNLOCK();
-}
-
-static void
-rtcache(struct route *ro)
-{
-	struct domain *dom;
-
-	RTCACHE_ASSERT_WLOCK();
-
-	rtcache_invariants(ro);
-	KASSERT(ro->_ro_rt != NULL);
-	KASSERT(ro->ro_invalid == false);
-	KASSERT(rtcache_getdst(ro) != NULL);
-
-	if ((dom = pffinddomain(rtcache_getdst(ro)->sa_family)) == NULL)
-		return;
-
-	LIST_INSERT_HEAD(&dom->dom_rtcache, ro, ro_rtcache_next);
-	rtcache_invariants(ro);
+	rtcache_generation++;
 }
 
 #ifdef RT_DEBUG
@@ -557,7 +527,8 @@ dump_rt(const struct rtentry *rt)
  * will be incremented. The caller has to rtfree it by itself.
  */
 struct rtentry *
-rtalloc1_locked(const struct sockaddr *dst, int report, bool wait_ok)
+rtalloc1_locked(const struct sockaddr *dst, int report, bool wait_ok,
+    bool wlock)
 {
 	rtbl_t *rtbl;
 	struct rtentry *rt;
@@ -582,23 +553,18 @@ retry:
 	if (ISSET(rt->rt_flags, RTF_UPDATING) &&
 	    /* XXX updater should be always able to acquire */
 	    curlwp != rt_update_global.lwp) {
-		bool need_lock = false;
 		if (!wait_ok || !rt_wait_ok())
 			goto miss;
 		RT_UNLOCK();
 		splx(s);
 
-		/* XXX need more proper solution */
-		if (RTCACHE_WLOCKED()) {
-			RTCACHE_UNLOCK();
-			need_lock = true;
-		}
-
 		/* We can wait until the update is complete */
 		rt_update_wait();
 
-		if (need_lock)
-			RTCACHE_WLOCK();
+		if (wlock)
+			RT_WLOCK();
+		else
+			RT_RLOCK();
 		goto retry;
 	}
 #endif /* NET_MPSAFE */
@@ -627,7 +593,7 @@ rtalloc1(const struct sockaddr *dst, int report)
 	struct rtentry *rt;
 
 	RT_RLOCK();
-	rt = rtalloc1_locked(dst, report, true);
+	rt = rtalloc1_locked(dst, report, true, false);
 	RT_UNLOCK();
 
 	return rt;
@@ -784,17 +750,14 @@ rt_update_prepare(struct rtentry *rt)
 
 	dlog(LOG_DEBUG, "%s: updating rt=%p lwp=%p\n", __func__, rt, curlwp);
 
-	RTCACHE_WLOCK();
 	RT_WLOCK();
 	/* If the entry is being destroyed, don't proceed the update. */
 	if (!ISSET(rt->rt_flags, RTF_UP)) {
 		RT_UNLOCK();
-		RTCACHE_UNLOCK();
 		return -1;
 	}
 	rt->rt_flags |= RTF_UPDATING;
 	RT_UNLOCK();
-	RTCACHE_UNLOCK();
 
 	mutex_enter(&rt_update_global.lock);
 	while (rt_update_global.ongoing) {
@@ -819,11 +782,9 @@ void
 rt_update_finish(struct rtentry *rt)
 {
 
-	RTCACHE_WLOCK();
 	RT_WLOCK();
 	rt->rt_flags &= ~RTF_UPDATING;
 	RT_UNLOCK();
-	RTCACHE_UNLOCK();
 
 	mutex_enter(&rt_update_global.lock);
 	rt_update_global.ongoing = false;
@@ -1026,7 +987,7 @@ ifa_ifwithroute_psref(int flags, const struct sockaddr *dst,
 
 		/* XXX we cannot call rtalloc1 if holding the rt lock */
 		if (RT_LOCKED())
-			rt = rtalloc1_locked(gateway, 0, true);
+			rt = rtalloc1_locked(gateway, 0, true, true);
 		else
 			rt = rtalloc1(gateway, 0);
 		if (rt == NULL)
@@ -1240,10 +1201,14 @@ rtrequest1(int req, struct rt_addrinfo *info, struct rtentry **ret_nrt)
 			rt_ref(rt);
 			RT_REFCNT_TRACE(rt);
 		}
+		rtcache_invalidate();
 		RT_UNLOCK();
 		need_unlock = false;
 		rt_timer_remove_all(rt);
-		rtcache_clear_rtentry(dst->sa_family, rt);
+#if defined(INET) || defined(INET6)
+		if (netmask != NULL)
+			lltable_prefix_free(dst->sa_family, dst, netmask, 0);
+#endif
 		if (ret_nrt == NULL) {
 			/* Adjust the refcount */
 			rt_ref(rt);
@@ -1332,9 +1297,9 @@ rtrequest1(int req, struct rt_addrinfo *info, struct rtentry **ret_nrt)
 			rt_ref(rt);
 			RT_REFCNT_TRACE(rt);
 		}
+		rtcache_invalidate();
 		RT_UNLOCK();
 		need_unlock = false;
-		rtflushall(dst->sa_family);
 		break;
 	case RTM_GET:
 		if (netmask != NULL) {
@@ -1387,7 +1352,7 @@ rt_setgate(struct rtentry *rt, const struct sockaddr *gate)
 
 		/* XXX we cannot call rtalloc1 if holding the rt lock */
 		if (RT_LOCKED())
-			gwrt = rtalloc1_locked(gate, 1, false);
+			gwrt = rtalloc1_locked(gate, 1, false, true);
 		else
 			gwrt = rtalloc1(gate, 1);
 		/*
@@ -1582,8 +1547,6 @@ rt_ifa_addlocal(struct ifaddr *ifa)
 
 		memset(&info, 0, sizeof(info));
 		info.rti_flags = RTF_HOST | RTF_LOCAL;
-		if (!(ifa->ifa_ifp->if_flags & (IFF_LOOPBACK|IFF_POINTOPOINT)))
-			info.rti_flags |= RTF_LLDATA;
 		info.rti_info[RTAX_DST] = ifa->ifa_addr;
 		info.rti_info[RTAX_GATEWAY] =
 		    (const struct sockaddr *)ifa->ifa_ifp->if_sadl;
@@ -1686,7 +1649,6 @@ rt_timer_init(void)
 
 	/* XXX should be in rt_init */
 	rw_init(&rt_lock);
-	rw_init(&rtcache_lock);
 
 	LIST_INIT(&rttimer_queue_head);
 	callout_init(&rt_timer_ch, CALLOUT_MPSAFE);
@@ -1879,20 +1841,20 @@ _rtcache_init(struct route *ro, int flag)
 
 	rtcache_invariants(ro);
 	KASSERT(ro->_ro_rt == NULL);
-	RTCACHE_ASSERT_WLOCK();
 
 	if (rtcache_getdst(ro) == NULL)
 		return NULL;
-	ro->ro_invalid = false;
 	rt = rtalloc1(rtcache_getdst(ro), flag);
-	if (rt != NULL && ISSET(rt->rt_flags, RTF_UP)) {
-		ro->_ro_rt = rt;
-		KASSERT(!ISSET(rt->rt_flags, RTF_UPDATING));
-		rtcache_ref(rt, ro);
+	if (rt != NULL) {
+		RT_RLOCK();
+		if (ISSET(rt->rt_flags, RTF_UP)) {
+			ro->_ro_rt = rt;
+			ro->ro_rtcache_generation = rtcache_generation;
+			rtcache_ref(rt, ro);
+		}
+		RT_UNLOCK();
 		rt_unref(rt);
-		rtcache(ro);
-	} else if (rt != NULL)
-		rt_unref(rt);
+	}
 
 	rtcache_invariants(ro);
 	return ro->_ro_rt;
@@ -1901,32 +1863,23 @@ _rtcache_init(struct route *ro, int flag)
 struct rtentry *
 rtcache_init(struct route *ro)
 {
-	struct rtentry *rt;
-	RTCACHE_WLOCK();
-	rt = _rtcache_init(ro, 1);
-	RTCACHE_UNLOCK();
-	return rt;
+
+	return _rtcache_init(ro, 1);
 }
 
 struct rtentry *
 rtcache_init_noclone(struct route *ro)
 {
-	struct rtentry *rt;
-	RTCACHE_WLOCK();
-	rt = _rtcache_init(ro, 0);
-	RTCACHE_UNLOCK();
-	return rt;
+
+	return _rtcache_init(ro, 0);
 }
 
 struct rtentry *
 rtcache_update(struct route *ro, int clone)
 {
-	struct rtentry *rt;
-	RTCACHE_WLOCK();
-	rtcache_clear(ro);
-	rt = _rtcache_init(ro, clone);
-	RTCACHE_UNLOCK();
-	return rt;
+
+	ro->_ro_rt = NULL;
+	return _rtcache_init(ro, clone);
 }
 
 void
@@ -1947,18 +1900,15 @@ rtcache_copy(struct route *new_ro, struct route *old_ro)
 	if (ret != 0)
 		goto out;
 
-	RTCACHE_WLOCK();
-	new_ro->ro_invalid = false;
-	if ((new_ro->_ro_rt = rt) != NULL)
-		rtcache(new_ro);
+	RT_RLOCK();
+	new_ro->_ro_rt = rt;
+	new_ro->ro_rtcache_generation = rtcache_generation;
+	RT_UNLOCK();
 	rtcache_invariants(new_ro);
-	RTCACHE_UNLOCK();
 out:
 	rtcache_unref(rt, old_ro);
 	return;
 }
-
-static struct dom_rtlist invalid_routes = LIST_HEAD_INITIALIZER(dom_rtlist);
 
 #if defined(RT_DEBUG) && defined(NET_MPSAFE)
 static void
@@ -2002,106 +1952,47 @@ rtcache_unref(struct rtentry *rt, struct route *ro)
 #endif
 }
 
-static struct rtentry *
-rtcache_validate_locked(struct route *ro)
+struct rtentry *
+rtcache_validate(struct route *ro)
 {
 	struct rtentry *rt = NULL;
 
 #ifdef NET_MPSAFE
 retry:
 #endif
-	rt = ro->_ro_rt;
 	rtcache_invariants(ro);
-
-	if (ro->ro_invalid) {
+	RT_RLOCK();
+	if (ro->ro_rtcache_generation != rtcache_generation) {
+		/* The cache is invalidated */
 		rt = NULL;
 		goto out;
 	}
 
-	RT_RLOCK();
-	if (rt != NULL && (rt->rt_flags & RTF_UP) != 0 && rt->rt_ifp != NULL) {
-#ifdef NET_MPSAFE
-		if (ISSET(rt->rt_flags, RTF_UPDATING)) {
-			if (rt_wait_ok()) {
-				RT_UNLOCK();
-				RTCACHE_UNLOCK();
-				/* We can wait until the update is complete */
-				rt_update_wait();
-				RTCACHE_RLOCK();
-				goto retry;
-			} else {
-				rt = NULL;
-			}
-		} else
-#endif
-			rtcache_ref(rt, ro);
-	} else
+	rt = ro->_ro_rt;
+	if (rt == NULL)
+		goto out;
+
+	if ((rt->rt_flags & RTF_UP) == 0) {
 		rt = NULL;
-	RT_UNLOCK();
+		goto out;
+	}
+#ifdef NET_MPSAFE
+	if (ISSET(rt->rt_flags, RTF_UPDATING)) {
+		if (rt_wait_ok()) {
+			RT_UNLOCK();
+
+			/* We can wait until the update is complete */
+			rt_update_wait();
+			goto retry;
+		} else {
+			rt = NULL;
+		}
+	} else
+#endif
+		rtcache_ref(rt, ro);
 out:
+	RT_UNLOCK();
 	return rt;
-}
-
-struct rtentry *
-rtcache_validate(struct route *ro)
-{
-	struct rtentry *rt;
-
-	RTCACHE_RLOCK();
-	rt = rtcache_validate_locked(ro);
-	RTCACHE_UNLOCK();
-	return rt;
-}
-
-static void
-rtcache_invalidate(struct dom_rtlist *rtlist)
-{
-	struct route *ro;
-
-	RTCACHE_ASSERT_WLOCK();
-
-	while ((ro = LIST_FIRST(rtlist)) != NULL) {
-		rtcache_invariants(ro);
-		KASSERT(ro->_ro_rt != NULL);
-		ro->ro_invalid = true;
-		LIST_REMOVE(ro, ro_rtcache_next);
-		LIST_INSERT_HEAD(&invalid_routes, ro, ro_rtcache_next);
-		rtcache_invariants(ro);
-	}
-}
-
-static void
-rtcache_clear_rtentry(int family, struct rtentry *rt)
-{
-	struct domain *dom;
-	struct route *ro, *nro;
-
-	if ((dom = pffinddomain(family)) == NULL)
-		return;
-
-	RTCACHE_WLOCK();
-	LIST_FOREACH_SAFE(ro, &dom->dom_rtcache, ro_rtcache_next, nro) {
-		if (ro->_ro_rt == rt)
-			rtcache_clear(ro);
-	}
-	RTCACHE_UNLOCK();
-}
-
-static void
-rtcache_clear(struct route *ro)
-{
-
-	RTCACHE_ASSERT_WLOCK();
-
-	rtcache_invariants(ro);
-	if (ro->_ro_rt == NULL)
-		return;
-
-	LIST_REMOVE(ro, ro_rtcache_next);
-
-	ro->_ro_rt = NULL;
-	ro->ro_invalid = false;
-	rtcache_invariants(ro);
 }
 
 struct rtentry *
@@ -2111,53 +2002,42 @@ rtcache_lookup2(struct route *ro, const struct sockaddr *dst,
 	const struct sockaddr *odst;
 	struct rtentry *rt = NULL;
 
-	RTCACHE_RLOCK();
 	odst = rtcache_getdst(ro);
-	if (odst == NULL) {
-		RTCACHE_UNLOCK();
-		RTCACHE_WLOCK();
+	if (odst == NULL)
 		goto miss;
-	}
 
 	if (sockaddr_cmp(odst, dst) != 0) {
-		RTCACHE_UNLOCK();
-		RTCACHE_WLOCK();
-		rtcache_free_locked(ro);
+		rtcache_free(ro);
 		goto miss;
 	}
 
-	rt = rtcache_validate_locked(ro);
+	rt = rtcache_validate(ro);
 	if (rt == NULL) {
-		RTCACHE_UNLOCK();
-		RTCACHE_WLOCK();
-		rtcache_clear(ro);
+		ro->_ro_rt = NULL;
 		goto miss;
 	}
 
 	rtcache_invariants(ro);
 
-	RTCACHE_UNLOCK();
 	if (hitp != NULL)
 		*hitp = 1;
 	return rt;
 miss:
 	if (hitp != NULL)
 		*hitp = 0;
-	if (rtcache_setdst_locked(ro, dst) == 0)
+	if (rtcache_setdst(ro, dst) == 0)
 		rt = _rtcache_init(ro, clone);
 
 	rtcache_invariants(ro);
 
-	RTCACHE_UNLOCK();
 	return rt;
 }
 
-static void
-rtcache_free_locked(struct route *ro)
+void
+rtcache_free(struct route *ro)
 {
 
-	RTCACHE_ASSERT_WLOCK();
-	rtcache_clear(ro);
+	ro->_ro_rt = NULL;
 	if (ro->ro_sa != NULL) {
 		sockaddr_free(ro->ro_sa);
 		ro->ro_sa = NULL;
@@ -2165,32 +2045,21 @@ rtcache_free_locked(struct route *ro)
 	rtcache_invariants(ro);
 }
 
-void
-rtcache_free(struct route *ro)
-{
-
-	RTCACHE_WLOCK();
-	rtcache_free_locked(ro);
-	RTCACHE_UNLOCK();
-}
-
-static int
-rtcache_setdst_locked(struct route *ro, const struct sockaddr *sa)
+int
+rtcache_setdst(struct route *ro, const struct sockaddr *sa)
 {
 	KASSERT(sa != NULL);
-
-	RTCACHE_ASSERT_WLOCK();
 
 	rtcache_invariants(ro);
 	if (ro->ro_sa != NULL) {
 		if (ro->ro_sa->sa_family == sa->sa_family) {
-			rtcache_clear(ro);
+			ro->_ro_rt = NULL;
 			sockaddr_copy(ro->ro_sa, ro->ro_sa->sa_len, sa);
 			rtcache_invariants(ro);
 			return 0;
 		}
 		/* free ro_sa, wrong family */
-		rtcache_free_locked(ro);
+		rtcache_free(ro);
 	}
 
 	KASSERT(ro->_ro_rt == NULL);
@@ -2201,18 +2070,6 @@ rtcache_setdst_locked(struct route *ro, const struct sockaddr *sa)
 	}
 	rtcache_invariants(ro);
 	return 0;
-}
-
-int
-rtcache_setdst(struct route *ro, const struct sockaddr *sa)
-{
-	int error;
-
-	RTCACHE_WLOCK();
-	error = rtcache_setdst_locked(ro, sa);
-	RTCACHE_UNLOCK();
-
-	return error;
 }
 
 const struct sockaddr *

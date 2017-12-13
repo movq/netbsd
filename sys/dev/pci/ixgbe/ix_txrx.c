@@ -59,7 +59,7 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 /*$FreeBSD: head/sys/dev/ixgbe/ix_txrx.c 301538 2016-06-07 04:51:50Z sephe $*/
-/*$NetBSD: ix_txrx.c,v 1.24 2017/05/18 08:25:37 msaitoh Exp $*/
+/*$NetBSD: ix_txrx.c,v 1.24.2.2 2017/10/24 08:38:59 snj Exp $*/
 
 #include "opt_inet.h"
 #include "opt_inet6.h"
@@ -331,10 +331,8 @@ ixgbe_deferred_mq_start(void *arg)
 static int
 ixgbe_xmit(struct tx_ring *txr, struct mbuf *m_head)
 {
-	struct m_tag *mtag;
 	struct adapter  *adapter = txr->adapter;
 	struct ifnet	*ifp = adapter->ifp;
-	struct ethercom *ec = &adapter->osdep.ec;
 	u32		olinfo_status = 0, cmd_type_len;
 	int             i, j, error;
 	int		first;
@@ -347,7 +345,7 @@ ixgbe_xmit(struct tx_ring *txr, struct mbuf *m_head)
         cmd_type_len = (IXGBE_ADVTXD_DTYP_DATA |
 	    IXGBE_ADVTXD_DCMD_IFCS | IXGBE_ADVTXD_DCMD_DEXT);
 
-	if ((mtag = VLAN_OUTPUT_TAG(ec, m_head)) != NULL)
+	if (vlan_has_tag(m_head))
         	cmd_type_len |= IXGBE_ADVTXD_DCMD_VLE;
 
         /*
@@ -734,8 +732,6 @@ ixgbe_tx_ctx_setup(struct tx_ring *txr, struct mbuf *mp,
     u32 *cmd_type_len, u32 *olinfo_status)
 {
 	struct adapter *adapter = txr->adapter;
-	struct ethercom *ec = &adapter->osdep.ec;
-	struct m_tag *mtag;
 	struct ixgbe_adv_tx_context_desc *TXD;
 	struct ether_vlan_header *eh;
 #ifdef INET
@@ -777,8 +773,8 @@ ixgbe_tx_ctx_setup(struct tx_ring *txr, struct mbuf *mp,
 	** be placed into the context descriptor. Hence
 	** we need to make one even if not doing offloads.
 	*/
-	if ((mtag = VLAN_OUTPUT_TAG(ec, mp)) != NULL) {
-		vtag = htole16(VLAN_TAG_VALUE(mtag) & 0xffff);
+	if (vlan_has_tag(mp)) {
+		vtag = htole16(vlan_get_tag(mp));
 		vlan_macip_lens |= (vtag << IXGBE_ADVTXD_VLAN_SHIFT);
 	} else if (!IXGBE_IS_X550VF(adapter) && (offload == FALSE))
 		return (0);
@@ -895,9 +891,6 @@ static int
 ixgbe_tso_setup(struct tx_ring *txr, struct mbuf *mp,
     u32 *cmd_type_len, u32 *olinfo_status)
 {
-	struct m_tag *mtag;
-	struct adapter *adapter = txr->adapter;
-	struct ethercom *ec = &adapter->osdep.ec;
 	struct ixgbe_adv_tx_context_desc *TXD;
 	u32 vlan_macip_lens = 0, type_tucmd_mlhl = 0;
 	u32 mss_l4len_idx = 0, paylen;
@@ -970,8 +963,8 @@ ixgbe_tso_setup(struct tx_ring *txr, struct mbuf *mp,
 	paylen = mp->m_pkthdr.len - ehdrlen - ip_hlen - tcp_hlen;
 
 	/* VLAN MACLEN IPLEN */
-	if ((mtag = VLAN_OUTPUT_TAG(ec, mp)) != NULL) {
-		vtag = htole16(VLAN_TAG_VALUE(mtag) & 0xffff);
+	if (vlan_has_tag(mp)) {
+		vtag = htole16(vlan_get_tag(mp));
                 vlan_macip_lens |= (vtag << IXGBE_ADVTXD_VLAN_SHIFT);
 	}
 
@@ -1446,21 +1439,10 @@ fail:
 
 static void     
 ixgbe_free_receive_ring(struct rx_ring *rxr)
-{ 
-	struct ixgbe_rx_buf       *rxbuf;
+{
 
 	for (int i = 0; i < rxr->num_desc; i++) {
-		rxbuf = &rxr->rx_buffers[i];
-		if (rxbuf->buf != NULL) {
-			bus_dmamap_sync(rxr->ptag->dt_dmat, rxbuf->pmap,
-			    0, rxbuf->buf->m_pkthdr.len,
-			    BUS_DMASYNC_POSTREAD);
-			ixgbe_dmamap_unload(rxr->ptag, rxbuf->pmap);
-			rxbuf->buf->m_flags |= M_PKTHDR;
-			m_freem(rxbuf->buf);
-			rxbuf->buf = NULL;
-			rxbuf->flags = 0;
-		}
+		ixgbe_rx_discard(rxr, i);
 	}
 }
 
@@ -1510,7 +1492,8 @@ ixgbe_setup_receive_ring(struct rx_ring *rxr)
 	 * or size of jumbo mbufs may have changed.
 	 */
 	ixgbe_jcl_reinit(&adapter->jcl_head, rxr->ptag->dt_dmat,
-	    2 * adapter->num_rx_desc, adapter->rx_mbuf_sz);
+	    (2 * adapter->num_rx_desc) * adapter->num_queues,
+	    adapter->rx_mbuf_sz);
 
 	IXGBE_RX_LOCK(rxr);
 
@@ -1631,7 +1614,9 @@ fail:
 	 */
 	for (int i = 0; i < j; ++i) {
 		rxr = &adapter->rx_rings[i];
+		IXGBE_RX_LOCK(rxr);
 		ixgbe_free_receive_ring(rxr);
+		IXGBE_RX_UNLOCK(rxr);
 	}
 
 	return (ENOBUFS);
@@ -1685,15 +1670,7 @@ ixgbe_free_receive_buffers(struct rx_ring *rxr)
 	if (rxr->rx_buffers != NULL) {
 		for (int i = 0; i < adapter->num_rx_desc; i++) {
 			rxbuf = &rxr->rx_buffers[i];
-			if (rxbuf->buf != NULL) {
-				bus_dmamap_sync(rxr->ptag->dt_dmat,
-				    rxbuf->pmap, 0, rxbuf->buf->m_pkthdr.len,
-				    BUS_DMASYNC_POSTREAD);
-				ixgbe_dmamap_unload(rxr->ptag, rxbuf->pmap);
-				rxbuf->buf->m_flags |= M_PKTHDR;
-				m_freem(rxbuf->buf);
-			}
-			rxbuf->buf = NULL;
+			ixgbe_rx_discard(rxr, i);
 			if (rxbuf->pmap != NULL) {
 				ixgbe_dmamap_destroy(rxr->ptag, rxbuf->pmap);
 				rxbuf->pmap = NULL;
@@ -1770,12 +1747,15 @@ ixgbe_rx_discard(struct rx_ring *rxr, int i)
 	** and mapping.
 	*/
 
-	if (rbuf->buf != NULL) {/* Partial chain ? */
-		rbuf->fmp->m_flags |= M_PKTHDR;
+	if (rbuf->fmp != NULL) {/* Partial chain ? */
+		bus_dmamap_sync(rxr->ptag->dt_dmat, rbuf->pmap, 0,
+		    rbuf->buf->m_pkthdr.len, BUS_DMASYNC_POSTREAD);
 		m_freem(rbuf->fmp);
 		rbuf->fmp = NULL;
 		rbuf->buf = NULL; /* rbuf->buf is part of fmp's chain */
 	} else if (rbuf->buf) {
+		bus_dmamap_sync(rxr->ptag->dt_dmat, rbuf->pmap, 0,
+		    rbuf->buf->m_pkthdr.len, BUS_DMASYNC_POSTREAD);
 		m_free(rbuf->buf);
 		rbuf->buf = NULL;
 	}
@@ -1868,6 +1848,9 @@ ixgbe_rxeof(struct ix_queue *que)
 			ixgbe_rx_discard(rxr, i);
 			goto next_desc;
 		}
+
+		bus_dmamap_sync(rxr->ptag->dt_dmat, rbuf->pmap, 0,
+		    rbuf->buf->m_pkthdr.len, BUS_DMASYNC_POSTREAD);
 
 		/*
 		** On 82599 which supports a hardware
@@ -1964,9 +1947,7 @@ ixgbe_rxeof(struct ix_queue *que)
 			    (staterr & IXGBE_RXD_STAT_VP))
 				vtag = le16toh(cur->wb.upper.vlan);
 			if (vtag) {
-				VLAN_INPUT_TAG(ifp, sendmp, vtag,
-				    printf("%s: could not apply VLAN "
-					"tag", __func__));
+				vlan_set_tag(sendmp, vtag);
 			}
 			if ((ifp->if_capenable & IFCAP_RXCSUM) != 0) {
 				ixgbe_rx_checksum(staterr, sendmp, ptype,

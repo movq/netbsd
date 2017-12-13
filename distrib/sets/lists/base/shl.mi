@@ -1,4 +1,4 @@
-# $NetBSD: shl.mi,v 1.817 2017/05/27 21:02:54 bouyer Exp $
+# $NetBSD: shl.mi,v 1.817.2.2 2017/10/11 22:49:48 snj Exp $
 #
 # Note:	Don't delete entries from here - mark them as "obsolete" instead,
 #	unless otherwise stated below.
@@ -176,14 +176,14 @@
 ./usr/lib/libasan.so				base-sys-shlib		compatfile,gcc=53
 ./usr/lib/libasan.so.0				base-sys-shlib		compatfile,gcc=48
 ./usr/lib/libasan.so.0.0			base-sys-shlib		compatfile,gcc=48
-./usr/lib/libasan.so.1				base-sys-shlib		compatfile,gcc=53
-./usr/lib/libasan.so.1.0			base-sys-shlib		compatfile,gcc=53
+./usr/lib/libasan.so.2				base-sys-shlib		compatfile,gcc=53
+./usr/lib/libasan.so.2.0			base-sys-shlib		compatfile,gcc=53
 ./usr/lib/libasn1.so				base-krb5-shlib		compatfile,kerberos
 ./usr/lib/libasn1.so.10				base-krb5-shlib		compatfile,kerberos
 ./usr/lib/libasn1.so.10.0			base-krb5-shlib		compatfile,kerberos
 ./usr/lib/libatf-c++.so				base-atf-shlib		compatfile,atf
-./usr/lib/libatf-c++.so.1			base-atf-shlib		compatfile,atf
-./usr/lib/libatf-c++.so.1.0			base-atf-shlib		compatfile,atf
+./usr/lib/libatf-c++.so.2			base-atf-shlib		compatfile,atf
+./usr/lib/libatf-c++.so.2.0			base-atf-shlib		compatfile,atf
 ./usr/lib/libatf-c.so				base-atf-shlib		compatfile,atf
 ./usr/lib/libatf-c.so.0				base-atf-shlib		compatfile,atf
 ./usr/lib/libatf-c.so.0.0			base-atf-shlib		compatfile,atf
@@ -196,7 +196,7 @@
 ./usr/lib/libbfd.so.15.0			base-sys-shlib		compatfile,binutils=227
 ./usr/lib/libbind9.so				base-bind-shlib		compatfile
 ./usr/lib/libbind9.so.8				base-bind-shlib		compatfile
-./usr/lib/libbind9.so.8.4			base-bind-shlib		compatfile
+./usr/lib/libbind9.so.8.5			base-bind-shlib		compatfile
 ./usr/lib/libblacklist.so			base-sys-shlib		compatfile
 ./usr/lib/libblacklist.so.0			base-sys-shlib		compatfile
 ./usr/lib/libblacklist.so.0.0			base-sys-shlib		compatfile
@@ -249,7 +249,7 @@
 ./usr/lib/libdm.so.0.0				base-sys-shlib		compatfile
 ./usr/lib/libdns.so				base-bind-shlib		compatfile
 ./usr/lib/libdns.so.8				base-bind-shlib		compatfile
-./usr/lib/libdns.so.8.4				base-bind-shlib		compatfile
+./usr/lib/libdns.so.8.5				base-bind-shlib		compatfile
 ./usr/lib/libdns_sd.so				base-mdns-shlib		compatfile,mdns
 ./usr/lib/libdns_sd.so.0			base-mdns-shlib		compatfile,mdns
 ./usr/lib/libdns_sd.so.0.0			base-mdns-shlib		compatfile,mdns
@@ -321,16 +321,16 @@
 ./usr/lib/libipsec.so.3.0			base-net-shlib		compatfile
 ./usr/lib/libirs.so				base-bind-shlib		compatfile
 ./usr/lib/libirs.so.8				base-bind-shlib		compatfile
-./usr/lib/libirs.so.8.4				base-bind-shlib		compatfile
+./usr/lib/libirs.so.8.5				base-bind-shlib		compatfile
 ./usr/lib/libisc.so				base-bind-shlib		compatfile
 ./usr/lib/libisc.so.8				base-bind-shlib		compatfile
-./usr/lib/libisc.so.8.4				base-bind-shlib		compatfile
+./usr/lib/libisc.so.8.5				base-bind-shlib		compatfile
 ./usr/lib/libisccc.so				base-bind-shlib		compatfile
 ./usr/lib/libisccc.so.8				base-bind-shlib		compatfile
-./usr/lib/libisccc.so.8.4			base-bind-shlib		compatfile
+./usr/lib/libisccc.so.8.5			base-bind-shlib		compatfile
 ./usr/lib/libisccfg.so				base-bind-shlib		compatfile
 ./usr/lib/libisccfg.so.8			base-bind-shlib		compatfile
-./usr/lib/libisccfg.so.8.4			base-bind-shlib		compatfile
+./usr/lib/libisccfg.so.8.5			base-bind-shlib		compatfile
 ./usr/lib/libiscsi.so				base-iscsi-shlib	iscsi,compatfile
 ./usr/lib/libiscsi.so.2				base-iscsi-shlib	iscsi,compatfile
 ./usr/lib/libiscsi.so.2.0			base-iscsi-shlib	iscsi,compatfile
@@ -378,7 +378,7 @@
 ./usr/lib/liblutok.so.2.0			base-sys-shlib		kyua,compatfile
 ./usr/lib/liblwres.so				base-bind-shlib		compatfile
 ./usr/lib/liblwres.so.8				base-bind-shlib		compatfile
-./usr/lib/liblwres.so.8.4			base-bind-shlib		compatfile
+./usr/lib/liblwres.so.8.5			base-bind-shlib		compatfile
 ./usr/lib/liblzf.so				base-sys-shlib		compatfile
 ./usr/lib/liblzf.so.1				base-sys-shlib		compatfile
 ./usr/lib/liblzf.so.1.0				base-sys-shlib		compatfile
@@ -443,8 +443,8 @@
 ./usr/lib/libppath.so.0				base-sys-shlib		compatfile
 ./usr/lib/libppath.so.0.0			base-sys-shlib		compatfile
 ./usr/lib/libproc.so				base-sys-shlib		compatfile,dtrace
-./usr/lib/libproc.so.0				base-sys-shlib		compatfile,dtrace
-./usr/lib/libproc.so.0.0			base-sys-shlib		compatfile,dtrace
+./usr/lib/libproc.so.1				base-sys-shlib		compatfile,dtrace
+./usr/lib/libproc.so.1.0			base-sys-shlib		compatfile,dtrace
 ./usr/lib/libprop.so				base-sys-shlib		compatfile
 ./usr/lib/libprop.so.1				base-sys-shlib		compatfile
 ./usr/lib/libprop.so.1.1			base-sys-shlib		compatfile
@@ -793,9 +793,9 @@
 ./usr/lib/libssl.so.12				base-crypto-shlib	compatfile
 ./usr/lib/libssl.so.12.0			base-crypto-shlib	compatfile
 ./usr/lib/libstdc++.so				base-sys-shlib		compatfile,gcc,cxx,libstdcxx
-./usr/lib/libstdc++.so.7			base-sys-shlib		compatfile,gcc,cxx,libstdcxx
+./usr/lib/libstdc++.so.8			base-sys-shlib		compatfile,gcc,cxx,libstdcxx
 ./usr/lib/libstdc++.so.7.3			base-sys-shlib		compatfile,gcc=48,cxx,libstdcxx
-./usr/lib/libstdc++.so.7.4			base-sys-shlib		compatfile,gcc=53,cxx,libstdcxx
+./usr/lib/libstdc++.so.8.0			base-sys-shlib		compatfile,gcc=53,cxx,libstdcxx
 ./usr/lib/libtelnet.so				base-obsolete		obsolete
 ./usr/lib/libtermcap.so				base-sys-shlib		compatfile
 ./usr/lib/libtermcap.so.0			base-sys-shlib		compatfile
@@ -816,8 +816,8 @@
 ./usr/lib/libtspi.so.3				base-sys-shlib		compatfile,tpm
 ./usr/lib/libtspi.so.3.0			base-sys-shlib		compatfile,tpm
 ./usr/lib/libubsan.so				base-sys-shlib		compatfile,gcc=53
-./usr/lib/libubsan.so.0				base-sys-shlib		compatfile,gcc=53
-./usr/lib/libubsan.so.0.0			base-sys-shlib		compatfile,gcc=53
+./usr/lib/libubsan.so.1				base-sys-shlib		compatfile,gcc=53
+./usr/lib/libubsan.so.1.0			base-sys-shlib		compatfile,gcc=53
 ./usr/lib/libukfs.so				base-sys-shlib		compatfile,rump
 ./usr/lib/libukfs.so.1				base-sys-shlib		compatfile,rump
 ./usr/lib/libukfs.so.1.0			base-sys-shlib		compatfile,rump

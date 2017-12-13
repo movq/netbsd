@@ -1,4 +1,4 @@
-# $NetBSD: GENERIC,v 1.1156 2017/05/27 22:53:29 bouyer Exp $
+# $NetBSD: GENERIC,v 1.1156.2.6 2017/09/11 05:13:45 snj Exp $
 #
 # GENERIC machine description file
 #
@@ -22,12 +22,12 @@ include 	"arch/i386/conf/std.i386"
 
 options 	INCLUDE_CONFIG_FILE	# embed config file in kernel binary
 
-#ident		"GENERIC-$Revision: 1.1156 $"
+#ident		"GENERIC-$Revision: 1.1156.2.6 $"
 
 maxusers	64		# estimated number of users
 
 # CPU-related options.
-options 	VM86		# virtual 8086 emulation
+#options 	VM86		# virtual 8086 emulation
 options 	USER_LDT	# user-settable LDT; used by WINE
 #options 	PAE		# PAE mode (36 bits physical addressing)
 
@@ -42,7 +42,7 @@ viac7temp*	at cpu?		# VIA C7 temperature sensor
 vmt0		at cpu0		# VMware Tools
 
 options 	MTRR		# memory-type range register syscall support
-#options 	PMC		# performance-monitoring counters support
+options 	PMC		# performance-monitoring counters support
 
 options 	MULTIBOOT	# Multiboot support (see multiboot(8))
 
@@ -144,8 +144,8 @@ options 	COMPAT_43	# 4.3BSD, 386BSD, and BSDI
 #options 	TCP_COMPAT_42	# 4.2BSD TCP/IP bug compat. Not recommended.
 
 options 	COMPAT_OSSAUDIO	# OSS (Voxware) audio driver compatibility
-options 	COMPAT_SVR4	# binary compatibility with SVR4
-options 	COMPAT_IBCS2	# binary compatibility with SCO and ISC
+#options 	COMPAT_SVR4	# binary compatibility with SVR4
+#options 	COMPAT_IBCS2	# binary compatibility with SCO and ISC
 options 	COMPAT_LINUX	# binary compatibility with Linux
 #options 	COMPAT_FREEBSD	# binary compatibility with FreeBSD
 #options 	COMPAT_NDIS	# NDIS network driver
@@ -1733,8 +1733,8 @@ options 	VERIFIED_EXEC_FP_SHA512
 options 	VERIFIED_EXEC_FP_SHA1
 options 	VERIFIED_EXEC_FP_MD5
 
-options 	PAX_ASLR_DEBUG=1	# PaX ASLR debug
+#options 	PAX_ASLR_DEBUG=1	# PaX ASLR debug
 options 	PAX_SEGVGUARD=0		# PaX Segmentation fault guard
 options 	PAX_MPROTECT=1		# PaX mprotect(2) restrictions
-options 	PAX_MPROTECT_DEBUG=1	# PaX mprotect debug
+#options 	PAX_MPROTECT_DEBUG=1	# PaX mprotect debug
 options 	PAX_ASLR=1		# PaX Address Space Layout Randomization

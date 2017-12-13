@@ -1,4 +1,4 @@
-/*	$NetBSD: genfs_vnops.c,v 1.195 2017/04/11 14:29:32 riastradh Exp $	*/
+/*	$NetBSD: genfs_vnops.c,v 1.195.4.2 2017/07/05 20:04:40 snj Exp $	*/
 
 /*-
  * Copyright (c) 2008 The NetBSD Foundation, Inc.
@@ -57,7 +57,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: genfs_vnops.c,v 1.195 2017/04/11 14:29:32 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: genfs_vnops.c,v 1.195.4.2 2017/07/05 20:04:40 snj Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -288,41 +288,18 @@ genfs_deadlock(void *v)
 	vnode_impl_t *vip = VNODE_TO_VIMPL(vp);
 	int flags = ap->a_flags;
 	krw_t op;
-	int error;
+
+	if (! ISSET(flags, LK_RETRY))
+		return ENOENT;
 
 	op = (ISSET(flags, LK_EXCLUSIVE) ? RW_WRITER : RW_READER);
 	if (ISSET(flags, LK_NOWAIT)) {
-		if (! rw_tryenter(vip->vi_lock, op))
+		if (! rw_tryenter(&vip->vi_lock, op))
 			return EBUSY;
-		if (mutex_tryenter(vp->v_interlock)) {
-			error = vdead_check(vp, VDEAD_NOWAIT);
-			if (error == ENOENT && ISSET(flags, LK_RETRY))
-				error = 0;
-			mutex_exit(vp->v_interlock);
-		} else
-			error = EBUSY;
-		if (error)
-			rw_exit(vip->vi_lock);
-		return error;
+	} else {
+		rw_enter(&vip->vi_lock, op);
 	}
-
-	rw_enter(vip->vi_lock, op);
-	mutex_enter(vp->v_interlock);
-	error = vdead_check(vp, VDEAD_NOWAIT);
-	if (error == EBUSY) {
-		rw_exit(vip->vi_lock);
-		error = vdead_check(vp, 0);
-		KASSERT(error == ENOENT);
-		mutex_exit(vp->v_interlock);
-		rw_enter(vip->vi_lock, op);
-		mutex_enter(vp->v_interlock);
-	}
-	KASSERT(error == ENOENT);
-	mutex_exit(vp->v_interlock);
-	if (! ISSET(flags, LK_RETRY)) {
-		rw_exit(vip->vi_lock);
-		return ENOENT;
-	}
+	VSTATE_ASSERT_UNLOCKED(vp, VS_RECLAIMED);
 	return 0;
 }
 
@@ -338,7 +315,7 @@ genfs_deadunlock(void *v)
 	vnode_t *vp = ap->a_vp;
 	vnode_impl_t *vip = VNODE_TO_VIMPL(vp);
 
-	rw_exit(vip->vi_lock);
+	rw_exit(&vip->vi_lock);
 
 	return 0;
 }
@@ -355,43 +332,18 @@ genfs_lock(void *v)
 	} */ *ap = v;
 	vnode_t *vp = ap->a_vp;
 	vnode_impl_t *vip = VNODE_TO_VIMPL(vp);
-	struct mount *mp = vp->v_mount;
 	int flags = ap->a_flags;
 	krw_t op;
-	int error;
 
 	op = (ISSET(flags, LK_EXCLUSIVE) ? RW_WRITER : RW_READER);
 	if (ISSET(flags, LK_NOWAIT)) {
-		if (fstrans_start_nowait(mp, FSTRANS_SHARED))
+		if (! rw_tryenter(&vip->vi_lock, op))
 			return EBUSY;
-		if (! rw_tryenter(vip->vi_lock, op)) {
-			fstrans_done(mp);
-			return EBUSY;
-		}
-		if (mutex_tryenter(vp->v_interlock)) {
-			error = vdead_check(vp, VDEAD_NOWAIT);
-			mutex_exit(vp->v_interlock);
-		} else
-			error = EBUSY;
-		if (error) {
-			rw_exit(vip->vi_lock);
-			fstrans_done(mp);
-		}
-		return error;
+	} else {
+		rw_enter(&vip->vi_lock, op);
 	}
-
-	fstrans_start(mp, FSTRANS_SHARED);
-	rw_enter(vip->vi_lock, op);
-	mutex_enter(vp->v_interlock);
-	error = vdead_check(vp, VDEAD_NOWAIT);
-	if (error) {
-		rw_exit(vip->vi_lock);
-		fstrans_done(mp);
-		error = vdead_check(vp, 0);
-		KASSERT(error == ENOENT);
-	}
-	mutex_exit(vp->v_interlock);
-	return error;
+	VSTATE_ASSERT_UNLOCKED(vp, VS_ACTIVE);
+	return 0;
 }
 
 /*
@@ -405,10 +357,8 @@ genfs_unlock(void *v)
 	} */ *ap = v;
 	vnode_t *vp = ap->a_vp;
 	vnode_impl_t *vip = VNODE_TO_VIMPL(vp);
-	struct mount *mp = vp->v_mount;
 
-	rw_exit(vip->vi_lock);
-	fstrans_done(mp);
+	rw_exit(&vip->vi_lock);
 
 	return 0;
 }
@@ -425,10 +375,10 @@ genfs_islocked(void *v)
 	vnode_t *vp = ap->a_vp;
 	vnode_impl_t *vip = VNODE_TO_VIMPL(vp);
 
-	if (rw_write_held(vip->vi_lock))
+	if (rw_write_held(&vip->vi_lock))
 		return LK_EXCLUSIVE;
 
-	if (rw_read_held(vip->vi_lock))
+	if (rw_read_held(&vip->vi_lock))
 		return LK_SHARED;
 
 	return 0;
@@ -550,6 +500,32 @@ filt_genfsread(struct knote *kn, long hint)
 }
 
 static int
+filt_genfswrite(struct knote *kn, long hint)
+{
+	struct vnode *vp = (struct vnode *)kn->kn_hook;
+
+	/*
+	 * filesystem is gone, so set the EOF flag and schedule
+	 * the knote for deletion.
+	 */
+	switch (hint) {
+	case NOTE_REVOKE:
+		KASSERT(mutex_owned(vp->v_interlock));
+		kn->kn_flags |= (EV_EOF | EV_ONESHOT);
+		return (1);
+	case 0:
+		mutex_enter(vp->v_interlock);
+		kn->kn_data = 0;
+		mutex_exit(vp->v_interlock);
+		return 1;
+	default:
+		KASSERT(mutex_owned(vp->v_interlock));
+		kn->kn_data = 0;
+		return 1;
+	}
+}
+
+static int
 filt_genfsvnode(struct knote *kn, long hint)
 {
 	struct vnode *vp = (struct vnode *)kn->kn_hook;
@@ -580,6 +556,8 @@ filt_genfsvnode(struct knote *kn, long hint)
 
 static const struct filterops genfsread_filtops =
 	{ 1, NULL, filt_genfsdetach, filt_genfsread };
+static const struct filterops genfswrite_filtops =
+	{ 1, NULL, filt_genfsdetach, filt_genfswrite };
 static const struct filterops genfsvnode_filtops =
 	{ 1, NULL, filt_genfsdetach, filt_genfsvnode };
 
@@ -598,6 +576,9 @@ genfs_kqfilter(void *v)
 	switch (kn->kn_filter) {
 	case EVFILT_READ:
 		kn->kn_fop = &genfsread_filtops;
+		break;
+	case EVFILT_WRITE:
+		kn->kn_fop = &genfswrite_filtops;
 		break;
 	case EVFILT_VNODE:
 		kn->kn_fop = &genfsvnode_filtops;

@@ -1,11 +1,11 @@
-# $NetBSD: GENERIC,v 1.27 2017/02/19 07:47:01 rin Exp $
+# $NetBSD: GENERIC,v 1.27.6.2 2017/08/29 09:42:19 martin Exp $
 #
 
 include 	"arch/mvmeppc/conf/std.mvmeppc"
 
 #options 	INCLUDE_CONFIG_FILE	# embed config file in kernel binary
 
-ident		"GENERIC-$Revision: 1.27 $"
+ident		"GENERIC-$Revision: 1.27.6.2 $"
 
 maxusers	8
 

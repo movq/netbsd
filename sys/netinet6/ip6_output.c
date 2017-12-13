@@ -1,4 +1,4 @@
-/*	$NetBSD: ip6_output.c,v 1.191 2017/03/03 07:13:06 ozaki-r Exp $	*/
+/*	$NetBSD: ip6_output.c,v 1.191.6.2 2017/10/21 19:43:54 snj Exp $	*/
 /*	$KAME: ip6_output.c,v 1.172 2001/03/25 09:55:56 itojun Exp $	*/
 
 /*
@@ -62,7 +62,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ip6_output.c,v 1.191 2017/03/03 07:13:06 ozaki-r Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ip6_output.c,v 1.191.6.2 2017/10/21 19:43:54 snj Exp $");
 
 #ifdef _KERNEL_OPT
 #include "opt_inet.h"
@@ -1069,7 +1069,7 @@ done:
 
 #ifdef IPSEC
 	if (sp != NULL)
-		KEY_FREESP(&sp);
+		KEY_SP_UNREF(&sp);
 #endif /* IPSEC */
 
 	if_put(ifp, &psref);
@@ -2561,8 +2561,10 @@ ip6_setmoptions(const struct sockopt *sopt, struct in6pcb *in6p)
 		 * Group must be a valid IP6 multicast address.
 		 */
 		bound = curlwp_bind();
+		ifp = NULL;
 		error = ip6_get_membership(sopt, &ifp, &psref, &ia, sizeof(ia));
 		if (error != 0) {
+			KASSERT(ifp == NULL);
 			curlwp_bindx(bound);
 			return error;
 		}

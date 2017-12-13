@@ -1,4 +1,4 @@
-/*	$NetBSD: route.h,v 1.112 2017/04/11 13:55:54 roy Exp $	*/
+/*	$NetBSD: route.h,v 1.112.4.2 2017/10/24 08:55:55 snj Exp $	*/
 
 /*
  * Copyright (c) 1980, 1986, 1993
@@ -64,8 +64,7 @@
 struct route {
 	struct	rtentry		*_ro_rt;
 	struct	sockaddr	*ro_sa;
-	LIST_ENTRY(route)	ro_rtcache_next;
-	bool			ro_invalid;
+	uint64_t		ro_rtcache_generation;
 	struct	psref		ro_psref;
 	int			ro_bound;
 };
@@ -458,8 +457,8 @@ struct rtentry *
 static inline void
 rtcache_invariants(const struct route *ro)
 {
+
 	KASSERT(ro->ro_sa != NULL || ro->_ro_rt == NULL);
-	KASSERT(!ro->ro_invalid || ro->_ro_rt != NULL);
 }
 
 static inline struct rtentry *
@@ -499,6 +498,10 @@ struct mbuf *
 int	rt_msg3(int, struct rt_addrinfo *, void *, struct rt_walkarg *, int *);
 void	rt_newaddrmsg(int, struct ifaddr *, int, struct rtentry *);
 void	route_enqueue(struct mbuf *, int);
+
+struct llentry;
+void	rt_clonedmsg(const struct sockaddr *, const struct ifnet *,
+	    const struct rtentry *);
 
 /* rtbl */
 int	rt_addaddr(rtbl_t *, struct rtentry *, const struct sockaddr *);

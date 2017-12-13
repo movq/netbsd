@@ -1,4 +1,4 @@
-/*	$NetBSD: vfs_vnode.c,v 1.93 2017/05/28 16:39:41 hannken Exp $	*/
+/*	$NetBSD: vfs_vnode.c,v 1.93.2.2 2017/08/25 05:46:46 snj Exp $	*/
 
 /*-
  * Copyright (c) 1997-2011 The NetBSD Foundation, Inc.
@@ -100,7 +100,7 @@
  *			will never change its state.
  *	- LOADING	Vnode is associating underlying file system and not
  *			yet ready to use.
- *	- ACTIVE	Vnode has associated underlying file system and is
+ *	- LOADED	Vnode has associated underlying file system and is
  *			ready to use.
  *	- BLOCKED	Vnode is active but cannot get new references.
  *	- RECLAIMING	Vnode is disassociating from the underlying file
@@ -109,19 +109,19 @@
  *			and is dead.
  *
  *	Valid state changes are:
- *	LOADING -> ACTIVE
+ *	LOADING -> LOADED
  *			Vnode has been initialised in vcache_get() or
  *			vcache_new() and is ready to use.
- *	ACTIVE -> RECLAIMING
+ *	LOADED -> RECLAIMING
  *			Vnode starts disassociation from underlying file
  *			system in vcache_reclaim().
  *	RECLAIMING -> RECLAIMED
  *			Vnode finished disassociation from underlying file
  *			system in vcache_reclaim().
- *	ACTIVE -> BLOCKED
+ *	LOADED -> BLOCKED
  *			Either vcache_rekey*() is changing the vnode key or
  *			vrelel() is about to call VOP_INACTIVE().
- *	BLOCKED -> ACTIVE
+ *	BLOCKED -> LOADED
  *			The block condition is over.
  *	LOADING -> RECLAIMED
  *			Either vcache_get() or vcache_new() failed to
@@ -156,7 +156,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: vfs_vnode.c,v 1.93 2017/05/28 16:39:41 hannken Exp $");
+__KERNEL_RCSID(0, "$NetBSD: vfs_vnode.c,v 1.93.2.2 2017/08/25 05:46:46 snj Exp $");
 
 #include <sys/param.h>
 #include <sys/kernel.h>
@@ -225,32 +225,37 @@ static void		vnpanic(vnode_t *, const char *, ...)
 /* Routines having to do with the management of the vnode table. */
 extern struct mount	*dead_rootmount;
 extern int		(**dead_vnodeop_p)(void *);
+extern int		(**spec_vnodeop_p)(void *);
 extern struct vfsops	dead_vfsops;
 
 /* Vnode state operations and diagnostics. */
 
 #if defined(DIAGNOSTIC)
 
+#define VSTATE_VALID(state) \
+	((state) != VS_ACTIVE && (state) != VS_MARKER)
 #define VSTATE_GET(vp) \
 	vstate_assert_get((vp), __func__, __LINE__)
 #define VSTATE_CHANGE(vp, from, to) \
 	vstate_assert_change((vp), (from), (to), __func__, __LINE__)
 #define VSTATE_WAIT_STABLE(vp) \
 	vstate_assert_wait_stable((vp), __func__, __LINE__)
-#define VSTATE_ASSERT(vp, state) \
-	vstate_assert((vp), (state), __func__, __LINE__)
 
-static void
-vstate_assert(vnode_t *vp, enum vnode_state state, const char *func, int line)
+void
+_vstate_assert(vnode_t *vp, enum vnode_state state, const char *func, int line)
 {
 	vnode_impl_t *vip = VNODE_TO_VIMPL(vp);
 
 	KASSERTMSG(mutex_owned(vp->v_interlock), "at %s:%d", func, line);
 
-	if (__predict_true(vip->vi_state == state))
+	if (state == VS_ACTIVE && vp->v_usecount > 0 &&
+	    (vip->vi_state == VS_LOADED || vip->vi_state == VS_BLOCKED))
 		return;
-	vnpanic(vp, "state is %s, expected %s at %s:%d",
-	    vstate_name(vip->vi_state), vstate_name(state), func, line);
+	if (vip->vi_state == state)
+		return;
+	vnpanic(vp, "state is %s, usecount %d, expected %s at %s:%d",
+	    vstate_name(vip->vi_state), vp->v_usecount,
+	    vstate_name(state), func, line);
 }
 
 static enum vnode_state
@@ -259,7 +264,7 @@ vstate_assert_get(vnode_t *vp, const char *func, int line)
 	vnode_impl_t *vip = VNODE_TO_VIMPL(vp);
 
 	KASSERTMSG(mutex_owned(vp->v_interlock), "at %s:%d", func, line);
-	if (vip->vi_state == VS_MARKER)
+	if (! VSTATE_VALID(vip->vi_state))
 		vnpanic(vp, "state is %s at %s:%d",
 		    vstate_name(vip->vi_state), func, line);
 
@@ -272,14 +277,14 @@ vstate_assert_wait_stable(vnode_t *vp, const char *func, int line)
 	vnode_impl_t *vip = VNODE_TO_VIMPL(vp);
 
 	KASSERTMSG(mutex_owned(vp->v_interlock), "at %s:%d", func, line);
-	if (vip->vi_state == VS_MARKER)
+	if (! VSTATE_VALID(vip->vi_state))
 		vnpanic(vp, "state is %s at %s:%d",
 		    vstate_name(vip->vi_state), func, line);
 
-	while (vip->vi_state != VS_ACTIVE && vip->vi_state != VS_RECLAIMED)
+	while (vip->vi_state != VS_LOADED && vip->vi_state != VS_RECLAIMED)
 		cv_wait(&vp->v_cv, vp->v_interlock);
 
-	if (vip->vi_state == VS_MARKER)
+	if (! VSTATE_VALID(vip->vi_state))
 		vnpanic(vp, "state is %s at %s:%d",
 		    vstate_name(vip->vi_state), func, line);
 }
@@ -294,10 +299,10 @@ vstate_assert_change(vnode_t *vp, enum vnode_state from, enum vnode_state to,
 	if (from == VS_LOADING)
 		KASSERTMSG(mutex_owned(&vcache_lock), "at %s:%d", func, line);
 
-	if (from == VS_MARKER)
+	if (! VSTATE_VALID(from))
 		vnpanic(vp, "from is %s at %s:%d",
 		    vstate_name(from), func, line);
-	if (to == VS_MARKER)
+	if (! VSTATE_VALID(to))
 		vnpanic(vp, "to is %s at %s:%d",
 		    vstate_name(to), func, line);
 	if (vip->vi_state != from)
@@ -311,7 +316,7 @@ vstate_assert_change(vnode_t *vp, enum vnode_state from, enum vnode_state to,
 	vip->vi_state = to;
 	if (from == VS_LOADING)
 		cv_broadcast(&vcache_cv);
-	if (to == VS_ACTIVE || to == VS_RECLAIMED)
+	if (to == VS_LOADED || to == VS_RECLAIMED)
 		cv_broadcast(&vp->v_cv);
 }
 
@@ -323,14 +328,18 @@ vstate_assert_change(vnode_t *vp, enum vnode_state from, enum vnode_state to,
 	vstate_change((vp), (from), (to))
 #define VSTATE_WAIT_STABLE(vp) \
 	vstate_wait_stable((vp))
-#define VSTATE_ASSERT(vp, state)
+void
+_vstate_assert(vnode_t *vp, enum vnode_state state, const char *func, int line)
+{
+
+}
 
 static void
 vstate_wait_stable(vnode_t *vp)
 {
 	vnode_impl_t *vip = VNODE_TO_VIMPL(vp);
 
-	while (vip->vi_state != VS_ACTIVE && vip->vi_state != VS_RECLAIMED)
+	while (vip->vi_state != VS_LOADED && vip->vi_state != VS_RECLAIMED)
 		cv_wait(&vp->v_cv, vp->v_interlock);
 }
 
@@ -342,7 +351,7 @@ vstate_change(vnode_t *vp, enum vnode_state from, enum vnode_state to)
 	vip->vi_state = to;
 	if (from == VS_LOADING)
 		cv_broadcast(&vcache_cv);
-	if (to == VS_ACTIVE || to == VS_RECLAIMED)
+	if (to == VS_LOADED || to == VS_RECLAIMED)
 		cv_broadcast(&vp->v_cv);
 }
 
@@ -413,21 +422,6 @@ vnis_marker(vnode_t *vp)
 {
 
 	return (VNODE_TO_VIMPL(vp)->vi_state == VS_MARKER);
-}
-
-/*
- * Set vnode to share another vnodes lock.
- */
-void
-vshare_lock(vnode_t *vp, vnode_t *src_vp)
-{
-	vnode_impl_t *vip = VNODE_TO_VIMPL(vp);
-	vnode_impl_t *src_vip = VNODE_TO_VIMPL(src_vp);
-	krwlock_t *oldlock = vip->vi_lock;
-
-	rw_obj_hold(src_vip->vi_lock);
-	vip->vi_lock = src_vip->vi_lock;
-	rw_obj_free(oldlock);
 }
 
 /*
@@ -528,12 +522,12 @@ vdrain_remove(vnode_t *vp)
 	if (!mutex_tryenter(vp->v_interlock))
 		return;
 	/* Probe usecount and state. */
-	if (vp->v_usecount > 0 || VSTATE_GET(vp) != VS_ACTIVE) {
+	if (vp->v_usecount > 0 || VSTATE_GET(vp) != VS_LOADED) {
 		mutex_exit(vp->v_interlock);
 		return;
 	}
 	mp = vp->v_mount;
-	if (fstrans_start_nowait(mp, FSTRANS_SHARED) != 0) {
+	if (fstrans_start_nowait(mp) != 0) {
 		mutex_exit(vp->v_interlock);
 		return;
 	}
@@ -563,7 +557,7 @@ vdrain_vrele(vnode_t *vp)
 	KASSERT(mutex_owned(&vdrain_lock));
 
 	mp = vp->v_mount;
-	if (fstrans_start_nowait(mp, FSTRANS_SHARED) != 0)
+	if (fstrans_start_nowait(mp) != 0)
 		return;
 
 	/*
@@ -752,7 +746,7 @@ vrelel(vnode_t *vp, int flags)
 	if (VSTATE_GET(vp) == VS_RECLAIMED) {
 		VOP_UNLOCK(vp);
 	} else {
-		VSTATE_CHANGE(vp, VS_ACTIVE, VS_BLOCKED);
+		VSTATE_CHANGE(vp, VS_LOADED, VS_BLOCKED);
 		mutex_exit(vp->v_interlock);
 
 		/*
@@ -768,7 +762,7 @@ vrelel(vnode_t *vp, int flags)
 		if (!recycle)
 			VOP_UNLOCK(vp);
 		mutex_enter(vp->v_interlock);
-		VSTATE_CHANGE(vp, VS_BLOCKED, VS_ACTIVE);
+		VSTATE_CHANGE(vp, VS_BLOCKED, VS_LOADED);
 		if (!recycle) {
 			if (vtryrele(vp)) {
 				mutex_exit(vp->v_interlock);
@@ -791,7 +785,7 @@ vrelel(vnode_t *vp, int flags)
 		 * otherwise just free it.
 		 */
 		if (recycle) {
-			VSTATE_ASSERT(vp, VS_ACTIVE);
+			VSTATE_ASSERT(vp, VS_LOADED);
 			/* vcache_reclaim drops the lock. */
 			vcache_reclaim(vp);
 		}
@@ -910,14 +904,14 @@ vrecycle(vnode_t *vp)
 	}
 
 	/* If the vnode is already clean we're done. */
-	if (VSTATE_GET(vp) != VS_ACTIVE) {
+	if (VSTATE_GET(vp) != VS_LOADED) {
 		VSTATE_ASSERT(vp, VS_RECLAIMED);
 		vrelel(vp, 0);
 		return true;
 	}
 
 	/* Prevent further references until the vnode is locked. */
-	VSTATE_CHANGE(vp, VS_ACTIVE, VS_BLOCKED);
+	VSTATE_CHANGE(vp, VS_LOADED, VS_BLOCKED);
 	mutex_exit(vp->v_interlock);
 
 	/*
@@ -929,7 +923,7 @@ vrecycle(vnode_t *vp)
 	error = vn_lock(vp, LK_EXCLUSIVE | LK_RETRY | LK_NOWAIT);
 
 	mutex_enter(vp->v_interlock);
-	VSTATE_CHANGE(vp, VS_BLOCKED, VS_ACTIVE);
+	VSTATE_CHANGE(vp, VS_BLOCKED, VS_LOADED);
 
 	if (error) {
 		mutex_exit(vp->v_interlock);
@@ -1024,7 +1018,7 @@ vgone(vnode_t *vp)
 	vn_lock(vp, LK_EXCLUSIVE | LK_RETRY);
 	mutex_enter(vp->v_interlock);
 	VSTATE_WAIT_STABLE(vp);
-	if (VSTATE_GET(vp) == VS_ACTIVE)
+	if (VSTATE_GET(vp) == VS_LOADED)
 		vcache_reclaim(vp);
 	VSTATE_ASSERT(vp, VS_RECLAIMED);
 	vrelel(vp, 0);
@@ -1034,6 +1028,8 @@ static inline uint32_t
 vcache_hash(const struct vcache_key *key)
 {
 	uint32_t hash = HASH32_BUF_INIT;
+
+	KASSERT(key->vk_key_len > 0);
 
 	hash = hash32_buf(&key->vk_mount, sizeof(struct mount *), hash);
 	hash = hash32_buf(key->vk_key, key->vk_key_len, hash);
@@ -1115,7 +1111,7 @@ vcache_alloc(void)
 	vip = pool_cache_get(vcache_pool, PR_WAITOK);
 	memset(vip, 0, sizeof(*vip));
 
-	vip->vi_lock = rw_obj_alloc();
+	rw_init(&vip->vi_lock);
 	/* SLIST_INIT(&vip->vi_hash); */
 	/* LIST_INIT(&vip->vi_nclist); */
 	/* LIST_INIT(&vip->vi_dnclist); */
@@ -1177,7 +1173,7 @@ vcache_free(vnode_impl_t *vip)
 	if (vp->v_type == VBLK || vp->v_type == VCHR)
 		spec_node_destroy(vp);
 
-	rw_obj_free(vip->vi_lock);
+	rw_destroy(&vip->vi_lock);
 	uvm_obj_destroy(&vp->v_uobj, true);
 	cv_destroy(&vp->v_cv);
 	pool_cache_put(vcache_pool, vip);
@@ -1199,7 +1195,7 @@ vcache_tryvget(vnode_t *vp)
 
 	if (__predict_false(VSTATE_GET(vp) == VS_RECLAIMED))
 		error = ENOENT;
-	else if (__predict_false(VSTATE_GET(vp) != VS_ACTIVE))
+	else if (__predict_false(VSTATE_GET(vp) != VS_LOADED))
 		error = EBUSY;
 	else if (vp->v_usecount == 0)
 		vp->v_usecount = 1;
@@ -1237,7 +1233,7 @@ vcache_vget(vnode_t *vp)
 			mutex_exit(vp->v_interlock);
 		return ENOENT;
 	}
-	VSTATE_ASSERT(vp, VS_ACTIVE);
+	VSTATE_ASSERT(vp, VS_LOADED);
 	if (vp->v_usecount == 0)
 		vp->v_usecount = 1;
 	else
@@ -1349,7 +1345,7 @@ again:
 	mutex_enter(&vcache_lock);
 	new_vip->vi_key.vk_key = new_key;
 	mutex_enter(vp->v_interlock);
-	VSTATE_CHANGE(vp, VS_LOADING, VS_ACTIVE);
+	VSTATE_CHANGE(vp, VS_LOADING, VS_LOADED);
 	mutex_exit(vp->v_interlock);
 	mutex_exit(&vcache_lock);
 	*vpp = vp;
@@ -1388,23 +1384,29 @@ vcache_new(struct mount *mp, struct vnode *dvp, struct vattr *vap,
 		KASSERT(*vpp == NULL);
 		return error;
 	}
-	KASSERT(vip->vi_key.vk_key != NULL);
 	KASSERT(vp->v_op != NULL);
-	hash = vcache_hash(&vip->vi_key);
+	KASSERT((vip->vi_key.vk_key_len == 0) == (mp == dead_rootmount));
+	if (vip->vi_key.vk_key_len > 0) {
+		KASSERT(vip->vi_key.vk_key != NULL);
+		hash = vcache_hash(&vip->vi_key);
 
-	/* Wait for previous instance to be reclaimed, then insert new node. */
-	mutex_enter(&vcache_lock);
-	while ((ovip = vcache_hash_lookup(&vip->vi_key, hash))) {
-		ovp = VIMPL_TO_VNODE(ovip);
-		mutex_enter(ovp->v_interlock);
-		mutex_exit(&vcache_lock);
-		error = vcache_vget(ovp);
-		KASSERT(error == ENOENT);
+		/*
+		 * Wait for previous instance to be reclaimed,
+		 * then insert new node.
+		 */
 		mutex_enter(&vcache_lock);
+		while ((ovip = vcache_hash_lookup(&vip->vi_key, hash))) {
+			ovp = VIMPL_TO_VNODE(ovip);
+			mutex_enter(ovp->v_interlock);
+			mutex_exit(&vcache_lock);
+			error = vcache_vget(ovp);
+			KASSERT(error == ENOENT);
+			mutex_enter(&vcache_lock);
+		}
+		SLIST_INSERT_HEAD(&vcache_hashtab[hash & vcache_hashmask],
+		    vip, vi_hash);
+		mutex_exit(&vcache_lock);
 	}
-	SLIST_INSERT_HEAD(&vcache_hashtab[hash & vcache_hashmask],
-	    vip, vi_hash);
-	mutex_exit(&vcache_lock);
 	vfs_insmntque(vp, mp);
 	if ((mp->mnt_iflag & IMNT_MPSAFE) != 0)
 		vp->v_vflag |= VV_MPSAFE;
@@ -1414,7 +1416,7 @@ vcache_new(struct mount *mp, struct vnode *dvp, struct vattr *vap,
 	/* Finished loading, finalize node. */
 	mutex_enter(&vcache_lock);
 	mutex_enter(vp->v_interlock);
-	VSTATE_CHANGE(vp, VS_LOADING, VS_ACTIVE);
+	VSTATE_CHANGE(vp, VS_LOADING, VS_LOADED);
 	mutex_exit(&vcache_lock);
 	mutex_exit(vp->v_interlock);
 	*vpp = vp;
@@ -1549,7 +1551,7 @@ vcache_reclaim(vnode_t *vp)
 	 * Prevent the vnode from being recycled or brought into use
 	 * while we clean it out.
 	 */
-	VSTATE_CHANGE(vp, VS_ACTIVE, VS_RECLAIMING);
+	VSTATE_CHANGE(vp, VS_LOADED, VS_RECLAIMING);
 	if (vp->v_iflag & VI_EXECMAP) {
 		atomic_add_int(&uvmexp.execpages, -vp->v_uobj.uo_npages);
 		atomic_add_int(&uvmexp.filepages, vp->v_uobj.uo_npages);
@@ -1563,12 +1565,14 @@ vcache_reclaim(vnode_t *vp)
 	} else {
 		temp_key = temp_buf;
 	}
-	mutex_enter(&vcache_lock);
-	memcpy(temp_key, vip->vi_key.vk_key, temp_key_len);
-	vip->vi_key.vk_key = temp_key;
-	mutex_exit(&vcache_lock);
+	if (vip->vi_key.vk_key_len > 0) {
+		mutex_enter(&vcache_lock);
+		memcpy(temp_key, vip->vi_key.vk_key, temp_key_len);
+		vip->vi_key.vk_key = temp_key;
+		mutex_exit(&vcache_lock);
+	}
 
-	fstrans_start(mp, FSTRANS_SHARED);
+	fstrans_start(mp);
 
 	/*
 	 * Clean out any cached data associated with the vnode.
@@ -1611,13 +1615,15 @@ vcache_reclaim(vnode_t *vp)
 	/* Purge name cache. */
 	cache_purge(vp);
 
+	if (vip->vi_key.vk_key_len > 0) {
 	/* Remove from vnode cache. */
-	hash = vcache_hash(&vip->vi_key);
-	mutex_enter(&vcache_lock);
-	KASSERT(vip == vcache_hash_lookup(&vip->vi_key, hash));
-	SLIST_REMOVE(&vcache_hashtab[hash & vcache_hashmask],
-	    vip, vnode_impl, vi_hash);
-	mutex_exit(&vcache_lock);
+		hash = vcache_hash(&vip->vi_key);
+		mutex_enter(&vcache_lock);
+		KASSERT(vip == vcache_hash_lookup(&vip->vi_key, hash));
+		SLIST_REMOVE(&vcache_hashtab[hash & vcache_hashmask],
+		    vip, vnode_impl, vi_hash);
+		mutex_exit(&vcache_lock);
+	}
 	if (temp_key != temp_buf)
 		kmem_free(temp_key, temp_key_len);
 
@@ -1642,6 +1648,72 @@ vcache_reclaim(vnode_t *vp)
 	mutex_enter(vp->v_interlock);
 	fstrans_done(mp);
 	KASSERT((vp->v_iflag & VI_ONWORKLST) == 0);
+}
+
+/*
+ * Disassociate the underlying file system from an open device vnode
+ * and make it anonymous.
+ *
+ * Vnode unlocked on entry, drops a reference to the vnode.
+ */
+void
+vcache_make_anon(vnode_t *vp)
+{
+	vnode_impl_t *vip = VNODE_TO_VIMPL(vp);
+	uint32_t hash;
+	bool recycle;
+
+	KASSERT(vp->v_type == VBLK || vp->v_type == VCHR);
+	KASSERT((vp->v_mount->mnt_iflag & IMNT_HAS_TRANS) == 0 ||
+	    fstrans_is_owner(vp->v_mount));
+	VSTATE_ASSERT_UNLOCKED(vp, VS_ACTIVE);
+
+	/* Remove from vnode cache. */
+	hash = vcache_hash(&vip->vi_key);
+	mutex_enter(&vcache_lock);
+	KASSERT(vip == vcache_hash_lookup(&vip->vi_key, hash));
+	SLIST_REMOVE(&vcache_hashtab[hash & vcache_hashmask],
+	    vip, vnode_impl, vi_hash);
+	vip->vi_key.vk_mount = dead_rootmount;
+	vip->vi_key.vk_key_len = 0;
+	vip->vi_key.vk_key = NULL;
+	mutex_exit(&vcache_lock);
+
+	/*
+	 * Disassociate the underlying file system from the vnode.
+	 * VOP_INACTIVE leaves the vnode locked; VOP_RECLAIM unlocks
+	 * the vnode, and may destroy the vnode so that VOP_UNLOCK
+	 * would no longer function.
+	 */
+	if (vn_lock(vp, LK_EXCLUSIVE)) {
+		vnpanic(vp, "%s: cannot lock", __func__);
+	}
+	VOP_INACTIVE(vp, &recycle);
+	KASSERT((vp->v_vflag & VV_LOCKSWORK) == 0 ||
+	    VOP_ISLOCKED(vp) == LK_EXCLUSIVE);
+	if (VOP_RECLAIM(vp)) {
+		vnpanic(vp, "%s: cannot reclaim", __func__);
+	}
+
+	/* Purge name cache. */
+	cache_purge(vp);
+
+	/* Done with purge, change operations vector. */
+	mutex_enter(vp->v_interlock);
+	vp->v_op = spec_vnodeop_p;
+	vp->v_vflag |= VV_MPSAFE;
+	vp->v_vflag &= ~VV_LOCKSWORK;
+	mutex_exit(vp->v_interlock);
+
+	/*
+	 * Move to dead mount.  Must be after changing the operations
+	 * vector as vnode operations enter the mount before using the
+	 * operations vector.  See sys/kern/vnode_if.c.
+	 */
+	vfs_ref(dead_rootmount);
+	vfs_insmntque(vp, dead_rootmount);
+
+	vrele(vp);
 }
 
 /*
