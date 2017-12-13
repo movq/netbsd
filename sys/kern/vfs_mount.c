@@ -1,4 +1,4 @@
-/*	$NetBSD: vfs_mount.c,v 1.65 2017/06/01 02:45:13 chs Exp $	*/
+/*	$NetBSD: vfs_mount.c,v 1.65.2.2 2017/08/25 05:46:46 snj Exp $	*/
 
 /*-
  * Copyright (c) 1997-2011 The NetBSD Foundation, Inc.
@@ -67,7 +67,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: vfs_mount.c,v 1.65 2017/06/01 02:45:13 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: vfs_mount.c,v 1.65.2.2 2017/08/25 05:46:46 snj Exp $");
 
 #include <sys/param.h>
 #include <sys/kernel.h>
@@ -319,9 +319,9 @@ _vfs_busy(struct mount *mp, bool wait)
 	KASSERT(mp->mnt_refcnt > 0);
 
 	if (wait) {
-		fstrans_start(mp, FSTRANS_SHARED);
+		fstrans_start(mp);
 	} else {
-		if (fstrans_start_nowait(mp, FSTRANS_SHARED))
+		if (fstrans_start_nowait(mp))
 			return EBUSY;
 	}
 	if (__predict_false((mp->mnt_iflag & IMNT_GONE) != 0)) {
@@ -558,9 +558,16 @@ vflush_one(vnode_t *vp, vnode_t *skipvp, int flags)
 		return 0;
 	/*
 	 * If FORCECLOSE is set, forcibly close the vnode.
+	 * For block or character devices, revert to an
+	 * anonymous device.  For all other files, just
+	 * kill them.
 	 */
 	if (flags & FORCECLOSE) {
-		vgone(vp);
+		if (vp->v_usecount > 1 &&
+		    (vp->v_type == VBLK || vp->v_type == VCHR))
+			vcache_make_anon(vp);
+		else
+			vgone(vp);
 		return 0;
 	}
 	vrele(vp);

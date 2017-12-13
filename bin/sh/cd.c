@@ -1,4 +1,4 @@
-/*	$NetBSD: cd.c,v 1.47 2016/12/26 02:27:57 christos Exp $	*/
+/*	$NetBSD: cd.c,v 1.47.6.2 2017/07/23 14:58:14 snj Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993
@@ -37,7 +37,7 @@
 #if 0
 static char sccsid[] = "@(#)cd.c	8.2 (Berkeley) 5/4/95";
 #else
-__RCSID("$NetBSD: cd.c,v 1.47 2016/12/26 02:27:57 christos Exp $");
+__RCSID("$NetBSD: cd.c,v 1.47.6.2 2017/07/23 14:58:14 snj Exp $");
 #endif
 #endif /* not lint */
 
@@ -80,10 +80,11 @@ int
 cdcmd(int argc, char **argv)
 {
 	const char *dest;
-	const char *path, *p;
+	const char *path, *cp;
+	char *p;
 	char *d;
 	struct stat statb;
-	int print = cdprint;	/* set -cdprint to enable */
+	int print = cdprint;	/* set -o cdprint to enable */
 
 	while (nextopt("P") != '\0')
 		;
@@ -98,46 +99,46 @@ cdcmd(int argc, char **argv)
 		dest = bltinlookup("HOME", 1);
 		if (dest == NULL)
 			error("HOME not set");
-	} else {
-		if (argptr[1]) {
-			/* Do 'ksh' style substitution */
-			if (!curdir)
-				error("PWD not set");
-			p = strstr(curdir, dest);
-			if (!p)
-				error("bad substitution");
-			d = stalloc(strlen(curdir) + strlen(argptr[1]) + 1);
-			memcpy(d, curdir, p - curdir);
-			strcpy(d + (p - curdir), argptr[1]);
-			strcat(d, p + strlen(dest));
-			dest = d;
-			print = 1;
-		}
-	}
-
-	if (dest[0] == '-' && dest[1] == '\0') {
+	} else if (argptr[1]) {
+		/* Do 'ksh' style substitution */
+		if (!curdir)
+			error("PWD not set");
+		p = strstr(curdir, dest);
+		if (!p)
+			error("bad substitution");
+		d = stalloc(strlen(curdir) + strlen(argptr[1]) + 1);
+		memcpy(d, curdir, p - curdir);
+		strcpy(d + (p - curdir), argptr[1]);
+		strcat(d, p + strlen(dest));
+		dest = d;
+		print = 1;
+	} else if (dest[0] == '-' && dest[1] == '\0') {
 		dest = prevdir ? prevdir : curdir;
 		print = 1;
 	}
 	if (*dest == '\0')
 	        dest = ".";
-	p = dest;
-	if (*p == '.' && *++p == '.')
-	    p++;
-	if (*p == 0 || *p == '/' || (path = bltinlookup("CDPATH", 1)) == NULL)
+
+	cp = dest;
+	if (*cp == '.' && *++cp == '.')
+	    cp++;
+	if (*cp == 0 || *cp == '/' || (path = bltinlookup("CDPATH", 1)) == NULL)
 		path = nullstr;
-	while ((p = padvance(&path, dest)) != NULL) {
+	while ((p = padvance(&path, dest, 0)) != NULL) {
+		stunalloc(p);
 		if (stat(p, &statb) >= 0 && S_ISDIR(statb.st_mode)) {
+			int dopr = print;
+
 			if (!print) {
 				/*
 				 * XXX - rethink
 				 */
 				if (p[0] == '.' && p[1] == '/' && p[2] != '\0')
-					print = strcmp(p + 2, dest);
+					dopr = strcmp(p + 2, dest);
 				else
-					print = strcmp(p, dest);
+					dopr = strcmp(p, dest);
 			}
-			if (docd(p, print) >= 0)
+			if (docd(p, dopr) >= 0)
 				return 0;
 
 		}
@@ -155,6 +156,7 @@ cdcmd(int argc, char **argv)
 STATIC int
 docd(const char *dest, int print)
 {
+#if 0		/* no "cd -L" (ever) so all this is just a waste of time ... */
 	char *p;
 	char *q;
 	char *component;
@@ -162,7 +164,7 @@ docd(const char *dest, int print)
 	int first;
 	int badstat;
 
-	TRACE(("docd(\"%s\", %d) called\n", dest, print));
+	CTRACE(DBG_CMDS, ("docd(\"%s\", %d) called\n", dest, print));
 
 	/*
 	 *  Check each component of the path. If we find a symlink or
@@ -195,13 +197,14 @@ docd(const char *dest, int print)
 			break;
 		}
 	}
+#endif
 
 	INTOFF;
 	if (chdir(dest) < 0) {
 		INTON;
 		return -1;
 	}
-	updatepwd(badstat ? NULL : dest);
+	updatepwd(NULL);	/* only do cd -P, no "pretend" -L mode */
 	INTON;
 	if (print && iflag == 1 && curdir)
 		out1fmt("%s\n", curdir);
@@ -402,6 +405,7 @@ find_curdir(int noerror)
 		pwd = stalloc(i);
 		if (getcwd(pwd, i) != NULL) {
 			curdir = savestr(pwd);
+			stunalloc(pwd);
 			return;
 		}
 		stunalloc(pwd);
@@ -452,6 +456,7 @@ find_curdir(int noerror)
 		p[-1] = '\0';
 		INTON;
 		curdir = savestr(pwd);
+		stunalloc(pwd);
 		return;
 	}
 #endif

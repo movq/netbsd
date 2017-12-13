@@ -1,4 +1,4 @@
-/*	$NetBSD: locore.S,v 1.145 2017/02/02 19:12:09 maxv Exp $	*/
+/*	$NetBSD: locore.S,v 1.145.6.2 2017/09/09 17:29:40 snj Exp $	*/
 
 /*
  * Copyright-o-rama!
@@ -128,7 +128,7 @@
  */
 
 #include <machine/asm.h>
-__KERNEL_RCSID(0, "$NetBSD: locore.S,v 1.145 2017/02/02 19:12:09 maxv Exp $");
+__KERNEL_RCSID(0, "$NetBSD: locore.S,v 1.145.6.2 2017/09/09 17:29:40 snj Exp $");
 
 #include "opt_compat_oldboot.h"
 #include "opt_copy_symtab.h"
@@ -343,11 +343,13 @@ _C_LABEL(Multiboot_Header):
 	jne	1f
 
 	/*
-	 * Indeed, a multiboot-compliant boot loader executed us.  We copy
-	 * the received Multiboot information structure into kernel's data
-	 * space to process it later -- after we are relocated.  It will
-	 * be safer to run complex C code than doing it at this point.
+	 * Indeed, a multiboot-compliant boot loader executed us. We switch
+	 * to the temporary stack, and copy the received Multiboot information
+	 * structure into kernel's data space to process it later -- after we
+	 * are relocated. It will be safer to run complex C code than doing it
+	 * at this point.
 	 */
+	movl	$_RELOC(tmpstk),%esp
 	pushl	%ebx		/* Address of Multiboot information */
 	call	_C_LABEL(multiboot_pre_reloc)
 	addl	$4,%esp
@@ -842,24 +844,6 @@ begin:
 	addl	$PDE_SIZE,%esp		/* pop paddr_t */
 	addl	$NGDT*8,%esp		/* pop temporary gdt */
 
-#ifdef SAFARI_FIFO_HACK
-	movb	$5,%al
-	movw	$0x37b,%dx
-	outb	%al,%dx
-	movw	$0x37f,%dx
-	inb	%dx,%al
-	movb	%al,%cl
-
-	orb	$1,%cl
-
-	movb	$5,%al
-	movw	$0x37b,%dx
-	outb	%al,%dx
-	movw	$0x37f,%dx
-	movb	%cl,%al
-	outb	%al,%dx
-#endif /* SAFARI_FIFO_HACK */
-
 	call 	_C_LABEL(main)
 #else /* XEN */
 	/* First, reset the PSL. */
@@ -1239,30 +1223,12 @@ ENTRY(savectx)
 END(savectx)
 
 /*
- * osyscall()
- *
- * Old call gate entry for syscall
- */
-IDTVEC(osyscall)
-#ifndef XEN
-	/* XXX we are in trouble! interrupts be off here. */
-	cli			/* must be first instruction */
-#endif
-	pushfl			/* set eflags in trap frame */
-	popl	8(%esp)
-	orl	$PSL_I,8(%esp)	/* re-enable ints on return to user */
-	pushl	$7		/* size of instruction for restart */
-	jmp	syscall1
-IDTVEC_END(osyscall)
-
-/*
  * syscall()
  *
  * Trap gate entry for syscall
  */
 IDTVEC(syscall)
 	pushl	$2		/* size of instruction for restart */
-syscall1:
 	pushl	$T_ASTFLT	/* trap # for doing ASTs */
 	INTRENTRY
 	STI(%eax)

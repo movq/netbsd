@@ -1,4 +1,4 @@
-#	$NetBSD: GENERIC,v 1.73 2017/04/03 00:11:45 sevan Exp $
+#	$NetBSD: GENERIC,v 1.73.6.2 2017/08/29 09:42:19 martin Exp $
 #
 # GENERIC machine description file
 #

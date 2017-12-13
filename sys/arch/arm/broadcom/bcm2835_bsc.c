@@ -1,4 +1,4 @@
-/*	$NetBSD: bcm2835_bsc.c,v 1.5 2015/01/24 00:27:31 jakllsch Exp $	*/
+/*	$NetBSD: bcm2835_bsc.c,v 1.5.10.2 2017/11/02 21:29:51 snj Exp $	*/
 
 /*
  * Copyright (c) 2012 Jonathan A. Kollasch
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: bcm2835_bsc.c,v 1.5 2015/01/24 00:27:31 jakllsch Exp $");
+__KERNEL_RCSID(0, "$NetBSD: bcm2835_bsc.c,v 1.5.10.2 2017/11/02 21:29:51 snj Exp $");
 
 #include <sys/param.h>
 #include <sys/bus.h>
@@ -99,8 +99,10 @@ bsciic_attach(device_t parent, device_t self, void *aux)
 {
 	struct bsciic_softc * const sc = device_private(self);
 	struct amba_attach_args * const aaa = aux;
+	prop_dictionary_t prop = device_properties(self);
 	struct i2cbus_attach_args iba;
 	u_int bscunit = ~0;
+	bool disable = false;
 	static ONCE_DECL(control);
 
 	switch (aaa->aaa_addr) {
@@ -110,6 +112,13 @@ bsciic_attach(device_t parent, device_t self, void *aux)
 	case BCM2835_BSC1_BASE:
 		bscunit = 1;
 		break;
+	}
+
+	prop_dictionary_get_bool(prop, "disable", &disable);
+	if (disable) {
+		aprint_naive(": disabled\n");
+		aprint_normal(": disabled\n");
+		return;
 	}
 
 	aprint_naive("\n");
@@ -167,7 +176,7 @@ bsciic_dump_regs(struct bsciic_softc * const sc)
 	KERNHIST_FUNC(__func__);
 	KERNHIST_CALLED(bsciichist);
 
-	KERNHIST_LOG(bsciichist, "C %08x S %08x D %08x A %08x",
+	KERNHIST_LOG(bsciichist, "C %08jx S %08jx D %08jx A %08jx",
 	    bus_space_read_4(sc->sc_iot, sc->sc_ioh, BSC_C),
 	    bus_space_read_4(sc->sc_iot, sc->sc_ioh, BSC_S),
 	    bus_space_read_4(sc->sc_iot, sc->sc_ioh, BSC_DLEN),
@@ -256,13 +265,14 @@ bsciic_exec(void *v, i2c_op_t op, i2c_addr_t addr, const void *cmdbuf,
 	} while ((s & BSC_S_TA) == 0);
 
 flood_again:
-	KERNHIST_LOG(bsciichist, "flood top %p %zu", buf, len, 0, 0);
+	KERNHIST_LOG(bsciichist, "flood top %#jx %ju",
+	    (uintptr_t)buf, len, 0, 0);
 	j = 10000000;
 	for (pos = 0; pos < len; ) {
 		if (--j == 0)
 			return -1;
 		s = bus_space_read_4(sc->sc_iot, sc->sc_ioh, BSC_S);
-		KERNHIST_LOG(bsciichist, "w s %08x", s, 0, 0, 0);
+		KERNHIST_LOG(bsciichist, "w s %08jx", s, 0, 0, 0);
 		if ((s & BSC_S_CLKT) != 0) {
 			error = EIO;
 			goto done;
@@ -276,11 +286,13 @@ flood_again:
 		if ((s & BSC_S_TXD) == 0)
 			continue;
 		bus_space_write_4(sc->sc_iot, sc->sc_ioh, BSC_FIFO, buf[pos]);
-		KERNHIST_LOG(bsciichist, "w %p %p %02x", buf, &buf[pos],
+		KERNHIST_LOG(bsciichist, "w %#jx %#jx %02jx",
+		    (uintptr_t)buf, (uintptr_t)&buf[pos],
 		    buf[pos], 0);
 		pos++;
 	}
-	KERNHIST_LOG(bsciichist, "flood bot %p %zu", buf, len, 0, 0);
+	KERNHIST_LOG(bsciichist, "flood bot %#jx %ju",
+	    (uintptr_t)buf, len, 0, 0);
 
 	if (buf == cmdbuf && !isread) {
 		buf = databuf;
@@ -321,13 +333,14 @@ only_read:
 		s = bus_space_read_4(sc->sc_iot, sc->sc_ioh, BSC_S);
 	} while ((s & BSC_S_TA) == 0);
 
-	KERNHIST_LOG(bsciichist, "drain top %p %zu", buf, len, 0, 0);
+	KERNHIST_LOG(bsciichist, "drain top %#jx %ju",
+	    (uintptr_t)buf, len, 0, 0);
 	j = 10000000;
 	for (pos = 0; pos < len; ) {
 		if (--j == 0)
 			return -1;
 		s = bus_space_read_4(sc->sc_iot, sc->sc_ioh, BSC_S);
-		KERNHIST_LOG(bsciichist, "r s %08x", s, 0, 0, 0);
+		KERNHIST_LOG(bsciichist, "r s %08jx", s, 0, 0, 0);
 		if ((s & BSC_S_CLKT) != 0) {
 			error = EIO;
 			goto done;
@@ -342,11 +355,13 @@ only_read:
 			continue;
 		j = 10000000;
 		buf[pos] = bus_space_read_4(sc->sc_iot, sc->sc_ioh, BSC_FIFO);
-		KERNHIST_LOG(bsciichist, "r %p %p %02x", buf, &buf[pos],
+		KERNHIST_LOG(bsciichist, "r %#jx %#jx %02jx",
+		    (uintptr_t)buf, (uintptr_t)&buf[pos],
 		    buf[pos], 0);
 		pos++;
 	}
-	KERNHIST_LOG(bsciichist, "drain bot %p %zu", buf, len, 0, 0);
+	KERNHIST_LOG(bsciichist, "drain bot %#jx %ju", (uintptr_t)buf, len,
+	    0, 0);
 
 	do {
 		s = bus_space_read_4(sc->sc_iot, sc->sc_ioh, BSC_S);

@@ -1,4 +1,4 @@
-/*	$NetBSD: pthread_attr.c,v 1.16 2012/03/02 18:06:05 joerg Exp $	*/
+/*	$NetBSD: pthread_attr.c,v 1.16.24.2 2017/10/01 16:37:57 snj Exp $	*/
 
 /*-
  * Copyright (c) 2001, 2002, 2003, 2008 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: pthread_attr.c,v 1.16 2012/03/02 18:06:05 joerg Exp $");
+__RCSID("$NetBSD: pthread_attr.c,v 1.16.24.2 2017/10/01 16:37:57 snj Exp $");
 
 #include <errno.h>
 #include <stdio.h>
@@ -58,11 +58,12 @@ pthread__attr_init_private(pthread_attr_t *attr)
 	if ((p = attr->pta_private) != NULL)
 		return p;
 
-	p = malloc(sizeof(*p));
+	p = calloc(1, sizeof(*p));
 	if (p != NULL) {
-		memset(p, 0, sizeof(*p));
 		attr->pta_private = p;
 		p->ptap_policy = SCHED_OTHER;
+		p->ptap_stacksize = pthread__stacksize;
+		p->ptap_guardsize = pthread__guardsize;
 	}
 	return p;
 }
@@ -107,7 +108,7 @@ pthread_attr_get_np(pthread_t thread, pthread_attr_t *attr)
 	p->ptap_namearg = thread->pt_name;
 	p->ptap_stackaddr = thread->pt_stack.ss_sp;
 	p->ptap_stacksize = thread->pt_stack.ss_size;
-	p->ptap_guardsize = pthread__pagesize;
+	p->ptap_guardsize = thread->pt_guardsize;
 	return pthread_getschedparam(thread, &p->ptap_policy, &p->ptap_sp);
 }
 
@@ -150,7 +151,7 @@ pthread_attr_getguardsize(const pthread_attr_t *attr, size_t *guard)
 	struct pthread_attr_private *p;
 
 	if ((p = attr->pta_private) == NULL)
-		*guard = (size_t)sysconf(_SC_PAGESIZE);
+		*guard = pthread__guardsize;
 	else
 		*guard = p->ptap_guardsize;
 

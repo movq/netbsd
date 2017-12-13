@@ -1,4 +1,4 @@
-# $NetBSD: GENERIC,v 1.198 2017/03/25 13:24:08 martin Exp $
+# $NetBSD: GENERIC,v 1.198.6.3 2017/08/31 08:41:33 bouyer Exp $
 #
 # GENERIC machine description file
 #
@@ -22,7 +22,7 @@ include 	"arch/sparc64/conf/std.sparc64"
 
 options 	INCLUDE_CONFIG_FILE	# embed config file in kernel binary
 
-#ident		"GENERIC-$Revision: 1.198 $"
+#ident		"GENERIC-$Revision: 1.198.6.3 $"
 
 maxusers	64
 
@@ -149,8 +149,8 @@ options 	COMPAT_50	# NetBSD 5.0,
 options 	COMPAT_60	# NetBSD 6.0, and
 options 	COMPAT_70	# NetBSD 7.0 binary compatibility.
 options 	COMPAT_SUNOS	# SunOS 4.x binary compatibility
-options 	COMPAT_SVR4	# SunOS 5.x binary compatibility
-options 	COMPAT_SVR4_32	# SunOS 5.x 32-bit binary compatibility -- 64-bit only
+#options 	COMPAT_SVR4	# SunOS 5.x binary compatibility
+#options 	COMPAT_SVR4_32	# SunOS 5.x 32-bit binary compatibility -- 64-bit only
 options 	COMPAT_NETBSD32	# NetBSD/sparc binary compatibility -- 64-bit only
 options 	EXEC_AOUT	# execve(2) support for a.out binaries
 options 	EXEC_ELF32	# Exec module for SunOS 5.x binaries.
@@ -1029,7 +1029,7 @@ pseudo-device	nsmb		# experimental - SMB requester
 # drvctl - needed to show device dictionary via drvctl(8)
 pseudo-device	drvctl
 
-options 	PAX_ASLR_DEBUG=1	# PaX ASLR debug
+#options 	PAX_ASLR_DEBUG=1	# PaX ASLR debug
 options 	PAX_SEGVGUARD=0		# PaX Segmentation fault guard
 # XXX: there is no PLT format for sparc64 that cooperates with
 # MPROTECT, so disable it for now

@@ -1,4 +1,4 @@
-/*	$NetBSD: vmparam.h,v 1.57 2016/11/22 11:01:50 skrll Exp $	*/
+/*	$NetBSD: vmparam.h,v 1.57.8.2 2017/09/11 05:20:26 snj Exp $	*/
 
 /*
  * Copyright (c) 1988 University of Utah.
@@ -185,12 +185,12 @@
 #define __USE_TOPDOWN_VM
 
 #define VM_DEFAULT_ADDRESS_TOPDOWN(da, sz) \
-    trunc_page(USRSTACK - MAXSSIZ - (sz))
+    trunc_page(USRSTACK - MAXSSIZ - (sz) - user_stack_guard_size)
 #define VM_DEFAULT_ADDRESS_BOTTOMUP(da, sz) \
     round_page((vaddr_t)(da) + (vsize_t)maxdmap)
 
 #define VM_DEFAULT_ADDRESS32_TOPDOWN(da, sz) \
-    trunc_page(USRSTACK32 - MAXSSIZ32 - (sz))
+    trunc_page(USRSTACK32 - MAXSSIZ32 - (sz) - user_stack_guard_size)
 #define VM_DEFAULT_ADDRESS32_BOTTOMUP(da, sz) \
     round_page((vaddr_t)(da) + (vsize_t)MAXDSIZ32)
 
@@ -208,8 +208,6 @@
 #endif
 
 #ifdef _KERNEL
-#define	UVM_KM_VMFREELIST	mips_poolpage_vmfreelist
-extern int mips_poolpage_vmfreelist;
 #ifdef ENABLE_MIPS_16KB_PAGE
 extern vaddr_t mips_vm_maxuser_address;
 #endif

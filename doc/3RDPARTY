@@ -1,4 +1,4 @@
-#	$NetBSD: 3RDPARTY,v 1.1444 2017/05/31 14:18:36 wiz Exp $
+#	$NetBSD: 3RDPARTY,v 1.1444.2.5 2017/11/02 21:02:06 snj Exp $
 #
 # This file contains a list of the software that has been integrated into
 # NetBSD where we are not the primary maintainer.
@@ -114,8 +114,8 @@ Notes:
 bc includes dc, both of which are in the NetBSD tree.
 
 Package:	bind [named and utils]
-Version:	9.10.4-P8/BSD	9.11.0-P3/MPL
-Current Vers:	9.10.4-P8/BSD
+Version:	9.10.5-P1/BSD	9.11.1-P1/MPL
+Current Vers:	9.10.5-P1/BSD
 Maintainer:	Paul Vixie <vixie@vix.com>
 Archive Site:	ftp://ftp.isc.org/isc/bind9/
 Home Page:	http://www.isc.org/software/bind/
@@ -225,8 +225,8 @@ is a FreeBSD committer who has been helpful with incorporating changes
 in the past.
 
 Package:	byacc
-Version:	20170201
-Current Vers:	20170201
+Version:	20170430
+Current Vers:	20170430
 Maintainer:	Thomas Dickey <dickey@invisible-island.net>
 Archive Site:	http://www.invisible-island.net/byacc/byacc.html
 Home Page:	http://www.invisible-island.net/byacc/byacc.html
@@ -412,8 +412,8 @@ Location:	external/bsd/ekermit
 Notes:
 
 Package:	expat
-Version:	2.2.0
-Current Vers:	2.2.0
+Version:	2.2.1
+Current Vers:	2.2.1
 Maintainer:	Expat Project
 Archive Site:	http://sourceforge.net/projects/expat/files/expat/
 Home Page:	http://www.libexpat.org/
@@ -1411,8 +1411,8 @@ Notes:
 Added changes from a5 -> a12 manually.
 
 Package:	tz
-Version:	tzcode2017b / tzdata2017b
-Current Vers:	tzcode2017b / tzdata2017b
+Version:	tzcode2017b / tzdata2017c
+Current Vers:	tzcode2017c / tzdata2017c
 Maintainer:	Paul Eggert <eggert@cs.ucla.edu>
 Archive Site:	ftp://ftp.iana.org/tz/releases/
 Archive Site:	ftp://munnari.oz.au/pub/oldtz/
@@ -1702,3 +1702,14 @@ Responsible:	christos
 Location:	usr.bin/dc
 Notes:
 		Uses OpenSSL's bignum
+
+Package:	dts
+Version:	4.11.5
+Current Vers:	4.11.5
+Maintainer:	https://www.kernel.org/
+Archive Site:	https://cdn.kernel.org/pub/linux/kernel/v4.x/
+Home Page:	https://www.kernel.org/
+Mailing List:	mailto:devicetree@vger.kernel.org
+Responsible:	jmcneill
+License:	GPLv2 and dual GPLv2/X11 license
+Location:	sys/external/gpl2/dts

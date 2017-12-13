@@ -1,4 +1,4 @@
-/*	$NetBSD: icmp6.c,v 1.211 2017/03/14 04:24:04 ozaki-r Exp $	*/
+/*	$NetBSD: icmp6.c,v 1.211.6.2 2017/10/21 19:43:54 snj Exp $	*/
 /*	$KAME: icmp6.c,v 1.217 2001/06/20 15:03:29 jinmei Exp $	*/
 
 /*
@@ -62,7 +62,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: icmp6.c,v 1.211 2017/03/14 04:24:04 ozaki-r Exp $");
+__KERNEL_RCSID(0, "$NetBSD: icmp6.c,v 1.211.6.2 2017/10/21 19:43:54 snj Exp $");
 
 #ifdef _KERNEL_OPT
 #include "opt_inet.h"
@@ -104,6 +104,9 @@ __KERNEL_RCSID(0, "$NetBSD: icmp6.c,v 1.211 2017/03/14 04:24:04 ozaki-r Exp $");
 
 #ifdef IPSEC
 #include <netipsec/ipsec.h>
+#include <netipsec/ipsec_var.h>
+#include <netipsec/ipsec_private.h>
+#include <netipsec/ipsec6.h>
 #include <netipsec/key.h>
 #endif
 
@@ -492,6 +495,15 @@ _icmp6_input(struct mbuf *m, int off, int proto)
 		ICMP6_STATINC(ICMP6_STAT_TOOSHORT);
 		icmp6_ifstat_inc(rcvif, ifs6_in_error);
 		goto freeit;
+	}
+
+	if (m->m_len < sizeof(struct ip6_hdr)) {
+		m = m_pullup(m, sizeof(struct ip6_hdr));
+		if (m == NULL) {
+			ICMP6_STATINC(ICMP6_STAT_TOOSHORT);
+			icmp6_ifstat_inc(rcvif, ifs6_in_error);
+			goto freeit;
+		}
 	}
 
 	ip6 = mtod(m, struct ip6_hdr *);
@@ -1996,6 +2008,12 @@ icmp6_rip6_input(struct mbuf **mp, int off)
 			continue;
 		if (last) {
 			struct	mbuf *n;
+#ifdef IPSEC
+			/*
+			 * Check AH/ESP integrity
+			 */
+			if (ipsec_used && !ipsec6_in_reject(m, last))
+#endif /* IPSEC */
 			if ((n = m_copy(m, 0, (int)M_COPYALL)) != NULL) {
 				if (last->in6p_flags & IN6P_CONTROLOPTS)
 					ip6_savecontrol(last, &opts, ip6, n);
@@ -2014,6 +2032,20 @@ icmp6_rip6_input(struct mbuf **mp, int off)
 		}
 		last = in6p;
 	}
+#ifdef IPSEC
+	if (ipsec_used && last && ipsec6_in_reject(m, last)) {
+		m_freem(m);
+		/*
+		 * XXX ipsec6_in_reject update stat if there is an error
+		 * so we just need to update stats by hand in the case of last is
+		 * NULL
+		 */
+		if (!last)
+			IPSEC6_STATINC(IPSEC_STAT_IN_POLVIO);
+			IP6_STATDEC(IP6_STAT_DELIVERED);
+			/* do not inject data into pcb */
+		} else
+#endif /* IPSEC */
 	if (last) {
 		if (last->in6p_flags & IN6P_CONTROLOPTS)
 			ip6_savecontrol(last, &opts, ip6, m);

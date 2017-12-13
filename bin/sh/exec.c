@@ -1,4 +1,4 @@
-/*	$NetBSD: exec.c,v 1.47 2017/05/15 19:55:20 kre Exp $	*/
+/*	$NetBSD: exec.c,v 1.47.2.2 2017/07/23 14:58:14 snj Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993
@@ -37,7 +37,7 @@
 #if 0
 static char sccsid[] = "@(#)exec.c	8.4 (Berkeley) 6/8/95";
 #else
-__RCSID("$NetBSD: exec.c,v 1.47 2017/05/15 19:55:20 kre Exp $");
+__RCSID("$NetBSD: exec.c,v 1.47.2.2 2017/07/23 14:58:14 snj Exp $");
 #endif
 #endif /* not lint */
 
@@ -91,6 +91,8 @@ struct tblentry {
 	union param param;	/* definition of builtin function */
 	short cmdtype;		/* index identifying command */
 	char rehash;		/* if set, cd done since entry created */
+	char fn_ln1;		/* for functions, LINENO from 1 */
+	int lineno;		/* for functions abs LINENO of definition */
 	char cmdname[ARB];	/* name of command */
 };
 
@@ -130,7 +132,7 @@ shellexec(char **argv, char **envp, const char *path, int idx, int vforked)
 		e = errno;
 	} else {
 		e = ENOENT;
-		while ((cmdname = padvance(&path, argv[0])) != NULL) {
+		while ((cmdname = padvance(&path, argv[0], 1)) != NULL) {
 			if (--idx < 0 && pathopt == NULL) {
 				tryexec(cmdname, argv, envp, vforked);
 				if (errno != ENOENT && errno != ENOTDIR)
@@ -142,18 +144,28 @@ shellexec(char **argv, char **envp, const char *path, int idx, int vforked)
 
 	/* Map to POSIX errors */
 	switch (e) {
-	case EACCES:
+	case EACCES:	/* particularly this (unless no search perm) */
+		/*
+		 * should perhaps check if this EACCES is an exec()
+		 * EACESS or a namei() EACESS - the latter should be 127
+		 * - but not today
+		 */
+	case EINVAL:	/* also explicitly these */
+	case ENOEXEC:
+	default:	/* and anything else */
 		exerrno = 126;
 		break;
-	case ENOENT:
+
+	case ENOENT:	/* these are the "pathname lookup failed" errors */
+	case ELOOP:
+	case ENOTDIR:
+	case ENAMETOOLONG:
 		exerrno = 127;
 		break;
-	default:
-		exerrno = 2;
-		break;
 	}
-	TRACE(("shellexec failed for %s, errno %d, vforked %d, suppressint %d\n",
-		argv[0], e, vforked, suppressint ));
+	CTRACE(DBG_ERRS|DBG_CMDS|DBG_EVAL,
+	    ("shellexec failed for %s, errno %d, vforked %d, suppressint %d\n",
+		argv[0], e, vforked, suppressint));
 	exerror(EXEXEC, "%s: %s", argv[0], errmsg(e, E_EXEC));
 	/* NOTREACHED */
 }
@@ -184,7 +196,7 @@ tryexec(char *cmd, char **argv, char **envp, int vforked)
 			exraise(EXSHELLPROC);
 		}
 #ifdef DEBUG
-		TRACE(("execve(cmd=%s) returned ENOEXEC\n", cmd));
+		VTRACE(DBG_CMDS, ("execve(cmd=%s) returned ENOEXEC\n", cmd));
 #endif
 		initshellproc();
 		setinputfile(cmd, 0);
@@ -296,7 +308,7 @@ break2:;
 const char *pathopt;
 
 char *
-padvance(const char **path, const char *name)
+padvance(const char **path, const char *name, int magic_percent)
 {
 	const char *p;
 	char *q;
@@ -305,8 +317,12 @@ padvance(const char **path, const char *name)
 
 	if (*path == NULL)
 		return NULL;
+	if (magic_percent)
+		magic_percent = '%';
+
 	start = *path;
-	for (p = start ; *p && *p != ':' && *p != '%' ; p++);
+	for (p = start ; *p && *p != ':' && *p != magic_percent ; p++)
+		;
 	len = p - start + strlen(name) + 2;	/* "2" is for '/' and '\0' */
 	while (stackblocksize() < len)
 		growstackblock();
@@ -314,21 +330,22 @@ padvance(const char **path, const char *name)
 	if (p != start) {
 		memcpy(q, start, p - start);
 		q += p - start;
-		*q++ = '/';
+		if (q[-1] != '/')
+			*q++ = '/';
 	}
 	strcpy(q, name);
 	pathopt = NULL;
-	if (*p == '%') {
+	if (*p == magic_percent) {
 		pathopt = ++p;
-		while (*p && *p != ':')  p++;
+		while (*p && *p != ':')
+			p++;
 	}
 	if (*p == ':')
 		*path = p + 1;
 	else
 		*path = NULL;
-	return stalloc(len);
+	return grabstackstr(q + strlen(name) + 1);
 }
-
 
 
 /*** Command hashing code ***/
@@ -441,7 +458,7 @@ printentry(struct tblentry *cmdp, int verbose)
 		idx = cmdp->param.index;
 		path = pathval();
 		do {
-			name = padvance(&path, cmdp->cmdname);
+			name = padvance(&path, cmdp->cmdname, 1);
 			stunalloc(name);
 		} while (--idx >= 0);
 		if (verbose)
@@ -574,7 +591,7 @@ find_command(char *name, struct cmdentry *entry, int act, const char *path)
 	e = ENOENT;
 	idx = -1;
 loop:
-	while ((fullname = padvance(&path, name)) != NULL) {
+	while ((fullname = padvance(&path, name, 1)) != NULL) {
 		stunalloc(fullname);
 		idx++;
 		if (pathopt) {
@@ -593,7 +610,8 @@ loop:
 		if (fullname[0] == '/' && idx <= prev) {
 			if (idx < prev)
 				goto loop;
-			TRACE(("searchexec \"%s\": no change\n", name));
+			VTRACE(DBG_CMDS, ("searchexec \"%s\": no change\n",
+			    name));
 			goto success;
 		}
 		while (stat(fullname, &statb) < 0) {
@@ -609,14 +627,17 @@ loop:
 		if (!S_ISREG(statb.st_mode))
 			goto loop;
 		if (pathopt) {		/* this is a %func directory */
+			char *endname;
+
 			if (act & DO_NOFUNC)
 				goto loop;
-			stalloc(strlen(fullname) + 1);
+			endname = fullname + strlen(fullname) + 1;
+			grabstackstr(endname);
 			readcmdfile(fullname);
 			if ((cmdp = cmdlookup(name, 0)) == NULL ||
 			    cmdp->cmdtype != CMDFUNCTION)
 				error("%s not defined in %s", name, fullname);
-			stunalloc(fullname);
+			ungrabstackstr(fullname, endname);
 			goto success;
 		}
 #ifdef notdef
@@ -633,10 +654,15 @@ loop:
 				goto loop;
 		}
 #endif
-		TRACE(("searchexec \"%s\" returns \"%s\"\n", name, fullname));
+		VTRACE(DBG_CMDS, ("searchexec \"%s\" returns \"%s\"\n", name,
+		    fullname));
 		INTOFF;
 		if (act & DO_ALTPATH) {
+		/*
+		 * this should be a grabstackstr() but is not needed:
+		 * fullname is no longer needed for anything
 			stalloc(strlen(fullname) + 1);
+		 */
 			cmdp = &loc_cmd;
 		} else
 			cmdp = cmdlookup(name, 1);
@@ -670,6 +696,8 @@ success:
 	if (cmdp) {
 		cmdp->rehash = 0;
 		entry->cmdtype = cmdp->cmdtype;
+		entry->lineno = cmdp->lineno;
+		entry->lno_frel = cmdp->fn_ln1;
 		entry->u = cmdp->param;
 	} else
 		entry->cmdtype = CMDUNKNOWN;
@@ -965,6 +993,8 @@ addcmdentry(char *name, struct cmdentry *entry)
 			freefunc(cmdp->param.func);
 		}
 		cmdp->cmdtype = entry->cmdtype;
+		cmdp->lineno = entry->lineno;
+		cmdp->fn_ln1 = entry->lno_frel;
 		cmdp->param = entry->u;
 	}
 	INTON;
@@ -976,12 +1006,14 @@ addcmdentry(char *name, struct cmdentry *entry)
  */
 
 void
-defun(char *name, union node *func)
+defun(char *name, union node *func, int lineno)
 {
 	struct cmdentry entry;
 
 	INTOFF;
 	entry.cmdtype = CMDFUNCTION;
+	entry.lineno = lineno;
+	entry.lno_frel = fnline1;
 	entry.u.func = copyfunc(func);
 	addcmdentry(name, &entry);
 	INTON;
@@ -1075,7 +1107,7 @@ typecmd(int argc, char **argv)
 				char *name;
 				int j = entry.u.index;
 				do {
-					name = padvance(&path, arg);
+					name = padvance(&path, arg, 1);
 					stunalloc(name);
 				} while (--j >= 0);
 				if (!v_flag)

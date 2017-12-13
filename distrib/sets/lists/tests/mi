@@ -1,4 +1,4 @@
-# $NetBSD: mi,v 1.752 2017/06/01 15:45:02 perseant Exp $
+# $NetBSD: mi,v 1.752.2.5 2017/10/24 08:55:55 snj Exp $
 #
 # Note: don't delete entries from here - mark them as "obsolete" instead.
 #
@@ -1588,6 +1588,7 @@
 ./usr/tests/include/sys/t_bitops		tests-include-tests	compattestfile,atf
 ./usr/tests/include/sys/t_bootblock		tests-include-tests	compattestfile,atf
 ./usr/tests/include/sys/t_cdefs			tests-include-tests	compattestfile,atf
+./usr/tests/include/sys/t_list			tests-include-tests	compattestfile,atf
 ./usr/tests/include/sys/t_pslist		tests-include-tests	compattestfile,atf
 ./usr/tests/include/sys/t_socket		tests-include-tests	atf,rump
 ./usr/tests/include/sys/t_tree			tests-include-tests	compattestfile,atf
@@ -2549,6 +2550,7 @@
 ./usr/tests/lib/libc/locale/t_mbstowcs		tests-lib-tests		compattestfile,atf
 ./usr/tests/lib/libc/locale/t_mbtowc		tests-lib-tests		compattestfile,atf
 ./usr/tests/lib/libc/locale/t_sprintf		tests-lib-tests		compattestfile,atf
+./usr/tests/lib/libc/locale/t_strfmon		tests-lib-tests		compattestfile,atf
 ./usr/tests/lib/libc/locale/t_toupper		tests-lib-tests		compattestfile,atf
 ./usr/tests/lib/libc/locale/t_wcscspn		tests-lib-tests		compattestfile,atf
 ./usr/tests/lib/libc/locale/t_wcspbrk		tests-lib-tests		compattestfile,atf
@@ -3043,6 +3045,7 @@
 ./usr/tests/lib/libpthread/h_cancel		tests-lib-tests		compattestfile,atf
 ./usr/tests/lib/libpthread/h_exit		tests-lib-tests		compattestfile,atf
 ./usr/tests/lib/libpthread/h_resolv		tests-lib-tests		compattestfile,atf
+./usr/tests/lib/libpthread/h_thread_local_dtor	tests-lib-tests		compattestfile,atf
 ./usr/tests/lib/libpthread/t_atexit		tests-lib-tests		compattestfile,atf
 ./usr/tests/lib/libpthread/t_barrier		tests-lib-tests		compattestfile,atf
 ./usr/tests/lib/libpthread/t_cancel		tests-lib-tests		compattestfile,atf
@@ -3068,6 +3071,7 @@
 ./usr/tests/lib/libpthread/t_sleep		tests-lib-tests		compattestfile,atf
 ./usr/tests/lib/libpthread/t_status		tests-obsolete		obsolete
 ./usr/tests/lib/libpthread/t_swapcontext	tests-lib-tests		compattestfile,atf
+./usr/tests/lib/libpthread/t_thread_local_dtor	tests-lib-tests		compattestfile,atf
 ./usr/tests/lib/libpthread/t_timedmutex		tests-lib-tests		compattestfile,atf
 ./usr/tests/lib/libpthread_dbg			tests-obsolete		obsolete
 ./usr/tests/lib/libpthread_dbg/Atffile		tests-obsolete		obsolete
@@ -3205,6 +3209,7 @@
 ./usr/tests/libexec/ld.elf_so/h_helper_symver_dso2	tests-libexec-tests	compattestfile,atf
 ./usr/tests/libexec/ld.elf_so/h_ifunc		tests-libexec-tests	compattestfile,atf,pic
 ./usr/tests/libexec/ld.elf_so/h_locking		tests-libexec-tests	compattestfile,atf,pic
+./usr/tests/libexec/ld.elf_so/h_thread_local_dtor	tests-libexec-tests	compattestfile,atf,pic
 ./usr/tests/libexec/ld.elf_so/t_df_1_noopen	tests-libexec-tests	compattestfile,atf,pic
 ./usr/tests/libexec/ld.elf_so/t_dl_symver	tests-libexec-tests	compattestfile,atf,pic
 ./usr/tests/libexec/ld.elf_so/t_dlerror-cleared	tests-libexec-tests	compattestfile,atf,pic
@@ -3212,6 +3217,7 @@
 ./usr/tests/libexec/ld.elf_so/t_dlinfo		tests-libexec-tests	compattestfile,atf,pic
 ./usr/tests/libexec/ld.elf_so/t_dlvsym		tests-libexec-tests	compattestfile,atf,pic
 ./usr/tests/libexec/ld.elf_so/t_ifunc		tests-libexec-tests	compattestfile,atf,pic
+./usr/tests/libexec/ld.elf_so/t_thread_local_dtor	tests-libexec-tests	compattestfile,atf,pic
 ./usr/tests/modules				tests-sys-tests		compattestfile,atf
 ./usr/tests/net					tests-net-tests		compattestfile,atf
 ./usr/tests/net/Atffile				tests-net-tests		compattestfile,atf
@@ -3315,9 +3321,12 @@
 ./usr/tests/net/ipsec/t_ipsec_gif		tests-net-tests		atf,rump
 ./usr/tests/net/ipsec/t_ipsec_l2tp		tests-net-tests		atf,rump
 ./usr/tests/net/ipsec/t_ipsec_misc		tests-net-tests		atf,rump
+./usr/tests/net/ipsec/t_ipsec_sockopt		tests-net-tests		atf,rump
 ./usr/tests/net/ipsec/t_ipsec_sysctl		tests-net-tests		atf,rump
+./usr/tests/net/ipsec/t_ipsec_tcp		tests-net-tests		atf,rump
 ./usr/tests/net/ipsec/t_ipsec_transport		tests-net-tests		atf,rump
 ./usr/tests/net/ipsec/t_ipsec_tunnel		tests-net-tests		atf,rump
+./usr/tests/net/ipsec/t_ipsec_tunnel_ipcomp	tests-net-tests		atf,rump
 ./usr/tests/net/ipsec/t_ipsec_tunnel_odd	tests-net-tests		atf,rump
 ./usr/tests/net/mcast				tests-net-tests		compattestfile,atf
 ./usr/tests/net/mcast/Atffile			tests-net-tests		atf,rump
@@ -3367,6 +3376,7 @@
 ./usr/tests/net/route/t_flags			tests-net-tests		atf,rump
 ./usr/tests/net/route/t_flags6			tests-net-tests		atf,rump
 ./usr/tests/net/route/t_route			tests-net-tests		atf,rump
+./usr/tests/net/route/t_rtcache			tests-net-tests		atf,rump
 ./usr/tests/net/sys				tests-net-tests		compattestfile,atf
 ./usr/tests/net/sys/Atffile			tests-net-tests		compattestfile,atf
 ./usr/tests/net/sys/Kyuafile			tests-net-tests		compattestfile,atf,kyua
