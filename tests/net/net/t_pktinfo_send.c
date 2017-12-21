@@ -1,4 +1,4 @@
-/*	$NetBSD: t_pktinfo_send.c,v 1.2 2017/12/11 05:47:18 ryo Exp $	*/
+/*	$NetBSD: t_pktinfo_send.c,v 1.2.2.2 2017/12/21 21:08:13 snj Exp $	*/
 
 /*-
  * Copyright (c) 2017 Internet Initiative Japan Inc.
@@ -27,7 +27,7 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: t_pktinfo_send.c,v 1.2 2017/12/11 05:47:18 ryo Exp $");
+__RCSID("$NetBSD: t_pktinfo_send.c,v 1.2.2.2 2017/12/21 21:08:13 snj Exp $");
 
 #include <sys/types.h>
 #include <sys/socket.h>
