@@ -1,4 +1,4 @@
-/*	$NetBSD: t_workqueue.c,v 1.2 2017/12/28 07:10:26 ozaki-r Exp $	*/
+/*	$NetBSD: t_workqueue.c,v 1.2.2.2 2018/01/16 13:01:10 martin Exp $	*/
 
 /*-
  * Copyright (c) 2017 The NetBSD Foundation, Inc.
