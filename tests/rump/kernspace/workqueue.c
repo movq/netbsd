@@ -1,4 +1,4 @@
-/*	$NetBSD: workqueue.c,v 1.6 2017/12/28 07:46:34 ozaki-r Exp $	*/
+/*	$NetBSD: workqueue.c,v 1.6.2.2 2018/01/16 13:01:10 martin Exp $	*/
 
 /*-
  * Copyright (c) 2017 The NetBSD Foundation, Inc.
@@ -29,7 +29,7 @@
 
 #include <sys/cdefs.h>
 #if !defined(lint)
-__RCSID("$NetBSD: workqueue.c,v 1.6 2017/12/28 07:46:34 ozaki-r Exp $");
+__RCSID("$NetBSD: workqueue.c,v 1.6.2.2 2018/01/16 13:01:10 martin Exp $");
 #endif /* !lint */
 
 #include <sys/param.h>
