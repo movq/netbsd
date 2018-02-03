@@ -1,4 +1,4 @@
-print '.\\"	$NetBSD: libcrypto.pl,v 1.1 2018/02/03 22:43:39 christos Exp $' . "\n";
+print '.\\"	$NetBSD: libcrypto.pl,v 1.1.1.1 2018/02/03 22:43:39 christos Exp $' . "\n";
 print '.\\"' . "\n";
 while (<>) {
 	next if (/\$RCSfile/);

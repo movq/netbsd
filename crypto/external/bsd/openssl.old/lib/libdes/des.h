@@ -1,4 +1,4 @@
-/*	$NetBSD: des.h,v 1.1 2018/02/03 22:43:39 christos Exp $	*/
+/*	$NetBSD: des.h,v 1.1.1.1 2018/02/03 22:43:39 christos Exp $	*/
 
 /* crypto/des/des.h */
 /* Copyright (C) 1995-1997 Eric Young (eay@cryptsoft.com)

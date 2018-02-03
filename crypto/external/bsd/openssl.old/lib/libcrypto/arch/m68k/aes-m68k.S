@@ -1,4 +1,4 @@
-|	$NetBSD: aes-m68k.S,v 1.1 2018/02/03 22:43:37 christos Exp $
+|	$NetBSD: aes-m68k.S,v 1.1.1.1 2018/02/03 22:43:37 christos Exp $
 
 | Copyright (C) 2016 Tetsuya Isaki. All rights reserved.
 | Copyright (C) 2016 Y.Sugahara (moveccr). All rights reserved.

@@ -1,4 +1,4 @@
-#	$NetBSD: ocsp.inc,v 1.1 2018/02/03 22:43:37 christos Exp $
+#	$NetBSD: ocsp.inc,v 1.1.1.1 2018/02/03 22:43:37 christos Exp $
 #
 #	@(#) Copyright (c) 1995 Simon J. Gerraty
 #

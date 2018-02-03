@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.1 2018/02/03 22:43:39 christos Exp $
+#	$NetBSD: Makefile,v 1.1.1.1 2018/02/03 22:43:39 christos Exp $
 
 # the makefile is not, and should not be visited during normal build process.
 # try to use latest pod2man, which comes with the latest perl.

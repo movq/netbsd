@@ -1,4 +1,4 @@
-#	$NetBSD: srp.inc,v 1.1 2018/02/03 22:43:37 christos Exp $
+#	$NetBSD: srp.inc,v 1.1.1.1 2018/02/03 22:43:37 christos Exp $
 #
 #	SRCS extracted from src/crypto/dist/openssl/crypto/srp/Makefile
 #

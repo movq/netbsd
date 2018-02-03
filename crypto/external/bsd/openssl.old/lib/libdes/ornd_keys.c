@@ -1,4 +1,4 @@
-/*	$NetBSD: ornd_keys.c,v 1.1 2018/02/03 22:43:40 christos Exp $	*/
+/*	$NetBSD: ornd_keys.c,v 1.1.1.1 2018/02/03 22:43:40 christos Exp $	*/
 
 #include "des_locl.h"
 #include <sys/time.h>

@@ -1,4 +1,4 @@
-/*	$NetBSD: orand_key.c,v 1.1 2018/02/03 22:43:40 christos Exp $	*/
+/*	$NetBSD: orand_key.c,v 1.1.1.1 2018/02/03 22:43:40 christos Exp $	*/
 
 /*
  * Copyright (C) 2003 WIDE Project.

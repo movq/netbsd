@@ -1,4 +1,4 @@
-#	$NetBSD: des.inc,v 1.1 2018/02/03 22:43:38 christos Exp $
+#	$NetBSD: des.inc,v 1.1.1.1 2018/02/03 22:43:38 christos Exp $
 
 .if ${MACHINE} == "sparc64"
 .PATH.S: ${.PARSEDIR}

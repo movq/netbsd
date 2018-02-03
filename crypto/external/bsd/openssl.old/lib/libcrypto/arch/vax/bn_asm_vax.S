@@ -1,4 +1,4 @@
-#	$NetBSD: bn_asm_vax.S,v 1.1 2018/02/03 22:43:38 christos Exp $
+#	$NetBSD: bn_asm_vax.S,v 1.1.1.1 2018/02/03 22:43:38 christos Exp $
 #
 # w.j.m. 15-jan-1999
 #
