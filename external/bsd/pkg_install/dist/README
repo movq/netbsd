@@ -1,4 +1,4 @@
-# $NetBSD: README,v 1.1 2018/02/04 08:20:39 maya Exp $
+# $NetBSD: README,v 1.1.1.1 2018/02/04 08:20:39 maya Exp $
 # Original from FreeBSD, no rcs id.
 
 This is the pkg_install suite of tools for doing maintainance of

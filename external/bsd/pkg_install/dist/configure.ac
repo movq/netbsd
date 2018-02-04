@@ -1,4 +1,4 @@
-dnl $NetBSD: configure.ac,v 1.1 2018/02/04 08:20:42 maya Exp $
+dnl $NetBSD: configure.ac,v 1.1.1.1 2018/02/04 08:20:42 maya Exp $
 dnl Process this file with autoconf to produce a configure script.
 AC_PREREQ(2.52)
 AC_INIT([pkg_install], [20090911], [joerg@NetBSD.org])
