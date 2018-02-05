@@ -1,4 +1,4 @@
-/*	$NetBSD: amdsmn.h,v 1.1 2018/01/25 01:22:21 christos Exp $	*/
+/*	$NetBSD: amdsmn.h,v 1.1.2.2 2018/02/05 13:06:55 martin Exp $	*/
 
 /*-
  * Copyright (c) 2017 Conrad Meyer <cem@FreeBSD.org>

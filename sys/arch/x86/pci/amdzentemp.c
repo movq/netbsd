@@ -1,4 +1,4 @@
-/*      $NetBSD: amdzentemp.c,v 1.7 2018/01/26 23:01:44 pgoyette Exp $ */
+/*      $NetBSD: amdzentemp.c,v 1.7.2.2 2018/02/05 13:06:55 martin Exp $ */
 /*      $OpenBSD: kate.c,v 1.2 2008/03/27 04:52:03 cnst Exp $   */
 
 /*
@@ -50,7 +50,7 @@
 
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: amdzentemp.c,v 1.7 2018/01/26 23:01:44 pgoyette Exp $ ");
+__KERNEL_RCSID(0, "$NetBSD: amdzentemp.c,v 1.7.2.2 2018/02/05 13:06:55 martin Exp $ ");
 
 #include <sys/param.h>
 #include <sys/bus.h>
