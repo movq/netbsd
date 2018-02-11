@@ -1,4 +1,4 @@
-/*	$NetBSD: if_ipsec.h,v 1.1 2018/01/10 10:56:30 knakahara Exp $  */
+/*	$NetBSD: if_ipsec.h,v 1.1.2.2 2018/02/11 21:17:34 snj Exp $  */
 
 /*
  * Copyright (c) 2017 Internet Initiative Japan Inc.

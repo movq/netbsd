@@ -1,4 +1,4 @@
-/*	$NetBSD: ipsec_component.c,v 1.1 2018/01/10 11:02:42 knakahara Exp $	*/
+/*	$NetBSD: ipsec_component.c,v 1.1.2.2 2018/02/11 21:17:35 snj Exp $	*/
 
 /*
  * Copyright (c) 2017 Internet Initiative Japan Inc.
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ipsec_component.c,v 1.1 2018/01/10 11:02:42 knakahara Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ipsec_component.c,v 1.1.2.2 2018/02/11 21:17:35 snj Exp $");
 
 #include <sys/param.h>
 
