@@ -1,4 +1,4 @@
-/*	$NetBSD: if_ipsec.c,v 1.3 2018/01/31 07:33:18 mrg Exp $  */
+/*	$NetBSD: if_ipsec.c,v 1.3.2.2 2018/02/11 21:17:34 snj Exp $  */
 
 /*
  * Copyright (c) 2017 Internet Initiative Japan Inc.
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_ipsec.c,v 1.3 2018/01/31 07:33:18 mrg Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_ipsec.c,v 1.3.2.2 2018/02/11 21:17:34 snj Exp $");
 
 #ifdef _KERNEL_OPT
 #include "opt_inet.h"
