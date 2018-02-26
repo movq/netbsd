@@ -1,4 +1,4 @@
-/*	$NetBSD: rss_config.c,v 1.1 2018/02/16 04:48:32 knakahara Exp $  */
+/*	$NetBSD: rss_config.c,v 1.1.2.2 2018/02/26 00:25:16 snj Exp $  */
 
 /*
  * Copyright (c) 2018 Internet Initiative Japan Inc.
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: rss_config.c,v 1.1 2018/02/16 04:48:32 knakahara Exp $");
+__KERNEL_RCSID(0, "$NetBSD: rss_config.c,v 1.1.2.2 2018/02/26 00:25:16 snj Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
