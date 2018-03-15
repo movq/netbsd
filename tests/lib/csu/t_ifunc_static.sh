@@ -1,4 +1,4 @@
-# $NetBSD: t_ifunc_static.sh,v 1.1 2018/03/09 20:20:47 joerg Exp $
+# $NetBSD: t_ifunc_static.sh,v 1.1.2.2 2018/03/15 09:12:07 pgoyette Exp $
 #
 # Copyright (c) 2018 The NetBSD Foundation, Inc.
 # All rights reserved.

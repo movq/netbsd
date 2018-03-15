@@ -1,4 +1,4 @@
-/*	$NetBSD: uvm.h,v 1.2 2018/03/15 03:22:23 christos Exp $	*/
+/*	$NetBSD: uvm.h,v 1.2.2.2 2018/03/15 09:12:05 pgoyette Exp $	*/
 
 /*-
  * Copyright (c) 2018 The NetBSD Foundation, Inc.

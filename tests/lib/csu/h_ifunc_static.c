@@ -1,4 +1,4 @@
-/*	$NetBSD: h_ifunc_static.c,v 1.2 2018/03/11 21:20:22 joerg Exp $	*/
+/*	$NetBSD: h_ifunc_static.c,v 1.2.2.2 2018/03/15 09:12:07 pgoyette Exp $	*/
 
 /*-
  * Copyright (c) 2018 The NetBSD Foundation, Inc.
