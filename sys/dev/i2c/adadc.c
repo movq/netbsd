@@ -1,4 +1,4 @@
-/* $NetBSD: adadc.c,v 1.2 2018/03/09 22:27:15 macallan Exp $ */
+/* $NetBSD: adadc.c,v 1.2.2.2 2018/03/15 09:12:05 pgoyette Exp $ */
 
 /*-
  * Copyright (c) 2018 Michael Lorenz
@@ -34,7 +34,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: adadc.c,v 1.2 2018/03/09 22:27:15 macallan Exp $");
+__KERNEL_RCSID(0, "$NetBSD: adadc.c,v 1.2.2.2 2018/03/15 09:12:05 pgoyette Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
