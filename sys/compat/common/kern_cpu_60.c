@@ -1,4 +1,4 @@
-/*	$NetBSD: kern_cpu_60.c,v 1.1 2018/03/17 19:00:23 christos Exp $	*/
+/*	$NetBSD: kern_cpu_60.c,v 1.1.2.2 2018/03/17 21:37:52 pgoyette Exp $	*/
 
 /*-
  * Copyright (c) 2018 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: kern_cpu_60.c,v 1.1 2018/03/17 19:00:23 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: kern_cpu_60.c,v 1.1.2.2 2018/03/17 21:37:52 pgoyette Exp $");
 
 #include <sys/param.h>
 #include <sys/types.h>
