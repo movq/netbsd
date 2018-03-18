@@ -1,4 +1,4 @@
-/*	$NetBSD: ccdvar.h,v 1.1 2018/03/18 20:33:52 christos Exp $	*/
+/*	$NetBSD: ccdvar.h,v 1.1.2.2 2018/03/18 21:41:31 pgoyette Exp $	*/
 
 /*-
  * Copyright (c) 2018 The NetBSD Foundation, Inc.
