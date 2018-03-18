@@ -1,4 +1,4 @@
-/* $NetBSD: compat_60_cpu_ucode.c,v 1.1 2018/03/18 00:17:18 christos Exp $ */
+/* $NetBSD: compat_60_cpu_ucode.c,v 1.1.2.2 2018/03/18 00:35:26 pgoyette Exp $ */
 /*
  * Copyright (c) 2012 The NetBSD Foundation, Inc.
  * All rights reserved.
@@ -29,7 +29,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: compat_60_cpu_ucode.c,v 1.1 2018/03/18 00:17:18 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: compat_60_cpu_ucode.c,v 1.1.2.2 2018/03/18 00:35:26 pgoyette Exp $");
 
 #ifdef _KERNEL_OPT
 #include "opt_cpu_ucode.h"
