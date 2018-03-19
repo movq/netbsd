@@ -1,4 +1,4 @@
-/*	$NetBSD: compat_60_mod.c,v 1.1.2.10 2018/03/18 23:34:25 pgoyette Exp $	*/
+/*	$NetBSD: compat_60_mod.c,v 1.1.2.11 2018/03/19 21:54:43 pgoyette Exp $	*/
 
 /*-
  * Copyright (c) 2008 The NetBSD Foundation, Inc.
@@ -34,7 +34,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: compat_60_mod.c,v 1.1.2.10 2018/03/18 23:34:25 pgoyette Exp $");
+__KERNEL_RCSID(0, "$NetBSD: compat_60_mod.c,v 1.1.2.11 2018/03/19 21:54:43 pgoyette Exp $");
 
 #ifdef _KERNEL_OPT
 #include "opt_compat_netbsd.h"
@@ -53,9 +53,6 @@ __KERNEL_RCSID(0, "$NetBSD: compat_60_mod.c,v 1.1.2.10 2018/03/18 23:34:25 pgoye
 
 #include <compat/sys/ccdvar.h>
 #include <compat/sys/cpuio.h>
-
-#define REQUIRED_60 "compat_70"		/* XXX No compat_80 yet */
-MODULE(MODULE_CLASS_EXEC, compat_60, REQUIRED_60);
 
 int
 compat_60_init(void)
@@ -117,6 +114,11 @@ compat_60_fini(void)
 	return error;
 }
 
+#ifdef _MODULE
+
+#define REQUIRED_60 "compat_70"		/* XXX No compat_80 yet */
+MODULE(MODULE_CLASS_EXEC, compat_60, REQUIRED_60);
+
 static int
 compat_60_modcmd(modcmd_t cmd, void *arg)
 {
@@ -130,3 +132,4 @@ compat_60_modcmd(modcmd_t cmd, void *arg)
 		return ENOTTY;
 	}
 }
+#endif
