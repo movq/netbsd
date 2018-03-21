@@ -1,4 +1,4 @@
-/* $NetBSD: compat_stub.h,v 1.1.2.2 2018/03/21 04:48:32 pgoyette Exp $	*/
+/* $NetBSD: compat_stub.h,v 1.1.2.3 2018/03/21 10:12:49 pgoyette Exp $	*/
 
 /*-
  * Copyright (c) 2018 The NetBSD Foundation, Inc.
@@ -55,4 +55,11 @@ extern int (*compat_ccd_ioctl_60)(dev_t, u_long, void *, int, struct lwp *,
 
 extern int (*compat_clockctl_ioctl_50)(dev_t, u_long, void *, int,
     struct lwp *);
+
+/*
+ * if_sppp device compatability ioctl subroutine
+ */
+struct sppp;
+extern int (*sppp_params50)(struct sppp *, u_long, void *);
+
 #endif	/* _SYS_COMPAT_STUB_H */
