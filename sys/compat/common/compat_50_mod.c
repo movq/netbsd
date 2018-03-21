@@ -1,11 +1,11 @@
-/*	$NetBSD: compat_50_mod.c,v 1.1.2.2 2018/03/21 04:48:31 pgoyette Exp $	*/
+/*	$NetBSD: compat_50_mod.c,v 1.1.2.3 2018/03/21 10:01:04 pgoyette Exp $	*/
 
 /*-
- * Copyright (c) 2008 The NetBSD Foundation, Inc.
+ * Copyright (c) 2018 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software developed for The NetBSD Foundation
- * by Andrew Doran.
+ * by Paul Goyette
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -34,7 +34,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: compat_50_mod.c,v 1.1.2.2 2018/03/21 04:48:31 pgoyette Exp $");
+__KERNEL_RCSID(0, "$NetBSD: compat_50_mod.c,v 1.1.2.3 2018/03/21 10:01:04 pgoyette Exp $");
 
 #ifdef _KERNEL_OPT
 #include "opt_compat_netbsd.h"
@@ -52,6 +52,7 @@ __KERNEL_RCSID(0, "$NetBSD: compat_50_mod.c,v 1.1.2.2 2018/03/21 04:48:31 pgoyet
 
 #include <compat/common/compat_util.h>
 #include <compat/common/compat_mod.h>
+#include <compat/common/if_spppsubr50.h>
 
 int
 compat_50_init(void)
@@ -77,6 +78,7 @@ compat_50_init(void)
 	uvm_50_init();
 	if_50_init();
 	clockctl_50_init();
+	if_spppsubr_50_init();
 
 	return error;
 
@@ -97,6 +99,7 @@ compat_50_fini(void)
 {
 	int error = 0;
 
+	if_spppsubr_50_fini();
 	clockctl_50_fini();
 	if_50_fini();
 	uvm_50_fini();
@@ -130,15 +133,16 @@ compat_50_fini(void)
 	uvm_50_init();
 	if_50_init();
 	clockctl_50_init();
+	if_spppsubr_50_init();
 
 	return error;
 }
 
 #ifdef _MODULE
 
-#define REQUIRED_50	"compat_70,compat_60"	/* XXX No compat_80 yet */
+#define REQD_50	"compat_80,compat_70,compat_60"
 
-MODULE(MODULE_CLASS_EXEC, compat_50, REQUIRED_50);
+MODULE(MODULE_CLASS_EXEC, compat_50, REQD_50);
 
 static int
 compat_50_modcmd(modcmd_t cmd, void *arg)
