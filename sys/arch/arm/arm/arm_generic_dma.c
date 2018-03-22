@@ -1,4 +1,4 @@
-/* $NetBSD: arm_generic_dma.c,v 1.1 2018/03/17 18:34:09 ryo Exp $ */
+/* $NetBSD: arm_generic_dma.c,v 1.1.2.2 2018/03/22 01:44:41 pgoyette Exp $ */
 
 /*-
  * Copyright (c) 2017 Jared McNeill <jmcneill@invisible.ca>
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: arm_generic_dma.c,v 1.1 2018/03/17 18:34:09 ryo Exp $");
+__KERNEL_RCSID(0, "$NetBSD: arm_generic_dma.c,v 1.1.2.2 2018/03/22 01:44:41 pgoyette Exp $");
 
 #define	_ARM32_BUS_DMA_PRIVATE
 
