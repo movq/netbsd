@@ -1,4 +1,4 @@
-/*	$NetBSD: svs.c,v 1.14 2018/03/13 16:45:52 maxv Exp $	*/
+/*	$NetBSD: svs.c,v 1.14.2.2 2018/03/22 16:59:04 martin Exp $	*/
 
 /*
  * Copyright (c) 2018 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: svs.c,v 1.14 2018/03/13 16:45:52 maxv Exp $");
+__KERNEL_RCSID(0, "$NetBSD: svs.c,v 1.14.2.2 2018/03/22 16:59:04 martin Exp $");
 
 #include "opt_svs.h"
 
