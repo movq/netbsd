@@ -1,4 +1,4 @@
-/* $NetBSD: sunxi_ccu_fractional.c,v 1.1 2018/03/19 16:18:30 bouyer Exp $ */
+/* $NetBSD: sunxi_ccu_fractional.c,v 1.1.2.2 2018/03/22 01:44:43 pgoyette Exp $ */
 
 /*-
  * Copyright (c) 2017 Jared McNeill <jmcneill@invisible.ca>
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sunxi_ccu_fractional.c,v 1.1 2018/03/19 16:18:30 bouyer Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sunxi_ccu_fractional.c,v 1.1.2.2 2018/03/22 01:44:43 pgoyette Exp $");
 
 #include <sys/param.h>
 #include <sys/bus.h>
