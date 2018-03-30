@@ -1,4 +1,4 @@
-/*	$NetBSD: spectre.c,v 1.5 2018/03/29 07:21:24 maxv Exp $	*/
+/*	$NetBSD: spectre.c,v 1.5.2.2 2018/03/30 06:20:13 pgoyette Exp $	*/
 
 /*
  * Copyright (c) 2018 NetBSD Foundation, Inc.
@@ -34,7 +34,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: spectre.c,v 1.5 2018/03/29 07:21:24 maxv Exp $");
+__KERNEL_RCSID(0, "$NetBSD: spectre.c,v 1.5.2.2 2018/03/30 06:20:13 pgoyette Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

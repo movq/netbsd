@@ -1,4 +1,4 @@
-/*	$NetBSD: elf_support.h,v 1.1 2018/03/29 13:23:40 joerg Exp $	*/
+/*	$NetBSD: elf_support.h,v 1.1.2.2 2018/03/30 06:20:12 pgoyette Exp $	*/
 
 /*-
  * Copyright (c) 2000 Eduardo Horvath.
