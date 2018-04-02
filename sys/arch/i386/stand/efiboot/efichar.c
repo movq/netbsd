@@ -1,4 +1,4 @@
-/*	$NetBSD: efichar.c,v 1.1 2018/03/27 14:15:05 nonaka Exp $	*/
+/*	$NetBSD: efichar.c,v 1.1.4.2 2018/04/02 08:50:33 martin Exp $	*/
 
 /*-
  * Copyright (c) 2010 Marcel Moolenaar
