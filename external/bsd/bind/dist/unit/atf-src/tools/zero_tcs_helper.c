@@ -1,4 +1,4 @@
-/*	$NetBSD: zero_tcs_helper.c,v 1.1 2018/04/07 21:44:16 christos Exp $	*/
+/*	$NetBSD: zero_tcs_helper.c,v 1.1.1.1 2018/04/07 21:44:16 christos Exp $	*/
 
 /*
  * Automated Testing Framework (atf)
