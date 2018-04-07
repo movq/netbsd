@@ -1,4 +1,4 @@
-/*	$NetBSD: confpars.c,v 1.1 2018/04/07 22:34:27 christos Exp $	*/
+/*	$NetBSD: confpars.c,v 1.1.1.1 2018/04/07 22:34:27 christos Exp $	*/
 
 /* confpars.c
 
@@ -29,7 +29,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: confpars.c,v 1.1 2018/04/07 22:34:27 christos Exp $");
+__RCSID("$NetBSD: confpars.c,v 1.1.1.1 2018/04/07 22:34:27 christos Exp $");
 
 /*! \file server/confpars.c */
 

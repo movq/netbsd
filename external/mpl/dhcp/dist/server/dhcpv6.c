@@ -1,4 +1,4 @@
-/*	$NetBSD: dhcpv6.c,v 1.1 2018/04/07 22:34:27 christos Exp $	*/
+/*	$NetBSD: dhcpv6.c,v 1.1.1.1 2018/04/07 22:34:27 christos Exp $	*/
 
 /*
  * Copyright (C) 2006-2017 by Internet Systems Consortium, Inc. ("ISC")
@@ -17,7 +17,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: dhcpv6.c,v 1.1 2018/04/07 22:34:27 christos Exp $");
+__RCSID("$NetBSD: dhcpv6.c,v 1.1.1.1 2018/04/07 22:34:27 christos Exp $");
 
 
 /*! \file server/dhcpv6.c */

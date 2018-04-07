@@ -1,4 +1,4 @@
-/*	$NetBSD: dns.c,v 1.1 2018/04/07 22:34:26 christos Exp $	*/
+/*	$NetBSD: dns.c,v 1.1.1.1 2018/04/07 22:34:26 christos Exp $	*/
 
 /* dns.c
 
@@ -29,7 +29,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: dns.c,v 1.1 2018/04/07 22:34:26 christos Exp $");
+__RCSID("$NetBSD: dns.c,v 1.1.1.1 2018/04/07 22:34:26 christos Exp $");
 
 /*! \file common/dns.c
  */

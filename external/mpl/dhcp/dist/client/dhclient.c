@@ -1,4 +1,4 @@
-/*	$NetBSD: dhclient.c,v 1.1 2018/04/07 22:34:25 christos Exp $	*/
+/*	$NetBSD: dhclient.c,v 1.1.1.1 2018/04/07 22:34:25 christos Exp $	*/
 
 /* dhclient.c
 
@@ -33,7 +33,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: dhclient.c,v 1.1 2018/04/07 22:34:25 christos Exp $");
+__RCSID("$NetBSD: dhclient.c,v 1.1.1.1 2018/04/07 22:34:25 christos Exp $");
 
 #include "dhcpd.h"
 #include <isc/util.h>
@@ -145,7 +145,7 @@ static void dhclient_ddns_cb_free(dhcp_ddns_cb_t *ddns_cb,
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: dhclient.c,v 1.1 2018/04/07 22:34:25 christos Exp $");
+__RCSID("$NetBSD: dhclient.c,v 1.1.1.1 2018/04/07 22:34:25 christos Exp $");
 
 #if defined(DHCPv6) && defined(DHCP4o6)
 static void dhcp4o6_poll(void *dummy);

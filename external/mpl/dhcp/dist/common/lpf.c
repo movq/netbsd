@@ -1,4 +1,4 @@
-/*	$NetBSD: lpf.c,v 1.1 2018/04/07 22:34:26 christos Exp $	*/
+/*	$NetBSD: lpf.c,v 1.1.1.1 2018/04/07 22:34:26 christos Exp $	*/
 
 /* lpf.c
 
@@ -29,7 +29,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: lpf.c,v 1.1 2018/04/07 22:34:26 christos Exp $");
+__RCSID("$NetBSD: lpf.c,v 1.1.1.1 2018/04/07 22:34:26 christos Exp $");
 
 #include "dhcpd.h"
 #if defined (USE_LPF_SEND) || defined (USE_LPF_RECEIVE)

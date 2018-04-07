@@ -1,4 +1,4 @@
-/*	$NetBSD: dhcrelay.c,v 1.1 2018/04/07 22:34:28 christos Exp $	*/
+/*	$NetBSD: dhcrelay.c,v 1.1.1.1 2018/04/07 22:34:28 christos Exp $	*/
 
 /* dhcrelay.c
 
@@ -29,7 +29,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: dhcrelay.c,v 1.1 2018/04/07 22:34:28 christos Exp $");
+__RCSID("$NetBSD: dhcrelay.c,v 1.1.1.1 2018/04/07 22:34:28 christos Exp $");
 
 #include "dhcpd.h"
 #include <syslog.h>
@@ -242,7 +242,7 @@ char *progname;
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: dhcrelay.c,v 1.1 2018/04/07 22:34:28 christos Exp $");
+__RCSID("$NetBSD: dhcrelay.c,v 1.1.1.1 2018/04/07 22:34:28 christos Exp $");
 static const char use_noarg[] = "No argument for command: %s";
 #ifdef RELAY_PORT
 static const char use_port_defined[] = "Port already set, %s inappropriate";

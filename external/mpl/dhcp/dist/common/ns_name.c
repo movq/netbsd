@@ -1,4 +1,4 @@
-/*	$NetBSD: ns_name.c,v 1.1 2018/04/07 22:34:26 christos Exp $	*/
+/*	$NetBSD: ns_name.c,v 1.1.1.1 2018/04/07 22:34:26 christos Exp $	*/
 
 /*
  * Copyright (c) 2004-2017 by Internet Systems Consortium, Inc. ("ISC")
@@ -24,7 +24,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: ns_name.c,v 1.1 2018/04/07 22:34:26 christos Exp $");
+__RCSID("$NetBSD: ns_name.c,v 1.1.1.1 2018/04/07 22:34:26 christos Exp $");
 
 #include <sys/types.h>
 
