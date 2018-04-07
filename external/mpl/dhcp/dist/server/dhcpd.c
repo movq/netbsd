@@ -1,4 +1,4 @@
-/*	$NetBSD: dhcpd.c,v 1.1 2018/04/07 22:34:27 christos Exp $	*/
+/*	$NetBSD: dhcpd.c,v 1.1.1.1 2018/04/07 22:34:27 christos Exp $	*/
 
 /* dhcpd.c
 
@@ -29,7 +29,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: dhcpd.c,v 1.1 2018/04/07 22:34:27 christos Exp $");
+__RCSID("$NetBSD: dhcpd.c,v 1.1.1.1 2018/04/07 22:34:27 christos Exp $");
 
 static const char copyright[] =
 "Copyright 2004-2018 Internet Systems Consortium.";
@@ -209,7 +209,7 @@ static void omapi_listener_start (void *foo)
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: dhcpd.c,v 1.1 2018/04/07 22:34:27 christos Exp $");
+__RCSID("$NetBSD: dhcpd.c,v 1.1.1.1 2018/04/07 22:34:27 christos Exp $");
 static char use_noarg[] = "No argument for command: %s ";
 
 static void

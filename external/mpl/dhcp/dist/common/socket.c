@@ -1,4 +1,4 @@
-/*	$NetBSD: socket.c,v 1.1 2018/04/07 22:34:26 christos Exp $	*/
+/*	$NetBSD: socket.c,v 1.1.1.1 2018/04/07 22:34:26 christos Exp $	*/
 
 /* socket.c
 
@@ -29,7 +29,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: socket.c,v 1.1 2018/04/07 22:34:26 christos Exp $");
+__RCSID("$NetBSD: socket.c,v 1.1.1.1 2018/04/07 22:34:26 christos Exp $");
 
 /* SO_BINDTODEVICE support added by Elliot Poger (poger@leland.stanford.edu).
  * This sockopt allows a socket to be bound to a particular interface,

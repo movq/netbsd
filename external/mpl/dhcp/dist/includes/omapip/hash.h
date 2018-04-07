@@ -1,4 +1,4 @@
-/*	$NetBSD: hash.h,v 1.1 2018/04/07 22:34:26 christos Exp $	*/
+/*	$NetBSD: hash.h,v 1.1.1.1 2018/04/07 22:34:26 christos Exp $	*/
 
 /* hash.h
 

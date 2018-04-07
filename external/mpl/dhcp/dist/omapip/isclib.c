@@ -1,4 +1,4 @@
-/*	$NetBSD: isclib.c,v 1.1 2018/04/07 22:34:27 christos Exp $	*/
+/*	$NetBSD: isclib.c,v 1.1.1.1 2018/04/07 22:34:27 christos Exp $	*/
 
 /*
  * Copyright(c) 2009-2017 by Internet Systems Consortium, Inc.("ISC")
@@ -24,7 +24,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: isclib.c,v 1.1 2018/04/07 22:34:27 christos Exp $");
+__RCSID("$NetBSD: isclib.c,v 1.1.1.1 2018/04/07 22:34:27 christos Exp $");
 
 /*Trying to figure out what we need to define to get things to work.
   It looks like we want/need the library but need the fdwatchcommand

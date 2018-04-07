@@ -1,4 +1,4 @@
-/*	$NetBSD: cltest.c,v 1.1 2018/04/07 22:34:26 christos Exp $	*/
+/*	$NetBSD: cltest.c,v 1.1.1.1 2018/04/07 22:34:26 christos Exp $	*/
 
 /* cltest.c
 
@@ -31,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: cltest.c,v 1.1 2018/04/07 22:34:26 christos Exp $");
+__RCSID("$NetBSD: cltest.c,v 1.1.1.1 2018/04/07 22:34:26 christos Exp $");
 
 #include "config.h"
 
