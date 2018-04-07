@@ -1,4 +1,4 @@
-/*	$NetBSD: doa_259.c,v 1.1 2018/04/07 21:44:09 christos Exp $	*/
+/*	$NetBSD: doa_259.c,v 1.1.1.1 2018/04/07 21:44:09 christos Exp $	*/
 
 /*
  * Copyright (C) 2017  Internet Systems Consortium, Inc. ("ISC")
