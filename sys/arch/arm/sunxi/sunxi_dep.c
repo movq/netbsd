@@ -1,4 +1,4 @@
-/*	$NetBSD: sunxi_dep.c,v 1.2 2018/04/03 13:38:13 bouyer Exp $	*/
+/*	$NetBSD: sunxi_dep.c,v 1.2.2.2 2018/04/07 04:12:12 pgoyette Exp $	*/
 
 /*-
  * Copyright (c) 2018 The NetBSD Foundation, Inc.
@@ -32,7 +32,7 @@
 
 #include <sys/cdefs.h>
 
-__KERNEL_RCSID(1, "$NetBSD: sunxi_dep.c,v 1.2 2018/04/03 13:38:13 bouyer Exp $");
+__KERNEL_RCSID(1, "$NetBSD: sunxi_dep.c,v 1.2.2.2 2018/04/07 04:12:12 pgoyette Exp $");
 
 #include <sys/param.h>
 #include <sys/bus.h>

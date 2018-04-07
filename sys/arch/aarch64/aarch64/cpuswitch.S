@@ -1,4 +1,4 @@
-/* $NetBSD: cpuswitch.S,v 1.1 2018/04/01 04:35:03 ryo Exp $ */
+/* $NetBSD: cpuswitch.S,v 1.1.2.2 2018/04/07 04:12:10 pgoyette Exp $ */
 
 /*-
  * Copyright (c) 2014 The NetBSD Foundation, Inc.
@@ -35,7 +35,7 @@
 
 #include "opt_ddb.h"
 
-RCSID("$NetBSD: cpuswitch.S,v 1.1 2018/04/01 04:35:03 ryo Exp $")
+RCSID("$NetBSD: cpuswitch.S,v 1.1.2.2 2018/04/07 04:12:10 pgoyette Exp $")
 
 /*
  * At IPL_SCHED:

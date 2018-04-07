@@ -1,4 +1,4 @@
-#	$NetBSD: files.generic,v 1.1 2018/04/01 04:35:04 ryo Exp $
+#	$NetBSD: files.generic,v 1.1.2.2 2018/04/07 04:12:12 pgoyette Exp $
 #
 
 defparam opt_arm_debug.h	EARLYCONS

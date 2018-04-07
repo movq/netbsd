@@ -1,4 +1,4 @@
-/* $NetBSD: tegra_platform.h,v 1.1 2018/04/01 04:35:04 ryo Exp $ */
+/* $NetBSD: tegra_platform.h,v 1.1.2.2 2018/04/07 04:12:12 pgoyette Exp $ */
 
 /*-
  * Copyright (c) 2015 Jared D. McNeill <jmcneill@invisible.ca>

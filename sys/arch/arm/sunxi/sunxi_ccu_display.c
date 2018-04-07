@@ -1,4 +1,4 @@
-/* $NetBSD: sunxi_ccu_display.c,v 1.2 2018/04/02 20:55:49 bouyer Exp $ */
+/* $NetBSD: sunxi_ccu_display.c,v 1.2.2.2 2018/04/07 04:12:12 pgoyette Exp $ */
 
 /*-
  * Copyright (c) 2018 Manuel Bouyer <bouyer@antioche.eu.org>
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sunxi_ccu_display.c,v 1.2 2018/04/02 20:55:49 bouyer Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sunxi_ccu_display.c,v 1.2.2.2 2018/04/07 04:12:12 pgoyette Exp $");
 
 #include <sys/param.h>
 #include <sys/bus.h>

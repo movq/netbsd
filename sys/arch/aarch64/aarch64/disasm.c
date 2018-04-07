@@ -1,4 +1,4 @@
-/*	$NetBSD: disasm.c,v 1.1 2018/04/01 04:35:03 ryo Exp $	*/
+/*	$NetBSD: disasm.c,v 1.1.2.2 2018/04/07 04:12:10 pgoyette Exp $	*/
 
 /*
  * Copyright (c) 2018 Ryo Shimizu <ryo@nerv.org>
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: disasm.c,v 1.1 2018/04/01 04:35:03 ryo Exp $");
+__KERNEL_RCSID(0, "$NetBSD: disasm.c,v 1.1.2.2 2018/04/07 04:12:10 pgoyette Exp $");
 
 #include <sys/param.h>
 #include <sys/types.h>

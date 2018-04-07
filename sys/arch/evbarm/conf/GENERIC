@@ -1,5 +1,5 @@
 #
-#	$NetBSD: GENERIC,v 1.1 2018/04/01 04:35:04 ryo Exp $
+#	$NetBSD: GENERIC,v 1.1.2.2 2018/04/07 04:12:12 pgoyette Exp $
 #
 #	GENERIC ARM (aarch32) kernel
 #

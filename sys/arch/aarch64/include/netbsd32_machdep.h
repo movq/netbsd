@@ -1,4 +1,4 @@
-/*	$NetBSD: netbsd32_machdep.h,v 1.1 2018/04/01 04:35:03 ryo Exp $	*/
+/*	$NetBSD: netbsd32_machdep.h,v 1.1.2.2 2018/04/07 04:12:11 pgoyette Exp $	*/
 
 #ifndef _MACHINE_NETBSD32_H_
 #define _MACHINE_NETBSD32_H_

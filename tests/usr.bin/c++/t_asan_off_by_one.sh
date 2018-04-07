@@ -1,4 +1,4 @@
-#	$NetBSD: t_asan_off_by_one.sh,v 1.1 2018/04/04 23:53:26 kamil Exp $
+#	$NetBSD: t_asan_off_by_one.sh,v 1.1.2.2 2018/04/07 04:12:20 pgoyette Exp $
 #
 # Copyright (c) 2018 The NetBSD Foundation, Inc.
 # All rights reserved.

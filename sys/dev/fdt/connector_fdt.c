@@ -1,4 +1,4 @@
-/*	$NetBSD: connector_fdt.c,v 1.1 2018/04/03 12:40:20 bouyer Exp $	*/
+/*	$NetBSD: connector_fdt.c,v 1.1.2.2 2018/04/07 04:12:14 pgoyette Exp $	*/
 
 /*-
  * Copyright (c) 2018 The NetBSD Foundation, Inc.
@@ -37,7 +37,7 @@
 
 #include <sys/cdefs.h>
 
-__KERNEL_RCSID(1, "$NetBSD: connector_fdt.c,v 1.1 2018/04/03 12:40:20 bouyer Exp $");
+__KERNEL_RCSID(1, "$NetBSD: connector_fdt.c,v 1.1.2.2 2018/04/07 04:12:14 pgoyette Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

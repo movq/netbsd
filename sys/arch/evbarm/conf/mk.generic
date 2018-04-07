@@ -1,4 +1,4 @@
-#	$NetBSD: mk.generic,v 1.1 2018/04/01 04:35:04 ryo Exp $
+#	$NetBSD: mk.generic,v 1.1.2.2 2018/04/07 04:12:12 pgoyette Exp $
 CPPFLAGS+=		-mcpu=cortex-a15 -mfpu=neon
 
 .include "$S/arch/arm/nvidia/tegra_xusb-fw.mk"
