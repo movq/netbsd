@@ -1,4 +1,4 @@
-/*	$NetBSD: option_unittest.c,v 1.1 2018/04/07 20:44:26 christos Exp $	*/
+/*	$NetBSD: option_unittest.c,v 1.1.1.1 2018/04/07 20:44:26 christos Exp $	*/
 
 /*
  * Copyright (C) 2018 Internet Systems Consortium, Inc. ("ISC")
