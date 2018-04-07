@@ -1,4 +1,4 @@
-/*	$NetBSD: locore_el2.S,v 1.1 2018/04/01 04:35:03 ryo Exp $	*/
+/*	$NetBSD: locore_el2.S,v 1.1.2.2 2018/04/07 04:12:10 pgoyette Exp $	*/
 
 /*-
  * Copyright (c) 2012-2014 Andrew Turner
@@ -32,7 +32,7 @@
 #include <aarch64/hypervisor.h>
 #include "assym.h"
 
-RCSID("$NetBSD: locore_el2.S,v 1.1 2018/04/01 04:35:03 ryo Exp $")
+RCSID("$NetBSD: locore_el2.S,v 1.1.2.2 2018/04/07 04:12:10 pgoyette Exp $")
 
 
 /* for use in #include "locore_el2.S" */

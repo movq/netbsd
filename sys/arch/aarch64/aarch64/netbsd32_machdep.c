@@ -29,7 +29,7 @@
 
 #include <sys/cdefs.h>
 
-__KERNEL_RCSID(1, "$NetBSD: netbsd32_machdep.c,v 1.1 2018/04/01 04:35:03 ryo Exp $");
+__KERNEL_RCSID(1, "$NetBSD: netbsd32_machdep.c,v 1.1.2.2 2018/04/07 04:12:10 pgoyette Exp $");
 
 #include "opt_compat_netbsd.h"
 

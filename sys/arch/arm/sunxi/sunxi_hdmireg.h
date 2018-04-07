@@ -1,4 +1,4 @@
-/* $NetBSD: sunxi_hdmireg.h,v 1.1 2018/04/03 12:52:16 bouyer Exp $ */
+/* $NetBSD: sunxi_hdmireg.h,v 1.1.2.2 2018/04/07 04:12:12 pgoyette Exp $ */
 
 /*-
  * Copyright (c) 2013 The NetBSD Foundation, Inc.

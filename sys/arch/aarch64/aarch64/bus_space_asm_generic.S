@@ -1,4 +1,4 @@
-/*	$NetBSD: bus_space_asm_generic.S,v 1.1 2018/04/01 04:35:03 ryo Exp $	*/
+/*	$NetBSD: bus_space_asm_generic.S,v 1.1.2.2 2018/04/07 04:12:10 pgoyette Exp $	*/
 
 /*
  * Copyright (c) 2017 Ryo Shimizu <ryo@nerv.org>
@@ -29,7 +29,7 @@
 #include <aarch64/asm.h>
 #include "assym.h"
 
-RCSID("$NetBSD: bus_space_asm_generic.S,v 1.1 2018/04/01 04:35:03 ryo Exp $")
+RCSID("$NetBSD: bus_space_asm_generic.S,v 1.1.2.2 2018/04/07 04:12:10 pgoyette Exp $")
 
 .macro generate_bsfunc funcname, dsbop
 /* uint8_t {funcname}_bs_r_1(x0:tag, x1:addr, x2:offset) */

@@ -1,4 +1,4 @@
-/*	$NetBSD: aarch64_reboot.c,v 1.1 2018/04/01 04:35:03 ryo Exp $	*/
+/*	$NetBSD: aarch64_reboot.c,v 1.1.2.2 2018/04/07 04:12:10 pgoyette Exp $	*/
 
 /*
  * Copyright (c) 2002, 2003, 2005  Genetec Corporation.  All rights reserved.
@@ -122,7 +122,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: aarch64_reboot.c,v 1.1 2018/04/01 04:35:03 ryo Exp $");
+__KERNEL_RCSID(0, "$NetBSD: aarch64_reboot.c,v 1.1.2.2 2018/04/07 04:12:10 pgoyette Exp $");
 
 #include <sys/param.h>
 #include <sys/device.h>
