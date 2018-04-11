@@ -1,4 +1,4 @@
-/*	$NetBSD: efipxe.c,v 1.1 2018/04/11 10:32:09 nonaka Exp $	*/
+/*	$NetBSD: efipxe.c,v 1.1.2.2 2018/04/11 14:51:43 martin Exp $	*/
 /*	$OpenBSD: efipxe.c,v 1.3 2018/01/30 20:19:06 naddy Exp $	*/
 
 /*
