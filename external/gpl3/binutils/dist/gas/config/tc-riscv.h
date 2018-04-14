@@ -1,7 +1,7 @@
 /* tc-riscv.h -- header file for tc-riscv.c.
-   Copyright 2011-2014 Free Software Foundation, Inc.
+   Copyright (C) 2011-2018 Free Software Foundation, Inc.
 
-   Contributed by Andrew Waterman (waterman@cs.berkeley.edu) at UC Berkeley.
+   Contributed by Andrew Waterman (andrew@sifive.com).
    Based on MIPS target.
 
    This file is part of GAS.
@@ -17,9 +17,8 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with GAS; see the file COPYING.  If not, write to the Free
-   Software Foundation, 51 Franklin Street - Fifth Floor, Boston, MA
-   02110-1301, USA.  */
+   along with this program; see the file COPYING3. If not,
+   see <http://www.gnu.org/licenses/>.  */
 
 #ifndef TC_RISCV
 #define TC_RISCV
@@ -34,52 +33,51 @@ struct expressionS;
 #define TARGET_ARCH bfd_arch_riscv
 
 #define WORKING_DOT_WORD	1
-#define OLD_FLOAT_READS
-#define REPEAT_CONS_EXPRESSIONS
-#define RELOC_EXPANSION_POSSIBLE
-#define MAX_RELOC_EXPANSION 3
-#define LOCAL_LABELS_FB 1
+#define LOCAL_LABELS_FB 	1
+
+/* Symbols named FAKE_LABEL_NAME are emitted when generating DWARF, so make
+   sure FAKE_LABEL_NAME is printable.  It still must be distinct from any
+   real label name.  So, append a space, which other labels can't contain.  */
+#define FAKE_LABEL_NAME ".L0 "
+/* Changing the special character in FAKE_LABEL_NAME requires changing
+   FAKE_LABEL_CHAR too.  */
+#define FAKE_LABEL_CHAR ' '
 
 #define md_relax_frag(segment, fragp, stretch) \
-  riscv_relax_frag(segment, fragp, stretch)
+  riscv_relax_frag (segment, fragp, stretch)
 extern int riscv_relax_frag (asection *, struct frag *, long);
 
 #define md_section_align(seg,size)	(size)
 #define md_undefined_symbol(name)	(0)
 #define md_operand(x)
 
-#define NOP_OPCODE RISCV_NOP
+extern bfd_boolean riscv_frag_align_code (int);
+#define md_do_align(N, FILL, LEN, MAX, LABEL)				\
+  if ((N) != 0 && !(FILL) && !need_pass_2 && subseg_text_p (now_seg))	\
+    {									\
+      if (riscv_frag_align_code (N))					\
+	goto LABEL;							\
+    }
 
-extern void riscv_handle_align (struct frag *);
-#define HANDLE_ALIGN(fragp)  riscv_handle_align (fragp)
+extern void riscv_handle_align (fragS *);
+#define HANDLE_ALIGN riscv_handle_align
 
-#define MAX_MEM_FOR_RS_ALIGN_CODE  (1 + 2)
-
-struct insn_label_list;
-struct riscv_segment_info {
-  struct insn_label_list *labels;
-};
-#define TC_SEGMENT_INFO_TYPE struct riscv_segment_info
-
-#define TC_SYMFIELD_TYPE int
+#define MAX_MEM_FOR_RS_ALIGN_CODE 7
 
 /* The ISA of the target may change based on command-line arguments.  */
 #define TARGET_FORMAT riscv_target_format()
-extern const char *riscv_target_format (void);
+extern const char * riscv_target_format (void);
 
 #define md_after_parse_args() riscv_after_parse_args()
 extern void riscv_after_parse_args (void);
 
-#define tc_init_after_args() riscv_init_after_args()
-extern void riscv_init_after_args (void);
-
 #define md_parse_long_option(arg) riscv_parse_long_option (arg)
 extern int riscv_parse_long_option (const char *);
 
-#define tc_frob_label(sym) riscv_define_label (sym)
-extern void riscv_define_label (symbolS *);
+#define md_pre_output_hook riscv_pre_output_hook()
+extern void riscv_pre_output_hook (void);
 
-/* Let the linker resolve all the relocs due to relaxation. */
+/* Let the linker resolve all the relocs due to relaxation.  */
 #define tc_fix_adjustable(fixp) 0
 #define md_allow_local_subtract(l,r,s) 0
 
@@ -90,27 +88,18 @@ extern void riscv_define_label (symbolS *);
 #define EXTERN_FORCE_RELOC			\
   (OUTPUT_FLAVOR == bfd_target_elf_flavour)
 
-#define TC_FORCE_RELOCATION_SUB_SAME(FIX, SEG) ((SEG)->flags & SEC_CODE)
+/* Postpone text-section label subtraction calculation until linking, since
+   linker relaxations might change the deltas.  */
+#define TC_FORCE_RELOCATION_SUB_SAME(FIX, SEG)	\
+  (GENERIC_FORCE_RELOCATION_SUB_SAME (FIX, SEG)	\
+   || ((SEG)->flags & SEC_CODE) != 0)
 #define TC_FORCE_RELOCATION_SUB_LOCAL(FIX, SEG) 1
-#define TC_VALIDATE_FIX_SUB(FIX, SEG) TC_FORCE_RELOCATION_SUB_SAME(FIX, SEG)
+#define TC_VALIDATE_FIX_SUB(FIX, SEG) 1
+#define TC_FORCE_RELOCATION_LOCAL(FIX) 1
 #define DIFF_EXPR_OK 1
 
 extern void riscv_pop_insert (void);
-#define md_pop_insert()		riscv_pop_insert()
-
-extern void riscv_clear_insn_labels (void);
-#define md_flush_pending_output riscv_clear_insn_labels
-
-extern void riscv_enable_auto_align (void);
-#define md_elf_section_change_hook()	riscv_enable_auto_align()
-
-enum dwarf2_format;
-extern enum dwarf2_format riscv_dwarf2_format (asection *);
-#define DWARF2_FORMAT(SEC) riscv_dwarf2_format (SEC)
-
-extern int riscv_dwarf2_addr_size (void);
-#define DWARF2_ADDR_SIZE(bfd) riscv_dwarf2_addr_size ()
-#define DWARF2_FDE_RELOC_SIZE riscv_dwarf2_addr_size ()
+#define md_pop_insert()		riscv_pop_insert ()
 
 #define TARGET_USE_CFIPOP 1
 
@@ -118,12 +107,17 @@ extern int riscv_dwarf2_addr_size (void);
 extern void riscv_cfi_frame_initial_instructions (void);
 
 #define tc_regname_to_dw2regnum tc_riscv_regname_to_dw2regnum
-extern int tc_riscv_regname_to_dw2regnum (char *regname);
+extern int tc_riscv_regname_to_dw2regnum (char *);
 
-#define DWARF2_DEFAULT_RETURN_COLUMN LINK_REG
-#define DWARF2_CIE_DATA_ALIGNMENT (-4)
+#define DWARF2_DEFAULT_RETURN_COLUMN X_RA
+
+/* Even on RV64, use 4-byte alignment, as F registers may be only 32 bits.  */
+#define DWARF2_CIE_DATA_ALIGNMENT -4
 
 #define elf_tc_final_processing riscv_elf_final_processing
 extern void riscv_elf_final_processing (void);
+
+/* Adjust debug_line after relaxation.  */
+#define DWARF2_USE_FIXED_ADVANCE_PC 1
 
 #endif /* TC_RISCV */
