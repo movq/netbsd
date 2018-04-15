@@ -1,4 +1,4 @@
-/*	$NetBSD: buffer.c,v 1.1 2018/04/15 19:32:48 christos Exp $	*/
+/*	$NetBSD: buffer.c,v 1.1.1.1 2018/04/15 19:32:48 christos Exp $	*/
 
 /*
  * Copyright (c) Christos Zoulas 2017.
@@ -32,7 +32,7 @@
 #if 0
 FILE_RCSID("@(#)$File: buffer.c,v 1.4 2018/02/21 21:26:00 christos Exp $")
 #else
-__RCSID("$NetBSD: buffer.c,v 1.1 2018/04/15 19:32:48 christos Exp $");
+__RCSID("$NetBSD: buffer.c,v 1.1.1.1 2018/04/15 19:32:48 christos Exp $");
 #endif
 #endif	/* lint */
 
