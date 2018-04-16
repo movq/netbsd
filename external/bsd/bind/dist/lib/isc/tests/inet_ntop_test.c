@@ -1,4 +1,4 @@
-/*	$NetBSD: inet_ntop_test.c,v 1.1.1.1 2018/04/07 21:44:11 christos Exp $	*/
+/*	$NetBSD: inet_ntop_test.c,v 1.1.1.1.2.2 2018/04/16 01:57:59 pgoyette Exp $	*/
 
 /*
  * Copyright (C) 2017  Internet Systems Consortium, Inc. ("ISC")

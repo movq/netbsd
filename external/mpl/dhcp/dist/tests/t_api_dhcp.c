@@ -1,4 +1,4 @@
-/*	$NetBSD: t_api_dhcp.c,v 1.2 2018/04/07 22:37:30 christos Exp $	*/
+/*	$NetBSD: t_api_dhcp.c,v 1.2.2.2 2018/04/16 01:59:49 pgoyette Exp $	*/
 
 /*
  * We have to have a number of symbols defined in order to build a

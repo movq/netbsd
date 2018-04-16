@@ -1,4 +1,4 @@
-/*	$NetBSD: dns_unittest.c,v 1.2 2018/04/07 22:37:29 christos Exp $	*/
+/*	$NetBSD: dns_unittest.c,v 1.2.2.2 2018/04/16 01:59:46 pgoyette Exp $	*/
 
 /*
  * Copyright (C) 2013-2017 Internet Systems Consortium, Inc. ("ISC")

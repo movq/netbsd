@@ -1,4 +1,4 @@
-/*	$NetBSD: xmss_wots.h,v 1.2 2018/04/06 18:59:00 christos Exp $	*/
+/*	$NetBSD: xmss_wots.h,v 1.2.2.2 2018/04/16 01:57:31 pgoyette Exp $	*/
 /* $OpenBSD: xmss_wots.h,v 1.3 2018/02/26 12:14:53 dtucker Exp $ */
 /*
 wots.h version 20160722

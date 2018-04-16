@@ -1,4 +1,4 @@
-/*	$NetBSD: xmss_fast.c,v 1.2 2018/04/06 18:59:00 christos Exp $	*/
+/*	$NetBSD: xmss_fast.c,v 1.2.2.2 2018/04/16 01:57:31 pgoyette Exp $	*/
 /* $OpenBSD: xmss_fast.c,v 1.3 2018/03/22 07:06:11 markus Exp $ */
 /*
 xmss_fast.c version 20160722
@@ -7,7 +7,7 @@ Joost Rijneveld
 Public domain.
 */
 #include "includes.h"
-__RCSID("$NetBSD: xmss_fast.c,v 1.2 2018/04/06 18:59:00 christos Exp $");
+__RCSID("$NetBSD: xmss_fast.c,v 1.2.2.2 2018/04/16 01:57:31 pgoyette Exp $");
 
 #include <stdlib.h>
 #include <string.h>

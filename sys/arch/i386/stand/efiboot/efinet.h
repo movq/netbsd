@@ -1,4 +1,4 @@
-/*	$NetBSD: efinet.h,v 1.1 2018/04/11 10:32:09 nonaka Exp $	*/
+/*	$NetBSD: efinet.h,v 1.1.4.2 2018/04/16 01:59:54 pgoyette Exp $	*/
 
 /*-
  * Copyright (c) 2018 Kimihiro Nonaka <nonaka@netbsd.org>

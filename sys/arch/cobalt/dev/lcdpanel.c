@@ -1,4 +1,4 @@
-/* $NetBSD: lcdpanel.c,v 1.1 2018/04/09 20:16:16 christos Exp $ */
+/* $NetBSD: lcdpanel.c,v 1.1.2.2 2018/04/16 01:59:54 pgoyette Exp $ */
 
 /*
  * Copyright (c) 2002 Dennis I. Chernoivanov
@@ -28,7 +28,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: lcdpanel.c,v 1.1 2018/04/09 20:16:16 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: lcdpanel.c,v 1.1.2.2 2018/04/16 01:59:54 pgoyette Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

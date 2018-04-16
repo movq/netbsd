@@ -1,4 +1,4 @@
-/*	$NetBSD: bpf.c,v 1.2 2018/04/07 22:37:29 christos Exp $	*/
+/*	$NetBSD: bpf.c,v 1.2.2.2 2018/04/16 01:59:46 pgoyette Exp $	*/
 
 /* bpf.c
 
@@ -35,7 +35,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: bpf.c,v 1.2 2018/04/07 22:37:29 christos Exp $");
+__RCSID("$NetBSD: bpf.c,v 1.2.2.2 2018/04/16 01:59:46 pgoyette Exp $");
 
 #include "dhcpd.h"
 #if defined (USE_BPF_SEND) || defined (USE_BPF_RECEIVE)	\

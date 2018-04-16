@@ -1,4 +1,4 @@
-/*	$NetBSD: button.c,v 1.1 2018/04/09 20:07:22 christos Exp $ */
+/*	$NetBSD: button.c,v 1.1.2.2 2018/04/16 01:59:55 pgoyette Exp $ */
 
 /*-
  * Copyright (c) 2009 Michael Lorenz
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: button.c,v 1.1 2018/04/09 20:07:22 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: button.c,v 1.1.2.2 2018/04/16 01:59:55 pgoyette Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

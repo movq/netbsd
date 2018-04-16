@@ -1,4 +1,4 @@
-/*	$NetBSD: freezero.c,v 1.1 2018/04/06 18:59:00 christos Exp $	*/
+/*	$NetBSD: freezero.c,v 1.1.2.2 2018/04/16 01:57:31 pgoyette Exp $	*/
 /*
  * Copyright (c) 2008, 2010, 2011, 2016 Otto Moerbeek <otto@drijf.net>
  *
@@ -16,7 +16,7 @@
  */
 
 #include "includes.h"
-__RCSID("$NetBSD: freezero.c,v 1.1 2018/04/06 18:59:00 christos Exp $");
+__RCSID("$NetBSD: freezero.c,v 1.1.2.2 2018/04/16 01:57:31 pgoyette Exp $");
 
 #include <string.h>
 #include <stdlib.h>

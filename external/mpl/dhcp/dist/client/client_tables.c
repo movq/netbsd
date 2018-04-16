@@ -1,4 +1,4 @@
-/*	$NetBSD: client_tables.c,v 1.2 2018/04/07 22:37:29 christos Exp $	*/
+/*	$NetBSD: client_tables.c,v 1.2.2.2 2018/04/16 01:59:45 pgoyette Exp $	*/
 
 /* client_tables.c
 
@@ -28,7 +28,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: client_tables.c,v 1.2 2018/04/07 22:37:29 christos Exp $");
+__RCSID("$NetBSD: client_tables.c,v 1.2.2.2 2018/04/16 01:59:45 pgoyette Exp $");
 
 #include "dhcpd.h"
 
