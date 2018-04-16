@@ -1,4 +1,4 @@
-/*	$NetBSD: xmss_wots.c,v 1.2 2018/04/06 18:59:00 christos Exp $	*/
+/*	$NetBSD: xmss_wots.c,v 1.2.2.2 2018/04/16 02:03:04 pgoyette Exp $	*/
 /* $OpenBSD: xmss_wots.c,v 1.2 2018/02/26 03:56:44 dtucker Exp $ */
 /*
 wots.c version 20160722
@@ -7,7 +7,7 @@ Joost Rijneveld
 Public domain.
 */
 #include "includes.h"
-__RCSID("$NetBSD: xmss_wots.c,v 1.2 2018/04/06 18:59:00 christos Exp $");
+__RCSID("$NetBSD: xmss_wots.c,v 1.2.2.2 2018/04/16 02:03:04 pgoyette Exp $");
 
 #include <stdlib.h>
 #include <stdint.h>
