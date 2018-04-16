@@ -1,4 +1,4 @@
-/*	$NetBSD: dlpi.c,v 1.2 2018/04/07 22:37:29 christos Exp $	*/
+/*	$NetBSD: dlpi.c,v 1.2.2.2 2018/04/16 01:59:46 pgoyette Exp $	*/
 
 /* dlpi.c
  
@@ -36,7 +36,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: dlpi.c,v 1.2 2018/04/07 22:37:29 christos Exp $");
+__RCSID("$NetBSD: dlpi.c,v 1.2.2.2 2018/04/16 01:59:46 pgoyette Exp $");
 
 /*
  * Based largely in part to the existing NIT code in nit.c.

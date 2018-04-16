@@ -1,4 +1,4 @@
-/*	$NetBSD: executor.c,v 1.1 2018/04/13 20:30:09 kamil Exp $	*/
+/*	$NetBSD: executor.c,v 1.1.2.2 2018/04/16 02:00:08 pgoyette Exp $	*/
 
 /*-
  * Copyright (c) 2018 The NetBSD Foundation, Inc.
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: executor.c,v 1.1 2018/04/13 20:30:09 kamil Exp $");
+__KERNEL_RCSID(0, "$NetBSD: executor.c,v 1.1.2.2 2018/04/16 02:00:08 pgoyette Exp $");
 
 #include <sys/param.h>
 #include <sys/module.h>

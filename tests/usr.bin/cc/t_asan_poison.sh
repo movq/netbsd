@@ -1,4 +1,4 @@
-#	$NetBSD: t_asan_poison.sh,v 1.1 2018/04/11 03:25:25 kamil Exp $
+#	$NetBSD: t_asan_poison.sh,v 1.1.2.2 2018/04/16 02:00:10 pgoyette Exp $
 #
 # Copyright (c) 2018 The NetBSD Foundation, Inc.
 # All rights reserved.

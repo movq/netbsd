@@ -1,4 +1,4 @@
-/*	$NetBSD: convert.h,v 1.2 2018/04/07 22:37:30 christos Exp $	*/
+/*	$NetBSD: convert.h,v 1.2.2.2 2018/04/16 01:59:48 pgoyette Exp $	*/
 
 /* convert.h
 

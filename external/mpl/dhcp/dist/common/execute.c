@@ -1,4 +1,4 @@
-/*	$NetBSD: execute.c,v 1.2 2018/04/07 22:37:29 christos Exp $	*/
+/*	$NetBSD: execute.c,v 1.2.2.2 2018/04/16 01:59:46 pgoyette Exp $	*/
 
 /* execute.c
 
@@ -29,7 +29,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: execute.c,v 1.2 2018/04/07 22:37:29 christos Exp $");
+__RCSID("$NetBSD: execute.c,v 1.2.2.2 2018/04/16 01:59:46 pgoyette Exp $");
 
 #include "dhcpd.h"
 #include <isc/util.h>

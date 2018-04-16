@@ -1,4 +1,4 @@
-/*	$NetBSD: xmss_hash.c,v 1.2 2018/04/06 18:59:00 christos Exp $	*/
+/*	$NetBSD: xmss_hash.c,v 1.2.2.2 2018/04/16 01:57:31 pgoyette Exp $	*/
 /* $OpenBSD: xmss_hash.c,v 1.2 2018/02/26 03:56:44 dtucker Exp $ */
 /*
 hash.c version 20160722
@@ -7,7 +7,7 @@ Joost Rijneveld
 Public domain.
 */
 #include "includes.h"
-__RCSID("$NetBSD: xmss_hash.c,v 1.2 2018/04/06 18:59:00 christos Exp $");
+__RCSID("$NetBSD: xmss_hash.c,v 1.2.2.2 2018/04/16 01:57:31 pgoyette Exp $");
 
 #include "xmss_hash_address.h"
 #include "xmss_commons.h"

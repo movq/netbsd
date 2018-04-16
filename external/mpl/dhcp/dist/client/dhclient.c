@@ -1,4 +1,4 @@
-/*	$NetBSD: dhclient.c,v 1.2 2018/04/07 22:37:29 christos Exp $	*/
+/*	$NetBSD: dhclient.c,v 1.2.2.2 2018/04/16 01:59:45 pgoyette Exp $	*/
 
 /* dhclient.c
 
@@ -33,7 +33,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: dhclient.c,v 1.2 2018/04/07 22:37:29 christos Exp $");
+__RCSID("$NetBSD: dhclient.c,v 1.2.2.2 2018/04/16 01:59:45 pgoyette Exp $");
 
 #include "dhcpd.h"
 #include <isc/util.h>
@@ -236,7 +236,7 @@ add_interfaces(char **ifaces, int nifaces)
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: dhclient.c,v 1.2 2018/04/07 22:37:29 christos Exp $");
+__RCSID("$NetBSD: dhclient.c,v 1.2.2.2 2018/04/16 01:59:45 pgoyette Exp $");
 
 #if defined(DHCPv6) && defined(DHCP4o6)
 static void dhcp4o6_poll(void *dummy);
@@ -1225,7 +1225,7 @@ int find_subnet (struct subnet **sp,
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: dhclient.c,v 1.2 2018/04/07 22:37:29 christos Exp $");
+__RCSID("$NetBSD: dhclient.c,v 1.2.2.2 2018/04/16 01:59:45 pgoyette Exp $");
 
 void state_reboot (cpp)
 	void *cpp;

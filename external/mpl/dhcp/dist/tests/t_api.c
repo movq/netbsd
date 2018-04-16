@@ -1,4 +1,4 @@
-/*	$NetBSD: t_api.c,v 1.2 2018/04/07 22:37:30 christos Exp $	*/
+/*	$NetBSD: t_api.c,v 1.2.2.2 2018/04/16 01:59:49 pgoyette Exp $	*/
 
 /*
  * Copyright (C) 2004-2017  Internet Systems Consortium, Inc. ("ISC")
@@ -31,7 +31,7 @@
  * macro.
  */
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: t_api.c,v 1.2 2018/04/07 22:37:30 christos Exp $");
+__RCSID("$NetBSD: t_api.c,v 1.2.2.2 2018/04/16 01:59:49 pgoyette Exp $");
 
 #include <config.h>
 
