@@ -1,4 +1,4 @@
-/*	$NetBSD: compat_sysv_mod.c,v 1.4.10.1 2018/04/17 21:59:27 pgoyette Exp $	*/
+/*	$NetBSD: compat_sysv_mod.c,v 1.4.10.2 2018/04/17 23:06:11 pgoyette Exp $	*/
 
 /*-
  * Copyright (c) 2018 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: compat_sysv_mod.c,v 1.4.10.1 2018/04/17 21:59:27 pgoyette Exp $");
+__KERNEL_RCSID(0, "$NetBSD: compat_sysv_mod.c,v 1.4.10.2 2018/04/17 23:06:11 pgoyette Exp $");
 
 #ifdef _KERNEL_OPT
 #include "opt_compat_netbsd.h"
@@ -46,11 +46,16 @@ __KERNEL_RCSID(0, "$NetBSD: compat_sysv_mod.c,v 1.4.10.1 2018/04/17 21:59:27 pgo
 
 #include <compat/common/compat_sysv_mod.h>
 
-MODULE(MODULE_CLASS_EXEC, compat_sysv, "sysv_ipc");
+static const char * const compat_sysv_includes[] = {
+        "compat_sysv_50", "compat_14", "compat_10", NULL
+};
+
+MODULE_WITH_ALIASES(MODULE_CLASS_EXEC, compat_sysv, "sysv_ipc",
+    &compat_sysv_includes);
 
 /* Build the syscall package based on options specified */
 
-static const struct syscall_package compat_syscalls[] = {
+static const struct syscall_package compat_sysv_syscalls[] = {
 #if defined(COMPAT_10) && !defined(_LP64)
 #ifdef	SYSVSHM
 	{ SYS_compat_10_oshmsys, 0, (sy_call_t *)compat_10_sys_shmsys },
@@ -99,7 +104,7 @@ compat_sysv_modcmd(modcmd_t cmd, void *arg)
 
 	switch (cmd) {
 	case MODULE_CMD_INIT:
-		error = syscall_establish(NULL, compat_syscalls);
+		error = syscall_establish(NULL, compat_sysv_syscalls);
 		if (error != 0) {
 			break;
 		}
@@ -113,7 +118,7 @@ compat_sysv_modcmd(modcmd_t cmd, void *arg)
 #if defined(COMPAT_50)
 		vec_sysvipc50_sysctl = orig_sysvipc50_sysctl;
 #endif
-		error = syscall_disestablish(NULL, compat_syscalls);
+		error = syscall_disestablish(NULL, compat_sysv_syscalls);
 		if (error != 0) {
 			break;
 		}
