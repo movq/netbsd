@@ -1,4 +1,4 @@
-/*	$NetBSD: seccomp.c,v 1.1.1.1 2018/04/15 19:32:48 christos Exp $	*/
+/*	$NetBSD: seccomp.c,v 1.1.1.1.2.2 2018/04/22 07:20:09 pgoyette Exp $	*/
 
 /*
  * Redistribution and use in source and binary forms, with or without
@@ -32,7 +32,7 @@
 #if 0
 FILE_RCSID("@(#)$File: seccomp.c,v 1.2 2017/11/04 01:14:25 christos Exp $")
 #else
-__RCSID("$NetBSD: seccomp.c,v 1.1.1.1 2018/04/15 19:32:48 christos Exp $");
+__RCSID("$NetBSD: seccomp.c,v 1.1.1.1.2.2 2018/04/22 07:20:09 pgoyette Exp $");
 #endif
 #endif	/* lint */
 
