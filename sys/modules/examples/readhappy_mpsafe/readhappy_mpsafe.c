@@ -1,4 +1,4 @@
-/*	$NetBSD: readhappy_mpsafe.c,v 1.1 2018/04/20 00:06:45 kamil Exp $    */
+/*	$NetBSD: readhappy_mpsafe.c,v 1.1.2.2 2018/04/22 07:20:27 pgoyette Exp $    */
 
 /*-
  * Copyright (c) 2018 The NetBSD Foundation, Inc.
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: readhappy_mpsafe.c,v 1.1 2018/04/20 00:06:45 kamil Exp $");
+__KERNEL_RCSID(0, "$NetBSD: readhappy_mpsafe.c,v 1.1.2.2 2018/04/22 07:20:27 pgoyette Exp $");
 
 #include <sys/param.h>
 #include <sys/module.h>

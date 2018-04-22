@@ -1,4 +1,4 @@
-/*	$NetBSD: util.c,v 1.2 2018/04/18 10:11:44 nonaka Exp $	*/
+/*	$NetBSD: util.c,v 1.2.4.2 2018/04/22 07:20:16 pgoyette Exp $	*/
 
 /*-
  * Copyright (c) 2017 Netflix, Inc
@@ -28,7 +28,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: util.c,v 1.2 2018/04/18 10:11:44 nonaka Exp $");
+__RCSID("$NetBSD: util.c,v 1.2.4.2 2018/04/22 07:20:16 pgoyette Exp $");
 #if 0
 __FBSDID("$FreeBSD: head/sbin/nvmecontrol/util.c 320423 2017-06-27 20:24:25Z imp $");
 #endif
