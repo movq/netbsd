@@ -1,4 +1,4 @@
-/*	$NetBSD: tegra194-reset.h,v 1.1 2018/04/28 18:25:54 jmcneill Exp $	*/
+/*	$NetBSD: tegra194-reset.h,v 1.1.1.1 2018/04/28 18:25:54 jmcneill Exp $	*/
 
 /* SPDX-License-Identifier: GPL-2.0 */
 /* Copyright (c) 2018, NVIDIA CORPORATION. All rights reserved. */

@@ -1,4 +1,4 @@
-/*	$NetBSD: am4.h,v 1.1 2018/04/28 18:25:53 jmcneill Exp $	*/
+/*	$NetBSD: am4.h,v 1.1.1.1 2018/04/28 18:25:53 jmcneill Exp $	*/
 
 /*
  * Copyright 2017 Texas Instruments, Inc.

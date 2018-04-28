@@ -1,4 +1,4 @@
-/*	$NetBSD: amlogic,meson-axg-reset.h,v 1.1 2018/04/28 18:25:53 jmcneill Exp $	*/
+/*	$NetBSD: amlogic,meson-axg-reset.h,v 1.1.1.1 2018/04/28 18:25:53 jmcneill Exp $	*/
 
 /*
  *
