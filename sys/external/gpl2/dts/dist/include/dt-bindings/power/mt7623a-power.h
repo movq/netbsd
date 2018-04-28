@@ -1,4 +1,4 @@
-/*	$NetBSD: mt7623a-power.h,v 1.1 2018/04/28 18:25:53 jmcneill Exp $	*/
+/*	$NetBSD: mt7623a-power.h,v 1.1.1.1 2018/04/28 18:25:53 jmcneill Exp $	*/
 
 /* SPDX-License-Identifier: GPL-2.0 */
 #ifndef _DT_BINDINGS_POWER_MT7623A_POWER_H

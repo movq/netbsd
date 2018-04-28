@@ -1,4 +1,4 @@
-/*	$NetBSD: r8a77980-cpg-mssr.h,v 1.1 2018/04/28 18:25:53 jmcneill Exp $	*/
+/*	$NetBSD: r8a77980-cpg-mssr.h,v 1.1.1.1 2018/04/28 18:25:53 jmcneill Exp $	*/
 
 /* SPDX-License-Identifier: GPL-2.0+ */
 /*
