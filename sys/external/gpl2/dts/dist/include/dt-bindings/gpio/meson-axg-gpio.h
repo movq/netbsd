@@ -1,4 +1,4 @@
-/*	$NetBSD: meson-axg-gpio.h,v 1.1.1.1 2018/04/28 18:25:53 jmcneill Exp $	*/
+/*	$NetBSD: meson-axg-gpio.h,v 1.1.1.1.2.2 2018/05/02 07:20:21 pgoyette Exp $	*/
 
 /*
  * Copyright (c) 2017 Amlogic, Inc. All rights reserved.

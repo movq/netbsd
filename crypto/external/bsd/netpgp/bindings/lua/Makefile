@@ -1,4 +1,4 @@
-# $NetBSD: Makefile,v 1.1 2018/04/29 19:47:35 sevan Exp $
+# $NetBSD: Makefile,v 1.1.2.2 2018/05/02 07:19:58 pgoyette Exp $
 
 LUA_MODULES=netpgp
 LUA_SRCS.netpgp=glue.c

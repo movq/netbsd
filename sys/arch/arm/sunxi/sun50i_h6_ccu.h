@@ -1,4 +1,4 @@
-/* $NetBSD: sun50i_h6_ccu.h,v 1.1 2018/05/01 19:53:14 jmcneill Exp $ */
+/* $NetBSD: sun50i_h6_ccu.h,v 1.1.2.2 2018/05/02 07:20:04 pgoyette Exp $ */
 
 /*-
  * Copyright (c) 2018 Jared McNeill <jmcneill@invisible.ca>

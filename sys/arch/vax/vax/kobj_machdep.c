@@ -1,4 +1,4 @@
-/*      $NetBSD: kobj_machdep.c,v 1.1 2018/04/30 06:46:12 ragge Exp $   */
+/*      $NetBSD: kobj_machdep.c,v 1.1.2.2 2018/05/02 07:20:05 pgoyette Exp $   */
 
 /*-
  * Copyright (c) 2018 The NetBSD Foundation, Inc.

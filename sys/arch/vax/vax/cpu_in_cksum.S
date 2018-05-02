@@ -1,4 +1,4 @@
-/*	$NetBSD: cpu_in_cksum.S,v 1.1 2018/04/25 11:06:49 ragge Exp $	*/
+/*	$NetBSD: cpu_in_cksum.S,v 1.1.2.2 2018/05/02 07:20:05 pgoyette Exp $	*/
 
 /*-
  * Copyright (c) 2017 The NetBSD Foundation, Inc.
@@ -66,7 +66,7 @@
  */
 
 #include <machine/asm.h>
-__KERNEL_RCSID(0, "$NetBSD: cpu_in_cksum.S,v 1.1 2018/04/25 11:06:49 ragge Exp $");
+__KERNEL_RCSID(0, "$NetBSD: cpu_in_cksum.S,v 1.1.2.2 2018/05/02 07:20:05 pgoyette Exp $");
 
 #include "assym.h"
 

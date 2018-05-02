@@ -1,4 +1,4 @@
-/*	$NetBSD: stm32mp1-resets.h,v 1.1.1.1 2018/04/28 18:25:54 jmcneill Exp $	*/
+/*	$NetBSD: stm32mp1-resets.h,v 1.1.1.1.2.2 2018/05/02 07:20:22 pgoyette Exp $	*/
 
 /* SPDX-License-Identifier: GPL-2.0 or BSD-3-Clause */
 /*
