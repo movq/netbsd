@@ -1,4 +1,4 @@
-/*	$NetBSD: imx6ull-pinfunc-snvs.h,v 1.1.1.1 2018/04/28 18:25:52 jmcneill Exp $	*/
+/*	$NetBSD: imx6ull-pinfunc-snvs.h,v 1.1.1.1.2.2 2018/05/02 07:20:15 pgoyette Exp $	*/
 
 // SPDX-License-Identifier: GPL-2.0
 /*

@@ -1,4 +1,4 @@
-# $NetBSD: bsd.hostinit.mk,v 1.1 2018/05/01 19:59:44 christos Exp $
+# $NetBSD: bsd.hostinit.mk,v 1.1.2.2 2018/05/02 07:20:02 pgoyette Exp $
 
 .if !defined(_BSD_HOSTINIT_MK_)
 _BSD_HOSTINIT_MK_=1

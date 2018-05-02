@@ -1,4 +1,4 @@
-/*	$NetBSD: compat_sigaction.S,v 1.1 2018/04/29 17:47:06 jmcneill Exp $	*/
+/*	$NetBSD: compat_sigaction.S,v 1.1.2.2 2018/05/02 07:20:01 pgoyette Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.

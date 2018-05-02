@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile.inc,v 1.1 2018/04/29 17:47:06 jmcneill Exp $
+#	$NetBSD: Makefile.inc,v 1.1.2.2 2018/05/02 07:20:01 pgoyette Exp $
 
 SRCS+=compat_Ovfork.S compat___semctl.S compat___sigreturn14.S \
     compat_msgctl.S compat_shmctl.S compat_sigaction.S \

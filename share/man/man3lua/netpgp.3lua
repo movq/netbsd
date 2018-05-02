@@ -1,4 +1,4 @@
-.\"     $NetBSD: netpgp.3lua,v 1.2 2018/04/30 07:10:04 wiz Exp $
+.\"     $NetBSD: netpgp.3lua,v 1.2.2.2 2018/05/02 07:20:02 pgoyette Exp $
 .\"
 .\" Copyright (c) 2018 The NetBSD Foundation, Inc.
 .\" All rights reserved.
