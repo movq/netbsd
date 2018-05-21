@@ -1,4 +1,4 @@
-/*	$NetBSD: t_vfork.c,v 1.1 2018/05/18 06:39:58 kamil Exp $	*/
+/*	$NetBSD: t_vfork.c,v 1.1.2.2 2018/05/21 04:36:17 pgoyette Exp $	*/
 
 /*-
  * Copyright (c) 2018 The NetBSD Foundation, Inc.

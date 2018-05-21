@@ -1,4 +1,4 @@
-/*	$NetBSD: if_bwfm_pci.c,v 1.1 2018/05/11 07:42:22 maya Exp $	*/
+/*	$NetBSD: if_bwfm_pci.c,v 1.1.2.2 2018/05/21 04:36:06 pgoyette Exp $	*/
 /*	$OpenBSD: if_bwfm_pci.c,v 1.18 2018/02/08 05:00:38 patrick Exp $	*/
 /*
  * Copyright (c) 2010-2016 Broadcom Corporation

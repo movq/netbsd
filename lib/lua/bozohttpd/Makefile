@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.1 2018/05/03 22:51:18 sevan Exp $
+#	$NetBSD: Makefile,v 1.1.2.2 2018/05/21 04:35:56 pgoyette Exp $
 
 LUA_MODULES=		bozohttpd
 LUA_SRCS.bozohttpd=	glue.c

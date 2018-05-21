@@ -1,4 +1,4 @@
-/* $NetBSD: sunxi_pwm.c,v 1.1 2018/05/06 10:34:34 jmcneill Exp $ */
+/* $NetBSD: sunxi_pwm.c,v 1.1.2.2 2018/05/21 04:35:59 pgoyette Exp $ */
 
 /*-
  * Copyright (c) 2018 Jared McNeill <jmcneill@invisible.ca>
@@ -28,7 +28,7 @@
 
 #include <sys/cdefs.h>
 
-__KERNEL_RCSID(1, "$NetBSD: sunxi_pwm.c,v 1.1 2018/05/06 10:34:34 jmcneill Exp $");
+__KERNEL_RCSID(1, "$NetBSD: sunxi_pwm.c,v 1.1.2.2 2018/05/21 04:35:59 pgoyette Exp $");
 
 #include <sys/param.h>
 #include <sys/bus.h>

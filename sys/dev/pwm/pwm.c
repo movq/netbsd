@@ -1,4 +1,4 @@
-/* $NetBSD: pwm.c,v 1.1 2018/05/06 10:32:33 jmcneill Exp $ */
+/* $NetBSD: pwm.c,v 1.1.2.2 2018/05/21 04:36:12 pgoyette Exp $ */
 
 /*-
  * Copyright (c) 2018 Jared McNeill <jmcneill@invisible.ca>
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pwm.c,v 1.1 2018/05/06 10:32:33 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pwm.c,v 1.1.2.2 2018/05/21 04:36:12 pgoyette Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
