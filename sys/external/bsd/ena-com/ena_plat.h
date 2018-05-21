@@ -38,7 +38,7 @@
 #if 0
 __FBSDID("$FreeBSD: head/sys/contrib/ena-com/ena_plat.h 333453 2018-05-10 09:25:51Z mw $");
 #endif
-__KERNEL_RCSID(0, "$NetBSD: ena_plat.h,v 1.2 2018/05/19 08:59:38 jdolecek Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ena_plat.h,v 1.2.2.2 2018/05/21 04:36:14 pgoyette Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

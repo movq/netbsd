@@ -1,4 +1,4 @@
-/* $NetBSD: ausoc.c,v 1.3 2018/05/12 23:51:06 jmcneill Exp $ */
+/* $NetBSD: ausoc.c,v 1.3.2.2 2018/05/21 04:36:05 pgoyette Exp $ */
 
 /*-
  * Copyright (c) 2018 Jared McNeill <jmcneill@invisible.ca>
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ausoc.c,v 1.3 2018/05/12 23:51:06 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ausoc.c,v 1.3.2.2 2018/05/21 04:36:05 pgoyette Exp $");
 
 #include <sys/param.h>
 #include <sys/bus.h>

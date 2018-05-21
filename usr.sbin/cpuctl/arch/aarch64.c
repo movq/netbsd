@@ -1,4 +1,4 @@
-/*	$NetBSD: aarch64.c,v 1.2 2018/05/08 11:42:43 ryo Exp $	*/
+/*	$NetBSD: aarch64.c,v 1.2.2.2 2018/05/21 04:36:19 pgoyette Exp $	*/
 
 /*
  * Copyright (c) 2018 Ryo Shimizu <ryo@nerv.org>
@@ -29,7 +29,7 @@
 #include <sys/cdefs.h>
 
 #ifndef lint
-__RCSID("$NetBSD: aarch64.c,v 1.2 2018/05/08 11:42:43 ryo Exp $");
+__RCSID("$NetBSD: aarch64.c,v 1.2.2.2 2018/05/21 04:36:19 pgoyette Exp $");
 #endif /* no lint */
 
 #include <sys/types.h>

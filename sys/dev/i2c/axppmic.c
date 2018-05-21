@@ -1,4 +1,4 @@
-/* $NetBSD: axppmic.c,v 1.9 2018/05/13 22:58:58 jmcneill Exp $ */
+/* $NetBSD: axppmic.c,v 1.9.2.2 2018/05/21 04:36:05 pgoyette Exp $ */
 
 /*-
  * Copyright (c) 2014-2018 Jared McNeill <jmcneill@invisible.ca>
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: axppmic.c,v 1.9 2018/05/13 22:58:58 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: axppmic.c,v 1.9.2.2 2018/05/21 04:36:05 pgoyette Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

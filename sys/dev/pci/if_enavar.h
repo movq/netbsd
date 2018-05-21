@@ -1,4 +1,4 @@
-/*	$NetBSD: if_enavar.h,v 1.2 2018/05/19 09:32:55 jdolecek Exp $	*/
+/*	$NetBSD: if_enavar.h,v 1.2.2.2 2018/05/21 04:36:06 pgoyette Exp $	*/
 
 /*-
  * BSD LICENSE

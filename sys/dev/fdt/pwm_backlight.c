@@ -1,4 +1,4 @@
-/* $NetBSD: pwm_backlight.c,v 1.4 2018/05/10 13:11:21 jmcneill Exp $ */
+/* $NetBSD: pwm_backlight.c,v 1.4.2.2 2018/05/21 04:36:05 pgoyette Exp $ */
 
 /*-
  * Copyright (c) 2018 Jared McNeill <jmcneill@invisible.ca>
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pwm_backlight.c,v 1.4 2018/05/10 13:11:21 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pwm_backlight.c,v 1.4.2.2 2018/05/21 04:36:05 pgoyette Exp $");
 
 #include <sys/param.h>
 #include <sys/bus.h>

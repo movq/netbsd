@@ -1,4 +1,4 @@
-/*	$NetBSD: kern.ldscript,v 1.1 2018/05/18 19:04:10 reinoud Exp $	*/
+/*	$NetBSD: kern.ldscript,v 1.1.2.2 2018/05/21 04:36:02 pgoyette Exp $	*/
 
 #include "assym.h"
 

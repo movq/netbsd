@@ -1,4 +1,4 @@
-/* $NetBSD: gpioirq.c,v 1.1 2018/05/19 14:15:39 thorpej Exp $ */
+/* $NetBSD: gpioirq.c,v 1.1.2.2 2018/05/21 04:36:05 pgoyette Exp $ */
 
 /*
  * Copyright (c) 2016 Brad Spencer <brad@anduin.eldar.org>
@@ -17,7 +17,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: gpioirq.c,v 1.1 2018/05/19 14:15:39 thorpej Exp $");
+__KERNEL_RCSID(0, "$NetBSD: gpioirq.c,v 1.1.2.2 2018/05/21 04:36:05 pgoyette Exp $");
 
 /*
  * Example GPIO driver that uses interrupts.

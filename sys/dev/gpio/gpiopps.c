@@ -1,4 +1,4 @@
-/* $NetBSD: gpiopps.c,v 1.1 2018/05/20 14:08:33 thorpej Exp $ */
+/* $NetBSD: gpiopps.c,v 1.1.2.2 2018/05/21 04:36:05 pgoyette Exp $ */
 
 /*
  * Copyright (c) 2016 Brad Spencer <brad@anduin.eldar.org>
@@ -26,7 +26,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: gpiopps.c,v 1.1 2018/05/20 14:08:33 thorpej Exp $");
+__KERNEL_RCSID(0, "$NetBSD: gpiopps.c,v 1.1.2.2 2018/05/21 04:36:05 pgoyette Exp $");
 
 /*
  * GPIO interface to the pps subsystem for ntp support.
