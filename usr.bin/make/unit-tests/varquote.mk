@@ -1,4 +1,4 @@
-# $NetBSD: varquote.mk,v 1.2 2018/05/27 01:14:51 christos Exp $
+# $NetBSD: varquote.mk,v 1.2.2.2 2018/06/09 15:35:38 martin Exp $
 #
 # Test VAR:q modifier
 
