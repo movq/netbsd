@@ -1,4 +1,4 @@
-/*	$NetBSD: cdefs.h,v 1.1 2018/05/28 21:05:10 chs Exp $	*/
+/*	$NetBSD: cdefs.h,v 1.1.2.2 2018/06/25 07:25:25 pgoyette Exp $	*/
 
 #ifndef _FREEBSD_SYS_CDEFS_H_
 #define _FREEBSD_SYS_CDEFS_H_

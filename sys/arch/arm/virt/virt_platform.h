@@ -1,4 +1,4 @@
-/* $NetBSD: virt_platform.h,v 1.1 2018/06/14 10:56:39 jmcneill Exp $ */
+/* $NetBSD: virt_platform.h,v 1.1.2.2 2018/06/25 07:25:40 pgoyette Exp $ */
 
 /*-
  * Copyright (c) 2018 Jared McNeill <jmcneill@invisible.ca>

@@ -1,4 +1,4 @@
-/* $NetBSD: virtio_mmio_fdt.c,v 1.2 2018/06/15 17:13:43 jakllsch Exp $ */
+/* $NetBSD: virtio_mmio_fdt.c,v 1.2.2.2 2018/06/25 07:25:49 pgoyette Exp $ */
 
 /*
  * Copyright (c) 2018 Jonathan A. Kollasch
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: virtio_mmio_fdt.c,v 1.2 2018/06/15 17:13:43 jakllsch Exp $");
+__KERNEL_RCSID(0, "$NetBSD: virtio_mmio_fdt.c,v 1.2.2.2 2018/06/25 07:25:49 pgoyette Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

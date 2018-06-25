@@ -1,4 +1,4 @@
-/*	$NetBSD: kmem.c,v 1.1 2018/05/28 21:05:09 chs Exp $	*/
+/*	$NetBSD: kmem.c,v 1.1.2.2 2018/06/25 07:25:25 pgoyette Exp $	*/
 
 /*-
  * Copyright (c) 2017 The NetBSD Foundation, Inc.

@@ -1,4 +1,4 @@
-/* $NetBSD: pl061gpio_fdt.c,v 1.1 2018/06/15 19:52:01 jakllsch Exp $ */
+/* $NetBSD: pl061gpio_fdt.c,v 1.1.2.2 2018/06/25 07:25:49 pgoyette Exp $ */
 
 /*
  * Copyright (c) 2018 Jonathan A. Kollasch
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pl061gpio_fdt.c,v 1.1 2018/06/15 19:52:01 jakllsch Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pl061gpio_fdt.c,v 1.1.2.2 2018/06/25 07:25:49 pgoyette Exp $");
 
 #include <sys/param.h>
 #include <sys/bus.h>

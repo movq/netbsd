@@ -1,4 +1,4 @@
-/*	$NetBSD: e1000phyreg.h,v 1.2 2018/06/18 09:12:17 msaitoh Exp $	*/
+/*	$NetBSD: e1000phyreg.h,v 1.2.2.2 2018/06/25 07:25:51 pgoyette Exp $	*/
 /* $FreeBSD: head/sys/dev/mii/e1000phyreg.h 326022 2017-11-20 19:36:21Z pfg $ */
 /*-
  * Principal Author: Parag Patel

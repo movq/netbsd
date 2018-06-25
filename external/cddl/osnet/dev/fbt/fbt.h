@@ -1,4 +1,4 @@
-/*	$NetBSD: fbt.h,v 1.1 2018/05/28 21:05:03 chs Exp $	*/
+/*	$NetBSD: fbt.h,v 1.1.2.2 2018/06/25 07:25:14 pgoyette Exp $	*/
 
 /*
  * CDDL HEADER START

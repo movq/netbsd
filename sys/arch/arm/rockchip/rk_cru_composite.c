@@ -1,4 +1,4 @@
-/* $NetBSD: rk_cru_composite.c,v 1.3 2018/06/19 01:24:17 jmcneill Exp $ */
+/* $NetBSD: rk_cru_composite.c,v 1.3.2.2 2018/06/25 07:25:39 pgoyette Exp $ */
 
 /*-
  * Copyright (c) 2018 Jared McNeill <jmcneill@invisible.ca>
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: rk_cru_composite.c,v 1.3 2018/06/19 01:24:17 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: rk_cru_composite.c,v 1.3.2.2 2018/06/25 07:25:39 pgoyette Exp $");
 
 #include <sys/param.h>
 #include <sys/bus.h>

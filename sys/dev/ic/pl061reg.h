@@ -1,4 +1,4 @@
-/* $NetBSD: pl061reg.h,v 1.1 2018/06/15 19:52:01 jakllsch Exp $ */
+/* $NetBSD: pl061reg.h,v 1.1.2.2 2018/06/25 07:25:50 pgoyette Exp $ */
 
 /*
  * Copyright (c) 2018 Jonathan A. Kollasch

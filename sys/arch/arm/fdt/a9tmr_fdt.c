@@ -1,4 +1,4 @@
-/* $NetBSD: a9tmr_fdt.c,v 1.1 2018/06/05 08:03:28 hkenken Exp $ */
+/* $NetBSD: a9tmr_fdt.c,v 1.1.2.2 2018/06/25 07:25:39 pgoyette Exp $ */
 
 /*-
  * Copyright (c) 2017 Jared McNeill <jmcneill@invisible.ca>
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: a9tmr_fdt.c,v 1.1 2018/06/05 08:03:28 hkenken Exp $");
+__KERNEL_RCSID(0, "$NetBSD: a9tmr_fdt.c,v 1.1.2.2 2018/06/25 07:25:39 pgoyette Exp $");
 
 #include <sys/param.h>
 #include <sys/bus.h>

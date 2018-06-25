@@ -1,4 +1,4 @@
-/*	$NetBSD: panic_string.c,v 1.1 2018/05/29 16:53:56 kamil Exp $	*/
+/*	$NetBSD: panic_string.c,v 1.1.2.2 2018/06/25 07:26:05 pgoyette Exp $	*/
 
 /*-
  * Copyright (c) 2018 The NetBSD Foundation, Inc.
@@ -28,7 +28,7 @@
 
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: panic_string.c,v 1.1 2018/05/29 16:53:56 kamil Exp $");
+__KERNEL_RCSID(0, "$NetBSD: panic_string.c,v 1.1.2.2 2018/06/25 07:26:05 pgoyette Exp $");
 
 #include <sys/param.h>
 #include <sys/types.h>

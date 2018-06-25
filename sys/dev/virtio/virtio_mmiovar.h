@@ -1,4 +1,4 @@
-/* $NetBSD: virtio_mmiovar.h,v 1.1 2018/06/06 20:35:36 jakllsch Exp $ */
+/* $NetBSD: virtio_mmiovar.h,v 1.1.2.2 2018/06/25 07:26:03 pgoyette Exp $ */
 /*
  * Copyright (c) 2018 Jonathan A. Kollasch
  * All rights reserved.
