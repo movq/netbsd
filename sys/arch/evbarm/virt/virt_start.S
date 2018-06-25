@@ -1,4 +1,4 @@
-/*	$NetBSD: virt_start.S,v 1.3 2018/06/15 14:37:35 jakllsch Exp $	*/
+/*	$NetBSD: virt_start.S,v 1.3.2.2 2018/06/25 07:25:41 pgoyette Exp $	*/
 
 /*-
  * Copyright (c) 2015 The NetBSD Foundation, Inc.
@@ -41,7 +41,7 @@
 
 #include <arm/virt/virt_platform.h>
 
-RCSID("$NetBSD: virt_start.S,v 1.3 2018/06/15 14:37:35 jakllsch Exp $")
+RCSID("$NetBSD: virt_start.S,v 1.3.2.2 2018/06/25 07:25:41 pgoyette Exp $")
 
 #ifdef VERBOSE_INIT_ARM
 #define	XPUTC(n)	mov r0, n; bl xputc

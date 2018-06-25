@@ -1,4 +1,4 @@
-/*	$NetBSD: t_syscall.c,v 1.3 2018/05/28 07:55:56 martin Exp $	*/
+/*	$NetBSD: t_syscall.c,v 1.3.2.2 2018/06/25 07:26:09 pgoyette Exp $	*/
 
 /*-
  * Copyright (c) 2018 The NetBSD Foundation, Inc.
@@ -29,7 +29,7 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: t_syscall.c,v 1.3 2018/05/28 07:55:56 martin Exp $");
+__RCSID("$NetBSD: t_syscall.c,v 1.3.2.2 2018/06/25 07:26:09 pgoyette Exp $");
 
 
 #include <atf-c.h>

@@ -1,4 +1,4 @@
-/*	$NetBSD: virtio_mmio.c,v 1.2 2018/06/15 17:13:43 jakllsch Exp $	*/
+/*	$NetBSD: virtio_mmio.c,v 1.2.2.2 2018/06/25 07:26:03 pgoyette Exp $	*/
 /*	$OpenBSD: virtio_mmio.c,v 1.2 2017/02/24 17:12:31 patrick Exp $	*/
 
 /*
@@ -29,7 +29,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: virtio_mmio.c,v 1.2 2018/06/15 17:13:43 jakllsch Exp $");
+__KERNEL_RCSID(0, "$NetBSD: virtio_mmio.c,v 1.2.2.2 2018/06/25 07:26:03 pgoyette Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

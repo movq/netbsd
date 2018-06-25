@@ -1,4 +1,4 @@
-/*	$NetBSD: l2cc_fdt.c,v 1.1 2018/06/20 08:03:55 hkenken Exp $	*/
+/*	$NetBSD: l2cc_fdt.c,v 1.1.2.2 2018/06/25 07:25:39 pgoyette Exp $	*/
 /*
  * Copyright (c) 2018  Genetec Corporation.  All rights reserved.
  * Written by Hashimoto Kenichi for Genetec Corporation.
@@ -26,7 +26,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: l2cc_fdt.c,v 1.1 2018/06/20 08:03:55 hkenken Exp $");
+__KERNEL_RCSID(0, "$NetBSD: l2cc_fdt.c,v 1.1.2.2 2018/06/25 07:25:39 pgoyette Exp $");
 
 #include <sys/param.h>
 #include <sys/bus.h>

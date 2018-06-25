@@ -1,4 +1,4 @@
-/*	$NetBSD: cpu_speedctl.c,v 1.1 2018/06/01 18:06:58 macallan Exp $ */
+/*	$NetBSD: cpu_speedctl.c,v 1.1.2.2 2018/06/25 07:25:45 pgoyette Exp $ */
 
 /*-
  * Copyright (c) 2006 Michael Lorenz
@@ -26,7 +26,7 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: cpu_speedctl.c,v 1.1 2018/06/01 18:06:58 macallan Exp $");
+__KERNEL_RCSID(0, "$NetBSD: cpu_speedctl.c,v 1.1.2.2 2018/06/25 07:25:45 pgoyette Exp $");
 
 #include "opt_ppcparam.h"
 

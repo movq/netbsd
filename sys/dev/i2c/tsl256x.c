@@ -1,4 +1,4 @@
-/* $NetBSD: tsl256x.c,v 1.5 2018/06/18 17:07:07 thorpej Exp $ */
+/* $NetBSD: tsl256x.c,v 1.5.2.2 2018/06/25 07:25:50 pgoyette Exp $ */
 
 /*-
  * Copyright (c) 2018 Jason R. Thorpe
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: tsl256x.c,v 1.5 2018/06/18 17:07:07 thorpej Exp $");
+__KERNEL_RCSID(0, "$NetBSD: tsl256x.c,v 1.5.2.2 2018/06/25 07:25:50 pgoyette Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

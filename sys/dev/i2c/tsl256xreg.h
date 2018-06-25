@@ -1,4 +1,4 @@
-/* $NetBSD: tsl256xreg.h,v 1.1 2018/05/27 05:31:20 thorpej Exp $ */
+/* $NetBSD: tsl256xreg.h,v 1.1.2.2 2018/06/25 07:25:50 pgoyette Exp $ */
 
 /*-
  * Copyright (c) 2018 Jason R. Thorpe

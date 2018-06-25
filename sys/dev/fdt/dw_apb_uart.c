@@ -1,4 +1,4 @@
-/* $NetBSD: dw_apb_uart.c,v 1.2 2018/05/27 19:54:45 jmcneill Exp $ */
+/* $NetBSD: dw_apb_uart.c,v 1.2.2.2 2018/06/25 07:25:49 pgoyette Exp $ */
 
 /*-
  * Copyright (c) 2017 Jared McNeill <jmcneill@invisible.ca>
@@ -28,7 +28,7 @@
 
 #include <sys/cdefs.h>
 
-__KERNEL_RCSID(1, "$NetBSD: dw_apb_uart.c,v 1.2 2018/05/27 19:54:45 jmcneill Exp $");
+__KERNEL_RCSID(1, "$NetBSD: dw_apb_uart.c,v 1.2.2.2 2018/06/25 07:25:49 pgoyette Exp $");
 
 #include <sys/param.h>
 #include <sys/bus.h>

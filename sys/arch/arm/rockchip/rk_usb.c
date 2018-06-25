@@ -1,4 +1,4 @@
-/* $NetBSD: rk_usb.c,v 1.2 2018/06/20 20:12:51 jmcneill Exp $ */
+/* $NetBSD: rk_usb.c,v 1.2.2.2 2018/06/25 07:25:39 pgoyette Exp $ */
 
 /*-
  * Copyright (c) 2018 Jared McNeill <jmcneill@invisible.ca>
@@ -28,7 +28,7 @@
 
 #include <sys/cdefs.h>
 
-__KERNEL_RCSID(0, "$NetBSD: rk_usb.c,v 1.2 2018/06/20 20:12:51 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: rk_usb.c,v 1.2.2.2 2018/06/25 07:25:39 pgoyette Exp $");
 
 #include <sys/param.h>
 #include <sys/bus.h>

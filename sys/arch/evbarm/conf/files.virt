@@ -1,4 +1,4 @@
-#	$NetBSD: files.virt,v 1.1 2018/06/14 10:56:39 jmcneill Exp $
+#	$NetBSD: files.virt,v 1.1.2.2 2018/06/25 07:25:40 pgoyette Exp $
 #
 # QEMU 'virt' machine configuration info
 #
