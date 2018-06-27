@@ -1,4 +1,4 @@
-/*	$NetBSD: qcom,gcc-msm8998.h,v 1.1 2018/06/27 16:27:08 jmcneill Exp $	*/
+/*	$NetBSD: qcom,gcc-msm8998.h,v 1.1.1.1 2018/06/27 16:27:08 jmcneill Exp $	*/
 
 /*
  * Copyright (c) 2016, The Linux Foundation. All rights reserved.
