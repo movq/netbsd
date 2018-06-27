@@ -1,4 +1,4 @@
-/*	$NetBSD: qcom,q6asm.h,v 1.1 2018/06/27 16:27:08 jmcneill Exp $	*/
+/*	$NetBSD: qcom,q6asm.h,v 1.1.1.1 2018/06/27 16:27:08 jmcneill Exp $	*/
 
 /* SPDX-License-Identifier: GPL-2.0 */
 #ifndef __DT_BINDINGS_Q6_ASM_H__
