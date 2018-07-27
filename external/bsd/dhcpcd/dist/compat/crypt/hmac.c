@@ -1,4 +1,4 @@
-/*	$NetBSD: hmac.c,v 1.1.1.1 2017/10/07 14:05:36 roy Exp $	*/
+/*	$NetBSD: hmac.c,v 1.1.1.1.8.2 2018/07/27 10:43:19 martin Exp $	*/
 
 /*-
  * Copyright (c) 2016 The NetBSD Foundation, Inc.
