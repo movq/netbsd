@@ -1,4 +1,4 @@
-/*	$NetBSD: tprof_x86.c,v 1.4 2018/07/14 07:54:04 maxv Exp $	*/
+/*	$NetBSD: tprof_x86.c,v 1.4.2.2 2018/07/28 04:38:15 pgoyette Exp $	*/
 
 /*
  * Copyright (c) 2018 The NetBSD Foundation, Inc.

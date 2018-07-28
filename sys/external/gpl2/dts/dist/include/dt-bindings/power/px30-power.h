@@ -1,4 +1,4 @@
-/*	$NetBSD: px30-power.h,v 1.1.1.1 2018/06/27 16:27:08 jmcneill Exp $	*/
+/*	$NetBSD: px30-power.h,v 1.1.1.1.4.2 2018/07/28 04:38:07 pgoyette Exp $	*/
 
 /* SPDX-License-Identifier: GPL-2.0 */
 #ifndef __DT_BINDINGS_POWER_PX30_POWER_H__

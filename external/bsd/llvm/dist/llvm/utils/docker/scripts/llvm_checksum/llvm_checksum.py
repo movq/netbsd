@@ -79,7 +79,7 @@ def ComputeLLVMChecksums(root_path, projects):
   hash_algo = hashlib.sha256
 
   def collapse_svn_substitutions(contents):
-    # Replace svn substitutions for $Date: 2018/07/17 18:36:09 $ and $LastChangedDate$.
+    # Replace svn substitutions for $Date: 2018/07/28 04:37:05 $ and $LastChangedDate$.
     # Unfortunately, these are locale-specific.
     return SVN_DATES_REGEX.sub("$\1$", contents)
 

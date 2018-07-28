@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.1 2018/07/17 18:55:30 joerg Exp $
+#	$NetBSD: Makefile,v 1.1.2.2 2018/07/28 04:37:13 pgoyette Exp $
 
 LIB=	clangASTDiff
 
