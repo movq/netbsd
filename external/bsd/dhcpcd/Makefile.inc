@@ -1,4 +1,4 @@
-# $NetBSD: Makefile.inc,v 1.3 2018/07/05 05:41:17 triaxx Exp $
+# $NetBSD: Makefile.inc,v 1.3.2.2 2018/07/28 13:20:45 martin Exp $
 
 SRCDIR=		${NETBSDSRCDIR}/external/bsd/dhcpcd
 DIST=		${SRCDIR}/dist
