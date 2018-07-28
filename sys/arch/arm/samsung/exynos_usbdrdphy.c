@@ -1,4 +1,4 @@
-/* $NetBSD: exynos_usbdrdphy.c,v 1.2 2018/07/03 16:22:48 jmcneill Exp $ */
+/* $NetBSD: exynos_usbdrdphy.c,v 1.2.2.2 2018/07/28 04:37:29 pgoyette Exp $ */
 
 /*-
  * Copyright (c) 2018 Jared McNeill <jmcneill@invisible.ca>
@@ -28,7 +28,7 @@
 
 #include <sys/cdefs.h>
 
-__KERNEL_RCSID(0, "$NetBSD: exynos_usbdrdphy.c,v 1.2 2018/07/03 16:22:48 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: exynos_usbdrdphy.c,v 1.2.2.2 2018/07/28 04:37:29 pgoyette Exp $");
 
 #include <sys/param.h>
 #include <sys/bus.h>

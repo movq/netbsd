@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.1 2018/07/24 09:47:36 maxv Exp $
+#	$NetBSD: Makefile,v 1.1.2.2 2018/07/28 04:38:09 pgoyette Exp $
 
 .include "../Makefile.inc"
 

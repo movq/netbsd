@@ -1,4 +1,4 @@
-/*	$NetBSD: base64.c,v 1.2 2018/07/25 03:45:34 christos Exp $	*/
+/*	$NetBSD: base64.c,v 1.2.2.2 2018/07/28 04:38:13 pgoyette Exp $	*/
 
 /*-
  * Copyright (c) 2018 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: base64.c,v 1.2 2018/07/25 03:45:34 christos Exp $");
+__RCSID("$NetBSD: base64.c,v 1.2.2.2 2018/07/28 04:38:13 pgoyette Exp $");
 
 #include <ctype.h>
 #include <errno.h>

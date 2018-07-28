@@ -1,4 +1,4 @@
-/* $NetBSD: rk_i2c.c,v 1.1 2018/07/01 18:16:58 jmcneill Exp $ */
+/* $NetBSD: rk_i2c.c,v 1.1.2.2 2018/07/28 04:37:29 pgoyette Exp $ */
 
 /*-
  * Copyright (c) 2018 Jared McNeill <jmcneill@invisible.ca>
@@ -28,7 +28,7 @@
 
 #include <sys/cdefs.h>
 
-__KERNEL_RCSID(0, "$NetBSD: rk_i2c.c,v 1.1 2018/07/01 18:16:58 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: rk_i2c.c,v 1.1.2.2 2018/07/28 04:37:29 pgoyette Exp $");
 
 #include <sys/param.h>
 #include <sys/bus.h>

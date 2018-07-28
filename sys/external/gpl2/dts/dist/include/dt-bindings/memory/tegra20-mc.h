@@ -1,4 +1,4 @@
-/*	$NetBSD: tegra20-mc.h,v 1.1.1.1 2018/06/27 16:27:08 jmcneill Exp $	*/
+/*	$NetBSD: tegra20-mc.h,v 1.1.1.1.4.2 2018/07/28 04:38:07 pgoyette Exp $	*/
 
 /* SPDX-License-Identifier: GPL-2.0 */
 #ifndef DT_BINDINGS_MEMORY_TEGRA20_MC_H

@@ -1,4 +1,4 @@
-/* $NetBSD: pmu_fdt.c,v 1.3 2018/07/16 10:49:52 jmcneill Exp $ */
+/* $NetBSD: pmu_fdt.c,v 1.3.2.2 2018/07/28 04:37:28 pgoyette Exp $ */
 
 /*-
  * Copyright (c) 2018 Jared McNeill <jmcneill@invisible.ca>
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pmu_fdt.c,v 1.3 2018/07/16 10:49:52 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pmu_fdt.c,v 1.3.2.2 2018/07/28 04:37:28 pgoyette Exp $");
 
 #include <sys/param.h>
 #include <sys/bus.h>

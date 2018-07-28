@@ -1,4 +1,4 @@
-/*	$NetBSD: tprof_x86.c,v 1.1 2018/07/24 09:47:35 maxv Exp $	*/
+/*	$NetBSD: tprof_x86.c,v 1.1.2.2 2018/07/28 04:37:57 pgoyette Exp $	*/
 
 /*
  * Copyright (c) 2018 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: tprof_x86.c,v 1.1 2018/07/24 09:47:35 maxv Exp $");
+__KERNEL_RCSID(0, "$NetBSD: tprof_x86.c,v 1.1.2.2 2018/07/28 04:37:57 pgoyette Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

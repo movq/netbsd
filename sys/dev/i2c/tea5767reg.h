@@ -1,4 +1,4 @@
-/*	$NetBSD: tea5767reg.h,v 1.1 2018/07/27 12:02:26 rkujawa Exp $	*/
+/*	$NetBSD: tea5767reg.h,v 1.1.2.2 2018/07/28 04:37:44 pgoyette Exp $	*/
 /*-
  * Copyright (c) 2018 The NetBSD Foundation, Inc.
  * All rights reserved.

@@ -1,4 +1,4 @@
-/*	$NetBSD: jz4780-dma.h,v 1.1.1.1 2018/06/27 16:27:08 jmcneill Exp $	*/
+/*	$NetBSD: jz4780-dma.h,v 1.1.1.1.4.2 2018/07/28 04:38:07 pgoyette Exp $	*/
 
 #ifndef __DT_BINDINGS_DMA_JZ4780_DMA_H__
 #define __DT_BINDINGS_DMA_JZ4780_DMA_H__

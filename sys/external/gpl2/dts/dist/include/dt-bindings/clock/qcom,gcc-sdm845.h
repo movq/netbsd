@@ -1,4 +1,4 @@
-/*	$NetBSD: qcom,gcc-sdm845.h,v 1.1.1.1 2018/06/27 16:27:08 jmcneill Exp $	*/
+/*	$NetBSD: qcom,gcc-sdm845.h,v 1.1.1.1.4.2 2018/07/28 04:38:06 pgoyette Exp $	*/
 
 /* SPDX-License-Identifier: GPL-2.0 */
 /*

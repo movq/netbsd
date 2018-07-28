@@ -1,4 +1,4 @@
-/* $NetBSD: syscon.h,v 1.1 2018/06/30 12:35:18 jmcneill Exp $ */
+/* $NetBSD: syscon.h,v 1.1.2.2 2018/07/28 04:37:44 pgoyette Exp $ */
 
 /*-
  * Copyright (c) 2018 Jared McNeill <jmcneill@invisible.ca>

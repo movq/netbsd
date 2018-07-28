@@ -1,4 +1,4 @@
-/*	$NetBSD: tprof_noarch.c,v 1.3 2018/07/14 15:38:59 jmcneill Exp $	*/
+/*	$NetBSD: tprof_noarch.c,v 1.3.2.2 2018/07/28 04:38:15 pgoyette Exp $	*/
 
 /*
  * Copyright (c) 2018 The NetBSD Foundation, Inc.

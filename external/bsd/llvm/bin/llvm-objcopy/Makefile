@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.1 2018/07/17 18:55:26 joerg Exp $
+#	$NetBSD: Makefile,v 1.1.2.2 2018/07/28 04:33:05 pgoyette Exp $
 
 PROG_CXX=	llvm-objcopy
 NOMAN=		yes

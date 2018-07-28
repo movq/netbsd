@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.1 2018/07/24 15:26:16 christos Exp $
+#	$NetBSD: Makefile,v 1.1.2.2 2018/07/28 04:38:13 pgoyette Exp $
 
 WARNS?= 6	
 
