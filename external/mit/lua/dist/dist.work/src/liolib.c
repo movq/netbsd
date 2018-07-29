@@ -1,4 +1,4 @@
-/*	$NetBSD: liolib.c,v 1.1 2018/07/29 19:46:07 alnsn Exp $	*/
+/*	$NetBSD: liolib.c,v 1.1.1.1 2018/07/29 19:46:07 alnsn Exp $	*/
 
 /*
 ** Id: liolib.c,v 2.151.1.1 2017/04/19 17:29:57 roberto Exp 

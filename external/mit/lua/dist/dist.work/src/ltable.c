@@ -1,4 +1,4 @@
-/*	$NetBSD: ltable.c,v 1.1 2018/07/29 19:46:07 alnsn Exp $	*/
+/*	$NetBSD: ltable.c,v 1.1.1.1 2018/07/29 19:46:07 alnsn Exp $	*/
 
 /*
 ** Id: ltable.c,v 2.118.1.4 2018/06/08 16:22:51 roberto Exp 

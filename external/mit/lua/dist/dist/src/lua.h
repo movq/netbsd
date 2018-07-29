@@ -1,4 +1,4 @@
-/*	$NetBSD: lua.h,v 1.1 2018/07/29 19:46:01 alnsn Exp $	*/
+/*	$NetBSD: lua.h,v 1.1.1.1 2018/07/29 19:46:01 alnsn Exp $	*/
 
 /*
 ** Id: lua.h,v 1.332 2016/12/22 15:51:20 roberto Exp 

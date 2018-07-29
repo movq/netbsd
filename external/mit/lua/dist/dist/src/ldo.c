@@ -1,4 +1,4 @@
-/*	$NetBSD: ldo.c,v 1.1 2018/07/29 19:45:59 alnsn Exp $	*/
+/*	$NetBSD: ldo.c,v 1.1.1.1 2018/07/29 19:45:59 alnsn Exp $	*/
 
 /*
 ** Id: ldo.c,v 2.157 2016/12/13 15:52:21 roberto Exp 

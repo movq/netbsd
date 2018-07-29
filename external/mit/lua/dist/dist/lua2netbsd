@@ -1,6 +1,6 @@
 #! /bin/sh
 #
-#	$NetBSD: lua2netbsd,v 1.1 2018/07/29 19:45:46 alnsn Exp $
+#	$NetBSD: lua2netbsd,v 1.1.1.1 2018/07/29 19:45:46 alnsn Exp $
 #	adapted from dist/ipf/ipf2netbsd:
 #	NetBSD: ipf2netbsd,v 1.23 2010/04/17 22:05:53 darrenr Exp $
 #
