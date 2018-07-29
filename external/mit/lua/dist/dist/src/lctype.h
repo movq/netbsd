@@ -1,4 +1,4 @@
-/*	$NetBSD: lctype.h,v 1.1 2018/07/29 19:45:58 alnsn Exp $	*/
+/*	$NetBSD: lctype.h,v 1.1.1.1 2018/07/29 19:45:58 alnsn Exp $	*/
 
 /*
 ** Id: lctype.h,v 1.12 2011/07/15 12:50:29 roberto Exp 

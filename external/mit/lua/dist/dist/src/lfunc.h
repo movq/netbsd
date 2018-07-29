@@ -1,4 +1,4 @@
-/*	$NetBSD: lfunc.h,v 1.1 2018/07/29 19:45:59 alnsn Exp $	*/
+/*	$NetBSD: lfunc.h,v 1.1.1.1 2018/07/29 19:45:59 alnsn Exp $	*/
 
 /*
 ** Id: lfunc.h,v 2.15 2015/01/13 15:49:11 roberto Exp 

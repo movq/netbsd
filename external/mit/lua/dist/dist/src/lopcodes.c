@@ -1,4 +1,4 @@
-/*	$NetBSD: lopcodes.c,v 1.1 2018/07/29 19:46:00 alnsn Exp $	*/
+/*	$NetBSD: lopcodes.c,v 1.1.1.1 2018/07/29 19:46:00 alnsn Exp $	*/
 
 /*
 ** Id: lopcodes.c,v 1.55 2015/01/05 13:48:33 roberto Exp 

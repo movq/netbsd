@@ -1,4 +1,4 @@
-/*	$NetBSD: lobject.h,v 1.1 2018/07/29 19:46:07 alnsn Exp $	*/
+/*	$NetBSD: lobject.h,v 1.1.1.1 2018/07/29 19:46:07 alnsn Exp $	*/
 
 /*
 ** Id: lobject.h,v 2.117.1.1 2017/04/19 17:39:34 roberto Exp 

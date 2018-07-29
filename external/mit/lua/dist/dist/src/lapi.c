@@ -1,4 +1,4 @@
-/*	$NetBSD: lapi.c,v 1.1 2018/07/29 19:46:04 alnsn Exp $	*/
+/*	$NetBSD: lapi.c,v 1.1.1.1 2018/07/29 19:46:04 alnsn Exp $	*/
 
 /*
 ** Id: lapi.c,v 2.259 2016/02/29 14:27:14 roberto Exp 

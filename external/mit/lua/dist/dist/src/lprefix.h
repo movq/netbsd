@@ -1,4 +1,4 @@
-/*	$NetBSD: lprefix.h,v 1.1 2018/07/29 19:46:00 alnsn Exp $	*/
+/*	$NetBSD: lprefix.h,v 1.1.1.1 2018/07/29 19:46:00 alnsn Exp $	*/
 
 /*
 ** Id: lprefix.h,v 1.2 2014/12/29 16:54:13 roberto Exp 

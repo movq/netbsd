@@ -1,4 +1,4 @@
-/*	$NetBSD: luac.c,v 1.1 2018/07/29 19:46:07 alnsn Exp $	*/
+/*	$NetBSD: luac.c,v 1.1.1.1 2018/07/29 19:46:07 alnsn Exp $	*/
 
 /*
 ** Id: luac.c,v 1.76 2018/06/19 01:32:02 lhf Exp 

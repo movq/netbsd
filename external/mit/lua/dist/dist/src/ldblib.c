@@ -1,4 +1,4 @@
-/*	$NetBSD: ldblib.c,v 1.1 2018/07/29 19:45:58 alnsn Exp $	*/
+/*	$NetBSD: ldblib.c,v 1.1.1.1 2018/07/29 19:45:58 alnsn Exp $	*/
 
 /*
 ** Id: ldblib.c,v 1.151 2015/11/23 11:29:43 roberto Exp 

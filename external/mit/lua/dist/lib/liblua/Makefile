@@ -1,4 +1,4 @@
-# $NetBSD: Makefile,v 1.1 2018/07/29 19:46:04 alnsn Exp $
+# $NetBSD: Makefile,v 1.1.1.1 2018/07/29 19:46:04 alnsn Exp $
 
 LIB=		lua
 LUA_CORE=	lapi.c lcode.c lctype.c ldebug.c ldo.c ldump.c lfunc.c lgc.c \

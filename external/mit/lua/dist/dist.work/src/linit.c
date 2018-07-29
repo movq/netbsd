@@ -1,4 +1,4 @@
-/*	$NetBSD: linit.c,v 1.1 2018/07/29 19:46:07 alnsn Exp $	*/
+/*	$NetBSD: linit.c,v 1.1.1.1 2018/07/29 19:46:07 alnsn Exp $	*/
 
 /*
 ** Id: linit.c,v 1.39.1.1 2017/04/19 17:20:42 roberto Exp 

@@ -1,4 +1,4 @@
-/*	$NetBSD: lgc.c,v 1.1 2018/07/29 19:46:07 alnsn Exp $	*/
+/*	$NetBSD: lgc.c,v 1.1.1.1 2018/07/29 19:46:07 alnsn Exp $	*/
 
 /*
 ** Id: lgc.c,v 2.215.1.2 2017/08/31 16:15:27 roberto Exp 

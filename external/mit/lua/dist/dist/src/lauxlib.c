@@ -1,4 +1,4 @@
-/*	$NetBSD: lauxlib.c,v 1.1 2018/07/29 19:45:56 alnsn Exp $	*/
+/*	$NetBSD: lauxlib.c,v 1.1.1.1 2018/07/29 19:45:56 alnsn Exp $	*/
 
 /*
 ** Id: lauxlib.c,v 1.289 2016/12/20 18:37:00 roberto Exp 
