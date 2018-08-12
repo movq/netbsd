@@ -1,4 +1,4 @@
-/*	$NetBSD: unicode_template.c,v 1.1 2018/08/12 12:07:48 christos Exp $	*/
+/*	$NetBSD: unicode_template.c,v 1.1.1.1 2018/08/12 12:07:48 christos Exp $	*/
 
 /* Id: unicode_template.c,v 1.1 2003/06/04 00:26:16 marka Exp  */
 

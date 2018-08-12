@@ -1,4 +1,4 @@
-/*	$NetBSD: utils.c,v 1.1 2018/08/12 12:08:36 christos Exp $	*/
+/*	$NetBSD: utils.c,v 1.1.1.1 2018/08/12 12:08:36 christos Exp $	*/
 
 /* Copyright (c) 2010 The NetBSD Foundation, Inc.
  * All rights reserved.

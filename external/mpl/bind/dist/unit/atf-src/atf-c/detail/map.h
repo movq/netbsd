@@ -1,4 +1,4 @@
-/*	$NetBSD: map.h,v 1.1 2018/08/12 12:08:36 christos Exp $	*/
+/*	$NetBSD: map.h,v 1.1.1.1 2018/08/12 12:08:36 christos Exp $	*/
 
 /* Copyright (c) 2008 The NetBSD Foundation, Inc.
  * All rights reserved.

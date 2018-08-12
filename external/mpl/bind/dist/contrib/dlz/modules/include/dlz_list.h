@@ -1,4 +1,4 @@
-/*	$NetBSD: dlz_list.h,v 1.1 2018/08/12 12:07:50 christos Exp $	*/
+/*	$NetBSD: dlz_list.h,v 1.1.1.1 2018/08/12 12:07:50 christos Exp $	*/
 
 /*
  * Copyright (C) 1997-2002, 2004, 2006, 2007, 2011-2013, 2016  Internet Systems Consortium, Inc. ("ISC")

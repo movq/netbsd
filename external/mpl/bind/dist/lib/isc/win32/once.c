@@ -1,4 +1,4 @@
-/*	$NetBSD: once.c,v 1.1 2018/08/12 12:08:27 christos Exp $	*/
+/*	$NetBSD: once.c,v 1.1.1.1 2018/08/12 12:08:27 christos Exp $	*/
 
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")

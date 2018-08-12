@@ -1,4 +1,4 @@
-/*	$NetBSD: datafile.h,v 1.1 2018/08/12 12:07:51 christos Exp $	*/
+/*	$NetBSD: datafile.h,v 1.1.1.1 2018/08/12 12:07:51 christos Exp $	*/
 
 /*
  * Copyright (C) 2011 - 2015 Nominum, Inc.

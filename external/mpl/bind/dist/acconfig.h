@@ -1,4 +1,4 @@
-/*	$NetBSD: acconfig.h,v 1.1 2018/08/12 12:06:59 christos Exp $	*/
+/*	$NetBSD: acconfig.h,v 1.1.1.1 2018/08/12 12:06:59 christos Exp $	*/
 
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")

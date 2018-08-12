@@ -1,4 +1,4 @@
-/*	$NetBSD: h_tp_basic_c.c,v 1.1 2018/08/12 12:08:33 christos Exp $	*/
+/*	$NetBSD: h_tp_basic_c.c,v 1.1.1.1 2018/08/12 12:08:33 christos Exp $	*/
 
 /* Copyright (c) 2008 The NetBSD Foundation, Inc.
  * All rights reserved.

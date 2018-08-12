@@ -1,4 +1,4 @@
-/*	$NetBSD: version_helper.c,v 1.1 2018/08/12 12:08:37 christos Exp $	*/
+/*	$NetBSD: version_helper.c,v 1.1.1.1 2018/08/12 12:08:37 christos Exp $	*/
 
 /*
  * Copyright 2014 Google Inc.

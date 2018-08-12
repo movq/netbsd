@@ -1,4 +1,4 @@
-/*	$NetBSD: kx_36.c,v 1.1 2018/08/12 12:08:17 christos Exp $	*/
+/*	$NetBSD: kx_36.c,v 1.1.1.1 2018/08/12 12:08:17 christos Exp $	*/
 
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")

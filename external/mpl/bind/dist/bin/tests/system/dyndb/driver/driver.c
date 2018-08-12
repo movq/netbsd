@@ -1,4 +1,4 @@
-/*	$NetBSD: driver.c,v 1.1 2018/08/12 12:07:38 christos Exp $	*/
+/*	$NetBSD: driver.c,v 1.1.1.1 2018/08/12 12:07:38 christos Exp $	*/
 
 /*
  * Driver API implementation and main entry point for BIND.

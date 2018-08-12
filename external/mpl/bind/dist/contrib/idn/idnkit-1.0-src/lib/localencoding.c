@@ -1,4 +1,4 @@
-/*	$NetBSD: localencoding.c,v 1.1 2018/08/12 12:07:48 christos Exp $	*/
+/*	$NetBSD: localencoding.c,v 1.1.1.1 2018/08/12 12:07:48 christos Exp $	*/
 
 #ifndef lint
 static char *rcsid = "Id: localencoding.c,v 1.1 2003/06/04 00:25:53 marka Exp ";
