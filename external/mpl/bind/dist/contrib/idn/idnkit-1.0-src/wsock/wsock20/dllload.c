@@ -1,4 +1,4 @@
-/*	$NetBSD: dllload.c,v 1.1 2018/08/12 12:07:45 christos Exp $	*/
+/*	$NetBSD: dllload.c,v 1.1.1.1 2018/08/12 12:07:45 christos Exp $	*/
 
 /*
  * dllload.c - load original entries

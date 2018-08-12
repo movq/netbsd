@@ -1,4 +1,4 @@
-/*	$NetBSD: ucsset.h,v 1.1 2018/08/12 12:07:47 christos Exp $	*/
+/*	$NetBSD: ucsset.h,v 1.1.1.1 2018/08/12 12:07:47 christos Exp $	*/
 
 /* Id: ucsset.h,v 1.1 2003/06/04 00:25:43 marka Exp  */
 /*

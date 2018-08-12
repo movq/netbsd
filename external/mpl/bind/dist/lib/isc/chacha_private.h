@@ -1,4 +1,4 @@
-/*	$NetBSD: chacha_private.h,v 1.1 2018/08/12 12:08:23 christos Exp $	*/
+/*	$NetBSD: chacha_private.h,v 1.1.1.1 2018/08/12 12:08:23 christos Exp $	*/
 
 /*
  * Taken from OpenBSD CVS src/lib/libc/crypt/chacha_private.h on

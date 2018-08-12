@@ -1,4 +1,4 @@
-/*	$NetBSD: assert.h,v 1.1 2018/08/12 12:07:46 christos Exp $	*/
+/*	$NetBSD: assert.h,v 1.1.1.1 2018/08/12 12:07:46 christos Exp $	*/
 
 /* Id: assert.h,v 1.1 2003/06/04 00:25:35 marka Exp  */
 /*

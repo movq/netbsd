@@ -1,4 +1,4 @@
-/*	$NetBSD: sig_24.c,v 1.1 2018/08/12 12:08:18 christos Exp $	*/
+/*	$NetBSD: sig_24.c,v 1.1.1.1 2018/08/12 12:08:18 christos Exp $	*/
 
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")

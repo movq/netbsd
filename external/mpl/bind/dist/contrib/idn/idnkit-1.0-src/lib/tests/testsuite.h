@@ -1,4 +1,4 @@
-/*	$NetBSD: testsuite.h,v 1.1 2018/08/12 12:07:49 christos Exp $	*/
+/*	$NetBSD: testsuite.h,v 1.1.1.1 2018/08/12 12:07:49 christos Exp $	*/
 
 /* Id: testsuite.h,v 1.1 2003/06/04 00:27:03 marka Exp  */
 /*

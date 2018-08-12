@@ -1,4 +1,4 @@
-/*	$NetBSD: net.c,v 1.1 2018/08/12 12:07:51 christos Exp $	*/
+/*	$NetBSD: net.c,v 1.1.1.1 2018/08/12 12:07:51 christos Exp $	*/
 
 /*
  * Copyright (C) 2000, 2001  Nominum, Inc.

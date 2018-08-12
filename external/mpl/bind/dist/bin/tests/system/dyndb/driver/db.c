@@ -1,4 +1,4 @@
-/*	$NetBSD: db.c,v 1.1 2018/08/12 12:07:38 christos Exp $	*/
+/*	$NetBSD: db.c,v 1.1.1.1 2018/08/12 12:07:38 christos Exp $	*/
 
 /*
  * Database API implementation. The interface is defined in lib/dns/db.h.

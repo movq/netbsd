@@ -1,4 +1,4 @@
-/*	$NetBSD: db.h,v 1.1 2018/08/12 12:07:38 christos Exp $	*/
+/*	$NetBSD: db.h,v 1.1.1.1 2018/08/12 12:07:38 christos Exp $	*/
 
 /**
  * Database API implementation.
