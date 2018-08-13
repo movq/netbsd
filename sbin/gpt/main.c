@@ -1,4 +1,4 @@
-/*	$NetBSD: main.c,v 1.11 2018/03/19 09:06:20 mlelstv Exp $	*/
+/*	$NetBSD: main.c,v 1.11.4.2 2018/08/13 16:12:12 martin Exp $	*/
 
 /*-
  * Copyright (c) 2002 Marcel Moolenaar
@@ -34,7 +34,7 @@
 
 #include <sys/cdefs.h>
 #ifdef __RCSID
-__RCSID("$NetBSD: main.c,v 1.11 2018/03/19 09:06:20 mlelstv Exp $");
+__RCSID("$NetBSD: main.c,v 1.11.4.2 2018/08/13 16:12:12 martin Exp $");
 #endif
 
 #include <stdio.h>
