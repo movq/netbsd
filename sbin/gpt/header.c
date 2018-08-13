@@ -33,7 +33,7 @@
 
 #include <sys/cdefs.h>
 #ifdef __RCSID
-__RCSID("$NetBSD: header.c,v 1.9 2018/05/01 08:17:13 martin Exp $");
+__RCSID("$NetBSD: header.c,v 1.9.4.2 2018/08/13 16:12:12 martin Exp $");
 #endif
 
 #include <sys/types.h>
