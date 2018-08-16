@@ -1,4 +1,4 @@
-/*	$NetBSD: drv0.h,v 1.1 2018/08/16 18:17:47 jmcneill Exp $	*/
+/*	$NetBSD: drv0.h,v 1.1.1.1 2018/08/16 18:17:47 jmcneill Exp $	*/
 
 #ifndef _GNU_EFI_APPS_DRV0_H_
 #define _GNU_EFI_APPS_DRV0_H_

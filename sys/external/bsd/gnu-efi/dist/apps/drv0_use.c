@@ -1,4 +1,4 @@
-/*	$NetBSD: drv0_use.c,v 1.1 2018/08/16 18:17:47 jmcneill Exp $	*/
+/*	$NetBSD: drv0_use.c,v 1.1.1.1 2018/08/16 18:17:47 jmcneill Exp $	*/
 
 /*
  * Copyright (C) 2013 David Decotigny <decot@googlers.com>

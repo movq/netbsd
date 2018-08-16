@@ -1,4 +1,4 @@
-/*	$NetBSD: t8.c,v 1.1 2018/08/16 18:17:47 jmcneill Exp $	*/
+/*	$NetBSD: t8.c,v 1.1.1.1 2018/08/16 18:17:47 jmcneill Exp $	*/
 
 #include <efi.h>
 #include <efilib.h>

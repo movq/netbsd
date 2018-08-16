@@ -1,4 +1,4 @@
-/*	$NetBSD: efisetjmp_arch.h,v 1.1 2018/08/16 18:17:47 jmcneill Exp $	*/
+/*	$NetBSD: efisetjmp_arch.h,v 1.1.1.1 2018/08/16 18:17:47 jmcneill Exp $	*/
 
 #ifndef GNU_EFI_IA64_SETJMP_H
 #define GNU_EFI_IA64_SETJMP_H

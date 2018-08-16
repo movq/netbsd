@@ -1,4 +1,4 @@
-/*	$NetBSD: elf_aarch64_efi.lds,v 1.1 2018/08/16 18:17:47 jmcneill Exp $	*/
+/*	$NetBSD: elf_aarch64_efi.lds,v 1.1.1.1 2018/08/16 18:17:47 jmcneill Exp $	*/
 
 OUTPUT_FORMAT("elf64-littleaarch64", "elf64-littleaarch64", "elf64-littleaarch64")
 OUTPUT_ARCH(aarch64)

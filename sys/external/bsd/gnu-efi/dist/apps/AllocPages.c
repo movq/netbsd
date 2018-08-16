@@ -1,4 +1,4 @@
-/*	$NetBSD: AllocPages.c,v 1.1 2018/08/16 18:17:47 jmcneill Exp $	*/
+/*	$NetBSD: AllocPages.c,v 1.1.1.1 2018/08/16 18:17:47 jmcneill Exp $	*/
 
 
 /*
