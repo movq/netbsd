@@ -1,4 +1,4 @@
-/* $NetBSD: conf.c,v 1.1 2018/08/24 02:01:06 jmcneill Exp $ */
+/* $NetBSD: conf.c,v 1.2 2018/08/26 21:28:18 jmcneill Exp $ */
 
 /*-
  * Copyright (c) 2018 Jared McNeill <jmcneill@invisible.ca>
@@ -28,9 +28,15 @@
 
 #include "efiboot.h"
 #include "efifile.h"
+#include "efiblock.h"
+
+#include <lib/libsa/stand.h>
+#include <lib/libsa/ufs.h>
+#include <lib/libsa/dosfs.h>
 
 struct devsw devsw[] = {
 	{ "efifile", efi_file_strategy, efi_file_open, efi_file_close, noioctl },
+	{ "efiblock", efi_block_strategy, efi_block_open, efi_block_close, noioctl },
 };
 int ndevs = __arraycount(devsw);
 
@@ -39,5 +45,8 @@ struct netif_driver *netif_drivers[] = {
 int n_netif_drivers = __arraycount(netif_drivers);
 
 struct fs_ops file_system[] = {
+	FS_OPS(ffsv1),
+	FS_OPS(ffsv2),
+	FS_OPS(dosfs),
 };
 int nfsys = __arraycount(file_system);
