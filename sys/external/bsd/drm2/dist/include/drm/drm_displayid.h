@@ -1,4 +1,4 @@
-/*	$NetBSD: drm_displayid.h,v 1.1 2018/08/27 01:35:00 riastradh Exp $	*/
+/*	$NetBSD: drm_displayid.h,v 1.1.1.1 2018/08/27 01:35:00 riastradh Exp $	*/
 
 /*
  * Copyright © 2014 Red Hat Inc.

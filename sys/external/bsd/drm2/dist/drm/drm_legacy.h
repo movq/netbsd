@@ -1,4 +1,4 @@
-/*	$NetBSD: drm_legacy.h,v 1.1 2018/08/27 01:34:42 riastradh Exp $	*/
+/*	$NetBSD: drm_legacy.h,v 1.1.1.1 2018/08/27 01:34:42 riastradh Exp $	*/
 
 #ifndef __DRM_LEGACY_H__
 #define __DRM_LEGACY_H__

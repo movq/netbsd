@@ -1,4 +1,4 @@
-/*	$NetBSD: g98.fuc0s.h,v 1.1 2018/08/27 01:34:56 riastradh Exp $	*/
+/*	$NetBSD: g98.fuc0s.h,v 1.1.1.1 2018/08/27 01:34:56 riastradh Exp $	*/
 
 uint32_t g98_sec_data[] = {
 /* 0x0000: ctx_dma */

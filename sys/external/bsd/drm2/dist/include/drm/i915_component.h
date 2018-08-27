@@ -1,4 +1,4 @@
-/*	$NetBSD: i915_component.h,v 1.1 2018/08/27 01:35:00 riastradh Exp $	*/
+/*	$NetBSD: i915_component.h,v 1.1.1.1 2018/08/27 01:35:00 riastradh Exp $	*/
 
 /*
  * Copyright © 2014 Intel Corporation

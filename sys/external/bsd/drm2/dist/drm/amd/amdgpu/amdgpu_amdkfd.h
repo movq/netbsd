@@ -1,4 +1,4 @@
-/*	$NetBSD: amdgpu_amdkfd.h,v 1.1 2018/08/27 01:34:43 riastradh Exp $	*/
+/*	$NetBSD: amdgpu_amdkfd.h,v 1.1.1.1 2018/08/27 01:34:43 riastradh Exp $	*/
 
 /*
  * Copyright 2014 Advanced Micro Devices, Inc.

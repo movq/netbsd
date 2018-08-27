@@ -1,4 +1,4 @@
-/*	$NetBSD: intel_fifo_underrun.c,v 1.1 2018/08/27 01:34:55 riastradh Exp $	*/
+/*	$NetBSD: intel_fifo_underrun.c,v 1.1.1.1 2018/08/27 01:34:55 riastradh Exp $	*/
 
 /*
  * Copyright © 2014 Intel Corporation
@@ -28,7 +28,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: intel_fifo_underrun.c,v 1.1 2018/08/27 01:34:55 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: intel_fifo_underrun.c,v 1.1.1.1 2018/08/27 01:34:55 riastradh Exp $");
 
 #include "i915_drv.h"
 #include "intel_drv.h"

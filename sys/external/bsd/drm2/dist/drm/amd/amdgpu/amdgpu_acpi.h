@@ -1,4 +1,4 @@
-/*	$NetBSD: amdgpu_acpi.h,v 1.1 2018/08/27 01:34:43 riastradh Exp $	*/
+/*	$NetBSD: amdgpu_acpi.h,v 1.1.1.1 2018/08/27 01:34:43 riastradh Exp $	*/
 
 /*
  * Copyright 2012 Advanced Micro Devices, Inc.

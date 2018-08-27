@@ -1,4 +1,4 @@
-/*	$NetBSD: smu_7_1_2_d.h,v 1.1 2018/08/27 01:34:53 riastradh Exp $	*/
+/*	$NetBSD: smu_7_1_2_d.h,v 1.1.1.1 2018/08/27 01:34:53 riastradh Exp $	*/
 
 /*
  * SMU_7_1_2 Register documentation

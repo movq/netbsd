@@ -1,4 +1,4 @@
-/*	$NetBSD: drm_buffer.c,v 1.1 2018/08/27 01:34:57 riastradh Exp $	*/
+/*	$NetBSD: drm_buffer.c,v 1.1.1.1 2018/08/27 01:34:57 riastradh Exp $	*/
 
 /**************************************************************************
  *
@@ -35,7 +35,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: drm_buffer.c,v 1.1 2018/08/27 01:34:57 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: drm_buffer.c,v 1.1.1.1 2018/08/27 01:34:57 riastradh Exp $");
 
 #include <linux/export.h>
 #include "drm_buffer.h"
