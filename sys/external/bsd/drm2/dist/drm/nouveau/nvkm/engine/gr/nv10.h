@@ -1,4 +1,4 @@
-/*	$NetBSD: nv10.h,v 1.1 2018/08/27 01:34:56 riastradh Exp $	*/
+/*	$NetBSD: nv10.h,v 1.1.1.1 2018/08/27 01:34:56 riastradh Exp $	*/
 
 #ifndef __NV10_GR_H__
 #define __NV10_GR_H__

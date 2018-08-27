@@ -1,4 +1,4 @@
-/*	$NetBSD: drm_internal.h,v 1.1 2018/08/27 01:34:42 riastradh Exp $	*/
+/*	$NetBSD: drm_internal.h,v 1.1.1.1 2018/08/27 01:34:42 riastradh Exp $	*/
 
 /*
  * Copyright © 2014 Intel Corporation

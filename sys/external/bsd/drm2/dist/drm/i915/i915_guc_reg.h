@@ -1,4 +1,4 @@
-/*	$NetBSD: i915_guc_reg.h,v 1.1 2018/08/27 01:34:54 riastradh Exp $	*/
+/*	$NetBSD: i915_guc_reg.h,v 1.1.1.1 2018/08/27 01:34:54 riastradh Exp $	*/
 
 /*
  * Copyright © 2014 Intel Corporation

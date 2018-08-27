@@ -1,4 +1,4 @@
-/*	$NetBSD: dce_10_0_d.h,v 1.1 2018/08/27 01:34:48 riastradh Exp $	*/
+/*	$NetBSD: dce_10_0_d.h,v 1.1.1.1 2018/08/27 01:34:48 riastradh Exp $	*/
 
 /*
  * DCE_10_0 Register documentation

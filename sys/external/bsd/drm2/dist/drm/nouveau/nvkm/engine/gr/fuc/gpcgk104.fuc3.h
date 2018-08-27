@@ -1,4 +1,4 @@
-/*	$NetBSD: gpcgk104.fuc3.h,v 1.1 2018/08/27 01:34:56 riastradh Exp $	*/
+/*	$NetBSD: gpcgk104.fuc3.h,v 1.1.1.1 2018/08/27 01:34:56 riastradh Exp $	*/
 
 uint32_t gk104_grgpc_data[] = {
 /* 0x0000: gpc_mmio_list_head */

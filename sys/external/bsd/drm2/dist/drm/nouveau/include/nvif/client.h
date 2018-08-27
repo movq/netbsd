@@ -1,4 +1,4 @@
-/*	$NetBSD: client.h,v 1.1 2018/08/27 01:34:55 riastradh Exp $	*/
+/*	$NetBSD: client.h,v 1.1.1.1 2018/08/27 01:34:55 riastradh Exp $	*/
 
 #ifndef __NVIF_CLIENT_H__
 #define __NVIF_CLIENT_H__

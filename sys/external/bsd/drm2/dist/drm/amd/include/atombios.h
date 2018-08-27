@@ -1,4 +1,4 @@
-/*	$NetBSD: atombios.h,v 1.1 2018/08/27 01:34:47 riastradh Exp $	*/
+/*	$NetBSD: atombios.h,v 1.1.1.1 2018/08/27 01:34:47 riastradh Exp $	*/
 
 /*
  * Copyright 2006-2007 Advanced Micro Devices, Inc.
