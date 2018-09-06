@@ -1,4 +1,4 @@
-/*	$NetBSD: t_ubsanxx.cpp,v 1.1 2018/08/03 04:18:40 kamil Exp $	*/
+/*	$NetBSD: t_ubsanxx.cpp,v 1.1.2.2 2018/09/06 06:56:48 pgoyette Exp $	*/
 
 /*-
  * Copyright (c) 2018 The NetBSD Foundation, Inc.

@@ -1,4 +1,4 @@
-/*	$NetBSD: prompt.c,v 1.2 2018/08/24 20:55:20 jmcneill Exp $	*/
+/*	$NetBSD: prompt.c,v 1.2.2.2 2018/09/06 06:56:47 pgoyette Exp $	*/
 
 /*
  * Copyright (c) 1996, 1997

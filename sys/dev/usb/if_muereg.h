@@ -1,4 +1,4 @@
-/*	$NetBSD: if_muereg.h,v 1.2 2018/08/30 09:00:08 rin Exp $	*/
+/*	$NetBSD: if_muereg.h,v 1.2.4.2 2018/09/06 06:56:04 pgoyette Exp $	*/
 /*	$OpenBSD: if_muereg.h,v 1.1 2018/08/03 01:50:15 kevlo Exp $	*/
 
 /*

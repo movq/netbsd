@@ -1,4 +1,4 @@
-/*	$NetBSD: AccountInfo.h,v 1.2 2018/08/12 13:02:30 christos Exp $	*/
+/*	$NetBSD: AccountInfo.h,v 1.2.2.2 2018/09/06 06:54:49 pgoyette Exp $	*/
 
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")

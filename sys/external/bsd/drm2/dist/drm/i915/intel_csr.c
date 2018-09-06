@@ -1,4 +1,4 @@
-/*	$NetBSD: intel_csr.c,v 1.4 2018/08/27 15:09:35 riastradh Exp $	*/
+/*	$NetBSD: intel_csr.c,v 1.4.2.2 2018/09/06 06:56:17 pgoyette Exp $	*/
 
 /*
  * Copyright © 2014 Intel Corporation
@@ -24,7 +24,7 @@
  *
  */
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: intel_csr.c,v 1.4 2018/08/27 15:09:35 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: intel_csr.c,v 1.4.2.2 2018/09/06 06:56:17 pgoyette Exp $");
 
 #include <linux/firmware.h>
 #include <linux/module.h>

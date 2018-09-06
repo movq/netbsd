@@ -1,4 +1,4 @@
-/*	$NetBSD: efidev.c,v 1.1 2018/08/26 21:28:18 jmcneill Exp $	*/
+/*	$NetBSD: efidev.c,v 1.1.2.2 2018/09/06 06:56:47 pgoyette Exp $	*/
 /*	$OpenBSD: efiboot.c,v 1.28 2017/11/25 19:02:07 patrick Exp $	*/
 
 /*

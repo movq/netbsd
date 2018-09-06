@@ -1,4 +1,4 @@
-/*	$NetBSD: amdgpu_task.h,v 1.1 2018/08/27 14:02:32 riastradh Exp $	*/
+/*	$NetBSD: amdgpu_task.h,v 1.1.2.2 2018/09/06 06:56:09 pgoyette Exp $	*/
 
 /*-
  * Copyright (c) 2018 The NetBSD Foundation, Inc.

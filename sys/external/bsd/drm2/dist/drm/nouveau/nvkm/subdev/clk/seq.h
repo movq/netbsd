@@ -1,4 +1,4 @@
-/*	$NetBSD: seq.h,v 1.2 2018/08/27 04:58:33 riastradh Exp $	*/
+/*	$NetBSD: seq.h,v 1.2.2.2 2018/09/06 06:56:28 pgoyette Exp $	*/
 
 #ifndef __NVKM_CLK_SEQ_H__
 #define __NVKM_CLK_SEQ_H__

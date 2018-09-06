@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile.inc,v 1.2 2018/08/16 16:34:33 christos Exp $
+#	$NetBSD: Makefile.inc,v 1.2.2.2 2018/09/06 06:53:51 pgoyette Exp $
 
 .if !defined(BIND9_MAKEFILE_INC)
 BIND9_MAKEFILE_INC=yes

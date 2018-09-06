@@ -1,4 +1,4 @@
-/*	$NetBSD: notify.h,v 1.2 2018/08/27 04:58:30 riastradh Exp $	*/
+/*	$NetBSD: notify.h,v 1.2.2.2 2018/09/06 06:56:23 pgoyette Exp $	*/
 
 #ifndef __NVIF_NOTIFY_H__
 #define __NVIF_NOTIFY_H__

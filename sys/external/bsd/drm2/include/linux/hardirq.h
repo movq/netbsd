@@ -1,4 +1,4 @@
-/*	$NetBSD: hardirq.h,v 1.2 2018/08/27 13:37:37 riastradh Exp $	*/
+/*	$NetBSD: hardirq.h,v 1.2.2.2 2018/09/06 06:56:36 pgoyette Exp $	*/
 
 /*-
  * Copyright (c) 2018 The NetBSD Foundation, Inc.

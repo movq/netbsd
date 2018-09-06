@@ -1,4 +1,4 @@
-/*	$NetBSD: nouveau_nvkm_core_enum.c,v 1.2 2018/08/27 04:58:30 riastradh Exp $	*/
+/*	$NetBSD: nouveau_nvkm_core_enum.c,v 1.2.2.2 2018/09/06 06:56:24 pgoyette Exp $	*/
 
 /*
  * Copyright (C) 2010 Nouveau Project
@@ -27,7 +27,7 @@
  *
  */
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: nouveau_nvkm_core_enum.c,v 1.2 2018/08/27 04:58:30 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: nouveau_nvkm_core_enum.c,v 1.2.2.2 2018/09/06 06:56:24 pgoyette Exp $");
 
 #include <core/enum.h>
 

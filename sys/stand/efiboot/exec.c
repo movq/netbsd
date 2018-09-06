@@ -1,4 +1,4 @@
-/* $NetBSD: exec.c,v 1.3 2018/09/02 23:50:23 jmcneill Exp $ */
+/* $NetBSD: exec.c,v 1.3.2.2 2018/09/06 06:56:47 pgoyette Exp $ */
 
 /*-
  * Copyright (c) 2018 Jared McNeill <jmcneill@invisible.ca>

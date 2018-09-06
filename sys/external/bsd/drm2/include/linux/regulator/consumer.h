@@ -1,4 +1,4 @@
-/*	$NetBSD: consumer.h,v 1.4 2018/08/27 15:29:54 riastradh Exp $	*/
+/*	$NetBSD: consumer.h,v 1.4.2.2 2018/09/06 06:56:36 pgoyette Exp $	*/
 
 /*-
  * Copyright (c) 2018 The NetBSD Foundation, Inc.

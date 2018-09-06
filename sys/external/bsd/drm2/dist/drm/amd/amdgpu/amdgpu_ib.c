@@ -1,4 +1,4 @@
-/*	$NetBSD: amdgpu_ib.c,v 1.2 2018/08/27 04:58:19 riastradh Exp $	*/
+/*	$NetBSD: amdgpu_ib.c,v 1.2.2.2 2018/09/06 06:56:10 pgoyette Exp $	*/
 
 /*
  * Copyright 2008 Advanced Micro Devices, Inc.
@@ -29,7 +29,7 @@
  *          Christian König
  */
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: amdgpu_ib.c,v 1.2 2018/08/27 04:58:19 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: amdgpu_ib.c,v 1.2.2.2 2018/09/06 06:56:10 pgoyette Exp $");
 
 #include <linux/seq_file.h>
 #include <linux/slab.h>

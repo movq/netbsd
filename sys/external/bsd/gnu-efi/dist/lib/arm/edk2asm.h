@@ -1,4 +1,4 @@
-/*	$NetBSD: edk2asm.h,v 1.1.1.1 2018/08/16 18:17:47 jmcneill Exp $	*/
+/*	$NetBSD: edk2asm.h,v 1.1.1.1.2.2 2018/09/06 06:56:39 pgoyette Exp $	*/
 
 
 #define ASM_PFX(x)			x

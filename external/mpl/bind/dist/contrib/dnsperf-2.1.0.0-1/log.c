@@ -1,4 +1,4 @@
-/*	$NetBSD: log.c,v 1.2 2018/08/12 13:02:32 christos Exp $	*/
+/*	$NetBSD: log.c,v 1.2.2.2 2018/09/06 06:54:52 pgoyette Exp $	*/
 
 /*
  * Copyright (C) 2011 - 2015 Nominum, Inc.

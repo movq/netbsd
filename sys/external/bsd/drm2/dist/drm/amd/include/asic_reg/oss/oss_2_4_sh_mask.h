@@ -1,4 +1,4 @@
-/*	$NetBSD: oss_2_4_sh_mask.h,v 1.2 2018/08/27 04:58:22 riastradh Exp $	*/
+/*	$NetBSD: oss_2_4_sh_mask.h,v 1.2.2.2 2018/09/06 06:56:15 pgoyette Exp $	*/
 
 /*
  * OSS_2_4 Register documentation

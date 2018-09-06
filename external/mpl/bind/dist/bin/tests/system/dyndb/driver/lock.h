@@ -1,4 +1,4 @@
-/*	$NetBSD: lock.h,v 1.2 2018/08/12 13:02:30 christos Exp $	*/
+/*	$NetBSD: lock.h,v 1.2.2.2 2018/09/06 06:54:15 pgoyette Exp $	*/
 
 /*
  * Copyright (C) 2014-2015  Red Hat ; see COPYRIGHT for license

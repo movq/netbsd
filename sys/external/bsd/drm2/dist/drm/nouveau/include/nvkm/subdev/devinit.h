@@ -1,4 +1,4 @@
-/*	$NetBSD: devinit.h,v 1.2 2018/08/27 04:58:30 riastradh Exp $	*/
+/*	$NetBSD: devinit.h,v 1.2.2.2 2018/09/06 06:56:24 pgoyette Exp $	*/
 
 #ifndef __NVKM_DEVINIT_H__
 #define __NVKM_DEVINIT_H__

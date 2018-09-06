@@ -1,4 +1,4 @@
-/*	$NetBSD: outpdp.h,v 1.3 2018/08/27 07:43:38 riastradh Exp $	*/
+/*	$NetBSD: outpdp.h,v 1.3.2.2 2018/09/06 06:56:26 pgoyette Exp $	*/
 
 #ifndef __NVKM_DISP_OUTP_DP_H__
 #define __NVKM_DISP_OUTP_DP_H__

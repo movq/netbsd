@@ -1,4 +1,4 @@
-/*	$NetBSD: hooks.h,v 1.2 2018/08/12 13:02:41 christos Exp $	*/
+/*	$NetBSD: hooks.h,v 1.2.2.2 2018/09/06 06:55:12 pgoyette Exp $	*/
 
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")

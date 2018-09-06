@@ -1,4 +1,4 @@
-/*	$NetBSD: ati_pcigart.h,v 1.2 2018/08/27 04:58:37 riastradh Exp $	*/
+/*	$NetBSD: ati_pcigart.h,v 1.2.2.2 2018/09/06 06:56:35 pgoyette Exp $	*/
 
 #ifndef DRM_ATI_PCIGART_H
 #define DRM_ATI_PCIGART_H

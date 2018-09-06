@@ -1,4 +1,4 @@
-/*	$NetBSD: vm_basic_types.h,v 1.2 2018/08/27 04:58:37 riastradh Exp $	*/
+/*	$NetBSD: vm_basic_types.h,v 1.2.2.2 2018/09/06 06:56:35 pgoyette Exp $	*/
 
 #ifndef _VM_BASIC_TYPES_H_
 #define _VM_BASIC_TYPES_H_

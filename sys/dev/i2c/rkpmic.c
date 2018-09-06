@@ -1,4 +1,4 @@
-/* $NetBSD: rkpmic.c,v 1.1 2018/09/02 01:16:58 jmcneill Exp $ */
+/* $NetBSD: rkpmic.c,v 1.1.2.2 2018/09/06 06:55:49 pgoyette Exp $ */
 
 /*-
  * Copyright (c) 2018 Jared McNeill <jmcneill@invisible.ca>
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: rkpmic.c,v 1.1 2018/09/02 01:16:58 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: rkpmic.c,v 1.1.2.2 2018/09/06 06:55:49 pgoyette Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

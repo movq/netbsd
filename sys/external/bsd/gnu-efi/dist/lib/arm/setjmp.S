@@ -1,4 +1,4 @@
-/*	$NetBSD: setjmp.S,v 1.1.1.1 2018/08/16 18:17:47 jmcneill Exp $	*/
+/*	$NetBSD: setjmp.S,v 1.1.1.1.2.2 2018/09/06 06:56:39 pgoyette Exp $	*/
 
 /*
  * Copyright (c) 2006 - 2008, Intel Corporation. All rights reserved.

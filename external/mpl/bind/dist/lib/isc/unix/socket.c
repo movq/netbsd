@@ -1,4 +1,4 @@
-/*	$NetBSD: socket.c,v 1.3 2018/08/13 08:48:46 christos Exp $	*/
+/*	$NetBSD: socket.c,v 1.3.2.2 2018/09/06 06:55:09 pgoyette Exp $	*/
 
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")

@@ -1,4 +1,4 @@
-/* $NetBSD: efifile.c,v 1.3 2018/08/26 21:28:18 jmcneill Exp $ */
+/* $NetBSD: efifile.c,v 1.3.2.2 2018/09/06 06:56:47 pgoyette Exp $ */
 
 /*-
  * Copyright (c) 2018 Jared McNeill <jmcneill@invisible.ca>

@@ -1,4 +1,4 @@
-/*	$NetBSD: debug.h,v 1.2 2018/08/27 04:58:30 riastradh Exp $	*/
+/*	$NetBSD: debug.h,v 1.2.2.2 2018/09/06 06:56:23 pgoyette Exp $	*/
 
 #ifndef __NVKM_DEBUG_H__
 #define __NVKM_DEBUG_H__

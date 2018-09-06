@@ -1,4 +1,4 @@
-/*	$NetBSD: efisetjmp.h,v 1.1.1.1 2018/08/16 18:17:47 jmcneill Exp $	*/
+/*	$NetBSD: efisetjmp.h,v 1.1.1.1.2.2 2018/09/06 06:56:38 pgoyette Exp $	*/
 
 #ifndef GNU_EFI_SETJMP_H
 #define GNU_EFI_SETJMP_H

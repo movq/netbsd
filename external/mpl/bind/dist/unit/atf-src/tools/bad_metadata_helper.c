@@ -1,4 +1,4 @@
-/*	$NetBSD: bad_metadata_helper.c,v 1.2 2018/08/12 13:02:42 christos Exp $	*/
+/*	$NetBSD: bad_metadata_helper.c,v 1.2.2.2 2018/09/06 06:55:16 pgoyette Exp $	*/
 
 /*
  * Automated Testing Framework (atf)

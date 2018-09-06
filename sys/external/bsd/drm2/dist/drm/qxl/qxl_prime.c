@@ -1,4 +1,4 @@
-/*	$NetBSD: qxl_prime.c,v 1.2 2018/08/27 04:58:35 riastradh Exp $	*/
+/*	$NetBSD: qxl_prime.c,v 1.2.2.2 2018/09/06 06:56:31 pgoyette Exp $	*/
 
 /*
  * Copyright 2014 Canonical
@@ -25,7 +25,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: qxl_prime.c,v 1.2 2018/08/27 04:58:35 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: qxl_prime.c,v 1.2.2.2 2018/09/06 06:56:31 pgoyette Exp $");
 
 #include "qxl_drv.h"
 

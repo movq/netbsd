@@ -1,4 +1,4 @@
-/*	$NetBSD: user.h,v 1.2 2018/08/27 04:58:31 riastradh Exp $	*/
+/*	$NetBSD: user.h,v 1.2.2.2 2018/09/06 06:56:26 pgoyette Exp $	*/
 
 #ifndef __NVKM_DMA_USER_H__
 #define __NVKM_DMA_USER_H__

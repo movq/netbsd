@@ -1,4 +1,4 @@
-/*	$NetBSD: pkcs11-keygen.c,v 1.2 2018/08/12 13:02:28 christos Exp $	*/
+/*	$NetBSD: pkcs11-keygen.c,v 1.2.2.2 2018/09/06 06:53:57 pgoyette Exp $	*/
 
 /*
  * Copyright (C) 2009, 2012, 2015 Internet Systems Consortium, Inc. ("ISC")

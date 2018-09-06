@@ -1,4 +1,4 @@
-/*	$NetBSD: kfd_device_queue_manager_vi.c,v 1.2 2018/08/27 04:58:20 riastradh Exp $	*/
+/*	$NetBSD: kfd_device_queue_manager_vi.c,v 1.2.2.2 2018/09/06 06:56:10 pgoyette Exp $	*/
 
 /*
  * Copyright 2014 Advanced Micro Devices, Inc.
@@ -24,7 +24,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: kfd_device_queue_manager_vi.c,v 1.2 2018/08/27 04:58:20 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: kfd_device_queue_manager_vi.c,v 1.2.2.2 2018/09/06 06:56:10 pgoyette Exp $");
 
 #include "kfd_device_queue_manager.h"
 #include "gca/gfx_8_0_enum.h"

@@ -1,4 +1,4 @@
-/* $NetBSD: efifdt.c,v 1.7 2018/09/03 00:17:00 jmcneill Exp $ */
+/* $NetBSD: efifdt.c,v 1.7.2.2 2018/09/06 06:56:47 pgoyette Exp $ */
 
 /*-
  * Copyright (c) 2018 Jared McNeill <jmcneill@invisible.ca>

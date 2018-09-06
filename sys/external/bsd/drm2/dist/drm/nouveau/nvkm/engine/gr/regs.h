@@ -1,4 +1,4 @@
-/*	$NetBSD: regs.h,v 1.2 2018/08/27 04:58:32 riastradh Exp $	*/
+/*	$NetBSD: regs.h,v 1.2.2.2 2018/09/06 06:56:26 pgoyette Exp $	*/
 
 #ifndef __NVKM_GR_REGS_H__
 #define __NVKM_GR_REGS_H__

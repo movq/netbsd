@@ -1,4 +1,4 @@
-/*	$NetBSD: drm_atomic_helper.c,v 1.4 2018/08/27 06:50:45 riastradh Exp $	*/
+/*	$NetBSD: drm_atomic_helper.c,v 1.4.2.2 2018/09/06 06:56:09 pgoyette Exp $	*/
 
 /*
  * Copyright (C) 2014 Red Hat
@@ -28,7 +28,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: drm_atomic_helper.c,v 1.4 2018/08/27 06:50:45 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: drm_atomic_helper.c,v 1.4.2.2 2018/09/06 06:56:09 pgoyette Exp $");
 
 #include <drm/drmP.h>
 #include <drm/drm_atomic.h>

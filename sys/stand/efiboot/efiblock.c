@@ -1,4 +1,4 @@
-/* $NetBSD: efiblock.c,v 1.2 2018/08/27 09:51:32 jmcneill Exp $ */
+/* $NetBSD: efiblock.c,v 1.2.2.2 2018/09/06 06:56:47 pgoyette Exp $ */
 
 /*-
  * Copyright (c) 2016 Kimihiro Nonaka <nonaka@netbsd.org>

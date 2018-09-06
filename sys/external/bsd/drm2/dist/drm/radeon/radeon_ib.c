@@ -1,4 +1,4 @@
-/*	$NetBSD: radeon_ib.c,v 1.2 2018/08/27 04:58:36 riastradh Exp $	*/
+/*	$NetBSD: radeon_ib.c,v 1.2.2.2 2018/09/06 06:56:32 pgoyette Exp $	*/
 
 /*
  * Copyright 2008 Advanced Micro Devices, Inc.
@@ -29,7 +29,7 @@
  *          Christian König
  */
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: radeon_ib.c,v 1.2 2018/08/27 04:58:36 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: radeon_ib.c,v 1.2.2.2 2018/09/06 06:56:32 pgoyette Exp $");
 
 #include <drm/drmP.h>
 #include "radeon.h"

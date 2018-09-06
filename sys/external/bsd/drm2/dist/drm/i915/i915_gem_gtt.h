@@ -1,4 +1,4 @@
-/*	$NetBSD: i915_gem_gtt.h,v 1.7 2018/08/27 07:08:07 riastradh Exp $	*/
+/*	$NetBSD: i915_gem_gtt.h,v 1.7.2.2 2018/09/06 06:56:17 pgoyette Exp $	*/
 
 /*
  * Copyright © 2014 Intel Corporation

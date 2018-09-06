@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.2 2018/08/12 15:37:06 christos Exp $
+#	$NetBSD: Makefile,v 1.2.2.2 2018/09/06 06:55:18 pgoyette Exp $
 
 LIB=isc
 #USE_SHLIBDIR=   yes

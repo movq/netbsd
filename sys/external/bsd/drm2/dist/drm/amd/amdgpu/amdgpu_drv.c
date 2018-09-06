@@ -1,4 +1,4 @@
-/*	$NetBSD: amdgpu_drv.c,v 1.5 2018/08/27 15:22:54 riastradh Exp $	*/
+/*	$NetBSD: amdgpu_drv.c,v 1.5.2.2 2018/09/06 06:56:10 pgoyette Exp $	*/
 
 /**
  * \file amdgpu_drv.c
@@ -32,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: amdgpu_drv.c,v 1.5 2018/08/27 15:22:54 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: amdgpu_drv.c,v 1.5.2.2 2018/09/06 06:56:10 pgoyette Exp $");
 
 #include <drm/drmP.h>
 #include <drm/amdgpu_drm.h>

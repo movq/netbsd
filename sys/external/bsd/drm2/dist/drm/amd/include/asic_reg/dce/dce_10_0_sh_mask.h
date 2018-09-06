@@ -1,4 +1,4 @@
-/*	$NetBSD: dce_10_0_sh_mask.h,v 1.2 2018/08/27 04:58:21 riastradh Exp $	*/
+/*	$NetBSD: dce_10_0_sh_mask.h,v 1.2.2.2 2018/09/06 06:56:12 pgoyette Exp $	*/
 
 /*
  * DCE_10_0 Register documentation

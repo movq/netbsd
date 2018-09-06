@@ -1,4 +1,4 @@
-/*	$NetBSD: drm_bridge.c,v 1.3 2018/08/27 06:43:47 riastradh Exp $	*/
+/*	$NetBSD: drm_bridge.c,v 1.3.2.2 2018/09/06 06:56:09 pgoyette Exp $	*/
 
 /*
  * Copyright (c) 2014 Samsung Electronics Co., Ltd
@@ -24,7 +24,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: drm_bridge.c,v 1.3 2018/08/27 06:43:47 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: drm_bridge.c,v 1.3.2.2 2018/09/06 06:56:09 pgoyette Exp $");
 
 #include <linux/err.h>
 #include <linux/module.h>

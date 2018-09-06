@@ -1,4 +1,4 @@
-/*	$NetBSD: circ_buf.h,v 1.2 2018/08/27 07:15:18 riastradh Exp $	*/
+/*	$NetBSD: circ_buf.h,v 1.2.2.2 2018/09/06 06:56:36 pgoyette Exp $	*/
 
 /*-
  * Copyright (c) 2018 The NetBSD Foundation, Inc.

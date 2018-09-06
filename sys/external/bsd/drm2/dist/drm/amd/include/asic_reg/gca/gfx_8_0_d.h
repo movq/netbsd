@@ -1,4 +1,4 @@
-/*	$NetBSD: gfx_8_0_d.h,v 1.2 2018/08/27 04:58:21 riastradh Exp $	*/
+/*	$NetBSD: gfx_8_0_d.h,v 1.2.2.2 2018/09/06 06:56:13 pgoyette Exp $	*/
 
 /*
  * GFX_8_0 Register documentation

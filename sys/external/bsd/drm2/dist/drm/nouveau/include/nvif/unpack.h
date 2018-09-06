@@ -1,4 +1,4 @@
-/*	$NetBSD: unpack.h,v 1.3 2018/08/27 07:35:22 riastradh Exp $	*/
+/*	$NetBSD: unpack.h,v 1.3.2.2 2018/09/06 06:56:23 pgoyette Exp $	*/
 
 #ifndef __NVIF_UNPACK_H__
 #define __NVIF_UNPACK_H__

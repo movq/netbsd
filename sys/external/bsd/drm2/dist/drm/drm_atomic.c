@@ -1,4 +1,4 @@
-/*	$NetBSD: drm_atomic.c,v 1.7 2018/08/27 07:45:55 riastradh Exp $	*/
+/*	$NetBSD: drm_atomic.c,v 1.7.2.2 2018/09/06 06:56:09 pgoyette Exp $	*/
 
 /*
  * Copyright (C) 2014 Red Hat
@@ -29,7 +29,7 @@
 
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: drm_atomic.c,v 1.7 2018/08/27 07:45:55 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: drm_atomic.c,v 1.7.2.2 2018/09/06 06:56:09 pgoyette Exp $");
 
 #include <linux/export.h>
 

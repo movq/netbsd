@@ -1,4 +1,4 @@
-/*	$NetBSD: object.h,v 1.5 2018/08/27 14:54:32 riastradh Exp $	*/
+/*	$NetBSD: object.h,v 1.5.2.2 2018/09/06 06:56:23 pgoyette Exp $	*/
 
 #ifndef __NVKM_OBJECT_H__
 #define __NVKM_OBJECT_H__

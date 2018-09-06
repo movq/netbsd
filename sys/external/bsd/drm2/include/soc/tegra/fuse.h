@@ -1,4 +1,4 @@
-/*	$NetBSD: fuse.h,v 1.1 2018/08/27 06:40:18 riastradh Exp $	*/
+/*	$NetBSD: fuse.h,v 1.1.2.2 2018/09/06 06:56:37 pgoyette Exp $	*/
 
 /*-
  * Copyright (c) 2018 The NetBSD Foundation, Inc.

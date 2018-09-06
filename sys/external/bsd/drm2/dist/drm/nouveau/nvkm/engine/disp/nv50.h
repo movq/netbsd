@@ -1,4 +1,4 @@
-/*	$NetBSD: nv50.h,v 1.2 2018/08/27 04:58:31 riastradh Exp $	*/
+/*	$NetBSD: nv50.h,v 1.2.2.2 2018/09/06 06:56:25 pgoyette Exp $	*/
 
 #ifndef __NV50_DISP_H__
 #define __NV50_DISP_H__

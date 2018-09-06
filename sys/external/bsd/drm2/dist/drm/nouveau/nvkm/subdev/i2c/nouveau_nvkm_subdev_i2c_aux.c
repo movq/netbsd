@@ -1,4 +1,4 @@
-/*	$NetBSD: nouveau_nvkm_subdev_i2c_aux.c,v 1.3 2018/08/27 07:38:42 riastradh Exp $	*/
+/*	$NetBSD: nouveau_nvkm_subdev_i2c_aux.c,v 1.3.2.2 2018/09/06 06:56:29 pgoyette Exp $	*/
 
 /*
  * Copyright 2009 Red Hat Inc.
@@ -24,7 +24,7 @@
  * Authors: Ben Skeggs
  */
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: nouveau_nvkm_subdev_i2c_aux.c,v 1.3 2018/08/27 07:38:42 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: nouveau_nvkm_subdev_i2c_aux.c,v 1.3.2.2 2018/09/06 06:56:29 pgoyette Exp $");
 
 #include "aux.h"
 #include "pad.h"

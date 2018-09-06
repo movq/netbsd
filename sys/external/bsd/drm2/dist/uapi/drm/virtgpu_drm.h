@@ -1,4 +1,4 @@
-/*	$NetBSD: virtgpu_drm.h,v 1.2 2018/08/27 04:58:38 riastradh Exp $	*/
+/*	$NetBSD: virtgpu_drm.h,v 1.2.2.2 2018/09/06 06:56:35 pgoyette Exp $	*/
 
 /*
  * Copyright 2013 Red Hat

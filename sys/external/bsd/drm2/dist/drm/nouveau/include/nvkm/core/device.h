@@ -1,4 +1,4 @@
-/*	$NetBSD: device.h,v 1.7 2018/08/29 19:31:35 mrg Exp $	*/
+/*	$NetBSD: device.h,v 1.7.2.2 2018/09/06 06:56:23 pgoyette Exp $	*/
 
 #ifndef __NVKM_DEVICE_H__
 #define __NVKM_DEVICE_H__

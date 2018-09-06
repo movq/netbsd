@@ -1,4 +1,4 @@
-/*	$NetBSD: atom-names.h,v 1.3 2018/08/27 14:03:38 riastradh Exp $	*/
+/*	$NetBSD: atom-names.h,v 1.3.2.2 2018/09/06 06:56:11 pgoyette Exp $	*/
 
 /*
  * Copyright 2008 Advanced Micro Devices, Inc.

@@ -1,4 +1,4 @@
-/*	$NetBSD: if_umb.c,v 1.4 2018/08/01 18:27:58 khorben Exp $ */
+/*	$NetBSD: if_umb.c,v 1.4.4.2 2018/09/06 06:56:04 pgoyette Exp $ */
 /*	$OpenBSD: if_umb.c,v 1.18 2018/02/19 08:59:52 mpi Exp $ */
 
 /*
@@ -26,7 +26,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_umb.c,v 1.4 2018/08/01 18:27:58 khorben Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_umb.c,v 1.4.4.2 2018/09/06 06:56:04 pgoyette Exp $");
 
 #ifdef _KERNEL_OPT
 #include "opt_inet.h"

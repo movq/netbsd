@@ -1,4 +1,4 @@
-/*	$NetBSD: sljit_machdep.h,v 1.1 2018/08/26 21:06:46 rjs Exp $	*/
+/*	$NetBSD: sljit_machdep.h,v 1.1.2.2 2018/09/06 06:55:23 pgoyette Exp $	*/
 
 /*-
  * Copyright (c) 2014 Alexander Nasonov.

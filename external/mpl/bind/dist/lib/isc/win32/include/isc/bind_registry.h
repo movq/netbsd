@@ -1,4 +1,4 @@
-/*	$NetBSD: bind_registry.h,v 1.2 2018/08/12 13:02:40 christos Exp $	*/
+/*	$NetBSD: bind_registry.h,v 1.2.2.2 2018/09/06 06:55:10 pgoyette Exp $	*/
 
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")

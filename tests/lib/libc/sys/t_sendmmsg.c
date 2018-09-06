@@ -1,4 +1,4 @@
-/*	$NetBSD: t_sendmmsg.c,v 1.1 2018/08/21 10:38:09 christos Exp $	*/
+/*	$NetBSD: t_sendmmsg.c,v 1.1.2.2 2018/09/06 06:56:48 pgoyette Exp $	*/
 
 /*-
  * Copyright (c) 2018 The NetBSD Foundation, Inc.
@@ -29,7 +29,7 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: t_sendmmsg.c,v 1.1 2018/08/21 10:38:09 christos Exp $");
+__RCSID("$NetBSD: t_sendmmsg.c,v 1.1.2.2 2018/09/06 06:56:48 pgoyette Exp $");
 
 #include <atf-c.h>
 #include <sys/types.h>

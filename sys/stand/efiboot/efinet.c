@@ -1,4 +1,4 @@
-/*	$NetBSD: efinet.c,v 1.3 2018/09/04 21:29:54 jmcneill Exp $	*/
+/*	$NetBSD: efinet.c,v 1.3.2.2 2018/09/06 06:56:47 pgoyette Exp $	*/
 
 /*-
  * Copyright (c) 2001 Doug Rabson

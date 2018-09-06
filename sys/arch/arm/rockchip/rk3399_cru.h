@@ -1,4 +1,4 @@
-/* $NetBSD: rk3399_cru.h,v 1.1 2018/08/12 16:48:05 jmcneill Exp $ */
+/* $NetBSD: rk3399_cru.h,v 1.1.2.2 2018/09/06 06:55:27 pgoyette Exp $ */
 
 /*-
  * Copyright (c) 2018 Jared McNeill <jmcneill@invisible.ca>
