@@ -1,4 +1,4 @@
-/*	$NetBSD: crt0-efi-mips64el.S,v 1.1.1.1 2018/08/16 18:17:47 jmcneill Exp $	*/
+/*	$NetBSD: crt0-efi-mips64el.S,v 1.1.1.1.2.2 2018/09/06 06:56:38 pgoyette Exp $	*/
 
 /*
  * crt0-efi-mips64el.S - PE/COFF header for MIPS64 EFI applications

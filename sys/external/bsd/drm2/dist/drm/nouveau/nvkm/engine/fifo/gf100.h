@@ -1,4 +1,4 @@
-/*	$NetBSD: gf100.h,v 1.2 2018/08/27 04:58:31 riastradh Exp $	*/
+/*	$NetBSD: gf100.h,v 1.2.2.2 2018/09/06 06:56:26 pgoyette Exp $	*/
 
 #ifndef __GF100_FIFO_H__
 #define __GF100_FIFO_H__

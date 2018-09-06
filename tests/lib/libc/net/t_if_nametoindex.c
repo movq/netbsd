@@ -1,4 +1,4 @@
-/*	$NetBSD: t_if_nametoindex.c,v 1.1 2018/08/06 04:50:11 msaitoh Exp $	*/
+/*	$NetBSD: t_if_nametoindex.c,v 1.1.2.2 2018/09/06 06:56:48 pgoyette Exp $	*/
 
 /*-
  * Copyright (c) 2010 The NetBSD Foundation, Inc.
@@ -36,7 +36,7 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: t_if_nametoindex.c,v 1.1 2018/08/06 04:50:11 msaitoh Exp $");
+__RCSID("$NetBSD: t_if_nametoindex.c,v 1.1.2.2 2018/09/06 06:56:48 pgoyette Exp $");
 
 #include <atf-c.h>
 #include <stdio.h>

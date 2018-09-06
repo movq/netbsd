@@ -1,4 +1,4 @@
-/* $NetBSD: fan53555.c,v 1.2 2018/08/29 11:08:30 jmcneill Exp $ */
+/* $NetBSD: fan53555.c,v 1.2.4.2 2018/09/06 06:55:49 pgoyette Exp $ */
 
 /*-
  * Copyright (c) 2018 Jared McNeill <jmcneill@invisible.ca>
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: fan53555.c,v 1.2 2018/08/29 11:08:30 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: fan53555.c,v 1.2.4.2 2018/09/06 06:55:49 pgoyette Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

@@ -1,8 +1,8 @@
-/*	$NetBSD: ast_dp501.c,v 1.2 2018/08/27 04:58:23 riastradh Exp $	*/
+/*	$NetBSD: ast_dp501.c,v 1.2.2.2 2018/09/06 06:56:16 pgoyette Exp $	*/
 
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ast_dp501.c,v 1.2 2018/08/27 04:58:23 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ast_dp501.c,v 1.2.2.2 2018/09/06 06:56:16 pgoyette Exp $");
 
 #include <linux/firmware.h>
 #include <drm/drmP.h>

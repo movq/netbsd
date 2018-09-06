@@ -1,4 +1,4 @@
-/*	$NetBSD: channv50.h,v 1.2 2018/08/27 04:58:31 riastradh Exp $	*/
+/*	$NetBSD: channv50.h,v 1.2.2.2 2018/09/06 06:56:26 pgoyette Exp $	*/
 
 #ifndef __NV50_FIFO_CHAN_H__
 #define __NV50_FIFO_CHAN_H__

@@ -1,4 +1,4 @@
-/*	$NetBSD: aux.h,v 1.2 2018/08/27 04:58:34 riastradh Exp $	*/
+/*	$NetBSD: aux.h,v 1.2.2.2 2018/09/06 06:56:29 pgoyette Exp $	*/
 
 #ifndef __NVKM_I2C_AUX_H__
 #define __NVKM_I2C_AUX_H__

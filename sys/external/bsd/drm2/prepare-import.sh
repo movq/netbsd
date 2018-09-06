@@ -1,6 +1,6 @@
 #!/bin/sh
 
-#	$NetBSD: prepare-import.sh,v 1.1 2018/08/27 00:46:21 riastradh Exp $
+#	$NetBSD: prepare-import.sh,v 1.1.2.2 2018/09/06 06:56:09 pgoyette Exp $
 #
 # $ /path/to/prepare-import.sh
 #
@@ -13,7 +13,7 @@ set -Ceu
 find . -name '*.h' \
 | while read f; do
 	cleantags "$f"
-	(printf '/*\t$NetBSD: prepare-import.sh,v 1.1 2018/08/27 00:46:21 riastradh Exp $\t*/\n\n' && cat -- "$f") > "$f".tmp
+	(printf '/*\t$NetBSD: prepare-import.sh,v 1.1.2.2 2018/09/06 06:56:09 pgoyette Exp $\t*/\n\n' && cat -- "$f") > "$f".tmp
 	mv -f -- "$f".tmp "$f"
 done
 

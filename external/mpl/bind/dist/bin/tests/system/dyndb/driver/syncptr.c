@@ -1,4 +1,4 @@
-/*	$NetBSD: syncptr.c,v 1.2 2018/08/12 13:02:30 christos Exp $	*/
+/*	$NetBSD: syncptr.c,v 1.2.2.2 2018/09/06 06:54:15 pgoyette Exp $	*/
 
 /*
  * Automatic A/AAAA/PTR record synchronization.

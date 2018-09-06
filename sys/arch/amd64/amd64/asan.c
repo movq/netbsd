@@ -1,4 +1,4 @@
-/*	$NetBSD: asan.c,v 1.7 2018/08/27 08:53:19 maxv Exp $	*/
+/*	$NetBSD: asan.c,v 1.7.2.2 2018/09/06 06:55:24 pgoyette Exp $	*/
 
 /*
  * Copyright (c) 2018 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: asan.c,v 1.7 2018/08/27 08:53:19 maxv Exp $");
+__KERNEL_RCSID(0, "$NetBSD: asan.c,v 1.7.2.2 2018/09/06 06:55:24 pgoyette Exp $");
 
 #include <sys/param.h>
 #include <sys/device.h>

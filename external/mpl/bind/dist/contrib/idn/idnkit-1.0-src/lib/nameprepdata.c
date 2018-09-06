@@ -1,4 +1,4 @@
-/*	$NetBSD: nameprepdata.c,v 1.2 2018/08/12 13:02:33 christos Exp $	*/
+/*	$NetBSD: nameprepdata.c,v 1.2.2.2 2018/09/06 06:54:53 pgoyette Exp $	*/
 
 /* Id: nameprepdata.c,v 1.1 2003/06/04 00:26:05 marka Exp  */
 /* $-Id: generate_nameprep_data.pl,v 1.9 2002/11/29 09:08:13 ishisone Exp -$ */

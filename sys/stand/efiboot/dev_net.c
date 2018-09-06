@@ -1,4 +1,4 @@
-/*	$NetBSD: dev_net.c,v 1.1 2018/09/03 00:04:02 jmcneill Exp $	*/
+/*	$NetBSD: dev_net.c,v 1.1.2.2 2018/09/06 06:56:47 pgoyette Exp $	*/
 
 /*-
  * Copyright (c) 2018 Jared McNeill <jmcneill@invisible.ca>

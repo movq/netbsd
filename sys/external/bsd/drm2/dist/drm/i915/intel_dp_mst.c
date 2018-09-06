@@ -1,4 +1,4 @@
-/*	$NetBSD: intel_dp_mst.c,v 1.3 2018/08/27 07:22:08 riastradh Exp $	*/
+/*	$NetBSD: intel_dp_mst.c,v 1.3.2.2 2018/09/06 06:56:17 pgoyette Exp $	*/
 
 /*
  * Copyright © 2008 Intel Corporation
@@ -26,7 +26,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: intel_dp_mst.c,v 1.3 2018/08/27 07:22:08 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: intel_dp_mst.c,v 1.3.2.2 2018/09/06 06:56:17 pgoyette Exp $");
 
 #include <drm/drmP.h>
 #include "i915_drv.h"

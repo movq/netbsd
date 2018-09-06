@@ -1,4 +1,4 @@
-/*	$NetBSD: if_umbreg.h,v 1.1 2018/07/31 16:44:29 khorben Exp $ */
+/*	$NetBSD: if_umbreg.h,v 1.1.4.2 2018/09/06 06:56:04 pgoyette Exp $ */
 /*	$OpenBSD: if_umb.h,v 1.4 2017/04/18 13:27:55 gerhard Exp $ */
 
 /*

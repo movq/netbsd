@@ -1,4 +1,4 @@
-/*	$NetBSD: amdgpu_dpm.c,v 1.3 2018/08/27 14:04:50 riastradh Exp $	*/
+/*	$NetBSD: amdgpu_dpm.c,v 1.3.2.2 2018/09/06 06:56:10 pgoyette Exp $	*/
 
 /*
  * Copyright 2011 Advanced Micro Devices, Inc.
@@ -25,7 +25,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: amdgpu_dpm.c,v 1.3 2018/08/27 14:04:50 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: amdgpu_dpm.c,v 1.3.2.2 2018/09/06 06:56:10 pgoyette Exp $");
 
 #include <asm/byteorder.h>
 #include "drmP.h"

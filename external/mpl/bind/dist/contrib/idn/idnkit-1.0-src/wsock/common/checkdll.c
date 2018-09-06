@@ -1,4 +1,4 @@
-/*	$NetBSD: checkdll.c,v 1.2 2018/08/12 13:02:33 christos Exp $	*/
+/*	$NetBSD: checkdll.c,v 1.2.2.2 2018/09/06 06:54:55 pgoyette Exp $	*/
 
 /*
  * checkdll.c - Winsock DLL/IDN processing status

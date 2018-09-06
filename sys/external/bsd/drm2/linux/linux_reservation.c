@@ -1,4 +1,4 @@
-/*	$NetBSD: linux_reservation.c,v 1.11 2018/09/03 18:02:11 riastradh Exp $	*/
+/*	$NetBSD: linux_reservation.c,v 1.11.2.2 2018/09/06 06:56:37 pgoyette Exp $	*/
 
 /*-
  * Copyright (c) 2018 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: linux_reservation.c,v 1.11 2018/09/03 18:02:11 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: linux_reservation.c,v 1.11.2.2 2018/09/06 06:56:37 pgoyette Exp $");
 
 #include <sys/param.h>
 #include <sys/poll.h>

@@ -1,4 +1,4 @@
-/*	$NetBSD: i915_guc_submission.c,v 1.8 2018/08/27 15:09:35 riastradh Exp $	*/
+/*	$NetBSD: i915_guc_submission.c,v 1.8.2.2 2018/09/06 06:56:17 pgoyette Exp $	*/
 
 /*
  * Copyright © 2014 Intel Corporation
@@ -24,7 +24,7 @@
  *
  */
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: i915_guc_submission.c,v 1.8 2018/08/27 15:09:35 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: i915_guc_submission.c,v 1.8.2.2 2018/09/06 06:56:17 pgoyette Exp $");
 
 #include <linux/bitmap.h>
 #include <linux/firmware.h>

@@ -1,4 +1,4 @@
-/*	$NetBSD: clk.h,v 1.3 2018/08/27 07:57:22 riastradh Exp $	*/
+/*	$NetBSD: clk.h,v 1.3.2.2 2018/09/06 06:56:36 pgoyette Exp $	*/
 
 /*-
  * Copyright (c) 2018 The NetBSD Foundation, Inc.

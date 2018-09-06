@@ -1,4 +1,4 @@
-# $NetBSD: printf.sh,v 1.1 2018/09/05 21:05:40 kre Exp $
+# $NetBSD: printf.sh,v 1.1.2.2 2018/09/06 06:56:49 pgoyette Exp $
 #
 # Copyright (c) 2018 The NetBSD Foundation, Inc.
 # All rights reserved.

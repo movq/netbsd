@@ -1,7 +1,7 @@
-/*	$NetBSD: drm_of.c,v 1.2 2018/08/27 04:58:19 riastradh Exp $	*/
+/*	$NetBSD: drm_of.c,v 1.2.2.2 2018/09/06 06:56:09 pgoyette Exp $	*/
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: drm_of.c,v 1.2 2018/08/27 04:58:19 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: drm_of.c,v 1.2.2.2 2018/09/06 06:56:09 pgoyette Exp $");
 
 #include <linux/component.h>
 #include <linux/export.h>

@@ -1,4 +1,4 @@
-/*	$NetBSD: linux_pci.c,v 1.6 2018/08/28 03:41:39 riastradh Exp $	*/
+/*	$NetBSD: linux_pci.c,v 1.6.2.2 2018/09/06 06:56:37 pgoyette Exp $	*/
 
 /*-
  * Copyright (c) 2013 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: linux_pci.c,v 1.6 2018/08/28 03:41:39 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: linux_pci.c,v 1.6.2.2 2018/09/06 06:56:37 pgoyette Exp $");
 
 #include <linux/pci.h>
 

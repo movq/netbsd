@@ -1,4 +1,4 @@
-/*	$NetBSD: acpi.h,v 1.2 2018/08/27 04:58:31 riastradh Exp $	*/
+/*	$NetBSD: acpi.h,v 1.2.2.2 2018/09/06 06:56:25 pgoyette Exp $	*/
 
 #ifndef __NVKM_DEVICE_ACPI_H__
 #define __NVKM_DEVICE_ACPI_H__

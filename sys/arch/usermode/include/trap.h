@@ -1,4 +1,4 @@
-/* $NetBSD: trap.h,v 1.1 2018/07/28 20:26:13 reinoud Exp $ */
+/* $NetBSD: trap.h,v 1.1.2.2 2018/09/06 06:55:43 pgoyette Exp $ */
 
 /*
  * Handcrafted redirect to prevent problems with i386 and x86_64 sharing x86

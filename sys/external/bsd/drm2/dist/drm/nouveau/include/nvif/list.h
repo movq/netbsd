@@ -1,4 +1,4 @@
-/*	$NetBSD: list.h,v 1.2 2018/08/27 04:58:30 riastradh Exp $	*/
+/*	$NetBSD: list.h,v 1.2.2.2 2018/09/06 06:56:23 pgoyette Exp $	*/
 
 /*
  * Copyright © 2010 Intel Corporation

@@ -1,4 +1,4 @@
-/*	$NetBSD: nouveau_nvkm_subdev_fb_sddr3.c,v 1.3 2018/08/27 07:41:41 riastradh Exp $	*/
+/*	$NetBSD: nouveau_nvkm_subdev_fb_sddr3.c,v 1.3.2.2 2018/09/06 06:56:29 pgoyette Exp $	*/
 
 /*
  * Copyright 2013 Red Hat Inc.
@@ -25,7 +25,7 @@
  * 	    Roy Spliet <rspliet@eclipso.eu>
  */
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: nouveau_nvkm_subdev_fb_sddr3.c,v 1.3 2018/08/27 07:41:41 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: nouveau_nvkm_subdev_fb_sddr3.c,v 1.3.2.2 2018/09/06 06:56:29 pgoyette Exp $");
 
 #include "ram.h"
 #include "priv.h"

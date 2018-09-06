@@ -1,4 +1,4 @@
-/*	$NetBSD: intel_lrc.h,v 1.3 2018/08/27 07:01:02 riastradh Exp $	*/
+/*	$NetBSD: intel_lrc.h,v 1.3.2.2 2018/09/06 06:56:17 pgoyette Exp $	*/
 
 /*
  * Copyright © 2014 Intel Corporation

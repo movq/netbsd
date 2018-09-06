@@ -1,4 +1,4 @@
-/*	$NetBSD: intel-mid.h,v 1.1 2018/08/27 06:40:32 riastradh Exp $	*/
+/*	$NetBSD: intel-mid.h,v 1.1.2.2 2018/09/06 06:56:36 pgoyette Exp $	*/
 
 /*-
  * Copyright (c) 2018 The NetBSD Foundation, Inc.

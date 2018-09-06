@@ -1,4 +1,4 @@
-/*	$NetBSD: amdgpu_pm.c,v 1.3 2018/08/27 14:04:50 riastradh Exp $	*/
+/*	$NetBSD: amdgpu_pm.c,v 1.3.2.2 2018/09/06 06:56:10 pgoyette Exp $	*/
 
 /*
  * Permission is hereby granted, free of charge, to any person obtaining a
@@ -23,7 +23,7 @@
  *          Alex Deucher <alexdeucher@gmail.com>
  */
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: amdgpu_pm.c,v 1.3 2018/08/27 14:04:50 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: amdgpu_pm.c,v 1.3.2.2 2018/09/06 06:56:10 pgoyette Exp $");
 
 #include <drm/drmP.h>
 #include "amdgpu.h"

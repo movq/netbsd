@@ -1,4 +1,4 @@
-/*	$NetBSD: dlz_ldap_dynamic.c,v 1.2 2018/08/12 13:02:31 christos Exp $	*/
+/*	$NetBSD: dlz_ldap_dynamic.c,v 1.2.2.2 2018/09/06 06:54:50 pgoyette Exp $	*/
 
 /*
  * Copyright (C) 2002 Stichting NLnet, Netherlands, stichting@nlnet.nl.

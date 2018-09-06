@@ -1,4 +1,4 @@
-/*	$NetBSD: vmwgfx_so.h,v 1.2 2018/08/27 04:58:37 riastradh Exp $	*/
+/*	$NetBSD: vmwgfx_so.h,v 1.2.2.2 2018/09/06 06:56:34 pgoyette Exp $	*/
 
 /**************************************************************************
  * Copyright © 2014-2015 VMware, Inc., Palo Alto, CA., USA

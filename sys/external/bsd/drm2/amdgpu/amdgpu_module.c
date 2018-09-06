@@ -1,4 +1,4 @@
-/*	$NetBSD: amdgpu_module.c,v 1.4 2018/08/28 03:35:08 riastradh Exp $	*/
+/*	$NetBSD: amdgpu_module.c,v 1.4.2.2 2018/09/06 06:56:09 pgoyette Exp $	*/
 
 /*-
  * Copyright (c) 2018 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: amdgpu_module.c,v 1.4 2018/08/28 03:35:08 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: amdgpu_module.c,v 1.4.2.2 2018/09/06 06:56:09 pgoyette Exp $");
 
 #include <sys/types.h>
 #include <sys/module.h>

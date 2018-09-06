@@ -1,4 +1,4 @@
-/*	$NetBSD: async.h,v 1.4 2018/08/27 07:55:49 riastradh Exp $	*/
+/*	$NetBSD: async.h,v 1.4.2.2 2018/09/06 06:56:36 pgoyette Exp $	*/
 
 /*-
  * Copyright (c) 2018 The NetBSD Foundation, Inc.

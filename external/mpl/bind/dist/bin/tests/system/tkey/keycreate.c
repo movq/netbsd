@@ -1,4 +1,4 @@
-/*	$NetBSD: keycreate.c,v 1.2 2018/08/12 13:02:30 christos Exp $	*/
+/*	$NetBSD: keycreate.c,v 1.2.2.2 2018/09/06 06:54:41 pgoyette Exp $	*/
 
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")

@@ -1,4 +1,4 @@
-/*	$NetBSD: elf_mips64el_efi.lds,v 1.1.1.1 2018/08/16 18:17:47 jmcneill Exp $	*/
+/*	$NetBSD: elf_mips64el_efi.lds,v 1.1.1.1.2.2 2018/09/06 06:56:38 pgoyette Exp $	*/
 
 OUTPUT_FORMAT("elf64-tradlittlemips", "elf64-tradbigmips", "elf64-tradlittlemips")
 OUTPUT_ARCH(mips)

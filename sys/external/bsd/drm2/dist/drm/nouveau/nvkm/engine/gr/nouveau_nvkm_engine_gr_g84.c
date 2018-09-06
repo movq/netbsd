@@ -1,4 +1,4 @@
-/*	$NetBSD: nouveau_nvkm_engine_gr_g84.c,v 1.2 2018/08/27 04:58:32 riastradh Exp $	*/
+/*	$NetBSD: nouveau_nvkm_engine_gr_g84.c,v 1.2.2.2 2018/09/06 06:56:26 pgoyette Exp $	*/
 
 /*
  * Copyright 2012 Red Hat Inc.
@@ -24,7 +24,7 @@
  * Authors: Ben Skeggs
  */
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: nouveau_nvkm_engine_gr_g84.c,v 1.2 2018/08/27 04:58:32 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: nouveau_nvkm_engine_gr_g84.c,v 1.2.2.2 2018/09/06 06:56:26 pgoyette Exp $");
 
 #include "nv50.h"
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: i915_gem_userptr.c,v 1.1 2018/08/27 07:56:13 riastradh Exp $	*/
+/*	$NetBSD: i915_gem_userptr.c,v 1.1.2.2 2018/09/06 06:56:36 pgoyette Exp $	*/
 
 /*-
  * Copyright (c) 2018 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: i915_gem_userptr.c,v 1.1 2018/08/27 07:56:13 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: i915_gem_userptr.c,v 1.1.2.2 2018/09/06 06:56:36 pgoyette Exp $");
 
 #include "i915_drv.h"
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: efibind.h,v 1.2 2018/08/18 20:17:51 jmcneill Exp $	*/
+/*	$NetBSD: efibind.h,v 1.2.2.2 2018/09/06 06:56:38 pgoyette Exp $	*/
 
 /*
  * Copright (C) 2014 - 2015 Linaro Ltd.

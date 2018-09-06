@@ -1,4 +1,4 @@
-/*	$NetBSD: amdgpu_cik_ih.c,v 1.2 2018/08/27 14:24:03 riastradh Exp $	*/
+/*	$NetBSD: amdgpu_cik_ih.c,v 1.2.2.2 2018/09/06 06:56:09 pgoyette Exp $	*/
 
 /*
  * Copyright 2012 Advanced Micro Devices, Inc.
@@ -23,7 +23,7 @@
  *
  */
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: amdgpu_cik_ih.c,v 1.2 2018/08/27 14:24:03 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: amdgpu_cik_ih.c,v 1.2.2.2 2018/09/06 06:56:09 pgoyette Exp $");
 
 #include <asm/byteorder.h>
 #include <linux/log2.h>

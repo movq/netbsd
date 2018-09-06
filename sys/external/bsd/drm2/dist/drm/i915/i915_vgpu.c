@@ -1,4 +1,4 @@
-/*	$NetBSD: i915_vgpu.c,v 1.4 2018/08/27 16:15:34 riastradh Exp $	*/
+/*	$NetBSD: i915_vgpu.c,v 1.4.2.2 2018/09/06 06:56:17 pgoyette Exp $	*/
 
 /*
  * Copyright(c) 2011-2015 Intel Corporation. All rights reserved.
@@ -24,7 +24,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: i915_vgpu.c,v 1.4 2018/08/27 16:15:34 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: i915_vgpu.c,v 1.4.2.2 2018/09/06 06:56:17 pgoyette Exp $");
 
 #include "intel_drv.h"
 #include "i915_vgpu.h"

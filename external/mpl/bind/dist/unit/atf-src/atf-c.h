@@ -1,4 +1,4 @@
-/*	$NetBSD: atf-c.h,v 1.2 2018/08/12 13:02:41 christos Exp $	*/
+/*	$NetBSD: atf-c.h,v 1.2.2.2 2018/09/06 06:55:14 pgoyette Exp $	*/
 
 /* Copyright (c) 2008 The NetBSD Foundation, Inc.
  * All rights reserved.

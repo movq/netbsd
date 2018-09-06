@@ -1,4 +1,4 @@
-/*	$NetBSD: mxms.h,v 1.2 2018/08/27 04:58:34 riastradh Exp $	*/
+/*	$NetBSD: mxms.h,v 1.2.2.2 2018/09/06 06:56:30 pgoyette Exp $	*/
 
 #ifndef __NVMXM_MXMS_H__
 #define __NVMXM_MXMS_H__

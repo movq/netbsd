@@ -1,4 +1,4 @@
-/*	$NetBSD: amdgpu_gmc_v8_0.c,v 1.1 2018/08/27 14:10:14 riastradh Exp $	*/
+/*	$NetBSD: amdgpu_gmc_v8_0.c,v 1.1.2.2 2018/09/06 06:56:10 pgoyette Exp $	*/
 
 /*
  * Copyright 2014 Advanced Micro Devices, Inc.
@@ -23,7 +23,7 @@
  *
  */
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: amdgpu_gmc_v8_0.c,v 1.1 2018/08/27 14:10:14 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: amdgpu_gmc_v8_0.c,v 1.1.2.2 2018/09/06 06:56:10 pgoyette Exp $");
 
 #include <linux/firmware.h>
 #include <linux/module.h>

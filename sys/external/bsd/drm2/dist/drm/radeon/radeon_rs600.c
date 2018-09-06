@@ -1,4 +1,4 @@
-/*	$NetBSD: radeon_rs600.c,v 1.1 2018/08/27 14:38:20 riastradh Exp $	*/
+/*	$NetBSD: radeon_rs600.c,v 1.1.2.2 2018/09/06 06:56:33 pgoyette Exp $	*/
 
 /*
  * Copyright 2008 Advanced Micro Devices, Inc.
@@ -38,7 +38,7 @@
  * of the RS600 GART block).
  */
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: radeon_rs600.c,v 1.1 2018/08/27 14:38:20 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: radeon_rs600.c,v 1.1.2.2 2018/09/06 06:56:33 pgoyette Exp $");
 
 #include <drm/drmP.h>
 #include "radeon.h"

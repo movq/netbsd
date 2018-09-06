@@ -1,4 +1,4 @@
-/*	$NetBSD: amdgpu_cik_sdma.c,v 1.2 2018/08/27 14:24:03 riastradh Exp $	*/
+/*	$NetBSD: amdgpu_cik_sdma.c,v 1.2.2.2 2018/09/06 06:56:09 pgoyette Exp $	*/
 
 /*
  * Copyright 2013 Advanced Micro Devices, Inc.
@@ -24,7 +24,7 @@
  * Authors: Alex Deucher
  */
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: amdgpu_cik_sdma.c,v 1.2 2018/08/27 14:24:03 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: amdgpu_cik_sdma.c,v 1.2.2.2 2018/09/06 06:56:09 pgoyette Exp $");
 
 #include <linux/firmware.h>
 #include <linux/module.h>

@@ -1,4 +1,4 @@
-/*	$NetBSD: vmwgfx_binding.c,v 1.2 2018/08/27 04:58:37 riastradh Exp $	*/
+/*	$NetBSD: vmwgfx_binding.c,v 1.2.2.2 2018/09/06 06:56:34 pgoyette Exp $	*/
 
 /**************************************************************************
  *
@@ -54,7 +54,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: vmwgfx_binding.c,v 1.2 2018/08/27 04:58:37 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: vmwgfx_binding.c,v 1.2.2.2 2018/09/06 06:56:34 pgoyette Exp $");
 
 #include "vmwgfx_drv.h"
 #include "vmwgfx_binding.h"
