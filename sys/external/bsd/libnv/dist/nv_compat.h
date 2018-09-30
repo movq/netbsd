@@ -1,4 +1,4 @@
-/*	$NetBSD: nv_compat.h,v 1.1 2018/09/08 14:02:15 christos Exp $	*/
+/*	$NetBSD: nv_compat.h,v 1.1.2.2 2018/09/30 01:45:55 pgoyette Exp $	*/
 
 /*
  * Copyright (c) 1987, 1991, 1993

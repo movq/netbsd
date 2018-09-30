@@ -1,4 +1,4 @@
-/*	$NetBSD: nv_kern_netbsd.c,v 1.5 2018/09/23 21:35:26 rmind Exp $	*/
+/*	$NetBSD: nv_kern_netbsd.c,v 1.5.2.2 2018/09/30 01:45:55 pgoyette Exp $	*/
 
 /*-
  * Copyright (c) 2018 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: nv_kern_netbsd.c,v 1.5 2018/09/23 21:35:26 rmind Exp $");
+__RCSID("$NetBSD: nv_kern_netbsd.c,v 1.5.2.2 2018/09/30 01:45:55 pgoyette Exp $");
 
 #if !defined(_KERNEL) && !defined(_STANDALONE)
 #include <sys/mman.h>

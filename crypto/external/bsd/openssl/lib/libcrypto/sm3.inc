@@ -1,4 +1,4 @@
-#	$NetBSD: sm3.inc,v 1.1 2018/09/23 13:33:04 christos Exp $
+#	$NetBSD: sm3.inc,v 1.1.2.2 2018/09/30 01:44:52 pgoyette Exp $
 #
 #	SRCS extracted from src/crypto/dist/openssl/crypto/sm3/Makefile
 #

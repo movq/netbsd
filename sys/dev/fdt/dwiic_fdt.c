@@ -1,4 +1,4 @@
-/* $NetBSD: dwiic_fdt.c,v 1.1 2018/09/26 19:06:33 jakllsch Exp $ */
+/* $NetBSD: dwiic_fdt.c,v 1.1.2.2 2018/09/30 01:45:49 pgoyette Exp $ */
 
 /*-
  * Copyright (c) 2017 The NetBSD Foundation, Inc.
@@ -33,7 +33,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: dwiic_fdt.c,v 1.1 2018/09/26 19:06:33 jakllsch Exp $");
+__KERNEL_RCSID(0, "$NetBSD: dwiic_fdt.c,v 1.1.2.2 2018/09/30 01:45:49 pgoyette Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

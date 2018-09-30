@@ -1,4 +1,4 @@
-/* $NetBSD: cycv_var.h,v 1.1 2018/09/19 17:31:38 aymeric Exp $ */
+/* $NetBSD: cycv_var.h,v 1.1.2.2 2018/09/30 01:45:37 pgoyette Exp $ */
 #ifndef _ARM_ALTERA_CYCV_VAR_H
 #define _ARM_ALTERA_CYCV_VAR_H
 
