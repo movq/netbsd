@@ -1,4 +1,4 @@
-#	$NetBSD: files.altera,v 1.1 2018/09/19 17:31:39 aymeric Exp $
+#	$NetBSD: files.altera,v 1.1.2.2 2018/09/30 01:45:40 pgoyette Exp $
 #
 # Altera SoC configuration
 

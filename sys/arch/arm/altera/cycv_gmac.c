@@ -1,4 +1,4 @@
-/* $NetBSD: cycv_gmac.c,v 1.1 2018/09/19 17:31:38 aymeric Exp $ */
+/* $NetBSD: cycv_gmac.c,v 1.1.2.2 2018/09/30 01:45:37 pgoyette Exp $ */
 
 /*-
  * Copyright (c) 2017 Jared McNeill <jmcneill@invisible.ca>
@@ -30,7 +30,7 @@
 
 #include <sys/cdefs.h>
 
-__KERNEL_RCSID(0, "$NetBSD: cycv_gmac.c,v 1.1 2018/09/19 17:31:38 aymeric Exp $");
+__KERNEL_RCSID(0, "$NetBSD: cycv_gmac.c,v 1.1.2.2 2018/09/30 01:45:37 pgoyette Exp $");
 
 #include <sys/param.h>
 #include <sys/bus.h>

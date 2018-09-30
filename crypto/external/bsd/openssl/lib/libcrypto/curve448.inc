@@ -1,4 +1,4 @@
-#	$NetBSD: curve448.inc,v 1.2 2018/09/23 21:43:00 christos Exp $
+#	$NetBSD: curve448.inc,v 1.2.2.2 2018/09/30 01:44:52 pgoyette Exp $
 #
 #	SRCS extracted from src/crypto/dist/openssl/crypto/ec/curve448
 #

@@ -1,4 +1,4 @@
-/*	$NetBSD: menus.pm,v 1.1 2018/09/20 12:27:42 rin Exp $	*/
+/*	$NetBSD: menus.pm,v 1.1.2.2 2018/09/30 01:46:01 pgoyette Exp $	*/
 /*	NetBSD: menus.mi,v 1.14 2018/09/11 08:05:18 martin Exp 		*/
 
 /*-

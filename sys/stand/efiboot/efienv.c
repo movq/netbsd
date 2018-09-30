@@ -1,4 +1,4 @@
-/* $NetBSD: efienv.c,v 1.2 2018/09/18 19:19:45 jmcneill Exp $ */
+/* $NetBSD: efienv.c,v 1.2.2.2 2018/09/30 01:45:57 pgoyette Exp $ */
 
 /*-
  * Copyright (c) 2018 Jared McNeill <jmcneill@invisible.ca>

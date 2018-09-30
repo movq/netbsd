@@ -1,4 +1,4 @@
-/* $NetBSD: cycv_intr.h,v 1.1 2018/09/19 17:31:38 aymeric Exp $ */
+/* $NetBSD: cycv_intr.h,v 1.1.2.2 2018/09/30 01:45:37 pgoyette Exp $ */
 
 #include <arm/fdt/fdt_intr.h>
 #include <arm/cortex/gic_intr.h>

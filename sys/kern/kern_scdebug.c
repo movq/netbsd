@@ -1,4 +1,4 @@
-/*	$NetBSD: kern_scdebug.c,v 1.1 2018/09/14 01:55:19 mrg Exp $	*/
+/*	$NetBSD: kern_scdebug.c,v 1.1.2.2 2018/09/30 01:45:55 pgoyette Exp $	*/
 
 /*
  * Copyright (c) 2015 Matthew R. Green
@@ -59,7 +59,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: kern_scdebug.c,v 1.1 2018/09/14 01:55:19 mrg Exp $");
+__KERNEL_RCSID(0, "$NetBSD: kern_scdebug.c,v 1.1.2.2 2018/09/30 01:45:55 pgoyette Exp $");
 
 #ifdef _KERNEL_OPT
 #include "opt_syscall_debug.h"

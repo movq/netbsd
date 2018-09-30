@@ -1,4 +1,4 @@
-/*	$NetBSD: altera_start.S,v 1.1 2018/09/19 17:31:38 aymeric Exp $ */
+/*	$NetBSD: altera_start.S,v 1.1.2.2 2018/09/30 01:45:40 pgoyette Exp $ */
 
 #include "opt_arm_debug.h"
 #include "opt_fdt.h"
@@ -11,7 +11,7 @@
 
 #include "assym.h"
 
-RCSID("$NetBSD: altera_start.S,v 1.1 2018/09/19 17:31:38 aymeric Exp $")
+RCSID("$NetBSD: altera_start.S,v 1.1.2.2 2018/09/30 01:45:40 pgoyette Exp $")
 
 #define MD_CPU_HATCH _C_LABEL(arm_fdt_cpu_hatch)
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: nvlist_impl.h,v 1.3 2018/09/11 02:20:31 christos Exp $	*/
+/*	$NetBSD: nvlist_impl.h,v 1.3.2.2 2018/09/30 01:45:55 pgoyette Exp $	*/
 
 /*-
  * SPDX-License-Identifier: BSD-2-Clause-FreeBSD
