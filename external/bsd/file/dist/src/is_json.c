@@ -1,4 +1,4 @@
-/*	$NetBSD: is_json.c,v 1.1 2018/10/18 23:54:09 christos Exp $	*/
+/*	$NetBSD: is_json.c,v 1.1.1.1 2018/10/18 23:54:09 christos Exp $	*/
 
 /*-
  * Copyright (c) 2018 Christos Zoulas
@@ -37,7 +37,7 @@
 #if 0
 FILE_RCSID("@(#)$File: is_json.c,v 1.11 2018/10/15 16:29:16 christos Exp $")
 #else
-__RCSID("$NetBSD: is_json.c,v 1.1 2018/10/18 23:54:09 christos Exp $");
+__RCSID("$NetBSD: is_json.c,v 1.1.1.1 2018/10/18 23:54:09 christos Exp $");
 #endif
 #endif
 
