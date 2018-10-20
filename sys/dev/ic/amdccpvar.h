@@ -1,4 +1,4 @@
-/* $NetBSD: amdccpvar.h,v 1.1 2018/10/19 21:09:10 jakllsch Exp $ */
+/* $NetBSD: amdccpvar.h,v 1.1.2.2 2018/10/20 06:58:31 pgoyette Exp $ */
 
 /*
  * Copyright (c) 2018 Jonathan A. Kollasch

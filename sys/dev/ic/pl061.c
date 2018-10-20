@@ -1,4 +1,4 @@
-/* $NetBSD: pl061.c,v 1.1 2018/10/15 23:50:48 jmcneill Exp $ */
+/* $NetBSD: pl061.c,v 1.1.2.2 2018/10/20 06:58:31 pgoyette Exp $ */
 
 /*
  * Copyright (c) 2018 Jonathan A. Kollasch
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pl061.c,v 1.1 2018/10/15 23:50:48 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pl061.c,v 1.1.2.2 2018/10/20 06:58:31 pgoyette Exp $");
 
 #include <sys/param.h>
 #include <sys/bus.h>

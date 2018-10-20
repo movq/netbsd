@@ -1,4 +1,4 @@
-/* $NetBSD: tadpmureg.h,v 1.2 2018/10/13 19:53:43 macallan Exp $ */
+/* $NetBSD: tadpmureg.h,v 1.2.2.2 2018/10/20 06:58:29 pgoyette Exp $ */
 
 /*-
  * Copyright (c) 2018 Michael Lorenz <macallan@netbsd.org>
