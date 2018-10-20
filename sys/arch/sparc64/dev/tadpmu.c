@@ -1,4 +1,4 @@
-/*/* $NetBSD: tadpmu.c,v 1.4 2018/10/14 05:08:39 macallan Exp $ */
+/*/* $NetBSD: tadpmu.c,v 1.4.2.2 2018/10/20 06:58:29 pgoyette Exp $ */
 
 /*-
  * Copyright (c) 2018 Michael Lorenz <macallan@netbsd.org>

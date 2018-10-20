@@ -1,4 +1,4 @@
-#	$NetBSD: files.acpi,v 1.2 2018/10/15 11:35:03 jmcneill Exp $
+#	$NetBSD: files.acpi,v 1.2.2.2 2018/10/20 06:58:24 pgoyette Exp $
 #
 # Configuration info for ACPI compliant ARM boards.
 #

@@ -1,4 +1,4 @@
-/*	$NetBSD: pmapboot.c,v 1.2 2018/10/05 01:54:10 ryo Exp $	*/
+/*	$NetBSD: pmapboot.c,v 1.2.2.2 2018/10/20 06:58:23 pgoyette Exp $	*/
 
 /*
  * Copyright (c) 2018 Ryo Shimizu <ryo@nerv.org>
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pmapboot.c,v 1.2 2018/10/05 01:54:10 ryo Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pmapboot.c,v 1.2.2.2 2018/10/20 06:58:23 pgoyette Exp $");
 
 #include "opt_arm_debug.h"
 #include "opt_ddb.h"

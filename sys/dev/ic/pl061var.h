@@ -1,4 +1,4 @@
-/* $NetBSD: pl061var.h,v 1.1 2018/10/15 23:50:48 jmcneill Exp $ */
+/* $NetBSD: pl061var.h,v 1.1.2.2 2018/10/20 06:58:31 pgoyette Exp $ */
 
 /*
  * Copyright (c) 2018 Jonathan A. Kollasch

@@ -1,4 +1,4 @@
-/*	$NetBSD: thunderx_platform.h,v 1.1 2018/10/03 09:24:36 skrll Exp $	*/
+/*	$NetBSD: thunderx_platform.h,v 1.1.2.2 2018/10/20 06:58:25 pgoyette Exp $	*/
 
 /*-
  * Copyright (c) 2018 The NetBSD Foundation, Inc.
