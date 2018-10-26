@@ -1,4 +1,4 @@
-/* $NetBSD: ehci_acpi.c,v 1.1 2018/10/26 10:46:21 jmcneill Exp $ */
+/* $NetBSD: ehci_acpi.c,v 1.2 2018/10/26 23:33:38 jmcneill Exp $ */
 
 /*-
  * Copyright (c) 2018 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ehci_acpi.c,v 1.1 2018/10/26 10:46:21 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ehci_acpi.c,v 1.2 2018/10/26 23:33:38 jmcneill Exp $");
 
 #include <sys/param.h>
 #include <sys/bus.h>
@@ -46,12 +46,7 @@ __KERNEL_RCSID(0, "$NetBSD: ehci_acpi.c,v 1.1 2018/10/26 10:46:21 jmcneill Exp $
 
 #include <dev/acpi/acpireg.h>
 #include <dev/acpi/acpivar.h>
-
-/* Windows-defined USB subsystem device-specific method (_DSM) */
-static UINT8 ehci_acpi_dsm_uuid[ACPI_UUID_LENGTH] = {
-	0x85, 0xe3, 0x2e, 0xce, 0xe6, 0x00, 0xcb, 0x48,
-	0x9f, 0x05, 0x2e, 0xdb, 0x92, 0x7c, 0x48, 0x99
-};
+#include <dev/acpi/acpi_usb.h>
 
 static const char * const compatible[] = {
 	"PNP0D20",	/* EHCI-compliant USB controller without standard debug */
@@ -158,32 +153,6 @@ static void
 ehci_acpi_init(struct ehci_softc *sc)
 {
 	struct ehci_acpi_softc * const asc = (struct ehci_acpi_softc *)sc;
-	ACPI_OBJECT_LIST objs;
-	ACPI_OBJECT obj[4];
-	ACPI_HANDLE method;
 
-	/*
-	 * Invoke the _DSM control method for post-reset processing function
-	 * for dual-role USB controllers. If supported, this will perform any
-	 * controller-specific initialization required to put the dual-role
-	 * device into host mode.
-	 */
-
-	objs.Count = 4;
-	objs.Pointer = obj;
-	obj[0].Type = ACPI_TYPE_BUFFER;
-	obj[0].Buffer.Length = ACPI_UUID_LENGTH;
-	obj[0].Buffer.Pointer = ehci_acpi_dsm_uuid;
-	obj[1].Type = ACPI_TYPE_INTEGER;
-	obj[1].Integer.Value = 0;	/* Revision ID = 0 */
-	obj[2].Type = ACPI_TYPE_INTEGER;
-	obj[2].Integer.Value = 1;	/* Function index = 1 */
-	obj[3].Type = ACPI_TYPE_PACKAGE;
-	obj[3].Package.Count = 0;	/* Empty package (not used) */
-	obj[3].Package.Elements = NULL;
-
-	if (ACPI_FAILURE(AcpiGetHandle(asc->sc_handle, "_DSM", &method)))
-		return;
-
-	(void)AcpiEvaluateObject(method, NULL, &objs, NULL);
+	acpi_usb_post_reset(asc->sc_handle);
 }
