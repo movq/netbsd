@@ -1,4 +1,4 @@
-/* $NetBSD: bwfm.c,v 1.14 2018/09/02 19:46:53 maya Exp $ */
+/* $NetBSD: bwfm.c,v 1.14.2.2 2018/10/31 09:23:00 martin Exp $ */
 /* $OpenBSD: bwfm.c,v 1.5 2017/10/16 22:27:16 patrick Exp $ */
 /*
  * Copyright (c) 2010-2016 Broadcom Corporation
@@ -351,7 +351,7 @@ bwfm_start(struct ifnet *ifp)
 			if (ni != NULL)
 				ieee80211_free_node(ni);
 		} else {
-			bpf_mtap3(ic->ic_rawbpf, m, BPF_D_OUT);
+			bpf_mtap3(ic->ic_rawbpf, m);
 		}
 	}
 }
@@ -1911,41 +1911,41 @@ bwfm_scan_node(struct bwfm_softc *sc, struct bwfm_bss_info *bss, size_t len)
 
 	/* Build scan result */
 	memset(&scan, 0, sizeof(scan));
-	scan.sp_tstamp  = (uint8_t *)&tsf;
-	scan.sp_bintval = le16toh(bss->beacon_period);
-	scan.sp_capinfo = le16toh(bss->capability);
-	scan.sp_bchan   = ieee80211_chan2ieee(ic, ic->ic_curchan);
-	scan.sp_chan    = scan.sp_bchan;
-	scan.sp_rates   = rates;
-	scan.sp_ssid    = ssid;
+	scan.tstamp  = (uint8_t *)&tsf;
+	scan.bintval = le16toh(bss->beacon_period);
+	scan.capinfo = le16toh(bss->capability);
+	scan.bchan   = ieee80211_chan2ieee(ic, ic->ic_curchan);
+	scan.chan    = scan.bchan;
+	scan.rates   = rates;
+	scan.ssid    = ssid;
 
 	for (frm = sfrm; frm < efrm; frm += frm[1] + 2) {
 		switch (frm[0]) {
 		case IEEE80211_ELEMID_COUNTRY:
-			scan.sp_country = frm;
+			scan.country = frm;
 			break;
 		case IEEE80211_ELEMID_FHPARMS:
 			if (ic->ic_phytype == IEEE80211_T_FH) {
 				if (frm + 6 >= efrm)
 					break;
-				scan.sp_fhdwell = le16dec(&frm[2]);
-				scan.sp_chan = IEEE80211_FH_CHAN(frm[4], frm[5]);
-				scan.sp_fhindex = frm[6];
+				scan.fhdwell = le16dec(&frm[2]);
+				scan.chan = IEEE80211_FH_CHAN(frm[4], frm[5]);
+				scan.fhindex = frm[6];
 			}
 			break;
 		case IEEE80211_ELEMID_DSPARMS:
 			if (ic->ic_phytype != IEEE80211_T_FH) {
 				if (frm + 2 >= efrm)
 					break;
-				scan.sp_chan = frm[2];
+				scan.chan = frm[2];
 			}
 			break;
 		case IEEE80211_ELEMID_TIM:
-			scan.sp_tim = frm;
-			scan.sp_timoff = frm - sfrm;
+			scan.tim = frm;
+			scan.timoff = frm - sfrm;
 			break;
 		case IEEE80211_ELEMID_XRATES:
-			scan.sp_xrates = frm;
+			scan.xrates = frm;
 			break;
 		case IEEE80211_ELEMID_ERP:
 			if (frm + 1 >= efrm)
@@ -1954,10 +1954,10 @@ bwfm_scan_node(struct bwfm_softc *sc, struct bwfm_bss_info *bss, size_t len)
 				ic->ic_stats.is_rx_elem_toobig++;
 				break;
 			}
-			scan.sp_erp = frm[2];
+			scan.erp = frm[2];
 			break;
 		case IEEE80211_ELEMID_RSN:
-			scan.sp_wpa = frm;
+			scan.wpa = frm;
 			break;
 		case IEEE80211_ELEMID_VENDOR:
 			if (frm + 1 >= efrm)
@@ -1965,7 +1965,7 @@ bwfm_scan_node(struct bwfm_softc *sc, struct bwfm_bss_info *bss, size_t len)
 			if (frm + frm[1] + 2 >= efrm)
 				break;
 			if (bwfm_iswpaoui(frm))
-				scan.sp_wpa = frm;
+				scan.wpa = frm;
 			break;
 		}
 		if (frm + 1 >= efrm)
