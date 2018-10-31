@@ -1,4 +1,4 @@
-/* $NetBSD: bwfmvar.h,v 1.3 2018/09/01 22:01:03 riastradh Exp $ */
+/* $NetBSD: bwfmvar.h,v 1.3.2.2 2018/10/31 09:23:00 martin Exp $ */
 /* $OpenBSD: bwfmvar.h,v 1.1 2017/10/11 17:19:50 patrick Exp $ */
 /*
  * Copyright (c) 2010-2016 Broadcom Corporation
