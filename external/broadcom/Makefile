@@ -1,10 +1,5 @@
-# $NetBSD: Makefile,v 1.3 2018/05/31 05:27:45 mrg Exp $
+# $NetBSD: Makefile,v 1.3.4.2 2018/10/31 08:55:32 martin Exp $
 
-.include <bsd.own.mk>
-
-.if ${MKFIRMWARE} != "no"
-SUBDIR+=	bcm43xx
 SUBDIR+=	bwfm
-.endif
 
 .include <bsd.subdir.mk>
