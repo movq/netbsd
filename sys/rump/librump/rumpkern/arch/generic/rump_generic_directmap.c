@@ -1,4 +1,4 @@
-/*	$NetBSD: rump_generic_directmap.c,v 1.1 2018/11/15 04:59:02 riastradh Exp $	*/
+/*	$NetBSD: rump_generic_directmap.c,v 1.1.2.2 2018/11/26 01:52:51 pgoyette Exp $	*/
 
 /*-
  * Copyright (c) 2018 The NetBSD Foundation, Inc.

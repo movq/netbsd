@@ -1,4 +1,4 @@
-/*	$NetBSD: nvmm_x86_svm.c,v 1.6 2018/11/25 14:09:57 maxv Exp $	*/
+/*	$NetBSD: nvmm_x86_svm.c,v 1.6.2.2 2018/11/26 01:52:32 pgoyette Exp $	*/
 
 /*
  * Copyright (c) 2018 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: nvmm_x86_svm.c,v 1.6 2018/11/25 14:09:57 maxv Exp $");
+__KERNEL_RCSID(0, "$NetBSD: nvmm_x86_svm.c,v 1.6.2.2 2018/11/26 01:52:32 pgoyette Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

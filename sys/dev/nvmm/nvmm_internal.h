@@ -1,4 +1,4 @@
-/*	$NetBSD: nvmm_internal.h,v 1.1 2018/11/07 07:43:08 maxv Exp $	*/
+/*	$NetBSD: nvmm_internal.h,v 1.1.2.2 2018/11/26 01:52:31 pgoyette Exp $	*/
 
 /*
  * Copyright (c) 2018 The NetBSD Foundation, Inc.

@@ -31,7 +31,7 @@
 
 #if defined(LIBC_SCCS) && !defined(lint)
 	/* .asciz "@(#)fabs.s	8.1 (Berkeley) 6/4/93" */
-RCSID("$NetBSD: fabsf.S,v 1.1 2018/11/08 18:19:37 riastradh Exp $")
+RCSID("$NetBSD: fabsf.S,v 1.1.2.2 2018/11/26 01:52:11 pgoyette Exp $")
 #endif /* LIBC_SCCS and not lint */
 
 /* fabsf - floating absolute value, float edition */

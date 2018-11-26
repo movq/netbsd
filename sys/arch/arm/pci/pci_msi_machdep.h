@@ -1,4 +1,4 @@
-/* $NetBSD: pci_msi_machdep.h,v 1.3 2018/11/16 15:06:22 jmcneill Exp $ */
+/* $NetBSD: pci_msi_machdep.h,v 1.3.2.2 2018/11/26 01:52:19 pgoyette Exp $ */
 
 /*-
  * Copyright (c) 2018 The NetBSD Foundation, Inc.

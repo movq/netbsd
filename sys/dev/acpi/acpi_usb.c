@@ -1,4 +1,4 @@
-/* $NetBSD: acpi_usb.c,v 1.1 2018/10/26 23:33:38 jmcneill Exp $ */
+/* $NetBSD: acpi_usb.c,v 1.1.2.2 2018/11/26 01:52:30 pgoyette Exp $ */
 
 /*-
  * Copyright (c) 2018 The NetBSD Foundation, Inc.
@@ -36,7 +36,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: acpi_usb.c,v 1.1 2018/10/26 23:33:38 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: acpi_usb.c,v 1.1.2.2 2018/11/26 01:52:30 pgoyette Exp $");
 
 #include <sys/param.h>
 

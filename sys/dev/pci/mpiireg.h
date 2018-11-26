@@ -1,4 +1,4 @@
-/* $NetBSD: mpiireg.h,v 1.1 2018/11/24 18:11:22 bouyer Exp $ */
+/* $NetBSD: mpiireg.h,v 1.1.2.2 2018/11/26 01:52:32 pgoyette Exp $ */
 /*	OpenBSD: mpii.c,v 1.51 2012/04/11 13:29:14 naddy Exp 	*/
 /*
  * Copyright (c) 2010 Mike Belopuhov <mkb@crypt.org.ru>

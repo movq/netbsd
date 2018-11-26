@@ -1,4 +1,4 @@
-/* $NetBSD: fdt_memory.h,v 1.1 2018/10/30 21:32:35 jmcneill Exp $ */
+/* $NetBSD: fdt_memory.h,v 1.1.2.2 2018/11/26 01:52:21 pgoyette Exp $ */
 
 /*-
  * Copyright (c) 2018 The NetBSD Foundation, Inc.
