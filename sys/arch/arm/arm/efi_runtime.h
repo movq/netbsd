@@ -1,4 +1,4 @@
-/* $NetBSD: efi_runtime.h,v 1.2 2018/10/31 13:01:48 jmcneill Exp $ */
+/* $NetBSD: efi_runtime.h,v 1.2.2.2 2018/11/26 01:52:17 pgoyette Exp $ */
 
 /*-
  * Copyright (c) 2018 The NetBSD Foundation, Inc.

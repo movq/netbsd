@@ -1,4 +1,4 @@
-/*	$NetBSD: libnvmm.c,v 1.2 2018/11/19 21:45:37 maxv Exp $	*/
+/*	$NetBSD: libnvmm.c,v 1.2.2.2 2018/11/26 01:52:13 pgoyette Exp $	*/
 
 /*
  * Copyright (c) 2018 The NetBSD Foundation, Inc.

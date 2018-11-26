@@ -1,4 +1,4 @@
-/* $NetBSD: gicv3_its.c,v 1.8 2018/11/24 15:40:57 skrll Exp $ */
+/* $NetBSD: gicv3_its.c,v 1.8.2.2 2018/11/26 01:52:18 pgoyette Exp $ */
 
 /*-
  * Copyright (c) 2018 The NetBSD Foundation, Inc.
@@ -32,7 +32,7 @@
 #define _INTR_PRIVATE
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: gicv3_its.c,v 1.8 2018/11/24 15:40:57 skrll Exp $");
+__KERNEL_RCSID(0, "$NetBSD: gicv3_its.c,v 1.8.2.2 2018/11/26 01:52:18 pgoyette Exp $");
 
 #include <sys/param.h>
 #include <sys/kmem.h>

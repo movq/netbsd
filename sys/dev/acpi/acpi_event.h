@@ -1,4 +1,4 @@
-/* $NetBSD: acpi_event.h,v 1.1 2018/10/22 22:29:35 jmcneill Exp $ */
+/* $NetBSD: acpi_event.h,v 1.1.2.2 2018/11/26 01:52:30 pgoyette Exp $ */
 
 /*-
  * Copyright (c) 2018 The NetBSD Foundation, Inc.

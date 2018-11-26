@@ -1,4 +1,4 @@
-/* $NetBSD: xhci_acpi.c,v 1.2 2018/11/16 23:18:17 jmcneill Exp $ */
+/* $NetBSD: xhci_acpi.c,v 1.2.2.2 2018/11/26 01:52:30 pgoyette Exp $ */
 
 /*-
  * Copyright (c) 2018 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: xhci_acpi.c,v 1.2 2018/11/16 23:18:17 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: xhci_acpi.c,v 1.2.2.2 2018/11/26 01:52:30 pgoyette Exp $");
 
 #include <sys/param.h>
 #include <sys/bus.h>

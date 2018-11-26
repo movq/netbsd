@@ -1,4 +1,4 @@
-/* $NetBSD: gicv3_its.h,v 1.3 2018/11/24 22:08:53 jakllsch Exp $ */
+/* $NetBSD: gicv3_its.h,v 1.3.2.2 2018/11/26 01:52:18 pgoyette Exp $ */
 
 /*-
  * Copyright (c) 2018 The NetBSD Foundation, Inc.

@@ -1,4 +1,4 @@
-#	$NetBSD: nvmm.ioconf,v 1.1 2018/11/07 07:43:08 maxv Exp $
+#	$NetBSD: nvmm.ioconf,v 1.1.2.2 2018/11/26 01:52:50 pgoyette Exp $
 
 ioconf		nvmm
 
