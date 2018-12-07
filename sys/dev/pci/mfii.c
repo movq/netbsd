@@ -1,8 +1,7 @@
-/* $NetBSD: mfii.c,v 1.3 2018/12/03 22:34:36 bouyer Exp $ */
+/* $NetBSD: mfii.c,v 1.3.2.2 2018/12/07 17:11:37 martin Exp $ */
 /* $OpenBSD: mfii.c,v 1.58 2018/08/14 05:22:21 jmatthew Exp $ */
 
 /*
- * Copyright (c) 2018 Manuel Bouyer <Manuel.Bouyer@lip6.fr>
  * Copyright (c) 2012 David Gwynne <dlg@openbsd.org>
  *
  * Permission to use, copy, modify, and distribute this software for any
@@ -19,7 +18,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: mfii.c,v 1.3 2018/12/03 22:34:36 bouyer Exp $");
+__KERNEL_RCSID(0, "$NetBSD: mfii.c,v 1.3.2.2 2018/12/07 17:11:37 martin Exp $");
 
 #include "bio.h"
 
@@ -715,7 +714,7 @@ mfii_attach(device_t parent, device_t self, void *aux)
 	 * reduce max_cmds by 1 to ensure that the reply queue depth does not
 	 * exceed FW supplied max_fw_cmds.
 	 */
-	sc->sc_max_cmds = uimin(sc->sc_max_fw_cmds, 1024) - 1;
+	sc->sc_max_cmds = min(sc->sc_max_fw_cmds, 1024) - 1;
 
 	/* determine max_sgl (refer to the Linux megaraid_sas driver) */
 	scpad2 = mfii_read(sc, MFII_OSP2);
@@ -1935,15 +1934,11 @@ mfii_initialise_firmware(struct mfii_softc *sc)
 	iiq->sense_buffer_address_high = htole32(
 	    MFII_DMA_DVA(sc->sc_sense) >> 32);
 
-	iiq->reply_descriptor_post_queue_address_lo =
-	    htole32(MFII_DMA_DVA(sc->sc_reply_postq));
-	iiq->reply_descriptor_post_queue_address_hi =
-	    htole32(MFII_DMA_DVA(sc->sc_reply_postq) >> 32);
+	iiq->reply_descriptor_post_queue_address = htole64(
+	    MFII_DMA_DVA(sc->sc_reply_postq));
 
-	iiq->system_request_frame_base_address_lo = 
-	    htole32(MFII_DMA_DVA(sc->sc_requests));
-	iiq->system_request_frame_base_address_hi = 
-	    htole32(MFII_DMA_DVA(sc->sc_requests) >> 32);
+	iiq->system_request_frame_base_address =
+	    htole64(MFII_DMA_DVA(sc->sc_requests));
 
 	iiq->timestamp = htole64(time_uptime);
 
