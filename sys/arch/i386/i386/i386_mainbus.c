@@ -1,4 +1,4 @@
-/*	$NetBSD: i386_mainbus.c,v 1.4 2018/12/22 08:35:04 maxv Exp $	*/
+/*	$NetBSD: i386_mainbus.c,v 1.4.2.2 2018/12/26 14:01:38 pgoyette Exp $	*/
 /*	NetBSD: mainbus.c,v 1.104 2018/12/02 08:19:44 cherry Exp 	*/
 
 /*
@@ -32,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: i386_mainbus.c,v 1.4 2018/12/22 08:35:04 maxv Exp $");
+__KERNEL_RCSID(0, "$NetBSD: i386_mainbus.c,v 1.4.2.2 2018/12/26 14:01:38 pgoyette Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

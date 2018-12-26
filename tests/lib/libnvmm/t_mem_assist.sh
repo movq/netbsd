@@ -1,4 +1,4 @@
-#	$NetBSD: t_mem_assist.sh,v 1.1 2018/12/23 13:35:02 maxv Exp $
+#	$NetBSD: t_mem_assist.sh,v 1.1.2.2 2018/12/26 14:02:09 pgoyette Exp $
 #
 # Copyright (c) 2018 The NetBSD Foundation, Inc.
 # All rights reserved.

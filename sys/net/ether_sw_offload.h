@@ -1,4 +1,4 @@
-/*	$NetBSD: ether_sw_offload.h,v 1.1 2018/12/12 01:40:20 rin Exp $	*/
+/*	$NetBSD: ether_sw_offload.h,v 1.1.2.2 2018/12/26 14:02:04 pgoyette Exp $	*/
 
 /*
  * Copyright (c) 2018 The NetBSD Foundation, Inc.

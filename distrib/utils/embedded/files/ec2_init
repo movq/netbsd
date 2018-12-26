@@ -1,6 +1,6 @@
 #!/bin/sh
 #
-# $NetBSD: ec2_init,v 1.1 2018/11/30 20:53:02 jmcneill Exp $
+# $NetBSD: ec2_init,v 1.1.2.2 2018/12/26 14:01:13 pgoyette Exp $
 #
 # PROVIDE: ec2_init
 # REQUIRE: NETWORKING

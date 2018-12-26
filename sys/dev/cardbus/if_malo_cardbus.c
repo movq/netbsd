@@ -1,4 +1,4 @@
-/*	$NetBSD: if_malo_cardbus.c,v 1.1 2018/12/14 21:49:22 jakllsch Exp $ */
+/*	$NetBSD: if_malo_cardbus.c,v 1.1.2.2 2018/12/26 14:01:48 pgoyette Exp $ */
 /*	$OpenBSD: if_malo_cardbus.c,v 1.12 2013/12/06 21:03:02 deraadt Exp $ */
 
 /*
@@ -18,7 +18,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_malo_cardbus.c,v 1.1 2018/12/14 21:49:22 jakllsch Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_malo_cardbus.c,v 1.1.2.2 2018/12/26 14:01:48 pgoyette Exp $");
 
 #include <sys/param.h>
 #include <sys/mbuf.h>

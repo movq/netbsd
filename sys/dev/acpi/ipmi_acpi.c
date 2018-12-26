@@ -1,4 +1,4 @@
-/* $NetBSD: ipmi_acpi.c,v 1.2 2018/12/26 06:45:58 mlelstv Exp $ */
+/* $NetBSD: ipmi_acpi.c,v 1.2.2.2 2018/12/26 14:01:47 pgoyette Exp $ */
 
 /*-
  * Copyright (c) 2018 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ipmi_acpi.c,v 1.2 2018/12/26 06:45:58 mlelstv Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ipmi_acpi.c,v 1.2.2.2 2018/12/26 14:01:47 pgoyette Exp $");
 
 #include <sys/param.h>
 #include <sys/device.h>
@@ -92,7 +92,6 @@ ipmi_acpi_attach(device_t parent, device_t self, void *opaque)
 #endif
 	struct ipmi_attach_args IA, *ia = &IA;
 	bus_addr_t reg2;
-	uint16_t i2caddr;
 
 	sc->sc_dev = self;
 
@@ -174,14 +173,7 @@ ipmi_acpi_attach(device_t parent, device_t self, void *opaque)
 			aprint_error_dev(self, "no resources\n");
 			return;
 		}
-		if (adr > 65535) {
-			aprint_normal("\n");
-			aprint_error_dev(self, "i2c address out of range\n");
-			return;
-		}
-		i2caddr = adr;
-
-		aprint_normal(": i2c 0x%x\n", i2caddr);
+		aprint_normal(": i2c 0x%lx\n", adr);
 		break;
 	default:
 		aprint_normal("\n");

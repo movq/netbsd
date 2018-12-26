@@ -1,4 +1,4 @@
-/*	$NetBSD: subr_thmap.c,v 1.3 2018/12/22 21:53:06 christos Exp $	*/
+/*	$NetBSD: subr_thmap.c,v 1.3.2.2 2018/12/26 14:02:04 pgoyette Exp $	*/
 
 /*-
  * Copyright (c) 2018 Mindaugas Rasiukevicius <rmind at noxt eu>
@@ -112,7 +112,7 @@
 #include "utils.h"
 #endif
 
-THMAP_RCSID("$NetBSD: subr_thmap.c,v 1.3 2018/12/22 21:53:06 christos Exp $");
+THMAP_RCSID("$NetBSD: subr_thmap.c,v 1.3.2.2 2018/12/26 14:02:04 pgoyette Exp $");
 
 /*
  * NetBSD kernel wrappers

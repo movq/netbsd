@@ -1,4 +1,4 @@
-#	$NetBSD: engines.mk,v 1.1 2018/12/08 23:24:01 christos Exp $
+#	$NetBSD: engines.mk,v 1.1.2.2 2018/12/26 14:01:09 pgoyette Exp $
 
 NOLINT=		# don't build a lint library
 NOPROFILE=	# don't build a profile library
