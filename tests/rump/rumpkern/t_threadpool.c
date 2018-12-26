@@ -1,4 +1,4 @@
-/*	$NetBSD: t_threadpool.c,v 1.1 2018/12/24 21:42:05 thorpej Exp $	*/
+/*	$NetBSD: t_threadpool.c,v 1.1.2.2 2018/12/26 14:02:10 pgoyette Exp $	*/
 
 /*-
  * Copyright (c) 2018 The NetBSD Foundation, Inc.

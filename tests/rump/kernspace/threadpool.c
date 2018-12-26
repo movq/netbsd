@@ -1,4 +1,4 @@
-/*	$NetBSD: threadpool.c,v 1.2 2018/12/25 21:26:31 thorpej Exp $	*/
+/*	$NetBSD: threadpool.c,v 1.2.2.2 2018/12/26 14:02:10 pgoyette Exp $	*/
 
 /*-
  * Copyright (c) 2018 The NetBSD Foundation, Inc.
@@ -32,7 +32,7 @@
 
 #include <sys/cdefs.h>
 #if !defined(lint)
-__RCSID("$NetBSD: threadpool.c,v 1.2 2018/12/25 21:26:31 thorpej Exp $");
+__RCSID("$NetBSD: threadpool.c,v 1.2.2.2 2018/12/26 14:02:10 pgoyette Exp $");
 #endif /* !lint */
 
 #include <sys/param.h>

@@ -1,4 +1,4 @@
-/* $NetBSD: mainbus.c,v 1.2 2018/12/22 08:35:04 maxv Exp $ */
+/* $NetBSD: mainbus.c,v 1.2.2.2 2018/12/26 14:01:45 pgoyette Exp $ */
 
 /*
  * Copyright (c) 2018 The NetBSD Foundation, Inc.
@@ -28,7 +28,7 @@
 
 #include <sys/cdefs.h>
 
-__KERNEL_RCSID(0, "$NetBSD: mainbus.c,v 1.2 2018/12/22 08:35:04 maxv Exp $");
+__KERNEL_RCSID(0, "$NetBSD: mainbus.c,v 1.2.2.2 2018/12/26 14:01:45 pgoyette Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

@@ -1,4 +1,4 @@
-/*	$NetBSD: netbsd32_fd.c,v 1.1 2018/12/24 21:27:05 mrg Exp $	*/
+/*	$NetBSD: netbsd32_fd.c,v 1.1.2.2 2018/12/26 14:01:46 pgoyette Exp $	*/
 
 /*
  * Copyright (c) 1998, 2001, 2008, 2018 Matthew R. Green
@@ -29,7 +29,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: netbsd32_fd.c,v 1.1 2018/12/24 21:27:05 mrg Exp $");
+__KERNEL_RCSID(0, "$NetBSD: netbsd32_fd.c,v 1.1.2.2 2018/12/26 14:01:46 pgoyette Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

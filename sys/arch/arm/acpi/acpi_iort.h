@@ -1,4 +1,4 @@
-/* $NetBSD: acpi_iort.h,v 1.1 2018/12/08 15:04:40 jmcneill Exp $ */
+/* $NetBSD: acpi_iort.h,v 1.1.2.2 2018/12/26 14:01:32 pgoyette Exp $ */
 
 /*-
  * Copyright (c) 2018 The NetBSD Foundation, Inc.
