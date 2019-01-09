@@ -1,4 +1,4 @@
-/*	$NetBSD: dns_name_fromtext_target.c,v 1.1 2019/01/09 16:48:23 christos Exp $	*/
+/*	$NetBSD: dns_name_fromtext_target.c,v 1.1.1.1 2019/01/09 16:48:23 christos Exp $	*/
 
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")
