@@ -1,4 +1,4 @@
-/*	$NetBSD: strerr.h,v 1.1 2019/01/09 16:48:20 christos Exp $	*/
+/*	$NetBSD: strerr.h,v 1.1.1.1 2019/01/09 16:48:20 christos Exp $	*/
 
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")
