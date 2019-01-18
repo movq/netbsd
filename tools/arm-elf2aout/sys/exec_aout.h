@@ -1,4 +1,4 @@
-/*	$NetBSD: exec_aout.h,v 1.1 2018/12/31 13:35:16 christos Exp $	*/
+/*	$NetBSD: exec_aout.h,v 1.1.2.2 2019/01/18 08:51:01 pgoyette Exp $	*/
 
 /*
  * Copyright (c) 1993, 1994 Christopher G. Demetriou

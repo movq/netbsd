@@ -1,4 +1,4 @@
-/*	$NetBSD: cmd_mapper.c,v 1.1 2019/01/17 20:47:42 kamil Exp $	*/
+/*	$NetBSD: cmd_mapper.c,v 1.1.2.2 2019/01/18 08:50:58 pgoyette Exp $	*/
 
 /*-
  * Copyright (c) 2019 The NetBSD Foundation, Inc.
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: cmd_mapper.c,v 1.1 2019/01/17 20:47:42 kamil Exp $");
+__RCSID("$NetBSD: cmd_mapper.c,v 1.1.2.2 2019/01/18 08:50:58 pgoyette Exp $");
 
 #include <sys/mman.h>
 

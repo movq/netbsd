@@ -2863,11 +2863,11 @@ def CheckStyle(filename, clean_lines, linenum, file_extension, nesting_state,
   # URLs can be long too.  It's possible to split these, but it makes them
   # harder to cut&paste.
   #
-  # The "$Id: cpplint.py,v 1.1.1.1 2019/01/08 05:40:31 kamil Exp $" comment may also get very long without it being the
+  # The "$Id: cpplint.py,v 1.1.1.1.2.2 2019/01/18 08:50:53 pgoyette Exp $" comment may also get very long without it being the
   # developers fault.
   if (not line.startswith('#include') and not is_header_guard and
       not Match(r'^\s*//.*http(s?)://\S*$', line) and
-      not Match(r'^// \$Id: cpplint.py,v 1.1.1.1 2019/01/08 05:40:31 kamil Exp $$', line)):
+      not Match(r'^// \$Id: cpplint.py,v 1.1.1.1.2.2 2019/01/18 08:50:53 pgoyette Exp $$', line)):
     line_width = GetLineWidth(line)
     if line_width > 100:
       error(filename, linenum, 'whitespace/line_length', 4,

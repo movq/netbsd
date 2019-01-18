@@ -1,4 +1,4 @@
-/*	$NetBSD: iris_scsictl.c,v 1.1 2019/01/12 16:44:47 tsutsui Exp $	*/
+/*	$NetBSD: iris_scsictl.c,v 1.1.2.2 2019/01/18 08:50:23 pgoyette Exp $	*/
 
 /*
  * Copyright (c) 2018 Naruaki Etomi

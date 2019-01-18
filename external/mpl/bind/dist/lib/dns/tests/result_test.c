@@ -1,4 +1,4 @@
-/*	$NetBSD: result_test.c,v 1.2 2019/01/09 16:55:13 christos Exp $	*/
+/*	$NetBSD: result_test.c,v 1.2.2.2 2019/01/18 08:49:56 pgoyette Exp $	*/
 
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")
