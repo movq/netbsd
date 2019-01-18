@@ -1,4 +1,4 @@
-#	$NetBSD: t_ipsec_pfil.sh,v 1.1 2019/01/17 02:49:11 knakahara Exp $
+#	$NetBSD: t_ipsec_pfil.sh,v 1.1.2.2 2019/01/18 08:51:00 pgoyette Exp $
 #
 # Copyright (c) 2019 Internet Initiative Japan Inc.
 # All rights reserved.

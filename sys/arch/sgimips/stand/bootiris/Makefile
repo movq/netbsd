@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.1 2019/01/12 16:44:47 tsutsui Exp $
+#	$NetBSD: Makefile,v 1.1.2.2 2019/01/18 08:50:22 pgoyette Exp $
 
 # Silicon Graphics "IRIS" series MIPS processors machine.
 STRIPFLAG=
