@@ -1,4 +1,4 @@
-/* $NetBSD: meson_platform.c,v 1.3 2019/01/21 16:27:48 jmcneill Exp $ */
+/* $NetBSD: meson_platform.c,v 1.3.2.2 2019/01/26 21:59:59 pgoyette Exp $ */
 
 /*-
  * Copyright (c) 2019 Jared McNeill <jmcneill@invisible.ca>
@@ -33,7 +33,7 @@
 #include "arml2cc.h"
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: meson_platform.c,v 1.3 2019/01/21 16:27:48 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: meson_platform.c,v 1.3.2.2 2019/01/26 21:59:59 pgoyette Exp $");
 
 #include <sys/param.h>
 #include <sys/bus.h>

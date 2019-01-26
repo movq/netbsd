@@ -1,4 +1,4 @@
-/*	$NetBSD: at91-sama5d2_adc.h,v 1.1.1.1 2019/01/22 14:57:01 jmcneill Exp $	*/
+/*	$NetBSD: at91-sama5d2_adc.h,v 1.1.1.1.2.2 2019/01/26 22:00:35 pgoyette Exp $	*/
 
 /* SPDX-License-Identifier: GPL-2.0 */
 /*
