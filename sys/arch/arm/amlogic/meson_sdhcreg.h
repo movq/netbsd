@@ -1,4 +1,4 @@
-/* $NetBSD: meson_sdhcreg.h,v 1.1 2019/01/20 00:44:01 jmcneill Exp $ */
+/* $NetBSD: meson_sdhcreg.h,v 1.1.2.2 2019/01/26 21:59:59 pgoyette Exp $ */
 
 /*-
  * Copyright (c) 2015 Jared McNeill <jmcneill@invisible.ca>

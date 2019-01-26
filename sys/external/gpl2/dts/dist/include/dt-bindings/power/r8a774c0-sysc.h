@@ -1,4 +1,4 @@
-/*	$NetBSD: r8a774c0-sysc.h,v 1.1.1.1 2019/01/22 14:57:01 jmcneill Exp $	*/
+/*	$NetBSD: r8a774c0-sysc.h,v 1.1.1.1.2.2 2019/01/26 22:00:36 pgoyette Exp $	*/
 
 /* SPDX-License-Identifier: GPL-2.0
  *

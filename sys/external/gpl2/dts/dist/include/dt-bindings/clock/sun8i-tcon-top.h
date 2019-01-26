@@ -1,4 +1,4 @@
-/*	$NetBSD: sun8i-tcon-top.h,v 1.1.1.1 2019/01/22 14:57:02 jmcneill Exp $	*/
+/*	$NetBSD: sun8i-tcon-top.h,v 1.1.1.1.2.2 2019/01/26 22:00:34 pgoyette Exp $	*/
 
 /* SPDX-License-Identifier: (GPL-2.0+ OR MIT) */
 /* Copyright (C) 2018 Jernej Skrabec <jernej.skrabec@siol.net> */

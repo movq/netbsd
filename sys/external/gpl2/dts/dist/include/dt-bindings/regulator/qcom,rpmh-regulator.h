@@ -1,4 +1,4 @@
-/*	$NetBSD: qcom,rpmh-regulator.h,v 1.1.1.1 2019/01/22 14:57:01 jmcneill Exp $	*/
+/*	$NetBSD: qcom,rpmh-regulator.h,v 1.1.1.1.2.2 2019/01/26 22:00:36 pgoyette Exp $	*/
 
 /* SPDX-License-Identifier: GPL-2.0 */
 /* Copyright (c) 2018, The Linux Foundation. All rights reserved. */

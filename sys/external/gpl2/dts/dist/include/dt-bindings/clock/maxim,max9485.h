@@ -1,4 +1,4 @@
-/*	$NetBSD: maxim,max9485.h,v 1.1.1.1 2019/01/22 14:57:02 jmcneill Exp $	*/
+/*	$NetBSD: maxim,max9485.h,v 1.1.1.1.2.2 2019/01/26 22:00:34 pgoyette Exp $	*/
 
 /*
  * Copyright (C) 2018 Daniel Mack

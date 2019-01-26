@@ -1,4 +1,4 @@
-/* $NetBSD: meson8b_clkc.c,v 1.2 2019/01/20 17:28:34 jmcneill Exp $ */
+/* $NetBSD: meson8b_clkc.c,v 1.2.2.2 2019/01/26 21:59:59 pgoyette Exp $ */
 
 /*-
  * Copyright (c) 2019 Jared McNeill <jmcneill@invisible.ca>
@@ -28,7 +28,7 @@
 
 #include <sys/cdefs.h>
 
-__KERNEL_RCSID(1, "$NetBSD: meson8b_clkc.c,v 1.2 2019/01/20 17:28:34 jmcneill Exp $");
+__KERNEL_RCSID(1, "$NetBSD: meson8b_clkc.c,v 1.2.2.2 2019/01/26 21:59:59 pgoyette Exp $");
 
 #include <sys/param.h>
 #include <sys/bus.h>
