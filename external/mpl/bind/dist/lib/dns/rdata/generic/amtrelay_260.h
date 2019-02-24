@@ -1,4 +1,4 @@
-/*	$NetBSD: amtrelay_260.h,v 1.1 2019/02/24 18:56:52 christos Exp $	*/
+/*	$NetBSD: amtrelay_260.h,v 1.1.1.1 2019/02/24 18:56:52 christos Exp $	*/
 
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")

@@ -1,4 +1,4 @@
-/*	$NetBSD: stdatomic.h,v 1.1 2019/02/24 18:56:48 christos Exp $	*/
+/*	$NetBSD: stdatomic.h,v 1.1.1.1 2019/02/24 18:56:48 christos Exp $	*/
 
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")
