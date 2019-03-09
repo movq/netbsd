@@ -1,4 +1,4 @@
-/*	$NetBSD: rndisreg.h,v 1.2 2019/02/15 08:54:02 nonaka Exp $ */
+/*	$NetBSD: rndisreg.h,v 1.2.2.2 2019/03/09 17:10:20 martin Exp $ */
 /*	NetBSD: if_urndisreg.h,v 1.4 2018/11/09 21:57:09 maya Exp */
 /*	$OpenBSD: if_urndisreg.h,v 1.14 2010/07/08 18:22:01 ckuethe Exp $ */
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: hvheartbeat.c,v 1.2 2019/03/01 08:17:51 nonaka Exp $	*/
+/*	$NetBSD: hvheartbeat.c,v 1.2.2.2 2019/03/09 17:10:19 martin Exp $	*/
 
 /*-
  * Copyright (c) 2014,2016 Microsoft Corp.
@@ -28,7 +28,7 @@
 
 #include <sys/cdefs.h>
 #ifdef __KERNEL_RCSID
-__KERNEL_RCSID(0, "$NetBSD: hvheartbeat.c,v 1.2 2019/03/01 08:17:51 nonaka Exp $");
+__KERNEL_RCSID(0, "$NetBSD: hvheartbeat.c,v 1.2.2.2 2019/03/09 17:10:19 martin Exp $");
 #endif
 #ifdef __FBSDID
 __FBSDID("$FreeBSD: head/sys/dev/hyperv/utilities/vmbus_heartbeat.c 310324 2016-12-20 09:46:14Z sephe $");

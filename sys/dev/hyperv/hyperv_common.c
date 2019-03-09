@@ -1,4 +1,4 @@
-/*	$NetBSD: hyperv_common.c,v 1.1 2019/02/15 08:54:01 nonaka Exp $	*/
+/*	$NetBSD: hyperv_common.c,v 1.1.2.2 2019/03/09 17:10:19 martin Exp $	*/
 
 /*-
  * Copyright (c) 2009-2012,2016-2017 Microsoft Corp.
@@ -29,7 +29,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: hyperv_common.c,v 1.1 2019/02/15 08:54:01 nonaka Exp $");
+__KERNEL_RCSID(0, "$NetBSD: hyperv_common.c,v 1.1.2.2 2019/03/09 17:10:19 martin Exp $");
 
 #include "hyperv.h"
 

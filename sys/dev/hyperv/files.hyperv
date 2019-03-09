@@ -1,4 +1,4 @@
-#	$NetBSD: files.hyperv,v 1.1 2019/02/15 08:54:01 nonaka Exp $
+#	$NetBSD: files.hyperv,v 1.1.2.2 2019/03/09 17:10:19 martin Exp $
 
 define	hypervvmbus {}
 device	vmbus: hypervvmbus

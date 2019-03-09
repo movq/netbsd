@@ -1,4 +1,4 @@
-/*	$NetBSD: vmbusicreg.h,v 1.2 2019/03/01 10:02:33 nonaka Exp $	*/
+/*	$NetBSD: vmbusicreg.h,v 1.2.2.2 2019/03/09 17:10:19 martin Exp $	*/
 /*	$OpenBSD: hypervicreg.h,v 1.6 2017/11/07 16:49:42 mikeb Exp $	*/
 
 /*-

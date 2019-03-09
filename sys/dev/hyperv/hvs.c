@@ -1,4 +1,4 @@
-/*	$NetBSD: hvs.c,v 1.1 2019/02/15 08:54:01 nonaka Exp $	*/
+/*	$NetBSD: hvs.c,v 1.1.2.2 2019/03/09 17:10:19 martin Exp $	*/
 /*	$OpenBSD: hvs.c,v 1.17 2017/08/10 17:22:48 mikeb Exp $	*/
 
 /*-
@@ -37,7 +37,7 @@
 /* #define HVS_DEBUG_IO */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: hvs.c,v 1.1 2019/02/15 08:54:01 nonaka Exp $");
+__KERNEL_RCSID(0, "$NetBSD: hvs.c,v 1.1.2.2 2019/03/09 17:10:19 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
