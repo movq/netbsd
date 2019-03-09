@@ -1,4 +1,4 @@
-/*	$NetBSD: vmbusic.c,v 1.1 2019/02/15 08:54:02 nonaka Exp $	*/
+/*	$NetBSD: vmbusic.c,v 1.1.2.2 2019/03/09 17:10:19 martin Exp $	*/
 /*-
  * Copyright (c) 2014,2016 Microsoft Corp.
  * All rights reserved.
@@ -27,7 +27,7 @@
 
 #include <sys/cdefs.h>
 #ifdef __KERNEL_RCSID
-__KERNEL_RCSID(0, "$NetBSD: vmbusic.c,v 1.1 2019/02/15 08:54:02 nonaka Exp $");
+__KERNEL_RCSID(0, "$NetBSD: vmbusic.c,v 1.1.2.2 2019/03/09 17:10:19 martin Exp $");
 #endif
 #ifdef __FBSDID
 __FBSDID("$FreeBSD: head/sys/dev/hyperv/utilities/vmbus_ic.c 310317 2016-12-20 07:14:24Z sephe $");

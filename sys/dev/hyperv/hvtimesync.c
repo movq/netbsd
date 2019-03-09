@@ -1,4 +1,4 @@
-/*	$NetBSD: hvtimesync.c,v 1.2 2019/03/01 08:17:51 nonaka Exp $	*/
+/*	$NetBSD: hvtimesync.c,v 1.2.2.2 2019/03/09 17:10:19 martin Exp $	*/
 
 /*-
  * Copyright (c) 2014,2016-2017 Microsoft Corp.
@@ -28,7 +28,7 @@
 
 #include <sys/cdefs.h>
 #ifdef __KERNEL_RCSID
-__KERNEL_RCSID(0, "$NetBSD: hvtimesync.c,v 1.2 2019/03/01 08:17:51 nonaka Exp $");
+__KERNEL_RCSID(0, "$NetBSD: hvtimesync.c,v 1.2.2.2 2019/03/09 17:10:19 martin Exp $");
 #endif
 #ifdef __FBSDID
 __FBSDID("$FreeBSD: head/sys/dev/hyperv/utilities/vmbus_timesync.c 322488 2017-08-14 06:00:50Z sephe $");

@@ -1,4 +1,4 @@
-/*	$NetBSD: if_hvn.c,v 1.2 2019/03/05 08:25:02 msaitoh Exp $	*/
+/*	$NetBSD: if_hvn.c,v 1.2.2.2 2019/03/09 17:10:19 martin Exp $	*/
 /*	$OpenBSD: if_hvn.c,v 1.39 2018/03/11 14:31:34 mikeb Exp $	*/
 
 /*-
@@ -35,7 +35,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_hvn.c,v 1.2 2019/03/05 08:25:02 msaitoh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_hvn.c,v 1.2.2.2 2019/03/09 17:10:19 martin Exp $");
 
 #ifdef _KERNEL_OPT
 #include "opt_inet.h"
@@ -66,6 +66,10 @@ __KERNEL_RCSID(0, "$NetBSD: if_hvn.c,v 1.2 2019/03/05 08:25:02 msaitoh Exp $");
 
 #ifndef EVL_PRIO_BITS
 #define EVL_PRIO_BITS	13
+#endif
+
+#ifndef ETHER_ALIGN
+#define ETHER_ALIGN	2
 #endif
 
 #define HVN_NVS_MSGSIZE			32
@@ -501,7 +505,7 @@ hvn_start(struct ifnet *ifp)
 			continue;
 		}
 
-		bpf_mtap(ifp, m, BPF_D_OUT);
+		bpf_mtap(ifp, m);
 
 		if (hvn_rndis_output(sc, txd)) {
 			hvn_decap(sc, txd);
