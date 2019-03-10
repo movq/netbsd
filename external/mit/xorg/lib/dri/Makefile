@@ -1,4 +1,4 @@
-# $NetBSD: Makefile,v 1.28 2016/06/07 23:21:58 christos Exp $
+# $NetBSD: Makefile,v 1.29 2019/03/10 02:29:52 mrg Exp $
 
 # Link the mesa_dri_drivers mega driver.
 
@@ -15,12 +15,12 @@ LIB=		mesa_dri_drivers
 DRIDIR=		${X11USRLIBDIR}/modules/dri
 DRIDEBUGDIR=	${DEBUGDIR}${X11USRLIBDIR}/modules/dri
 
-#	-I${X11SRCDIR.MesaLib}/src/mesa/drivers/dri/${MODULE}/server \
+#	-I${X11SRCDIR.Mesa}/src/mesa/drivers/dri/${MODULE}/server \
 
 CPPFLAGS+= \
-	-I${X11SRCDIR.MesaLib}/src/egl/main \
-	-I${X11SRCDIR.MesaLib}/src/egl/drivers/dri \
-	-I${X11SRCDIR.MesaLib}/../src/mesa/drivers/dri/common \
+	-I${X11SRCDIR.Mesa}/src/egl/main \
+	-I${X11SRCDIR.Mesa}/src/egl/drivers/dri \
+	-I${X11SRCDIR.Mesa}/../src/mesa/drivers/dri/common \
 	-I${DESTDIR}${X11INCDIR}/libdrm
 
 #CPPFLAGS+=	-D_NETBSD_SOURCE -DPTHREADS
@@ -86,9 +86,9 @@ I915_INTEL_FILES = \
 	intel_fbo.c
 
 .for _f in ${I915_INTEL_FILES}
-BUILDSYMLINKS+=		${X11SRCDIR.MesaLib}/src/mesa/drivers/dri/i915/${_f} i915_${_f}
+BUILDSYMLINKS+=		${X11SRCDIR.Mesa}/src/mesa/drivers/dri/i915/${_f} i915_${_f}
 DRI_SOURCES.i915+=	i915_${_f}
-CPPFLAGS.i915_${_f}+=	-I${X11SRCDIR.MesaLib}/src/mesa/drivers/dri/i915
+CPPFLAGS.i915_${_f}+=	-I${X11SRCDIR.Mesa}/src/mesa/drivers/dri/i915
 .endfor
 
 DRI_SOURCES.i965 = \
@@ -259,9 +259,9 @@ I965_INTEL_FILES = \
 	intel_upload.c
 
 .for _f in ${I965_INTEL_FILES}
-BUILDSYMLINKS+=		${X11SRCDIR.MesaLib}/src/mesa/drivers/dri/i965/${_f} i965_${_f}
+BUILDSYMLINKS+=		${X11SRCDIR.Mesa}/src/mesa/drivers/dri/i965/${_f} i965_${_f}
 DRI_SOURCES.i965+=	i965_${_f}
-CPPFLAGS.i965_${_f} +=	-I${X11SRCDIR.MesaLib}/src/mesa/drivers/dri/i965
+CPPFLAGS.i965_${_f} +=	-I${X11SRCDIR.Mesa}/src/mesa/drivers/dri/i965
 .endfor
 
 DRI_SOURCES.r200 = \
@@ -298,15 +298,15 @@ R200_RADEON_FILES= \
 	radeon_screen.c
 
 .for _f in ${R200_RADEON_FILES}
-BUILDSYMLINKS+=		${X11SRCDIR.MesaLib}/src/mesa/drivers/dri/radeon/${_f} r200_${_f}
+BUILDSYMLINKS+=		${X11SRCDIR.Mesa}/src/mesa/drivers/dri/radeon/${_f} r200_${_f}
 DRI_SOURCES.r200+=	r200_${_f}
 .endfor
 
 .for _f in ${DRI_SOURCES.r200}
-CPPFLAGS.${_f} +=	-I${X11SRCDIR.MesaLib}/src/mesa/drivers/dri/r200/server \
-			-I${X11SRCDIR.MesaLib}/src/mesa/drivers/dri/r200 \
-			-I${X11SRCDIR.MesaLib}/src/mesa/drivers/dri/radeon/server \
-			-I${X11SRCDIR.MesaLib}/src/mesa/drivers/dri/radeon \
+CPPFLAGS.${_f} +=	-I${X11SRCDIR.Mesa}/src/mesa/drivers/dri/r200/server \
+			-I${X11SRCDIR.Mesa}/src/mesa/drivers/dri/r200 \
+			-I${X11SRCDIR.Mesa}/src/mesa/drivers/dri/radeon/server \
+			-I${X11SRCDIR.Mesa}/src/mesa/drivers/dri/radeon \
 			-DRADEON_R200
 .endfor
 
@@ -339,14 +339,14 @@ DRI_SOURCES.radeon = \
 	radeon_blit.c
 
 .for _f in ${DRI_SOURCES.radeon}
-CPPFLAGS.${_f} +=	-I${X11SRCDIR.MesaLib}/src/mesa/drivers/dri/radeon/server \
-			-I${X11SRCDIR.MesaLib}/src/mesa/drivers/dri/radeon \
+CPPFLAGS.${_f} +=	-I${X11SRCDIR.Mesa}/src/mesa/drivers/dri/radeon/server \
+			-I${X11SRCDIR.Mesa}/src/mesa/drivers/dri/radeon \
 			-DRADEON_R100
 .endfor
 
 .for _d in ${DRI_SUBDIRS}
 SRCS+=	${DRI_SOURCES.${_d}}
-.PATH: ${X11SRCDIR.MesaLib}/src/mesa/drivers/dri/${_d}
+.PATH: ${X11SRCDIR.Mesa}/src/mesa/drivers/dri/${_d}
 .endfor
 
 LIBDPLIBS+=	expat		${NETBSDSRCDIR}/external/mit/expat/lib/libexpat
@@ -380,7 +380,7 @@ SYMLINKS+= mesa_dri_drivers.so.${SHLIB_MAJOR}.debug ${DRIDEBUGDIR}/${_d}_dri.so.
 .endif
 
 PKGCONFIG=	dri
-PKGDIST.dri=	${X11SRCDIR.MesaLib}/src/mesa/drivers/dri
+PKGDIST.dri=	${X11SRCDIR.Mesa}/src/mesa/drivers/dri
 .include "${.CURDIR}/../libGL/mesa-ver.mk"
 PKGCONFIG_VERSION.dri=	${MESA_VER}
 
@@ -392,7 +392,7 @@ PKGCONFIG_SED_FLAGS= \
 FILESDIR=	/etc
 FILES=		drirc
 
-.PATH:          ${X11SRCDIR.MesaLib}/src/mesa/drivers/dri/common
+.PATH:          ${X11SRCDIR.Mesa}/src/mesa/drivers/dri/common
 
 .include <bsd.x11.mk>
 .if ${MACHINE_ARCH} == "i386" || ${MACHINE_ARCH} == "x86_64"

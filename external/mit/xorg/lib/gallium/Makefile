@@ -1,4 +1,4 @@
-# $NetBSD: Makefile,v 1.17 2016/11/29 23:17:22 dholland Exp $
+# $NetBSD: Makefile,v 1.18 2019/03/10 02:29:52 mrg Exp $
 
 # Link the gallium mega driver.
 
@@ -248,13 +248,13 @@ GALLIUM_SOURCES.auxiliary/vl= \
 	vl_deint_filter.c
 
 # Generated
-.PATH: ${X11SRCDIR.MesaLib}/../src/gallium/auxiliary
+.PATH: ${X11SRCDIR.Mesa}/../src/gallium/auxiliary
 GALLIUM_SOURCES.auxiliary= \
 	u_indices_gen.c \
 	u_unfilled_gen.c \
 	u_format_table.c
 .for _f in ${GALLIUM_SOURCES.auxiliary}
-CPPFLAGS.${_f} +=	-I${X11SRCDIR.MesaLib}/src/gallium/auxiliary/util
+CPPFLAGS.${_f} +=	-I${X11SRCDIR.Mesa}/src/gallium/auxiliary/util
 .endfor
 
 GALLIUM_SOURCES.drivers/galahad= \
@@ -284,14 +284,14 @@ GALLIUM_SOURCES.drivers/rbug = \
         rbug_objects.c \
         rbug_screen.c
 # Conflicts with auxiliary/rbug/ files
-BUILDSYMLINKS+=	${X11SRCDIR.MesaLib}/src/gallium/drivers/rbug/rbug_core.c    DRIVERrbug_core.c
-BUILDSYMLINKS+=	${X11SRCDIR.MesaLib}/src/gallium/drivers/rbug/rbug_context.c DRIVERrbug_context.c
-CPPFLAGS.DRIVERrbug_core.c+=	-I${X11SRCDIR.MesaLib}/src/gallium/auxiliary
-CPPFLAGS.DRIVERrbug_core.c+=	-I${X11SRCDIR.MesaLib}/src/gallium/drivers/rbug
-CPPFLAGS.DRIVERrbug_core.c+=	-I${X11SRCDIR.MesaLib}/src/gallium/drivers
-CPPFLAGS.DRIVERrbug_context.c+=	-I${X11SRCDIR.MesaLib}/src/gallium/auxiliary
-CPPFLAGS.DRIVERrbug_context.c+=	-I${X11SRCDIR.MesaLib}/src/gallium/drivers/rbug
-CPPFLAGS.DRIVERrbug_context.c+=	-I${X11SRCDIR.MesaLib}/src/gallium/drivers
+BUILDSYMLINKS+=	${X11SRCDIR.Mesa}/src/gallium/drivers/rbug/rbug_core.c    DRIVERrbug_core.c
+BUILDSYMLINKS+=	${X11SRCDIR.Mesa}/src/gallium/drivers/rbug/rbug_context.c DRIVERrbug_context.c
+CPPFLAGS.DRIVERrbug_core.c+=	-I${X11SRCDIR.Mesa}/src/gallium/auxiliary
+CPPFLAGS.DRIVERrbug_core.c+=	-I${X11SRCDIR.Mesa}/src/gallium/drivers/rbug
+CPPFLAGS.DRIVERrbug_core.c+=	-I${X11SRCDIR.Mesa}/src/gallium/drivers
+CPPFLAGS.DRIVERrbug_context.c+=	-I${X11SRCDIR.Mesa}/src/gallium/auxiliary
+CPPFLAGS.DRIVERrbug_context.c+=	-I${X11SRCDIR.Mesa}/src/gallium/drivers/rbug
+CPPFLAGS.DRIVERrbug_context.c+=	-I${X11SRCDIR.Mesa}/src/gallium/drivers
 
 GALLIUM_SOURCES.drivers/radeon = \
         cayman_msaa.c \
@@ -356,7 +356,7 @@ GALLIUM_SOURCES.drivers/r600/sb = \
 #LLVM_C_SOURCES = r600_llvm.c
 
 .for _f in ${GALLIUM_SOURCES.drivers/r600} ${GALLIUM_SOURCES.drivers/r600/sb}
-CPPFLAGS.${_f} +=	-I${X11SRCDIR.MesaLib}/src/gallium/drivers/r600
+CPPFLAGS.${_f} +=	-I${X11SRCDIR.Mesa}/src/gallium/drivers/r600
 .endfor
 
 GALLIUM_SOURCES.drivers/nouveau = \
@@ -467,7 +467,7 @@ GALLIUM_SOURCES.drivers/nouveau/nvc0 = \
 	   ${GALLIUM_SOURCES.drivers/nouveau/nv50} \
 	   ${GALLIUM_SOURCES.drivers/nouveau/codegen} \
 	   ${GALLIUM_SOURCES.drivers/nouveau/nvc0}
-CPPFLAGS.${_f} +=	-I${X11SRCDIR.MesaLib}/src/gallium/drivers/nouveau
+CPPFLAGS.${_f} +=	-I${X11SRCDIR.Mesa}/src/gallium/drivers/nouveau
 .endfor
 
 
@@ -528,7 +528,7 @@ GALLIUM_SOURCES.state_trackers/dri = \
 	drisw.c \
 	dri2.c
 .for _f in ${GALLIUM_SOURCES.state_trackers/dri}
-CPPFLAGS.${_f} +=	-I${X11SRCDIR.MesaLib}/src/gallium/state_trackers/dri/common
+CPPFLAGS.${_f} +=	-I${X11SRCDIR.Mesa}/src/gallium/state_trackers/dri/common
 .endfor
 
 # missing
@@ -539,7 +539,7 @@ CPPFLAGS+=	\
 
 .for _d in ${GALLIUM_SUBDIRS}
 SRCS+=	${GALLIUM_SOURCES.${_d}}
-.PATH: ${X11SRCDIR.MesaLib}/src/gallium/${_d}
+.PATH: ${X11SRCDIR.Mesa}/src/gallium/${_d}
 .endfor
 
 #. if defined(${GALLIUM_SOURCES.${_d}})
@@ -567,7 +567,7 @@ LIBDPLIBS+= 	drm_nouveau	${.CURDIR}/../libdrm_nouveau
 LIBDPLIBS+= 	glapi		${.CURDIR}/../libglapi
 LIBDPLIBS+=	expat		${.CURDIR}/../../../../../external/mit/expat/lib/libexpat
 
-LDFLAGS+=	-Wl,--version-script=${X11SRCDIR.MesaLib}/src/gallium/targets/dri/dri.sym
+LDFLAGS+=	-Wl,--version-script=${X11SRCDIR.Mesa}/src/gallium/targets/dri/dri.sym
 
 ##  build mesagallium parts
 MESA_SRC_MODULES=  main math vbo state_tracker program asm_s
@@ -575,7 +575,7 @@ MESA_SRC_MODULES=  main math vbo state_tracker program asm_s
 .include "../libglsl.mk"
 
 # Special addition for just gallium; it misses the rest of asm_c files.
-.PATH: ${X11SRCDIR.MesaLib}/src/mesa/x86
+.PATH: ${X11SRCDIR.Mesa}/src/mesa/x86
 SRCS+=	common_x86.c
 
 .if ${MACHINE} == "amd64" || ${MACHINE} == "i386"
@@ -586,14 +586,14 @@ CFLAGS.streaming-load-memcpy.c+= -msse4.1
 .include "../driver.mk"
 
 
-.PATH: ${X11SRCDIR.MesaLib}/src/gallium/targets/dri
+.PATH: ${X11SRCDIR.Mesa}/src/gallium/targets/dri
 SRCS+=	target.c
 
 CPPFLAGS+= \
-	-I${X11SRCDIR.MesaLib}/src/gallium/include \
-	-I${X11SRCDIR.MesaLib}/src/gallium/auxiliary \
-	-I${X11SRCDIR.MesaLib}/src/gallium/drivers \
-	-I${X11SRCDIR.MesaLib}/../src/mesa/drivers/dri/common
+	-I${X11SRCDIR.Mesa}/src/gallium/include \
+	-I${X11SRCDIR.Mesa}/src/gallium/auxiliary \
+	-I${X11SRCDIR.Mesa}/src/gallium/drivers \
+	-I${X11SRCDIR.Mesa}/../src/mesa/drivers/dri/common
 
 CPPFLAGS.target.c += \
 	-DDRI_TARGET \
@@ -602,9 +602,9 @@ CPPFLAGS.target.c += \
 	-DGALLIUM_RBUG \
 	-DGALLIUM_TRACE \
 	-DGALLIUM_SOFTPIPE \
-	-I${X11SRCDIR.MesaLib}/src/gallium/state_trackers/dri \
-	-I${X11SRCDIR.MesaLib}/src/loader \
-	-I${X11SRCDIR.MesaLib}/src/gallium/winsys
+	-I${X11SRCDIR.Mesa}/src/gallium/state_trackers/dri \
+	-I${X11SRCDIR.Mesa}/src/loader \
+	-I${X11SRCDIR.Mesa}/src/gallium/winsys
 
 .if ${BUILD_RADEON} == 1
 CPPFLAGS.target.c += \

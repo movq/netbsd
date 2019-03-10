@@ -1,15 +1,15 @@
-#	$NetBSD: Makefile,v 1.1 2015/02/23 00:09:30 jmcneill Exp $
+#	$NetBSD: Makefile,v 1.2 2019/03/10 02:29:53 mrg Exp $
 
 .include <bsd.own.mk>
 
 LIB=		gbm
 
-.PATH:	${X11SRCDIR.MesaLib}/src/gbm/main
+.PATH:	${X11SRCDIR.Mesa}/src/gbm/main
 SRCS.main=	\
 	backend.c \
 	gbm.c
 
-.PATH:	${X11SRCDIR.MesaLib}/src/gbm/backends/dri
+.PATH:	${X11SRCDIR.Mesa}/src/gbm/backends/dri
 SRCS.dri=	\
 	gbm_dri.c
 
@@ -19,10 +19,10 @@ CPPFLAGS+=	-D_OS_UNIX=1
 CPPFLAGS+=	-DHAVE_PTHREAD=1
 CPPFLAGS+=	-DDEFAULT_DRIVER_DIR=\"${X11USRLIBDIR}/modules/dri\"
 CPPFLAGS+=	-DMODULEDIR=\"${X11USRLIBDIR}/gbm\"
-CPPFLAGS+=	-I${X11SRCDIR.MesaLib}/include
-CPPFLAGS+=	-I${X11SRCDIR.MesaLib}/src/loader
-CPPFLAGS+=	-I${X11SRCDIR.MesaLib}/src/gbm/main
-CPPFLAGS+=	-I${X11SRCDIR.MesaLib}/src/mapi
+CPPFLAGS+=	-I${X11SRCDIR.Mesa}/include
+CPPFLAGS+=	-I${X11SRCDIR.Mesa}/src/loader
+CPPFLAGS+=	-I${X11SRCDIR.Mesa}/src/gbm/main
+CPPFLAGS+=	-I${X11SRCDIR.Mesa}/src/mapi
 CPPFLAGS+=	-I${DESTDIR}${X11INCDIR}/libdrm
 CFLAGS+=	-fno-strict-aliasing -fexceptions
 
@@ -30,7 +30,7 @@ COPTS.gbm_dri.c+=	-Wno-error
 
 .include "../libloader.mk"
 
-.PATH:	${X11SRCDIR.MesaLib}/src/gbm/main
+.PATH:	${X11SRCDIR.Mesa}/src/gbm/main
 INCS=		gbm.h
 INCSDIR=	${X11INCDIR}
 
@@ -38,7 +38,7 @@ LIBDPLIBS=      glapi	${.CURDIR}/../libglapi
 LIBDPLIBS=      drm     ${.CURDIR}/../libdrm
 
 PKGCONFIG=	gbm
-PKGDIST.gbm=	${X11SRCDIR.MesaLib}/src/gbm/main
+PKGDIST.gbm=	${X11SRCDIR.Mesa}/src/gbm/main
 .include "${.CURDIR}/../libGL/mesa-ver.mk"
 PKGCONFIG_VERSION.gbm=	${MESA_VER}
 

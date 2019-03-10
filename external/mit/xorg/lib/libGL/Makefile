@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.21 2014/12/18 06:24:30 mrg Exp $
+#	$NetBSD: Makefile,v 1.22 2019/03/10 02:29:52 mrg Exp $
 
 .include <bsd.own.mk>
 
@@ -8,7 +8,7 @@ LIBISCXX=	yes
 SUBDIR=		internal
 
 # glx
-.PATH:		${X11SRCDIR.MesaLib}/src/glx
+.PATH:		${X11SRCDIR.Mesa}/src/glx
 SRCS.glx=	\
 	clientattrib.c \
 	clientinfo.c \
@@ -42,33 +42,33 @@ SRCS.glx=	\
 	glx_query.c \
 	glxhash.c
 
-BUILDSYMLINKS+=     ${X11SRCDIR.MesaLib}/../src/mapi/glapi/indirect.c MESAindirect.c
-BUILDSYMLINKS+=     ${X11SRCDIR.MesaLib}/../src/mapi/glapi/indirect_init.c MESAindirect_init.c
-BUILDSYMLINKS+=     ${X11SRCDIR.MesaLib}/../src/mapi/glapi/indirect_size.c MESAindirect_size.c
-BUILDSYMLINKS+=     ${X11SRCDIR.MesaLib}/src/glx/indirect_window_pos.c MESAindirect_window_pos.c
+BUILDSYMLINKS+=     ${X11SRCDIR.Mesa}/../src/mapi/glapi/indirect.c MESAindirect.c
+BUILDSYMLINKS+=     ${X11SRCDIR.Mesa}/../src/mapi/glapi/indirect_init.c MESAindirect_init.c
+BUILDSYMLINKS+=     ${X11SRCDIR.Mesa}/../src/mapi/glapi/indirect_size.c MESAindirect_size.c
+BUILDSYMLINKS+=     ${X11SRCDIR.Mesa}/src/glx/indirect_window_pos.c MESAindirect_window_pos.c
 
 .for _f in ${SRCS.glx}
-CPPFLAGS.${_f}= -I${X11SRCDIR.MesaLib}/../src/mapi/glapi -DGLX_SHARED_GLAPI
+CPPFLAGS.${_f}= -I${X11SRCDIR.Mesa}/../src/mapi/glapi -DGLX_SHARED_GLAPI
 .endfor
 
 # glapi
-.PATH:		${X11SRCDIR.MesaLib}/src/mapi
-.PATH:		${X11SRCDIR.MesaLib}/../src/mapi/glapi
+.PATH:		${X11SRCDIR.Mesa}/src/mapi
+.PATH:		${X11SRCDIR.Mesa}/../src/mapi/glapi
 SRCS.glapi=	\
 	entry.c \
 	glapi_gentable.c
 .for _f in ${SRCS.glapi}
 CPPFLAGS.${_f}= -DMAPI_MODE_BRIDGE \
 		-DMAPI_ABI_HEADER=\"glapi_glapi_mapi_tmp.h\" \
-		-I${X11SRCDIR.MesaLib}/src/mesa
+		-I${X11SRCDIR.Mesa}/src/mesa
 .endfor
 
 
 # XXX see TODO
 #.if ${MACHINE_ARCH} == "i386"
-#.PATH:		${X11SRCDIR.MesaLib}/src/mesa/x86
+#.PATH:		${X11SRCDIR.Mesa}/src/mesa/x86
 #SRCS.glx+=	glapi_x86.S
-#CPPFLAGS+=	-DUSE_X86_ASM -I${X11SRCDIR.MesaLib}/src/mesa/x86
+#CPPFLAGS+=	-DUSE_X86_ASM -I${X11SRCDIR.Mesa}/src/mesa/x86
 ## -DUSE_X86_ASM $(MMX_DEFS) $(3DNOW_DEFS) $(SSE_DEFS)
 #.endif
 
@@ -91,9 +91,9 @@ CPPFLAGS.${fn}=-DDEFAULT_DRIVER_DIR=\"${X11USRLIBDIR}/modules/dri\"
 
 .include "../libloader.mk"
 
-.PATH:		${X11SRCDIR.MesaLib}/src/glw
-.PATH:		${X11SRCDIR.MesaLib}/include/GL
-.PATH:		${X11SRCDIR.MesaLib}/src/mesa/drivers/x11
+.PATH:		${X11SRCDIR.Mesa}/src/glw
+.PATH:		${X11SRCDIR.Mesa}/include/GL
+.PATH:		${X11SRCDIR.Mesa}/src/mesa/drivers/x11
 INCS=	gl.h gl_mangle.h glcorearb.h glext.h \
 	glx.h glx_mangle.h glxext.h \
 	osmesa.h wglext.h wmesa.h
@@ -103,13 +103,13 @@ INCSDIR=${X11INCDIR}/GL
 SRCS+=	${SRCS.dri} ${SRCS.glx} ${SRCS.glapi}
 
 CPPFLAGS+= \
-	-I${X11SRCDIR.MesaLib}/include \
-	-I${X11SRCDIR.MesaLib}/include/GL/internal \
-	-I${X11SRCDIR.MesaLib}/src/loader \
-	-I${X11SRCDIR.MesaLib}/src/mapi \
-	-I${X11SRCDIR.MesaLib}/src/mapi/glapi \
-	-I${X11SRCDIR.MesaLib}/../src/mapi/glapi \
-	-I${X11SRCDIR.MesaLib}/src/glx \
+	-I${X11SRCDIR.Mesa}/include \
+	-I${X11SRCDIR.Mesa}/include/GL/internal \
+	-I${X11SRCDIR.Mesa}/src/loader \
+	-I${X11SRCDIR.Mesa}/src/mapi \
+	-I${X11SRCDIR.Mesa}/src/mapi/glapi \
+	-I${X11SRCDIR.Mesa}/../src/mapi/glapi \
+	-I${X11SRCDIR.Mesa}/src/glx \
 	-I${DESTDIR}${X11INCDIR}/libdrm \
 	-I${DESTDIR}${X11INCDIR}/GL \
 	-I${DESTDIR}${X11INCDIR}/X11 \
@@ -163,7 +163,7 @@ LIBDPLIBS=	Xext		${.CURDIR}/../libXext \
 MKLINT=no
 
 PKGCONFIG=	gl
-PKGDIST.gl=	${X11SRCDIR.MesaLib}/src/mesa
+PKGDIST.gl=	${X11SRCDIR.Mesa}/src/mesa
 .include "${.CURDIR}/../libGL/mesa-ver.mk"
 PKGCONFIG_VERSION.gl=	${MESA_VER}
 

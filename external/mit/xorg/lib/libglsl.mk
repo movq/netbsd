@@ -1,4 +1,4 @@
-#	$NetBSD: libglsl.mk,v 1.2 2016/02/26 21:20:17 riastradh Exp $
+#	$NetBSD: libglsl.mk,v 1.3 2019/03/10 02:29:52 mrg Exp $
 
 LIBGLSL_GENERATED_CXX_FILES = \
 	glsl_lexer.cpp \
@@ -104,8 +104,8 @@ LIBGLCPP_GENERATED_FILES = \
 LIBGLCPP_FILES = \
 	pp.c
 
-.PATH:	${X11SRCDIR.MesaLib}/src/glsl
-.PATH:	${X11SRCDIR.MesaLib}/src/glsl/glcpp
+.PATH:	${X11SRCDIR.Mesa}/src/glsl
+.PATH:	${X11SRCDIR.Mesa}/src/glsl/glcpp
 
 SRCS+=	${LIBGLSL_GENERATED_CXX_FILES} \
 	${LIBGLSL_FILES} \

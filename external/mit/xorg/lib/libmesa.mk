@@ -1,4 +1,4 @@
-#	$NetBSD: libmesa.mk,v 1.2 2015/11/03 06:00:50 mrg Exp $
+#	$NetBSD: libmesa.mk,v 1.3 2019/03/10 02:29:52 mrg Exp $
 #
 # Consumer of this Makefile should set MESA_SRC_MODULES.
 
@@ -125,16 +125,16 @@ SRCS.main= \
 	es1_conversion.c
 
 # Build files
-.PATH:	${X11SRCDIR.MesaLib}/../src/mesa/main
+.PATH:	${X11SRCDIR.Mesa}/../src/mesa/main
 SRCS.main+= \
 	enums.c \
 	api_exec.c
 
 # XXX  avoid source name clashes with glx
-.PATH:		${X11SRCDIR.MesaLib}/src/mesa/main
-BUILDSYMLINKS+=	${X11SRCDIR.MesaLib}/src/mesa/main/pixel.c MESApixel.c \
-		${X11SRCDIR.MesaLib}/src/mesa/main/pixelstore.c MESApixelstore.c \
-		${X11SRCDIR.MesaLib}/src/mesa/main/eval.c MESAeval.c
+.PATH:		${X11SRCDIR.Mesa}/src/mesa/main
+BUILDSYMLINKS+=	${X11SRCDIR.Mesa}/src/mesa/main/pixel.c MESApixel.c \
+		${X11SRCDIR.Mesa}/src/mesa/main/pixelstore.c MESApixelstore.c \
+		${X11SRCDIR.Mesa}/src/mesa/main/eval.c MESAeval.c
 
 # Math sources
 PATHS.math=	mesa/math
@@ -263,7 +263,7 @@ PATHS.asm_s=	mesa/x86 mesa/x86/rtasm mesa/sparc mesa/x86-64
 .if ${MACHINE} == "amd64"
 SRCS.asm_s= \
 	xform4.S
-CPPFLAGS+=	-I${X11SRCDIR.MesaLib}/../src/arch/x86_64
+CPPFLAGS+=	-I${X11SRCDIR.Mesa}/../src/arch/x86_64
 .elif ${MACHINE} == "sparc" || ${MACHINE} == "sparc64"
 SRCS.asm_s= \
 	sparc_clip.S \
@@ -288,7 +288,7 @@ SRCS.asm_s= \
 	sse_xform4.S \
 	sse_normal.S \
 	read_rgba_span_x86.S
-CPPFLAGS+=	-I${X11SRCDIR.MesaLib}/../src/arch/i386
+CPPFLAGS+=	-I${X11SRCDIR.Mesa}/../src/arch/i386
 .endif
 
 
@@ -376,7 +376,7 @@ SRCS.program= \
 	program_lexer.l
 
 # Generated
-.PATH:	${X11SRCDIR.MesaLib}/../src/mesa/program
+.PATH:	${X11SRCDIR.Mesa}/../src/mesa/program
 SRCS.program+= \
 	program_parse.tab.c
 
@@ -387,31 +387,31 @@ SRCS.program+= \
 SRCS+=	${SRCS.${_mod_}}
 
 . for _path_ in ${PATHS.${_mod_}}
-.PATH:	${X11SRCDIR.MesaLib}/src/${_path_}
+.PATH:	${X11SRCDIR.Mesa}/src/${_path_}
 . endfor
 
 . for _path_ in ${INCLUDES.${_mod_}}
 .  for _s in ${SRCS.${_mod_}}
-CPPFLAGS.${_s}+=	-I${X11SRCDIR.MesaLib}/src/${_path_}
+CPPFLAGS.${_s}+=	-I${X11SRCDIR.Mesa}/src/${_path_}
 .  endfor
 . endfor
 
 .endfor
 
 .for _path_ in ${INCLUDES.all}
-CPPFLAGS+=	-I${X11SRCDIR.MesaLib}/src/${_path_}
+CPPFLAGS+=	-I${X11SRCDIR.Mesa}/src/${_path_}
 .endfor
 
-CPPFLAGS+=	-I${X11SRCDIR.MesaLib}/include
-CPPFLAGS+=	-I${X11SRCDIR.MesaLib}/src
-CPPFLAGS+=	-I${X11SRCDIR.MesaLib}/src/mesa
-CPPFLAGS+=	-I${X11SRCDIR.MesaLib}/src/mesa/main
-CPPFLAGS+=	-I${X11SRCDIR.MesaLib}/src/mapi
-CPPFLAGS+=	-I${X11SRCDIR.MesaLib}/src/gallium/include
-CPPFLAGS+=	-I${X11SRCDIR.MesaLib}/../src/mapi/glapi
-CPPFLAGS+=	-I${X11SRCDIR.MesaLib}/../src/mesa
-CPPFLAGS+=	-I${X11SRCDIR.MesaLib}/../src/mesa/main
-CPPFLAGS+=	-I${X11SRCDIR.MesaLib}/src/mesa/drivers/dri/common
+CPPFLAGS+=	-I${X11SRCDIR.Mesa}/include
+CPPFLAGS+=	-I${X11SRCDIR.Mesa}/src
+CPPFLAGS+=	-I${X11SRCDIR.Mesa}/src/mesa
+CPPFLAGS+=	-I${X11SRCDIR.Mesa}/src/mesa/main
+CPPFLAGS+=	-I${X11SRCDIR.Mesa}/src/mapi
+CPPFLAGS+=	-I${X11SRCDIR.Mesa}/src/gallium/include
+CPPFLAGS+=	-I${X11SRCDIR.Mesa}/../src/mapi/glapi
+CPPFLAGS+=	-I${X11SRCDIR.Mesa}/../src/mesa
+CPPFLAGS+=	-I${X11SRCDIR.Mesa}/../src/mesa/main
+CPPFLAGS+=	-I${X11SRCDIR.Mesa}/src/mesa/drivers/dri/common
 
 CPPFLAGS+=	\
 	-DPACKAGE_NAME=\"Mesa\" \

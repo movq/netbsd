@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.2 2017/10/06 20:24:46 christos Exp $
+#	$NetBSD: Makefile,v 1.3 2019/03/10 02:29:53 mrg Exp $
 
 .include <bsd.own.mk>
 
@@ -9,16 +9,16 @@ SHLIB_MAJOR=    1
 SHLIB_MINOR=    0
 
 # util
-.PATH:		${X11SRCDIR.MesaLib}/src/util
+.PATH:		${X11SRCDIR.Mesa}/src/util
 SRCS.util=	\
 	hash_table.c    \
         ralloc.c
-.PATH:		${X11SRCDIR.MesaLib}/../src/util
+.PATH:		${X11SRCDIR.Mesa}/../src/util
 SRCS.util+=	\
 	format_srgb.c
 
 # mapi
-.PATH:		${X11SRCDIR.MesaLib}/src/mapi
+.PATH:		${X11SRCDIR.Mesa}/src/mapi
 SRCS.mapi=	\
 	entry.c \
 	mapi_glapi.c \
@@ -28,21 +28,21 @@ SRCS.mapi=	\
 	u_execmem.c
 CPPFLAGS.entry.c=	-DMAPI_MODE_GLAPI -DMAPI_ABI_HEADER=\"shared-glapi_glapi_mapi_tmp.h\"
 
-BUILDSYMLINKS+=   ${X11SRCDIR.MesaLib}/src/mapi/entry.c shared_entry.c
+BUILDSYMLINKS+=   ${X11SRCDIR.Mesa}/src/mapi/entry.c shared_entry.c
 
 # above is shared/libglapi.la
 
 SRCS+=	${SRCS.util} ${SRCS.mapi} ${SRCS.mapi-glapi}
 
 CPPFLAGS+= \
-	-I${X11SRCDIR.MesaLib}/include \
-	-I${X11SRCDIR.MesaLib}/src/mapi \
-	-I${X11SRCDIR.MesaLib}/src/mapi/glapi \
-	-I${X11SRCDIR.MesaLib}/src/mesa \
-	-I${X11SRCDIR.MesaLib}/src/util \
-	-I${X11SRCDIR.MesaLib}/../src/mapi \
-	-I${X11SRCDIR.MesaLib}/../src/mapi/glapi \
-	-I${X11SRCDIR.MesaLib}/../src/mesa
+	-I${X11SRCDIR.Mesa}/include \
+	-I${X11SRCDIR.Mesa}/src/mapi \
+	-I${X11SRCDIR.Mesa}/src/mapi/glapi \
+	-I${X11SRCDIR.Mesa}/src/mesa \
+	-I${X11SRCDIR.Mesa}/src/util \
+	-I${X11SRCDIR.Mesa}/../src/mapi \
+	-I${X11SRCDIR.Mesa}/../src/mapi/glapi \
+	-I${X11SRCDIR.Mesa}/../src/mesa
 
 CPPFLAGS+= \
 	-DMAPI_MODE_GLAPI -DMAPI_ABI_HEADER=\"shared-glapi_glapi_mapi_tmp.h\"
