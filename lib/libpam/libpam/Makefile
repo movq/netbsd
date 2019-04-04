@@ -1,4 +1,3 @@
-# $NetBSD: Makefile,v 1.19 2017/05/21 15:28:41 riastradh Exp $
 #-
 # Copyright (c) 1998 Juniper Networks, Inc.
 # All rights reserved.
@@ -36,44 +35,25 @@
 #
 # $FreeBSD: src/lib/libpam/libpam/Makefile,v 1.51 2004/10/24 15:32:32 ru Exp $
 
-NOPROFILE=	# Don't build a profiling library
+OPENPAM=	${.CURDIR}/../../../contrib/openpam
+.PATH: ${OPENPAM}/include ${OPENPAM}/lib ${OPENPAM}/doc/man
 
-.include <bsd.own.mk>
-
-DIST=   ${NETBSDSRCDIR}/external/bsd/openpam/dist
 LIB=	pam
 NOPROFILE=
 
-WARNS=	6
-# 233: Struct/union never defined
-LINTFLAGS+= -Sw -X 233
-
-CPPFLAGS+= -DLIB_MAJ=${SHLIB_MAJOR} -DHAVE_CONFIG_H -I${.CURDIR}
-
 SRCS=	openpam_borrow_cred.c \
-	openpam_check_owner_perms.c \
 	openpam_configure.c \
-	openpam_constants.c \
 	openpam_dispatch.c \
 	openpam_dynamic.c \
-	openpam_features.c \
 	openpam_findenv.c \
 	openpam_free_data.c \
-	openpam_free_envlist.c \
-	openpam_get_feature.c \
 	openpam_get_option.c \
 	openpam_load.c \
 	openpam_log.c \
 	openpam_nullconv.c \
 	openpam_readline.c \
-	openpam_readlinev.c \
-	openpam_readword.c \
 	openpam_restore_cred.c \
-	openpam_set_feature.c \
 	openpam_set_option.c \
-	openpam_straddch.c \
-	openpam_strlset.c \
-	openpam_subst.c \
 	openpam_ttyconv.c \
 	pam_acct_mgmt.c \
 	pam_authenticate.c \
@@ -103,26 +83,17 @@ SRCS=	openpam_borrow_cred.c \
 # Local additions
 SRCS+=	pam_debug_log.c
 
-MAN=	\
-	openpam.3 \
+MAN=	openpam.3 \
 	openpam_borrow_cred.3 \
 	openpam_free_data.3 \
-	openpam_free_envlist.3 \
-	openpam_get_feature.3 \
 	openpam_get_option.3 \
 	openpam_log.3 \
 	openpam_nullconv.3 \
 	openpam_readline.3 \
-	openpam_readlinev.3 \
-	openpam_readword.3 \
 	openpam_restore_cred.3 \
-	openpam_set_feature.3 \
 	openpam_set_option.3 \
-	openpam_straddch.3 \
-	openpam_subst.3 \
 	openpam_ttyconv.3 \
 	pam.3 \
-	pam.conf.5 \
 	pam_acct_mgmt.3 \
 	pam_authenticate.3 \
 	pam_chauthtok.3 \
@@ -156,57 +127,36 @@ MAN=	\
 	pam_vinfo.3 \
 	pam_vprompt.3
 
-INCS=		security/openpam.h \
-		security/openpam_attr.h \
+CSTD?= c99
+WARNS?=	3
+CFLAGS+= -I${.CURDIR} -I${OPENPAM}/include
+CFLAGS+= -DLIB_MAJ=${SHLIB_MAJOR}
+
+HEADERS=	security/openpam.h \
 		security/openpam_version.h \
 		security/pam_appl.h \
 		security/pam_constants.h \
 		security/pam_modules.h \
 		security/pam_types.h \
 
-INCS+=		security/pam_mod_misc.h
-INCSDIR=/usr/include
+ADD_HEADERS=	security/pam_mod_misc.h
 
-CLEANFILES+= openpam_static.o openpam_static_modules.o
-STOBJS+= openpam_static_modules.o
+# Static modules
+MODULE_DIR=	../modules
+.include "${.CURDIR}/${MODULE_DIR}/modules.inc"
+STATIC_MODULES=	${MODULES:C/.*/${MODULE_DIR}\/&\/lib&.a/}
+STATICOBJS+=	openpam_static_modules.o
+CLEANFILES+=	openpam_static.o \
+		openpam_static_modules.o
 
-# Static module support.  These go ONLY in the static libpam.a
-STATIC_MODULES=	pam_chroot pam_deny pam_echo pam_exec pam_ftpusers pam_group \
-    pam_guest pam_lastlog pam_login_access pam_nologin pam_permit pam_radius \
-    pam_rhosts pam_rootok pam_securetty pam_self pam_unix
+openpam_static_modules.o: openpam_static.o ${STATIC_MODULES}
+	${LD} -o ${.TARGET} -r --whole-archive ${.ALLSRC}
 
-.if (${MKKERBEROS} != "no")
-STATIC_MODULES+= pam_afslog pam_krb5 pam_ksu
-.endif
+# Can't put openpam_static.c in SRCS but want .o in .depend.
+DPSRCS=		openpam_static.c
 
-.if (${MKSKEY} != "no")
-STATIC_MODULES+= pam_skey
-.endif
-
-STATIC_MODULES+= pam_ssh
- 
-MODULE_DIR=../modules
-# XXX
-.ifdef _CURDIR
-PAM_DIR=${_CURDIR}
-.else
-PAM_DIR=${.CURDIR}
-.endif
-.for MOD in ${STATIC_MODULES}
-MODOBJDIR!=	cd ${PAM_DIR}/${MODULE_DIR}/${MOD} && ${PRINTOBJDIR}
-STATIC_MODULE_LIBS:= ${STATIC_MODULE_LIBS} ${MODOBJDIR}/lib${MOD}.a
-.endfor
-
-# XXX Using ${.ALLSRC} in the ld command causes openpam_static.c to be
-# XXX used.  Why??!!  --thorpej
-openpam_static_modules.o: openpam_static.o ${STATIC_MODULE_LIBS}
-	${CC} ${LDFLAGS} -nostdlib -o ${.TARGET} -r -Wl,--whole-archive \
-	    openpam_static.o ${STATIC_MODULE_LIBS}
-
-CWARNFLAGS.clang+=	-Wno-error=tautological-pointer-compare
+# Headers
+INCS=		${HEADERS} ${ADD_HEADERS}
+INCSDIR=	${INCLUDEDIR}/security
 
 .include <bsd.lib.mk>
-.PATH.h: ${DIST}/include
-.PATH.c: ${DIST}/lib/libpam
-.PATH.3: ${DIST}/doc/man
-.PATH.5: ${DIST}/doc/man

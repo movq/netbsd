@@ -1,5 +1,3 @@
-/* $NetBSD: pipe.h,v 1.36 2018/08/22 01:05:24 msaitoh Exp $ */
-
 /*
  * Copyright (c) 1996 John S. Dyson
  * All rights reserved.
@@ -20,16 +18,18 @@
  * 5. Modifications may be freely made to this file if the above conditions
  *    are met.
  *
- * $FreeBSD: src/sys/sys/pipe.h,v 1.18 2002/02/27 07:35:59 alfred Exp $
+ * $FreeBSD: src/sys/sys/pipe.h,v 1.17 2001/01/09 04:33:48 wollman Exp $
  */
 
 #ifndef _SYS_PIPE_H_
 #define _SYS_PIPE_H_
 
-#include <sys/selinfo.h>		/* for struct selinfo */
+#ifndef _KERNEL
 #include <sys/time.h>			/* for struct timespec */
-
-#include <uvm/uvm_extern.h>
+#include <sys/selinfo.h>		/* for struct selinfo */
+#include <vm/vm.h>			/* for vm_page_t */
+#include <machine/param.h>		/* for PAGE_SIZE */
+#endif
 
 /*
  * Pipe buffer size, keep moderate in value, pipes take kva space.
@@ -39,16 +39,7 @@
 #endif
 
 #ifndef BIG_PIPE_SIZE
-#define BIG_PIPE_SIZE	(4*PIPE_SIZE)
-#endif
-
-/*
- * Maximum size of transfer for direct write transfer. If the amount
- * of data in buffer is larger, it would be transferred in chunks of this
- * size.
- */
-#ifndef PIPE_DIRECT_CHUNK
-#define PIPE_DIRECT_CHUNK	(1*1024*1024)
+#define BIG_PIPE_SIZE	(64*1024)
 #endif
 
 /*
@@ -59,79 +50,62 @@
 #define PIPE_MINDIRECT	8192
 #endif
 
+#define PIPENPAGES	(BIG_PIPE_SIZE / PAGE_SIZE + 1)
+
 /*
  * Pipe buffer information.
  * Separate in, out, cnt are used to simplify calculations.
  * Buffered write is active when the buffer.cnt field is set.
  */
 struct pipebuf {
-	size_t	cnt;		/* number of chars currently in buffer */
+	u_int	cnt;		/* number of chars currently in buffer */
 	u_int	in;		/* in pointer */
 	u_int	out;		/* out pointer */
-	size_t	size;		/* size of buffer */
-	void *	buffer;		/* kva of buffer */
+	u_int	size;		/* size of buffer */
+	caddr_t	buffer;		/* kva of buffer */
+	struct	vm_object *object;	/* VM object containing buffer */
 };
 
 /*
  * Information to support direct transfers between processes for pipes.
  */
 struct pipemapping {
-	vsize_t		cnt;		/* number of chars in buffer */
-	voff_t		pos;		/* current position within page */
-	u_int		npages;		/* how many pages available */
-	u_int		maxpages;	/* how many pages allocated */
-	struct vm_page	**pgs;		/* pointers to the pages */
+	vm_offset_t	kva;		/* kernel virtual address */
+	vm_size_t	cnt;		/* number of chars in buffer */
+	vm_size_t	pos;		/* current position of transfer */
+	int		npages;		/* number of pages */
+	vm_page_t	ms[PIPENPAGES];	/* pages in source process */
 };
 
 /*
  * Bits in pipe_state.
  */
-#define PIPE_ASYNC	0x001	/* Async I/O */
-#define PIPE_EOF	0x010	/* Pipe is in EOF condition */
-#define PIPE_SIGNALR	0x020	/* Do selwakeup() on read(2) */
-#define PIPE_DIRECTW	0x040	/* Pipe in direct write mode setup */
-#define PIPE_DIRECTR	0x080	/* Pipe direct read request (setup complete) */
-#define	PIPE_LOCKFL	0x100	/* Process has exclusive access to
-				   pointers/data. */
-#define	PIPE_LWANT	0x200	/* Process wants exclusive access to
-				   pointers/data. */
-#define	PIPE_RESTART	0x400	/* Return ERESTART to blocked syscalls */
+#define PIPE_ASYNC	0x004	/* Async? I/O. */
+#define PIPE_WANTR	0x008	/* Reader wants some characters. */
+#define PIPE_WANTW	0x010	/* Writer wants space to put characters. */
+#define PIPE_WANT	0x020	/* Pipe is wanted to be run-down. */
+#define PIPE_SEL	0x040	/* Pipe has a select active. */
+#define PIPE_EOF	0x080	/* Pipe is in EOF condition. */
+#define PIPE_LOCK	0x100	/* Process has exclusive access to pointers/data. */
+#define PIPE_LWANT	0x200	/* Process wants exclusive access to pointers/data. */
+#define PIPE_DIRECTW	0x400	/* Pipe direct write active. */
+#define PIPE_DIRECTOK	0x800	/* Direct mode ok. */
 
 /*
  * Per-pipe data structure.
  * Two of these are linked together to produce bi-directional pipes.
  */
 struct pipe {
-	kmutex_t *pipe_lock;		/* pipe mutex */
-	kcondvar_t pipe_rcv;		/* cv for readers */
-	kcondvar_t pipe_wcv;		/* cv for writers */
-	kcondvar_t pipe_draincv;	/* cv for close */
-	kcondvar_t pipe_lkcv;		/* locking */
 	struct	pipebuf pipe_buffer;	/* data storage */
 	struct	pipemapping pipe_map;	/* pipe mapping for direct I/O */
 	struct	selinfo pipe_sel;	/* for compat with select */
 	struct	timespec pipe_atime;	/* time of last access */
 	struct	timespec pipe_mtime;	/* time of last modify */
-	struct	timespec pipe_btime;	/* time of creation */
-	pid_t	pipe_pgid;		/* process group for sigio */
+	struct	timespec pipe_ctime;	/* time of status change */
+	struct	sigio *pipe_sigio;	/* information for async I/O */
 	struct	pipe *pipe_peer;	/* link with other direction */
 	u_int	pipe_state;		/* pipe status info */
-	int	pipe_busy;		/* busy flag, to handle rundown */
-	vaddr_t	pipe_kmem;		/* preallocated PIPE_SIZE buffer */
+	int	pipe_busy;		/* busy flag, mostly to handle rundown sanely */
 };
-
-/*
- * KERN_PIPE subtypes
- */
-#define	KERN_PIPE_MAXKVASZ		1	/* maximum kva size (obsolete) */
-#define	KERN_PIPE_LIMITKVA		2	/* limit kva for laons (obsolete) */
-#define	KERN_PIPE_MAXBIGPIPES		3	/* maximum # of "big" pipes */
-#define	KERN_PIPE_NBIGPIPES		4	/* current number of "big" p. */
-#define	KERN_PIPE_KVASIZE		5	/* current pipe kva size */
-
-#ifdef _KERNEL
-int	sysctl_dopipe(int *, u_int, void *, size_t *, void *, size_t);
-void	pipe_init(void);
-#endif /* _KERNEL */
 
 #endif /* !_SYS_PIPE_H_ */

@@ -1,4 +1,3 @@
-# $NetBSD: Makefile,v 1.13 2017/05/21 15:28:41 riastradh Exp $
 # Copyright 1998 Juniper Networks, Inc.
 # All rights reserved.
 #
@@ -25,20 +24,8 @@
 #
 # $FreeBSD: src/lib/libpam/modules/Makefile,v 1.19 2003/03/09 20:06:34 obrien Exp $
 
-.include <bsd.own.mk>
+.include "modules.inc"
 
-SUBDIR=	pam_chroot pam_deny pam_echo pam_exec pam_ftpusers pam_group \
-	pam_guest pam_lastlog pam_login_access pam_nologin pam_permit \
-	pam_radius pam_rhosts pam_rootok pam_securetty pam_self pam_unix
-
-.if (${MKSKEY} != "no")
-SUBDIR+= pam_skey
-.endif
-
-.if (${MKKERBEROS} != "no")
-SUBDIR+= pam_afslog pam_krb5 pam_ksu
-.endif
-
-SUBDIR+= pam_ssh
+SUBDIR=	${MODULES}
 
 .include <bsd.subdir.mk>

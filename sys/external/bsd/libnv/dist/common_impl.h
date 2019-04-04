@@ -1,5 +1,3 @@
-/*	$NetBSD: common_impl.h,v 1.2 2018/09/08 14:02:15 christos Exp $	*/
-
 /*-
  * SPDX-License-Identifier: BSD-2-Clause-FreeBSD
  *

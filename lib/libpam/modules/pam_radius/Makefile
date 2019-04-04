@@ -1,4 +1,3 @@
-# $NetBSD: Makefile,v 1.7 2013/12/28 18:04:18 christos Exp $
 # Copyright 1998 Juniper Networks, Inc.
 # All rights reserved.
 #
@@ -28,8 +27,9 @@
 LIB=	pam_radius
 SRCS=	pam_radius.c
 MAN=	pam_radius.8
+WARNS=	0
 
-# XXX: libradius doesn't exist yet
-LIBDPLIBS+=	radius	${.CURDIR}/../../../libradius
+DPADD=	${LIBRADIUS}
+LDADD=	-lradius
 
-.include "${.CURDIR}/../mod.mk"
+.include <bsd.lib.mk>

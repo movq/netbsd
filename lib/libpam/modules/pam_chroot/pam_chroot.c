@@ -1,5 +1,3 @@
-/*	$NetBSD: pam_chroot.c,v 1.5 2012/01/03 19:02:54 christos Exp $	*/
-
 /*-
  * Copyright (c) 2003 Networks Associates Technology, Inc.
  * All rights reserved.
@@ -35,18 +33,13 @@
  */
 
 #include <sys/cdefs.h>
-#ifdef __FreeBSD__
 __FBSDID("$FreeBSD: src/lib/libpam/modules/pam_chroot/pam_chroot.c,v 1.3 2003/04/30 00:40:24 des Exp $");
-#else
-__RCSID("$NetBSD: pam_chroot.c,v 1.5 2012/01/03 19:02:54 christos Exp $");
-#endif
 
 #include <sys/param.h>
 
 #include <pwd.h>
 #include <stdio.h>
 #include <string.h>
-#include <errno.h>
 #include <unistd.h>
 
 #define PAM_SM_SESSION
@@ -60,14 +53,11 @@ pam_sm_open_session(pam_handle_t *pamh, int flags __unused,
     int argc __unused, const char *argv[] __unused)
 {
 	const char *dir, *end, *cwd, *user;
-	struct passwd *pwd, pwres;
+	struct passwd *pwd;
 	char buf[PATH_MAX];
-	char pwbuf[1024];
 
 	if (pam_get_user(pamh, &user, NULL) != PAM_SUCCESS ||
-	    user == NULL ||
-	    getpwnam_r(user, &pwres, pwbuf, sizeof(pwbuf), &pwd) != 0 ||
-	    pwd == NULL)
+	    user == NULL || (pwd = getpwnam(user)) == NULL)
 		return (PAM_SESSION_ERR);
 	if (pwd->pw_uid == 0 && !openpam_get_option(pamh, "also_root"))
 		return (PAM_SUCCESS);
@@ -97,11 +87,11 @@ pam_sm_open_session(pam_handle_t *pamh, int flags __unused,
 	openpam_log(PAM_LOG_DEBUG, "chrooting %s to %s", dir, user);
 
 	if (chroot(dir) == -1) {
-		openpam_log(PAM_LOG_ERROR, "chroot(): %s", strerror(errno));
+		openpam_log(PAM_LOG_ERROR, "chroot(): %m");
 		return (PAM_SESSION_ERR);
 	}
 	if (chdir(cwd) == -1) {
-		openpam_log(PAM_LOG_ERROR, "chdir(): %s", strerror(errno));
+		openpam_log(PAM_LOG_ERROR, "chdir(): %m");
 		return (PAM_SESSION_ERR);
 	}
 	pam_setenv(pamh, "HOME", cwd, 1);

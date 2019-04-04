@@ -1,4 +1,3 @@
-# $NetBSD: Makefile,v 1.7 2008/10/27 07:57:42 mrg Exp $
 # Copyright 1998 Juniper Networks, Inc.
 # All rights reserved.
 # Copyright (c) 2002 Networks Associates Technology, Inc.
@@ -35,22 +34,17 @@
 #
 # $FreeBSD: src/lib/libpam/modules/pam_unix/Makefile,v 1.19 2004/11/13 20:40:29 bz Exp $
 
-NOLINT=		# don't build a lint library
-NOPROFILE=	# don't build a profile library
-NOPICINSTALL=	# don't install _pic.a library
-
-.include <bsd.own.mk>
-
 LIB=	pam_unix
 SRCS=	pam_unix.c
 MAN=	pam_unix.8
 
-LIBDPLIBS+=	util	${.CURDIR}/../../../libutil \
-		crypt	${.CURDIR}/../../../libcrypt
+DPADD= ${LIBUTIL} ${LIBCRYPT}
+LDADD= -lutil -lcrypt
 
-.if (${USE_YP} != "no")
-CPPFLAGS+= -DYP
-LIBDPLIBS+=	rpcsvc	${.CURDIR}/../../../librpcsvc
+.if !defined(NO_NIS)
+CFLAGS+= -DYP
+DPADD+= ${LIBYPCLNT}
+LDADD+= -lypclnt
 .endif
 
-.include "${.CURDIR}/../mod.mk"
+.include <bsd.lib.mk>

@@ -1,4 +1,4 @@
-/*	$NetBSD: nfsdiskless.h,v 1.1.1.1 2013/09/30 07:19:34 dholland Exp $	*/
+/*	$NetBSD: nfsdiskless.h,v 1.1 2013/09/30 07:19:34 dholland Exp $	*/
 /*-
  * Copyright (c) 1991, 1993
  *	The Regents of the University of California.  All rights reserved.
@@ -32,7 +32,7 @@
  *
  *	@(#)nfsdiskless.h	8.2 (Berkeley) 3/30/95
  * FreeBSD: head/sys/nfs/nfsdiskless.h 221032 2011-04-25 22:22:51Z rmacklem 
- * $NetBSD: nfsdiskless.h,v 1.1.1.1 2013/09/30 07:19:34 dholland Exp $
+ * $NetBSD: nfsdiskless.h,v 1.1 2013/09/30 07:19:34 dholland Exp $
  */
 
 #ifndef _NFSCLIENT_NFSDISKLESS_H_

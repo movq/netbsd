@@ -1,5 +1,3 @@
-/* $NetBSD: mktemp.c,v 1.12 2012/11/03 13:34:08 christos Exp $ */
-
 /*-
  * Copyright (c) 1994, 1995, 1996, 1998 Peter Wemm <peter@netplex.com.au>
  * All rights reserved.
@@ -36,12 +34,6 @@
  * more like the OpenBSD version - which was first to publish the interface.
  */
 
-#if HAVE_NBTOOL_CONFIG_H
-#include "nbtool_config.h"
-#endif
-
-#include <sys/cdefs.h>
-#include <sys/types.h>
 #include <err.h>
 #include <paths.h>
 #include <stdio.h>
@@ -49,37 +41,31 @@
 #include <string.h>
 #include <unistd.h>
 
-#if defined(__RCSID) && !defined(__lint)
-__RCSID("$NetBSD: mktemp.c,v 1.12 2012/11/03 13:34:08 christos Exp $");
-#endif /* !__lint */
+#ifndef lint
+static const char rcsid[] =
+	"$FreeBSD: src/usr.bin/mktemp/mktemp.c,v 1.2 1998/05/05 06:13:47 charnier Exp $";
+#endif /* not lint */
 
-static void usage(void) __dead;
+static void usage __P((void));
 
 int
 main(int argc, char **argv)
 {
 	int c, fd, ret;
-	char *tmpdir;
-	const char *prefix;
+	char *tmpdir, *prefix;
 	char *name;
 	int dflag, qflag, tflag, uflag;
 
-	setprogname(*argv);
 	ret = dflag = qflag = tflag = uflag = 0;
-	tmpdir = NULL;
 	prefix = "mktemp";
 	name = NULL;
 
-	while ((c = getopt(argc, argv, "dp:qt:u")) != -1)
+	while ((c = getopt(argc, argv, "dqt:u")) != -1)
 		switch (c) {
 		case 'd':
 			dflag++;
 			break;
 
-		case 'p':
-			tmpdir = optarg;
-			break;
-			
 		case 'q':
 			qflag++;
 			break;
@@ -100,23 +86,18 @@ main(int argc, char **argv)
 	argc -= optind;
 	argv += optind;
 
-	if (tflag == 0 && argc < 1)
-		tflag = 1;
-
 	if (tflag) {
+		tmpdir = getenv("TMPDIR");
 		if (tmpdir == NULL)
-			tmpdir = getenv("TMPDIR");
-		if (tmpdir == NULL)
-			(void)asprintf(&name, "%s%s.XXXXXXXX", _PATH_TMP,
-			    prefix);
+			asprintf(&name, "%s%s.XXXXXXXX", _PATH_TMP, prefix);
 		else
-			(void)asprintf(&name, "%s/%s.XXXXXXXX", tmpdir, prefix);
+			asprintf(&name, "%s/%s.XXXXXXXX", tmpdir, prefix);
 		/* if this fails, the program is in big trouble already */
 		if (name == NULL) {
 			if (qflag)
-				return 1;
+				return (1);
 			else
-				errx(1, "Cannot generate template");
+				errx(1, "cannot generate template");
 		}
 	} else if (argc < 1) {
 		usage();
@@ -125,11 +106,7 @@ main(int argc, char **argv)
 	/* generate all requested files */
 	while (name != NULL || argc > 0) {
 		if (name == NULL) {
-			if (tmpdir)
-				(void)asprintf(&name, "%s/%s",
-				    tmpdir, argv[0]);
-			else
-				name = strdup(argv[0]);
+			name = strdup(argv[0]);
 			argv++;
 			argc--;
 		}
@@ -140,9 +117,9 @@ main(int argc, char **argv)
 				if (!qflag)
 					warn("mkdtemp failed on %s", name);
 			} else {
-				(void)printf("%s\n", name);
+				printf("%s\n", name);
 				if (uflag)
-					(void)rmdir(name);
+					rmdir(name);
 			}
 		} else {
 			fd = mkstemp(name);
@@ -151,24 +128,23 @@ main(int argc, char **argv)
 				if (!qflag)
 					warn("mkstemp failed on %s", name);
 			} else {
-				(void)close(fd);
+				close(fd);
 				if (uflag)
-					(void)unlink(name);
-				(void)printf("%s\n", name);
+					unlink(name);
+				printf("%s\n", name);
 			}
 		}
 		if (name)
 			free(name);
 		name = NULL;
 	}
-	return ret;
+	return (ret);
 }
 
 static void
-usage(void)
+usage()
 {
-	(void)fprintf(stderr,
-	    "Usage: %s [-dqu] [-p <tmpdir>] {-t prefix | template ...}\n",
-	    getprogname());
+	fprintf(stderr,
+		"usage: mktemp [-d] [-q] [-t prefix] [-u] [template ...]\n");
 	exit (1);
 }

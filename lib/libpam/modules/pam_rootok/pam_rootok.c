@@ -1,5 +1,3 @@
-/*	$NetBSD: pam_rootok.c,v 1.3 2006/11/03 18:03:23 christos Exp $	*/
-
 /*-
  * Copyright (c) 2001 Mark R V Murray
  * All rights reserved.
@@ -37,15 +35,12 @@
  */
 
 #include <sys/cdefs.h>
-#ifdef __FreeBSD__
 __FBSDID("$FreeBSD: src/lib/libpam/modules/pam_rootok/pam_rootok.c,v 1.8 2002/04/12 22:27:23 des Exp $");
-#else
-__RCSID("$NetBSD: pam_rootok.c,v 1.3 2006/11/03 18:03:23 christos Exp $");
-#endif
 
 #define _BSD_SOURCE
 
 #include <unistd.h>
+#include <syslog.h>
 
 #define PAM_SM_AUTH
 

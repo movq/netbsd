@@ -1,5 +1,3 @@
-/*	$NetBSD: nvlist_impl.h,v 1.3 2018/09/11 02:20:31 christos Exp $	*/
-
 /*-
  * SPDX-License-Identifier: BSD-2-Clause-FreeBSD
  *
@@ -37,17 +35,13 @@
 #ifndef	_NVLIST_IMPL_H_
 #define	_NVLIST_IMPL_H_
 
-#ifdef __FreeBSD__
 #include <sys/nv.h>
-#else
-#include "nv.h"
-#endif
 
-#if !defined(_KERNEL) && !defined(_STANDALONE)
+#ifndef _KERNEL
 #include <stdint.h>
 #endif
 
-__dead void nvlist_report_missing(int type, const char *name);
+void nvlist_report_missing(int type, const char *name);
 nvpair_t *nvlist_get_nvpair_parent(const nvlist_t *nvl);
 const unsigned char *nvlist_unpack_header(nvlist_t *nvl,
     const unsigned char *ptr, size_t nfds, bool *isbep, size_t *leftp);

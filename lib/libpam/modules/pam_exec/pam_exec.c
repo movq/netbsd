@@ -1,5 +1,3 @@
-/*	$NetBSD: pam_exec.c,v 1.7 2013/12/29 22:54:58 christos Exp $	*/
-
 /*-
  * Copyright (c) 2001,2003 Networks Associates Technology, Inc.
  * All rights reserved.
@@ -35,18 +33,13 @@
  */
 
 #include <sys/cdefs.h>
-#ifdef __FreeBSD__
-__FBSDID("$FreeBSD: src/lib/libpam/modules/pam_exec/pam_exec.c,v 1.4 2005/02/01 10:37:07 des Exp $");
-#else
-__RCSID("$NetBSD: pam_exec.c,v 1.7 2013/12/29 22:54:58 christos Exp $");
-#endif
+__FBSDID("$FreeBSD: src/lib/libpam/modules/pam_exec/pam_exec.c,v 1.3 2003/02/06 12:56:51 des Exp $");
 
 #include <sys/types.h>
 #include <sys/wait.h>
 
 #include <errno.h>
 #include <stdlib.h>
-#include <stdio.h>
 #include <string.h>
 #include <unistd.h>
 
@@ -54,26 +47,12 @@ __RCSID("$NetBSD: pam_exec.c,v 1.7 2013/12/29 22:54:58 christos Exp $");
 #include <security/pam_modules.h>
 #include <security/openpam.h>
 
-#define ENV_ITEM(n) { (n), #n }
-static struct {
-	int item;
-	const char *name;
-} env_items[] = {
-	ENV_ITEM(PAM_SERVICE),
-	ENV_ITEM(PAM_USER),
-	ENV_ITEM(PAM_TTY),
-	ENV_ITEM(PAM_RHOST),
-	ENV_ITEM(PAM_RUSER),
-};
-
 static int
 _pam_exec(pam_handle_t *pamh __unused, int flags __unused,
     int argc, const char *argv[])
 {
-	size_t envlen, i, nitems;
-	int pam_err, status;
-	char **envlist, **tmp;
-	volatile int childerr;
+	int childerr, status;
+	char **env, **envlist;
 	pid_t pid;
 
 	if (argc < 1)
@@ -83,61 +62,26 @@ _pam_exec(pam_handle_t *pamh __unused, int flags __unused,
 	 * XXX For additional credit, divert child's stdin/stdout/stderr
 	 * to the conversation function.
 	 */
-
-	/*
-	 * Set up the child's environment list.  It consists of the PAM
-	 * environment, plus a few hand-picked PAM items.
-	 */
 	envlist = pam_getenvlist(pamh);
-	for (envlen = 0; envlist[envlen] != NULL; ++envlen)
-		/* nothing */ ;
-	nitems = sizeof(env_items) / sizeof(*env_items);
-	tmp = realloc(envlist, (envlen + nitems + 1) * sizeof(*envlist));
-	if (tmp == NULL) {
-		openpam_free_envlist(envlist);
-		return (PAM_BUF_ERR);
-	}
-	envlist = tmp;
-	for (i = 0; i < nitems; ++i) {
-		const void *item;
-		char *envstr;
-
-		pam_err = pam_get_item(pamh, env_items[i].item, &item);
-		if (pam_err != PAM_SUCCESS || item == NULL)
-			continue;
-		asprintf(&envstr, "%s=%s", env_items[i].name,
-		    (const char *)item);
-		if (envstr == NULL) {
-			openpam_free_envlist(envlist);
-			return (PAM_BUF_ERR);
-		}
-		envlist[envlen++] = envstr;
-		envlist[envlen] = NULL;
-	}
-
-	/*
-	 * Fork and run the command.  By using vfork() instead of fork(),
-	 * we can distinguish between an execve() failure and a non-zero
-	 * exit code from the command.
-	 */
 	childerr = 0;
 	if ((pid = vfork()) == 0) {
-		/*LINTED const cast*/
-		execve(argv[0], (char **)__UNCONST(argv), envlist);
+		execve(argv[0], argv, envlist);
 		childerr = errno;
 		_exit(1);
 	}
-	openpam_free_envlist(envlist);
+	for (env = envlist; *env != NULL; ++env)
+		free(*env);
+	free(envlist);
 	if (pid == -1) {
-		openpam_log(PAM_LOG_ERROR, "vfork(): %s", strerror(errno));
+		openpam_log(PAM_LOG_ERROR, "vfork(): %m");
 		return (PAM_SYSTEM_ERR);
 	}
 	if (waitpid(pid, &status, 0) == -1) {
-		openpam_log(PAM_LOG_ERROR, "waitpid(): %s", strerror(errno));
+		openpam_log(PAM_LOG_ERROR, "waitpid(): %m");
 		return (PAM_SYSTEM_ERR);
 	}
 	if (childerr != 0) {
-		openpam_log(PAM_LOG_ERROR, "execve(): %s", strerror(errno));
+		openpam_log(PAM_LOG_ERROR, "execv(): %m");
 		return (PAM_SYSTEM_ERR);
 	}
 	if (WIFSIGNALED(status)) {

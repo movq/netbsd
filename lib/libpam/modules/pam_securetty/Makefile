@@ -1,4 +1,3 @@
-# $NetBSD: Makefile,v 1.2 2004/12/12 08:18:47 christos Exp $
 # Copyright 2001 Mark R V Murray
 # All rights reserved.
 #
@@ -29,4 +28,4 @@ LIB=	pam_securetty
 SRCS=	pam_securetty.c
 MAN=	pam_securetty.8
 
-.include "${.CURDIR}/../mod.mk"
+.include <bsd.lib.mk>

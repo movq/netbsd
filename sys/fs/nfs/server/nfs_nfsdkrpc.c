@@ -1,4 +1,4 @@
-/*	$NetBSD: nfs_nfsdkrpc.c,v 1.4 2016/12/13 21:50:32 pgoyette Exp $	*/
+/*	$NetBSD: nfs_nfsdkrpc.c,v 1.1 2013/09/30 07:19:53 dholland Exp $	*/
 /*-
  * Copyright (c) 1989, 1993
  *	The Regents of the University of California.  All rights reserved.
@@ -33,27 +33,21 @@
  */
 
 #include <sys/cdefs.h>
-/* __FBSDID("FreeBSD: head/sys/fs/nfsserver/nfs_nfsdkrpc.c 299203 2016-05-06 23:40:37Z pfg "); */
-__RCSID("$NetBSD: nfs_nfsdkrpc.c,v 1.4 2016/12/13 21:50:32 pgoyette Exp $");
+/* __FBSDID("FreeBSD: head/sys/fs/nfsserver/nfs_nfsdkrpc.c 249596 2013-04-17 22:42:43Z ken "); */
+__RCSID("$NetBSD: nfs_nfsdkrpc.c,v 1.1 2013/09/30 07:19:53 dholland Exp $");
 
-#ifdef _KERNEL_OPT
 #include "opt_inet6.h"
-#if 0
 #include "opt_kgssapi.h"
-#endif
-#endif
 
-#include <fs/nfs/common/nfsport.h>
+#include <fs/nfs/nfsport.h>
 
 #include <rpc/rpc.h>
 #include <rpc/rpcsec_gss.h>
 
-#include <fs/nfs/common/nfs_fha.h>
-#include <fs/nfs/server/nfs_fha_new.h>
+#include <nfs/nfs_fha.h>
+#include <fs/nfsserver/nfs_fha_new.h>
 
-#if 0
 #include <security/mac/mac_framework.h>
-#endif
 
 NFSDLOCKMUTEX;
 NFSV4ROOTLOCKMUTEX;
@@ -93,20 +87,20 @@ SYSCTL_DECL(_vfs_nfsd);
 SVCPOOL		*nfsrvd_pool;
 
 static int	nfs_privport = 0;
-SYSCTL_INT(_vfs_nfsd, OID_AUTO, nfs_privport, CTLFLAG_RWTUN,
+SYSCTL_INT(_vfs_nfsd, OID_AUTO, nfs_privport, CTLFLAG_RW,
     &nfs_privport, 0,
     "Only allow clients using a privileged port for NFSv2 and 3");
 
 static int	nfs_minvers = NFS_VER2;
-SYSCTL_INT(_vfs_nfsd, OID_AUTO, server_min_nfsvers, CTLFLAG_RWTUN,
+SYSCTL_INT(_vfs_nfsd, OID_AUTO, server_min_nfsvers, CTLFLAG_RW,
     &nfs_minvers, 0, "The lowest version of NFS handled by the server");
 
 static int	nfs_maxvers = NFS_VER4;
-SYSCTL_INT(_vfs_nfsd, OID_AUTO, server_max_nfsvers, CTLFLAG_RWTUN,
+SYSCTL_INT(_vfs_nfsd, OID_AUTO, server_max_nfsvers, CTLFLAG_RW,
     &nfs_maxvers, 0, "The highest version of NFS handled by the server");
 
-static int nfs_proc(struct nfsrv_descript *, u_int32_t, SVCXPRT *xprt,
-    struct nfsrvcache **);
+static int nfs_proc(struct nfsrv_descript *, u_int32_t, struct socket *,
+    u_int64_t, struct nfsrvcache **);
 
 extern u_long sb_max_adj;
 extern int newnfs_numnfsd;
@@ -125,8 +119,7 @@ nfssvc_program(struct svc_req *rqst, SVCXPRT *xprt)
 
 	memset(&nd, 0, sizeof(nd));
 	if (rqst->rq_vers == NFS_VER2) {
-		if (rqst->rq_proc > NFSV2PROC_STATFS ||
-		    newnfs_nfsv3_procid[rqst->rq_proc] == NFSPROC_NOOP) {
+		if (rqst->rq_proc > NFSV2PROC_STATFS) {
 			svcerr_noproc(rqst);
 			svc_freereq(rqst);
 			goto out;
@@ -183,10 +176,10 @@ nfssvc_program(struct svc_req *rqst, SVCXPRT *xprt)
 		    nd.nd_procnum != NFSPROC_NULL) {
 #ifdef INET6
 			char b6[INET6_ADDRSTRLEN];
-#if defined(_MODULE)
+#if defined(KLD_MODULE)
 			/* Do not use ip6_sprintf: the nfs module should work without INET6. */
 #define	ip6_sprintf(buf, a)						\
-			(snprintf((buf), sizeof(buf), "%x:%x:%x:%x:%x:%x:%x:%x",	\
+			(sprintf((buf), "%x:%x:%x:%x:%x:%x:%x:%x",	\
 			    (a)->s6_addr16[0], (a)->s6_addr16[1],	\
 			    (a)->s6_addr16[2], (a)->s6_addr16[3],	\
 			    (a)->s6_addr16[4], (a)->s6_addr16[5],	\
@@ -198,7 +191,7 @@ nfssvc_program(struct svc_req *rqst, SVCXPRT *xprt)
 #ifdef INET6
 			    sin->sin_family == AF_INET6 ?
 			    ip6_sprintf(b6, &satosin6(sin)->sin6_addr) :
-#if defined(_MODULE)
+#if defined(KLD_MODULE)
 #undef ip6_sprintf
 #endif
 #endif
@@ -239,16 +232,10 @@ nfssvc_program(struct svc_req *rqst, SVCXPRT *xprt)
 		 * Get a refcnt (shared lock) on nfsd_suspend_lock.
 		 * NFSSVC_SUSPENDNFSD will take an exclusive lock on
 		 * nfsd_suspend_lock to suspend these threads.
-		 * The call to nfsv4_lock() that precedes nfsv4_getref()
-		 * ensures that the acquisition of the exclusive lock
-		 * takes priority over acquisition of the shared lock by
-		 * waiting for any exclusive lock request to complete.
 		 * This must be done here, before the check of
 		 * nfsv4root exports by nfsvno_v4rootexport().
 		 */
 		NFSLOCKV4ROOTMUTEX();
-		nfsv4_lock(&nfsd_suspend_lock, 0, NULL, NFSV4ROOTLOCKMUTEXPTR,
-		    NULL);
 		nfsv4_getref(&nfsd_suspend_lock, NULL, NFSV4ROOTLOCKMUTEXPTR,
 		    NULL);
 		NFSUNLOCKV4ROOTMUTEX();
@@ -266,7 +253,8 @@ nfssvc_program(struct svc_req *rqst, SVCXPRT *xprt)
 			}
 		}
 
-		cacherep = nfs_proc(&nd, rqst->rq_xid, xprt, &rp);
+		cacherep = nfs_proc(&nd, rqst->rq_xid, xprt->xp_socket,
+		    xprt->xp_sockref, &rp);
 		NFSLOCKV4ROOTMUTEX();
 		nfsv4_relref(&nfsd_suspend_lock);
 		NFSUNLOCKV4ROOTMUTEX();
@@ -301,15 +289,11 @@ nfssvc_program(struct svc_req *rqst, SVCXPRT *xprt)
 	} else if (!svc_sendreply_mbuf(rqst, nd.nd_mreq)) {
 		svcerr_systemerr(rqst);
 	}
-	if (rp != NULL) {
-		nfsrvd_sentcache(rp, (rqst->rq_reply_seq != 0 ||
-		    SVC_ACK(xprt, NULL)), rqst->rq_reply_seq);
-	}
+	if (rp != NULL)
+		nfsrvd_sentcache(rp, xprt->xp_socket, 0);
 	svc_freereq(rqst);
 
 out:
-	if (softdep_ast_cleanup != NULL)
-		softdep_ast_cleanup();
 	NFSEXITCODE(0);
 }
 
@@ -318,15 +302,11 @@ out:
  * Return the appropriate cache response.
  */
 static int
-nfs_proc(struct nfsrv_descript *nd, u_int32_t xid, SVCXPRT *xprt,
-    struct nfsrvcache **rpp)
+nfs_proc(struct nfsrv_descript *nd, u_int32_t xid, struct socket *so,
+    u_int64_t sockref, struct nfsrvcache **rpp)
 {
 	struct thread *td = curthread;
-	int cacherep = RC_DOIT, isdgram, taglen = -1;
-	struct mbuf *m;
-	u_char tag[NFSV4_SMALLSTR + 1], *tagstr = NULL;
-	u_int32_t minorvers = 0;
-	uint32_t ack;
+	int cacherep = RC_DOIT, isdgram;
 
 	*rpp = NULL;
 	if (nd->nd_nam2 == NULL) {
@@ -358,19 +338,8 @@ nfs_proc(struct nfsrv_descript *nd, u_int32_t xid, SVCXPRT *xprt,
 			nd->nd_flag |= ND_SAMETCPCONN;
 		nd->nd_retxid = xid;
 		nd->nd_tcpconntime = NFSD_MONOSEC;
-		nd->nd_sockref = xprt->xp_sockref;
-		if ((nd->nd_flag & ND_NFSV4) != 0)
-			nfsd_getminorvers(nd, tag, &tagstr, &taglen,
-			    &minorvers);
-		if ((nd->nd_flag & ND_NFSV41) != 0)
-			/* NFSv4.1 caches replies in the session slots. */
-			cacherep = RC_DOIT;
-		else {
-			cacherep = nfsrvd_getcache(nd);
-			ack = 0;
-			SVC_ACK(xprt, &ack);
-			nfsrc_trimcache(xprt->xp_sockref, ack, 0);
-		}
+		nd->nd_sockref = sockref;
+		cacherep = nfsrvd_getcache(nd, so);
 	}
 
 	/*
@@ -380,46 +349,16 @@ nfs_proc(struct nfsrv_descript *nd, u_int32_t xid, SVCXPRT *xprt,
 	 * RC_DROPIT - just throw the request away
 	 */
 	if (cacherep == RC_DOIT) {
-		if ((nd->nd_flag & ND_NFSV41) != 0)
-			nd->nd_xprt = xprt;
-		nfsrvd_dorpc(nd, isdgram, tagstr, taglen, minorvers, td);
-		if ((nd->nd_flag & ND_NFSV41) != 0) {
-			if (nd->nd_repstat != NFSERR_REPLYFROMCACHE &&
-			    (nd->nd_flag & ND_SAVEREPLY) != 0) {
-				/* Cache a copy of the reply. */
-				m = m_copym(nd->nd_mreq, 0, M_COPYALL,
-				    M_WAITOK);
-			} else
-				m = NULL;
-			if ((nd->nd_flag & ND_HASSEQUENCE) != 0)
-				nfsrv_cache_session(nd->nd_sessionid,
-				    nd->nd_slotid, nd->nd_repstat, &m);
-			if (nd->nd_repstat == NFSERR_REPLYFROMCACHE)
-				nd->nd_repstat = 0;
+		nfsrvd_dorpc(nd, isdgram, td);
+		if (nd->nd_repstat == NFSERR_DONTREPLY)
+			cacherep = RC_DROPIT;
+		else
 			cacherep = RC_REPLY;
-		} else {
-			if (nd->nd_repstat == NFSERR_DONTREPLY)
-				cacherep = RC_DROPIT;
-			else
-				cacherep = RC_REPLY;
-			*rpp = nfsrvd_updatecache(nd);
-		}
+		*rpp = nfsrvd_updatecache(nd, so);
 	}
-	if (tagstr != NULL && taglen > NFSV4_SMALLSTR)
-		free(tagstr, M_TEMP);
 
 	NFSEXITCODE2(0, nd);
 	return (cacherep);
-}
-
-static void
-nfssvc_loss(SVCXPRT *xprt)
-{
-	uint32_t ack;
-
-	ack = 0;
-	SVC_ACK(xprt, &ack);
-	nfsrc_trimcache(xprt->xp_sockref, ack, 1);
 }
 
 /*
@@ -462,8 +401,6 @@ nfsrvd_addsock(struct file *fp)
 		if (nfs_maxvers >= NFS_VER4)
 			svc_reg(xprt, NFS_PROG, NFS_VER4, nfssvc_program,
 			    NULL);
-		if (so->so_type == SOCK_STREAM)
-			svc_loss_reg(xprt, nfssvc_loss);
 		SVC_RELEASE(xprt);
 	}
 
@@ -480,7 +417,6 @@ int
 nfsrvd_nfsd(struct thread *td, struct nfsd_nfsd_args *args)
 {
 	char principal[MAXHOSTNAMELEN + 5];
-	struct proc *p;
 	int error = 0;
 	bool_t ret2, ret3, ret4;
 
@@ -498,10 +434,6 @@ nfsrvd_nfsd(struct thread *td, struct nfsd_nfsd_args *args)
 	 */
 	NFSD_LOCK();
 	if (newnfs_numnfsd == 0) {
-		p = td->td_proc;
-		PROC_LOCK(p);
-		p->p_flag2 |= P2_AST_SU;
-		PROC_UNLOCK(p);
 		newnfs_numnfsd++;
 
 		NFSD_UNLOCK();
@@ -533,9 +465,6 @@ nfsrvd_nfsd(struct thread *td, struct nfsd_nfsd_args *args)
 		NFSD_LOCK();
 		newnfs_numnfsd--;
 		nfsrvd_init(1);
-		PROC_LOCK(p);
-		p->p_flag2 &= ~P2_AST_SU;
-		PROC_UNLOCK(p);
 	}
 	NFSD_UNLOCK();
 
@@ -558,7 +487,6 @@ nfsrvd_init(int terminating)
 	if (terminating) {
 		nfsd_master_proc = NULL;
 		NFSD_UNLOCK();
-		nfsrv_freeallbackchannel_xprts();
 		svcpool_destroy(nfsrvd_pool);
 		nfsrvd_pool = NULL;
 		NFSD_LOCK();

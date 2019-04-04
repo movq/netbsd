@@ -1,5 +1,3 @@
-/*	$NetBSD: pam_ftpusers.c,v 1.6 2012/01/03 19:02:55 christos Exp $	*/
-
 /*-
  * Copyright (c) 2001 Networks Associates Technology, Inc.
  * All rights reserved.
@@ -35,18 +33,13 @@
  */
 
 #include <sys/cdefs.h>
-#ifdef __FreeBSD__
 __FBSDID("$FreeBSD: src/lib/libpam/modules/pam_ftpusers/pam_ftpusers.c,v 1.1 2002/05/08 00:30:10 des Exp $");
-#else
-__RCSID("$NetBSD: pam_ftpusers.c,v 1.6 2012/01/03 19:02:55 christos Exp $");
-#endif
 
 #include <ctype.h>
 #include <grp.h>
 #include <paths.h>
 #include <pwd.h>
 #include <stdio.h>
-#include <errno.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -61,33 +54,30 @@ PAM_EXTERN int
 pam_sm_acct_mgmt(pam_handle_t *pamh, int flags __unused,
     int argc __unused, const char *argv[] __unused)
 {
-	struct passwd *pwd, pwres;
-	struct group *grp, grres;
+	struct passwd *pwd;
+	struct group *grp;
 	const char *user;
 	int pam_err, found, allow;
 	char *line, *name, **mem;
 	size_t len, ulen;
 	FILE *f;
-	char pwbuf[1024], grbuf[1024];
 
 	pam_err = pam_get_user(pamh, &user, NULL);
 	if (pam_err != PAM_SUCCESS)
 		return (pam_err);
-	if (user == NULL ||
-	    getpwnam_r(user, &pwres, pwbuf, sizeof(pwbuf), &pwd) != 0 ||
-	    pwd == NULL)
+	if (user == NULL || (pwd = getpwnam(user)) == NULL)
 		return (PAM_SERVICE_ERR);
 
 	found = 0;
 	ulen = strlen(user);
 	if ((f = fopen(_PATH_FTPUSERS, "r")) == NULL) {
-		PAM_LOG("%s: %s", _PATH_FTPUSERS, strerror(errno));
+		PAM_LOG("%s: %m", _PATH_FTPUSERS);
 		goto done;
 	}
 	while (!found && (line = fgetln(f, &len)) != NULL) {
 		if (*line == '#')
 			continue;
-		while (len > 0 && isspace((unsigned char)line[len - 1]))
+		while (len > 0 && isspace(line[len - 1]))
 			--len;
 		if (len == 0)
 			continue;
@@ -103,7 +93,7 @@ pam_sm_acct_mgmt(pam_handle_t *pamh, int flags __unused,
 			fclose(f);
 			return (PAM_BUF_ERR);
 		}
-		(void)getgrnam_r(name, &grres, grbuf, sizeof(grbuf), &grp);
+		grp = getgrnam(name);
 		free(name);
 		if (grp == NULL)
 			continue;

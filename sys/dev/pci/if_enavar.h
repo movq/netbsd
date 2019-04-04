@@ -1,5 +1,3 @@
-/*	$NetBSD: if_enavar.h,v 1.7 2018/12/23 12:32:33 jmcneill Exp $	*/
-
 /*-
  * BSD LICENSE
  *
@@ -38,8 +36,8 @@
 
 #include <sys/types.h>
 
-#include "external/bsd/ena-com/ena_com.h"
-#include "external/bsd/ena-com/ena_eth_com.h"
+#include "ena-com/ena_com.h"
+#include "ena-com/ena_eth_com.h"
 
 #define DRV_MODULE_VER_MAJOR	0
 #define DRV_MODULE_VER_MINOR	8
@@ -49,9 +47,9 @@
 
 #ifndef DRV_MODULE_VERSION
 #define DRV_MODULE_VERSION				\
-	___STRING(DRV_MODULE_VER_MAJOR) "."		\
-	___STRING(DRV_MODULE_VER_MINOR) "."		\
-	___STRING(DRV_MODULE_VER_SUBMINOR)
+	__XSTRING(DRV_MODULE_VER_MAJOR) "."		\
+	__XSTRING(DRV_MODULE_VER_MINOR) "."		\
+	__XSTRING(DRV_MODULE_VER_SUBMINOR)
 #endif
 #define DEVICE_NAME	"Elastic Network Adapter (ENA)"
 #define DEVICE_DESC	"ENA adapter"
@@ -63,8 +61,8 @@
 #define	ENA_ADMIN_MSIX_VEC		1
 #define	ENA_MAX_MSIX_VEC(io_queues)	(ENA_ADMIN_MSIX_VEC + (io_queues))
 
-#define	ENA_REG_BAR			PCI_BAR(0)
-#define	ENA_MEM_BAR			PCI_BAR(2)
+#define	ENA_REG_BAR			0
+#define	ENA_MEM_BAR			2
 
 #define	ENA_BUS_DMA_SEGS		32
 
@@ -147,8 +145,6 @@
 #define	PCI_DEV_ID_ENA_VF	0xec20
 #define	PCI_DEV_ID_ENA_LLQ_VF	0xec21
 
-typedef __int64_t sbintime_t;
-
 struct msix_entry {
 	int entry;
 	int vector;
@@ -159,6 +155,18 @@ typedef struct _ena_vendor_info_t {
 	unsigned int device_id;
 	unsigned int index;
 } ena_vendor_info_t;
+
+struct ena_irq {
+	/* Interrupt resources */
+	struct resource *res;
+	driver_intr_t *handler;
+	void *data;
+	void *cookie;
+	unsigned int vector;
+	bool requested;
+	int cpu;
+	char name[ENA_IRQNAME_SIZE];
+};
 
 struct ena_que {
 	struct ena_adapter *adapter;
@@ -191,30 +199,28 @@ struct ena_rx_buffer {
 } __aligned(CACHE_LINE_SIZE);
 
 struct ena_stats_tx {
-	char name[16];
-	struct evcnt cnt;
-	struct evcnt bytes;
-	struct evcnt prepare_ctx_err;
-	struct evcnt dma_mapping_err;
-	struct evcnt doorbells;
-	struct evcnt missing_tx_comp;
-	struct evcnt bad_req_id;
-	struct evcnt collapse;
-	struct evcnt collapse_err;
+	counter_u64_t cnt;
+	counter_u64_t bytes;
+	counter_u64_t prepare_ctx_err;
+	counter_u64_t dma_mapping_err;
+	counter_u64_t doorbells;
+	counter_u64_t missing_tx_comp;
+	counter_u64_t bad_req_id;
+	counter_u64_t collapse;
+	counter_u64_t collapse_err;
 };
 
 struct ena_stats_rx {
-	char name[16];
-	struct evcnt cnt;
-	struct evcnt bytes;
-	struct evcnt refil_partial;
-	struct evcnt bad_csum;
-	struct evcnt mjum_alloc_fail;
-	struct evcnt mbuf_alloc_fail;
-	struct evcnt dma_mapping_err;
-	struct evcnt bad_desc_num;
-	struct evcnt bad_req_id;
-	struct evcnt empty_rx_ring;
+	counter_u64_t cnt;
+	counter_u64_t bytes;
+	counter_u64_t refil_partial;
+	counter_u64_t bad_csum;
+	counter_u64_t mjum_alloc_fail;
+	counter_u64_t mbuf_alloc_fail;
+	counter_u64_t dma_mapping_err;
+	counter_u64_t bad_desc_num;
+	counter_u64_t bad_req_id;
+	counter_u64_t empty_rx_ring;
 };
 
 struct ena_ring {
@@ -245,9 +251,7 @@ struct ena_ring {
 	enum ena_intr_moder_level moder_tbl_idx;
 
 	struct ena_que *que;
-#ifdef LRO
 	struct lro_ctrl lro;
-#endif
 
 	uint16_t next_to_use;
 	uint16_t next_to_clean;
@@ -260,20 +264,19 @@ struct ena_ring {
 
 	struct buf_ring *br; /* only for TX */
 
-	kmutex_t ring_mtx;
+	struct mtx ring_mtx;
 	char mtx_name[16];
 
 	union {
 		struct {
-			struct work enqueue_task;
-			struct workqueue *enqueue_tq;
+			struct task enqueue_task;
+			struct taskqueue *enqueue_tq;
 		};
 		struct {
-			struct work cmpl_task;
-			struct workqueue *cmpl_tq;
+			struct task cmpl_task;
+			struct taskqueue *cmpl_tq;
 		};
 	};
-	u_int task_pending;
 
 	union {
 		struct ena_stats_tx tx_stats;
@@ -284,22 +287,20 @@ struct ena_ring {
 } __aligned(CACHE_LINE_SIZE);
 
 struct ena_stats_dev {
-	char name[16];
-	struct evcnt wd_expired;
-	struct evcnt interface_up;
-	struct evcnt interface_down;
-	struct evcnt admin_q_pause;
+	counter_u64_t wd_expired;
+	counter_u64_t interface_up;
+	counter_u64_t interface_down;
+	counter_u64_t admin_q_pause;
 };
 
 struct ena_hw_stats {
-	char name[16];
-	struct evcnt rx_packets;
-	struct evcnt tx_packets;
+	counter_u64_t rx_packets;
+	counter_u64_t tx_packets;
 
-	struct evcnt rx_bytes;
-	struct evcnt tx_bytes;
+	counter_u64_t rx_bytes;
+	counter_u64_t tx_bytes;
 
-	struct evcnt rx_drops;
+	counter_u64_t rx_drops;
 };
 
 /* Board specific private data structure */
@@ -307,26 +308,25 @@ struct ena_adapter {
 	struct ena_com_dev *ena_dev;
 
 	/* OS defined structs */
+	if_t ifp;
 	device_t pdev;
-        struct ethercom sc_ec;
-	struct ifnet *ifp;		/* set to point to sc_ec */
 	struct ifmedia	media;
 
 	/* OS resources */
-	kmutex_t global_mtx;
-	krwlock_t ioctl_sx;
+	struct resource *memory;
+	struct resource *registers;
 
-	void *sc_ihs[ENA_MAX_MSIX_VEC(ENA_MAX_NUM_IO_QUEUES)];
-	pci_intr_handle_t *sc_intrs;
-	int sc_nintrs;
-	struct pci_attach_args sc_pa;
+	struct mtx global_mtx;
+	struct sx ioctl_sx;
 
-	/* Registers */
-	bus_space_handle_t sc_bhandle;
-	bus_space_tag_t	sc_btag;
+	/* MSI-X */
+	uint32_t msix_enabled;
+	struct msix_entry *msix_entries;
+	int msix_vecs;
 
-	/* DMA tag used throughout the driver adapter for Tx and Rx */
-	bus_dma_tag_t sc_dmat;
+	/* DMA tags used throughout the driver adapter for Tx and Rx */
+	bus_dma_tag_t tx_buf_tag;
+	bus_dma_tag_t rx_buf_tag;
 	int dma_width;
 
 	uint32_t max_mtu;
@@ -366,12 +366,14 @@ struct ena_adapter {
 	struct ena_ring rx_ring[ENA_MAX_NUM_IO_QUEUES]
 	    __aligned(CACHE_LINE_SIZE);
 
+	struct ena_irq irq_tbl[ENA_MAX_MSIX_VEC(ENA_MAX_NUM_IO_QUEUES)];
+
 	/* Timer service */
 	struct callout timer_service;
 	sbintime_t keep_alive_timestamp;
 	uint32_t next_monitored_tx_qid;
-	struct work reset_task;
-	struct workqueue *reset_tq;
+	struct task reset_task;
+	struct taskqueue *reset_tq;
 	int wd_active;
 	sbintime_t keep_alive_timeout;
 	sbintime_t missing_tx_timeout;
@@ -385,9 +387,9 @@ struct ena_adapter {
 	enum ena_regs_reset_reason_types reset_reason;
 };
 
-#define	ENA_RING_MTX_LOCK(_ring)	mutex_enter(&(_ring)->ring_mtx)
-#define	ENA_RING_MTX_TRYLOCK(_ring)	mutex_tryenter(&(_ring)->ring_mtx)
-#define	ENA_RING_MTX_UNLOCK(_ring)	mutex_exit(&(_ring)->ring_mtx)
+#define	ENA_RING_MTX_LOCK(_ring)		mtx_lock(&(_ring)->ring_mtx)
+#define	ENA_RING_MTX_TRYLOCK(_ring)		mtx_trylock(&(_ring)->ring_mtx)
+#define	ENA_RING_MTX_UNLOCK(_ring)		mtx_unlock(&(_ring)->ring_mtx)
 
 static inline int ena_mbuf_count(struct mbuf *mbuf)
 {
@@ -399,145 +401,4 @@ static inline int ena_mbuf_count(struct mbuf *mbuf)
 	return count;
 }
 
-/* provide FreeBSD-compatible macros */
-#define	if_getcapenable(ifp)		(ifp)->if_capenable
-#define	if_setcapenable(ifp, s)		SET((ifp)->if_capenable, s)
-#define if_getcapabilities(ifp)		(ifp)->if_capabilities
-#define if_setcapabilities(ifp, s)	SET((ifp)->if_capabilities, s)
-#define if_setcapabilitiesbit(ifp, s, c) do {	\
-		CLR((ifp)->if_capabilities, c);	\
-		SET((ifp)->if_capabilities, s);	\
-	} while (0)
-#define	if_getsoftc(ifp)		(ifp)->if_softc
-#define if_setmtu(ifp, new_mtu)		(ifp)->if_mtu = (new_mtu)
-#define if_getdrvflags(ifp)		(ifp)->if_flags
-#define if_setdrvflagbits(ifp, s, c)	do {	\
-		CLR((ifp)->if_flags, c);	\
-		SET((ifp)->if_flags, s);	\
-	} while (0)
-#define	if_setflags(ifp, s)		SET((ifp)->if_flags, s)
-#define if_sethwassistbits(ifp, s, c)	do {		\
-		CLR((ifp)->if_csum_flags_rx, c);	\
-		SET((ifp)->if_csum_flags_rx, s);	\
-	} while (0)
-#define if_clearhwassist(ifp)		(ifp)->if_csum_flags_rx = 0
-#define if_setbaudrate(ifp, r)		(ifp)->if_baudrate = (r)
-#define if_setdev(ifp, dev)		do { } while (0)
-#define if_setsoftc(ifp, softc)		(ifp)->if_softc = (softc)
-#define if_setinitfn(ifp, initfn)	(ifp)->if_init = (initfn)
-#define if_settransmitfn(ifp, txfn)	(ifp)->if_transmit = (txfn)
-#define if_setioctlfn(ifp, ioctlfn)	(ifp)->if_ioctl = (ioctlfn)
-#define if_setsendqlen(ifp, sqlen)	\
-	IFQ_SET_MAXLEN(&(ifp)->if_snd, uimax(sqlen, IFQ_MAXLEN))
-#define if_setsendqready(ifp)		IFQ_SET_READY(&(ifp)->if_snd)
-#define if_setifheaderlen(ifp, len)	(ifp)->if_hdrlen = (len)
-
-#define	SBT_1S	((sbintime_t)1 << 32)
-#define bintime_clear(a)	((a)->sec = (a)->frac = 0)
-#define	bintime_isset(a)	((a)->sec || (a)->frac)
-
-static __inline sbintime_t
-bttosbt(const struct bintime _bt)
-{
-	return (((sbintime_t)_bt.sec << 32) + (_bt.frac >> 32));
-}
-
-static __inline sbintime_t
-getsbinuptime(void)
-{
-	struct bintime _bt;
-
-	getbinuptime(&_bt);
-	return (bttosbt(_bt));
-}
-
-/* Intentionally non-atomic, it's just unnecessary overhead */
-#define counter_u64_add(x, cnt)			(x).ev_count += (cnt)
-#define counter_u64_zero(x)			(x).ev_count = 0
-#define counter_u64_free(x)			evcnt_detach(&(x))
-
-#define counter_u64_add_protected(x, cnt)	(x).ev_count += (cnt)
-#define counter_enter()				do {} while (0)
-#define counter_exit()				do {} while (0)
-
-/* Misc other constants */
-#define	mp_ncpus			ncpu
-#define osreldate			__NetBSD_Version__
-
-/*
- * XXX XXX XXX just to make compile, must provide replacement XXX XXX XXX
- * Other than that, TODO:
- * - decide whether to import <sys/buf_ring.h>
- * - recheck the M_CSUM/IPCAP mapping
- * - recheck workqueue use - FreeBSD taskqueues might have different semantics
- */
-#define buf_ring_alloc(a, b, c, d)	(void *)&a
-#define drbr_free(ifp, b)		do { } while (0)
-#define drbr_flush(ifp, b)		IFQ_PURGE(&(ifp)->if_snd)
-#define drbr_advance(ifp, b)					\
-	({							\
-		struct mbuf *__m;				\
-		IFQ_DEQUEUE(&(ifp)->if_snd, __m);		\
-		__m;						\
-	})
-#define drbr_putback(ifp, b, m)		do { } while (0)
-#define drbr_empty(ifp, b)		IFQ_IS_EMPTY(&(ifp)->if_snd)
-#define drbr_peek(ifp, b)					\
-	({							\
-		struct mbuf *__m;				\
-		IFQ_POLL(&(ifp)->if_snd, __m);			\
-		__m;						\
-	})
-#define drbr_enqueue(ifp, b, m)					\
-	({							\
-		int __err;					\
-		IFQ_ENQUEUE(&(ifp)->if_snd, m, __err);		\
-		__err;						\
-	})
-#define m_getjcl(a, b, c, d)		NULL
-#define MJUM16BYTES			MCLBYTES
-#define m_append(m, len, cp)		ena_m_append(m, len, cp)
-#define m_collapse(m, how, maxfrags)	m_defrag(m, how)	/* XXX */
-/* XXX XXX XXX */
-
-static inline int
-ena_m_append(struct mbuf *m0, int len, const void *cpv)
-{
-	struct mbuf *m, *n;
-	int remainder, space;
-	const char *cp = cpv;
-
-	KASSERT(len != M_COPYALL);
-	for (m = m0; m->m_next != NULL; m = m->m_next)
-		continue;
-	remainder = len;
-	space = M_TRAILINGSPACE(m);
-	if (space > 0) {
-		/*
-		 * Copy into available space.
-		 */
-		if (space > remainder)
-			space = remainder;
-		memmove(mtod(m, char *) + m->m_len, cp, space);
-		m->m_len += space;
-		cp = cp + space, remainder -= space;
-	}
-	while (remainder > 0) {
-		/*
-		 * Allocate a new mbuf; could check space
-		 * and allocate a cluster instead.
-		 */
-		n = m_get(M_DONTWAIT, m->m_type);
-		if (n == NULL)
-			break;
-		n->m_len = uimin(MLEN, remainder);
-		memmove(mtod(n, void *), cp, n->m_len);
-		cp += n->m_len, remainder -= n->m_len;
-		m->m_next = n;
-		m = n;
-	}
-	if (m0->m_flags & M_PKTHDR)
-		m0->m_pkthdr.len += len - remainder;
-	return (remainder == 0);
-}
 #endif /* !(ENA_H) */

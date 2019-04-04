@@ -1,21 +1,26 @@
-# $NetBSD: telnetd,v 1.6 2005/05/13 02:56:34 lukem Exp $
+#
+# $FreeBSD: src/etc/pam.d/telnetd,v 1.7 2003/04/30 21:57:54 markm Exp $
 #
 # PAM configuration for the "telnetd" service
-#
-# NOTE: This service is only used if telnetd is using a built-in
-# authenticator such as SRA.  For non-authenticated telnet sessions,
-# telnetd invokes login(1), which uses the "login" service.
 #
 
 # auth
 auth		required	pam_nologin.so		no_warn
-auth		include		system
+auth		sufficient	pam_opie.so		no_warn no_fake_prompts
+auth		requisite	pam_opieaccess.so	no_warn allow_local
+#auth		sufficient	pam_krb5.so		no_warn try_first_pass
+#auth		sufficient	pam_ssh.so		no_warn try_first_pass
+auth		required	pam_unix.so		no_warn try_first_pass
 
 # account
-account		include		login
+#account 	required	pam_krb5.so
+account		required	pam_login_access.so
+account		required	pam_unix.so
 
 # session
-session		include		login
+#session 	optional	pam_ssh.so
+session		required	pam_lastlog.so		no_fail
 
 # password
-password	include		login
+#password	sufficient	pam_krb5.so		no_warn try_first_pass
+password	required	pam_unix.so		no_warn try_first_pass

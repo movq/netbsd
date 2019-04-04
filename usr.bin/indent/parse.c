@@ -1,11 +1,7 @@
-/*	$NetBSD: parse.c,v 1.9 2019/04/04 15:22:13 kamil Exp $	*/
-
-/*-
- * SPDX-License-Identifier: BSD-4-Clause
- *
+/*
  * Copyright (c) 1985 Sun Microsystems, Inc.
- * Copyright (c) 1980, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1980 The Regents of the University of California.
+ * Copyright (c) 1976 Board of Trustees of the University of Illinois.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -37,31 +33,16 @@
  * SUCH DAMAGE.
  */
 
-#if 0
 #ifndef lint
-static char sccsid[] = "@(#)parse.c	8.1 (Berkeley) 6/6/93";
+static char sccsid[] = "@(#)parse.c	5.12 (Berkeley) 2/26/91";
 #endif /* not lint */
-#endif
 
-#include <sys/cdefs.h>
-#ifndef lint
-#if defined(__NetBSD__)
-__RCSID("$FreeBSD$");
-#else
-__FBSDID("$FreeBSD: head/usr.bin/indent/parse.c 337651 2018-08-11 19:20:06Z pstef $");
-#endif
-#endif
-
-#include <err.h>
 #include <stdio.h>
 #include "indent_globs.h"
 #include "indent_codes.h"
-#include "indent.h"
 
-static void reduce(void);
-
-void
-parse(int tk) /* tk: the code for the construct scanned */
+parse(tk)
+    int         tk;		/* the code for the construct scanned */
 {
     int         i;
 
@@ -81,7 +62,7 @@ parse(int tk) /* tk: the code for the construct scanned */
 				 * input */
 
     case decl:			/* scanned a declaration word */
-	ps.search_brace = opt.btype_2;
+	ps.search_brace = btype_2;
 	/* indicate that following brace should be on same line */
 	if (ps.p_stack[ps.tos] != decl) {	/* only put one declaration
 						 * onto stack */
@@ -90,7 +71,7 @@ parse(int tk) /* tk: the code for the construct scanned */
 	    ps.p_stack[++ps.tos] = decl;
 	    ps.il[ps.tos] = ps.i_l_follow;
 
-	    if (opt.ljust_decl) {/* only do if we want left justified
+	    if (ps.ljust_decl) {/* only do if we want left justified
 				 * declarations */
 		ps.ind_level = 0;
 		for (i = ps.tos - 1; i > 0; --i)
@@ -103,21 +84,14 @@ parse(int tk) /* tk: the code for the construct scanned */
 	break;
 
     case ifstmt:		/* scanned if (...) */
-	if (ps.p_stack[ps.tos] == elsehead && opt.else_if) /* "else if ..." */
-		/*
-		 * Note that the stack pointer here is decremented, effectively
-		 * reducing "else if" to "if". This saves a lot of stack space
-		 * in case of a long "if-else-if ... else-if" sequence.
-		 */
-		ps.i_l_follow = ps.il[ps.tos--];
-	/* the rest is the same as for dolit and forstmt */
-	/* FALLTHROUGH */
+	if (ps.p_stack[ps.tos] == elsehead && ps.else_if)	/* "else if ..." */
+	    ps.i_l_follow = ps.il[ps.tos];
     case dolit:		/* 'do' */
     case forstmt:		/* for (...) */
 	ps.p_stack[++ps.tos] = tk;
 	ps.il[ps.tos] = ps.ind_level = ps.i_l_follow;
 	++ps.i_l_follow;	/* subsequent statements should be indented 1 */
-	ps.search_brace = opt.btype_2;
+	ps.search_brace = btype_2;
 	break;
 
     case lbrace:		/* scanned { */
@@ -135,7 +109,7 @@ parse(int tk) /* tk: the code for the construct scanned */
 		/*
 		 * it is a group as part of a while, for, etc.
 		 */
-		if (ps.p_stack[ps.tos] == swstmt && opt.case_indent >= 1)
+		if (ps.p_stack[ps.tos] == swstmt && ps.case_indent >= 1)
 		    --ps.ind_level;
 		/*
 		 * for a switch, brace should be two levels out from the code
@@ -161,7 +135,7 @@ parse(int tk) /* tk: the code for the construct scanned */
 	    ps.p_stack[++ps.tos] = whilestmt;
 	    ps.il[ps.tos] = ps.i_l_follow;
 	    ++ps.i_l_follow;
-	    ps.search_brace = opt.btype_2;
+	    ps.search_brace = btype_2;
 	}
 
 	break;
@@ -169,7 +143,7 @@ parse(int tk) /* tk: the code for the construct scanned */
     case elselit:		/* scanned an else */
 
 	if (ps.p_stack[ps.tos] != ifhead)
-	    diag2(1, "Unmatched 'else'");
+	    diag(1, "Unmatched 'else'");
 	else {
 	    ps.ind_level = ps.il[ps.tos];	/* indentation for else should
 						 * be same as for if */
@@ -177,18 +151,18 @@ parse(int tk) /* tk: the code for the construct scanned */
 						 * be in 1 level */
 	    ps.p_stack[ps.tos] = elsehead;
 	    /* remember if with else */
-	    ps.search_brace = opt.btype_2 | opt.else_if;
+	    ps.search_brace = btype_2 | ps.else_if;
 	}
 	break;
 
     case rbrace:		/* scanned a } */
 	/* stack should have <lbrace> <stmt> or <lbrace> <stmtl> */
-	if (ps.tos > 0 && ps.p_stack[ps.tos - 1] == lbrace) {
+	if (ps.p_stack[ps.tos - 1] == lbrace) {
 	    ps.ind_level = ps.i_l_follow = ps.il[--ps.tos];
 	    ps.p_stack[ps.tos] = stmt;
 	}
 	else
-	    diag2(1, "Statement nesting error");
+	    diag(1, "Stmt nesting error.");
 	break;
 
     case swstmt:		/* had switch (...) */
@@ -196,12 +170,12 @@ parse(int tk) /* tk: the code for the construct scanned */
 	ps.cstk[ps.tos] = case_ind;
 	/* save current case indent level */
 	ps.il[ps.tos] = ps.i_l_follow;
-	case_ind = ps.i_l_follow + opt.case_indent;	/* cases should be one
+	case_ind = ps.i_l_follow + ps.case_indent;	/* cases should be one
 							 * level down from
 							 * switch */
-	ps.i_l_follow += opt.case_indent + 1;	/* statements should be two
+	ps.i_l_follow += ps.case_indent + 1;	/* statements should be two
 						 * levels in */
-	ps.search_brace = opt.btype_2;
+	ps.search_brace = btype_2;
 	break;
 
     case semicolon:		/* this indicates a simple stmt */
@@ -212,14 +186,11 @@ parse(int tk) /* tk: the code for the construct scanned */
 	break;
 
     default:			/* this is an error */
-	diag2(1, "Unknown code to parser");
+	diag(1, "Unknown code to parser");
 	return;
 
 
     }				/* end of switch */
-
-    if (ps.tos >= STACKSIZE - 1)
-	errx(1, "Parser stack overflow");
 
     reduce();			/* see if any reduction can be done */
 
@@ -234,12 +205,12 @@ parse(int tk) /* tk: the code for the construct scanned */
 
 /*
  * NAME: reduce
- *
+ * 
  * FUNCTION: Implements the reduce part of the parsing algorithm
- *
+ * 
  * ALGORITHM: The following reductions are done.  Reductions are repeated
  *	until no more are possible.
- *
+ * 
  * Old TOS		New TOS
  * <stmt> <stmt>	<stmtl>
  * <stmtl> <stmt>	<stmtl>
@@ -251,30 +222,30 @@ parse(int tk) /* tk: the code for the construct scanned */
  * for <stmt>		<stmt>
  * while <stmt>		<stmt>
  * "dostmt" while	<stmt>
- *
+ * 
  * On each reduction, ps.i_l_follow (the indentation for the following line)
  * is set to the indentation level associated with the old TOS.
- *
+ * 
  * PARAMETERS: None
- *
+ * 
  * RETURNS: Nothing
- *
+ * 
  * GLOBALS: ps.cstk ps.i_l_follow = ps.il ps.p_stack = ps.tos =
- *
+ * 
  * CALLS: None
- *
+ * 
  * CALLED BY: parse
- *
+ * 
  * HISTORY: initial coding 	November 1976	D A Willcox of CAC
- *
+ * 
  */
 /*----------------------------------------------*\
 |   REDUCTION PHASE				    |
 \*----------------------------------------------*/
-static void
-reduce(void)
+reduce()
 {
-    int i;
+
+    register int i;
 
     for (;;) {			/* keep looping until there is nothing left to
 				 * reduce */
@@ -318,7 +289,7 @@ reduce(void)
 	    case swstmt:
 		/* <switch> <stmt> */
 		case_ind = ps.cstk[ps.tos - 1];
-		/* FALLTHROUGH */
+
 	    case decl:		/* finish of a declaration */
 	    case elsehead:
 		/* <<if> <stmt> else> <stmt> */
@@ -339,7 +310,7 @@ reduce(void)
 	case whilestmt:	/* while (...) on top */
 	    if (ps.p_stack[ps.tos - 1] == dohead) {
 		/* it is termination of a do while */
-		ps.tos -= 2;
+		ps.p_stack[--ps.tos] = stmt;
 		break;
 	    }
 	    else
