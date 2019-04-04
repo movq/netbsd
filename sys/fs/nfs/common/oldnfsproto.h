@@ -1,4 +1,4 @@
-/*	$NetBSD: oldnfsproto.h,v 1.1.1.1 2013/09/30 07:19:34 dholland Exp $	*/
+/*	$NetBSD: oldnfsproto.h,v 1.1 2013/09/30 07:19:34 dholland Exp $	*/
 /*-
  * Copyright (c) 1989, 1993
  *	The Regents of the University of California.  All rights reserved.
@@ -32,7 +32,7 @@
  *
  *	@(#)nfsproto.h  8.2 (Berkeley) 3/30/95
  * FreeBSD: head/sys/nfs/nfsproto.h 164725 2006-11-28 19:33:28Z rees 
- * $NetBSD: oldnfsproto.h,v 1.1.1.1 2013/09/30 07:19:34 dholland Exp $
+ * $NetBSD: oldnfsproto.h,v 1.1 2013/09/30 07:19:34 dholland Exp $
  */
 
 #ifndef _NFS_NFSPROTO_H_

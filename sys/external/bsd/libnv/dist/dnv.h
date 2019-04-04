@@ -1,5 +1,3 @@
-/*	$NetBSD: dnv.h,v 1.2 2018/09/08 14:02:15 christos Exp $	*/
-
 /*-
  * SPDX-License-Identifier: BSD-2-Clause-FreeBSD
  *
@@ -38,7 +36,7 @@
 
 #include <sys/cdefs.h>
 
-#if !defined(_KERNEL) && !defined(_STANDALONE)
+#ifndef _KERNEL
 #include <stdarg.h>
 #include <stdbool.h>
 #include <stddef.h>

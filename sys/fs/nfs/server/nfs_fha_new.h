@@ -1,4 +1,4 @@
-/*	$NetBSD: nfs_fha_new.h,v 1.1.1.1 2013/09/30 07:19:57 dholland Exp $	*/
+/*	$NetBSD: nfs_fha_new.h,v 1.1 2013/09/30 07:19:57 dholland Exp $	*/
 /*-
  * Copyright (c) 2008 Isilon Inc http://www.isilon.com/
  * Copyright (c) 2013 Spectra Logic Corporation
@@ -26,7 +26,7 @@
  * SUCH DAMAGE.
  */
 /* FreeBSD: head/sys/fs/nfsserver/nfs_fha_new.h 249592 2013-04-17 21:00:22Z ken  */
-/* $NetBSD: nfs_fha_new.h,v 1.1.1.1 2013/09/30 07:19:57 dholland Exp $ */
+/* $NetBSD: nfs_fha_new.h,v 1.1 2013/09/30 07:19:57 dholland Exp $ */
 
 #ifndef	_NFS_FHA_NEW_H
 #define	_NFS_FHA_NEW_H 1

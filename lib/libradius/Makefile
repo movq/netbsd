@@ -1,23 +1,19 @@
-# $NetBSD: Makefile,v 1.15 2018/02/07 22:51:31 christos Exp $
-
-USE_FORT?= yes	# network protocol library
+# $NetBSD: Makefile,v 1.1 2005/02/19 23:56:30 manu Exp $
 
 USE_SHLIBDIR=	yes
+NOLINT=         # To be fixed later
+
 .include <bsd.own.mk>
 
-WARNS=3
-LINTFLAGS+= -Sw
-
-LIB=	radius
+LIB=	libradius
+CFLAGS+=-g
 CPPFLAGS+=	-I.
-CPPFLAGS+=	-DOPENSSL_API_COMPAT=0x10100000L
 
+.if (${MKCRYPTO} != "no")
 CPPFLAGS+=	-DWITH_SSL
-LIBDPLIBS+=crypto ${.CURDIR}/../../crypto/external/bsd/${EXTERNAL_OPENSSL_SUBDIR}/lib/libcrypto
+.endif
 
 SRCS=	radlib.c
-INCS=	radlib.h radlib_vs.h
-INCSDIR=/usr/include
 
 MAN=	libradius.3 radius.conf.5
 

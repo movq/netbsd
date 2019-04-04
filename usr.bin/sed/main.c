@@ -1,10 +1,7 @@
-/*	$NetBSD: main.c,v 1.34 2015/03/12 12:40:41 christos Exp $	*/
-
 /*-
- * Copyright (c) 2013 Johann 'Myrkraverk' Oskarsson.
  * Copyright (c) 1992 Diomidis Spinellis.
- * Copyright (c) 1992, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1992 The Regents of the University of California.
+ * All rights reserved.
  *
  * This code is derived from software contributed to Berkeley by
  * Diomidis Spinellis of Imperial College, University of London.
@@ -17,7 +14,11 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. Neither the name of the University nor the names of its contributors
+ * 3. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgement:
+ *	This product includes software developed by the University of
+ *	California, Berkeley and its contributors.
+ * 4. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -34,39 +35,23 @@
  * SUCH DAMAGE.
  */
 
-#if HAVE_NBTOOL_CONFIG_H
-#include "nbtool_config.h"
-#endif
-
-#include <sys/cdefs.h>
-__RCSID("$NetBSD: main.c,v 1.34 2015/03/12 12:40:41 christos Exp $");
-#ifdef __FBSDID
-__FBSDID("$FreeBSD: head/usr.bin/sed/main.c 252231 2013-06-26 04:14:19Z pfg $");
-#endif
+#ifndef lint
+char copyright[] =
+"@(#) Copyright (c) 1992 The Regents of the University of California.\n\
+ All rights reserved.\n";
+#endif /* not lint */
 
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1992, 1993\
-	The Regents of the University of California.  All rights reserved.");
-#endif
-
-#if 0
-static const char sccsid[] = "@(#)main.c	8.2 (Berkeley) 1/3/94";
-#endif
+static char sccsid[] = "@(#)main.c	5.6 (Berkeley) 8/30/92";
+#endif /* not lint */
 
 #include <sys/types.h>
-#include <sys/mman.h>
-#include <sys/param.h>
-#include <sys/stat.h>
 
-#include <err.h>
+#include <ctype.h>
 #include <errno.h>
 #include <fcntl.h>
-#include <libgen.h>
-#include <limits.h>
-#include <locale.h>
 #include <regex.h>
 #include <stddef.h>
-#define _WITH_GETLINE
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -104,96 +89,48 @@ struct s_flist {
  */
 static struct s_flist *files, **fl_nextp = &files;
 
-FILE *infile;			/* Current input file */
-FILE *outfile;			/* Current output file */
-
 int aflag, eflag, nflag;
-int rflags = 0;
-static int rval;		/* Exit status */
-
-static int ispan;		/* Whether inplace editing spans across files */
 
 /*
  * Current file and line number; line numbers restart across compilation
- * units, but span across input files.  The latter is optional if editing
- * in place.
+ * units, but span across input files.
  */
-const char *fname;		/* File name. */
-const char *outfname;		/* Output file name */
-static char oldfname[PATH_MAX];	/* Old file name (for in-place editing) */
-static char tmpfname[PATH_MAX];	/* Temporary file name (for in-place editing) */
-static const char *inplace;	/* Inplace edit file extension. */
+char *fname;			/* File name. */
 u_long linenum;
+int lastline;			/* TRUE on the last line of the last file */
 
-static void add_compunit(enum e_cut, char *);
-static void add_file(char *);
-static void usage(void) __dead;
+static void add_compunit __P((enum e_cut, char *));
+static void add_file __P((char *));
 
 int
-main(int argc, char *argv[])
+main(argc, argv)
+	int argc;
+	char *argv[];
 {
 	int c, fflag;
-	char *temp_arg;
-
-	setprogname(argv[0]);
-	(void) setlocale(LC_ALL, "");
 
 	fflag = 0;
-	inplace = NULL;
-
-	while ((c = getopt(argc, argv, "EI::ae:f:i::lnru")) != -1)
+	while ((c = getopt(argc, argv, "ae:f:n")) != EOF)
 		switch (c) {
-		case 'r':		/* Gnu sed compat */
-		case 'E':
-			rflags = REG_EXTENDED;
-			break;
-		case 'I':
-			inplace = optarg ? optarg : __UNCONST("");
-			ispan = 1;	/* span across input files */
-			break;
 		case 'a':
 			aflag = 1;
 			break;
 		case 'e':
 			eflag = 1;
-			temp_arg = xmalloc(strlen(optarg) + 2);
-			strcpy(temp_arg, optarg);
-			strcat(temp_arg, "\n");
-			add_compunit(CU_STRING, temp_arg);
+			add_compunit(CU_STRING, optarg);
 			break;
 		case 'f':
 			fflag = 1;
 			add_compunit(CU_FILE, optarg);
 			break;
-		case 'i':
-			inplace = optarg ? optarg : __UNCONST("");
-			ispan = 0;	/* don't span across input files */
-			break;
-		case 'l':
-#ifdef _IOLBF
-			c = setvbuf(stdout, NULL, _IOLBF, 0);
-#else
-			c = setlinebuf(stdout);
-#endif
-			if (c)
-				warn("setting line buffered output failed");
-			break;
 		case 'n':
 			nflag = 1;
 			break;
-		case 'u':
-#ifdef _IONBF
-			c = setvbuf(stdout, NULL, _IONBF, 0);
-#else
-			c = -1;
-			errno = EOPNOTSUPP;
-#endif
-			if (c)
-				warn("setting unbuffered output failed");
-			break;
 		default:
 		case '?':
-			usage();
+			(void)fprintf(stderr,
+"usage:\tsed script [-an] [file ...]\n\tsed [-an] [-e script] ... [-f scipt_file] ... [file ...]\n");
+			exit(1);
 		}
 	argc -= optind;
 	argv += optind;
@@ -215,18 +152,8 @@ main(int argc, char *argv[])
 	process();
 	cfclose(prog, NULL);
 	if (fclose(stdout))
-		err(1, "stdout");
-	exit(rval);
-}
-
-static void
-usage(void)
-{
-	(void)fprintf(stderr,
-	    "Usage:  %s [-aElnru] command [file ...]\n"
-	    "\t%s [-aElnru] [-e command] [-f command_file] [-I[extension]]\n"
-	    "\t    [-i[extension]] [file ...]\n", getprogname(), getprogname());
-	exit(1);
+		err(FATAL, "stdout: %s", strerror(errno));
+	exit (0);
 }
 
 /*
@@ -234,7 +161,9 @@ usage(void)
  * together.  Empty strings and files are ignored.
  */
 char *
-cu_fgets(char *buf, int n, int *more)
+cu_fgets(buf, n)
+	char *buf;
+	int n;
 {
 	static enum {ST_EOF, ST_FILE, ST_STRING} state = ST_EOF;
 	static FILE *f;		/* Current open file */
@@ -245,21 +174,19 @@ cu_fgets(char *buf, int n, int *more)
 again:
 	switch (state) {
 	case ST_EOF:
-		if (script == NULL) {
-			if (more != NULL)
-				*more = 0;
+		if (script == NULL)
 			return (NULL);
-		}
 		linenum = 0;
 		switch (script->type) {
 		case CU_FILE:
 			if ((f = fopen(script->s, "r")) == NULL)
-				err(1, "%s", script->s);
+				err(FATAL,
+				    "%s: %s", script->s, strerror(errno));
 			fname = script->s;
 			state = ST_FILE;
 			goto again;
 		case CU_STRING:
-			if (((size_t)snprintf(string_ident,
+			if ((snprintf(string_ident,
 			    sizeof(string_ident), "\"%s\"", script->s)) >=
 			    sizeof(string_ident) - 1)
 				(void)strcpy(string_ident +
@@ -274,8 +201,6 @@ again:
 			linenum++;
 			if (linenum == 1 && buf[0] == '#' && buf[1] == 'n')
 				nflag = 1;
-			if (more != NULL)
-				*more = !feof(f);
 			return (p);
 		}
 		script = script->next;
@@ -290,8 +215,6 @@ again:
 			if (n-- <= 1) {
 				*p = '\0';
 				linenum++;
-				if (more != NULL)
-					*more = 1;
 				return (buf);
 			}
 			switch (*s) {
@@ -304,8 +227,6 @@ again:
 					script = script->next;
 					*p = '\0';
 					linenum++;
-					if (more != NULL)
-						*more = 0;
 					return (buf);
 				}
 			case '\n':
@@ -313,8 +234,6 @@ again:
 				*p = '\0';
 				s++;
 				linenum++;
-				if (more != NULL)
-					*more = 0;
 				return (buf);
 			default:
 				*p++ = *s++;
@@ -322,7 +241,6 @@ again:
 		}
 	}
 	/* NOTREACHED */
-	return (NULL);
 }
 
 /*
@@ -330,145 +248,72 @@ again:
  * Set len to the length of the line.
  */
 int
-mf_fgets(SPACE *sp, enum e_spflag spflag)
+mf_fgets(sp, spflag)
+	SPACE *sp;
+	enum e_spflag spflag;
 {
-	struct stat sb;
+	static FILE *f;		/* Current open file */
 	size_t len;
-	static char *p = NULL;
-	static size_t plen = 0;
-	int c;
-	static int firstfile;
+	char c, *p;
 
-	if (infile == NULL) {
-		/* stdin? */
-		if (files->fname == NULL) {
-			if (inplace != NULL)
-				errx(1, "-I or -i may not be used with stdin");
-			infile = stdin;
-			fname = "stdin";
-			outfile = stdout;
-			outfname = "stdout";
-		}
-		firstfile = 1;
-	}
-
-	for (;;) {
-		if (infile != NULL && (c = getc(infile)) != EOF) {
-			(void)ungetc(c, infile);
-			break;
-		}
-		/* If we are here then either eof or no files are open yet */
-		if (infile == stdin) {
-			sp->len = 0;
-			return (0);
-		}
-		if (infile != NULL) {
-			fclose(infile);
-			if (*oldfname != '\0') {
-				/* if there was a backup file, remove it */
-				unlink(oldfname);
-				/*
-				 * Backup the original.  Note that hard links
-				 * are not supported on all filesystems.
-				 */
-				if ((link(fname, oldfname) != 0) &&
-				   (rename(fname, oldfname) != 0)) {
-					warn("rename()");
-					if (*tmpfname)
-						unlink(tmpfname);
-					exit(1);
-				}
-				*oldfname = '\0';
+	if (f == NULL)
+		/* Advance to first non-empty file */
+		for (;;) {
+			if (files == NULL) {
+				lastline = 1;
+				return (0);
 			}
-			if (*tmpfname != '\0') {
-				if (outfile != NULL && outfile != stdout)
-					if (fclose(outfile) != 0) {
-						warn("fclose()");
-						unlink(tmpfname);
-						exit(1);
-					}
-				outfile = NULL;
-				if (rename(tmpfname, fname) != 0) {
-					/* this should not happen really! */
-					warn("rename()");
-					unlink(tmpfname);
-					exit(1);
-				}
-				*tmpfname = '\0';
+			if (files->fname == NULL) {
+				f = stdin;
+				fname = "stdin";
+			} else {
+				fname = files->fname;
+				if ((f = fopen(fname, "r")) == NULL)
+					err(FATAL, "%s: %s",
+					    fname, strerror(errno));
 			}
-			outfname = NULL;
-		}
-		if (firstfile == 0)
+			if ((c = getc(f)) != EOF) {
+				(void)ungetc(c, f);
+				break;
+			}
+			(void)fclose(f);
 			files = files->next;
-		else
-			firstfile = 0;
-		if (files == NULL) {
-			sp->len = 0;
-			return (0);
 		}
-		fname = files->fname;
-		if (inplace != NULL) {
-			if (lstat(fname, &sb) != 0)
-				err(1, "%s", fname);
-			if (!(sb.st_mode & S_IFREG))
-				errx(1, "%s: %s %s", fname,
-				    "in-place editing only",
-				    "works for regular files");
-			if (*inplace != '\0') {
-				strlcpy(oldfname, fname,
-				    sizeof(oldfname));
-				len = strlcat(oldfname, inplace,
-				    sizeof(oldfname));
-				if (len > sizeof(oldfname))
-					errx(1, "%s: name too long", fname);
-			}
-			char d_name[PATH_MAX], f_name[PATH_MAX];
-			(void)strlcpy(d_name, fname, sizeof(d_name));
-			(void)strlcpy(f_name, fname, sizeof(f_name));
-			len = (size_t)snprintf(tmpfname, sizeof(tmpfname),
-			    "%s/.!%ld!%s", dirname(d_name), (long)getpid(),
-			    basename(f_name));
-			if (len >= sizeof(tmpfname))
-				errx(1, "%s: name too long", fname);
-			unlink(tmpfname);
-			if (outfile != NULL && outfile != stdout)
-				fclose(outfile);
-			if ((outfile = fopen(tmpfname, "w")) == NULL)
-				err(1, "%s", fname);
-			fchown(fileno(outfile), sb.st_uid, sb.st_gid);
-			fchmod(fileno(outfile), sb.st_mode & ALLPERMS);
-			outfname = tmpfname;
-			if (!ispan) {
-				linenum = 0;
-				resetstate();
-			}
-		} else {
-			outfile = stdout;
-			outfname = "stdout";
-		}
-		if ((infile = fopen(fname, "r")) == NULL) {
-			warn("%s", fname);
-			rval = 1;
-			continue;
-		}
+
+	if (lastline) {
+		sp->len = 0;
+		return (0);
 	}
+
 	/*
-	 * We are here only when infile is open and we still have something
-	 * to read from it.
-	 *
-	 * Use getline() so that we can handle essentially infinite input
-	 * data.  The p and plen are static so each invocation gives
-	 * getline() the same buffer which is expanded as needed.
+	 * Use fgetline so that we can handle essentially infinite input
+	 * data.  Can't use the pointer into the stdio buffer as the process
+	 * space because the ungetc() can cause it to move.
 	 */
-	ssize_t slen = getline(&p, &plen, infile);
-	if (slen == -1)
-		err(1, "%s", fname);
-	if (slen != 0 && p[slen - 1] == '\n')
-		slen--;
-	cspace(sp, p, (size_t)slen, spflag);
+	p = fgetline(f, &len);
+	if (ferror(f))
+		err(FATAL, "%s: %s", fname, strerror(errno ? errno : EIO));
+	cspace(sp, p, len, spflag);
 
 	linenum++;
-
+	/* Advance to next non-empty file */
+	while ((c = getc(f)) == EOF) {
+		(void)fclose(f);
+		files = files->next;
+		if (files == NULL) {
+			lastline = 1;
+			return (1);
+		}
+		if (files->fname == NULL) {
+			f = stdin;
+			fname = "stdin";
+		} else {
+			fname = files->fname;
+			if ((f = fopen(fname, "r")) == NULL)
+				err(FATAL, "%s: %s", fname, strerror(errno));
+		}
+	}
+	(void)ungetc(c, f);
 	return (1);
 }
 
@@ -476,7 +321,9 @@ mf_fgets(SPACE *sp, enum e_spflag spflag)
  * Add a compilation unit to the linked list
  */
 static void
-add_compunit(enum e_cut type, char *s)
+add_compunit(type, s)
+	enum e_cut type;
+	char *s;
 {
 	struct s_compunit *cu;
 
@@ -492,7 +339,8 @@ add_compunit(enum e_cut type, char *s)
  * Add a file to the linked list
  */
 static void
-add_file(char *s)
+add_file(s)
+	char *s;
 {
 	struct s_flist *fp;
 
@@ -501,17 +349,4 @@ add_file(char *s)
 	*fl_nextp = fp;
 	fp->fname = s;
 	fl_nextp = &fp->next;
-}
-
-int
-lastline(void)
-{
-	int ch;
-
-	if (files->next != NULL && (inplace == NULL || ispan))
-		return (0);
-	if ((ch = getc(infile)) == EOF)
-		return (1);
-	ungetc(ch, infile);
-	return (0);
 }

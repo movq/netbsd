@@ -1,58 +1,29 @@
-.\" $NetBSD: pam_krb5.8,v 1.12 2017/07/03 21:32:51 wiz Exp $
+.\"
+.\" $Id: pam_krb5.8,v 1.1 2004/12/12 06:45:40 christos Exp $
 .\" $FreeBSD: src/lib/libpam/modules/pam_krb5/pam_krb5.8,v 1.6 2001/11/24 23:41:32 dd Exp $
-.\"
-.\" Copyright (c) Frank Cusack, 1999-2001. All rights reserved.
-.\"
-.\" Redistribution and use in source and binary forms, with or without
-.\" modification, are permitted provided that the following conditions
-.\" are met:
-.\" 1. Redistributions of source code must retain the above copyright
-.\"    notices, and the entire permission notice in its entirety,
-.\"    including the disclaimer of warranties.
-.\" 2. Redistributions in binary form must reproduce the above copyright
-.\"    notice, this list of conditions and the following disclaimer in the
-.\"    documentation and/or other materials provided with the distribution.
-.\" 3. The name of the author may not be used to endorse or promote
-.\"    products derived from this software without specific prior
-.\"    written permission.
-.\"
-.\" ALTERNATIVELY, this product may be distributed under the terms of
-.\" the GNU Public License, in which case the provisions of the GPL are
-.\" required INSTEAD OF the above restrictions.  (This clause is
-.\" necessary due to a potential bad interaction between the GPL and
-.\" the restrictions contained in a BSD-style copyright.)
-.\"
-.\" THIS SOFTWARE IS PROVIDED ``AS IS'' AND ANY EXPRESS OR IMPLIED
-.\" WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
-.\" OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
-.\" DISCLAIMED.  IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT,
-.\" INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
-.\" (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
-.\" SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
-.\" HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
-.\" STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
-.\" ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED
-.\" OF THE POSSIBILITY OF SUCH DAMAGE.
-.\"
-.Dd March 10, 2007
+.Dd January 15, 1999
 .Dt PAM_KRB5 8
 .Os
 .Sh NAME
 .Nm pam_krb5
 .Nd Kerberos 5 PAM module
 .Sh SYNOPSIS
-.Op Ar service-name
-.Ar module-type
-.Ar control-flag
-.Pa pam_krb5
-.Op Ar arguments
+.Pa /usr/lib/pam_krb5.so
 .Sh DESCRIPTION
-The Kerberos 5 service module for PAM
+The Kerberos 5 service module for PAM, typically
+.Pa /usr/lib/pam_krb5.so ,
 provides functionality for three PAM categories:
 authentication,
 account management,
 and password management.
 It also provides null functions for session management.
+The
+.Pa pam_krb5.so
+module is a shared object
+that can be dynamically loaded to provide
+the necessary functionality upon demand.
+Its path is specified in the
+PAM configuration file.
 .Ss Kerberos 5 Authentication Module
 The Kerberos 5 authentication component
 provides functions to verify the identity of a user
@@ -114,11 +85,6 @@ This option is similar to the
 .Cm use_first_pass
 option, except that if the previously obtained password fails, the
 user is prompted for another password.
-.It Cm renewable Ns = Ns Ar timeperiod
-Obtain renewable Kerberos credentials for the user.
-The renewable time can be specified, or it defaults to one month.
-Since spaces are not allowed in the pam configuration time, underscores
-are used to form parseable times (e.g., 1_month).
 .It Cm forwardable
 Obtain forwardable Kerberos credentials for the user.
 .It Cm no_ccache
@@ -249,14 +215,3 @@ more than once between calls to
 and
 .Fn pam_end
 when using the Kerberos 5 PAM module.
-.Sh SECURITY CONSIDERATIONS
-The
-.Nm
-module implements what is fundamentally a password authentication scheme.
-It does not use a Kerberos 5 exchange between client and server, but rather
-authenticates the password provided by the client against the Kerberos KDC.
-Therefore, care should be taken to only use this module over a secure session
-.Po
-secure TTY, encrypted session, etc.
-.Pc ,
-otherwise the user's Kerberos 5 password could be compromised.

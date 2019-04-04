@@ -1,5 +1,3 @@
-/*	$NetBSD: pam_radius.c,v 1.8 2014/01/07 02:07:43 joerg Exp $	*/
-
 /*-
  * Copyright 1998 Juniper Networks, Inc.
  * All rights reserved.
@@ -37,11 +35,7 @@
  */
 
 #include <sys/cdefs.h>
-#ifdef __FreeBSD__
 __FBSDID("$FreeBSD: src/lib/libpam/modules/pam_radius/pam_radius.c,v 1.22 2004/06/25 12:32:45 kan Exp $");
-#else
-__RCSID("$NetBSD: pam_radius.c,v 1.8 2014/01/07 02:07:43 joerg Exp $");
-#endif
 
 #include <sys/param.h>
 #include <sys/types.h>
@@ -53,7 +47,6 @@ __RCSID("$NetBSD: pam_radius.c,v 1.8 2014/01/07 02:07:43 joerg Exp $");
 #include <string.h>
 #include <syslog.h>
 #include <unistd.h>
-#include <stdarg.h>
 
 #define PAM_SM_AUTH
 
@@ -76,20 +69,6 @@ static int	 do_accept(pam_handle_t *, struct rad_handle *);
 static int	 do_challenge(pam_handle_t *, struct rad_handle *,
 		    const char *);
 
-__printflike(2, 3)
-static void
-logit(int level, const char *fmt, ...)
-{
-	va_list ap;
-	struct syslog_data data = SYSLOG_DATA_INIT;
-
-	openlog_r("pam_radius", LOG_PID, LOG_AUTHPRIV, &data);
-	va_start(ap, fmt);
-	vsyslog_r(level, &data, fmt, ap);
-	va_end(ap);
-	closelog_r(&data);
-}
-
 /*
  * Construct an access request, but don't send it.  Returns 0 on success,
  * -1 on failure.
@@ -106,7 +85,7 @@ build_access_request(struct rad_handle *radh, const char *user,
 	struct addrinfo *res;
 
 	if (rad_create_request(radh, RAD_ACCESS_REQUEST) == -1) {
-		logit(LOG_CRIT, "rad_create_request: %s", rad_strerror(radh));
+		syslog(LOG_CRIT, "rad_create_request: %s", rad_strerror(radh));
 		return (-1);
 	}
 	if (nas_id == NULL ||
@@ -124,7 +103,7 @@ build_access_request(struct rad_handle *radh, const char *user,
 	    rad_put_string(radh, RAD_USER_PASSWORD, pass) == -1) ||
 	    (nas_id != NULL &&
 	    rad_put_string(radh, RAD_NAS_IDENTIFIER, nas_id) == -1)) {
-		logit(LOG_CRIT, "rad_put_string: %s", rad_strerror(radh));
+		syslog(LOG_CRIT, "rad_put_string: %s", rad_strerror(radh));
 		return (-1);
 	}
 	if (nas_ipaddr != NULL) {
@@ -132,12 +111,12 @@ build_access_request(struct rad_handle *radh, const char *user,
 		hints.ai_family = PF_INET;
 		if (getaddrinfo(nas_ipaddr, NULL, &hints, &res) == 0 &&
 		    res != NULL) {
-			haddr = (struct sockaddr_in *)res->ai_addr;
+			(struct sockaddr *)haddr = res->ai_addr;
 			error = rad_put_addr(radh, RAD_NAS_IP_ADDRESS,
 			    haddr->sin_addr);
 			freeaddrinfo(res);
 			if (error == -1) {
-				logit(LOG_CRIT, "rad_put_addr: %s",
+				syslog(LOG_CRIT, "rad_put_addr: %s",
 				    rad_strerror(radh));
 				return (-1);
 			}
@@ -145,11 +124,11 @@ build_access_request(struct rad_handle *radh, const char *user,
 	}
 	if (state != NULL && rad_put_attr(radh, RAD_STATE, state,
 	    state_len) == -1) {
-		logit(LOG_CRIT, "rad_put_attr: %s", rad_strerror(radh));
+		syslog(LOG_CRIT, "rad_put_attr: %s", rad_strerror(radh));
 		return (-1);
 	}
 	if (rad_put_int(radh, RAD_SERVICE_TYPE, RAD_AUTHENTICATE_ONLY) == -1) {
-		logit(LOG_CRIT, "rad_put_int: %s", rad_strerror(radh));
+		syslog(LOG_CRIT, "rad_put_int: %s", rad_strerror(radh));
 		return (-1);
 	}
 	return (0);
@@ -167,7 +146,7 @@ do_accept(pam_handle_t *pamh, struct rad_handle *radh)
 		if (attrtype == RAD_USER_NAME) {
 			s = rad_cvt_string(attrval, attrlen);
 			if (s == NULL) {
-				logit(LOG_CRIT,
+				syslog(LOG_CRIT,
 				    "rad_cvt_string: out of memory");
 				return (-1);
 			}
@@ -176,7 +155,7 @@ do_accept(pam_handle_t *pamh, struct rad_handle *radh)
 		}
 	}
 	if (attrtype == -1) {
-		logit(LOG_CRIT, "rad_get_attr: %s", rad_strerror(radh));
+		syslog(LOG_CRIT, "rad_get_attr: %s", rad_strerror(radh));
 		return (-1);
 	}
 	return (0);
@@ -211,13 +190,13 @@ do_challenge(pam_handle_t *pamh, struct rad_handle *radh, const char *user)
 
 		case RAD_REPLY_MESSAGE:
 			if (num_msgs >= MAX_CHALLENGE_MSGS) {
-				logit(LOG_CRIT,
+				syslog(LOG_CRIT,
 				    "Too many RADIUS challenge messages");
 				return (PAM_SERVICE_ERR);
 			}
 			msgs[num_msgs].msg = rad_cvt_string(attrval, attrlen);
 			if (msgs[num_msgs].msg == NULL) {
-				logit(LOG_CRIT,
+				syslog(LOG_CRIT,
 				    "rad_cvt_string: out of memory");
 				return (PAM_SERVICE_ERR);
 			}
@@ -228,13 +207,13 @@ do_challenge(pam_handle_t *pamh, struct rad_handle *radh, const char *user)
 		}
 	}
 	if (attrtype == -1) {
-		logit(LOG_CRIT, "rad_get_attr: %s", rad_strerror(radh));
+		syslog(LOG_CRIT, "rad_get_attr: %s", rad_strerror(radh));
 		return (PAM_SERVICE_ERR);
 	}
 	if (num_msgs == 0) {
 		msgs[num_msgs].msg = strdup("(null RADIUS challenge): ");
 		if (msgs[num_msgs].msg == NULL) {
-			logit(LOG_CRIT, "Out of memory");
+			syslog(LOG_CRIT, "Out of memory");
 			return (PAM_SERVICE_ERR);
 		}
 		msgs[num_msgs].msg_style = PAM_TEXT_INFO;
@@ -243,7 +222,7 @@ do_challenge(pam_handle_t *pamh, struct rad_handle *radh, const char *user)
 	}
 	msgs[num_msgs-1].msg_style = PAM_PROMPT_ECHO_ON;
 	if ((retval = pam_get_item(pamh, PAM_CONV, &item)) != PAM_SUCCESS) {
-		logit(LOG_CRIT, "do_challenge: cannot get PAM_CONV");
+		syslog(LOG_CRIT, "do_challenge: cannot get PAM_CONV");
 		return (retval);
 	}
 	conv = (const struct pam_conv *)item;
@@ -268,8 +247,6 @@ pam_sm_authenticate(pam_handle_t *pamh, int flags __unused,
 	struct rad_handle *radh;
 	const char *user, *pass;
 	const void *tmpuser;
-	struct passwd *pwd, pwres;
-	char pwbuf[1024];
 	const char *conf_file, *template_user, *nas_id, *nas_ipaddr;
 	int retval;
 	int e;
@@ -293,14 +270,14 @@ pam_sm_authenticate(pam_handle_t *pamh, int flags __unused,
 
 	radh = rad_open();
 	if (radh == NULL) {
-		logit(LOG_CRIT, "rad_open failed");
+		syslog(LOG_CRIT, "rad_open failed");
 		return (PAM_SERVICE_ERR);
 	}
 
 	PAM_LOG("Radius opened");
 
 	if (rad_config(radh, conf_file) == -1) {
-		logit(LOG_ALERT, "rad_config: %s", rad_strerror(radh));
+		syslog(LOG_ALERT, "rad_config: %s", rad_strerror(radh));
 		rad_close(radh);
 		return (PAM_SERVICE_ERR);
 	}
@@ -337,9 +314,7 @@ pam_sm_authenticate(pam_handle_t *pamh, int flags __unused,
 				retval = pam_get_item(pamh, PAM_USER, &tmpuser);
 				if (retval != PAM_SUCCESS)
 					return (retval);
-				if (getpwnam_r(tmpuser, &pwres, pwbuf,
-					       sizeof(pwbuf), &pwd) != 0 ||
-				    pwd == NULL) {
+				if (getpwnam(tmpuser) == NULL) {
 					pam_set_item(pamh, PAM_USER,
 					    template_user);
 					PAM_LOG("Using template user");
@@ -362,14 +337,14 @@ pam_sm_authenticate(pam_handle_t *pamh, int flags __unused,
 			break;
 
 		case -1:
-			logit(LOG_CRIT, "rad_send_request: %s",
+			syslog(LOG_CRIT, "rad_send_request: %s",
 			    rad_strerror(radh));
 			rad_close(radh);
 			PAM_VERBOSE_ERROR("Radius failure");
 			return (PAM_AUTHINFO_UNAVAIL);
 
 		default:
-			logit(LOG_CRIT,
+			syslog(LOG_CRIT,
 			    "rad_send_request: unexpected return value");
 			rad_close(radh);
 			PAM_VERBOSE_ERROR("Radius error");

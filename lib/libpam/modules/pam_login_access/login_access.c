@@ -1,13 +1,11 @@
-/*	$NetBSD: login_access.c,v 1.8 2014/01/07 02:07:43 joerg Exp $	*/
-
-/*
- * This module implements a simple but effective form of login access
- * control based on login names and on host (or domain) names, internet
- * addresses (or network numbers), or on terminal line names in case of
- * non-networked logins. Diagnostics are reported through syslog(3).
- *
- * Author: Wietse Venema, Eindhoven University of Technology, The Netherlands.
- */
+ /*
+  * This module implements a simple but effective form of login access
+  * control based on login names and on host (or domain) names, internet
+  * addresses (or network numbers), or on terminal line names in case of
+  * non-networked logins. Diagnostics are reported through syslog(3).
+  *
+  * Author: Wietse Venema, Eindhoven University of Technology, The Netherlands.
+  */
 
 #if 0
 #ifndef lint
@@ -16,11 +14,7 @@ static char sccsid[] = "%Z% %M% %I% %E% %U%";
 #endif
 
 #include <sys/cdefs.h>
-#ifdef __FreeBSD__
 __FBSDID("$FreeBSD: src/lib/libpam/modules/pam_login_access/login_access.c,v 1.12 2004/03/05 08:10:18 markm Exp $");
-#else
-__RCSID("$NetBSD: login_access.c,v 1.8 2014/01/07 02:07:43 joerg Exp $");
-#endif
 
 #include <sys/types.h>
 #include <ctype.h>
@@ -31,7 +25,6 @@ __RCSID("$NetBSD: login_access.c,v 1.8 2014/01/07 02:07:43 joerg Exp $");
 #include <string.h>
 #include <syslog.h>
 #include <unistd.h>
-#include <stdarg.h>
 
 #include "pam_login_access.h"
 
@@ -56,20 +49,6 @@ static int	user_match(const char *, const char *);
 
 /* login_access - match username/group and host/tty with access control file */
 
-__printflike(2, 3)
-static void
-logit(int level, const char *fmt, ...)
-{
-	va_list ap;
-	struct syslog_data data = SYSLOG_DATA_INIT;
-
-	openlog_r("pam_login_access", LOG_PID, LOG_AUTHPRIV, &data);
-	va_start(ap, fmt);
-	vsyslog_r(level, &data, fmt, ap);
-	va_end(ap);
-	closelog_r(&data);
-}
-
 int
 login_access(const char *user, const char *from)
 {
@@ -79,7 +58,7 @@ login_access(const char *user, const char *from)
     char   *users;			/* becomes list of login names */
     char   *froms;			/* becomes list of terminals or hosts */
     int     match = NO;
-    size_t  end;
+    int     end;
     int     lineno = 0;			/* for diagnostics */
 
     /*
@@ -93,14 +72,14 @@ login_access(const char *user, const char *from)
     if ((fp = fopen(_PATH_LOGACCESS, "r")) != NULL) {
 	while (!match && fgets(line, sizeof(line), fp)) {
 	    lineno++;
-	    if ((end = strlen(line)) == 0 || line[end - 1] != '\n') {
-		logit(LOG_ERR, "%s: line %d: missing newline or line too long",
+	    if (line[end = strlen(line) - 1] != '\n') {
+		syslog(LOG_ERR, "%s: line %d: missing newline or line too long",
 		       _PATH_LOGACCESS, lineno);
 		continue;
 	    }
 	    if (line[0] == '#')
 		continue;			/* comment line */
-	    while (end > 0 && isspace((unsigned char)line[end - 1]))
+	    while (end > 0 && isspace(line[end - 1]))
 		end--;
 	    line[end] = 0;			/* strip trailing whitespace */
 	    if (line[0] == 0)			/* skip blank lines */
@@ -109,12 +88,12 @@ login_access(const char *user, const char *from)
 		|| !(users = strtok((char *) 0, fs))
 		|| !(froms = strtok((char *) 0, fs))
 		|| strtok((char *) 0, fs)) {
-		logit(LOG_ERR, "%s: line %d: bad field count", _PATH_LOGACCESS,
+		syslog(LOG_ERR, "%s: line %d: bad field count", _PATH_LOGACCESS,
 		       lineno);
 		continue;
 	    }
 	    if (perm[0] != '+' && perm[0] != '-') {
-		logit(LOG_ERR, "%s: line %d: bad first field", _PATH_LOGACCESS,
+		syslog(LOG_ERR, "%s: line %d: bad first field", _PATH_LOGACCESS,
 		       lineno);
 		continue;
 	    }
@@ -123,7 +102,7 @@ login_access(const char *user, const char *from)
 	}
 	(void) fclose(fp);
     } else if (errno != ENOENT) {
-	logit(LOG_ERR, "cannot open %s: %s", _PATH_LOGACCESS, strerror(errno));
+	syslog(LOG_ERR, "cannot open %s: %m", _PATH_LOGACCESS);
     }
     return (match == 0 || (line[0] == '+'));
 }
@@ -167,7 +146,7 @@ static int
 netgroup_match(const char *group __unused,
     const char *machine __unused, const char *user __unused)
 {
-    logit(LOG_ERR, "NIS netgroup support not configured");
+    syslog(LOG_ERR, "NIS netgroup support not configured");
     return 0;
 }
 
@@ -176,8 +155,7 @@ netgroup_match(const char *group __unused,
 static int
 user_match(const char *tok, const char *string)
 {
-    struct group grres, *group;
-    char grbuf[1024];
+    struct group *group;
     int     i;
 
     /*
@@ -190,8 +168,7 @@ user_match(const char *tok, const char *string)
 	return (netgroup_match(tok + 1, (char *) 0, string));
     } else if (string_match(tok, string)) {	/* ALL or exact match */
 	return (YES);
-    } else if (getgrnam_r(tok, &grres, grbuf, sizeof(grbuf), &group) == 0 &&
-	group != NULL) {/* try group membership */
+    } else if ((group = getgrnam(tok)) != NULL) {/* try group membership */
 	for (i = 0; group->gr_mem[i]; i++)
 	    if (strcasecmp(string, group->gr_mem[i]) == 0)
 		return (YES);
@@ -204,8 +181,8 @@ user_match(const char *tok, const char *string)
 static int
 from_match(const char *tok, const char *string)
 {
-    size_t     tok_len;
-    size_t     str_len;
+    int     tok_len;
+    int     str_len;
 
     /*
      * If a token has the magic value "ALL" the match always succeeds. Return

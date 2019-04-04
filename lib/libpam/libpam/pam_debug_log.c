@@ -1,5 +1,3 @@
-/*	$NetBSD: pam_debug_log.c,v 1.4 2011/12/28 14:52:56 christos Exp $	*/
-
 /*-
  * Copyright 2001 Mark R V Murray
  * All rights reserved.
@@ -27,12 +25,9 @@
  */
 
 #include <sys/cdefs.h>
-#ifdef __FreeBSD__
 __FBSDID("$FreeBSD: src/lib/libpam/libpam/pam_debug_log.c,v 1.8 2002/04/14 16:44:04 des Exp $");
-#else
-__RCSID("$NetBSD: pam_debug_log.c,v 1.4 2011/12/28 14:52:56 christos Exp $");
-#endif
 
+#include <libgen.h>
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -50,24 +45,18 @@ _pam_verbose_error(pam_handle_t *pamh, int flags,
     const char *file, const char *function, const char *format, ...)
 {
 	va_list ap;
-	char *msg;
-	int rv;
-	const char *modname, *period;
+	char *fmtbuf, *modname, *period;
 
-	if ((flags & PAM_SILENT) || openpam_get_option(pamh, "no_warn"))
-		return;
-	modname = strrchr(file, '/');
-	if (modname == NULL)
-		modname = file;
-	period = strchr(modname, '.');
-	if (period == NULL)
-		period = strchr(modname, '\0');
-	va_start(ap, format);
-	rv = vasprintf(&msg, format, ap);
-	va_end(ap);
-	if (rv < 0)
-		return;
-	pam_error(pamh, "%.*s: %s: %s\n", (int)(ssize_t)(period - modname),
-	    modname, function, msg);
-	free(msg);
+	if (!(flags & PAM_SILENT) && !openpam_get_option(pamh, "no_warn")) {
+		modname = basename(file);
+		period = strchr(modname, '.');
+		if (period == NULL)
+			period = strchr(modname, '\0');
+		va_start(ap, format);
+		asprintf(&fmtbuf, "%.*s: %s: %s\n", (int)(period - modname),
+		    modname, function, format);
+		pam_verror(pamh, fmtbuf, ap);
+		free(fmtbuf);
+		va_end(ap);
+	}
 }

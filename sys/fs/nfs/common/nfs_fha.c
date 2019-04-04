@@ -1,4 +1,4 @@
-/*	$NetBSD: nfs_fha.c,v 1.2 2016/12/13 22:41:46 pgoyette Exp $	*/
+/*	$NetBSD: nfs_fha.c,v 1.1 2013/09/30 07:19:33 dholland Exp $	*/
 /*-
  * Copyright (c) 2008 Isilon Inc http://www.isilon.com/
  *
@@ -25,8 +25,8 @@
  */
 
 #include <sys/cdefs.h>
-/* __FBSDID("FreeBSD: head/sys/nfs/nfs_fha.c 267479 2014-06-14 12:26:12Z mav "); */
-__RCSID("$NetBSD: nfs_fha.c,v 1.2 2016/12/13 22:41:46 pgoyette Exp $");
+/* __FBSDID("FreeBSD: head/sys/nfs/nfs_fha.c 249596 2013-04-17 22:42:43Z ken "); */
+__RCSID("$NetBSD: nfs_fha.c,v 1.1 2013/09/30 07:19:33 dholland Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -40,7 +40,7 @@ __RCSID("$NetBSD: nfs_fha.c,v 1.2 2016/12/13 22:41:46 pgoyette Exp $");
 #include <sys/sbuf.h>
 
 #include <rpc/rpc.h>
-#include <fs/nfs/common/nfs_fha.h>
+#include <nfs/nfs_fha.h>
 
 static MALLOC_DEFINE(M_NFS_FHA, "NFS FHA", "NFS FHA");
 
@@ -54,10 +54,13 @@ void
 fha_init(struct fha_params *softc)
 {
 	char tmpstr[128];
-	int i;
 
-	for (i = 0; i < FHA_HASH_SIZE; i++)
-		mtx_init(&softc->fha_hash[i].mtx, "fhalock", NULL, MTX_DEF);
+	/*
+	 * A small hash table to map filehandles to fha_hash_entry
+	 * structures.
+	 */
+	softc->g_fha.hashtable = hashinit(256, M_NFS_FHA,
+	    &softc->g_fha.hashmask);
 
 	/*
 	 * Set the default tuning parameters.
@@ -116,11 +119,8 @@ fha_init(struct fha_params *softc)
 void
 fha_uninit(struct fha_params *softc)
 {
-	int i;
-
 	sysctl_ctx_free(&softc->sysctl_ctx);
-	for (i = 0; i < FHA_HASH_SIZE; i++)
-		mtx_destroy(&softc->fha_hash[i].mtx);
+	hashdestroy(softc->g_fha.hashtable, M_NFS_FHA, softc->g_fha.hashmask);
 }
 
 /*
@@ -132,6 +132,7 @@ fha_extract_info(struct svc_req *req, struct fha_info *i,
     struct fha_callbacks *cb)
 {
 	struct mbuf *md;
+	fhandle_t fh;
 	caddr_t dpos;
 	static u_int64_t random_fh = 0;
 	int error;
@@ -178,9 +179,11 @@ fha_extract_info(struct svc_req *req, struct fha_info *i,
 	dpos = mtod(md, caddr_t);
 
 	/* Grab the filehandle. */
-	error = cb->get_fh(&i->fh, v3, &md, &dpos);
+	error = cb->get_fh(&fh, v3, &md, &dpos);
 	if (error)
 		goto out;
+
+	bcopy(fh.fh_fid.fid_data, &i->fh, sizeof(i->fh));
 
 	/* Content ourselves with zero offset for all but reads. */
 	if (cb->is_read(procnum) || cb->is_write(procnum))
@@ -209,13 +212,8 @@ static void
 fha_hash_entry_destroy(struct fha_hash_entry *e)
 {
 
-	mtx_assert(e->mtx, MA_OWNED);
-	KASSERT(e->num_rw == 0,
-	    ("%d reqs on destroyed fhe %p", e->num_rw, e));
-	KASSERT(e->num_exclusive == 0,
-	    ("%d exclusive reqs on destroyed fhe %p", e->num_exclusive, e));
-	KASSERT(e->num_threads == 0,
-	    ("%d threads on destroyed fhe %p", e->num_threads, e));
+	if (e->num_rw + e->num_exclusive)
+		panic("nonempty fhe");
 	free(e, M_NFS_FHA);
 }
 
@@ -223,7 +221,6 @@ static void
 fha_hash_entry_remove(struct fha_hash_entry *e)
 {
 
-	mtx_assert(e->mtx, MA_OWNED);
 	LIST_REMOVE(e, link);
 	fha_hash_entry_destroy(e);
 }
@@ -232,22 +229,36 @@ static struct fha_hash_entry *
 fha_hash_entry_lookup(struct fha_params *softc, u_int64_t fh)
 {
 	SVCPOOL *pool;
-	struct fha_hash_slot *fhs;
-	struct fha_hash_entry *fhe, *new_fhe;
 
 	pool = *softc->pool;
-	fhs = &softc->fha_hash[fh % FHA_HASH_SIZE];
-	new_fhe = fha_hash_entry_new(fh);
-	new_fhe->mtx = &fhs->mtx;
-	mtx_lock(&fhs->mtx);
-	LIST_FOREACH(fhe, &fhs->list, link)
+
+	struct fha_hash_entry *fhe, *new_fhe;
+
+	LIST_FOREACH(fhe, &softc->g_fha.hashtable[fh % softc->g_fha.hashmask],
+	    link)
 		if (fhe->fh == fh)
 			break;
+
 	if (!fhe) {
-		fhe = new_fhe;
-		LIST_INSERT_HEAD(&fhs->list, fhe, link);
-	} else
-		fha_hash_entry_destroy(new_fhe);
+		/* Allocate a new entry. */
+		mtx_unlock(&pool->sp_lock);
+		new_fhe = fha_hash_entry_new(fh);
+		mtx_lock(&pool->sp_lock);
+
+		/* Double-check to make sure we still need the new entry. */
+		LIST_FOREACH(fhe,
+		    &softc->g_fha.hashtable[fh % softc->g_fha.hashmask], link)
+			if (fhe->fh == fh)
+				break;
+		if (!fhe) {
+			fhe = new_fhe;
+			LIST_INSERT_HEAD(
+			    &softc->g_fha.hashtable[fh % softc->g_fha.hashmask],
+			    fhe, link);
+		} else
+			fha_hash_entry_destroy(new_fhe);
+	}
+
 	return (fhe);
 }
 
@@ -255,8 +266,6 @@ static void
 fha_hash_entry_add_thread(struct fha_hash_entry *fhe, SVCTHREAD *thread)
 {
 
-	mtx_assert(fhe->mtx, MA_OWNED);
-	thread->st_p2 = 0;
 	LIST_INSERT_HEAD(&fhe->threads, thread, st_alink);
 	fhe->num_threads++;
 }
@@ -265,9 +274,6 @@ static void
 fha_hash_entry_remove_thread(struct fha_hash_entry *fhe, SVCTHREAD *thread)
 {
 
-	mtx_assert(fhe->mtx, MA_OWNED);
-	KASSERT(thread->st_p2 == 0,
-	    ("%d reqs on removed thread %p", thread->st_p2, thread));
 	LIST_REMOVE(thread, st_alink);
 	fhe->num_threads--;
 }
@@ -279,18 +285,34 @@ static void
 fha_hash_entry_add_op(struct fha_hash_entry *fhe, int locktype, int count)
 {
 
-	mtx_assert(fhe->mtx, MA_OWNED);
 	if (LK_EXCLUSIVE == locktype)
 		fhe->num_exclusive += count;
 	else
 		fhe->num_rw += count;
 }
 
+static SVCTHREAD *
+get_idle_thread(SVCPOOL *pool)
+{
+	SVCTHREAD *st;
+
+	LIST_FOREACH(st, &pool->sp_idlethreads, st_ilink) {
+		if (st->st_xprt == NULL && STAILQ_EMPTY(&st->st_reqs))
+			return (st);
+	}
+	return (NULL);
+}
+
+
 /*
  * Get the service thread currently associated with the fhe that is
  * appropriate to handle this operation.
  */
-static SVCTHREAD *
+SVCTHREAD *
+fha_hash_entry_choose_thread(struct fha_params *softc,
+    struct fha_hash_entry *fhe, struct fha_info *i, SVCTHREAD *this_thread);
+
+SVCTHREAD *
 fha_hash_entry_choose_thread(struct fha_params *softc,
     struct fha_hash_entry *fhe, struct fha_info *i, SVCTHREAD *this_thread)
 {
@@ -302,7 +324,7 @@ fha_hash_entry_choose_thread(struct fha_params *softc,
 	pool = *softc->pool;
 
 	LIST_FOREACH(thread, &fhe->threads, st_alink) {
-		req_count = thread->st_p2;
+		req_count = thread->st_reqcount;
 
 		/* If there are any writes in progress, use the first thread. */
 		if (fhe->num_exclusive) {
@@ -318,7 +340,7 @@ fha_hash_entry_choose_thread(struct fha_params *softc,
 		 * exceed our per-thread load limit in the process.
 		 */
 		offset1 = i->offset;
-		offset2 = thread->st_p3;
+		offset2 = STAILQ_FIRST(&thread->st_reqs)->rq_p3;
 
 		if (((offset1 >= offset2)
 		  && ((offset1 - offset2) < (1 << softc->ctls.bin_shift)))
@@ -356,11 +378,28 @@ fha_hash_entry_choose_thread(struct fha_params *softc,
 	 */
 	if ((softc->ctls.max_nfsds_per_fh == 0) ||
 	    (fhe->num_threads < softc->ctls.max_nfsds_per_fh)) {
-		thread = this_thread;
+		/*
+		 * We can add a new thread, so try for an idle thread
+		 * first, and fall back to this_thread if none are idle.
+		 */
+		if (STAILQ_EMPTY(&this_thread->st_reqs)) {
+			thread = this_thread;
 #if 0
-		ITRACE_CURPROC(ITRACE_NFS, ITRACE_INFO,
-		    "fha: %p(%d)t", thread, thread->st_p2);
+			ITRACE_CURPROC(ITRACE_NFS, ITRACE_INFO,
+			    "fha: %p(%d)t", thread, thread->st_reqcount);
 #endif
+		} else if ((thread = get_idle_thread(pool))) {
+#if 0
+			ITRACE_CURPROC(ITRACE_NFS, ITRACE_INFO,
+			    "fha: %p(%d)i", thread, thread->st_reqcount);
+#endif
+		} else {
+			thread = this_thread;
+#if 0
+			ITRACE_CURPROC(ITRACE_NFS, ITRACE_INFO,
+			    "fha: %p(%d)b", thread, thread->st_reqcount);
+#endif
+		}
 		fha_hash_entry_add_thread(fhe, thread);
 	} else {
 		/*
@@ -381,6 +420,7 @@ SVCTHREAD *
 fha_assign(SVCTHREAD *this_thread, struct svc_req *req,
     struct fha_params *softc)
 {
+	SVCPOOL *pool;
 	SVCTHREAD *thread;
 	struct fha_info i;
 	struct fha_hash_entry *fhe;
@@ -390,17 +430,18 @@ fha_assign(SVCTHREAD *this_thread, struct svc_req *req,
 
 	/* Check to see whether we're enabled. */
 	if (softc->ctls.enable == 0)
-		goto thist;
+		return (this_thread);
 
 	/*
 	 * Only do placement if this is an NFS request.
 	 */
 	if (req->rq_prog != NFS_PROG)
-		goto thist;
+		return (this_thread);
 
 	if (req->rq_vers != 2 && req->rq_vers != 3)
-		goto thist;
+		return (this_thread);
 
+	pool = req->rq_xprt->xp_pool;
 	fha_extract_info(req, &i, cb);
 
 	/*
@@ -419,21 +460,8 @@ fha_assign(SVCTHREAD *this_thread, struct svc_req *req,
 	thread = fha_hash_entry_choose_thread(softc, fhe, &i, this_thread);
 	KASSERT(thread, ("fha_assign: NULL thread!"));
 	fha_hash_entry_add_op(fhe, i.locktype, 1);
-	thread->st_p2++;
-	thread->st_p3 = i.offset;
-
-	/*
-	 * Grab the pool lock here to not let chosen thread go away before
-	 * the new request inserted to its queue while we drop fhe lock.
-	 */
-	mtx_lock(&thread->st_lock);
-	mtx_unlock(fhe->mtx);
 
 	return (thread);
-thist:
-	req->rq_p1 = NULL;
-	mtx_lock(&this_thread->st_lock);
-	return (this_thread);
 }
 
 /*
@@ -444,7 +472,6 @@ void
 fha_nd_complete(SVCTHREAD *thread, struct svc_req *req)
 {
 	struct fha_hash_entry *fhe = req->rq_p1;
-	struct mtx *mtx;
 
 	/*
 	 * This may be called for reqs that didn't go through
@@ -453,31 +480,26 @@ fha_nd_complete(SVCTHREAD *thread, struct svc_req *req)
 	if (!fhe)
 		return;
 
-	mtx = fhe->mtx;
-	mtx_lock(mtx);
 	fha_hash_entry_add_op(fhe, req->rq_p2, -1);
-	thread->st_p2--;
-	KASSERT(thread->st_p2 >= 0, ("Negative request count %d on %p",
-	    thread->st_p2, thread));
-	if (thread->st_p2 == 0) {
+
+	if (thread->st_reqcount == 0) {
 		fha_hash_entry_remove_thread(fhe, thread);
 		if (0 == fhe->num_rw + fhe->num_exclusive)
 			fha_hash_entry_remove(fhe);
 	}
-	mtx_unlock(mtx);
 }
 
 int
 fhe_stats_sysctl(SYSCTL_HANDLER_ARGS, struct fha_params *softc)
 {
-	int error, i;
+	int error, count, i;
 	struct sbuf sb;
 	struct fha_hash_entry *fhe;
-	bool_t first, hfirst;
+	bool_t first = TRUE;
 	SVCTHREAD *thread;
 	SVCPOOL *pool;
 
-	sbuf_new(&sb, NULL, 65536, SBUF_FIXEDLEN);
+	sbuf_new(&sb, NULL, 4096, SBUF_FIXEDLEN);
 
 	pool = NULL;
 
@@ -487,47 +509,47 @@ fhe_stats_sysctl(SYSCTL_HANDLER_ARGS, struct fha_params *softc)
 	}
 	pool = *softc->pool;
 
-	for (i = 0; i < FHA_HASH_SIZE; i++)
-		if (!LIST_EMPTY(&softc->fha_hash[i].list))
-			break;
+	mtx_lock(&pool->sp_lock);
+	count = 0;
+	for (i = 0; i <= softc->g_fha.hashmask; i++)
+		if (!LIST_EMPTY(&softc->g_fha.hashtable[i]))
+			count++;
 
-	if (i == FHA_HASH_SIZE) {
+	if (count == 0) {
 		sbuf_printf(&sb, "No file handle entries.\n");
 		goto out;
 	}
 
-	hfirst = TRUE;
-	for (; i < FHA_HASH_SIZE; i++) {
-		mtx_lock(&softc->fha_hash[i].mtx);
-		if (LIST_EMPTY(&softc->fha_hash[i].list)) {
-			mtx_unlock(&softc->fha_hash[i].mtx);
-			continue;
-		}
-		sbuf_printf(&sb, "%shash %d: {\n", hfirst ? "" : ", ", i);
-		first = TRUE;
-		LIST_FOREACH(fhe, &softc->fha_hash[i].list, link) {
-			sbuf_printf(&sb, "%sfhe %p: {\n", first ? "  " : ", ", fhe);
+	for (i = 0; i <= softc->g_fha.hashmask; i++) {
+		LIST_FOREACH(fhe, &softc->g_fha.hashtable[i], link) {
+			sbuf_printf(&sb, "%sfhe %p: {\n", first ? "" : ", ", fhe);
 
 			sbuf_printf(&sb, "    fh: %ju\n", (uintmax_t) fhe->fh);
-			sbuf_printf(&sb, "    num_rw/exclusive: %d/%d\n",
-			    fhe->num_rw, fhe->num_exclusive);
+			sbuf_printf(&sb, "    num_rw: %d\n", fhe->num_rw);
+			sbuf_printf(&sb, "    num_exclusive: %d\n", fhe->num_exclusive);
 			sbuf_printf(&sb, "    num_threads: %d\n", fhe->num_threads);
 
 			LIST_FOREACH(thread, &fhe->threads, st_alink) {
-				sbuf_printf(&sb, "      thread %p offset %ju "
-				    "reqs %d\n", thread,
-				    thread->st_p3, thread->st_p2);
+				sbuf_printf(&sb, "    thread %p offset %ju "
+				    "(count %d)\n", thread,
+				    STAILQ_FIRST(&thread->st_reqs)->rq_p3,
+				    thread->st_reqcount);
 			}
 
-			sbuf_printf(&sb, "  }");
+			sbuf_printf(&sb, "}");
 			first = FALSE;
+
+			/* Limit the output. */
+			if (++count > 128) {
+				sbuf_printf(&sb, "...");
+				break;
+			}
 		}
-		sbuf_printf(&sb, "\n}");
-		mtx_unlock(&softc->fha_hash[i].mtx);
-		hfirst = FALSE;
 	}
 
  out:
+	if (pool)
+		mtx_unlock(&pool->sp_lock);
 	sbuf_trim(&sb);
 	sbuf_finish(&sb);
 	error = sysctl_handle_string(oidp, sbuf_data(&sb), sbuf_len(&sb), req);

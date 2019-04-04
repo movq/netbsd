@@ -1,4 +1,3 @@
-# $NetBSD: Makefile,v 1.12 2018/02/04 03:19:53 christos Exp $
 # Copyright 2002 FreeBSD, Inc.
 # All rights reserved.
 #
@@ -29,14 +28,7 @@ LIB=	pam_ksu
 SRCS=	pam_ksu.c
 MAN=	pam_ksu.8
 
-LIBDPLIBS+= \
-	krb5	${NETBSDSRCDIR}/crypto/external/bsd/heimdal/lib/libkrb5 \
-	asn1	${NETBSDSRCDIR}/crypto/external/bsd/heimdal/lib/libasn1 \
-	roken	${NETBSDSRCDIR}/crypto/external/bsd/heimdal/lib/libroken \
-	com_err	${NETBSDSRCDIR}/crypto/external/bsd/heimdal/lib/libcom_err \
-	crypt	${.CURDIR}/../../../libcrypt \
-	crypto	${NETBSDSRCDIR}/crypto/external/bsd/${EXTERNAL_OPENSSL_SUBDIR}/lib/libcrypto
+DPADD=	${LIBKRB5} ${LIBASN1} ${LIBROKEN} ${LIBCOM_ERR} ${LIBCRYPT} ${LIBCRYPTO}
+LDADD=	-lkrb5 -lasn1 -lroken -lcom_err -lcrypt -lcrypto
 
-CWARNFLAGS.clang=	-Wno-format-security
-
-.include "${.CURDIR}/../mod.mk"
+.include <bsd.lib.mk>

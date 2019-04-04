@@ -1,5 +1,3 @@
-/*	$NetBSD: cnvlist.c,v 1.2 2018/09/08 14:02:15 christos Exp $	*/
-
 /*-
  * SPDX-License-Identifier: BSD-2-Clause-FreeBSD
  *
@@ -31,13 +29,9 @@
  */
 
 #include <sys/cdefs.h>
-#ifdef __FreeBSD__
 __FBSDID("$FreeBSD: head/sys/contrib/libnv/cnvlist.c 335343 2018-06-18 21:26:58Z oshogbo $");
-#else
-__RCSID("$NetBSD: cnvlist.c,v 1.2 2018/09/08 14:02:15 christos Exp $");
-#endif
 
-#if defined(_KERNEL) || defined(_STANDALONE)
+#ifdef _KERNEL
 
 #include <sys/types.h>
 #include <sys/param.h>
@@ -45,9 +39,7 @@ __RCSID("$NetBSD: cnvlist.c,v 1.2 2018/09/08 14:02:15 christos Exp $");
 #include <sys/systm.h>
 #include <sys/malloc.h>
 
-#ifdef __FreeBSD__
 #include <machine/stdarg.h>
-#endif
 
 #else
 #include <stdarg.h>
@@ -56,13 +48,8 @@ __RCSID("$NetBSD: cnvlist.c,v 1.2 2018/09/08 14:02:15 christos Exp $");
 #include <stdlib.h>
 #endif
 
-#ifdef __FreeBSD__
-#include <sys/nv.h>
 #include <sys/cnv.h>
-#else
-#include "nv.h"
-#include "cnv.h"
-#endif
+#include <sys/nv.h>
 
 #include "nv_impl.h"
 #include "nvlist_impl.h"
@@ -98,7 +85,7 @@ CNVLIST_GET(bool, bool, BOOL)
 CNVLIST_GET(uint64_t, number, NUMBER)
 CNVLIST_GET(const char *, string, STRING)
 CNVLIST_GET(const nvlist_t *, nvlist, NVLIST)
-#if !defined(_KERNEL) && !defined(_STANDALONE)
+#ifndef _KERNEL
 CNVLIST_GET(int, descriptor, DESCRIPTOR)
 #endif
 
@@ -120,7 +107,7 @@ CNVLIST_GET_ARRAY(const bool *, bool_array, BOOL_ARRAY)
 CNVLIST_GET_ARRAY(const uint64_t *, number_array, NUMBER_ARRAY)
 CNVLIST_GET_ARRAY(const char * const *, string_array, STRING_ARRAY)
 CNVLIST_GET_ARRAY(const nvlist_t * const *, nvlist_array, NVLIST_ARRAY)
-#if !defined(_KERNEL) && !defined(_STANDALONE)
+#ifndef _KERNEL
 CNVLIST_GET_ARRAY(const int *, descriptor_array, DESCRIPTOR_ARRAY)
 #endif
 
@@ -157,7 +144,7 @@ CNVLIST_TAKE(bool, bool, BOOL)
 CNVLIST_TAKE(uint64_t, number, NUMBER)
 CNVLIST_TAKE(char *, string, STRING)
 CNVLIST_TAKE(nvlist_t *, nvlist, NVLIST)
-#if !defined(_KERNEL) && !defined(_STANDALONE)
+#ifndef _KERNEL
 CNVLIST_TAKE(int, descriptor, DESCRIPTOR)
 #endif
 
@@ -185,7 +172,7 @@ CNVLIST_TAKE_ARRAY(bool *, bool_array, BOOL_ARRAY)
 CNVLIST_TAKE_ARRAY(uint64_t *, number_array, NUMBER_ARRAY)
 CNVLIST_TAKE_ARRAY(char **, string_array, STRING_ARRAY)
 CNVLIST_TAKE_ARRAY(nvlist_t **, nvlist_array, NVLIST_ARRAY)
-#if !defined(_KERNEL) && !defined(_STANDALONE)
+#ifndef _KERNEL
 CNVLIST_TAKE_ARRAY(int *, descriptor_array, DESCRIPTOR_ARRAY);
 #endif
 
@@ -224,7 +211,7 @@ CNVLIST_FREE(bool_array)
 CNVLIST_FREE(number_array)
 CNVLIST_FREE(string_array)
 CNVLIST_FREE(nvlist_array)
-#if !defined(_KERNEL) && !defined(_STANDALONE)
+#ifndef _KERNEL
 CNVLIST_FREE(descriptor)
 CNVLIST_FREE(descriptor_array)
 #endif

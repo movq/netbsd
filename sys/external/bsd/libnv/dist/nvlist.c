@@ -1,5 +1,3 @@
-/*	$NetBSD: nvlist.c,v 1.7 2019/02/12 12:49:23 rmind Exp $	*/
-
 /*-
  * SPDX-License-Identifier: BSD-2-Clause-FreeBSD
  *
@@ -33,17 +31,13 @@
  */
 
 #include <sys/cdefs.h>
-#ifdef __FreeBSD__
 __FBSDID("$FreeBSD: head/sys/contrib/libnv/nvlist.c 335347 2018-06-18 22:57:32Z oshogbo $");
-#else
-__RCSID("$NetBSD: nvlist.c,v 1.7 2019/02/12 12:49:23 rmind Exp $");
-#endif
 
 #include <sys/param.h>
 #include <sys/endian.h>
 #include <sys/queue.h>
 
-#if defined(_KERNEL) || defined(_STANDALONE)
+#ifdef _KERNEL
 
 #include <sys/errno.h>
 #include <sys/kernel.h>
@@ -51,9 +45,7 @@ __RCSID("$NetBSD: nvlist.c,v 1.7 2019/02/12 12:49:23 rmind Exp $");
 #include <sys/malloc.h>
 #include <sys/systm.h>
 
-#ifdef __FreeBSD__
 #include <machine/stdarg.h>
-#endif
 
 #else
 #include <sys/socket.h>
@@ -74,27 +66,18 @@ __RCSID("$NetBSD: nvlist.c,v 1.7 2019/02/12 12:49:23 rmind Exp $");
 #include <pjdlog.h>
 #endif
 
-#ifdef __FreeBSD__
 #include <sys/nv.h>
-#else
-#include "nv.h"
-#endif
 
 #include "nv_impl.h"
 #include "nvlist_impl.h"
 #include "nvpair_impl.h"
 
 #ifndef	HAVE_PJDLOG
-#if defined(_KERNEL) || defined(_STANDALONE)
-#ifdef __FreeBSD__
+#ifdef _KERNEL
 #define	PJDLOG_ASSERT(...)		MPASS(__VA_ARGS__)
-#else
-#define	PJDLOG_ASSERT(...)		KASSERT(__VA_ARGS__)
-#endif
 #define	PJDLOG_RASSERT(expr, ...)	KASSERT(expr, (__VA_ARGS__))
 #define	PJDLOG_ABORT(...)		panic(__VA_ARGS__)
 #else
-#ifndef __lint__
 #include <assert.h>
 #define	PJDLOG_ASSERT(...)		assert(__VA_ARGS__)
 #define	PJDLOG_RASSERT(expr, ...)	assert(expr)
@@ -103,12 +86,7 @@ __RCSID("$NetBSD: nvlist.c,v 1.7 2019/02/12 12:49:23 rmind Exp $");
 	fprintf(stderr, __VA_ARGS__);					\
 	fprintf(stderr, "\n");						\
 	abort();							\
-} while (/*CONSTCOND*/0)
-#else
-#define	PJDLOG_ASSERT(...)
-#define	PJDLOG_RASSERT(expr, ...)
-#define	PJDLOG_ABORT(...)
-#endif
+} while (0)
 #endif
 #endif
 
@@ -129,7 +107,7 @@ struct nvlist {
 #define	NVLIST_ASSERT(nvl)	do {					\
 	PJDLOG_ASSERT((nvl) != NULL);					\
 	PJDLOG_ASSERT((nvl)->nvl_magic == NVLIST_MAGIC);		\
-} while (/*CONSTCOND*/0)
+} while (0)
 
 #ifdef _KERNEL
 MALLOC_DEFINE(M_NVLIST, "nvlist", "kernel nvlist");
@@ -269,15 +247,6 @@ nvlist_set_array_next(nvlist_t *nvl, nvpair_t *ele)
 	nvl->nvl_array_next = ele;
 }
 
-nvpair_t *
-nvlist_get_array_next_nvpair(nvlist_t *nvl)
-{
-
-	NVLIST_ASSERT(nvl);
-
-	return (nvl->nvl_array_next);
-}
-
 bool
 nvlist_in_array(const nvlist_t *nvl)
 {
@@ -346,7 +315,7 @@ nvlist_set_flags(nvlist_t *nvl, int flags)
 	nvl->nvl_flags = flags;
 }
 
-__dead void
+void
 nvlist_report_missing(int type, const char *name)
 {
 
@@ -441,7 +410,7 @@ nvlist_clone(const nvlist_t *nvl)
 	return (newnvl);
 }
 
-#if !defined(_KERNEL) && !defined(_STANDALONE)
+#ifndef _KERNEL
 static bool
 nvlist_dump_error_check(const nvlist_t *nvl, int fd, int level)
 {
@@ -736,7 +705,7 @@ out:
 	return (size);
 }
 
-#if !defined(_KERNEL) && !defined(_STANDALONE)
+#ifndef _KERNEL
 static int *
 nvlist_xdescriptors(const nvlist_t *nvl, int *descs)
 {
@@ -795,7 +764,7 @@ nvlist_xdescriptors(const nvlist_t *nvl, int *descs)
 }
 #endif
 
-#if !defined(_KERNEL) && !defined(_STANDALONE)
+#ifndef _KERNEL
 int *
 nvlist_descriptors(const nvlist_t *nvl, size_t *nitemsp)
 {
@@ -818,7 +787,7 @@ nvlist_descriptors(const nvlist_t *nvl, size_t *nitemsp)
 size_t
 nvlist_ndescriptors(const nvlist_t *nvl)
 {
-#if !defined(_KERNEL) && !defined(_STANDALONE)
+#ifndef _KERNEL
 	void *cookie;
 	nvpair_t *nvp;
 	size_t ndescs;
@@ -955,7 +924,7 @@ nvlist_xpack(const nvlist_t *nvl, int64_t *fdidxp, size_t *sizep)
 			}
 			ptr = nvpair_pack_nvlist_up(ptr, &left);
 			break;
-#if !defined(_KERNEL) && !defined(_STANDALONE)
+#ifndef _KERNEL
 		case NV_TYPE_DESCRIPTOR:
 			ptr = nvpair_pack_descriptor(nvp, ptr, fdidxp, &left);
 			break;
@@ -1189,7 +1158,7 @@ nvlist_xunpack(const void *buf, size_t size, const int *fds, size_t nfds,
 				goto fail;
 			nvlist_set_parent(tmpnvl, nvp);
 			break;
-#if !defined(_KERNEL) && !defined(_STANDALONE) && !defined(__NetBSD__)
+#ifndef _KERNEL
 		case NV_TYPE_DESCRIPTOR:
 			ptr = nvpair_unpack_descriptor(isbe, nvp, ptr, &left,
 			    fds, nfds);
@@ -1273,7 +1242,7 @@ nvlist_unpack(const void *buf, size_t size, int flags)
 	return (nvlist_xunpack(buf, size, NULL, 0, flags));
 }
 
-#if !defined(_KERNEL) && !defined(_STANDALONE) && defined(WITH_MSGIO)
+#ifndef _KERNEL
 int
 nvlist_send(int sock, const nvlist_t *nvl)
 {
@@ -1471,7 +1440,7 @@ NVLIST_EXISTS(bool_array, BOOL_ARRAY)
 NVLIST_EXISTS(number_array, NUMBER_ARRAY)
 NVLIST_EXISTS(string_array, STRING_ARRAY)
 NVLIST_EXISTS(nvlist_array, NVLIST_ARRAY)
-#if !defined(_KERNEL) && !defined(_STANDALONE)
+#ifndef _KERNEL
 NVLIST_EXISTS(descriptor, DESCRIPTOR)
 NVLIST_EXISTS(descriptor_array, DESCRIPTOR_ARRAY)
 #endif
@@ -1507,7 +1476,6 @@ nvlist_add_nvpair(nvlist_t *nvl, const nvpair_t *nvp)
 	nvpair_insert(&nvl->nvl_head, newnvp, nvl);
 }
 
-#if !defined(_KERNEL) && !defined(_STANDALONE) && !defined(__NetBSD__)
 void
 nvlist_add_stringf(nvlist_t *nvl, const char *name, const char *valuefmt, ...)
 {
@@ -1537,7 +1505,6 @@ nvlist_add_stringv(nvlist_t *nvl, const char *name, const char *valuefmt,
 		(void)nvlist_move_nvpair(nvl, nvp);
 	}
 }
-#endif
 
 void
 nvlist_add_null(nvlist_t *nvl, const char *name)
@@ -1603,7 +1570,7 @@ NVLIST_ADD(bool, bool)
 NVLIST_ADD(uint64_t, number)
 NVLIST_ADD(const char *, string)
 NVLIST_ADD(const nvlist_t *, nvlist)
-#if !defined(_KERNEL) && !defined(_STANDALONE)
+#ifndef _KERNEL
 NVLIST_ADD(int, descriptor);
 #endif
 
@@ -1634,7 +1601,7 @@ NVLIST_ADD_ARRAY(const bool *, bool)
 NVLIST_ADD_ARRAY(const uint64_t *, number)
 NVLIST_ADD_ARRAY(const char * const *, string)
 NVLIST_ADD_ARRAY(const nvlist_t * const *, nvlist)
-#if !defined(_KERNEL) && !defined(_STANDALONE)
+#ifndef _KERNEL
 NVLIST_ADD_ARRAY(const int *, descriptor)
 #endif
 
@@ -1665,7 +1632,7 @@ NVLIST_APPEND_ARRAY(const bool, bool, BOOL)
 NVLIST_APPEND_ARRAY(const uint64_t, number, NUMBER)
 NVLIST_APPEND_ARRAY(const char *, string, STRING)
 NVLIST_APPEND_ARRAY(const nvlist_t *, nvlist, NVLIST)
-#if !defined(_KERNEL) && !defined(_STANDALONE)
+#ifndef _KERNEL
 NVLIST_APPEND_ARRAY(const int, descriptor, DESCRIPTOR)
 #endif
 
@@ -1737,7 +1704,7 @@ nvlist_move_nvlist(nvlist_t *nvl, const char *name, nvlist_t *value)
 	}
 }
 
-#if !defined(_KERNEL) && !defined(_STANDALONE)
+#ifndef _KERNEL
 void
 nvlist_move_descriptor(nvlist_t *nvl, const char *name, int value)
 {
@@ -1875,7 +1842,7 @@ nvlist_move_number_array(nvlist_t *nvl, const char *name, uint64_t *value,
 	}
 }
 
-#if !defined(_KERNEL) && !defined(_STANDALONE)
+#ifndef _KERNEL
 void
 nvlist_move_descriptor_array(nvlist_t *nvl, const char *name, int *value,
     size_t nitems)
@@ -1927,7 +1894,7 @@ NVLIST_GET(bool, bool, BOOL)
 NVLIST_GET(uint64_t, number, NUMBER)
 NVLIST_GET(const char *, string, STRING)
 NVLIST_GET(const nvlist_t *, nvlist, NVLIST)
-#if !defined(_KERNEL) && !defined(_STANDALONE)
+#ifndef _KERNEL
 NVLIST_GET(int, descriptor, DESCRIPTOR)
 #endif
 
@@ -1962,7 +1929,7 @@ NVLIST_GET_ARRAY(const bool *, bool, BOOL)
 NVLIST_GET_ARRAY(const uint64_t *, number, NUMBER)
 NVLIST_GET_ARRAY(const char * const *, string, STRING)
 NVLIST_GET_ARRAY(const nvlist_t * const *, nvlist, NVLIST)
-#if !defined(_KERNEL) && !defined(_STANDALONE)
+#ifndef _KERNEL
 NVLIST_GET_ARRAY(const int *, descriptor, DESCRIPTOR)
 #endif
 
@@ -1988,7 +1955,7 @@ NVLIST_TAKE(bool, bool, BOOL)
 NVLIST_TAKE(uint64_t, number, NUMBER)
 NVLIST_TAKE(char *, string, STRING)
 NVLIST_TAKE(nvlist_t *, nvlist, NVLIST)
-#if !defined(_KERNEL) && !defined(_STANDALONE)
+#ifndef _KERNEL
 NVLIST_TAKE(int, descriptor, DESCRIPTOR)
 #endif
 
@@ -2031,7 +1998,7 @@ NVLIST_TAKE_ARRAY(bool *, bool, BOOL)
 NVLIST_TAKE_ARRAY(uint64_t *, number, NUMBER)
 NVLIST_TAKE_ARRAY(char **, string, STRING)
 NVLIST_TAKE_ARRAY(nvlist_t **, nvlist, NVLIST)
-#if !defined(_KERNEL) && !defined(_STANDALONE)
+#ifndef _KERNEL
 NVLIST_TAKE_ARRAY(int *, descriptor, DESCRIPTOR)
 #endif
 
@@ -2071,7 +2038,7 @@ NVLIST_FREE(bool_array, BOOL_ARRAY)
 NVLIST_FREE(number_array, NUMBER_ARRAY)
 NVLIST_FREE(string_array, STRING_ARRAY)
 NVLIST_FREE(nvlist_array, NVLIST_ARRAY)
-#if !defined(_KERNEL) && !defined(_STANDALONE)
+#ifndef _KERNEL
 NVLIST_FREE(descriptor, DESCRIPTOR)
 NVLIST_FREE(descriptor_array, DESCRIPTOR_ARRAY)
 #endif

@@ -1,9 +1,7 @@
-/*	$NetBSD: defs.h,v 1.12 2014/06/06 21:56:39 wiz Exp $	*/
-
 /*-
  * Copyright (c) 1992 Diomidis Spinellis.
- * Copyright (c) 1992, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1992 The Regents of the University of California.
+ * All rights reserved.
  *
  * This code is derived from software contributed to Berkeley by
  * Diomidis Spinellis of Imperial College, University of London.
@@ -16,7 +14,11 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. Neither the name of the University nor the names of its contributors
+ * 3. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgement:
+ *	This product includes software developed by the University of
+ *	California, Berkeley and its contributors.
+ * 4. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -32,18 +34,16 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	@(#)defs.h	8.1 (Berkeley) 6/6/93
- * $FreeBSD: head/usr.bin/sed/defs.h 192732 2009-05-25 06:45:33Z brian $
+ *	@(#)defs.h	5.3 (Berkeley) 8/28/92
  */
 
 /*
  * Types of address specifications
  */
 enum e_atype {
-	AT_RE	    = 1,			/* Line that match RE */
+	AT_RE,					/* Line that match RE */
 	AT_LINE,				/* Specific line */
-	AT_RELLINE,				/* Relative line */
-	AT_LAST					/* Last line */
+	AT_LAST,				/* Last line */
 };
 
 /*
@@ -63,47 +63,33 @@ struct s_addr {
 struct s_subst {
 	int n;					/* Occurrence to subst. */
 	int p;					/* True if p flag */
-	int icase;				/* True if I flag */
 	char *wfile;				/* NULL if no wfile */
 	int wfd;				/* Cached file descriptor */
 	regex_t *re;				/* Regular expression */
-	unsigned int maxbref;			/* Largest backreference. */
+	int maxbref;				/* Largest backreference. */
 	u_long linenum;				/* Line number. */
 	char *new;				/* Replacement text */
 };
 
-/*
- * Translate command.
- */
-struct s_tr {
-	unsigned char bytetab[256];
-	struct trmulti {
-		size_t fromlen;
-		char from[MB_LEN_MAX];
-		size_t tolen;
-		char to[MB_LEN_MAX];
-	} *multis;
-	size_t nmultis;
-};
 
 /*
  * An internally compiled command.
- * Initialy, label references are stored in t, on a second pass they
+ * Initialy, label references are stored in u.t, on a second pass they
  * are updated to pointers.
  */
 struct s_command {
 	struct s_command *next;			/* Pointer to next command */
 	struct s_addr *a1, *a2;			/* Start and end address */
-	u_long startline;			/* Start line number or zero */
 	char *t;				/* Text for : a c i r w */
 	union {
 		struct s_command *c;		/* Command(s) for b t { */
 		struct s_subst *s;		/* Substitute command */
-		struct s_tr *y;			/* Replace command array */
+		u_char *y;			/* Replace command array */
 		int fd;				/* File descriptor for w */
 	} u;
 	char code;				/* Command code */
 	u_int nonsel:1;				/* True if ! */
+	u_int inrange:1;			/* True if in range */
 };
 
 /*
@@ -114,7 +100,6 @@ enum e_args {
 	TEXT,			/* a c i */
 	NONSEL,			/* ! */
 	GROUP,			/* { */
-	ENDGROUP,		/* } */
 	COMMENT,		/* # */
 	BRANCH,			/* b t */
 	LABEL,			/* : */
@@ -130,12 +115,12 @@ enum e_args {
 struct s_appends {
 	enum {AP_STRING, AP_FILE} type;
 	char *s;
-	size_t len;
 };
 
 enum e_spflag {
 	APPEND,					/* Append to the contents. */
-	REPLACE					/* Replace the contents. */
+	APPENDNL,				/* Append, with newline. */
+	REPLACE,				/* Replace the contents. */
 };
 
 /*
@@ -148,3 +133,16 @@ typedef struct {
 	char *back;		/* Backing memory. */
 	size_t blen;		/* Backing memory length. */
 } SPACE;
+
+/*
+ * Error severity codes:
+ */
+#define	FATAL		0	/* Exit immediately with 1 */
+#define	ERROR		1	/* Continue, but change exit value */
+#define	WARNING		2	/* Just print the warning */
+#define	COMPILE		3	/* Print error, count and finish script */
+#define	COMPILE2	3	/* Print error, count and finish script */
+
+#ifdef GNU_REGEX
+# define FASTMAP_SIZE 256	/* size of fastmap for ASCII char set */
+#endif
