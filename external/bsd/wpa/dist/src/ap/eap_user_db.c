@@ -83,16 +83,12 @@ static int get_user_cb(void *ctx, int argc, char *argv[], char *col[])
 
 	for (i = 0; i < argc; i++) {
 		if (os_strcmp(col[i], "password") == 0 && argv[i]) {
-			bin_clear_free(user->password, user->password_len);
+			os_free(user->password);
 			user->password_len = os_strlen(argv[i]);
 			user->password = (u8 *) os_strdup(argv[i]);
 			user->next = (void *) 1;
 		} else if (os_strcmp(col[i], "methods") == 0 && argv[i]) {
 			set_user_methods(user, argv[i]);
-		} else if (os_strcmp(col[i], "remediation") == 0 && argv[i]) {
-			user->remediation = strlen(argv[i]) > 0;
-		} else if (os_strcmp(col[i], "t_c_timestamp") == 0 && argv[i]) {
-			user->t_c_timestamp = strtol(argv[i], NULL, 10);
 		}
 	}
 
@@ -120,7 +116,7 @@ static int get_wildcard_cb(void *ctx, int argc, char *argv[], char *col[])
 	if (len <= user->identity_len &&
 	    os_memcmp(argv[id], user->identity, len) == 0 &&
 	    (user->password == NULL || len > user->password_len)) {
-		bin_clear_free(user->password, user->password_len);
+		os_free(user->password);
 		user->password_len = os_strlen(argv[id]);
 		user->password = (u8 *) os_strdup(argv[id]);
 		user->next = (void *) 1;
@@ -140,12 +136,8 @@ eap_user_sqlite_get(struct hostapd_data *hapd, const u8 *identity,
 	char id_str[256], cmd[300];
 	size_t i;
 
-	if (identity_len >= sizeof(id_str)) {
-		wpa_printf(MSG_DEBUG, "%s: identity len too big: %d >= %d",
-			   __func__, (int) identity_len,
-			   (int) (sizeof(id_str)));
+	if (identity_len >= sizeof(id_str))
 		return NULL;
-	}
 	os_memcpy(id_str, identity, identity_len);
 	id_str[identity_len] = '\0';
 	for (i = 0; i < identity_len; i++) {
@@ -164,10 +156,8 @@ eap_user_sqlite_get(struct hostapd_data *hapd, const u8 *identity,
 		return NULL;
 	}
 
-	bin_clear_free(hapd->tmp_eap_user.identity,
-		       hapd->tmp_eap_user.identity_len);
-	bin_clear_free(hapd->tmp_eap_user.password,
-		       hapd->tmp_eap_user.password_len);
+	os_free(hapd->tmp_eap_user.identity);
+	os_free(hapd->tmp_eap_user.password);
 	os_memset(&hapd->tmp_eap_user, 0, sizeof(hapd->tmp_eap_user));
 	hapd->tmp_eap_user.phase2 = phase2;
 	hapd->tmp_eap_user.identity = os_zalloc(identity_len + 1);
@@ -183,14 +173,12 @@ eap_user_sqlite_get(struct hostapd_data *hapd, const u8 *identity,
 	}
 
 	os_snprintf(cmd, sizeof(cmd),
-		    "SELECT * FROM users WHERE identity='%s' AND phase2=%d;",
-		    id_str, phase2);
+		    "SELECT password,methods FROM users WHERE "
+		    "identity='%s' AND phase2=%d;", id_str, phase2);
 	wpa_printf(MSG_DEBUG, "DB: %s", cmd);
 	if (sqlite3_exec(db, cmd, get_user_cb, &hapd->tmp_eap_user, NULL) !=
 	    SQLITE_OK) {
-		wpa_printf(MSG_DEBUG,
-			   "DB: Failed to complete SQL operation: %s  db: %s",
-			   sqlite3_errmsg(db), hapd->conf->eap_user_sqlite);
+		wpa_printf(MSG_DEBUG, "DB: Failed to complete SQL operation");
 	} else if (hapd->tmp_eap_user.next)
 		user = &hapd->tmp_eap_user;
 
@@ -200,10 +188,8 @@ eap_user_sqlite_get(struct hostapd_data *hapd, const u8 *identity,
 		wpa_printf(MSG_DEBUG, "DB: %s", cmd);
 		if (sqlite3_exec(db, cmd, get_wildcard_cb, &hapd->tmp_eap_user,
 				 NULL) != SQLITE_OK) {
-			wpa_printf(MSG_DEBUG,
-				   "DB: Failed to complete SQL operation: %s  db: %s",
-				   sqlite3_errmsg(db),
-				   hapd->conf->eap_user_sqlite);
+			wpa_printf(MSG_DEBUG, "DB: Failed to complete SQL "
+				   "operation");
 		} else if (hapd->tmp_eap_user.next) {
 			user = &hapd->tmp_eap_user;
 			os_free(user->identity);

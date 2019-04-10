@@ -2,8 +2,14 @@
  * WPA Supplicant - ASCII passphrase to WPA PSK tool
  * Copyright (c) 2003-2005, Jouni Malinen <j@w1.fi>
  *
- * This software may be distributed under the terms of the BSD license.
- * See README for more details.
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
+ *
+ * Alternatively, this software may be distributed under the terms of BSD
+ * license.
+ *
+ * See README and COPYING for more details.
  */
 
 #include "includes.h"
@@ -17,7 +23,6 @@ int main(int argc, char *argv[])
 	unsigned char psk[32];
 	int i;
 	char *ssid, *passphrase, buf[64], *pos;
-	size_t len;
 
 	if (argc < 2) {
 		printf("usage: wpa_passphrase <ssid> [passphrase]\n"
@@ -48,17 +53,12 @@ int main(int argc, char *argv[])
 		passphrase = buf;
 	}
 
-	len = os_strlen(passphrase);
-	if (len < 8 || len > 63) {
+	if (os_strlen(passphrase) < 8 || os_strlen(passphrase) > 63) {
 		printf("Passphrase must be 8..63 characters\n");
 		return 1;
 	}
-	if (has_ctrl_char((u8 *) passphrase, len)) {
-		printf("Invalid passphrase character\n");
-		return 1;
-	}
 
-	pbkdf2_sha1(passphrase, (u8 *) ssid, os_strlen(ssid), 4096, psk, 32);
+	pbkdf2_sha1(passphrase, ssid, os_strlen(ssid), 4096, psk, 32);
 
 	printf("network={\n");
 	printf("\tssid=\"%s\"\n", ssid);

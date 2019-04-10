@@ -242,7 +242,6 @@
 
 
 static int acs_request_scan(struct hostapd_iface *iface);
-static int acs_survey_is_sufficient(struct freq_survey *survey);
 
 
 static void acs_clean_chan_surveys(struct hostapd_channel_data *chan)
@@ -260,7 +259,7 @@ static void acs_clean_chan_surveys(struct hostapd_channel_data *chan)
 }
 
 
-void acs_cleanup(struct hostapd_iface *iface)
+static void acs_cleanup(struct hostapd_iface *iface)
 {
 	int i;
 	struct hostapd_channel_data *chan;
@@ -314,7 +313,7 @@ acs_survey_interference_factor(struct freq_survey *survey, s8 min_nf)
 
 	/* TODO: figure out the best multiplier for noise floor base */
 	factor = pow(10, survey->nf / 5.0L) +
-		(total ? (busy / total) : 0) *
+		(busy / total) *
 		pow(2, pow(10, (long double) survey->nf / 10.0L) -
 		    pow(10, (long double) min_nf / 10.0L));
 
@@ -329,36 +328,29 @@ acs_survey_chan_interference_factor(struct hostapd_iface *iface,
 	struct freq_survey *survey;
 	unsigned int i = 0;
 	long double int_factor = 0;
-	unsigned count = 0;
 
-	if (dl_list_empty(&chan->survey_list) ||
-	    (chan->flag & HOSTAPD_CHAN_DISABLED))
+	if (dl_list_empty(&chan->survey_list))
+		return;
+
+	if (chan->flag & HOSTAPD_CHAN_DISABLED)
 		return;
 
 	chan->interference_factor = 0;
 
 	dl_list_for_each(survey, &chan->survey_list, struct freq_survey, list)
 	{
-		i++;
-
-		if (!acs_survey_is_sufficient(survey)) {
-			wpa_printf(MSG_DEBUG, "ACS: %d: insufficient data", i);
-			continue;
-		}
-
-		count++;
 		int_factor = acs_survey_interference_factor(survey,
 							    iface->lowest_nf);
 		chan->interference_factor += int_factor;
 		wpa_printf(MSG_DEBUG, "ACS: %d: min_nf=%d interference_factor=%Lg nf=%d time=%lu busy=%lu rx=%lu",
-			   i, chan->min_nf, int_factor,
+			   ++i, chan->min_nf, int_factor,
 			   survey->nf, (unsigned long) survey->channel_time,
 			   (unsigned long) survey->channel_time_busy,
 			   (unsigned long) survey->channel_time_rx);
 	}
 
-	if (count)
-		chan->interference_factor /= count;
+	chan->interference_factor = chan->interference_factor /
+		dl_list_len(&chan->survey_list);
 }
 
 
@@ -392,19 +384,18 @@ static int acs_usable_vht80_chan(struct hostapd_channel_data *chan)
 static int acs_survey_is_sufficient(struct freq_survey *survey)
 {
 	if (!(survey->filled & SURVEY_HAS_NF)) {
-		wpa_printf(MSG_INFO, "ACS: Survey is missing noise floor");
+		wpa_printf(MSG_ERROR, "ACS: Survey is missing noise floor");
 		return 0;
 	}
 
 	if (!(survey->filled & SURVEY_HAS_CHAN_TIME)) {
-		wpa_printf(MSG_INFO, "ACS: Survey is missing channel time");
+		wpa_printf(MSG_ERROR, "ACS: Survey is missing channel time");
 		return 0;
 	}
 
 	if (!(survey->filled & SURVEY_HAS_CHAN_TIME_BUSY) &&
 	    !(survey->filled & SURVEY_HAS_CHAN_TIME_RX)) {
-		wpa_printf(MSG_INFO,
-			   "ACS: Survey is missing RX and busy time (at least one is required)");
+		wpa_printf(MSG_ERROR, "ACS: Survey is missing RX and busy time (at least one is required)");
 		return 0;
 	}
 
@@ -415,27 +406,18 @@ static int acs_survey_is_sufficient(struct freq_survey *survey)
 static int acs_survey_list_is_sufficient(struct hostapd_channel_data *chan)
 {
 	struct freq_survey *survey;
-	int ret = -1;
 
 	dl_list_for_each(survey, &chan->survey_list, struct freq_survey, list)
 	{
-		if (acs_survey_is_sufficient(survey)) {
-			ret = 1;
-			break;
+		if (!acs_survey_is_sufficient(survey)) {
+			wpa_printf(MSG_ERROR, "ACS: Channel %d has insufficient survey data",
+				   chan->chan);
+			return 0;
 		}
-		ret = 0;
 	}
 
-	if (ret == -1)
-		ret = 1; /* no survey list entries */
+	return 1;
 
-	if (!ret) {
-		wpa_printf(MSG_INFO,
-			   "ACS: Channel %d has insufficient survey data",
-			   chan->chan);
-	}
-
-	return ret;
 }
 
 
@@ -447,9 +429,13 @@ static int acs_surveys_are_sufficient(struct hostapd_iface *iface)
 
 	for (i = 0; i < iface->current_mode->num_channels; i++) {
 		chan = &iface->current_mode->channels[i];
-		if (!(chan->flag & HOSTAPD_CHAN_DISABLED) &&
-		    acs_survey_list_is_sufficient(chan))
-			valid++;
+		if (chan->flag & HOSTAPD_CHAN_DISABLED)
+			continue;
+
+		if (!acs_survey_list_is_sufficient(chan))
+			continue;
+
+		valid++;
 	}
 
 	/* We need at least survey data for one channel */
@@ -459,19 +445,13 @@ static int acs_surveys_are_sufficient(struct hostapd_iface *iface)
 
 static int acs_usable_chan(struct hostapd_channel_data *chan)
 {
-	return !dl_list_empty(&chan->survey_list) &&
-		!(chan->flag & HOSTAPD_CHAN_DISABLED) &&
-		acs_survey_list_is_sufficient(chan);
-}
-
-
-static int is_in_chanlist(struct hostapd_iface *iface,
-			  struct hostapd_channel_data *chan)
-{
-	if (!iface->conf->acs_ch_list.num)
-		return 1;
-
-	return freq_range_list_includes(&iface->conf->acs_ch_list, chan->chan);
+	if (dl_list_empty(&chan->survey_list))
+		return 0;
+	if (chan->flag & HOSTAPD_CHAN_DISABLED)
+		return 0;
+	if (!acs_survey_list_is_sufficient(chan))
+		return 0;
+	return 1;
 }
 
 
@@ -485,9 +465,6 @@ static void acs_survey_all_chans_intereference_factor(
 		chan = &iface->current_mode->channels[i];
 
 		if (!acs_usable_chan(chan))
-			continue;
-
-		if (!is_in_chanlist(iface, chan))
 			continue;
 
 		wpa_printf(MSG_DEBUG, "ACS: Survey analysis for channel %d (%d MHz)",
@@ -521,36 +498,6 @@ static struct hostapd_channel_data *acs_find_chan(struct hostapd_iface *iface,
 }
 
 
-static int is_24ghz_mode(enum hostapd_hw_mode mode)
-{
-	return mode == HOSTAPD_MODE_IEEE80211B ||
-		mode == HOSTAPD_MODE_IEEE80211G;
-}
-
-
-static int is_common_24ghz_chan(int chan)
-{
-	return chan == 1 || chan == 6 || chan == 11;
-}
-
-
-#ifndef ACS_ADJ_WEIGHT
-#define ACS_ADJ_WEIGHT 0.85
-#endif /* ACS_ADJ_WEIGHT */
-
-#ifndef ACS_NEXT_ADJ_WEIGHT
-#define ACS_NEXT_ADJ_WEIGHT 0.55
-#endif /* ACS_NEXT_ADJ_WEIGHT */
-
-#ifndef ACS_24GHZ_PREFER_1_6_11
-/*
- * Select commonly used channels 1, 6, 11 by default even if a neighboring
- * channel has a smaller interference factor as long as it is not better by more
- * than this multiplier.
- */
-#define ACS_24GHZ_PREFER_1_6_11 0.8
-#endif /* ACS_24GHZ_PREFER_1_6_11 */
-
 /*
  * At this point it's assumed chan->interface_factor has been computed.
  * This function should be reusable regardless of interference computation
@@ -565,7 +512,6 @@ acs_find_ideal_chan(struct hostapd_iface *iface)
 	long double factor, ideal_factor = 0;
 	int i, j;
 	int n_chans = 1;
-	unsigned int k;
 
 	/* TODO: HT40- support */
 
@@ -588,19 +534,15 @@ acs_find_ideal_chan(struct hostapd_iface *iface)
 	wpa_printf(MSG_DEBUG, "ACS: Survey analysis for selected bandwidth %d MHz",
 		   n_chans == 1 ? 20 :
 		   n_chans == 2 ? 40 :
-		   80);
+		   n_chans == 4 ? 80 :
+		   -1);
 
 	for (i = 0; i < iface->current_mode->num_channels; i++) {
-		double total_weight;
-		struct acs_bias *bias, tmp_bias;
-
 		chan = &iface->current_mode->channels[i];
 
 		if (chan->flag & HOSTAPD_CHAN_DISABLED)
 			continue;
 
-		if (!is_in_chanlist(iface, chan))
-			continue;
 
 		/* HT40 on 5 GHz has a limited set of primary channels as per
 		 * 11n Annex J */
@@ -625,17 +567,14 @@ acs_find_ideal_chan(struct hostapd_iface *iface)
 		factor = 0;
 		if (acs_usable_chan(chan))
 			factor = chan->interference_factor;
-		total_weight = 1;
 
 		for (j = 1; j < n_chans; j++) {
 			adj_chan = acs_find_chan(iface, chan->freq + (j * 20));
 			if (!adj_chan)
 				break;
 
-			if (acs_usable_chan(adj_chan)) {
+			if (acs_usable_chan(adj_chan))
 				factor += adj_chan->interference_factor;
-				total_weight += 1;
-			}
 		}
 
 		if (j != n_chans) {
@@ -646,69 +585,36 @@ acs_find_ideal_chan(struct hostapd_iface *iface)
 
 		/* 2.4 GHz has overlapping 20 MHz channels. Include adjacent
 		 * channel interference factor. */
-		if (is_24ghz_mode(iface->current_mode->mode)) {
+		if (iface->current_mode->mode == HOSTAPD_MODE_IEEE80211B ||
+		    iface->current_mode->mode == HOSTAPD_MODE_IEEE80211G) {
 			for (j = 0; j < n_chans; j++) {
+				/* TODO: perhaps a multiplier should be used
+				 * here? */
+
 				adj_chan = acs_find_chan(iface, chan->freq +
 							 (j * 20) - 5);
-				if (adj_chan && acs_usable_chan(adj_chan)) {
-					factor += ACS_ADJ_WEIGHT *
-						adj_chan->interference_factor;
-					total_weight += ACS_ADJ_WEIGHT;
-				}
+				if (adj_chan && acs_usable_chan(adj_chan))
+					factor += adj_chan->interference_factor;
 
 				adj_chan = acs_find_chan(iface, chan->freq +
 							 (j * 20) - 10);
-				if (adj_chan && acs_usable_chan(adj_chan)) {
-					factor += ACS_NEXT_ADJ_WEIGHT *
-						adj_chan->interference_factor;
-					total_weight += ACS_NEXT_ADJ_WEIGHT;
-				}
+				if (adj_chan && acs_usable_chan(adj_chan))
+					factor += adj_chan->interference_factor;
 
 				adj_chan = acs_find_chan(iface, chan->freq +
 							 (j * 20) + 5);
-				if (adj_chan && acs_usable_chan(adj_chan)) {
-					factor += ACS_ADJ_WEIGHT *
-						adj_chan->interference_factor;
-					total_weight += ACS_ADJ_WEIGHT;
-				}
+				if (adj_chan && acs_usable_chan(adj_chan))
+					factor += adj_chan->interference_factor;
 
 				adj_chan = acs_find_chan(iface, chan->freq +
 							 (j * 20) + 10);
-				if (adj_chan && acs_usable_chan(adj_chan)) {
-					factor += ACS_NEXT_ADJ_WEIGHT *
-						adj_chan->interference_factor;
-					total_weight += ACS_NEXT_ADJ_WEIGHT;
-				}
+				if (adj_chan && acs_usable_chan(adj_chan))
+					factor += adj_chan->interference_factor;
 			}
 		}
 
-		factor /= total_weight;
-
-		bias = NULL;
-		if (iface->conf->acs_chan_bias) {
-			for (k = 0; k < iface->conf->num_acs_chan_bias; k++) {
-				bias = &iface->conf->acs_chan_bias[k];
-				if (bias->channel == chan->chan)
-					break;
-				bias = NULL;
-			}
-		} else if (is_24ghz_mode(iface->current_mode->mode) &&
-			   is_common_24ghz_chan(chan->chan)) {
-			tmp_bias.channel = chan->chan;
-			tmp_bias.bias = ACS_24GHZ_PREFER_1_6_11;
-			bias = &tmp_bias;
-		}
-
-		if (bias) {
-			factor *= bias->bias;
-			wpa_printf(MSG_DEBUG,
-				   "ACS:  * channel %d: total interference = %Lg (%f bias)",
-				   chan->chan, factor, bias->bias);
-		} else {
-			wpa_printf(MSG_DEBUG,
-				   "ACS:  * channel %d: total interference = %Lg",
-				   chan->chan, factor);
-		}
+		wpa_printf(MSG_DEBUG, "ACS:  * channel %d: total interference = %Lg",
+			   chan->chan, factor);
 
 		if (acs_usable_chan(chan) &&
 		    (!ideal_chan || factor < ideal_factor)) {
@@ -777,7 +683,10 @@ static int acs_study_survey_based(struct hostapd_iface *iface)
 
 static int acs_study_options(struct hostapd_iface *iface)
 {
-	if (acs_study_survey_based(iface) == 0)
+	int err;
+
+	err = acs_study_survey_based(iface);
+	if (err == 0)
 		return 0;
 
 	/* TODO: If no surveys are available/sufficient this is a good
@@ -879,9 +788,6 @@ static int acs_request_scan(struct hostapd_iface *iface)
 		if (chan->flag & HOSTAPD_CHAN_DISABLED)
 			continue;
 
-		if (!is_in_chanlist(iface, chan))
-			continue;
-
 		*freq++ = chan->freq;
 	}
 	*freq = 0;
@@ -906,21 +812,14 @@ static int acs_request_scan(struct hostapd_iface *iface)
 
 enum hostapd_chan_status acs_init(struct hostapd_iface *iface)
 {
+	int err;
+
 	wpa_printf(MSG_INFO, "ACS: Automatic channel selection started, this may take a bit");
-
-	if (iface->drv_flags & WPA_DRIVER_FLAGS_ACS_OFFLOAD) {
-		wpa_printf(MSG_INFO, "ACS: Offloading to driver");
-		if (hostapd_drv_do_acs(iface->bss[0]))
-			return HOSTAPD_CHAN_INVALID;
-		return HOSTAPD_CHAN_ACS;
-	}
-
-	if (!iface->current_mode)
-		return HOSTAPD_CHAN_INVALID;
 
 	acs_cleanup(iface);
 
-	if (acs_request_scan(iface) < 0)
+	err = acs_request_scan(iface);
+	if (err < 0)
 		return HOSTAPD_CHAN_INVALID;
 
 	hostapd_set_state(iface, HAPD_IFACE_ACS);

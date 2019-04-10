@@ -1,7 +1,6 @@
 TEMPLATE	= app
 LANGUAGE	= C++
 TRANSLATIONS	= lang/wpa_gui_de.ts
-greaterThan(QT_MAJOR_VERSION, 4): QT += widgets
 
 CONFIG	+= qt warn_on release
 
@@ -35,8 +34,6 @@ HEADERS	+= wpamsg.h \
 	wpagui.h \
 	eventhistory.h \
 	scanresults.h \
-	scanresultsitem.h \
-	signalbar.h \
 	userdatarequest.h \
 	networkconfig.h \
 	addinterface.h \
@@ -47,8 +44,6 @@ SOURCES	+= main.cpp \
 	wpagui.cpp \
 	eventhistory.cpp \
 	scanresults.cpp \
-	scanresultsitem.cpp \
-	signalbar.cpp \
 	userdatarequest.cpp \
 	networkconfig.cpp \
 	addinterface.cpp \

@@ -172,8 +172,7 @@ int get_wpa_status(const char *ifname, const char *field, char *obuf,
 	if (ctrl == NULL)
 		return -1;
 	len = sizeof(buf);
-	if (wpa_ctrl_request(ctrl, "STATUS-NO_EVENTS", 16, buf, &len,
-			     NULL) < 0) {
+	if (wpa_ctrl_request(ctrl, "STATUS", 6, buf, &len, NULL) < 0) {
 		wpa_ctrl_close(ctrl);
 		return -1;
 	}
@@ -222,8 +221,7 @@ int wait_ip_addr(const char *ifname, int timeout)
 		if (get_wpa_status(ifname, "ip_address", ip, sizeof(ip)) == 0
 		    && strlen(ip) > 0) {
 			printf("IP address found: '%s'\n", ip);
-			if (strncmp(ip, "169.254.", 8) != 0)
-				return 0;
+			return 0;
 		}
 		ctrl = wpa_open_ctrl(ifname);
 		if (ctrl == NULL)
