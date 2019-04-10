@@ -2,8 +2,14 @@
  * WPA Supplicant - test code for pre-authentication
  * Copyright (c) 2003-2007, Jouni Malinen <j@w1.fi>
  *
- * This software may be distributed under the terms of the BSD license.
- * See README for more details.
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
+ *
+ * Alternatively, this software may be distributed under the terms of BSD
+ * license.
+ *
+ * See README and COPYING for more details.
  *
  * IEEE 802.1X Supplicant test code (to be used in place of wpa_supplicant.c.
  * Not used in production version.
@@ -27,12 +33,21 @@
 #include "drivers/driver.h"
 
 
-const struct wpa_driver_ops *const wpa_drivers[] = { NULL };
+extern int wpa_debug_level;
+extern int wpa_debug_show_keys;
+
+struct wpa_driver_ops *wpa_drivers[] = { NULL };
 
 
 struct preauth_test_data {
 	int auth_timed_out;
 };
+
+
+static void _wpa_supplicant_disassociate(void *wpa_s, int reason_code)
+{
+	wpa_supplicant_disassociate(wpa_s, reason_code);
+}
 
 
 static void _wpa_supplicant_deauthenticate(void *wpa_s, int reason_code)
@@ -143,19 +158,16 @@ static int wpa_supplicant_mlme_setprotection(void *wpa_s, const u8 *addr,
 }
 
 
-static int wpa_supplicant_add_pmkid(void *wpa_s, void *network_ctx,
-				    const u8 *bssid, const u8 *pmkid,
-				    const u8 *fils_cache_id,
-				    const u8 *pmk, size_t pmk_len)
+static int wpa_supplicant_add_pmkid(void *wpa_s,
+				    const u8 *bssid, const u8 *pmkid)
 {
 	printf("%s - not implemented\n", __func__);
 	return -1;
 }
 
 
-static int wpa_supplicant_remove_pmkid(void *wpa_s, void *network_ctx,
-				       const u8 *bssid, const u8 *pmkid,
-				       const u8 *fils_cache_id)
+static int wpa_supplicant_remove_pmkid(void *wpa_s,
+				       const u8 *bssid, const u8 *pmkid)
 {
 	printf("%s - not implemented\n", __func__);
 	return -1;
@@ -232,6 +244,7 @@ static void wpa_init_conf(struct wpa_supplicant *wpa_s, const char *ifname)
 	ctx->set_state = _wpa_supplicant_set_state;
 	ctx->get_state = _wpa_supplicant_get_state;
 	ctx->deauthenticate = _wpa_supplicant_deauthenticate;
+	ctx->disassociate = _wpa_supplicant_disassociate;
 	ctx->set_key = wpa_supplicant_set_key;
 	ctx->get_network_ctx = wpa_supplicant_get_network_ctx;
 	ctx->get_bssid = wpa_supplicant_get_bssid;
@@ -309,7 +322,7 @@ int main(int argc, char *argv[])
 	}
 
 	os_memset(&wpa_s, 0, sizeof(wpa_s));
-	wpa_s.conf = wpa_config_read(argv[1], NULL);
+	wpa_s.conf = wpa_config_read(argv[1]);
 	if (wpa_s.conf == NULL) {
 		printf("Failed to parse configuration file '%s'.\n", argv[1]);
 		return -1;
@@ -347,8 +360,8 @@ int main(int argc, char *argv[])
 	if (preauth_test.auth_timed_out)
 		ret = -2;
 	else {
-		ret = pmksa_cache_set_current(wpa_s.wpa, NULL, bssid, NULL, 0,
-					      NULL, 0) ? 0 : -3;
+		ret = pmksa_cache_set_current(wpa_s.wpa, NULL, bssid, NULL, 0)
+			? 0 : -3;
 	}
 
 	test_eapol_clean(&wpa_s);

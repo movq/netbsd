@@ -1,10 +1,16 @@
 /*
  * Generic advertisement service (GAS) (IEEE 802.11u)
  * Copyright (c) 2009, Atheros Communications
- * Copyright (c) 2011-2012, Qualcomm Atheros
+ * Copyright (c) 2011, Qualcomm Atheros
  *
- * This software may be distributed under the terms of the BSD license.
- * See README for more details.
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
+ *
+ * Alternatively, this software may be distributed under the terms of BSD
+ * license.
+ *
+ * See README and COPYING for more details.
  */
 
 #include "includes.h"
@@ -31,7 +37,7 @@ gas_build_req(u8 action, u8 dialog_token, size_t size)
 }
 
 
-struct wpabuf * gas_build_initial_req(u8 dialog_token, size_t size)
+static struct wpabuf * gas_build_initial_req(u8 dialog_token, size_t size)
 {
 	return gas_build_req(WLAN_PA_GAS_INITIAL_REQ, dialog_token,
 			     size);
@@ -75,7 +81,7 @@ gas_build_initial_resp(u8 dialog_token, u16 status_code, u16 comeback_delay,
 }
 
 
-struct wpabuf *
+static struct wpabuf *
 gas_build_comeback_resp(u8 dialog_token, u16 status_code, u8 frag_id, u8 more,
 			u16 comeback_delay, size_t size)
 {

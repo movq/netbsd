@@ -2,8 +2,14 @@
  * SSL/TLS interface functions for no TLS case
  * Copyright (c) 2004-2009, Jouni Malinen <j@w1.fi>
  *
- * This software may be distributed under the terms of the BSD license.
- * See README for more details.
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
+ *
+ * Alternatively, this software may be distributed under the terms of BSD
+ * license.
+ *
+ * See README and COPYING for more details.
  */
 
 #include "includes.h"
@@ -45,13 +51,6 @@ int tls_connection_established(void *tls_ctx, struct tls_connection *conn)
 }
 
 
-char * tls_connection_peer_serial_num(void *tls_ctx,
-				      struct tls_connection *conn)
-{
-	return NULL;
-}
-
-
 int tls_connection_shutdown(void *tls_ctx, struct tls_connection *conn)
 {
 	return -1;
@@ -79,29 +78,29 @@ int tls_global_set_verify(void *tls_ctx, int check_crl)
 
 
 int tls_connection_set_verify(void *tls_ctx, struct tls_connection *conn,
-			      int verify_peer, unsigned int flags,
-			      const u8 *session_ctx, size_t session_ctx_len)
+			      int verify_peer)
 {
 	return -1;
 }
 
 
-int tls_connection_get_random(void *tls_ctx, struct tls_connection *conn,
-			      struct tls_random *data)
+int tls_connection_set_ia(void *tls_ctx, struct tls_connection *conn,
+			  int tls_ia)
 {
 	return -1;
 }
 
 
-int tls_connection_export_key(void *tls_ctx, struct tls_connection *conn,
-			      const char *label, u8 *out, size_t out_len)
+int tls_connection_get_keys(void *tls_ctx, struct tls_connection *conn,
+			    struct tls_keys *keys)
 {
 	return -1;
 }
 
 
-int tls_connection_get_eap_fast_key(void *tls_ctx, struct tls_connection *conn,
-				    u8 *out, size_t out_len)
+int tls_connection_prf(void *tls_ctx, struct tls_connection *conn,
+		       const char *label, int server_random_first,
+		       u8 *out, size_t out_len)
 {
 	return -1;
 }
@@ -154,13 +153,6 @@ int tls_connection_set_cipher_list(void *tls_ctx, struct tls_connection *conn,
 }
 
 
-int tls_get_version(void *ssl_ctx, struct tls_connection *conn,
-		    char *buf, size_t buflen)
-{
-	return -1;
-}
-
-
 int tls_get_cipher(void *tls_ctx, struct tls_connection *conn,
 		   char *buf, size_t buflen)
 {
@@ -202,30 +194,36 @@ int tls_connection_get_write_alerts(void *tls_ctx,
 }
 
 
-int tls_get_library_version(char *buf, size_t buf_len)
+int tls_connection_get_keyblock_size(void *tls_ctx,
+				     struct tls_connection *conn)
 {
-	return os_snprintf(buf, buf_len, "none");
+	return -1;
 }
 
 
-void tls_connection_set_success_data(struct tls_connection *conn,
-				     struct wpabuf *data)
+unsigned int tls_capabilities(void *tls_ctx)
 {
+	return 0;
 }
 
 
-void tls_connection_set_success_data_resumed(struct tls_connection *conn)
-{
-}
-
-
-const struct wpabuf *
-tls_connection_get_success_data(struct tls_connection *conn)
+struct wpabuf * tls_connection_ia_send_phase_finished(
+	void *tls_ctx, struct tls_connection *conn, int final)
 {
 	return NULL;
 }
 
 
-void tls_connection_remove_session(struct tls_connection *conn)
+int tls_connection_ia_final_phase_finished(void *tls_ctx,
+					   struct tls_connection *conn)
 {
+	return -1;
+}
+
+
+int tls_connection_ia_permute_inner_secret(void *tls_ctx,
+					   struct tls_connection *conn,
+					   const u8 *key, size_t key_len)
+{
+	return -1;
 }

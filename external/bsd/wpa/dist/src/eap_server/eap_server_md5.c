@@ -1,15 +1,20 @@
 /*
  * hostapd / EAP-MD5 server
- * Copyright (c) 2004-2012, Jouni Malinen <j@w1.fi>
+ * Copyright (c) 2004-2007, Jouni Malinen <j@w1.fi>
  *
- * This software may be distributed under the terms of the BSD license.
- * See README for more details.
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
+ *
+ * Alternatively, this software may be distributed under the terms of BSD
+ * license.
+ *
+ * See README and COPYING for more details.
  */
 
 #include "includes.h"
 
 #include "common.h"
-#include "crypto/random.h"
 #include "eap_i.h"
 #include "eap_common/chap.h"
 
@@ -47,7 +52,7 @@ static struct wpabuf * eap_md5_buildReq(struct eap_sm *sm, void *priv, u8 id)
 	struct eap_md5_data *data = priv;
 	struct wpabuf *req;
 
-	if (random_get_bytes(data->challenge, CHALLENGE_LEN)) {
+	if (os_get_random(data->challenge, CHALLENGE_LEN)) {
 		wpa_printf(MSG_ERROR, "EAP-MD5: Failed to get random data");
 		data->state = FAILURE;
 		return NULL;
@@ -119,14 +124,10 @@ static void eap_md5_process(struct eap_sm *sm, void *priv,
 	wpa_hexdump(MSG_MSGDUMP, "EAP-MD5: Response", pos, CHAP_MD5_LEN);
 
 	id = eap_get_id(respData);
-	if (chap_md5(id, sm->user->password, sm->user->password_len,
-		     data->challenge, CHALLENGE_LEN, hash)) {
-		wpa_printf(MSG_INFO, "EAP-MD5: CHAP MD5 operation failed");
-		data->state = FAILURE;
-		return;
-	}
+	chap_md5(id, sm->user->password, sm->user->password_len,
+		 data->challenge, CHALLENGE_LEN, hash);
 
-	if (os_memcmp_const(hash, pos, CHAP_MD5_LEN) == 0) {
+	if (os_memcmp(hash, pos, CHAP_MD5_LEN) == 0) {
 		wpa_printf(MSG_DEBUG, "EAP-MD5: Done - Success");
 		data->state = SUCCESS;
 	} else {
@@ -153,6 +154,7 @@ static Boolean eap_md5_isSuccess(struct eap_sm *sm, void *priv)
 int eap_server_md5_register(void)
 {
 	struct eap_method *eap;
+	int ret;
 
 	eap = eap_server_method_alloc(EAP_SERVER_METHOD_INTERFACE_VERSION,
 				      EAP_VENDOR_IETF, EAP_TYPE_MD5, "MD5");
@@ -167,5 +169,8 @@ int eap_server_md5_register(void)
 	eap->isDone = eap_md5_isDone;
 	eap->isSuccess = eap_md5_isSuccess;
 
-	return eap_server_method_register(eap);
+	ret = eap_server_method_register(eap);
+	if (ret)
+		eap_server_method_free(eap);
+	return ret;
 }

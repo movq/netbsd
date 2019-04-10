@@ -2,8 +2,14 @@
  * Crypto wrapper for internal crypto implementation - modexp
  * Copyright (c) 2006-2009, Jouni Malinen <j@w1.fi>
  *
- * This software may be distributed under the terms of the BSD license.
- * See README for more details.
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
+ *
+ * Alternatively, this software may be distributed under the terms of BSD
+ * license.
+ *
+ * See README and COPYING for more details.
  */
 
 #include "includes.h"
@@ -11,42 +17,6 @@
 #include "common.h"
 #include "tls/bignum.h"
 #include "crypto.h"
-
-
-int crypto_dh_init(u8 generator, const u8 *prime, size_t prime_len, u8 *privkey,
-		   u8 *pubkey)
-{
-	size_t pubkey_len, pad;
-
-	if (os_get_random(privkey, prime_len) < 0)
-		return -1;
-	if (os_memcmp(privkey, prime, prime_len) > 0) {
-		/* Make sure private value is smaller than prime */
-		privkey[0] = 0;
-	}
-
-	pubkey_len = prime_len;
-	if (crypto_mod_exp(&generator, 1, privkey, prime_len, prime, prime_len,
-			   pubkey, &pubkey_len) < 0)
-		return -1;
-	if (pubkey_len < prime_len) {
-		pad = prime_len - pubkey_len;
-		os_memmove(pubkey + pad, pubkey, pubkey_len);
-		os_memset(pubkey, 0, pad);
-	}
-
-	return 0;
-}
-
-
-int crypto_dh_derive_secret(u8 generator, const u8 *prime, size_t prime_len,
-			    const u8 *privkey, size_t privkey_len,
-			    const u8 *pubkey, size_t pubkey_len,
-			    u8 *secret, size_t *len)
-{
-	return crypto_mod_exp(pubkey, pubkey_len, privkey, privkey_len,
-			      prime, prime_len, secret, len);
-}
 
 
 int crypto_mod_exp(const u8 *base, size_t base_len,

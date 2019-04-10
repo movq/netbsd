@@ -4,8 +4,14 @@
  * Copyright 2005-2006, Devicescape Software, Inc.
  * Copyright (c) 2009, Jouni Malinen <j@w1.fi>
  *
- * This software may be distributed under the terms of the BSD license.
- * See README for more details.
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
+ *
+ * Alternatively, this software may be distributed under the terms of BSD
+ * license.
+ *
+ * See README and COPYING for more details.
  */
 
 #include "utils/includes.h"
@@ -17,8 +23,12 @@
 #include "ieee802_11.h"
 #include "sta_info.h"
 #include "ap_config.h"
-#include "ap_drv_ops.h"
 #include "wmm.h"
+
+
+/* TODO: maintain separate sequence and fragment numbers for each AC
+ * TODO: IGMP snooping to track which multicasts to forward - and use QOS-DATA
+ * if only WMM stations are receiving a certain group */
 
 
 static inline u8 wmm_aci_aifsn(int aifsn, int acm, int aci)
@@ -61,11 +71,8 @@ u8 * hostapd_eid_wmm(struct hostapd_data *hapd, u8 *eid)
 	wmm->version = WMM_VERSION;
 	wmm->qos_info = hapd->parameter_set_count & 0xf;
 
-	if (hapd->conf->wmm_uapsd &&
-	    (hapd->iface->drv_flags & WPA_DRIVER_FLAGS_AP_UAPSD))
+	if (hapd->conf->wmm_uapsd)
 		wmm->qos_info |= 0x80;
-
-	wmm->reserved = 0;
 
 	/* fill in a parameter set record for each AC */
 	for (e = 0; e < 4; e++) {
@@ -87,11 +94,9 @@ u8 * hostapd_eid_wmm(struct hostapd_data *hapd, u8 *eid)
 }
 
 
-/*
- * This function is called when a station sends an association request with
- * WMM info element. The function returns 1 on success or 0 on any error in WMM
- * element. eid does not include Element ID and Length octets.
- */
+/* This function is called when a station sends an association request with
+ * WMM info element. The function returns zero on success or non-zero on any
+ * error in WMM element. eid does not include Element ID and Length octets. */
 int hostapd_eid_wmm_valid(struct hostapd_data *hapd, const u8 *eid, size_t len)
 {
 	struct wmm_information_element *wmm;
@@ -101,7 +106,7 @@ int hostapd_eid_wmm_valid(struct hostapd_data *hapd, const u8 *eid, size_t len)
 	if (len < sizeof(struct wmm_information_element)) {
 		wpa_printf(MSG_DEBUG, "Too short WMM IE (len=%lu)",
 			   (unsigned long) len);
-		return 0;
+		return -1;
 	}
 
 	wmm = (struct wmm_information_element *) eid;
@@ -112,10 +117,10 @@ int hostapd_eid_wmm_valid(struct hostapd_data *hapd, const u8 *eid, size_t len)
 	if (wmm->oui_subtype != WMM_OUI_SUBTYPE_INFORMATION_ELEMENT ||
 	    wmm->version != WMM_VERSION) {
 		wpa_printf(MSG_DEBUG, "Unsupported WMM IE Subtype/Version");
-		return 0;
+		return -1;
 	}
 
-	return 1;
+	return 0;
 }
 
 
@@ -145,16 +150,15 @@ static void wmm_send_action(struct hostapd_data *hapd, const u8 *addr,
 	os_memcpy(t, tspec, sizeof(struct wmm_tspec_element));
 	len = ((u8 *) (t + 1)) - buf;
 
-	if (hostapd_drv_send_mlme(hapd, m, len, 0) < 0)
-		wpa_printf(MSG_INFO, "wmm_send_action: send failed");
+	if (hapd->drv.send_mgmt_frame(hapd, m, len) < 0)
+		perror("wmm_send_action: send");
 }
 
 
 int wmm_process_tspec(struct wmm_tspec_element *tspec)
 {
-	u64 medium_time;
-	unsigned int pps, duration;
-	unsigned int up, psb, dir, tid;
+	int medium_time, pps, duration;
+	int up, psb, dir, tid;
 	u16 val, surplus;
 
 	up = (tspec->ts_info[1] >> 3) & 0x07;
@@ -202,9 +206,8 @@ int wmm_process_tspec(struct wmm_tspec_element *tspec)
 		return WMM_ADDTS_STATUS_INVALID_PARAMETERS;
 	}
 
-	medium_time = (u64) surplus * pps * duration / 0x2000;
-	wpa_printf(MSG_DEBUG, "WMM: Estimated medium time: %lu",
-		   (unsigned long) medium_time);
+	medium_time = surplus * pps * duration / 0x2000;
+	wpa_printf(MSG_DEBUG, "WMM: Estimated medium time: %u", medium_time);
 
 	/*
 	 * TODO: store list of granted (and still active) TSPECs and check
@@ -270,9 +273,6 @@ void hostapd_wmm_action(struct hostapd_data *hapd,
 		/* TODO: respond with action frame refused status code */
 		return;
 	}
-
-	if (left < 0)
-		return; /* not a valid WMM Action frame */
 
 	/* extract the tspec info element */
 	if (ieee802_11_parse_elems(pos, left, &elems, 1) == ParseFailed) {

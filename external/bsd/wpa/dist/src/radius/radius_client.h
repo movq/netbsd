@@ -2,8 +2,14 @@
  * RADIUS client
  * Copyright (c) 2002-2009, Jouni Malinen <j@w1.fi>
  *
- * This software may be distributed under the terms of the BSD license.
- * See README for more details.
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
+ *
+ * Alternatively, this software may be distributed under the terms of BSD
+ * license.
+ *
+ * See README and COPYING for more details.
  */
 
 #ifndef RADIUS_CLIENT_H
@@ -241,9 +247,6 @@ int radius_client_register(struct radius_client_data *radius,
 			    const u8 *shared_secret, size_t shared_secret_len,
 			    void *data),
 			   void *data);
-void radius_client_set_interim_error_cb(struct radius_client_data *radius,
-					void (*cb)(const u8 *addr, void *ctx),
-					void *ctx);
 int radius_client_send(struct radius_client_data *radius,
 		       struct radius_msg *msg,
 		       RadiusType msg_type, const u8 *addr);
@@ -256,7 +259,5 @@ void radius_client_flush_auth(struct radius_client_data *radius,
 			      const u8 *addr);
 int radius_client_get_mib(struct radius_client_data *radius, char *buf,
 			  size_t buflen);
-void radius_client_reconfig(struct radius_client_data *radius,
-			    struct hostapd_radius_servers *conf);
 
 #endif /* RADIUS_CLIENT_H */

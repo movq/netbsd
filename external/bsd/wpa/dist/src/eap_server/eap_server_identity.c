@@ -2,8 +2,14 @@
  * hostapd / EAP-Identity
  * Copyright (c) 2004-2006, Jouni Malinen <j@w1.fi>
  *
- * This software may be distributed under the terms of the BSD license.
- * See README for more details.
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
+ *
+ * Alternatively, this software may be distributed under the terms of BSD
+ * license.
+ *
+ * See README and COPYING for more details.
  */
 
 #include "includes.h"
@@ -102,7 +108,6 @@ static void eap_identity_process(struct eap_sm *sm, void *priv,
 	struct eap_identity_data *data = priv;
 	const u8 *pos;
 	size_t len;
-	char *buf;
 
 	if (data->pick_up) {
 		if (eap_identity_check(sm, data, respData)) {
@@ -120,12 +125,6 @@ static void eap_identity_process(struct eap_sm *sm, void *priv,
 		return; /* Should not happen - frame already validated */
 
 	wpa_hexdump_ascii(MSG_DEBUG, "EAP-Identity: Peer identity", pos, len);
-	buf = os_malloc(len * 4 + 1);
-	if (buf) {
-		printf_encode(buf, len * 4 + 1, pos, len);
-		eap_log_msg(sm, "EAP-Response/Identity '%s'", buf);
-		os_free(buf);
-	}
 	if (sm->identity)
 		sm->update_user = TRUE;
 	os_free(sm->identity);
@@ -157,6 +156,7 @@ static Boolean eap_identity_isSuccess(struct eap_sm *sm, void *priv)
 int eap_server_identity_register(void)
 {
 	struct eap_method *eap;
+	int ret;
 
 	eap = eap_server_method_alloc(EAP_SERVER_METHOD_INTERFACE_VERSION,
 				      EAP_VENDOR_IETF, EAP_TYPE_IDENTITY,
@@ -173,5 +173,8 @@ int eap_server_identity_register(void)
 	eap->isDone = eap_identity_isDone;
 	eap->isSuccess = eap_identity_isSuccess;
 
-	return eap_server_method_register(eap);
+	ret = eap_server_method_register(eap);
+	if (ret)
+		eap_server_method_free(eap);
+	return ret;
 }

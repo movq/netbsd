@@ -2,8 +2,14 @@
  * hostapd / P2P integration
  * Copyright (c) 2009-2010, Atheros Communications
  *
- * This software may be distributed under the terms of the BSD license.
- * See README for more details.
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
+ *
+ * Alternatively, this software may be distributed under the terms of BSD
+ * license.
+ *
+ * See README and COPYING for more details.
  */
 
 #include "utils/includes.h"
@@ -96,8 +102,9 @@ u8 * hostapd_eid_p2p_manage(struct hostapd_data *hapd, u8 *eid)
 	u8 bitmap;
 	*eid++ = WLAN_EID_VENDOR_SPECIFIC;
 	*eid++ = 4 + 3 + 1;
-	WPA_PUT_BE32(eid, P2P_IE_VENDOR_TYPE);
-	eid += 4;
+	WPA_PUT_BE24(eid, OUI_WFA);
+	eid += 3;
+	*eid++ = P2P_OUI_TYPE;
 
 	*eid++ = P2P_ATTR_MANAGEABILITY;
 	WPA_PUT_LE16(eid, 1);

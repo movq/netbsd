@@ -2,8 +2,14 @@
  * wpa_gui - AddInterface class
  * Copyright (c) 2008, Jouni Malinen <j@w1.fi>
  *
- * This software may be distributed under the terms of the BSD license.
- * See README for more details.
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
+ *
+ * Alternatively, this software may be distributed under the terms of BSD
+ * license.
+ *
+ * See README and COPYING for more details.
  */
 
 #include <cstdio>
@@ -41,8 +47,8 @@ AddInterface::AddInterface(WpaGui *_wpagui, QWidget *parent)
 	interfaceWidget->headerItem()->setText(0, tr("driver"));
 	interfaceWidget->headerItem()->setText(1, tr("interface"));
 	interfaceWidget->headerItem()->setText(2, tr("description"));
-	interfaceWidget->setItemsExpandable(false);
-	interfaceWidget->setRootIsDecorated(false);
+	interfaceWidget->setItemsExpandable(FALSE);
+	interfaceWidget->setRootIsDecorated(FALSE);
 	vboxLayout->addWidget(interfaceWidget);
 
 	connect(interfaceWidget,
@@ -196,9 +202,9 @@ void AddInterface::interfaceSelected(QTreeWidgetItem *sel)
 	 */
 	snprintf(cmd, sizeof(cmd),
 		 "INTERFACE_ADD %s\t%s\t%s\t%s\t%s\t%s",
-		 sel->text(1).toLocal8Bit().constData(),
+		 sel->text(1).toAscii().constData(),
 		 "default",
-		 sel->text(0).toLocal8Bit().constData(),
+		 sel->text(0).toAscii().constData(),
 		 "yes", "", "");
 	cmd[sizeof(cmd) - 1] = '\0';
 

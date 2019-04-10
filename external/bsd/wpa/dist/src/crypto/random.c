@@ -2,8 +2,14 @@
  * Random number generator
  * Copyright (c) 2010-2011, Jouni Malinen <j@w1.fi>
  *
- * This software may be distributed under the terms of the BSD license.
- * See README for more details.
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
+ *
+ * Alternatively, this software may be distributed under the terms of BSD
+ * license.
+ *
+ * See README and COPYING for more details.
  *
  * This random number generator is used to provide additional entropy to the
  * one provided by the operating system (os_get_random()) for session key
@@ -29,7 +35,6 @@
 
 #include "utils/common.h"
 #include "utils/eloop.h"
-#include "crypto/crypto.h"
 #include "sha1.h"
 #include "random.h"
 
@@ -54,6 +59,7 @@ static int random_fd = -1;
 static unsigned int own_pool_ready = 0;
 #define RANDOM_ENTROPY_SIZE 20
 static char *random_entropy_file = NULL;
+static int random_entropy_file_read = 0;
 
 #define MIN_COLLECT_ENTROPY 1000
 static unsigned int entropy = 0;
@@ -65,9 +71,6 @@ static void random_write_entropy(void);
 
 static u32 __ROL32(u32 x, u32 y)
 {
-	if (y == 0)
-		return x;
-
 	return (x << (y & 31)) | (x >> (32 - (y & 31)));
 }
 
@@ -131,6 +134,8 @@ void random_add_randomness(const void *buf, size_t len)
 	static unsigned int count = 0;
 
 	count++;
+	wpa_printf(MSG_MSGDUMP, "Add randomness: count=%u entropy=%u",
+		   count, entropy);
 	if (entropy > MIN_COLLECT_ENTROPY && (count & 0x3ff) != 0) {
 		/*
 		 * No need to add more entropy at this point, so save CPU and
@@ -138,8 +143,6 @@ void random_add_randomness(const void *buf, size_t len)
 		 */
 		return;
 	}
-	wpa_printf(MSG_EXCESSIVE, "Add randomness: count=%u entropy=%u",
-		   count, entropy);
 
 	os_get_time(&t);
 	wpa_hexdump_key(MSG_EXCESSIVE, "random pool",
@@ -180,28 +183,6 @@ int random_get_bytes(void *buf, size_t len)
 			*bytes++ ^= tmp[i];
 		left -= siz;
 	}
-
-#ifdef CONFIG_FIPS
-	/* Mix in additional entropy from the crypto module */
-	bytes = buf;
-	left = len;
-	while (left) {
-		size_t siz, i;
-		u8 tmp[EXTRACT_LEN];
-		if (crypto_get_random(tmp, sizeof(tmp)) < 0) {
-			wpa_printf(MSG_ERROR, "random: No entropy available "
-				   "for generating strong random bytes");
-			return -1;
-		}
-		wpa_hexdump_key(MSG_EXCESSIVE, "random from crypto module",
-				tmp, sizeof(tmp));
-		siz = left > EXTRACT_LEN ? EXTRACT_LEN : left;
-		for (i = 0; i < siz; i++)
-			*bytes++ ^= tmp[i];
-		left -= siz;
-	}
-#endif /* CONFIG_FIPS */
-
 	wpa_hexdump_key(MSG_EXCESSIVE, "mixed random", buf, len);
 
 	if (entropy < len)
@@ -235,8 +216,12 @@ int random_pool_ready(void)
 	 */
 	fd = open("/dev/random", O_RDONLY | O_NONBLOCK);
 	if (fd < 0) {
+#ifndef CONFIG_NO_STDOUT_DEBUG
+		int error = errno;
+		perror("open(/dev/random)");
 		wpa_printf(MSG_ERROR, "random: Cannot open /dev/random: %s",
-			   strerror(errno));
+			   strerror(error));
+#endif /* CONFIG_NO_STDOUT_DEBUG */
 		return -1;
 	}
 
@@ -356,6 +341,7 @@ static void random_read_entropy(void)
 
 	own_pool_ready = (u8) buf[0];
 	random_add_randomness(buf + 1, RANDOM_ENTROPY_SIZE);
+	random_entropy_file_read = 1;
 	os_free(buf);
 	wpa_printf(MSG_DEBUG, "random: Added entropy from %s "
 		   "(own_pool_ready=%u)",
@@ -415,8 +401,12 @@ void random_init(const char *entropy_file)
 
 	random_fd = open("/dev/random", O_RDONLY | O_NONBLOCK);
 	if (random_fd < 0) {
+#ifndef CONFIG_NO_STDOUT_DEBUG
+		int error = errno;
+		perror("open(/dev/random)");
 		wpa_printf(MSG_ERROR, "random: Cannot open /dev/random: %s",
-			   strerror(errno));
+			   strerror(error));
+#endif /* CONFIG_NO_STDOUT_DEBUG */
 		return;
 	}
 	wpa_printf(MSG_DEBUG, "random: Trying to read entropy from "

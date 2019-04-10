@@ -2,8 +2,14 @@
  * hostapd / EAP-GTC (RFC 3748)
  * Copyright (c) 2004-2006, Jouni Malinen <j@w1.fi>
  *
- * This software may be distributed under the terms of the BSD license.
- * See README for more details.
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
+ *
+ * Alternatively, this software may be distributed under the terms of BSD
+ * license.
+ *
+ * See README and COPYING for more details.
  */
 
 #include "includes.h"
@@ -141,11 +147,12 @@ static void eap_gtc_process(struct eap_sm *sm, void *priv,
 		} else {
 			os_free(sm->identity);
 			sm->identity_len = pos2 - pos;
-			sm->identity = os_memdup(pos, sm->identity_len);
+			sm->identity = os_malloc(sm->identity_len);
 			if (sm->identity == NULL) {
 				data->state = FAILURE;
 				return;
 			}
+			os_memcpy(sm->identity, pos, sm->identity_len);
 		}
 
 		if (eap_user_get(sm, sm->identity, sm->identity_len, 1) != 0) {
@@ -174,7 +181,7 @@ static void eap_gtc_process(struct eap_sm *sm, void *priv,
 	}
 
 	if (rlen != sm->user->password_len ||
-	    os_memcmp_const(pos, sm->user->password, rlen) != 0) {
+	    os_memcmp(pos, sm->user->password, rlen) != 0) {
 		wpa_printf(MSG_DEBUG, "EAP-GTC: Done - Failure");
 		data->state = FAILURE;
 	} else {
@@ -201,6 +208,7 @@ static Boolean eap_gtc_isSuccess(struct eap_sm *sm, void *priv)
 int eap_server_gtc_register(void)
 {
 	struct eap_method *eap;
+	int ret;
 
 	eap = eap_server_method_alloc(EAP_SERVER_METHOD_INTERFACE_VERSION,
 				      EAP_VENDOR_IETF, EAP_TYPE_GTC, "GTC");
@@ -215,5 +223,8 @@ int eap_server_gtc_register(void)
 	eap->isDone = eap_gtc_isDone;
 	eap->isSuccess = eap_gtc_isSuccess;
 
-	return eap_server_method_register(eap);
+	ret = eap_server_method_register(eap);
+	if (ret)
+		eap_server_method_free(eap);
+	return ret;
 }

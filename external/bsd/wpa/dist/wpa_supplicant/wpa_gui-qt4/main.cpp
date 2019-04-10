@@ -2,8 +2,14 @@
  * wpa_gui - Application startup
  * Copyright (c) 2005-2006, Jouni Malinen <j@w1.fi>
  *
- * This software may be distributed under the terms of the BSD license.
- * See README for more details.
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
+ *
+ * Alternatively, this software may be distributed under the terms of BSD
+ * license.
+ *
+ * See README and COPYING for more details.
  */
 
 #ifdef CONFIG_NATIVE_WINDOWS
@@ -14,15 +20,24 @@
 #include <QtCore/QTranslator>
 #include "wpagui.h"
 
-WpaGuiApp::WpaGuiApp(int &argc, char **argv) :
-	QApplication(argc, argv),
-	argc(argc),
-	argv(argv)
+
+class WpaGuiApp : public QApplication
 {
-	w = NULL;
+public:
+	WpaGuiApp(int &argc, char **argv);
+
+#ifndef QT_NO_SESSIONMANAGER
+	virtual void saveState(QSessionManager &manager);
+#endif
+
+	WpaGui *w;
+};
+
+WpaGuiApp::WpaGuiApp(int &argc, char **argv) : QApplication(argc, argv)
+{
 }
 
-#if !defined(QT_NO_SESSIONMANAGER) && QT_VERSION < 0x050000
+#ifndef QT_NO_SESSIONMANAGER
 void WpaGuiApp::saveState(QSessionManager &manager)
 {
 	QApplication::saveState(manager);
