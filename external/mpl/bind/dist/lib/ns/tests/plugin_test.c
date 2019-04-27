@@ -1,4 +1,4 @@
-/*	$NetBSD: plugin_test.c,v 1.1 2019/04/27 23:47:30 christos Exp $	*/
+/*	$NetBSD: plugin_test.c,v 1.1.1.1 2019/04/27 23:47:30 christos Exp $	*/
 
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")
