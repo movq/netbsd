@@ -1,6 +1,6 @@
 #!/bin/sh
 #
-# $NetBSD: smtoff,v 1.4 2019/05/13 18:53:10 maxv Exp $
+# $NetBSD: smtoff,v 1.4.2.2 2019/05/14 11:33:42 martin Exp $
 #
 # Public Domain.
 #
