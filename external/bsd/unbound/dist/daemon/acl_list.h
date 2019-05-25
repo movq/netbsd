@@ -43,7 +43,6 @@
 #ifndef DAEMON_ACL_LIST_H
 #define DAEMON_ACL_LIST_H
 #include "util/storage/dnstree.h"
-#include "services/view.h"
 struct config_file;
 struct regional;
 
@@ -63,9 +62,7 @@ enum acl_access {
 	/** allow full access for recursion (+RD) queries */
 	acl_allow,
 	/** allow full access for all queries, recursion and cache snooping */
-	acl_allow_snoop,
-	/** allow full access for recursion queries and set RD flag regardless of request */
-	acl_allow_setrd
+	acl_allow_snoop
 };
 
 /**
@@ -78,7 +75,7 @@ struct acl_list {
 	 * Tree of the addresses that are allowed/blocked.
 	 * contents of type acl_addr.
 	 */
-	rbtree_type tree;
+	rbtree_t tree;
 };
 
 /**
@@ -90,21 +87,6 @@ struct acl_addr {
 	struct addr_tree_node node;
 	/** access control on this netblock */
 	enum acl_access control;
-	/** tag bitlist */
-	uint8_t* taglist;
-	/** length of the taglist (in bytes) */
-	size_t taglen;
-	/** array per tagnumber of localzonetype(in one byte). NULL if none. */
-	uint8_t* tag_actions;
-	/** size of the tag_actions_array */
-	size_t tag_actions_size;
-	/** array per tagnumber, with per tag a list of rdata strings.
-	 * NULL if none.  strings are like 'A 127.0.0.1' 'AAAA ::1' */
-	struct config_strlist** tag_datas;
-	/** size of the tag_datas array */
-	size_t tag_datas_size;
-	/* view element, NULL if none */
-	struct view* view;
 };
 
 /**
@@ -123,29 +105,19 @@ void acl_list_delete(struct acl_list* acl);
  * Process access control config.
  * @param acl: where to store.
  * @param cfg: config options.
- * @param v: views structure
  * @return 0 on error.
  */
-int acl_list_apply_cfg(struct acl_list* acl, struct config_file* cfg,
-	struct views* v);
+int acl_list_apply_cfg(struct acl_list* acl, struct config_file* cfg);
 
 /**
- * Lookup access control status for acl structure.
- * @param acl: structure for acl storage.
- * @return: what to do with message from this address.
- */
-enum acl_access acl_get_control(struct acl_addr* acl);
-
-/**
- * Lookup address to see its acl structure
+ * Lookup address to see its access control status.
  * @param acl: structure for address storage.
  * @param addr: address to check
  * @param addrlen: length of addr.
- * @return: acl structure from this address.
+ * @return: what to do with message from this address.
  */
-struct acl_addr*
-acl_addr_lookup(struct acl_list* acl, struct sockaddr_storage* addr,
-        socklen_t addrlen);
+enum acl_access acl_list_lookup(struct acl_list* acl, 
+	struct sockaddr_storage* addr, socklen_t addrlen);
 
 /**
  * Get memory used by acl structure.

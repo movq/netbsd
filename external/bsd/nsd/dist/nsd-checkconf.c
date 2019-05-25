@@ -20,7 +20,6 @@
 
 extern char *optarg;
 extern int optind;
-static void usage(void) ATTR_NORETURN;
 
 #define ZONE_GET_ACL(NAME, VAR, PATTERN) 		\
 	if (strcasecmp(#NAME, (VAR)) == 0) { 	\
@@ -30,7 +29,7 @@ static void usage(void) ATTR_NORETURN;
 
 #define ZONE_GET_OUTGOING(NAME, VAR, PATTERN)			\
 	if (strcasecmp(#NAME, (VAR)) == 0) {		\
-		acl_options_type* acl; 			\
+		acl_options_t* acl; 			\
 		for(acl=PATTERN->NAME; acl; acl=acl->next)	\
 			quote(acl->ip_address_spec);	\
 		return; 				\
@@ -177,7 +176,7 @@ quote(const char *v)
 }
 
 static void
-quotepath(nsd_options_type* opt, int final, const char *f)
+quotepath(nsd_options_t* opt, int final, const char *f)
 {
 	const char* chr = opt->chroot;
 #ifdef CHROOTDIR
@@ -192,7 +191,7 @@ quotepath(nsd_options_type* opt, int final, const char *f)
 }
 
 static void
-quote_acl(acl_options_type* acl)
+quote_acl(acl_options_t* acl)
 {
 	while(acl)
 	{
@@ -204,7 +203,7 @@ quote_acl(acl_options_type* acl)
 }
 
 static void
-print_acl(const char* varname, acl_options_type* acl)
+print_acl(const char* varname, acl_options_t* acl)
 {
 	while(acl)
 	{
@@ -252,7 +251,7 @@ print_acl(const char* varname, acl_options_type* acl)
 }
 
 static void
-print_acl_ips(const char* varname, acl_options_type* acl)
+print_acl_ips(const char* varname, acl_options_t* acl)
 {
 	while(acl)
 	{
@@ -262,14 +261,14 @@ print_acl_ips(const char* varname, acl_options_type* acl)
 }
 
 void
-config_print_zone(nsd_options_type* opt, const char* k, int s, const char *o,
+config_print_zone(nsd_options_t* opt, const char* k, int s, const char *o,
 	const char *z, const char* pat, int final)
 {
-	ip_address_option_type* ip;
+	ip_address_option_t* ip;
 
 	if (k) {
 		/* find key */
-		key_options_type* key = key_options_find(opt, k);
+		key_options_t* key = key_options_find(opt, k);
 		if(key) {
 			if (s) {
 				quote(key->secret);
@@ -287,7 +286,7 @@ config_print_zone(nsd_options_type* opt, const char* k, int s, const char *o,
 	}
 
 	if (z) {
-		zone_options_type* zone;
+		zone_options_t* zone;
 		const dname_type *dname = dname_parse(opt->region, z);
 		if(!dname) {
 			printf("Could not parse zone name %s\n", z);
@@ -325,7 +324,7 @@ config_print_zone(nsd_options_type* opt, const char* k, int s, const char *o,
 		printf("Zone option not handled: %s %s\n", z, o);
 		exit(1);
 	} else if(pat) {
-		pattern_options_type* p = pattern_options_find(opt, pat);
+		pattern_options_t* p = pattern_options_find(opt, pat);
 		if(!p) {
 			printf("Pattern does not exist: %s\n", pat);
 			exit(1);
@@ -369,8 +368,6 @@ config_print_zone(nsd_options_type* opt, const char* k, int s, const char *o,
 		SERV_GET_BIN(zonefiles_check, o);
 		SERV_GET_BIN(log_time_ascii, o);
 		SERV_GET_BIN(round_robin, o);
-		SERV_GET_BIN(minimal_responses, o);
-		SERV_GET_BIN(refuse_any, o);
 		/* str */
 		SERV_GET_PATH(final, database, o);
 		SERV_GET_STR(identity, o);
@@ -405,16 +402,6 @@ config_print_zone(nsd_options_type* opt, const char* k, int s, const char *o,
 		SERV_GET_INT(rrl_ipv6_prefix_length, o);
 		SERV_GET_INT(rrl_whitelist_ratelimit, o);
 #endif
-#ifdef USE_DNSTAP
-		SERV_GET_BIN(dnstap_enable, o);
-		SERV_GET_STR(dnstap_socket_path, o);
-		SERV_GET_BIN(dnstap_send_identity, o);
-		SERV_GET_BIN(dnstap_send_version, o);
-		SERV_GET_STR(dnstap_identity, o);
-		SERV_GET_STR(dnstap_version, o);
-		SERV_GET_BIN(dnstap_log_auth_query_messages, o);
-		SERV_GET_BIN(dnstap_log_auth_response_messages, o);
-#endif
 		SERV_GET_INT(zonefiles_write, o);
 		/* remote control */
 		SERV_GET_BIN(control_enable, o);
@@ -426,14 +413,14 @@ config_print_zone(nsd_options_type* opt, const char* k, int s, const char *o,
 		SERV_GET_STR(control_cert_file, o);
 
 		if(strcasecmp(o, "zones") == 0) {
-			zone_options_type* zone;
-			RBTREE_FOR(zone, zone_options_type*, opt->zone_options)
+			zone_options_t* zone;
+			RBTREE_FOR(zone, zone_options_t*, opt->zone_options)
 				quote(zone->name);
 			return;
 		}
 		if(strcasecmp(o, "patterns") == 0) {
-			pattern_options_type* p;
-			RBTREE_FOR(p, pattern_options_type*, opt->patterns)
+			pattern_options_t* p;
+			RBTREE_FOR(p, pattern_options_t*, opt->patterns)
 				quote(p->pname);
 			return;
 		}
@@ -443,7 +430,7 @@ config_print_zone(nsd_options_type* opt, const char* k, int s, const char *o,
 }
 
 /* print zone content items */
-static void print_zone_content_elems(pattern_options_type* pat)
+static void print_zone_content_elems(pattern_options_t* pat)
 {
 	if(pat->zonefile)
 		print_string_var("zonefile:", pat->zonefile);
@@ -478,12 +465,12 @@ static void print_zone_content_elems(pattern_options_type* pat)
 }
 
 void
-config_test_print_server(nsd_options_type* opt)
+config_test_print_server(nsd_options_t* opt)
 {
-	ip_address_option_type* ip;
-	key_options_type* key;
-	zone_options_type* zone;
-	pattern_options_type* pat;
+	ip_address_option_t* ip;
+	key_options_t* key;
+	zone_options_t* zone;
+	pattern_options_t* pat;
 
 	printf("# Config settings.\n");
 	printf("server:\n");
@@ -519,8 +506,6 @@ config_test_print_server(nsd_options_type* opt)
 	printf("\txfrd-reload-timeout: %d\n", opt->xfrd_reload_timeout);
 	printf("\tlog-time-ascii: %s\n", opt->log_time_ascii?"yes":"no");
 	printf("\tround-robin: %s\n", opt->round_robin?"yes":"no");
-	printf("\tminimal-responses: %s\n", opt->minimal_responses?"yes":"no");
-	printf("\trefuse-any: %s\n", opt->refuse_any?"yes":"no");
 	printf("\tverbosity: %d\n", opt->verbosity);
 	for(ip = opt->ip_addresses; ip; ip=ip->next)
 	{
@@ -537,18 +522,6 @@ config_test_print_server(nsd_options_type* opt)
 	printf("\tzonefiles-check: %s\n", opt->zonefiles_check?"yes":"no");
 	printf("\tzonefiles-write: %d\n", opt->zonefiles_write);
 
-#ifdef USE_DNSTAP
-	printf("\ndnstap:\n");
-	printf("\tdnstap-enable: %s\n", opt->dnstap_enable?"yes":"no");
-	print_string_var("dnstap-socket-path:", opt->dnstap_socket_path);
-	printf("\tdnstap-send-identity: %s\n", opt->dnstap_send_identity?"yes":"no");
-	printf("\tdnstap-send-version: %s\n", opt->dnstap_send_version?"yes":"no");
-	print_string_var("dnstap-identity:", opt->dnstap_identity);
-	print_string_var("dnstap-version:", opt->dnstap_version);
-	printf("\tdnstap-log-auth-query-messages: %s\n", opt->dnstap_log_auth_query_messages?"yes":"no");
-	printf("\tdnstap-log-auth-response-messages: %s\n", opt->dnstap_log_auth_response_messages?"yes":"no");
-#endif
-
 	printf("\nremote-control:\n");
 	printf("\tcontrol-enable: %s\n", opt->control_enable?"yes":"no");
 	for(ip = opt->control_interface; ip; ip=ip->next)
@@ -559,21 +532,21 @@ config_test_print_server(nsd_options_type* opt)
 	print_string_var("control-key-file:", opt->control_key_file);
 	print_string_var("control-cert-file:", opt->control_cert_file);
 
-	RBTREE_FOR(key, key_options_type*, opt->keys)
+	RBTREE_FOR(key, key_options_t*, opt->keys)
 	{
 		printf("\nkey:\n");
 		print_string_var("name:", key->name);
 		print_string_var("algorithm:", key->algorithm);
 		print_string_var("secret:", key->secret);
 	}
-	RBTREE_FOR(pat, pattern_options_type*, opt->patterns)
+	RBTREE_FOR(pat, pattern_options_t*, opt->patterns)
 	{
 		if(pat->implicit) continue;
 		printf("\npattern:\n");
 		print_string_var("name:", pat->pname);
 		print_zone_content_elems(pat);
 	}
-	RBTREE_FOR(zone, zone_options_type*, opt->zone_options)
+	RBTREE_FOR(zone, zone_options_t*, opt->zone_options)
 	{
 		if(!zone->part_of_config)
 			continue;
@@ -584,19 +557,38 @@ config_test_print_server(nsd_options_type* opt)
 
 }
 
-static int
-additional_checks(nsd_options_type* opt, const char* filename)
+static void
+append_trailing_slash(const char** dirname, region_type* region)
 {
-	zone_options_type* zone;
+	int l = strlen(*dirname);
+	if (l>0 && (*dirname)[l-1] != '/' && l < 0xffffff) {
+		char *dirname_slash = region_alloc(region, l+2);
+		memcpy(dirname_slash, *dirname, l+1);
+		strlcat(dirname_slash, "/", l+2);
+		*dirname = dirname_slash;
+	}
+}
+
+static int
+file_inside_chroot(const char* fname, const char* chr)
+{
+	/* true if filename starts with chroot or is not absolute */
+	return ((fname && fname[0] && strncmp(fname, chr, strlen(chr)) == 0) ||
+		(fname && fname[0] != '/'));
+}
+
+static int
+additional_checks(nsd_options_t* opt, const char* filename)
+{
+	zone_options_t* zone;
 	int errors = 0;
 
-	RBTREE_FOR(zone, zone_options_type*, opt->zone_options)
+	RBTREE_FOR(zone, zone_options_t*, opt->zone_options)
 	{
 		const dname_type* dname = dname_parse(opt->region, zone->name); /* memory leak. */
 		if(!dname) {
 			fprintf(stderr, "%s: cannot parse zone name syntax for zone %s.\n", filename, zone->name);
 			errors ++;
-			continue;
 		}
 #ifndef ROOT_SERVER
 		/* Is it a root zone? Are we a root server then? Idiot proof. */
@@ -715,7 +707,7 @@ main(int argc, char* argv[])
 	const char * conf_key = NULL; /* what key is needed */
 	const char * conf_pat = NULL; /* what pattern is talked about */
 	const char* configfile;
-	nsd_options_type *options;
+	nsd_options_t *options;
 
 	log_init("nsd-checkconf");
 
@@ -757,9 +749,9 @@ main(int argc, char* argv[])
 			usage();
 		};
 	}
-	argc -= optind;
-	argv += optind;
-	if (argc == 0 || argc>=2) {
+        argc -= optind;
+        argv += optind;
+        if (argc == 0 || argc>=2) {
 		usage();
 	}
 	configfile = argv[0];

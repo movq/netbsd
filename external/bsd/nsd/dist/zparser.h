@@ -1,8 +1,8 @@
-/* A Bison parser, made by GNU Bison 3.0.5.  */
+/* A Bison parser, made by GNU Bison 3.0.4.  */
 
 /* Bison interface for Yacc-like parsers in C
 
-   Copyright (C) 1984, 1989-1990, 2000-2015, 2018 Free Software Foundation, Inc.
+   Copyright (C) 1984, 1989-1990, 2000-2015 Free Software Foundation, Inc.
 
    This program is free software: you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -121,19 +121,17 @@ extern int yydebug;
     T_CDNSKEY = 331,
     T_OPENPGPKEY = 332,
     T_CSYNC = 333,
-    T_AVC = 334,
-    T_SMIMEA = 335,
-    DOLLAR_TTL = 336,
-    DOLLAR_ORIGIN = 337,
-    NL = 338,
-    SP = 339,
-    STR = 340,
-    PREV = 341,
-    BITLAB = 342,
-    T_TTL = 343,
-    T_RRCLASS = 344,
-    URR = 345,
-    T_UTYPE = 346
+    DOLLAR_TTL = 334,
+    DOLLAR_ORIGIN = 335,
+    NL = 336,
+    SP = 337,
+    STR = 338,
+    PREV = 339,
+    BITLAB = 340,
+    T_TTL = 341,
+    T_RRCLASS = 342,
+    URR = 343,
+    T_UTYPE = 344
   };
 #endif
 /* Tokens.  */
@@ -213,26 +211,24 @@ extern int yydebug;
 #define T_CDNSKEY 331
 #define T_OPENPGPKEY 332
 #define T_CSYNC 333
-#define T_AVC 334
-#define T_SMIMEA 335
-#define DOLLAR_TTL 336
-#define DOLLAR_ORIGIN 337
-#define NL 338
-#define SP 339
-#define STR 340
-#define PREV 341
-#define BITLAB 342
-#define T_TTL 343
-#define T_RRCLASS 344
-#define URR 345
-#define T_UTYPE 346
+#define DOLLAR_TTL 334
+#define DOLLAR_ORIGIN 335
+#define NL 336
+#define SP 337
+#define STR 338
+#define PREV 339
+#define BITLAB 340
+#define T_TTL 341
+#define T_RRCLASS 342
+#define URR 343
+#define T_UTYPE 344
 
 /* Value type.  */
 #if ! defined YYSTYPE && ! defined YYSTYPE_IS_DECLARED
 
 union YYSTYPE
 {
-#line 50 "zparser.y" /* yacc.c:1910  */
+#line 50 "zparser.y" /* yacc.c:1909  */
 
 	domain_type	 *domain;
 	const dname_type *dname;
@@ -242,7 +238,7 @@ union YYSTYPE
 	uint16_t	  type;
 	uint16_t	 *unknown;
 
-#line 246 "zparser.h" /* yacc.c:1910  */
+#line 242 "zparser.h" /* yacc.c:1909  */
 };
 
 typedef union YYSTYPE YYSTYPE;

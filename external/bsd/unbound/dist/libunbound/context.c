@@ -47,7 +47,6 @@
 #include "services/localzone.h"
 #include "services/cache/rrset.h"
 #include "services/cache/infra.h"
-#include "services/authzone.h"
 #include "util/data/msgreply.h"
 #include "util/storage/slabhash.h"
 #include "sldns/sbuffer.h"
@@ -63,13 +62,10 @@ context_finalize(struct ub_ctx* ctx)
 	config_apply(cfg);
 	if(!modstack_setup(&ctx->mods, cfg->module_conf, ctx->env))
 		return UB_INITFAIL;
-	log_edns_known_options(VERB_ALGO, ctx->env);
 	ctx->local_zones = local_zones_create();
 	if(!ctx->local_zones)
 		return UB_NOMEM;
 	if(!local_zones_apply_cfg(ctx->local_zones, cfg))
-		return UB_INITFAIL;
-	if(!auth_zones_apply_cfg(ctx->env->auth_zones, cfg, 1))
 		return UB_INITFAIL;
 	if(!ctx->env->msg_cache ||
 	   cfg->msg_cache_size != slabhash_get_size(ctx->env->msg_cache) || 
@@ -130,7 +126,7 @@ find_id(struct ub_ctx* ctx, int* id)
 
 struct ctx_query* 
 context_new(struct ub_ctx* ctx, const char* name, int rrtype, int rrclass, 
-	ub_callback_type cb, ub_event_callback_type cb_event, void* cbarg)
+	ub_callback_t cb, void* cbarg)
 {
 	struct ctx_query* q = (struct ctx_query*)calloc(1, sizeof(*q));
 	if(!q) return NULL;
@@ -142,9 +138,8 @@ context_new(struct ub_ctx* ctx, const char* name, int rrtype, int rrclass,
 	}
 	lock_basic_unlock(&ctx->cfglock);
 	q->node.key = &q->querynum;
-	q->async = (cb != NULL || cb_event != NULL);
+	q->async = (cb != NULL);
 	q->cb = cb;
-	q->cb_event = cb_event;
 	q->cb_arg = cbarg;
 	q->res = (struct ub_result*)calloc(1, sizeof(*q->res));
 	if(!q->res) {

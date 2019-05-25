@@ -25,6 +25,7 @@
 #include "udbzone.h"
 #include "util.h"
 
+static void error(const char *format, ...) ATTR_FORMAT(printf, 1, 2);
 struct nsd nsd;
 
 /*
@@ -37,6 +38,20 @@ usage (void)
 	fprintf(stderr, "Usage: nsd-mem [-c configfile]\n");
 	fprintf(stderr, "Version %s. Report bugs to <%s>.\n",
 		PACKAGE_VERSION, PACKAGE_BUGREPORT);
+}
+
+/*
+ * Something went wrong, give error messages and exit.
+ *
+ */
+static void
+error(const char *format, ...)
+{
+	va_list args;
+	va_start(args, format);
+	log_vmsg(LOG_ERR, format, args);
+	va_end(args);
+	exit(1);
 }
 
 /* zone memory structure */
@@ -124,7 +139,7 @@ print_zone_mem(struct zone_mem* z)
 }
 
 static void
-account_total(struct nsd_options* opt, struct tot_mem* t)
+account_total(nsd_options_t* opt, struct tot_mem* t)
 {
 	t->opt_data = region_get_mem(opt->region);
 	t->opt_unused = region_get_mem_unused(opt->region);
@@ -177,8 +192,8 @@ add_mem(struct tot_mem* t, struct zone_mem* z)
 }
 
 static void
-check_zone_mem(const char* tf, const char* df, struct zone_options* zo,
-	struct nsd_options* opt, struct tot_mem* totmem)
+check_zone_mem(const char* tf, const char* df, zone_options_t* zo,
+	nsd_options_t* opt, struct tot_mem* totmem)
 {
 	struct nsd nsd;
 	struct namedb* db;
@@ -219,10 +234,10 @@ check_zone_mem(const char* tf, const char* df, struct zone_options* zo,
 }
 
 static void
-check_mem(struct nsd_options* opt)
+check_mem(nsd_options_t* opt)
 {
 	struct tot_mem totmem;
-	struct zone_options* zo;
+	zone_options_t* zo;
 	char tf[512];
 	char df[512];
 	memset(&totmem, 0, sizeof(totmem));
@@ -232,7 +247,7 @@ check_mem(struct nsd_options* opt)
 	else snprintf(df, sizeof(df), "./nsd-mem-db-%u.db", (unsigned)getpid());
 
 	/* read all zones and account memory */
-	RBTREE_FOR(zo, struct zone_options*, opt->zone_options) {
+	RBTREE_FOR(zo, zone_options_t*, opt->zone_options) {
 		check_zone_mem(tf, df, zo, opt, &totmem);
 	}
 
@@ -298,7 +313,7 @@ main(int argc, char *argv[])
 		}
 	}
 	argc -= optind;
-	/* argv += optind; move along argv for positional arguments */
+	argv += optind;
 
 	/* Commandline parse error */
 	if (argc != 0) {

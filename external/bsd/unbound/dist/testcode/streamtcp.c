@@ -128,9 +128,6 @@ write_q(int fd, int udp, SSL* ssl, sldns_buffer* buf, uint16_t id,
 	qinfo.qtype = sldns_get_rr_type_by_name(strtype);
 	qinfo.qclass = sldns_get_rr_class_by_name(strclass);
 
-	/* clear local alias */
-	qinfo.local_alias = NULL;
-
 	/* make query */
 	qinfo_query_encode(buf, &qinfo);
 	sldns_buffer_write_u16_at(buf, 0, id);
@@ -143,9 +140,7 @@ write_q(int fd, int udp, SSL* ssl, sldns_buffer* buf, uint16_t id,
 		edns.edns_present = 1;
 		edns.bits = EDNS_DO;
 		edns.udp_size = 4096;
-		if(sldns_buffer_capacity(buf) >=
-			sldns_buffer_limit(buf)+calc_edns_field_size(&edns))
-			attach_edns_record(buf, &edns);
+		attach_edns_record(buf, &edns);
 	}
 
 	/* send it */
@@ -284,7 +279,7 @@ send_em(const char* svr, int udp, int usessl, int noanswer, int num, char** qs)
 	SSL* ssl = NULL;
 	if(!buf) fatal_exit("out of memory");
 	if(usessl) {
-		ctx = connect_sslctx_create(NULL, NULL, NULL, 0);
+		ctx = connect_sslctx_create(NULL, NULL, NULL);
 		if(!ctx) fatal_exit("cannot create ssl ctx");
 		ssl = outgoing_ssl_fd(ctx, fd);
 		if(!ssl) fatal_exit("cannot create ssl");
@@ -410,21 +405,9 @@ int main(int argc, char** argv)
 		return 1;
 	}
 	if(usessl) {
-#if OPENSSL_VERSION_NUMBER < 0x10100000 || !defined(HAVE_OPENSSL_INIT_SSL)
 		ERR_load_SSL_strings();
-#endif
-#if OPENSSL_VERSION_NUMBER < 0x10100000 || !defined(HAVE_OPENSSL_INIT_CRYPTO)
 		OpenSSL_add_all_algorithms();
-#else
-		OPENSSL_init_crypto(OPENSSL_INIT_ADD_ALL_CIPHERS
-			| OPENSSL_INIT_ADD_ALL_DIGESTS
-			| OPENSSL_INIT_LOAD_CRYPTO_STRINGS, NULL);
-#endif
-#if OPENSSL_VERSION_NUMBER < 0x10100000 || !defined(HAVE_OPENSSL_INIT_SSL)
-		(void)SSL_library_init();
-#else
-		(void)OPENSSL_init_ssl(OPENSSL_INIT_LOAD_SSL_STRINGS, NULL);
-#endif
+		SSL_library_init();
 	}
 	send_em(svr, udp, usessl, noanswer, argc, argv);
 	checklock_stop();

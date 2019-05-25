@@ -57,7 +57,7 @@ struct iter_forwards {
 	 * match which gives the ancestor needed.
 	 * contents of type iter_forward_zone.
 	 */
-	rbtree_type* tree;
+	rbtree_t* tree;
 };
 
 /**
@@ -65,7 +65,7 @@ struct iter_forwards {
  */
 struct iter_forward_zone {
 	/** redblacktree node, key is this structure: class and name */
-	rbnode_type node;
+	rbnode_t node;
 	/** name */
 	uint8_t* name;
 	/** length of name */

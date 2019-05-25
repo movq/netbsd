@@ -49,14 +49,6 @@
  * AUTOTRUST_FILE id
  * ; contents of that file
  * AUTOTRUST_END
- * ; temp file names are echoed as "tmp/xxx.fname"
- * TEMPFILE_NAME fname
- * ; temp file contents, inline, deleted at end of run
- * TEMPFILE_CONTENTS fname
- * ; contents of that file
- * ; this creates $INCLUDE /tmp/xxx.fname
- * $INCLUDE_TEMPFILE fname
- * TEMPFILE_END
  * CONFIG_END
  * ; comment line.
  * SCENARIO_BEGIN name_of_scenario
@@ -83,7 +75,6 @@
  *		the step waits for traffic to stop.
  *      o CHECK_AUTOTRUST [id] - followed by FILE_BEGIN [to match] FILE_END.
  *      	The file contents is macro expanded before match.
- *      o CHECK_TEMPFILE [fname] - followed by FILE_BEGIN [to match] FILE_END
  *      o INFRA_RTT [ip] [dp] [rtt] - update infra cache entry with rtt.
  *      o ERROR
  * ; following entry starts on the next line, ENTRY_BEGIN.
@@ -204,8 +195,6 @@ struct replay_moment {
 		repevt_back_query,
 		/** check autotrust key file */
 		repevt_autotrust_check,
-		/** check a temp file */
-		repevt_tempfile_check,
 		/** an error happens to outbound query */
 		repevt_error,
 		/** assignment to a variable */
@@ -291,7 +280,7 @@ struct replay_runtime {
 	struct fake_timer* timer_list;
 
 	/** callback to call for incoming queries */
-	comm_point_callback_type* callback_query;
+	comm_point_callback_t* callback_query;
 	/** user argument for incoming query callback */
 	void *cb_arg;
 
@@ -316,7 +305,7 @@ struct replay_runtime {
 	/**
 	 * Tree of macro values. Of type replay_var
 	 */
-	rbtree_type* vars;
+	rbtree_t* vars;
 };
 
 /**
@@ -336,7 +325,7 @@ struct fake_pending {
 	/** qtype */
 	int qtype;
 	/** The callback function to call when answer arrives (or timeout) */
-	comm_point_callback_type* callback;
+	comm_point_callback_t* callback;
 	/** callback user argument */
 	void* cb_arg;
 	/** original timeout in seconds from 'then' */
@@ -351,8 +340,6 @@ struct fake_pending {
 	enum transport_type transport;
 	/** if this is a serviced query */
 	int serviced;
-	/** if we are handling a multi pkt tcp stream, non 0 and the pkt nr*/
-	int tcp_pkt_counter;
 	/** the runtime structure this is part of */
 	struct replay_runtime* runtime;
 };
@@ -393,7 +380,7 @@ struct fake_timer {
  */
 struct replay_var {
 	/** rbtree node. Key is this structure. Sorted by name. */
-	rbnode_type node;
+	rbnode_t node;
 	/** the variable name */
 	char* name;
 	/** the variable value */
@@ -426,13 +413,13 @@ struct fake_timer* replay_get_oldest_timer(struct replay_runtime* runtime);
  * Create variable storage
  * @return new or NULL on failure.
  */
-rbtree_type* macro_store_create(void);
+rbtree_t* macro_store_create(void);
 
 /**
  * Delete variable storage
  * @param store: the macro storage to free up.
  */
-void macro_store_delete(rbtree_type* store);
+void macro_store_delete(rbtree_t* store);
 
 /**
  * Apply macro substitution to string.
@@ -441,7 +428,7 @@ void macro_store_delete(rbtree_type* store);
  * @param text: string to work on.
  * @return newly malloced string with result.
  */
-char* macro_process(rbtree_type* store, struct replay_runtime* runtime, 
+char* macro_process(rbtree_t* store, struct replay_runtime* runtime, 
 	char* text);
 
 /**
@@ -451,7 +438,7 @@ char* macro_process(rbtree_type* store, struct replay_runtime* runtime,
  * @return newly malloced string with result or strdup("") if not found.
  * 	or NULL on malloc failure.
  */
-char* macro_lookup(rbtree_type* store, char* name);
+char* macro_lookup(rbtree_t* store, char* name);
 
 /**
  * Set macro value.
@@ -460,10 +447,10 @@ char* macro_lookup(rbtree_type* store, char* name);
  * @param value: text to set it to.  Not expanded.
  * @return false on failure.
  */
-int macro_assign(rbtree_type* store, char* name, char* value);
+int macro_assign(rbtree_t* store, char* name, char* value);
 
 /** Print macro variables stored as debug info */
-void macro_print_debug(rbtree_type* store);
+void macro_print_debug(rbtree_t* store);
 
 /** testbounds self test */
 void testbound_selftest(void);

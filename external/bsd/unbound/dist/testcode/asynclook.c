@@ -56,15 +56,6 @@
 #undef free
 #undef strdup
 #endif
-#ifdef HAVE_SSL
-#ifdef HAVE_OPENSSL_SSL_H
-#include <openssl/ssl.h>
-#endif
-#ifdef HAVE_OPENSSL_ERR_H
-#include <openssl/err.h>
-#endif
-#endif /* HAVE_SSL */
-
 
 /** keeping track of the async ids */
 struct track_id {
@@ -73,7 +64,7 @@ struct track_id {
 	/** true if cancelled */
 	int cancel;
 	/** a lock on this structure for thread safety */
-	lock_basic_type lock;
+	lock_basic_t lock;
 };
 
 /**
@@ -173,7 +164,7 @@ struct ext_thr_info {
 	/** thread num for debug */
 	int thread_num;
 	/** thread id */
-	ub_thread_type tid;
+	ub_thread_t tid;
 	/** context */
 	struct ub_ctx* ctx;
 	/** size of array to query */
@@ -468,27 +459,6 @@ int main(int argc, char** argv)
 	argc -= optind;
 	argv += optind;
 
-#ifdef HAVE_SSL
-#ifdef HAVE_ERR_LOAD_CRYPTO_STRINGS
-	ERR_load_crypto_strings();
-#endif
-#if OPENSSL_VERSION_NUMBER < 0x10100000 || !defined(HAVE_OPENSSL_INIT_SSL)
-	ERR_load_SSL_strings();
-#endif
-#if OPENSSL_VERSION_NUMBER < 0x10100000 || !defined(HAVE_OPENSSL_INIT_CRYPTO)
-	OpenSSL_add_all_algorithms();
-#else
-	OPENSSL_init_crypto(OPENSSL_INIT_ADD_ALL_CIPHERS
-		| OPENSSL_INIT_ADD_ALL_DIGESTS
-		| OPENSSL_INIT_LOAD_CRYPTO_STRINGS, NULL);
-#endif
-#if OPENSSL_VERSION_NUMBER < 0x10100000 || !defined(HAVE_OPENSSL_INIT_SSL)
-	(void)SSL_library_init();
-#else
-	(void)OPENSSL_init_ssl(OPENSSL_INIT_LOAD_SSL_STRINGS, NULL);
-#endif
-#endif /* HAVE_SSL */
-
 	if(ext)
 		return ext_test(ctx, argc, argv);
 
@@ -500,7 +470,7 @@ int main(int argc, char** argv)
 		return 1;
 	}
 
-	/* perform asynchronous calls */
+	/* perform asyncronous calls */
 	num_wait = argc;
 	for(i=0; i<argc; i++) {
 		lookups[i].name = argv[i];
