@@ -1,4 +1,4 @@
-/*	$NetBSD: imx8mm-pinfunc.h,v 1.1 2019/05/25 11:29:15 jmcneill Exp $	*/
+/*	$NetBSD: imx8mm-pinfunc.h,v 1.1.1.1 2019/05/25 11:29:15 jmcneill Exp $	*/
 
 /* SPDX-License-Identifier: GPL-2.0+ */
 /*
