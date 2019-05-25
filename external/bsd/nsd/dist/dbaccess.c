@@ -247,7 +247,7 @@ read_zone_data(udb_base* udb, namedb_type* db, region_type* dname_region,
 /** create a zone */
 zone_type*
 namedb_zone_create(namedb_type* db, const dname_type* dname,
-	struct zone_options* zo)
+	zone_options_t* zo)
 {
 	zone_type* zone = (zone_type *) region_alloc(db->region,
 		sizeof(zone_type));
@@ -321,12 +321,12 @@ namedb_zone_delete(namedb_type* db, zone_type* zone)
 #ifdef HAVE_MMAP
 /** read a zone */
 static void
-read_zone(udb_base* udb, namedb_type* db, struct nsd_options* opt,
+read_zone(udb_base* udb, namedb_type* db, nsd_options_t* opt,
 	region_type* dname_region, udb_ptr* z)
 {
 	/* construct dname */
 	const dname_type* dname = dname_make(dname_region, ZONE(z)->name, 0);
-	struct zone_options* zo = dname?zone_options_find(opt, dname):NULL;
+	zone_options_t* zo = dname?zone_options_find(opt, dname):NULL;
 	zone_type* zone;
 	if(!dname) return;
 	if(!zo) {
@@ -353,7 +353,7 @@ read_zone(udb_base* udb, namedb_type* db, struct nsd_options* opt,
 #ifdef HAVE_MMAP
 /** read zones from nsd.db */
 static void
-read_zones(udb_base* udb, namedb_type* db, struct nsd_options* opt,
+read_zones(udb_base* udb, namedb_type* db, nsd_options_t* opt,
 	region_type* dname_region)
 {
 	udb_ptr ztree, n, z;
@@ -378,7 +378,7 @@ read_zones(udb_base* udb, namedb_type* db, struct nsd_options* opt,
 /** try to read the udb file or fail */
 static int
 try_read_udb(namedb_type* db, int fd, const char* filename,
-	struct nsd_options* opt)
+	nsd_options_t* opt)
 {
 	/*
 	 * Temporary region used while loading domain names from the
@@ -414,7 +414,7 @@ try_read_udb(namedb_type* db, int fd, const char* filename,
 #endif /* HAVE_MMAP */
 
 struct namedb *
-namedb_open (const char* filename, struct nsd_options* opt)
+namedb_open (const char* filename, nsd_options_t* opt)
 {
 	namedb_type* db;
 
@@ -571,10 +571,13 @@ namedb_read_zonefile(struct nsd* nsd, struct zone* zone, udb_base* taskudb,
 	assert(parser);
 	/* wipe zone from memory */
 #ifdef NSEC3
-	nsec3_clear_precompile(nsd->db, zone);
-	zone->nsec3_param = NULL;
+	nsec3_hash_tree_clear(zone);
 #endif
 	delete_zone_rrs(nsd->db, zone);
+#ifdef NSEC3
+	nsec3_clear_precompile(nsd->db, zone);
+	zone->nsec3_param = NULL;
+#endif /* NSEC3 */
 	errors = zonec_read(zone->opts->name, fname, zone);
 	if(errors > 0) {
 		log_msg(LOG_ERR, "zone %s file %s read with %u errors",
@@ -582,10 +585,13 @@ namedb_read_zonefile(struct nsd* nsd, struct zone* zone, udb_base* taskudb,
 		/* wipe (partial) zone from memory */
 		zone->is_ok = 1;
 #ifdef NSEC3
-		nsec3_clear_precompile(nsd->db, zone);
-		zone->nsec3_param = NULL;
+		nsec3_hash_tree_clear(zone);
 #endif
 		delete_zone_rrs(nsd->db, zone);
+#ifdef NSEC3
+		nsec3_clear_precompile(nsd->db, zone);
+		zone->nsec3_param = NULL;
+#endif /* NSEC3 */
 		if(nsd->db->udb) {
 			region_type* dname_region;
 			udb_ptr z;
@@ -647,7 +653,7 @@ namedb_read_zonefile(struct nsd* nsd, struct zone* zone, udb_base* taskudb,
 }
 
 void namedb_check_zonefile(struct nsd* nsd, udb_base* taskudb,
-	udb_ptr* last_task, struct zone_options* zopt)
+	udb_ptr* last_task, zone_options_t* zopt)
 {
 	zone_type* zone;
 	const dname_type* dname = (const dname_type*)zopt->node.key;
@@ -659,12 +665,12 @@ void namedb_check_zonefile(struct nsd* nsd, udb_base* taskudb,
 	namedb_read_zonefile(nsd, zone, taskudb, last_task);
 }
 
-void namedb_check_zonefiles(struct nsd* nsd, struct nsd_options* opt,
+void namedb_check_zonefiles(struct nsd* nsd, nsd_options_t* opt,
 	udb_base* taskudb, udb_ptr* last_task)
 {
-	struct zone_options* zo;
+	zone_options_t* zo;
 	/* check all zones in opt, create if not exist in main db */
-	RBTREE_FOR(zo, struct zone_options*, opt->zone_options) {
+	RBTREE_FOR(zo, zone_options_t*, opt->zone_options) {
 		namedb_check_zonefile(nsd, taskudb, last_task, zo);
 		if(nsd->signal_hint_shutdown) break;
 	}

@@ -60,8 +60,6 @@
 #ifndef NET_EVENT_H
 #define NET_EVENT_H
 
-#include "dnscrypt/dnscrypt.h"
-
 struct sldns_buffer;
 struct comm_point;
 struct comm_reply;
@@ -73,7 +71,7 @@ struct internal_base;
 struct internal_timer; /* A sub struct of the comm_timer super struct */
 
 /** callback from communication point function type */
-typedef int comm_point_callback_type(struct comm_point*, void*, int, 
+typedef int comm_point_callback_t(struct comm_point*, void*, int, 
 	struct comm_reply*);
 
 /** to pass no_error to callback function */
@@ -84,8 +82,6 @@ typedef int comm_point_callback_type(struct comm_point*, void*, int,
 #define NETEVENT_TIMEOUT -2 
 /** to pass fallback from capsforID to callback function; 0x20 failed */
 #define NETEVENT_CAPSFAIL -3
-/** to pass done transfer to callback function; http file is complete */
-#define NETEVENT_DONE -4
 
 /** timeout to slow accept calls when not possible, in msec. */
 #define NETEVENT_SLOW_ACCEPT_TIME 2000
@@ -118,13 +114,6 @@ struct comm_reply {
 	socklen_t addrlen;
 	/** return type 0 (none), 4(IP4), 6(IP6) */
 	int srctype;
-	/* DnsCrypt context */
-#ifdef USE_DNSCRYPT
-	uint8_t client_nonce[crypto_box_HALF_NONCEBYTES];
-	uint8_t nmkey[crypto_box_BEFORENMBYTES];
-	const dnsccert *dnsc_cert;
-	int is_dnscrypted;
-#endif
 	/** the return source interface data */
 	union {
 #ifdef IPV6_PKTINFO
@@ -135,11 +124,9 @@ struct comm_reply {
 #elif defined(IP_RECVDSTADDR)
 		struct in_addr v4addr;
 #endif
-	}
+	} 	
 		/** variable with return source data */
 		pktinfo;
-	/** max udp size for udp packets */
-	size_t max_udp_size;
 };
 
 /** 
@@ -203,19 +190,6 @@ struct comm_point {
 		comm_ssl_shake_hs_write
 	} ssl_shake_state;
 
-	/* -------- HTTP ------- */
-	/** Currently reading in http headers */
-	int http_in_headers;
-	/** Currently reading in chunk headers, 0=not, 1=firstline, 2=unused
-	 * (more lines), 3=trailer headers after chunk */
-	int http_in_chunk_headers;
-	/** chunked transfer */
-	int http_is_chunked;
-	/** http temp buffer (shared buffer for temporary work) */
-	struct sldns_buffer* http_temp;
-	/** http stored content in buffer */
-	size_t http_stored;
-
 	/* -------- dnstap ------- */
 	/** the dnstap environment */
 	struct dt_env* dtenv;
@@ -228,8 +202,6 @@ struct comm_point {
 		comm_tcp_accept, 
 		/** TCP handler socket - handle byteperbyte readwrite. */
 		comm_tcp,
-		/** HTTP handler socket */
-		comm_http,
 		/** AF_UNIX socket - for internal commands. */
 		comm_local,
 		/** raw - not DNS format - for pipe readers and writers */
@@ -253,23 +225,9 @@ struct comm_point {
 	    So that when that is done the callback is called. */
 	int tcp_do_toggle_rw;
 
-	/** timeout in msec for TCP wait times for this connection */
-	int tcp_timeout_msec;
-
 	/** if set, checks for pending error from nonblocking connect() call.*/
 	int tcp_check_nb_connect;
 
-#ifdef USE_MSG_FASTOPEN
-	/** used to track if the sendto() call should be done when using TFO. */
-	int tcp_do_fastopen;
-#endif
-
-#ifdef USE_DNSCRYPT
-	/** Is this a dnscrypt channel */
-	int dnscrypt;
-	/** encrypted buffer pointer. Either to perthread, or own buffer or NULL */
-	struct sldns_buffer* dnscrypt_buffer;
-#endif
 	/** number of queries outstanding on this socket, used by
 	 * outside network for udp ports */
 	int inuse;
@@ -298,7 +256,7 @@ struct comm_point {
 	    		For UDP this is done without changing the commpoint.
 			In TCP it sets write state.
 	*/
-	comm_point_callback_type* callback;
+	comm_point_callback_t* callback;
 	/** argument to pass to callback. */
 	void *cb_arg;
 };
@@ -416,7 +374,7 @@ struct ub_event_base* comm_base_internal(struct comm_base* b);
  */
 struct comm_point* comm_point_create_udp(struct comm_base* base,
 	int fd, struct sldns_buffer* buffer, 
-	comm_point_callback_type* callback, void* callback_arg);
+	comm_point_callback_t* callback, void* callback_arg);
 
 /**
  * Create an UDP with ancillary data comm point. Calls malloc.
@@ -432,7 +390,7 @@ struct comm_point* comm_point_create_udp(struct comm_base* base,
  */
 struct comm_point* comm_point_create_udp_ancil(struct comm_base* base,
 	int fd, struct sldns_buffer* buffer, 
-	comm_point_callback_type* callback, void* callback_arg);
+	comm_point_callback_t* callback, void* callback_arg);
 
 /**
  * Create a TCP listener comm point. Calls malloc.
@@ -453,7 +411,7 @@ struct comm_point* comm_point_create_udp_ancil(struct comm_base* base,
  */
 struct comm_point* comm_point_create_tcp(struct comm_base* base,
 	int fd, int num, size_t bufsize, 
-	comm_point_callback_type* callback, void* callback_arg);
+	comm_point_callback_t* callback, void* callback_arg);
 
 /**
  * Create an outgoing TCP commpoint. No file descriptor is opened, left at -1.
@@ -464,21 +422,7 @@ struct comm_point* comm_point_create_tcp(struct comm_base* base,
  * @return: the commpoint or NULL on error.
  */
 struct comm_point* comm_point_create_tcp_out(struct comm_base* base,
-	size_t bufsize, comm_point_callback_type* callback, void* callback_arg);
-
-/**
- * Create an outgoing HTTP commpoint. No file descriptor is opened, left at -1.
- * @param base: in which base to alloc the commpoint.
- * @param bufsize: size of buffer to create for handlers.
- * @param callback: callback function pointer for the handler.
- * @param callback_arg: will be passed to your callback function.
- * @param temp: sldns buffer, shared between other http_out commpoints, for
- * 	temporary data when performing callbacks.
- * @return: the commpoint or NULL on error.
- */
-struct comm_point* comm_point_create_http_out(struct comm_base* base,
-	size_t bufsize, comm_point_callback_type* callback,
-	void* callback_arg, struct sldns_buffer* temp);
+	size_t bufsize, comm_point_callback_t* callback, void* callback_arg);
 
 /**
  * Create commpoint to listen to a local domain file descriptor.
@@ -491,7 +435,7 @@ struct comm_point* comm_point_create_http_out(struct comm_base* base,
  */
 struct comm_point* comm_point_create_local(struct comm_base* base,
 	int fd, size_t bufsize, 
-	comm_point_callback_type* callback, void* callback_arg);
+	comm_point_callback_t* callback, void* callback_arg);
 
 /**
  * Create commpoint to listen to a local domain pipe descriptor.
@@ -504,7 +448,7 @@ struct comm_point* comm_point_create_local(struct comm_base* base,
  */
 struct comm_point* comm_point_create_raw(struct comm_base* base,
 	int fd, int writing, 
-	comm_point_callback_type* callback, void* callback_arg);
+	comm_point_callback_t* callback, void* callback_arg);
 
 /**
  * Close a comm point fd.
@@ -552,10 +496,9 @@ void comm_point_stop_listening(struct comm_point* c);
  * Start listening again for input on the comm point.
  * @param c: commpoint to enable again.
  * @param newfd: new fd, or -1 to leave fd be.
- * @param msec: timeout in milliseconds, or -1 for no (change to the) timeout.
- *	So seconds*1000.
+ * @param sec: timeout in seconds, or -1 for no (change to the) timeout.
  */
-void comm_point_start_listening(struct comm_point* c, int newfd, int msec);
+void comm_point_start_listening(struct comm_point* c, int newfd, int sec);
 
 /**
  * Stop listening and start listening again for reading or writing.
@@ -695,16 +638,6 @@ void comm_point_tcp_accept_callback(int fd, short event, void* arg);
  * @param arg: the comm_point structure.
  */
 void comm_point_tcp_handle_callback(int fd, short event, void* arg);
-
-/**
- * This routine is published for checks and tests, and is only used internally.
- * handle libevent callback for tcp data comm point
- * @param fd: file descriptor.
- * @param event: event bits from libevent: 
- *	EV_READ, EV_WRITE, EV_SIGNAL, EV_TIMEOUT.
- * @param arg: the comm_point structure.
- */
-void comm_point_http_handle_callback(int fd, short event, void* arg);
 
 /**
  * This routine is published for checks and tests, and is only used internally.

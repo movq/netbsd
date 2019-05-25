@@ -688,8 +688,8 @@ AC_DEFUN([ACX_SSL_CHECKS], [
                 # check if -lwsock32 or -lgdi32 are needed.	
                 BAKLIBS="$LIBS"
                 BAKSSLLIBS="$LIBSSL_LIBS"
-		LIBS="$LIBS -lgdi32 -lws2_32"
-		LIBSSL_LIBS="$LIBSSL_LIBS -lgdi32 -lws2_32"
+                LIBS="$LIBS -lgdi32"
+                LIBSSL_LIBS="$LIBSSL_LIBS -lgdi32"
                 AC_MSG_CHECKING([if -lcrypto needs -lgdi32])
                 AC_TRY_LINK([], [
                     int HMAC_Update(void);
@@ -839,11 +839,7 @@ dnl see if on windows
 if test "$ac_cv_header_windows_h" = "yes"; then
 	AC_DEFINE(USE_WINSOCK, 1, [Whether the windows socket API is used])
 	USE_WINSOCK="1"
-	if echo $LIBS | grep 'lws2_32' >/dev/null; then
-		:
-	else
-		LIBS="$LIBS -lws2_32"
-	fi
+	LIBS="$LIBS -lws2_32"
 fi
 ],
 dnl no quick getaddrinfo, try mingw32 and winsock2 library.

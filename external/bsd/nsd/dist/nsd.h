@@ -18,9 +18,6 @@ struct netio_handler;
 struct nsd_options;
 struct udb_base;
 struct daemon_remote;
-#ifdef USE_DNSTAP
-struct dt_collector;
-#endif
 
 /* The NSD runtime states and NSD ipc command values */
 #define	NSD_RUN	0
@@ -76,7 +73,7 @@ struct dt_collector;
 
 #ifdef BIND8_STATS
 /* Counter for statistics */
-typedef	unsigned long stc_type;
+typedef	unsigned long stc_t;
 
 #define	LASTELEM(arr)	(sizeof(arr) / sizeof(arr[0]) - 1)
 
@@ -149,7 +146,7 @@ struct nsd_child
 	struct netio_handler* handler;
 
 #ifdef	BIND8_STATS
-	stc_type query_count;
+	stc_t query_count;
 #endif
 };
 
@@ -187,11 +184,7 @@ struct	nsd
 
 	/* mmaps with data exchange from xfrd and reload */
 	struct udb_base* task[2];
-	int mytask;
-	/* the base used by this (child)process */
-	struct event_base* event_base;
-	/* the server_region used by this (child)process */
-	region_type* server_region;
+	int mytask; /* the base used by this process */
 	struct netio_handler* xfrd_listener;
 	struct daemon_remote* rc;
 
@@ -240,14 +233,14 @@ struct	nsd
 	struct nsdst {
 		time_t	boot;
 		int	period;		/* Produce statistics dump every st_period seconds */
-		stc_type qtype[257];	/* Counters per qtype */
-		stc_type qclass[4];	/* Class IN or Class CH or other */
-		stc_type qudp, qudp6;	/* Number of queries udp and udp6 */
-		stc_type ctcp, ctcp6;	/* Number of tcp and tcp6 connections */
-		stc_type rcode[17], opcode[6]; /* Rcodes & opcodes */
+		stc_t	qtype[257];	/* Counters per qtype */
+		stc_t	qclass[4];	/* Class IN or Class CH or other */
+		stc_t	qudp, qudp6;	/* Number of queries udp and udp6 */
+		stc_t	ctcp, ctcp6;	/* Number of tcp and tcp6 connections */
+		stc_t	rcode[17], opcode[6]; /* Rcodes & opcodes */
 		/* Dropped, truncated, queries for nonconfigured zone, tx errors */
-		stc_type dropped, truncated, wrongzone, txerr, rxerr;
-		stc_type edns, ednserr, raxfr, nona;
+		stc_t	dropped, truncated, wrongzone, txerr, rxerr;
+		stc_t 	edns, ednserr, raxfr, nona;
 		uint64_t db_disk, db_mem;
 	} st;
 	/* per zone stats, each an array per zone-stat-idx, stats per zone is
@@ -263,13 +256,6 @@ struct	nsd
 	/* current zonestat array to use */
 	struct nsdst* zonestatnow;
 #endif /* BIND8_STATS */
-#ifdef USE_DNSTAP
-	/* the dnstap collector process info */
-	struct dt_collector* dt_collector;
-	/* the pipes from server processes to the dt_collector,
-	 * arrays of size child_count.  Kept open for (re-)forks. */
-	int *dt_collector_fd_send, *dt_collector_fd_recv;
-#endif /* USE_DNSTAP */
 	/* ratelimit for errors, time value */
 	time_t err_limit_time;
 	/* ratelimit for errors, packet count */
@@ -292,7 +278,7 @@ int server_init(struct nsd *nsd);
 int server_prepare(struct nsd *nsd);
 void server_main(struct nsd *nsd);
 void server_child(struct nsd *nsd);
-void server_shutdown(struct nsd *nsd) ATTR_NORETURN;
+void server_shutdown(struct nsd *nsd);
 void server_close_all_sockets(struct nsd_socket sockets[], size_t n);
 struct event_base* nsd_child_event_base(void);
 /* extra domain numbers for temporary domains */

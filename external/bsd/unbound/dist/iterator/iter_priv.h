@@ -60,14 +60,14 @@ struct iter_priv {
 	 * contents of type addr_tree_node.
 	 * No further data need, only presence or absence.
 	 */
-	rbtree_type a;
+	rbtree_t a;
 	/** 
 	 * Tree of the domains spans that are allowed to contain
 	 * the blocked address spans.
 	 * contents of type name_tree_node.
 	 * No further data need, only presence or absence.
 	 */
-	rbtree_type n;
+	rbtree_t n;
 };
 
 /**

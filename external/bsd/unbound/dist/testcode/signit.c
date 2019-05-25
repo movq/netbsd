@@ -63,7 +63,7 @@ struct keysets {
 
 /** print usage and exit */
 static void
-usage(void)
+usage()
 {
 	printf("usage:	signit expi ince keytag owner keyfile\n");
 	printf("present rrset data on stdin.\n");

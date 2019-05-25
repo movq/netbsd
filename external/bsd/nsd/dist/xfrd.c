@@ -29,14 +29,6 @@
 #include "difffile.h"
 #include "ipc.h"
 #include "remote.h"
-#include "rrl.h"
-#ifdef USE_DNSTAP
-#include "dnstap/dnstap_collector.h"
-#endif
-
-#ifdef HAVE_SYSTEMD
-#include <systemd/sd-daemon.h>
-#endif
 
 #define XFRD_UDP_TIMEOUT 10 /* seconds, before a udp request times out */
 #define XFRD_NO_IXFR_CACHE 172800 /* 48h before retrying ixfr's after notimpl */
@@ -50,7 +42,7 @@
 		 * was lost, and need waitpid to remove their process entry. */
 
 /* the daemon state */
-xfrd_state_type* xfrd = 0;
+xfrd_state_t* xfrd = 0;
 
 /* main xfrd loop */
 static void xfrd_main(void);
@@ -64,18 +56,16 @@ static void xfrd_init_zones(void);
 static void xfrd_receive_soa(int socket, int shortsoa);
 
 /* handle incoming notification message. soa can be NULL. true if transfer needed. */
-static int xfrd_handle_incoming_notify(xfrd_zone_type* zone,
-	xfrd_soa_type* soa);
+static int xfrd_handle_incoming_notify(xfrd_zone_t* zone, xfrd_soa_t* soa);
 
 /* call with buffer just after the soa dname. returns 0 on error. */
-static int xfrd_parse_soa_info(buffer_type* packet, xfrd_soa_type* soa);
+static int xfrd_parse_soa_info(buffer_type* packet, xfrd_soa_t* soa);
 /* set the zone state to a new state (takes care of expiry messages) */
-static void xfrd_set_zone_state(xfrd_zone_type* zone,
-	enum xfrd_zone_state new_zone_state);
+static void xfrd_set_zone_state(xfrd_zone_t* zone, enum xfrd_zone_state new_zone_state);
 /* set timer for retry amount (depends on zone_state) */
-static void xfrd_set_timer_retry(xfrd_zone_type* zone);
+static void xfrd_set_timer_retry(xfrd_zone_t* zone);
 /* set timer for refresh timeout (depends on zone_state) */
-static void xfrd_set_timer_refresh(xfrd_zone_type* zone);
+static void xfrd_set_timer_refresh(xfrd_zone_t* zone);
 
 /* set reload timeout */
 static void xfrd_set_reload_timeout(void);
@@ -85,15 +75,15 @@ static void xfrd_handle_reload(int fd, short event, void* arg);
 static void xfrd_handle_child_timer(int fd, short event, void* arg);
 
 /* send ixfr request, returns fd of connection to read on */
-static int xfrd_send_ixfr_request_udp(xfrd_zone_type* zone);
+static int xfrd_send_ixfr_request_udp(xfrd_zone_t* zone);
 /* obtain udp socket slot */
-static void xfrd_udp_obtain(xfrd_zone_type* zone);
+static void xfrd_udp_obtain(xfrd_zone_t* zone);
 
 /* read data via udp */
-static void xfrd_udp_read(xfrd_zone_type* zone);
+static void xfrd_udp_read(xfrd_zone_t* zone);
 
 /* find master by notify number */
-static int find_same_master_notify(xfrd_zone_type* zone, int acl_num_nfy);
+static int find_same_master_notify(xfrd_zone_t* zone, int acl_num_nfy);
 
 /* set the write timer to activate */
 static void xfrd_write_timer_set(void);
@@ -106,15 +96,11 @@ xfrd_signal_callback(int sig, short event, void* ATTR_UNUSED(arg))
 	sig_handler(sig);
 }
 
-static struct event* xfrd_sig_evs[10];
-static int xfrd_sig_num = 0;
-
 static void
 xfrd_sigsetup(int sig)
 {
+	/* no need to remember the event ; dealloc on process exit */
 	struct event *ev = xalloc_zero(sizeof(*ev));
-	assert(xfrd_sig_num <= (int)(sizeof(xfrd_sig_evs)/sizeof(ev)));
-	xfrd_sig_evs[xfrd_sig_num++] = ev;
 	signal_set(ev, sig, xfrd_signal_callback, NULL);
 	if(event_base_set(xfrd->event_base, ev) != 0) {
 		log_msg(LOG_ERR, "xfrd sig handler: event_base_set failed");
@@ -136,8 +122,8 @@ xfrd_init(int socket, struct nsd* nsd, int shortsoa, int reload_active,
 
 	region = region_create_custom(xalloc, free, DEFAULT_CHUNK_SIZE,
 		DEFAULT_LARGE_OBJECT_SIZE, DEFAULT_INITIAL_CLEANUP_SIZE, 1);
-	xfrd = (xfrd_state_type*)region_alloc(region, sizeof(xfrd_state_type));
-	memset(xfrd, 0, sizeof(xfrd_state_type));
+	xfrd = (xfrd_state_t*)region_alloc(region, sizeof(xfrd_state_t));
+	memset(xfrd, 0, sizeof(xfrd_state_t));
 	xfrd->region = region;
 	xfrd->xfrd_start_time = time(0);
 	xfrd->event_base = nsd_child_event_base();
@@ -229,16 +215,13 @@ xfrd_init(int socket, struct nsd* nsd, int shortsoa, int reload_active,
 	xfrd_sigsetup(SIGINT);
 
 	DEBUG(DEBUG_XFRD,1, (LOG_INFO, "xfrd startup"));
-#ifdef HAVE_SYSTEMD
-	sd_notify(0, "READY=1");
-#endif
 	xfrd_main();
 }
 
 static void
 xfrd_process_activated(void)
 {
-	xfrd_zone_type* zone;
+	xfrd_zone_t* zone;
 	while((zone = xfrd->activated_first)) {
 		DEBUG(DEBUG_XFRD,1, (LOG_INFO, "xfrd zone %s activation",
 			zone->apex_str));
@@ -331,15 +314,11 @@ xfrd_main(void)
 static void
 xfrd_shutdown()
 {
-	xfrd_zone_type* zone;
+	xfrd_zone_t* zone;
 
 	DEBUG(DEBUG_XFRD,1, (LOG_INFO, "xfrd shutdown"));
-#ifdef HAVE_SYSTEMD
-	sd_notify(0, "STOPPING=1");
-#endif
 	event_del(&xfrd->ipc_handler);
 	close(xfrd->ipc_handler.ev_fd); /* notifies parent we stop */
-	zone_list_close(nsd.options);
 	if(xfrd->nsd->options->xfrdfile != NULL && xfrd->nsd->options->xfrdfile[0]!=0)
 		xfrd_write_state(xfrd);
 	if(xfrd->reload_added) {
@@ -357,7 +336,7 @@ xfrd_shutdown()
 	daemon_remote_close(xfrd->nsd->rc); /* close sockets of rc */
 #endif
 	/* close sockets */
-	RBTREE_FOR(zone, xfrd_zone_type*, xfrd->zones)
+	RBTREE_FOR(zone, xfrd_zone_t*, xfrd->zones)
 	{
 		if(zone->event_added) {
 			event_del(&zone->zone_handler);
@@ -390,7 +369,7 @@ xfrd_shutdown()
 	 * to clean them out */
 
 	/* unlink xfr files for running transfers */
-	RBTREE_FOR(zone, xfrd_zone_type*, xfrd->zones)
+	RBTREE_FOR(zone, xfrd_zone_t*, xfrd->zones)
 	{
 		if(zone->msg_seq_nr)
 			xfrd_unlink_xfrfile(xfrd->nsd, zone->xfrfilenumber);
@@ -398,55 +377,9 @@ xfrd_shutdown()
 	/* unlink xfr files in not-yet-done task file */
 	xfrd_clean_pending_tasks(xfrd->nsd, xfrd->nsd->task[xfrd->nsd->mytask]);
 	xfrd_del_tempdir(xfrd->nsd);
-#ifdef HAVE_SSL
-	daemon_remote_delete(xfrd->nsd->rc); /* ssl-delete secret keys */
-#endif
-#ifdef USE_DNSTAP
-	dt_collector_close(nsd.dt_collector, &nsd);
-#endif
 
 	/* process-exit cleans up memory used by xfrd process */
 	DEBUG(DEBUG_XFRD,1, (LOG_INFO, "xfrd shutdown complete"));
-#ifdef MEMCLEAN /* OS collects memory pages */
-	if(xfrd->zones) {
-		xfrd_zone_type* z;
-		RBTREE_FOR(z, xfrd_zone_type*, xfrd->zones) {
-			tsig_delete_record(&z->tsig, NULL);
-		}
-	}
-	if(xfrd->notify_zones) {
-		struct notify_zone* n;
-		RBTREE_FOR(n, struct notify_zone*, xfrd->notify_zones) {
-			tsig_delete_record(&n->notify_tsig, NULL);
-		}
-	}
-	if(xfrd_sig_num > 0) {
-		int i;
-		for(i=0; i<xfrd_sig_num; i++) {
-			signal_del(xfrd_sig_evs[i]);
-			free(xfrd_sig_evs[i]);
-		}
-		for(i=0; i<(int)nsd.ifs; i++) {
-			if(nsd.udp[i].s != -1 && nsd.udp[i].addr)
-				freeaddrinfo(nsd.udp[i].addr);
-			if(nsd.tcp[i].s != -1 && nsd.tcp[i].addr)
-				freeaddrinfo(nsd.tcp[i].addr);
-		}
-	}
-#ifdef RATELIMIT
-	rrl_mmap_deinit();
-#endif
-#ifdef USE_DNSTAP
-	dt_collector_destroy(nsd.dt_collector, &nsd);
-#endif
-	udb_base_free(nsd.task[0]);
-	udb_base_free(nsd.task[1]);
-	event_base_free(xfrd->event_base);
-	region_destroy(xfrd->region);
-	nsd_options_destroy(nsd.options);
-	region_destroy(nsd.region);
-	log_finalize();
-#endif
 
 	exit(0);
 }
@@ -467,12 +400,11 @@ xfrd_clean_pending_tasks(struct nsd* nsd, udb_base* u)
 }
 
 void
-xfrd_init_slave_zone(xfrd_state_type* xfrd, struct zone_options* zone_opt)
+xfrd_init_slave_zone(xfrd_state_t* xfrd, zone_options_t* zone_opt)
 {
-	xfrd_zone_type *xzone;
-	xzone = (xfrd_zone_type*)region_alloc(xfrd->region,
-		sizeof(xfrd_zone_type));
-	memset(xzone, 0, sizeof(xfrd_zone_type));
+	xfrd_zone_t *xzone;
+	xzone = (xfrd_zone_t*)region_alloc(xfrd->region, sizeof(xfrd_zone_t));
+	memset(xzone, 0, sizeof(xfrd_zone_t));
 	xzone->apex = zone_opt->node.key;
 	xzone->apex_str = zone_opt->name;
 	xzone->state = xfrd_zone_refreshing;
@@ -511,13 +443,13 @@ xfrd_init_slave_zone(xfrd_state_type* xfrd, struct zone_options* zone_opt)
 	xfrd_set_refresh_now(xzone);
 
 	xzone->node.key = xzone->apex;
-	rbtree_insert(xfrd->zones, (rbnode_type*)xzone);
+	rbtree_insert(xfrd->zones, (rbnode_t*)xzone);
 }
 
 static void
 xfrd_init_zones()
 {
-	struct zone_options *zone_opt;
+	zone_options_t *zone_opt;
 	assert(xfrd->zones == 0);
 
 	xfrd->zones = rbtree_create(xfrd->region,
@@ -525,7 +457,7 @@ xfrd_init_zones()
 	xfrd->notify_zones = rbtree_create(xfrd->region,
 		(int (*)(const void *, const void *)) dname_compare);
 
-	RBTREE_FOR(zone_opt, struct zone_options*, xfrd->nsd->options->zone_options)
+	RBTREE_FOR(zone_opt, zone_options_t*, xfrd->nsd->options->zone_options)
 	{
 		DEBUG(DEBUG_XFRD,1, (LOG_INFO, "xfrd: adding %s zone",
 			zone_opt->name));
@@ -546,12 +478,12 @@ xfrd_init_zones()
 static void
 xfrd_process_soa_info_task(struct task_list_d* task)
 {
-	xfrd_soa_type soa;
-	xfrd_soa_type* soa_ptr = &soa;
-	xfrd_zone_type* zone;
+	xfrd_soa_t soa;
+	xfrd_soa_t* soa_ptr = &soa;
+	xfrd_zone_t* zone;
 	DEBUG(DEBUG_IPC,1, (LOG_INFO, "xfrd: process SOAINFO %s",
 		dname_to_string(task->zname, 0)));
-	zone = (xfrd_zone_type*)rbtree_search(xfrd->zones, task->zname);
+	zone = (xfrd_zone_t*)rbtree_search(xfrd->zones, task->zname);
 	if(task->size <= sizeof(struct task_list_d)+dname_total_size(
 		task->zname)+sizeof(uint32_t)*6 + sizeof(uint8_t)*2) {
 		/* NSD has zone without any info */
@@ -586,7 +518,7 @@ xfrd_process_soa_info_task(struct task_list_d* task)
 		memmove(&soa.expire, p, sizeof(uint32_t));
 		p += sizeof(uint32_t);
 		memmove(&soa.minimum, p, sizeof(uint32_t));
-		/* p += sizeof(uint32_t); if we wanted to read further */
+		p += sizeof(uint32_t);
 		DEBUG(DEBUG_IPC,1, (LOG_INFO, "SOAINFO for %s %u",
 			dname_to_string(task->zname,0),
 			(unsigned)ntohl(soa.serial)));
@@ -608,12 +540,12 @@ xfrd_receive_soa(int socket, int shortsoa)
 	sig_atomic_t cmd;
 	struct udb_base* xtask = xfrd->nsd->task[xfrd->nsd->mytask];
 	udb_ptr last_task, t;
-	xfrd_zone_type* zone;
+	xfrd_zone_t* zone;
 
 	if(!shortsoa) {
 		/* put all expired zones into mytask */
 		udb_ptr_init(&last_task, xtask);
-		RBTREE_FOR(zone, xfrd_zone_type*, xfrd->zones) {
+		RBTREE_FOR(zone, xfrd_zone_t*, xfrd->zones) {
 			if(zone->state == xfrd_zone_expired) {
 				task_new_expire(xtask, &last_task, zone->apex, 1);
 			}
@@ -673,7 +605,7 @@ xfrd_receive_soa(int socket, int shortsoa)
 		/* for shortsoa version, do expire later */
 		/* if expire notifications, put in my task and
 		 * schedule a reload to make sure they are processed */
-		RBTREE_FOR(zone, xfrd_zone_type*, xfrd->zones) {
+		RBTREE_FOR(zone, xfrd_zone_t*, xfrd->zones) {
 			if(zone->state == xfrd_zone_expired) {
 				xfrd_send_expire_notification(zone);
 			}
@@ -689,7 +621,7 @@ xfrd_reopen_logfile(void)
 }
 
 void
-xfrd_deactivate_zone(xfrd_zone_type* z)
+xfrd_deactivate_zone(xfrd_zone_t* z)
 {
 	if(z->is_activated) {
 		/* delete from activated list */
@@ -703,9 +635,9 @@ xfrd_deactivate_zone(xfrd_zone_type* z)
 }
 
 void
-xfrd_del_slave_zone(xfrd_state_type* xfrd, const dname_type* dname)
+xfrd_del_slave_zone(xfrd_state_t* xfrd, const dname_type* dname)
 {
-	xfrd_zone_type* z = (xfrd_zone_type*)rbtree_delete(xfrd->zones, dname);
+	xfrd_zone_t* z = (xfrd_zone_t*)rbtree_delete(xfrd->zones, dname);
 	if(!z) return;
 	
 	/* io */
@@ -759,7 +691,7 @@ xfrd_free_namedb(struct nsd* nsd)
 }
 
 static void
-xfrd_set_timer_refresh(xfrd_zone_type* zone)
+xfrd_set_timer_refresh(xfrd_zone_t* zone)
 {
 	time_t set_refresh;
 	time_t set_expire;
@@ -790,7 +722,7 @@ xfrd_set_timer_refresh(xfrd_zone_type* zone)
 }
 
 static void
-xfrd_set_timer_retry(xfrd_zone_type* zone)
+xfrd_set_timer_retry(xfrd_zone_t* zone)
 {
 	time_t set_retry;
 	int mult;
@@ -832,7 +764,7 @@ xfrd_set_timer_retry(xfrd_zone_type* zone)
 		else if(set_retry < (time_t)zone->zone_options->pattern->min_retry_time)
 			set_retry = zone->zone_options->pattern->min_retry_time;
 		if(set_retry < XFRD_LOWERBOUND_RETRY)
-			set_retry = XFRD_LOWERBOUND_RETRY;
+			set_retry =  XFRD_LOWERBOUND_RETRY;
 		xfrd_set_timer(zone, set_retry);
 	} else {
 		set_retry = ntohl(zone->soa_disk.expire);
@@ -850,7 +782,7 @@ xfrd_set_timer_retry(xfrd_zone_type* zone)
 void
 xfrd_handle_zone(int ATTR_UNUSED(fd), short event, void* arg)
 {
-	xfrd_zone_type* zone = (xfrd_zone_type*)arg;
+	xfrd_zone_t* zone = (xfrd_zone_t*)arg;
 
 	if(zone->tcp_conn != -1) {
 		if(event == 0) /* activated, but already in TCP, nothing to do*/
@@ -914,7 +846,7 @@ xfrd_handle_zone(int ATTR_UNUSED(fd), short event, void* arg)
 }
 
 void
-xfrd_make_request(xfrd_zone_type* zone)
+xfrd_make_request(xfrd_zone_t* zone)
 {
 	if(zone->next_master != -1) {
 		/* we are told to use this next master */
@@ -1022,7 +954,7 @@ xfrd_make_request(xfrd_zone_type* zone)
 }
 
 static void
-xfrd_udp_obtain(xfrd_zone_type* zone)
+xfrd_udp_obtain(xfrd_zone_t* zone)
 {
 	assert(zone->udp_waiting == 0);
 	if(zone->tcp_conn != -1) {
@@ -1073,7 +1005,7 @@ xfrd_time()
 }
 
 void
-xfrd_copy_soa(xfrd_soa_type* soa, rr_type* rr)
+xfrd_copy_soa(xfrd_soa_t* soa, rr_type* rr)
 {
 	const uint8_t* rr_ns_wire = dname_name(domain_dname(rdata_atom_domain(rr->rdatas[0])));
 	uint8_t rr_ns_len = domain_dname(rdata_atom_domain(rr->rdatas[0]))->name_size;
@@ -1111,7 +1043,7 @@ xfrd_copy_soa(xfrd_soa_type* soa, rr_type* rr)
 }
 
 static void
-xfrd_set_zone_state(xfrd_zone_type* zone, enum xfrd_zone_state s)
+xfrd_set_zone_state(xfrd_zone_t* zone, enum xfrd_zone_state s)
 {
 	if(s != zone->state) {
 		enum xfrd_zone_state old = zone->state;
@@ -1124,7 +1056,7 @@ xfrd_set_zone_state(xfrd_zone_type* zone, enum xfrd_zone_state s)
 }
 
 void
-xfrd_set_refresh_now(xfrd_zone_type* zone)
+xfrd_set_refresh_now(xfrd_zone_t* zone)
 {
 	DEBUG(DEBUG_XFRD,1, (LOG_INFO, "xfrd zone %s is activated, state %d",
 		zone->apex_str, zone->state));
@@ -1140,7 +1072,7 @@ xfrd_set_refresh_now(xfrd_zone_type* zone)
 }
 
 void
-xfrd_unset_timer(xfrd_zone_type* zone)
+xfrd_unset_timer(xfrd_zone_t* zone)
 {
 	assert(zone->zone_handler.ev_fd == -1);
 	if(zone->event_added)
@@ -1150,7 +1082,7 @@ xfrd_unset_timer(xfrd_zone_type* zone)
 }
 
 void
-xfrd_set_timer(xfrd_zone_type* zone, time_t t)
+xfrd_set_timer(xfrd_zone_t* zone, time_t t)
 {
 	int fd = zone->zone_handler.ev_fd;
 	int fl = ((fd == -1)?EV_TIMEOUT:zone->zone_handler_flags);
@@ -1184,8 +1116,8 @@ xfrd_set_timer(xfrd_zone_type* zone, time_t t)
 }
 
 void
-xfrd_handle_incoming_soa(xfrd_zone_type* zone,
-	xfrd_soa_type* soa, time_t acquired)
+xfrd_handle_incoming_soa(xfrd_zone_t* zone,
+	xfrd_soa_t* soa, time_t acquired)
 {
 	if(soa == NULL) {
 		/* nsd no longer has a zone in memory */
@@ -1267,7 +1199,7 @@ xfrd_handle_incoming_soa(xfrd_zone_type* zone,
 }
 
 void
-xfrd_send_expire_notification(xfrd_zone_type* zone)
+xfrd_send_expire_notification(xfrd_zone_t* zone)
 {
 	task_new_expire(xfrd->nsd->task[xfrd->nsd->mytask], xfrd->last_task,
 		zone->apex, zone->state == xfrd_zone_expired);
@@ -1275,15 +1207,14 @@ xfrd_send_expire_notification(xfrd_zone_type* zone)
 }
 
 int
-xfrd_udp_read_packet(buffer_type* packet, int fd, struct sockaddr* src,
-	socklen_t* srclen)
+xfrd_udp_read_packet(buffer_type* packet, int fd)
 {
 	ssize_t received;
 
 	/* read the data */
 	buffer_clear(packet);
 	received = recvfrom(fd, buffer_begin(packet), buffer_remaining(packet),
-		0, src, srclen);
+		0, NULL, NULL);
 	if(received == -1) {
 		log_msg(LOG_ERR, "xfrd: recvfrom failed: %s",
 			strerror(errno));
@@ -1294,7 +1225,7 @@ xfrd_udp_read_packet(buffer_type* packet, int fd, struct sockaddr* src,
 }
 
 void
-xfrd_udp_release(xfrd_zone_type* zone)
+xfrd_udp_release(xfrd_zone_t* zone)
 {
 	assert(zone->udp_waiting == 0);
 	if(zone->event_added)
@@ -1310,7 +1241,7 @@ xfrd_udp_release(xfrd_zone_type* zone)
 	{
 		while(xfrd->udp_waiting_first) {
 			/* snip off waiting list */
-			xfrd_zone_type* wz = xfrd->udp_waiting_first;
+			xfrd_zone_t* wz = xfrd->udp_waiting_first;
 			assert(wz->udp_waiting);
 			wz->udp_waiting = 0;
 			xfrd->udp_waiting_first = wz->udp_waiting_next;
@@ -1350,7 +1281,7 @@ xfrd_udp_release(xfrd_zone_type* zone)
 
 /** disable ixfr for master */
 void
-xfrd_disable_ixfr(xfrd_zone_type* zone)
+xfrd_disable_ixfr(xfrd_zone_t* zone)
 {
 	if(!(zone->master->ixfr_disabled &&
 		(zone->master->ixfr_disabled + XFRD_NO_IXFR_CACHE) <= time(NULL))) {
@@ -1362,11 +1293,10 @@ xfrd_disable_ixfr(xfrd_zone_type* zone)
 }
 
 static void
-xfrd_udp_read(xfrd_zone_type* zone)
+xfrd_udp_read(xfrd_zone_t* zone)
 {
 	DEBUG(DEBUG_XFRD,1, (LOG_INFO, "xfrd: zone %s read udp data", zone->apex_str));
-	if(!xfrd_udp_read_packet(xfrd->packet, zone->zone_handler.ev_fd,
-		NULL, NULL)) {
+	if(!xfrd_udp_read_packet(xfrd->packet, zone->zone_handler.ev_fd)) {
 		zone->master->bad_xfr_count++;
 		if (zone->master->bad_xfr_count > 2) {
 			xfrd_disable_ixfr(zone);
@@ -1390,7 +1320,6 @@ xfrd_udp_read(xfrd_zone_type* zone)
 				xfrd_make_request(zone);
 				break;
 			}
-			/* fallthrough */
 		case xfrd_packet_newlease:
 			/* nothing more to do */
 			assert(zone->round_num == -1);
@@ -1426,8 +1355,7 @@ xfrd_udp_read(xfrd_zone_type* zone)
 }
 
 int
-xfrd_send_udp(struct acl_options* acl, buffer_type* packet,
-	struct acl_options* ifc)
+xfrd_send_udp(acl_options_t* acl, buffer_type* packet, acl_options_t* ifc)
 {
 #ifdef INET6
 	struct sockaddr_storage to;
@@ -1481,8 +1409,8 @@ xfrd_send_udp(struct acl_options* acl, buffer_type* packet,
 }
 
 int
-xfrd_bind_local_interface(int sockd, struct acl_options* ifc,
-	struct acl_options* acl, int tcp)
+xfrd_bind_local_interface(int sockd, acl_options_t* ifc, acl_options_t* acl,
+	int tcp)
 {
 #ifdef SO_LINGER
 	struct linger linger = {1, 0};
@@ -1559,7 +1487,7 @@ xfrd_bind_local_interface(int sockd, struct acl_options* ifc,
 
 void
 xfrd_tsig_sign_request(buffer_type* packet, tsig_record_type* tsig,
-	struct acl_options* acl)
+	acl_options_t* acl)
 {
 	tsig_algorithm_type* algo;
 	assert(acl->key_options && acl->key_options->tsig_key);
@@ -1583,7 +1511,7 @@ xfrd_tsig_sign_request(buffer_type* packet, tsig_record_type* tsig,
 }
 
 static int
-xfrd_send_ixfr_request_udp(xfrd_zone_type* zone)
+xfrd_send_ixfr_request_udp(xfrd_zone_t* zone)
 {
 	int fd;
 
@@ -1625,7 +1553,7 @@ xfrd_send_ixfr_request_udp(xfrd_zone_type* zone)
 	return fd;
 }
 
-static int xfrd_parse_soa_info(buffer_type* packet, xfrd_soa_type* soa)
+static int xfrd_parse_soa_info(buffer_type* packet, xfrd_soa_t* soa)
 {
 	if(!buffer_available(packet, 10))
 		return 0;
@@ -1662,8 +1590,8 @@ static int xfrd_parse_soa_info(buffer_type* packet, xfrd_soa_type* soa)
  * (soa contents is modified by the routine)
  */
 static int
-xfrd_xfr_check_rrs(xfrd_zone_type* zone, buffer_type* packet, size_t count,
-	int *done, xfrd_soa_type* soa, region_type* temp)
+xfrd_xfr_check_rrs(xfrd_zone_t* zone, buffer_type* packet, size_t count,
+	int *done, xfrd_soa_t* soa, region_type* temp)
 {
 	/* first RR has already been checked */
 	uint32_t tmp_serial = 0;
@@ -1769,7 +1697,7 @@ xfrd_xfr_check_rrs(xfrd_zone_type* zone, buffer_type* packet, size_t count,
 }
 
 static int
-xfrd_xfr_process_tsig(xfrd_zone_type* zone, buffer_type* packet)
+xfrd_xfr_process_tsig(xfrd_zone_t* zone, buffer_type* packet)
 {
 	int have_tsig = 0;
 	assert(zone && zone->master && zone->master->key_options
@@ -1825,8 +1753,8 @@ xfrd_xfr_process_tsig(xfrd_zone_type* zone, buffer_type* packet)
 
 /* parse the received packet. returns xfrd packet result code. */
 static enum xfrd_packet_result
-xfrd_parse_received_xfr_packet(xfrd_zone_type* zone, buffer_type* packet,
-	xfrd_soa_type* soa)
+xfrd_parse_received_xfr_packet(xfrd_zone_t* zone, buffer_type* packet,
+	xfrd_soa_t* soa)
 {
 	size_t rr_count;
 	size_t qdcount = QDCOUNT(packet);
@@ -1960,13 +1888,13 @@ xfrd_parse_received_xfr_packet(xfrd_zone_type* zone, buffer_type* packet,
 			zone->soa_disk_acquired = xfrd_time();
 			if(zone->soa_nsd.serial == soa->serial)
 				zone->soa_nsd_acquired = xfrd_time();
-			xfrd_set_zone_state(zone, xfrd_zone_ok);
- 			DEBUG(DEBUG_XFRD,1, (LOG_INFO, "xfrd: zone %s is ok",
-				zone->apex_str));
 			if(zone->zone_options->pattern->multi_master_check) {
 				region_destroy(tempregion);
 				return xfrd_packet_drop;
 			}
+			xfrd_set_zone_state(zone, xfrd_zone_ok);
+ 			DEBUG(DEBUG_XFRD,1, (LOG_INFO, "xfrd: zone %s is ok",
+				zone->apex_str));
 			if(zone->soa_notified_acquired == 0) {
 				/* not notified or anything, so stop asking around */
 				zone->round_num = -1; /* next try start a new round */
@@ -2053,9 +1981,9 @@ xfrd_pretty_time(time_t v)
 }
 
 enum xfrd_packet_result
-xfrd_handle_received_xfr_packet(xfrd_zone_type* zone, buffer_type* packet)
+xfrd_handle_received_xfr_packet(xfrd_zone_t* zone, buffer_type* packet)
 {
-	xfrd_soa_type soa;
+	xfrd_soa_t soa;
 	enum xfrd_packet_result res;
         uint64_t xfrfile_size;
 
@@ -2240,7 +2168,7 @@ xfrd_handle_reload(int ATTR_UNUSED(fd), short event, void* ATTR_UNUSED(arg))
 }
 
 void
-xfrd_handle_notify_and_start_xfr(xfrd_zone_type* zone, xfrd_soa_type* soa)
+xfrd_handle_notify_and_start_xfr(xfrd_zone_t* zone, xfrd_soa_t* soa)
 {
 	if(xfrd_handle_incoming_notify(zone, soa)) {
 		if(zone->zone_handler.ev_fd == -1 && zone->tcp_conn == -1 &&
@@ -2263,7 +2191,7 @@ xfrd_handle_passed_packet(buffer_type* packet,
 	uint16_t qtype, qclass;
 	const dname_type* dname;
 	region_type* tempregion = region_create(xalloc, free);
-	xfrd_zone_type* zone;
+	xfrd_zone_t* zone;
 
 	buffer_skip(packet, QHEADERSZ);
 	if(!packet_read_query_section(packet, qnamebuf, &qtype, &qclass)) {
@@ -2276,7 +2204,7 @@ xfrd_handle_passed_packet(buffer_type* packet,
 		   "%d", dname_to_string(dname,0), acl_num));
 
 	/* find the zone */
-	zone = (xfrd_zone_type*)rbtree_search(xfrd->zones, dname);
+	zone = (xfrd_zone_t*)rbtree_search(xfrd->zones, dname);
 	if(!zone) {
 		/* this could be because the zone has been deleted meanwhile */
 		DEBUG(DEBUG_XFRD, 1, (LOG_INFO, "xfrd: incoming packet for "
@@ -2288,7 +2216,7 @@ xfrd_handle_passed_packet(buffer_type* packet,
 
 	/* handle */
 	if(OPCODE(packet) == OPCODE_NOTIFY) {
-		xfrd_soa_type soa;
+		xfrd_soa_t soa;
 		int have_soa = 0;
 		int next;
 		/* get serial from a SOA */
@@ -2316,7 +2244,7 @@ xfrd_handle_passed_packet(buffer_type* packet,
 }
 
 static int
-xfrd_handle_incoming_notify(xfrd_zone_type* zone, xfrd_soa_type* soa)
+xfrd_handle_incoming_notify(xfrd_zone_t* zone, xfrd_soa_t* soa)
 {
 	if(soa && zone->soa_disk_acquired && zone->state != xfrd_zone_expired &&
 	   compare_serial(ntohl(soa->serial),ntohl(zone->soa_disk.serial)) <= 0)
@@ -2349,12 +2277,12 @@ xfrd_handle_incoming_notify(xfrd_zone_type* zone, xfrd_soa_type* soa)
 }
 
 static int
-find_same_master_notify(xfrd_zone_type* zone, int acl_num_nfy)
+find_same_master_notify(xfrd_zone_t* zone, int acl_num_nfy)
 {
-	struct acl_options* nfy_acl = acl_find_num(zone->zone_options->pattern->
+	acl_options_t* nfy_acl = acl_find_num(zone->zone_options->pattern->
 		allow_notify, acl_num_nfy);
 	int num = 0;
-	struct acl_options* master = zone->zone_options->pattern->request_xfr;
+	acl_options_t* master = zone->zone_options->pattern->request_xfr;
 	if(!nfy_acl)
 		return -1;
 	while(master)
@@ -2371,8 +2299,8 @@ void
 xfrd_check_failed_updates()
 {
 	/* see if updates have not come through */
-	xfrd_zone_type* zone;
-	RBTREE_FOR(zone, xfrd_zone_type*, xfrd->zones)
+	xfrd_zone_t* zone;
+	RBTREE_FOR(zone, xfrd_zone_t*, xfrd->zones)
 	{
 		/* zone has a disk soa, and no nsd soa or a different nsd soa */
 		if(zone->soa_disk_acquired != 0 &&
@@ -2384,7 +2312,7 @@ xfrd_check_failed_updates()
 			{
 				/* this zone should have been loaded, since its disk
 				   soa time is before the time of the reload cmd. */
-				xfrd_soa_type dumped_soa = zone->soa_disk;
+				xfrd_soa_t dumped_soa = zone->soa_disk;
 				log_msg(LOG_ERR, "xfrd: zone %s: soa serial %u "
 						 		 "update failed, restarting "
 						 		 "transfer (notified zone)",
@@ -2423,8 +2351,8 @@ xfrd_check_failed_updates()
 void
 xfrd_prepare_zones_for_reload()
 {
-	xfrd_zone_type* zone;
-	RBTREE_FOR(zone, xfrd_zone_type*, xfrd->zones)
+	xfrd_zone_t* zone;
+	RBTREE_FOR(zone, xfrd_zone_t*, xfrd->zones)
 	{
 		/* zone has a disk soa, and no nsd soa or a different nsd soa */
 		if(zone->soa_disk_acquired != 0 &&
@@ -2452,10 +2380,10 @@ xfrd_get_temp_buffer()
 #ifdef BIND8_STATS
 /** process stat info task */
 static void
-xfrd_process_stat_info_task(xfrd_state_type* xfrd, struct task_list_d* task)
+xfrd_process_stat_info_task(xfrd_state_t* xfrd, struct task_list_d* task)
 {
 	size_t i;
-	stc_type* p = (void*)task->zname + sizeof(struct nsdst);
+	stc_t* p = (void*)task->zname + sizeof(struct nsdst);
 	stats_add(&xfrd->nsd->st, (struct nsdst*)task->zname);
 	for(i=0; i<xfrd->nsd->child_count; i++) {
 		xfrd->nsd->children[i].query_count += *p++;
@@ -2470,7 +2398,7 @@ xfrd_process_stat_info_task(xfrd_state_type* xfrd, struct task_list_d* task)
 #ifdef USE_ZONE_STATS
 /** process zonestat inc task */
 static void
-xfrd_process_zonestat_inc_task(xfrd_state_type* xfrd, struct task_list_d* task)
+xfrd_process_zonestat_inc_task(xfrd_state_t* xfrd, struct task_list_d* task)
 {
 	xfrd->zonestat_safe = (unsigned)task->oldserial;
 	zonestat_remap(xfrd->nsd, 0, xfrd->zonestat_safe*sizeof(struct nsdst));
@@ -2481,7 +2409,7 @@ xfrd_process_zonestat_inc_task(xfrd_state_type* xfrd, struct task_list_d* task)
 #endif /* USE_ZONE_STATS */
 
 static void
-xfrd_handle_taskresult(xfrd_state_type* xfrd, struct task_list_d* task)
+xfrd_handle_taskresult(xfrd_state_t* xfrd, struct task_list_d* task)
 {
 #ifndef BIND8_STATS
 	(void)xfrd;
@@ -2506,7 +2434,7 @@ xfrd_handle_taskresult(xfrd_state_type* xfrd, struct task_list_d* task)
 	}
 }
 
-void xfrd_process_task_result(xfrd_state_type* xfrd, struct udb_base* taskudb)
+void xfrd_process_task_result(xfrd_state_t* xfrd, struct udb_base* taskudb)
 {
 	udb_ptr t;
 	/* remap it for usage */
@@ -2522,16 +2450,10 @@ void xfrd_process_task_result(xfrd_state_type* xfrd, struct udb_base* taskudb)
 	 * reload, this happens when the reload signal is sent, and thus
 	 * the taskudbs are swapped */
 	task_clear(taskudb);
-#ifdef HAVE_SYSTEMD
-	sd_notify(0, "READY=1");
-#endif
 }
 
-void xfrd_set_reload_now(xfrd_state_type* xfrd)
+void xfrd_set_reload_now(xfrd_state_t* xfrd)
 {
-#ifdef HAVE_SYSTEMD
-	sd_notify(0, "RELOADING=1");
-#endif
 	xfrd->need_to_send_reload = 1;
 	if(!(xfrd->ipc_handler_flags&EV_WRITE)) {
 		ipc_xfrd_set_listening(xfrd, EV_PERSIST|EV_READ|EV_WRITE);

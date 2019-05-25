@@ -1,13 +1,11 @@
 .. _example_asynch:
 
+==============================
 Asynchronous lookup
-===================
+==============================
 
 This example performs the name lookup in the background. 
 The main program keeps running while the name is resolved. 
-
-Source code
------------
 
 ::
 
@@ -35,5 +33,4 @@ Source code
 	if (status != 0):
 		print "Resolve error:", unbound.ub_strerror(status)
 
-The :meth:`unbound.ub_ctx.resolve_async` method is able to pass on any Python
-object. In this example, we used a dictionary object ``my_data``.
+The :meth:`unbound.ub_ctx.resolve_async` method is able to pass on any Python object. In this example, we used a dictionary object `my_data`.

@@ -90,20 +90,11 @@ section "-hidden.postinstall"
 	File "..\unbound-service-install.exe"
 	File "..\unbound-service-remove.exe"
 	File "..\anchor-update.exe"
-	File "..\root.key"
 	File "unbound-control-setup.cmd"
 	File "unbound-website.url"
+	File "service.conf"
 	File "..\doc\example.conf"
 	File "..\doc\Changelog"
-
-	# Does service.conf already exist?
-	IfFileExists "$INSTDIR\service.conf" 0 service_conf_not_found
-	# if so, leave it be and place the shipped file under another name
-	File /oname=service.conf.shipped "service.conf"
-	goto end_service_conf_not_found
-	# or, it is not there, place it and fill it.
-	service_conf_not_found:
-	File "service.conf"
 
 	# Store Root Key choice
 	SectionGetFlags ${SectionRootKey} $R0
@@ -120,7 +111,6 @@ section "-hidden.postinstall"
 	${Else}
 		WriteRegStr HKLM "Software\Unbound" "RootAnchor" ""
 	${EndIf}
-	end_service_conf_not_found:
 
 	# store installation folder
 	WriteRegStr HKLM "Software\Unbound" "InstallLocation" "$INSTDIR"
@@ -149,10 +139,8 @@ section "-hidden.postinstall"
 
 	# install service entry
 	nsExec::ExecToLog '"$INSTDIR\unbound-service-install.exe"'
-	Pop $0 # return value/error/timeout
 	# start unbound service
 	nsExec::ExecToLog '"$INSTDIR\unbound-service-install.exe" start'
-	Pop $0 # return value/error/timeout
 sectionEnd
 
 # set section descriptions
@@ -174,10 +162,8 @@ LangString DESC_rootkey ${LANG_ENGLISH} "Set up to use the DNSSEC root trust anc
 section "un.Unbound"
 	# stop unbound service
 	nsExec::ExecToLog '"$INSTDIR\unbound-service-remove.exe" stop'
-	Pop $0 # return value/error/timeout
 	# uninstall service entry
 	nsExec::ExecToLog '"$INSTDIR\unbound-service-remove.exe"'
-	Pop $0 # return value/error/timeout
 	# deregister uninstall
 	DeleteRegKey HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\Unbound"
 	Delete "$INSTDIR\uninst.exe"   # delete self
@@ -193,9 +179,7 @@ section "un.Unbound"
 	Delete "$INSTDIR\anchor-update.exe"
 	Delete "$INSTDIR\unbound-control-setup.cmd"
 	Delete "$INSTDIR\unbound-website.url"
-	# keep the service.conf with potential local modifications
-	#Delete "$INSTDIR\service.conf"
-	Delete "$INSTDIR\service.conf.shipped"
+	Delete "$INSTDIR\service.conf"
 	Delete "$INSTDIR\example.conf"
 	Delete "$INSTDIR\Changelog"
 	Delete "$INSTDIR\root.key"
