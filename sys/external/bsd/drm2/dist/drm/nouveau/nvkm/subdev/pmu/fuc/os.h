@@ -1,4 +1,4 @@
-/*	$NetBSD: os.h,v 1.2 2018/08/27 04:58:35 riastradh Exp $	*/
+/*	$NetBSD: os.h,v 1.2.6.2 2019/06/10 22:08:24 christos Exp $	*/
 
 #ifndef __NVKM_PWR_OS_H__
 #define __NVKM_PWR_OS_H__

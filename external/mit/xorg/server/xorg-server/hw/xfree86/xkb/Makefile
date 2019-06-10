@@ -1,4 +1,4 @@
-# $NetBSD: Makefile,v 1.1 2018/12/31 11:14:05 mrg Exp $
+# $NetBSD: Makefile,v 1.1.4.2 2019/06/10 22:02:49 christos Exp $
 
 .include "../../../Makefile.serverlib"
 .include "../../../Makefile.servermod"

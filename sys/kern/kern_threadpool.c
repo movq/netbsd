@@ -1,4 +1,4 @@
-/*	$NetBSD: kern_threadpool.c,v 1.15 2019/01/17 10:18:52 hannken Exp $	*/
+/*	$NetBSD: kern_threadpool.c,v 1.15.4.2 2019/06/10 22:09:03 christos Exp $	*/
 
 /*-
  * Copyright (c) 2014, 2018 The NetBSD Foundation, Inc.
@@ -81,7 +81,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: kern_threadpool.c,v 1.15 2019/01/17 10:18:52 hannken Exp $");
+__KERNEL_RCSID(0, "$NetBSD: kern_threadpool.c,v 1.15.4.2 2019/06/10 22:09:03 christos Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>

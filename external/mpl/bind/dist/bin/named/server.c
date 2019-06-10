@@ -1,4 +1,4 @@
-/*	$NetBSD: server.c,v 1.6 2019/05/02 14:57:01 taca Exp $	*/
+/*	$NetBSD: server.c,v 1.6.2.2 2019/06/10 22:03:00 christos Exp $	*/
 
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")

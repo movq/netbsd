@@ -1,4 +1,4 @@
-/*	$NetBSD: slab.h,v 1.1 2018/08/27 15:45:06 riastradh Exp $	*/
+/*	$NetBSD: slab.h,v 1.1.6.2 2019/06/10 22:07:44 christos Exp $	*/
 
 /*-
  * Copyright (c) 2013 The NetBSD Foundation, Inc.

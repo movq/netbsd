@@ -1,4 +1,4 @@
-/*	$NetBSD: types.h,v 1.2 2019/06/05 16:25:43 hannken Exp $	*/
+/*	$NetBSD: types.h,v 1.2.2.2 2019/06/10 21:41:05 christos Exp $	*/
 
 /*
  * Sun RPC is a product of Sun Microsystems, Inc. and is provided for

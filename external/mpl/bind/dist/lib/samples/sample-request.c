@@ -1,4 +1,4 @@
-/*	$NetBSD: sample-request.c,v 1.2 2018/08/12 13:02:41 christos Exp $	*/
+/*	$NetBSD: sample-request.c,v 1.2.4.2 2019/06/10 22:04:50 christos Exp $	*/
 
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")

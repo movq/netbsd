@@ -1,4 +1,4 @@
-/*	$NetBSD: makphyreg.h,v 1.9 2018/12/28 06:20:32 msaitoh Exp $	*/
+/*	$NetBSD: makphyreg.h,v 1.9.4.2 2019/06/10 22:07:14 christos Exp $	*/
 
 /*-
  * Copyright (c) 2001 The NetBSD Foundation, Inc.

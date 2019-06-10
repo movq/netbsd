@@ -1,4 +1,4 @@
-/* $NetBSD: tprof_armv8.h,v 1.1 2018/07/15 16:05:24 jmcneill Exp $ */
+/* $NetBSD: tprof_armv8.h,v 1.1.8.2 2019/06/10 22:07:33 christos Exp $ */
 
 /*-
  * Copyright (c) 2018 Jared McNeill <jmcneill@invisible.ca>

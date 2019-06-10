@@ -1,4 +1,4 @@
-/*	$NetBSD: thrd.c,v 1.3 2019/04/29 20:11:43 kamil Exp $	*/
+/*	$NetBSD: thrd.c,v 1.3.2.2 2019/06/10 22:05:26 christos Exp $	*/
 
 /*-
  * Copyright (c) 2016 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: thrd.c,v 1.3 2019/04/29 20:11:43 kamil Exp $");
+__RCSID("$NetBSD: thrd.c,v 1.3.2.2 2019/06/10 22:05:26 christos Exp $");
 
 #include <assert.h>
 #include <errno.h>

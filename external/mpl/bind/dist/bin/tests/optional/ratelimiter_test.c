@@ -1,4 +1,4 @@
-/*	$NetBSD: ratelimiter_test.c,v 1.2 2018/08/12 13:02:29 christos Exp $	*/
+/*	$NetBSD: ratelimiter_test.c,v 1.2.4.2 2019/06/10 22:03:04 christos Exp $	*/
 
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")

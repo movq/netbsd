@@ -1,4 +1,4 @@
-/*	$NetBSD: intel_psr.c,v 1.5 2018/08/27 07:28:57 riastradh Exp $	*/
+/*	$NetBSD: intel_psr.c,v 1.5.6.2 2019/06/10 22:08:06 christos Exp $	*/
 
 /*
  * Copyright © 2014 Intel Corporation
@@ -54,7 +54,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: intel_psr.c,v 1.5 2018/08/27 07:28:57 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: intel_psr.c,v 1.5.6.2 2019/06/10 22:08:06 christos Exp $");
 
 #include <drm/drmP.h>
 

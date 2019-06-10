@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile.inc,v 1.2 2018/08/14 11:52:41 christos Exp $
+#	$NetBSD: Makefile.inc,v 1.2.4.2 2019/06/10 22:02:52 christos Exp $
 
 LDADD+=-lns
 DPADD+=${LIBNS}

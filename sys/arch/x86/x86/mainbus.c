@@ -1,4 +1,4 @@
-/* $NetBSD: mainbus.c,v 1.3 2019/02/14 08:18:25 cherry Exp $ */
+/* $NetBSD: mainbus.c,v 1.3.4.2 2019/06/10 22:06:54 christos Exp $ */
 
 /*
  * Copyright (c) 2018 The NetBSD Foundation, Inc.
@@ -28,7 +28,7 @@
 
 #include <sys/cdefs.h>
 
-__KERNEL_RCSID(0, "$NetBSD: mainbus.c,v 1.3 2019/02/14 08:18:25 cherry Exp $");
+__KERNEL_RCSID(0, "$NetBSD: mainbus.c,v 1.3.4.2 2019/06/10 22:06:54 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

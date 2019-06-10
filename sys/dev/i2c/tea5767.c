@@ -1,4 +1,4 @@
-/*	$NetBSD: tea5767.c,v 1.1 2018/07/27 12:02:26 rkujawa Exp $	*/
+/*	$NetBSD: tea5767.c,v 1.1.8.2 2019/06/10 22:07:09 christos Exp $	*/
 /*-
  * Copyright (c) 2018 The NetBSD Foundation, Inc.
  * All rights reserved.
@@ -29,7 +29,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: tea5767.c,v 1.1 2018/07/27 12:02:26 rkujawa Exp $");
+__KERNEL_RCSID(0, "$NetBSD: tea5767.c,v 1.1.8.2 2019/06/10 22:07:09 christos Exp $");
 
 #include <sys/proc.h>
 #include <sys/kernel.h>

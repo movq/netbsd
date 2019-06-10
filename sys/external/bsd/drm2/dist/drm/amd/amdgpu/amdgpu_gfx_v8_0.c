@@ -1,4 +1,4 @@
-/*	$NetBSD: amdgpu_gfx_v8_0.c,v 1.2 2019/02/23 19:37:36 kamil Exp $	*/
+/*	$NetBSD: amdgpu_gfx_v8_0.c,v 1.2.4.2 2019/06/10 22:07:58 christos Exp $	*/
 
 /*
  * Copyright 2014 Advanced Micro Devices, Inc.
@@ -23,7 +23,7 @@
  *
  */
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: amdgpu_gfx_v8_0.c,v 1.2 2019/02/23 19:37:36 kamil Exp $");
+__KERNEL_RCSID(0, "$NetBSD: amdgpu_gfx_v8_0.c,v 1.2.4.2 2019/06/10 22:07:58 christos Exp $");
 
 #include <linux/firmware.h>
 #include <linux/module.h>

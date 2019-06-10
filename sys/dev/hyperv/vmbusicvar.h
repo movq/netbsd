@@ -1,4 +1,4 @@
-/*	$NetBSD: vmbusicvar.h,v 1.1 2019/02/15 08:54:02 nonaka Exp $	*/
+/*	$NetBSD: vmbusicvar.h,v 1.1.6.2 2019/06/10 22:07:09 christos Exp $	*/
 /*	$OpenBSD: hypervic.c,v 1.13 2017/08/10 15:25:57 mikeb Exp $	*/
 
 /*-

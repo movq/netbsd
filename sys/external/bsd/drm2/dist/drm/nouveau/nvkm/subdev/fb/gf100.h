@@ -1,4 +1,4 @@
-/*	$NetBSD: gf100.h,v 1.3 2018/08/27 07:40:22 riastradh Exp $	*/
+/*	$NetBSD: gf100.h,v 1.3.6.2 2019/06/10 22:08:21 christos Exp $	*/
 
 #ifndef __NVKM_RAM_NVC0_H__
 #define __NVKM_RAM_NVC0_H__

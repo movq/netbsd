@@ -1,4 +1,4 @@
-/*	$NetBSD: clearstate_defs.h,v 1.2 2018/08/27 04:58:20 riastradh Exp $	*/
+/*	$NetBSD: clearstate_defs.h,v 1.2.6.2 2019/06/10 22:07:58 christos Exp $	*/
 
 /*
  * Copyright 2012 Advanced Micro Devices, Inc.

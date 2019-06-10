@@ -1,4 +1,4 @@
-/*	$NetBSD: nouveau_nvkm_engine_mspdec_gf100.c,v 1.2 2018/08/27 04:58:32 riastradh Exp $	*/
+/*	$NetBSD: nouveau_nvkm_engine_mspdec_gf100.c,v 1.2.6.2 2019/06/10 22:08:18 christos Exp $	*/
 
 /*
  * Copyright 2012 Maarten Lankhorst
@@ -24,7 +24,7 @@
  * Authors: Maarten Lankhorst
  */
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: nouveau_nvkm_engine_mspdec_gf100.c,v 1.2 2018/08/27 04:58:32 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: nouveau_nvkm_engine_mspdec_gf100.c,v 1.2.6.2 2019/06/10 22:08:18 christos Exp $");
 
 #include "priv.h"
 

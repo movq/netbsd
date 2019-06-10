@@ -1,4 +1,4 @@
-/*	$NetBSD: kobj_machdep.c,v 1.2 2018/08/19 20:02:22 ryo Exp $	*/
+/*	$NetBSD: kobj_machdep.c,v 1.2.6.2 2019/06/10 22:05:43 christos Exp $	*/
 
 /*
  * Copyright (c) 2018 Ryo Shimizu <ryo@nerv.org>
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: kobj_machdep.c,v 1.2 2018/08/19 20:02:22 ryo Exp $");
+__KERNEL_RCSID(0, "$NetBSD: kobj_machdep.c,v 1.2.6.2 2019/06/10 22:05:43 christos Exp $");
 
 #define ELFSIZE		ARCH_ELFSIZE
 

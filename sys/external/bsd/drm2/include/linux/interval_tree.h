@@ -1,4 +1,4 @@
-/*	$NetBSD: interval_tree.h,v 1.8 2019/01/04 20:22:32 tnn Exp $	*/
+/*	$NetBSD: interval_tree.h,v 1.8.4.2 2019/06/10 22:08:31 christos Exp $	*/
 
 /*-
  * Copyright (c) 2018 The NetBSD Foundation, Inc.

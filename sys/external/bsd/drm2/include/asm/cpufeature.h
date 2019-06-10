@@ -1,4 +1,4 @@
-/*	$NetBSD: cpufeature.h,v 1.4 2018/08/27 13:44:15 riastradh Exp $	*/
+/*	$NetBSD: cpufeature.h,v 1.4.6.2 2019/06/10 22:08:31 christos Exp $	*/
 
 /*-
  * Copyright (c) 2018 The NetBSD Foundation, Inc.

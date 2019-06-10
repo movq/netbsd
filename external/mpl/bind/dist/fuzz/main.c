@@ -1,4 +1,4 @@
-/*	$NetBSD: main.c,v 1.2 2019/01/09 16:55:11 christos Exp $	*/
+/*	$NetBSD: main.c,v 1.2.4.2 2019/06/10 22:04:33 christos Exp $	*/
 
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")

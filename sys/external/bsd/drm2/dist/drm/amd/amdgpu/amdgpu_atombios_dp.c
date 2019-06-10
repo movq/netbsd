@@ -1,4 +1,4 @@
-/*	$NetBSD: amdgpu_atombios_dp.c,v 1.2 2019/01/01 08:07:47 maya Exp $	*/
+/*	$NetBSD: amdgpu_atombios_dp.c,v 1.2.4.2 2019/06/10 22:07:57 christos Exp $	*/
 
 /*
  * Copyright 2007-8 Advanced Micro Devices, Inc.
@@ -27,7 +27,7 @@
  *          Jerome Glisse
  */
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: amdgpu_atombios_dp.c,v 1.2 2019/01/01 08:07:47 maya Exp $");
+__KERNEL_RCSID(0, "$NetBSD: amdgpu_atombios_dp.c,v 1.2.4.2 2019/06/10 22:07:57 christos Exp $");
 
 #include <drm/drmP.h>
 #include <drm/amdgpu_drm.h>

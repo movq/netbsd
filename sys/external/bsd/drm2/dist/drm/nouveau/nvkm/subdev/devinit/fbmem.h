@@ -1,4 +1,4 @@
-/*	$NetBSD: fbmem.h,v 1.3 2018/08/27 14:51:33 riastradh Exp $	*/
+/*	$NetBSD: fbmem.h,v 1.3.6.2 2019/06/10 22:08:21 christos Exp $	*/
 
 /*
  * Copyright (C) 2010 Francisco Jerez.

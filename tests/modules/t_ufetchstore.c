@@ -1,4 +1,4 @@
-/*	$NetBSD: t_ufetchstore.c,v 1.1 2019/04/15 23:41:23 christos Exp $	*/
+/*	$NetBSD: t_ufetchstore.c,v 1.1.2.2 2019/06/10 22:10:08 christos Exp $	*/
 
 /*
  * Copyright (c) 2019 The NetBSD Foundation, Inc.
@@ -32,7 +32,7 @@
 #include <sys/cdefs.h>
 __COPYRIGHT("@(#) Copyright (c) 2019\
  The NetBSD Foundation, inc. All rights reserved.");
-__RCSID("$NetBSD: t_ufetchstore.c,v 1.1 2019/04/15 23:41:23 christos Exp $");
+__RCSID("$NetBSD: t_ufetchstore.c,v 1.1.2.2 2019/06/10 22:10:08 christos Exp $");
 
 #include <sys/types.h>
 #include <sys/endian.h>

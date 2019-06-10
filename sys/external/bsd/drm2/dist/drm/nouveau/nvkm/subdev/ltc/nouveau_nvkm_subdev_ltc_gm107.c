@@ -1,4 +1,4 @@
-/*	$NetBSD: nouveau_nvkm_subdev_ltc_gm107.c,v 1.2 2018/08/27 04:58:34 riastradh Exp $	*/
+/*	$NetBSD: nouveau_nvkm_subdev_ltc_gm107.c,v 1.2.6.2 2019/06/10 22:08:23 christos Exp $	*/
 
 /*
  * Copyright 2014 Red Hat Inc.
@@ -24,7 +24,7 @@
  * Authors: Ben Skeggs
  */
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: nouveau_nvkm_subdev_ltc_gm107.c,v 1.2 2018/08/27 04:58:34 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: nouveau_nvkm_subdev_ltc_gm107.c,v 1.2.6.2 2019/06/10 22:08:23 christos Exp $");
 
 #include "priv.h"
 

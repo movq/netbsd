@@ -1,4 +1,4 @@
-/* $NetBSD: t_bit.c,v 1.1 2019/04/26 08:52:16 maya Exp $ */
+/* $NetBSD: t_bit.c,v 1.1.2.2 2019/06/10 22:10:07 christos Exp $ */
 
 /*
  * Written by Maya Rashish <maya@NetBSD.org>

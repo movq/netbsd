@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.1 2018/07/17 18:55:27 joerg Exp $
+#	$NetBSD: Makefile,v 1.1.4.2 2019/06/10 21:50:52 christos Exp $
 
 LIB=	LLVMDebugInfoPDBDIA
 

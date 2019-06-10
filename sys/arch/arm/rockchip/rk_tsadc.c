@@ -1,4 +1,4 @@
-/*	$NetBSD: rk_tsadc.c,v 1.6 2019/06/01 19:32:19 joerg Exp $	*/
+/*	$NetBSD: rk_tsadc.c,v 1.6.2.2 2019/06/10 22:05:56 christos Exp $	*/
 
 /*
  * Copyright (c) 2019 Matthew R. Green
@@ -30,7 +30,7 @@
 
 #include <sys/cdefs.h>
 
-__KERNEL_RCSID(0, "$NetBSD: rk_tsadc.c,v 1.6 2019/06/01 19:32:19 joerg Exp $");
+__KERNEL_RCSID(0, "$NetBSD: rk_tsadc.c,v 1.6.2.2 2019/06/10 22:05:56 christos Exp $");
 
 /*
  * Driver for the TSADC temperature sensor monitor in RK3328 and RK3399.

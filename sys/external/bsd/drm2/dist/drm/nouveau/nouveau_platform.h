@@ -1,4 +1,4 @@
-/*	$NetBSD: nouveau_platform.h,v 1.2 2018/08/27 04:58:24 riastradh Exp $	*/
+/*	$NetBSD: nouveau_platform.h,v 1.2.6.2 2019/06/10 22:08:07 christos Exp $	*/
 
 /*
  * Copyright (c) 2014, NVIDIA CORPORATION. All rights reserved.

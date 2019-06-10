@@ -1,4 +1,4 @@
-#	$NetBSD: files.meson,v 1.9 2019/04/21 13:51:04 jmcneill Exp $
+#	$NetBSD: files.meson,v 1.9.2.2 2019/06/10 22:05:51 christos Exp $
 #
 # Configuration info for Amlogic Meson family SoCs
 #

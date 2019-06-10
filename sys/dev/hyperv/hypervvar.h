@@ -1,4 +1,4 @@
-/*	$NetBSD: hypervvar.h,v 1.2 2019/05/24 14:28:48 nonaka Exp $	*/
+/*	$NetBSD: hypervvar.h,v 1.2.2.2 2019/06/10 22:07:09 christos Exp $	*/
 
 /*-
  * SPDX-License-Identifier: BSD-2-Clause-FreeBSD

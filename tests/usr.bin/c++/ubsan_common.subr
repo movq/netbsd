@@ -1,4 +1,4 @@
-#	$NetBSD: ubsan_common.subr,v 1.1 2019/01/29 20:07:03 mgorny Exp $
+#	$NetBSD: ubsan_common.subr,v 1.1.2.2 2019/06/10 22:10:12 christos Exp $
 #
 # Copyright (c) 2018, 2019 The NetBSD Foundation, Inc.
 # All rights reserved.

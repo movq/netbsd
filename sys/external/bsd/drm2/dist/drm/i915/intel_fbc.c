@@ -1,4 +1,4 @@
-/*	$NetBSD: intel_fbc.c,v 1.4 2018/09/13 08:25:55 mrg Exp $	*/
+/*	$NetBSD: intel_fbc.c,v 1.4.4.2 2019/06/10 22:08:06 christos Exp $	*/
 
 /*
  * Copyright © 2014 Intel Corporation
@@ -41,7 +41,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: intel_fbc.c,v 1.4 2018/09/13 08:25:55 mrg Exp $");
+__KERNEL_RCSID(0, "$NetBSD: intel_fbc.c,v 1.4.4.2 2019/06/10 22:08:06 christos Exp $");
 
 #include "intel_drv.h"
 #include "i915_drv.h"

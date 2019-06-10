@@ -1,4 +1,4 @@
-/*	$NetBSD: unlz.c,v 1.6 2018/11/11 01:42:36 christos Exp $	*/
+/*	$NetBSD: unlz.c,v 1.6.4.2 2019/06/10 22:10:20 christos Exp $	*/
 
 /*-
  * Copyright (c) 2018 The NetBSD Foundation, Inc.

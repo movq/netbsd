@@ -1,4 +1,4 @@
-/*	$NetBSD: vmbus.c,v 1.3 2019/05/24 14:28:48 nonaka Exp $	*/
+/*	$NetBSD: vmbus.c,v 1.3.2.2 2019/06/10 22:07:09 christos Exp $	*/
 /*	$OpenBSD: hyperv.c,v 1.43 2017/06/27 13:56:15 mikeb Exp $	*/
 
 /*-
@@ -35,7 +35,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: vmbus.c,v 1.3 2019/05/24 14:28:48 nonaka Exp $");
+__KERNEL_RCSID(0, "$NetBSD: vmbus.c,v 1.3.2.2 2019/06/10 22:07:09 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

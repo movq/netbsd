@@ -1,4 +1,4 @@
-/*	$NetBSD: linux_rcu.c,v 1.4 2018/08/27 15:07:59 riastradh Exp $	*/
+/*	$NetBSD: linux_rcu.c,v 1.4.6.2 2019/06/10 22:08:33 christos Exp $	*/
 
 /*-
  * Copyright (c) 2018 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: linux_rcu.c,v 1.4 2018/08/27 15:07:59 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: linux_rcu.c,v 1.4.6.2 2019/06/10 22:08:33 christos Exp $");
 
 #include <sys/types.h>
 #include <sys/condvar.h>

@@ -1,4 +1,4 @@
-# $NetBSD: t_threadpool.sh,v 1.1 2019/01/25 18:34:45 christos Exp $
+# $NetBSD: t_threadpool.sh,v 1.1.4.2 2019/06/10 22:10:08 christos Exp $
 #
 # Copyright (c) 2018 The NetBSD Foundation, Inc.
 # All rights reserved.

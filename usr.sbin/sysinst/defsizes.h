@@ -1,4 +1,4 @@
-/*	$NetBSD: defsizes.h,v 1.3 2018/11/17 19:22:48 martin Exp $	*/
+/*	$NetBSD: defsizes.h,v 1.3.4.2 2019/06/10 22:10:38 christos Exp $	*/
 
 /*
  * Copyright 2018 The NetBSD Foundation, Inc.

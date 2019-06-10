@@ -1,4 +1,4 @@
-/*	$NetBSD: elf_arm_efi.lds,v 1.1.1.1 2018/08/16 18:17:47 jmcneill Exp $	*/
+/*	$NetBSD: elf_arm_efi.lds,v 1.1.1.1.6.2 2019/06/10 22:08:34 christos Exp $	*/
 
 OUTPUT_FORMAT("elf32-littlearm", "elf32-littlearm", "elf32-littlearm")
 OUTPUT_ARCH(arm)

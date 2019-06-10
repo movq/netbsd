@@ -1,4 +1,4 @@
-/*	$NetBSD: kern_reboot.c,v 1.1 2018/09/14 01:55:19 mrg Exp $	*/
+/*	$NetBSD: kern_reboot.c,v 1.1.6.2 2019/06/10 22:09:03 christos Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1989, 1993
@@ -33,7 +33,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: kern_reboot.c,v 1.1 2018/09/14 01:55:19 mrg Exp $");
+__KERNEL_RCSID(0, "$NetBSD: kern_reboot.c,v 1.1.6.2 2019/06/10 22:09:03 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

@@ -1,4 +1,4 @@
-/*	$NetBSD: nvpair.c,v 1.6 2019/02/15 22:49:24 rmind Exp $	*/
+/*	$NetBSD: nvpair.c,v 1.6.4.2 2019/06/10 22:08:38 christos Exp $	*/
 
 /*-
  * SPDX-License-Identifier: BSD-2-Clause-FreeBSD
@@ -36,7 +36,7 @@
 #ifdef __FreeBSD__
 __FBSDID("$FreeBSD: head/sys/contrib/libnv/nvpair.c 335382 2018-06-19 18:43:02Z lwhsu $");
 #else
-__RCSID("$NetBSD: nvpair.c,v 1.6 2019/02/15 22:49:24 rmind Exp $");
+__RCSID("$NetBSD: nvpair.c,v 1.6.4.2 2019/06/10 22:08:38 christos Exp $");
 #endif
 
 #include <sys/param.h>

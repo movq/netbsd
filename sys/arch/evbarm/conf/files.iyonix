@@ -1,4 +1,4 @@
-#	$NetBSD: files.iyonix,v 1.1 2019/02/14 21:47:52 macallan Exp $
+#	$NetBSD: files.iyonix,v 1.1.4.2 2019/06/10 22:06:05 christos Exp $
 
 #
 # Machine dependent stuff

@@ -1,4 +1,4 @@
-/* $NetBSD: gicv3.h,v 1.4 2018/11/10 11:46:31 jmcneill Exp $ */
+/* $NetBSD: gicv3.h,v 1.4.4.2 2019/06/10 22:05:52 christos Exp $ */
 
 /*-
  * Copyright (c) 2018 Jared McNeill <jmcneill@invisible.ca>

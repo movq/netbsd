@@ -1,4 +1,4 @@
-/*	$NetBSD: linux_osf1.h,v 1.1 2019/03/24 16:24:19 maxv Exp $	*/
+/*	$NetBSD: linux_osf1.h,v 1.1.4.2 2019/06/10 22:06:59 christos Exp $	*/
 
 /*
  * Copyright (c) 1999 Christopher G. Demetriou.  All rights reserved.

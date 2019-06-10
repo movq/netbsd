@@ -1,4 +1,4 @@
-/*	$NetBSD: tprof.h,v 1.2 2018/07/13 11:03:36 maxv Exp $	*/
+/*	$NetBSD: tprof.h,v 1.2.4.2 2019/06/10 22:10:43 christos Exp $	*/
 
 /*
  * Copyright (c) 2018 The NetBSD Foundation, Inc.

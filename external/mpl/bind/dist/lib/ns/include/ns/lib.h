@@ -1,4 +1,4 @@
-/*	$NetBSD: lib.h,v 1.3 2019/02/24 20:01:33 christos Exp $	*/
+/*	$NetBSD: lib.h,v 1.3.2.2 2019/06/10 22:04:49 christos Exp $	*/
 
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")

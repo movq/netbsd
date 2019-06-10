@@ -1,4 +1,4 @@
-/* $NetBSD: meson_rtcreg.h,v 1.1 2019/01/20 17:58:22 jmcneill Exp $ */
+/* $NetBSD: meson_rtcreg.h,v 1.1.6.2 2019/06/10 22:05:51 christos Exp $ */
 
 /*-
  * Copyright (c) 2015 The NetBSD Foundation, Inc.

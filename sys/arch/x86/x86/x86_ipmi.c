@@ -1,4 +1,4 @@
-/*	$NetBSD: x86_ipmi.c,v 1.1 2018/12/25 11:56:13 mlelstv Exp $ */
+/*	$NetBSD: x86_ipmi.c,v 1.1.6.2 2019/06/10 22:06:54 christos Exp $ */
 
 /*
  * Copyright (c) 2006 Manuel Bouyer.
@@ -52,7 +52,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: x86_ipmi.c,v 1.1 2018/12/25 11:56:13 mlelstv Exp $");
+__KERNEL_RCSID(0, "$NetBSD: x86_ipmi.c,v 1.1.6.2 2019/06/10 22:06:54 christos Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>

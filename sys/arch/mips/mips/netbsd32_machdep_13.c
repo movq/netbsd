@@ -1,4 +1,4 @@
-/*	$NetBSD: netbsd32_machdep_13.c,v 1.2 2019/01/27 02:08:38 pgoyette Exp $	*/
+/*	$NetBSD: netbsd32_machdep_13.c,v 1.2.4.2 2019/06/10 22:06:30 christos Exp $	*/
 
 /*-
  * Copyright (c) 2009 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: netbsd32_machdep_13.c,v 1.2 2019/01/27 02:08:38 pgoyette Exp $");
+__KERNEL_RCSID(0, "$NetBSD: netbsd32_machdep_13.c,v 1.2.4.2 2019/06/10 22:06:30 christos Exp $");
 
 #include "opt_compat_netbsd.h"
 #include "opt_coredump.h"

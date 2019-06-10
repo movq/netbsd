@@ -1,4 +1,4 @@
-/* $NetBSD: xenring.h,v 1.4 2019/04/07 12:23:54 bouyer Exp $ */
+/* $NetBSD: xenring.h,v 1.4.4.2 2019/06/10 22:06:54 christos Exp $ */
 
 /*
  * Glue goop for xbd ring request/response protocol structures.

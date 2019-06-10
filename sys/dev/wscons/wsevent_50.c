@@ -1,4 +1,4 @@
-/* $NetBSD: wsevent_50.c,v 1.4 2019/03/01 11:06:57 pgoyette Exp $ */
+/* $NetBSD: wsevent_50.c,v 1.4.4.2 2019/06/10 22:07:36 christos Exp $ */
 
 /*-
  * Copyright (c) 2006, 2008 The NetBSD Foundation, Inc.
@@ -104,7 +104,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: wsevent_50.c,v 1.4 2019/03/01 11:06:57 pgoyette Exp $");
+__KERNEL_RCSID(0, "$NetBSD: wsevent_50.c,v 1.4.4.2 2019/06/10 22:07:36 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/kernel.h>

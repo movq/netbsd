@@ -1,4 +1,4 @@
-/*	$NetBSD: kexgen.c,v 1.2 2019/04/20 17:16:40 christos Exp $	*/
+/*	$NetBSD: kexgen.c,v 1.2.2.2 2019/06/10 21:41:12 christos Exp $	*/
 /* $OpenBSD: kexgen.c,v 1.2 2019/01/23 00:30:41 djm Exp $ */
 /*
  * Copyright (c) 2019 Markus Friedl.  All rights reserved.

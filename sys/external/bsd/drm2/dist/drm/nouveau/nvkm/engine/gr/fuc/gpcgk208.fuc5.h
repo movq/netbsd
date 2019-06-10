@@ -1,4 +1,4 @@
-/*	$NetBSD: gpcgk208.fuc5.h,v 1.2 2018/08/27 04:58:32 riastradh Exp $	*/
+/*	$NetBSD: gpcgk208.fuc5.h,v 1.2.6.2 2019/06/10 22:08:18 christos Exp $	*/
 
 uint32_t gk208_grgpc_data[] = {
 /* 0x0000: gpc_mmio_list_head */

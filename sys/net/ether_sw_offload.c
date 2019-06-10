@@ -1,4 +1,4 @@
-/*	$NetBSD: ether_sw_offload.c,v 1.6 2018/12/15 07:38:58 rin Exp $	*/
+/*	$NetBSD: ether_sw_offload.c,v 1.6.6.2 2019/06/10 22:09:45 christos Exp $	*/
 
 /*
  * Copyright (c) 2018 The NetBSD Foundation, Inc.
@@ -34,7 +34,7 @@
 #endif
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ether_sw_offload.c,v 1.6 2018/12/15 07:38:58 rin Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ether_sw_offload.c,v 1.6.6.2 2019/06/10 22:09:45 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/types.h>

@@ -1,4 +1,4 @@
-/* $NetBSD: sunxi_fb.c,v 1.3 2019/01/30 10:55:44 jmcneill Exp $ */
+/* $NetBSD: sunxi_fb.c,v 1.3.4.2 2019/06/10 22:05:56 christos Exp $ */
 
 /*-
  * Copyright (c) 2015-2019 Jared McNeill <jmcneill@invisible.ca>
@@ -29,7 +29,7 @@
 #include "opt_wsdisplay_compat.h"
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sunxi_fb.c,v 1.3 2019/01/30 10:55:44 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sunxi_fb.c,v 1.3.4.2 2019/06/10 22:05:56 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/bus.h>

@@ -1,4 +1,4 @@
-/* $NetBSD: acpi_pci_machdep.c,v 1.9 2018/12/08 15:04:40 jmcneill Exp $ */
+/* $NetBSD: acpi_pci_machdep.c,v 1.9.4.2 2019/06/10 22:05:50 christos Exp $ */
 
 /*-
  * Copyright (c) 2018 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: acpi_pci_machdep.c,v 1.9 2018/12/08 15:04:40 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: acpi_pci_machdep.c,v 1.9.4.2 2019/06/10 22:05:50 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/bus.h>

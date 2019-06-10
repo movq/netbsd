@@ -1,4 +1,4 @@
-/*	$NetBSD: indent.h,v 1.1 2019/04/04 15:27:35 kamil Exp $	*/
+/*	$NetBSD: indent.h,v 1.1.2.2 2019/06/10 22:10:20 christos Exp $	*/
 
 /*-
  * SPDX-License-Identifier: BSD-2-Clause-FreeBSD
@@ -30,7 +30,7 @@
 
 #if 0
 #if defined(__NetBSD__)
-__RCSID("$NetBSD: indent.h,v 1.1 2019/04/04 15:27:35 kamil Exp $");
+__RCSID("$NetBSD: indent.h,v 1.1.2.2 2019/06/10 22:10:20 christos Exp $");
 #elif defined(__FreeBSD__)
 __FBSDID("$FreeBSD: head/usr.bin/indent/indent.h 336333 2018-07-16 05:46:50Z pstef $");
 #endif

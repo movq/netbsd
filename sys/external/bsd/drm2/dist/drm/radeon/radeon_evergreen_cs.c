@@ -1,4 +1,4 @@
-/*	$NetBSD: radeon_evergreen_cs.c,v 1.2 2019/02/08 04:11:53 mrg Exp $	*/
+/*	$NetBSD: radeon_evergreen_cs.c,v 1.2.4.2 2019/06/10 22:08:26 christos Exp $	*/
 
 /*
  * Copyright 2010 Advanced Micro Devices, Inc.
@@ -28,7 +28,7 @@
  *          Jerome Glisse
  */
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: radeon_evergreen_cs.c,v 1.2 2019/02/08 04:11:53 mrg Exp $");
+__KERNEL_RCSID(0, "$NetBSD: radeon_evergreen_cs.c,v 1.2.4.2 2019/06/10 22:08:26 christos Exp $");
 
 #include <drm/drmP.h>
 #include "radeon.h"

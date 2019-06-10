@@ -1,4 +1,4 @@
-/*	$NetBSD: libnvmm_x86.c,v 1.31 2019/06/08 07:27:44 maxv Exp $	*/
+/*	$NetBSD: libnvmm_x86.c,v 1.31.2.2 2019/06/10 22:05:25 christos Exp $	*/
 
 /*
  * Copyright (c) 2018 The NetBSD Foundation, Inc.

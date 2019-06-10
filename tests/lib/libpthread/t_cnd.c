@@ -1,4 +1,4 @@
-/*	$NetBSD: t_cnd.c,v 1.1 2019/04/24 11:43:19 kamil Exp $	*/
+/*	$NetBSD: t_cnd.c,v 1.1.2.2 2019/06/10 22:10:07 christos Exp $	*/
 
 /*-
  * Copyright (c) 2019 The NetBSD Foundation, Inc.
@@ -32,7 +32,7 @@
 #include <sys/cdefs.h>
 __COPYRIGHT("@(#) Copyright (c) 2019\
  The NetBSD Foundation, inc. All rights reserved.");
-__RCSID("$NetBSD: t_cnd.c,v 1.1 2019/04/24 11:43:19 kamil Exp $");
+__RCSID("$NetBSD: t_cnd.c,v 1.1.2.2 2019/06/10 22:10:07 christos Exp $");
 
 #include <stdbool.h>
 #include <threads.h>

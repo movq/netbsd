@@ -1,4 +1,4 @@
-/*	$NetBSD: procfs_limit.c,v 1.1 2019/03/30 23:28:30 christos Exp $	*/
+/*	$NetBSD: procfs_limit.c,v 1.1.4.2 2019/06/10 22:09:06 christos Exp $	*/
 
 /*-
  * Copyright (c) 2019 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: procfs_limit.c,v 1.1 2019/03/30 23:28:30 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: procfs_limit.c,v 1.1.4.2 2019/06/10 22:09:06 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

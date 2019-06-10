@@ -1,4 +1,4 @@
-/*	$NetBSD: crt0-efi-arm.S,v 1.1.1.1 2018/08/16 18:17:47 jmcneill Exp $	*/
+/*	$NetBSD: crt0-efi-arm.S,v 1.1.1.1.6.2 2019/06/10 22:08:34 christos Exp $	*/
 
 /*
  * crt0-efi-arm.S - PE/COFF header for ARM EFI applications

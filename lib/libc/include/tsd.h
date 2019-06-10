@@ -1,4 +1,4 @@
-/*	$NetBSD: tsd.h,v 1.1 2019/03/05 01:35:52 christos Exp $	*/
+/*	$NetBSD: tsd.h,v 1.1.2.2 2019/06/10 22:05:20 christos Exp $	*/
 
 /*-
  * Copyright (c) 2019 The NetBSD Foundation, Inc.

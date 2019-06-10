@@ -1,4 +1,4 @@
-/*	$NetBSD: srv_33.c,v 1.3 2019/01/09 16:55:13 christos Exp $	*/
+/*	$NetBSD: srv_33.c,v 1.3.2.2 2019/06/10 22:04:39 christos Exp $	*/
 
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")

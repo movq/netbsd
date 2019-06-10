@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile.inc,v 1.1 2018/07/14 23:49:20 christos Exp $
+#	$NetBSD: Makefile.inc,v 1.1.4.2 2019/06/10 22:02:23 christos Exp $
 
 GMP_LIMB_BITS=64
 

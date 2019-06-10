@@ -1,4 +1,4 @@
-/*	$NetBSD: subr_asan.c,v 1.9 2019/05/04 17:19:10 maxv Exp $	*/
+/*	$NetBSD: subr_asan.c,v 1.9.2.2 2019/06/10 22:09:03 christos Exp $	*/
 
 /*
  * Copyright (c) 2018 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: subr_asan.c,v 1.9 2019/05/04 17:19:10 maxv Exp $");
+__KERNEL_RCSID(0, "$NetBSD: subr_asan.c,v 1.9.2.2 2019/06/10 22:09:03 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/device.h>

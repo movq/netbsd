@@ -1,4 +1,4 @@
-# $NetBSD: t_command.sh,v 1.1 2018/09/05 21:05:40 kre Exp $
+# $NetBSD: t_command.sh,v 1.1.4.2 2019/06/10 22:10:12 christos Exp $
 #
 # Copyright (c) 2018 The NetBSD Foundation, Inc.
 # All rights reserved.

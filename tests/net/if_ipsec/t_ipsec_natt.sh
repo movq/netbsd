@@ -1,4 +1,4 @@
-#	$NetBSD: t_ipsec_natt.sh,v 1.2 2018/12/26 08:59:41 knakahara Exp $
+#	$NetBSD: t_ipsec_natt.sh,v 1.2.4.2 2019/06/10 22:10:09 christos Exp $
 #
 # Copyright (c) 2018 Internet Initiative Japan Inc.
 # All rights reserved.

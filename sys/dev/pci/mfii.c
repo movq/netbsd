@@ -1,4 +1,4 @@
-/* $NetBSD: mfii.c,v 1.4 2019/04/24 09:21:01 bouyer Exp $ */
+/* $NetBSD: mfii.c,v 1.4.2.2 2019/06/10 22:07:17 christos Exp $ */
 /* $OpenBSD: mfii.c,v 1.58 2018/08/14 05:22:21 jmatthew Exp $ */
 
 /*
@@ -19,7 +19,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: mfii.c,v 1.4 2019/04/24 09:21:01 bouyer Exp $");
+__KERNEL_RCSID(0, "$NetBSD: mfii.c,v 1.4.2.2 2019/06/10 22:07:17 christos Exp $");
 
 #include "bio.h"
 

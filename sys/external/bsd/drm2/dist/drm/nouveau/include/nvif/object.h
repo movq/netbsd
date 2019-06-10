@@ -1,4 +1,4 @@
-/*	$NetBSD: object.h,v 1.8 2018/08/27 14:48:21 riastradh Exp $	*/
+/*	$NetBSD: object.h,v 1.8.6.2 2019/06/10 22:08:14 christos Exp $	*/
 
 #ifndef __NVIF_OBJECT_H__
 #define __NVIF_OBJECT_H__

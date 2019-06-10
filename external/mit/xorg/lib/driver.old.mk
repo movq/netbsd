@@ -1,4 +1,4 @@
-#	$NetBSD: driver.old.mk,v 1.1 2019/03/10 02:29:52 mrg Exp $
+#	$NetBSD: driver.old.mk,v 1.1.2.2 2019/06/10 22:02:37 christos Exp $
 
 # stuff both dri and gallium drivers need.
 

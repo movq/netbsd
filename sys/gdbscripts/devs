@@ -1,4 +1,4 @@
-#	$NetBSD: devs,v 1.2 2019/05/09 07:59:49 mrg Exp $
+#	$NetBSD: devs,v 1.2.2.2 2019/06/10 22:09:02 christos Exp $
 
 define devs
 	set $i = 0

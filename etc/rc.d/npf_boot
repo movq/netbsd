@@ -1,6 +1,6 @@
 #!/bin/sh
 #
-# $NetBSD: npf_boot,v 1.1 2019/04/02 01:50:32 sevan Exp $
+# $NetBSD: npf_boot,v 1.1.2.2 2019/06/10 21:42:45 christos Exp $
 #
 
 # PROVIDE: npf_boot

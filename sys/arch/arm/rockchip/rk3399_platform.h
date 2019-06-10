@@ -1,4 +1,4 @@
-/* $NetBSD: rk3399_platform.h,v 1.1 2018/08/12 16:48:05 jmcneill Exp $ */
+/* $NetBSD: rk3399_platform.h,v 1.1.6.2 2019/06/10 22:05:55 christos Exp $ */
 
 /*-
  * Copyright (c) 2018 Jared McNeill <jmcneill@invisible.ca>

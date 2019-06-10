@@ -1,4 +1,4 @@
-/* $NetBSD: pci_msi_machdep.c,v 1.5 2018/12/01 20:38:45 skrll Exp $ */
+/* $NetBSD: pci_msi_machdep.c,v 1.5.4.2 2019/06/10 22:05:55 christos Exp $ */
 
 /*-
  * Copyright (c) 2018 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pci_msi_machdep.c,v 1.5 2018/12/01 20:38:45 skrll Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pci_msi_machdep.c,v 1.5.4.2 2019/06/10 22:05:55 christos Exp $");
 
 #include <sys/kernel.h>
 #include <sys/kmem.h>

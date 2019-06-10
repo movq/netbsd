@@ -1,4 +1,4 @@
-/*	$NetBSD: kern_crashme.c,v 1.2 2019/01/13 00:11:29 tnn Exp $	*/
+/*	$NetBSD: kern_crashme.c,v 1.2.6.2 2019/06/10 22:09:03 christos Exp $	*/
 
 /*
  * Copyright (c) 2018, 2019 Matthew R. Green

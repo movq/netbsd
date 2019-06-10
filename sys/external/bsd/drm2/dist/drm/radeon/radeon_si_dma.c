@@ -1,4 +1,4 @@
-/*	$NetBSD: radeon_si_dma.c,v 1.1 2018/08/27 14:38:20 riastradh Exp $	*/
+/*	$NetBSD: radeon_si_dma.c,v 1.1.6.2 2019/06/10 22:08:26 christos Exp $	*/
 
 /*
  * Copyright 2013 Advanced Micro Devices, Inc.
@@ -24,7 +24,7 @@
  * Authors: Alex Deucher
  */
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: radeon_si_dma.c,v 1.1 2018/08/27 14:38:20 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: radeon_si_dma.c,v 1.1.6.2 2019/06/10 22:08:26 christos Exp $");
 
 #include <drm/drmP.h>
 #include "radeon.h"

@@ -1,4 +1,4 @@
-/*	$NetBSD: nouveau_nvkm_engine_disp_dport.c,v 1.3 2018/08/27 07:43:38 riastradh Exp $	*/
+/*	$NetBSD: nouveau_nvkm_engine_disp_dport.c,v 1.3.6.2 2019/06/10 22:08:16 christos Exp $	*/
 
 /*
  * Copyright 2013 Red Hat Inc.
@@ -24,7 +24,7 @@
  * Authors: Ben Skeggs
  */
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: nouveau_nvkm_engine_disp_dport.c,v 1.3 2018/08/27 07:43:38 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: nouveau_nvkm_engine_disp_dport.c,v 1.3.6.2 2019/06/10 22:08:16 christos Exp $");
 
 #include "dport.h"
 #include "outpdp.h"

@@ -1,4 +1,4 @@
-/*	$NetBSD: named-checkconf.c,v 1.4 2019/04/28 00:01:13 christos Exp $	*/
+/*	$NetBSD: named-checkconf.c,v 1.4.2.2 2019/06/10 22:02:57 christos Exp $	*/
 
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")

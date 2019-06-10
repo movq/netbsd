@@ -1,4 +1,4 @@
-/* $NetBSD: anxedp.c,v 1.2 2019/02/03 13:56:38 jmcneill Exp $ */
+/* $NetBSD: anxedp.c,v 1.2.4.2 2019/06/10 22:07:09 christos Exp $ */
 
 /*-
  * Copyright (c) 2019 Jared D. McNeill <jmcneill@invisible.ca>
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: anxedp.c,v 1.2 2019/02/03 13:56:38 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: anxedp.c,v 1.2.4.2 2019/06/10 22:07:09 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/bus.h>

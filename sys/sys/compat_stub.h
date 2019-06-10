@@ -1,4 +1,4 @@
-/*	$NetBSD: compat_stub.h,v 1.16 2019/05/17 07:37:12 msaitoh Exp $	*/
+/*	$NetBSD: compat_stub.h,v 1.16.2.2 2019/06/10 22:09:57 christos Exp $	*/
 
 /*-
  * Copyright (c) 2018 The NetBSD Foundation, Inc.
@@ -188,10 +188,10 @@ MODULE_HOOK(compat_vndioctl_50_hook, int, (u_long, struct lwp *, void *, int,
 /*
  * ieee80211 ioctl compatibility
  */
-struct ieee80211com;
+struct ieee80211vap;
 
 MODULE_HOOK(ieee80211_ioctl_20_hook, int,
-    (struct ieee80211com *, u_long, void *));
+    (struct ieee80211vap *, u_long, void *));
 
 /*
  * if_43 compatibility

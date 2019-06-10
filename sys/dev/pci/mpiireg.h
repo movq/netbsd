@@ -1,4 +1,4 @@
-/* $NetBSD: mpiireg.h,v 1.2 2018/12/03 22:34:36 bouyer Exp $ */
+/* $NetBSD: mpiireg.h,v 1.2.6.2 2019/06/10 22:07:17 christos Exp $ */
 /*	$OpenBSD: mpiireg.h,v 1.13 2018/06/19 10:32:41 jmatthew Exp $	*/
 /*
  * Copyright (c) 2010 Mike Belopuhov

@@ -1,4 +1,4 @@
-/*	$NetBSD: randutils.h,v 1.1 2019/03/07 03:53:51 mrg Exp $	*/
+/*	$NetBSD: randutils.h,v 1.1.2.2 2019/06/10 21:45:03 christos Exp $	*/
 
 /*
  * Copyright (c) 2019 Matthew R. Green

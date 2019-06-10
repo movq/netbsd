@@ -1,4 +1,4 @@
-/*	$NetBSD: xoshiro128starstar.c,v 1.2 2019/01/09 16:55:14 christos Exp $	*/
+/*	$NetBSD: xoshiro128starstar.c,v 1.2.4.2 2019/06/10 22:04:43 christos Exp $	*/
 
 /*
  * Portions Copyright (C) Internet Systems Consortium, Inc. ("ISC")

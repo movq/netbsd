@@ -1,4 +1,4 @@
-/* $NetBSD: devopen.c,v 1.4 2018/11/15 23:52:33 jmcneill Exp $ */
+/* $NetBSD: devopen.c,v 1.4.4.2 2019/06/10 22:09:56 christos Exp $ */
 
 /*-
  * Copyright (c) 2018 Jared McNeill <jmcneill@invisible.ca>

@@ -1,4 +1,4 @@
-/*	$NetBSD: obio.c,v 1.1 2019/02/14 21:47:52 macallan Exp $	*/
+/*	$NetBSD: obio.c,v 1.1.4.2 2019/06/10 22:06:08 christos Exp $	*/
 
 /*
  * Copyright (c) 2001, 2002, 2003 Wasabi Systems, Inc.
@@ -40,7 +40,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: obio.c,v 1.1 2019/02/14 21:47:52 macallan Exp $");
+__KERNEL_RCSID(0, "$NetBSD: obio.c,v 1.1.4.2 2019/06/10 22:06:08 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

@@ -1,4 +1,4 @@
-#	$NetBSD: copts.mk,v 1.3 2019/02/10 05:01:59 mrg Exp $
+#	$NetBSD: copts.mk,v 1.3.4.2 2019/06/10 22:07:04 christos Exp $
 
 # MI per-file compiler options required.
 

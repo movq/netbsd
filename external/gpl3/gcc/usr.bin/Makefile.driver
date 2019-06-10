@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile.driver,v 1.1 2019/02/01 10:32:32 mrg Exp $
+#	$NetBSD: Makefile.driver,v 1.1.2.2 2019/06/10 21:55:38 christos Exp $
 
 .ifndef _EXTERNAL_GPL3_GCC_USR_BIN_MAKEFILE_DRIVER_
 _EXTERNAL_GPL3_GCC_USR_BIN_MAKEFILE_DRIVER_=1

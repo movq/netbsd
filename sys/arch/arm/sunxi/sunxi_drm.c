@@ -1,4 +1,4 @@
-/* $NetBSD: sunxi_drm.c,v 1.7 2019/02/06 03:07:08 jmcneill Exp $ */
+/* $NetBSD: sunxi_drm.c,v 1.7.4.2 2019/06/10 22:05:56 christos Exp $ */
 
 /*-
  * Copyright (c) 2019 Jared D. McNeill <jmcneill@invisible.ca>
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sunxi_drm.c,v 1.7 2019/02/06 03:07:08 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sunxi_drm.c,v 1.7.4.2 2019/06/10 22:05:56 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/bus.h>

@@ -1,4 +1,4 @@
-/*	$NetBSD: drm_cdevsw.c,v 1.14 2019/04/16 10:00:04 mrg Exp $	*/
+/*	$NetBSD: drm_cdevsw.c,v 1.14.4.2 2019/06/10 22:08:30 christos Exp $	*/
 
 /*-
  * Copyright (c) 2013 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: drm_cdevsw.c,v 1.14 2019/04/16 10:00:04 mrg Exp $");
+__KERNEL_RCSID(0, "$NetBSD: drm_cdevsw.c,v 1.14.4.2 2019/06/10 22:08:30 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/types.h>

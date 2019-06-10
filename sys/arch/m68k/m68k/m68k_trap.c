@@ -1,4 +1,4 @@
-/*	$NetBSD: m68k_trap.c,v 1.2 2019/04/06 03:06:26 thorpej Exp $	*/
+/*	$NetBSD: m68k_trap.c,v 1.2.4.2 2019/06/10 22:06:26 christos Exp $	*/
 
 /*
  * Copyright (c) 1988 University of Utah.
@@ -39,7 +39,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: m68k_trap.c,v 1.2 2019/04/06 03:06:26 thorpej Exp $");
+__KERNEL_RCSID(0, "$NetBSD: m68k_trap.c,v 1.2.4.2 2019/06/10 22:06:26 christos Exp $");
 
 #include "opt_m68k_arch.h"
 

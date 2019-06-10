@@ -1,4 +1,4 @@
-/*	$NetBSD: xdr.c,v 1.2 2019/06/05 16:25:43 hannken Exp $	*/
+/*	$NetBSD: xdr.c,v 1.2.2.2 2019/06/10 21:41:07 christos Exp $	*/
 
 /*
  * Copyright (c) 2010, Oracle America, Inc.
@@ -37,7 +37,7 @@
 static char *sccsid = "@(#)xdr.c 1.35 87/08/12";
 static char *sccsid = "@(#)xdr.c	2.1 88/07/29 4.0 RPCSRC";
 #else
-__RCSID("$NetBSD: xdr.c,v 1.2 2019/06/05 16:25:43 hannken Exp $");
+__RCSID("$NetBSD: xdr.c,v 1.2.2.2 2019/06/10 21:41:07 christos Exp $");
 #endif
 #endif
 

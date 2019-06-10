@@ -1,4 +1,4 @@
-/*	$NetBSD: news4000.c,v 1.1 2018/10/14 00:10:11 tsutsui Exp $	*/
+/*	$NetBSD: news4000.c,v 1.1.6.2 2019/06/10 22:06:35 christos Exp $	*/
 
 /*-
  * Copyright (C) 2000 NONAKA Kimihiro.  All rights reserved.

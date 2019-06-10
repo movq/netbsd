@@ -1,4 +1,4 @@
-/*	$NetBSD: pkcs11-destroy.c,v 1.3 2019/01/09 16:55:00 christos Exp $	*/
+/*	$NetBSD: pkcs11-destroy.c,v 1.3.2.2 2019/06/10 22:03:01 christos Exp $	*/
 
 /*
  * Copyright (C) 2009, 2015  Internet Systems Consortium, Inc. ("ISC")

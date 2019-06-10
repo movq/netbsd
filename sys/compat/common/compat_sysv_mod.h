@@ -1,4 +1,4 @@
-/*	$NetBSD: compat_sysv_mod.h,v 1.2 2019/01/27 02:08:39 pgoyette Exp $	*/
+/*	$NetBSD: compat_sysv_mod.h,v 1.2.4.2 2019/06/10 22:06:58 christos Exp $	*/
 
 /*-
  * Copyright (c) 2018 The NetBSD Foundation, Inc.

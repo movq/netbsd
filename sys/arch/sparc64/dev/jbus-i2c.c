@@ -1,4 +1,4 @@
-/*	$NetBSD: jbus-i2c.c,v 1.3 2018/11/03 14:56:36 martin Exp $	*/
+/*	$NetBSD: jbus-i2c.c,v 1.3.6.2 2019/06/10 22:06:47 christos Exp $	*/
 
 /*
  * Copyright (c) 2018 Michael Lorenz
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: jbus-i2c.c,v 1.3 2018/11/03 14:56:36 martin Exp $");
+__KERNEL_RCSID(0, "$NetBSD: jbus-i2c.c,v 1.3.6.2 2019/06/10 22:06:47 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/device.h>

@@ -1,4 +1,4 @@
-/* $NetBSD: rk3399-rockpro64.dts,v 1.5 2019/05/01 10:43:55 jmcneill Exp $ */
+/* $NetBSD: rk3399-rockpro64.dts,v 1.5.2.2 2019/06/10 22:05:53 christos Exp $ */
 
 /*-
  * Copyright (c) 2019 Jared McNeill <jmcneill@invisible.ca>

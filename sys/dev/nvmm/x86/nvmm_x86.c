@@ -1,4 +1,4 @@
-/*	$NetBSD: nvmm_x86.c,v 1.7 2019/05/15 04:39:52 maxv Exp $	*/
+/*	$NetBSD: nvmm_x86.c,v 1.7.2.2 2019/06/10 22:07:14 christos Exp $	*/
 
 /*
  * Copyright (c) 2018-2019 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: nvmm_x86.c,v 1.7 2019/05/15 04:39:52 maxv Exp $");
+__KERNEL_RCSID(0, "$NetBSD: nvmm_x86.c,v 1.7.2.2 2019/06/10 22:07:14 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

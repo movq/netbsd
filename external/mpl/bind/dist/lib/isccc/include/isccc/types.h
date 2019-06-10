@@ -1,4 +1,4 @@
-/*	$NetBSD: types.h,v 1.3 2019/01/09 16:55:18 christos Exp $	*/
+/*	$NetBSD: types.h,v 1.3.2.2 2019/06/10 22:04:48 christos Exp $	*/
 
 /*
  * Portions Copyright (C) Internet Systems Consortium, Inc. ("ISC")

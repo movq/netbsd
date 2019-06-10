@@ -1,4 +1,4 @@
-/*	$NetBSD: site.h,v 1.3 2019/01/09 16:55:15 christos Exp $	*/
+/*	$NetBSD: site.h,v 1.3.2.2 2019/06/10 22:04:44 christos Exp $	*/
 
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")

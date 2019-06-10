@@ -1,4 +1,4 @@
-/*	$NetBSD: imx8-clock.h,v 1.1.1.1 2019/05/25 11:29:13 jmcneill Exp $	*/
+/*	$NetBSD: imx8-clock.h,v 1.1.1.1.2.2 2019/06/10 22:08:54 christos Exp $	*/
 
 /* SPDX-License-Identifier: GPL-2.0+ */
 /*

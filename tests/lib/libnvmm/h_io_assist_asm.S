@@ -1,4 +1,4 @@
-/*	$NetBSD: h_io_assist_asm.S,v 1.2 2019/03/19 19:23:39 maxv Exp $	*/
+/*	$NetBSD: h_io_assist_asm.S,v 1.2.2.2 2019/06/10 22:10:07 christos Exp $	*/
 
 /*
  * Copyright (c) 2019 The NetBSD Foundation, Inc.

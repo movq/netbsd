@@ -1,4 +1,4 @@
-/*	$NetBSD: t_sendrecv.c,v 1.6 2019/02/03 03:19:28 mrg Exp $	*/
+/*	$NetBSD: t_sendrecv.c,v 1.6.2.2 2019/06/10 22:10:05 christos Exp $	*/
 
 /*-
  * Copyright (c) 2018 The NetBSD Foundation, Inc.
@@ -29,7 +29,7 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: t_sendrecv.c,v 1.6 2019/02/03 03:19:28 mrg Exp $");
+__RCSID("$NetBSD: t_sendrecv.c,v 1.6.2.2 2019/06/10 22:10:05 christos Exp $");
 
 #include <atf-c.h>
 #include <sys/types.h>

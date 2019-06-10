@@ -1,4 +1,4 @@
-/* $NetBSD: exynos_pwm.c,v 1.1 2018/07/04 23:06:54 jmcneill Exp $ */
+/* $NetBSD: exynos_pwm.c,v 1.1.6.2 2019/06/10 22:05:56 christos Exp $ */
 
 /*-
  * Copyright (c) 2018 Jared McNeill <jmcneill@invisible.ca>
@@ -28,7 +28,7 @@
 
 #include <sys/cdefs.h>
 
-__KERNEL_RCSID(1, "$NetBSD: exynos_pwm.c,v 1.1 2018/07/04 23:06:54 jmcneill Exp $");
+__KERNEL_RCSID(1, "$NetBSD: exynos_pwm.c,v 1.1.6.2 2019/06/10 22:05:56 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/bus.h>

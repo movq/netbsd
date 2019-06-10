@@ -1,4 +1,4 @@
-#	$NetBSD: t_libgomp.sh,v 1.1 2019/02/09 00:12:14 mrg Exp $
+#	$NetBSD: t_libgomp.sh,v 1.1.2.2 2019/06/10 22:10:12 christos Exp $
 #
 # Copyright (c) 2019 Matthew R. Green
 # All rights reserved.

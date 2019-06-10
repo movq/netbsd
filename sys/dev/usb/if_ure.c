@@ -1,4 +1,4 @@
-/*	$NetBSD: if_ure.c,v 1.8 2019/06/09 13:35:47 mrg Exp $	*/
+/*	$NetBSD: if_ure.c,v 1.8.2.2 2019/06/10 22:07:34 christos Exp $	*/
 /*	$OpenBSD: if_ure.c,v 1.10 2018/11/02 21:32:30 jcs Exp $	*/
 /*-
  * Copyright (c) 2015-2016 Kevin Lo <kevlo@FreeBSD.org>
@@ -29,7 +29,7 @@
 /* RealTek RTL8152/RTL8153 10/100/Gigabit USB Ethernet device */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_ure.c,v 1.8 2019/06/09 13:35:47 mrg Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_ure.c,v 1.8.2.2 2019/06/10 22:07:34 christos Exp $");
 
 #ifdef _KERNEL_OPT
 #include "opt_usb.h"

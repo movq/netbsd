@@ -1,4 +1,4 @@
-/*	$NetBSD: amdgpu_gpu_scheduler.c,v 1.2 2018/08/27 14:42:07 riastradh Exp $	*/
+/*	$NetBSD: amdgpu_gpu_scheduler.c,v 1.2.6.2 2019/06/10 22:08:04 christos Exp $	*/
 
 /*
  * Copyright 2015 Advanced Micro Devices, Inc.
@@ -24,7 +24,7 @@
  *
  */
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: amdgpu_gpu_scheduler.c,v 1.2 2018/08/27 14:42:07 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: amdgpu_gpu_scheduler.c,v 1.2.6.2 2019/06/10 22:08:04 christos Exp $");
 
 #include <sys/kthread.h>
 

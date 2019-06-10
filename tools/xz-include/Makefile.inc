@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile.inc,v 1.2 2018/09/25 17:57:33 riz Exp $
+#	$NetBSD: Makefile.inc,v 1.2.4.2 2019/06/10 22:10:16 christos Exp $
 
 XZ_TOPLEVEL:=	${.PARSEDIR}/../../external/public-domain/xz
 

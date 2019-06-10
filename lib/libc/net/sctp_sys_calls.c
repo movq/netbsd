@@ -1,5 +1,5 @@
 /*	$KAME: sctp_sys_calls.c,v 1.10 2005/03/06 16:04:16 itojun Exp $ */
-/*	$NetBSD: sctp_sys_calls.c,v 1.1 2018/08/02 08:40:48 rjs Exp $ */
+/*	$NetBSD: sctp_sys_calls.c,v 1.1.4.2 2019/06/10 22:05:20 christos Exp $ */
 
 /*
  * Copyright (C) 2002, 2003, 2004 Cisco Systems Inc,

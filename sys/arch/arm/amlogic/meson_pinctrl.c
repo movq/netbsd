@@ -1,4 +1,4 @@
-/* $NetBSD: meson_pinctrl.c,v 1.5 2019/04/19 19:07:56 jmcneill Exp $ */
+/* $NetBSD: meson_pinctrl.c,v 1.5.4.2 2019/06/10 22:05:51 christos Exp $ */
 
 /*-
  * Copyright (c) 2019 Jared D. McNeill <jmcneill@invisible.ca>
@@ -29,7 +29,7 @@
 #include "opt_soc.h"
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: meson_pinctrl.c,v 1.5 2019/04/19 19:07:56 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: meson_pinctrl.c,v 1.5.4.2 2019/06/10 22:05:51 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/bus.h>

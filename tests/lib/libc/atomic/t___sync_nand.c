@@ -1,4 +1,4 @@
-/*	$NetBSD: t___sync_nand.c,v 1.1 2019/02/26 10:01:41 isaki Exp $	*/
+/*	$NetBSD: t___sync_nand.c,v 1.1.2.2 2019/06/10 22:10:03 christos Exp $	*/
 
 /*
  * Copyright (C) 2019 Tetsuya Isaki. All rights reserved.
@@ -26,7 +26,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: t___sync_nand.c,v 1.1 2019/02/26 10:01:41 isaki Exp $");
+__RCSID("$NetBSD: t___sync_nand.c,v 1.1.2.2 2019/06/10 22:10:03 christos Exp $");
 
 #include <atf-c.h>
 #include <inttypes.h>

@@ -1,4 +1,4 @@
-/*	$NetBSD: tonga_sdma_pkt_open.h,v 1.2 2018/08/27 04:58:20 riastradh Exp $	*/
+/*	$NetBSD: tonga_sdma_pkt_open.h,v 1.2.6.2 2019/06/10 22:07:58 christos Exp $	*/
 
 /*
  * Copyright (C) 2014  Advanced Micro Devices, Inc.

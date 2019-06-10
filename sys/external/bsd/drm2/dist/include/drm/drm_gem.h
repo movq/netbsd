@@ -1,4 +1,4 @@
-/*	$NetBSD: drm_gem.h,v 1.5 2018/08/27 15:22:54 riastradh Exp $	*/
+/*	$NetBSD: drm_gem.h,v 1.5.6.2 2019/06/10 22:08:29 christos Exp $	*/
 
 #ifndef __DRM_GEM_H__
 #define __DRM_GEM_H__

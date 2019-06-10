@@ -1,4 +1,4 @@
-/*	$NetBSD: netbsd32_compat_14_sysv.c,v 1.3 2019/02/21 03:37:19 mrg Exp $	*/
+/*	$NetBSD: netbsd32_compat_14_sysv.c,v 1.3.4.2 2019/06/10 22:07:01 christos Exp $	*/
 
 /*
  * Copyright (c) 1999 Eduardo E. Horvath
@@ -29,7 +29,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: netbsd32_compat_14_sysv.c,v 1.3 2019/02/21 03:37:19 mrg Exp $");
+__KERNEL_RCSID(0, "$NetBSD: netbsd32_compat_14_sysv.c,v 1.3.4.2 2019/06/10 22:07:01 christos Exp $");
 
 #ifdef _KERNEL_OPT
 #include "opt_sysv.h"

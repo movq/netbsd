@@ -1,4 +1,4 @@
-/* $NetBSD: efienv.c,v 1.4 2019/04/21 22:30:41 thorpej Exp $ */
+/* $NetBSD: efienv.c,v 1.4.2.2 2019/06/10 22:09:56 christos Exp $ */
 
 /*-
  * Copyright (c) 2019 Jason R. Thorpe

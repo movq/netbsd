@@ -1,4 +1,4 @@
-/*	$NetBSD: float.0.stdout,v 1.1 2019/04/04 15:27:35 kamil Exp $	*/
+/*	$NetBSD: float.0.stdout,v 1.1.2.2 2019/06/10 22:10:12 christos Exp $	*/
 /* $FreeBSD: head/usr.bin/indent/tests/float.0.stdout 337862 2018-08-15 18:19:45Z pstef $ */
 void
 t(void)

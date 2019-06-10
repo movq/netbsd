@@ -1,4 +1,4 @@
-/*	$NetBSD: linux_atomic64.c,v 1.3 2018/08/27 15:11:17 riastradh Exp $	*/
+/*	$NetBSD: linux_atomic64.c,v 1.3.6.2 2019/06/10 22:08:32 christos Exp $	*/
 
 /*-
  * Copyright (c) 2018 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: linux_atomic64.c,v 1.3 2018/08/27 15:11:17 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: linux_atomic64.c,v 1.3.6.2 2019/06/10 22:08:32 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/bitops.h>

@@ -1,4 +1,4 @@
-/* $NetBSD: efiacpi.c,v 1.3 2018/10/28 10:17:47 jmcneill Exp $ */
+/* $NetBSD: efiacpi.c,v 1.3.4.2 2019/06/10 22:09:56 christos Exp $ */
 
 /*-
  * Copyright (c) 2018 The NetBSD Foundation, Inc.

@@ -1,4 +1,4 @@
-/*	$NetBSD: nouveau_nvif_object.c,v 1.4 2018/08/27 14:47:53 riastradh Exp $	*/
+/*	$NetBSD: nouveau_nvif_object.c,v 1.4.6.2 2019/06/10 22:08:15 christos Exp $	*/
 
 /*
  * Copyright 2014 Red Hat Inc.
@@ -25,7 +25,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: nouveau_nvif_object.c,v 1.4 2018/08/27 14:47:53 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: nouveau_nvif_object.c,v 1.4.6.2 2019/06/10 22:08:15 christos Exp $");
 
 #include <nvif/object.h>
 #include <nvif/client.h>

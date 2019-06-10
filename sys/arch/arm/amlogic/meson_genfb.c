@@ -1,4 +1,4 @@
-/* $NetBSD: meson_genfb.c,v 1.1 2019/01/19 21:43:43 jmcneill Exp $ */
+/* $NetBSD: meson_genfb.c,v 1.1.6.2 2019/06/10 22:05:51 christos Exp $ */
 
 /*-
  * Copyright (c) 2015-2019 Jared McNeill <jmcneill@invisible.ca>
@@ -33,7 +33,7 @@
 #include "opt_wsdisplay_compat.h"
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: meson_genfb.c,v 1.1 2019/01/19 21:43:43 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: meson_genfb.c,v 1.1.6.2 2019/06/10 22:05:51 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/types.h>

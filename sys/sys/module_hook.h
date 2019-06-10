@@ -1,4 +1,4 @@
-/* $NetBSD: module_hook.h,v 1.3 2019/03/01 11:06:57 pgoyette Exp $	*/
+/* $NetBSD: module_hook.h,v 1.3.4.2 2019/06/10 22:09:57 christos Exp $	*/
 
 /*-
  * Copyright (c) 2018 The NetBSD Foundation, Inc.

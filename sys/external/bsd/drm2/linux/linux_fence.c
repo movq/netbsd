@@ -1,4 +1,4 @@
-/*	$NetBSD: linux_fence.c,v 1.15 2019/04/16 10:00:04 mrg Exp $	*/
+/*	$NetBSD: linux_fence.c,v 1.15.4.2 2019/06/10 22:08:32 christos Exp $	*/
 
 /*-
  * Copyright (c) 2018 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: linux_fence.c,v 1.15 2019/04/16 10:00:04 mrg Exp $");
+__KERNEL_RCSID(0, "$NetBSD: linux_fence.c,v 1.15.4.2 2019/06/10 22:08:32 christos Exp $");
 
 #include <sys/atomic.h>
 #include <sys/condvar.h>

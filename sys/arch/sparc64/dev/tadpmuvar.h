@@ -1,4 +1,4 @@
-/* $NetBSD: tadpmuvar.h,v 1.2 2018/10/13 19:53:43 macallan Exp $ */
+/* $NetBSD: tadpmuvar.h,v 1.2.6.2 2019/06/10 22:06:47 christos Exp $ */
 
 /*-
  * Copyright (c) 2018 Michael Lorenz <macallan@netbsd.org>

@@ -1,4 +1,4 @@
-/*	$NetBSD: efishellintf.h,v 1.1.1.1 2018/08/16 18:17:47 jmcneill Exp $	*/
+/*	$NetBSD: efishellintf.h,v 1.1.1.1.6.2 2019/06/10 22:08:35 christos Exp $	*/
 
 /** @file
   SHELL_INTERFACE_PROTOCOL from EDK shell (no spec).

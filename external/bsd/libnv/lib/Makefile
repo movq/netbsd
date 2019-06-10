@@ -1,4 +1,4 @@
-# $NetBSD: Makefile,v 1.2 2019/02/17 23:54:08 bad Exp $
+# $NetBSD: Makefile,v 1.2.2.2 2019/06/10 21:44:58 christos Exp $
 
 WARNS?=		5
 

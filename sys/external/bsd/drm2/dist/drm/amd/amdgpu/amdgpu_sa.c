@@ -1,4 +1,4 @@
-/*	$NetBSD: amdgpu_sa.c,v 1.3 2018/08/27 14:04:50 riastradh Exp $	*/
+/*	$NetBSD: amdgpu_sa.c,v 1.3.6.2 2019/06/10 22:07:58 christos Exp $	*/
 
 /*
  * Copyright 2011 Red Hat Inc.
@@ -44,7 +44,7 @@
  * rings. We just wait for any of those fence to complete.
  */
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: amdgpu_sa.c,v 1.3 2018/08/27 14:04:50 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: amdgpu_sa.c,v 1.3.6.2 2019/06/10 22:07:58 christos Exp $");
 
 #include <drm/drmP.h>
 #include "amdgpu.h"

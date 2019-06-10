@@ -1,4 +1,4 @@
-/*	$NetBSD: nouveau_nvkm_core_memory.c,v 1.2 2018/08/27 04:58:30 riastradh Exp $	*/
+/*	$NetBSD: nouveau_nvkm_core_memory.c,v 1.2.6.2 2019/06/10 22:08:15 christos Exp $	*/
 
 /*
  * Copyright 2015 Red Hat Inc.
@@ -24,7 +24,7 @@
  * Authors: Ben Skeggs <bskeggs@redhat.com>
  */
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: nouveau_nvkm_core_memory.c,v 1.2 2018/08/27 04:58:30 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: nouveau_nvkm_core_memory.c,v 1.2.6.2 2019/06/10 22:08:15 christos Exp $");
 
 #include <core/memory.h>
 #include <subdev/instmem.h>

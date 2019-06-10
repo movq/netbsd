@@ -1,4 +1,4 @@
-# $NetBSD: t_patterns.sh,v 1.4 2018/11/18 13:41:24 kre Exp $
+# $NetBSD: t_patterns.sh,v 1.4.2.2 2019/06/10 22:09:59 christos Exp $
 #
 # Copyright (c) 2018 The NetBSD Foundation, Inc.
 # All rights reserved.

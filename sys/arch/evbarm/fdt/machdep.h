@@ -1,4 +1,4 @@
-/* $NetBSD: machdep.h,v 1.1 2018/08/03 13:48:24 skrll Exp $ */
+/* $NetBSD: machdep.h,v 1.1.6.2 2019/06/10 22:06:06 christos Exp $ */
 
 /*-
  * Copyright (c) 2018 The NetBSD Foundation, Inc.

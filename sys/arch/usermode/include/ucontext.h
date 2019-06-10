@@ -1,4 +1,4 @@
-/* $NetBSD: ucontext.h,v 1.2 2018/08/05 18:42:48 reinoud Exp $ */
+/* $NetBSD: ucontext.h,v 1.2.6.2 2019/06/10 22:06:50 christos Exp $ */
 
 #ifndef _USERMODE_UCONTEXT_H
 #define _USERMODE_UCONTEXT_H

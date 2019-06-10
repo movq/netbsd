@@ -1,4 +1,4 @@
-/*	$NetBSD: if_urevar.h,v 1.2 2019/02/07 10:36:20 mlelstv Exp $	*/
+/*	$NetBSD: if_urevar.h,v 1.2.4.2 2019/06/10 22:07:34 christos Exp $	*/
 /*	$OpenBSD: if_urereg.h,v 1.5 2018/11/02 21:32:30 jcs Exp $	*/
 /*-
  * Copyright (c) 2015-2016 Kevin Lo <kevlo@FreeBSD.org>

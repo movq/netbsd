@@ -1,4 +1,4 @@
-/* $NetBSD: efiblock.h,v 1.3 2018/11/01 00:43:38 jmcneill Exp $ */
+/* $NetBSD: efiblock.h,v 1.3.4.2 2019/06/10 22:09:56 christos Exp $ */
 
 /*-
  * Copyright (c) 2018 Jared McNeill <jmcneill@invisible.ca>

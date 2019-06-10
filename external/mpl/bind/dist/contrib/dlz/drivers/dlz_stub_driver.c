@@ -1,4 +1,4 @@
-/*	$NetBSD: dlz_stub_driver.c,v 1.3 2019/02/24 20:01:29 christos Exp $	*/
+/*	$NetBSD: dlz_stub_driver.c,v 1.3.2.2 2019/06/10 22:04:26 christos Exp $	*/
 
 /*
  * Copyright (C) 2002 Stichting NLnet, Netherlands, stichting@nlnet.nl.

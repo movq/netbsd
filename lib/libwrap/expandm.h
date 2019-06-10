@@ -1,4 +1,4 @@
-/*	$NetBSD: expandm.h,v 1.3 2019/01/12 22:14:08 kre Exp $	*/
+/*	$NetBSD: expandm.h,v 1.3.4.2 2019/06/10 22:05:28 christos Exp $	*/
 
 /*-
  * Copyright (c) 2018 The NetBSD Foundation, Inc.

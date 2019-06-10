@@ -1,4 +1,4 @@
-/*	$NetBSD: jz4725b-cgu.h,v 1.1.1.1 2019/01/22 14:57:02 jmcneill Exp $	*/
+/*	$NetBSD: jz4725b-cgu.h,v 1.1.1.1.6.2 2019/06/10 22:08:54 christos Exp $	*/
 
 /* SPDX-License-Identifier: GPL-2.0 */
 /*

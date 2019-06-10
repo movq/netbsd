@@ -1,4 +1,4 @@
-/*	$NetBSD: radeon_ucode.c,v 1.3 2018/08/27 07:51:27 riastradh Exp $	*/
+/*	$NetBSD: radeon_ucode.c,v 1.3.6.2 2019/06/10 22:08:27 christos Exp $	*/
 
 /*
  * Copyright 2014 Advanced Micro Devices, Inc.
@@ -24,7 +24,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: radeon_ucode.c,v 1.3 2018/08/27 07:51:27 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: radeon_ucode.c,v 1.3.6.2 2019/06/10 22:08:27 christos Exp $");
 
 #include <linux/firmware.h>
 #include <linux/slab.h>

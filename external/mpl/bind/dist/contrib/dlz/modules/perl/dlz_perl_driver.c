@@ -1,4 +1,4 @@
-/*	$NetBSD: dlz_perl_driver.c,v 1.2 2018/08/12 13:02:32 christos Exp $	*/
+/*	$NetBSD: dlz_perl_driver.c,v 1.2.4.2 2019/06/10 22:04:29 christos Exp $	*/
 
 /*
  * Copyright (C) 2002 Stichting NLnet, Netherlands, stichting@nlnet.nl.
