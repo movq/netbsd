@@ -1,4 +1,4 @@
-/* $NetBSD: meson8b_clkc.h,v 1.1 2019/01/19 20:56:03 jmcneill Exp $ */
+/* $NetBSD: meson8b_clkc.h,v 1.1.6.2 2019/06/10 22:05:51 christos Exp $ */
 
 /*-
  * Copyright (c) 2019 Jared McNeill <jmcneill@invisible.ca>

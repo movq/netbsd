@@ -1,4 +1,4 @@
-/* $NetBSD: ssdfb.c,v 1.6 2019/06/05 20:32:28 tnn Exp $ */
+/* $NetBSD: ssdfb.c,v 1.6.2.2 2019/06/10 22:07:11 christos Exp $ */
 
 /*
  * Copyright (c) 2019 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ssdfb.c,v 1.6 2019/06/05 20:32:28 tnn Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ssdfb.c,v 1.6.2.2 2019/06/10 22:07:11 christos Exp $");
 
 #include "opt_ddb.h"
 

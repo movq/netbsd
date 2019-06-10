@@ -1,4 +1,4 @@
-/*	$NetBSD: spleen5x8.h,v 1.1 2019/03/17 06:09:35 tnn Exp $ */
+/*	$NetBSD: spleen5x8.h,v 1.1.4.2 2019/06/10 22:07:37 christos Exp $ */
 /*	$OpenBSD: spleen5x8.h,v 1.2 2018/12/02 14:47:23 fcambus Exp $ */
 
 /*

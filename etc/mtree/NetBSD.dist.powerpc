@@ -1,4 +1,4 @@
-#	$NetBSD: NetBSD.dist.powerpc,v 1.2 2019/03/12 10:07:49 mrg Exp $
+#	$NetBSD: NetBSD.dist.powerpc,v 1.2.2.2 2019/06/10 21:42:45 christos Exp $
 
 ./usr/include/powerpc
 ./usr/include/powerpc/oea

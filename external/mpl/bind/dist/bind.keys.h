@@ -1,4 +1,4 @@
-/*	$NetBSD: bind.keys.h,v 1.4 2019/04/28 00:01:13 christos Exp $	*/
+/*	$NetBSD: bind.keys.h,v 1.4.2.2 2019/06/10 22:02:56 christos Exp $	*/
 
 #ifndef BIND_KEYS_H
 #define BIND_KEYS_H 1

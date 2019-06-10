@@ -1,4 +1,4 @@
-/*	$NetBSD: xen_mainbus.c,v 1.6 2019/02/14 08:18:26 cherry Exp $	*/
+/*	$NetBSD: xen_mainbus.c,v 1.6.4.2 2019/06/10 22:06:56 christos Exp $	*/
 /*	NetBSD: mainbus.c,v 1.19 2017/05/23 08:54:39 nonaka Exp 	*/
 /*	NetBSD: mainbus.c,v 1.53 2003/10/27 14:11:47 junyoung Exp 	*/
 
@@ -33,7 +33,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: xen_mainbus.c,v 1.6 2019/02/14 08:18:26 cherry Exp $");
+__KERNEL_RCSID(0, "$NetBSD: xen_mainbus.c,v 1.6.4.2 2019/06/10 22:06:56 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

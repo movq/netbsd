@@ -1,4 +1,4 @@
-/*	$NetBSD: comments.0,v 1.1 2019/04/04 15:27:35 kamil Exp $	*/
+/*	$NetBSD: comments.0,v 1.1.2.2 2019/06/10 22:10:12 christos Exp $	*/
 /* $FreeBSD: head/usr.bin/indent/tests/comments.0 321383 2017-07-23 15:07:52Z pstef $ */
 typedef enum x {
 	aaaaaaaaaaaaaaaaaaaaaa = 1 << 0,	/* test a */

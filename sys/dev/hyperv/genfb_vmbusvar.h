@@ -1,4 +1,4 @@
-/*	$NetBSD: genfb_vmbusvar.h,v 1.1 2019/05/24 14:28:48 nonaka Exp $	*/
+/*	$NetBSD: genfb_vmbusvar.h,v 1.1.2.2 2019/06/10 22:07:09 christos Exp $	*/
 
 /*-
  * Copyright (c) 2007 Michael Lorenz

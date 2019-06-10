@@ -1,4 +1,4 @@
-/* $NetBSD: vfs_syscalls_10.c,v 1.4 2019/03/01 11:06:56 pgoyette Exp $	*/
+/* $NetBSD: vfs_syscalls_10.c,v 1.4.4.2 2019/06/10 22:06:58 christos Exp $	*/
 
 /*-
  * Copyright (c) 2018 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: vfs_syscalls_10.c,v 1.4 2019/03/01 11:06:56 pgoyette Exp $");
+__KERNEL_RCSID(0, "$NetBSD: vfs_syscalls_10.c,v 1.4.4.2 2019/06/10 22:06:58 christos Exp $");
 
 #if defined(_KERNEL_OPT)
 #include "opt_compat_netbsd.h"

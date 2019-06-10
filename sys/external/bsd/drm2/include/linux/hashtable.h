@@ -1,4 +1,4 @@
-/*	$NetBSD: hashtable.h,v 1.5 2018/08/27 06:39:27 riastradh Exp $	*/
+/*	$NetBSD: hashtable.h,v 1.5.6.2 2019/06/10 22:08:31 christos Exp $	*/
 
 /*-
  * Copyright (c) 2018 The NetBSD Foundation, Inc.

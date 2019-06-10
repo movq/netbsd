@@ -1,4 +1,4 @@
-/*	$NetBSD: radeon_kv_smc.c,v 1.1 2018/08/27 14:38:20 riastradh Exp $	*/
+/*	$NetBSD: radeon_kv_smc.c,v 1.1.6.2 2019/06/10 22:08:26 christos Exp $	*/
 
 /*
  * Copyright 2013 Advanced Micro Devices, Inc.
@@ -25,7 +25,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: radeon_kv_smc.c,v 1.1 2018/08/27 14:38:20 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: radeon_kv_smc.c,v 1.1.6.2 2019/06/10 22:08:26 christos Exp $");
 
 #include "drmP.h"
 #include "radeon.h"

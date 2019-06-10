@@ -1,4 +1,4 @@
-/*	$NetBSD: ipmi.h,v 1.1 2019/05/18 08:38:00 mlelstv Exp $	*/
+/*	$NetBSD: ipmi.h,v 1.1.2.2 2019/06/10 22:09:57 christos Exp $	*/
 
 /*-
  * Copyright (c) 2019 The NetBSD Foundation, Inc.

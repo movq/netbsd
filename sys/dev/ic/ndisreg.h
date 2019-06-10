@@ -1,4 +1,4 @@
-/*	$NetBSD: ndisreg.h,v 1.1 2019/02/15 08:54:02 nonaka Exp $	*/
+/*	$NetBSD: ndisreg.h,v 1.1.6.2 2019/06/10 22:07:11 christos Exp $	*/
 /*	$OpenBSD: ndis.h,v 1.2 2016/09/23 11:32:13 mikeb Exp $	*/
 
 /*-

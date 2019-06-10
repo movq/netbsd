@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.1 2018/11/12 20:16:46 scole Exp $
+#	$NetBSD: Makefile,v 1.1.4.2 2019/06/10 21:42:25 christos Exp $
 
 FLOPPY_NETBSD=	${KERNOBJ}/netbsd-INSTALL_601.gz
 FLOPPYBASE=	boot601_

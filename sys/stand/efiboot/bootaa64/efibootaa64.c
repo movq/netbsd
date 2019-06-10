@@ -1,4 +1,4 @@
-/*	$NetBSD: efibootaa64.c,v 1.2 2018/09/07 17:30:32 jmcneill Exp $	*/
+/*	$NetBSD: efibootaa64.c,v 1.2.4.2 2019/06/10 22:09:56 christos Exp $	*/
 
 /*-
  * Copyright (c) 2016 Kimihiro Nonaka <nonaka@netbsd.org>

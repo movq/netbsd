@@ -1,4 +1,4 @@
-/*	$NetBSD: mulaw.c,v 1.2 2019/05/08 13:40:17 isaki Exp $	*/
+/*	$NetBSD: mulaw.c,v 1.2.2.2 2019/06/10 22:07:06 christos Exp $	*/
 
 /*
  * Copyright (C) 2017 Tetsuya Isaki. All rights reserved.
@@ -28,7 +28,7 @@
 
 #if defined(_KERNEL)
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: mulaw.c,v 1.2 2019/05/08 13:40:17 isaki Exp $");
+__KERNEL_RCSID(0, "$NetBSD: mulaw.c,v 1.2.2.2 2019/06/10 22:07:06 christos Exp $");
 
 #include <sys/types.h>
 #include <sys/systm.h>

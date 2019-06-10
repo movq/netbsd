@@ -1,4 +1,4 @@
-/* $NetBSD: compat_stub.c,v 1.12 2019/05/17 07:37:12 msaitoh Exp $	*/
+/* $NetBSD: compat_stub.c,v 1.12.2.2 2019/06/10 22:09:02 christos Exp $	*/
 
 /*-
  * Copyright (c) 2018 The NetBSD Foundation, Inc.

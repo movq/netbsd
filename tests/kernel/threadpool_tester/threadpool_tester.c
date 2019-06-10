@@ -1,4 +1,4 @@
-/*	$NetBSD: threadpool_tester.c,v 1.3 2018/12/26 22:21:10 thorpej Exp $	*/
+/*	$NetBSD: threadpool_tester.c,v 1.3.2.2 2019/06/10 22:10:02 christos Exp $	*/
 
 /*-
  * Copyright (c) 2018 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: threadpool_tester.c,v 1.3 2018/12/26 22:21:10 thorpej Exp $");
+__KERNEL_RCSID(0, "$NetBSD: threadpool_tester.c,v 1.3.2.2 2019/06/10 22:10:02 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/kernel.h>

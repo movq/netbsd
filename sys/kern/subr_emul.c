@@ -1,4 +1,4 @@
-/*	$NetBSD: subr_emul.c,v 1.2 2019/01/27 02:08:43 pgoyette Exp $	*/
+/*	$NetBSD: subr_emul.c,v 1.2.4.2 2019/06/10 22:09:03 christos Exp $	*/
 
 /*-
  * Copyright (c) 1994, 2000, 2005, 2015 The NetBSD Foundation, Inc.
@@ -57,7 +57,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(1, "$NetBSD: subr_emul.c,v 1.2 2019/01/27 02:08:43 pgoyette Exp $");
+__KERNEL_RCSID(1, "$NetBSD: subr_emul.c,v 1.2.4.2 2019/06/10 22:09:03 christos Exp $");
 
 #ifdef _KERNEL_OPT
 #include "opt_pax.h"

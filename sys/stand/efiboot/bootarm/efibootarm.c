@@ -1,4 +1,4 @@
-/* $NetBSD: efibootarm.c,v 1.2 2019/03/30 17:41:13 jmcneill Exp $ */
+/* $NetBSD: efibootarm.c,v 1.2.4.2 2019/06/10 22:09:56 christos Exp $ */
 
 /*-
  * Copyright (c) 2019 Jared McNeill <jmcneill@invisible.ca>

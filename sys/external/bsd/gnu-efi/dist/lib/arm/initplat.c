@@ -1,4 +1,4 @@
-/*	$NetBSD: initplat.c,v 1.2 2019/03/30 12:46:16 jmcneill Exp $	*/
+/*	$NetBSD: initplat.c,v 1.2.4.2 2019/06/10 22:08:36 christos Exp $	*/
 
 /*
  * Copright (C) 2014 Linaro Ltd.

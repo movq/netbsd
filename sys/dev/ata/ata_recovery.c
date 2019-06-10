@@ -1,4 +1,4 @@
-/*	$NetBSD: ata_recovery.c,v 1.2 2018/10/22 20:13:47 jdolecek Exp $	*/
+/*	$NetBSD: ata_recovery.c,v 1.2.6.2 2019/06/10 22:07:05 christos Exp $	*/
 
 /*-
  * Copyright (c) 2018 The NetBSD Foundation, Inc.
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ata_recovery.c,v 1.2 2018/10/22 20:13:47 jdolecek Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ata_recovery.c,v 1.2.6.2 2019/06/10 22:07:05 christos Exp $");
 
 #include "opt_ata.h"
 

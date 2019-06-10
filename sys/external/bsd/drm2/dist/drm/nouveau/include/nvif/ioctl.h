@@ -1,4 +1,4 @@
-/*	$NetBSD: ioctl.h,v 1.4 2018/08/27 14:54:32 riastradh Exp $	*/
+/*	$NetBSD: ioctl.h,v 1.4.6.2 2019/06/10 22:08:14 christos Exp $	*/
 
 #ifndef __NVIF_IOCTL_H__
 #define __NVIF_IOCTL_H__

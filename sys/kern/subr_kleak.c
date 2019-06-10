@@ -1,4 +1,4 @@
-/*	$NetBSD: subr_kleak.c,v 1.2 2018/12/10 07:24:49 maxv Exp $	*/
+/*	$NetBSD: subr_kleak.c,v 1.2.6.2 2019/06/10 22:09:03 christos Exp $	*/
 
 /*
  * Copyright (c) 2018 The NetBSD Foundation, Inc.
@@ -31,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: subr_kleak.c,v 1.2 2018/12/10 07:24:49 maxv Exp $");
+__KERNEL_RCSID(0, "$NetBSD: subr_kleak.c,v 1.2.6.2 2019/06/10 22:09:03 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/device.h>

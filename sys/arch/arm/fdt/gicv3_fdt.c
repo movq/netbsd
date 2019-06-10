@@ -1,4 +1,4 @@
-/* $NetBSD: gicv3_fdt.c,v 1.7 2019/01/26 14:43:46 thorpej Exp $ */
+/* $NetBSD: gicv3_fdt.c,v 1.7.4.2 2019/06/10 22:05:53 christos Exp $ */
 
 /*-
  * Copyright (c) 2015-2018 Jared McNeill <jmcneill@invisible.ca>
@@ -31,7 +31,7 @@
 #define	_INTR_PRIVATE
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: gicv3_fdt.c,v 1.7 2019/01/26 14:43:46 thorpej Exp $");
+__KERNEL_RCSID(0, "$NetBSD: gicv3_fdt.c,v 1.7.4.2 2019/06/10 22:05:53 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/bus.h>

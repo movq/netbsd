@@ -1,4 +1,4 @@
-/* $NetBSD: plgpio_acpi.c,v 1.5 2018/11/23 14:08:40 jmcneill Exp $ */
+/* $NetBSD: plgpio_acpi.c,v 1.5.4.2 2019/06/10 22:07:05 christos Exp $ */
 
 /*-
  * Copyright (c) 2018 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: plgpio_acpi.c,v 1.5 2018/11/23 14:08:40 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: plgpio_acpi.c,v 1.5.4.2 2019/06/10 22:07:05 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/bus.h>

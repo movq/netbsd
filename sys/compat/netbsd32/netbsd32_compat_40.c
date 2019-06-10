@@ -1,4 +1,4 @@
-/*	$NetBSD: netbsd32_compat_40.c,v 1.4 2019/01/28 18:53:52 mlelstv Exp $	*/
+/*	$NetBSD: netbsd32_compat_40.c,v 1.4.4.2 2019/06/10 22:07:01 christos Exp $	*/
 
 /*
  * Copyright (c) 1998, 2001, 2008, 2018 Matthew R. Green
@@ -29,7 +29,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: netbsd32_compat_40.c,v 1.4 2019/01/28 18:53:52 mlelstv Exp $");
+__KERNEL_RCSID(0, "$NetBSD: netbsd32_compat_40.c,v 1.4.4.2 2019/06/10 22:07:01 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

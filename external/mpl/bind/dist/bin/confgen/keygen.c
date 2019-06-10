@@ -1,4 +1,4 @@
-/*	$NetBSD: keygen.c,v 1.3 2019/01/09 16:54:58 christos Exp $	*/
+/*	$NetBSD: keygen.c,v 1.3.2.2 2019/06/10 22:02:57 christos Exp $	*/
 
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")

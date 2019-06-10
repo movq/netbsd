@@ -1,4 +1,4 @@
-/* $NetBSD: syscon.c,v 1.3 2019/02/25 19:28:36 jmcneill Exp $ */
+/* $NetBSD: syscon.c,v 1.3.4.2 2019/06/10 22:07:08 christos Exp $ */
 
 /*-
  * Copyright (c) 2018 Jared McNeill <jmcneill@invisible.ca>
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: syscon.c,v 1.3 2019/02/25 19:28:36 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: syscon.c,v 1.3.4.2 2019/06/10 22:07:08 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/bus.h>

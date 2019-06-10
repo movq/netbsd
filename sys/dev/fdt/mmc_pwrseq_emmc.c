@@ -1,4 +1,4 @@
-/* $NetBSD: mmc_pwrseq_emmc.c,v 1.1 2019/03/03 12:54:07 jmcneill Exp $ */
+/* $NetBSD: mmc_pwrseq_emmc.c,v 1.1.4.2 2019/06/10 22:07:08 christos Exp $ */
 
 /*-
  * Copyright (c) 2019 Jared McNeill <jmcneill@invisible.ca>
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: mmc_pwrseq_emmc.c,v 1.1 2019/03/03 12:54:07 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: mmc_pwrseq_emmc.c,v 1.1.4.2 2019/06/10 22:07:08 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/kernel.h>

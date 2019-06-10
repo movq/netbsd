@@ -1,4 +1,4 @@
-/*	$NetBSD: crashme.h,v 1.1 2019/01/09 04:01:20 mrg Exp $	*/
+/*	$NetBSD: crashme.h,v 1.1.6.2 2019/06/10 22:09:57 christos Exp $	*/
 
 /*
  * Copyright (c) 2018, 2019 Matthew R. Green

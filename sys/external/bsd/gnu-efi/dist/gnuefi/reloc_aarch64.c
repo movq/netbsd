@@ -1,4 +1,4 @@
-/*	$NetBSD: reloc_aarch64.c,v 1.2 2018/08/20 09:50:18 jmcneill Exp $	*/
+/*	$NetBSD: reloc_aarch64.c,v 1.2.6.2 2019/06/10 22:08:34 christos Exp $	*/
 
 /* reloc_aarch64.c - position independent x86 ELF shared object relocator
    Copyright (C) 2014 Linaro Ltd. <ard.biesheuvel@linaro.org>

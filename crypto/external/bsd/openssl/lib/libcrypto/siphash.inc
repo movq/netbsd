@@ -1,4 +1,4 @@
-#	$NetBSD: siphash.inc,v 1.1 2018/09/23 13:33:04 christos Exp $
+#	$NetBSD: siphash.inc,v 1.1.4.2 2019/06/10 21:41:55 christos Exp $
 #
 #	SRCS extracted from src/crypto/dist/openssl/crypto/siphash
 #

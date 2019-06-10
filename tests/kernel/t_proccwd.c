@@ -1,4 +1,4 @@
-/*	$NetBSD: t_proccwd.c,v 1.2 2019/06/01 22:18:23 kamil Exp $	*/
+/*	$NetBSD: t_proccwd.c,v 1.2.2.2 2019/06/10 22:10:01 christos Exp $	*/
 /*-
  * Copyright (c) 2019 The NetBSD Foundation, Inc.
  * All rights reserved.
@@ -28,7 +28,7 @@
 #include <sys/cdefs.h>
 __COPYRIGHT("@(#) Copyright (c) 2019\
  The NetBSD Foundation, inc. All rights reserved.");
-__RCSID("$NetBSD: t_proccwd.c,v 1.2 2019/06/01 22:18:23 kamil Exp $");
+__RCSID("$NetBSD: t_proccwd.c,v 1.2.2.2 2019/06/10 22:10:01 christos Exp $");
 
 #include <sys/types.h>
 #include <sys/stat.h>

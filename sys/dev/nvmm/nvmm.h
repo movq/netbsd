@@ -1,4 +1,4 @@
-/*	$NetBSD: nvmm.h,v 1.10 2019/05/11 07:31:56 maxv Exp $	*/
+/*	$NetBSD: nvmm.h,v 1.10.2.2 2019/06/10 22:07:14 christos Exp $	*/
 
 /*
  * Copyright (c) 2018 The NetBSD Foundation, Inc.

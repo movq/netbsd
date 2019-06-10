@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.1 2019/03/10 12:14:05 mrg Exp $
+#	$NetBSD: Makefile,v 1.1.2.2 2019/06/10 21:50:50 christos Exp $
 
 LIB=	LLVMAMDGPUAsmParser
 

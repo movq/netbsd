@@ -1,4 +1,4 @@
-/*	$NetBSD: exec_elf.h,v 1.2 2019/05/19 04:09:22 christos Exp $	*/
+/*	$NetBSD: exec_elf.h,v 1.2.2.2 2019/06/10 22:10:13 christos Exp $	*/
 
 /*-
  * Copyright (c) 1994 The NetBSD Foundation, Inc.

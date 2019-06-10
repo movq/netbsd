@@ -1,4 +1,4 @@
-/*	$NetBSD: spi_io.h,v 1.1 2019/02/23 10:43:25 mlelstv Exp $	*/
+/*	$NetBSD: spi_io.h,v 1.1.4.2 2019/06/10 22:07:32 christos Exp $	*/
 
 /*
  * Copyright (c) 2019 Michael van Elst

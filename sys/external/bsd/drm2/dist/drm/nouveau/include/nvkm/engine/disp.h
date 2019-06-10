@@ -1,4 +1,4 @@
-/*	$NetBSD: disp.h,v 1.2 2018/08/27 04:58:30 riastradh Exp $	*/
+/*	$NetBSD: disp.h,v 1.2.6.2 2019/06/10 22:08:14 christos Exp $	*/
 
 #ifndef __NVKM_DISP_H__
 #define __NVKM_DISP_H__

@@ -1,4 +1,4 @@
-/*	$NetBSD: compat.c,v 1.1 2018/10/17 23:36:58 joerg Exp $	*/
+/*	$NetBSD: compat.c,v 1.1.4.2 2019/06/10 22:05:29 christos Exp $	*/
 /*-
  * Copyright (c) 2018 The NetBSD Foundation, Inc.
  * All rights reserved.
@@ -38,7 +38,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: compat.c,v 1.1 2018/10/17 23:36:58 joerg Exp $");
+__RCSID("$NetBSD: compat.c,v 1.1.4.2 2019/06/10 22:05:29 christos Exp $");
 
 #include "rtld.h"
 

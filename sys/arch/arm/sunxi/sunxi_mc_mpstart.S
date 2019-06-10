@@ -1,4 +1,4 @@
-/* $NetBSD: sunxi_mc_mpstart.S,v 1.2 2019/02/06 13:15:59 skrll Exp $ */
+/* $NetBSD: sunxi_mc_mpstart.S,v 1.2.4.2 2019/06/10 22:05:57 christos Exp $ */
 
 /*-
  * Copyright (c) 2018 Jared McNeill <jmcneill@invisible.ca>

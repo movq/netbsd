@@ -1,4 +1,4 @@
-/* $NetBSD: sunxi_hdmiphy.h,v 1.1 2019/01/30 01:24:00 jmcneill Exp $ */
+/* $NetBSD: sunxi_hdmiphy.h,v 1.1.4.2 2019/06/10 22:05:56 christos Exp $ */
 
 /*-
  * Copyright (c) 2019 Jared McNeill <jmcneill@invisible.ca>

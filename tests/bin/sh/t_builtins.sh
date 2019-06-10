@@ -1,4 +1,4 @@
-# $NetBSD: t_builtins.sh,v 1.5 2019/01/09 10:51:23 kre Exp $
+# $NetBSD: t_builtins.sh,v 1.5.2.2 2019/06/10 22:09:59 christos Exp $
 #
 # Copyright (c) 2018 The NetBSD Foundation, Inc.
 # All rights reserved.

@@ -1,4 +1,4 @@
-/* $NetBSD: sunxi_drm.h,v 1.2 2019/02/04 12:10:13 jmcneill Exp $ */
+/* $NetBSD: sunxi_drm.h,v 1.2.4.2 2019/06/10 22:05:56 christos Exp $ */
 
 /*-
  * Copyright (c) 2019 Jared D. McNeill <jmcneill@invisible.ca>

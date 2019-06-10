@@ -1,4 +1,4 @@
-/*	$NetBSD: a.out.h,v 1.1 2018/12/31 13:35:16 christos Exp $	*/
+/*	$NetBSD: a.out.h,v 1.1.4.2 2019/06/10 22:10:13 christos Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993

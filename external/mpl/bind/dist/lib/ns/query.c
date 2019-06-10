@@ -1,4 +1,4 @@
-/*	$NetBSD: query.c,v 1.5 2019/04/28 00:01:15 christos Exp $	*/
+/*	$NetBSD: query.c,v 1.5.2.2 2019/06/10 22:04:49 christos Exp $	*/
 
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")

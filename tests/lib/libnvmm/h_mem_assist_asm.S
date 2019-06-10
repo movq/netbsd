@@ -1,4 +1,4 @@
-/*	$NetBSD: h_mem_assist_asm.S,v 1.6 2019/03/19 19:23:39 maxv Exp $	*/
+/*	$NetBSD: h_mem_assist_asm.S,v 1.6.2.2 2019/06/10 22:10:07 christos Exp $	*/
 
 /*
  * Copyright (c) 2018 The NetBSD Foundation, Inc.

@@ -1,4 +1,4 @@
-/* $NetBSD: cpu_acpi.c,v 1.6 2019/05/23 15:54:28 ryo Exp $ */
+/* $NetBSD: cpu_acpi.c,v 1.6.2.2 2019/06/10 22:05:50 christos Exp $ */
 
 /*-
  * Copyright (c) 2018 The NetBSD Foundation, Inc.
@@ -33,7 +33,7 @@
 #include "opt_multiprocessor.h"
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: cpu_acpi.c,v 1.6 2019/05/23 15:54:28 ryo Exp $");
+__KERNEL_RCSID(0, "$NetBSD: cpu_acpi.c,v 1.6.2.2 2019/06/10 22:05:50 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/bus.h>

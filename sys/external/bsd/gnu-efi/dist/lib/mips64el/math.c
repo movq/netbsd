@@ -1,4 +1,4 @@
-/*	$NetBSD: math.c,v 1.1.1.1 2018/08/16 18:17:47 jmcneill Exp $	*/
+/*	$NetBSD: math.c,v 1.1.1.1.6.2 2019/06/10 22:08:37 christos Exp $	*/
 
 /*
  * Copright (C) 2014 Linaro Ltd.

@@ -1,4 +1,4 @@
-/* $NetBSD: audio_dai.h,v 1.2 2019/05/08 13:40:17 isaki Exp $ */
+/* $NetBSD: audio_dai.h,v 1.2.2.2 2019/06/10 22:07:06 christos Exp $ */
 
 /*-
  * Copyright (c) 2018 Jared McNeill <jmcneill@invisible.ca>

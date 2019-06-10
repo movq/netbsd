@@ -1,4 +1,4 @@
-/*	$NetBSD: netbsd32_rlimit.c,v 1.1 2018/12/24 20:44:39 mrg Exp $	*/
+/*	$NetBSD: netbsd32_rlimit.c,v 1.1.6.2 2019/06/10 22:07:02 christos Exp $	*/
 
 /*
  * Copyright (c) 1998, 2001, 2008, 2018 Matthew R. Green
@@ -31,7 +31,7 @@
 /* rlimit netbsd32 related code */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: netbsd32_rlimit.c,v 1.1 2018/12/24 20:44:39 mrg Exp $");
+__KERNEL_RCSID(0, "$NetBSD: netbsd32_rlimit.c,v 1.1.6.2 2019/06/10 22:07:02 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

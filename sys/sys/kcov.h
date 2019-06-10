@@ -1,4 +1,4 @@
-/*      $NetBSD: kcov.h,v 1.6 2019/05/26 01:44:34 kamil Exp $        */
+/*      $NetBSD: kcov.h,v 1.6.2.2 2019/06/10 22:09:57 christos Exp $        */
 
 /*
  * Copyright (c) 2019 The NetBSD Foundation, Inc.

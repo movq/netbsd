@@ -1,4 +1,4 @@
-/* $NetBSD: meson_uart.c,v 1.3 2019/05/28 05:08:47 ryo Exp $ */
+/* $NetBSD: meson_uart.c,v 1.3.2.2 2019/06/10 22:05:51 christos Exp $ */
 
 /*-
  * Copyright (c) 2013 The NetBSD Foundation, Inc.
@@ -34,7 +34,7 @@
 
 #include <sys/cdefs.h>
 
-__KERNEL_RCSID(1, "$NetBSD: meson_uart.c,v 1.3 2019/05/28 05:08:47 ryo Exp $");
+__KERNEL_RCSID(1, "$NetBSD: meson_uart.c,v 1.3.2.2 2019/06/10 22:05:51 christos Exp $");
 
 #define cn_trap()			\
 	do {				\

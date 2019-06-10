@@ -1,4 +1,4 @@
-/*	$NetBSD: if_media_80.c,v 1.1 2019/05/17 07:37:11 msaitoh Exp $	*/
+/*	$NetBSD: if_media_80.c,v 1.1.2.2 2019/06/10 22:06:58 christos Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.

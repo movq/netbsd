@@ -1,4 +1,4 @@
-#	$NetBSD: files.nvmm,v 1.2 2019/03/28 19:00:40 maxv Exp $
+#	$NetBSD: files.nvmm,v 1.2.4.2 2019/06/10 22:07:14 christos Exp $
 
 defpseudo nvmm
 

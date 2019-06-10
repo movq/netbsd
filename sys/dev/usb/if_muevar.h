@@ -1,4 +1,4 @@
-/*	$NetBSD: if_muevar.h,v 1.8 2019/05/26 04:52:07 mlelstv Exp $	*/
+/*	$NetBSD: if_muevar.h,v 1.8.2.2 2019/06/10 22:07:33 christos Exp $	*/
 /*	$OpenBSD: if_muereg.h,v 1.1 2018/08/03 01:50:15 kevlo Exp $	*/
 
 /*

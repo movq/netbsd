@@ -1,4 +1,4 @@
-/*	$NetBSD: netbsd32_compat_10_sysv.c,v 1.2 2019/01/27 02:08:40 pgoyette Exp $	*/
+/*	$NetBSD: netbsd32_compat_10_sysv.c,v 1.2.4.2 2019/06/10 22:07:01 christos Exp $	*/
 
 /*
  * Copyright (c) 1994 Adam Glass and Charles M. Hannum.  All rights reserved.
@@ -31,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: netbsd32_compat_10_sysv.c,v 1.2 2019/01/27 02:08:40 pgoyette Exp $");
+__KERNEL_RCSID(0, "$NetBSD: netbsd32_compat_10_sysv.c,v 1.2.4.2 2019/06/10 22:07:01 christos Exp $");
 
 #ifdef _KERNEL_OPT
 #include "opt_sysv.h"

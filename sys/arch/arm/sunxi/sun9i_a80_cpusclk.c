@@ -1,4 +1,4 @@
-/* $NetBSD: sun9i_a80_cpusclk.c,v 1.1 2019/05/27 21:12:54 jmcneill Exp $ */
+/* $NetBSD: sun9i_a80_cpusclk.c,v 1.1.2.2 2019/06/10 22:05:56 christos Exp $ */
 
 /*-
  * Copyright (c) 2017 Jared McNeill <jmcneill@invisible.ca>
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sun9i_a80_cpusclk.c,v 1.1 2019/05/27 21:12:54 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sun9i_a80_cpusclk.c,v 1.1.2.2 2019/06/10 22:05:56 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

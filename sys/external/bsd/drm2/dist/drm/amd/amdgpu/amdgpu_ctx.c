@@ -1,4 +1,4 @@
-/*	$NetBSD: amdgpu_ctx.c,v 1.4 2018/08/27 14:14:28 riastradh Exp $	*/
+/*	$NetBSD: amdgpu_ctx.c,v 1.4.6.2 2019/06/10 22:07:57 christos Exp $	*/
 
 /*
  * Copyright 2015 Advanced Micro Devices, Inc.
@@ -25,7 +25,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: amdgpu_ctx.c,v 1.4 2018/08/27 14:14:28 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: amdgpu_ctx.c,v 1.4.6.2 2019/06/10 22:07:57 christos Exp $");
 
 #include <drm/drmP.h>
 #include "amdgpu.h"

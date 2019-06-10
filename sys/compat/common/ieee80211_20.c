@@ -1,4 +1,4 @@
-/*	$NetBSD: ieee80211_20.c,v 1.5 2019/03/01 11:06:56 pgoyette Exp $	*/
+/*	$NetBSD: ieee80211_20.c,v 1.5.4.2 2019/06/10 22:06:58 christos Exp $	*/
 /*-
  * Copyright (c) 2001 Atsushi Onoe
  * Copyright (c) 2002-2005 Sam Leffler, Errno Consulting
@@ -36,7 +36,7 @@
 __FBSDID("$FreeBSD: src/sys/net80211/ieee80211_ioctl.c,v 1.35 2005/08/30 14:27:47 avatar Exp $");
 #endif
 #ifdef __NetBSD__
-__KERNEL_RCSID(0, "$NetBSD: ieee80211_20.c,v 1.5 2019/03/01 11:06:56 pgoyette Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ieee80211_20.c,v 1.5.4.2 2019/06/10 22:06:58 christos Exp $");
 #endif
 
 /*
@@ -93,7 +93,7 @@ ieee80211_get_ostats(struct ieee80211_ostats *ostats,
 }
 
 static int
-ieee80211_20_ioctl(struct ieee80211com *ic, u_long cmd, void *data)
+ieee80211_20_ioctl(struct ieee80211vap *vap, u_long cmd, void *data)
 {
 	struct ieee80211_ostats ostats;
 	struct ifreq *ifr;
@@ -104,10 +104,10 @@ ieee80211_20_ioctl(struct ieee80211com *ic, u_long cmd, void *data)
 	case OSIOCG80211ZSTATS:
 		s = splnet();
 		ifr = (struct ifreq *)data;
-		ieee80211_get_ostats(&ostats, &ic->ic_stats);
+		ieee80211_get_ostats(&ostats, &vap->iv_stats);
 		error = copyout(&ostats, ifr->ifr_data, sizeof(ostats));
 		if (error == 0 && cmd == OSIOCG80211ZSTATS)
-			(void)memset(&ic->ic_stats, 0, sizeof(ic->ic_stats));
+			(void)memset(&vap->iv_stats, 0, sizeof(vap->iv_stats));
 		splx(s);
 		return error;
 	default:

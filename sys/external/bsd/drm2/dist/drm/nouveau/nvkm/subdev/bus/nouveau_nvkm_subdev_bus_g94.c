@@ -1,4 +1,4 @@
-/*	$NetBSD: nouveau_nvkm_subdev_bus_g94.c,v 1.2 2018/08/27 04:58:33 riastradh Exp $	*/
+/*	$NetBSD: nouveau_nvkm_subdev_bus_g94.c,v 1.2.6.2 2019/06/10 22:08:20 christos Exp $	*/
 
 /*
  * Copyright 2012 Nouveau Community
@@ -25,7 +25,7 @@
  *          Ben Skeggs
  */
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: nouveau_nvkm_subdev_bus_g94.c,v 1.2 2018/08/27 04:58:33 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: nouveau_nvkm_subdev_bus_g94.c,v 1.2.6.2 2019/06/10 22:08:20 christos Exp $");
 
 #include "priv.h"
 

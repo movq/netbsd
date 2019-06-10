@@ -1,4 +1,4 @@
-/*	$NetBSD: threads.h,v 1.2 2019/04/24 18:47:54 kamil Exp $	*/
+/*	$NetBSD: threads.h,v 1.2.2.2 2019/06/10 22:05:26 christos Exp $	*/
 
 /*-
  * Copyright (c) 2016 The NetBSD Foundation, Inc.

@@ -1,4 +1,4 @@
-#	$NetBSD: netbsd32.mk,v 1.1 2019/02/04 21:57:47 mrg Exp $
+#	$NetBSD: netbsd32.mk,v 1.1.4.2 2019/06/10 22:07:01 christos Exp $
 
 # makefile fragment that tells you if you should support netbsd32 or not.
 # include this and check ${COMPAT_USE_NETBSD32} != "no".

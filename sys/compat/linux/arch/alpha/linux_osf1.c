@@ -1,4 +1,4 @@
-/*	$NetBSD: linux_osf1.c,v 1.3 2019/04/06 03:06:28 thorpej Exp $	*/
+/*	$NetBSD: linux_osf1.c,v 1.3.4.2 2019/06/10 22:06:59 christos Exp $	*/
 
 /*
  * Copyright (c) 1999 Christopher G. Demetriou.  All rights reserved.
@@ -31,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: linux_osf1.c,v 1.3 2019/04/06 03:06:28 thorpej Exp $");
+__KERNEL_RCSID(0, "$NetBSD: linux_osf1.c,v 1.3.4.2 2019/06/10 22:06:59 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

@@ -1,4 +1,4 @@
-/* $NetBSD: umbctl.c,v 1.2 2018/08/02 03:40:51 roy Exp $ */
+/* $NetBSD: umbctl.c,v 1.2.4.2 2019/06/10 22:05:36 christos Exp $ */
 /*
  * Copyright (c) 2018 Pierre Pronchery <khorben@defora.org>
  *

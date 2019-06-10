@@ -1,4 +1,4 @@
-/*	$NetBSD: nvpair_impl.h,v 1.2 2018/09/08 14:02:15 christos Exp $	*/
+/*	$NetBSD: nvpair_impl.h,v 1.2.6.2 2019/06/10 22:08:38 christos Exp $	*/
 
 /*-
  * SPDX-License-Identifier: BSD-2-Clause-FreeBSD

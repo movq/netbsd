@@ -1,4 +1,4 @@
-/*	$NetBSD: nvmm_ioctl.h,v 1.7 2019/05/01 09:20:21 maxv Exp $	*/
+/*	$NetBSD: nvmm_ioctl.h,v 1.7.2.2 2019/06/10 22:07:14 christos Exp $	*/
 
 /*
  * Copyright (c) 2018 The NetBSD Foundation, Inc.

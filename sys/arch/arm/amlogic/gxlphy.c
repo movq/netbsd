@@ -1,4 +1,4 @@
-/* $NetBSD: gxlphy.c,v 1.1 2019/04/21 11:02:32 jmcneill Exp $ */
+/* $NetBSD: gxlphy.c,v 1.1.2.2 2019/06/10 22:05:51 christos Exp $ */
 
 /*
  * Copyright (c) 2019 Jared McNeill <jmcneill@invisible.ca>
@@ -31,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: gxlphy.c,v 1.1 2019/04/21 11:02:32 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: gxlphy.c,v 1.1.2.2 2019/06/10 22:05:51 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

@@ -1,4 +1,4 @@
-/*	$NetBSD: of_device.h,v 1.1 2018/08/27 06:36:35 riastradh Exp $	*/
+/*	$NetBSD: of_device.h,v 1.1.6.2 2019/06/10 22:08:31 christos Exp $	*/
 
 /*-
  * Copyright (c) 2018 The NetBSD Foundation, Inc.

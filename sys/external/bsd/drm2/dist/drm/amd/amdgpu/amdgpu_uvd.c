@@ -1,4 +1,4 @@
-/*	$NetBSD: amdgpu_uvd.c,v 1.4 2019/01/01 08:07:47 maya Exp $	*/
+/*	$NetBSD: amdgpu_uvd.c,v 1.4.4.2 2019/06/10 22:07:58 christos Exp $	*/
 
 /*
  * Copyright 2011 Advanced Micro Devices, Inc.
@@ -31,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: amdgpu_uvd.c,v 1.4 2019/01/01 08:07:47 maya Exp $");
+__KERNEL_RCSID(0, "$NetBSD: amdgpu_uvd.c,v 1.4.4.2 2019/06/10 22:07:58 christos Exp $");
 
 #include <linux/firmware.h>
 #include <linux/module.h>

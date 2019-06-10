@@ -1,4 +1,4 @@
-/*	$NetBSD: gk104.h,v 1.3 2018/08/27 07:41:51 riastradh Exp $	*/
+/*	$NetBSD: gk104.h,v 1.3.6.2 2019/06/10 22:08:17 christos Exp $	*/
 
 #ifndef __GK104_FIFO_H__
 #define __GK104_FIFO_H__

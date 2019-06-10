@@ -1,4 +1,4 @@
-/* $NetBSD: gic_v2m.h,v 1.1 2018/10/21 00:42:05 jmcneill Exp $ */
+/* $NetBSD: gic_v2m.h,v 1.1.6.2 2019/06/10 22:05:52 christos Exp $ */
 
 /*-
  * Copyright (c) 2018 The NetBSD Foundation, Inc.

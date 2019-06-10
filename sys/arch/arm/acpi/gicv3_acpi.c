@@ -1,4 +1,4 @@
-/* $NetBSD: gicv3_acpi.c,v 1.3 2018/11/12 12:56:05 jmcneill Exp $ */
+/* $NetBSD: gicv3_acpi.c,v 1.3.6.2 2019/06/10 22:05:50 christos Exp $ */
 
 /*-
  * Copyright (c) 2018 The NetBSD Foundation, Inc.
@@ -34,7 +34,7 @@
 #define	_INTR_PRIVATE
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: gicv3_acpi.c,v 1.3 2018/11/12 12:56:05 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: gicv3_acpi.c,v 1.3.6.2 2019/06/10 22:05:50 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/bus.h>

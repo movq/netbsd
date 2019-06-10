@@ -1,4 +1,4 @@
-$NetBSD: version,v 1.10 2019/04/21 22:30:41 thorpej Exp $
+$NetBSD: version,v 1.10.2.2 2019/06/10 22:09:56 christos Exp $
 
 NOTE ANY CHANGES YOU MAKE TO THE EFI BOOTLOADER HERE.  The format of this
 file is important - make sure the entries are appended on end, last item

@@ -1,4 +1,4 @@
-/*	$NetBSD: nouveau_nvkm_subdev_instmem_nv50.c,v 1.5 2018/08/27 14:18:18 riastradh Exp $	*/
+/*	$NetBSD: nouveau_nvkm_subdev_instmem_nv50.c,v 1.5.6.2 2019/06/10 22:08:22 christos Exp $	*/
 
 /*
  * Copyright 2012 Red Hat Inc.
@@ -24,7 +24,7 @@
  * Authors: Ben Skeggs
  */
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: nouveau_nvkm_subdev_instmem_nv50.c,v 1.5 2018/08/27 14:18:18 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: nouveau_nvkm_subdev_instmem_nv50.c,v 1.5.6.2 2019/06/10 22:08:22 christos Exp $");
 
 #define nv50_instmem(p) container_of((p), struct nv50_instmem, base)
 #include "priv.h"

@@ -1,4 +1,4 @@
-/*	$NetBSD: os.h,v 1.4 2018/08/27 07:35:13 riastradh Exp $	*/
+/*	$NetBSD: os.h,v 1.4.6.2 2019/06/10 22:08:14 christos Exp $	*/
 
 #ifndef __NOUVEAU_OS_H__
 #define __NOUVEAU_OS_H__

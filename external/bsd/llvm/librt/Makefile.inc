@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile.inc,v 1.3 2019/04/03 15:21:58 joerg Exp $
+#	$NetBSD: Makefile.inc,v 1.3.2.2 2019/06/10 21:50:58 christos Exp $
 
 LLVM_TOPLEVEL:=	${.PARSEDIR}/..
 NOSTATICLIB=	yes

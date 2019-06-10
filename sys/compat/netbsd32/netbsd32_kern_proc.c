@@ -1,4 +1,4 @@
-/*	$NetBSD: netbsd32_kern_proc.c,v 1.4 2019/03/01 11:06:56 pgoyette Exp $	*/
+/*	$NetBSD: netbsd32_kern_proc.c,v 1.4.4.2 2019/06/10 22:07:02 christos Exp $	*/
 
 /*-
  * Copyright (c) 1999, 2006, 2007, 2008 The NetBSD Foundation, Inc.
@@ -62,7 +62,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: netbsd32_kern_proc.c,v 1.4 2019/03/01 11:06:56 pgoyette Exp $");
+__KERNEL_RCSID(0, "$NetBSD: netbsd32_kern_proc.c,v 1.4.4.2 2019/06/10 22:07:02 christos Exp $");
 
 #ifdef _KERNEL_OPT
 #include "opt_kstack.h"

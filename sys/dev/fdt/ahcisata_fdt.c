@@ -1,4 +1,4 @@
-/* $NetBSD: ahcisata_fdt.c,v 1.1 2018/09/03 23:15:12 jmcneill Exp $ */
+/* $NetBSD: ahcisata_fdt.c,v 1.1.6.2 2019/06/10 22:07:07 christos Exp $ */
 
 /*-
  * Copyright (c) 2018 Jared McNeill <jmcneill@invisible.ca>
@@ -28,7 +28,7 @@
 
 #include <sys/cdefs.h>
 
-__KERNEL_RCSID(0, "$NetBSD: ahcisata_fdt.c,v 1.1 2018/09/03 23:15:12 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ahcisata_fdt.c,v 1.1.6.2 2019/06/10 22:07:07 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/bus.h>

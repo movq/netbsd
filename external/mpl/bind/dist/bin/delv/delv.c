@@ -1,4 +1,4 @@
-/*	$NetBSD: delv.c,v 1.4 2019/02/24 20:01:26 christos Exp $	*/
+/*	$NetBSD: delv.c,v 1.4.2.2 2019/06/10 22:02:58 christos Exp $	*/
 
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")

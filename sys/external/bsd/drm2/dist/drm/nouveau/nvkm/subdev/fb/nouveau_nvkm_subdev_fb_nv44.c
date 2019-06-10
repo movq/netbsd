@@ -1,4 +1,4 @@
-/*	$NetBSD: nouveau_nvkm_subdev_fb_nv44.c,v 1.2 2018/08/27 04:58:33 riastradh Exp $	*/
+/*	$NetBSD: nouveau_nvkm_subdev_fb_nv44.c,v 1.2.6.2 2019/06/10 22:08:21 christos Exp $	*/
 
 /*
  * Copyright (C) 2010 Francisco Jerez.
@@ -26,7 +26,7 @@
  *
  */
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: nouveau_nvkm_subdev_fb_nv44.c,v 1.2 2018/08/27 04:58:33 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: nouveau_nvkm_subdev_fb_nv44.c,v 1.2.6.2 2019/06/10 22:08:21 christos Exp $");
 
 #include "priv.h"
 #include "ram.h"

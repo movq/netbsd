@@ -1,4 +1,4 @@
-/*	$NetBSD: netbsd32_machdep_13.c,v 1.3 2019/01/30 10:11:11 hannken Exp $	*/
+/*	$NetBSD: netbsd32_machdep_13.c,v 1.3.4.2 2019/06/10 22:06:48 christos Exp $	*/
 
 /*
  * Copyright (c) 1998, 2001 Matthew R. Green
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: netbsd32_machdep_13.c,v 1.3 2019/01/30 10:11:11 hannken Exp $");
+__KERNEL_RCSID(0, "$NetBSD: netbsd32_machdep_13.c,v 1.3.4.2 2019/06/10 22:06:48 christos Exp $");
 
 #ifdef _KERNEL_OPT
 #include "opt_compat_netbsd.h"

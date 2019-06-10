@@ -1,4 +1,4 @@
-/* $NetBSD: gic_v2m.c,v 1.5 2018/12/07 17:56:41 jakllsch Exp $ */
+/* $NetBSD: gic_v2m.c,v 1.5.4.2 2019/06/10 22:05:52 christos Exp $ */
 
 /*-
  * Copyright (c) 2018 The NetBSD Foundation, Inc.
@@ -32,7 +32,7 @@
 #define _INTR_PRIVATE
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: gic_v2m.c,v 1.5 2018/12/07 17:56:41 jakllsch Exp $");
+__KERNEL_RCSID(0, "$NetBSD: gic_v2m.c,v 1.5.4.2 2019/06/10 22:05:52 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/kmem.h>

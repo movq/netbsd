@@ -1,4 +1,4 @@
-/*	$NetBSD: tprof_x86.c,v 1.8 2019/05/29 17:09:18 maxv Exp $	*/
+/*	$NetBSD: tprof_x86.c,v 1.8.2.2 2019/06/10 22:10:43 christos Exp $	*/
 
 /*
  * Copyright (c) 2018-2019 The NetBSD Foundation, Inc.

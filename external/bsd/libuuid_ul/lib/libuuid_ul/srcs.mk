@@ -1,4 +1,4 @@
-#	$NetBSD: srcs.mk,v 1.1 2019/03/08 09:58:23 mrg Exp $
+#	$NetBSD: srcs.mk,v 1.1.2.2 2019/06/10 21:45:03 christos Exp $
 
 # Sources and flags for libuuid_ul.
 

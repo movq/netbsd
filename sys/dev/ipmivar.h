@@ -1,4 +1,4 @@
-/* $NetBSD: ipmivar.h,v 1.3 2019/05/18 08:38:00 mlelstv Exp $ */
+/* $NetBSD: ipmivar.h,v 1.3.2.2 2019/06/10 22:07:04 christos Exp $ */
 
 /*
  * Copyright (c) 2005 Jordan Hargrave

@@ -1,4 +1,4 @@
-/* $NetBSD: tprof_armv7.c,v 1.1 2018/07/15 23:50:53 jmcneill Exp $ */
+/* $NetBSD: tprof_armv7.c,v 1.1.4.2 2019/06/10 22:10:43 christos Exp $ */
 
 /*-
  * Copyright (c) 2018 Jared McNeill <jmcneill@invisible.ca>

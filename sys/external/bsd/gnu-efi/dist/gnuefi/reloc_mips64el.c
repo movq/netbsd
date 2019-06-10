@@ -1,4 +1,4 @@
-/*	$NetBSD: reloc_mips64el.c,v 1.1.1.1 2018/08/16 18:17:47 jmcneill Exp $	*/
+/*	$NetBSD: reloc_mips64el.c,v 1.1.1.1.6.2 2019/06/10 22:08:34 christos Exp $	*/
 
 /* reloc_mips64el.c - position independent MIPS64 ELF shared object relocator
    Copyright (C) 2014 Linaro Ltd. <ard.biesheuvel@linaro.org>

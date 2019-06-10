@@ -1,9 +1,9 @@
-/* $NetBSD: cycv_clkmgr.c,v 1.2 2019/01/17 12:49:53 skrll Exp $ */
+/* $NetBSD: cycv_clkmgr.c,v 1.2.4.2 2019/06/10 22:05:50 christos Exp $ */
 
 /* This file is in the public domain. */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: cycv_clkmgr.c,v 1.2 2019/01/17 12:49:53 skrll Exp $");
+__KERNEL_RCSID(0, "$NetBSD: cycv_clkmgr.c,v 1.2.4.2 2019/06/10 22:05:50 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/bus.h>

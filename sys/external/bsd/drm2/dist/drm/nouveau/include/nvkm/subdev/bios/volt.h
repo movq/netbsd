@@ -1,4 +1,4 @@
-/*	$NetBSD: volt.h,v 1.2 2018/08/27 04:58:30 riastradh Exp $	*/
+/*	$NetBSD: volt.h,v 1.2.6.2 2019/06/10 22:08:15 christos Exp $	*/
 
 #ifndef __NVBIOS_VOLT_H__
 #define __NVBIOS_VOLT_H__

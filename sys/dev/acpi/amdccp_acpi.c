@@ -1,4 +1,4 @@
-/* $NetBSD: amdccp_acpi.c,v 1.2 2018/10/21 11:09:20 jmcneill Exp $ */
+/* $NetBSD: amdccp_acpi.c,v 1.2.4.2 2019/06/10 22:07:05 christos Exp $ */
 
 /*
  * Copyright (c) 2018 Jonathan A. Kollasch
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: amdccp_acpi.c,v 1.2 2018/10/21 11:09:20 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: amdccp_acpi.c,v 1.2.4.2 2019/06/10 22:07:05 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/bus.h>

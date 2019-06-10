@@ -1,4 +1,4 @@
-/*	$NetBSD: VersionInfo.h,v 1.2 2018/08/12 13:02:30 christos Exp $	*/
+/*	$NetBSD: VersionInfo.h,v 1.2.4.2 2019/06/10 22:04:25 christos Exp $	*/
 
 // VersionInfo.h: interface for the CVersionInfo class.
 //

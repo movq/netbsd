@@ -1,4 +1,4 @@
-/*	$NetBSD: eficompiler.h,v 1.2 2018/08/16 18:24:35 jmcneill Exp $	*/
+/*	$NetBSD: eficompiler.h,v 1.2.6.2 2019/06/10 22:08:35 christos Exp $	*/
 
 /*++
 

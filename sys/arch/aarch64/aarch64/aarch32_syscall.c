@@ -1,4 +1,4 @@
-/*	$NetBSD: aarch32_syscall.c,v 1.3 2019/04/12 09:29:26 ryo Exp $	*/
+/*	$NetBSD: aarch32_syscall.c,v 1.3.4.2 2019/06/10 22:05:42 christos Exp $	*/
 
 /*
  * Copyright (c) 2018 Ryo Shimizu <ryo@nerv.org>
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: aarch32_syscall.c,v 1.3 2019/04/12 09:29:26 ryo Exp $");
+__KERNEL_RCSID(0, "$NetBSD: aarch32_syscall.c,v 1.3.4.2 2019/06/10 22:05:42 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/ktrace.h>

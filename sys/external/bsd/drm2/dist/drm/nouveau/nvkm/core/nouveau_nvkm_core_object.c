@@ -1,4 +1,4 @@
-/*	$NetBSD: nouveau_nvkm_core_object.c,v 1.6 2018/08/27 14:54:33 riastradh Exp $	*/
+/*	$NetBSD: nouveau_nvkm_core_object.c,v 1.6.6.2 2019/06/10 22:08:15 christos Exp $	*/
 
 /*
  * Copyright 2012 Red Hat Inc.
@@ -24,7 +24,7 @@
  * Authors: Ben Skeggs
  */
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: nouveau_nvkm_core_object.c,v 1.6 2018/08/27 14:54:33 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: nouveau_nvkm_core_object.c,v 1.6.6.2 2019/06/10 22:08:15 christos Exp $");
 
 #include <core/object.h>
 #include <core/client.h>

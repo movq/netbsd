@@ -1,4 +1,4 @@
-/*	$NetBSD: nouveau_nvkm_subdev_bios_shadow.c,v 1.3 2018/08/27 07:37:58 riastradh Exp $	*/
+/*	$NetBSD: nouveau_nvkm_subdev_bios_shadow.c,v 1.3.6.2 2019/06/10 22:08:20 christos Exp $	*/
 
 /*
  * Copyright 2014 Red Hat Inc.
@@ -24,7 +24,7 @@
  * Authors: Ben Skeggs <bskeggs@redhat.com>
  */
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: nouveau_nvkm_subdev_bios_shadow.c,v 1.3 2018/08/27 07:37:58 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: nouveau_nvkm_subdev_bios_shadow.c,v 1.3.6.2 2019/06/10 22:08:20 christos Exp $");
 
 #include "priv.h"
 

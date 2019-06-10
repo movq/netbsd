@@ -1,4 +1,4 @@
-/*	$NetBSD: efishellparm.h,v 1.1.1.1 2018/08/16 18:17:47 jmcneill Exp $	*/
+/*	$NetBSD: efishellparm.h,v 1.1.1.1.6.2 2019/06/10 22:08:35 christos Exp $	*/
 
 /** @file
   EFI_SHELL_PARAMETERS_PROTOCOL as defined in the UEFI Shell 2.0 specification.

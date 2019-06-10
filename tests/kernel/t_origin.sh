@@ -1,4 +1,4 @@
-#	$NetBSD: t_origin.sh,v 1.1 2019/06/07 21:18:16 christos Exp $
+#	$NetBSD: t_origin.sh,v 1.1.2.2 2019/06/10 22:10:01 christos Exp $
 #
 # Copyright (c) 2019 The NetBSD Foundation, Inc.
 # All rights reserved.

@@ -1,4 +1,4 @@
-# $NetBSD: Makefile,v 1.1 2019/03/10 02:29:52 mrg Exp $
+# $NetBSD: Makefile,v 1.1.2.2 2019/06/10 22:02:38 christos Exp $
 
 # Link the gallium mega driver.
 

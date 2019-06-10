@@ -1,4 +1,4 @@
-/*	$NetBSD: amdgpu_ioc32.c,v 1.2 2018/08/27 04:58:19 riastradh Exp $	*/
+/*	$NetBSD: amdgpu_ioc32.c,v 1.2.6.2 2019/06/10 22:07:58 christos Exp $	*/
 
 /**
  * \file amdgpu_ioc32.c
@@ -30,7 +30,7 @@
  * IN THE SOFTWARE.
  */
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: amdgpu_ioc32.c,v 1.2 2018/08/27 04:58:19 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: amdgpu_ioc32.c,v 1.2.6.2 2019/06/10 22:07:58 christos Exp $");
 
 #include <linux/compat.h>
 

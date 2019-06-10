@@ -1,4 +1,4 @@
-/*	$NetBSD: kleak.h,v 1.1 2018/12/02 21:00:13 maxv Exp $	*/
+/*	$NetBSD: kleak.h,v 1.1.6.2 2019/06/10 22:05:47 christos Exp $	*/
 
 /*
  * Copyright (c) 2018 The NetBSD Foundation, Inc.

@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.2 2018/11/19 20:00:28 aymeric Exp $
+#	$NetBSD: Makefile,v 1.2.2.2 2019/06/10 22:10:16 christos Exp $
 
 HOSTPROG=	${_TOOL_PREFIX}xz
 HOST_SRCDIR=	external/public-domain/xz/bin/xz

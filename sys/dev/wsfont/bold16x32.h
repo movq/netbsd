@@ -1,4 +1,4 @@
-/*	 $NetBSD: bold16x32.h,v 1.1 2019/04/07 13:48:27 jmcneill Exp $ */
+/*	 $NetBSD: bold16x32.h,v 1.1.4.2 2019/06/10 22:07:36 christos Exp $ */
 
 /*-
  * Copyright (c) 1999-2019 The NetBSD Foundation, Inc.

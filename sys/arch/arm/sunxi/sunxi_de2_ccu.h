@@ -1,4 +1,4 @@
-/* $NetBSD: sunxi_de2_ccu.h,v 1.1 2019/01/22 20:17:36 jmcneill Exp $ */
+/* $NetBSD: sunxi_de2_ccu.h,v 1.1.6.2 2019/06/10 22:05:56 christos Exp $ */
 
 /*-
  * Copyright (c) 2019 Jared McNeill <jmcneill@invisible.ca>

@@ -1,4 +1,4 @@
-/*	$NetBSD: virtgpu_prime.c,v 1.2 2018/08/27 04:58:37 riastradh Exp $	*/
+/*	$NetBSD: virtgpu_prime.c,v 1.2.6.2 2019/06/10 22:08:28 christos Exp $	*/
 
 /*
  * Copyright 2014 Canonical
@@ -25,7 +25,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: virtgpu_prime.c,v 1.2 2018/08/27 04:58:37 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: virtgpu_prime.c,v 1.2.6.2 2019/06/10 22:08:28 christos Exp $");
 
 #include "virtgpu_drv.h"
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: rk3399_pcie_phy.c,v 1.1 2019/03/07 00:35:22 jakllsch Exp $	*/
+/*	$NetBSD: rk3399_pcie_phy.c,v 1.1.4.2 2019/06/10 22:05:55 christos Exp $	*/
 /*	$OpenBSD: rkpcie.c,v 1.6 2018/08/28 09:33:18 jsg Exp $	*/
 /*
  * Copyright (c) 2018 Mark Kettenis <kettenis@openbsd.org>
@@ -18,7 +18,7 @@
 
 #include <sys/cdefs.h>
 
-__KERNEL_RCSID(1, "$NetBSD: rk3399_pcie_phy.c,v 1.1 2019/03/07 00:35:22 jakllsch Exp $");
+__KERNEL_RCSID(1, "$NetBSD: rk3399_pcie_phy.c,v 1.1.4.2 2019/06/10 22:05:55 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

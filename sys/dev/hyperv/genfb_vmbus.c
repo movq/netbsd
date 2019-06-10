@@ -1,4 +1,4 @@
-/*	$NetBSD: genfb_vmbus.c,v 1.1 2019/05/24 14:28:48 nonaka Exp $	*/
+/*	$NetBSD: genfb_vmbus.c,v 1.1.2.2 2019/06/10 22:07:09 christos Exp $	*/
 
 /*-
  * Copyright (c) 2007 Michael Lorenz
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: genfb_vmbus.c,v 1.1 2019/05/24 14:28:48 nonaka Exp $");
+__KERNEL_RCSID(0, "$NetBSD: genfb_vmbus.c,v 1.1.2.2 2019/06/10 22:07:09 christos Exp $");
 
 #include "opt_wsfb.h"
 #include "opt_genfb.h"

@@ -1,4 +1,4 @@
-/*	$NetBSD: msgio.c,v 1.2 2018/09/08 14:02:15 christos Exp $	*/
+/*	$NetBSD: msgio.c,v 1.2.6.2 2019/06/10 22:08:38 christos Exp $	*/
 
 /*-
  * SPDX-License-Identifier: BSD-2-Clause-FreeBSD
@@ -36,7 +36,7 @@
 #ifdef __FreeBSD__
 __FBSDID("$FreeBSD: head/lib/libnv/msgio.c 326219 2017-11-26 02:00:33Z pfg $");
 #else
-__RCSID("$NetBSD: msgio.c,v 1.2 2018/09/08 14:02:15 christos Exp $");
+__RCSID("$NetBSD: msgio.c,v 1.2.6.2 2019/06/10 22:08:38 christos Exp $");
 #endif
 
 #include <sys/param.h>

@@ -1,4 +1,4 @@
-/* $NetBSD: meson_pinctrl.h,v 1.3 2019/04/19 19:07:56 jmcneill Exp $ */
+/* $NetBSD: meson_pinctrl.h,v 1.3.4.2 2019/06/10 22:05:51 christos Exp $ */
 
 /*-
  * Copyright (c) 2019 Jared McNeill <jmcneill@invisible.ca>

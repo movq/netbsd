@@ -1,4 +1,4 @@
-# $NetBSD: XEN3PAE_PVHVM,v 1.1 2019/02/14 08:18:25 cherry Exp $
+# $NetBSD: XEN3PAE_PVHVM,v 1.1.4.2 2019/06/10 22:06:20 christos Exp $
 
 include 	"arch/xen/conf/std.xen"
 

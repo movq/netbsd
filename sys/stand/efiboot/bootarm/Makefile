@@ -1,4 +1,4 @@
-# $NetBSD: Makefile,v 1.1 2019/03/30 12:48:50 jmcneill Exp $
+# $NetBSD: Makefile,v 1.1.4.2 2019/06/10 22:09:56 christos Exp $
 
 PROG=		bootarm.efi
 OBJFMT=		binary

@@ -1,4 +1,4 @@
-/*	$NetBSD: intel_dsi_panel_vbt.c,v 1.2 2018/08/27 04:58:24 riastradh Exp $	*/
+/*	$NetBSD: intel_dsi_panel_vbt.c,v 1.2.6.2 2019/06/10 22:08:06 christos Exp $	*/
 
 /*
  * Copyright © 2014 Intel Corporation
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: intel_dsi_panel_vbt.c,v 1.2 2018/08/27 04:58:24 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: intel_dsi_panel_vbt.c,v 1.2.6.2 2019/06/10 22:08:06 christos Exp $");
 
 #include <drm/drmP.h>
 #include <drm/drm_crtc.h>

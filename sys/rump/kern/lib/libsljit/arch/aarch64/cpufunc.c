@@ -1,4 +1,4 @@
-/*	$NetBSD: cpufunc.c,v 1.1 2019/01/21 00:30:14 alnsn Exp $	*/
+/*	$NetBSD: cpufunc.c,v 1.1.6.2 2019/06/10 22:09:52 christos Exp $	*/
 
 /*-
  * Copyright (c) 2019 Alexander Nasonov.
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: cpufunc.c,v 1.1 2019/01/21 00:30:14 alnsn Exp $");
+__KERNEL_RCSID(0, "$NetBSD: cpufunc.c,v 1.1.6.2 2019/06/10 22:09:52 christos Exp $");
 
 /*
  * Barebone implementation of arm cpufunc routines for rump.

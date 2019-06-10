@@ -1,4 +1,4 @@
-/* $NetBSD: ssdfbvar.h,v 1.2 2019/03/17 04:03:17 tnn Exp $ */
+/* $NetBSD: ssdfbvar.h,v 1.2.4.2 2019/06/10 22:07:11 christos Exp $ */
 
 /*
  * Copyright (c) 2019 The NetBSD Foundation, Inc.

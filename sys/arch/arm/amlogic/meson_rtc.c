@@ -1,4 +1,4 @@
-/* $NetBSD: meson_rtc.c,v 1.2 2019/01/20 20:22:13 jmcneill Exp $ */
+/* $NetBSD: meson_rtc.c,v 1.2.6.2 2019/06/10 22:05:51 christos Exp $ */
 
 /*-
  * Copyright (c) 2015 The NetBSD Foundation, Inc.
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: meson_rtc.c,v 1.2 2019/01/20 20:22:13 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: meson_rtc.c,v 1.2.6.2 2019/06/10 22:05:51 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/atomic.h>

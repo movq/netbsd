@@ -1,4 +1,4 @@
-#	$NetBSD: files.common,v 1.4 2019/05/17 07:37:11 msaitoh Exp $
+#	$NetBSD: files.common,v 1.4.2.2 2019/06/10 22:06:58 christos Exp $
 
 #
 # Generic utility files, used by various compat options.

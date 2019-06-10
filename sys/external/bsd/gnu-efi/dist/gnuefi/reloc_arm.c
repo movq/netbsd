@@ -1,4 +1,4 @@
-/*	$NetBSD: reloc_arm.c,v 1.2 2019/03/30 12:46:16 jmcneill Exp $	*/
+/*	$NetBSD: reloc_arm.c,v 1.2.4.2 2019/06/10 22:08:34 christos Exp $	*/
 
 /* reloc_arm.c - position independent x86 ELF shared object relocator
    Copyright (C) 2014 Linaro Ltd. <ard.biesheuvel@linaro.org>

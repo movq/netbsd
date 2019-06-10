@@ -1,4 +1,4 @@
-/*	$NetBSD: expandm.c,v 1.12 2019/01/24 22:07:14 mrg Exp $	*/
+/*	$NetBSD: expandm.c,v 1.12.2.2 2019/06/10 22:05:28 christos Exp $	*/
 
 /*-
  * Copyright (c) 2019 The NetBSD Foundation, Inc.
@@ -29,7 +29,7 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: expandm.c,v 1.12 2019/01/24 22:07:14 mrg Exp $");
+__RCSID("$NetBSD: expandm.c,v 1.12.2.2 2019/06/10 22:05:28 christos Exp $");
 
 #include <limits.h>
 #include <stdio.h>

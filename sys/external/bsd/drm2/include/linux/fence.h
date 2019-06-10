@@ -1,4 +1,4 @@
-/*	$NetBSD: fence.h,v 1.15 2018/08/27 14:20:41 riastradh Exp $	*/
+/*	$NetBSD: fence.h,v 1.15.6.2 2019/06/10 22:08:31 christos Exp $	*/
 
 /*-
  * Copyright (c) 2018 The NetBSD Foundation, Inc.

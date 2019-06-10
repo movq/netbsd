@@ -1,4 +1,4 @@
-/*	$NetBSD: zoneverify.c,v 1.2 2019/01/09 16:55:12 christos Exp $	*/
+/*	$NetBSD: zoneverify.c,v 1.2.4.2 2019/06/10 22:04:36 christos Exp $	*/
 
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")

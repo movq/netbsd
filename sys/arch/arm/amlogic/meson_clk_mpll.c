@@ -1,4 +1,4 @@
-/* $NetBSD: meson_clk_mpll.c,v 1.2 2019/02/25 19:30:17 jmcneill Exp $ */
+/* $NetBSD: meson_clk_mpll.c,v 1.2.4.2 2019/06/10 22:05:51 christos Exp $ */
 
 /*-
  * Copyright (c) 2019 Jared McNeill <jmcneill@invisible.ca>
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: meson_clk_mpll.c,v 1.2 2019/02/25 19:30:17 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: meson_clk_mpll.c,v 1.2.4.2 2019/06/10 22:05:51 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/bus.h>

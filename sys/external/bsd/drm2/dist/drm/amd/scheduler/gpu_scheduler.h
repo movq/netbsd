@@ -1,4 +1,4 @@
-/*	$NetBSD: gpu_scheduler.h,v 1.4 2018/08/27 14:03:24 riastradh Exp $	*/
+/*	$NetBSD: gpu_scheduler.h,v 1.4.6.2 2019/06/10 22:08:04 christos Exp $	*/
 
 /*
  * Copyright 2015 Advanced Micro Devices, Inc.

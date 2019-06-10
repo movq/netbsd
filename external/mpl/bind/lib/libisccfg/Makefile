@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.1 2018/08/12 13:02:43 christos Exp $
+#	$NetBSD: Makefile,v 1.1.4.2 2019/06/10 22:04:53 christos Exp $
 
 LIB=isccfg
 

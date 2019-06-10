@@ -1,4 +1,4 @@
-/* $NetBSD: acpi_pci_machdep.h,v 1.2 2018/10/19 11:40:27 jmcneill Exp $ */
+/* $NetBSD: acpi_pci_machdep.h,v 1.2.6.2 2019/06/10 22:05:50 christos Exp $ */
 
 /*-
  * Copyright (c) 2018 The NetBSD Foundation, Inc.

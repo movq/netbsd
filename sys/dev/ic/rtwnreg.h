@@ -1,4 +1,4 @@
-/*	$NetBSD: rtwnreg.h,v 1.1 2018/06/29 04:02:10 thorpej Exp $	*/
+/*	$NetBSD: rtwnreg.h,v 1.1.8.2 2019/06/10 22:07:11 christos Exp $	*/
 /*	$OpenBSD: r92creg.h,v 1.16 2017/09/22 13:41:56 kevlo Exp $	*/
 
 /*-

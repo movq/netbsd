@@ -1,4 +1,4 @@
-/*	$NetBSD: nouveau_usif.h,v 1.3 2018/12/21 07:51:17 maya Exp $	*/
+/*	$NetBSD: nouveau_usif.h,v 1.3.4.2 2019/06/10 22:08:07 christos Exp $	*/
 
 #ifndef __NOUVEAU_USIF_H__
 #define __NOUVEAU_USIF_H__

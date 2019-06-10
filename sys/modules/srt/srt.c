@@ -1,4 +1,4 @@
-/*	$NetBSD: srt.c,v 1.1 2019/03/26 00:36:14 pgoyette Exp $ */
+/*	$NetBSD: srt.c,v 1.1.4.2 2019/06/10 22:09:39 christos Exp $ */
 
 /*-
  * Copyright (c) 2016 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: srt.c,v 1.1 2019/03/26 00:36:14 pgoyette Exp $");
+__KERNEL_RCSID(0, "$NetBSD: srt.c,v 1.1.4.2 2019/06/10 22:09:39 christos Exp $");
 
 #include <sys/errno.h>
 #include <sys/module.h>

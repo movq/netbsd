@@ -1,4 +1,4 @@
-/*	$NetBSD: i915_gem_render_state.c,v 1.9 2018/08/27 14:50:04 riastradh Exp $	*/
+/*	$NetBSD: i915_gem_render_state.c,v 1.9.6.2 2019/06/10 22:08:05 christos Exp $	*/
 
 /*
  * Copyright © 2014 Intel Corporation
@@ -28,7 +28,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: i915_gem_render_state.c,v 1.9 2018/08/27 14:50:04 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: i915_gem_render_state.c,v 1.9.6.2 2019/06/10 22:08:05 christos Exp $");
 
 #include "i915_drv.h"
 #include "intel_renderstate.h"

@@ -1,4 +1,4 @@
-/* $NetBSD: ipmi_acpi.c,v 1.3 2019/01/30 20:20:36 christos Exp $ */
+/* $NetBSD: ipmi_acpi.c,v 1.3.4.2 2019/06/10 22:07:05 christos Exp $ */
 
 /*-
  * Copyright (c) 2018 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ipmi_acpi.c,v 1.3 2019/01/30 20:20:36 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ipmi_acpi.c,v 1.3.4.2 2019/06/10 22:07:05 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/device.h>

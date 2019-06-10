@@ -1,4 +1,4 @@
-/*	$NetBSD: amdgpufb.c,v 1.1 2018/08/27 14:02:32 riastradh Exp $	*/
+/*	$NetBSD: amdgpufb.c,v 1.1.6.2 2019/06/10 22:07:56 christos Exp $	*/
 
 /*-
  * Copyright (c) 2018 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: amdgpufb.c,v 1.1 2018/08/27 14:02:32 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: amdgpufb.c,v 1.1.6.2 2019/06/10 22:07:56 christos Exp $");
 
 #include <sys/types.h>
 #include <sys/bus.h>

@@ -1,4 +1,4 @@
-/*	$NetBSD: amd_shared.h,v 1.2 2018/08/27 04:58:20 riastradh Exp $	*/
+/*	$NetBSD: amd_shared.h,v 1.2.6.2 2019/06/10 22:07:59 christos Exp $	*/
 
 /*
  * Copyright 2015 Advanced Micro Devices, Inc.

@@ -1,4 +1,4 @@
-/*	$NetBSD: kgdb_machdep.c,v 1.4 2018/08/05 18:42:48 reinoud Exp $	*/
+/*	$NetBSD: kgdb_machdep.c,v 1.4.6.2 2019/06/10 22:06:51 christos Exp $	*/
 
 /*
  * Copyright (c) 1996 Matthias Pfaller.
@@ -26,7 +26,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: kgdb_machdep.c,v 1.4 2018/08/05 18:42:48 reinoud Exp $");
+__KERNEL_RCSID(0, "$NetBSD: kgdb_machdep.c,v 1.4.6.2 2019/06/10 22:06:51 christos Exp $");
 
 #include "opt_ddb.h"
 #include "opt_kgdb.h"

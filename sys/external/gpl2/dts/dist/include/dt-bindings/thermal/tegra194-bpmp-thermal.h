@@ -1,4 +1,4 @@
-/*	$NetBSD: tegra194-bpmp-thermal.h,v 1.1.1.1 2019/05/25 11:29:13 jmcneill Exp $	*/
+/*	$NetBSD: tegra194-bpmp-thermal.h,v 1.1.1.1.2.2 2019/06/10 22:08:58 christos Exp $	*/
 
 /*
  * This header provides constants for binding nvidia,tegra194-bpmp-thermal.

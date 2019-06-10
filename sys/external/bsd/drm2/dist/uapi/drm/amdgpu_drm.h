@@ -1,4 +1,4 @@
-/*	$NetBSD: amdgpu_drm.h,v 1.2 2018/08/27 04:58:38 riastradh Exp $	*/
+/*	$NetBSD: amdgpu_drm.h,v 1.2.6.2 2019/06/10 22:08:30 christos Exp $	*/
 
 /* amdgpu_drm.h -- Public header for the amdgpu driver -*- linux-c -*-
  *

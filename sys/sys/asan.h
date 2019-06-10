@@ -1,4 +1,4 @@
-/*	$NetBSD: asan.h,v 1.10 2019/04/07 09:20:04 maxv Exp $	*/
+/*	$NetBSD: asan.h,v 1.10.4.2 2019/06/10 22:09:57 christos Exp $	*/
 
 /*
  * Copyright (c) 2018 The NetBSD Foundation, Inc.

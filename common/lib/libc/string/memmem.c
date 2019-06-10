@@ -25,7 +25,7 @@
 #if 0
 __FBSDID("$FreeBSD: head/lib/libc/string/memmem.c 315468 2017-03-18 00:53:24Z emaste $");
 #else
-__RCSID("$NetBSD: memmem.c,v 1.3 2018/10/15 19:32:48 christos Exp $");
+__RCSID("$NetBSD: memmem.c,v 1.3.2.2 2019/06/10 21:41:07 christos Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: tap.c,v 1.1 2019/03/24 11:20:26 pgoyette Exp $ */
+/*	$NetBSD: tap.c,v 1.1.4.2 2019/06/10 22:09:40 christos Exp $ */
 
 /*-
  * Copyright (c) 2016 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: tap.c,v 1.1 2019/03/24 11:20:26 pgoyette Exp $");
+__KERNEL_RCSID(0, "$NetBSD: tap.c,v 1.1.4.2 2019/06/10 22:09:40 christos Exp $");
 
 #include <sys/errno.h>
 #include <sys/module.h>

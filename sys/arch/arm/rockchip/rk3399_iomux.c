@@ -1,4 +1,4 @@
-/* $NetBSD: rk3399_iomux.c,v 1.4 2019/04/30 22:42:32 jmcneill Exp $ */
+/* $NetBSD: rk3399_iomux.c,v 1.4.2.2 2019/06/10 22:05:55 christos Exp $ */
 
 /*-
  * Copyright (c) 2018 Jared McNeill <jmcneill@invisible.ca>
@@ -29,7 +29,7 @@
 //#define RK3399_IOMUX_DEBUG
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: rk3399_iomux.c,v 1.4 2019/04/30 22:42:32 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: rk3399_iomux.c,v 1.4.2.2 2019/06/10 22:05:55 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/bus.h>

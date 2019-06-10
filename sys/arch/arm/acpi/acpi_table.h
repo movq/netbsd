@@ -1,4 +1,4 @@
-/* $NetBSD: acpi_table.h,v 1.1 2018/10/12 22:15:04 jmcneill Exp $ */
+/* $NetBSD: acpi_table.h,v 1.1.6.2 2019/06/10 22:05:50 christos Exp $ */
 
 /*-
  * Copyright (c) 2018 The NetBSD Foundation, Inc.

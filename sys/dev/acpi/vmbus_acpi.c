@@ -1,4 +1,4 @@
-/*	$NetBSD: vmbus_acpi.c,v 1.2 2019/05/24 14:28:48 nonaka Exp $	*/
+/*	$NetBSD: vmbus_acpi.c,v 1.2.2.2 2019/06/10 22:07:05 christos Exp $	*/
 
 /*
  * Copyright (c) 2018 Kimihiro Nonaka <nonaka@NetBSD.org>
@@ -26,7 +26,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: vmbus_acpi.c,v 1.2 2019/05/24 14:28:48 nonaka Exp $");
+__KERNEL_RCSID(0, "$NetBSD: vmbus_acpi.c,v 1.2.2.2 2019/06/10 22:07:05 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/device.h>

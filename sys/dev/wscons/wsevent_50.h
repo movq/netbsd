@@ -1,4 +1,4 @@
-/* $NetBSD: wsevent_50.h,v 1.2 2019/01/27 02:08:42 pgoyette Exp $	*/
+/* $NetBSD: wsevent_50.h,v 1.2.4.2 2019/06/10 22:07:36 christos Exp $	*/
 
 /*-
  * Copyright (c) 2018 The NetBSD Foundation, Inc.

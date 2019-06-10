@@ -1,4 +1,4 @@
-/* $NetBSD: rk_pwm.c,v 1.1 2019/05/01 10:41:33 jmcneill Exp $ */
+/* $NetBSD: rk_pwm.c,v 1.1.2.2 2019/06/10 22:05:55 christos Exp $ */
 
 /*-
  * Copyright (c) 2019 Jared McNeill <jmcneill@invisible.ca>
@@ -28,7 +28,7 @@
 
 #include <sys/cdefs.h>
 
-__KERNEL_RCSID(1, "$NetBSD: rk_pwm.c,v 1.1 2019/05/01 10:41:33 jmcneill Exp $");
+__KERNEL_RCSID(1, "$NetBSD: rk_pwm.c,v 1.1.2.2 2019/06/10 22:05:55 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/bus.h>

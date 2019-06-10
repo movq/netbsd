@@ -1,4 +1,4 @@
-/*	$NetBSD: uimax.c,v 1.1 2018/09/03 16:54:54 riastradh Exp $	*/
+/*	$NetBSD: uimax.c,v 1.1.6.2 2019/06/10 22:09:04 christos Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1991 Regents of the University of California.

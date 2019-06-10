@@ -1,4 +1,4 @@
-/* $NetBSD: psci_fdtvar.h,v 1.1 2018/09/10 11:05:12 ryo Exp $ */
+/* $NetBSD: psci_fdtvar.h,v 1.1.6.2 2019/06/10 22:05:53 christos Exp $ */
 
 /*-
  * Copyright (c) 2017 Jared McNeill <jmcneill@invisible.ca>

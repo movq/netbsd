@@ -1,4 +1,4 @@
-/*	$NetBSD: nv_impl.h,v 1.6 2019/02/12 12:49:23 rmind Exp $	*/
+/*	$NetBSD: nv_impl.h,v 1.6.4.2 2019/06/10 22:08:38 christos Exp $	*/
 
 /*-
  * SPDX-License-Identifier: BSD-2-Clause-FreeBSD

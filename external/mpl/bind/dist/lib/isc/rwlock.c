@@ -1,4 +1,4 @@
-/*	$NetBSD: rwlock.c,v 1.6 2019/02/24 20:01:31 christos Exp $	*/
+/*	$NetBSD: rwlock.c,v 1.6.2.2 2019/06/10 22:04:43 christos Exp $	*/
 
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")

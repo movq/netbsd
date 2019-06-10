@@ -1,4 +1,4 @@
-/*	$NetBSD: ubsan.c,v 1.5 2019/02/13 17:17:02 kamil Exp $	*/
+/*	$NetBSD: ubsan.c,v 1.5.2.2 2019/06/10 21:41:07 christos Exp $	*/
 
 /*-
  * Copyright (c) 2018 The NetBSD Foundation, Inc.
@@ -38,9 +38,9 @@
 
 #include <sys/cdefs.h>
 #if defined(_KERNEL)
-__KERNEL_RCSID(0, "$NetBSD: ubsan.c,v 1.5 2019/02/13 17:17:02 kamil Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ubsan.c,v 1.5.2.2 2019/06/10 21:41:07 christos Exp $");
 #else
-__RCSID("$NetBSD: ubsan.c,v 1.5 2019/02/13 17:17:02 kamil Exp $");
+__RCSID("$NetBSD: ubsan.c,v 1.5.2.2 2019/06/10 21:41:07 christos Exp $");
 #endif
 
 #if defined(_KERNEL)

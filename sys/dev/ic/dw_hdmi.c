@@ -1,4 +1,4 @@
-/* $NetBSD: dw_hdmi.c,v 1.1 2019/01/30 01:19:49 jmcneill Exp $ */
+/* $NetBSD: dw_hdmi.c,v 1.1.4.2 2019/06/10 22:07:10 christos Exp $ */
 
 /*-
  * Copyright (c) 2019 Jared D. McNeill <jmcneill@invisible.ca>
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: dw_hdmi.c,v 1.1 2019/01/30 01:19:49 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: dw_hdmi.c,v 1.1.4.2 2019/06/10 22:07:10 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/bus.h>

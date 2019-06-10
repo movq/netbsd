@@ -1,4 +1,4 @@
-#	$NetBSD: libloader.old.mk,v 1.1 2019/03/10 02:29:52 mrg Exp $
+#	$NetBSD: libloader.old.mk,v 1.1.2.2 2019/06/10 22:02:37 christos Exp $
 
 # makefile fragment for mesa src/loader
 

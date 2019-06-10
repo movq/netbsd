@@ -1,4 +1,4 @@
-/*	$NetBSD: kern_uipc_socket_50.c,v 1.2 2019/04/15 10:53:17 pgoyette Exp $	*/
+/*	$NetBSD: kern_uipc_socket_50.c,v 1.2.4.2 2019/06/10 22:06:58 christos Exp $	*/
 
 /*
  * Copyright (c) 2002, 2007, 2008, 2009 The NetBSD Foundation, Inc.
@@ -101,7 +101,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: kern_uipc_socket_50.c,v 1.2 2019/04/15 10:53:17 pgoyette Exp $");
+__KERNEL_RCSID(0, "$NetBSD: kern_uipc_socket_50.c,v 1.2.4.2 2019/06/10 22:06:58 christos Exp $");
 
 #if defined(_KERNEL_OPT)
 #include "opt_compat_netbsd.h"

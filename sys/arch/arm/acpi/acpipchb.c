@@ -1,4 +1,4 @@
-/* $NetBSD: acpipchb.c,v 1.7 2018/11/19 10:45:47 jmcneill Exp $ */
+/* $NetBSD: acpipchb.c,v 1.7.4.2 2019/06/10 22:05:50 christos Exp $ */
 
 /*-
  * Copyright (c) 2018 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: acpipchb.c,v 1.7 2018/11/19 10:45:47 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: acpipchb.c,v 1.7.4.2 2019/06/10 22:05:50 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/bus.h>

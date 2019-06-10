@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.1 2018/07/15 00:18:13 christos Exp $
+#	$NetBSD: Makefile,v 1.1.4.2 2019/06/10 21:55:38 christos Exp $
 
 GCC_MACHINE_ARCH=aarch64
 .include "../Makefile.arch_bits"

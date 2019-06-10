@@ -1,4 +1,4 @@
-/*	$NetBSD: compat_70_mod.c,v 1.3 2019/04/17 09:21:57 msaitoh Exp $	*/
+/*	$NetBSD: compat_70_mod.c,v 1.3.4.2 2019/06/10 22:06:58 christos Exp $	*/
 
 /*-
  * Copyright (c) 2018 The NetBSD Foundation, Inc.
@@ -38,7 +38,7 @@
 #endif
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: compat_70_mod.c,v 1.3 2019/04/17 09:21:57 msaitoh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: compat_70_mod.c,v 1.3.4.2 2019/06/10 22:06:58 christos Exp $");
 
 #include <sys/systm.h>
 #include <sys/module.h>

@@ -1,4 +1,4 @@
-/*	$NetBSD: dig.h,v 1.3 2019/01/09 16:54:59 christos Exp $	*/
+/*	$NetBSD: dig.h,v 1.3.2.2 2019/06/10 22:02:58 christos Exp $	*/
 
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")

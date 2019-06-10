@@ -1,4 +1,4 @@
-/*	$NetBSD: intel_runtime_pm.c,v 1.6 2018/09/13 08:25:55 mrg Exp $	*/
+/*	$NetBSD: intel_runtime_pm.c,v 1.6.4.2 2019/06/10 22:08:06 christos Exp $	*/
 
 /*
  * Copyright © 2012-2014 Intel Corporation
@@ -29,7 +29,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: intel_runtime_pm.c,v 1.6 2018/09/13 08:25:55 mrg Exp $");
+__KERNEL_RCSID(0, "$NetBSD: intel_runtime_pm.c,v 1.6.4.2 2019/06/10 22:08:06 christos Exp $");
 
 #include <linux/pm_runtime.h>
 #include <linux/vgaarb.h>

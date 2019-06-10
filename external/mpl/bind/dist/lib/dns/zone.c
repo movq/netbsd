@@ -1,4 +1,4 @@
-/*	$NetBSD: zone.c,v 1.5 2019/04/28 00:01:14 christos Exp $	*/
+/*	$NetBSD: zone.c,v 1.5.2.2 2019/06/10 22:04:36 christos Exp $	*/
 
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")

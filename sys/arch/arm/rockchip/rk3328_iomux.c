@@ -1,4 +1,4 @@
-/* $NetBSD: rk3328_iomux.c,v 1.2 2019/01/23 04:21:54 thorpej Exp $ */
+/* $NetBSD: rk3328_iomux.c,v 1.2.4.2 2019/06/10 22:05:55 christos Exp $ */
 
 /*-
  * Copyright (c) 2018 Jared McNeill <jmcneill@invisible.ca>
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: rk3328_iomux.c,v 1.2 2019/01/23 04:21:54 thorpej Exp $");
+__KERNEL_RCSID(0, "$NetBSD: rk3328_iomux.c,v 1.2.4.2 2019/06/10 22:05:55 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/bus.h>

@@ -1,4 +1,4 @@
-/* $NetBSD: fdt_memory.c,v 1.3 2018/11/01 10:48:48 jmcneill Exp $ */
+/* $NetBSD: fdt_memory.c,v 1.3.6.2 2019/06/10 22:06:06 christos Exp $ */
 
 /*-
  * Copyright (c) 2018 The NetBSD Foundation, Inc.
@@ -32,7 +32,7 @@
 #include "opt_bootconfig.h"
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: fdt_memory.c,v 1.3 2018/11/01 10:48:48 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: fdt_memory.c,v 1.3.6.2 2019/06/10 22:06:06 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/queue.h>
