@@ -1,4 +1,4 @@
-/*	$NetBSD: hypervvar.h,v 1.1 2019/05/24 14:28:48 nonaka Exp $	*/
+/*	$NetBSD: hypervvar.h,v 1.1.4.2 2019/06/12 10:17:32 martin Exp $	*/
 
 /*-
  * Copyright (c) 2009-2012,2016 Microsoft Corp.
