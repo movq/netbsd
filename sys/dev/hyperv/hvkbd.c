@@ -1,4 +1,4 @@
-/*	$NetBSD: hvkbd.c,v 1.1 2019/05/24 14:28:48 nonaka Exp $	*/
+/*	$NetBSD: hvkbd.c,v 1.1.4.2 2019/06/12 10:17:32 martin Exp $	*/
 
 /*-
  * Copyright (c) 2017 Microsoft Corp.
@@ -36,7 +36,7 @@
 #endif /* _KERNEL_OPT */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: hvkbd.c,v 1.1 2019/05/24 14:28:48 nonaka Exp $");
+__KERNEL_RCSID(0, "$NetBSD: hvkbd.c,v 1.1.4.2 2019/06/12 10:17:32 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
