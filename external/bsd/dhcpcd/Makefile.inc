@@ -1,15 +1,33 @@
-# $NetBSD: Makefile.inc,v 1.1 2017/03/31 21:02:08 roy Exp $
+# System definitions
 
-SRCDIR=		${NETBSDSRCDIR}/external/bsd/dhcpcd
-DIST=		${SRCDIR}/dist
+PICFLAG?=	-fPIC
 
-SED_SYS=	-e 's:@SYSCONFDIR@:/etc:g' \
-		-e 's:@DBDIR@:/var/db:g' \
-		-e 's:@LIBDIR@:/lib:g' \
-		-e 's:@RUNDIR@:/var/run:g' \
-		-e 's:@HOOKDIR@:/libexec/dhcpcd-hooks:g' \
-		-e 's:@SCRIPT@:/libexec/dhcpcd-run-hooks:g' \
-		-e 's:@SERVICEEXISTS@::g' \
-		-e 's:@SERVICECMD@::g' \
-		-e 's:@SERVICESTATUS@::g' \
-		-e 's:@STATUSARG@::g'
+BINMODE?=	0555
+NONBINMODE?=	0444
+MANMODE?=	${NONBINMODE}
+CONFMODE?=	0644
+
+CC?=		cc
+INSTALL?=	install
+LINT?=		lint
+SED?=		sed
+HOST_SH?=	/bin/sh
+
+# This isn't very portable, but I generaly make releases from NetBSD
+CKSUM?=		cksum -a SHA256
+PGP?=		netpgp
+
+SCRIPT=		${LIBEXECDIR}/dhcpcd-run-hooks
+HOOKDIR=	${LIBEXECDIR}/dhcpcd-hooks
+
+SED_RUNDIR=		-e 's:@RUNDIR@:${RUNDIR}:g'
+SED_DBDIR=		-e 's:@DBDIR@:${DBDIR}:g'
+SED_LIBDIR=		-e 's:@LIBDIR@:${LIBDIR}:g'
+SED_DATADIR=		-e 's:@DATADIR@:${DATADIR}:g'
+SED_HOOKDIR=		-e 's:@HOOKDIR@:${HOOKDIR}:g'
+SED_SERVICEEXISTS=	-e 's:@SERVICEEXISTS@:${SERVICEEXISTS}:g'
+SED_SERVICECMD=		-e 's:@SERVICECMD@:${SERVICECMD}:g'
+SED_SERVICESTATUS=	-e 's:@SERVICESTATUS@:${SERVICESTATUS}:g'
+SED_STATUSARG=		-e 's:@STATUSARG@:${STATUSARG}:g'
+SED_SCRIPT=		-e 's:@SCRIPT@:${SCRIPT}:g'
+SED_SYS=		-e 's:@SYSCONFDIR@:${SYSCONFDIR}:g'
