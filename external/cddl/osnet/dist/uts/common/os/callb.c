@@ -434,7 +434,5 @@ callb_is_stopped(kthread_id_t tp, caddr_t *thread_name)
 }
 #endif	/* illumos */
 
-#if defined(__FreeBSD__) && defined(_KERNEL)
 SYSINIT(sol_callb, SI_SUB_DRIVERS, SI_ORDER_FIRST, callb_init, NULL);
 SYSUNINIT(sol_callb, SI_SUB_DRIVERS, SI_ORDER_FIRST, callb_fini, NULL);
-#endif

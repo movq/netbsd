@@ -36,8 +36,8 @@
  * contributors.
  */
 
-#ifndef _UTS_SYS_VNODE_H
-#define	_UTS_SYS_VNODE_H
+#ifndef _SYS_VNODE_H
+#define	_SYS_VNODE_H
 
 #include_next <sys/vnode.h>
 
@@ -423,4 +423,4 @@ xoptattr_t	*xva_getxoptattr(xvattr_t *);	/* Get ptr to xoptattr_t */
 }
 #endif
 
-#endif	/* _UTS_SYS_VNODE_H */
+#endif	/* _SYS_VNODE_H */

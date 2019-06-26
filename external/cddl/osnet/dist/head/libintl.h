@@ -29,14 +29,6 @@
 #ifndef	_LIBINTL_H
 #define	_LIBINTL_H
 
-#ifdef __NetBSD__
-
-#define	textdomain(domain)	0
-#define	gettext(...)		(__VA_ARGS__)
-#define	dgettext(domain, ...)	(__VA_ARGS__)
-
-#else /* __NetBSD__ */
-
 #include <sys/isa_defs.h>
 
 #ifdef	__cplusplus
@@ -101,7 +93,5 @@ extern int mcwrap(void);
 #ifdef	__cplusplus
 }
 #endif
-
-#endif /* __NetBSD__ */
 
 #endif /* _LIBINTL_H */

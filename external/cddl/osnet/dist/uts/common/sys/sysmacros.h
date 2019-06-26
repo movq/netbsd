@@ -35,9 +35,6 @@
 #if defined(__FreeBSD__) && defined(_KERNEL)
 #include <sys/libkern.h>
 #endif
-#if defined(__NetBSD__) && defined(_KERNEL)
-#include <lib/libkern/libkern.h>
-#endif
 
 #ifdef	__cplusplus
 extern "C" {
@@ -81,8 +78,6 @@ extern unsigned char bcd_to_byte[256];
 
 #endif	/* _KERNEL */
 
-#ifndef __NetBSD__
-	
 /*
  * WARNING: The device number macros defined here should not be used by device
  * drivers or user software. Device drivers should use the device functions
@@ -217,22 +212,16 @@ extern unsigned char bcd_to_byte[256];
 	(dev_t)(((dev_t)(((x) >> O_BITSMINOR) & O_MAXMAJ) << L_BITSMINOR) | \
 	    ((x) & O_MAXMIN))
 
-#endif	/* !__NetBSD__ */
-
 /*
  * Macro for checking power of 2 address alignment.
  */
 #define	IS_P2ALIGNED(v, a) ((((uintptr_t)(v)) & ((uintptr_t)(a) - 1)) == 0)
-
-#ifndef __NetBSD__
 
 /*
  * Macros for counting and rounding.
  */
 #define	howmany(x, y)	(((x)+((y)-1))/(y))
 #define	roundup(x, y)	((((x)+((y)-1))/(y))*(y))
-
-#endif	/* !__NetBSD__ */
 
 /*
  * Macro to determine if value is a power of 2
@@ -347,8 +336,6 @@ extern unsigned char bcd_to_byte[256];
  * because if a field crosses a byte boundary it's not likely to be meaningful
  * without reassembly in its nonnative endianness.
  */
-#ifndef __NetBSD__
-
 #if defined(_BIT_FIELDS_LTOH)
 #define	DECL_BITFIELD2(_a, _b)				\
 	uint8_t _a, _b
@@ -383,27 +370,12 @@ extern unsigned char bcd_to_byte[256];
 #error	One of _BIT_FIELDS_LTOH or _BIT_FIELDS_HTOL must be defined
 #endif  /* _BIT_FIELDS_LTOH */
 
-#endif /* ! __NetBSD__ */
-
 #if defined(_KERNEL) && !defined(_KMEMUSER) && !defined(offsetof)
 
 /* avoid any possibility of clashing with <stddef.h> version */
 
 #define	offsetof(s, m)	((size_t)(&(((s *)0)->m)))
 #endif
-
-#ifdef __NetBSD__
-
-#include <sys/bitops.h>
-
-#ifdef _LP64
-#define highbit(i)	fls64((i))
-#else
-#define highbit(i)	fls32((i))
-#endif
-#define highbit64(i)	fls64((i))
-
-#else /* __NetBSD__ */
 
 /*
  * Find highest one bit set.
@@ -479,8 +451,6 @@ highbit64(uint64_t i)
 	return (h);
 #endif
 }
-
-#endif /* __NetBSD__ */
 
 #ifdef	__cplusplus
 }

@@ -31,9 +31,7 @@
 #ifndef _SYS_PROCSET_H
 #define	_SYS_PROCSET_H
 
-#ifndef __NetBSD__
 #pragma ident	"%Z%%M%	%I%	%E% SMI"	/* SVr4.0 1.6 */
-#endif
 
 #ifdef	__cplusplus
 extern "C" {
@@ -52,12 +50,6 @@ extern "C" {
 #define	P_INITPID	1
 #define	P_INITUID	0
 #define	P_INITPGID	0
-
-#ifdef __NetBSD__
-
-#include <sys/idtype.h>
-
-#else /* __NetBSD__ */
 
 #ifndef _IDTYPE_T_DECLARED
 
@@ -93,8 +85,6 @@ typedef enum
 #define	_IDTYPE_T_DECLARED
 
 #endif
-
-#endif /* __NetBSD__ */
 
 /*
  *	The following defines the operations which can be performed to

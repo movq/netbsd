@@ -214,27 +214,6 @@
  *	from the file /etc/hostid, rather than from hardware.
  */
 
-#ifdef __NetBSD__
-
-#include <sys/cdefs.h>
-
-#ifdef _LP64
-__CTASSERT(sizeof(int) == 4);
-__CTASSERT(sizeof(long) == 8);
-__CTASSERT(sizeof(void *) == 8);
-#else
-/*
- * For 64-bit architectures the compiler defines _LP64.  All else in
- * NetBSD is ILP32 for now.
- */
-__CTASSERT(sizeof(int) == 4);
-__CTASSERT(sizeof(long) == 4);
-__CTASSERT(sizeof(void *) == 4);
-#define	_ILP32	1
-#endif
-
-#else /* __NetBSD__ */
-
 #ifdef	__cplusplus
 extern "C" {
 #endif
@@ -712,7 +691,5 @@ extern "C" {
 #ifdef	__cplusplus
 }
 #endif
-
-#endif /* __NetBSD__ */
 
 #endif	/* _SYS_ISA_DEFS_H */
