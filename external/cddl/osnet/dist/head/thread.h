@@ -30,11 +30,7 @@
 #define	_THREAD_H
 
 #include <pthread.h>
-
-#ifndef __NetBSD__
 #include <pthread_np.h>
-#endif
-
 #include <assert.h>
 
 /*

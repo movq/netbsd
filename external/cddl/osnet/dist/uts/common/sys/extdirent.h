@@ -1,5 +1,3 @@
-/*	$NetBSD: extdirent.h,v 1.1 2019/06/24 08:27:20 hannken Exp $	*/
-
 /*
  * CDDL HEADER START
  *

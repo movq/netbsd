@@ -43,13 +43,7 @@ extern "C" {
 #define	_SYS_VFS_H
 #define	_SYS_SUNDDI_H
 #define	_SYS_CALLB_H
-#ifndef __NetBSD__
 #define	_SYS_SCHED_H_
-#else
-#define	_SYS_CONDVAR_H_
-#define _SYS_MUTEX_H_
-#define	_SYS_RWLOCK_H_
-#endif
 
 #include <solaris.h>
 #include <stdio.h>
@@ -95,11 +89,7 @@ extern "C" {
 #include <sys/sysevent.h>
 #include <sys/sysevent/eventdefs.h>
 #include <sys/sysevent/dev.h>
-#ifndef __NetBSD__
 #include <machine/atomic.h>
-#else
-#include <sys/atomic.h>
-#endif
 #include <sys/debug.h>
 #ifdef illumos
 #include "zfs.h"
@@ -519,11 +509,7 @@ extern int fop_getattr(vnode_t *vp, vattr_t *vap);
 
 #define	VOP_CLOSE(vp, f, c, o, cr, ct)	0
 #define	VOP_PUTPAGE(vp, of, sz, fl, cr, ct)	0
-#ifndef __NetBSD__
 #define	VOP_GETATTR(vp, vap, cr)  fop_getattr((vp), (vap));
-#else
-#define	VOP_GETATTR(vp, vap, fl, cr, ct)  fop_getattr((vp), (vap));
-#endif
 
 #define	VOP_FSYNC(vp, f, cr, ct)	fsync((vp)->v_fd)
 
@@ -585,9 +571,7 @@ extern void delay(clock_t ticks);
 
 extern uint64_t physmem;
 
-#ifndef __NetBSD__
 extern int highbit64(uint64_t i);
-#endif
 extern int random_get_bytes(uint8_t *ptr, size_t len);
 extern int random_get_pseudo_bytes(uint8_t *ptr, size_t len);
 
@@ -670,9 +654,7 @@ extern int zfs_secpolicy_snapshot_perms(const char *name, cred_t *cr);
 extern int zfs_secpolicy_rename_perms(const char *from, const char *to,
     cred_t *cr);
 extern int zfs_secpolicy_destroy_perms(const char *name, cred_t *cr);
-#ifndef __NetBSD__
 extern zoneid_t getzoneid(void);
-#endif
 /* Random compatibility stuff. */
 #define	pwrite64(d, p, n, o)	pwrite(d, p, n, o)
 #define	readdir64(d)		readdir(d)
@@ -772,7 +754,7 @@ int sysctl_handle_64(SYSCTL_HANDLER_ARGS);
 #define	ERESTART	(-1)
 #endif
 
-#if defined(illumos) || defined(__NetBSD__)
+#ifdef illumos
 /*
  * Cyclic information
  */
