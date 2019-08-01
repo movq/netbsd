@@ -1,4 +1,4 @@
-/* $NetBSD: makphyvar.h,v 1.2 2019/03/25 06:17:56 msaitoh Exp $ */
+/* $NetBSD: makphyvar.h,v 1.2.8.2 2019/08/01 15:48:15 martin Exp $ */
 
 /*-
  * Copyright (c) 2018 The NetBSD Foundation, Inc.
