@@ -1,4 +1,4 @@
-/*	$NetBSD: openldap.h,v 1.1 2019/08/08 13:31:03 christos Exp $	*/
+/*	$NetBSD: openldap.h,v 1.1.1.1 2019/08/08 13:31:03 christos Exp $	*/
 
 /* $OpenLDAP$ */
 /* This work is part of OpenLDAP Software <http://www.openldap.org/>.
