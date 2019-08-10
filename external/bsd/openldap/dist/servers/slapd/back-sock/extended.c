@@ -1,4 +1,4 @@
-/*	$NetBSD: extended.c,v 1.1.1.1 2019/08/08 13:31:42 christos Exp $	*/
+/*	$NetBSD: extended.c,v 1.1.1.1.2.2 2019/08/10 06:17:20 martin Exp $	*/
 
 /* extended.c - sock backend extended routines */
 /* $OpenLDAP$ */
@@ -17,7 +17,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: extended.c,v 1.1.1.1 2019/08/08 13:31:42 christos Exp $");
+__RCSID("$NetBSD: extended.c,v 1.1.1.1.2.2 2019/08/10 06:17:20 martin Exp $");
 
 #include "portable.h"
 
