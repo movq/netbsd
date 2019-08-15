@@ -1,4 +1,4 @@
-/*	$NetBSD: a9ptmr.c,v 1.2 2019/08/14 09:20:00 skrll Exp $	*/
+/*	$NetBSD: a9ptmr.c,v 1.2.2.2 2019/08/15 09:49:49 martin Exp $	*/
 
 /*-
  * Copyright (c) 2019 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: a9ptmr.c,v 1.2 2019/08/14 09:20:00 skrll Exp $");
+__KERNEL_RCSID(0, "$NetBSD: a9ptmr.c,v 1.2.2.2 2019/08/15 09:49:49 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/bus.h>
