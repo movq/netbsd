@@ -1,4 +1,4 @@
-/* $NetBSD: a9ptmr_var.h,v 1.1 2019/08/10 17:03:59 skrll Exp $ */
+/* $NetBSD: a9ptmr_var.h,v 1.1.2.2 2019/08/15 09:49:49 martin Exp $ */
 /*-
  * Copyright (c) 2012 The NetBSD Foundation, Inc.
  * All rights reserved.

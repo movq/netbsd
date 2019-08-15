@@ -1,4 +1,4 @@
-/* $NetBSD: a9wdt_fdt.c,v 1.1 2019/08/10 17:03:59 skrll Exp $ */
+/* $NetBSD: a9wdt_fdt.c,v 1.1.2.2 2019/08/15 09:49:49 martin Exp $ */
 
 /*-
  * Copyright (c) 2019 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: a9wdt_fdt.c,v 1.1 2019/08/10 17:03:59 skrll Exp $");
+__KERNEL_RCSID(0, "$NetBSD: a9wdt_fdt.c,v 1.1.2.2 2019/08/15 09:49:49 martin Exp $");
 
 #if 0
 #include <sys/param.h>
