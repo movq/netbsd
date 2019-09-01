@@ -1,4 +1,4 @@
-#	$NetBSD: srcs.mk,v 1.1 2019/08/27 14:53:38 martin Exp $
+#	$NetBSD: srcs.mk,v 1.1.2.2 2019/09/01 13:18:39 martin Exp $
 
 # Sources and additional flags for libnv
 
