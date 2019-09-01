@@ -1,4 +1,4 @@
-#	$NetBSD: bsd.sanitizer.mk,v 1.1 2019/08/27 22:48:54 kamil Exp $
+#	$NetBSD: bsd.sanitizer.mk,v 1.1.2.2 2019/09/01 10:44:22 martin Exp $
 
 .if !defined(_BSD_SANITIZER_MK_)
 _BSD_SANITIZER_MK_=1
