@@ -1,4 +1,4 @@
-/*	$NetBSD: usbnet.h,v 1.14 2019/08/23 04:32:57 mrg Exp $	*/
+/*	$NetBSD: usbnet.h,v 1.14.2.2 2019/09/01 13:00:36 martin Exp $	*/
 
 /*
  * Copyright (c) 2019 Matthew R. Green
@@ -86,6 +86,7 @@
 #include <sys/rndsource.h>
 #include <sys/mutex.h>
 #include <sys/module.h>
+#include <sys/sysctl.h>
 
 #include <net/bpf.h>
 #include <net/if.h>
@@ -256,6 +257,14 @@ struct usbnet {
 	 * This section is private to usbnet. Don't touch.
 	 */
 	struct usbnet_private	*un_pri;
+
+	/*
+	 * NetBSD 9.x specific portion.  Not needed afterwards.
+	 *
+	 * This structure will be passed to sysctl_teardown() in
+	 * usbnet_detach() if it is not NULL.
+	 */
+	struct sysctllog	*un_sysctl_log;
 };
 
 /* Various accessors. */
