@@ -1,4 +1,4 @@
-/*	$NetBSD: multiboot32.S,v 1.1 2019/09/13 02:19:45 manu Exp $ */
+/*	$NetBSD: multiboot32.S,v 1.1.4.2 2019/09/18 17:30:05 martin Exp $ */
 
 #include <machine/asm.h>
 #include <machine/specialreg.h>
