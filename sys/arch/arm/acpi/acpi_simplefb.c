@@ -1,4 +1,4 @@
-/* $NetBSD: acpi_simplefb.c,v 1.1 2019/09/22 18:31:59 jmcneill Exp $ */
+/* $NetBSD: acpi_simplefb.c,v 1.1.2.2 2019/09/23 07:06:31 martin Exp $ */
 
 /*-
  * Copyright (c) 2019 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: acpi_simplefb.c,v 1.1 2019/09/22 18:31:59 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: acpi_simplefb.c,v 1.1.2.2 2019/09/23 07:06:31 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/bus.h>
