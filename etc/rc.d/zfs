@@ -1,6 +1,6 @@
 #!/bin/sh
 #
-# $NetBSD: zfs,v 1.1 2019/09/15 19:38:09 brad Exp $
+# $NetBSD: zfs,v 1.1.2.2 2019/09/27 09:18:37 martin Exp $
 #
 
 # PROVIDE: zfs
