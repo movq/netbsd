@@ -1,4 +1,4 @@
-/* $NetBSD: gic_v2m_acpi.h,v 1.1 2019/10/14 11:00:13 jmcneill Exp $ */
+/* $NetBSD: gic_v2m_acpi.h,v 1.1.2.2 2019/10/15 19:40:34 martin Exp $ */
 
 /*-
  * Copyright (c) 2019 The NetBSD Foundation, Inc.
