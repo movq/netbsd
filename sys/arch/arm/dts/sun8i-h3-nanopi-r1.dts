@@ -1,4 +1,4 @@
-/* $NetBSD: sun8i-h3-nanopi-r1.dts,v 1.2 2019/10/08 23:00:36 bad Exp $ */
+/* $NetBSD: sun8i-h3-nanopi-r1.dts,v 1.2.2.2 2019/10/17 18:47:48 martin Exp $ */
 
 /*
  * Copyright (C) 2019 Igor Pecovnik <igor@armbian.com>
