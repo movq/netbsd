@@ -1,4 +1,4 @@
-/* $NetBSD: rk_fb.c,v 1.1 2019/11/09 23:30:14 jmcneill Exp $ */
+/* $NetBSD: rk_fb.c,v 1.1.2.2 2019/11/16 16:48:25 martin Exp $ */
 
 /*-
  * Copyright (c) 2015-2019 Jared McNeill <jmcneill@invisible.ca>
@@ -29,7 +29,7 @@
 #include "opt_wsdisplay_compat.h"
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: rk_fb.c,v 1.1 2019/11/09 23:30:14 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: rk_fb.c,v 1.1.2.2 2019/11/16 16:48:25 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/bus.h>
