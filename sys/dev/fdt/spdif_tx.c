@@ -1,4 +1,4 @@
-/* $NetBSD: spdif_tx.c,v 1.1 2019/11/17 19:30:42 jmcneill Exp $ */
+/* $NetBSD: spdif_tx.c,v 1.1.2.2 2019/11/18 19:33:10 martin Exp $ */
 
 /*-
  * Copyright (c) 2019 Jared McNeill <jmcneill@invisible.ca>
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: spdif_tx.c,v 1.1 2019/11/17 19:30:42 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: spdif_tx.c,v 1.1.2.2 2019/11/18 19:33:10 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/bus.h>
