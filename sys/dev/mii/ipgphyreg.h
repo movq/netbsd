@@ -1,4 +1,4 @@
-/*	$NetBSD: ipgphyreg.h,v 1.3 2019/11/21 03:04:21 msaitoh Exp $ */
+/*	$NetBSD: ipgphyreg.h,v 1.3.2.2 2019/11/25 16:44:31 martin Exp $ */
 /*	$OpenBSD: ipgphyreg.h,v 1.3 2015/07/19 06:28:12 yuo Exp $	*/
 
 /*-
