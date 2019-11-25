@@ -1,4 +1,4 @@
-/*	$NetBSD: jmphy.c,v 1.1 2019/10/30 12:06:26 msaitoh Exp $ */
+/*	$NetBSD: jmphy.c,v 1.1.2.2 2019/11/25 16:53:55 martin Exp $ */
 /*	$OpenBSD: jmphy.c,v 1.6 2015/03/14 03:38:48 jsg Exp $	*/
 /*-
  * Copyright (c) 2008, Pyun YongHyeon <yongari@FreeBSD.org>
