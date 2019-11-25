@@ -1,4 +1,4 @@
-/*	$NetBSD: jmphyreg.h,v 1.1 2019/10/30 12:06:26 msaitoh Exp $ */
+/*	$NetBSD: jmphyreg.h,v 1.1.2.2 2019/11/25 16:53:55 martin Exp $ */
 /*	$OpenBSD: jmphyreg.h,v 1.1 2008/09/26 10:35:15 jsg Exp $	*/
 /*-
  * Copyright (c) 2008, Pyun YongHyeon
