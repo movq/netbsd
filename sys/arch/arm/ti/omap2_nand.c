@@ -1,4 +1,4 @@
-/*	$NetBSD: omap2_nand.c,v 1.2 2019/11/03 13:45:57 jmcneill Exp $	*/
+/*	$NetBSD: omap2_nand.c,v 1.2.2.2 2019/11/27 13:46:44 martin Exp $	*/
 
 /*-
  * Copyright (c) 2010 Department of Software Engineering,
@@ -36,7 +36,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: omap2_nand.c,v 1.2 2019/11/03 13:45:57 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: omap2_nand.c,v 1.2.2.2 2019/11/27 13:46:44 martin Exp $");
 
 /* TODO move to opt_* */
 #undef OMAP2_NAND_HARDWARE_ECC

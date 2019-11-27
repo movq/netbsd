@@ -1,4 +1,4 @@
-/* $NetBSD: omap3-n900.dts,v 1.1 2019/10/31 17:09:13 jmcneill Exp $ */
+/* $NetBSD: omap3-n900.dts,v 1.1.2.2 2019/11/27 13:46:45 martin Exp $ */
 
 /*-
  * Copyright (c) 2019 Jared McNeill <jmcneill@invisible.ca>

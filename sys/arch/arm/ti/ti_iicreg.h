@@ -1,4 +1,4 @@
-/*	$NetBSD: ti_iicreg.h,v 1.3 2019/10/31 10:21:29 jmcneill Exp $	*/
+/*	$NetBSD: ti_iicreg.h,v 1.3.2.2 2019/11/27 13:46:44 martin Exp $	*/
 
 /*
  * Copyright (c) 2013 Manuel Bouyer.  All rights reserved.

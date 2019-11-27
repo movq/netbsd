@@ -1,4 +1,4 @@
-/*	$NetBSD: omap3_dssreg.h,v 1.1 2019/10/31 17:08:54 jmcneill Exp $ */
+/*	$NetBSD: omap3_dssreg.h,v 1.1.2.2 2019/11/27 13:46:44 martin Exp $ */
 
 /*-
  * Copyright (c) 2010 Michael Lorenz
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: omap3_dssreg.h,v 1.1 2019/10/31 17:08:54 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: omap3_dssreg.h,v 1.1.2.2 2019/11/27 13:46:44 martin Exp $");
 
 #ifndef OMAP3_DSSREG_H
 #define OMAP3_DSSREG_H

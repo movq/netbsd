@@ -1,4 +1,4 @@
-/* $NetBSD: pinctrl_single.c,v 1.1 2019/10/27 15:31:15 jmcneill Exp $ */
+/* $NetBSD: pinctrl_single.c,v 1.1.2.2 2019/11/27 13:46:45 martin Exp $ */
 
 /*-
  * Copyright (c) 2019 Jared McNeill <jmcneill@invisible.ca>
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pinctrl_single.c,v 1.1 2019/10/27 15:31:15 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pinctrl_single.c,v 1.1.2.2 2019/11/27 13:46:45 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/bus.h>

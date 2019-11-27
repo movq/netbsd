@@ -1,4 +1,4 @@
-/* $NetBSD: ti_rngreg.h,v 1.1 2019/10/28 23:57:59 jmcneill Exp $ */
+/* $NetBSD: ti_rngreg.h,v 1.1.2.2 2019/11/27 13:46:44 martin Exp $ */
 
 /*-
  * Copyright (c) 2015 Jared D. McNeill <jmcneill@invisible.ca>

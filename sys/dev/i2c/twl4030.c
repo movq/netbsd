@@ -1,4 +1,4 @@
-/* $NetBSD: twl4030.c,v 1.3 2019/11/03 09:34:09 jmcneill Exp $ */
+/* $NetBSD: twl4030.c,v 1.3.2.2 2019/11/27 13:46:45 martin Exp $ */
 
 /*-
  * Copyright (c) 2019 Jared McNeill <jmcneill@invisible.ca>
@@ -29,7 +29,7 @@
 #include "opt_fdt.h"
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: twl4030.c,v 1.3 2019/11/03 09:34:09 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: twl4030.c,v 1.3.2.2 2019/11/27 13:46:45 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
