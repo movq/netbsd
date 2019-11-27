@@ -1,4 +1,4 @@
-/* $NetBSD: omap3-beagle-xm.dts,v 1.1 2019/10/31 01:25:56 sevan Exp $ */
+/* $NetBSD: omap3-beagle-xm.dts,v 1.1.2.2 2019/11/27 13:46:45 martin Exp $ */
 
 /*-
  * Copyright (c) 2008 The NetBSD Foundation, Inc.

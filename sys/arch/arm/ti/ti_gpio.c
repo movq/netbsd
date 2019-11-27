@@ -1,4 +1,4 @@
-/* $NetBSD: ti_gpio.c,v 1.3 2019/11/03 11:34:40 jmcneill Exp $ */
+/* $NetBSD: ti_gpio.c,v 1.3.2.2 2019/11/27 13:46:44 martin Exp $ */
 
 /*-
  * Copyright (c) 2019 Jared McNeill <jmcneill@invisible.ca>
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ti_gpio.c,v 1.3 2019/11/03 11:34:40 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ti_gpio.c,v 1.3.2.2 2019/11/27 13:46:44 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/bus.h>

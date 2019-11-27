@@ -1,4 +1,4 @@
-/* $NetBSD: omap3_cm.c,v 1.4 2019/11/01 11:53:35 jmcneill Exp $ */
+/* $NetBSD: omap3_cm.c,v 1.4.2.2 2019/11/27 13:46:44 martin Exp $ */
 
 /*-
  * Copyright (c) 2017 Jared McNeill <jmcneill@invisible.ca>
@@ -28,7 +28,7 @@
 
 #include <sys/cdefs.h>
 
-__KERNEL_RCSID(1, "$NetBSD: omap3_cm.c,v 1.4 2019/11/01 11:53:35 jmcneill Exp $");
+__KERNEL_RCSID(1, "$NetBSD: omap3_cm.c,v 1.4.2.2 2019/11/27 13:46:44 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/bus.h>
