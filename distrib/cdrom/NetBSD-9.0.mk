@@ -1,4 +1,4 @@
-# $NetBSD: NetBSD-9.0.mk,v 1.1 2019/12/05 10:25:41 martin Exp $
+# $NetBSD: NetBSD-9.0.mk,v 1.1.2.2 2019/12/05 10:28:07 martin Exp $
 #
 # Configuration file for NetBSD-9.0
 
