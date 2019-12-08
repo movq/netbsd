@@ -1,4 +1,4 @@
-/*	$NetBSD: smbios.c,v 1.1 2019/11/30 13:02:18 jmcneill Exp $	*/
+/*	$NetBSD: smbios.c,v 1.1.2.2 2019/12/08 13:13:06 martin Exp $	*/
 
 /*
  * Copyright (c) 1999 The NetBSD Foundation, Inc.
@@ -82,7 +82,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: smbios.c,v 1.1 2019/11/30 13:02:18 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: smbios.c,v 1.1.2.2 2019/12/08 13:13:06 martin Exp $");
 
 #include <sys/param.h>
 
