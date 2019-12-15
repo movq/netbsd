@@ -1,4 +1,4 @@
-/*	$NetBSD: spnego-private.h,v 1.1 2019/12/15 22:45:44 christos Exp $	*/
+/*	$NetBSD: spnego-private.h,v 1.1.1.1 2019/12/15 22:45:44 christos Exp $	*/
 
 /* This is a generated file */
 #ifndef __spnego_private_h__
