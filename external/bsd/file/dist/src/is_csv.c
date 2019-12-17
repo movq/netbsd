@@ -1,4 +1,4 @@
-/*	$NetBSD: is_csv.c,v 1.1 2019/12/17 02:23:53 christos Exp $	*/
+/*	$NetBSD: is_csv.c,v 1.1.1.1 2019/12/17 02:23:53 christos Exp $	*/
 
 /*-
  * Copyright (c) 2019 Christos Zoulas
@@ -37,7 +37,7 @@
 #if 0
 FILE_RCSID("@(#)$File: is_csv.c,v 1.4 2019/06/26 20:31:31 christos Exp $")
 #else
-__RCSID("$NetBSD: is_csv.c,v 1.1 2019/12/17 02:23:53 christos Exp $");
+__RCSID("$NetBSD: is_csv.c,v 1.1.1.1 2019/12/17 02:23:53 christos Exp $");
 #endif
 #endif
 
