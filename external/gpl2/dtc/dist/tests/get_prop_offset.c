@@ -1,4 +1,4 @@
-/*	$NetBSD: get_prop_offset.c,v 1.1 2019/12/22 12:34:06 skrll Exp $	*/
+/*	$NetBSD: get_prop_offset.c,v 1.1.1.1 2019/12/22 12:34:06 skrll Exp $	*/
 
 // SPDX-License-Identifier: LGPL-2.1-or-later
 /*

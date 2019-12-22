@@ -1,4 +1,4 @@
-/*	$NetBSD: fdtoverlay.c,v 1.1 2019/12/22 12:34:03 skrll Exp $	*/
+/*	$NetBSD: fdtoverlay.c,v 1.1.1.1 2019/12/22 12:34:03 skrll Exp $	*/
 
 // SPDX-License-Identifier: GPL-2.0-or-later
 /*
