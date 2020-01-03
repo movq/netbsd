@@ -1,4 +1,4 @@
-/*	$NetBSD: ast2600-clock.h,v 1.1 2020/01/03 14:33:05 skrll Exp $	*/
+/*	$NetBSD: ast2600-clock.h,v 1.1.1.1 2020/01/03 14:33:05 skrll Exp $	*/
 
 /* SPDX-License-Identifier: GPL-2.0-or-later OR MIT */
 #ifndef DT_BINDINGS_AST2600_CLOCK_H

@@ -1,4 +1,4 @@
-/*	$NetBSD: mt7629-resets.h,v 1.1 2020/01/03 14:33:06 skrll Exp $	*/
+/*	$NetBSD: mt7629-resets.h,v 1.1.1.1 2020/01/03 14:33:06 skrll Exp $	*/
 
 /* SPDX-License-Identifier: GPL-2.0 */
 /*
