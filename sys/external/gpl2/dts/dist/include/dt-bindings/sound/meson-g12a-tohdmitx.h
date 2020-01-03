@@ -1,4 +1,4 @@
-/*	$NetBSD: meson-g12a-tohdmitx.h,v 1.1 2020/01/03 14:33:03 skrll Exp $	*/
+/*	$NetBSD: meson-g12a-tohdmitx.h,v 1.1.1.1 2020/01/03 14:33:03 skrll Exp $	*/
 
 /* SPDX-License-Identifier: GPL-2.0 */
 #ifndef __DT_MESON_G12A_TOHDMITX_H

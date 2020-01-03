@@ -1,4 +1,4 @@
-/*	$NetBSD: active-semi,8865-regulator.h,v 1.1 2020/01/03 14:33:03 skrll Exp $	*/
+/*	$NetBSD: active-semi,8865-regulator.h,v 1.1.1.1 2020/01/03 14:33:03 skrll Exp $	*/
 
 /* SPDX-License-Identifier: GPL-2.0 */
 /*

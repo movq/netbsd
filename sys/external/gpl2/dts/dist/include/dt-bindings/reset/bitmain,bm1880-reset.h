@@ -1,4 +1,4 @@
-/*	$NetBSD: bitmain,bm1880-reset.h,v 1.1 2020/01/03 14:33:06 skrll Exp $	*/
+/*	$NetBSD: bitmain,bm1880-reset.h,v 1.1.1.1 2020/01/03 14:33:06 skrll Exp $	*/
 
 /* SPDX-License-Identifier: GPL-2.0+ */
 /*

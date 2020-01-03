@@ -1,4 +1,4 @@
-/*	$NetBSD: x1000-cgu.h,v 1.1 2020/01/03 14:33:04 skrll Exp $	*/
+/*	$NetBSD: x1000-cgu.h,v 1.1.1.1 2020/01/03 14:33:04 skrll Exp $	*/
 
 /* SPDX-License-Identifier: GPL-2.0 */
 /*
