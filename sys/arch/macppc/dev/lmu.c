@@ -1,4 +1,4 @@
- /* $NetBSD: lmu.c,v 1.1 2020/01/10 06:24:17 macallan Exp $ */
+ /* $NetBSD: lmu.c,v 1.1.2.2 2020/01/17 21:47:26 ad Exp $ */
 
 /*-
  * Copyright (c) 2020 Michael Lorenz
@@ -31,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: lmu.c,v 1.1 2020/01/10 06:24:17 macallan Exp $");
+__KERNEL_RCSID(0, "$NetBSD: lmu.c,v 1.1.2.2 2020/01/17 21:47:26 ad Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

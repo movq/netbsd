@@ -1,4 +1,4 @@
-/*	$NetBSD: arm_cpu_topology.c,v 1.2 2020/01/16 06:34:24 mrg Exp $	*/
+/*	$NetBSD: arm_cpu_topology.c,v 1.2.2.2 2020/01/17 21:47:23 ad Exp $	*/
 
 /*
  * Copyright (c) 2020 Matthew R. Green
@@ -33,7 +33,7 @@
 #include "opt_multiprocessor.h"
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: arm_cpu_topology.c,v 1.2 2020/01/16 06:34:24 mrg Exp $");
+__KERNEL_RCSID(0, "$NetBSD: arm_cpu_topology.c,v 1.2.2.2 2020/01/17 21:47:23 ad Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

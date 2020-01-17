@@ -1,4 +1,4 @@
-/*	$NetBSD: if_rge.c,v 1.3 2020/01/12 23:22:12 sevan Exp $	*/
+/*	$NetBSD: if_rge.c,v 1.3.2.2 2020/01/17 21:47:31 ad Exp $	*/
 /*	$OpenBSD: if_rge.c,v 1.2 2020/01/02 09:00:45 kevlo Exp $	*/
 
 /*
@@ -18,7 +18,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_rge.c,v 1.3 2020/01/12 23:22:12 sevan Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_rge.c,v 1.3.2.2 2020/01/17 21:47:31 ad Exp $");
 
 /* #include "bpfilter.h" Sevan */
 /* #include "vlan.h" Sevan */

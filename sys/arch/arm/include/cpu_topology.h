@@ -1,4 +1,4 @@
-/*	$NetBSD: cpu_topology.h,v 1.1 2020/01/15 08:34:04 mrg Exp $	*/
+/*	$NetBSD: cpu_topology.h,v 1.1.2.2 2020/01/17 21:47:24 ad Exp $	*/
 
 /*
  * Copyright (c) 2020 Matthew R. Green
