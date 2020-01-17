@@ -1,4 +1,4 @@
-/* $NetBSD: imx8mq_ccm.h,v 1.1 2020/01/15 01:09:56 jmcneill Exp $ */
+/* $NetBSD: imx8mq_ccm.h,v 1.1.2.2 2020/01/17 21:47:24 ad Exp $ */
 
 /*-
  * Copyright (c) 2020 Jared McNeill <jmcneill@invisible.ca>
