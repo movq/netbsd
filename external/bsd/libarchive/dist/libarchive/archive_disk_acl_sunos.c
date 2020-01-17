@@ -145,8 +145,10 @@ sunacl_get(int cmd, int *aclcnt, int fd, const char *path)
 					cnt = facl(fd, cmd, cnt, aclp);
 			}
 		} else {
-			free(aclp);
-			aclp = NULL;
+			if (aclp != NULL) {
+				free(aclp);
+				aclp = NULL;
+			}
 			break;
 		}
 	}

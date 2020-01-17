@@ -23,11 +23,11 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 #include "test.h"
-__FBSDID("$FreeBSD: head/lib/libarchive/test/test_read_format_gtar_sparse.c 189308 2009-03-03 17:02:51Z kientzle $");
+__FBSDID("$FreeBSD: src/lib/libarchive/test/test_read_format_gtar_sparse.c,v 1.8 2008/03/12 05:12:23 kientzle Exp $");
 
 
 struct contents {
-	int64_t	o;
+	off_t	o;
 	size_t	s;
 	const char *d;
 };
@@ -171,6 +171,13 @@ struct archive_contents {
 	{ NULL, NULL }
 };
 
+/*
+ * A tricky piece of code that verifies the contents of a sparse
+ * archive entry against a description as defined at the top of this
+ * source file.
+ */
+#define min(a,b) ((a) < (b) ? (a) : (b))
+
 static void
 verify_archive_file(const char *name, struct archive_contents *ac)
 {
@@ -180,13 +187,12 @@ verify_archive_file(const char *name, struct archive_contents *ac)
 	struct contents expect;
 	/* data, size, offset of block read from archive. */
 	struct contents actual;
-	const void *p;
 	struct archive *a;
 
 	extract_reference_file(name);
 
 	assert((a = archive_read_new()) != NULL);
-	assert(0 == archive_read_support_filter_all(a));
+	assert(0 == archive_read_support_compression_all(a));
 	assert(0 == archive_read_support_format_tar(a));
 	failure("Can't open %s", name);
 	assert(0 == archive_read_open_filename(a, name, 3));
@@ -194,21 +200,16 @@ verify_archive_file(const char *name, struct archive_contents *ac)
 	while (ac->filename != NULL) {
 		struct contents *cts = ac->contents;
 
-		if (!assertEqualIntA(a, 0, archive_read_next_header(a, &ae))) {
-			assertEqualInt(ARCHIVE_OK, archive_read_free(a));
-			return;
-		}
+		assertEqualIntA(a, 0, archive_read_next_header(a, &ae));
 		failure("Name mismatch in archive %s", name);
 		assertEqualString(ac->filename, archive_entry_pathname(ae));
-		assertEqualInt(archive_entry_is_encrypted(ae), 0);
-		assertEqualIntA(a, archive_read_has_encrypted_entries(a), ARCHIVE_READ_FORMAT_ENCRYPTION_UNSUPPORTED);
 
 		expect = *cts++;
 		while (0 == (err = archive_read_data_block(a,
-				 &p, &actual.s, &actual.o))) {
-			actual.d = p;
+				 (const void **)&actual.d,
+				 &actual.s, &actual.o))) {
 			while (actual.s > 0) {
-				char c = *actual.d;
+				char c = *(const char *)actual.d;
 				if(actual.o < expect.o) {
 					/*
 					 * Any byte before the expected
@@ -235,7 +236,7 @@ verify_archive_file(const char *name, struct archive_contents *ac)
 					failure("%s: Unexpected trailing data",
 					    name);
 					assert(actual.o <= expect.o);
-					archive_read_free(a);
+					archive_read_finish(a);
 					return;
 				}
 				actual.d++;
@@ -246,9 +247,14 @@ verify_archive_file(const char *name, struct archive_contents *ac)
 		failure("%s: should be end of entry", name);
 		assertEqualIntA(a, err, ARCHIVE_EOF);
 		failure("%s: Size returned at EOF must be zero", name);
-		assertEqualInt((int)actual.s, 0);
+		assertEqualInt(actual.s, 0);
+#if ARCHIVE_VERSION_STAMP < 1009000
+		/* libarchive < 1.9 doesn't get this right */
+		skipping("offset of final sparse chunk");
+#else
 		failure("%s: Offset of final empty chunk must be same as file size", name);
 		assertEqualInt(actual.o, expect.o);
+#endif
 		/* Step to next file description. */
 		++ac;
 	}
@@ -256,39 +262,45 @@ verify_archive_file(const char *name, struct archive_contents *ac)
 	err = archive_read_next_header(a, &ae);
 	assertEqualIntA(a, ARCHIVE_EOF, err);
 
-	assertEqualIntA(a, ARCHIVE_OK, archive_read_close(a));
-	assertEqualInt(ARCHIVE_OK, archive_read_free(a));
+	assert(0 == archive_read_close(a));
+#if ARCHIVE_API_VERSION > 1
+	assert(0 == archive_read_finish(a));
+#else
+	archive_read_finish(a);
+#endif
 }
 
 
 DEFINE_TEST(test_read_format_gtar_sparse)
 {
 	/* Two archives that use the "GNU tar sparse format". */
-	verify_archive_file("test_read_format_gtar_sparse_1_13.tar", files);
-	verify_archive_file("test_read_format_gtar_sparse_1_17.tar", files);
+	verify_archive_file("test_read_format_gtar_sparse_1_13.tgz", files);
+	verify_archive_file("test_read_format_gtar_sparse_1_17.tgz", files);
 
 	/*
 	 * libarchive < 1.9 doesn't support the newer --posix sparse formats
 	 * from GNU tar 1.15 and later.
 	 */
-
+#if ARCHIVE_VERSION_STAMP < 1009000
+	skipping("read support for GNUtar --posix sparse formats");
+#else
 	/*
 	 * An archive created by GNU tar 1.17 using --posix --sparse-format=0.1
 	 */
 	verify_archive_file(
-		"test_read_format_gtar_sparse_1_17_posix00.tar",
+		"test_read_format_gtar_sparse_1_17_posix00.tgz",
 		files);
 	/*
 	 * An archive created by GNU tar 1.17 using --posix --sparse-format=0.1
 	 */
 	verify_archive_file(
-		"test_read_format_gtar_sparse_1_17_posix01.tar",
+		"test_read_format_gtar_sparse_1_17_posix01.tgz",
 		files);
 	/*
 	 * An archive created by GNU tar 1.17 using --posix --sparse-format=1.0
 	 */
 	verify_archive_file(
-		"test_read_format_gtar_sparse_1_17_posix10.tar",
+		"test_read_format_gtar_sparse_1_17_posix10.tgz",
 		files);
 	/*
 	 * The last test archive here is a little odd.  First, it's
@@ -303,6 +315,7 @@ DEFINE_TEST(test_read_format_gtar_sparse)
 	verify_archive_file(
 		"test_read_format_gtar_sparse_1_17_posix10_modified.tar",
 		files);
+#endif
 }
 
 

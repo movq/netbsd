@@ -23,7 +23,7 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 #include "test.h"
-__FBSDID("$FreeBSD: head/lib/libarchive/test/test_empty_write.c 189308 2009-03-03 17:02:51Z kientzle $");
+__FBSDID("$FreeBSD: src/lib/libarchive/test/test_empty_write.c,v 1.2 2008/03/15 11:06:15 kientzle Exp $");
 
 DEFINE_TEST(test_empty_write)
 {
@@ -31,7 +31,6 @@ DEFINE_TEST(test_empty_write)
 	struct archive_entry *ae;
 	struct archive *a;
 	size_t used;
-	int r;
 
 	/*
 	 * Exercise a zero-byte write to a gzip-compressed archive.
@@ -40,32 +39,28 @@ DEFINE_TEST(test_empty_write)
 	/* Create a new archive in memory. */
 	assert((a = archive_write_new()) != NULL);
 	assertA(0 == archive_write_set_format_ustar(a));
-	r = archive_write_add_filter_gzip(a);
-	if (r != ARCHIVE_OK && !canGzip()) {
-		skipping("Empty write to gzip-compressed archive");
-	} else {
-		if (r != ARCHIVE_OK && canGzip())
-			assertEqualIntA(a, ARCHIVE_WARN, r);
-		else
-			assertEqualIntA(a, ARCHIVE_OK, r);
-		assertEqualIntA(a, ARCHIVE_OK,
-		    archive_write_open_memory(a, buff, sizeof(buff), &used));
-		/* Write a file to it. */
-		assert((ae = archive_entry_new()) != NULL);
-		archive_entry_copy_pathname(ae, "file");
-		archive_entry_set_mode(ae, S_IFREG | 0755);
-		archive_entry_set_size(ae, 0);
-		assertA(0 == archive_write_header(a, ae));
-		archive_entry_free(ae);
+	assertA(0 == archive_write_set_compression_gzip(a));
+	assertA(0 == archive_write_open_memory(a, buff, sizeof(buff), &used));
+	/* Write a file to it. */
+	assert((ae = archive_entry_new()) != NULL);
+	archive_entry_copy_pathname(ae, "file");
+	archive_entry_set_mode(ae, S_IFREG | 0755);
+	archive_entry_set_size(ae, 0);
+	assertA(0 == archive_write_header(a, ae));
+	archive_entry_free(ae);
 
-		/* THE TEST: write zero bytes to this entry. */
-		/* This used to crash. */
-		assertEqualIntA(a, 0, archive_write_data(a, "", 0));
+	/* THE TEST: write zero bytes to this entry. */
+	/* This used to crash. */
+	assertEqualIntA(a, 0, archive_write_data(a, "", 0));
 
-		/* Close out the archive. */
-		assertEqualIntA(a, ARCHIVE_OK, archive_write_close(a));
-		assertEqualInt(ARCHIVE_OK, archive_write_free(a));
-	}
+	/* Close out the archive. */
+	assertA(0 == archive_write_close(a));
+#if ARCHIVE_API_VERSION > 1
+	assertA(0 == archive_write_finish(a));
+#else
+	archive_write_finish(a);
+#endif
+
 
 	/*
 	 * Again, with bzip2 compression.
@@ -74,40 +69,7 @@ DEFINE_TEST(test_empty_write)
 	/* Create a new archive in memory. */
 	assert((a = archive_write_new()) != NULL);
 	assertA(0 == archive_write_set_format_ustar(a));
-	r = archive_write_add_filter_bzip2(a);
-	if (r != ARCHIVE_OK && !canBzip2()) {
-		skipping("Empty write to bzip2-compressed archive");
-	} else {
-		if (r != ARCHIVE_OK && canBzip2())
-			assertEqualIntA(a, ARCHIVE_WARN, r);
-		else
-			assertEqualIntA(a, ARCHIVE_OK, r);
-		assertEqualIntA(a, ARCHIVE_OK,
-		    archive_write_open_memory(a, buff, sizeof(buff), &used));
-		/* Write a file to it. */
-		assert((ae = archive_entry_new()) != NULL);
-		archive_entry_copy_pathname(ae, "file");
-		archive_entry_set_mode(ae, S_IFREG | 0755);
-		archive_entry_set_size(ae, 0);
-		assertA(0 == archive_write_header(a, ae));
-		archive_entry_free(ae);
-
-		/* THE TEST: write zero bytes to this entry. */
-		assertEqualIntA(a, 0, archive_write_data(a, "", 0));
-
-		/* Close out the archive. */
-		assertEqualIntA(a, ARCHIVE_OK, archive_write_close(a));
-		assertEqualInt(ARCHIVE_OK, archive_write_free(a));
-	}
-
-	/*
-	 * For good measure, one more time with no compression.
-	 */
-
-	/* Create a new archive in memory. */
-	assert((a = archive_write_new()) != NULL);
-	assertA(0 == archive_write_set_format_ustar(a));
-	assertA(0 == archive_write_add_filter_none(a));
+	assertA(0 == archive_write_set_compression_bzip2(a));
 	assertA(0 == archive_write_open_memory(a, buff, sizeof(buff), &used));
 	/* Write a file to it. */
 	assert((ae = archive_entry_new()) != NULL);
@@ -121,6 +83,39 @@ DEFINE_TEST(test_empty_write)
 	assertEqualIntA(a, 0, archive_write_data(a, "", 0));
 
 	/* Close out the archive. */
-	assertEqualIntA(a, ARCHIVE_OK, archive_write_close(a));
-	assertEqualInt(ARCHIVE_OK, archive_write_free(a));
+	assertA(0 == archive_write_close(a));
+#if ARCHIVE_API_VERSION > 1
+	assertA(0 == archive_write_finish(a));
+#else
+	archive_write_finish(a);
+#endif
+
+
+	/*
+	 * For good measure, one more time with no compression.
+	 */
+
+	/* Create a new archive in memory. */
+	assert((a = archive_write_new()) != NULL);
+	assertA(0 == archive_write_set_format_ustar(a));
+	assertA(0 == archive_write_set_compression_none(a));
+	assertA(0 == archive_write_open_memory(a, buff, sizeof(buff), &used));
+	/* Write a file to it. */
+	assert((ae = archive_entry_new()) != NULL);
+	archive_entry_copy_pathname(ae, "file");
+	archive_entry_set_mode(ae, S_IFREG | 0755);
+	archive_entry_set_size(ae, 0);
+	assertA(0 == archive_write_header(a, ae));
+	archive_entry_free(ae);
+
+	/* THE TEST: write zero bytes to this entry. */
+	assertEqualIntA(a, 0, archive_write_data(a, "", 0));
+
+	/* Close out the archive. */
+	assertA(0 == archive_write_close(a));
+#if ARCHIVE_API_VERSION > 1
+	assertA(0 == archive_write_finish(a));
+#else
+	archive_write_finish(a);
+#endif
 }

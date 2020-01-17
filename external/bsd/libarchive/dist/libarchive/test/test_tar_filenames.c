@@ -23,7 +23,7 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 #include "test.h"
-__FBSDID("$FreeBSD: src/lib/libarchive/test/test_tar_filenames.c,v 1.10 2008/09/01 05:38:33 kientzle Exp $");
+__FBSDID("$FreeBSD: src/lib/libarchive/test/test_tar_filenames.c,v 1.9 2008/05/26 17:00:24 kientzle Exp $");
 
 /*
  * Exercise various lengths of filenames in tar archives,
@@ -62,7 +62,7 @@ test_filename(const char *prefix, int dlen, int flen)
 	/* Create a new archive in memory. */
 	assert((a = archive_write_new()) != NULL);
 	assertA(0 == archive_write_set_format_pax_restricted(a));
-	assertA(0 == archive_write_add_filter_none(a));
+	assertA(0 == archive_write_set_compression_none(a));
 	assertA(0 == archive_write_set_bytes_per_block(a,0));
 	assertA(0 == archive_write_open_memory(a, buff, sizeof(buff), &used));
 
@@ -100,20 +100,28 @@ test_filename(const char *prefix, int dlen, int flen)
 	archive_entry_free(ae);
 
 	/* Close out the archive. */
-	assertEqualIntA(a, ARCHIVE_OK, archive_write_close(a));
-	assertEqualInt(ARCHIVE_OK, archive_write_free(a));
+	assertA(0 == archive_write_close(a));
+#if ARCHIVE_API_VERSION > 1
+	assertA(0 == archive_write_finish(a));
+#else
+	archive_write_finish(a);
+#endif
 
 	/*
 	 * Now, read the data back.
 	 */
 	assert((a = archive_read_new()) != NULL);
 	assertA(0 == archive_read_support_format_all(a));
-	assertA(0 == archive_read_support_filter_all(a));
+	assertA(0 == archive_read_support_compression_all(a));
 	assertA(0 == archive_read_open_memory(a, buff, used));
 
 	/* Read the file and check the filename. */
 	assertA(0 == archive_read_next_header(a, &ae));
+#if ARCHIVE_VERSION_STAMP < 1009000
+	skipping("Leading '/' preserved on long filenames");
+#else
 	assertEqualString(filename, archive_entry_pathname(ae));
+#endif
 	assertEqualInt((S_IFREG | 0755), archive_entry_mode(ae));
 
 	/*
@@ -125,17 +133,29 @@ test_filename(const char *prefix, int dlen, int flen)
 	 * here.
 	 */
 	assertA(0 == archive_read_next_header(a, &ae));
+#if ARCHIVE_VERSION_STAMP < 1009000
+	skipping("Trailing '/' preserved on dirnames");
+#else
 	assertEqualString(dirname, archive_entry_pathname(ae));
+#endif
 	assert((S_IFDIR | 0755) == archive_entry_mode(ae));
 
 	assertA(0 == archive_read_next_header(a, &ae));
+#if ARCHIVE_VERSION_STAMP < 1009000
+	skipping("Trailing '/' added to dir names");
+#else
 	assertEqualString(dirname, archive_entry_pathname(ae));
+#endif
 	assert((S_IFDIR | 0755) == archive_entry_mode(ae));
 
 	/* Verify the end of the archive. */
 	assert(1 == archive_read_next_header(a, &ae));
-	assertEqualIntA(a, ARCHIVE_OK, archive_read_close(a));
-	assertEqualInt(ARCHIVE_OK, archive_read_free(a));
+	assert(0 == archive_read_close(a));
+#if ARCHIVE_API_VERSION > 1
+	assert(0 == archive_read_finish(a));
+#else
+	archive_read_finish(a);
+#endif
 }
 
 DEFINE_TEST(test_tar_filenames)

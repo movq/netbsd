@@ -28,9 +28,6 @@ __FBSDID("$FreeBSD: head/lib/libarchive/test/test_open_fd.c 201247 2009-12-30 05
 #if defined(_WIN32) && !defined(__CYGWIN__)
 #define open _open
 #if !defined(__BORLANDC__)
-#ifdef lseek
-#undef lseek
-#endif
 #define lseek _lseek
 #endif
 #define close _close
@@ -55,7 +52,7 @@ DEFINE_TEST(test_open_fd)
 	/* Write an archive through this fd. */
 	assert((a = archive_write_new()) != NULL);
 	assertEqualIntA(a, ARCHIVE_OK, archive_write_set_format_ustar(a));
-	assertEqualIntA(a, ARCHIVE_OK, archive_write_add_filter_none(a));
+	assertEqualIntA(a, ARCHIVE_OK, archive_write_set_compression_none(a));
 	assertEqualIntA(a, ARCHIVE_OK, archive_write_open_fd(a, fd));
 
 	/*
@@ -82,7 +79,7 @@ DEFINE_TEST(test_open_fd)
 
 	/* Close out the archive. */
 	assertEqualIntA(a, ARCHIVE_OK, archive_write_close(a));
-	assertEqualInt(ARCHIVE_OK, archive_write_free(a));
+	assertEqualInt(ARCHIVE_OK, archive_write_finish(a));
 
 	/*
 	 * Now, read the data back.
@@ -90,7 +87,7 @@ DEFINE_TEST(test_open_fd)
 	assert(lseek(fd, 0, SEEK_SET) == 0);
 	assert((a = archive_read_new()) != NULL);
 	assertEqualIntA(a, ARCHIVE_OK, archive_read_support_format_all(a));
-	assertEqualIntA(a, ARCHIVE_OK, archive_read_support_filter_all(a));
+	assertEqualIntA(a, ARCHIVE_OK, archive_read_support_compression_all(a));
 	assertEqualIntA(a, ARCHIVE_OK, archive_read_open_fd(a, fd, 512));
 
 	assertEqualIntA(a, ARCHIVE_OK, archive_read_next_header(a, &ae));
@@ -113,7 +110,7 @@ DEFINE_TEST(test_open_fd)
 	/* Verify the end of the archive. */
 	assertEqualIntA(a, ARCHIVE_EOF, archive_read_next_header(a, &ae));
 	assertEqualIntA(a, ARCHIVE_OK, archive_read_close(a));
-	assertEqualInt(ARCHIVE_OK, archive_read_free(a));
+	assertEqualInt(ARCHIVE_OK, archive_read_finish(a));
 	close(fd);
 
 
@@ -122,10 +119,10 @@ DEFINE_TEST(test_open_fd)
 	 */
 	assert((a = archive_read_new()) != NULL);
 	assertEqualIntA(a, ARCHIVE_OK, archive_read_support_format_all(a));
-	assertEqualIntA(a, ARCHIVE_OK, archive_read_support_filter_all(a));
+	assertEqualIntA(a, ARCHIVE_OK, archive_read_support_compression_all(a));
 	/* FD 100 shouldn't be open. */
 	assertEqualIntA(a, ARCHIVE_FATAL,
 	    archive_read_open_fd(a, 100, 512));
 	assertEqualIntA(a, ARCHIVE_OK, archive_read_close(a));
-	assertEqualInt(ARCHIVE_OK, archive_read_free(a));
+	assertEqualInt(ARCHIVE_OK, archive_read_finish(a));
 }

@@ -26,7 +26,7 @@
  */
 
 #include "archive_platform.h"
-__FBSDID("$FreeBSD: head/lib/libarchive/archive_read_support_format_ar.c 201101 2009-12-28 03:06:27Z kientzle $");
+__FBSDID("$FreeBSD: src/lib/libarchive/archive_read_support_format_ar.c,v 1.10 2008/05/26 17:00:22 kientzle Exp $");
 
 #ifdef HAVE_SYS_STAT_H
 #include <sys/stat.h>
@@ -40,9 +40,6 @@ __FBSDID("$FreeBSD: head/lib/libarchive/archive_read_support_format_ar.c 201101 
 #ifdef HAVE_STRING_H
 #include <string.h>
 #endif
-#ifdef HAVE_LIMITS_H
-#include <limits.h>
-#endif
 
 #include "archive.h"
 #include "archive_entry.h"
@@ -50,17 +47,11 @@ __FBSDID("$FreeBSD: head/lib/libarchive/archive_read_support_format_ar.c 201101 
 #include "archive_read_private.h"
 
 struct ar {
-	int64_t	 entry_bytes_remaining;
-	/* unconsumed is purely to track data we've gotten from readahead,
-	 * but haven't yet marked as consumed.  Must be paired with
-	 * entry_bytes_remaining usage/modification.
-	 */
-	size_t   entry_bytes_unconsumed;
-	int64_t	 entry_offset;
-	int64_t	 entry_padding;
+	off_t	 entry_bytes_remaining;
+	off_t	 entry_offset;
+	off_t	 entry_padding;
 	char	*strtab;
 	size_t	 strtab_size;
-	char	 read_global_header;
 };
 
 /*
@@ -81,10 +72,12 @@ struct ar {
 #define AR_fmag_offset 58
 #define AR_fmag_size 2
 
-static int	archive_read_format_ar_bid(struct archive_read *a, int);
+#define isdigit(x)	(x) >= '0' && (x) <= '9'
+
+static int	archive_read_format_ar_bid(struct archive_read *a);
 static int	archive_read_format_ar_cleanup(struct archive_read *a);
 static int	archive_read_format_ar_read_data(struct archive_read *a,
-		    const void **buff, size_t *size, int64_t *offset);
+		    const void **buff, size_t *size, off_t *offset);
 static int	archive_read_format_ar_skip(struct archive_read *a);
 static int	archive_read_format_ar_read_header(struct archive_read *a,
 		    struct archive_entry *e);
@@ -101,29 +94,22 @@ archive_read_support_format_ar(struct archive *_a)
 	struct ar *ar;
 	int r;
 
-	archive_check_magic(_a, ARCHIVE_READ_MAGIC,
-	    ARCHIVE_STATE_NEW, "archive_read_support_format_ar");
-
-	ar = (struct ar *)calloc(1, sizeof(*ar));
+	ar = (struct ar *)malloc(sizeof(*ar));
 	if (ar == NULL) {
 		archive_set_error(&a->archive, ENOMEM,
 		    "Can't allocate ar data");
 		return (ARCHIVE_FATAL);
 	}
+	memset(ar, 0, sizeof(*ar));
 	ar->strtab = NULL;
 
 	r = __archive_read_register_format(a,
 	    ar,
-	    "ar",
 	    archive_read_format_ar_bid,
-	    NULL,
 	    archive_read_format_ar_read_header,
 	    archive_read_format_ar_read_data,
 	    archive_read_format_ar_skip,
-	    NULL,
-	    archive_read_format_ar_cleanup,
-	    NULL,
-	    NULL);
+	    archive_read_format_ar_cleanup);
 
 	if (r != ARCHIVE_OK) {
 		free(ar);
@@ -138,47 +124,80 @@ archive_read_format_ar_cleanup(struct archive_read *a)
 	struct ar *ar;
 
 	ar = (struct ar *)(a->format->data);
-	free(ar->strtab);
+	if (ar->strtab)
+		free(ar->strtab);
 	free(ar);
 	(a->format->data) = NULL;
 	return (ARCHIVE_OK);
 }
 
 static int
-archive_read_format_ar_bid(struct archive_read *a, int best_bid)
+archive_read_format_ar_bid(struct archive_read *a)
 {
+	struct ar *ar;
+	ssize_t bytes_read;
 	const void *h;
 
-	(void)best_bid; /* UNUSED */
+	if (a->archive.archive_format != 0 &&
+	    (a->archive.archive_format & ARCHIVE_FORMAT_BASE_MASK) !=
+	    ARCHIVE_FORMAT_AR)
+		return(0);
+
+	ar = (struct ar *)(a->format->data);
 
 	/*
 	 * Verify the 8-byte file signature.
 	 * TODO: Do we need to check more than this?
 	 */
-	if ((h = __archive_read_ahead(a, 8, NULL)) == NULL)
+	bytes_read = (a->decompressor->read_ahead)(a, &h, 8);
+	if (bytes_read < 8)
 		return (-1);
-	if (memcmp(h, "!<arch>\n", 8) == 0) {
+	if (strncmp((const char*)h, "!<arch>\n", 8) == 0) {
 		return (64);
 	}
 	return (-1);
 }
 
 static int
-_ar_read_header(struct archive_read *a, struct archive_entry *entry,
-	struct ar *ar, const char *h, size_t *unconsumed)
+archive_read_format_ar_read_header(struct archive_read *a,
+    struct archive_entry *entry)
 {
 	char filename[AR_name_size + 1];
+	struct ar *ar;
 	uint64_t number; /* Used to hold parsed numbers before validation. */
-	size_t bsd_name_length, entry_size;
+	ssize_t bytes_read;
+	size_t bsd_name_length, entry_size, s;
 	char *p, *st;
 	const void *b;
+	const char *h;
 	int r;
+
+	ar = (struct ar*)(a->format->data);
+
+	if (a->archive.file_position == 0) {
+		/*
+		 * We are now at the beginning of the archive,
+		 * so we need first consume the ar global header.
+		 */
+		(a->decompressor->consume)(a, 8);
+		/* Set a default format code for now. */
+		a->archive.archive_format = ARCHIVE_FORMAT_AR;
+	}
+
+	/* Read the header for the next file entry. */
+	bytes_read = (a->decompressor->read_ahead)(a, &b, 60);
+	if (bytes_read < 60) {
+		/* Broken header. */
+		return (ARCHIVE_EOF);
+	}
+	(a->decompressor->consume)(a, 60);
+	h = (const char *)b;
 
 	/* Verify the magic signature on the file header. */
 	if (strncmp(h + AR_fmag_offset, "`\n", 2) != 0) {
 		archive_set_error(&a->archive, EINVAL,
-		    "Incorrect file header signature");
-		return (ARCHIVE_FATAL);
+		    "Consistency check failed");
+		return (ARCHIVE_WARN);
 	}
 
 	/* Copy filename into work buffer. */
@@ -237,15 +256,8 @@ _ar_read_header(struct archive_read *a, struct archive_entry *entry,
 	 * and are not terminated in '/', so we don't trim anything
 	 * that starts with '/'.)
 	 */
-	if (filename[0] != '/' && p > filename && *p == '/') {
+	if (filename[0] != '/' && *p == '/')
 		*p = '\0';
-	}
-
-	if (p < filename) {
-		archive_set_error(&a->archive, ARCHIVE_ERRNO_MISC,
-		    "Found entry with empty filename");
-		return (ARCHIVE_FATAL);
-	}
 
 	/*
 	 * '//' is the GNU filename table.
@@ -258,7 +270,7 @@ _ar_read_header(struct archive_read *a, struct archive_entry *entry,
 		archive_entry_set_filetype(entry, AE_IFREG);
 		/* Get the size of the filename table. */
 		number = ar_atol10(h + AR_size_offset, AR_size_size);
-		if (number > SIZE_MAX || number > 1024 * 1024 * 1024) {
+		if (number > SIZE_MAX) {
 			archive_set_error(&a->archive, ARCHIVE_ERRNO_MISC,
 			    "Filename table too large");
 			return (ARCHIVE_FATAL);
@@ -267,12 +279,12 @@ _ar_read_header(struct archive_read *a, struct archive_entry *entry,
 		if (entry_size == 0) {
 			archive_set_error(&a->archive, EINVAL,
 			    "Invalid string table");
-			return (ARCHIVE_FATAL);
+			return (ARCHIVE_WARN);
 		}
 		if (ar->strtab != NULL) {
 			archive_set_error(&a->archive, EINVAL,
 			    "More than one string tables exist");
-			return (ARCHIVE_FATAL);
+			return (ARCHIVE_WARN);
 		}
 
 		/* Read the filename table into memory. */
@@ -284,16 +296,16 @@ _ar_read_header(struct archive_read *a, struct archive_entry *entry,
 		}
 		ar->strtab = st;
 		ar->strtab_size = entry_size;
-
-		if (*unconsumed) {
-			__archive_read_consume(a, *unconsumed);
-			*unconsumed = 0;
+		for (s = entry_size; s > 0; s -= bytes_read) {
+			bytes_read = (a->decompressor->read_ahead)(a, &b, s);
+			if (bytes_read <= 0)
+				return (ARCHIVE_FATAL);
+			if (bytes_read > (ssize_t)s)
+				bytes_read = s;
+			memcpy(st, b, bytes_read);
+			st += bytes_read;
+			(a->decompressor->consume)(a, bytes_read);
 		}
-
-		if ((b = __archive_read_ahead(a, entry_size, NULL)) == NULL)
-			return (ARCHIVE_FATAL);
-		memcpy(st, b, entry_size);
-		__archive_read_consume(a, entry_size);
 		/* All contents are consumed. */
 		ar->entry_bytes_remaining = 0;
 		archive_entry_set_size(entry, ar->entry_bytes_remaining);
@@ -305,22 +317,20 @@ _ar_read_header(struct archive_read *a, struct archive_entry *entry,
 	/*
 	 * GNU variant handles long filenames by storing /<number>
 	 * to indicate a name stored in the filename table.
-	 * XXX TODO: Verify that it's all digits... Don't be fooled
-	 * by "/9xyz" XXX
 	 */
-	if (filename[0] == '/' && filename[1] >= '0' && filename[1] <= '9') {
+	if (filename[0] == '/' && isdigit(filename[1])) {
 		number = ar_atol10(h + AR_name_offset + 1, AR_name_size - 1);
 		/*
 		 * If we can't look up the real name, warn and return
 		 * the entry with the wrong name.
 		 */
-		if (ar->strtab == NULL || number >= ar->strtab_size) {
+		if (ar->strtab == NULL || number > ar->strtab_size) {
 			archive_set_error(&a->archive, EINVAL,
-			    "Can't find long filename for GNU/SVR4 archive entry");
+			    "Can't find long filename for entry");
 			archive_entry_copy_pathname(entry, filename);
 			/* Parse the time, owner, mode, size fields. */
 			ar_parse_common_header(ar, entry, h);
-			return (ARCHIVE_FATAL);
+			return (ARCHIVE_WARN);
 		}
 
 		archive_entry_copy_pathname(entry, &ar->strtab[(size_t)number]);
@@ -340,34 +350,31 @@ _ar_read_header(struct archive_read *a, struct archive_entry *entry,
 
 		/* Parse the size of the name, adjust the file size. */
 		number = ar_atol10(h + AR_name_offset + 3, AR_name_size - 3);
-		/* Sanity check the filename length:
-		 *   = Must be <= SIZE_MAX - 1
-		 *   = Must be <= 1MB
-		 *   = Cannot be bigger than the entire entry
-		 */
-		if (number > SIZE_MAX - 1
-		    || number > 1024 * 1024
-		    || (int64_t)number > ar->entry_bytes_remaining) {
+		bsd_name_length = (size_t)number;
+		/* Guard against the filename + trailing NUL
+		 * overflowing a size_t and against the filename size
+		 * being larger than the entire entry. */
+		if (number > (uint64_t)(bsd_name_length + 1)
+		    || (off_t)bsd_name_length > ar->entry_bytes_remaining) {
 			archive_set_error(&a->archive, ARCHIVE_ERRNO_MISC,
 			    "Bad input file size");
 			return (ARCHIVE_FATAL);
 		}
-		bsd_name_length = (size_t)number;
 		ar->entry_bytes_remaining -= bsd_name_length;
 		/* Adjust file size reported to client. */
 		archive_entry_set_size(entry, ar->entry_bytes_remaining);
 
-		if (*unconsumed) {
-			__archive_read_consume(a, *unconsumed);
-			*unconsumed = 0;
-		}
-
 		/* Read the long name into memory. */
-		if ((b = __archive_read_ahead(a, bsd_name_length, NULL)) == NULL) {
+		bytes_read = (a->decompressor->read_ahead)(a, &b, bsd_name_length);
+		if (bytes_read <= 0)
+			return (ARCHIVE_FATAL);
+		if ((size_t)bytes_read < bsd_name_length) {
 			archive_set_error(&a->archive, ARCHIVE_ERRNO_MISC,
 			    "Truncated input file");
 			return (ARCHIVE_FATAL);
 		}
+		(a->decompressor->consume)(a, bsd_name_length);
+
 		/* Store it in the entry. */
 		p = (char *)malloc(bsd_name_length + 1);
 		if (p == NULL) {
@@ -377,9 +384,6 @@ _ar_read_header(struct archive_read *a, struct archive_entry *entry,
 		}
 		strncpy(p, b, bsd_name_length);
 		p[bsd_name_length] = '\0';
-
-		__archive_read_consume(a, bsd_name_length);
-
 		archive_entry_copy_pathname(entry, p);
 		free(p);
 		return (ARCHIVE_OK);
@@ -387,10 +391,9 @@ _ar_read_header(struct archive_read *a, struct archive_entry *entry,
 
 	/*
 	 * "/" is the SVR4/GNU archive symbol table.
-	 * "/SYM64/" is the SVR4/GNU 64-bit variant archive symbol table.
 	 */
-	if (strcmp(filename, "/") == 0 || strcmp(filename, "/SYM64/") == 0) {
-		archive_entry_copy_pathname(entry, filename);
+	if (strcmp(filename, "/") == 0) {
+		archive_entry_copy_pathname(entry, "/");
 		/* Parse the time, owner, mode, size fields. */
 		r = ar_parse_common_header(ar, entry, h);
 		/* Force the file type to a regular file. */
@@ -417,49 +420,12 @@ _ar_read_header(struct archive_read *a, struct archive_entry *entry,
 }
 
 static int
-archive_read_format_ar_read_header(struct archive_read *a,
-    struct archive_entry *entry)
-{
-	struct ar *ar = (struct ar*)(a->format->data);
-	size_t unconsumed;
-	const void *header_data;
-	int ret;
-
-	if (!ar->read_global_header) {
-		/*
-		 * We are now at the beginning of the archive,
-		 * so we need first consume the ar global header.
-		 */
-		__archive_read_consume(a, 8);
-		ar->read_global_header = 1;
-		/* Set a default format code for now. */
-		a->archive.archive_format = ARCHIVE_FORMAT_AR;
-	}
-
-	/* Read the header for the next file entry. */
-	if ((header_data = __archive_read_ahead(a, 60, NULL)) == NULL)
-		/* Broken header. */
-		return (ARCHIVE_EOF);
-	
-	unconsumed = 60;
-	
-	ret = _ar_read_header(a, entry, ar, (const char *)header_data, &unconsumed);
-
-	if (unconsumed)
-		__archive_read_consume(a, unconsumed);
-
-	return ret;
-}
-
-
-static int
 ar_parse_common_header(struct ar *ar, struct archive_entry *entry,
     const char *h)
 {
 	uint64_t n;
 
 	/* Copy remaining header */
-	archive_entry_set_filetype(entry, AE_IFREG);
 	archive_entry_set_mtime(entry,
 	    (time_t)ar_atol10(h + AR_date_offset, AR_date_size), 0L);
 	archive_entry_set_uid(entry,
@@ -479,20 +445,15 @@ ar_parse_common_header(struct ar *ar, struct archive_entry *entry,
 
 static int
 archive_read_format_ar_read_data(struct archive_read *a,
-    const void **buff, size_t *size, int64_t *offset)
+    const void **buff, size_t *size, off_t *offset)
 {
 	ssize_t bytes_read;
 	struct ar *ar;
 
 	ar = (struct ar *)(a->format->data);
 
-	if (ar->entry_bytes_unconsumed) {
-		__archive_read_consume(a, ar->entry_bytes_unconsumed);
-		ar->entry_bytes_unconsumed = 0;
-	}
-
 	if (ar->entry_bytes_remaining > 0) {
-		*buff = __archive_read_ahead(a, 1, &bytes_read);
+		bytes_read = (a->decompressor->read_ahead)(a, buff, 1);
 		if (bytes_read == 0) {
 			archive_set_error(&a->archive, ARCHIVE_ERRNO_MISC,
 			    "Truncated ar archive");
@@ -503,22 +464,20 @@ archive_read_format_ar_read_data(struct archive_read *a,
 		if (bytes_read > ar->entry_bytes_remaining)
 			bytes_read = (ssize_t)ar->entry_bytes_remaining;
 		*size = bytes_read;
-		ar->entry_bytes_unconsumed = bytes_read;
 		*offset = ar->entry_offset;
 		ar->entry_offset += bytes_read;
 		ar->entry_bytes_remaining -= bytes_read;
+		(a->decompressor->consume)(a, (size_t)bytes_read);
 		return (ARCHIVE_OK);
 	} else {
-		int64_t skipped = __archive_read_consume(a, ar->entry_padding);
-		if (skipped >= 0) {
-			ar->entry_padding -= skipped;
-		}
-		if (ar->entry_padding) {
-			if (skipped >= 0) {
-				archive_set_error(&a->archive, ARCHIVE_ERRNO_MISC,
-					"Truncated ar archive- failed consuming padding");
-			}
-			return (ARCHIVE_FATAL);
+		while (ar->entry_padding > 0) {
+			bytes_read = (a->decompressor->read_ahead)(a, buff, 1);
+			if (bytes_read <= 0)
+				return (ARCHIVE_FATAL);
+			if (bytes_read > ar->entry_padding)
+				bytes_read = (ssize_t)ar->entry_padding;
+			(a->decompressor->consume)(a, (size_t)bytes_read);
+			ar->entry_padding -= bytes_read;
 		}
 		*buff = NULL;
 		*size = 0;
@@ -530,19 +489,26 @@ archive_read_format_ar_read_data(struct archive_read *a,
 static int
 archive_read_format_ar_skip(struct archive_read *a)
 {
-	int64_t bytes_skipped;
+	off_t bytes_skipped;
 	struct ar* ar;
+	int r = ARCHIVE_OK;
+	const void *b;		/* Dummy variables */
+	size_t s;
+	off_t o;
 
 	ar = (struct ar *)(a->format->data);
+	if (a->decompressor->skip == NULL) {
+		while (r == ARCHIVE_OK)
+			r = archive_read_format_ar_read_data(a, &b, &s, &o);
+		return (r);
+	}
 
-	bytes_skipped = __archive_read_consume(a,
-	    ar->entry_bytes_remaining + ar->entry_padding
-	    + ar->entry_bytes_unconsumed);
+	bytes_skipped = (a->decompressor->skip)(a, ar->entry_bytes_remaining +
+	    ar->entry_padding);
 	if (bytes_skipped < 0)
 		return (ARCHIVE_FATAL);
 
 	ar->entry_bytes_remaining = 0;
-	ar->entry_bytes_unconsumed = 0;
 	ar->entry_padding = 0;
 
 	return (ARCHIVE_OK);
@@ -567,10 +533,11 @@ ar_parse_gnu_filename_table(struct archive_read *a)
 		}
 	}
 	/*
-	 * GNU ar always pads the table to an even size.
-	 * The pad character is either '\n' or '`'.
+	 * Sanity check, last two chars must be `/\n' or '\n\n',
+	 * depending on whether the string table is padded by a '\n'
+	 * (string table produced by GNU ar always has a even size).
 	 */
-	if (p != ar->strtab + size && *p != '\n' && *p != '`')
+	if (p != ar->strtab + size && *p != '\n')
 		goto bad_string_table;
 
 	/* Enforce zero termination. */
@@ -583,7 +550,7 @@ bad_string_table:
 	    "Invalid string table");
 	free(ar->strtab);
 	ar->strtab = NULL;
-	return (ARCHIVE_FATAL);
+	return (ARCHIVE_WARN);
 }
 
 static uint64_t

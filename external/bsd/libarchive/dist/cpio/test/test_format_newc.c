@@ -23,14 +23,7 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 #include "test.h"
-__FBSDID("$FreeBSD: src/usr.bin/cpio/test/test_format_newc.c,v 1.2 2008/08/22 02:09:10 kientzle Exp $");
-
-/* Number of bytes needed to pad 'n' to multiple of 'block', assuming
- * that 'block' is a power of two. This trick can be more easily
- * remembered as -n & (block - 1), but many compilers quite reasonably
- * warn about "-n" when n is an unsigned value.  (~(n) + 1) is the
- * same thing, but written in a way that won't offend anyone. */
-#define PAD(n, block)  ((~(n) + 1) & ((block) - 1))
+__FBSDID("$FreeBSD$");
 
 static int
 is_hex(const char *p, size_t l)
@@ -68,120 +61,62 @@ from_hex(const char *p, size_t l)
 	return (r);
 }
 
-#if !defined(_WIN32) || defined(__CYGWIN__)
-static int
-nlinks(const char *p)
-{
-	struct stat st;
-	assertEqualInt(0, stat(p, &st));
-	return st.st_nlink;
-}
-#endif
-
 DEFINE_TEST(test_format_newc)
 {
-	FILE *list;
+	int fd, list;
 	int r;
 	int devmajor, devminor, ino, gid;
-	int uid = -1;
 	time_t t, t2, now;
 	char *p, *e;
-	size_t s, fs, ns;
-	char result[1024];
+	size_t s;
+	mode_t oldmask;
 
-	assertUmask(0);
-
-#if !defined(_WIN32)
-	uid = getuid();
-#endif
+	oldmask = umask(0);
 
 	/*
 	 * Create an assortment of files.
 	 * TODO: Extend this to cover more filetypes.
 	 */
-	list = fopen("list", "w");
+	list = open("list", O_CREAT | O_WRONLY, 0644);
 
 	/* "file1" */
-	assertMakeFile("file1", 0644, "1234567890");
-	fprintf(list, "file1\n");
+	fd = open("file1", O_CREAT | O_WRONLY, 0644);
+	assert(fd >= 0);
+	assertEqualInt(10, write(fd, "123456789", 10));
+	close(fd);
+	assertEqualInt(6, write(list, "file1\n", 6));
 
 	/* "hardlink" */
-	assertMakeHardlink("hardlink", "file1");
-	fprintf(list, "hardlink\n");
+	assertEqualInt(0, link("file1", "hardlink"));
+	assertEqualInt(9, write(list, "hardlink\n", 9));
 
 	/* Another hardlink, but this one won't be archived. */
-	assertMakeHardlink("hardlink2", "file1");
+	assertEqualInt(0, link("file1", "hardlink2"));
 
 	/* "symlink" */
-	if (canSymlink()) {
-		assertMakeSymlink("symlink", "file1", 0);
-		fprintf(list, "symlink\n");
-	}
+	assertEqualInt(0, symlink("file1", "symlink"));
+	assertEqualInt(8, write(list, "symlink\n", 8));
 
 	/* "dir" */
-	assertMakeDir("dir", 0775);
-	fprintf(list, "dir\n");
-
-	/* Setup result message. */
-	memset(result, 0, sizeof(result));
-	if (is_LargeInode("file1")) {
-		strncat(result,
-		    "bsdcpio: file1: large inode number truncated: ",
-		    sizeof(result) - strlen(result) -1);
-		strncat(result, strerror(ERANGE),
-		    sizeof(result) - strlen(result) -1);
-		strncat(result, "\n",
-		    sizeof(result) - strlen(result) -1);
-	}
-	if (canSymlink() && is_LargeInode("symlink")) {
-		strncat(result,
-		    "bsdcpio: symlink: large inode number truncated: ",
-		    sizeof(result) - strlen(result) -1);
-		strncat(result, strerror(ERANGE),
-		    sizeof(result) - strlen(result) -1);
-		strncat(result, "\n",
-		    sizeof(result) - strlen(result) -1);
-	}
-	if (is_LargeInode("dir")) {
-		strncat(result,
-		    "bsdcpio: dir: large inode number truncated: ",
-		    sizeof(result) - strlen(result) -1);
-		strncat(result, strerror(ERANGE),
-		    sizeof(result) - strlen(result) -1);
-		strncat(result, "\n",
-		    sizeof(result) - strlen(result) -1);
-	}
-	if (is_LargeInode("hardlink")) {
-		strncat(result,
-		    "bsdcpio: hardlink: large inode number truncated: ",
-		    sizeof(result) - strlen(result) -1);
-		strncat(result, strerror(ERANGE),
-		    sizeof(result) - strlen(result) -1);
-		strncat(result, "\n",
-		    sizeof(result) - strlen(result) -1);
-	}
+	assertEqualInt(0, mkdir("dir", 0775));
+	assertEqualInt(4, write(list, "dir\n", 4));
 
 	/* Record some facts about what we just created: */
 	now = time(NULL); /* They were all created w/in last two seconds. */
 
 	/* Use the cpio program to create an archive. */
-	fclose(list);
+	close(list);
 	r = systemf("%s -o --format=newc <list >newc.out 2>newc.err",
 	    testprog);
 	if (!assertEqualInt(r, 0))
 		return;
 
 	/* Verify that nothing went to stderr. */
-	if (canSymlink()) {
-		strncat(result, "2 blocks\n", sizeof(result) - strlen(result) -1);
-	} else {
-		strncat(result, "1 block\n", sizeof(result) - strlen(result) -1);
-	}
-	assertTextFileContents(result, "newc.err");
+	assertFileContents("2 blocks\n", 9, "newc.err");
 
 	/* Verify that stdout is a well-formed cpio file in "newc" format. */
 	p = slurpfile(&s, "newc.out");
-	assertEqualInt(s, canSymlink() ? 1024 : 512);
+	assertEqualInt(s, 1024);
 	e = p;
 
 	/*
@@ -193,15 +128,8 @@ DEFINE_TEST(test_format_newc)
 	assert(is_hex(e, 110)); /* Entire header is octal digits. */
 	assertEqualMem(e + 0, "070701", 6); /* Magic */
 	ino = from_hex(e + 6, 8); /* ino */
-#if defined(_WIN32) && !defined(__CYGWIN__)
-	/* Group members bits and others bits do not work. */ 
-	assertEqualInt(0x8180, from_hex(e + 14, 8) & 0xffc0); /* Mode */
-#else
 	assertEqualInt(0x81a4, from_hex(e + 14, 8)); /* Mode */
-#endif	
-	if (uid < 0)
-		uid = from_hex(e + 22, 8);
-	assertEqualInt(from_hex(e + 22, 8), uid); /* uid */
+	assertEqualInt(from_hex(e + 22, 8), getuid()); /* uid */
 	gid = from_hex(e + 30, 8); /* gid */
 	assertEqualMem(e + 38, "00000003", 8); /* nlink */
 	t = from_hex(e + 46, 8); /* mtime */
@@ -213,86 +141,60 @@ DEFINE_TEST(test_format_newc)
 	    "       first appearance should be empty, so this file size\n"
 	    "       field should be zero");
 	assertEqualInt(0, from_hex(e + 54, 8)); /* File size */
-	fs = from_hex(e + 54, 8);
-	fs += PAD(fs, 4);
 	devmajor = from_hex(e + 62, 8); /* devmajor */
 	devminor = from_hex(e + 70, 8); /* devminor */
 	assert(is_hex(e + 78, 8)); /* rdevmajor */
 	assert(is_hex(e + 86, 8)); /* rdevminor */
 	assertEqualMem(e + 94, "00000006", 8); /* Name size */
-	ns = from_hex(e + 94, 8);
-	ns += PAD(ns + 2, 4);
 	assertEqualInt(0, from_hex(e + 102, 8)); /* check field */
 	assertEqualMem(e + 110, "file1\0", 6); /* Name contents */
 	/* Since there's another link, no file contents here. */
 	/* But add in file size so that an error here doesn't cascade. */
-	e += 110 + fs + ns;
-
-	if (canSymlink()) {
-		/* "symlink" pointing to "file1" */
-		assert(is_hex(e, 110));
-		assertEqualMem(e + 0, "070701", 6); /* Magic */
-		assert(is_hex(e + 6, 8)); /* ino */
-#if defined(_WIN32) && !defined(CYGWIN)
-		/* Mode: Group members bits and others bits do not work. */
-		assertEqualInt(0xa180, from_hex(e + 14, 8) & 0xffc0);
-#else
-		assertEqualInt(0xa1ff, from_hex(e + 14, 8)); /* Mode */
-#endif
-		assertEqualInt(from_hex(e + 22, 8), uid); /* uid */
-		assertEqualInt(gid, from_hex(e + 30, 8)); /* gid */
-		assertEqualMem(e + 38, "00000001", 8); /* nlink */
-		t2 = from_hex(e + 46, 8); /* mtime */
-		failure("First entry created at t=0x%08x this entry created at t2=0x%08x", t, t2);
-		assert(t2 == t || t2 == t + 1); /* Almost same as first entry. */
-		assertEqualMem(e + 54, "00000005", 8); /* File size */
-		fs = from_hex(e + 54, 8);
-		fs += PAD(fs, 4);
-		assertEqualInt(devmajor, from_hex(e + 62, 8)); /* devmajor */
-		assertEqualInt(devminor, from_hex(e + 70, 8)); /* devminor */
-		assert(is_hex(e + 78, 8)); /* rdevmajor */
-		assert(is_hex(e + 86, 8)); /* rdevminor */
-		assertEqualMem(e + 94, "00000008", 8); /* Name size */
-		ns = from_hex(e + 94, 8);
-		ns += PAD(ns + 2, 4);
-		assertEqualInt(0, from_hex(e + 102, 8)); /* check field */
-		assertEqualMem(e + 110, "symlink\0\0\0", 10); /* Name contents */
-		assertEqualMem(e + 110 + ns, "file1\0\0\0", 8); /* symlink target */
-		e += 110 + fs + ns;
-	}
+	e += 116 + from_hex(e + 54, 8) + (3 & -from_hex(e + 54, 8));
+	/* "symlink" pointing to "file1" */
+	assert(is_hex(e, 110));
+	assertEqualMem(e + 0, "070701", 6); /* Magic */
+	assert(is_hex(e + 6, 8)); /* ino */
+	assertEqualInt(0xa1ff, from_hex(e + 14, 8)); /* Mode */
+	assertEqualInt(from_hex(e + 22, 8), getuid()); /* uid */
+	assertEqualInt(gid, from_hex(e + 30, 8)); /* gid */
+	assertEqualMem(e + 38, "00000001", 8); /* nlink */
+	t2 = from_hex(e + 46, 8); /* mtime */
+	failure("First entry created at t=0x%08x this entry created at t2=0x%08x", t, t2);
+	assert(t2 == t || t2 == t + 1); /* Almost same as first entry. */
+	assertEqualMem(e + 54, "00000005", 8); /* File size */
+	assertEqualInt(devmajor, from_hex(e + 62, 8)); /* devmajor */
+	assertEqualInt(devminor, from_hex(e + 70, 8)); /* devminor */
+	assert(is_hex(e + 78, 8)); /* rdevmajor */
+	assert(is_hex(e + 86, 8)); /* rdevminor */
+	assertEqualMem(e + 94, "00000008", 8); /* Name size */
+	assertEqualInt(0, from_hex(e + 102, 8)); /* check field */
+	assertEqualMem(e + 110, "symlink\0\0\0", 10); /* Name contents */
+	assertEqualMem(e + 120, "file1\0\0\0", 8); /* symlink target */
+	e += 120 + from_hex(e + 54, 8) + (3 & -from_hex(e + 54, 8));
 
 	/* "dir" */
 	assert(is_hex(e, 110));
 	assertEqualMem(e + 0, "070701", 6); /* Magic */
 	assert(is_hex(e + 6, 8)); /* ino */
-#if defined(_WIN32) && !defined(__CYGWIN__)
-	/* Group members bits and others bits do not work. */
-	assertEqualInt(0x41c0, from_hex(e + 14, 8) & 0xffc0); /* Mode */
-#else
-	/* Mode: sgid bit sometimes propagates from parent dirs, ignore it. */
-	assertEqualInt(040775, from_hex(e + 14, 8) & ~02000);
-#endif
-	assertEqualInt(uid, from_hex(e + 22, 8)); /* uid */
+	assertEqualInt(0x41fd, from_hex(e + 14, 8)); /* Mode */
+	assertEqualInt(from_hex(e + 22, 8), getuid()); /* uid */
 	assertEqualInt(gid, from_hex(e + 30, 8)); /* gid */
-#if !defined(_WIN32) || defined(__CYGWIN__)
-	assertEqualInt(nlinks("dir"), from_hex(e + 38, 8)); /* nlinks */
-#endif
+	assertEqualMem(e + 38, "00000002", 8); /* nlink */
 	t2 = from_hex(e + 46, 8); /* mtime */
 	failure("First entry created at t=0x%08x this entry created at t2=0x%08x", t, t2);
 	assert(t2 == t || t2 == t + 1); /* Almost same as first entry. */
 	assertEqualMem(e + 54, "00000000", 8); /* File size */
-	fs = from_hex(e + 54, 8);
-	fs += PAD(fs, 4);
 	assertEqualInt(devmajor, from_hex(e + 62, 8)); /* devmajor */
 	assertEqualInt(devminor, from_hex(e + 70, 8)); /* devminor */
 	assert(is_hex(e + 78, 8)); /* rdevmajor */
 	assert(is_hex(e + 86, 8)); /* rdevminor */
 	assertEqualMem(e + 94, "00000004", 8); /* Name size */
-	ns = from_hex(e + 94, 8);
-	ns += PAD(ns + 2, 4);
 	assertEqualInt(0, from_hex(e + 102, 8)); /* check field */
 	assertEqualMem(e + 110, "dir\0\0\0", 6); /* Name contents */
-	e += 110 + fs + ns;
+	e += 116;
+
+	/* TODO: Verify other types of entries. */
 
 	/* Hardlink identical to "file1" */
 	/* Since we only wrote two of the three links to this
@@ -301,32 +203,23 @@ DEFINE_TEST(test_format_newc)
 	assertEqualMem(e + 0, "070701", 6); /* Magic */
 	failure("If these aren't the same, then the hardlink detection failed to match them.");
 	assertEqualInt(ino, from_hex(e + 6, 8)); /* ino */
-#if defined(_WIN32) && !defined(__CYGWIN__)
-	/* Group members bits and others bits do not work. */ 
-	assertEqualInt(0x8180, from_hex(e + 14, 8) & 0xffc0); /* Mode */
-#else
 	assertEqualInt(0x81a4, from_hex(e + 14, 8)); /* Mode */
-#endif
-	assertEqualInt(from_hex(e + 22, 8), uid); /* uid */
+	assertEqualInt(from_hex(e + 22, 8), getuid()); /* uid */
 	assertEqualInt(gid, from_hex(e + 30, 8)); /* gid */
 	assertEqualMem(e + 38, "00000003", 8); /* nlink */
 	t2 = from_hex(e + 46, 8); /* mtime */
 	failure("First entry created at t=0x%08x this entry created at t2=0x%08x", t, t2);
 	assert(t2 == t || t2 == t + 1); /* Almost same as first entry. */
 	assertEqualInt(10, from_hex(e + 54, 8)); /* File size */
-	fs = from_hex(e + 54, 8);
-	fs += PAD(fs, 4);
 	assertEqualInt(devmajor, from_hex(e + 62, 8)); /* devmajor */
 	assertEqualInt(devminor, from_hex(e + 70, 8)); /* devminor */
 	assert(is_hex(e + 78, 8)); /* rdevmajor */
 	assert(is_hex(e + 86, 8)); /* rdevminor */
 	assertEqualMem(e + 94, "00000009", 8); /* Name size */
-	ns = from_hex(e + 94, 8);
-	ns += PAD(ns + 2, 4);
 	assertEqualInt(0, from_hex(e + 102, 8)); /* check field */
 	assertEqualMem(e + 110, "hardlink\0\0", 10); /* Name contents */
-	assertEqualMem(e + 110 + ns, "1234567890\0\0", 12); /* File contents */
-	e += 110 + ns + fs;
+	assertEqualMem(e + 120, "123456789\0\0\0", 12); /* File contents */
+	e += 120 + from_hex(e + 54, 8) + (3 & -from_hex(e + 54, 8));
 
 	/* Last entry is end-of-archive marker. */
 	assert(is_hex(e, 110));
@@ -347,4 +240,6 @@ DEFINE_TEST(test_format_newc)
 	assertEqualMem(e + 110, "TRAILER!!!\0\0", 12); /* Name */
 
 	free(p);
+
+	umask(oldmask);
 }

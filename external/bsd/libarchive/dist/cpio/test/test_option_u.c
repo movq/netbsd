@@ -23,11 +23,7 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 #include "test.h"
-#if defined(HAVE_UTIME_H)
 #include <utime.h>
-#elif defined(HAVE_SYS_UTIME_H)
-#include <sys/utime.h>
-#endif
 __FBSDID("$FreeBSD$");
 
 DEFINE_TEST(test_option_u)
@@ -35,13 +31,17 @@ DEFINE_TEST(test_option_u)
 	struct utimbuf times;
 	char *p;
 	size_t s;
+	int fd;
 	int r;
 
 	/* Create a file. */
-	assertMakeFile("f", 0644, "a");
+	fd = open("f", O_CREAT | O_WRONLY, 0644);
+	assert(fd >= 0);
+	assertEqualInt(1, write(fd, "a", 1));
+	close(fd);
 
 	/* Copy the file to the "copy" dir. */
-	r = systemf("echo f| %s -pd copy >copy.out 2>copy.err",
+	r = systemf("echo f | %s -pd copy >copy.out 2>copy.err",
 	    testprog);
 	assertEqualInt(r, 0);
 
@@ -49,10 +49,12 @@ DEFINE_TEST(test_option_u)
 	p = slurpfile(&s, "copy/f");
 	assertEqualInt(s, 1);
 	assertEqualMem(p, "a", 1);
-	free(p);
 
 	/* Recreate the file with a single "b" */
-	assertMakeFile("f", 0644, "b");
+	fd = open("f", O_CREAT | O_TRUNC | O_WRONLY, 0644);
+	assert(fd >= 0);
+	assertEqualInt(1, write(fd, "b", 1));
+	close(fd);
 
 	/* Set the mtime to the distant past. */
 	memset(&times, 0, sizeof(times));
@@ -61,7 +63,7 @@ DEFINE_TEST(test_option_u)
 	assertEqualInt(0, utime("f", &times));
 
 	/* Copy the file to the "copy" dir. */
-	r = systemf("echo f| %s -pd copy >copy.out 2>copy.err",
+	r = systemf("echo f | %s -pd copy >copy.out 2>copy.err",
 	    testprog);
 	assertEqualInt(r, 0);
 
@@ -69,10 +71,9 @@ DEFINE_TEST(test_option_u)
 	p = slurpfile(&s, "copy/f");
 	assertEqualInt(s, 1);
 	assertEqualMem(p, "a", 1);
-	free(p);
 
 	/* Copy the file to the "copy" dir with -u (force) */
-	r = systemf("echo f| %s -pud copy >copy.out 2>copy.err",
+	r = systemf("echo f | %s -pud copy >copy.out 2>copy.err",
 	    testprog);
 	assertEqualInt(r, 0);
 
@@ -80,5 +81,4 @@ DEFINE_TEST(test_option_u)
 	p = slurpfile(&s, "copy/f");
 	assertEqualInt(s, 1);
 	assertEqualMem(p, "b", 1);
-	free(p);
 }

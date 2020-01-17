@@ -23,7 +23,7 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 #include "test.h"
-__FBSDID("$FreeBSD: head/lib/libarchive/test/test_ustar_filenames.c 189308 2009-03-03 17:02:51Z kientzle $");
+__FBSDID("$FreeBSD$");
 
 /*
  * Exercise various lengths of filenames in ustar archives.
@@ -43,7 +43,7 @@ test_filename(const char *prefix, int dlen, int flen)
 
 	if (prefix != NULL) {
 		strcpy(filename, prefix);
-		i = (int)strlen(prefix);
+		i = strlen(prefix);
 	}
 	if (dlen > 0) {
 		for (; i < dlen; i++)
@@ -53,14 +53,14 @@ test_filename(const char *prefix, int dlen, int flen)
 	}
 	for (; i < dlen + flen + separator; i++)
 		filename[i] = 'b';
-	filename[i] = '\0';
+	filename[i++] = '\0';
 
 	strcpy(dirname, filename);
 
 	/* Create a new archive in memory. */
 	assert((a = archive_write_new()) != NULL);
 	assertA(0 == archive_write_set_format_ustar(a));
-	assertA(0 == archive_write_add_filter_none(a));
+	assertA(0 == archive_write_set_compression_none(a));
 	assertA(0 == archive_write_set_bytes_per_block(a,0));
 	assertA(0 == archive_write_open_memory(a, buff, sizeof(buff), &used));
 
@@ -110,15 +110,15 @@ test_filename(const char *prefix, int dlen, int flen)
 	archive_entry_free(ae);
 
 	/* Close out the archive. */
-	assertEqualIntA(a, ARCHIVE_OK, archive_write_close(a));
-	assertEqualInt(ARCHIVE_OK, archive_write_free(a));
+	assertA(0 == archive_write_close(a));
+	assertA(0 == archive_write_finish(a));
 
 	/*
 	 * Now, read the data back.
 	 */
 	assert((a = archive_read_new()) != NULL);
 	assertA(0 == archive_read_support_format_all(a));
-	assertA(0 == archive_read_support_filter_all(a));
+	assertA(0 == archive_read_support_compression_all(a));
 	assertA(0 == archive_read_open_memory(a, buff, used));
 
 	if (flen <= 100) {
@@ -152,8 +152,8 @@ test_filename(const char *prefix, int dlen, int flen)
 	/* Verify the end of the archive. */
 	failure("This fails if entries were written that should not have been written.  dlen=%d, flen=%d", dlen, flen);
 	assertEqualInt(1, archive_read_next_header(a, &ae));
-	assertEqualIntA(a, ARCHIVE_OK, archive_read_close(a));
-	assertEqualInt(ARCHIVE_OK, archive_read_free(a));
+	assert(0 == archive_read_close(a));
+	assert(0 == archive_read_finish(a));
 }
 
 DEFINE_TEST(test_ustar_filenames)

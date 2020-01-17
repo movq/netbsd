@@ -28,7 +28,9 @@ __FBSDID("$FreeBSD$");
 
 DEFINE_TEST(test_option_m)
 {
+	struct stat st;
 	int r;
+	time_t now;
 
 	/*
 	 * The reference archive has one file with an mtime in 1970, 1
@@ -36,28 +38,33 @@ DEFINE_TEST(test_option_m)
 	 */
 
 	/* Restored without -m, the result should have a current mtime. */
-	assertMakeDir("without-m", 0755);
-	assertChdir("without-m");
+	assertEqualInt(0, mkdir("without-m", 0755));
+	assertEqualInt(0, chdir("without-m"));
 	extract_reference_file("test_option_m.cpio");
-	r = systemf("%s --no-preserve-owner -i < test_option_m.cpio >out 2>err", testprog);
+	r = systemf("%s -i < test_option_m.cpio >out 2>err", testprog);
+	now = time(NULL);
 	assertEqualInt(r, 0);
 	assertEmptyFile("out");
-	assertTextFileContents("1 block\n", "err");
+	assertFileContents("1 block\n", 8, "err");
+	assertEqualInt(0, stat("file", &st));
 	/* Should have been created within the last few seconds. */
-	assertFileMtimeRecent("file");
+	assert(st.st_mtime <= now);
+	assert(st.st_mtime > now - 5);
 
 	/* With -m, it should have an mtime in 1970. */
-	assertChdir("..");
-	assertMakeDir("with-m", 0755);
-	assertChdir("with-m");
+	assertEqualInt(0, chdir(".."));
+	assertEqualInt(0, mkdir("with-m", 0755));
+	assertEqualInt(0, chdir("with-m"));
 	extract_reference_file("test_option_m.cpio");
-	r = systemf("%s --no-preserve-owner -im < test_option_m.cpio >out 2>err", testprog);
+	r = systemf("%s -im < test_option_m.cpio >out 2>err", testprog);
+	now = time(NULL);
 	assertEqualInt(r, 0);
 	assertEmptyFile("out");
-	assertTextFileContents("1 block\n", "err");
+	assertFileContents("1 block\n", 8, "err");
+	assertEqualInt(0, stat("file", &st));
 	/*
 	 * mtime in reference archive is '1' == 1 second after
 	 * midnight Jan 1, 1970 UTC.
 	 */
-	assertFileMtime("file", 1, 0);
+	assertEqualInt(1, st.st_mtime);
 }

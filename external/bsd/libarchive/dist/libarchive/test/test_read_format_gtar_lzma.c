@@ -45,11 +45,11 @@ DEFINE_TEST(test_read_format_gtar_lzma)
 	struct archive *a;
 	assert((a = archive_read_new()) != NULL);
 	assertEqualIntA(a, ARCHIVE_OK,
-	    archive_read_support_filter_all(a));
-	r = archive_read_support_filter_lzma(a);
+	    archive_read_support_compression_all(a));
+	r = archive_read_support_compression_lzma(a);
 	if (r == ARCHIVE_WARN) {
 		skipping("lzma reading not fully supported on this platform");
-		assertEqualInt(ARCHIVE_OK, archive_read_free(a));
+		assertEqualInt(ARCHIVE_OK, archive_read_finish(a));
 		return;
 	}
 
@@ -64,13 +64,15 @@ DEFINE_TEST(test_read_format_gtar_lzma)
 	}
 	assertEqualIntA(a, ARCHIVE_OK,
 	    archive_read_next_header(a, &ae));
-	assertEqualInt(archive_filter_code(a, 0), ARCHIVE_FILTER_LZMA);
+	assertEqualInt(archive_compression(a), ARCHIVE_COMPRESSION_LZMA);
 	assertEqualInt(archive_format(a), ARCHIVE_FORMAT_TAR_GNUTAR);
-	assertEqualInt(archive_entry_is_encrypted(ae), 0);
-	assertEqualIntA(a, archive_read_has_encrypted_entries(a), ARCHIVE_READ_FORMAT_ENCRYPTION_UNSUPPORTED);
 	assertEqualIntA(a, ARCHIVE_OK, archive_read_close(a));
 finish:
-	assertEqualInt(ARCHIVE_OK, archive_read_free(a));
+#if ARCHIVE_VERSION_NUMBER < 2000000
+	archive_read_finish(a);
+#else
+	assertEqualInt(ARCHIVE_OK, archive_read_finish(a));
+#endif
 }
 
 

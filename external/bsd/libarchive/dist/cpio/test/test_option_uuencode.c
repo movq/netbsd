@@ -42,7 +42,6 @@ DEFINE_TEST(test_option_uuencode)
 	p = slurpfile(&s, "archive.out");
 	assert(s > 2);
 	assertEqualMem(p, "begin 644", 9);
-	free(p);
 
 	/* Archive it with uuencode only. */
 	assertEqualInt(0,
@@ -52,5 +51,4 @@ DEFINE_TEST(test_option_uuencode)
 	p = slurpfile(&s, "archive.out");
 	assert(s > 2);
 	assertEqualMem(p, "begin 644", 9);
-	free(p);
 }

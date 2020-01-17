@@ -30,10 +30,8 @@ __FBSDID("$FreeBSD: src/usr.bin/cpio/test/test_option_L.c,v 1.2 2008/08/24 06:21
  * tests won't run on Windows. */
 #if defined(_WIN32) && !defined(__CYGWIN__)
 #define CAT "type"
-#define SEP "\\"
 #else
 #define CAT "cat"
-#define SEP "/"
 #endif
 
 DEFINE_TEST(test_option_L_upper)
@@ -53,7 +51,7 @@ DEFINE_TEST(test_option_L_upper)
 	fprintf(filelist, "file\n");
 
 	/* Symlink to above file. */
-	assertMakeSymlink("symlink", "file", 0);
+	assertMakeSymlink("symlink", "file");
 	fprintf(filelist, "symlink\n");
 
 	fclose(filelist);
@@ -63,7 +61,7 @@ DEFINE_TEST(test_option_L_upper)
 	assertTextFileContents("1 block\n", "copy.err");
 
 	failure("Regular -p without -L should preserve symlinks.");
-	assertIsSymlink("copy/symlink", NULL, 0);
+	assertIsSymlink("copy/symlink", NULL);
 
 	r = systemf(CAT " filelist | %s -pd -L copy-L >copy-L.out 2>copy-L.err", testprog);
 	assertEqualInt(r, 0);
@@ -79,14 +77,13 @@ DEFINE_TEST(test_option_L_upper)
 
 	assertMakeDir("unpack", 0755);
 	assertChdir("unpack");
-	r = systemf(CAT " .." SEP "archive.out | %s -i >unpack.out 2>unpack.err", testprog);
-
+	r = systemf(CAT " ../archive.out | %s -i >unpack.out 2>unpack.err", testprog);
 	failure("Error invoking %s -i", testprog);
 	assertEqualInt(r, 0);
 	assertTextFileContents("1 block\n", "unpack.err");
 	assertChdir("..");
 
-	assertIsSymlink("unpack/symlink", NULL, 0);
+	assertIsSymlink("unpack/symlink", NULL);
 
 	r = systemf(CAT " filelist | %s -oL >archive-L.out 2>archive-L.err", testprog);
 	failure("Error invoking %s -oL", testprog);
@@ -95,8 +92,7 @@ DEFINE_TEST(test_option_L_upper)
 
 	assertMakeDir("unpack-L", 0755);
 	assertChdir("unpack-L");
-	r = systemf(CAT " .." SEP "archive-L.out | %s -i >unpack-L.out 2>unpack-L.err", testprog);
-
+	r = systemf(CAT " ../archive-L.out | %s -i >unpack-L.out 2>unpack-L.err", testprog);
 	failure("Error invoking %s -i < archive-L.out", testprog);
 	assertEqualInt(r, 0);
 	assertTextFileContents("1 block\n", "unpack-L.err");
