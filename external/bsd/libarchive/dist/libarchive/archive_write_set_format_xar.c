@@ -496,13 +496,10 @@ xar_options(struct archive_write *a, const char *key, const char *value)
 		return (ARCHIVE_OK);
 	}
 	if (strcmp(key, "threads") == 0) {
-		char *endptr;
-
 		if (value == NULL)
 			return (ARCHIVE_FAILED);
-		errno = 0;
-		xar->opt_threads = (int)strtoul(value, &endptr, 10);
-		if (errno != 0 || *endptr != '\0') {
+		xar->opt_threads = (int)strtoul(value, NULL, 10);
+		if (xar->opt_threads == 0 && errno != 0) {
 			xar->opt_threads = 1;
 			archive_set_error(&(a->archive),
 			    ARCHIVE_ERRNO_MISC,
@@ -2123,10 +2120,10 @@ file_gen_utility_names(struct archive_write *a, struct file *file)
 		if (p[0] == '/') {
 			if (p[1] == '/')
 				/* Convert '//' --> '/' */
-				memmove(p, p+1, strlen(p+1) + 1);
+				strcpy(p, p+1);
 			else if (p[1] == '.' && p[2] == '/')
 				/* Convert '/./' --> '/' */
-				memmove(p, p+2, strlen(p+2) + 1);
+				strcpy(p, p+2);
 			else if (p[1] == '.' && p[2] == '.' && p[3] == '/') {
 				/* Convert 'dir/dir1/../dir2/'
 				 *     --> 'dir/dir2/'
@@ -3172,10 +3169,8 @@ save_xattrs(struct archive_write *a, struct file *file)
 			checksum_update(&(xar->a_sumwrk),
 			    xar->wbuff, size);
 			if (write_to_temp(a, xar->wbuff, size)
-			    != ARCHIVE_OK) {
-				free(heap);
+			    != ARCHIVE_OK)
 				return (ARCHIVE_FATAL);
-			}
 			if (r == ARCHIVE_OK) {
 				xar->stream.next_out = xar->wbuff;
 				xar->stream.avail_out = sizeof(xar->wbuff);

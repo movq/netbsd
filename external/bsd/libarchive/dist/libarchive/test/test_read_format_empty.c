@@ -23,23 +23,27 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 #include "test.h"
-__FBSDID("$FreeBSD: head/lib/libarchive/test/test_read_format_empty.c 189308 2009-03-03 17:02:51Z kientzle $");
+__FBSDID("$FreeBSD: src/lib/libarchive/test/test_read_format_empty.c,v 1.1 2007/03/03 07:37:37 kientzle Exp $");
 
-static unsigned char archive[] = { 0 };
+static unsigned char archive[] = { };
 
 DEFINE_TEST(test_read_format_empty)
 {
 	struct archive_entry *ae;
 	struct archive *a;
 	assert((a = archive_read_new()) != NULL);
-	assertA(0 == archive_read_support_filter_all(a));
+	assertA(0 == archive_read_support_compression_all(a));
 	assertA(0 == archive_read_support_format_all(a));
-	assertA(0 == archive_read_open_memory(a, archive, 0));
+	assertA(0 == archive_read_open_memory(a, archive, sizeof(archive)));
 	assertA(ARCHIVE_EOF == archive_read_next_header(a, &ae));
-	assertA(archive_filter_code(a, 0) == ARCHIVE_FILTER_NONE);
+	assertA(archive_compression(a) == ARCHIVE_COMPRESSION_NONE);
 	assertA(archive_format(a) == ARCHIVE_FORMAT_EMPTY);
-	assertEqualInt(archive_entry_is_encrypted(ae), 0);
-	assertEqualIntA(a, archive_read_has_encrypted_entries(a), ARCHIVE_READ_FORMAT_ENCRYPTION_UNSUPPORTED);
-	assertEqualIntA(a, ARCHIVE_OK, archive_read_close(a));
-	assertEqualInt(ARCHIVE_OK, archive_read_free(a));
+	assert(0 == archive_read_close(a));
+#if ARCHIVE_API_VERSION > 1
+	assert(0 == archive_read_finish(a));
+#else
+	archive_read_finish(a);
+#endif
 }
+
+

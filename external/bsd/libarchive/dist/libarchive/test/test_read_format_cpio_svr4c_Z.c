@@ -23,7 +23,7 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 #include "test.h"
-__FBSDID("$FreeBSD: head/lib/libarchive/test/test_read_format_cpio_svr4c_Z.c 189381 2009-03-05 00:31:48Z kientzle $");
+__FBSDID("$FreeBSD: src/lib/libarchive/test/test_read_format_cpio_svr4c_Z.c,v 1.1 2007/03/03 07:37:37 kientzle Exp $");
 
 static unsigned char archive[] = {
 31,157,144,'0','n',4,132,'!',3,6,140,26,'8','n',228,16,19,195,160,'A',26,
@@ -39,22 +39,18 @@ DEFINE_TEST(test_read_format_cpio_svr4c_Z)
 	struct archive *a;
 /*	printf("Archive address: start=%X, end=%X\n", archive, archive+sizeof(archive)); */
 	assert((a = archive_read_new()) != NULL);
-	assertEqualIntA(a, ARCHIVE_OK,
-	    archive_read_support_filter_all(a));
-	assertEqualIntA(a, ARCHIVE_OK,
-	    archive_read_support_format_all(a));
-	assertEqualIntA(a, ARCHIVE_OK,
-	    archive_read_open_memory(a, archive, sizeof(archive)));
-	assertEqualIntA(a, ARCHIVE_OK, archive_read_next_header(a, &ae));
-	failure("archive_filter_name(a, 0)=\"%s\"",
-	    archive_filter_name(a, 0));
-	assertEqualInt(archive_filter_code(a, 0), ARCHIVE_FILTER_COMPRESS);
-	failure("archive_format_name(a)=\"%s\"", archive_format_name(a));
-	assertEqualInt(archive_format(a), ARCHIVE_FORMAT_CPIO_SVR4_CRC);
-	assertEqualInt(archive_entry_is_encrypted(ae), 0);
-	assertEqualIntA(a, archive_read_has_encrypted_entries(a), ARCHIVE_READ_FORMAT_ENCRYPTION_UNSUPPORTED);
-	assertEqualIntA(a, ARCHIVE_OK, archive_read_close(a));
-	assertEqualInt(ARCHIVE_OK, archive_read_free(a));
+	assertA(0 == archive_read_support_compression_all(a));
+	assertA(0 == archive_read_support_format_all(a));
+	assertA(0 == archive_read_open_memory(a, archive, sizeof(archive)));
+	assertA(0 == archive_read_next_header(a, &ae));
+	assertA(archive_compression(a) == ARCHIVE_COMPRESSION_COMPRESS);
+	assertA(archive_format(a) == ARCHIVE_FORMAT_CPIO_SVR4_CRC);
+	assert(0 == archive_read_close(a));
+#if ARCHIVE_API_VERSION > 1
+	assert(0 == archive_read_finish(a));
+#else
+	archive_read_finish(a);
+#endif
 }
 
 

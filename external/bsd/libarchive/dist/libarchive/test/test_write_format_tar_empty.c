@@ -23,7 +23,7 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 #include "test.h"
-__FBSDID("$FreeBSD: head/lib/libarchive/test/test_write_format_tar_empty.c 189308 2009-03-03 17:02:51Z kientzle $");
+__FBSDID("$FreeBSD: src/lib/libarchive/test/test_write_format_tar_empty.c,v 1.3 2007/07/06 15:43:11 kientzle Exp $");
 
 /*
  * Check that an "empty" tar archive is correctly created.
@@ -39,16 +39,25 @@ DEFINE_TEST(test_write_format_tar_empty)
 	/* USTAR format: Create a new archive in memory. */
 	assert((a = archive_write_new()) != NULL);
 	assertA(0 == archive_write_set_format_ustar(a));
-	assertA(0 == archive_write_add_filter_none(a));
+	assertA(0 == archive_write_set_compression_none(a));
 	assertA(0 == archive_write_set_bytes_per_block(a, 512));
 	assertA(0 == archive_write_set_bytes_in_last_block(a, 512));
 	assertA(0 == archive_write_open_memory(a, buff, sizeof(buff), &used));
 
 	/* Close out the archive. */
-	assertEqualIntA(a, ARCHIVE_OK, archive_write_close(a));
-	assertEqualInt(ARCHIVE_OK, archive_write_free(a));
+	assertA(0 == archive_write_close(a));
+#if ARCHIVE_API_VERSION > 1
+	assertA(0 == archive_write_finish(a));
+#else
+	archive_write_finish(a);
+#endif
 
+#if ARCHIVE_VERSION_STAMP < 1009000
+	/* Earlier versions wrote 0-length files for empty tar archives. */
+	skipping("empty tar archive size");
+#else
 	assert(used == 1024);
+#endif
 	for (i = 0; i < used; i++) {
 		failure("Empty tar archive should be all nulls.");
 		assert(buff[i] == 0);
@@ -57,16 +66,25 @@ DEFINE_TEST(test_write_format_tar_empty)
 	/* PAX format: Create a new archive in memory. */
 	assert((a = archive_write_new()) != NULL);
 	assertA(0 == archive_write_set_format_pax(a));
-	assertA(0 == archive_write_add_filter_none(a));
+	assertA(0 == archive_write_set_compression_none(a));
 	assertA(0 == archive_write_set_bytes_per_block(a, 512));
 	assertA(0 == archive_write_set_bytes_in_last_block(a, 512));
 	assertA(0 == archive_write_open_memory(a, buff, sizeof(buff), &used));
 
 	/* Close out the archive. */
-	assertEqualIntA(a, ARCHIVE_OK, archive_write_close(a));
-	assertEqualInt(ARCHIVE_OK, archive_write_free(a));
+	assertA(0 == archive_write_close(a));
+#if ARCHIVE_API_VERSION > 1
+	assertA(0 == archive_write_finish(a));
+#else
+	archive_write_finish(a);
+#endif
 
-	assertEqualInt((int)used, 1024);
+#if ARCHIVE_VERSION_STAMP < 1009000
+	/* Earlier versions wrote 0-length files for empty tar archives. */
+	skipping("empty tar archive size");
+#else
+	assertEqualInt(used, 1024);
+#endif
 	for (i = 0; i < used; i++) {
 		failure("Empty tar archive should be all nulls.");
 		assert(buff[i] == 0);

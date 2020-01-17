@@ -23,7 +23,7 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 #include "test.h"
-__FBSDID("$FreeBSD: head/lib/libarchive/test/test_read_format_tar.c 201247 2009-12-30 05:59:21Z kientzle $");
+__FBSDID("$FreeBSD: src/lib/libarchive/test/test_read_format_tar.c,v 1.3 2008/01/13 23:50:30 kientzle Exp $");
 
 /*
  * Each of these archives is a short archive with a single entry.  The
@@ -66,19 +66,20 @@ static void verifyEmpty(void)
 	struct archive *a;
 
 	assert((a = archive_read_new()) != NULL);
-	assertA(0 == archive_read_support_filter_all(a));
+	assertA(0 == archive_read_support_compression_all(a));
 	assertA(0 == archive_read_support_format_all(a));
 	assertA(0 == archive_read_open_memory(a, archiveEmpty, 512));
 	assertEqualIntA(a, ARCHIVE_EOF, archive_read_next_header(a, &ae));
-	assertEqualInt(archive_filter_code(a, 0), ARCHIVE_FILTER_NONE);
-	assertEqualString(archive_filter_name(a, 0), "none");
+	assertEqualInt(archive_compression(a), ARCHIVE_COMPRESSION_NONE);
 	failure("512 zero bytes should be recognized as a tar archive.");
 	assertEqualInt(archive_format(a), ARCHIVE_FORMAT_TAR);
-	assertEqualInt(archive_entry_is_encrypted(ae), 0);
-	assertEqualIntA(a, archive_read_has_encrypted_entries(a), ARCHIVE_READ_FORMAT_ENCRYPTION_UNSUPPORTED);
 
-	assertEqualIntA(a, ARCHIVE_OK, archive_read_close(a));
-	assertEqualInt(ARCHIVE_OK, archive_read_free(a));
+	assert(0 == archive_read_close(a));
+#if ARCHIVE_API_VERSION > 1
+	assert(0 == archive_read_finish(a));
+#else
+	archive_read_finish(a);
+#endif
 }
 
 /* Single entry with a hardlink. */
@@ -99,9 +100,9 @@ static unsigned char archive1[] = {
 static void verify1(struct archive_entry *ae)
 {
 	/* A hardlink is not a symlink. */
-	assert(archive_entry_filetype(ae) != AE_IFLNK);
+	assert(!S_ISLNK(archive_entry_mode(ae)));
 	/* Nor is it a directory. */
-	assert(archive_entry_filetype(ae) != AE_IFDIR);
+	assert(!S_ISDIR(archive_entry_mode(ae)));
 	assertEqualInt(archive_entry_mode(ae) & 0777, 0644);
 	assertEqualInt(archive_entry_uid(ae), 1000);
 	assertEqualInt(archive_entry_gid(ae), 1000);
@@ -130,7 +131,7 @@ static unsigned char archive2[] = {
 
 static void verify2(struct archive_entry *ae)
 {
-	assertEqualInt(archive_entry_filetype(ae), AE_IFLNK);
+	assert(S_ISLNK(archive_entry_mode(ae)));
 	assertEqualInt(archive_entry_mode(ae) & 0777, 0755);
 	assertEqualInt(archive_entry_uid(ae), 1000);
 	assertEqualInt(archive_entry_gid(ae), 1000);
@@ -159,7 +160,7 @@ static unsigned char archive3[] = {
 
 static void verify3(struct archive_entry *ae)
 {
-	assertEqualInt(archive_entry_filetype(ae), AE_IFCHR);
+	assert(S_ISCHR(archive_entry_mode(ae)));
 	assertEqualInt(archive_entry_mode(ae) & 0777, 0755);
 	assertEqualInt(archive_entry_uid(ae), 1000);
 	assertEqualInt(archive_entry_gid(ae), 1000);
@@ -188,7 +189,7 @@ static unsigned char archive4[] = {
 
 static void verify4(struct archive_entry *ae)
 {
-	assertEqualInt(archive_entry_filetype(ae), AE_IFBLK);
+	assert(S_ISBLK(archive_entry_mode(ae)));
 	assertEqualInt(archive_entry_mode(ae) & 0777, 0755);
 	assertEqualInt(archive_entry_uid(ae), 1000);
 	assertEqualInt(archive_entry_gid(ae), 1000);
@@ -217,7 +218,7 @@ static unsigned char archive5[] = {
 
 static void verify5(struct archive_entry *ae)
 {
-	assertEqualInt(archive_entry_filetype(ae), AE_IFDIR);
+	assert(S_ISDIR(archive_entry_mode(ae)));
 	assertEqualInt(archive_entry_mtime(ae), 1131430878);
 	assertEqualInt(archive_entry_mode(ae) & 0777, 0755);
 	assertEqualInt(archive_entry_uid(ae), 1000);
@@ -243,7 +244,7 @@ static unsigned char archive6[] = {
 
 static void verify6(struct archive_entry *ae)
 {
-	assertEqualInt(archive_entry_filetype(ae), AE_IFIFO);
+	assert(S_ISFIFO(archive_entry_mode(ae)));
 	assertEqualInt(archive_entry_mode(ae) & 0777, 0755);
 	assertEqualInt(archive_entry_uid(ae), 1000);
 	assertEqualInt(archive_entry_gid(ae), 1000);
@@ -314,7 +315,7 @@ static unsigned char archiveK[] = {
 
 static void verifyK(struct archive_entry *ae)
 {
-	assertEqualInt(archive_entry_filetype(ae), AE_IFLNK);
+	assert(S_ISLNK(archive_entry_mode(ae)));
 	assertEqualInt(archive_entry_mode(ae) & 0777, 0755);
 	assertEqualInt(archive_entry_uid(ae), 1000);
 	assertEqualInt(archive_entry_gid(ae), 1000);
@@ -400,7 +401,7 @@ static unsigned char archivexL[] = {
 
 static void verifyxL(struct archive_entry *ae)
 {
-	assertEqualInt(archive_entry_filetype(ae), AE_IFLNK);
+	assert(S_ISLNK(archive_entry_mode(ae)));
 	assertEqualInt(archive_entry_mode(ae) & 0777, 0755);
 	assertEqualInt(archive_entry_uid(ae), 1000);
 	assertEqualInt(archive_entry_gid(ae), 1000);
@@ -435,20 +436,22 @@ static void verify(unsigned char *d, size_t s,
 	memset(buff + s, 0, 2048);
 
 	assert((a = archive_read_new()) != NULL);
-	assertA(0 == archive_read_support_filter_all(a));
+	assertA(0 == archive_read_support_compression_all(a));
 	assertA(0 == archive_read_support_format_all(a));
 	assertA(0 == archive_read_open_memory(a, buff, s + 1024));
 	assertA(0 == archive_read_next_header(a, &ae));
-	assertEqualInt(archive_filter_code(a, 0), compression);
+	assertEqualInt(archive_compression(a), compression);
 	assertEqualInt(archive_format(a), format);
-	assertEqualInt(archive_entry_is_encrypted(ae), 0);
-	assertEqualIntA(a, archive_read_has_encrypted_entries(a), ARCHIVE_READ_FORMAT_ENCRYPTION_UNSUPPORTED);
 
 	/* Verify the only entry. */
 	f(ae);
 
-	assertEqualIntA(a, ARCHIVE_OK, archive_read_close(a));
-	assertEqualInt(ARCHIVE_OK, archive_read_free(a));
+	assert(0 == archive_read_close(a));
+#if ARCHIVE_API_VERSION > 1
+	assert(0 == archive_read_finish(a));
+#else
+	archive_read_finish(a);
+#endif
 	free(buff);
 }
 
@@ -456,21 +459,21 @@ DEFINE_TEST(test_read_format_tar)
 {
 	verifyEmpty();
 	verify(archive1, sizeof(archive1), verify1,
-	    ARCHIVE_FILTER_NONE, ARCHIVE_FORMAT_TAR_USTAR);
+	    ARCHIVE_COMPRESSION_NONE, ARCHIVE_FORMAT_TAR_USTAR);
 	verify(archive2, sizeof(archive2), verify2,
-	    ARCHIVE_FILTER_NONE, ARCHIVE_FORMAT_TAR_USTAR);
+	    ARCHIVE_COMPRESSION_NONE, ARCHIVE_FORMAT_TAR_USTAR);
 	verify(archive3, sizeof(archive3), verify3,
-	    ARCHIVE_FILTER_NONE, ARCHIVE_FORMAT_TAR_USTAR);
+	    ARCHIVE_COMPRESSION_NONE, ARCHIVE_FORMAT_TAR_USTAR);
 	verify(archive4, sizeof(archive4), verify4,
-	    ARCHIVE_FILTER_NONE, ARCHIVE_FORMAT_TAR_USTAR);
+	    ARCHIVE_COMPRESSION_NONE, ARCHIVE_FORMAT_TAR_USTAR);
 	verify(archive5, sizeof(archive5), verify5,
-	    ARCHIVE_FILTER_NONE, ARCHIVE_FORMAT_TAR_USTAR);
+	    ARCHIVE_COMPRESSION_NONE, ARCHIVE_FORMAT_TAR_USTAR);
 	verify(archive6, sizeof(archive6), verify6,
-	    ARCHIVE_FILTER_NONE, ARCHIVE_FORMAT_TAR_USTAR);
+	    ARCHIVE_COMPRESSION_NONE, ARCHIVE_FORMAT_TAR_USTAR);
 	verify(archiveK, sizeof(archiveK), verifyK,
-	    ARCHIVE_FILTER_NONE, ARCHIVE_FORMAT_TAR_GNUTAR);
+	    ARCHIVE_COMPRESSION_NONE, ARCHIVE_FORMAT_TAR_GNUTAR);
 	verify(archivexL, sizeof(archivexL), verifyxL,
-	    ARCHIVE_FILTER_NONE, ARCHIVE_FORMAT_TAR_PAX_INTERCHANGE);
+	    ARCHIVE_COMPRESSION_NONE, ARCHIVE_FORMAT_TAR_PAX_INTERCHANGE);
 }
 
 

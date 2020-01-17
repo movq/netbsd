@@ -87,7 +87,7 @@ test_copy(int use_open_fd)
  * An archive file has no entry.
  */
 static void
-test_empty_archive(void)
+test_empty_archive()
 {
 	const char *refname = "test_read_format_7zip_empty_archive.7z";
 	struct archive_entry *ae;
@@ -119,7 +119,7 @@ test_empty_archive(void)
  * in the archive file except for a header.
  */
 static void
-test_empty_file(void)
+test_empty_file()
 {
 	const char *refname = "test_read_format_7zip_empty_file.7z";
 	struct archive_entry *ae;
@@ -609,7 +609,7 @@ test_bcj(const char *refname)
  * Extract a file compressed with PPMd.
  */
 static void
-test_ppmd(void)
+test_ppmd()
 {
 	const char *refname = "test_read_format_7zip_ppmd.7z";
 	struct archive_entry *ae;
@@ -663,7 +663,7 @@ test_ppmd(void)
 }
 
 static void
-test_symname(void)
+test_symname()
 {
 	const char *refname = "test_read_format_7zip_symbolic_name.7z";
 	struct archive_entry *ae;

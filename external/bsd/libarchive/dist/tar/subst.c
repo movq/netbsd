@@ -26,15 +26,11 @@
 #include "bsdtar_platform.h"
 __FBSDID("$FreeBSD: src/usr.bin/tar/subst.c,v 1.4 2008/06/15 10:08:16 kientzle Exp $");
 
-#if defined(HAVE_REGEX_H) || defined(HAVE_PCREPOSIX_H)
+#if HAVE_REGEX_H
 #include "bsdtar.h"
 
 #include <errno.h>
-#ifdef HAVE_PCREPOSIX_H
-#include <pcreposix.h>
-#else
 #include <regex.h>
-#endif
 #include <stdlib.h>
 #include <string.h>
 
@@ -42,13 +38,11 @@ __FBSDID("$FreeBSD: src/usr.bin/tar/subst.c,v 1.4 2008/06/15 10:08:16 kientzle E
 #define	REG_BASIC 0
 #endif
 
-#include "err.h"
-
 struct subst_rule {
 	struct subst_rule *next;
 	regex_t re;
 	char *result;
-	unsigned int global:1, print:1, regular:1, symlink:1, hardlink:1;
+	unsigned int global:1, print:1, symlink:1;
 };
 
 struct substitution {
@@ -62,7 +56,7 @@ init_substitution(struct bsdtar *bsdtar)
 
 	bsdtar->substitution = subst = malloc(sizeof(*subst));
 	if (subst == NULL)
-		lafe_errc(1, errno, "Out of memory");
+		bsdtar_errc(bsdtar, 1, errno, "Out of memory");
 	subst->first_rule = subst->last_rule = NULL;
 }
 
@@ -82,9 +76,8 @@ add_substitution(struct bsdtar *bsdtar, const char *rule_text)
 
 	rule = malloc(sizeof(*rule));
 	if (rule == NULL)
-		lafe_errc(1, errno, "Out of memory");
+		bsdtar_errc(bsdtar, 1, errno, "Out of memory");
 	rule->next = NULL;
-	rule->result = NULL;
 
 	if (subst->last_rule == NULL)
 		subst->first_rule = rule;
@@ -93,41 +86,38 @@ add_substitution(struct bsdtar *bsdtar, const char *rule_text)
 	subst->last_rule = rule;
 
 	if (*rule_text == '\0')
-		lafe_errc(1, 0, "Empty replacement string");
+		bsdtar_errc(bsdtar, 1, 0, "Empty replacement string");
 	end_pattern = strchr(rule_text + 1, *rule_text);
 	if (end_pattern == NULL)
-		lafe_errc(1, 0, "Invalid replacement string");
+		bsdtar_errc(bsdtar, 1, 0, "Invalid replacement string");
 
 	pattern = malloc(end_pattern - rule_text);
 	if (pattern == NULL)
-		lafe_errc(1, errno, "Out of memory");
+		bsdtar_errc(bsdtar, 1, errno, "Out of memory");
 	memcpy(pattern, rule_text + 1, end_pattern - rule_text - 1);
 	pattern[end_pattern - rule_text - 1] = '\0';
 
 	if ((r = regcomp(&rule->re, pattern, REG_BASIC)) != 0) {
 		char buf[80];
 		regerror(r, &rule->re, buf, sizeof(buf));
-		lafe_errc(1, 0, "Invalid regular expression: %s", buf);
+		bsdtar_errc(bsdtar, 1, 0, "Invalid regular expression: %s", buf);
 	}
 	free(pattern);
 
 	start_subst = end_pattern + 1;
 	end_pattern = strchr(start_subst, *rule_text);
 	if (end_pattern == NULL)
-		lafe_errc(1, 0, "Invalid replacement string");
+		bsdtar_errc(bsdtar, 1, 0, "Invalid replacement string");
 
 	rule->result = malloc(end_pattern - start_subst + 1);
 	if (rule->result == NULL)
-		lafe_errc(1, errno, "Out of memory");
+		bsdtar_errc(bsdtar, 1, errno, "Out of memory");
 	memcpy(rule->result, start_subst, end_pattern - start_subst);
 	rule->result[end_pattern - start_subst] = '\0';
 
-	/* Defaults */
-	rule->global = 0; /* Don't do multiple replacements. */
-	rule->print = 0; /* Don't print. */
-	rule->regular = 1; /* Rewrite regular filenames. */
-	rule->symlink = 1; /* Rewrite symlink targets. */
-	rule->hardlink = 1; /* Rewrite hardlink targets. */
+	rule->global = 0;
+	rule->print = 0;
+	rule->symlink = 0;
 
 	while (*++end_pattern) {
 		switch (*end_pattern) {
@@ -135,36 +125,22 @@ add_substitution(struct bsdtar *bsdtar, const char *rule_text)
 		case 'G':
 			rule->global = 1;
 			break;
-		case 'h':
-			rule->hardlink = 1;
-			break;
-		case 'H':
-			rule->hardlink = 0;
-			break;
 		case 'p':
 		case 'P':
 			rule->print = 1;
 			break;
-		case 'r':
-			rule->regular = 1;
-			break;
-		case 'R':
-			rule->regular = 0;
-			break;
 		case 's':
+		case 'S':
 			rule->symlink = 1;
 			break;
-		case 'S':
-			rule->symlink = 0;
-			break;
 		default:
-			lafe_errc(1, 0, "Invalid replacement flag %c", *end_pattern);
+			bsdtar_errc(bsdtar, 1, 0, "Invalid replacement flag %c", *end_pattern);
 		}
 	}
 }
 
 static void
-realloc_strncat(char **str, const char *append, size_t len)
+realloc_strncat(struct bsdtar *bsdtar, char **str, const char *append, size_t len)
 {
 	char *new_str;
 	size_t old_len;
@@ -176,9 +152,8 @@ realloc_strncat(char **str, const char *append, size_t len)
 
 	new_str = malloc(old_len + len + 1);
 	if (new_str == NULL)
-		lafe_errc(1, errno, "Out of memory");
-	if (*str != NULL)
-		memcpy(new_str, *str, old_len);
+		bsdtar_errc(bsdtar, 1, errno, "Out of memory");
+	memcpy(new_str, *str, old_len);
 	memcpy(new_str + old_len, append, len);
 	new_str[old_len + len] = '\0';
 	free(*str);
@@ -186,7 +161,7 @@ realloc_strncat(char **str, const char *append, size_t len)
 }
 
 static void
-realloc_strcat(char **str, const char *append)
+realloc_strcat(struct bsdtar *bsdtar, char **str, const char *append)
 {
 	char *new_str;
 	size_t old_len;
@@ -198,17 +173,15 @@ realloc_strcat(char **str, const char *append)
 
 	new_str = malloc(old_len + strlen(append) + 1);
 	if (new_str == NULL)
-		lafe_errc(1, errno, "Out of memory");
-	if (*str != NULL)
-		memcpy(new_str, *str, old_len);
+		bsdtar_errc(bsdtar, 1, errno, "Out of memory");
+	memcpy(new_str, *str, old_len);
 	strcpy(new_str + old_len, append);
 	free(*str);
 	*str = new_str;
 }
 
 int
-apply_substitution(struct bsdtar *bsdtar, const char *name, char **result,
-    int symlink_target, int hardlink_target)
+apply_substitution(struct bsdtar *bsdtar, const char *name, char **result, int symlink_only)
 {
 	const char *path = name;
 	regmatch_t matches[10];
@@ -226,81 +199,68 @@ apply_substitution(struct bsdtar *bsdtar, const char *name, char **result,
 	print_match = 0;
 
 	for (rule = subst->first_rule; rule != NULL; rule = rule->next) {
-		if (symlink_target) {
-			if (!rule->symlink)
-				continue;
-		} else if (hardlink_target) {
-			if (!rule->hardlink)
-				continue;
-		} else { /* Regular filename. */
-			if (!rule->regular)
-				continue;
-		}
+		if (symlink_only && !rule->symlink)
+			continue;
+		if (regexec(&rule->re, name, 10, matches, 0))
+			break;
 
-		while (1) {
-			if (regexec(&rule->re, name, 10, matches, 0))
+		got_match = 1;
+		print_match |= rule->print;
+		realloc_strncat(bsdtar, result, name, matches[0].rm_so);
+
+		for (i = 0, j = 0; rule->result[i] != '\0'; ++i) {
+			if (rule->result[i] == '~') {
+				realloc_strncat(bsdtar, result, rule->result + j, i - j);
+				realloc_strncat(bsdtar, result, name, matches[0].rm_eo);
+				j = i + 1;
+				continue;
+			}
+			if (rule->result[i] != '\\')
+				continue;
+
+			++i;
+			c = rule->result[i];
+			switch (c) {
+			case '~':
+			case '\\':
+				realloc_strncat(bsdtar, result, rule->result + j, i - j - 1);
+				j = i;
 				break;
-
-			got_match = 1;
-			print_match |= rule->print;
-			realloc_strncat(result, name, matches[0].rm_so);
-
-			for (i = 0, j = 0; rule->result[i] != '\0'; ++i) {
-				if (rule->result[i] == '~') {
-					realloc_strncat(result, rule->result + j, i - j);
-					realloc_strncat(result,
-					    name + matches[0].rm_so,
-					    matches[0].rm_eo - matches[0].rm_so);
-					j = i + 1;
-					continue;
+			case '1':
+			case '2':
+			case '3':
+			case '4':
+			case '5':
+			case '6':
+			case '7':
+			case '8':
+			case '9':
+				realloc_strncat(bsdtar, result, rule->result + j, i - j - 1);
+				if ((size_t)(c - '0') > (size_t)(rule->re.re_nsub)) {
+					free(*result);
+					*result = NULL;
+					return -1;
 				}
-				if (rule->result[i] != '\\')
-					continue;
-
-				++i;
-				c = rule->result[i];
-				switch (c) {
-				case '~':
-				case '\\':
-					realloc_strncat(result, rule->result + j, i - j - 1);
-					j = i;
-					break;
-				case '1':
-				case '2':
-				case '3':
-				case '4':
-				case '5':
-				case '6':
-				case '7':
-				case '8':
-				case '9':
-					realloc_strncat(result, rule->result + j, i - j - 1);
-					if ((size_t)(c - '0') > (size_t)(rule->re.re_nsub)) {
-						free(*result);
-						*result = NULL;
-						return -1;
-					}
-					realloc_strncat(result, name + matches[c - '0'].rm_so, matches[c - '0'].rm_eo - matches[c - '0'].rm_so);
-					j = i + 1;
-					break;
-				default:
-					/* Just continue; */
-					break;
-				}
-
+				realloc_strncat(bsdtar, result, name + matches[c - '0'].rm_so, matches[c - '0'].rm_eo - matches[c - '0'].rm_so);
+				j = i + 1;
+				break;
+			default:
+				/* Just continue; */
+				break;
 			}
 
-			realloc_strcat(result, rule->result + j);
-
-			name += matches[0].rm_eo;
-
-			if (!rule->global)
-				break;
 		}
+
+		realloc_strcat(bsdtar, result, rule->result + j);
+
+		name += matches[0].rm_eo;
+
+		if (!rule->global)
+			break;
 	}
 
 	if (got_match)
-		realloc_strcat(result, name);
+		realloc_strcat(bsdtar, result, name);
 
 	if (print_match)
 		fprintf(stderr, "%s >> %s\n", path, *result);
@@ -324,4 +284,4 @@ cleanup_substitution(struct bsdtar *bsdtar)
 	}
 	free(subst);
 }
-#endif /* defined(HAVE_REGEX_H) || defined(HAVE_PCREPOSIX_H) */
+#endif /* HAVE_REGEX_H */

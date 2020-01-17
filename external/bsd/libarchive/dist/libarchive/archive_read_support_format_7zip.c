@@ -975,6 +975,18 @@ decode_codec_id(const unsigned char *codecId, size_t id_size)
 	return (id);
 }
 
+static void *
+ppmd_alloc(void *p, size_t size)
+{
+	(void)p;
+	return malloc(size);
+}
+static void
+ppmd_free(void *p, void *address)
+{
+	(void)p;
+	free(address);
+}
 static Byte
 ppmd_read(void *p)
 {
@@ -993,6 +1005,8 @@ ppmd_read(void *p)
 	zip->ppstream.total_in++;
 	return (b);
 }
+
+static ISzAlloc g_szalloc = { ppmd_alloc, ppmd_free };
 
 static int
 init_decompression(struct archive_read *a, struct _7zip *zip,
@@ -1223,7 +1237,7 @@ init_decompression(struct archive_read *a, struct _7zip *zip,
 
 		if (zip->ppmd7_valid) {
 			__archive_ppmd7_functions.Ppmd7_Free(
-			    &zip->ppmd7_context);
+			    &zip->ppmd7_context, &g_szalloc);
 			zip->ppmd7_valid = 0;
 		}
 
@@ -1242,7 +1256,7 @@ init_decompression(struct archive_read *a, struct _7zip *zip,
 		}
 		__archive_ppmd7_functions.Ppmd7_Construct(&zip->ppmd7_context);
 		r = __archive_ppmd7_functions.Ppmd7_Alloc(
-			&zip->ppmd7_context, msize);
+			&zip->ppmd7_context, msize, &g_szalloc);
 		if (r == 0) {
 			archive_set_error(&a->archive, ENOMEM,
 			    "Coludn't allocate memory for PPMd");
@@ -1622,7 +1636,7 @@ free_decompression(struct archive_read *a, struct _7zip *zip)
 #endif
 	if (zip->ppmd7_valid) {
 		__archive_ppmd7_functions.Ppmd7_Free(
-			&zip->ppmd7_context);
+			&zip->ppmd7_context, &g_szalloc);
 		zip->ppmd7_valid = 0;
 	}
 	return (r);
@@ -2555,7 +2569,6 @@ read_Header(struct archive_read *a, struct _7z_header_info *h,
 		case kDummy:
 			if (ll == 0)
 				break;
-			__LA_FALLTHROUGH;
 		default:
 			if (header_bytes(a, ll) == NULL)
 				return (-1);
@@ -2964,7 +2977,13 @@ get_uncompressed_data(struct archive_read *a, const void **buff, size_t size,
 	if (zip->codec == _7Z_COPY && zip->codec2 == (unsigned long)-1) {
 		/* Copy mode. */
 
-		*buff = __archive_read_ahead(a, minimum, &bytes_avail);
+		/*
+		 * Note: '1' here is a performance optimization.
+		 * Recall that the decompression layer returns a count of
+		 * available bytes; asking for more than that forces the
+		 * decompressor to combine reads by copying data.
+		 */
+		*buff = __archive_read_ahead(a, 1, &bytes_avail);
 		if (bytes_avail <= 0) {
 			archive_set_error(&a->archive,
 			    ARCHIVE_ERRNO_FILE_FORMAT,
@@ -3317,7 +3336,8 @@ setup_decode_folder(struct archive_read *a, struct _7z_folder *folder,
 	 * Release the memory which the previous folder used for BCJ2.
 	 */
 	for (i = 0; i < 3; i++) {
-		free(zip->sub_stream_buff[i]);
+		if (zip->sub_stream_buff[i] != NULL)
+			free(zip->sub_stream_buff[i]);
 		zip->sub_stream_buff[i] = NULL;
 	}
 

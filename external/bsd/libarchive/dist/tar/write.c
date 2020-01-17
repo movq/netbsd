@@ -1,6 +1,5 @@
 /*-
  * Copyright (c) 2003-2007 Tim Kientzle
- * Copyright (c) 2012 Michihiro NAKAJIMA
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -25,10 +24,16 @@
  */
 
 #include "bsdtar_platform.h"
-__FBSDID("$FreeBSD: src/usr.bin/tar/write.c,v 1.79 2008/11/27 05:49:52 kientzle Exp $");
+__FBSDID("$FreeBSD: src/usr.bin/tar/write.c,v 1.70 2008/05/26 17:10:10 kientzle Exp $");
 
 #ifdef HAVE_SYS_TYPES_H
 #include <sys/types.h>
+#endif
+#ifdef HAVE_SYS_ACL_H
+#include <sys/acl.h>
+#endif
+#ifdef HAVE_SYS_IOCTL_H
+#include <sys/ioctl.h>
 #endif
 #ifdef HAVE_SYS_STAT_H
 #include <sys/stat.h>
@@ -39,29 +44,26 @@ __FBSDID("$FreeBSD: src/usr.bin/tar/write.c,v 1.79 2008/11/27 05:49:52 kientzle 
 #ifdef HAVE_ERRNO_H
 #include <errno.h>
 #endif
+#ifdef HAVE_EXT2FS_EXT2_FS_H
+#include <ext2fs/ext2_fs.h>
+#endif
 #ifdef HAVE_FCNTL_H
 #include <fcntl.h>
+#endif
+#ifdef HAVE_FNMATCH_H
+#include <fnmatch.h>
 #endif
 #ifdef HAVE_GRP_H
 #include <grp.h>
 #endif
-#ifdef HAVE_IO_H
-#include <io.h>
-#endif
-#ifdef HAVE_LIBGEN_H
-#include <libgen.h>
-#endif
 #ifdef HAVE_LIMITS_H
 #include <limits.h>
 #endif
-#ifdef HAVE_PATHS_H
-#include <paths.h>
+#ifdef HAVE_LINUX_FS_H
+#include <linux/fs.h>	/* for Linux file flags */
 #endif
 #ifdef HAVE_PWD_H
 #include <pwd.h>
-#endif
-#ifdef HAVE_STDINT_H
-#include <stdint.h>
 #endif
 #include <stdio.h>
 #ifdef HAVE_STDLIB_H
@@ -75,12 +77,12 @@ __FBSDID("$FreeBSD: src/usr.bin/tar/write.c,v 1.79 2008/11/27 05:49:52 kientzle 
 #endif
 
 #include "bsdtar.h"
-#include "err.h"
-#include "line_reader.h"
+#include "tree.h"
 
-#ifndef O_BINARY
-#define	O_BINARY 0
-#endif
+/* Fixed size of uname/gname caches. */
+#define	name_cache_size 101
+
+static const char * const NO_NAME = "(noname)";
 
 struct archive_dir_entry {
 	struct archive_dir_entry	*next;
@@ -93,158 +95,137 @@ struct archive_dir {
 	struct archive_dir_entry *head, *tail;
 };
 
+struct name_cache {
+	int	probes;
+	int	hits;
+	size_t	size;
+	struct {
+		id_t id;
+		const char *name;
+	} cache[name_cache_size];
+};
+
+static void		 add_dir_list(struct bsdtar *bsdtar, const char *path,
+			     time_t mtime_sec, int mtime_nsec);
 static int		 append_archive(struct bsdtar *, struct archive *,
 			     struct archive *ina);
 static int		 append_archive_filename(struct bsdtar *,
 			     struct archive *, const char *fname);
 static void		 archive_names_from_file(struct bsdtar *bsdtar,
 			     struct archive *a);
-static int		 copy_file_data_block(struct bsdtar *,
-			     struct archive *a, struct archive *,
-			     struct archive_entry *);
-static void		 excluded_callback(struct archive *, void *,
-			     struct archive_entry *);
-static void		 report_write(struct bsdtar *, struct archive *,
-			     struct archive_entry *, int64_t progress);
+static int		 archive_names_from_file_helper(struct bsdtar *bsdtar,
+			     const char *line);
+static int		 copy_file_data(struct bsdtar *bsdtar,
+			     struct archive *a, struct archive *ina);
+static void		 create_cleanup(struct bsdtar *);
+static void		 free_cache(struct name_cache *cache);
+static const char *	 lookup_gname(struct bsdtar *bsdtar, gid_t gid);
+static int		 lookup_gname_helper(struct bsdtar *bsdtar,
+			     const char **name, id_t gid);
+static const char *	 lookup_uname(struct bsdtar *bsdtar, uid_t uid);
+static int		 lookup_uname_helper(struct bsdtar *bsdtar,
+			     const char **name, id_t uid);
+static int		 new_enough(struct bsdtar *, const char *path,
+			     const struct stat *);
+static void		 setup_acls(struct bsdtar *, struct archive_entry *,
+			     const char *path);
+static void		 setup_xattrs(struct bsdtar *, struct archive_entry *,
+			     const char *path);
 static void		 test_for_append(struct bsdtar *);
-static int		 metadata_filter(struct archive *, void *,
-			     struct archive_entry *);
 static void		 write_archive(struct archive *, struct bsdtar *);
 static void		 write_entry(struct bsdtar *, struct archive *,
-			     struct archive_entry *);
-static void		 write_file(struct bsdtar *, struct archive *,
-			     struct archive_entry *);
+			     const struct stat *, const char *pathname,
+			     const char *accpath);
+static void		 write_entry_backend(struct bsdtar *, struct archive *,
+			     struct archive_entry *, int);
+static int		 write_file_data(struct bsdtar *, struct archive *,
+			     int fd);
 static void		 write_hierarchy(struct bsdtar *, struct archive *,
 			     const char *);
-
-#if defined(_WIN32) && !defined(__CYGWIN__)
-/* Not a full lseek() emulation, but enough for our needs here. */
-static int
-seek_file(int fd, int64_t offset, int whence)
-{
-	LARGE_INTEGER distance;
-	(void)whence; /* UNUSED */
-	distance.QuadPart = offset;
-	return (SetFilePointerEx((HANDLE)_get_osfhandle(fd),
-		distance, NULL, FILE_BEGIN) ? 1 : -1);
-}
-#define	open _open
-#define	close _close
-#define	read _read
-#ifdef lseek
-#undef lseek
-#endif
-#define	lseek seek_file
-#endif
-
-static void
-set_writer_options(struct bsdtar *bsdtar, struct archive *a)
-{
-	const char *writer_options;
-	int r;
-
-	writer_options = getenv(ENV_WRITER_OPTIONS);
-	if (writer_options != NULL) {
-		size_t module_len = sizeof(IGNORE_WRONG_MODULE_NAME) - 1;
-		size_t opt_len = strlen(writer_options) + 1;
-		char *p;
-		/* Set default write options. */
-		if ((p = malloc(module_len + opt_len)) == NULL)
-			lafe_errc(1, errno, "Out of memory");
-		/* Prepend magic code to ignore options for
-		 * a format or filters which are not added to
-		 * the archive write object. */
-		memcpy(p, IGNORE_WRONG_MODULE_NAME, module_len);
-		memcpy(p, writer_options, opt_len);
-		r = archive_write_set_options(a, p);
-		free(p);
-		if (r < ARCHIVE_WARN)
-			lafe_errc(1, 0, "%s", archive_error_string(a));
-		else
-			archive_clear_error(a);
-	}
-	if (ARCHIVE_OK != archive_write_set_options(a, bsdtar->option_options))
-		lafe_errc(1, 0, "%s", archive_error_string(a));
-}
-
-static void
-set_reader_options(struct bsdtar *bsdtar, struct archive *a)
-{
-	const char *reader_options;
-	int r;
-
-	(void)bsdtar; /* UNUSED */
-
-	reader_options = getenv(ENV_READER_OPTIONS);
-	if (reader_options != NULL) {
-		size_t module_len = sizeof(IGNORE_WRONG_MODULE_NAME) - 1;
-		size_t opt_len = strlen(reader_options) + 1;
-		char *p;
-		/* Set default write options. */
-		if ((p = malloc(module_len + opt_len)) == NULL)
-		if (p == NULL)
-			lafe_errc(1, errno, "Out of memory");
-		/* Prepend magic code to ignore options for
-		 * a format or filters which are not added to
-		 * the archive write object. */
-		memcpy(p, IGNORE_WRONG_MODULE_NAME, module_len);
-		memcpy(p, reader_options, opt_len);
-		r = archive_read_set_options(a, p);
-		free(p);
-		if (r < ARCHIVE_WARN)
-			lafe_errc(1, 0, "%s", archive_error_string(a));
-		else
-			archive_clear_error(a);
-	}
-}
 
 void
 tar_mode_c(struct bsdtar *bsdtar)
 {
 	struct archive *a;
-	const void *filter_name;
 	int r;
 
 	if (*bsdtar->argv == NULL && bsdtar->names_from_file == NULL)
-		lafe_errc(1, 0, "no files or directories specified");
+		bsdtar_errc(bsdtar, 1, 0, "no files or directories specified");
+
+	/* We want to catch SIGINFO and SIGUSR1. */
+	siginfo_init(bsdtar);
 
 	a = archive_write_new();
 
 	/* Support any format that the library supports. */
-	if (cset_get_format(bsdtar->cset) == NULL) {
+	if (bsdtar->create_format == NULL) {
 		r = archive_write_set_format_pax_restricted(a);
-		cset_set_format(bsdtar->cset, "pax restricted");
+		bsdtar->create_format = "pax restricted";
 	} else {
-		r = archive_write_set_format_by_name(a,
-			cset_get_format(bsdtar->cset));
+		r = archive_write_set_format_by_name(a, bsdtar->create_format);
 	}
 	if (r != ARCHIVE_OK) {
 		fprintf(stderr, "Can't use format %s: %s\n",
-		    cset_get_format(bsdtar->cset),
+		    bsdtar->create_format,
 		    archive_error_string(a));
-		usage();
+		usage(bsdtar);
 	}
 
-	archive_write_set_bytes_per_block(a, bsdtar->bytes_per_block);
-	archive_write_set_bytes_in_last_block(a, bsdtar->bytes_in_last_block);
+	/*
+	 * If user explicitly set the block size, then assume they
+	 * want the last block padded as well.  Otherwise, use the
+	 * default block size and accept archive_write_open_file()'s
+	 * default padding decisions.
+	 */
+	if (bsdtar->bytes_per_block != 0) {
+		archive_write_set_bytes_per_block(a, bsdtar->bytes_per_block);
+		archive_write_set_bytes_in_last_block(a,
+		    bsdtar->bytes_per_block);
+	} else
+		archive_write_set_bytes_per_block(a, DEFAULT_BYTES_PER_BLOCK);
 
-	r = cset_write_add_filters(bsdtar->cset, a, &filter_name);
-	if (r < ARCHIVE_WARN) {
-		lafe_errc(1, 0, "Unsupported compression option --%s",
-		    (const char *)filter_name);
+	if (bsdtar->compress_program) {
+		archive_write_set_compression_program(a, bsdtar->compress_program);
+	} else {
+		switch (bsdtar->create_compression) {
+		case 0:
+			archive_write_set_compression_none(a);
+			break;
+#ifdef HAVE_LIBBZ2
+		case 'j': case 'y':
+			archive_write_set_compression_bzip2(a);
+			break;
+#endif
+#ifdef HAVE_LIBZ
+		case 'z':
+			archive_write_set_compression_gzip(a);
+			break;
+#endif
+		case 'Z':
+			archive_write_set_compression_compress(a);
+			break;
+		default:
+			bsdtar_errc(bsdtar, 1, 0,
+			    "Unrecognized compression option -%c",
+			    bsdtar->create_compression);
+		}
 	}
 
-	set_writer_options(bsdtar, a);
-	if (bsdtar->passphrase != NULL)
-		r = archive_write_set_passphrase(a, bsdtar->passphrase);
-	else
-		r = archive_write_set_passphrase_callback(a, bsdtar,
-			&passphrase_callback);
+	r = archive_write_open_file(a, bsdtar->filename);
 	if (r != ARCHIVE_OK)
-		lafe_errc(1, 0, "%s", archive_error_string(a));
-	if (ARCHIVE_OK != archive_write_open_filename(a, bsdtar->filename))
-		lafe_errc(1, 0, "%s", archive_error_string(a));
+		bsdtar_errc(bsdtar, 1, 0, archive_error_string(a));
+
 	write_archive(a, bsdtar);
+
+	if (bsdtar->option_totals) {
+		fprintf(stderr, "Total bytes written: " BSDTAR_FILESIZE_PRINTF "\n",
+		    (BSDTAR_FILESIZE_TYPE)archive_position_compressed(a));
+	}
+
+	archive_write_finish(a);
+
+	/* Restore old SIGINFO + SIGUSR1 handlers. */
+	siginfo_done(bsdtar);
 }
 
 /*
@@ -254,7 +235,7 @@ tar_mode_c(struct bsdtar *bsdtar)
 void
 tar_mode_r(struct bsdtar *bsdtar)
 {
-	int64_t	end_offset;
+	off_t	end_offset;
 	int	format;
 	struct archive *a;
 	struct archive_entry *entry;
@@ -263,33 +244,30 @@ tar_mode_r(struct bsdtar *bsdtar)
 	/* Sanity-test some arguments and the file. */
 	test_for_append(bsdtar);
 
+	/* We want to catch SIGINFO and SIGUSR1. */
+	siginfo_init(bsdtar);
+
 	format = ARCHIVE_FORMAT_TAR_PAX_RESTRICTED;
 
-#if defined(__BORLANDC__)
-	bsdtar->fd = open(bsdtar->filename, O_RDWR | O_CREAT | O_BINARY);
-#else
-	bsdtar->fd = open(bsdtar->filename, O_RDWR | O_CREAT | O_BINARY, 0666);
-#endif
+	bsdtar->fd = open(bsdtar->filename, O_RDWR | O_CREAT, 0666);
 	if (bsdtar->fd < 0)
-		lafe_errc(1, errno,
+		bsdtar_errc(bsdtar, 1, errno,
 		    "Cannot open %s", bsdtar->filename);
 
 	a = archive_read_new();
-	archive_read_support_filter_all(a);
-	archive_read_support_format_empty(a);
+	archive_read_support_compression_all(a);
 	archive_read_support_format_tar(a);
 	archive_read_support_format_gnutar(a);
-	set_reader_options(bsdtar, a);
 	r = archive_read_open_fd(a, bsdtar->fd, 10240);
 	if (r != ARCHIVE_OK)
-		lafe_errc(1, archive_errno(a),
+		bsdtar_errc(bsdtar, 1, archive_errno(a),
 		    "Can't read archive %s: %s", bsdtar->filename,
 		    archive_error_string(a));
 	while (0 == archive_read_next_header(a, &entry)) {
-		if (archive_filter_code(a, 0) != ARCHIVE_FILTER_NONE) {
-			archive_read_free(a);
+		if (archive_compression(a) != ARCHIVE_COMPRESSION_NONE) {
+			archive_read_finish(a);
 			close(bsdtar->fd);
-			lafe_errc(1, 0,
+			bsdtar_errc(bsdtar, 1, 0,
 			    "Cannot append to compressed archive.");
 		}
 		/* Keep going until we hit end-of-archive */
@@ -297,10 +275,11 @@ tar_mode_r(struct bsdtar *bsdtar)
 	}
 
 	end_offset = archive_read_header_position(a);
-	archive_read_free(a);
+	archive_read_finish(a);
 
 	/* Re-open archive for writing */
 	a = archive_write_new();
+	archive_write_set_compression_none(a);
 	/*
 	 * Set the format to be used for writing.  To allow people to
 	 * extend empty files, we need to allow them to specify the format,
@@ -309,35 +288,41 @@ tar_mode_r(struct bsdtar *bsdtar)
 	 * of arcane ugliness.
 	 */
 
-	if (cset_get_format(bsdtar->cset) != NULL) {
+	if (bsdtar->create_format != NULL) {
 		/* If the user requested a format, use that, but ... */
 		archive_write_set_format_by_name(a,
-		    cset_get_format(bsdtar->cset));
+		    bsdtar->create_format);
 		/* ... complain if it's not compatible. */
 		format &= ARCHIVE_FORMAT_BASE_MASK;
 		if (format != (int)(archive_format(a) & ARCHIVE_FORMAT_BASE_MASK)
 		    && format != ARCHIVE_FORMAT_EMPTY) {
-			lafe_errc(1, 0,
+			bsdtar_errc(bsdtar, 1, 0,
 			    "Format %s is incompatible with the archive %s.",
-			    cset_get_format(bsdtar->cset), bsdtar->filename);
+			    bsdtar->create_format, bsdtar->filename);
 		}
 	} else {
 		/*
 		 * Just preserve the current format, with a little care
 		 * for formats that libarchive can't write.
 		 */
+		if (format == ARCHIVE_FORMAT_TAR_GNUTAR)
+			/* TODO: When gtar supports pax, use pax restricted. */
+			format = ARCHIVE_FORMAT_TAR_USTAR;
 		if (format == ARCHIVE_FORMAT_EMPTY)
 			format = ARCHIVE_FORMAT_TAR_PAX_RESTRICTED;
 		archive_write_set_format(a, format);
 	}
-	if (lseek(bsdtar->fd, end_offset, SEEK_SET) < 0)
-		lafe_errc(1, errno, "Could not seek to archive end");
-	set_writer_options(bsdtar, a);
-	if (ARCHIVE_OK != archive_write_open_fd(a, bsdtar->fd))
-		lafe_errc(1, 0, "%s", archive_error_string(a));
+	lseek(bsdtar->fd, end_offset, SEEK_SET); /* XXX check return val XXX */
+	archive_write_open_fd(a, bsdtar->fd); /* XXX check return val XXX */
 
 	write_archive(a, bsdtar); /* XXX check return val XXX */
 
+	if (bsdtar->option_totals) {
+		fprintf(stderr, "Total bytes written: " BSDTAR_FILESIZE_PRINTF "\n",
+		    (BSDTAR_FILESIZE_TYPE)archive_position_compressed(a));
+	}
+
+	archive_write_finish(a);
 	close(bsdtar->fd);
 	bsdtar->fd = -1;
 }
@@ -345,7 +330,7 @@ tar_mode_r(struct bsdtar *bsdtar)
 void
 tar_mode_u(struct bsdtar *bsdtar)
 {
-	int64_t			 end_offset;
+	off_t			 end_offset;
 	struct archive		*a;
 	struct archive_entry	*entry;
 	int			 format;
@@ -360,61 +345,73 @@ tar_mode_u(struct bsdtar *bsdtar)
 	/* Sanity-test some arguments and the file. */
 	test_for_append(bsdtar);
 
-	bsdtar->fd = open(bsdtar->filename, O_RDWR | O_BINARY);
+	/* We want to catch SIGINFO and SIGUSR1. */
+	siginfo_init(bsdtar);
+
+	bsdtar->fd = open(bsdtar->filename, O_RDWR);
 	if (bsdtar->fd < 0)
-		lafe_errc(1, errno,
+		bsdtar_errc(bsdtar, 1, errno,
 		    "Cannot open %s", bsdtar->filename);
 
 	a = archive_read_new();
-	archive_read_support_filter_all(a);
+	archive_read_support_compression_all(a);
 	archive_read_support_format_tar(a);
 	archive_read_support_format_gnutar(a);
-	set_reader_options(bsdtar, a);
-	if (archive_read_open_fd(a, bsdtar->fd, bsdtar->bytes_per_block)
-	    != ARCHIVE_OK) {
-		lafe_errc(1, 0,
+	if (archive_read_open_fd(a, bsdtar->fd,
+	    bsdtar->bytes_per_block != 0 ? bsdtar->bytes_per_block :
+		DEFAULT_BYTES_PER_BLOCK) != ARCHIVE_OK) {
+		bsdtar_errc(bsdtar, 1, 0,
 		    "Can't open %s: %s", bsdtar->filename,
 		    archive_error_string(a));
 	}
 
 	/* Build a list of all entries and their recorded mod times. */
 	while (0 == archive_read_next_header(a, &entry)) {
-		if (archive_filter_code(a, 0) != ARCHIVE_FILTER_NONE) {
-			archive_read_free(a);
+		if (archive_compression(a) != ARCHIVE_COMPRESSION_NONE) {
+			archive_read_finish(a);
 			close(bsdtar->fd);
-			lafe_errc(1, 0,
+			bsdtar_errc(bsdtar, 1, 0,
 			    "Cannot append to compressed archive.");
 		}
-		if (archive_match_exclude_entry(bsdtar->matching,
-		    ARCHIVE_MATCH_MTIME | ARCHIVE_MATCH_OLDER |
-		    ARCHIVE_MATCH_EQUAL, entry) != ARCHIVE_OK)
-			lafe_errc(1, 0, "Error : %s",
-			    archive_error_string(bsdtar->matching));
+		add_dir_list(bsdtar, archive_entry_pathname(entry),
+		    archive_entry_mtime(entry),
+		    archive_entry_mtime_nsec(entry));
 		/* Record the last format determination we see */
 		format = archive_format(a);
 		/* Keep going until we hit end-of-archive */
 	}
 
 	end_offset = archive_read_header_position(a);
-	archive_read_free(a);
+	archive_read_finish(a);
 
 	/* Re-open archive for writing. */
 	a = archive_write_new();
+	archive_write_set_compression_none(a);
 	/*
-	 * Set format to same one auto-detected above.
+	 * Set format to same one auto-detected above, except that
+	 * we don't write GNU tar format, so use ustar instead.
 	 */
+	if (format == ARCHIVE_FORMAT_TAR_GNUTAR)
+		format = ARCHIVE_FORMAT_TAR_USTAR;
 	archive_write_set_format(a, format);
-	archive_write_set_bytes_per_block(a, bsdtar->bytes_per_block);
-	archive_write_set_bytes_in_last_block(a, bsdtar->bytes_in_last_block);
-
-	if (lseek(bsdtar->fd, end_offset, SEEK_SET) < 0)
-		lafe_errc(1, errno, "Could not seek to archive end");
-	set_writer_options(bsdtar, a);
-	if (ARCHIVE_OK != archive_write_open_fd(a, bsdtar->fd))
-		lafe_errc(1, 0, "%s", archive_error_string(a));
+	if (bsdtar->bytes_per_block != 0) {
+		archive_write_set_bytes_per_block(a, bsdtar->bytes_per_block);
+		archive_write_set_bytes_in_last_block(a,
+		    bsdtar->bytes_per_block);
+	} else
+		archive_write_set_bytes_per_block(a, DEFAULT_BYTES_PER_BLOCK);
+	lseek(bsdtar->fd, end_offset, SEEK_SET);
+	ftruncate(bsdtar->fd, end_offset);
+	archive_write_open_fd(a, bsdtar->fd);
 
 	write_archive(a, bsdtar);
 
+	if (bsdtar->option_totals) {
+		fprintf(stderr, "Total bytes written: " BSDTAR_FILESIZE_PRINTF "\n",
+		    (BSDTAR_FILESIZE_TYPE)archive_position_compressed(a));
+	}
+
+	archive_write_finish(a);
 	close(bsdtar->fd);
 	bsdtar->fd = -1;
 
@@ -437,46 +434,10 @@ write_archive(struct archive *a, struct bsdtar *bsdtar)
 	const char *arg;
 	struct archive_entry *entry, *sparse_entry;
 
-	/* Choose a suitable copy buffer size */
-	bsdtar->buff_size = 64 * 1024;
-	while (bsdtar->buff_size < (size_t)bsdtar->bytes_per_block)
-	  bsdtar->buff_size *= 2;
-	/* Try to compensate for space we'll lose to alignment. */
-	bsdtar->buff_size += 16 * 1024;
-
-	/* Allocate a buffer for file data. */
-	if ((bsdtar->buff = malloc(bsdtar->buff_size)) == NULL)
-		lafe_errc(1, 0, "cannot allocate memory");
-
 	if ((bsdtar->resolver = archive_entry_linkresolver_new()) == NULL)
-		lafe_errc(1, 0, "cannot create link resolver");
+		bsdtar_errc(bsdtar, 1, 0, "cannot create link resolver");
 	archive_entry_linkresolver_set_strategy(bsdtar->resolver,
 	    archive_format(a));
-
-	/* Create a read_disk object. */
-	if ((bsdtar->diskreader = archive_read_disk_new()) == NULL)
-		lafe_errc(1, 0, "Cannot create read_disk object");
-	/* Tell the read_disk how handle symlink. */
-	switch (bsdtar->symlink_mode) {
-	case 'H':
-		archive_read_disk_set_symlink_hybrid(bsdtar->diskreader);
-		break;
-	case 'L':
-		archive_read_disk_set_symlink_logical(bsdtar->diskreader);
-		break;
-	default:
-		archive_read_disk_set_symlink_physical(bsdtar->diskreader);
-		break;
-	}
-	/* Register entry filters. */
-	archive_read_disk_set_matching(bsdtar->diskreader,
-	    bsdtar->matching, excluded_callback, bsdtar);
-	archive_read_disk_set_metadata_filter_callback(
-	    bsdtar->diskreader, metadata_filter, bsdtar);
-	/* Set the behavior of archive_read_disk. */
-	archive_read_disk_set_behavior(bsdtar->diskreader,
-	    bsdtar->readdisk_flags);
-	archive_read_disk_set_standard_lookup(bsdtar->diskreader);
 
 	if (bsdtar->names_from_file != NULL)
 		archive_names_from_file(bsdtar, a);
@@ -489,21 +450,15 @@ write_archive(struct archive *a, struct bsdtar *bsdtar)
 				bsdtar->argv++;
 				arg = *bsdtar->argv;
 				if (arg == NULL) {
-					lafe_warnc(0, "%s",
+					bsdtar_warnc(bsdtar, 1, 0,
 					    "Missing argument for -C");
 					bsdtar->return_value = 1;
-					goto cleanup;
-				}
-				if (*arg == '\0') {
-					lafe_warnc(0,
-					    "Meaningless argument for -C: ''");
-					bsdtar->return_value = 1;
-					goto cleanup;
+					return;
 				}
 			}
 			set_chdir(bsdtar, arg);
 		} else {
-			if (*arg != '/')
+			if (*arg != '/' && (arg[0] != '@' || arg[1] != '/'))
 				do_chdir(bsdtar); /* Handle a deferred -C */
 			if (*arg == '@') {
 				if (append_archive_filename(bsdtar, a,
@@ -515,78 +470,21 @@ write_archive(struct archive *a, struct bsdtar *bsdtar)
 		bsdtar->argv++;
 	}
 
-	archive_read_disk_set_matching(bsdtar->diskreader, NULL, NULL, NULL);
-	archive_read_disk_set_metadata_filter_callback(
-	    bsdtar->diskreader, NULL, NULL);
 	entry = NULL;
 	archive_entry_linkify(bsdtar->resolver, &entry, &sparse_entry);
 	while (entry != NULL) {
-		int r;
-		struct archive_entry *entry2;
-		struct archive *disk = bsdtar->diskreader;
-
-		/*
-		 * This tricky code here is to correctly read the contents
-		 * of the entry because the disk reader bsdtar->diskreader
-		 * is pointing at does not have any information about the
-		 * entry by this time and using archive_read_data_block()
-		 * with the disk reader consequently must fail. And we
-		 * have to re-open the entry to read the contents.
-		 */
-		/* TODO: Work with -C option as well. */
-		r = archive_read_disk_open(disk,
-			archive_entry_sourcepath(entry));
-		if (r != ARCHIVE_OK) {
-			lafe_warnc(archive_errno(disk),
-			    "%s", archive_error_string(disk));
-			bsdtar->return_value = 1;
-			goto next_entry;
-		}
-
-		/*
-		 * Invoke archive_read_next_header2() to work
-		 * archive_read_data_block(), which is called via write_file(),
-		 * without failure.
-		 */
-		entry2 = archive_entry_new();
-		r = archive_read_next_header2(disk, entry2);
-		archive_entry_free(entry2);
-		if (r != ARCHIVE_OK) {
-			lafe_warnc(archive_errno(disk),
-			    "%s", archive_error_string(disk));
-			if (r == ARCHIVE_FATAL)
-				bsdtar->return_value = 1;
-			archive_read_close(disk);
-			goto next_entry;
-		}
-
-		write_file(bsdtar, a, entry);
-		archive_read_close(disk);
-next_entry:
+		int fd = -1;
+		write_entry_backend(bsdtar, a, entry, fd);
 		archive_entry_free(entry);
 		entry = NULL;
 		archive_entry_linkify(bsdtar->resolver, &entry, &sparse_entry);
 	}
 
+	create_cleanup(bsdtar);
 	if (archive_write_close(a)) {
-		lafe_warnc(0, "%s", archive_error_string(a));
+		bsdtar_warnc(bsdtar, 0, "%s", archive_error_string(a));
 		bsdtar->return_value = 1;
 	}
-
-cleanup:
-	/* Free file data buffer. */
-	free(bsdtar->buff);
-	archive_entry_linkresolver_free(bsdtar->resolver);
-	bsdtar->resolver = NULL;
-	archive_read_free(bsdtar->diskreader);
-	bsdtar->diskreader = NULL;
-
-	if (bsdtar->flags & OPTFLAG_TOTALS) {
-		fprintf(stderr, "Total bytes written: %s\n",
-		    tar_i64toa(archive_filter_bytes(a, -1)));
-	}
-
-	archive_write_free(a);
 }
 
 /*
@@ -596,40 +494,34 @@ cleanup:
  * cause the next line to be a directory to pass to chdir().  If
  * --null is specified, then a line "-C" is just another filename.
  */
-static void
+void
 archive_names_from_file(struct bsdtar *bsdtar, struct archive *a)
 {
-	struct lafe_line_reader *lr;
-	const char *line;
+	bsdtar->archive = a;
 
 	bsdtar->next_line_is_dir = 0;
-
-	lr = lafe_line_reader(bsdtar->names_from_file,
-	    (bsdtar->flags & OPTFLAG_NULL));
-	while ((line = lafe_line_reader_next(lr)) != NULL) {
-		if (bsdtar->next_line_is_dir) {
-			if (*line != '\0')
-				set_chdir(bsdtar, line);
-			else {
-				lafe_warnc(0,
-				    "Meaningless argument for -C: ''");
-				bsdtar->return_value = 1;
-			}
-			bsdtar->next_line_is_dir = 0;
-		} else if (((bsdtar->flags & OPTFLAG_NULL) == 0) &&
-		    strcmp(line, "-C") == 0)
-			bsdtar->next_line_is_dir = 1;
-		else {
-			if (*line != '/')
-				do_chdir(bsdtar); /* Handle a deferred -C */
-			write_hierarchy(bsdtar, a, line);
-		}
-	}
-	lafe_line_reader_free(lr);
+	process_lines(bsdtar, bsdtar->names_from_file,
+	    archive_names_from_file_helper);
 	if (bsdtar->next_line_is_dir)
-		lafe_errc(1, errno,
+		bsdtar_errc(bsdtar, 1, errno,
 		    "Unexpected end of filename list; "
 		    "directory expected after -C");
+}
+
+static int
+archive_names_from_file_helper(struct bsdtar *bsdtar, const char *line)
+{
+	if (bsdtar->next_line_is_dir) {
+		set_chdir(bsdtar, line);
+		bsdtar->next_line_is_dir = 0;
+	} else if (!bsdtar->option_null && strcmp(line, "-C") == 0)
+		bsdtar->next_line_is_dir = 1;
+	else {
+		if (*line != '/')
+			do_chdir(bsdtar); /* Handle a deferred -C */
+		write_hierarchy(bsdtar, bsdtar->archive, line);
+	}
+	return (0);
 }
 
 /*
@@ -641,10 +533,9 @@ archive_names_from_file(struct bsdtar *bsdtar, struct archive *a)
  */
 static int
 append_archive_filename(struct bsdtar *bsdtar, struct archive *a,
-    const char *raw_filename)
+    const char *filename)
 {
 	struct archive *ina;
-	const char *filename = raw_filename;
 	int rc;
 
 	if (strcmp(filename, "-") == 0)
@@ -652,31 +543,21 @@ append_archive_filename(struct bsdtar *bsdtar, struct archive *a,
 
 	ina = archive_read_new();
 	archive_read_support_format_all(ina);
-	archive_read_support_filter_all(ina);
-	set_reader_options(bsdtar, ina);
-	archive_read_set_options(ina, "mtree:checkfs");
-	if (bsdtar->passphrase != NULL)
-		rc = archive_read_add_passphrase(a, bsdtar->passphrase);
-	else
-		rc = archive_read_set_passphrase_callback(ina, bsdtar,
-			&passphrase_callback);
-	if (rc != ARCHIVE_OK)
-		lafe_errc(1, 0, "%s", archive_error_string(a));
-	if (archive_read_open_filename(ina, filename,
-					bsdtar->bytes_per_block)) {
-		lafe_warnc(0, "%s", archive_error_string(ina));
+	archive_read_support_compression_all(ina);
+	if (archive_read_open_file(ina, filename, 10240)) {
+		bsdtar_warnc(bsdtar, 0, "%s", archive_error_string(ina));
 		bsdtar->return_value = 1;
 		return (0);
 	}
 
 	rc = append_archive(bsdtar, a, ina);
 
-	if (rc != ARCHIVE_OK) {
-		lafe_warnc(0, "Error reading archive %s: %s",
-		    raw_filename, archive_error_string(ina));
+	if (archive_errno(ina)) {
+		bsdtar_warnc(bsdtar, 0, "Error reading archive %s: %s",
+		    filename, archive_error_string(ina));
 		bsdtar->return_value = 1;
 	}
-	archive_read_free(ina);
+	archive_read_finish(ina);
 
 	return (rc);
 }
@@ -687,25 +568,27 @@ append_archive(struct bsdtar *bsdtar, struct archive *a, struct archive *ina)
 	struct archive_entry *in_entry;
 	int e;
 
-	while (ARCHIVE_OK == (e = archive_read_next_header(ina, &in_entry))) {
-		if (archive_match_excluded(bsdtar->matching, in_entry))
+	while (0 == archive_read_next_header(ina, &in_entry)) {
+		if (!new_enough(bsdtar, archive_entry_pathname(in_entry),
+			archive_entry_stat(in_entry)))
 			continue;
-		if ((bsdtar->flags & OPTFLAG_INTERACTIVE) &&
+		if (excluded(bsdtar, archive_entry_pathname(in_entry)))
+			continue;
+		if (bsdtar->option_interactive &&
 		    !yes("copy '%s'", archive_entry_pathname(in_entry)))
 			continue;
-		if (bsdtar->verbose > 1) {
-			safe_fprintf(stderr, "a ");
-			list_item_verbose(bsdtar, stderr, in_entry);
-		} else if (bsdtar->verbose > 0)
+		if (bsdtar->verbose)
 			safe_fprintf(stderr, "a %s",
 			    archive_entry_pathname(in_entry));
-		if (need_report())
-			report_write(bsdtar, a, in_entry, 0);
+		siginfo_setinfo(bsdtar, "copying",
+		    archive_entry_pathname(in_entry),
+		    archive_entry_size(in_entry));
+		siginfo_printinfo(bsdtar, 0);
 
 		e = archive_write_header(a, in_entry);
 		if (e != ARCHIVE_OK) {
 			if (!bsdtar->verbose)
-				lafe_warnc(0, "%s: %s",
+				bsdtar_warnc(bsdtar, 0, "%s: %s",
 				    archive_entry_pathname(in_entry),
 				    archive_error_string(a));
 			else
@@ -717,7 +600,7 @@ append_archive(struct bsdtar *bsdtar, struct archive *a, struct archive *ina)
 		if (e >= ARCHIVE_WARN) {
 			if (archive_entry_size(in_entry) == 0)
 				archive_read_data_skip(ina);
-			else if (copy_file_data_block(bsdtar, a, ina, in_entry))
+			else if (copy_file_data(bsdtar, a, ina))
 				exit(1);
 		}
 
@@ -725,135 +608,33 @@ append_archive(struct bsdtar *bsdtar, struct archive *a, struct archive *ina)
 			fprintf(stderr, "\n");
 	}
 
-	return (e == ARCHIVE_EOF ? ARCHIVE_OK : e);
-}
-
-/* Helper function to copy file to archive. */
-static int
-copy_file_data_block(struct bsdtar *bsdtar, struct archive *a,
-    struct archive *in_a, struct archive_entry *entry)
-{
-	size_t	bytes_read;
-	ssize_t	bytes_written;
-	int64_t	offset, progress = 0;
-	char *null_buff = NULL;
-	const void *buff;
-	int r;
-
-	while ((r = archive_read_data_block(in_a, &buff,
-	    &bytes_read, &offset)) == ARCHIVE_OK) {
-		if (need_report())
-			report_write(bsdtar, a, entry, progress);
-
-		if (offset > progress) {
-			int64_t sparse = offset - progress;
-			size_t ns;
-
-			if (null_buff == NULL) {
-				null_buff = bsdtar->buff;
-				memset(null_buff, 0, bsdtar->buff_size);
-			}
-
-			while (sparse > 0) {
-				if (sparse > (int64_t)bsdtar->buff_size)
-					ns = bsdtar->buff_size;
-				else
-					ns = (size_t)sparse;
-				bytes_written =
-				    archive_write_data(a, null_buff, ns);
-				if (bytes_written < 0) {
-					/* Write failed; this is bad */
-					lafe_warnc(0, "%s",
-					     archive_error_string(a));
-					return (-1);
-				}
-				if ((size_t)bytes_written < ns) {
-					/* Write was truncated; warn but
-					 * continue. */
-					lafe_warnc(0,
-					    "%s: Truncated write; file may "
-					    "have grown while being archived.",
-					    archive_entry_pathname(entry));
-					return (0);
-				}
-				progress += bytes_written;
-				sparse -= bytes_written;
-			}
-		}
-
-		bytes_written = archive_write_data(a, buff, bytes_read);
-		if (bytes_written < 0) {
-			/* Write failed; this is bad */
-			lafe_warnc(0, "%s", archive_error_string(a));
-			return (-1);
-		}
-		if ((size_t)bytes_written < bytes_read) {
-			/* Write was truncated; warn but continue. */
-			lafe_warnc(0,
-			    "%s: Truncated write; file may have grown "
-			    "while being archived.",
-			    archive_entry_pathname(entry));
-			return (0);
-		}
-		progress += bytes_written;
-	}
-	if (r < ARCHIVE_WARN) {
-		lafe_warnc(archive_errno(a), "%s", archive_error_string(a));
-		return (-1);
-	}
+	/* Note: If we got here, we saw no write errors, so return success. */
 	return (0);
 }
 
-static void
-excluded_callback(struct archive *a, void *_data, struct archive_entry *entry)
-{
-	struct bsdtar *bsdtar = (struct bsdtar *)_data;
-
-	if (bsdtar->flags & OPTFLAG_NO_SUBDIRS)
-		return;
-	if (!archive_read_disk_can_descend(a))
-		return;
-	if ((bsdtar->flags & OPTFLAG_INTERACTIVE) &&
-	    !yes("add '%s'", archive_entry_pathname(entry)))
-		return;
-	archive_read_disk_descend(a);
-}
-
+/* Helper function to copy data between archives. */
 static int
-metadata_filter(struct archive *a, void *_data, struct archive_entry *entry)
+copy_file_data(struct bsdtar *bsdtar, struct archive *a, struct archive *ina)
 {
-	struct bsdtar *bsdtar = (struct bsdtar *)_data;
+	char	buff[64*1024];
+	ssize_t	bytes_read;
+	ssize_t	bytes_written;
+	off_t	progress = 0;
 
-	/* XXX TODO: check whether this filesystem is
-	 * synthetic and/or local.  Add a new
-	 * --local-only option to skip non-local
-	 * filesystems.  Skip synthetic filesystems
-	 * regardless.
-	 *
-	 * The results should be cached, since
-	 * tree.c doesn't usually visit a directory
-	 * and the directory contents together.  A simple
-	 * move-to-front list should perform quite well.
-	 *
-	 * Use archive_read_disk_current_filesystem_is_remote().
-	 */
+	bytes_read = archive_read_data(ina, buff, sizeof(buff));
+	while (bytes_read > 0) {
+		siginfo_printinfo(bsdtar, progress);
 
-	/*
-	 * If the user vetoes this file/directory, skip it.
-	 * We want this to be fairly late; if some other
-	 * check would veto this file, we shouldn't bother
-	 * the user with it.
-	 */
-	if ((bsdtar->flags & OPTFLAG_INTERACTIVE) &&
-	    !yes("add '%s'", archive_entry_pathname(entry)))
-		return (0);
+		bytes_written = archive_write_data(a, buff, bytes_read);
+		if (bytes_written < bytes_read) {
+			bsdtar_warnc(bsdtar, 0, "%s", archive_error_string(a));
+			return (-1);
+		}
+		progress += bytes_written;
+		bytes_read = archive_read_data(ina, buff, sizeof(buff));
+	}
 
-	/* Note: if user vetoes, we won't descend. */
-	if (((bsdtar->flags & OPTFLAG_NO_SUBDIRS) == 0) &&
-	    archive_read_disk_can_descend(a))
-		archive_read_disk_descend(a);
-
-	return (1);
+	return (0);
 }
 
 /*
@@ -862,124 +643,185 @@ metadata_filter(struct archive *a, void *_data, struct archive_entry *entry)
 static void
 write_hierarchy(struct bsdtar *bsdtar, struct archive *a, const char *path)
 {
-	struct archive *disk = bsdtar->diskreader;
-	struct archive_entry *entry = NULL, *spare_entry = NULL;
-	int r;
+	struct tree *tree;
+	char symlink_mode = bsdtar->symlink_mode;
+	dev_t first_dev = 0;
+	int dev_recorded = 0;
+	int tree_ret;
+#ifdef __linux
+	int	 fd, r;
+	unsigned long fflags;
+#endif
 
-	r = archive_read_disk_open(disk, path);
-	if (r != ARCHIVE_OK) {
-		lafe_warnc(archive_errno(disk),
-		    "%s", archive_error_string(disk));
+	tree = tree_open(path);
+
+	if (!tree) {
+		bsdtar_warnc(bsdtar, errno, "%s: Cannot open", path);
 		bsdtar->return_value = 1;
 		return;
 	}
-	bsdtar->first_fs = -1;
 
-	for (;;) {
-		archive_entry_free(entry);
-		entry = archive_entry_new();
-		r = archive_read_next_header2(disk, entry);
-		if (r == ARCHIVE_EOF)
-			break;
-		else if (r != ARCHIVE_OK) {
-			lafe_warnc(archive_errno(disk),
-			    "%s", archive_error_string(disk));
-			if (r == ARCHIVE_FATAL || r == ARCHIVE_FAILED) {
+	while ((tree_ret = tree_next(tree))) {
+		const char *name = tree_current_path(tree);
+		const struct stat *st = NULL, *lst = NULL;
+		int descend;
+
+		if (tree_ret == TREE_ERROR_DIR)
+			bsdtar_warnc(bsdtar, errno, "%s: Couldn't visit directory", name);
+		if (tree_ret != TREE_REGULAR)
+			continue;
+		lst = tree_current_lstat(tree);
+		if (lst == NULL) {
+			/* Couldn't lstat(); must not exist. */
+			bsdtar_warnc(bsdtar, errno, "%s: Cannot stat", name);
+
+			/*
+			 * Report an error via the exit code if the failed
+			 * path is a prefix of what the user provided via
+			 * the command line.  (Testing for string equality
+			 * here won't work due to trailing '/' characters.)
+			 */
+			if (memcmp(name, path, strlen(name)) == 0)
 				bsdtar->return_value = 1;
-				archive_entry_free(entry);
-				archive_read_close(disk);
-				return;
-			} else if (r < ARCHIVE_WARN)
-				continue;
-		}
 
-		if (bsdtar->uid >= 0) {
-			archive_entry_set_uid(entry, bsdtar->uid);
-			if (!bsdtar->uname)
-				archive_entry_set_uname(entry,
-				    archive_read_disk_uname(bsdtar->diskreader,
-					bsdtar->uid));
+			continue;
 		}
-		if (bsdtar->gid >= 0) {
-			archive_entry_set_gid(entry, bsdtar->gid);
-			if (!bsdtar->gname)
-				archive_entry_set_gname(entry,
-				    archive_read_disk_gname(bsdtar->diskreader,
-					bsdtar->gid));
-		}
-		if (bsdtar->uname)
-			archive_entry_set_uname(entry, bsdtar->uname);
-		if (bsdtar->gname)
-			archive_entry_set_gname(entry, bsdtar->gname);
+		if (S_ISLNK(lst->st_mode))
+			st = tree_current_stat(tree);
+		/* Default: descend into any dir or symlink to dir. */
+		/* We'll adjust this later on. */
+		descend = 0;
+		if ((st != NULL) && S_ISDIR(st->st_mode))
+			descend = 1;
+		if ((lst != NULL) && S_ISDIR(lst->st_mode))
+			descend = 1;
 
 		/*
-		 * Rewrite the pathname to be archived.  If rewrite
-		 * fails, skip the entry.
+		 * If user has asked us not to cross mount points,
+		 * then don't descend into into a dir on a different
+		 * device.
 		 */
-		if (edit_pathname(bsdtar, entry))
+		if (!dev_recorded) {
+			first_dev = lst->st_dev;
+			dev_recorded = 1;
+		}
+		if (bsdtar->option_dont_traverse_mounts) {
+			if (lst != NULL && lst->st_dev != first_dev)
+				descend = 0;
+		}
+
+		/*
+		 * If this file/dir is flagged "nodump" and we're
+		 * honoring such flags, skip this file/dir.
+		 */
+#ifdef HAVE_CHFLAGS
+		if (bsdtar->option_honor_nodump &&
+		    (lst->st_flags & UF_NODUMP))
+			continue;
+#endif
+
+#ifdef __linux
+		/*
+		 * Linux has a nodump flag too but to read it
+		 * we have to open() the file/dir and do an ioctl on it...
+		 */
+		if (bsdtar->option_honor_nodump &&
+		    ((fd = open(name, O_RDONLY|O_NONBLOCK)) >= 0) &&
+		    ((r = ioctl(fd, EXT2_IOC_GETFLAGS, &fflags)),
+			close(fd), r) >= 0 &&
+		    (fflags & EXT2_NODUMP_FL))
+			continue;
+#endif
+
+		/*
+		 * If this file/dir is excluded by a filename
+		 * pattern, skip it.
+		 */
+		if (excluded(bsdtar, name))
 			continue;
 
-		/* Display entry as we process it. */
-		if (bsdtar->verbose > 1) {
-			safe_fprintf(stderr, "a ");
-			list_item_verbose(bsdtar, stderr, entry);
-		} else if (bsdtar->verbose > 0) {
-		/* This format is required by SUSv2. */
-			safe_fprintf(stderr, "a %s",
-			    archive_entry_pathname(entry));
+		/*
+		 * If the user vetoes this file/directory, skip it.
+		 */
+		if (bsdtar->option_interactive &&
+		    !yes("add '%s'", name))
+			continue;
+
+		/*
+		 * If this is a dir, decide whether or not to recurse.
+		 */
+		if (bsdtar->option_no_subdirs)
+			descend = 0;
+
+		/*
+		 * Distinguish 'L'/'P'/'H' symlink following.
+		 */
+		switch(symlink_mode) {
+		case 'H':
+			/* 'H': After the first item, rest like 'P'. */
+			symlink_mode = 'P';
+			/* 'H': First item (from command line) like 'L'. */
+			/* FALLTHROUGH */
+		case 'L':
+			/* 'L': Do descend through a symlink to dir. */
+			/* 'L': Archive symlink to file as file. */
+			lst = tree_current_stat(tree);
+			/* If stat fails, we have a broken symlink;
+			 * in that case, archive the link as such. */
+			if (lst == NULL)
+				lst = tree_current_lstat(tree);
+			break;
+		default:
+			/* 'P': Don't descend through a symlink to dir. */
+			if (!S_ISDIR(lst->st_mode))
+				descend = 0;
+			/* 'P': Archive symlink to file as symlink. */
+			/* lst = tree_current_lstat(tree); */
+			break;
 		}
 
-		/* Non-regular files get archived with zero size. */
-		if (archive_entry_filetype(entry) != AE_IFREG)
-			archive_entry_set_size(entry, 0);
+		if (descend)
+			tree_descend(tree);
 
-		archive_entry_linkify(bsdtar->resolver, &entry, &spare_entry);
-
-		while (entry != NULL) {
-			write_file(bsdtar, a, entry);
-			archive_entry_free(entry);
-			entry = spare_entry;
-			spare_entry = NULL;
-		}
-
-		if (bsdtar->verbose)
-			fprintf(stderr, "\n");
+		/*
+		 * Write the entry.  Note that write_entry() handles
+		 * pathname editing and newness testing.
+		 */
+		write_entry(bsdtar, a, lst, name,
+		    tree_current_access_path(tree));
 	}
-	archive_entry_free(entry);
-	archive_read_close(disk);
+	tree_close(tree);
 }
 
 /*
- * Write a single file (or directory or other filesystem object) to
- * the archive.
+ * Backend for write_entry.
  */
 static void
-write_file(struct bsdtar *bsdtar, struct archive *a,
-    struct archive_entry *entry)
-{
-	write_entry(bsdtar, a, entry);
-}
-
-/*
- * Write a single entry to the archive.
- */
-static void
-write_entry(struct bsdtar *bsdtar, struct archive *a,
-    struct archive_entry *entry)
+write_entry_backend(struct bsdtar *bsdtar, struct archive *a,
+    struct archive_entry *entry, int fd)
 {
 	int e;
 
+	if (fd == -1 && archive_entry_size(entry) > 0) {
+		const char *pathname = archive_entry_sourcepath(entry);
+		fd = open(pathname, O_RDONLY);
+		if (fd == -1) {
+			if (!bsdtar->verbose)
+				bsdtar_warnc(bsdtar, errno,
+				    "%s: could not open file", pathname);
+			else
+				fprintf(stderr, ": %s", strerror(errno));
+			return;
+		}
+	}
+
 	e = archive_write_header(a, entry);
 	if (e != ARCHIVE_OK) {
-		if (bsdtar->verbose > 1) {
-			safe_fprintf(stderr, "a ");
-			list_item_verbose(bsdtar, stderr, entry);
-			lafe_warnc(0, ": %s", archive_error_string(a));
-		} else if (bsdtar->verbose > 0) {
-			lafe_warnc(0, "%s: %s",
+		if (!bsdtar->verbose)
+			bsdtar_warnc(bsdtar, 0, "%s: %s",
 			    archive_entry_pathname(entry),
 			    archive_error_string(a));
-		} else
+		else
 			fprintf(stderr, ": %s", archive_error_string(a));
 	}
 
@@ -992,62 +834,605 @@ write_entry(struct bsdtar *bsdtar, struct archive *a,
 	 * to inform us that the archive body won't get stored.  In
 	 * that case, just skip the write.
 	 */
-	if (e >= ARCHIVE_WARN && archive_entry_size(entry) > 0) {
-		if (copy_file_data_block(bsdtar, a, bsdtar->diskreader, entry))
+	if (e >= ARCHIVE_WARN && fd >= 0 && archive_entry_size(entry) > 0) {
+		if (write_file_data(bsdtar, a, fd))
 			exit(1);
+		close(fd);
 	}
 }
 
+/*
+ * Add a single filesystem object to the archive.
+ */
 static void
-report_write(struct bsdtar *bsdtar, struct archive *a,
-    struct archive_entry *entry, int64_t progress)
+write_entry(struct bsdtar *bsdtar, struct archive *a, const struct stat *st,
+    const char *pathname, const char *accpath)
 {
-	uint64_t comp, uncomp;
-	int compression;
+	struct archive_entry	*entry, *sparse_entry;
+	int			fd;
+#ifdef __linux
+	int			 r;
+	unsigned long		 stflags;
+#endif
+	static char		 linkbuffer[PATH_MAX+1];
 
+	fd = -1;
+	entry = archive_entry_new();
+
+	archive_entry_set_pathname(entry, pathname);
+	archive_entry_copy_sourcepath(entry, accpath);
+
+	/*
+	 * Rewrite the pathname to be archived.  If rewrite
+	 * fails, skip the entry.
+	 */
+	if (edit_pathname(bsdtar, entry))
+		goto abort;
+
+	/*
+	 * In -u mode, check that the file is newer than what's
+	 * already in the archive; in all modes, obey --newerXXX flags.
+	 */
+	if (!new_enough(bsdtar, archive_entry_pathname(entry), st))
+		goto abort;
+
+	/* Display entry as we process it. This format is required by SUSv2. */
+	if (bsdtar->verbose)
+		safe_fprintf(stderr, "a %s", archive_entry_pathname(entry));
+
+	/* Read symbolic link information. */
+	if ((st->st_mode & S_IFMT) == S_IFLNK) {
+		int lnklen;
+
+		lnklen = readlink(accpath, linkbuffer, PATH_MAX);
+		if (lnklen < 0) {
+			if (!bsdtar->verbose)
+				bsdtar_warnc(bsdtar, errno,
+				    "%s: Couldn't read symbolic link",
+				    pathname);
+			else
+				safe_fprintf(stderr,
+				    ": Couldn't read symbolic link: %s",
+				    strerror(errno));
+			goto cleanup;
+		}
+		linkbuffer[lnklen] = 0;
+		archive_entry_set_symlink(entry, linkbuffer);
+	}
+
+	/* Look up username and group name. */
+	archive_entry_set_uname(entry, lookup_uname(bsdtar, st->st_uid));
+	archive_entry_set_gname(entry, lookup_gname(bsdtar, st->st_gid));
+
+#ifdef HAVE_CHFLAGS
+	if (st->st_flags != 0)
+		archive_entry_set_fflags(entry, st->st_flags, 0);
+#endif
+
+#ifdef __linux
+	if ((S_ISREG(st->st_mode) || S_ISDIR(st->st_mode)) &&
+	    ((fd = open(accpath, O_RDONLY|O_NONBLOCK)) >= 0) &&
+	    ((r = ioctl(fd, EXT2_IOC_GETFLAGS, &stflags)), close(fd), (fd = -1), r) >= 0 &&
+	    stflags) {
+		archive_entry_set_fflags(entry, stflags, 0);
+	}
+#endif
+
+	archive_entry_copy_stat(entry, st);
+	setup_acls(bsdtar, entry, accpath);
+	setup_xattrs(bsdtar, entry, accpath);
+
+	/* Non-regular files get archived with zero size. */
+	if (!S_ISREG(st->st_mode))
+		archive_entry_set_size(entry, 0);
+
+	/* Record what we're doing, for the benefit of SIGINFO / SIGUSR1. */
+	siginfo_setinfo(bsdtar, "adding", archive_entry_pathname(entry),
+	    archive_entry_size(entry));
+	archive_entry_linkify(bsdtar->resolver, &entry, &sparse_entry);
+
+	/* Handle SIGINFO / SIGUSR1 request if one was made. */
+	siginfo_printinfo(bsdtar, 0);
+
+	while (entry != NULL) {
+		write_entry_backend(bsdtar, a, entry, fd);
+		fd = -1;
+		archive_entry_free(entry);
+		entry = sparse_entry;
+		sparse_entry = NULL;
+	}
+
+cleanup:
 	if (bsdtar->verbose)
 		fprintf(stderr, "\n");
-	comp = archive_filter_bytes(a, -1);
-	uncomp = archive_filter_bytes(a, 0);
-	fprintf(stderr, "In: %d files, %s bytes;",
-	    archive_file_count(a), tar_i64toa(uncomp));
-	if (comp >= uncomp)
-		compression = 0;
-	else
-		compression = (int)((uncomp - comp) * 100 / uncomp);
-	fprintf(stderr,
-	    " Out: %s bytes, compression %d%%\n",
-	    tar_i64toa(comp), compression);
-	/* Can't have two calls to tar_i64toa() pending, so split the output. */
-	safe_fprintf(stderr, "Current: %s (%s",
-	    archive_entry_pathname(entry),
-	    tar_i64toa(progress));
-	fprintf(stderr, "/%s bytes)\n",
-	    tar_i64toa(archive_entry_size(entry)));
+
+abort:
+	if (fd >= 0)
+		close(fd);
+
+	archive_entry_free(entry);
+}
+
+
+/* Helper function to copy file to archive, with stack-allocated buffer. */
+static int
+write_file_data(struct bsdtar *bsdtar, struct archive *a, int fd)
+{
+	char	buff[64*1024];
+	ssize_t	bytes_read;
+	ssize_t	bytes_written;
+	off_t	progress = 0;
+
+	/* XXX TODO: Allocate buffer on heap and store pointer to
+	 * it in bsdtar structure; arrange cleanup as well. XXX */
+
+	bytes_read = read(fd, buff, sizeof(buff));
+	while (bytes_read > 0) {
+		siginfo_printinfo(bsdtar, progress);
+
+		bytes_written = archive_write_data(a, buff, bytes_read);
+		if (bytes_written < 0) {
+			/* Write failed; this is bad */
+			bsdtar_warnc(bsdtar, 0, "%s", archive_error_string(a));
+			return (-1);
+		}
+		if (bytes_written < bytes_read) {
+			/* Write was truncated; warn but continue. */
+			bsdtar_warnc(bsdtar, 0,
+			    "Truncated write; file may have grown while being archived.");
+			return (0);
+		}
+		progress += bytes_written;
+		bytes_read = read(fd, buff, sizeof(buff));
+	}
+	return 0;
+}
+
+
+static void
+create_cleanup(struct bsdtar *bsdtar)
+{
+	free_cache(bsdtar->uname_cache);
+	bsdtar->uname_cache = NULL;
+	free_cache(bsdtar->gname_cache);
+	bsdtar->gname_cache = NULL;
+}
+
+#ifdef HAVE_POSIX_ACL
+static void		setup_acl(struct bsdtar *bsdtar,
+			     struct archive_entry *entry, const char *accpath,
+			     int acl_type, int archive_entry_acl_type);
+
+static void
+setup_acls(struct bsdtar *bsdtar, struct archive_entry *entry,
+    const char *accpath)
+{
+	archive_entry_acl_clear(entry);
+
+	setup_acl(bsdtar, entry, accpath,
+	    ACL_TYPE_ACCESS, ARCHIVE_ENTRY_ACL_TYPE_ACCESS);
+	/* Only directories can have default ACLs. */
+	if (S_ISDIR(archive_entry_mode(entry)))
+		setup_acl(bsdtar, entry, accpath,
+		    ACL_TYPE_DEFAULT, ARCHIVE_ENTRY_ACL_TYPE_DEFAULT);
 }
 
 static void
+setup_acl(struct bsdtar *bsdtar, struct archive_entry *entry,
+    const char *accpath, int acl_type, int archive_entry_acl_type)
+{
+	acl_t		 acl;
+	acl_tag_t	 acl_tag;
+	acl_entry_t	 acl_entry;
+	acl_permset_t	 acl_permset;
+	int		 s, ae_id, ae_tag, ae_perm;
+	const char	*ae_name;
+
+	/* Retrieve access ACL from file. */
+	acl = acl_get_file(accpath, acl_type);
+	if (acl != NULL) {
+		s = acl_get_entry(acl, ACL_FIRST_ENTRY, &acl_entry);
+		while (s == 1) {
+			ae_id = -1;
+			ae_name = NULL;
+
+			acl_get_tag_type(acl_entry, &acl_tag);
+			if (acl_tag == ACL_USER) {
+				ae_id = (int)*(uid_t *)acl_get_qualifier(acl_entry);
+				ae_name = lookup_uname(bsdtar, ae_id);
+				ae_tag = ARCHIVE_ENTRY_ACL_USER;
+			} else if (acl_tag == ACL_GROUP) {
+				ae_id = (int)*(gid_t *)acl_get_qualifier(acl_entry);
+				ae_name = lookup_gname(bsdtar, ae_id);
+				ae_tag = ARCHIVE_ENTRY_ACL_GROUP;
+			} else if (acl_tag == ACL_MASK) {
+				ae_tag = ARCHIVE_ENTRY_ACL_MASK;
+			} else if (acl_tag == ACL_USER_OBJ) {
+				ae_tag = ARCHIVE_ENTRY_ACL_USER_OBJ;
+			} else if (acl_tag == ACL_GROUP_OBJ) {
+				ae_tag = ARCHIVE_ENTRY_ACL_GROUP_OBJ;
+			} else if (acl_tag == ACL_OTHER) {
+				ae_tag = ARCHIVE_ENTRY_ACL_OTHER;
+			} else {
+				/* Skip types that libarchive can't support. */
+				continue;
+			}
+
+			acl_get_permset(acl_entry, &acl_permset);
+			ae_perm = 0;
+			/*
+			 * acl_get_perm() is spelled differently on different
+			 * platforms; see bsdtar_platform.h for details.
+			 */
+			if (ACL_GET_PERM(acl_permset, ACL_EXECUTE))
+				ae_perm |= ARCHIVE_ENTRY_ACL_EXECUTE;
+			if (ACL_GET_PERM(acl_permset, ACL_READ))
+				ae_perm |= ARCHIVE_ENTRY_ACL_READ;
+			if (ACL_GET_PERM(acl_permset, ACL_WRITE))
+				ae_perm |= ARCHIVE_ENTRY_ACL_WRITE;
+
+			archive_entry_acl_add_entry(entry,
+			    archive_entry_acl_type, ae_perm, ae_tag,
+			    ae_id, ae_name);
+
+			s = acl_get_entry(acl, ACL_NEXT_ENTRY, &acl_entry);
+		}
+		acl_free(acl);
+	}
+}
+#else
+static void
+setup_acls(struct bsdtar *bsdtar, struct archive_entry *entry,
+    const char *accpath)
+{
+	(void)bsdtar;
+	(void)entry;
+	(void)accpath;
+}
+#endif
+
+#if HAVE_LISTXATTR && HAVE_LLISTXATTR && HAVE_GETXATTR && HAVE_LGETXATTR
+
+static void
+setup_xattr(struct bsdtar *bsdtar, struct archive_entry *entry,
+    const char *accpath, const char *name)
+{
+	size_t size;
+	void *value = NULL;
+	char symlink_mode = bsdtar->symlink_mode;
+
+	if (symlink_mode == 'H')
+		size = getxattr(accpath, name, NULL, 0);
+	else
+		size = lgetxattr(accpath, name, NULL, 0);
+
+	if (size == -1) {
+		bsdtar_warnc(bsdtar, errno, "Couldn't get extended attribute");
+		return;
+	}
+
+	if (size > 0 && (value = malloc(size)) == NULL) {
+		bsdtar_errc(bsdtar, 1, errno, "Out of memory");
+		return;
+	}
+
+	if (symlink_mode == 'H')
+		size = getxattr(accpath, name, value, size);
+	else
+		size = lgetxattr(accpath, name, value, size);
+
+	if (size == -1) {
+		bsdtar_warnc(bsdtar, errno, "Couldn't get extended attribute");
+		return;
+	}
+
+	archive_entry_xattr_add_entry(entry, name, value, size);
+
+	free(value);
+}
+
+/*
+ * Linux extended attribute support
+ */
+static void
+setup_xattrs(struct bsdtar *bsdtar, struct archive_entry *entry,
+    const char *accpath)
+{
+	char *list, *p;
+	size_t list_size;
+	char symlink_mode = bsdtar->symlink_mode;
+
+	if (symlink_mode == 'H')
+		list_size = listxattr(accpath, NULL, 0);
+	else
+		list_size = llistxattr(accpath, NULL, 0);
+
+	if (list_size == -1) {
+		bsdtar_warnc(bsdtar, errno,
+			"Couldn't list extended attributes");
+		return;
+	} else if (list_size == 0)
+		return;
+
+	if ((list = malloc(list_size)) == NULL) {
+		bsdtar_errc(bsdtar, 1, errno, "Out of memory");
+		return;
+	}
+
+	if (symlink_mode == 'H')
+		list_size = listxattr(accpath, list, list_size);
+	else
+		list_size = llistxattr(accpath, list, list_size);
+
+	if (list_size == -1) {
+		bsdtar_warnc(bsdtar, errno,
+			"Couldn't list extended attributes");
+		free(list);
+		return;
+	}
+
+	for (p = list; (p - list) < list_size; p += strlen(p) + 1) {
+		if (strncmp(p, "system.", 7) == 0 ||
+				strncmp(p, "xfsroot.", 8) == 0)
+			continue;
+
+		setup_xattr(bsdtar, entry, accpath, p);
+	}
+
+	free(list);
+}
+
+#else
+
+/*
+ * Generic (stub) extended attribute support.
+ */
+static void
+setup_xattrs(struct bsdtar *bsdtar, struct archive_entry *entry,
+    const char *accpath)
+{
+	(void)bsdtar; /* UNUSED */
+	(void)entry; /* UNUSED */
+	(void)accpath; /* UNUSED */
+}
+
+#endif
+
+static void
+free_cache(struct name_cache *cache)
+{
+	size_t i;
+
+	if (cache != NULL) {
+		for (i = 0; i < cache->size; i++) {
+			if (cache->cache[i].name != NULL &&
+			    cache->cache[i].name != NO_NAME)
+				free((void *)(uintptr_t)cache->cache[i].name);
+		}
+		free(cache);
+	}
+}
+
+/*
+ * Lookup uid/gid from uname/gname, return NULL if no match.
+ */
+static const char *
+lookup_name(struct bsdtar *bsdtar, struct name_cache **name_cache_variable,
+    int (*lookup_fn)(struct bsdtar *, const char **, id_t), id_t id)
+{
+	struct name_cache	*cache;
+	const char *name;
+	int slot;
+
+
+	if (*name_cache_variable == NULL) {
+		*name_cache_variable = malloc(sizeof(struct name_cache));
+		if (*name_cache_variable == NULL)
+			bsdtar_errc(bsdtar, 1, ENOMEM, "No more memory");
+		memset(*name_cache_variable, 0, sizeof(struct name_cache));
+		(*name_cache_variable)->size = name_cache_size;
+	}
+
+	cache = *name_cache_variable;
+	cache->probes++;
+
+	slot = id % cache->size;
+	if (cache->cache[slot].name != NULL) {
+		if (cache->cache[slot].id == id) {
+			cache->hits++;
+			if (cache->cache[slot].name == NO_NAME)
+				return (NULL);
+			return (cache->cache[slot].name);
+		}
+		if (cache->cache[slot].name != NO_NAME)
+			free((void *)(uintptr_t)cache->cache[slot].name);
+		cache->cache[slot].name = NULL;
+	}
+
+	if (lookup_fn(bsdtar, &name, id) == 0) {
+		if (name == NULL || name[0] == '\0') {
+			/* Cache the negative response. */
+			cache->cache[slot].name = NO_NAME;
+			cache->cache[slot].id = id;
+		} else {
+			cache->cache[slot].name = strdup(name);
+			if (cache->cache[slot].name != NULL) {
+				cache->cache[slot].id = id;
+				return (cache->cache[slot].name);
+			}
+			/*
+			 * Conveniently, NULL marks an empty slot, so
+			 * if the strdup() fails, we've just failed to
+			 * cache it.  No recovery necessary.
+			 */
+		}
+	}
+	return (NULL);
+}
+
+static const char *
+lookup_uname(struct bsdtar *bsdtar, uid_t uid)
+{
+	return (lookup_name(bsdtar, &bsdtar->uname_cache,
+		    &lookup_uname_helper, (id_t)uid));
+}
+
+static int
+lookup_uname_helper(struct bsdtar *bsdtar, const char **name, id_t id)
+{
+	struct passwd	*pwent;
+
+	(void)bsdtar; /* UNUSED */
+
+	errno = 0;
+	pwent = getpwuid((uid_t)id);
+	if (pwent == NULL) {
+		*name = NULL;
+		if (errno != 0)
+			bsdtar_warnc(bsdtar, errno, "getpwuid(%d) failed", id);
+		return (errno);
+	}
+
+	*name = pwent->pw_name;
+	return (0);
+}
+
+static const char *
+lookup_gname(struct bsdtar *bsdtar, gid_t gid)
+{
+	return (lookup_name(bsdtar, &bsdtar->gname_cache,
+		    &lookup_gname_helper, (id_t)gid));
+}
+
+static int
+lookup_gname_helper(struct bsdtar *bsdtar, const char **name, id_t id)
+{
+	struct group	*grent;
+
+	(void)bsdtar; /* UNUSED */
+
+	errno = 0;
+	grent = getgrgid((gid_t)id);
+	if (grent == NULL) {
+		*name = NULL;
+		if (errno != 0)
+			bsdtar_warnc(bsdtar, errno, "getgrgid(%d) failed", id);
+		return (errno);
+	}
+
+	*name = grent->gr_name;
+	return (0);
+}
+
+/*
+ * Test if the specified file is new enough to include in the archive.
+ */
+int
+new_enough(struct bsdtar *bsdtar, const char *path, const struct stat *st)
+{
+	struct archive_dir_entry *p;
+
+	/*
+	 * If this file/dir is excluded by a time comparison, skip it.
+	 */
+	if (bsdtar->newer_ctime_sec > 0) {
+		if (st->st_ctime < bsdtar->newer_ctime_sec)
+			return (0); /* Too old, skip it. */
+		if (st->st_ctime == bsdtar->newer_ctime_sec
+		    && ARCHIVE_STAT_CTIME_NANOS(st)
+		    <= bsdtar->newer_ctime_nsec)
+			return (0); /* Too old, skip it. */
+	}
+	if (bsdtar->newer_mtime_sec > 0) {
+		if (st->st_mtime < bsdtar->newer_mtime_sec)
+			return (0); /* Too old, skip it. */
+		if (st->st_mtime == bsdtar->newer_mtime_sec
+		    && ARCHIVE_STAT_MTIME_NANOS(st)
+		    <= bsdtar->newer_mtime_nsec)
+			return (0); /* Too old, skip it. */
+	}
+
+	/*
+	 * In -u mode, we only write an entry if it's newer than
+	 * what was already in the archive.
+	 */
+	if (bsdtar->archive_dir != NULL &&
+	    bsdtar->archive_dir->head != NULL) {
+		for (p = bsdtar->archive_dir->head; p != NULL; p = p->next) {
+			if (pathcmp(path, p->name)==0)
+				return (p->mtime_sec < st->st_mtime ||
+				    (p->mtime_sec == st->st_mtime &&
+					p->mtime_nsec
+					< ARCHIVE_STAT_MTIME_NANOS(st)));
+		}
+	}
+
+	/* If the file wasn't rejected, include it. */
+	return (1);
+}
+
+/*
+ * Add an entry to the dir list for 'u' mode.
+ *
+ * XXX TODO: Make this fast.
+ */
+static void
+add_dir_list(struct bsdtar *bsdtar, const char *path,
+    time_t mtime_sec, int mtime_nsec)
+{
+	struct archive_dir_entry	*p;
+
+	/*
+	 * Search entire list to see if this file has appeared before.
+	 * If it has, override the timestamp data.
+	 */
+	p = bsdtar->archive_dir->head;
+	while (p != NULL) {
+		if (strcmp(path, p->name)==0) {
+			p->mtime_sec = mtime_sec;
+			p->mtime_nsec = mtime_nsec;
+			return;
+		}
+		p = p->next;
+	}
+
+	p = malloc(sizeof(*p));
+	if (p == NULL)
+		bsdtar_errc(bsdtar, 1, ENOMEM, "Can't read archive directory");
+
+	p->name = strdup(path);
+	if (p->name == NULL)
+		bsdtar_errc(bsdtar, 1, ENOMEM, "Can't read archive directory");
+	p->mtime_sec = mtime_sec;
+	p->mtime_nsec = mtime_nsec;
+	p->next = NULL;
+	if (bsdtar->archive_dir->tail == NULL) {
+		bsdtar->archive_dir->head = bsdtar->archive_dir->tail = p;
+	} else {
+		bsdtar->archive_dir->tail->next = p;
+		bsdtar->archive_dir->tail = p;
+	}
+}
+
+void
 test_for_append(struct bsdtar *bsdtar)
 {
 	struct stat s;
 
 	if (*bsdtar->argv == NULL && bsdtar->names_from_file == NULL)
-		lafe_errc(1, 0, "no files or directories specified");
+		bsdtar_errc(bsdtar, 1, 0, "no files or directories specified");
 	if (bsdtar->filename == NULL)
-		lafe_errc(1, 0, "Cannot append to stdout.");
+		bsdtar_errc(bsdtar, 1, 0, "Cannot append to stdout.");
+
+	if (bsdtar->create_compression != 0)
+		bsdtar_errc(bsdtar, 1, 0,
+		    "Cannot append to %s with compression", bsdtar->filename);
 
 	if (stat(bsdtar->filename, &s) != 0)
 		return;
 
 	if (!S_ISREG(s.st_mode) && !S_ISBLK(s.st_mode))
-		lafe_errc(1, 0,
+		bsdtar_errc(bsdtar, 1, 0,
 		    "Cannot append to %s: not a regular file.",
 		    bsdtar->filename);
-
-/* Is this an appropriate check here on Windows? */
-/*
-	if (GetFileType(handle) != FILE_TYPE_DISK)
-		lafe_errc(1, 0, "Cannot append");
-*/
-
 }

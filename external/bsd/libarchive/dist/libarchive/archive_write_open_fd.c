@@ -24,19 +24,13 @@
  */
 
 #include "archive_platform.h"
-__FBSDID("$FreeBSD: head/lib/libarchive/archive_write_open_fd.c 201093 2009-12-28 02:28:44Z kientzle $");
+__FBSDID("$FreeBSD: src/lib/libarchive/archive_write_open_fd.c,v 1.9 2007/01/09 08:05:56 kientzle Exp $");
 
 #ifdef HAVE_SYS_STAT_H
 #include <sys/stat.h>
 #endif
 #ifdef HAVE_ERRNO_H
 #include <errno.h>
-#endif
-#ifdef HAVE_FCNTL_H
-#include <fcntl.h>
-#endif
-#ifdef HAVE_IO_H
-#include <io.h>
 #endif
 #ifdef HAVE_STDLIB_H
 #include <stdlib.h>
@@ -51,6 +45,7 @@ __FBSDID("$FreeBSD: head/lib/libarchive/archive_write_open_fd.c 201093 2009-12-2
 #include "archive.h"
 
 struct write_fd_data {
+	off_t		offset;
 	int		fd;
 };
 
@@ -69,9 +64,6 @@ archive_write_open_fd(struct archive *a, int fd)
 		return (ARCHIVE_FATAL);
 	}
 	mine->fd = fd;
-#if defined(__CYGWIN__) || defined(_WIN32)
-	setmode(mine->fd, O_BINARY);
-#endif
 	return (archive_write_open(a, mine,
 		    file_open, file_write, file_close));
 }
@@ -121,16 +113,12 @@ file_write(struct archive *a, void *client_data, const void *buff, size_t length
 	ssize_t	bytesWritten;
 
 	mine = (struct write_fd_data *)client_data;
-	for (;;) {
-		bytesWritten = write(mine->fd, buff, length);
-		if (bytesWritten <= 0) {
-			if (errno == EINTR)
-				continue;
-			archive_set_error(a, errno, "Write error");
-			return (-1);
-		}
-		return (bytesWritten);
+	bytesWritten = write(mine->fd, buff, length);
+	if (bytesWritten <= 0) {
+		archive_set_error(a, errno, "Write error");
+		return (-1);
 	}
+	return (bytesWritten);
 }
 
 static int

@@ -23,7 +23,7 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 #include "test.h"
-__FBSDID("$FreeBSD: head/lib/libarchive/test/test_write_format_cpio_odc.c 201247 2009-12-30 05:59:21Z kientzle $");
+__FBSDID("$FreeBSD: src/lib/libarchive/test/test_write_format_cpio_odc.c,v 1.1 2008/01/01 22:28:04 kientzle Exp $");
 
 
 static int
@@ -46,7 +46,7 @@ DEFINE_TEST(test_write_format_cpio_odc)
 {
 	struct archive *a;
 	struct archive_entry *entry;
-	char *buff, *e, *file;
+	char *buff, *e;
 	size_t buffsize = 100000;
 	size_t used;
 
@@ -55,7 +55,7 @@ DEFINE_TEST(test_write_format_cpio_odc)
 	/* Create a new archive in memory. */
 	assert((a = archive_write_new()) != NULL);
 	assertEqualIntA(a, 0, archive_write_set_format_cpio(a));
-	assertEqualIntA(a, 0, archive_write_add_filter_none(a));
+	assertEqualIntA(a, 0, archive_write_set_compression_none(a));
 	assertEqualIntA(a, 0, archive_write_open_memory(a, buff, buffsize, &used));
 
 	/*
@@ -109,8 +109,7 @@ DEFINE_TEST(test_write_format_cpio_odc)
 	assert((entry = archive_entry_new()) != NULL);
 	archive_entry_set_mtime(entry, 3, 30);
 	archive_entry_set_pathname(entry, "symlink");
-	archive_entry_set_mode(entry, 0664);
-	archive_entry_set_filetype(entry, AE_IFLNK);
+	archive_entry_set_mode(entry, S_IFLNK | 0664);
 	archive_entry_set_symlink(entry,"file");
 	archive_entry_set_size(entry, 0);
 	archive_entry_set_uid(entry, 88);
@@ -123,33 +122,22 @@ DEFINE_TEST(test_write_format_cpio_odc)
 	/* Write of data to symlink should fail == zero bytes get written. */
 	assertEqualIntA(a, 0, archive_write_data(a, "1234567890", 10));
 
-	assertEqualInt(ARCHIVE_OK, archive_write_free(a));
+#if ARCHIVE_API_VERSION > 1
+	assert(0 == archive_write_finish(a));
+#else
+	archive_write_finish(a);
+#endif
 
 	/*
 	 * Verify the archive format.
-	 *
-	 * Notes on the ino validation: cpio does not actually require
-	 * that the ino values written to the archive match those read
-	 * from disk.  It really requires that:
-	 *   * matching non-zero ino values be written as matching
-	 *     non-zero values
-	 *   * non-matching non-zero ino values be written as non-matching
-	 *     non-zero values
-	 * Libarchive further ensures that zero ino values get written
-	 * as zeroes.  This allows the cpio writer to generate
-	 * synthetic ino values for the archive that may be different
-	 * than those on disk in order to avoid problems due to truncation.
-	 * This is especially needed for odc (POSIX format) that
-	 * only supports 18-bit ino values.
 	 */
 	e = buff;
 
 	/* "file" */
-	file = e; /* Remember where this starts... */
 	assert(is_octal(e, 76)); /* Entire header is octal digits. */
 	assertEqualMem(e + 0, "070707", 6); /* Magic */
 	assertEqualMem(e + 6, "000014", 6); /* dev */
-	assert(memcmp(e + 12, "000000", 6) != 0); /* ino must be != 0 */
+	assertEqualMem(e + 12, "000131", 6); /* ino */
 	assertEqualMem(e + 18, "100664", 6); /* Mode */
 	assertEqualMem(e + 24, "000120", 6); /* uid */
 	assertEqualMem(e + 30, "000132", 6); /* gid */
@@ -166,7 +154,7 @@ DEFINE_TEST(test_write_format_cpio_odc)
 	assert(is_octal(e, 76)); /* Entire header is octal digits. */
 	assertEqualMem(e + 0, "070707", 6); /* Magic */
 	assertEqualMem(e + 6, "000014", 6); /* dev */
-	assertEqualMem(e + 12, file + 12, 6); /* ino must match above */
+	assertEqualMem(e + 12, "000131", 6); /* ino */
 	assertEqualMem(e + 18, "100664", 6); /* Mode */
 	assertEqualMem(e + 24, "000120", 6); /* uid */
 	assertEqualMem(e + 30, "000132", 6); /* gid */
@@ -199,8 +187,7 @@ DEFINE_TEST(test_write_format_cpio_odc)
 	assert(is_octal(e, 76)); /* Entire header is octal digits. */
 	assertEqualMem(e + 0, "070707", 6); /* Magic */
 	assertEqualMem(e + 6, "000014", 6); /* dev */
-	assert(memcmp(e + 12, file + 12, 6) != 0); /* ino must != file ino */
-	assert(memcmp(e + 12, "000000", 6) != 0); /* ino must != 0 */
+	assertEqualMem(e + 12, "000132", 6); /* ino */
 	assertEqualMem(e + 18, "120664", 6); /* Mode */
 	assertEqualMem(e + 24, "000130", 6); /* uid */
 	assertEqualMem(e + 30, "000142", 6); /* gid */
@@ -231,7 +218,7 @@ DEFINE_TEST(test_write_format_cpio_odc)
 	assertEqualMem(e + 76, "TRAILER!!!\0", 11); /* Name */
 	e += 87;
 
-	assertEqualInt((int)used, e - buff);
+	assertEqualInt(used, e - buff);
 
 	free(buff);
 }

@@ -44,8 +44,6 @@ verify_write_data(struct archive *a, int sparse)
 
 	buff = malloc(buff_size);
 	assert(buff != NULL);
-	if (buff == NULL)
-		return;
 
 	ae = archive_entry_new();
 	assert(ae != NULL);
@@ -81,11 +79,8 @@ verify_write_data(struct archive *a, int sparse)
 	assert(0 == stat(archive_entry_pathname(ae), &st));
         assertEqualInt(st.st_size, 8 * buff_size);
 	f = fopen(archive_entry_pathname(ae), "rb");
-	assert(f != NULL);
-	if (f == NULL) {
-		free(buff);
+	if (!assert(f != NULL))
 		return;
-	}
 
 	/* Check first block. */
 	assertEqualInt(buff_size, fread(buff, 1, buff_size, f));
@@ -141,8 +136,6 @@ verify_write_data_block(struct archive *a, int sparse)
 
 	buff = malloc(buff_size);
 	assert(buff != NULL);
-	if (buff == NULL)
-		return;
 
 	ae = archive_entry_new();
 	assert(ae != NULL);
@@ -182,11 +175,8 @@ verify_write_data_block(struct archive *a, int sparse)
 	assert(0 == stat(archive_entry_pathname(ae), &st));
         assertEqualInt(st.st_size, 8 * buff_size);
 	f = fopen(archive_entry_pathname(ae), "rb");
-	assert(f != NULL);
-	if (f == NULL) {
-		free(buff);
+	if (!assert(f != NULL))
 		return;
-	}
 
 	/* Check 100-byte gap at beginning */
 	assertEqualInt(100, fread(buff, 1, 100, f));
@@ -279,12 +269,12 @@ DEFINE_TEST(test_write_disk_sparse)
         archive_write_disk_set_options(ad, 0);
 	verify_write_data(ad, 0);
 	verify_write_data_block(ad, 0);
-	assertEqualInt(0, archive_write_free(ad));
+	assertEqualInt(0, archive_write_finish(ad));
 
 	assert((ad = archive_write_disk_new()) != NULL);
         archive_write_disk_set_options(ad, ARCHIVE_EXTRACT_SPARSE);
 	verify_write_data(ad, 1);
 	verify_write_data_block(ad, 1);
-	assertEqualInt(0, archive_write_free(ad));
+	assertEqualInt(0, archive_write_finish(ad));
 
 }

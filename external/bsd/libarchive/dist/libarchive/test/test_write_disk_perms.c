@@ -23,9 +23,9 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 #include "test.h"
-__FBSDID("$FreeBSD: head/lib/libarchive/test/test_write_disk_perms.c 201247 2009-12-30 05:59:21Z kientzle $");
+__FBSDID("$FreeBSD: src/lib/libarchive/test/test_write_disk_perms.c,v 1.9 2008/06/15 10:35:22 kientzle Exp $");
 
-#if !defined(_WIN32) || defined(__CYGWIN__)
+#if ARCHIVE_VERSION_STAMP >= 1009000
 
 #define UMASK 022
 
@@ -60,7 +60,7 @@ searchgid(void)
 	_searched = 1;
 
 	/* Create a file on disk in the current default dir. */
-	fd = open("test_gid", O_CREAT | O_BINARY, 0664);
+	fd = open("test_gid", O_CREAT, 0664);
 	failure("Couldn't create a file for gid testing.");
 	assert(fd > 0);
 
@@ -125,16 +125,12 @@ defaultgid(void)
 
 DEFINE_TEST(test_write_disk_perms)
 {
-#if defined(_WIN32) && !defined(__CYGWIN__)
+#if ARCHIVE_VERSION_STAMP < 1009000
 	skipping("archive_write_disk interface");
 #else
 	struct archive *a;
 	struct archive_entry *ae;
 	struct stat st;
-	uid_t original_uid;
-	uid_t try_to_change_uid;
-
-	assertUmask(UMASK);
 
 	/*
 	 * Set ownership of the current directory to the group of this
@@ -152,8 +148,8 @@ DEFINE_TEST(test_write_disk_perms)
 	assert((ae = archive_entry_new()) != NULL);
 	archive_entry_copy_pathname(ae, "file_0755");
 	archive_entry_set_mode(ae, S_IFREG | 0777);
-	assertEqualIntA(a, ARCHIVE_OK, archive_write_header(a, ae));
-	assertEqualIntA(a, ARCHIVE_OK, archive_write_finish_entry(a));
+	assert(0 == archive_write_header(a, ae));
+	assert(0 == archive_write_finish_entry(a));
 	archive_entry_free(ae);
 
 	/* Write a regular file, then write over it. */
@@ -161,94 +157,63 @@ DEFINE_TEST(test_write_disk_perms)
 	assert((ae = archive_entry_new()) != NULL);
 	archive_entry_copy_pathname(ae, "file_overwrite_0144");
 	archive_entry_set_mode(ae, S_IFREG | 0777);
-	assertEqualIntA(a, ARCHIVE_OK, archive_write_header(a, ae));
+	assert(0 == archive_write_header(a, ae));
 	archive_entry_free(ae);
-	assertEqualIntA(a, ARCHIVE_OK, archive_write_finish_entry(a));
+	assert(0 == archive_write_finish_entry(a));
 	/* Check that file was created with different perms. */
-	assertEqualInt(0, stat("file_overwrite_0144", &st));
+	assert(0 == stat("file_overwrite_0144", &st));
 	failure("file_overwrite_0144: st.st_mode=%o", st.st_mode);
 	assert((st.st_mode & 07777) != 0144);
 	/* Overwrite, this should change the perms. */
 	assert((ae = archive_entry_new()) != NULL);
 	archive_entry_copy_pathname(ae, "file_overwrite_0144");
 	archive_entry_set_mode(ae, S_IFREG | 0144);
-	assertEqualIntA(a, ARCHIVE_OK, archive_write_header(a, ae));
+	assert(0 == archive_write_header(a, ae));
 	archive_entry_free(ae);
-	assertEqualIntA(a, ARCHIVE_OK, archive_write_finish_entry(a));
+	assert(0 == archive_write_finish_entry(a));
 
 	/* Write a regular dir. */
 	assert((ae = archive_entry_new()) != NULL);
 	archive_entry_copy_pathname(ae, "dir_0514");
 	archive_entry_set_mode(ae, S_IFDIR | 0514);
-	assertEqualIntA(a, ARCHIVE_OK, archive_write_header(a, ae));
+	assert(0 == archive_write_header(a, ae));
 	archive_entry_free(ae);
-	assertEqualIntA(a, ARCHIVE_OK, archive_write_finish_entry(a));
+	assert(0 == archive_write_finish_entry(a));
 
 	/* Overwrite an existing dir. */
 	/* For dir, the first perms should get left. */
-	assertMakeDir("dir_overwrite_0744", 0744);
+	assert(mkdir("dir_overwrite_0744", 0744) == 0);
 	/* Check original perms. */
-	assertEqualInt(0, stat("dir_overwrite_0744", &st));
+	assert(0 == stat("dir_overwrite_0744", &st));
 	failure("dir_overwrite_0744: st.st_mode=%o", st.st_mode);
-	assertEqualInt(st.st_mode & 0777, 0744);
+	assert((st.st_mode & 0777) == 0744);
 	/* Overwrite shouldn't edit perms. */
 	assert((ae = archive_entry_new()) != NULL);
 	archive_entry_copy_pathname(ae, "dir_overwrite_0744");
 	archive_entry_set_mode(ae, S_IFDIR | 0777);
-	assertEqualIntA(a, ARCHIVE_OK, archive_write_header(a, ae));
+	assert(0 == archive_write_header(a, ae));
 	archive_entry_free(ae);
-	assertEqualIntA(a, ARCHIVE_OK, archive_write_finish_entry(a));
+	assert(0 == archive_write_finish_entry(a));
 	/* Make sure they're unchanged. */
-	assertEqualInt(0, stat("dir_overwrite_0744", &st));
+	assert(0 == stat("dir_overwrite_0744", &st));
 	failure("dir_overwrite_0744: st.st_mode=%o", st.st_mode);
-	assertEqualInt(st.st_mode & 0777, 0744);
-
-	/* For dir, the owner should get left when not overwriting. */
-	assertMakeDir("dir_owner", 0744);
-
-	if (getuid() == 0) {
-		original_uid = getuid() + 1;
-		try_to_change_uid = getuid();
-		assertEqualInt(0, chown("dir_owner", original_uid, getgid()));
-	} else {
-		original_uid = getuid();
-		try_to_change_uid = getuid() + 1;
-	}
-
-	/* Check original owner. */
-	assertEqualInt(0, stat("dir_owner", &st));
-	failure("dir_owner: st.st_uid=%d", st.st_uid);
-	assertEqualInt(st.st_uid, original_uid);
-	/* Shouldn't try to edit the owner when no overwrite option is set. */
-	assert((ae = archive_entry_new()) != NULL);
-	archive_entry_copy_pathname(ae, "dir_owner");
-	archive_entry_set_mode(ae, S_IFDIR | 0744);
-	archive_entry_set_uid(ae, try_to_change_uid);
-	archive_write_disk_set_options(a,
-	    ARCHIVE_EXTRACT_OWNER | ARCHIVE_EXTRACT_NO_OVERWRITE);
-	assertEqualIntA(a, ARCHIVE_OK, archive_write_header(a, ae));
-	archive_entry_free(ae);
-	assertEqualIntA(a, ARCHIVE_OK, archive_write_finish_entry(a));
-	/* Make sure they're unchanged. */
-	assertEqualInt(0, stat("dir_owner", &st));
-	failure("dir_owner: st.st_uid=%d", st.st_uid);
-	assertEqualInt(st.st_uid, original_uid);
+	assert((st.st_mode & 0777) == 0744);
 
 	/* Write a regular file with SUID bit, but don't use _EXTRACT_PERM. */
 	assert((ae = archive_entry_new()) != NULL);
 	archive_entry_copy_pathname(ae, "file_no_suid");
 	archive_entry_set_mode(ae, S_IFREG | S_ISUID | 0777);
 	archive_write_disk_set_options(a, 0);
-	assertEqualIntA(a, ARCHIVE_OK, archive_write_header(a, ae));
-	assertEqualIntA(a, ARCHIVE_OK, archive_write_finish_entry(a));
+	assert(0 == archive_write_header(a, ae));
+	assert(0 == archive_write_finish_entry(a));
 
 	/* Write a regular file with ARCHIVE_EXTRACT_PERM. */
 	assert(archive_entry_clear(ae) != NULL);
 	archive_entry_copy_pathname(ae, "file_0777");
 	archive_entry_set_mode(ae, S_IFREG | 0777);
 	archive_write_disk_set_options(a, ARCHIVE_EXTRACT_PERM);
-	assertEqualIntA(a, ARCHIVE_OK, archive_write_header(a, ae));
-	assertEqualIntA(a, ARCHIVE_OK, archive_write_finish_entry(a));
+	assert(0 == archive_write_header(a, ae));
+	assert(0 == archive_write_finish_entry(a));
 
 	/* Write a regular file with ARCHIVE_EXTRACT_PERM & SUID bit */
 	assert(archive_entry_clear(ae) != NULL);
@@ -256,8 +221,8 @@ DEFINE_TEST(test_write_disk_perms)
 	archive_entry_set_mode(ae, S_IFREG | S_ISUID | 0742);
 	archive_entry_set_uid(ae, getuid());
 	archive_write_disk_set_options(a, ARCHIVE_EXTRACT_PERM);
-	assertEqualIntA(a, ARCHIVE_OK, archive_write_header(a, ae));
-	assertEqualIntA(a, ARCHIVE_OK, archive_write_finish_entry(a));
+	assert(0 == archive_write_header(a, ae));
+	assert(0 == archive_write_finish_entry(a));
 
 	/*
 	 * Write a regular file with ARCHIVE_EXTRACT_PERM & SUID bit,
@@ -298,7 +263,7 @@ DEFINE_TEST(test_write_disk_perms)
 	archive_entry_set_mode(ae, S_IFREG | S_ISGID | 0742);
 	archive_entry_set_gid(ae, defaultgid());
 	archive_write_disk_set_options(a, ARCHIVE_EXTRACT_PERM);
-	assertEqualIntA(a, ARCHIVE_OK, archive_write_header(a, ae));
+	assert(0 == archive_write_header(a, ae));
 	failure("Setting SGID bit should succeed here.");
 	assertEqualIntA(a, 0, archive_write_finish_entry(a));
 
@@ -307,7 +272,7 @@ DEFINE_TEST(test_write_disk_perms)
 		 * Current user must belong to at least two groups or
 		 * else we can't test setting the GID to another group.
 		 */
-		skipping("Current user can't test gid restore: must belong to more than one group.");
+		printf("Current user can't test gid restore: must belong to more than one group.\n");
 	} else {
 		/*
 		 * Write a regular file with ARCHIVE_EXTRACT_PERM & SGID bit
@@ -336,7 +301,7 @@ DEFINE_TEST(test_write_disk_perms)
 		archive_entry_set_uid(ae, getuid());
 		archive_entry_set_gid(ae, altgid());
 		archive_write_disk_set_options(a, ARCHIVE_EXTRACT_PERM);
-		assertEqualIntA(a, ARCHIVE_OK, archive_write_header(a, ae));
+		assert(0 == archive_write_header(a, ae));
 		failure("Setting SGID bit should fail because of group mismatch but the failure should be silent because we didn't ask for the group to be set.");
 		assertEqualIntA(a, 0, archive_write_finish_entry(a));
 
@@ -351,7 +316,7 @@ DEFINE_TEST(test_write_disk_perms)
 		archive_entry_set_gid(ae, altgid());
 		archive_write_disk_set_options(a,
 		    ARCHIVE_EXTRACT_PERM | ARCHIVE_EXTRACT_OWNER);
-		assertEqualIntA(a, ARCHIVE_OK, archive_write_header(a, ae));
+		assert(0 == archive_write_header(a, ae));
 		failure("Setting SGID bit should succeed here.");
 		assertEqualIntA(a, ARCHIVE_OK, archive_write_finish_entry(a));
 	}
@@ -398,89 +363,93 @@ DEFINE_TEST(test_write_disk_perms)
 		assertEqualIntA(a,ARCHIVE_WARN,archive_write_finish_entry(a));
 	}
 
-	assertEqualInt(ARCHIVE_OK, archive_write_free(a));
+#if ARCHIVE_API_VERSION > 1
+	assert(0 == archive_write_finish(a));
+#else
+	archive_write_finish(a);
+#endif
 	archive_entry_free(ae);
 
 	/* Test the entries on disk. */
-	assertEqualInt(0, stat("file_0755", &st));
+	assert(0 == stat("file_0755", &st));
 	failure("file_0755: st.st_mode=%o", st.st_mode);
-	assertEqualInt(st.st_mode & 07777, 0755);
+	assert((st.st_mode & 07777) == 0755);
 
-	assertEqualInt(0, stat("file_overwrite_0144", &st));
+	assert(0 == stat("file_overwrite_0144", &st));
 	failure("file_overwrite_0144: st.st_mode=%o", st.st_mode);
-	assertEqualInt(st.st_mode & 07777, 0144);
+	assert((st.st_mode & 07777) == 0144);
 
-	assertEqualInt(0, stat("dir_0514", &st));
+	assert(0 == stat("dir_0514", &st));
 	failure("dir_0514: st.st_mode=%o", st.st_mode);
-	assertEqualInt(st.st_mode & 07777, 0514);
+	assert((st.st_mode & 07777) == 0514);
 
-	assertEqualInt(0, stat("dir_overwrite_0744", &st));
+	assert(0 == stat("dir_overwrite_0744", &st));
 	failure("dir_overwrite_0744: st.st_mode=%o", st.st_mode);
-	assertEqualInt(st.st_mode & 0777, 0744);
+	assert((st.st_mode & 0777) == 0744);
 
-	assertEqualInt(0, stat("file_no_suid", &st));
+	assert(0 == stat("file_no_suid", &st));
 	failure("file_0755: st.st_mode=%o", st.st_mode);
-	assertEqualInt(st.st_mode & 07777, 0755);
+	assert((st.st_mode & 07777) == 0755);
 
-	assertEqualInt(0, stat("file_0777", &st));
+	assert(0 == stat("file_0777", &st));
 	failure("file_0777: st.st_mode=%o", st.st_mode);
-	assertEqualInt(st.st_mode & 07777, 0777);
+	assert((st.st_mode & 07777) == 0777);
 
 	/* SUID bit should get set here. */
-	assertEqualInt(0, stat("file_4742", &st));
+	assert(0 == stat("file_4742", &st));
 	failure("file_4742: st.st_mode=%o", st.st_mode);
-	assertEqualInt(st.st_mode & 07777, S_ISUID | 0742);
+	assert((st.st_mode & 07777) == (S_ISUID | 0742));
 
 	/* SUID bit should NOT have been set here. */
-	assertEqualInt(0, stat("file_bad_suid", &st));
+	assert(0 == stat("file_bad_suid", &st));
 	failure("file_bad_suid: st.st_mode=%o", st.st_mode);
-	assertEqualInt(st.st_mode & 07777, 0742);
+	assert((st.st_mode & 07777) == (0742));
 
 	/* Some things don't fail if you're root, so suppress this. */
 	if (getuid() != 0) {
 		/* SUID bit should NOT have been set here. */
-		assertEqualInt(0, stat("file_bad_suid2", &st));
+		assert(0 == stat("file_bad_suid2", &st));
 		failure("file_bad_suid2: st.st_mode=%o", st.st_mode);
-		assertEqualInt(st.st_mode & 07777, 0742);
+		assert((st.st_mode & 07777) == (0742));
 	}
 
 	/* SGID should be set here. */
-	assertEqualInt(0, stat("file_perm_sgid", &st));
+	assert(0 == stat("file_perm_sgid", &st));
 	failure("file_perm_sgid: st.st_mode=%o", st.st_mode);
-	assertEqualInt(st.st_mode & 07777, S_ISGID | 0742);
+	assert((st.st_mode & 07777) == (S_ISGID | 0742));
 
 	if (altgid() != -1) {
 		/* SGID should not be set here. */
-		assertEqualInt(0, stat("file_alt_sgid", &st));
+		assert(0 == stat("file_alt_sgid", &st));
 		failure("file_alt_sgid: st.st_mode=%o", st.st_mode);
-		assertEqualInt(st.st_mode & 07777, 0742);
+		assert((st.st_mode & 07777) == (0742));
 
 		/* SGID should be set here. */
-		assertEqualInt(0, stat("file_alt_sgid_owner", &st));
+		assert(0 == stat("file_alt_sgid_owner", &st));
 		failure("file_alt_sgid: st.st_mode=%o", st.st_mode);
-		assertEqualInt(st.st_mode & 07777, S_ISGID | 0742);
+		assert((st.st_mode & 07777) == (S_ISGID | 0742));
 	}
 
 	if (invalidgid() != -1) {
 		/* SGID should NOT be set here. */
-		assertEqualInt(0, stat("file_bad_sgid", &st));
+		assert(0 == stat("file_bad_sgid", &st));
 		failure("file_bad_sgid: st.st_mode=%o", st.st_mode);
-		assertEqualInt(st.st_mode & 07777, 0742);
+		assert((st.st_mode & 07777) == (0742));
 		/* SGID should NOT be set here. */
-		assertEqualInt(0, stat("file_bad_sgid2", &st));
+		assert(0 == stat("file_bad_sgid2", &st));
 		failure("file_bad_sgid2: st.st_mode=%o", st.st_mode);
-		assertEqualInt(st.st_mode & 07777, 0742);
+		assert((st.st_mode & 07777) == (0742));
 	}
 
 	if (getuid() != 0) {
-		assertEqualInt(0, stat("file_bad_owner", &st));
+		assert(0 == stat("file_bad_owner", &st));
 		failure("file_bad_owner: st.st_mode=%o", st.st_mode);
-		assertEqualInt(st.st_mode & 07777, 0744);
+		assert((st.st_mode & 07777) == (0744));
 		failure("file_bad_owner: st.st_uid=%d getuid()=%d",
 		    st.st_uid, getuid());
 		/* The entry had getuid()+1, but because we're
 		 * not root, we should not have been able to set that. */
-		assertEqualInt(st.st_uid, getuid());
+		assert(st.st_uid == getuid());
 	}
 #endif
 }

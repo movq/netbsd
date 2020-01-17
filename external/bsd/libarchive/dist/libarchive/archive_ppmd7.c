@@ -115,14 +115,14 @@ static void Ppmd7_Construct(CPpmd7 *p)
   memset(p->HB2Flag + 0x40, 8, 0x100 - 0x40);
 }
 
-static void Ppmd7_Free(CPpmd7 *p)
+static void Ppmd7_Free(CPpmd7 *p, ISzAlloc *alloc)
 {
-  free(p->Base);
+  alloc->Free(alloc, p->Base);
   p->Size = 0;
   p->Base = 0;
 }
 
-static Bool Ppmd7_Alloc(CPpmd7 *p, UInt32 size)
+static Bool Ppmd7_Alloc(CPpmd7 *p, UInt32 size, ISzAlloc *alloc)
 {
   if (p->Base == 0 || p->Size != size)
   {
@@ -131,14 +131,14 @@ static Bool Ppmd7_Alloc(CPpmd7 *p, UInt32 size)
     if (size < UNIT_SIZE) {
       return False;
     }
-    Ppmd7_Free(p);
+    Ppmd7_Free(p, alloc);
     p->AlignOffset =
       #ifdef PPMD_32BIT
         (4 - size) & 3;
       #else
         4 - (size & 3);
       #endif
-    if ((p->Base = (Byte *)malloc(p->AlignOffset + size
+    if ((p->Base = (Byte *)alloc->Alloc(alloc, p->AlignOffset + size
         #ifndef PPMD_32BIT
         + UNIT_SIZE
         #endif

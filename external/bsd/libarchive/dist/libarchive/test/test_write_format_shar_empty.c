@@ -23,7 +23,7 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 #include "test.h"
-__FBSDID("$FreeBSD: src/lib/libarchive/test/test_write_format_shar_empty.c,v 1.3 2008/09/01 05:38:33 kientzle Exp $");
+__FBSDID("$FreeBSD: src/lib/libarchive/test/test_write_format_shar_empty.c,v 1.2 2007/05/29 01:00:21 kientzle Exp $");
 
 /*
  * Check that an "empty" shar archive is correctly created as an empty file.
@@ -38,7 +38,7 @@ DEFINE_TEST(test_write_format_shar_empty)
 	/* Create a new archive in memory. */
 	assert((a = archive_write_new()) != NULL);
 	assertA(0 == archive_write_set_format_shar(a));
-	assertA(0 == archive_write_add_filter_none(a));
+	assertA(0 == archive_write_set_compression_none(a));
 	/* 1-byte block size ensures we see only the required bytes. */
 	/* We're not testing the padding here. */
 	assertA(0 == archive_write_set_bytes_per_block(a, 1));
@@ -46,8 +46,12 @@ DEFINE_TEST(test_write_format_shar_empty)
 	assertA(0 == archive_write_open_memory(a, buff, sizeof(buff), &used));
 
 	/* Close out the archive. */
-	assertEqualIntA(a, ARCHIVE_OK, archive_write_close(a));
-	assertEqualInt(ARCHIVE_OK, archive_write_free(a));
+	assertA(0 == archive_write_close(a));
+#if ARCHIVE_API_VERSION > 1
+	assertA(0 == archive_write_finish(a));
+#else
+	archive_write_finish(a);
+#endif
 
 	failure("Empty shar archive should be exactly 0 bytes, was %d.", used);
 	assert(used == 0);

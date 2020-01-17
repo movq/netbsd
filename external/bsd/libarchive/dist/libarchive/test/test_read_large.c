@@ -23,27 +23,21 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 #include "test.h"
-__FBSDID("$FreeBSD: head/lib/libarchive/test/test_read_large.c 201247 2009-12-30 05:59:21Z kientzle $");
+__FBSDID("$FreeBSD: src/lib/libarchive/test/test_read_large.c,v 1.3 2007/05/29 01:00:21 kientzle Exp $");
 
 static unsigned char testdata[10 * 1024 * 1024];
 static unsigned char testdatacopy[10 * 1024 * 1024];
 static unsigned char buff[11 * 1024 * 1024];
-
-#if defined(_WIN32) && !defined(__CYGWIN__)
-#define open _open
-#define close _close
-#endif
 
 /* Check correct behavior on large reads. */
 DEFINE_TEST(test_read_large)
 {
 	unsigned int i;
 	int tmpfilefd;
-	char tmpfilename[] = "test-read_large.XXXXXX";
+	char tmpfilename[] = "/tmp/test-read_large.XXXXXX";
 	size_t used;
 	struct archive *a;
 	struct archive_entry *entry;
-	FILE *f;
 
 	for (i = 0; i < sizeof(testdata); i++)
 		testdata[i] = (unsigned char)(rand());
@@ -57,38 +51,44 @@ DEFINE_TEST(test_read_large)
 	archive_entry_set_pathname(entry, "test");
 	assertA(0 == archive_write_header(a, entry));
 	archive_entry_free(entry);
-	assertA((int)sizeof(testdata) == archive_write_data(a, testdata, sizeof(testdata)));
-	assertEqualInt(ARCHIVE_OK, archive_write_free(a));
-
-	assert(NULL != (a = archive_read_new()));
-	assertA(0 == archive_read_support_format_all(a));
-	assertA(0 == archive_read_support_filter_all(a));
-	assertA(0 == archive_read_open_memory(a, buff, sizeof(buff)));
-	assertA(0 == archive_read_next_header(a, &entry));
-	assertEqualIntA(a, sizeof(testdatacopy),
-	    archive_read_data(a, testdatacopy, sizeof(testdatacopy)));
-	assertEqualInt(ARCHIVE_OK, archive_read_free(a));
-	assertEqualMem(testdata, testdatacopy, sizeof(testdata));
-
-
-	assert(NULL != (a = archive_read_new()));
-	assertA(0 == archive_read_support_format_all(a));
-	assertA(0 == archive_read_support_filter_all(a));
-	assertA(0 == archive_read_open_memory(a, buff, sizeof(buff)));
-	assertA(0 == archive_read_next_header(a, &entry));
-#if defined(__BORLANDC__)
-	tmpfilefd = open(tmpfilename, O_WRONLY | O_CREAT | O_BINARY);
+	assertA(sizeof(testdata) == archive_write_data(a, testdata, sizeof(testdata)));
+#if ARCHIVE_API_VERSION > 1
+	assertA(0 == archive_write_finish(a));
 #else
-	tmpfilefd = open(tmpfilename, O_WRONLY | O_CREAT | O_BINARY, 0755);
+	archive_write_finish(a);
 #endif
-	assert(0 < tmpfilefd);
+
+	assert(NULL != (a = archive_read_new()));
+	assertA(0 == archive_read_support_format_all(a));
+	assertA(0 == archive_read_support_compression_all(a));
+	assertA(0 == archive_read_open_memory(a, buff, sizeof(buff)));
+	assertA(0 == archive_read_next_header(a, &entry));
+	assertA(0 == archive_read_data_into_buffer(a, testdatacopy, sizeof(testdatacopy)));
+#if ARCHIVE_API_VERSION > 1
+	assertA(0 == archive_read_finish(a));
+#else
+	archive_read_finish(a);
+#endif
+	assert(0 == memcmp(testdata, testdatacopy, sizeof(testdata)));
+
+
+	assert(NULL != (a = archive_read_new()));
+	assertA(0 == archive_read_support_format_all(a));
+	assertA(0 == archive_read_support_compression_all(a));
+	assertA(0 == archive_read_open_memory(a, buff, sizeof(buff)));
+	assertA(0 == archive_read_next_header(a, &entry));
+	assert(0 < (tmpfilefd = mkstemp(tmpfilename)));
 	assertA(0 == archive_read_data_into_fd(a, tmpfilefd));
 	close(tmpfilefd);
-	assertEqualInt(ARCHIVE_OK, archive_read_free(a));
+#if ARCHIVE_API_VERSION > 1
+	assertA(0 == archive_read_finish(a));
+#else
+	archive_read_finish(a);
+#endif
+	tmpfilefd = open(tmpfilename, O_RDONLY);
+	read(tmpfilefd, testdatacopy, sizeof(testdatacopy));
+	close(tmpfilefd);
+	assert(0 == memcmp(testdata, testdatacopy, sizeof(testdata)));
 
-	f = fopen(tmpfilename, "rb");
-	assertEqualInt(sizeof(testdatacopy),
-	    fread(testdatacopy, 1, sizeof(testdatacopy), f));
-	fclose(f);
-	assertEqualMem(testdata, testdatacopy, sizeof(testdata));
+	unlink(tmpfilename);
 }

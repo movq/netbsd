@@ -23,65 +23,95 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 #include "test.h"
-__FBSDID("$FreeBSD: src/usr.bin/cpio/test/test_basic.c,v 1.4 2008/08/25 06:39:29 kientzle Exp $");
+__FBSDID("$FreeBSD$");
 
 static void
-verify_files(const char *msg)
+verify_files(const char *target)
 {
+	struct stat st, st2;
+	char buff[128];
+	int r;
+
 	/*
 	 * Verify unpacked files.
 	 */
 
 	/* Regular file with 2 links. */
-	failure(msg);
-	assertIsReg("file", 0644);
-	failure(msg);
-	assertFileSize("file", 10);
-	failure(msg);
-	assertFileNLinks("file", 2);
+	r = lstat("file", &st);
+	failure("Failed to stat file %s/file, errno=%d", target, errno);
+	assertEqualInt(r, 0);
+	if (r == 0) {
+		assert(S_ISREG(st.st_mode));
+		assertEqualInt(0644, st.st_mode & 0777);
+		assertEqualInt(10, st.st_size);
+		failure("file %s/file should have 2 links", target);
+		assertEqualInt(2, st.st_nlink);
+	}
 
 	/* Another name for the same file. */
-	failure(msg);
-	assertIsHardlink("linkfile", "file");
+	r = lstat("linkfile", &st2);
+	failure("Failed to stat file %s/linkfile, errno=%d", target, errno);
+	assertEqualInt(r, 0);
+	if (r == 0) {
+		assert(S_ISREG(st2.st_mode));
+		assertEqualInt(0644, st2.st_mode & 0777);
+		assertEqualInt(10, st2.st_size);
+		failure("file %s/linkfile should have 2 links", target);
+		assertEqualInt(2, st2.st_nlink);
+		/* Verify that the two are really hardlinked. */
+		assertEqualInt(st.st_dev, st2.st_dev);
+		failure("%s/linkfile and %s/file should be hardlinked",
+		    target, target);
+		assertEqualInt(st.st_ino, st2.st_ino);
+	}
 
 	/* Symlink */
-	if (canSymlink())
-		assertIsSymlink("symlink", "file", 0);
-
-	/* Another file with 1 link and different permissions. */
-	failure(msg);
-	assertIsReg("file2", 0777);
-	failure(msg);
-	assertFileSize("file2", 10);
-	failure(msg);
-	assertFileNLinks("file2", 1);
+	r = lstat("symlink", &st);
+	failure("Failed to stat file %s/symlink, errno=%d", target, errno);
+	assertEqualInt(r, 0);
+	if (r == 0) {
+		failure("symlink should be a symlink; actual mode is %o",
+		    st.st_mode);
+		assert(S_ISLNK(st.st_mode));
+		if (S_ISLNK(st.st_mode)) {
+			r = readlink("symlink", buff, sizeof(buff));
+			assertEqualInt(r, 4);
+			buff[r] = '\0';
+			assertEqualString(buff, "file");
+		}
+	}
 
 	/* dir */
-	assertIsDir("dir", 0775);
+	r = lstat("dir", &st);
+	if (r == 0) {
+		assertEqualInt(r, 0);
+		assert(S_ISDIR(st.st_mode));
+		assertEqualInt(0775, st.st_mode & 0777);
+	}
 }
 
 static void
 basic_cpio(const char *target,
     const char *pack_options,
     const char *unpack_options,
-    const char *se, const char *se2)
+    const char *se)
 {
 	int r;
 
-	if (!assertMakeDir(target, 0775))
+	if (!assertEqualInt(0, mkdir(target, 0775)))
 	    return;
 
 	/* Use the cpio program to create an archive. */
-	r = systemf("%s -R 1000:1000 -o %s < filelist >%s/archive 2>%s/pack.err",
+	r = systemf("%s -o %s < filelist >%s/archive 2>%s/pack.err",
 	    testprog, pack_options, target, target);
 	failure("Error invoking %s -o %s", testprog, pack_options);
 	assertEqualInt(r, 0);
 
-	assertChdir(target);
+	chdir(target);
 
 	/* Verify stderr. */
 	failure("Expected: %s, options=%s", se, pack_options);
-	assertTextFileContents(se, "pack.err");
+	assertFileContents(se, strlen(se), "pack.err");
 
 	/*
 	 * Use cpio to unpack the archive into another directory.
@@ -93,11 +123,11 @@ basic_cpio(const char *target,
 
 	/* Verify stderr. */
 	failure("Error invoking %s -i %s in dir %s", testprog, unpack_options, target);
-	assertTextFileContents(se2, "unpack.err");
+	assertFileContents(se, strlen(se), "unpack.err");
 
-	verify_files(pack_options);
+	verify_files(target);
 
-	assertChdir("..");
+	chdir("..");
 }
 
 static void
@@ -105,134 +135,70 @@ passthrough(const char *target)
 {
 	int r;
 
-	if (!assertMakeDir(target, 0775))
+	if (!assertEqualInt(0, mkdir(target, 0775)))
 		return;
 
 	/*
 	 * Use cpio passthrough mode to copy files to another directory.
 	 */
-	r = systemf("%s -p %s <filelist >%s/stdout 2>%s/stderr",
+	r = systemf("%s -p -W quiet %s <filelist >%s/stdout 2>%s/stderr", 
 	    testprog, target, target, target);
 	failure("Error invoking %s -p", testprog);
 	assertEqualInt(r, 0);
 
-	assertChdir(target);
+	chdir(target);
 
 	/* Verify stderr. */
 	failure("Error invoking %s -p in dir %s",
 	    testprog, target);
-	assertTextFileContents("1 block\n", "stderr");
+	assertEmptyFile("stderr");
 
-	verify_files("passthrough");
-	assertChdir("..");
+	verify_files(target);
+	chdir("..");
 }
 
 DEFINE_TEST(test_basic)
 {
-	FILE *filelist;
-	const char *msg;
-	char result[1024];
+	int fd;
+	int filelist;
+	int oldumask;
 
-	assertUmask(0);
+	oldumask = umask(0);
 
 	/*
 	 * Create an assortment of files on disk.
 	 */
-	filelist = fopen("filelist", "w");
-	memset(result, 0, sizeof(result));
+	filelist = open("filelist", O_CREAT | O_WRONLY, 0644);
 
 	/* File with 10 bytes content. */
-	assertMakeFile("file", 0644, "1234567890");
-	fprintf(filelist, "file\n");
-	if (is_LargeInode("file")) {
-		strncat(result,
-		    "bsdcpio: file: large inode number truncated: ",
-		    sizeof(result) - strlen(result) -1);
-		strncat(result,
-		    strerror(ERANGE),
-		    sizeof(result) - strlen(result) -1);
-		strncat(result,
-		    "\n",
-		    sizeof(result) - strlen(result) -1);
-	}
+	fd = open("file", O_CREAT | O_WRONLY, 0644);
+	assert(fd >= 0);
+	assertEqualInt(10, write(fd, "123456789", 10));
+	close(fd);
+	write(filelist, "file\n", 5);
 
 	/* hardlink to above file. */
-	assertMakeHardlink("linkfile", "file");
-	fprintf(filelist, "linkfile\n");
-	if (is_LargeInode("linkfile")) {
-		strncat(result,
-		    "bsdcpio: linkfile: large inode number truncated: ",
-		    sizeof(result) - strlen(result) -1);
-		strncat(result,
-		    strerror(ERANGE),
-		    sizeof(result) - strlen(result) -1);
-		strncat(result,
-		    "\n",
-		    sizeof(result) - strlen(result) -1);
-	}
+	assertEqualInt(0, link("file", "linkfile"));
+	write(filelist, "linkfile\n", 9);
 
 	/* Symlink to above file. */
-	if (canSymlink()) {
-		assertMakeSymlink("symlink", "file", 0);
-		fprintf(filelist, "symlink\n");
-		if (is_LargeInode("symlink")) {
-			strncat(result,
-			    "bsdcpio: symlink: large inode number truncated: ",
-			    sizeof(result) - strlen(result) -1);
-			strncat(result,
-			    strerror(ERANGE),
-			    sizeof(result) - strlen(result) -1);
-			strncat(result,
-			    "\n",
-			    sizeof(result) - strlen(result) -1);
-		}
-	}
-
-	/* Another file with different permissions. */
-	assertMakeFile("file2", 0777, "1234567890");
-	fprintf(filelist, "file2\n");
-	if (is_LargeInode("file2")) {
-		strncat(result,
-		    "bsdcpio: file2: large inode number truncated: ",
-		    sizeof(result) - strlen(result) -1);
-		strncat(result,
-		    strerror(ERANGE),
-		    sizeof(result) - strlen(result) -1);
-		strncat(result,
-		    "\n",
-		    sizeof(result) - strlen(result) -1);
-	}
+	assertEqualInt(0, symlink("file", "symlink"));
+	write(filelist, "symlink\n", 8);
 
 	/* Directory. */
-	assertMakeDir("dir", 0775);
-	fprintf(filelist, "dir\n");
-	if (is_LargeInode("dir")) {
-		strncat(result,
-		    "bsdcpio: dir: large inode number truncated: ",
-		    sizeof(result) - strlen(result) -1);
-		strncat(result,
-		    strerror(ERANGE),
-		    sizeof(result) - strlen(result) -1);
-		strncat(result,
-		    "\n",
-		    sizeof(result) - strlen(result) -1);
-	}
-	strncat(result, "2 blocks\n", sizeof(result) - strlen(result) -1);
-
+	assertEqualInt(0, mkdir("dir", 0775));
+	write(filelist, "dir\n", 4);
 	/* All done. */
-	fclose(filelist);
-
-	assertUmask(022);
+	close(filelist);
 
 	/* Archive/dearchive with a variety of options. */
-	msg = canSymlink() ? "2 blocks\n" : "1 block\n";
-	basic_cpio("copy", "", "", msg, msg);
-	basic_cpio("copy_odc", "--format=odc", "", msg, msg);
-	basic_cpio("copy_newc", "-H newc", "", result, "2 blocks\n");
-	basic_cpio("copy_cpio", "-H odc", "", msg, msg);
-	msg = canSymlink() ? "9 blocks\n" : "8 blocks\n";
-	basic_cpio("copy_ustar", "-H ustar", "", msg, msg);
-
+	basic_cpio("copy", "", "", "1 block\n");
+	basic_cpio("copy_odc", "--format=odc", "", "1 block\n");
+	basic_cpio("copy_newc", "-H newc", "", "2 blocks\n");
+	basic_cpio("copy_cpio", "-H odc", "", "1 block\n");
+	basic_cpio("copy_ustar", "-H ustar", "", "7 blocks\n");
 	/* Copy in one step using -p */
 	passthrough("passthrough");
+
+	umask(oldumask);
 }

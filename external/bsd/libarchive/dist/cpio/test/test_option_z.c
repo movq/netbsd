@@ -28,29 +28,25 @@ __FBSDID("$FreeBSD$");
 DEFINE_TEST(test_option_z)
 {
 	char *p;
+	int fd;
 	int r;
 	size_t s;
 
 	/* Create a file. */
-	assertMakeFile("f", 0644, "a");
+	fd = open("f", O_CREAT | O_WRONLY, 0644);
+	assert(fd >= 0);
+	assertEqualInt(1, write(fd, "a", 1));
+	close(fd);
 
 	/* Archive it with gzip compression. */
 	r = systemf("echo f | %s -oz >archive.out 2>archive.err",
 	    testprog);
-	p = slurpfile(&s, "archive.err");
-	free(p);
-	if (r != 0) {
-		if (!canGzip()) {
-			skipping("gzip is not supported on this platform");
-			return;
-		}
-		failure("-z option is broken");
-		assertEqualInt(r, 0);
-		return;
+	failure("-z option seems to be broken");
+	assertEqualInt(r, 0);
+	if (r == 0) {
+		/* Check that the archive file has a gzip signature. */
+		p = slurpfile(&s, "archive.out");
+		assert(s > 2);
+		assertEqualMem(p, "\x1f\x8b\x08\x00", 4);
 	}
-	/* Check that the archive file has a gzip signature. */
-	p = slurpfile(&s, "archive.out");
-	assert(s > 4);
-	assertEqualMem(p, "\x1f\x8b\x08\x00", 4);
-	free(p);
 }

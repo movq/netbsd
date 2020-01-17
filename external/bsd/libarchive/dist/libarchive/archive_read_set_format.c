@@ -73,9 +73,6 @@ archive_read_set_format(struct archive *_a, int code)
     case ARCHIVE_FORMAT_RAR:
       strcpy(str, "rar");
       break;
-    case ARCHIVE_FORMAT_RAR_V5:
-      strcpy(str, "rar5");
-      break;
     case ARCHIVE_FORMAT_TAR:
       strcpy(str, "tar");
       break;

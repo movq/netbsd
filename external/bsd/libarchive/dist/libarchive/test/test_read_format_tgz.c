@@ -23,7 +23,7 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 #include "test.h"
-__FBSDID("$FreeBSD: head/lib/libarchive/test/test_read_format_tgz.c 191183 2009-04-17 01:06:31Z kientzle $");
+__FBSDID("$FreeBSD: src/lib/libarchive/test/test_read_format_tgz.c,v 1.1 2007/03/03 07:37:37 kientzle Exp $");
 
 static unsigned char archive[] = {
 31,139,8,0,222,'C','p','C',0,3,211,'c',160,'=','0','0','0','0','7','5','U',
@@ -36,28 +36,19 @@ DEFINE_TEST(test_read_format_tgz)
 {
 	struct archive_entry *ae;
 	struct archive *a;
-	int r;
-
 	assert((a = archive_read_new()) != NULL);
-	assertEqualInt(ARCHIVE_OK, archive_read_support_filter_all(a));
-	r = archive_read_support_filter_gzip(a);
-	if (r == ARCHIVE_WARN) {
-		skipping("gzip reading not fully supported on this platform");
-		assertEqualInt(ARCHIVE_OK, archive_read_free(a));
-		return;
-	}
-	assertEqualInt(ARCHIVE_OK, archive_read_support_format_all(a));
-	assertEqualInt(ARCHIVE_OK,
-	    archive_read_open_memory(a, archive, sizeof(archive)));
-	assertEqualInt(ARCHIVE_OK, archive_read_next_header(a, &ae));
-	assertEqualInt(1, archive_file_count(a));
-	assertEqualInt(archive_filter_code(a, 0),
-	    ARCHIVE_FILTER_GZIP);
-	assertEqualInt(archive_format(a), ARCHIVE_FORMAT_TAR_USTAR);
-	assertEqualInt(archive_entry_is_encrypted(ae), 0);
-	assertEqualIntA(a, archive_read_has_encrypted_entries(a), ARCHIVE_READ_FORMAT_ENCRYPTION_UNSUPPORTED);
-	assertEqualInt(ARCHIVE_OK, archive_read_close(a));
-	assertEqualInt(ARCHIVE_OK,archive_read_free(a));
+	assert(0 == archive_read_support_compression_all(a));
+	assert(0 == archive_read_support_format_all(a));
+	assert(0 == archive_read_open_memory(a, archive, sizeof(archive)));
+	assert(0 == archive_read_next_header(a, &ae));
+	assert(archive_compression(a) == ARCHIVE_COMPRESSION_GZIP);
+	assert(archive_format(a) == ARCHIVE_FORMAT_TAR_USTAR);
+	assert(0 == archive_read_close(a));
+#if ARCHIVE_API_VERSION > 1
+	assert(0 == archive_read_finish(a));
+#else
+	archive_read_finish(a);
+#endif
 }
 
 
