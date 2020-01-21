@@ -1,4 +1,4 @@
-/* $NetBSD: simple_amplifier.c,v 1.1 2020/01/02 00:57:09 jmcneill Exp $ */
+/* $NetBSD: simple_amplifier.c,v 1.1.4.2 2020/01/21 10:39:58 martin Exp $ */
 
 /*-
  * Copyright (c) 2020 Jared McNeill <jmcneill@invisible.ca>
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: simple_amplifier.c,v 1.1 2020/01/02 00:57:09 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: simple_amplifier.c,v 1.1.4.2 2020/01/21 10:39:58 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/bus.h>
