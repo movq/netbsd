@@ -1,4 +1,4 @@
-/* $NetBSD: anx_dp.c,v 1.2 2020/01/04 12:08:32 jmcneill Exp $ */
+/* $NetBSD: anx_dp.c,v 1.2.4.2 2020/01/21 10:39:58 martin Exp $ */
 
 /*-
  * Copyright (c) 2019 Jonathan A. Kollasch <jakllsch@kollasch.net>
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: anx_dp.c,v 1.2 2020/01/04 12:08:32 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: anx_dp.c,v 1.2.4.2 2020/01/21 10:39:58 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/bus.h>

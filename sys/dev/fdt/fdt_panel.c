@@ -1,4 +1,4 @@
-/* $NetBSD: fdt_panel.c,v 1.2 2019/12/19 16:00:52 jakllsch Exp $ */
+/* $NetBSD: fdt_panel.c,v 1.2.4.2 2020/01/21 10:39:58 martin Exp $ */
 
 /*-
  * Copyright (c) 2019 Jonathan A. Kollasch <jakllsch@kollasch.net>
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: fdt_panel.c,v 1.2 2019/12/19 16:00:52 jakllsch Exp $");
+__KERNEL_RCSID(0, "$NetBSD: fdt_panel.c,v 1.2.4.2 2020/01/21 10:39:58 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/bus.h>
