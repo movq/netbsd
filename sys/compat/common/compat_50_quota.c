@@ -1,4 +1,4 @@
-/*	$NetBSD: compat_50_quota.c,v 1.2 2020/01/22 23:41:29 pgoyette Exp $ */
+/*	$NetBSD: compat_50_quota.c,v 1.2.2.2 2020/01/25 22:38:44 ad Exp $ */
 
 /*-
  * Copyright (c) 2008 The NetBSD Foundation, Inc.
@@ -29,7 +29,7 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: compat_50_quota.c,v 1.2 2020/01/22 23:41:29 pgoyette Exp $");
+__KERNEL_RCSID(0, "$NetBSD: compat_50_quota.c,v 1.2.2.2 2020/01/25 22:38:44 ad Exp $");
 
 #if defined(_KERNEL_OPT)
 #include "opt_compat_netbsd.h"
