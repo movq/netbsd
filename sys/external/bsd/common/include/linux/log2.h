@@ -1,4 +1,4 @@
-/*	$NetBSD: log2.h,v 1.1 2020/02/16 07:29:48 riastradh Exp $	*/
+/*	$NetBSD: log2.h,v 1.1.2.2 2020/02/29 20:20:12 ad Exp $	*/
 
 /*-
  * Copyright (c) 2013 The NetBSD Foundation, Inc.

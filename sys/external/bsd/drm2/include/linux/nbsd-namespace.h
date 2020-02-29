@@ -1,4 +1,4 @@
-/*	$NetBSD: nbsd-namespace.h,v 1.2 2020/02/14 04:38:48 riastradh Exp $	*/
+/*	$NetBSD: nbsd-namespace.h,v 1.2.2.2 2020/02/29 20:20:17 ad Exp $	*/
 
 /*-
  * Copyright (c) 2020 The NetBSD Foundation, Inc.
