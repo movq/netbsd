@@ -1,4 +1,4 @@
-/*	$NetBSD: if_stats.h,v 1.2 2020/02/14 22:04:12 thorpej Exp $	*/
+/*	$NetBSD: if_stats.h,v 1.2.2.2 2020/02/29 20:21:06 ad Exp $	*/
 
 /*-
  * Copyright (c) 2020 The NetBSD Foundation, Inc.
