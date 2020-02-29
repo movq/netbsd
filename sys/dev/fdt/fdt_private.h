@@ -1,4 +1,4 @@
-/* $NetBSD: fdt_private.h,v 1.1 2020/02/16 23:05:42 thorpej Exp $ */
+/* $NetBSD: fdt_private.h,v 1.1.2.2 2020/02/29 20:19:07 ad Exp $ */
 
 /*-
  * Copyright (c) 2020 The NetBSD Foundation, Inc.

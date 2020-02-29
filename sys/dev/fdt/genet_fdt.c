@@ -1,4 +1,4 @@
-/* $NetBSD: genet_fdt.c,v 1.1 2020/02/22 00:28:35 jmcneill Exp $ */
+/* $NetBSD: genet_fdt.c,v 1.1.2.2 2020/02/29 20:19:07 ad Exp $ */
 
 /*-
  * Copyright (c) 2020 Jared McNeill <jmcneill@invisible.ca>
@@ -29,7 +29,7 @@
 #include "opt_net_mpsafe.h"
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: genet_fdt.c,v 1.1 2020/02/22 00:28:35 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: genet_fdt.c,v 1.1.2.2 2020/02/29 20:19:07 ad Exp $");
 
 #include <sys/param.h>
 #include <sys/bus.h>
