@@ -1,4 +1,4 @@
-/*	$NetBSD: ixp425_mem.c,v 1.1 2020/02/12 06:57:35 thorpej Exp $	*/
+/*	$NetBSD: ixp425_mem.c,v 1.1.2.2 2020/02/29 20:18:23 ad Exp $	*/
 
 /*
  * Copyright (c) 2003 Wasabi Systems, Inc.
