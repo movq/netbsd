@@ -1,5 +1,5 @@
 /*	$OpenBSD: getopt.h,v 1.2 2008/06/26 05:42:04 ray Exp $	*/
-/*	$NetBSD: getopt.h,v 1.1 2020/03/03 00:11:47 christos Exp $	*/
+/*	$NetBSD: getopt.h,v 1.1.1.1 2020/03/03 00:11:47 christos Exp $	*/
 
 /*-
  * Copyright (c) 2000 The NetBSD Foundation, Inc.
