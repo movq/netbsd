@@ -1,4 +1,4 @@
-/*	$NetBSD: split_qnameval.c,v 1.1 2020/03/18 18:59:38 christos Exp $	*/
+/*	$NetBSD: split_qnameval.c,v 1.1.1.1 2020/03/18 18:59:38 christos Exp $	*/
 
 /*++
 /* NAME

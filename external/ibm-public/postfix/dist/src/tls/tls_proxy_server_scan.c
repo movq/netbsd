@@ -1,4 +1,4 @@
-/*	$NetBSD: tls_proxy_server_scan.c,v 1.1 2020/03/18 18:59:35 christos Exp $	*/
+/*	$NetBSD: tls_proxy_server_scan.c,v 1.1.1.1 2020/03/18 18:59:35 christos Exp $	*/
 
 /*++
 /* NAME

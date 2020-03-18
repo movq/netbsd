@@ -1,4 +1,4 @@
-/*	$NetBSD: info_log_addr_form.c,v 1.1 2020/03/18 18:59:33 christos Exp $	*/
+/*	$NetBSD: info_log_addr_form.c,v 1.1.1.1 2020/03/18 18:59:33 christos Exp $	*/
 
 /*++
 /* NAME

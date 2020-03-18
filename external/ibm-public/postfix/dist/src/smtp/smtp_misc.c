@@ -1,4 +1,4 @@
-/*	$NetBSD: smtp_misc.c,v 1.1 2020/03/18 18:59:36 christos Exp $	*/
+/*	$NetBSD: smtp_misc.c,v 1.1.1.1 2020/03/18 18:59:36 christos Exp $	*/
 
 /*++
 /* NAME
