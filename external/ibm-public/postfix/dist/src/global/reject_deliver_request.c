@@ -1,4 +1,4 @@
-/*	$NetBSD: reject_deliver_request.c,v 1.1 2020/03/18 18:59:34 christos Exp $	*/
+/*	$NetBSD: reject_deliver_request.c,v 1.1.1.1 2020/03/18 18:59:34 christos Exp $	*/
 
 /*++
 /* NAME
