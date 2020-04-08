@@ -1,4 +1,4 @@
-/* $NetBSD: acpi_pci_graviton.c,v 1.1 2020/01/17 17:06:33 jmcneill Exp $ */
+/* $NetBSD: acpi_pci_graviton.c,v 1.1.6.2 2020/04/08 14:07:27 martin Exp $ */
 
 /*-
  * Copyright (c) 2018 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: acpi_pci_graviton.c,v 1.1 2020/01/17 17:06:33 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: acpi_pci_graviton.c,v 1.1.6.2 2020/04/08 14:07:27 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/bus.h>

@@ -1,4 +1,4 @@
-/*	$NetBSD: bcm2835_mbox_acpi.c,v 1.2 2020/02/22 22:09:07 jmcneill Exp $	*/
+/*	$NetBSD: bcm2835_mbox_acpi.c,v 1.2.4.2 2020/04/08 14:07:28 martin Exp $	*/
 
 /*-
  * Copyright (c) 2012 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: bcm2835_mbox_acpi.c,v 1.2 2020/02/22 22:09:07 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: bcm2835_mbox_acpi.c,v 1.2.4.2 2020/04/08 14:07:28 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

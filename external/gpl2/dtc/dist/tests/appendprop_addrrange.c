@@ -1,4 +1,4 @@
-/*	$NetBSD: appendprop_addrrange.c,v 1.1.1.1 2019/12/22 12:34:07 skrll Exp $	*/
+/*	$NetBSD: appendprop_addrrange.c,v 1.1.1.1.4.2 2020/04/08 14:04:21 martin Exp $	*/
 
 // SPDX-License-Identifier: LGPL-2.1-or-later
 /*

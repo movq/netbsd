@@ -1,4 +1,4 @@
-/*	$NetBSD: kcm-protos.h,v 1.2 2019/12/15 22:50:46 christos Exp $	*/
+/*	$NetBSD: kcm-protos.h,v 1.2.4.2 2020/04/08 14:03:08 martin Exp $	*/
 
 /* This is a generated file */
 #ifndef __kcm_protos_h__

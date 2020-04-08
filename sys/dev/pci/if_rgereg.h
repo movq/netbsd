@@ -1,4 +1,4 @@
-/*	$NetBSD: if_rgereg.h,v 1.3 2020/01/12 23:22:12 sevan Exp $	*/
+/*	$NetBSD: if_rgereg.h,v 1.3.6.2 2020/04/08 14:08:09 martin Exp $	*/
 /*	$OpenBSD: if_rgereg.h,v 1.1 2019/11/18 03:03:37 kevlo Exp $	*/
 
 /*

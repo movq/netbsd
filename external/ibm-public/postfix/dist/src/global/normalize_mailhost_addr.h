@@ -1,4 +1,4 @@
-/*	$NetBSD: normalize_mailhost_addr.h,v 1.2 2020/03/18 19:05:16 christos Exp $	*/
+/*	$NetBSD: normalize_mailhost_addr.h,v 1.2.2.2 2020/04/08 14:06:53 martin Exp $	*/
 
 #ifndef _NORMALIZE_MAILHOST_ADDR_H_INCLUDED_
 #define _NORMALIZE_MAILHOST_ADDR_H_INCLUDED_

@@ -1,4 +1,4 @@
-/*	$NetBSD: ssh-ed25519-sk.c,v 1.2 2020/02/27 00:24:40 christos Exp $	*/
+/*	$NetBSD: ssh-ed25519-sk.c,v 1.2.4.2 2020/04/08 14:03:18 martin Exp $	*/
 /* $OpenBSD: ssh-ed25519-sk.c,v 1.4 2019/11/26 03:04:27 djm Exp $ */
 /*
  * Copyright (c) 2019 Markus Friedl.  All rights reserved.
@@ -16,7 +16,7 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 #include "includes.h"
-__RCSID("$NetBSD: ssh-ed25519-sk.c,v 1.2 2020/02/27 00:24:40 christos Exp $");
+__RCSID("$NetBSD: ssh-ed25519-sk.c,v 1.2.4.2 2020/04/08 14:03:18 martin Exp $");
 
 /* #define DEBUG_SK 1 */
 

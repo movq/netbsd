@@ -1,4 +1,4 @@
-/*        $NetBSD: hammer2.c,v 1.4 2020/01/15 15:32:05 tkusumi Exp $      */
+/*        $NetBSD: hammer2.c,v 1.4.4.2 2020/04/08 14:09:20 martin Exp $      */
 
 /*-
  * Copyright (c) 2017-2019 The DragonFly Project
@@ -27,7 +27,7 @@
  * SUCH DAMAGE.
  */
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: hammer2.c,v 1.4 2020/01/15 15:32:05 tkusumi Exp $");
+__KERNEL_RCSID(0, "$NetBSD: hammer2.c,v 1.4.4.2 2020/04/08 14:09:20 martin Exp $");
 
 #include <stdio.h>
 #include <stdlib.h>

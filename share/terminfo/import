@@ -1,5 +1,5 @@
 #!/bin/sh
-# $NetBSD: import,v 1.1 2019/11/27 19:00:25 christos Exp $
+# $NetBSD: import,v 1.1.4.2 2020/04/08 14:07:23 martin Exp $
 #
 # Simple shell script to import the newest version of terminfo
 # Download it from ftp://ftp.invisible-island.net/ncurses/current

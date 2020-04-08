@@ -1,4 +1,4 @@
-/*	$NetBSD: mouse.c,v 1.1 2020/03/23 13:37:36 roy Exp $	*/
+/*	$NetBSD: mouse.c,v 1.1.2.2 2020/04/08 14:07:14 martin Exp $	*/
 
 /*-
  * Copyright (c) 2020 The NetBSD Foundation, Inc.
@@ -31,7 +31,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: mouse.c,v 1.1 2020/03/23 13:37:36 roy Exp $");
+__RCSID("$NetBSD: mouse.c,v 1.1.2.2 2020/04/08 14:07:14 martin Exp $");
 #endif				/* not lint */
 
 #include "curses.h"

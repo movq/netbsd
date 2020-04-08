@@ -1,4 +1,4 @@
-/*	$NetBSD: asn1parse.c,v 1.2 2019/12/15 22:50:47 christos Exp $	*/
+/*	$NetBSD: asn1parse.c,v 1.2.4.2 2020/04/08 14:03:09 martin Exp $	*/
 
 /* A Bison parser, made by GNU Bison 2.3.  */
 

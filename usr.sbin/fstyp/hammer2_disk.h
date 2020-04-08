@@ -1,4 +1,4 @@
-/*        $NetBSD: hammer2_disk.h,v 1.1 2020/01/01 08:56:41 tkusumi Exp $      */
+/*        $NetBSD: hammer2_disk.h,v 1.1.4.2 2020/04/08 14:09:20 martin Exp $      */
 
 /*
  * Copyright (c) 2011-2019 The DragonFly Project.  All rights reserved.
@@ -35,7 +35,7 @@
  * SUCH DAMAGE.
  */
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: hammer2_disk.h,v 1.1 2020/01/01 08:56:41 tkusumi Exp $");
+__KERNEL_RCSID(0, "$NetBSD: hammer2_disk.h,v 1.1.4.2 2020/04/08 14:09:20 martin Exp $");
 
 #ifndef _VFS_HAMMER2_DISK_H_
 #define _VFS_HAMMER2_DISK_H_

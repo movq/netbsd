@@ -1,4 +1,4 @@
-/* $NetBSD: pcagpio.c,v 1.3 2020/02/02 06:43:14 macallan Exp $ */
+/* $NetBSD: pcagpio.c,v 1.3.6.2 2020/04/08 14:08:05 martin Exp $ */
 
 /*-
  * Copyright (c) 2020 Michael Lorenz
@@ -31,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pcagpio.c,v 1.3 2020/02/02 06:43:14 macallan Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pcagpio.c,v 1.3.6.2 2020/04/08 14:08:05 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

@@ -1,4 +1,4 @@
-/*	$NetBSD: if_ixl.c,v 1.65 2020/03/19 03:11:23 yamaguchi Exp $	*/
+/*	$NetBSD: if_ixl.c,v 1.65.2.2 2020/04/08 14:08:09 martin Exp $	*/
 
 /*
  * Copyright (c) 2013-2015, Intel Corporation
@@ -74,7 +74,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_ixl.c,v 1.65 2020/03/19 03:11:23 yamaguchi Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_ixl.c,v 1.65.2.2 2020/04/08 14:08:09 martin Exp $");
 
 #ifdef _KERNEL_OPT
 #include "opt_net_mpsafe.h"

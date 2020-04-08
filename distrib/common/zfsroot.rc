@@ -1,6 +1,6 @@
 #/bin/sh
 #
-#	$NetBSD: zfsroot.rc,v 1.4 2020/02/25 20:05:10 roy Exp $
+#	$NetBSD: zfsroot.rc,v 1.4.4.2 2020/04/08 14:03:44 martin Exp $
 
 # Assumption - boot.cfg loads this ramdisk.
 # Assumption - The needed kernel modules: solaris and zfs; are either on this

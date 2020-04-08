@@ -1,4 +1,4 @@
-/*	$NetBSD: info_log_addr_form.h,v 1.2 2020/03/18 19:05:16 christos Exp $	*/
+/*	$NetBSD: info_log_addr_form.h,v 1.2.2.2 2020/04/08 14:06:53 martin Exp $	*/
 
 #ifndef _INFO_LOG_ADDR_FORM_H_INCLUDED_
 #define _INFO_LOG_ADDR_FORM_H_INCLUDED_

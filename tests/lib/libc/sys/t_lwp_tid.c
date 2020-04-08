@@ -1,4 +1,4 @@
-/* $NetBSD: t_lwp_tid.c,v 1.1 2020/04/04 20:20:12 thorpej Exp $ */
+/* $NetBSD: t_lwp_tid.c,v 1.1.2.2 2020/04/08 14:09:09 martin Exp $ */
 
 /*-
  * Copyright (c) 2019, 2020 The NetBSD Foundation, Inc.
@@ -29,7 +29,7 @@
 #include <sys/cdefs.h>
 __COPYRIGHT("@(#) Copyright (c) 2019\
  The NetBSD Foundation, inc. All rights reserved.");
-__RCSID("$NetBSD: t_lwp_tid.c,v 1.1 2020/04/04 20:20:12 thorpej Exp $");
+__RCSID("$NetBSD: t_lwp_tid.c,v 1.1.2.2 2020/04/08 14:09:09 martin Exp $");
 
 #include <sys/mman.h>
 #include <errno.h>

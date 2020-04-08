@@ -1,4 +1,4 @@
-/* $NetBSD: h_sha2hmac.c,v 1.1 2019/12/03 04:20:45 hikaru Exp $ */
+/* $NetBSD: h_sha2hmac.c,v 1.1.4.2 2020/04/08 14:09:05 martin Exp $ */
 
 /*-
  * Copyright (c) 2014 The NetBSD Foundation, Inc.

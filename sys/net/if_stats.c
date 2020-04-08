@@ -1,4 +1,4 @@
-/*	$NetBSD: if_stats.c,v 1.3 2020/02/14 22:04:12 thorpej Exp $	*/
+/*	$NetBSD: if_stats.c,v 1.3.6.2 2020/04/08 14:08:57 martin Exp $	*/
 
 /*-
  * Copyright (c) 2020 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_stats.c,v 1.3 2020/02/14 22:04:12 thorpej Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_stats.c,v 1.3.6.2 2020/04/08 14:08:57 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/mbuf.h>

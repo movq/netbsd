@@ -1,4 +1,4 @@
-$NetBSD: README,v 1.1 2020/01/18 04:42:29 isaki Exp $
+$NetBSD: README,v 1.1.6.2 2020/04/08 14:07:57 martin Exp $
 
 Primary bootloaders:
 	boot_ufs/

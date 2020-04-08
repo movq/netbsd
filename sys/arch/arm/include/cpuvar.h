@@ -1,4 +1,4 @@
-/*	$NetBSD: cpuvar.h,v 1.1 2020/02/15 08:16:11 skrll Exp $	*/
+/*	$NetBSD: cpuvar.h,v 1.1.6.2 2020/04/08 14:07:29 martin Exp $	*/
 
 /*-
  * Copyright (c) 2020 The NetBSD Foundation, Inc.

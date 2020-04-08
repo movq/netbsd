@@ -1,4 +1,4 @@
-/*	$NetBSD: slc-lex.c,v 1.2 2019/12/15 22:50:51 christos Exp $	*/
+/*	$NetBSD: slc-lex.c,v 1.2.4.2 2020/04/08 14:03:14 martin Exp $	*/
 
 
 #line 3 "slc-lex.c"

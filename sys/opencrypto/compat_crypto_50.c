@@ -1,4 +1,4 @@
-/*	$NetBSD: compat_crypto_50.c,v 1.2 2020/01/27 17:11:27 pgoyette Exp $ */
+/*	$NetBSD: compat_crypto_50.c,v 1.2.6.2 2020/04/08 14:08:59 martin Exp $ */
 
 /*-
  * Copyright (c) 2008 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: compat_crypto_50.c,v 1.2 2020/01/27 17:11:27 pgoyette Exp $");
+__KERNEL_RCSID(0, "$NetBSD: compat_crypto_50.c,v 1.2.6.2 2020/04/08 14:08:59 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

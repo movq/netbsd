@@ -1,4 +1,4 @@
-/*	$NetBSD: sys_process_lwpstatus.c,v 1.1 2020/01/04 03:46:19 kamil Exp $	*/
+/*	$NetBSD: sys_process_lwpstatus.c,v 1.1.6.2 2020/04/08 14:08:52 martin Exp $	*/
 
 /*-
  * Copyright (c) 2019 The NetBSD Foundation, Inc.
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sys_process_lwpstatus.c,v 1.1 2020/01/04 03:46:19 kamil Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sys_process_lwpstatus.c,v 1.1.6.2 2020/04/08 14:08:52 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

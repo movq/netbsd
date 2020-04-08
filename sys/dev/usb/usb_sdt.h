@@ -1,4 +1,4 @@
-/*	$NetBSD: usb_sdt.h,v 1.1 2020/02/19 16:03:30 riastradh Exp $	*/
+/*	$NetBSD: usb_sdt.h,v 1.1.6.2 2020/04/08 14:08:13 martin Exp $	*/
 
 /*-
  * Copyright (c) 2020 The NetBSD Foundation, Inc.

@@ -1,4 +1,4 @@
-/*	$NetBSD: if_aq.c,v 1.11 2020/02/15 12:20:35 ryo Exp $	*/
+/*	$NetBSD: if_aq.c,v 1.11.4.2 2020/04/08 14:08:09 martin Exp $	*/
 
 /**
  * aQuantia Corporation Network Driver
@@ -62,7 +62,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_aq.c,v 1.11 2020/02/15 12:20:35 ryo Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_aq.c,v 1.11.4.2 2020/04/08 14:08:09 martin Exp $");
 
 #ifdef _KERNEL_OPT
 #include "opt_if_aq.h"

@@ -1,4 +1,4 @@
-/*	$NetBSD: cpu_subr.c,v 1.1 2020/02/15 08:16:10 skrll Exp $	*/
+/*	$NetBSD: cpu_subr.c,v 1.1.6.2 2020/04/08 14:07:27 martin Exp $	*/
 
 /*-
  * Copyright (c) 2020 The NetBSD Foundation, Inc.
@@ -33,7 +33,7 @@
 #include "opt_multiprocessor.h"
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: cpu_subr.c,v 1.1 2020/02/15 08:16:10 skrll Exp $");
+__KERNEL_RCSID(0, "$NetBSD: cpu_subr.c,v 1.1.6.2 2020/04/08 14:07:27 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/atomic.h>

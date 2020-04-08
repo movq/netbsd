@@ -1,4 +1,4 @@
-/* $NetBSD: bcmgenet.c,v 1.5 2020/03/29 13:20:04 jmcneill Exp $ */
+/* $NetBSD: bcmgenet.c,v 1.5.2.2 2020/04/08 14:08:06 martin Exp $ */
 
 /*-
  * Copyright (c) 2020 Jared McNeill <jmcneill@invisible.ca>
@@ -34,7 +34,7 @@
 #include "opt_ddb.h"
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: bcmgenet.c,v 1.5 2020/03/29 13:20:04 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: bcmgenet.c,v 1.5.2.2 2020/04/08 14:08:06 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/bus.h>

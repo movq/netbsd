@@ -1,4 +1,4 @@
-/*	$NetBSD: nslu2.c,v 1.1 2020/02/12 06:57:35 thorpej Exp $	*/
+/*	$NetBSD: nslu2.c,v 1.1.6.2 2020/04/08 14:07:36 martin Exp $	*/
 
 /*
  * Copyright (c) 2002 Wasabi Systems, Inc.

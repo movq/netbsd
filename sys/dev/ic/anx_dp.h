@@ -1,4 +1,4 @@
-/* $NetBSD: anx_dp.h,v 1.2 2020/01/04 12:08:32 jmcneill Exp $ */
+/* $NetBSD: anx_dp.h,v 1.2.8.2 2020/04/08 14:08:06 martin Exp $ */
 
 /*-
  * Copyright (c) 2019 Jonathan A. Kollasch <jakllsch@kollasch.net>

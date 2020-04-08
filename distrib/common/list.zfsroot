@@ -1,4 +1,4 @@
-#	$NetBSD: list.zfsroot,v 1.2 2020/02/23 05:15:54 roy Exp $
+#	$NetBSD: list.zfsroot,v 1.2.4.2 2020/04/08 14:03:44 martin Exp $
 #
 # list file (c.f. parselist.awk) for ZFS on root.
 #

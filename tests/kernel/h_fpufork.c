@@ -1,4 +1,4 @@
-/*	$NetBSD: h_fpufork.c,v 1.1 2020/02/11 03:15:10 riastradh Exp $	*/
+/*	$NetBSD: h_fpufork.c,v 1.1.4.2 2020/04/08 14:09:08 martin Exp $	*/
 
 /*-
  * Copyright (c) 2020 The NetBSD Foundation, Inc.
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: h_fpufork.c,v 1.1 2020/02/11 03:15:10 riastradh Exp $");
+__RCSID("$NetBSD: h_fpufork.c,v 1.1.4.2 2020/04/08 14:09:08 martin Exp $");
 
 #include <sys/wait.h>
 
