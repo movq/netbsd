@@ -1,4 +1,4 @@
-/* $NetBSD: bcm2835_bsc_acpi.c,v 1.1 2020/03/31 12:23:17 jmcneill Exp $ */
+/* $NetBSD: bcm2835_bsc_acpi.c,v 1.1.2.2 2020/04/08 14:07:28 martin Exp $ */
 
 /*-
  * Copyright (c) 2020 Jared McNeill <jmcneill@invisible.ca>
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: bcm2835_bsc_acpi.c,v 1.1 2020/03/31 12:23:17 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: bcm2835_bsc_acpi.c,v 1.1.2.2 2020/04/08 14:07:28 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/bus.h>

@@ -1,4 +1,4 @@
-/*	$NetBSD: uvm_page_array.h,v 1.2 2019/12/15 21:11:35 ad Exp $	*/
+/*	$NetBSD: uvm_page_array.h,v 1.2.6.2 2020/04/08 14:09:04 martin Exp $	*/
 
 /*-
  * Copyright (c)2011 YAMAMOTO Takashi,

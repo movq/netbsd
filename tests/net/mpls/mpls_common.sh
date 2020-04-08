@@ -1,4 +1,4 @@
-# $NetBSD: mpls_common.sh,v 1.1 2020/04/01 01:49:26 christos Exp $
+# $NetBSD: mpls_common.sh,v 1.1.2.2 2020/04/08 14:09:12 martin Exp $
 #
 # Copyright (c) 2020 The NetBSD Foundation, Inc.
 # All rights reserved.

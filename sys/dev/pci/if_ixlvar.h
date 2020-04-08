@@ -1,4 +1,4 @@
-/*	$NetBSD: if_ixlvar.h,v 1.6 2020/02/12 06:37:21 yamaguchi Exp $	*/
+/*	$NetBSD: if_ixlvar.h,v 1.6.4.2 2020/04/08 14:08:09 martin Exp $	*/
 
 /*
  * Copyright (c) 2019 Internet Initiative Japan, Inc.

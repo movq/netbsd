@@ -1,4 +1,4 @@
-/*	$NetBSD: kern_module_hook.c,v 1.4 2019/12/13 08:02:53 skrll Exp $ */
+/*	$NetBSD: kern_module_hook.c,v 1.4.6.2 2020/04/08 14:08:51 martin Exp $ */
 
 /*-
  * Copyright (c) 2019 The NetBSD Foundation, Inc.
@@ -31,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: kern_module_hook.c,v 1.4 2019/12/13 08:02:53 skrll Exp $");
+__KERNEL_RCSID(0, "$NetBSD: kern_module_hook.c,v 1.4.6.2 2020/04/08 14:08:51 martin Exp $");
 
 #include <sys/param.h>
 

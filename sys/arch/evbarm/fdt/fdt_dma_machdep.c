@@ -1,4 +1,4 @@
-/* $NetBSD: fdt_dma_machdep.c,v 1.1 2020/02/20 01:35:55 jmcneill Exp $ */
+/* $NetBSD: fdt_dma_machdep.c,v 1.1.6.2 2020/04/08 14:07:35 martin Exp $ */
 
 /*-
  * Copyright (c) 2020 Jared McNeill <jmcneill@invisible.ca>
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: fdt_dma_machdep.c,v 1.1 2020/02/20 01:35:55 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: fdt_dma_machdep.c,v 1.1.6.2 2020/04/08 14:07:35 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/bus.h>

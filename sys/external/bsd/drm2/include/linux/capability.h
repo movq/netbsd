@@ -1,4 +1,4 @@
-/*	$NetBSD: capability.h,v 1.2 2020/02/14 16:02:41 tnn Exp $	*/
+/*	$NetBSD: capability.h,v 1.2.6.2 2020/04/08 14:08:27 martin Exp $	*/
 
 /*-
  * Copyright (c) 2020 The NetBSD Foundation, Inc.

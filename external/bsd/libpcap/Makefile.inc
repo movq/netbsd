@@ -1,4 +1,4 @@
-# $NetBSD: Makefile.inc,v 1.1 2020/03/29 17:12:45 christos Exp $
+# $NetBSD: Makefile.inc,v 1.1.2.2 2020/04/08 14:04:07 martin Exp $
 
 SRCDIR := ${.PARSEDIR}/dist
 

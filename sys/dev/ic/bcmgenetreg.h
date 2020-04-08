@@ -1,4 +1,4 @@
-/* $NetBSD: bcmgenetreg.h,v 1.2 2020/02/22 13:41:41 jmcneill Exp $ */
+/* $NetBSD: bcmgenetreg.h,v 1.2.6.2 2020/04/08 14:08:06 martin Exp $ */
 
 /*-
  * Copyright (c) 2020 Jared McNeill <jmcneill@invisible.ca>

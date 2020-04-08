@@ -1,4 +1,4 @@
-/*	$NetBSD: audiotest.c,v 1.10 2020/03/26 13:43:10 isaki Exp $	*/
+/*	$NetBSD: audiotest.c,v 1.10.2.2 2020/04/08 14:09:05 martin Exp $	*/
 
 /*
  * Copyright (C) 2019 Tetsuya Isaki. All rights reserved.
@@ -26,7 +26,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: audiotest.c,v 1.10 2020/03/26 13:43:10 isaki Exp $");
+__RCSID("$NetBSD: audiotest.c,v 1.10.2.2 2020/04/08 14:09:05 martin Exp $");
 
 #include <errno.h>
 #include <fcntl.h>

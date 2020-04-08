@@ -1,4 +1,4 @@
-/*	$NetBSD: smbios.h,v 1.1 2019/11/30 13:02:18 jmcneill Exp $ */
+/*	$NetBSD: smbios.h,v 1.1.8.2 2020/04/08 14:09:02 martin Exp $ */
 /*
  * Copyright (c) 2006 Gordon Willem Klok <gklok@cogeco.ca>
  * Copyright (c) 2005 Jordan Hargrave

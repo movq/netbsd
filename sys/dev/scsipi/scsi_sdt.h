@@ -1,4 +1,4 @@
-/*	$NetBSD: scsi_sdt.h,v 1.1 2020/02/19 16:05:41 riastradh Exp $	*/
+/*	$NetBSD: scsi_sdt.h,v 1.1.6.2 2020/04/08 14:08:12 martin Exp $	*/
 
 /*-
  * Copyright (c) 2020 The NetBSD Foundation, Inc.

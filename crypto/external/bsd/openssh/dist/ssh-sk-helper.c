@@ -1,4 +1,4 @@
-/*	$NetBSD: ssh-sk-helper.c,v 1.2 2020/02/27 00:24:40 christos Exp $	*/
+/*	$NetBSD: ssh-sk-helper.c,v 1.2.4.2 2020/04/08 14:03:18 martin Exp $	*/
 /* $OpenBSD: ssh-sk-helper.c,v 1.9 2020/01/25 23:13:09 djm Exp $ */
 /*
  * Copyright (c) 2019 Google LLC
@@ -26,7 +26,7 @@
  * protocol changes.
  */
 #include "includes.h"
-__RCSID("$NetBSD: ssh-sk-helper.c,v 1.2 2020/02/27 00:24:40 christos Exp $");
+__RCSID("$NetBSD: ssh-sk-helper.c,v 1.2.4.2 2020/04/08 14:03:18 martin Exp $");
 
 #include <limits.h>
 #include <stdarg.h>

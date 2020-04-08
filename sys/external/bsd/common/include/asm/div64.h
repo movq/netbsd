@@ -1,4 +1,4 @@
-/*	$NetBSD: div64.h,v 1.1 2020/02/14 09:38:51 riastradh Exp $	*/
+/*	$NetBSD: div64.h,v 1.1.6.2 2020/04/08 14:08:21 martin Exp $	*/
 
 /*-
  * Copyright (c) 2014 The NetBSD Foundation, Inc.

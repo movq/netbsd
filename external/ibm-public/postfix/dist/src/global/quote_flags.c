@@ -1,4 +1,4 @@
-/*	$NetBSD: quote_flags.c,v 1.2 2020/03/18 19:05:16 christos Exp $	*/
+/*	$NetBSD: quote_flags.c,v 1.2.2.2 2020/04/08 14:06:53 martin Exp $	*/
 
 /*++
 /* NAME

@@ -1,4 +1,4 @@
-/*	$NetBSD: vhci.h,v 1.2 2020/03/31 16:34:25 maxv Exp $ */
+/*	$NetBSD: vhci.h,v 1.2.2.2 2020/04/08 14:08:14 martin Exp $ */
 
 /*
  * Copyright (c) 2019-2020 The NetBSD Foundation, Inc.

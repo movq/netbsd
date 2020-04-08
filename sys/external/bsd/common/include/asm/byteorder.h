@@ -1,4 +1,4 @@
-/*	$NetBSD: byteorder.h,v 1.1 2020/02/16 06:50:14 riastradh Exp $	*/
+/*	$NetBSD: byteorder.h,v 1.1.6.2 2020/04/08 14:08:21 martin Exp $	*/
 
 /*-
  * Copyright (c) 2013 The NetBSD Foundation, Inc.

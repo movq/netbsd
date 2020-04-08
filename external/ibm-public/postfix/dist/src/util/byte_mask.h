@@ -1,4 +1,4 @@
-/*	$NetBSD: byte_mask.h,v 1.2 2020/03/18 19:05:21 christos Exp $	*/
+/*	$NetBSD: byte_mask.h,v 1.2.2.2 2020/04/08 14:06:59 martin Exp $	*/
 
 #ifndef _BYTE_MASK_H_INCLUDED_
 #define _BYTE_MASK_H_INCLUDED_

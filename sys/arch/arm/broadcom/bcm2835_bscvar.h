@@ -1,4 +1,4 @@
-/*	$NetBSD: bcm2835_bscvar.h,v 1.1 2020/03/31 14:39:44 jmcneill Exp $	*/
+/*	$NetBSD: bcm2835_bscvar.h,v 1.1.2.2 2020/04/08 14:07:28 martin Exp $	*/
 
 /*
  * Copyright (c) 2019 Jason R. Thorpe

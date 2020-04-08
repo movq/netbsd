@@ -1,4 +1,4 @@
-/* $NetBSD: vchiq_netbsd_acpi.c,v 1.2 2020/02/22 19:37:31 jmcneill Exp $ */
+/* $NetBSD: vchiq_netbsd_acpi.c,v 1.2.4.2 2020/04/08 14:08:29 martin Exp $ */
 
 /*-
  * Copyright (c) 2013 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: vchiq_netbsd_acpi.c,v 1.2 2020/02/22 19:37:31 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: vchiq_netbsd_acpi.c,v 1.2.4.2 2020/04/08 14:08:29 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

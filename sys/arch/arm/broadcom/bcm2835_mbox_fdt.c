@@ -1,4 +1,4 @@
-/*	$NetBSD: bcm2835_mbox_fdt.c,v 1.1 2019/12/30 18:43:38 jmcneill Exp $	*/
+/*	$NetBSD: bcm2835_mbox_fdt.c,v 1.1.6.2 2020/04/08 14:07:28 martin Exp $	*/
 
 /*-
  * Copyright (c) 2012 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: bcm2835_mbox_fdt.c,v 1.1 2019/12/30 18:43:38 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: bcm2835_mbox_fdt.c,v 1.1.6.2 2020/04/08 14:07:28 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

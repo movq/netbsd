@@ -1,4 +1,4 @@
-/*	$NetBSD: ofw_sysctl.c,v 1.2 2020/04/03 21:55:07 macallan Exp $ */
+/*	$NetBSD: ofw_sysctl.c,v 1.2.2.2 2020/04/08 14:08:08 martin Exp $ */
 
 /*-
  * Copyright (c) 2020 Michael Lorenz
@@ -26,7 +26,7 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ofw_sysctl.c,v 1.2 2020/04/03 21:55:07 macallan Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ofw_sysctl.c,v 1.2.2.2 2020/04/08 14:08:08 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

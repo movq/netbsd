@@ -1,4 +1,4 @@
-/*	$NetBSD: ssh-sk-client.c,v 1.3 2020/03/01 14:51:06 christos Exp $	*/
+/*	$NetBSD: ssh-sk-client.c,v 1.3.4.2 2020/04/08 14:03:18 martin Exp $	*/
 /* $OpenBSD: ssh-sk-client.c,v 1.7 2020/01/23 07:10:22 dtucker Exp $ */
 /*
  * Copyright (c) 2019 Google LLC
@@ -16,7 +16,7 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 #include "includes.h"
-__RCSID("$NetBSD: ssh-sk-client.c,v 1.3 2020/03/01 14:51:06 christos Exp $");
+__RCSID("$NetBSD: ssh-sk-client.c,v 1.3.4.2 2020/04/08 14:03:18 martin Exp $");
 
 #include <sys/types.h>
 #include <sys/socket.h>

@@ -1,4 +1,4 @@
-/*	$NetBSD: netbsd32_compat_50_quota.c,v 1.1 2020/03/12 15:02:29 pgoyette Exp $	*/
+/*	$NetBSD: netbsd32_compat_50_quota.c,v 1.1.2.2 2020/04/08 14:08:01 martin Exp $	*/
 
 /*-
  * Copyright (c) 2008, 2020 The NetBSD Foundation, Inc.
@@ -29,7 +29,7 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: netbsd32_compat_50_quota.c,v 1.1 2020/03/12 15:02:29 pgoyette Exp $");
+__KERNEL_RCSID(0, "$NetBSD: netbsd32_compat_50_quota.c,v 1.1.2.2 2020/04/08 14:08:01 martin Exp $");
 
 #if defined(_KERNEL_OPT)
 #include "opt_compat_netbsd.h"

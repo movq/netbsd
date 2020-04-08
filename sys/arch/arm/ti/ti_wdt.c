@@ -1,4 +1,4 @@
-/* $NetBSD: ti_wdt.c,v 1.1 2019/11/29 20:54:00 jmcneill Exp $ */
+/* $NetBSD: ti_wdt.c,v 1.1.8.2 2020/04/08 14:07:31 martin Exp $ */
 
 /*-
  * Copyright (c) 2019 Jared McNeill <jmcneill@invisible.ca>
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ti_wdt.c,v 1.1 2019/11/29 20:54:00 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ti_wdt.c,v 1.1.8.2 2020/04/08 14:07:31 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/bus.h>

@@ -1,4 +1,4 @@
-/*	$NetBSD: t_ptrace_sigchld.c,v 1.2 2020/03/06 19:10:27 kamil Exp $	*/
+/*	$NetBSD: t_ptrace_sigchld.c,v 1.2.2.2 2020/04/08 14:09:09 martin Exp $	*/
 
 /*-
  * Copyright (c) 2020 The NetBSD Foundation, Inc.
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: t_ptrace_sigchld.c,v 1.2 2020/03/06 19:10:27 kamil Exp $");
+__RCSID("$NetBSD: t_ptrace_sigchld.c,v 1.2.2.2 2020/04/08 14:09:09 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/types.h>

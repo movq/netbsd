@@ -1,4 +1,4 @@
-# $NetBSD: varmod-edge.mk,v 1.6 2019/12/02 01:01:08 rillig Exp $
+# $NetBSD: varmod-edge.mk,v 1.6.4.2 2020/04/08 14:09:17 martin Exp $
 #
 # Tests for edge cases in variable modifiers.
 #

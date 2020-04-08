@@ -1,4 +1,4 @@
-/*	$NetBSD: normalize_table.h,v 1.2 2019/12/15 22:50:51 christos Exp $	*/
+/*	$NetBSD: normalize_table.h,v 1.2.4.2 2020/04/08 14:03:15 martin Exp $	*/
 
 /* ./normalize_table.h */
 /* Automatically generated at 2019-06-07T02:26:41.685585 */
