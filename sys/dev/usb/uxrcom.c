@@ -1,4 +1,4 @@
-/*	$NetBSD: uxrcom.c,v 1.1 2020/04/12 01:10:54 simonb Exp $	*/
+/*	$NetBSD: uxrcom.c,v 1.1.2.2 2020/04/12 08:44:42 martin Exp $	*/
 /*	$OpenBSD: uxrcom.c,v 1.1 2019/03/27 22:08:51 kettenis Exp $	*/
 
 /*
@@ -47,7 +47,7 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: uxrcom.c,v 1.1 2020/04/12 01:10:54 simonb Exp $");
+__KERNEL_RCSID(0, "$NetBSD: uxrcom.c,v 1.1.2.2 2020/04/12 08:44:42 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
