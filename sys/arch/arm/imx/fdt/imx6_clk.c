@@ -1,4 +1,4 @@
-/*	$NetBSD: imx6_clk.c,v 1.1 2019/07/24 13:12:33 hkenken Exp $	*/
+/*	$NetBSD: imx6_clk.c,v 1.1.10.2 2020/04/13 08:03:35 martin Exp $	*/
 /*-
  * Copyright (c) 2019 Genetec Corporation.  All rights reserved.
  * Written by Hashimoto Kenichi for Genetec Corporation.
@@ -25,7 +25,7 @@
  * SUCH DAMAGE.
  */
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: imx6_clk.c,v 1.1 2019/07/24 13:12:33 hkenken Exp $");
+__KERNEL_RCSID(0, "$NetBSD: imx6_clk.c,v 1.1.10.2 2020/04/13 08:03:35 martin Exp $");
 
 #include "opt_fdt.h"
 

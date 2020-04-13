@@ -1,4 +1,4 @@
-/*	$NetBSD: board.h,v 1.1 2019/06/30 05:04:48 tsutsui Exp $	*/
+/*	$NetBSD: board.h,v 1.1.10.2 2020/04/13 08:03:56 martin Exp $	*/
 /*	$OpenBSD: board.h,v 1.15 2017/11/03 06:55:08 aoyama Exp $	*/
 /*
  * Mach Operating System

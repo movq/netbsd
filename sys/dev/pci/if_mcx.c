@@ -1,4 +1,4 @@
-/*	$NetBSD: if_mcx.c,v 1.12 2020/03/15 23:04:50 thorpej Exp $ */
+/*	$NetBSD: if_mcx.c,v 1.12.4.2 2020/04/13 08:04:26 martin Exp $ */
 /*	$OpenBSD: if_mcx.c,v 1.33 2019/09/12 04:23:59 jmatthew Exp $ */
 
 /*

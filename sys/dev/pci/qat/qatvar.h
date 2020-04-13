@@ -1,4 +1,4 @@
-/*	$NetBSD: qatvar.h,v 1.2 2020/03/14 18:08:39 ad Exp $	*/
+/*	$NetBSD: qatvar.h,v 1.2.4.2 2020/04/13 08:04:46 martin Exp $	*/
 
 /*
  * Copyright (c) 2019 Internet Initiative Japan, Inc.

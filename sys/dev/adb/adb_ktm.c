@@ -1,4 +1,4 @@
-/*	$NetBSD: adb_ktm.c,v 1.2 2019/09/15 16:16:36 macallan Exp $	*/
+/*	$NetBSD: adb_ktm.c,v 1.2.8.2 2020/04/13 08:04:18 martin Exp $	*/
 
 /*-
  * Copyright (c) 2019 Michael Lorenz
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: adb_ktm.c,v 1.2 2019/09/15 16:16:36 macallan Exp $");
+__KERNEL_RCSID(0, "$NetBSD: adb_ktm.c,v 1.2.8.2 2020/04/13 08:04:18 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/device.h>

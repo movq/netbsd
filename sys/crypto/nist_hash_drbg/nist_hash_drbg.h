@@ -1,4 +1,4 @@
-/*	$NetBSD: nist_hash_drbg.h,v 1.1 2019/09/02 20:09:29 riastradh Exp $	*/
+/*	$NetBSD: nist_hash_drbg.h,v 1.1.18.2 2020/04/13 08:04:17 martin Exp $	*/
 
 /*-
  * Copyright (c) 2019 The NetBSD Foundation, Inc.

@@ -1,4 +1,4 @@
-/*	$NetBSD: imx6_usbphy.c,v 1.2 2019/11/24 11:07:19 skrll Exp $	*/
+/*	$NetBSD: imx6_usbphy.c,v 1.2.8.2 2020/04/13 08:03:35 martin Exp $	*/
 /*-
  * Copyright (c) 2019 Genetec Corporation.  All rights reserved.
  * Written by Hashimoto Kenichi for Genetec Corporation.
@@ -25,7 +25,7 @@
  * SUCH DAMAGE.
  */
 #include <sys/cdefs.h>
-__KERNEL_RCSID(1, "$NetBSD: imx6_usbphy.c,v 1.2 2019/11/24 11:07:19 skrll Exp $");
+__KERNEL_RCSID(1, "$NetBSD: imx6_usbphy.c,v 1.2.8.2 2020/04/13 08:03:35 martin Exp $");
 
 #include "opt_fdt.h"
 

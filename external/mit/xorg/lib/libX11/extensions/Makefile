@@ -1,4 +1,4 @@
-# $NetBSD: Makefile,v 1.2 2020/02/23 09:14:05 mrg Exp $
+# $NetBSD: Makefile,v 1.2.4.2 2020/04/13 08:02:32 martin Exp $
 
 NOPROG=	yes
 

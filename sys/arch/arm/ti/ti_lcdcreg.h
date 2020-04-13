@@ -1,4 +1,4 @@
-/* $NetBSD: ti_lcdcreg.h,v 1.1 2019/11/03 22:59:06 jmcneill Exp $ */
+/* $NetBSD: ti_lcdcreg.h,v 1.1.10.2 2020/04/13 08:03:38 martin Exp $ */
 /*-
  * Copyright 2013 Oleksandr Tymoshenko <gonzo@freebsd.org>
  * All rights reserved.

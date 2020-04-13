@@ -1,4 +1,4 @@
-/*	$NetBSD: siphash.c,v 1.4 2019/10/17 16:47:01 christos Exp $	*/
+/*	$NetBSD: siphash.c,v 1.4.4.2 2020/04/13 08:02:58 martin Exp $	*/
 
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")

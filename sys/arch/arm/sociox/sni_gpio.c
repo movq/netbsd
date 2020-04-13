@@ -1,4 +1,4 @@
-/*	$NetBSD: sni_gpio.c,v 1.7 2020/03/25 23:31:19 nisimura Exp $	*/
+/*	$NetBSD: sni_gpio.c,v 1.7.4.2 2020/04/13 08:03:37 martin Exp $	*/
 
 /*-
  * Copyright (c) 2020 The NetBSD Foundation, Inc.
@@ -34,7 +34,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sni_gpio.c,v 1.7 2020/03/25 23:31:19 nisimura Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sni_gpio.c,v 1.7.4.2 2020/04/13 08:03:37 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/device.h>

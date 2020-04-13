@@ -1,4 +1,4 @@
-/*	$NetBSD: h_fexecve.c,v 1.1 2019/09/15 16:53:58 christos Exp $	*/
+/*	$NetBSD: h_fexecve.c,v 1.1.4.2 2020/04/13 08:05:25 martin Exp $	*/
 
 /*-
  * Copyright (c) 2019 The NetBSD Foundation, Inc.
@@ -29,7 +29,7 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: h_fexecve.c,v 1.1 2019/09/15 16:53:58 christos Exp $");
+__RCSID("$NetBSD: h_fexecve.c,v 1.1.4.2 2020/04/13 08:05:25 martin Exp $");
 
 #include <unistd.h>
 #include <fcntl.h>

@@ -1,4 +1,4 @@
-/*	$NetBSD: gpt.c,v 1.18 2020/03/30 12:19:28 martin Exp $	*/
+/*	$NetBSD: gpt.c,v 1.18.2.2 2020/04/13 08:06:00 martin Exp $	*/
 
 /*
  * Copyright 2018 The NetBSD Foundation, Inc.

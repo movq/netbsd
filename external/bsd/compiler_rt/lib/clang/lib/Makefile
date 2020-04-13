@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.3 2019/08/25 06:06:48 kamil Exp $
+#	$NetBSD: Makefile,v 1.3.4.2 2020/04/13 07:45:52 martin Exp $
 
 SUBDIR+=	netbsd
 

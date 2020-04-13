@@ -1,4 +1,4 @@
-/*	$NetBSD: if_ave.c,v 1.16 2020/03/27 13:00:22 nisimura Exp $	*/
+/*	$NetBSD: if_ave.c,v 1.16.4.2 2020/04/13 08:03:37 martin Exp $	*/
 
 /*-
  * Copyright (c) 2020 The NetBSD Foundation, Inc.
@@ -36,7 +36,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_ave.c,v 1.16 2020/03/27 13:00:22 nisimura Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_ave.c,v 1.16.4.2 2020/04/13 08:03:37 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/bus.h>

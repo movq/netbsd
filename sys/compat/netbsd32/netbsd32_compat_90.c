@@ -1,4 +1,4 @@
-/*	$NetBSD: netbsd32_compat_90.c,v 1.1 2019/09/22 22:59:38 christos Exp $	*/
+/*	$NetBSD: netbsd32_compat_90.c,v 1.1.8.2 2020/04/13 08:04:16 martin Exp $	*/
 
 /*-
  * Copyright (c) 2019 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: netbsd32_compat_90.c,v 1.1 2019/09/22 22:59:38 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: netbsd32_compat_90.c,v 1.1.8.2 2020/04/13 08:04:16 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/kmem.h>

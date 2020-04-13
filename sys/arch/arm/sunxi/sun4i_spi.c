@@ -1,4 +1,4 @@
-/*	$NetBSD: sun4i_spi.c,v 1.5 2019/09/11 15:03:52 bouyer Exp $	*/
+/*	$NetBSD: sun4i_spi.c,v 1.5.8.2 2020/04/13 08:03:37 martin Exp $	*/
 
 /*
  * Copyright (c) 2019 Tobias Nygren
@@ -28,7 +28,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sun4i_spi.c,v 1.5 2019/09/11 15:03:52 bouyer Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sun4i_spi.c,v 1.5.8.2 2020/04/13 08:03:37 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/device.h>

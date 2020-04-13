@@ -1,4 +1,4 @@
-/* $NetBSD: gic_v2m_acpi.c,v 1.1 2019/10/14 11:00:13 jmcneill Exp $ */
+/* $NetBSD: gic_v2m_acpi.c,v 1.1.10.2 2020/04/13 08:03:32 martin Exp $ */
 
 /*-
  * Copyright (c) 2018 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: gic_v2m_acpi.c,v 1.1 2019/10/14 11:00:13 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: gic_v2m_acpi.c,v 1.1.10.2 2020/04/13 08:03:32 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/bus.h>

@@ -1,4 +1,4 @@
-/*	$NetBSD: sun4i_spireg.h,v 1.1 2019/08/03 13:28:42 tnn Exp $	*/
+/*	$NetBSD: sun4i_spireg.h,v 1.1.8.2 2020/04/13 08:03:37 martin Exp $	*/
 
 /*
  * Copyright (c) 2019 Tobias Nygren

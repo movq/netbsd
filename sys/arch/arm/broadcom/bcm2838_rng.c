@@ -1,4 +1,4 @@
-/*	$NetBSD: bcm2838_rng.c,v 1.1 2019/09/01 17:27:22 mlelstv Exp $ */
+/*	$NetBSD: bcm2838_rng.c,v 1.1.8.2 2020/04/13 08:03:33 martin Exp $ */
 
 /*-
  * Copyright (c) 2019 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: bcm2838_rng.c,v 1.1 2019/09/01 17:27:22 mlelstv Exp $");
+__KERNEL_RCSID(0, "$NetBSD: bcm2838_rng.c,v 1.1.8.2 2020/04/13 08:03:33 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/device.h>

@@ -1,4 +1,4 @@
-/*	$NetBSD: cmd_mapper.c,v 1.2 2020/04/01 13:07:32 kamil Exp $	*/
+/*	$NetBSD: cmd_mapper.c,v 1.2.4.2 2020/04/13 08:05:11 martin Exp $	*/
 
 /*-
  * Copyright (c) 2020 The NetBSD Foundation, Inc.
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: cmd_mapper.c,v 1.2 2020/04/01 13:07:32 kamil Exp $");
+__RCSID("$NetBSD: cmd_mapper.c,v 1.2.4.2 2020/04/13 08:05:11 martin Exp $");
 
 #include <sys/mman.h>
 

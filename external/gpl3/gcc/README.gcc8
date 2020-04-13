@@ -1,4 +1,4 @@
-$NetBSD: README.gcc8,v 1.7 2020/02/07 07:16:32 mrg Exp $
+$NetBSD: README.gcc8,v 1.7.4.2 2020/04/13 07:56:56 martin Exp $
 
 new stuff:
 	cc1objcplus

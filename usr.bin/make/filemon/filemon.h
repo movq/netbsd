@@ -1,4 +1,4 @@
-/*	$NetBSD: filemon.h,v 1.2 2020/01/22 22:10:36 sjg Exp $	*/
+/*	$NetBSD: filemon.h,v 1.2.4.2 2020/04/13 08:05:44 martin Exp $	*/
 
 /*-
  * Copyright (c) 2019 The NetBSD Foundation, Inc.

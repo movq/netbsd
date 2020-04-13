@@ -1,4 +1,4 @@
-/*	$NetBSD: partitions.h,v 1.15 2020/01/27 21:21:22 martin Exp $	*/
+/*	$NetBSD: partitions.h,v 1.15.4.2 2020/04/13 08:06:00 martin Exp $	*/
 
 /*
  * Copyright 2018 The NetBSD Foundation, Inc.

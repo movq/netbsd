@@ -1,4 +1,4 @@
-/*	$NetBSD: qat.c,v 1.5 2020/03/05 15:33:13 msaitoh Exp $	*/
+/*	$NetBSD: qat.c,v 1.5.4.2 2020/04/13 08:04:46 martin Exp $	*/
 
 /*
  * Copyright (c) 2019 Internet Initiative Japan, Inc.
@@ -57,7 +57,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: qat.c,v 1.5 2020/03/05 15:33:13 msaitoh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: qat.c,v 1.5.4.2 2020/04/13 08:04:46 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

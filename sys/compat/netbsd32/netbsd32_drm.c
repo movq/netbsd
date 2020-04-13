@@ -1,4 +1,4 @@
-/*	$NetBSD: netbsd32_drm.c,v 1.4 2019/09/28 15:15:34 christos Exp $ */
+/*	$NetBSD: netbsd32_drm.c,v 1.4.8.2 2020/04/13 08:04:16 martin Exp $ */
 
 /*
  * Copyright (c) 2019 The NetBSD Foundation, Inc.
@@ -29,7 +29,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: netbsd32_drm.c,v 1.4 2019/09/28 15:15:34 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: netbsd32_drm.c,v 1.4.8.2 2020/04/13 08:04:16 martin Exp $");
 
 #include <compat/netbsd32/netbsd32.h>
 #include <compat/netbsd32/netbsd32_ioctl.h>

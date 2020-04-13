@@ -1,4 +1,4 @@
-# $NetBSD: Makefile,v 1.3 2020/03/04 17:22:49 christos Exp $
+# $NetBSD: Makefile,v 1.3.2.2 2020/04/13 08:02:29 martin Exp $
 
 NOLINT=
 NOMAN=

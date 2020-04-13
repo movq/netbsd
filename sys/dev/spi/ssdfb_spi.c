@@ -1,4 +1,4 @@
-/* $NetBSD: ssdfb_spi.c,v 1.3 2019/11/02 22:55:57 tnn Exp $ */
+/* $NetBSD: ssdfb_spi.c,v 1.3.8.2 2020/04/13 08:04:48 martin Exp $ */
 
 /*
  * Copyright (c) 2019 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ssdfb_spi.c,v 1.3 2019/11/02 22:55:57 tnn Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ssdfb_spi.c,v 1.3.8.2 2020/04/13 08:04:48 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/device.h>

@@ -1,4 +1,4 @@
-/*	$NetBSD: drm_stub.c,v 1.1 2019/11/16 04:10:33 christos Exp $	*/
+/*	$NetBSD: drm_stub.c,v 1.1.8.2 2020/04/13 08:04:59 martin Exp $	*/
 
 /*-
  * Copyright (c) 2019 The NetBSD Foundation, Inc.
@@ -29,7 +29,7 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: drm_stub.c,v 1.1 2019/11/16 04:10:33 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: drm_stub.c,v 1.1.8.2 2020/04/13 08:04:59 martin Exp $");
 
 #include <sys/errno.h>
 

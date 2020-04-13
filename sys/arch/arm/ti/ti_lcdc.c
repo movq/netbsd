@@ -1,4 +1,4 @@
-/* $NetBSD: ti_lcdc.c,v 1.4 2019/12/15 01:00:58 mrg Exp $ */
+/* $NetBSD: ti_lcdc.c,v 1.4.8.2 2020/04/13 08:03:38 martin Exp $ */
 
 /*-
  * Copyright (c) 2019 Jared D. McNeill <jmcneill@invisible.ca>
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ti_lcdc.c,v 1.4 2019/12/15 01:00:58 mrg Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ti_lcdc.c,v 1.4.8.2 2020/04/13 08:03:38 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/bus.h>

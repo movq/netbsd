@@ -1,4 +1,4 @@
-#       $NetBSD: t_cpio.sh,v 1.1 2020/01/17 16:25:37 christos Exp $
+#       $NetBSD: t_cpio.sh,v 1.1.4.2 2020/04/13 08:05:33 martin Exp $
 #
 # Copyright (c) 2020 The NetBSD Foundation, Inc.
 # All rights reserved.

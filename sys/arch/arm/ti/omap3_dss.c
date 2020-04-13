@@ -1,4 +1,4 @@
-/*	$NetBSD: omap3_dss.c,v 1.1 2019/10/31 17:08:54 jmcneill Exp $	*/
+/*	$NetBSD: omap3_dss.c,v 1.1.10.2 2020/04/13 08:03:38 martin Exp $	*/
 
 /*
  * Copyright (c) 2010 Michael Lorenz
@@ -33,7 +33,7 @@
 #include "opt_wsdisplay_compat.h"
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: omap3_dss.c,v 1.1 2019/10/31 17:08:54 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: omap3_dss.c,v 1.1.10.2 2020/04/13 08:03:38 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

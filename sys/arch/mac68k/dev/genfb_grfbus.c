@@ -1,4 +1,4 @@
-/* $NetBSD: genfb_grfbus.c,v 1.1 2019/07/26 10:48:44 rin Exp $ */
+/* $NetBSD: genfb_grfbus.c,v 1.1.10.2 2020/04/13 08:03:57 martin Exp $ */
 
 /* NetBSD: simplefb.c,v 1.7 2019/01/30 00:55:04 jmcneill Exp */
 /*-
@@ -61,7 +61,7 @@
 #include "opt_wsdisplay_compat.h"
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: genfb_grfbus.c,v 1.1 2019/07/26 10:48:44 rin Exp $");
+__KERNEL_RCSID(0, "$NetBSD: genfb_grfbus.c,v 1.1.10.2 2020/04/13 08:03:57 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/bus.h>

@@ -1,4 +1,4 @@
-/*	$NetBSD: imxpcievar.h,v 1.3 2019/10/16 11:16:30 hkenken Exp $	*/
+/*	$NetBSD: imxpcievar.h,v 1.3.8.2 2020/04/13 08:03:35 martin Exp $	*/
 
 /*
  * Copyright (c) 2019  Genetec Corporation.  All rights reserved.

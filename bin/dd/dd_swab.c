@@ -1,4 +1,4 @@
-/*	$NetBSD: dd_swab.c,v 1.1 2019/10/04 08:57:38 mrg Exp $	*/
+/*	$NetBSD: dd_swab.c,v 1.1.4.2 2020/04/13 07:45:05 martin Exp $	*/
 
 /*
  * Copyright (c) 1988, 1993
@@ -41,7 +41,7 @@
 #if 0
 static char sccsid[] = "@(#)swab.c	8.1 (Berkeley) 6/4/93";
 #else
-__RCSID("$NetBSD: dd_swab.c,v 1.1 2019/10/04 08:57:38 mrg Exp $");
+__RCSID("$NetBSD: dd_swab.c,v 1.1.4.2 2020/04/13 07:45:05 martin Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 

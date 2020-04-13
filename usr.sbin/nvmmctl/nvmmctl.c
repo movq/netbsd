@@ -1,4 +1,4 @@
-/*	$NetBSD: nvmmctl.c,v 1.1 2019/10/28 13:04:18 maxv Exp $	*/
+/*	$NetBSD: nvmmctl.c,v 1.1.6.2 2020/04/13 08:05:56 martin Exp $	*/
 
 /*
  * Copyright (c) 2019 The NetBSD Foundation, Inc.
@@ -31,7 +31,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: nvmmctl.c,v 1.1 2019/10/28 13:04:18 maxv Exp $");
+__RCSID("$NetBSD: nvmmctl.c,v 1.1.6.2 2020/04/13 08:05:56 martin Exp $");
 #endif /* not lint */
 
 #include <sys/param.h>

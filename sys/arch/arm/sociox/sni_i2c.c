@@ -1,4 +1,4 @@
-/*	$NetBSD: sni_i2c.c,v 1.6 2020/03/25 23:20:38 nisimura Exp $	*/
+/*	$NetBSD: sni_i2c.c,v 1.6.4.2 2020/04/13 08:03:37 martin Exp $	*/
 
 /*-
  * Copyright (c) 2020 The NetBSD Foundation, Inc.
@@ -34,7 +34,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sni_i2c.c,v 1.6 2020/03/25 23:20:38 nisimura Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sni_i2c.c,v 1.6.4.2 2020/04/13 08:03:37 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/bus.h>

@@ -1,4 +1,4 @@
-# $NetBSD: Makefile.inc,v 1.1 2019/07/20 19:09:22 wiz Exp $
+# $NetBSD: Makefile.inc,v 1.1.6.2 2020/04/13 08:03:04 martin Exp $
 
 includes:
 clean:

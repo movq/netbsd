@@ -1,4 +1,4 @@
-/*	$NetBSD: if_scx.c,v 1.22 2020/03/28 13:15:24 nisimura Exp $	*/
+/*	$NetBSD: if_scx.c,v 1.22.4.2 2020/04/13 08:03:37 martin Exp $	*/
 
 /*-
  * Copyright (c) 2020 The NetBSD Foundation, Inc.
@@ -57,7 +57,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_scx.c,v 1.22 2020/03/28 13:15:24 nisimura Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_scx.c,v 1.22.4.2 2020/04/13 08:03:37 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/bus.h>

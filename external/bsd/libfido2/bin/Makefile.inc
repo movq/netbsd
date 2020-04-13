@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile.inc,v 1.2 2020/03/04 17:31:08 christos Exp $
+#	$NetBSD: Makefile.inc,v 1.2.2.2 2020/04/13 07:46:06 martin Exp $
 
 .include "${.PARSEDIR}/../Makefile.inc"
 

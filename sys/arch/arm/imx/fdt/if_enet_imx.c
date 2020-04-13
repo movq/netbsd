@@ -1,4 +1,4 @@
-/*	$NetBSD: if_enet_imx.c,v 1.9 2020/01/15 01:09:56 jmcneill Exp $	*/
+/*	$NetBSD: if_enet_imx.c,v 1.9.6.2 2020/04/13 08:03:35 martin Exp $	*/
 /*-
  * Copyright (c) 2019 Genetec Corporation.  All rights reserved.
  * Written by Hashimoto Kenichi for Genetec Corporation.
@@ -25,7 +25,7 @@
  * SUCH DAMAGE.
  */
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_enet_imx.c,v 1.9 2020/01/15 01:09:56 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_enet_imx.c,v 1.9.6.2 2020/04/13 08:03:35 martin Exp $");
 
 #include "opt_fdt.h"
 

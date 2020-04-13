@@ -1,4 +1,4 @@
-/*	$NetBSD: zynq_uart.c,v 1.2 2019/11/10 21:16:24 chs Exp $	*/
+/*	$NetBSD: zynq_uart.c,v 1.2.8.2 2020/04/13 08:03:38 martin Exp $	*/
 
 /*
  * Copyright (c) 2012  Genetec Corporation.  All rights reserved.
@@ -96,7 +96,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: zynq_uart.c,v 1.2 2019/11/10 21:16:24 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: zynq_uart.c,v 1.2.8.2 2020/04/13 08:03:38 martin Exp $");
 
 #include "opt_soc.h"
 #include "opt_console.h"

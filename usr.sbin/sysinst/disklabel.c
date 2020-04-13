@@ -1,4 +1,4 @@
-/*	$NetBSD: disklabel.c,v 1.37 2020/02/19 21:45:09 martin Exp $	*/
+/*	$NetBSD: disklabel.c,v 1.37.4.2 2020/04/13 08:06:00 martin Exp $	*/
 
 /*
  * Copyright 2018 The NetBSD Foundation, Inc.

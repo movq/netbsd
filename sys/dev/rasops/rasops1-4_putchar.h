@@ -1,4 +1,4 @@
-/* $NetBSD: rasops1-4_putchar.h,v 1.3 2019/08/10 01:24:17 rin Exp $ */
+/* $NetBSD: rasops1-4_putchar.h,v 1.3.10.2 2020/04/13 08:04:47 martin Exp $ */
 
 /* NetBSD: rasops_bitops.h,v 1.23 2019/08/02 04:39:09 rin Exp */
 /*-

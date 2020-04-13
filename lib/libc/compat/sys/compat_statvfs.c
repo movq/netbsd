@@ -1,4 +1,4 @@
-/*	$NetBSD: compat_statvfs.c,v 1.1 2019/09/22 22:59:38 christos Exp $	*/
+/*	$NetBSD: compat_statvfs.c,v 1.1.4.2 2020/04/13 08:03:09 martin Exp $	*/
 
 /*-
  * Copyright (c) 2019 The NetBSD Foundation, Inc.
@@ -32,7 +32,7 @@
 
 #include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-__RCSID("$NetBSD: compat_statvfs.c,v 1.1 2019/09/22 22:59:38 christos Exp $");
+__RCSID("$NetBSD: compat_statvfs.c,v 1.1.4.2 2020/04/13 08:03:09 martin Exp $");
 #endif /* LIBC_SCCS and not lint */
 
 #define __LIBC12_SOURCE__

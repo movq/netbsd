@@ -1,4 +1,4 @@
-/* $NetBSD: tda19988.c,v 1.4 2019/12/23 15:05:32 thorpej Exp $ */
+/* $NetBSD: tda19988.c,v 1.4.8.2 2020/04/13 08:04:20 martin Exp $ */
 
 /*-
  * Copyright (c) 2015 Oleksandr Tymoshenko <gonzo@freebsd.org>
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: tda19988.c,v 1.4 2019/12/23 15:05:32 thorpej Exp $");
+__KERNEL_RCSID(0, "$NetBSD: tda19988.c,v 1.4.8.2 2020/04/13 08:04:20 martin Exp $");
 
 /*
 * NXP TDA19988 HDMI encoder 

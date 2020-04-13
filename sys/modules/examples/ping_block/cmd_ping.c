@@ -1,4 +1,4 @@
-/*	$NetBSD: cmd_ping.c,v 1.1 2020/02/05 13:23:42 kamil Exp $	*/
+/*	$NetBSD: cmd_ping.c,v 1.1.6.2 2020/04/13 08:05:11 martin Exp $	*/
 
 /*-
  * Copyright (c) 2015 The NetBSD Foundation, Inc.
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: cmd_ping.c,v 1.1 2020/02/05 13:23:42 kamil Exp $");
+__RCSID("$NetBSD: cmd_ping.c,v 1.1.6.2 2020/04/13 08:05:11 martin Exp $");
 
 #include <err.h>
 #include <fcntl.h>

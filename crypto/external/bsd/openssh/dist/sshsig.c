@@ -1,4 +1,4 @@
-/*	$NetBSD: sshsig.c,v 1.3 2020/02/27 00:24:40 christos Exp $	*/
+/*	$NetBSD: sshsig.c,v 1.3.4.2 2020/04/13 07:45:20 martin Exp $	*/
 
 /*
  * Copyright (c) 2019 Google LLC
@@ -16,7 +16,7 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 #include "includes.h"
-__RCSID("$NetBSD: sshsig.c,v 1.3 2020/02/27 00:24:40 christos Exp $");
+__RCSID("$NetBSD: sshsig.c,v 1.3.4.2 2020/04/13 07:45:20 martin Exp $");
 
 #include <stdio.h>
 #include <stdlib.h>

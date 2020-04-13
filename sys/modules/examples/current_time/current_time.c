@@ -1,4 +1,4 @@
-/*	$NetBSD: current_time.c,v 1.2 2020/04/04 23:22:12 kamil Exp $  */
+/*	$NetBSD: current_time.c,v 1.2.4.2 2020/04/13 08:05:11 martin Exp $  */
 
 /*-
  * Copyright (c) 2020 The NetBSD Foundation, Inc.
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: current_time.c,v 1.2 2020/04/04 23:22:12 kamil Exp $");
+__KERNEL_RCSID(0, "$NetBSD: current_time.c,v 1.2.4.2 2020/04/13 08:05:11 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/module.h>

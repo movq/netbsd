@@ -1,4 +1,4 @@
-/*	$NetBSD: endian.h,v 1.2 2019/09/05 19:32:59 christos Exp $	*/
+/*	$NetBSD: endian.h,v 1.2.6.2 2020/04/13 08:02:58 martin Exp $	*/
 
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")

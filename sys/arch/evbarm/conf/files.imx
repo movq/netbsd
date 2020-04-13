@@ -1,4 +1,4 @@
-#	$NetBSD: files.imx,v 1.2 2019/08/12 11:45:53 skrll Exp $
+#	$NetBSD: files.imx,v 1.2.8.2 2020/04/13 08:03:42 martin Exp $
 #
 # NXP(Freescale) i.MX configuration info
 #

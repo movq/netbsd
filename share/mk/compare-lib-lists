@@ -1,5 +1,5 @@
 #!/bin/sh
-# $NetBSD: compare-lib-lists,v 1.3 2019/11/18 16:23:28 christos Exp $
+# $NetBSD: compare-lib-lists,v 1.3.4.2 2020/04/13 08:03:26 martin Exp $
 #
 # Q+D script to print the library lists for comparison between whats in the
 # bsd.prog.mk file and bsd.README (this matches)

@@ -1,4 +1,4 @@
-/* $NetBSD: exec_multiboot1.c,v 1.3 2019/10/18 01:09:46 manu Exp $ */
+/* $NetBSD: exec_multiboot1.c,v 1.3.8.2 2020/04/13 08:03:54 martin Exp $ */
 
 /*
  * Copyright (c) 2019 The NetBSD Foundation, Inc.

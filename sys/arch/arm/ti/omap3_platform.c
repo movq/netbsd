@@ -1,4 +1,4 @@
-/* $NetBSD: omap3_platform.c,v 1.2 2019/10/30 22:21:06 jmcneill Exp $ */
+/* $NetBSD: omap3_platform.c,v 1.2.10.2 2020/04/13 08:03:38 martin Exp $ */
 
 /*-
  * Copyright (c) 2019 Jared McNeill <jmcneill@invisible.ca>
@@ -30,7 +30,7 @@
 #include "opt_console.h"
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: omap3_platform.c,v 1.2 2019/10/30 22:21:06 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: omap3_platform.c,v 1.2.10.2 2020/04/13 08:03:38 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/bus.h>

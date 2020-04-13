@@ -28,7 +28,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: dtrace_subr.c,v 1.3 2020/02/12 06:05:23 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: dtrace_subr.c,v 1.3.4.2 2020/04/13 07:56:35 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

@@ -1,4 +1,4 @@
-/*	$NetBSD: t_wcsrtombs.c,v 1.1 2019/07/28 13:46:45 christos Exp $	*/
+/*	$NetBSD: t_wcsrtombs.c,v 1.1.6.2 2020/04/13 08:05:26 martin Exp $	*/
 
 /*-
  * Copyright (c) 2019 The NetBSD Foundation, Inc.
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: t_wcsrtombs.c,v 1.1 2019/07/28 13:46:45 christos Exp $");
+__RCSID("$NetBSD: t_wcsrtombs.c,v 1.1.6.2 2020/04/13 08:05:26 martin Exp $");
 
 #include <atf-c.h>
 #include <wchar.h>

@@ -1,4 +1,4 @@
-/*	$NetBSD: meson6_timer.c,v 1.1 2019/08/14 15:08:53 skrll Exp $	*/
+/*	$NetBSD: meson6_timer.c,v 1.1.8.2 2020/04/13 08:03:32 martin Exp $	*/
 
 /*-
  * Copyright (c) 2019 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: meson6_timer.c,v 1.1 2019/08/14 15:08:53 skrll Exp $");
+__KERNEL_RCSID(0, "$NetBSD: meson6_timer.c,v 1.1.8.2 2020/04/13 08:03:32 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/bus.h>

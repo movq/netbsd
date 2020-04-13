@@ -1,4 +1,4 @@
-/*	$NetBSD: multiboot2.c,v 1.4 2020/01/30 01:49:44 manu Exp $	*/
+/*	$NetBSD: multiboot2.c,v 1.4.6.2 2020/04/13 08:04:11 martin Exp $	*/
 
 /*-
  * Copyright (c) 2005, 2006 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: multiboot2.c,v 1.4 2020/01/30 01:49:44 manu Exp $");
+__KERNEL_RCSID(0, "$NetBSD: multiboot2.c,v 1.4.6.2 2020/04/13 08:04:11 martin Exp $");
 
 #include "opt_multiboot.h"
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: usbnet.h,v 1.17 2020/03/15 23:04:51 thorpej Exp $	*/
+/*	$NetBSD: usbnet.h,v 1.17.4.2 2020/04/13 08:04:51 martin Exp $	*/
 
 /*
  * Copyright (c) 2019 Matthew R. Green

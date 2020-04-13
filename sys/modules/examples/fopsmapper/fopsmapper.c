@@ -1,4 +1,4 @@
-/*	$NetBSD: fopsmapper.c,v 1.2 2020/04/01 11:45:53 kamil Exp $	*/
+/*	$NetBSD: fopsmapper.c,v 1.2.4.2 2020/04/13 08:05:11 martin Exp $	*/
 
 /*-
  * Copyright (c) 2020 The NetBSD Foundation, Inc.
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: fopsmapper.c,v 1.2 2020/04/01 11:45:53 kamil Exp $");
+__KERNEL_RCSID(0, "$NetBSD: fopsmapper.c,v 1.2.4.2 2020/04/13 08:05:11 martin Exp $");
 
 #include <sys/module.h>
 #include <sys/param.h>

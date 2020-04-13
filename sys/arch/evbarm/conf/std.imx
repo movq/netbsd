@@ -1,4 +1,4 @@
-#	$NetBSD: std.imx,v 1.1 2019/07/24 13:12:34 hkenken Exp $
+#	$NetBSD: std.imx,v 1.1.10.2 2020/04/13 08:03:42 martin Exp $
 #
 
 machine		evbarm arm

@@ -1,4 +1,4 @@
-# $NetBSD: Makefile,v 1.2 2020/01/13 19:03:03 christos Exp $
+# $NetBSD: Makefile,v 1.2.4.2 2020/04/13 08:05:40 martin Exp $
 .include <bsd.own.mk>
 
 HOSTLIB=	install

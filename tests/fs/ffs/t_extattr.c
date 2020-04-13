@@ -1,4 +1,4 @@
-/*	$NetBSD: t_extattr.c,v 1.2 2020/04/12 23:52:20 christos Exp $	*/
+/*	$NetBSD: t_extattr.c,v 1.2.2.2 2020/04/13 08:05:23 martin Exp $	*/
 
 /*-
  * Copyright (c) 2020 The NetBSD Foundation, Inc.
@@ -29,7 +29,7 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: t_extattr.c,v 1.2 2020/04/12 23:52:20 christos Exp $");
+__RCSID("$NetBSD: t_extattr.c,v 1.2.2.2 2020/04/13 08:05:23 martin Exp $");
 
 #include <sys/types.h>
 #include <sys/mount.h>
@@ -50,6 +50,14 @@ __RCSID("$NetBSD: t_extattr.c,v 1.2 2020/04/12 23:52:20 christos Exp $");
 #include <ufs/ufs/ufsmount.h>
 
 #include "h_macros.h"
+
+ATF_TC_WITH_CLEANUP(extattr);
+ATF_TC_HEAD(extattr, tc)
+{
+	atf_tc_set_md_var(tc, "descr", "test extended attribute support in "
+	    "ffsv2");
+	atf_tc_set_md_var(tc, "timeout", "5");
+}
 
 #define IMGNAME "extattr.img"
 
@@ -82,9 +90,12 @@ check_list(const char *buf, ssize_t nr)
 const char *newfs = "newfs -O 2 -F -s 10000 " IMGNAME;
 #define FAKEBLK "/dev/formula1"
 
-static void
-start(void) {
+ATF_TC_BODY(extattr, tc)
+{
 	struct ufs_args args;
+	ssize_t nr;
+	int fd;
+	char buf[512];
 
 	if (system(newfs) == -1)
 		atf_tc_fail_errno("newfs failed");
@@ -102,33 +113,6 @@ start(void) {
 	/* create extattr */
 	if (rump_sys_chdir(G) == 1)
 		atf_tc_fail_errno("chdir");
-}
-
-static void
-finish(void) {
-	if (rump_sys_chdir("/") == 1)
-		atf_tc_fail_errno("chdir");
-	if (rump_sys_unmount(G, 0) == -1)
-		atf_tc_fail_errno("unmount failed");
-}
-
-
-ATF_TC_WITH_CLEANUP(extattr_simple);
-ATF_TC_HEAD(extattr_simple, tc)
-{
-	atf_tc_set_md_var(tc, "descr", "test extended attribute creation"
-	    " and removal ffsv2");
-	atf_tc_set_md_var(tc, "timeout", "5");
-}
-
-ATF_TC_BODY(extattr_simple, tc)
-{
-	ssize_t nr;
-	int fd;
-	char buf[512];
-
-	start();
-
 	if ((fd = rump_sys_open(M, O_RDWR | O_CREAT, 0600)) == -1)
 		atf_tc_fail_errno("open");
 	if (rump_sys_write(fd, "hi mom\n", 7) != 7)
@@ -177,46 +161,9 @@ ATF_TC_BODY(extattr_simple, tc)
 		atf_tc_fail_errno("close");
 	if (rump_sys_unlink(M) == -1)
 		atf_tc_fail_errno("unlink");
-
-	finish();
 }
 
-ATF_TC_CLEANUP(extattr_simple, tc)
-{
-
-	unlink(IMGNAME);
-}
-
-ATF_TC_WITH_CLEANUP(extattr_create_unlink);
-ATF_TC_HEAD(extattr_create_unlink, tc)
-{
-	atf_tc_set_md_var(tc, "descr", "test extended attribute creation"
-	    " and unlinking file with ACLs");
-	atf_tc_set_md_var(tc, "timeout", "5");
-}
-
-ATF_TC_BODY(extattr_create_unlink, tc)
-{
-	int fd;
-
-	start();
-	if ((fd = rump_sys_open(M, O_RDWR | O_CREAT, 0600)) == -1)
-		atf_tc_fail_errno("open");
-
-	if (rump_sys_close(fd) == -1)
-		atf_tc_fail_errno("close");
-
-	/* create extattr */
-	if (rump_sys_extattr_set_file(M, EXTATTR_NAMESPACE_USER, T, S, 9) == -1)
-		atf_tc_fail_errno("extattr_set_file");
-
-	if (rump_sys_unlink(M) == -1)
-		atf_tc_fail_errno("unlink");
-	finish();
-
-}
-
-ATF_TC_CLEANUP(extattr_create_unlink, tc)
+ATF_TC_CLEANUP(extattr, tc)
 {
 
 	unlink(IMGNAME);
@@ -224,7 +171,6 @@ ATF_TC_CLEANUP(extattr_create_unlink, tc)
 
 ATF_TP_ADD_TCS(tp)
 {
-	ATF_TP_ADD_TC(tp, extattr_simple);
-	ATF_TP_ADD_TC(tp, extattr_create_unlink);
+	ATF_TP_ADD_TC(tp, extattr);
 	return atf_no_error();
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: filemon_ktrace.c,v 1.2 2020/01/19 20:22:57 riastradh Exp $	*/
+/*	$NetBSD: filemon_ktrace.c,v 1.2.4.2 2020/04/13 08:05:44 martin Exp $	*/
 
 /*-
  * Copyright (c) 2019 The NetBSD Foundation, Inc.

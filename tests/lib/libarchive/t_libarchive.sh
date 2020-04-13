@@ -1,4 +1,4 @@
-#       $NetBSD: t_libarchive.sh,v 1.3 2020/03/12 12:57:45 martin Exp $
+#       $NetBSD: t_libarchive.sh,v 1.3.2.2 2020/04/13 08:05:25 martin Exp $
 #
 # Copyright (c) 2020 The NetBSD Foundation, Inc.
 # All rights reserved.

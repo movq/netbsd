@@ -1,4 +1,4 @@
-/*	$NetBSD: rk_spi.c,v 1.4 2020/04/01 20:37:32 tnn Exp $	*/
+/*	$NetBSD: rk_spi.c,v 1.4.4.2 2020/04/13 08:03:37 martin Exp $	*/
 
 /*
  * Copyright (c) 2019 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: rk_spi.c,v 1.4 2020/04/01 20:37:32 tnn Exp $");
+__KERNEL_RCSID(0, "$NetBSD: rk_spi.c,v 1.4.4.2 2020/04/13 08:03:37 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/device.h>

@@ -1,4 +1,4 @@
-/* $NetBSD: acpi_simplefb.h,v 1.1 2019/09/22 18:31:59 jmcneill Exp $ */
+/* $NetBSD: acpi_simplefb.h,v 1.1.10.2 2020/04/13 08:03:32 martin Exp $ */
 
 /*-
  * Copyright (c) 2019 The NetBSD Foundation, Inc.

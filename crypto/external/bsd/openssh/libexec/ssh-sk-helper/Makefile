@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.3 2020/03/04 17:30:40 christos Exp $
+#	$NetBSD: Makefile,v 1.3.2.2 2020/04/13 07:45:21 martin Exp $
 
 BINDIR=	/usr/libexec
 

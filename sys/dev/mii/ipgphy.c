@@ -1,4 +1,4 @@
-/*	$NetBSD: ipgphy.c,v 1.10 2020/03/15 23:04:50 thorpej Exp $ */
+/*	$NetBSD: ipgphy.c,v 1.10.4.2 2020/04/13 08:04:24 martin Exp $ */
 /*	$OpenBSD: ipgphy.c,v 1.19 2015/07/19 06:28:12 yuo Exp $	*/
 
 /*-
@@ -33,7 +33,7 @@
  * Driver for the IC Plus IP1000A/IP1001 10/100/1000 PHY.
  */
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ipgphy.c,v 1.10 2020/03/15 23:04:50 thorpej Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ipgphy.c,v 1.10.4.2 2020/04/13 08:04:24 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

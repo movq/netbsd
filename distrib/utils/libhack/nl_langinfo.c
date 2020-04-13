@@ -1,4 +1,4 @@
-/*	$NetBSD: nl_langinfo.c,v 1.1 2019/07/28 10:21:18 martin Exp $	*/
+/*	$NetBSD: nl_langinfo.c,v 1.1.6.2 2020/04/13 07:45:36 martin Exp $	*/
 
 /*
  * Written by Martin Husemann <martin@NetBSD.org>

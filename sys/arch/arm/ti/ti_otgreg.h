@@ -1,4 +1,4 @@
-/* $NetBSD: ti_otgreg.h,v 1.1 2019/10/27 16:31:26 jmcneill Exp $ */
+/* $NetBSD: ti_otgreg.h,v 1.1.10.2 2020/04/13 08:03:38 martin Exp $ */
 /*
  * Copyright (c) 2013 Manuel Bouyer.  All rights reserved.
  *

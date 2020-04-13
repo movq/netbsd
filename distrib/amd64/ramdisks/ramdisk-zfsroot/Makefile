@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.2 2020/03/02 16:04:49 roy Exp $
+#	$NetBSD: Makefile,v 1.2.2.2 2020/04/13 07:45:23 martin Exp $
 
 IMAGE=			ramdisk-zfsroot.fs
 IMAGESIZE=		5000k

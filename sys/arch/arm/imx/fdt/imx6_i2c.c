@@ -1,4 +1,4 @@
-/*	$NetBSD: imx6_i2c.c,v 1.3 2020/01/15 11:35:58 jmcneill Exp $	*/
+/*	$NetBSD: imx6_i2c.c,v 1.3.6.2 2020/04/13 08:03:35 martin Exp $	*/
 /*-
  * Copyright (c) 2019 Genetec Corporation.  All rights reserved.
  * Written by Hashimoto Kenichi for Genetec Corporation.
@@ -25,7 +25,7 @@
  * SUCH DAMAGE.
  */
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: imx6_i2c.c,v 1.3 2020/01/15 11:35:58 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: imx6_i2c.c,v 1.3.6.2 2020/04/13 08:03:35 martin Exp $");
 
 #include <sys/bus.h>
 

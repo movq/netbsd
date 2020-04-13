@@ -1,4 +1,4 @@
-/*	$NetBSD: qatreg.h,v 1.1 2019/11/20 09:37:46 hikaru Exp $	*/
+/*	$NetBSD: qatreg.h,v 1.1.8.2 2020/04/13 08:04:46 martin Exp $	*/
 
 /*
  * Copyright (c) 2019 Internet Initiative Japan, Inc.

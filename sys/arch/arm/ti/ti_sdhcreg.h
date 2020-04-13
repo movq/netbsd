@@ -1,4 +1,4 @@
-/*	$NetBSD: ti_sdhcreg.h,v 1.2 2019/10/27 17:21:23 jmcneill Exp $	*/
+/*	$NetBSD: ti_sdhcreg.h,v 1.2.10.2 2020/04/13 08:03:38 martin Exp $	*/
 /*-
  * Copyright (c) 2012 The NetBSD Foundation, Inc.
  * All rights reserved.
