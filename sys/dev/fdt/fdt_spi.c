@@ -1,4 +1,4 @@
-/* $NetBSD: fdt_spi.c,v 1.1 2019/08/13 16:46:49 tnn Exp $ */
+/* $NetBSD: fdt_spi.c,v 1.1.8.2 2020/04/13 08:04:19 martin Exp $ */
 
 /*
  * Copyright (c) 2019 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: fdt_spi.c,v 1.1 2019/08/13 16:46:49 tnn Exp $");
+__KERNEL_RCSID(0, "$NetBSD: fdt_spi.c,v 1.1.8.2 2020/04/13 08:04:19 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/device.h>

@@ -1,4 +1,4 @@
-# $NetBSD: WSFB,v 1.1 2019/07/26 10:48:44 rin Exp $
+# $NetBSD: WSFB,v 1.1.10.2 2020/04/13 08:03:57 martin Exp $
 #
 # GENERIC with wsfb raster console driver enabled
 

@@ -1,4 +1,4 @@
-#	$NetBSD: syms.mk,v 1.3 2019/08/30 23:36:40 kamil Exp $
+#	$NetBSD: syms.mk,v 1.3.4.2 2020/04/13 07:45:52 martin Exp $
 
 here := ${.PARSEDIR}
 

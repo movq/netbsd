@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.3 2020/02/07 19:00:10 kamil Exp $
+#	$NetBSD: Makefile,v 1.3.4.2 2020/04/13 07:45:52 martin Exp $
 
 TOPDIR=	${NETBSDSRCDIR}/sys/external/bsd/compiler_rt/dist
 

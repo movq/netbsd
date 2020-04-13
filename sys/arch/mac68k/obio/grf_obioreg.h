@@ -1,4 +1,4 @@
-/* $NetBSD: grf_obioreg.h,v 1.1 2019/07/26 10:48:44 rin Exp $ */
+/* $NetBSD: grf_obioreg.h,v 1.1.10.2 2020/04/13 08:03:58 martin Exp $ */
 
 /* NetBSD: grf_obio.c,v 1.58 2012/10/27 17:18:00 chs Exp */
 /*

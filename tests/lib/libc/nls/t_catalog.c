@@ -1,4 +1,4 @@
-/* $NetBSD: t_catalog.c,v 1.1 2020/03/08 22:08:46 mgorny Exp $ */
+/* $NetBSD: t_catalog.c,v 1.1.2.2 2020/04/13 08:05:26 martin Exp $ */
 
 /*-
  * Copyright (c) 2020 The NetBSD Foundation, Inc.
@@ -26,7 +26,7 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: t_catalog.c,v 1.1 2020/03/08 22:08:46 mgorny Exp $");
+__RCSID("$NetBSD: t_catalog.c,v 1.1.2.2 2020/04/13 08:05:26 martin Exp $");
 
 #include <atf-c.h>
 #include <errno.h>

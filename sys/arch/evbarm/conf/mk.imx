@@ -1,4 +1,4 @@
-#	$NetBSD: mk.imx,v 1.1 2019/07/24 13:12:34 hkenken Exp $
+#	$NetBSD: mk.imx,v 1.1.10.2 2020/04/13 08:03:42 martin Exp $
 
 .if !empty(MACHINE_ARCH:M*eb)
 EXTRA_LINKFLAGS+=	--be8

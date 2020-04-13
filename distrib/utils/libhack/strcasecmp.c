@@ -1,4 +1,4 @@
-/*	$NetBSD: strcasecmp.c,v 1.3 2019/08/13 08:48:07 christos Exp $	*/
+/*	$NetBSD: strcasecmp.c,v 1.3.4.2 2020/04/13 07:45:36 martin Exp $	*/
 
 /*
  * Written by Martin Husemann <martin@NetBSD.org>

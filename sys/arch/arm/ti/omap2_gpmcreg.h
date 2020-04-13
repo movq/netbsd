@@ -1,4 +1,4 @@
-/*	$NetBSD: omap2_gpmcreg.h,v 1.1 2019/11/01 11:53:35 jmcneill Exp $	*/
+/*	$NetBSD: omap2_gpmcreg.h,v 1.1.10.2 2020/04/13 08:03:38 martin Exp $	*/
 /*
  * Copyright (c) 2007 Microsoft
  * All rights reserved.

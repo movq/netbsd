@@ -1,4 +1,4 @@
-/* $NetBSD: rk_dwhdmi.c,v 1.4 2019/12/17 18:26:36 jakllsch Exp $ */
+/* $NetBSD: rk_dwhdmi.c,v 1.4.8.2 2020/04/13 08:03:37 martin Exp $ */
 
 /*-
  * Copyright (c) 2019 Jared D. McNeill <jmcneill@invisible.ca>
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: rk_dwhdmi.c,v 1.4 2019/12/17 18:26:36 jakllsch Exp $");
+__KERNEL_RCSID(0, "$NetBSD: rk_dwhdmi.c,v 1.4.8.2 2020/04/13 08:03:37 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/bus.h>

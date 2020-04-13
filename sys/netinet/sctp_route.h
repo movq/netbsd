@@ -1,4 +1,4 @@
-/*	$NetBSD: sctp_route.h,v 1.1 2019/06/25 15:33:56 rjs Exp $ */
+/*	$NetBSD: sctp_route.h,v 1.1.10.2 2020/04/13 08:05:16 martin Exp $ */
 
 #ifndef _NETINET_SCTP_ROUTE_H_
 #define _NETINET_SCTP_ROUTE_H_

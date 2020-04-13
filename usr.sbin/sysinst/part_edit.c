@@ -1,4 +1,4 @@
-/*	$NetBSD: part_edit.c,v 1.16 2020/01/27 21:21:22 martin Exp $ */
+/*	$NetBSD: part_edit.c,v 1.16.4.2 2020/04/13 08:06:00 martin Exp $ */
 
 /*
  * Copyright (c) 2019 The NetBSD Foundation, Inc.

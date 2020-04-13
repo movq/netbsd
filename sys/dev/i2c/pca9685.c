@@ -1,4 +1,4 @@
-/* $NetBSD: pca9685.c,v 1.3 2019/07/25 04:24:44 thorpej Exp $ */
+/* $NetBSD: pca9685.c,v 1.3.10.2 2020/04/13 08:04:20 martin Exp $ */
 
 /*-
  * Copyright (c) 2018, 2019 Jason R. Thorpe
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pca9685.c,v 1.3 2019/07/25 04:24:44 thorpej Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pca9685.c,v 1.3.10.2 2020/04/13 08:04:20 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

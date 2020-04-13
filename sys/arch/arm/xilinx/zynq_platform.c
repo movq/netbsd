@@ -1,4 +1,4 @@
-/*	$NetBSD: zynq_platform.c,v 1.1 2019/06/11 13:01:48 skrll Exp $	*/
+/*	$NetBSD: zynq_platform.c,v 1.1.10.2 2020/04/13 08:03:38 martin Exp $	*/
 
 /*-
  * Copyright (c) 2019 The NetBSD Foundation, Inc.
@@ -35,7 +35,7 @@
 #include "arml2cc.h"
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: zynq_platform.c,v 1.1 2019/06/11 13:01:48 skrll Exp $");
+__KERNEL_RCSID(0, "$NetBSD: zynq_platform.c,v 1.1.10.2 2020/04/13 08:03:38 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/bus.h>

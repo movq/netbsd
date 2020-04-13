@@ -1,4 +1,4 @@
-/*	$NetBSD: realpath.c,v 1.1 2020/02/02 21:49:44 kamil Exp $	*/
+/*	$NetBSD: realpath.c,v 1.1.4.2 2020/04/13 08:05:46 martin Exp $	*/
 /*-
  * SPDX-License-Identifier: BSD-3-Clause
  *
@@ -35,7 +35,7 @@
 #if 0
 __FBSDID("$FreeBSD: head/bin/realpath/realpath.c 326025 2017-11-20 19:49:47Z pfg $");
 #else
-__RCSID("$NetBSD: realpath.c,v 1.1 2020/02/02 21:49:44 kamil Exp $");
+__RCSID("$NetBSD: realpath.c,v 1.1.4.2 2020/04/13 08:05:46 martin Exp $");
 #endif
 #endif /* not lint */
 

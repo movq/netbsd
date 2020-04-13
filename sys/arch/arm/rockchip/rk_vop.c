@@ -1,4 +1,4 @@
-/* $NetBSD: rk_vop.c,v 1.6 2020/01/05 12:14:35 mrg Exp $ */
+/* $NetBSD: rk_vop.c,v 1.6.8.2 2020/04/13 08:03:37 martin Exp $ */
 
 /*-
  * Copyright (c) 2019 Jared D. McNeill <jmcneill@invisible.ca>
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: rk_vop.c,v 1.6 2020/01/05 12:14:35 mrg Exp $");
+__KERNEL_RCSID(0, "$NetBSD: rk_vop.c,v 1.6.8.2 2020/04/13 08:03:37 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/bus.h>

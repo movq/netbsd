@@ -26,7 +26,7 @@
 
 #ifdef _KERNEL
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: npf_params.c,v 1.2 2019/08/11 20:26:34 rmind Exp $");
+__KERNEL_RCSID(0, "$NetBSD: npf_params.c,v 1.2.8.2 2020/04/13 08:05:15 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/types.h>

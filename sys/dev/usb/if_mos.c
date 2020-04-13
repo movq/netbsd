@@ -1,4 +1,4 @@
-/*	$NetBSD: if_mos.c,v 1.7 2020/04/02 04:09:36 nisimura Exp $	*/
+/*	$NetBSD: if_mos.c,v 1.7.4.2 2020/04/13 08:04:49 martin Exp $	*/
 /*	$OpenBSD: if_mos.c,v 1.40 2019/07/07 06:40:10 kevlo Exp $	*/
 
 /*
@@ -72,7 +72,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_mos.c,v 1.7 2020/04/02 04:09:36 nisimura Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_mos.c,v 1.7.4.2 2020/04/13 08:04:49 martin Exp $");
 
 #include <sys/param.h>
 

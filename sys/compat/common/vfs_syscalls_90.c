@@ -1,4 +1,4 @@
-/*	$NetBSD: vfs_syscalls_90.c,v 1.1 2019/09/22 22:59:38 christos Exp $	*/
+/*	$NetBSD: vfs_syscalls_90.c,v 1.1.8.2 2020/04/13 08:04:14 martin Exp $	*/
 
 /*-
  * Copyright (c) 2005, 2008 The NetBSD Foundation, Inc.
@@ -29,7 +29,7 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: vfs_syscalls_90.c,v 1.1 2019/09/22 22:59:38 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: vfs_syscalls_90.c,v 1.1.8.2 2020/04/13 08:04:14 martin Exp $");
 
 #if defined(_KERNEL_OPT)
 #include "opt_compat_netbsd.h"

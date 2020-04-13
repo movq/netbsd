@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.2 2019/10/29 08:13:16 maxv Exp $
+#	$NetBSD: Makefile,v 1.2.6.2 2020/04/13 08:05:56 martin Exp $
 
 .include <bsd.own.mk>
 

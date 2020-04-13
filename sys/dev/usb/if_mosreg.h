@@ -1,4 +1,4 @@
-/*	$NetBSD: if_mosreg.h,v 1.1 2019/09/20 10:34:54 mrg Exp $	*/
+/*	$NetBSD: if_mosreg.h,v 1.1.8.2 2020/04/13 08:04:49 martin Exp $	*/
 /*	$OpenBSD: if_mosreg.h,v 1.7 2013/04/15 09:23:01 mglocker Exp $	*/
 
 /*

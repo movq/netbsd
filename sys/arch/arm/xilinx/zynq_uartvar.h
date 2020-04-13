@@ -1,4 +1,4 @@
-/*	$NetBSD: zynq_uartvar.h,v 1.1 2019/06/11 13:01:48 skrll Exp $	*/
+/*	$NetBSD: zynq_uartvar.h,v 1.1.10.2 2020/04/13 08:03:38 martin Exp $	*/
 /*-
  * Copyright (c) 2015  Genetec Corporation.  All rights reserved.
  * Written by Hashimoto Kenichi for Genetec Corporation.

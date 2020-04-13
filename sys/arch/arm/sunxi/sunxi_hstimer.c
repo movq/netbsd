@@ -1,4 +1,4 @@
-/* $NetBSD: sunxi_hstimer.c,v 1.2 2019/06/14 21:48:43 tnn Exp $ */
+/* $NetBSD: sunxi_hstimer.c,v 1.2.10.2 2020/04/13 08:03:38 martin Exp $ */
 
 /*-
  * Copyright (c) 2019 Tobias Nygren <tnn@NetBSD.org>
@@ -28,7 +28,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sunxi_hstimer.c,v 1.2 2019/06/14 21:48:43 tnn Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sunxi_hstimer.c,v 1.2.10.2 2020/04/13 08:03:38 martin Exp $");
 
 #include <sys/bus.h>
 #include <sys/device.h>

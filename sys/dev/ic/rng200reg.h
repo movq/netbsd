@@ -1,4 +1,4 @@
-/*	$NetBSD: rng200reg.h,v 1.1 2019/09/01 14:44:14 mlelstv Exp $	*/
+/*	$NetBSD: rng200reg.h,v 1.1.8.2 2020/04/13 08:04:22 martin Exp $	*/
 
 /*
  * Copyright (c) 2019 The NetBSD Foundation, Inc.

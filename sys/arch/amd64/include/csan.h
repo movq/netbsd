@@ -1,4 +1,4 @@
-/*	$NetBSD: csan.h,v 1.3 2019/11/08 12:36:11 maxv Exp $	*/
+/*	$NetBSD: csan.h,v 1.3.8.2 2020/04/13 08:03:30 martin Exp $	*/
 
 /*
  * Copyright (c) 2019 The NetBSD Foundation, Inc.

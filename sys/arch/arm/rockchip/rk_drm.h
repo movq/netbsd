@@ -1,4 +1,4 @@
-/* $NetBSD: rk_drm.h,v 1.1 2019/11/09 23:30:14 jmcneill Exp $ */
+/* $NetBSD: rk_drm.h,v 1.1.10.2 2020/04/13 08:03:37 martin Exp $ */
 
 /*-
  * Copyright (c) 2019 Jared D. McNeill <jmcneill@invisible.ca>

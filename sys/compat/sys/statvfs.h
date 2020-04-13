@@ -1,4 +1,4 @@
-/*	$NetBSD: statvfs.h,v 1.1 2019/09/22 23:18:53 christos Exp $	 */
+/*	$NetBSD: statvfs.h,v 1.1.8.2 2020/04/13 08:04:17 martin Exp $	 */
 
 /*-
  * Copyright (c) 2019 The NetBSD Foundation, Inc.

@@ -1,4 +1,4 @@
-/* $NetBSD: README.md_defs,v 1.4 2020/01/20 21:26:35 martin Exp $ */
+/* $NetBSD: README.md_defs,v 1.4.4.2 2020/04/13 08:06:00 martin Exp $ */
 
 The following is trying to document the most important machine dependent
 defines used in the sysinst code.

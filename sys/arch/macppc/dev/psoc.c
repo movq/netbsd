@@ -1,4 +1,4 @@
- /* $NetBSD: psoc.c,v 1.3 2019/11/23 05:13:11 macallan Exp $ */
+ /* $NetBSD: psoc.c,v 1.3.8.2 2020/04/13 08:03:58 martin Exp $ */
 
 /*-
  * Copyright (c) 2019 Michael Lorenz
@@ -42,7 +42,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: psoc.c,v 1.3 2019/11/23 05:13:11 macallan Exp $");
+__KERNEL_RCSID(0, "$NetBSD: psoc.c,v 1.3.8.2 2020/04/13 08:03:58 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

@@ -1,4 +1,4 @@
-/*	$NetBSD: compat_90_mod.c,v 1.3 2020/01/04 02:40:22 pgoyette Exp $	*/
+/*	$NetBSD: compat_90_mod.c,v 1.3.8.2 2020/04/13 08:04:13 martin Exp $	*/
 
 /*-
  * Copyright (c) 2019 The NetBSD Foundation, Inc.
@@ -38,7 +38,7 @@
 #endif
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: compat_90_mod.c,v 1.3 2020/01/04 02:40:22 pgoyette Exp $");
+__KERNEL_RCSID(0, "$NetBSD: compat_90_mod.c,v 1.3.8.2 2020/04/13 08:04:13 martin Exp $");
 
 #include <sys/systm.h>
 #include <sys/module.h>

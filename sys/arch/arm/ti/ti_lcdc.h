@@ -1,4 +1,4 @@
-/* $NetBSD: ti_lcdc.h,v 1.1 2019/11/03 22:59:06 jmcneill Exp $ */
+/* $NetBSD: ti_lcdc.h,v 1.1.10.2 2020/04/13 08:03:38 martin Exp $ */
 
 /*-
  * Copyright (c) 2019 Jared D. McNeill <jmcneill@invisible.ca>

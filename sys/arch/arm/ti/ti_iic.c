@@ -1,4 +1,4 @@
-/* $NetBSD: ti_iic.c,v 1.4 2019/11/01 09:49:21 jmcneill Exp $ */
+/* $NetBSD: ti_iic.c,v 1.4.10.2 2020/04/13 08:03:38 martin Exp $ */
 
 /*
  * Copyright (c) 2013 Manuel Bouyer.  All rights reserved.
@@ -50,7 +50,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ti_iic.c,v 1.4 2019/11/01 09:49:21 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ti_iic.c,v 1.4.10.2 2020/04/13 08:03:38 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

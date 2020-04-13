@@ -1,4 +1,4 @@
-/* $NetBSD: omap3-beagle.dts,v 1.2 2020/03/05 14:24:46 tnn Exp $ */
+/* $NetBSD: omap3-beagle.dts,v 1.2.4.2 2020/04/13 08:03:33 martin Exp $ */
 
 /*-
  * Copyright (c) 2019 Jared McNeill <jmcneill@invisible.ca>

@@ -1,4 +1,4 @@
-/*	$NetBSD: nct.c,v 1.3 2020/04/01 18:34:22 ad Exp $	*/
+/*	$NetBSD: nct.c,v 1.3.4.2 2020/04/13 08:04:22 martin Exp $	*/
 
 /*-
  * Copyright (c) 2019, 2020 The NetBSD Foundation, Inc.
@@ -44,7 +44,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: nct.c,v 1.3 2020/04/01 18:34:22 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: nct.c,v 1.3.4.2 2020/04/13 08:04:22 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

@@ -1,6 +1,6 @@
 #!/bin/sh
 #
-# $NetBSD: creds_msdos,v 1.4 2019/10/05 09:25:11 mlelstv Exp $
+# $NetBSD: creds_msdos,v 1.4.4.2 2020/04/13 07:45:36 martin Exp $
 #
 # Copyright (c) 2019 Matthew R. Green
 # All rights reserved.

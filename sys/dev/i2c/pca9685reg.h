@@ -1,4 +1,4 @@
-/* $NetBSD: pca9685reg.h,v 1.1 2019/07/24 05:25:32 thorpej Exp $ */
+/* $NetBSD: pca9685reg.h,v 1.1.10.2 2020/04/13 08:04:20 martin Exp $ */
 
 /*-
  * Copyright (c) 2018 Jason R. Thorpe

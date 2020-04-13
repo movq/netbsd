@@ -1,4 +1,4 @@
-/* $NetBSD: rasops1_putchar_width.h,v 1.6 2019/08/10 01:24:17 rin Exp $ */
+/* $NetBSD: rasops1_putchar_width.h,v 1.6.8.2 2020/04/13 08:04:47 martin Exp $ */
 
 /* NetBSD: rasops1.c,v 1.28 2019/07/25 03:02:44 rin Exp */
 /*-

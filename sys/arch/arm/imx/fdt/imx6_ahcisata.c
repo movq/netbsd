@@ -1,4 +1,4 @@
-/*	$NetBSD: imx6_ahcisata.c,v 1.3 2019/10/04 06:49:40 hkenken Exp $	*/
+/*	$NetBSD: imx6_ahcisata.c,v 1.3.8.2 2020/04/13 08:03:35 martin Exp $	*/
 /*-
  * Copyright (c) 2019 Genetec Corporation.  All rights reserved.
  * Written by Hashimoto Kenichi for Genetec Corporation.
@@ -25,7 +25,7 @@
  * SUCH DAMAGE.
  */
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: imx6_ahcisata.c,v 1.3 2019/10/04 06:49:40 hkenken Exp $");
+__KERNEL_RCSID(0, "$NetBSD: imx6_ahcisata.c,v 1.3.8.2 2020/04/13 08:03:35 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/bus.h>

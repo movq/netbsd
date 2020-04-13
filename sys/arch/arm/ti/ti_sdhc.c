@@ -1,4 +1,4 @@
-/*	$NetBSD: ti_sdhc.c,v 1.5 2019/11/28 23:57:09 jmcneill Exp $	*/
+/*	$NetBSD: ti_sdhc.c,v 1.5.8.2 2020/04/13 08:03:38 martin Exp $	*/
 /*-
  * Copyright (c) 2011 The NetBSD Foundation, Inc.
  * All rights reserved.
@@ -29,7 +29,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ti_sdhc.c,v 1.5 2019/11/28 23:57:09 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ti_sdhc.c,v 1.5.8.2 2020/04/13 08:03:38 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

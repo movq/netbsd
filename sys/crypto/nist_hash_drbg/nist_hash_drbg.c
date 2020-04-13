@@ -1,4 +1,4 @@
-/*	$NetBSD: nist_hash_drbg.c,v 1.3 2019/09/19 18:29:55 riastradh Exp $	*/
+/*	$NetBSD: nist_hash_drbg.c,v 1.3.8.2 2020/04/13 08:04:17 martin Exp $	*/
 
 /*-
  * Copyright (c) 2019 The NetBSD Foundation, Inc.
@@ -49,7 +49,7 @@
 
 #ifdef _KERNEL
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: nist_hash_drbg.c,v 1.3 2019/09/19 18:29:55 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: nist_hash_drbg.c,v 1.3.8.2 2020/04/13 08:04:17 martin Exp $");
 #endif
 
 #include <sys/param.h>

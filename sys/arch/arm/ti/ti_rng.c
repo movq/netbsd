@@ -1,4 +1,4 @@
-/* $NetBSD: ti_rng.c,v 1.2 2019/10/29 22:19:13 jmcneill Exp $ */
+/* $NetBSD: ti_rng.c,v 1.2.10.2 2020/04/13 08:03:38 martin Exp $ */
 
 /*-
  * Copyright (c) 2015 Jared D. McNeill <jmcneill@invisible.ca>
@@ -26,7 +26,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ti_rng.c,v 1.2 2019/10/29 22:19:13 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ti_rng.c,v 1.2.10.2 2020/04/13 08:03:38 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

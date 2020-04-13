@@ -1,4 +1,4 @@
-#	$NetBSD: sources.mk,v 1.2 2019/08/26 04:49:45 kamil Exp $
+#	$NetBSD: sources.mk,v 1.2.4.2 2020/04/13 07:45:52 martin Exp $
 
 # RTInterception
 INTERCEPTION_SOURCES+=	interception_linux.cc

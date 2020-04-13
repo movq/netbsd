@@ -1,4 +1,4 @@
-/*	$NetBSD: version.c,v 1.3 2019/09/03 13:43:34 roy Exp $	*/
+/*	$NetBSD: version.c,v 1.3.4.2 2020/04/13 08:03:12 martin Exp $	*/
 
 /*-
  * Copyright (c) 2019 The NetBSD Foundation, Inc.
@@ -31,7 +31,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: version.c,v 1.3 2019/09/03 13:43:34 roy Exp $");
+__RCSID("$NetBSD: version.c,v 1.3.4.2 2020/04/13 08:03:12 martin Exp $");
 #endif
 
 #include "curses.h"

@@ -1,5 +1,5 @@
 #! /bin/sh
-#	$NetBSD: msg_cmp.sh,v 1.2 2019/06/11 15:31:19 martin Exp $
+#	$NetBSD: msg_cmp.sh,v 1.2.6.2 2020/04/13 08:06:00 martin Exp $
 
 #-
 # Copyright (c) 2019 The NetBSD Foundation, Inc.

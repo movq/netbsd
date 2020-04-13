@@ -1,5 +1,5 @@
 /*	$OpenBSD: getopt_long.c,v 1.25 2011/03/05 22:10:11 guenther Exp $	*/
-/*	$NetBSD: getopt_long.c,v 1.1.1.1 2020/03/03 00:11:47 christos Exp $	*/
+/*	$NetBSD: getopt_long.c,v 1.1.1.1.2.2 2020/04/13 07:46:09 martin Exp $	*/
 
 /*
  * Copyright (c) 2002 Todd C. Miller <Todd.Miller@courtesan.com>

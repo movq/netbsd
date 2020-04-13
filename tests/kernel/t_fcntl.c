@@ -1,4 +1,4 @@
-/*	$NetBSD: t_fcntl.c,v 1.2 2019/10/20 16:02:11 christos Exp $	*/
+/*	$NetBSD: t_fcntl.c,v 1.2.4.2 2020/04/13 08:05:25 martin Exp $	*/
 
 /*-
  * Copyright (c) 2019 The NetBSD Foundation, Inc.

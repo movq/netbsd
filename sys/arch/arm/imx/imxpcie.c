@@ -1,4 +1,4 @@
-/*	$NetBSD: imxpcie.c,v 1.3 2019/10/16 11:16:30 hkenken Exp $	*/
+/*	$NetBSD: imxpcie.c,v 1.3.8.2 2020/04/13 08:03:35 martin Exp $	*/
 
 /*
  * Copyright (c) 2019  Genetec Corporation.  All rights reserved.
@@ -31,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: imxpcie.c,v 1.3 2019/10/16 11:16:30 hkenken Exp $");
+__KERNEL_RCSID(0, "$NetBSD: imxpcie.c,v 1.3.8.2 2020/04/13 08:03:35 martin Exp $");
 
 #include "opt_pci.h"
 #include "opt_fdt.h"
