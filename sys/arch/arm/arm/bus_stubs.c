@@ -1,4 +1,4 @@
-/*	$NetBSD: bus_stubs.c,v 1.1 2020/04/13 07:09:51 maxv Exp $	*/
+/*	$NetBSD: bus_stubs.c,v 1.1.2.2 2020/04/20 11:28:52 bouyer Exp $	*/
 
 /*
  * Copyright (c) 2020 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: bus_stubs.c,v 1.1 2020/04/13 07:09:51 maxv Exp $");
+__KERNEL_RCSID(0, "$NetBSD: bus_stubs.c,v 1.1.2.2 2020/04/20 11:28:52 bouyer Exp $");
 
 #include <sys/systm.h>
 #include <sys/asan.h>

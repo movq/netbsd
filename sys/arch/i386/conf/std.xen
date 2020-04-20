@@ -1,4 +1,4 @@
-# $NetBSD: std.xen,v 1.1 2020/04/09 14:39:10 jdolecek Exp $
+# $NetBSD: std.xen,v 1.1.4.2 2020/04/20 11:28:57 bouyer Exp $
 # NetBSD: std.i386,v 1.24 2003/02/26 21:33:36 fvdl Exp 
 #
 # standard, required NetBSD/i386 'options'
