@@ -1,4 +1,4 @@
-#	$NetBSD: dmesg,v 1.1 2020/04/14 13:58:11 christos Exp $
+#	$NetBSD: dmesg,v 1.1.4.2 2020/04/21 18:42:42 martin Exp $
 
 define dmesg
 	set $mbp = msgbufp

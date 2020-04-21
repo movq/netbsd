@@ -1,4 +1,4 @@
-/*	$NetBSD: t_user_ldt.c,v 1.1 2020/04/19 13:22:58 maxv Exp $	*/
+/*	$NetBSD: t_user_ldt.c,v 1.1.2.2 2020/04/21 18:42:47 martin Exp $	*/
 
 /*
  * Copyright (c) 2020 The NetBSD Foundation, Inc.

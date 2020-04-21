@@ -1,4 +1,4 @@
-/*	$NetBSD: oweeprom.c,v 1.1 2020/04/14 13:35:24 macallan Exp $	*/
+/*	$NetBSD: oweeprom.c,v 1.1.4.2 2020/04/21 18:42:16 martin Exp $	*/
 
 /*-
  * Copyright (c) 2020 The NetBSD Foundation, Inc.
@@ -34,7 +34,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: oweeprom.c,v 1.1 2020/04/14 13:35:24 macallan Exp $");
+__KERNEL_RCSID(0, "$NetBSD: oweeprom.c,v 1.1.4.2 2020/04/21 18:42:16 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
