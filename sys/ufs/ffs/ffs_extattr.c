@@ -1,4 +1,4 @@
-/*	$NetBSD: ffs_extattr.c,v 1.3 2020/04/20 18:10:10 christos Exp $	*/
+/*	$NetBSD: ffs_extattr.c,v 1.3.2.2 2020/04/21 18:42:45 martin Exp $	*/
 
 /*-
  * SPDX-License-Identifier: (BSD-2-Clause-FreeBSD AND BSD-3-Clause)
@@ -66,7 +66,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ffs_extattr.c,v 1.3 2020/04/20 18:10:10 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ffs_extattr.c,v 1.3.2.2 2020/04/21 18:42:45 martin Exp $");
 
 #if defined(_KERNEL_OPT)
 #include "opt_ffs.h"
