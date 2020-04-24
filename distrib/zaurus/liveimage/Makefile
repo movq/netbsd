@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.1 2020/03/21 14:24:12 tsutsui Exp $
+#	$NetBSD: Makefile,v 1.1.4.2 2020/04/24 17:19:49 martin Exp $
 
 LIVEIMGBASE=	NetBSD-${DISTRIBVER}-zaurus-live	# gives ${IMGBASE}.img
 
