@@ -1,4 +1,4 @@
-/* $NetBSD: asms.c,v 1.1 2020/04/24 12:38:31 macallan Exp $ */
+/* $NetBSD: asms.c,v 1.1.2.2 2020/04/25 11:23:59 bouyer Exp $ */
 
 /*-
  * Copyright (c) 2020 Michael Lorenz
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: asms.c,v 1.1 2020/04/24 12:38:31 macallan Exp $");
+__KERNEL_RCSID(0, "$NetBSD: asms.c,v 1.1.2.2 2020/04/25 11:23:59 bouyer Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
