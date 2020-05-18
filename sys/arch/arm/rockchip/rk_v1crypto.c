@@ -1,4 +1,4 @@
-/*	$NetBSD: rk_v1crypto.c,v 1.2 2020/05/17 20:29:39 riastradh Exp $	*/
+/*	$NetBSD: rk_v1crypto.c,v 1.2.2.2 2020/05/18 18:54:30 martin Exp $	*/
 
 /*-
  * Copyright (c) 2020 The NetBSD Foundation, Inc.
@@ -36,7 +36,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(1, "$NetBSD: rk_v1crypto.c,v 1.2 2020/05/17 20:29:39 riastradh Exp $");
+__KERNEL_RCSID(1, "$NetBSD: rk_v1crypto.c,v 1.2.2.2 2020/05/18 18:54:30 martin Exp $");
 
 #include <sys/types.h>
 
@@ -44,6 +44,7 @@ __KERNEL_RCSID(1, "$NetBSD: rk_v1crypto.c,v 1.2 2020/05/17 20:29:39 riastradh Ex
 #include <sys/device.h>
 #include <sys/errno.h>
 #include <sys/mutex.h>
+#include <sys/rndpool.h>
 #include <sys/rndsource.h>
 #include <sys/sysctl.h>
 
@@ -247,6 +248,7 @@ rk_v1crypto_rndsource_attach(struct rk_v1crypto_softc *sc)
 	rndsource_setcb(&sc->sc_rndsource, rk_v1crypto_rng_get, sc);
 	rnd_attach_source(&sc->sc_rndsource, device_xname(self),
 	    RND_TYPE_RNG, RND_FLAG_DEFAULT|RND_FLAG_HASCB);
+	rk_v1crypto_rng_get(RND_POOLBITS/NBBY, sc);
 }
 
 static void
