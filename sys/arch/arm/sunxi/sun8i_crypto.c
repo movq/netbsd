@@ -1,4 +1,4 @@
-/*	$NetBSD: sun8i_crypto.c,v 1.14 2020/05/15 19:28:09 maxv Exp $	*/
+/*	$NetBSD: sun8i_crypto.c,v 1.14.2.2 2020/05/18 18:45:40 martin Exp $	*/
 
 /*-
  * Copyright (c) 2019 The NetBSD Foundation, Inc.
@@ -43,7 +43,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(1, "$NetBSD: sun8i_crypto.c,v 1.14 2020/05/15 19:28:09 maxv Exp $");
+__KERNEL_RCSID(1, "$NetBSD: sun8i_crypto.c,v 1.14.2.2 2020/05/18 18:45:40 martin Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>
@@ -55,6 +55,7 @@ __KERNEL_RCSID(1, "$NetBSD: sun8i_crypto.c,v 1.14 2020/05/15 19:28:09 maxv Exp $
 #include <sys/kernel.h>
 #include <sys/kmem.h>
 #include <sys/mutex.h>
+#include <sys/rndpool.h>
 #include <sys/rndsource.h>
 #include <sys/sysctl.h>
 #include <sys/workqueue.h>
@@ -614,7 +615,7 @@ sun8i_crypto_submit(struct sun8i_crypto_softc *sc,
 
 	/* Loaded up and ready to go.  Start a timer ticking.  */
 	sc->sc_chan[i].cc_task = task;
-	sc->sc_chan[i].cc_starttime = getticks();
+	sc->sc_chan[i].cc_starttime = atomic_load_relaxed(&hardclock_ticks);
 	callout_schedule(&sc->sc_timeout, SUN8I_CRYPTO_TIMEOUT);
 
 	/* XXX Consider polling if cold to get entropy earlier.  */
@@ -725,7 +726,7 @@ sun8i_crypto_worker(struct work *wk, void *cookie)
 	sc->sc_esr = 0;
 
 	/* Check the time to determine what's timed out.  */
-	now = getticks();
+	now = atomic_load_relaxed(&hardclock_ticks);
 
 	/* Process the channels.  */
 	for (i = 0; i < SUN8I_CRYPTO_NCHAN; i++) {

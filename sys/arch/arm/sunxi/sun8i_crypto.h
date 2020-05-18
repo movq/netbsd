@@ -1,4 +1,4 @@
-/*	$NetBSD: sun8i_crypto.h,v 1.1 2019/12/09 04:51:03 riastradh Exp $	*/
+/*	$NetBSD: sun8i_crypto.h,v 1.1.10.2 2020/05/18 18:45:40 martin Exp $	*/
 
 /*-
  * Copyright (c) 2019 The NetBSD Foundation, Inc.
