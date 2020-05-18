@@ -1,4 +1,4 @@
-/*	$NetBSD: rk3399-crypto.dtsi,v 1.1 2020/05/17 19:57:25 riastradh Exp $	*/
+/*	$NetBSD: rk3399-crypto.dtsi,v 1.1.2.2 2020/05/18 18:54:30 martin Exp $	*/
 
 /*-
  * Copyright (c) 2020 The NetBSD Foundation, Inc.
