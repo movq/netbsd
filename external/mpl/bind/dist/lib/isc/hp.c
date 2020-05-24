@@ -1,4 +1,4 @@
-/*	$NetBSD: hp.c,v 1.1 2020/05/24 19:36:46 christos Exp $	*/
+/*	$NetBSD: hp.c,v 1.1.1.1 2020/05/24 19:36:46 christos Exp $	*/
 
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")
