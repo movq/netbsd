@@ -1,4 +1,4 @@
-/*	$NetBSD: keymgr.c,v 1.1 2020/05/24 19:36:41 christos Exp $	*/
+/*	$NetBSD: keymgr.c,v 1.1.1.1 2020/05/24 19:36:41 christos Exp $	*/
 
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")

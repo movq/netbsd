@@ -1,4 +1,4 @@
-/*	$NetBSD: wrap.c,v 1.1 2020/05/24 19:36:48 christos Exp $	*/
+/*	$NetBSD: wrap.c,v 1.1.1.1 2020/05/24 19:36:48 christos Exp $	*/
 
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")
