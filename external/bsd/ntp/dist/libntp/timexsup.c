@@ -1,4 +1,4 @@
-/*	$NetBSD: timexsup.c,v 1.1 2020/05/25 20:40:05 christos Exp $	*/
+/*	$NetBSD: timexsup.c,v 1.1.1.1 2020/05/25 20:40:05 christos Exp $	*/
 
 /*
  * timexsup.c - 'struct timex' support functions

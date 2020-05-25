@@ -1,4 +1,4 @@
-/*	$NetBSD: ntp_calgps.c,v 1.1 2020/05/25 20:40:05 christos Exp $	*/
+/*	$NetBSD: ntp_calgps.c,v 1.1.1.1 2020/05/25 20:40:05 christos Exp $	*/
 
 /*
  * ntp_calgps.c - calendar for GPS/GNSS based clocks
