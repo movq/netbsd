@@ -1,4 +1,4 @@
-/*	$NetBSD: ddb.h,v 1.3 2018/03/04 07:14:50 mlelstv Exp $	*/
+/*	$NetBSD: ddb.h,v 1.4 2020/05/31 09:40:09 rin Exp $	*/
 
 /*-
  * Copyright (c) 2009 The NetBSD Foundation, Inc.
@@ -50,5 +50,6 @@
 #include <ddb/db_proc.h>
 #include <ddb/db_cpu.h>
 #include <ddb/db_autoconf.h>
+#include <ddb/db_alloc.h>
 
 #endif	/* _DDB_DDB_H_ */
