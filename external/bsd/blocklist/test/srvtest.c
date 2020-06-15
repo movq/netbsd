@@ -1,4 +1,4 @@
-/*	$NetBSD: srvtest.c,v 1.1 2020/06/15 01:52:54 christos Exp $	*/
+/*	$NetBSD: srvtest.c,v 1.1.1.1 2020/06/15 01:52:54 christos Exp $	*/
 
 /*-
  * Copyright (c) 2015 The NetBSD Foundation, Inc.
@@ -33,7 +33,7 @@
 #endif
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: srvtest.c,v 1.1 2020/06/15 01:52:54 christos Exp $");
+__RCSID("$NetBSD: srvtest.c,v 1.1.1.1 2020/06/15 01:52:54 christos Exp $");
 
 #include <sys/types.h> 
 #include <sys/socket.h>

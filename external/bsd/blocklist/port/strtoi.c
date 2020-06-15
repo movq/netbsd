@@ -1,4 +1,4 @@
-/*	$NetBSD: strtoi.c,v 1.1 2020/06/15 01:52:54 christos Exp $	*/
+/*	$NetBSD: strtoi.c,v 1.1.1.1 2020/06/15 01:52:54 christos Exp $	*/
 
 /*-
  * Copyright (c) 2005 The DragonFly Project.  All rights reserved.
@@ -34,7 +34,7 @@
 #endif
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: strtoi.c,v 1.1 2020/06/15 01:52:54 christos Exp $");
+__RCSID("$NetBSD: strtoi.c,v 1.1.1.1 2020/06/15 01:52:54 christos Exp $");
 
 #if defined(_KERNEL)
 #include <sys/param.h>
