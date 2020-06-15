@@ -1,4 +1,4 @@
-/*	$NetBSD: pidfile.c,v 1.1 2020/06/15 01:52:54 christos Exp $	*/
+/*	$NetBSD: pidfile.c,v 1.1.1.1 2020/06/15 01:52:54 christos Exp $	*/
 
 /*-
  * Copyright (c) 1999 The NetBSD Foundation, Inc.
@@ -34,7 +34,7 @@
 
 #include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-__RCSID("$NetBSD: pidfile.c,v 1.1 2020/06/15 01:52:54 christos Exp $");
+__RCSID("$NetBSD: pidfile.c,v 1.1.1.1 2020/06/15 01:52:54 christos Exp $");
 #endif
 
 #include <sys/param.h>

@@ -1,4 +1,4 @@
-/*	$NetBSD: blocklist.c,v 1.1 2020/06/15 01:52:53 christos Exp $	*/
+/*	$NetBSD: blocklist.c,v 1.1.1.1 2020/06/15 01:52:53 christos Exp $	*/
 
 /*-
  * Copyright (c) 2014 The NetBSD Foundation, Inc.
@@ -33,7 +33,7 @@
 #endif
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: blocklist.c,v 1.1 2020/06/15 01:52:53 christos Exp $");
+__RCSID("$NetBSD: blocklist.c,v 1.1.1.1 2020/06/15 01:52:53 christos Exp $");
 
 #include <stdio.h>
 #include <bl.h>
