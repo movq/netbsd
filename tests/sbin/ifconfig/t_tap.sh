@@ -1,4 +1,4 @@
-# $NetBSD: t_tap.sh,v 1.4 2020/06/25 16:57:00 jruoho Exp $
+# $NetBSD: t_tap.sh,v 1.5 2020/06/25 18:30:42 jruoho Exp $
 #
 # Copyright (c) 2020 The NetBSD Foundation, Inc.
 # All rights reserved.
@@ -38,7 +38,7 @@ manytaps_head() {
 manytaps_body() {
 
 	atf_skip "The test causes a panic (PR kern/55417)"
-	seq 65535 64000 > $taps
+	seq 65535 65000 > $taps # Try to avoid stalling automated runs.
 
 	while read tap; do
 
