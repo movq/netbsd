@@ -1,4 +1,4 @@
-/*	$NetBSD: aes.h,v 1.3 2020/07/25 22:12:57 riastradh Exp $	*/
+/*	$NetBSD: aes.h,v 1.4 2020/07/25 22:14:35 riastradh Exp $	*/
 
 /*-
  * Copyright (c) 2020 The NetBSD Foundation, Inc.
@@ -65,15 +65,5 @@ void	aes_enc(const struct aesenc *, const uint8_t[static 16],
 	    uint8_t[static 16], uint32_t);
 void	aes_dec(const struct aesdec *, const uint8_t[static 16],
 	    uint8_t[static 16], uint32_t);
-
-void	aes_cbc_enc(struct aesenc *, const uint8_t[static 16],
-	    uint8_t[static 16], size_t, uint8_t[static 16], uint32_t);
-void	aes_cbc_dec(struct aesdec *, const uint8_t[static 16],
-	    uint8_t[static 16], size_t, uint8_t[static 16], uint32_t);
-
-void	aes_xts_enc(struct aesenc *, const uint8_t[static 16],
-	    uint8_t[static 16], size_t, uint8_t[static 16], uint32_t);
-void	aes_xts_dec(struct aesdec *, const uint8_t[static 16],
-	    uint8_t[static 16], size_t, uint8_t[static 16], uint32_t);
 
 #endif	/* _CRYPTO_AES_AES_H */
