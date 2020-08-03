@@ -1,4 +1,4 @@
-/*	$NetBSD: dhctoken.h,v 1.1 2020/08/03 21:09:08 christos Exp $	*/
+/*	$NetBSD: dhctoken.h,v 1.1.1.1 2020/08/03 21:09:08 christos Exp $	*/
 
 /* dhctoken.h
 
