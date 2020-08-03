@@ -1,4 +1,4 @@
-/*	$NetBSD: lmdb.h,v 1.1 2020/08/03 17:07:12 christos Exp $	*/
+/*	$NetBSD: lmdb.h,v 1.1.1.1 2020/08/03 17:07:12 christos Exp $	*/
 
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")
