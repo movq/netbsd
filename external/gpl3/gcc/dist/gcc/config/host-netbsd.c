@@ -1,5 +1,5 @@
 /* NetBSD host-specific hook definitions.
-   Copyright (C) 2004-2013 Free Software Foundation, Inc.
+   Copyright (C) 2004-2019 Free Software Foundation, Inc.
 
    This file is part of GCC.
 
@@ -35,7 +35,7 @@
 # define TRY_EMPTY_VM_SPACE	0x40000000000
 #elif defined(_LP64)
 # define TRY_EMPTY_VM_SPACE	0x400000000000
-#elif defined(__mips__) || defined(__vax__)
+#elif defined(__mips__) || defined(__vax__) || defined (__arm__)
 # define TRY_EMPTY_VM_SPACE	0x60000000
 #else
 # define TRY_EMPTY_VM_SPACE	0xb0000000
@@ -81,5 +81,5 @@ netbsd_gt_pch_use_address (void *base, size_t size, int fd, size_t offset)
   return addr == base ? 1 : -1;
 }
 
-
+
 const struct host_hooks host_hooks = HOST_HOOKS_INITIALIZER;
