@@ -49,7 +49,7 @@ struct DDFlags {
 };
 
 struct DDReport {
-  enum { kMaxLoopSize = 20 };
+  enum { kMaxLoopSize = 8 };
   int n;  // number of entries in loop
   struct {
     u64 thr_ctx;   // user thread context
@@ -70,10 +70,10 @@ struct DDCallback {
 struct DDetector {
   static DDetector *Create(const DDFlags *flags);
 
-  virtual DDPhysicalThread* CreatePhysicalThread() { return nullptr; }
+  virtual DDPhysicalThread* CreatePhysicalThread() { return 0; }
   virtual void DestroyPhysicalThread(DDPhysicalThread *pt) {}
 
-  virtual DDLogicalThread* CreateLogicalThread(u64 ctx) { return nullptr; }
+  virtual DDLogicalThread* CreateLogicalThread(u64 ctx) { return 0; }
   virtual void DestroyLogicalThread(DDLogicalThread *lt) {}
 
   virtual void MutexInit(DDCallback *cb, DDMutex *m) {}
@@ -83,7 +83,7 @@ struct DDetector {
   virtual void MutexBeforeUnlock(DDCallback *cb, DDMutex *m, bool wlock) {}
   virtual void MutexDestroy(DDCallback *cb, DDMutex *m) {}
 
-  virtual DDReport *GetReport(DDCallback *cb) { return nullptr; }
+  virtual DDReport *GetReport(DDCallback *cb) { return 0; }
 };
 
 } // namespace __sanitizer

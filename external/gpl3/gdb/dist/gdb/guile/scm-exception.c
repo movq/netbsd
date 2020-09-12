@@ -1,6 +1,6 @@
 /* GDB/Scheme exception support.
 
-   Copyright (C) 2014-2019 Free Software Foundation, Inc.
+   Copyright (C) 2014-2015 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -575,13 +575,16 @@ gdbscm_print_gdb_exception (SCM port, SCM exception)
 
 /* Return a string description of <gdb:exception> EXCEPTION.
    If EXCEPTION is a gdb:with-stack exception, unwrap it, a backtrace
-   is never returned as part of the result.  */
+   is never returned as part of the result.
 
-gdb::unique_xmalloc_ptr<char>
+   Space for the result is malloc'd, the caller must free.  */
+
+char *
 gdbscm_exception_message_to_string (SCM exception)
 {
   SCM port = scm_open_output_string ();
   SCM key, args;
+  char *result;
 
   gdb_assert (gdbscm_is_exception (exception));
 
@@ -598,9 +601,9 @@ gdbscm_exception_message_to_string (SCM exception)
     }
 
   gdbscm_print_exception_message (port, SCM_BOOL_F, key, args);
-  gdb::unique_xmalloc_ptr<char> result
-    = gdbscm_scm_to_c_string (scm_get_output_string (port));
+  result = gdbscm_scm_to_c_string (scm_get_output_string (port));
   scm_close_port (port);
+
   return result;
 }
 
@@ -632,22 +635,22 @@ gdbscm_percent_exception_count (void)
 
 static const scheme_function exception_functions[] =
 {
-  { "make-exception", 2, 0, 0, as_a_scm_t_subr (gdbscm_make_exception),
+  { "make-exception", 2, 0, 0, gdbscm_make_exception,
     "\
 Create a <gdb:exception> object.\n\
 \n\
   Arguments: key args\n\
     These are the standard key,args arguments of \"throw\"." },
 
-  { "exception?", 1, 0, 0, as_a_scm_t_subr (gdbscm_exception_p),
+  { "exception?", 1, 0, 0, gdbscm_exception_p,
     "\
 Return #t if the object is a <gdb:exception> object." },
 
-  { "exception-key", 1, 0, 0, as_a_scm_t_subr (gdbscm_exception_key),
+  { "exception-key", 1, 0, 0, gdbscm_exception_key,
     "\
 Return the exception's key." },
 
-  { "exception-args", 1, 0, 0, as_a_scm_t_subr (gdbscm_exception_args),
+  { "exception-args", 1, 0, 0, gdbscm_exception_args,
     "\
 Return the exception's arg list." },
 
@@ -656,13 +659,11 @@ Return the exception's arg list." },
 
 static const scheme_function private_exception_functions[] =
 {
-  { "%exception-print-style", 0, 0, 0,
-    as_a_scm_t_subr (gdbscm_percent_exception_print_style),
+  { "%exception-print-style", 0, 0, 0, gdbscm_percent_exception_print_style,
     "\
 Return the value of the \"guile print-stack\" option." },
 
-  { "%exception-count", 0, 0, 0,
-    as_a_scm_t_subr (gdbscm_percent_exception_count),
+  { "%exception-count", 0, 0, 0, gdbscm_percent_exception_count,
     "\
 Return a count of the number of <gdb:exception> objects created.\n\
 This is for debugging purposes." },

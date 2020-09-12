@@ -1,5 +1,6 @@
 /* Header file for GDB CLI set and show commands implementation.
-   Copyright (C) 2000-2019 Free Software Foundation, Inc.
+   Copyright (c) 2000, 2001, 2007, 2008, 2009, 2010, 2011
+   Free Software Foundation, Inc.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -14,21 +15,23 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-#ifndef CLI_CLI_SETSHOW_H
-#define CLI_CLI_SETSHOW_H
+#if !defined (CLI_SETSHOW_H)
+#define CLI_SETSHOW_H 1
 
 struct cmd_list_element;
 
-/* Parse ARG, an option to a boolean variable.
-   Returns 1 for true, 0 for false, and -1 if invalid.  */
-extern int parse_cli_boolean_value (const char *arg);
+/* Exported to cli/cli-cmds.c and gdb/top.c */
 
-extern void do_set_command (const char *arg, int from_tty,
-			    struct cmd_list_element *c);
-extern void do_show_command (const char *arg, int from_tty,
-			     struct cmd_list_element *c);
+/* Do a "set" or "show" command.  ARG is NULL if no argument, or the
+   text of the argument, and FROM_TTY is nonzero if this command is
+   being entered directly by the user (i.e. these are just like any
+   other command).  C is the command list element for the command.  */
+extern void do_setshow_command (char *arg, int from_tty,
+				struct cmd_list_element *c);
+
+/* Exported to cli/cli-cmds.c and gdb/top.c, language.c and valprint.c */
 
 extern void cmd_show_list (struct cmd_list_element *list, int from_tty,
-			   const char *prefix);
+			   char *prefix);
 
-#endif /* CLI_CLI_SETSHOW_H */
+#endif /* !defined (CLI_SETSHOW_H) */

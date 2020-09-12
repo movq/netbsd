@@ -1,5 +1,7 @@
 /* Convert tree expression to rtl instructions, for GNU compiler.
-   Copyright (C) 1988-2019 Free Software Foundation, Inc.
+   Copyright (C) 1988, 1992, 1993, 1994, 1995, 1996, 1997, 1998, 1999,
+   2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010
+   Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -20,35 +22,34 @@ along with GCC; see the file COPYING3.  If not see
 #include "config.h"
 #include "system.h"
 #include "coretypes.h"
-#include "backend.h"
-#include "target.h"
+#include "tm.h"
 #include "rtl.h"
 #include "tree.h"
-#include "predict.h"
-#include "memmodel.h"
-#include "tm_p.h"
-#include "optabs.h"
-#include "emit-rtl.h"
-#include "fold-const.h"
-#include "stor-layout.h"
+#include "flags.h"
+#include "function.h"
+#include "insn-config.h"
+#include "insn-attr.h"
 /* Include expr.h after insn-config.h so we get HAVE_conditional_move.  */
-#include "dojump.h"
-#include "explow.h"
 #include "expr.h"
+#include "optabs.h"
 #include "langhooks.h"
+#include "ggc.h"
+#include "basic-block.h"
+#include "output.h"
 
-static bool prefer_and_bit_test (scalar_int_mode, int);
-static void do_jump (tree, rtx_code_label *, rtx_code_label *,
-		     profile_probability);
-static void do_jump_by_parts_greater (scalar_int_mode, tree, tree, int,
-				      rtx_code_label *, rtx_code_label *,
-				      profile_probability);
-static void do_jump_by_parts_equality (scalar_int_mode, tree, tree,
-				       rtx_code_label *, rtx_code_label *,
-				       profile_probability);
-static void do_compare_and_jump	(tree, tree, enum rtx_code, enum rtx_code,
-				 rtx_code_label *, rtx_code_label *,
-				 profile_probability);
+static bool prefer_and_bit_test (enum machine_mode, int);
+static void do_jump_by_parts_greater (tree, tree, int, rtx, rtx, int);
+static void do_jump_by_parts_equality (tree, tree, rtx, rtx, int);
+static void do_compare_and_jump	(tree, tree, enum rtx_code, enum rtx_code, rtx,
+				 rtx, int);
+
+/* Invert probability if there is any.  -1 stands for unknown.  */
+
+static inline int
+inv (int prob)
+{
+  return prob == -1 ? -1 : REG_BR_PROB_BASE - prob;
+}
 
 /* At the start of a function, record that we have no previously-pushed
    arguments waiting to be popped.  */
@@ -91,35 +92,44 @@ do_pending_stack_adjust (void)
 {
   if (inhibit_defer_pop == 0)
     {
-      if (maybe_ne (pending_stack_adjust, 0))
-	adjust_stack (gen_int_mode (pending_stack_adjust, Pmode));
+      if (pending_stack_adjust != 0)
+        adjust_stack (GEN_INT (pending_stack_adjust));
       pending_stack_adjust = 0;
     }
 }
-
-/* Remember pending_stack_adjust/stack_pointer_delta.
-   To be used around code that may call do_pending_stack_adjust (),
-   but the generated code could be discarded e.g. using delete_insns_since.  */
-
-void
-save_pending_stack_adjust (saved_pending_stack_adjust *save)
-{
-  save->x_pending_stack_adjust = pending_stack_adjust;
-  save->x_stack_pointer_delta = stack_pointer_delta;
-}
-
-/* Restore the saved pending_stack_adjust/stack_pointer_delta.  */
-
-void
-restore_pending_stack_adjust (saved_pending_stack_adjust *save)
-{
-  if (inhibit_defer_pop == 0)
-    {
-      pending_stack_adjust = save->x_pending_stack_adjust;
-      stack_pointer_delta = save->x_stack_pointer_delta;
-    }
-}
 
+/* Expand conditional expressions.  */
+
+/* Generate code to evaluate EXP and jump to LABEL if the value is zero.
+   LABEL is an rtx of code CODE_LABEL, in this function and all the
+   functions here.  */
+
+void
+jumpifnot (tree exp, rtx label, int prob)
+{
+  do_jump (exp, label, NULL_RTX, inv (prob));
+}
+
+void
+jumpifnot_1 (enum tree_code code, tree op0, tree op1, rtx label, int prob)
+{
+  do_jump_1 (code, op0, op1, label, NULL_RTX, inv (prob));
+}
+
+/* Generate code to evaluate EXP and jump to LABEL if the value is nonzero.  */
+
+void
+jumpif (tree exp, rtx label, int prob)
+{
+  do_jump (exp, NULL_RTX, label, prob);
+}
+
+void
+jumpif_1 (enum tree_code code, tree op0, tree op1, rtx label, int prob)
+{
+  do_jump_1 (code, op0, op1, NULL_RTX, label, prob);
+}
+
 /* Used internally by prefer_and_bit_test.  */
 
 static GTY(()) rtx and_reg;
@@ -131,16 +141,13 @@ static GTY(()) rtx shift_test;
    is preferred.  */
 
 static bool
-prefer_and_bit_test (scalar_int_mode mode, int bitnum)
+prefer_and_bit_test (enum machine_mode mode, int bitnum)
 {
-  bool speed_p;
-  wide_int mask = wi::set_bit_in_zero (bitnum, GET_MODE_PRECISION (mode));
-
   if (and_test == 0)
     {
       /* Set up rtxes for the two variations.  Use NULL as a placeholder
 	 for the BITNUM-based constants.  */
-      and_reg = gen_rtx_REG (mode, LAST_VIRTUAL_REGISTER + 1);
+      and_reg = gen_rtx_REG (mode, FIRST_PSEUDO_REGISTER);
       and_test = gen_rtx_AND (mode, and_reg, NULL);
       shift_test = gen_rtx_AND (mode, gen_rtx_ASHIFTRT (mode, and_reg, NULL),
 				const1_rtx);
@@ -155,26 +162,24 @@ prefer_and_bit_test (scalar_int_mode mode, int bitnum)
     }
 
   /* Fill in the integers.  */
-  XEXP (and_test, 1) = immed_wide_int_const (mask, mode);
+  XEXP (and_test, 1)
+    = immed_double_const ((unsigned HOST_WIDE_INT) 1 << bitnum, 0, mode);
   XEXP (XEXP (shift_test, 0), 1) = GEN_INT (bitnum);
 
-  speed_p = optimize_insn_for_speed_p ();
-  return (rtx_cost (and_test, mode, IF_THEN_ELSE, 0, speed_p)
-	  <= rtx_cost (shift_test, mode, IF_THEN_ELSE, 0, speed_p));
+  return (rtx_cost (and_test, IF_THEN_ELSE, optimize_insn_for_speed_p ())
+	  <= rtx_cost (shift_test, IF_THEN_ELSE, optimize_insn_for_speed_p ()));
 }
 
 /* Subroutine of do_jump, dealing with exploded comparisons of the type
    OP0 CODE OP1 .  IF_FALSE_LABEL and IF_TRUE_LABEL like in do_jump.
-   PROB is probability of jump to if_true_label.  */
+   PROB is probability of jump to if_true_label, or -1 if unknown.  */
 
-static void
+void
 do_jump_1 (enum tree_code code, tree op0, tree op1,
-	   rtx_code_label *if_false_label, rtx_code_label *if_true_label,
-	   profile_probability prob)
+	   rtx if_false_label, rtx if_true_label, int prob)
 {
-  machine_mode mode;
-  rtx_code_label *drop_through_label = 0;
-  scalar_int_mode int_mode;
+  enum machine_mode mode;
+  rtx drop_through_label = 0;
 
   switch (code)
     {
@@ -188,12 +193,11 @@ do_jump_1 (enum tree_code code, tree op0, tree op1,
 		    != MODE_COMPLEX_INT);
 
         if (integer_zerop (op1))
-	  do_jump (op0, if_true_label, if_false_label,
-		   prob.invert ());
-	else if (is_int_mode (TYPE_MODE (inner_type), &int_mode)
-		 && !can_compare_p (EQ, int_mode, ccp_jump))
-	  do_jump_by_parts_equality (int_mode, op0, op1, if_false_label,
-				     if_true_label, prob);
+	  do_jump (op0, if_true_label, if_false_label, inv (prob));
+        else if (GET_MODE_CLASS (TYPE_MODE (inner_type)) == MODE_INT
+                 && !can_compare_p (EQ, TYPE_MODE (inner_type), ccp_jump))
+	  do_jump_by_parts_equality (op0, op1, if_false_label, if_true_label,
+				     prob);
         else
 	  do_compare_and_jump (op0, op1, EQ, EQ, if_false_label, if_true_label,
 			       prob);
@@ -211,10 +215,10 @@ do_jump_1 (enum tree_code code, tree op0, tree op1,
 
         if (integer_zerop (op1))
 	  do_jump (op0, if_false_label, if_true_label, prob);
-	else if (is_int_mode (TYPE_MODE (inner_type), &int_mode)
-		 && !can_compare_p (NE, int_mode, ccp_jump))
-	  do_jump_by_parts_equality (int_mode, op0, op1, if_true_label,
-				     if_false_label, prob.invert ());
+        else if (GET_MODE_CLASS (TYPE_MODE (inner_type)) == MODE_INT
+           && !can_compare_p (NE, TYPE_MODE (inner_type), ccp_jump))
+	  do_jump_by_parts_equality (op0, op1, if_true_label, if_false_label,
+				     inv (prob));
         else
 	  do_compare_and_jump (op0, op1, NE, NE, if_false_label, if_true_label,
 			       prob);
@@ -223,10 +227,10 @@ do_jump_1 (enum tree_code code, tree op0, tree op1,
 
     case LT_EXPR:
       mode = TYPE_MODE (TREE_TYPE (op0));
-      if (is_int_mode (mode, &int_mode)
-	  && ! can_compare_p (LT, int_mode, ccp_jump))
-	do_jump_by_parts_greater (int_mode, op0, op1, 1, if_false_label,
-				  if_true_label, prob);
+      if (GET_MODE_CLASS (mode) == MODE_INT
+          && ! can_compare_p (LT, mode, ccp_jump))
+	do_jump_by_parts_greater (op0, op1, 1, if_false_label, if_true_label,
+				  prob);
       else
 	do_compare_and_jump (op0, op1, LT, LTU, if_false_label, if_true_label,
 			     prob);
@@ -234,10 +238,10 @@ do_jump_1 (enum tree_code code, tree op0, tree op1,
 
     case LE_EXPR:
       mode = TYPE_MODE (TREE_TYPE (op0));
-      if (is_int_mode (mode, &int_mode)
-	  && ! can_compare_p (LE, int_mode, ccp_jump))
-	do_jump_by_parts_greater (int_mode, op0, op1, 0, if_true_label,
-				  if_false_label, prob.invert ());
+      if (GET_MODE_CLASS (mode) == MODE_INT
+          && ! can_compare_p (LE, mode, ccp_jump))
+	do_jump_by_parts_greater (op0, op1, 0, if_true_label, if_false_label,
+				  inv (prob));
       else
 	do_compare_and_jump (op0, op1, LE, LEU, if_false_label, if_true_label,
 			     prob);
@@ -245,10 +249,10 @@ do_jump_1 (enum tree_code code, tree op0, tree op1,
 
     case GT_EXPR:
       mode = TYPE_MODE (TREE_TYPE (op0));
-      if (is_int_mode (mode, &int_mode)
-	  && ! can_compare_p (GT, int_mode, ccp_jump))
-	do_jump_by_parts_greater (int_mode, op0, op1, 0, if_false_label,
-				  if_true_label, prob);
+      if (GET_MODE_CLASS (mode) == MODE_INT
+          && ! can_compare_p (GT, mode, ccp_jump))
+	do_jump_by_parts_greater (op0, op1, 0, if_false_label, if_true_label,
+				  prob);
       else
 	do_compare_and_jump (op0, op1, GT, GTU, if_false_label, if_true_label,
 			     prob);
@@ -256,10 +260,10 @@ do_jump_1 (enum tree_code code, tree op0, tree op1,
 
     case GE_EXPR:
       mode = TYPE_MODE (TREE_TYPE (op0));
-      if (is_int_mode (mode, &int_mode)
-	  && ! can_compare_p (GE, int_mode, ccp_jump))
-	do_jump_by_parts_greater (int_mode, op0, op1, 1, if_true_label,
-				  if_false_label, prob.invert ());
+      if (GET_MODE_CLASS (mode) == MODE_INT
+          && ! can_compare_p (GE, mode, ccp_jump))
+	do_jump_by_parts_greater (op0, op1, 1, if_true_label, if_false_label,
+				  inv (prob));
       else
 	do_compare_and_jump (op0, op1, GE, GEU, if_false_label, if_true_label,
 			     prob);
@@ -306,64 +310,32 @@ do_jump_1 (enum tree_code code, tree op0, tree op1,
       break;
 
     case TRUTH_ANDIF_EXPR:
-      {
-        /* Spread the probability that the expression is false evenly between
-           the two conditions. So the first condition is false half the total
-           probability of being false. The second condition is false the other
-           half of the total probability of being false, so its jump has a false
-           probability of half the total, relative to the probability we
-           reached it (i.e. the first condition was true).  */
-        profile_probability op0_prob = profile_probability::uninitialized ();
-        profile_probability op1_prob = profile_probability::uninitialized ();
-        if (prob.initialized_p ())
-          {
-	    op1_prob = prob.invert ();
-	    op0_prob = op1_prob.split (profile_probability::even ());
-            /* Get the probability that each jump below is true.  */
-	    op0_prob = op0_prob.invert ();
-	    op1_prob = op1_prob.invert ();
-          }
-	if (if_false_label == NULL)
-          {
-            drop_through_label = gen_label_rtx ();
-	    do_jump (op0, drop_through_label, NULL, op0_prob);
-	    do_jump (op1, NULL, if_true_label, op1_prob);
-          }
-        else
-          {
-	    do_jump (op0, if_false_label, NULL, op0_prob);
-            do_jump (op1, if_false_label, if_true_label, op1_prob);
-          }
-        break;
-      }
+      if (if_false_label == NULL_RTX)
+        {
+	  drop_through_label = gen_label_rtx ();
+	  do_jump (op0, drop_through_label, NULL_RTX, prob);
+	  do_jump (op1, NULL_RTX, if_true_label, prob);
+	}
+      else
+	{
+	  do_jump (op0, if_false_label, NULL_RTX, prob);
+	  do_jump (op1, if_false_label, if_true_label, prob);
+	}
+      break;
 
     case TRUTH_ORIF_EXPR:
-      {
-        /* Spread the probability evenly between the two conditions. So
-           the first condition has half the total probability of being true.
-           The second condition has the other half of the total probability,
-           so its jump has a probability of half the total, relative to
-           the probability we reached it (i.e. the first condition was false).  */
-        profile_probability op0_prob = profile_probability::uninitialized ();
-        profile_probability op1_prob = profile_probability::uninitialized ();
-        if (prob.initialized_p ())
-          {
-	    op1_prob = prob;
-	    op0_prob = op1_prob.split (profile_probability::even ());
-	  }
-	if (if_true_label == NULL)
-	  {
-	    drop_through_label = gen_label_rtx ();
-	    do_jump (op0, NULL, drop_through_label, op0_prob);
-	    do_jump (op1, if_false_label, NULL, op1_prob);
-	  }
-	else
-	  {
-	    do_jump (op0, NULL, if_true_label, op0_prob);
-	    do_jump (op1, if_false_label, if_true_label, op1_prob);
-	  }
-        break;
-      }
+      if (if_true_label == NULL_RTX)
+	{
+          drop_through_label = gen_label_rtx ();
+	  do_jump (op0, NULL_RTX, drop_through_label, prob);
+	  do_jump (op1, if_false_label, NULL_RTX, prob);
+	}
+      else
+	{
+	  do_jump (op0, NULL_RTX, if_true_label, prob);
+	  do_jump (op1, if_false_label, if_true_label, prob);
+	}
+      break;
 
     default:
       gcc_unreachable ();
@@ -385,18 +357,17 @@ do_jump_1 (enum tree_code code, tree op0, tree op1,
    actually perform a jump.  An example where there is no jump
    is when EXP is `(foo (), 0)' and IF_FALSE_LABEL is null.
 
-   PROB is probability of jump to if_true_label.  */
+   PROB is probability of jump to if_true_label, or -1 if unknown.  */
 
-static void
-do_jump (tree exp, rtx_code_label *if_false_label,
-	 rtx_code_label *if_true_label, profile_probability prob)
+void
+do_jump (tree exp, rtx if_false_label, rtx if_true_label, int prob)
 {
   enum tree_code code = TREE_CODE (exp);
   rtx temp;
   int i;
   tree type;
-  scalar_int_mode mode;
-  rtx_code_label *drop_through_label = NULL;
+  enum machine_mode mode;
+  rtx drop_through_label = 0;
 
   switch (code)
     {
@@ -404,13 +375,10 @@ do_jump (tree exp, rtx_code_label *if_false_label,
       break;
 
     case INTEGER_CST:
-      {
-	rtx_code_label *lab = integer_zerop (exp) ? if_false_label
-						  : if_true_label;
-	if (lab)
-	  emit_jump (lab);
-	break;
-      }
+      temp = integer_zerop (exp) ? if_false_label : if_true_label;
+      if (temp)
+        emit_jump (temp);
+      break;
 
 #if 0
       /* This is not true with #pragma weak  */
@@ -427,17 +395,14 @@ do_jump (tree exp, rtx_code_label *if_false_label,
           || TREE_CODE (TREE_OPERAND (exp, 0)) == ARRAY_REF
           || TREE_CODE (TREE_OPERAND (exp, 0)) == ARRAY_RANGE_REF)
         goto normal;
-      /* FALLTHRU */
     case CONVERT_EXPR:
       /* If we are narrowing the operand, we have to do the compare in the
          narrower mode.  */
       if ((TYPE_PRECISION (TREE_TYPE (exp))
            < TYPE_PRECISION (TREE_TYPE (TREE_OPERAND (exp, 0)))))
         goto normal;
-      /* FALLTHRU */
     case NON_LVALUE_EXPR:
     case ABS_EXPR:
-    case ABSU_EXPR:
     case NEGATE_EXPR:
     case LROTATE_EXPR:
     case RROTATE_EXPR:
@@ -447,12 +412,12 @@ do_jump (tree exp, rtx_code_label *if_false_label,
 
     case TRUTH_NOT_EXPR:
       do_jump (TREE_OPERAND (exp, 0), if_true_label, if_false_label,
-	       prob.invert ());
+	       inv (prob));
       break;
 
     case COND_EXPR:
       {
-	rtx_code_label *label1 = gen_label_rtx ();
+	rtx label1 = gen_label_rtx ();
 	if (!if_true_label || !if_false_label)
 	  {
 	    drop_through_label = gen_label_rtx ();
@@ -463,8 +428,7 @@ do_jump (tree exp, rtx_code_label *if_false_label,
 	  }
 
         do_pending_stack_adjust ();
-	do_jump (TREE_OPERAND (exp, 0), label1, NULL,
-		 profile_probability::uninitialized ());
+	do_jump (TREE_OPERAND (exp, 0), label1, NULL_RTX, -1);
 	do_jump (TREE_OPERAND (exp, 1), if_false_label, if_true_label, prob);
         emit_label (label1);
 	do_jump (TREE_OPERAND (exp, 2), if_false_label, if_true_label, prob);
@@ -474,6 +438,36 @@ do_jump (tree exp, rtx_code_label *if_false_label,
     case COMPOUND_EXPR:
       /* Lowered by gimplify.c.  */
       gcc_unreachable ();
+
+    case COMPONENT_REF:
+    case BIT_FIELD_REF:
+    case ARRAY_REF:
+    case ARRAY_RANGE_REF:
+      {
+        HOST_WIDE_INT bitsize, bitpos;
+        int unsignedp;
+        enum machine_mode mode;
+        tree type;
+        tree offset;
+        int volatilep = 0;
+
+        /* Get description of this reference.  We don't actually care
+           about the underlying object here.  */
+        get_inner_reference (exp, &bitsize, &bitpos, &offset, &mode,
+                             &unsignedp, &volatilep, false);
+
+        type = lang_hooks.types.type_for_size (bitsize, unsignedp);
+        if (! SLOW_BYTE_ACCESS
+            && type != 0 && bitsize >= 0
+            && TYPE_PRECISION (type) < TYPE_PRECISION (TREE_TYPE (exp))
+            && have_insn_for (COMPARE, TYPE_MODE (type)))
+          {
+	    do_jump (fold_convert (type, exp), if_false_label, if_true_label,
+		     prob);
+            break;
+          }
+        goto normal;
+      }
 
     case MINUS_EXPR:
       /* Nonzero iff operands of minus differ.  */
@@ -508,8 +502,8 @@ do_jump (tree exp, rtx_code_label *if_false_label,
       if (integer_onep (TREE_OPERAND (exp, 1)))
 	{
 	  tree exp0 = TREE_OPERAND (exp, 0);
-	  rtx_code_label *set_label, *clr_label;
-	  profile_probability setclr_prob = prob;
+	  rtx set_label, clr_label;
+	  int setclr_prob = prob;
 
 	  /* Strip narrowing integral type conversions.  */
 	  while (CONVERT_EXPR_P (exp0)
@@ -525,7 +519,7 @@ do_jump (tree exp, rtx_code_label *if_false_label,
 	      exp0 = TREE_OPERAND (exp0, 0);
 	      clr_label = if_true_label;
 	      set_label = if_false_label;
-	      setclr_prob = prob.invert ();
+	      setclr_prob = inv (prob);
 	    }
 	  else
 	    {
@@ -541,13 +535,13 @@ do_jump (tree exp, rtx_code_label *if_false_label,
 	      if (TREE_CODE (shift) == INTEGER_CST
 		  && compare_tree_int (shift, 0) >= 0
 		  && compare_tree_int (shift, HOST_BITS_PER_WIDE_INT) < 0
-		  && prefer_and_bit_test (SCALAR_INT_TYPE_MODE (argtype),
+		  && prefer_and_bit_test (TYPE_MODE (argtype),
 					  TREE_INT_CST_LOW (shift)))
 		{
 		  unsigned HOST_WIDE_INT mask
-		    = HOST_WIDE_INT_1U << TREE_INT_CST_LOW (shift);
+		    = (unsigned HOST_WIDE_INT) 1 << TREE_INT_CST_LOW (shift);
 		  do_jump (build2 (BIT_AND_EXPR, argtype, arg,
-				   build_int_cstu (argtype, mask)),
+				   build_int_cst_wide_type (argtype, mask, 0)),
 			   clr_label, set_label, setclr_prob);
 		  break;
 		}
@@ -565,7 +559,7 @@ do_jump (tree exp, rtx_code_label *if_false_label,
           && TREE_CODE (TREE_OPERAND (exp, 1)) == INTEGER_CST
           && TYPE_PRECISION (TREE_TYPE (exp)) <= HOST_BITS_PER_WIDE_INT
           && (i = tree_floor_log2 (TREE_OPERAND (exp, 1))) >= 0
-	  && int_mode_for_size (i + 1, 0).exists (&mode)
+          && (mode = mode_for_size (i + 1, MODE_INT, 0)) != BLKmode
           && (type = lang_hooks.types.type_for_mode (mode, 1)) != 0
           && TYPE_PRECISION (type) < TYPE_PRECISION (TREE_TYPE (exp))
           && have_insn_for (COMPARE, TYPE_MODE (type)))
@@ -580,7 +574,6 @@ do_jump (tree exp, rtx_code_label *if_false_label,
 	goto normal;
 
       /* Boolean comparisons can be compiled as TRUTH_AND_EXPR.  */
-      /* FALLTHRU */
 
     case TRUTH_AND_EXPR:
       /* High branch cost, expand as the bitwise AND of the conditions.
@@ -637,41 +630,20 @@ do_jump (tree exp, rtx_code_label *if_false_label,
    Jump to IF_TRUE_LABEL if OP0 is greater, IF_FALSE_LABEL otherwise.  */
 
 static void
-do_jump_by_parts_greater_rtx (scalar_int_mode mode, int unsignedp, rtx op0,
-			      rtx op1, rtx_code_label *if_false_label,
-			      rtx_code_label *if_true_label,
-			      profile_probability prob)
+do_jump_by_parts_greater_rtx (enum machine_mode mode, int unsignedp, rtx op0,
+			      rtx op1, rtx if_false_label, rtx if_true_label,
+			      int prob)
 {
   int nwords = (GET_MODE_SIZE (mode) / UNITS_PER_WORD);
-  rtx_code_label *drop_through_label = 0;
-  bool drop_through_if_true = false, drop_through_if_false = false;
-  enum rtx_code code = GT;
+  rtx drop_through_label = 0;
   int i;
 
   if (! if_true_label || ! if_false_label)
     drop_through_label = gen_label_rtx ();
   if (! if_true_label)
-    {
-      if_true_label = drop_through_label;
-      drop_through_if_true = true;
-    }
+    if_true_label = drop_through_label;
   if (! if_false_label)
-    {
-      if_false_label = drop_through_label;
-      drop_through_if_false = true;
-    }
-
-  /* Deal with the special case 0 > x: only one comparison is necessary and
-     we reverse it to avoid jumping to the drop-through label.  */
-  if (op0 == const0_rtx && drop_through_if_true && !drop_through_if_false)
-    {
-      code = LE;
-      if_true_label = if_false_label;
-      if_false_label = drop_through_label;
-      drop_through_if_true = false;
-      drop_through_if_false = true;
-      prob = prob.invert ();
-    }
+    if_false_label = drop_through_label;
 
   /* Compare a word at a time, high order first.  */
   for (i = 0; i < nwords; i++)
@@ -690,21 +662,17 @@ do_jump_by_parts_greater_rtx (scalar_int_mode mode, int unsignedp, rtx op0,
         }
 
       /* All but high-order word must be compared as unsigned.  */
-      do_compare_rtx_and_jump (op0_word, op1_word, code, (unsignedp || i > 0),
-			       word_mode, NULL_RTX, NULL, if_true_label,
-			       prob);
-
-      /* Emit only one comparison for 0.  Do not emit the last cond jump.  */
-      if (op0 == const0_rtx || i == nwords - 1)
-	break;
+      do_compare_rtx_and_jump (op0_word, op1_word, GT,
+                               (unsignedp || i > 0), word_mode, NULL_RTX,
+			       NULL_RTX, if_true_label, prob);
 
       /* Consider lower words only if these are equal.  */
       do_compare_rtx_and_jump (op0_word, op1_word, NE, unsignedp, word_mode,
-			       NULL_RTX, NULL, if_false_label,
-			       prob.invert ());
+			       NULL_RTX, NULL_RTX, if_false_label,
+			       inv (prob));
     }
 
-  if (!drop_through_if_false)
+  if (if_false_label)
     emit_jump (if_false_label);
   if (drop_through_label)
     emit_label (drop_through_label);
@@ -713,16 +681,15 @@ do_jump_by_parts_greater_rtx (scalar_int_mode mode, int unsignedp, rtx op0,
 /* Given a comparison expression EXP for values too wide to be compared
    with one insn, test the comparison and jump to the appropriate label.
    The code of EXP is ignored; we always test GT if SWAP is 0,
-   and LT if SWAP is 1.  MODE is the mode of the two operands.  */
+   and LT if SWAP is 1.  */
 
 static void
-do_jump_by_parts_greater (scalar_int_mode mode, tree treeop0, tree treeop1,
-			  int swap, rtx_code_label *if_false_label,
-			  rtx_code_label *if_true_label,
-			  profile_probability prob)
+do_jump_by_parts_greater (tree treeop0, tree treeop1, int swap,
+			  rtx if_false_label, rtx if_true_label, int prob)
 {
   rtx op0 = expand_normal (swap ? treeop1 : treeop0);
   rtx op1 = expand_normal (swap ? treeop0 : treeop1);
+  enum machine_mode mode = TYPE_MODE (TREE_TYPE (treeop0));
   int unsignedp = TYPE_UNSIGNED (TREE_TYPE (treeop0));
 
   do_jump_by_parts_greater_rtx (mode, unsignedp, op0, op1, if_false_label,
@@ -731,19 +698,17 @@ do_jump_by_parts_greater (scalar_int_mode mode, tree treeop0, tree treeop1,
 
 /* Jump according to whether OP0 is 0.  We assume that OP0 has an integer
    mode, MODE, that is too wide for the available compare insns.  Either
-   Either (but not both) of IF_TRUE_LABEL and IF_FALSE_LABEL may be NULL
+   Either (but not both) of IF_TRUE_LABEL and IF_FALSE_LABEL may be NULL_RTX
    to indicate drop through.  */
 
 static void
-do_jump_by_parts_zero_rtx (scalar_int_mode mode, rtx op0,
-			   rtx_code_label *if_false_label,
-			   rtx_code_label *if_true_label,
-			   profile_probability prob)
+do_jump_by_parts_zero_rtx (enum machine_mode mode, rtx op0,
+			   rtx if_false_label, rtx if_true_label, int prob)
 {
   int nwords = GET_MODE_SIZE (mode) / UNITS_PER_WORD;
   rtx part;
   int i;
-  rtx_code_label *drop_through_label = NULL;
+  rtx drop_through_label = 0;
 
   /* The fastest way of doing this comparison on almost any machine is to
      "or" all the words and compare the result.  If all have to be loaded
@@ -766,12 +731,12 @@ do_jump_by_parts_zero_rtx (scalar_int_mode mode, rtx op0,
 
   /* If we couldn't do the "or" simply, do this with a series of compares.  */
   if (! if_false_label)
-    if_false_label = drop_through_label = gen_label_rtx ();
+    drop_through_label = if_false_label = gen_label_rtx ();
 
   for (i = 0; i < nwords; i++)
     do_compare_rtx_and_jump (operand_subword_force (op0, i, mode),
                              const0_rtx, EQ, 1, word_mode, NULL_RTX,
-			     if_false_label, NULL, prob);
+			     if_false_label, NULL_RTX, prob);
 
   if (if_true_label)
     emit_jump (if_true_label);
@@ -786,13 +751,11 @@ do_jump_by_parts_zero_rtx (scalar_int_mode mode, rtx op0,
    to indicate drop through.  */
 
 static void
-do_jump_by_parts_equality_rtx (scalar_int_mode mode, rtx op0, rtx op1,
-			       rtx_code_label *if_false_label,
-			       rtx_code_label *if_true_label,
-			       profile_probability prob)
+do_jump_by_parts_equality_rtx (enum machine_mode mode, rtx op0, rtx op1,
+			       rtx if_false_label, rtx if_true_label, int prob)
 {
   int nwords = (GET_MODE_SIZE (mode) / UNITS_PER_WORD);
-  rtx_code_label *drop_through_label = NULL;
+  rtx drop_through_label = 0;
   int i;
 
   if (op1 == const0_rtx)
@@ -815,7 +778,7 @@ do_jump_by_parts_equality_rtx (scalar_int_mode mode, rtx op0, rtx op1,
     do_compare_rtx_and_jump (operand_subword_force (op0, i, mode),
                              operand_subword_force (op1, i, mode),
                              EQ, 0, word_mode, NULL_RTX,
-			     if_false_label, NULL, prob);
+			     if_false_label, NULL_RTX, prob);
 
   if (if_true_label)
     emit_jump (if_true_label);
@@ -824,17 +787,15 @@ do_jump_by_parts_equality_rtx (scalar_int_mode mode, rtx op0, rtx op1,
 }
 
 /* Given an EQ_EXPR expression EXP for values too wide to be compared
-   with one insn, test the comparison and jump to the appropriate label.
-   MODE is the mode of the two operands.  */
+   with one insn, test the comparison and jump to the appropriate label.  */
 
 static void
-do_jump_by_parts_equality (scalar_int_mode mode, tree treeop0, tree treeop1,
-			   rtx_code_label *if_false_label,
-			   rtx_code_label *if_true_label,
-			   profile_probability prob)
+do_jump_by_parts_equality (tree treeop0, tree treeop1, rtx if_false_label,
+			   rtx if_true_label, int prob)
 {
   rtx op0 = expand_normal (treeop0);
   rtx op1 = expand_normal (treeop1);
+  enum machine_mode mode = TYPE_MODE (TREE_TYPE (treeop0));
   do_jump_by_parts_equality_rtx (mode, op0, op1, if_false_label,
 				 if_true_label, prob);
 }
@@ -848,7 +809,7 @@ do_jump_by_parts_equality (scalar_int_mode mode, tree treeop0, tree treeop1,
    the conditions must be ANDed, false if they must be ORed.  */
 
 bool
-split_comparison (enum rtx_code code, machine_mode mode,
+split_comparison (enum rtx_code code, enum machine_mode mode,
 		  enum rtx_code *code1, enum rtx_code *code2)
 {
   switch (code)
@@ -916,43 +877,6 @@ split_comparison (enum rtx_code code, machine_mode mode,
     }
 }
 
-/* Generate code to evaluate EXP and jump to LABEL if the value is nonzero.
-   PROB is probability of jump to LABEL.  */
-
-void
-jumpif (tree exp, rtx_code_label *label, profile_probability prob)
-{
-  do_jump (exp, NULL, label, prob);
-}
-
-/* Similar to jumpif but dealing with exploded comparisons of the type
-   OP0 CODE OP1 .  LABEL and PROB are like in jumpif.  */
-
-void
-jumpif_1 (enum tree_code code, tree op0, tree op1, rtx_code_label *label,
-	  profile_probability prob)
-{
-  do_jump_1 (code, op0, op1, NULL, label, prob);
-}
-
-/* Generate code to evaluate EXP and jump to LABEL if the value is zero.
-   PROB is probability of jump to LABEL.  */
-
-void
-jumpifnot (tree exp, rtx_code_label *label, profile_probability prob)
-{
-  do_jump (exp, label, NULL, prob.invert ());
-}
-
-/* Similar to jumpifnot but dealing with exploded comparisons of the type
-   OP0 CODE OP1 .  LABEL and PROB are like in jumpifnot.  */
-
-void
-jumpifnot_1 (enum tree_code code, tree op0, tree op1, rtx_code_label *label,
-	     profile_probability prob)
-{
-  do_jump_1 (code, op0, op1, label, NULL, prob.invert ());
-}
 
 /* Like do_compare_and_jump but expects the values to compare as two rtx's.
    The decision as to signed or unsigned comparison must be made by the caller.
@@ -962,13 +886,12 @@ jumpifnot_1 (enum tree_code code, tree op0, tree op1, rtx_code_label *label,
 
 void
 do_compare_rtx_and_jump (rtx op0, rtx op1, enum rtx_code code, int unsignedp,
-			 machine_mode mode, rtx size,
-			 rtx_code_label *if_false_label,
-			 rtx_code_label *if_true_label,
-			 profile_probability prob)
+			 enum machine_mode mode, rtx size, rtx if_false_label,
+			 rtx if_true_label, int prob)
 {
   rtx tem;
-  rtx_code_label *dummy_label = NULL;
+  rtx dummy_label = NULL_RTX;
+  rtx last;
 
   /* Reverse the comparison if that is safe and we want to jump if it is
      false.  Also convert to the reverse comparison if the target can
@@ -990,9 +913,11 @@ do_compare_rtx_and_jump (rtx op0, rtx op1, enum rtx_code code, int unsignedp,
       if (can_compare_p (rcode, mode, ccp_jump)
 	  || (code == ORDERED && ! can_compare_p (ORDERED, mode, ccp_jump)))
 	{
-	  std::swap (if_true_label, if_false_label);
+          tem = if_true_label;
+          if_true_label = if_false_label;
+          if_false_label = tem;
 	  code = rcode;
-	  prob = prob.invert ();
+	  prob = inv (prob);
 	}
     }
 
@@ -1001,21 +926,22 @@ do_compare_rtx_and_jump (rtx op0, rtx op1, enum rtx_code code, int unsignedp,
 
   if (swap_commutative_operands_p (op0, op1))
     {
-      std::swap (op0, op1);
+      tem = op0;
+      op0 = op1;
+      op1 = tem;
       code = swap_condition (code);
     }
 
   do_pending_stack_adjust ();
 
   code = unsignedp ? unsigned_condition (code) : code;
-  if ((tem = simplify_relational_operation (code, mode, VOIDmode,
-					    op0, op1)) != 0)
+  if (0 != (tem = simplify_relational_operation (code, mode, VOIDmode,
+						 op0, op1)))
     {
       if (CONSTANT_P (tem))
 	{
-	  rtx_code_label *label = (tem == const0_rtx
-				   || tem == CONST0_RTX (mode))
-					? if_false_label : if_true_label;
+	  rtx label = (tem == const0_rtx || tem == CONST0_RTX (mode))
+		      ? if_false_label : if_true_label;
 	  if (label)
 	    emit_jump (label);
 	  return;
@@ -1031,65 +957,63 @@ do_compare_rtx_and_jump (rtx op0, rtx op1, enum rtx_code code, int unsignedp,
   if (! if_true_label)
     dummy_label = if_true_label = gen_label_rtx ();
 
-  scalar_int_mode int_mode;
-  if (is_int_mode (mode, &int_mode)
-      && ! can_compare_p (code, int_mode, ccp_jump))
+  if (GET_MODE_CLASS (mode) == MODE_INT
+      && ! can_compare_p (code, mode, ccp_jump))
     {
       switch (code)
 	{
 	case LTU:
-	  do_jump_by_parts_greater_rtx (int_mode, 1, op1, op0,
+	  do_jump_by_parts_greater_rtx (mode, 1, op1, op0,
 					if_false_label, if_true_label, prob);
 	  break;
 
 	case LEU:
-	  do_jump_by_parts_greater_rtx (int_mode, 1, op0, op1,
+	  do_jump_by_parts_greater_rtx (mode, 1, op0, op1,
 					if_true_label, if_false_label,
-					prob.invert ());
+					inv (prob));
 	  break;
 
 	case GTU:
-	  do_jump_by_parts_greater_rtx (int_mode, 1, op0, op1,
+	  do_jump_by_parts_greater_rtx (mode, 1, op0, op1,
 					if_false_label, if_true_label, prob);
 	  break;
 
 	case GEU:
-	  do_jump_by_parts_greater_rtx (int_mode, 1, op1, op0,
+	  do_jump_by_parts_greater_rtx (mode, 1, op1, op0,
 					if_true_label, if_false_label,
-					prob.invert ());
+					inv (prob));
 	  break;
 
 	case LT:
-	  do_jump_by_parts_greater_rtx (int_mode, 0, op1, op0,
+	  do_jump_by_parts_greater_rtx (mode, 0, op1, op0,
 					if_false_label, if_true_label, prob);
 	  break;
 
 	case LE:
-	  do_jump_by_parts_greater_rtx (int_mode, 0, op0, op1,
+	  do_jump_by_parts_greater_rtx (mode, 0, op0, op1,
 					if_true_label, if_false_label,
-					prob.invert ());
+					inv (prob));
 	  break;
 
 	case GT:
-	  do_jump_by_parts_greater_rtx (int_mode, 0, op0, op1,
+	  do_jump_by_parts_greater_rtx (mode, 0, op0, op1,
 					if_false_label, if_true_label, prob);
 	  break;
 
 	case GE:
-	  do_jump_by_parts_greater_rtx (int_mode, 0, op1, op0,
+	  do_jump_by_parts_greater_rtx (mode, 0, op1, op0,
 					if_true_label, if_false_label,
-					prob.invert ());
+					inv (prob));
 	  break;
 
 	case EQ:
-	  do_jump_by_parts_equality_rtx (int_mode, op0, op1, if_false_label,
+	  do_jump_by_parts_equality_rtx (mode, op0, op1, if_false_label,
 					 if_true_label, prob);
 	  break;
 
 	case NE:
-	  do_jump_by_parts_equality_rtx (int_mode, op0, op1, if_true_label,
-					 if_false_label,
-					 prob.invert ());
+	  do_jump_by_parts_equality_rtx (mode, op0, op1, if_true_label,
+					 if_false_label, inv (prob));
 	  break;
 
 	default:
@@ -1098,23 +1022,29 @@ do_compare_rtx_and_jump (rtx op0, rtx op1, enum rtx_code code, int unsignedp,
     }
   else
     {
-      if (SCALAR_FLOAT_MODE_P (mode)
+      if (GET_MODE_CLASS (mode) == MODE_FLOAT
 	  && ! can_compare_p (code, mode, ccp_jump)
 	  && can_compare_p (swap_condition (code), mode, ccp_jump))
 	{
+	  rtx tmp;
 	  code = swap_condition (code);
-	  std::swap (op0, op1);
+	  tmp = op0;
+	  op0 = op1;
+	  op1 = tmp;
 	}
-      else if (SCALAR_FLOAT_MODE_P (mode)
+
+      else if (GET_MODE_CLASS (mode) == MODE_FLOAT
 	       && ! can_compare_p (code, mode, ccp_jump)
-	       /* Never split ORDERED and UNORDERED.
-		  These must be implemented.  */
+
+	       /* Never split ORDERED and UNORDERED.  These must be implemented.  */
 	       && (code != ORDERED && code != UNORDERED)
-               /* Split a floating-point comparison if
-		  we can jump on other conditions...  */
+
+               /* Split a floating-point comparison if we can jump on other
+	          conditions...  */
 	       && (have_insn_for (COMPARE, mode)
+
 	           /* ... or if there is no libcall for it.  */
-	           || code_to_optab (code) == unknown_optab))
+	           || code_to_optab[code] == NULL))
         {
 	  enum rtx_code first_code;
 	  bool and_them = split_comparison (code, mode, &first_code, &code);
@@ -1126,27 +1056,9 @@ do_compare_rtx_and_jump (rtx op0, rtx op1, enum rtx_code code, int unsignedp,
 
 	  else
 	    {
-	      profile_probability cprob
-		= profile_probability::guessed_always ();
-	      if (first_code == UNORDERED)
-		cprob = cprob.apply_scale (1, 100);
-	      else if (first_code == ORDERED)
-		cprob = cprob.apply_scale (99, 100);
-	      else
-		cprob = profile_probability::even ();
-	      /* We want to split:
-		 if (x) goto t; // prob;
-		 into
-		 if (a) goto t; // first_prob;
-		 if (b) goto t; // prob;
-		 such that the overall probability of jumping to t
-		 remains the same and first_prob is prob * cprob.  */
 	      if (and_them)
 		{
-		  rtx_code_label *dest_label;
-		  prob = prob.invert ();
-		  profile_probability first_prob = prob.split (cprob).invert ();
-		  prob = prob.invert ();
+		  rtx dest_label;
 		  /* If we only jump if true, just bypass the second jump.  */
 		  if (! if_false_label)
 		    {
@@ -1157,19 +1069,38 @@ do_compare_rtx_and_jump (rtx op0, rtx op1, enum rtx_code code, int unsignedp,
 		  else
 		    dest_label = if_false_label;
                   do_compare_rtx_and_jump (op0, op1, first_code, unsignedp, mode,
-					   size, dest_label, NULL, first_prob);
+					   size, dest_label, NULL_RTX, prob);
 		}
               else
-		{
-		  profile_probability first_prob = prob.split (cprob);
-		  do_compare_rtx_and_jump (op0, op1, first_code, unsignedp, mode,
-					   size, NULL, if_true_label, first_prob);
-		}
+                do_compare_rtx_and_jump (op0, op1, first_code, unsignedp, mode,
+					 size, NULL_RTX, if_true_label, prob);
 	    }
 	}
 
+      last = get_last_insn ();
       emit_cmp_and_jump_insns (op0, op1, code, size, mode, unsignedp,
-			       if_true_label, prob);
+			       if_true_label);
+      if (prob != -1 && profile_status != PROFILE_ABSENT)
+	{
+	  for (last = NEXT_INSN (last);
+	       last && NEXT_INSN (last);
+	       last = NEXT_INSN (last))
+	    if (JUMP_P (last))
+	      break;
+	  if (!last
+	      || !JUMP_P (last)
+	      || NEXT_INSN (last)
+	      || !any_condjump_p (last))
+	    {
+	      if (dump_file)
+		fprintf (dump_file, "Failed to add probability note\n");
+	    }
+	  else
+	    {
+	      gcc_assert (!find_reg_note (last, REG_BR_PROB, 0));
+	      add_reg_note (last, REG_BR_PROB, GEN_INT (prob));
+	    }
+	}
     }
 
   if (if_false_label)
@@ -1190,13 +1121,12 @@ do_compare_rtx_and_jump (rtx op0, rtx op1, enum rtx_code code, int unsignedp,
 
 static void
 do_compare_and_jump (tree treeop0, tree treeop1, enum rtx_code signed_code,
-		     enum rtx_code unsigned_code,
-		     rtx_code_label *if_false_label,
-		     rtx_code_label *if_true_label, profile_probability prob)
+		     enum rtx_code unsigned_code, rtx if_false_label,
+		     rtx if_true_label, int prob)
 {
   rtx op0, op1;
   tree type;
-  machine_mode mode;
+  enum machine_mode mode;
   int unsignedp;
   enum rtx_code code;
 
@@ -1210,37 +1140,44 @@ do_compare_and_jump (tree treeop0, tree treeop1, enum rtx_code signed_code,
     return;
 
   type = TREE_TYPE (treeop0);
+  mode = TYPE_MODE (type);
   if (TREE_CODE (treeop0) == INTEGER_CST
       && (TREE_CODE (treeop1) != INTEGER_CST
-	  || (GET_MODE_BITSIZE (SCALAR_INT_TYPE_MODE (type))
-	      > GET_MODE_BITSIZE (SCALAR_INT_TYPE_MODE (TREE_TYPE (treeop1))))))
-    /* op0 might have been replaced by promoted constant, in which
-       case the type of second argument should be used.  */
-    type = TREE_TYPE (treeop1);
-  mode = TYPE_MODE (type);
+          || (GET_MODE_BITSIZE (mode)
+              > GET_MODE_BITSIZE (TYPE_MODE (TREE_TYPE (treeop1))))))
+    {
+      /* op0 might have been replaced by promoted constant, in which
+         case the type of second argument should be used.  */
+      type = TREE_TYPE (treeop1);
+      mode = TYPE_MODE (type);
+    }
   unsignedp = TYPE_UNSIGNED (type);
   code = unsignedp ? unsigned_code : signed_code;
 
+#ifdef HAVE_canonicalize_funcptr_for_compare
   /* If function pointers need to be "canonicalized" before they can
-     be reliably compared, then canonicalize them.  Canonicalize the
-     expression when one of the operands is a function pointer.  This
-     handles the case where the other operand is a void pointer.  See
-     PR middle-end/17564.  */
-  if (targetm.have_canonicalize_funcptr_for_compare ()
-      && ((POINTER_TYPE_P (TREE_TYPE (treeop0))
-	   && FUNC_OR_METHOD_TYPE_P (TREE_TYPE (TREE_TYPE (treeop0))))
-	  || (POINTER_TYPE_P (TREE_TYPE (treeop1))
-	      && FUNC_OR_METHOD_TYPE_P (TREE_TYPE (TREE_TYPE (treeop1))))))
+     be reliably compared, then canonicalize them.
+     Only do this if *both* sides of the comparison are function pointers.
+     If one side isn't, we want a noncanonicalized comparison.  See PR
+     middle-end/17564.  */
+  if (HAVE_canonicalize_funcptr_for_compare
+      && TREE_CODE (TREE_TYPE (treeop0)) == POINTER_TYPE
+      && TREE_CODE (TREE_TYPE (TREE_TYPE (treeop0)))
+          == FUNCTION_TYPE
+      && TREE_CODE (TREE_TYPE (treeop1)) == POINTER_TYPE
+      && TREE_CODE (TREE_TYPE (TREE_TYPE (treeop1)))
+          == FUNCTION_TYPE)
     {
       rtx new_op0 = gen_reg_rtx (mode);
       rtx new_op1 = gen_reg_rtx (mode);
 
-      emit_insn (targetm.gen_canonicalize_funcptr_for_compare (new_op0, op0));
+      emit_insn (gen_canonicalize_funcptr_for_compare (new_op0, op0));
       op0 = new_op0;
 
-      emit_insn (targetm.gen_canonicalize_funcptr_for_compare (new_op1, op1));
+      emit_insn (gen_canonicalize_funcptr_for_compare (new_op1, op1));
       op1 = new_op1;
     }
+#endif
 
   do_compare_rtx_and_jump (op0, op1, code, unsignedp, mode,
                            ((mode == BLKmode)

@@ -1,4 +1,4 @@
-# Copyright 2012-2019 Free Software Foundation, Inc.
+# Copyright 2012-2013 Free Software Foundation, Inc.
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
 # the Free Software Foundation; either version 3 of the License, or
@@ -19,11 +19,13 @@ if { [skip_shlib_tests] || [is_remote target] } {
 # Library file.
 set libname "info-fun-solib"
 set srcfile_lib ${srcdir}/${subdir}/${libname}.c
-set binfile_lib [standard_output_file ${libname}.so]
+set binfile_lib ${objdir}/${subdir}/${libname}.so
 set lib_flags {}
 # Binary file.
-standard_testfile .c
+set testfile "info-fun"
+set srcfile ${srcdir}/${subdir}/${testfile}.c
 set executable ${testfile}
+set binfile ${objdir}/${subdir}/${executable}
 set bin_flags [list debug shlib=${binfile_lib}]
 
 if [get_compiler_info] {
@@ -38,15 +40,14 @@ foreach libsepdebug {NO IN SEP} { with_test_prefix "$libsepdebug" {
 	lappend sep_lib_flags {debug}
     }
     if { [gdb_compile_shlib ${srcfile_lib} ${binfile_lib} $sep_lib_flags] != ""
-	 || [gdb_compile $srcdir/$subdir/${srcfile} ${binfile} \
-		 executable $bin_flags] != "" } {
-      untested "failed to compile"
+	 || [gdb_compile ${srcfile} ${binfile} executable $bin_flags] != "" } {
+      untested "Could not compile $binfile_lib or $binfile."
       return -1
     }
 
     if {$libsepdebug == "SEP"} {
 	if {[gdb_gnu_strip_debug $binfile_lib] != 0} {
-	    unsupported "could not split debug of $binfile_lib."
+	    unsupported "Could not split debug of $binfile_lib."
 	    return
 	} else {
 	    pass "split solib"
@@ -56,14 +57,14 @@ foreach libsepdebug {NO IN SEP} { with_test_prefix "$libsepdebug" {
     clean_restart $executable
 
     if ![runto_main] then {
-      fail "can't run to main"
+      fail "Can't run to main"
       return 0
     }
 
     set match_str {All functions matching regular expression "foo":[\r\n]*}
     if { "$libsepdebug" != "NO"  } {
 	append match_str {File .*/info-fun-solib[.]c:[\r\n]*}
-	append match_str {\d+:\tint foo\(void\);[\r\n]*}
+	append match_str {int foo\(void\);[\r\n]*}
     }
     append match_str {Non-debugging symbols:[\r\n]*}
     # Note: Targets like {m68k,ppc64,s390x}-linux also have, e.g.,

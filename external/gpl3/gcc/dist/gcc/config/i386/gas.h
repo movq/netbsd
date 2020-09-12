@@ -1,5 +1,6 @@
 /* Definitions for Intel 386 using GAS.
-   Copyright (C) 1988-2019 Free Software Foundation, Inc.
+   Copyright (C) 1988, 1993, 1994, 1996, 2002, 2004, 2007, 2008
+   Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -40,10 +41,13 @@ along with GCC; see the file COPYING3.  If not see
 #undef DBX_NO_XREFS
 #undef DBX_CONTIN_LENGTH
 
+/* Ask for COFF symbols.  */
+
+#define SDB_DEBUGGING_INFO 1
+
 /* Output #ident as a .ident.  */
 
-#undef TARGET_ASM_OUTPUT_IDENT
-#define TARGET_ASM_OUTPUT_IDENT default_asm_output_ident_directive
+#define ASM_OUTPUT_IDENT(FILE, NAME) fprintf (FILE, "\t.ident \"%s\"\n", NAME);
 
 /* In the past there was confusion as to what the argument to .align was
    in GAS.  For the last several years the rule has been this: for a.out
@@ -57,7 +61,7 @@ along with GCC; see the file COPYING3.  If not see
 #ifdef HAVE_GAS_BALIGN_AND_P2ALIGN 
 #undef ASM_OUTPUT_ALIGN
 #define ASM_OUTPUT_ALIGN(FILE,LOG) \
-  if ((LOG)!=0) fprintf ((FILE), "\t.balign %d\n", 1 << (LOG))
+  if ((LOG)!=0) fprintf ((FILE), "\t.balign %d\n", 1<<(LOG))
 #endif
 
 /* A C statement to output to the stdio stream FILE an assembler
@@ -68,12 +72,10 @@ along with GCC; see the file COPYING3.  If not see
 
 #ifdef HAVE_GAS_MAX_SKIP_P2ALIGN
 #  define ASM_OUTPUT_MAX_SKIP_ALIGN(FILE,LOG,MAX_SKIP) \
-    if ((LOG) != 0) { \
-      if ((MAX_SKIP) == 0 || (MAX_SKIP) >= (1 << (LOG)) - 1)		\
-	fprintf ((FILE), "\t.p2align %d\n", (LOG));			\
-      else								\
-	fprintf ((FILE), "\t.p2align %d,,%d\n", (LOG), (MAX_SKIP));	\
-    }
+     if ((LOG) != 0) {\
+       if ((MAX_SKIP) == 0) fprintf ((FILE), "\t.p2align %d\n", (LOG)); \
+       else fprintf ((FILE), "\t.p2align %d,,%d\n", (LOG), (MAX_SKIP)); \
+     }
 #endif
 
 /* A C statement or statements which output an assembler instruction

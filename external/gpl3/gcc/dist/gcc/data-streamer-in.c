@@ -1,7 +1,7 @@
 /* Routines for restoring various data types from a file stream.  This deals
    with various data types like strings, integers, enums, etc.
 
-   Copyright (C) 2011-2019 Free Software Foundation, Inc.
+   Copyright (C) 2011-2013 Free Software Foundation, Inc.
    Contributed by Diego Novillo <dnovillo@google.com>
 
 This file is part of GCC.
@@ -23,18 +23,16 @@ along with GCC; see the file COPYING3.  If not see
 #include "config.h"
 #include "system.h"
 #include "coretypes.h"
-#include "backend.h"
-#include "tree.h"
-#include "gimple.h"
-#include "cgraph.h"
+#include "diagnostic.h"
 #include "data-streamer.h"
 
 /* Read a string from the string table in DATA_IN using input block
    IB.  Write the length to RLEN.  */
 
-static const char *
+const char *
 string_for_index (struct data_in *data_in, unsigned int loc, unsigned int *rlen)
 {
+  struct lto_input_block str_tab;
   unsigned int len;
   const char *result;
 
@@ -45,7 +43,8 @@ string_for_index (struct data_in *data_in, unsigned int loc, unsigned int *rlen)
     }
 
   /* Get the string stored at location LOC in DATA_IN->STRINGS.  */
-  lto_input_block str_tab (data_in->strings, loc - 1, data_in->strings_len, NULL);
+  LTO_INIT_INPUT_BLOCK (str_tab, data_in->strings, loc - 1,
+			data_in->strings_len);
   len = streamer_read_uhwi (&str_tab);
   *rlen = len;
 
@@ -121,33 +120,18 @@ bp_unpack_string (struct data_in *data_in, struct bitpack_d *bp)
 unsigned HOST_WIDE_INT
 streamer_read_uhwi (struct lto_input_block *ib)
 {
-  unsigned HOST_WIDE_INT result;
-  int shift;
+  unsigned HOST_WIDE_INT result = 0;
+  int shift = 0;
   unsigned HOST_WIDE_INT byte;
-  unsigned int p = ib->p;
-  unsigned int len = ib->len;
 
-  const char *data = ib->data;
-  result = data[p++];
-  if ((result & 0x80) != 0)
+  while (true)
     {
-      result &= 0x7f;
-      shift = 7;
-      do
-	{
-	  byte = data[p++];
-	  result |= (byte & 0x7f) << shift;
-	  shift += 7;
-	}
-      while ((byte & 0x80) != 0);
+      byte = streamer_read_uchar (ib);
+      result |= (byte & 0x7f) << shift;
+      shift += 7;
+      if ((byte & 0x80) == 0)
+	return result;
     }
-
-  /* We check for section overrun after the fact for performance reason.  */
-  if (p > len)
-    lto_section_overrun (ib);
-
-  ib->p = p;
-  return result;
 }
 
 
@@ -168,49 +152,9 @@ streamer_read_hwi (struct lto_input_block *ib)
       if ((byte & 0x80) == 0)
 	{
 	  if ((shift < HOST_BITS_PER_WIDE_INT) && (byte & 0x40))
-	    result |= - (HOST_WIDE_INT_1U << shift);
+	    result |= - ((HOST_WIDE_INT)1 << shift);
 
 	  return result;
 	}
     }
 }
-
-/* Read gcov_type value from IB.  */
-
-gcov_type
-streamer_read_gcov_count (struct lto_input_block *ib)
-{
-  gcov_type ret = streamer_read_hwi (ib);
-  return ret;
-}
-
-/* Read the physical representation of a wide_int val from
-   input block IB.  */
-
-wide_int
-streamer_read_wide_int (struct lto_input_block *ib)
-{
-  HOST_WIDE_INT a[WIDE_INT_MAX_ELTS];
-  int i;
-  int prec = streamer_read_uhwi (ib);
-  int len = streamer_read_uhwi (ib);
-  for (i = 0; i < len; i++)
-    a[i] = streamer_read_hwi (ib);
-  return wide_int::from_array (a, len, prec);
-}
-
-/* Read the physical representation of a widest_int val from
-   input block IB.  */
-
-widest_int
-streamer_read_widest_int (struct lto_input_block *ib)
-{
-  HOST_WIDE_INT a[WIDE_INT_MAX_ELTS];
-  int i;
-  int prec ATTRIBUTE_UNUSED = streamer_read_uhwi (ib);
-  int len = streamer_read_uhwi (ib);
-  for (i = 0; i < len; i++)
-    a[i] = streamer_read_hwi (ib);
-  return widest_int::from_array (a, len);
-}
-

@@ -1,11 +1,18 @@
 dnl Process this file with autoconf to produce a configure script.
+AC_PREREQ(2.59)dnl
 AC_INIT(Makefile.in)
-sinclude(../common/acinclude.m4)
+AC_CONFIG_HEADER(config.h:config.in)
 
-SIM_AC_COMMON
+sinclude(../common/aclocal.m4)
+
+# Bugs in autoconf 2.59 break the call to SIM_AC_COMMON, hack around
+# it by inlining the macro's contents.
+sinclude(../common/common.m4)
 
 dnl Options available in this module
+SIM_AC_OPTION_INLINE()
 SIM_AC_OPTION_ALIGNMENT(NONSTRICT_ALIGNMENT)
+SIM_AC_OPTION_HOSTENDIAN
 SIM_AC_OPTION_WARNINGS
 SIM_AC_OPTION_RESERVED_BITS(1)
 
@@ -19,7 +26,6 @@ case "${target}" in
   mips64vr*-*-*)	SIM_SUBTARGET="-DTARGET_ENABLE_FR=1" ;;
   mips*tx39*)           SIM_SUBTARGET="-DSUBTARGET_R3900=1";;
   mips*-sde-elf*)       SIM_SUBTARGET="-DTARGET_ENABLE_FR=1";;
-  mips*-mti-elf*)       SIM_SUBTARGET="-DTARGET_ENABLE_FR=1";;
   mipsisa32*-*-*)       SIM_SUBTARGET="-DTARGET_ENABLE_FR=1";;
   mipsisa64*-*-*)       SIM_SUBTARGET="-DTARGET_ENABLE_FR=1";;
   *)                    SIM_SUBTARGET="";;
@@ -34,14 +40,14 @@ AC_SUBST(SIM_SUBTARGET)
 mips_endian=
 default_endian=
 case "${target}" in
-  mips64el*-*-*)        mips_endian=LITTLE ;;
-  mips64vr*el-*-*)      default_endian=LITTLE ;;
-  mips64*-*-*)          default_endian=BIG ;;
-  mips16*-*-*)          default_endian=BIG ;;
-  mipsisa32*-*-*)       default_endian=BIG ;;
-  mipsisa64*-*-*)       default_endian=BIG ;;
-  mips*-*-*)            default_endian=BIG ;;
-  *)                    default_endian=BIG ;;
+  mips64el*-*-*)	mips_endian=LITTLE_ENDIAN ;;
+  mips64vr*el-*-*)      default_endian=LITTLE_ENDIAN ;;
+  mips64*-*-*)          default_endian=BIG_ENDIAN ;;
+  mips16*-*-*)          default_endian=BIG_ENDIAN ;;
+  mipsisa32*-*-*)       default_endian=BIG_ENDIAN ;;
+  mipsisa64*-*-*)       default_endian=BIG_ENDIAN ;;
+  mips*-*-*)            default_endian=BIG_ENDIAN ;;
+  *)                    default_endian=BIG_ENDIAN ;;
 esac
 SIM_AC_OPTION_ENDIAN($mips_endian,$default_endian)
 
@@ -53,7 +59,6 @@ SIM_AC_OPTION_ENDIAN($mips_endian,$default_endian)
 mips_addr_bitsize=
 case "${target}" in
   mips*-sde-elf*)       mips_bitsize=64 ; mips_msb=63 ;;
-  mips*-mti-elf*)       mips_bitsize=64 ; mips_msb=63 ;;
   mips64*-*-*)          mips_bitsize=64 ; mips_msb=63 ;;
   mips16*-*-*)          mips_bitsize=64 ; mips_msb=63 ;;
   mipsisa32*-*-*)       mips_bitsize=32 ; mips_msb=31 ;;
@@ -73,7 +78,6 @@ mips_fpu_bitsize=
 case "${target}" in
   mips*tx39*)		mips_fpu=HARD_FLOATING_POINT ; mips_fpu_bitsize=32 ;;
   mips*-sde-elf*)       mips_fpu=HARD_FLOATING_POINT ; mips_fpu_bitsize=64 ;;
-  mips*-mti-elf*)       mips_fpu=HARD_FLOATING_POINT ; mips_fpu_bitsize=64 ;;
   mips64*-*-*)          mips_fpu=HARD_FLOATING_POINT ;;
   mips16*-*-*)          mips_fpu=HARD_FLOATING_POINT ;;
   mipsisa32*-*-*)       mips_fpu=HARD_FLOATING_POINT ; mips_fpu_bitsize=64 ;;
@@ -82,6 +86,16 @@ case "${target}" in
   *)                    mips_fpu=HARD_FLOATING_POINT ;;
 esac
 SIM_AC_OPTION_FLOAT($mips_fpu,$mips_fpu_bitsize)
+
+
+
+#
+# Select the level of SMP support
+#
+case "${target}" in
+  *)                    mips_smp=0 ;;
+esac
+SIM_AC_OPTION_SMP($mips_smp)
 
 
 
@@ -125,12 +139,11 @@ case "${target}" in
 			  vr5500:mipsIV,vr5500:32,64,f:mips5500"
 			sim_multi_default=mips5000
 			;;
-  mips*-sde-elf* | mips*-mti-elf*)
-			sim_gen=MULTI
-			sim_multi_configs="\
-			  micromips:micromips64,micromipsdsp:32,64,f:mips_micromips\
-			  mips64r2:mips64r2,mips3d,mips16,mips16e,mdmx,dsp,dsp2,smartmips:32,64,f:mipsisa64r2"
-			sim_multi_default=mipsisa64r2
+  mips*-sde-elf*)	sim_gen=M16
+			sim_igen_machine="-M mips64r2,mips3d,mips16,mips16e,mdmx,dsp,dsp2,smartmips"
+			sim_m16_machine="-M mips16,mips16e,mips64r2"
+			sim_igen_filter="32,64,f"
+			sim_mach_default="mipsisa64r2"
 			;;
   mips64*-*-*)		sim_igen_filter="32,64,f"
 			sim_gen=IGEN
@@ -139,11 +152,11 @@ case "${target}" in
 			sim_igen_filter="32,64,f"
 			sim_m16_filter="16"
 			;;
-  mipsisa32r2*-*-*)	sim_gen=MULTI
-			sim_multi_configs="\
-			  micromips:micromips32,micromipsdsp:32,f:mips_micromips\
-			  mips32r2:mips32r2,mips3d,mips16,mips16e,mdmx,dsp,dsp2,smartmips:32,f:mipsisa32r2"
-			sim_multi_default=mipsisa32r2
+  mipsisa32r2*-*-*)	sim_gen=M16
+			sim_igen_machine="-M mips32r2,mips16,mips16e,mdmx,dsp,dsp2,smartmips"
+			sim_m16_machine="-M mips16,mips16e,mips32r2"
+			sim_igen_filter="32,f"
+			sim_mach_default="mipsisa32r2"
 			;;
   mipsisa32*-*-*)	sim_gen=M16
 			sim_igen_machine="-M mips32,mips16,mips16e,smartmips"
@@ -208,20 +221,20 @@ if test ${sim_gen} = MULTI; then
 
   # Simple sanity check.
   if test -z "${sim_multi_configs}" || test -z "${sim_multi_default}"; then
-    AC_MSG_ERROR(Error in configure.ac: MULTI simulator not set up correctly)
+    AC_MSG_ERROR(Error in configure.in: MULTI simulator not set up correctly)
   fi
 
   # Start in a known state.
   rm -f multi-include.h multi-run.c
   sim_multi_flags=
   sim_multi_src=
-  sim_multi_obj=
+  sim_multi_obj=multi-run.o
   sim_multi_igen_configs=
   sim_seen_default=no
 
   cat << __EOF__ > multi-run.c
 /* Main entry point for MULTI simulators.
-   Copyright (C) 2003-2019 Free Software Foundation, Inc.
+   Copyright (C) 2003, 2007, 2010 Free Software Foundation, Inc.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -242,8 +255,6 @@ if test ${sim_gen} = MULTI; then
 
 #include "sim-main.h"
 #include "multi-include.h"
-#include "elf-bfd.h"
-#include "elf/mips.h"
 
 #define SD sd
 #define CPU cpu
@@ -258,9 +269,6 @@ sim_engine_run (SIM_DESC sd,
 
   if (STATE_ARCHITECTURE (sd) == NULL)
     mach = bfd_mach_${sim_multi_default};
-  else if (elf_elfheader (STATE_PROG_BFD (sd))->e_flags
-	   & EF_MIPS_ARCH_ASE_MICROMIPS)
-    mach = bfd_mach_mips_micromips;
   else
     mach = STATE_ARCHITECTURE (SD)->mach;
 
@@ -290,7 +298,7 @@ __EOF__
     # the ${sim_multi_configs} entry.
     sim_multi_flags="${sim_multi_flags} -F ${filter} -M ${machine}"
 
-    # Check whether special handling is needed.
+    # Check whether mips16 handling is needed.
     case ${c} in
       *:*mips16*:*)
 	# Run igen twice, once for normal mode and once for mips16.
@@ -302,30 +310,6 @@ __EOF__
 	sim_multi_src="${sim_multi_src} m16${name}_run.c"
 	sim_multi_obj="${sim_multi_obj} m16${name}_run.o"
 	sim_multi_flags="${sim_multi_flags} -F 16"
-	;;
-      *:*micromips32*:*)
-	# Run igen thrice, once for micromips32, once for micromips16,
-	# and once for m32.
-	ws="micromips_m32 micromips16 micromips32"
-
-	# The top-level function for the micromips simulator is
-	# in a file micromips${name}_run.c, generated by the
-	# tmp-run-multi Makefile rule.
-	sim_multi_src="${sim_multi_src} micromips${name}_run.c"
-	sim_multi_obj="${sim_multi_obj} micromips${name}_run.o"
-	sim_multi_flags="${sim_multi_flags} -F 16,32"
-	;;
-      *:*micromips64*:*)
-	# Run igen thrice, once for micromips64, once for micromips16,
-	# and once for m64.
-	ws="micromips_m64 micromips16 micromips64"
-
-	# The top-level function for the micromips simulator is
-	# in a file micromips${name}_run.c, generated by the
-	# tmp-run-multi Makefile rule.
-	sim_multi_src="${sim_multi_src} micromips${name}_run.c"
-	sim_multi_obj="${sim_multi_obj} micromips${name}_run.o"
-	sim_multi_flags="${sim_multi_flags} -F 16,32,64"
 	;;
       *)
 	ws=m32
@@ -362,7 +346,7 @@ __EOF__
 
   # Check whether we added a 'default:' label.
   if test ${sim_seen_default} = no; then
-    AC_MSG_ERROR(Error in configure.ac: \${sim_multi_configs} doesn't have an entry for \${sim_multi_default})
+    AC_MSG_ERROR(Error in configure.in: \${sim_multi_configs} doesn't have an entry for \${sim_multi_default})
   fi
 
   cat << __EOF__ >> multi-run.c
@@ -406,23 +390,21 @@ else
   sim_multi_src=doesnt-exist.c
 
   if test x"${sim_mach_default}" = x""; then
-    AC_MSG_ERROR(Error in configure.ac: \${sim_mach_default} not defined)
+    AC_MSG_ERROR(Error in configure.in: \${sim_mach_default} not defined)
   fi
   SIM_SUBTARGET="$SIM_SUBTARGET -DMIPS_MACH_DEFAULT=bfd_mach_${sim_mach_default}"
 fi
 sim_igen_flags="-F ${sim_igen_filter} ${sim_igen_machine} ${sim_igen_smp}"
 sim_m16_flags=" -F ${sim_m16_filter}  ${sim_m16_machine}  ${sim_igen_smp}"
-sim_micromips16_flags=" -F ${sim_micromips16_filter}  ${sim_micromips16_machine}  ${sim_igen_smp}"
-sim_micromips_flags=" -F ${sim_micromips_filter}  ${sim_micromips_machine}  ${sim_igen_smp}"
 AC_SUBST(sim_igen_flags)
 AC_SUBST(sim_m16_flags)
-AC_SUBST(sim_micromips_flags)
-AC_SUBST(sim_micromips16_flags)
 AC_SUBST(sim_gen)
 AC_SUBST(sim_multi_flags)
 AC_SUBST(sim_multi_igen_configs)
 AC_SUBST(sim_multi_src)
 AC_SUBST(sim_multi_obj)
+
+
 #
 # Add simulated hardware devices
 #
@@ -431,11 +413,15 @@ case "${target}" in
   mips*tx39*)
 	hw_enabled=yes
 	hw_extra_devices="tx3904cpu tx3904irc tx3904tmr tx3904sio" 
+	mips_extra_objs="dv-sockser.o"
+	SIM_SUBTARGET="$SIM_SUBTARGET -DTARGET_TX3904=1"
 	;;
   *)
+	mips_extra_objs="" 
 	;;
 esac
 SIM_AC_OPTION_HARDWARE($hw_enabled,$hw_devices,$hw_extra_devices)
+AC_SUBST(mips_extra_objs)
 
 
 # Choose simulator engine
@@ -450,6 +436,7 @@ AC_PATH_X
 mips_extra_libs=""
 AC_SUBST(mips_extra_libs)
 
+AC_CHECK_HEADERS(string.h strings.h stdlib.h stdlib.h)
 AC_CHECK_LIB(m, fabs)
 AC_CHECK_FUNCS(aint anint sqrt)
 

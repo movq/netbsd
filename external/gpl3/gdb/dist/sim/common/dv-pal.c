@@ -1,6 +1,6 @@
 /* The common simulator framework for GDB, the GNU Debugger.
 
-   Copyright 2002-2019 Free Software Foundation, Inc.
+   Copyright 2002, 2007, 2008, 2009, 2010, 2011 Free Software Foundation, Inc.
 
    Contributed by Andrew Cagney and Red Hat.
 
@@ -19,8 +19,7 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-#include "config.h"
-#include "sim-main.h"
+
 #include "hw-main.h"
 #include "sim-io.h"
 
@@ -307,7 +306,7 @@ scan_hw_pal (struct hw *me)
   hw_pal_device *hw_pal = (hw_pal_device *)hw_data (me);
   char c;
   int count;
-  count = do_hw_poll_read (me, hw_pal->reader, 0/*STDIN*/, &c, sizeof (c));
+  count = do_hw_poll_read (me, hw_pal->reader, 0/*STDIN*/, &c, sizeof(c));
   switch (count)
     {
     case HW_IO_NOT_READY:
@@ -350,7 +349,11 @@ hw_pal_io_read_buffer (struct hw *me,
     {
 
     case hw_pal_cpu_nr_register:
+#ifdef CPU_INDEX
       *byte = CPU_INDEX (hw_system_cpu (me));
+#else
+      *byte = 0;
+#endif
       HW_TRACE ((me, "read - cpu-nr %d\n", *byte));
       break;
 
@@ -479,7 +482,7 @@ hw_pal_io_write_buffer (struct hw *me,
 
 #if NOT_YET
 static void
-hw_pal_instance_delete_callback (hw_instance *instance)
+hw_pal_instance_delete_callback(hw_instance *instance)
 {
   /* nothing to delete, the hw_pal is attached to the struct hw */
   return;

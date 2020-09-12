@@ -1,5 +1,7 @@
 /* sysdep.h -- handle host dependencies for binutils
-   Copyright (C) 1991-2020 Free Software Foundation, Inc.
+   Copyright 1991, 1992, 1993, 1994, 1995, 1996, 1997, 1998, 1999, 2000,
+   2001, 2002, 2003, 2005, 2006, 2007, 2008
+   Free Software Foundation, Inc.
 
    This file is part of GNU Binutils.
 
@@ -20,7 +22,7 @@
 #ifndef _BIN_SYSDEP_H
 #define _BIN_SYSDEP_H
 
-#include "alloca-conf.h"
+#include "config.h"
 #include "ansidecl.h"
 #include <stdio.h>
 #include <sys/types.h>
@@ -44,10 +46,6 @@ extern int errno;
 #include <unistd.h>
 #endif
 
-#ifdef STRING_WITH_STRINGS
-#include <string.h>
-#include <strings.h>
-#else
 #ifdef HAVE_STRING_H
 #include <string.h>
 #else
@@ -56,7 +54,6 @@ extern int errno;
 #else
 extern char *strchr ();
 extern char *strrchr ();
-#endif
 #endif
 #endif
 
@@ -70,10 +67,6 @@ extern char *strrchr ();
 #ifdef HAVE_SYS_FILE_H
 #include <sys/file.h>
 #endif
-#endif
-
-#ifdef HAVE_SYS_STAT_H
-#include <sys/stat.h>
 #endif
 
 #include "binary-io.h"
@@ -112,10 +105,6 @@ extern int snprintf(char *, size_t, const char *, ...);
 extern int vsnprintf(char *, size_t, const char *, va_list);
 #endif
 
-#if !HAVE_DECL_STRNLEN
-size_t strnlen (const char *, size_t);
-#endif
-
 #ifndef O_RDONLY
 #define O_RDONLY 0
 #endif
@@ -132,6 +121,23 @@ size_t strnlen (const char *, size_t);
 #endif
 #ifndef SEEK_END
 #define SEEK_END 2
+#endif
+
+#if defined(__GNUC__) && !defined(C_ALLOCA)
+# undef alloca
+# define alloca __builtin_alloca
+#else
+# if defined(HAVE_ALLOCA_H) && !defined(C_ALLOCA)
+#  include <alloca.h>
+# else
+#  ifndef alloca /* predefined by HP cc +Olibcalls */
+#   if !defined (__STDC__) && !defined (__hpux)
+char *alloca ();
+#   else
+void *alloca ();
+#   endif /* __STDC__, __hpux */
+#  endif /* alloca */
+# endif /* HAVE_ALLOCA_H */
 #endif
 
 #ifdef HAVE_LOCALE_H
@@ -159,46 +165,13 @@ size_t strnlen (const char *, size_t);
 # define gettext(Msgid) (Msgid)
 # define dgettext(Domainname, Msgid) (Msgid)
 # define dcgettext(Domainname, Msgid, Category) (Msgid)
-# define ngettext(Msgid1, Msgid2, n) \
-  (n == 1 ? Msgid1 : Msgid2)
-# define dngettext(Domainname, Msgid1, Msgid2, n) \
-  (n == 1 ? Msgid1 : Msgid2)
-# define dcngettext(Domainname, Msgid1, Msgid2, n, Category) \
-  (n == 1 ? Msgid1 : Msgid2)
-# define textdomain(Domainname) do {} while (0)
-# define bindtextdomain(Domainname, Dirname) do {} while (0)
+# define textdomain(Domainname) while (0) /* nothing */
+# define bindtextdomain(Domainname, Dirname) while (0) /* nothing */
 # define _(String) (String)
 # define N_(String) (String)
 #endif
 
 /* Used by ar.c and objcopy.c.  */
 #define BUFSIZE 8192
-
-/* For PATH_MAX.  */
-#ifdef HAVE_LIMITS_H
-#include <limits.h>
-#endif
-
-#ifndef PATH_MAX
-/* For MAXPATHLEN.  */
-# ifdef HAVE_SYS_PARAM_H
-#  include <sys/param.h>
-# endif
-# ifndef PATH_MAX
-#  ifdef MAXPATHLEN
-#   define PATH_MAX MAXPATHLEN
-#  else
-#   define PATH_MAX 1024
-#  endif
-# endif
-#endif
-
-#if defined HAVE_LONG_LONG && SIZEOF_LONG_LONG > SIZEOF_LONG
-/* We can't use any bfd types here since readelf may define BFD64 and
-   objdump may not.  */
-#define HOST_WIDEST_INT	long long
-#else
-#define HOST_WIDEST_INT long
-#endif
 
 #endif /* _BIN_SYSDEP_H */

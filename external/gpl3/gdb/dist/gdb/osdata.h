@@ -1,6 +1,6 @@
 /* Routines for handling XML generic OS data provided by target.
 
-   Copyright (C) 2008-2019 Free Software Foundation, Inc.
+   Copyright (C) 2008, 2009, 2010, 2011 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -20,41 +20,34 @@
 #ifndef OSDATA_H
 #define OSDATA_H
 
-#include <vector>
+#include "vec.h"
 
-struct osdata_column
+typedef struct osdata_column
 {
-  osdata_column (std::string &&name_, std::string &&value_)
-  : name (std::move (name_)), value (std::move (value_))
-  {}
+  char *name;
+  char *value;
+} osdata_column_s;
+DEF_VEC_O(osdata_column_s);
 
-  std::string name;
-  std::string value;
-};
-
-struct osdata_item
+typedef struct osdata_item
 {
-  std::vector<osdata_column> columns;
-};
+  VEC(osdata_column_s) *columns;
+} osdata_item_s;
+DEF_VEC_O(osdata_item_s);
 
 struct osdata
 {
-  osdata (std::string &&type_)
-  : type (std::move (type_))
-  {}
+  char *type;
 
-  std::string type;
-  std::vector<osdata_item> items;
+  VEC(osdata_item_s) *items;
 };
+typedef struct osdata *osdata_p;
+DEF_VEC_P(osdata_p);
 
-std::unique_ptr<osdata> osdata_parse (const char *xml);
-std::unique_ptr<osdata> get_osdata (const char *type);
-const std::string *get_osdata_column (const osdata_item &item,
-				      const char *name);
-
-/* Dump TYPE info to the current uiout builder.  If TYPE is either
-   NULL or empty, then dump the top level table that lists the
-   available types of OS data.  */
-void info_osdata (const char *type);
+struct osdata *osdata_parse (const char *xml);
+void osdata_free (struct osdata *);
+struct cleanup *make_cleanup_osdata_free (struct osdata *data);
+struct osdata *get_osdata (const char *type);
+const char *get_osdata_column (struct osdata_item *item, const char *name);
 
 #endif /* OSDATA_H */

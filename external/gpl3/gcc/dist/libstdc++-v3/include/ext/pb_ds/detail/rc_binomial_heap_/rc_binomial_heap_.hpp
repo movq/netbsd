@@ -1,6 +1,6 @@
 // -*- C++ -*-
 
-// Copyright (C) 2005-2019 Free Software Foundation, Inc.
+// Copyright (C) 2005, 2006, 2009 Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the terms
@@ -34,8 +34,12 @@
 // warranty.
 
 /**
- * @file rc_binomial_heap_/rc_binomial_heap_.hpp
- * Contains an implementation for redundant-counter binomial heap.
+ * @file rc_binomial_heap_.hpp
+ * Contains an implementation for rc_binomial_heap_.
+ */
+
+/*
+ * Redundant-counter binomial heap.
  */
 
 #include <ext/pb_ds/detail/cond_dealtor.hpp>
@@ -49,96 +53,114 @@ namespace __gnu_pbds
   namespace detail
   {
 #define PB_DS_CLASS_T_DEC \
-    template<typename Value_Type, typename Cmp_Fn, typename _Alloc>
+    template<typename Value_Type, class Cmp_Fn, class Allocator>
 
 #define PB_DS_CLASS_C_DEC \
-    rc_binomial_heap<Value_Type, Cmp_Fn, _Alloc>
+    rc_binomial_heap_<Value_Type, Cmp_Fn, Allocator>
+
+#define PB_DS_BASE_C_DEC \
+    binomial_heap_base_<Value_Type, Cmp_Fn, Allocator>
 
 #define PB_DS_RC_C_DEC \
-    rc<typename binomial_heap_base<Value_Type, Cmp_Fn, _Alloc>::node, _Alloc>
+    rc<typename PB_DS_BASE_C_DEC::node, Allocator>
 
     /**
-     *  Redundant-counter binomial heap.
-     *
-     *  @ingroup heap-detail
-     */
-    template<typename Value_Type, typename Cmp_Fn, typename _Alloc>
-    class rc_binomial_heap
-    : public binomial_heap_base<Value_Type, Cmp_Fn, _Alloc>
+     * class description = "8y|\|0|\/|i41 h34p 74813">
+     **/
+    template<typename Value_Type, class Cmp_Fn, class Allocator>
+    class rc_binomial_heap_ : public PB_DS_BASE_C_DEC
     {
+
     private:
-      typedef binomial_heap_base<Value_Type, Cmp_Fn, _Alloc>
-      							base_type;
-      typedef typename base_type::node_pointer 		node_pointer;
-      typedef typename base_type::node_const_pointer 	node_const_pointer;
-      typedef PB_DS_RC_C_DEC 				rc_t;
+      typedef PB_DS_BASE_C_DEC base_type;
+
+      typedef typename base_type::node_pointer node_pointer;
+
+      typedef typename base_type::const_node_pointer const_node_pointer;
+
+      typedef PB_DS_RC_C_DEC rc_t;
 
     public:
-      typedef Value_Type 				value_type;
-      typedef typename _Alloc::size_type 		size_type;
-      typedef typename _Alloc::difference_type 		difference_type;
-      typedef typename base_type::pointer 		pointer;
-      typedef typename base_type::const_pointer 	const_pointer;
-      typedef typename base_type::reference 		reference;
-      typedef typename base_type::const_reference 	const_reference;
-      typedef typename base_type::point_const_iterator 	point_const_iterator;
-      typedef typename base_type::point_iterator 	point_iterator;
-      typedef typename base_type::const_iterator 	const_iterator;
-      typedef typename base_type::iterator 		iterator;
-      typedef typename base_type::cmp_fn 		cmp_fn;
-      typedef typename base_type::allocator_type 	allocator_type;
 
-      rc_binomial_heap();
+      typedef typename Allocator::size_type size_type;
 
-      rc_binomial_heap(const Cmp_Fn&);
+      typedef typename Allocator::difference_type difference_type;
 
-      rc_binomial_heap(const PB_DS_CLASS_C_DEC&);
+      typedef Value_Type value_type;
 
-      ~rc_binomial_heap();
+      typedef typename base_type::pointer pointer;
+
+      typedef typename base_type::const_pointer const_pointer;
+
+      typedef typename base_type::reference reference;
+
+      typedef typename base_type::const_reference const_reference;
+
+      typedef typename base_type::const_point_iterator const_point_iterator;
+
+      typedef typename base_type::point_iterator point_iterator;
+
+      typedef typename base_type::const_iterator const_iterator;
+
+      typedef typename base_type::iterator iterator;
+
+      typedef typename base_type::cmp_fn cmp_fn;
+
+      typedef typename base_type::allocator_type allocator_type;
+
+    public:
+
+      rc_binomial_heap_();
+
+      rc_binomial_heap_(const Cmp_Fn& r_cmp_fn);
+
+      rc_binomial_heap_(const PB_DS_CLASS_C_DEC& other);
+
+      ~rc_binomial_heap_();
 
       void
-      swap(PB_DS_CLASS_C_DEC&);
+      swap(PB_DS_CLASS_C_DEC& other);
 
       inline point_iterator
-      push(const_reference);
+      push(const_reference r_val);
 
       void
-      modify(point_iterator, const_reference);
+      modify(point_iterator it, const_reference r_new_val);
 
       inline void
       pop();
 
       void
-      erase(point_iterator);
+      erase(point_iterator it);
 
       inline void
       clear();
 
       template<typename Pred>
       size_type
-      erase_if(Pred);
+      erase_if(Pred pred);
 
       template<typename Pred>
       void
-      split(Pred, PB_DS_CLASS_C_DEC&);
+      split(Pred pred, PB_DS_CLASS_C_DEC& other);
 
       void
-      join(PB_DS_CLASS_C_DEC&);
+      join(PB_DS_CLASS_C_DEC& other);
 
 #ifdef _GLIBCXX_DEBUG
       void
-      assert_valid(const char*, int) const;
-#endif
+      assert_valid() const;
+#endif 
 
 #ifdef PB_DS_RC_BINOMIAL_HEAP_TRACE_
       void
       trace() const;
-#endif
+#endif 
 
     private:
 
       inline node_pointer
-      link_with_next_sibling(node_pointer);
+      link_with_next_sibling(node_pointer p_nd);
 
       void
       make_0_exposed();
@@ -147,14 +169,15 @@ namespace __gnu_pbds
       make_binomial_heap();
 
 #ifdef _GLIBCXX_DEBUG
-      static node_const_pointer
-      next_2_pointer(node_const_pointer);
+      static const_node_pointer
+      next_2_pointer(const_node_pointer p_nd);
 
-      static node_const_pointer
-      next_after_0_pointer(node_const_pointer);
-#endif
+      static const_node_pointer
+      next_after_0_pointer(const_node_pointer p_nd);
+#endif 
 
-      rc_t 			m_rc;
+    private:
+      rc_t m_rc;
     };
 
 #include <ext/pb_ds/detail/rc_binomial_heap_/constructors_destructor_fn_imps.hpp>
@@ -165,7 +188,11 @@ namespace __gnu_pbds
 #include <ext/pb_ds/detail/rc_binomial_heap_/split_join_fn_imps.hpp>
 
 #undef PB_DS_CLASS_C_DEC
+
 #undef PB_DS_CLASS_T_DEC
+
+#undef PB_DS_BASE_C_DEC
+
 #undef PB_DS_RC_C_DEC
   } // namespace detail
 } // namespace __gnu_pbds

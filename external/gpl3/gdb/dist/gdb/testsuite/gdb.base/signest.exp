@@ -1,6 +1,6 @@
 # This testcase is part of GDB, the GNU debugger.
 
-# Copyright 2011-2019 Free Software Foundation, Inc.
+# Copyright 2011-2013 Free Software Foundation, Inc.
 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -15,19 +15,21 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-standard_testfile
+set testfile "signest"
+set srcfile ${testfile}.c
 
 if [target_info exists gdb,nosignals] {
     verbose "Skipping ${testfile}.exp because of nosignals."
     return -1
 }
 
-if [prepare_for_testing "failed to prepare" ${testfile} ${srcfile} {debug}] {
+if [prepare_for_testing ${testfile}.exp ${testfile} ${srcfile} {debug}] {
+    untested ${testfile}.exp
     return -1
 }
 
 if ![runto_main] then {
-    untested "could not run to main"
+    untested ${testfile}.exp
     return -1
 }
 
@@ -37,9 +39,13 @@ if ![runto_main] then {
 # especially on targets without an MMU.  Don't run the tests in that
 # case.
 
-if { [is_address_zero_readable] } {
-    untested "memory at address 0 is possibly executable"
-    return -1
+gdb_test_multiple "x 0" "memory at address 0" {
+    -re "0x0:.*Cannot access memory at address 0x0.*$gdb_prompt $" { }
+    -re "0x0:.*Error accessing memory address 0x0.*$gdb_prompt $" { }
+    -re ".*$gdb_prompt $" {
+	untested "Memory at address 0 is possibly executable"
+	return -1
+    }
 }
 
 # Run until we hit the SIGSEGV (or SIGBUS on some platforms).

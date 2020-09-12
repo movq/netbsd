@@ -1,6 +1,6 @@
 /* Scheme interface to symbols.
 
-   Copyright (C) 2008-2019 Free Software Foundation, Inc.
+   Copyright (C) 2008-2015 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -65,7 +65,7 @@ struct syscm_gdbarch_data
 static hashval_t
 syscm_hash_symbol_smob (const void *p)
 {
-  const symbol_smob *s_smob = (const symbol_smob *) p;
+  const symbol_smob *s_smob = p;
 
   return htab_hash_pointer (s_smob->symbol);
 }
@@ -75,8 +75,8 @@ syscm_hash_symbol_smob (const void *p)
 static int
 syscm_eq_symbol_smob (const void *ap, const void *bp)
 {
-  const symbol_smob *a = (const symbol_smob *) ap;
-  const symbol_smob *b = (const symbol_smob *) bp;
+  const symbol_smob *a = ap;
+  const symbol_smob *b = bp;
 
   return (a->symbol == b->symbol
 	  && a->symbol != NULL);
@@ -105,7 +105,7 @@ syscm_get_symbol_map (struct symbol *symbol)
     {
       struct objfile *objfile = symbol_objfile (symbol);
 
-      htab = (htab_t) objfile_data (objfile, syscm_objfile_data_key);
+      htab = objfile_data (objfile, syscm_objfile_data_key);
       if (htab == NULL)
 	{
 	  htab = gdbscm_create_eqable_gsmob_ptr_map (syscm_hash_symbol_smob,
@@ -116,8 +116,7 @@ syscm_get_symbol_map (struct symbol *symbol)
   else
     {
       struct gdbarch *gdbarch = symbol_arch (symbol);
-      struct syscm_gdbarch_data *data
-	= (struct syscm_gdbarch_data *) gdbarch_data (gdbarch,
+      struct syscm_gdbarch_data *data = gdbarch_data (gdbarch,
 						      syscm_gdbarch_data_key);
 
       htab = data->htab;
@@ -312,7 +311,7 @@ syscm_mark_symbol_invalid (void **slot, void *info)
 static void
 syscm_del_objfile_symbols (struct objfile *objfile, void *datum)
 {
-  htab_t htab = (htab_t) datum;
+  htab_t htab = datum;
 
   if (htab != NULL)
     {
@@ -435,11 +434,11 @@ gdbscm_symbol_constant_p (SCM self)
   symbol_smob *s_smob
     = syscm_get_valid_symbol_smob_arg_unsafe (self, SCM_ARG1, FUNC_NAME);
   const struct symbol *symbol = s_smob->symbol;
-  enum address_class theclass;
+  enum address_class class;
 
-  theclass = SYMBOL_CLASS (symbol);
+  class = SYMBOL_CLASS (symbol);
 
-  return scm_from_bool (theclass == LOC_CONST || theclass == LOC_CONST_BYTES);
+  return scm_from_bool (class == LOC_CONST || class == LOC_CONST_BYTES);
 }
 
 /* (symbol-function? <gdb:symbol>) -> boolean */
@@ -450,11 +449,11 @@ gdbscm_symbol_function_p (SCM self)
   symbol_smob *s_smob
     = syscm_get_valid_symbol_smob_arg_unsafe (self, SCM_ARG1, FUNC_NAME);
   const struct symbol *symbol = s_smob->symbol;
-  enum address_class theclass;
+  enum address_class class;
 
-  theclass = SYMBOL_CLASS (symbol);
+  class = SYMBOL_CLASS (symbol);
 
-  return scm_from_bool (theclass == LOC_BLOCK);
+  return scm_from_bool (class == LOC_BLOCK);
 }
 
 /* (symbol-variable? <gdb:symbol>) -> boolean */
@@ -465,14 +464,14 @@ gdbscm_symbol_variable_p (SCM self)
   symbol_smob *s_smob
     = syscm_get_valid_symbol_smob_arg_unsafe (self, SCM_ARG1, FUNC_NAME);
   const struct symbol *symbol = s_smob->symbol;
-  enum address_class theclass;
+  enum address_class class;
 
-  theclass = SYMBOL_CLASS (symbol);
+  class = SYMBOL_CLASS (symbol);
 
   return scm_from_bool (!SYMBOL_IS_ARGUMENT (symbol)
-			&& (theclass == LOC_LOCAL || theclass == LOC_REGISTER
-			    || theclass == LOC_STATIC || theclass == LOC_COMPUTED
-			    || theclass == LOC_OPTIMIZED_OUT));
+			&& (class == LOC_LOCAL || class == LOC_REGISTER
+			    || class == LOC_STATIC || class == LOC_COMPUTED
+			    || class == LOC_OPTIMIZED_OUT));
 }
 
 /* (symbol-needs-frame? <gdb:symbol>) -> boolean
@@ -484,17 +483,14 @@ gdbscm_symbol_needs_frame_p (SCM self)
   symbol_smob *s_smob
     = syscm_get_valid_symbol_smob_arg_unsafe (self, SCM_ARG1, FUNC_NAME);
   struct symbol *symbol = s_smob->symbol;
+  volatile struct gdb_exception except;
   int result = 0;
 
-  TRY
+  TRY_CATCH (except, RETURN_MASK_ALL)
     {
       result = symbol_read_needs_frame (symbol);
     }
-  CATCH (except, RETURN_MASK_ALL)
-    {
-      GDBSCM_HANDLE_GDB_EXCEPTION (except);
-    }
-  END_CATCH
+  GDBSCM_HANDLE_GDB_EXCEPTION (except);
 
   return scm_from_bool (result);
 }
@@ -527,6 +523,7 @@ gdbscm_symbol_value (SCM self, SCM rest)
   frame_smob *f_smob = NULL;
   struct frame_info *frame_info = NULL;
   struct value *value = NULL;
+  volatile struct gdb_exception except;
 
   gdbscm_parse_function_args (FUNC_NAME, SCM_ARG2, keywords, "#O",
 			      rest, &frame_pos, &frame_scm);
@@ -539,7 +536,7 @@ gdbscm_symbol_value (SCM self, SCM rest)
 				 _("cannot get the value of a typedef"));
     }
 
-  TRY
+  TRY_CATCH (except, RETURN_MASK_ALL)
     {
       if (f_smob != NULL)
 	{
@@ -551,17 +548,9 @@ gdbscm_symbol_value (SCM self, SCM rest)
       if (symbol_read_needs_frame (symbol) && frame_info == NULL)
 	error (_("Symbol requires a frame to compute its value"));
 
-      /* TODO: currently, we have no way to recover the block in which SYMBOL
-	 was found, so we have no block to pass to read_var_value.  This will
-	 yield an incorrect value when symbol is not local to FRAME_INFO (this
-	 can happen with nested functions).  */
-      value = read_var_value (symbol, NULL, frame_info);
+      value = read_var_value (symbol, frame_info);
     }
-  CATCH (except, RETURN_MASK_ALL)
-    {
-      GDBSCM_HANDLE_GDB_EXCEPTION (except);
-    }
-  END_CATCH
+  GDBSCM_HANDLE_GDB_EXCEPTION (except);
 
   return vlscm_scm_from_value (value);
 }
@@ -582,11 +571,15 @@ gdbscm_lookup_symbol (SCM name_scm, SCM rest)
   int block_arg_pos = -1, domain_arg_pos = -1;
   struct field_of_this_result is_a_field_of_this;
   struct symbol *symbol = NULL;
+  volatile struct gdb_exception except;
+  struct cleanup *cleanups;
 
   gdbscm_parse_function_args (FUNC_NAME, SCM_ARG1, keywords, "s#Oi",
 			      name_scm, &name, rest,
 			      &block_arg_pos, &block_scm,
 			      &domain_arg_pos, &domain);
+
+  cleanups = make_cleanup (xfree, name);
 
   if (block_arg_pos >= 0)
     {
@@ -596,7 +589,7 @@ gdbscm_lookup_symbol (SCM name_scm, SCM rest)
 				  &except_scm);
       if (block == NULL)
 	{
-	  xfree (name);
+	  do_cleanups (cleanups);
 	  gdbscm_throw (except_scm);
 	}
     }
@@ -604,32 +597,19 @@ gdbscm_lookup_symbol (SCM name_scm, SCM rest)
     {
       struct frame_info *selected_frame;
 
-      TRY
+      TRY_CATCH (except, RETURN_MASK_ALL)
 	{
 	  selected_frame = get_selected_frame (_("no frame selected"));
 	  block = get_frame_block (selected_frame, NULL);
 	}
-      CATCH (ex, RETURN_MASK_ALL)
-	{
-	  xfree (name);
-	  GDBSCM_HANDLE_GDB_EXCEPTION (ex);
-	}
-      END_CATCH
+      GDBSCM_HANDLE_GDB_EXCEPTION_WITH_CLEANUPS (except, cleanups);
     }
 
-  struct gdb_exception except = exception_none;
-  TRY
+  TRY_CATCH (except, RETURN_MASK_ALL)
     {
-      symbol = lookup_symbol (name, block, (domain_enum) domain,
-			      &is_a_field_of_this).symbol;
+      symbol = lookup_symbol (name, block, domain, &is_a_field_of_this);
     }
-  CATCH (ex, RETURN_MASK_ALL)
-    {
-      except = ex;
-    }
-  END_CATCH
-
-  xfree (name);
+  do_cleanups (cleanups);
   GDBSCM_HANDLE_GDB_EXCEPTION (except);
 
   if (symbol == NULL)
@@ -650,23 +630,20 @@ gdbscm_lookup_global_symbol (SCM name_scm, SCM rest)
   int domain_arg_pos = -1;
   int domain = VAR_DOMAIN;
   struct symbol *symbol = NULL;
-  struct gdb_exception except = exception_none;
+  volatile struct gdb_exception except;
+  struct cleanup *cleanups;
 
   gdbscm_parse_function_args (FUNC_NAME, SCM_ARG1, keywords, "s#i",
 			      name_scm, &name, rest,
 			      &domain_arg_pos, &domain);
 
-  TRY
-    {
-      symbol = lookup_global_symbol (name, NULL, (domain_enum) domain).symbol;
-    }
-  CATCH (ex, RETURN_MASK_ALL)
-    {
-      except = ex;
-    }
-  END_CATCH
+  cleanups = make_cleanup (xfree, name);
 
-  xfree (name);
+  TRY_CATCH (except, RETURN_MASK_ALL)
+    {
+      symbol = lookup_global_symbol (name, NULL, domain);
+    }
+  do_cleanups (cleanups);
   GDBSCM_HANDLE_GDB_EXCEPTION (except);
 
   if (symbol == NULL)
@@ -713,75 +690,73 @@ static const scheme_integer_constant symbol_integer_constants[] =
 
 static const scheme_function symbol_functions[] =
 {
-  { "symbol?", 1, 0, 0, as_a_scm_t_subr (gdbscm_symbol_p),
+  { "symbol?", 1, 0, 0, gdbscm_symbol_p,
     "\
 Return #t if the object is a <gdb:symbol> object." },
 
-  { "symbol-valid?", 1, 0, 0, as_a_scm_t_subr (gdbscm_symbol_valid_p),
+  { "symbol-valid?", 1, 0, 0, gdbscm_symbol_valid_p,
     "\
 Return #t if object is a valid <gdb:symbol> object.\n\
 A valid symbol is a symbol that has not been freed.\n\
 Symbols are freed when the objfile they come from is freed." },
 
-  { "symbol-type", 1, 0, 0, as_a_scm_t_subr (gdbscm_symbol_type),
+  { "symbol-type", 1, 0, 0, gdbscm_symbol_type,
     "\
 Return the type of symbol." },
 
-  { "symbol-symtab", 1, 0, 0, as_a_scm_t_subr (gdbscm_symbol_symtab),
+  { "symbol-symtab", 1, 0, 0, gdbscm_symbol_symtab,
     "\
 Return the symbol table (<gdb:symtab>) containing symbol." },
 
-  { "symbol-line", 1, 0, 0, as_a_scm_t_subr (gdbscm_symbol_line),
+  { "symbol-line", 1, 0, 0, gdbscm_symbol_line,
     "\
 Return the line number at which the symbol was defined." },
 
-  { "symbol-name", 1, 0, 0, as_a_scm_t_subr (gdbscm_symbol_name),
+  { "symbol-name", 1, 0, 0, gdbscm_symbol_name,
     "\
 Return the name of the symbol as a string." },
 
-  { "symbol-linkage-name", 1, 0, 0,
-    as_a_scm_t_subr (gdbscm_symbol_linkage_name),
+  { "symbol-linkage-name", 1, 0, 0, gdbscm_symbol_linkage_name,
     "\
 Return the linkage name of the symbol as a string." },
 
-  { "symbol-print-name", 1, 0, 0, as_a_scm_t_subr (gdbscm_symbol_print_name),
+  { "symbol-print-name", 1, 0, 0, gdbscm_symbol_print_name,
     "\
 Return the print name of the symbol as a string.\n\
 This is either name or linkage-name, depending on whether the user\n\
 asked GDB to display demangled or mangled names." },
 
-  { "symbol-addr-class", 1, 0, 0, as_a_scm_t_subr (gdbscm_symbol_addr_class),
+  { "symbol-addr-class", 1, 0, 0, gdbscm_symbol_addr_class,
     "\
 Return the address class of the symbol." },
 
-  { "symbol-needs-frame?", 1, 0, 0,
-    as_a_scm_t_subr (gdbscm_symbol_needs_frame_p),
+  { "symbol-needs-frame?", 1, 0, 0, gdbscm_symbol_needs_frame_p,
     "\
 Return #t if the symbol needs a frame to compute its value." },
 
-  { "symbol-argument?", 1, 0, 0, as_a_scm_t_subr (gdbscm_symbol_argument_p),
+  { "symbol-argument?", 1, 0, 0, gdbscm_symbol_argument_p,
     "\
 Return #t if the symbol is a function argument." },
 
-  { "symbol-constant?", 1, 0, 0, as_a_scm_t_subr (gdbscm_symbol_constant_p),
+  { "symbol-constant?", 1, 0, 0, gdbscm_symbol_constant_p,
     "\
 Return #t if the symbol is a constant." },
 
-  { "symbol-function?", 1, 0, 0, as_a_scm_t_subr (gdbscm_symbol_function_p),
+  { "symbol-function?", 1, 0, 0, gdbscm_symbol_function_p,
     "\
 Return #t if the symbol is a function." },
 
-  { "symbol-variable?", 1, 0, 0, as_a_scm_t_subr (gdbscm_symbol_variable_p),
+  { "symbol-variable?", 1, 0, 0, gdbscm_symbol_variable_p,
     "\
 Return #t if the symbol is a variable." },
 
-  { "symbol-value", 1, 0, 1, as_a_scm_t_subr (gdbscm_symbol_value),
+  { "symbol-value", 1, 0, 1, gdbscm_symbol_value,
     "\
 Return the value of the symbol.\n\
 \n\
   Arguments: <gdb:symbol> [#:frame frame]" },
 
-  { "lookup-symbol", 1, 0, 1, as_a_scm_t_subr (gdbscm_lookup_symbol),
+  { "lookup-symbol", 1, 0, 1, gdbscm_lookup_symbol,
     "\
 Return (<gdb:symbol> field-of-this?) if found, otherwise #f.\n\
 \n\
@@ -790,8 +765,7 @@ Return (<gdb:symbol> field-of-this?) if found, otherwise #f.\n\
     block:  a <gdb:block> object\n\
     domain: a SYMBOL_*_DOMAIN value" },
 
-  { "lookup-global-symbol", 1, 0, 1,
-    as_a_scm_t_subr (gdbscm_lookup_global_symbol),
+  { "lookup-global-symbol", 1, 0, 1, gdbscm_lookup_global_symbol,
     "\
 Return <gdb:symbol> if found, otherwise #f.\n\
 \n\

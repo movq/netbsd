@@ -1,6 +1,6 @@
 /* Linux namespaces(7) support.
 
-   Copyright (C) 2015-2019 Free Software Foundation, Inc.
+   Copyright (C) 2015 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -17,33 +17,20 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-#include "common/common-defs.h"
+#include "common-defs.h"
 #include "nat/linux-namespaces.h"
-#include "common/filestuff.h"
+#include "filestuff.h"
 #include <fcntl.h>
 #include <sys/syscall.h>
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <sys/socket.h>
-#include "common/gdb_wait.h"
+#include "gdb_wait.h"
 #include <signal.h>
 #include <sched.h>
 
 /* See nat/linux-namespaces.h.  */
 int debug_linux_namespaces;
-
-/* Handle systems without fork.  */
-
-static inline pid_t
-do_fork (void)
-{
-#ifdef HAVE_FORK
-  return fork ();
-#else
-  errno = ENOSYS;
-  return -1;
-#endif
-}
 
 /* Handle systems without setns.  */
 
@@ -657,7 +644,7 @@ linux_mntns_get_helper (void)
       if (gdb_socketpair_cloexec (AF_UNIX, SOCK_STREAM, 0, sv) < 0)
 	return NULL;
 
-      h.pid = do_fork ();
+      h.pid = fork ();
       if (h.pid < 0)
 	{
 	  int saved_errno = errno;

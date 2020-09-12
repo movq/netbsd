@@ -1,8 +1,9 @@
 /* moxie-specific support for 32-bit ELF.
-   Copyright (C) 2009-2019 Free Software Foundation, Inc.
+   Copyright 2009, 2010 Free Software Foundation, Inc.
 
    Copied from elf32-fr30.c which is..
-   Copyright (C) 1998-2019 Free Software Foundation, Inc.
+   Copyright 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007
+   Free Software Foundation, Inc.
 
    This file is part of BFD, the Binary File Descriptor library.
 
@@ -34,11 +35,11 @@ static reloc_howto_type moxie_elf_howto_table [] =
   /* This reloc does nothing.  */
   HOWTO (R_MOXIE_NONE,		/* type */
 	 0,			/* rightshift */
-	 3,			/* size (0 = byte, 1 = short, 2 = long) */
-	 0,			/* bitsize */
+	 2,			/* size (0 = byte, 1 = short, 2 = long) */
+	 32,			/* bitsize */
 	 FALSE,			/* pc_relative */
 	 0,			/* bitpos */
-	 complain_overflow_dont, /* complain_on_overflow */
+	 complain_overflow_bitfield, /* complain_on_overflow */
 	 bfd_elf_generic_reloc,	/* special_function */
 	 "R_MOXIE_NONE",		/* name */
 	 FALSE,			/* partial_inplace */
@@ -87,8 +88,8 @@ struct moxie_reloc_map
 
 static const struct moxie_reloc_map moxie_reloc_map [] =
 {
-  { BFD_RELOC_NONE,	       R_MOXIE_NONE },
-  { BFD_RELOC_32,	       R_MOXIE_32 },
+  { BFD_RELOC_NONE,            R_MOXIE_NONE },
+  { BFD_RELOC_32,              R_MOXIE_32 },
   { BFD_RELOC_MOXIE_10_PCREL,  R_MOXIE_PCREL10 },
 };
 
@@ -99,7 +100,7 @@ moxie_reloc_type_lookup (bfd *abfd ATTRIBUTE_UNUSED,
   unsigned int i;
 
   for (i = sizeof (moxie_reloc_map) / sizeof (moxie_reloc_map[0]);
-       i--;)
+       --i;)
     if (moxie_reloc_map [i].bfd_reloc_val == code)
       return & moxie_elf_howto_table [moxie_reloc_map[i].moxie_reloc_val];
 
@@ -123,24 +124,16 @@ moxie_reloc_name_lookup (bfd *abfd ATTRIBUTE_UNUSED, const char *r_name)
 
 /* Set the howto pointer for an MOXIE ELF reloc.  */
 
-static bfd_boolean
-moxie_info_to_howto_rela (bfd *abfd,
+static void
+moxie_info_to_howto_rela (bfd *abfd ATTRIBUTE_UNUSED,
 			  arelent *cache_ptr,
 			  Elf_Internal_Rela *dst)
 {
   unsigned int r_type;
 
   r_type = ELF32_R_TYPE (dst->r_info);
-  if (r_type >= (unsigned int) R_MOXIE_max)
-    {
-      /* xgettext:c-format */
-      _bfd_error_handler (_("%pB: unsupported relocation type %#x"),
-			  abfd, r_type);
-      bfd_set_error (bfd_error_bad_value);
-      return FALSE;
-    }
+  BFD_ASSERT (r_type < (unsigned int) R_MOXIE_max);
   cache_ptr->howto = & moxie_elf_howto_table [r_type];
-  return TRUE;
 }
 
 /* Perform a single relocation.  By default we use the standard BFD
@@ -247,21 +240,21 @@ moxie_elf_relocate_section (bfd *output_bfd,
 	}
       else
 	{
-	  bfd_boolean unresolved_reloc, warned, ignored;
+	  bfd_boolean unresolved_reloc, warned;
 
 	  RELOC_FOR_GLOBAL_SYMBOL (info, input_bfd, input_section, rel,
 				   r_symndx, symtab_hdr, sym_hashes,
 				   h, sec, relocation,
-				   unresolved_reloc, warned, ignored);
+				   unresolved_reloc, warned);
 
 	  name = h->root.root.string;
 	}
 
-      if (sec != NULL && discarded_section (sec))
+      if (sec != NULL && elf_discarded_section (sec))
 	RELOC_AGAINST_DISCARDED_SECTION (info, input_bfd, input_section,
-					 rel, 1, relend, howto, 0, contents);
+					 rel, relend, howto, contents);
 
-      if (bfd_link_relocatable (info))
+      if (info->relocatable)
 	continue;
 
       r = moxie_final_link_relocate (howto, input_bfd, input_section,
@@ -274,14 +267,15 @@ moxie_elf_relocate_section (bfd *output_bfd,
 	  switch (r)
 	    {
 	    case bfd_reloc_overflow:
-	      (*info->callbacks->reloc_overflow)
+	      r = info->callbacks->reloc_overflow
 		(info, (h ? &h->root : NULL), name, howto->name,
 		 (bfd_vma) 0, input_bfd, input_section, rel->r_offset);
 	      break;
 
 	    case bfd_reloc_undefined:
-	      (*info->callbacks->undefined_symbol)
-		(info, name, input_bfd, input_section, rel->r_offset, TRUE);
+	      r = info->callbacks->undefined_symbol
+		(info, name, input_bfd, input_section, rel->r_offset,
+		 TRUE);
 	      break;
 
 	    case bfd_reloc_outofrange:
@@ -302,8 +296,11 @@ moxie_elf_relocate_section (bfd *output_bfd,
 	    }
 
 	  if (msg)
-	    (*info->callbacks->warning) (info, msg, name, input_bfd,
-					 input_section, rel->r_offset);
+	    r = info->callbacks->warning
+	      (info, msg, name, input_bfd, input_section, rel->r_offset);
+
+	  if (! r)
+	    return FALSE;
 	}
     }
 
@@ -338,7 +335,7 @@ moxie_elf_check_relocs (bfd *abfd,
   const Elf_Internal_Rela *rel;
   const Elf_Internal_Rela *rel_end;
 
-  if (bfd_link_relocatable (info))
+  if (info->relocatable)
     return TRUE;
 
   symtab_hdr = &elf_tdata (abfd)->symtab_hdr;
@@ -352,7 +349,7 @@ moxie_elf_check_relocs (bfd *abfd,
 
       r_symndx = ELF32_R_SYM (rel->r_info);
       if (r_symndx < symtab_hdr->sh_info)
-	h = NULL;
+        h = NULL;
       else
 	{
 	  h = sym_hashes[r_symndx - symtab_hdr->sh_info];
@@ -367,19 +364,16 @@ moxie_elf_check_relocs (bfd *abfd,
 
 #define ELF_ARCH		bfd_arch_moxie
 #define ELF_MACHINE_CODE	EM_MOXIE
-#define ELF_MACHINE_ALT1	EM_MOXIE_OLD
 #define ELF_MAXPAGESIZE		0x1
 
-#define TARGET_BIG_SYM		moxie_elf32_be_vec
-#define TARGET_BIG_NAME		"elf32-bigmoxie"
-#define TARGET_LITTLE_SYM	moxie_elf32_le_vec
-#define TARGET_LITTLE_NAME	"elf32-littlemoxie"
+#define TARGET_BIG_SYM          bfd_elf32_moxie_vec
+#define TARGET_BIG_NAME		"elf32-moxie"
 
 #define elf_info_to_howto_rel			NULL
 #define elf_info_to_howto			moxie_info_to_howto_rela
 #define elf_backend_relocate_section		moxie_elf_relocate_section
 #define elf_backend_gc_mark_hook		moxie_elf_gc_mark_hook
-#define elf_backend_check_relocs		moxie_elf_check_relocs
+#define elf_backend_check_relocs                moxie_elf_check_relocs
 
 #define elf_backend_can_gc_sections		1
 #define elf_backend_rela_normal			1

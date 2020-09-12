@@ -1,5 +1,5 @@
 /* brig-branch-inst-handler.cc -- brig branch instruction handling
-   Copyright (C) 2016-2019 Free Software Foundation, Inc.
+   Copyright (C) 2016-2017 Free Software Foundation, Inc.
    Contributed by Pekka Jaaskelainen <pekka.jaaskelainen@parmance.com>
    for General Processor Tech.
 
@@ -42,8 +42,7 @@ brig_branch_inst_handler::operator () (const BrigBase *base)
       vec<tree, va_gc> *out_args;
       vec_alloc (out_args, 1);
       vec<tree, va_gc> *in_args;
-      /* Ten elem initially, more reserved if needed. */
-      vec_alloc (in_args, 10);
+      vec_alloc (in_args, 4);
 
       size_t operand_count = operand_entries->byteCount / 4;
       gcc_assert (operand_count < 4);
@@ -70,7 +69,7 @@ brig_branch_inst_handler::operator () (const BrigBase *base)
 	  const BrigOperandOffset32_t *operand_ptr
 	    = (const BrigOperandOffset32_t *) data->bytes;
 
-	  bool out_args_p = i == 0;
+	  vec<tree, va_gc> *args = i == 0 ? out_args : in_args;
 
 	  while (bytes > 0)
 	    {
@@ -85,7 +84,7 @@ brig_branch_inst_handler::operator () (const BrigBase *base)
 	      if (brig_var->type & BRIG_TYPE_ARRAY)
 		{
 		  /* Array return values are passed as the first argument.  */
-		  out_args_p = false;
+		  args = in_args;
 		  /* Pass pointer to the element zero and use its element zero
 		     as the base address.  */
 		  tree etype = TREE_TYPE (TREE_TYPE (var));
@@ -97,7 +96,7 @@ brig_branch_inst_handler::operator () (const BrigBase *base)
 		}
 
 	      gcc_assert (var != NULL_TREE);
-	      vec_safe_push (out_args_p ? out_args : in_args, var);
+	      vec_safe_push (args, var);
 	      ++operand_ptr;
 	      bytes -= 4;
 	    }
@@ -118,19 +117,8 @@ brig_branch_inst_handler::operator () (const BrigBase *base)
 	 they might call builtins that need them or access group/private
 	 memory.  */
 
-      tree group_local_offset
-	= m_parent.m_cf->add_temp_var ("group_local_offset",
-				       build_int_cst
-				       (uint32_type_node,
-					m_parent.m_cf->
-					m_local_group_variables.size()));
-
-      /* TODO: ensure the callee's frame is aligned!  */
-
-      vec_safe_reserve (in_args, 4);
       vec_safe_push (in_args, m_parent.m_cf->m_context_arg);
       vec_safe_push (in_args, m_parent.m_cf->m_group_base_arg);
-      vec_safe_push (in_args, group_local_offset);
       vec_safe_push (in_args, m_parent.m_cf->m_private_base_arg);
 
       tree call = build_call_vec (ret_val_type, build_fold_addr_expr (func_ref),
@@ -150,10 +138,8 @@ brig_branch_inst_handler::operator () (const BrigBase *base)
 	  m_parent.m_cf->append_statement (call);
 	}
 
+      m_parent.m_cf->m_has_unexpanded_dp_builtins = false;
       m_parent.m_cf->m_called_functions.push_back (func_ref);
-      if (DECL_EXTERNAL (func_ref))
-	m_parent.add_decl_call (call);
-      m_parent.m_cf->start_new_bb ();
 
       return base->byteCount;
     }
@@ -171,8 +157,8 @@ brig_branch_inst_handler::operator () (const BrigBase *base)
       tree select = operands[0];
       tree cases = operands[1];
 
-      tree switch_expr = build2 (SWITCH_EXPR, TREE_TYPE (select), select,
-				 NULL_TREE);
+      tree switch_expr = build3 (SWITCH_EXPR, TREE_TYPE (select), select,
+				 NULL_TREE, NULL_TREE);
 
       tree default_case
 	= build_case_label (NULL_TREE, NULL_TREE,
@@ -218,21 +204,18 @@ brig_branch_inst_handler::operator () (const BrigBase *base)
 	 ensure the barrier won't be duplicated or moved out of loops etc.
 	 Like the 'noduplicate' of LLVM.  Same goes for fbarriers.  */
       m_parent.m_cf->append_statement
-	(m_parent.m_cf->expand_or_call_builtin (brig_inst->opcode,
-						BRIG_TYPE_NONE, NULL_TREE,
-						call_operands));
+	(expand_or_call_builtin (brig_inst->opcode, BRIG_TYPE_NONE, NULL_TREE,
+				 call_operands));
     }
   else if (brig_inst->opcode >= BRIG_OPCODE_ARRIVEFBAR
 	   && brig_inst->opcode <= BRIG_OPCODE_WAITFBAR)
     {
       m_parent.m_cf->m_has_barriers = true;
       m_parent.m_cf->append_statement
-	(m_parent.m_cf->expand_or_call_builtin (brig_inst->opcode,
-						BRIG_TYPE_NONE,
-						uint32_type_node, operands));
+	(expand_or_call_builtin (brig_inst->opcode, BRIG_TYPE_NONE,
+				 uint32_type_node, operands));
     }
   else
     gcc_unreachable ();
-  m_parent.m_cf->start_new_bb ();
   return base->byteCount;
 }

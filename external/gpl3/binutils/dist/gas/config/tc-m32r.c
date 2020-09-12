@@ -1,5 +1,6 @@
 /* tc-m32r.c -- Assembler for the Renesas M32R.
-   Copyright (C) 1996-2020 Free Software Foundation, Inc.
+   Copyright 1996, 1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005,
+   2006, 2007 Free Software Foundation, Inc.
 
    This file is part of GAS, the GNU Assembler.
 
@@ -113,7 +114,7 @@ static int warn_explicit_parallel_conflicts = 1;
 /* Non-zero if the programmer should not receive any messages about
    parallel instruction with potential or real constraint violations.
    The ability to suppress these messages is intended only for hardware
-   vendors testing the chip.  It supersedes
+   vendors testing the chip.  It superceedes
    warn_explicit_parallel_conflicts.  */
 static int ignore_parallel_conflicts = 0;
 
@@ -164,7 +165,7 @@ struct m32r_hi_fixup
 
 static struct m32r_hi_fixup *m32r_hi_fixup_list;
 
-static const struct
+struct
 {
   enum bfd_architecture bfd_mach;
   int mach_flags;
@@ -266,7 +267,7 @@ parallel (void)
 }
 
 int
-md_parse_option (int c, const char *arg ATTRIBUTE_UNUSED)
+md_parse_option (int c, char *arg ATTRIBUTE_UNUSED)
 {
   switch (c)
     {
@@ -393,11 +394,11 @@ md_show_usage (FILE *stream)
   fprintf (stream, _("\
   -warn-explicit-parallel-conflicts     warn when parallel instructions\n"));
   fprintf (stream, _("\
-                                         might violate constraints\n"));
+                                         might violate contraints\n"));
   fprintf (stream, _("\
   -no-warn-explicit-parallel-conflicts  do not warn when parallel\n"));
   fprintf (stream, _("\
-                                         instructions might violate constraints\n"));
+                                         instructions might violate contraints\n"));
   fprintf (stream, _("\
   -Wp                     synonym for -warn-explicit-parallel-conflicts\n"));
   fprintf (stream, _("\
@@ -405,11 +406,11 @@ md_show_usage (FILE *stream)
   fprintf (stream, _("\
   -ignore-parallel-conflicts            do not check parallel instructions\n"));
   fprintf (stream, _("\
-                                         for constraint violations\n"));
+                                         fo contraint violations\n"));
   fprintf (stream, _("\
   -no-ignore-parallel-conflicts         check parallel instructions for\n"));
   fprintf (stream, _("\
-                                         constraint violations\n"));
+                                         contraint violations\n"));
   fprintf (stream, _("\
   -Ip                     synonym for -ignore-parallel-conflicts\n"));
   fprintf (stream, _("\
@@ -567,10 +568,13 @@ debug_sym (int ignore ATTRIBUTE_UNUSED)
 {
   char *name;
   char delim;
+  char *end_name;
   symbolS *symbolP;
-  sym_linkS *lnk;
+  sym_linkS *link;
 
-  delim = get_symbol_name (&name);
+  name = input_line_pointer;
+  delim = get_symbol_end ();
+  end_name = input_line_pointer;
 
   if ((symbolP = symbol_find (name)) == NULL
       && (symbolP = md_undefined_symbol (name)) == NULL)
@@ -585,14 +589,14 @@ debug_sym (int ignore ATTRIBUTE_UNUSED)
 
   else
     {
-      lnk = XNEW (sym_linkS);
-      lnk->symbol = symbolP;
-      lnk->next = debug_sym_link;
-      debug_sym_link = lnk;
+      link = (sym_linkS *) xmalloc (sizeof (sym_linkS));
+      link->symbol = symbolP;
+      link->next = debug_sym_link;
+      debug_sym_link = link;
       symbol_get_obj (symbolP)->local = 1;
     }
 
-  (void) restore_line_pointer (delim);
+  *end_name = delim;
   demand_empty_rest_of_line ();
 }
 
@@ -613,7 +617,7 @@ expand_debug_syms (sym_linkS *syms, int align)
     {
       symbolS *symbolP = syms->symbol;
       next_syms = syms->next;
-      input_line_pointer = (char *) ".\n";
+      input_line_pointer = ".\n";
       pseudo_set (symbolP);
       free ((char *) syms);
     }
@@ -713,18 +717,18 @@ md_begin (void)
 
   /* This is copied from perform_an_assembly_pass.  */
   applicable = bfd_applicable_section_flags (stdoutput);
-  bfd_set_section_flags (sbss_section, applicable & SEC_ALLOC);
+  bfd_set_section_flags (stdoutput, sbss_section, applicable & SEC_ALLOC);
 
   subseg_set (seg, subseg);
 
   /* We must construct a fake section similar to bfd_com_section
      but with the name .scommon.  */
-  scom_section                = *bfd_com_section_ptr;
+  scom_section                = bfd_com_section;
   scom_section.name           = ".scommon";
   scom_section.output_section = & scom_section;
   scom_section.symbol         = & scom_symbol;
   scom_section.symbol_ptr_ptr = & scom_section.symbol;
-  scom_symbol                 = * bfd_com_section_ptr->symbol;
+  scom_symbol                 = * bfd_com_section.symbol;
   scom_symbol.name            = ".scommon";
   scom_symbol.section         = & scom_section;
 
@@ -916,7 +920,7 @@ assemble_two_insns (char *str1, char *str2, int parallel_p)
   if (! (first.insn = m32r_cgen_assemble_insn
 	 (gas_cgen_cpu_desc, str1, & first.fields, first.buffer, & errmsg)))
     {
-      as_bad ("%s", errmsg);
+      as_bad (errmsg);
       return;
     }
 
@@ -1030,7 +1034,7 @@ assemble_two_insns (char *str1, char *str2, int parallel_p)
   if (! (second.insn = m32r_cgen_assemble_insn
 	 (gas_cgen_cpu_desc, str1, & second.fields, second.buffer, & errmsg)))
     {
-      as_bad ("%s", errmsg);
+      as_bad (errmsg);
       return;
     }
 
@@ -1221,7 +1225,7 @@ md_assemble (char *str)
 
   if (!insn.insn)
     {
-      as_bad ("%s", errmsg);
+      as_bad (errmsg);
       return;
     }
 
@@ -1448,9 +1452,9 @@ md_operand (expressionS *expressionP)
 valueT
 md_section_align (segT segment, valueT size)
 {
-  int align = bfd_section_alignment (segment);
+  int align = bfd_get_section_alignment (stdoutput, segment);
 
-  return ((size + (1 << align) - 1) & -(1 << align));
+  return ((size + (1 << align) - 1) & (-1 << align));
 }
 
 symbolS *
@@ -1477,12 +1481,13 @@ m32r_scomm (int ignore ATTRIBUTE_UNUSED)
   offsetT align;
   int align2;
 
-  c = get_symbol_name (&name);
+  name = input_line_pointer;
+  c = get_symbol_end ();
 
   /* Just after name is now '\0'.  */
   p = input_line_pointer;
   *p = c;
-  SKIP_WHITESPACE_AFTER_NAME ();
+  SKIP_WHITESPACE ();
   if (*input_line_pointer != ',')
     {
       as_bad (_("Expected comma after symbol-name: rest of line ignored."));
@@ -1804,8 +1809,8 @@ md_convert_frag (bfd *abfd ATTRIBUTE_UNUSED,
     {
       fixS *fixP;
 
-      gas_assert (fragP->fr_subtype != 1);
-      gas_assert (fragP->fr_cgen.insn != 0);
+      assert (fragP->fr_subtype != 1);
+      assert (fragP->fr_cgen.insn != 0);
 
       fixP = gas_cgen_record_fixup (fragP,
 				    /* Offset of branch insn in frag.  */
@@ -1895,10 +1900,10 @@ m32r_record_hi16 (int reloc_type,
 {
   struct m32r_hi_fixup *hi_fixup;
 
-  gas_assert (reloc_type == BFD_RELOC_M32R_HI16_SLO
+  assert (reloc_type == BFD_RELOC_M32R_HI16_SLO
 	  || reloc_type == BFD_RELOC_M32R_HI16_ULO);
 
-  hi_fixup = XNEW (struct m32r_hi_fixup);
+  hi_fixup = xmalloc (sizeof (* hi_fixup));
   hi_fixup->fixp = fixP;
   hi_fixup->seg  = now_seg;
   hi_fixup->next = m32r_hi_fixup_list;
@@ -2003,7 +2008,7 @@ m32r_frob_file (void)
       segment_info_type *seginfo;
       int pass;
 
-      gas_assert (FX_OPINFO_R_TYPE (l->fixp) == BFD_RELOC_M32R_HI16_SLO
+      assert (FX_OPINFO_R_TYPE (l->fixp) == BFD_RELOC_M32R_HI16_SLO
 	      || FX_OPINFO_R_TYPE (l->fixp) == BFD_RELOC_M32R_HI16_ULO);
 
       /* Check quickly whether the next fixup happens to be a matching low.  */
@@ -2044,7 +2049,7 @@ m32r_frob_file (void)
 		  for (pf = &seginfo->fix_root;
 		       *pf != l->fixp;
 		       pf = & (*pf)->fx_next)
-		    gas_assert (*pf != NULL);
+		    assert (*pf != NULL);
 
 		  *pf = l->fixp->fx_next;
 
@@ -2103,7 +2108,10 @@ md_number_to_chars (char *buf, valueT val, int n)
    of LITTLENUMS emitted is stored in *SIZEP.  An error message is
    returned, or NULL on OK.  */
 
-const char *
+/* Equal to MAX_PRECISION in atof-ieee.c.  */
+#define MAX_LITTLENUMS 6
+
+char *
 md_atof (int type, char *litP, int *sizeP)
 {
   return ieee_md_atof (type, litP, sizeP, target_big_endian);
@@ -2191,10 +2199,10 @@ tc_gen_reloc (asection * section, fixS * fixP)
 {
   arelent * reloc;
   bfd_reloc_code_real_type code;
-
-  reloc = XNEW (arelent);
-
-  reloc->sym_ptr_ptr = XNEW (asymbol *);
+ 
+  reloc = xmalloc (sizeof (* reloc));
+ 
+  reloc->sym_ptr_ptr = xmalloc (sizeof (asymbol *));
   *reloc->sym_ptr_ptr = symbol_get_bfdsym (fixP->fx_addsy);
   reloc->address = fixP->fx_frag->fr_address + fixP->fx_where;
 
@@ -2208,7 +2216,7 @@ tc_gen_reloc (asection * section, fixS * fixP)
           bfd_set_error (bfd_error_bad_value);
 	}
     }
-
+ 
   code = fixP->fx_r_type;
   if (pic_code)
     {
@@ -2260,7 +2268,7 @@ printf("%s",bfd_get_reloc_code_name(code));
 printf(" => %s",bfd_get_reloc_code_name(code));
 #endif
     }
-
+ 
   reloc->howto = bfd_reloc_type_lookup (stdoutput, code);
 
 #ifdef DEBUG_PIC
@@ -2274,7 +2282,7 @@ printf(" => %s\n",reloc->howto->name);
             fixP->fx_r_type, bfd_get_reloc_code_name (code));
       return NULL;
     }
-
+ 
   /* Use fx_offset for these cases.  */
   if (   fixP->fx_r_type == BFD_RELOC_VTABLE_ENTRY
       || fixP->fx_r_type == BFD_RELOC_VTABLE_INHERIT
@@ -2288,16 +2296,16 @@ printf(" => %s\n",reloc->howto->name);
            && S_IS_DEFINED (fixP->fx_addsy)
            && ! S_IS_EXTERNAL(fixP->fx_addsy)
            && ! S_IS_WEAK(fixP->fx_addsy))
-    /* Already used fx_offset in the opcode field itself.  */
+    /* Already used fx_offset in the opcode field itseld.  */
     reloc->addend  = fixP->fx_offset;
   else
     reloc->addend  = fixP->fx_addnumber;
-
+ 
   return reloc;
 }
 
 inline static char *
-m32r_end_of_match (char *cont, const char *what)
+m32r_end_of_match (char *cont, char *what)
 {
   int len = strlen (what);
 

@@ -1,6 +1,6 @@
 /* Routines for emitting GIMPLE to a file stream.
 
-   Copyright (C) 2011-2019 Free Software Foundation, Inc.
+   Copyright (C) 2011-2013 Free Software Foundation, Inc.
    Contributed by Diego Novillo <dnovillo@google.com>
 
 This file is part of GCC.
@@ -22,21 +22,17 @@ along with GCC; see the file COPYING3.  If not see
 #include "config.h"
 #include "system.h"
 #include "coretypes.h"
-#include "backend.h"
 #include "tree.h"
-#include "gimple.h"
-#include "gimple-ssa.h"
+#include "tree-flow.h"
+#include "data-streamer.h"
 #include "gimple-streamer.h"
-#include "tree-eh.h"
-#include "gimple-iterator.h"
-#include "cgraph.h"
-#include "value-prof.h"
-#include "gimple-pretty-print.h"
+#include "lto-streamer.h"
+#include "tree-streamer.h"
 
 /* Output PHI function PHI to the main stream in OB.  */
 
 static void
-output_phi (struct output_block *ob, gphi *phi)
+output_phi (struct output_block *ob, gimple phi)
 {
   unsigned i, len = gimple_phi_num_args (phi);
 
@@ -57,13 +53,12 @@ output_phi (struct output_block *ob, gphi *phi)
 /* Emit statement STMT on the main stream of output block OB.  */
 
 static void
-output_gimple_stmt (struct output_block *ob, struct function *fn, gimple *stmt)
+output_gimple_stmt (struct output_block *ob, gimple stmt)
 {
   unsigned i;
   enum gimple_code code;
   enum LTO_tags tag;
   struct bitpack_d bp;
-  histogram_value hist;
 
   /* Emit identifying tag.  */
   code = gimple_code (stmt);
@@ -75,14 +70,9 @@ output_gimple_stmt (struct output_block *ob, struct function *fn, gimple *stmt)
   bp_pack_var_len_unsigned (&bp, gimple_num_ops (stmt));
   bp_pack_value (&bp, gimple_no_warning_p (stmt), 1);
   if (is_gimple_assign (stmt))
-    bp_pack_value (&bp,
-		   gimple_assign_nontemporal_move_p (
-		     as_a <gassign *> (stmt)),
-		   1);
+    bp_pack_value (&bp, gimple_assign_nontemporal_move_p (stmt), 1);
   bp_pack_value (&bp, gimple_has_volatile_ops (stmt), 1);
-  hist = gimple_histogram_value (fn, stmt);
-  bp_pack_value (&bp, hist != NULL, 1);
-  bp_pack_var_len_unsigned (&bp, stmt->subcode);
+  bp_pack_var_len_unsigned (&bp, stmt->gsbase.subcode);
 
   /* Emit location information for the statement.  */
   stream_output_location (ob, &bp, LOCATION_LOCUS (gimple_location (stmt)));
@@ -95,32 +85,24 @@ output_gimple_stmt (struct output_block *ob, struct function *fn, gimple *stmt)
   switch (gimple_code (stmt))
     {
     case GIMPLE_RESX:
-      streamer_write_hwi (ob, gimple_resx_region (as_a <gresx *> (stmt)));
+      streamer_write_hwi (ob, gimple_resx_region (stmt));
       break;
 
     case GIMPLE_EH_MUST_NOT_THROW:
-      stream_write_tree (ob,
-			 gimple_eh_must_not_throw_fndecl (
-			   as_a <geh_mnt *> (stmt)),
-			 true);
+      stream_write_tree (ob, gimple_eh_must_not_throw_fndecl (stmt), true);
       break;
 
     case GIMPLE_EH_DISPATCH:
-      streamer_write_hwi (ob,
-			  gimple_eh_dispatch_region (
-			    as_a <geh_dispatch *> (stmt)));
+      streamer_write_hwi (ob, gimple_eh_dispatch_region (stmt));
       break;
 
     case GIMPLE_ASM:
-      {
-	gasm *asm_stmt = as_a <gasm *> (stmt);
-	streamer_write_uhwi (ob, gimple_asm_ninputs (asm_stmt));
-	streamer_write_uhwi (ob, gimple_asm_noutputs (asm_stmt));
-	streamer_write_uhwi (ob, gimple_asm_nclobbers (asm_stmt));
-	streamer_write_uhwi (ob, gimple_asm_nlabels (asm_stmt));
-	streamer_write_string (ob, ob->main_stream,
-			       gimple_asm_string (asm_stmt), true);
-      }
+      streamer_write_uhwi (ob, gimple_asm_ninputs (stmt));
+      streamer_write_uhwi (ob, gimple_asm_noutputs (stmt));
+      streamer_write_uhwi (ob, gimple_asm_nclobbers (stmt));
+      streamer_write_uhwi (ob, gimple_asm_nlabels (stmt));
+      streamer_write_string (ob, ob->main_stream, gimple_asm_string (stmt),
+			     true);
       /* Fallthru  */
 
     case GIMPLE_ASSIGN:
@@ -139,22 +121,20 @@ output_gimple_stmt (struct output_block *ob, struct function *fn, gimple *stmt)
 	     so that we do not have to deal with type mismatches on
 	     merged symbols during IL read in.  The first operand
 	     of GIMPLE_DEBUG must be a decl, not MEM_REF, though.  */
-	  if (!flag_wpa && op && (i || !is_gimple_debug (stmt)))
+	  if (op && (i || !is_gimple_debug (stmt)))
 	    {
 	      basep = &op;
-	      if (TREE_CODE (*basep) == ADDR_EXPR)
-		basep = &TREE_OPERAND (*basep, 0);
 	      while (handled_component_p (*basep))
 		basep = &TREE_OPERAND (*basep, 0);
-	      if (VAR_P (*basep)
-		  && !auto_var_in_fn_p (*basep, fn->decl)
+	      if (TREE_CODE (*basep) == VAR_DECL
+		  && !auto_var_in_fn_p (*basep, current_function_decl)
 		  && !DECL_REGISTER (*basep))
 		{
 		  bool volatilep = TREE_THIS_VOLATILE (*basep);
-		  tree ptrtype = build_pointer_type (TREE_TYPE (*basep));
 		  *basep = build2 (MEM_REF, TREE_TYPE (*basep),
-				   build1 (ADDR_EXPR, ptrtype, *basep),
-				   build_int_cst (ptrtype, 0));
+				   build_fold_addr_expr (*basep),
+				   build_int_cst (build_pointer_type
+						  (TREE_TYPE (*basep)), 0));
 		  TREE_THIS_VOLATILE (*basep) = volatilep;
 		}
 	      else
@@ -180,20 +160,13 @@ output_gimple_stmt (struct output_block *ob, struct function *fn, gimple *stmt)
       break;
 
     case GIMPLE_TRANSACTION:
-      {
-	gtransaction *txn = as_a <gtransaction *> (stmt);
-	gcc_assert (gimple_transaction_body (txn) == NULL);
-	stream_write_tree (ob, gimple_transaction_label_norm (txn), true);
-	stream_write_tree (ob, gimple_transaction_label_uninst (txn), true);
-	stream_write_tree (ob, gimple_transaction_label_over (txn), true);
-      }
+      gcc_assert (gimple_transaction_body (stmt) == NULL);
+      stream_write_tree (ob, gimple_transaction_label (stmt), true);
       break;
 
     default:
       gcc_unreachable ();
     }
-  if (hist)
-    stream_out_histogram_value (ob, hist);
 }
 
 
@@ -210,9 +183,9 @@ output_bb (struct output_block *ob, basic_block bb, struct function *fn)
 				: LTO_bb0);
 
   streamer_write_uhwi (ob, bb->index);
-  bb->count.stream_out (ob);
+  streamer_write_hwi (ob, bb->count);
+  streamer_write_hwi (ob, bb->frequency);
   streamer_write_hwi (ob, bb->flags);
-  streamer_write_hwi (ob, bb->discriminator);
 
   if (!gsi_end_p (bsi) || phi_nodes (bb))
     {
@@ -221,14 +194,9 @@ output_bb (struct output_block *ob, basic_block bb, struct function *fn)
       for (bsi = gsi_start_bb (bb); !gsi_end_p (bsi); gsi_next (&bsi))
 	{
 	  int region;
-	  gimple *stmt = gsi_stmt (bsi);
-	  if (streamer_dump_file)
-	    {
-	      fprintf (streamer_dump_file, "  Streaming gimple stmt ");
-	      print_gimple_stmt (streamer_dump_file, stmt, 0, TDF_SLIM);
-	    }
+	  gimple stmt = gsi_stmt (bsi);
 
-	  output_gimple_stmt (ob, fn, stmt);
+	  output_gimple_stmt (ob, stmt);
 
 	  /* Emit the EH region holding STMT.  */
 	  region = lookup_stmt_eh_lp_fn (fn, stmt);
@@ -243,11 +211,9 @@ output_bb (struct output_block *ob, basic_block bb, struct function *fn)
 
       streamer_write_record_start (ob, LTO_null);
 
-      for (gphi_iterator psi = gsi_start_phis (bb);
-	   !gsi_end_p (psi);
-	   gsi_next (&psi))
+      for (bsi = gsi_start_phis (bb); !gsi_end_p (bsi); gsi_next (&bsi))
 	{
-	  gphi *phi = psi.phi ();
+	  gimple phi = gsi_stmt (bsi);
 
 	  /* Only emit PHIs for gimple registers.  PHI nodes for .MEM
 	     will be filled in on reading when the SSA form is

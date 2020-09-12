@@ -1,4 +1,4 @@
-# Copyright 2010-2019 Free Software Foundation, Inc.
+# Copyright 2010, 2011 Free Software Foundation, Inc.
 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -20,10 +20,12 @@ if {![istarget arm*-*eabi*]} then {
     return
 }
 
-standard_testfile .S
+set testfile "thumb2-it"
+set srcfile ${testfile}.S
+set binfile ${objdir}/${subdir}/${testfile}
 
 if { [gdb_compile "${srcdir}/${subdir}/${srcfile}" "${binfile}" executable debug] != "" } {
-    untested "failed to compile"
+    untested thumb2-it.exp
     return -1
 }
 
@@ -33,7 +35,7 @@ gdb_reinitialize_dir $srcdir/$subdir
 gdb_load ${binfile}
 
 if ![runto_main] then {
-    untested "could not run to main"
+    untested thumb2-it.exp
     return -1
 }
 
@@ -41,7 +43,7 @@ if ![runto_main] then {
 gdb_test_multiple "list" "list main" {
     -re ".*@ No Thumb-2.*$gdb_prompt $" {
 	pass "list main"
-	untested "skipping tests due to lack of Thumb-2"
+	untested thumb2-it.exp
 	return -1
     }
     -re ".*@ Thumb-2 OK.*$gdb_prompt $" {
@@ -58,7 +60,7 @@ proc test_it_block { func } {
 	return
     }
 
-    gdb_test "call (int) ${func}()" "Breakpoint.*@ Setup.*" "$func, call"
+    gdb_test "call ${func}()" "Breakpoint.*@ Setup.*" "$func, call"
 
     set expected 0
     set reached 0
@@ -155,7 +157,7 @@ for { set i 1 } { $i <= 8 } { incr i } {
 }
 
 gdb_breakpoint "*it_breakpoints"
-gdb_test "call (int) it_breakpoints()" "Breakpoint.*"
+gdb_test "call it_breakpoints()" "Breakpoint.*"
 for { set i 1 } { $i <= 7 } { incr i } {
     test_it_break ${i}
 }

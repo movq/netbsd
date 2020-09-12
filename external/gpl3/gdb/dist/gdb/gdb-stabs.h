@@ -1,5 +1,6 @@
 /* Definitions for symbol-reading containing "stabs", for GDB.
-   Copyright (C) 1992-2019 Free Software Foundation, Inc.
+   Copyright (C) 1992, 1993, 1995, 1996, 1997, 1999, 2000, 2007, 2008, 2009,
+   2010, 2011 Free Software Foundation, Inc.
    Contributed by Cygnus Support.  Written by John Gilmore.
 
    This file is part of GDB.
@@ -17,23 +18,32 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-#ifndef GDB_STABS_H
-#define GDB_STABS_H
-
 /* This file exists to hold the common definitions required of most of
    the symbol-readers that end up using stabs.  The common use of
    these `symbol-type-specific' customizations of the generic data
    structures makes the stabs-oriented symbol readers able to call
    each others' functions as required.  */
 
+#if !defined (GDBSTABS_H)
+#define GDBSTABS_H
 
-/* The tag used to find the DBX info attached to an objfile.  This is
-   global because it is referenced by several modules.  */
-extern const struct objfile_data *dbx_objfile_data_key;
+/* The stab_section_info chain remembers info from the ELF symbol table,
+   while psymtabs are being built for the other symbol tables in the 
+   objfile.  It is destroyed at the complation of psymtab-reading.
+   Any info that was used from it has been copied into psymtabs.  */
+
+struct stab_section_info
+  {
+    char *filename;
+    struct stab_section_info *next;
+    int found;			/* Count of times it's found in searching.  */
+    size_t num_sections;
+    CORE_ADDR sections[1];
+  };
 
 /* Information is passed among various dbxread routines for accessing
-   symbol files.  A pointer to this structure is kept in the objfile,
-   using the dbx_objfile_data_key.  */
+   symbol files.  A pointer to this structure is kept in the
+   deprecated_sym_stab_info field of the objfile struct.  */
 
 struct dbx_symfile_info
   {
@@ -44,6 +54,9 @@ struct dbx_symfile_info
     int stringtab_size;		/* Its size */
     file_ptr symtab_offset;	/* Offset in file to symbol table */
     int symbol_size;		/* Bytes in a single symbol */
+    struct stab_section_info *stab_section_info;    /* Section starting points
+						       of the original .o files
+						       before linking.  */
 
     /* See stabsread.h for the use of the following.  */
     struct header_file *header_files;
@@ -60,8 +73,7 @@ struct dbx_symfile_info
     asection *stab_section;
   };
 
-#define DBX_SYMFILE_INFO(o) \
-  ((struct dbx_symfile_info *) objfile_data ((o), dbx_objfile_data_key))
+#define DBX_SYMFILE_INFO(o)	((o)->deprecated_sym_stab_info)
 #define DBX_TEXT_ADDR(o)	(DBX_SYMFILE_INFO(o)->text_addr)
 #define DBX_TEXT_SIZE(o)	(DBX_SYMFILE_INFO(o)->text_size)
 #define DBX_SYMCOUNT(o)		(DBX_SYMFILE_INFO(o)->symcount)
@@ -74,4 +86,4 @@ struct dbx_symfile_info
 #define DBX_BSS_SECTION(o)	(DBX_SYMFILE_INFO(o)->bss_section)
 #define DBX_STAB_SECTION(o)	(DBX_SYMFILE_INFO(o)->stab_section)
 
-#endif /* GDB_STABS_H */
+#endif /* GDBSTABS_H */

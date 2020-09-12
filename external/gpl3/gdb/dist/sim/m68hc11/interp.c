@@ -1,5 +1,6 @@
 /* interp.c -- Simulator for Motorola 68HC11/68HC12
-   Copyright (C) 1999-2019 Free Software Foundation, Inc.
+   Copyright (C) 1999, 2000, 2001, 2002, 2003, 2004, 2007, 2008, 2009, 2010,
+   2011 Free Software Foundation, Inc.
    Written by Stephane Carrez (stcarrez@nerim.fr)
 
 This file is part of GDB, the GNU debugger.
@@ -32,6 +33,22 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 #endif
 
 static void sim_get_info (SIM_DESC sd, char *cmd);
+
+
+char *interrupt_names[] = {
+  "reset",
+  "nmi",
+  "int",
+  NULL
+};
+
+#ifndef INLINE
+#if defined(__GNUC__) && defined(__OPTIMIZE__)
+#define INLINE __inline__
+#else
+#define INLINE
+#endif
+#endif
 
 struct sim_info_list
 {
@@ -292,25 +309,50 @@ sim_hw_configure (SIM_DESC sd)
 /* Get the memory bank parameters by looking at the global symbols
    defined by the linker.  */
 static int
-sim_get_bank_parameters (SIM_DESC sd)
+sim_get_bank_parameters (SIM_DESC sd, bfd* abfd)
 {
   sim_cpu *cpu;
+  long symsize;
+  long symbol_count, i;
   unsigned size;
-  bfd_vma addr;
+  asymbol** asymbols;
+  asymbol** current;
 
   cpu = STATE_CPU (sd, 0);
 
-  addr = trace_sym_value (sd, BFD_M68HC11_BANK_START_NAME);
-  if (addr != -1)
-    cpu->bank_start = addr;
+  symsize = bfd_get_symtab_upper_bound (abfd);
+  if (symsize < 0)
+    {
+      sim_io_eprintf (sd, "Cannot read symbols of program");
+      return 0;
+    }
+  asymbols = (asymbol **) xmalloc (symsize);
+  symbol_count = bfd_canonicalize_symtab (abfd, asymbols);
+  if (symbol_count < 0)
+    {
+      sim_io_eprintf (sd, "Cannot read symbols of program");
+      return 0;
+    }
 
-  size = trace_sym_value (sd, BFD_M68HC11_BANK_SIZE_NAME);
-  if (size == -1)
-    size = 0;
+  size = 0;
+  for (i = 0, current = asymbols; i < symbol_count; i++, current++)
+    {
+      const char* name = bfd_asymbol_name (*current);
 
-  addr = trace_sym_value (sd, BFD_M68HC11_BANK_VIRTUAL_NAME);
-  if (addr != -1)
-    cpu->bank_virtual = addr;
+      if (strcmp (name, BFD_M68HC11_BANK_START_NAME) == 0)
+        {
+          cpu->bank_start = bfd_asymbol_value (*current);
+        }
+      else if (strcmp (name, BFD_M68HC11_BANK_SIZE_NAME) == 0)
+        {
+          size = bfd_asymbol_value (*current);
+        }
+      else if (strcmp (name, BFD_M68HC11_BANK_VIRTUAL_NAME) == 0)
+        {
+          cpu->bank_virtual = bfd_asymbol_value (*current);
+        }
+    }
+  free (asymbols);
 
   cpu->bank_end = cpu->bank_start + size;
   cpu->bank_shift = 0;
@@ -362,7 +404,7 @@ sim_prepare_for_program (SIM_DESC sd, bfd* abfd)
 
       if (elf_flags & E_M68HC12_BANKS)
         {
-          if (sim_get_bank_parameters (sd) != 0)
+          if (sim_get_bank_parameters (sd, abfd) != 0)
             sim_io_eprintf (sd, "Memory bank parameters are not initialized\n");
         }
     }
@@ -376,41 +418,21 @@ sim_prepare_for_program (SIM_DESC sd, bfd* abfd)
   return SIM_RC_OK;
 }
 
-static sim_cia
-m68hc11_pc_get (sim_cpu *cpu)
-{
-  return cpu_get_pc (cpu);
-}
-
-static void
-m68hc11_pc_set (sim_cpu *cpu, sim_cia pc)
-{
-  cpu_set_pc (cpu, pc);
-}
-
-static int m68hc11_reg_fetch (SIM_CPU *, int, unsigned char *, int);
-static int m68hc11_reg_store (SIM_CPU *, int, unsigned char *, int);
-
 SIM_DESC
 sim_open (SIM_OPEN_KIND kind, host_callback *callback,
-	  bfd *abfd, char * const *argv)
+          bfd *abfd, char **argv)
 {
-  int i;
   SIM_DESC sd;
   sim_cpu *cpu;
 
   sd = sim_state_alloc (kind, callback);
+  cpu = STATE_CPU (sd, 0);
 
   SIM_ASSERT (STATE_MAGIC (sd) == SIM_MAGIC_NUMBER);
 
-  /* The cpu data is kept in a separately allocated chunk of memory.  */
-  if (sim_cpu_alloc_all (sd, 1, /*cgen_cpu_max_extra_bytes ()*/0) != SIM_RC_OK)
-    {
-      free_state (sd);
-      return 0;
-    }
-
-  cpu = STATE_CPU (sd, 0);
+  /* for compatibility */
+  current_alignment = NONSTRICT_ALIGNMENT;
+  current_target_byte_order = BIG_ENDIAN;
 
   cpu_initialize (sd, cpu);
 
@@ -420,7 +442,9 @@ sim_open (SIM_OPEN_KIND kind, host_callback *callback,
       return 0;
     }
 
-  /* The parser will print an error message for us, so we silently return.  */
+  /* getopt will print the error message so we just have to exit if this fails.
+     FIXME: Hmmm...  in the case of gdb we need getopt to call
+     print_filtered.  */
   if (sim_parse_args (sd, argv) != SIM_RC_OK)
     {
       /* Uninstall the modules to avoid memory leaks,
@@ -459,18 +483,34 @@ sim_open (SIM_OPEN_KIND kind, host_callback *callback,
       return 0;
     }      
 
-  /* CPU specific initialization.  */
-  for (i = 0; i < MAX_NR_PROCESSORS; ++i)
-    {
-      SIM_CPU *cpu = STATE_CPU (sd, i);
-
-      CPU_REG_FETCH (cpu) = m68hc11_reg_fetch;
-      CPU_REG_STORE (cpu) = m68hc11_reg_store;
-      CPU_PC_FETCH (cpu) = m68hc11_pc_get;
-      CPU_PC_STORE (cpu) = m68hc11_pc_set;
-    }
-
+  /* Fudge our descriptor.  */
   return sd;
+}
+
+
+void
+sim_close (SIM_DESC sd, int quitting)
+{
+  /* shut down modules */
+  sim_module_uninstall (sd);
+
+  /* Ensure that any resources allocated through the callback
+     mechanism are released: */
+  sim_io_shutdown (sd);
+
+  /* FIXME - free SD */
+  sim_state_free (sd);
+  return;
+}
+
+void
+sim_set_profile (int n)
+{
+}
+
+void
+sim_set_profile_size (int n)
+{
 }
 
 /* Generic implementation of sim_engine_run that works within the
@@ -498,6 +538,13 @@ sim_engine_run (SIM_DESC sd,
     }
 }
 
+int
+sim_trace (SIM_DESC sd)
+{
+  sim_resume (sd, 0, 0);
+  return 1;
+}
+
 void
 sim_info (SIM_DESC sd, int verbose)
 {
@@ -522,17 +569,27 @@ sim_info (SIM_DESC sd, int verbose)
 
 SIM_RC
 sim_create_inferior (SIM_DESC sd, struct bfd *abfd,
-                     char * const *argv, char * const *env)
+                     char **argv, char **env)
 {
   return sim_prepare_for_program (sd, abfd);
 }
 
-static int
-m68hc11_reg_fetch (SIM_CPU *cpu, int rn, unsigned char *memory, int length)
+
+void
+sim_set_callbacks (host_callback *p)
 {
+  /*  m6811_callback = p; */
+}
+
+
+int
+sim_fetch_register (SIM_DESC sd, int rn, unsigned char *memory, int length)
+{
+  sim_cpu *cpu;
   uint16 val;
   int size = 2;
 
+  cpu = STATE_CPU (sd, 0);
   switch (rn)
     {
     case A_REGNUM:
@@ -591,10 +648,13 @@ m68hc11_reg_fetch (SIM_CPU *cpu, int rn, unsigned char *memory, int length)
   return size;
 }
 
-static int
-m68hc11_reg_store (SIM_CPU *cpu, int rn, unsigned char *memory, int length)
+int
+sim_store_register (SIM_DESC sd, int rn, unsigned char *memory, int length)
 {
   uint16 val;
+  sim_cpu *cpu;
+
+  cpu = STATE_CPU (sd, 0);
 
   val = *memory++;
   if (length == 2)
@@ -643,4 +703,113 @@ m68hc11_reg_store (SIM_CPU *cpu, int rn, unsigned char *memory, int length)
     }
 
   return 2;
+}
+
+void
+sim_size (int s)
+{
+  ;
+}
+
+void
+sim_do_command (SIM_DESC sd, char *cmd)
+{
+  char *mm_cmd = "memory-map";
+  char *int_cmd = "interrupt";
+  sim_cpu *cpu;
+
+  cpu = STATE_CPU (sd, 0);
+  /* Commands available from GDB:   */
+  if (sim_args_command (sd, cmd) != SIM_RC_OK)
+    {
+      if (strncmp (cmd, "info", sizeof ("info") - 1) == 0)
+	sim_get_info (sd, &cmd[4]);
+      else if (strncmp (cmd, mm_cmd, strlen (mm_cmd) == 0))
+	sim_io_eprintf (sd,
+			"`memory-map' command replaced by `sim memory'\n");
+      else if (strncmp (cmd, int_cmd, strlen (int_cmd)) == 0)
+	sim_io_eprintf (sd, "`interrupt' command replaced by `sim watch'\n");
+      else
+	sim_io_eprintf (sd, "Unknown command `%s'\n", cmd);
+    }
+
+  /* If the architecture changed, re-configure.  */
+  if (STATE_ARCHITECTURE (sd) != cpu->cpu_configured_arch)
+    sim_hw_configure (sd);
+}
+
+/* Halt the simulator after just one instruction */
+
+static void
+has_stepped (SIM_DESC sd,
+	     void *data)
+{
+  ASSERT (STATE_MAGIC (sd) == SIM_MAGIC_NUMBER);
+  sim_engine_halt (sd, NULL, NULL, NULL_CIA, sim_stopped, SIM_SIGTRAP);
+}
+
+
+/* Generic resume - assumes the existance of sim_engine_run */
+
+void
+sim_resume (SIM_DESC sd,
+	    int step,
+	    int siggnal)
+{
+  sim_engine *engine = STATE_ENGINE (sd);
+  jmp_buf buf;
+  int jmpval;
+
+  ASSERT (STATE_MAGIC (sd) == SIM_MAGIC_NUMBER);
+
+  /* we only want to be single stepping the simulator once */
+  if (engine->stepper != NULL)
+    {
+      sim_events_deschedule (sd, engine->stepper);
+      engine->stepper = NULL;
+    }
+  sim_module_resume (sd);
+
+  /* run/resume the simulator */
+  engine->jmpbuf = &buf;
+  jmpval = setjmp (buf);
+  if (jmpval == sim_engine_start_jmpval
+      || jmpval == sim_engine_restart_jmpval)
+    {
+      int last_cpu_nr = sim_engine_last_cpu_nr (sd);
+      int next_cpu_nr = sim_engine_next_cpu_nr (sd);
+      int nr_cpus = sim_engine_nr_cpus (sd);
+
+      sim_events_preprocess (sd, last_cpu_nr >= nr_cpus, next_cpu_nr >= nr_cpus);
+      if (next_cpu_nr >= nr_cpus)
+	next_cpu_nr = 0;
+
+      /* Only deliver the siggnal ]sic] the first time through - don't
+         re-deliver any siggnal during a restart. */
+      if (jmpval == sim_engine_restart_jmpval)
+	siggnal = 0;
+
+      /* Install the stepping event after having processed some
+         pending events.  This is necessary for HC11/HC12 simulator
+         because the tick counter is incremented by the number of cycles
+         the instruction took.  Some pending ticks to process can still
+         be recorded internally by the simulator and sim_events_preprocess
+         will handle them.  If the stepping event is inserted before,
+         these pending ticks will raise the event and the simulator will
+         stop without having executed any instruction.  */
+      if (step)
+        engine->stepper = sim_events_schedule (sd, 0, has_stepped, sd);
+
+#ifdef SIM_CPU_EXCEPTION_RESUME
+      {
+	sim_cpu* cpu = STATE_CPU (sd, next_cpu_nr);
+	SIM_CPU_EXCEPTION_RESUME(sd, cpu, siggnal);
+      }
+#endif
+
+      sim_engine_run (sd, next_cpu_nr, nr_cpus, siggnal);
+    }
+  engine->jmpbuf = NULL;
+
+  sim_module_suspend (sd);
 }

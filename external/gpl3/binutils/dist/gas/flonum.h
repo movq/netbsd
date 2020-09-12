@@ -1,5 +1,6 @@
 /* flonum.h - Floating point package
-   Copyright (C) 1987-2020 Free Software Foundation, Inc.
+   Copyright 1987, 1990, 1991, 1992, 1994, 1996, 2000, 2003, 2007
+   Free Software Foundation, Inc.
 
    This file is part of GAS, the GNU Assembler.
 

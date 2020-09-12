@@ -1,5 +1,6 @@
 /* BFD back-end for NetBSD/ns32k a.out-ish binaries.
-   Copyright (C) 1990-2020 Free Software Foundation, Inc.
+   Copyright 1990, 1991, 1992, 1994, 1995, 1998, 2000, 2001, 2002, 2005,
+   2007  Free Software Foundation, Inc.
 
    This file is part of BFD, the Binary File Descriptor library.
 
@@ -25,12 +26,12 @@
 #define	SEGMENT_SIZE		4096
 
 #define	DEFAULT_ARCH		bfd_arch_ns32k
-#define	DEFAULT_MID		M_532_NETBSD
+#define	DEFAULT_MID 		M_532_NETBSD
 
 /* Do not "beautify" the CONCAT* macro args.  Traditional C will not
    remove whitespace added here, and thus will fail to concatenate
    the tokens.  */
-#define MY(OP) CONCAT2 (ns32k_aout_pc532nbsd_,OP)
+#define MY(OP) CONCAT2 (pc532netbsd_,OP)
 
 #define NAME(x,y) CONCAT3 (ns32kaout,_32_,y)
 
@@ -43,11 +44,10 @@
 
 /* We can`t use the MYNS macro here for cpp reasons too subtle
    for me -- IWD.  */
-#define MY_bfd_reloc_type_lookup ns32k_aout_bfd_reloc_type_lookup
+#define MY_bfd_reloc_type_lookup ns32kaout_bfd_reloc_type_lookup
 
-#include "sysdep.h"
 #include "bfd.h"		/* To ensure following declaration is OK.  */
 
-reloc_howto_type * MY_bfd_reloc_type_lookup (bfd *, bfd_reloc_code_real_type);
+const struct reloc_howto_struct * MY_bfd_reloc_type_lookup (bfd *, bfd_reloc_code_real_type);
 
 #include "netbsd.h"

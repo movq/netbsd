@@ -1,5 +1,5 @@
 /* Definitions for PA_RISC with ELF-32 format
-   Copyright (C) 2000-2019 Free Software Foundation, Inc.
+   Copyright (C) 2000, 2002, 2004, 2006, 2007 Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -31,7 +31,7 @@ along with GCC; see the file COPYING3.  If not see
 "	.text\n"							\
 "	.word __canonicalize_funcptr_for_compare-$PIC_pcrel$0");	\
   STATIC func_ptr __CTOR_LIST__[1]					\
-    __attribute__ ((__used__, section(".ctors"),			\
+    __attribute__ ((__unused__, section(".ctors"),			\
 		    aligned(sizeof(func_ptr))))				\
     = { (func_ptr) (-1) }
 
@@ -57,27 +57,4 @@ call_ ## FUNC (void)					\
 }
 #endif
 
-#undef  WCHAR_TYPE
-#define WCHAR_TYPE "long int"
-
-#undef  WCHAR_TYPE_SIZE
-#define WCHAR_TYPE_SIZE BITS_PER_WORD
-
-/* POSIX types such as pthread_mutex_t require 16-byte alignment to retain
-   layout compatibility with the original linux thread implementation.  */
-#undef MALLOC_ABI_ALIGNMENT
-#define MALLOC_ABI_ALIGNMENT 128
-
-/* Place jump tables in the text section except when generating non-PIC
-   code.  When generating non-PIC code, the relocations needed to load the
-   address of the jump table result in a text label in the final executable
-   if the jump table is placed in the text section.  This breaks the unwind
-   data for the function.  Thus, the jump table needs to be placed in
-   rodata when generating non-PIC code.  */
-#undef JUMP_TABLES_IN_TEXT_SECTION
-#define JUMP_TABLES_IN_TEXT_SECTION (flag_pic)
-
-/* We need to override default selection to put references to functions
-   in COMDAT groups in .data.rel.ro.local.  */
-#undef TARGET_ASM_SELECT_RTX_SECTION
-#define TARGET_ASM_SELECT_RTX_SECTION pa_elf_select_rtx_section
+#define MD_UNWIND_SUPPORT "config/pa/linux-unwind.h"

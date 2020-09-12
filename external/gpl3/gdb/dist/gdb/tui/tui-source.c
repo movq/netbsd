@@ -1,6 +1,7 @@
 /* TUI display source window.
 
-   Copyright (C) 1998-2019 Free Software Foundation, Inc.
+   Copyright (C) 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2007, 2008, 2009,
+   2010, 2011 Free Software Foundation, Inc.
 
    Contributed by Hewlett-Packard Company.
 
@@ -25,101 +26,18 @@
 #include "frame.h"
 #include "breakpoint.h"
 #include "source.h"
+#include "symtab.h"
 #include "objfiles.h"
 #include "filenames.h"
-#include "source-cache.h"
 
 #include "tui/tui.h"
 #include "tui/tui-data.h"
-#include "tui/tui-io.h"
 #include "tui/tui-stack.h"
 #include "tui/tui-winsource.h"
 #include "tui/tui-source.h"
+
+#include "gdb_string.h"
 #include "gdb_curses.h"
-
-/* A helper function for tui_set_source_content that extracts some
-   source text from PTR.  LINE_NO is the line number; FIRST_COL is the
-   first column to extract, and LINE_WIDTH is the number of characters
-   to display.  Returns a string holding the desired text.  */
-
-static std::string
-copy_source_line (const char **ptr, int line_no, int first_col,
-		  int line_width)
-{
-  const char *lineptr = *ptr;
-
-  /* Init the line with the line number.  */
-  std::string result = string_printf ("%-6d", line_no);
-  int len = result.size ();
-  len = len - ((len / tui_tab_width) * tui_tab_width);
-  result.append (len, ' ');
-
-  int column = 0;
-  char c;
-  do
-    {
-      int skip_bytes;
-
-      c = *lineptr;
-      if (c == '\033' && skip_ansi_escape (lineptr, &skip_bytes))
-	{
-	  /* We always have to preserve escapes.  */
-	  result.append (lineptr, lineptr + skip_bytes);
-	  lineptr += skip_bytes;
-	  continue;
-	}
-
-      ++lineptr;
-      ++column;
-
-      auto process_tab = [&] ()
-	{
-	  int max_tab_len = tui_tab_width;
-
-	  --column;
-	  for (int j = column % max_tab_len;
-	       j < max_tab_len && column < first_col + line_width;
-	       column++, j++)
-	    if (column >= first_col)
-	      result.push_back (' ');
-	};
-
-      /* We have to process all the text in order to pick up all the
-	 escapes.  */
-      if (column <= first_col || column > first_col + line_width)
-	{
-	  if (c == '\t')
-	    process_tab ();
-	  continue;
-	}
-
-      if (c == '\n' || c == '\r' || c == '\0')
-	{
-	  /* Nothing.  */
-	}
-      else if (c < 040 && c != '\t')
-	{
-	  result.push_back ('^');
-	  result.push_back (c + 0100);
-	}
-      else if (c == 0177)
-	{
-	  result.push_back ('^');
-	  result.push_back ('?');
-	}
-      else if (c == '\t')
-	process_tab ();
-      else
-	result.push_back (c);
-    }
-  while (c != '\0' && c != '\n' && c != '\r');
-
-  if (c == '\r' && *lineptr == '\n')
-    ++lineptr;
-  *ptr = lineptr;
-
-  return result;
-}
 
 /* Function to display source in the source window.  */
 enum tui_status
@@ -129,9 +47,11 @@ tui_set_source_content (struct symtab *s,
 {
   enum tui_status ret = TUI_FAILURE;
 
-  if (s != (struct symtab *) NULL)
+  if (s != (struct symtab *) NULL && s->filename != (char *) NULL)
     {
-      int line_width, nlines;
+      FILE *stream;
+      int i, desc, c, line_width, nlines;
+      char *src_line = 0;
 
       if ((ret = tui_alloc_source_buffer (TUI_SRC_WIN)) == TUI_SUCCESS)
 	{
@@ -139,79 +59,183 @@ tui_set_source_content (struct symtab *s,
 	  /* Take hilite (window border) into account, when
 	     calculating the number of lines.  */
 	  nlines = (line_no + (TUI_SRC_WIN->generic.height - 2)) - line_no;
-
-	  std::string srclines;
-	  if (!g_source_cache.get_source_lines (s, line_no, line_no + nlines,
-						&srclines))
+	  desc = open_source_file (s);
+	  if (desc < 0)
 	    {
 	      if (!noerror)
 		{
-		  const char *filename = symtab_to_filename_for_display (s);
-		  char *name = (char *) alloca (strlen (filename) + 100);
+		  char *name = alloca (strlen (s->filename) + 100);
 
-		  sprintf (name, "%s:%d", filename, line_no);
+		  sprintf (name, "%s:%d", s->filename, line_no);
 		  print_sys_errmsg (name, errno);
 		}
 	      ret = TUI_FAILURE;
 	    }
 	  else
 	    {
-	      int cur_line_no, cur_line;
-	      struct tui_gen_win_info *locator
-		= tui_locator_win_info_ptr ();
-	      struct tui_source_info *src
-		= &TUI_SRC_WIN->detail.source_info;
-	      const char *s_filename = symtab_to_filename_for_display (s);
+	      if (s->line_charpos == 0)
+		find_source_lines (s, desc);
 
-	      if (TUI_SRC_WIN->generic.title)
-		xfree (TUI_SRC_WIN->generic.title);
-	      TUI_SRC_WIN->generic.title = xstrdup (s_filename);
-
-	      xfree (src->fullname);
-	      src->fullname = xstrdup (symtab_to_fullname (s));
-
-	      cur_line = 0;
-	      src->gdbarch = get_objfile_arch (SYMTAB_OBJFILE (s));
-	      src->start_line_or_addr.loa = LOA_LINE;
-	      cur_line_no = src->start_line_or_addr.u.line_no = line_no;
-
-	      const char *iter = srclines.c_str ();
-	      while (cur_line < nlines)
+	      if (line_no < 1 || line_no > s->nlines)
 		{
-		  struct tui_win_element *element
-		    = TUI_SRC_WIN->generic.content[cur_line];
-
-		  std::string text;
-		  if (*iter != '\0')
-		    text = copy_source_line (&iter, cur_line_no,
-					     src->horizontal_offset,
-					     line_width);
-
-		  /* Set whether element is the execution point
-		     and whether there is a break point on it.  */
-		  element->which_element.source.line_or_addr.loa =
-		    LOA_LINE;
-		  element->which_element.source.line_or_addr.u.line_no =
-		    cur_line_no;
-		  element->which_element.source.is_exec_point =
-		    (filename_cmp (locator->content[0]
-				   ->which_element.locator.full_name,
-				   symtab_to_fullname (s)) == 0
-		     && cur_line_no
-		     == locator->content[0]
-		     ->which_element.locator.line_no);
-
-		  xfree (TUI_SRC_WIN->generic.content[cur_line]
-			 ->which_element.source.line);
-		  TUI_SRC_WIN->generic.content[cur_line]
-		    ->which_element.source.line
-		    = xstrdup (text.c_str ());
-
-		  cur_line++;
-		  cur_line_no++;
+		  close (desc);
+		  printf_unfiltered (
+			  "Line number %d out of range; %s has %d lines.\n",
+				      line_no, s->filename, s->nlines);
 		}
-	      TUI_SRC_WIN->generic.content_size = nlines;
-	      ret = TUI_SUCCESS;
+	      else if (lseek (desc, s->line_charpos[line_no - 1], 0) < 0)
+		{
+		  close (desc);
+		  perror_with_name (s->filename);
+		}
+	      else
+		{
+		  int offset, cur_line_no, cur_line, cur_len, threshold;
+		  struct tui_gen_win_info *locator
+		    = tui_locator_win_info_ptr ();
+                  struct tui_source_info *src
+		    = &TUI_SRC_WIN->detail.source_info;
+
+                  if (TUI_SRC_WIN->generic.title)
+                    xfree (TUI_SRC_WIN->generic.title);
+                  TUI_SRC_WIN->generic.title = xstrdup (s->filename);
+
+                  if (src->filename)
+                    xfree (src->filename);
+                  src->filename = xstrdup (s->filename);
+
+		  /* Determine the threshold for the length of the
+                     line and the offset to start the display.  */
+		  offset = src->horizontal_offset;
+		  threshold = (line_width - 1) + offset;
+		  stream = fdopen (desc, FOPEN_RT);
+		  clearerr (stream);
+		  cur_line = 0;
+		  src->gdbarch = get_objfile_arch (s->objfile);
+		  src->start_line_or_addr.loa = LOA_LINE;
+		  cur_line_no = src->start_line_or_addr.u.line_no = line_no;
+		  if (offset > 0)
+		    src_line = (char *) xmalloc (
+					   (threshold + 1) * sizeof (char));
+		  while (cur_line < nlines)
+		    {
+		      struct tui_win_element *element
+			= (struct tui_win_element *)
+			TUI_SRC_WIN->generic.content[cur_line];
+
+		      /* Get the first character in the line.  */
+		      c = fgetc (stream);
+
+		      if (offset == 0)
+			src_line = ((struct tui_win_element *)
+				   TUI_SRC_WIN->generic.content[
+					cur_line])->which_element.source.line;
+		      /* Init the line with the line number.  */
+		      sprintf (src_line, "%-6d", cur_line_no);
+		      cur_len = strlen (src_line);
+		      i = cur_len - ((cur_len / tui_default_tab_len ())
+				     * tui_default_tab_len ());
+		      while (i < tui_default_tab_len ())
+			{
+			  src_line[cur_len] = ' ';
+			  i++;
+			  cur_len++;
+			}
+		      src_line[cur_len] = (char) 0;
+
+		      /* Set whether element is the execution point
+		         and whether there is a break point on it.  */
+		      element->which_element.source.line_or_addr.loa =
+			LOA_LINE;
+		      element->which_element.source.line_or_addr.u.line_no =
+			cur_line_no;
+		      element->which_element.source.is_exec_point =
+			(filename_cmp (((struct tui_win_element *)
+				       locator->content[0])->which_element.locator.file_name,
+				       s->filename) == 0
+			 && cur_line_no == ((struct tui_win_element *)
+					    locator->content[0])->which_element.locator.line_no);
+		      if (c != EOF)
+			{
+			  i = strlen (src_line) - 1;
+			  do
+			    {
+			      if ((c != '\n') && (c != '\r') 
+				  && (++i < threshold))
+				{
+				  if (c < 040 && c != '\t')
+				    {
+				      src_line[i++] = '^';
+				      src_line[i] = c + 0100;
+				    }
+				  else if (c == 0177)
+				    {
+				      src_line[i++] = '^';
+				      src_line[i] = '?';
+				    }
+				  else
+				    { /* Store the charcter in the
+					 line buffer.  If it is a tab,
+					 then translate to the correct
+					 number of chars so we don't
+					 overwrite our buffer.  */
+				      if (c == '\t')
+					{
+					  int j, max_tab_len
+					    = tui_default_tab_len ();
+
+					  for (j = i - ((i / max_tab_len)
+							* max_tab_len);
+					       j < max_tab_len
+						 && i < threshold;
+					       i++, j++)
+					    src_line[i] = ' ';
+					  i--;
+					}
+				      else
+					src_line[i] = c;
+				    }
+				  src_line[i + 1] = 0;
+				}
+			      else
+				{ /* If we have not reached EOL, then
+				     eat chars until we do.  */
+				  while (c != EOF && c != '\n' && c != '\r')
+				    c = fgetc (stream);
+				  /* Handle non-'\n' end-of-line.  */
+				  if (c == '\r' 
+				      && (c = fgetc (stream)) != '\n' 
+				      && c != EOF)
+				    {
+				       ungetc (c, stream);
+				       c = '\r';
+				    }
+				  
+				}
+			    }
+			  while (c != EOF && c != '\n' && c != '\r' 
+				 && i < threshold 
+				 && (c = fgetc (stream)));
+			}
+		      /* Now copy the line taking the offset into
+			 account.  */
+		      if (strlen (src_line) > offset)
+			strcpy (((struct tui_win_element *)
+				 TUI_SRC_WIN->generic.content[cur_line])->which_element.source.line,
+				&src_line[offset]);
+		      else
+			((struct tui_win_element *)
+			 TUI_SRC_WIN->generic.content[
+			  cur_line])->which_element.source.line[0] = (char) 0;
+		      cur_line++;
+		      cur_line_no++;
+		    }
+		  if (offset > 0)
+		    xfree (src_line);
+		  fclose (stream);
+		  TUI_SRC_WIN->generic.content_size = nlines;
+		  ret = TUI_SUCCESS;
+		}
 	    }
 	}
     }
@@ -227,7 +251,7 @@ tui_set_source_content (struct symtab *s,
 
 void
 tui_set_source_content_nil (struct tui_win_info *win_info, 
-			    const char *warning_string)
+			    char *warning_string)
 {
   int line_width;
   int n_lines;
@@ -244,7 +268,8 @@ tui_set_source_content_nil (struct tui_win_info *win_info,
          i.e. the line number is 0, there is no bp, it is not where
          the program is stopped.  */
 
-      struct tui_win_element *element = win_info->generic.content[curr_line];
+      struct tui_win_element *element =
+	(struct tui_win_element *) win_info->generic.content[curr_line];
 
       element->which_element.source.line_or_addr.loa = LOA_LINE;
       element->which_element.source.line_or_addr.u.line_no = 0;
@@ -263,22 +288,33 @@ tui_set_source_content_nil (struct tui_win_info *win_info,
 
       if (curr_line == (n_lines / 2 + 1))
 	{
+	  int i;
 	  int xpos;
 	  int warning_length = strlen (warning_string);
 	  char *src_line;
+
+	  src_line = element->which_element.source.line;
 
 	  if (warning_length >= ((line_width - 1) / 2))
 	    xpos = 1;
 	  else
 	    xpos = (line_width - 1) / 2 - warning_length;
 
-	  src_line = xstrprintf ("%s%s", n_spaces (xpos), warning_string);
-	  xfree (element->which_element.source.line);
-	  element->which_element.source.line = src_line;
-	}
+	  for (i = 0; i < xpos; i++)
+	    src_line[i] = ' ';
+
+	  sprintf (src_line + i, "%s", warning_string);
+
+	  for (i = xpos + warning_length; i < line_width; i++)
+	    src_line[i] = ' ';
+
+	  src_line[i] = '\n';
+
+	}			/* end if */
 
       curr_line++;
-    }
+
+    }				/* end while */
 }
 
 
@@ -297,13 +333,13 @@ tui_show_symtab_source (struct gdbarch *gdbarch, struct symtab *s,
 /* Answer whether the source is currently displayed in the source
    window.  */
 int
-tui_source_is_displayed (const char *fullname)
+tui_source_is_displayed (char *fname)
 {
-  return (TUI_SRC_WIN != NULL
-	  && TUI_SRC_WIN->generic.content_in_use 
-	  && (filename_cmp (tui_locator_win_info_ptr ()->content[0]
-			      ->which_element.locator.full_name,
-			    fullname) == 0));
+  return (TUI_SRC_WIN->generic.content_in_use 
+	  && (filename_cmp (((struct tui_win_element *)
+			     (tui_locator_win_info_ptr ())->
+			     content[0])->which_element.locator.file_name,
+			    fname) == 0));
 }
 
 
@@ -316,11 +352,11 @@ tui_vertical_source_scroll (enum tui_scroll_direction scroll_direction,
     {
       struct tui_line_or_address l;
       struct symtab *s;
-      tui_win_content content = TUI_SRC_WIN->generic.content;
+      tui_win_content content = (tui_win_content) TUI_SRC_WIN->generic.content;
       struct symtab_and_line cursal = get_current_source_symtab_and_line ();
 
       if (cursal.symtab == (struct symtab *) NULL)
-	s = find_pc_line_symtab (get_frame_pc (get_selected_frame (NULL)));
+	s = find_pc_symtab (get_frame_pc (get_selected_frame (NULL)));
       else
 	s = cursal.symtab;
 

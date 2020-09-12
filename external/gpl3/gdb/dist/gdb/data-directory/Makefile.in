@@ -1,4 +1,4 @@
-# Copyright (C) 2010-2019 Free Software Foundation, Inc.
+# Copyright (C) 2010, 2011 Free Software Foundation, Inc.
 
 # Makefile for building a staged copy of the data-directory.
 # This file is part of GDB.
@@ -16,16 +16,10 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-# Please keep lists in this file sorted alphabetically, with one item per line.
-# See gdb/Makefile.in for guidelines on ordering files and directories.
-
 srcdir = @srcdir@
 SYSCALLS_SRCDIR = $(srcdir)/../syscalls
 PYTHON_SRCDIR = $(srcdir)/../python/lib
-GUILE_SRCDIR = $(srcdir)/../guile/lib
-SYSTEM_GDBINIT_SRCDIR = $(srcdir)/../system-gdbinit
-VPATH = $(srcdir):$(SYSCALLS_SRCDIR):$(PYTHON_SRCDIR):$(GUILE_SRCDIR):$(SYSTEM_GDBINIT_SRCDIR)
-XSLTPROC = @XSLTPROC@
+VPATH = $(srcdir):$(SYSCALLS_SRCDIR):$(PYTHON_SRCDIR)
 
 top_srcdir = @top_srcdir@
 top_builddir = @top_builddir@
@@ -48,96 +42,21 @@ GDB_DATADIR = @GDB_DATADIR@
 
 SYSCALLS_DIR = syscalls
 SYSCALLS_INSTALL_DIR = $(DESTDIR)$(GDB_DATADIR)/$(SYSCALLS_DIR)
-GEN_SYSCALLS_FILES = \
-	aarch64-linux.xml \
-	amd64-linux.xml \
-	arm-linux.xml \
-	i386-linux.xml \
-	mips-n32-linux.xml \
-	mips-n64-linux.xml \
-	mips-o32-linux.xml \
-	ppc-linux.xml \
-	ppc64-linux.xml \
-	s390-linux.xml \
-	s390x-linux.xml \
-	sparc-linux.xml \
-	sparc64-linux.xml
-
-SYSCALLS_FILES = gdb-syscalls.dtd freebsd.xml $(GEN_SYSCALLS_FILES)
+SYSCALLS_FILES = \
+	gdb-syscalls.dtd \
+	ppc-linux.xml ppc64-linux.xml \
+	i386-linux.xml amd64-linux.xml \
+	sparc-linux.xml sparc64-linux.xml \
+	mips-o32-linux.xml mips-n32-linux.xml mips-n64-linux.xml
 
 PYTHON_DIR = python
 PYTHON_INSTALL_DIR = $(DESTDIR)$(GDB_DATADIR)/$(PYTHON_DIR)
-PYTHON_FILE_LIST = \
+PYTHON_FILES = \
 	gdb/__init__.py \
-	gdb/FrameDecorator.py \
-	gdb/FrameIterator.py \
-	gdb/frames.py \
-	gdb/printing.py \
-	gdb/prompt.py \
 	gdb/types.py \
-	gdb/unwinder.py \
-	gdb/xmethod.py \
+	gdb/printing.py \
 	gdb/command/__init__.py \
-	gdb/command/explore.py \
-	gdb/command/frame_filters.py \
-	gdb/command/pretty_printers.py \
-	gdb/command/prompt.py \
-	gdb/command/type_printers.py \
-	gdb/command/unwinders.py \
-	gdb/command/xmethods.py \
-	gdb/function/__init__.py \
-	gdb/function/as_string.py \
-	gdb/function/caller_is.py \
-	gdb/function/strfns.py \
-	gdb/printer/__init__.py \
-	gdb/printer/bound_registers.py
-
-@HAVE_PYTHON_TRUE@PYTHON_FILES = $(PYTHON_FILE_LIST)
-@HAVE_PYTHON_FALSE@PYTHON_FILES =
-
-GUILE_DIR = guile
-GUILE_INSTALL_DIR = $(DESTDIR)$(GDB_DATADIR)/$(GUILE_DIR)
-
-GUILE_SOURCE_FILES = \
-	./gdb.scm \
-	gdb/boot.scm \
-	gdb/experimental.scm \
-	gdb/init.scm \
-	gdb/iterator.scm \
-	gdb/printing.scm \
-	gdb/support.scm \
-	gdb/types.scm
-
-GUILE_COMPILED_FILES = \
-	./gdb.go \
-	gdb/experimental.go \
-	gdb/iterator.go \
-	gdb/printing.go \
-	gdb/support.go \
-	gdb/types.go
-
-@HAVE_GUILE_TRUE@GUILE_FILES = $(GUILE_SOURCE_FILES) $(GUILE_COMPILED_FILES)
-@HAVE_GUILE_FALSE@GUILE_FILES =
-
-GUILD = @GUILD@
-GUILD_TARGET_FLAG = @GUILD_TARGET_FLAG@
-
-# Flags passed to 'guild compile'.
-# Note: We can't use -Wunbound-variable because all the variables
-# defined in C aren't visible when we compile.
-# Note: To work around a guile 2.0.5 issue (it can't find gdb/init.scm even if
-# we pass -L <dir>) we have to compile in the directory containing gdb.scm.
-# We still need to pass "-L ." so that other modules are found.
-GUILD_COMPILE_FLAGS = \
-	$(GUILD_TARGET_FLAG) \
-	-Warity-mismatch -Wformat -Wunused-toplevel \
-	-L .
-
-SYSTEM_GDBINIT_DIR = system-gdbinit
-SYSTEM_GDBINIT_INSTALL_DIR = $(DESTDIR)$(GDB_DATADIR)/$(SYSTEM_GDBINIT_DIR)
-SYSTEM_GDBINIT_FILES = \
-	elinos.py \
-	wrs-linux.py
+	gdb/command/pretty_printers.py
 
 FLAGS_TO_PASS = \
 	"prefix=$(prefix)" \
@@ -172,22 +91,7 @@ FLAGS_TO_PASS = \
 	"RUNTESTFLAGS=$(RUNTESTFLAGS)"
 
 .PHONY: all
-all: stamp-syscalls stamp-python stamp-guile stamp-system-gdbinit
-
-%.xml: @MAINTAINER_MODE_TRUE@ %.xml.in apply-defaults.xsl linux-defaults.xml.in
-	$(XSLTPROC) -o $(SYSCALLS_SRCDIR)/$@ $(SYSCALLS_SRCDIR)/apply-defaults.xsl\
-		$(SYSCALLS_SRCDIR)/$@.in
-
-.PHONY: syscall-xml
-syscall-xml: $(GEN_SYSCALLS_FILES)
-
-.PHONY: clean-syscall-xml
-# Only clean files generated XML files.
-clean-syscall-xml:
-	files='$(GEN_SYSCALLS_FILES)' ; \
-	for file in $$files; do \
-		rm -f "$(SYSCALLS_SRCDIR)/$$file"; \
-	done
+all: stamp-syscalls stamp-python
 
 # For portability's sake, we need to handle systems that don't have
 # symbolic links.
@@ -237,13 +141,11 @@ uninstall-syscalls:
 stamp-python: Makefile $(PYTHON_FILES)
 	rm -rf ./$(PYTHON_DIR)
 	files='$(PYTHON_FILES)' ; \
-	if test "x$$files" != x ; then \
-	  for file in $$files ; do \
-	    dir=`echo "$$file" | sed 's,/[^/]*$$,,'` ; \
-	    $(INSTALL_DIR) ./$(PYTHON_DIR)/$$dir ; \
-	    $(INSTALL_DATA) $(PYTHON_SRCDIR)/$$file ./$(PYTHON_DIR)/$$dir ; \
-	  done ; \
-	fi
+	for file in $$files ; do \
+	  dir=`echo "$$file" | sed 's,/[^/]*$$,,'` ; \
+	  $(INSTALL_DIR) ./$(PYTHON_DIR)/$$dir ; \
+	  $(INSTALL_DATA) $(PYTHON_SRCDIR)/$$file ./$(PYTHON_DIR)/$$dir ; \
+	done
 	touch $@
 
 .PHONY: clean-python
@@ -254,115 +156,20 @@ clean-python:
 .PHONY: install-python
 install-python:
 	files='$(PYTHON_FILES)' ; \
-	if test "x$$files" != x ; then \
-	  for file in $$files ; do \
-	    dir=`echo "$$file" | sed 's,/[^/]*$$,,'` ; \
-	    $(INSTALL_DIR) $(PYTHON_INSTALL_DIR)/$$dir ; \
-	    $(INSTALL_DATA) ./$(PYTHON_DIR)/$$file $(PYTHON_INSTALL_DIR)/$$dir ; \
-	  done ; \
-	fi
+	for file in $$files ; do \
+	  dir=`echo "$$file" | sed 's,/[^/]*$$,,'` ; \
+	  $(INSTALL_DIR) $(PYTHON_INSTALL_DIR)/$$dir ; \
+	  $(INSTALL_DATA) ./$(PYTHON_DIR)/$$file $(PYTHON_INSTALL_DIR)/$$dir ; \
+	done
 
 .PHONY: uninstall-python
 uninstall-python:
 	files='$(PYTHON_FILES)' ; \
-	if test "x$$files" != x ; then \
-	  for file in $$files ; do \
-	    slashdir=`echo "/$$file" | sed 's,/[^/]*$$,,'` ; \
-	    rm -f $(PYTHON_INSTALL_DIR)/$$file ; \
-	    while test "x$$file" != "x$$slashdir" ; do \
-	      rmdir 2>/dev/null "$(PYTHON_INSTALL_DIR)$$slashdir" ; \
-	      file="$$slashdir" ; \
-	      slashdir=`echo "$$file" | sed 's,/[^/]*$$,,'` ; \
-	    done \
-	  done ; \
-	fi
-
-stamp-guile: Makefile $(GUILE_SOURCE_FILES)
-	rm -rf ./$(GUILE_DIR)
-	if test "x$(GUILE_FILES)" != x ; then \
-	  files='$(GUILE_SOURCE_FILES)' ; \
-	  for file in $$files ; do \
-	    dir=`echo "$$file" | sed 's,/[^/]*$$,,'` ; \
-	    $(INSTALL_DIR) ./$(GUILE_DIR)/$$dir ; \
-	    $(INSTALL_DATA) $(GUILE_SRCDIR)/$$file ./$(GUILE_DIR)/$$dir ; \
-	  done ; \
-	  files='$(GUILE_COMPILED_FILES)' ; \
-	  cd ./$(GUILE_DIR) ; \
-	  for go in $$files ; do \
-	    source="`echo $$go | sed 's/\.go$$/.scm/'`" ; \
-	    echo $(GUILD) compile $(GUILD_COMPILE_FLAGS) -o "$$go" "$$source" ; \
-	    $(GUILD) compile $(GUILD_COMPILE_FLAGS) -o "$$go" "$$source" || exit 1 ; \
-	  done ; \
-	fi
-	touch $@
-
-.PHONY: clean-guile
-clean-guile:
-	rm -rf $(GUILE_DIR)
-	rm -f stamp-guile
-
-.PHONY: install-guile
-install-guile:
-	files='$(GUILE_FILES)' ; \
-	if test "x$$files" != x ; then \
-	  for file in $$files ; do \
-	    dir=`echo "$$file" | sed 's,/[^/]*$$,,'` ; \
-	    $(INSTALL_DIR) $(GUILE_INSTALL_DIR)/$$dir ; \
-	    $(INSTALL_DATA) ./$(GUILE_DIR)/$$file $(GUILE_INSTALL_DIR)/$$dir ; \
-	  done ; \
-	fi
-
-.PHONY: uninstall-guile
-uninstall-guile:
-	files='$(GUILE_FILES)' ; \
-	if test "x$$files" != x ; then \
-	  for file in $$files ; do \
-	    slashdir=`echo "/$$file" | sed 's,/[^/]*$$,,'` ; \
-	    rm -f $(GUILE_INSTALL_DIR)/$$file ; \
-	    while test "x$$file" != "x$$slashdir" ; do \
-	      rmdir 2>/dev/null "$(GUILE_INSTALL_DIR)$$slashdir" ; \
-	      file="$$slashdir" ; \
-	      slashdir=`echo "$$file" | sed 's,/[^/]*$$,,'` ; \
-	    done \
-	  done ; \
-	fi
-
-stamp-system-gdbinit: Makefile $(SYSTEM_GDBINIT_FILES)
-	rm -rf ./$(SYSTEM_GDBINIT_DIR)
-	mkdir ./$(SYSTEM_GDBINIT_DIR)
-	files='$(SYSTEM_GDBINIT_FILES)' ; \
-	for file in $$files ; do \
-	  f=$(SYSTEM_GDBINIT_SRCDIR)/$$file ; \
-	  if test -f $$f ; then \
-	    $(INSTALL_DATA) $$f ./$(SYSTEM_GDBINIT_DIR) ; \
-	  fi ; \
-	done
-	touch $@
-
-.PHONY: clean-system-gdbinit
-clean-system-gdbinit:
-	rm -rf $(SYSTEM_GDBINIT_DIR)
-	rm -f stamp-system-gdbinit
-
-.PHONY: install-system-gdbinit
-install-system-gdbinit:
-	$(INSTALL_DIR) $(SYSTEM_GDBINIT_INSTALL_DIR)
-	files='$(SYSTEM_GDBINIT_FILES)' ; \
-	for file in $$files; do \
-	  f=$(SYSTEM_GDBINIT_SRCDIR)/$$file ; \
-	  if test -f $$f ; then \
-	    $(INSTALL_DATA) $$f $(SYSTEM_GDBINIT_INSTALL_DIR) ; \
-	  fi ; \
-	done
-
-.PHONY: uninstall-system-gdbinit
-uninstall-system-gdbinit:
-	files='$(SYSTEM_GDBINIT_FILES)' ; \
 	for file in $$files ; do \
 	  slashdir=`echo "/$$file" | sed 's,/[^/]*$$,,'` ; \
-	  rm -f $(SYSTEM_GDBINIT_INSTALL_DIR)/$$file ; \
+	  rm -f $(PYTHON_INSTALL_DIR)/$$file ; \
 	  while test "x$$file" != "x$$slashdir" ; do \
-	    rmdir 2>/dev/null "$(SYSTEM_GDBINIT_INSTALL_DIR)$$slashdir" ; \
+	    rmdir 2>/dev/null "$(PYTHON_INSTALL_DIR)$$slashdir" ; \
 	    file="$$slashdir" ; \
 	    slashdir=`echo "$$file" | sed 's,/[^/]*$$,,'` ; \
 	  done \
@@ -378,15 +185,13 @@ install: all
 	@$(MAKE) $(FLAGS_TO_PASS) install-only
 
 .PHONY: install-only
-install-only: install-syscalls install-python install-guile \
-	install-system-gdbinit
+install-only: install-syscalls install-python
 
 .PHONY: uninstall
-uninstall: uninstall-syscalls uninstall-python uninstall-guile \
-	uninstall-system-gdbinit
+uninstall: uninstall-syscalls uninstall-python
 
 .PHONY: clean
-clean: clean-syscalls clean-python clean-guile clean-system-gdbinit
+clean: clean-syscalls clean-python
 
 .PHONY: maintainer-clean realclean distclean
 maintainer-clean realclean distclean: clean
@@ -412,6 +217,3 @@ MAKEOVERRIDES=
 
 Makefile: $(srcdir)/Makefile.in $(top_builddir)/config.status
 	cd $(top_builddir) && $(MAKE) data-directory/Makefile
-
-# Disable implicit make rules.
-include $(srcdir)/../disable-implicit-rules.mk

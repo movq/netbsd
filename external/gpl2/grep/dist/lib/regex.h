@@ -1,4 +1,4 @@
-/*	$NetBSD: regex.h,v 1.1.1.1 2016/01/10 21:36:19 christos Exp $	*/
+/*	$NetBSD: regex.h,v 1.1 2016/01/10 21:36:19 christos Exp $	*/
 
 #ifndef _REGEX_H
 #include <posix/regex.h>

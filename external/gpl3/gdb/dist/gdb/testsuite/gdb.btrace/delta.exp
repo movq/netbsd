@@ -1,6 +1,6 @@
 # This testcase is part of GDB, the GNU debugger.
 #
-# Copyright 2013-2019 Free Software Foundation, Inc.
+# Copyright 2013-2015 Free Software Foundation, Inc.
 #
 # Contributed by Intel Corp. <markus.t.metzger@intel.com>
 #
@@ -17,18 +17,15 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-if { [skip_btrace_tests] } {
-    unsupported "target does not support record-btrace"
+# check for btrace support
+if { [skip_btrace_tests] } { return -1 }
+
+# start inferior
+standard_testfile x86-record_goto.S
+if [prepare_for_testing delta.exp $testfile $srcfile] {
     return -1
 }
-
-standard_testfile record_goto.c
-if [prepare_for_testing "failed to prepare" $testfile $srcfile] {
-    return -1
-}
-
 if ![runto_main] {
-    untested "failed to run to main"
     return -1
 }
 
@@ -40,11 +37,10 @@ gdb_test_no_output "record btrace"
 
 # we start without trace
 with_test_prefix "no trace" {
-  gdb_test "info record" [multi_line \
+  gdb_test "info record" [join [list \
     "Active record target: record-btrace" \
-    "Recording format: .*" \
-    "Recorded 0 instructions in 0 functions \\\(0 gaps\\\) for .*" \
-    ]
+    "Recorded 0 instructions in 0 functions for .*" \
+    ] "\r\n"]
   gdb_test "record instruction-history" "No trace\."
   gdb_test "record function-call-history" "No trace\."
 }
@@ -53,11 +49,10 @@ with_test_prefix "no trace" {
 gdb_test "stepi"
 
 proc check_trace {} {
-  gdb_test "info record" [multi_line \
+  gdb_test "info record" [join [list \
     "Active record target: record-btrace" \
-    "Recording format: .*" \
-    "Recorded 1 instructions in 1 functions \\\(0 gaps\\\) for .*" \
-    ]
+    "Recorded 1 instructions in 1 functions for .*" \
+    ] "\r\n"]
   gdb_test "record instruction-history /f 1" \
     "1\t   0x\[0-9a-f\]+ <\\+\[0-9\]+>:\tmov *\\\$0x0,%eax\r"
   gdb_test "record function-call-history /c 1" "1\tmain"
@@ -74,17 +69,15 @@ with_test_prefix "twice" {
 
 # check that we can reverse-stepi that instruction
 gdb_test "reverse-stepi"
-gdb_test "info record" [multi_line \
+gdb_test "info record" [join [list \
   "Active record target: record-btrace" \
-  "Recording format: .*" \
-  "Recorded 1 instructions in 1 functions \\\(0 gaps\\\) for .*" \
+  "Recorded 1 instructions in 1 functions for .*" \
   "Replay in progress\.  At instruction 1\." \
-  ] "reverse-stepi"
+  ] "\r\n"] "reverse-stepi"
 
 # and back
 gdb_test "stepi"
-gdb_test "info record" [multi_line \
+gdb_test "info record" [join [list \
   "Active record target: record-btrace" \
-  "Recording format: .*" \
-  "Recorded 1 instructions in 1 functions \\\(0 gaps\\\) for .*" \
-  ] "and back"
+  "Recorded 1 instructions in 1 functions for .*" \
+  ] "\r\n"] "and back"

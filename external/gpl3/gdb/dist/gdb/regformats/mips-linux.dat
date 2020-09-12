@@ -1,5 +1,4 @@
-# THIS FILE IS GENERATED.  -*- buffer-read-only: t -*- vi :set ro:
-# Generated from: mips-linux.xml
+# DO NOT EDIT: generated from mips-linux.xml
 name:mips_linux
 xmltarget:mips-linux.xml
 expedite:r29,pc

@@ -1,4 +1,4 @@
-# Copyright 2014-2019 Free Software Foundation, Inc.
+# Copyright 2014-2015 Free Software Foundation, Inc.
 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -25,9 +25,6 @@ if ![runto main] {
     return -1
 }
 
-# Delete all target-supplied memory regions.
-delete_memory_regions
-
 delete_breakpoints
 
 # Probe for hardware stepping.
@@ -40,7 +37,7 @@ proc probe_target_hardware_step {} {
     gdb_test_no_output "set debug target 1"
     set test "probe target hardware step"
     gdb_test_multiple "si" $test {
-	-re "resume \\(\[^\r\n\]+, step, .*$gdb_prompt $" {
+	-re "to_resume \\(\[^\r\n\]+, step, .*$gdb_prompt $" {
 	    set hw_step 1
 	    pass $test
 	}
@@ -48,7 +45,7 @@ proc probe_target_hardware_step {} {
 	    pass $test
 	}
     }
-    gdb_test "set debug target 0" "->log_command.*\\).*"
+    gdb_test "set debug target 0" "->to_log_command.*\\).*"
     return $hw_step
 }
 
@@ -194,7 +191,6 @@ delete_breakpoints
 proc test_single_step { always_inserted auto_hw } {
     global gdb_prompt
     global decimal
-    global hex
     global supports_hbreak
     global hw_step
 
@@ -219,11 +215,11 @@ proc test_single_step { always_inserted auto_hw } {
 	    gdb_assert {!$hw_step && $auto_hw == "off"} \
 		"$test (cannot insert sw break)"
 	}
-	-re "^si\r\nNote: automatically using hardware breakpoints for read-only addresses\.\r\n\(\?\:${hex}\[ \t\]\)\?${decimal}\[ \t\]+i = 0;\r\n$gdb_prompt $" {
+	-re "^si\r\nNote: automatically using hardware breakpoints for read-only addresses\.\r\n${decimal}\[ \t\]+i = 0;\r\n$gdb_prompt $" {
 	    gdb_assert {!$hw_step && $auto_hw == "on" && $supports_hbreak} \
 		"$test (auto-hw)"
 	}
-	-re "^si\r\n\(\?\:${hex}\[ \t\]\)\?${decimal}\[ \t\]+i = 0;\r\n$gdb_prompt $" {
+	-re "^si\r\n${decimal}\[ \t\]+i = 0;\r\n$gdb_prompt $" {
 	    gdb_assert {$hw_step || ($auto_hw == "on" && $supports_hbreak)} \
 		"$test (no error)"
 	}

@@ -1,25 +1,25 @@
 /* readline.c -- a general facility for reading lines of input
    with emacs style editing and completion. */
 
-/* Copyright (C) 1987-2009 Free Software Foundation, Inc.
+/* Copyright (C) 1987, 1989, 1992 Free Software Foundation, Inc.
 
-   This file is part of the GNU Readline Library (Readline), a library
-   for reading lines of text with interactive input and history editing.      
+   This file is part of the GNU Readline Library, a library for
+   reading lines of text with interactive input and history editing.
 
-   Readline is free software: you can redistribute it and/or modify
-   it under the terms of the GNU General Public License as published by
-   the Free Software Foundation, either version 3 of the License, or
+   The GNU Readline Library is free software; you can redistribute it
+   and/or modify it under the terms of the GNU General Public License
+   as published by the Free Software Foundation; either version 2, or
    (at your option) any later version.
 
-   Readline is distributed in the hope that it will be useful,
-   but WITHOUT ANY WARRANTY; without even the implied warranty of
-   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   The GNU Readline Library is distributed in the hope that it will be
+   useful, but WITHOUT ANY WARRANTY; without even the implied warranty
+   of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
    GNU General Public License for more details.
 
-   You should have received a copy of the GNU General Public License
-   along with Readline.  If not, see <http://www.gnu.org/licenses/>.
-*/
-
+   The GNU General Public License is often shipped with GNU software, and
+   is generally kept in a file called COPYING or LICENSE.  If you do not
+   have a copy of the license, write to the Free Software Foundation,
+   59 Temple Place, Suite 330, Boston, MA 02111 USA. */
 #define READLINE_LIBRARY
 
 #if defined (HAVE_CONFIG_H)
@@ -50,8 +50,6 @@
 #include "rlprivate.h"
 #include "xmalloc.h"
 
-extern void replace_history_data PARAMS((int, histdata_t *, histdata_t *));
-
 /* Non-zero tells rl_delete_text and rl_insert_text to not add to
    the undo list. */
 int _rl_doing_an_undo = 0;
@@ -68,24 +66,6 @@ UNDO_LIST *rl_undo_list = (UNDO_LIST *)NULL;
 /*								    */
 /* **************************************************************** */
 
-static UNDO_LIST *
-alloc_undo_entry (what, start, end, text)
-     enum undo_code what;
-     int start, end;
-     char *text;
-{
-  UNDO_LIST *temp;
-
-  temp = (UNDO_LIST *)xmalloc (sizeof (UNDO_LIST));
-  temp->what = what;
-  temp->start = start;
-  temp->end = end;
-  temp->text = text;
-
-  temp->next = (UNDO_LIST *)NULL;
-  return temp;
-}
-
 /* Remember how to undo something.  Concatenate some undos if that
    seems right. */
 void
@@ -94,9 +74,11 @@ rl_add_undo (what, start, end, text)
      int start, end;
      char *text;
 {
-  UNDO_LIST *temp;
-
-  temp = alloc_undo_entry (what, start, end, text);
+  UNDO_LIST *temp = (UNDO_LIST *)xmalloc (sizeof (UNDO_LIST));
+  temp->what = what;
+  temp->start = start;
+  temp->end = end;
+  temp->text = text;
   temp->next = rl_undo_list;
   rl_undo_list = temp;
 }
@@ -105,60 +87,17 @@ rl_add_undo (what, start, end, text)
 void
 rl_free_undo_list ()
 {
-  UNDO_LIST *release, *orig_list;
-
-  orig_list = rl_undo_list;
   while (rl_undo_list)
     {
-      release = rl_undo_list;
+      UNDO_LIST *release = rl_undo_list;
       rl_undo_list = rl_undo_list->next;
 
       if (release->what == UNDO_DELETE)
-	xfree (release->text);
+	free (release->text);
 
-      xfree (release);
+      free (release);
     }
   rl_undo_list = (UNDO_LIST *)NULL;
-  replace_history_data (-1, (histdata_t *)orig_list, (histdata_t *)NULL);
-}
-
-UNDO_LIST *
-_rl_copy_undo_entry (entry)
-     UNDO_LIST *entry;
-{
-  UNDO_LIST *new;
-
-  new = alloc_undo_entry (entry->what, entry->start, entry->end, (char *)NULL);
-  new->text = entry->text ? savestring (entry->text) : 0;
-  return new;
-}
-
-UNDO_LIST *
-_rl_copy_undo_list (head)
-     UNDO_LIST *head;
-{
-  UNDO_LIST *list, *new, *roving, *c;
-
-  if (head == 0)
-    return head;
-
-  list = head;
-  new = 0;
-  while (list)
-    {
-      c = _rl_copy_undo_entry (list);
-      if (new == 0)
-	roving = new = c;
-      else
-	{
-	  roving->next = c;
-	  roving = roving->next;
-	}
-      list = list->next;
-    }
-
-  roving->next = 0;
-  return new;
 }
 
 /* Undo the next thing in the list.  Return 0 if there
@@ -174,7 +113,7 @@ rl_do_undo ()
   start = end = waiting_for_begin = 0;
   do
     {
-      if (rl_undo_list == 0)
+      if (!rl_undo_list)
 	return (0);
 
       _rl_doing_an_undo = 1;
@@ -194,7 +133,7 @@ rl_do_undo ()
 	case UNDO_DELETE:
 	  rl_point = start;
 	  rl_insert_text (rl_undo_list->text);
-	  xfree (rl_undo_list->text);
+	  free (rl_undo_list->text);
 	  break;
 
 	/* Undoing inserts means deleting some text. */
@@ -222,9 +161,7 @@ rl_do_undo ()
 
       release = rl_undo_list;
       rl_undo_list = rl_undo_list->next;
-      replace_history_data (-1, (histdata_t *)release, (histdata_t *)rl_undo_list);
-
-      xfree (release);
+      free (release);
     }
   while (waiting_for_begin);
 
@@ -294,7 +231,7 @@ int
 rl_revert_line (count, key)
      int count, key;
 {
-  if (rl_undo_list == 0)
+  if (!rl_undo_list)
     rl_ding ();
   else
     {

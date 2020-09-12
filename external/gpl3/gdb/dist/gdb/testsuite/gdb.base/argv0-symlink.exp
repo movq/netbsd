@@ -1,4 +1,4 @@
-# Copyright 2013-2019 Free Software Foundation, Inc.
+# Copyright 2013 Free Software Foundation, Inc.
 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -14,8 +14,6 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 standard_testfile
-
-set has_argv0 [gdb_has_argv0]
 
 if { [build_executable ${testfile}.exp ${testfile} ${srcfile}] == -1 } {
     return -1
@@ -38,22 +36,7 @@ if ![runto_main] {
     return -1
 }
 
-gdb_test_no_output "set print repeats 10000"
-gdb_test_no_output "set print elements 10000"
-
-if { $has_argv0 } {
-    gdb_test {print argv[0]} "/$filelink\"" $test
-} else {
-    unsupported $test
-}
-
-# For a link named /PATH/TO/DIR/LINK, we want to check the output
-# against "/DIR/LINK", but computed in a way that doesn't make
-# assumptions about the test directory layout.
-set full_filelink [standard_output_file $filelink]
-set lastdir [file tail [file dirname $full_filelink]]
-
-gdb_test "info inferiors" "/$lastdir/$filelink *" "$test for info inferiors"
+gdb_test {print argv[0]} "/$filelink\"" $test
 
 
 set test "kept directory symbolic link name"
@@ -76,18 +59,4 @@ if ![runto_main] {
     return -1
 }
 
-gdb_test_no_output "set print repeats 10000"
-gdb_test_no_output "set print elements 10000"
-
-if { $has_argv0 } {
-    # gdbserver in extended-remote mode does not have this issue.
-    # Plain remote does, however.
-    if {[target_info gdb_protocol] != "extended-remote" || ![target_is_gdbserver]} {
-	setup_kfail "*-*-*" gdb/15934
-    }
-    gdb_test {print argv[0]} "/$dirlink/$filelink\"" $test
-} else {
-    unsupported $test
-}
-
-gdb_test "info inferiors" "/$lastdir/$filelink *" "$test for info inferiors"
+gdb_test {print argv[0]} "/$dirlink/$filelink\"" $test

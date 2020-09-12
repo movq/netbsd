@@ -1,5 +1,5 @@
 /* GCC backend definitions for the Renesas RX processor.
-   Copyright (C) 2008-2019 Free Software Foundation, Inc.
+   Copyright (C) 2008, 2009, 2010, 2011 Free Software Foundation, Inc.
    Contributed by Red Hat.
 
    This file is part of GCC.
@@ -29,22 +29,9 @@
           builtin_define ("__RX610__");		\
           builtin_assert ("machine=RX610");	\
 	}					\
-      else if (rx_cpu_type == RX100)		\
-	{					\
-          builtin_define ("__RX100__");		\
-          builtin_assert ("machine=RX100");	\
-	}					\
-      else if (rx_cpu_type == RX200)		\
-	{					\
-          builtin_define ("__RX200__");		\
-          builtin_assert ("machine=RX200");	\
-        }					\
-      else if (rx_cpu_type == RX600)		\
-        {					\
-          builtin_define ("__RX600__");		\
-          builtin_assert ("machine=RX600");	\
-        }					\
-						\
+     else					\
+        builtin_assert ("machine=RX600");	\
+      						\
       if (TARGET_BIG_ENDIAN_DATA)		\
 	builtin_define ("__RX_BIG_ENDIAN__");	\
       else					\
@@ -62,23 +49,21 @@
 	builtin_define ("__RX_AS100_SYNTAX__"); \
       else					\
 	builtin_define ("__RX_GAS_SYNTAX__");   \
-						\
-      if (TARGET_GCC_ABI)			\
-	builtin_define ("__RX_GCC_ABI__");	\
-      else					\
-	builtin_define ("__RX_ABI__");		\
-						\
-      if (rx_allow_string_insns)		\
-	builtin_define ("__RX_ALLOW_STRING_INSNS__"); \
-      else					\
-	builtin_define ("__RX_DISALLOW_STRING_INSNS__");\
     }                                           \
   while (0)
+
+enum rx_cpu_types
+{
+  RX600,
+  RX610,
+  RX200
+};
+
+extern enum rx_cpu_types  rx_cpu_type;
 
 #undef  CC1_SPEC
 #define CC1_SPEC "\
   %{mas100-syntax:%{gdwarf*:%e-mas100-syntax is incompatible with -gdwarf}} \
-  %{mcpu=rx100:%{fpu:%erx100 cpu does not have FPU hardware}} \
   %{mcpu=rx200:%{fpu:%erx200 cpu does not have FPU hardware}}"
 
 #undef  STARTFILE_SPEC
@@ -87,13 +72,6 @@
 #undef  ENDFILE_SPEC
 #define ENDFILE_SPEC "crtend.o%s crtn.o%s"
 
-#undef  CPP_SPEC
-#define CPP_SPEC "\
-%{mpid:-D_RX_PID=1} \
-%{mint-register=*:-D_RX_INT_REGISTERS=%*} \
-%{msmall-data-limit*:-D_RX_SMALL_DATA} \
-"
-
 #undef  ASM_SPEC
 #define ASM_SPEC "\
 %{mbig-endian-data:-mbig-endian-data} \
@@ -101,21 +79,16 @@
 %{!m64bit-doubles:-m32bit-doubles} \
 %{msmall-data-limit*:-msmall-data-limit} \
 %{mrelax:-relax} \
-%{mpid} \
-%{mno-allow-string-insns} \
-%{mint-register=*} \
-%{mgcc-abi:-mgcc-abi} %{!mgcc-abi:-mrx-abi} \
-%{mcpu=*} \
 "
 
 #undef  LIB_SPEC
 #define LIB_SPEC "					\
 --start-group						\
 -lc							\
-%{msim:-lsim}%{!msim:-lnosys}				\
+%{msim*:-lsim}%{!msim*:-lnosys}				\
 %{fprofile-arcs|fprofile-generate|coverage:-lgcov} 	\
 --end-group					   	\
-%{!T*: %{msim:%Trx-sim.ld}%{!msim:%Trx.ld}}		\
+%{!T*: %{msim*:%Trx-sim.ld}%{!msim*:%Trx.ld}}		\
 "
 
 #undef  LINK_SPEC
@@ -125,6 +98,12 @@
 #define BITS_BIG_ENDIAN 		0
 #define BYTES_BIG_ENDIAN 		TARGET_BIG_ENDIAN_DATA
 #define WORDS_BIG_ENDIAN 		TARGET_BIG_ENDIAN_DATA
+
+#ifdef __RX_BIG_ENDIAN__
+#define LIBGCC2_WORDS_BIG_ENDIAN	1
+#else
+#define LIBGCC2_WORDS_BIG_ENDIAN	0
+#endif
 
 #define UNITS_PER_WORD 			4
 
@@ -136,14 +115,25 @@
 #define DOUBLE_TYPE_SIZE 		(TARGET_64BIT_DOUBLES ? 64 : 32)
 #define LONG_DOUBLE_TYPE_SIZE		DOUBLE_TYPE_SIZE
 
+#ifdef __RX_32BIT_DOUBLES__
+#define LIBGCC2_HAS_DF_MODE		0
+#define LIBGCC2_LONG_DOUBLE_TYPE_SIZE   32
+#define LIBGCC2_DOUBLE_TYPE_SIZE	32
+#else
+#define LIBGCC2_HAS_DF_MODE		1
+#define LIBGCC2_LONG_DOUBLE_TYPE_SIZE   64
+#define LIBGCC2_DOUBLE_TYPE_SIZE	64
+#endif
+
 #define DEFAULT_SIGNED_CHAR		0
 
-/* RX load/store instructions can handle unaligned addresses.  */
-#define STRICT_ALIGNMENT 		0
-#define FUNCTION_BOUNDARY 		((rx_cpu_type == RX100 || rx_cpu_type == RX200) ? 4 : 8)
+#define STRICT_ALIGNMENT 		1
+#define FUNCTION_BOUNDARY 		8
 #define BIGGEST_ALIGNMENT 		32
 #define STACK_BOUNDARY 			32
 #define PARM_BOUNDARY 			8
+
+#define FUNCTION_ARG_BOUNDARY(MODE, TYPE) 32
 
 #define STACK_GROWS_DOWNWARD		1
 #define FRAME_GROWS_DOWNWARD		0
@@ -169,8 +159,16 @@
 #define HAS_LONG_UNCOND_BRANCH		0
 
 #define MOVE_MAX 			4
+#define STARTING_FRAME_OFFSET		0
 
-#define HAVE_PRE_DECREMENT		1
+#define RETURN_POPS_ARGS(FUNDECL, FUNTYPE, SIZE) 0
+#define TRULY_NOOP_TRUNCATION(OUTPREC, INPREC)   1
+
+#define LEGITIMATE_CONSTANT_P(X) 	rx_is_legitimate_constant (X)
+
+#define HANDLE_PRAGMA_PACK_PUSH_POP	1
+
+#define HAVE_PRE_DECCREMENT		1
 #define HAVE_POST_INCREMENT		1
 
 #define MOVE_RATIO(SPEED) 		((SPEED) ? 4 : 2)
@@ -202,6 +200,12 @@ enum reg_class
   { 0x0000ffff }	/* All registers.  */		\
 }
 
+#define IRA_COVER_CLASSES				\
+  {							\
+    GR_REGS, LIM_REG_CLASSES				\
+  }
+
+#define SMALL_REGISTER_CLASSES 		0
 #define N_REG_CLASSES			(int) LIM_REG_CLASSES
 #define CLASS_MAX_NREGS(CLASS, MODE)    ((GET_MODE_SIZE (MODE) \
 					  + UNITS_PER_WORD - 1) \
@@ -225,17 +229,14 @@ enum reg_class
 #define STRUCT_VAL_REGNUM		15
 #define CC_REGNUM                       16
 
-/* This is the register which will probably be used to hold the address of
-   the start of the small data area, if -msmall-data-limit is being used,
-   or the address of the constant data area if -mpid is being used.  If both
-   features are in use then two consecutive registers will be used.
+/* This is the register which is used to hold the address of the start
+   of the small data area, if that feature is being used.  Note - this
+   register must not be call_used because otherwise library functions
+   that are compiled without small data support might clobber it.
 
-   Note - these registers must not be call_used because otherwise library
-   functions that are compiled without -msmall-data-limit/-mpid support
-   might clobber them.
-
-   Note that the actual values used depends on other options; use
-   rx_gp_base_regnum() and rx_pid_base_regnum() instead.  */
+   FIXME: The function gcc/config/rx/rx.c:rx_gen_move_template() has a
+   built in copy of this register's name, rather than constructing the
+   name from this #define.  */
 #define GP_BASE_REGNUM			13
 
 #define ELIMINABLE_REGS					\
@@ -261,10 +262,12 @@ enum reg_class
   1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1	\
 }
 
+#define CONDITIONAL_REGISTER_USAGE			\
+  rx_conditional_register_usage ()
+
 #define LIBCALL_VALUE(MODE)				\
   gen_rtx_REG (((GET_MODE_CLASS (MODE) != MODE_INT	\
                  || COMPLEX_MODE_P (MODE)		\
-                 || VECTOR_MODE_P (MODE)		\
 		 || GET_MODE_SIZE (MODE) >= 4)		\
 		? (MODE)				\
 		: SImode),				\
@@ -275,6 +278,8 @@ enum reg_class
 #define REG_ALLOC_ORDER						\
 {  7,  10,  11,  12,  13,  14,  4,  3,  2,  1, 9, 8, 6, 5, 15	\
 }
+
+#define PREFERRED_RELOAD_CLASS(X,CLASS)		CLASS
 
 #define REGNO_IN_RANGE(REGNO, MIN, MAX)		\
   (IN_RANGE ((REGNO), (MIN), (MAX)) 		\
@@ -301,6 +306,14 @@ enum reg_class
     ( (REG_P (X)						\
        || (GET_CODE (X) == SUBREG				\
 	   && REG_P (SUBREG_REG (X))))))
+
+#define GO_IF_MODE_DEPENDENT_ADDRESS(ADDR, LABEL)	\
+  do							\
+    {							\
+      if (rx_is_mode_dependent_addr (ADDR))		\
+        goto LABEL;					\
+    }							\
+  while (0)
 
 
 #define RETURN_ADDR_RTX(COUNT, FRAMEADDR)				\
@@ -317,6 +330,11 @@ typedef unsigned int CUMULATIVE_ARGS;
 #define INIT_CUMULATIVE_ARGS(CUM, FNTYPE, LIBNAME, INDIRECT, N_NAMED_ARGS) \
   (CUM) = 0
 
+#define FUNCTION_ARG(CUM, MODE, TYPE, NAMED) \
+  rx_function_arg (& CUM, MODE, TYPE, NAMED)
+
+#define FUNCTION_ARG_ADVANCE(CUM, MODE, TYPE, NAMED)	\
+  (CUM) += rx_function_arg_size (MODE, TYPE)
 
 #define TRAMPOLINE_SIZE 	(! TARGET_BIG_ENDIAN_DATA ? 14 : 20)
 #define TRAMPOLINE_ALIGNMENT 	32
@@ -326,6 +344,18 @@ typedef unsigned int CUMULATIVE_ARGS;
 
 #define FUNCTION_PROFILER(FILE, LABELNO)	\
     fprintf (FILE, "\tbsr\t__mcount\n");
+
+
+#define HARD_REGNO_NREGS(REGNO, MODE)   CLASS_MAX_NREGS (0, MODE)
+
+#define HARD_REGNO_MODE_OK(REGNO, MODE) 			\
+  REGNO_REG_CLASS (REGNO) == GR_REGS
+
+#define MODES_TIEABLE_P(MODE1, MODE2)				\
+  (   (   GET_MODE_CLASS (MODE1) == MODE_FLOAT			\
+       || GET_MODE_CLASS (MODE1) == MODE_COMPLEX_FLOAT)		\
+   == (   GET_MODE_CLASS (MODE2) == MODE_FLOAT			\
+       || GET_MODE_CLASS (MODE2) == MODE_COMPLEX_FLOAT))
 
 
 #define REGISTER_NAMES						\
@@ -376,13 +406,13 @@ typedef unsigned int CUMULATIVE_ARGS;
 # else
 #  define TEXT_SECTION_ASM_OP	      "\t.section P,\"ax\""
 #  define CTORS_SECTION_ASM_OP	      \
-  "\t.section\t.init_array,\"awx\",@init_array"
+  "\t.section\t.init_array,\"aw\",@init_array"
 #  define DTORS_SECTION_ASM_OP	      \
-  "\t.section\t.fini_array,\"awx\",@fini_array"
+  "\t.section\t.fini_array,\"aw\",@fini_array"
 #  define INIT_ARRAY_SECTION_ASM_OP   \
-  "\t.section\t.init_array,\"awx\",@init_array"
+  "\t.section\t.init_array,\"aw\",@init_array"
 #  define FINI_ARRAY_SECTION_ASM_OP   \
-  "\t.section\t.fini_array,\"awx\",@fini_array"
+  "\t.section\t.fini_array,\"aw\",@fini_array"
 # endif
 #else
 # define TEXT_SECTION_ASM_OP	      \
@@ -390,19 +420,19 @@ typedef unsigned int CUMULATIVE_ARGS;
 
 # define CTORS_SECTION_ASM_OP			      \
   (TARGET_AS100_SYNTAX ? "\t.SECTION init_array,CODE" \
-   : "\t.section\t.init_array,\"awx\",@init_array")
+   : "\t.section\t.init_array,\"aw\",@init_array")
 
 # define DTORS_SECTION_ASM_OP			      \
   (TARGET_AS100_SYNTAX ? "\t.SECTION fini_array,CODE" \
-   : "\t.section\t.fini_array,\"awx\",@fini_array")
+   : "\t.section\t.fini_array,\"aw\",@fini_array")
 
 # define INIT_ARRAY_SECTION_ASM_OP		      \
   (TARGET_AS100_SYNTAX ? "\t.SECTION init_array,CODE" \
-   : "\t.section\t.init_array,\"awx\",@init_array")
+   : "\t.section\t.init_array,\"aw\",@init_array")
 
 # define FINI_ARRAY_SECTION_ASM_OP		      \
   (TARGET_AS100_SYNTAX ? "\t.SECTION fini_array,CODE" \
-   : "\t.section\t.fini_array,\"awx\",@fini_array")
+   : "\t.section\t.fini_array,\"aw\",@fini_array")
 #endif
 
 #define GLOBAL_ASM_OP 		\
@@ -413,31 +443,6 @@ typedef unsigned int CUMULATIVE_ARGS;
 #define LOCAL_LABEL_PREFIX	"L"
 #undef  USER_LABEL_PREFIX
 #define USER_LABEL_PREFIX	"_"
-
-/* Compute the alignment needed for label X in various situations.
-   If the user has specified an alignment then honour that, otherwise
-   use rx_align_for_label.  */
-#define JUMP_ALIGN(x)				(align_jumps.levels[0].log > 0 ? align_jumps : align_flags (rx_align_for_label (x, 0)))
-#define LABEL_ALIGN(x)				(align_labels.levels[0].log > 0 ? align_labels : align_flags (rx_align_for_label (x, 3)))
-#define LOOP_ALIGN(x)				(align_loops.levels[0].log > 0 ? align_loops : align_flags (rx_align_for_label (x, 2)))
-#define LABEL_ALIGN_AFTER_BARRIER(x)		rx_align_for_label (x, 0)
-
-#define ASM_OUTPUT_MAX_SKIP_ALIGN(STREAM, LOG, MAX_SKIP)	\
-  do						\
-    {						\
-      if ((LOG) == 0 || (MAX_SKIP) == 0)	\
-        break;					\
-      if (TARGET_AS100_SYNTAX)			\
-	{					\
-	  if ((LOG) >= 2)			\
-	    fprintf (STREAM, "\t.ALIGN 4\t; %d alignment actually requested\n", 1 << (LOG)); \
-	  else					\
-	    fprintf (STREAM, "\t.ALIGN 2\n");	\
-	}					\
-      else					\
-	fprintf (STREAM, "\t.balign %d,3,%d\n", 1 << (LOG), (MAX_SKIP));	\
-    }						\
-  while (0)
 
 #define ASM_OUTPUT_ALIGN(STREAM, LOG)		\
   do						\
@@ -461,14 +466,12 @@ typedef unsigned int CUMULATIVE_ARGS;
 	   VALUE)
 
 /* This is how to output an element of a case-vector that is relative.
-   Note: The local label referenced by the "1b" below is emitted by
+   Note: The local label referenced by the "3b" below is emitted by
    the tablejump insn.  */
 
 #define ASM_OUTPUT_ADDR_DIFF_ELT(FILE, BODY, VALUE, REL) \
   fprintf (FILE, TARGET_AS100_SYNTAX \
 	   ? "\t.LWORD L%d - ?-\n" : "\t.long .L%d - 1b\n", VALUE)
-
-#define CASE_VECTOR_PC_RELATIVE	(TARGET_PID)
 
 #define ASM_OUTPUT_SIZE_DIRECTIVE(STREAM, NAME, SIZE)			\
   do									\
@@ -548,15 +551,15 @@ typedef unsigned int CUMULATIVE_ARGS;
 	  switch ((ALIGN) / BITS_PER_UNIT)				\
             {								\
             case 4:							\
-              fprintf ((FILE), ":\t.BLKL\t" HOST_WIDE_INT_PRINT_UNSIGNED"\n",\
+              fprintf ((FILE), ":\t.BLKL\t"HOST_WIDE_INT_PRINT_UNSIGNED"\n",\
 		       (SIZE) / 4);					\
 	      break;							\
             case 2:							\
-              fprintf ((FILE), ":\t.BLKW\t" HOST_WIDE_INT_PRINT_UNSIGNED"\n",\
+              fprintf ((FILE), ":\t.BLKW\t"HOST_WIDE_INT_PRINT_UNSIGNED"\n",\
 		       (SIZE) / 2);					\
 	      break;							\
             default:							\
-              fprintf ((FILE), ":\t.BLKB\t" HOST_WIDE_INT_PRINT_UNSIGNED"\n",\
+              fprintf ((FILE), ":\t.BLKB\t"HOST_WIDE_INT_PRINT_UNSIGNED"\n",\
 		       (SIZE));						\
 	      break;							\
             }								\
@@ -565,7 +568,7 @@ typedef unsigned int CUMULATIVE_ARGS;
         {								\
           fprintf ((FILE), "%s", COMMON_ASM_OP);			\
           assemble_name ((FILE), (NAME));				\
-          fprintf ((FILE), "," HOST_WIDE_INT_PRINT_UNSIGNED",%u\n",	\
+          fprintf ((FILE), ","HOST_WIDE_INT_PRINT_UNSIGNED",%u\n",	\
 	           (SIZE), (ALIGN) / BITS_PER_UNIT);			\
 	}								\
     }									\
@@ -608,9 +611,18 @@ typedef unsigned int CUMULATIVE_ARGS;
     }							\
   while (0)
 
+#undef  IDENT_ASM_OP
+#define IDENT_ASM_OP  (TARGET_AS100_SYNTAX \
+		       ? "\t.END\t; Built by: ": "\t.ident\t")
+
 /* For PIC put jump tables into the text section so that the offsets that
    they contain are always computed between two same-section symbols.  */
-#define JUMP_TABLES_IN_TEXT_SECTION	(TARGET_PID || flag_pic)
+#define JUMP_TABLES_IN_TEXT_SECTION	(flag_pic)
+
+#define PRINT_OPERAND(FILE, X, CODE)		\
+  rx_print_operand (FILE, X, CODE)
+#define PRINT_OPERAND_ADDRESS(FILE, ADDR)	\
+  rx_print_operand_address (FILE, ADDR)
 
 /* This is a version of REG_P that also returns TRUE for SUBREGs.  */
 #define RX_REG_P(rtl) (REG_P (rtl) || GET_CODE (rtl) == SUBREG)
@@ -618,6 +630,8 @@ typedef unsigned int CUMULATIVE_ARGS;
 /* Like REG_P except that this macro is true for SET expressions.  */
 #define SET_P(rtl)    (GET_CODE (rtl) == SET)
 
+#define CAN_DEBUG_WITHOUT_FP 1
+
 /* The AS100 assembler does not support .leb128 and .uleb128, but
    the compiler-build-time configure tests will have enabled their
    use because GAS supports them.  So default to generating STABS
@@ -629,20 +643,49 @@ typedef unsigned int CUMULATIVE_ARGS;
 
 #define INCOMING_FRAME_SP_OFFSET		4
 #define ARG_POINTER_CFA_OFFSET(FNDECL)		4
+#define FRAME_POINTER_CFA_OFFSET(FNDECL)	4
 
+/* Translate -nofpu into -mnofpu so that it gets passed from gcc to cc1.  */
+#define TARGET_OPTION_TRANSLATE_TABLE \
+  {"-nofpu", "-mnofpu" }
+
+#define OPTIMIZATION_OPTIONS(LEVEL,SIZE) \
+  rx_set_optimization_options ()
+
 #define TARGET_USE_FPU		(! TARGET_NO_USE_FPU)
 
 /* This macro is used to decide when RX FPU instructions can be used.  */
 #define ALLOW_RX_FPU_INSNS	(TARGET_USE_FPU)
 
-#define BRANCH_COST(SPEED,PREDICT)       1
-#define REGISTER_MOVE_COST(MODE,FROM,TO) 2
+#define BRANCH_COST(SPEED, PREDICT)           1
+#define REGISTER_MOVE_COST(MODE, FROM, TO)    2
+#define MEMORY_MOVE_COST(MODE, REGCLASS, IN) \
+  (((IN) ? 2 : 0) + memory_move_secondary_cost (MODE, REGCLASS, IN))
+  
+#define SELECT_CC_MODE(OP,X,Y)  rx_select_cc_mode ((OP), (X), (Y))
 
-#define SELECT_CC_MODE(OP,X,Y)  rx_select_cc_mode(OP, X, Y)
+#define JUMP_ALIGN(x)				rx_align_for_label (x)
+#define JUMP_ALIGN_MAX_SKIP			rx_max_skip_for_label (label)
+#define LABEL_ALIGN_AFTER_BARRIER(x)		rx_align_for_label (x)
+#define LABEL_ALIGN_AFTER_BARRIER_MAX_SKIP	rx_max_skip_for_label (label)
+#define LOOP_ALIGN(x)				rx_align_for_label (x)
+#define LOOP_ALIGN_MAX_SKIP			rx_max_skip_for_label (label)
+#define LABEL_ALIGN(x)				rx_align_for_label (x)
+#define LABEL_ALIGN_MAX_SKIP			rx_max_skip_for_label (NULL_RTX)
 
-#define ADJUST_INSN_LENGTH(INSN,LENGTH)				\
-  do								\
-    {								\
-      (LENGTH) = rx_adjust_insn_length ((INSN), (LENGTH));	\
-    }								\
+#define ASM_OUTPUT_MAX_SKIP_ALIGN(STREAM, LOG, MAX_SKIP)	\
+  do						\
+    {						\
+      if ((LOG) == 0 || (MAX_SKIP) == 0)	\
+        break;					\
+      if (TARGET_AS100_SYNTAX)			\
+	{					\
+	  if ((LOG) >= 2)			\
+	    fprintf (STREAM, "\t.ALIGN 4\t; %d alignment actually requested\n", 1 << (LOG)); \
+	  else					\
+	    fprintf (STREAM, "\t.ALIGN 2\n");	\
+	}					\
+      else					\
+	fprintf (STREAM, "\t.balign %d,3,%d\n", 1 << (LOG), (MAX_SKIP));	\
+    }						\
   while (0)

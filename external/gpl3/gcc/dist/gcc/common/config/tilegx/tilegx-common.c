@@ -1,5 +1,5 @@
 /* Common hooks for TILE-Gx.
-   Copyright (C) 2011-2019 Free Software Foundation, Inc.
+   Copyright (C) 2011-2013 Free Software Foundation, Inc.
    Contributed by Walter Lee (walt@tilera.com)
 
    This file is part of GCC.
@@ -29,6 +29,7 @@
 #include "flags.h"
 
 static const struct default_options tilegx_option_optimization_table[] = {
+  {OPT_LEVELS_1_PLUS, OPT_fomit_frame_pointer, NULL, 1},
   /* Scheduling and bundling are super important for our architecture, so
      enable them at -O1. */
   {OPT_LEVELS_1_PLUS, OPT_fschedule_insns, NULL, 1},
@@ -43,11 +44,6 @@ tilegx_option_init_struct (struct gcc_options *opts)
   opts->x_flag_asynchronous_unwind_tables = 1;
 }
 
-
-#undef  TARGET_DEFAULT_TARGET_FLAGS
-#define TARGET_DEFAULT_TARGET_FLAGS \
-  (TARGET_DEFAULT		    \
-   | TARGET_ENDIAN_DEFAULT)
 
 #undef  TARGET_OPTION_OPTIMIZATION_TABLE
 #define TARGET_OPTION_OPTIMIZATION_TABLE tilegx_option_optimization_table

@@ -1,6 +1,7 @@
 // Special functions -*- C++ -*-
 
-// Copyright (C) 2006-2019 Free Software Foundation, Inc.
+// Copyright (C) 2006, 2007, 2008, 2009
+// Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
@@ -24,7 +25,7 @@
 
 /** @file tr1/modified_bessel_func.tcc
  *  This is an internal header file, included by other library headers.
- *  Do not attempt to use it directly. @headername{tr1/cmath}
+ *  You should not attempt to use it directly.
  */
 
 //
@@ -46,24 +47,19 @@
 #ifndef _GLIBCXX_TR1_MODIFIED_BESSEL_FUNC_TCC
 #define _GLIBCXX_TR1_MODIFIED_BESSEL_FUNC_TCC 1
 
-#include <tr1/special_function_util.h>
+#include "special_function_util.h"
 
-namespace std _GLIBCXX_VISIBILITY(default)
+namespace std
 {
-_GLIBCXX_BEGIN_NAMESPACE_VERSION
-
-#if _GLIBCXX_USE_STD_SPEC_FUNCS
-#elif defined(_GLIBCXX_TR1_CMATH)
 namespace tr1
 {
-#else
-# error do not include this header directly, use <cmath> or <tr1/cmath>
-#endif
+
   // [5.2] Special functions
 
   // Implementation-space details.
   namespace __detail
   {
+
     /**
      *   @brief  Compute the modified Bessel functions @f$ I_\nu(x) @f$ and
      *           @f$ K_\nu(x) @f$ and their first derivatives
@@ -82,7 +78,7 @@ namespace tr1
      */
     template <typename _Tp>
     void
-    __bessel_ik(_Tp __nu, _Tp __x,
+    __bessel_ik(const _Tp __nu, const _Tp __x,
                 _Tp & __Inu, _Tp & __Knu, _Tp & __Ipnu, _Tp & __Kpnu)
     {
       if (__x == _Tp(0))
@@ -137,7 +133,7 @@ namespace tr1
         }
       if (__i > __max_iter)
         std::__throw_runtime_error(__N("Argument x too large "
-                                       "in __bessel_ik; "
+                                       "in __bessel_jn; "
                                        "try asymptotic expansion."));
       _Tp __Inul = __fp_min;
       _Tp __Ipnul = __h * __Inul;
@@ -190,7 +186,7 @@ namespace tr1
             }
           if (__i > __max_iter)
             std::__throw_runtime_error(__N("Bessel k series failed to converge "
-                                           "in __bessel_ik."));
+                                           "in __bessel_jn."));
           __Kmu = __sum;
           __Knu1 = __sum1 * __xi2;
         }
@@ -226,7 +222,7 @@ namespace tr1
             }
           if (__i > __max_iter)
             std::__throw_runtime_error(__N("Steed's method failed "
-                                           "in __bessel_ik."));
+                                           "in __bessel_jn."));
           __h = __a1 * __h;
           __Kmu = std::sqrt(__numeric_constants<_Tp>::__pi() / (_Tp(2) * __x))
                 * std::exp(-__x) / __s;
@@ -266,7 +262,7 @@ namespace tr1
      */
     template<typename _Tp>
     _Tp
-    __cyl_bessel_i(_Tp __nu, _Tp __x)
+    __cyl_bessel_i(const _Tp __nu, const _Tp __x)
     {
       if (__nu < _Tp(0) || __x < _Tp(0))
         std::__throw_domain_error(__N("Bad argument "
@@ -302,7 +298,7 @@ namespace tr1
      */
     template<typename _Tp>
     _Tp
-    __cyl_bessel_k(_Tp __nu, _Tp __x)
+    __cyl_bessel_k(const _Tp __nu, const _Tp __x)
     {
       if (__nu < _Tp(0) || __x < _Tp(0))
         std::__throw_domain_error(__N("Bad argument "
@@ -336,7 +332,7 @@ namespace tr1
      */
     template <typename _Tp>
     void
-    __sph_bessel_ik(unsigned int __n, _Tp __x,
+    __sph_bessel_ik(const unsigned int __n, const _Tp __x,
                     _Tp & __i_n, _Tp & __k_n, _Tp & __ip_n, _Tp & __kp_n)
     {
       const _Tp __nu = _Tp(__n) + _Tp(0.5L);
@@ -362,33 +358,24 @@ namespace tr1
      *           derivatives @f$ Ai'(x) @f$ and @f$ Bi(x) @f$
      *           respectively.
      *
+     *   @param  __n  The order of the Airy functions.
      *   @param  __x  The argument of the Airy functions.
-     *   @param  __Ai  The output Airy function of the first kind.
-     *   @param  __Bi  The output Airy function of the second kind.
-     *   @param  __Aip  The output derivative of the Airy function
-     *                  of the first kind.
-     *   @param  __Bip  The output derivative of the Airy function
-     *                  of the second kind.
+     *   @param  __i_n  The output Airy function.
+     *   @param  __k_n  The output Airy function.
+     *   @param  __ip_n  The output derivative of the Airy function.
+     *   @param  __kp_n  The output derivative of the Airy function.
      */
     template <typename _Tp>
     void
-    __airy(_Tp __x, _Tp & __Ai, _Tp & __Bi, _Tp & __Aip, _Tp & __Bip)
+    __airy(const _Tp __x,
+           _Tp & __Ai, _Tp & __Bi, _Tp & __Aip, _Tp & __Bip)
     {
       const _Tp __absx = std::abs(__x);
       const _Tp __rootx = std::sqrt(__absx);
       const _Tp __z = _Tp(2) * __absx * __rootx / _Tp(3);
-      const _Tp _S_NaN = std::numeric_limits<_Tp>::quiet_NaN();
-      const _Tp _S_inf = std::numeric_limits<_Tp>::infinity();
 
       if (__isnan(__x))
-        __Bip = __Aip = __Bi = __Ai = std::numeric_limits<_Tp>::quiet_NaN();
-      else if (__z == _S_inf)
-        {
-	  __Aip = __Ai = _Tp(0);
-	  __Bip = __Bi = _S_inf;
-	}
-      else if (__z == -_S_inf)
-	__Bip = __Aip = __Bi = __Ai = _Tp(0);
+        return std::numeric_limits<_Tp>::quiet_NaN();
       else if (__x > _Tp(0))
         {
           _Tp __I_nu, __Ip_nu, __K_nu, __Kp_nu;
@@ -441,12 +428,9 @@ namespace tr1
 
       return;
     }
-  } // namespace __detail
-#if ! _GLIBCXX_USE_STD_SPEC_FUNCS && defined(_GLIBCXX_TR1_CMATH)
-} // namespace tr1
-#endif
 
-_GLIBCXX_END_NAMESPACE_VERSION
+  } // namespace std::tr1::__detail
+}
 }
 
 #endif // _GLIBCXX_TR1_MODIFIED_BESSEL_FUNC_TCC

@@ -1,5 +1,6 @@
 /* BFD support for plugins.
-   Copyright (C) 2009-2019 Free Software Foundation, Inc.
+   Copyright 2009
+   Free Software Foundation, Inc.
 
    This file is part of BFD, the Binary File Descriptor library.
 
@@ -35,6 +36,5 @@ const bfd_arch_info_type bfd_plugin_arch =
   TRUE,
   bfd_default_compatible,
   bfd_default_scan,
-  bfd_arch_default_fill,
   0
 };

@@ -1,6 +1,6 @@
 /* A small multi-threaded test case.
 
-   Copyright 2004-2019 Free Software Foundation, Inc.
+   Copyright 2004, 2007, 2008, 2009, 2010, 2011 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -20,7 +20,6 @@
 #include <pthread.h>
 #include <stdio.h>
 #include <time.h>
-#include <unistd.h>
 
 void
 cond_wait (pthread_cond_t *cond, pthread_mutex_t *mut)
@@ -60,11 +59,12 @@ int
 main (void)
 {
   pthread_t forever;
+  const struct timespec ts = { 0, 10000000 }; /* 0.01 sec */
 
   pthread_create (&forever, NULL, forever_pthread, NULL);
   for (;;)
     {
-      sleep (2);
+      nanosleep (&ts, NULL);
       break_me();
     }
 

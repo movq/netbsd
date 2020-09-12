@@ -1,6 +1,7 @@
 // Special functions -*- C++ -*-
 
-// Copyright (C) 2006-2019 Free Software Foundation, Inc.
+// Copyright (C) 2006, 2007, 2008, 2009
+// Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
@@ -24,7 +25,7 @@
 
 /** @file tr1/poly_hermite.tcc
  *  This is an internal header file, included by other library headers.
- *  Do not attempt to use it directly. @headername{tr1/cmath}
+ *  You should not attempt to use it directly.
  */
 
 //
@@ -39,22 +40,17 @@
 #ifndef _GLIBCXX_TR1_POLY_HERMITE_TCC
 #define _GLIBCXX_TR1_POLY_HERMITE_TCC 1
 
-namespace std _GLIBCXX_VISIBILITY(default)
+namespace std
 {
-_GLIBCXX_BEGIN_NAMESPACE_VERSION
-
-#if _GLIBCXX_USE_STD_SPEC_FUNCS
-#elif defined(_GLIBCXX_TR1_CMATH)
 namespace tr1
 {
-#else
-# error do not include this header directly, use <cmath> or <tr1/cmath>
-#endif
+
   // [5.2] Special functions
 
   // Implementation-space details.
   namespace __detail
   {
+
     /**
      *   @brief This routine returns the Hermite polynomial
      *          of order n: \f$ H_n(x) \f$ by recursion on n.
@@ -71,7 +67,7 @@ namespace tr1
      */
     template<typename _Tp>
     _Tp
-    __poly_hermite_recursion(unsigned int __n, _Tp __x)
+    __poly_hermite_recursion(const unsigned int __n, const _Tp __x)
     {
       //  Compute H_0.
       _Tp __H_0 = 1;
@@ -88,7 +84,7 @@ namespace tr1
       unsigned int __i;
       for  (__H_nm2 = __H_0, __H_nm1 = __H_1, __i = 2; __i <= __n; ++__i)
         {
-          __H_n = 2 * (__x * __H_nm1 - (__i - 1) * __H_nm2);
+          __H_n = 2 * (__x * __H_nm1 + (__i - 1) * __H_nm2);
           __H_nm2 = __H_nm1;
           __H_nm1 = __H_n;
         }
@@ -113,19 +109,16 @@ namespace tr1
      */
     template<typename _Tp>
     inline _Tp
-    __poly_hermite(unsigned int __n, _Tp __x)
+    __poly_hermite(const unsigned int __n, const _Tp __x)
     {
       if (__isnan(__x))
         return std::numeric_limits<_Tp>::quiet_NaN();
       else
         return __poly_hermite_recursion(__n, __x);
     }
-  } // namespace __detail
-#if ! _GLIBCXX_USE_STD_SPEC_FUNCS && defined(_GLIBCXX_TR1_CMATH)
-} // namespace tr1
-#endif
 
-_GLIBCXX_END_NAMESPACE_VERSION
+  } // namespace std::tr1::__detail
+}
 }
 
 #endif // _GLIBCXX_TR1_POLY_HERMITE_TCC

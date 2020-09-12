@@ -1,6 +1,7 @@
 /* Data/register window display.
 
-   Copyright (C) 1998-2019 Free Software Foundation, Inc.
+   Copyright (C) 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2007, 2008, 2009,
+   2010, 2011 Free Software Foundation, Inc.
 
    Contributed by Hewlett-Packard Company.
 
@@ -25,6 +26,8 @@
 #include "tui/tui-wingeneral.h"
 #include "tui/tui-regs.h"
 #include "tui/tui-windata.h"
+
+#include "gdb_string.h"
 #include "gdb_curses.h"
 
 
@@ -53,8 +56,8 @@ tui_first_data_item_displayed (void)
     {
       struct tui_gen_win_info *data_item_win;
 
-      data_item_win
-	= &TUI_DATA_WIN->generic.content[i]->which_element.data_window;
+      data_item_win = &((tui_win_content)
+			TUI_DATA_WIN->generic.content)[i]->which_element.data_window;
       if (data_item_win->handle != (WINDOW *) NULL 
 	  && data_item_win->is_visible)
 	element_no = i;
@@ -91,21 +94,21 @@ tui_delete_data_content_windows (void)
 
   for (i = 0; (i < TUI_DATA_WIN->generic.content_size); i++)
     {
-      data_item_win_ptr
-	= &TUI_DATA_WIN->generic.content[i]->which_element.data_window;
+      data_item_win_ptr = &((tui_win_content)
+			    TUI_DATA_WIN->generic.content)[i]->which_element.data_window;
       tui_delete_win (data_item_win_ptr->handle);
-      data_item_win_ptr->handle = NULL;
+      data_item_win_ptr->handle = (WINDOW *) NULL;
       data_item_win_ptr->is_visible = FALSE;
     }
 }
 
 
 void
-tui_erase_data_content (const char *prompt)
+tui_erase_data_content (char *prompt)
 {
   werase (TUI_DATA_WIN->generic.handle);
   tui_check_and_display_highlight_if_needed (TUI_DATA_WIN);
-  if (prompt != NULL)
+  if (prompt != (char *) NULL)
     {
       int half_width = (TUI_DATA_WIN->generic.width - 2) / 2;
       int x_pos;
@@ -117,7 +120,7 @@ tui_erase_data_content (const char *prompt)
       mvwaddstr (TUI_DATA_WIN->generic.handle,
 		 (TUI_DATA_WIN->generic.height / 2),
 		 x_pos,
-		 (char *) prompt);
+		 prompt);
     }
   wrefresh (TUI_DATA_WIN->generic.handle);
 }
@@ -132,7 +135,7 @@ tui_display_all_data (void)
     tui_erase_data_content (NO_DATA_STRING);
   else
     {
-      tui_erase_data_content (NULL);
+      tui_erase_data_content ((char *) NULL);
       tui_delete_data_content_windows ();
       tui_check_and_display_highlight_if_needed (TUI_DATA_WIN);
       tui_display_registers_from (0);
@@ -201,7 +204,7 @@ tui_display_data_from (int element_no, int reuse_windows)
 
   if (first_line >= 0)
     {
-      tui_erase_data_content (NULL);
+      tui_erase_data_content ((char *) NULL);
       if (!reuse_windows)
 	tui_delete_data_content_windows ();
       tui_display_data_from_line (first_line);
@@ -213,7 +216,7 @@ tui_display_data_from (int element_no, int reuse_windows)
 void
 tui_refresh_data_win (void)
 {
-  tui_erase_data_content (NULL);
+  tui_erase_data_content ((char *) NULL);
   if (TUI_DATA_WIN->generic.content_size > 0)
     {
       int first_element = tui_first_data_item_displayed ();
@@ -253,7 +256,7 @@ tui_check_data_values (struct frame_info *frame)
 	    has changed (data_element_ptr, frame, &new_value)
 	    {
 	      data_element_ptr->value = new_value;
-	      update the display with the newobj value, hiliting it.
+	      update the display with the new value, hiliting it.
 	    }
 #endif
 	}
@@ -284,7 +287,7 @@ tui_vertical_data_scroll (enum tui_scroll_direction scroll_direction,
 	first_line += num_to_scroll;
       else
 	first_line -= num_to_scroll;
-      tui_erase_data_content (NULL);
+      tui_erase_data_content ((char *) NULL);
       tui_delete_data_content_windows ();
       tui_display_data_from_line (first_line);
     }

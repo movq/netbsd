@@ -1,5 +1,5 @@
 @node States
-@c $NetBSD: states.texi,v 1.1.1.1 2016/01/14 21:06:14 christos Exp $
+@c $NetBSD: states.texi,v 1.1 2016/01/14 21:06:14 christos Exp $
 @section States of Problem Reports
 
 @cindex life-cycle of a Problem Report

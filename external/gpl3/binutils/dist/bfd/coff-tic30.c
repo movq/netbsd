@@ -1,5 +1,6 @@
 /* BFD back-end for TMS320C30 coff binaries.
-   Copyright (C) 1998-2020 Free Software Foundation, Inc.
+   Copyright 1998, 1999, 2000, 2001, 2002, 2007, 2008
+   Free Software Foundation, Inc.
    Contributed by Steven Haworth (steve@pm.cse.rmit.edu.au)
 
    This file is part of BFD, the Binary File Descriptor library.
@@ -27,6 +28,12 @@
 #include "coff/internal.h"
 #include "libcoff.h"
 
+static int  coff_tic30_select_reloc PARAMS ((reloc_howto_type *));
+static void rtype2howto PARAMS ((arelent *, struct internal_reloc *));
+static void reloc_processing PARAMS ((arelent *, struct internal_reloc *, asymbol **, bfd *, asection *));
+
+reloc_howto_type * tic30_coff_reloc_type_lookup PARAMS ((bfd *, bfd_reloc_code_real_type));
+
 #define COFF_DEFAULT_SECTION_ALIGNMENT_POWER (1)
 
 reloc_howto_type tic30_coff_howto_table[] =
@@ -52,9 +59,10 @@ reloc_howto_type tic30_coff_howto_table[] =
    map to the howto table entries that match those in both the aout
    and coff implementations.  */
 
-static reloc_howto_type *
-tic30_coff_reloc_type_lookup (bfd *abfd ATTRIBUTE_UNUSED,
-			      bfd_reloc_code_real_type code)
+reloc_howto_type *
+tic30_coff_reloc_type_lookup (abfd, code)
+     bfd *abfd ATTRIBUTE_UNUSED;
+     bfd_reloc_code_real_type code;
 {
   switch (code)
     {
@@ -96,7 +104,8 @@ tic30_coff_reloc_name_lookup (bfd *abfd ATTRIBUTE_UNUSED,
 /* Turn a howto into a reloc number.  */
 
 static int
-coff_tic30_select_reloc (reloc_howto_type *howto)
+coff_tic30_select_reloc (howto)
+     reloc_howto_type *howto;
 {
   return howto->type;
 }
@@ -116,7 +125,9 @@ dst->r_stuff[1] = 'C';
 /* Code to turn a r_type into a howto ptr, uses the above howto table.  */
 
 static void
-rtype2howto (arelent *internal, struct internal_reloc *dst)
+rtype2howto (internal, dst)
+     arelent *internal;
+     struct internal_reloc *dst;
 {
   switch (dst->r_type)
     {
@@ -136,7 +147,7 @@ rtype2howto (arelent *internal, struct internal_reloc *dst)
       internal->howto = &tic30_coff_howto_table[4];
       break;
     default:
-      internal->howto = NULL;
+      abort ();
       break;
     }
 }
@@ -152,11 +163,12 @@ rtype2howto (arelent *internal, struct internal_reloc *dst)
  reloc_processing(relent, reloc, symbols, abfd, section)
 
 static void
-reloc_processing (arelent *relent,
-		  struct internal_reloc *reloc,
-		  asymbol **symbols,
-		  bfd *abfd,
-		  asection *section)
+reloc_processing (relent, reloc, symbols, abfd, section)
+     arelent *relent;
+     struct internal_reloc *reloc;
+     asymbol **symbols;
+     bfd *abfd;
+     asection *section;
 {
   relent->address = reloc->r_vaddr;
   rtype2howto (relent, reloc);
@@ -183,15 +195,14 @@ const bfd_target tic30_coff_vec =
   BFD_ENDIAN_BIG,		/* data byte order is big */
   BFD_ENDIAN_LITTLE,		/* header byte order is little */
 
-  (HAS_RELOC | EXEC_P		/* object flags */
-   | HAS_LINENO | HAS_DEBUG
-   | HAS_SYMS | HAS_LOCALS | WP_TEXT),
+  (HAS_RELOC | EXEC_P |		/* object flags */
+   HAS_LINENO | HAS_DEBUG |
+   HAS_SYMS | HAS_LOCALS | WP_TEXT),
 
   (SEC_HAS_CONTENTS | SEC_ALLOC | SEC_LOAD | SEC_RELOC), /* section flags */
   '_',				/* leading symbol underscore */
   '/',				/* ar_pad_char */
   15,				/* ar_max_namelen */
-  0,				/* match priority.  */
   bfd_getb64, bfd_getb_signed_64, bfd_putb64,
   bfd_getb32, bfd_getb_signed_32, bfd_putb32,
   bfd_getb16, bfd_getb_signed_16, bfd_putb16,	/* data */
@@ -199,24 +210,12 @@ const bfd_target tic30_coff_vec =
   bfd_getl32, bfd_getl_signed_32, bfd_putl32,
   bfd_getl16, bfd_getl_signed_16, bfd_putl16,	/* hdrs */
 
-  {				/* bfd_check_format */
-    _bfd_dummy_target,
-    coff_object_p,
-    bfd_generic_archive_p,
-    _bfd_dummy_target
-  },
-  {				/* bfd_set_format */
-    _bfd_bool_bfd_false_error,
-    coff_mkobject,
-    _bfd_generic_mkarchive,
-    _bfd_bool_bfd_false_error
-  },
-  {				/* bfd_write_contents */
-    _bfd_bool_bfd_false_error,
-    coff_write_object_contents,
-    _bfd_write_archive_contents,
-    _bfd_bool_bfd_false_error
-  },
+  {_bfd_dummy_target, coff_object_p,	/* bfd_check_format */
+   bfd_generic_archive_p, _bfd_dummy_target},
+  {bfd_false, coff_mkobject, _bfd_generic_mkarchive,	/* bfd_set_format */
+   bfd_false},
+  {bfd_false, coff_write_object_contents,	/* bfd_write_contents */
+   _bfd_write_archive_contents, bfd_false},
 
   BFD_JUMP_TABLE_GENERIC (coff),
   BFD_JUMP_TABLE_COPY (coff),

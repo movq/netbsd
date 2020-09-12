@@ -1,6 +1,6 @@
 // Class filesystem::path -*- C++ -*-
 
-// Copyright (C) 2014-2019 Free Software Foundation, Inc.
+// Copyright (C) 2014-2016 Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
@@ -44,7 +44,7 @@
 #include <bits/stl_algobase.h>
 #include <bits/quoted_string.h>
 #include <bits/locale_conv.h>
-#if __cplusplus == 201402L
+#if __cplusplus >= 201402L
 # include <experimental/string_view>
 #endif
 
@@ -55,40 +55,31 @@
 
 namespace std _GLIBCXX_VISIBILITY(default)
 {
-_GLIBCXX_BEGIN_NAMESPACE_VERSION
-
 namespace experimental
 {
 namespace filesystem
 {
 inline namespace v1
 {
+_GLIBCXX_BEGIN_NAMESPACE_VERSION
 _GLIBCXX_BEGIN_NAMESPACE_CXX11
 
-#if __cplusplus == 201402L
-  using std::experimental::basic_string_view;
-#elif __cplusplus > 201402L
-  using std::basic_string_view;
+#if __cplusplus >= 201402L
+  template<typename _CharT, typename _Traits = std::char_traits<_CharT>>
+    using __basic_string_view
+      = std::experimental::basic_string_view<_CharT, _Traits>;
 #endif
 
   /**
-   * @ingroup filesystem-ts
+   * @ingroup filesystem
    * @{
    */
 
   /// A filesystem path.
   class path
   {
-    template<typename _CharT,
-	     typename _Ch = typename remove_const<_CharT>::type>
-      using __is_encoded_char
-	= __or_<is_same<_Ch, char>,
-		is_same<_Ch, wchar_t>,
-#ifdef _GLIBCXX_USE_CHAR8_T
-		is_same<_Ch, char8_t>,
-#endif
-		is_same<_Ch, char16_t>,
-		is_same<_Ch, char32_t>>;
+    template<typename _CharT>
+      struct __is_encoded_char : std::false_type { };
 
     template<typename _Iter,
 	     typename _Iter_traits = std::iterator_traits<_Iter>>
@@ -108,7 +99,7 @@ _GLIBCXX_BEGIN_NAMESPACE_CXX11
 #if __cplusplus >= 201402L
     template<typename _CharT, typename _Traits>
       static __is_encoded_char<_CharT>
-      __is_path_src(const basic_string_view<_CharT, _Traits>&, int);
+      __is_path_src(const __basic_string_view<_CharT, _Traits>&, int);
 #endif
 
     template<typename _Unknown>
@@ -128,12 +119,9 @@ _GLIBCXX_BEGIN_NAMESPACE_CXX11
       : decltype(__is_path_src(std::declval<_Source>(), 0))
       { };
 
-    template<typename _Tp1, typename _Tp2 = void,
-	     typename _Tp1_nocv = typename remove_cv<_Tp1>::type,
-	     typename _Tp1_noptr = typename remove_pointer<_Tp1>::type>
+    template<typename _Tp1, typename _Tp2 = void>
       using _Path = typename
-	std::enable_if<__and_<__not_<is_same<_Tp1_nocv, path>>,
-			      __not_<is_void<_Tp1_noptr>>,
+	std::enable_if<__and_<__not_<is_same<_Tp1, path>>,
 			      __constructible_from<_Tp1, _Tp2>>::value,
 		       path>::type;
 
@@ -160,21 +148,20 @@ _GLIBCXX_BEGIN_NAMESPACE_CXX11
 #if __cplusplus >= 201402L
     template<typename _CharT, typename _Traits>
       static const _CharT*
-      _S_range_begin(const basic_string_view<_CharT, _Traits>& __str)
+      _S_range_begin(const __basic_string_view<_CharT, _Traits>& __str)
       { return __str.data(); }
 
     template<typename _CharT, typename _Traits>
       static const _CharT*
-      _S_range_end(const basic_string_view<_CharT, _Traits>& __str)
+      _S_range_end(const __basic_string_view<_CharT, _Traits>& __str)
       { return __str.data() + __str.size(); }
 #endif
 
     template<typename _Tp,
 	     typename _Iter = decltype(_S_range_begin(std::declval<_Tp>())),
 	     typename _Val = typename std::iterator_traits<_Iter>::value_type>
-      using __value_type_is_char = typename std::enable_if<
-	std::is_same<typename std::remove_const<_Val>::type, char>::value
-	>::type;
+      using __value_type_is_char
+	= typename std::enable_if<std::is_same<_Val, char>::value>::type;
 
   public:
 #ifdef _GLIBCXX_FILESYSTEM_IS_WINDOWS
@@ -195,8 +182,7 @@ _GLIBCXX_BEGIN_NAMESPACE_CXX11
     path(path&& __p) noexcept
     : _M_pathname(std::move(__p._M_pathname)), _M_type(__p._M_type)
     {
-      if (_M_type == _Type::_Multi)
-	_M_split_cmpts();
+      _M_split_cmpts();
       __p.clear();
     }
 
@@ -285,7 +271,7 @@ _GLIBCXX_BEGIN_NAMESPACE_CXX11
     path& operator+=(const value_type* __x);
     path& operator+=(value_type __x);
 #if __cplusplus >= 201402L
-    path& operator+=(basic_string_view<value_type> __x);
+    path& operator+=(__basic_string_view<value_type> __x);
 #endif
 
     template<typename _Source>
@@ -332,12 +318,7 @@ _GLIBCXX_BEGIN_NAMESPACE_CXX11
 #if _GLIBCXX_USE_WCHAR_T
     std::wstring   wstring() const;
 #endif
-#ifdef _GLIBCXX_USE_CHAR8_T
-    __attribute__((__abi_tag__("__u8")))
-    std::u8string  u8string() const;
-#else
     std::string    u8string() const;
-#endif // _GLIBCXX_USE_CHAR8_T
     std::u16string u16string() const;
     std::u32string u32string() const;
 
@@ -351,12 +332,7 @@ _GLIBCXX_BEGIN_NAMESPACE_CXX11
 #if _GLIBCXX_USE_WCHAR_T
     std::wstring   generic_wstring() const;
 #endif
-#ifdef _GLIBCXX_USE_CHAR8_T
-    __attribute__((__abi_tag__("__u8")))
-    std::u8string  generic_u8string() const;
-#else
     std::string    generic_u8string() const;
-#endif // _GLIBCXX_USE_CHAR8_T
     std::u16string generic_u16string() const;
     std::u32string generic_u32string() const;
 
@@ -366,7 +342,7 @@ _GLIBCXX_BEGIN_NAMESPACE_CXX11
     int compare(const string_type& __s) const;
     int compare(const value_type* __s) const;
 #if __cplusplus >= 201402L
-    int compare(const basic_string_view<value_type> __s) const;
+    int compare(const __basic_string_view<value_type> __s) const;
 #endif
 
     // decomposition
@@ -382,7 +358,7 @@ _GLIBCXX_BEGIN_NAMESPACE_CXX11
 
     // query
 
-    _GLIBCXX_NODISCARD bool empty() const noexcept { return _M_pathname.empty(); }
+    bool empty() const noexcept { return _M_pathname.empty(); }
     bool has_root_name() const;
     bool has_root_directory() const;
     bool has_root_path() const;
@@ -400,20 +376,6 @@ _GLIBCXX_BEGIN_NAMESPACE_CXX11
 
     iterator begin() const;
     iterator end() const;
-
-    // Create a basic_string by reading until a null character.
-    template<typename _InputIterator,
-	     typename _Traits = std::iterator_traits<_InputIterator>,
-	     typename _CharT
-	       = typename std::remove_cv<typename _Traits::value_type>::type>
-      static std::basic_string<_CharT>
-      _S_string_from_iter(_InputIterator __source)
-      {
-	std::basic_string<_CharT> __str;
-	for (_CharT __ch = *__source; __ch != _CharT(); __ch = *++__source)
-	  __str.push_back(__ch);
-	return __str;
-      }
 
   private:
     enum class _Type : unsigned char {
@@ -464,8 +426,11 @@ _GLIBCXX_BEGIN_NAMESPACE_CXX11
       static string_type
       _S_convert(_InputIterator __src, __null_terminated)
       {
-	auto __s = _S_string_from_iter(__src);
-	return _S_convert(__s.c_str(), __s.c_str() + __s.size());
+	using _Tp = typename std::iterator_traits<_InputIterator>::value_type;
+	std::basic_string<typename remove_cv<_Tp>::type> __tmp;
+	for (; *__src != _Tp{}; ++__src)
+	  __tmp.push_back(*__src);
+	return _S_convert(__tmp.c_str(), __tmp.c_str() + __tmp.size());
       }
 
     static string_type
@@ -485,11 +450,13 @@ _GLIBCXX_BEGIN_NAMESPACE_CXX11
       _S_convert_loc(_InputIterator __src, __null_terminated,
 		     const std::locale& __loc)
       {
-	const std::string __s = _S_string_from_iter(__src);
-	return _S_convert_loc(__s.data(), __s.data() + __s.size(), __loc);
+	std::string __tmp;
+	while (*__src != '\0')
+	  __tmp.push_back(*__src++);
+	return _S_convert_loc(__tmp.data(), __tmp.data()+__tmp.size(), __loc);
       }
 
-    static bool _S_is_dir_sep(value_type __ch)
+    bool _S_is_dir_sep(value_type __ch)
     {
 #ifdef _GLIBCXX_FILESYSTEM_IS_WINDOWS
       return __ch == L'/' || __ch == preferred_separator;
@@ -542,11 +509,7 @@ _GLIBCXX_BEGIN_NAMESPACE_CXX11
 
   /// Append one path to another
   inline path operator/(const path& __lhs, const path& __rhs)
-  {
-    path __result(__lhs);
-    __result /= __rhs;
-    return __result;
-  }
+  { return path(__lhs) /= __rhs; }
 
   /// Write a path to a stream
   template<typename _CharT, typename _Traits>
@@ -556,7 +519,7 @@ _GLIBCXX_BEGIN_NAMESPACE_CXX11
       auto __tmp = __p.string<_CharT, _Traits>();
       using __quoted_string
 	= std::__detail::_Quoted_string<decltype(__tmp)&, _CharT>;
-      __os << __quoted_string{__tmp, _CharT('"'), _CharT('\\')};
+      __os << __quoted_string{__tmp, '"', '\\'};
       return __os;
     }
 
@@ -568,44 +531,32 @@ _GLIBCXX_BEGIN_NAMESPACE_CXX11
       basic_string<_CharT, _Traits> __tmp;
       using __quoted_string
 	= std::__detail::_Quoted_string<decltype(__tmp)&, _CharT>;
-      if (__is >> __quoted_string{ __tmp, _CharT('"'), _CharT('\\') })
+      if (__is >> __quoted_string{ __tmp, '"', '\\' })
 	__p = std::move(__tmp);
       return __is;
     }
 
-  /// Create a path from a UTF-8-encoded sequence of char
-  // TODO constrain with _Path<InputIterator, InputIterator> and __value_type_is_char
-  template<typename _InputIterator>
-    inline path
-    u8path(_InputIterator __first, _InputIterator __last)
-    {
-#ifdef _GLIBCXX_FILESYSTEM_IS_WINDOWS
-      // XXX This assumes native wide encoding is UTF-16.
-      std::codecvt_utf8_utf16<path::value_type> __cvt;
-      path::string_type __tmp;
-      const std::string __u8str{__first, __last};
-      const char* const __ptr = __u8str.data();
-      if (__str_codecvt_in_all(__ptr, __ptr + __u8str.size(), __tmp, __cvt))
-	return path{ __tmp };
-      _GLIBCXX_THROW_OR_ABORT(filesystem_error(
-	    "Cannot convert character sequence",
-	    std::make_error_code(errc::illegal_byte_sequence)));
-#else
-      return path{ __first, __last };
-#endif
-    }
-
-  /// Create a path from a UTF-8-encoded sequence of char
   // TODO constrain with _Path<Source> and __value_type_is_char
   template<typename _Source>
     inline path
     u8path(const _Source& __source)
     {
 #ifdef _GLIBCXX_FILESYSTEM_IS_WINDOWS
-      std::string __s = path::_S_string_from_iter(__source);
-      return filesystem::u8path(__s.data(), __s.data() + __s.size());
+      return path{ path::string_type{__source} };
 #else
       return path{ __source };
+#endif
+    }
+
+  // TODO constrain with _Path<InputIterator, InputIterator> and __value_type_is_char
+  template<typename _InputIterator>
+    inline path
+    u8path(_InputIterator __first, _InputIterator __last)
+    {
+#ifdef _GLIBCXX_FILESYSTEM_IS_WINDOWS
+      return path{ path::string_type{__first, __last} };
+#else
+      return path{ __first, __last };
 #endif
     }
 
@@ -638,6 +589,25 @@ _GLIBCXX_BEGIN_NAMESPACE_CXX11
     std::string _M_what = _M_gen_what();
   };
 
+  template<>
+    struct path::__is_encoded_char<char> : std::true_type
+    { using value_type = char; };
+
+  template<>
+    struct path::__is_encoded_char<wchar_t> : std::true_type
+    { using value_type = wchar_t; };
+
+  template<>
+    struct path::__is_encoded_char<char16_t> : std::true_type
+    { using value_type = char16_t; };
+
+  template<>
+    struct path::__is_encoded_char<char32_t> : std::true_type
+    { using value_type = char32_t; };
+
+  template<typename _Tp>
+    struct path::__is_encoded_char<const _Tp> : __is_encoded_char<_Tp> { };
+
   struct path::_Cmpt : path
   {
     _Cmpt(string_type __s, _Type __t, size_t __pos)
@@ -668,7 +638,7 @@ _GLIBCXX_BEGIN_NAMESPACE_CXX11
 	using _Cvt = std::codecvt<wchar_t, char, mbstate_t>;
 	const auto& __cvt = std::use_facet<_Cvt>(std::locale{});
 	std::wstring __wstr;
-	if (__str_codecvt_in_all(__f, __l, __wstr, __cvt))
+	if (__str_codecvt_in(__f, __l, __wstr, __cvt))
 	    return __wstr;
 	_GLIBCXX_THROW_OR_ABORT(filesystem_error(
 	      "Cannot convert character sequence",
@@ -678,28 +648,20 @@ _GLIBCXX_BEGIN_NAMESPACE_CXX11
       static string_type
       _S_wconvert(const _CharT* __f, const _CharT* __l, false_type)
       {
-#ifdef _GLIBCXX_USE_CHAR8_T
-	if constexpr (is_same<_CharT, char8_t>::value)
-	  return _S_wconvert((const char*)__f, (const char*)__l, true_type());
-	else
-#endif
+	std::codecvt_utf8<_CharT> __cvt;
+	std::string __str;
+	if (__str_codecvt_out(__f, __l, __str, __cvt))
 	  {
-	    struct _UCvt : std::codecvt<_CharT, char, std::mbstate_t>
-	    { } __cvt;
-	    std::string __str;
-	    if (__str_codecvt_out_all(__f, __l, __str, __cvt))
-	      {
-		const char* __f2 = __str.data();
-		const char* __l2 = __f2 + __str.size();
-		std::codecvt_utf8_utf16<wchar_t> __wcvt;
-		std::wstring __wstr;
-		if (__str_codecvt_in_all(__f2, __l2, __wstr, __wcvt))
-		  return __wstr;
-	      }
-	    _GLIBCXX_THROW_OR_ABORT(filesystem_error(
-		  "Cannot convert character sequence",
-		  std::make_error_code(errc::illegal_byte_sequence)));
+	    const char* __f2 = __str.data();
+	    const char* __l2 = __f2 + __str.size();
+	    std::codecvt_utf8<wchar_t> __wcvt;
+	    std::wstring __wstr;
+	    if (__str_codecvt_in(__f2, __l2, __wstr, __wcvt))
+	      return __wstr;
 	  }
+	_GLIBCXX_THROW_OR_ABORT(filesystem_error(
+	      "Cannot convert character sequence",
+	      std::make_error_code(errc::illegal_byte_sequence)));
       }
 
       static string_type
@@ -711,20 +673,10 @@ _GLIBCXX_BEGIN_NAMESPACE_CXX11
       static string_type
       _S_convert(const _CharT* __f, const _CharT* __l)
       {
-#ifdef _GLIBCXX_USE_CHAR8_T
-	if constexpr (is_same<_CharT, char8_t>::value)
-	  return string_type(__f, __l);
-	else
-	  {
-#endif
-	    struct _UCvt : std::codecvt<_CharT, char, std::mbstate_t>
-	    { } __cvt;
-	    std::string __str;
-	    if (__str_codecvt_out_all(__f, __l, __str, __cvt))
-	      return __str;
-#ifdef _GLIBCXX_USE_CHAR8_T
-	  }
-#endif
+	std::codecvt_utf8<_CharT> __cvt;
+	std::string __str;
+	if (__str_codecvt_out(__f, __l, __str, __cvt))
+	  return __str;
 	_GLIBCXX_THROW_OR_ABORT(filesystem_error(
 	      "Cannot convert character sequence",
 	      std::make_error_code(errc::illegal_byte_sequence)));
@@ -772,10 +724,10 @@ _GLIBCXX_BEGIN_NAMESPACE_CXX11
     pointer   operator->() const { return std::__addressof(**this); }
 
     iterator& operator++();
-    iterator  operator++(int) { auto __tmp = *this; ++*this; return __tmp; }
+    iterator  operator++(int) { auto __tmp = *this; ++_M_cur; return __tmp; }
 
     iterator& operator--();
-    iterator  operator--(int) { auto __tmp = *this; --*this; return __tmp; }
+    iterator  operator--(int) { auto __tmp = *this; --_M_cur; return __tmp; }
 
     friend bool operator==(const iterator& __lhs, const iterator& __rhs)
     { return __lhs._M_equals(__rhs); }
@@ -852,7 +804,7 @@ _GLIBCXX_BEGIN_NAMESPACE_CXX11
 
 #if __cplusplus >= 201402L
   inline path&
-  path::operator+=(basic_string_view<value_type> __x)
+  path::operator+=(__basic_string_view<value_type> __x)
   {
     _M_pathname.append(__x.data(), __x.size());
     _M_split_cmpts();
@@ -892,20 +844,18 @@ _GLIBCXX_BEGIN_NAMESPACE_CXX11
       if (is_same<_CharT, value_type>::value)
 	return { _M_pathname.begin(), _M_pathname.end(), __a };
 
-      using _WString = basic_string<_CharT, _Traits, _Allocator>;
-
       const value_type* __first = _M_pathname.data();
       const value_type* __last = __first + _M_pathname.size();
 
 #ifdef _GLIBCXX_FILESYSTEM_IS_WINDOWS
       using _CharAlloc = __alloc_rebind<_Allocator, char>;
       using _String = basic_string<char, char_traits<char>, _CharAlloc>;
+      using _WString = basic_string<_CharT, _Traits, _Allocator>;
 
-      // First convert native string from UTF-16 to to UTF-8.
-      // XXX This assumes that the execution wide-character set is UTF-16.
-      codecvt_utf8_utf16<value_type> __cvt;
+      // use codecvt_utf8<wchar_t> to convert native string to UTF-8
+      codecvt_utf8<value_type> __cvt;
       _String __u8str{_CharAlloc{__a}};
-      if (__str_codecvt_out_all(__first, __last, __u8str, __cvt))
+      if (__str_codecvt_out(__first, __last, __u8str, __cvt))
 	{
 	  struct
 	  {
@@ -916,42 +866,24 @@ _GLIBCXX_BEGIN_NAMESPACE_CXX11
 	    _WString*
 	    operator()(const _String& __from, _WString& __to, false_type)
 	    {
-#ifdef _GLIBCXX_USE_CHAR8_T
-	      if constexpr (is_same<_CharT, char8_t>::value)
-	        {
-	          __to.assign(__from.begin(), __from.end());
-	          return std::__addressof(__to);
-	        }
-	      else
-#endif
-	        {
-	          // Convert UTF-8 to wide string.
-	          struct _UCvt : std::codecvt<_CharT, char, std::mbstate_t>
-		  { } __cvt;
-	          const char* __f = __from.data();
-	          const char* __l = __f + __from.size();
-	          if (__str_codecvt_in_all(__f, __l, __to, __cvt))
-		    return std::__addressof(__to);
-	        }
+	      // use codecvt_utf8<_CharT> to convert UTF-8 to wide string
+	      codecvt_utf8<_CharT> __cvt;
+	      const char* __f = __from.data();
+	      const char* __l = __f + __from.size();
+	      if (__str_codecvt_in(__f, __l, __to, __cvt))
+		return std::__addressof(__to);
 	      return nullptr;
 	    }
 	  } __dispatch;
-	  _WString __wstr(__a);
+	  _WString __wstr;
 	  if (auto* __p = __dispatch(__u8str, __wstr, is_same<_CharT, char>{}))
 	    return *__p;
 	}
 #else
-#ifdef _GLIBCXX_USE_CHAR8_T
-      if constexpr (is_same<_CharT, char8_t>::value)
-          return _WString(__first, __last, __a);
-      else
-#endif
-        {
-          struct _UCvt : std::codecvt<_CharT, char, std::mbstate_t> { } __cvt;
-          _WString __wstr(__a);
-          if (__str_codecvt_in_all(__first, __last, __wstr, __cvt))
-	    return __wstr;
-        }
+      codecvt_utf8<_CharT> __cvt;
+      basic_string<_CharT, _Traits, _Allocator> __wstr{__a};
+      if (__str_codecvt_in(__first, __last, __wstr, __cvt))
+	return __wstr;
 #endif
       _GLIBCXX_THROW_OR_ABORT(filesystem_error(
 	    "Cannot convert character sequence",
@@ -966,20 +898,16 @@ _GLIBCXX_BEGIN_NAMESPACE_CXX11
   path::wstring() const { return string<wchar_t>(); }
 #endif
 
-#ifdef _GLIBCXX_USE_CHAR8_T
-  inline std::u8string
-  path::u8string() const { return string<char8_t>(); }
-#else
   inline std::string
   path::u8string() const
   {
 #ifdef _GLIBCXX_FILESYSTEM_IS_WINDOWS
     std::string __str;
-    // convert from native wide encoding (assumed to be UTF-16) to UTF-8
-    std::codecvt_utf8_utf16<value_type> __cvt;
+    // convert from native encoding to UTF-8
+    codecvt_utf8<value_type> __cvt;
     const value_type* __first = _M_pathname.data();
     const value_type* __last = __first + _M_pathname.size();
-    if (__str_codecvt_out_all(__first, __last, __str, __cvt))
+    if (__str_codecvt_out(__first, __last, __str, __cvt))
       return __str;
     _GLIBCXX_THROW_OR_ABORT(filesystem_error(
 	  "Cannot convert character sequence",
@@ -988,7 +916,6 @@ _GLIBCXX_BEGIN_NAMESPACE_CXX11
     return _M_pathname;
 #endif
   }
-#endif // _GLIBCXX_USE_CHAR8_T
 
   inline std::u16string
   path::u16string() const { return string<char16_t>(); }
@@ -1010,13 +937,8 @@ _GLIBCXX_BEGIN_NAMESPACE_CXX11
   path::generic_wstring() const { return wstring(); }
 #endif
 
-#ifdef _GLIBCXX_USE_CHAR8_T
-  inline std::u8string
-  path::generic_u8string() const { return u8string(); }
-#else
   inline std::string
   path::generic_u8string() const { return u8string(); }
-#endif
 
   inline std::u16string
   path::generic_u16string() const { return u16string(); }
@@ -1033,7 +955,7 @@ _GLIBCXX_BEGIN_NAMESPACE_CXX11
 
 #if __cplusplus >= 201402L
   inline int
-  path::compare(basic_string_view<value_type> __s) const
+  path::compare(__basic_string_view<value_type> __s) const
   { return compare(path(__s)); }
 #endif
 
@@ -1076,7 +998,7 @@ _GLIBCXX_BEGIN_NAMESPACE_CXX11
   path::is_absolute() const
   {
 #ifdef _GLIBCXX_FILESYSTEM_IS_WINDOWS
-    return has_root_name() && has_root_directory();
+    return has_root_name();
 #else
     return has_root_directory();
 #endif
@@ -1156,13 +1078,12 @@ _GLIBCXX_BEGIN_NAMESPACE_CXX11
     return _M_at_end == __rhs._M_at_end;
   }
 
-  // @} group filesystem-ts
+  // @} group filesystem
 _GLIBCXX_END_NAMESPACE_CXX11
+_GLIBCXX_END_NAMESPACE_VERSION
 } // namespace v1
 } // namespace filesystem
 } // namespace experimental
-
-_GLIBCXX_END_NAMESPACE_VERSION
 } // namespace std
 
 #endif // C++11

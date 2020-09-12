@@ -1,5 +1,5 @@
 // -*- C++ -*- Exception handling routines for Transactional Memory.
-// Copyright (C) 2009-2019 Free Software Foundation, Inc.
+// Copyright (C) 2009-2013 Free Software Foundation, Inc.
 //
 // This file is part of GCC.
 //
@@ -24,7 +24,6 @@
 
 #include <cstdlib>
 #include "unwind-cxx.h"
-#include "eh_atomics.h"
 
 using namespace __cxxabiv1;
 
@@ -46,7 +45,9 @@ free_any_cxa_exception (_Unwind_Exception *eo)
       __cxa_free_dependent_exception (dep);
     }
 
-  if (__gnu_cxx::__eh_atomic_dec (&h->referenceCount))
+#if __GCC_ATOMIC_INT_LOCK_FREE > 1
+  if (__atomic_sub_fetch (&h->referenceCount, 1, __ATOMIC_ACQ_REL) == 0)
+#endif
     __cxa_free_exception (h + 1);
 }
 

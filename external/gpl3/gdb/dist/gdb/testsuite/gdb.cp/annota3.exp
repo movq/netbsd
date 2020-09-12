@@ -1,4 +1,5 @@
-# Copyright 2003-2019 Free Software Foundation, Inc.
+# Copyright 2003, 2004, 2007, 2008, 2009, 2010, 2011
+# Free Software Foundation, Inc.
 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -15,6 +16,10 @@
 
 # This file was written by Elena Zannoni (ezannoni@cygnus.com)
 
+if $tracelevel then {
+    strace $tracelevel
+}
+
 
 #
 # test running programs
@@ -22,18 +27,32 @@
 
 if { [skip_cplus_tests] } { continue }
 
-standard_testfile .cc
+set testfile "annota3"
+set srcfile ${testfile}.cc
+set binfile ${objdir}/${subdir}/${testfile}
 
-if {[prepare_for_testing "failed to prepare" $testfile $srcfile \
-	 {debug c++ nowarnings}]} {
+if  { [gdb_compile "${srcdir}/${subdir}/${srcfile}" "${binfile}" executable {debug c++ nowarnings}] != "" } {
+    untested annota3.exp
     return -1
 }
 
-# This testcase cannot use runto_main because of the different prompt
-# we get when using annotation level 2.
+# are we on a target board? If so, don't run these tests.
+# note: this is necessary because we cannot use runto_main (which would
+# work for remote targets too) because of the different prompt we get
+# when using annotation level 2.
 #
-if ![target_can_use_run_cmd] {
+if [is_remote target] then {
     return 0
+}
+
+
+gdb_exit
+gdb_start
+gdb_reinitialize_dir $srcdir/$subdir
+gdb_load ${binfile}
+
+if [target_info exists gdb_stub] {
+    gdb_step_for_stub;
 }
 
 #
@@ -167,6 +186,9 @@ gdb_test_multiple "next" "watch triggered on a.x" {
     -re "\r\n\032\032post-prompt\r\n\r\n\032\032starting\r\n\r\n\032\032watchpoint 3\r\n.*atchpoint 3: a.x\r\n\r\nOld value = 0\r\nNew value = 1\r\n\r\n(\032\032frame-begin 0 0x\[0-9a-z\]+\r\n|)main \\(\\) at .*$srcfile:$decimal\r\n\r\n\032\032source .*$srcfile.*beg:$hex\r\n\r\n\032\032stopped\r\n.*$gdb_prompt$" { 
 	pass "watch triggered on a.x"
     }
+    -re "\r\n\032\032post-prompt\r\n\r\n\032\032starting\r\n\r\n\032\032source .*$srcfile.*beg:$hex\r\n\r\n\032\032stopped\r\n$gdb_prompt$" {
+	kfail "gdb/38" "watch triggered on a.x"
+    }
 }
 
 #
@@ -175,13 +197,11 @@ gdb_test_multiple "next" "watch triggered on a.x" {
 # test:
 # annotate-quit
 #
-if ![target_info exists gdb,nointerrupts] {
-    send_gdb "\003"
-    gdb_expect_list "annotate-quit" "$gdb_prompt$" {
-	"\r\n\032\032error-begin\r\n"
-	"Quit\r\n"
-	"\r\n\032\032quit\r\n"
-    }
+send_gdb "\003"
+gdb_expect_list "annotate-quit" "$gdb_prompt$" {
+    "\r\n\032\032error-begin\r\n"
+    "Quit\r\n"
+    "\r\n\032\032quit\r\n"
 }
 
 #

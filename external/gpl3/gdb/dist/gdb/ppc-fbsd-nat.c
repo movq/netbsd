@@ -1,6 +1,6 @@
 /* Native-dependent code for PowerPC's running FreeBSD, for GDB.
 
-   Copyright (C) 2013-2019 Free Software Foundation, Inc.
+   Copyright (C) 2013-2017 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -36,14 +36,6 @@
 #include "ppc-fbsd-tdep.h"
 #include "inf-ptrace.h"
 #include "bsd-kvm.h"
-
-struct ppc_fbsd_nat_target final : public fbsd_nat_target
-{
-  void fetch_registers (struct regcache *, int) override;
-  void store_registers (struct regcache *, int) override;
-};
-
-static ppc_fbsd_nat_target the_ppc_fbsd_nat_target;
 
 /* Fill GDB's register array with the general-purpose register values
    in *GREGSETP.  */
@@ -123,18 +115,19 @@ getfpregs_supplies (struct gdbarch *gdbarch, int regno)
 /* Fetch register REGNO from the child process. If REGNO is -1, do it
    for all registers.  */
 
-void
-ppc_fbsd_nat_target::fetch_registers (struct regcache *regcache, int regno)
+static void
+ppcfbsd_fetch_inferior_registers (struct target_ops *ops,
+				  struct regcache *regcache, int regno)
 {
   gdb_gregset_t regs;
-  pid_t pid = regcache->ptid ().lwp ();
+  pid_t pid = ptid_get_lwp (regcache_get_ptid (regcache));
 
   if (ptrace (PT_GETREGS, pid, (PTRACE_TYPE_ARG3) &regs, 0) == -1)
     perror_with_name (_("Couldn't get registers"));
 
   supply_gregset (regcache, &regs);
 
-  if (regno == -1 || getfpregs_supplies (regcache->arch (), regno))
+  if (regno == -1 || getfpregs_supplies (get_regcache_arch (regcache), regno))
     {
       const struct regset *fpregset = ppc_fbsd_fpregset ();
       gdb_fpregset_t fpregs;
@@ -149,11 +142,12 @@ ppc_fbsd_nat_target::fetch_registers (struct regcache *regcache, int regno)
 /* Store register REGNO back into the child process. If REGNO is -1,
    do this for all registers.  */
 
-void
-ppc_fbsd_nat_target::store_registers (struct regcache *regcache, int regno)
+static void
+ppcfbsd_store_inferior_registers (struct target_ops *ops,
+				  struct regcache *regcache, int regno)
 {
   gdb_gregset_t regs;
-  pid_t pid = regcache->ptid ().lwp ();
+  pid_t pid = ptid_get_lwp (regcache_get_ptid (regcache));
 
   if (ptrace (PT_GETREGS, pid, (PTRACE_TYPE_ARG3) &regs, 0) == -1)
     perror_with_name (_("Couldn't get registers"));
@@ -163,7 +157,7 @@ ppc_fbsd_nat_target::store_registers (struct regcache *regcache, int regno)
   if (ptrace (PT_SETREGS, pid, (PTRACE_TYPE_ARG3) &regs, 0) == -1)
     perror_with_name (_("Couldn't write registers"));
 
-  if (regno == -1 || getfpregs_supplies (regcache->arch (), regno))
+  if (regno == -1 || getfpregs_supplies (get_regcache_arch (regcache), regno))
     {
       gdb_fpregset_t fpregs;
 
@@ -184,7 +178,7 @@ ppc_fbsd_nat_target::store_registers (struct regcache *regcache, int regno)
 static int
 ppcfbsd_supply_pcb (struct regcache *regcache, struct pcb *pcb)
 {
-  struct gdbarch *gdbarch = regcache->arch ();
+  struct gdbarch *gdbarch = get_regcache_arch (regcache);
   struct gdbarch_tdep *tdep = gdbarch_tdep (gdbarch);
   int i, regnum;
 
@@ -192,19 +186,29 @@ ppcfbsd_supply_pcb (struct regcache *regcache, struct pcb *pcb)
   if (pcb->pcb_sp == 0)
     return 0;
 
-  regcache->raw_supply (gdbarch_sp_regnum (gdbarch), &pcb->pcb_sp);
-  regcache->raw_supply (tdep->ppc_cr_regnum, &pcb->pcb_cr);
-  regcache->raw_supply (tdep->ppc_lr_regnum, &pcb->pcb_lr);
+  regcache_raw_supply (regcache, gdbarch_sp_regnum (gdbarch), &pcb->pcb_sp);
+  regcache_raw_supply (regcache, tdep->ppc_cr_regnum, &pcb->pcb_cr);
+  regcache_raw_supply (regcache, tdep->ppc_lr_regnum, &pcb->pcb_lr);
   for (i = 0, regnum = tdep->ppc_gp0_regnum + 14; i < 20; i++, regnum++)
-    regcache->raw_supply (regnum, &pcb->pcb_context[i]);
+    regcache_raw_supply (regcache, regnum, &pcb->pcb_context[i]);
 
   return 1;
 }
 
+/* Provide a prototype to silence -Wmissing-prototypes.  */
+
+void _initialize_ppcfbsd_nat (void);
+
 void
 _initialize_ppcfbsd_nat (void)
 {
-  add_inf_child_target (&the_ppc_fbsd_nat_target);
+  struct target_ops *t;
+
+  /* Add in local overrides.  */
+  t = inf_ptrace_target ();
+  t->to_fetch_registers = ppcfbsd_fetch_inferior_registers;
+  t->to_store_registers = ppcfbsd_store_inferior_registers;
+  fbsd_nat_add_target (t);
 
   /* Support debugging kernel virtual memory images.  */
   bsd_kvm_add_target (ppcfbsd_supply_pcb);

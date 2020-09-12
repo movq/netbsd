@@ -37,13 +37,13 @@
 /*
  * Opcodes of the call instructions:
  */
-#define OP_Jxx	0x1aU
-#define	OP_BSR	0x34U
+#define OP_Jxx	0x1a
+#define	OP_BSR	0x34
 
-#define Jxx_FUNC_JMP		0U
-#define Jxx_FUNC_JSR		1U
-#define Jxx_FUNC_RET		2U
-#define Jxx_FUNC_JSR_COROUTINE	3U
+#define Jxx_FUNC_JMP		0
+#define Jxx_FUNC_JSR		1
+#define Jxx_FUNC_RET		2
+#define Jxx_FUNC_JSR_COROUTINE	3
 
 /* *INDENT-OFF* */
 /* Here to document only.  We can't use this when cross compiling as
@@ -111,7 +111,7 @@ alpha_find_call (Sym *parent, bfd_vma p_lowpc, bfd_vma p_highpc)
     {
       insn = bfd_get_32 (core_bfd, ((unsigned char *) core_text_space
 				    + pc - core_text_sect->vma));
-      switch (insn & (0x3fU << 26))
+      switch (insn & (0x3f << 26))
 	{
 	case OP_Jxx << 26:
 	  /*
@@ -148,20 +148,17 @@ alpha_find_call (Sym *parent, bfd_vma p_lowpc, bfd_vma p_highpc)
 	  if (hist_check_address (dest_pc))
 	    {
 	      child = sym_lookup (&symtab, dest_pc);
-              if (child)
-                {
-	          DBG (CALLDEBUG,
-		       printf (" 0x%lx\t; name=%s, addr=0x%lx",
-			       (unsigned long) dest_pc, child->name,
-			       (unsigned long) child->addr));
-	          if (child->addr == dest_pc || child->addr == dest_pc - 8)
-		    {
-		      DBG (CALLDEBUG, printf ("\n"));
-		      /* a hit:  */
-		      arc_add (parent, child, (unsigned long) 0);
-		      continue;
-		    }
-                }
+	      DBG (CALLDEBUG,
+		   printf (" 0x%lx\t; name=%s, addr=0x%lx",
+			   (unsigned long) dest_pc, child->name,
+			   (unsigned long) child->addr));
+	      if (child->addr == dest_pc || child->addr == dest_pc - 8)
+		{
+		  DBG (CALLDEBUG, printf ("\n"));
+		  /* a hit:  */
+		  arc_add (parent, child, (unsigned long) 0);
+		  continue;
+		}
 	    }
 	  /*
 	   * Something funny going on.

@@ -1,5 +1,5 @@
 /* Iterator routines for GIMPLE statements.
-   Copyright (C) 2007-2019 Free Software Foundation, Inc.
+   Copyright (C) 2007, 2008, 2010 Free Software Foundation, Inc.
    Contributed by Aldy Hernandez  <aldy@quesejoda.com>
 
 This file is part of GCC.
@@ -21,25 +21,19 @@ along with GCC; see the file COPYING3.  If not see
 #include "config.h"
 #include "system.h"
 #include "coretypes.h"
-#include "backend.h"
+#include "tm.h"
 #include "tree.h"
 #include "gimple.h"
-#include "cfghooks.h"
-#include "ssa.h"
-#include "cgraph.h"
-#include "tree-eh.h"
-#include "gimple-iterator.h"
-#include "tree-cfg.h"
-#include "tree-ssa.h"
+#include "tree-flow.h"
 #include "value-prof.h"
 
 
 /* Mark the statement STMT as modified, and update it.  */
 
 static inline void
-update_modified_stmt (gimple *stmt)
+update_modified_stmt (gimple stmt)
 {
-  if (!ssa_operands_active (cfun))
+  if (!ssa_operands_active ())
     return;
   update_stmt_if_modified (stmt);
 }
@@ -47,12 +41,12 @@ update_modified_stmt (gimple *stmt)
 
 /* Mark the statements in SEQ as modified, and update them.  */
 
-void
+static void
 update_modified_stmts (gimple_seq seq)
 {
   gimple_stmt_iterator gsi;
 
-  if (!ssa_operands_active (cfun))
+  if (!ssa_operands_active ())
     return;
   for (gsi = gsi_start (seq); !gsi_end_p (gsi); gsi_next (&gsi))
     update_stmt_if_modified (gsi_stmt (gsi));
@@ -63,43 +57,14 @@ update_modified_stmts (gimple_seq seq)
    starting at FIRST and LAST.  */
 
 static void
-update_bb_for_stmts (gimple_seq_node first, gimple_seq_node last,
-		     basic_block bb)
+update_bb_for_stmts (gimple_seq_node first, basic_block bb)
 {
   gimple_seq_node n;
 
   for (n = first; n; n = n->next)
-    {
-      gimple_set_bb (n, bb);
-      if (n == last)
-	break;
-    }
+    gimple_set_bb (n->stmt, bb);
 }
 
-/* Set the frequencies for the cgraph_edges for each of the calls
-   starting at FIRST for their new position within BB.  */
-
-static void
-update_call_edge_frequencies (gimple_seq_node first, basic_block bb)
-{
-  struct cgraph_node *cfun_node = NULL;
-  gimple_seq_node n;
-
-  for (n = first; n ; n = n->next)
-    if (is_gimple_call (n))
-      {
-	struct cgraph_edge *e;
-
-	/* These function calls are expensive enough that we want
-	   to avoid calling them if we never see any calls.  */
-	if (cfun_node == NULL)
-	  cfun_node = cgraph_node::get (current_function_decl);
-
-	e = cfun_node->get_edge (n);
-	if (e != NULL)
-	  e->count = bb->count;
-      }
-}
 
 /* Insert the sequence delimited by nodes FIRST and LAST before
    iterator I.  M specifies how to update iterator I after insertion
@@ -119,16 +84,14 @@ gsi_insert_seq_nodes_before (gimple_stmt_iterator *i,
   basic_block bb;
   gimple_seq_node cur = i->ptr;
 
-  gcc_assert (!cur || cur->prev);
-
   if ((bb = gsi_bb (*i)) != NULL)
-    update_bb_for_stmts (first, last, bb);
+    update_bb_for_stmts (first, bb);
 
   /* Link SEQ before CUR in the sequence.  */
   if (cur)
     {
       first->prev = cur->prev;
-      if (first->prev->next)
+      if (first->prev)
 	first->prev->next = first;
       else
 	gimple_seq_set_first (i->seq, first);
@@ -137,19 +100,16 @@ gsi_insert_seq_nodes_before (gimple_stmt_iterator *i,
     }
   else
     {
-      gimple_seq_node itlast = gimple_seq_last (*i->seq);
+      gimple_seq_node itlast = gimple_seq_last (i->seq);
 
       /* If CUR is NULL, we link at the end of the sequence (this case happens
 	 when gsi_after_labels is called for a basic block that contains only
 	 labels, so it returns an iterator after the end of the block, and
 	 we need to insert before it; it might be cleaner to add a flag to the
 	 iterator saying whether we are at the start or end of the list).  */
-      last->next = NULL;
+      first->prev = itlast;
       if (itlast)
-	{
-	  first->prev = itlast;
-	  itlast->next = first;
-	}
+	itlast->next = first;
       else
 	gimple_seq_set_first (i->seq, first);
       gimple_seq_set_last (i->seq, last);
@@ -189,10 +149,14 @@ gsi_insert_seq_before_without_update (gimple_stmt_iterator *i, gimple_seq seq,
     return;
 
   /* Don't allow inserting a sequence into itself.  */
-  gcc_assert (seq != *i->seq);
+  gcc_assert (seq != i->seq);
 
   first = gimple_seq_first (seq);
   last = gimple_seq_last (seq);
+
+  gimple_seq_set_first (seq, NULL);
+  gimple_seq_set_last (seq, NULL);
+  gimple_seq_free (seq);
 
   /* Empty sequences need no work.  */
   if (!first || !last)
@@ -237,21 +201,17 @@ gsi_insert_seq_nodes_after (gimple_stmt_iterator *i,
   basic_block bb;
   gimple_seq_node cur = i->ptr;
 
-  gcc_assert (!cur || cur->prev);
-
   /* If the iterator is inside a basic block, we need to update the
      basic block information for all the nodes between FIRST and LAST.  */
   if ((bb = gsi_bb (*i)) != NULL)
-    update_bb_for_stmts (first, last, bb);
+    update_bb_for_stmts (first, bb);
 
   /* Link SEQ after CUR.  */
   if (cur)
     {
       last->next = cur->next;
       if (last->next)
-	{
-	  last->next->prev = last;
-	}
+	last->next->prev = last;
       else
 	gimple_seq_set_last (i->seq, last);
       first->prev = cur;
@@ -259,8 +219,7 @@ gsi_insert_seq_nodes_after (gimple_stmt_iterator *i,
     }
   else
     {
-      gcc_assert (!gimple_seq_last (*i->seq));
-      last->next = NULL;
+      gcc_assert (!gimple_seq_last (i->seq));
       gimple_seq_set_first (i->seq, first);
       gimple_seq_set_last (i->seq, last);
     }
@@ -301,10 +260,14 @@ gsi_insert_seq_after_without_update (gimple_stmt_iterator *i, gimple_seq seq,
     return;
 
   /* Don't allow inserting a sequence into itself.  */
-  gcc_assert (seq != *i->seq);
+  gcc_assert (seq != i->seq);
 
   first = gimple_seq_first (seq);
   last = gimple_seq_last (seq);
+
+  gimple_seq_set_first (seq, NULL);
+  gimple_seq_set_last (seq, NULL);
+  gimple_seq_free (seq);
 
   /* Empty sequences need no work.  */
   if (!first || !last)
@@ -337,7 +300,7 @@ gimple_seq
 gsi_split_seq_after (gimple_stmt_iterator i)
 {
   gimple_seq_node cur, next;
-  gimple_seq *pold_seq, new_seq;
+  gimple_seq old_seq, new_seq;
 
   cur = i.ptr;
 
@@ -345,53 +308,27 @@ gsi_split_seq_after (gimple_stmt_iterator i)
   gcc_assert (cur && cur->next);
   next = cur->next;
 
-  pold_seq = i.seq;
+  old_seq = i.seq;
+  new_seq = gimple_seq_alloc ();
 
-  gimple_seq_set_first (&new_seq, next);
-  gimple_seq_set_last (&new_seq, gimple_seq_last (*pold_seq));
-  gimple_seq_set_last (pold_seq, cur);
+  gimple_seq_set_first (new_seq, next);
+  gimple_seq_set_last (new_seq, gimple_seq_last (old_seq));
+  gimple_seq_set_last (old_seq, cur);
   cur->next = NULL;
+  next->prev = NULL;
 
   return new_seq;
-}
-
-
-/* Set the statement to which GSI points to STMT.  This only updates
-   the iterator and the gimple sequence, it doesn't do the bookkeeping
-   of gsi_replace.  */
-
-void
-gsi_set_stmt (gimple_stmt_iterator *gsi, gimple *stmt)
-{
-  gimple *orig_stmt = gsi_stmt (*gsi);
-  gimple *prev, *next;
-
-  stmt->next = next = orig_stmt->next;
-  stmt->prev = prev = orig_stmt->prev;
-  /* Note how we don't clear next/prev of orig_stmt.  This is so that
-     copies of *GSI our callers might still hold (to orig_stmt)
-     can be advanced as if they too were replaced.  */
-  if (prev->next)
-    prev->next = stmt;
-  else
-    gimple_seq_set_first (gsi->seq, stmt);
-  if (next)
-    next->prev = stmt;
-  else
-    gimple_seq_set_last (gsi->seq, stmt);
-
-  gsi->ptr = stmt;
 }
 
 
 /* Move all statements in the sequence before I to a new sequence.
    Return this new sequence.  I is set to the head of the new list.  */
 
-void
-gsi_split_seq_before (gimple_stmt_iterator *i, gimple_seq *pnew_seq)
+gimple_seq
+gsi_split_seq_before (gimple_stmt_iterator *i)
 {
   gimple_seq_node cur, prev;
-  gimple_seq old_seq;
+  gimple_seq old_seq, new_seq;
 
   cur = i->ptr;
 
@@ -399,38 +336,40 @@ gsi_split_seq_before (gimple_stmt_iterator *i, gimple_seq *pnew_seq)
   gcc_assert (cur);
   prev = cur->prev;
 
-  old_seq = *i->seq;
-  if (!prev->next)
-    *i->seq = NULL;
-  i->seq = pnew_seq;
+  old_seq = i->seq;
+  new_seq = gimple_seq_alloc ();
+  i->seq = new_seq;
 
   /* Set the limits on NEW_SEQ.  */
-  gimple_seq_set_first (pnew_seq, cur);
-  gimple_seq_set_last (pnew_seq, gimple_seq_last (old_seq));
+  gimple_seq_set_first (new_seq, cur);
+  gimple_seq_set_last (new_seq, gimple_seq_last (old_seq));
 
   /* Cut OLD_SEQ before I.  */
-  gimple_seq_set_last (&old_seq, prev);
-  if (prev->next)
+  gimple_seq_set_last (old_seq, prev);
+  cur->prev = NULL;
+  if (prev)
     prev->next = NULL;
+  else
+    gimple_seq_set_first (old_seq, NULL);
+
+  return new_seq;
 }
 
 
 /* Replace the statement pointed-to by GSI to STMT.  If UPDATE_EH_INFO
    is true, the exception handling information of the original
    statement is moved to the new statement.  Assignments must only be
-   replaced with assignments to the same LHS.  Returns whether EH edge
-   cleanup is required.  */
+   replaced with assignments to the same LHS.  */
 
-bool
-gsi_replace (gimple_stmt_iterator *gsi, gimple *stmt, bool update_eh_info)
+void
+gsi_replace (gimple_stmt_iterator *gsi, gimple stmt, bool update_eh_info)
 {
-  gimple *orig_stmt = gsi_stmt (*gsi);
-  bool require_eh_edge_purge = false;
+  gimple orig_stmt = gsi_stmt (*gsi);
 
   if (stmt == orig_stmt)
-    return false;
+    return;
 
-  gcc_assert (!gimple_has_lhs (orig_stmt) || !gimple_has_lhs (stmt)
+  gcc_assert (!gimple_has_lhs (orig_stmt)
 	      || gimple_get_lhs (orig_stmt) == gimple_get_lhs (stmt));
 
   gimple_set_location (stmt, gimple_location (orig_stmt));
@@ -439,7 +378,7 @@ gsi_replace (gimple_stmt_iterator *gsi, gimple *stmt, bool update_eh_info)
   /* Preserve EH region information from the original statement, if
      requested by the caller.  */
   if (update_eh_info)
-    require_eh_edge_purge = maybe_clean_or_replace_eh_stmt (orig_stmt, stmt);
+    maybe_clean_or_replace_eh_stmt (orig_stmt, stmt);
 
   gimple_duplicate_stmt_histograms (cfun, stmt, cfun, orig_stmt);
 
@@ -448,36 +387,9 @@ gsi_replace (gimple_stmt_iterator *gsi, gimple *stmt, bool update_eh_info)
   gimple_remove_stmt_histograms (cfun, orig_stmt);
   delink_stmt_imm_use (orig_stmt);
 
-  gsi_set_stmt (gsi, stmt);
+  *gsi_stmt_ptr (gsi) = stmt;
   gimple_set_modified (stmt, true);
   update_modified_stmt (stmt);
-  return require_eh_edge_purge;
-}
-
-
-/* Replace the statement pointed-to by GSI with the sequence SEQ.
-   If UPDATE_EH_INFO is true, the exception handling information of
-   the original statement is moved to the last statement of the new
-   sequence.  If the old statement is an assignment, then so must
-   be the last statement of the new sequence, and they must have the
-   same LHS.  */
-
-void
-gsi_replace_with_seq (gimple_stmt_iterator *gsi, gimple_seq seq,
-		      bool update_eh_info)
-{
-  gimple_stmt_iterator seqi;
-  gimple *last;
-  if (gimple_seq_empty_p (seq))
-    {
-      gsi_remove (gsi, true);
-      return;
-    }
-  seqi = gsi_last (seq);
-  last = gsi_stmt (seqi);
-  gsi_remove (&seqi, false);
-  gsi_insert_seq_before (gsi, seq, GSI_SAME_STMT);
-  gsi_replace (gsi, last, update_eh_info);
 }
 
 
@@ -491,10 +403,15 @@ gsi_replace_with_seq (gimple_stmt_iterator *gsi, gimple_seq seq,
    should use gsi_insert_before.  */
 
 void
-gsi_insert_before_without_update (gimple_stmt_iterator *i, gimple *stmt,
+gsi_insert_before_without_update (gimple_stmt_iterator *i, gimple stmt,
                                   enum gsi_iterator_update m)
 {
-  gsi_insert_seq_nodes_before (i, stmt, stmt, m);
+  gimple_seq_node n;
+
+  n = GGC_NEW (struct gimple_seq_node_d);
+  n->prev = n->next = NULL;
+  n->stmt = stmt;
+  gsi_insert_seq_nodes_before (i, n, n, m);
 }
 
 /* Insert statement STMT before the statement pointed-to by iterator I.
@@ -503,7 +420,7 @@ gsi_insert_before_without_update (gimple_stmt_iterator *i, gimple *stmt,
    gsi_iterator_update).  */
 
 void
-gsi_insert_before (gimple_stmt_iterator *i, gimple *stmt,
+gsi_insert_before (gimple_stmt_iterator *i, gimple stmt,
                    enum gsi_iterator_update m)
 {
   update_modified_stmt (stmt);
@@ -521,10 +438,15 @@ gsi_insert_before (gimple_stmt_iterator *i, gimple *stmt,
    should use gsi_insert_after.  */
 
 void
-gsi_insert_after_without_update (gimple_stmt_iterator *i, gimple *stmt,
+gsi_insert_after_without_update (gimple_stmt_iterator *i, gimple stmt,
                                  enum gsi_iterator_update m)
 {
-  gsi_insert_seq_nodes_after (i, stmt, stmt, m);
+  gimple_seq_node n;
+
+  n = GGC_NEW (struct gimple_seq_node_d);
+  n->prev = n->next = NULL;
+  n->stmt = stmt;
+  gsi_insert_seq_nodes_after (i, n, n, m);
 }
 
 
@@ -534,7 +456,7 @@ gsi_insert_after_without_update (gimple_stmt_iterator *i, gimple *stmt,
    gsi_iterator_update).  */
 
 void
-gsi_insert_after (gimple_stmt_iterator *i, gimple *stmt,
+gsi_insert_after (gimple_stmt_iterator *i, gimple stmt,
 		  enum gsi_iterator_update m)
 {
   update_modified_stmt (stmt);
@@ -548,15 +470,13 @@ gsi_insert_after (gimple_stmt_iterator *i, gimple *stmt,
    REMOVE_PERMANENTLY is true when the statement is going to be removed
    from the IL and not reinserted elsewhere.  In that case we remove the
    statement pointed to by iterator I from the EH tables, and free its
-   operand caches.  Otherwise we do not modify this information.  Returns
-   true whether EH edge cleanup is required.  */
+   operand caches.  Otherwise we do not modify this information.  */
 
-bool
+void
 gsi_remove (gimple_stmt_iterator *i, bool remove_permanently)
 {
   gimple_seq_node cur, next, prev;
-  gimple *stmt = gsi_stmt (*i);
-  bool require_eh_edge_purge = false;
+  gimple stmt = gsi_stmt (*i);
 
   if (gimple_code (stmt) != GIMPLE_PHI)
     insert_debug_temps_for_defs (i);
@@ -568,11 +488,7 @@ gsi_remove (gimple_stmt_iterator *i, bool remove_permanently)
 
   if (remove_permanently)
     {
-      if (gimple_debug_nonbind_marker_p (stmt))
-	/* We don't need this to be exact, but try to keep it at least
-	   close.  */
-	cfun->debug_marker_count--;
-      require_eh_edge_purge = remove_stmt_from_eh_lp (stmt);
+      remove_stmt_from_eh_lp (stmt);
       gimple_remove_stmt_histograms (cfun, stmt);
     }
 
@@ -580,32 +496,25 @@ gsi_remove (gimple_stmt_iterator *i, bool remove_permanently)
   cur = i->ptr;
   next = cur->next;
   prev = cur->prev;
-  /* See gsi_set_stmt for why we don't reset prev/next of STMT.  */
 
-  if (next)
-    /* Cur is not last.  */
-    next->prev = prev;
-  else if (prev->next)
-    /* Cur is last but not first.  */
-    gimple_seq_set_last (i->seq, prev);
-
-  if (prev->next)
-    /* Cur is not first.  */
+  if (prev)
     prev->next = next;
   else
-    /* Cur is first.  */
-    *i->seq = next;
+    gimple_seq_set_first (i->seq, next);
+
+  if (next)
+    next->prev = prev;
+  else
+    gimple_seq_set_last (i->seq, prev);
 
   i->ptr = next;
-
-  return require_eh_edge_purge;
 }
 
 
 /* Finds iterator for STMT.  */
 
 gimple_stmt_iterator
-gsi_for_stmt (gimple *stmt)
+gsi_for_stmt (gimple stmt)
 {
   gimple_stmt_iterator i;
   basic_block bb = gimple_bb (stmt);
@@ -615,42 +524,20 @@ gsi_for_stmt (gimple *stmt)
   else
     i = gsi_start_bb (bb);
 
-  i.ptr = stmt;
-  return i;
+  for (; !gsi_end_p (i); gsi_next (&i))
+    if (gsi_stmt (i) == stmt)
+      return i;
+
+  gcc_unreachable ();
 }
 
-/* Get an iterator for STMT, which is known to belong to SEQ.  This is
-   equivalent to starting at the beginning of SEQ and searching forward
-   until STMT is found.  */
-
-gimple_stmt_iterator
-gsi_for_stmt (gimple *stmt, gimple_seq *seq)
-{
-  gimple_stmt_iterator i = gsi_start_1 (seq);
-  i.ptr = stmt;
-  return i;
-}
-
-/* Finds iterator for PHI.  */
-
-gphi_iterator
-gsi_for_phi (gphi *phi)
-{
-  gphi_iterator i;
-  basic_block bb = gimple_bb (phi);
-
-  i = gsi_start_phis (bb);
-  i.ptr = phi;
-
-  return i;
-}
 
 /* Move the statement at FROM so it comes right after the statement at TO.  */
 
 void
 gsi_move_after (gimple_stmt_iterator *from, gimple_stmt_iterator *to)
 {
-  gimple *stmt = gsi_stmt (*from);
+  gimple stmt = gsi_stmt (*from);
   gsi_remove (from, false);
 
   /* We must have GSI_NEW_STMT here, as gsi_move_after is sometimes used to
@@ -665,7 +552,7 @@ gsi_move_after (gimple_stmt_iterator *from, gimple_stmt_iterator *to)
 void
 gsi_move_before (gimple_stmt_iterator *from, gimple_stmt_iterator *to)
 {
-  gimple *stmt = gsi_stmt (*from);
+  gimple stmt = gsi_stmt (*from);
   gsi_remove (from, false);
 
   /* For consistency with gsi_move_after, it might be better to have
@@ -681,7 +568,9 @@ void
 gsi_move_to_bb_end (gimple_stmt_iterator *from, basic_block bb)
 {
   gimple_stmt_iterator last = gsi_last_bb (bb);
-  gcc_checking_assert (gsi_bb (last) == bb);
+#ifdef ENABLE_CHECKING
+  gcc_assert (gsi_bb (last) == bb);
+#endif
 
   /* Have to check gsi_end_p because it could be an empty block.  */
   if (!gsi_end_p (last) && is_ctrl_stmt (gsi_stmt (last)))
@@ -695,7 +584,7 @@ gsi_move_to_bb_end (gimple_stmt_iterator *from, basic_block bb)
    made until a call to gsi_commit_edge_inserts () is made.  */
 
 void
-gsi_insert_on_edge (edge e, gimple *stmt)
+gsi_insert_on_edge (edge e, gimple stmt)
 {
   gimple_seq_add_stmt (&PENDING_STMT (e), stmt);
 }
@@ -710,15 +599,6 @@ gsi_insert_seq_on_edge (edge e, gimple_seq seq)
   gimple_seq_add_seq (&PENDING_STMT (e), seq);
 }
 
-/* Return a new iterator pointing to the first statement in sequence of
-   statements on edge E.  Such statements need to be subsequently moved into a
-   basic block by calling gsi_commit_edge_inserts.  */
-
-gimple_stmt_iterator
-gsi_start_edge (edge e)
-{
-  return gsi_start (PENDING_STMT (e));
-}
 
 /* Insert the statement pointed-to by GSI into edge E.  Every attempt
    is made to place the statement in an existing basic block, but
@@ -735,7 +615,7 @@ gimple_find_edge_insert_loc (edge e, gimple_stmt_iterator *gsi,
 			     basic_block *new_bb)
 {
   basic_block dest, src;
-  gimple *tmp;
+  gimple tmp;
 
   dest = e->dest;
 
@@ -749,7 +629,7 @@ gimple_find_edge_insert_loc (edge e, gimple_stmt_iterator *gsi,
  restart:
   if (single_pred_p (dest)
       && gimple_seq_empty_p (phi_nodes (dest))
-      && dest != EXIT_BLOCK_PTR_FOR_FN (cfun))
+      && dest != EXIT_BLOCK_PTR)
     {
       *gsi = gsi_start_bb (dest);
       if (gsi_end_p (*gsi))
@@ -779,34 +659,15 @@ gimple_find_edge_insert_loc (edge e, gimple_stmt_iterator *gsi,
      Except for the entry block.  */
   src = e->src;
   if ((e->flags & EDGE_ABNORMAL) == 0
-      && (single_succ_p (src)
-	  /* Do not count a fake edge as successor as added to infinite
-	     loops by connect_infinite_loops_to_exit.  */
-	  || (EDGE_COUNT (src->succs) == 2
-	      && (EDGE_SUCC (src, 0)->flags & EDGE_FAKE
-		  || EDGE_SUCC (src, 1)->flags & EDGE_FAKE)))
-      && src != ENTRY_BLOCK_PTR_FOR_FN (cfun))
+      && single_succ_p (src)
+      && src != ENTRY_BLOCK_PTR)
     {
       *gsi = gsi_last_bb (src);
       if (gsi_end_p (*gsi))
 	return true;
 
       tmp = gsi_stmt (*gsi);
-      if (is_gimple_debug (tmp))
-	{
-	  gimple_stmt_iterator si = *gsi;
-	  gsi_prev_nondebug (&si);
-	  if (!gsi_end_p (si))
-	    tmp = gsi_stmt (si);
-	  /* If we don't have a BB-ending nondebug stmt, we want to
-	     insert after the trailing debug stmts.  Otherwise, we may
-	     insert before the BB-ending nondebug stmt, or split the
-	     edge.  */
-	  if (!stmt_ends_bb_p (tmp))
-	    return true;
-	  *gsi = si;
-	}
-      else if (!stmt_ends_bb_p (tmp))
+      if (!stmt_ends_bb_p (tmp))
 	return true;
 
       switch (gimple_code (tmp))
@@ -832,19 +693,14 @@ gimple_find_edge_insert_loc (edge e, gimple_stmt_iterator *gsi,
    block has to be created, it is returned.  */
 
 basic_block
-gsi_insert_on_edge_immediate (edge e, gimple *stmt)
+gsi_insert_on_edge_immediate (edge e, gimple stmt)
 {
   gimple_stmt_iterator gsi;
   basic_block new_bb = NULL;
-  bool ins_after;
 
   gcc_assert (!PENDING_STMT (e));
 
-  ins_after = gimple_find_edge_insert_loc (e, &gsi, &new_bb);
-
-  update_call_edge_frequencies (stmt, gsi.bb);
-
-  if (ins_after)
+  if (gimple_find_edge_insert_loc (e, &gsi, &new_bb))
     gsi_insert_after (&gsi, stmt, GSI_NEW_STMT);
   else
     gsi_insert_before (&gsi, stmt, GSI_NEW_STMT);
@@ -860,14 +716,10 @@ gsi_insert_seq_on_edge_immediate (edge e, gimple_seq stmts)
 {
   gimple_stmt_iterator gsi;
   basic_block new_bb = NULL;
-  bool ins_after;
 
   gcc_assert (!PENDING_STMT (e));
 
-  ins_after = gimple_find_edge_insert_loc (e, &gsi, &new_bb);
-  update_call_edge_frequencies (gimple_seq_first (stmts), gsi.bb);
-
-  if (ins_after)
+  if (gimple_find_edge_insert_loc (e, &gsi, &new_bb))
     gsi_insert_seq_after (&gsi, stmts, GSI_NEW_STMT);
   else
     gsi_insert_seq_before (&gsi, stmts, GSI_NEW_STMT);
@@ -885,10 +737,9 @@ gsi_commit_edge_inserts (void)
   edge e;
   edge_iterator ei;
 
-  gsi_commit_one_edge_insert (single_succ_edge (ENTRY_BLOCK_PTR_FOR_FN (cfun)),
-			      NULL);
+  gsi_commit_one_edge_insert (single_succ_edge (ENTRY_BLOCK_PTR), NULL);
 
-  FOR_EACH_BB_FN (bb, cfun)
+  FOR_EACH_BB (bb)
     FOR_EACH_EDGE (e, ei, bb->succs)
       gsi_commit_one_edge_insert (e, NULL);
 }
@@ -907,14 +758,10 @@ gsi_commit_one_edge_insert (edge e, basic_block *new_bb)
     {
       gimple_stmt_iterator gsi;
       gimple_seq seq = PENDING_STMT (e);
-      bool ins_after;
 
       PENDING_STMT (e) = NULL;
 
-      ins_after = gimple_find_edge_insert_loc (e, &gsi, new_bb);
-      update_call_edge_frequencies (gimple_seq_first (seq), gsi.bb);
-
-      if (ins_after)
+      if (gimple_find_edge_insert_loc (e, &gsi, new_bb))
 	gsi_insert_seq_after (&gsi, seq, GSI_NEW_STMT);
       else
 	gsi_insert_seq_before (&gsi, seq, GSI_NEW_STMT);
@@ -923,17 +770,8 @@ gsi_commit_one_edge_insert (edge e, basic_block *new_bb)
 
 /* Returns iterator at the start of the list of phi nodes of BB.  */
 
-gphi_iterator
+gimple_stmt_iterator
 gsi_start_phis (basic_block bb)
 {
-  gimple_seq *pseq = phi_nodes_ptr (bb);
-
-  /* Adapted from gsi_start_1. */
-  gphi_iterator i;
-
-  i.ptr = gimple_seq_first (*pseq);
-  i.seq = pseq;
-  i.bb = i.ptr ? gimple_bb (i.ptr) : NULL;
-
-  return i;
+  return gsi_start (phi_nodes (bb));
 }

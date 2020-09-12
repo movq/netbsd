@@ -1,6 +1,6 @@
 /* Process record and replay target for GDB, the GNU debugger.
 
-   Copyright (C) 2013-2019 Free Software Foundation, Inc.
+   Copyright (C) 2013 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -21,8 +21,8 @@
 #include "gdbcmd.h"
 #include "regcache.h"
 #include "gdbthread.h"
-#include "inferior.h"
 #include "event-top.h"
+#include "exceptions.h"
 #include "completer.h"
 #include "arch-utils.h"
 #include "gdbcore.h"
@@ -34,10 +34,7 @@
 #include "event-loop.h"
 #include "inf-loop.h"
 #include "gdb_bfd.h"
-#include "observable.h"
-#include "infrun.h"
-#include "common/gdb_unlinker.h"
-#include "common/byte-vector.h"
+#include "observer.h"
 
 #include <signal.h>
 
@@ -48,7 +45,7 @@
 
    Target record has two modes: recording, and replaying.
 
-   In record mode, we intercept the resume and wait methods.
+   In record mode, we intercept the to_resume and to_wait methods.
    Whenever gdb resumes the target, we run the target in single step
    mode, and we build up an execution log in which, for each executed
    instruction, we record all changes in memory and register state.
@@ -64,7 +61,7 @@
 #define DEFAULT_RECORD_FULL_INSN_MAX_NUM	200000
 
 #define RECORD_FULL_IS_REPLAY \
-  (record_full_list->next || ::execution_direction == EXEC_REVERSE)
+     (record_full_list->next || execution_direction == EXEC_REVERSE)
 
 #define RECORD_FULL_FILE_MAGIC	netorder32(0x20091016)
 
@@ -169,7 +166,7 @@ struct record_full_core_buf_entry
 };
 
 /* Record buf with core target.  */
-static detached_regcache *record_full_core_regbuf = NULL;
+static gdb_byte *record_full_core_regbuf = NULL;
 static struct target_section *record_full_core_start;
 static struct target_section *record_full_core_end;
 static struct record_full_core_buf_entry *record_full_core_buf_list = NULL;
@@ -202,171 +199,14 @@ static int record_full_stop_at_limit = 1;
 static unsigned int record_full_insn_max_num
 	= DEFAULT_RECORD_FULL_INSN_MAX_NUM;
 /* Actual count of insns presently in execution log.  */
-static unsigned int record_full_insn_num = 0;
+static int record_full_insn_num = 0;
 /* Count of insns logged so far (may be larger
    than count of insns presently in execution log).  */
 static ULONGEST record_full_insn_count;
 
-static const char record_longname[]
-  = N_("Process record and replay target");
-static const char record_doc[]
-  = N_("Log program while executing and replay execution from log.");
-
-/* Base class implementing functionality common to both the
-   "record-full" and "record-core" targets.  */
-
-class record_full_base_target : public target_ops
-{
-public:
-  const target_info &info () const override = 0;
-
-  strata stratum () const override { return record_stratum; }
-
-  void close () override;
-  void async (int) override;
-  ptid_t wait (ptid_t, struct target_waitstatus *, int) override;
-  bool stopped_by_watchpoint () override;
-  bool stopped_data_address (CORE_ADDR *) override;
-
-  bool stopped_by_sw_breakpoint () override;
-  bool supports_stopped_by_sw_breakpoint () override;
-
-  bool stopped_by_hw_breakpoint () override;
-  bool supports_stopped_by_hw_breakpoint () override;
-
-  bool can_execute_reverse () override;
-
-  /* Add bookmark target methods.  */
-  gdb_byte *get_bookmark (const char *, int) override;
-  void goto_bookmark (const gdb_byte *, int) override;
-  enum exec_direction_kind execution_direction () override;
-  enum record_method record_method (ptid_t ptid) override;
-  void info_record () override;
-  void save_record (const char *filename) override;
-  bool supports_delete_record () override;
-  void delete_record () override;
-  bool record_is_replaying (ptid_t ptid) override;
-  bool record_will_replay (ptid_t ptid, int dir) override;
-  void record_stop_replaying () override;
-  void goto_record_begin () override;
-  void goto_record_end () override;
-  void goto_record (ULONGEST insn) override;
-};
-
-/* The "record-full" target.  */
-
-static const target_info record_full_target_info = {
-  "record-full",
-  record_longname,
-  record_doc,
-};
-
-class record_full_target final : public record_full_base_target
-{
-public:
-  const target_info &info () const override
-  { return record_full_target_info; }
-
-  void commit_resume () override;
-  void resume (ptid_t, int, enum gdb_signal) override;
-  void disconnect (const char *, int) override;
-  void detach (inferior *, int) override;
-  void mourn_inferior () override;
-  void kill () override;
-  void store_registers (struct regcache *, int) override;
-  enum target_xfer_status xfer_partial (enum target_object object,
-					const char *annex,
-					gdb_byte *readbuf,
-					const gdb_byte *writebuf,
-					ULONGEST offset, ULONGEST len,
-					ULONGEST *xfered_len) override;
-  int insert_breakpoint (struct gdbarch *,
-			 struct bp_target_info *) override;
-  int remove_breakpoint (struct gdbarch *,
-			 struct bp_target_info *,
-			 enum remove_bp_reason) override;
-};
-
-/* The "record-core" target.  */
-
-static const target_info record_full_core_target_info = {
-  "record-core",
-  record_longname,
-  record_doc,
-};
-
-class record_full_core_target final : public record_full_base_target
-{
-public:
-  const target_info &info () const override
-  { return record_full_core_target_info; }
-
-  void resume (ptid_t, int, enum gdb_signal) override;
-  void disconnect (const char *, int) override;
-  void kill () override;
-  void fetch_registers (struct regcache *regcache, int regno) override;
-  void prepare_to_store (struct regcache *regcache) override;
-  void store_registers (struct regcache *, int) override;
-  enum target_xfer_status xfer_partial (enum target_object object,
-					const char *annex,
-					gdb_byte *readbuf,
-					const gdb_byte *writebuf,
-					ULONGEST offset, ULONGEST len,
-					ULONGEST *xfered_len) override;
-  int insert_breakpoint (struct gdbarch *,
-			 struct bp_target_info *) override;
-  int remove_breakpoint (struct gdbarch *,
-			 struct bp_target_info *,
-			 enum remove_bp_reason) override;
-
-  bool has_execution (ptid_t) override;
-};
-
-static record_full_target record_full_ops;
-static record_full_core_target record_full_core_ops;
-
-void
-record_full_target::detach (inferior *inf, int from_tty)
-{
-  record_detach (this, inf, from_tty);
-}
-
-void
-record_full_target::disconnect (const char *args, int from_tty)
-{
-  record_disconnect (this, args, from_tty);
-}
-
-void
-record_full_core_target::disconnect (const char *args, int from_tty)
-{
-  record_disconnect (this, args, from_tty);
-}
-
-void
-record_full_target::mourn_inferior ()
-{
-  record_mourn_inferior (this);
-}
-
-void
-record_full_target::kill ()
-{
-  record_kill (this);
-}
-
-/* See record-full.h.  */
-
-int
-record_full_is_used (void)
-{
-  struct target_ops *t;
-
-  t = find_record_target ();
-  return (t == &record_full_ops
-	  || t == &record_full_core_ops);
-}
-
+/* The target_ops of process record.  */
+static struct target_ops record_full_ops;
+static struct target_ops record_full_core_ops;
 
 /* Command lists for "set/show record full".  */
 static struct cmd_list_element *set_record_full_cmdlist;
@@ -375,8 +215,43 @@ static struct cmd_list_element *show_record_full_cmdlist;
 /* Command list for "record full".  */
 static struct cmd_list_element *record_full_cmdlist;
 
+/* The beneath function pointers.  */
+static struct target_ops *record_full_beneath_to_resume_ops;
+static void (*record_full_beneath_to_resume) (struct target_ops *, ptid_t, int,
+					      enum gdb_signal);
+static struct target_ops *record_full_beneath_to_wait_ops;
+static ptid_t (*record_full_beneath_to_wait) (struct target_ops *, ptid_t,
+					      struct target_waitstatus *,
+					      int);
+static struct target_ops *record_full_beneath_to_store_registers_ops;
+static void (*record_full_beneath_to_store_registers) (struct target_ops *,
+						       struct regcache *,
+						       int regno);
+static struct target_ops *record_full_beneath_to_xfer_partial_ops;
+static LONGEST
+  (*record_full_beneath_to_xfer_partial) (struct target_ops *ops,
+					  enum target_object object,
+					  const char *annex,
+					  gdb_byte *readbuf,
+					  const gdb_byte *writebuf,
+					  ULONGEST offset,
+					  LONGEST len);
+static int
+  (*record_full_beneath_to_insert_breakpoint) (struct gdbarch *,
+					       struct bp_target_info *);
+static int
+  (*record_full_beneath_to_remove_breakpoint) (struct gdbarch *,
+					       struct bp_target_info *);
+static int (*record_full_beneath_to_stopped_by_watchpoint) (void);
+static int (*record_full_beneath_to_stopped_data_address) (struct target_ops *,
+							   CORE_ADDR *);
+static void
+  (*record_full_beneath_to_async) (void (*) (enum inferior_event_type, void *),
+				   void *);
+
 static void record_full_goto_insn (struct record_full_entry *entry,
 				   enum exec_direction_kind dir);
+static void record_full_save (char *recfilename);
 
 /* Alloc and free functions for record_full_reg, record_full_mem, and
    record_full_end entries.  */
@@ -387,9 +262,9 @@ static inline struct record_full_entry *
 record_full_reg_alloc (struct regcache *regcache, int regnum)
 {
   struct record_full_entry *rec;
-  struct gdbarch *gdbarch = regcache->arch ();
+  struct gdbarch *gdbarch = get_regcache_arch (regcache);
 
-  rec = XCNEW (struct record_full_entry);
+  rec = xcalloc (1, sizeof (struct record_full_entry));
   rec->type = record_full_reg;
   rec->u.reg.num = regnum;
   rec->u.reg.len = register_size (gdbarch, regnum);
@@ -417,7 +292,7 @@ record_full_mem_alloc (CORE_ADDR addr, int len)
 {
   struct record_full_entry *rec;
 
-  rec = XCNEW (struct record_full_entry);
+  rec = xcalloc (1, sizeof (struct record_full_entry));
   rec->type = record_full_mem;
   rec->u.mem.addr = addr;
   rec->u.mem.len = len;
@@ -445,7 +320,7 @@ record_full_end_alloc (void)
 {
   struct record_full_entry *rec;
 
-  rec = XCNEW (struct record_full_entry);
+  rec = xcalloc (1, sizeof (struct record_full_entry));
   rec->type = record_full_end;
 
   return rec;
@@ -620,7 +495,7 @@ record_full_arch_list_add_reg (struct regcache *regcache, int regnum)
 
   rec = record_full_reg_alloc (regcache, regnum);
 
-  regcache->raw_read (regnum, record_full_get_loc (rec));
+  regcache_raw_read (regcache, regnum, record_full_get_loc (rec));
 
   record_full_arch_list_add (rec);
 
@@ -680,20 +555,38 @@ record_full_arch_list_add_end (void)
 }
 
 static void
-record_full_check_insn_num (void)
+record_full_check_insn_num (int set_terminal)
 {
-  if (record_full_insn_num == record_full_insn_max_num)
+  if (record_full_insn_max_num)
     {
-      /* Ask user what to do.  */
-      if (record_full_stop_at_limit)
+      gdb_assert (record_full_insn_num <= record_full_insn_max_num);
+      if (record_full_insn_num == record_full_insn_max_num)
 	{
-	  if (!yquery (_("Do you want to auto delete previous execution "
-			"log entries when record/replay buffer becomes "
-			"full (record full stop-at-limit)?")))
-	    error (_("Process record: stopped by user."));
-	  record_full_stop_at_limit = 0;
+	  /* Ask user what to do.  */
+	  if (record_full_stop_at_limit)
+	    {
+	      int q;
+
+	      if (set_terminal)
+		target_terminal_ours ();
+	      q = yquery (_("Do you want to auto delete previous execution "
+			    "log entries when record/replay buffer becomes "
+			    "full (record full stop-at-limit)?"));
+	      if (set_terminal)
+		target_terminal_inferior ();
+	      if (q)
+		record_full_stop_at_limit = 0;
+	      else
+		error (_("Process record: stopped by user."));
+	    }
 	}
     }
+}
+
+static void
+record_full_arch_list_cleanups (void *ignore)
+{
+  record_full_list_release (record_full_arch_list_tail);
 }
 
 /* Before inferior step (when GDB record the running message, inferior
@@ -702,98 +595,104 @@ record_full_check_insn_num (void)
    record the running message of inferior and set them to
    record_full_arch_list, and add it to record_full_list.  */
 
-static void
+static int
 record_full_message (struct regcache *regcache, enum gdb_signal signal)
 {
   int ret;
-  struct gdbarch *gdbarch = regcache->arch ();
+  struct gdbarch *gdbarch = get_regcache_arch (regcache);
+  struct cleanup *old_cleanups
+    = make_cleanup (record_full_arch_list_cleanups, 0);
 
-  TRY
+  record_full_arch_list_head = NULL;
+  record_full_arch_list_tail = NULL;
+
+  /* Check record_full_insn_num.  */
+  record_full_check_insn_num (1);
+
+  /* If gdb sends a signal value to target_resume,
+     save it in the 'end' field of the previous instruction.
+
+     Maybe process record should record what really happened,
+     rather than what gdb pretends has happened.
+
+     So if Linux delivered the signal to the child process during
+     the record mode, we will record it and deliver it again in
+     the replay mode.
+
+     If user says "ignore this signal" during the record mode, then
+     it will be ignored again during the replay mode (no matter if
+     the user says something different, like "deliver this signal"
+     during the replay mode).
+
+     User should understand that nothing he does during the replay
+     mode will change the behavior of the child.  If he tries,
+     then that is a user error.
+
+     But we should still deliver the signal to gdb during the replay,
+     if we delivered it during the recording.  Therefore we should
+     record the signal during record_full_wait, not
+     record_full_resume.  */
+  if (record_full_list != &record_full_first)  /* FIXME better way to check */
     {
-      record_full_arch_list_head = NULL;
-      record_full_arch_list_tail = NULL;
-
-      /* Check record_full_insn_num.  */
-      record_full_check_insn_num ();
-
-      /* If gdb sends a signal value to target_resume,
-	 save it in the 'end' field of the previous instruction.
-
-	 Maybe process record should record what really happened,
-	 rather than what gdb pretends has happened.
-
-	 So if Linux delivered the signal to the child process during
-	 the record mode, we will record it and deliver it again in
-	 the replay mode.
-
-	 If user says "ignore this signal" during the record mode, then
-	 it will be ignored again during the replay mode (no matter if
-	 the user says something different, like "deliver this signal"
-	 during the replay mode).
-
-	 User should understand that nothing he does during the replay
-	 mode will change the behavior of the child.  If he tries,
-	 then that is a user error.
-
-	 But we should still deliver the signal to gdb during the replay,
-	 if we delivered it during the recording.  Therefore we should
-	 record the signal during record_full_wait, not
-	 record_full_resume.  */
-      if (record_full_list != &record_full_first)  /* FIXME better way
-						      to check */
-	{
-	  gdb_assert (record_full_list->type == record_full_end);
-	  record_full_list->u.end.sigval = signal;
-	}
-
-      if (signal == GDB_SIGNAL_0
-	  || !gdbarch_process_record_signal_p (gdbarch))
-	ret = gdbarch_process_record (gdbarch,
-				      regcache,
-				      regcache_read_pc (regcache));
-      else
-	ret = gdbarch_process_record_signal (gdbarch,
-					     regcache,
-					     signal);
-
-      if (ret > 0)
-	error (_("Process record: inferior program stopped."));
-      if (ret < 0)
-	error (_("Process record: failed to record execution log."));
+      gdb_assert (record_full_list->type == record_full_end);
+      record_full_list->u.end.sigval = signal;
     }
-  CATCH (ex, RETURN_MASK_ALL)
-    {
-      record_full_list_release (record_full_arch_list_tail);
-      throw_exception (ex);
-    }
-  END_CATCH
+
+  if (signal == GDB_SIGNAL_0
+      || !gdbarch_process_record_signal_p (gdbarch))
+    ret = gdbarch_process_record (gdbarch,
+				  regcache,
+				  regcache_read_pc (regcache));
+  else
+    ret = gdbarch_process_record_signal (gdbarch,
+					 regcache,
+					 signal);
+
+  if (ret > 0)
+    error (_("Process record: inferior program stopped."));
+  if (ret < 0)
+    error (_("Process record: failed to record execution log."));
+
+  discard_cleanups (old_cleanups);
 
   record_full_list->next = record_full_arch_list_head;
   record_full_arch_list_head->prev = record_full_list;
   record_full_list = record_full_arch_list_tail;
 
-  if (record_full_insn_num == record_full_insn_max_num)
+  if (record_full_insn_num == record_full_insn_max_num
+      && record_full_insn_max_num)
     record_full_list_release_first ();
   else
     record_full_insn_num++;
+
+  return 1;
 }
 
-static bool
+struct record_full_message_args {
+  struct regcache *regcache;
+  enum gdb_signal signal;
+};
+
+static int
+record_full_message_wrapper (void *args)
+{
+  struct record_full_message_args *record_full_args = args;
+
+  return record_full_message (record_full_args->regcache,
+			      record_full_args->signal);
+}
+
+static int
 record_full_message_wrapper_safe (struct regcache *regcache,
 				  enum gdb_signal signal)
 {
-  TRY
-    {
-      record_full_message (regcache, signal);
-    }
-  CATCH (ex, RETURN_MASK_ALL)
-    {
-      exception_print (gdb_stderr, ex);
-      return false;
-    }
-  END_CATCH
+  struct record_full_message_args args;
 
-  return true;
+  args.regcache = regcache;
+  args.signal = signal;
+
+  return catch_errors (record_full_message_wrapper, &args, NULL,
+		       RETURN_MASK_ALL);
 }
 
 /* Set to 1 if record_full_store_registers and record_full_xfer_partial
@@ -801,15 +700,20 @@ record_full_message_wrapper_safe (struct regcache *regcache,
 
 static int record_full_gdb_operation_disable = 0;
 
-scoped_restore_tmpl<int>
+struct cleanup *
 record_full_gdb_operation_disable_set (void)
 {
-  return make_scoped_restore (&record_full_gdb_operation_disable, 1);
+  struct cleanup *old_cleanups = NULL;
+
+  old_cleanups =
+    make_cleanup_restore_integer (&record_full_gdb_operation_disable);
+  record_full_gdb_operation_disable = 1;
+
+  return old_cleanups;
 }
 
 /* Flag set to TRUE for target_stopped_by_watchpoint.  */
-static enum target_stop_reason record_full_stop_reason
-  = TARGET_STOPPED_BY_NO_REASON;
+static int record_full_hw_watchpoint = 0;
 
 /* Execute one instruction from the record log.  Each instruction in
    the log will be represented by an arbitrary sequence of register
@@ -824,7 +728,7 @@ record_full_exec_insn (struct regcache *regcache,
     {
     case record_full_reg: /* reg */
       {
-	gdb::byte_vector reg (entry->u.reg.len);
+        gdb_byte reg[MAX_REGISTER_SIZE];
 
         if (record_debug > 1)
           fprintf_unfiltered (gdb_stdlog,
@@ -833,9 +737,10 @@ record_full_exec_insn (struct regcache *regcache,
                               host_address_to_string (entry),
                               entry->u.reg.num);
 
-        regcache->cooked_read (entry->u.reg.num, reg.data ());
-        regcache->cooked_write (entry->u.reg.num, record_full_get_loc (entry));
-        memcpy (record_full_get_loc (entry), reg.data (), entry->u.reg.len);
+        regcache_cooked_read (regcache, entry->u.reg.num, reg);
+        regcache_cooked_write (regcache, entry->u.reg.num, 
+			       record_full_get_loc (entry));
+        memcpy (record_full_get_loc (entry), reg, entry->u.reg.len);
       }
       break;
 
@@ -844,7 +749,7 @@ record_full_exec_insn (struct regcache *regcache,
 	/* Nothing to do if the entry is flagged not_accessible.  */
         if (!entry->u.mem.mem_entry_not_accessible)
           {
-	    gdb::byte_vector mem (entry->u.mem.len);
+            gdb_byte *mem = alloca (entry->u.mem.len);
 
             if (record_debug > 1)
               fprintf_unfiltered (gdb_stdlog,
@@ -855,8 +760,7 @@ record_full_exec_insn (struct regcache *regcache,
                                   entry->u.mem.len);
 
             if (record_read_memory (gdbarch,
-				    entry->u.mem.addr, mem.data (),
-				    entry->u.mem.len))
+				    entry->u.mem.addr, mem, entry->u.mem.len))
 	      entry->u.mem.mem_entry_not_accessible = 1;
             else
               {
@@ -873,7 +777,7 @@ record_full_exec_insn (struct regcache *regcache,
                   }
                 else
 		  {
-		    memcpy (record_full_get_loc (entry), mem.data (),
+		    memcpy (record_full_get_loc (entry), mem,
 			    entry->u.mem.len);
 
 		    /* We've changed memory --- check if a hardware
@@ -885,9 +789,9 @@ record_full_exec_insn (struct regcache *regcache,
 		       not doing the change at all if the watchpoint
 		       traps.  */
 		    if (hardware_watchpoint_inserted_in_range
-			(regcache->aspace (),
+			(get_regcache_aspace (regcache),
 			 entry->u.mem.addr, entry->u.mem.len))
-		      record_full_stop_reason = TARGET_STOPPED_BY_WATCHPOINT;
+		      record_full_hw_watchpoint = 1;
 		  }
               }
           }
@@ -895,6 +799,34 @@ record_full_exec_insn (struct regcache *regcache,
       break;
     }
 }
+
+static struct target_ops *tmp_to_resume_ops;
+static void (*tmp_to_resume) (struct target_ops *, ptid_t, int,
+			      enum gdb_signal);
+static struct target_ops *tmp_to_wait_ops;
+static ptid_t (*tmp_to_wait) (struct target_ops *, ptid_t,
+			      struct target_waitstatus *,
+			      int);
+static struct target_ops *tmp_to_store_registers_ops;
+static void (*tmp_to_store_registers) (struct target_ops *,
+				       struct regcache *,
+				       int regno);
+static struct target_ops *tmp_to_xfer_partial_ops;
+static LONGEST (*tmp_to_xfer_partial) (struct target_ops *ops,
+				       enum target_object object,
+				       const char *annex,
+				       gdb_byte *readbuf,
+				       const gdb_byte *writebuf,
+				       ULONGEST offset,
+				       LONGEST len);
+static int (*tmp_to_insert_breakpoint) (struct gdbarch *,
+					struct bp_target_info *);
+static int (*tmp_to_remove_breakpoint) (struct gdbarch *,
+					struct bp_target_info *);
+static int (*tmp_to_stopped_by_watchpoint) (void);
+static int (*tmp_to_stopped_data_address) (struct target_ops *, CORE_ADDR *);
+static int (*tmp_to_stopped_data_address) (struct target_ops *, CORE_ADDR *);
+static void (*tmp_to_async) (void (*) (enum inferior_event_type, void *), void *);
 
 static void record_full_restore (void);
 
@@ -909,27 +841,27 @@ record_full_async_inferior_event_handler (gdb_client_data data)
   inferior_event_handler (INF_REG_EVENT, NULL);
 }
 
-/* Open the process record target for 'core' files.  */
+/* Open the process record target.  */
 
 static void
-record_full_core_open_1 (const char *name, int from_tty)
+record_full_core_open_1 (char *name, int from_tty)
 {
   struct regcache *regcache = get_current_regcache ();
-  int regnum = gdbarch_num_regs (regcache->arch ());
+  int regnum = gdbarch_num_regs (get_regcache_arch (regcache));
   int i;
 
   /* Get record_full_core_regbuf.  */
   target_fetch_registers (regcache, -1);
-  record_full_core_regbuf = new detached_regcache (regcache->arch (), false);
-
+  record_full_core_regbuf = xmalloc (MAX_REGISTER_SIZE * regnum);
   for (i = 0; i < regnum; i ++)
-    record_full_core_regbuf->raw_supply (i, *regcache);
+    regcache_raw_collect (regcache, i,
+			  record_full_core_regbuf + MAX_REGISTER_SIZE * i);
 
   /* Get record_full_core_start and record_full_core_end.  */
   if (build_section_table (core_bfd, &record_full_core_start,
 			   &record_full_core_end))
     {
-      delete record_full_core_regbuf;
+      xfree (record_full_core_regbuf);
       record_full_core_regbuf = NULL;
       error (_("\"%s\": Can't find sections: %s"),
 	     bfd_get_filename (core_bfd), bfd_errmsg (bfd_get_error ()));
@@ -939,13 +871,13 @@ record_full_core_open_1 (const char *name, int from_tty)
   record_full_restore ();
 }
 
-/* Open the process record target for 'live' processes.  */
+/* "to_open" target method for 'live' processes.  */
 
 static void
-record_full_open_1 (const char *name, int from_tty)
+record_full_open_1 (char *name, int from_tty)
 {
   if (record_debug)
-    fprintf_unfiltered (gdb_stdlog, "Process record: record_full_open_1\n");
+    fprintf_unfiltered (gdb_stdlog, "Process record: record_full_open\n");
 
   /* check exec */
   if (!target_has_execution)
@@ -958,26 +890,118 @@ record_full_open_1 (const char *name, int from_tty)
     error (_("Process record: the current architecture doesn't support "
 	     "record function."));
 
+  if (!tmp_to_resume)
+    error (_("Could not find 'to_resume' method on the target stack."));
+  if (!tmp_to_wait)
+    error (_("Could not find 'to_wait' method on the target stack."));
+  if (!tmp_to_store_registers)
+    error (_("Could not find 'to_store_registers' "
+	     "method on the target stack."));
+  if (!tmp_to_insert_breakpoint)
+    error (_("Could not find 'to_insert_breakpoint' "
+	     "method on the target stack."));
+  if (!tmp_to_remove_breakpoint)
+    error (_("Could not find 'to_remove_breakpoint' "
+	     "method on the target stack."));
+  if (!tmp_to_stopped_by_watchpoint)
+    error (_("Could not find 'to_stopped_by_watchpoint' "
+	     "method on the target stack."));
+  if (!tmp_to_stopped_data_address)
+    error (_("Could not find 'to_stopped_data_address' "
+	     "method on the target stack."));
+
   push_target (&record_full_ops);
 }
 
 static void record_full_init_record_breakpoints (void);
 
-/* Open the process record target.  */
+/* "to_open" target method.  Open the process record target.  */
 
 static void
-record_full_open (const char *name, int from_tty)
+record_full_open (char *name, int from_tty)
 {
+  struct target_ops *t;
+
   if (record_debug)
     fprintf_unfiltered (gdb_stdlog, "Process record: record_full_open\n");
 
-  record_preopen ();
+  /* Check if record target is already running.  */
+  if (current_target.to_stratum == record_stratum)
+    error (_("Process record target already running.  Use \"record stop\" to "
+             "stop record target first."));
+
+  /* Reset the tmp beneath pointers.  */
+  tmp_to_resume_ops = NULL;
+  tmp_to_resume = NULL;
+  tmp_to_wait_ops = NULL;
+  tmp_to_wait = NULL;
+  tmp_to_store_registers_ops = NULL;
+  tmp_to_store_registers = NULL;
+  tmp_to_xfer_partial_ops = NULL;
+  tmp_to_xfer_partial = NULL;
+  tmp_to_insert_breakpoint = NULL;
+  tmp_to_remove_breakpoint = NULL;
+  tmp_to_stopped_by_watchpoint = NULL;
+  tmp_to_stopped_data_address = NULL;
+  tmp_to_async = NULL;
+
+  /* Set the beneath function pointers.  */
+  for (t = current_target.beneath; t != NULL; t = t->beneath)
+    {
+      if (!tmp_to_resume)
+        {
+	  tmp_to_resume = t->to_resume;
+	  tmp_to_resume_ops = t;
+        }
+      if (!tmp_to_wait)
+        {
+	  tmp_to_wait = t->to_wait;
+	  tmp_to_wait_ops = t;
+        }
+      if (!tmp_to_store_registers)
+        {
+	  tmp_to_store_registers = t->to_store_registers;
+	  tmp_to_store_registers_ops = t;
+        }
+      if (!tmp_to_xfer_partial)
+        {
+	  tmp_to_xfer_partial = t->to_xfer_partial;
+	  tmp_to_xfer_partial_ops = t;
+        }
+      if (!tmp_to_insert_breakpoint)
+	tmp_to_insert_breakpoint = t->to_insert_breakpoint;
+      if (!tmp_to_remove_breakpoint)
+	tmp_to_remove_breakpoint = t->to_remove_breakpoint;
+      if (!tmp_to_stopped_by_watchpoint)
+	tmp_to_stopped_by_watchpoint = t->to_stopped_by_watchpoint;
+      if (!tmp_to_stopped_data_address)
+	tmp_to_stopped_data_address = t->to_stopped_data_address;
+      if (!tmp_to_async)
+	tmp_to_async = t->to_async;
+    }
+  if (!tmp_to_xfer_partial)
+    error (_("Could not find 'to_xfer_partial' method on the target stack."));
 
   /* Reset */
   record_full_insn_num = 0;
   record_full_insn_count = 0;
   record_full_list = &record_full_first;
   record_full_list->next = NULL;
+
+  /* Set the tmp beneath pointers to beneath pointers.  */
+  record_full_beneath_to_resume_ops = tmp_to_resume_ops;
+  record_full_beneath_to_resume = tmp_to_resume;
+  record_full_beneath_to_wait_ops = tmp_to_wait_ops;
+  record_full_beneath_to_wait = tmp_to_wait;
+  record_full_beneath_to_store_registers_ops = tmp_to_store_registers_ops;
+  record_full_beneath_to_store_registers = tmp_to_store_registers;
+  record_full_beneath_to_xfer_partial_ops = tmp_to_xfer_partial_ops;
+  record_full_beneath_to_xfer_partial = tmp_to_xfer_partial;
+  record_full_beneath_to_insert_breakpoint = tmp_to_insert_breakpoint;
+  record_full_beneath_to_remove_breakpoint = tmp_to_remove_breakpoint;
+  record_full_beneath_to_stopped_by_watchpoint = tmp_to_stopped_by_watchpoint;
+  record_full_beneath_to_stopped_data_address = tmp_to_stopped_data_address;
+  record_full_beneath_to_async = tmp_to_async;
 
   if (core_bfd)
     record_full_core_open_1 (name, from_tty);
@@ -991,13 +1015,13 @@ record_full_open (const char *name, int from_tty)
 
   record_full_init_record_breakpoints ();
 
-  gdb::observers::record_changed.notify (current_inferior (),  1, "full", NULL);
+  observer_notify_record_changed (current_inferior (),  1);
 }
 
-/* "close" target method.  Close the process record target.  */
+/* "to_close" target method.  Close the process record target.  */
 
-void
-record_full_base_target::close ()
+static void
+record_full_close (int quitting)
 {
   struct record_full_core_buf_entry *entry;
 
@@ -1009,33 +1033,24 @@ record_full_base_target::close ()
   /* Release record_full_core_regbuf.  */
   if (record_full_core_regbuf)
     {
-      delete record_full_core_regbuf;
+      xfree (record_full_core_regbuf);
       record_full_core_regbuf = NULL;
     }
 
   /* Release record_full_core_buf_list.  */
-  while (record_full_core_buf_list)
+  if (record_full_core_buf_list)
     {
-      entry = record_full_core_buf_list;
-      record_full_core_buf_list = record_full_core_buf_list->prev;
-      xfree (entry);
+      for (entry = record_full_core_buf_list->prev; entry;
+	   entry = entry->prev)
+	{
+	  xfree (record_full_core_buf_list);
+	  record_full_core_buf_list = entry;
+	}
+      record_full_core_buf_list = NULL;
     }
 
   if (record_full_async_inferior_event_token)
     delete_async_event_handler (&record_full_async_inferior_event_token);
-}
-
-/* "async" target method.  */
-
-void
-record_full_base_target::async (int enable)
-{
-  if (enable)
-    mark_async_event_handler (record_full_async_inferior_event_token);
-  else
-    clear_async_event_handler (record_full_async_inferior_event_token);
-
-  beneath ()->async (enable);
 }
 
 static int record_full_resume_step = 0;
@@ -1061,14 +1076,15 @@ static int record_full_resumed = 0;
 */
 static enum exec_direction_kind record_full_execution_dir = EXEC_FORWARD;
 
-/* "resume" target method.  Resume the process record target.  */
+/* "to_resume" target method.  Resume the process record target.  */
 
-void
-record_full_target::resume (ptid_t ptid, int step, enum gdb_signal signal)
+static void
+record_full_resume (struct target_ops *ops, ptid_t ptid, int step,
+		    enum gdb_signal signal)
 {
   record_full_resume_step = step;
   record_full_resumed = 1;
-  record_full_execution_dir = ::execution_direction;
+  record_full_execution_dir = execution_direction;
 
   if (!RECORD_FULL_IS_REPLAY)
     {
@@ -1086,41 +1102,48 @@ record_full_target::resume (ptid_t ptid, int step, enum gdb_signal signal)
             }
           else
             {
-              /* This arch supports soft single step.  */
-              if (thread_has_single_step_breakpoints_set (inferior_thread ()))
+              /* This arch support soft sigle step.  */
+              if (single_step_breakpoints_inserted ())
                 {
                   /* This is a soft single step.  */
                   record_full_resume_step = 1;
                 }
               else
-		step = !insert_single_step_breakpoints (gdbarch);
+                {
+                  /* This is a continue.
+                     Try to insert a soft single step breakpoint.  */
+                  if (!gdbarch_software_single_step (gdbarch,
+                                                     get_current_frame ()))
+                    {
+                      /* This system don't want use soft single step.
+                         Use hard sigle step.  */
+                      step = 1;
+                    }
+                }
             }
         }
 
       /* Make sure the target beneath reports all signals.  */
-      target_pass_signals ({});
+      target_pass_signals (0, NULL);
 
-      this->beneath ()->resume (ptid, step, signal);
+      record_full_beneath_to_resume (record_full_beneath_to_resume_ops,
+				     ptid, step, signal);
     }
 
   /* We are about to start executing the inferior (or simulate it),
      let's register it with the event loop.  */
   if (target_can_async_p ())
-    target_async (1);
-}
-
-/* "commit_resume" method for process record target.  */
-
-void
-record_full_target::commit_resume ()
-{
-  if (!RECORD_FULL_IS_REPLAY)
-    beneath ()->commit_resume ();
+    {
+      target_async (inferior_event_handler, 0);
+      /* Notify the event loop there's an event to wait for.  We do
+	 most of the work in record_full_wait.  */
+      mark_async_event_handler (record_full_async_inferior_event_token);
+    }
 }
 
 static int record_full_get_sig = 0;
 
-/* SIGINT signal handler, registered by "wait" method.  */
+/* SIGINT signal handler, registered by "to_wait" method.  */
 
 static void
 record_full_sig_handler (int signo)
@@ -1136,13 +1159,25 @@ record_full_sig_handler (int signo)
   record_full_get_sig = 1;
 }
 
-/* "wait" target method for process record target.
+static void
+record_full_wait_cleanups (void *ignore)
+{
+  if (execution_direction == EXEC_REVERSE)
+    {
+      if (record_full_list->next)
+	record_full_list = record_full_list->next;
+    }
+  else
+    record_full_list = record_full_list->prev;
+}
+
+/* "to_wait" target method for process record target.
 
    In record mode, the target is always run in singlestep mode
-   (even when gdb says to continue).  The wait method intercepts
+   (even when gdb says to continue).  The to_wait method intercepts
    the stop events and determines which ones are to be passed on to
    gdb.  Most stop events are just singlestep events that gdb is not
-   to know about, so the wait method just records them and keeps
+   to know about, so the to_wait method just records them and keeps
    singlestepping.
 
    In replay mode, this function emulates the recorded execution log, 
@@ -1154,8 +1189,7 @@ record_full_wait_1 (struct target_ops *ops,
 		    ptid_t ptid, struct target_waitstatus *status,
 		    int options)
 {
-  scoped_restore restore_operation_disable
-    = record_full_gdb_operation_disable_set ();
+  struct cleanup *set_cleanups = record_full_gdb_operation_disable_set ();
 
   if (record_debug)
     fprintf_unfiltered (gdb_stdlog,
@@ -1178,14 +1212,13 @@ record_full_wait_1 (struct target_ops *ops,
   record_full_get_sig = 0;
   signal (SIGINT, record_full_sig_handler);
 
-  record_full_stop_reason = TARGET_STOPPED_BY_NO_REASON;
-
   if (!RECORD_FULL_IS_REPLAY && ops != &record_full_core_ops)
     {
       if (record_full_resume_step)
 	{
 	  /* This is a single step.  */
-	  return ops->beneath ()->wait (ptid, status, options);
+	  return record_full_beneath_to_wait (record_full_beneath_to_wait_ops,
+					      ptid, status, options);
 	}
       else
 	{
@@ -1196,7 +1229,8 @@ record_full_wait_1 (struct target_ops *ops,
 
 	  while (1)
 	    {
-	      ret = ops->beneath ()->wait (ptid, status, options);
+	      ret = record_full_beneath_to_wait
+		(record_full_beneath_to_wait_ops, ptid, status, options);
 	      if (status->kind == TARGET_WAITKIND_IGNORE)
 		{
 		  if (record_debug)
@@ -1206,8 +1240,8 @@ record_full_wait_1 (struct target_ops *ops,
 		  return ret;
 		}
 
-	      for (thread_info *tp : all_non_exited_threads ())
-                delete_single_step_breakpoints (tp);
+              if (single_step_breakpoints_inserted ())
+                remove_single_step_breakpoints ();
 
 	      if (record_full_resume_step)
 		return ret;
@@ -1217,8 +1251,7 @@ record_full_wait_1 (struct target_ops *ops,
 		  && status->value.sig == GDB_SIGNAL_TRAP)
 		{
 		  struct regcache *regcache;
-		  enum target_stop_reason *stop_reason_p
-		    = &record_full_stop_reason;
+		  struct address_space *aspace;
 
 		  /* Yes -- this is likely our single-step finishing,
 		     but check if there's any reason the core would be
@@ -1227,17 +1260,26 @@ record_full_wait_1 (struct target_ops *ops,
 		  registers_changed ();
 		  regcache = get_current_regcache ();
 		  tmp_pc = regcache_read_pc (regcache);
-		  const struct address_space *aspace = regcache->aspace ();
+		  aspace = get_regcache_aspace (regcache);
 
 		  if (target_stopped_by_watchpoint ())
 		    {
 		      /* Always interested in watchpoints.  */
 		    }
-		  else if (record_check_stopped_by_breakpoint (aspace, tmp_pc,
-							       stop_reason_p))
+		  else if (breakpoint_inserted_here_p (aspace, tmp_pc))
 		    {
 		      /* There is a breakpoint here.  Let the core
 			 handle it.  */
+		      if (software_breakpoint_inserted_here_p (aspace, tmp_pc))
+			{
+			  struct gdbarch *gdbarch
+			    = get_regcache_arch (regcache);
+			  CORE_ADDR decr_pc_after_break
+			    = gdbarch_decr_pc_after_break (gdbarch);
+			  if (decr_pc_after_break)
+			    regcache_write_pc (regcache,
+					       tmp_pc + decr_pc_after_break);
+			}
 		    }
 		  else
 		    {
@@ -1261,9 +1303,9 @@ record_full_wait_1 (struct target_ops *ops,
 			     If insert success, set step to 0.  */
 			  set_executing (inferior_ptid, 0);
 			  reinit_frame_cache ();
-
-			  step = !insert_single_step_breakpoints (gdbarch);
-
+			  if (gdbarch_software_single_step (gdbarch,
+                                                            get_current_frame ()))
+			    step = 0;
 			  set_executing (inferior_ptid, 1);
 			}
 
@@ -1272,8 +1314,9 @@ record_full_wait_1 (struct target_ops *ops,
 					    "Process record: record_full_wait "
 					    "issuing one more step in the "
 					    "target beneath\n");
-		      ops->beneath ()->resume (ptid, step, GDB_SIGNAL_0);
-		      ops->beneath ()->commit_resume ();
+		      record_full_beneath_to_resume
+			(record_full_beneath_to_resume_ops, ptid, step,
+			 GDB_SIGNAL_0);
 		      continue;
 		    }
 		}
@@ -1288,181 +1331,179 @@ record_full_wait_1 (struct target_ops *ops,
   else
     {
       struct regcache *regcache = get_current_regcache ();
-      struct gdbarch *gdbarch = regcache->arch ();
-      const struct address_space *aspace = regcache->aspace ();
+      struct gdbarch *gdbarch = get_regcache_arch (regcache);
+      struct address_space *aspace = get_regcache_aspace (regcache);
       int continue_flag = 1;
       int first_record_full_end = 1;
+      struct cleanup *old_cleanups
+	= make_cleanup (record_full_wait_cleanups, 0);
+      CORE_ADDR tmp_pc;
 
-      TRY
+      record_full_hw_watchpoint = 0;
+      status->kind = TARGET_WAITKIND_STOPPED;
+
+      /* Check breakpoint when forward execute.  */
+      if (execution_direction == EXEC_FORWARD)
 	{
-	  CORE_ADDR tmp_pc;
-
-	  record_full_stop_reason = TARGET_STOPPED_BY_NO_REASON;
-	  status->kind = TARGET_WAITKIND_STOPPED;
-
-	  /* Check breakpoint when forward execute.  */
-	  if (execution_direction == EXEC_FORWARD)
+	  tmp_pc = regcache_read_pc (regcache);
+	  if (breakpoint_inserted_here_p (aspace, tmp_pc))
 	    {
-	      tmp_pc = regcache_read_pc (regcache);
-	      if (record_check_stopped_by_breakpoint (aspace, tmp_pc,
-						      &record_full_stop_reason))
-		{
-		  if (record_debug)
-		    fprintf_unfiltered (gdb_stdlog,
-					"Process record: break at %s.\n",
-					paddress (gdbarch, tmp_pc));
-		  goto replay_out;
-		}
+	      int decr_pc_after_break = gdbarch_decr_pc_after_break (gdbarch);
+
+	      if (record_debug)
+		fprintf_unfiltered (gdb_stdlog,
+				    "Process record: break at %s.\n",
+				    paddress (gdbarch, tmp_pc));
+
+	      if (decr_pc_after_break
+		  && !record_full_resume_step
+		  && software_breakpoint_inserted_here_p (aspace, tmp_pc))
+		regcache_write_pc (regcache,
+				   tmp_pc + decr_pc_after_break);
+	      goto replay_out;
 	    }
-
-	  /* If GDB is in terminal_inferior mode, it will not get the
-	     signal.  And in GDB replay mode, GDB doesn't need to be
-	     in terminal_inferior mode, because inferior will not
-	     executed.  Then set it to terminal_ours to make GDB get
-	     the signal.  */
-	  target_terminal::ours ();
-
-	  /* In EXEC_FORWARD mode, record_full_list points to the tail of prev
-	     instruction.  */
-	  if (execution_direction == EXEC_FORWARD && record_full_list->next)
-	    record_full_list = record_full_list->next;
-
-	  /* Loop over the record_full_list, looking for the next place to
-	     stop.  */
-	  do
-	    {
-	      /* Check for beginning and end of log.  */
-	      if (execution_direction == EXEC_REVERSE
-		  && record_full_list == &record_full_first)
-		{
-		  /* Hit beginning of record log in reverse.  */
-		  status->kind = TARGET_WAITKIND_NO_HISTORY;
-		  break;
-		}
-	      if (execution_direction != EXEC_REVERSE
-		  && !record_full_list->next)
-		{
-		  /* Hit end of record log going forward.  */
-		  status->kind = TARGET_WAITKIND_NO_HISTORY;
-		  break;
-		}
-
-	      record_full_exec_insn (regcache, gdbarch, record_full_list);
-
-	      if (record_full_list->type == record_full_end)
-		{
-		  if (record_debug > 1)
-		    fprintf_unfiltered
-		      (gdb_stdlog,
-		       "Process record: record_full_end %s to "
-		       "inferior.\n",
-		       host_address_to_string (record_full_list));
-
-		  if (first_record_full_end
-		      && execution_direction == EXEC_REVERSE)
-		    {
-		      /* When reverse excute, the first
-			 record_full_end is the part of current
-			 instruction.  */
-		      first_record_full_end = 0;
-		    }
-		  else
-		    {
-		      /* In EXEC_REVERSE mode, this is the
-			 record_full_end of prev instruction.  In
-			 EXEC_FORWARD mode, this is the
-			 record_full_end of current instruction.  */
-		      /* step */
-		      if (record_full_resume_step)
-			{
-			  if (record_debug > 1)
-			    fprintf_unfiltered (gdb_stdlog,
-						"Process record: step.\n");
-			  continue_flag = 0;
-			}
-
-		      /* check breakpoint */
-		      tmp_pc = regcache_read_pc (regcache);
-		      if (record_check_stopped_by_breakpoint
-			  (aspace, tmp_pc, &record_full_stop_reason))
-			{
-			  if (record_debug)
-			    fprintf_unfiltered (gdb_stdlog,
-						"Process record: break "
-						"at %s.\n",
-						paddress (gdbarch, tmp_pc));
-
-			  continue_flag = 0;
-			}
-
-		      if (record_full_stop_reason
-			  == TARGET_STOPPED_BY_WATCHPOINT)
-			{
-			  if (record_debug)
-			    fprintf_unfiltered (gdb_stdlog,
-						"Process record: hit hw "
-						"watchpoint.\n");
-			  continue_flag = 0;
-			}
-		      /* Check target signal */
-		      if (record_full_list->u.end.sigval != GDB_SIGNAL_0)
-			/* FIXME: better way to check */
-			continue_flag = 0;
-		    }
-		}
-
-	      if (continue_flag)
-		{
-		  if (execution_direction == EXEC_REVERSE)
-		    {
-		      if (record_full_list->prev)
-			record_full_list = record_full_list->prev;
-		    }
-		  else
-		    {
-		      if (record_full_list->next)
-			record_full_list = record_full_list->next;
-		    }
-		}
-	    }
-	  while (continue_flag);
-
-	replay_out:
-	  if (record_full_get_sig)
-	    status->value.sig = GDB_SIGNAL_INT;
-	  else if (record_full_list->u.end.sigval != GDB_SIGNAL_0)
-	    /* FIXME: better way to check */
-	    status->value.sig = record_full_list->u.end.sigval;
-	  else
-	    status->value.sig = GDB_SIGNAL_TRAP;
 	}
-      CATCH (ex, RETURN_MASK_ALL)
+
+      /* If GDB is in terminal_inferior mode, it will not get the signal.
+         And in GDB replay mode, GDB doesn't need to be in terminal_inferior
+         mode, because inferior will not executed.
+         Then set it to terminal_ours to make GDB get the signal.  */
+      target_terminal_ours ();
+
+      /* In EXEC_FORWARD mode, record_full_list points to the tail of prev
+         instruction.  */
+      if (execution_direction == EXEC_FORWARD && record_full_list->next)
+	record_full_list = record_full_list->next;
+
+      /* Loop over the record_full_list, looking for the next place to
+	 stop.  */
+      do
 	{
-	  if (execution_direction == EXEC_REVERSE)
+	  /* Check for beginning and end of log.  */
+	  if (execution_direction == EXEC_REVERSE
+	      && record_full_list == &record_full_first)
 	    {
-	      if (record_full_list->next)
-		record_full_list = record_full_list->next;
+	      /* Hit beginning of record log in reverse.  */
+	      status->kind = TARGET_WAITKIND_NO_HISTORY;
+	      break;
 	    }
-	  else
-	    record_full_list = record_full_list->prev;
+	  if (execution_direction != EXEC_REVERSE && !record_full_list->next)
+	    {
+	      /* Hit end of record log going forward.  */
+	      status->kind = TARGET_WAITKIND_NO_HISTORY;
+	      break;
+	    }
 
-	  throw_exception (ex);
+          record_full_exec_insn (regcache, gdbarch, record_full_list);
+
+	  if (record_full_list->type == record_full_end)
+	    {
+	      if (record_debug > 1)
+		fprintf_unfiltered (gdb_stdlog,
+				    "Process record: record_full_end %s to "
+				    "inferior.\n",
+				    host_address_to_string (record_full_list));
+
+	      if (first_record_full_end && execution_direction == EXEC_REVERSE)
+		{
+		  /* When reverse excute, the first record_full_end is the
+		     part of current instruction.  */
+		  first_record_full_end = 0;
+		}
+	      else
+		{
+		  /* In EXEC_REVERSE mode, this is the record_full_end of prev
+		     instruction.
+		     In EXEC_FORWARD mode, this is the record_full_end of
+		     current instruction.  */
+		  /* step */
+		  if (record_full_resume_step)
+		    {
+		      if (record_debug > 1)
+			fprintf_unfiltered (gdb_stdlog,
+					    "Process record: step.\n");
+		      continue_flag = 0;
+		    }
+
+		  /* check breakpoint */
+		  tmp_pc = regcache_read_pc (regcache);
+		  if (breakpoint_inserted_here_p (aspace, tmp_pc))
+		    {
+		      int decr_pc_after_break
+			= gdbarch_decr_pc_after_break (gdbarch);
+
+		      if (record_debug)
+			fprintf_unfiltered (gdb_stdlog,
+					    "Process record: break "
+					    "at %s.\n",
+					    paddress (gdbarch, tmp_pc));
+		      if (decr_pc_after_break
+			  && execution_direction == EXEC_FORWARD
+			  && !record_full_resume_step
+			  && software_breakpoint_inserted_here_p (aspace,
+								  tmp_pc))
+			regcache_write_pc (regcache,
+					   tmp_pc + decr_pc_after_break);
+		      continue_flag = 0;
+		    }
+
+		  if (record_full_hw_watchpoint)
+		    {
+		      if (record_debug)
+			fprintf_unfiltered (gdb_stdlog,
+					    "Process record: hit hw "
+					    "watchpoint.\n");
+		      continue_flag = 0;
+		    }
+		  /* Check target signal */
+		  if (record_full_list->u.end.sigval != GDB_SIGNAL_0)
+		    /* FIXME: better way to check */
+		    continue_flag = 0;
+		}
+	    }
+
+	  if (continue_flag)
+	    {
+	      if (execution_direction == EXEC_REVERSE)
+		{
+		  if (record_full_list->prev)
+		    record_full_list = record_full_list->prev;
+		}
+	      else
+		{
+		  if (record_full_list->next)
+		    record_full_list = record_full_list->next;
+		}
+	    }
 	}
-      END_CATCH
+      while (continue_flag);
+
+replay_out:
+      if (record_full_get_sig)
+	status->value.sig = GDB_SIGNAL_INT;
+      else if (record_full_list->u.end.sigval != GDB_SIGNAL_0)
+	/* FIXME: better way to check */
+	status->value.sig = record_full_list->u.end.sigval;
+      else
+	status->value.sig = GDB_SIGNAL_TRAP;
+
+      discard_cleanups (old_cleanups);
     }
 
   signal (SIGINT, handle_sigint);
 
+  do_cleanups (set_cleanups);
   return inferior_ptid;
 }
 
-ptid_t
-record_full_base_target::wait (ptid_t ptid, struct target_waitstatus *status,
-			       int options)
+static ptid_t
+record_full_wait (struct target_ops *ops,
+		  ptid_t ptid, struct target_waitstatus *status,
+		  int options)
 {
   ptid_t return_ptid;
 
-  return_ptid = record_full_wait_1 (this, ptid, status, options);
+  return_ptid = record_full_wait_1 (ops, ptid, status, options);
   if (status->kind != TARGET_WAITKIND_IGNORE)
     {
       /* We're reporting a stop.  Make sure any spurious
@@ -1473,56 +1514,22 @@ record_full_base_target::wait (ptid_t ptid, struct target_waitstatus *status,
   return return_ptid;
 }
 
-bool
-record_full_base_target::stopped_by_watchpoint ()
+static int
+record_full_stopped_by_watchpoint (void)
 {
   if (RECORD_FULL_IS_REPLAY)
-    return record_full_stop_reason == TARGET_STOPPED_BY_WATCHPOINT;
+    return record_full_hw_watchpoint;
   else
-    return beneath ()->stopped_by_watchpoint ();
+    return record_full_beneath_to_stopped_by_watchpoint ();
 }
 
-bool
-record_full_base_target::stopped_data_address (CORE_ADDR *addr_p)
+static int
+record_full_stopped_data_address (struct target_ops *ops, CORE_ADDR *addr_p)
 {
   if (RECORD_FULL_IS_REPLAY)
-    return false;
+    return 0;
   else
-    return this->beneath ()->stopped_data_address (addr_p);
-}
-
-/* The stopped_by_sw_breakpoint method of target record-full.  */
-
-bool
-record_full_base_target::stopped_by_sw_breakpoint ()
-{
-  return record_full_stop_reason == TARGET_STOPPED_BY_SW_BREAKPOINT;
-}
-
-/* The supports_stopped_by_sw_breakpoint method of target
-   record-full.  */
-
-bool
-record_full_base_target::supports_stopped_by_sw_breakpoint ()
-{
-  return true;
-}
-
-/* The stopped_by_hw_breakpoint method of target record-full.  */
-
-bool
-record_full_base_target::stopped_by_hw_breakpoint ()
-{
-  return record_full_stop_reason == TARGET_STOPPED_BY_HW_BREAKPOINT;
-}
-
-/* The supports_stopped_by_sw_breakpoint method of target
-   record-full.  */
-
-bool
-record_full_base_target::supports_stopped_by_hw_breakpoint ()
-{
-  return true;
+    return record_full_beneath_to_stopped_data_address (ops, addr_p);
 }
 
 /* Record registers change (by user or by GDB) to list as an instruction.  */
@@ -1531,7 +1538,7 @@ static void
 record_full_registers_change (struct regcache *regcache, int regnum)
 {
   /* Check record_full_insn_num.  */
-  record_full_check_insn_num ();
+  record_full_check_insn_num (0);
 
   record_full_arch_list_head = NULL;
   record_full_arch_list_tail = NULL;
@@ -1540,7 +1547,7 @@ record_full_registers_change (struct regcache *regcache, int regnum)
     {
       int i;
 
-      for (i = 0; i < gdbarch_num_regs (regcache->arch ()); i++)
+      for (i = 0; i < gdbarch_num_regs (get_regcache_arch (regcache)); i++)
 	{
 	  if (record_full_arch_list_add_reg (regcache, i))
 	    {
@@ -1566,16 +1573,19 @@ record_full_registers_change (struct regcache *regcache, int regnum)
   record_full_arch_list_head->prev = record_full_list;
   record_full_list = record_full_arch_list_tail;
 
-  if (record_full_insn_num == record_full_insn_max_num)
+  if (record_full_insn_num == record_full_insn_max_num
+      && record_full_insn_max_num)
     record_full_list_release_first ();
   else
     record_full_insn_num++;
 }
 
-/* "store_registers" method for process record target.  */
+/* "to_store_registers" method for process record target.  */
 
-void
-record_full_target::store_registers (struct regcache *regcache, int regno)
+static void
+record_full_store_registers (struct target_ops *ops,
+			     struct regcache *regcache,
+			     int regno)
 {
   if (!record_full_gdb_operation_disable)
     {
@@ -1595,7 +1605,7 @@ record_full_target::store_registers (struct regcache *regcache, int regno)
 	      query (_("Because GDB is in replay mode, changing the value "
 		       "of a register will make the execution log unusable "
 		       "from this point onward.  Change register %s?"),
-		      gdbarch_register_name (regcache->arch (),
+		      gdbarch_register_name (get_regcache_arch (regcache),
 					       regno));
 
 	  if (!n)
@@ -1607,12 +1617,12 @@ record_full_target::store_registers (struct regcache *regcache, int regno)
 		  int i;
 
 		  for (i = 0;
-		       i < gdbarch_num_regs (regcache->arch ());
+		       i < gdbarch_num_regs (get_regcache_arch (regcache));
 		       i++)
-		    regcache->invalidate (i);
+		    regcache_invalidate (regcache, i);
 		}
 	      else
-		regcache->invalidate (regno);
+		regcache_invalidate (regcache, regno);
 
 	      error (_("Process record canceled the operation."));
 	    }
@@ -1623,19 +1633,20 @@ record_full_target::store_registers (struct regcache *regcache, int regno)
 
       record_full_registers_change (regcache, regno);
     }
-  this->beneath ()->store_registers (regcache, regno);
+  record_full_beneath_to_store_registers
+    (record_full_beneath_to_store_registers_ops, regcache, regno);
 }
 
-/* "xfer_partial" method.  Behavior is conditional on
+/* "to_xfer_partial" method.  Behavior is conditional on
    RECORD_FULL_IS_REPLAY.
    In replay mode, we cannot write memory unles we are willing to
    invalidate the record/replay log from this point forward.  */
 
-enum target_xfer_status
-record_full_target::xfer_partial (enum target_object object,
-				  const char *annex, gdb_byte *readbuf,
-				  const gdb_byte *writebuf, ULONGEST offset,
-				  ULONGEST len, ULONGEST *xfered_len)
+static LONGEST
+record_full_xfer_partial (struct target_ops *ops, enum target_object object,
+			  const char *annex, gdb_byte *readbuf,
+			  const gdb_byte *writebuf, ULONGEST offset,
+			  LONGEST len)
 {
   if (!record_full_gdb_operation_disable
       && (object == TARGET_OBJECT_MEMORY
@@ -1655,7 +1666,7 @@ record_full_target::xfer_partial (enum target_object object,
 	}
 
       /* Check record_full_insn_num */
-      record_full_check_insn_num ();
+      record_full_check_insn_num (0);
 
       /* Record registers change to list as an instruction.  */
       record_full_arch_list_head = NULL;
@@ -1667,7 +1678,7 @@ record_full_target::xfer_partial (enum target_object object,
 	    fprintf_unfiltered (gdb_stdlog,
 				"Process record: failed to record "
 				"execution log.");
-	  return TARGET_XFER_E_IO;
+	  return -1;
 	}
       if (record_full_arch_list_add_end ())
 	{
@@ -1676,20 +1687,22 @@ record_full_target::xfer_partial (enum target_object object,
 	    fprintf_unfiltered (gdb_stdlog,
 				"Process record: failed to record "
 				"execution log.");
-	  return TARGET_XFER_E_IO;
+	  return -1;
 	}
       record_full_list->next = record_full_arch_list_head;
       record_full_arch_list_head->prev = record_full_list;
       record_full_list = record_full_arch_list_tail;
 
-      if (record_full_insn_num == record_full_insn_max_num)
+      if (record_full_insn_num == record_full_insn_max_num
+	  && record_full_insn_max_num)
 	record_full_list_release_first ();
       else
 	record_full_insn_num++;
     }
 
-  return this->beneath ()->xfer_partial (object, annex, readbuf, writebuf,
-					 offset, len, xfered_len);
+  return record_full_beneath_to_xfer_partial
+    (record_full_beneath_to_xfer_partial_ops, object, annex,
+     readbuf, writebuf, offset, len);
 }
 
 /* This structure represents a breakpoint inserted while the record
@@ -1701,15 +1714,6 @@ record_full_target::xfer_partial (enum target_object object,
 
 struct record_full_breakpoint
 {
-  record_full_breakpoint (struct address_space *address_space_,
-			  CORE_ADDR addr_,
-			  bool in_target_beneath_)
-    : address_space (address_space_),
-      addr (addr_),
-      in_target_beneath (in_target_beneath_)
-  {
-  }
-
   /* The address and address space the breakpoint was set at.  */
   struct address_space *address_space;
   CORE_ADDR addr;
@@ -1717,12 +1721,15 @@ struct record_full_breakpoint
   /* True when the breakpoint has been also installed in the target
      beneath.  This will be false for breakpoints set during replay or
      when recording.  */
-  bool in_target_beneath;
+  int in_target_beneath;
 };
+
+typedef struct record_full_breakpoint *record_full_breakpoint_p;
+DEF_VEC_P(record_full_breakpoint_p);
 
 /* The list of breakpoints inserted while the record target is
    active.  */
-static std::vector<record_full_breakpoint> record_full_breakpoints;
+VEC(record_full_breakpoint_p) *record_full_breakpoints = NULL;
 
 static void
 record_full_sync_record_breakpoints (struct bp_location *loc, void *data)
@@ -1732,10 +1739,14 @@ record_full_sync_record_breakpoints (struct bp_location *loc, void *data)
 
   if (loc->inserted)
     {
-      record_full_breakpoints.emplace_back
-	(loc->target_info.placed_address_space,
-	 loc->target_info.placed_address,
-	 1);
+      struct record_full_breakpoint *bp = XNEW (struct record_full_breakpoint);
+
+      bp->addr = loc->target_info.placed_address;
+      bp->address_space = loc->target_info.placed_address_space;
+
+      bp->in_target_beneath = 1;
+
+      VEC_safe_push (record_full_breakpoint_p, record_full_breakpoints, bp);
     }
 }
 
@@ -1744,7 +1755,7 @@ record_full_sync_record_breakpoints (struct bp_location *loc, void *data)
 static void
 record_full_init_record_breakpoints (void)
 {
-  record_full_breakpoints.clear ();
+  VEC_free (record_full_breakpoint_p, record_full_breakpoints);
 
   iterate_over_bp_locations (record_full_sync_record_breakpoints);
 }
@@ -1753,11 +1764,12 @@ record_full_init_record_breakpoints (void)
    insert or remove breakpoints in the real target when replaying, nor
    when recording.  */
 
-int
-record_full_target::insert_breakpoint (struct gdbarch *gdbarch,
-				       struct bp_target_info *bp_tgt)
+static int
+record_full_insert_breakpoint (struct gdbarch *gdbarch,
+			       struct bp_target_info *bp_tgt)
 {
-  bool in_target_beneath = false;
+  struct record_full_breakpoint *bp;
+  int in_target_beneath = 0;
 
   if (!RECORD_FULL_IS_REPLAY)
     {
@@ -1765,66 +1777,60 @@ record_full_target::insert_breakpoint (struct gdbarch *gdbarch,
 	 really need to install regular breakpoints in the inferior.
 	 However, we do have to insert software single-step
 	 breakpoints, in case the target can't hardware step.  To keep
-	 things simple, we always insert.  */
+	 things single, we always insert.  */
+      struct cleanup *old_cleanups;
+      int ret;
 
-      scoped_restore restore_operation_disable
-	= record_full_gdb_operation_disable_set ();
+      old_cleanups = record_full_gdb_operation_disable_set ();
+      ret = record_full_beneath_to_insert_breakpoint (gdbarch, bp_tgt);
+      do_cleanups (old_cleanups);
 
-      int ret = this->beneath ()->insert_breakpoint (gdbarch, bp_tgt);
       if (ret != 0)
 	return ret;
 
-      in_target_beneath = true;
+      in_target_beneath = 1;
     }
 
-  /* Use the existing entries if found in order to avoid duplication
-     in record_full_breakpoints.  */
-
-  for (const record_full_breakpoint &bp : record_full_breakpoints)
-    {
-      if (bp.addr == bp_tgt->placed_address
-	  && bp.address_space == bp_tgt->placed_address_space)
-	{
-	  gdb_assert (bp.in_target_beneath == in_target_beneath);
-	  return 0;
-	}
-    }
-
-  record_full_breakpoints.emplace_back (bp_tgt->placed_address_space,
-					bp_tgt->placed_address,
-					in_target_beneath);
+  bp = XNEW (struct record_full_breakpoint);
+  bp->addr = bp_tgt->placed_address;
+  bp->address_space = bp_tgt->placed_address_space;
+  bp->in_target_beneath = in_target_beneath;
+  VEC_safe_push (record_full_breakpoint_p, record_full_breakpoints, bp);
   return 0;
 }
 
-/* "remove_breakpoint" method for process record target.  */
+/* "to_remove_breakpoint" method for process record target.  */
 
-int
-record_full_target::remove_breakpoint (struct gdbarch *gdbarch,
-				       struct bp_target_info *bp_tgt,
-				       enum remove_bp_reason reason)
+static int
+record_full_remove_breakpoint (struct gdbarch *gdbarch,
+			       struct bp_target_info *bp_tgt)
 {
-  for (auto iter = record_full_breakpoints.begin ();
-       iter != record_full_breakpoints.end ();
-       ++iter)
+  struct record_full_breakpoint *bp;
+  int ix;
+
+  for (ix = 0;
+       VEC_iterate (record_full_breakpoint_p,
+		    record_full_breakpoints, ix, bp);
+       ++ix)
     {
-      struct record_full_breakpoint &bp = *iter;
-
-      if (bp.addr == bp_tgt->placed_address
-	  && bp.address_space == bp_tgt->placed_address_space)
+      if (bp->addr == bp_tgt->placed_address
+	  && bp->address_space == bp_tgt->placed_address_space)
 	{
-	  if (bp.in_target_beneath)
+	  if (bp->in_target_beneath)
 	    {
-	      scoped_restore restore_operation_disable
-		= record_full_gdb_operation_disable_set ();
+	      struct cleanup *old_cleanups;
+	      int ret;
 
-	      int ret = this->beneath ()->remove_breakpoint (gdbarch, bp_tgt,
-							     reason);
+	      old_cleanups = record_full_gdb_operation_disable_set ();
+	      ret = record_full_beneath_to_remove_breakpoint (gdbarch, bp_tgt);
+	      do_cleanups (old_cleanups);
+
 	      if (ret != 0)
 		return ret;
 	    }
 
-	  if (reason == REMOVE_BREAKPOINT)
-	    unordered_remove (record_full_breakpoints, iter);
+	  VEC_unordered_remove (record_full_breakpoint_p,
+				record_full_breakpoints, ix);
 	  return 0;
 	}
     }
@@ -1832,20 +1838,20 @@ record_full_target::remove_breakpoint (struct gdbarch *gdbarch,
   gdb_assert_not_reached ("removing unknown breakpoint");
 }
 
-/* "can_execute_reverse" method for process record target.  */
+/* "to_can_execute_reverse" method for process record target.  */
 
-bool
-record_full_base_target::can_execute_reverse ()
+static int
+record_full_can_execute_reverse (void)
 {
-  return true;
+  return 1;
 }
 
-/* "get_bookmark" method for process record and prec over core.  */
+/* "to_get_bookmark" method for process record and prec over core.  */
 
-gdb_byte *
-record_full_base_target::get_bookmark (const char *args, int from_tty)
+static gdb_byte *
+record_full_get_bookmark (char *args, int from_tty)
 {
-  char *ret = NULL;
+  gdb_byte *ret = NULL;
 
   /* Return stringified form of instruction count.  */
   if (record_full_list && record_full_list->type == record_full_end)
@@ -1860,50 +1866,67 @@ record_full_base_target::get_bookmark (const char *args, int from_tty)
 	fprintf_unfiltered (gdb_stdlog,
 			    "record_full_get_bookmark returns NULL\n");
     }
-  return (gdb_byte *) ret;
+  return ret;
 }
 
-/* "goto_bookmark" method for process record and prec over core.  */
+/* "to_goto_bookmark" method for process record and prec over core.  */
 
-void
-record_full_base_target::goto_bookmark (const gdb_byte *raw_bookmark,
-					int from_tty)
+static void
+record_full_goto_bookmark (gdb_byte *bookmark, int from_tty)
 {
-  const char *bookmark = (const char *) raw_bookmark;
-
   if (record_debug)
     fprintf_unfiltered (gdb_stdlog,
 			"record_full_goto_bookmark receives %s\n", bookmark);
 
-  std::string name_holder;
   if (bookmark[0] == '\'' || bookmark[0] == '\"')
     {
       if (bookmark[strlen (bookmark) - 1] != bookmark[0])
 	error (_("Unbalanced quotes: %s"), bookmark);
 
-      name_holder = std::string (bookmark + 1, strlen (bookmark) - 2);
-      bookmark = name_holder.c_str ();
+      /* Strip trailing quote.  */
+      bookmark[strlen (bookmark) - 1] = '\0';
+      /* Strip leading quote.  */
+      bookmark++;
+      /* Pass along to cmd_record_full_goto.  */
     }
 
-  record_goto (bookmark);
+  cmd_record_goto ((char *) bookmark, from_tty);
+  return;
 }
 
-enum exec_direction_kind
-record_full_base_target::execution_direction ()
+static void
+record_full_async (void (*callback) (enum inferior_event_type event_type,
+				     void *context), void *context)
+{
+  /* If we're on top of a line target (e.g., linux-nat, remote), then
+     set it to async mode as well.  Will be NULL if we're sitting on
+     top of the core target, for "record restore".  */
+  if (record_full_beneath_to_async != NULL)
+    record_full_beneath_to_async (callback, context);
+}
+
+static int
+record_full_can_async_p (void)
+{
+  /* We only enable async when the user specifically asks for it.  */
+  return target_async_permitted;
+}
+
+static int
+record_full_is_async_p (void)
+{
+  /* We only enable async when the user specifically asks for it.  */
+  return target_async_permitted;
+}
+
+static enum exec_direction_kind
+record_full_execution_direction (void)
 {
   return record_full_execution_dir;
 }
 
-/* The record_method method of target record-full.  */
-
-enum record_method
-record_full_base_target::record_method (ptid_t ptid)
-{
-  return RECORD_METHOD_FULL;
-}
-
-void
-record_full_base_target::info_record ()
+static void
+record_full_info (void)
 {
   struct record_full_entry *p;
 
@@ -1935,49 +1958,31 @@ record_full_base_target::info_record ()
 		       pulongest (record_full_insn_count));
 
       /* Display log count.  */
-      printf_filtered (_("Log contains %u instructions.\n"),
+      printf_filtered (_("Log contains %d instructions.\n"),
 		       record_full_insn_num);
     }
   else
     printf_filtered (_("No instructions have been logged.\n"));
 
   /* Display max log size.  */
-  printf_filtered (_("Max logged instructions is %u.\n"),
+  printf_filtered (_("Max logged instructions is %d.\n"),
 		   record_full_insn_max_num);
 }
 
-bool
-record_full_base_target::supports_delete_record ()
-{
-  return true;
-}
+/* The "to_record_delete" target method.  */
 
-/* The "delete_record" target method.  */
-
-void
-record_full_base_target::delete_record ()
+static void
+record_full_delete (void)
 {
   record_full_list_release_following (record_full_list);
 }
 
-/* The "record_is_replaying" target method.  */
+/* The "to_record_is_replaying" target method.  */
 
-bool
-record_full_base_target::record_is_replaying (ptid_t ptid)
+static int
+record_full_is_replaying (void)
 {
   return RECORD_FULL_IS_REPLAY;
-}
-
-/* The "record_will_replay" target method.  */
-
-bool
-record_full_base_target::record_will_replay (ptid_t ptid, int dir)
-{
-  /* We can currently only record when executing forwards.  Should we be able
-     to record when executing backwards on targets that support reverse
-     execution, this needs to be changed.  */
-
-  return RECORD_FULL_IS_REPLAY || dir == EXEC_REVERSE;
 }
 
 /* Go to a specific entry.  */
@@ -2004,15 +2009,13 @@ record_full_goto_entry (struct record_full_entry *p)
 
   registers_changed ();
   reinit_frame_cache ();
-  inferior_thread ()->suspend.stop_pc
-    = regcache_read_pc (get_current_regcache ());
-  print_stack_frame (get_selected_frame (NULL), 1, SRC_AND_LOC, 1);
+  print_stack_frame (get_selected_frame (NULL), 1, SRC_AND_LOC);
 }
 
-/* The "goto_record_begin" target method.  */
+/* The "to_goto_record_begin" target method.  */
 
-void
-record_full_base_target::goto_record_begin ()
+static void
+record_full_goto_begin (void)
 {
   struct record_full_entry *p = NULL;
 
@@ -2023,10 +2026,10 @@ record_full_base_target::goto_record_begin ()
   record_full_goto_entry (p);
 }
 
-/* The "goto_record_end" target method.  */
+/* The "to_goto_record_end" target method.  */
 
-void
-record_full_base_target::goto_record_end ()
+static void
+record_full_goto_end (void)
 {
   struct record_full_entry *p = NULL;
 
@@ -2039,10 +2042,10 @@ record_full_base_target::goto_record_end ()
   record_full_goto_entry (p);
 }
 
-/* The "goto_record" target method.  */
+/* The "to_goto_record" target method.  */
 
-void
-record_full_base_target::goto_record (ULONGEST target_insn)
+static void
+record_full_goto (ULONGEST target_insn)
 {
   struct record_full_entry *p = NULL;
 
@@ -2053,85 +2056,129 @@ record_full_base_target::goto_record (ULONGEST target_insn)
   record_full_goto_entry (p);
 }
 
-/* The "record_stop_replaying" target method.  */
-
-void
-record_full_base_target::record_stop_replaying ()
+static void
+init_record_full_ops (void)
 {
-  goto_record_end ();
+  record_full_ops.to_shortname = "record-full";
+  record_full_ops.to_longname = "Process record and replay target";
+  record_full_ops.to_doc =
+    "Log program while executing and replay execution from log.";
+  record_full_ops.to_open = record_full_open;
+  record_full_ops.to_close = record_full_close;
+  record_full_ops.to_resume = record_full_resume;
+  record_full_ops.to_wait = record_full_wait;
+  record_full_ops.to_disconnect = record_disconnect;
+  record_full_ops.to_detach = record_detach;
+  record_full_ops.to_mourn_inferior = record_mourn_inferior;
+  record_full_ops.to_kill = record_kill;
+  record_full_ops.to_create_inferior = find_default_create_inferior;
+  record_full_ops.to_store_registers = record_full_store_registers;
+  record_full_ops.to_xfer_partial = record_full_xfer_partial;
+  record_full_ops.to_insert_breakpoint = record_full_insert_breakpoint;
+  record_full_ops.to_remove_breakpoint = record_full_remove_breakpoint;
+  record_full_ops.to_stopped_by_watchpoint = record_full_stopped_by_watchpoint;
+  record_full_ops.to_stopped_data_address = record_full_stopped_data_address;
+  record_full_ops.to_can_execute_reverse = record_full_can_execute_reverse;
+  record_full_ops.to_stratum = record_stratum;
+  /* Add bookmark target methods.  */
+  record_full_ops.to_get_bookmark = record_full_get_bookmark;
+  record_full_ops.to_goto_bookmark = record_full_goto_bookmark;
+  record_full_ops.to_async = record_full_async;
+  record_full_ops.to_can_async_p = record_full_can_async_p;
+  record_full_ops.to_is_async_p = record_full_is_async_p;
+  record_full_ops.to_execution_direction = record_full_execution_direction;
+  record_full_ops.to_info_record = record_full_info;
+  record_full_ops.to_save_record = record_full_save;
+  record_full_ops.to_delete_record = record_full_delete;
+  record_full_ops.to_record_is_replaying = record_full_is_replaying;
+  record_full_ops.to_goto_record_begin = record_full_goto_begin;
+  record_full_ops.to_goto_record_end = record_full_goto_end;
+  record_full_ops.to_goto_record = record_full_goto;
+  record_full_ops.to_magic = OPS_MAGIC;
 }
 
-/* "resume" method for prec over corefile.  */
+/* "to_resume" method for prec over corefile.  */
 
-void
-record_full_core_target::resume (ptid_t ptid, int step,
-				 enum gdb_signal signal)
+static void
+record_full_core_resume (struct target_ops *ops, ptid_t ptid, int step,
+			 enum gdb_signal signal)
 {
   record_full_resume_step = step;
   record_full_resumed = 1;
-  record_full_execution_dir = ::execution_direction;
+  record_full_execution_dir = execution_direction;
 
   /* We are about to start executing the inferior (or simulate it),
      let's register it with the event loop.  */
   if (target_can_async_p ())
-    target_async (1);
+    {
+      target_async (inferior_event_handler, 0);
+
+      /* Notify the event loop there's an event to wait for.  */
+      mark_async_event_handler (record_full_async_inferior_event_token);
+    }
 }
 
-/* "kill" method for prec over corefile.  */
+/* "to_kill" method for prec over corefile.  */
 
-void
-record_full_core_target::kill ()
+static void
+record_full_core_kill (struct target_ops *ops)
 {
   if (record_debug)
     fprintf_unfiltered (gdb_stdlog, "Process record: record_full_core_kill\n");
 
-  unpush_target (this);
+  unpush_target (&record_full_core_ops);
 }
 
-/* "fetch_registers" method for prec over corefile.  */
+/* "to_fetch_registers" method for prec over corefile.  */
 
-void
-record_full_core_target::fetch_registers (struct regcache *regcache,
-					  int regno)
+static void
+record_full_core_fetch_registers (struct target_ops *ops,
+				  struct regcache *regcache,
+				  int regno)
 {
   if (regno < 0)
     {
-      int num = gdbarch_num_regs (regcache->arch ());
+      int num = gdbarch_num_regs (get_regcache_arch (regcache));
       int i;
 
       for (i = 0; i < num; i ++)
-	regcache->raw_supply (i, *record_full_core_regbuf);
+        regcache_raw_supply (regcache, i,
+                             record_full_core_regbuf + MAX_REGISTER_SIZE * i);
     }
   else
-    regcache->raw_supply (regno, *record_full_core_regbuf);
+    regcache_raw_supply (regcache, regno,
+                         record_full_core_regbuf + MAX_REGISTER_SIZE * regno);
 }
 
-/* "prepare_to_store" method for prec over corefile.  */
+/* "to_prepare_to_store" method for prec over corefile.  */
 
-void
-record_full_core_target::prepare_to_store (struct regcache *regcache)
+static void
+record_full_core_prepare_to_store (struct regcache *regcache)
 {
 }
 
-/* "store_registers" method for prec over corefile.  */
+/* "to_store_registers" method for prec over corefile.  */
 
-void
-record_full_core_target::store_registers (struct regcache *regcache,
-					  int regno)
+static void
+record_full_core_store_registers (struct target_ops *ops,
+                             struct regcache *regcache,
+                             int regno)
 {
   if (record_full_gdb_operation_disable)
-    record_full_core_regbuf->raw_supply (regno, *regcache);
+    regcache_raw_collect (regcache, regno,
+                          record_full_core_regbuf + MAX_REGISTER_SIZE * regno);
   else
     error (_("You can't do that without a process to debug."));
 }
 
-/* "xfer_partial" method for prec over corefile.  */
+/* "to_xfer_partial" method for prec over corefile.  */
 
-enum target_xfer_status
-record_full_core_target::xfer_partial (enum target_object object,
-				       const char *annex, gdb_byte *readbuf,
-				       const gdb_byte *writebuf, ULONGEST offset,
-				       ULONGEST len, ULONGEST *xfered_len)
+static LONGEST
+record_full_core_xfer_partial (struct target_ops *ops,
+			       enum target_object object,
+			       const char *annex, gdb_byte *readbuf,
+			       const gdb_byte *writebuf, ULONGEST offset,
+			       LONGEST len)
 {
   if (object == TARGET_OBJECT_MEMORY)
     {
@@ -2161,9 +2208,7 @@ record_full_core_target::xfer_partial (enum target_object object,
 		    {
 		      if (readbuf)
 			memset (readbuf, 0, len);
-
-		      *xfered_len = len;
-		      return TARGET_XFER_OK;
+		      return len;
 		    }
 		  /* Get record_full_core_buf_entry.  */
 		  for (entry = record_full_core_buf_list; entry;
@@ -2175,15 +2220,16 @@ record_full_core_target::xfer_partial (enum target_object object,
 		      if (!entry)
 			{
 			  /* Add a new entry.  */
-			  entry = XNEW (struct record_full_core_buf_entry);
+			  entry = (struct record_full_core_buf_entry *)
+			    xmalloc
+			    (sizeof (struct record_full_core_buf_entry));
 			  entry->p = p;
-			  if (!bfd_malloc_and_get_section
-			        (p->the_bfd_section->owner,
-				 p->the_bfd_section,
-				 &entry->buf))
+			  if (!bfd_malloc_and_get_section (p->bfd,
+							   p->the_bfd_section,
+							   &entry->buf))
 			    {
 			      xfree (entry);
-			      return TARGET_XFER_EOF;
+			      return 0;
 			    }
 			  entry->prev = record_full_core_buf_list;
 			  record_full_core_buf_list = entry;
@@ -2195,56 +2241,99 @@ record_full_core_target::xfer_partial (enum target_object object,
 		  else
 		    {
 		      if (!entry)
-			return this->beneath ()->xfer_partial (object, annex,
-							       readbuf, writebuf,
-							       offset, len,
-							       xfered_len);
+			return record_full_beneath_to_xfer_partial
+			  (record_full_beneath_to_xfer_partial_ops,
+			   object, annex, readbuf, writebuf,
+			   offset, len);
 
 		      memcpy (readbuf, entry->buf + sec_offset,
 			      (size_t) len);
 		    }
 
-		  *xfered_len = len;
-		  return TARGET_XFER_OK;
+		  return len;
 		}
 	    }
 
-	  return TARGET_XFER_E_IO;
+	  return -1;
 	}
       else
 	error (_("You can't do that without a process to debug."));
     }
 
-  return this->beneath ()->xfer_partial (object, annex,
-					 readbuf, writebuf, offset, len,
-					 xfered_len);
+  return record_full_beneath_to_xfer_partial
+    (record_full_beneath_to_xfer_partial_ops, object, annex,
+     readbuf, writebuf, offset, len);
 }
 
-/* "insert_breakpoint" method for prec over corefile.  */
+/* "to_insert_breakpoint" method for prec over corefile.  */
 
-int
-record_full_core_target::insert_breakpoint (struct gdbarch *gdbarch,
-					    struct bp_target_info *bp_tgt)
+static int
+record_full_core_insert_breakpoint (struct gdbarch *gdbarch,
+				    struct bp_target_info *bp_tgt)
 {
   return 0;
 }
 
-/* "remove_breakpoint" method for prec over corefile.  */
+/* "to_remove_breakpoint" method for prec over corefile.  */
 
-int
-record_full_core_target::remove_breakpoint (struct gdbarch *gdbarch,
-					    struct bp_target_info *bp_tgt,
-					    enum remove_bp_reason reason)
+static int
+record_full_core_remove_breakpoint (struct gdbarch *gdbarch,
+				    struct bp_target_info *bp_tgt)
 {
   return 0;
 }
 
-/* "has_execution" method for prec over corefile.  */
+/* "to_has_execution" method for prec over corefile.  */
 
-bool
-record_full_core_target::has_execution (ptid_t the_ptid)
+static int
+record_full_core_has_execution (struct target_ops *ops, ptid_t the_ptid)
 {
-  return true;
+  return 1;
+}
+
+static void
+init_record_full_core_ops (void)
+{
+  record_full_core_ops.to_shortname = "record-core";
+  record_full_core_ops.to_longname = "Process record and replay target";
+  record_full_core_ops.to_doc =
+    "Log program while executing and replay execution from log.";
+  record_full_core_ops.to_open = record_full_open;
+  record_full_core_ops.to_close = record_full_close;
+  record_full_core_ops.to_resume = record_full_core_resume;
+  record_full_core_ops.to_wait = record_full_wait;
+  record_full_core_ops.to_kill = record_full_core_kill;
+  record_full_core_ops.to_fetch_registers = record_full_core_fetch_registers;
+  record_full_core_ops.to_prepare_to_store = record_full_core_prepare_to_store;
+  record_full_core_ops.to_store_registers = record_full_core_store_registers;
+  record_full_core_ops.to_xfer_partial = record_full_core_xfer_partial;
+  record_full_core_ops.to_insert_breakpoint
+    = record_full_core_insert_breakpoint;
+  record_full_core_ops.to_remove_breakpoint
+    = record_full_core_remove_breakpoint;
+  record_full_core_ops.to_stopped_by_watchpoint
+    = record_full_stopped_by_watchpoint;
+  record_full_core_ops.to_stopped_data_address
+    = record_full_stopped_data_address;
+  record_full_core_ops.to_can_execute_reverse
+    = record_full_can_execute_reverse;
+  record_full_core_ops.to_has_execution = record_full_core_has_execution;
+  record_full_core_ops.to_stratum = record_stratum;
+  /* Add bookmark target methods.  */
+  record_full_core_ops.to_get_bookmark = record_full_get_bookmark;
+  record_full_core_ops.to_goto_bookmark = record_full_goto_bookmark;
+  record_full_core_ops.to_async = record_full_async;
+  record_full_core_ops.to_can_async_p = record_full_can_async_p;
+  record_full_core_ops.to_is_async_p = record_full_is_async_p;
+  record_full_core_ops.to_execution_direction
+    = record_full_execution_direction;
+  record_full_core_ops.to_info_record = record_full_info;
+  record_full_core_ops.to_delete_record = record_full_delete;
+  record_full_core_ops.to_record_is_replaying = record_full_is_replaying;
+  record_full_core_ops.to_goto_record_begin = record_full_goto_begin;
+  record_full_core_ops.to_goto_record_end = record_full_goto_end;
+  record_full_core_ops.to_goto_record = record_full_goto;
+  record_full_core_ops.to_magic = OPS_MAGIC;
 }
 
 /* Record log save-file format
@@ -2324,11 +2413,22 @@ netorder32 (uint32_t input)
   return ret;
 }
 
+static inline uint16_t
+netorder16 (uint16_t input)
+{
+  uint16_t ret;
+
+  store_unsigned_integer ((gdb_byte *) &ret, sizeof (ret), 
+			  BFD_ENDIAN_BIG, input);
+  return ret;
+}
+
 /* Restore the execution log from a core_bfd file.  */
 static void
 record_full_restore (void)
 {
   uint32_t magic;
+  struct cleanup *old_cleanups;
   struct record_full_entry *rec;
   asection *osec;
   uint32_t osec_size;
@@ -2373,115 +2473,108 @@ record_full_restore (void)
   record_full_arch_list_head = NULL;
   record_full_arch_list_tail = NULL;
   record_full_insn_num = 0;
+  old_cleanups = make_cleanup (record_full_arch_list_cleanups, 0);
+  regcache = get_current_regcache ();
 
-  TRY
+  while (1)
     {
-      regcache = get_current_regcache ();
+      uint8_t rectype;
+      uint32_t regnum, len, signal, count;
+      uint64_t addr;
 
-      while (1)
-	{
-	  uint8_t rectype;
-	  uint32_t regnum, len, signal, count;
-	  uint64_t addr;
+      /* We are finished when offset reaches osec_size.  */
+      if (bfd_offset >= osec_size)
+	break;
+      bfdcore_read (core_bfd, osec, &rectype, sizeof (rectype), &bfd_offset);
 
-	  /* We are finished when offset reaches osec_size.  */
-	  if (bfd_offset >= osec_size)
-	    break;
-	  bfdcore_read (core_bfd, osec, &rectype, sizeof (rectype), &bfd_offset);
+      switch (rectype)
+        {
+        case record_full_reg: /* reg */
+          /* Get register number to regnum.  */
+          bfdcore_read (core_bfd, osec, &regnum,
+			sizeof (regnum), &bfd_offset);
+	  regnum = netorder32 (regnum);
 
-	  switch (rectype)
-	    {
-	    case record_full_reg: /* reg */
-	      /* Get register number to regnum.  */
-	      bfdcore_read (core_bfd, osec, &regnum,
-			    sizeof (regnum), &bfd_offset);
-	      regnum = netorder32 (regnum);
+          rec = record_full_reg_alloc (regcache, regnum);
 
-	      rec = record_full_reg_alloc (regcache, regnum);
+          /* Get val.  */
+          bfdcore_read (core_bfd, osec, record_full_get_loc (rec),
+			rec->u.reg.len, &bfd_offset);
 
-	      /* Get val.  */
-	      bfdcore_read (core_bfd, osec, record_full_get_loc (rec),
-			    rec->u.reg.len, &bfd_offset);
+	  if (record_debug)
+	    fprintf_unfiltered (gdb_stdlog,
+				"  Reading register %d (1 "
+				"plus %lu plus %d bytes)\n",
+				rec->u.reg.num,
+				(unsigned long) sizeof (regnum),
+				rec->u.reg.len);
+          break;
 
-	      if (record_debug)
-		fprintf_unfiltered (gdb_stdlog,
-				    "  Reading register %d (1 "
-				    "plus %lu plus %d bytes)\n",
-				    rec->u.reg.num,
-				    (unsigned long) sizeof (regnum),
-				    rec->u.reg.len);
-	      break;
+        case record_full_mem: /* mem */
+          /* Get len.  */
+          bfdcore_read (core_bfd, osec, &len, 
+			sizeof (len), &bfd_offset);
+	  len = netorder32 (len);
 
-	    case record_full_mem: /* mem */
-	      /* Get len.  */
-	      bfdcore_read (core_bfd, osec, &len,
-			    sizeof (len), &bfd_offset);
-	      len = netorder32 (len);
+          /* Get addr.  */
+          bfdcore_read (core_bfd, osec, &addr,
+			sizeof (addr), &bfd_offset);
+	  addr = netorder64 (addr);
 
-	      /* Get addr.  */
-	      bfdcore_read (core_bfd, osec, &addr,
-			    sizeof (addr), &bfd_offset);
-	      addr = netorder64 (addr);
+          rec = record_full_mem_alloc (addr, len);
 
-	      rec = record_full_mem_alloc (addr, len);
+          /* Get val.  */
+          bfdcore_read (core_bfd, osec, record_full_get_loc (rec),
+			rec->u.mem.len, &bfd_offset);
 
-	      /* Get val.  */
-	      bfdcore_read (core_bfd, osec, record_full_get_loc (rec),
-			    rec->u.mem.len, &bfd_offset);
+	  if (record_debug)
+	    fprintf_unfiltered (gdb_stdlog,
+				"  Reading memory %s (1 plus "
+				"%lu plus %lu plus %d bytes)\n",
+				paddress (get_current_arch (),
+					  rec->u.mem.addr),
+				(unsigned long) sizeof (addr),
+				(unsigned long) sizeof (len),
+				rec->u.mem.len);
+          break;
 
-	      if (record_debug)
-		fprintf_unfiltered (gdb_stdlog,
-				    "  Reading memory %s (1 plus "
-				    "%lu plus %lu plus %d bytes)\n",
-				    paddress (get_current_arch (),
-					      rec->u.mem.addr),
-				    (unsigned long) sizeof (addr),
-				    (unsigned long) sizeof (len),
-				    rec->u.mem.len);
-	      break;
+        case record_full_end: /* end */
+          rec = record_full_end_alloc ();
+          record_full_insn_num ++;
 
-	    case record_full_end: /* end */
-	      rec = record_full_end_alloc ();
-	      record_full_insn_num ++;
+	  /* Get signal value.  */
+	  bfdcore_read (core_bfd, osec, &signal, 
+			sizeof (signal), &bfd_offset);
+	  signal = netorder32 (signal);
+	  rec->u.end.sigval = signal;
 
-	      /* Get signal value.  */
-	      bfdcore_read (core_bfd, osec, &signal,
-			    sizeof (signal), &bfd_offset);
-	      signal = netorder32 (signal);
-	      rec->u.end.sigval = (enum gdb_signal) signal;
+	  /* Get insn count.  */
+	  bfdcore_read (core_bfd, osec, &count, 
+			sizeof (count), &bfd_offset);
+	  count = netorder32 (count);
+	  rec->u.end.insn_num = count;
+	  record_full_insn_count = count + 1;
+	  if (record_debug)
+	    fprintf_unfiltered (gdb_stdlog,
+				"  Reading record_full_end (1 + "
+				"%lu + %lu bytes), offset == %s\n",
+				(unsigned long) sizeof (signal),
+				(unsigned long) sizeof (count),
+				paddress (get_current_arch (),
+					  bfd_offset));
+          break;
 
-	      /* Get insn count.  */
-	      bfdcore_read (core_bfd, osec, &count,
-			    sizeof (count), &bfd_offset);
-	      count = netorder32 (count);
-	      rec->u.end.insn_num = count;
-	      record_full_insn_count = count + 1;
-	      if (record_debug)
-		fprintf_unfiltered (gdb_stdlog,
-				    "  Reading record_full_end (1 + "
-				    "%lu + %lu bytes), offset == %s\n",
-				    (unsigned long) sizeof (signal),
-				    (unsigned long) sizeof (count),
-				    paddress (get_current_arch (),
-					      bfd_offset));
-	      break;
+        default:
+          error (_("Bad entry type in core file %s."),
+		 bfd_get_filename (core_bfd));
+          break;
+        }
 
-	    default:
-	      error (_("Bad entry type in core file %s."),
-		     bfd_get_filename (core_bfd));
-	      break;
-	    }
-
-	  /* Add rec to record arch list.  */
-	  record_full_arch_list_add (rec);
-	}
+      /* Add rec to record arch list.  */
+      record_full_arch_list_add (rec);
     }
-  CATCH (ex, RETURN_MASK_ALL)
-    {
-      record_full_list_release (record_full_arch_list_tail);
-      throw_exception (ex);
-    }
-  END_CATCH
+
+  discard_cleanups (old_cleanups);
 
   /* Add record_full_arch_list_head to the end of record list.  */
   record_full_first.next = record_full_arch_list_head;
@@ -2493,7 +2586,7 @@ record_full_restore (void)
   if (record_full_insn_num > record_full_insn_max_num)
     {
       record_full_insn_max_num = record_full_insn_num;
-      warning (_("Auto increase record/replay buffer limit to %u."),
+      warning (_("Auto increase record/replay buffer limit to %d."),
                record_full_insn_max_num);
     }
 
@@ -2501,7 +2594,7 @@ record_full_restore (void)
   printf_filtered (_("Restored records from core file %s.\n"),
 		   bfd_get_filename (core_bfd));
 
-  print_stack_frame (get_selected_frame (NULL), 1, SRC_AND_LOC, 1);
+  print_stack_frame (get_selected_frame (NULL), 1, SRC_AND_LOC);
 }
 
 /* bfdcore_write -- write bytes into a core file section.  */
@@ -2523,22 +2616,36 @@ bfdcore_write (bfd *obfd, asection *osec, void *buf, int len, int *offset)
    corefile format, with an extra section for our data.  */
 
 static void
-cmd_record_full_restore (const char *args, int from_tty)
+cmd_record_full_restore (char *args, int from_tty)
 {
   core_file_command (args, from_tty);
   record_full_open (args, from_tty);
 }
 
+static void
+record_full_save_cleanups (void *data)
+{
+  bfd *obfd = data;
+  char *pathname = xstrdup (bfd_get_filename (obfd));
+
+  gdb_bfd_unref (obfd);
+  unlink (pathname);
+  xfree (pathname);
+}
+
 /* Save the execution log to a file.  We use a modified elf corefile
    format, with an extra section for our data.  */
 
-void
-record_full_base_target::save_record (const char *recfilename)
+static void
+record_full_save (char *recfilename)
 {
   struct record_full_entry *cur_record_full_list;
   uint32_t magic;
   struct regcache *regcache;
   struct gdbarch *gdbarch;
+  struct cleanup *old_cleanups;
+  struct cleanup *set_cleanups;
+  bfd *obfd;
   int save_size = 0;
   asection *osec = NULL;
   int bfd_offset = 0;
@@ -2549,21 +2656,18 @@ record_full_base_target::save_record (const char *recfilename)
 			recfilename);
 
   /* Open the output file.  */
-  gdb_bfd_ref_ptr obfd (create_gcore_bfd (recfilename));
-
-  /* Arrange to remove the output file on failure.  */
-  gdb::unlinker unlink_file (recfilename);
+  obfd = create_gcore_bfd (recfilename);
+  old_cleanups = make_cleanup (record_full_save_cleanups, obfd);
 
   /* Save the current record entry to "cur_record_full_list".  */
   cur_record_full_list = record_full_list;
 
   /* Get the values of regcache and gdbarch.  */
   regcache = get_current_regcache ();
-  gdbarch = regcache->arch ();
+  gdbarch = get_regcache_arch (regcache);
 
   /* Disable the GDB operation record.  */
-  scoped_restore restore_operation_disable
-    = record_full_gdb_operation_disable_set ();
+  set_cleanups = record_full_gdb_operation_disable_set ();
 
   /* Reverse execute to the begin of record list.  */
   while (1)
@@ -2596,20 +2700,20 @@ record_full_base_target::save_record (const char *recfilename)
       }
 
   /* Make the new bfd section.  */
-  osec = bfd_make_section_anyway_with_flags (obfd.get (), "precord",
+  osec = bfd_make_section_anyway_with_flags (obfd, "precord",
                                              SEC_HAS_CONTENTS
                                              | SEC_READONLY);
   if (osec == NULL)
     error (_("Failed to create 'precord' section for corefile %s: %s"),
 	   recfilename,
            bfd_errmsg (bfd_get_error ()));
-  bfd_set_section_size (obfd.get (), osec, save_size);
-  bfd_set_section_vma (obfd.get (), osec, 0);
-  bfd_set_section_alignment (obfd.get (), osec, 0);
-  bfd_section_lma (obfd.get (), osec) = 0;
+  bfd_set_section_size (obfd, osec, save_size);
+  bfd_set_section_vma (obfd, osec, 0);
+  bfd_set_section_alignment (obfd, osec, 0);
+  bfd_section_lma (obfd, osec) = 0;
 
   /* Save corefile state.  */
-  write_gcore_file (obfd.get ());
+  write_gcore_file (obfd);
 
   /* Write out the record log.  */
   /* Write the magic code.  */
@@ -2619,7 +2723,7 @@ record_full_base_target::save_record (const char *recfilename)
 			"  Writing 4-byte magic cookie "
 			"RECORD_FULL_FILE_MAGIC (0x%s)\n",
 		      phex_nz (magic, 4));
-  bfdcore_write (obfd.get (), osec, &magic, sizeof (magic), &bfd_offset);
+  bfdcore_write (obfd, osec, &magic, sizeof (magic), &bfd_offset);
 
   /* Save the entries to recfd and forward execute to the end of
      record list.  */
@@ -2634,7 +2738,7 @@ record_full_base_target::save_record (const char *recfilename)
           uint64_t addr;
 
 	  type = record_full_list->type;
-          bfdcore_write (obfd.get (), osec, &type, sizeof (type), &bfd_offset);
+          bfdcore_write (obfd, osec, &type, sizeof (type), &bfd_offset);
 
           switch (record_full_list->type)
             {
@@ -2649,11 +2753,11 @@ record_full_base_target::save_record (const char *recfilename)
 
               /* Write regnum.  */
               regnum = netorder32 (record_full_list->u.reg.num);
-              bfdcore_write (obfd.get (), osec, &regnum,
+              bfdcore_write (obfd, osec, &regnum,
 			     sizeof (regnum), &bfd_offset);
 
               /* Write regval.  */
-              bfdcore_write (obfd.get (), osec,
+              bfdcore_write (obfd, osec,
 			     record_full_get_loc (record_full_list),
 			     record_full_list->u.reg.len, &bfd_offset);
               break;
@@ -2671,16 +2775,15 @@ record_full_base_target::save_record (const char *recfilename)
 
 	      /* Write memlen.  */
 	      len = netorder32 (record_full_list->u.mem.len);
-	      bfdcore_write (obfd.get (), osec, &len, sizeof (len),
-			     &bfd_offset);
+	      bfdcore_write (obfd, osec, &len, sizeof (len), &bfd_offset);
 
 	      /* Write memaddr.  */
 	      addr = netorder64 (record_full_list->u.mem.addr);
-	      bfdcore_write (obfd.get (), osec, &addr, 
+	      bfdcore_write (obfd, osec, &addr, 
 			     sizeof (addr), &bfd_offset);
 
 	      /* Write memval.  */
-	      bfdcore_write (obfd.get (), osec,
+	      bfdcore_write (obfd, osec,
 			     record_full_get_loc (record_full_list),
 			     record_full_list->u.mem.len, &bfd_offset);
               break;
@@ -2694,12 +2797,12 @@ record_full_base_target::save_record (const char *recfilename)
 				      (unsigned long) sizeof (count));
 		/* Write signal value.  */
 		signal = netorder32 (record_full_list->u.end.sigval);
-		bfdcore_write (obfd.get (), osec, &signal,
+		bfdcore_write (obfd, osec, &signal,
 			       sizeof (signal), &bfd_offset);
 
 		/* Write insn count.  */
 		count = netorder32 (record_full_list->u.end.insn_num);
-		bfdcore_write (obfd.get (), osec, &count,
+		bfdcore_write (obfd, osec, &count,
 			       sizeof (count), &bfd_offset);
                 break;
             }
@@ -2727,7 +2830,9 @@ record_full_base_target::save_record (const char *recfilename)
         record_full_list = record_full_list->prev;
     }
 
-  unlink_file.keep ();
+  do_cleanups (set_cleanups);
+  gdb_bfd_unref (obfd);
+  discard_cleanups (old_cleanups);
 
   /* Succeeded.  */
   printf_filtered (_("Saved core file %s with execution log.\n"),
@@ -2742,10 +2847,9 @@ static void
 record_full_goto_insn (struct record_full_entry *entry,
 		       enum exec_direction_kind dir)
 {
-  scoped_restore restore_operation_disable
-    = record_full_gdb_operation_disable_set ();
+  struct cleanup *set_cleanups = record_full_gdb_operation_disable_set ();
   struct regcache *regcache = get_current_regcache ();
-  struct gdbarch *gdbarch = regcache->arch ();
+  struct gdbarch *gdbarch = get_regcache_arch (regcache);
 
   /* Assume everything is valid: we will hit the entry,
      and we will not hit the end of the recording.  */
@@ -2761,21 +2865,23 @@ record_full_goto_insn (struct record_full_entry *entry,
       else
 	record_full_list = record_full_list->next;
     } while (record_full_list != entry);
+  do_cleanups (set_cleanups);
 }
 
 /* Alias for "target record-full".  */
 
 static void
-cmd_record_full_start (const char *args, int from_tty)
+cmd_record_full_start (char *args, int from_tty)
 {
   execute_command ("target record-full", from_tty);
 }
 
 static void
-set_record_full_insn_max_num (const char *args, int from_tty,
+set_record_full_insn_max_num (char *args, int from_tty,
 			      struct cmd_list_element *c)
 {
-  if (record_full_insn_num > record_full_insn_max_num)
+  if (record_full_insn_num > record_full_insn_max_num
+      && record_full_insn_max_num)
     {
       /* Count down record_full_insn_num while releasing records from list.  */
       while (record_full_insn_num > record_full_insn_max_num)
@@ -2789,10 +2895,10 @@ set_record_full_insn_max_num (const char *args, int from_tty,
 /* The "set record full" command.  */
 
 static void
-set_record_full_command (const char *args, int from_tty)
+set_record_full_command (char *args, int from_tty)
 {
   printf_unfiltered (_("\"set record full\" must be followed "
-		       "by an appropriate subcommand.\n"));
+		       "by an apporpriate subcommand.\n"));
   help_list (set_record_full_cmdlist, "set record full ", all_commands,
 	     gdb_stdout);
 }
@@ -2800,10 +2906,13 @@ set_record_full_command (const char *args, int from_tty)
 /* The "show record full" command.  */
 
 static void
-show_record_full_command (const char *args, int from_tty)
+show_record_full_command (char *args, int from_tty)
 {
   cmd_show_list (show_record_full_cmdlist, from_tty, "");
 }
+
+/* Provide a prototype to silence -Wmissing-prototypes.  */
+extern initialize_file_ftype _initialize_record_full;
 
 void
 _initialize_record_full (void)
@@ -2815,9 +2924,11 @@ _initialize_record_full (void)
   record_full_first.next = NULL;
   record_full_first.type = record_full_end;
 
-  add_target (record_full_target_info, record_full_open);
-  add_deprecated_target_alias (record_full_target_info, "record");
-  add_target (record_full_core_target_info, record_full_open);
+  init_record_full_ops ();
+  add_target (&record_full_ops);
+  add_deprecated_target_alias (&record_full_ops, "record");
+  init_record_full_core_ops ();
+  add_target (&record_full_core_ops);
 
   add_prefix_cmd ("full", class_obscure, cmd_record_full_start,
 		  _("Start full execution recording."), &record_full_cmdlist,
@@ -2868,8 +2979,7 @@ delete the oldest recorded instruction to make room for each new one."),
 			    _("Set record/replay buffer limit."),
 			    _("Show record/replay buffer limit."), _("\
 Set the maximum number of instructions to be stored in the\n\
-record/replay buffer.  A value of either \"unlimited\" or zero means no\n\
-limit.  Default is 200000."),
+record/replay buffer.  Zero means unlimited.  Default is 200000."),
 			    set_record_full_insn_max_num,
 			    NULL, &set_record_full_cmdlist,
 			    &show_record_full_cmdlist);

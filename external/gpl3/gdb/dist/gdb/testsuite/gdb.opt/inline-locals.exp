@@ -1,4 +1,4 @@
-# Copyright 2008-2019 Free Software Foundation, Inc.
+# Copyright 2008, 2010, 2011 Free Software Foundation, Inc.
 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -13,16 +13,28 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-standard_testfile .c inline-markers.c
+set testfile "inline-locals"
+set srcfile ${testfile}.c
+set srcfile2 "inline-markers.c"
+set fullsrcfile "${srcdir}/${subdir}/${srcfile}"
+set fullsrcfile2 "${srcdir}/${subdir}/${srcfile2}"
+set sources [list ${fullsrcfile} ${fullsrcfile2}]
+set binfile ${objdir}/${subdir}/${testfile}
 
-if {[prepare_for_testing "failed to prepare" $testfile \
-	 [list $srcfile $srcfile2] {debug additional_flags=-Winline}]} {
+if  { [gdb_compile ${sources} ${binfile} \
+	   executable {debug optimize=-O2}] != "" } {
+    untested inline-locals.exp
     return -1
 }
 
+gdb_exit
+gdb_start
+gdb_reinitialize_dir $srcdir/$subdir
+gdb_load ${binfile}
+
 runto_main
 
-get_compiler_info
+get_compiler_info $binfile
 get_debug_format
 if { [skip_inline_var_tests] } {
     untested inline-bt.exp
@@ -34,19 +46,18 @@ set no_frames [skip_inline_frame_tests]
 set line1 [gdb_get_line_number "set breakpoint 1 here" ${srcfile2}]
 gdb_breakpoint $srcfile2:$line1
 
-gdb_test "continue" ".*set breakpoint 1 here.*" "continue to bar 1"
+gdb_test "continue" ".*set breakpoint 1 here.*" "continue to bar (1)"
 
-gdb_test "continue" ".*set breakpoint 1 here.*" "continue to bar 2"
+gdb_test "continue" ".*set breakpoint 1 here.*" "continue to bar (2)"
 
 if { ! $no_frames } {
     gdb_test "backtrace" "#0  bar.*#1  .*func1.*#2  .*main.*" \
-	"backtrace from bar 2"
-    gdb_test "up" "#1  .*func1 .* at .*" "up from bar 2"
-    gdb_test "info frame" ".*inlined into frame.*" "func1 inlined 2"
-    setup_kfail "gdb/xyz" *-*-*
-    gdb_test "info locals" "array = {.*}" "info locals above bar 2"
+	"backtrace from bar (2)"
+    gdb_test "up" "#1  .*func1 .* at .*" "up from bar (2)"
+    gdb_test "info frame" ".*inlined into frame.*" "func1 inlined (2)"
+    gdb_test "info locals" "array = {.*}" "info locals above bar (2)"
 
-    set msg "info args above bar 2"
+    set msg "info args above bar (2)"
     gdb_test_multiple "info args" $msg {
 	-re "arg1 = $decimal\r\n$gdb_prompt $" {
 	    pass $msg
@@ -60,13 +71,13 @@ if { ! $no_frames } {
 	}
     }
 } else {
-    gdb_test "up" "#1  .*main .* at .*" "up from bar 2"
-    gdb_test "info locals" ".*arg1 = 0.*" "info locals above bar 2"
+    gdb_test "up" "#1  .*main .* at .*" "up from bar (2)"
+    gdb_test "info locals" ".*arg1 = 0.*" "info locals above bar (2)"
 }
 
 # Make sure that locals on the stack are found.  This is an array to
 # prevent it from living in a register.
-gdb_test "print array\[0\]" "\\\$$decimal = 0" "print local 2"
+gdb_test "print array\[0\]" "\\\$$decimal = 0" "print local (2)"
 
 if { ! $no_frames } {
     # Verify that we do not print out variables from the inlined
@@ -77,16 +88,15 @@ if { ! $no_frames } {
 
 # Repeat the tests from a depth of two inlined functions, and with a
 # more interesting value in the local array.
-gdb_test "continue" ".*set breakpoint 1 here.*" "continue to bar 3"
+gdb_test "continue" ".*set breakpoint 1 here.*" "continue to bar (3)"
 if { ! $no_frames } {
     gdb_test "backtrace" "#0  bar.*#1  .*func1.*#2  .*func2.*#3  .*main.*" \
-	"backtrace from bar 3"
-    gdb_test "up" "#1  .*func1 .* at .*" "up from bar 3"
-    gdb_test "info frame" ".*inlined into frame.*" "func1 inlined 3"
-    setup_kfail "gdb/xyz" *-*-*
-    gdb_test "info locals" "array = {.*}" "info locals above bar 3"
+	"backtrace from bar (3)"
+    gdb_test "up" "#1  .*func1 .* at .*" "up from bar (3)"
+    gdb_test "info frame" ".*inlined into frame.*" "func1 inlined (3)"
+    gdb_test "info locals" "array = {.*}" "info locals above bar (3)"
 
-    set msg "info args above bar 3"
+    set msg "info args above bar (3)"
     gdb_test_multiple "info args" $msg {
 	-re "arg1 = $decimal\r\n$gdb_prompt $" {
 	    pass $msg
@@ -100,9 +110,9 @@ if { ! $no_frames } {
 	}
     }
 } else {
-    gdb_test "up" "#1  .*main .* at .*" "up from bar 3"
+    gdb_test "up" "#1  .*main .* at .*" "up from bar (3)"
     gdb_test "info locals" ".*arg1 = 1.*" "info locals above bar (3a)"
     gdb_test "info locals" ".*arg2 = 184.*" "info locals above bar (3b)"
 }
 
-gdb_test "print array\[0\]" "\\\$$decimal = 184" "print local 3"
+gdb_test "print array\[0\]" "\\\$$decimal = 184" "print local (3)"

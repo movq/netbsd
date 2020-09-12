@@ -1,6 +1,7 @@
 /* Target-dependent code for QNX Neutrino x86.
 
-   Copyright (C) 2003-2019 Free Software Foundation, Inc.
+   Copyright (C) 2003, 2004, 2007, 2008, 2009, 2010, 2011
+   Free Software Foundation, Inc.
 
    Contributed by QNX Software Systems Ltd.
 
@@ -24,6 +25,9 @@
 #include "osabi.h"
 #include "regcache.h"
 #include "target.h"
+
+#include "gdb_assert.h"
+#include "gdb_string.h"
 
 #include "i386-tdep.h"
 #include "i387-tdep.h"
@@ -76,12 +80,16 @@ nto_reg_offset (int regnum)
 static void
 i386nto_supply_gregset (struct regcache *regcache, char *gpregs)
 {
-  struct gdbarch *gdbarch = regcache->arch ();
+  struct gdbarch *gdbarch = get_regcache_arch (regcache);
   struct gdbarch_tdep *tdep = gdbarch_tdep (gdbarch);
 
+  if(tdep->gregset == NULL)
+    tdep->gregset = regset_alloc (gdbarch, i386_supply_gregset,
+				  i386_collect_gregset);
+
   gdb_assert (tdep->gregset_reg_offset == i386nto_gregset_reg_offset);
-  i386_gregset.supply_regset (&i386_gregset, regcache, -1,
-			      gpregs, NUM_GPREGS * 4);
+  tdep->gregset->supply_regset (tdep->gregset, regcache, -1,
+				gpregs, NUM_GPREGS * 4);
 }
 
 static void
@@ -127,6 +135,7 @@ i386nto_register_area (struct gdbarch *gdbarch,
 		       int regno, int regset, unsigned *off)
 {
   struct gdbarch_tdep *tdep = gdbarch_tdep (gdbarch);
+  int len;
 
   *off = 0;
   if (regset == NTO_REG_GENERAL)
@@ -250,7 +259,7 @@ i386nto_regset_fill (const struct regcache *regcache, int regset, char *data)
 	{
 	  int offset = nto_reg_offset (regno);
 	  if (offset != -1)
-	    regcache->raw_collect (regno, data + offset);
+	    regcache_raw_collect (regcache, regno, data + offset);
 	}
     }
   else if (regset == NTO_REG_FLOAT)
@@ -273,7 +282,7 @@ static int
 i386nto_sigtramp_p (struct frame_info *this_frame)
 {
   CORE_ADDR pc = get_frame_pc (this_frame);
-  const char *name;
+  char *name;
 
   find_pc_partial_function (pc, &name, NULL, NULL);
   return name && strcmp ("__signalstub", name) == 0;
@@ -287,7 +296,7 @@ i386nto_sigcontext_addr (struct frame_info *this_frame)
 {
   struct gdbarch *gdbarch = get_frame_arch (this_frame);
   enum bfd_endian byte_order = gdbarch_byte_order (gdbarch);
-  gdb_byte buf[4];
+  char buf[4];
   CORE_ADDR ptrctx;
 
   /* We store __ucontext_t addr in EDI register.  */
@@ -362,10 +371,10 @@ i386nto_init_abi (struct gdbarch_info info, struct gdbarch *gdbarch)
         = nto_in_dynsym_resolve_code;
     }
   set_solib_ops (gdbarch, &nto_svr4_so_ops);
-
-  set_gdbarch_wchar_bit (gdbarch, 32);
-  set_gdbarch_wchar_signed (gdbarch, 0);
 }
+
+/* Provide a prototype to silence -Wmissing-prototypes.  */
+extern initialize_file_ftype _initialize_i386nto_tdep;
 
 void
 _initialize_i386nto_tdep (void)

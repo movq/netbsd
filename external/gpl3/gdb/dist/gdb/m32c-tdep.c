@@ -1,6 +1,7 @@
 /* Renesas M32C target-dependent code for GDB, the GNU debugger.
 
-   Copyright (C) 2004-2019 Free Software Foundation, Inc.
+   Copyright 2004, 2005, 2007, 2008, 2009, 2010, 2011
+   Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -18,6 +19,14 @@
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #include "defs.h"
+
+#include <stdarg.h>
+
+#if defined (HAVE_STRING_H)
+#include <string.h>
+#endif
+
+#include "gdb_assert.h"
 #include "elf-bfd.h"
 #include "elf/m32c.h"
 #include "gdb/sim-m32c.h"
@@ -35,7 +44,6 @@
 #include "reggroups.h"
 #include "prologue-value.h"
 #include "target.h"
-#include "objfiles.h"
 
 
 /* The m32c tdep structure.  */
@@ -46,13 +54,9 @@ struct m32c_reg;
 
 /* The type of a function that moves the value of REG between CACHE or
    BUF --- in either direction.  */
-typedef enum register_status (m32c_write_reg_t) (struct m32c_reg *reg,
-						 struct regcache *cache,
-						 const gdb_byte *buf);
-
-typedef enum register_status (m32c_read_reg_t) (struct m32c_reg *reg,
-						readable_regcache *cache,
-						gdb_byte *buf);
+typedef enum register_status (m32c_move_reg_t) (struct m32c_reg *reg,
+						struct regcache *cache,
+						void *buf);
 
 struct m32c_reg
 {
@@ -82,8 +86,7 @@ struct m32c_reg
 
   /* Functions to read its value from a regcache, and write its value
      to a regcache.  */
-  m32c_read_reg_t *read;
-  m32c_write_reg_t *write;
+  m32c_move_reg_t *read, *write;
 
   /* Data for READ and WRITE functions.  The exact meaning depends on
      the specific functions selected; see the comments for those
@@ -190,20 +193,29 @@ make_types (struct gdbarch *arch)
 
   /* The builtin_type_mumble variables are sometimes uninitialized when
      this is called, so we avoid using them.  */
-  tdep->voyd = arch_type (arch, TYPE_CODE_VOID, TARGET_CHAR_BIT, "void");
+  tdep->voyd = arch_type (arch, TYPE_CODE_VOID, 1, "void");
   tdep->ptr_voyd
-    = arch_pointer_type (arch, gdbarch_ptr_bit (arch), NULL, tdep->voyd);
+    = arch_type (arch, TYPE_CODE_PTR, gdbarch_ptr_bit (arch) / TARGET_CHAR_BIT,
+                 NULL);
+  TYPE_TARGET_TYPE (tdep->ptr_voyd) = tdep->voyd;
+  TYPE_UNSIGNED (tdep->ptr_voyd) = 1;
   tdep->func_voyd = lookup_function_type (tdep->voyd);
 
-  xsnprintf (type_name, sizeof (type_name), "%s_data_addr_t",
-	     gdbarch_bfd_arch_info (arch)->printable_name);
+  sprintf (type_name, "%s_data_addr_t",
+	   gdbarch_bfd_arch_info (arch)->printable_name);
   tdep->data_addr_reg_type
-    = arch_pointer_type (arch, data_addr_reg_bits, type_name, tdep->voyd);
+    = arch_type (arch, TYPE_CODE_PTR, data_addr_reg_bits / TARGET_CHAR_BIT,
+                 xstrdup (type_name));
+  TYPE_TARGET_TYPE (tdep->data_addr_reg_type) = tdep->voyd;
+  TYPE_UNSIGNED (tdep->data_addr_reg_type) = 1;
 
-  xsnprintf (type_name, sizeof (type_name), "%s_code_addr_t",
-	     gdbarch_bfd_arch_info (arch)->printable_name);
+  sprintf (type_name, "%s_code_addr_t",
+	   gdbarch_bfd_arch_info (arch)->printable_name);
   tdep->code_addr_reg_type
-    = arch_pointer_type (arch, code_addr_reg_bits, type_name, tdep->func_voyd);
+    = arch_type (arch, TYPE_CODE_PTR, code_addr_reg_bits / TARGET_CHAR_BIT,
+                 xstrdup (type_name));
+  TYPE_TARGET_TYPE (tdep->code_addr_reg_type) = tdep->func_voyd;
+  TYPE_UNSIGNED (tdep->code_addr_reg_type) = 1;
 
   tdep->uint8  = arch_integer_type (arch,  8, 1, "uint8_t");
   tdep->uint16 = arch_integer_type (arch, 16, 1, "uint16_t");
@@ -293,35 +305,28 @@ m32c_register_reggroup_p (struct gdbarch *gdbarch, int regnum,
 
 
 /* Register move functions.  We declare them here using
-   m32c_{read,write}_reg_t to check the types.  */
-static m32c_read_reg_t m32c_raw_read;
-static m32c_read_reg_t m32c_banked_read;
-static m32c_read_reg_t m32c_sb_read;
-static m32c_read_reg_t m32c_part_read;
-static m32c_read_reg_t m32c_cat_read;
-static m32c_read_reg_t m32c_r3r2r1r0_read;
+   m32c_move_reg_t to check the types.  */
+static m32c_move_reg_t m32c_raw_read,      m32c_raw_write;
+static m32c_move_reg_t m32c_banked_read,   m32c_banked_write;
+static m32c_move_reg_t m32c_sb_read, 	   m32c_sb_write;
+static m32c_move_reg_t m32c_part_read,     m32c_part_write;
+static m32c_move_reg_t m32c_cat_read,      m32c_cat_write;
+static m32c_move_reg_t m32c_r3r2r1r0_read, m32c_r3r2r1r0_write;
 
-static m32c_write_reg_t m32c_raw_write;
-static m32c_write_reg_t m32c_banked_write;
-static m32c_write_reg_t m32c_sb_write;
-static m32c_write_reg_t m32c_part_write;
-static m32c_write_reg_t m32c_cat_write;
-static m32c_write_reg_t m32c_r3r2r1r0_write;
 
 /* Copy the value of the raw register REG from CACHE to BUF.  */
 static enum register_status
-m32c_raw_read (struct m32c_reg *reg, readable_regcache *cache, gdb_byte *buf)
+m32c_raw_read (struct m32c_reg *reg, struct regcache *cache, void *buf)
 {
-  return cache->raw_read (reg->num, buf);
+  return regcache_raw_read (cache, reg->num, buf);
 }
 
 
 /* Copy the value of the raw register REG from BUF to CACHE.  */
 static enum register_status
-m32c_raw_write (struct m32c_reg *reg, struct regcache *cache,
-		const gdb_byte *buf)
+m32c_raw_write (struct m32c_reg *reg, struct regcache *cache, void *buf)
 {
-  cache->raw_write (reg->num, buf);
+  regcache_raw_write (cache, reg->num, (const void *) buf);
 
   return REG_VALID;
 }
@@ -329,19 +334,18 @@ m32c_raw_write (struct m32c_reg *reg, struct regcache *cache,
 
 /* Return the value of the 'flg' register in CACHE.  */
 static int
-m32c_read_flg (readable_regcache *cache)
+m32c_read_flg (struct regcache *cache)
 {
-  struct gdbarch_tdep *tdep = gdbarch_tdep (cache->arch ());
+  struct gdbarch_tdep *tdep = gdbarch_tdep (get_regcache_arch (cache));
   ULONGEST flg;
-
-  cache->raw_read (tdep->flg->num, &flg);
+  regcache_raw_read_unsigned (cache, tdep->flg->num, &flg);
   return flg & 0xffff;
 }
 
 
 /* Evaluate the real register number of a banked register.  */
 static struct m32c_reg *
-m32c_banked_register (struct m32c_reg *reg, readable_regcache *cache)
+m32c_banked_register (struct m32c_reg *reg, struct regcache *cache)
 {
   return ((m32c_read_flg (cache) & reg->n) ? reg->ry : reg->rx);
 }
@@ -352,10 +356,10 @@ m32c_banked_register (struct m32c_reg *reg, readable_regcache *cache)
    masked in REG->n set, then read REG->ry.  Otherwise, read
    REG->rx.  */
 static enum register_status
-m32c_banked_read (struct m32c_reg *reg, readable_regcache *cache, gdb_byte *buf)
+m32c_banked_read (struct m32c_reg *reg, struct regcache *cache, void *buf)
 {
   struct m32c_reg *bank_reg = m32c_banked_register (reg, cache);
-  return cache->raw_read (bank_reg->num, buf);
+  return regcache_raw_read (cache, bank_reg->num, buf);
 }
 
 
@@ -364,11 +368,10 @@ m32c_banked_read (struct m32c_reg *reg, readable_regcache *cache, gdb_byte *buf)
    masked in REG->n set, then write REG->ry.  Otherwise, write
    REG->rx.  */
 static enum register_status
-m32c_banked_write (struct m32c_reg *reg, struct regcache *cache,
-		   const gdb_byte *buf)
+m32c_banked_write (struct m32c_reg *reg, struct regcache *cache, void *buf)
 {
   struct m32c_reg *bank_reg = m32c_banked_register (reg, cache);
-  cache->raw_write (bank_reg->num, buf);
+  regcache_raw_write (cache, bank_reg->num, (const void *) buf);
 
   return REG_VALID;
 }
@@ -377,7 +380,7 @@ m32c_banked_write (struct m32c_reg *reg, struct regcache *cache,
 /* Move the value of SB from CACHE to BUF.  On bfd_mach_m32c, SB is a
    banked register; on bfd_mach_m16c, it's not.  */
 static enum register_status
-m32c_sb_read (struct m32c_reg *reg, readable_regcache *cache, gdb_byte *buf)
+m32c_sb_read (struct m32c_reg *reg, struct regcache *cache, void *buf)
 {
   if (gdbarch_bfd_arch_info (reg->arch)->mach == bfd_mach_m16c)
     return m32c_raw_read (reg->rx, cache, buf);
@@ -389,7 +392,7 @@ m32c_sb_read (struct m32c_reg *reg, readable_regcache *cache, gdb_byte *buf)
 /* Move the value of SB from BUF to CACHE.  On bfd_mach_m32c, SB is a
    banked register; on bfd_mach_m16c, it's not.  */
 static enum register_status
-m32c_sb_write (struct m32c_reg *reg, struct regcache *cache, const gdb_byte *buf)
+m32c_sb_write (struct m32c_reg *reg, struct regcache *cache, void *buf)
 {
   if (gdbarch_bfd_arch_info (reg->arch)->mach == bfd_mach_m16c)
     m32c_raw_write (reg->rx, cache, buf);
@@ -442,13 +445,13 @@ m32c_find_part (struct m32c_reg *reg, int *offset_p, int *len_p)
    REG->type values, where higher indices refer to more significant
    bits, read the value of the REG->n'th element.  */
 static enum register_status
-m32c_part_read (struct m32c_reg *reg, readable_regcache *cache, gdb_byte *buf)
+m32c_part_read (struct m32c_reg *reg, struct regcache *cache, void *buf)
 {
   int offset, len;
 
   memset (buf, 0, TYPE_LENGTH (reg->type));
   m32c_find_part (reg, &offset, &len);
-  return cache->cooked_read_part (reg->rx->num, offset, len, buf);
+  return regcache_cooked_read_part (cache, reg->rx->num, offset, len, buf);
 }
 
 
@@ -457,13 +460,12 @@ m32c_part_read (struct m32c_reg *reg, readable_regcache *cache, gdb_byte *buf)
    values, where higher indices refer to more significant bits, write
    the value of the REG->n'th element.  */
 static enum register_status
-m32c_part_write (struct m32c_reg *reg, struct regcache *cache,
-		 const gdb_byte *buf)
+m32c_part_write (struct m32c_reg *reg, struct regcache *cache, void *buf)
 {
   int offset, len;
 
   m32c_find_part (reg, &offset, &len);
-  cache->cooked_write_part (reg->rx->num, offset, len, buf);
+  regcache_cooked_write_part (cache, reg->rx->num, offset, len, buf);
 
   return REG_VALID;
 }
@@ -473,26 +475,29 @@ m32c_part_write (struct m32c_reg *reg, struct regcache *cache,
    concatenation of the values of the registers REG->rx and REG->ry,
    with REG->rx contributing the more significant bits.  */
 static enum register_status
-m32c_cat_read (struct m32c_reg *reg, readable_regcache *cache, gdb_byte *buf)
+m32c_cat_read (struct m32c_reg *reg, struct regcache *cache, void *buf)
 {
   int high_bytes = TYPE_LENGTH (reg->rx->type);
   int low_bytes  = TYPE_LENGTH (reg->ry->type);
+  /* For address arithmetic.  */
+  unsigned char *cbuf = buf;
   enum register_status status;
 
   gdb_assert (TYPE_LENGTH (reg->type) == high_bytes + low_bytes);
 
   if (gdbarch_byte_order (reg->arch) == BFD_ENDIAN_BIG)
     {
-      status = cache->cooked_read (reg->rx->num, buf);
+      status = regcache_cooked_read (cache, reg->rx->num, cbuf);
       if (status == REG_VALID)
-	status = cache->cooked_read (reg->ry->num, buf + high_bytes);
+	status = regcache_cooked_read (cache, reg->ry->num, cbuf + high_bytes);
     }
   else
     {
-      status = cache->cooked_read (reg->rx->num, buf + low_bytes);
+      status = regcache_cooked_read (cache, reg->rx->num, cbuf + low_bytes);
       if (status == REG_VALID)
-	status = cache->cooked_read (reg->ry->num, buf);
+	status = regcache_cooked_read (cache, reg->ry->num, cbuf);
     }
+
   return status;
 }
 
@@ -501,23 +506,24 @@ m32c_cat_read (struct m32c_reg *reg, readable_regcache *cache, gdb_byte *buf)
    concatenation of the values of the registers REG->rx and REG->ry,
    with REG->rx contributing the more significant bits.  */
 static enum register_status
-m32c_cat_write (struct m32c_reg *reg, struct regcache *cache,
-		const gdb_byte *buf)
+m32c_cat_write (struct m32c_reg *reg, struct regcache *cache, void *buf)
 {
   int high_bytes = TYPE_LENGTH (reg->rx->type);
   int low_bytes  = TYPE_LENGTH (reg->ry->type);
+  /* For address arithmetic.  */
+  unsigned char *cbuf = buf;
 
   gdb_assert (TYPE_LENGTH (reg->type) == high_bytes + low_bytes);
 
   if (gdbarch_byte_order (reg->arch) == BFD_ENDIAN_BIG)
     {
-      cache->cooked_write (reg->rx->num, buf);
-      cache->cooked_write (reg->ry->num, buf + high_bytes);
+      regcache_cooked_write (cache, reg->rx->num, cbuf);
+      regcache_cooked_write (cache, reg->ry->num, cbuf + high_bytes);
     }
   else
     {
-      cache->cooked_write (reg->rx->num, buf + low_bytes);
-      cache->cooked_write (reg->ry->num, buf);
+      regcache_cooked_write (cache, reg->rx->num, cbuf + low_bytes);
+      regcache_cooked_write (cache, reg->ry->num, cbuf);
     }
 
   return REG_VALID;
@@ -528,31 +534,34 @@ m32c_cat_write (struct m32c_reg *reg, struct regcache *cache,
    the concatenation (from most significant to least) of r3, r2, r1,
    and r0.  */
 static enum register_status
-m32c_r3r2r1r0_read (struct m32c_reg *reg, readable_regcache *cache, gdb_byte *buf)
+m32c_r3r2r1r0_read (struct m32c_reg *reg, struct regcache *cache, void *buf)
 {
   struct gdbarch_tdep *tdep = gdbarch_tdep (reg->arch);
   int len = TYPE_LENGTH (tdep->r0->type);
   enum register_status status;
 
+  /* For address arithmetic.  */
+  unsigned char *cbuf = buf;
+
   if (gdbarch_byte_order (reg->arch) == BFD_ENDIAN_BIG)
     {
-      status = cache->cooked_read (tdep->r0->num, buf + len * 3);
+      status = regcache_cooked_read (cache, tdep->r0->num, cbuf + len * 3);
       if (status == REG_VALID)
-	status = cache->cooked_read (tdep->r1->num, buf + len * 2);
+	status = regcache_cooked_read (cache, tdep->r1->num, cbuf + len * 2);
       if (status == REG_VALID)
-	status = cache->cooked_read (tdep->r2->num, buf + len * 1);
+	status = regcache_cooked_read (cache, tdep->r2->num, cbuf + len * 1);
       if (status == REG_VALID)
-	status = cache->cooked_read (tdep->r3->num, buf);
+	status = regcache_cooked_read (cache, tdep->r3->num, cbuf);
     }
   else
     {
-      status = cache->cooked_read (tdep->r0->num, buf);
+      status = regcache_cooked_read (cache, tdep->r0->num, cbuf);
       if (status == REG_VALID)
-	status = cache->cooked_read (tdep->r1->num, buf + len * 1);
+	status = regcache_cooked_read (cache, tdep->r1->num, cbuf + len * 1);
       if (status == REG_VALID)
-	status = cache->cooked_read (tdep->r2->num, buf + len * 2);
+	status = regcache_cooked_read (cache, tdep->r2->num, cbuf + len * 2);
       if (status == REG_VALID)
-	status = cache->cooked_read (tdep->r3->num, buf + len * 3);
+	status = regcache_cooked_read (cache, tdep->r3->num, cbuf + len * 3);
     }
 
   return status;
@@ -563,25 +572,27 @@ m32c_r3r2r1r0_read (struct m32c_reg *reg, readable_regcache *cache, gdb_byte *bu
    the concatenation (from most significant to least) of r3, r2, r1,
    and r0.  */
 static enum register_status
-m32c_r3r2r1r0_write (struct m32c_reg *reg, struct regcache *cache,
-		     const gdb_byte *buf)
+m32c_r3r2r1r0_write (struct m32c_reg *reg, struct regcache *cache, void *buf)
 {
   struct gdbarch_tdep *tdep = gdbarch_tdep (reg->arch);
   int len = TYPE_LENGTH (tdep->r0->type);
 
+  /* For address arithmetic.  */
+  unsigned char *cbuf = buf;
+
   if (gdbarch_byte_order (reg->arch) == BFD_ENDIAN_BIG)
     {
-      cache->cooked_write (tdep->r0->num, buf + len * 3);
-      cache->cooked_write (tdep->r1->num, buf + len * 2);
-      cache->cooked_write (tdep->r2->num, buf + len * 1);
-      cache->cooked_write (tdep->r3->num, buf);
+      regcache_cooked_write (cache, tdep->r0->num, cbuf + len * 3);
+      regcache_cooked_write (cache, tdep->r1->num, cbuf + len * 2);
+      regcache_cooked_write (cache, tdep->r2->num, cbuf + len * 1);
+      regcache_cooked_write (cache, tdep->r3->num, cbuf);
     }
   else
     {
-      cache->cooked_write (tdep->r0->num, buf);
-      cache->cooked_write (tdep->r1->num, buf + len * 1);
-      cache->cooked_write (tdep->r2->num, buf + len * 2);
-      cache->cooked_write (tdep->r3->num, buf + len * 3);
+      regcache_cooked_write (cache, tdep->r0->num, cbuf);
+      regcache_cooked_write (cache, tdep->r1->num, cbuf + len * 1);
+      regcache_cooked_write (cache, tdep->r2->num, cbuf + len * 2);
+      regcache_cooked_write (cache, tdep->r3->num, cbuf + len * 3);
     }
 
   return REG_VALID;
@@ -590,7 +601,7 @@ m32c_r3r2r1r0_write (struct m32c_reg *reg, struct regcache *cache,
 
 static enum register_status
 m32c_pseudo_register_read (struct gdbarch *arch,
-			   readable_regcache *cache,
+			   struct regcache *cache,
 			   int cookednum,
 			   gdb_byte *buf)
 {
@@ -598,7 +609,7 @@ m32c_pseudo_register_read (struct gdbarch *arch,
   struct m32c_reg *reg;
 
   gdb_assert (0 <= cookednum && cookednum < tdep->num_regs);
-  gdb_assert (arch == cache->arch ());
+  gdb_assert (arch == get_regcache_arch (cache));
   gdb_assert (arch == tdep->regs[cookednum].arch);
   reg = &tdep->regs[cookednum];
 
@@ -616,11 +627,11 @@ m32c_pseudo_register_write (struct gdbarch *arch,
   struct m32c_reg *reg;
 
   gdb_assert (0 <= cookednum && cookednum < tdep->num_regs);
-  gdb_assert (arch == cache->arch ());
+  gdb_assert (arch == get_regcache_arch (cache));
   gdb_assert (arch == tdep->regs[cookednum].arch);
   reg = &tdep->regs[cookednum];
 
-  reg->write (reg, cache, buf);
+  reg->write (reg, cache, (void *) buf);
 }
 
 
@@ -631,8 +642,8 @@ add_reg (struct gdbarch *arch,
 	 const char *name,
 	 struct type *type,
 	 int sim_num,
-	 m32c_read_reg_t *read,
-	 m32c_write_reg_t *write,
+	 m32c_move_reg_t *read,
+	 m32c_move_reg_t *write,
 	 struct m32c_reg *rx,
 	 struct m32c_reg *ry,
 	 int n)
@@ -689,11 +700,12 @@ mark_general (struct m32c_reg *reg)
 }
 
 
-/* Mark REG as a DMA register.  */
-static void
+/* Mark REG as a DMA register, and return it.  */
+static struct m32c_reg *
 mark_dma (struct m32c_reg *reg)
 {
   reg->dma_p = 1;
+  return reg;
 }
 
 
@@ -813,6 +825,9 @@ make_regs (struct gdbarch *arch)
   struct m32c_reg *sp;
   struct m32c_reg *r0hl;
   struct m32c_reg *r1hl;
+  struct m32c_reg *r2hl;
+  struct m32c_reg *r3hl;
+  struct m32c_reg *intbhl;
   struct m32c_reg *r2r0;
   struct m32c_reg *r3r1;
   struct m32c_reg *r3r1r2r0;
@@ -840,16 +855,16 @@ make_regs (struct gdbarch *arch)
 
   if (mach == bfd_mach_m32c)
     {
-      S (R16U (svf));
-      S (RC (svp));
-      S (RC (vct));
+      struct m32c_reg *svf     = S (R16U (svf));
+      struct m32c_reg *svp     = S (RC (svp));
+      struct m32c_reg *vct     = S (RC (vct));
 
-      DMA (RP (dmd, tdep->uint8));
-      DMA (RP (dct, tdep->uint16));
-      DMA (RP (drc, tdep->uint16));
-      DMA (RP (dma, tdep->data_addr_reg_type));
-      DMA (RP (dsa, tdep->data_addr_reg_type));
-      DMA (RP (dra, tdep->data_addr_reg_type));
+      struct m32c_reg *dmd01   = DMA (RP (dmd, tdep->uint8));
+      struct m32c_reg *dct01   = DMA (RP (dct, tdep->uint16));
+      struct m32c_reg *drc01   = DMA (RP (drc, tdep->uint16));
+      struct m32c_reg *dma01   = DMA (RP (dma, tdep->data_addr_reg_type));
+      struct m32c_reg *dsa01   = DMA (RP (dsa, tdep->data_addr_reg_type));
+      struct m32c_reg *dra01   = DMA (RP (dra, tdep->data_addr_reg_type));
     }
 
   num_raw_regs = tdep->num_regs;
@@ -876,9 +891,9 @@ make_regs (struct gdbarch *arch)
 
   r0hl        = CHL (r0, tdep->int8);
   r1hl        = CHL (r1, tdep->int8);
-  CHL (r2, tdep->int8);
-  CHL (r3, tdep->int8);
-  CHL (intb, tdep->int16);
+  r2hl        = CHL (r2, tdep->int8);
+  r3hl        = CHL (r3, tdep->int8);
+  intbhl      = CHL (intb, tdep->int16);
 
   r2r0        = CCAT (r2,   r0,   tdep->int32);
   r3r1        = CCAT (r3,   r1,   tdep->int32);
@@ -989,25 +1004,19 @@ make_regs (struct gdbarch *arch)
 
 
 /* Breakpoints.  */
-constexpr gdb_byte m32c_break_insn[] = { 0x00 };	/* brk */
 
-typedef BP_MANIPULATION (m32c_break_insn) m32c_breakpoint;
+static const unsigned char *
+m32c_breakpoint_from_pc (struct gdbarch *gdbarch, CORE_ADDR *pc, int *len)
+{
+  static unsigned char break_insn[] = { 0x00 };	/* brk */
+
+  *len = sizeof (break_insn);
+  return break_insn;
+}
+
 
 
 /* Prologue analysis.  */
-
-enum m32c_prologue_kind
-{
-  /* This function uses a frame pointer.  */
-  prologue_with_frame_ptr,
-
-  /* This function has no frame pointer.  */
-  prologue_sans_frame_ptr,
-
-  /* This function sets up the stack, so its frame is the first
-     frame on the stack.  */
-  prologue_first_frame
-};
 
 struct m32c_prologue
 {
@@ -1018,7 +1027,18 @@ struct m32c_prologue
   /* The architecture for which we generated this prologue info.  */
   struct gdbarch *arch;
 
-  enum m32c_prologue_kind kind;
+  enum {
+    /* This function uses a frame pointer.  */
+    prologue_with_frame_ptr,
+
+    /* This function has no frame pointer.  */
+    prologue_sans_frame_ptr,
+
+    /* This function sets up the stack, so its frame is the first
+       frame on the stack.  */
+    prologue_first_frame
+
+  } kind;
 
   /* If KIND is prologue_with_frame_ptr, this is the offset from the
      CFA to where the frame pointer points.  This is always zero or
@@ -1078,22 +1098,15 @@ struct m32c_pv_state
 static int
 m32c_pv_push (struct m32c_pv_state *state, pv_t value, int size)
 {
-  if (state->stack->store_would_trash (state->sp))
+  if (pv_area_store_would_trash (state->stack, state->sp))
     return 1;
 
   state->sp = pv_add_constant (state->sp, -size);
-  state->stack->store (state->sp, size, value);
+  pv_area_store (state->stack, state->sp, size, value);
 
   return 0;
 }
 
-
-enum srcdest_kind
-{
-  srcdest_reg,
-  srcdest_partial_reg,
-  srcdest_mem
-};
 
 /* A source or destination location for an m16c or m32c
    instruction.  */
@@ -1103,7 +1116,7 @@ struct srcdest
      If srcdest_partial_reg, the location is part of a register pointed
      to by REG.  We don't try to handle this too well.
      If srcdest_mem, the location is memory whose address is ADDR.  */
-  enum srcdest_kind kind;
+  enum { srcdest_reg, srcdest_partial_reg, srcdest_mem } kind;
   pv_t *reg, addr;
 };
 
@@ -1113,7 +1126,7 @@ static pv_t
 m32c_srcdest_fetch (struct m32c_pv_state *state, struct srcdest loc, int size)
 {
   if (loc.kind == srcdest_mem)
-    return state->stack->fetch (loc.addr, size);
+    return pv_area_fetch (state->stack, loc.addr, size);
   else if (loc.kind == srcdest_partial_reg)
     return pv_unknown ();
   else
@@ -1130,9 +1143,9 @@ m32c_srcdest_store (struct m32c_pv_state *state, struct srcdest loc,
 {
   if (loc.kind == srcdest_mem)
     {
-      if (state->stack->store_would_trash (loc.addr))
+      if (pv_area_store_would_trash (state->stack, loc.addr))
 	return 1;
-      state->stack->store (loc.addr, size, value);
+      pv_area_store (state->stack, loc.addr, size, value);
     }
   else if (loc.kind == srcdest_partial_reg)
     *loc.reg = pv_unknown ();
@@ -1236,7 +1249,7 @@ m32c_decode_srcdest4 (struct m32c_pv_state *st,
 
   switch (code)
     {
-    case 0x0: sd.reg = &st->r0; break;
+    case 0x0: sd.reg = (size == 1 ? &st->r0 : &st->r0); break;
     case 0x1: sd.reg = (size == 1 ? &st->r0 : &st->r1); break;
     case 0x2: sd.reg = (size == 1 ? &st->r1 : &st->r2); break;
     case 0x3: sd.reg = (size == 1 ? &st->r1 : &st->r3); break;
@@ -1349,7 +1362,7 @@ m32c_pv_enter (struct m32c_pv_state *state, int size)
   /* If simulating this store would require us to forget
      everything we know about the stack frame in the name of
      accuracy, it would be better to just quit now.  */
-  if (state->stack->store_would_trash (state->sp))
+  if (pv_area_store_would_trash (state->stack, state->sp))
     return 1;
 
   if (m32c_pv_push (state, state->fb, tdep->push_addr_bytes))
@@ -1440,7 +1453,7 @@ m32c_is_arg_spill (struct m32c_pv_state *st,
   return (m32c_is_arg_reg (st, value)
 	  && loc.kind == srcdest_mem
           && pv_is_register (loc.addr, tdep->sp->num)
-          && ! st->stack->find_reg (st->arch, value.reg, 0));
+          && ! pv_area_find_reg (st->stack, st->arch, value.reg, 0));
 }
 
 /* Return non-zero if a store of VALUE to LOC is probably 
@@ -1461,7 +1474,7 @@ m32c_is_struct_return (struct m32c_pv_state *st,
   struct gdbarch_tdep *tdep = gdbarch_tdep (st->arch);
 
   return (m32c_is_1st_arg_reg (st, value)
-	  && !st->stack->find_reg (st->arch, value.reg, 0)
+	  && !pv_area_find_reg (st->stack, st->arch, value.reg, 0)
 	  && loc.kind == srcdest_reg
 	  && (pv_is_register (*loc.reg, tdep->a0->num)
 	      || pv_is_register (*loc.reg, tdep->a1->num)));
@@ -1492,7 +1505,7 @@ m32c_pushm_is_reg_save (struct m32c_pv_state *st, int src)
 
 
 /* Function for finding saved registers in a 'struct pv_area'; we pass
-   this to pv_area::scan.
+   this to pv_area_scan.
 
    If VALUE is a saved register, ADDR says it was saved at a constant
    offset from the frame base, and SIZE indicates that the whole
@@ -1545,6 +1558,7 @@ m32c_analyze_prologue (struct gdbarch *arch,
   struct gdbarch_tdep *tdep = gdbarch_tdep (arch);
   unsigned long mach = gdbarch_bfd_arch_info (arch)->mach;
   CORE_ADDR after_last_frame_related_insn;
+  struct cleanup *back_to;
   struct m32c_pv_state st;
 
   st.arch = arch;
@@ -1558,8 +1572,8 @@ m32c_analyze_prologue (struct gdbarch *arch,
   st.fb = pv_register (tdep->fb->num, 0);
   st.sp = pv_register (tdep->sp->num, 0);
   st.pc = pv_register (tdep->pc->num, 0);
-  pv_area stack (tdep->sp->num, gdbarch_addr_bit (arch));
-  st.stack = &stack;
+  st.stack = make_pv_area (tdep->sp->num, gdbarch_addr_bit (arch));
+  back_to = make_cleanup_free_pv_area (st.stack);
 
   /* Record that the call instruction has saved the return address on
      the stack.  */
@@ -1810,16 +1824,18 @@ m32c_analyze_prologue (struct gdbarch *arch,
     prologue->kind = prologue_first_frame;
 
   /* Record where all the registers were saved.  */
-  st.stack->scan (check_for_saved, (void *) prologue);
+  pv_area_scan (st.stack, check_for_saved, (void *) prologue);
 
   prologue->prologue_end = after_last_frame_related_insn;
+
+  do_cleanups (back_to);
 }
 
 
 static CORE_ADDR
 m32c_skip_prologue (struct gdbarch *gdbarch, CORE_ADDR ip)
 {
-  const char *name;
+  char *name;
   CORE_ADDR func_addr, func_end, sal_end;
   struct m32c_prologue p;
 
@@ -1858,11 +1874,10 @@ m32c_analyze_frame_prologue (struct frame_info *this_frame,
 
       *this_prologue_cache = FRAME_OBSTACK_ZALLOC (struct m32c_prologue);
       m32c_analyze_prologue (get_frame_arch (this_frame),
-			     func_start, stop_addr,
-			     (struct m32c_prologue *) *this_prologue_cache);
+			     func_start, stop_addr, *this_prologue_cache);
     }
 
-  return (struct m32c_prologue *) *this_prologue_cache;
+  return *this_prologue_cache;
 }
 
 
@@ -1926,6 +1941,7 @@ m32c_prev_register (struct frame_info *this_frame,
   struct m32c_prologue *p
     = m32c_analyze_frame_prologue (this_frame, this_prologue_cache);
   CORE_ADDR frame_base = m32c_frame_base (this_frame, this_prologue_cache);
+  int reg_size = register_size (get_frame_arch (this_frame), regnum);
 
   if (regnum == tdep->sp->num)
     return frame_unwind_got_constant (this_frame, regnum, frame_base);
@@ -2007,7 +2023,7 @@ m32c_reg_arg_type (struct type *type)
   return (code == TYPE_CODE_INT
 	  || code == TYPE_CODE_ENUM
 	  || code == TYPE_CODE_PTR
-	  || TYPE_IS_REFERENCE (type)
+	  || code == TYPE_CODE_REF
 	  || code == TYPE_CODE_BOOL
 	  || code == TYPE_CODE_CHAR);
 }
@@ -2016,8 +2032,7 @@ m32c_reg_arg_type (struct type *type)
 static CORE_ADDR
 m32c_push_dummy_call (struct gdbarch *gdbarch, struct value *function,
 		      struct regcache *regcache, CORE_ADDR bp_addr, int nargs,
-		      struct value **args, CORE_ADDR sp,
-		      function_call_return_method return_method,
+		      struct value **args, CORE_ADDR sp, int struct_return,
 		      CORE_ADDR struct_addr)
 {
   struct gdbarch_tdep *tdep = gdbarch_tdep (gdbarch);
@@ -2055,7 +2070,7 @@ m32c_push_dummy_call (struct gdbarch *gdbarch, struct value *function,
   /* First, if the function returns an aggregate by value, push a
      pointer to a buffer for it.  This doesn't affect the way
      subsequent arguments are allocated to registers.  */
-  if (return_method == return_method_struct)
+  if (struct_return)
     {
       int ptr_len = TYPE_LENGTH (tdep->ptr_voyd);
       sp -= ptr_len;
@@ -2092,7 +2107,7 @@ m32c_push_dummy_call (struct gdbarch *gdbarch, struct value *function,
 	       && arg_size == 2
 	       && i < num_prototyped_args
 	       && m32c_reg_arg_type (arg_type))
-	regcache->cooked_write (tdep->r2->num, arg_bits);
+	regcache_cooked_write (regcache, tdep->r2->num, arg_bits);
 
       /* Everything else goes on the stack.  */
       else
@@ -2192,7 +2207,7 @@ m32c_return_by_passed_buf (struct type *type)
 
 static enum return_value_convention
 m32c_return_value (struct gdbarch *gdbarch,
-		   struct value *function,
+		   struct type *func_type,
 		   struct type *valtype,
 		   struct regcache *regcache,
 		   gdb_byte *readbuf,
@@ -2229,14 +2244,14 @@ m32c_return_value (struct gdbarch *gdbarch,
 	  /* Everything else is passed in mem0, using as many bytes as
 	     needed.  This is not what the Renesas tools do, but it's
 	     what GCC does at the moment.  */
-	  struct bound_minimal_symbol mem0
+	  struct minimal_symbol *mem0
 	    = lookup_minimal_symbol ("mem0", NULL, NULL);
 
-	  if (! mem0.minsym)
+	  if (! mem0)
 	    error (_("The return value is stored in memory at 'mem0', "
 		     "but GDB cannot find\n"
 		     "its address."));
-	  read_memory (BMSYMBOL_VALUE_ADDRESS (mem0), readbuf, valtype_len);
+	  read_memory (SYMBOL_VALUE_ADDRESS (mem0), readbuf, valtype_len);
 	}
     }
 
@@ -2261,14 +2276,15 @@ m32c_return_value (struct gdbarch *gdbarch,
 	  /* Everything else is passed in mem0, using as many bytes as
 	     needed.  This is not what the Renesas tools do, but it's
 	     what GCC does at the moment.  */
-	  struct bound_minimal_symbol mem0
+	  struct minimal_symbol *mem0
 	    = lookup_minimal_symbol ("mem0", NULL, NULL);
 
-	  if (! mem0.minsym)
+	  if (! mem0)
 	    error (_("The return value is stored in memory at 'mem0', "
 		     "but GDB cannot find\n"
 		     " its address."));
-	  write_memory (BMSYMBOL_VALUE_ADDRESS (mem0), writebuf, valtype_len);
+	  write_memory (SYMBOL_VALUE_ADDRESS (mem0),
+                        (char *) writebuf, valtype_len);
 	}
     }
 
@@ -2338,7 +2354,7 @@ m32c_skip_trampoline_code (struct frame_info *frame, CORE_ADDR stop_pc)
      someone loaded a new executable, and I'm not quite sure of the
      best way to do that.  find_pc_partial_function does do some
      caching, so we'll see how this goes.  */
-  const char *name;
+  char *name;
   CORE_ADDR start, end;
 
   if (find_pc_partial_function (stop_pc, &name, &start, &end))
@@ -2430,27 +2446,27 @@ m32c_m16c_address_to_pointer (struct gdbarch *gdbarch,
 {
   enum bfd_endian byte_order = gdbarch_byte_order (gdbarch);
   enum type_code target_code;
-  gdb_assert (TYPE_CODE (type) == TYPE_CODE_PTR || TYPE_IS_REFERENCE (type));
+  gdb_assert (TYPE_CODE (type) == TYPE_CODE_PTR ||
+	      TYPE_CODE (type) == TYPE_CODE_REF);
 
   target_code = TYPE_CODE (TYPE_TARGET_TYPE (type));
 
   if (target_code == TYPE_CODE_FUNC || target_code == TYPE_CODE_METHOD)
     {
-      const char *func_name;
+      char *func_name;
       char *tramp_name;
-      struct bound_minimal_symbol tramp_msym;
+      struct minimal_symbol *tramp_msym;
 
       /* Try to find a linker symbol at this address.  */
-      struct bound_minimal_symbol func_msym
-	= lookup_minimal_symbol_by_pc (addr);
+      struct minimal_symbol *func_msym = lookup_minimal_symbol_by_pc (addr);
 
-      if (! func_msym.minsym)
+      if (! func_msym)
         error (_("Cannot convert code address %s to function pointer:\n"
                "couldn't find a symbol at that address, to find trampoline."),
                paddress (gdbarch, addr));
 
-      func_name = MSYMBOL_LINKAGE_NAME (func_msym.minsym);
-      tramp_name = (char *) xmalloc (strlen (func_name) + 5);
+      func_name = SYMBOL_LINKAGE_NAME (func_msym);
+      tramp_name = xmalloc (strlen (func_name) + 5);
       strcpy (tramp_name, func_name);
       strcat (tramp_name, ".plt");
 
@@ -2461,7 +2477,7 @@ m32c_m16c_address_to_pointer (struct gdbarch *gdbarch,
          the name any more.  */
       xfree (tramp_name);
 
-      if (! tramp_msym.minsym)
+      if (! tramp_msym)
 	{
 	  CORE_ADDR ptrval;
 
@@ -2493,7 +2509,7 @@ m32c_m16c_address_to_pointer (struct gdbarch *gdbarch,
       else
 	{
 	  /* The trampoline's address is our pointer.  */
-	  addr = BMSYMBOL_VALUE_ADDRESS (tramp_msym);
+	  addr = SYMBOL_VALUE_ADDRESS (tramp_msym);
 	}
     }
 
@@ -2509,7 +2525,8 @@ m32c_m16c_pointer_to_address (struct gdbarch *gdbarch,
   CORE_ADDR ptr;
   enum type_code target_code;
 
-  gdb_assert (TYPE_CODE (type) == TYPE_CODE_PTR || TYPE_IS_REFERENCE (type));
+  gdb_assert (TYPE_CODE (type) == TYPE_CODE_PTR ||
+	      TYPE_CODE (type) == TYPE_CODE_REF);
 
   ptr = extract_unsigned_integer (buf, TYPE_LENGTH (type), byte_order);
 
@@ -2519,24 +2536,24 @@ m32c_m16c_pointer_to_address (struct gdbarch *gdbarch,
     {
       /* See if there is a minimal symbol at that address whose name is
          "NAME.plt".  */
-      struct bound_minimal_symbol ptr_msym = lookup_minimal_symbol_by_pc (ptr);
+      struct minimal_symbol *ptr_msym = lookup_minimal_symbol_by_pc (ptr);
 
-      if (ptr_msym.minsym)
+      if (ptr_msym)
         {
-          const char *ptr_msym_name = MSYMBOL_LINKAGE_NAME (ptr_msym.minsym);
+          char *ptr_msym_name = SYMBOL_LINKAGE_NAME (ptr_msym);
           int len = strlen (ptr_msym_name);
 
           if (len > 4
               && strcmp (ptr_msym_name + len - 4, ".plt") == 0)
             {
-	      struct bound_minimal_symbol func_msym;
+	      struct minimal_symbol *func_msym;
               /* We have a .plt symbol; try to find the symbol for the
                  corresponding function.
 
                  Since the trampoline contains a jump instruction, we
                  could also just extract the jump's target address.  I
                  don't see much advantage one way or the other.  */
-              char *func_name = (char *) xmalloc (len - 4 + 1);
+              char *func_name = xmalloc (len - 4 + 1);
               memcpy (func_name, ptr_msym_name, len - 4);
               func_name[len - 4] = '\0';
               func_msym
@@ -2544,8 +2561,8 @@ m32c_m16c_pointer_to_address (struct gdbarch *gdbarch,
 
               /* If we do have such a symbol, return its value as the
                  function's true address.  */
-              if (func_msym.minsym)
-                ptr = BMSYMBOL_VALUE_ADDRESS (func_msym);
+              if (func_msym)
+                ptr = SYMBOL_VALUE_ADDRESS (func_msym);
             }
         }
       else
@@ -2556,7 +2573,7 @@ m32c_m16c_pointer_to_address (struct gdbarch *gdbarch,
 	    {
 	      ptr_msym = lookup_minimal_symbol_by_pc ((aspace << 16) | ptr);
 	      
-	      if (ptr_msym.minsym)
+	      if (ptr_msym)
 		ptr |= aspace << 16;
 	    }
 	}
@@ -2570,8 +2587,8 @@ m32c_virtual_frame_pointer (struct gdbarch *gdbarch, CORE_ADDR pc,
 			    int *frame_regnum,
 			    LONGEST *frame_offset)
 {
-  const char *name;
-  CORE_ADDR func_addr, func_end;
+  char *name;
+  CORE_ADDR func_addr, func_end, sal_end;
   struct m32c_prologue p;
 
   struct regcache *regcache = get_current_regcache ();
@@ -2609,7 +2626,7 @@ m32c_virtual_frame_pointer (struct gdbarch *gdbarch, CORE_ADDR pc,
 static struct gdbarch *
 m32c_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
 {
-  struct gdbarch *gdbarch;
+  struct gdbarch *arch;
   struct gdbarch_tdep *tdep;
   unsigned long mach = info.bfd_arch_info->mach;
 
@@ -2620,50 +2637,52 @@ m32c_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
        arches = gdbarch_list_lookup_by_info (arches->next, &info))
     return arches->gdbarch;
 
-  tdep = XCNEW (struct gdbarch_tdep);
-  gdbarch = gdbarch_alloc (&info, tdep);
+  tdep = xcalloc (1, sizeof (*tdep));
+  arch = gdbarch_alloc (&info, tdep);
 
   /* Essential types.  */
-  make_types (gdbarch);
+  make_types (arch);
 
   /* Address/pointer conversions.  */
   if (mach == bfd_mach_m16c)
     {
-      set_gdbarch_address_to_pointer (gdbarch, m32c_m16c_address_to_pointer);
-      set_gdbarch_pointer_to_address (gdbarch, m32c_m16c_pointer_to_address);
+      set_gdbarch_address_to_pointer (arch, m32c_m16c_address_to_pointer);
+      set_gdbarch_pointer_to_address (arch, m32c_m16c_pointer_to_address);
     }
 
   /* Register set.  */
-  make_regs (gdbarch);
+  make_regs (arch);
+
+  /* Disassembly.  */
+  set_gdbarch_print_insn (arch, print_insn_m32c);
 
   /* Breakpoints.  */
-  set_gdbarch_breakpoint_kind_from_pc (gdbarch, m32c_breakpoint::kind_from_pc);
-  set_gdbarch_sw_breakpoint_from_kind (gdbarch, m32c_breakpoint::bp_from_kind);
+  set_gdbarch_breakpoint_from_pc (arch, m32c_breakpoint_from_pc);
 
   /* Prologue analysis and unwinding.  */
-  set_gdbarch_inner_than (gdbarch, core_addr_lessthan);
-  set_gdbarch_skip_prologue (gdbarch, m32c_skip_prologue);
-  set_gdbarch_unwind_pc (gdbarch, m32c_unwind_pc);
-  set_gdbarch_unwind_sp (gdbarch, m32c_unwind_sp);
+  set_gdbarch_inner_than (arch, core_addr_lessthan);
+  set_gdbarch_skip_prologue (arch, m32c_skip_prologue);
+  set_gdbarch_unwind_pc (arch, m32c_unwind_pc);
+  set_gdbarch_unwind_sp (arch, m32c_unwind_sp);
 #if 0
   /* I'm dropping the dwarf2 sniffer because it has a few problems.
      They may be in the dwarf2 cfi code in GDB, or they may be in
      the debug info emitted by the upstream toolchain.  I don't 
      know which, but I do know that the prologue analyzer works better.
      MVS 04/13/06  */
-  dwarf2_append_sniffers (gdbarch);
+  dwarf2_append_sniffers (arch);
 #endif
-  frame_unwind_append_unwinder (gdbarch, &m32c_unwind);
+  frame_unwind_append_unwinder (arch, &m32c_unwind);
 
   /* Inferior calls.  */
-  set_gdbarch_push_dummy_call (gdbarch, m32c_push_dummy_call);
-  set_gdbarch_return_value (gdbarch, m32c_return_value);
-  set_gdbarch_dummy_id (gdbarch, m32c_dummy_id);
+  set_gdbarch_push_dummy_call (arch, m32c_push_dummy_call);
+  set_gdbarch_return_value (arch, m32c_return_value);
+  set_gdbarch_dummy_id (arch, m32c_dummy_id);
 
   /* Trampolines.  */
-  set_gdbarch_skip_trampoline_code (gdbarch, m32c_skip_trampoline_code);
+  set_gdbarch_skip_trampoline_code (arch, m32c_skip_trampoline_code);
 
-  set_gdbarch_virtual_frame_pointer (gdbarch, m32c_virtual_frame_pointer);
+  set_gdbarch_virtual_frame_pointer (arch, m32c_virtual_frame_pointer);
 
   /* m32c function boundary addresses are not necessarily even.
      Therefore, the `vbit', which indicates a pointer to a virtual
@@ -2673,10 +2692,13 @@ m32c_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
      In order to verify this, see the definition of
      TARGET_PTRMEMFUNC_VBIT_LOCATION in gcc/defaults.h along with the
      definition of FUNCTION_BOUNDARY in gcc/config/m32c/m32c.h.  */
-  set_gdbarch_vbit_in_delta (gdbarch, 1);
+  set_gdbarch_vbit_in_delta (arch, 1);
 
-  return gdbarch;
+  return arch;
 }
+
+/* Provide a prototype to silence -Wmissing-prototypes.  */
+extern initialize_file_ftype _initialize_m32c_tdep;
 
 void
 _initialize_m32c_tdep (void)

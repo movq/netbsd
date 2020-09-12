@@ -1,4 +1,4 @@
-/*	$NetBSD: quotearg.c,v 1.1.1.1 2016/01/13 18:41:48 christos Exp $	*/
+/*	$NetBSD: quotearg.c,v 1.1 2016/01/13 18:41:48 christos Exp $	*/
 
 /* Copyright (C) 2004
    Free Software Foundation, Inc.

@@ -1,6 +1,7 @@
 // Support for concurrent programing -*- C++ -*-
 
-// Copyright (C) 2003-2019 Free Software Foundation, Inc.
+// Copyright (C) 2003, 2004, 2005, 2006, 2007, 2009
+// Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
@@ -22,24 +23,19 @@
 // see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
 // <http://www.gnu.org/licenses/>.
 
-/** @file ext/concurrence.h
- *  This file is a GNU extension to the Standard C++ Library.
+/** @file concurrence.h
+ *  This is an internal header file, included by other library headers.
+ *  You should not attempt to use it directly.
  */
 
 #ifndef _CONCURRENCE_H
 #define _CONCURRENCE_H 1
 
-#pragma GCC system_header
-
 #include <exception>
 #include <bits/gthr.h> 
 #include <bits/functexcept.h>
-#include <bits/cpp_type_traits.h>
-#include <ext/type_traits.h>
 
-namespace __gnu_cxx _GLIBCXX_VISIBILITY(default)
-{
-_GLIBCXX_BEGIN_NAMESPACE_VERSION
+_GLIBCXX_BEGIN_NAMESPACE(__gnu_cxx)
 
   // Available locking policies:
   // _S_single    single-threaded code that doesn't need to be locked.
@@ -51,12 +47,15 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
   // Compile time constant that indicates prefered locking policy in
   // the current configuration.
   static const _Lock_policy __default_lock_policy = 
-#ifndef __GTHREADS
-  _S_single;
-#elif defined _GLIBCXX_HAVE_ATOMIC_LOCK_POLICY
+#ifdef __GTHREADS
+#if (defined(__GCC_HAVE_SYNC_COMPARE_AND_SWAP_2) \
+     && defined(__GCC_HAVE_SYNC_COMPARE_AND_SWAP_4))
   _S_atomic;
 #else
   _S_mutex;
+#endif
+#else
+  _S_single;
 #endif
 
   // NB: As this is used in libsupc++, need to only depend on
@@ -96,30 +95,50 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
   // Substitute for concurrence_error object in the case of -fno-exceptions.
   inline void
   __throw_concurrence_lock_error()
-  { _GLIBCXX_THROW_OR_ABORT(__concurrence_lock_error()); }
+  {
+#if __EXCEPTIONS
+    throw __concurrence_lock_error();
+#else
+    __builtin_abort();
+#endif
+  }
 
   inline void
   __throw_concurrence_unlock_error()
-  { _GLIBCXX_THROW_OR_ABORT(__concurrence_unlock_error()); }
+  {
+#if __EXCEPTIONS
+    throw __concurrence_unlock_error();
+#else
+    __builtin_abort();
+#endif
+  }
 
 #ifdef __GTHREAD_HAS_COND
   inline void
   __throw_concurrence_broadcast_error()
-  { _GLIBCXX_THROW_OR_ABORT(__concurrence_broadcast_error()); }
+  {
+#if __EXCEPTIONS
+    throw __concurrence_broadcast_error();
+#else
+    __builtin_abort();
+#endif
+  }
 
   inline void
   __throw_concurrence_wait_error()
-  { _GLIBCXX_THROW_OR_ABORT(__concurrence_wait_error()); }
+  {
+#if __EXCEPTIONS
+    throw __concurrence_wait_error();
+#else
+    __builtin_abort();
+#endif
+  }
 #endif
  
   class __mutex 
   {
   private:
-#if __GTHREADS && defined __GTHREAD_MUTEX_INIT
-    __gthread_mutex_t _M_mutex = __GTHREAD_MUTEX_INIT;
-#else
     __gthread_mutex_t _M_mutex;
-#endif
 
     __mutex(const __mutex&);
     __mutex& operator=(const __mutex&);
@@ -127,19 +146,18 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
   public:
     __mutex() 
     { 
-#if __GTHREADS && ! defined __GTHREAD_MUTEX_INIT
+#if __GTHREADS
       if (__gthread_active_p())
-	__GTHREAD_MUTEX_INIT_FUNCTION(&_M_mutex);
+	{
+#if defined __GTHREAD_MUTEX_INIT
+	  __gthread_mutex_t __tmp = __GTHREAD_MUTEX_INIT;
+	  _M_mutex = __tmp;
+#else
+	  __GTHREAD_MUTEX_INIT_FUNCTION(&_M_mutex); 
 #endif
-    }
-
-#if __GTHREADS && ! defined __GTHREAD_MUTEX_INIT
-    ~__mutex() 
-    { 
-      if (__gthread_active_p())
-	__gthread_mutex_destroy(&_M_mutex); 
-    }
+	}
 #endif 
+    }
 
     void lock()
     {
@@ -170,11 +188,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
   class __recursive_mutex 
   {
   private:
-#if __GTHREADS && defined __GTHREAD_RECURSIVE_MUTEX_INIT
-    __gthread_recursive_mutex_t _M_mutex = __GTHREAD_RECURSIVE_MUTEX_INIT;
-#else
     __gthread_recursive_mutex_t _M_mutex;
-#endif
 
     __recursive_mutex(const __recursive_mutex&);
     __recursive_mutex& operator=(const __recursive_mutex&);
@@ -182,19 +196,18 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
   public:
     __recursive_mutex() 
     { 
-#if __GTHREADS && ! defined __GTHREAD_RECURSIVE_MUTEX_INIT
+#if __GTHREADS
       if (__gthread_active_p())
-	__GTHREAD_RECURSIVE_MUTEX_INIT_FUNCTION(&_M_mutex);
+	{
+#if defined __GTHREAD_RECURSIVE_MUTEX_INIT
+	  __gthread_recursive_mutex_t __tmp = __GTHREAD_RECURSIVE_MUTEX_INIT;
+	  _M_mutex = __tmp;
+#else
+	  __GTHREAD_RECURSIVE_MUTEX_INIT_FUNCTION(&_M_mutex); 
 #endif
+	}
+#endif 
     }
-
-#if __GTHREADS && ! defined __GTHREAD_RECURSIVE_MUTEX_INIT
-    ~__recursive_mutex()
-    {
-      if (__gthread_active_p())
-	__gthread_recursive_mutex_destroy(&_M_mutex);
-    }
-#endif
 
     void lock()
     { 
@@ -219,7 +232,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
     }
 
     __gthread_recursive_mutex_t* gthread_recursive_mutex(void)
-    { return &_M_mutex; }
+      { return &_M_mutex; }
   };
 
   /// Scoped lock idiom.
@@ -248,11 +261,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
   class __cond
   {
   private:
-#if __GTHREADS && defined __GTHREAD_COND_INIT
-    __gthread_cond_t _M_cond = __GTHREAD_COND_INIT;
-#else
     __gthread_cond_t _M_cond;
-#endif
 
     __cond(const __cond&);
     __cond& operator=(const __cond&);
@@ -260,19 +269,18 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
   public:
     __cond() 
     { 
-#if __GTHREADS && ! defined __GTHREAD_COND_INIT
+#if __GTHREADS
       if (__gthread_active_p())
-	__GTHREAD_COND_INIT_FUNCTION(&_M_cond);
+	{
+#if defined __GTHREAD_COND_INIT
+	  __gthread_cond_t __tmp = __GTHREAD_COND_INIT;
+	  _M_cond = __tmp;
+#else
+	  __GTHREAD_COND_INIT_FUNCTION(&_M_cond);
 #endif
-    }
-
-#if __GTHREADS && ! defined __GTHREAD_COND_INIT
-    ~__cond() 
-    { 
-      if (__gthread_active_p())
-	__gthread_cond_destroy(&_M_cond); 
-    }
+	}
 #endif 
+    }
 
     void broadcast()
     {
@@ -309,7 +317,6 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
   };
 #endif
 
-_GLIBCXX_END_NAMESPACE_VERSION
-} // namespace
+_GLIBCXX_END_NAMESPACE
 
 #endif

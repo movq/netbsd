@@ -1,6 +1,6 @@
 #! /usr/bin/perl -w
 
-#   Copyright (C) 1999-2014 Free Software Foundation, Inc.
+#   Copyright (C) 1999, 2000, 2001, 2003 Free Software Foundation, Inc.
 
 # This file is part of GCC.
 
@@ -213,12 +213,10 @@ while(<$inf>) {
 
     # Now the ones that have to be replaced by special escapes
     # (which will be turned back into text by unmunge())
-    # Replace @@ before @{ and @} in order to parse @samp{@@} correctly.
     s/&/&amp;/g;
-    s/\@\@/&at;/g;
     s/\@\{/&lbrace;/g;
     s/\@\}/&rbrace;/g;
-    s/\@`\{(.)\}/&$1grave;/g;
+    s/\@\@/&at;/g;
 
     # Inside a verbatim block, handle @var, @samp and @url specially.
     if ($shift ne "") {
@@ -316,7 +314,7 @@ while(<$inf>) {
 	@columns = ();
 	for $column (split (/\s*\@tab\s*/, $1)) {
 	    # @strong{...} is used a @headitem work-alike
-	    $column =~ s/^\@strong\{(.*)\}$/$1/;
+	    $column =~ s/^\@strong{(.*)}$/$1/;
 	    push @columns, $column;
 	}
 	$_ = "\n=item ".join (" : ", @columns)."\n";
@@ -337,7 +335,7 @@ while(<$inf>) {
                 $_ = "\n=item $1\n";
             }
 	} else {
-	    $_ = "\n=item Z\&LT;\&GT;$ic\n";
+	    $_ = "\n=item $ic\n";
 	    $ic =~ y/A-Ya-y/B-Zb-z/;
 	    $ic =~ s/(\d+)/$1 + 1/eg;
 	}
@@ -389,16 +387,13 @@ sub postprocess
     # Formatting commands.
     # Temporary escape for @r.
     s/\@r\{([^\}]*)\}/R<$1>/g;
-    s/\@sc\{([^\}]*)\}/\U$1/g;
     s/\@(?:dfn|var|emph|cite|i)\{([^\}]*)\}/I<$1>/g;
     s/\@(?:code|kbd)\{([^\}]*)\}/C<$1>/g;
     s/\@(?:samp|strong|key|option|env|command|b)\{([^\}]*)\}/B<$1>/g;
-    s/\@acronym\{([^\}]*)\}/\U$1/g;
+    s/\@sc\{([^\}]*)\}/\U$1/g;
     s/\@file\{([^\}]*)\}/F<$1>/g;
     s/\@w\{([^\}]*)\}/S<$1>/g;
     s/\@(?:dmn|math)\{([^\}]*)\}/$1/g;
-    s/\@\///g;
-    s/\@t\{([^\}]*)\}/$1/g;
 
     # keep references of the form @ref{...}, print them bold
     s/\@(?:ref)\{([^\}]*)\}/B<$1>/g;
@@ -467,7 +462,6 @@ sub unmunge
     # Replace escaped symbols with their equivalents.
     local $_ = $_[0];
 
-    s/&(.)grave;/E<$1grave>/g;
     s/&lt;/E<lt>/g;
     s/&gt;/E<gt>/g;
     s/&lbrace;/\{/g;

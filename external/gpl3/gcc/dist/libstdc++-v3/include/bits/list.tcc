@@ -1,6 +1,7 @@
 // List implementation (out of line) -*- C++ -*-
 
-// Copyright (C) 2001-2019 Free Software Foundation, Inc.
+// Copyright (C) 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010
+// Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
@@ -48,50 +49,45 @@
  * purpose.  It is provided "as is" without express or implied warranty.
  */
 
-/** @file bits/list.tcc
+/** @file list.tcc
  *  This is an internal header file, included by other library headers.
- *  Do not attempt to use it directly. @headername{list}
+ *  You should not attempt to use it directly.
  */
 
 #ifndef _LIST_TCC
 #define _LIST_TCC 1
 
-namespace std _GLIBCXX_VISIBILITY(default)
-{
-_GLIBCXX_BEGIN_NAMESPACE_VERSION
-_GLIBCXX_BEGIN_NAMESPACE_CONTAINER
+_GLIBCXX_BEGIN_NESTED_NAMESPACE(std, _GLIBCXX_STD_D)
 
   template<typename _Tp, typename _Alloc>
     void
     _List_base<_Tp, _Alloc>::
-    _M_clear() _GLIBCXX_NOEXCEPT
+    _M_clear()
     {
       typedef _List_node<_Tp>  _Node;
-      __detail::_List_node_base* __cur = _M_impl._M_node._M_next;
-      while (__cur != &_M_impl._M_node)
+      _Node* __cur = static_cast<_Node*>(this->_M_impl._M_node._M_next);
+      while (__cur != &this->_M_impl._M_node)
 	{
-	  _Node* __tmp = static_cast<_Node*>(__cur);
-	  __cur = __tmp->_M_next;
-	  _Tp* __val = __tmp->_M_valptr();
-#if __cplusplus >= 201103L
-	  _Node_alloc_traits::destroy(_M_get_Node_allocator(), __val);
+	  _Node* __tmp = __cur;
+	  __cur = static_cast<_Node*>(__cur->_M_next);
+#ifdef __GXX_EXPERIMENTAL_CXX0X__
+	  _M_get_Node_allocator().destroy(__tmp);
 #else
-	  _Tp_alloc_type(_M_get_Node_allocator()).destroy(__val);
+	  _M_get_Tp_allocator().destroy(&__tmp->_M_data);
 #endif
 	  _M_put_node(__tmp);
 	}
     }
 
-#if __cplusplus >= 201103L
+#ifdef __GXX_EXPERIMENTAL_CXX0X__
   template<typename _Tp, typename _Alloc>
     template<typename... _Args>
       typename list<_Tp, _Alloc>::iterator
       list<_Tp, _Alloc>::
-      emplace(const_iterator __position, _Args&&... __args)
+      emplace(iterator __position, _Args&&... __args)
       {
 	_Node* __tmp = _M_create_node(std::forward<_Args>(__args)...);
-	__tmp->_M_hook(__position._M_const_cast()._M_node);
-	this->_M_inc_size(1);
+	__tmp->_M_hook(__position._M_node);
 	return iterator(__tmp);
       }
 #endif
@@ -99,191 +95,56 @@ _GLIBCXX_BEGIN_NAMESPACE_CONTAINER
   template<typename _Tp, typename _Alloc>
     typename list<_Tp, _Alloc>::iterator
     list<_Tp, _Alloc>::
-#if __cplusplus >= 201103L
-    insert(const_iterator __position, const value_type& __x)
-#else
     insert(iterator __position, const value_type& __x)
-#endif
     {
       _Node* __tmp = _M_create_node(__x);
-      __tmp->_M_hook(__position._M_const_cast()._M_node);
-      this->_M_inc_size(1);
+      __tmp->_M_hook(__position._M_node);
       return iterator(__tmp);
     }
 
-#if __cplusplus >= 201103L
   template<typename _Tp, typename _Alloc>
     typename list<_Tp, _Alloc>::iterator
     list<_Tp, _Alloc>::
-    insert(const_iterator __position, size_type __n, const value_type& __x)
-    {
-      if (__n)
-	{
-	  list __tmp(__n, __x, get_allocator());
-	  iterator __it = __tmp.begin();
-	  splice(__position, __tmp);
-	  return __it;
-	}
-      return __position._M_const_cast();
-    }
-
-  template<typename _Tp, typename _Alloc>
-    template<typename _InputIterator, typename>
-      typename list<_Tp, _Alloc>::iterator
-      list<_Tp, _Alloc>::
-      insert(const_iterator __position, _InputIterator __first,
-	     _InputIterator __last)
-      {
-	list __tmp(__first, __last, get_allocator());
-	if (!__tmp.empty())
-	  {
-	    iterator __it = __tmp.begin();
-	    splice(__position, __tmp);
-	    return __it;
-	  }
-	return __position._M_const_cast();
-      }
-#endif
-
-  template<typename _Tp, typename _Alloc>
-    typename list<_Tp, _Alloc>::iterator
-    list<_Tp, _Alloc>::
-#if __cplusplus >= 201103L
-    erase(const_iterator __position) noexcept
-#else
     erase(iterator __position)
-#endif
     {
       iterator __ret = iterator(__position._M_node->_M_next);
-      _M_erase(__position._M_const_cast());
+      _M_erase(__position);
       return __ret;
     }
 
-  // Return a const_iterator indicating the position to start inserting or
-  // erasing elements (depending whether the list is growing or shrinking),
-  // and set __new_size to the number of new elements that must be appended.
-  // Equivalent to the following, but performed optimally:
-  // if (__new_size < size()) {
-  //   __new_size = 0;
-  //   return std::next(begin(), __new_size);
-  // } else {
-  //   __newsize -= size();
-  //   return end();
-  // }
-  template<typename _Tp, typename _Alloc>
-    typename list<_Tp, _Alloc>::const_iterator
-    list<_Tp, _Alloc>::
-    _M_resize_pos(size_type& __new_size) const
-    {
-      const_iterator __i;
-#if _GLIBCXX_USE_CXX11_ABI
-      const size_type __len = size();
-      if (__new_size < __len)
-	{
-	  if (__new_size <= __len / 2)
-	    {
-	      __i = begin();
-	      std::advance(__i, __new_size);
-	    }
-	  else
-	    {
-	      __i = end();
-	      ptrdiff_t __num_erase = __len - __new_size;
-	      std::advance(__i, -__num_erase);
-	    }
-	  __new_size = 0;
-	  return __i;
-	}
-      else
-	__i = end();
-#else
-      size_type __len = 0;
-      for (__i = begin(); __i != end() && __len < __new_size; ++__i, ++__len)
-        ;
-#endif
-      __new_size -= __len;
-      return __i;
-    }
-
-#if __cplusplus >= 201103L
-  template<typename _Tp, typename _Alloc>
-    void
-    list<_Tp, _Alloc>::
-    _M_default_append(size_type __n)
-    {
-      size_type __i = 0;
-      __try
-	{
-	  for (; __i < __n; ++__i)
-	    emplace_back();
-	}
-      __catch(...)
-	{
-	  for (; __i; --__i)
-	    pop_back();
-	  __throw_exception_again;
-	}
-    }
-
-  template<typename _Tp, typename _Alloc>
-    void
-    list<_Tp, _Alloc>::
-    resize(size_type __new_size)
-    {
-      const_iterator __i = _M_resize_pos(__new_size);
-      if (__new_size)
-	_M_default_append(__new_size);
-      else
-        erase(__i, end());
-    }
-
-  template<typename _Tp, typename _Alloc>
-    void
-    list<_Tp, _Alloc>::
-    resize(size_type __new_size, const value_type& __x)
-    {
-      const_iterator __i = _M_resize_pos(__new_size);
-      if (__new_size)
-        insert(end(), __new_size, __x);
-      else
-        erase(__i, end());
-    }
-#else
   template<typename _Tp, typename _Alloc>
     void
     list<_Tp, _Alloc>::
     resize(size_type __new_size, value_type __x)
     {
-      const_iterator __i = _M_resize_pos(__new_size);
-      if (__new_size)
-        insert(end(), __new_size, __x);
-      else
-        erase(__i._M_const_cast(), end());
+      iterator __i = begin();
+      size_type __len = 0;
+      for (; __i != end() && __len < __new_size; ++__i, ++__len)
+        ;
+      if (__len == __new_size)
+        erase(__i, end());
+      else                          // __i == end()
+        insert(end(), __new_size - __len, __x);
     }
-#endif
 
   template<typename _Tp, typename _Alloc>
     list<_Tp, _Alloc>&
     list<_Tp, _Alloc>::
     operator=(const list& __x)
     {
-      if (this != std::__addressof(__x))
+      if (this != &__x)
 	{
-#if __cplusplus >= 201103L
-	  if (_Node_alloc_traits::_S_propagate_on_copy_assign())
-	    {
-              auto& __this_alloc = this->_M_get_Node_allocator();
-              auto& __that_alloc = __x._M_get_Node_allocator();
-              if (!_Node_alloc_traits::_S_always_equal()
-	          && __this_alloc != __that_alloc)
-	        {
-		  // replacement allocator cannot free existing storage
-		  clear();
-		}
-	      std::__alloc_on_copy(__this_alloc, __that_alloc);
-            }
-#endif
-	  _M_assign_dispatch(__x.begin(), __x.end(), __false_type());
+	  iterator __first1 = begin();
+	  iterator __last1 = end();
+	  const_iterator __first2 = __x.begin();
+	  const_iterator __last2 = __x.end();
+	  for (; __first1 != __last1 && __first2 != __last2;
+	       ++__first1, ++__first2)
+	    *__first1 = *__first2;
+	  if (__first2 == __last2)
+	    erase(__first1, __last1);
+	  else
+	    insert(__last1, __first2, __last2);
 	}
       return *this;
     }
@@ -312,7 +173,7 @@ _GLIBCXX_BEGIN_NAMESPACE_CONTAINER
         iterator __first1 = begin();
         iterator __last1 = end();
         for (; __first1 != __last1 && __first2 != __last2;
-	     ++__first1, (void)++__first2)
+	     ++__first1, ++__first2)
           *__first1 = *__first2;
         if (__first2 == __last2)
           erase(__first1, __last1);
@@ -320,18 +181,11 @@ _GLIBCXX_BEGIN_NAMESPACE_CONTAINER
           insert(__last1, __first2, __last2);
       }
 
-#if __cplusplus > 201703L
-# define _GLIBCXX20_ONLY(__expr) __expr
-#else
-# define _GLIBCXX20_ONLY(__expr)
-#endif
-
   template<typename _Tp, typename _Alloc>
-    typename list<_Tp, _Alloc>::__remove_return_type
+    void
     list<_Tp, _Alloc>::
     remove(const value_type& __value)
     {
-      size_type __removed __attribute__((__unused__)) = 0;
       iterator __first = begin();
       iterator __last = end();
       iterator __extra = __last;
@@ -344,53 +198,41 @@ _GLIBCXX_BEGIN_NAMESPACE_CONTAINER
 	      // _GLIBCXX_RESOLVE_LIB_DEFECTS
 	      // 526. Is it undefined if a function in the standard changes
 	      // in parameters?
-	      if (std::__addressof(*__first) != std::__addressof(__value))
-		{
-		  _M_erase(__first);
-		  _GLIBCXX20_ONLY( __removed++ );
-		}
+	      if (&*__first != &__value)
+		_M_erase(__first);
 	      else
 		__extra = __first;
 	    }
 	  __first = __next;
 	}
       if (__extra != __last)
-	{
-	  _M_erase(__extra);
-	  _GLIBCXX20_ONLY( __removed++ );
-	}
-      return _GLIBCXX20_ONLY( __removed );
+	_M_erase(__extra);
     }
 
   template<typename _Tp, typename _Alloc>
-    typename list<_Tp, _Alloc>::__remove_return_type
+    void
     list<_Tp, _Alloc>::
     unique()
     {
       iterator __first = begin();
       iterator __last = end();
       if (__first == __last)
-	return _GLIBCXX20_ONLY( 0 );
-      size_type __removed __attribute__((__unused__)) = 0;
+	return;
       iterator __next = __first;
       while (++__next != __last)
 	{
 	  if (*__first == *__next)
-	    {
-	      _M_erase(__next);
-	      _GLIBCXX20_ONLY( __removed++ );
-	    }
+	    _M_erase(__next);
 	  else
 	    __first = __next;
 	  __next = __first;
 	}
-      return _GLIBCXX20_ONLY( __removed );
     }
 
   template<typename _Tp, typename _Alloc>
     void
     list<_Tp, _Alloc>::
-#if __cplusplus >= 201103L
+#ifdef __GXX_EXPERIMENTAL_CXX0X__
     merge(list&& __x)
 #else
     merge(list& __x)
@@ -398,18 +240,50 @@ _GLIBCXX_BEGIN_NAMESPACE_CONTAINER
     {
       // _GLIBCXX_RESOLVE_LIB_DEFECTS
       // 300. list::merge() specification incomplete
-      if (this != std::__addressof(__x))
+      if (this != &__x)
 	{
-	  _M_check_equal_allocators(__x);
+	  _M_check_equal_allocators(__x); 
 
 	  iterator __first1 = begin();
 	  iterator __last1 = end();
 	  iterator __first2 = __x.begin();
 	  iterator __last2 = __x.end();
-	  const size_t __orig_size = __x.size();
-	  __try {
+	  while (__first1 != __last1 && __first2 != __last2)
+	    if (*__first2 < *__first1)
+	      {
+		iterator __next = __first2;
+		_M_transfer(__first1, __first2, ++__next);
+		__first2 = __next;
+	      }
+	    else
+	      ++__first1;
+	  if (__first2 != __last2)
+	    _M_transfer(__last1, __first2, __last2);
+	}
+    }
+
+  template<typename _Tp, typename _Alloc>
+    template <typename _StrictWeakOrdering>
+      void
+      list<_Tp, _Alloc>::
+#ifdef __GXX_EXPERIMENTAL_CXX0X__
+      merge(list&& __x, _StrictWeakOrdering __comp)
+#else
+      merge(list& __x, _StrictWeakOrdering __comp)
+#endif
+      {
+	// _GLIBCXX_RESOLVE_LIB_DEFECTS
+	// 300. list::merge() specification incomplete
+	if (this != &__x)
+	  {
+	    _M_check_equal_allocators(__x);
+
+	    iterator __first1 = begin();
+	    iterator __last1 = end();
+	    iterator __first2 = __x.begin();
+	    iterator __last2 = __x.end();
 	    while (__first1 != __last1 && __first2 != __last2)
-	      if (*__first2 < *__first1)
+	      if (__comp(*__first2, *__first1))
 		{
 		  iterator __next = __first2;
 		  _M_transfer(__first1, __first2, ++__next);
@@ -419,65 +293,6 @@ _GLIBCXX_BEGIN_NAMESPACE_CONTAINER
 		++__first1;
 	    if (__first2 != __last2)
 	      _M_transfer(__last1, __first2, __last2);
-
-	    this->_M_inc_size(__x._M_get_size());
-	    __x._M_set_size(0);
-	  }
-	  __catch(...)
-	    {
-	      const size_t __dist = std::distance(__first2, __last2);
-	      this->_M_inc_size(__orig_size - __dist);
-	      __x._M_set_size(__dist);
-	      __throw_exception_again;
-	    }
-	}
-    }
-
-  template<typename _Tp, typename _Alloc>
-    template <typename _StrictWeakOrdering>
-      void
-      list<_Tp, _Alloc>::
-#if __cplusplus >= 201103L
-      merge(list&& __x, _StrictWeakOrdering __comp)
-#else
-      merge(list& __x, _StrictWeakOrdering __comp)
-#endif
-      {
-	// _GLIBCXX_RESOLVE_LIB_DEFECTS
-	// 300. list::merge() specification incomplete
-	if (this != std::__addressof(__x))
-	  {
-	    _M_check_equal_allocators(__x);
-
-	    iterator __first1 = begin();
-	    iterator __last1 = end();
-	    iterator __first2 = __x.begin();
-	    iterator __last2 = __x.end();
-	    const size_t __orig_size = __x.size();
-	    __try
-	      {
-		while (__first1 != __last1 && __first2 != __last2)
-		  if (__comp(*__first2, *__first1))
-		    {
-		      iterator __next = __first2;
-		      _M_transfer(__first1, __first2, ++__next);
-		      __first2 = __next;
-		    }
-		  else
-		    ++__first1;
-		if (__first2 != __last2)
-		  _M_transfer(__last1, __first2, __last2);
-
-		this->_M_inc_size(__x._M_get_size());
-		__x._M_set_size(0);
-	      }
-	    __catch(...)
-	      {
-		const size_t __dist = std::distance(__first2, __last2);
-		this->_M_inc_size(__orig_size - __dist);
-		__x._M_set_size(__dist);
-		__throw_exception_again;
-	      }
 	  }
       }
 
@@ -492,48 +307,38 @@ _GLIBCXX_BEGIN_NAMESPACE_CONTAINER
       {
         list __carry;
         list __tmp[64];
-        list * __fill = __tmp;
+        list * __fill = &__tmp[0];
         list * __counter;
-	__try
+
+        do
 	  {
-	    do
+	    __carry.splice(__carry.begin(), *this, begin());
+
+	    for(__counter = &__tmp[0];
+		__counter != __fill && !__counter->empty();
+		++__counter)
 	      {
-		__carry.splice(__carry.begin(), *this, begin());
-
-		for(__counter = __tmp;
-		    __counter != __fill && !__counter->empty();
-		    ++__counter)
-		  {
-		    __counter->merge(__carry);
-		    __carry.swap(*__counter);
-		  }
+		__counter->merge(__carry);
 		__carry.swap(*__counter);
-		if (__counter == __fill)
-		  ++__fill;
 	      }
-	    while ( !empty() );
+	    __carry.swap(*__counter);
+	    if (__counter == __fill)
+	      ++__fill;
+	  }
+	while ( !empty() );
 
-	    for (__counter = __tmp + 1; __counter != __fill; ++__counter)
-	      __counter->merge(*(__counter - 1));
-	    swap( *(__fill - 1) );
-	  }
-	__catch(...)
-	  {
-	    this->splice(this->end(), __carry);
-	    for (int __i = 0; __i < sizeof(__tmp)/sizeof(__tmp[0]); ++__i)
-	      this->splice(this->end(), __tmp[__i]);
-	    __throw_exception_again;
-	  }
+        for (__counter = &__tmp[1]; __counter != __fill; ++__counter)
+          __counter->merge(*(__counter - 1));
+        swap( *(__fill - 1) );
       }
     }
 
   template<typename _Tp, typename _Alloc>
     template <typename _Predicate>
-      typename list<_Tp, _Alloc>::__remove_return_type
+      void
       list<_Tp, _Alloc>::
       remove_if(_Predicate __pred)
       {
-	size_type __removed __attribute__((__unused__)) = 0;
         iterator __first = begin();
         iterator __last = end();
         while (__first != __last)
@@ -541,42 +346,31 @@ _GLIBCXX_BEGIN_NAMESPACE_CONTAINER
 	    iterator __next = __first;
 	    ++__next;
 	    if (__pred(*__first))
-	      {
-		_M_erase(__first);
-		_GLIBCXX20_ONLY( __removed++ );
-	      }
+	      _M_erase(__first);
 	    __first = __next;
 	  }
-	return _GLIBCXX20_ONLY( __removed );
       }
 
   template<typename _Tp, typename _Alloc>
     template <typename _BinaryPredicate>
-      typename list<_Tp, _Alloc>::__remove_return_type
+      void
       list<_Tp, _Alloc>::
       unique(_BinaryPredicate __binary_pred)
       {
         iterator __first = begin();
         iterator __last = end();
         if (__first == __last)
-	  return _GLIBCXX20_ONLY(0);
-        size_type __removed __attribute__((__unused__)) = 0;
+	  return;
         iterator __next = __first;
         while (++__next != __last)
 	  {
 	    if (__binary_pred(*__first, *__next))
-	      {
-		_M_erase(__next);
-		_GLIBCXX20_ONLY( __removed++ );
-	      }
+	      _M_erase(__next);
 	    else
 	      __first = __next;
 	    __next = __first;
 	  }
-	return _GLIBCXX20_ONLY( __removed );
       }
-
-#undef _GLIBCXX20_ONLY
 
   template<typename _Tp, typename _Alloc>
     template <typename _StrictWeakOrdering>
@@ -590,44 +384,33 @@ _GLIBCXX_BEGIN_NAMESPACE_CONTAINER
 	  {
 	    list __carry;
 	    list __tmp[64];
-	    list * __fill = __tmp;
+	    list * __fill = &__tmp[0];
 	    list * __counter;
-	    __try
+
+	    do
 	      {
-		do
+		__carry.splice(__carry.begin(), *this, begin());
+
+		for(__counter = &__tmp[0];
+		    __counter != __fill && !__counter->empty();
+		    ++__counter)
 		  {
-		    __carry.splice(__carry.begin(), *this, begin());
-
-		    for(__counter = __tmp;
-			__counter != __fill && !__counter->empty();
-			++__counter)
-		      {
-			__counter->merge(__carry, __comp);
-			__carry.swap(*__counter);
-		      }
+		    __counter->merge(__carry, __comp);
 		    __carry.swap(*__counter);
-		    if (__counter == __fill)
-		      ++__fill;
 		  }
-		while ( !empty() );
+		__carry.swap(*__counter);
+		if (__counter == __fill)
+		  ++__fill;
+	      }
+	    while ( !empty() );
 
-		for (__counter = __tmp + 1; __counter != __fill; ++__counter)
-		  __counter->merge(*(__counter - 1), __comp);
-		swap(*(__fill - 1));
-	      }
-	    __catch(...)
-	      {
-		this->splice(this->end(), __carry);
-		for (int __i = 0; __i < sizeof(__tmp)/sizeof(__tmp[0]); ++__i)
-		  this->splice(this->end(), __tmp[__i]);
-		__throw_exception_again;
-	      }
+	    for (__counter = &__tmp[1]; __counter != __fill; ++__counter)
+	      __counter->merge(*(__counter - 1), __comp);
+	    swap(*(__fill - 1));
 	  }
       }
 
-_GLIBCXX_END_NAMESPACE_CONTAINER
-_GLIBCXX_END_NAMESPACE_VERSION
-} // namespace std
+_GLIBCXX_END_NESTED_NAMESPACE
 
 #endif /* _LIST_TCC */
 

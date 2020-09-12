@@ -1,5 +1,5 @@
 /* MD reader for GCC.
-   Copyright (C) 1987-2019 Free Software Foundation, Inc.
+   Copyright (C) 1987-2013 Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -17,31 +17,12 @@ You should have received a copy of the GNU General Public License
 along with GCC; see the file COPYING3.  If not see
 <http://www.gnu.org/licenses/>.  */
 
-/* This file is compiled twice: once for the generator programs
-   once for the compiler.  */
-#ifdef GENERATOR_FILE
 #include "bconfig.h"
-#else
-#include "config.h"
-#endif
 #include "system.h"
 #include "coretypes.h"
-#ifdef GENERATOR_FILE
+#include "hashtab.h"
 #include "errors.h"
-#endif /* #ifdef GENERATOR_FILE */
-#include "statistics.h"
-#include "vec.h"
 #include "read-md.h"
-
-#ifndef GENERATOR_FILE
-
-/* Minimal reimplementation of errors.c for use by RTL frontend
-   within cc1.  */
-
-int have_error = 0;
-
-#endif /* #ifndef GENERATOR_FILE */
-
 
 /* Associates PTR (which can be a string, etc.) with the file location
    specified by FILENAME and LINENO.  */
@@ -51,13 +32,68 @@ struct ptr_loc {
   int lineno;
 };
 
+/* A singly-linked list of filenames.  */
+struct file_name_list {
+  struct file_name_list *next;
+  const char *fname;
+};
+
+/* Obstack used for allocating MD strings.  */
+struct obstack string_obstack;
+
+/* A table of ptr_locs, hashed on the PTR field.  */
+static htab_t ptr_locs;
+
+/* An obstack for the above.  Plain xmalloc is a bit heavyweight for a
+   small structure like ptr_loc.  */
+static struct obstack ptr_loc_obstack;
+
+/* A hash table of triples (A, B, C), where each of A, B and C is a condition
+   and A is equivalent to "B && C".  This is used to keep track of the source
+   of conditions that are made up of separate MD strings (such as the split
+   condition of a define_insn_and_split).  */
+static htab_t joined_conditions;
+
+/* An obstack for allocating joined_conditions entries.  */
+static struct obstack joined_conditions_obstack;
+
+/* The file we are reading.  */
+FILE *read_md_file;
+
+/* The filename of READ_MD_FILE.  */
+const char *read_md_filename;
+
+/* The current line number in READ_MD_FILE.  */
+int read_md_lineno;
+
+/* The name of the toplevel file that indirectly included READ_MD_FILE.  */
+const char *in_fname;
+
+/* The directory part of IN_FNAME.  NULL if IN_FNAME is a bare filename.  */
+static char *base_dir;
+
+/* The first directory to search.  */
+static struct file_name_list *first_dir_md_include;
+
+/* A pointer to the null terminator of the md include chain.  */
+static struct file_name_list **last_dir_md_include_ptr = &first_dir_md_include;
+
 /* This callback will be invoked whenever an md include directive is
    processed.  To be used for creation of the dependency file.  */
 void (*include_callback) (const char *);
 
-/* Global singleton.  */
+/* The current maximum length of directory names in the search path
+   for include files.  (Altered as we get more of them.)  */
+static size_t max_include_len;
 
-md_reader *md_reader_ptr;
+/* A table of md_constant structures, hashed by name.  Null if no
+   constant expansion should occur.  */
+static htab_t md_constants;
+
+/* A table of enum_type structures, hashed by name.  */
+static htab_t enum_types;
+
+static void handle_file (directive_handler_t);
 
 /* Given an object that starts with a char * name field, return a hash
    code for its name.  */
@@ -96,32 +132,32 @@ leading_ptr_eq_p (const void *def1, const void *def2)
 
 /* Associate PTR with the file position given by FILENAME and LINENO.  */
 
-void
-md_reader::set_md_ptr_loc (const void *ptr, const char *filename, int lineno)
+static void
+set_md_ptr_loc (const void *ptr, const char *filename, int lineno)
 {
   struct ptr_loc *loc;
 
-  loc = (struct ptr_loc *) obstack_alloc (&m_ptr_loc_obstack,
+  loc = (struct ptr_loc *) obstack_alloc (&ptr_loc_obstack,
 					  sizeof (struct ptr_loc));
   loc->ptr = ptr;
   loc->filename = filename;
   loc->lineno = lineno;
-  *htab_find_slot (m_ptr_locs, loc, INSERT) = loc;
+  *htab_find_slot (ptr_locs, loc, INSERT) = loc;
 }
 
 /* Return the position associated with pointer PTR.  Return null if no
    position was set.  */
 
-const struct ptr_loc *
-md_reader::get_md_ptr_loc (const void *ptr)
+static const struct ptr_loc *
+get_md_ptr_loc (const void *ptr)
 {
-  return (const struct ptr_loc *) htab_find (m_ptr_locs, &ptr);
+  return (const struct ptr_loc *) htab_find (ptr_locs, &ptr);
 }
 
 /* Associate NEW_PTR with the same file position as OLD_PTR.  */
 
 void
-md_reader::copy_md_ptr_loc (const void *new_ptr, const void *old_ptr)
+copy_md_ptr_loc (const void *new_ptr, const void *old_ptr)
 {
   const struct ptr_loc *loc = get_md_ptr_loc (old_ptr);
   if (loc != 0)
@@ -132,7 +168,7 @@ md_reader::copy_md_ptr_loc (const void *new_ptr, const void *old_ptr)
    directive for it to OUTF.  */
 
 void
-md_reader::fprint_md_ptr_loc (FILE *outf, const void *ptr)
+fprint_md_ptr_loc (FILE *outf, const void *ptr)
 {
   const struct ptr_loc *loc = get_md_ptr_loc (ptr);
   if (loc != 0)
@@ -141,7 +177,7 @@ md_reader::fprint_md_ptr_loc (FILE *outf, const void *ptr)
 
 /* Special fprint_md_ptr_loc for writing to STDOUT.  */
 void
-md_reader::print_md_ptr_loc (const void *ptr)
+print_md_ptr_loc (const void *ptr)
 {
   fprint_md_ptr_loc (stdout, ptr);
 }
@@ -150,7 +186,7 @@ md_reader::print_md_ptr_loc (const void *ptr)
    may be null or empty.  */
 
 const char *
-md_reader::join_c_conditions (const char *cond1, const char *cond2)
+join_c_conditions (const char *cond1, const char *cond2)
 {
   char *result;
   const void **entry;
@@ -165,11 +201,11 @@ md_reader::join_c_conditions (const char *cond1, const char *cond2)
     return cond1;
 
   result = concat ("(", cond1, ") && (", cond2, ")", NULL);
-  obstack_ptr_grow (&m_joined_conditions_obstack, result);
-  obstack_ptr_grow (&m_joined_conditions_obstack, cond1);
-  obstack_ptr_grow (&m_joined_conditions_obstack, cond2);
-  entry = XOBFINISH (&m_joined_conditions_obstack, const void **);
-  *htab_find_slot (m_joined_conditions, entry, INSERT) = entry;
+  obstack_ptr_grow (&joined_conditions_obstack, result);
+  obstack_ptr_grow (&joined_conditions_obstack, cond1);
+  obstack_ptr_grow (&joined_conditions_obstack, cond2);
+  entry = XOBFINISH (&joined_conditions_obstack, const void **);
+  *htab_find_slot (joined_conditions, entry, INSERT) = entry;
   return result;
 }
 
@@ -179,9 +215,9 @@ md_reader::join_c_conditions (const char *cond1, const char *cond2)
    directive for COND if its original file position is known.  */
 
 void
-md_reader::fprint_c_condition (FILE *outf, const char *cond)
+fprint_c_condition (FILE *outf, const char *cond)
 {
-  const char **halves = (const char **) htab_find (m_joined_conditions, &cond);
+  const char **halves = (const char **) htab_find (joined_conditions, &cond);
   if (halves != 0)
     {
       fprintf (outf, "(");
@@ -201,7 +237,7 @@ md_reader::fprint_c_condition (FILE *outf, const char *cond)
 /* Special fprint_c_condition for writing to STDOUT.  */
 
 void
-md_reader::print_c_condition (const char *cond)
+print_c_condition (const char *cond)
 {
   fprint_c_condition (stdout, cond);
 }
@@ -210,49 +246,37 @@ md_reader::print_c_condition (const char *cond)
    of the current MD file.  */
 
 static void ATTRIBUTE_PRINTF(2,0)
-message_at_1 (file_location loc, const char *msg, va_list ap)
+message_with_line_1 (int lineno, const char *msg, va_list ap)
 {
-  fprintf (stderr, "%s:%d:%d: ", loc.filename, loc.lineno, loc.colno);
+  fprintf (stderr, "%s:%d: ", read_md_filename, lineno);
   vfprintf (stderr, msg, ap);
   fputc ('\n', stderr);
 }
 
-/* A printf-like function for reporting a message against location LOC.  */
+/* A printf-like function for reporting an error against line LINENO
+   in the current MD file.  */
 
 void
-message_at (file_location loc, const char *msg, ...)
+message_with_line (int lineno, const char *msg, ...)
 {
   va_list ap;
 
   va_start (ap, msg);
-  message_at_1 (loc, msg, ap);
+  message_with_line_1 (lineno, msg, ap);
   va_end (ap);
 }
 
-/* Like message_at, but treat the condition as an error.  */
+/* Like message_with_line, but treat the condition as an error.  */
 
 void
-error_at (file_location loc, const char *msg, ...)
+error_with_line (int lineno, const char *msg, ...)
 {
   va_list ap;
 
   va_start (ap, msg);
-  message_at_1 (loc, msg, ap);
+  message_with_line_1 (lineno, msg, ap);
   va_end (ap);
   have_error = 1;
-}
-
-/* Like message_at, but treat the condition as a fatal error.  */
-
-void
-fatal_at (file_location loc, const char *msg, ...)
-{
-  va_list ap;
-
-  va_start (ap, msg);
-  message_at_1 (loc, msg, ap);
-  va_end (ap);
-  exit (1);
 }
 
 /* A printf-like function for reporting an error against the current
@@ -268,9 +292,7 @@ fatal_with_file_and_line (const char *msg, ...)
 
   va_start (ap, msg);
 
-  fprintf (stderr, "%s:%d:%d: error: ", md_reader_ptr->get_filename (),
-	   md_reader_ptr->get_lineno (),
-	   md_reader_ptr->get_colno ());
+  fprintf (stderr, "%s:%d: ", read_md_filename, read_md_lineno);
   vfprintf (stderr, msg, ap);
   putc ('\n', stderr);
 
@@ -289,10 +311,8 @@ fatal_with_file_and_line (const char *msg, ...)
     }
   context[i] = '\0';
 
-  fprintf (stderr, "%s:%d:%d: note: following context is `%s'\n",
-	   md_reader_ptr->get_filename (),
-	   md_reader_ptr->get_lineno (),
-	   md_reader_ptr->get_colno (), context);
+  fprintf (stderr, "%s:%d: following context is `%s'\n",
+	   read_md_filename, read_md_lineno, context);
 
   va_end (ap);
   exit (1);
@@ -360,130 +380,28 @@ read_skip_spaces (void)
     }
 }
 
-/* Consume the next character, issuing a fatal error if it is not
-   EXPECTED.  */
-
-void
-md_reader::require_char (char expected)
-{
-  int ch = read_char ();
-  if (ch != expected)
-    fatal_expected_char (expected, ch);
-}
-
-/* Consume any whitespace, then consume the next non-whitespace
-   character, issuing a fatal error if it is not EXPECTED.  */
-
-void
-md_reader::require_char_ws (char expected)
-{
-  int ch = read_skip_spaces ();
-  if (ch != expected)
-    fatal_expected_char (expected, ch);
-}
-
-/* Consume any whitespace, then consume the next word (as per read_name),
-   issuing a fatal error if it is not EXPECTED.  */
-
-void
-md_reader::require_word_ws (const char *expected)
-{
-  struct md_name name;
-  read_name (&name);
-  if (strcmp (name.string, expected))
-    fatal_with_file_and_line ("missing '%s'", expected);
-}
-
-/* Read the next character from the file.  */
-
-int
-md_reader::read_char (void)
-{
-  int ch;
-
-  ch = getc (m_read_md_file);
-  if (ch == '\n')
-    {
-      m_read_md_lineno++;
-      m_last_line_colno = m_read_md_colno;
-      m_read_md_colno = 0;
-    }
-  else
-    m_read_md_colno++;
-
-  /* If we're filtering lines, treat everything before the range of
-     interest as a space, and as EOF for everything after.  */
-  if (m_first_line && m_last_line)
-    {
-      if (m_read_md_lineno < m_first_line)
-	return ' ';
-      if (m_read_md_lineno > m_last_line)
-	return EOF;
-    }
-
-  return ch;
-}
-
-/* Put back CH, which was the last character read from the file.  */
-
-void
-md_reader::unread_char (int ch)
-{
-  if (ch == '\n')
-    {
-      m_read_md_lineno--;
-      m_read_md_colno = m_last_line_colno;
-    }
-  else
-    m_read_md_colno--;
-  ungetc (ch, m_read_md_file);
-}
-
-/* Peek at the next character from the file without consuming it.  */
-
-int
-md_reader::peek_char (void)
-{
-  int ch = read_char ();
-  unread_char (ch);
-  return ch;
-}
-
 /* Read an rtx code name into NAME.  It is terminated by any of the
    punctuation chars of rtx printed syntax.  */
 
-bool
-md_reader::read_name_1 (struct md_name *name, file_location *out_loc)
+void
+read_name (struct md_name *name)
 {
   int c;
   size_t i;
-  int angle_bracket_depth;
 
   c = read_skip_spaces ();
 
-  *out_loc = get_current_location ();
-
   i = 0;
-  angle_bracket_depth = 0;
   while (1)
     {
-      if (c == '<')
-	angle_bracket_depth++;
-
-      if ((c == '>') && (angle_bracket_depth > 0))
-	  angle_bracket_depth--;
-
       if (c == ' ' || c == '\n' || c == '\t' || c == '\f' || c == '\r'
 	  || c == EOF)
 	break;
-      if (angle_bracket_depth == 0)
+      if (c == ':' || c == ')' || c == ']' || c == '"' || c == '/'
+	  || c == '(' || c == '[')
 	{
-	  if (c == ':' || c == ')' || c == ']'
-	      || c == '"' || c == '/' || c == '(' || c == '[')
-	    {
-	      unread_char (c);
-	      break;
-	    }
+	  unread_char (c);
+	  break;
 	}
 
       if (i == sizeof (name->buffer) - 1)
@@ -494,12 +412,12 @@ md_reader::read_name_1 (struct md_name *name, file_location *out_loc)
     }
 
   if (i == 0)
-    return false;
+    fatal_with_file_and_line ("missing name or number");
 
   name->buffer[i] = 0;
   name->string = name->buffer;
 
-  if (m_md_constants)
+  if (md_constants)
     {
       /* Do constant expansion.  */
       struct md_constant *def;
@@ -509,49 +427,19 @@ md_reader::read_name_1 (struct md_name *name, file_location *out_loc)
 	  struct md_constant tmp_def;
 
 	  tmp_def.name = name->string;
-	  def = (struct md_constant *) htab_find (m_md_constants, &tmp_def);
+	  def = (struct md_constant *) htab_find (md_constants, &tmp_def);
 	  if (def)
 	    name->string = def->value;
 	}
       while (def);
     }
-
-  return true;
-}
-
-/* Read an rtx code name into NAME.  It is terminated by any of the
-   punctuation chars of rtx printed syntax.  */
-
-file_location
-md_reader::read_name (struct md_name *name)
-{
-  file_location loc;
-  if (!read_name_1 (name, &loc))
-    fatal_with_file_and_line ("missing name or number");
-  return loc;
-}
-
-file_location
-md_reader::read_name_or_nil (struct md_name *name)
-{
-  file_location loc;
-  if (!read_name_1 (name, &loc))
-    {
-      file_location loc = get_current_location ();
-      read_skip_construct (0, loc);
-      /* Skip the ')'.  */
-      read_char ();
-      name->buffer[0] = 0;
-      name->string = name->buffer;
-    }
-  return loc;
 }
 
 /* Subroutine of the string readers.  Handles backslash escapes.
    Caller has read the backslash, but not placed it into the obstack.  */
 
-void
-md_reader::read_escape ()
+static void
+read_escape (void)
 {
   int c = read_char ();
 
@@ -579,32 +467,31 @@ md_reader::read_escape ()
     case 'a': case 'b': case 'f': case 'n': case 'r': case 't': case 'v':
     case '0': case '1': case '2': case '3': case '4': case '5': case '6':
     case '7': case 'x':
-      obstack_1grow (&m_string_obstack, '\\');
+      obstack_1grow (&string_obstack, '\\');
       break;
 
       /* \; makes stuff for a C string constant containing
 	 newline and tab.  */
     case ';':
-      obstack_grow (&m_string_obstack, "\\n\\t", 4);
+      obstack_grow (&string_obstack, "\\n\\t", 4);
       return;
 
       /* pass anything else through, but issue a warning.  */
     default:
       fprintf (stderr, "%s:%d: warning: unrecognized escape \\%c\n",
-	       get_filename (), get_lineno (),
-	       c);
-      obstack_1grow (&m_string_obstack, '\\');
+	       read_md_filename, read_md_lineno, c);
+      obstack_1grow (&string_obstack, '\\');
       break;
     }
 
-  obstack_1grow (&m_string_obstack, c);
+  obstack_1grow (&string_obstack, c);
 }
 
 /* Read a double-quoted string onto the obstack.  Caller has scanned
    the leading quote.  */
 
 char *
-md_reader::read_quoted_string ()
+read_quoted_string (void)
 {
   int c;
 
@@ -619,25 +506,25 @@ md_reader::read_quoted_string ()
       else if (c == '"' || c == EOF)
 	break;
 
-      obstack_1grow (&m_string_obstack, c);
+      obstack_1grow (&string_obstack, c);
     }
 
-  obstack_1grow (&m_string_obstack, 0);
-  return XOBFINISH (&m_string_obstack, char *);
+  obstack_1grow (&string_obstack, 0);
+  return XOBFINISH (&string_obstack, char *);
 }
 
 /* Read a braced string (a la Tcl) onto the string obstack.  Caller
    has scanned the leading brace.  Note that unlike quoted strings,
    the outermost braces _are_ included in the string constant.  */
 
-char *
-md_reader::read_braced_string ()
+static char *
+read_braced_string (void)
 {
   int c;
   int brace_depth = 1;  /* caller-processed */
-  unsigned long starting_read_md_lineno = get_lineno ();
+  unsigned long starting_read_md_lineno = read_md_lineno;
 
-  obstack_1grow (&m_string_obstack, '{');
+  obstack_1grow (&string_obstack, '{');
   while (brace_depth)
     {
       c = read_char (); /* Read the string  */
@@ -656,11 +543,11 @@ md_reader::read_braced_string ()
 	  ("missing closing } for opening brace on line %lu",
 	   starting_read_md_lineno);
 
-      obstack_1grow (&m_string_obstack, c);
+      obstack_1grow (&string_obstack, c);
     }
 
-  obstack_1grow (&m_string_obstack, 0);
-  return XOBFINISH (&m_string_obstack, char *);
+  obstack_1grow (&string_obstack, 0);
+  return XOBFINISH (&string_obstack, char *);
 }
 
 /* Read some kind of string constant.  This is the high-level routine
@@ -668,7 +555,7 @@ md_reader::read_braced_string ()
    and dispatch to the appropriate string constant reader.  */
 
 char *
-md_reader::read_string (int star_if_braced)
+read_string (int star_if_braced)
 {
   char *stringbuf;
   int saw_paren = 0;
@@ -681,30 +568,26 @@ md_reader::read_string (int star_if_braced)
       c = read_skip_spaces ();
     }
 
-  old_lineno = get_lineno ();
+  old_lineno = read_md_lineno;
   if (c == '"')
     stringbuf = read_quoted_string ();
   else if (c == '{')
     {
       if (star_if_braced)
-	obstack_1grow (&m_string_obstack, '*');
+	obstack_1grow (&string_obstack, '*');
       stringbuf = read_braced_string ();
-    }
-  else if (saw_paren && c == 'n')
-    {
-      /* Handle (nil) by returning NULL.  */
-      require_char ('i');
-      require_char ('l');
-      require_char_ws (')');
-      return NULL;
     }
   else
     fatal_with_file_and_line ("expected `\"' or `{', found `%c'", c);
 
   if (saw_paren)
-    require_char_ws (')');
+    {
+      c = read_skip_spaces ();
+      if (c != ')')
+	fatal_expected_char (')', c);
+    }
 
-  set_md_ptr_loc (stringbuf, get_filename (), old_lineno);
+  set_md_ptr_loc (stringbuf, read_md_filename, old_lineno);
   return stringbuf;
 }
 
@@ -712,7 +595,7 @@ md_reader::read_string (int star_if_braced)
    is currently nested by DEPTH levels of parentheses.  */
 
 void
-md_reader::read_skip_construct (int depth, file_location loc)
+read_skip_construct (int depth, int lineno)
 {
   struct md_name name;
   int c;
@@ -722,7 +605,7 @@ md_reader::read_skip_construct (int depth, file_location loc)
       c = read_skip_spaces ();
       if (c == EOF)
 	{
-	  error_at (loc, "unterminated construct");
+	  error_with_line (lineno, "unterminated construct");
 	  exit (1);
 	}
       switch (c)
@@ -789,7 +672,7 @@ scan_comma_elt (const char **pstr)
 
   if (*p == ',')
     p++;
-  while (ISSPACE (*p))
+  while (ISSPACE(*p))
     p++;
 
   if (*p == '\0')
@@ -853,17 +736,19 @@ add_constant (htab_t defs, char *name, char *value,
 /* Process a define_constants directive, starting with the optional space
    after the "define_constants".  */
 
-void
-md_reader::handle_constants ()
+static void
+handle_constants (void)
 {
   int c;
   htab_t defs;
 
-  require_char_ws ('[');
+  c = read_skip_spaces ();
+  if (c != '[')
+    fatal_expected_char ('[', c);
 
   /* Disable constant expansion during definition processing.  */
-  defs = m_md_constants;
-  m_md_constants = 0;
+  defs = md_constants;
+  md_constants = 0;
   while ( (c = read_skip_spaces ()) != ']')
     {
       struct md_name name, value;
@@ -875,9 +760,11 @@ md_reader::handle_constants ()
       read_name (&value);
       add_constant (defs, xstrdup (name.string), xstrdup (value.string), 0);
 
-      require_char_ws (')');
+      c = read_skip_spaces ();
+      if (c != ')')
+	fatal_expected_char (')', c);
     }
-  m_md_constants = defs;
+  md_constants = defs;
 }
 
 /* For every constant definition, call CALLBACK with two arguments:
@@ -885,15 +772,15 @@ md_reader::handle_constants ()
    Stop when CALLBACK returns zero.  */
 
 void
-md_reader::traverse_md_constants (htab_trav callback, void *info)
+traverse_md_constants (htab_trav callback, void *info)
 {
-  htab_traverse (get_md_constants (), callback, info);
+  htab_traverse (md_constants, callback, info);
 }
 
 /* Return a malloc()ed decimal string that represents number NUMBER.  */
 
 static char *
-md_decimal_string (int number)
+decimal_string (int number)
 {
   /* A safe overestimate.  +1 for sign, +1 for null terminator.  */
   char buffer[sizeof (int) * CHAR_BIT + 1 + 1];
@@ -907,8 +794,8 @@ md_decimal_string (int number)
    number on which the directive started and MD_P is true if the
    directive is a define_enum rather than a define_c_enum.  */
 
-void
-md_reader::handle_enum (file_location loc, bool md_p)
+static void
+handle_enum (int lineno, bool md_p)
 {
   char *enum_name, *value_name;
   struct md_name name;
@@ -918,13 +805,13 @@ md_reader::handle_enum (file_location loc, bool md_p)
   int c;
 
   enum_name = read_string (false);
-  slot = htab_find_slot (m_enum_types, &enum_name, INSERT);
+  slot = htab_find_slot (enum_types, &enum_name, INSERT);
   if (*slot)
     {
       def = (struct enum_type *) *slot;
       if (def->md_p != md_p)
-	error_at (loc, "redefining `%s' as a different type of enum",
-		  enum_name);
+	error_with_line (lineno, "redefining `%s' as a different type of enum",
+			 enum_name);
     }
   else
     {
@@ -937,13 +824,15 @@ md_reader::handle_enum (file_location loc, bool md_p)
       *slot = def;
     }
 
-  require_char_ws ('[');
+  c = read_skip_spaces ();
+  if (c != '[')
+    fatal_expected_char ('[', c);
 
   while ((c = read_skip_spaces ()) != ']')
     {
       if (c == EOF)
 	{
-	  error_at (loc, "unterminated construct");
+	  error_with_line (lineno, "unterminated construct");
 	  exit (1);
 	}
       unread_char (c);
@@ -962,8 +851,8 @@ md_reader::handle_enum (file_location loc, bool md_p)
 	  value_name = xstrdup (name.string);
 	  ev->name = value_name;
 	}
-      ev->def = add_constant (get_md_constants (), value_name,
-			      md_decimal_string (def->num_values), def);
+      ev->def = add_constant (md_constants, value_name,
+			      decimal_string (def->num_values), def);
 
       *def->tail_ptr = ev;
       def->tail_ptr = &ev->next;
@@ -974,9 +863,9 @@ md_reader::handle_enum (file_location loc, bool md_p)
 /* Try to find the definition of the given enum.  Return null on failure.  */
 
 struct enum_type *
-md_reader::lookup_enum_type (const char *name)
+lookup_enum_type (const char *name)
 {
-  return (struct enum_type *) htab_find (m_enum_types, &name);
+  return (struct enum_type *) htab_find (enum_types, &name);
 }
 
 /* For every enum definition, call CALLBACK with two arguments:
@@ -984,84 +873,22 @@ md_reader::lookup_enum_type (const char *name)
    returns zero.  */
 
 void
-md_reader::traverse_enum_types (htab_trav callback, void *info)
+traverse_enum_types (htab_trav callback, void *info)
 {
-  htab_traverse (m_enum_types, callback, info);
-}
-
-
-/* Constructor for md_reader.  */
-
-md_reader::md_reader (bool compact)
-: m_compact (compact),
-  m_toplevel_fname (NULL),
-  m_base_dir (NULL),
-  m_read_md_file (NULL),
-  m_read_md_filename (NULL),
-  m_read_md_lineno (0),
-  m_read_md_colno (0),
-  m_first_dir_md_include (NULL),
-  m_last_dir_md_include_ptr (&m_first_dir_md_include),
-  m_first_line (0),
-  m_last_line (0),
-  m_first_overload (NULL),
-  m_next_overload_ptr (&m_first_overload),
-  m_overloads_htab (NULL)
-{
-  /* Set the global singleton pointer.  */
-  md_reader_ptr = this;
-
-  obstack_init (&m_string_obstack);
-
-  m_ptr_locs = htab_create (161, leading_ptr_hash, leading_ptr_eq_p, 0);
-  obstack_init (&m_ptr_loc_obstack);
-
-  m_joined_conditions = htab_create (161, leading_ptr_hash, leading_ptr_eq_p, 0);
-  obstack_init (&m_joined_conditions_obstack);
-
-  m_md_constants = htab_create (31, leading_string_hash,
-				leading_string_eq_p, (htab_del) 0);
-
-  m_enum_types = htab_create (31, leading_string_hash,
-			      leading_string_eq_p, (htab_del) 0);
-
-  /* Unlock the stdio streams.  */
-  unlock_std_streams ();
-}
-
-/* md_reader's destructor.  */
-
-md_reader::~md_reader ()
-{
-  free (m_base_dir);
-
-  htab_delete (m_enum_types);
-
-  htab_delete (m_md_constants);
-
-  obstack_free (&m_joined_conditions_obstack, NULL);
-  htab_delete (m_joined_conditions);
-
-  obstack_free (&m_ptr_loc_obstack, NULL);
-  htab_delete (m_ptr_locs);
-
-  obstack_free (&m_string_obstack, NULL);
-
-  /* Clear the global singleton pointer.  */
-  md_reader_ptr = NULL;
+  htab_traverse (enum_types, callback, info);
 }
 
 /* Process an "include" directive, starting with the optional space
    after the "include".  Read in the file and use HANDLE_DIRECTIVE
    to process each unknown directive.  LINENO is the line number on
-   which the "include" occurred.  */
+   which the "include" occured.  */
 
-void
-md_reader::handle_include (file_location loc)
+static void
+handle_include (int lineno, directive_handler_t handle_directive)
 {
   const char *filename;
   const char *old_filename;
-  int old_lineno, old_colno;
+  int old_lineno;
   char *pathname;
   FILE *input_file, *old_file;
 
@@ -1074,7 +901,7 @@ md_reader::handle_include (file_location loc)
       struct file_name_list *stackp;
 
       /* Search the directory path, trying to open the file.  */
-      for (stackp = m_first_dir_md_include; stackp; stackp = stackp->next)
+      for (stackp = first_dir_md_include; stackp; stackp = stackp->next)
 	{
 	  static const char sep[2] = { DIR_SEPARATOR, '\0' };
 
@@ -1090,8 +917,8 @@ md_reader::handle_include (file_location loc)
      filename with BASE_DIR.  */
   if (input_file == NULL)
     {
-      if (m_base_dir)
-	pathname = concat (m_base_dir, filename, NULL);
+      if (base_dir)
+	pathname = concat (base_dir, filename, NULL);
       else
 	pathname = xstrdup (filename);
       input_file = fopen (pathname, "r");
@@ -1100,31 +927,28 @@ md_reader::handle_include (file_location loc)
   if (input_file == NULL)
     {
       free (pathname);
-      error_at (loc, "include file `%s' not found", filename);
+      error_with_line (lineno, "include file `%s' not found", filename);
       return;
     }
 
   /* Save the old cursor.  Note that the LINENO argument to this
      function is the beginning of the include statement, while
      read_md_lineno has already been advanced.  */
-  old_file = m_read_md_file;
-  old_filename = m_read_md_filename;
-  old_lineno = m_read_md_lineno;
-  old_colno = m_read_md_colno;
+  old_file = read_md_file;
+  old_filename = read_md_filename;
+  old_lineno = read_md_lineno;
 
   if (include_callback)
     include_callback (pathname);
 
-  m_read_md_file = input_file;
-  m_read_md_filename = pathname;
-
-  handle_file ();
+  read_md_file = input_file;
+  read_md_filename = pathname;
+  handle_file (handle_directive);
 
   /* Restore the old cursor.  */
-  m_read_md_file = old_file;
-  m_read_md_filename = old_filename;
-  m_read_md_lineno = old_lineno;
-  m_read_md_colno = old_colno;
+  read_md_file = old_file;
+  read_md_filename = old_filename;
+  read_md_lineno = old_lineno;
 
   /* Do not free the pathname.  It is attached to the various rtx
      queue elements.  */
@@ -1134,17 +958,16 @@ md_reader::handle_include (file_location loc)
    read_md_filename are valid.  Use HANDLE_DIRECTIVE to handle
    unknown directives.  */
 
-void
-md_reader::handle_file ()
+static void
+handle_file (directive_handler_t handle_directive)
 {
   struct md_name directive;
-  int c;
+  int c, lineno;
 
-  m_read_md_lineno = 1;
-  m_read_md_colno = 0;
+  read_md_lineno = 1;
   while ((c = read_skip_spaces ()) != EOF)
     {
-      file_location loc = get_current_location ();
+      lineno = read_md_lineno;
       if (c != '(')
 	fatal_expected_char ('(', c);
 
@@ -1152,76 +975,93 @@ md_reader::handle_file ()
       if (strcmp (directive.string, "define_constants") == 0)
 	handle_constants ();
       else if (strcmp (directive.string, "define_enum") == 0)
-	handle_enum (loc, true);
+	handle_enum (lineno, true);
       else if (strcmp (directive.string, "define_c_enum") == 0)
-	handle_enum (loc, false);
+	handle_enum (lineno, false);
       else if (strcmp (directive.string, "include") == 0)
-	handle_include (loc);
+	handle_include (lineno, handle_directive);
+      else if (handle_directive)
+	handle_directive (lineno, directive.string);
       else
-	handle_unknown_directive (loc, directive.string);
+	read_skip_construct (1, lineno);
 
-      require_char_ws (')');
+      c = read_skip_spaces ();
+      if (c != ')')
+	fatal_expected_char (')', c);
     }
-  fclose (m_read_md_file);
+  fclose (read_md_file);
 }
 
-/* Like handle_file, but for top-level files.  Set up m_toplevel_fname
-   and m_base_dir accordingly.  */
+/* Like handle_file, but for top-level files.  Set up in_fname and
+   base_dir accordingly.  */
 
-void
-md_reader::handle_toplevel_file ()
+static void
+handle_toplevel_file (directive_handler_t handle_directive)
 {
   const char *base;
 
-  m_toplevel_fname = m_read_md_filename;
-  base = lbasename (m_toplevel_fname);
-  if (base == m_toplevel_fname)
-    m_base_dir = NULL;
+  in_fname = read_md_filename;
+  base = lbasename (in_fname);
+  if (base == in_fname)
+    base_dir = NULL;
   else
-    m_base_dir = xstrndup (m_toplevel_fname, base - m_toplevel_fname);
+    base_dir = xstrndup (in_fname, base - in_fname);
 
-  handle_file ();
-}
-
-file_location
-md_reader::get_current_location () const
-{
-  return file_location (m_read_md_filename, m_read_md_lineno, m_read_md_colno);
+  handle_file (handle_directive);
 }
 
 /* Parse a -I option with argument ARG.  */
 
-void
-md_reader::add_include_path (const char *arg)
+static void
+parse_include (const char *arg)
 {
   struct file_name_list *dirtmp;
 
   dirtmp = XNEW (struct file_name_list);
   dirtmp->next = 0;
   dirtmp->fname = arg;
-  *m_last_dir_md_include_ptr = dirtmp;
-  m_last_dir_md_include_ptr = &dirtmp->next;
+  *last_dir_md_include_ptr = dirtmp;
+  last_dir_md_include_ptr = &dirtmp->next;
+  if (strlen (dirtmp->fname) > max_include_len)
+    max_include_len = strlen (dirtmp->fname);
 }
 
-#ifdef GENERATOR_FILE
-
 /* The main routine for reading .md files.  Try to process all the .md
-   files specified on the command line and return true if no error occurred.
+   files specified on the command line and return true if no error occured.
 
    ARGC and ARGV are the arguments to main.
 
    PARSE_OPT, if nonnull, is passed all unknown command-line arguments.
    It should return true if it recognizes the argument or false if a
-   generic error should be reported.  */
+   generic error should be reported.
+
+   If HANDLE_DIRECTIVE is nonnull, the parser calls it for each
+   unknown directive, otherwise it just skips such directives.
+   See the comment above the directive_handler_t definition for
+   details about the callback's interface.  */
 
 bool
-md_reader::read_md_files (int argc, const char **argv,
-			  bool (*parse_opt) (const char *))
+read_md_files (int argc, char **argv, bool (*parse_opt) (const char *),
+	       directive_handler_t handle_directive)
 {
   int i;
   bool no_more_options;
   bool already_read_stdin;
   int num_files;
+
+  /* Initialize global data.  */
+  obstack_init (&string_obstack);
+  ptr_locs = htab_create (161, leading_ptr_hash, leading_ptr_eq_p, 0);
+  obstack_init (&ptr_loc_obstack);
+  joined_conditions = htab_create (161, leading_ptr_hash, leading_ptr_eq_p, 0);
+  obstack_init (&joined_conditions_obstack);
+  md_constants = htab_create (31, leading_string_hash,
+			      leading_string_eq_p, (htab_del) 0);
+  enum_types = htab_create (31, leading_string_hash,
+			    leading_string_eq_p, (htab_del) 0);
+
+  /* Unlock the stdio streams.  */
+  unlock_std_streams ();
 
   /* First we loop over all the options.  */
   for (i = 1; i < argc; i++)
@@ -1240,9 +1080,9 @@ md_reader::read_md_files (int argc, const char **argv,
 	if (argv[i][1] == 'I')
 	  {
 	    if (argv[i][2] != '\0')
-	      add_include_path (argv[i] + 2);
+	      parse_include (argv[i] + 2);
 	    else if (++i < argc)
-	      add_include_path (argv[i]);
+	      parse_include (argv[i]);
 	    else
 	      fatal ("directory name missing after -I option");
 	    continue;
@@ -1270,9 +1110,9 @@ md_reader::read_md_files (int argc, const char **argv,
 	      if (already_read_stdin)
 		fatal ("cannot read standard input twice");
 
-	      m_read_md_file = stdin;
-	      m_read_md_filename = "<stdin>";
-	      handle_toplevel_file ();
+	      read_md_file = stdin;
+	      read_md_filename = "<stdin>";
+	      handle_toplevel_file (handle_directive);
 	      already_read_stdin = true;
 	      continue;
 	    }
@@ -1288,14 +1128,14 @@ md_reader::read_md_files (int argc, const char **argv,
 
       /* If we get here we are looking at a non-option argument, i.e.
 	 a file to be processed.  */
-      m_read_md_filename = argv[i];
-      m_read_md_file = fopen (m_read_md_filename, "r");
-      if (m_read_md_file == 0)
+      read_md_filename = argv[i];
+      read_md_file = fopen (read_md_filename, "r");
+      if (read_md_file == 0)
 	{
-	  perror (m_read_md_filename);
+	  perror (read_md_filename);
 	  return false;
 	}
-      handle_toplevel_file ();
+      handle_toplevel_file (handle_directive);
       num_files++;
     }
 
@@ -1303,57 +1143,10 @@ md_reader::read_md_files (int argc, const char **argv,
      read the standard input now.  */
   if (num_files == 0 && !already_read_stdin)
     {
-      m_read_md_file = stdin;
-      m_read_md_filename = "<stdin>";
-      handle_toplevel_file ();
+      read_md_file = stdin;
+      read_md_filename = "<stdin>";
+      handle_toplevel_file (handle_directive);
     }
 
   return !have_error;
-}
-
-#endif /* #ifdef GENERATOR_FILE */
-
-/* Read FILENAME.  */
-
-bool
-md_reader::read_file (const char *filename)
-{
-  m_read_md_filename = filename;
-  m_read_md_file = fopen (m_read_md_filename, "r");
-  if (m_read_md_file == 0)
-    {
-      perror (m_read_md_filename);
-      return false;
-    }
-  handle_toplevel_file ();
-  return !have_error;
-}
-
-/* Read FILENAME, filtering to just the given lines.  */
-
-bool
-md_reader::read_file_fragment (const char *filename,
-			       int first_line,
-			       int last_line)
-{
-  m_read_md_filename = filename;
-  m_read_md_file = fopen (m_read_md_filename, "r");
-  if (m_read_md_file == 0)
-    {
-      perror (m_read_md_filename);
-      return false;
-    }
-  m_first_line = first_line;
-  m_last_line = last_line;
-  handle_toplevel_file ();
-  return !have_error;
-}
-
-/* class noop_reader : public md_reader */
-
-/* A dummy implementation which skips unknown directives.  */
-void
-noop_reader::handle_unknown_directive (file_location loc, const char *)
-{
-  read_skip_construct (1, loc);
 }

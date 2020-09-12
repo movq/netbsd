@@ -1,4 +1,4 @@
-#   Copyright 2010-2019 Free Software Foundation, Inc.
+#   Copyright 2010, 2011 Free Software Foundation, Inc.
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -18,21 +18,21 @@
 # The tests that use the maintenance command do not need tracepoint
 # support on the target, but they do want a live program.
 
-load_lib "trace-support.exp"
+load_lib "trace-support.exp";
+
+if $tracelevel then {
+    strace $tracelevel
+}
 
 
 gdb_exit
 gdb_start
-standard_testfile actions.c
-
-if ![gdb_trace_common_supports_arch] {
-    unsupported "no trace-common.h support for arch"
-    return -1
-}
-
+set testfile "actions"
+set srcfile ${testfile}.c
+set binfile $objdir/$subdir/ax
 if { [gdb_compile "$srcdir/$subdir/$srcfile" $binfile \
 	  executable {debug nowarnings}] != "" } {
-    untested "failed to compile"
+    untested ax.exp
     return -1
 }
 
@@ -85,8 +85,6 @@ gdb_test "maint agent gdb_long_test >= gdb_short_test" "" "maint agent gdb_long_
 gdb_test "maint agent &gdb_long_test == &gdb_short_test" "" "maint agent &gdb_long_test == &gdb_short_test"
 
 gdb_test "maint agent &gdb_long_test < &gdb_short_test" "" "maint agent &gdb_long_test < &gdb_short_test"
-
-gdb_test "maint agent (unsigned char)1L" ".*ext 8.*" "maint agent (unsigned char)1L"
 
 # Now test eval version of agent expressions.
 

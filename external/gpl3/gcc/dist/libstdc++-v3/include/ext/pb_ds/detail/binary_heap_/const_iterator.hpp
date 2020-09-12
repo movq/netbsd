@@ -1,6 +1,6 @@
 // -*- C++ -*-
 
-// Copyright (C) 2005-2019 Free Software Foundation, Inc.
+// Copyright (C) 2005, 2006, 2009 Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the terms
@@ -34,7 +34,7 @@
 // warranty.
 
 /**
- * @file binary_heap_/const_iterator.hpp
+ * @file const_iterator.hpp
  * Contains an iterator class returned by the table's const find and insert
  *     methods.
  */
@@ -42,86 +42,98 @@
 #ifndef PB_DS_BINARY_HEAP_CONST_ITERATOR_HPP
 #define PB_DS_BINARY_HEAP_CONST_ITERATOR_HPP
 
-#include <ext/pb_ds/detail/binary_heap_/point_const_iterator.hpp>
+#include <ext/pb_ds/detail/binary_heap_/const_point_iterator.hpp>
 #include <debug/debug.h>
 
 namespace __gnu_pbds
 {
   namespace detail
   {
-#define PB_DS_BIN_HEAP_CIT_BASE \
-    binary_heap_point_const_iterator_<Value_Type, Entry, Simple, _Alloc>
 
-    /// Const point-type iterator.
+#define PB_DS_CLASS_C_DEC \
+    binary_heap_const_iterator_<Value_Type, Entry, Simple, Allocator>
+
+#define PB_DS_BASE_C_DEC \
+    binary_heap_const_point_iterator_<Value_Type, Entry, Simple, Allocator>
+
+    // Const point-type iterator.
     template<typename Value_Type,
 	     typename Entry,
 	     bool Simple,
-	     typename _Alloc>
-    class binary_heap_const_iterator_ : public PB_DS_BIN_HEAP_CIT_BASE
+	     class Allocator>
+    class binary_heap_const_iterator_ : public PB_DS_BASE_C_DEC
     {
+
     private:
-      typedef PB_DS_BIN_HEAP_CIT_BASE 		       	base_type;
-      typedef typename base_type::entry_pointer 	entry_pointer;
+      typedef typename PB_DS_BASE_C_DEC::entry_pointer entry_pointer;
+
+      typedef PB_DS_BASE_C_DEC base_type;
 
     public:
-      /// Category.
-      typedef std::forward_iterator_tag 		iterator_category;
 
-      /// Difference type.
-      typedef typename _Alloc::difference_type 		difference_type;
+      // Category.
+      typedef std::forward_iterator_tag iterator_category;
 
-      /// Iterator's value type.
-      typedef typename base_type::value_type 		value_type;
+      // Difference type.
+      typedef typename Allocator::difference_type difference_type;
 
-      /// Iterator's pointer type.
-      typedef typename base_type::pointer 		pointer;
+      // Iterator's value type.
+      typedef typename base_type::value_type value_type;
 
-      /// Iterator's const pointer type.
-      typedef typename base_type::const_pointer 	const_pointer;
+      // Iterator's pointer type.
+      typedef typename base_type::pointer pointer;
 
-      /// Iterator's reference type.
-      typedef typename base_type::reference 		reference;
+      // Iterator's const pointer type.
+      typedef typename base_type::const_pointer const_pointer;
 
-      /// Iterator's const reference type.
-      typedef typename base_type::const_reference 	const_reference;
+      // Iterator's reference type.
+      typedef typename base_type::reference reference;
+
+      // Iterator's const reference type.
+      typedef typename base_type::const_reference const_reference;
+
+    public:
 
       inline
       binary_heap_const_iterator_(entry_pointer p_e) : base_type(p_e)
       { }
 
-      /// Default constructor.
+      // Default constructor.
       inline
       binary_heap_const_iterator_()
       { }
 
-      /// Copy constructor.
+      // Copy constructor.
       inline
-      binary_heap_const_iterator_(const binary_heap_const_iterator_& other) 
-      : base_type(other)
+      binary_heap_const_iterator_(const PB_DS_CLASS_C_DEC& other) : base_type(other)
       { }
 
-      /// Compares content to a different iterator object.
+      // Compares content to a different iterator object.
       inline bool
-      operator==(const binary_heap_const_iterator_& other) const
-      { return base_type::m_p_e == other.m_p_e; }
+      operator==(const PB_DS_CLASS_C_DEC& other) const
+      {
+	return base_type::m_p_e == other.m_p_e;
+      }
 
-      /// Compares content (negatively) to a different iterator object.
+      // Compares content (negatively) to a different iterator object.
       inline bool
-      operator!=(const binary_heap_const_iterator_& other) const
-      { return base_type::m_p_e != other.m_p_e; }
+      operator!=(const PB_DS_CLASS_C_DEC& other) const
+      {
+	return base_type::m_p_e != other.m_p_e;
+      }
 
-      inline binary_heap_const_iterator_& 
+      inline PB_DS_CLASS_C_DEC& 
       operator++()
       {
-	_GLIBCXX_DEBUG_ASSERT(base_type::m_p_e != 0);
+	_GLIBCXX_DEBUG_ASSERT(base_type::m_p_e != NULL);
 	inc();
 	return *this;
       }
 
-      inline binary_heap_const_iterator_
+      inline PB_DS_CLASS_C_DEC
       operator++(int)
       {
-	binary_heap_const_iterator_ ret_it(base_type::m_p_e);
+	PB_DS_CLASS_C_DEC ret_it(base_type::m_p_e);
 	operator++();
 	return ret_it;
       }
@@ -132,7 +144,8 @@ namespace __gnu_pbds
       { ++base_type::m_p_e; }
     };
 
-#undef PB_DS_BIN_HEAP_CIT_BASE
+#undef PB_DS_CLASS_C_DEC
+#undef PB_DS_BASE_C_DEC
   } // namespace detail
 } // namespace __gnu_pbds
 

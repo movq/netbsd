@@ -1,6 +1,7 @@
 /* GNU/Linux on ARM target support, prototypes.
 
-   Copyright (C) 2006-2019 Free Software Foundation, Inc.
+   Copyright (C) 2006, 2007, 2008, 2009, 2010, 2011
+   Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -17,15 +18,15 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-#ifndef ARM_LINUX_TDEP_H
-#define ARM_LINUX_TDEP_H
-
 struct regset;
 struct regcache;
 
 #define ARM_LINUX_SIZEOF_NWFPE (8 * FP_REGISTER_SIZE \
 				+ 2 * INT_REGISTER_SIZE \
 				+ 8 + INT_REGISTER_SIZE)
+
+/* The index to access CSPR in user_regs defined in GLIBC.  */
+#define ARM_CPSR_GREGNUM 16
 
 /* Support for register format used by the NWFPE FPA emulator.  Each
    register takes three words, where either the first one, two, or
@@ -58,13 +59,3 @@ void arm_linux_supply_nwfpe (const struct regset *regset,
 void arm_linux_collect_nwfpe (const struct regset *regset,
 			      const struct regcache *regcache,
 			      int regnum, void *regs_buf, size_t len);
-
-/* ARM GNU/Linux HWCAP values.  These are in defined in
-   <asm/elf.h> in current kernels.  */
-#define HWCAP_VFP       64
-#define HWCAP_IWMMXT    512
-#define HWCAP_NEON      4096
-#define HWCAP_VFPv3     8192
-#define HWCAP_VFPv3D16  16384
-
-#endif /* ARM_LINUX_TDEP_H */

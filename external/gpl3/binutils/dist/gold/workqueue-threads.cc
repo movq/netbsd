@@ -1,6 +1,6 @@
 // workqueue-threads.cc -- the threaded workqueue for gold
 
-// Copyright (C) 2007-2020 Free Software Foundation, Inc.
+// Copyright 2007, 2008 Free Software Foundation, Inc.
 // Written by Ian Lance Taylor <iant@google.com>.
 
 // This file is part of gold.
@@ -174,7 +174,7 @@ Workqueue_threader_threadpool::set_thread_count(int thread_count)
 // Return whether the current thread should be cancelled.
 
 bool
-Workqueue_threader_threadpool::should_cancel_thread(int thread_number)
+Workqueue_threader_threadpool::should_cancel_thread()
 {
   // Fast exit without taking a lock.
   if (!this->check_thread_count_)
@@ -182,13 +182,12 @@ Workqueue_threader_threadpool::should_cancel_thread(int thread_number)
 
   {
     Hold_lock hl(this->lock_);
-    if (thread_number > this->desired_thread_count_)
+    if (this->threads_ > this->desired_thread_count_)
       {
 	--this->threads_;
-	if (this->threads_ <= this->desired_thread_count_)
-	  this->check_thread_count_ = 0;
 	return true;
       }
+    this->check_thread_count_ = 0;
   }
 
   return false;

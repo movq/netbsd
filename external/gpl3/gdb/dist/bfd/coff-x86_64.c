@@ -1,5 +1,5 @@
 /* BFD back-end for AMD 64 COFF files.
-   Copyright (C) 2006-2019 Free Software Foundation, Inc.
+   Copyright 2006, 2007, 2008, 2009  Free Software Foundation, Inc.
 
    This file is part of BFD, the Binary File Descriptor library.
 
@@ -17,7 +17,7 @@
    along with this program; if not, write to the Free Software
    Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston,
    MA 02110-1301, USA.
-
+   
    Written by Kai Tietz, OneVision Software GmbH&CoKg.  */
 
 #ifndef COFF_WITH_pex64
@@ -138,55 +138,48 @@ coff_amd64_reloc (bfd *abfd,
 #define DOIT(x) \
   x = ((x & ~howto->dst_mask) | (((x & howto->src_mask) + diff) & howto->dst_mask))
 
-  if (diff != 0)
-    {
-      reloc_howto_type *howto = reloc_entry->howto;
-      unsigned char *addr = (unsigned char *) data + reloc_entry->address;
+    if (diff != 0)
+      {
+	reloc_howto_type *howto = reloc_entry->howto;
+	unsigned char *addr = (unsigned char *) data + reloc_entry->address;
 
-      if (! bfd_reloc_offset_in_range (howto, abfd, input_section,
-				       reloc_entry->address
-				       * bfd_octets_per_byte (abfd)))
-	return bfd_reloc_outofrange;
-
-      switch (howto->size)
-	{
-	case 0:
+	switch (howto->size)
 	  {
-	    char x = bfd_get_8 (abfd, addr);
-	    DOIT (x);
-	    bfd_put_8 (abfd, x, addr);
-	  }
-	  break;
+	  case 0:
+	    {
+	      char x = bfd_get_8 (abfd, addr);
+	      DOIT (x);
+	      bfd_put_8 (abfd, x, addr);
+	    }
+	    break;
 
-	case 1:
-	  {
-	    short x = bfd_get_16 (abfd, addr);
-	    DOIT (x);
-	    bfd_put_16 (abfd, (bfd_vma) x, addr);
-	  }
-	  break;
+	  case 1:
+	    {
+	      short x = bfd_get_16 (abfd, addr);
+	      DOIT (x);
+	      bfd_put_16 (abfd, (bfd_vma) x, addr);
+	    }
+	    break;
 
-	case 2:
-	  {
-	    long x = bfd_get_32 (abfd, addr);
-	    DOIT (x);
-	    bfd_put_32 (abfd, (bfd_vma) x, addr);
-	  }
-	  break;
+	  case 2:
+	    {
+	      long x = bfd_get_32 (abfd, addr);
+	      DOIT (x);
+	      bfd_put_32 (abfd, (bfd_vma) x, addr);
+	    }
+	    break;
+	  case 4:
+	    {
+	      long long x = bfd_get_64 (abfd, addr);
+	      DOIT (x);
+	      bfd_put_64 (abfd, (bfd_vma) x, addr);
+	    }
+	    break;
 
-	case 4:
-	  {
-	    bfd_uint64_t x = bfd_get_64 (abfd, addr);
-	    DOIT (x);
-	    bfd_put_64 (abfd, x, addr);
+	  default:
+	    abort ();
 	  }
-	  break;
-
-	default:
-	  bfd_set_error (bfd_error_bad_value);
-	  return bfd_reloc_notsupported;
-	}
-    }
+      }
 
   /* Now let bfd_perform_relocation finish everything up.  */
   return bfd_reloc_continue;
@@ -354,18 +347,18 @@ static reloc_howto_type howto_table[] =
   EMPTY_HOWTO (13),
 #ifndef DONT_EXTEND_AMD64
   HOWTO (R_AMD64_PCRQUAD,
-	 0,			/* rightshift */
-	 4,			/* size (0 = byte, 1 = short, 2 = long) */
-	 64,			/* bitsize */
-	 TRUE,			/* pc_relative */
-	 0,			/* bitpos */
-	 complain_overflow_signed, /* complain_on_overflow */
-	 coff_amd64_reloc,	/* special_function */
-	 "R_X86_64_PC64",	/* name */
-	 TRUE,			/* partial_inplace */
-	 0xffffffffffffffffll,	/* src_mask */
-	 0xffffffffffffffffll,	/* dst_mask */
-	 PCRELOFFSET),		 /* pcrel_offset */
+         0,                     /* rightshift */
+         4,                     /* size (0 = byte, 1 = short, 2 = long) */
+         64,                    /* bitsize */
+         TRUE,                  /* pc_relative */
+         0,                     /* bitpos */
+         complain_overflow_signed, /* complain_on_overflow */
+         coff_amd64_reloc,      /* special_function */
+         "R_X86_64_PC64",       /* name */
+         TRUE,                  /* partial_inplace */
+         0xffffffffffffffffll,  /* src_mask */
+         0xffffffffffffffffll,  /* dst_mask */
+         PCRELOFFSET),           /* pcrel_offset */
 #else
   EMPTY_HOWTO (14),
 #endif
@@ -455,8 +448,6 @@ static reloc_howto_type howto_table[] =
 	 PCRELOFFSET)		/* pcrel_offset */
 };
 
-#define NUM_HOWTOS ARRAY_SIZE (howto_table)
-
 /* Turn a howto into a reloc  nunmber */
 
 #define SELECT_RELOC(x,howto) { x.r_type = howto->type; }
@@ -465,7 +456,7 @@ static reloc_howto_type howto_table[] =
 
 #define RTYPE2HOWTO(cache_ptr, dst)		\
   ((cache_ptr)->howto =				\
-   ((dst)->r_type < NUM_HOWTOS)			\
+   ((dst)->r_type < ARRAY_SIZE (howto_table))	\
     ? howto_table + (dst)->r_type		\
     : NULL)
 
@@ -490,13 +481,13 @@ static reloc_howto_type howto_table[] =
 #define CALC_ADDEND(abfd, ptr, reloc, cache_ptr)		\
   {								\
     coff_symbol_type *coffsym = NULL;				\
-								\
+    								\
     if (ptr && bfd_asymbol_bfd (ptr) != abfd)			\
       coffsym = (obj_symbols (abfd)				\
-		 + (cache_ptr->sym_ptr_ptr - symbols));		\
+	         + (cache_ptr->sym_ptr_ptr - symbols));		\
     else if (ptr)						\
-      coffsym = coff_symbol_from (ptr);				\
-								\
+      coffsym = coff_symbol_from (abfd, ptr);			\
+    								\
     if (coffsym != NULL						\
 	&& coffsym->native->u.syment.n_scnum == 0)		\
       cache_ptr->addend = - coffsym->native->u.syment.n_value;	\
@@ -505,8 +496,7 @@ static reloc_howto_type howto_table[] =
       cache_ptr->addend = - (ptr->section->vma + ptr->value);	\
     else							\
       cache_ptr->addend = 0;					\
-    if (ptr && reloc.r_type < NUM_HOWTOS			\
-	&& howto_table[reloc.r_type].pc_relative)		\
+    if (ptr && howto_table[reloc.r_type].pc_relative)		\
       cache_ptr->addend += asect->vma;				\
   }
 
@@ -534,7 +524,7 @@ coff_pe_amd64_relocate_section (bfd *output_bfd,
 				struct internal_syment *syms,
 				asection **sections)
 {
-  if (bfd_link_relocatable (info))
+  if (info->relocatable)
     return TRUE;
 
   return _bfd_coff_generic_relocate_section (output_bfd, info, input_bfd,input_section, contents,relocs, syms, sections);
@@ -556,7 +546,7 @@ coff_amd64_rtype_to_howto (bfd *abfd ATTRIBUTE_UNUSED,
 {
   reloc_howto_type *howto;
 
-  if (rel->r_type >= NUM_HOWTOS)
+  if (rel->r_type >= ARRAY_SIZE (howto_table))
     {
       bfd_set_error (bfd_error_bad_value);
       return NULL;
@@ -608,19 +598,14 @@ coff_amd64_rtype_to_howto (bfd *abfd ATTRIBUTE_UNUSED,
 #if defined(COFF_WITH_PE)
   if (howto->pc_relative)
     {
-#ifndef DONT_EXTEND_AMD64
-      if (rel->r_type == R_AMD64_PCRQUAD)
-	*addendp -= 8;
-      else
-#endif
-	*addendp -= 4;
+      *addendp -= 4;
 
       /* If the symbol is defined, then the generic code is going to
-	 add back the symbol value in order to cancel out an
-	 adjustment it made to the addend.  However, we set the addend
-	 to 0 at the start of this function.  We need to adjust here,
-	 to avoid the adjustment the generic code will make.  FIXME:
-	 This is getting a bit hackish.  */
+         add back the symbol value in order to cancel out an
+         adjustment it made to the addend.  However, we set the addend
+         to 0 at the start of this function.  We need to adjust here,
+         to avoid the adjustment the generic code will make.  FIXME:
+         This is getting a bit hackish.  */
       if (sym != NULL && sym->n_scnum != 0)
 	*addendp -= sym->n_value;
     }
@@ -633,8 +618,7 @@ coff_amd64_rtype_to_howto (bfd *abfd ATTRIBUTE_UNUSED,
     {
       bfd_vma osect_vma;
 
-      if (h && (h->root.type == bfd_link_hash_defined
-		|| h->root.type == bfd_link_hash_defweak))
+      if (h && (h->type == bfd_link_hash_defined || h->type == bfd_link_hash_defweak))
 	osect_vma = h->root.u.def.section->output_section->vma;
       else
 	{
@@ -704,7 +688,7 @@ coff_amd64_reloc_name_lookup (bfd *abfd ATTRIBUTE_UNUSED,
 {
   unsigned int i;
 
-  for (i = 0; i < NUM_HOWTOS; i++)
+  for (i = 0; i < sizeof (howto_table) / sizeof (howto_table[0]); i++)
     if (howto_table[i].name != NULL
 	&& strcasecmp (howto_table[i].name, r_name) == 0)
       return &howto_table[i];
@@ -749,7 +733,7 @@ const bfd_target
 #ifdef TARGET_SYM
   TARGET_SYM =
 #else
-  x86_64_coff_vec =
+  x86_64coff_vec =
 #endif
 {
 #ifdef TARGET_NAME
@@ -761,15 +745,15 @@ const bfd_target
   BFD_ENDIAN_LITTLE,		/* Data byte order is little.  */
   BFD_ENDIAN_LITTLE,		/* Header byte order is little.  */
 
-  (HAS_RELOC | EXEC_P		/* Object flags.  */
-   | HAS_LINENO | HAS_DEBUG
-   | HAS_SYMS | HAS_LOCALS | WP_TEXT | D_PAGED | BFD_COMPRESS | BFD_DECOMPRESS),
+  (HAS_RELOC | EXEC_P |		/* Object flags.  */
+   HAS_LINENO | HAS_DEBUG |
+   HAS_SYMS | HAS_LOCALS | WP_TEXT | D_PAGED),
 
   (SEC_HAS_CONTENTS | SEC_ALLOC | SEC_LOAD | SEC_RELOC /* Section flags.  */
 #if defined(COFF_WITH_PE)
-   | SEC_LINK_ONCE | SEC_LINK_DUPLICATES | SEC_READONLY | SEC_DEBUGGING
+   | SEC_LINK_ONCE | SEC_LINK_DUPLICATES | SEC_READONLY
 #endif
-   | SEC_CODE | SEC_DATA | SEC_EXCLUDE ),
+   | SEC_CODE | SEC_DATA),
 
 #ifdef TARGET_UNDERSCORE
   TARGET_UNDERSCORE,		/* Leading underscore.  */
@@ -778,7 +762,6 @@ const bfd_target
 #endif
   '/',				/* Ar_pad_char.  */
   15,				/* Ar_max_namelen.  */
-  0,				/* match priority.  */
 
   bfd_getl64, bfd_getl_signed_64, bfd_putl64,
      bfd_getl32, bfd_getl_signed_32, bfd_putl32,
@@ -788,24 +771,12 @@ const bfd_target
      bfd_getl16, bfd_getl_signed_16, bfd_putl16, /* Hdrs.  */
 
   /* Note that we allow an object file to be treated as a core file as well.  */
-  {				/* bfd_check_format.  */
-    _bfd_dummy_target,
-    amd64coff_object_p,
-    bfd_generic_archive_p,
-    amd64coff_object_p 
-  },
-  {				/* bfd_set_format.  */
-    _bfd_bool_bfd_false_error,
-    coff_mkobject,
-    _bfd_generic_mkarchive,
-    _bfd_bool_bfd_false_error 
-  },
-  {				/* bfd_write_contents.  */
-    _bfd_bool_bfd_false_error,
-    coff_write_object_contents,
-    _bfd_write_archive_contents,
-    _bfd_bool_bfd_false_error 
-  },
+  { _bfd_dummy_target, amd64coff_object_p, /* BFD_check_format.  */
+    bfd_generic_archive_p, amd64coff_object_p },
+  { bfd_false, coff_mkobject, _bfd_generic_mkarchive, /* bfd_set_format.  */
+    bfd_false },
+  { bfd_false, coff_write_object_contents, /* bfd_write_contents.  */
+   _bfd_write_archive_contents, bfd_false },
 
   BFD_JUMP_TABLE_GENERIC (coff),
   BFD_JUMP_TABLE_COPY (coff),

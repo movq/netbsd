@@ -1,6 +1,6 @@
 # cpexprs.exp - C++ expressions tests
 #
-# Copyright 2008-2019 Free Software Foundation, Inc.
+# Copyright 2008, 2009, 2010, 2011 Free Software Foundation, Inc.
 #
 # Contributed by Red Hat, originally written by Keith Seitz.
 #
@@ -54,7 +54,7 @@ proc test_breakpoint {func} {
 # Usage:
 # add NAME TYPE PRINT LST
 # add NAME TYPE PRINT -
-proc add_type_regexp {func type print lst} {
+proc add {func type print lst} {
     global all_functions CONVAR ADDR
 
     set all_functions($func,type) $type
@@ -67,15 +67,11 @@ proc add_type_regexp {func type print lst} {
     regsub {\(void\)} $print {()} print
 
     set all_functions($func,print) \
-	"$CONVAR = {$type} $ADDR <[string_to_regexp $print].*>"
+	"$CONVAR = {[string_to_regexp $type]} $ADDR <[string_to_regexp $print].*>"
     if {$lst == "-"} {
 	set lst "$func"
     }
     set all_functions($func,list) ".*// [string_to_regexp $lst]"
-}
-
-proc add {func type print lst} {
-    add_type_regexp $func [string_to_regexp $type] $print $lst
 }
 
 proc get {func cmd} {
@@ -143,40 +139,32 @@ add {base2::a_function} \
 
 # On targets using the ARM EABI, the constructor is expected to return
 # "this".
-proc ctor_ret { type } {
-    if { [istarget arm*-*eabi*] || [is_aarch32_target] } {
-	return "$type *"
-    } else {
-	return "void "
-    }
-}
-
-proc ctor_prefix { type } {
-    set ret [ctor_ret $type]
-    return "${ret}($type * const"
-}
-
 proc ctor { type arglist } {
+    if { [istarget arm*-*eabi*] } {
+	set ret "$type *"
+    } else {
+	set ret "void "
+    }
     if { $arglist != "" } {
 	set arglist ", $arglist"
     }
-    return "[ctor_prefix $type]$arglist)"
+    return "${ret}($type * const$arglist)"
 }
 
 add {derived::derived} \
     [ctor derived ""] \
     - \
     -
-add_type_regexp {base1::base1(void)} \
-    "[string_to_regexp [ctor_prefix base1]], (const )?void \\*\\*( const)?\\)" \
+add {base1::base1(void)} \
+    [ctor base1 "const void ** const"] \
     - \
     -
 add {base1::base1(int)} \
     [ctor base1 "int"] \
     - \
     -
-add_type_regexp {base2::base2} \
-    "[string_to_regexp [ctor_prefix base2]], (const )?void \\*\\*( const)?\\)" \
+add {base2::base2} \
+    [ctor base2 "const void ** const"] \
     - \
     -
 add {base::base(void)} \
@@ -195,7 +183,7 @@ add {base::base(int)} \
 # GCC returns void * instead of $type *; RealView appears to do
 # the same.
 proc dtor { type } {
-    if { [istarget arm*-*eabi*] || [is_aarch32_target] } {
+    if { [istarget arm*-*eabi*] } {
 	set ret "void *"
     } else {
 	set ret "void "
@@ -405,10 +393,6 @@ add {base::operator fluff**} \
     -
 add {base::operator int} \
     {int (const base * const)} \
-    - \
-    -
-add {base::operator fluff const* const*} \
-    {const fluff * const *(const base * const)} \
     - \
     -
 
@@ -679,6 +663,10 @@ add {policyd5::function} \
     {operation_1<T>::function}
 
 # Start the test
+if {$tracelevel} {
+    strace $tracelevel
+}
+
 if {[skip_cplus_tests]} { continue }
 
 # On SPU this test fails because the executable exceeds local storage size.
@@ -690,15 +678,24 @@ if { [istarget "spu*-*-*"] } {
 # test running programs
 #
 
-standard_testfile .cc
+set testfile "cpexprs"
+set srcfile "${testfile}.cc"
+set binfile [file join $objdir $subdir $testfile]
 
-if {[get_compiler_info "c++"]} {
+if  {[gdb_compile [file join $srcdir $subdir $srcfile] $binfile \
+	  executable {debug c++}] != "" } {
+    untested "$testfile.exp"
     return -1
 }
 
-if {[prepare_for_testing "failed to prepare" $testfile $srcfile {debug c++}]} {
+if {[get_compiler_info $binfile "c++"]} {
     return -1
 }
+
+gdb_exit
+gdb_start
+gdb_reinitialize_dir [file join $srcdir $subdir]
+gdb_load $binfile
 
 if {![runto_main]} {
     perror "couldn't run to breakpoint"
@@ -725,42 +722,6 @@ foreach name [get_functions list] {
 	test_breakpoint $name
     }
 }
-
-# Test c/v gets recognized even without quoting.
-foreach cv {{} { const} { volatile} { const volatile}} {
-  set test "p 'CV::m(int)$cv'"
-  gdb_test_multiple $test $test {
-      -re "( = {.*} 0x\[0-9a-f\]+ <CV::m.*>)\r\n$gdb_prompt $" {
-	  # = {void (CV * const, CV::t)} 0x400944 <CV::m(int)>
-	  set correct $expect_out(1,string)
-	  pass $test
-      }
-  }
-  if {"$cv" != ""} {
-      setup_kfail c++/14186 *-*-*
-  }
-  gdb_test "p CV::m(int)$cv" [string_to_regexp $correct]
-}
-
-# Test TYPENAME:: gets recognized even in parentheses.
-gdb_test "p CV_f(int)"   { = {int \(int\)} 0x[0-9a-f]+ <CV_f\(int\)>}
-gdb_test "p CV_f(CV::t)" { = {int \(int\)} 0x[0-9a-f]+ <CV_f\(int\)>}
-gdb_test "p CV_f(CV::i)" " = 43"
-
-gdb_test "p CV_f('cpexprs.cc'::CV::t)" \
-    { = {int \(int\)} 0x[0-9a-f]+ <CV_f\(int\)>}
-
-# Make sure conversion operator names are canonicalized and properly
-# "spelled."
-gdb_test "p base::operator const fluff * const *" \
-    [get "base::operator fluff const* const*" print] \
-    "canonicalized conversion operator name 1"
-gdb_test "p base::operator const fluff* const*" \
-    [get "base::operator fluff const* const*" print] \
-    "canonicalized conversion operator name 2"
-gdb_test "p base::operator derived*" \
-    "There is no field named operator derived\\*" \
-    "undefined conversion operator"
 
 gdb_exit
 return 0

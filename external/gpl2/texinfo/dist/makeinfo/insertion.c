@@ -1,4 +1,4 @@
-/*	$NetBSD: insertion.c,v 1.1.1.1 2016/01/14 00:11:29 christos Exp $	*/
+/*	$NetBSD: insertion.c,v 1.1 2016/01/14 00:11:29 christos Exp $	*/
 
 /* insertion.c -- insertions for Texinfo.
    Id: insertion.c,v 1.55 2004/11/11 18:34:28 karl Exp 

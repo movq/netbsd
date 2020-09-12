@@ -1,6 +1,6 @@
 // -*- C++ -*-
 
-// Copyright (C) 2005-2019 Free Software Foundation, Inc.
+// Copyright (C) 2005, 2006, 2009 Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the terms
@@ -34,7 +34,7 @@
 // warranty.
 
 /**
- * @file binary_heap_/resize_policy.hpp
+ * @file resize_policy.hpp
  * Contains an implementation class for a binary_heap.
  */
 
@@ -47,49 +47,40 @@ namespace __gnu_pbds
 {
   namespace detail
   {
-    /// Resize policy for binary heap.
-    template<typename _Tp>
+
+#define PB_DS_CLASS_T_DEC template<typename Size_Type>
+
+#define PB_DS_CLASS_C_DEC resize_policy<Size_Type>
+
+    template<typename Size_Type>
     class resize_policy
     {
-    private:
+    public:
+      typedef Size_Type size_type;
+
       enum
 	{
-	  ratio = 8,
-	  factor = 2
+	  min_size = 16
 	};
 
-      /// Next shrink size.
-      _Tp 		m_shrink_size;
-
-      /// Next grow size.
-      _Tp 		m_grow_size;
-
     public:
-      typedef _Tp	size_type;
-
-      static const _Tp	min_size = 16;
-
-      resize_policy() : m_shrink_size(0), m_grow_size(min_size)
-      { PB_DS_ASSERT_VALID((*this)) }
-
-      resize_policy(const resize_policy& other)
-      : m_shrink_size(other.m_shrink_size), m_grow_size(other.m_grow_size)
-      { PB_DS_ASSERT_VALID((*this)) }
+      inline
+      resize_policy();
 
       inline void
-      swap(resize_policy<_Tp>&);
+      swap(PB_DS_CLASS_C_DEC& other);
 
       inline bool
-      resize_needed_for_grow(size_type) const;
+      resize_needed_for_grow(size_type size) const;
 
       inline bool
-      resize_needed_for_shrink(size_type) const;
+      resize_needed_for_shrink(size_type size) const;
 
       inline bool
-      grow_needed(size_type) const;
+      grow_needed(size_type size) const;
 
       inline bool
-      shrink_needed(size_type) const;
+      shrink_needed(size_type size) const;
 
       inline size_type
       get_new_size_for_grow() const;
@@ -97,8 +88,8 @@ namespace __gnu_pbds
       inline size_type
       get_new_size_for_shrink() const;
 
-      inline size_type
-      get_new_size_for_arbitrary(size_type) const;
+      size_type
+      get_new_size_for_arbitrary(size_type size) const;
 
       inline void
       notify_grow_resize();
@@ -107,67 +98,83 @@ namespace __gnu_pbds
       notify_shrink_resize();
 
       void
-      notify_arbitrary(size_type);
+      notify_arbitrary(size_type actual_size);
 
 #ifdef _GLIBCXX_DEBUG
       void
-      assert_valid(const char*, int) const;
-#endif
+      assert_valid() const;
+#endif 
 
 #ifdef PB_DS_BINARY_HEAP_TRACE_
       void
       trace() const;
-#endif
+#endif 
+
+    private:
+      enum
+	{
+	  ratio = 8,
+	  factor = 2
+	};
+
+    private:
+      size_type m_next_shrink_size;
+      size_type m_next_grow_size;
     };
 
-    template<typename _Tp>
-      const _Tp resize_policy<_Tp>::min_size;
+    PB_DS_CLASS_T_DEC
+    inline
+    PB_DS_CLASS_C_DEC::
+    resize_policy() :
+      m_next_shrink_size(0),
+      m_next_grow_size(min_size)
+    { _GLIBCXX_DEBUG_ONLY(assert_valid();) }
 
-    template<typename _Tp>
+    PB_DS_CLASS_T_DEC
     inline void
-    resize_policy<_Tp>::
-    swap(resize_policy<_Tp>& other)
+    PB_DS_CLASS_C_DEC::
+    swap(PB_DS_CLASS_C_DEC& other)
     {
-      std::swap(m_shrink_size, other.m_shrink_size);
-      std::swap(m_grow_size, other.m_grow_size);
+      std::swap(m_next_shrink_size, other.m_next_shrink_size);
+      std::swap(m_next_grow_size, other.m_next_grow_size);
     }
 
-    template<typename _Tp>
+    PB_DS_CLASS_T_DEC
     inline bool
-    resize_policy<_Tp>::
+    PB_DS_CLASS_C_DEC::
     resize_needed_for_grow(size_type size) const
     {
-      _GLIBCXX_DEBUG_ASSERT(size <= m_grow_size);
-      return size == m_grow_size;
+      _GLIBCXX_DEBUG_ASSERT(size <= m_next_grow_size);
+      return size == m_next_grow_size;
     }
 
-    template<typename _Tp>
+    PB_DS_CLASS_T_DEC
     inline bool
-    resize_policy<_Tp>::
+    PB_DS_CLASS_C_DEC::
     resize_needed_for_shrink(size_type size) const
     {
-      _GLIBCXX_DEBUG_ASSERT(size <= m_grow_size);
-      return size == m_shrink_size;
+      _GLIBCXX_DEBUG_ASSERT(size <= m_next_grow_size);
+      return size == m_next_shrink_size;
     }
 
-    template<typename _Tp>
-    inline typename resize_policy<_Tp>::size_type
-    resize_policy<_Tp>::
+    PB_DS_CLASS_T_DEC
+    inline typename PB_DS_CLASS_C_DEC::size_type
+    PB_DS_CLASS_C_DEC::
     get_new_size_for_grow() const
-    { return m_grow_size * factor; }
+    { return m_next_grow_size*  factor; }
 
-    template<typename _Tp>
-    inline typename resize_policy<_Tp>::size_type
-    resize_policy<_Tp>::
+    PB_DS_CLASS_T_DEC
+    inline typename PB_DS_CLASS_C_DEC::size_type
+    PB_DS_CLASS_C_DEC::
     get_new_size_for_shrink() const
     {
-      const size_type half_size = m_grow_size / factor;
-      return std::max(min_size, half_size);
+      const size_type half_size = m_next_grow_size / factor;
+      return std::max(static_cast<size_type>(min_size), half_size);
     }
 
-    template<typename _Tp>
-    inline typename resize_policy<_Tp>::size_type
-    resize_policy<_Tp>::
+    PB_DS_CLASS_T_DEC
+    inline typename PB_DS_CLASS_C_DEC::size_type
+    PB_DS_CLASS_C_DEC::
     get_new_size_for_arbitrary(size_type size) const
     {
       size_type ret = min_size;
@@ -176,65 +183,71 @@ namespace __gnu_pbds
       return ret;
     }
 
-    template<typename _Tp>
+    PB_DS_CLASS_T_DEC
     inline void
-    resize_policy<_Tp>::
+    PB_DS_CLASS_C_DEC::
     notify_grow_resize()
     {
-      PB_DS_ASSERT_VALID((*this))
-      _GLIBCXX_DEBUG_ASSERT(m_grow_size >= min_size);
-      m_grow_size *= factor;
-      m_shrink_size = m_grow_size / ratio;
-      PB_DS_ASSERT_VALID((*this))
+      _GLIBCXX_DEBUG_ONLY(assert_valid();)
+      _GLIBCXX_DEBUG_ASSERT(m_next_grow_size >= min_size);
+      m_next_grow_size *= factor;
+      m_next_shrink_size = m_next_grow_size / ratio;
+      _GLIBCXX_DEBUG_ONLY(assert_valid();)
     }
 
-    template<typename _Tp>
+    PB_DS_CLASS_T_DEC
     inline void
-    resize_policy<_Tp>::
+    PB_DS_CLASS_C_DEC::
     notify_shrink_resize()
     {
-      PB_DS_ASSERT_VALID((*this))
-      m_shrink_size /= factor;
-      if (m_shrink_size == 1)
-	m_shrink_size = 0;
-      m_grow_size = std::max(m_grow_size / factor, min_size);
-      PB_DS_ASSERT_VALID((*this))
+      _GLIBCXX_DEBUG_ONLY(assert_valid();)
+      m_next_shrink_size /= factor;
+      if (m_next_shrink_size == 1)
+	m_next_shrink_size = 0;
+
+      m_next_grow_size =
+	std::max(m_next_grow_size / factor, static_cast<size_type>(min_size));
+      _GLIBCXX_DEBUG_ONLY(assert_valid();)
     }
 
-    template<typename _Tp>
+    PB_DS_CLASS_T_DEC
     inline void
-    resize_policy<_Tp>::
+    PB_DS_CLASS_C_DEC::
     notify_arbitrary(size_type actual_size)
     {
-      m_grow_size = actual_size;
-      m_shrink_size = m_grow_size / ratio;
-      PB_DS_ASSERT_VALID((*this))
+      m_next_grow_size = actual_size;
+      m_next_shrink_size = m_next_grow_size / ratio;
+      _GLIBCXX_DEBUG_ONLY(assert_valid();)
     }
 
 #ifdef _GLIBCXX_DEBUG
-    template<typename _Tp>
+    PB_DS_CLASS_T_DEC
     void
-    resize_policy<_Tp>::
-    assert_valid(const char* __file, int __line) const
+    PB_DS_CLASS_C_DEC::
+    assert_valid() const
     {
-      PB_DS_DEBUG_VERIFY(m_shrink_size == 0
-			 || m_shrink_size * ratio == m_grow_size);
-      PB_DS_DEBUG_VERIFY(m_grow_size >= min_size);
+      _GLIBCXX_DEBUG_ASSERT(m_next_shrink_size == 0 ||
+		       m_next_shrink_size*  ratio == m_next_grow_size);
+
+      _GLIBCXX_DEBUG_ASSERT(m_next_grow_size >= min_size);
     }
-#endif
+#endif 
 
 #ifdef PB_DS_BINARY_HEAP_TRACE_
-    template<typename _Tp>
+    PB_DS_CLASS_T_DEC
     void
-    resize_policy<_Tp>::
+    PB_DS_CLASS_C_DEC::
     trace() const
     {
-      std::cerr << "shrink = " << m_shrink_size
-		<< " grow = " << m_grow_size << std::endl;
+      std::cerr << "shrink = " << m_next_shrink_size <<
+	" grow = " << m_next_grow_size << std::endl;
     }
-#endif
+#endif 
+
+#undef PB_DS_CLASS_T_DEC
+#undef PB_DS_CLASS_C_DEC
 
 } // namespace detail
 } // namespace __gnu_pbds
 
-#endif
+#endif 

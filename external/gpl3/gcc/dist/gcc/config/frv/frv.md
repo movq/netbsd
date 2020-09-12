@@ -1,5 +1,6 @@
 ;; Frv Machine Description
-;; Copyright (C) 1999-2019 Free Software Foundation, Inc.
+;; Copyright (C) 1999, 2000, 2001, 2003, 2004, 2005, 2007, 2008
+;; Free Software Foundation, Inc.
 ;; Contributed by Red Hat, Inc.
 
 ;; This file is part of GCC.
@@ -89,13 +90,262 @@
 (define_mode_attr IMODEsuffix [(QI "b") (HI "h") (SI "") (DI "d")])
 (define_mode_attr BREADsuffix [(QI "ub") (HI "uh") (SI "") (DI "d")])
 
+;; ::::::::::::::::::::
+;; ::
+;; :: Constraints
+;; ::
+;; ::::::::::::::::::::
+
+;; Standard Constraints
+;;
+;; `m' A memory operand is allowed, with any kind of address that the
+;;     machine supports in general.
+;;
+;; `o' A memory operand is allowed, but only if the address is
+;;     "offsettable".  This means that adding a small integer (actually, the
+;;     width in bytes of the operand, as determined by its machine mode) may be
+;;     added to the address and the result is also a valid memory address.
+;;
+;; `V' A memory operand that is not offsettable.  In other words,
+;;     anything that would fit the `m' constraint but not the `o' constraint.
+;;
+;; `<' A memory operand with autodecrement addressing (either
+;;     predecrement or postdecrement) is allowed.
+;;
+;; `>' A memory operand with autoincrement addressing (either
+;;     preincrement or postincrement) is allowed.
+;;
+;; `r' A register operand is allowed provided that it is in a general
+;;     register.
+;;
+;; `d', `a', `f', ...
+;;     Other letters can be defined in machine-dependent fashion to stand for
+;;     particular classes of registers.  `d', `a' and `f' are defined on the
+;;     68000/68020 to stand for data, address and floating point registers.
+;;
+;; `i' An immediate integer operand (one with constant value) is allowed.
+;;     This includes symbolic constants whose values will be known only at
+;;     assembly time.
+;;
+;; `n' An immediate integer operand with a known numeric value is allowed.
+;;     Many systems cannot support assembly-time constants for operands less
+;;     than a word wide.  Constraints for these operands should use `n' rather
+;;     than `i'.
+;;
+;; 'I' First machine-dependent integer constant (6-bit signed ints).
+;; 'J' Second machine-dependent integer constant (10-bit signed ints).
+;; 'K' Third machine-dependent integer constant (-2048).
+;; 'L' Fourth machine-dependent integer constant (16-bit signed ints).
+;; 'M' Fifth machine-dependent integer constant (16-bit unsigned ints).
+;; 'N' Sixth machine-dependent integer constant (-2047..-1).
+;; 'O' Seventh machine-dependent integer constant (zero).
+;; 'P' Eighth machine-dependent integer constant (1..2047).
+;;
+;;     Other letters in the range `I' through `P' may be defined in a
+;;     machine-dependent fashion to permit immediate integer operands with
+;;     explicit integer values in specified ranges.  For example, on the 68000,
+;;     `I' is defined to stand for the range of values 1 to 8.  This is the
+;;     range permitted as a shift count in the shift instructions.
+;;
+;; `E' An immediate floating operand (expression code `const_double') is
+;;     allowed, but only if the target floating point format is the same as
+;;     that of the host machine (on which the compiler is running).
+;;
+;; `F' An immediate floating operand (expression code `const_double') is
+;;     allowed.
+;;
+;; 'G' First machine-dependent const_double.
+;; 'H' Second machine-dependent const_double.
+;;
+;; `s' An immediate integer operand whose value is not an explicit
+;;     integer is allowed.
+;;
+;;     This might appear strange; if an insn allows a constant operand with a
+;;     value not known at compile time, it certainly must allow any known
+;;     value.  So why use `s' instead of `i'?  Sometimes it allows better code
+;;     to be generated.
+;;
+;;     For example, on the 68000 in a fullword instruction it is possible to
+;;     use an immediate operand; but if the immediate value is between -128 and
+;;     127, better code results from loading the value into a register and
+;;     using the register.  This is because the load into the register can be
+;;     done with a `moveq' instruction.  We arrange for this to happen by
+;;     defining the letter `K' to mean "any integer outside the range -128 to
+;;     127", and then specifying `Ks' in the operand constraints.
+;;
+;; `g' Any register, memory or immediate integer operand is allowed,
+;;     except for registers that are not general registers.
+;;
+;; `X' Any operand whatsoever is allowed, even if it does not satisfy
+;;     `general_operand'.  This is normally used in the constraint of a
+;;     `match_scratch' when certain alternatives will not actually require a
+;;     scratch register.
+;;
+;; `0' Match operand 0.
+;; `1' Match operand 1.
+;; `2' Match operand 2.
+;; `3' Match operand 3.
+;; `4' Match operand 4.
+;; `5' Match operand 5.
+;; `6' Match operand 6.
+;; `7' Match operand 7.
+;; `8' Match operand 8.
+;; `9' Match operand 9.
+;;
+;;     An operand that matches the specified operand number is allowed.  If a
+;;     digit is used together with letters within the same alternative, the
+;;     digit should come last.
+;;
+;;     This is called a "matching constraint" and what it really means is that
+;;     the assembler has only a single operand that fills two roles considered
+;;     separate in the RTL insn.  For example, an add insn has two input
+;;     operands and one output operand in the RTL, but on most CISC machines an
+;;     add instruction really has only two operands, one of them an
+;;     input-output operand:
+;;
+;;          addl #35,r12
+;;
+;;     Matching constraints are used in these circumstances.  More precisely,
+;;     the two operands that match must include one input-only operand and one
+;;     output-only operand.  Moreover, the digit must be a smaller number than
+;;     the number of the operand that uses it in the constraint.
+;;
+;;     For operands to match in a particular case usually means that they are
+;;     identical-looking RTL expressions.  But in a few special cases specific
+;;     kinds of dissimilarity are allowed.  For example, `*x' as an input
+;;     operand will match `*x++' as an output operand.  For proper results in
+;;     such cases, the output template should always use the output-operand's
+;;     number when printing the operand.
+;;
+;; `p' An operand that is a valid memory address is allowed.  This is for
+;;     "load address" and "push address" instructions.
+;;
+;;     `p' in the constraint must be accompanied by `address_operand' as the
+;;     predicate in the `match_operand'.  This predicate interprets the mode
+;;     specified in the `match_operand' as the mode of the memory reference for
+;;     which the address would be valid.
+;;
+;; `Q` First non constant, non register machine-dependent insns
+;; `R` Second non constant, non register machine-dependent insns
+;; `S` Third non constant, non register machine-dependent insns
+;; `T` Fourth non constant, non register machine-dependent insns
+;; `U` Fifth non constant, non register machine-dependent insns
+;;
+;;     Letters in the range `Q' through `U' may be defined in a
+;;     machine-dependent fashion to stand for arbitrary operand types.  The
+;;     machine description macro `EXTRA_CONSTRAINT' is passed the operand as
+;;     its first argument and the constraint letter as its second operand.
+;;
+;;     A typical use for this would be to distinguish certain types of memory
+;;     references that affect other insn operands.
+;;
+;;     Do not define these constraint letters to accept register references
+;;     (`reg'); the reload pass does not expect this and would not handle it
+;;     properly.
+
+;; Multiple Alternative Constraints
+;; `?' Disparage slightly the alternative that the `?' appears in, as a
+;;     choice when no alternative applies exactly.  The compiler regards this
+;;     alternative as one unit more costly for each `?' that appears in it.
+;;
+;; `!' Disparage severely the alternative that the `!' appears in.  This
+;;     alternative can still be used if it fits without reloading, but if
+;;     reloading is needed, some other alternative will be used.
+
+;; Constraint modifiers
+;; `=' Means that this operand is write-only for this instruction: the
+;;     previous value is discarded and replaced by output data.
+;;
+;; `+' Means that this operand is both read and written by the
+;;     instruction.
+;;
+;;     When the compiler fixes up the operands to satisfy the constraints, it
+;;     needs to know which operands are inputs to the instruction and which are
+;;     outputs from it.  `=' identifies an output; `+' identifies an operand
+;;     that is both input and output; all other operands are assumed to be
+;;     input only.
+;;
+;; `&' Means (in a particular alternative) that this operand is written
+;;     before the instruction is finished using the input operands.  Therefore,
+;;     this operand may not lie in a register that is used as an input operand
+;;     or as part of any memory address.
+;;
+;;     `&' applies only to the alternative in which it is written.  In
+;;     constraints with multiple alternatives, sometimes one alternative
+;;     requires `&' while others do not.
+;;
+;;     `&' does not obviate the need to write `='.
+;;
+;; `%' Declares the instruction to be commutative for this operand and the
+;;     following operand.  This means that the compiler may interchange the two
+;;     operands if that is the cheapest way to make all operands fit the
+;;     constraints.  This is often used in patterns for addition instructions
+;;     that really have only two operands: the result must go in one of the
+;;     arguments.
+;;
+;; `#' Says that all following characters, up to the next comma, are to be
+;;     ignored as a constraint.  They are significant only for choosing
+;;     register preferences.
+;;
+;; `*' Says that the following character should be ignored when choosing
+;;     register preferences.  `*' has no effect on the meaning of the
+;;     constraint as a constraint, and no effect on reloading.
+
+
+;; ::::::::::::::::::::
+;; ::
+;; :: Attributes
+;; ::
+;; ::::::::::::::::::::
+
+;; The `define_attr' expression is used to define each attribute required by
+;; the target machine.  It looks like:
+;;
+;; (define_attr NAME LIST-OF-VALUES DEFAULT)
+
+;; NAME is a string specifying the name of the attribute being defined.
+
+;; LIST-OF-VALUES is either a string that specifies a comma-separated list of
+;; values that can be assigned to the attribute, or a null string to indicate
+;; that the attribute takes numeric values.
+
+;; DEFAULT is an attribute expression that gives the value of this attribute
+;; for insns that match patterns whose definition does not include an explicit
+;; value for this attribute.
+
+;; For each defined attribute, a number of definitions are written to the
+;; `insn-attr.h' file.  For cases where an explicit set of values is specified
+;; for an attribute, the following are defined:
+
+;; * A `#define' is written for the symbol `HAVE_ATTR_NAME'.
+;;
+;; * An enumeral class is defined for `attr_NAME' with elements of the
+;;   form `UPPER-NAME_UPPER-VALUE' where the attribute name and value are first
+;;   converted to upper case.
+;;
+;; * A function `get_attr_NAME' is defined that is passed an insn and
+;;   returns the attribute value for that insn.
+
+;; For example, if the following is present in the `md' file:
+;;
+;; (define_attr "type" "branch,fp,load,store,arith" ...)
+;;
+;; the following lines will be written to the file `insn-attr.h'.
+;;
+;; #define HAVE_ATTR_type
+;; enum attr_type {TYPE_BRANCH, TYPE_FP, TYPE_LOAD, TYPE_STORE, TYPE_ARITH};
+;; extern enum attr_type get_attr_type ();
+
+;; If the attribute takes numeric values, no `enum' type will be defined and
+;; the function to obtain the attribute's value will return `int'.
+
 (define_attr "length" "" (const_int 4))
 
 ;; Processor type -- this attribute must exactly match the processor_type
 ;; enumeration in frv-protos.h.
 
 (define_attr "cpu" "generic,fr550,fr500,fr450,fr405,fr400,fr300,simple,tomcat"
-  (const (symbol_ref "(enum attr_cpu) frv_cpu_type")))
+  (const (symbol_ref "frv_cpu_type")))
 
 ;; Attribute is "yes" for branches and jumps that span too great a distance
 ;; to be implemented in the most natural way.  Such instructions will use
@@ -110,7 +360,7 @@
   (const_string "unknown"))
 
 (define_attr "acc_group" "none,even,odd"
-  (symbol_ref "(enum attr_acc_group) frv_acc_group (insn)"))
+  (symbol_ref "frv_acc_group (insn)"))
 
 ;; Scheduling and Packing Overview
 ;; -------------------------------
@@ -1269,7 +1519,6 @@
 ;;
 
 (include "predicates.md")
-(include "constraints.md")
 
 ;; ::::::::::::::::::::
 ;; ::
@@ -1335,9 +1584,9 @@
 ;; patterns `reload_inM' or `reload_outM' to handle them.
 
 ;; The constraints on a `moveM' must permit moving any hard register to any
-;; other hard register provided that `TARGET_HARD_REGNO_MODE_OK' permits
-;; mode M in both registers and `REGISTER_MOVE_COST' applied to their
-;; classes returns a value of 2.
+;; other hard register provided that `HARD_REGNO_MODE_OK' permits mode M in
+;; both registers and `REGISTER_MOVE_COST' applied to their classes returns a
+;; value of 2.
 
 ;; It is obligatory to support floating point `moveM' instructions
 ;; into and out of any registers that can hold fixed point values,
@@ -1345,13 +1594,12 @@
 ;; `DImode') can be in those registers and they may have floating
 ;; point members.
 
-;; There may also be a need to support fixed point `moveM' instructions
-;; in and out of floating point registers.  Unfortunately, I have
-;; forgotten why this was so, and I don't know whether it is still true.
-;; If `TARGET_HARD_REGNO_MODE_OK' rejects fixed point values in floating
-;; point registers, then the constraints of the fixed point `moveM'
-;; instructions must be designed to avoid ever trying to reload into a
-;; floating point register.
+;; There may also be a need to support fixed point `moveM' instructions in and
+;; out of floating point registers.  Unfortunately, I have forgotten why this
+;; was so, and I don't know whether it is still true.  If `HARD_REGNO_MODE_OK'
+;; rejects fixed point values in floating point registers, then the constraints
+;; of the fixed point `moveM' instructions must be designed to avoid ever
+;; trying to reload into a floating point register.
 
 (define_expand "movqi"
   [(set (match_operand:QI 0 "general_operand" "")
@@ -1647,8 +1895,10 @@
     }
   else
     {
-      operands[4] = gen_int_mode ((INTVAL (op1) >> 16) >> 16, SImode);
-      operands[5] = gen_int_mode (INTVAL (op1), SImode);
+      operands[4] = GEN_INT ((((unsigned HOST_WIDE_INT)INTVAL (op1) >> 16)
+			      >> 16) ^ ((unsigned HOST_WIDE_INT)1 << 31)
+			     - ((unsigned HOST_WIDE_INT)1 << 31));
+      operands[5] = GEN_INT (trunc_int_for_mode (INTVAL (op1), SImode));
     }
 }")
 
@@ -1871,9 +2121,11 @@
 {
   rtx op0 = operands[0];
   rtx op1 = operands[1];
+  REAL_VALUE_TYPE rv;
   long l[2];
 
-  REAL_VALUE_TO_TARGET_DOUBLE (*CONST_DOUBLE_REAL_VALUE (op1), l);
+  REAL_VALUE_FROM_CONST_DOUBLE (rv, op1);
+  REAL_VALUE_TO_TARGET_DOUBLE (rv, l);
 
   operands[2] = gen_highpart (SImode, op0);
   operands[3] = gen_lowpart (SImode, op0);
@@ -1994,20 +2246,22 @@
 
   start_sequence ();
 
-  emit_insn (gen_rtx_SET (icr, gen_rtx_LT (CC_CCRmode, icc, const0_rtx)));
+  emit_insn (gen_rtx_SET (VOIDmode, icr,
+			  gen_rtx_LT (CC_CCRmode, icc, const0_rtx)));
 
   emit_insn (gen_movsi (dest, const1_rtx));
 
   emit_insn (gen_rtx_COND_EXEC (VOIDmode,
 				gen_rtx_NE (CC_CCRmode, icr, const0_rtx),
-				gen_rtx_SET (dest,
+				gen_rtx_SET (VOIDmode, dest,
 					     gen_rtx_NEG (SImode, dest))));
 
-  emit_insn (gen_rtx_SET (icr, gen_rtx_EQ (CC_CCRmode, icc, const0_rtx)));
+  emit_insn (gen_rtx_SET (VOIDmode, icr,
+			  gen_rtx_EQ (CC_CCRmode, icc, const0_rtx)));
 
   emit_insn (gen_rtx_COND_EXEC (VOIDmode,
 				gen_rtx_NE (CC_CCRmode, icr, const0_rtx),
-				gen_rtx_SET (dest, const0_rtx)));
+				gen_rtx_SET (VOIDmode, dest, const0_rtx)));
 
   operands[3] = get_insns ();
   end_sequence ();
@@ -2060,7 +2314,8 @@
 
   start_sequence ();
 
-  emit_insn (gen_rtx_SET (icr, gen_rtx_GTU (CC_CCRmode, icc, const0_rtx)));
+  emit_insn (gen_rtx_SET (VOIDmode, icr,
+			  gen_rtx_GTU (CC_CCRmode, icc, const0_rtx)));
 
   emit_insn (gen_movsi (dest, const1_rtx));
 
@@ -2068,11 +2323,12 @@
 				gen_rtx_NE (CC_CCRmode, icr, const0_rtx),
 				gen_addsi3 (dest, dest, dest)));
 
-  emit_insn (gen_rtx_SET (icr, gen_rtx_LTU (CC_CCRmode, icc, const0_rtx)));
+  emit_insn (gen_rtx_SET (VOIDmode, icr,
+			  gen_rtx_LTU (CC_CCRmode, icc, const0_rtx)));
 
   emit_insn (gen_rtx_COND_EXEC (VOIDmode,
 				gen_rtx_NE (CC_CCRmode, icr, const0_rtx),
-				gen_rtx_SET (dest, const0_rtx)));
+				gen_rtx_SET (VOIDmode, dest, const0_rtx)));
 
   operands[3] = get_insns ();
   end_sequence ();
@@ -2327,7 +2583,8 @@
 				gen_rtx_EQ (CC_CCRmode,
 					    operands[1],
 					    const0_rtx),
-				gen_rtx_SET (int_op0, const0_rtx)));
+				gen_rtx_SET (VOIDmode, int_op0,
+					     const0_rtx)));
 
   operands[2] = get_insns ();
   end_sequence ();
@@ -3019,21 +3276,21 @@
    (set_attr "type" "fsmul")])
 
 ;; Multiplication with addition/subtraction
-(define_insn "fmasf4"
+(define_insn "*muladdsf4"
   [(set (match_operand:SF 0 "fpr_operand" "=f")
-	(fma:SF (match_operand:SF 1 "fpr_operand" "f")
-		(match_operand:SF 2 "fpr_operand" "f")
-		(match_operand:SF 3 "fpr_operand" "0")))]
+	(plus:SF (mult:SF (match_operand:SF 1 "fpr_operand" "%f")
+			  (match_operand:SF 2 "fpr_operand" "f"))
+		 (match_operand:SF 3 "fpr_operand" "0")))]
   "TARGET_HARD_FLOAT && TARGET_MULADD"
   "fmadds %1,%2,%0"
   [(set_attr "length" "4")
    (set_attr "type" "fsmadd")])
 
-(define_insn "fmssf4"
+(define_insn "*mulsubsf4"
   [(set (match_operand:SF 0 "fpr_operand" "=f")
-	(fma:SF (match_operand:SF 1 "fpr_operand" "f")
-		(match_operand:SF 2 "fpr_operand" "f")
-		(neg:SF (match_operand:SF 3 "fpr_operand" "0"))))]
+	(minus:SF (mult:SF (match_operand:SF 1 "fpr_operand" "%f")
+			   (match_operand:SF 2 "fpr_operand" "f"))
+		  (match_operand:SF 3 "fpr_operand" "0")))]
   "TARGET_HARD_FLOAT && TARGET_MULADD"
   "fmsubs %1,%2,%0"
   [(set_attr "length" "4")
@@ -4373,8 +4630,8 @@
    (clobber (match_operand:CC_CCR 5 "icr_operand" "=v,v,v,v,v"))]
   "(INTVAL (operands[3]) == 0
     || INTVAL (operands[4]) == 0
-    || (IN_RANGE (INTVAL (operands[3]), -2048, 2047)
-        && IN_RANGE (INTVAL (operands[4]) - INTVAL (operands[3]), -2048, 2047)))"
+    || (IN_RANGE_P (INTVAL (operands[3]), -2048, 2047)
+        && IN_RANGE_P (INTVAL (operands[4]) - INTVAL (operands[3]), -2048, 2047)))"
   "#"
   [(set_attr "length" "8,12,8,12,12")
    (set_attr "type" "multi")])
@@ -4390,8 +4647,8 @@
   "TARGET_HARD_FLOAT
    && (INTVAL (operands[3]) == 0
        || INTVAL (operands[4]) == 0
-       || (IN_RANGE (INTVAL (operands[3]), -2048, 2047)
-	   && IN_RANGE (INTVAL (operands[4]) - INTVAL (operands[3]), -2048, 2047)))"
+       || (IN_RANGE_P (INTVAL (operands[3]), -2048, 2047)
+	   && IN_RANGE_P (INTVAL (operands[4]) - INTVAL (operands[3]), -2048, 2047)))"
   "#"
   [(set_attr "length" "8,12,8,12,12")
    (set_attr "type" "multi")])
@@ -4458,8 +4715,8 @@
    (clobber (match_operand:CC_CCR 5 "icr_operand" "=v,v,v,v,v"))]
   "(INTVAL (operands[3]) == 0
     || INTVAL (operands[4]) == 0
-    || (IN_RANGE (INTVAL (operands[3]), -2048, 2047)
-        && IN_RANGE (INTVAL (operands[4]) - INTVAL (operands[3]), -2048, 2047)))"
+    || (IN_RANGE_P (INTVAL (operands[3]), -2048, 2047)
+        && IN_RANGE_P (INTVAL (operands[4]) - INTVAL (operands[3]), -2048, 2047)))"
   "#"
   [(set_attr "length" "8,12,8,12,12")
    (set_attr "type" "multi")])
@@ -4475,8 +4732,8 @@
   "TARGET_HARD_FLOAT
    && (INTVAL (operands[3]) == 0
        || INTVAL (operands[4]) == 0
-       || (IN_RANGE (INTVAL (operands[3]), -2048, 2047)
-	   && IN_RANGE (INTVAL (operands[4]) - INTVAL (operands[3]), -2048, 2047)))"
+       || (IN_RANGE_P (INTVAL (operands[3]), -2048, 2047)
+	   && IN_RANGE_P (INTVAL (operands[4]) - INTVAL (operands[3]), -2048, 2047)))"
   "#"
   [(set_attr "length" "8,12,8,12,12")
    (set_attr "type" "multi")])
@@ -4543,8 +4800,8 @@
    (clobber (match_operand:CC_CCR 5 "icr_operand" "=v,v,v,v,v"))]
   "(INTVAL (operands[3]) == 0
     || INTVAL (operands[4]) == 0
-    || (IN_RANGE (INTVAL (operands[3]), -2048, 2047)
-        && IN_RANGE (INTVAL (operands[4]) - INTVAL (operands[3]), -2048, 2047)))"
+    || (IN_RANGE_P (INTVAL (operands[3]), -2048, 2047)
+        && IN_RANGE_P (INTVAL (operands[4]) - INTVAL (operands[3]), -2048, 2047)))"
   "#"
   [(set_attr "length" "8,12,8,12,12")
    (set_attr "type" "multi")])
@@ -4560,8 +4817,8 @@
   "TARGET_HARD_FLOAT
    && (INTVAL (operands[3]) == 0
        || INTVAL (operands[4]) == 0
-       || (IN_RANGE (INTVAL (operands[3]), -2048, 2047)
-	   && IN_RANGE (INTVAL (operands[4]) - INTVAL (operands[3]), -2048, 2047)))"
+       || (IN_RANGE_P (INTVAL (operands[3]), -2048, 2047)
+	   && IN_RANGE_P (INTVAL (operands[4]) - INTVAL (operands[3]), -2048, 2047)))"
   "#"
   [(set_attr "length" "8,12,8,12,12")
    (set_attr "type" "multi")])
@@ -5309,7 +5566,7 @@
   gcc_assert (GET_CODE (operands[2]) == CONST_INT);
 
   /* If we can't generate an immediate instruction, promote to register.  */
-  if (! IN_RANGE (INTVAL (range), -2048, 2047))
+  if (! IN_RANGE_P (INTVAL (range), -2048, 2047))
     range = force_reg (SImode, range);
 
   /* If low bound is 0, we don't have to subtract it.  */
@@ -5318,7 +5575,7 @@
   else
     {
       indx = gen_reg_rtx (SImode);
-      if (IN_RANGE (INTVAL (low), -2047, 2048))
+      if (IN_RANGE_P (INTVAL (low), -2047, 2048))
 	emit_insn (gen_addsi3 (indx, operands[0], GEN_INT (- INTVAL (low))));
       else
 	emit_insn (gen_subsi3 (indx, operands[0], force_reg (SImode, low)));
@@ -7348,8 +7605,9 @@
   ""
   "
 {
-  rtx_insn *insn = emit_insn (gen_symGOT2reg_i (operands[0], operands[1],
-						operands[2], operands[3]));
+  rtx insn;
+
+  insn = emit_insn (gen_symGOT2reg_i (operands[0], operands[1], operands[2], operands[3]));
 
   MEM_READONLY_P (SET_SRC (PATTERN (insn))) = 1;
 
@@ -7431,8 +7689,7 @@
   ""
   "
 {
-  rtx_insn *insn = emit_insn (gen_symGOTOFF2reg_i (operands[0], operands[1],
-						   operands[2], operands[3]));
+  rtx insn = emit_insn (gen_symGOTOFF2reg_i (operands[0], operands[1], operands[2], operands[3]));
 
   set_unique_reg_note (insn, REG_EQUAL, operands[1]);
 
@@ -7458,6 +7715,8 @@
   ""
   "
 {
+  rtx insn;
+
   if (!can_create_pseudo_p ())
     operands[4] = operands[0];
   else
@@ -7465,8 +7724,8 @@
 
   emit_insn (frv_gen_GPsym2reg (operands[4], operands[2]));
 
-  rtx_insn *insn = emit_insn (gen_symGOTOFF2reg_i (operands[0], operands[1],
-						   operands[4], operands[3]));
+  insn = emit_insn (gen_symGOTOFF2reg_i (operands[0], operands[1],
+					 operands[4], operands[3]));
 
   set_unique_reg_note (insn, REG_EQUAL, operands[1]);
 
@@ -7482,6 +7741,8 @@
   ""
   "
 {
+  rtx insn;
+
   if (!can_create_pseudo_p ())
     {
       emit_insn (gen_symGOT2reg (operands[0], operands[1], operands[2],
@@ -7493,8 +7754,8 @@
 
   emit_insn (frv_gen_GPsym2reg (operands[4], operands[2]));
 
-  rtx_insn *insn = emit_insn (gen_symGOTOFF2reg_hilo (operands[0], operands[1],
-						      operands[4], operands[3]));
+  insn = emit_insn (gen_symGOTOFF2reg_hilo (operands[0], operands[1],
+					    operands[4], operands[3]));
 
   set_unique_reg_note (insn, REG_EQUAL, operands[1]);
 

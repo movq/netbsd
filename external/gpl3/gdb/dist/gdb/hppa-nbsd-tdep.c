@@ -1,6 +1,6 @@
 /* Target-dependent code for NetBSD/hppa
 
-   Copyright (C) 2008-2019 Free Software Foundation, Inc.
+   Copyright (C) 2008-2017 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -25,8 +25,8 @@
 #include "trad-frame.h"
 #include "tramp-frame.h"
 
-#include "hppa-bsd-tdep.h"
 #include "hppa-tdep.h"
+#include "hppa-bsd-tdep.h"
 
 /* From <machine/mcontext.h>.  */
 static int hppanbsd_mc_reg_offset[] =
@@ -57,19 +57,6 @@ static int hppanbsd_mc_reg_offset[] =
   38 * 4,	/* sr1 */
   39 * 4,	/* sr2 */
   40 * 4,	/* sr3 */
-  -1,		/* 48 */
-  -1,		/* 49 */
-  -1,		/* 50 */
-  -1,		/* 51 */
-  -1,		/* 52 */
-  -1,		/* 53 */
-  -1,		/* 54 */
-  -1,		/* 55 */
-  -1,		/* 56 */
-  -1,		/* 57 CR24 */
-  -1,		/* 58 CR25 */
-  -1,		/* 59 CR26 */
-  43 * 4,	/* HPPA_CR27_REGNUM */
 
   /* more tbd */
 };
@@ -84,25 +71,25 @@ static const struct tramp_frame hppanbsd_sigtramp_si4 =
   SIGTRAMP_FRAME,
   4,
   {
-    { 0xc7d7c012, ULONGEST_MAX },	/*	bb,>=,n %arg3, 30, 1f		*/
-    { 0xd6e01c1e, ULONGEST_MAX },	/*	 depwi 0,31,2,%arg3		*/
-    { 0x0ee81093, ULONGEST_MAX },	/*	ldw 4(%arg3), %r19		*/
-    { 0x0ee01097, ULONGEST_MAX },	/*	ldw 0(%arg3), %arg3		*/
+    { 0xc7d7c012, -1 },	/*	bb,>=,n %arg3, 30, 1f		*/
+    { 0xd6e01c1e, -1 },	/*	 depwi 0,31,2,%arg3		*/
+    { 0x0ee81093, -1 },	/*	ldw 4(%arg3), %r19		*/
+    { 0x0ee01097, -1 },	/*	ldw 0(%arg3), %arg3		*/
 			/* 1: 					*/
-    { 0xe8404000, ULONGEST_MAX },	/* 	blr %r0, %rp			*/
-    { 0xeae0c002, ULONGEST_MAX },	/*	bv,n %r0(%arg3)			*/
-    { 0x08000240, ULONGEST_MAX },	/*	 nop				*/
+    { 0xe8404000, -1 },	/* 	blr %r0, %rp			*/
+    { 0xeae0c002, -1 },	/*	bv,n %r0(%arg3)			*/
+    { 0x08000240, -1 },	/*	 nop				*/
 
-    { 0x0803025a, ULONGEST_MAX },	/*	copy %r3, %arg0			*/
-    { 0x20200801, ULONGEST_MAX },	/*	ldil -40000000, %r1		*/
-    { 0xe420e008, ULONGEST_MAX },	/*	be,l 4(%sr7, %r1), %sr0, %r31	*/
-    { 0x34160268, ULONGEST_MAX },	/*	 ldi 134, %t1 ; SYS_setcontext	*/
+    { 0x0803025a, -1 },	/*	copy %r3, %arg0			*/
+    { 0x20200801, -1 },	/*	ldil -40000000, %r1		*/
+    { 0xe420e008, -1 },	/*	be,l 4(%sr7, %r1), %sr0, %r31	*/
+    { 0x34160268, -1 },	/*	 ldi 134, %t1 ; SYS_setcontext	*/
 
-    { 0x081c025a, ULONGEST_MAX },	/*	copy ret0, %arg0		*/
-    { 0x20200801, ULONGEST_MAX },	/*	ldil -40000000, %r1		*/
-    { 0xe420e008, ULONGEST_MAX },	/*	be,l 4(%sr7, %r1), %sr0, %r31	*/
-    { 0x34160002, ULONGEST_MAX },	/*	 ldi 1, %t1 ; SYS_exit		*/
-    { TRAMP_SENTINEL_INSN, ULONGEST_MAX }
+    { 0x081c025a, -1 },	/*	copy ret0, %arg0		*/
+    { 0x20200801, -1 },	/*	ldil -40000000, %r1		*/
+    { 0xe420e008, -1 },	/*	be,l 4(%sr7, %r1), %sr0, %r31	*/
+    { 0x34160002, -1 },	/*	 ldi 1, %t1 ; SYS_exit		*/
+    { TRAMP_SENTINEL_INSN, -1 }
   },
   hppanbsd_sigtramp_cache_init
 };
@@ -141,7 +128,7 @@ hppanbsd_sigtramp_cache_init (const struct tramp_frame *self,
 /* Core file support.  */
 
 /* Sizeof `struct reg' in <machine/reg.h>.  */
-#define HPPANBSD_SIZEOF_GREGS	(47 * 4)
+#define HPPANBSD_SIZEOF_GREGS	(44 * 4)
 
 static int hppanbsd_reg_offset[] =
 {
@@ -165,25 +152,6 @@ static int hppanbsd_reg_offset[] =
   -1,		/* HPPA_ISR_REGNUM */
   -1,		/* HPPA_IOR_REGNUM */
   0 * 4,	/* HPPA_IPSW_REGNUM */
-  -1,		/* spare? */
-  41 * 4,	/* HPPA_SR4_REGNUM */
-  37 * 4,	/* sr0 */
-  38 * 4,	/* sr1 */
-  39 * 4,	/* sr2 */
-  40 * 4,	/* sr3 */
-  -1,		/* 48 */
-  -1,		/* 49 */
-  -1,		/* 50 */
-  -1,		/* 51 */
-  -1,		/* 52 */
-  -1,		/* 53 */
-  -1,		/* 54 */
-  -1,		/* 55 */
-  -1,		/* 56 */
-  -1,		/* 57 */
-  -1,		/* 58 */
-  -1,		/* 59 */
-  46 * 4,	/* HPPA_CR27_REGNUM */
 };
 
 /* Supply register REGNUM from the buffer specified by GREGS and LEN
@@ -203,7 +171,7 @@ hppanbsd_supply_gregset (const struct regset *regset,
   for (i = 0; i < ARRAY_SIZE (hppanbsd_reg_offset); i++)
     if (hppanbsd_reg_offset[i] != -1)
       if (regnum == -1 || regnum == i)
-	regcache->raw_supply (i, regs + hppanbsd_reg_offset[i]);
+	regcache_raw_supply (regcache, i, regs + hppanbsd_reg_offset[i]);
 }
 
 /* NetBSD/hppa register set.  */
@@ -222,8 +190,7 @@ hppanbsd_iterate_over_regset_sections (struct gdbarch *gdbarch,
 				       void *cb_data,
 				       const struct regcache *regcache)
 {
-  cb (".reg", HPPANBSD_SIZEOF_GREGS, HPPANBSD_SIZEOF_GREGS, &hppanbsd_gregset,
-      NULL, cb_data);
+  cb (".reg", HPPANBSD_SIZEOF_GREGS, &hppanbsd_gregset, NULL, cb_data);
 }
 
 static void
@@ -238,6 +205,10 @@ hppanbsd_init_abi (struct gdbarch_info info, struct gdbarch *gdbarch)
 
   tramp_frame_prepend_unwinder (gdbarch, &hppanbsd_sigtramp_si4);
 }
+
+
+/* Provide a prototype to silence -Wmissing-prototypes.  */
+extern initialize_file_ftype _initialize_hppanbsd_tdep;
 
 void
 _initialize_hppanbsd_tdep (void)

@@ -1,4 +1,4 @@
-#   Copyright 2007-2019 Free Software Foundation, Inc.
+#   Copyright 2007, 2009, 2010, 2011 Free Software Foundation, Inc.
 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -13,6 +13,10 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
+if $tracelevel then {
+    strace $tracelevel
+}
+
 #
 # test running programs
 #
@@ -26,23 +30,23 @@ set libfile "watchpoint-solib-shr"
 set libname "${libfile}.sl"
 set libsrcfile ${libfile}.c
 set srcfile $srcdir/$subdir/$testfile.c
-set binfile [standard_output_file $testfile]
-set shlibdir [standard_output_file {}]
+set binfile $objdir/$subdir/$testfile
+set shlibdir ${objdir}/${subdir}
 set libsrc  $srcdir/$subdir/$libfile.c
-set lib_sl  [standard_output_file $libname]
+set lib_sl  $objdir/$subdir/$libname
 set lib_dlopen [shlib_target_file ${libname}]
 set lib_syms [shlib_symbol_file ${libname}]
 
-if [get_compiler_info] {
+if [get_compiler_info ${binfile}] {
     return -1
 }
 
 set lib_opts debug
-set exec_opts [list debug shlib_load additional_flags=-DSHLIB_NAME=\"${lib_dlopen}\"]
+set exec_opts [list debug shlib_load additional_flags=-DSHLIB_NAME\=\"${lib_dlopen}\"]
 
 if { [gdb_compile_shlib $libsrc $lib_sl $lib_opts] != ""
      || [gdb_compile $srcfile $binfile executable $exec_opts] != ""} {
-    untested "failed to compile"
+    untested "Couldn't compile $libsrc or $srcfile."
     return -1
 }
 
@@ -52,7 +56,11 @@ gdb_exit
 gdb_start
 gdb_reinitialize_dir $srcdir/$subdir
 gdb_load ${binfile}
-gdb_load_shlib $lib_sl
+gdb_load_shlibs $lib_sl
+
+if [target_info exists gdb_stub] {
+    gdb_step_for_stub;
+}
 
 runto_main
 
@@ -70,13 +78,14 @@ gdb_test_multiple "break foo" "set pending breakpoint" {
      }
 }
 
+set prev_timeout $timeout
+set timeout 120
+
 gdb_test "continue" ".*Breakpoint 2.*foo.*" "continue to foo"
 gdb_test "watch g" "atchpoint 3: g" "set watchpoint on g"
 gdb_test "continue" ".*New value = 1.*" "continue to watchpoint hit"
 rerun_to_main
-
-with_timeout_factor 30 {
-    gdb_test "continue" ".*Breakpoint 2.*foo.*" "continue to foo again"
-}
-
+gdb_test "continue" ".*Breakpoint 2.*foo.*" "continue to foo again"
 gdb_test "continue" ".*New value = 1.*" "continue to watchpoint hit again"
+
+set timeout $prev_timeout

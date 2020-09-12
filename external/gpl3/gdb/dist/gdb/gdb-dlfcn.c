@@ -1,6 +1,6 @@
 /* Platform independent shared object routines for GDB.
 
-   Copyright (C) 2011-2019 Free Software Foundation, Inc.
+   Copyright (C) 2011-2013 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -18,6 +18,8 @@
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #include "defs.h"
+#include "gdb_assert.h"
+
 #include "gdb-dlfcn.h"
 
 #ifdef HAVE_DLFCN_H
@@ -31,20 +33,27 @@
 
 #ifdef NO_SHARED_LIB
 
-gdb_dlhandle_up
+void *
 gdb_dlopen (const char *filename)
 {
   gdb_assert_not_reached ("gdb_dlopen should not be called on this platform.");
 }
 
 void *
-gdb_dlsym (const gdb_dlhandle_up &handle, const char *symbol)
+gdb_dlsym (void *handle, const char *symbol)
 {
   gdb_assert_not_reached ("gdb_dlsym should not be called on this platform.");
 }
 
-void
-dlclose_deleter::operator() (void *handle) const
+struct cleanup *
+make_cleanup_dlclose (void *handle)
+{
+  gdb_assert_not_reached ("make_cleanup_dlclose should not be called on this "
+                          "platform.");
+}
+
+int
+gdb_dlclose (void *handle)
 {
   gdb_assert_not_reached ("gdb_dlclose should not be called on this platform.");
 }
@@ -57,7 +66,7 @@ is_dl_available (void)
 
 #else /* NO_SHARED_LIB */
 
-gdb_dlhandle_up
+void *
 gdb_dlopen (const char *filename)
 {
   void *result;
@@ -67,7 +76,7 @@ gdb_dlopen (const char *filename)
   result = (void *) LoadLibrary (filename);
 #endif
   if (result != NULL)
-    return gdb_dlhandle_up (result);
+    return result;
 
 #ifdef HAVE_DLFCN_H
   error (_("Could not load %s: %s"), filename, dlerror());
@@ -90,23 +99,35 @@ gdb_dlopen (const char *filename)
 }
 
 void *
-gdb_dlsym (const gdb_dlhandle_up &handle, const char *symbol)
+gdb_dlsym (void *handle, const char *symbol)
 {
 #ifdef HAVE_DLFCN_H
-  return dlsym (handle.get (), symbol);
+  return dlsym (handle, symbol);
 #elif __MINGW32__
-  return (void *) GetProcAddress ((HMODULE) handle.get (), symbol);
+  return (void *) GetProcAddress (handle, symbol);
 #endif
 }
 
-void
-dlclose_deleter::operator() (void *handle) const
+int
+gdb_dlclose (void *handle)
 {
 #ifdef HAVE_DLFCN_H
-  dlclose (handle);
+  return dlclose (handle);
 #elif __MINGW32__
-  FreeLibrary ((HMODULE) handle);
+  return !((int) FreeLibrary (handle));
 #endif
+}
+
+static void
+do_dlclose_cleanup (void *handle)
+{
+  gdb_dlclose (handle);
+}
+
+struct cleanup *
+make_cleanup_dlclose (void *handle)
+{
+  return make_cleanup (do_dlclose_cleanup, handle);
 }
 
 int

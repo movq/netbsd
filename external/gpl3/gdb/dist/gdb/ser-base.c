@@ -1,6 +1,8 @@
 /* Generic serial interface functions.
 
-   Copyright (C) 1992-2019 Free Software Foundation, Inc.
+   Copyright (C) 1992, 1993, 1994, 1995, 1996, 1998, 1999, 2000, 2001, 2003,
+   2004, 2005, 2006, 2007, 2008, 2009, 2010, 2011
+   Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -23,7 +25,8 @@
 #include "event-loop.h"
 
 #include "gdb_select.h"
-#include "common/gdb_sys_time.h"
+#include "gdb_string.h"
+#include <sys/time.h>
 #ifdef USE_WIN32API
 #include <winsock2.h>
 #endif
@@ -121,29 +124,6 @@ reschedule (struct serial *scb)
     }
 }
 
-/* Run the SCB's async handle, and reschedule, if the handler doesn't
-   close SCB.  */
-
-static void
-run_async_handler_and_reschedule (struct serial *scb)
-{
-  int is_open;
-
-  /* Take a reference, so a serial_close call within the handler
-     doesn't make SCB a dangling pointer.  */
-  serial_ref (scb);
-
-  /* Run the handler.  */
-  scb->async_handler (scb, scb->async_context);
-
-  is_open = serial_is_open (scb);
-  serial_unref (scb);
-
-  /* Get ready for more, if not already closed.  */
-  if (is_open)
-    reschedule (scb);
-}
-
 /* FD_EVENT: This is scheduled when the input FIFO is empty (and there
    is no pending error).  As soon as data arrives, it is read into the
    input FIFO and the client notified.  The client should then drain
@@ -153,7 +133,7 @@ run_async_handler_and_reschedule (struct serial *scb)
 static void
 fd_event (int error, void *context)
 {
-  struct serial *scb = (struct serial *) context;
+  struct serial *scb = context;
   if (error != 0)
     {
       scb->bufcnt = SERIAL_ERROR;
@@ -164,13 +144,7 @@ fd_event (int error, void *context)
          pull characters out of the buffer.  See also
          generic_readchar().  */
       int nr;
-
-      do
-	{
-	  nr = scb->ops->read_prim (scb, BUFSIZ);
-	}
-      while (nr < 0 && errno == EINTR);
-
+      nr = scb->ops->read_prim (scb, BUFSIZ);
       if (nr == 0)
 	{
 	  scb->bufcnt = SERIAL_EOF;
@@ -185,7 +159,8 @@ fd_event (int error, void *context)
 	  scb->bufcnt = SERIAL_ERROR;
 	}
     }
-  run_async_handler_and_reschedule (scb);
+  scb->async_handler (scb, scb->async_context);
+  reschedule (scb);
 }
 
 /* PUSH_EVENT: The input FIFO is non-empty (or there is a pending
@@ -196,19 +171,16 @@ fd_event (int error, void *context)
 static void
 push_event (void *context)
 {
-  struct serial *scb = (struct serial *) context;
+  struct serial *scb = context;
 
   scb->async_state = NOTHING_SCHEDULED; /* Timers are one-off */
-  run_async_handler_and_reschedule (scb);
+  scb->async_handler (scb, scb->async_context);
+  /* re-schedule */
+  reschedule (scb);
 }
 
 /* Wait for input on scb, with timeout seconds.  Returns 0 on success,
    otherwise SERIAL_TIMEOUT or SERIAL_ERROR.  */
-
-/* NOTE: Some of the code below is dead.  The only possible values of
-   the TIMEOUT parameter are ONE and ZERO.  OTOH, we should probably
-   get rid of the deprecated_ui_loop_hook call in do_ser_base_readchar
-   instead and support infinite time outs here.  */
 
 static int
 ser_base_wait_for (struct serial *scb, int timeout)
@@ -218,7 +190,6 @@ ser_base_wait_for (struct serial *scb, int timeout)
       int numfds;
       struct timeval tv;
       fd_set readfds, exceptfds;
-      int nfds;
 
       /* NOTE: Some OS's can scramble the READFDS when the select()
          call fails (ex the kernel with Red Hat 5.2).  Initialize all
@@ -232,13 +203,10 @@ ser_base_wait_for (struct serial *scb, int timeout)
       FD_SET (scb->fd, &readfds);
       FD_SET (scb->fd, &exceptfds);
 
-      QUIT;
-
-      nfds = scb->fd + 1;
       if (timeout >= 0)
-	numfds = interruptible_select (nfds, &readfds, 0, &exceptfds, &tv);
+	numfds = gdb_select (scb->fd + 1, &readfds, 0, &exceptfds, &tv);
       else
-	numfds = interruptible_select (nfds, &readfds, 0, &exceptfds, 0);
+	numfds = gdb_select (scb->fd + 1, &readfds, 0, &exceptfds, 0);
 
       if (numfds <= 0)
 	{
@@ -255,82 +223,10 @@ ser_base_wait_for (struct serial *scb, int timeout)
     }
 }
 
-/* Read any error output we might have.  */
-
-static void
-ser_base_read_error_fd (struct serial *scb, int close_fd)
-{
-  if (scb->error_fd != -1)
-    {
-      ssize_t s;
-      char buf[GDB_MI_MSG_WIDTH + 1];
-
-      for (;;)
-	{
-	  char *current;
-	  char *newline;
-	  int to_read = GDB_MI_MSG_WIDTH;
-	  int num_bytes = -1;
-
-	  if (scb->ops->avail)
-	    num_bytes = (scb->ops->avail)(scb, scb->error_fd);
-
-	  if (num_bytes != -1)
-	    to_read = (num_bytes < to_read) ? num_bytes : to_read;
-
-	  if (to_read == 0)
-	    break;
-
-	  s = read (scb->error_fd, &buf, to_read);
-	  if ((s == -1) || (s == 0 && !close_fd))
-	    break;
-
-	  if (s == 0 && close_fd)
-	    {
-	      /* End of file.  */
-	      if (serial_is_async_p (scb))
-		delete_file_handler (scb->error_fd);
-	      close (scb->error_fd);
-	      scb->error_fd = -1;
-	      break;
-	    }
-
-	  /* In theory, embedded newlines are not a problem.
-	     But for MI, we want each output line to have just
-	     one newline for legibility.  So output things
-	     in newline chunks.  */
-	  gdb_assert (s > 0 && s <= GDB_MI_MSG_WIDTH);
-	  buf[s] = '\0';
-	  current = buf;
-	  while ((newline = strstr (current, "\n")) != NULL)
-	    {
-	      *newline = '\0';
-	      fputs_unfiltered (current, gdb_stderr);
-	      fputs_unfiltered ("\n", gdb_stderr);
-	      current = newline + 1;
-	    }
-
-	  fputs_unfiltered (current, gdb_stderr);
-       }
-    }
-}
-
-/* Event-loop callback for a serial's error_fd.  Flushes any error
-   output we might have.  */
-
-static void
-handle_error_fd (int error, gdb_client_data client_data)
-{
-  serial *scb = (serial *) client_data;
-
-  ser_base_read_error_fd (scb, 0);
-}
-
-/* Read a character with user-specified timeout.  TIMEOUT is number of
-   seconds to wait, or -1 to wait forever.  Use timeout of 0 to effect
-   a poll.  Returns char if successful.  Returns SERIAL_TIMEOUT if
-   timeout expired, SERIAL_EOF if line dropped dead, or SERIAL_ERROR
-   for any other error (see errno in that case).  */
+/* Read a character with user-specified timeout.  TIMEOUT is number of seconds
+   to wait, or -1 to wait forever.  Use timeout of 0 to effect a poll.  Returns
+   char if successful.  Returns -2 if timeout expired, EOF if line dropped
+   dead, or -3 for any other error (see errno in that case).  */
 
 static int
 do_ser_base_readchar (struct serial *scb, int timeout)
@@ -377,21 +273,12 @@ do_ser_base_readchar (struct serial *scb, int timeout)
 	  status = SERIAL_TIMEOUT;
 	  break;
 	}
-
-      /* We also need to check and consume the stderr because it could
-	 come before the stdout for some stubs.  If we just sit and wait
-	 for stdout, we would hit a deadlock for that case.  */
-      ser_base_read_error_fd (scb, 0);
     }
 
   if (status < 0)
     return status;
 
-  do
-    {
-      status = scb->ops->read_prim (scb, BUFSIZ);
-    }
-  while (status < 0 && errno == EINTR);
+  status = scb->ops->read_prim (scb, BUFSIZ);
 
   if (status <= 0)
     {
@@ -456,9 +343,54 @@ generic_readchar (struct serial *scb, int timeout,
 	    }
 	}
     }
-
   /* Read any error output we might have.  */
-  ser_base_read_error_fd (scb, 1);
+  if (scb->error_fd != -1)
+    {
+      ssize_t s;
+      char buf[81];
+
+      for (;;)
+        {
+ 	  char *current;
+ 	  char *newline;
+	  int to_read = 80;
+
+	  int num_bytes = -1;
+	  if (scb->ops->avail)
+	    num_bytes = (scb->ops->avail)(scb, scb->error_fd);
+	  if (num_bytes != -1)
+	    to_read = (num_bytes < to_read) ? num_bytes : to_read;
+
+	  if (to_read == 0)
+	    break;
+
+	  s = read (scb->error_fd, &buf, to_read);
+	  if (s == -1)
+	    break;
+	  if (s == 0)
+	    {
+	      /* EOF */
+	      close (scb->error_fd);
+	      scb->error_fd = -1;
+	      break;
+	    }
+
+	  /* In theory, embedded newlines are not a problem.
+	     But for MI, we want each output line to have just
+	     one newline for legibility.  So output things
+	     in newline chunks.  */
+	  buf[s] = '\0';
+	  current = buf;
+	  while ((newline = strstr (current, "\n")) != NULL)
+	    {
+	      *newline = '\0';
+	      fputs_unfiltered (current, gdb_stderr);
+	      fputs_unfiltered ("\n", gdb_stderr);
+	      current = newline + 1;
+	    }
+	  fputs_unfiltered (current, gdb_stderr);
+	}
+    }
 
   reschedule (scb);
   return ch;
@@ -471,24 +403,17 @@ ser_base_readchar (struct serial *scb, int timeout)
 }
 
 int
-ser_base_write (struct serial *scb, const void *buf, size_t count)
+ser_base_write (struct serial *scb, const char *str, int len)
 {
-  const char *str = (const char *) buf;
   int cc;
 
-  while (count > 0)
+  while (len > 0)
     {
-      QUIT;
-
-      cc = scb->ops->write_prim (scb, str, count);
+      cc = scb->ops->write_prim (scb, str, len); 
 
       if (cc < 0)
-	{
-	  if (errno == EINTR)
-	    continue;
-	  return 1;
-	}
-      count -= cc;
+	return 1;
+      len -= cc;
       str += cc;
     }
   return 0;
@@ -535,18 +460,26 @@ serial_ttystate
 ser_base_get_tty_state (struct serial *scb)
 {
   /* Allocate a dummy.  */
-  return (serial_ttystate) XNEW (int);
+  return (serial_ttystate) XMALLOC (int);
 }
 
 serial_ttystate
 ser_base_copy_tty_state (struct serial *scb, serial_ttystate ttystate)
 {
   /* Allocate another dummy.  */
-  return (serial_ttystate) XNEW (int);
+  return (serial_ttystate) XMALLOC (int);
 }
 
 int
 ser_base_set_tty_state (struct serial *scb, serial_ttystate ttystate)
+{
+  return 0;
+}
+
+int
+ser_base_noflush_set_tty_state (struct serial *scb,
+				serial_ttystate new_ttystate,
+				serial_ttystate old_ttystate)
 {
   return 0;
 }
@@ -572,14 +505,6 @@ ser_base_setstopbits (struct serial *scb, int num)
   return 0;			/* Never fails!  */
 }
 
-/* Implement the "setparity" serial_ops callback.  */
-
-int
-ser_base_setparity (struct serial *scb, int parity)
-{
-  return 0;			/* Never fails!  */
-}
-
 /* Put the SERIAL device into/out-of ASYNC mode.  */
 
 void
@@ -594,9 +519,6 @@ ser_base_async (struct serial *scb,
 	fprintf_unfiltered (gdb_stdlog, "[fd%d->asynchronous]\n",
 			    scb->fd);
       reschedule (scb);
-
-      if (scb->error_fd != -1)
-	add_file_handler (scb->error_fd, handle_error_fd, scb);
     }
   else
     {
@@ -615,8 +537,5 @@ ser_base_async (struct serial *scb,
 	  delete_timer (scb->async_state);
 	  break;
 	}
-
-      if (scb->error_fd != -1)
-	delete_file_handler (scb->error_fd);
     }
 }

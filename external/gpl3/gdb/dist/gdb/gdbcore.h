@@ -1,6 +1,8 @@
 /* Machine independent variables that describe the core file under GDB.
 
-   Copyright (C) 1986-2019 Free Software Foundation, Inc.
+   Copyright (C) 1986, 1987, 1989, 1990, 1991, 1992, 1993, 1994, 1995, 1996,
+   1997, 1998, 1999, 2000, 2001, 2004, 2007, 2008, 2009, 2010, 2011
+   Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -27,7 +29,12 @@ struct regcache;
 
 #include "bfd.h"
 #include "exec.h"
-#include "target.h"
+
+/* Return the name of the executable file as a string.
+   ERR nonzero means get error if there is none specified;
+   otherwise return 0 in that case.  */
+
+extern char *get_exec_file (int err);
 
 /* Nonzero if there is a core file.  */
 
@@ -35,25 +42,15 @@ extern int have_core_file_p (void);
 
 /* Report a memory error with error().  */
 
-extern void memory_error (enum target_xfer_status status, CORE_ADDR memaddr);
-
-/* The string 'memory_error' would use as exception message.  */
-
-extern std::string memory_error_message (enum target_xfer_status err,
-					 struct gdbarch *gdbarch,
-					 CORE_ADDR memaddr);
+extern void memory_error (int status, CORE_ADDR memaddr);
 
 /* Like target_read_memory, but report an error if can't read.  */
 
-extern void read_memory (CORE_ADDR memaddr, gdb_byte *myaddr, ssize_t len);
+extern void read_memory (CORE_ADDR memaddr, gdb_byte *myaddr, int len);
 
 /* Like target_read_stack, but report an error if can't read.  */
 
-extern void read_stack (CORE_ADDR memaddr, gdb_byte *myaddr, ssize_t len);
-
-/* Like target_read_code, but report an error if can't read.  */
-
-extern void read_code (CORE_ADDR memaddr, gdb_byte *myaddr, ssize_t len);
+extern void read_stack (CORE_ADDR memaddr, gdb_byte *myaddr, int len);
 
 /* Read an integer from debugged memory, given address and number of
    bytes.  */
@@ -70,22 +67,6 @@ extern int safe_read_memory_integer (CORE_ADDR memaddr, int len,
 extern ULONGEST read_memory_unsigned_integer (CORE_ADDR memaddr,
 					      int len,
 					      enum bfd_endian byte_order);
-extern int safe_read_memory_unsigned_integer (CORE_ADDR memaddr, int len,
-					      enum bfd_endian byte_order,
-					      ULONGEST *return_value);
-
-/* Read an integer from debugged code memory, given address,
-   number of bytes, and byte order for code.  */
-
-extern LONGEST read_code_integer (CORE_ADDR memaddr, int len,
-				  enum bfd_endian byte_order);
-
-/* Read an unsigned integer from debugged code memory, given address,
-   number of bytes, and byte order for code.  */
-
-extern ULONGEST read_code_unsigned_integer (CORE_ADDR memaddr,
-					    int len,
-					    enum bfd_endian byte_order);
 
 /* Read a null-terminated string from the debuggee's memory, given
    address, a buffer into which to place the string, and the maximum
@@ -98,17 +79,12 @@ extern void read_memory_string (CORE_ADDR, char *, int);
 
 CORE_ADDR read_memory_typed_address (CORE_ADDR addr, struct type *type);
 
-/* Same as target_write_memory, but report an error if can't
-   write.  */
+/* This takes a char *, not void *.  This is probably right, because
+   passing in an int * or whatever is wrong with respect to
+   byteswapping, alignment, different sizes for host vs. target types,
+   etc.  */
 
-extern void write_memory (CORE_ADDR memaddr, const gdb_byte *myaddr,
-			  ssize_t len);
-
-/* Same as write_memory, but notify 'memory_changed' observers.  */
-
-extern void write_memory_with_notification (CORE_ADDR memaddr,
-					    const bfd_byte *myaddr,
-					    ssize_t len);
+extern void write_memory (CORE_ADDR memaddr, const gdb_byte *myaddr, int len);
 
 /* Store VALUE at ADDR in the inferior as a LEN-byte unsigned integer.  */
 extern void write_memory_unsigned_integer (CORE_ADDR addr, int len,
@@ -122,38 +98,30 @@ extern void write_memory_signed_integer (CORE_ADDR addr, int len,
 
 /* Hook for `exec_file_command' command to call.  */
 
-extern void (*deprecated_exec_file_display_hook) (const char *filename);
+extern void (*deprecated_exec_file_display_hook) (char *filename);
 
 /* Hook for "file_command", which is more useful than above
    (because it is invoked AFTER symbols are read, not before).  */
 
-extern void (*deprecated_file_changed_hook) (const char *filename);
+extern void (*deprecated_file_changed_hook) (char *filename);
 
-extern void specify_exec_file_hook (void (*hook) (const char *filename));
+extern void specify_exec_file_hook (void (*hook) (char *filename));
 
 /* Binary File Diddler for the core file.  */
 
-#define core_bfd (current_program_space->cbfd.get ())
+extern bfd *core_bfd;
+
+extern struct target_ops *core_target;
 
 /* Whether to open exec and core files read-only or read-write.  */
 
 extern int write_files;
 
-/* Open and set up the core file bfd.  */
+extern void core_file_command (char *filename, int from_tty);
 
-extern void core_target_open (const char *arg, int from_tty);
+extern void exec_file_attach (char *filename, int from_tty);
 
-extern void core_file_command (const char *filename, int from_tty);
-
-extern void exec_file_attach (const char *filename, int from_tty);
-
-/* If the filename of the main executable is unknown, attempt to
-   determine it.  If a filename is determined, proceed as though
-   it was just specified with the "file" command.  Do nothing if
-   the filename of the main executable is already known.
-   DEFER_BP_RESET uses SYMFILE_DEFER_BP_RESET for the main symbol file.  */
-
-extern void exec_file_locate_attach (int pid, int defer_bp_reset, int from_tty);
+extern void exec_file_clear (int from_tty);
 
 extern void validate_files (void);
 
@@ -161,7 +129,7 @@ extern void validate_files (void);
 
 extern char *gnutarget;
 
-extern void set_gnutarget (const char *);
+extern void set_gnutarget (char *);
 
 /* Structure to keep track of core register reading functions for
    various core file types.  */
@@ -226,53 +194,12 @@ struct core_fns
 
   };
 
-/* Build either a single-thread or multi-threaded section name for
-   PTID.
-
-   If ptid's lwp member is zero, we want to do the single-threaded
-   thing: look for a section named NAME (as passed to the
-   constructor).  If ptid's lwp member is non-zero, we'll want do the
-   multi-threaded thing: look for a section named "NAME/LWP", where
-   LWP is the shortest ASCII decimal representation of ptid's lwp
-   member.  */
-
-class thread_section_name
-{
-public:
-  /* NAME is the single-threaded section name.  If PTID represents an
-     LWP, then the build section name is "NAME/LWP", otherwise it's
-     just "NAME" unmodified.  */
-  thread_section_name (const char *name, ptid_t ptid)
-  {
-    if (ptid.lwp_p ())
-      {
-	m_storage = string_printf ("%s/%ld", name, ptid.lwp ());
-	m_section_name = m_storage.c_str ();
-      }
-    else
-      m_section_name = name;
-  }
-
-  /* Return the computed section name.  The result is valid as long as
-     this thread_section_name object is live.  */
-  const char *c_str () const
-  { return m_section_name; }
-
-  DISABLE_COPY_AND_ASSIGN (thread_section_name);
-
-private:
-  /* Either a pointer into M_STORAGE, or a pointer to the name passed
-     as parameter to the constructor.  */
-  const char *m_section_name;
-  /* If we need to build a new section name, this is where we store
-     it.  */
-  std::string m_storage;
-};
-
 /* NOTE: cagney/2004-04-05: Replaced by "regset.h" and
    regset_from_core_section().  */
 extern void deprecated_add_core_fns (struct core_fns *cf);
 extern int default_core_sniffer (struct core_fns *cf, bfd * abfd);
 extern int default_check_format (bfd * abfd);
+
+struct target_section *deprecated_core_resize_section_table (int num_added);
 
 #endif /* !defined (GDBCORE_H) */

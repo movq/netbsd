@@ -1,6 +1,7 @@
 /* BFD library -- caching of file descriptors.
 
-   Copyright (C) 1990-2020 Free Software Foundation, Inc.
+   Copyright 1990, 1991, 1992, 1993, 1994, 1996, 2000, 2001, 2002,
+   2003, 2004, 2005, 2007 Free Software Foundation, Inc.
 
    Hacked by Steve Chamberlain of Cygnus Support (steve@cygnus.com).
 
@@ -30,7 +31,7 @@ SECTION
 	regard to the underlying operating system's file descriptor
 	limit (often as low as 20 open files).  The module in
 	<<cache.c>> maintains a least recently used list of
-	<<bfd_cache_max_open>> files, and exports the name
+	<<BFD_CACHE_MAX_OPEN>> files, and exports the name
 	<<bfd_cache_lookup>>, which runs around and makes sure that
 	the required BFD is open. If not, then it chooses a file to
 	close, closes it and opens the one wanted, returning its file
@@ -44,10 +45,6 @@ SUBSECTION
 #include "bfd.h"
 #include "libbfd.h"
 #include "libiberty.h"
-
-#ifdef HAVE_MMAP
-#include <sys/mman.h>
-#endif
 
 /* In some cases we can optimize cache operation when reopening files.
    For instance, a flush is entirely unnecessary if the file is already
@@ -65,53 +62,9 @@ enum cache_flag {
 };
 
 /* The maximum number of files which the cache will keep open at
-   one time.  When needed call bfd_cache_max_open to initialize.  */
+   one time.  */
 
-static int max_open_files = 0;
-
-/* Set max_open_files, if not already set, to 12.5% of the allowed open
-   file descriptors, but at least 10, and return the value.  */
-static int
-bfd_cache_max_open (void)
-{
-  if (max_open_files == 0)
-    {
-      int max;
-#if defined(__sun) && !defined(__sparcv9) && !defined(__x86_64__)
-      /* PR ld/19260: 32-bit Solaris has very inelegant handling of the 255
-	 file descriptor limit.  The problem is that setrlimit(2) can raise
-	 RLIMIT_NOFILE to a value that is not supported by libc, resulting
-	 in "Too many open files" errors.  This can happen here even though
-	 max_open_files is set to rlim.rlim_cur / 8.  For example, if
-	 a parent process has set rlim.rlim_cur to 65536, then max_open_files
-	 will be computed as 8192.
-
-	 This check essentially reverts to the behavior from binutils 2.23.1
-	 for 32-bit Solaris only.  (It is hoped that the 32-bit libc
-	 limitation will be removed soon).  64-bit Solaris libc does not have
-	 this limitation.  */
-      max = 16;
-#else
-#ifdef HAVE_GETRLIMIT
-      struct rlimit rlim;
-
-      if (getrlimit (RLIMIT_NOFILE, &rlim) == 0
-	  && rlim.rlim_cur != (rlim_t) RLIM_INFINITY)
-	max = rlim.rlim_cur / 8;
-      else
-#endif
-#ifdef _SC_OPEN_MAX
-	max = sysconf (_SC_OPEN_MAX) / 8;
-#else
-	max = 10;
-#endif
-#endif /* not 32-bit Solaris */
-
-      max_open_files = max < 10 ? 10 : max;
-    }
-
-  return max_open_files;
-}
+#define BFD_CACHE_MAX_OPEN 10
 
 /* The number of BFD files we have open.  */
 
@@ -187,33 +140,33 @@ bfd_cache_delete (bfd *abfd)
 static bfd_boolean
 close_one (void)
 {
-  register bfd *to_kill;
+  register bfd *kill;
 
   if (bfd_last_cache == NULL)
-    to_kill = NULL;
+    kill = NULL;
   else
     {
-      for (to_kill = bfd_last_cache->lru_prev;
-	   ! to_kill->cacheable;
-	   to_kill = to_kill->lru_prev)
+      for (kill = bfd_last_cache->lru_prev;
+	   ! kill->cacheable;
+	   kill = kill->lru_prev)
 	{
-	  if (to_kill == bfd_last_cache)
+	  if (kill == bfd_last_cache)
 	    {
-	      to_kill = NULL;
+	      kill = NULL;
 	      break;
 	    }
 	}
     }
 
-  if (to_kill == NULL)
+  if (kill == NULL)
     {
       /* There are no open cacheable BFD's.  */
       return TRUE;
     }
 
-  to_kill->where = _bfd_real_ftell ((FILE *) to_kill->iostream);
+  kill->where = real_ftell ((FILE *) kill->iostream);
 
-  return bfd_cache_delete (to_kill);
+  return bfd_cache_delete (kill);
 }
 
 /* Check to see if the required BFD is the same as the last one
@@ -229,19 +182,19 @@ close_one (void)
 /* Called when the macro <<bfd_cache_lookup>> fails to find a
    quick answer.  Find a file descriptor for @var{abfd}.  If
    necessary, it open it.  If there are already more than
-   <<bfd_cache_max_open>> files open, it tries to close one first, to
+   <<BFD_CACHE_MAX_OPEN>> files open, it tries to close one first, to
    avoid running out of file descriptors.  It will return NULL
    if it is unable to (re)open the @var{abfd}.  */
 
 static FILE *
 bfd_cache_lookup_worker (bfd *abfd, enum cache_flag flag)
 {
+  bfd *orig_bfd = abfd;
   if ((abfd->flags & BFD_IN_MEMORY) != 0)
     abort ();
 
-  if (abfd->my_archive != NULL
-      && !bfd_is_thin_archive (abfd->my_archive))
-    abort ();
+  if (abfd->my_archive)
+    abfd = abfd->my_archive;
 
   if (abfd->iostream != NULL)
     {
@@ -260,16 +213,14 @@ bfd_cache_lookup_worker (bfd *abfd, enum cache_flag flag)
   if (bfd_open_file (abfd) == NULL)
     ;
   else if (!(flag & CACHE_NO_SEEK)
-	   && _bfd_real_fseek ((FILE *) abfd->iostream,
-			       abfd->where, SEEK_SET) != 0
+	   && real_fseek ((FILE *) abfd->iostream, abfd->where, SEEK_SET) != 0
 	   && !(flag & CACHE_NO_SEEK_ERROR))
     bfd_set_error (bfd_error_system_call);
   else
     return (FILE *) abfd->iostream;
 
-  /* xgettext:c-format */
-  _bfd_error_handler (_("reopening %pB: %s\n"),
-		      abfd, bfd_errmsg (bfd_get_error ()));
+  (*_bfd_error_handler) (_("reopening %B: %s\n"),
+			 orig_bfd, bfd_errmsg (bfd_get_error ()));
   return NULL;
 }
 
@@ -279,16 +230,16 @@ cache_btell (struct bfd *abfd)
   FILE *f = bfd_cache_lookup (abfd, CACHE_NO_OPEN);
   if (f == NULL)
     return abfd->where;
-  return _bfd_real_ftell (f);
+  return real_ftell (f);
 }
 
 static int
 cache_bseek (struct bfd *abfd, file_ptr offset, int whence)
 {
-  FILE *f = bfd_cache_lookup (abfd, whence != SEEK_CUR ? CACHE_NO_SEEK : CACHE_NORMAL);
+  FILE *f = bfd_cache_lookup (abfd, whence != SEEK_CUR ? CACHE_NO_SEEK : 0);
   if (f == NULL)
     return -1;
-  return _bfd_real_fseek (f, offset, whence);
+  return real_fseek (f, offset, whence);
 }
 
 /* Note that archive entries don't have streams; they share their parent's.
@@ -299,9 +250,25 @@ cache_bseek (struct bfd *abfd, file_ptr offset, int whence)
    first octet in the file, NOT the beginning of the archive header.  */
 
 static file_ptr
-cache_bread_1 (FILE *f, void *buf, file_ptr nbytes)
+cache_bread_1 (struct bfd *abfd, void *buf, file_ptr nbytes)
 {
+  FILE *f;
   file_ptr nread;
+  /* FIXME - this looks like an optimization, but it's really to cover
+     up for a feature of some OSs (not solaris - sigh) that
+     ld/pe-dll.c takes advantage of (apparently) when it creates BFDs
+     internally and tries to link against them.  BFD seems to be smart
+     enough to realize there are no symbol records in the "file" that
+     doesn't exist but attempts to read them anyway.  On Solaris,
+     attempting to read zero bytes from a NULL file results in a core
+     dump, but on other platforms it just returns zero bytes read.
+     This makes it to something reasonable. - DJ */
+  if (nbytes == 0)
+    return 0;
+
+  f = bfd_cache_lookup (abfd, 0);
+  if (f == NULL)
+    return 0;
 
 #if defined (__VAX) && defined (VMS)
   /* Apparently fread on Vax VMS does not keep the record length
@@ -313,7 +280,7 @@ cache_bread_1 (FILE *f, void *buf, file_ptr nbytes)
   if (nread == (file_ptr)-1)
     {
       bfd_set_error (bfd_error_system_call);
-      return nread;
+      return -1;
     }
 #else
   nread = fread (buf, 1, nbytes, f);
@@ -323,7 +290,7 @@ cache_bread_1 (FILE *f, void *buf, file_ptr nbytes)
   if (nread < nbytes && ferror (f))
     {
       bfd_set_error (bfd_error_system_call);
-      return nread;
+      return -1;
     }
 #endif
   if (nread < nbytes)
@@ -337,11 +304,6 @@ static file_ptr
 cache_bread (struct bfd *abfd, void *buf, file_ptr nbytes)
 {
   file_ptr nread = 0;
-  FILE *f;
-
-  f = bfd_cache_lookup (abfd, CACHE_NORMAL);
-  if (f == NULL)
-    return -1;
 
   /* Some filesystems are unable to handle reads that are too large
      (for instance, NetApp shares with oplocks turned off).  To avoid
@@ -353,37 +315,36 @@ cache_bread (struct bfd *abfd, void *buf, file_ptr nbytes)
       file_ptr chunk_nread;
 
       if (chunk_size > max_chunk_size)
-	chunk_size = max_chunk_size;
+        chunk_size = max_chunk_size;
 
-      chunk_nread = cache_bread_1 (f, (char *) buf + nread, chunk_size);
+      chunk_nread = cache_bread_1 (abfd, buf + nread, chunk_size);
 
       /* Update the nread count.
 
-	 We just have to be careful of the case when cache_bread_1 returns
-	 a negative count:  If this is our first read, then set nread to
-	 that negative count in order to return that negative value to the
-	 caller.  Otherwise, don't add it to our total count, or we would
-	 end up returning a smaller number of bytes read than we actually
-	 did.  */
+         We just have to be careful of the case when cache_bread_1 returns
+         a negative count:  If this is our first read, then set nread to
+         that negative count in order to return that negative value to the
+         caller.  Otherwise, don't add it to our total count, or we would
+         end up returning a smaller number of bytes read than we actually
+         did.  */
       if (nread == 0 || chunk_nread > 0)
-	nread += chunk_nread;
+        nread += chunk_nread;
 
       if (chunk_nread < chunk_size)
-	break;
+        break;
     }
 
   return nread;
 }
 
 static file_ptr
-cache_bwrite (struct bfd *abfd, const void *from, file_ptr nbytes)
+cache_bwrite (struct bfd *abfd, const void *where, file_ptr nbytes)
 {
   file_ptr nwrite;
-  FILE *f = bfd_cache_lookup (abfd, CACHE_NORMAL);
-
+  FILE *f = bfd_cache_lookup (abfd, 0);
   if (f == NULL)
     return 0;
-  nwrite = fwrite (from, 1, nbytes, f);
+  nwrite = fwrite (where, 1, nbytes, f);
   if (nwrite < nbytes && ferror (f))
     {
       bfd_set_error (bfd_error_system_call);
@@ -395,7 +356,7 @@ cache_bwrite (struct bfd *abfd, const void *from, file_ptr nbytes)
 static int
 cache_bclose (struct bfd *abfd)
 {
-  return bfd_cache_close (abfd) - 1;
+  return bfd_cache_close (abfd);
 }
 
 static int
@@ -403,7 +364,6 @@ cache_bflush (struct bfd *abfd)
 {
   int sts;
   FILE *f = bfd_cache_lookup (abfd, CACHE_NO_OPEN);
-
   if (f == NULL)
     return 0;
   sts = fflush (f);
@@ -417,7 +377,6 @@ cache_bstat (struct bfd *abfd, struct stat *sb)
 {
   int sts;
   FILE *f = bfd_cache_lookup (abfd, CACHE_NO_SEEK_ERROR);
-
   if (f == NULL)
     return -1;
   sts = fstat (fileno (f), sb);
@@ -426,58 +385,9 @@ cache_bstat (struct bfd *abfd, struct stat *sb)
   return sts;
 }
 
-static void *
-cache_bmmap (struct bfd *abfd ATTRIBUTE_UNUSED,
-	     void *addr ATTRIBUTE_UNUSED,
-	     bfd_size_type len ATTRIBUTE_UNUSED,
-	     int prot ATTRIBUTE_UNUSED,
-	     int flags ATTRIBUTE_UNUSED,
-	     file_ptr offset ATTRIBUTE_UNUSED,
-	     void **map_addr ATTRIBUTE_UNUSED,
-	     bfd_size_type *map_len ATTRIBUTE_UNUSED)
-{
-  void *ret = (void *) -1;
-
-  if ((abfd->flags & BFD_IN_MEMORY) != 0)
-    abort ();
-#ifdef HAVE_MMAP
-  else
-    {
-      static uintptr_t pagesize_m1;
-      FILE *f;
-      file_ptr pg_offset;
-      bfd_size_type pg_len;
-
-      f = bfd_cache_lookup (abfd, CACHE_NO_SEEK_ERROR);
-      if (f == NULL)
-	return ret;
-
-      if (pagesize_m1 == 0)
-	pagesize_m1 = getpagesize () - 1;
-
-      /* Align.  */
-      pg_offset = offset & ~pagesize_m1;
-      pg_len = (len + (offset - pg_offset) + pagesize_m1) & ~pagesize_m1;
-
-      ret = mmap (addr, pg_len, prot, flags, fileno (f), pg_offset);
-      if (ret == (void *) -1)
-	bfd_set_error (bfd_error_system_call);
-      else
-	{
-	  *map_addr = ret;
-	  *map_len = pg_len;
-	  ret = (char *) ret + (offset & pagesize_m1);
-	}
-    }
-#endif
-
-  return ret;
-}
-
-static const struct bfd_iovec cache_iovec =
-{
+static const struct bfd_iovec cache_iovec = {
   &cache_bread, &cache_bwrite, &cache_btell, &cache_bseek,
-  &cache_bclose, &cache_bflush, &cache_bstat, &cache_bmmap
+  &cache_bclose, &cache_bflush, &cache_bstat
 };
 
 /*
@@ -495,7 +405,7 @@ bfd_boolean
 bfd_cache_init (bfd *abfd)
 {
   BFD_ASSERT (abfd->iostream != NULL);
-  if (open_files >= bfd_cache_max_open ())
+  if (open_files >= BFD_CACHE_MAX_OPEN)
     {
       if (! close_one ())
 	return FALSE;
@@ -552,7 +462,7 @@ RETURNS
 */
 
 bfd_boolean
-bfd_cache_close_all (void)
+bfd_cache_close_all ()
 {
   bfd_boolean ret = TRUE;
 
@@ -582,7 +492,7 @@ bfd_open_file (bfd *abfd)
 {
   abfd->cacheable = TRUE;	/* Allow it to be closed later.  */
 
-  if (open_files >= bfd_cache_max_open ())
+  if (open_files >= BFD_CACHE_MAX_OPEN)
     {
       if (! close_one ())
 	return NULL;
@@ -592,15 +502,15 @@ bfd_open_file (bfd *abfd)
     {
     case read_direction:
     case no_direction:
-      abfd->iostream = _bfd_real_fopen (abfd->filename, FOPEN_RB);
+      abfd->iostream = (PTR) real_fopen (abfd->filename, FOPEN_RB);
       break;
     case both_direction:
     case write_direction:
       if (abfd->opened_once)
 	{
-	  abfd->iostream = _bfd_real_fopen (abfd->filename, FOPEN_RUB);
+	  abfd->iostream = (PTR) real_fopen (abfd->filename, FOPEN_RUB);
 	  if (abfd->iostream == NULL)
-	    abfd->iostream = _bfd_real_fopen (abfd->filename, FOPEN_WUB);
+	    abfd->iostream = (PTR) real_fopen (abfd->filename, FOPEN_WUB);
 	}
       else
 	{
@@ -630,7 +540,7 @@ bfd_open_file (bfd *abfd)
 	  if (stat (abfd->filename, &s) == 0 && s.st_size != 0)
 	    unlink_if_ordinary (abfd->filename);
 #endif
-	  abfd->iostream = _bfd_real_fopen (abfd->filename, FOPEN_WUB);
+	  abfd->iostream = (PTR) real_fopen (abfd->filename, FOPEN_WUB);
 	  abfd->opened_once = TRUE;
 	}
       break;

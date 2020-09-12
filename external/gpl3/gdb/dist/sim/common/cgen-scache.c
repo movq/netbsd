@@ -1,5 +1,6 @@
 /* Simulator cache routines for CGEN simulators (and maybe others).
-   Copyright (C) 1996-2019 Free Software Foundation, Inc.
+   Copyright (C) 1996, 1997, 1998, 2007, 2008, 2009, 2010, 2011
+   Free Software Foundation, Inc.
    Contributed by Cygnus Support.
 
 This file is part of GDB, the GNU debugger.
@@ -26,6 +27,8 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 #include "libiberty.h"
 #include "sim-options.h"
 #include "sim-io.h"
+
+#define MAX(a,b) ((a) > (b) ? (a) : (b))
 
 /* Unused address.  */
 #define UNUSED_ADDR 0xffffffff
@@ -121,26 +124,24 @@ scache_option_handler (SIM_DESC sd, sim_cpu *cpu, int opt,
 	{
 	  if (arg != NULL)
 	    {
-	      unsigned int n = (unsigned int) strtoul (arg, NULL, 0);
+	      int n = strtol (arg, NULL, 0);
 	      if (n < MIN_SCACHE_SIZE)
 		{
-		  sim_io_eprintf (sd, "invalid scache size `%u', must be at least %u",
-				  n, MIN_SCACHE_SIZE);
+		  sim_io_eprintf (sd, "invalid scache size `%d', must be at least 4", n);
 		  return SIM_RC_FAIL;
 		}
 	      /* Ensure it's a multiple of 2.  */
 	      if ((n & (n - 1)) != 0)
 		{
-		  unsigned int i;
-		  sim_io_eprintf (sd, "scache size `%u' not a multiple of 2\n", n);
-		  /* Round up to nearest multiple of 2.  */
-		  for (i = 1; i && i < n; i <<= 1)
-		    continue;
-		  if (i)
-		    {
-		      n = i;
-		      sim_io_eprintf (sd, "rounding scache size up to %u\n", n);
-		    }
+		  sim_io_eprintf (sd, "scache size `%d' not a multiple of 2\n", n);
+		  {
+		    /* round up to nearest multiple of 2 */
+		    int i;
+		    for (i = 1; i < n; i <<= 1)
+		      continue;
+		    n = i;
+		  }
+		  sim_io_eprintf (sd, "rounding scache size up to %d\n", n);
 		}
 	      if (cpu == NULL)
 		STATE_SCACHE_SIZE (sd) = n;
@@ -212,7 +213,7 @@ scache_init (SIM_DESC sd)
 #if WITH_SCACHE_PBB
 	  CPU_SCACHE_MAX_CHAIN_LENGTH (cpu) = MAX_CHAIN_LENGTH;
 	  CPU_SCACHE_NUM_HASH_CHAIN_ENTRIES (cpu) = MAX_HASH_CHAIN_LENGTH;
-	  CPU_SCACHE_NUM_HASH_CHAINS (cpu) = max (MIN_HASH_CHAINS,
+	  CPU_SCACHE_NUM_HASH_CHAINS (cpu) = MAX (MIN_HASH_CHAINS,
 						  CPU_SCACHE_SIZE (cpu)
 						  / SCACHE_HASH_RATIO);
 	  CPU_SCACHE_HASH_TABLE (cpu) =

@@ -1,5 +1,5 @@
 /* Output Go language descriptions of types.
-   Copyright (C) 2008-2019 Free Software Foundation, Inc.
+   Copyright (C) 2008-2013 Free Software Foundation, Inc.
    Written by Ian Lance Taylor <iant@google.com>.
 
 This file is part of GCC.
@@ -30,10 +30,12 @@ along with GCC; see the file COPYING3.  If not see
 #include "config.h"
 #include "system.h"
 #include "coretypes.h"
-#include "tree.h"
 #include "diagnostic-core.h"
+#include "tree.h"
+#include "ggc.h"
+#include "pointer-set.h"
+#include "obstack.h"
 #include "debug.h"
-#include "stor-layout.h"
 
 /* We dump this information from the debug hooks.  This gives us a
    stable and maintainable API to hook into.  In order to work
@@ -69,15 +71,6 @@ struct macro_hash_value
   /* The value of the macro.  */
   char *value;
 };
-
-/* Returns the number of units necessary to represent an integer with the given
-   PRECISION (in bits).  */
-
-static inline unsigned int
-precision_to_units (unsigned int precision)
-{
-  return (precision + BITS_PER_UNIT - 1) / BITS_PER_UNIT;
-}
 
 /* Calculate the hash value for an entry in the macro hash table.  */
 
@@ -499,20 +492,13 @@ go_function_decl (tree decl)
   go_decl (decl);
 }
 
-static void
-go_early_global_decl (tree decl)
-{
-  go_decl (decl);
-  if (TREE_CODE (decl) != FUNCTION_DECL || DECL_STRUCT_FUNCTION (decl) != NULL)
-    real_debug_hooks->early_global_decl (decl);
-}
-
 /* A global variable decl.  */
 
 static void
-go_late_global_decl (tree decl)
+go_global_decl (tree decl)
 {
-  real_debug_hooks->late_global_decl (decl);
+  real_debug_hooks->global_decl (decl);
+  go_decl (decl);
 }
 
 /* A type declaration.  */
@@ -538,11 +524,11 @@ go_type_decl (tree decl, int local)
 struct godump_container
 {
   /* DECLs that we have already seen.  */
-  hash_set<tree> decls_seen;
+  struct pointer_set_t *decls_seen;
 
   /* Types which may potentially have to be defined as dummy
      types.  */
-  hash_set<const char *> pot_dummy_types;
+  struct pointer_set_t *pot_dummy_types;
 
   /* Go keywords.  */
   htab_t keyword_hash;
@@ -565,140 +551,25 @@ go_append_string (struct obstack *ob, tree id)
   obstack_grow (ob, IDENTIFIER_POINTER (id), IDENTIFIER_LENGTH (id));
 }
 
-/* Given an integer PRECISION in bits, returns a constant string that is the
-   matching go int or uint type (depending on the IS_UNSIGNED flag).  Returns a
-   NULL pointer if there is no matching go type.  */
-
-static const char *
-go_get_uinttype_for_precision (unsigned int precision, bool is_unsigned)
-{
-  switch (precision)
-    {
-    case 8:
-      return is_unsigned ? "uint8" : "int8";
-    case 16:
-      return is_unsigned ? "uint16" : "int16";
-    case 32:
-      return is_unsigned ? "uint32" : "int32";
-    case 64:
-      return is_unsigned ? "uint64" : "int64";
-    default:
-      return NULL;
-    }
-}
-
-/* Append an artificial variable name with the suffix _INDEX to OB.  Returns
-   INDEX + 1.  */
-
-static unsigned int
-go_append_artificial_name (struct obstack *ob, unsigned int index)
-{
-  char buf[100];
-
-  /* FIXME: identifier may not be unique.  */
-  obstack_grow (ob, "Godump_", 7);
-  snprintf (buf, sizeof buf, "%u", index);
-  obstack_grow (ob, buf, strlen (buf));
-
-  return index + 1;
-}
-
-/* Append the variable name from DECL to OB.  If the name is in the
-   KEYWORD_HASH, prepend an '_'.  */
-
-static void
-go_append_decl_name (struct obstack *ob, tree decl, htab_t keyword_hash)
-{
-  const char *var_name;
-  void **slot;
-
-  /* Start variable name with an underscore if a keyword.  */
-  var_name = IDENTIFIER_POINTER (DECL_NAME (decl));
-  slot = htab_find_slot (keyword_hash, var_name, NO_INSERT);
-  if (slot != NULL)
-    obstack_1grow (ob, '_');
-  go_append_string (ob, DECL_NAME (decl));
-}
-
-/* Appends a byte array with the necessary number of elements and the name
-   "Godump_INDEX_pad" to pad from FROM_OFFSET to TO_OFFSET to OB assuming that
-   the next field is automatically aligned to ALIGN_UNITS.  Returns INDEX + 1,
-   or INDEX if no padding had to be appended.  The resulting offset where the
-   next field is allocated is returned through RET_OFFSET.  */
-
-static unsigned int
-go_append_padding (struct obstack *ob, unsigned int from_offset,
-		   unsigned int to_offset, unsigned int align_units,
-		   unsigned int index, unsigned int *ret_offset)
-{
-  if (from_offset % align_units > 0)
-    from_offset += align_units - (from_offset % align_units);
-  gcc_assert (to_offset >= from_offset);
-  if (to_offset > from_offset)
-    {
-      char buf[100];
-
-      index = go_append_artificial_name (ob, index);
-      snprintf (buf, sizeof buf, "_pad [%u]byte; ", to_offset - from_offset);
-      obstack_grow (ob, buf, strlen (buf));
-    }
-  *ret_offset = to_offset;
-
-  return index;
-}
-
-/* Appends an array of type TYPE_STRING with zero elements and the name
-   "Godump_INDEX_align" to OB.  If TYPE_STRING is a null pointer, ERROR_STRING
-   is appended instead of the type.  Returns INDEX + 1.  */
-
-static unsigned int
-go_force_record_alignment (struct obstack *ob, const char *type_string,
-			   unsigned int index, const char *error_string)
-{
-  index = go_append_artificial_name (ob, index);
-  obstack_grow (ob, "_align ", 7);
-  if (type_string == NULL)
-    obstack_grow (ob, error_string, strlen (error_string));
-  else
-    {
-      obstack_grow (ob, "[0]", 3);
-      obstack_grow (ob, type_string, strlen (type_string));
-    }
-  obstack_grow (ob, "; ", 2);
-
-  return index;
-}
-
 /* Write the Go version of TYPE to CONTAINER->TYPE_OBSTACK.
    USE_TYPE_NAME is true if we can simply use a type name here without
    needing to define it.  IS_FUNC_OK is true if we can output a func
-   type here; the "func" keyword will already have been added.
-   Return true if the type can be represented in Go, false otherwise.
-   P_ART_I is used for indexing artificial elements in nested structures and
-   should always be a NULL pointer when called, except by certain recursive
-   calls from go_format_type() itself.  */
+   type here; the "func" keyword will already have been added.  Return
+   true if the type can be represented in Go, false otherwise.  */
 
 static bool
 go_format_type (struct godump_container *container, tree type,
-		bool use_type_name, bool is_func_ok, unsigned int *p_art_i,
-		bool is_anon_record_or_union)
+		bool use_type_name, bool is_func_ok)
 {
   bool ret;
   struct obstack *ob;
-  unsigned int art_i_dummy;
-  bool is_union = false;
 
-  if (p_art_i == NULL)
-    {
-      art_i_dummy = 0;
-      p_art_i = &art_i_dummy;
-    }
   ret = true;
   ob = &container->type_obstack;
 
   if (TYPE_NAME (type) != NULL_TREE
-      && (container->decls_seen.contains (type)
-	  || container->decls_seen.contains (TYPE_NAME (type)))
+      && (pointer_set_contains (container->decls_seen, type)
+	  || pointer_set_contains (container->decls_seen, TYPE_NAME (type)))
       && (AGGREGATE_TYPE_P (type)
 	  || POINTER_TYPE_P (type)
 	  || TREE_CODE (type) == FUNCTION_TYPE))
@@ -706,7 +577,9 @@ go_format_type (struct godump_container *container, tree type,
       tree name;
       void **slot;
 
-      name = TYPE_IDENTIFIER (type);
+      name = TYPE_NAME (type);
+      if (TREE_CODE (name) == TYPE_DECL)
+	name = DECL_NAME (name);
 
       slot = htab_find_slot (container->invalid_hash, IDENTIFIER_POINTER (name),
 			     NO_INSERT);
@@ -718,10 +591,14 @@ go_format_type (struct godump_container *container, tree type,
       return ret;
     }
 
-  container->decls_seen.add (type);
+  pointer_set_insert (container->decls_seen, type);
 
   switch (TREE_CODE (type))
     {
+    case ENUMERAL_TYPE:
+      obstack_grow (ob, "int", 3);
+      break;
+
     case TYPE_DECL:
       {
 	void **slot;
@@ -737,21 +614,32 @@ go_format_type (struct godump_container *container, tree type,
       }
       break;
 
-    case ENUMERAL_TYPE:
     case INTEGER_TYPE:
       {
 	const char *s;
 	char buf[100];
 
-	s = go_get_uinttype_for_precision (TYPE_PRECISION (type),
-					   TYPE_UNSIGNED (type));
-	if (s == NULL)
+	switch (TYPE_PRECISION (type))
 	  {
+	  case 8:
+	    s = TYPE_UNSIGNED (type) ? "uint8" : "int8";
+	    break;
+	  case 16:
+	    s = TYPE_UNSIGNED (type) ? "uint16" : "int16";
+	    break;
+	  case 32:
+	    s = TYPE_UNSIGNED (type) ? "uint32" : "int32";
+	    break;
+	  case 64:
+	    s = TYPE_UNSIGNED (type) ? "uint64" : "int64";
+	    break;
+	  default:
 	    snprintf (buf, sizeof buf, "INVALID-int-%u%s",
 		      TYPE_PRECISION (type),
 		      TYPE_UNSIGNED (type) ? "u" : "");
 	    s = buf;
 	    ret = false;
+	    break;
 	  }
 	obstack_grow (ob, s, strlen (s));
       }
@@ -781,40 +669,6 @@ go_format_type (struct godump_container *container, tree type,
       }
       break;
 
-    case COMPLEX_TYPE:
-      {
-	const char *s;
-	char buf[100];
-	tree real_type;
-
-	real_type = TREE_TYPE (type);
-	if (TREE_CODE (real_type) == REAL_TYPE)
-	  {
-	    switch (TYPE_PRECISION (real_type))
-	      {
-	      case 32:
-		s = "complex64";
-		break;
-	      case 64:
-		s = "complex128";
-		break;
-	      default:
-		snprintf (buf, sizeof buf, "INVALID-complex-%u",
-			  2 * TYPE_PRECISION (real_type));
-		s = buf;
-		ret = false;
-		break;
-	      }
-	  }
-	else
-	  {
-	    s = "INVALID-complex-non-real";
-	    ret = false;
-	  }
-	obstack_grow (ob, s, strlen (s));
-      }
-      break;
-
     case BOOLEAN_TYPE:
       obstack_grow (ob, "bool", 4);
       break;
@@ -830,7 +684,9 @@ go_format_type (struct godump_container *container, tree type,
 	  tree name;
 	  void **slot;
 
-	  name = TYPE_IDENTIFIER (TREE_TYPE (type));
+	  name = TYPE_NAME (TREE_TYPE (type));
+	  if (TREE_CODE (name) == TYPE_DECL)
+	    name = DECL_NAME (name);
 
 	  slot = htab_find_slot (container->invalid_hash,
 				 IDENTIFIER_POINTER (name), NO_INSERT);
@@ -844,7 +700,8 @@ go_format_type (struct godump_container *container, tree type,
 	     definition.  So this struct or union is a potential dummy
 	     type.  */
 	  if (RECORD_OR_UNION_TYPE_P (TREE_TYPE (type)))
-	    container->pot_dummy_types.add (IDENTIFIER_POINTER (name));
+	    pointer_set_insert (container->pot_dummy_types,
+				IDENTIFIER_POINTER (name));
 
 	  return ret;
         }
@@ -857,7 +714,7 @@ go_format_type (struct godump_container *container, tree type,
       else
 	{
 	  if (!go_format_type (container, TREE_TYPE (type), use_type_name,
-			       true, NULL, false))
+			       true))
 	    ret = false;
 	}
       break;
@@ -871,115 +728,86 @@ go_format_type (struct godump_container *container, tree type,
 	  && tree_int_cst_sgn (TYPE_MIN_VALUE (TYPE_DOMAIN (type))) == 0
 	  && TYPE_MAX_VALUE (TYPE_DOMAIN (type)) != NULL_TREE
 	  && TREE_CODE (TYPE_MAX_VALUE (TYPE_DOMAIN (type))) == INTEGER_CST
-	  && tree_fits_shwi_p (TYPE_MAX_VALUE (TYPE_DOMAIN (type))))
+	  && host_integerp (TYPE_MAX_VALUE (TYPE_DOMAIN (type)), 0))
 	{
 	  char buf[100];
 
 	  snprintf (buf, sizeof buf, HOST_WIDE_INT_PRINT_DEC "+1",
-		    tree_to_shwi (TYPE_MAX_VALUE (TYPE_DOMAIN (type))));
+		    tree_low_cst (TYPE_MAX_VALUE (TYPE_DOMAIN (type)), 0));
 	  obstack_grow (ob, buf, strlen (buf));
 	}
-      else
-	obstack_1grow (ob, '0');
       obstack_1grow (ob, ']');
-      if (!go_format_type (container, TREE_TYPE (type), use_type_name, false,
-			   NULL, false))
+      if (!go_format_type (container, TREE_TYPE (type), use_type_name, false))
 	ret = false;
       break;
 
     case UNION_TYPE:
-      is_union = true;
-      /* Fall through to RECORD_TYPE case.  */
-      gcc_fallthrough ();
     case RECORD_TYPE:
       {
-	unsigned int prev_field_end;
-	unsigned int known_alignment;
 	tree field;
-	bool emitted_a_field;
+	int i;
 
-	/* FIXME: Why is this necessary?  Without it we can get a core
-	   dump on the s390x headers, or from a file containing simply
-	   "typedef struct S T;".  */
-	layout_type (type);
-
-	prev_field_end = 0;
-	known_alignment = 1;
-	/* Anonymous records and unions are flattened, i.e. they are not put
-	   into "struct { ... }".  */
-	if (!is_anon_record_or_union)
-	  obstack_grow (ob, "struct { ", 9);
-	for (field = TYPE_FIELDS (type), emitted_a_field = false;
+	obstack_grow (ob, "struct { ", 9);
+	i = 0;
+	for (field = TYPE_FIELDS (type);
 	     field != NULL_TREE;
 	     field = TREE_CHAIN (field))
 	  {
-	    if (TREE_CODE (field) != FIELD_DECL)
-	      continue;
-	    if (DECL_BIT_FIELD (field))
-	      /* Bit fields are replaced by padding.  */
-	      continue;
-	    /* Only the first non-bitfield field is emitted for unions.  */
-	    if (!is_union || !emitted_a_field)
+	    struct obstack hold_type_obstack;
+	    bool field_ok;
+
+	    if (TREE_CODE (type) == UNION_TYPE)
 	      {
-		/* Emit the field.  */
-		bool field_ok;
-		bool is_anon_substructure;
-		unsigned int decl_align_unit;
-		unsigned int decl_offset;
+		hold_type_obstack = container->type_obstack;
+		obstack_init (&container->type_obstack);
+	      }
 
-		field_ok = true;
-		emitted_a_field = true;
-		is_anon_substructure =
-		  (DECL_NAME (field) == NULL
-		   && (TREE_CODE (TREE_TYPE (field)) == RECORD_TYPE
-		       || TREE_CODE (TREE_TYPE (field)) == UNION_TYPE));
-		/* Keep track of the alignment of named substructures, either
-		   of the whole record, or the alignment of the emitted field
-		   (for unions).  */
-		decl_align_unit = DECL_ALIGN_UNIT (field);
-		if (!is_anon_substructure && decl_align_unit > known_alignment)
-		  known_alignment = decl_align_unit;
-		/* Pad to start of field.  */
-		decl_offset =
-		  TREE_INT_CST_LOW (DECL_FIELD_OFFSET (field))
-		  + precision_to_units
-		  (TREE_INT_CST_LOW (DECL_FIELD_BIT_OFFSET (field)));
-		{
-		  unsigned int align_unit;
+	    field_ok = true;
 
-		  /* For anonymous records and unions there is no automatic
-		     structure alignment, so use 1 as the alignment.  */
-		  align_unit = (is_anon_substructure) ? 1 : decl_align_unit;
-		  *p_art_i = go_append_padding
-		    (ob, prev_field_end, decl_offset, align_unit, *p_art_i,
-		     &prev_field_end);
-		}
-		if (DECL_SIZE_UNIT (field))
-		  prev_field_end +=
-		    TREE_INT_CST_LOW (DECL_SIZE_UNIT (field));
-		/* Emit the field name, but not for anonymous records and
-		   unions.  */
-		if (!is_anon_substructure)
-		  {
-		    if (DECL_NAME (field) == NULL)
-		      *p_art_i = go_append_artificial_name (ob, *p_art_i);
-		    else
-		      go_append_decl_name
-			(ob, field, container->keyword_hash);
-		    obstack_1grow (ob, ' ');
-		  }
-		/* Do not expand type if a record or union type or a function
-		   pointer.  */
+	    if (DECL_NAME (field) == NULL)
+	      {
+		char buf[100];
+
+		obstack_grow (ob, "Godump_", 7);
+		snprintf (buf, sizeof buf, "%d", i);
+		obstack_grow (ob, buf, strlen (buf));
+		i++;
+	      }
+	    else
+              {
+		const char *var_name;
+		void **slot;
+
+		/* Start variable name with an underscore if a keyword.  */
+		var_name = IDENTIFIER_POINTER (DECL_NAME (field));
+		slot = htab_find_slot (container->keyword_hash, var_name,
+				       NO_INSERT);
+		if (slot != NULL)
+		  obstack_1grow (ob, '_');
+		go_append_string (ob, DECL_NAME (field));
+	      }
+	    obstack_1grow (ob, ' ');
+	    if (DECL_BIT_FIELD (field))
+	      {
+		obstack_grow (ob, "INVALID-bit-field", 17);
+		field_ok = false;
+	      }
+	    else
+              {
+		/* Do not expand type if a record or union type or a
+		   function pointer.  */
 		if (TYPE_NAME (TREE_TYPE (field)) != NULL_TREE
 		    && (RECORD_OR_UNION_TYPE_P (TREE_TYPE (field))
 			|| (POINTER_TYPE_P (TREE_TYPE (field))
 			    && (TREE_CODE (TREE_TYPE (TREE_TYPE (field)))
-				== FUNCTION_TYPE))))
+                                == FUNCTION_TYPE))))
 		  {
 		    tree name;
 		    void **slot;
 
-		    name = TYPE_IDENTIFIER (TREE_TYPE (field));
+		    name = TYPE_NAME (TREE_TYPE (field));
+		    if (TREE_CODE (name) == TYPE_DECL)
+		      name = DECL_NAME (name);
 
 		    slot = htab_find_slot (container->invalid_hash,
 					   IDENTIFIER_POINTER (name),
@@ -993,42 +821,44 @@ go_format_type (struct godump_container *container, tree type,
 		else
 		  {
 		    if (!go_format_type (container, TREE_TYPE (field), true,
-					 false, p_art_i, is_anon_substructure))
+					 false))
 		      field_ok = false;
 		  }
-		if (!is_anon_substructure)
-		  obstack_grow (ob, "; ", 2);
+              }
+	    obstack_grow (ob, "; ", 2);
+
+	    /* Only output the first successful field of a union, and
+	       hope for the best.  */
+	    if (TREE_CODE (type) == UNION_TYPE)
+	      {
+		if (!field_ok && TREE_CHAIN (field) == NULL_TREE)
+		  {
+		    field_ok = true;
+		    ret = false;
+		  }
+		if (field_ok)
+		  {
+		    unsigned int sz;
+
+		    sz = obstack_object_size (&container->type_obstack);
+		    obstack_grow (&hold_type_obstack,
+				  obstack_base (&container->type_obstack),
+				  sz);
+		  }
+		obstack_free (&container->type_obstack, NULL);
+		container->type_obstack = hold_type_obstack;
+		if (field_ok)
+		  break;
+	      }
+	    else
+	      {
 		if (!field_ok)
 		  ret = false;
 	      }
 	  }
-	/* Padding.  */
-	*p_art_i = go_append_padding (ob, prev_field_end,
-				      TREE_INT_CST_LOW (TYPE_SIZE_UNIT (type)),
-				      1, *p_art_i, &prev_field_end);
-	/* Alignment.  */
-	if (!is_anon_record_or_union
-	    && known_alignment < TYPE_ALIGN_UNIT (type))
-	  {
-	    const char *s;
-	    char buf[100];
-
-	    /* Enforce proper record alignment.  */
-	    s = go_get_uinttype_for_precision
-	      (TYPE_ALIGN (type), TYPE_UNSIGNED (type));
-	    if (s == NULL)
-	      {
-		snprintf (buf, sizeof buf, "INVALID-int-%u%s",
-			  TYPE_ALIGN (type), TYPE_UNSIGNED (type) ? "u" : "");
-		s = buf;
-		ret = false;
-	      }
-	    *p_art_i = go_force_record_alignment (ob, s, *p_art_i, buf);
-	  }
-	if (!is_anon_record_or_union)
-	  obstack_1grow (ob, '}');
+	obstack_1grow (ob, '}');
       }
-    break;
+      break;
 
     case FUNCTION_TYPE:
       {
@@ -1055,7 +885,7 @@ go_format_type (struct godump_container *container, tree type,
 	      break;
 	    if (seen_arg)
 	      obstack_grow (ob, ", ", 2);
-	    if (!go_format_type (container, arg_type, true, false, NULL, false))
+	    if (!go_format_type (container, arg_type, true, false))
 	      ret = false;
 	    seen_arg = true;
 	  }
@@ -1071,8 +901,7 @@ go_format_type (struct godump_container *container, tree type,
 	if (!VOID_TYPE_P (result))
 	  {
 	    obstack_1grow (ob, ' ');
-	    if (!go_format_type (container, result, use_type_name, false, NULL,
-				 false))
+	    if (!go_format_type (container, result, use_type_name, false))
 	      ret = false;
 	  }
       }
@@ -1097,7 +926,7 @@ go_output_type (struct godump_container *container)
 
   ob = &container->type_obstack;
   obstack_1grow (ob, '\0');
-  fputs ((char *) obstack_base (ob), go_dump_file);
+  fputs (obstack_base (ob), go_dump_file);
   obstack_free (ob, obstack_base (ob));
 }
 
@@ -1106,7 +935,7 @@ go_output_type (struct godump_container *container)
 static void
 go_output_fndecl (struct godump_container *container, tree decl)
 {
-  if (!go_format_type (container, TREE_TYPE (decl), false, true, NULL, false))
+  if (!go_format_type (container, TREE_TYPE (decl), false, true))
     fprintf (go_dump_file, "// ");
   fprintf (go_dump_file, "func _%s ",
 	   IDENTIFIER_POINTER (DECL_NAME (decl)));
@@ -1124,10 +953,10 @@ go_output_typedef (struct godump_container *container, tree decl)
      separately.  */
   if (TREE_CODE (TREE_TYPE (decl)) == ENUMERAL_TYPE
       && TYPE_SIZE (TREE_TYPE (decl)) != 0
-      && !container->decls_seen.contains (TREE_TYPE (decl))
+      && !pointer_set_contains (container->decls_seen, TREE_TYPE (decl))
       && (TYPE_CANONICAL (TREE_TYPE (decl)) == NULL_TREE
-	  || !container->decls_seen.contains
-				    (TYPE_CANONICAL (TREE_TYPE (decl)))))
+	  || !pointer_set_contains (container->decls_seen,
+				    TYPE_CANONICAL (TREE_TYPE (decl)))))
     {
       tree element;
 
@@ -1138,7 +967,7 @@ go_output_typedef (struct godump_container *container, tree decl)
 	  const char *name;
 	  struct macro_hash_value *mhval;
 	  void **slot;
-	  char buf[WIDE_INT_PRINT_BUFFER_SIZE];
+	  char buf[100];
 
 	  name = IDENTIFIER_POINTER (TREE_PURPOSE (element));
 
@@ -1152,21 +981,26 @@ go_output_typedef (struct godump_container *container, tree decl)
 	  if (*slot != NULL)
 	    macro_hash_del (*slot);
 
-	  if (tree_fits_shwi_p (TREE_VALUE (element)))
+	  if (host_integerp (TREE_VALUE (element), 0))
 	    snprintf (buf, sizeof buf, HOST_WIDE_INT_PRINT_DEC,
-		     tree_to_shwi (TREE_VALUE (element)));
-	  else if (tree_fits_uhwi_p (TREE_VALUE (element)))
+		     tree_low_cst (TREE_VALUE (element), 0));
+	  else if (host_integerp (TREE_VALUE (element), 1))
 	    snprintf (buf, sizeof buf, HOST_WIDE_INT_PRINT_UNSIGNED,
-		      tree_to_uhwi (TREE_VALUE (element)));
+		     ((unsigned HOST_WIDE_INT)
+		      tree_low_cst (TREE_VALUE (element), 1)));
 	  else
-	    print_hex (wi::to_wide (element), buf);
+	    snprintf (buf, sizeof buf, HOST_WIDE_INT_PRINT_DOUBLE_HEX,
+		     ((unsigned HOST_WIDE_INT)
+		      TREE_INT_CST_HIGH (TREE_VALUE (element))),
+		     TREE_INT_CST_LOW (TREE_VALUE (element)));
 
 	  mhval->value = xstrdup (buf);
 	  *slot = mhval;
 	}
-      container->decls_seen.add (TREE_TYPE (decl));
+      pointer_set_insert (container->decls_seen, TREE_TYPE (decl));
       if (TYPE_CANONICAL (TREE_TYPE (decl)) != NULL_TREE)
-	container->decls_seen.add (TYPE_CANONICAL (TREE_TYPE (decl)));
+	pointer_set_insert (container->decls_seen,
+			    TYPE_CANONICAL (TREE_TYPE (decl)));
     }
 
   if (DECL_NAME (decl) != NULL_TREE)
@@ -1181,8 +1015,7 @@ go_output_typedef (struct godump_container *container, tree decl)
 	return;
       *slot = CONST_CAST (void *, (const void *) type);
 
-      if (!go_format_type (container, TREE_TYPE (decl), true, false, NULL,
-			   false))
+      if (!go_format_type (container, TREE_TYPE (decl), false, false))
 	{
 	  fprintf (go_dump_file, "// ");
 	  slot = htab_find_slot (container->invalid_hash, type, INSERT);
@@ -1203,7 +1036,7 @@ go_output_typedef (struct godump_container *container, tree decl)
 		     size);
 	}
 
-      container->decls_seen.add (decl);
+      pointer_set_insert (container->decls_seen, decl);
     }
   else if (RECORD_OR_UNION_TYPE_P (TREE_TYPE (decl)))
     {
@@ -1218,8 +1051,7 @@ go_output_typedef (struct godump_container *container, tree decl)
          return;
        *slot = CONST_CAST (void *, (const void *) type);
 
-       if (!go_format_type (container, TREE_TYPE (decl), false, false, NULL,
-			    false))
+       if (!go_format_type (container, TREE_TYPE (decl), false, false))
 	 {
 	   fprintf (go_dump_file, "// ");
 	   slot = htab_find_slot (container->invalid_hash, type, INSERT);
@@ -1248,42 +1080,14 @@ static void
 go_output_var (struct godump_container *container, tree decl)
 {
   bool is_valid;
-  tree type_name;
-  tree id;
 
-  if (container->decls_seen.contains (decl)
-      || container->decls_seen.contains (DECL_NAME (decl)))
+  if (pointer_set_contains (container->decls_seen, decl)
+      || pointer_set_contains (container->decls_seen, DECL_NAME (decl)))
     return;
-  container->decls_seen.add (decl);
-  container->decls_seen.add (DECL_NAME (decl));
+  pointer_set_insert (container->decls_seen, decl);
+  pointer_set_insert (container->decls_seen, DECL_NAME (decl));
 
-  type_name = TYPE_NAME (TREE_TYPE (decl));
-  id = NULL_TREE;
-  if (type_name != NULL_TREE && TREE_CODE (type_name) == IDENTIFIER_NODE)
-    id = type_name;
-  else if (type_name != NULL_TREE && TREE_CODE (type_name) == TYPE_DECL
-	   && DECL_SOURCE_LOCATION (type_name) != BUILTINS_LOCATION
-	   && DECL_NAME (type_name))
-    id = DECL_NAME (type_name);
-  if (id != NULL_TREE
-      && (!htab_find_slot (container->type_hash, IDENTIFIER_POINTER (id),
-			   NO_INSERT)
-	  || htab_find_slot (container->invalid_hash, IDENTIFIER_POINTER (id),
-			     NO_INSERT)))
-    id = NULL_TREE;
-  if (id != NULL_TREE)
-    {
-      struct obstack *ob;
-
-      ob = &container->type_obstack;
-      obstack_1grow (ob, '_');
-      go_append_string (ob, id);
-      is_valid = htab_find_slot (container->type_hash, IDENTIFIER_POINTER (id),
-				 NO_INSERT) != NULL;
-    }
-  else
-    is_valid = go_format_type (container, TREE_TYPE (decl), true, false, NULL,
-			       false);
+  is_valid = go_format_type (container, TREE_TYPE (decl), true, false);
   if (is_valid
       && htab_find_slot (container->type_hash,
 			 IDENTIFIER_POINTER (DECL_NAME (decl)),
@@ -1303,13 +1107,16 @@ go_output_var (struct godump_container *container, tree decl)
 
   /* Sometimes an extern variable is declared with an unknown struct
      type.  */
-  if (type_name != NULL_TREE && RECORD_OR_UNION_TYPE_P (TREE_TYPE (decl)))
+  if (TYPE_NAME (TREE_TYPE (decl)) != NULL_TREE
+      && RECORD_OR_UNION_TYPE_P (TREE_TYPE (decl)))
     {
+      tree type_name = TYPE_NAME (TREE_TYPE (decl));
       if (TREE_CODE (type_name) == IDENTIFIER_NODE)
-	container->pot_dummy_types.add (IDENTIFIER_POINTER (type_name));
+	pointer_set_insert (container->pot_dummy_types,
+			    IDENTIFIER_POINTER (type_name));
       else if (TREE_CODE (type_name) == TYPE_DECL)
-	container->pot_dummy_types.add
-			    (IDENTIFIER_POINTER (DECL_NAME (type_name)));
+	pointer_set_insert (container->pot_dummy_types,
+			    IDENTIFIER_POINTER (DECL_NAME (type_name)));
     }
 }
 
@@ -1349,10 +1156,10 @@ keyword_hash_init (struct godump_container *container)
 
 /* Traversing the pot_dummy_types and seeing which types are present
    in the global types hash table and creating dummy definitions if
-   not found.  This function is invoked by hash_set::traverse.  */
+   not found.  This function is invoked by pointer_set_traverse.  */
 
-bool
-find_dummy_types (const char *const &ptr, godump_container *adata)
+static bool
+find_dummy_types (const void *ptr, void *adata)
 {
   struct godump_container *data = (struct godump_container *) adata;
   const char *type = (const char *) ptr;
@@ -1377,6 +1184,8 @@ go_finish (const char *filename)
 
   real_debug_hooks->finish (filename);
 
+  container.decls_seen = pointer_set_create ();
+  container.pot_dummy_types = pointer_set_create ();
   container.type_hash = htab_create (100, htab_hash_string,
                                      string_hash_eq, NULL);
   container.invalid_hash = htab_create (10, htab_hash_string,
@@ -1404,16 +1213,18 @@ go_finish (const char *filename)
 	  break;
 
 	default:
-	  gcc_unreachable ();
+	  gcc_unreachable();
 	}
     }
 
   htab_traverse_noresize (macro_hash, go_print_macro, NULL);
 
   /* To emit dummy definitions.  */
-  container.pot_dummy_types.traverse<godump_container *, find_dummy_types>
-                        (&container);
+  pointer_set_traverse (container.pot_dummy_types, find_dummy_types,
+                        (void *) &container);
 
+  pointer_set_destroy (container.decls_seen);
+  pointer_set_destroy (container.pot_dummy_types);
   htab_delete (container.type_hash);
   htab_delete (container.invalid_hash);
   htab_delete (container.keyword_hash);
@@ -1445,8 +1256,7 @@ dump_go_spec_init (const char *filename, const struct gcc_debug_hooks *hooks)
   go_debug_hooks.define = go_define;
   go_debug_hooks.undef = go_undef;
   go_debug_hooks.function_decl = go_function_decl;
-  go_debug_hooks.early_global_decl = go_early_global_decl;
-  go_debug_hooks.late_global_decl = go_late_global_decl;
+  go_debug_hooks.global_decl = go_global_decl;
   go_debug_hooks.type_decl = go_type_decl;
 
   macro_hash = htab_create (100, macro_hash_hashval, macro_hash_eq,

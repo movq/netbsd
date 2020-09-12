@@ -1,6 +1,6 @@
 /* Common target dependent code for GDB on AArch64 systems.
 
-   Copyright (C) 2009-2019 Free Software Foundation, Inc.
+   Copyright (C) 2009-2013 Free Software Foundation, Inc.
    Contributed by ARM Ltd.
 
    This file is part of GDB.
@@ -22,8 +22,6 @@
 #ifndef AARCH64_TDEP_H
 #define AARCH64_TDEP_H
 
-#include "arch/aarch64.h"
-
 /* Forward declarations.  */
 struct gdbarch;
 struct regset;
@@ -32,10 +30,32 @@ struct regset;
 #define AARCH64_DWARF_X0   0
 #define AARCH64_DWARF_SP  31
 #define AARCH64_DWARF_V0  64
-#define AARCH64_DWARF_SVE_VG   46
-#define AARCH64_DWARF_SVE_FFR  47
-#define AARCH64_DWARF_SVE_P0   48
-#define AARCH64_DWARF_SVE_Z0   96
+
+/* Register numbers of various important registers.  */
+enum aarch64_regnum
+{
+  AARCH64_X0_REGNUM,		/* First integer register */
+
+  /* Frame register in AArch64 code, if used.  */
+  AARCH64_FP_REGNUM = AARCH64_X0_REGNUM + 29,
+  AARCH64_LR_REGNUM = AARCH64_X0_REGNUM + 30,	/* Return address */
+  AARCH64_SP_REGNUM,		/* Stack pointer */
+  AARCH64_PC_REGNUM,		/* Program counter */
+  AARCH64_CPSR_REGNUM,		/* Contains status register */
+  AARCH64_V0_REGNUM,		/* First floating point / vector register */
+
+  /* Last floating point / vector register */
+  AARCH64_V31_REGNUM = AARCH64_V0_REGNUM + 31,
+  AARCH64_FPSR_REGNUM,		/* Floating point status register */
+  AARCH64_FPCR_REGNUM,		/* Floating point control register */
+
+  /* Other useful registers.  */
+
+  /* Last integer-like argument */
+  AARCH64_LAST_X_ARG_REGNUM = AARCH64_X0_REGNUM + 7,
+  AARCH64_STRUCT_RETURN_REGNUM = AARCH64_X0_REGNUM + 8,
+  AARCH64_LAST_V_ARG_REGNUM = AARCH64_V0_REGNUM + 7
+};
 
 /* Size of integer registers.  */
 #define X_REGISTER_SIZE  8
@@ -48,12 +68,6 @@ struct regset;
 
 /* Total number of general (X) registers.  */
 #define AARCH64_X_REGISTER_COUNT 32
-/* Total number of D registers.  */
-#define AARCH64_D_REGISTER_COUNT 32
-
-/* The maximum number of modified instructions generated for one
-   single-stepped instruction.  */
-#define DISPLACED_MODIFIED_INSNS 1
 
 /* Target-dependent structure in gdbarch.  */
 struct gdbarch_tdep
@@ -68,43 +82,16 @@ struct gdbarch_tdep
   /* And the size of each entry in the buf.  */
   size_t jb_elt_size;
 
+  /* Cached core file helpers.  */
+  struct regset *gregset;
+  struct regset *fpregset;
+
   /* Types for AdvSISD registers.  */
   struct type *vnq_type;
   struct type *vnd_type;
   struct type *vns_type;
   struct type *vnh_type;
   struct type *vnb_type;
-  struct type *vnv_type;
-
-  /* syscall record.  */
-  int (*aarch64_syscall_record) (struct regcache *regcache, unsigned long svc_number);
-
-  /* The VQ value for SVE targets, or zero if SVE is not supported.  */
-  uint64_t vq;
-
-  /* Returns true if the target supports SVE.  */
-  bool has_sve () const
-  {
-    return vq != 0;
-  }
 };
-
-const target_desc *aarch64_read_description (uint64_t vq);
-
-extern int aarch64_process_record (struct gdbarch *gdbarch,
-                               struct regcache *regcache, CORE_ADDR addr);
-
-struct displaced_step_closure *
-  aarch64_displaced_step_copy_insn (struct gdbarch *gdbarch,
-				    CORE_ADDR from, CORE_ADDR to,
-				    struct regcache *regs);
-
-void aarch64_displaced_step_fixup (struct gdbarch *gdbarch,
-				   struct displaced_step_closure *dsc,
-				   CORE_ADDR from, CORE_ADDR to,
-				   struct regcache *regs);
-
-int aarch64_displaced_step_hw_singlestep (struct gdbarch *gdbarch,
-					  struct displaced_step_closure *closure);
 
 #endif /* aarch64-tdep.h */

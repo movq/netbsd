@@ -1,7 +1,7 @@
 /* Write and read the cgraph to the memory mapped representation of a
    .o file.
 
-   Copyright (C) 2009-2019 Free Software Foundation, Inc.
+   Copyright 2009 Free Software Foundation, Inc.
    Contributed by Kenneth Zadeck <zadeck@naturalbridge.com>
 
 This file is part of GCC.
@@ -23,64 +23,38 @@ along with GCC; see the file COPYING3.  If not see
 #include "config.h"
 #include "system.h"
 #include "coretypes.h"
-#include "backend.h"
-#include "rtl.h"
+#include "tm.h"
+#include "toplev.h"
 #include "tree.h"
-#include "gimple.h"
-#include "predict.h"
-#include "stringpool.h"
-#include "tree-streamer.h"
+#include "expr.h"
+#include "flags.h"
+#include "params.h"
+#include "input.h"
+#include "varray.h"
+#include "hashtab.h"
+#include "langhooks.h"
+#include "basic-block.h"
+#include "tree-flow.h"
 #include "cgraph.h"
-#include "tree-pass.h"
-#include "profile.h"
-#include "context.h"
-#include "pass_manager.h"
-#include "ipa-utils.h"
-#include "omp-offload.h"
-#include "stringpool.h"
-#include "attribs.h"
+#include "function.h"
+#include "ggc.h"
+#include "diagnostic.h"
+#include "except.h"
+#include "vec.h"
+#include "timevar.h"
+#include "output.h"
+#include "pointer-set.h"
+#include "lto-streamer.h"
+#include "gcov-io.h"
 
-/* True when asm nodes has been output.  */
-bool asm_nodes_output = false;
+/* Create a new cgraph encoder.  */
 
-static void output_cgraph_opt_summary (void);
-static void input_cgraph_opt_summary (vec<symtab_node *>  nodes);
-
-/* Number of LDPR values known to GCC.  */
-#define LDPR_NUM_KNOWN (LDPR_PREVAILING_DEF_IRONLY_EXP + 1)
-
-/* All node orders are ofsetted by ORDER_BASE.  */
-static int order_base;
-
-/* Cgraph streaming is organized as set of record whose type
-   is indicated by a tag.  */
-enum LTO_symtab_tags
+lto_cgraph_encoder_t
+lto_cgraph_encoder_new (void)
 {
-  /* Must leave 0 for the stopper.  */
-
-  /* Cgraph node without body available.  */
-  LTO_symtab_unavail_node = 1,
-  /* Cgraph node with function body.  */
-  LTO_symtab_analyzed_node,
-  /* Cgraph edges.  */
-  LTO_symtab_edge,
-  LTO_symtab_indirect_edge,
-  LTO_symtab_variable,
-  LTO_symtab_last_tag
-};
-
-/* Create a new symtab encoder.
-   if FOR_INPUT, the encoder allocate only datastructures needed
-   to read the symtab.  */
-
-lto_symtab_encoder_t
-lto_symtab_encoder_new (bool for_input)
-{
-  lto_symtab_encoder_t encoder = XCNEW (struct lto_symtab_encoder_d);
-
-  if (!for_input)
-    encoder->map = new hash_map<symtab_node *, size_t>;
-  encoder->nodes.create (0);
+  lto_cgraph_encoder_t encoder = XCNEW (struct lto_cgraph_encoder_d);
+  encoder->map = pointer_map_create ();
+  encoder->nodes = NULL;
   return encoder;
 }
 
@@ -88,289 +62,108 @@ lto_symtab_encoder_new (bool for_input)
 /* Delete ENCODER and its components.  */
 
 void
-lto_symtab_encoder_delete (lto_symtab_encoder_t encoder)
+lto_cgraph_encoder_delete (lto_cgraph_encoder_t encoder)
 {
-   encoder->nodes.release ();
-   if (encoder->map)
-     delete encoder->map;
+   VEC_free (cgraph_node_ptr, heap, encoder->nodes);
+   pointer_map_destroy (encoder->map);
    free (encoder);
 }
 
 
-/* Return the existing reference number of NODE in the symtab encoder in
+/* Return the existing reference number of NODE in the cgraph encoder in
    output block OB.  Assign a new reference if this is the first time
    NODE is encoded.  */
 
 int
-lto_symtab_encoder_encode (lto_symtab_encoder_t encoder,
-			   symtab_node *node)
+lto_cgraph_encoder_encode (lto_cgraph_encoder_t encoder,
+			   struct cgraph_node *node)
 {
   int ref;
+  void **slot;
 
-  if (!encoder->map)
+  slot = pointer_map_contains (encoder->map, node);
+  if (!slot)
     {
-      lto_encoder_entry entry = {node, false, false, false};
-
-      ref = encoder->nodes.length ();
-      encoder->nodes.safe_push (entry);
-      return ref;
-    }
-
-  size_t *slot = encoder->map->get (node);
-  if (!slot || !*slot)
-    {
-      lto_encoder_entry entry = {node, false, false, false};
-      ref = encoder->nodes.length ();
-      if (!slot)
-        encoder->map->put (node, ref + 1);
-      encoder->nodes.safe_push (entry);
+      ref = VEC_length (cgraph_node_ptr, encoder->nodes);
+      slot = pointer_map_insert (encoder->map, node);
+      *slot = (void *) (intptr_t) ref;
+      VEC_safe_push (cgraph_node_ptr, heap, encoder->nodes, node);
     }
   else
-    ref = *slot - 1;
+    ref = (int) (intptr_t) *slot;
 
   return ref;
 }
 
-/* Remove NODE from encoder.  */
 
-bool
-lto_symtab_encoder_delete_node (lto_symtab_encoder_t encoder,
-			        symtab_node *node)
+/* Look up NODE in encoder.  Return NODE's reference if it has been encoded
+   or LCC_NOT_FOUND if it is not there.  */
+
+int
+lto_cgraph_encoder_lookup (lto_cgraph_encoder_t encoder,
+			   struct cgraph_node *node)
 {
-  int index;
-  lto_encoder_entry last_node;
-
-  size_t *slot = encoder->map->get (node);
-  if (slot == NULL || !*slot)
-    return false;
-
-  index = *slot - 1;
-  gcc_checking_assert (encoder->nodes[index].node == node);
-
-  /* Remove from vector. We do this by swapping node with the last element
-     of the vector.  */
-  last_node = encoder->nodes.pop ();
-  if (last_node.node != node)
-    {
-      gcc_assert (encoder->map->put (last_node.node, index + 1));
-
-      /* Move the last element to the original spot of NODE.  */
-      encoder->nodes[index] = last_node;
-    }
-
-  /* Remove element from hash table.  */
-  encoder->map->remove (node);
-  return true;
+  void **slot = pointer_map_contains (encoder->map, node);
+  return (slot ? (int) (intptr_t) *slot : LCC_NOT_FOUND);
 }
 
 
-/* Return TRUE if we should encode the body of NODE (if any).  */
+/* Return the cgraph node corresponding to REF using ENCODER.  */
 
-bool
-lto_symtab_encoder_encode_body_p (lto_symtab_encoder_t encoder,
-				  struct cgraph_node *node)
+struct cgraph_node *
+lto_cgraph_encoder_deref (lto_cgraph_encoder_t encoder, int ref)
 {
-  int index = lto_symtab_encoder_lookup (encoder, node);
-  return encoder->nodes[index].body;
+  if (ref == LCC_NOT_FOUND)
+    return NULL;
+
+  return VEC_index (cgraph_node_ptr, encoder->nodes, ref);
 }
 
-/* Specify that we encode the body of NODE in this partition.  */
 
-static void
-lto_set_symtab_encoder_encode_body (lto_symtab_encoder_t encoder,
-				    struct cgraph_node *node)
+/* Return number of encoded nodes in ENCODER.  */
+
+static int
+lto_cgraph_encoder_size (lto_cgraph_encoder_t encoder)
 {
-  int index = lto_symtab_encoder_encode (encoder, node);
-  gcc_checking_assert (encoder->nodes[index].node == node);
-  encoder->nodes[index].body = true;
+  return VEC_length (cgraph_node_ptr, encoder->nodes);
 }
 
-/* Return TRUE if we should encode initializer of NODE (if any).  */
-
-bool
-lto_symtab_encoder_encode_initializer_p (lto_symtab_encoder_t encoder,
-					 varpool_node *node)
-{
-  int index = lto_symtab_encoder_lookup (encoder, node);
-  if (index == LCC_NOT_FOUND)
-    return false;
-  return encoder->nodes[index].initializer;
-}
-
-/* Specify that we should encode initializer of NODE (if any).  */
-
-static void
-lto_set_symtab_encoder_encode_initializer (lto_symtab_encoder_t encoder,
-					   varpool_node *node)
-{
-  int index = lto_symtab_encoder_lookup (encoder, node);
-  encoder->nodes[index].initializer = true;
-}
-
-/* Return TRUE if NODE is in this partition.  */
-
-bool
-lto_symtab_encoder_in_partition_p (lto_symtab_encoder_t encoder,
-				   symtab_node *node)
-{
-  int index = lto_symtab_encoder_lookup (encoder, node);
-  if (index == LCC_NOT_FOUND)
-    return false;
-  return encoder->nodes[index].in_partition;
-}
-
-/* Specify that NODE is in this partition.  */
-
-void
-lto_set_symtab_encoder_in_partition (lto_symtab_encoder_t encoder,
-				     symtab_node *node)
-{
-  int index = lto_symtab_encoder_encode (encoder, node);
-  encoder->nodes[index].in_partition = true;
-}
 
 /* Output the cgraph EDGE to OB using ENCODER.  */
 
 static void
 lto_output_edge (struct lto_simple_output_block *ob, struct cgraph_edge *edge,
-		 lto_symtab_encoder_t encoder)
+		 lto_cgraph_encoder_t encoder)
 {
   unsigned int uid;
   intptr_t ref;
-  struct bitpack_d bp;
+  struct bitpack_d *bp;
 
-  if (edge->indirect_unknown_callee)
-    streamer_write_enum (ob->main_stream, LTO_symtab_tags, LTO_symtab_last_tag,
-			 LTO_symtab_indirect_edge);
-  else
-    streamer_write_enum (ob->main_stream, LTO_symtab_tags, LTO_symtab_last_tag,
-			 LTO_symtab_edge);
+  lto_output_uleb128_stream (ob->main_stream, LTO_cgraph_edge);
 
-  ref = lto_symtab_encoder_lookup (encoder, edge->caller);
+  ref = lto_cgraph_encoder_lookup (encoder, edge->caller);
   gcc_assert (ref != LCC_NOT_FOUND);
-  streamer_write_hwi_stream (ob->main_stream, ref);
+  lto_output_sleb128_stream (ob->main_stream, ref);
 
-  if (!edge->indirect_unknown_callee)
-    {
-      ref = lto_symtab_encoder_lookup (encoder, edge->callee);
-      gcc_assert (ref != LCC_NOT_FOUND);
-      streamer_write_hwi_stream (ob->main_stream, ref);
-    }
+  ref = lto_cgraph_encoder_lookup (encoder, edge->callee);
+  gcc_assert (ref != LCC_NOT_FOUND);
+  lto_output_sleb128_stream (ob->main_stream, ref);
 
-  edge->count.stream_out (ob->main_stream);
+  lto_output_sleb128_stream (ob->main_stream, edge->count);
 
-  bp = bitpack_create (ob->main_stream);
-  uid = (!gimple_has_body_p (edge->caller->decl) || edge->caller->thunk.thunk_p
-	 ? edge->lto_stmt_uid : gimple_uid (edge->call_stmt) + 1);
-  bp_pack_enum (&bp, cgraph_inline_failed_t,
-	        CIF_N_REASONS, edge->inline_failed);
-  bp_pack_var_len_unsigned (&bp, uid);
-  bp_pack_value (&bp, edge->indirect_inlining_edge, 1);
-  bp_pack_value (&bp, edge->speculative, 1);
-  bp_pack_value (&bp, edge->call_stmt_cannot_inline_p, 1);
-  gcc_assert (!edge->call_stmt_cannot_inline_p
-	      || edge->inline_failed != CIF_BODY_NOT_AVAILABLE);
-  bp_pack_value (&bp, edge->can_throw_external, 1);
-  bp_pack_value (&bp, edge->in_polymorphic_cdtor, 1);
-  if (edge->indirect_unknown_callee)
-    {
-      int flags = edge->indirect_info->ecf_flags;
-      bp_pack_value (&bp, (flags & ECF_CONST) != 0, 1);
-      bp_pack_value (&bp, (flags & ECF_PURE) != 0, 1);
-      bp_pack_value (&bp, (flags & ECF_NORETURN) != 0, 1);
-      bp_pack_value (&bp, (flags & ECF_MALLOC) != 0, 1);
-      bp_pack_value (&bp, (flags & ECF_NOTHROW) != 0, 1);
-      bp_pack_value (&bp, (flags & ECF_RETURNS_TWICE) != 0, 1);
-      /* Flags that should not appear on indirect calls.  */
-      gcc_assert (!(flags & (ECF_LOOPING_CONST_OR_PURE
-			     | ECF_MAY_BE_ALLOCA
-			     | ECF_SIBCALL
-			     | ECF_LEAF
-			     | ECF_NOVOPS)));
-    }
-  streamer_write_bitpack (&bp);
-  if (edge->indirect_unknown_callee)
-    {
-      streamer_write_hwi_stream (ob->main_stream,
-			         edge->indirect_info->common_target_id);
-      if (edge->indirect_info->common_target_id)
-	streamer_write_hwi_stream
-	   (ob->main_stream, edge->indirect_info->common_target_probability);
-    }
+  bp = bitpack_create ();
+  uid = flag_wpa ? edge->lto_stmt_uid : gimple_uid (edge->call_stmt);
+  bp_pack_value (bp, uid, HOST_BITS_PER_INT);
+  bp_pack_value (bp, edge->inline_failed, HOST_BITS_PER_INT);
+  bp_pack_value (bp, edge->frequency, HOST_BITS_PER_INT);
+  bp_pack_value (bp, edge->loop_nest, 30);
+  bp_pack_value (bp, edge->indirect_call, 1);
+  bp_pack_value (bp, edge->call_stmt_cannot_inline_p, 1);
+  bp_pack_value (bp, edge->can_throw_external, 1);
+  lto_output_bitpack (ob->main_stream, bp);
+  bitpack_delete (bp);
 }
 
-/* Return if NODE contain references from other partitions.  */
-
-bool
-referenced_from_other_partition_p (symtab_node *node, lto_symtab_encoder_t encoder)
-{
-  int i;
-  struct ipa_ref *ref = NULL;
-
-  for (i = 0; node->iterate_referring (i, ref); i++)
-    {
-      /* Ignore references from non-offloadable nodes while streaming NODE into
-	 offload LTO section.  */
-      if (!ref->referring->need_lto_streaming)
-	continue;
-
-      if (ref->referring->in_other_partition
-          || !lto_symtab_encoder_in_partition_p (encoder, ref->referring))
-	return true;
-    }
-  return false;
-}
-
-/* Return true when node is reachable from other partition.  */
-
-bool
-reachable_from_other_partition_p (struct cgraph_node *node, lto_symtab_encoder_t encoder)
-{
-  struct cgraph_edge *e;
-  if (!node->definition)
-    return false;
-  if (node->global.inlined_to)
-    return false;
-  for (e = node->callers; e; e = e->next_caller)
-    {
-      /* Ignore references from non-offloadable nodes while streaming NODE into
-	 offload LTO section.  */
-      if (!e->caller->need_lto_streaming)
-	continue;
-
-      if (e->caller->in_other_partition
-	  || !lto_symtab_encoder_in_partition_p (encoder, e->caller))
-	return true;
-    }
-  return false;
-}
-
-/* Return if NODE contain references from other partitions.  */
-
-bool
-referenced_from_this_partition_p (symtab_node *node,
-				  lto_symtab_encoder_t encoder)
-{
-  int i;
-  struct ipa_ref *ref = NULL;
-
-  for (i = 0; node->iterate_referring (i, ref); i++)
-    if (lto_symtab_encoder_in_partition_p (encoder, ref->referring))
-      return true;
-  return false;
-}
-
-/* Return true when node is reachable from other partition.  */
-
-bool
-reachable_from_this_partition_p (struct cgraph_node *node, lto_symtab_encoder_t encoder)
-{
-  struct cgraph_edge *e;
-  for (e = node->callers; e; e = e->next_caller)
-    if (lto_symtab_encoder_in_partition_p (encoder, e->caller))
-      return true;
-  return false;
-}
 
 /* Output the cgraph NODE to OB.  ENCODER is used to find the
    reference number of NODE->inlined_to.  SET is the set of nodes we
@@ -382,31 +175,46 @@ reachable_from_this_partition_p (struct cgraph_node *node, lto_symtab_encoder_t 
 
 static void
 lto_output_node (struct lto_simple_output_block *ob, struct cgraph_node *node,
-		 lto_symtab_encoder_t encoder)
+		 lto_cgraph_encoder_t encoder, cgraph_node_set set,
+		 bitmap written_decls)
 {
   unsigned int tag;
-  struct bitpack_d bp;
-  bool boundary_p;
+  struct bitpack_d *bp;
+  unsigned local, externally_visible, inlinable, analyzed;
+  bool boundary_p, wrote_decl_p;
   intptr_t ref;
-  bool in_other_partition = false;
-  struct cgraph_node *clone_of, *ultimate_clone_of;
-  ipa_opt_pass_d *pass;
-  int i;
-  const char *comdat;
-  const char *section;
-  tree group;
 
-  boundary_p = !lto_symtab_encoder_in_partition_p (encoder, node);
+  boundary_p = !cgraph_node_in_set_p (node, set);
+  wrote_decl_p = bitmap_bit_p (written_decls, DECL_UID (node->decl));
 
-  if (node->analyzed && (!boundary_p || node->alias
-			 || (node->thunk.thunk_p && !node->global.inlined_to)))
-    tag = LTO_symtab_analyzed_node;
-  else
-    tag = LTO_symtab_unavail_node;
+  switch (cgraph_function_body_availability (node))
+    {
+    case AVAIL_NOT_AVAILABLE:
+      tag = LTO_cgraph_unavail_node;
+      break;
 
-  streamer_write_enum (ob->main_stream, LTO_symtab_tags, LTO_symtab_last_tag,
-		       tag);
-  streamer_write_hwi_stream (ob->main_stream, node->order);
+    case AVAIL_AVAILABLE:
+    case AVAIL_LOCAL:
+      tag = LTO_cgraph_avail_node;
+      break;
+
+    case AVAIL_OVERWRITABLE:
+      tag = LTO_cgraph_overwritable_node;
+      break;
+
+    default:
+      gcc_unreachable ();
+    }
+
+  if (boundary_p)
+    tag = LTO_cgraph_unavail_node;
+
+  lto_output_uleb128_stream (ob->main_stream, tag);
+
+  local = node->local.local;
+  externally_visible = node->local.externally_visible;
+  inlinable = node->local.inlinable;
+  analyzed = node->analyzed;
 
   /* In WPA mode, we only output part of the call-graph.  Also, we
      fake cgraph node attributes.  There are two cases that we care.
@@ -418,277 +226,131 @@ lto_output_node (struct lto_simple_output_block *ob, struct cgraph_node *node,
      Cherry-picked nodes:  These are nodes we pulled from other
      translation units into SET during IPA-inlining.  We make them as
      local static nodes to prevent clashes with other local statics.  */
-  if (boundary_p && node->analyzed
-      && node->get_partitioning_class () == SYMBOL_PARTITION)
+  if (boundary_p)
     {
-      /* Inline clones cannot be part of boundary.  
-         gcc_assert (!node->global.inlined_to);  
-
-	 FIXME: At the moment they can be, when partition contains an inline
-	 clone that is clone of inline clone from outside partition.  We can
-	 reshape the clone tree and make other tree to be the root, but it
-	 needs a bit extra work and will be promplty done by cgraph_remove_node
-	 after reading back.  */
-      in_other_partition = 1;
+      /* Inline clones can not be part of boundary.  */
+      gcc_assert (!node->global.inlined_to);
+      local = 0;
+      externally_visible = 1;
+      inlinable = 0;
+      analyzed = 0;
+    }
+  else if (lto_forced_extern_inline_p (node->decl))
+    {
+      local = 1;
+      externally_visible = 0;
+      inlinable = 1;
     }
 
-  clone_of = node->clone_of;
-  while (clone_of
-	 && (ref = lto_symtab_encoder_lookup (encoder, clone_of)) == LCC_NOT_FOUND)
-    if (clone_of->prev_sibling_clone)
-      clone_of = clone_of->prev_sibling_clone;
-    else
-      clone_of = clone_of->clone_of;
+  lto_output_uleb128_stream (ob->main_stream, wrote_decl_p);
 
-  /* See if body of the master function is output.  If not, we are seeing only
-     an declaration and we do not need to pass down clone tree. */
-  ultimate_clone_of = clone_of;
-  while (ultimate_clone_of && ultimate_clone_of->clone_of)
-    ultimate_clone_of = ultimate_clone_of->clone_of;
-
-  if (clone_of && !lto_symtab_encoder_encode_body_p (encoder, ultimate_clone_of))
-    clone_of = NULL;
-
-  if (tag == LTO_symtab_analyzed_node)
-    gcc_assert (clone_of || !node->clone_of);
-  if (!clone_of)
-    streamer_write_hwi_stream (ob->main_stream, LCC_NOT_FOUND);
-  else
-    streamer_write_hwi_stream (ob->main_stream, ref);
-
+  if (!wrote_decl_p)
+    bitmap_set_bit (written_decls, DECL_UID (node->decl));
 
   lto_output_fn_decl_index (ob->decl_state, ob->main_stream, node->decl);
-  node->count.stream_out (ob->main_stream);
-  streamer_write_hwi_stream (ob->main_stream, node->count_materialization_scale);
+  lto_output_sleb128_stream (ob->main_stream, node->count);
 
-  streamer_write_hwi_stream (ob->main_stream,
-			     node->ipa_transforms_to_apply.length ());
-  FOR_EACH_VEC_ELT (node->ipa_transforms_to_apply, i, pass)
-    streamer_write_hwi_stream (ob->main_stream, pass->static_pass_number);
+  bp = bitpack_create ();
+  bp_pack_value (bp, local, 1);
+  bp_pack_value (bp, externally_visible, 1);
+  bp_pack_value (bp, node->local.finalized, 1);
+  bp_pack_value (bp, inlinable, 1);
+  bp_pack_value (bp, node->local.disregard_inline_limits, 1);
+  bp_pack_value (bp, node->local.redefined_extern_inline, 1);
+  bp_pack_value (bp, node->local.for_functions_valid, 1);
+  bp_pack_value (bp, node->local.vtable_method, 1);
+  bp_pack_value (bp, node->needed, 1);
+  bp_pack_value (bp, node->address_taken, 1);
+  bp_pack_value (bp, node->abstract_and_needed, 1);
+  bp_pack_value (bp, node->reachable, 1);
+  bp_pack_value (bp, node->lowered, 1);
+  bp_pack_value (bp, analyzed, 1);
+  bp_pack_value (bp, node->process, 1);
+  bp_pack_value (bp, node->alias, 1);
+  bp_pack_value (bp, node->finalized_by_frontend, 1);
+  lto_output_bitpack (ob->main_stream, bp);
+  bitpack_delete (bp);
 
-  if (tag == LTO_symtab_analyzed_node)
+  if (tag != LTO_cgraph_unavail_node)
     {
-      if (node->global.inlined_to)
-	{
-	  ref = lto_symtab_encoder_lookup (encoder, node->global.inlined_to);
-	  gcc_assert (ref != LCC_NOT_FOUND);
-	}
-      else
-	ref = LCC_NOT_FOUND;
-
-      streamer_write_hwi_stream (ob->main_stream, ref);
+      lto_output_sleb128_stream (ob->main_stream,
+				 node->local.inline_summary.estimated_self_stack_size);
+      lto_output_sleb128_stream (ob->main_stream,
+				 node->local.inline_summary.self_size);
+      lto_output_sleb128_stream (ob->main_stream,
+				 node->local.inline_summary.size_inlining_benefit);
+      lto_output_sleb128_stream (ob->main_stream,
+				 node->local.inline_summary.self_time);
+      lto_output_sleb128_stream (ob->main_stream,
+				 node->local.inline_summary.time_inlining_benefit);
     }
 
-  group = node->get_comdat_group ();
-  if (group)
-    comdat = IDENTIFIER_POINTER (group);
-  else
-    comdat = "";
-  streamer_write_data_stream (ob->main_stream, comdat, strlen (comdat) + 1);
-
-  if (group)
+  /* FIXME lto: Outputting global info is not neccesary until after
+     inliner was run.  Global structure holds results of propagation
+     done by inliner.  */
+  lto_output_sleb128_stream (ob->main_stream,
+			     node->global.estimated_stack_size);
+  lto_output_sleb128_stream (ob->main_stream,
+			     node->global.stack_frame_offset);
+  if (node->global.inlined_to && !boundary_p)
     {
-      if (node->same_comdat_group)
-	{
-	  ref = LCC_NOT_FOUND;
-	  for (struct symtab_node *n = node->same_comdat_group; 
-	       ref == LCC_NOT_FOUND && n != node; n = n->same_comdat_group)
-	    ref = lto_symtab_encoder_lookup (encoder, n);
-	}
-      else
-	ref = LCC_NOT_FOUND;
-      streamer_write_hwi_stream (ob->main_stream, ref);
-    }
-
-  section = node->get_section ();
-  if (!section)
-    section = "";
-
-  streamer_write_hwi_stream (ob->main_stream, node->tp_first_run);
-
-  bp = bitpack_create (ob->main_stream);
-  bp_pack_value (&bp, node->local.local, 1);
-  bp_pack_value (&bp, node->externally_visible, 1);
-  bp_pack_value (&bp, node->no_reorder, 1);
-  bp_pack_value (&bp, node->definition, 1);
-  bp_pack_value (&bp, node->local.versionable, 1);
-  bp_pack_value (&bp, node->local.can_change_signature, 1);
-  bp_pack_value (&bp, node->local.redefined_extern_inline, 1);
-  bp_pack_value (&bp, node->force_output, 1);
-  bp_pack_value (&bp, node->forced_by_abi, 1);
-  bp_pack_value (&bp, node->unique_name, 1);
-  bp_pack_value (&bp, node->body_removed, 1);
-  bp_pack_value (&bp, node->implicit_section, 1);
-  bp_pack_value (&bp, node->address_taken, 1);
-  bp_pack_value (&bp, tag == LTO_symtab_analyzed_node
-		 && node->get_partitioning_class () == SYMBOL_PARTITION
-		 && (reachable_from_other_partition_p (node, encoder)
-		     || referenced_from_other_partition_p (node, encoder)), 1);
-  bp_pack_value (&bp, node->lowered, 1);
-  bp_pack_value (&bp, in_other_partition, 1);
-  bp_pack_value (&bp, node->alias, 1);
-  bp_pack_value (&bp, node->transparent_alias, 1);
-  bp_pack_value (&bp, node->weakref, 1);
-  bp_pack_value (&bp, node->frequency, 2);
-  bp_pack_value (&bp, node->only_called_at_startup, 1);
-  bp_pack_value (&bp, node->only_called_at_exit, 1);
-  bp_pack_value (&bp, node->tm_clone, 1);
-  bp_pack_value (&bp, node->calls_comdat_local, 1);
-  bp_pack_value (&bp, node->icf_merged, 1);
-  bp_pack_value (&bp, node->nonfreeing_fn, 1);
-  bp_pack_value (&bp, node->thunk.thunk_p, 1);
-  bp_pack_value (&bp, node->parallelized_function, 1);
-  bp_pack_enum (&bp, ld_plugin_symbol_resolution,
-	        LDPR_NUM_KNOWN,
-		/* When doing incremental link, we will get new resolution
-		   info next time we process the file.  */
-		flag_incremental_link ? LDPR_UNKNOWN : node->resolution);
-  bp_pack_value (&bp, node->split_part, 1);
-  streamer_write_bitpack (&bp);
-  streamer_write_data_stream (ob->main_stream, section, strlen (section) + 1);
-
-  /* Stream thunk info always because we use it in
-     ipa_polymorphic_call_context::ipa_polymorphic_call_context
-     to properly interpret THIS pointers for thunks that has been converted
-     to Gimple.  */
-  if (node->definition)
-    {
-      streamer_write_uhwi_stream
-	 (ob->main_stream,
-	  1 + (node->thunk.this_adjusting != 0) * 2
-	  + (node->thunk.virtual_offset_p != 0) * 4);
-      streamer_write_uhwi_stream (ob->main_stream, node->thunk.fixed_offset);
-      streamer_write_uhwi_stream (ob->main_stream, node->thunk.virtual_value);
-      streamer_write_uhwi_stream (ob->main_stream, node->thunk.indirect_offset);
-    }
-  streamer_write_hwi_stream (ob->main_stream, node->profile_id);
-  if (DECL_STATIC_CONSTRUCTOR (node->decl))
-    streamer_write_hwi_stream (ob->main_stream, node->get_init_priority ());
-  if (DECL_STATIC_DESTRUCTOR (node->decl))
-    streamer_write_hwi_stream (ob->main_stream, node->get_fini_priority ());
-}
-
-/* Output the varpool NODE to OB. 
-   If NODE is not in SET, then NODE is a boundary.  */
-
-static void
-lto_output_varpool_node (struct lto_simple_output_block *ob, varpool_node *node,
-			 lto_symtab_encoder_t encoder)
-{
-  bool boundary_p = !lto_symtab_encoder_in_partition_p (encoder, node);
-  bool encode_initializer_p
-	 = (node->definition
-	    && lto_symtab_encoder_encode_initializer_p (encoder, node));
-  struct bitpack_d bp;
-  int ref;
-  const char *comdat;
-  const char *section;
-  tree group;
-
-  gcc_assert (!encode_initializer_p || node->definition);
-  gcc_assert (boundary_p || encode_initializer_p);
-
-  streamer_write_enum (ob->main_stream, LTO_symtab_tags, LTO_symtab_last_tag,
-		       LTO_symtab_variable);
-  streamer_write_hwi_stream (ob->main_stream, node->order);
-  lto_output_var_decl_index (ob->decl_state, ob->main_stream, node->decl);
-  bp = bitpack_create (ob->main_stream);
-  bp_pack_value (&bp, node->externally_visible, 1);
-  bp_pack_value (&bp, node->no_reorder, 1);
-  bp_pack_value (&bp, node->force_output, 1);
-  bp_pack_value (&bp, node->forced_by_abi, 1);
-  bp_pack_value (&bp, node->unique_name, 1);
-  bp_pack_value (&bp,
-		 node->body_removed
-		 || (!encode_initializer_p && !node->alias && node->definition),
-		 1);
-  bp_pack_value (&bp, node->implicit_section, 1);
-  bp_pack_value (&bp, node->writeonly, 1);
-  bp_pack_value (&bp, node->definition && (encode_initializer_p || node->alias),
-		 1);
-  bp_pack_value (&bp, node->alias, 1);
-  bp_pack_value (&bp, node->transparent_alias, 1);
-  bp_pack_value (&bp, node->weakref, 1);
-  bp_pack_value (&bp, node->analyzed && (!boundary_p || node->alias), 1);
-  gcc_assert (node->definition || !node->analyzed);
-  /* Constant pool initializers can be de-unified into individual ltrans units.
-     FIXME: Alternatively at -Os we may want to avoid generating for them the local
-     labels and share them across LTRANS partitions.  */
-  if (node->get_partitioning_class () != SYMBOL_PARTITION)
-    {
-      bp_pack_value (&bp, 0, 1);  /* used_from_other_parition.  */
-      bp_pack_value (&bp, 0, 1);  /* in_other_partition.  */
+      ref = lto_cgraph_encoder_lookup (encoder, node->global.inlined_to);
+      gcc_assert (ref != LCC_NOT_FOUND);
     }
   else
-    {
-      bp_pack_value (&bp, node->definition
-		     && referenced_from_other_partition_p (node, encoder), 1);
-      bp_pack_value (&bp, node->analyzed
-		     && boundary_p && !DECL_EXTERNAL (node->decl), 1);
-	  /* in_other_partition.  */
-    }
-  bp_pack_value (&bp, node->tls_model, 3);
-  bp_pack_value (&bp, node->used_by_single_function, 1);
-  bp_pack_value (&bp, node->dynamically_initialized, 1);
-  streamer_write_bitpack (&bp);
+    ref = LCC_NOT_FOUND;
+  lto_output_sleb128_stream (ob->main_stream, ref);
 
-  group = node->get_comdat_group ();
-  if (group)
-    comdat = IDENTIFIER_POINTER (group);
+  lto_output_sleb128_stream (ob->main_stream, node->global.time);
+  lto_output_sleb128_stream (ob->main_stream, node->global.size);
+  lto_output_sleb128_stream (ob->main_stream,
+			     node->global.estimated_growth);
+  lto_output_uleb128_stream (ob->main_stream, node->global.inlined);
+  if (node->same_comdat_group)
+    {
+      ref = lto_cgraph_encoder_lookup (encoder, node->same_comdat_group);
+      gcc_assert (ref != LCC_NOT_FOUND);
+    }
   else
-    comdat = "";
-  streamer_write_data_stream (ob->main_stream, comdat, strlen (comdat) + 1);
+    ref = LCC_NOT_FOUND;
+  lto_output_sleb128_stream (ob->main_stream, ref);
 
-  if (group)
+  if (node->same_body)
     {
-      if (node->same_comdat_group)
+      struct cgraph_node *alias;
+      unsigned long alias_count = 1;
+      for (alias = node->same_body; alias->next; alias = alias->next)
+	alias_count++;
+      lto_output_uleb128_stream (ob->main_stream, alias_count);
+      do
 	{
-	  ref = LCC_NOT_FOUND;
-	  for (struct symtab_node *n = node->same_comdat_group; 
-	       ref == LCC_NOT_FOUND && n != node; n = n->same_comdat_group)
-	    ref = lto_symtab_encoder_lookup (encoder, n);
+	  lto_output_fn_decl_index (ob->decl_state, ob->main_stream,
+				    alias->decl);
+	  if (alias->thunk.thunk_p)
+	    {
+              lto_output_uleb128_stream
+	         (ob->main_stream,
+	      	  1 + (alias->thunk.this_adjusting != 0) * 2
+		  + (alias->thunk.virtual_offset_p != 0) * 4);
+	      lto_output_uleb128_stream (ob->main_stream,
+	      				 alias->thunk.fixed_offset);
+	      lto_output_uleb128_stream (ob->main_stream,
+	      				 alias->thunk.virtual_value);
+	      lto_output_fn_decl_index (ob->decl_state, ob->main_stream,
+					alias->thunk.alias);
+	    }
+	  else
+	    {
+	      lto_output_uleb128_stream (ob->main_stream, 0);
+	      lto_output_fn_decl_index (ob->decl_state, ob->main_stream,
+					alias->thunk.alias);
+	    }
+	  alias = alias->previous;
 	}
-      else
-	ref = LCC_NOT_FOUND;
-      streamer_write_hwi_stream (ob->main_stream, ref);
+      while (alias);
     }
-
-  section = node->get_section ();
-  if (!section)
-    section = "";
-  streamer_write_data_stream (ob->main_stream, section, strlen (section) + 1);
-
-  streamer_write_enum (ob->main_stream, ld_plugin_symbol_resolution,
-		       LDPR_NUM_KNOWN, node->resolution);
-}
-
-/* Output the varpool NODE to OB. 
-   If NODE is not in SET, then NODE is a boundary.  */
-
-static void
-lto_output_ref (struct lto_simple_output_block *ob, struct ipa_ref *ref,
-		lto_symtab_encoder_t encoder)
-{
-  struct bitpack_d bp;
-  int nref;
-  int uid = ref->lto_stmt_uid;
-  struct cgraph_node *node;
-
-  bp = bitpack_create (ob->main_stream);
-  bp_pack_value (&bp, ref->use, 3);
-  bp_pack_value (&bp, ref->speculative, 1);
-  streamer_write_bitpack (&bp);
-  nref = lto_symtab_encoder_lookup (encoder, ref->referred);
-  gcc_assert (nref != LCC_NOT_FOUND);
-  streamer_write_hwi_stream (ob->main_stream, nref);
-  
-  node = dyn_cast <cgraph_node *> (ref->referring);
-  if (node)
-    {
-      if (ref->stmt)
-	uid = gimple_uid (ref->stmt) + 1;
-      streamer_write_hwi_stream (ob->main_stream, uid);
-    }
+  else
+    lto_output_uleb128_stream (ob->main_stream, 0);
 }
 
 /* Stream out profile_summary to OB.  */
@@ -698,430 +360,135 @@ output_profile_summary (struct lto_simple_output_block *ob)
 {
   if (profile_info)
     {
-      /* We do not output num and run_max, they are not used by
-         GCC profile feedback and they are difficult to merge from multiple
-         units.  */
-      unsigned runs = (profile_info->runs);
-      streamer_write_uhwi_stream (ob->main_stream, runs);
-
-      /* IPA-profile computes hot bb threshold based on cumulated
-	 whole program profile.  We need to stream it down to ltrans.  */
-       if (flag_wpa)
-         streamer_write_gcov_count_stream (ob->main_stream,
-					   get_hot_bb_threshold ());
+      /* We do not output num, it is not terribly useful.  */
+      gcc_assert (profile_info->runs);
+      lto_output_uleb128_stream (ob->main_stream, profile_info->runs);
+      lto_output_sleb128_stream (ob->main_stream, profile_info->sum_all);
+      lto_output_sleb128_stream (ob->main_stream, profile_info->run_max);
+      lto_output_sleb128_stream (ob->main_stream, profile_info->sum_max);
     }
   else
-    streamer_write_uhwi_stream (ob->main_stream, 0);
+    lto_output_uleb128_stream (ob->main_stream, 0);
 }
 
-/* Output all callees or indirect outgoing edges.  EDGE must be the first such
-   edge.  */
-
-static void
-output_outgoing_cgraph_edges (struct cgraph_edge *edge,
-			      struct lto_simple_output_block *ob,
-			      lto_symtab_encoder_t encoder)
-{
-  if (!edge)
-    return;
-
-  /* Output edges in backward direction, so the reconstructed callgraph match
-     and it is easy to associate call sites in the IPA pass summaries.  */
-  while (edge->next_callee)
-    edge = edge->next_callee;
-  for (; edge; edge = edge->prev_callee)
-    lto_output_edge (ob, edge, encoder);
-}
 
 /* Output the part of the cgraph in SET.  */
 
-static void
-output_refs (lto_symtab_encoder_t encoder)
-{
-  struct lto_simple_output_block *ob;
-  int count;
-  struct ipa_ref *ref;
-
-  ob = lto_create_simple_output_block (LTO_section_refs);
-
-  for (int i = 0; i < lto_symtab_encoder_size (encoder); i++)
-    {
-      symtab_node *node = lto_symtab_encoder_deref (encoder, i);
-
-      /* IPA_REF_ALIAS references are always preserved
-	 in the boundary.  Alias node can't have other references and
-	 can be always handled as if it's not in the boundary.  */
-      if (!node->alias && !lto_symtab_encoder_in_partition_p (encoder, node))
-	continue;
-
-      count = node->ref_list.nreferences ();
-      if (count)
-	{
-	  streamer_write_gcov_count_stream (ob->main_stream, count);
-	  streamer_write_uhwi_stream (ob->main_stream,
-				     lto_symtab_encoder_lookup (encoder, node));
-	  for (int i = 0; node->iterate_reference (i, ref); i++)
-	    lto_output_ref (ob, ref, encoder);
-	}
-    }
-
-  streamer_write_uhwi_stream (ob->main_stream, 0);
-
-  lto_destroy_simple_output_block (ob);
-}
-
-/* Add NODE into encoder as well as nodes it is cloned from.
-   Do it in a way so clones appear first.  */
-
-static void
-add_node_to (lto_symtab_encoder_t encoder, struct cgraph_node *node,
-	     bool include_body)
-{
-  if (node->clone_of)
-    add_node_to (encoder, node->clone_of, include_body);
-  else if (include_body)
-    lto_set_symtab_encoder_encode_body (encoder, node);
-  lto_symtab_encoder_encode (encoder, node);
-}
-
-/* Add all references in NODE to encoders.  */
-
-static void
-create_references (lto_symtab_encoder_t encoder, symtab_node *node)
-{
-  int i;
-  struct ipa_ref *ref = NULL;
-  for (i = 0; node->iterate_reference (i, ref); i++)
-    if (is_a <cgraph_node *> (ref->referred))
-      add_node_to (encoder, dyn_cast <cgraph_node *> (ref->referred), false);
-    else
-      lto_symtab_encoder_encode (encoder, ref->referred);
-}
-
-/* Select what needs to be streamed out.  In regular lto mode stream everything.
-   In offload lto mode stream only nodes marked as offloadable.  */
 void
-select_what_to_stream (void)
-{
-  struct symtab_node *snode;
-  FOR_EACH_SYMBOL (snode)
-    snode->need_lto_streaming = !lto_stream_offload_p || snode->offloadable;
-}
-
-/* Find all symbols we want to stream into given partition and insert them
-   to encoders.
-
-   The function actually replaces IN_ENCODER by new one.  The reason is that
-   streaming code needs clone's origin to be streamed before clone.  This
-   means that we need to insert the nodes in specific order.  This order is
-   ignored by the partitioning logic earlier.  */
-
-lto_symtab_encoder_t 
-compute_ltrans_boundary (lto_symtab_encoder_t in_encoder)
-{
-  struct cgraph_edge *edge;
-  int i;
-  lto_symtab_encoder_t encoder;
-  lto_symtab_encoder_iterator lsei;
-  hash_set<void *> reachable_call_targets;
-
-  encoder = lto_symtab_encoder_new (false);
-
-  /* Go over all entries in the IN_ENCODER and duplicate them to
-     ENCODER. At the same time insert masters of clones so
-     every master appears before clone.  */
-  for (lsei = lsei_start_function_in_partition (in_encoder);
-       !lsei_end_p (lsei); lsei_next_function_in_partition (&lsei))
-    {
-      struct cgraph_node *node = lsei_cgraph_node (lsei);
-      if (!node->need_lto_streaming)
-	continue;
-      add_node_to (encoder, node, true);
-      lto_set_symtab_encoder_in_partition (encoder, node);
-      create_references (encoder, node);
-    }
-  for (lsei = lsei_start_variable_in_partition (in_encoder);
-       !lsei_end_p (lsei); lsei_next_variable_in_partition (&lsei))
-    {
-      varpool_node *vnode = lsei_varpool_node (lsei);
-
-      if (!vnode->need_lto_streaming)
-	continue;
-      lto_set_symtab_encoder_in_partition (encoder, vnode);
-      lto_set_symtab_encoder_encode_initializer (encoder, vnode);
-      create_references (encoder, vnode);
-    }
-  /* Pickle in also the initializer of all referenced readonly variables
-     to help folding.  Constant pool variables are not shared, so we must
-     pickle those too.  */
-  for (i = 0; i < lto_symtab_encoder_size (encoder); i++)
-    {
-      symtab_node *node = lto_symtab_encoder_deref (encoder, i);
-      if (varpool_node *vnode = dyn_cast <varpool_node *> (node))
-	{
-	  if (!lto_symtab_encoder_encode_initializer_p (encoder,
-							vnode)
-	      && (((vnode->ctor_useable_for_folding_p ()
-		   && (!DECL_VIRTUAL_P (vnode->decl)
-		       || !flag_wpa
-		       || flag_ltrans_devirtualize)))))
-	    {
-	      lto_set_symtab_encoder_encode_initializer (encoder, vnode);
-	      create_references (encoder, vnode);
-	    }
-       }
-    }
-
-  /* Go over all the nodes again to include callees that are not in
-     SET.  */
-  for (lsei = lsei_start_function_in_partition (encoder);
-       !lsei_end_p (lsei); lsei_next_function_in_partition (&lsei))
-    {
-      struct cgraph_node *node = lsei_cgraph_node (lsei);
-      for (edge = node->callees; edge; edge = edge->next_callee)
-	{
-	  struct cgraph_node *callee = edge->callee;
-	  if (!lto_symtab_encoder_in_partition_p (encoder, callee))
-	    {
-	      /* We should have moved all the inlines.  */
-	      gcc_assert (!callee->global.inlined_to);
-	      add_node_to (encoder, callee, false);
-	    }
-	}
-      /* Add all possible targets for late devirtualization.  */
-      if (flag_ltrans_devirtualize || !flag_wpa)
-	for (edge = node->indirect_calls; edge; edge = edge->next_callee)
-	  if (edge->indirect_info->polymorphic)
-	    {
-	      unsigned int i;
-	      void *cache_token;
-	      bool final;
-	      vec <cgraph_node *>targets
-		= possible_polymorphic_call_targets
-		    (edge, &final, &cache_token);
-	      if (!reachable_call_targets.add (cache_token))
-		{
-		  for (i = 0; i < targets.length (); i++)
-		    {
-		      struct cgraph_node *callee = targets[i];
-
-		      /* Adding an external declarations into the unit serves
-			 no purpose and just increases its boundary.  */
-		      if (callee->definition
-			  && !lto_symtab_encoder_in_partition_p
-			       (encoder, callee))
-			{
-			  gcc_assert (!callee->global.inlined_to);
-			  add_node_to (encoder, callee, false);
-			}
-		    }
-		}
-	    }
-    }
-  /* Be sure to also insert alias targert and thunk callees.  These needs
-     to stay to aid local calling conventions.  */
-  for (i = 0; i < lto_symtab_encoder_size (encoder); i++)
-    {
-      symtab_node *node = lto_symtab_encoder_deref (encoder, i);
-      cgraph_node *cnode = dyn_cast <cgraph_node *> (node);
-
-      if (node->alias && node->analyzed)
-	create_references (encoder, node);
-      if (cnode
-	  && cnode->thunk.thunk_p && !cnode->global.inlined_to)
-	add_node_to (encoder, cnode->callees->callee, false);
-      while (node->transparent_alias && node->analyzed)
-	{
-	  node = node->get_alias_target ();
-	  if (is_a <cgraph_node *> (node))
-	    add_node_to (encoder, dyn_cast <cgraph_node *> (node),
-			 false);
-	  else
-	    lto_symtab_encoder_encode (encoder, node);
-	}
-    }
-  lto_symtab_encoder_delete (in_encoder);
-  return encoder;
-}
-
-/* Output the part of the symtab in SET and VSET.  */
-
-void
-output_symtab (void)
+output_cgraph (cgraph_node_set set)
 {
   struct cgraph_node *node;
   struct lto_simple_output_block *ob;
+  cgraph_node_set_iterator csi;
+  struct cgraph_edge *edge;
   int i, n_nodes;
-  lto_symtab_encoder_t encoder;
+  bitmap written_decls;
+  lto_cgraph_encoder_t encoder;
+  struct cgraph_asm_node *can;
 
-  if (flag_wpa)
-    output_cgraph_opt_summary ();
-
-  ob = lto_create_simple_output_block (LTO_section_symtab_nodes);
+  ob = lto_create_simple_output_block (LTO_section_cgraph);
 
   output_profile_summary (ob);
 
   /* An encoder for cgraph nodes should have been created by
      ipa_write_summaries_1.  */
-  gcc_assert (ob->decl_state->symtab_node_encoder);
-  encoder = ob->decl_state->symtab_node_encoder;
+  gcc_assert (ob->decl_state->cgraph_node_encoder);
+  encoder = ob->decl_state->cgraph_node_encoder;
 
-  /* Write out the nodes.  We must first output a node and then its clones,
-     otherwise at a time reading back the node there would be nothing to clone
-     from.  */
-  n_nodes = lto_symtab_encoder_size (encoder);
-  for (i = 0; i < n_nodes; i++)
+  /* The FUNCTION_DECLs for which we have written a node.  The first
+     node found is written as the "original" node, the remaining nodes
+     are considered its clones.  */
+  written_decls = lto_bitmap_alloc ();
+
+  /* Go over all the nodes in SET and assign references.  */
+  for (csi = csi_start (set); !csi_end_p (csi); csi_next (&csi))
     {
-      symtab_node *node = lto_symtab_encoder_deref (encoder, i);
-      if (cgraph_node *cnode = dyn_cast <cgraph_node *> (node))
-        lto_output_node (ob, cnode, encoder);
-      else
-	lto_output_varpool_node (ob, dyn_cast<varpool_node *> (node), encoder);
+      node = csi_node (csi);
+      lto_cgraph_encoder_encode (encoder, node);
     }
 
-  /* Go over the nodes in SET again to write edges.  */
-  for (int i = 0; i < lto_symtab_encoder_size (encoder); i++)
+  /* Go over all the nodes again to include callees that are not in
+     SET.  */
+  for (csi = csi_start (set); !csi_end_p (csi); csi_next (&csi))
     {
-      node = dyn_cast <cgraph_node *> (lto_symtab_encoder_deref (encoder, i));
-      if (node
-	  && ((node->thunk.thunk_p && !node->global.inlined_to)
-	      || lto_symtab_encoder_in_partition_p (encoder, node)))
+      node = csi_node (csi);
+      for (edge = node->callees; edge; edge = edge->next_callee)
 	{
-	  output_outgoing_cgraph_edges (node->callees, ob, encoder);
-	  output_outgoing_cgraph_edges (node->indirect_calls, ob, encoder);
+	  struct cgraph_node *callee = edge->callee;
+	  if (!cgraph_node_in_set_p (callee, set))
+	    {
+	      /* We should have moved all the inlines.  */
+	      gcc_assert (!callee->global.inlined_to);
+	      lto_cgraph_encoder_encode (encoder, callee);
+	      /* Also with each included function include all other functions
+		 in the same comdat group.  */
+	      if (callee->same_comdat_group)
+		{
+		  struct cgraph_node *next;
+		  for (next = callee->same_comdat_group;
+		       next != callee;
+		       next = next->same_comdat_group)
+		    if (!cgraph_node_in_set_p (next, set))
+		      lto_cgraph_encoder_encode (encoder, next);
+		}
+	    }
+	}
+      /* Also with each included function include all other functions
+	 in the same comdat group.  */
+      if (node->same_comdat_group)
+	{
+	  struct cgraph_node *next;
+	  for (next = node->same_comdat_group;
+	       next != node;
+	       next = next->same_comdat_group)
+	    if (!cgraph_node_in_set_p (next, set))
+	      lto_cgraph_encoder_encode (encoder, next);
 	}
     }
 
-  streamer_write_uhwi_stream (ob->main_stream, 0);
+  /* Write out the nodes.  */
+  n_nodes = lto_cgraph_encoder_size (encoder);
+  for (i = 0; i < n_nodes; i++)
+    {
+      node = lto_cgraph_encoder_deref (encoder, i);
+      lto_output_node (ob, node, encoder, set, written_decls);
+    }
+
+  lto_bitmap_free (written_decls);
+
+  /* Go over the nodes in SET again to write edges.  */
+  for (csi = csi_start (set); !csi_end_p (csi); csi_next (&csi))
+    {
+      node = csi_node (csi);
+      if (node->callees)
+        {
+	  /* Output edges in backward direction, so the reconstructed callgraph
+	     match and it is easy to associate call sites in the IPA pass summaries.  */
+	  edge = node->callees;
+	  while (edge->next_callee)
+	    edge = edge->next_callee;
+	  for (; edge; edge = edge->prev_callee)
+	    lto_output_edge (ob, edge, encoder);
+	}
+    }
+
+  lto_output_uleb128_stream (ob->main_stream, 0);
+
+  /* Emit toplevel asms.  */
+  for (can = cgraph_asm_nodes; can; can = can->next)
+    {
+      int len = TREE_STRING_LENGTH (can->asm_str);
+      lto_output_uleb128_stream (ob->main_stream, len);
+      for (i = 0; i < len; ++i)
+	lto_output_1_stream (ob->main_stream,
+			     TREE_STRING_POINTER (can->asm_str)[i]);
+    }
+
+  lto_output_uleb128_stream (ob->main_stream, 0);
 
   lto_destroy_simple_output_block (ob);
-
-  /* Emit toplevel asms.
-     When doing WPA we must output every asm just once.  Since we do not partition asm
-     nodes at all, output them to first output.  This is kind of hack, but should work
-     well.  */
-  if (!asm_nodes_output)
-    {
-      asm_nodes_output = true;
-      lto_output_toplevel_asms ();
-    }
-
-  output_refs (encoder);
 }
 
-/* Return identifier encoded in IB as a plain string.  */
-
-static tree
-read_identifier (struct lto_input_block *ib)
-{
-  unsigned int len = strnlen (ib->data + ib->p, ib->len - ib->p - 1);
-  tree id;
-
-  if (ib->data[ib->p + len])
-    lto_section_overrun (ib);
-  if (!len)
-    {
-      ib->p++;
-      return NULL;
-    }
-  id = get_identifier (ib->data + ib->p);
-  ib->p += len + 1;
-  return id;
-}
-
-/* Return string encoded in IB, NULL if string is empty.  */
-
-static const char *
-read_string (struct lto_input_block *ib)
-{
-  unsigned int len = strnlen (ib->data + ib->p, ib->len - ib->p - 1);
-  const char *str;
-
-  if (ib->data[ib->p + len])
-    lto_section_overrun (ib);
-  if (!len)
-    {
-      ib->p++;
-      return NULL;
-    }
-  str = ib->data + ib->p;
-  ib->p += len + 1;
-  return str;
-}
-
-/* Output function/variable tables that will allow libgomp to look up offload
-   target code.
-   OFFLOAD_FUNCS is filled in expand_omp_target, OFFLOAD_VARS is filled in
-   varpool_node::get_create.  In WHOPR (partitioned) mode during the WPA stage
-   both OFFLOAD_FUNCS and OFFLOAD_VARS are filled by input_offload_tables.  */
-
-void
-output_offload_tables (void)
-{
-  if (vec_safe_is_empty (offload_funcs) && vec_safe_is_empty (offload_vars))
-    return;
-
-  struct lto_simple_output_block *ob
-    = lto_create_simple_output_block (LTO_section_offload_table);
-
-  for (unsigned i = 0; i < vec_safe_length (offload_funcs); i++)
-    {
-      streamer_write_enum (ob->main_stream, LTO_symtab_tags,
-			   LTO_symtab_last_tag, LTO_symtab_unavail_node);
-      lto_output_fn_decl_index (ob->decl_state, ob->main_stream,
-				(*offload_funcs)[i]);
-    }
-
-  for (unsigned i = 0; i < vec_safe_length (offload_vars); i++)
-    {
-      streamer_write_enum (ob->main_stream, LTO_symtab_tags,
-			   LTO_symtab_last_tag, LTO_symtab_variable);
-      lto_output_var_decl_index (ob->decl_state, ob->main_stream,
-				 (*offload_vars)[i]);
-    }
-
-  streamer_write_uhwi_stream (ob->main_stream, 0);
-  lto_destroy_simple_output_block (ob);
-
-  /* In WHOPR mode during the WPA stage the joint offload tables need to be
-     streamed to one partition only.  That's why we free offload_funcs and
-     offload_vars after the first call of output_offload_tables.  */
-  if (flag_wpa)
-    {
-      vec_free (offload_funcs);
-      vec_free (offload_vars);
-    }
-}
-
-/* Verify the partitioning of NODE.  */
-
-static inline void
-verify_node_partition (symtab_node *node)
-{
-  if (flag_ltrans)
-    return;
-
-#ifdef ACCEL_COMPILER
-  if (node->in_other_partition)
-    {
-      if (TREE_CODE (node->decl) == FUNCTION_DECL)
-	error_at (DECL_SOURCE_LOCATION (node->decl),
-		  "function %qs has been referenced in offloaded code but"
-		  " hasn%'t been marked to be included in the offloaded code",
-		  node->name ());
-      else if (VAR_P (node->decl))
-	error_at (DECL_SOURCE_LOCATION (node->decl),
-		  "variable %qs has been referenced in offloaded code but"
-		  " hasn%'t been marked to be included in the offloaded code",
-		  node->name ());
-      else
-	gcc_unreachable ();
-    }
-#else
-  gcc_assert (!node->in_other_partition
-	      && !node->used_from_other_partition);
-#endif
-}
 
 /* Overwrite the information in NODE based on FILE_DATA, TAG, FLAGS,
    STACK_SIZE, SELF_TIME and SELF_SIZE.  This is called either to initialize
@@ -1133,70 +500,43 @@ verify_node_partition (symtab_node *node)
 static void
 input_overwrite_node (struct lto_file_decl_data *file_data,
 		      struct cgraph_node *node,
-		      enum LTO_symtab_tags tag,
-		      struct bitpack_d *bp)
+		      enum LTO_cgraph_tags tag,
+		      struct bitpack_d *bp,
+		      unsigned int stack_size,
+		      unsigned int self_time,
+		      unsigned int time_inlining_benefit,
+		      unsigned int self_size,
+		      unsigned int size_inlining_benefit)
 {
   node->aux = (void *) tag;
-  node->lto_file_data = file_data;
+  node->local.inline_summary.estimated_self_stack_size = stack_size;
+  node->local.inline_summary.self_time = self_time;
+  node->local.inline_summary.time_inlining_benefit = time_inlining_benefit;
+  node->local.inline_summary.self_size = self_size;
+  node->local.inline_summary.size_inlining_benefit = size_inlining_benefit;
+  node->global.time = self_time;
+  node->global.size = self_size;
+  node->local.lto_file_data = file_data;
 
   node->local.local = bp_unpack_value (bp, 1);
-  node->externally_visible = bp_unpack_value (bp, 1);
-  node->no_reorder = bp_unpack_value (bp, 1);
-  node->definition = bp_unpack_value (bp, 1);
-  node->local.versionable = bp_unpack_value (bp, 1);
-  node->local.can_change_signature = bp_unpack_value (bp, 1);
+  node->local.externally_visible = bp_unpack_value (bp, 1);
+  node->local.finalized = bp_unpack_value (bp, 1);
+  node->local.inlinable = bp_unpack_value (bp, 1);
+  node->local.disregard_inline_limits = bp_unpack_value (bp, 1);
   node->local.redefined_extern_inline = bp_unpack_value (bp, 1);
-  node->force_output = bp_unpack_value (bp, 1);
-  node->forced_by_abi = bp_unpack_value (bp, 1);
-  node->unique_name = bp_unpack_value (bp, 1);
-  node->body_removed = bp_unpack_value (bp, 1);
-  node->implicit_section = bp_unpack_value (bp, 1);
+  node->local.for_functions_valid = bp_unpack_value (bp, 1);
+  node->local.vtable_method = bp_unpack_value (bp, 1);
+  node->needed = bp_unpack_value (bp, 1);
   node->address_taken = bp_unpack_value (bp, 1);
-  node->used_from_other_partition = bp_unpack_value (bp, 1);
+  node->abstract_and_needed = bp_unpack_value (bp, 1);
+  node->reachable = bp_unpack_value (bp, 1);
   node->lowered = bp_unpack_value (bp, 1);
-  node->analyzed = tag == LTO_symtab_analyzed_node;
-  node->in_other_partition = bp_unpack_value (bp, 1);
-  if (node->in_other_partition
-      /* Avoid updating decl when we are seeing just inline clone.
-	 When inlining function that has functions already inlined into it,
-	 we produce clones of inline clones.
-
-	 WPA partitioning might put each clone into different unit and
-	 we might end up streaming inline clone from other partition
-	 to support clone we are interested in. */
-      && (!node->clone_of
-	  || node->clone_of->decl != node->decl))
-    {
-      DECL_EXTERNAL (node->decl) = 1;
-      TREE_STATIC (node->decl) = 0;
-    }
+  node->analyzed = bp_unpack_value (bp, 1);
+  node->process = bp_unpack_value (bp, 1);
   node->alias = bp_unpack_value (bp, 1);
-  node->transparent_alias = bp_unpack_value (bp, 1);
-  node->weakref = bp_unpack_value (bp, 1);
-  node->frequency = (enum node_frequency)bp_unpack_value (bp, 2);
-  node->only_called_at_startup = bp_unpack_value (bp, 1);
-  node->only_called_at_exit = bp_unpack_value (bp, 1);
-  node->tm_clone = bp_unpack_value (bp, 1);
-  node->calls_comdat_local = bp_unpack_value (bp, 1);
-  node->icf_merged = bp_unpack_value (bp, 1);
-  node->nonfreeing_fn = bp_unpack_value (bp, 1);
-  node->thunk.thunk_p = bp_unpack_value (bp, 1);
-  node->parallelized_function = bp_unpack_value (bp, 1);
-  node->resolution = bp_unpack_enum (bp, ld_plugin_symbol_resolution,
-				     LDPR_NUM_KNOWN);
-  node->split_part = bp_unpack_value (bp, 1);
-  verify_node_partition (node);
+  node->finalized_by_frontend = bp_unpack_value (bp, 1);
 }
 
-/* Return string alias is alias of.  */
-
-static tree
-get_alias_symbol (tree decl)
-{
-  tree alias = lookup_attribute ("alias", DECL_ATTRIBUTES (decl));
-  return get_identifier (TREE_STRING_POINTER
-			  (TREE_VALUE (TREE_VALUE (alias))));
-}
 
 /* Read a node from input_block IB.  TAG is the node's tag just read.
    Return the node read or overwriten.  */
@@ -1204,485 +544,268 @@ get_alias_symbol (tree decl)
 static struct cgraph_node *
 input_node (struct lto_file_decl_data *file_data,
 	    struct lto_input_block *ib,
-	    enum LTO_symtab_tags tag,
-	    vec<symtab_node *> nodes)
+	    enum LTO_cgraph_tags tag)
 {
-  gcc::pass_manager *passes = g->get_passes ();
   tree fn_decl;
   struct cgraph_node *node;
-  struct bitpack_d bp;
+  struct bitpack_d *bp;
+  int stack_size = 0;
   unsigned decl_index;
+  bool clone_p;
+  int estimated_stack_size = 0;
+  int stack_frame_offset = 0;
   int ref = LCC_NOT_FOUND, ref2 = LCC_NOT_FOUND;
-  int clone_ref;
-  int order;
-  int i, count;
-  tree group;
-  const char *section;
-  order = streamer_read_hwi (ib) + order_base;
-  clone_ref = streamer_read_hwi (ib);
+  int estimated_growth = 0;
+  int time = 0;
+  int size = 0;
+  int self_time = 0;
+  int self_size = 0;
+  int time_inlining_benefit = 0;
+  int size_inlining_benefit = 0;
+  unsigned long same_body_count = 0;
+  bool inlined = false;
 
-  decl_index = streamer_read_uhwi (ib);
+  clone_p = (lto_input_uleb128 (ib) != 0);
+
+  decl_index = lto_input_uleb128 (ib);
   fn_decl = lto_file_decl_data_get_fn_decl (file_data, decl_index);
 
-  if (clone_ref != LCC_NOT_FOUND)
-    {
-      node = dyn_cast<cgraph_node *> (nodes[clone_ref])->create_clone (fn_decl,
-	profile_count::uninitialized (), false,
-	vNULL, false, NULL, NULL);
-    }
+  if (clone_p)
+    node = cgraph_clone_node (cgraph_node (fn_decl), 0,
+			      CGRAPH_FREQ_BASE, 0, false, NULL);
+
   else
+    node = cgraph_node (fn_decl);
+
+  node->count = lto_input_sleb128 (ib);
+  bp = lto_input_bitpack (ib);
+
+  if (tag != LTO_cgraph_unavail_node)
     {
-      /* Declaration of functions can be already merged with a declaration
-	 from other input file.  We keep cgraph unmerged until after streaming
-	 of ipa passes is done.  Alays forcingly create a fresh node.  */
-      node = symtab->create_empty ();
-      node->decl = fn_decl;
-      if (lookup_attribute ("ifunc", DECL_ATTRIBUTES (fn_decl)))
-	node->ifunc_resolver = 1;
-      node->register_symbol ();
+      stack_size = lto_input_sleb128 (ib);
+      self_size = lto_input_sleb128 (ib);
+      size_inlining_benefit = lto_input_sleb128 (ib);
+      self_time = lto_input_sleb128 (ib);
+      time_inlining_benefit = lto_input_sleb128 (ib);
     }
 
-  node->order = order;
-  if (order >= symtab->order)
-    symtab->order = order + 1;
-
-  node->count = profile_count::stream_in (ib);
-  node->count_materialization_scale = streamer_read_hwi (ib);
-
-  count = streamer_read_hwi (ib);
-  node->ipa_transforms_to_apply = vNULL;
-  for (i = 0; i < count; i++)
-    {
-      opt_pass *pass;
-      int pid = streamer_read_hwi (ib);
-
-      gcc_assert (pid < passes->passes_by_id_size);
-      pass = passes->passes_by_id[pid];
-      node->ipa_transforms_to_apply.safe_push ((ipa_opt_pass_d *) pass);
-    }
-
-  if (tag == LTO_symtab_analyzed_node)
-    ref = streamer_read_hwi (ib);
-
-  group = read_identifier (ib);
-  if (group)
-    ref2 = streamer_read_hwi (ib);
+  estimated_stack_size = lto_input_sleb128 (ib);
+  stack_frame_offset = lto_input_sleb128 (ib);
+  ref = lto_input_sleb128 (ib);
+  time = lto_input_sleb128 (ib);
+  size = lto_input_sleb128 (ib);
+  estimated_growth = lto_input_sleb128 (ib);
+  inlined = lto_input_uleb128 (ib);
+  ref2 = lto_input_sleb128 (ib);
+  same_body_count = lto_input_uleb128 (ib);
 
   /* Make sure that we have not read this node before.  Nodes that
      have already been read will have their tag stored in the 'aux'
      field.  Since built-in functions can be referenced in multiple
      functions, they are expected to be read more than once.  */
-  if (node->aux && !fndecl_built_in_p (node->decl))
+  if (node->aux && !DECL_IS_BUILTIN (node->decl))
     internal_error ("bytecode stream: found multiple instances of cgraph "
-		    "node with uid %d", node->get_uid ());
+		    "node %d", node->uid);
 
-  node->tp_first_run = streamer_read_uhwi (ib);
+  input_overwrite_node (file_data, node, tag, bp, stack_size, self_time,
+  			time_inlining_benefit, self_size,
+			size_inlining_benefit);
+  bitpack_delete (bp);
 
-  bp = streamer_read_bitpack (ib);
-
-  input_overwrite_node (file_data, node, tag, &bp);
+  node->global.estimated_stack_size = estimated_stack_size;
+  node->global.stack_frame_offset = stack_frame_offset;
+  node->global.time = time;
+  node->global.size = size;
 
   /* Store a reference for now, and fix up later to be a pointer.  */
-  node->global.inlined_to = (cgraph_node *) (intptr_t) ref;
+  node->global.inlined_to = (cgraph_node_ptr) (intptr_t) ref;
 
-  if (group)
+  node->global.estimated_growth = estimated_growth;
+  node->global.inlined = inlined;
+
+  /* Store a reference for now, and fix up later to be a pointer.  */
+  node->same_comdat_group = (cgraph_node_ptr) (intptr_t) ref2;
+
+  while (same_body_count-- > 0)
     {
-      node->set_comdat_group (group);
-      /* Store a reference for now, and fix up later to be a pointer.  */
-      node->same_comdat_group = (symtab_node *) (intptr_t) ref2;
+      tree alias_decl;
+      int type;
+      decl_index = lto_input_uleb128 (ib);
+      alias_decl = lto_file_decl_data_get_fn_decl (file_data, decl_index);
+      type = lto_input_uleb128 (ib);
+      if (!type)
+	{
+	  tree real_alias;
+	  decl_index = lto_input_uleb128 (ib);
+	  real_alias = lto_file_decl_data_get_fn_decl (file_data, decl_index);
+	  cgraph_same_body_alias (alias_decl, real_alias);
+	}
+      else
+        {
+	  HOST_WIDE_INT fixed_offset = lto_input_uleb128 (ib);
+	  HOST_WIDE_INT virtual_value = lto_input_uleb128 (ib);
+	  tree real_alias;
+	  decl_index = lto_input_uleb128 (ib);
+	  real_alias = lto_file_decl_data_get_fn_decl (file_data, decl_index);
+	  cgraph_add_thunk (alias_decl, fn_decl, type & 2, fixed_offset,
+	  		    virtual_value,
+			    (type & 4) ? size_int (virtual_value) : NULL_TREE,
+			    real_alias);
+	}
     }
-  else
-    node->same_comdat_group = (symtab_node *) (intptr_t) LCC_NOT_FOUND;
-  section = read_string (ib);
-  if (section)
-    node->set_section_for_node (section);
-
-  if (node->definition)
-    {
-      int type = streamer_read_uhwi (ib);
-      HOST_WIDE_INT fixed_offset = streamer_read_uhwi (ib);
-      HOST_WIDE_INT virtual_value = streamer_read_uhwi (ib);
-      HOST_WIDE_INT indirect_offset = streamer_read_uhwi (ib);
-
-      node->thunk.fixed_offset = fixed_offset;
-      node->thunk.virtual_value = virtual_value;
-      node->thunk.indirect_offset = indirect_offset;
-      node->thunk.this_adjusting = (type & 2);
-      node->thunk.virtual_offset_p = (type & 4);
-    }
-  if (node->alias && !node->analyzed && node->weakref)
-    node->alias_target = get_alias_symbol (node->decl);
-  node->profile_id = streamer_read_hwi (ib);
-  if (DECL_STATIC_CONSTRUCTOR (node->decl))
-    node->set_init_priority (streamer_read_hwi (ib));
-  if (DECL_STATIC_DESTRUCTOR (node->decl))
-    node->set_fini_priority (streamer_read_hwi (ib));
-
   return node;
 }
 
-/* Read a node from input_block IB.  TAG is the node's tag just read.
-   Return the node read or overwriten.  */
 
-static varpool_node *
-input_varpool_node (struct lto_file_decl_data *file_data,
-		    struct lto_input_block *ib)
-{
-  int decl_index;
-  tree var_decl;
-  varpool_node *node;
-  struct bitpack_d bp;
-  int ref = LCC_NOT_FOUND;
-  int order;
-  tree group;
-  const char *section;
-
-  order = streamer_read_hwi (ib) + order_base;
-  decl_index = streamer_read_uhwi (ib);
-  var_decl = lto_file_decl_data_get_var_decl (file_data, decl_index);
-
-  /* Declaration of functions can be already merged with a declaration
-     from other input file.  We keep cgraph unmerged until after streaming
-     of ipa passes is done.  Alays forcingly create a fresh node.  */
-  node = varpool_node::create_empty ();
-  node->decl = var_decl;
-  node->register_symbol ();
-
-  node->order = order;
-  if (order >= symtab->order)
-    symtab->order = order + 1;
-  node->lto_file_data = file_data;
-
-  bp = streamer_read_bitpack (ib);
-  node->externally_visible = bp_unpack_value (&bp, 1);
-  node->no_reorder = bp_unpack_value (&bp, 1);
-  node->force_output = bp_unpack_value (&bp, 1);
-  node->forced_by_abi = bp_unpack_value (&bp, 1);
-  node->unique_name = bp_unpack_value (&bp, 1);
-  node->body_removed = bp_unpack_value (&bp, 1);
-  node->implicit_section = bp_unpack_value (&bp, 1);
-  node->writeonly = bp_unpack_value (&bp, 1);
-  node->definition = bp_unpack_value (&bp, 1);
-  node->alias = bp_unpack_value (&bp, 1);
-  node->transparent_alias = bp_unpack_value (&bp, 1);
-  node->weakref = bp_unpack_value (&bp, 1);
-  node->analyzed = bp_unpack_value (&bp, 1);
-  node->used_from_other_partition = bp_unpack_value (&bp, 1);
-  node->in_other_partition = bp_unpack_value (&bp, 1);
-  if (node->in_other_partition)
-    {
-      DECL_EXTERNAL (node->decl) = 1;
-      TREE_STATIC (node->decl) = 0;
-    }
-  if (node->alias && !node->analyzed && node->weakref)
-    node->alias_target = get_alias_symbol (node->decl);
-  node->tls_model = (enum tls_model)bp_unpack_value (&bp, 3);
-  node->used_by_single_function = (enum tls_model)bp_unpack_value (&bp, 1);
-  node->dynamically_initialized = bp_unpack_value (&bp, 1);
-  group = read_identifier (ib);
-  if (group)
-    {
-      node->set_comdat_group (group);
-      ref = streamer_read_hwi (ib);
-      /* Store a reference for now, and fix up later to be a pointer.  */
-      node->same_comdat_group = (symtab_node *) (intptr_t) ref;
-    }
-  else
-    node->same_comdat_group = (symtab_node *) (intptr_t) LCC_NOT_FOUND;
-  section = read_string (ib);
-  if (section)
-    node->set_section_for_node (section);
-  node->resolution = streamer_read_enum (ib, ld_plugin_symbol_resolution,
-					        LDPR_NUM_KNOWN);
-  verify_node_partition (node);
-  return node;
-}
-
-/* Read a node from input_block IB.  TAG is the node's tag just read.
-   Return the node read or overwriten.  */
+/* Read an edge from IB.  NODES points to a vector of previously read
+   nodes for decoding caller and callee of the edge to be read.  */
 
 static void
-input_ref (struct lto_input_block *ib,
-	   symtab_node *referring_node,
-	   vec<symtab_node *> nodes)
-{
-  symtab_node *node = NULL;
-  struct bitpack_d bp;
-  enum ipa_ref_use use;
-  bool speculative;
-  struct ipa_ref *ref;
-
-  bp = streamer_read_bitpack (ib);
-  use = (enum ipa_ref_use) bp_unpack_value (&bp, 3);
-  speculative = (enum ipa_ref_use) bp_unpack_value (&bp, 1);
-  node = nodes[streamer_read_hwi (ib)];
-  ref = referring_node->create_reference (node, use);
-  ref->speculative = speculative;
-  if (is_a <cgraph_node *> (referring_node))
-    ref->lto_stmt_uid = streamer_read_hwi (ib);
-}
-
-/* Read an edge from IB.  NODES points to a vector of previously read nodes for
-   decoding caller and callee of the edge to be read.  If INDIRECT is true, the
-   edge being read is indirect (in the sense that it has
-   indirect_unknown_callee set).  */
-
-static void
-input_edge (struct lto_input_block *ib, vec<symtab_node *> nodes,
-	    bool indirect)
+input_edge (struct lto_input_block *ib, VEC(cgraph_node_ptr, heap) *nodes)
 {
   struct cgraph_node *caller, *callee;
   struct cgraph_edge *edge;
   unsigned int stmt_id;
-  profile_count count;
+  gcov_type count;
+  int freq;
+  unsigned int nest;
   cgraph_inline_failed_t inline_failed;
-  struct bitpack_d bp;
-  int ecf_flags = 0;
+  struct bitpack_d *bp;
+  enum ld_plugin_symbol_resolution caller_resolution;
 
-  caller = dyn_cast<cgraph_node *> (nodes[streamer_read_hwi (ib)]);
+  caller = VEC_index (cgraph_node_ptr, nodes, lto_input_sleb128 (ib));
   if (caller == NULL || caller->decl == NULL_TREE)
     internal_error ("bytecode stream: no caller found while reading edge");
 
-  if (!indirect)
-    {
-      callee = dyn_cast<cgraph_node *> (nodes[streamer_read_hwi (ib)]);
-      if (callee == NULL || callee->decl == NULL_TREE)
-	internal_error ("bytecode stream: no callee found while reading edge");
-    }
-  else
-    callee = NULL;
+  callee = VEC_index (cgraph_node_ptr, nodes, lto_input_sleb128 (ib));
+  if (callee == NULL || callee->decl == NULL_TREE)
+    internal_error ("bytecode stream: no callee found while reading edge");
 
-  count = profile_count::stream_in (ib);
+  count = (gcov_type) lto_input_sleb128 (ib);
 
-  bp = streamer_read_bitpack (ib);
-  inline_failed = bp_unpack_enum (&bp, cgraph_inline_failed_t, CIF_N_REASONS);
-  stmt_id = bp_unpack_var_len_unsigned (&bp);
+  bp = lto_input_bitpack (ib);
+  stmt_id = (unsigned int) bp_unpack_value (bp, HOST_BITS_PER_INT);
+  inline_failed = (cgraph_inline_failed_t) bp_unpack_value (bp,
+							    HOST_BITS_PER_INT);
+  freq = (int) bp_unpack_value (bp, HOST_BITS_PER_INT);
+  nest = (unsigned) bp_unpack_value (bp, 30);
 
-  if (indirect)
-    edge = caller->create_indirect_edge (NULL, 0, count);
-  else
-    edge = caller->create_edge (callee, NULL, count);
+  /* If the caller was preempted, don't create the edge.
+     ???  Should we ever have edges from a preempted caller?  */
+  caller_resolution = lto_symtab_get_resolution (caller->decl);
+  if (caller_resolution == LDPR_PREEMPTED_REG
+      || caller_resolution == LDPR_PREEMPTED_IR)
+    return;
 
-  edge->indirect_inlining_edge = bp_unpack_value (&bp, 1);
-  edge->speculative = bp_unpack_value (&bp, 1);
+  edge = cgraph_create_edge (caller, callee, NULL, count, freq, nest);
   edge->lto_stmt_uid = stmt_id;
   edge->inline_failed = inline_failed;
-  edge->call_stmt_cannot_inline_p = bp_unpack_value (&bp, 1);
-  edge->can_throw_external = bp_unpack_value (&bp, 1);
-  edge->in_polymorphic_cdtor = bp_unpack_value (&bp, 1);
-  if (indirect)
-    {
-      if (bp_unpack_value (&bp, 1))
-	ecf_flags |= ECF_CONST;
-      if (bp_unpack_value (&bp, 1))
-	ecf_flags |= ECF_PURE;
-      if (bp_unpack_value (&bp, 1))
-	ecf_flags |= ECF_NORETURN;
-      if (bp_unpack_value (&bp, 1))
-	ecf_flags |= ECF_MALLOC;
-      if (bp_unpack_value (&bp, 1))
-	ecf_flags |= ECF_NOTHROW;
-      if (bp_unpack_value (&bp, 1))
-	ecf_flags |= ECF_RETURNS_TWICE;
-      edge->indirect_info->ecf_flags = ecf_flags;
-      edge->indirect_info->common_target_id = streamer_read_hwi (ib);
-      if (edge->indirect_info->common_target_id)
-        edge->indirect_info->common_target_probability = streamer_read_hwi (ib);
-    }
+  edge->indirect_call = bp_unpack_value (bp, 1);
+  edge->call_stmt_cannot_inline_p = bp_unpack_value (bp, 1);
+  edge->can_throw_external = bp_unpack_value (bp, 1);
+  bitpack_delete (bp);
 }
 
 
 /* Read a cgraph from IB using the info in FILE_DATA.  */
 
-static vec<symtab_node *> 
+static void
 input_cgraph_1 (struct lto_file_decl_data *file_data,
 		struct lto_input_block *ib)
 {
-  enum LTO_symtab_tags tag;
-  vec<symtab_node *> nodes = vNULL;
-  symtab_node *node;
+  enum LTO_cgraph_tags tag;
+  VEC(cgraph_node_ptr, heap) *nodes = NULL;
+  struct cgraph_node *node;
   unsigned i;
+  unsigned HOST_WIDE_INT len;
 
-  tag = streamer_read_enum (ib, LTO_symtab_tags, LTO_symtab_last_tag);
-  order_base = symtab->order;
+  tag = (enum LTO_cgraph_tags) lto_input_uleb128 (ib);
   while (tag)
     {
-      if (tag == LTO_symtab_edge)
-        input_edge (ib, nodes, false);
-      else if (tag == LTO_symtab_indirect_edge)
-        input_edge (ib, nodes, true);
-      else if (tag == LTO_symtab_variable)
-        {
-	  node = input_varpool_node (file_data, ib);
-          nodes.safe_push (node);
-	  lto_symtab_encoder_encode (file_data->symtab_node_encoder, node);
-        }
+      if (tag == LTO_cgraph_edge)
+        input_edge (ib, nodes);
       else
 	{
-	  node = input_node (file_data, ib, tag, nodes);
+	  node = input_node (file_data, ib, tag);
 	  if (node == NULL || node->decl == NULL_TREE)
 	    internal_error ("bytecode stream: found empty cgraph node");
-	  nodes.safe_push (node);
-	  lto_symtab_encoder_encode (file_data->symtab_node_encoder, node);
+	  VEC_safe_push (cgraph_node_ptr, heap, nodes, node);
+	  lto_cgraph_encoder_encode (file_data->cgraph_node_encoder, node);
 	}
 
-      tag = streamer_read_enum (ib, LTO_symtab_tags, LTO_symtab_last_tag);
+      tag = (enum LTO_cgraph_tags) lto_input_uleb128 (ib);
     }
 
-  lto_input_toplevel_asms (file_data, order_base);
-
-  /* AUX pointers should be all non-zero for function nodes read from the stream.  */
-  if (flag_checking)
+  /* Input toplevel asms.  */
+  len = lto_input_uleb128 (ib);
+  while (len)
     {
-      FOR_EACH_VEC_ELT (nodes, i, node)
-	gcc_assert (node->aux || !is_a <cgraph_node *> (node));
+      char *str = (char *)xmalloc (len + 1);
+      for (i = 0; i < len; ++i)
+	str[i] = lto_input_1_unsigned (ib);
+      cgraph_add_asm_node (build_string (len, str));
+      free (str);
+
+      len = lto_input_uleb128 (ib);
     }
-  FOR_EACH_VEC_ELT (nodes, i, node)
+
+  for (i = 0; VEC_iterate (cgraph_node_ptr, nodes, i, node); i++)
     {
-      int ref;
-      if (cgraph_node *cnode = dyn_cast <cgraph_node *> (node))
-	{
-	  ref = (int) (intptr_t) cnode->global.inlined_to;
+      int ref = (int) (intptr_t) node->global.inlined_to;
 
-	  /* We share declaration of builtins, so we may read same node twice.  */
-	  if (!node->aux)
-	    continue;
-	  node->aux = NULL;
-
-	  /* Fixup inlined_to from reference to pointer.  */
-	  if (ref != LCC_NOT_FOUND)
-	    dyn_cast<cgraph_node *> (node)->global.inlined_to
-	      = dyn_cast<cgraph_node *> (nodes[ref]);
-	  else
-	    cnode->global.inlined_to = NULL;
-	}
+      /* Fixup inlined_to from reference to pointer.  */
+      if (ref != LCC_NOT_FOUND)
+	node->global.inlined_to = VEC_index (cgraph_node_ptr, nodes, ref);
+      else
+	node->global.inlined_to = NULL;
 
       ref = (int) (intptr_t) node->same_comdat_group;
 
       /* Fixup same_comdat_group from reference to pointer.  */
       if (ref != LCC_NOT_FOUND)
-	node->same_comdat_group = nodes[ref];
+	node->same_comdat_group = VEC_index (cgraph_node_ptr, nodes, ref);
       else
 	node->same_comdat_group = NULL;
     }
-  FOR_EACH_VEC_ELT (nodes, i, node)
-    node->aux = is_a <cgraph_node *> (node) ? (void *)1 : NULL;
-  return nodes;
+
+  VEC_free (cgraph_node_ptr, heap, nodes);
 }
 
-/* Input ipa_refs.  */
+static struct gcov_ctr_summary lto_gcov_summary;
 
-static void
-input_refs (struct lto_input_block *ib,
-	    vec<symtab_node *> nodes)
-{
-  int count;
-  int idx;
-  while (true)
-    {
-      symtab_node *node;
-      count = streamer_read_uhwi (ib);
-      if (!count)
-	break;
-      idx = streamer_read_uhwi (ib);
-      node = nodes[idx];
-      while (count)
-	{
-	  input_ref (ib, node, nodes);
-	  count--;
-	}
-    }
-}
-	    
 /* Input profile_info from IB.  */
 static void
-input_profile_summary (struct lto_input_block *ib,
-		       struct lto_file_decl_data *file_data)
+input_profile_summary (struct lto_input_block *ib)
 {
-  unsigned int runs = streamer_read_uhwi (ib);
+  unsigned int runs = lto_input_uleb128 (ib);
   if (runs)
     {
-      file_data->profile_info.runs = runs;
-
-      /* IPA-profile computes hot bb threshold based on cumulated
-	 whole program profile.  We need to stream it down to ltrans.  */
-      if (flag_ltrans)
-	set_hot_bb_threshold (streamer_read_gcov_count (ib));
+      if (!profile_info)
+        {
+	  profile_info = &lto_gcov_summary;
+	  lto_gcov_summary.runs = runs;
+	  lto_gcov_summary.sum_all = lto_input_sleb128 (ib);
+	  lto_gcov_summary.run_max = lto_input_sleb128 (ib);
+	  lto_gcov_summary.sum_max = lto_input_sleb128 (ib);
+	}
+      /* We can support this by scaling all counts to nearest common multiple
+         of all different runs, but it is perhaps not worth the effort.  */
+      else if (profile_info->runs != runs
+	       || profile_info->sum_all != lto_input_sleb128 (ib)
+	       || profile_info->run_max != lto_input_sleb128 (ib)
+	       || profile_info->sum_max != lto_input_sleb128 (ib))
+	sorry ("Combining units with different profiles is not supported.");
+      /* We allow some units to have profile and other to not have one.  This will
+         just make unprofiled units to be size optimized that is sane.  */
     }
 
 }
 
-/* Rescale profile summaries to the same number of runs in the whole unit.  */
-
-static void
-merge_profile_summaries (struct lto_file_decl_data **file_data_vec)
-{
-  struct lto_file_decl_data *file_data;
-  unsigned int j;
-  gcov_unsigned_t max_runs = 0;
-  struct cgraph_node *node;
-  struct cgraph_edge *edge;
-
-  /* Find unit with maximal number of runs.  If we ever get serious about
-     roundoff errors, we might also consider computing smallest common
-     multiply.  */
-  for (j = 0; (file_data = file_data_vec[j]) != NULL; j++)
-    if (max_runs < file_data->profile_info.runs)
-      max_runs = file_data->profile_info.runs;
-
-  if (!max_runs)
-    return;
-
-  /* Simple overflow check.  We probably don't need to support that many train
-     runs. Such a large value probably imply data corruption anyway.  */
-  if (max_runs > INT_MAX / REG_BR_PROB_BASE)
-    {
-      sorry ("At most %i profile runs is supported. Perhaps corrupted profile?",
-	     INT_MAX / REG_BR_PROB_BASE);
-      return;
-    }
-
-  profile_info = XCNEW (gcov_summary);
-  profile_info->runs = max_runs;
-
-  /* If merging already happent at WPA time, we are done.  */
-  if (flag_ltrans)
-    return;
-
-  /* Now compute count_materialization_scale of each node.
-     During LTRANS we already have values of count_materialization_scale
-     computed, so just update them.  */
-  FOR_EACH_FUNCTION (node)
-    if (node->lto_file_data
-	&& node->lto_file_data->profile_info.runs)
-      {
-	int scale;
-
-	scale = RDIV (node->count_materialization_scale * max_runs,
-                      node->lto_file_data->profile_info.runs);
-	node->count_materialization_scale = scale;
-	if (scale < 0)
-	  fatal_error (input_location, "Profile information in %s corrupted",
-		       file_data->file_name);
-
-	if (scale == REG_BR_PROB_BASE)
-	  continue;
-	for (edge = node->callees; edge; edge = edge->next_callee)
-	  if (edge->count.ipa ().nonzero_p ())
-	    edge->count = edge->count.apply_scale (scale, REG_BR_PROB_BASE);
-	for (edge = node->indirect_calls; edge; edge = edge->next_callee)
-	  if (edge->count.ipa ().nonzero_p ())
-	    edge->count = edge->count.apply_scale (scale, REG_BR_PROB_BASE);
-	if (node->count.ipa ().nonzero_p ())
-	  node->count = node->count.apply_scale (scale, REG_BR_PROB_BASE);
-      }
-}
-
-/* Input and merge the symtab from each of the .o files passed to
+/* Input and merge the cgraph from each of the .o files passed to
    lto1.  */
 
 void
-input_symtab (void)
+input_cgraph (void)
 {
   struct lto_file_decl_data **file_data_vec = lto_get_file_decl_data ();
   struct lto_file_decl_data *file_data;
@@ -1694,325 +817,30 @@ input_symtab (void)
       const char *data;
       size_t len;
       struct lto_input_block *ib;
-      vec<symtab_node *> nodes;
 
-      ib = lto_create_simple_input_block (file_data, LTO_section_symtab_nodes,
+      ib = lto_create_simple_input_block (file_data, LTO_section_cgraph,
 					  &data, &len);
-      if (!ib) 
-	fatal_error (input_location,
-		     "cannot find LTO cgraph in %s", file_data->file_name);
-      input_profile_summary (ib, file_data);
-      file_data->symtab_node_encoder = lto_symtab_encoder_new (true);
-      nodes = input_cgraph_1 (file_data, ib);
-      lto_destroy_simple_input_block (file_data, LTO_section_symtab_nodes,
+      input_profile_summary (ib);
+      file_data->cgraph_node_encoder = lto_cgraph_encoder_new ();
+      input_cgraph_1 (file_data, ib);
+      lto_destroy_simple_input_block (file_data, LTO_section_cgraph,
 				      ib, data, len);
 
-      ib = lto_create_simple_input_block (file_data, LTO_section_refs,
-					  &data, &len);
-      if (!ib)
-	fatal_error (input_location, "cannot find LTO section refs in %s",
-		     file_data->file_name);
-      input_refs (ib, nodes);
-      lto_destroy_simple_input_block (file_data, LTO_section_refs,
-				      ib, data, len);
-      if (flag_ltrans)
-	input_cgraph_opt_summary (nodes);
-      nodes.release ();
+      /* Assume that every file read needs to be processed by LTRANS.  */
+      if (flag_wpa)
+	lto_mark_file_for_ltrans (file_data);
     }
-
-  merge_profile_summaries (file_data_vec);
 
   /* Clear out the aux field that was used to store enough state to
      tell which nodes should be overwritten.  */
-  FOR_EACH_FUNCTION (node)
+  for (node = cgraph_nodes; node; node = node->next)
     {
       /* Some nodes may have been created by cgraph_node.  This
 	 happens when the callgraph contains nested functions.  If the
 	 node for the parent function was never emitted to the gimple
 	 file, cgraph_node will create a node for it when setting the
 	 context of the nested function.  */
-      if (node->lto_file_data)
+      if (node->local.lto_file_data)
 	node->aux = NULL;
-    }
-}
-
-/* Input function/variable tables that will allow libgomp to look up offload
-   target code, and store them into OFFLOAD_FUNCS and OFFLOAD_VARS.  */
-
-void
-input_offload_tables (bool do_force_output)
-{
-  struct lto_file_decl_data **file_data_vec = lto_get_file_decl_data ();
-  struct lto_file_decl_data *file_data;
-  unsigned int j = 0;
-
-  while ((file_data = file_data_vec[j++]))
-    {
-      const char *data;
-      size_t len;
-      struct lto_input_block *ib
-	= lto_create_simple_input_block (file_data, LTO_section_offload_table,
-					 &data, &len);
-      if (!ib)
-	continue;
-
-      enum LTO_symtab_tags tag
-	= streamer_read_enum (ib, LTO_symtab_tags, LTO_symtab_last_tag);
-      while (tag)
-	{
-	  if (tag == LTO_symtab_unavail_node)
-	    {
-	      int decl_index = streamer_read_uhwi (ib);
-	      tree fn_decl
-		= lto_file_decl_data_get_fn_decl (file_data, decl_index);
-	      vec_safe_push (offload_funcs, fn_decl);
-
-	      /* Prevent IPA from removing fn_decl as unreachable, since there
-		 may be no refs from the parent function to child_fn in offload
-		 LTO mode.  */
-	      if (do_force_output)
-		cgraph_node::get (fn_decl)->mark_force_output ();
-	    }
-	  else if (tag == LTO_symtab_variable)
-	    {
-	      int decl_index = streamer_read_uhwi (ib);
-	      tree var_decl
-		= lto_file_decl_data_get_var_decl (file_data, decl_index);
-	      vec_safe_push (offload_vars, var_decl);
-
-	      /* Prevent IPA from removing var_decl as unused, since there
-		 may be no refs to var_decl in offload LTO mode.  */
-	      if (do_force_output)
-		varpool_node::get (var_decl)->force_output = 1;
-	    }
-	  else
-	    fatal_error (input_location,
-			 "invalid offload table in %s", file_data->file_name);
-
-	  tag = streamer_read_enum (ib, LTO_symtab_tags, LTO_symtab_last_tag);
-	}
-
-      lto_destroy_simple_input_block (file_data, LTO_section_offload_table,
-				      ib, data, len);
-    }
-}
-
-/* True when we need optimization summary for NODE.  */
-
-static int
-output_cgraph_opt_summary_p (struct cgraph_node *node)
-{
-  return ((node->clone_of || node->former_clone_of)
-	  && (node->clone.tree_map
-	      || node->clone.args_to_skip
-	      || node->clone.combined_args_to_skip));
-}
-
-/* Output optimization summary for EDGE to OB.  */
-static void
-output_edge_opt_summary (struct output_block *ob ATTRIBUTE_UNUSED,
-			 struct cgraph_edge *edge ATTRIBUTE_UNUSED)
-{
-}
-
-/* Output optimization summary for NODE to OB.  */
-
-static void
-output_node_opt_summary (struct output_block *ob,
-			 struct cgraph_node *node,
-			 lto_symtab_encoder_t encoder)
-{
-  unsigned int index;
-  bitmap_iterator bi;
-  struct ipa_replace_map *map;
-  struct bitpack_d bp;
-  int i;
-  struct cgraph_edge *e;
-
-  if (node->clone.args_to_skip)
-    {
-      streamer_write_uhwi (ob, bitmap_count_bits (node->clone.args_to_skip));
-      EXECUTE_IF_SET_IN_BITMAP (node->clone.args_to_skip, 0, index, bi)
-	streamer_write_uhwi (ob, index);
-    }
-  else
-    streamer_write_uhwi (ob, 0);
-  if (node->clone.combined_args_to_skip)
-    {
-      streamer_write_uhwi (ob, bitmap_count_bits (node->clone.combined_args_to_skip));
-      EXECUTE_IF_SET_IN_BITMAP (node->clone.combined_args_to_skip, 0, index, bi)
-	streamer_write_uhwi (ob, index);
-    }
-  else
-    streamer_write_uhwi (ob, 0);
-  streamer_write_uhwi (ob, vec_safe_length (node->clone.tree_map));
-  FOR_EACH_VEC_SAFE_ELT (node->clone.tree_map, i, map)
-    {
-      /* At the moment we assume all old trees to be PARM_DECLs, because we have no
-         mechanism to store function local declarations into summaries.  */
-      gcc_assert (!map->old_tree);
-      streamer_write_uhwi (ob, map->parm_num);
-      gcc_assert (EXPR_LOCATION (map->new_tree) == UNKNOWN_LOCATION);
-      stream_write_tree (ob, map->new_tree, true);
-      bp = bitpack_create (ob->main_stream);
-      bp_pack_value (&bp, map->replace_p, 1);
-      bp_pack_value (&bp, map->ref_p, 1);
-      streamer_write_bitpack (&bp);
-    }
-
-  if (lto_symtab_encoder_in_partition_p (encoder, node))
-    {
-      for (e = node->callees; e; e = e->next_callee)
-	output_edge_opt_summary (ob, e);
-      for (e = node->indirect_calls; e; e = e->next_callee)
-	output_edge_opt_summary (ob, e);
-    }
-}
-
-/* Output optimization summaries stored in callgraph.
-   At the moment it is the clone info structure.  */
-
-static void
-output_cgraph_opt_summary (void)
-{
-  int i, n_nodes;
-  lto_symtab_encoder_t encoder;
-  struct output_block *ob = create_output_block (LTO_section_cgraph_opt_sum);
-  unsigned count = 0;
-
-  ob->symbol = NULL;
-  encoder = ob->decl_state->symtab_node_encoder;
-  n_nodes = lto_symtab_encoder_size (encoder);
-  for (i = 0; i < n_nodes; i++)
-    {
-      symtab_node *node = lto_symtab_encoder_deref (encoder, i);
-      cgraph_node *cnode = dyn_cast <cgraph_node *> (node);
-      if (cnode && output_cgraph_opt_summary_p (cnode))
-	count++;
-    }
-  streamer_write_uhwi (ob, count);
-  for (i = 0; i < n_nodes; i++)
-    {
-      symtab_node *node = lto_symtab_encoder_deref (encoder, i);
-      cgraph_node *cnode = dyn_cast <cgraph_node *> (node);
-      if (cnode && output_cgraph_opt_summary_p (cnode))
-	{
-	  streamer_write_uhwi (ob, i);
-	  output_node_opt_summary (ob, cnode, encoder);
-	}
-    }
-  produce_asm (ob, NULL);
-  destroy_output_block (ob);
-}
-
-/* Input optimisation summary of EDGE.  */
-
-static void
-input_edge_opt_summary (struct cgraph_edge *edge ATTRIBUTE_UNUSED,
-			struct lto_input_block *ib_main ATTRIBUTE_UNUSED)
-{
-}
-
-/* Input optimisation summary of NODE.  */
-
-static void
-input_node_opt_summary (struct cgraph_node *node,
-			struct lto_input_block *ib_main,
-			struct data_in *data_in)
-{
-  int i;
-  int count;
-  int bit;
-  struct bitpack_d bp;
-  struct cgraph_edge *e;
-
-  count = streamer_read_uhwi (ib_main);
-  if (count)
-    node->clone.args_to_skip = BITMAP_GGC_ALLOC ();
-  for (i = 0; i < count; i++)
-    {
-      bit = streamer_read_uhwi (ib_main);
-      bitmap_set_bit (node->clone.args_to_skip, bit);
-    }
-  count = streamer_read_uhwi (ib_main);
-  if (count)
-    node->clone.combined_args_to_skip = BITMAP_GGC_ALLOC ();
-  for (i = 0; i < count; i++)
-    {
-      bit = streamer_read_uhwi (ib_main);
-      bitmap_set_bit (node->clone.combined_args_to_skip, bit);
-    }
-  count = streamer_read_uhwi (ib_main);
-  for (i = 0; i < count; i++)
-    {
-      struct ipa_replace_map *map = ggc_alloc<ipa_replace_map> ();
-
-      vec_safe_push (node->clone.tree_map, map);
-      map->parm_num = streamer_read_uhwi (ib_main);
-      map->old_tree = NULL;
-      map->new_tree = stream_read_tree (ib_main, data_in);
-      bp = streamer_read_bitpack (ib_main);
-      map->replace_p = bp_unpack_value (&bp, 1);
-      map->ref_p = bp_unpack_value (&bp, 1);
-    }
-  for (e = node->callees; e; e = e->next_callee)
-    input_edge_opt_summary (e, ib_main);
-  for (e = node->indirect_calls; e; e = e->next_callee)
-    input_edge_opt_summary (e, ib_main);
-}
-
-/* Read section in file FILE_DATA of length LEN with data DATA.  */
-
-static void
-input_cgraph_opt_section (struct lto_file_decl_data *file_data,
-			  const char *data, size_t len,
-			  vec<symtab_node *> nodes)
-{
-  const struct lto_function_header *header =
-    (const struct lto_function_header *) data;
-  const int cfg_offset = sizeof (struct lto_function_header);
-  const int main_offset = cfg_offset + header->cfg_size;
-  const int string_offset = main_offset + header->main_size;
-  struct data_in *data_in;
-  unsigned int i;
-  unsigned int count;
-
-  lto_input_block ib_main ((const char *) data + main_offset,
-			   header->main_size, file_data->mode_table);
-
-  data_in =
-    lto_data_in_create (file_data, (const char *) data + string_offset,
-			header->string_size, vNULL);
-  count = streamer_read_uhwi (&ib_main);
-
-  for (i = 0; i < count; i++)
-    {
-      int ref = streamer_read_uhwi (&ib_main);
-      input_node_opt_summary (dyn_cast<cgraph_node *> (nodes[ref]),
-			      &ib_main, data_in);
-    }
-  lto_free_section_data (file_data, LTO_section_cgraph_opt_sum, NULL, data,
-			 len);
-  lto_data_in_delete (data_in);
-}
-
-/* Input optimization summary of cgraph.  */
-
-static void
-input_cgraph_opt_summary (vec<symtab_node *> nodes)
-{
-  struct lto_file_decl_data **file_data_vec = lto_get_file_decl_data ();
-  struct lto_file_decl_data *file_data;
-  unsigned int j = 0;
-
-  while ((file_data = file_data_vec[j++]))
-    {
-      size_t len;
-      const char *data =
-	lto_get_section_data (file_data, LTO_section_cgraph_opt_sum, NULL,
-			      &len);
-
-      if (data)
-	input_cgraph_opt_section (file_data, data, len, nodes);
     }
 }

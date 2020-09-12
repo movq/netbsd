@@ -1,5 +1,5 @@
 /* Test plugin for the GNU linker.
-   Copyright (C) 2010-2020 Free Software Foundation, Inc.
+   Copyright 2010 Free Software Foundation, Inc.
 
    This file is part of the GNU Binutils.
 
@@ -23,8 +23,6 @@
 #include "plugin-api.h"
 /* For ARRAY_SIZE macro only - we don't link the library itself.  */
 #include "libiberty.h"
-
-#include <ctype.h> /* For isdigit.  */
 
 extern enum ld_plugin_status onload (struct ld_plugin_tv *tv);
 static enum ld_plugin_status onclaim_file (const struct ld_plugin_input_file *file,
@@ -85,11 +83,9 @@ static const tag_name_t tag_names[] =
   ADDENTRY(LDPT_REGISTER_CLEANUP_HOOK),
   ADDENTRY(LDPT_ADD_SYMBOLS),
   ADDENTRY(LDPT_GET_SYMBOLS),
-  ADDENTRY(LDPT_GET_SYMBOLS_V2),
   ADDENTRY(LDPT_ADD_INPUT_FILE),
   ADDENTRY(LDPT_MESSAGE),
   ADDENTRY(LDPT_GET_INPUT_FILE),
-  ADDENTRY(LDPT_GET_VIEW),
   ADDENTRY(LDPT_RELEASE_INPUT_FILE),
   ADDENTRY(LDPT_ADD_INPUT_LIBRARY),
   ADDENTRY(LDPT_OUTPUT_NAME),
@@ -103,11 +99,9 @@ static ld_plugin_register_all_symbols_read tv_register_all_symbols_read = 0;
 static ld_plugin_register_cleanup tv_register_cleanup = 0;
 static ld_plugin_add_symbols tv_add_symbols = 0;
 static ld_plugin_get_symbols tv_get_symbols = 0;
-static ld_plugin_get_symbols tv_get_symbols_v2 = 0;
 static ld_plugin_add_input_file tv_add_input_file = 0;
 static ld_plugin_message tv_message = 0;
 static ld_plugin_get_input_file tv_get_input_file = 0;
-static ld_plugin_get_view tv_get_view = 0;
 static ld_plugin_release_input_file tv_release_input_file = 0;
 static ld_plugin_add_input_library tv_add_input_library = 0;
 static ld_plugin_set_extra_library_path tv_set_extra_library_path = 0;
@@ -141,10 +135,6 @@ static add_file_t *addfiles_list = NULL;
 /* We keep a tail pointer for easy linking on the end.  */
 static add_file_t **addfiles_tail_chain_ptr = &addfiles_list;
 
-/* Number of bytes read in claim file before deciding if the file can be
-   claimed.  */
-static int bytes_to_read_before_claim = 0;
-
 /* Add a new claimfile on the end of the chain.  */
 static enum ld_plugin_status
 record_claim_file (const char *file)
@@ -165,25 +155,6 @@ record_claim_file (const char *file)
   return LDPS_OK;
 }
 
-/* How many bytes to read before claiming (or not) an input file.  */
-static enum ld_plugin_status
-record_read_length (const char *length)
-{
-  const char *tmp;
-
-  tmp = length;
-  while (*tmp != '\0' && isdigit (*tmp))
-    ++tmp;
-  if (*tmp != '\0' || *length == '\0')
-    {
-      fprintf (stderr, "APB: Bad length string: %s\n", tmp);
-      return LDPS_ERR;
-    }
-
-  bytes_to_read_before_claim = atoi (length);
-  return LDPS_OK;
-}
-
 /* Add a new addfile on the end of the chain.  */
 static enum ld_plugin_status
 record_add_file (const char *file, addfile_enum_t type)
@@ -195,7 +166,7 @@ record_add_file (const char *file, addfile_enum_t type)
     return LDPS_ERR;
   newfile->next = NULL;
   newfile->name = file;
-  newfile->type = type;
+  newfile->type = type;;
   /* Chain it on the end of the list.  */
   *addfiles_tail_chain_ptr = newfile;
   addfiles_tail_chain_ptr = &newfile->next;
@@ -350,8 +321,6 @@ parse_option (const char *opt)
     return set_register_hook (opt + 10, FALSE);
   else if (!strncmp ("claim:", opt, 6))
     return record_claim_file (opt + 6);
-  else if (!strncmp ("read:", opt, 5))
-    return record_read_length (opt + 5);
   else if (!strncmp ("sym:", opt, 4))
     return record_claimed_file_symbol (opt + 4);
   else if (!strncmp ("add:", opt, 4))
@@ -392,11 +361,9 @@ dump_tv_tag (size_t n, struct ld_plugin_tv *tv)
       case LDPT_REGISTER_CLEANUP_HOOK:
       case LDPT_ADD_SYMBOLS:
       case LDPT_GET_SYMBOLS:
-      case LDPT_GET_SYMBOLS_V2:
       case LDPT_ADD_INPUT_FILE:
       case LDPT_MESSAGE:
       case LDPT_GET_INPUT_FILE:
-      case LDPT_GET_VIEW:
       case LDPT_RELEASE_INPUT_FILE:
       case LDPT_ADD_INPUT_LIBRARY:
       case LDPT_SET_EXTRA_LIBRARY_PATH:
@@ -451,9 +418,6 @@ parse_tv_tag (struct ld_plugin_tv *tv)
       case LDPT_GET_SYMBOLS:
 	SETVAR(tv_get_symbols);
 	break;
-      case LDPT_GET_SYMBOLS_V2:
-	tv_get_symbols_v2 = tv->tv_u.tv_get_symbols;
-	break;
       case LDPT_ADD_INPUT_FILE:
 	SETVAR(tv_add_input_file);
 	break;
@@ -462,9 +426,6 @@ parse_tv_tag (struct ld_plugin_tv *tv)
 	break;
       case LDPT_GET_INPUT_FILE:
 	SETVAR(tv_get_input_file);
-	break;
-      case LDPT_GET_VIEW:
-	SETVAR(tv_get_view);
 	break;
       case LDPT_RELEASE_INPUT_FILE:
 	SETVAR(tv_release_input_file);
@@ -554,20 +515,6 @@ onload (struct ld_plugin_tv *tv)
 static enum ld_plugin_status
 onclaim_file (const struct ld_plugin_input_file *file, int *claimed)
 {
-  /* Possible read of some bytes out of the input file into a buffer.  This
-     simulates a plugin that reads some file content in order to decide if
-     the file should be claimed or not.  */
-  if (bytes_to_read_before_claim > 0)
-    {
-      char *buffer = malloc (bytes_to_read_before_claim);
-
-      if (buffer == NULL)
-        return LDPS_ERR;
-      if (read (file->fd, buffer, bytes_to_read_before_claim) < 0)
-        return LDPS_ERR;
-      free (buffer);
-    }
-
   /* Let's see if we want to claim this file.  */
   claim_file_t *claimfile = claimfiles_list;
   while (claimfile)
@@ -615,7 +562,6 @@ onall_symbols_read (void)
       "LDPR_RESOLVED_IR",
       "LDPR_RESOLVED_EXEC",
       "LDPR_RESOLVED_DYN",
-      "LDPR_PREVAILING_DEF_IRONLY_EXP",
     };
   claim_file_t *claimfile = dumpresolutions ? claimfiles_list : NULL;
   add_file_t *addfile = addfiles_list;
@@ -624,12 +570,12 @@ onall_symbols_read (void)
     {
       enum ld_plugin_status rv;
       int n;
-      if (claimfile->n_syms_used && !tv_get_symbols_v2)
+      if (claimfile->n_syms_used && !tv_get_symbols)
 	return LDPS_ERR;
       else if (!claimfile->n_syms_used)
         continue;
-      rv = tv_get_symbols_v2 (claimfile->file.handle, claimfile->n_syms_used,
-			      claimfile->symbols);
+      rv = tv_get_symbols (claimfile->file.handle, claimfile->n_syms_used,
+				claimfile->symbols);
       if (rv != LDPS_OK)
 	return rv;
       for (n = 0; n < claimfile->n_syms_used; n++)

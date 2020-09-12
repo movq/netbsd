@@ -1,6 +1,6 @@
 /* Global common subexpression elimination/Partial redundancy elimination
    and global constant/copy propagation for GNU compiler.
-   Copyright (C) 1997-2019 Free Software Foundation, Inc.
+   Copyright (C) 1997-2013 Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -32,14 +32,11 @@ struct target_gcse {
   bool x_can_copy_init_p;
 };
 
-extern struct target_gcse default_target_gcse;
+extern GTY(()) struct target_gcse default_target_gcse;
 #if SWITCHABLE_TARGET
 extern struct target_gcse *this_target_gcse;
 #else
 #define this_target_gcse (&default_target_gcse)
 #endif
-
-void gcse_c_finalize (void);
-extern bool gcse_or_cprop_is_too_expensive (const char *);
 
 #endif

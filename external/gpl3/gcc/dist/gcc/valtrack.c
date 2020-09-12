@@ -1,6 +1,6 @@
 /* Infrastructure for tracking user variable locations and values
    throughout compilation.
-   Copyright (C) 2010-2019 Free Software Foundation, Inc.
+   Copyright (C) 2010-2013 Free Software Foundation, Inc.
    Contributed by Alexandre Oliva <aoliva@redhat.com>.
 
 This file is part of GCC.
@@ -22,21 +22,19 @@ along with GCC; see the file COPYING3.  If not see
 #include "config.h"
 #include "system.h"
 #include "coretypes.h"
-#include "backend.h"
+#include "tm.h"
 #include "rtl.h"
-#include "df.h"
 #include "valtrack.h"
+#include "function.h"
 #include "regs.h"
-#include "memmodel.h"
 #include "emit-rtl.h"
-#include "rtl-iter.h"
 
 /* gen_lowpart_no_emit hook implementation for DEBUG_INSNs.  In DEBUG_INSNs,
    all lowpart SUBREGs are valid, despite what the machine requires for
    instructions.  */
 
 static rtx
-gen_lowpart_for_debug (machine_mode mode, rtx x)
+gen_lowpart_for_debug (enum machine_mode mode, rtx x)
 {
   rtx result = gen_lowpart_if_possible (mode, x);
   if (result)
@@ -53,10 +51,10 @@ gen_lowpart_for_debug (machine_mode mode, rtx x)
    the same addresses without modifying the corresponding registers.  */
 
 static rtx
-cleanup_auto_inc_dec (rtx src, machine_mode mem_mode ATTRIBUTE_UNUSED)
+cleanup_auto_inc_dec (rtx src, enum machine_mode mem_mode ATTRIBUTE_UNUSED)
 {
   rtx x = src;
-
+#ifdef AUTO_INC_DEC
   const RTX_CODE code = GET_CODE (x);
   int i;
   const char *fmt;
@@ -92,15 +90,12 @@ cleanup_auto_inc_dec (rtx src, machine_mode mem_mode ATTRIBUTE_UNUSED)
 
     case PRE_INC:
     case PRE_DEC:
-      {
-	gcc_assert (mem_mode != VOIDmode && mem_mode != BLKmode);
-	poly_int64 offset = GET_MODE_SIZE (mem_mode);
-	if (code == PRE_DEC)
-	  offset = -offset;
-	return gen_rtx_PLUS (GET_MODE (x),
-			     cleanup_auto_inc_dec (XEXP (x, 0), mem_mode),
-			     gen_int_mode (offset, GET_MODE (x)));
-      }
+      gcc_assert (mem_mode != VOIDmode && mem_mode != BLKmode);
+      return gen_rtx_PLUS (GET_MODE (x),
+			   cleanup_auto_inc_dec (XEXP (x, 0), mem_mode),
+			   GEN_INT (code == PRE_INC
+				    ? GET_MODE_SIZE (mem_mode)
+				    : -GET_MODE_SIZE (mem_mode)));
 
     case POST_INC:
     case POST_DEC:
@@ -120,6 +115,10 @@ cleanup_auto_inc_dec (rtx src, machine_mode mem_mode ATTRIBUTE_UNUSED)
      us to explicitly document why we are *not* copying a flag.  */
   x = shallow_copy_rtx (x);
 
+  /* We do not copy the USED flag, which is used as a mark bit during
+     walks over the RTL.  */
+  RTX_FLAG (x, used) = 0;
+
   /* We do not copy FRAME_RELATED for INSNs.  */
   if (INSN_P (x))
     RTX_FLAG (x, frame_related) = 0;
@@ -137,6 +136,10 @@ cleanup_auto_inc_dec (rtx src, machine_mode mem_mode ATTRIBUTE_UNUSED)
 	    = cleanup_auto_inc_dec (XVECEXP (src, i, j), mem_mode);
       }
 
+#else /* !AUTO_INC_DEC */
+  x = copy_rtx (x);
+#endif /* !AUTO_INC_DEC */
+
   return x;
 }
 
@@ -146,7 +149,6 @@ struct rtx_subst_pair
 {
   rtx to;
   bool adjusted;
-  rtx_insn *insn;
 };
 
 /* DATA points to an rtx_subst_pair.  Return the value that should be
@@ -164,26 +166,6 @@ propagate_for_debug_subst (rtx from, const_rtx old_rtx, void *data)
       pair->adjusted = true;
       pair->to = cleanup_auto_inc_dec (pair->to, VOIDmode);
       pair->to = make_compound_operation (pair->to, SET);
-      /* Avoid propagation from growing DEBUG_INSN expressions too much.  */
-      int cnt = 0;
-      subrtx_iterator::array_type array;
-      FOR_EACH_SUBRTX (iter, array, pair->to, ALL)
-	if (REG_P (*iter) && ++cnt > 1)
-	  {
-	    rtx dval = make_debug_expr_from_rtl (old_rtx);
-	    rtx to = pair->to;
-	    if (volatile_insn_p (to))
-	      to = gen_rtx_UNKNOWN_VAR_LOC ();
-	    /* Emit a debug bind insn.  */
-	    rtx bind
-	      = gen_rtx_VAR_LOCATION (GET_MODE (old_rtx),
-				      DEBUG_EXPR_TREE_DECL (dval), to,
-				      VAR_INIT_STATUS_INITIALIZED);
-	    rtx_insn *bind_insn = emit_debug_insn_before (bind, pair->insn);
-	    df_insn_rescan (bind_insn);
-	    pair->to = dval;
-	    break;
-	  }
       return pair->to;
     }
   return copy_rtx (pair->to);
@@ -194,17 +176,15 @@ propagate_for_debug_subst (rtx from, const_rtx old_rtx, void *data)
    of THIS_BASIC_BLOCK.  */
 
 void
-propagate_for_debug (rtx_insn *insn, rtx_insn *last, rtx dest, rtx src,
+propagate_for_debug (rtx insn, rtx last, rtx dest, rtx src,
 		     basic_block this_basic_block)
 {
-  rtx_insn *next, *end = NEXT_INSN (BB_END (this_basic_block));
-  rtx loc;
-  rtx (*saved_rtl_hook_no_emit) (machine_mode, rtx);
+  rtx next, loc, end = NEXT_INSN (BB_END (this_basic_block));
+  rtx (*saved_rtl_hook_no_emit) (enum machine_mode, rtx);
 
   struct rtx_subst_pair p;
   p.to = src;
   p.adjusted = false;
-  p.insn = NEXT_INSN (insn);
 
   next = NEXT_INSN (insn);
   last = NEXT_INSN (last);
@@ -214,14 +194,12 @@ propagate_for_debug (rtx_insn *insn, rtx_insn *last, rtx dest, rtx src,
     {
       insn = next;
       next = NEXT_INSN (insn);
-      if (DEBUG_BIND_INSN_P (insn))
+      if (DEBUG_INSN_P (insn))
 	{
 	  loc = simplify_replace_fn_rtx (INSN_VAR_LOCATION_LOC (insn),
 					 dest, propagate_for_debug_subst, &p);
 	  if (loc == INSN_VAR_LOCATION_LOC (insn))
 	    continue;
-	  if (volatile_insn_p (loc))
-	    loc = gen_rtx_UNKNOWN_VAR_LOC ();
 	  INSN_VAR_LOCATION_LOC (insn) = loc;
 	  df_insn_rescan (insn);
 	}
@@ -235,7 +213,6 @@ void
 dead_debug_global_init (struct dead_debug_global *debug, bitmap used)
 {
   debug->used = used;
-  debug->htab = NULL;
   if (used)
     bitmap_clear (used);
 }
@@ -272,7 +249,7 @@ dead_debug_global_find (struct dead_debug_global *global, rtx reg)
   dead_debug_global_entry temp_entry;
   temp_entry.reg = reg;
 
-  dead_debug_global_entry *entry = global->htab->find (&temp_entry);
+  dead_debug_global_entry *entry = global->htab.find (&temp_entry);
   gcc_checking_assert (entry && entry->reg == temp_entry.reg);
 
   return entry;
@@ -287,11 +264,10 @@ dead_debug_global_insert (struct dead_debug_global *global, rtx reg, rtx dtemp)
   temp_entry.reg = reg;
   temp_entry.dtemp = dtemp;
 
-  if (!global->htab)
-    global->htab = new hash_table<dead_debug_hash_descr> (31);
+  if (!global->htab.is_created ())
+    global->htab.create (31);
 
-  dead_debug_global_entry **slot = global->htab->find_slot (&temp_entry,
-							    INSERT);
+  dead_debug_global_entry **slot = global->htab.find_slot (&temp_entry, INSERT);
   gcc_checking_assert (!*slot);
   *slot = XNEW (dead_debug_global_entry);
   **slot = temp_entry;
@@ -299,7 +275,7 @@ dead_debug_global_insert (struct dead_debug_global *global, rtx reg, rtx dtemp)
 }
 
 /* If UREGNO, referenced by USE, is a pseudo marked as used in GLOBAL,
-   replace it with a USE of the debug temp recorded for it, and
+   replace it with with a USE of the debug temp recorded for it, and
    return TRUE.  Otherwise, just return FALSE.
 
    If PTO_RESCAN is given, instead of rescanning modified INSNs right
@@ -364,7 +340,7 @@ dead_debug_reset_uses (struct dead_debug_local *debug,
   while (head)
     {
       struct dead_debug_use *next = head->next;
-      rtx_insn *insn;
+      rtx insn;
 
       insn = DF_REF_INSN (head->use);
       if (!next || DF_REF_INSN (next->use) != insn)
@@ -452,7 +428,7 @@ dead_debug_promote_uses (struct dead_debug_local *debug)
 						 REGNO (reg),
 						 &debug->to_rescan))
 	      {
-		rtx_insn *insn = DF_REF_INSN (ref);
+		rtx insn = DF_REF_INSN (ref);
 		INSN_VAR_LOCATION_LOC (insn) = gen_rtx_UNKNOWN_VAR_LOC ();
 		bitmap_set_bit (debug->to_rescan, INSN_UID (insn));
 	      }
@@ -468,7 +444,7 @@ dead_debug_promote_uses (struct dead_debug_local *debug)
 					 DEBUG_EXPR_TREE_DECL (entry->dtemp),
 					 gen_rtx_UNKNOWN_VAR_LOC (),
 					 VAR_INIT_STATUS_INITIALIZED);
-	    rtx_insn *insn = emit_debug_insn_before (bind, DF_REF_INSN (ref));
+	    rtx insn = emit_debug_insn_before (bind, DF_REF_INSN (ref));
 	    bitmap_set_bit (debug->to_rescan, INSN_UID (insn));
 	  }
 
@@ -516,8 +492,8 @@ dead_debug_global_finish (struct dead_debug_global *global, bitmap used)
   if (global->used != used)
     BITMAP_FREE (global->used);
 
-  delete global->htab;
-  global->htab = NULL;
+  if (global->htab.is_created ())
+    global->htab.dispose ();
 }
 
 /* Add USE to DEBUG, or substitute it right away if it's a pseudo in
@@ -546,22 +522,6 @@ dead_debug_add (struct dead_debug_local *debug, df_ref use, unsigned int uregno)
   bitmap_set_bit (debug->used, uregno);
 }
 
-/* Like lowpart_subreg, but if a subreg is not valid for machine, force
-   it anyway - for use in debug insns.  */
-
-static rtx
-debug_lowpart_subreg (machine_mode outer_mode, rtx expr,
-		      machine_mode inner_mode)
-{
-  if (inner_mode == VOIDmode)
-    inner_mode = GET_MODE (expr);
-  poly_int64 offset = subreg_lowpart_offset (outer_mode, inner_mode);
-  rtx ret = simplify_gen_subreg (outer_mode, expr, inner_mode, offset);
-  if (ret)
-    return ret;
-  return gen_rtx_raw_SUBREG (outer_mode, expr, offset);
-}
-
 /* If UREGNO is referenced by any entry in DEBUG, emit a debug insn
    before or after INSN (depending on WHERE), that binds a (possibly
    global) debug temp to the widest-mode use of UREGNO, if WHERE is
@@ -572,7 +532,7 @@ debug_lowpart_subreg (machine_mode outer_mode, rtx expr,
 
 int
 dead_debug_insert_temp (struct dead_debug_local *debug, unsigned int uregno,
-			rtx_insn *insn, enum debug_temp_where where)
+			rtx insn, enum debug_temp_where where)
 {
   struct dead_debug_use **tailp = &debug->head;
   struct dead_debug_use *cur;
@@ -611,13 +571,10 @@ dead_debug_insert_temp (struct dead_debug_local *debug, unsigned int uregno,
 	  usesp = &cur->next;
 	  *tailp = cur->next;
 	  cur->next = NULL;
-	  /* "may" rather than "must" because we want (for example)
-	     N V4SFs to win over plain V4SF even though N might be 1.  */
-	  rtx candidate = *DF_REF_REAL_LOC (cur->use);
 	  if (!reg
-	      || maybe_lt (GET_MODE_BITSIZE (GET_MODE (reg)),
-			   GET_MODE_BITSIZE (GET_MODE (candidate))))
-	    reg = candidate;
+	      || (GET_MODE_BITSIZE (GET_MODE (reg))
+		  < GET_MODE_BITSIZE (GET_MODE (*DF_REF_REAL_LOC (cur->use)))))
+	    reg = *DF_REF_REAL_LOC (cur->use);
 	}
       else
 	tailp = &(*tailp)->next;
@@ -657,13 +614,17 @@ dead_debug_insert_temp (struct dead_debug_local *debug, unsigned int uregno,
 	{
 	  dest = SET_DEST (set);
 	  src = SET_SRC (set);
-	  /* Reset uses if the REG-setting insn is a CALL.  Asm in
-	     DEBUG_INSN is never useful, we can't emit debug info for
-	     that.  And for volatile_insn_p, it is actually harmful -
-	     DEBUG_INSNs shouldn't have any side-effects.  */
-	  if (GET_CODE (src) == CALL || GET_CODE (src) == ASM_OPERANDS
-	      || volatile_insn_p (src))
-	    set = NULL_RTX;
+	  /* Lose if the REG-setting insn is a CALL.  */
+	  if (GET_CODE (src) == CALL)
+	    {
+	      while (uses)
+		{
+		  cur = uses->next;
+		  XDELETE (uses);
+		  uses = cur;
+		}
+	      return 0;
+	    }
 	}
 
       /* ??? Should we try to extract it from a PARALLEL?  */
@@ -682,14 +643,16 @@ dead_debug_insert_temp (struct dead_debug_local *debug, unsigned int uregno,
 	     the debug temp to.  ??? We could bind the debug_expr to a
 	     CONCAT or PARALLEL with the split multi-registers, and
 	     replace them as we found the corresponding sets.  */
-	  else if (REG_NREGS (reg) != REG_NREGS (dest))
+	  else if (REGNO (reg) < FIRST_PSEUDO_REGISTER
+		   && (hard_regno_nregs[REGNO (reg)][GET_MODE (reg)]
+		       != hard_regno_nregs[REGNO (reg)][GET_MODE (dest)]))
 	    breg = NULL;
 	  /* Ok, it's the same (hardware) REG, but with a different
 	     mode, so SUBREG it.  */
 	  else
-	    breg = debug_lowpart_subreg (GET_MODE (reg),
-					 cleanup_auto_inc_dec (src, VOIDmode),
-					 GET_MODE (dest));
+	    breg = lowpart_subreg (GET_MODE (reg),
+				   cleanup_auto_inc_dec (src, VOIDmode),
+				   GET_MODE (dest));
 	}
       else if (GET_CODE (dest) == SUBREG)
 	{
@@ -704,14 +667,14 @@ dead_debug_insert_temp (struct dead_debug_local *debug, unsigned int uregno,
 	     setting REG in its mode would, we won't know what to bind
 	     the debug temp to.  */
 	  else if (REGNO (reg) < FIRST_PSEUDO_REGISTER
-		   && (REG_NREGS (reg)
-		       != hard_regno_nregs (REGNO (reg), GET_MODE (dest))))
+		   && (hard_regno_nregs[REGNO (reg)][GET_MODE (reg)]
+		       != hard_regno_nregs[REGNO (reg)][GET_MODE (dest)]))
 	    breg = NULL;
 	  /* Yay, we can use SRC, just adjust its mode.  */
 	  else
-	    breg = debug_lowpart_subreg (GET_MODE (reg),
-					 cleanup_auto_inc_dec (src, VOIDmode),
-					 GET_MODE (dest));
+	    breg = lowpart_subreg (GET_MODE (reg),
+				   cleanup_auto_inc_dec (src, VOIDmode),
+				   GET_MODE (dest));
 	}
       /* Oh well, we're out of luck.  */
       else
@@ -731,7 +694,7 @@ dead_debug_insert_temp (struct dead_debug_local *debug, unsigned int uregno,
      probably doesn't make sense to introduce a new debug temp.  */
   if (where == DEBUG_TEMP_AFTER_WITH_REG && !uses->next)
     {
-      rtx_insn *next = DF_REF_INSN (uses->use);
+      rtx next = DF_REF_INSN (uses->use);
 
       if (DEBUG_INSN_P (next) && reg == INSN_VAR_LOCATION_LOC (next))
 	{
@@ -765,8 +728,7 @@ dead_debug_insert_temp (struct dead_debug_local *debug, unsigned int uregno,
 	*DF_REF_REAL_LOC (cur->use) = dval;
       else
 	*DF_REF_REAL_LOC (cur->use)
-	  = debug_lowpart_subreg (GET_MODE (*DF_REF_REAL_LOC (cur->use)), dval,
-				  GET_MODE (dval));
+	  = gen_lowpart_SUBREG (GET_MODE (*DF_REF_REAL_LOC (cur->use)), dval);
       /* ??? Should we simplify subreg of subreg?  */
       bitmap_set_bit (debug->to_rescan, INSN_UID (DF_REF_INSN (cur->use)));
       uses = cur->next;

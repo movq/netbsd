@@ -1,5 +1,6 @@
 /* Simulator option handling.
-   Copyright (C) 1996-2019 Free Software Foundation, Inc.
+   Copyright (C) 1996, 1997, 2004, 2007, 2008, 2009, 2010, 2011
+   Free Software Foundation, Inc.
    Contributed by Cygnus Support.
 
 This file is part of GDB, the GNU debugger.
@@ -33,7 +34,6 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 #include "sim-options.h"
 #include "sim-io.h"
 #include "sim-assert.h"
-#include "version.h"
 
 #include "bfd.h"
 
@@ -102,8 +102,15 @@ typedef enum {
   OPTION_VERBOSE,
   OPTION_ENDIAN,
   OPTION_DEBUG,
+#ifdef SIM_HAVE_FLATMEM
+  OPTION_MEM_SIZE,
+#endif
   OPTION_HELP,
-  OPTION_VERSION,
+#ifdef SIM_H8300 /* FIXME: Should be movable to h8300 dir.  */
+  OPTION_H8300H,
+  OPTION_H8300S,
+  OPTION_H8300SX,
+#endif
   OPTION_LOAD_LMA,
   OPTION_LOAD_VMA,
   OPTION_SYSROOT
@@ -119,12 +126,14 @@ static const OPTION standard_options[] =
       'E', "big|little", "Set endianness",
       standard_option_handler, NULL },
 
+#ifdef SIM_HAVE_ENVIRONMENT
   /* This option isn't supported unless all choices are supported in keeping
      with the goal of not printing in --help output things the simulator can't
      do [as opposed to things that just haven't been configured in].  */
   { {"environment", required_argument, NULL, OPTION_ENVIRONMENT},
       '\0', "user|virtual|operating", "Set running environment",
       standard_option_handler },
+#endif
 
   { {"alignment", required_argument, NULL, OPTION_ALIGNMENT},
       '\0', "strict|nonstrict|forced", "Set memory access alignment",
@@ -140,15 +149,30 @@ static const OPTION standard_options[] =
       '\0', "FILE NAME", "Specify debugging output file",
       standard_option_handler },
 
+#ifdef SIM_H8300 /* FIXME: Should be movable to h8300 dir.  */
+  { {"h8300h", no_argument, NULL, OPTION_H8300H},
+      'h', NULL, "Indicate the CPU is H8/300H",
+      standard_option_handler },
+  { {"h8300s", no_argument, NULL, OPTION_H8300S},
+      'S', NULL, "Indicate the CPU is H8S",
+      standard_option_handler },
+  { {"h8300sx", no_argument, NULL, OPTION_H8300SX},
+      'x', NULL, "Indicate the CPU is H8SX",
+      standard_option_handler },
+#endif
+
+#ifdef SIM_HAVE_FLATMEM
+  { {"mem-size", required_argument, NULL, OPTION_MEM_SIZE},
+     'm', "<size>[in bytes, Kb (k suffix), Mb (m suffix) or Gb (g suffix)]",
+     "Specify memory size", standard_option_handler },
+#endif
+
   { {"do-command", required_argument, NULL, OPTION_DO_COMMAND},
       '\0', "COMMAND", ""/*undocumented*/,
       standard_option_handler },
 
   { {"help", no_argument, NULL, OPTION_HELP},
       'H', NULL, "Print help information",
-      standard_option_handler },
-  { {"version", no_argument, NULL, OPTION_VERSION},
-      '\0', NULL, "Print version information",
       standard_option_handler },
 
   { {"architecture", required_argument, NULL, OPTION_ARCHITECTURE},
@@ -165,12 +189,18 @@ static const OPTION standard_options[] =
       '\0', "BFDNAME", "Specify the object-code format for the object files",
       standard_option_handler },
 
+#ifdef SIM_HANDLES_LMA
   { {"load-lma", no_argument, NULL, OPTION_LOAD_LMA},
       '\0', NULL,
+#if SIM_HANDLES_LMA
     "Use VMA or LMA addresses when loading image (default LMA)",
+#else
+    "Use VMA or LMA addresses when loading image (default VMA)",
+#endif
       standard_option_handler, "load-{lma,vma}" },
   { {"load-vma", no_argument, NULL, OPTION_LOAD_VMA},
       '\0', NULL, "", standard_option_handler,  "" },
+#endif
 
   { {"sysroot", required_argument, NULL, OPTION_SYSROOT},
       '\0', "SYSROOT",
@@ -195,23 +225,23 @@ standard_option_handler (SIM_DESC sd, sim_cpu *cpu, int opt,
     case OPTION_ENDIAN:
       if (strcmp (arg, "big") == 0)
 	{
-	  if (WITH_TARGET_BYTE_ORDER == BFD_ENDIAN_LITTLE)
+	  if (WITH_TARGET_BYTE_ORDER == LITTLE_ENDIAN)
 	    {
 	      sim_io_eprintf (sd, "Simulator compiled for little endian only.\n");
 	      return SIM_RC_FAIL;
 	    }
 	  /* FIXME:wip: Need to set something in STATE_CONFIG.  */
-	  current_target_byte_order = BFD_ENDIAN_BIG;
+	  current_target_byte_order = BIG_ENDIAN;
 	}
       else if (strcmp (arg, "little") == 0)
 	{
-	  if (WITH_TARGET_BYTE_ORDER == BFD_ENDIAN_BIG)
+	  if (WITH_TARGET_BYTE_ORDER == BIG_ENDIAN)
 	    {
 	      sim_io_eprintf (sd, "Simulator compiled for big endian only.\n");
 	      return SIM_RC_FAIL;
 	    }
 	  /* FIXME:wip: Need to set something in STATE_CONFIG.  */
-	  current_target_byte_order = BFD_ENDIAN_LITTLE;
+	  current_target_byte_order = LITTLE_ENDIAN;
 	}
       else
 	{
@@ -330,6 +360,47 @@ standard_option_handler (SIM_DESC sd, sim_cpu *cpu, int opt,
 	}
       break;
 
+#ifdef SIM_H8300 /* FIXME: Can be moved to h8300 dir.  */
+    case OPTION_H8300H:
+      set_h8300h (bfd_mach_h8300h);
+      break;
+    case OPTION_H8300S:
+      set_h8300h (bfd_mach_h8300s);
+      break;
+    case OPTION_H8300SX:
+      set_h8300h (bfd_mach_h8300sx);
+      break;
+#endif
+
+#ifdef SIM_HAVE_FLATMEM
+    case OPTION_MEM_SIZE:
+      {
+	char * endp;
+	unsigned long ul = strtol (arg, &endp, 0);
+
+	switch (* endp)
+	  {
+	  case 'k': case 'K': size <<= 10; break;
+	  case 'm': case 'M': size <<= 20; break;
+	  case 'g': case 'G': size <<= 30; break;
+	  case ' ': case '\0': case '\t':  break;
+	  default:
+	    if (ul > 0)
+	      sim_io_eprintf (sd, "Ignoring strange character at end of memory size: %c\n", * endp);
+	    break;
+	  }
+
+	/* 16384: some minimal amount */
+	if (! isdigit (arg[0]) || ul < 16384)
+	  {
+	    sim_io_eprintf (sd, "Invalid memory size `%s'", arg);
+	    return SIM_RC_FAIL;
+	  }
+	STATE_MEM_SIZE (sd) = ul;
+      }
+      break;
+#endif
+
     case OPTION_DO_COMMAND:
       sim_do_command (sd, arg);
       break;
@@ -348,7 +419,7 @@ standard_option_handler (SIM_DESC sd, sim_cpu *cpu, int opt,
 
     case OPTION_ARCHITECTURE_INFO:
       {
-	const char **list = bfd_arch_list ();
+	const char **list = bfd_arch_list();
 	const char **lp;
 	if (list == NULL)
 	  abort ();
@@ -385,22 +456,12 @@ standard_option_handler (SIM_DESC sd, sim_cpu *cpu, int opt,
       /* FIXME: 'twould be nice to do something similar if gdb.  */
       break;
 
-    case OPTION_VERSION:
-      sim_io_printf (sd, "GNU simulator %s%s\n", PKGVERSION, version);
-      if (STATE_OPEN_KIND (sd) == SIM_OPEN_STANDALONE)
-	exit (0);
-      break;
-
     case OPTION_SYSROOT:
       /* Don't leak memory in the odd event that there's lots of
-	 --sysroot=... options.  We treat "" specially since this
-	 is the statically initialized value and cannot free it.  */
-      if (simulator_sysroot[0] != '\0')
+	 --sysroot=... options.  */
+      if (simulator_sysroot[0] != '\0' && arg[0] != '\0')
 	free (simulator_sysroot);
-      if (arg[0] != '\0')
-	simulator_sysroot = xstrdup (arg);
-      else
-	simulator_sysroot = "";
+      simulator_sysroot = xstrdup (arg);
       break;
     }
 
@@ -415,7 +476,9 @@ standard_install (SIM_DESC sd)
   SIM_ASSERT (STATE_MAGIC (sd) == SIM_MAGIC_NUMBER);
   if (sim_add_option_table (sd, NULL, standard_options) != SIM_RC_OK)
     return SIM_RC_FAIL;
-  STATE_LOAD_AT_LMA_P (sd) = 1;
+#ifdef SIM_HANDLES_LMA
+  STATE_LOAD_AT_LMA_P (sd) = SIM_HANDLES_LMA;
+#endif
   return SIM_RC_OK;
 }
 
@@ -456,9 +519,9 @@ dup_arg_p (const char *arg)
 /* Called by sim_open to parse the arguments.  */
 
 SIM_RC
-sim_parse_args (SIM_DESC sd, char * const *argv)
+sim_parse_args (SIM_DESC sd, char **argv)
 {
-  int c, i, argc, num_opts, save_opterr;
+  int c, i, argc, num_opts;
   char *p, *short_options;
   /* The `val' option struct entry is dynamically assigned for options that
      only come in the long form.  ORIG_VAL is used to get the original value
@@ -472,7 +535,8 @@ sim_parse_args (SIM_DESC sd, char * const *argv)
   SIM_RC result = SIM_RC_OK;
 
   /* Count the number of arguments.  */
-  argc = countargv (argv);
+  for (argc = 0; argv[argc] != NULL; ++argc)
+    continue;
 
   /* Count the number of options.  */
   num_opts = 0;
@@ -581,11 +645,6 @@ sim_parse_args (SIM_DESC sd, char * const *argv)
   /* Ensure getopt is initialized.  */
   optind = 0;
 
-  /* Do not lot getopt throw errors for us.  But don't mess with the state for
-     any callers higher up by saving/restoring it.  */
-  save_opterr = opterr;
-  opterr = 0;
-
   while (1)
     {
       int longind, optc;
@@ -599,25 +658,6 @@ sim_parse_args (SIM_DESC sd, char * const *argv)
 	}
       if (optc == '?')
 	{
-	  /* If getopt rejects a short option, optopt is set to the bad char.
-	     If it rejects a long option, we have to look at optind.  In the
-	     short option case, argv could be multiple short options.  */
-	  const char *badopt;
-	  char optbuf[3];
-
-	  if (optopt)
-	    {
-	      sprintf (optbuf, "-%c", optopt);
-	      badopt = optbuf;
-	    }
-	  else
-	    badopt = argv[optind - 1];
-
-	  sim_io_eprintf (sd,
-			  "%s: unrecognized option '%s'\n"
-			  "Use --help for a complete list of options.\n",
-			  STATE_MY_NAME (sd), badopt);
-
 	  result = SIM_RC_FAIL;
 	  break;
 	}
@@ -628,8 +668,6 @@ sim_parse_args (SIM_DESC sd, char * const *argv)
 	  break;
 	}
     }
-
-  opterr = save_opterr;
 
   free (long_options);
   free (short_options);
@@ -877,60 +915,8 @@ find_match (SIM_DESC sd, sim_cpu *cpu, char *argv[], int *pargi)
   return matching_opt;
 }
 
-static char **
-complete_option_list (char **ret, size_t *cnt, const struct option_list *ol,
-		      const char *text, const char *word)
-{
-  const OPTION *opt = NULL;
-  int argi;
-  size_t len = strlen (word);
-
-  for ( ; ol != NULL; ol = ol->next)
-    for (opt = ol->options; OPTION_VALID_P (opt); ++opt)
-      {
-	const char *name = opt->opt.name;
-
-	/* A long option to match against?  */
-	if (!name)
-	  continue;
-
-	/* Does this option actually match?  */
-	if (strncmp (name, word, len))
-	  continue;
-
-	ret = xrealloc (ret, ++*cnt * sizeof (ret[0]));
-	ret[*cnt - 2] = xstrdup (name);
-      }
-
-  return ret;
-}
-
-/* All leading text is stored in @text, while the current word being
-   completed is stored in @word.  Trailing text of @word is not.  */
-
-char **
-sim_complete_command (SIM_DESC sd, const char *text, const char *word)
-{
-  char **ret = NULL;
-  size_t cnt = 1;
-  sim_cpu *cpu;
-
-  /* Only complete first word for now.  */
-  if (text != word)
-    return ret;
-
-  cpu = STATE_CPU (sd, 0);
-  if (cpu)
-    ret = complete_option_list (ret, &cnt, CPU_OPTIONS (cpu), text, word);
-  ret = complete_option_list (ret, &cnt, STATE_OPTIONS (sd), text, word);
-
-  if (ret)
-    ret[cnt - 1] = NULL;
-  return ret;
-}
-
 SIM_RC
-sim_args_command (SIM_DESC sd, const char *cmd)
+sim_args_command (SIM_DESC sd, char *cmd)
 {
   /* something to do? */
   if (cmd == NULL)
@@ -952,10 +938,7 @@ sim_args_command (SIM_DESC sd, const char *cmd)
       sim_cpu *cpu;
 
       if (argv [0] == NULL)
-	{
-	  freeargv (argv);
-	  return SIM_RC_OK; /* FIXME - perhaps help would be better */
-	}
+	return SIM_RC_OK; /* FIXME - perhaps help would be better */
 
       /* First check for a cpu selector.  */
       {

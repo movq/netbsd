@@ -1,6 +1,6 @@
 // reduced_debug_output.h -- reduce debugging information  -*- C++ -*-
 
-// Copyright (C) 2008-2020 Free Software Foundation, Inc.
+// Copyright 2008 Free Software Foundation, Inc.
 // Written by Caleb Howe <cshowe@google.com>.
 
 // This file is part of gold.
@@ -64,7 +64,7 @@ class Output_reduced_debug_abbrev_section : public Output_section
   void
   failed(std::string reason)
   {
-    gold_warning("%s", reason.c_str());
+    gold_warning(reason.c_str());
     failed_ = true;
   }
 
@@ -110,7 +110,7 @@ class Output_reduced_debug_info_section : public Output_section
   void
   failed(std::string reason)
   {
-    gold_warning("%s", reason.c_str());
+    gold_warning(reason.c_str());
     this->failed_ = true;
   }
 

@@ -1,5 +1,6 @@
 /* Motorola 68HC12-specific support for 32-bit ELF
-   Copyright (C) 1999-2019 Free Software Foundation, Inc.
+   Copyright 1999, 2000, 2002, 2003, 2004, 2005, 2006, 2007
+   Free Software Foundation, Inc.
    Contributed by Stephane Carrez (stcarrez@nerim.fr)
    (Heavily copied from the D10V port by Martin Hunt (hunt@cygnus.com))
 
@@ -32,11 +33,18 @@
 /* Relocation functions.  */
 static reloc_howto_type *bfd_elf32_bfd_reloc_type_lookup
   (bfd *, bfd_reloc_code_real_type);
-static bfd_boolean m68hc11_info_to_howto_rel
+static void m68hc11_info_to_howto_rel
   (bfd *, arelent *, Elf_Internal_Rela *);
 
 /* Trampoline generation.  */
+static bfd_boolean m68hc12_elf_size_one_stub
+  (struct bfd_hash_entry *gen_entry, void *in_arg);
+static bfd_boolean m68hc12_elf_build_one_stub
+  (struct bfd_hash_entry *gen_entry, void *in_arg);
+static struct bfd_link_hash_table* m68hc12_elf_bfd_link_hash_table_create
+  (bfd*);
 
+static bfd_boolean m68hc12_elf_set_mach_from_flags PARAMS ((bfd *));
 
 /* Use REL instead of RELA to save space */
 #define USE_REL	1
@@ -62,31 +70,31 @@ static bfd_boolean m68hc11_info_to_howto_rel
 
 					Banked
 					Address Space
-					|		|	Page n
+                                        |               |       Page n
 					+---------------+ 0x1010000
-					|		|
-					| jsr _foo	|
-					| ..		|	Page 3
-					| _foo:		|
+                                        |               |
+                                        | jsr _foo      |
+                                        | ..            |       Page 3
+                                        | _foo:         |
 					+---------------+ 0x100C000
-					|		|
-					| call _bar	|
-					| ..		|	Page 2
-					| _bar:		|
+					|	        |
+                                        | call _bar     |
+					| ..	        |	Page 2
+					| _bar:	        |
 					+---------------+ 0x1008000
-				/------>|		|
-				|	| call _foo	|	Page 1
-				|	|		|
+				/------>|	        |
+				|	| call _foo     |	Page 1
+				|	|       	|
 				|	+---------------+ 0x1004000
-      Physical			|	|		|
-      Address Space		|	|		|	Page 0
-				|	|		|
+      Physical			|	|	        |
+      Address Space		|	|	        |	Page 0
+				|	|	        |
     +-----------+ 0x00FFFF	|	+---------------+ 0x1000000
     |		|		|
     | call _foo	|		|
     |		|		|
     +-----------+ 0x00BFFF -+---/
-    |		|	    |
+    |		|           |
     |		|	    |
     |		| 16K	    |
     |		|	    |
@@ -107,8 +115,8 @@ static reloc_howto_type elf_m68hc11_howto_table[] = {
   /* This reloc does nothing.  */
   HOWTO (R_M68HC11_NONE,	/* type */
 	 0,			/* rightshift */
-	 3,			/* size (0 = byte, 1 = short, 2 = long) */
-	 0,			/* bitsize */
+	 2,			/* size (0 = byte, 1 = short, 2 = long) */
+	 32,			/* bitsize */
 	 FALSE,			/* pc_relative */
 	 0,			/* bitpos */
 	 complain_overflow_dont,/* complain_on_overflow */
@@ -177,7 +185,7 @@ static reloc_howto_type elf_m68hc11_howto_table[] = {
 	 FALSE,			/* partial_inplace */
 	 0x00ff,		/* src_mask */
 	 0x00ff,		/* dst_mask */
-	 TRUE),			/* pcrel_offset */
+	 TRUE),                 /* pcrel_offset */
 
   /* A 16 bit absolute relocation */
   HOWTO (R_M68HC11_16,		/* type */
@@ -238,7 +246,7 @@ static reloc_howto_type elf_m68hc11_howto_table[] = {
 	 FALSE,			/* partial_inplace */
 	 0xffff,		/* src_mask */
 	 0xffff,		/* dst_mask */
-	 TRUE),			/* pcrel_offset */
+	 TRUE),                 /* pcrel_offset */
 
   /* GNU extension to record C++ vtable hierarchy */
   HOWTO (R_M68HC11_GNU_VTINHERIT,	/* type */
@@ -271,7 +279,7 @@ static reloc_howto_type elf_m68hc11_howto_table[] = {
 	 FALSE),		/* pcrel_offset */
 
   /* A 24 bit relocation */
-  HOWTO (R_M68HC11_24,		/* type */
+  HOWTO (R_M68HC11_24,	        /* type */
 	 0,			/* rightshift */
 	 2,			/* size (0 = byte, 1 = short, 2 = long) */
 	 24,			/* bitsize */
@@ -286,7 +294,7 @@ static reloc_howto_type elf_m68hc11_howto_table[] = {
 	 FALSE),		/* pcrel_offset */
 
   /* A 16-bit low relocation */
-  HOWTO (R_M68HC11_LO16,	/* type */
+  HOWTO (R_M68HC11_LO16,        /* type */
 	 0,			/* rightshift */
 	 1,			/* size (0 = byte, 1 = short, 2 = long) */
 	 16,			/* bitsize */
@@ -301,7 +309,7 @@ static reloc_howto_type elf_m68hc11_howto_table[] = {
 	 FALSE),		/* pcrel_offset */
 
   /* A page relocation */
-  HOWTO (R_M68HC11_PAGE,	/* type */
+  HOWTO (R_M68HC11_PAGE,        /* type */
 	 0,			/* rightshift */
 	 0,			/* size (0 = byte, 1 = short, 2 = long) */
 	 8,			/* bitsize */
@@ -316,81 +324,11 @@ static reloc_howto_type elf_m68hc11_howto_table[] = {
 	 FALSE),		/* pcrel_offset */
 
   EMPTY_HOWTO (14),
-
-  /* A 16 bit absolute relocation.  */
-  HOWTO (R_M68HC12_16B,		/* type */
-	 0,			/* rightshift */
-	 1,			/* size (0 = byte, 1 = short, 2 = long) */
-	 16,			/* bitsize */
-	 FALSE,			/* pc_relative */
-	 0,			/* bitpos */
-	 complain_overflow_bitfield,	/* complain_on_overflow */
-	 bfd_elf_generic_reloc,	/* special_function */
-	 "R_M68HC12_16B",	/* name */
-	 FALSE,			/* partial_inplace */
-	 0xffff,		/* src_mask */
-	 0xffff,		/* dst_mask */
-	 FALSE),		/* pcrel_offset */
-
-  /* A 9 bit PC-rel relocation.  */
-  HOWTO (R_M68HC12_PCREL_9,	/* type */
-	 1,			/* rightshift */
-	 1,			/* size (0 = byte, 1 = short, 2 = long) */
-	 10,			/* bitsize (result is >>1) */
-	 TRUE,			/* pc_relative */
-	 0,			/* bitpos */
-	 complain_overflow_dont,	/* complain_on_overflow */
-	 bfd_elf_generic_reloc,	/* special_function */
-	 "R_M68HC12_PCREL_9",	/* name */
-	 TRUE,			/* partial_inplace */
-	 0xfe00,		/* src_mask */
-	 0x01ff,		/* dst_mask */
-	 TRUE),			/* pcrel_offset */
-
-  /* A 10 bit PC-rel relocation.  */
-  HOWTO (R_M68HC12_PCREL_10,	/* type */
-	 1,			/* rightshift */
-	 1,			/* size (0 = byte, 1 = short, 2 = long) */
-	 11,			/* bitsize (result is >>1) */
-	 TRUE,			/* pc_relative */
-	 0,			/* bitpos */
-	 complain_overflow_dont,	/* complain_on_overflow */
-	 bfd_elf_generic_reloc,	/* special_function */
-	 "R_M68HC12_PCREL_10",	/* name */
-	 TRUE,			/* partial_inplace */
-	 0xfc00,		/* src_mask */
-	 0x03ff,		/* dst_mask */
-	 TRUE),			/* pcrel_offset */
-
-  /* A 8 bit absolute relocation (upper address).  */
-  HOWTO (R_M68HC12_HI8XG,		/* type */
-	 8,			/* rightshift */
-	 0,			/* size (0 = byte, 1 = short, 2 = long) */
-	 8,			/* bitsize */
-	 FALSE,			/* pc_relative */
-	 0,			/* bitpos */
-	 complain_overflow_bitfield,	/* complain_on_overflow */
-	 bfd_elf_generic_reloc,	/* special_function */
-	 "R_M68HC12_HI8XG",	/* name */
-	 FALSE,			/* partial_inplace */
-	 0x00ff,		/* src_mask */
-	 0x00ff,		/* dst_mask */
-	 FALSE),		/* pcrel_offset */
-
-  /* A 8 bit absolute relocation (lower address).  */
-  HOWTO (R_M68HC12_LO8XG,		/* type */
-	 8,			/* rightshift */
-	 0,			/* size (0 = byte, 1 = short, 2 = long) */
-	 8,			/* bitsize */
-	 FALSE,			/* pc_relative */
-	 0,			/* bitpos */
-	 complain_overflow_bitfield,	/* complain_on_overflow */
-	 bfd_elf_generic_reloc,	/* special_function */
-	 "R_M68HC12_LO8XG",	/* name */
-	 FALSE,			/* partial_inplace */
-	 0x00ff,		/* src_mask */
-	 0x00ff,		/* dst_mask */
-	 FALSE),		/* pcrel_offset */
+  EMPTY_HOWTO (15),
+  EMPTY_HOWTO (16),
+  EMPTY_HOWTO (17),
+  EMPTY_HOWTO (18),
+  EMPTY_HOWTO (19),
 
   /* Mark beginning of a jump instruction (any form).  */
   HOWTO (R_M68HC11_RL_JUMP,	/* type */
@@ -405,7 +343,7 @@ static reloc_howto_type elf_m68hc11_howto_table[] = {
 	 TRUE,			/* partial_inplace */
 	 0,			/* src_mask */
 	 0,			/* dst_mask */
-	 TRUE),			/* pcrel_offset */
+	 TRUE),                 /* pcrel_offset */
 
   /* Mark beginning of Gcc relaxation group instruction.  */
   HOWTO (R_M68HC11_RL_GROUP,	/* type */
@@ -420,7 +358,7 @@ static reloc_howto_type elf_m68hc11_howto_table[] = {
 	 TRUE,			/* partial_inplace */
 	 0,			/* src_mask */
 	 0,			/* dst_mask */
-	 TRUE),			/* pcrel_offset */
+	 TRUE),                 /* pcrel_offset */
 };
 
 /* Map BFD reloc types to M68HC11 ELF reloc types.  */
@@ -431,8 +369,7 @@ struct m68hc11_reloc_map
   unsigned char elf_reloc_val;
 };
 
-static const struct m68hc11_reloc_map m68hc11_reloc_map[] =
-{
+static const struct m68hc11_reloc_map m68hc11_reloc_map[] = {
   {BFD_RELOC_NONE, R_M68HC11_NONE,},
   {BFD_RELOC_8, R_M68HC11_8},
   {BFD_RELOC_M68HC11_HI8, R_M68HC11_HI8},
@@ -452,18 +389,11 @@ static const struct m68hc11_reloc_map m68hc11_reloc_map[] =
 
   {BFD_RELOC_M68HC11_RL_JUMP, R_M68HC11_RL_JUMP},
   {BFD_RELOC_M68HC11_RL_GROUP, R_M68HC11_RL_GROUP},
-
-  {BFD_RELOC_M68HC12_16B, R_M68HC12_16B},
-
-  {BFD_RELOC_M68HC12_9_PCREL, R_M68HC12_PCREL_9},
-  {BFD_RELOC_M68HC12_10_PCREL, R_M68HC12_PCREL_10},
-  {BFD_RELOC_M68HC12_HI8XG, R_M68HC12_HI8XG},
-  {BFD_RELOC_M68HC12_LO8XG, R_M68HC12_LO8XG},
 };
 
 static reloc_howto_type *
 bfd_elf32_bfd_reloc_type_lookup (bfd *abfd ATTRIBUTE_UNUSED,
-				 bfd_reloc_code_real_type code)
+                                 bfd_reloc_code_real_type code)
 {
   unsigned int i;
 
@@ -497,23 +427,15 @@ bfd_elf32_bfd_reloc_name_lookup (bfd *abfd ATTRIBUTE_UNUSED,
 
 /* Set the howto pointer for an M68HC11 ELF reloc.  */
 
-static bfd_boolean
-m68hc11_info_to_howto_rel (bfd *abfd,
-			   arelent *cache_ptr, Elf_Internal_Rela *dst)
+static void
+m68hc11_info_to_howto_rel (bfd *abfd ATTRIBUTE_UNUSED,
+                           arelent *cache_ptr, Elf_Internal_Rela *dst)
 {
   unsigned int r_type;
 
   r_type = ELF32_R_TYPE (dst->r_info);
-  if (r_type >= (unsigned int) R_M68HC11_max)
-    {
-      /* xgettext:c-format */
-      _bfd_error_handler (_("%pB: unsupported relocation type %#x"),
-			  abfd, r_type);
-      bfd_set_error (bfd_error_bad_value);
-      return FALSE;
-    }
+  BFD_ASSERT (r_type < (unsigned int) R_M68HC11_max);
   cache_ptr->howto = &elf_m68hc11_howto_table[r_type];
-  return TRUE;
 }
 
 
@@ -553,8 +475,8 @@ m68hc12_elf_build_one_stub (struct bfd_hash_entry *gen_entry, void *in_arg)
 
   */
   sym_value = (stub_entry->target_value
-	       + stub_entry->target_section->output_offset
-	       + stub_entry->target_section->output_section->vma);
+               + stub_entry->target_section->output_offset
+               + stub_entry->target_section->output_section->vma);
   phys_addr = m68hc11_phys_addr (&htab->pinfo, sym_value);
   phys_page = m68hc11_phys_page (&htab->pinfo, sym_value);
 
@@ -576,7 +498,7 @@ m68hc12_elf_build_one_stub (struct bfd_hash_entry *gen_entry, void *in_arg)
 
 static bfd_boolean
 m68hc12_elf_size_one_stub (struct bfd_hash_entry *gen_entry,
-			   void *in_arg ATTRIBUTE_UNUSED)
+                           void *in_arg ATTRIBUTE_UNUSED)
 {
   struct elf32_m68hc11_stub_hash_entry *stub_entry;
 
@@ -619,7 +541,7 @@ m68hc12_elf_set_mach_from_flags (bfd *abfd)
       break;
     case EF_M68HC11_GENERIC:
       bfd_default_set_arch_mach (abfd, bfd_arch_m68hc12,
-				 bfd_mach_m6812_default);
+                                 bfd_mach_m6812_default);
       break;
     default:
       return FALSE;
@@ -638,7 +560,7 @@ static const struct bfd_elf_special_section elf32_m68hc12_special_sections[] =
   { STRING_COMMA_LEN (".page0"),    0, SHT_PROGBITS, SHF_ALLOC + SHF_WRITE },
   { STRING_COMMA_LEN (".softregs"), 0, SHT_NOBITS,   SHF_ALLOC + SHF_WRITE },
   { STRING_COMMA_LEN (".vectors"),  0, SHT_PROGBITS, SHF_ALLOC },
-  { NULL,			0,  0, 0,	     0 }
+  { NULL,                       0,  0, 0,            0 }
 };
 
 #define ELF_ARCH		bfd_arch_m68hc12
@@ -646,10 +568,10 @@ static const struct bfd_elf_special_section elf32_m68hc12_special_sections[] =
 #define ELF_MACHINE_CODE	EM_68HC12
 #define ELF_MAXPAGESIZE		0x1000
 
-#define TARGET_BIG_SYM		m68hc12_elf32_vec
+#define TARGET_BIG_SYM          bfd_elf32_m68hc12_vec
 #define TARGET_BIG_NAME		"elf32-m68hc12"
 
-#define elf_info_to_howto	NULL
+#define elf_info_to_howto	0
 #define elf_info_to_howto_rel	m68hc11_info_to_howto_rel
 #define elf_backend_check_relocs     elf32_m68hc11_check_relocs
 #define elf_backend_relocate_section elf32_m68hc11_relocate_section
@@ -659,10 +581,11 @@ static const struct bfd_elf_special_section elf32_m68hc12_special_sections[] =
 #define elf_backend_special_sections elf32_m68hc12_special_sections
 #define elf_backend_post_process_headers     elf32_m68hc11_post_process_headers
 #define elf_backend_add_symbol_hook  elf32_m68hc11_add_symbol_hook
-#define elf_backend_merge_symbol_attribute elf32_m68hc11_merge_symbol_attribute
 
 #define bfd_elf32_bfd_link_hash_table_create \
-				m68hc12_elf_bfd_link_hash_table_create
+                                m68hc12_elf_bfd_link_hash_table_create
+#define bfd_elf32_bfd_link_hash_table_free \
+				m68hc11_elf_bfd_link_hash_table_free
 #define bfd_elf32_bfd_merge_private_bfd_data \
 					_bfd_m68hc11_elf_merge_private_bfd_data
 #define bfd_elf32_bfd_set_private_flags	_bfd_m68hc11_elf_set_private_flags

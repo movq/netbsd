@@ -71,8 +71,6 @@ class AddrHashMap {
 
     ~Handle();
     T *operator->();
-    T &operator*();
-    const T &operator*() const;
     bool created() const;
     bool exists() const;
 
@@ -136,16 +134,6 @@ T *AddrHashMap<T, kSize>::Handle::operator->() {
   return &cell_->val;
 }
 
-template <typename T, uptr kSize>
-const T &AddrHashMap<T, kSize>::Handle::operator*() const {
-  return cell_->val;
-}
-
-template <typename T, uptr kSize>
-T &AddrHashMap<T, kSize>::Handle::operator*() {
-  return cell_->val;
-}
-
 template<typename T, uptr kSize>
 bool AddrHashMap<T, kSize>::Handle::created() const {
   return created_;
@@ -153,7 +141,7 @@ bool AddrHashMap<T, kSize>::Handle::created() const {
 
 template<typename T, uptr kSize>
 bool AddrHashMap<T, kSize>::Handle::exists() const {
-  return cell_ != nullptr;
+  return cell_ != 0;
 }
 
 template<typename T, uptr kSize>
@@ -170,7 +158,7 @@ void AddrHashMap<T, kSize>::acquire(Handle *h) {
   h->created_ = false;
   h->addidx_ = -1U;
   h->bucket_ = b;
-  h->cell_ = nullptr;
+  h->cell_ = 0;
 
   // If we want to remove the element, we need exclusive access to the bucket,
   // so skip the lock-free phase.
@@ -260,7 +248,7 @@ void AddrHashMap<T, kSize>::acquire(Handle *h) {
   }
 
   // Store in the add cells.
-  if (!add) {
+  if (add == 0) {
     // Allocate a new add array.
     const uptr kInitSize = 64;
     add = (AddBucket*)InternalAlloc(kInitSize);
@@ -292,7 +280,7 @@ void AddrHashMap<T, kSize>::acquire(Handle *h) {
 
 template<typename T, uptr kSize>
 void AddrHashMap<T, kSize>::release(Handle *h) {
-  if (!h->cell_)
+  if (h->cell_ == 0)
     return;
   Bucket *b = h->bucket_;
   Cell *c = h->cell_;

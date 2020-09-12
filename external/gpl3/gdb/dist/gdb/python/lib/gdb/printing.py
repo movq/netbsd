@@ -1,5 +1,5 @@
 # Pretty-printer utilities.
-# Copyright (C) 2010-2019 Free Software Foundation, Inc.
+# Copyright (C) 2010, 2011 Free Software Foundation, Inc.
 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -19,24 +19,19 @@
 import gdb
 import gdb.types
 import re
-import sys
 
-if sys.version_info[0] > 2:
-    # Python 3 removed basestring and long
-    basestring = str
-    long = int
 
 class PrettyPrinter(object):
     """A basic pretty-printer.
 
     Attributes:
         name: A unique string among all printers for the context in which
-            it is defined (objfile, progspace, or global(gdb)), and should
-            meaningfully describe what can be pretty-printed.
-            E.g., "StringPiece" or "protobufs".
+              it is defined (objfile, progspace, or global(gdb)), and should
+              meaningfully describe what can be pretty-printed.
+              E.g., "StringPiece" or "protobufs".
         subprinters: An iterable object with each element having a `name'
-            attribute, and, potentially, "enabled" attribute.
-            Or this is None if there are no subprinters.
+                     attribute, and, potentially, "enabled" attribute.
+                     Or this is None if there are no subprinters.
         enabled: A boolean indicating if the printer is enabled.
 
     Subprinters are for situations where "one" pretty-printer is actually a
@@ -73,21 +68,17 @@ class SubPrettyPrinter(object):
         self.enabled = True
 
 
-def register_pretty_printer(obj, printer, replace=False):
+def register_pretty_printer(obj, printer):
     """Register pretty-printer PRINTER with OBJ.
 
     The printer is added to the front of the search list, thus one can override
-    an existing printer if one needs to.  Use a different name when overriding
-    an existing printer, otherwise an exception will be raised; multiple
-    printers with the same name are disallowed.
+    an existing printer if one needs to.
 
     Arguments:
         obj: Either an objfile, progspace, or None (in which case the printer
-            is registered globally).
+             is registered globally).
         printer: Either a function of one argument (old way) or any object
-            which has attributes: name, enabled, __call__.
-        replace: If True replace any existing copy of the printer.
-            Otherwise if the printer already exists raise an exception.
+                 which has attributes: name, enabled, __call__.
 
     Returns:
         Nothing.
@@ -95,7 +86,6 @@ def register_pretty_printer(obj, printer, replace=False):
     Raises:
         TypeError: A problem with the type of the printer.
         ValueError: The printer's name contains a semicolon ";".
-        RuntimeError: A printer with the same name is already registered.
 
     If the caller wants the printer to be listable and disableable, it must
     follow the PrettyPrinter API.  This applies to the old way (functions) too.
@@ -114,21 +104,15 @@ def register_pretty_printer(obj, printer, replace=False):
     if not hasattr(printer, "__call__"):
         raise TypeError("printer missing attribute: __call__")
 
-    if hasattr(printer, "name"):
-      name = printer.name
-    else:
-      name = printer.__name__
-    if obj is None or obj is gdb:
+    if obj is None:
         if gdb.parameter("verbose"):
             gdb.write("Registering global %s pretty-printer ...\n" % name)
         obj = gdb
     else:
         if gdb.parameter("verbose"):
-            gdb.write("Registering %s pretty-printer for %s ...\n" % (
-                name, obj.filename))
+            gdb.write("Registering %s pretty-printer for %s ...\n" %
+                      (printer.name, obj.filename))
 
-    # Printers implemented as functions are old-style.  In order to not risk
-    # breaking anything we do not check __name__ here.
     if hasattr(printer, "name"):
         if not isinstance(printer.name, basestring):
             raise TypeError("printer name is not a string")
@@ -141,16 +125,10 @@ def register_pretty_printer(obj, printer, replace=False):
         # Alas, we can't do the same for functions and __name__, they could
         # all have a canonical name like "lookup_function".
         # PERF: gdb records printers in a list, making this inefficient.
-        i = 0
-        for p in obj.pretty_printers:
-            if hasattr(p, "name") and p.name == printer.name:
-                if replace:
-                    del obj.pretty_printers[i]
-                    break
-                else:
-                  raise RuntimeError("pretty-printer already registered: %s" %
-                                     printer.name)
-            i = i + 1
+        if (printer.name in
+              [p.name for p in obj.pretty_printers if hasattr(p, "name")]):
+            raise RuntimeError("pretty-printer already registered: %s" %
+                               printer.name)
 
     obj.pretty_printers.insert(0, printer)
 
@@ -186,7 +164,7 @@ class RegexpCollectionPrettyPrinter(PrettyPrinter):
             name: The name of the subprinter.
             regexp: The regular expression, as a string.
             gen_printer: A function/method that given a value returns an
-                object to pretty-print it.
+                         object to pretty-print it.
 
         Returns:
             Nothing.
@@ -206,8 +184,6 @@ class RegexpCollectionPrettyPrinter(PrettyPrinter):
         # Get the type name.
         typename = gdb.types.get_basic_type(val.type).tag
         if not typename:
-            typename = val.type.name
-        if not typename:
             return None
 
         # Iterate over table of type regexps to determine
@@ -219,67 +195,3 @@ class RegexpCollectionPrettyPrinter(PrettyPrinter):
 
         # Cannot find a pretty printer.  Return None.
         return None
-
-# A helper class for printing enum types.  This class is instantiated
-# with a list of enumerators to print a particular Value.
-class _EnumInstance:
-    def __init__(self, enumerators, val):
-        self.enumerators = enumerators
-        self.val = val
-
-    def to_string(self):
-        flag_list = []
-        v = long(self.val)
-        any_found = False
-        for (e_name, e_value) in self.enumerators:
-            if v & e_value != 0:
-                flag_list.append(e_name)
-                v = v & ~e_value
-                any_found = True
-        if not any_found or v != 0:
-            # Leftover value.
-            flag_list.append('<unknown: 0x%x>' % v)
-        return "0x%x [%s]" % (int(self.val), " | ".join(flag_list))
-
-class FlagEnumerationPrinter(PrettyPrinter):
-    """A pretty-printer which can be used to print a flag-style enumeration.
-    A flag-style enumeration is one where the enumerators are or'd
-    together to create values.  The new printer will print these
-    symbolically using '|' notation.  The printer must be registered
-    manually.  This printer is most useful when an enum is flag-like,
-    but has some overlap.  GDB's built-in printing will not handle
-    this case, but this printer will attempt to."""
-
-    def __init__(self, enum_type):
-        super(FlagEnumerationPrinter, self).__init__(enum_type)
-        self.initialized = False
-
-    def __call__(self, val):
-        if not self.initialized:
-            self.initialized = True
-            flags = gdb.lookup_type(self.name)
-            self.enumerators = []
-            for field in flags.fields():
-                self.enumerators.append((field.name, field.enumval))
-            # Sorting the enumerators by value usually does the right
-            # thing.
-            self.enumerators.sort(key = lambda x: x[1])
-
-        if self.enabled:
-            return _EnumInstance(self.enumerators, val)
-        else:
-            return None
-
-
-# Builtin pretty-printers.
-# The set is defined as empty, and files in printing/*.py add their printers
-# to this with add_builtin_pretty_printer.
-
-_builtin_pretty_printers = RegexpCollectionPrettyPrinter("builtin")
-
-register_pretty_printer(None, _builtin_pretty_printers)
-
-# Add a builtin pretty-printer.
-
-def add_builtin_pretty_printer(name, regexp, printer):
-    _builtin_pretty_printers.add_printer(name, regexp, printer)

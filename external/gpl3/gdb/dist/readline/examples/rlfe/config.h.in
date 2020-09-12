@@ -21,7 +21,7 @@
  * 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA
  *
  ****************************************************************
- * Id FAU
+ * $Id: config.h.in,v 1.1 2011/09/24 19:56:57 christos Exp $ FAU
  */
 
 
@@ -373,7 +373,3 @@
 #undef PTYRANGE1
 
 #define USEVARARGS
-
-#undef HAVE_SYS_STROPTS_H
-
-#undef HAVE_SYS_WAIT_H

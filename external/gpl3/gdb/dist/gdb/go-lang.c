@@ -1,6 +1,6 @@
 /* Go language support routines for GDB, the GNU debugger.
 
-   Copyright (C) 2012-2019 Free Software Foundation, Inc.
+   Copyright (C) 2012-2013 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -32,11 +32,12 @@
 */
 
 #include "defs.h"
+#include "gdb_assert.h"
 #include "gdb_obstack.h"
+#include "gdb_string.h"
 #include "block.h"
 #include "symtab.h"
 #include "language.h"
-#include "varobj.h"
 #include "go-lang.h"
 #include "c-lang.h"
 #include "parser-defs.h"
@@ -54,10 +55,10 @@ static const char GO_MAIN_MAIN[] = "main.main";
 const char *
 go_main_name (void)
 {
-  struct bound_minimal_symbol msym;
+  struct minimal_symbol *msym;
 
   msym = lookup_minimal_symbol (GO_MAIN_MAIN, NULL, NULL);
-  if (msym.minsym != NULL)
+  if (msym != NULL)
     return GO_MAIN_MAIN;
 
   /* No known entry procedure found, the main program is probably not Go.  */
@@ -77,8 +78,8 @@ gccgo_string_p (struct type *type)
       struct type *type0 = TYPE_FIELD_TYPE (type, 0);
       struct type *type1 = TYPE_FIELD_TYPE (type, 1);
 
-      type0 = check_typedef (type0);
-      type1 = check_typedef (type1);
+      CHECK_TYPEDEF (type0);
+      CHECK_TYPEDEF (type1);
 
       if (TYPE_CODE (type0) == TYPE_CODE_PTR
 	  && strcmp (TYPE_FIELD_NAME (type, 0), "__data") == 0
@@ -87,7 +88,7 @@ gccgo_string_p (struct type *type)
 	{
 	  struct type *target_type = TYPE_TARGET_TYPE (type0);
 
-	  target_type = check_typedef (target_type);
+	  CHECK_TYPEDEF (target_type);
 
 	  if (TYPE_CODE (target_type) == TYPE_CODE_INT
 	      && TYPE_LENGTH (target_type) == 1
@@ -106,8 +107,8 @@ static int
 sixg_string_p (struct type *type)
 {
   if (TYPE_NFIELDS (type) == 2
-      && TYPE_NAME (type) != NULL
-      && strcmp (TYPE_NAME (type), "string") == 0)
+      && TYPE_TAG_NAME (type) != NULL
+      && strcmp (TYPE_TAG_NAME (type), "string") == 0)
     return 1;
 
   return 0;
@@ -119,7 +120,7 @@ sixg_string_p (struct type *type)
 enum go_type
 go_classify_struct_type (struct type *type)
 {
-  type = check_typedef (type);
+  CHECK_TYPEDEF (type);
 
   /* Recognize strings as they're useful to be able to print without
      pretty-printers.  */
@@ -195,9 +196,9 @@ unpack_mangled_go_symbol (const char *mangled_name,
   /* Pointer to "N" if valid "N<digit(s)>_" found.  */
   char *method_type;
   /* Pointer to the first '.'.  */
-  const char *first_dot;
+  char *first_dot;
   /* Pointer to the last '.'.  */
-  const char *last_dot;
+  char *last_dot;
   /* Non-zero if we saw a pointer indicator.  */
   int saw_pointer;
 
@@ -233,8 +234,8 @@ unpack_mangled_go_symbol (const char *mangled_name,
      libgo_.*: used by gccgo's runtime
 
      Thus we don't support -fgo-prefix (except as used by the runtime).  */
-  if (!startswith (mangled_name, "go.")
-      && !startswith (mangled_name, "libgo_"))
+  if (strncmp (mangled_name, "go.", 3) != 0
+      && strncmp (mangled_name, "libgo_", 6) != 0)
     return NULL;
 
   /* Quick check for whether a search may be fruitful.  */
@@ -379,19 +380,10 @@ go_demangle (const char *mangled_name, int options)
     }
   obstack_grow_str0 (&tempbuf, "");
 
-  result = xstrdup ((const char *) obstack_finish (&tempbuf));
+  result = xstrdup (obstack_finish (&tempbuf));
   obstack_free (&tempbuf, NULL);
   xfree (name_buf);
   return result;
-}
-
-/* la_sniff_from_mangled_name for Go.  */
-
-static int
-go_sniff_from_mangled_name (const char *mangled, char **demangled)
-{
-  *demangled = go_demangle (mangled, 0);
-  return *demangled != NULL;
 }
 
 /* Given a Go symbol, return its package or NULL if unknown.
@@ -487,7 +479,7 @@ static const struct op_print go_op_print_tab[] =
   {"unsafe.Sizeof ", UNOP_SIZEOF, PREC_PREFIX, 0},
   {"++", UNOP_POSTINCREMENT, PREC_SUFFIX, 0},
   {"--", UNOP_POSTDECREMENT, PREC_SUFFIX, 0},
-  {NULL, OP_NULL, PREC_SUFFIX, 0}
+  {NULL, 0, 0, 0}
 };
 
 enum go_primitive_types {
@@ -565,18 +557,17 @@ go_language_arch_info (struct gdbarch *gdbarch,
   lai->bool_type_default = builtin->builtin_bool;
 }
 
-extern const struct language_defn go_language_defn =
+static const struct language_defn go_language_defn =
 {
   "go",
-  "Go",
   language_go,
   range_check_off,
   case_sensitive_on,
   array_row_major,
   macro_expansion_no,
-  NULL,
   &exp_descriptor_c,
   go_parse,
+  go_error,
   null_post_parser,
   c_printchar,			/* Print a character constant.  */
   c_printstr,			/* Function to print string constant.  */
@@ -589,29 +580,22 @@ extern const struct language_defn go_language_defn =
   default_read_var_value,	/* la_read_var_value */
   NULL,				/* Language specific skip_trampoline.  */
   NULL,				/* name_of_this */
-  false,			/* la_store_sym_names_in_linkage_form_p */
   basic_lookup_symbol_nonlocal, 
   basic_lookup_transparent_type,
   go_demangle,			/* Language specific symbol demangler.  */
-  go_sniff_from_mangled_name,
   NULL,				/* Language specific
 				   class_name_from_physname.  */
   go_op_print_tab,		/* Expression operators for printing.  */
   1,				/* C-style arrays.  */
   0,				/* String lower bound.  */
   default_word_break_characters,
-  default_collect_symbol_completion_matches,
+  default_make_symbol_completion_list,
   go_language_arch_info,
   default_print_array_index,
   default_pass_by_reference,
   c_get_string,
-  c_watch_location_expression,
-  NULL,				/* la_get_symbol_name_matcher */
+  NULL,
   iterate_over_symbols,
-  default_search_name_hash,
-  &default_varobj_ops,
-  NULL,
-  NULL,
   LANG_MAGIC
 };
 
@@ -622,7 +606,7 @@ build_go_types (struct gdbarch *gdbarch)
     = GDBARCH_OBSTACK_ZALLOC (gdbarch, struct builtin_go_type);
 
   builtin_go_type->builtin_void
-    = arch_type (gdbarch, TYPE_CODE_VOID, TARGET_CHAR_BIT, "void");
+    = arch_type (gdbarch, TYPE_CODE_VOID, 1, "void");
   builtin_go_type->builtin_char
     = arch_character_type (gdbarch, 8, 1, "char");
   builtin_go_type->builtin_bool
@@ -650,9 +634,9 @@ build_go_types (struct gdbarch *gdbarch)
   builtin_go_type->builtin_uint64
     = arch_integer_type (gdbarch, 64, 1, "uint64");
   builtin_go_type->builtin_float32
-    = arch_float_type (gdbarch, 32, "float32", floatformats_ieee_single);
+    = arch_float_type (gdbarch, 32, "float32", NULL);
   builtin_go_type->builtin_float64
-    = arch_float_type (gdbarch, 64, "float64", floatformats_ieee_double);
+    = arch_float_type (gdbarch, 64, "float64", NULL);
   builtin_go_type->builtin_complex64
     = arch_complex_type (gdbarch, "complex64",
 			 builtin_go_type->builtin_float32);
@@ -668,11 +652,15 @@ static struct gdbarch_data *go_type_data;
 const struct builtin_go_type *
 builtin_go_type (struct gdbarch *gdbarch)
 {
-  return (const struct builtin_go_type *) gdbarch_data (gdbarch, go_type_data);
+  return gdbarch_data (gdbarch, go_type_data);
 }
+
+extern initialize_file_ftype _initialize_go_language;
 
 void
 _initialize_go_language (void)
 {
   go_type_data = gdbarch_data_register_post_init (build_go_types);
+
+  add_language (&go_language_defn);
 }

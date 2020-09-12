@@ -1,5 +1,5 @@
 ;; microblaze.md -- Machine description for Xilinx MicroBlaze processors.
-;; Copyright (C) 2009-2019 Free Software Foundation, Inc.
+;; Copyright (C) 2009-2013 Free Software Foundation, Inc.
 
 ;; Contributed by Michael Eager <eager@eagercon.com>.
 
@@ -41,13 +41,8 @@
   (UNSPEC_CMP		104)    ;; signed compare
   (UNSPEC_CMPU		105)    ;; unsigned compare
   (UNSPEC_TLS           106)    ;; jump table
-  (UNSPEC_SET_TEXT      107)    ;; set text start
-  (UNSPEC_TEXT          108)    ;; data text relative
 ])
 
-(define_c_enum "unspec" [
-  UNSPEC_IPREFETCH
-])
 
 ;;----------------------------------------------------
 ;; Instruction Attributes
@@ -79,7 +74,7 @@
 ;; bshift 	Shift operations
 
 (define_attr "type"
-  "unknown,branch,jump,call,load,store,move,arith,darith,imul,idiv,icmp,multi,nop,no_delay_arith,no_delay_load,no_delay_store,no_delay_imul,no_delay_move,bshift,fadd,frsub,fmul,fdiv,fcmp,fsl,fsqrt,fcvt,trap"
+  "unknown,branch,jump,call,load,store,move,arith,darith,imul,idiv,icmp,multi,nop,no_delay_arith,no_delay_load,no_delay_store,no_delay_imul,no_delay_move,bshift,fadd,frsub,fmul,fdiv,fcmp,fsl,fsqrt,fcvt"
   (const_string "unknown"))
 
 ;; Main data type used by the insn
@@ -124,10 +119,10 @@
      DEFINE_AUTOMATON).
 
      All define_reservations and define_cpu_units should have unique
-     names which cannot be "nothing".
+     names which can not be "nothing".
 
    o (exclusion_set string string) means that each CPU function unit
-     in the first string cannot be reserved simultaneously with each
+     in the first string can not be reserved simultaneously with each
      unit whose name is in the second string and vise versa.  CPU
      units in the string are separated by commas. For example, it is
      useful for description CPU with fully pipelined floating point
@@ -135,18 +130,18 @@
      floating point insns or only double floating point insns.
 
    o (presence_set string string) means that each CPU function unit in
-     the first string cannot be reserved unless at least one of units
+     the first string can not be reserved unless at least one of units
      whose names are in the second string is reserved.  This is an
      asymmetric relation.  CPU units in the string are separated by
      commas.  For example, it is useful for description that slot1 is
      reserved after slot0 reservation for a VLIW processor.
 
    o (absence_set string string) means that each CPU function unit in
-     the first string cannot be reserved only if each unit whose name
+     the first string can not be reserved only if each unit whose name
      is in the second string is not reserved.  This is an asymmetric
      relation (actually exclusion set is analogous to this one but it
      is symmetric).  CPU units in the string are separated by commas.
-     For example, it is useful for description that slot0 cannot be
+     For example, it is useful for description that slot0 can not be
      reserved after slot1 or slot2 reservation for a VLIW processor.
 
    o (define_bypass number out_insn_names in_insn_names) names bypass with
@@ -169,7 +164,7 @@
      case, you describe common part and use one its name (the 1st
      parameter) in regular expression in define_insn_reservation.  All
      define_reservations, define results and define_cpu_units should
-     have unique names which cannot be "nothing".
+     have unique names which can not be "nothing".
 
    o (define_insn_reservation name default_latency condition regexpr)
      describes reservation of cpu functional units (the 3nd operand)
@@ -370,8 +365,7 @@
   [(set (match_operand:HI 0 "register_operand" "=r")
         (bswap:HI (match_operand:HI 1 "register_operand" "r")))]
   "TARGET_REORDER"
-  "swapb %0, %1
-   swaph %0, %0"
+  "swaph %0, %1"
 )
 
 ;;----------------------------------------------------------------
@@ -513,17 +507,6 @@
   (set_attr "mode"	"SI")
   (set_attr "length"	"4,8")])
 
-(define_insn "iprefetch"
-  [(unspec [(match_operand:SI 0 "const_int_operand" "n")] UNSPEC_IPREFETCH)
-   (clobber (mem:BLK (scratch)))]
-   "TARGET_PREFETCH"
-  {
-    operands[2] = gen_rtx_REG (SImode, MB_ABI_ASM_TEMP_REGNUM);
-    return "mfs\t%2,rpc\n\twic\t%2,r0";
-  }
-  [(set_attr "type" "arith")
-   (set_attr "mode"  "SI")
-   (set_attr "length"    "8")])
 
 ;;----------------------------------------------------------------
 ;; Double Precision Subtraction
@@ -534,7 +517,8 @@
 	(minus:DI (match_operand:DI 1 "register_operand" "d")
 		  (match_operand:DI 2 "arith_operand32" "d")))]
   ""
-  "rsub\t%L0,%L2,%L1\;rsubc\t%M0,%M2,%M1"
+  "@
+   rsub\t%L0,%L2,%L1\;rsubc\t%M0,%M2,%M1"
   [(set_attr "type"	"darith")
   (set_attr "mode"	"DI")
   (set_attr "length"	"8")])
@@ -679,31 +663,6 @@
   (set_attr "mode"	"SI")
   (set_attr "length"	"4")])
 
-(define_peephole2
-  [(set (match_operand:SI 0 "register_operand")
-        (fix:SI (match_operand:SF 1 "register_operand")))
-   (set (pc)
-        (if_then_else (match_operator 2 "ordered_comparison_operator"
-                       [(match_operand:SI 3 "register_operand")
-                        (match_operand:SI 4 "arith_operand")])
-                      (label_ref (match_operand 5))
-                      (pc)))]
-   "TARGET_HARD_FLOAT"
-   [(set (match_dup 1) (match_dup 3))]
-
-  {
-    rtx condition;
-    rtx cmp_op0 = operands[3];
-    rtx cmp_op1 = operands[4];
-    rtx comp_reg =  gen_rtx_REG (SImode, MB_ABI_ASM_TEMP_REGNUM);
-
-    emit_insn (gen_cstoresf4 (comp_reg, operands[2],
-                              gen_rtx_REG (SFmode, REGNO (cmp_op0)),
-                              gen_rtx_REG (SFmode, REGNO (cmp_op1))));
-    condition = gen_rtx_NE (SImode, comp_reg, const0_rtx);
-    emit_jump_insn (gen_condjump (condition, operands[5]));
-  }
-)
 
 ;;----------------------------------------------------------------
 ;; Negation and one's complement
@@ -1159,18 +1118,6 @@
   }
 )
 
-;;Load and store reverse
-(define_insn "movsi4_rev"
-  [(set (match_operand:SI 0 "reg_or_mem_operand" "=r,Q")
-        (bswap:SI (match_operand:SF 1 "reg_or_mem_operand" "Q,r")))]
-  "TARGET_REORDER"
-  "@
-   lwr\t%0,%y1,r0
-   swr\t%1,%y0,r0"
-  [(set_attr "type"     "load,store")
-  (set_attr "mode"      "SI")
-  (set_attr "length"    "4,4")])
-
 ;; 32-bit floating point moves
 
 (define_expand "movsf"
@@ -1323,7 +1270,7 @@
   [(set (match_operand:SI 0 "register_operand" "=d")
 	(ashift:SI (match_operand:SI 1 "register_operand" "d")
                    (match_operand:SI 2 "arith_operand"    "I")))] 
-  "(operands[2] == const1_rtx)"
+  "(INTVAL (operands[2]) == 1)"
   "addk\t%0,%1,%1"
   [(set_attr "type"	"arith")
    (set_attr "mode"	"SI")
@@ -1484,7 +1431,7 @@
   [(set (match_operand:SI 0 "register_operand" "=d")
 	(ashiftrt:SI (match_operand:SI 1 "register_operand" "d")
                      (match_operand:SI 2 "arith_operand"    "I")))] 
-  "(operands[2] == const1_rtx)"
+  "(INTVAL (operands[2]) == 1)"
   "sra\t%0,%1"
   [(set_attr "type"	"arith")
    (set_attr "mode"	"SI")
@@ -1525,7 +1472,7 @@
   (set_attr "length"   "124")]
 )
 
-(define_insn "*ashrsi_reg"
+(define_insn "*ashlri_reg"
   [(set (match_operand:SI 0 "register_operand" "=&d")
        (ashiftrt:SI (match_operand:SI 1 "register_operand"  "d")
                    (match_operand:SI 2 "register_operand" "d")))]
@@ -1573,7 +1520,7 @@
   [(set (match_operand:SI 0 "register_operand" "=d")
 	(lshiftrt:SI (match_operand:SI 1 "register_operand" "d")
                      (match_operand:SI 2 "arith_operand"    "I")))] 
-  "(operands[2] == const1_rtx)"
+  "(INTVAL (operands[2]) == 1)"
   "srl\t%0,%1"
   [(set_attr "type"	"arith")
    (set_attr "mode"	"SI")
@@ -1614,7 +1561,7 @@
   (set_attr "length"   "124")]
 )
 
-(define_insn "*lshrsi_reg"
+(define_insn "*lshlri_reg"
   [(set (match_operand:SI 0 "register_operand" "=&d")
        (lshiftrt:SI (match_operand:SI 1 "register_operand"  "d")
                    (match_operand:SI 2 "register_operand" "d")))]
@@ -1675,12 +1622,34 @@
   (set_attr "length"	"4")]
 )              
 
+(define_insn "signed_compare"
+  [(set (match_operand:SI 0 "register_operand" "=d")
+	(unspec
+		[(match_operand:SI 1 "register_operand" "d")
+		 (match_operand:SI 2 "register_operand" "d")] UNSPEC_CMP))]
+  ""
+  "cmp\t%0,%1,%2"
+  [(set_attr "type"	"arith")
+  (set_attr "mode"	"SI")
+  (set_attr "length"	"4")])
+
+(define_insn "unsigned_compare"
+  [(set (match_operand:SI 0 "register_operand" "=d")
+	(unspec 
+		[(match_operand:SI 1 "register_operand" "d")
+		 (match_operand:SI 2 "register_operand" "d")] UNSPEC_CMPU))]
+  ""
+  "cmpu\t%0,%1,%2"
+  [(set_attr "type"	"arith")
+  (set_attr "mode"	"SI")
+  (set_attr "length"	"4")])
+
 ;;----------------------------------------------------------------
 ;; Setting a register from an floating point comparison. 
 ;;----------------------------------------------------------------
 (define_insn "cstoresf4"
    [(set (match_operand:SI 0 "register_operand" "=r")
-        (match_operator:SI 1 "ordered_comparison_operator"
+        (match_operator 1 "comparison_operator"
 	      [(match_operand:SF 2 "register_operand" "r")
 	       (match_operand:SF 3 "register_operand" "r")]))]
   "TARGET_HARD_FLOAT"
@@ -1696,33 +1665,20 @@
 
 (define_expand "cbranchsi4"
   [(set (pc)
-        (if_then_else (match_operator 0 "ordered_comparison_operator"
-                       [(match_operand:SI 1 "register_operand")
-                        (match_operand:SI 2 "arith_operand" "I,i")])
-                      (label_ref (match_operand 3 ""))
-                      (pc)))]
+	(if_then_else (match_operator 0 "ordered_comparison_operator"
+		       [(match_operand:SI 1 "register_operand")
+		        (match_operand:SI 2 "arith_operand")])
+		      (label_ref (match_operand 3 ""))
+		      (pc)))]
   ""
 {
   microblaze_expand_conditional_branch (SImode, operands);
   DONE;
 })
 
-(define_expand "cbranchsi4_reg"
-  [(set (pc)
-        (if_then_else (match_operator 0 "ordered_comparison_operator"
-                       [(match_operand:SI 1 "register_operand")
-                        (match_operand:SI 2 "register_operand")])
-                      (label_ref (match_operand 3 ""))
-                      (pc)))]
-  ""
-{
-  microblaze_expand_conditional_branch_reg (SImode, operands);
-  DONE;
-})
-
 (define_expand "cbranchsf4"
   [(set (pc)
-	(if_then_else (match_operator 0 "ordered_comparison_operator"
+	(if_then_else (match_operator 0 "comparison_operator"
 		       [(match_operand:SF 1 "register_operand")
 		        (match_operand:SF 2 "register_operand")])
 		      (label_ref (match_operand 3 ""))
@@ -1759,47 +1715,6 @@
   [(set_attr "type"	"branch")
    (set_attr "mode"	"none")
    (set_attr "length"	"4")]
-)
-
-(define_insn "branch_compare"
-  [(set (pc)
-        (if_then_else (match_operator:SI 0 "cmp_op"
-                                         [(match_operand:SI 1 "register_operand" "d")
-                                          (match_operand:SI 2 "register_operand" "d")
-                                         ])
-                      (label_ref (match_operand 3))
-                      (pc)))
-  (clobber(reg:SI R_TMP))]
-  ""
-  {
-    operands[4] = gen_rtx_REG (SImode, MB_ABI_ASM_TEMP_REGNUM);
-    enum rtx_code code = GET_CODE (operands[0]);
-
-    if (code == GT || code == LE)
-      {
-        output_asm_insn ("cmp\tr18,%z1,%z2", operands);
-        code = swap_condition (code);
-      }
-    else if (code == GTU || code == LEU)
-      {
-        output_asm_insn ("cmpu\tr18,%z1,%z2", operands);
-        code = swap_condition (code);
-      }
-    else if (code == GE || code == LT)
-      {
-        output_asm_insn ("cmp\tr18,%z2,%z1", operands);
-      }
-    else if (code == GEU || code == LTU)
-      {
-        output_asm_insn ("cmpu\tr18,%z2,%z1", operands);
-      }
-
-    operands[0] = gen_rtx_fmt_ee (signed_condition (code), SImode, operands[4], const0_rtx);
-    return "b%C0i%?\tr18,%3";
-  }
-  [(set_attr "type"     "branch")
-   (set_attr "mode"     "none")
-   (set_attr "length"   "12")]
 )
 
 ;;----------------------------------------------------------------
@@ -1850,7 +1765,7 @@
   {
     gcc_assert (GET_MODE (operands[0]) == Pmode);
 
-    if (!flag_pic || TARGET_PIC_DATA_TEXT_REL)
+    if (!flag_pic)
       emit_jump_insn (gen_tablejump_internal1 (operands[0], operands[1]));
     else
       emit_jump_insn (gen_tablejump_internal3 (operands[0], operands[1]));
@@ -1883,8 +1798,9 @@
 	(plus:SI (match_operand:SI 0 "register_operand" "d")
 		 (label_ref:SI (match_operand 1 "" ""))))
   (use (label_ref:SI (match_dup 1)))]
- "NEXT_INSN (as_a <rtx_insn *> (operands[1])) != 0
-  && GET_CODE (PATTERN (NEXT_INSN (as_a <rtx_insn *> (operands[1])))) == ADDR_DIFF_VEC
+ "next_active_insn (insn) != 0
+  && GET_CODE (PATTERN (next_active_insn (insn))) == ADDR_DIFF_VEC
+  && PREV_INSN (next_active_insn (insn)) == operands[1]
   && flag_pic"
   {
     output_asm_insn ("addk\t%0,%0,r20",operands);
@@ -1998,10 +1914,8 @@
 (define_insn "*<optab>"
   [(any_return)]
   ""
-  {
-    if (microblaze_is_break_handler ())
-        return "rtbd\tr16, 8\;%#";
-    else if (microblaze_is_interrupt_variant ())
+  { 
+    if (microblaze_is_interrupt_variant ())
         return "rtid\tr14, 0\;%#";
     else
         return "rtsd\tr15, 8\;%#";
@@ -2017,10 +1931,8 @@
   [(any_return)
    (use (match_operand:SI 0 "register_operand" ""))]
   ""
-  {
-    if (microblaze_is_break_handler ())
-        return "rtbd\tr16,8\;%#";
-    else if (microblaze_is_interrupt_variant ())
+  {	
+    if (microblaze_is_interrupt_variant ())
         return "rtid\tr14,0 \;%#";
     else
         return "rtsd\tr15,8 \;%#";
@@ -2055,8 +1967,7 @@
   {
     rtx addr = XEXP (operands[0], 0);
 
-    if (flag_pic == 2 && !TARGET_PIC_DATA_TEXT_REL
-    && GET_CODE (addr) == SYMBOL_REF
+    if (flag_pic == 2 && GET_CODE (addr) == SYMBOL_REF 
 	&& !SYMBOL_REF_LOCAL_P (addr)) 
       {
         rtx temp = gen_rtx_UNSPEC (Pmode, gen_rtvec (1, addr), UNSPEC_PLT);
@@ -2117,7 +2028,7 @@
   (set_attr "length"	"4")])
 
 (define_insn "call_internal1"
-  [(call (mem (match_operand:VOID 0 "call_insn_simple_operand" "ri"))
+  [(call (mem (match_operand:SI 0 "call_insn_simple_operand" "ri"))
 	 (match_operand:SI 1 "" "i"))
   (clobber (reg:SI R_SR))]
   ""
@@ -2126,14 +2037,8 @@
     register rtx target2 = gen_rtx_REG (Pmode,
 			      GP_REG_FIRST + MB_ABI_SUB_RETURN_ADDR_REGNUM);
     if (GET_CODE (target) == SYMBOL_REF) {
-        if (microblaze_break_function_p (SYMBOL_REF_DECL (target))) {
-            gen_rtx_CLOBBER (VOIDmode, target2);
-            return "brki\tr16,%0\;%#";
-        }
-        else {
-            gen_rtx_CLOBBER (VOIDmode, target2);
-            return "brlid\tr15,%0\;%#";
-        }
+        gen_rtx_CLOBBER (VOIDmode, target2);
+        return "brlid\tr15,%0\;%#";
     } else if (GET_CODE (target) == CONST_INT)
         return "la\t%@,r0,%0\;brald\tr15,%@\;%#";
     else if (GET_CODE (target) == REG)
@@ -2159,8 +2064,7 @@
   {
     rtx addr = XEXP (operands[1], 0);
 
-    if (flag_pic == 2 && !TARGET_PIC_DATA_TEXT_REL
-    && GET_CODE (addr) == SYMBOL_REF
+    if (flag_pic == 2 && GET_CODE (addr) == SYMBOL_REF
 	&& !SYMBOL_REF_LOCAL_P (addr)) 
       {
         rtx temp = gen_rtx_UNSPEC (Pmode, gen_rtvec (1, addr), UNSPEC_PLT);
@@ -2238,15 +2142,13 @@
     if (GET_CODE (target) == SYMBOL_REF)
     {
       gen_rtx_CLOBBER (VOIDmode,target2);
-      if (microblaze_break_function_p (SYMBOL_REF_DECL (target)))
-        return "brki\tr16,%1\;%#";
-      else if (SYMBOL_REF_FLAGS (target) & SYMBOL_FLAG_FUNCTION)
+      if (SYMBOL_REF_FLAGS (target) & SYMBOL_FLAG_FUNCTION)
         {
 	  return "brlid\tr15,%1\;%#";
         }
       else
         {
-	    return "bralid\tr15,%1\;%#";
+	  return "bralid\tr15,%1\;%#";
         }
     }
     else if (GET_CODE (target) == CONST_INT)
@@ -2299,14 +2201,6 @@
   (set_attr "mode"	"none")
   (set_attr "length"	"4")])
 
-;; Trap instruction pattern for __builtin_trap. Same as the glibc ABORT_INSTRUCTION
-(define_insn "trap"
-  [(trap_if (const_int 1) (const_int 0))]
-  ""
-  "brki\tr0,-1"
- [(set_attr "type" "trap")]
-)
-
 ;; The insn to set GOT. The hardcoded number "8" accounts for $pc difference
 ;; between "mfs" and "addik" instructions.
 (define_insn "set_got"
@@ -2316,18 +2210,6 @@
   "mfs\t%0,rpc\n\taddik\t%0,%0,_GLOBAL_OFFSET_TABLE_+8"
   [(set_attr "type" "multi")
    (set_attr "length" "12")])
-
-;; The insn to set TEXT.
-;; The hardcoded number "8" accounts for $pc difference
-;; between "mfs" and "addik" instructions.
-(define_insn "set_text"
-  [(set (match_operand:SI 0 "register_operand" "=r")
-    (unspec:SI[(const_int 0)] UNSPEC_SET_TEXT))]
-  ""
-  "mfs\t%0,rpc\n\taddik\t%0,%0,8@TXTPCREL"
-  [(set_attr "type" "multi")
-   (set_attr "length" "12")])
-
 
 ;; This insn gives the count of leading number of zeros for the second
 ;; operand and stores the result in first operand.
@@ -2339,15 +2221,3 @@
   [(set_attr "type"     "arith")
   (set_attr "mode"      "SI")
   (set_attr "length"    "4")])
-
-; This is used in compiling the unwind routines.
-(define_expand "eh_return"
-  [(use (match_operand 0 "general_operand" ""))]
-  ""
-  "
-{
-  microblaze_eh_return (operands[0]);
-  DONE;
-}")
-
-(include "sync.md")

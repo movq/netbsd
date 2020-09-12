@@ -1,6 +1,7 @@
 /* trace.c --- tracing output for the M32C simulator.
 
-Copyright (C) 2005-2019 Free Software Foundation, Inc.
+Copyright (C) 2005, 2007, 2008, 2009, 2010, 2011
+Free Software Foundation, Inc.
 Contributed by Red Hat, Inc.
 
 This file is part of the GNU simulators.
@@ -18,7 +19,7 @@ GNU General Public License for more details.
 You should have received a copy of the GNU General Public License
 along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-#include "config.h"
+
 #include <stdio.h>
 #include <stdarg.h>
 #include <string.h>
@@ -34,7 +35,6 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 #include "cpu.h"
 #include "mem.h"
 #include "load.h"
-#include "trace.h"
 
 static int
 sim_dis_read (bfd_vma memaddr, bfd_byte * ptr, unsigned int length,
@@ -129,7 +129,6 @@ load_file_and_line (const char *filename, int lineno)
       int i;
       struct stat s;
       const char *found_filename, *slash;
-      FILE *file;
 
       found_filename = filename;
       while (1)
@@ -147,7 +146,7 @@ load_file_and_line (const char *filename, int lineno)
       files = f;
       f->filename = strdup (filename);
       f->data = (char *) malloc (s.st_size + 2);
-      file = fopen (found_filename, "rb");
+      FILE *file = fopen (found_filename, "rb");
       fread (f->data, 1, s.st_size, file);
       f->data[s.st_size] = 0;
       fclose (file);
@@ -176,7 +175,7 @@ load_file_and_line (const char *filename, int lineno)
 }
 
 void
-sim_disasm_one (void)
+sim_disasm_one ()
 {
   static int initted = 0;
   static asymbol **symtab = 0;

@@ -20,9 +20,9 @@
 #ifndef GCC_AARCH64_NETBSD_H
 #define GCC_AARCH64_NETBSD_H
 
-/* NetBSD malloc(3) does 64, not 128 bytes. */
-#undef MALLOC_ABI_ALIGNMENT
-#define MALLOC_ABI_ALIGNMENT  64
+#undef SUBTARGET_EXTRA_SPECS
+#define SUBTARGET_EXTRA_SPECS				\
+  NETBSD_SUBTARGET_EXTRA_SPECS
 
 #define TARGET_LINKER_BIG_EMULATION "aarch64nbsdb"
 #define TARGET_LINKER_LITTLE_EMULATION "aarch64nbsd"
@@ -35,8 +35,6 @@
 
 #undef  SUBTARGET_EXTRA_LINK_SPEC
 #define SUBTARGET_EXTRA_LINK_SPEC " -m" TARGET_LINKER_EMULATION
-
-#define NETBSD_ENTRY_POINT "__start"
 
 #define NETBSD_TARGET_LINK_SPEC  "%{h*}			\
    -X %{mbig-endian:-EB -m " TARGET_LINKER_BIG_EMULATION "} \
@@ -88,14 +86,14 @@
 #define TARGET_BINDS_LOCAL_P default_binds_local_p_2
 #endif
 
+/* Use the AAPCS type for wchar_t, override the one from
+   config/netbsd.h.  */
+#undef  WCHAR_TYPE
+#define WCHAR_TYPE  "unsigned int"
+
 #if 0
 #undef MCOUNT_NAME
 #define MCOUNT_NAME ".mcount"
 #endif
-
-#undef EXTRA_SPECS
-#define EXTRA_SPECS \
-  { "asm_cpu_spec",             ASM_CPU_SPEC }, \
-  NETBSD_SUBTARGET_EXTRA_SPECS
 
 #endif  /* GCC_AARCH64_NETBSD_H */

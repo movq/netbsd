@@ -1,4 +1,4 @@
-# Copyright 2004-2019 Free Software Foundation, Inc.
+# Copyright 2004, 2007, 2008, 2009, 2010, 2011 Free Software Foundation, Inc.
 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -17,21 +17,27 @@
 # a shared library (PR gdb/1555, was PR shlib/1280, shlib/1237).
 # Tested on ppc-yellowdog-linux (Yellow Dog Linux 3.0 3.2.2-2a)
 
+if $tracelevel then {
+    strace $tracelevel
+}
+
 if {[skip_shlib_tests]} {
     return 0
 }
 
-standard_testfile gdb1555-main.c gdb1555.c
-
+set testfile gdb1555-main
 set libfile gdb1555
+set srcfile ${testfile}.c
+set binfile ${objdir}/${subdir}/${testfile}
+
 set libsrc "${srcdir}/${subdir}/${libfile}.c"
-set libobj [standard_output_file ${libfile}.so]
+set libobj "${objdir}/${subdir}/${libfile}.so"
 set execsrc "${srcdir}/${subdir}/${srcfile}"
 
 remote_exec build "rm -f ${binfile}"
 
 # get the value of gcc_compiled
-if [get_compiler_info] {
+if [get_compiler_info ${binfile}] {
     return -1
 }
 
@@ -41,11 +47,14 @@ if { [gdb_compile_shlib $libsrc $libobj {debug}] != ""
     return -1
 }
 
-clean_restart ${binfile}
-gdb_load_shlib $libobj
+gdb_exit
+gdb_start
+gdb_reinitialize_dir $srcdir/$subdir
+gdb_load ${binfile}
+gdb_load_shlibs $libobj
 
 if ![runto_main] then {
-    fail "can't run to main"
+    fail "Can't run to main"
     return 0
 }
 

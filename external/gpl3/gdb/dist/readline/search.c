@@ -1,24 +1,25 @@
 /* search.c - code for non-incremental searching in emacs and vi modes. */
 
-/* Copyright (C) 1992-2009 Free Software Foundation, Inc.
+/* Copyright (C) 1992-2005 Free Software Foundation, Inc.
 
-   This file is part of the GNU Readline Library (Readline), a library
-   for reading lines of text with interactive input and history editing.      
+   This file is part of the Readline Library (the Library), a set of
+   routines for providing Emacs style line input to programs that ask
+   for it.
 
-   Readline is free software: you can redistribute it and/or modify
+   The Library is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation, either version 3 of the License, or
-   (at your option) any later version.
+   the Free Software Foundation; either version 2, or (at your option)
+   any later version.
 
-   Readline is distributed in the hope that it will be useful,
-   but WITHOUT ANY WARRANTY; without even the implied warranty of
-   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-   GNU General Public License for more details.
+   The Library is distributed in the hope that it will be useful, but
+   WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+   General Public License for more details.
 
-   You should have received a copy of the GNU General Public License
-   along with Readline.  If not, see <http://www.gnu.org/licenses/>.
-*/
-
+   The GNU General Public License is often shipped with GNU software, and
+   is generally kept in a file called COPYING or LICENSE.  If you do not
+   have a copy of the license, write to the Free Software Foundation,
+   59 Temple Place, Suite 330, Boston, MA 02111 USA. */
 #define READLINE_LIBRARY
 
 #if defined (HAVE_CONFIG_H)
@@ -69,6 +70,7 @@ static int rl_history_search_pos;
 static char *history_search_string;
 static int history_string_size;
 
+static UNDO_LIST *noninc_saved_undo_list;
 static void make_history_line_current PARAMS((HIST_ENTRY *));
 static int noninc_search_from_pos PARAMS((char *, int, int));
 static int noninc_dosearch PARAMS((char *, int));
@@ -210,8 +212,8 @@ _rl_nsearch_init (dir, pchar)
   rl_end = rl_point = 0;
 
   p = _rl_make_prompt_for_search (pchar ? pchar : ':');
-  rl_message ("%s", p);
-  xfree (p);
+  rl_message (p, 0, 0);
+  free (p);
 
   RL_SETSTATE(RL_STATE_NSEARCH);
 

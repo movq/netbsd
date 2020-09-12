@@ -1,6 +1,6 @@
 #! /bin/sh
 
-# Copyright (C) 2011-2019 Free Software Foundation, Inc.
+# Copyright (C) 2011-2012 Free Software Foundation, Inc.
 #
 # This file is part of GDB.
 #
@@ -29,49 +29,15 @@
 #     regenerate the various scripts and Makefiles are on the PATH.
 
 # The list of gnulib modules we are importing in GDB.
-IMPORTED_GNULIB_MODULES="\
-    alloca \
-    canonicalize-lgpl \
-    dirent \
-    dirfd \
-    errno \
-    fnmatch-gnu \
-    frexpl \
-    getcwd \
-    glob \
-    inet_ntop
-    inttypes \
-    lstat \
-    limits-h \
-    memchr \
-    memmem \
-    mkdir \
-    mkdtemp \
-    mkostemp \
-    pathmax \
-    rawmemchr \
-    readlink \
-    rename \
-    setenv \
-    signal-h \
-    strchrnul \
-    strstr \
-    strtok_r \
-    sys_stat \
-    unistd \
-    unsetenv \
-    update-copyright \
-    wchar \
-    wctype-h \
-"
+IMPORTED_GNULIB_MODULES="fnmatch-gnu inttypes memmem update-copyright"
 
 # The gnulib commit ID to use for the update.
-GNULIB_COMMIT_SHA1="38237baf99386101934cd93278023aa4ae523ec0"
+GNULIB_COMMIT_SHA1="8d5bd1402003bd0153984b138735adf537d960b0"
 
 # The expected version number for the various auto tools we will
 # use after the import.
-AUTOCONF_VERSION="2.69"
-AUTOMAKE_VERSION="1.15.1"
+AUTOCONF_VERSION="2.64"
+AUTOMAKE_VERSION="1.11.1"
 ACLOCAL_VERSION="$AUTOMAKE_VERSION"
 
 if [ $# -ne 1 ]; then
@@ -110,8 +76,7 @@ fi
 # Verify that we have the correct version of autoconf.
 ver=`autoconf --version 2>&1 | head -1 | sed 's/.*) //'`
 if [ "$ver" != "$AUTOCONF_VERSION" ]; then
-   echo "Error: Wrong autoconf version ($ver), we need $AUTOCONF_VERSION."
-   echo "Aborting."
+   echo "Error: Wrong autoconf version: $ver. Aborting."
    exit 1
 fi
 
@@ -124,26 +89,9 @@ if [ "$ver" != "$AUTOMAKE_VERSION" ]; then
 fi
 
 # Verify that we have the correct version of aclocal.
-#
-# The grep below is needed because Perl >= 5.16 dumps a "called too
-# early to check prototype" warning when running aclocal 1.11.1.  This
-# causes trouble below, because the warning is the first line output
-# by aclocal, resulting in:
-#
-# $ sh ./update-gnulib.sh ~/src/gnulib/src/
-# Error: Wrong aclocal version: called too early to check prototype at /opt/automake-1.11.1/bin/aclocal line 617.. Aborting.
-#
-# Some distros carry an automake patch for that:
-#  https://bugs.debian.org/cgi-bin/bugreport.cgi?msg=5;filename=aclocal-function-prototypes.debdiff;att=1;bug=752784
-#
-# But since we prefer pristine FSF versions of autotools, work around
-# the issue here.  This can be removed later when we bump the required
-# automake version.
-#
-ver=`aclocal --version 2>&1 | grep -v "called too early to check prototype" | head -1 | sed 's/.*) //'`
+ver=`aclocal --version 2>&1 | head -1 | sed 's/.*) //'`
 if [ "$ver" != "$ACLOCAL_VERSION" ]; then
-   echo "Error: Wrong aclocal version ($ver), we need $ACLOCAL_VERSION."
-   echo "Aborting."
+   echo "Error: Wrong aclocal version: $ver. Aborting."
    exit 1
 fi
 
@@ -159,19 +107,6 @@ if [ $? -ne 0 ]; then
    exit 1
 fi
 
-# Apply our local patches.
-apply_patches ()
-{
-    patch -p3 -f -i "$1"
-    if [ $? -ne 0 ]; then
-        echo "Failed to apply some patches.  Aborting."
-        exit 1
-    fi
-}
-
-apply_patches "patches/0001-Fix-PR-gdb-23558-Use-system-s-getcwd-when-cross-comp.patch"
-apply_patches "patches/0002-mkostemp-mkostemps-Fix-compilation-error-in-C-mode-o.patch"
-
 # Regenerate all necessary files...
 aclocal -Iimport/m4 &&
 autoconf &&
@@ -182,14 +117,3 @@ if [ $? -ne 0 ]; then
    exit 1
 fi
 
-# Update aclocal-m4-deps.mk
-ACLOCAL_M4_DEPS_FILE=aclocal-m4-deps.mk
-cat > ${ACLOCAL_M4_DEPS_FILE}.tmp <<EOF
-# THIS FILE IS GENERATED.  -*- buffer-read-only: t -*- vi :set ro:
-aclocal_m4_deps = \\
-$(find import/m4 -type f -name "*.m4" | LC_COLLATE=C sort | \
-  sed 's/^/	/; s/$/ \\/; $s/ \\//g')
-EOF
-
-../../move-if-change ${ACLOCAL_M4_DEPS_FILE}.tmp ${ACLOCAL_M4_DEPS_FILE}
-rm -f ${ACLOCAL_M4_DEPS_FILE}.tmp

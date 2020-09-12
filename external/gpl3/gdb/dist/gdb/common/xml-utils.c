@@ -1,6 +1,6 @@
 /* Shared helper routines for manipulating XML.
 
-   Copyright (C) 2006-2019 Free Software Foundation, Inc.
+   Copyright (C) 2006-2013 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -17,47 +17,74 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-#include "common-defs.h"
+#ifdef GDBSERVER
+#include "server.h"
+#else
+#include "defs.h"
+#endif
+
 #include "xml-utils.h"
 
-/* See xml-utils.h.  */
+#include <string.h>
 
-std::string
+/* Return a malloc allocated string with special characters from TEXT
+   replaced by entity references.  */
+
+char *
 xml_escape_text (const char *text)
 {
-  std::string result;
+  char *result;
+  int i, special;
 
-  xml_escape_text_append (&result, text);
-
-  return result;
-}
-
-/* See xml-utils.h.  */
-
-void
-xml_escape_text_append (std::string *result, const char *text)
-{
-  /* Expand the result.  */
-  for (int i = 0; text[i] != '\0'; i++)
+  /* Compute the length of the result.  */
+  for (i = 0, special = 0; text[i] != '\0'; i++)
     switch (text[i])
       {
       case '\'':
-	*result += "&apos;";
-	break;
       case '\"':
-	*result += "&quot;";
+	special += 5;
 	break;
       case '&':
-	*result += "&amp;";
+	special += 4;
 	break;
       case '<':
-	*result += "&lt;";
-	break;
       case '>':
-	*result += "&gt;";
+	special += 3;
 	break;
       default:
-	*result += text[i];
 	break;
       }
+
+  /* Expand the result.  */
+  result = xmalloc (i + special + 1);
+  for (i = 0, special = 0; text[i] != '\0'; i++)
+    switch (text[i])
+      {
+      case '\'':
+	strcpy (result + i + special, "&apos;");
+	special += 5;
+	break;
+      case '\"':
+	strcpy (result + i + special, "&quot;");
+	special += 5;
+	break;
+      case '&':
+	strcpy (result + i + special, "&amp;");
+	special += 4;
+	break;
+      case '<':
+	strcpy (result + i + special, "&lt;");
+	special += 3;
+	break;
+      case '>':
+	strcpy (result + i + special, "&gt;");
+	special += 3;
+	break;
+      default:
+	result[i + special] = text[i];
+	break;
+      }
+  result[i + special] = '\0';
+
+  return result;
 }

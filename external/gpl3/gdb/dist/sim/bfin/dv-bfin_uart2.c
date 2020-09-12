@@ -1,7 +1,7 @@
 /* Blackfin Universal Asynchronous Receiver/Transmitter (UART) model.
    For "new style" UARTs on BF50x/BF54x parts.
 
-   Copyright (C) 2010-2019 Free Software Foundation, Inc.
+   Copyright (C) 2010-2011 Free Software Foundation, Inc.
    Contributed by Analog Devices, Inc.
 
    This file is part of simulators.
@@ -76,22 +76,20 @@ bfin_uart_io_write_buffer (struct hw *me, const void *source,
   bu32 value;
   bu16 *valuep;
 
-  /* Invalid access mode is higher priority than missing register.  */
-  if (!dv_bfin_mmr_require_16 (me, addr, nr_bytes, true))
-    return 0;
-
   value = dv_load_2 (source);
   mmr_off = addr - uart->base;
   valuep = (void *)((unsigned long)uart + mmr_base() + mmr_off);
 
   HW_TRACE_WRITE ();
 
+  dv_bfin_mmr_require_16 (me, addr, nr_bytes, true);
+
   /* XXX: All MMRs are "8bit" ... what happens to high 8bits ?  */
 
   switch (mmr_off)
     {
     case mmr_offset(thr):
-      uart->thr = bfin_uart_write_byte (me, value, uart->mcr);
+      uart->thr = bfin_uart_write_byte (me, value);
       if (uart->ier & ETBEI)
 	hw_port_event (me, DV_PORT_TX, 1);
       break;
@@ -120,7 +118,7 @@ bfin_uart_io_write_buffer (struct hw *me, const void *source,
       break;
     default:
       dv_bfin_mmr_invalid (me, addr, nr_bytes, true);
-      return 0;
+      break;
     }
 
   return nr_bytes;
@@ -134,19 +132,17 @@ bfin_uart_io_read_buffer (struct hw *me, void *dest,
   bu32 mmr_off;
   bu16 *valuep;
 
-  /* Invalid access mode is higher priority than missing register.  */
-  if (!dv_bfin_mmr_require_16 (me, addr, nr_bytes, false))
-    return 0;
-
   mmr_off = addr - uart->base;
   valuep = (void *)((unsigned long)uart + mmr_base() + mmr_off);
 
   HW_TRACE_READ ();
 
+  dv_bfin_mmr_require_16 (me, addr, nr_bytes, false);
+
   switch (mmr_off)
     {
     case mmr_offset(rbr):
-      uart->rbr = bfin_uart_get_next_byte (me, uart->rbr, uart->mcr, NULL);
+      uart->rbr = bfin_uart_get_next_byte (me, uart->rbr, NULL);
       dv_store_2 (dest, uart->rbr);
       break;
     case mmr_offset(ier_set):
@@ -155,7 +151,6 @@ bfin_uart_io_read_buffer (struct hw *me, void *dest,
       bfin_uart_reschedule (me);
       break;
     case mmr_offset(lsr):
-      uart->lsr &= ~(DR | THRE | TEMT);
       uart->lsr |= bfin_uart_get_status (me);
     case mmr_offset(thr):
     case mmr_offset(msr):
@@ -169,7 +164,7 @@ bfin_uart_io_read_buffer (struct hw *me, void *dest,
       break;
     default:
       dv_bfin_mmr_invalid (me, addr, nr_bytes, false);
-      return 0;
+      break;
     }
 
   return nr_bytes;

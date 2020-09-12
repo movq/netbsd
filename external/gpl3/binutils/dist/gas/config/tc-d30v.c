@@ -1,5 +1,6 @@
 /* tc-d30v.c -- Assembler code for the Mitsubishi D30V
-   Copyright (C) 1997-2020 Free Software Foundation, Inc.
+   Copyright 1997, 1998, 1999, 2000, 2001, 2002, 2003, 2005, 2006, 2007, 2008
+   Free Software Foundation, Inc.
 
    This file is part of GAS, the GNU Assembler.
 
@@ -22,7 +23,6 @@
 #include "safe-ctype.h"
 #include "subsegs.h"
 #include "opcode/d30v.h"
-#include "dwarf2dbg.h"
 
 const char comment_chars[]        = ";";
 const char line_comment_chars[]   = "#";
@@ -121,7 +121,7 @@ size_t md_longopts_size = sizeof (md_longopts);
 static struct hash_control *d30v_hash;
 
 /* Do a binary search of the pre_defined_registers array to see if
-   NAME is a valid register name.  Return the register number from the
+   NAME is a valid regiter name.  Return the register number from the
    array on success, or -1 on failure.  */
 
 static int
@@ -239,13 +239,13 @@ md_show_usage (FILE *stream)
   fprintf (stream, _("\nD30V options:\n\
 -O                      Make adjacent short instructions parallel if possible.\n\
 -n                      Warn about all NOPs inserted by the assembler.\n\
--N                      Warn about NOPs inserted after word multiplies.\n\
--c                      Warn about symbols whose names match register names.\n\
+-N			Warn about NOPs inserted after word multiplies.\n\
+-c                      Warn about symbols whoes names match register names.\n\
 -C                      Opposite of -C.  -c is the default.\n"));
 }
 
 int
-md_parse_option (int c, const char *arg ATTRIBUTE_UNUSED)
+md_parse_option (int c, char *arg ATTRIBUTE_UNUSED)
 {
   switch (c)
     {
@@ -285,7 +285,7 @@ md_undefined_symbol (char *name ATTRIBUTE_UNUSED)
   return 0;
 }
 
-const char *
+char *
 md_atof (int type, char *litP, int *sizeP)
 {
   return ieee_md_atof (type, litP, sizeP, TRUE);
@@ -302,8 +302,8 @@ md_convert_frag (bfd *abfd ATTRIBUTE_UNUSED,
 valueT
 md_section_align (asection *seg, valueT addr)
 {
-  int align = bfd_section_alignment (seg);
-  return ((addr + (1 << align) - 1) & -(1 << align));
+  int align = bfd_get_section_alignment (stdoutput, seg);
+  return ((addr + (1 << align) - 1) & (-1 << align));
 }
 
 void
@@ -484,7 +484,7 @@ get_operands (expressionS exp[], int cmp_hack)
 static long long
 build_insn (struct d30v_insn *opcode, expressionS *opers)
 {
-  int i, bits, shift, flags;
+  int i, length, bits, shift, flags;
   unsigned long number, id = 0;
   long long insn;
   struct d30v_opcode *op = opcode->op;
@@ -506,6 +506,7 @@ build_insn (struct d30v_insn *opcode, expressionS *opers)
       if (flags & OPERAND_SHIFT)
 	bits += 3;
 
+      length = d30v_operand_table[form->operands[i]].length;
       shift = 12 - d30v_operand_table[form->operands[i]].position;
       if (opers[i].X_op != O_symbol)
 	number = opers[i].X_add_number;
@@ -592,7 +593,6 @@ write_long (struct d30v_insn *opcode ATTRIBUTE_UNUSED,
   int i, where;
   char *f = frag_more (8);
 
-  dwarf2_emit_insn (8);
   insn |= FM11;
   d30v_number_to_chars (f, insn, 8);
 
@@ -620,7 +620,6 @@ write_1_short (struct d30v_insn *opcode,
   char *f = frag_more (8);
   int i, where;
 
-  dwarf2_emit_insn (8);
   if (warn_nops == NOP_ALL)
     as_warn (_("%s NOP inserted"), use_sequential ?
 	     _("sequential") : _("parallel"));
@@ -998,7 +997,7 @@ write_2_short (struct d30v_insn *opcode1,
 	}
       else if (prev_left_kills_right_p)
 	{
-	  /* The left instruction kills the right slot, so we
+	  /* The left instruction kils the right slot, so we
 	     must leave it empty.  */
 	  write_1_short (opcode1, insn1, fx->next, FALSE);
 	  return 1;
@@ -1088,7 +1087,6 @@ write_2_short (struct d30v_insn *opcode1,
     }
 
   f = frag_more (8);
-  dwarf2_emit_insn (8);
   d30v_number_to_chars (f, insn, 8);
 
   /* If the previous instruction was a 32-bit multiply but it is put into a
@@ -1131,26 +1129,26 @@ find_format (struct d30v_opcode *opcode,
 	     int fsize,
 	     int cmp_hack)
 {
-  int match, opcode_index, i = 0, j, k;
+  int numops, match, index, i = 0, j, k;
   struct d30v_format *fm;
 
   if (opcode == NULL)
     return NULL;
 
   /* Get all the operands and save them as expressions.  */
-  get_operands (myops, cmp_hack);
+  numops = get_operands (myops, cmp_hack);
 
-  while ((opcode_index = opcode->format[i++]) != 0)
+  while ((index = opcode->format[i++]) != 0)
     {
-      if (fsize == FORCE_SHORT && opcode_index >= LONG)
+      if (fsize == FORCE_SHORT && index >= LONG)
 	continue;
 
-      if (fsize == FORCE_LONG && opcode_index < LONG)
+      if (fsize == FORCE_LONG && index < LONG)
 	continue;
 
-      fm = (struct d30v_format *) &d30v_format_table[opcode_index];
-      k = opcode_index;
-      while (fm->form == opcode_index)
+      fm = (struct d30v_format *) &d30v_format_table[index];
+      k = index;
+      while (fm->form == index)
 	{
 	  match = 1;
 	  /* Now check the operands for compatibility.  */
@@ -1158,7 +1156,7 @@ find_format (struct d30v_opcode *opcode,
 	    {
 	      int flags = d30v_operand_table[fm->operands[j]].flags;
 	      int bits = d30v_operand_table[fm->operands[j]].bits;
-	      operatorT X_op = myops[j].X_op;
+	      int X_op = myops[j].X_op;
 	      int num = myops[j].X_add_number;
 
 	      if (flags & OPERAND_SPECIAL)
@@ -1242,10 +1240,12 @@ find_format (struct d30v_opcode *opcode,
 
 		      /* Calculate the current address by running through the
 			 previous frags and adding our current offset.  */
-		      value = frag_now_fix_octets ();
+		      value = 0;
 		      for (f = frchain_now->frch_root; f; f = f->fr_next)
 			value += f->fr_fix + f->fr_offset;
-		      value = S_GET_VALUE (myops[j].X_add_symbol) - value;
+		      value = (S_GET_VALUE (myops[j].X_add_symbol) - value
+			       - (obstack_next_free (&frchain_now->frch_obstack)
+				  - frag_now->fr_literal));
 		      if (check_range (value, bits, flags))
 			match = 0;
 		    }
@@ -1342,14 +1342,13 @@ do_assemble (char *str,
   if (!strncmp (name, "cmp", 3))
     {
       int p, i;
-      char **d30v_str = (char **) d30v_cc_names;
-
+      char **str = (char **) d30v_cc_names;
       if (name[3] == 'u')
 	p = 4;
       else
 	p = 3;
 
-      for (i = 1; *d30v_str && strncmp (*d30v_str, &name[p], 2); i++, d30v_str++)
+      for (i = 1; *str && strncmp (*str, &name[p], 2); i++, str++)
 	;
 
       /* cmpu only supports some condition codes.  */
@@ -1362,7 +1361,7 @@ do_assemble (char *str,
 	    }
 	}
 
-      if (!*d30v_str)
+      if (!*str)
 	{
 	  name[p + 2] = 0;
 	  as_bad (_("unknown condition code: %s"), &name[p]);
@@ -1490,7 +1489,7 @@ d30v_align (int n, char *pfill, symbolS *label)
   if (pfill == NULL)
     {
       if (n > 2
-	  && (bfd_section_flags (now_seg) & SEC_CODE) != 0)
+	  && (bfd_get_section_flags (stdoutput, now_seg) & SEC_CODE) != 0)
 	{
 	  static char const nop[4] = { 0x00, 0xf0, 0x00, 0x00 };
 
@@ -1517,7 +1516,7 @@ d30v_align (int n, char *pfill, symbolS *label)
       valueT       old_value;
       valueT       new_value;
 
-      gas_assert (S_GET_SEGMENT (label) == now_seg);
+      assert (S_GET_SEGMENT (label) == now_seg);
 
       old_frag  = symbol_get_frag (label);
       old_value = S_GET_VALUE (label);
@@ -1685,7 +1684,6 @@ md_assemble (char *str)
 	      else
 		{
 		  f = frag_more (8);
-		  dwarf2_emit_insn (8);
 		  d30v_number_to_chars (f, NOP2, 8);
 
 		  if (warn_nops == NOP_ALL || warn_nops == NOP_MULTIPLY)
@@ -1760,8 +1758,8 @@ arelent *
 tc_gen_reloc (asection *seg ATTRIBUTE_UNUSED, fixS *fixp)
 {
   arelent *reloc;
-  reloc = XNEW (arelent);
-  reloc->sym_ptr_ptr = XNEW (asymbol *);
+  reloc = xmalloc (sizeof (arelent));
+  reloc->sym_ptr_ptr = xmalloc (sizeof (asymbol *));
   *reloc->sym_ptr_ptr = symbol_get_bfdsym (fixp->fx_addsy);
   reloc->address = fixp->fx_frag->fr_address + fixp->fx_where;
   reloc->howto = bfd_reloc_type_lookup (stdoutput, fixp->fx_r_type);
@@ -1840,7 +1838,7 @@ d30v_start_line (void)
 }
 
 static void
-check_size (long value, int bits, const char *file, int line)
+check_size (long value, int bits, char *file, int line)
 {
   int tmp, max;
 
@@ -1870,8 +1868,6 @@ d30v_frob_label (symbolS *lab)
   /* Record this label for future adjustment after we find out what
      kind of data it references, and the required alignment therewith.  */
   d30v_last_label = lab;
-
-  dwarf2_emit_label (lab);
 }
 
 /* Hook into cons for capturing alignment changes.  */
@@ -1880,11 +1876,6 @@ void
 d30v_cons_align (int size)
 {
   int log_size;
-
-  /* Don't specially align anything in debug sections.  */
-  if ((now_seg->flags & SEC_ALLOC) == 0
-      || strcmp (now_seg->name, ".eh_frame") == 0)
-    return;
 
   log_size = 0;
   while ((size >>= 1) != 0)
@@ -1918,17 +1909,37 @@ md_apply_fix (fixS *fixP, valueT *valP, segT seg ATTRIBUTE_UNUSED)
 
   switch (fixP->fx_r_type)
     {
-    case BFD_RELOC_8:
-      *(unsigned char *) where = value;
+    case BFD_RELOC_8:  /* Check for a bad .byte directive.  */
+      if (fixP->fx_addsy != NULL)
+	as_bad (_("line %d: unable to place address of symbol '%s' into a byte"),
+		fixP->fx_line, S_GET_NAME (fixP->fx_addsy));
+      else if (((unsigned)value) > 0xff)
+	as_bad (_("line %d: unable to place value %lx into a byte"),
+		fixP->fx_line, value);
+      else
+	*(unsigned char *) where = value;
       break;
 
-    case BFD_RELOC_16:
-      bfd_putb16 ((bfd_vma) value, (unsigned char *) where);
+    case BFD_RELOC_16:  /* Check for a bad .short directive.  */
+      if (fixP->fx_addsy != NULL)
+	as_bad (_("line %d: unable to place address of symbol '%s' into a short"),
+		fixP->fx_line, S_GET_NAME (fixP->fx_addsy));
+      else if (((unsigned)value) > 0xffff)
+	as_bad (_("line %d: unable to place value %lx into a short"),
+		fixP->fx_line, value);
+      else
+	bfd_putb16 ((bfd_vma) value, (unsigned char *) where);
       break;
 
-    case BFD_RELOC_64:
-      bfd_putb32 ((bfd_vma) value, (unsigned char *) where);
-      bfd_putb32 (0, ((unsigned char *) where) + 4);
+    case BFD_RELOC_64:  /* Check for a bad .quad directive.  */
+      if (fixP->fx_addsy != NULL)
+	as_bad (_("line %d: unable to place address of symbol '%s' into a quad"),
+		fixP->fx_line, S_GET_NAME (fixP->fx_addsy));
+      else
+	{
+	  bfd_putb32 ((bfd_vma) value, (unsigned char *) where);
+	  bfd_putb32 (0, ((unsigned char *) where) + 4);
+	}
       break;
 
     case BFD_RELOC_D30V_6:
@@ -2102,3 +2113,4 @@ const pseudo_typeS md_pseudo_table[] =
   { "sect.s", s_d30v_section, 0 },
   { NULL, NULL, 0 }
 };
+

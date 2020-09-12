@@ -1,6 +1,6 @@
 /* Parse a printf-style format string.
 
-   Copyright (C) 1986-2019 Free Software Foundation, Inc.
+   Copyright (C) 1986-2013 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -17,16 +17,27 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-#include "common-defs.h"
+#ifdef GDBSERVER
+#include "server.h"
+#else
+#include "defs.h"
+#endif
+
+#include <string.h>
+
 #include "format.h"
 
-format_pieces::format_pieces (const char **arg)
+struct format_piece *
+parse_format_string (const char **arg)
 {
   const char *s;
   char *f, *string;
   const char *prev_start;
   const char *percent_loc;
   char *sub_start, *current_substring;
+  struct format_piece *pieces;
+  int next_frag;
+  int max_pieces;
   enum argclass this_argclass;
 
   s = *arg;
@@ -55,9 +66,6 @@ format_pieces::format_pieces (const char **arg)
 	      break;
 	    case 'b':
 	      *f++ = '\b';
-	      break;
-	    case 'e':
-	      *f++ = '\e';
 	      break;
 	    case 'f':
 	      *f++ = '\f';
@@ -98,8 +106,14 @@ format_pieces::format_pieces (const char **arg)
 
   /* Need extra space for the '\0's.  Doubling the size is sufficient.  */
 
-  current_substring = (char *) xmalloc (strlen (string) * 2 + 1000);
-  m_storage.reset (current_substring);
+  current_substring = xmalloc (strlen (string) * 2 + 1000);
+
+  max_pieces = strlen (string) + 2;
+
+  pieces = (struct format_piece *)
+    xmalloc (max_pieces * sizeof (struct format_piece));
+
+  next_frag = 0;
 
   /* Now scan the string for %-specs and see what kinds of args they want.
      argclass classifies the %-specs so we can give printf-type functions
@@ -129,7 +143,9 @@ format_pieces::format_pieces (const char **arg)
 	current_substring += f - 1 - prev_start;
 	*current_substring++ = '\0';
 
-	m_pieces.emplace_back (sub_start, literal_piece);
+	pieces[next_frag].string = sub_start;
+	pieces[next_frag].argclass = literal_piece;
+	next_frag++;
 
 	percent_loc = f - 1;
 
@@ -140,7 +156,7 @@ format_pieces::format_pieces (const char **arg)
 
 	/* The first part of a format specifier is a set of flag
 	   characters.  */
-	while (*f != '\0' && strchr ("0-+ #", *f))
+	while (strchr ("0-+ #", *f))
 	  {
 	    if (*f == '#')
 	      seen_hash = 1;
@@ -154,7 +170,7 @@ format_pieces::format_pieces (const char **arg)
 	  }
 
 	/* The next part of a format specifier is a width.  */
-	while (*f != '\0' && strchr ("0123456789", *f))
+	while (strchr ("0123456789", *f))
 	  f++;
 
 	/* The next part of a format specifier is a precision.  */
@@ -162,7 +178,7 @@ format_pieces::format_pieces (const char **arg)
 	  {
 	    seen_prec = 1;
 	    f++;
-	    while (*f != '\0' && strchr ("0123456789", *f))
+	    while (strchr ("0123456789", *f))
 	      f++;
 	  }
 
@@ -247,9 +263,7 @@ format_pieces::format_pieces (const char **arg)
 	    this_argclass = ptr_arg;
 	    if (lcount || seen_h || seen_big_l)
 	      bad = 1;
-	    if (seen_prec)
-	      bad = 1;
-	    if (seen_hash || seen_zero || seen_space || seen_plus)
+	    if (seen_prec || seen_zero || seen_space || seen_plus)
 	      bad = 1;
 	    break;
 
@@ -266,12 +280,8 @@ format_pieces::format_pieces (const char **arg)
 	  case 'g':
 	  case 'E':
 	  case 'G':
-	    if (seen_double_big_d)
-	      this_argclass = dec128float_arg;
-	    else if (seen_big_d)
-	      this_argclass = dec64float_arg;
-	    else if (seen_big_h)
-	      this_argclass = dec32float_arg;
+	    if (seen_big_h || seen_big_d || seen_double_big_d)
+	      this_argclass = decfloat_arg;
 	    else if (seen_big_l)
 	      this_argclass = long_double_arg;
 	    else
@@ -335,7 +345,9 @@ format_pieces::format_pieces (const char **arg)
 
 	prev_start = f;
 
-	m_pieces.emplace_back (sub_start, this_argclass);
+	pieces[next_frag].string = sub_start;
+	pieces[next_frag].argclass = this_argclass;
+	next_frag++;
       }
 
   /* Record the remainder of the string.  */
@@ -346,5 +358,44 @@ format_pieces::format_pieces (const char **arg)
   current_substring += f - prev_start;
   *current_substring++ = '\0';
 
-  m_pieces.emplace_back (sub_start, literal_piece);
+  pieces[next_frag].string = sub_start;
+  pieces[next_frag].argclass = literal_piece;
+  next_frag++;
+
+  /* Record an end-of-array marker.  */
+
+  pieces[next_frag].string = NULL;
+  pieces[next_frag].argclass = literal_piece;
+
+  return pieces;
 }
+
+void
+free_format_pieces (struct format_piece *pieces)
+{
+  if (!pieces)
+    return;
+
+  /* We happen to know that all the string pieces are in the block
+     pointed to by the first string piece.  */
+  if (pieces[0].string)
+    xfree (pieces[0].string);
+
+  xfree (pieces);
+}
+
+void
+free_format_pieces_cleanup (void *ptr)
+{
+  void **location = ptr;
+
+  if (location == NULL)
+    return;
+
+  if (*location != NULL)
+    {
+      free_format_pieces (*location);
+      *location = NULL;
+    }
+}
+

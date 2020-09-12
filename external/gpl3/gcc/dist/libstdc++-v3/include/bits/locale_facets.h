@@ -1,6 +1,8 @@
 // Locale support -*- C++ -*-
 
-// Copyright (C) 1997-2019 Free Software Foundation, Inc.
+// Copyright (C) 1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005,
+// 2006, 2007, 2008, 2009, 2010
+// Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
@@ -22,9 +24,9 @@
 // see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
 // <http://www.gnu.org/licenses/>.
 
-/** @file bits/locale_facets.h
+/** @file locale_facets.h
  *  This is an internal header file, included by other library headers.
- *  Do not attempt to use it directly. @headername{locale}
+ *  You should not attempt to use it directly.
  */
 
 //
@@ -38,7 +40,7 @@
 
 #include <cwctype>	// For wctype_t
 #include <cctype>
-#include <bits/ctype_base.h>
+#include <bits/ctype_base.h>	
 #include <iosfwd>
 #include <bits/ios_base.h>  // For ios_base, ios_base::iostate
 #include <streambuf>
@@ -47,22 +49,13 @@
 #include <ext/numeric_traits.h>
 #include <bits/streambuf_iterator.h>
 
-namespace std _GLIBCXX_VISIBILITY(default)
-{
-_GLIBCXX_BEGIN_NAMESPACE_VERSION
+_GLIBCXX_BEGIN_NAMESPACE(std)
 
   // NB: Don't instantiate required wchar_t facets if no wchar_t support.
 #ifdef _GLIBCXX_USE_WCHAR_T
 # define  _GLIBCXX_NUM_FACETS 28
-# define  _GLIBCXX_NUM_CXX11_FACETS 16
 #else
 # define  _GLIBCXX_NUM_FACETS 14
-# define  _GLIBCXX_NUM_CXX11_FACETS 8
-#endif
-#ifdef _GLIBCXX_USE_CHAR8_T
-# define _GLIBCXX_NUM_UNICODE_FACETS 4
-#else
-# define _GLIBCXX_NUM_UNICODE_FACETS 2
 #endif
 
   // Convert string to numeric value of type _Tp and store results.
@@ -157,13 +150,12 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       /**
        *  @brief  Test char_type classification.
        *
-       *  This function finds a mask M for @a __c and compares it to
-       *  mask @a __m.  It does so by returning the value of
-       *  ctype<char_type>::do_is().
+       *  This function finds a mask M for @a c and compares it to mask @a m.
+       *  It does so by returning the value of ctype<char_type>::do_is().
        *
-       *  @param __c  The char_type to compare the mask of.
-       *  @param __m  The mask to compare against.
-       *  @return  (M & __m) != 0.
+       *  @param c  The char_type to compare the mask of.
+       *  @param m  The mask to compare against.
+       *  @return  (M & m) != 0.
       */
       bool
       is(mask __m, char_type __c) const
@@ -177,10 +169,10 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
        *  as the char array.  It does so by returning the value of
        *  ctype<char_type>::do_is().
        *
-       *  @param __lo  Pointer to start of range.
-       *  @param __hi  Pointer to end of range.
-       *  @param __vec  Pointer to an array of mask storage.
-       *  @return  @a __hi.
+       *  @param lo  Pointer to start of range.
+       *  @param hi  Pointer to end of range.
+       *  @param vec  Pointer to an array of mask storage.
+       *  @return  @a hi.
       */
       const char_type*
       is(const char_type *__lo, const char_type *__hi, mask *__vec) const
@@ -193,10 +185,10 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
        *  [lo,hi) for which is(m,c) is true.  It does so by returning
        *  ctype<char_type>::do_scan_is().
        *
-       *  @param __m  The mask to compare against.
-       *  @param __lo  Pointer to start of range.
-       *  @param __hi  Pointer to end of range.
-       *  @return  Pointer to matching char_type if found, else @a __hi.
+       *  @param m  The mask to compare against.
+       *  @param lo  Pointer to start of range.
+       *  @param hi  Pointer to end of range.
+       *  @return  Pointer to matching char_type if found, else @a hi.
       */
       const char_type*
       scan_is(mask __m, const char_type* __lo, const char_type* __hi) const
@@ -209,10 +201,10 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
        *  [lo,hi) for which is(m,c) is false.  It does so by returning
        *  ctype<char_type>::do_scan_not().
        *
-       *  @param __m  The mask to compare against.
-       *  @param __lo  Pointer to first char in range.
-       *  @param __hi  Pointer to end of range.
-       *  @return  Pointer to non-matching char if found, else @a __hi.
+       *  @param m  The mask to compare against.
+       *  @param lo  Pointer to first char in range.
+       *  @param hi  Pointer to end of range.
+       *  @return  Pointer to non-matching char if found, else @a hi.
       */
       const char_type*
       scan_not(mask __m, const char_type* __lo, const char_type* __hi) const
@@ -225,8 +217,8 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
        *  If not possible (for example, '2'), returns the argument.  It does
        *  so by returning ctype<char_type>::do_toupper().
        *
-       *  @param __c  The char_type to convert.
-       *  @return  The uppercase char_type if convertible, else @a __c.
+       *  @param c  The char_type to convert.
+       *  @return  The uppercase char_type if convertible, else @a c.
       */
       char_type
       toupper(char_type __c) const
@@ -239,9 +231,9 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
        *  uppercase if possible.  Other elements remain untouched.  It does so
        *  by returning ctype<char_type>:: do_toupper(lo, hi).
        *
-       *  @param __lo  Pointer to start of range.
-       *  @param __hi  Pointer to end of range.
-       *  @return  @a __hi.
+       *  @param lo  Pointer to start of range.
+       *  @param hi  Pointer to end of range.
+       *  @return  @a hi.
       */
       const char_type*
       toupper(char_type *__lo, const char_type* __hi) const
@@ -254,8 +246,8 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
        *  not possible (for example, '2'), returns the argument.  It does so
        *  by returning ctype<char_type>::do_tolower(c).
        *
-       *  @param __c  The char_type to convert.
-       *  @return  The lowercase char_type if convertible, else @a __c.
+       *  @param c  The char_type to convert.
+       *  @return  The lowercase char_type if convertible, else @a c.
       */
       char_type
       tolower(char_type __c) const
@@ -264,13 +256,13 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       /**
        *  @brief  Convert array to lowercase.
        *
-       *  This function converts each char_type in the range [__lo,__hi) to
+       *  This function converts each char_type in the range [lo,hi) to
        *  lowercase if possible.  Other elements remain untouched.  It does so
-       *  by returning ctype<char_type>:: do_tolower(__lo, __hi).
+       *  by returning ctype<char_type>:: do_tolower(lo, hi).
        *
-       *  @param __lo  Pointer to start of range.
-       *  @param __hi  Pointer to end of range.
-       *  @return  @a __hi.
+       *  @param lo  Pointer to start of range.
+       *  @param hi  Pointer to end of range.
+       *  @return  @a hi.
       */
       const char_type*
       tolower(char_type* __lo, const char_type* __hi) const
@@ -286,7 +278,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
        *  Note: this is not what you want for codepage conversions.  See
        *  codecvt for that.
        *
-       *  @param __c  The char to convert.
+       *  @param c  The char to convert.
        *  @return  The converted char_type.
       */
       char_type
@@ -303,10 +295,10 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
        *  Note: this is not what you want for codepage conversions.  See
        *  codecvt for that.
        *
-       *  @param __lo  Pointer to start of range.
-       *  @param __hi  Pointer to end of range.
-       *  @param __to  Pointer to the destination array.
-       *  @return  @a __hi.
+       *  @param lo  Pointer to start of range.
+       *  @param hi  Pointer to end of range.
+       *  @param to  Pointer to the destination array.
+       *  @return  @a hi.
       */
       const char*
       widen(const char* __lo, const char* __hi, char_type* __to) const
@@ -318,13 +310,13 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
        *  This function converts the char_type to char using the simplest
        *  reasonable transformation.  If the conversion fails, dfault is
        *  returned instead.  It does so by returning
-       *  ctype<char_type>::do_narrow(__c).
+       *  ctype<char_type>::do_narrow(c).
        *
        *  Note: this is not what you want for codepage conversions.  See
        *  codecvt for that.
        *
-       *  @param __c  The char_type to convert.
-       *  @param __dfault  Char to return if conversion fails.
+       *  @param c  The char_type to convert.
+       *  @param dfault  Char to return if conversion fails.
        *  @return  The converted char.
       */
       char
@@ -338,20 +330,20 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
        *  simplest reasonable transformation and writes the results to the
        *  destination array.  For any char_type in the input that cannot be
        *  converted, @a dfault is used instead.  It does so by returning
-       *  ctype<char_type>::do_narrow(__lo, __hi, __dfault, __to).
+       *  ctype<char_type>::do_narrow(lo, hi, dfault, to).
        *
        *  Note: this is not what you want for codepage conversions.  See
        *  codecvt for that.
        *
-       *  @param __lo  Pointer to start of range.
-       *  @param __hi  Pointer to end of range.
-       *  @param __dfault  Char to use if conversion fails.
-       *  @param __to  Pointer to the destination array.
-       *  @return  @a __hi.
+       *  @param lo  Pointer to start of range.
+       *  @param hi  Pointer to end of range.
+       *  @param dfault  Char to use if conversion fails.
+       *  @param to  Pointer to the destination array.
+       *  @return  @a hi.
       */
       const char_type*
       narrow(const char_type* __lo, const char_type* __hi,
-	      char __dfault, char* __to) const
+	      char __dfault, char *__to) const
       { return this->do_narrow(__lo, __hi, __dfault, __to); }
 
     protected:
@@ -370,9 +362,9 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
        *  classifying.  do_is() must always return the same result for the
        *  same input.
        *
-       *  @param __c  The char_type to find the mask of.
-       *  @param __m  The mask to compare against.
-       *  @return  (M & __m) != 0.
+       *  @param c  The char_type to find the mask of.
+       *  @param m  The mask to compare against.
+       *  @return  (M & m) != 0.
       */
       virtual bool
       do_is(mask __m, char_type __c) const = 0;
@@ -388,10 +380,10 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
        *  classifying.  do_is() must always return the same result for the
        *  same input.
        *
-       *  @param __lo  Pointer to start of range.
-       *  @param __hi  Pointer to end of range.
-       *  @param __vec  Pointer to an array of mask storage.
-       *  @return  @a __hi.
+       *  @param lo  Pointer to start of range.
+       *  @param hi  Pointer to end of range.
+       *  @param vec  Pointer to an array of mask storage.
+       *  @return  @a hi.
       */
       virtual const char_type*
       do_is(const char_type* __lo, const char_type* __hi,
@@ -401,16 +393,16 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
        *  @brief  Find char_type matching mask
        *
        *  This function searches for and returns the first char_type c in
-       *  [__lo,__hi) for which is(__m,c) is true.
+       *  [lo,hi) for which is(m,c) is true.
        *
        *  do_scan_is() is a hook for a derived facet to change the behavior of
        *  match searching.  do_is() must always return the same result for the
        *  same input.
        *
-       *  @param __m  The mask to compare against.
-       *  @param __lo  Pointer to start of range.
-       *  @param __hi  Pointer to end of range.
-       *  @return  Pointer to a matching char_type if found, else @a __hi.
+       *  @param m  The mask to compare against.
+       *  @param lo  Pointer to start of range.
+       *  @param hi  Pointer to end of range.
+       *  @return  Pointer to a matching char_type if found, else @a hi.
       */
       virtual const char_type*
       do_scan_is(mask __m, const char_type* __lo,
@@ -426,10 +418,10 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
        *  match searching.  do_is() must always return the same result for the
        *  same input.
        *
-       *  @param __m  The mask to compare against.
-       *  @param __lo  Pointer to start of range.
-       *  @param __hi  Pointer to end of range.
-       *  @return  Pointer to a non-matching char_type if found, else @a __hi.
+       *  @param m  The mask to compare against.
+       *  @param lo  Pointer to start of range.
+       *  @param hi  Pointer to end of range.
+       *  @return  Pointer to a non-matching char_type if found, else @a hi.
       */
       virtual const char_type*
       do_scan_not(mask __m, const char_type* __lo,
@@ -446,25 +438,25 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
        *  uppercasing.  do_toupper() must always return the same result for
        *  the same input.
        *
-       *  @param __c  The char_type to convert.
-       *  @return  The uppercase char_type if convertible, else @a __c.
+       *  @param c  The char_type to convert.
+       *  @return  The uppercase char_type if convertible, else @a c.
       */
       virtual char_type
-      do_toupper(char_type __c) const = 0;
+      do_toupper(char_type) const = 0;
 
       /**
        *  @brief  Convert array to uppercase.
        *
-       *  This virtual function converts each char_type in the range [__lo,__hi)
+       *  This virtual function converts each char_type in the range [lo,hi)
        *  to uppercase if possible.  Other elements remain untouched.
        *
        *  do_toupper() is a hook for a derived facet to change the behavior of
        *  uppercasing.  do_toupper() must always return the same result for
        *  the same input.
        *
-       *  @param __lo  Pointer to start of range.
-       *  @param __hi  Pointer to end of range.
-       *  @return  @a __hi.
+       *  @param lo  Pointer to start of range.
+       *  @param hi  Pointer to end of range.
+       *  @return  @a hi.
       */
       virtual const char_type*
       do_toupper(char_type* __lo, const char_type* __hi) const = 0;
@@ -479,25 +471,25 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
        *  lowercasing.  do_tolower() must always return the same result for
        *  the same input.
        *
-       *  @param __c  The char_type to convert.
-       *  @return  The lowercase char_type if convertible, else @a __c.
+       *  @param c  The char_type to convert.
+       *  @return  The lowercase char_type if convertible, else @a c.
       */
       virtual char_type
-      do_tolower(char_type __c) const = 0;
+      do_tolower(char_type) const = 0;
 
       /**
        *  @brief  Convert array to lowercase.
        *
-       *  This virtual function converts each char_type in the range [__lo,__hi)
+       *  This virtual function converts each char_type in the range [lo,hi)
        *  to lowercase if possible.  Other elements remain untouched.
        *
        *  do_tolower() is a hook for a derived facet to change the behavior of
        *  lowercasing.  do_tolower() must always return the same result for
        *  the same input.
        *
-       *  @param __lo  Pointer to start of range.
-       *  @param __hi  Pointer to end of range.
-       *  @return  @a __hi.
+       *  @param lo  Pointer to start of range.
+       *  @param hi  Pointer to end of range.
+       *  @return  @a hi.
       */
       virtual const char_type*
       do_tolower(char_type* __lo, const char_type* __hi) const = 0;
@@ -515,11 +507,11 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
        *  Note: this is not what you want for codepage conversions.  See
        *  codecvt for that.
        *
-       *  @param __c  The char to convert.
+       *  @param c  The char to convert.
        *  @return  The converted char_type
       */
       virtual char_type
-      do_widen(char __c) const = 0;
+      do_widen(char) const = 0;
 
       /**
        *  @brief  Widen char array
@@ -534,13 +526,14 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
        *  Note: this is not what you want for codepage conversions.  See
        *  codecvt for that.
        *
-       *  @param __lo  Pointer to start range.
-       *  @param __hi  Pointer to end of range.
-       *  @param __to  Pointer to the destination array.
-       *  @return  @a __hi.
+       *  @param lo  Pointer to start range.
+       *  @param hi  Pointer to end of range.
+       *  @param to  Pointer to the destination array.
+       *  @return  @a hi.
       */
       virtual const char*
-      do_widen(const char* __lo, const char* __hi, char_type* __to) const = 0;
+      do_widen(const char* __lo, const char* __hi,
+	       char_type* __dest) const = 0;
 
       /**
        *  @brief  Narrow char_type to char
@@ -556,21 +549,20 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
        *  Note: this is not what you want for codepage conversions.  See
        *  codecvt for that.
        *
-       *  @param __c  The char_type to convert.
-       *  @param __dfault  Char to return if conversion fails.
+       *  @param c  The char_type to convert.
+       *  @param dfault  Char to return if conversion fails.
        *  @return  The converted char.
       */
       virtual char
-      do_narrow(char_type __c, char __dfault) const = 0;
+      do_narrow(char_type, char __dfault) const = 0;
 
       /**
        *  @brief  Narrow char_type array to char
        *
-       *  This virtual function converts each char_type in the range
-       *  [__lo,__hi) to char using the simplest reasonable
-       *  transformation and writes the results to the destination
-       *  array.  For any element in the input that cannot be
-       *  converted, @a __dfault is used instead.
+       *  This virtual function converts each char_type in the range [lo,hi) to
+       *  char using the simplest reasonable transformation and writes the
+       *  results to the destination array.  For any element in the input that
+       *  cannot be converted, @a dfault is used instead.
        *
        *  do_narrow() is a hook for a derived facet to change the behavior of
        *  narrowing.  do_narrow() must always return the same result for the
@@ -579,15 +571,15 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
        *  Note: this is not what you want for codepage conversions.  See
        *  codecvt for that.
        *
-       *  @param __lo  Pointer to start of range.
-       *  @param __hi  Pointer to end of range.
-       *  @param __dfault  Char to use if conversion fails.
-       *  @param __to  Pointer to the destination array.
-       *  @return  @a __hi.
+       *  @param lo  Pointer to start of range.
+       *  @param hi  Pointer to end of range.
+       *  @param dfault  Char to use if conversion fails.
+       *  @param to  Pointer to the destination array.
+       *  @return  @a hi.
       */
       virtual const char_type*
       do_narrow(const char_type* __lo, const char_type* __hi,
-		char __dfault, char* __to) const = 0;
+		char __dfault, char* __dest) const = 0;
     };
 
   /**
@@ -662,7 +654,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 
       virtual const char_type*
       do_narrow(const char_type* __lo, const char_type* __hi,
-		char __dfault, char* __to) const;
+		char __dfault, char* __dest) const;
     };
 
   template<typename _CharT>
@@ -709,10 +701,10 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
        *
        *  This is the constructor provided by the standard.
        *
-       *  @param __table If non-zero, table is used as the per-char mask.
+       *  @param table If non-zero, table is used as the per-char mask.
        *               Else classic_table() is used.
-       *  @param __del   If true, passes ownership of table to this facet.
-       *  @param __refs  Passed to the base facet class.
+       *  @param del   If true, passes ownership of table to this facet.
+       *  @param refs  Passed to the base facet class.
       */
       explicit
       ctype(const mask* __table = 0, bool __del = false, size_t __refs = 0);
@@ -722,10 +714,10 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
        *
        *  This constructor is used to construct the initial C locale facet.
        *
-       *  @param __cloc  Handle to C locale data.
-       *  @param __table If non-zero, table is used as the per-char mask.
-       *  @param __del   If true, passes ownership of table to this facet.
-       *  @param __refs  Passed to the base facet class.
+       *  @param cloc  Handle to C locale data.
+       *  @param table If non-zero, table is used as the per-char mask.
+       *  @param del   If true, passes ownership of table to this facet.
+       *  @param refs  Passed to the base facet class.
       */
       explicit
       ctype(__c_locale __cloc, const mask* __table = 0, bool __del = false,
@@ -734,11 +726,11 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       /**
        *  @brief  Test char classification.
        *
-       *  This function compares the mask table[c] to @a __m.
+       *  This function compares the mask table[c] to @a m.
        *
-       *  @param __c  The char to compare the mask of.
-       *  @param __m  The mask to compare against.
-       *  @return  True if __m & table[__c] is true, false otherwise.
+       *  @param c  The char to compare the mask of.
+       *  @param m  The mask to compare against.
+       *  @return  True if m & table[c] is true, false otherwise.
       */
       inline bool
       is(mask __m, char __c) const;
@@ -750,10 +742,10 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
        *  successively writes it to vec.  vec must have as many elements as
        *  the char array.
        *
-       *  @param __lo  Pointer to start of range.
-       *  @param __hi  Pointer to end of range.
-       *  @param __vec  Pointer to an array of mask storage.
-       *  @return  @a __hi.
+       *  @param lo  Pointer to start of range.
+       *  @param hi  Pointer to end of range.
+       *  @param vec  Pointer to an array of mask storage.
+       *  @return  @a hi.
       */
       inline const char*
       is(const char* __lo, const char* __hi, mask* __vec) const;
@@ -764,10 +756,10 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
        *  This function searches for and returns the first char in [lo,hi) for
        *  which is(m,char) is true.
        *
-       *  @param __m  The mask to compare against.
-       *  @param __lo  Pointer to start of range.
-       *  @param __hi  Pointer to end of range.
-       *  @return  Pointer to a matching char if found, else @a __hi.
+       *  @param m  The mask to compare against.
+       *  @param lo  Pointer to start of range.
+       *  @param hi  Pointer to end of range.
+       *  @return  Pointer to a matching char if found, else @a hi.
       */
       inline const char*
       scan_is(mask __m, const char* __lo, const char* __hi) const;
@@ -776,12 +768,12 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
        *  @brief  Find char not matching a mask
        *
        *  This function searches for and returns a pointer to the first char
-       *  in [__lo,__hi) for which is(m,char) is false.
+       *  in [lo,hi) for which is(m,char) is false.
        *
-       *  @param __m  The mask to compare against.
-       *  @param __lo  Pointer to start of range.
-       *  @param __hi  Pointer to end of range.
-       *  @return  Pointer to a non-matching char if found, else @a __hi.
+       *  @param m  The mask to compare against.
+       *  @param lo  Pointer to start of range.
+       *  @param hi  Pointer to end of range.
+       *  @return  Pointer to a non-matching char if found, else @a hi.
       */
       inline const char*
       scan_not(mask __m, const char* __lo, const char* __hi) const;
@@ -795,8 +787,8 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
        *  toupper() acts as if it returns ctype<char>::do_toupper(c).
        *  do_toupper() must always return the same result for the same input.
        *
-       *  @param __c  The char to convert.
-       *  @return  The uppercase char if convertible, else @a __c.
+       *  @param c  The char to convert.
+       *  @return  The uppercase char if convertible, else @a c.
       */
       char_type
       toupper(char_type __c) const
@@ -805,15 +797,15 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       /**
        *  @brief  Convert array to uppercase.
        *
-       *  This function converts each char in the range [__lo,__hi) to uppercase
+       *  This function converts each char in the range [lo,hi) to uppercase
        *  if possible.  Other chars remain untouched.
        *
-       *  toupper() acts as if it returns ctype<char>:: do_toupper(__lo, __hi).
+       *  toupper() acts as if it returns ctype<char>:: do_toupper(lo, hi).
        *  do_toupper() must always return the same result for the same input.
        *
-       *  @param __lo  Pointer to first char in range.
-       *  @param __hi  Pointer to end of range.
-       *  @return  @a __hi.
+       *  @param lo  Pointer to first char in range.
+       *  @param hi  Pointer to end of range.
+       *  @return  @a hi.
       */
       const char_type*
       toupper(char_type *__lo, const char_type* __hi) const
@@ -825,11 +817,11 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
        *  This function converts the char argument to lowercase if possible.
        *  If not possible (for example, '2'), returns the argument.
        *
-       *  tolower() acts as if it returns ctype<char>::do_tolower(__c).
+       *  tolower() acts as if it returns ctype<char>::do_tolower(c).
        *  do_tolower() must always return the same result for the same input.
        *
-       *  @param __c  The char to convert.
-       *  @return  The lowercase char if convertible, else @a __c.
+       *  @param c  The char to convert.
+       *  @return  The lowercase char if convertible, else @a c.
       */
       char_type
       tolower(char_type __c) const
@@ -841,12 +833,12 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
        *  This function converts each char in the range [lo,hi) to lowercase
        *  if possible.  Other chars remain untouched.
        *
-       *  tolower() acts as if it returns ctype<char>:: do_tolower(__lo, __hi).
+       *  tolower() acts as if it returns ctype<char>:: do_tolower(lo, hi).
        *  do_tolower() must always return the same result for the same input.
        *
-       *  @param __lo  Pointer to first char in range.
-       *  @param __hi  Pointer to end of range.
-       *  @return  @a __hi.
+       *  @param lo  Pointer to first char in range.
+       *  @param hi  Pointer to end of range.
+       *  @return  @a hi.
       */
       const char_type*
       tolower(char_type* __lo, const char_type* __hi) const
@@ -865,7 +857,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
        *  Note: this is not what you want for codepage conversions.  See
        *  codecvt for that.
        *
-       *  @param __c  The char to convert.
+       *  @param c  The char to convert.
        *  @return  The converted character.
       */
       char_type
@@ -890,18 +882,17 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
        *  Note: this is not what you want for codepage conversions.  See
        *  codecvt for that.
        *
-       *  @param __lo  Pointer to first char in range.
-       *  @param __hi  Pointer to end of range.
-       *  @param __to  Pointer to the destination array.
-       *  @return  @a __hi.
+       *  @param lo  Pointer to first char in range.
+       *  @param hi  Pointer to end of range.
+       *  @param to  Pointer to the destination array.
+       *  @return  @a hi.
       */
       const char*
       widen(const char* __lo, const char* __hi, char_type* __to) const
       {
 	if (_M_widen_ok == 1)
 	  {
-	    if (__builtin_expect(__hi != __lo, true))
-	      __builtin_memcpy(__to, __lo, __hi - __lo);
+	    __builtin_memcpy(__to, __lo, __hi - __lo);
 	    return __hi;
 	  }
 	if (!_M_widen_ok)
@@ -923,8 +914,8 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
        *  Note: this is not what you want for codepage conversions.  See
        *  codecvt for that.
        *
-       *  @param __c  The char to convert.
-       *  @param __dfault  Char to return if conversion fails.
+       *  @param c  The char to convert.
+       *  @param dfault  Char to return if conversion fails.
        *  @return  The converted character.
       */
       char
@@ -954,20 +945,19 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
        *  Note: this is not what you want for codepage conversions.  See
        *  codecvt for that.
        *
-       *  @param __lo  Pointer to start of range.
-       *  @param __hi  Pointer to end of range.
-       *  @param __dfault  Char to use if conversion fails.
-       *  @param __to  Pointer to the destination array.
-       *  @return  @a __hi.
+       *  @param lo  Pointer to start of range.
+       *  @param hi  Pointer to end of range.
+       *  @param dfault  Char to use if conversion fails.
+       *  @param to  Pointer to the destination array.
+       *  @return  @a hi.
       */
       const char_type*
       narrow(const char_type* __lo, const char_type* __hi,
-	     char __dfault, char* __to) const
+	     char __dfault, char *__to) const
       {
 	if (__builtin_expect(_M_narrow_ok == 1, true))
 	  {
-	    if (__builtin_expect(__hi != __lo, true))
-	      __builtin_memcpy(__to, __lo, __hi - __lo);
+	    __builtin_memcpy(__to, __lo, __hi - __lo);
 	    return __hi;
 	  }
 	if (!_M_narrow_ok)
@@ -1007,11 +997,11 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
        *  uppercasing.  do_toupper() must always return the same result for
        *  the same input.
        *
-       *  @param __c  The char to convert.
-       *  @return  The uppercase char if convertible, else @a __c.
+       *  @param c  The char to convert.
+       *  @return  The uppercase char if convertible, else @a c.
       */
       virtual char_type
-      do_toupper(char_type __c) const;
+      do_toupper(char_type) const;
 
       /**
        *  @brief  Convert array to uppercase.
@@ -1023,9 +1013,9 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
        *  uppercasing.  do_toupper() must always return the same result for
        *  the same input.
        *
-       *  @param __lo  Pointer to start of range.
-       *  @param __hi  Pointer to end of range.
-       *  @return  @a __hi.
+       *  @param lo  Pointer to start of range.
+       *  @param hi  Pointer to end of range.
+       *  @return  @a hi.
       */
       virtual const char_type*
       do_toupper(char_type* __lo, const char_type* __hi) const;
@@ -1040,11 +1030,11 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
        *  lowercasing.  do_tolower() must always return the same result for
        *  the same input.
        *
-       *  @param __c  The char to convert.
-       *  @return  The lowercase char if convertible, else @a __c.
+       *  @param c  The char to convert.
+       *  @return  The lowercase char if convertible, else @a c.
       */
       virtual char_type
-      do_tolower(char_type __c) const;
+      do_tolower(char_type) const;
 
       /**
        *  @brief  Convert array to lowercase.
@@ -1056,9 +1046,9 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
        *  lowercasing.  do_tolower() must always return the same result for
        *  the same input.
        *
-       *  @param __lo  Pointer to first char in range.
-       *  @param __hi  Pointer to end of range.
-       *  @return  @a __hi.
+       *  @param lo  Pointer to first char in range.
+       *  @param hi  Pointer to end of range.
+       *  @return  @a hi.
       */
       virtual const char_type*
       do_tolower(char_type* __lo, const char_type* __hi) const;
@@ -1077,7 +1067,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
        *  Note: this is not what you want for codepage conversions.  See
        *  codecvt for that.
        *
-       *  @param __c  The char to convert.
+       *  @param c  The char to convert.
        *  @return  The converted character.
       */
       virtual char_type
@@ -1098,16 +1088,15 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
        *  Note: this is not what you want for codepage conversions.  See
        *  codecvt for that.
        *
-       *  @param __lo  Pointer to start of range.
-       *  @param __hi  Pointer to end of range.
-       *  @param __to  Pointer to the destination array.
-       *  @return  @a __hi.
+       *  @param lo  Pointer to start of range.
+       *  @param hi  Pointer to end of range.
+       *  @param to  Pointer to the destination array.
+       *  @return  @a hi.
       */
       virtual const char*
-      do_widen(const char* __lo, const char* __hi, char_type* __to) const
+      do_widen(const char* __lo, const char* __hi, char_type* __dest) const
       {
-	if (__builtin_expect(__hi != __lo, true))
-	  __builtin_memcpy(__to, __lo, __hi - __lo);
+	__builtin_memcpy(__dest, __lo, __hi - __lo);
 	return __hi;
       }
 
@@ -1126,12 +1115,12 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
        *  Note: this is not what you want for codepage conversions.  See
        *  codecvt for that.
        *
-       *  @param __c  The char to convert.
-       *  @param __dfault  Char to return if conversion fails.
+       *  @param c  The char to convert.
+       *  @param dfault  Char to return if conversion fails.
        *  @return  The converted char.
       */
       virtual char
-      do_narrow(char_type __c, char __dfault __attribute__((__unused__))) const
+      do_narrow(char_type __c, char) const
       { return __c; }
 
       /**
@@ -1150,18 +1139,17 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
        *  Note: this is not what you want for codepage conversions.  See
        *  codecvt for that.
        *
-       *  @param __lo  Pointer to start of range.
-       *  @param __hi  Pointer to end of range.
-       *  @param __dfault  Char to use if conversion fails.
-       *  @param __to  Pointer to the destination array.
-       *  @return  @a __hi.
+       *  @param lo  Pointer to start of range.
+       *  @param hi  Pointer to end of range.
+       *  @param dfault  Char to use if conversion fails.
+       *  @param to  Pointer to the destination array.
+       *  @return  @a hi.
       */
       virtual const char_type*
       do_narrow(const char_type* __lo, const char_type* __hi,
-		char __dfault __attribute__((__unused__)), char* __to) const
+		char, char* __dest) const
       {
-	if (__builtin_expect(__hi != __lo, true))
-	  __builtin_memcpy(__to, __lo, __hi - __lo);
+	__builtin_memcpy(__dest, __lo, __hi - __lo);
 	return __hi;
       }
 
@@ -1213,7 +1201,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
        *
        *  This is the constructor provided by the standard.
        *
-       *  @param __refs  Passed to the base facet class.
+       *  @param refs  Passed to the base facet class.
       */
       explicit
       ctype(size_t __refs = 0);
@@ -1223,8 +1211,8 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
        *
        *  This constructor is used to construct the initial C locale facet.
        *
-       *  @param __cloc  Handle to C locale data.
-       *  @param __refs  Passed to the base facet class.
+       *  @param cloc  Handle to C locale data.
+       *  @param refs  Passed to the base facet class.
       */
       explicit
       ctype(__c_locale __cloc, size_t __refs = 0);
@@ -1246,9 +1234,9 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
        *  classifying.  do_is() must always return the same result for the
        *  same input.
        *
-       *  @param __c  The wchar_t to find the mask of.
-       *  @param __m  The mask to compare against.
-       *  @return  (M & __m) != 0.
+       *  @param c  The wchar_t to find the mask of.
+       *  @param m  The mask to compare against.
+       *  @return  (M & m) != 0.
       */
       virtual bool
       do_is(mask __m, char_type __c) const;
@@ -1264,10 +1252,10 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
        *  classifying.  do_is() must always return the same result for the
        *  same input.
        *
-       *  @param __lo  Pointer to start of range.
-       *  @param __hi  Pointer to end of range.
-       *  @param __vec  Pointer to an array of mask storage.
-       *  @return  @a __hi.
+       *  @param lo  Pointer to start of range.
+       *  @param hi  Pointer to end of range.
+       *  @param vec  Pointer to an array of mask storage.
+       *  @return  @a hi.
       */
       virtual const char_type*
       do_is(const char_type* __lo, const char_type* __hi, mask* __vec) const;
@@ -1276,16 +1264,16 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
        *  @brief  Find wchar_t matching mask
        *
        *  This function searches for and returns the first wchar_t c in
-       *  [__lo,__hi) for which is(__m,c) is true.
+       *  [lo,hi) for which is(m,c) is true.
        *
        *  do_scan_is() is a hook for a derived facet to change the behavior of
        *  match searching.  do_is() must always return the same result for the
        *  same input.
        *
-       *  @param __m  The mask to compare against.
-       *  @param __lo  Pointer to start of range.
-       *  @param __hi  Pointer to end of range.
-       *  @return  Pointer to a matching wchar_t if found, else @a __hi.
+       *  @param m  The mask to compare against.
+       *  @param lo  Pointer to start of range.
+       *  @param hi  Pointer to end of range.
+       *  @return  Pointer to a matching wchar_t if found, else @a hi.
       */
       virtual const char_type*
       do_scan_is(mask __m, const char_type* __lo, const char_type* __hi) const;
@@ -1294,16 +1282,16 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
        *  @brief  Find wchar_t not matching mask
        *
        *  This function searches for and returns a pointer to the first
-       *  wchar_t c of [__lo,__hi) for which is(__m,c) is false.
+       *  wchar_t c of [lo,hi) for which is(m,c) is false.
        *
        *  do_scan_is() is a hook for a derived facet to change the behavior of
        *  match searching.  do_is() must always return the same result for the
        *  same input.
        *
-       *  @param __m  The mask to compare against.
-       *  @param __lo  Pointer to start of range.
-       *  @param __hi  Pointer to end of range.
-       *  @return  Pointer to a non-matching wchar_t if found, else @a __hi.
+       *  @param m  The mask to compare against.
+       *  @param lo  Pointer to start of range.
+       *  @param hi  Pointer to end of range.
+       *  @return  Pointer to a non-matching wchar_t if found, else @a hi.
       */
       virtual const char_type*
       do_scan_not(mask __m, const char_type* __lo,
@@ -1319,11 +1307,11 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
        *  uppercasing.  do_toupper() must always return the same result for
        *  the same input.
        *
-       *  @param __c  The wchar_t to convert.
-       *  @return  The uppercase wchar_t if convertible, else @a __c.
+       *  @param c  The wchar_t to convert.
+       *  @return  The uppercase wchar_t if convertible, else @a c.
       */
       virtual char_type
-      do_toupper(char_type __c) const;
+      do_toupper(char_type) const;
 
       /**
        *  @brief  Convert array to uppercase.
@@ -1335,9 +1323,9 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
        *  uppercasing.  do_toupper() must always return the same result for
        *  the same input.
        *
-       *  @param __lo  Pointer to start of range.
-       *  @param __hi  Pointer to end of range.
-       *  @return  @a __hi.
+       *  @param lo  Pointer to start of range.
+       *  @param hi  Pointer to end of range.
+       *  @return  @a hi.
       */
       virtual const char_type*
       do_toupper(char_type* __lo, const char_type* __hi) const;
@@ -1352,11 +1340,11 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
        *  lowercasing.  do_tolower() must always return the same result for
        *  the same input.
        *
-       *  @param __c  The wchar_t to convert.
-       *  @return  The lowercase wchar_t if convertible, else @a __c.
+       *  @param c  The wchar_t to convert.
+       *  @return  The lowercase wchar_t if convertible, else @a c.
       */
       virtual char_type
-      do_tolower(char_type __c) const;
+      do_tolower(char_type) const;
 
       /**
        *  @brief  Convert array to lowercase.
@@ -1368,9 +1356,9 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
        *  lowercasing.  do_tolower() must always return the same result for
        *  the same input.
        *
-       *  @param __lo  Pointer to start of range.
-       *  @param __hi  Pointer to end of range.
-       *  @return  @a __hi.
+       *  @param lo  Pointer to start of range.
+       *  @param hi  Pointer to end of range.
+       *  @return  @a hi.
       */
       virtual const char_type*
       do_tolower(char_type* __lo, const char_type* __hi) const;
@@ -1389,11 +1377,11 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
        *  Note: this is not what you want for codepage conversions.  See
        *  codecvt for that.
        *
-       *  @param __c  The char to convert.
+       *  @param c  The char to convert.
        *  @return  The converted wchar_t.
       */
       virtual char_type
-      do_widen(char __c) const;
+      do_widen(char) const;
 
       /**
        *  @brief  Widen char array to wchar_t array
@@ -1409,13 +1397,13 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
        *  Note: this is not what you want for codepage conversions.  See
        *  codecvt for that.
        *
-       *  @param __lo  Pointer to start range.
-       *  @param __hi  Pointer to end of range.
-       *  @param __to  Pointer to the destination array.
-       *  @return  @a __hi.
+       *  @param lo  Pointer to start range.
+       *  @param hi  Pointer to end of range.
+       *  @param to  Pointer to the destination array.
+       *  @return  @a hi.
       */
       virtual const char*
-      do_widen(const char* __lo, const char* __hi, char_type* __to) const;
+      do_widen(const char* __lo, const char* __hi, char_type* __dest) const;
 
       /**
        *  @brief  Narrow wchar_t to char
@@ -1433,12 +1421,12 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
        *  Note: this is not what you want for codepage conversions.  See
        *  codecvt for that.
        *
-       *  @param __c  The wchar_t to convert.
-       *  @param __dfault  Char to return if conversion fails.
+       *  @param c  The wchar_t to convert.
+       *  @param dfault  Char to return if conversion fails.
        *  @return  The converted char.
       */
       virtual char
-      do_narrow(char_type __c, char __dfault) const;
+      do_narrow(char_type, char __dfault) const;
 
       /**
        *  @brief  Narrow wchar_t array to char array
@@ -1457,15 +1445,15 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
        *  Note: this is not what you want for codepage conversions.  See
        *  codecvt for that.
        *
-       *  @param __lo  Pointer to start of range.
-       *  @param __hi  Pointer to end of range.
-       *  @param __dfault  Char to use if conversion fails.
-       *  @param __to  Pointer to the destination array.
-       *  @return  @a __hi.
+       *  @param lo  Pointer to start of range.
+       *  @param hi  Pointer to end of range.
+       *  @param dfault  Char to use if conversion fails.
+       *  @param to  Pointer to the destination array.
+       *  @return  @a hi.
       */
       virtual const char_type*
       do_narrow(const char_type* __lo, const char_type* __hi,
-		char __dfault, char* __to) const;
+		char __dfault, char* __dest) const;
 
       // For use at construction time only.
       void
@@ -1483,15 +1471,9 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       explicit
       ctype_byname(const char* __s, size_t __refs = 0);
 
-#if __cplusplus >= 201103L
-      explicit
-      ctype_byname(const string& __s, size_t __refs = 0)
-      : ctype_byname(__s.c_str(), __refs) { }
-#endif
-
     protected:
       virtual
-      ~ctype_byname() { }
+      ~ctype_byname() { };
     };
 
   /// 22.2.1.4  Class ctype_byname specializations.
@@ -1501,11 +1483,6 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
     public:
       explicit
       ctype_byname(const char* __s, size_t __refs = 0);
-
-#if __cplusplus >= 201103L
-      explicit
-      ctype_byname(const string& __s, size_t __refs = 0);
-#endif
 
     protected:
       virtual
@@ -1520,26 +1497,18 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       explicit
       ctype_byname(const char* __s, size_t __refs = 0);
 
-#if __cplusplus >= 201103L
-      explicit
-      ctype_byname(const string& __s, size_t __refs = 0);
-#endif
-
     protected:
       virtual
       ~ctype_byname();
     };
 #endif
 
-_GLIBCXX_END_NAMESPACE_VERSION
-} // namespace
+_GLIBCXX_END_NAMESPACE
 
 // Include host and configuration specific ctype inlines.
 #include <bits/ctype_inline.h>
 
-namespace std _GLIBCXX_VISIBILITY(default)
-{
-_GLIBCXX_BEGIN_NAMESPACE_VERSION
+_GLIBCXX_BEGIN_NAMESPACE(std)
 
   // 22.2.2  The numeric category.
   class __num_base
@@ -1549,16 +1518,16 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
     // Below are the indices into _S_atoms_out.
     enum
       {
-	_S_ominus,
-	_S_oplus,
-	_S_ox,
-	_S_oX,
-	_S_odigits,
-	_S_odigits_end = _S_odigits + 16,
-	_S_oudigits = _S_odigits_end,
-	_S_oudigits_end = _S_oudigits + 16,
-	_S_oe = _S_odigits + 14,  // For scientific notation, 'e'
-	_S_oE = _S_oudigits + 14, // For scientific notation, 'E'
+        _S_ominus,
+        _S_oplus,
+        _S_ox,
+        _S_oX,
+        _S_odigits,
+        _S_odigits_end = _S_odigits + 16,
+        _S_oudigits = _S_odigits_end,
+        _S_oudigits_end = _S_oudigits + 16,
+        _S_oe = _S_odigits + 14,  // For scientific notation, 'e'
+        _S_oE = _S_oudigits + 14, // For scientific notation, 'E'
 	_S_oend = _S_oudigits_end
       };
 
@@ -1618,13 +1587,12 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 
       bool				_M_allocated;
 
-      __numpunct_cache(size_t __refs = 0)
-      : facet(__refs), _M_grouping(0), _M_grouping_size(0),
-	_M_use_grouping(false),
-	_M_truename(0), _M_truename_size(0), _M_falsename(0),
-	_M_falsename_size(0), _M_decimal_point(_CharT()),
-	_M_thousands_sep(_CharT()), _M_allocated(false)
-	{ }
+      __numpunct_cache(size_t __refs = 0) : facet(__refs),
+      _M_grouping(NULL), _M_grouping_size(0), _M_use_grouping(false),
+      _M_truename(NULL), _M_truename_size(0), _M_falsename(NULL),
+      _M_falsename_size(0), _M_decimal_point(_CharT()),
+      _M_thousands_sep(_CharT()), _M_allocated(false)
+      { }
 
       ~__numpunct_cache();
 
@@ -1634,7 +1602,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
     private:
       __numpunct_cache&
       operator=(const __numpunct_cache&);
-
+      
       explicit
       __numpunct_cache(const __numpunct_cache&);
     };
@@ -1649,8 +1617,6 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	  delete [] _M_falsename;
 	}
     }
-
-_GLIBCXX_BEGIN_NAMESPACE_CXX11
 
   /**
    *  @brief  Primary class template numpunct.
@@ -1688,11 +1654,10 @@ _GLIBCXX_BEGIN_NAMESPACE_CXX11
       /**
        *  @brief  Numpunct constructor.
        *
-       *  @param  __refs  Refcount to pass to the base class.
+       *  @param  refs  Refcount to pass to the base class.
        */
       explicit
-      numpunct(size_t __refs = 0)
-      : facet(__refs), _M_data(0)
+      numpunct(size_t __refs = 0) : facet(__refs), _M_data(NULL)
       { _M_initialize_numpunct(); }
 
       /**
@@ -1701,8 +1666,8 @@ _GLIBCXX_BEGIN_NAMESPACE_CXX11
        *  This is a constructor for use by the library itself to set up the
        *  predefined locale facets.
        *
-       *  @param  __cache  __numpunct_cache object.
-       *  @param  __refs  Refcount to pass to the base class.
+       *  @param  cache  __numpunct_cache object.
+       *  @param  refs  Refcount to pass to the base class.
        */
       explicit
       numpunct(__cache_type* __cache, size_t __refs = 0)
@@ -1715,12 +1680,12 @@ _GLIBCXX_BEGIN_NAMESPACE_CXX11
        *  This is a constructor for use by the library itself to set up new
        *  locales.
        *
-       *  @param  __cloc  The C locale.
-       *  @param  __refs  Refcount to pass to the base class.
+       *  @param  cloc  The C locale.
+       *  @param  refs  Refcount to pass to the base class.
        */
       explicit
       numpunct(__c_locale __cloc, size_t __refs = 0)
-      : facet(__refs), _M_data(0)
+      : facet(__refs), _M_data(NULL)
       { _M_initialize_numpunct(__cloc); }
 
       /**
@@ -1876,7 +1841,7 @@ _GLIBCXX_BEGIN_NAMESPACE_CXX11
 
       // For use at construction time only.
       void
-      _M_initialize_numpunct(__c_locale __cloc = 0);
+      _M_initialize_numpunct(__c_locale __cloc = NULL);
     };
 
   template<typename _CharT>
@@ -1920,20 +1885,12 @@ _GLIBCXX_BEGIN_NAMESPACE_CXX11
 	  }
       }
 
-#if __cplusplus >= 201103L
-      explicit
-      numpunct_byname(const string& __s, size_t __refs = 0)
-      : numpunct_byname(__s.c_str(), __refs) { }
-#endif
-
     protected:
       virtual
       ~numpunct_byname() { }
     };
 
-_GLIBCXX_END_NAMESPACE_CXX11
-
-_GLIBCXX_BEGIN_NAMESPACE_LDBL
+_GLIBCXX_BEGIN_LDBL_NAMESPACE
 
   /**
    *  @brief  Primary class template num_get.
@@ -1967,7 +1924,7 @@ _GLIBCXX_BEGIN_NAMESPACE_LDBL
        *
        *  This is the constructor provided by the standard.
        *
-       *  @param __refs  Passed to the base facet class.
+       *  @param refs  Passed to the base facet class.
       */
       explicit
       num_get(size_t __refs = 0) : facet(__refs) { }
@@ -1988,11 +1945,11 @@ _GLIBCXX_BEGIN_NAMESPACE_LDBL
        *  except if the value is 1, sets @a v to true, if the value is 0, sets
        *  @a v to false, and otherwise set err to ios_base::failbit.
        *
-       *  @param  __in  Start of input stream.
-       *  @param  __end  End of input stream.
-       *  @param  __io  Source of locale and flags.
-       *  @param  __err  Error flags to set.
-       *  @param  __v  Value to format and insert.
+       *  @param  in  Start of input stream.
+       *  @param  end  End of input stream.
+       *  @param  io  Source of locale and flags.
+       *  @param  err  Error flags to set.
+       *  @param  v  Value to format and insert.
        *  @return  Iterator after reading.
       */
       iter_type
@@ -2016,20 +1973,19 @@ _GLIBCXX_BEGIN_NAMESPACE_LDBL
        *  specifier.  Otherwise, parses like %d for signed and %u for unsigned
        *  types.  The matching type length modifier is also used.
        *
-       *  Digit grouping is interpreted according to
-       *  numpunct::grouping() and numpunct::thousands_sep().  If the
-       *  pattern of digit groups isn't consistent, sets err to
-       *  ios_base::failbit.
+       *  Digit grouping is interpreted according to numpunct::grouping() and
+       *  numpunct::thousands_sep().  If the pattern of digit groups isn't
+       *  consistent, sets err to ios_base::failbit.
        *
        *  If parsing the string yields a valid value for @a v, @a v is set.
        *  Otherwise, sets err to ios_base::failbit and leaves @a v unaltered.
        *  Sets err to ios_base::eofbit if the stream is emptied.
        *
-       *  @param  __in  Start of input stream.
-       *  @param  __end  End of input stream.
-       *  @param  __io  Source of locale and flags.
-       *  @param  __err  Error flags to set.
-       *  @param  __v  Value to format and insert.
+       *  @param  in  Start of input stream.
+       *  @param  end  End of input stream.
+       *  @param  io  Source of locale and flags.
+       *  @param  err  Error flags to set.
+       *  @param  v  Value to format and insert.
        *  @return  Iterator after reading.
       */
       iter_type
@@ -2076,20 +2032,19 @@ _GLIBCXX_BEGIN_NAMESPACE_LDBL
        *  matching type length modifier is also used.
        *
        *  The decimal point character used is numpunct::decimal_point().
-       *  Digit grouping is interpreted according to
-       *  numpunct::grouping() and numpunct::thousands_sep().  If the
-       *  pattern of digit groups isn't consistent, sets err to
-       *  ios_base::failbit.
+       *  Digit grouping is interpreted according to numpunct::grouping() and
+       *  numpunct::thousands_sep().  If the pattern of digit groups isn't
+       *  consistent, sets err to ios_base::failbit.
        *
        *  If parsing the string yields a valid value for @a v, @a v is set.
        *  Otherwise, sets err to ios_base::failbit and leaves @a v unaltered.
        *  Sets err to ios_base::eofbit if the stream is emptied.
        *
-       *  @param  __in  Start of input stream.
-       *  @param  __end  End of input stream.
-       *  @param  __io  Source of locale and flags.
-       *  @param  __err  Error flags to set.
-       *  @param  __v  Value to format and insert.
+       *  @param  in  Start of input stream.
+       *  @param  end  End of input stream.
+       *  @param  io  Source of locale and flags.
+       *  @param  err  Error flags to set.
+       *  @param  v  Value to format and insert.
        *  @return  Iterator after reading.
       */
       iter_type
@@ -2116,10 +2071,9 @@ _GLIBCXX_BEGIN_NAMESPACE_LDBL
        *
        *  The input characters are parsed like the scanf %p specifier.
        *
-       *  Digit grouping is interpreted according to
-       *  numpunct::grouping() and numpunct::thousands_sep().  If the
-       *  pattern of digit groups isn't consistent, sets err to
-       *  ios_base::failbit.
+       *  Digit grouping is interpreted according to numpunct::grouping() and
+       *  numpunct::thousands_sep().  If the pattern of digit groups isn't
+       *  consistent, sets err to ios_base::failbit.
        *
        *  Note that the digit grouping effect for pointers is a bit ambiguous
        *  in the standard and shouldn't be relied on.  See DR 344.
@@ -2128,11 +2082,11 @@ _GLIBCXX_BEGIN_NAMESPACE_LDBL
        *  Otherwise, sets err to ios_base::failbit and leaves @a v unaltered.
        *  Sets err to ios_base::eofbit if the stream is emptied.
        *
-       *  @param  __in  Start of input stream.
-       *  @param  __end  End of input stream.
-       *  @param  __io  Source of locale and flags.
-       *  @param  __err  Error flags to set.
-       *  @param  __v  Value to format and insert.
+       *  @param  in  Start of input stream.
+       *  @param  end  End of input stream.
+       *  @param  io  Source of locale and flags.
+       *  @param  err  Error flags to set.
+       *  @param  v  Value to format and insert.
        *  @return  Iterator after reading.
       */
       iter_type
@@ -2144,21 +2098,19 @@ _GLIBCXX_BEGIN_NAMESPACE_LDBL
       /// Destructor.
       virtual ~num_get() { }
 
-      _GLIBCXX_DEFAULT_ABI_TAG
       iter_type
       _M_extract_float(iter_type, iter_type, ios_base&, ios_base::iostate&,
 		       string&) const;
 
       template<typename _ValueT>
-	_GLIBCXX_DEFAULT_ABI_TAG
-	iter_type
-	_M_extract_int(iter_type, iter_type, ios_base&, ios_base::iostate&,
+        iter_type
+        _M_extract_int(iter_type, iter_type, ios_base&, ios_base::iostate&,
 		       _ValueT&) const;
 
       template<typename _CharT2>
       typename __gnu_cxx::__enable_if<__is_char<_CharT2>::__value, int>::__type
-	_M_find(const _CharT2*, size_t __len, _CharT2 __c) const
-	{
+        _M_find(const _CharT2*, size_t __len, _CharT2 __c) const
+        {
 	  int __ret = -1;
 	  if (__len <= 10)
 	    {
@@ -2178,10 +2130,10 @@ _GLIBCXX_BEGIN_NAMESPACE_LDBL
 	}
 
       template<typename _CharT2>
-      typename __gnu_cxx::__enable_if<!__is_char<_CharT2>::__value,
+      typename __gnu_cxx::__enable_if<!__is_char<_CharT2>::__value, 
 				      int>::__type
-	_M_find(const _CharT2* __zero, size_t __len, _CharT2 __c) const
-	{
+        _M_find(const _CharT2* __zero, size_t __len, _CharT2 __c) const
+        {
 	  int __ret = -1;
 	  const char_type* __q = char_traits<_CharT2>::find(__zero, __len, __c);
 	  if (__q)
@@ -2201,11 +2153,11 @@ _GLIBCXX_BEGIN_NAMESPACE_LDBL
        *  hook for derived classes to change the value returned.  @see get()
        *  for more details.
        *
-       *  @param  __beg  Start of input stream.
-       *  @param  __end  End of input stream.
-       *  @param  __io  Source of locale and flags.
-       *  @param  __err  Error flags to set.
-       *  @param  __v  Value to format and insert.
+       *  @param  in  Start of input stream.
+       *  @param  end  End of input stream.
+       *  @param  io  Source of locale and flags.
+       *  @param  err  Error flags to set.
+       *  @param  v  Value to format and insert.
        *  @return  Iterator after reading.
       */
       virtual iter_type
@@ -2235,7 +2187,7 @@ _GLIBCXX_BEGIN_NAMESPACE_LDBL
       virtual iter_type
       do_get(iter_type __beg, iter_type __end, ios_base& __io,
 	     ios_base::iostate& __err, long long& __v) const
-      { return _M_extract_int(__beg, __end, __io, __err, __v); }
+      { return _M_extract_int(__beg, __end, __io, __err, __v); }	
 
       virtual iter_type
       do_get(iter_type __beg, iter_type __end, ios_base& __io,
@@ -2244,30 +2196,32 @@ _GLIBCXX_BEGIN_NAMESPACE_LDBL
 #endif
 
       virtual iter_type
-      do_get(iter_type, iter_type, ios_base&, ios_base::iostate&, float&) const;
+      do_get(iter_type, iter_type, ios_base&, ios_base::iostate& __err,
+	     float&) const;
 
       virtual iter_type
-      do_get(iter_type, iter_type, ios_base&, ios_base::iostate&,
+      do_get(iter_type, iter_type, ios_base&, ios_base::iostate& __err,
 	     double&) const;
 
       // XXX GLIBCXX_ABI Deprecated
 #if defined _GLIBCXX_LONG_DOUBLE_COMPAT && defined __LONG_DOUBLE_128__
       virtual iter_type
-      __do_get(iter_type, iter_type, ios_base&, ios_base::iostate&,
+      __do_get(iter_type, iter_type, ios_base&, ios_base::iostate& __err,
 	       double&) const;
 #else
       virtual iter_type
-      do_get(iter_type, iter_type, ios_base&, ios_base::iostate&,
+      do_get(iter_type, iter_type, ios_base&, ios_base::iostate& __err,
 	     long double&) const;
 #endif
 
       virtual iter_type
-      do_get(iter_type, iter_type, ios_base&, ios_base::iostate&, void*&) const;
+      do_get(iter_type, iter_type, ios_base&, ios_base::iostate& __err,
+	     void*&) const;
 
       // XXX GLIBCXX_ABI Deprecated
 #if defined _GLIBCXX_LONG_DOUBLE_COMPAT && defined __LONG_DOUBLE_128__
       virtual iter_type
-      do_get(iter_type, iter_type, ios_base&, ios_base::iostate&,
+      do_get(iter_type, iter_type, ios_base&, ios_base::iostate& __err,
 	     long double&) const;
 #endif
       //@}
@@ -2308,7 +2262,7 @@ _GLIBCXX_BEGIN_NAMESPACE_LDBL
        *
        *  This is the constructor provided by the standard.
        *
-       *  @param __refs  Passed to the base facet class.
+       *  @param refs  Passed to the base facet class.
       */
       explicit
       num_put(size_t __refs = 0) : facet(__refs) { }
@@ -2322,15 +2276,15 @@ _GLIBCXX_BEGIN_NAMESPACE_LDBL
        *  If ios_base::boolalpha is set, writes ctype<CharT>::truename() or
        *  ctype<CharT>::falsename().  Otherwise formats @a v as an int.
        *
-       *  @param  __s  Stream to write to.
-       *  @param  __io  Source of locale and flags.
-       *  @param  __fill  Char_type to use for filling.
-       *  @param  __v  Value to format and insert.
+       *  @param  s  Stream to write to.
+       *  @param  io  Source of locale and flags.
+       *  @param  fill  Char_type to use for filling.
+       *  @param  v  Value to format and insert.
        *  @return  Iterator after writing.
       */
       iter_type
-      put(iter_type __s, ios_base& __io, char_type __fill, bool __v) const
-      { return this->do_put(__s, __io, __fill, __v); }
+      put(iter_type __s, ios_base& __f, char_type __fill, bool __v) const
+      { return this->do_put(__s, __f, __fill, __v); }
 
       //@{
       /**
@@ -2353,9 +2307,9 @@ _GLIBCXX_BEGIN_NAMESPACE_LDBL
        *  If ios_base::showbase is set, '0' precedes octal values (except 0)
        *  and '0[xX]' precedes hex values.
        *
-       *  The decimal point character used is numpunct::decimal_point().
-       *  Thousands separators are inserted according to
-       *  numpunct::grouping() and numpunct::thousands_sep().
+       *  Thousands separators are inserted according to numpunct::grouping()
+       *  and numpunct::thousands_sep().  The decimal point character used is
+       *  numpunct::decimal_point().
        *
        *  If io.width() is non-zero, enough @a fill characters are inserted to
        *  make the result at least that wide.  If
@@ -2364,30 +2318,30 @@ _GLIBCXX_BEGIN_NAMESPACE_LDBL
        *  immediately after either a '+' or '-' or after '0x' or '0X'.
        *  Otherwise, padding occurs at the beginning.
        *
-       *  @param  __s  Stream to write to.
-       *  @param  __io  Source of locale and flags.
-       *  @param  __fill  Char_type to use for filling.
-       *  @param  __v  Value to format and insert.
+       *  @param  s  Stream to write to.
+       *  @param  io  Source of locale and flags.
+       *  @param  fill  Char_type to use for filling.
+       *  @param  v  Value to format and insert.
        *  @return  Iterator after writing.
       */
       iter_type
-      put(iter_type __s, ios_base& __io, char_type __fill, long __v) const
-      { return this->do_put(__s, __io, __fill, __v); }
+      put(iter_type __s, ios_base& __f, char_type __fill, long __v) const
+      { return this->do_put(__s, __f, __fill, __v); }
 
       iter_type
-      put(iter_type __s, ios_base& __io, char_type __fill,
+      put(iter_type __s, ios_base& __f, char_type __fill,
 	  unsigned long __v) const
-      { return this->do_put(__s, __io, __fill, __v); }
+      { return this->do_put(__s, __f, __fill, __v); }
 
 #ifdef _GLIBCXX_USE_LONG_LONG
       iter_type
-      put(iter_type __s, ios_base& __io, char_type __fill, long long __v) const
-      { return this->do_put(__s, __io, __fill, __v); }
+      put(iter_type __s, ios_base& __f, char_type __fill, long long __v) const
+      { return this->do_put(__s, __f, __fill, __v); }
 
       iter_type
-      put(iter_type __s, ios_base& __io, char_type __fill,
+      put(iter_type __s, ios_base& __f, char_type __fill,
 	  unsigned long long __v) const
-      { return this->do_put(__s, __io, __fill, __v); }
+      { return this->do_put(__s, __f, __fill, __v); }
 #endif
       //@}
 
@@ -2416,9 +2370,9 @@ _GLIBCXX_BEGIN_NAMESPACE_LDBL
        *  If ios_base::showpoint is set, a decimal point will always be
        *  output.
        *
-       *  The decimal point character used is numpunct::decimal_point().
-       *  Thousands separators are inserted according to
-       *  numpunct::grouping() and numpunct::thousands_sep().
+       *  Thousands separators are inserted according to numpunct::grouping()
+       *  and numpunct::thousands_sep().  The decimal point character used is
+       *  numpunct::decimal_point().
        *
        *  If io.width() is non-zero, enough @a fill characters are inserted to
        *  make the result at least that wide.  If
@@ -2427,20 +2381,20 @@ _GLIBCXX_BEGIN_NAMESPACE_LDBL
        *  immediately after either a '+' or '-' or after '0x' or '0X'.
        *  Otherwise, padding occurs at the beginning.
        *
-       *  @param  __s  Stream to write to.
-       *  @param  __io  Source of locale and flags.
-       *  @param  __fill  Char_type to use for filling.
-       *  @param  __v  Value to format and insert.
+       *  @param  s  Stream to write to.
+       *  @param  io  Source of locale and flags.
+       *  @param  fill  Char_type to use for filling.
+       *  @param  v  Value to format and insert.
        *  @return  Iterator after writing.
       */
       iter_type
-      put(iter_type __s, ios_base& __io, char_type __fill, double __v) const
-      { return this->do_put(__s, __io, __fill, __v); }
+      put(iter_type __s, ios_base& __f, char_type __fill, double __v) const
+      { return this->do_put(__s, __f, __fill, __v); }
 
       iter_type
-      put(iter_type __s, ios_base& __io, char_type __fill,
+      put(iter_type __s, ios_base& __f, char_type __fill,
 	  long double __v) const
-      { return this->do_put(__s, __io, __fill, __v); }
+      { return this->do_put(__s, __f, __fill, __v); }
       //@}
 
       /**
@@ -2452,21 +2406,21 @@ _GLIBCXX_BEGIN_NAMESPACE_LDBL
        *  This function formats @a v as an unsigned long with ios_base::hex
        *  and ios_base::showbase set.
        *
-       *  @param  __s  Stream to write to.
-       *  @param  __io  Source of locale and flags.
-       *  @param  __fill  Char_type to use for filling.
-       *  @param  __v  Value to format and insert.
+       *  @param  s  Stream to write to.
+       *  @param  io  Source of locale and flags.
+       *  @param  fill  Char_type to use for filling.
+       *  @param  v  Value to format and insert.
        *  @return  Iterator after writing.
       */
       iter_type
-      put(iter_type __s, ios_base& __io, char_type __fill,
+      put(iter_type __s, ios_base& __f, char_type __fill,
 	  const void* __v) const
-      { return this->do_put(__s, __io, __fill, __v); }
+      { return this->do_put(__s, __f, __fill, __v); }
 
     protected:
       template<typename _ValueT>
-	iter_type
-	_M_insert_float(iter_type, ios_base& __io, char_type __fill,
+        iter_type
+        _M_insert_float(iter_type, ios_base& __io, char_type __fill,
 			char __mod, _ValueT __v) const;
 
       void
@@ -2475,8 +2429,8 @@ _GLIBCXX_BEGIN_NAMESPACE_LDBL
 		     char_type* __cs, int& __len) const;
 
       template<typename _ValueT>
-	iter_type
-	_M_insert_int(iter_type, ios_base& __io, char_type __fill,
+        iter_type
+        _M_insert_int(iter_type, ios_base& __io, char_type __fill,
 		      _ValueT __v) const;
 
       void
@@ -2490,7 +2444,7 @@ _GLIBCXX_BEGIN_NAMESPACE_LDBL
 
       /// Destructor.
       virtual
-      ~num_put() { }
+      ~num_put() { };
 
       //@{
       /**
@@ -2500,18 +2454,18 @@ _GLIBCXX_BEGIN_NAMESPACE_LDBL
        *  inserting them into a stream. This function is a hook for derived
        *  classes to change the value returned.
        *
-       *  @param  __s  Stream to write to.
-       *  @param  __io  Source of locale and flags.
-       *  @param  __fill  Char_type to use for filling.
-       *  @param  __v  Value to format and insert.
+       *  @param  s  Stream to write to.
+       *  @param  io  Source of locale and flags.
+       *  @param  fill  Char_type to use for filling.
+       *  @param  v  Value to format and insert.
        *  @return  Iterator after writing.
       */
       virtual iter_type
-      do_put(iter_type __s, ios_base& __io, char_type __fill, bool __v) const;
+      do_put(iter_type, ios_base&, char_type __fill, bool __v) const;
 
       virtual iter_type
       do_put(iter_type __s, ios_base& __io, char_type __fill, long __v) const
-      { return _M_insert_int(__s, __io, __fill, __v); }
+      { return _M_insert_int(__s, __io, __fill, __v); }	
 
       virtual iter_type
       do_put(iter_type __s, ios_base& __io, char_type __fill,
@@ -2531,24 +2485,24 @@ _GLIBCXX_BEGIN_NAMESPACE_LDBL
 #endif
 
       virtual iter_type
-      do_put(iter_type, ios_base&, char_type, double) const;
+      do_put(iter_type, ios_base&, char_type __fill, double __v) const;
 
       // XXX GLIBCXX_ABI Deprecated
 #if defined _GLIBCXX_LONG_DOUBLE_COMPAT && defined __LONG_DOUBLE_128__
       virtual iter_type
-      __do_put(iter_type, ios_base&, char_type, double) const;
+      __do_put(iter_type, ios_base&, char_type __fill, double __v) const;
 #else
       virtual iter_type
-      do_put(iter_type, ios_base&, char_type, long double) const;
+      do_put(iter_type, ios_base&, char_type __fill, long double __v) const;
 #endif
 
       virtual iter_type
-      do_put(iter_type, ios_base&, char_type, const void*) const;
+      do_put(iter_type, ios_base&, char_type __fill, const void* __v) const;
 
       // XXX GLIBCXX_ABI Deprecated
 #if defined _GLIBCXX_LONG_DOUBLE_COMPAT && defined __LONG_DOUBLE_128__
       virtual iter_type
-      do_put(iter_type, ios_base&, char_type, long double) const;
+      do_put(iter_type, ios_base&, char_type __fill, long double __v) const;
 #endif
       //@}
     };
@@ -2556,7 +2510,7 @@ _GLIBCXX_BEGIN_NAMESPACE_LDBL
   template <typename _CharT, typename _OutIter>
     locale::id num_put<_CharT, _OutIter>::id;
 
-_GLIBCXX_END_NAMESPACE_LDBL
+_GLIBCXX_END_LDBL_NAMESPACE
 
   // Subclause convenience interfaces, inlines.
   // NB: These are inline because, when used in a loop, some compilers
@@ -2589,7 +2543,7 @@ _GLIBCXX_END_NAMESPACE_LDBL
 
   /// Convenience interface to ctype.is(ctype_base::lower, __c).
   template<typename _CharT>
-    inline bool
+    inline bool 
     islower(_CharT __c, const locale& __loc)
     { return use_facet<ctype<_CharT> >(__loc).is(ctype_base::lower, __c); }
 
@@ -2629,14 +2583,6 @@ _GLIBCXX_END_NAMESPACE_LDBL
     isgraph(_CharT __c, const locale& __loc)
     { return use_facet<ctype<_CharT> >(__loc).is(ctype_base::graph, __c); }
 
-#if __cplusplus >= 201103L
-  /// Convenience interface to ctype.is(ctype_base::blank, __c).
-  template<typename _CharT>
-    inline bool
-    isblank(_CharT __c, const locale& __loc)
-    { return use_facet<ctype<_CharT> >(__loc).is(ctype_base::blank, __c); }
-#endif
-
   /// Convenience interface to ctype.toupper(__c).
   template<typename _CharT>
     inline _CharT
@@ -2649,9 +2595,10 @@ _GLIBCXX_END_NAMESPACE_LDBL
     tolower(_CharT __c, const locale& __loc)
     { return use_facet<ctype<_CharT> >(__loc).tolower(__c); }
 
-_GLIBCXX_END_NAMESPACE_VERSION
-} // namespace std
+_GLIBCXX_END_NAMESPACE
 
+#ifndef _GLIBCXX_EXPORT_TEMPLATE
 # include <bits/locale_facets.tcc>
+#endif
 
 #endif

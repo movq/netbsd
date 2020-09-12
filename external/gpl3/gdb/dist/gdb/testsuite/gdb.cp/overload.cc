@@ -97,8 +97,6 @@ class D: C {};
 int bar (A) { return 11; }
 int bar (B) { return 22; }
 
-int intintfunc (int x) { return x; }
-
 int main () 
 {
     char arg2 = 2;
@@ -136,6 +134,11 @@ int main ()
     N::nsoverload();
     N::nsoverload(2);
     N::nsoverload(2, 3);
+
+    #ifdef usestubs
+       set_debug_traps();
+       breakpoint();
+    #endif
 
     overloadNamespace (1);
     overloadNamespace (dummyInstance);

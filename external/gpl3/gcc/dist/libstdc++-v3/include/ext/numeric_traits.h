@@ -1,6 +1,6 @@
 // -*- C++ -*-
 
-// Copyright (C) 2007-2019 Free Software Foundation, Inc.
+// Copyright (C) 2007, 2009 Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the terms
@@ -34,9 +34,7 @@
 #include <bits/cpp_type_traits.h>
 #include <ext/type_traits.h>
 
-namespace __gnu_cxx _GLIBCXX_VISIBILITY(default)
-{
-_GLIBCXX_BEGIN_NAMESPACE_VERSION
+_GLIBCXX_BEGIN_NAMESPACE(__gnu_cxx)
 
   // Compile time constants for builtin types.
   // Sadly std::numeric_limits member functions cannot be used for this.
@@ -60,7 +58,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 
       // NB: these two also available in std::numeric_limits as compile
       // time constants, but <limits> is big and we avoid including it.
-      static const bool __is_signed_val = __glibcxx_signed(_Value);
+      static const bool __is_signed = __glibcxx_signed(_Value);
       static const int __digits = __glibcxx_digits(_Value);      
     };
 
@@ -71,7 +69,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
     const _Value __numeric_traits_integer<_Value>::__max;
 
   template<typename _Value>
-    const bool __numeric_traits_integer<_Value>::__is_signed_val;
+    const bool __numeric_traits_integer<_Value>::__is_signed;
 
   template<typename _Value>
     const int __numeric_traits_integer<_Value>::__digits;
@@ -87,7 +85,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 
 #define __glibcxx_max_digits10(_Tp) \
   (2 + __glibcxx_floating(_Tp, __FLT_MANT_DIG__, __DBL_MANT_DIG__, \
-			  __LDBL_MANT_DIG__) * 643L / 2136)
+			  __LDBL_MANT_DIG__) * 3010 / 10000)
 
 #define __glibcxx_digits10(_Tp) \
   __glibcxx_floating(_Tp, __FLT_DIG__, __DBL_DIG__, __LDBL_DIG__)
@@ -103,7 +101,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       static const int __max_digits10 = __glibcxx_max_digits10(_Value);
 
       // See above comment...
-      static const bool __is_signed_val = true;
+      static const bool __is_signed = true;
       static const int __digits10 = __glibcxx_digits10(_Value);
       static const int __max_exponent10 = __glibcxx_max_exponent10(_Value);
     };
@@ -112,7 +110,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
     const int __numeric_traits_floating<_Value>::__max_digits10;
 
   template<typename _Value>
-    const bool __numeric_traits_floating<_Value>::__is_signed_val;
+    const bool __numeric_traits_floating<_Value>::__is_signed;
 
   template<typename _Value>
     const int __numeric_traits_floating<_Value>::__digits10;
@@ -127,8 +125,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 				__numeric_traits_floating<_Value> >::__type
     { };
 
-_GLIBCXX_END_NAMESPACE_VERSION
-} // namespace
+_GLIBCXX_END_NAMESPACE
 
 #undef __glibcxx_floating
 #undef __glibcxx_max_digits10

@@ -1,5 +1,6 @@
 /* Miscellaneous simulator utilities.
-   Copyright (C) 1997-2019 Free Software Foundation, Inc.
+   Copyright (C) 1997, 1998, 2007, 2008, 2009, 2010, 2011
+   Free Software Foundation, Inc.
    Contributed by Cygnus Support.
 
 This file is part of GDB, the GNU debugger.
@@ -47,6 +48,10 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 #include "libiberty.h"
 #include "bfd.h"
 #include "sim-utils.h"
+
+/* Global pointer to all state data.
+   Set by sim_resume.  */
+struct sim_state *current_state;
 
 /* Allocate zero filled memory with xcalloc - xcalloc aborts if the
    allocation fails.  */
@@ -101,7 +106,7 @@ sim_state_alloc (SIM_OPEN_KIND kind,
 void
 sim_state_free (SIM_DESC sd)
 {
-  ASSERT (STATE_MAGIC (sd) == SIM_MAGIC_NUMBER);
+  ASSERT (sd->base.magic == SIM_MAGIC_NUMBER);
 
 #ifdef SIM_STATE_FREE
   SIM_STATE_FREE (sd);
@@ -207,7 +212,7 @@ sim_add_commas (char *buf, int sizeof_buf, unsigned long value)
    bfd open.  */
 
 SIM_RC
-sim_analyze_program (SIM_DESC sd, const char *prog_name, bfd *prog_bfd)
+sim_analyze_program (SIM_DESC sd, char *prog_name, bfd *prog_bfd)
 {
   asection *s;
   SIM_ASSERT (STATE_MAGIC (sd) == SIM_MAGIC_NUMBER);
@@ -324,20 +329,15 @@ sim_do_commandf (SIM_DESC sd,
 {
   va_list ap;
   char *buf;
-  int ret;
-
   va_start (ap, fmt);
-  ret = vasprintf (&buf, fmt, ap);
-  va_end (ap);
-
-  if (ret < 0)
+  if (vasprintf (&buf, fmt, ap) < 0)
     {
       sim_io_eprintf (sd, "%s: asprintf failed for `%s'\n",
 		      STATE_MY_NAME (sd), fmt);
       return;
     }
-
   sim_do_command (sd, buf);
+  va_end (ap);
   free (buf);
 }
 

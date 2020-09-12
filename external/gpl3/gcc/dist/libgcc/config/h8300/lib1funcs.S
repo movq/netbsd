@@ -2,7 +2,7 @@
 ;; Contributed by Steve Chamberlain <sac@cygnus.com>
 ;; Optimizations by Toshiyasu Morita <toshiyasu.morita@renesas.com>
 
-/* Copyright (C) 1994-2019 Free Software Foundation, Inc.
+/* Copyright (C) 1994-2013 Free Software Foundation, Inc.
 
 This file is free software; you can redistribute it and/or modify it
 under the terms of the GNU General Public License as published by the
@@ -84,12 +84,6 @@ see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
 #define A3E	e3
 #endif
 
-#define CONCAT(A,B)     A##B
-#define LABEL0(U,X)    CONCAT(U,__##X)
-#define LABEL0_DEF(U,X)    CONCAT(U,__##X##:)
-#define LABEL_DEF(X)       LABEL0_DEF(__USER_LABEL_PREFIX__,X)
-#define LABEL(X)       LABEL0(__USER_LABEL_PREFIX__,X)
-
 #ifdef __H8300H__
 #ifdef __NORMAL_MODE__
 	.h8300hn
@@ -117,8 +111,8 @@ see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
 #ifdef __H8300__
 	.section .text
 	.align 2
-	.global LABEL(cmpsi2)
-LABEL_DEF(cmpsi2)
+	.global ___cmpsi2
+___cmpsi2:
 	cmp.w	A0,A2
 	bne	.L2
 	cmp.w	A1,A3
@@ -143,8 +137,8 @@ LABEL_DEF(cmpsi2)
 #ifdef __H8300__
 	.section .text
 	.align 2
-	.global LABEL(ucmpsi2)
-LABEL_DEF(ucmpsi2)
+	.global ___ucmpsi2
+___ucmpsi2:
 	cmp.w	A0,A2
 	bne	.L2
 	cmp.w	A1,A3
@@ -213,10 +207,10 @@ _lab8:	rts
 
 ; A0=A0/A1 signed
 
-	.global	LABEL(divhi3)
-LABEL_DEF(divhi3)
+	.global	___divhi3
+___divhi3:
 	bsr	divnorm
-	bsr	LABEL(udivhi3)
+	bsr	___udivhi3
 negans:	btst	#3,A2L	; should answer be negative ?
 	beq	_lab4
 	not	A0H	; yes, so make it so
@@ -226,18 +220,18 @@ _lab4:	rts
 
 ; A0=A0%A1 signed
 
-	.global	LABEL(modhi3)
-LABEL_DEF(modhi3)
+	.global	___modhi3
+___modhi3:
 	bsr	modnorm
-	bsr	LABEL(udivhi3)
+	bsr	___udivhi3
 	mov	A3,A0
 	bra	negans
 
 ; A0=A0%A1 unsigned
 
-	.global	LABEL(umodhi3)
-LABEL_DEF(umodhi3)
-	bsr	LABEL(udivhi3)
+	.global	___umodhi3
+___umodhi3:
+	bsr	___udivhi3
 	mov	A3,A0
 	rts
 
@@ -257,8 +251,8 @@ LABEL_DEF(umodhi3)
 ; The H8/300 only has a 16/8 bit divide, so we look at the incoming and
 ; see how to partition up the expression.
 
-	.global	LABEL(udivhi3)
-LABEL_DEF(udivhi3)
+	.global	___udivhi3
+___udivhi3:
 				; A0 A1 A2 A3
 				; Nn Dd       P
 	sub.w	A3,A3		; Nn Dd xP 00
@@ -424,8 +418,8 @@ mpostive2:
 
 ; numerator in A0/A1
 ; denominator in A2/A3
-	.global	LABEL(modsi3)
-LABEL_DEF(modsi3)
+	.global	___modsi3
+___modsi3:
 #ifdef __H8300__
 	PUSHP	S2P
 	PUSHP	S0P
@@ -438,7 +432,7 @@ LABEL_DEF(modsi3)
 #else
 	PUSHP	S2P
 	bsr	modnorm
-	bsr	LABEL(divsi3)
+	bsr	___udivsi3
 	mov.l	er3,er0
 	bra	exitdiv
 #endif
@@ -446,8 +440,8 @@ LABEL_DEF(modsi3)
 	;; H8/300H and H8S version of ___udivsi3 is defined later in
 	;; the file.
 #ifdef __H8300__
-	.global	LABEL(udivsi3)
-LABEL_DEF(udivsi3)
+	.global	___udivsi3
+___udivsi3:
 	PUSHP	S2P
 	PUSHP	S0P
 	PUSHP	S1P
@@ -455,8 +449,8 @@ LABEL_DEF(udivsi3)
 	bra	reti
 #endif
 
-	.global	LABEL(umodsi3)
-LABEL_DEF(umodsi3)
+	.global	___umodsi3
+___umodsi3:
 #ifdef __H8300__
 	PUSHP	S2P
 	PUSHP	S0P
@@ -466,13 +460,13 @@ LABEL_DEF(umodsi3)
 	mov	S1,A1
 	bra	reti
 #else
-	bsr	LABEL(udivsi3)
+	bsr	___udivsi3
 	mov.l	er3,er0
 	rts
 #endif
 
-	.global	LABEL(divsi3)
-LABEL_DEF(divsi3)
+	.global	___divsi3
+___divsi3:
 #ifdef __H8300__
 	PUSHP	S2P
 	PUSHP	S0P
@@ -482,7 +476,7 @@ LABEL_DEF(divsi3)
 #else
 	PUSHP	S2P
 	jsr	divnorm
-	bsr	LABEL(udivsi3)
+	bsr	___udivsi3
 #endif
 
 	; examine what the sign should be
@@ -597,8 +591,8 @@ setone:
 #else /* __H8300H__ */
 
 	;; This function also computes the remainder and stores it in er3.
-	.global	LABEL(udivsi3)
-LABEL_DEF(udivsi3)
+	.global	___udivsi3
+___udivsi3:
 	mov.w	A1E,A1E		; denominator top word 0?
 	bne	DenHighNonZero
 
@@ -687,8 +681,8 @@ divmod_L26:
 #ifdef __H8300__
 	.section .text
 	.align 2
-	.global	LABEL(mulhi3)
-LABEL_DEF(mulhi3)
+	.global	___mulhi3
+___mulhi3:
 	mov.b	A1L,A2L		; A2l gets srcb.l
 	mulxu	A0L,A2		; A2 gets first sub product
 
@@ -732,8 +726,8 @@ LABEL_DEF(mulhi3)
 
 #ifdef __H8300__
 
-	.global	LABEL(mulsi3)
-LABEL_DEF(mulsi3)
+	.global	___mulsi3
+___mulsi3:
 	PUSHP	S0P
 	PUSHP	S1P
 
@@ -791,8 +785,8 @@ _done:
 ; 32b * 32b =  92 states
 ;
 
-	.global LABEL(mulsi3)
-LABEL_DEF(mulsi3)
+	.global	___mulsi3
+___mulsi3:
 	mov.w	r1,r2   ; ( 2 states) b * d
 	mulxu	r0,er2  ; (22 states)
 
@@ -820,11 +814,11 @@ L_skip2:
 #ifdef __H8300__
 /* We still treat NANs different than libgcc2.c, but then, the
    behavior is undefined anyways.  */
-	.global LABEL(fixunssfsi)
-LABEL_DEF(fixunssfsi)
+	.global	___fixunssfsi
+___fixunssfsi:
 	cmp.b #0x4f,r0h
 	bge Large_num
-	jmp     @LABEL(fixsfsi)
+	jmp     @___fixsfsi
 Large_num:
 	bhi L_huge_num
 	xor.b #0x80,A0L

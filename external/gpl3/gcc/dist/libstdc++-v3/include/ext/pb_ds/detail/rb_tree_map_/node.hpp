@@ -1,6 +1,6 @@
 // -*- C++ -*-
 
-// Copyright (C) 2005-2019 Free Software Foundation, Inc.
+// Copyright (C) 2005, 2006, 2009 Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the terms
@@ -34,54 +34,53 @@
 // warranty.
 
 /**
- * @file rb_tree_map_/node.hpp
+ * @file node.hpp
  * Contains an implementation for rb_tree_.
  */
 
 #ifndef PB_DS_RB_TREE_NODE_HPP
 #define PB_DS_RB_TREE_NODE_HPP
 
-#include <ext/pb_ds/detail/branch_policy/null_node_metadata.hpp>
+#include <ext/pb_ds/detail/basic_tree_policy/null_node_metadata.hpp>
 
 namespace __gnu_pbds
 {
   namespace detail
   {
-    /// Node for Red-Black trees.
-    template<typename Value_Type, class Metadata, typename _Alloc>
+    template<typename Value_Type, class Metadata, class Allocator>
     struct rb_tree_node_
     {
     public:
-      typedef Value_Type 		value_type;
-      typedef Metadata 			metadata_type;
+      typedef Value_Type value_type;
+      typedef Metadata metadata_type;
 
       typedef
-      typename _Alloc::template rebind<
+      typename Allocator::template rebind<
       rb_tree_node_<
       Value_Type,
       Metadata,
-      _Alloc> >::other::pointer
+      Allocator> >::other::pointer
       node_pointer;
 
       typedef
-      typename _Alloc::template rebind<
+      typename Allocator::template rebind<
 	metadata_type>::other::reference
       metadata_reference;
 
       typedef
-      typename _Alloc::template rebind<
+      typename Allocator::template rebind<
 	metadata_type>::other::const_reference
-      metadata_const_reference;
+      const_metadata_reference;
 
-      bool
+      inline bool
       special() const
       { return m_red; }
 
-      metadata_const_reference
+      inline const_metadata_reference
       get_metadata() const
       { return m_metadata; }
 
-      metadata_reference
+      inline metadata_reference
       get_metadata()
       { return m_metadata; }
 
@@ -94,30 +93,30 @@ namespace __gnu_pbds
       }
 #endif
 
-      node_pointer 	m_p_left;
-      node_pointer 	m_p_right;
-      node_pointer 	m_p_parent;
-      value_type 	m_value;
-      bool 		m_red;
-      metadata_type 	m_metadata;
+      node_pointer m_p_left;
+      node_pointer m_p_right;
+      node_pointer m_p_parent;
+      value_type m_value;
+      bool m_red;
+      metadata_type m_metadata;
     };
 
-    template<typename Value_Type, typename _Alloc>
-    struct rb_tree_node_<Value_Type, null_type, _Alloc>
+    template<typename Value_Type, class Allocator>
+    struct rb_tree_node_<Value_Type, null_node_metadata, Allocator>
     {
     public:
-      typedef Value_Type 		value_type;
-      typedef null_type 	metadata_type;
+      typedef Value_Type value_type;
+      typedef null_node_metadata metadata_type;
 
       typedef
-      typename _Alloc::template rebind<
+      typename Allocator::template rebind<
       rb_tree_node_<
       Value_Type,
-      null_type,
-      _Alloc> >::other::pointer
+      null_node_metadata,
+      Allocator> >::other::pointer
       node_pointer;
 
-      bool
+      inline bool
       special() const
       { return m_red; }
 
@@ -127,11 +126,11 @@ namespace __gnu_pbds
       { std::cout << PB_DS_V2F(m_value) <<(m_red? " <r> " : " <b> "); }
 #endif 
 
-      node_pointer 	m_p_left;
-      node_pointer 	m_p_right;
-      node_pointer 	m_p_parent;
-      value_type 	m_value;
-      bool 		m_red;
+      node_pointer m_p_left;
+      node_pointer m_p_right;
+      node_pointer m_p_parent;
+      value_type m_value;
+      bool m_red;
     };
   } // namespace detail
 } // namespace __gnu_pbds

@@ -1,6 +1,6 @@
 # This testcase is part of GDB, the GNU debugger.
 
-# Copyright 2007-2019 Free Software Foundation, Inc.
+# Copyright 2007, 2009, 2010, 2011 Free Software Foundation, Inc.
 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -18,57 +18,55 @@
 # Test attaching to already-running programs using extended-remote.
 
 load_lib gdbserver-support.exp
-load_lib trace-support.exp
 
-standard_testfile
+set testfile "ext-attach"
+set srcfile ${testfile}.c
+set binfile ${objdir}/${subdir}/${testfile}
 
 if { [skip_gdbserver_tests] } {
     return 0
 }
 
-if {![can_spawn_for_attach]} {
+# We need to use TCL's exec to get the pid.
+if [is_remote target] then {
     return 0
 }
 
-if {[prepare_for_testing "failed to prepare" $testfile $srcfile debug]} {
+if  { [gdb_compile "${srcdir}/${subdir}/${srcfile}" "${binfile}" executable {debug}] != "" } {
+    untested ext-attach.exp
     return -1
 }
 
-# Make sure we're disconnected, in case we're testing with an
-# extended-remote board, therefore already connected.
-gdb_test "disconnect" ".*"
+gdb_exit
+gdb_start
+gdb_load $binfile
+gdb_reinitialize_dir $srcdir/$subdir
 
 set target_exec [gdbserver_download_current_prog]
 gdbserver_start_extended
 
 gdb_test_no_output "set remote exec-file $target_exec" "set remote exec-file"
 
-set test_spawn_id [spawn_wait_for_attach $binfile]
-set testpid [spawn_id_get_pid $test_spawn_id]
-
-gdb_test "attach $testpid" \
-    "Attaching to program: .*, process $testpid.*(in|at).*" \
-    "attach to remote program 1"
-
-if { [gdb_target_supports_trace] } then {
-    # Test predefined TSVs are uploaded.
-    gdb_test_sequence "info tvariables" "check uploaded tsv" {
-	"\[\r\n\]+Name\[\t \]+Initial\[\t \]+Current"
-	"\[\r\n\]+\\\$trace_timestamp 0"
-    }
+# Start the program running and then wait for a bit, to be sure
+# that it can be attached to.
+set testpid [eval exec $binfile &]
+exec sleep 2
+if { [istarget "*-*-cygwin*"] } {
+    # testpid is the Cygwin PID, GDB uses the Windows PID, which might be
+    # different due to the way fork/exec works.
+    set testpid [ exec ps -e | gawk "{ if (\$1 == $testpid) print \$4; }" ]
 }
 
+gdb_test "attach $testpid" "Attached to.*" \
+    "attach to remote program 1"
 gdb_test "backtrace" ".*main.*" "backtrace 1"
 
-gdb_test "detach" "Detaching from program.*process.*"
+gdb_test "detach" "Detached from remote process.*\\."
 gdb_test "backtrace" "No stack\\." "backtrace with no program"
 
-gdb_test "attach $testpid" \
-    "Attaching to program: .*, process $testpid.*(in|at).*" \
+gdb_test "attach $testpid" "Attached to.*" \
     "attach to remote program 2"
 gdb_test "backtrace" ".*main.*" "backtrace 2"
 
-gdb_test "kill" "" "kill" "Kill the program being debugged. .y or n. " "y"
+gdb_test "kill" "" "kill" "Kill the program being debugged.*" "y"
 gdb_test_no_output "monitor exit"
-
-kill_wait_spawned_process $test_spawn_id

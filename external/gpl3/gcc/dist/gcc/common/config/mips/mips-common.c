@@ -1,5 +1,5 @@
 /* Common hooks for MIPS.
-   Copyright (C) 1989-2019 Free Software Foundation, Inc.
+   Copyright (C) 1989-2013 Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -42,26 +42,29 @@ mips_handle_option (struct gcc_options *opts,
       opts->x_mips_cache_flush_func = NULL;
       return true;
 
-    case OPT_mfp32:
-    case OPT_mfp64:
-      opts->x_target_flags &= ~MASK_FLOATXX;
-      return true;
-
-    case OPT_mfpxx:
-      opts->x_target_flags &= ~MASK_FLOAT64;
-      return true;
-
     default:
       return true;
     }
 }
+
+/* Implement TARGET_OPTION_OPTIMIZATION_TABLE.  */
+static const struct default_options mips_option_optimization_table[] =
+  {
+    { OPT_LEVELS_1_PLUS, OPT_fomit_frame_pointer, NULL, 1 },
+    { OPT_LEVELS_NONE, 0, NULL, 0 }
+  };
+
+#undef TARGET_OPTION_OPTIMIZATION_TABLE
+#define TARGET_OPTION_OPTIMIZATION_TABLE mips_option_optimization_table
 
 #undef TARGET_DEFAULT_TARGET_FLAGS
 #define TARGET_DEFAULT_TARGET_FLAGS		\
   (TARGET_DEFAULT				\
    | TARGET_CPU_DEFAULT				\
    | TARGET_ENDIAN_DEFAULT			\
-   | MASK_CHECK_ZERO_DIV)
+   | TARGET_FP_EXCEPTIONS_DEFAULT		\
+   | MASK_CHECK_ZERO_DIV			\
+   | MASK_FUSED_MADD)
 #undef TARGET_HANDLE_OPTION
 #define TARGET_HANDLE_OPTION mips_handle_option
 

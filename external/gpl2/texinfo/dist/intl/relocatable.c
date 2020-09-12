@@ -1,4 +1,4 @@
-/*	$NetBSD: relocatable.c,v 1.1.1.1 2016/01/14 00:11:28 christos Exp $	*/
+/*	$NetBSD: relocatable.c,v 1.1 2016/01/14 00:11:28 christos Exp $	*/
 
 /* Provide relocatable packages.
    Copyright (C) 2003 Free Software Foundation, Inc.

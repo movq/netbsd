@@ -1,6 +1,6 @@
 // chrono -*- C++ -*-
 
-// Copyright (C) 2008-2019 Free Software Foundation, Inc.
+// Copyright (C) 2008-2013 Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
@@ -25,6 +25,8 @@
 #include <bits/c++config.h>
 #include <chrono>
 
+#ifdef _GLIBCXX_USE_C99_STDINT_TR1
+
 // Conditional inclusion of sys/time.h for gettimeofday
 #if !defined(_GLIBCXX_USE_CLOCK_MONOTONIC) && \
     !defined(_GLIBCXX_USE_CLOCK_REALTIME) && \
@@ -39,10 +41,10 @@
 
 namespace std _GLIBCXX_VISIBILITY(default)
 {
-_GLIBCXX_BEGIN_NAMESPACE_VERSION
-
   namespace chrono
   {
+  _GLIBCXX_BEGIN_NAMESPACE_VERSION
+
     // XXX GLIBCXX_ABI Deprecated
     inline namespace _V2 {
 
@@ -73,7 +75,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 #endif
     }
 
-
+    
     constexpr bool steady_clock::is_steady;
 
     steady_clock::time_point
@@ -95,7 +97,9 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
     }
 
   } // end inline namespace _V2
-  } // namespace chrono
 
-_GLIBCXX_END_NAMESPACE_VERSION
+  _GLIBCXX_END_NAMESPACE_VERSION
+  } // namespace chrono
 } // namespace std
+
+#endif // _GLIBCXX_USE_C99_STDINT_TR1

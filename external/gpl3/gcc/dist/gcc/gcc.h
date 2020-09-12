@@ -1,5 +1,6 @@
 /* Header file for modules that link with gcc.c
-   Copyright (C) 1999-2019 Free Software Foundation, Inc.
+   Copyright (C) 1999, 2000, 2001, 2003, 2004, 2007, 2008, 2010
+   Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -21,44 +22,6 @@ along with GCC; see the file COPYING3.  If not see
 #define GCC_GCC_H
 
 #include "version.h"
-#include "diagnostic-core.h"
-
-/* The top-level "main" within the driver would be ~1000 lines long.
-   This class breaks it up into smaller functions and contains some
-   state shared by them.  */
-
-class driver
-{
- public:
-  driver (bool can_finalize, bool debug);
-  ~driver ();
-  int main (int argc, char **argv);
-  void finalize ();
-
- private:
-  void set_progname (const char *argv0) const;
-  void expand_at_files (int *argc, char ***argv) const;
-  void decode_argv (int argc, const char **argv);
-  void global_initializations ();
-  void build_multilib_strings () const;
-  void set_up_specs () const;
-  void putenv_COLLECT_GCC (const char *argv0) const;
-  void maybe_putenv_COLLECT_LTO_WRAPPER () const;
-  void maybe_putenv_OFFLOAD_TARGETS () const;
-  void handle_unrecognized_options ();
-  int maybe_print_and_exit () const;
-  bool prepare_infiles ();
-  void do_spec_on_infiles () const;
-  void maybe_run_linker (const char *argv0) const;
-  void final_actions () const;
-  int get_exit_code () const;
-
- private:
-  char *explicit_link_files;
-  struct cl_decoded_option *decoded_options;
-  unsigned int decoded_options_count;
-  option_proposer m_option_proposer;
-};
 
 /* The mapping of a spec function name to the C function that
    implements it.  */
@@ -68,16 +31,43 @@ struct spec_function
   const char *(*func) (int, const char **);
 };
 
+/* This defines which switch letters take arguments.  */
+
+#define DEFAULT_SWITCH_TAKES_ARG(CHAR) \
+  ((CHAR) == 'D' || (CHAR) == 'U' || (CHAR) == 'o' \
+   || (CHAR) == 'e' || (CHAR) == 'T' || (CHAR) == 'u' \
+   || (CHAR) == 'I' || (CHAR) == 'J' || (CHAR) == 'm' \
+   || (CHAR) == 'x' || (CHAR) == 'L' || (CHAR) == 'A' \
+   || (CHAR) == 'V' || (CHAR) == 'B' || (CHAR) == 'b')
+
+/* This defines which multi-letter switches take arguments.  */
+
+#define DEFAULT_WORD_SWITCH_TAKES_ARG(STR)		\
+ (!strcmp (STR, "Tdata") || !strcmp (STR, "Ttext")	\
+  || !strcmp (STR, "Tbss") || !strcmp (STR, "include")	\
+  || !strcmp (STR, "imacros") || !strcmp (STR, "aux-info") \
+  || !strcmp (STR, "idirafter") || !strcmp (STR, "iprefix") \
+  || !strcmp (STR, "iwithprefix") || !strcmp (STR, "iwithprefixbefore") \
+  || !strcmp (STR, "iquote") || !strcmp (STR, "isystem") \
+  || !strcmp (STR, "isysroot") \
+  || !strcmp (STR, "-param") || !strcmp (STR, "specs") \
+  || !strcmp (STR, "MF") || !strcmp (STR, "MT") || !strcmp (STR, "MQ") \
+  || !strcmp (STR, "fintrinsic-modules-path") \
+  || !strcmp (STR, "dumpbase") || !strcmp (STR, "dumpdir"))
+
+
 /* These are exported by gcc.c.  */
 extern int do_spec (const char *);
 extern void record_temp_file (const char *, int, int);
+extern void fatal (const char *, ...) ATTRIBUTE_PRINTF_1 ATTRIBUTE_NORETURN;
+extern void error (const char *, ...) ATTRIBUTE_PRINTF_1;
+extern void pfatal_with_name (const char *) ATTRIBUTE_NORETURN;
 extern void set_input (const char *);
 
 /* Spec files linked with gcc.c must provide definitions for these.  */
 
 /* Called before processing to change/add/remove arguments.  */
-extern void lang_specific_driver (struct cl_decoded_option **,
-				  unsigned int *, int *);
+extern void lang_specific_driver (int *, const char *const **, int *);
 
 /* Called before linking.  Returns 0 on success and -1 on failure.  */
 extern int lang_specific_pre_link (void);
@@ -90,10 +80,5 @@ extern int lang_specific_extra_outfiles;
 /* A vector of corresponding output files is made up later.  */
 
 extern const char **outfiles;
-
-extern void
-driver_get_configure_time_options (void (*cb)(const char *option,
-					      void *user_data),
-				   void *user_data);
 
 #endif /* ! GCC_GCC_H */

@@ -1,6 +1,6 @@
 /* Target-dependent code for Darwin x86-64.
 
-   Copyright (C) 2009-2019 Free Software Foundation, Inc.
+   Copyright (C) 2009, 2010, 2011 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -16,9 +16,8 @@
 
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
-
-#ifndef AMD64_DARWIN_TDEP_H
-#define AMD64_DARWIN_TDEP_H
+#ifndef __AMD64_DARWIN_TDEP_H__
+#define __AMD64_DARWIN_TDEP_H__
 
 /* Mapping between the general-purpose registers in Darwin x86-64 thread
    state and GDB's register cache layout.
@@ -26,4 +25,4 @@
 extern int amd64_darwin_thread_state_reg_offset[];
 extern const int amd64_darwin_thread_state_num_regs;
 
-#endif /* AMD64_DARWIN_TDEP_H */
+#endif /* __AMD64_DARWIN_TDEP_H__ */

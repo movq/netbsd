@@ -1,4 +1,4 @@
-/*	$NetBSD: lang.c,v 1.1.1.1 2016/01/14 00:11:29 christos Exp $	*/
+/*	$NetBSD: lang.c,v 1.1 2016/01/14 00:11:29 christos Exp $	*/
 
 /* lang.c -- language-dependent support.
    Id: lang.c,v 1.14 2004/11/22 23:57:33 karl Exp 

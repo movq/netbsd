@@ -1,6 +1,6 @@
 // script-sections.cc -- linker script SECTIONS for gold
 
-// Copyright (C) 2008-2020 Free Software Foundation, Inc.
+// Copyright 2008 Free Software Foundation, Inc.
 // Written by Ian Lance Taylor <iant@google.com>.
 
 // This file is part of gold.
@@ -43,553 +43,6 @@
 namespace gold
 {
 
-// A region of memory.
-class Memory_region
-{
- public:
-  Memory_region(const char* name, size_t namelen, unsigned int attributes,
-		Expression* start, Expression* length)
-    : name_(name, namelen),
-      attributes_(attributes),
-      start_(start),
-      length_(length),
-      current_offset_(0),
-      vma_sections_(),
-      lma_sections_(),
-      last_section_(NULL)
-  { }
-
-  // Return the name of this region.
-  const std::string&
-  name() const
-  { return this->name_; }
-
-  // Return the start address of this region.
-  Expression*
-  start_address() const
-  { return this->start_; }
-
-  // Return the length of this region.
-  Expression*
-  length() const
-  { return this->length_; }
-
-  // Print the region (when debugging).
-  void
-  print(FILE*) const;
-
-  // Return true if <name,namelen> matches this region.
-  bool
-  name_match(const char* name, size_t namelen)
-  {
-    return (this->name_.length() == namelen
-	    && strncmp(this->name_.c_str(), name, namelen) == 0);
-  }
-
-  Expression*
-  get_current_address() const
-  {
-    return
-      script_exp_binary_add(this->start_,
-			    script_exp_integer(this->current_offset_));
-  }
-
-  void
-  set_address(uint64_t addr, const Symbol_table* symtab, const Layout* layout)
-  {
-    uint64_t start = this->start_->eval(symtab, layout, false);
-    uint64_t len = this->length_->eval(symtab, layout, false);
-    if (addr < start || addr >= start + len)
-      gold_error(_("address 0x%llx is not within region %s"),
-		 static_cast<unsigned long long>(addr),
-		 this->name_.c_str());
-    else if (addr < start + this->current_offset_)
-      gold_error(_("address 0x%llx moves dot backwards in region %s"),
-		 static_cast<unsigned long long>(addr),
-		 this->name_.c_str());
-    this->current_offset_ = addr - start;
-  }
-
-  void
-  increment_offset(std::string section_name, uint64_t amount,
-		   const Symbol_table* symtab, const Layout* layout)
-  {
-    this->current_offset_ += amount;
-
-    if (this->current_offset_
-	> this->length_->eval(symtab, layout, false))
-      gold_error(_("section %s overflows end of region %s"),
-		 section_name.c_str(), this->name_.c_str());
-  }
-
-  // Returns true iff there is room left in this region
-  // for AMOUNT more bytes of data.
-  bool
-  has_room_for(const Symbol_table* symtab, const Layout* layout,
-	       uint64_t amount) const
-  {
-    return (this->current_offset_ + amount
-	    < this->length_->eval(symtab, layout, false));
-  }
-
-  // Return true if the provided section flags
-  // are compatible with this region's attributes.
-  bool
-  attributes_compatible(elfcpp::Elf_Xword flags, elfcpp::Elf_Xword type) const;
-
-  void
-  add_section(Output_section_definition* sec, bool vma)
-  {
-    if (vma)
-      this->vma_sections_.push_back(sec);
-    else
-      this->lma_sections_.push_back(sec);
-  }
-
-  typedef std::vector<Output_section_definition*> Section_list;
-
-  // Return the start of the list of sections
-  // whose VMAs are taken from this region.
-  Section_list::const_iterator
-  get_vma_section_list_start() const
-  { return this->vma_sections_.begin(); }
-
-  // Return the start of the list of sections
-  // whose LMAs are taken from this region.
-  Section_list::const_iterator
-  get_lma_section_list_start() const
-  { return this->lma_sections_.begin(); }
-
-  // Return the end of the list of sections
-  // whose VMAs are taken from this region.
-  Section_list::const_iterator
-  get_vma_section_list_end() const
-  { return this->vma_sections_.end(); }
-
-  // Return the end of the list of sections
-  // whose LMAs are taken from this region.
-  Section_list::const_iterator
-  get_lma_section_list_end() const
-  { return this->lma_sections_.end(); }
-
-  Output_section_definition*
-  get_last_section() const
-  { return this->last_section_; }
-
-  void
-  set_last_section(Output_section_definition* sec)
-  { this->last_section_ = sec; }
-
- private:
-
-  std::string name_;
-  unsigned int attributes_;
-  Expression* start_;
-  Expression* length_;
-  // The offset to the next free byte in the region.
-  // Note - for compatibility with GNU LD we only maintain one offset
-  // regardless of whether the region is being used for VMA values,
-  // LMA values, or both.
-  uint64_t current_offset_;
-  // A list of sections whose VMAs are set inside this region.
-  Section_list vma_sections_;
-  // A list of sections whose LMAs are set inside this region.
-  Section_list lma_sections_;
-  // The latest section to make use of this region.
-  Output_section_definition* last_section_;
-};
-
-// Return true if the provided section flags
-// are compatible with this region's attributes.
-
-bool
-Memory_region::attributes_compatible(elfcpp::Elf_Xword flags,
-				     elfcpp::Elf_Xword type) const
-{
-  unsigned int attrs = this->attributes_;
-
-  // No attributes means that this region is not compatible with anything.
-  if (attrs == 0)
-    return false;
-
-  bool match = true;
-  do
-    {
-      switch (attrs & - attrs)
-	{
-	case MEM_EXECUTABLE:
-	  if ((flags & elfcpp::SHF_EXECINSTR) == 0)
-	    match = false;
-	  break;
-
-	case MEM_WRITEABLE:
-	  if ((flags & elfcpp::SHF_WRITE) == 0)
-	    match = false;
-	  break;
-
-	case MEM_READABLE:
-	  // All sections are presumed readable.
-	  break;
-
-	case MEM_ALLOCATABLE:
-	  if ((flags & elfcpp::SHF_ALLOC) == 0)
-	    match = false;
-	  break;
-
-	case MEM_INITIALIZED:
-	  if ((type & elfcpp::SHT_NOBITS) != 0)
-	    match = false;
-	  break;
-	}
-      attrs &= ~ (attrs & - attrs);
-    }
-  while (attrs != 0);
-
-  return match;
-}
-
-// Print a memory region.
-
-void
-Memory_region::print(FILE* f) const
-{
-  fprintf(f, "  %s", this->name_.c_str());
-
-  unsigned int attrs = this->attributes_;
-  if (attrs != 0)
-    {
-      fprintf(f, " (");
-      do
-	{
-	  switch (attrs & - attrs)
-	    {
-	    case MEM_EXECUTABLE:  fputc('x', f); break;
-	    case MEM_WRITEABLE:   fputc('w', f); break;
-	    case MEM_READABLE:    fputc('r', f); break;
-	    case MEM_ALLOCATABLE: fputc('a', f); break;
-	    case MEM_INITIALIZED: fputc('i', f); break;
-	    default:
-	      gold_unreachable();
-	    }
-	  attrs &= ~ (attrs & - attrs);
-	}
-      while (attrs != 0);
-      fputc(')', f);
-    }
-
-  fprintf(f, " : origin = ");
-  this->start_->print(f);
-  fprintf(f, ", length = ");
-  this->length_->print(f);
-  fprintf(f, "\n");
-}
-
-// Manage orphan sections.  This is intended to be largely compatible
-// with the GNU linker.  The Linux kernel implicitly relies on
-// something similar to the GNU linker's orphan placement.  We
-// originally used a simpler scheme here, but it caused the kernel
-// build to fail, and was also rather inefficient.
-
-class Orphan_section_placement
-{
- private:
-  typedef Script_sections::Elements_iterator Elements_iterator;
-
- public:
-  Orphan_section_placement();
-
-  // Handle an output section during initialization of this mapping.
-  void
-  output_section_init(const std::string& name, Output_section*,
-		      Elements_iterator location);
-
-  // Initialize the last location.
-  void
-  last_init(Elements_iterator location);
-
-  // Set *PWHERE to the address of an iterator pointing to the
-  // location to use for an orphan section.  Return true if the
-  // iterator has a value, false otherwise.
-  bool
-  find_place(Output_section*, Elements_iterator** pwhere);
-
-  // Update PLACE_LAST_ALLOC.
-  void
-  update_last_alloc(Elements_iterator where);
-
-  // Return the iterator being used for sections at the very end of
-  // the linker script.
-  Elements_iterator
-  last_place() const;
-
- private:
-  // The places that we specifically recognize.  This list is copied
-  // from the GNU linker.
-  enum Place_index
-  {
-    PLACE_TEXT,
-    PLACE_RODATA,
-    PLACE_DATA,
-    PLACE_TLS,
-    PLACE_TLS_BSS,
-    PLACE_BSS,
-    PLACE_LAST_ALLOC,
-    PLACE_REL,
-    PLACE_INTERP,
-    PLACE_NONALLOC,
-    PLACE_LAST,
-    PLACE_MAX
-  };
-
-  // The information we keep for a specific place.
-  struct Place
-  {
-    // The name of sections for this place.
-    const char* name;
-    // Whether we have a location for this place.
-    bool have_location;
-    // The iterator for this place.
-    Elements_iterator location;
-  };
-
-  // Initialize one place element.
-  void
-  initialize_place(Place_index, const char*);
-
-  // The places.
-  Place places_[PLACE_MAX];
-  // True if this is the first call to output_section_init.
-  bool first_init_;
-};
-
-// Initialize Orphan_section_placement.
-
-Orphan_section_placement::Orphan_section_placement()
-  : first_init_(true)
-{
-  this->initialize_place(PLACE_TEXT, ".text");
-  this->initialize_place(PLACE_RODATA, ".rodata");
-  this->initialize_place(PLACE_DATA, ".data");
-  this->initialize_place(PLACE_TLS, NULL);
-  this->initialize_place(PLACE_TLS_BSS, NULL);
-  this->initialize_place(PLACE_BSS, ".bss");
-  this->initialize_place(PLACE_LAST_ALLOC, NULL);
-  this->initialize_place(PLACE_REL, NULL);
-  this->initialize_place(PLACE_INTERP, ".interp");
-  this->initialize_place(PLACE_NONALLOC, NULL);
-  this->initialize_place(PLACE_LAST, NULL);
-}
-
-// Initialize one place element.
-
-void
-Orphan_section_placement::initialize_place(Place_index index, const char* name)
-{
-  this->places_[index].name = name;
-  this->places_[index].have_location = false;
-}
-
-// While initializing the Orphan_section_placement information, this
-// is called once for each output section named in the linker script.
-// If we found an output section during the link, it will be passed in
-// OS.
-
-void
-Orphan_section_placement::output_section_init(const std::string& name,
-					      Output_section* os,
-					      Elements_iterator location)
-{
-  bool first_init = this->first_init_;
-  this->first_init_ = false;
-
-  // Remember the last allocated section. Any orphan bss sections
-  // will be placed after it.
-  if (os != NULL
-      && (os->flags() & elfcpp::SHF_ALLOC) != 0)
-    {
-      this->places_[PLACE_LAST_ALLOC].location = location;
-      this->places_[PLACE_LAST_ALLOC].have_location = true;
-    }
-
-  for (int i = 0; i < PLACE_MAX; ++i)
-    {
-      if (this->places_[i].name != NULL && this->places_[i].name == name)
-	{
-	  if (this->places_[i].have_location)
-	    {
-	      // We have already seen a section with this name.
-	      return;
-	    }
-
-	  this->places_[i].location = location;
-	  this->places_[i].have_location = true;
-
-	  // If we just found the .bss section, restart the search for
-	  // an unallocated section.  This follows the GNU linker's
-	  // behaviour.
-	  if (i == PLACE_BSS)
-	    this->places_[PLACE_NONALLOC].have_location = false;
-
-	  return;
-	}
-    }
-
-  // Relocation sections.
-  if (!this->places_[PLACE_REL].have_location
-      && os != NULL
-      && (os->type() == elfcpp::SHT_REL || os->type() == elfcpp::SHT_RELA)
-      && (os->flags() & elfcpp::SHF_ALLOC) != 0)
-    {
-      this->places_[PLACE_REL].location = location;
-      this->places_[PLACE_REL].have_location = true;
-    }
-
-  // We find the location for unallocated sections by finding the
-  // first debugging or comment section after the BSS section (if
-  // there is one).
-  if (!this->places_[PLACE_NONALLOC].have_location
-      && (name == ".comment" || Layout::is_debug_info_section(name.c_str())))
-    {
-      // We add orphan sections after the location in PLACES_.  We
-      // want to store unallocated sections before LOCATION.  If this
-      // is the very first section, we can't use it.
-      if (!first_init)
-	{
-	  --location;
-	  this->places_[PLACE_NONALLOC].location = location;
-	  this->places_[PLACE_NONALLOC].have_location = true;
-	}
-    }
-}
-
-// Initialize the last location.
-
-void
-Orphan_section_placement::last_init(Elements_iterator location)
-{
-  this->places_[PLACE_LAST].location = location;
-  this->places_[PLACE_LAST].have_location = true;
-}
-
-// Set *PWHERE to the address of an iterator pointing to the location
-// to use for an orphan section.  Return true if the iterator has a
-// value, false otherwise.
-
-bool
-Orphan_section_placement::find_place(Output_section* os,
-				     Elements_iterator** pwhere)
-{
-  // Figure out where OS should go.  This is based on the GNU linker
-  // code.  FIXME: The GNU linker handles small data sections
-  // specially, but we don't.
-  elfcpp::Elf_Word type = os->type();
-  elfcpp::Elf_Xword flags = os->flags();
-  Place_index index;
-  if ((flags & elfcpp::SHF_ALLOC) == 0
-      && !Layout::is_debug_info_section(os->name()))
-    index = PLACE_NONALLOC;
-  else if ((flags & elfcpp::SHF_ALLOC) == 0)
-    index = PLACE_LAST;
-  else if (type == elfcpp::SHT_NOTE)
-    index = PLACE_INTERP;
-  else if ((flags & elfcpp::SHF_TLS) != 0)
-    {
-      if (type == elfcpp::SHT_NOBITS)
-	index = PLACE_TLS_BSS;
-      else
-	index = PLACE_TLS;
-    }
-  else if (type == elfcpp::SHT_NOBITS)
-    index = PLACE_BSS;
-  else if ((flags & elfcpp::SHF_WRITE) != 0)
-    index = PLACE_DATA;
-  else if (type == elfcpp::SHT_REL || type == elfcpp::SHT_RELA)
-    index = PLACE_REL;
-  else if ((flags & elfcpp::SHF_EXECINSTR) == 0)
-    index = PLACE_RODATA;
-  else
-    index = PLACE_TEXT;
-
-  // If we don't have a location yet, try to find one based on a
-  // plausible ordering of sections.
-  if (!this->places_[index].have_location)
-    {
-      Place_index follow;
-      switch (index)
-	{
-	default:
-	  follow = PLACE_MAX;
-	  break;
-	case PLACE_RODATA:
-	  follow = PLACE_TEXT;
-	  break;
-	case PLACE_DATA:
-	  follow = PLACE_RODATA;
-	  if (!this->places_[PLACE_RODATA].have_location)
-	    follow = PLACE_TEXT;
-	  break;
-	case PLACE_BSS:
-	  follow = PLACE_LAST_ALLOC;
-	  break;
-	case PLACE_REL:
-	  follow = PLACE_TEXT;
-	  break;
-	case PLACE_INTERP:
-	  follow = PLACE_TEXT;
-	  break;
-	case PLACE_TLS:
-	  follow = PLACE_DATA;
-	  break;
-	case PLACE_TLS_BSS:
-	  follow = PLACE_TLS;
-	  if (!this->places_[PLACE_TLS].have_location)
-	    follow = PLACE_DATA;
-	  break;
-	}
-      if (follow != PLACE_MAX && this->places_[follow].have_location)
-	{
-	  // Set the location of INDEX to the location of FOLLOW.  The
-	  // location of INDEX will then be incremented by the caller,
-	  // so anything in INDEX will continue to be after anything
-	  // in FOLLOW.
-	  this->places_[index].location = this->places_[follow].location;
-	  this->places_[index].have_location = true;
-	}
-    }
-
-  *pwhere = &this->places_[index].location;
-  bool ret = this->places_[index].have_location;
-
-  // The caller will set the location.
-  this->places_[index].have_location = true;
-
-  return ret;
-}
-
-// Update PLACE_LAST_ALLOC.
-void
-Orphan_section_placement::update_last_alloc(Elements_iterator elem)
-{
-  Elements_iterator prev = elem;
-  --prev;
-  if (this->places_[PLACE_LAST_ALLOC].have_location
-      && this->places_[PLACE_LAST_ALLOC].location == prev)
-    {
-      this->places_[PLACE_LAST_ALLOC].have_location = true;
-      this->places_[PLACE_LAST_ALLOC].location = elem;
-    }
-}
-
-// Return the iterator being used for sections at the very end of the
-// linker script.
-
-Orphan_section_placement::Elements_iterator
-Orphan_section_placement::last_place() const
-{
-  gold_assert(this->places_[PLACE_LAST].have_location);
-  return this->places_[PLACE_LAST].location;
-}
-
 // An element in a SECTIONS clause.
 
 class Sections_element
@@ -600,11 +53,6 @@ class Sections_element
 
   virtual ~Sections_element()
   { }
-
-  // Return whether an output section is relro.
-  virtual bool
-  is_relro() const
-  { return false; }
 
   // Record that an output section is relro.
   virtual void
@@ -631,21 +79,19 @@ class Sections_element
   // section name.  This only real implementation is in
   // Output_section_definition.
   virtual const char*
-  output_section_name(const char*, const char*, Output_section***,
-		      Script_sections::Section_type*, bool*, bool)
+  output_section_name(const char*, const char*, Output_section***)
   { return NULL; }
 
-  // Initialize OSP with an output section.
-  virtual void
-  orphan_section_init(Orphan_section_placement*,
-		      Script_sections::Elements_iterator)
-  { }
+  // Return whether to place an orphan output section after this
+  // element.
+  virtual bool
+  place_orphan_here(const Output_section *, bool*, bool*) const
+  { return false; }
 
   // Set section addresses.  This includes applying assignments if the
-  // expression is an absolute value.
+  // the expression is an absolute value.
   virtual void
-  set_section_addresses(Symbol_table*, Layout*, uint64_t*, uint64_t*,
-			uint64_t*)
+  set_section_addresses(Symbol_table*, Layout*, uint64_t*, uint64_t*)
   { }
 
   // Check a constraint (ONLY_IF_RO, etc.) on an output section.  If
@@ -690,11 +136,6 @@ class Sections_element
   get_output_section() const
   { return NULL; }
 
-  // Set the section's memory regions.
-  virtual void
-  set_memory_region(Memory_region*, bool)
-  { gold_error(_("Attempt to set a memory region for a non-output section")); }
-
   // Print the element for debugging purposes.
   virtual void
   print(FILE* f) const = 0;
@@ -707,7 +148,7 @@ class Sections_element_assignment : public Sections_element
  public:
   Sections_element_assignment(const char* name, size_t namelen,
 			      Expression* val, bool provide, bool hidden)
-    : assignment_(name, namelen, false, val, provide, hidden)
+    : assignment_(name, namelen, val, provide, hidden)
   { }
 
   // Add the symbol to the symbol table.
@@ -728,9 +169,9 @@ class Sections_element_assignment : public Sections_element
   // absolute symbols when setting dot.
   void
   set_section_addresses(Symbol_table* symtab, Layout* layout,
-			uint64_t* dot_value, uint64_t*, uint64_t*)
+			uint64_t* dot_value, uint64_t*)
   {
-    this->assignment_.set_if_absolute(symtab, layout, true, *dot_value, NULL);
+    this->assignment_.set_if_absolute(symtab, layout, true, *dot_value);
   }
 
   // Print for debugging.
@@ -763,18 +204,19 @@ class Sections_element_dot_assignment : public Sections_element
     // We ignore the section of the result because outside of an
     // output section definition the dot symbol is always considered
     // to be absolute.
+    Output_section* dummy;
     *dot_value = this->val_->eval_with_dot(symtab, layout, true, *dot_value,
-					   NULL, NULL, NULL, false);
+					   NULL, &dummy);
   }
 
   // Update the dot symbol while setting section addresses.
   void
   set_section_addresses(Symbol_table* symtab, Layout* layout,
-			uint64_t* dot_value, uint64_t* dot_alignment,
-			uint64_t* load_address)
+			uint64_t* dot_value, uint64_t* load_address)
   {
+    Output_section* dummy;
     *dot_value = this->val_->eval_with_dot(symtab, layout, false, *dot_value,
-					   NULL, NULL, dot_alignment, false);
+					   NULL, &dummy);
     *load_address = *dot_value;
   }
 
@@ -824,7 +266,7 @@ class Output_section_element
 {
  public:
   // A list of input sections.
-  typedef std::list<Output_section::Input_section> Input_section_list;
+  typedef std::list<std::pair<Relobj*, unsigned int> > Input_section_list;
 
   Output_section_element()
   { }
@@ -850,14 +292,14 @@ class Output_section_element
   // Return whether this element matches FILE_NAME and SECTION_NAME.
   // The only real implementation is in Output_section_element_input.
   virtual bool
-  match_name(const char*, const char*, bool *) const
+  match_name(const char*, const char*) const
   { return false; }
 
   // Set section addresses.  This includes applying assignments if the
-  // expression is an absolute value.
+  // the expression is an absolute value.
   virtual void
   set_section_addresses(Symbol_table*, Layout*, Output_section*, uint64_t,
-			uint64_t*, uint64_t*, Output_section**, std::string*,
+			uint64_t*, Output_section**, std::string*,
 			Input_section_list*)
   { }
 
@@ -893,7 +335,7 @@ class Output_section_element_assignment : public Output_section_element
   Output_section_element_assignment(const char* name, size_t namelen,
 				    Expression* val, bool provide,
 				    bool hidden)
-    : assignment_(name, namelen, false, val, provide, hidden)
+    : assignment_(name, namelen, val, provide, hidden)
   { }
 
   // Add the symbol to the symbol table.
@@ -915,12 +357,10 @@ class Output_section_element_assignment : public Output_section_element
   // absolute symbols when setting dot.
   void
   set_section_addresses(Symbol_table* symtab, Layout* layout, Output_section*,
-			uint64_t, uint64_t* dot_value, uint64_t*,
-			Output_section** dot_section, std::string*,
-			Input_section_list*)
+			uint64_t, uint64_t* dot_value, Output_section**,
+			std::string*, Input_section_list*)
   {
-    this->assignment_.set_if_absolute(symtab, layout, true, *dot_value,
-				      *dot_section);
+    this->assignment_.set_if_absolute(symtab, layout, true, *dot_value);
   }
 
   // Print for debugging.
@@ -944,28 +384,20 @@ class Output_section_element_dot_assignment : public Output_section_element
     : val_(val)
   { }
 
-  // An assignment to dot within an output section is enough to force
-  // the output section to exist.
-  bool
-  needs_output_section() const
-  { return true; }
-
   // Finalize the symbol.
   void
   finalize_symbols(Symbol_table* symtab, const Layout* layout,
 		   uint64_t* dot_value, Output_section** dot_section)
   {
     *dot_value = this->val_->eval_with_dot(symtab, layout, true, *dot_value,
-					   *dot_section, dot_section, NULL,
-					   true);
+					   *dot_section, dot_section);
   }
 
   // Update the dot symbol while setting section addresses.
   void
   set_section_addresses(Symbol_table* symtab, Layout* layout, Output_section*,
-			uint64_t, uint64_t* dot_value, uint64_t*,
-			Output_section** dot_section, std::string*,
-			Input_section_list*);
+			uint64_t, uint64_t* dot_value, Output_section**,
+			std::string*, Input_section_list*);
 
   // Print for debugging.
   void
@@ -989,15 +421,13 @@ Output_section_element_dot_assignment::set_section_addresses(
     Output_section* output_section,
     uint64_t,
     uint64_t* dot_value,
-    uint64_t* dot_alignment,
     Output_section** dot_section,
     std::string* fill,
     Input_section_list*)
 {
   uint64_t next_dot = this->val_->eval_with_dot(symtab, layout, false,
 						*dot_value, *dot_section,
-						dot_section, dot_alignment,
-						true);
+						dot_section);
   if (next_dot < *dot_value)
     gold_error(_("dot may not move backward"));
   if (next_dot > *dot_value && output_section != NULL)
@@ -1013,7 +443,6 @@ Output_section_element_dot_assignment::set_section_addresses(
 	  posd = new Output_data_const(this_fill, 0);
 	}
       output_section->add_output_section_data(posd);
-      layout->new_output_section_data_from_script(posd);
     }
   *dot_value = next_dot;
 }
@@ -1049,7 +478,7 @@ class Output_data_expression : public Output_section_data
   Output_data_expression(int size, bool is_signed, Expression* val,
 			 const Symbol_table* symtab, const Layout* layout,
 			 uint64_t dot_value, Output_section* dot_section)
-    : Output_section_data(size, 0, true),
+    : Output_section_data(size, 0),
       is_signed_(is_signed), val_(val), symtab_(symtab),
       layout_(layout), dot_value_(dot_value), dot_section_(dot_section)
   { }
@@ -1096,10 +525,10 @@ Output_data_expression::do_write(Output_file* of)
 void
 Output_data_expression::do_write_to_buffer(unsigned char* buf)
 {
+  Output_section* dummy;
   uint64_t val = this->val_->eval_with_dot(this->symtab_, this->layout_,
 					   true, this->dot_value_,
-					   this->dot_section_, NULL, NULL,
-					   false);
+					   this->dot_section_, &dummy);
 
   if (parameters->target().is_big_endian())
     this->endian_write_to_buffer<true>(val, buf);
@@ -1160,8 +589,8 @@ class Output_section_element_data : public Output_section_element
   // Store the value in the section.
   void
   set_section_addresses(Symbol_table*, Layout*, Output_section*, uint64_t,
-			uint64_t* dot_value, uint64_t*, Output_section**,
-			std::string*, Input_section_list*);
+			uint64_t* dot_value, Output_section**, std::string*,
+			Input_section_list*);
 
   // Print for debugging.
   void
@@ -1185,17 +614,18 @@ Output_section_element_data::set_section_addresses(
     Output_section* os,
     uint64_t,
     uint64_t* dot_value,
-    uint64_t*,
     Output_section** dot_section,
     std::string*,
     Input_section_list*)
 {
   gold_assert(os != NULL);
-  Output_data_expression* expression =
-    new Output_data_expression(this->size_, this->is_signed_, this->val_,
-			       symtab, layout, *dot_value, *dot_section);
-  os->add_output_section_data(expression);
-  layout->new_output_section_data_from_script(expression);
+  os->add_output_section_data(new Output_data_expression(this->size_,
+							 this->is_signed_,
+							 this->val_,
+							 symtab,
+							 layout,
+							 *dot_value,
+							 *dot_section));
   *dot_value += this->size_;
 }
 
@@ -1242,14 +672,14 @@ class Output_section_element_fill : public Output_section_element
   // Update the fill value while setting section addresses.
   void
   set_section_addresses(Symbol_table* symtab, Layout* layout, Output_section*,
-			uint64_t, uint64_t* dot_value, uint64_t*,
+			uint64_t, uint64_t* dot_value,
 			Output_section** dot_section,
 			std::string* fill, Input_section_list*)
   {
     Output_section* fill_section;
     uint64_t fill_val = this->val_->eval_with_dot(symtab, layout, false,
 						  *dot_value, *dot_section,
-						  &fill_section, NULL, false);
+						  &fill_section);
     if (fill_section != NULL)
       gold_warning(_("fill value is not absolute"));
     // FIXME: The GNU linker supports fill values of arbitrary length.
@@ -1272,6 +702,15 @@ class Output_section_element_fill : public Output_section_element
   Expression* val_;
 };
 
+// Return whether STRING contains a wildcard character.  This is used
+// to speed up matching.
+
+static inline bool
+is_wildcard_string(const std::string& s)
+{
+  return strpbrk(s.c_str(), "?*[") != NULL;
+}
+
 // An input section specification in an output section
 
 class Output_section_element_input : public Output_section_element
@@ -1288,15 +727,15 @@ class Output_section_element_input : public Output_section_element
     *dot_section = this->final_dot_section_;
   }
 
-  // See whether we match FILE_NAME and SECTION_NAME as an input section.
-  // If we do then also indicate whether the section should be KEPT.
+  // See whether we match FILE_NAME and SECTION_NAME as an input
+  // section.
   bool
-  match_name(const char* file_name, const char* section_name, bool* keep) const;
+  match_name(const char* file_name, const char* section_name) const;
 
   // Set the section address.
   void
   set_section_addresses(Symbol_table* symtab, Layout* layout, Output_section*,
-			uint64_t subalign, uint64_t* dot_value, uint64_t*,
+			uint64_t subalign, uint64_t* dot_value,
 			Output_section**, std::string* fill,
 			Input_section_list*);
 
@@ -1315,7 +754,7 @@ class Output_section_element_input : public Output_section_element
     Input_section_pattern(const char* patterna, size_t patternlena,
 			  Sort_wildcard sorta)
       : pattern(patterna, patternlena),
-	pattern_is_wildcard(is_wildcard_string(this->pattern.c_str())),
+	pattern_is_wildcard(is_wildcard_string(this->pattern)),
 	sort(sorta)
     { }
   };
@@ -1382,7 +821,7 @@ Output_section_element_input::Output_section_element_input(
   if (spec->file.name.length != 1 || spec->file.name.value[0] != '*')
     this->filename_pattern_.assign(spec->file.name.value,
 				   spec->file.name.length);
-  this->filename_is_wildcard_ = is_wildcard_string(this->filename_pattern_.c_str());
+  this->filename_is_wildcard_ = is_wildcard_string(this->filename_pattern_);
 
   if (spec->input_sections.exclude != NULL)
     {
@@ -1391,7 +830,7 @@ Output_section_element_input::Output_section_element_input(
 	   p != spec->input_sections.exclude->end();
 	   ++p)
 	{
-	  bool is_wildcard = is_wildcard_string((*p).c_str());
+	  bool is_wildcard = is_wildcard_string(*p);
 	  this->filename_exclusions_.push_back(std::make_pair(*p,
 							      is_wildcard));
 	}
@@ -1443,18 +882,14 @@ Output_section_element_input::match_file_name(const char* file_name) const
   return true;
 }
 
-// See whether we match FILE_NAME and SECTION_NAME.  If we do then
-// KEEP indicates whether the section should survive garbage collection.
+// See whether we match FILE_NAME and SECTION_NAME.
 
 bool
 Output_section_element_input::match_name(const char* file_name,
-					 const char* section_name,
-					 bool *keep) const
+					 const char* section_name) const
 {
   if (!this->match_file_name(file_name))
     return false;
-
-  *keep = this->keep_;
 
   // If there are no section name patterns, then we match.
   if (this->input_section_patterns_.empty())
@@ -1476,73 +911,13 @@ Output_section_element_input::match_name(const char* file_name,
 
 // Information we use to sort the input sections.
 
-class Input_section_info
+struct Input_section_info
 {
- public:
-  Input_section_info(const Output_section::Input_section& input_section)
-    : input_section_(input_section), section_name_(),
-      size_(0), addralign_(1)
-  { }
-
-  // Return the simple input section.
-  const Output_section::Input_section&
-  input_section() const
-  { return this->input_section_; }
-
-  // Return the object.
-  Relobj*
-  relobj() const
-  { return this->input_section_.relobj(); }
-
-  // Return the section index.
-  unsigned int
-  shndx()
-  { return this->input_section_.shndx(); }
-
-  // Return the section name.
-  const std::string&
-  section_name() const
-  { return this->section_name_; }
-
-  // Set the section name.
-  void
-  set_section_name(const std::string name)
-  {
-    if (is_compressed_debug_section(name.c_str()))
-      this->section_name_ = corresponding_uncompressed_section_name(name);
-    else
-      this->section_name_ = name;
-  }
-
-  // Return the section size.
-  uint64_t
-  size() const
-  { return this->size_; }
-
-  // Set the section size.
-  void
-  set_size(uint64_t size)
-  { this->size_ = size; }
-
-  // Return the address alignment.
-  uint64_t
-  addralign() const
-  { return this->addralign_; }
-
-  // Set the address alignment.
-  void
-  set_addralign(uint64_t addralign)
-  { this->addralign_ = addralign; }
-
- private:
-  // Input section, can be a relaxed section.
-  Output_section::Input_section input_section_;
-  // Name of the section.
-  std::string section_name_;
-  // Section size.
-  uint64_t size_;
-  // Address alignment.
-  uint64_t addralign_;
+  Relobj* relobj;
+  unsigned int shndx;
+  std::string section_name;
+  uint64_t size;
+  uint64_t addralign;
 };
 
 // A class to sort the input sections.
@@ -1558,84 +933,33 @@ class Input_section_sorter
   operator()(const Input_section_info&, const Input_section_info&) const;
 
  private:
-  static unsigned long
-  get_init_priority(const char*);
-
   Sort_wildcard filename_sort_;
   Sort_wildcard section_sort_;
 };
-
-// Return a relative priority of the section with the specified NAME
-// (a lower value meand a higher priority), or 0 if it should be compared
-// with others as strings.
-// The implementation of this function is copied from ld/ldlang.c.
-
-unsigned long
-Input_section_sorter::get_init_priority(const char* name)
-{
-  char* end;
-  unsigned long init_priority;
-
-  // GCC uses the following section names for the init_priority
-  // attribute with numerical values 101 and 65535 inclusive. A
-  // lower value means a higher priority.
-  //
-  // 1: .init_array.NNNN/.fini_array.NNNN: Where NNNN is the
-  //    decimal numerical value of the init_priority attribute.
-  //    The order of execution in .init_array is forward and
-  //    .fini_array is backward.
-  // 2: .ctors.NNNN/.dtors.NNNN: Where NNNN is 65535 minus the
-  //    decimal numerical value of the init_priority attribute.
-  //    The order of execution in .ctors is backward and .dtors
-  //    is forward.
-
-  if (strncmp(name, ".init_array.", 12) == 0
-      || strncmp(name, ".fini_array.", 12) == 0)
-    {
-      init_priority = strtoul(name + 12, &end, 10);
-      return *end ? 0 : init_priority;
-    }
-  else if (strncmp(name, ".ctors.", 7) == 0
-	   || strncmp(name, ".dtors.", 7) == 0)
-    {
-      init_priority = strtoul(name + 7, &end, 10);
-      return *end ? 0 : 65535 - init_priority;
-    }
-
-  return 0;
-}
 
 bool
 Input_section_sorter::operator()(const Input_section_info& isi1,
 				 const Input_section_info& isi2) const
 {
-  if (this->section_sort_ == SORT_WILDCARD_BY_INIT_PRIORITY)
-    {
-      unsigned long ip1 = get_init_priority(isi1.section_name().c_str());
-      unsigned long ip2 = get_init_priority(isi2.section_name().c_str());
-      if (ip1 != 0 && ip2 != 0 && ip1 != ip2)
-	return ip1 < ip2;
-    }
   if (this->section_sort_ == SORT_WILDCARD_BY_NAME
       || this->section_sort_ == SORT_WILDCARD_BY_NAME_BY_ALIGNMENT
       || (this->section_sort_ == SORT_WILDCARD_BY_ALIGNMENT_BY_NAME
-	  && isi1.addralign() == isi2.addralign())
-      || this->section_sort_ == SORT_WILDCARD_BY_INIT_PRIORITY)
+	  && isi1.addralign == isi2.addralign))
     {
-      if (isi1.section_name() != isi2.section_name())
-	return isi1.section_name() < isi2.section_name();
+      if (isi1.section_name != isi2.section_name)
+	return isi1.section_name < isi2.section_name;
     }
   if (this->section_sort_ == SORT_WILDCARD_BY_ALIGNMENT
       || this->section_sort_ == SORT_WILDCARD_BY_NAME_BY_ALIGNMENT
       || this->section_sort_ == SORT_WILDCARD_BY_ALIGNMENT_BY_NAME)
     {
-      if (isi1.addralign() != isi2.addralign())
-	return isi1.addralign() < isi2.addralign();
+      if (isi1.addralign != isi2.addralign)
+	return isi1.addralign < isi2.addralign;
     }
   if (this->filename_sort_ == SORT_WILDCARD_BY_NAME)
     {
-      if (isi1.relobj()->name() != isi2.relobj()->name())
-	return (isi1.relobj()->name() < isi2.relobj()->name());
+      if (isi1.relobj->name() != isi2.relobj->name())
+	return isi1.relobj->name() < isi2.relobj->name();
     }
 
   // Otherwise we leave them in the same order.
@@ -1649,11 +973,10 @@ Input_section_sorter::operator()(const Input_section_info& isi1,
 void
 Output_section_element_input::set_section_addresses(
     Symbol_table*,
-    Layout* layout,
+    Layout*,
     Output_section* output_section,
     uint64_t subalign,
     uint64_t* dot_value,
-    uint64_t*,
     Output_section** dot_section,
     std::string* fill,
     Input_section_list* input_sections)
@@ -1661,36 +984,11 @@ Output_section_element_input::set_section_addresses(
   // We build a list of sections which match each
   // Input_section_pattern.
 
-  // If none of the patterns specify a sort option, we throw all
-  // matching input sections into a single bin, in the order we
-  // find them.  Otherwise, we put matching input sections into
-  // a separate bin for each pattern, and sort each one as
-  // specified.  Thus, an input section spec like this:
-  //   *(.foo .bar)
-  // will group all .foo and .bar sections in the order seen,
-  // whereas this:
-  //   *(.foo) *(.bar)
-  // will group all .foo sections followed by all .bar sections.
-  // This matches Gnu ld behavior.
-
-  // Things get really weird, though, when you add a sort spec
-  // on some, but not all, of the patterns, like this:
-  //   *(SORT_BY_NAME(.foo) .bar)
-  // We do not attempt to match Gnu ld behavior in this case.
-
   typedef std::vector<std::vector<Input_section_info> > Matching_sections;
   size_t input_pattern_count = this->input_section_patterns_.size();
-  size_t bin_count = 1;
-  bool any_patterns_with_sort = false;
-  for (size_t i = 0; i < input_pattern_count; ++i)
-    {
-      const Input_section_pattern& isp(this->input_section_patterns_[i]);
-      if (isp.sort != SORT_WILDCARD_NONE)
-	any_patterns_with_sort = true;
-    }
-  if (any_patterns_with_sort)
-    bin_count = input_pattern_count;
-  Matching_sections matching_sections(bin_count);
+  if (input_pattern_count == 0)
+    input_pattern_count = 1;
+  Matching_sections matching_sections(input_pattern_count);
 
   // Look through the list of sections for this output section.  Add
   // each one which matches to one of the elements of
@@ -1699,36 +997,25 @@ Output_section_element_input::set_section_addresses(
   Input_section_list::iterator p = input_sections->begin();
   while (p != input_sections->end())
     {
-      Relobj* relobj = p->relobj();
-      unsigned int shndx = p->shndx();
-      Input_section_info isi(*p);
-
       // Calling section_name and section_addralign is not very
       // efficient.
+      Input_section_info isi;
+      isi.relobj = p->first;
+      isi.shndx = p->second;
 
       // Lock the object so that we can get information about the
       // section.  This is OK since we know we are single-threaded
       // here.
       {
 	const Task* task = reinterpret_cast<const Task*>(-1);
-	Task_lock_obj<Object> tl(task, relobj);
+	Task_lock_obj<Object> tl(task, p->first);
 
-	isi.set_section_name(relobj->section_name(shndx));
-	if (p->is_relaxed_input_section())
-	  {
-	    // We use current data size because relaxed section sizes may not
-	    // have finalized yet.
-	    isi.set_size(p->relaxed_input_section()->current_data_size());
-	    isi.set_addralign(p->relaxed_input_section()->addralign());
-	  }
-	else
-	  {
-	    isi.set_size(relobj->section_size(shndx));
-	    isi.set_addralign(relobj->section_addralign(shndx));
-	  }
+	isi.section_name = p->first->section_name(p->second);
+	isi.size = p->first->section_size(p->second);
+	isi.addralign = p->first->section_addralign(p->second);
       }
 
-      if (!this->match_file_name(relobj->name().c_str()))
+      if (!this->match_file_name(isi.relobj->name().c_str()))
 	++p;
       else if (this->input_section_patterns_.empty())
 	{
@@ -1742,17 +1029,15 @@ Output_section_element_input::set_section_addresses(
 	    {
 	      const Input_section_pattern&
 		isp(this->input_section_patterns_[i]);
-	      if (match(isi.section_name().c_str(), isp.pattern.c_str(),
+	      if (match(isi.section_name.c_str(), isp.pattern.c_str(),
 			isp.pattern_is_wildcard))
 		break;
 	    }
 
-	  if (i >= input_pattern_count)
+	  if (i >= this->input_section_patterns_.size())
 	    ++p;
 	  else
 	    {
-	      if (i >= bin_count)
-		i = 0;
 	      matching_sections[i].push_back(isi);
 	      p = input_sections->erase(p);
 	    }
@@ -1764,8 +1049,7 @@ Output_section_element_input::set_section_addresses(
   // sections are otherwise equal.  Add each input section to the
   // output section.
 
-  uint64_t dot = *dot_value;
-  for (size_t i = 0; i < bin_count; ++i)
+  for (size_t i = 0; i < input_pattern_count; ++i)
     {
       if (matching_sections[i].empty())
 	continue;
@@ -1785,44 +1069,29 @@ Output_section_element_input::set_section_addresses(
 	   p != matching_sections[i].end();
 	   ++p)
 	{
-	  // Override the original address alignment if SUBALIGN is specified.
-	  // We need to make a copy of the input section to modify the
-	  // alignment.
-	  Output_section::Input_section sis(p->input_section());
+	  uint64_t this_subalign = p->addralign;
+	  if (this_subalign < subalign)
+	    this_subalign = subalign;
 
-	  uint64_t this_subalign = sis.addralign();
-	  if (!sis.is_input_section())
-	    sis.output_section_data()->finalize_data_size();
-	  uint64_t data_size = sis.data_size();
-	  if (subalign > 0)
-	    {
-	      this_subalign = subalign;
-	      sis.set_addralign(subalign);
-	    }
+	  uint64_t address = align_address(*dot_value, this_subalign);
 
-	  uint64_t address = align_address(dot, this_subalign);
-
-	  if (address > dot && !fill->empty())
+	  if (address > *dot_value && !fill->empty())
 	    {
 	      section_size_type length =
-		convert_to_section_size_type(address - dot);
+		convert_to_section_size_type(address - *dot_value);
 	      std::string this_fill = this->get_fill_string(fill, length);
 	      Output_section_data* posd = new Output_data_const(this_fill, 0);
 	      output_section->add_output_section_data(posd);
-	      layout->new_output_section_data_from_script(posd);
 	    }
 
-	  output_section->add_script_input_section(sis);
-	  dot = address + data_size;
+	  output_section->add_input_section_for_script(p->relobj,
+						       p->shndx,
+						       p->size,
+						       this_subalign);
+
+	  *dot_value = address + p->size;
 	}
     }
-
-  // An SHF_TLS/SHT_NOBITS section does not take up any
-  // address space.
-  if (output_section == NULL
-      || (output_section->flags() & elfcpp::SHF_TLS) == 0
-      || output_section->type() != elfcpp::SHT_NOBITS)
-    *dot_value = dot;
 
   this->final_dot_value_ = *dot_value;
   this->final_dot_section_ = *dot_section;
@@ -1912,10 +1181,6 @@ Output_section_element_input::print(FILE* f) const
 	      fprintf(f, "SORT_BY_ALIGNMENT(SORT_BY_NAME(");
 	      close_parens = 2;
 	      break;
-	    case SORT_WILDCARD_BY_INIT_PRIORITY:
-	      fprintf(f, "SORT_BY_INIT_PRIORITY(");
-	      close_parens = 1;
-	      break;
 	    default:
 	      gold_unreachable();
 	    }
@@ -1976,11 +1241,6 @@ class Output_section_definition : public Sections_element
   void
   add_input_section(const Input_section_spec* spec, bool keep);
 
-  // Return whether the output section is relro.
-  bool
-  is_relro() const
-  { return this->is_relro_; }
-
   // Record that the output section is relro.
   void
   set_is_relro()
@@ -2002,20 +1262,16 @@ class Output_section_definition : public Sections_element
   // section name.
   const char*
   output_section_name(const char* file_name, const char* section_name,
-		      Output_section***, Script_sections::Section_type*,
-		      bool*, bool);
+		      Output_section***);
 
-  // Initialize OSP with an output section.
-  void
-  orphan_section_init(Orphan_section_placement* osp,
-		      Script_sections::Elements_iterator p)
-  { osp->output_section_init(this->name_, this->output_section_, p); }
+  // Return whether to place an orphan section after this one.
+  bool
+  place_orphan_here(const Output_section *os, bool* exact, bool*) const;
 
   // Set the section address.
   void
   set_section_addresses(Symbol_table* symtab, Layout* layout,
-			uint64_t* dot_value, uint64_t*,
-			uint64_t* load_address);
+			uint64_t* dot_value, uint64_t* load_address);
 
   // Check a constraint (ONLY_IF_RO, etc.) on an output section.  If
   // this section is constrained, and the input sections do not match,
@@ -2052,30 +1308,7 @@ class Output_section_definition : public Sections_element
   void
   print(FILE*) const;
 
-  // Return the output section type if specified or Script_sections::ST_NONE.
-  Script_sections::Section_type
-  section_type() const;
-
-  // Store the memory region to use.
-  void
-  set_memory_region(Memory_region*, bool set_vma);
-
-  void
-  set_section_vma(Expression* address)
-  { this->address_ = address; }
-
-  void
-  set_section_lma(Expression* address)
-  { this->load_address_ = address; }
-
-  const std::string&
-  get_section_name() const
-  { return this->name_; }
-
  private:
-  static const char*
-  script_section_type_name(Script_section_type);
-
   typedef std::vector<Output_section_element*> Output_section_elements;
 
   // The output section name.
@@ -2108,8 +1341,6 @@ class Output_section_definition : public Sections_element
   uint64_t evaluated_addralign_;
   // The output section is relro.
   bool is_relro_;
-  // The output section type if specified.
-  enum Script_section_type script_section_type_;
 };
 
 // Constructor.
@@ -2131,8 +1362,7 @@ Output_section_definition::Output_section_definition(
     evaluated_address_(0),
     evaluated_load_address_(0),
     evaluated_addralign_(0),
-    is_relro_(false),
-    script_section_type_(header->section_type)
+    is_relro_(false)
 {
 }
 
@@ -2228,8 +1458,7 @@ Output_section_definition::create_sections(Layout* layout)
       if ((*p)->needs_output_section())
 	{
 	  const char* name = this->name_.c_str();
-	  this->output_section_ =
-	    layout->make_output_section_for_script(name, this->section_type());
+	  this->output_section_ = layout->make_output_section_for_script(name);
 	  return;
 	}
     }
@@ -2260,15 +1489,18 @@ Output_section_definition::finalize_symbols(Symbol_table* symtab,
       uint64_t address = *dot_value;
       if (this->address_ != NULL)
 	{
+	  Output_section* dummy;
 	  address = this->address_->eval_with_dot(symtab, layout, true,
 						  *dot_value, NULL,
-						  NULL, NULL, false);
+						  &dummy);
 	}
       if (this->align_ != NULL)
 	{
+	  Output_section* dummy;
 	  uint64_t align = this->align_->eval_with_dot(symtab, layout, true,
-						       *dot_value, NULL,
-						       NULL, NULL, false);
+						       *dot_value,
+						       NULL,
+						       &dummy);
 	  address = align_address(address, align);
 	}
       *dot_value = address;
@@ -2284,36 +1516,20 @@ Output_section_definition::finalize_symbols(Symbol_table* symtab,
 // Return the output section name to use for an input section name.
 
 const char*
-Output_section_definition::output_section_name(
-    const char* file_name,
-    const char* section_name,
-    Output_section*** slot,
-    Script_sections::Section_type* psection_type,
-    bool* keep,
-    bool match_input_spec)
+Output_section_definition::output_section_name(const char* file_name,
+					       const char* section_name,
+					       Output_section*** slot)
 {
-  // If the section is a linker-created output section, just look for a match
-  // on the output section name.
-  if (!match_input_spec && this->name_ != "/DISCARD/")
-    {
-      if (this->name_ != section_name)
-	return NULL;
-      *slot = &this->output_section_;
-      *psection_type = this->section_type();
-      return this->name_.c_str();
-    }
-
   // Ask each element whether it matches NAME.
   for (Output_section_elements::const_iterator p = this->elements_.begin();
        p != this->elements_.end();
        ++p)
     {
-      if ((*p)->match_name(file_name, section_name, keep))
+      if ((*p)->match_name(file_name, section_name))
 	{
 	  // We found a match for NAME, which means that it should go
 	  // into this output section.
 	  *slot = &this->output_section_;
-	  *psection_type = this->section_type();
 	  return this->name_.c_str();
 	}
     }
@@ -2322,110 +1538,122 @@ Output_section_definition::output_section_name(
   return NULL;
 }
 
-// Return true if memory from START to START + LENGTH is contained
-// within a memory region.
+// Return whether to place an orphan output section after this
+// section.
 
 bool
-Script_sections::block_in_region(Symbol_table* symtab, Layout* layout,
-				 uint64_t start, uint64_t length) const
+Output_section_definition::place_orphan_here(const Output_section *os,
+					     bool* exact,
+					     bool* is_relro) const
 {
-  if (this->memory_regions_ == NULL)
+  *is_relro = this->is_relro_;
+
+  // Check for the simple case first.
+  if (this->output_section_ != NULL
+      && this->output_section_->type() == os->type()
+      && this->output_section_->flags() == os->flags())
+    {
+      *exact = true;
+      return true;
+    }
+
+  // Otherwise use some heuristics.
+
+  if ((os->flags() & elfcpp::SHF_ALLOC) == 0)
     return false;
 
-  for (Memory_regions::const_iterator mr = this->memory_regions_->begin();
-       mr != this->memory_regions_->end();
-       ++mr)
+  if (os->type() == elfcpp::SHT_NOBITS)
     {
-      uint64_t s = (*mr)->start_address()->eval(symtab, layout, false);
-      uint64_t l = (*mr)->length()->eval(symtab, layout, false);
-
-      if (s <= start
-	  && (s + l) >= (start + length))
+      if (this->name_ == ".bss")
+	{
+	  *exact = true;
+	  return true;
+	}
+      if (this->output_section_ != NULL
+	  && this->output_section_->type() == elfcpp::SHT_NOBITS)
+	return true;
+    }
+  else if (os->type() == elfcpp::SHT_NOTE)
+    {
+      if (this->output_section_ != NULL
+	  && this->output_section_->type() == elfcpp::SHT_NOTE)
+	{
+	  *exact = true;
+	  return true;
+	}
+      if (this->name_.compare(0, 5, ".note") == 0)
+	{
+	  *exact = true;
+	  return true;
+	}
+      if (this->name_ == ".interp")
+	return true;
+      if (this->output_section_ != NULL
+	  && this->output_section_->type() == elfcpp::SHT_PROGBITS
+	  && (this->output_section_->flags() & elfcpp::SHF_WRITE) == 0)
+	return true;
+    }
+  else if (os->type() == elfcpp::SHT_REL || os->type() == elfcpp::SHT_RELA)
+    {
+      if (this->name_.compare(0, 4, ".rel") == 0)
+	{
+	  *exact = true;
+	  return true;
+	}
+      if (this->output_section_ != NULL
+	  && (this->output_section_->type() == elfcpp::SHT_REL
+	      || this->output_section_->type() == elfcpp::SHT_RELA))
+	{
+	  *exact = true;
+	  return true;
+	}
+      if (this->output_section_ != NULL
+	  && this->output_section_->type() == elfcpp::SHT_PROGBITS
+	  && (this->output_section_->flags() & elfcpp::SHF_WRITE) == 0)
+	return true;
+    }
+  else if (os->type() == elfcpp::SHT_PROGBITS
+	   && (os->flags() & elfcpp::SHF_WRITE) != 0)
+    {
+      if (this->name_ == ".data")
+	{
+	  *exact = true;
+	  return true;
+	}
+      if (this->output_section_ != NULL
+	  && this->output_section_->type() == elfcpp::SHT_PROGBITS
+	  && (this->output_section_->flags() & elfcpp::SHF_WRITE) != 0)
+	return true;
+    }
+  else if (os->type() == elfcpp::SHT_PROGBITS
+	   && (os->flags() & elfcpp::SHF_EXECINSTR) != 0)
+    {
+      if (this->name_ == ".text")
+	{
+	  *exact = true;
+	  return true;
+	}
+      if (this->output_section_ != NULL
+	  && this->output_section_->type() == elfcpp::SHT_PROGBITS
+	  && (this->output_section_->flags() & elfcpp::SHF_EXECINSTR) != 0)
+	return true;
+    }
+  else if (os->type() == elfcpp::SHT_PROGBITS
+	   || (os->type() != elfcpp::SHT_PROGBITS
+	       && (os->flags() & elfcpp::SHF_WRITE) == 0))
+    {
+      if (this->name_ == ".rodata")
+	{
+	  *exact = true;
+	  return true;
+	}
+      if (this->output_section_ != NULL
+	  && this->output_section_->type() == elfcpp::SHT_PROGBITS
+	  && (this->output_section_->flags() & elfcpp::SHF_WRITE) == 0)
 	return true;
     }
 
   return false;
-}
-
-// Find a memory region that should be used by a given output SECTION.
-// If provided set PREVIOUS_SECTION_RETURN to point to the last section
-// that used the return memory region.
-
-Memory_region*
-Script_sections::find_memory_region(
-    Output_section_definition* section,
-    bool find_vma_region,
-    bool explicit_only,
-    Output_section_definition** previous_section_return)
-{
-  if (previous_section_return != NULL)
-    * previous_section_return = NULL;
-
-  // Walk the memory regions specified in this script, if any.
-  if (this->memory_regions_ == NULL)
-    return NULL;
-
-  // The /DISCARD/ section never gets assigned to any region.
-  if (section->get_section_name() == "/DISCARD/")
-    return NULL;
-
-  Memory_region* first_match = NULL;
-
-  // First check to see if a region has been assigned to this section.
-  for (Memory_regions::const_iterator mr = this->memory_regions_->begin();
-       mr != this->memory_regions_->end();
-       ++mr)
-    {
-      if (find_vma_region)
-	{
-	  for (Memory_region::Section_list::const_iterator s =
-		 (*mr)->get_vma_section_list_start();
-	       s != (*mr)->get_vma_section_list_end();
-	       ++s)
-	    if ((*s) == section)
-	      {
-		(*mr)->set_last_section(section);
-		return *mr;
-	      }
-	}
-      else
-	{
-	  for (Memory_region::Section_list::const_iterator s =
-		 (*mr)->get_lma_section_list_start();
-	       s != (*mr)->get_lma_section_list_end();
-	       ++s)
-	    if ((*s) == section)
-	      {
-		(*mr)->set_last_section(section);
-		return *mr;
-	      }
-	}
-
-      if (!explicit_only)
-	{
-	  // Make a note of the first memory region whose attributes
-	  // are compatible with the section.  If we do not find an
-	  // explicit region assignment, then we will return this region.
-	  Output_section* out_sec = section->get_output_section();
-	  if (first_match == NULL
-	      && out_sec != NULL
-	      && (*mr)->attributes_compatible(out_sec->flags(),
-					      out_sec->type()))
-	    first_match = *mr;
-	}
-    }
-
-  // With LMA computations, if an explicit region has not been specified then
-  // we will want to set the difference between the VMA and the LMA of the
-  // section were searching for to be the same as the difference between the
-  // VMA and LMA of the last section to be added to first matched region.
-  // Hence, if it was asked for, we return a pointer to the last section
-  // known to be used by the first matched region.
-  if (first_match != NULL
-      && previous_section_return != NULL)
-    *previous_section_return = first_match->get_last_section();
-
-  return first_match;
 }
 
 // Set the section address.  Note that the OUTPUT_SECTION_ field will
@@ -2436,57 +1664,16 @@ void
 Output_section_definition::set_section_addresses(Symbol_table* symtab,
 						 Layout* layout,
 						 uint64_t* dot_value,
-						 uint64_t* dot_alignment,
                                                  uint64_t* load_address)
 {
-  Memory_region* vma_region = NULL;
-  Memory_region* lma_region = NULL;
-  Script_sections* script_sections =
-    layout->script_options()->script_sections();
   uint64_t address;
-  uint64_t old_dot_value = *dot_value;
-  uint64_t old_load_address = *load_address;
-
-  // If input section sorting is requested via --section-ordering-file or
-  // linker plugins, then do it here.  This is important because we want
-  // any sorting specified in the linker scripts, which will be done after
-  // this, to take precedence.  The final order of input sections is then
-  // guaranteed to be according to the linker script specification.
-  if (this->output_section_ != NULL
-      && this->output_section_->input_section_order_specified())
-    this->output_section_->sort_attached_input_sections();
-
-  // Decide the start address for the section.  The algorithm is:
-  // 1) If an address has been specified in a linker script, use that.
-  // 2) Otherwise if a memory region has been specified for the section,
-  //    use the next free address in the region.
-  // 3) Otherwise if memory regions have been specified find the first
-  //    region whose attributes are compatible with this section and
-  //    install it into that region.
-  // 4) Otherwise use the current location counter.
-
-  if (this->output_section_ != NULL
-      // Check for --section-start.
-      && parameters->options().section_start(this->output_section_->name(),
-					     &address))
-    ;
-  else if (this->address_ == NULL)
-    {
-      vma_region = script_sections->find_memory_region(this, true, false, NULL);
-      if (vma_region != NULL)
-	address = vma_region->get_current_address()->eval(symtab, layout,
-							  false);
-      else
-	address = *dot_value;
-    }
+  if (this->address_ == NULL)
+    address = *dot_value;
   else
     {
-      vma_region = script_sections->find_memory_region(this, true, true, NULL);
+      Output_section* dummy;
       address = this->address_->eval_with_dot(symtab, layout, true,
-					      *dot_value, NULL, NULL,
-					      dot_alignment, false);
-      if (vma_region != NULL)
-	vma_region->set_address(address, symtab, layout);
+					      *dot_value, NULL, &dummy);
     }
 
   uint64_t align;
@@ -2501,12 +1688,40 @@ Output_section_definition::set_section_addresses(Symbol_table* symtab,
     {
       Output_section* align_section;
       align = this->align_->eval_with_dot(symtab, layout, true, *dot_value,
-					  NULL, &align_section, NULL, false);
+					  NULL, &align_section);
       if (align_section != NULL)
 	gold_warning(_("alignment of section %s is not absolute"),
 		     this->name_.c_str());
       if (this->output_section_ != NULL)
 	this->output_section_->set_addralign(align);
+    }
+
+  address = align_address(address, align);
+
+  uint64_t start_address = address;
+
+  *dot_value = address;
+
+  // The address of non-SHF_ALLOC sections is forced to zero,
+  // regardless of what the linker script wants.
+  if (this->output_section_ != NULL
+      && (this->output_section_->flags() & elfcpp::SHF_ALLOC) != 0)
+    this->output_section_->set_address(address);
+
+  this->evaluated_address_ = address;
+  this->evaluated_addralign_ = align;
+
+  if (this->load_address_ == NULL)
+    this->evaluated_load_address_ = address;
+  else
+    {
+      Output_section* dummy;
+      uint64_t load_address =
+	this->load_address_->eval_with_dot(symtab, layout, true, *dot_value,
+					   this->output_section_, &dummy);
+      if (this->output_section_ != NULL)
+        this->output_section_->set_load_address(load_address);
+      this->evaluated_load_address_ = load_address;
     }
 
   uint64_t subalign;
@@ -2517,110 +1732,11 @@ Output_section_definition::set_section_addresses(Symbol_table* symtab,
       Output_section* subalign_section;
       subalign = this->subalign_->eval_with_dot(symtab, layout, true,
 						*dot_value, NULL,
-						&subalign_section, NULL,
-						false);
+						&subalign_section);
       if (subalign_section != NULL)
 	gold_warning(_("subalign of section %s is not absolute"),
 		     this->name_.c_str());
-
-      // Reserve a value of 0 to mean there is no SUBALIGN property.
-      if (subalign == 0)
-	subalign = 1;
-
-      // The external alignment of the output section must be at least
-      // as large as that of the input sections.  If there is no
-      // explicit ALIGN property, we set the output section alignment
-      // to match the input section alignment.
-      if (align < subalign || this->align_ == NULL)
-	{
-	  align = subalign;
-	  this->output_section_->set_addralign(align);
-	}
     }
-
-  address = align_address(address, align);
-
-  uint64_t start_address = address;
-
-  *dot_value = address;
-
-  // Except for NOLOAD sections, the address of non-SHF_ALLOC sections is
-  // forced to zero, regardless of what the linker script wants.
-  if (this->output_section_ != NULL
-      && ((this->output_section_->flags() & elfcpp::SHF_ALLOC) != 0
-	  || this->output_section_->is_noload()))
-    this->output_section_->set_address(address);
-
-  this->evaluated_address_ = address;
-  this->evaluated_addralign_ = align;
-
-  uint64_t laddr;
-
-  if (this->load_address_ == NULL)
-    {
-      Output_section_definition* previous_section;
-
-      // Determine if an LMA region has been set for this section.
-      lma_region = script_sections->find_memory_region(this, false, false,
-						       &previous_section);
-
-      if (lma_region != NULL)
-	{
-	  if (previous_section == NULL)
-	    // The LMA address was explicitly set to the given region.
-	    laddr = lma_region->get_current_address()->eval(symtab, layout,
-							    false);
-	  else
-	    {
-	      // We are not going to use the discovered lma_region, so
-	      // make sure that we do not update it in the code below.
-	      lma_region = NULL;
-
-	      if (this->address_ != NULL || previous_section == this)
-		{
-		  // Either an explicit VMA address has been set, or an
-		  // explicit VMA region has been set, so set the LMA equal to
-		  // the VMA.
-		  laddr = address;
-		}
-	      else
-		{
-		  // The LMA address was not explicitly or implicitly set.
-		  //
-		  // We have been given the first memory region that is
-		  // compatible with the current section and a pointer to the
-		  // last section to use this region.  Set the LMA of this
-		  // section so that the difference between its' VMA and LMA
-		  // is the same as the difference between the VMA and LMA of
-		  // the last section in the given region.
-		  laddr = address + (previous_section->evaluated_load_address_
-				     - previous_section->evaluated_address_);
-		}
-	    }
-
-	  if (this->output_section_ != NULL)
-	    this->output_section_->set_load_address(laddr);
-	}
-      else
-	{
-	  // Do not set the load address of the output section, if one exists.
-	  // This allows future sections to determine what the load address
-	  // should be.  If none is ever set, it will default to being the
-	  // same as the vma address.
-	  laddr = address;
-	}
-    }
-  else
-    {
-      laddr = this->load_address_->eval_with_dot(symtab, layout, true,
-						 *dot_value,
-						 this->output_section_,
-						 NULL, NULL, false);
-      if (this->output_section_ != NULL)
-        this->output_section_->set_load_address(laddr);
-    }
-
-  this->evaluated_load_address_ = laddr;
 
   std::string fill;
   if (this->fill_ != NULL)
@@ -2630,8 +1746,8 @@ Output_section_definition::set_section_addresses(Symbol_table* symtab,
       Output_section* fill_section;
       uint64_t fill_val = this->fill_->eval_with_dot(symtab, layout, true,
 						     *dot_value,
-						     NULL, &fill_section,
-						     NULL, false);
+						     NULL,
+						     &fill_section);
       if (fill_section != NULL)
 	gold_warning(_("fill of section %s is not absolute"),
 		     this->name_.c_str());
@@ -2657,43 +1773,13 @@ Output_section_definition::set_section_addresses(Symbol_table* symtab,
        p != this->elements_.end();
        ++p)
     (*p)->set_section_addresses(symtab, layout, this->output_section_,
-				subalign, dot_value, dot_alignment,
-				&dot_section, &fill, &input_sections);
+				subalign, dot_value, &dot_section, &fill,
+				&input_sections);
 
   gold_assert(input_sections.empty());
 
-  if (vma_region != NULL)
-    {
-      // Update the VMA region being used by the section now that we know how
-      // big it is.  Use the current address in the region, rather than
-      // start_address because that might have been aligned upwards and we
-      // need to allow for the padding.
-      Expression* addr = vma_region->get_current_address();
-      uint64_t size = *dot_value - addr->eval(symtab, layout, false);
-
-      vma_region->increment_offset(this->get_section_name(), size,
-				   symtab, layout);
-    }
-
-  // If the LMA region is different from the VMA region, then increment the
-  // offset there as well.  Note that we use the same "dot_value -
-  // start_address" formula that is used in the load_address assignment below.
-  if (lma_region != NULL && lma_region != vma_region)
-    lma_region->increment_offset(this->get_section_name(),
-				 *dot_value - start_address,
-				 symtab, layout);
-
-  // Compute the load address for the following section.
-  if (this->output_section_ == NULL)
+  if (this->load_address_ == NULL || this->output_section_ == NULL)
     *load_address = *dot_value;
-  else if (this->load_address_ == NULL)
-    {
-      if (lma_region == NULL)
-	*load_address = *dot_value;
-      else
-	*load_address =
-	  lma_region->get_current_address()->eval(symtab, layout, false);
-    }
   else
     *load_address = (this->output_section_->load_address()
                      + (*dot_value - start_address));
@@ -2704,13 +1790,6 @@ Output_section_definition::set_section_addresses(Symbol_table* symtab,
 	this->output_section_->set_is_relro();
       else
 	this->output_section_->clear_is_relro();
-
-      // If this is a NOLOAD section, keep dot and load address unchanged.
-      if (this->output_section_->is_noload())
-	{
-	  *dot_value = old_dot_value;
-	  *load_address = old_load_address;
-	}
     }
 }
 
@@ -2808,16 +1887,13 @@ Output_section*
 Output_section_definition::allocate_to_segment(String_list** phdrs_list,
 					       bool* orphan)
 {
-  // Update phdrs_list even if we don't have an output section. It
-  // might be used by the following sections.
-  if (this->phdrs_ != NULL)
-    *phdrs_list = this->phdrs_;
-
   if (this->output_section_ == NULL)
     return NULL;
   if ((this->output_section_->flags() & elfcpp::SHF_ALLOC) == 0)
     return NULL;
   *orphan = false;
+  if (this->phdrs_ != NULL)
+    *phdrs_list = this->phdrs_;
   return this->output_section_;
 }
 
@@ -2871,10 +1947,6 @@ Output_section_definition::print(FILE* f) const
       fprintf(f, " ");
     }
 
-  if (this->script_section_type_ != SCRIPT_SECTION_TYPE_NONE)
-      fprintf(f, "(%s) ",
-	      this->script_section_type_name(this->script_section_type_));
-
   fprintf(f, ": ");
 
   if (this->load_address_ != NULL)
@@ -2924,60 +1996,6 @@ Output_section_definition::print(FILE* f) const
   fprintf(f, "\n");
 }
 
-Script_sections::Section_type
-Output_section_definition::section_type() const
-{
-  switch (this->script_section_type_)
-    {
-    case SCRIPT_SECTION_TYPE_NONE:
-      return Script_sections::ST_NONE;
-    case SCRIPT_SECTION_TYPE_NOLOAD:
-      return Script_sections::ST_NOLOAD;
-    case SCRIPT_SECTION_TYPE_COPY:
-    case SCRIPT_SECTION_TYPE_DSECT:
-    case SCRIPT_SECTION_TYPE_INFO:
-    case SCRIPT_SECTION_TYPE_OVERLAY:
-      // There are not really support so we treat them as ST_NONE.  The
-      // parse should have issued errors for them already.
-      return Script_sections::ST_NONE;
-    default:
-      gold_unreachable();
-    }
-}
-
-// Return the name of a script section type.
-
-const char*
-Output_section_definition::script_section_type_name(
-    Script_section_type script_section_type)
-{
-  switch (script_section_type)
-    {
-    case SCRIPT_SECTION_TYPE_NONE:
-      return "NONE";
-    case SCRIPT_SECTION_TYPE_NOLOAD:
-      return "NOLOAD";
-    case SCRIPT_SECTION_TYPE_DSECT:
-      return "DSECT";
-    case SCRIPT_SECTION_TYPE_COPY:
-      return "COPY";
-    case SCRIPT_SECTION_TYPE_INFO:
-      return "INFO";
-    case SCRIPT_SECTION_TYPE_OVERLAY:
-      return "OVERLAY";
-    default:
-      gold_unreachable();
-    }
-}
-
-void
-Output_section_definition::set_memory_region(Memory_region* mr, bool set_vma)
-{
-  gold_assert(mr != NULL);
-  // Add the current section to the specified region's list.
-  mr->add_section(this, set_vma);
-}
-
 // An output section created to hold orphaned input sections.  These
 // do not actually appear in linker scripts.  However, for convenience
 // when setting the output section addresses, we put a marker to these
@@ -2990,24 +2008,13 @@ class Orphan_output_section : public Sections_element
     : os_(os)
   { }
 
-  // Return whether the orphan output section is relro.  We can just
-  // check the output section because we always set the flag, if
-  // needed, just after we create the Orphan_output_section.
+  // Return whether to place an orphan section after this one.
   bool
-  is_relro() const
-  { return this->os_->is_relro(); }
-
-  // Initialize OSP with an output section.  This should have been
-  // done already.
-  void
-  orphan_section_init(Orphan_section_placement*,
-		      Script_sections::Elements_iterator)
-  { gold_unreachable(); }
+  place_orphan_here(const Output_section *os, bool* exact, bool*) const;
 
   // Set section addresses.
   void
-  set_section_addresses(Symbol_table*, Layout*, uint64_t*, uint64_t*,
-			uint64_t*);
+  set_section_addresses(Symbol_table*, Layout*, uint64_t*, uint64_t*);
 
   // Get the list of segments to use for an allocated section when
   // using a PHDRS clause.
@@ -3031,40 +2038,36 @@ class Orphan_output_section : public Sections_element
   Output_section* os_;
 };
 
+// Whether to place another orphan section after this one.
+
+bool
+Orphan_output_section::place_orphan_here(const Output_section* os,
+					 bool* exact,
+					 bool* is_relro) const
+{
+  if (this->os_->type() == os->type()
+      && this->os_->flags() == os->flags())
+    {
+      *exact = true;
+      *is_relro = this->os_->is_relro();
+      return true;
+    }
+  return false;
+}
+
 // Set section addresses.
 
 void
 Orphan_output_section::set_section_addresses(Symbol_table*, Layout*,
 					     uint64_t* dot_value,
-					     uint64_t*,
                                              uint64_t* load_address)
 {
-  typedef std::list<Output_section::Input_section> Input_section_list;
+  typedef std::list<std::pair<Relobj*, unsigned int> > Input_section_list;
 
   bool have_load_address = *load_address != *dot_value;
 
   uint64_t address = *dot_value;
   address = align_address(address, this->os_->addralign());
-
-  // If input section sorting is requested via --section-ordering-file or
-  // linker plugins, then do it here.  This is important because we want
-  // any sorting specified in the linker scripts, which will be done after
-  // this, to take precedence.  The final order of input sections is then
-  // guaranteed to be according to the linker script specification.
-  if (this->os_ != NULL
-      && this->os_->input_section_order_specified())
-    this->os_->sort_attached_input_sections();
-
-  // For a relocatable link, all orphan sections are put at
-  // address 0.  In general we expect all sections to be at
-  // address 0 for a relocatable link, but we permit the linker
-  // script to override that for specific output sections.
-  if (parameters->options().relocatable())
-    {
-      address = 0;
-      *load_address = 0;
-      have_load_address = false;
-    }
 
   if ((this->os_->flags() & elfcpp::SHF_ALLOC) != 0)
     {
@@ -3081,33 +2084,30 @@ Orphan_output_section::set_section_addresses(Symbol_table*, Layout*,
        p != input_sections.end();
        ++p)
     {
-      uint64_t addralign = p->addralign();
-      if (!p->is_input_section())
-	p->output_section_data()->finalize_data_size();
-      uint64_t size = p->data_size();
+      uint64_t addralign;
+      uint64_t size;
+
+      // We know what are single-threaded, so it is OK to lock the
+      // object.
+      {
+	const Task* task = reinterpret_cast<const Task*>(-1);
+	Task_lock_obj<Object> tl(task, p->first);
+	addralign = p->first->section_addralign(p->second);
+	size = p->first->section_size(p->second);
+      }
+
       address = align_address(address, addralign);
-      this->os_->add_script_input_section(*p);
+      this->os_->add_input_section_for_script(p->first, p->second, size,
+                                              addralign);
       address += size;
     }
 
-  if (parameters->options().relocatable())
-    {
-      // For a relocatable link, reset DOT_VALUE to 0.
-      *dot_value = 0;
-      *load_address = 0;
-    }
-  else if (this->os_ == NULL
-	   || (this->os_->flags() & elfcpp::SHF_TLS) == 0
-	   || this->os_->type() != elfcpp::SHT_NOBITS)
-    {
-      // An SHF_TLS/SHT_NOBITS section does not take up any address space.
-      if (!have_load_address)
-	*load_address = address;
-      else
-	*load_address += address - *dot_value;
+  if (!have_load_address)
+    *load_address = address;
+  else
+    *load_address += address - *dot_value;
 
-      *dot_value = address;
-    }
+  *dot_value = address;
 }
 
 // Get the list of segments to use for an allocated section when using
@@ -3193,11 +2193,6 @@ class Phdrs_element
   segment()
   { return this->segment_; }
 
-  // Release the segment.
-  void
-  release_segment()
-  { this->segment_ = NULL; }
-
   // Set the segment flags if appropriate.
   void
   set_flags_if_valid()
@@ -3253,86 +2248,6 @@ Phdrs_element::print(FILE* f) const
   fprintf(f, ";\n");
 }
 
-// Add a memory region.
-
-void
-Script_sections::add_memory_region(const char* name, size_t namelen,
-				   unsigned int attributes,
-				   Expression* start, Expression* length)
-{
-  if (this->memory_regions_ == NULL)
-    this->memory_regions_ = new Memory_regions();
-  else if (this->find_memory_region(name, namelen))
-    {
-      gold_error(_("region '%.*s' already defined"), static_cast<int>(namelen),
-                  name);
-      // FIXME: Add a GOLD extension to allow multiple regions with the same
-      // name.  This would amount to a single region covering disjoint blocks
-      // of memory, which is useful for embedded devices.
-    }
-
-  // FIXME: Check the length and start values.  Currently we allow
-  // non-constant expressions for these values, whereas LD does not.
-
-  // FIXME: Add a GOLD extension to allow NEGATIVE LENGTHS.  This would
-  // describe a region that packs from the end address going down, rather
-  // than the start address going up.  This would be useful for embedded
-  // devices.
-
-  this->memory_regions_->push_back(new Memory_region(name, namelen, attributes,
-						     start, length));
-}
-
-// Find a memory region.
-
-Memory_region*
-Script_sections::find_memory_region(const char* name, size_t namelen)
-{
-  if (this->memory_regions_ == NULL)
-    return NULL;
-
-  for (Memory_regions::const_iterator m = this->memory_regions_->begin();
-       m != this->memory_regions_->end();
-       ++m)
-    if ((*m)->name_match(name, namelen))
-      return *m;
-
-  return NULL;
-}
-
-// Find a memory region's origin.
-
-Expression*
-Script_sections::find_memory_region_origin(const char* name, size_t namelen)
-{
-  Memory_region* mr = find_memory_region(name, namelen);
-  if (mr == NULL)
-    return NULL;
-
-  return mr->start_address();
-}
-
-// Find a memory region's length.
-
-Expression*
-Script_sections::find_memory_region_length(const char* name, size_t namelen)
-{
-  Memory_region* mr = find_memory_region(name, namelen);
-  if (mr == NULL)
-    return NULL;
-
-  return mr->length();
-}
-
-// Set the memory region to use for the current section.
-
-void
-Script_sections::set_memory_region(Memory_region* mr, bool set_vma)
-{
-  gold_assert(!this->sections_elements_->empty());
-  this->sections_elements_->back()->set_memory_region(mr, set_vma);
-}
-
 // Class Script_sections.
 
 Script_sections::Script_sections()
@@ -3340,14 +2255,9 @@ Script_sections::Script_sections()
     in_sections_clause_(false),
     sections_elements_(NULL),
     output_section_(NULL),
-    memory_regions_(NULL),
     phdrs_elements_(NULL),
-    orphan_section_placement_(NULL),
-    data_segment_align_start_(),
-    saw_data_segment_align_(false),
-    saw_relro_end_(false),
-    saw_segment_start_expression_(false),
-    segments_created_(false)
+    data_segment_align_index_(-1U),
+    saw_relro_end_(false)
 {
 }
 
@@ -3400,15 +2310,6 @@ Script_sections::add_dot_assignment(Expression* val)
     this->output_section_->add_dot_assignment(val);
   else
     {
-      // The GNU linker permits assignments to . to appears outside of
-      // a SECTIONS clause, and treats it as appearing inside, so
-      // sections_elements_ may be NULL here.
-      if (this->sections_elements_ == NULL)
-	{
-	  this->sections_elements_ = new Sections_elements;
-	  this->saw_sections_clause_ = true;
-	}
-
       Sections_element* p = new Sections_element_dot_assignment(val);
       this->sections_elements_->push_back(p);
     }
@@ -3436,7 +2337,7 @@ void
 Script_sections::start_output_section(
     const char* name,
     size_t namelen,
-    const Parser_output_section_header* header)
+    const Parser_output_section_header *header)
 {
   Output_section_definition* posd = new Output_section_definition(name,
 								  namelen,
@@ -3490,13 +2391,9 @@ Script_sections::add_input_section(const Input_section_spec* spec, bool keep)
 void
 Script_sections::data_segment_align()
 {
-  if (this->saw_data_segment_align_)
+  if (this->data_segment_align_index_ != -1U)
     gold_error(_("DATA_SEGMENT_ALIGN may only appear once in a linker script"));
-  gold_assert(!this->sections_elements_->empty());
-  Sections_elements::iterator p = this->sections_elements_->end();
-  --p;
-  this->data_segment_align_start_ = p;
-  this->saw_data_segment_align_ = true;
+  this->data_segment_align_index_ = this->sections_elements_->size();
 }
 
 // This is called when we see DATA_SEGMENT_RELRO_END.  It means that
@@ -3510,13 +2407,14 @@ Script_sections::data_segment_relro_end()
 		 "in a linker script"));
   this->saw_relro_end_ = true;
 
-  if (!this->saw_data_segment_align_)
+  if (this->data_segment_align_index_ == -1U)
     gold_error(_("DATA_SEGMENT_RELRO_END must follow DATA_SEGMENT_ALIGN"));
   else
     {
-      Sections_elements::iterator p = this->data_segment_align_start_;
-      for (++p; p != this->sections_elements_->end(); ++p)
-	(*p)->set_is_relro();
+      for (size_t i = this->data_segment_align_index_;
+	   i < this->sections_elements_->size();
+	   ++i)
+	(*this->sections_elements_)[i]->set_is_relro();
     }
 }
 
@@ -3564,22 +2462,16 @@ Script_sections::finalize_symbols(Symbol_table* symtab, const Layout* layout)
 // and section name.
 
 const char*
-Script_sections::output_section_name(
-    const char* file_name,
-    const char* section_name,
-    Output_section*** output_section_slot,
-    Script_sections::Section_type* psection_type,
-    bool* keep,
-    bool is_input_section)
+Script_sections::output_section_name(const char* file_name,
+				     const char* section_name,
+				     Output_section*** output_section_slot)
 {
   for (Sections_elements::const_iterator p = this->sections_elements_->begin();
        p != this->sections_elements_->end();
        ++p)
     {
       const char* ret = (*p)->output_section_name(file_name, section_name,
-						  output_section_slot,
-						  psection_type, keep,
-						  is_input_section);
+						  output_section_slot);
 
       if (ret != NULL)
 	{
@@ -3588,44 +2480,17 @@ Script_sections::output_section_name(
 	  if (strcmp(ret, "/DISCARD/") == 0)
 	    {
 	      *output_section_slot = NULL;
-	      *psection_type = Script_sections::ST_NONE;
 	      return NULL;
 	    }
 	  return ret;
 	}
     }
 
-  // We have an orphan section.
-  *output_section_slot = NULL;
-  *psection_type = Script_sections::ST_NONE;
-  *keep = false;
-
-  General_options::Orphan_handling orphan_handling =
-      parameters->options().orphan_handling_enum();
-  if (orphan_handling == General_options::ORPHAN_DISCARD)
-    return NULL;
-  if (orphan_handling == General_options::ORPHAN_ERROR)
-    {
-      if (file_name == NULL)
-	gold_error(_("unplaced orphan section '%s'"), section_name);
-      else
-	gold_error(_("unplaced orphan section '%s' from '%s'"),
-		   section_name, file_name);
-      return NULL;
-    }
-  if (orphan_handling == General_options::ORPHAN_WARN)
-    {
-      if (file_name == NULL)
-	gold_warning(_("orphan section '%s' is being placed in section '%s'"),
-		     section_name, section_name);
-      else
-	gold_warning(_("orphan section '%s' from '%s' is being placed "
-		       "in section '%s'"),
-		     section_name, file_name, section_name);
-    }
-
   // If we couldn't find a mapping for the name, the output section
   // gets the name of the input section.
+
+  *output_section_slot = NULL;
+
   return section_name;
 }
 
@@ -3635,52 +2500,35 @@ Script_sections::output_section_name(
 void
 Script_sections::place_orphan(Output_section* os)
 {
-  Orphan_section_placement* osp = this->orphan_section_placement_;
-  if (osp == NULL)
+  // Look for an output section definition which matches the output
+  // section.  Put a marker after that section.
+  bool is_relro = false;
+  Sections_elements::iterator place = this->sections_elements_->end();
+  for (Sections_elements::iterator p = this->sections_elements_->begin();
+       p != this->sections_elements_->end();
+       ++p)
     {
-      // Initialize the Orphan_section_placement structure.
-      osp = new Orphan_section_placement();
-      for (Sections_elements::iterator p = this->sections_elements_->begin();
-	   p != this->sections_elements_->end();
-	   ++p)
-	(*p)->orphan_section_init(osp, p);
-      gold_assert(!this->sections_elements_->empty());
-      Sections_elements::iterator last = this->sections_elements_->end();
-      --last;
-      osp->last_init(last);
-      this->orphan_section_placement_ = osp;
+      bool exact = false;
+      bool is_relro_here;
+      if ((*p)->place_orphan_here(os, &exact, &is_relro_here))
+	{
+	  place = p;
+	  is_relro = is_relro_here;
+	  if (exact)
+	    break;
+	}
     }
 
-  Orphan_output_section* orphan = new Orphan_output_section(os);
+  // The insert function puts the new element before the iterator.
+  if (place != this->sections_elements_->end())
+    ++place;
 
-  // Look for where to put ORPHAN.
-  Sections_elements::iterator* where;
-  if (osp->find_place(os, &where))
-    {
-      if ((**where)->is_relro())
-	os->set_is_relro();
-      else
-	os->clear_is_relro();
+  this->sections_elements_->insert(place, new Orphan_output_section(os));
 
-      // We want to insert ORPHAN after *WHERE, and then update *WHERE
-      // so that the next one goes after this one.
-      Sections_elements::iterator p = *where;
-      gold_assert(p != this->sections_elements_->end());
-      ++p;
-      *where = this->sections_elements_->insert(p, orphan);
-    }
+  if (is_relro)
+    os->set_is_relro();
   else
-    {
-      os->clear_is_relro();
-      // We don't have a place to put this orphan section.  Put it,
-      // and all other sections like it, at the end, but before the
-      // sections which always come at the end.
-      Sections_elements::iterator last = osp->last_place();
-      *where = this->sections_elements_->insert(last, orphan);
-    }
-
-  if ((os->flags() & elfcpp::SHF_ALLOC) != 0)
-    osp->update_last_alloc(*where);
+    os->clear_is_relro();
 }
 
 // Set the addresses of all the output sections.  Walk through all the
@@ -3731,7 +2579,7 @@ Script_sections::set_section_addresses(Symbol_table* symtab, Layout* layout)
        p != this->sections_elements_->end();
        ++p)
     {
-      Output_section* os = (*p)->get_output_section();
+      Output_section *os = (*p)->get_output_section();
       if (os != NULL && (os->flags() & elfcpp::SHF_TLS) != 0)
 	{
 	  if (first_tls == NULL)
@@ -3745,55 +2593,11 @@ Script_sections::set_section_addresses(Symbol_table* symtab, Layout* layout)
 
   // For a relocatable link, we implicitly set dot to zero.
   uint64_t dot_value = 0;
-  uint64_t dot_alignment = 0;
   uint64_t load_address = 0;
-
-  // Check to see if we want to use any of -Ttext, -Tdata and -Tbss options
-  // to set section addresses.  If the script has any SEGMENT_START
-  // expression, we do not set the section addresses.
-  bool use_tsection_options =
-    (!this->saw_segment_start_expression_
-     && (parameters->options().user_set_Ttext()
-	 || parameters->options().user_set_Tdata()
-	 || parameters->options().user_set_Tbss()));
-
   for (Sections_elements::iterator p = this->sections_elements_->begin();
        p != this->sections_elements_->end();
        ++p)
-    {
-      Output_section* os = (*p)->get_output_section();
-
-      // Handle -Ttext, -Tdata and -Tbss options.  We do this by looking for
-      // the special sections by names and doing dot assignments.
-      if (use_tsection_options
-	  && os != NULL
-	  && (os->flags() & elfcpp::SHF_ALLOC) != 0)
-	{
-	  uint64_t new_dot_value = dot_value;
-
-	  if (parameters->options().user_set_Ttext()
-	      && strcmp(os->name(), ".text") == 0)
-	    new_dot_value = parameters->options().Ttext();
-	  else if (parameters->options().user_set_Tdata()
-	      && strcmp(os->name(), ".data") == 0)
-	    new_dot_value = parameters->options().Tdata();
-	  else if (parameters->options().user_set_Tbss()
-	      && strcmp(os->name(), ".bss") == 0)
-	    new_dot_value = parameters->options().Tbss();
-
-	  // Update dot and load address if necessary.
-	  if (new_dot_value < dot_value)
-	    gold_error(_("dot may not move backward"));
-	  else if (new_dot_value != dot_value)
-	    {
-	      dot_value = new_dot_value;
-	      load_address = new_dot_value;
-	    }
-	}
-
-      (*p)->set_section_addresses(symtab, layout, &dot_value, &dot_alignment,
-				  &load_address);
-    }
+    (*p)->set_section_addresses(symtab, layout, &dot_value, &load_address);
 
   if (this->phdrs_elements_ != NULL)
     {
@@ -3803,7 +2607,7 @@ Script_sections::set_section_addresses(Symbol_table* symtab, Layout* layout)
 	(*p)->eval_load_address(symtab, layout);
     }
 
-  return this->create_segments(layout, dot_alignment);
+  return this->create_segments(layout);
 }
 
 // Sort the sections in order to put them into segments.
@@ -3811,19 +2615,8 @@ Script_sections::set_section_addresses(Symbol_table* symtab, Layout* layout)
 class Sort_output_sections
 {
  public:
-  Sort_output_sections(const Script_sections::Sections_elements* elements)
-   : elements_(elements)
-  { }
-
   bool
   operator()(const Output_section* os1, const Output_section* os2) const;
-
- private:
-  int
-  script_compare(const Output_section* os1, const Output_section* os2) const;
-
- private:
-  const Script_sections::Sections_elements* elements_;
 };
 
 bool
@@ -3844,70 +2637,20 @@ Sort_output_sections::operator()(const Output_section* os1,
   if (os1->address() != os2->address())
     return os1->address() < os2->address();
 
-  // If the linker script says which of these sections is first, go
-  // with what it says.
-  int i = this->script_compare(os1, os2);
-  if (i != 0)
-    return i < 0;
-
-  // Sort PROGBITS before NOBITS.
-  bool nobits1 = os1->type() == elfcpp::SHT_NOBITS;
-  bool nobits2 = os2->type() == elfcpp::SHT_NOBITS;
-  if (nobits1 != nobits2)
-    return nobits2;
-
-  // Sort PROGBITS TLS sections to the end, NOBITS TLS sections to the
-  // beginning.
+  // Sort TLS sections to the end.
   bool tls1 = (os1->flags() & elfcpp::SHF_TLS) != 0;
   bool tls2 = (os2->flags() & elfcpp::SHF_TLS) != 0;
   if (tls1 != tls2)
-    return nobits1 ? tls1 : tls2;
+    return tls2;
 
-  // Sort non-NOLOAD before NOLOAD.
-  if (os1->is_noload() && !os2->is_noload())
+  // Sort PROGBITS before NOBITS.
+  if (os1->type() == elfcpp::SHT_PROGBITS && os2->type() == elfcpp::SHT_NOBITS)
     return true;
-  if (!os1->is_noload() && os2->is_noload())
-    return true;
+  if (os1->type() == elfcpp::SHT_NOBITS && os2->type() == elfcpp::SHT_PROGBITS)
+    return false;
 
-  // The sections seem practically identical.  Sort by name to get a
-  // stable sort.
-  return os1->name() < os2->name();
-}
-
-// Return -1 if OS1 comes before OS2 in ELEMENTS_, 1 if comes after, 0
-// if either OS1 or OS2 is not mentioned.  This ensures that we keep
-// empty sections in the order in which they appear in a linker
-// script.
-
-int
-Sort_output_sections::script_compare(const Output_section* os1,
-				     const Output_section* os2) const
-{
-  if (this->elements_ == NULL)
-    return 0;
-
-  bool found_os1 = false;
-  bool found_os2 = false;
-  for (Script_sections::Sections_elements::const_iterator
-	 p = this->elements_->begin();
-       p != this->elements_->end();
-       ++p)
-    {
-      if (os2 == (*p)->get_output_section())
-	{
-	  if (found_os1)
-	    return -1;
-	  found_os2 = true;
-	}
-      else if (os1 == (*p)->get_output_section())
-	{
-	  if (found_os2)
-	    return 1;
-	  found_os1 = true;
-	}
-    }
-
-  return 0;
+  // Otherwise we don't care.
+  return false;
 }
 
 // Return whether OS is a BSS section.  This is a SHT_NOBITS section.
@@ -3946,7 +2689,7 @@ Script_sections::total_header_size(Layout* layout) const
   return file_header_size + segment_headers_size;
 }
 
-// Return the amount we have to subtract from the LMA to accommodate
+// Return the amount we have to subtract from the LMA to accomodate
 // headers of the given size.  The complication is that the file
 // header have to be at the start of a page, as otherwise it will not
 // be at the start of the file.
@@ -3966,7 +2709,7 @@ Script_sections::header_size_adjustment(uint64_t lma,
 // if any.
 
 Output_segment*
-Script_sections::create_segments(Layout* layout, uint64_t dot_alignment)
+Script_sections::create_segments(Layout* layout)
 {
   gold_assert(this->saw_sections_clause_);
 
@@ -3974,14 +2717,13 @@ Script_sections::create_segments(Layout* layout, uint64_t dot_alignment)
     return NULL;
 
   if (this->saw_phdrs_clause())
-    return create_segments_from_phdrs_clause(layout, dot_alignment);
+    return create_segments_from_phdrs_clause(layout);
 
   Layout::Section_list sections;
   layout->get_allocated_sections(&sections);
 
   // Sort the sections by address.
-  std::stable_sort(sections.begin(), sections.end(),
-		   Sort_output_sections(this->sections_elements_));
+  std::stable_sort(sections.begin(), sections.end(), Sort_output_sections());
 
   this->create_note_and_tls_segments(layout, &sections);
 
@@ -3990,10 +2732,10 @@ Script_sections::create_segments(Layout* layout, uint64_t dot_alignment)
   Output_segment* first_seg = NULL;
   Output_segment* current_seg = NULL;
   bool is_current_seg_readonly = true;
+  Layout::Section_list::iterator plast = sections.end();
   uint64_t last_vma = 0;
   uint64_t last_lma = 0;
   uint64_t last_size = 0;
-  bool in_bss = false;
   for (Layout::Section_list::iterator p = sections.begin();
        p != sections.end();
        ++p)
@@ -4020,7 +2762,7 @@ Script_sections::create_segments(Layout* layout, uint64_t dot_alignment)
 	  // skipping a page.
 	  need_new_segment = true;
 	}
-      else if (in_bss && !is_bss_section(*p))
+      else if (is_bss_section(*plast) && !is_bss_section(*p))
 	{
 	  // A non-BSS section can not follow a BSS section in the
 	  // same segment.
@@ -4048,21 +2790,17 @@ Script_sections::create_segments(Layout* layout, uint64_t dot_alignment)
 	  current_seg = layout->make_output_segment(elfcpp::PT_LOAD,
 						    seg_flags);
 	  current_seg->set_addresses(vma, lma);
-	  current_seg->set_minimum_p_align(dot_alignment);
 	  if (first_seg == NULL)
 	    first_seg = current_seg;
 	  is_current_seg_readonly = true;
-	  in_bss = false;
 	}
 
-      current_seg->add_output_section_to_load(layout, *p, seg_flags);
+      current_seg->add_output_section(*p, seg_flags);
 
       if (((*p)->flags() & elfcpp::SHF_WRITE) != 0)
 	is_current_seg_readonly = false;
 
-      if (is_bss_section(*p) && size > 0)
-        in_bss = true;
-
+      plast = p;
       last_vma = vma;
       last_lma = lma;
       last_size = size;
@@ -4084,11 +2822,6 @@ Script_sections::create_segments(Layout* layout, uint64_t dot_alignment)
   if (first_seg == NULL)
     return NULL;
 
-  // -n or -N mean that the program is not demand paged and there is
-  // no need to put the program headers in a PT_LOAD segment.
-  if (parameters->options().nmagic() || parameters->options().omagic())
-    return NULL;
-
   size_t sizeof_headers = this->total_header_size(layout);
 
   uint64_t vma = first_seg->vaddr();
@@ -4107,18 +2840,6 @@ Script_sections::create_segments(Layout* layout, uint64_t dot_alignment)
   // trust that the user knows what they are doing.
   if (lma < subtract || vma < subtract)
     return NULL;
-
-  // If memory regions have been specified and the address range
-  // we are about to use is not contained within any region then
-  // issue a warning message about the segment we are going to
-  // create.  It will be outside of any region and so possibly
-  // using non-existent or protected memory.  We test LMA rather
-  // than VMA since we assume that the headers will never be
-  // relocated.
-  if (this->memory_regions_ != NULL
-      && !this->block_in_region (NULL, layout, lma - subtract, subtract))
-    gold_warning(_("creating a segment to contain the file and program"
-		   " headers outside of any MEMORY region"));
 
   Output_segment* load_seg = layout->make_output_segment(elfcpp::PT_LOAD,
 							 elfcpp::PF_R);
@@ -4148,7 +2869,7 @@ Script_sections::create_note_and_tls_segments(
 	    Layout::section_flags_to_segment((*p)->flags());
 	  Output_segment* oseg = layout->make_output_segment(elfcpp::PT_NOTE,
 							     seg_flags);
-	  oseg->add_output_section_to_nonload(*p, seg_flags);
+	  oseg->add_output_section(*p, seg_flags);
 
 	  // Incorporate any subsequent SHT_NOTE sections, in the
 	  // hopes that the script is sensible.
@@ -4157,7 +2878,7 @@ Script_sections::create_note_and_tls_segments(
 		 && (*pnext)->type() == elfcpp::SHT_NOTE)
 	    {
 	      seg_flags = Layout::section_flags_to_segment((*pnext)->flags());
-	      oseg->add_output_section_to_nonload(*pnext, seg_flags);
+	      oseg->add_output_section(*pnext, seg_flags);
 	      p = pnext;
 	      ++pnext;
 	    }
@@ -4172,40 +2893,26 @@ Script_sections::create_note_and_tls_segments(
 	    Layout::section_flags_to_segment((*p)->flags());
 	  Output_segment* oseg = layout->make_output_segment(elfcpp::PT_TLS,
 							     seg_flags);
-	  oseg->add_output_section_to_nonload(*p, seg_flags);
+	  oseg->add_output_section(*p, seg_flags);
 
 	  Layout::Section_list::const_iterator pnext = p + 1;
 	  while (pnext != sections->end()
 		 && ((*pnext)->flags() & elfcpp::SHF_TLS) != 0)
 	    {
 	      seg_flags = Layout::section_flags_to_segment((*pnext)->flags());
-	      oseg->add_output_section_to_nonload(*pnext, seg_flags);
+	      oseg->add_output_section(*pnext, seg_flags);
 	      p = pnext;
 	      ++pnext;
 	    }
 
 	  saw_tls = true;
 	}
-
-      // If we see a section named .interp then put the .interp section
-      // in a PT_INTERP segment.
-      // This is for GNU ld compatibility.
-      if (strcmp((*p)->name(), ".interp") == 0)
-	{
-	  elfcpp::Elf_Word seg_flags =
-	    Layout::section_flags_to_segment((*p)->flags());
-	  Output_segment* oseg = layout->make_output_segment(elfcpp::PT_INTERP,
-							     seg_flags);
-	  oseg->add_output_section_to_nonload(*p, seg_flags);
-	}
     }
-
-    this->segments_created_ = true;
 }
 
 // Add a program header.  The PHDRS clause is syntactically distinct
 // from the SECTIONS clause, but we implement it with the SECTIONS
-// support because PHDRS is useless if there is no SECTIONS clause.
+// support becauase PHDRS is useless if there is no SECTIONS clause.
 
 void
 Script_sections::add_phdr(const char* name, size_t namelen, unsigned int type,
@@ -4228,10 +2935,6 @@ Script_sections::add_phdr(const char* name, size_t namelen, unsigned int type,
 size_t
 Script_sections::expected_segment_count(const Layout* layout) const
 {
-  // If we've already created the segments, we won't be adding any more.
-  if (this->segments_created_)
-    return 0;
-
   if (this->saw_phdrs_clause())
     return this->phdrs_elements_->size();
 
@@ -4243,7 +2946,6 @@ Script_sections::expected_segment_count(const Layout* layout) const
 
   bool saw_note = false;
   bool saw_tls = false;
-  bool saw_interp = false;
   for (Layout::Section_list::const_iterator p = sections.begin();
        p != sections.end();
        ++p)
@@ -4267,15 +2969,6 @@ Script_sections::expected_segment_count(const Layout* layout) const
 	      saw_tls = true;
 	    }
 	}
-      else if (strcmp((*p)->name(), ".interp") == 0)
-	{
-	  // There can only be one PT_INTERP segment.
-	  if (!saw_interp)
-	    {
-	      ++ret;
-	      saw_interp = true;
-	    }
-	}
     }
 
   return ret;
@@ -4285,11 +2978,10 @@ Script_sections::expected_segment_count(const Layout* layout) const
 // should hold the file header and program headers, if any.
 
 Output_segment*
-Script_sections::create_segments_from_phdrs_clause(Layout* layout,
-						   uint64_t dot_alignment)
+Script_sections::create_segments_from_phdrs_clause(Layout* layout)
 {
   this->attach_sections_using_phdrs_clause(layout);
-  return this->set_phdrs_clause_addresses(layout, dot_alignment);
+  return this->set_phdrs_clause_addresses(layout);
 }
 
 // Create the segments from the PHDRS clause, and put the output
@@ -4304,57 +2996,26 @@ Script_sections::attach_sections_using_phdrs_clause(Layout* layout)
        p != this->phdrs_elements_->end();
        ++p)
     name_to_segment[(*p)->name()] = (*p)->create_segment(layout);
-  this->segments_created_ = true;
 
   // Walk through the output sections and attach them to segments.
   // Output sections in the script which do not list segments are
   // attached to the same set of segments as the immediately preceding
   // output section.
-
   String_list* phdr_names = NULL;
-  bool load_segments_only = false;
   for (Sections_elements::const_iterator p = this->sections_elements_->begin();
        p != this->sections_elements_->end();
        ++p)
     {
-      bool is_orphan;
-      String_list* old_phdr_names = phdr_names;
-      Output_section* os = (*p)->allocate_to_segment(&phdr_names, &is_orphan);
+      bool orphan;
+      Output_section* os = (*p)->allocate_to_segment(&phdr_names, &orphan);
       if (os == NULL)
 	continue;
 
-      elfcpp::Elf_Word seg_flags =
-	Layout::section_flags_to_segment(os->flags());
-
       if (phdr_names == NULL)
 	{
-	  // Don't worry about empty orphan sections.
-	  if (is_orphan && os->current_data_size() > 0)
-	    gold_error(_("allocated section %s not in any segment"),
-		       os->name());
-
-	  // To avoid later crashes drop this section into the first
-	  // PT_LOAD segment.
-	  for (Phdrs_elements::const_iterator ppe =
-		 this->phdrs_elements_->begin();
-	       ppe != this->phdrs_elements_->end();
-	       ++ppe)
-	    {
-	      Output_segment* oseg = (*ppe)->segment();
-	      if (oseg->type() == elfcpp::PT_LOAD)
-		{
-		  oseg->add_output_section_to_load(layout, os, seg_flags);
-		  break;
-		}
-	    }
-
+	  gold_error(_("allocated section not in any segment"));
 	  continue;
 	}
-
-      // We see a list of segments names.  Disable PT_LOAD segment only
-      // filtering.
-      if (old_phdr_names != phdr_names)
-	load_segments_only = false;
 
       // If this is an orphan section--one that was not explicitly
       // mentioned in the linker script--then it should not inherit
@@ -4362,11 +3023,19 @@ Script_sections::attach_sections_using_phdrs_clause(Layout* layout)
       // PT_INTERP segment will pick up following orphan sections,
       // which does not make sense.  If this is not an orphan section,
       // we trust the linker script.
-      if (is_orphan)
+      if (orphan)
 	{
-	  // Enable PT_LOAD segments only filtering until we see another
-	  // list of segment names.
-	  load_segments_only = true;
+	  String_list::iterator q = phdr_names->begin();
+	  while (q != phdr_names->end())
+	    {
+	      Name_to_segment::const_iterator r = name_to_segment.find(*q);
+	      // We give errors about unknown segments below.
+	      if (r == name_to_segment.end()
+		  || r->second->type() == elfcpp::PT_LOAD)
+		++q;
+	      else
+		q = phdr_names->erase(q);
+	    }
 	}
 
       bool in_load_segment = false;
@@ -4379,15 +3048,12 @@ Script_sections::attach_sections_using_phdrs_clause(Layout* layout)
 	    gold_error(_("no segment %s"), q->c_str());
 	  else
 	    {
-	      if (load_segments_only
-		  && r->second->type() != elfcpp::PT_LOAD)
-		continue;
+	      elfcpp::Elf_Word seg_flags =
+		Layout::section_flags_to_segment(os->flags());
+	      r->second->add_output_section(os, seg_flags);
 
-	      if (r->second->type() != elfcpp::PT_LOAD)
-		r->second->add_output_section_to_nonload(os, seg_flags);
-	      else
+	      if (r->second->type() == elfcpp::PT_LOAD)
 		{
-		  r->second->add_output_section_to_load(layout, os, seg_flags);
 		  if (in_load_segment)
 		    gold_error(_("section in two PT_LOAD segments"));
 		  in_load_segment = true;
@@ -4405,8 +3071,7 @@ Script_sections::attach_sections_using_phdrs_clause(Layout* layout)
 // if any.
 
 Output_segment*
-Script_sections::set_phdrs_clause_addresses(Layout* layout,
-					    uint64_t dot_alignment)
+Script_sections::set_phdrs_clause_addresses(Layout* layout)
 {
   Output_segment* load_seg = NULL;
   for (Phdrs_elements::const_iterator p = this->phdrs_elements_->begin();
@@ -4428,8 +3093,6 @@ Script_sections::set_phdrs_clause_addresses(Layout* layout,
 	    gold_error(_("may only specify load address for PT_LOAD segment"));
 	  continue;
 	}
-
-      oseg->set_minimum_p_align(dot_alignment);
 
       // The output sections should have addresses from the SECTIONS
       // clause.  The addresses don't have to be in order, so find the
@@ -4539,47 +3202,11 @@ Script_sections::get_output_section_info(const char* name, uint64_t* address,
   return false;
 }
 
-// Release all Output_segments.  This remove all pointers to all
-// Output_segments.
-
-void
-Script_sections::release_segments()
-{
-  if (this->saw_phdrs_clause())
-    {
-      for (Phdrs_elements::const_iterator p = this->phdrs_elements_->begin();
-	   p != this->phdrs_elements_->end();
-	   ++p)
-	(*p)->release_segment();
-    }
-  this->segments_created_ = false;
-}
-
 // Print the SECTIONS clause to F for debugging.
 
 void
 Script_sections::print(FILE* f) const
 {
-  if (this->phdrs_elements_ != NULL)
-    {
-      fprintf(f, "PHDRS {\n");
-      for (Phdrs_elements::const_iterator p = this->phdrs_elements_->begin();
-	   p != this->phdrs_elements_->end();
-	   ++p)
-	(*p)->print(f);
-      fprintf(f, "}\n");
-    }
-
-  if (this->memory_regions_ != NULL)
-    {
-      fprintf(f, "MEMORY {\n");
-      for (Memory_regions::const_iterator m = this->memory_regions_->begin();
-	   m != this->memory_regions_->end();
-	   ++m)
-	(*m)->print(f);
-      fprintf(f, "}\n");
-    }
-
   if (!this->saw_sections_clause_)
     return;
 
@@ -4591,6 +3218,16 @@ Script_sections::print(FILE* f) const
     (*p)->print(f);
 
   fprintf(f, "}\n");
+
+  if (this->phdrs_elements_ != NULL)
+    {
+      fprintf(f, "PHDRS {\n");
+      for (Phdrs_elements::const_iterator p = this->phdrs_elements_->begin();
+	   p != this->phdrs_elements_->end();
+	   ++p)
+	(*p)->print(f);
+      fprintf(f, "}\n");
+    }
 }
 
 } // End namespace gold.

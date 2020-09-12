@@ -1,5 +1,5 @@
 /* Target definitions for GNU compiler for VAX using ELF
-   Copyright (C) 2002-2019 Free Software Foundation, Inc.
+   Copyright (C) 2002, 2004, 2005, 2007, 2008 Free Software Foundation, Inc.
    Contributed by Matt Thomas <matt@3am-software.com>
 
 This file is part of GCC.
@@ -54,26 +54,31 @@ along with GCC; see the file COPYING3.  If not see
 /* Place the top of the stack for the DWARF2 EH stackadj value.  */
 #define EH_RETURN_STACKADJ_RTX						\
   gen_rtx_MEM (SImode,							\
-	       plus_constant (Pmode,					\
-			      gen_rtx_REG (Pmode, FRAME_POINTER_REGNUM),\
+	       plus_constant (gen_rtx_REG (Pmode, FRAME_POINTER_REGNUM),\
 			      -4))
 
 /* Simple store the return handler into the call frame.  */
 #define EH_RETURN_HANDLER_RTX						\
   gen_rtx_MEM (Pmode,							\
-	       plus_constant (Pmode,					\
-			      gen_rtx_REG (Pmode, FRAME_POINTER_REGNUM),\
+	       plus_constant (gen_rtx_REG (Pmode, FRAME_POINTER_REGNUM),\
 			      16))
 
+
+/* Reserve the top of the stack for exception handler stackadj value.  */
+#undef STARTING_FRAME_OFFSET
+#define STARTING_FRAME_OFFSET -4
 
 /* The VAX wants no space between the case instruction and the jump table.  */
 #undef  ASM_OUTPUT_BEFORE_CASE_LABEL
 #define ASM_OUTPUT_BEFORE_CASE_LABEL(FILE, PREFIX, NUM, TABLE)
 
-#undef SUBTARGET_OVERRIDE_OPTIONS
-#define SUBTARGET_OVERRIDE_OPTIONS			\
+#undef OVERRIDE_OPTIONS
+#define OVERRIDE_OPTIONS				\
   do							\
     {							\
+      /* Do generic VAX overrides.  */			\
+      override_options ();				\
+							\
       /* Turn off function CSE if we're doing PIC.  */	\
       if (flag_pic)					\
 	flag_no_function_cse = 1;			\
@@ -104,5 +109,5 @@ along with GCC; see the file COPYING3.  If not see
     fputs (integer_asm_op (SIZE, FALSE), FILE);		\
     fprintf (FILE, "%%pcrel%d(", SIZE * 8);		\
     assemble_name (FILE, LABEL);			\
-    fprintf (FILE, "%+d)", SIZE);			\
+    fputc (')', FILE);					\
   } while (0)

@@ -1,5 +1,6 @@
 /* Hash tables.
-   Copyright (C) 2000-2019 Free Software Foundation, Inc.
+   Copyright (C) 2000, 2001, 2003, 2004, 2008, 2009
+   Free Software Foundation, Inc.
 
 This program is free software; you can redistribute it and/or modify it
 under the terms of the GNU General Public License as published by the
@@ -30,7 +31,7 @@ along with this program; see the file COPYING3.  If not see
    existing entry with a potential new one.  */
 
 static unsigned int calc_hash (const unsigned char *, size_t);
-static void ht_expand (cpp_hash_table *);
+static void ht_expand (hash_table *);
 static double approx_sqrt (double);
 
 /* A deleted entry.  */
@@ -52,16 +53,18 @@ calc_hash (const unsigned char *str, size_t len)
 
 /* Initialize an identifier hashtable.  */
 
-cpp_hash_table *
+hash_table *
 ht_create (unsigned int order)
 {
   unsigned int nslots = 1 << order;
-  cpp_hash_table *table;
+  hash_table *table;
 
-  table = XCNEW (cpp_hash_table);
+  table = XCNEW (hash_table);
 
   /* Strings need no alignment.  */
-  obstack_specify_allocation (&table->stack, 0, 0, xmalloc, free);
+  _obstack_begin (&table->stack, 0, 0,
+		  (void *(*) (long)) xmalloc,
+		  (void (*) (void *)) free);
 
   obstack_alignment_mask (&table->stack) = 0;
 
@@ -74,7 +77,7 @@ ht_create (unsigned int order)
 /* Frees all memory associated with a hash table.  */
 
 void
-ht_destroy (cpp_hash_table *table)
+ht_destroy (hash_table *table)
 {
   obstack_free (&table->stack, NULL);
   if (table->entries_owned)
@@ -88,7 +91,7 @@ ht_destroy (cpp_hash_table *table)
    returns NULL.  Otherwise insert and returns a new entry.  A new
    string is allocated.  */
 hashnode
-ht_lookup (cpp_hash_table *table, const unsigned char *str, size_t len,
+ht_lookup (hash_table *table, const unsigned char *str, size_t len,
 	   enum ht_lookup_option insert)
 {
   return ht_lookup_with_hash (table, str, len, calc_hash (str, len),
@@ -96,7 +99,7 @@ ht_lookup (cpp_hash_table *table, const unsigned char *str, size_t len,
 }
 
 hashnode
-ht_lookup_with_hash (cpp_hash_table *table, const unsigned char *str,
+ht_lookup_with_hash (hash_table *table, const unsigned char *str,
 		     size_t len, unsigned int hash,
 		     enum ht_lookup_option insert)
 {
@@ -179,7 +182,7 @@ ht_lookup_with_hash (cpp_hash_table *table, const unsigned char *str,
 /* Double the size of a hash table, re-hashing existing entries.  */
 
 static void
-ht_expand (cpp_hash_table *table)
+ht_expand (hash_table *table)
 {
   hashnode *nentries, *p, *limit;
   unsigned int size, sizemask;
@@ -221,7 +224,7 @@ ht_expand (cpp_hash_table *table)
 /* For all nodes in TABLE, callback CB with parameters TABLE->PFILE,
    the node, and V.  */
 void
-ht_forall (cpp_hash_table *table, ht_cb cb, const void *v)
+ht_forall (hash_table *table, ht_cb cb, const void *v)
 {
   hashnode *p, *limit;
 
@@ -239,7 +242,7 @@ ht_forall (cpp_hash_table *table, ht_cb cb, const void *v)
 /* Like ht_forall, but a nonzero return from the callback means that
    the entry should be removed from the table.  */
 void
-ht_purge (cpp_hash_table *table, ht_cb cb, const void *v)
+ht_purge (hash_table *table, ht_cb cb, const void *v)
 {
   hashnode *p, *limit;
 
@@ -256,7 +259,7 @@ ht_purge (cpp_hash_table *table, ht_cb cb, const void *v)
 
 /* Restore the hash table.  */
 void
-ht_load (cpp_hash_table *ht, hashnode *entries,
+ht_load (hash_table *ht, hashnode *entries,
 	 unsigned int nslots, unsigned int nelements,
 	 bool own)
 {
@@ -271,7 +274,7 @@ ht_load (cpp_hash_table *ht, hashnode *entries,
 /* Dump allocation statistics to stderr.  */
 
 void
-ht_dump_statistics (cpp_hash_table *table)
+ht_dump_statistics (hash_table *table)
 {
   size_t nelts, nids, overhead, headers;
   size_t total_bytes, longest, deleted = 0;
@@ -304,43 +307,34 @@ ht_dump_statistics (cpp_hash_table *table)
   while (++p < limit);
 
   nelts = table->nelements;
+  overhead = obstack_memory_used (&table->stack) - total_bytes;
   headers = table->nslots * sizeof (hashnode);
 
-  fprintf (stderr, "\nString pool\n%-32s%lu\n", "entries:",
+  fprintf (stderr, "\nString pool\nentries\t\t%lu\n",
 	   (unsigned long) nelts);
-  fprintf (stderr, "%-32s%lu (%.2f%%)\n", "identifiers:",
+  fprintf (stderr, "identifiers\t%lu (%.2f%%)\n",
 	   (unsigned long) nids, nids * 100.0 / nelts);
-  fprintf (stderr, "%-32s%lu\n", "slots:",
+  fprintf (stderr, "slots\t\t%lu\n",
 	   (unsigned long) table->nslots);
-  fprintf (stderr, "%-32s%lu\n", "deleted:",
+  fprintf (stderr, "deleted\t\t%lu\n",
 	   (unsigned long) deleted);
-
-  if (table->alloc_subobject)
-    fprintf (stderr, "%-32s%lu%c\n", "GGC bytes:",
-	     SCALE (total_bytes), LABEL (total_bytes));
-  else
-    {
-      overhead = obstack_memory_used (&table->stack) - total_bytes;
-      fprintf (stderr, "%-32s%lu%c (%lu%c overhead)\n",
-	       "obstack bytes:",
-	       SCALE (total_bytes), LABEL (total_bytes),
-	       SCALE (overhead), LABEL (overhead));
-    }
-  fprintf (stderr, "%-32s%lu%c\n", "table size:",
+  fprintf (stderr, "bytes\t\t%lu%c (%lu%c overhead)\n",
+	   SCALE (total_bytes), LABEL (total_bytes),
+	   SCALE (overhead), LABEL (overhead));
+  fprintf (stderr, "table size\t%lu%c\n",
 	   SCALE (headers), LABEL (headers));
 
   exp_len = (double)total_bytes / (double)nelts;
   exp2_len = exp_len * exp_len;
   exp_len2 = (double) sum_of_squares / (double) nelts;
 
-  fprintf (stderr, "%-32s%.4f\n", "coll/search:",
+  fprintf (stderr, "coll/search\t%.4f\n",
 	   (double) table->collisions / (double) table->searches);
-  fprintf (stderr, "%-32s%.4f\n", "ins/search:",
+  fprintf (stderr, "ins/search\t%.4f\n",
 	   (double) nelts / (double) table->searches);
-  fprintf (stderr, "%-32s%.2f bytes (+/- %.2f)\n",
-	   "avg. entry:",
+  fprintf (stderr, "avg. entry\t%.2f bytes (+/- %.2f)\n",
 	   exp_len, approx_sqrt (exp_len2 - exp2_len));
-  fprintf (stderr, "%-32s%lu\n", "longest entry:",
+  fprintf (stderr, "longest entry\t%lu\n",
 	   (unsigned long) longest);
 #undef SCALE
 #undef LABEL

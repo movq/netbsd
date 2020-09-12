@@ -1,5 +1,6 @@
 /* New version of run front end support for simulators.
-   Copyright (C) 1997-2019 Free Software Foundation, Inc.
+   Copyright (C) 1997, 2004, 2007, 2008, 2009, 2010, 2011
+   Free Software Foundation, Inc.
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -14,22 +15,7 @@ GNU General Public License for more details.
 You should have received a copy of the GNU General Public License
 along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-/* Need to be before general includes, to pick up e.g. _GNU_SOURCE.  */
-#ifdef HAVE_CONFIG_H
-#include "config.h"
-#endif
-
 #include <signal.h>
-
-/* For strsignal.  */
-#ifdef HAVE_STRING_H
-#include <string.h>
-#else
-#ifdef HAVE_STRINGS_H
-#include <strings.h>
-#endif
-#endif
-
 #include "sim-main.h"
 
 #include "bfd.h"
@@ -47,7 +33,7 @@ static void usage (void);
 
 extern host_callback default_callback;
 
-static const char *myname;
+static char *myname;
 
 static SIM_DESC sd;
 
@@ -64,7 +50,7 @@ cntrl_c (int sig)
 int
 main (int argc, char **argv)
 {
-  const char *name;
+  char *name;
   char **prog_argv = NULL;
   struct bfd *prog_bfd;
   enum sim_stop reason;
@@ -72,7 +58,9 @@ main (int argc, char **argv)
   int single_step = 0;
   RETSIGTYPE (*prev_sigint) ();
 
-  myname = lbasename (argv[0]);
+  myname = argv[0] + strlen (argv[0]);
+  while (myname > argv[0] && myname[-1] != '/')
+    --myname;
 
   /* INTERNAL: When MYNAME is `step', single step the simulator
      instead of allowing it to run free.  The sole purpose of this
@@ -97,7 +85,7 @@ main (int argc, char **argv)
   /* We can't set the endianness in the callback structure until
      sim_config is called, which happens in sim_open.  */
   default_callback.target_endian
-    = (CURRENT_TARGET_BYTE_ORDER == BFD_ENDIAN_BIG
+    = (CURRENT_TARGET_BYTE_ORDER == BIG_ENDIAN
        ? BFD_ENDIAN_BIG : BFD_ENDIAN_LITTLE);
 
   /* Was there a program to run?  */
@@ -215,8 +203,7 @@ main (int argc, char **argv)
     case sim_signalled:
     case sim_stopped:
       if (sigrc != 0)
-	fprintf (stderr, "program stopped with signal %d (%s).\n", sigrc,
-		 strsignal (sigrc));
+        fprintf (stderr, "program stopped with signal %d.\n", sigrc);
       break;
 
     case sim_exited:

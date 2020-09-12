@@ -1,4 +1,4 @@
-/*	$NetBSD: indices.c,v 1.1.1.1 2016/01/14 00:11:29 christos Exp $	*/
+/*	$NetBSD: indices.c,v 1.1 2016/01/14 00:11:29 christos Exp $	*/
 
 /* indices.c -- deal with an Info file index.
    Id: indices.c,v 1.5 2004/04/11 17:56:45 karl Exp 

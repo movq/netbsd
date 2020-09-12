@@ -2,7 +2,7 @@
 
 # GDB script to list of problems using awk.
 #
-# Copyright (C) 2002-2019 Free Software Foundation, Inc.
+# Copyright (C) 2002-2013 Free Software Foundation, Inc.
 #
 # This file is part of GDB.
 #
@@ -60,7 +60,7 @@ Options:
   -Werror        Treat all problems as errors.
   -Wall          Report all problems.
   -Wari          Report problems that should be fixed in new code.
-  -W<category>   Report problems in the specifed category.  Valid categories
+  -W<category>   Report problems in the specifed category.  Vaid categories
                  are: ${all}
 EOF
     exit 1
@@ -306,6 +306,14 @@ Do not include assert.h, instead include \"gdb_assert.h\"";
     fail("assert.h")
 }
 
+BEGIN { doc["dirent.h"] = "\
+Do not include dirent.h, instead include gdb_dirent.h"
+    category["dirent.h"] = ari_regression
+}
+/^#[[:space:]]*include[[:space:]]*.dirent\.h./ {
+    fail("dirent.h")
+}
+
 BEGIN { doc["regex.h"] = "\
 Do not include regex.h, instead include gdb_regex.h"
     category["regex.h"] = ari_regression
@@ -330,6 +338,16 @@ Do not include gnu-regex.h, instead include gdb_regex.h"
 }
 /^#[[:space:]]*include[[:space:]]*.gnu-regex\.h./ {
     fail("gnu regex.h")
+}
+
+BEGIN { doc["stat.h"] = "\
+Do not include stat.h or sys/stat.h, instead include gdb_stat.h"
+    category["stat.h"] = ari_regression
+    fix("stat.h", "common/gdb_stat.h", 1)
+}
+/^#[[:space:]]*include[[:space:]]*.stat\.h./ \
+|| /^#[[:space:]]*include[[:space:]]*.sys\/stat\.h./ {
+    fail("stat.h")
 }
 
 BEGIN { doc["wait.h"] = "\
@@ -525,7 +543,7 @@ Function name starts lower case but has uppercased letters."
     editCase_full_line = ""
 }
 (possible_editCase) {
-    if (ARI_OK == "editCase function") {
+    if (ARI_OK == "ediCase function") {
 	possible_editCase = 0
     }
     # Closing brace found?
@@ -567,6 +585,16 @@ Function name in first column should be restricted to function implementation"
 }
 
 
+# Functions without any parameter should have (void)
+# after their name not simply ().
+BEGIN { doc["no parameter function"] = "\
+Function having no parameter should be declared with funcname (void)."
+    category["no parameter function"] = ari_code
+}
+/^[a-zA-Z][a-z0-9A-Z_]*[[:space:]]*\(\)/ {
+    fail("no parameter function")
+}
+
 BEGIN { doc["hash"] = "\
 Do not use ` #...'\'', instead use `#...'\''(some compilers only correctly \
 parse a C preprocessor directive when `#'\'' is the first character on \
@@ -581,11 +609,7 @@ BEGIN { doc["OP eol"] = "\
 Do not use &&, or || at the end of a line"
     category["OP eol"] = ari_code
 }
-# * operator needs a special treatment as it can be a
-# valid end of line for a pointer type definition
-# Only catch case where an assignment or an opening brace is present
-/(\|\||\&\&|==|!=|[[:space:]][+\-\/])[[:space:]]*$/ \
-|| /(\(|=)[[:space:]].*[[:space:]]\*[[:space:]]*$/ {
+/(\|\||\&\&|==|!=)[[:space:]]*$/ {
     fail("OP eol")
 }
 
@@ -593,8 +617,8 @@ BEGIN { doc["strerror"] = "\
 Do not use strerror(), instead use safe_strerror()"
     category["strerror"] = ari_regression
     fix("strerror", "gdb/gdb_string.h", 1)
-    fix("strerror", "gdb/common/mingw-strerror.c", 1)
-    fix("strerror", "gdb/common/posix-strerror.c", 1)
+    fix("strerror", "gdb/mingw-hdep.c", 1)
+    fix("strerror", "gdb/posix-hdep.c", 1)
 }
 /(^|[^_[:alnum:]])strerror[[:space:]]*\(/ {
     fail("strerror")
@@ -728,7 +752,7 @@ Replace ADD_SHARED_SYMBOL_FILES with nothing, not needed?"
 
 BEGIN { doc["SOLIB_ADD"] = "\
 Replace SOLIB_ADD with nothing, not needed?"
-    category["SOLIB_ADD"] = ari_regression
+    category["SOLIB_ADD"] = ari_deprecate
 }
 /(^|[^_[:alnum:]])SOLIB_ADD([^_[:alnum:]]|$)/ {
     fail("SOLIB_ADD")
@@ -736,7 +760,7 @@ Replace SOLIB_ADD with nothing, not needed?"
 
 BEGIN { doc["SOLIB_CREATE_INFERIOR_HOOK"] = "\
 Replace SOLIB_CREATE_INFERIOR_HOOK with nothing, not needed?"
-    category["SOLIB_CREATE_INFERIOR_HOOK"] = ari_regression
+    category["SOLIB_CREATE_INFERIOR_HOOK"] = ari_deprecate
 }
 /(^|[^_[:alnum:]])SOLIB_CREATE_INFERIOR_HOOK([^_[:alnum:]]|$)/ {
     fail("SOLIB_CREATE_INFERIOR_HOOK")
@@ -768,7 +792,7 @@ Replace PROCESS_LINENUMBER_HOOK with nothing, not needed?"
 
 BEGIN { doc["PC_SOLIB"] = "\
 Replace PC_SOLIB with nothing, not needed?"
-    category["PC_SOLIB"] = ari_regression
+    category["PC_SOLIB"] = ari_deprecate
 }
 /(^|[^_[:alnum:]])PC_SOLIB([^_[:alnum:]]|$)/ {
     fail("PC_SOLIB")
@@ -1012,6 +1036,7 @@ a DECR_PC_AFTER_BREAK"
     category["write_pc"] = ari_deprecate
 }
 /(^|[^_[:alnum:]])write_pc[[:space:]]*\(/ || \
+/(^|[^_[:alnum:]])set_gdbarch_write_pc[[:space:]]*\(/ || \
 /(^|[^_[:alnum:]])TARGET_WRITE_PC[[:space:]]*\(/ {
     fail("write_pc")
 }
@@ -1087,22 +1112,6 @@ Do not use vasprintf(), instead use xstrvprintf"
     fail("vasprintf")
 }
 
-BEGIN { doc["printf_vma"] = "\
-Do not use printf_vma, instead use paddress or phex_nz"
-    category["printf_vma"] = ari_code
-}
-/(^|[^_[:alnum:]])printf_vma[[:space:]]*\(/ {
-    fail("printf_vma")
-}
-
-BEGIN { doc["sprintf_vma"] = "\
-Do not use sprintf_vma, instead use paddress or phex_nz"
-    category["sprintf_vma"] = ari_code
-}
-/(^|[^_[:alnum:]])sprintf_vma[[:space:]]*\(/ {
-    fail("sprintf_vma")
-}
-
 # More generic memory operations
 
 BEGIN { doc["bzero"] = "\
@@ -1142,12 +1151,32 @@ Do not use strnicmp(), instead use strncasecmp()"
 # Boolean expressions and conditionals
 
 BEGIN { doc["boolean"] = "\
-Do not use `boolean'\'',  use `bool'\'' instead"
+Do not use `boolean'\'',  use `int'\'' instead"
     category["boolean"] = ari_regression
 }
 /(^|[^_[:alnum:]])boolean([^_[:alnum:]]|$)/ {
     if (is_yacc_or_lex == 0) {
        fail("boolean")
+    }
+}
+
+BEGIN { doc["false"] = "\
+Definitely do not use `false'\'' in boolean expressions"
+    category["false"] = ari_regression
+}
+/(^|[^_[:alnum:]])false([^_[:alnum:]]|$)/ {
+    if (is_yacc_or_lex == 0) {
+       fail("false")
+    }
+}
+
+BEGIN { doc["true"] = "\
+Do not try to use `true'\'' in boolean expressions"
+    category["true"] = ari_regression
+}
+/(^|[^_[:alnum:]])true([^_[:alnum:]]|$)/ {
+    if (is_yacc_or_lex == 0) {
+       fail("true")
     }
 }
 

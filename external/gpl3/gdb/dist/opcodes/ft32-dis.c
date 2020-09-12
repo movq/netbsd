@@ -1,5 +1,5 @@
 /* Disassemble ft32 instructions.
-   Copyright (C) 2013-2019 Free Software Foundation, Inc.
+   Copyright (C) 2013-2015 Free Software Foundation, Inc.
    Contributed by FTDI (support@ftdichip.com)
 
    This file is part of the GNU opcodes library.
@@ -25,45 +25,39 @@
 #define DEFINE_TABLE
 
 #include "opcode/ft32.h"
-#include "disassemble.h"
+#include "dis-asm.h"
 
 extern const ft32_opc_info_t ft32_opc_info[128];
 
 static fprintf_ftype fpr;
 static void *stream;
 
-static int
-sign_extend(int bit, int value)
+int
+print_insn_ft32 (bfd_vma addr, struct disassemble_info *info)
 {
-  int onebit = (1 << bit);
-  return (value & (onebit - 1)) - (value & onebit);
-}
-
-static void
-ft32_opcode(bfd_vma addr ATTRIBUTE_UNUSED,
-            unsigned int iword,
-            struct disassemble_info *info)
-{
+  int status;
+  stream = info->stream;
+  bfd_byte buffer[4];
+  unsigned int iword;
   const ft32_opc_info_t *oo;
+
+  fpr = info->fprintf_func;
+
+  if ((status = info->read_memory_func (addr, buffer, 4, info)))
+    goto fail;
+
+  iword = bfd_getl32 (buffer);
 
   for (oo = ft32_opc_info; oo->name; oo++)
     if ((iword & oo->mask) == oo->bits)
       break;
-
-  unsigned int sc[2];
-  if (ft32_decode_shortcode((unsigned int)addr, iword, sc))
-    {
-      ft32_opcode(addr, sc[0], info);
-      fpr (stream, " ; ");
-      ft32_opcode(addr, sc[1], info);
-    }
 
   if (oo->name)
     {
       int f = oo->fields;
       int imm;
 
-      fpr (stream, "%s", oo->name);
+      fpr (stream, "%08x %s", iword, oo->name);
       if (oo->dw)
         {
           fpr (stream, ".%c ", "bsl"[(iword >> FT32_FLD_DW_BIT) & 3]);
@@ -124,7 +118,7 @@ ft32_opcode(bfd_vma addr ATTRIBUTE_UNUSED,
               case  FT32_FLD_RIMM:
                 imm = (iword >> FT32_FLD_RIMM_BIT) & ((1 << FT32_FLD_RIMM_SIZ) - 1);
                 if (imm & 0x400)
-                  fpr(stream, "%d", sign_extend(9, imm));
+                  info->print_address_func ((bfd_vma) imm & 0x1ff, info);
                 else
                   fpr(stream, "$r%d", imm & 0x1f);
                 break;
@@ -133,7 +127,7 @@ ft32_opcode(bfd_vma addr ATTRIBUTE_UNUSED,
                 break;
               case  FT32_FLD_K20:
                 imm = iword & ((1 << FT32_FLD_K20_SIZ) - 1);
-                fpr(stream, "%d", sign_extend(19, imm));
+                info->print_address_func ((bfd_vma) imm, info);
                 break;
               case  FT32_FLD_PA:
                 imm = (iword & ((1 << FT32_FLD_PA_SIZ) - 1)) << 2;
@@ -141,15 +135,17 @@ ft32_opcode(bfd_vma addr ATTRIBUTE_UNUSED,
                 break;
               case  FT32_FLD_AA:
                 imm = iword & ((1 << FT32_FLD_AA_SIZ) - 1);
-                info->print_address_func ((1 << 23) | (bfd_vma) imm, info);
+                info->print_address_func ((bfd_vma) imm, info);
+                break;
                 break;
               case  FT32_FLD_K16:
                 imm = iword & ((1 << FT32_FLD_K16_SIZ) - 1);
-                fpr(stream, "%d", imm);
+                info->print_address_func ((bfd_vma) imm, info);
                 break;
-              case  FT32_FLD_K15:
-                imm = iword & ((1 << FT32_FLD_K15_SIZ) - 1);
-                fpr(stream, "%d", sign_extend(14, imm));
+              case  FT32_FLD_K8:
+                imm = iword & ((1 << FT32_FLD_K8_SIZ) - 1);
+                info->print_address_func ((bfd_vma) imm, info);
+                break;
                 break;
               case  FT32_FLD_R_D_POST:
                 fpr(stream, "$r%d", (iword >> FT32_FLD_R_D_BIT) & 0x1f);
@@ -170,28 +166,8 @@ ft32_opcode(bfd_vma addr ATTRIBUTE_UNUSED,
     }
     else
     {
-      fpr (stream, "!");
+      fpr (stream, "%08x!", iword);
     }
-}
-
-int
-print_insn_ft32 (bfd_vma addr, struct disassemble_info *info)
-{
-  int status;
-  stream = info->stream;
-  bfd_byte buffer[4];
-  unsigned int iword;
-
-  fpr = info->fprintf_func;
-
-  if ((status = info->read_memory_func (addr, buffer, 4, info)))
-    goto fail;
-
-  iword = bfd_getl32 (buffer);
-
-  fpr (stream, "%08x ", iword);
-
-  ft32_opcode(addr, iword, info);
 
   return 4;
 

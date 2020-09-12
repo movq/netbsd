@@ -1,6 +1,7 @@
 /* Definitions of target machine for GNU compiler, for HPs running
    HPUX using the 64bit runtime model.
-   Copyright (C) 1999-2019 Free Software Foundation, Inc.
+   Copyright (C) 1999, 2000, 2001, 2002, 2004, 2005, 2007, 2008, 2011
+   Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -26,10 +27,10 @@ along with GCC; see the file COPYING3.  If not see
 #if ((TARGET_DEFAULT | TARGET_CPU_DEFAULT) & MASK_GNU_LD)
 #define LINK_SPEC \
   "%{!shared:%{p:-L/lib/pa20_64/libp -L/usr/lib/pa20_64/libp %{!static:\
-     %nwarning: consider linking with '-static' as system libraries with\n\
+     %nWarning: consider linking with `-static' as system libraries with\n\
      %n  profiling support are only provided in archive format}}}\
    %{!shared:%{pg:-L/lib/pa20_64/libp -L/usr/lib/pa20_64/libp %{!static:\
-     %nwarning: consider linking with '-static' as system libraries with\n\
+     %nWarning: consider linking with `-static' as system libraries with\n\
      %n  profiling support are only provided in archive format}}}\
    %{!shared:%{!static:%{rdynamic:-E}}}\
    %{mhp-ld:+Accept TypeMismatch -z} %{mlinker-opt:-O}\
@@ -38,10 +39,10 @@ along with GCC; see the file COPYING3.  If not see
 #else
 #define LINK_SPEC \
   "%{!shared:%{p:-L/lib/pa20_64/libp -L/usr/lib/pa20_64/libp %{!static:\
-     %nwarning: consider linking with '-static' as system libraries with\n\
+     %nWarning: consider linking with `-static' as system libraries with\n\
      %n  profiling support are only provided in archive format}}}\
    %{!shared:%{pg:-L/lib/pa20_64/libp -L/usr/lib/pa20_64/libp %{!static:\
-     %nwarning: consider linking with '-static' as system libraries with\n\
+     %nWarning: consider linking with `-static' as system libraries with\n\
      %n  profiling support are only provided in archive format}}}\
    %{!shared:%{!static:%{rdynamic:-E}}}\
    %{!mgnu-ld:+Accept TypeMismatch -z} %{mlinker-opt:-O}\
@@ -58,22 +59,19 @@ along with GCC; see the file COPYING3.  If not see
 #if ((TARGET_DEFAULT | TARGET_CPU_DEFAULT) & MASK_GNU_LD)
 #define LIB_SPEC \
   "%{!shared:\
-     %{!p:%{!pg:%{fopenacc|fopenmp|%:gt(%{ftree-parallelize-loops=*:%*} 1):\
-                  %{static:-a shared} -lrt %{static:-a archive}}\
+     %{!p:%{!pg:%{fopenmp:%{static:-a shared} -lrt %{static:-a archive}}\
 	    %{mt|pthread:-lpthread} -lc\
 	    %{static:%{!nolibdld:-a shared -ldld -a archive -lc}\
 		%{!mt:%{!pthread:-a shared -lc -a archive}}}}}\
      %{p:%{!pg:%{static:%{!mhp-ld:-a shared}%{mhp-ld:-a archive_shared}}\
 	   -lprof %{static:-a archive}\
-	   %{fopenacc|fopenmp|%:gt(%{ftree-parallelize-loops=*:%*} 1):\
-             %{static:-a shared} -lrt %{static:-a archive}}\
+	   %{fopenmp:%{static:-a shared} -lrt %{static:-a archive}}\
 	   %{mt|pthread:-lpthread} -lc\
 	   %{static:%{!nolibdld:-a shared -ldld -a archive -lc}\
 		%{!mt:%{!pthread:-a shared -lc -a archive}}}}}\
      %{pg:%{static:%{!mhp-ld:-a shared}%{mhp-ld:-a archive_shared}}\
        -lgprof %{static:-a archive}\
-       %{fopenacc|fopenmp|%:gt(%{ftree-parallelize-loops=*:%*} 1):\
-         %{static:-a shared} -lrt %{static:-a archive}}\
+       %{fopenmp:%{static:-a shared} -lrt %{static:-a archive}}\
        %{mt|pthread:-lpthread} -lc\
        %{static:%{!nolibdld:-a shared -ldld -a archive -lc}\
 		%{!mt:%{!pthread:-a shared -lc -a archive}}}}}\
@@ -81,22 +79,19 @@ along with GCC; see the file COPYING3.  If not see
 #else
 #define LIB_SPEC \
   "%{!shared:\
-     %{!p:%{!pg:%{fopenacc|fopenmp|%:gt(%{ftree-parallelize-loops=*:%*} 1):\
-                  %{static:-a shared} -lrt %{static:-a archive}}\
+     %{!p:%{!pg:%{fopenmp:%{static:-a shared} -lrt %{static:-a archive}}\
 	    %{mt|pthread:-lpthread} -lc\
 	    %{static:%{!nolibdld:-a shared -ldld -a archive -lc}\
 		%{!mt:%{!pthread:-a shared -lc -a archive}}}}}\
      %{p:%{!pg:%{static:%{mgnu-ld:-a shared}%{!mgnu-ld:-a archive_shared}}\
 	   -lprof %{static:-a archive}\
-	   %{fopenacc|fopenmp|%:gt(%{ftree-parallelize-loops=*:%*} 1):\
-             %{static:-a shared} -lrt %{static:-a archive}}\
+	   %{fopenmp:%{static:-a shared} -lrt %{static:-a archive}}\
 	   %{mt|pthread:-lpthread} -lc\
 	   %{static:%{!nolibdld:-a shared -ldld -a archive -lc}\
 		%{!mt:%{!pthread:-a shared -lc -a archive}}}}}\
      %{pg:%{static:%{mgnu-ld:-a shared}%{!mgnu-ld:-a archive_shared}}\
        -lgprof %{static:-a archive}\
-       %{fopenacc|fopenmp|%:gt(%{ftree-parallelize-loops=*:%*} 1):\
-         %{static:-a shared} -lrt %{static:-a archive}}\
+       %{fopenmp:%{static:-a shared} -lrt %{static:-a archive}}\
        %{mt|pthread:-lpthread} -lc\
        %{static:%{!nolibdld:-a shared -ldld -a archive -lc}\
 		%{!mt:%{!pthread:-a shared -lc -a archive}}}}}\
@@ -106,7 +101,7 @@ along with GCC; see the file COPYING3.  If not see
 /* The libgcc_stub.a and milli.a libraries need to come last.  */
 #undef LINK_GCC_C_SEQUENCE_SPEC
 #define LINK_GCC_C_SEQUENCE_SPEC "\
-  %G %{!nolibc:%L} %G %{!nostdlib:%{!nodefaultlibs:%{!shared:-lgcc_stub}\
+  %G %L %G %{!nostdlib:%{!nodefaultlibs:%{!shared:-lgcc_stub}\
   milli.a%s}}"
 
 /* Under hpux11, the normal location of the `ld' and `as' programs is the
@@ -169,6 +164,8 @@ along with GCC; see the file COPYING3.  If not see
 #define TEXT_SECTION_ASM_OP	"\t.text"
 #define DATA_SECTION_ASM_OP	"\t.data"
 #define BSS_SECTION_ASM_OP	"\t.section\t.bss"
+
+#define JCR_SECTION_NAME	".jcr"
 
 #define HP_INIT_ARRAY_SECTION_ASM_OP	"\t.section\t.init"
 #define GNU_INIT_ARRAY_SECTION_ASM_OP	"\t.section\t.init_array"
@@ -239,24 +236,14 @@ do {								\
 #define ASM_OUTPUT_EXTERNAL_LIBCALL(FILE, FUN)			\
 do {								\
   if (!FUNCTION_NAME_P (XSTR (FUN, 0)))				\
-    pa_encode_label (FUN);					\
+    hppa_encode_label (FUN);					\
   ASM_OUTPUT_TYPE_DIRECTIVE (FILE, XSTR (FUN, 0), "function");	\
 } while (0)
 
 /* We need to use the HP style for internal labels.  */
 #undef ASM_GENERATE_INTERNAL_LABEL
-#define ASM_GENERATE_INTERNAL_LABEL(LABEL, PREFIX, NUM)		\
-  do								\
-    {								\
-      char *__p;						\
-      (LABEL)[0] = '*';						\
-      (LABEL)[1] = (PREFIX)[0];					\
-      (LABEL)[2] = '$';						\
-      __p = stpcpy (&(LABEL)[3], &(PREFIX)[1]);			\
-      sprint_ul (__p, (unsigned long) (NUM));			\
-    }								\
-  while (0)
-
+#define ASM_GENERATE_INTERNAL_LABEL(LABEL, PREFIX, NUM)	\
+  sprintf (LABEL, "*%c$%s%04ld", (PREFIX)[0], (PREFIX) + 1, (long)(NUM))
 
 #else /* USING_ELFOS_H */
 
@@ -317,14 +304,7 @@ do {								\
 /* The following STARTFILE_SPEC and ENDFILE_SPEC defines provide the
    magic needed to run initializers and finalizers.  */
 #undef STARTFILE_SPEC
-#if TARGET_HPUX_11_31
-#define STARTFILE_SPEC \
-  "%{!shared: %{!symbolic: crt0%O%s} \
-     %{munix=95:unix95.o%s} %{munix=98:unix98.o%s} \
-     %{!munix=93:%{!munix=95:%{!munix=98:unix2003%O%s}}}} \
-     %{static:crtbeginT%O%s} \
-   %{!static:%{!shared:crtbegin%O%s} %{shared:crtbeginS%O%s}}"
-#elif TARGET_HPUX_11_11
+#if TARGET_HPUX_11_11
 #define STARTFILE_SPEC \
   "%{!shared: %{!symbolic: crt0%O%s} %{munix=95:unix95.o%s} \
      %{!munix=93:%{!munix=95:unix98%O%s}}} %{static:crtbeginT%O%s} \
@@ -344,9 +324,9 @@ do {								\
    the sections are not actually used.  However, we still must provide
    defines to select the proper code path.  */
 #undef INIT_SECTION_ASM_OP
-#define INIT_SECTION_ASM_OP ""
+#define INIT_SECTION_ASM_OP
 #undef FINI_SECTION_ASM_OP
-#define FINI_SECTION_ASM_OP ""
+#define FINI_SECTION_ASM_OP
 
 /* We are using array initializers and don't want calls in the INIT
    and FINI sections.  */
@@ -360,6 +340,89 @@ do {								\
 #undef SUPPORTS_INIT_PRIORITY
 #define SUPPORTS_INIT_PRIORITY (TARGET_GNU_LD ? 1 : 0)
 
+/* We use DTOR_LIST_BEGIN to carry a bunch of hacks to allow us to use
+   the init and fini array sections with both the HP and GNU linkers.
+   The linkers setup the required dynamic entries in the dynamic segment
+   and the dynamic linker does the calls.  This approach avoids using
+   collect2.
+
+   The first hack is to implement __do_global_ctors_aux in crtbegin as
+   it needs to be the first entry in the init array so that it is called
+   last.  HP got the order of the init array backwards.  The DT_INIT_ARRAY
+   is supposed to be executed in the same order as the addresses appear in
+   the array.  DT_FINI_ARRAY is supposed to be executed in the opposite
+   order.
+
+   The second hack is a set of plabels to implement the effect of
+   CRT_CALL_STATIC_FUNCTION.  HP-UX 11 only supports DI_INIT_ARRAY and
+   DT_FINI_ARRAY and they put the arrays in .init and .fini, rather than
+   in .init_array and .fini_array.  The standard defines for .init and
+   .fini have the execute flag set.  So, the assembler has to be hacked
+   to munge the standard flags for these sections to make them agree
+   with what the HP linker expects.  With the GNU linker, we need to
+   used the .init_array and .fini_array sections.  So, we set up for
+   both just in case.  Once we have built the table, the linker does
+   the rest of the work.
+
+   The order is significant.  Placing __do_global_ctors_aux first in
+   the list, results in it being called last.  User specified initializers,
+   either using the linker +init command or a plabel, run before the
+   initializers specified here.  */
+
+/* We need to add frame_dummy to the initializer list if EH_FRAME_SECTION_NAME
+   or JCR_SECTION_NAME is defined.  */
+#if defined(EH_FRAME_SECTION_NAME) || defined(JCR_SECTION_NAME)
+#define PA_INIT_FRAME_DUMMY_ASM_OP ".dword P%frame_dummy"
+#else
+#define PA_INIT_FRAME_DUMMY_ASM_OP ""
+#endif
+
+/* The following hack sets up the .init, .init_array, .fini and
+   .fini_array sections.  */
+#define PA_CRTBEGIN_HACK \
+asm (TEXT_SECTION_ASM_OP);						\
+static void __attribute__((used))					\
+__do_global_ctors_aux (void)						\
+{									\
+  func_ptr *p = __CTOR_LIST__;						\
+  while (*(p + 1))							\
+    p++;								\
+  for (; *p != (func_ptr) -1; p--)					\
+    (*p) ();								\
+}									\
+									\
+asm (HP_INIT_ARRAY_SECTION_ASM_OP);					\
+asm (".align 8");							\
+asm (".dword P%__do_global_ctors_aux");					\
+asm (PA_INIT_FRAME_DUMMY_ASM_OP);					\
+asm (GNU_INIT_ARRAY_SECTION_ASM_OP);					\
+asm (".align 8");							\
+asm (".dword P%__do_global_ctors_aux");					\
+asm (PA_INIT_FRAME_DUMMY_ASM_OP);					\
+asm (HP_FINI_ARRAY_SECTION_ASM_OP);					\
+asm (".align 8");							\
+asm (".dword P%__do_global_dtors_aux");					\
+asm (GNU_FINI_ARRAY_SECTION_ASM_OP);					\
+asm (".align 8");							\
+asm (".dword P%__do_global_dtors_aux")
+
+/* The following two variants of DTOR_LIST_BEGIN are identical to those
+   in crtstuff.c except for the addition of the above crtbegin hack.  */
+#ifdef DTORS_SECTION_ASM_OP
+#define DTOR_LIST_BEGIN \
+asm (DTORS_SECTION_ASM_OP);						\
+STATIC func_ptr __DTOR_LIST__[1]					\
+  __attribute__ ((aligned(sizeof(func_ptr))))				\
+  = { (func_ptr) (-1) };						\
+PA_CRTBEGIN_HACK
+#else
+#define DTOR_LIST_BEGIN \
+STATIC func_ptr __DTOR_LIST__[1]					\
+  __attribute__ ((section(".dtors"), aligned(sizeof(func_ptr))))	\
+  = { (func_ptr) (-1) };						\
+PA_CRTBEGIN_HACK
+#endif
+
 /* If using HP ld do not call pxdb.  Use size as a program that does nothing
    and returns 0.  /bin/true cannot be used because it is a script without
    an interpreter.  */
@@ -369,11 +432,11 @@ do {								\
    not use them in gthr-posix.h.  */
 #define GTHREAD_USE_WEAK 0
 
-/* Support attribute weak.  However, the GNU linker only resolves weak
-   references if they appear in a shared library.  Thus, it is impossible
-   to create a static executable containing weak symbols.  This is a problem
-   for the various crt files in libgcc.  We don't want undefined weak
-   references to __register_frame_info, __deregister_frame_info and
-   __cxa_finalize introduced by crtbegin.o.  So, we provide an archive
-   library of empty stub functions to resolve these symbols.  */
+/* We don't want undefined weak references to __register_frame_info,
+   __deregister_frame_info, _Jv_RegisterClasses and __cxa_finalize
+   introduced by crtbegin.o.  The GNU linker only resolves weak
+   references if they appear in a shared library.  Thus, it would be
+   impossible to create a static executable if the symbols were weak.
+   So, the best solution seems to be to make the symbols strong and
+   provide an archive library of empty stub functions.  */
 #define TARGET_ATTRIBUTE_WEAK

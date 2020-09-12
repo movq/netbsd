@@ -1,6 +1,6 @@
 /* General queue data structure for GDB, the GNU debugger.
 
-   Copyright (C) 2012-2019 Free Software Foundation, Inc.
+   Copyright (C) 2012-2013 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -17,8 +17,11 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-#ifndef COMMON_QUEUE_H
-#define COMMON_QUEUE_H
+#ifndef QUEUE_H
+#define QUEUE_H
+
+#include "libiberty.h" /* xmalloc */
+#include "gdb_assert.h"
 
 /* These macros implement functions and structs for a general queue.
    Macro 'DEFINE_QUEUE_P(TYPEDEF)' is to define the new queue type for
@@ -125,7 +128,8 @@ QUEUE(TYPE)					\
 void									\
 queue_ ## TYPE ## _enque (QUEUE (TYPE) *q, TYPE v)			\
 {									\
-  QUEUE_ELEM (TYPE) *p = XNEW (QUEUE_ELEM (TYPE));			\
+  QUEUE_ELEM (TYPE) *p							\
+    = xmalloc (sizeof (QUEUE_ELEM (TYPE)));				\
 									\
   gdb_assert (q != NULL);						\
   p->data = v;								\
@@ -228,8 +232,9 @@ queue_ ## TYPE ## _iterate (QUEUE (TYPE) *q,				\
 QUEUE (TYPE) *								\
 queue_ ## TYPE ## _alloc (void (*free_func) (TYPE))			\
 {									\
-  QUEUE (TYPE) *q = XNEW (QUEUE (TYPE));				\
+  QUEUE (TYPE) *q;							\
 									\
+  q = (QUEUE (TYPE) *) xmalloc (sizeof (QUEUE (TYPE)));		\
   q->head = NULL;							\
   q->tail = NULL;							\
   q->free_func = free_func;						\
@@ -295,4 +300,4 @@ extern void							\
   queue_ ## TYPE ## _remove_elem (QUEUE (TYPE) *q,		\
 				  QUEUE_ITER (TYPE) *iter);	\
 
-#endif /* COMMON_QUEUE_H */
+#endif /* QUEUE_H */

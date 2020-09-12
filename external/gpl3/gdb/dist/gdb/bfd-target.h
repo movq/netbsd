@@ -1,6 +1,7 @@
 /* Very simple "bfd" target, for GDB, the GNU debugger.
 
-   Copyright (C) 2003-2019 Free Software Foundation, Inc.
+   Copyright (C) 2003, 2007, 2008, 2009, 2010, 2011
+   Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -23,9 +24,9 @@
 struct bfd;
 struct target_ops;
 
-/* Given an existing BFD, re-open it as a "struct target_ops".  This
-   acquires a new reference to the BFD.  This reference will be
-   released when the target is closed.  */
+/* Given an existing BFD, re-open it as a "struct target_ops".  On
+   close, it will also close the corresponding BFD (which is like
+   freopen and fdopen).  */
 struct target_ops *target_bfd_reopen (struct bfd *bfd);
 
 #endif

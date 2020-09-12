@@ -1,5 +1,6 @@
 # manythreads.exp -- Expect script to test stopping many threads
-# Copyright (C) 2004-2019 Free Software Foundation, Inc.
+# Copyright (C) 2004, 2006, 2007, 2008, 2009, 2010, 2011
+# Free Software Foundation, Inc.
 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -16,31 +17,32 @@
 
 # This file was written by Jeff Johnston. (jjohnstn@redhat.com)
 
-# This test requires sending ^C to interrupt the running target.
-if [target_info exists gdb,nointerrupts] {
-    verbose "Skipping manythreads.exp because of nointerrupts."
-    return
+if $tracelevel then {
+	strace $tracelevel
 }
 
-standard_testfile
 
-set opts { debug }
-if [info exists DEBUG] {
-    # make check RUNTESTFLAGS='gdb.threads/manythreads.exp DEBUG=1'
-    lappend opts "additional_flags=-DDEBUG"
-}
+set testfile "manythreads"
+set srcfile ${testfile}.c
+set binfile ${objdir}/${subdir}/${testfile}
 
-if {[gdb_compile_pthreads "${srcdir}/${subdir}/${srcfile}" "${binfile}" executable $opts] != "" } {
+if {[gdb_compile_pthreads "${srcdir}/${subdir}/${srcfile}" "${binfile}" executable [list debug "incdir=${objdir}"]] != "" } {
     return -1
 }
 
-clean_restart ${binfile}
+gdb_start
+gdb_reinitialize_dir $srcdir/$subdir
+gdb_load ${binfile}
 gdb_test_no_output "set print sevenbit-strings"
 runto_main
 
 # We'll need this when we send_gdb a ^C to GDB.  Need to do it before we
 # run the program and gdb starts saving and restoring tty states.
-gdb_test "shell stty intr '^C'" ".*"
+# On Ultrix, we don't need it and it is really slow (because shell_escape
+# doesn't use vfork).
+if ![istarget "*-*-ultrix*"] then {
+    gdb_test "shell stty intr '^C'" ".*"
+}
 
 set message "first continue"
 gdb_test_multiple "continue" "first continue" {
@@ -56,57 +58,26 @@ gdb_test_multiple "continue" "first continue" {
 # we don't lose GDB's output while we do it.
 remote_expect host 1 { timeout { } }
 
-# Send a Ctrl-C and wait for the SIGINT.
-
-proc interrupt_and_wait { message } {
-    global gdb_prompt
-
-    send_gdb "\003"
-
-    gdb_test_multiple "" $message {
-	-re "\\\[New \[^\]\]*\\\]\r\n" {
-	    exp_continue
-	}
-	-re "\\\[\[^\]\]* exited\\\]\r\n" {
-	    exp_continue
-	}
-	-re " received signal SIGINT.*$gdb_prompt $" {
-	    pass "$message"
-	}
-	-re "$gdb_prompt $" {
-	    # Note that with this regex order, if GDB emits [New
-	    # Thread ...] output between "Thread NNN received signal"
-	    # and the prompt, the "received signal" regex won't match.
-	    # That's good, as if we see that happening, it's a
-	    # regression.
-	    #
-	    # GDB makes sure to notify about signal stops, end of
-	    # stepping ranges, etc., only after updating the thread
-	    # list, otherwise that stop info would be easy to miss.
-	    #
-	    # A BROKEN example would be:
-	    #
-	    #  ... pages of new threads output ...
-	    #  [New Thread NNN]
-	    #  ^C
-	    #  ... more new threads output ...
-	    #  [New Thread NNN]
-	    #  [New Thread NNN]
-	    #  Thread NNN received signal SIGINT, Interrupt.
-	    #  [New Thread NNN]
-	    #  [New Thread NNN]
-	    #  ... pages of new threads output ...
-	    #  [Switching to Thread NNN]
-	    #  foo () at foo.c:31
-	    #  31      bar ();
-	    #
-	    fail $message
-	}
-    }
-}
-
 # Send a Ctrl-C and verify that we can do info threads and continue
-interrupt_and_wait "stop threads 1"
+send_gdb "\003"
+set message "stop threads 1"
+gdb_test_multiple "" "stop threads 1" {
+  -re "\\\[New \[^\]\]*\\\]\r\n" {
+    exp_continue
+  }
+  -re "\\\[\[^\]\]* exited\\\]\r\n" {
+    exp_continue
+  }
+  -re "Thread \[^\n\]* executing\r\n" {
+    exp_continue
+  }
+  -re "Program received signal SIGINT.*$gdb_prompt $" {
+    pass "$message"
+  }
+  timeout {
+    fail "$message (timeout)"
+  }
+}
 
 set cmd "info threads"
 set ok 0
@@ -151,7 +122,10 @@ remote_expect host 1 {
   -re "\\\[\[^\]\]* exited\\\]\r\n" {
     exp_continue -continue_timer
   }
-  -re " received signal SIGINT.*$gdb_prompt $" {
+  -re "Thread \[^\n\]* executing\r\n" {
+    exp_continue -continue_timer
+  }
+  -re "Program received signal SIGINT.*$gdb_prompt $" {
     if { $failed == 0 } {
       fail "check for duplicate SIGINT"
     }
@@ -167,7 +141,25 @@ remote_expect host 1 {
 }
 
 # Send another Ctrl-C and verify that we can do info threads and quit
-interrupt_and_wait "stop threads 2"
+send_gdb "\003"
+set message "stop threads 2"
+gdb_test_multiple "" "stop threads 2" {
+  -re "\\\[New \[^\]\]*\\\]\r\n" {
+    exp_continue
+  }
+  -re "\\\[\[^\]\]* exited\\\]\r\n" {
+    exp_continue
+  }
+  -re "Thread \[^\n\]* executing\r\n" {
+    exp_continue
+  }
+  -re "Program received signal SIGINT.*$gdb_prompt $" {
+    pass "$message"
+  }
+  timeout {
+    fail "$message (timeout)"
+  }
+} 
 
 gdb_test_multiple "quit" "GDB exits after stopping multithreaded program" {
     -re "Quit anyway\\? \\(y or n\\) $" {

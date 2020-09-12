@@ -1,6 +1,7 @@
 // Hashtable implementation used by containers -*- C++ -*-
 
-// Copyright (C) 2001-2019 Free Software Foundation, Inc.
+// Copyright (C) 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010
+// Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
@@ -65,9 +66,7 @@
 #include <bits/stl_function.h>
 #include <backward/hash_fun.h>
 
-namespace __gnu_cxx _GLIBCXX_VISIBILITY(default)
-{
-_GLIBCXX_BEGIN_NAMESPACE_VERSION
+_GLIBCXX_BEGIN_NAMESPACE(__gnu_cxx)
 
   using std::size_t;
   using std::ptrdiff_t;
@@ -208,17 +207,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
   // Note: assumes long is at least 32 bits.
   enum { _S_num_primes = 29 };
 
-  template<typename _PrimeType>
-    struct _Hashtable_prime_list
-    {
-      static const _PrimeType  __stl_prime_list[_S_num_primes];
-
-      static const _PrimeType*
-      _S_get_prime_list();
-    };
-
-  template<typename _PrimeType> const _PrimeType
-  _Hashtable_prime_list<_PrimeType>::__stl_prime_list[_S_num_primes] =
+  static const unsigned long __stl_prime_list[_S_num_primes] =
     {
       5ul,          53ul,         97ul,         193ul,       389ul,
       769ul,        1543ul,       3079ul,       6151ul,      12289ul,
@@ -228,17 +217,11 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       805306457ul,  1610612741ul, 3221225473ul, 4294967291ul
     };
 
- template<class _PrimeType> inline const _PrimeType*
- _Hashtable_prime_list<_PrimeType>::_S_get_prime_list()
- {
-   return __stl_prime_list;
- }
-
   inline unsigned long
   __stl_next_prime(unsigned long __n)
   {
-    const unsigned long* __first = _Hashtable_prime_list<unsigned long>::_S_get_prime_list();
-    const unsigned long* __last = __first + (int)_S_num_primes;
+    const unsigned long* __first = __stl_prime_list;
+    const unsigned long* __last = __stl_prime_list + (int)_S_num_primes;
     const unsigned long* pos = std::lower_bound(__first, __last, __n);
     return pos == __last ? *(__last - 1) : *pos;
   }
@@ -379,7 +362,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       max_size() const
       { return size_type(-1); }
 
-      _GLIBCXX_NODISCARD bool
+      bool
       empty() const
       { return size() == 0; }
 
@@ -432,9 +415,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 
       size_type
       max_bucket_count() const
-      { return _Hashtable_prime_list<unsigned long>::
-               _S_get_prime_list()[(int)_S_num_primes - 1];
-      }
+      { return __stl_prime_list[(int)_S_num_primes - 1]; }
 
       size_type
       elems_in_bucket(size_type __bucket) const
@@ -915,19 +896,18 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 		  __next = __cur->_M_next;
 		}
 	    }
-	  bool __delete_first = _M_equals(_M_get_key(__first->_M_val), __key);
+	  if (_M_equals(_M_get_key(__first->_M_val), __key))
+	    {
+	      _M_buckets[__n] = __first->_M_next;
+	      _M_delete_node(__first);
+	      ++__erased;
+	      --_M_num_elements;
+	    }
 	  if (__saved_slot)
 	    {
 	      __next = __saved_slot->_M_next;
 	      __saved_slot->_M_next = __next->_M_next;
 	      _M_delete_node(__next);
-	      ++__erased;
-	      --_M_num_elements;
-	    }
-	  if (__delete_first)
-	    {
-	      _M_buckets[__n] = __first->_M_next;
-	      _M_delete_node(__first);
 	      ++__erased;
 	      --_M_num_elements;
 	    }
@@ -1161,7 +1141,6 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	}
     }
 
-_GLIBCXX_END_NAMESPACE_VERSION
-} // namespace
+_GLIBCXX_END_NAMESPACE
 
 #endif

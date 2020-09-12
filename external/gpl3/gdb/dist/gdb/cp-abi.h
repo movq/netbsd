@@ -3,7 +3,8 @@
 
    Contributed by Daniel Berlin <dberlin@redhat.com>
 
-   Copyright (C) 2001-2019 Free Software Foundation, Inc.
+   Copyright (C) 2001, 2005, 2006, 2007, 2008, 2009, 2010, 2011
+   Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -20,8 +21,8 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-#ifndef CP_ABI_H
-#define CP_ABI_H
+#ifndef CP_ABI_H_
+#define CP_ABI_H_ 1
 
 struct fn_field;
 struct type;
@@ -135,7 +136,7 @@ extern struct value *value_virtual_fn_field (struct value **valuep,
    FULL, TOP, and USING_ENC can each be zero, in which case we don't
    provide the corresponding piece of information.  */
 extern struct type *value_rtti_type (struct value *value,
-                                     int *full, LONGEST *top,
+                                     int *full, int *top,
 				     int *using_enc);
 
 /* Compute the offset of the baseclass which is the INDEXth baseclass
@@ -146,7 +147,7 @@ extern struct type *value_rtti_type (struct value *value,
 
 extern int baseclass_offset (struct type *type,
 			     int index, const gdb_byte *valaddr,
-			     LONGEST embedded_offset,
+			     int embedded_offset,
 			     CORE_ADDR address,
 			     const struct value *val);
 
@@ -172,33 +173,6 @@ struct value *cplus_method_ptr_to_value (struct value **this_p,
    opposite of cplus_method_ptr_to_value.  */
 void cplus_make_method_ptr (struct type *type, gdb_byte *CONTENTS,
 			    CORE_ADDR address, int is_virtual);
-
-/* Print the vtable for VALUE, if there is one.  If there is no
-   vtable, print a message, but do not throw.  */
-
-void cplus_print_vtable (struct value *value);
-
-/* Implement 'typeid': find the type info for VALUE, if possible.  If
-   the type info cannot be found, throw an exception.  */
-
-extern struct value *cplus_typeid (struct value *value);
-
-/* Return the type of 'typeid' for the current C++ ABI on the given
-   architecture.  */
-
-extern struct type *cplus_typeid_type (struct gdbarch *gdbarch);
-
-/* Given a value which holds a pointer to a std::type_info, return the
-   type which that type_info represents.  Throw an exception if the
-   type cannot be found.  */
-
-extern struct type *cplus_type_from_type_info (struct value *value);
-
-/* Given a value which holds a pointer to a std::type_info, return the
-   name of the type which that type_info represents.  Throw an
-   exception if the type name cannot be found.  */
-
-extern std::string cplus_typename_from_type_info (struct value *value);
 
 /* Determine if we are currently in a C++ thunk.  If so, get the
    address of the routine we are thunking to and continue to there
@@ -228,9 +202,9 @@ struct cp_abi_ops
 				     int j, struct type * type,
 				     int offset);
   struct type *(*rtti_type) (struct value *v, int *full,
-			     LONGEST *top, int *using_enc);
+			     int *top, int *using_enc);
   int (*baseclass_offset) (struct type *type, int index,
-			   const bfd_byte *valaddr, LONGEST embedded_offset,
+			   const bfd_byte *valaddr, int embedded_offset,
 			   CORE_ADDR address, const struct value *val);
   void (*print_method_ptr) (const gdb_byte *contents,
 			    struct type *type,
@@ -240,11 +214,6 @@ struct cp_abi_ops
 			   CORE_ADDR, int);
   struct value * (*method_ptr_to_value) (struct value **,
 					 struct value *);
-  void (*print_vtable) (struct value *);
-  struct value *(*get_typeid) (struct value *value);
-  struct type *(*get_typeid_type) (struct gdbarch *gdbarch);
-  struct type *(*get_type_from_type_info) (struct value *value);
-  std::string (*get_typename_from_type_info) (struct value *value);
   CORE_ADDR (*skip_trampoline) (struct frame_info *, CORE_ADDR);
   int (*pass_by_reference) (struct type *type);
 };
@@ -253,4 +222,5 @@ struct cp_abi_ops
 extern int register_cp_abi (struct cp_abi_ops *abi);
 extern void set_cp_abi_as_auto_default (const char *short_name);
 
-#endif /* CP_ABI_H */
+#endif
+

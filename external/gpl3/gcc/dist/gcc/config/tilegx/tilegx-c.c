@@ -1,5 +1,5 @@
 /* Definitions of C specific functions for TILE-Gx.
-   Copyright (C) 2011-2019 Free Software Foundation, Inc.
+   Copyright (C) 2011-2013 Free Software Foundation, Inc.
    Contributed by Walter Lee (walt@tilera.com)
 
    This file is part of GCC.
@@ -18,12 +18,14 @@
    along with GCC; see the file COPYING3.  If not see
    <http://www.gnu.org/licenses/>.  */
 
-#define IN_TARGET_CODE 1
-
 #include "config.h"
 #include "system.h"
 #include "coretypes.h"
+#include "machmode.h"
 #include "tm.h"
+#include "tm_p.h"
+#include "cpplib.h"
+#include "tree.h"
 #include "c-family/c-common.h"
 
 /* copy defines in c-cppbuiltin.c */
@@ -44,9 +46,6 @@ tilegx_cpu_cpp_builtins (struct cpp_reader *pfile)
 
   if (TARGET_32BIT)
     builtin_define ("__tilegx32__");
-
-  builtin_define ("__GCC_HAVE_SYNC_COMPARE_AND_SWAP_1");
-  builtin_define ("__GCC_HAVE_SYNC_COMPARE_AND_SWAP_2");
 
   TILEGX_CPU_CPP_ENDIAN_BUILTINS ();
   GNU_USER_TARGET_OS_CPP_BUILTINS ();

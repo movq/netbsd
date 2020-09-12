@@ -1,6 +1,6 @@
 /* Readline support for Python.
 
-   Copyright (C) 2012-2019 Free Software Foundation, Inc.
+   Copyright (C) 2012-2013 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -19,8 +19,12 @@
 
 #include "defs.h"
 #include "python-internal.h"
+#include "exceptions.h"
 #include "top.h"
 #include "cli/cli-utils.h"
+#include "gdb_string.h"
+
+#include <stddef.h>
 
 /* Readline function suitable for PyOS_ReadlineFunctionPointer, which
    is used for Python's interactive parser and raw_input.  In both
@@ -30,26 +34,22 @@
 
 static char *
 gdbpy_readline_wrapper (FILE *sys_stdin, FILE *sys_stdout,
-#if PY_MAJOR_VERSION == 3 && PY_MINOR_VERSION >= 4
-			const char *prompt)
-#else
 			char *prompt)
-#endif
 {
   int n;
   char *p = NULL, *q;
+  volatile struct gdb_exception except;
 
-  TRY
-    {
-      p = command_line_input (prompt, "python");
-    }
+  TRY_CATCH (except, RETURN_MASK_ALL)
+    p = command_line_input (prompt, 0, "python");
+
+  /* Detect user interrupt (Ctrl-C).  */
+  if (except.reason == RETURN_QUIT)
+    return NULL;
+
   /* Handle errors by raising Python exceptions.  */
-  CATCH (except, RETURN_MASK_ALL)
+  if (except.reason < 0)
     {
-      /* Detect user interrupt (Ctrl-C).  */
-      if (except.reason == RETURN_QUIT)
-	return NULL;
-
       /* The thread state is nulled during gdbpy_readline_wrapper,
 	 with the original value saved in the following undocumented
 	 variable (see Python's Parser/myreadline.c and
@@ -59,12 +59,11 @@ gdbpy_readline_wrapper (FILE *sys_stdin, FILE *sys_stdout,
       PyEval_SaveThread ();
       return NULL;
     }
-  END_CATCH
 
   /* Detect EOF (Ctrl-D).  */
   if (p == NULL)
     {
-      q = (char *) PyMem_RawMalloc (1);
+      q = PyMem_Malloc (1);
       if (q != NULL)
 	q[0] = '\0';
       return q;
@@ -73,10 +72,10 @@ gdbpy_readline_wrapper (FILE *sys_stdin, FILE *sys_stdout,
   n = strlen (p);
 
   /* Copy the line to Python and return.  */
-  q = (char *) PyMem_RawMalloc (n + 2);
+  q = PyMem_Malloc (n + 2);
   if (q != NULL)
     {
-      strcpy (q, p);
+      strncpy (q, p, n);
       q[n] = '\n';
       q[n + 1] = '\0';
     }
@@ -94,7 +93,7 @@ gdbpy_initialize_gdb_readline (void)
      and prevent conflicts.  For now, this file implements a
      sys.meta_path finder that simply fails to import the readline
      module.  */
-  if (PyRun_SimpleString ("\
+  PyRun_SimpleString ("\
 import sys\n\
 \n\
 class GdbRemoveReadlineFinder:\n\
@@ -107,7 +106,8 @@ class GdbRemoveReadlineFinder:\n\
     raise ImportError('readline module disabled under GDB')\n\
 \n\
 sys.meta_path.append(GdbRemoveReadlineFinder())\n\
-") == 0)
-    PyOS_ReadlineFunctionPointer = gdbpy_readline_wrapper;
+");
+
+  PyOS_ReadlineFunctionPointer = gdbpy_readline_wrapper;
 }
 

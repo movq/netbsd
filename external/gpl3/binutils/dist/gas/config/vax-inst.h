@@ -1,5 +1,5 @@
 /* vax-inst.h - GNU - Part of vax.c
-   Copyright (C) 1987-2020 Free Software Foundation, Inc.
+   Copyright 1987, 1992, 1995, 2000, 2002, 2007 Free Software Foundation, Inc.
 
    This file is part of GAS, the GNU Assembler.
 
@@ -65,8 +65,6 @@ typedef long vax_opcodeT;	/* For initialising array of opcodes	   */
 #define VAX_WIDEN_WORD (0x20)	/* Add this to byte branch to get word br.  */
 #define VAX_WIDEN_LONG (0x6)	/* Add this to byte branch to get long jmp.*/
 /* Needs VAX_PC_RELATIVE_MODE byte after it*/
-#define	VAX_CALLS (0xFB)	/* Call with arg list on stack	           */
-#define	VAX_CALLG (0xFA)	/* Call with arg list in memory		   */
 
 struct vit			/* vax instruction tree                    */
 {

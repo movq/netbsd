@@ -1,6 +1,6 @@
 #! /bin/sh
 
-# Copyright (C) 1999, 2000, 2001, 2009, 2012 Free Software Foundation, Inc.
+# Copyright (C) 1999, 2000, 2001, 2009 Free Software Foundation, Inc.
 # This file is part of GCC.
 
 # GCC is free software; you can redistribute it and/or modify
@@ -55,16 +55,19 @@ do
   esac
 done
 
+if [ $# -eq 0 ] ; then
+  set -- fixincl.x
+fi
+
 AG="autogen $AG"
 set -e
 
-if [ -z "`${AG} -v | fgrep ' 5.'`" ]
+if [ -z "`${AG} -v | fgrep 'Ver. 5.'`" ]
 then
   echo "AutoGen appears to be out of date or not correctly installed."
-  echo "Please download and install from:"
-  echo "   https://ftp.gnu.org/gnu/autogen/"
+  echo "Please download and install:"
+  echo "   ftp://gcc.gnu.org/pub/gcc/infrastructure/autogen.tar.gz"
   touch fixincl.x
-  exit 1
 else
   echo AutoGen-ing fixincl.x
   $AG inclhack.def

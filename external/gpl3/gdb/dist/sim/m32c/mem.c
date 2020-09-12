@@ -1,6 +1,7 @@
 /* mem.c --- memory for M32C simulator.
 
-Copyright (C) 2005-2019 Free Software Foundation, Inc.
+Copyright (C) 2005, 2007, 2008, 2009, 2010, 2011
+Free Software Foundation, Inc.
 Contributed by Red Hat, Inc.
 
 This file is part of the GNU simulators.
@@ -89,7 +90,7 @@ init_mem (void)
 }
 
 static unsigned char *
-mem_ptr (int address)
+mem_ptr (address)
 {
   static int recursing = 0;
   int pt1 = (address >> (L2_BITS + OFF_BITS)) & ((1 << L1_BITS) - 1);
@@ -139,7 +140,7 @@ mcs (int isput, int bytes)
 }
 
 void
-mem_usage_stats (void)
+mem_usage_stats ()
 {
   int i, j;
   int rstart = 0;
@@ -192,7 +193,7 @@ s (int address, char *dir)
 
 #define S(d) if (trace) s(address, d)
 static void
-e (void)
+e ()
 {
   if (!trace)
     return;
@@ -205,7 +206,7 @@ e (void)
 
 extern int m32c_disassemble;
 
-static void
+void
 mem_put_byte (int address, unsigned char value)
 {
   unsigned char *m;
@@ -376,7 +377,7 @@ mem_put_blk (int address, const void *bufptr, int nbytes)
 }
 
 unsigned char
-mem_get_pc (void)
+mem_get_pc ()
 {
   unsigned char *m = mem_ptr (regs.r_pc & membus_mask);
   COUNT (0, 0);
@@ -388,7 +389,7 @@ static int console_raw = 0;
 static struct termios oattr;
 
 static int
-stdin_ready (void)
+stdin_ready ()
 {
   fd_set ifd;
   int n;
@@ -403,7 +404,7 @@ stdin_ready (void)
 }
 
 void
-m32c_sim_restore_console (void)
+m32c_sim_restore_console ()
 {
   if (console_raw)
     tcsetattr (m32c_console_ifd, TCSANOW, &oattr);
@@ -557,7 +558,7 @@ sign_ext (int v, int bits)
 
 #if TIMER_A
 void
-update_timer_a (void)
+update_timer_a ()
 {
   if (timer_a.bsr & 1)
     {

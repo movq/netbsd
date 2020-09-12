@@ -1,6 +1,6 @@
 // Short-string-optimized versatile string base -*- C++ -*-
 
-// Copyright (C) 2005-2019 Free Software Foundation, Inc.
+// Copyright (C) 2005, 2006, 2007, 2008, 2009 Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
@@ -23,16 +23,15 @@
 // <http://www.gnu.org/licenses/>.
 
 /** @file ext/sso_string_base.h
+ *  This file is a GNU extension to the Standard C++ Library.
  *  This is an internal header file, included by other library headers.
- *  Do not attempt to use it directly. @headername{ext/vstring.h}
+ *  You should not attempt to use it directly.
  */
 
 #ifndef _SSO_STRING_BASE_H
 #define _SSO_STRING_BASE_H 1
 
-namespace __gnu_cxx _GLIBCXX_VISIBILITY(default)
-{
-_GLIBCXX_BEGIN_NAMESPACE_VERSION
+_GLIBCXX_BEGIN_NAMESPACE(__gnu_cxx)
 
   template<typename _CharT, typename _Traits, typename _Alloc>
     class __sso_string_base
@@ -182,7 +181,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 
       __sso_string_base(const __sso_string_base& __rcs);
 
-#if __cplusplus >= 201103L
+#ifdef __GXX_EXPERIMENTAL_CXX0X__
       __sso_string_base(__sso_string_base&& __rcs);
 #endif
 
@@ -233,9 +232,6 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
     __sso_string_base<_CharT, _Traits, _Alloc>::
     _M_swap(__sso_string_base& __rcs)
     {
-      if (this == &__rcs)
-	return;
-
       // _GLIBCXX_RESOLVE_LIB_DEFECTS
       // 431. Swapping containers with unequal allocators.
       std::__alloc_swap<_CharT_alloc_type>::_S_do_it(_M_get_allocator(),
@@ -343,7 +339,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
     : _M_dataplus(__rcs._M_get_allocator(), _M_local_data)
     { _M_construct(__rcs._M_data(), __rcs._M_data() + __rcs._M_length()); }
 
-#if __cplusplus >= 201103L
+#ifdef __GXX_EXPERIMENTAL_CXX0X__
   template<typename _CharT, typename _Traits, typename _Alloc>
     __sso_string_base<_CharT, _Traits, _Alloc>::
     __sso_string_base(__sso_string_base&& __rcs)
@@ -361,9 +357,9 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	  _M_capacity(__rcs._M_allocated_capacity);
 	}
 
-      _M_set_length(__rcs._M_length());
+      _M_length(__rcs._M_length());
+      __rcs._M_length(0);
       __rcs._M_data(__rcs._M_local_data);
-      __rcs._M_set_length(0);
     }
 #endif
 
@@ -410,7 +406,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 		    // Allocate more space.
 		    __capacity = __len + 1;
 		    _CharT* __another = _M_create(__capacity, __len);
-		    this->_S_copy(__another, _M_data(), __len);
+		    _S_copy(__another, _M_data(), __len);
 		    _M_dispose();
 		    _M_data(__another);
 		    _M_capacity(__capacity);
@@ -438,7 +434,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	// NB: Not required, but considered best practice.
 	if (__is_null_pointer(__beg) && __beg != __end)
 	  std::__throw_logic_error(__N("__sso_string_base::"
-				       "_M_construct null not valid"));
+				       "_M_construct NULL not valid"));
 
 	size_type __dnew = static_cast<size_type>(std::distance(__beg, __end));
 
@@ -450,7 +446,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 
 	// Check for out_of_range and length_error exceptions.
 	__try
-	  { this->_S_copy_chars(_M_data(), __beg, __end); }
+	  { _S_copy_chars(_M_data(), __beg, __end); }
 	__catch(...)
 	  {
 	    _M_dispose();
@@ -472,7 +468,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	}
 
       if (__n)
-	this->_S_assign(_M_data(), __n, __c);
+	_S_assign(_M_data(), __n, __c);
 
       _M_set_length(__n);
     }
@@ -497,7 +493,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	    }
 
 	  if (__rsize)
-	    this->_S_copy(_M_data(), __rcs._M_data(), __rsize);
+	    _S_copy(_M_data(), __rcs._M_data(), __rsize);
 
 	  _M_set_length(__rsize);
 	}
@@ -519,14 +515,14 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	      || __res > size_type(_S_local_capacity))
 	    {
 	      _CharT* __tmp = _M_create(__res, __capacity);
-	      this->_S_copy(__tmp, _M_data(), _M_length() + 1);
+	      _S_copy(__tmp, _M_data(), _M_length() + 1);
 	      _M_dispose();
 	      _M_data(__tmp);
 	      _M_capacity(__res);
 	    }
 	  else if (!_M_is_local())
 	    {
-	      this->_S_copy(_M_local_data, _M_data(), _M_length() + 1);
+	      _S_copy(_M_local_data, _M_data(), _M_length() + 1);
 	      _M_destroy(__capacity);
 	      _M_data(_M_local_data);
 	    }
@@ -545,12 +541,12 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       _CharT* __r = _M_create(__new_capacity, _M_capacity());
 
       if (__pos)
-	this->_S_copy(__r, _M_data(), __pos);
+	_S_copy(__r, _M_data(), __pos);
       if (__s && __len2)
-	this->_S_copy(__r + __pos, __s, __len2);
+	_S_copy(__r + __pos, __s, __len2);
       if (__how_much)
-	this->_S_copy(__r + __pos + __len2,
-		      _M_data() + __pos + __len1, __how_much);
+	_S_copy(__r + __pos + __len2,
+		_M_data() + __pos + __len1, __how_much);
       
       _M_dispose();
       _M_data(__r);
@@ -565,12 +561,12 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       const size_type __how_much = _M_length() - __pos - __n;
 
       if (__how_much && __n)
-	this->_S_move(_M_data() + __pos, _M_data() + __pos + __n, __how_much);
+	_S_move(_M_data() + __pos, _M_data() + __pos + __n,
+		__how_much);
 
       _M_set_length(_M_length() - __n);
     }
 
-_GLIBCXX_END_NAMESPACE_VERSION
-} // namespace
+_GLIBCXX_END_NAMESPACE
 
 #endif /* _SSO_STRING_BASE_H */

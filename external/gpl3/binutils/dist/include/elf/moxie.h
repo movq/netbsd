@@ -1,5 +1,5 @@
 /* moxie ELF support for BFD.
-   Copyright (C) 2009-2020 Free Software Foundation, Inc.
+   Copyright 2009, 2010 Free Software Foundation, Inc.
 
    This file is part of BFD, the Binary File Descriptor library.
 

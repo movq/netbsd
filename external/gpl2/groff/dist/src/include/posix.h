@@ -1,4 +1,4 @@
-/*	$NetBSD: posix.h,v 1.1.1.1 2016/01/13 18:41:48 christos Exp $	*/
+/*	$NetBSD: posix.h,v 1.1 2016/01/13 18:41:48 christos Exp $	*/
 
 // -*- C++ -*-
 /* Copyright (C) 1992, 2000, 2001, 2002, 2005 Free Software Foundation, Inc.

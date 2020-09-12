@@ -1,5 +1,6 @@
 /* Motorola MCore specific support for 32-bit ELF
-   Copyright (C) 1994-2020 Free Software Foundation, Inc.
+   Copyright 1994, 1995, 1999, 2000, 2001, 2002, 2003, 2004, 2005, 2006,
+   2007 Free Software Foundation, Inc.
 
    This file is part of BFD, the Binary File Descriptor library.
 
@@ -49,14 +50,13 @@ mcore_elf_set_private_flags (bfd * abfd, flagword flags)
    object file when linking.  */
 
 static bfd_boolean
-mcore_elf_merge_private_bfd_data (bfd *ibfd, struct bfd_link_info *info)
+mcore_elf_merge_private_bfd_data (bfd * ibfd, bfd * obfd)
 {
-  bfd *obfd = info->output_bfd;
   flagword old_flags;
   flagword new_flags;
 
-  /* Check if we have the same endianness.  */
-  if (! _bfd_generic_verify_endian_match (ibfd, info))
+  /* Check if we have the same endianess.  */
+  if (! _bfd_generic_verify_endian_match (ibfd, obfd))
     return FALSE;
 
   if (   bfd_get_flavour (ibfd) != bfd_target_elf_flavour
@@ -68,7 +68,7 @@ mcore_elf_merge_private_bfd_data (bfd *ibfd, struct bfd_link_info *info)
 
   if (! elf_flags_init (obfd))
     {
-      /* First call, no flags set.  */
+      	/* First call, no flags set.  */
       elf_flags_init (obfd) = TRUE;
       elf_elfheader (obfd)->e_flags = new_flags;
     }
@@ -89,17 +89,17 @@ static bfd_reloc_status_type
 mcore_elf_unsupported_reloc (bfd * abfd,
 			     arelent * reloc_entry,
 			     asymbol * symbol ATTRIBUTE_UNUSED,
-			     void * data ATTRIBUTE_UNUSED,
+			     PTR data ATTRIBUTE_UNUSED,
 			     asection * input_section ATTRIBUTE_UNUSED,
 			     bfd * output_bfd ATTRIBUTE_UNUSED,
 			     char ** error_message ATTRIBUTE_UNUSED)
 {
   BFD_ASSERT (reloc_entry->howto != (reloc_howto_type *)0);
 
-  /* xgettext:c-format */
-  _bfd_error_handler (_("%pB: %s unsupported"),
+  _bfd_error_handler (_("%B: Relocation %s (%d) is not currently supported.\n"),
 		      abfd,
-		      reloc_entry->howto->name);
+		      reloc_entry->howto->name,
+		      reloc_entry->howto->type);
 
   return bfd_reloc_notsupported;
 }
@@ -111,12 +111,12 @@ static reloc_howto_type mcore_elf_howto_raw[] =
   /* This reloc does nothing.  */
   HOWTO (R_MCORE_NONE,		/* type */
 	 0,			/* rightshift */
-	 3,			/* size (0 = byte, 1 = short, 2 = long) */
-	 0,			/* bitsize */
+	 2,			/* size (0 = byte, 1 = short, 2 = long) */
+	 32,			/* bitsize */
 	 FALSE,			/* pc_relative */
 	 0,			/* bitpos */
-	 complain_overflow_dont,  /* complain_on_overflow */
-	 NULL,			/* special_function */
+	 complain_overflow_bitfield,  /* complain_on_overflow */
+	 NULL,                  /* special_function */
 	 "R_MCORE_NONE",	/* name */
 	 FALSE,			/* partial_inplace */
 	 0,			/* src_mask */
@@ -224,43 +224,43 @@ static reloc_howto_type mcore_elf_howto_raw[] =
 
   /* GNU extension to record C++ vtable hierarchy.  */
   HOWTO (R_MCORE_GNU_VTINHERIT, /* type */
-	 0,			/* rightshift */
-	 2,			/* size (0 = byte, 1 = short, 2 = long) */
-	 0,			/* bitsize */
-	 FALSE,			/* pc_relative */
-	 0,			/* bitpos */
-	 complain_overflow_dont, /* complain_on_overflow */
-	 NULL,			/* special_function */
-	 "R_MCORE_GNU_VTINHERIT", /* name */
-	 FALSE,			/* partial_inplace */
-	 0,			/* src_mask */
-	 0,			/* dst_mask */
-	 FALSE),		/* pcrel_offset */
+         0,                     /* rightshift */
+         2,                     /* size (0 = byte, 1 = short, 2 = long) */
+         0,                     /* bitsize */
+         FALSE,                 /* pc_relative */
+         0,                     /* bitpos */
+         complain_overflow_dont, /* complain_on_overflow */
+         NULL,                  /* special_function */
+         "R_MCORE_GNU_VTINHERIT", /* name */
+         FALSE,                 /* partial_inplace */
+         0,                     /* src_mask */
+         0,                     /* dst_mask */
+         FALSE),                /* pcrel_offset */
 
   /* GNU extension to record C++ vtable member usage.  */
-  HOWTO (R_MCORE_GNU_VTENTRY,	/* type */
-	 0,			/* rightshift */
-	 2,			/* size (0 = byte, 1 = short, 2 = long) */
-	 0,			/* bitsize */
-	 FALSE,			/* pc_relative */
-	 0,			/* bitpos */
-	 complain_overflow_dont,/* complain_on_overflow */
-	 _bfd_elf_rel_vtable_reloc_fn,	/* special_function */
-	 "R_MCORE_GNU_VTENTRY", /* name */
-	 FALSE,			/* partial_inplace */
-	 0,			/* src_mask */
-	 0,			/* dst_mask */
-	 FALSE),		/* pcrel_offset */
+  HOWTO (R_MCORE_GNU_VTENTRY,   /* type */
+         0,                     /* rightshift */
+         2,                     /* size (0 = byte, 1 = short, 2 = long) */
+         0,                     /* bitsize */
+         FALSE,                 /* pc_relative */
+         0,                     /* bitpos */
+         complain_overflow_dont,/* complain_on_overflow */
+         _bfd_elf_rel_vtable_reloc_fn,  /* special_function */
+         "R_MCORE_GNU_VTENTRY", /* name */
+         FALSE,                 /* partial_inplace */
+         0,                     /* src_mask */
+         0,                     /* dst_mask */
+         FALSE),                /* pcrel_offset */
 
-  HOWTO (R_MCORE_RELATIVE,	/* type */
+  HOWTO (R_MCORE_RELATIVE,      /* type */
 	 0,			/* rightshift */
 	 2,			/* size (0 = byte, 1 = short, 2 = long) */
 	 32,			/* bitsize */
 	 FALSE,			/* pc_relative */
 	 0,			/* bitpos */
 	 complain_overflow_signed, /* complain_on_overflow */
-	 NULL,			/* special_function */
-	 "R_MCORE_RELATIVE",	/* name */
+	 NULL,                  /* special_function */
+	 "R_MCORE_RELATIVE",    /* name */
 	 TRUE,			/* partial_inplace */
 	 0xffffffff,		/* src_mask */
 	 0xffffffff,		/* dst_mask */
@@ -304,9 +304,9 @@ mcore_elf_reloc_type_lookup (bfd * abfd ATTRIBUTE_UNUSED,
     case BFD_RELOC_MCORE_PCREL_IMM4BY2:	     mcore_reloc = R_MCORE_PCRELIMM4BY2; break;
     case BFD_RELOC_32_PCREL:		     mcore_reloc = R_MCORE_PCREL32; break;
     case BFD_RELOC_MCORE_PCREL_JSR_IMM11BY2: mcore_reloc = R_MCORE_PCRELJSR_IMM11BY2; break;
-    case BFD_RELOC_VTABLE_INHERIT:	     mcore_reloc = R_MCORE_GNU_VTINHERIT; break;
-    case BFD_RELOC_VTABLE_ENTRY:	     mcore_reloc = R_MCORE_GNU_VTENTRY; break;
-    case BFD_RELOC_RVA:			     mcore_reloc = R_MCORE_RELATIVE; break;
+    case BFD_RELOC_VTABLE_INHERIT:           mcore_reloc = R_MCORE_GNU_VTINHERIT; break;
+    case BFD_RELOC_VTABLE_ENTRY:             mcore_reloc = R_MCORE_GNU_VTENTRY; break;
+    case BFD_RELOC_RVA:                      mcore_reloc = R_MCORE_RELATIVE; break;
     default:
       return NULL;
     }
@@ -336,29 +336,18 @@ mcore_elf_reloc_name_lookup (bfd *abfd ATTRIBUTE_UNUSED,
 
 /* Set the howto pointer for a RCE ELF reloc.  */
 
-static bfd_boolean
-mcore_elf_info_to_howto (bfd * abfd,
+static void
+mcore_elf_info_to_howto (bfd * abfd ATTRIBUTE_UNUSED,
 			 arelent * cache_ptr,
 			 Elf_Internal_Rela * dst)
 {
-  unsigned int r_type;
-
   if (! mcore_elf_howto_table [R_MCORE_PCRELIMM8BY4])
     /* Initialize howto table if needed.  */
     mcore_elf_howto_init ();
 
-  r_type = ELF32_R_TYPE (dst->r_info);
-  if (r_type >= R_MCORE_max)
-    {
-      /* xgettext:c-format */
-      _bfd_error_handler (_("%pB: unsupported relocation type %#x"),
-			  abfd, r_type);
-      bfd_set_error (bfd_error_bad_value);
-      return FALSE;
-    }
+  BFD_ASSERT (ELF32_R_TYPE (dst->r_info) < (unsigned int) R_MCORE_max);
 
-  cache_ptr->howto = mcore_elf_howto_table [r_type];
-  return TRUE;
+  cache_ptr->howto = mcore_elf_howto_table [ELF32_R_TYPE (dst->r_info)];
 }
 
 /* The RELOCATE_SECTION function is called by the ELF backend linker
@@ -408,11 +397,11 @@ mcore_elf_relocate_section (bfd * output_bfd,
 
 #ifdef DEBUG
   _bfd_error_handler
-    ("mcore_elf_relocate_section called for %pB section %pA, %u relocations%s",
+    ("mcore_elf_relocate_section called for %B section %A, %ld relocations%s",
      input_bfd,
      input_section,
-     input_section->reloc_count,
-     (bfd_link_relocatable (info)) ? " (relocatable)" : "");
+     (long) input_section->reloc_count,
+     (info->relocatable) ? " (relocatable)" : "");
 #endif
 
   if (! mcore_elf_howto_table [R_MCORE_PCRELIMM8BY4])	/* Initialize howto table if needed */
@@ -420,24 +409,23 @@ mcore_elf_relocate_section (bfd * output_bfd,
 
   for (; rel < relend; rel++)
     {
-      enum elf_mcore_reloc_type	   r_type = (enum elf_mcore_reloc_type) ELF32_R_TYPE (rel->r_info);
-      bfd_vma			   offset = rel->r_offset;
-      bfd_vma			   addend = rel->r_addend;
-      bfd_reloc_status_type	   r = bfd_reloc_other;
-      asection *		   sec = NULL;
-      reloc_howto_type *	   howto;
-      bfd_vma			   relocation;
-      Elf_Internal_Sym *	   sym = NULL;
-      unsigned long		   r_symndx;
+      enum elf_mcore_reloc_type    r_type = (enum elf_mcore_reloc_type) ELF32_R_TYPE (rel->r_info);
+      bfd_vma                      offset = rel->r_offset;
+      bfd_vma                      addend = rel->r_addend;
+      bfd_reloc_status_type        r = bfd_reloc_other;
+      asection *                   sec = NULL;
+      reloc_howto_type *           howto;
+      bfd_vma                      relocation;
+      Elf_Internal_Sym *           sym = NULL;
+      unsigned long                r_symndx;
       struct elf_link_hash_entry * h = NULL;
-      unsigned short		   oldinst = 0;
+      unsigned short               oldinst = 0;
 
       /* Unknown relocation handling.  */
       if ((unsigned) r_type >= (unsigned) R_MCORE_max
 	  || ! mcore_elf_howto_table [(int)r_type])
 	{
-	  /* xgettext:c-format */
-	  _bfd_error_handler (_("%pB: unsupported relocation type %#x"),
+	  _bfd_error_handler (_("%B: Unknown relocation type %d\n"),
 			      input_bfd, (int) r_type);
 
 	  bfd_set_error (bfd_error_bad_value);
@@ -451,10 +439,10 @@ mcore_elf_relocate_section (bfd * output_bfd,
       /* Complain about known relocation that are not yet supported.  */
       if (howto->special_function == mcore_elf_unsupported_reloc)
 	{
-	  /* xgettext:c-format */
-	  _bfd_error_handler (_("%pB: %s unsupported"),
+	  _bfd_error_handler (_("%B: Relocation %s (%d) is not currently supported.\n"),
 			      input_bfd,
-			      howto->name);
+			      howto->name,
+			      (int)r_type);
 
 	  bfd_set_error (bfd_error_bad_value);
 	  ret = FALSE;
@@ -470,19 +458,26 @@ mcore_elf_relocate_section (bfd * output_bfd,
 	}
       else
 	{
-	  bfd_boolean unresolved_reloc, warned, ignored;
+	  bfd_boolean unresolved_reloc, warned;
 
 	  RELOC_FOR_GLOBAL_SYMBOL (info, input_bfd, input_section, rel,
 				   r_symndx, symtab_hdr, sym_hashes,
 				   h, sec, relocation,
-				   unresolved_reloc, warned, ignored);
+				   unresolved_reloc, warned);
 	}
 
-      if (sec != NULL && discarded_section (sec))
-	RELOC_AGAINST_DISCARDED_SECTION (info, input_bfd, input_section,
-					 rel, 1, relend, howto, 0, contents);
+      if (sec != NULL && elf_discarded_section (sec))
+	{
+	  /* For relocs against symbols from removed linkonce sections,
+	     or sections discarded by a linker script, we just want the
+	     section contents zeroed.  Avoid any special processing.  */
+	  _bfd_clear_contents (howto, input_bfd, contents + rel->r_offset);
+	  rel->r_info = 0;
+	  rel->r_addend = 0;
+	  continue;
+	}
 
-      if (bfd_link_relocatable (info))
+      if (info->relocatable)
 	continue;
 
       switch (r_type)
@@ -536,7 +531,7 @@ mcore_elf_relocate_section (bfd * output_bfd,
 		      break;
 
 		    if (* name == '\0')
-		      name = bfd_section_name (sec);
+		      name = bfd_section_name (input_bfd, sec);
 		  }
 
 		(*info->callbacks->reloc_overflow)
@@ -576,6 +571,17 @@ mcore_elf_gc_mark_hook (asection *sec,
   return _bfd_elf_gc_mark_hook (sec, info, rel, h, sym);
 }
 
+/* Update the got entry reference counts for the section being removed.  */
+
+static bfd_boolean
+mcore_elf_gc_sweep_hook (bfd * abfd ATTRIBUTE_UNUSED,
+			 struct bfd_link_info * info ATTRIBUTE_UNUSED,
+			 asection * sec ATTRIBUTE_UNUSED,
+			 const Elf_Internal_Rela * relocs ATTRIBUTE_UNUSED)
+{
+  return TRUE;
+}
+
 /* Look through the relocs for a section during the first phase.
    Since we don't do .gots or .plts, we just need to consider the
    virtual table relocs for gc.  */
@@ -591,7 +597,7 @@ mcore_elf_check_relocs (bfd * abfd,
   const Elf_Internal_Rela * rel;
   const Elf_Internal_Rela * rel_end;
 
-  if (bfd_link_relocatable (info))
+  if (info->relocatable)
     return TRUE;
 
   symtab_hdr = & elf_tdata (abfd)->symtab_hdr;
@@ -607,7 +613,7 @@ mcore_elf_check_relocs (bfd * abfd,
       r_symndx = ELF32_R_SYM (rel->r_info);
 
       if (r_symndx < symtab_hdr->sh_info)
-	h = NULL;
+        h = NULL;
       else
 	{
 	  h = sym_hashes [r_symndx - symtab_hdr->sh_info];
@@ -617,21 +623,23 @@ mcore_elf_check_relocs (bfd * abfd,
 	}
 
       switch (ELF32_R_TYPE (rel->r_info))
-	{
-	/* This relocation describes the C++ object vtable hierarchy.
-	   Reconstruct it for later use during GC.  */
-	case R_MCORE_GNU_VTINHERIT:
-	  if (!bfd_elf_gc_record_vtinherit (abfd, sec, h, rel->r_offset))
-	    return FALSE;
-	  break;
+        {
+        /* This relocation describes the C++ object vtable hierarchy.
+           Reconstruct it for later use during GC.  */
+        case R_MCORE_GNU_VTINHERIT:
+          if (!bfd_elf_gc_record_vtinherit (abfd, sec, h, rel->r_offset))
+            return FALSE;
+          break;
 
-	/* This relocation describes which C++ vtable entries are actually
-	   used.  Record for later use during GC.  */
-	case R_MCORE_GNU_VTENTRY:
-	  if (!bfd_elf_gc_record_vtentry (abfd, sec, h, rel->r_addend))
-	    return FALSE;
-	  break;
-	}
+        /* This relocation describes which C++ vtable entries are actually
+           used.  Record for later use during GC.  */
+        case R_MCORE_GNU_VTENTRY:
+          BFD_ASSERT (h != NULL);
+          if (h != NULL
+              && !bfd_elf_gc_record_vtentry (abfd, sec, h, rel->r_addend))
+            return FALSE;
+          break;
+        }
     }
 
   return TRUE;
@@ -641,13 +649,13 @@ static const struct bfd_elf_special_section mcore_elf_special_sections[]=
 {
   { STRING_COMMA_LEN (".ctors"), -2, SHT_PROGBITS, SHF_ALLOC + SHF_WRITE },
   { STRING_COMMA_LEN (".dtors"), -2, SHT_PROGBITS, SHF_ALLOC + SHF_WRITE },
-  { NULL,		      0,  0, 0,		   0 }
+  { NULL,                     0,  0, 0,            0 }
 };
 
-#define TARGET_BIG_SYM		mcore_elf32_be_vec
+#define TARGET_BIG_SYM		bfd_elf32_mcore_big_vec
 #define TARGET_BIG_NAME		"elf32-mcore-big"
-#define TARGET_LITTLE_SYM	mcore_elf32_le_vec
-#define TARGET_LITTLE_NAME	"elf32-mcore-little"
+#define TARGET_LITTLE_SYM       bfd_elf32_mcore_little_vec
+#define TARGET_LITTLE_NAME      "elf32-mcore-little"
 
 #define ELF_ARCH		bfd_arch_mcore
 #define ELF_MACHINE_CODE	EM_MCORE
@@ -661,7 +669,8 @@ static const struct bfd_elf_special_section mcore_elf_special_sections[]=
 #define bfd_elf32_bfd_reloc_name_lookup	mcore_elf_reloc_name_lookup
 #define elf_backend_relocate_section		mcore_elf_relocate_section
 #define elf_backend_gc_mark_hook		mcore_elf_gc_mark_hook
-#define elf_backend_check_relocs		mcore_elf_check_relocs
+#define elf_backend_gc_sweep_hook		mcore_elf_gc_sweep_hook
+#define elf_backend_check_relocs                mcore_elf_check_relocs
 #define elf_backend_special_sections		mcore_elf_special_sections
 
 #define elf_backend_can_gc_sections		1

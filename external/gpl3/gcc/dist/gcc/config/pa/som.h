@@ -1,5 +1,6 @@
 /* Definitions for SOM assembler support.
-   Copyright (C) 1999-2019 Free Software Foundation, Inc.
+   Copyright (C) 1999, 2001, 2002, 2003, 2004, 2005, 2007 Free Software Foundation,
+   Inc.
 
 This file is part of GCC.
 
@@ -98,8 +99,8 @@ do {								\
 
 
 #define ASM_DECLARE_FUNCTION_NAME(FILE, NAME, DECL) \
-    do { tree tree_type = TREE_TYPE (DECL);				\
-	 tree fntype = TREE_TYPE (tree_type);				\
+    do { tree fntype = TREE_TYPE (TREE_TYPE (DECL));			\
+	 tree tree_type = TREE_TYPE (DECL);				\
 	 tree parm;							\
 	 int i;								\
 	 if (TREE_PUBLIC (DECL) || TARGET_GAS)				\
@@ -117,15 +118,13 @@ do {								\
 		 fputs (",PRIV_LEV=3", FILE);				\
 	       }							\
 	     for (parm = DECL_ARGUMENTS (DECL), i = 0; parm && i < 4;	\
-		  parm = DECL_CHAIN (parm))				\
+		  parm = TREE_CHAIN (parm))				\
 	       {							\
-		 tree type = DECL_ARG_TYPE (parm);			\
-		 machine_mode mode = TYPE_MODE (type);			\
-		 if (!AGGREGATE_TYPE_P (type)				\
-		     && mode == SFmode && ! TARGET_SOFT_FLOAT)		\
+		 if (TYPE_MODE (DECL_ARG_TYPE (parm)) == SFmode		\
+		     && ! TARGET_SOFT_FLOAT)				\
 		   fprintf (FILE, ",ARGW%d=FR", i++);			\
-		 else if (!AGGREGATE_TYPE_P (type)			\
-			  && mode == DFmode && ! TARGET_SOFT_FLOAT)	\
+		 else if (TYPE_MODE (DECL_ARG_TYPE (parm)) == DFmode	\
+			  && ! TARGET_SOFT_FLOAT)			\
 		   {							\
 		     if (i <= 2)					\
 		       {						\
@@ -137,10 +136,13 @@ do {								\
 		   }							\
 		 else							\
 		   {							\
-		     int arg_size = pa_function_arg_size (mode, type);	\
+		     int arg_size =					\
+		       FUNCTION_ARG_SIZE (TYPE_MODE (DECL_ARG_TYPE (parm)),\
+					  DECL_ARG_TYPE (parm));	\
 		     /* Passing structs by invisible reference uses	\
 			one general register.  */			\
-		     if (arg_size > 2 || TREE_ADDRESSABLE (type))	\
+		     if (arg_size > 2					\
+			 || TREE_ADDRESSABLE (DECL_ARG_TYPE (parm)))	\
 		       arg_size = 1;					\
 		     if (arg_size == 2 && i <= 2)			\
 		       {						\
@@ -155,18 +157,16 @@ do {								\
 		   }							\
 	       }							\
 	     /* anonymous args */					\
-	     if (stdarg_p (tree_type))					\
+	     if (TYPE_ARG_TYPES (tree_type) != 0			\
+		 && (TREE_VALUE (tree_last (TYPE_ARG_TYPES (tree_type)))\
+		     != void_type_node))				\
 	       {							\
 		 for (; i < 4; i++)					\
 		   fprintf (FILE, ",ARGW%d=GR", i);			\
 	       }							\
-	     if (!AGGREGATE_TYPE_P (fntype)				\
-		 && TYPE_MODE (fntype) == DFmode			\
-		 && ! TARGET_SOFT_FLOAT)				\
+	     if (TYPE_MODE (fntype) == DFmode && ! TARGET_SOFT_FLOAT)	\
 	       fputs (DFMODE_RETURN_STRING, FILE);			\
-	     else if (!AGGREGATE_TYPE_P (fntype)			\
-		      && TYPE_MODE (fntype) == SFmode			\
-		      && ! TARGET_SOFT_FLOAT)				\
+	     else if (TYPE_MODE (fntype) == SFmode && ! TARGET_SOFT_FLOAT) \
 	       fputs (SFMODE_RETURN_STRING, FILE);			\
 	     else if (fntype != void_type_node)				\
 	       fputs (",RTNVAL=GR", FILE);				\
@@ -229,7 +229,7 @@ do {								\
        tree id;								\
 									\
        if (!function_label_operand (RTL, VOIDmode))			\
-	 pa_encode_label (RTL);						\
+	 hppa_encode_label (RTL);					\
 									\
        name = targetm.strip_name_encoding (XSTR ((RTL), 0));		\
        id = maybe_get_identifier (name);				\
@@ -271,17 +271,14 @@ do {						\
    must be removed from library prefixes to prevent binaries from depending
    on the location of the GCC tool directory.  The downside is GCC
    cannot be moved after installation using a symlink.  */
-#undef TARGET_ALWAYS_STRIP_DOTDOT
-#define TARGET_ALWAYS_STRIP_DOTDOT true
+#define ALWAYS_STRIP_DOTDOT 1
 
 /* If GAS supports weak, we can support weak when we have working linker
-   support for secondary definitions and are generating code for GAS.
-   This is primarily for one-only support as SOM doesn't allow undefined
-   weak symbols.  */
+   support for secondary definitions and are generating code for GAS.  */
 #ifdef HAVE_GAS_WEAK
-#define TARGET_SUPPORTS_WEAK (TARGET_SOM_SDEF && TARGET_GAS)
+#define SUPPORTS_WEAK (TARGET_SOM_SDEF && TARGET_GAS)
 #else
-#define TARGET_SUPPORTS_WEAK 0
+#define SUPPORTS_WEAK 0
 #endif
 
 /* CVS GAS as of 4/28/04 supports a comdat parameter for the .nsubspa
@@ -294,7 +291,7 @@ do {						\
 #endif
 
 /* We can support one only if we support weak or comdat.  */
-#define SUPPORTS_ONE_ONLY (TARGET_SUPPORTS_WEAK || SUPPORTS_SOM_COMDAT)
+#define SUPPORTS_ONE_ONLY (SUPPORTS_WEAK || SUPPORTS_SOM_COMDAT)
 
 /* We use DECL_COMMON for uninitialized one-only variables as we don't
    have linkonce .bss.  We use SOM secondary definitions or comdat for
@@ -305,7 +302,7 @@ do {						\
         && (DECL_INITIAL (DECL) == 0					\
             || DECL_INITIAL (DECL) == error_mark_node))			\
       DECL_COMMON (DECL) = 1;						\
-    else if (TARGET_SUPPORTS_WEAK)					\
+    else if (SUPPORTS_WEAK)						\
       DECL_WEAK (DECL) = 1;						\
   } while (0)
 
@@ -342,12 +339,3 @@ do {						\
 /* Shared library suffix.  Collect2 strips the version string after
    this suffix when generating constructor/destructor names.  */ 
 #define SHLIB_SUFFIX ".sl"
-
-/* We don't have named sections.  */
-#define TARGET_HAVE_NAMED_SECTIONS false
-
-#define TARGET_ASM_TM_CLONE_TABLE_SECTION pa_som_tm_clone_table_section
-
-/* Generate specially named labels to identify DWARF 2 frame unwind
-   information.  */
-#define EH_FRAME_THROUGH_COLLECT2

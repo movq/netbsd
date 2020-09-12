@@ -1,5 +1,6 @@
 /* Null garbage collection for the GNU compiler.
-   Copyright (C) 1998-2019 Free Software Foundation, Inc.
+   Copyright (C) 1998, 1999, 2000, 2003, 2004, 2005, 2007
+   Free Software Foundation, Inc.
 
    This file is part of GCC.
 
@@ -29,30 +30,24 @@
 
 #include "system.h"
 #include "coretypes.h"
-#include "hash-table.h"
-
-/* For a given size of memory requested for allocation, return the
-   actual size that is going to be allocated.  */
-
-size_t
-ggc_round_alloc_size (size_t requested_size)
-{
-  return requested_size;
-}
+#include "ggc.h"
 
 void *
-ggc_internal_alloc (size_t size, void (*f)(void *), size_t, size_t
-		    MEM_STAT_DECL)
+ggc_alloc_typed_stat (enum gt_types_enum ARG_UNUSED (gte), size_t size
+		      MEM_STAT_DECL)
 {
-  gcc_assert (!f); // ggc-none doesn't support finalizers
   return xmalloc (size);
 }
 
 void *
-ggc_internal_cleared_alloc (size_t size, void (*f)(void *), size_t, size_t
-			    MEM_STAT_DECL)
+ggc_alloc_stat (size_t size MEM_STAT_DECL)
 {
-  gcc_assert (!f); // ggc-none doesn't support finalizers
+  return xmalloc (size);
+}
+
+void *
+ggc_alloc_cleared_stat (size_t size MEM_STAT_DECL)
+{
   return xcalloc (size, 1);
 }
 
@@ -66,14 +61,4 @@ void
 ggc_free (void *p)
 {
   free (p);
-}
-
-void
-ggc_grow (void)
-{
-}
-
-void
-ggc_trim (void)
-{
 }

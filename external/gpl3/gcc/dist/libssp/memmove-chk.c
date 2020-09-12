@@ -1,5 +1,5 @@
 /* Checking memmove.
-   Copyright (C) 2005-2019 Free Software Foundation, Inc.
+   Copyright (C) 2005, 2009 Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -40,7 +40,7 @@ see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
 
 extern void __chk_fail (void) __attribute__((__noreturn__));
 
-#ifdef HAVE_MEMMOVE
+#ifdef HAVE_MEMPCPY
 void *
 __memmove_chk (void *dest, const void *src, size_t len, size_t slen)
 {

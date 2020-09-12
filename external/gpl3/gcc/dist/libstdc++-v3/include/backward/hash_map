@@ -1,6 +1,7 @@
 // Hashing map implementation -*- C++ -*-
 
-// Copyright (C) 2001-2019 Free Software Foundation, Inc.
+// Copyright (C) 2001, 2002, 2004, 2005, 2006, 2009, 2010
+// Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
@@ -56,17 +57,12 @@
 #ifndef _BACKWARD_HASH_MAP
 #define _BACKWARD_HASH_MAP 1
 
-#ifndef _GLIBCXX_PERMIT_BACKWARD_HASH
-#include <backward/backward_warning.h>
-#endif
-
+#include "backward_warning.h"
 #include <bits/c++config.h>
 #include <backward/hashtable.h>
 #include <bits/concept_check.h>
 
-namespace __gnu_cxx _GLIBCXX_VISIBILITY(default)
-{
-_GLIBCXX_BEGIN_NAMESPACE_VERSION
+_GLIBCXX_BEGIN_NAMESPACE(__gnu_cxx)
 
   using std::equal_to;
   using std::allocator;
@@ -166,7 +162,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       max_size() const
       { return _M_ht.max_size(); }
       
-      _GLIBCXX_NODISCARD bool
+      bool
       empty() const
       { return _M_ht.empty(); }
   
@@ -385,7 +381,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       max_size() const
       { return _M_ht.max_size(); }
 
-      _GLIBCXX_NODISCARD bool
+      bool
       empty() const
       { return _M_ht.empty(); }
 
@@ -498,12 +494,9 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	 hash_multimap<_Key, _Tp, _HashFn, _EqlKey, _Alloc>& __hm2)
     { __hm1.swap(__hm2); }
 
-_GLIBCXX_END_NAMESPACE_VERSION
-} // namespace
+_GLIBCXX_END_NAMESPACE
 
-namespace std _GLIBCXX_VISIBILITY(default)
-{
-_GLIBCXX_BEGIN_NAMESPACE_VERSION
+_GLIBCXX_BEGIN_NAMESPACE(std)
 
   // Specialization of insert_iterator so that it will work for hash_map
   // and hash_multimap.
@@ -593,7 +586,6 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       { return *this; }
     };
 
-_GLIBCXX_END_NAMESPACE_VERSION
-} // namespace
+_GLIBCXX_END_NAMESPACE
 
 #endif

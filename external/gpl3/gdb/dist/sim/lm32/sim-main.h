@@ -1,7 +1,7 @@
 /* Lattice Mico32 simulator support code
    Contributed by Jon Beniston <jon@beniston.com>
 
-   Copyright (C) 2009-2019 Free Software Foundation, Inc.
+   Copyright (C) 2009, 2010, 2011 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -23,7 +23,10 @@
 #ifndef SIM_MAIN_H
 #define SIM_MAIN_H
 
-#define WITH_SCACHE_PBB 1
+#define USING_SIM_BASE_H	/* FIXME: quick hack */
+
+struct _sim_cpu;		/* FIXME: should be in sim-basics.h */
+typedef struct _sim_cpu SIM_CPU;
 
 #include "symcat.h"
 #include "sim-basics.h"
@@ -31,6 +34,23 @@
 #include "lm32-desc.h"
 #include "lm32-opc.h"
 #include "arch.h"
+
+/* These must be defined before sim-base.h.  */
+typedef USI sim_cia;
+
+#define CIA_GET(cpu)     CPU_PC_GET (cpu)
+#define CIA_SET(cpu,val) CPU_PC_SET ((cpu), (val))
+
+#define SIM_ENGINE_HALT_HOOK(sd, cpu, cia) \
+do { \
+  if (cpu) /* null if ctrl-c */ \
+    sim_pc_set ((cpu), (cia)); \
+} while (0)
+#define SIM_ENGINE_RESTART_HOOK(sd, cpu, cia) \
+do { \
+  sim_pc_set ((cpu), (cia)); \
+} while (0)
+
 #include "sim-base.h"
 #include "cgen-sim.h"
 #include "lm32-sim.h"
@@ -63,7 +83,8 @@ struct _sim_cpu
 
 struct sim_state
 {
-  sim_cpu *cpu[MAX_NR_PROCESSORS];
+  sim_cpu *cpu;
+#define STATE_CPU(sd, n) (/*&*/ (sd)->cpu)
 
   CGEN_STATE cgen_state;
 

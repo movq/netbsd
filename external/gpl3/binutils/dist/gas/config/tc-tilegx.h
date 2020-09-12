@@ -1,5 +1,5 @@
 /* tc-tilegx.h - Macros and type defines for a TILE-Gx chip.
-   Copyright (C) 2011-2020 Free Software Foundation, Inc.
+   Copyright 2011 Free Software Foundation, Inc.
 
    This file is part of GAS, the GNU Assembler.
 
@@ -53,7 +53,7 @@ struct tilegx_operand;
 
 extern void tilegx_cons_fix_new (struct frag *, int,
 				 int, struct expressionS *);
-#define TC_CONS_FIX_NEW(FRAG, WHERE, NBYTES, EXP, RELOC)	\
+#define TC_CONS_FIX_NEW(FRAG, WHERE, NBYTES, EXP) \
   tilegx_cons_fix_new (FRAG, WHERE, NBYTES, EXP)
 
 extern int tilegx_parse_name (char *, expressionS *, char *);

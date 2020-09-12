@@ -1,10 +1,10 @@
 // elfcpp.h -- main header file for elfcpp    -*- C++ -*-
 
-// Copyright (C) 2006-2020 Free Software Foundation, Inc.
+// Copyright 2006, 2007, Free Software Foundation, Inc.
 // Written by Ian Lance Taylor <iant@google.com>.
 
 // This file is part of elfcpp.
-
+   
 // This program is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Library General Public License
 // as published by the Free Software Foundation; either version 2, or
@@ -17,7 +17,7 @@
 // combinations without any restriction coming from the use of this
 // file.  (The Library Public License restrictions do apply in other
 // respects; for example, they cover modification of the file, and
-// distribution when not linked into a combined executable.)
+/// distribution when not linked into a combined executable.)
 
 // This program is distributed in the hope that it will be useful, but
 // WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -129,9 +129,10 @@ enum ELFOSABI
   ELFOSABI_NONE = 0,
   ELFOSABI_HPUX = 1,
   ELFOSABI_NETBSD = 2,
-  ELFOSABI_GNU = 3,
-  // ELFOSABI_LINUX is an alias for ELFOSABI_GNU.
+  // ELFOSABI_LINUX is not listed in the ELF standard.
   ELFOSABI_LINUX = 3,
+  // ELFOSABI_HURD is not listed in the ELF standard.
+  ELFOSABI_HURD = 4,
   ELFOSABI_SOLARIS = 6,
   ELFOSABI_AIX = 7,
   ELFOSABI_IRIX = 8,
@@ -173,7 +174,7 @@ enum EM
   EM_386 = 3,
   EM_68K = 4,
   EM_88K = 5,
-  EM_IAMCU = 6,
+  // 6 used to be EM_486
   EM_860 = 7,
   EM_MIPS = 8,
   EM_S370 = 9,
@@ -246,7 +247,7 @@ enum EM
   EM_MN10300 = 89,
   EM_MN10200 = 90,
   EM_PJ = 91,
-  EM_OR1K = 92,
+  EM_OPENRISC = 92,
   EM_ARC_A5 = 93,
   EM_XTENSA = 94,
   EM_VIDEOCORE = 95,
@@ -268,9 +269,6 @@ enum EM
   EM_UNICORE = 110,
   EM_ALTERA_NIOS2 = 113,
   EM_CRX = 114,
-  EM_TI_PRU = 144,
-  EM_AARCH64 = 183,
-  EM_TILEGX = 191,
   // The Morph MT.
   EM_MT = 0x2530,
   // DLX.
@@ -290,7 +288,7 @@ enum EM
   // Old AVR objects used 0x1057 (EM_AVR is correct).
   // Old MSP430 objects used 0x1059 (EM_MSP430 is correct).
   // Old FR30 objects used 0x3330 (EM_FR30 is correct).
-  // Old OpenRISC objects used 0x3426 and 0x8472 (EM_OR1K is correct).
+  // Old OpenRISC objects used 0x3426 and 0x8472 (EM_OPENRISC is correct).
   // Old D10V objects used 0x7650 (EM_D10V is correct).
   // Old D30V objects used 0x7676 (EM_D30V is correct).
   // Old IP2X objects used 0x8217 (EM_IP2K is correct).
@@ -302,15 +300,6 @@ enum EM
   // Old Xtensa objects used 0xabc7 (EM_XTENSA is correct).
   // Old MN10300 objects used 0xbeef (EM_MN10300 is correct).
   // Old MN10200 objects used 0xdead (EM_MN10200 is correct).
-};
-
-// A special value found in the Ehdr e_phnum field.
-
-enum
-{
-  // Number of program segments stored in sh_info field of first
-  // section headre.
-  PN_XNUM = 0xffff
 };
 
 // Special section indices.
@@ -332,9 +321,6 @@ enum
   // with the SHF_LINK_ORDER and SHF_ORDERED section flags.
   SHN_BEFORE = 0xff00,
   SHN_AFTER = 0xff01,
-
-  // x86_64 specific large common symbol.
-  SHN_X86_64_LCOMMON = 0xff02
 };
 
 // The valid values found in the Shdr sh_type field.
@@ -365,11 +351,6 @@ enum SHT
   SHT_LOUSER = 0x80000000,
   SHT_HIUSER = 0xffffffff,
   // The remaining values are not in the standard.
-  // Incremental build data.
-  SHT_GNU_INCREMENTAL_INPUTS = 0x6fff4700,
-  SHT_GNU_INCREMENTAL_SYMTAB = 0x6fff4701,
-  SHT_GNU_INCREMENTAL_RELOCS = 0x6fff4702,
-  SHT_GNU_INCREMENTAL_GOT_PLT = 0x6fff4703,
   // Object attributes.
   SHT_GNU_ATTRIBUTES = 0x6ffffff5,
   // GNU style dynamic hash table.
@@ -388,34 +369,9 @@ enum SHT
 
   SHT_SPARC_GOTDATA = 0x70000000,
 
-  // ARM-specific section types.
-  // Exception Index table.
-  SHT_ARM_EXIDX = 0x70000001,
-  // BPABI DLL dynamic linking pre-emption map.
-  SHT_ARM_PREEMPTMAP = 0x70000002,
-  // Object file compatibility attributes.
-  SHT_ARM_ATTRIBUTES = 0x70000003,
-  // Support for debugging overlaid programs.
-  SHT_ARM_DEBUGOVERLAY = 0x70000004,
-  SHT_ARM_OVERLAYSECTION = 0x70000005,
-
-  // x86_64 unwind information.
-  SHT_X86_64_UNWIND = 0x70000001,
-
-  // MIPS-specific section types.
-  // Section contains register usage information.
-  SHT_MIPS_REGINFO = 0x70000006,
-  // Section contains miscellaneous options.
-  SHT_MIPS_OPTIONS = 0x7000000d,
-  // ABI related flags section.
-  SHT_MIPS_ABIFLAGS = 0x7000002a,
-
-  // AARCH64-specific section type.
-  SHT_AARCH64_ATTRIBUTES = 0x70000003,
-
   // Link editor is to sort the entries in this section based on the
   // address specified in the associated symbol table entry.
-  SHT_ORDERED = 0x7fffffff
+  SHT_ORDERED = 0x7fffffff,
 };
 
 // The valid bit flags found in the Shdr sh_flags field.
@@ -432,7 +388,6 @@ enum SHF
   SHF_OS_NONCONFORMING = 0x100,
   SHF_GROUP = 0x200,
   SHF_TLS = 0x400,
-  SHF_COMPRESSED = 0x800,
   SHF_MASKOS = 0x0ff00000,
   SHF_MASKPROC = 0xf0000000,
 
@@ -447,23 +402,6 @@ enum SHF
   // executable or shared object.  This flag is ignored if SHF_ALLOC
   // is also set, or if relocations exist against the section.
   SHF_EXCLUDE = 0x80000000,
-
-  // Section with data that is GP relative addressable.
-  SHF_MIPS_GPREL = 0x10000000,
-
-  // x86_64 specific large section.
-  SHF_X86_64_LARGE = 0x10000000
-};
-
-// Values which appear in the first Elf_WXword of the section data
-// of a SHF_COMPRESSED section.
-enum
-{
-  ELFCOMPRESS_ZLIB = 1,
-  ELFCOMPRESS_LOOS = 0x60000000,
-  ELFCOMPRESS_HIOS = 0x6fffffff,
-  ELFCOMPRESS_LOPROC = 0x70000000,
-  ELFCOMPRESS_HIPROC = 0x7fffffff,
 };
 
 // Bit flags which appear in the first 32-bit word of the section data
@@ -499,25 +437,7 @@ enum PT
   // Stack flags.
   PT_GNU_STACK = 0x6474e551,
   // Read only after relocation.
-  PT_GNU_RELRO = 0x6474e552,
-  // Platform architecture compatibility information
-  PT_ARM_ARCHEXT = 0x70000000,
-  // Exception unwind tables
-  PT_ARM_EXIDX = 0x70000001,
-  // Register usage information.  Identifies one .reginfo section.
-  PT_MIPS_REGINFO =0x70000000,
-  // Runtime procedure table.
-  PT_MIPS_RTPROC = 0x70000001,
-  // .MIPS.options section.
-  PT_MIPS_OPTIONS = 0x70000002,
-  // .MIPS.abiflags section.
-  PT_MIPS_ABIFLAGS = 0x70000003,
-  // Platform architecture compatibility information
-  PT_AARCH64_ARCHEXT = 0x70000000,
-  // Exception unwind tables
-  PT_AARCH64_UNWIND = 0x70000001,
-  // 4k page table size
-  PT_S390_PGSTE = 0x70000000,
+  PT_GNU_RELRO = 0x6474e552
 };
 
 // The valid bit flags found in the Phdr p_flags field.
@@ -539,7 +459,6 @@ enum STB
   STB_GLOBAL = 1,
   STB_WEAK = 2,
   STB_LOOS = 10,
-  STB_GNU_UNIQUE = 10,
   STB_HIOS = 12,
   STB_LOPROC = 13,
   STB_HIPROC = 15
@@ -556,11 +475,6 @@ enum STT
   STT_FILE = 4,
   STT_COMMON = 5,
   STT_TLS = 6,
-
-  // GNU extension: symbol value points to a function which is called
-  // at runtime to determine the final value of the symbol.
-  STT_GNU_IFUNC = 10,
-
   STT_LOOS = 10,
   STT_HIOS = 12,
   STT_LOPROC = 13,
@@ -569,10 +483,6 @@ enum STT
   // The section type that must be used for register symbols on
   // Sparc.  These symbols initialize a global register.
   STT_SPARC_REGISTER = 13,
-
-  // ARM: a THUMB function.  This is not defined in ARM ELF Specification but
-  // used by the GNU tool-chain.
-  STT_ARM_TFUNC = 13
 };
 
 inline STB
@@ -714,12 +624,8 @@ enum DT
   DT_FINI_ARRAYSZ = 28,
   DT_RUNPATH = 29,
   DT_FLAGS = 30,
-
-  // This is used to mark a range of dynamic tags.  It is not really
-  // a tag value.
   DT_ENCODING = 32,
-
-  DT_PREINIT_ARRAY = 32,
+  DT_PREINIT_ARRAY = 33,
   DT_PREINIT_ARRAYSZ = 33,
   DT_LOOS = 0x6000000d,
   DT_HIOS = 0x6ffff000,
@@ -768,9 +674,6 @@ enum DT
   // Specify the value of _GLOBAL_OFFSET_TABLE_.
   DT_PPC_GOT = 0x70000000,
 
-  // Specify whether various optimisations are possible.
-  DT_PPC_OPT = 0x70000001,
-
   // Specify the start of the .glink section.
   DT_PPC64_GLINK = 0x70000000,
 
@@ -778,107 +681,10 @@ enum DT
   DT_PPC64_OPD = 0x70000001,
   DT_PPC64_OPDSZ = 0x70000002,
 
-  // Specify whether various optimisations are possible.
-  DT_PPC64_OPT = 0x70000003,
-
   // The index of an STT_SPARC_REGISTER symbol within the DT_SYMTAB
   // symbol table.  One dynamic entry exists for every STT_SPARC_REGISTER
   // symbol in the symbol table.
   DT_SPARC_REGISTER = 0x70000001,
-
-  // MIPS specific dynamic array tags.
-  // 32 bit version number for runtime linker interface.
-  DT_MIPS_RLD_VERSION = 0x70000001,
-  // Time stamp.
-  DT_MIPS_TIME_STAMP = 0x70000002,
-  // Checksum of external strings and common sizes.
-  DT_MIPS_ICHECKSUM = 0x70000003,
-  // Index of version string in string table.
-  DT_MIPS_IVERSION = 0x70000004,
-  // 32 bits of flags.
-  DT_MIPS_FLAGS = 0x70000005,
-  // Base address of the segment.
-  DT_MIPS_BASE_ADDRESS = 0x70000006,
-  // ???
-  DT_MIPS_MSYM = 0x70000007,
-  // Address of .conflict section.
-  DT_MIPS_CONFLICT = 0x70000008,
-  // Address of .liblist section.
-  DT_MIPS_LIBLIST = 0x70000009,
-  // Number of local global offset table entries.
-  DT_MIPS_LOCAL_GOTNO = 0x7000000a,
-  // Number of entries in the .conflict section.
-  DT_MIPS_CONFLICTNO = 0x7000000b,
-  // Number of entries in the .liblist section.
-  DT_MIPS_LIBLISTNO = 0x70000010,
-  // Number of entries in the .dynsym section.
-  DT_MIPS_SYMTABNO = 0x70000011,
-  // Index of first external dynamic symbol not referenced locally.
-  DT_MIPS_UNREFEXTNO = 0x70000012,
-  // Index of first dynamic symbol in global offset table.
-  DT_MIPS_GOTSYM = 0x70000013,
-  // Number of page table entries in global offset table.
-  DT_MIPS_HIPAGENO = 0x70000014,
-  // Address of run time loader map, used for debugging.
-  DT_MIPS_RLD_MAP = 0x70000016,
-  // Delta C++ class definition.
-  DT_MIPS_DELTA_CLASS = 0x70000017,
-  // Number of entries in DT_MIPS_DELTA_CLASS.
-  DT_MIPS_DELTA_CLASS_NO = 0x70000018,
-  // Delta C++ class instances.
-  DT_MIPS_DELTA_INSTANCE = 0x70000019,
-  // Number of entries in DT_MIPS_DELTA_INSTANCE.
-  DT_MIPS_DELTA_INSTANCE_NO = 0x7000001a,
-  // Delta relocations.
-  DT_MIPS_DELTA_RELOC = 0x7000001b,
-  // Number of entries in DT_MIPS_DELTA_RELOC.
-  DT_MIPS_DELTA_RELOC_NO = 0x7000001c,
-  // Delta symbols that Delta relocations refer to.
-  DT_MIPS_DELTA_SYM = 0x7000001d,
-  // Number of entries in DT_MIPS_DELTA_SYM.
-  DT_MIPS_DELTA_SYM_NO = 0x7000001e,
-  // Delta symbols that hold class declarations.
-  DT_MIPS_DELTA_CLASSSYM = 0x70000020,
-  // Number of entries in DT_MIPS_DELTA_CLASSSYM.
-  DT_MIPS_DELTA_CLASSSYM_NO = 0x70000021,
-  // Flags indicating information about C++ flavor.
-  DT_MIPS_CXX_FLAGS = 0x70000022,
-  // Pixie information (???).
-  DT_MIPS_PIXIE_INIT = 0x70000023,
-  // Address of .MIPS.symlib
-  DT_MIPS_SYMBOL_LIB = 0x70000024,
-  // The GOT index of the first PTE for a segment
-  DT_MIPS_LOCALPAGE_GOTIDX = 0x70000025,
-  // The GOT index of the first PTE for a local symbol
-  DT_MIPS_LOCAL_GOTIDX = 0x70000026,
-  // The GOT index of the first PTE for a hidden symbol
-  DT_MIPS_HIDDEN_GOTIDX = 0x70000027,
-  // The GOT index of the first PTE for a protected symbol
-  DT_MIPS_PROTECTED_GOTIDX = 0x70000028,
-  // Address of `.MIPS.options'.
-  DT_MIPS_OPTIONS = 0x70000029,
-  // Address of `.interface'.
-  DT_MIPS_INTERFACE = 0x7000002a,
-  // ???
-  DT_MIPS_DYNSTR_ALIGN = 0x7000002b,
-  // Size of the .interface section.
-  DT_MIPS_INTERFACE_SIZE = 0x7000002c,
-  // Size of rld_text_resolve function stored in the GOT.
-  DT_MIPS_RLD_TEXT_RESOLVE_ADDR = 0x7000002d,
-  // Default suffix of DSO to be added by rld on dlopen() calls.
-  DT_MIPS_PERF_SUFFIX = 0x7000002e,
-  // Size of compact relocation section (O32).
-  DT_MIPS_COMPACT_SIZE = 0x7000002f,
-  // GP value for auxiliary GOTs.
-  DT_MIPS_GP_VALUE = 0x70000030,
-  // Address of auxiliary .dynamic.
-  DT_MIPS_AUX_DYNAMIC = 0x70000031,
-  // Address of the base of the PLTGOT.
-  DT_MIPS_PLTGOT = 0x70000032,
-  // Points to the base of a writable PLT.
-  DT_MIPS_RWPLT = 0x70000034,
-  // Relative offset of run time loader map, used for debugging.
-  DT_MIPS_RLD_MAP_REL = 0x70000035,
 
   DT_AUXILIARY = 0x7ffffffd,
   DT_USED = 0x7ffffffe,
@@ -913,7 +719,7 @@ enum DF_1
   DF_1_INTERPOSE = 0x400,
   DF_1_NODEFLIB = 0x800,
   DF_1_NODUMP = 0x1000,
-  DF_1_CONLFAT = 0x2000
+  DF_1_CONLFAT = 0x2000,
 };
 
 // Version numbers which appear in the vd_version field of a Verdef
@@ -933,7 +739,6 @@ const int VER_NEED_CURRENT = 1;
 
 const int VER_FLG_BASE = 0x1;
 const int VER_FLG_WEAK = 0x2;
-const int VER_FLG_INFO = 0x4;
 
 // Special constants found in the SHT_GNU_versym entries.
 
@@ -984,9 +789,7 @@ enum
   NT_GNU_BUILD_ID = 3,
   // The version of gold used to link.  Th descriptor is just a
   // string.
-  NT_GNU_GOLD_VERSION = 4,
-  // Program property note, as described in "Linux Extensions to the gABI".
-  NT_GNU_PROPERTY_TYPE_0 = 5
+  NT_GNU_GOLD_VERSION = 4
 };
 
 // The OS values which may appear in word 0 of a NT_GNU_ABI_TAG note.
@@ -999,21 +802,6 @@ enum
   ELF_NOTE_OS_FREEBSD = 3,
   ELF_NOTE_OS_NETBSD = 4,
   ELF_NOTE_OS_SYLLABLE = 5
-};
-
-// Program property types for NT_GNU_PROPERTY_TYPE_0.
-
-enum
-{
-  GNU_PROPERTY_STACK_SIZE = 1,
-  GNU_PROPERTY_NO_COPY_ON_PROTECTED = 2,
-  GNU_PROPERTY_LOPROC = 0xc0000000,
-  GNU_PROPERTY_X86_ISA_1_USED = 0xc0000000,
-  GNU_PROPERTY_X86_ISA_1_NEEDED = 0xc0000001,
-  GNU_PROPERTY_X86_FEATURE_1_AND = 0xc0000002,
-  GNU_PROPERTY_HIPROC = 0xdfffffff,
-  GNU_PROPERTY_LOUSER = 0xe0000000,
-  GNU_PROPERTY_HIUSER = 0xffffffff
 };
 
 } // End namespace elfcpp.
@@ -1039,8 +827,6 @@ struct Elf_sizes
   static const int phdr_size = sizeof(internal::Phdr_data<size>);
   // Size of ELF section header.
   static const int shdr_size = sizeof(internal::Shdr_data<size>);
-  // Size of ELF compression header.
-  static const int chdr_size = sizeof(internal::Chdr_data<size>);
   // Size of ELF symbol table entry.
   static const int sym_size = sizeof(internal::Sym_data<size>);
   // Sizes of ELF reloc entries.
@@ -1148,7 +934,7 @@ class Ehdr_write
   void
   put_e_type(Elf_Half v)
   { this->p_->e_type = Convert<16, big_endian>::convert_host(v); }
-
+  
   void
   put_e_machine(Elf_Half v)
   { this->p_->e_machine = Convert<16, big_endian>::convert_host(v); }
@@ -1315,82 +1101,6 @@ class Shdr_write
  private:
   internal::Shdr_data<size>* p_;
 };
-
-// Accessor class for an ELF compression header.
-
-template<int size, bool big_endian>
-class Chdr
-{
- public:
-  Chdr(const unsigned char* p)
-    : p_(reinterpret_cast<const internal::Chdr_data<size>*>(p))
-  { }
-
-  template<typename File>
-  Chdr(File* file, typename File::Location loc)
-    : p_(reinterpret_cast<const internal::Chdr_data<size>*>(
-	   file->view(loc.file_offset, loc.data_size).data()))
-  { }
-
-  Elf_Word
-  get_ch_type() const
-  { return Convert<size, big_endian>::convert_host(this->p_->ch_type); }
-
-  typename Elf_types<size>::Elf_WXword
-  get_ch_size() const
-  { return Convert<size, big_endian>::convert_host(this->p_->ch_size); }
-
-  typename Elf_types<size>::Elf_WXword
-  get_ch_addralign() const
-  { return
-      Convert<size, big_endian>::convert_host(this->p_->ch_addralign); }
-
- private:
-  const internal::Chdr_data<size>* p_;
-};
-
-// Write class for an ELF compression header.
-
-template<int size, bool big_endian>
-class Chdr_write
-{
- public:
-  Chdr_write(unsigned char* p)
-    : p_(reinterpret_cast<internal::Chdr_data<size>*>(p))
-  { }
-
-  void
-  put_ch_type(typename Elf_types<size>::Elf_WXword v)
-  { this->p_->ch_type = Convert<size, big_endian>::convert_host(v); }
-
-  void
-  put_ch_size(typename Elf_types<size>::Elf_WXword v)
-  { this->p_->ch_size = Convert<size, big_endian>::convert_host(v); }
-
-  void
-  put_ch_addralign(typename Elf_types<size>::Elf_WXword v)
-  { this->p_->ch_addralign = Convert<size, big_endian>::convert_host(v); }
-
-  void
-  put_ch_reserved(Elf_Word);
-
- private:
-  internal::Chdr_data<size>* p_;
-};
-
-template<>
-inline void
-elfcpp::Chdr_write<64, true>::put_ch_reserved(Elf_Word v)
-{
-  this->p_->ch_reserved = v;
-}
-
-template<>
-inline void
-elfcpp::Chdr_write<64, false>::put_ch_reserved(Elf_Word v)
-{
-  this->p_->ch_reserved = v;
-}
 
 // Accessor class for an ELF segment header.
 
@@ -1706,172 +1416,6 @@ class Rela_write
 
  private:
   internal::Rela_data<size>* p_;
-};
-
-// MIPS-64 has a non-standard relocation layout.
-
-template<bool big_endian>
-class Mips64_rel
-{
- public:
-  Mips64_rel(const unsigned char* p)
-    : p_(reinterpret_cast<const internal::Mips64_rel_data*>(p))
-  { }
-
-  template<typename File>
-  Mips64_rel(File* file, typename File::Location loc)
-    : p_(reinterpret_cast<const internal::Mips64_rel_data*>(
-	   file->view(loc.file_offset, loc.data_size).data()))
-  { }
-
-  typename Elf_types<64>::Elf_Addr
-  get_r_offset() const
-  { return Convert<64, big_endian>::convert_host(this->p_->r_offset); }
-
-  Elf_Word
-  get_r_sym() const
-  { return Convert<32, big_endian>::convert_host(this->p_->r_sym); }
-
-  unsigned char
-  get_r_ssym() const
-  { return this->p_->r_ssym; }
-
-  unsigned char
-  get_r_type() const
-  { return this->p_->r_type; }
-
-  unsigned char
-  get_r_type2() const
-  { return this->p_->r_type2; }
-
-  unsigned char
-  get_r_type3() const
-  { return this->p_->r_type3; }
-
- private:
-  const internal::Mips64_rel_data* p_;
-};
-
-template<bool big_endian>
-class Mips64_rel_write
-{
- public:
-  Mips64_rel_write(unsigned char* p)
-    : p_(reinterpret_cast<internal::Mips64_rel_data*>(p))
-  { }
-
-  void
-  put_r_offset(typename Elf_types<64>::Elf_Addr v)
-  { this->p_->r_offset = Convert<64, big_endian>::convert_host(v); }
-
-  void
-  put_r_sym(Elf_Word v)
-  { this->p_->r_sym = Convert<32, big_endian>::convert_host(v); }
-
-  void
-  put_r_ssym(unsigned char v)
-  { this->p_->r_ssym = v; }
-
-  void
-  put_r_type(unsigned char v)
-  { this->p_->r_type = v; }
-
-  void
-  put_r_type2(unsigned char v)
-  { this->p_->r_type2 = v; }
-
-  void
-  put_r_type3(unsigned char v)
-  { this->p_->r_type3 = v; }
-
- private:
-  internal::Mips64_rel_data* p_;
-};
-
-template<bool big_endian>
-class Mips64_rela
-{
- public:
-  Mips64_rela(const unsigned char* p)
-    : p_(reinterpret_cast<const internal::Mips64_rela_data*>(p))
-  { }
-
-  template<typename File>
-  Mips64_rela(File* file, typename File::Location loc)
-    : p_(reinterpret_cast<const internal::Mips64_rela_data*>(
-	   file->view(loc.file_offset, loc.data_size).data()))
-  { }
-
-  typename Elf_types<64>::Elf_Addr
-  get_r_offset() const
-  { return Convert<64, big_endian>::convert_host(this->p_->r_offset); }
-
-  Elf_Word
-  get_r_sym() const
-  { return Convert<32, big_endian>::convert_host(this->p_->r_sym); }
-
-  unsigned char
-  get_r_ssym() const
-  { return this->p_->r_ssym; }
-
-  unsigned char
-  get_r_type() const
-  { return this->p_->r_type; }
-
-  unsigned char
-  get_r_type2() const
-  { return this->p_->r_type2; }
-
-  unsigned char
-  get_r_type3() const
-  { return this->p_->r_type3; }
-
-  typename Elf_types<64>::Elf_Swxword
-  get_r_addend() const
-  { return Convert<64, big_endian>::convert_host(this->p_->r_addend); }
-
- private:
-  const internal::Mips64_rela_data* p_;
-};
-
-template<bool big_endian>
-class Mips64_rela_write
-{
- public:
-  Mips64_rela_write(unsigned char* p)
-    : p_(reinterpret_cast<internal::Mips64_rela_data*>(p))
-  { }
-
-  void
-  put_r_offset(typename Elf_types<64>::Elf_Addr v)
-  { this->p_->r_offset = Convert<64, big_endian>::convert_host(v); }
-
-  void
-  put_r_sym(Elf_Word v)
-  { this->p_->r_sym = Convert<32, big_endian>::convert_host(v); }
-
-  void
-  put_r_ssym(unsigned char v)
-  { this->p_->r_ssym = v; }
-
-  void
-  put_r_type(unsigned char v)
-  { this->p_->r_type = v; }
-
-  void
-  put_r_type2(unsigned char v)
-  { this->p_->r_type2 = v; }
-
-  void
-  put_r_type3(unsigned char v)
-  { this->p_->r_type3 = v; }
-
-  void
-  put_r_addend(typename Elf_types<64>::Elf_Swxword v)
-  { this->p_->r_addend = Convert<64, big_endian>::convert_host(v); }
-
- private:
-  internal::Mips64_rela_data* p_;
 };
 
 // Accessor classes for entries in the ELF SHT_DYNAMIC section aka

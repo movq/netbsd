@@ -1,5 +1,6 @@
 /* Motorola 68HC11/68HC12-specific support for 32-bit ELF
-   Copyright (C) 2003-2019 Free Software Foundation, Inc.
+   Copyright 2003, 2004, 2005, 2006, 2007, 2009, 2010
+   Free Software Foundation, Inc.
    Contributed by Stephane Carrez (stcarrez@nerim.fr)
 
    This file is part of BFD, the Binary File Descriptor library.
@@ -33,8 +34,7 @@
 #define BFD_M68HC11_BANK_VIRTUAL_NAME "__bank_virtual"
 
 /* Set and control ELF flags in ELF header.  */
-extern bfd_boolean _bfd_m68hc11_elf_merge_private_bfd_data
-  (bfd *, struct bfd_link_info *);
+extern bfd_boolean _bfd_m68hc11_elf_merge_private_bfd_data (bfd*,bfd*);
 extern bfd_boolean _bfd_m68hc11_elf_set_private_flags (bfd*,flagword);
 extern bfd_boolean _bfd_m68hc11_elf_print_private_bfd_data (bfd*, void*);
 
@@ -75,13 +75,13 @@ struct elf32_m68hc11_stub_hash_entry
    These parameters are obtained from the symbol table by looking
    at the following:
 
-   __bank_start		Symbol marking the start of memory bank window
-			(bank_physical)
-   __bank_virtual	Logical address of symbols for which the transformation
-			must be computed
-   __bank_page_size	Size in bytes of page size (this is *NOT* the memory
-			bank window size and the window size is always
-			less or equal to the page size)
+   __bank_start         Symbol marking the start of memory bank window
+                        (bank_physical)
+   __bank_virtual       Logical address of symbols for which the transformation
+                        must be computed
+   __bank_page_size     Size in bytes of page size (this is *NOT* the memory
+                        bank window size and the window size is always
+                        less or equal to the page size)
 
    For 68HC12, the window is at 0x8000 and the page size is 16K (full window).
    For 68HC11 this is board specific (implemented by external hardware).  */
@@ -137,6 +137,7 @@ struct m68hc11_elf_link_hash_table
 
 extern struct m68hc11_elf_link_hash_table* m68hc11_elf_hash_table_create
   (bfd*);
+extern void m68hc11_elf_bfd_link_hash_table_free (struct bfd_link_hash_table*);
 
 extern void m68hc11_elf_get_bank_parameters (struct bfd_link_info*);
 
@@ -174,10 +175,6 @@ bfd_boolean elf32_m68hc11_add_symbol_hook
    Elf_Internal_Sym *sym, const char **namep,
    flagword *flagsp, asection **secp,
    bfd_vma *valp);
-
-void elf32_m68hc11_merge_symbol_attribute
-  (struct elf_link_hash_entry *, const Elf_Internal_Sym *,
-   bfd_boolean, bfd_boolean);
 
 /* Tweak the OSABI field of the elf header.  */
 

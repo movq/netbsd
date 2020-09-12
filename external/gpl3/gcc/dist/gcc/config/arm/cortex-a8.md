@@ -1,5 +1,5 @@
 ;; ARM Cortex-A8 scheduling description.
-;; Copyright (C) 2007-2019 Free Software Foundation, Inc.
+;; Copyright (C) 2007 Free Software Foundation, Inc.
 ;; Contributed by CodeSourcery.
 
 ;; This file is part of GCC.
@@ -85,34 +85,30 @@
 ;; (source read in E2 and destination available at the end of that cycle).
 (define_insn_reservation "cortex_a8_alu" 2
   (and (eq_attr "tune" "cortexa8")
-       (eq_attr "type" "alu_imm,alus_imm,logic_imm,logics_imm,\
-                        alu_sreg,alus_sreg,logic_reg,logics_reg,\
-                        adc_imm,adcs_imm,adc_reg,adcs_reg,\
-                        adr,bfm,clz,rbit,rev,alu_dsp_reg,\
-                        shift_imm,shift_reg,\
-                        multiple,no_insn"))
+       (ior (and (and (eq_attr "type" "alu")
+		      (eq_attr "neon_type" "none"))
+		 (not (eq_attr "insn" "mov,mvn")))
+            (eq_attr "insn" "clz")))
   "cortex_a8_default")
 
 (define_insn_reservation "cortex_a8_alu_shift" 2
   (and (eq_attr "tune" "cortexa8")
-       (eq_attr "type" "alu_shift_imm,alus_shift_imm,\
-                        logic_shift_imm,logics_shift_imm,\
-                        extend"))
+       (and (eq_attr "type" "alu_shift")
+            (not (eq_attr "insn" "mov,mvn"))))
   "cortex_a8_default")
 
 (define_insn_reservation "cortex_a8_alu_shift_reg" 2
   (and (eq_attr "tune" "cortexa8")
-       (eq_attr "type" "alu_shift_reg,alus_shift_reg,\
-                        logic_shift_reg,logics_shift_reg"))
+       (and (eq_attr "type" "alu_shift_reg")
+            (not (eq_attr "insn" "mov,mvn"))))
   "cortex_a8_default")
 
 ;; Move instructions.
 
 (define_insn_reservation "cortex_a8_mov" 1
   (and (eq_attr "tune" "cortexa8")
-       (eq_attr "type" "mov_imm,mov_reg,mov_shift,mov_shift_reg,\
-                        mvn_imm,mvn_reg,mvn_shift,mvn_shift_reg,\
-                        mrs"))
+       (and (eq_attr "type" "alu,alu_shift,alu_shift_reg")
+            (eq_attr "insn" "mov,mvn")))
   "cortex_a8_default")
 
 ;; Exceptions to the default latencies for data processing instructions.
@@ -143,22 +139,22 @@
 
 (define_insn_reservation "cortex_a8_mul" 6
   (and (eq_attr "tune" "cortexa8")
-       (eq_attr "type" "mul,smulxy,smmul"))
+       (eq_attr "insn" "mul,smulxy,smmul"))
   "cortex_a8_multiply_2")
 
 (define_insn_reservation "cortex_a8_mla" 6
   (and (eq_attr "tune" "cortexa8")
-       (eq_attr "type" "mla,smlaxy,smlawy,smmla,smlad,smlsd"))
+       (eq_attr "insn" "mla,smlaxy,smlawy,smmla,smlad,smlsd"))
   "cortex_a8_multiply_2")
 
 (define_insn_reservation "cortex_a8_mull" 7
   (and (eq_attr "tune" "cortexa8")
-       (eq_attr "type" "smull,umull,smlal,umlal,umaal,smlalxy"))
+       (eq_attr "insn" "smull,umull,smlal,umlal,umaal,smlalxy"))
   "cortex_a8_multiply_3")
 
 (define_insn_reservation "cortex_a8_smulwy" 5
   (and (eq_attr "tune" "cortexa8")
-       (eq_attr "type" "smulwy,smuad,smusd"))
+       (eq_attr "insn" "smulwy,smuad,smusd"))
   "cortex_a8_multiply")
 
 ;; smlald and smlsld are multiply-accumulate instructions but do not
@@ -166,7 +162,7 @@
 ;; cannot go in cortex_a8_mla above.  (See below for bypass details.)
 (define_insn_reservation "cortex_a8_smlald" 6
   (and (eq_attr "tune" "cortexa8")
-       (eq_attr "type" "smlald,smlsld"))
+       (eq_attr "insn" "smlald,smlsld"))
   "cortex_a8_multiply_2")
 
 ;; A multiply with a single-register result or an MLA, followed by an
@@ -198,7 +194,7 @@
 ;; We assume 64-bit alignment for doubleword loads.
 (define_insn_reservation "cortex_a8_load1_2" 3
   (and (eq_attr "tune" "cortexa8")
-       (eq_attr "type" "load_4,load_8,load_byte"))
+       (eq_attr "type" "load1,load2,load_byte"))
   "cortex_a8_load_store_1")
 
 (define_bypass 2 "cortex_a8_load1_2"
@@ -221,7 +217,7 @@
 ;; issued as two micro-ops.
 (define_insn_reservation "cortex_a8_load3_4" 5
   (and (eq_attr "tune" "cortexa8")
-       (eq_attr "type" "load_12,load_16"))
+       (eq_attr "type" "load3,load4"))
   "cortex_a8_load_store_2")
 
 (define_bypass 4 "cortex_a8_load3_4"
@@ -238,12 +234,12 @@
 
 (define_insn_reservation "cortex_a8_store1_2" 0
   (and (eq_attr "tune" "cortexa8")
-       (eq_attr "type" "store_4,store_8"))
+       (eq_attr "type" "store1,store2"))
   "cortex_a8_load_store_1")
 
 (define_insn_reservation "cortex_a8_store3_4" 0
   (and (eq_attr "tune" "cortexa8")
-       (eq_attr "type" "store_12,store_16"))
+       (eq_attr "type" "store3,store4"))
   "cortex_a8_load_store_2")
 
 ;; An ALU instruction acting as a producer for a store instruction

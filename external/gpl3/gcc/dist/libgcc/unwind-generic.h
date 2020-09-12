@@ -1,5 +1,5 @@
 /* Exception handling and frame unwind runtime interface routines.
-   Copyright (C) 2001-2019 Free Software Foundation, Inc.
+   Copyright (C) 2001-2013 Free Software Foundation, Inc.
 
    This file is part of GCC.
 
@@ -177,7 +177,7 @@ extern void _Unwind_SetIP (struct _Unwind_Context *, _Unwind_Ptr);
 /* @@@ Retrieve the CFA of the given context.  */
 extern _Unwind_Word _Unwind_GetCFA (struct _Unwind_Context *);
 
-extern _Unwind_Ptr _Unwind_GetLanguageSpecificData (struct _Unwind_Context *);
+extern void *_Unwind_GetLanguageSpecificData (struct _Unwind_Context *);
 
 extern _Unwind_Ptr _Unwind_GetRegionStart (struct _Unwind_Context *);
 
@@ -221,6 +221,8 @@ _Unwind_SjLj_Resume_or_Rethrow (struct _Unwind_Exception *);
    compatible with the standard ABI for IA-64, we inline these.  */
 
 #ifdef __ia64__
+#include <stdlib.h>
+
 static inline _Unwind_Ptr
 _Unwind_GetDataRelBase (struct _Unwind_Context *_C)
 {
@@ -231,7 +233,7 @@ _Unwind_GetDataRelBase (struct _Unwind_Context *_C)
 static inline _Unwind_Ptr
 _Unwind_GetTextRelBase (struct _Unwind_Context *_C __attribute__ ((__unused__)))
 {
-  __builtin_abort ();
+  abort ();
   return 0;
 }
 
@@ -287,11 +289,5 @@ EXCEPTION_DISPOSITION _GCC_specific_handler (PEXCEPTION_RECORD, void *,
 #ifndef HIDE_EXPORTS
 #pragma GCC visibility pop
 #endif
-
-/* Additional actions to unwind number of stack frames.  */
-#define _Unwind_Frames_Extra(frames)
-
-/* Increment frame count.  */
-#define _Unwind_Frames_Increment(context, frames) frames++
 
 #endif /* unwind.h */

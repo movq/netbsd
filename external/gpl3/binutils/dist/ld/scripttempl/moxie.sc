@@ -1,9 +1,3 @@
-# Copyright (C) 2014-2020 Free Software Foundation, Inc.
-#
-# Copying and distribution of this file, with or without modification,
-# are permitted in any medium without royalty provided the copyright
-# notice and this notice are preserved.
-
 TORS=".tors :
   {
     ___ctors = . ;
@@ -15,12 +9,6 @@ TORS=".tors :
   } > ram"
 
 cat <<EOF
-/* Copyright (C) 2014-2020 Free Software Foundation, Inc.
-
-   Copying and distribution of this script, with or without modification,
-   are permitted in any medium without royalty provided the copyright
-   notice and this notice are preserved.  */
-
 OUTPUT_FORMAT("${OUTPUT_FORMAT}")
 OUTPUT_ARCH(${ARCH})
 
@@ -29,10 +17,10 @@ SECTIONS
   .text :
   {
     *(.text)
-    ${RELOCATING+KEEP (*(SORT_NONE(.init)))
-    KEEP (*(SORT_NONE(.fini)))
+      .init : { KEEP (*(.init)) } =0
+      .fini : { KEEP (*(.fini)) } =0
     *(.strings)
-    _etext = . ; }
+    ${RELOCATING+ _etext = . ; }
   } ${RELOCATING+ > ram}
   ${CONSTRUCTING+${TORS}}
   .data :

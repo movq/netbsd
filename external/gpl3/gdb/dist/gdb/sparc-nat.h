@@ -1,6 +1,7 @@
 /* Native-dependent code for SPARC.
 
-   Copyright (C) 2003-2019 Free Software Foundation, Inc.
+   Copyright (C) 2003, 2004, 2007, 2008, 2009, 2010, 2011
+   Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -20,64 +21,29 @@
 #ifndef SPARC_NAT_H
 #define SPARC_NAT_H 1
 
-#include "target.h"
+struct sparc_gregset;
 
-struct sparc_gregmap;
-struct sparc_fpregmap;
-
-extern const struct sparc_gregmap *sparc_gregmap;
-extern const struct sparc_fpregmap *sparc_fpregmap;
-extern void (*sparc_supply_gregset) (const struct sparc_gregmap *,
+extern const struct sparc_gregset *sparc_gregset;
+extern void (*sparc_supply_gregset) (const struct sparc_gregset *,
 				     struct regcache *, int , const void *);
-extern void (*sparc_collect_gregset) (const struct sparc_gregmap *,
+extern void (*sparc_collect_gregset) (const struct sparc_gregset *,
 				      const struct regcache *, int, void *);
-extern void (*sparc_supply_fpregset) (const struct sparc_fpregmap *,
-				      struct regcache *, int , const void *);
-extern void (*sparc_collect_fpregset) (const struct sparc_fpregmap *,
-				       const struct regcache *, int , void *);
+extern void (*sparc_supply_fpregset) (struct regcache *, int , const void *);
+extern void (*sparc_collect_fpregset) (const struct regcache *, int , void *);
 extern int (*sparc_gregset_supplies_p) (struct gdbarch *gdbarch, int);
 extern int (*sparc_fpregset_supplies_p) (struct gdbarch *gdbarch, int);
 
 extern int sparc32_gregset_supplies_p (struct gdbarch *gdbarch, int regnum);
 extern int sparc32_fpregset_supplies_p (struct gdbarch *gdbarch, int regnum);
 
-extern void sparc_fetch_inferior_registers (struct regcache *, int);
-extern void sparc_store_inferior_registers (struct regcache *, int);
-
-extern target_xfer_status sparc_xfer_wcookie (enum target_object object,
-					      const char *annex,
-					      gdb_byte *readbuf,
-					      const gdb_byte *writebuf,
-					      ULONGEST offset,
-					      ULONGEST len,
-					      ULONGEST *xfered_len);
-
-/* A prototype generic SPARC target.  The client can override
+/* Create a prototype generic SPARC target.  The client can override
    it with local methods.  */
 
-template<typename BaseTarget>
-struct sparc_target : public BaseTarget
-{
-  void fetch_registers (struct regcache *regcache, int regnum) override
-  { sparc_fetch_inferior_registers (regcache, regnum); }
+extern struct target_ops *sparc_target (void);
 
-  void store_registers (struct regcache *regcache, int regnum) override
-  { sparc_store_inferior_registers (regcache, regnum); }
-
-  enum target_xfer_status xfer_partial (enum target_object object,
-					const char *annex,
-					gdb_byte *readbuf,
-					const gdb_byte *writebuf,
-					ULONGEST offset, ULONGEST len,
-					ULONGEST *xfered_len) override
-  {
-    if (object == TARGET_OBJECT_WCOOKIE)
-      return sparc_xfer_wcookie (object, annex, readbuf, writebuf,
-				 offset, len, xfered_len);
-
-    return BaseTarget::xfer_partial (object, annex, readbuf, writebuf,
-		       offset, len, xfered_len);
-  }
-};
+extern void sparc_fetch_inferior_registers (struct target_ops *,
+					    struct regcache *, int);
+extern void sparc_store_inferior_registers (struct target_ops *,
+					    struct regcache *, int);
 
 #endif /* sparc-nat.h */

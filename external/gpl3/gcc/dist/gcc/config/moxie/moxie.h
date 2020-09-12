@@ -1,5 +1,5 @@
 /* Target Definitions for moxie.
-   Copyright (C) 2008-2019 Free Software Foundation, Inc.
+   Copyright (C) 2008, 2009, 2010  Free Software Foundation, Inc.
    Contributed by Anthony Green.
 
    This file is part of GCC.
@@ -21,8 +21,22 @@
 #ifndef GCC_MOXIE_H
 #define GCC_MOXIE_H
 
+/* This is defined by svr4.h, which is included prior to this file.
+   However, we should undefine it for moxie-elf, since we don't provide
+   functions like access() and mkdir() in newlib.  This will have to
+   be defined again for a Linux port.  */
+#undef TARGET_POSIX_IO
+
+/* Another C string constant used much like `LINK_SPEC'.  The difference
+   between the two is that `STARTFILE_SPEC' is used at the very beginning of
+   the command given to the linker.
+
+   If this macro is not defined, a default is provided that loads the standard
+   C startup file from the usual place.  See `gcc.c'.
+
+   Defined in svr4.h.  */
 #undef  STARTFILE_SPEC
-#define STARTFILE_SPEC "%{!mno-crt0:crt0%O%s} crti.o%s crtbegin.o%s"
+#define STARTFILE_SPEC "crt0%O%s crti.o%s crtbegin.o%s"
 
 /* Provide an ENDFILE_SPEC appropriate for svr4.  Here we tack on our own
    magical crtend.o file (see crtstuff.c) which provides part of the
@@ -40,14 +54,6 @@
 #undef LIB_SPEC
 #define LIB_SPEC "%{!shared:%{!symbolic:-lc}}"
 
-#undef  LINK_SPEC
-#define LINK_SPEC "%{h*} %{v:-V} %{!mel:-EB} %{mel:-EL}\
-		   %{static:-Bstatic} %{shared:-shared} %{symbolic:-Bsymbolic}"
-
-#ifndef MULTILIB_DEFAULTS
-#define MULTILIB_DEFAULTS { "meb" }
-#endif
-
 /* Layout of Source Language Data Types */
 
 #define INT_TYPE_SIZE 32
@@ -59,19 +65,7 @@
 #define DOUBLE_TYPE_SIZE 64
 #define LONG_DOUBLE_TYPE_SIZE 64
 
-#define DEFAULT_SIGNED_CHAR 0
-
-#undef  SIZE_TYPE
-#define SIZE_TYPE "unsigned int"
-
-#undef  PTRDIFF_TYPE
-#define PTRDIFF_TYPE "int"
-
-#undef  WCHAR_TYPE
-#define WCHAR_TYPE "unsigned int"
-
-#undef  WCHAR_TYPE_SIZE
-#define WCHAR_TYPE_SIZE BITS_PER_WORD
+#define DEFAULT_SIGNED_CHAR 1
 
 /* Registers...
 
@@ -139,6 +133,15 @@ enum reg_class
 };
 
 
+/* The following macro defines cover classes for Integrated Register
+   Allocator.  Cover classes is a set of non-intersected register
+   classes covering all hard registers used for register allocation
+   purpose.  Any move between two registers of a cover class should be
+   cheaper than load or store of the registers.  The macro value is
+   array of register classes with LIM_REG_CLASSES used as the end
+   marker.  */
+#define IRA_COVER_CLASSES { GENERAL_REGS, LIM_REG_CLASSES }
+
 #define REG_CLASS_CONTENTS \
 { { 0x00000000 }, /* Empty */			   \
   { 0x0003FFFF }, /* $fp, $sp, $r0 to $r13, ?fp */ \
@@ -171,15 +174,41 @@ enum reg_class
 /* We can't copy to or from our CC register. */
 #define AVOID_CCMODE_COPIES 1
 
+/* A C expression that is nonzero if it is permissible to store a
+   value of mode MODE in hard register number REGNO (or in several
+   registers starting with that one).  All gstore registers are 
+   equivalent, so we can set this to 1.  */
+#define HARD_REGNO_MODE_OK(R,M) 1
+
 /* A C expression whose value is a register class containing hard
    register REGNO.  */
 #define REGNO_REG_CLASS(R) ((R < MOXIE_PC) ? GENERAL_REGS :		\
                             (R == MOXIE_CC ? CC_REGS : SPECIAL_REGS))
 
+/* A C expression for the number of consecutive hard registers,
+   starting at register number REGNO, required to hold a value of mode
+   MODE.  */
+#define HARD_REGNO_NREGS(REGNO, MODE)			   \
+  ((GET_MODE_SIZE (MODE) + UNITS_PER_WORD - 1)		   \
+   / UNITS_PER_WORD)
+
+/* A C expression that is nonzero if a value of mode MODE1 is
+   accessible in mode MODE2 without copying.  */
+#define MODES_TIEABLE_P(MODE1, MODE2) 1
+
+/* A C expression for the maximum number of consecutive registers of
+   class CLASS needed to hold a value of mode MODE.  */
+#define CLASS_MAX_NREGS(CLASS, MODE) \
+  ((GET_MODE_SIZE (MODE) + UNITS_PER_WORD - 1) / UNITS_PER_WORD)
+
+/* A C expression that places additional restrictions on the register
+   class to use when it is necessary to copy value X into a register
+   in class CLASS.  */
+#define PREFERRED_RELOAD_CLASS(X,CLASS) CLASS
+
 /* The Overall Framework of an Assembler File */
 
 #undef  ASM_SPEC
-#define ASM_SPEC "%{!mel:-EB} %{mel:-EL}"
 #define ASM_COMMENT_START "#"
 #define ASM_APP_ON ""
 #define ASM_APP_OFF ""
@@ -195,11 +224,22 @@ enum reg_class
 #define ASM_OUTPUT_ALIGN(STREAM,POWER) \
 	fprintf (STREAM, "\t.p2align\t%d\n", POWER);
 
+/* A C compound statement to output to stdio stream STREAM the
+   assembler syntax for an instruction operand X.  */
+#define PRINT_OPERAND(STREAM, X, CODE) moxie_print_operand (STREAM, X, CODE)
+
+#define PRINT_OPERAND_ADDRESS(STREAM ,X) moxie_print_operand_address (STREAM, X)
+
 /* Output and Generation of Labels */
 
 #define GLOBAL_ASM_OP "\t.global\t"
 
 /* Passing Arguments in Registers */
+
+/* A C expression that controls whether a function argument is passed
+   in a register, and which register.  */
+#define FUNCTION_ARG(CUM,MODE,TYPE,NAMED) \
+  moxie_function_arg(CUM,MODE,TYPE,NAMED)
 
 /* A C type for declaring a variable that is used as the first
    argument of `FUNCTION_ARG' and other related values.  */
@@ -218,13 +258,39 @@ enum reg_class
 #define INIT_CUMULATIVE_ARGS(CUM,FNTYPE,LIBNAME,FNDECL,N_NAMED_ARGS) \
   (CUM = MOXIE_R0)
 
+#define MOXIE_FUNCTION_ARG_SIZE(MODE, TYPE)	\
+  ((MODE) != BLKmode ? GET_MODE_SIZE (MODE)	\
+   : (unsigned) int_size_in_bytes (TYPE))
+
+#define FUNCTION_ARG_ADVANCE(CUM,MODE,TYPE,NAMED) \
+  (CUM = (CUM < MOXIE_R6 ?                        \
+          CUM + ((3 + MOXIE_FUNCTION_ARG_SIZE(MODE,TYPE))/4) : CUM ))
+
 /* How Scalar Function Values Are Returned */
+
+/* These macros are deprecated, but we still need them for now since
+   the version of gcc we're using doesn't fully support
+   TARGET_FUNCTION_VALUE.  */
+#define FUNCTION_VALUE(VALTYPE, FUNC) \
+  moxie_function_value (VALTYPE, FUNC, 0)
+#define FUNCTION_OUTGOING_VALUE(VALTYPE, FUNC) \
+  moxie_function_value (VALTYPE, FUNC, 1)
+
+/* A C expression to create an RTX representing the place where a
+   library function returns a value of mode MODE.  */
+#define LIBCALL_VALUE(MODE) gen_rtx_REG (MODE, 2)
 
 /* STACK AND CALLING */
 
 /* Define this macro if pushing a word onto the stack moves the stack
    pointer to a smaller address.  */
-#define STACK_GROWS_DOWNWARD 1
+#define STACK_GROWS_DOWNWARD
+
+#define INITIAL_FRAME_POINTER_OFFSET(DEPTH) (DEPTH) = 0
+
+/* Offset from the frame pointer to the first local variable slot to
+   be allocated.  */
+#define STARTING_FRAME_OFFSET 0
 
 /* Define this if the above stack space is to be considered part of the
    space allocated by the caller.  */
@@ -249,26 +315,13 @@ enum reg_class
    pointer registers are already assumed to be used as needed.  */
 #define EPILOGUE_USES(R) (R == MOXIE_R5)
 
-/* A C expression whose value is RTL representing the location of the
-   incoming return address at the beginning of any function, before
-   the prologue.  */
-#define INCOMING_RETURN_ADDR_RTX					\
-  gen_frame_mem (Pmode,							\
-		 plus_constant (Pmode, stack_pointer_rtx, UNITS_PER_WORD))
-
-/* Describe how we implement __builtin_eh_return.  */
-#define EH_RETURN_DATA_REGNO(N)	((N) < 4 ? (N+2) : INVALID_REGNUM)
-
-/* Store the return handler into the call frame.  */
-#define EH_RETURN_HANDLER_RTX						\
-  gen_frame_mem (Pmode,							\
-		 plus_constant (Pmode, frame_pointer_rtx, UNITS_PER_WORD))
+#define OVERRIDE_OPTIONS moxie_override_options ()
 
 /* Storage Layout */
 
 #define BITS_BIG_ENDIAN 0
-#define BYTES_BIG_ENDIAN ( ! TARGET_LITTLE_ENDIAN )
-#define WORDS_BIG_ENDIAN ( ! TARGET_LITTLE_ENDIAN )
+#define BYTES_BIG_ENDIAN 1
+#define WORDS_BIG_ENDIAN 1
 
 /* Alignment required for a function entry point, in bits.  */
 #define FUNCTION_BOUNDARY 16
@@ -313,6 +366,12 @@ enum reg_class
    is GET_MODE_SIZE(DImode).  */
 #define MAX_FIXED_MODE_SIZE 32
 
+/* Make strings word-aligned so strcpy from constants will be faster.  */
+#define CONSTANT_ALIGNMENT(EXP, ALIGN)  \
+  ((TREE_CODE (EXP) == STRING_CST	\
+    && (ALIGN) < FASTEST_ALIGNMENT)	\
+   ? FASTEST_ALIGNMENT : (ALIGN))
+
 /* Make arrays of chars word-aligned for the same reasons.  */
 #define DATA_ALIGNMENT(TYPE, ALIGN)		\
   (TREE_CODE (TYPE) == ARRAY_TYPE		\
@@ -327,7 +386,7 @@ enum reg_class
 #define FUNCTION_PROFILER(FILE,LABELNO) (abort (), 0)
 
 /* Trampolines for Nested Functions.  */
-#define TRAMPOLINE_SIZE (2 + 6 + 4 + 2 + 6)
+#define TRAMPOLINE_SIZE (2 + 6 + 6 + 2 + 2 + 6)
 
 /* Alignment required for trampolines, in bits.  */
 #define TRAMPOLINE_ALIGNMENT 32
@@ -357,8 +416,10 @@ enum reg_class
 {{ FRAME_POINTER_REGNUM, HARD_FRAME_POINTER_REGNUM },			\
  { ARG_POINTER_REGNUM,   HARD_FRAME_POINTER_REGNUM }}			
 
-/* This macro returns the initial difference between the specified pair
-   of registers.  */
+/* This macro is similar to `INITIAL_FRAME_POINTER_OFFSET'.  It
+   specifies the initial difference between the specified pair of
+   registers.  This macro must be defined if `ELIMINABLE_REGS' is
+   defined.  */
 #define INITIAL_ELIMINATION_OFFSET(FROM, TO, OFFSET)			\
   do {									\
     (OFFSET) = moxie_initial_elimination_offset ((FROM), (TO));		\
@@ -368,6 +429,10 @@ enum reg_class
    register in which function arguments are sometimes passed.  */
 #define FUNCTION_ARG_REGNO_P(r) (r >= MOXIE_R0 && r <= MOXIE_R5)
 
+/* A C expression that is nonzero if REGNO is the number of a hard
+   register in which the values of called function may come back.  */
+#define FUNCTION_VALUE_REGNO_P(r) (r == MOXIE_R0)
+
 /* A macro whose definition is the name of the class to which a valid
    base register must belong.  A base register is one used in an
    address which is the register value plus a displacement.  */
@@ -376,7 +441,7 @@ enum reg_class
 #define INDEX_REG_CLASS NO_REGS
 
 #define HARD_REGNO_OK_FOR_BASE_P(NUM) \
-  ((unsigned) (NUM) < FIRST_PSEUDO_REGISTER \
+  ((NUM) >= 0 && (NUM) < FIRST_PSEUDO_REGISTER \
    && (REGNO_REG_CLASS(NUM) == GENERAL_REGS \
        || (NUM) == HARD_FRAME_POINTER_REGNUM))
 
@@ -399,28 +464,56 @@ enum reg_class
    quickly between memory and registers or between two memory
    locations.  */
 #define MOVE_MAX 4
+#define TRULY_NOOP_TRUNCATION(op,ip) 1
 
 /* All load operations zero extend.  */
 #define LOAD_EXTEND_OP(MEM) ZERO_EXTEND
+
+#define RETURN_POPS_ARGS(FUNDECL, FUNTYPE, STACK_SIZE) 0
+
+/* A C expression that is nonzero if X is a legitimate constant for
+   an immediate operand on the target machine.  */
+#define LEGITIMATE_CONSTANT_P(X) 1
 
 /* A number, the maximum number of registers that can appear in a
    valid memory address.  */
 #define MAX_REGS_PER_ADDRESS 1
 
+#define TRULY_NOOP_TRUNCATION(op,ip) 1
+
 /* An alias for a machine mode name.  This is the machine mode that
    elements of a jump-table should have.  */
 #define CASE_VECTOR_MODE SImode
+
+/* A C compound statement with a conditional `goto LABEL;' executed
+   if X (an RTX) is a legitimate memory address on the target machine
+   for a memory operand of mode MODE.  */
+#define GO_IF_LEGITIMATE_ADDRESS(MODE,X,LABEL)		\
+  do {                                                  \
+    if (GET_CODE(X) == PLUS)				\
+      {							\
+	rtx op1,op2;					\
+	op1 = XEXP(X,0);				\
+	op2 = XEXP(X,1);				\
+	if (GET_CODE(op1) == REG			\
+	    && CONSTANT_ADDRESS_P(op2)			\
+	    && REGNO_OK_FOR_BASE_P(REGNO(op1)))		\
+	  goto LABEL;					\
+      }							\
+    if (REG_P (X) && REGNO_OK_FOR_BASE_P (REGNO (X)))	\
+      goto LABEL;					\
+    if (GET_CODE (X) == SYMBOL_REF			\
+	|| GET_CODE (X) == LABEL_REF			\
+	|| GET_CODE (X) == CONST)			\
+      goto LABEL;					\
+  } while (0)
 
 /* Run-time Target Specification */
 
 #define TARGET_CPU_CPP_BUILTINS() \
   { \
-    builtin_define_std ("moxie");			\
-    builtin_define_std ("MOXIE");			\
-    if (TARGET_LITTLE_ENDIAN)				\
-      builtin_define ("__MOXIE_LITTLE_ENDIAN__");	\
-    else						\
-      builtin_define ("__MOXIE_BIG_ENDIAN__");		\
+    builtin_define_std ("moxie");		\
+    builtin_define_std ("MOXIE");		\
   }
 
 #define HAS_LONG_UNCOND_BRANCH true

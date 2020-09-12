@@ -1,5 +1,6 @@
 ;;  Machine description the Motorola MCore
-;;  Copyright (C) 1993-2019 Free Software Foundation, Inc.
+;;  Copyright (C) 1993, 1999, 2000, 2004, 2005, 2007
+;;  Free Software Foundation, Inc.
 ;;  Contributed by Motorola.
 
 ;; This file is part of GCC.
@@ -53,7 +54,6 @@
 			 "nothing")
 
 (include "predicates.md")
-(include "constraints.md")
 
 ;; -------------------------------------------------------------------------
 ;; Test and bit test
@@ -464,6 +464,33 @@
   ""
   "xor	%0,%2")
 
+; these patterns give better code then gcc invents if
+; left to its own devices
+
+(define_insn "anddi3"
+  [(set (match_operand:DI 0 "mcore_arith_reg_operand" "=r")
+	(and:DI (match_operand:DI 1 "mcore_arith_reg_operand" "%0")
+		(match_operand:DI 2 "mcore_arith_reg_operand" "r")))]
+  ""
+  "and	%0,%2\;and	%R0,%R2"
+  [(set_attr "length" "4")])
+
+(define_insn "iordi3"
+  [(set (match_operand:DI 0 "mcore_arith_reg_operand" "=r")
+	(ior:DI (match_operand:DI 1 "mcore_arith_reg_operand" "%0")
+		(match_operand:DI 2 "mcore_arith_reg_operand" "r")))]
+  ""
+  "or	%0,%2\;or	%R0,%R2"
+  [(set_attr "length" "4")])
+
+(define_insn "xordi3"
+  [(set (match_operand:DI 0 "mcore_arith_reg_operand" "=r")
+	(xor:DI (match_operand:DI 1 "mcore_arith_reg_operand" "%0")
+		(match_operand:DI 2 "mcore_arith_reg_operand" "r")))]
+  ""
+  "xor	%0,%2\;xor	%R0,%R2"
+  [(set_attr "length" "4")])
+
 ;; -------------------------------------------------------------------------
 ;; Shifts and rotates
 ;; -------------------------------------------------------------------------
@@ -670,6 +697,8 @@
   ""
   "
 {
+  extern int flag_omit_frame_pointer;
+
   /* If this is an add to the frame pointer, then accept it as is so
      that we can later fold in the fp/sp offset from frame pointer
      elimination.  */
@@ -1145,9 +1174,9 @@
     else
       low = 4, high = 0;
     
-    emit_insn (gen_rtx_SET (gen_rtx_SUBREG (SImode, operands[0], low),
+    emit_insn (gen_rtx_SET (VOIDmode, gen_rtx_SUBREG (SImode, operands[0], low),
 	      operands[1]));
-    emit_insn (gen_rtx_SET (gen_rtx_SUBREG (SImode, operands[0], high),
+    emit_insn (gen_rtx_SET (VOIDmode, gen_rtx_SUBREG (SImode, operands[0], high),
 	      gen_rtx_ASHIFTRT (SImode,
 			       gen_rtx_SUBREG (SImode, operands[0], low),
 			       GEN_INT (31))));
@@ -1288,7 +1317,7 @@
 }")
 
 (define_insn "movdi_i"
-  [(set (match_operand:DI 0 "nonimmediate_operand" "=r,r,r,r,a,r,m")
+  [(set (match_operand:DI 0 "general_operand" "=r,r,r,r,a,r,m")
 	(match_operand:DI 1 "mcore_general_movsrc_operand" "I,M,N,r,R,m,r"))]
   ""
   "* return mcore_output_movedouble (operands, DImode);"
@@ -1307,7 +1336,7 @@
 }")
 
 (define_insn "movsf_i"
-  [(set (match_operand:SF 0 "nonimmediate_operand" "=r,r,m")
+  [(set (match_operand:SF 0 "general_operand" "=r,r,m")
 	(match_operand:SF 1 "general_operand"  "r,m,r"))]
   ""
   "@
@@ -1329,7 +1358,7 @@
 }")
 
 (define_insn "movdf_k"
-  [(set (match_operand:DF 0 "nonimmediate_operand" "=r,r,m")
+  [(set (match_operand:DF 0 "general_operand" "=r,r,m")
 	(match_operand:DF 1 "general_operand" "r,m,r"))]
   ""
   "* return mcore_output_movedouble (operands, DFmode);"
@@ -1378,9 +1407,10 @@
 
   for (i = 0; i < count; i++)
     XVECEXP (operands[3], 0, i)
-      = gen_rtx_SET (gen_rtx_REG (SImode, regno + i),
-		 gen_rtx_MEM (SImode, plus_constant (Pmode, stack_pointer_rtx,
-						     i * 4)));
+      = gen_rtx_SET (VOIDmode,
+		 gen_rtx_REG (SImode, regno + i),
+		 gen_rtx_MEM (SImode, plus_constant (stack_pointer_rtx,
+						      i * 4)));
 }")
 
 (define_insn ""
@@ -1416,9 +1446,9 @@
 
   for (i = 0; i < count; i++)
     XVECEXP (operands[3], 0, i)
-      = gen_rtx_SET (
-		 gen_rtx_MEM (SImode, plus_constant (Pmode, stack_pointer_rtx,
-						     i * 4)),
+      = gen_rtx_SET (VOIDmode,
+		 gen_rtx_MEM (SImode, plus_constant (stack_pointer_rtx,
+						      i * 4)),
 		 gen_rtx_REG (SImode, regno + i));
 }")
 
@@ -1473,7 +1503,7 @@
 
 (define_expand "cbranchsi4"
   [(set (pc)
-	(if_then_else (match_operator 0 "ordered_comparison_operator"
+	(if_then_else (match_operator:SI 0 "ordered_comparison_operator"
 		       [(match_operand:SI 1 "mcore_compare_operand")
 			(match_operand:SI 2 "nonmemory_operand")])
 		      (label_ref (match_operand 3 ""))
@@ -2335,10 +2365,10 @@
 ;        rtx lshft = GEN_INT (32 - (INTVAL (operands[2]) + INTVAL (operands[3])));
 ;        rtx rshft = GEN_INT (32 - INTVAL (operands[2]));
 ;
-;        emit_insn (gen_rtx_SET (operands[0], operands[1]));
-;        emit_insn (gen_rtx_SET (operands[0],
+;        emit_insn (gen_rtx_SET (SImode, operands[0], operands[1]));
+;        emit_insn (gen_rtx_SET (SImode, operands[0],
 ;                            gen_rtx_ASHIFT (SImode, operands[0], lshft)));
-;        emit_insn (gen_rtx_SET (operands[0],
+;        emit_insn (gen_rtx_SET (SImode, operands[0],
 ;                            gen_rtx_ASHIFTRT (SImode, operands[0], rshft)));
 ;        DONE;
 ;     }
@@ -2370,10 +2400,10 @@
       rtx tmp1 = gen_reg_rtx (SImode);
       rtx tmp2 = gen_reg_rtx (SImode);
 
-      emit_insn (gen_rtx_SET (tmp1, operands[1]));
-      emit_insn (gen_rtx_SET (tmp2,
+      emit_insn (gen_rtx_SET (SImode, tmp1, operands[1]));
+      emit_insn (gen_rtx_SET (SImode, tmp2,
                          gen_rtx_ASHIFT (SImode, tmp1, lshft)));
-      emit_insn (gen_rtx_SET (operands[0],
+      emit_insn (gen_rtx_SET (SImode, operands[0],
                          gen_rtx_ASHIFTRT (SImode, tmp2, rshft)));
       DONE;
     }
@@ -2415,10 +2445,10 @@
         {
           rtx rshft = GEN_INT (INTVAL (operands[3]));
           shifted = gen_reg_rtx (SImode);
-          emit_insn (gen_rtx_SET (shifted,
+          emit_insn (gen_rtx_SET (SImode, shifted,
                          gen_rtx_LSHIFTRT (SImode, operands[1], rshft)));
         }
-     emit_insn (gen_rtx_SET (operands[0],
+     emit_insn (gen_rtx_SET (SImode, operands[0],
                        gen_rtx_AND (SImode, shifted, mask)));
      DONE;
    }
@@ -2431,10 +2461,10 @@
      rtx tmp1 = gen_reg_rtx (SImode);
      rtx tmp2 = gen_reg_rtx (SImode);
 
-     emit_insn (gen_rtx_SET (tmp1, operands[1]));
-     emit_insn (gen_rtx_SET (tmp2,
+     emit_insn (gen_rtx_SET (SImode, tmp1, operands[1]));
+     emit_insn (gen_rtx_SET (SImode, tmp2,
                          gen_rtx_ASHIFT (SImode, tmp1, lshft)));
-     emit_insn (gen_rtx_SET (operands[0],
+     emit_insn (gen_rtx_SET (SImode, operands[0],
                        gen_rtx_LSHIFTRT (SImode, tmp2, rshft)));
      DONE;
    }
@@ -2768,7 +2798,7 @@
 "*
 {
    int ofs;
-   machine_mode mode;
+   enum machine_mode mode;
    rtx base_reg = XEXP (operands[4], 0);
 
    if ((ofs = mcore_byte_offset (INTVAL (operands[3]))) > -1)
@@ -3006,8 +3036,8 @@
     }
   else
     {
-      rtx_code_label *out_label = 0;
-      rtx_code_label *loop_label = gen_label_rtx ();
+      rtx out_label = 0;
+      rtx loop_label = gen_label_rtx ();
       rtx step = gen_reg_rtx (Pmode);
       rtx tmp = gen_reg_rtx (Pmode);
       rtx test, memref;

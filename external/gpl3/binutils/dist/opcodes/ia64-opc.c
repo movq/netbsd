@@ -1,5 +1,5 @@
 /* ia64-opc.c -- Functions to access the compacted opcode table
-   Copyright (C) 1999-2020 Free Software Foundation, Inc.
+   Copyright 1999, 2000, 2001, 2003, 2005, 2007 Free Software Foundation, Inc.
    Written by Bob Manson of Cygnus Solutions, <manson@cygnus.com>
 
    This file is part of the GNU opcodes library.
@@ -19,6 +19,7 @@
    Free Software Foundation, 51 Franklin Street - Fifth Floor, Boston,
    MA 02110-1301, USA.  */
 
+#include "ansidecl.h"
 #include "sysdep.h"
 #include "libiberty.h"
 #include "ia64-asmtab.h"
@@ -123,7 +124,7 @@ static short
 find_main_ent (short nameindex)
 {
   short start = 0;
-  short end = ARRAY_SIZE (main_table);
+  short end = sizeof (main_table) / sizeof (struct ia64_main_table);
   short i = (start + end) / 2;
 
   if (nameindex < main_table[0].name_index
@@ -372,16 +373,13 @@ locate_opcode_ent (ia64_insn opcode, enum ia64_insn_type type)
 
       bitpos[currstatenum] = currbitnum;
 
-      /* Skip opval[0] bits in the instruction.  */
+      /* Skip opval[0] bits in the instruction. */
       if (op & 0x40)
 	{
 	  currbitnum -= opval[0];
 	}
 
-      if (currbitnum < 0)
-	currbitnum = 0;
-
-      /* The value of the current bit being tested.  */
+      /* The value of the current bit being tested. */
       currbit = opcode & (((ia64_insn) 1) << currbitnum) ? 1 : 0;
       next_op = -1;
 
@@ -466,7 +464,7 @@ locate_opcode_ent (ia64_insn opcode, enum ia64_insn_type type)
 
 	  if (next_op > 65535)
 	    {
-	      return -1;
+	      abort ();
 	    }
 
 	  /* Run through the list of opcodes to check, trying to find
@@ -615,9 +613,6 @@ ia64_find_matching_opcode (const char *name, short place)
   const char *suffix;
   short name_index;
 
-  if ((unsigned) place >= ARRAY_SIZE (main_table))
-    return NULL;
-
   if (strlen (name) > 128)
     {
       return NULL;
@@ -723,13 +718,13 @@ ia64_free_opcode (struct ia64_opcode *ent)
 }
 
 const struct ia64_dependency *
-ia64_find_dependency (int dep_index)
+ia64_find_dependency (int index)
 {
-  dep_index = DEP(dep_index);
+  index = DEP(index);
 
-  if (dep_index < 0
-      || dep_index >= (int) ARRAY_SIZE (dependencies))
+  if (index < 0
+      || index >= (int)(sizeof(dependencies) / sizeof(dependencies[0])))
     return NULL;
 
-  return &dependencies[dep_index];
+  return &dependencies[index];
 }

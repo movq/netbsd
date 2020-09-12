@@ -1,4 +1,4 @@
-/*	$NetBSD: grep.h,v 1.1.1.1 2016/01/10 21:36:21 christos Exp $	*/
+/*	$NetBSD: grep.h,v 1.1 2016/01/10 21:36:21 christos Exp $	*/
 
 /* grep.h - interface to grep driver for searching subroutines.
    Copyright (C) 1992, 1998, 2001 Free Software Foundation, Inc.

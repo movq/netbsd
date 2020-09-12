@@ -1,5 +1,6 @@
 /* tc-vax.h -- Header file for tc-vax.c.
-   Copyright (C) 1987-2020 Free Software Foundation, Inc.
+   Copyright 1987, 1991, 1992, 1993, 1995, 1996, 1997, 2000, 2002, 2005,
+   2006, 2007  Free Software Foundation, Inc.
 
    This file is part of GAS, the GNU Assembler.
 
@@ -49,9 +50,8 @@
 #ifdef OBJ_ELF
 #define TC_PARSE_CONS_EXPRESSION(EXP, NBYTES) vax_cons (EXP, NBYTES)
 #define TC_CONS_FIX_NEW vax_cons_fix_new
-bfd_reloc_code_real_type vax_cons (expressionS *, int);
-void vax_cons_fix_new (struct frag *, int, unsigned int, struct expressionS *,
-		       bfd_reloc_code_real_type);
+void vax_cons (expressionS *, int);
+void vax_cons_fix_new (struct frag *, int, unsigned int, struct expressionS *);
 #endif
 
 extern const struct relax_type md_relax_table[];
@@ -71,17 +71,9 @@ extern const struct relax_type md_relax_table[];
 		     == S_GET_SEGMENT ((FIX)->fx_addsy)))	\
 	     || S_IS_LOCAL ((FIX)->fx_addsy)))
 
-#define TARGET_USE_CFIPOP 1
-
-#define tc_cfi_frame_initial_instructions vax_cfi_frame_initial_instructions
-extern void vax_cfi_frame_initial_instructions (void);
-
-#define tc_regname_to_dw2regnum tc_vax_regname_to_dw2regnum
-extern int tc_vax_regname_to_dw2regnum (char *);
-
-#define tc_cfi_emit_pcrel_expr vax_cfi_emit_pcrel_expr
-extern void vax_cfi_emit_pcrel_expr (expressionS *, unsigned int);
-
-#define DWARF2_LINE_MIN_INSN_LENGTH     1
-#define DWARF2_DEFAULT_RETURN_COLUMN    15
-#define DWARF2_CIE_DATA_ALIGNMENT       -4
+/*
+ * Local Variables:
+ * comment-column: 0
+ * fill-column: 131
+ * End:
+ */

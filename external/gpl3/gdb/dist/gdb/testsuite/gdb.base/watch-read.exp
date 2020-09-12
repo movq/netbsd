@@ -1,6 +1,6 @@
 # This testcase is part of GDB, the GNU debugger.
 
-# Copyright 2010-2019 Free Software Foundation, Inc.
+# Copyright 2010, 2011 Free Software Foundation, Inc.
 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -15,6 +15,8 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
+# This file was written by Pedro Alves <pedro@codesourcery.com>
+
 # This file is part of the gdb testsuite.
 
 #
@@ -22,13 +24,15 @@
 # watching the same memory as read watchpoints.
 #
 
-standard_testfile .c
+set testfile "watch-read"
+set srcfile ${testfile}.c
 
 if {[skip_hw_watchpoint_access_tests]} {
     return 0
 }
 
-if { [prepare_for_testing "failed to prepare" ${testfile} ${srcfile}] } {
+if { [prepare_for_testing ${testfile}.exp ${testfile} ${srcfile}] } {
+    untested ${testfile}.exp
     return -1
 }
 

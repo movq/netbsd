@@ -1,6 +1,6 @@
 // -*- C++ -*-
 
-// Copyright (C) 2005-2019 Free Software Foundation, Inc.
+// Copyright (C) 2005, 2006, 2009 Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the terms
@@ -34,7 +34,7 @@
 // warranty.
 
 /**
- * @file pairing_heap_/find_fn_imps.hpp
+ * @file find_fn_imps.hpp
  * Contains an implementation class for a pairing heap.
  */
 
@@ -43,7 +43,8 @@ inline typename PB_DS_CLASS_C_DEC::const_reference
 PB_DS_CLASS_C_DEC::
 top() const
 {
-  PB_DS_ASSERT_VALID((*this))
-  _GLIBCXX_DEBUG_ASSERT(!base_type::empty());
+  _GLIBCXX_DEBUG_ONLY(assert_valid();)
+    _GLIBCXX_DEBUG_ASSERT(!base_type::empty());
+
   return base_type::m_p_root->m_value;
 }

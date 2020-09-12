@@ -1,6 +1,6 @@
 /* The common simulator framework for GDB, the GNU Debugger.
 
-   Copyright 2002-2019 Free Software Foundation, Inc.
+   Copyright 2002, 2007, 2008, 2009, 2010, 2011 Free Software Foundation, Inc.
 
    Contributed by Andrew Cagney and Red Hat.
 
@@ -20,8 +20,8 @@
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 
-#ifndef SIM_ALU_H
-#define SIM_ALU_H
+#ifndef _SIM_ALU_H_
+#define _SIM_ALU_H_
 
 #include "symcat.h"
 
@@ -1007,14 +1007,14 @@ do {									\
 #define ALU32_AND(VAL)							\
 do {									\
   alu32_r &= (VAL);							\
-  alu32_c = 0;								\
+  alu32_r = 0;								\
   alu32_v = 0;								\
 } while (0)
 
 #define ALU64_AND(VAL)							\
 do {									\
   alu64_r &= (VAL);							\
-  alu64_c = 0;								\
+  alu64_r = 0;								\
   alu64_v = 0;								\
 } while (0)
 

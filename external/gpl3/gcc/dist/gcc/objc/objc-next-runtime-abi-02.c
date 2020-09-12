@@ -1,5 +1,5 @@
 /* Next Runtime (ABI-2) private.
-   Copyright (C) 2011-2019 Free Software Foundation, Inc.
+   Copyright (C) 2011-2013 Free Software Foundation, Inc.
 
    Contributed by Iain Sandoe and based, in part, on an implementation in
    'branches/apple/trunk' contributed by Apple Computer Inc.
@@ -28,9 +28,8 @@ along with GCC; see the file COPYING3.  If not see
 #include "config.h"
 #include "system.h"
 #include "coretypes.h"
+#include "tm.h"
 #include "tree.h"
-#include "stringpool.h"
-#include "attribs.h"
 
 #ifdef OBJCPLUS
 #include "cp/cp-tree.h"
@@ -49,6 +48,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "objcp-decl.h"
 #endif  /* OBJCPLUS */
 
+#include "ggc.h"
 #include "target.h"
 #include "tree-iterator.h"
 
@@ -237,7 +237,7 @@ static GTY ((length ("SIZEHASHTABLE"))) hash *extern_names;
 bool
 objc_next_runtime_abi_02_init (objc_runtime_hooks *rthooks)
 {
-  extern_names = ggc_cleared_vec_alloc<hash> (SIZEHASHTABLE);
+  extern_names = ggc_alloc_cleared_vec_hash (SIZEHASHTABLE);
 
   if (flag_objc_exceptions && flag_objc_sjlj_exceptions)
     {
@@ -856,7 +856,7 @@ hash_name_enter (hash *hashlist, tree id)
   hash obj;
   int slot = IDENTIFIER_HASH_VALUE (DECL_NAME (id)) % SIZEHASHTABLE;
 
-  obj = ggc_alloc<hashed_entry> ();
+  obj = ggc_alloc_hashed_entry ();
   obj->list = 0;
   obj->next = hashlist[slot];
   obj->key = id;
@@ -1011,10 +1011,10 @@ next_runtime_abi_02_string_decl (tree type, const char *name,  string_section wh
 
 /* NOTE --- entry --- */
 
-struct GTY(()) ident_data_tuple {
+typedef struct GTY(()) ident_data_tuple {
   tree ident;
   tree data;
-};
+} ident_data_tuple ;
 
 /* This routine creates a file scope static variable of type 'Class'
    to hold the address of a class.  */
@@ -1087,8 +1087,7 @@ next_runtime_abi_02_get_class_reference (tree ident)
       t = my_build_string_pointer (IDENTIFIER_LENGTH (ident) + 1,
 				   IDENTIFIER_POINTER (ident));
       v->quick_push (t);
-      t = build_function_call_vec (input_location, vNULL, objc_get_class_decl,
-				   v, 0);
+      t = build_function_call_vec (input_location, objc_get_class_decl, v, 0);
       vec_free (v);
       return t;
     }
@@ -1195,11 +1194,11 @@ build_v2_message_reference_decl (tree sel_name, tree message_func_ident)
   return decl;
 }
 
-struct GTY(()) msgref_entry {
+typedef struct GTY(()) msgref_entry {
   tree func;
   tree selname;
   tree refdecl;
-};
+} msgref_entry;
 
 static GTY (()) vec<msgref_entry, va_gc> *msgrefs;
 
@@ -1251,10 +1250,10 @@ build_v2_protocollist_ref_decl (tree protocol)
   return decl;
 }
 
-struct GTY(()) prot_list_entry {
+typedef struct GTY(()) prot_list_entry {
   tree id;
   tree refdecl;
-};
+} prot_list_entry;
 static GTY (()) vec<prot_list_entry, va_gc> *protrefs;
 
 static tree
@@ -1405,7 +1404,7 @@ objc_v2_build_ivar_ref (tree datum, tree component)
 
 /* IVAR refs are made via an externally referenceable offset and built
    on the fly.  That is, unless they refer to (private) fields in  the
-   class structure.  */
+   class stucture.  */
 static tree
 next_runtime_abi_02_build_ivar_ref (location_t loc ATTRIBUTE_UNUSED,
 				   tree base, tree id)
@@ -1640,15 +1639,13 @@ build_v2_build_objc_method_call (int super_flag, tree method_prototype,
 			       fold_convert (rcv_p, integer_zero_node), 1);
 
 #ifdef OBJCPLUS
-      ret_val = build_conditional_expr (input_location,
-					ifexp, ret_val, ftree,
-					tf_warning_or_error);
+      ret_val = build_conditional_expr (ifexp, ret_val, ftree, tf_warning_or_error);
 #else
      /* ??? CHECKME.   */
       ret_val = build_conditional_expr (input_location,
 					ifexp, 1,
-					ret_val, NULL_TREE, input_location,
-					ftree, NULL_TREE, input_location);
+					ret_val, NULL_TREE,
+					ftree, NULL_TREE);
 #endif
     }
   return ret_val;
@@ -2231,7 +2228,7 @@ generate_v2_protocol_list (tree i_or_p, tree klass_ctxt)
    that the old ABI is supposed to build 'struct objc_method' which
    has 3 fields, but it does not build the initialization expression
    for 'method_imp' which for protocols is NULL any way.  To be
-   consistent with declaration of 'struct method_t', in the new ABI we
+   consistant with declaration of 'struct method_t', in the new ABI we
    set the method_t.imp to NULL.  */
 
 static tree
@@ -2755,11 +2752,11 @@ generate_v2_category (struct imp_entry *impent)
 /* This routine declares a variable to hold the offset for ivar
    FIELD_DECL.  Variable name is .objc_ivar.ClassName.IvarName.  */
 
-struct GTY(()) ivarref_entry
+typedef struct GTY(()) ivarref_entry
 {
   tree decl;
   tree offset;
-};
+} ivarref_entry;
 
 static GTY (()) vec<ivarref_entry, va_gc> *ivar_offset_refs;
 
@@ -3268,7 +3265,7 @@ generate_v2_class_structs (struct imp_entry *impent)
 
   if (field && TREE_CODE (field) == FIELD_DECL)
     instanceSize = int_byte_position (field) * BITS_PER_UNIT
-		   + tree_to_shwi (DECL_SIZE (field));
+		   + tree_low_cst (DECL_SIZE (field), 0);
   else
     instanceSize = 0;
   instanceSize /= BITS_PER_UNIT;
@@ -3332,6 +3329,31 @@ build_v2_ivar_offset_ref_table (void)
     finish_var_decl (ref->decl, ref->offset);
 }
 
+/* static int _OBJC_IMAGE_INFO[2] = { 0, 16 | flags }; */
+
+static void
+generate_v2_objc_image_info (void)
+{
+  tree decl, array_type;
+  vec<constructor_elt, va_gc> *v = NULL;
+  int flags =
+	((flag_replace_objc_classes && imp_count ? 1 : 0)
+	  | (flag_objc_gc ? 2 : 0));
+
+  flags |= 16;
+
+  array_type  = build_sized_array_type (integer_type_node, 2);
+
+  decl = start_var_decl (array_type, "_OBJC_ImageInfo");
+
+  CONSTRUCTOR_APPEND_ELT (v, NULL_TREE, integer_zero_node);
+  CONSTRUCTOR_APPEND_ELT (v, NULL_TREE, build_int_cst (integer_type_node, flags));
+  /* The Runtime wants this.  */
+  DECL_PRESERVE_P (decl) = 1;
+  OBJCMETA (decl, objc_meta, meta_info);
+  finish_var_decl (decl, objc_build_constructor (TREE_TYPE (decl), v));
+}
+
 static void
 objc_generate_v2_next_metadata (void)
 {
@@ -3382,6 +3404,9 @@ objc_generate_v2_next_metadata (void)
 			  meta_label_nonlazy_classlist);
   build_v2_address_table (nonlazy_category_list, "_OBJC_NonLazyCategoryList$",
 			  meta_label_nonlazy_categorylist);
+
+  /* This conveys information on GC usage and zero-link.  */
+  generate_v2_objc_image_info ();
 
   /* Generate catch objects for eh, if any are needed.  */
   build_v2_eh_catch_objects ();
@@ -3586,7 +3611,7 @@ next_runtime_02_eh_type (tree type)
 	 case, we use c++'s typeinfo decl.  */
       return build_eh_type_type (type);
 #else
-      error ("non-objective-c type %qT cannot be caught", type);
+      error ("non-objective-c type '%T' cannot be caught", type);
       goto err_mark_in;
 #endif
     }
@@ -3622,16 +3647,14 @@ build_throw_stmt (location_t loc, tree throw_expr, bool rethrown)
   tree t;
   if (rethrown)
     /* We have a separate re-throw entry.  */
-    t = build_function_call_vec (loc, vNULL, objc_rethrow_exception_decl,
-				 NULL, NULL);
+    t = build_function_call_vec (loc, objc_rethrow_exception_decl, NULL, NULL);
   else
     {
       /* Throw like the others...  */
       vec<tree, va_gc> *parms;
       vec_alloc (parms, 1);
       parms->quick_push (throw_expr);
-      t = build_function_call_vec (loc, vNULL, objc_exception_throw_decl,
-				   parms, 0);
+      t = build_function_call_vec (loc, objc_exception_throw_decl, parms, 0);
       vec_free (parms);
     }
   return add_stmt (t);
@@ -3710,8 +3733,7 @@ finish_catch (struct objc_try_context **cur_try_context, tree curr_catch)
 
   /* Pick up the new context we made in begin_try above...  */
   ct = *cur_try_context;
-  func = build_function_call_vec (loc, vNULL, objc2_end_catch_decl, NULL,
-				  NULL);
+  func = build_function_call_vec (loc, objc2_end_catch_decl, NULL, NULL);
   append_to_statement_list (func, &ct->finally_body);
   try_exp = build_stmt (loc, TRY_FINALLY_EXPR, ct->try_body, ct->finally_body);
   *cur_try_context = ct->outer;

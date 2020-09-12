@@ -1,5 +1,6 @@
 # GCC host-specific configuration file.
-# Copyright (C) 1997-2019 Free Software Foundation, Inc.
+# Copyright 1997, 1998, 1999, 2000, 2001, 2002, 2003, 2006, 2007, 2008, 2009,
+# 2011 Free Software Foundation, Inc.
 
 #This file is part of GCC.
 
@@ -50,15 +51,10 @@
 #
 #  host_can_use_collect2 Set to yes normally; to no if the host cannot
 #			link or otherwise use collect2
-#
 #  use_long_long_for_widest_fast_int Set this to 'yes' if 'long long'
 #			(or '__int64') is wider than 'long' but still
 #			efficeiently supported by the host hardware.
 #			Only affects compile speed.  Default is 'no'.
-#
-#  host_lto_plugin_soname Set this to the name to which the LTO linker
-#			plugin gets compiled on this host, if it is
-#			different from the default "liblto_plugin.so".
 
 # When setting any of these variables, check to see if a corresponding
 # variable is present in config.build; if so, you will likely want to 
@@ -74,7 +70,6 @@ host_extra_gcc_objs=
 out_host_hook_obj=host-default.o
 host_can_use_collect2=yes
 use_long_long_for_widest_fast_int=no
-host_lto_plugin_soname=liblto_plugin.so
 
 # Unsupported hosts list.  Generally, only include hosts known to fail here,
 # since we allow hosts not listed to be supported generically.
@@ -99,22 +94,6 @@ case ${host} in
 esac
 
 case ${host} in
-  aarch64*-*-freebsd* | aarch64*-*-linux* | aarch64*-*-netbsd* | aarch64*-*-fuchsia*)
-    case ${target} in
-      aarch64*-*-*)
-	host_extra_gcc_objs="driver-aarch64.o"
-	host_xmake_file="${host_xmake_file} aarch64/x-aarch64"
-	;;
-    esac
-    ;;
-  arm*-*-freebsd* | arm*-*-linux* | arm*-*-fuchsia*)
-    case ${target} in
-      arm*-*-*)
-	host_extra_gcc_objs="driver-arm.o"
-	host_xmake_file="${host_xmake_file} arm/x-arm"
-	;;
-    esac
-    ;;
   alpha*-*-linux*)
     case ${target} in
       alpha*-*-linux*)
@@ -172,34 +151,30 @@ case ${host} in
 	;;
     esac
     ;;
-  s390-*-* | s390x-*-*)
-    case ${target} in
-      s390-*-* | s390x-*-*)
-        host_extra_gcc_objs="driver-native.o"
-        host_xmake_file="${host_xmake_file} s390/x-native"
-        ;;
-    esac
-    ;;
-  sparc*-*-solaris2*)
-    case ${target} in
-      sparc*-*-solaris2*)
-	host_extra_gcc_objs="driver-sparc.o"
-	host_xmake_file="${host_xmake_file} sparc/x-sparc"
-	;;
-    esac
-    ;;
-  sparc*-*-linux*)
-    case ${target} in
-      sparc*-*-linux*)
-	host_extra_gcc_objs="driver-sparc.o"
-	host_xmake_file="${host_xmake_file} sparc/x-sparc"
-	;;
-    esac
-    ;;
 esac
 
 # Machine-specific settings.
 case ${host} in
+  alpha64-dec-*vms*)
+    host_xm_file="vms/xm-vms.h vms/xm-vms64.h"
+    host_xmake_file=vms/x-vms
+    host_exeext=.exe
+    host_can_use_collect2=no
+    prefix=/gnu
+    local_prefix=/gnu/local
+    ;;
+  alpha*-dec-osf*)
+    out_host_hook_obj=host-osf.o
+    host_xmake_file="${host_xmake_file} alpha/x-osf"
+    ;;
+  alpha*-dec-*vms*)
+    host_xm_file="vms/xm-vms.h"
+    host_xmake_file=vms/x-vms
+    host_exeext=.exe
+    host_can_use_collect2=no
+    prefix=/gnu
+    local_prefix=/gnu/local
+    ;;
   hppa1.0-*-hpux10* | hppa1.1-*-hpux10* | hppa2*-*-hpux10*)
     out_host_hook_obj=host-hpux.o
     host_xmake_file="${host_xmake_file} x-hpux"
@@ -213,7 +188,10 @@ case ${host} in
     out_host_hook_obj=host-hpux.o
     host_xmake_file="${host_xmake_file} x-hpux"
     ;;
-  i[34567]86-*-solaris2* | x86_64-*-solaris2.1[0-9]*)
+  i370-*-opened* | i370-*-mvs* ) # IBM 360/370/390 Architecture
+    host_xm_defines='FATAL_EXIT_CODE=12'
+    ;;
+  i[34567]86-*-solaris2*)
     out_host_hook_obj=host-solaris.o
     host_xmake_file="${host_xmake_file} x-solaris"
     ;;
@@ -227,20 +205,17 @@ case ${host} in
         ;;
     esac
     ;;
-  i[34567]86-*-cygwin* | x86_64-*-cygwin*)
+  i[34567]86-*-pe | i[34567]86-*-cygwin*)
     host_xm_file=i386/xm-cygwin.h
     out_host_hook_obj=host-cygwin.o
     host_xmake_file="${host_xmake_file} i386/x-cygwin"
     host_exeext=.exe
-    host_lto_plugin_soname=cyglto_plugin-0.dll
     ;;
   i[34567]86-*-mingw32*)
     host_xm_file=i386/xm-mingw32.h
     host_xmake_file="${host_xmake_file} i386/x-mingw32"
     host_exeext=.exe
     out_host_hook_obj=host-mingw32.o
-    host_extra_gcc_objs="${host_extra_gcc_objs} driver-mingw32.o"
-    host_lto_plugin_soname=liblto_plugin-0.dll
     ;;
   x86_64-*-mingw*)
     use_long_long_for_widest_fast_int=yes
@@ -248,12 +223,26 @@ case ${host} in
     host_xmake_file="${host_xmake_file} i386/x-mingw32"
     host_exeext=.exe
     out_host_hook_obj=host-mingw32.o
-    host_extra_gcc_objs="${host_extra_gcc_objs} driver-mingw32.o"
-    host_lto_plugin_soname=liblto_plugin-0.dll
+    ;;
+  i[34567]86-*-uwin*)
+    echo "*** UWIN may not be used as a host platform because"
+    echo "*** linking with posix.dll is not allowed by the GNU GPL."
+    exit 1
     ;;
   i[34567]86-*-darwin* | x86_64-*-darwin*)
     out_host_hook_obj="${out_host_hook_obj} host-i386-darwin.o"
     host_xmake_file="${host_xmake_file} i386/x-darwin"
+    ;;
+  ia64-hp-*vms*)
+    host_xm_file="vms/xm-vms.h vms/xm-vms64.h"
+    host_xmake_file=vms/x-vms
+    host_exeext=.exe
+    host_can_use_collect2=no
+    prefix=/gnu
+    local_prefix=/gnu/local
+    ;;
+  powerpc-*-beos*)
+    host_can_use_collect2=no
     ;;
   powerpc-*-darwin*)
     out_host_hook_obj="${out_host_hook_obj} host-ppc-darwin.o"
@@ -274,23 +263,9 @@ case ${host} in
     out_host_hook_obj=host-linux.o
     host_xmake_file="${host_xmake_file} x-linux"
     ;;
-  *-*-openbsd*)
-    out_host_hook_obj=host-openbsd.o
-    host_xmake_file="${host_xmake_file} x-openbsd"
-    ;;
-  *-*-netbsd*)
-    out_host_hook_obj=host-netbsd.o
-    host_xmake_file="${host_xmake_file} x-netbsd"
-    ;;
   ia64-*-hpux*)
     use_long_long_for_widest_fast_int=yes
     out_host_hook_obj=host-hpux.o
     host_xmake_file="${host_xmake_file} x-hpux"
-    ;;
-  *-*-*vms*)
-    host_xm_file="vms/xm-vms.h"
-    host_xmake_file=vms/x-vms
-    host_exeext=.exe
-    host_can_use_collect2=no
     ;;
 esac

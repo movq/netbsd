@@ -1,5 +1,5 @@
 /* tc-tic54x.h -- Header file for tc-tic54x.c
-   Copyright (C) 1999-2020 Free Software Foundation, Inc.
+   Copyright 1999, 2000, 2001, 2007, 2008 Free Software Foundation, Inc.
    Contributed by Timothy Wall (twall@alum.mit.edu)
 
    This file is part of GAS, the GNU Assembler.
@@ -62,21 +62,15 @@ struct bit_info
 
 /* We sometimes need to keep track of bit offsets within words */
 #define TC_FRAG_TYPE int
-#define TC_FRAG_INIT(FRAGP, MAX_BYTES) do {(FRAGP)->tc_frag_data = 0;}while (0)
+#define TC_FRAG_INIT(FRAGP) do {(FRAGP)->tc_frag_data = 0;}while (0)
 
-/* Tell GAS whether the given token is indeed a code label.
-   Note - we make of the knowledge that this macro will be called from
-   read.c:read_a_source_file()  in that we also pass the local variable
-   line_start.  */
-#define TC_START_LABEL_WITHOUT_COLON(NUL_CHAR, NEXT_CHAR) \
-  tic54x_start_label (line_start, NUL_CHAR, NEXT_CHAR)
-extern int tic54x_start_label (char *, int, int);
+/* tell GAS whether the given token is indeed a code label */
+#define TC_START_LABEL_WITHOUT_COLON(c,ptr) tic54x_start_label(c,ptr)
+extern int tic54x_start_label (int, char *);
 
 /* custom handling for relocations in cons expressions */
-#define TC_CONS_FIX_NEW(FRAG, OFF, LEN, EXP, RELOC)	\
-  tic54x_cons_fix_new (FRAG, OFF, LEN, EXP, RELOC)
-extern void tic54x_cons_fix_new (fragS *, int, int, expressionS *,
-				 bfd_reloc_code_real_type);
+#define TC_CONS_FIX_NEW(FRAG,OFF,LEN,EXP) tic54x_cons_fix_new(FRAG,OFF,LEN,EXP)
+extern void tic54x_cons_fix_new (fragS *,int,int,expressionS *);
 
 /* Define md_number_to_chars as the appropriate standard big endian or
    little endian function.  Mostly littleendian, but longwords and floats are

@@ -1,4 +1,5 @@
-# Copyright (C) 2003-2019 Free Software Foundation, Inc.
+# Copyright (C) 2003, 2005, 2007, 2008, 2009, 2010, 2011
+# Free Software Foundation, Inc.
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -23,21 +24,27 @@ if {[skip_shlib_tests]} {
     return 0
 }
 
+if $tracelevel then {
+    strace $tracelevel
+}
+
 #
 # This file uses shreloc.c, shreloc1.c and shreloc2.c
 #
 
 
-standard_testfile .c shreloc1.c shreloc2.c
+set workdir ${objdir}/${subdir}
+set testfile "shreloc"
+set libfile1 "shreloc1"
+set libfile2 "shreloc2"
+set srcfile $srcdir/$subdir/$testfile.c
+set lib1src $srcdir/$subdir/$libfile1.c
+set lib2src $srcdir/$subdir/$libfile2.c
+set binfile $objdir/$subdir/$testfile
+set lib1_sl $objdir/$subdir/$libfile1.sl
+set lib2_sl $objdir/$subdir/$libfile2.sl
 
-set srcfile $srcdir/$subdir/$srcfile
-set lib1src $srcdir/$subdir/$srcfile2
-set lib2src $srcdir/$subdir/$srcfile3
-set binfile [standard_output_file $testfile]
-set lib1_sl [standard_output_file shreloc1.sl]
-set lib2_sl [standard_output_file shreloc2.sl]
-
-if [get_compiler_info] {
+if [get_compiler_info ${binfile}] {
     return -1
 }
 
@@ -59,26 +66,50 @@ if [test_compiler_info "xlc-*"] {
 }
 
 if { [gdb_compile_shlib $lib1src $lib1_sl $lib_opts] != ""} {
-    untested "could not build $lib1_sl."
+    untested "Could not build $lib1_sl."
     return -1
 } elseif { [gdb_compile_shlib $lib2src $lib2_sl $lib_opts] != ""} {
-    untested "could not build $lib1_s2."
+    untested "Could not build $lib1_s2."
     return -1
 } elseif { [gdb_compile $srcfile $binfile executable $exec_opts] != ""} {
-    untested "could not build $binfile."
+    untested "Could not build $binfile."
     return -1
 }
 
 # Start with a fresh gdb.
 
-clean_restart $binfile
-gdb_load_shlib $lib1_sl
-gdb_load_shlib $lib2_sl
+gdb_exit
+gdb_start
+gdb_reinitialize_dir $srcdir/$subdir
+gdb_load ${workdir}/shreloc
+gdb_load_shlibs $lib1_sl $lib2_sl
 
 # Load up the shared objects
 if ![runto_main] then {
-    fail "can't run to main"
+    fail "Can't run to main"
     return 0
+}
+
+proc get_var_address { var } {
+    global gdb_prompt hex
+
+    # Match output like:
+    # $1 = (int *) 0x0
+    # $5 = (int (*)()) 0
+    # $6 = (int (*)()) 0x24 <function_bar>
+
+    gdb_test_multiple "print &${var}" "get address of ${var}" {
+	-re "\\\$\[0-9\]+ = \\(.*\\) (0|$hex)( <${var}>)?\[\r\n\]+${gdb_prompt} $"
+	{
+	    pass "get address of ${var}"
+	    if { $expect_out(1,string) == "0" } {
+		return "0x0"
+	    } else {
+		return $expect_out(1,string)
+	    }
+	}
+    }
+    return ""
 }
 
 #
@@ -200,11 +231,7 @@ proc check_different {var msymfile} {
     return 1
 }
 
-if [is_remote host] {
-    set msymfile shreloc.txt
-} else {
-    set msymfile [standard_output_file shreloc.txt]
-}
+set msymfile "${workdir}/shreloc.txt"
 
 if [send_gdb_discard "maint print msymbols ${msymfile}"] {
     if {[check_different "static_var_\[12\]" "${msymfile}"]} {
@@ -235,8 +262,8 @@ if {([istarget "*pc-cygwin"] || [istarget "*pc-mingw32"]) } {
     # A better approach would be include absolute symbols via the assembler.
     #
     if {[check_same "_minor_os_version__" "${msymfile}"]} {
-	pass "absolute symbols not relocated"
+	pass "Absolute symbols not relocated"
     } else {
-	fail "absolute symbols not relocated"
+	fail "Absolute symbols not relocated"
     }
 }

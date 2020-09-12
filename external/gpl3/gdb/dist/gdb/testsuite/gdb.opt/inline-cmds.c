@@ -1,4 +1,4 @@
-/* Copyright (C) 2008-2019 Free Software Foundation, Inc.
+/* Copyright (C) 2008, 2010, 2011 Free Software Foundation, Inc.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -23,7 +23,6 @@
 #endif
 
 int x, y;
-volatile int z = 0;
 volatile int result;
 
 void bar(void);
@@ -61,7 +60,7 @@ int main (void)
   int val;
 
   x = 7;
-  y = 8; /* set mi break here */
+  y = 8;
 
   result = func1 ();
   result = func2 ();

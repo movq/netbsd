@@ -1,5 +1,7 @@
 /* messages.c - error reporter -
-   Copyright (C) 1987-2020 Free Software Foundation, Inc.
+   Copyright 1987, 1991, 1992, 1993, 1994, 1995, 1996, 1998, 2000, 2001,
+   2003, 2004, 2005, 2006, 2007, 2008
+   Free Software Foundation, Inc.
    This file is part of GAS, the GNU Assembler.
 
    GAS is free software; you can redistribute it and/or modify
@@ -18,19 +20,11 @@
    02110-1301, USA.  */
 
 #include "as.h"
-#include <signal.h>
 
-/* If the system doesn't provide strsignal, we get it defined in
-   libiberty but no declaration is supplied.  Because, reasons. */
-#if !defined (HAVE_STRSIGNAL) && !defined (strsignal)
-extern const char *strsignal (int);
-#endif
-
-static void identify (const char *);
+static void identify (char *);
 static void as_show_where (void);
-static void as_warn_internal (const char *, unsigned int, char *);
-static void as_bad_internal (const char *, unsigned int, char *);
-static void signal_crash (int) ATTRIBUTE_NORETURN;
+static void as_warn_internal (char *, unsigned int, char *);
+static void as_bad_internal (char *, unsigned int, char *);
 
 /* Despite the rest of the comments in this file, (FIXME-SOON),
    here is the current scheme for error messages etc:
@@ -66,13 +60,10 @@ static void signal_crash (int) ATTRIBUTE_NORETURN;
    as_tsktsk() is used when we see a minor error for which
    our error recovery action is almost certainly correct.
    In this case, we print a message and then assembly
-   continues as though no error occurred.
-
-   as_abort () is used for logic failure (assert or abort, signal).
-*/
+   continues as though no error occurred.  */
 
 static void
-identify (const char *file)
+identify (char *file)
 {
   static int identified;
 
@@ -83,7 +74,7 @@ identify (const char *file)
   if (!file)
     {
       unsigned int x;
-      file = as_where (&x);
+      as_where (&file, &x);
     }
 
   if (file)
@@ -116,18 +107,13 @@ had_errors (void)
 static void
 as_show_where (void)
 {
-  const char *file;
+  char *file;
   unsigned int line;
 
-  file = as_where (&line);
+  as_where (&file, &line);
   identify (file);
   if (file)
-    {
-      if (line != 0)
-	fprintf (stderr, "%s:%u: ", file, line);
-      else
-	fprintf (stderr, "%s: ", file);
-    }
+    fprintf (stderr, "%s:%u: ", file, line);
 }
 
 /* Send to stderr a string as a warning, and locate warning
@@ -136,6 +122,7 @@ as_show_where (void)
    Please explain in string (which may have '\n's) what recovery was
    done.  */
 
+#ifdef USE_STDARG
 void
 as_tsktsk (const char *format, ...)
 {
@@ -147,27 +134,38 @@ as_tsktsk (const char *format, ...)
   va_end (args);
   (void) putc ('\n', stderr);
 }
+#else
+void
+as_tsktsk (format, va_alist)
+     const char *format;
+     va_dcl
+{
+  va_list args;
+
+  as_show_where ();
+  va_start (args);
+  vfprintf (stderr, format, args);
+  va_end (args);
+  (void) putc ('\n', stderr);
+}
+#endif /* not NO_STDARG */
 
 /* The common portion of as_warn and as_warn_where.  */
 
 static void
-as_warn_internal (const char *file, unsigned int line, char *buffer)
+as_warn_internal (char *file, unsigned int line, char *buffer)
 {
   ++warning_count;
 
   if (file == NULL)
-    file = as_where (&line);
+    as_where (&file, &line);
 
   identify (file);
   if (file)
-    {
-      if (line != 0)
-	fprintf (stderr, "%s:%u: %s%s\n", file, line, _("Warning: "), buffer);
-      else
-	fprintf (stderr, "%s: %s%s\n", file, _("Warning: "), buffer);
-    }
-  else
-    fprintf (stderr, "%s%s\n", _("Warning: "), buffer);
+    fprintf (stderr, "%s:%u: ", file, line);
+  fprintf (stderr, _("Warning: "));
+  fputs (buffer, stderr);
+  (void) putc ('\n', stderr);
 #ifndef NO_LISTING
   listing_warning (buffer);
 #endif
@@ -179,6 +177,7 @@ as_warn_internal (const char *file, unsigned int line, char *buffer)
    Please explain in string (which may have '\n's) what recovery was
    done.  */
 
+#ifdef USE_STDARG
 void
 as_warn (const char *format, ...)
 {
@@ -193,13 +192,32 @@ as_warn (const char *format, ...)
       as_warn_internal ((char *) NULL, 0, buffer);
     }
 }
+#else
+void
+as_warn (format, va_alist)
+     const char *format;
+     va_dcl
+{
+  va_list args;
+  char buffer[2000];
+
+  if (!flag_no_warnings)
+    {
+      va_start (args);
+      vsnprintf (buffer, sizeof (buffer), format, args);
+      va_end (args);
+      as_warn_internal ((char *) NULL, 0, buffer);
+    }
+}
+#endif /* not NO_STDARG */
 
 /* Like as_bad but the file name and line number are passed in.
    Unfortunately, we have to repeat the function in order to handle
    the varargs correctly and portably.  */
 
+#ifdef USE_STDARG
 void
-as_warn_where (const char *file, unsigned int line, const char *format, ...)
+as_warn_where (char *file, unsigned int line, const char *format, ...)
 {
   va_list args;
   char buffer[2000];
@@ -212,38 +230,55 @@ as_warn_where (const char *file, unsigned int line, const char *format, ...)
       as_warn_internal (file, line, buffer);
     }
 }
+#else
+void
+as_warn_where (file, line, format, va_alist)
+     char *file;
+     unsigned int line;
+     const char *format;
+     va_dcl
+{
+  va_list args;
+  char buffer[2000];
+
+  if (!flag_no_warnings)
+    {
+      va_start (args);
+      vsnprintf (buffer, sizeof (buffer), format, args);
+      va_end (args);
+      as_warn_internal (file, line, buffer);
+    }
+}
+#endif /* not NO_STDARG */
 
 /* The common portion of as_bad and as_bad_where.  */
 
 static void
-as_bad_internal (const char *file, unsigned int line, char *buffer)
+as_bad_internal (char *file, unsigned int line, char *buffer)
 {
   ++error_count;
 
   if (file == NULL)
-    file = as_where (&line);
+    as_where (&file, &line);
 
   identify (file);
   if (file)
-    {
-      if (line != 0)
-	fprintf (stderr, "%s:%u: %s%s\n", file, line, _("Error: "), buffer);
-      else
-	fprintf (stderr, "%s: %s%s\n", file, _("Error: "), buffer);
-    }
-  else
-    fprintf (stderr, "%s%s\n", _("Error: "), buffer);
+    fprintf (stderr, "%s:%u: ", file, line);
+  fprintf (stderr, _("Error: "));
+  fputs (buffer, stderr);
+  (void) putc ('\n', stderr);
 #ifndef NO_LISTING
   listing_error (buffer);
 #endif
 }
 
 /* Send to stderr a string as a warning, and locate warning in input
-   file(s).  Please use when there is no recovery, but we want to
+   file(s).  Please us when there is no recovery, but we want to
    continue processing but not produce an object file.
    Please explain in string (which may have '\n's) what recovery was
    done.  */
 
+#ifdef USE_STDARG
 void
 as_bad (const char *format, ...)
 {
@@ -257,12 +292,30 @@ as_bad (const char *format, ...)
   as_bad_internal ((char *) NULL, 0, buffer);
 }
 
+#else
+void
+as_bad (format, va_alist)
+     const char *format;
+     va_dcl
+{
+  va_list args;
+  char buffer[2000];
+
+  va_start (args);
+  vsnprintf (buffer, sizeof (buffer), format, args);
+  va_end (args);
+
+  as_bad_internal ((char *) NULL, 0, buffer);
+}
+#endif /* not NO_STDARG */
+
 /* Like as_bad but the file name and line number are passed in.
    Unfortunately, we have to repeat the function in order to handle
    the varargs correctly and portably.  */
 
+#ifdef USE_STDARG
 void
-as_bad_where (const char *file, unsigned int line, const char *format, ...)
+as_bad_where (char *file, unsigned int line, const char *format, ...)
 {
   va_list args;
   char buffer[2000];
@@ -274,11 +327,31 @@ as_bad_where (const char *file, unsigned int line, const char *format, ...)
   as_bad_internal (file, line, buffer);
 }
 
+#else
+void
+as_bad_where (file, line, format, va_alist)
+     char *file;
+     unsigned int line;
+     const char *format;
+     va_dcl
+{
+  va_list args;
+  char buffer[2000];
+
+  va_start (args);
+  vsnprintf (buffer, sizeof (buffer), format, args);
+  va_end (args);
+
+  as_bad_internal (file, line, buffer);
+}
+#endif /* not NO_STDARG */
+
 /* Send to stderr a string as a fatal message, and print location of
    error in input file(s).
    Please only use this for when we DON'T have some recovery action.
    It xexit()s with a warning status.  */
 
+#ifdef USE_STDARG
 void
 as_fatal (const char *format, ...)
 {
@@ -296,62 +369,56 @@ as_fatal (const char *format, ...)
     unlink_if_ordinary (out_file_name);
   xexit (EXIT_FAILURE);
 }
+#else
+void
+as_fatal (format, va_alist)
+     char *format;
+     va_dcl
+{
+  va_list args;
 
-/* Indicate internal constency error.
-   Arguments: Filename, line number, optional function name.
-   FILENAME may be NULL, which we use for crash-via-signal.  */
+  as_show_where ();
+  va_start (args);
+  fprintf (stderr, _("Fatal error: "));
+  vfprintf (stderr, format, args);
+  (void) putc ('\n', stderr);
+  va_end (args);
+  xexit (EXIT_FAILURE);
+}
+#endif /* not NO_STDARG */
+
+/* Indicate assertion failure.
+   Arguments: Filename, line number, optional function name.  */
+
+void
+as_assert (const char *file, int line, const char *fn)
+{
+  as_show_where ();
+  fprintf (stderr, _("Internal error!\n"));
+  if (fn)
+    fprintf (stderr, _("Assertion failure in %s at %s line %d.\n"),
+	     fn, file, line);
+  else
+    fprintf (stderr, _("Assertion failure at %s line %d.\n"), file, line);
+  fprintf (stderr, _("Please report this bug.\n"));
+  xexit (EXIT_FAILURE);
+}
+
+/* as_abort: Print a friendly message saying how totally hosed we are,
+   and exit without producing a core file.  */
 
 void
 as_abort (const char *file, int line, const char *fn)
 {
   as_show_where ();
-
-  if (!file)
-    fprintf (stderr, _("Internal error (%s).\n"), fn ? fn : "unknown");
-  else if (fn)
-    fprintf (stderr, _("Internal error in %s at %s:%d.\n"), fn, file, line);
+  if (fn)
+    fprintf (stderr, _("Internal error, aborting at %s line %d in %s\n"),
+	     file, line, fn);
   else
-    fprintf (stderr, _("Internal error at %s:%d.\n"), file, line);
-
+    fprintf (stderr, _("Internal error, aborting at %s line %d\n"),
+	     file, line);
   fprintf (stderr, _("Please report this bug.\n"));
-
   xexit (EXIT_FAILURE);
-}
-
-/* Handler for fatal signals, such as SIGSEGV. */
-
-static void
-signal_crash (int signo)
-{
-  /* Reset, to prevent unbounded recursion.  */
-  signal (signo, SIG_DFL);
-
-  as_abort (NULL, 0, strsignal (signo));
-}
-
-/* Register signal handlers, for less abrubt crashes.  */
-
-void
-signal_init (void)
-{
-#ifdef SIGSEGV
-  signal (SIGSEGV, signal_crash);
-#endif
-#ifdef SIGILL
-  signal (SIGILL, signal_crash);
-#endif
-#ifdef SIGBUS
-  signal (SIGBUS, signal_crash);
-#endif
-#ifdef SIGABRT
-  signal (SIGABRT, signal_crash);
-#endif
-#if defined SIGIOT && (!defined SIGABRT || SIGABRT != SIGIOT)
-  signal (SIGIOT, signal_crash);
-#endif
-#ifdef SIGFPE
-  signal (SIGFPE, signal_crash);
-#endif
 }
 
 /* Support routines.  */
@@ -376,13 +443,13 @@ sprint_value (char *buf, valueT val)
 #define HEX_MIN_THRESHOLD	-(HEX_MAX_THRESHOLD)
 
 static void
-as_internal_value_out_of_range (const char *prefix,
-				offsetT val,
-				offsetT min,
-				offsetT max,
-				const char *file,
-				unsigned line,
-				int bad)
+as_internal_value_out_of_range (char *    prefix,
+				offsetT   val,
+				offsetT   min,
+				offsetT   max,
+				char *    file,
+				unsigned  line,
+				int       bad)
 {
   const char * err;
 
@@ -397,12 +464,13 @@ as_internal_value_out_of_range (const char *prefix,
 	abort ();
 
       /* xgettext:c-format  */
-      err = _("%s out of domain (%" BFD_VMA_FMT "d is not a multiple of %" \
-	      BFD_VMA_FMT "d)");
+      err = _("%s out of domain (%d is not a multiple of %d)");
       if (bad)
-	as_bad_where (file, line, err, prefix, val, right);
+	as_bad_where (file, line, err,
+		      prefix, (int) val, (int) right);
       else
-	as_warn_where (file, line, err, prefix, val, right);
+	as_warn_where (file, line, err,
+		       prefix, (int) val, (int) right);
       return;
     }
 
@@ -414,13 +482,14 @@ as_internal_value_out_of_range (const char *prefix,
       && max > HEX_MIN_THRESHOLD)
     {
       /* xgettext:c-format  */
-      err = _("%s out of range (%" BFD_VMA_FMT "d is not between %" \
-	      BFD_VMA_FMT "d and %" BFD_VMA_FMT "d)");
+      err = _("%s out of range (%d is not between %d and %d)");
 
       if (bad)
-	as_bad_where (file, line, err, prefix, val, min, max);
+	as_bad_where (file, line, err,
+		      prefix, (int) val, (int) min, (int) max);
       else
-	as_warn_where (file, line, err, prefix, val, min, max);
+	as_warn_where (file, line, err,
+		       prefix, (int) val, (int) min, (int) max);
     }
   else
     {
@@ -446,22 +515,22 @@ as_internal_value_out_of_range (const char *prefix,
 }
 
 void
-as_warn_value_out_of_range (const char *prefix,
-			   offsetT value,
-			   offsetT min,
-			   offsetT max,
-			   const char *file,
+as_warn_value_out_of_range (char *   prefix,
+			   offsetT  value,
+			   offsetT  min,
+			   offsetT  max,
+			   char *   file,
 			   unsigned line)
 {
   as_internal_value_out_of_range (prefix, value, min, max, file, line, 0);
 }
 
 void
-as_bad_value_out_of_range (const char *prefix,
-			   offsetT value,
-			   offsetT min,
-			   offsetT max,
-			   const char *file,
+as_bad_value_out_of_range (char *   prefix,
+			   offsetT  value,
+			   offsetT  min,
+			   offsetT  max,
+			   char *   file,
 			   unsigned line)
 {
   as_internal_value_out_of_range (prefix, value, min, max, file, line, 1);

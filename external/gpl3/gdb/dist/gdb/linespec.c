@@ -1,6 +1,8 @@
 /* Parser for linespec for the GNU debugger, GDB.
 
-   Copyright (C) 1986-2019 Free Software Foundation, Inc.
+   Copyright (C) 1986, 1987, 1988, 1989, 1990, 1991, 1992, 1993, 1994, 1995,
+   1996, 1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005, 2007, 2008,
+   2009, 2010, 2011 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -33,6 +35,7 @@
 #include "block.h"
 #include "objc-lang.h"
 #include "linespec.h"
+#include "exceptions.h"
 #include "language.h"
 #include "interps.h"
 #include "mi/mi-cmds.h"
@@ -40,1206 +43,232 @@
 #include "arch-utils.h"
 #include <ctype.h>
 #include "cli/cli-utils.h"
-#include "filenames.h"
-#include "ada-lang.h"
-#include "stack.h"
-#include "location.h"
-#include "common/function-view.h"
-#include "common/def-vector.h"
-#include <algorithm>
 
-/* An enumeration of the various things a user might attempt to
-   complete for a linespec location.  */
+/* We share this one with symtab.c, but it is not exported widely.  */
 
-enum class linespec_complete_what
-{
-  /* Nothing, no possible completion.  */
-  NOTHING,
-
-  /* A function/method name.  Due to ambiguity between
-
-       (gdb) b source[TAB]
-       source_file.c
-       source_function
-
-     this can also indicate a source filename, iff we haven't seen a
-     separate source filename component, as in "b source.c:function".  */
-  FUNCTION,
-
-  /* A label symbol.  E.g., break file.c:function:LABEL.  */
-  LABEL,
-
-  /* An expression.  E.g., "break foo if EXPR", or "break *EXPR".  */
-  EXPRESSION,
-
-  /* A linespec keyword ("if"/"thread"/"task").
-     E.g., "break func threa<tab>".  */
-  KEYWORD,
-};
-
-/* An address entry is used to ensure that any given location is only
-   added to the result a single time.  It holds an address and the
-   program space from which the address came.  */
-
-struct address_entry
-{
-  struct program_space *pspace;
-  CORE_ADDR addr;
-};
-
-/* A linespec.  Elements of this structure are filled in by a parser
-   (either parse_linespec or some other function).  The structure is
-   then converted into SALs by convert_linespec_to_sals.  */
-
-struct linespec
-{
-  /* An explicit location describing the SaLs.  */
-  struct explicit_location explicit_loc;
-
-  /* The list of symtabs to search to which to limit the search.  May not
-     be NULL.  If explicit.SOURCE_FILENAME is NULL (no user-specified
-     filename), FILE_SYMTABS should contain one single NULL member.  This
-     will cause the code to use the default symtab.  */
-  std::vector<symtab *> *file_symtabs;
-
-  /* A list of matching function symbols and minimal symbols.  Both lists
-     may be NULL (or empty) if no matching symbols were found.  */
-  std::vector<block_symbol> *function_symbols;
-  std::vector<bound_minimal_symbol> *minimal_symbols;
-
-  /* A structure of matching label symbols and the corresponding
-     function symbol in which the label was found.  Both may be NULL
-     or both must be non-NULL.  */
-  struct
-  {
-    std::vector<block_symbol> *label_symbols;
-    std::vector<block_symbol> *function_symbols;
-  } labels;
-};
-typedef struct linespec *linespec_p;
-
-/* A canonical linespec represented as a symtab-related string.
-
-   Each entry represents the "SYMTAB:SUFFIX" linespec string.
-   SYMTAB can be converted for example by symtab_to_fullname or
-   symtab_to_filename_for_display as needed.  */
-
-struct linespec_canonical_name
-{
-  /* Remaining text part of the linespec string.  */
-  char *suffix;
-
-  /* If NULL then SUFFIX is the whole linespec string.  */
-  struct symtab *symtab;
-};
-
-/* An instance of this is used to keep all state while linespec
-   operates.  This instance is passed around as a 'this' pointer to
-   the various implementation methods.  */
-
-struct linespec_state
-{
-  /* The language in use during linespec processing.  */
-  const struct language_defn *language;
-
-  /* The program space as seen when the module was entered.  */
-  struct program_space *program_space;
-
-  /* If not NULL, the search is restricted to just this program
-     space.  */
-  struct program_space *search_pspace;
-
-  /* The default symtab to use, if no other symtab is specified.  */
-  struct symtab *default_symtab;
-
-  /* The default line to use.  */
-  int default_line;
-
-  /* The 'funfirstline' value that was passed in to decode_line_1 or
-     decode_line_full.  */
-  int funfirstline;
-
-  /* Nonzero if we are running in 'list' mode; see decode_line_list.  */
-  int list_mode;
-
-  /* The 'canonical' value passed to decode_line_full, or NULL.  */
-  struct linespec_result *canonical;
-
-  /* Canonical strings that mirror the std::vector<symtab_and_line> result.  */
-  struct linespec_canonical_name *canonical_names;
-
-  /* This is a set of address_entry objects which is used to prevent
-     duplicate symbols from being entered into the result.  */
-  htab_t addr_set;
-
-  /* Are we building a linespec?  */
-  int is_linespec;
-};
-
-/* This is a helper object that is used when collecting symbols into a
-   result.  */
-
-struct collect_info
-{
-  /* The linespec object in use.  */
-  struct linespec_state *state;
-
-  /* A list of symtabs to which to restrict matches.  */
-  std::vector<symtab *> *file_symtabs;
-
-  /* The result being accumulated.  */
-  struct
-  {
-    std::vector<block_symbol> *symbols;
-    std::vector<bound_minimal_symbol> *minimal_symbols;
-  } result;
-
-  /* Possibly add a symbol to the results.  */
-  virtual bool add_symbol (block_symbol *bsym);
-};
-
-bool
-collect_info::add_symbol (block_symbol *bsym)
-{
-  /* In list mode, add all matching symbols, regardless of class.
-     This allows the user to type "list a_global_variable".  */
-  if (SYMBOL_CLASS (bsym->symbol) == LOC_BLOCK || this->state->list_mode)
-    this->result.symbols->push_back (*bsym);
-
-  /* Continue iterating.  */
-  return true;
-}
-
-/* Custom collect_info for symbol_searcher.  */
-
-struct symbol_searcher_collect_info
-  : collect_info
-{
-  bool add_symbol (block_symbol *bsym) override
-  {
-    /* Add everything.  */
-    this->result.symbols->push_back (*bsym);
-
-    /* Continue iterating.  */
-    return true;
-  }
-};
-
-/* Token types  */
-
-enum ls_token_type
-{
-  /* A keyword  */
-  LSTOKEN_KEYWORD = 0,
-
-  /* A colon "separator"  */
-  LSTOKEN_COLON,
-
-  /* A string  */
-  LSTOKEN_STRING,
-
-  /* A number  */
-  LSTOKEN_NUMBER,
-
-  /* A comma  */
-  LSTOKEN_COMMA,
-
-  /* EOI (end of input)  */
-  LSTOKEN_EOI,
-
-  /* Consumed token  */
-  LSTOKEN_CONSUMED
-};
-typedef enum ls_token_type linespec_token_type;
-
-/* List of keywords.  This is NULL-terminated so that it can be used
-   as enum completer.  */
-const char * const linespec_keywords[] = { "if", "thread", "task", NULL };
-#define IF_KEYWORD_INDEX 0
-
-/* A token of the linespec lexer  */
-
-struct ls_token
-{
-  /* The type of the token  */
-  linespec_token_type type;
-
-  /* Data for the token  */
-  union
-  {
-    /* A string, given as a stoken  */
-    struct stoken string;
-
-    /* A keyword  */
-    const char *keyword;
-  } data;
-};
-typedef struct ls_token linespec_token;
-
-#define LS_TOKEN_STOKEN(TOK) (TOK).data.string
-#define LS_TOKEN_KEYWORD(TOK) (TOK).data.keyword
-
-/* An instance of the linespec parser.  */
-
-struct linespec_parser
-{
-  linespec_parser (int flags, const struct language_defn *language,
-		   struct program_space *search_pspace,
-		   struct symtab *default_symtab,
-		   int default_line,
-		   struct linespec_result *canonical);
-
-  ~linespec_parser ();
-
-  DISABLE_COPY_AND_ASSIGN (linespec_parser);
-
-  /* Lexer internal data  */
-  struct
-  {
-    /* Save head of input stream.  */
-    const char *saved_arg;
-
-    /* Head of the input stream.  */
-    const char *stream;
-#define PARSER_STREAM(P) ((P)->lexer.stream)
-
-    /* The current token.  */
-    linespec_token current;
-  } lexer {};
-
-  /* Is the entire linespec quote-enclosed?  */
-  int is_quote_enclosed = 0;
-
-  /* The state of the parse.  */
-  struct linespec_state state {};
-#define PARSER_STATE(PPTR) (&(PPTR)->state)
-
-  /* The result of the parse.  */
-  struct linespec result {};
-#define PARSER_RESULT(PPTR) (&(PPTR)->result)
-
-  /* What the parser believes the current word point should complete
-     to.  */
-  linespec_complete_what complete_what = linespec_complete_what::NOTHING;
-
-  /* The completion word point.  The parser advances this as it skips
-     tokens.  At some point the input string will end or parsing will
-     fail, and then we attempt completion at the captured completion
-     word point, interpreting the string at completion_word as
-     COMPLETE_WHAT.  */
-  const char *completion_word = nullptr;
-
-  /* If the current token was a quoted string, then this is the
-     quoting character (either " or ').  */
-  int completion_quote_char = 0;
-
-  /* If the current token was a quoted string, then this points at the
-     end of the quoted string.  */
-  const char *completion_quote_end = nullptr;
-
-  /* If parsing for completion, then this points at the completion
-     tracker.  Otherwise, this is NULL.  */
-  struct completion_tracker *completion_tracker = nullptr;
-};
-
-/* A convenience macro for accessing the explicit location result of
-   the parser.  */
-#define PARSER_EXPLICIT(PPTR) (&PARSER_RESULT ((PPTR))->explicit_loc)
+extern char *operator_chars (char *, char **);
 
 /* Prototypes for local functions.  */
-
-static void iterate_over_file_blocks
-  (struct symtab *symtab, const lookup_name_info &name,
-   domain_enum domain,
-   gdb::function_view<symbol_found_callback_ftype> callback);
 
 static void initialize_defaults (struct symtab **default_symtab,
 				 int *default_line);
 
-CORE_ADDR linespec_expression_to_pc (const char **exp_ptr);
-
-static std::vector<symtab_and_line> decode_objc (struct linespec_state *self,
-						 linespec_p ls,
-						 const char *arg);
-
-static std::vector<symtab *> symtabs_from_filename
-  (const char *, struct program_space *pspace);
-
-static std::vector<block_symbol> *find_label_symbols
-  (struct linespec_state *self, std::vector<block_symbol> *function_symbols,
-   std::vector<block_symbol> *label_funcs_ret, const char *name,
-   bool completion_mode = false);
-
-static void find_linespec_symbols (struct linespec_state *self,
-				   std::vector<symtab *> *file_symtabs,
-				   const char *name,
-				   symbol_name_match_type name_match_type,
-				   std::vector<block_symbol> *symbols,
-				   std::vector<bound_minimal_symbol> *minsyms);
-
-static struct line_offset
-     linespec_parse_variable (struct linespec_state *self,
-			      const char *variable);
-
-static int symbol_to_sal (struct symtab_and_line *result,
-			  int funfirstline, struct symbol *sym);
-
-static void add_matching_symbols_to_info (const char *name,
-					  symbol_name_match_type name_match_type,
-					  enum search_domain search_domain,
-					  struct collect_info *info,
-					  struct program_space *pspace);
-
-static void add_all_symbol_names_from_pspace
-    (struct collect_info *info, struct program_space *pspace,
-     const std::vector<const char *> &names, enum search_domain search_domain);
-
-static std::vector<symtab *>
-  collect_symtabs_from_filename (const char *file,
-				 struct program_space *pspace);
-
-static std::vector<symtab_and_line> decode_digits_ordinary
-  (struct linespec_state *self,
-   linespec_p ls,
-   int line,
-   linetable_entry **best_entry);
-
-static std::vector<symtab_and_line> decode_digits_list_mode
-  (struct linespec_state *self,
-   linespec_p ls,
-   struct symtab_and_line val);
-
-static void minsym_found (struct linespec_state *self, struct objfile *objfile,
-			  struct minimal_symbol *msymbol,
-			  std::vector<symtab_and_line> *result);
-
-static bool compare_symbols (const block_symbol &a, const block_symbol &b);
-
-static bool compare_msymbols (const bound_minimal_symbol &a,
-			      const bound_minimal_symbol &b);
-
-/* Permitted quote characters for the parser.  This is different from the
-   completer's quote characters to allow backward compatibility with the
-   previous parser.  */
-static const char *const linespec_quote_characters = "\"\'";
-
-/* Lexer functions.  */
-
-/* Lex a number from the input in PARSER.  This only supports
-   decimal numbers.
-
-   Return true if input is decimal numbers.  Return false if not.  */
-
-static int
-linespec_lexer_lex_number (linespec_parser *parser, linespec_token *tokenp)
-{
-  tokenp->type = LSTOKEN_NUMBER;
-  LS_TOKEN_STOKEN (*tokenp).length = 0;
-  LS_TOKEN_STOKEN (*tokenp).ptr = PARSER_STREAM (parser);
-
-  /* Keep any sign at the start of the stream.  */
-  if (*PARSER_STREAM (parser) == '+' || *PARSER_STREAM (parser) == '-')
-    {
-      ++LS_TOKEN_STOKEN (*tokenp).length;
-      ++(PARSER_STREAM (parser));
-    }
-
-  while (isdigit (*PARSER_STREAM (parser)))
-    {
-      ++LS_TOKEN_STOKEN (*tokenp).length;
-      ++(PARSER_STREAM (parser));
-    }
-
-  /* If the next character in the input buffer is not a space, comma,
-     quote, or colon, this input does not represent a number.  */
-  if (*PARSER_STREAM (parser) != '\0'
-      && !isspace (*PARSER_STREAM (parser)) && *PARSER_STREAM (parser) != ','
-      && *PARSER_STREAM (parser) != ':'
-      && !strchr (linespec_quote_characters, *PARSER_STREAM (parser)))
-    {
-      PARSER_STREAM (parser) = LS_TOKEN_STOKEN (*tokenp).ptr;
-      return 0;
-    }
-
-  return 1;
-}
-
-/* See linespec.h.  */
-
-const char *
-linespec_lexer_lex_keyword (const char *p)
-{
-  int i;
-
-  if (p != NULL)
-    {
-      for (i = 0; linespec_keywords[i] != NULL; ++i)
-	{
-	  int len = strlen (linespec_keywords[i]);
-
-	  /* If P begins with one of the keywords and the next
-	     character is whitespace, we may have found a keyword.
-	     It is only a keyword if it is not followed by another
-	     keyword.  */
-	  if (strncmp (p, linespec_keywords[i], len) == 0
-	      && isspace (p[len]))
-	    {
-	      int j;
-
-	      /* Special case: "if" ALWAYS stops the lexer, since it
-		 is not possible to predict what is going to appear in
-		 the condition, which can only be parsed after SaLs have
-		 been found.  */
-	      if (i != IF_KEYWORD_INDEX)
-		{
-		  p += len;
-		  p = skip_spaces (p);
-		  for (j = 0; linespec_keywords[j] != NULL; ++j)
-		    {
-		      int nextlen = strlen (linespec_keywords[j]);
-
-		      if (strncmp (p, linespec_keywords[j], nextlen) == 0
-			  && isspace (p[nextlen]))
-			return NULL;
-		    }
-		}
-
-	      return linespec_keywords[i];
-	    }
-	}
-    }
-
-  return NULL;
-}
-
-/*  See description in linespec.h.  */
-
-int
-is_ada_operator (const char *string)
-{
-  const struct ada_opname_map *mapping;
-
-  for (mapping = ada_opname_table;
-       mapping->encoded != NULL
-	 && !startswith (string, mapping->decoded); ++mapping)
-    ;
-
-  return mapping->decoded == NULL ? 0 : strlen (mapping->decoded);
-}
-
-/* Find QUOTE_CHAR in STRING, accounting for the ':' terminal.  Return
-   the location of QUOTE_CHAR, or NULL if not found.  */
-
-static const char *
-skip_quote_char (const char *string, char quote_char)
-{
-  const char *p, *last;
-
-  p = last = find_toplevel_char (string, quote_char);
-  while (p && *p != '\0' && *p != ':')
-    {
-      p = find_toplevel_char (p, quote_char);
-      if (p != NULL)
-	last = p++;
-    }
-
-  return last;
-}
-
-/* Make a writable copy of the string given in TOKEN, trimming
-   any trailing whitespace.  */
-
-static gdb::unique_xmalloc_ptr<char>
-copy_token_string (linespec_token token)
-{
-  const char *str, *s;
-
-  if (token.type == LSTOKEN_KEYWORD)
-    return gdb::unique_xmalloc_ptr<char> (xstrdup (LS_TOKEN_KEYWORD (token)));
-
-  str = LS_TOKEN_STOKEN (token).ptr;
-  s = remove_trailing_whitespace (str, str + LS_TOKEN_STOKEN (token).length);
-
-  return gdb::unique_xmalloc_ptr<char> (savestring (str, s - str));
-}
-
-/* Does P represent the end of a quote-enclosed linespec?  */
-
-static int
-is_closing_quote_enclosed (const char *p)
-{
-  if (strchr (linespec_quote_characters, *p))
-    ++p;
-  p = skip_spaces ((char *) p);
-  return (*p == '\0' || linespec_lexer_lex_keyword (p));
-}
-
-/* Find the end of the parameter list that starts with *INPUT.
-   This helper function assists with lexing string segments
-   which might contain valid (non-terminating) commas.  */
-
-static const char *
-find_parameter_list_end (const char *input)
-{
-  char end_char, start_char;
-  int depth;
-  const char *p;
-
-  start_char = *input;
-  if (start_char == '(')
-    end_char = ')';
-  else if (start_char == '<')
-    end_char = '>';
-  else
-    return NULL;
-
-  p = input;
-  depth = 0;
-  while (*p)
-    {
-      if (*p == start_char)
-	++depth;
-      else if (*p == end_char)
-	{
-	  if (--depth == 0)
-	    {
-	      ++p;
-	      break;
-	    }
-	}
-      ++p;
-    }
-
-  return p;
-}
-
-/* If the [STRING, STRING_LEN) string ends with what looks like a
-   keyword, return the keyword start offset in STRING.  Return -1
-   otherwise.  */
-
-static size_t
-string_find_incomplete_keyword_at_end (const char * const *keywords,
-				       const char *string, size_t string_len)
-{
-  const char *end = string + string_len;
-  const char *p = end;
-
-  while (p > string && *p != ' ')
-    --p;
-  if (p > string)
-    {
-      p++;
-      size_t len = end - p;
-      for (size_t i = 0; keywords[i] != NULL; ++i)
-	if (strncmp (keywords[i], p, len) == 0)
-	  return p - string;
-    }
-
-  return -1;
-}
-
-/* Lex a string from the input in PARSER.  */
-
-static linespec_token
-linespec_lexer_lex_string (linespec_parser *parser)
-{
-  linespec_token token;
-  const char *start = PARSER_STREAM (parser);
-
-  token.type = LSTOKEN_STRING;
-
-  /* If the input stream starts with a quote character, skip to the next
-     quote character, regardless of the content.  */
-  if (strchr (linespec_quote_characters, *PARSER_STREAM (parser)))
-    {
-      const char *end;
-      char quote_char = *PARSER_STREAM (parser);
-
-      /* Special case: Ada operators.  */
-      if (PARSER_STATE (parser)->language->la_language == language_ada
-	  && quote_char == '\"')
-	{
-	  int len = is_ada_operator (PARSER_STREAM (parser));
-
-	  if (len != 0)
-	    {
-	      /* The input is an Ada operator.  Return the quoted string
-		 as-is.  */
-	      LS_TOKEN_STOKEN (token).ptr = PARSER_STREAM (parser);
-	      LS_TOKEN_STOKEN (token).length = len;
-	      PARSER_STREAM (parser) += len;
-	      return token;
-	    }
-
-	  /* The input does not represent an Ada operator -- fall through
-	     to normal quoted string handling.  */
-	}
-
-      /* Skip past the beginning quote.  */
-      ++(PARSER_STREAM (parser));
-
-      /* Mark the start of the string.  */
-      LS_TOKEN_STOKEN (token).ptr = PARSER_STREAM (parser);
-
-      /* Skip to the ending quote.  */
-      end = skip_quote_char (PARSER_STREAM (parser), quote_char);
-
-      /* This helps the completer mode decide whether we have a
-	 complete string.  */
-      parser->completion_quote_char = quote_char;
-      parser->completion_quote_end = end;
-
-      /* Error if the input did not terminate properly, unless in
-	 completion mode.  */
-      if (end == NULL)
-	{
-	  if (parser->completion_tracker == NULL)
-	    error (_("unmatched quote"));
-
-	  /* In completion mode, we'll try to complete the incomplete
-	     token.  */
-	  token.type = LSTOKEN_STRING;
-	  while (*PARSER_STREAM (parser) != '\0')
-	    PARSER_STREAM (parser)++;
-	  LS_TOKEN_STOKEN (token).length = PARSER_STREAM (parser) - 1 - start;
-	}
-      else
-	{
-	  /* Skip over the ending quote and mark the length of the string.  */
-	  PARSER_STREAM (parser) = (char *) ++end;
-	  LS_TOKEN_STOKEN (token).length = PARSER_STREAM (parser) - 2 - start;
-	}
-    }
-  else
-    {
-      const char *p;
-
-      /* Otherwise, only identifier characters are permitted.
-	 Spaces are the exception.  In general, we keep spaces,
-	 but only if the next characters in the input do not resolve
-	 to one of the keywords.
-
-	 This allows users to forgo quoting CV-qualifiers, template arguments,
-	 and similar common language constructs.  */
-
-      while (1)
-	{
-	  if (isspace (*PARSER_STREAM (parser)))
-	    {
-	      p = skip_spaces (PARSER_STREAM (parser));
-	      /* When we get here we know we've found something followed by
-		 a space (we skip over parens and templates below).
-		 So if we find a keyword now, we know it is a keyword and not,
-		 say, a function name.  */
-	      if (linespec_lexer_lex_keyword (p) != NULL)
-		{
-		  LS_TOKEN_STOKEN (token).ptr = start;
-		  LS_TOKEN_STOKEN (token).length
-		    = PARSER_STREAM (parser) - start;
-		  return token;
-		}
-
-	      /* Advance past the whitespace.  */
-	      PARSER_STREAM (parser) = p;
-	    }
-
-	  /* If the next character is EOI or (single) ':', the
-	     string is complete;  return the token.  */
-	  if (*PARSER_STREAM (parser) == 0)
-	    {
-	      LS_TOKEN_STOKEN (token).ptr = start;
-	      LS_TOKEN_STOKEN (token).length = PARSER_STREAM (parser) - start;
-	      return token;
-	    }
-	  else if (PARSER_STREAM (parser)[0] == ':')
-	    {
-	      /* Do not tokenize the C++ scope operator. */
-	      if (PARSER_STREAM (parser)[1] == ':')
-		++(PARSER_STREAM (parser));
-
-	      /* Do not tokenize ABI tags such as "[abi:cxx11]".  */
-	      else if (PARSER_STREAM (parser) - start > 4
-		       && startswith (PARSER_STREAM (parser) - 4, "[abi"))
-		++(PARSER_STREAM (parser));
-
-	      /* Do not tokenify if the input length so far is one
-		 (i.e, a single-letter drive name) and the next character
-		 is a directory separator.  This allows Windows-style
-		 paths to be recognized as filenames without quoting it.  */
-	      else if ((PARSER_STREAM (parser) - start) != 1
-		       || !IS_DIR_SEPARATOR (PARSER_STREAM (parser)[1]))
-		{
-		  LS_TOKEN_STOKEN (token).ptr = start;
-		  LS_TOKEN_STOKEN (token).length
-		    = PARSER_STREAM (parser) - start;
-		  return token;
-		}
-	    }
-	  /* Special case: permit quote-enclosed linespecs.  */
-	  else if (parser->is_quote_enclosed
-		   && strchr (linespec_quote_characters,
-			      *PARSER_STREAM (parser))
-		   && is_closing_quote_enclosed (PARSER_STREAM (parser)))
-	    {
-	      LS_TOKEN_STOKEN (token).ptr = start;
-	      LS_TOKEN_STOKEN (token).length = PARSER_STREAM (parser) - start;
-	      return token;
-	    }
-	  /* Because commas may terminate a linespec and appear in
-	     the middle of valid string input, special cases for
-	     '<' and '(' are necessary.  */
-	  else if (*PARSER_STREAM (parser) == '<'
-		   || *PARSER_STREAM (parser) == '(')
-	    {
-	      /* Don't interpret 'operator<' / 'operator<<' as a
-		 template parameter list though.  */
-	      if (*PARSER_STREAM (parser) == '<'
-		  && (PARSER_STATE (parser)->language->la_language
-		      == language_cplus)
-		  && (PARSER_STREAM (parser) - start) >= CP_OPERATOR_LEN)
-		{
-		  const char *op = PARSER_STREAM (parser);
-
-		  while (op > start && isspace (op[-1]))
-		    op--;
-		  if (op - start >= CP_OPERATOR_LEN)
-		    {
-		      op -= CP_OPERATOR_LEN;
-		      if (strncmp (op, CP_OPERATOR_STR, CP_OPERATOR_LEN) == 0
-			  && (op == start
-			      || !(isalnum (op[-1]) || op[-1] == '_')))
-			{
-			  /* This is an operator name.  Keep going.  */
-			  ++(PARSER_STREAM (parser));
-			  if (*PARSER_STREAM (parser) == '<')
-			    ++(PARSER_STREAM (parser));
-			  continue;
-			}
-		    }
-		}
-
-	      const char *end = find_parameter_list_end (PARSER_STREAM (parser));
-	      PARSER_STREAM (parser) = end;
-
-	      /* Don't loop around to the normal \0 case above because
-		 we don't want to misinterpret a potential keyword at
-		 the end of the token when the string isn't
-		 "()<>"-balanced.  This handles "b
-		 function(thread<tab>" in completion mode.  */
-	      if (*end == '\0')
-		{
-		  LS_TOKEN_STOKEN (token).ptr = start;
-		  LS_TOKEN_STOKEN (token).length
-		    = PARSER_STREAM (parser) - start;
-		  return token;
-		}
-	      else
-		continue;
-	    }
-	  /* Commas are terminators, but not if they are part of an
-	     operator name.  */
-	  else if (*PARSER_STREAM (parser) == ',')
-	    {
-	      if ((PARSER_STATE (parser)->language->la_language
-		   == language_cplus)
-		  && (PARSER_STREAM (parser) - start) > CP_OPERATOR_LEN)
-		{
-		  const char *op = strstr (start, CP_OPERATOR_STR);
-
-		  if (op != NULL && is_operator_name (op))
-		    {
-		      /* This is an operator name.  Keep going.  */
-		      ++(PARSER_STREAM (parser));
-		      continue;
-		    }
-		}
-
-	      /* Comma terminates the string.  */
-	      LS_TOKEN_STOKEN (token).ptr = start;
-	      LS_TOKEN_STOKEN (token).length = PARSER_STREAM (parser) - start;
-	      return token;
-	    }
-
-	  /* Advance the stream.  */
-	  ++(PARSER_STREAM (parser));
-	}
-    }
-
-  return token;
-}
-
-/* Lex a single linespec token from PARSER.  */
-
-static linespec_token
-linespec_lexer_lex_one (linespec_parser *parser)
-{
-  const char *keyword;
-
-  if (parser->lexer.current.type == LSTOKEN_CONSUMED)
-    {
-      /* Skip any whitespace.  */
-      PARSER_STREAM (parser) = skip_spaces (PARSER_STREAM (parser));
-
-      /* Check for a keyword, they end the linespec.  */
-      keyword = linespec_lexer_lex_keyword (PARSER_STREAM (parser));
-      if (keyword != NULL)
-	{
-	  parser->lexer.current.type = LSTOKEN_KEYWORD;
-	  LS_TOKEN_KEYWORD (parser->lexer.current) = keyword;
-	  /* We do not advance the stream here intentionally:
-	     we would like lexing to stop when a keyword is seen.
-
-	     PARSER_STREAM (parser) +=  strlen (keyword);  */
-
-	  return parser->lexer.current;
-	}
-
-      /* Handle other tokens.  */
-      switch (*PARSER_STREAM (parser))
-	{
-	case 0:
-	  parser->lexer.current.type = LSTOKEN_EOI;
-	  break;
-
-	case '+': case '-':
-	case '0': case '1': case '2': case '3': case '4':
-        case '5': case '6': case '7': case '8': case '9':
-           if (!linespec_lexer_lex_number (parser, &(parser->lexer.current)))
-	     parser->lexer.current = linespec_lexer_lex_string (parser);
-          break;
-
-	case ':':
-	  /* If we have a scope operator, lex the input as a string.
-	     Otherwise, return LSTOKEN_COLON.  */
-	  if (PARSER_STREAM (parser)[1] == ':')
-	    parser->lexer.current = linespec_lexer_lex_string (parser);
-	  else
-	    {
-	      parser->lexer.current.type = LSTOKEN_COLON;
-	      ++(PARSER_STREAM (parser));
-	    }
-	  break;
-
-	case '\'': case '\"':
-	  /* Special case: permit quote-enclosed linespecs.  */
-	  if (parser->is_quote_enclosed
-	      && is_closing_quote_enclosed (PARSER_STREAM (parser)))
-	    {
-	      ++(PARSER_STREAM (parser));
-	      parser->lexer.current.type = LSTOKEN_EOI;
-	    }
-	  else
-	    parser->lexer.current = linespec_lexer_lex_string (parser);
-	  break;
-
-	case ',':
-	  parser->lexer.current.type = LSTOKEN_COMMA;
-	  LS_TOKEN_STOKEN (parser->lexer.current).ptr
-	    = PARSER_STREAM (parser);
-	  LS_TOKEN_STOKEN (parser->lexer.current).length = 1;
-	  ++(PARSER_STREAM (parser));
-	  break;
-
-	default:
-	  /* If the input is not a number, it must be a string.
-	     [Keywords were already considered above.]  */
-	  parser->lexer.current = linespec_lexer_lex_string (parser);
-	  break;
-	}
-    }
-
-  return parser->lexer.current;
-}
-
-/* Consume the current token and return the next token in PARSER's
-   input stream.  Also advance the completion word for completion
-   mode.  */
-
-static linespec_token
-linespec_lexer_consume_token (linespec_parser *parser)
-{
-  gdb_assert (parser->lexer.current.type != LSTOKEN_EOI);
-
-  bool advance_word = (parser->lexer.current.type != LSTOKEN_STRING
-		       || *PARSER_STREAM (parser) != '\0');
-
-  /* If we're moving past a string to some other token, it must be the
-     quote was terminated.  */
-  if (parser->completion_quote_char)
-    {
-      gdb_assert (parser->lexer.current.type == LSTOKEN_STRING);
-
-      /* If the string was the last (non-EOI) token, we're past the
-	 quote, but remember that for later.  */
-      if (*PARSER_STREAM (parser) != '\0')
-	{
-	  parser->completion_quote_char = '\0';
-	  parser->completion_quote_end = NULL;;
-	}
-    }
-
-  parser->lexer.current.type = LSTOKEN_CONSUMED;
-  linespec_lexer_lex_one (parser);
-
-  if (parser->lexer.current.type == LSTOKEN_STRING)
-    {
-      /* Advance the completion word past a potential initial
-	 quote-char.  */
-      parser->completion_word = LS_TOKEN_STOKEN (parser->lexer.current).ptr;
-    }
-  else if (advance_word)
-    {
-      /* Advance the completion word past any whitespace.  */
-      parser->completion_word = PARSER_STREAM (parser);
-    }
-
-  return parser->lexer.current;
-}
-
-/* Return the next token without consuming the current token.  */
-
-static linespec_token
-linespec_lexer_peek_token (linespec_parser *parser)
-{
-  linespec_token next;
-  const char *saved_stream = PARSER_STREAM (parser);
-  linespec_token saved_token = parser->lexer.current;
-  int saved_completion_quote_char = parser->completion_quote_char;
-  const char *saved_completion_quote_end = parser->completion_quote_end;
-  const char *saved_completion_word = parser->completion_word;
-
-  next = linespec_lexer_consume_token (parser);
-  PARSER_STREAM (parser) = saved_stream;
-  parser->lexer.current = saved_token;
-  parser->completion_quote_char = saved_completion_quote_char;
-  parser->completion_quote_end = saved_completion_quote_end;
-  parser->completion_word = saved_completion_word;
-  return next;
-}
+static struct symtabs_and_lines decode_indirect (char **argptr);
+
+static char *locate_first_half (char **argptr, int *is_quote_enclosed);
+
+static struct symtabs_and_lines decode_objc (char **argptr,
+					     int funfirstline,
+					     struct symtab *file_symtab,
+					     struct linespec_result *canonical,
+					     char *saved_arg);
+
+static struct symtabs_and_lines decode_compound (char **argptr,
+						 int funfirstline,
+						 struct linespec_result *canonical,
+						 struct symtab *file_symtab,
+						 char *saved_arg,
+						 char *p);
+
+static struct symbol *lookup_prefix_sym (char **argptr, char *p,
+					 struct symtab *);
+
+static struct symtabs_and_lines find_method (int funfirstline,
+					     struct linespec_result *canonical,
+					     char *saved_arg,
+					     char *copy,
+					     struct type *t,
+					     struct symbol *sym_class,
+					     struct symtab *);
+
+static void cplusplus_error (const char *name, const char *fmt, ...)
+     ATTRIBUTE_NORETURN ATTRIBUTE_PRINTF (2, 3);
+
+static int total_number_of_methods (struct type *type);
+
+static int find_methods (struct type *, char *,
+			 enum language, struct symbol **, struct symtab *);
+
+static int add_matching_methods (int method_counter, struct type *t,
+				 enum language language,
+				 struct symbol **sym_arr);
+
+static int add_constructors (int method_counter, struct type *t,
+			     enum language language,
+			     struct symbol **sym_arr);
+
+static void build_canonical_line_spec (struct symtab_and_line *,
+				       char *, struct linespec_result *);
+
+static char *find_toplevel_char (char *s, char c);
+
+static int is_objc_method_format (const char *s);
+
+static struct symtabs_and_lines decode_line_2 (struct symbol *[],
+					       int, int,
+					       struct linespec_result *);
+
+static struct symtab *symtab_from_filename (char **argptr,
+					    char *p, int is_quote_enclosed);
+
+static struct symbol *find_function_symbol (char **argptr, char *p,
+					    int is_quote_enclosed);
+
+static struct
+symtabs_and_lines decode_all_digits (char **argptr,
+				     struct symtab *default_symtab,
+				     int default_line,
+				     struct linespec_result *canonical,
+				     struct symtab *file_symtab,
+				     char *q);
+
+static struct symtabs_and_lines decode_dollar (char *copy,
+					       int funfirstline,
+					       struct symtab *default_symtab,
+					       struct linespec_result *canonical,
+					       struct symtab *file_symtab);
+
+static int decode_label (struct symbol *function_symbol,
+			 char *copy, struct linespec_result *canonical,
+			 struct symtabs_and_lines *result);
+
+static struct symtabs_and_lines decode_variable (char *copy,
+						 int funfirstline,
+						 struct linespec_result *canonical,
+						 struct symtab *file_symtab);
+
+static struct
+symtabs_and_lines symbol_found (int funfirstline,
+				struct linespec_result *canonical,
+				char *copy,
+				struct symbol *sym,
+				struct symtab *file_symtab,
+				struct symbol *function_symbol);
+
+static struct
+symtabs_and_lines minsym_found (int funfirstline,
+				struct minimal_symbol *msymbol);
 
 /* Helper functions.  */
 
-/* Add SAL to SALS, and also update SELF->CANONICAL_NAMES to reflect
-   the new sal, if needed.  If not NULL, SYMNAME is the name of the
-   symbol to use when constructing the new canonical name.
-
-   If LITERAL_CANONICAL is non-zero, SYMNAME will be used as the
-   canonical name for the SAL.  */
+/* Issue a helpful hint on using the command completion feature on
+   single quoted demangled C++ symbols as part of the completion
+   error.  */
 
 static void
-add_sal_to_sals (struct linespec_state *self,
-		 std::vector<symtab_and_line> *sals,
-		 struct symtab_and_line *sal,
-		 const char *symname, int literal_canonical)
+cplusplus_error (const char *name, const char *fmt, ...)
 {
-  sals->push_back (*sal);
+  struct ui_file *tmp_stream;
+  char *message;
 
-  if (self->canonical)
-    {
-      struct linespec_canonical_name *canonical;
+  tmp_stream = mem_fileopen ();
+  make_cleanup_ui_file_delete (tmp_stream);
 
-      self->canonical_names = XRESIZEVEC (struct linespec_canonical_name,
-					  self->canonical_names,
-					  sals->size ());
-      canonical = &self->canonical_names[sals->size () - 1];
-      if (!literal_canonical && sal->symtab)
-	{
-	  symtab_to_fullname (sal->symtab);
-
-	  /* Note that the filter doesn't have to be a valid linespec
-	     input.  We only apply the ":LINE" treatment to Ada for
-	     the time being.  */
-	  if (symname != NULL && sal->line != 0
-	      && self->language->la_language == language_ada)
-	    canonical->suffix = xstrprintf ("%s:%d", symname, sal->line);
-	  else if (symname != NULL)
-	    canonical->suffix = xstrdup (symname);
-	  else
-	    canonical->suffix = xstrprintf ("%d", sal->line);
-	  canonical->symtab = sal->symtab;
-	}
-      else
-	{
-	  if (symname != NULL)
-	    canonical->suffix = xstrdup (symname);
-	  else
-	    canonical->suffix = xstrdup ("<unknown>");
-	  canonical->symtab = NULL;
-	}
-    }
-}
-
-/* A hash function for address_entry.  */
-
-static hashval_t
-hash_address_entry (const void *p)
-{
-  const struct address_entry *aep = (const struct address_entry *) p;
-  hashval_t hash;
-
-  hash = iterative_hash_object (aep->pspace, 0);
-  return iterative_hash_object (aep->addr, hash);
-}
-
-/* An equality function for address_entry.  */
-
-static int
-eq_address_entry (const void *a, const void *b)
-{
-  const struct address_entry *aea = (const struct address_entry *) a;
-  const struct address_entry *aeb = (const struct address_entry *) b;
-
-  return aea->pspace == aeb->pspace && aea->addr == aeb->addr;
-}
-
-/* Check whether the address, represented by PSPACE and ADDR, is
-   already in the set.  If so, return 0.  Otherwise, add it and return
-   1.  */
-
-static int
-maybe_add_address (htab_t set, struct program_space *pspace, CORE_ADDR addr)
-{
-  struct address_entry e, *p;
-  void **slot;
-
-  e.pspace = pspace;
-  e.addr = addr;
-  slot = htab_find_slot (set, &e, INSERT);
-  if (*slot)
-    return 0;
-
-  p = XNEW (struct address_entry);
-  memcpy (p, &e, sizeof (struct address_entry));
-  *slot = p;
-
-  return 1;
-}
-
-/* A helper that walks over all matching symtabs in all objfiles and
-   calls CALLBACK for each symbol matching NAME.  If SEARCH_PSPACE is
-   not NULL, then the search is restricted to just that program
-   space.  If INCLUDE_INLINE is true then symbols representing
-   inlined instances of functions will be included in the result.  */
-
-static void
-iterate_over_all_matching_symtabs
-  (struct linespec_state *state,
-   const lookup_name_info &lookup_name,
-   const domain_enum name_domain,
-   enum search_domain search_domain,
-   struct program_space *search_pspace, bool include_inline,
-   gdb::function_view<symbol_found_callback_ftype> callback)
-{
-  struct program_space *pspace;
-
-  ALL_PSPACES (pspace)
   {
-    if (search_pspace != NULL && search_pspace != pspace)
-      continue;
-    if (pspace->executing_startup)
-      continue;
+    va_list args;
 
-    set_current_program_space (pspace);
-
-    for (objfile *objfile : current_program_space->objfiles ())
-      {
-	if (objfile->sf)
-	  objfile->sf->qf->expand_symtabs_matching (objfile,
-						    NULL,
-						    lookup_name,
-						    NULL, NULL,
-						    search_domain);
-
-	for (compunit_symtab *cu : objfile->compunits ())
-	  {
-	    struct symtab *symtab = COMPUNIT_FILETABS (cu);
-
-	    iterate_over_file_blocks (symtab, lookup_name, name_domain,
-				      callback);
-
-	    if (include_inline)
-	      {
-		struct block *block;
-		int i;
-
-		for (i = FIRST_LOCAL_BLOCK;
-		     i < BLOCKVECTOR_NBLOCKS (SYMTAB_BLOCKVECTOR (symtab));
-		     i++)
-		  {
-		    block = BLOCKVECTOR_BLOCK (SYMTAB_BLOCKVECTOR (symtab), i);
-		    state->language->la_iterate_over_symbols
-		      (block, lookup_name, name_domain,
-		       [&] (block_symbol *bsym)
-		       {
-			 /* Restrict calls to CALLBACK to symbols
-			    representing inline symbols only.  */
-			 if (SYMBOL_INLINED (bsym->symbol))
-			   return callback (bsym);
-			 return true;
-		       });
-		  }
-	      }
-	  }
-      }
+    va_start (args, fmt);
+    vfprintf_unfiltered (tmp_stream, fmt, args);
+    va_end (args);
   }
+
+  while (*name == '\'')
+    name++;
+  fprintf_unfiltered (tmp_stream,
+		      ("Hint: try '%s<TAB> or '%s<ESC-?>\n"
+		       "(Note leading single quote.)"),
+		      name, name);
+
+  message = ui_file_xstrdup (tmp_stream, NULL);
+  make_cleanup (xfree, message);
+  throw_error (NOT_FOUND_ERROR, "%s", message);
 }
 
-/* Returns the block to be used for symbol searches from
-   the current location.  */
+/* Return the number of methods described for TYPE, including the
+   methods from types it derives from.  This can't be done in the symbol
+   reader because the type of the baseclass might still be stubbed
+   when the definition of the derived class is parsed.  */
 
-static const struct block *
-get_current_search_block (void)
+static int
+total_number_of_methods (struct type *type)
 {
-  const struct block *block;
-  enum language save_language;
+  int n;
+  int count;
 
-  /* get_selected_block can change the current language when there is
-     no selected frame yet.  */
-  save_language = current_language->la_language;
-  block = get_selected_block (0);
-  set_language (save_language);
+  CHECK_TYPEDEF (type);
+  if (! HAVE_CPLUS_STRUCT (type))
+    return 0;
+  count = TYPE_NFN_FIELDS_TOTAL (type);
+
+  for (n = 0; n < TYPE_N_BASECLASSES (type); n++)
+    count += total_number_of_methods (TYPE_BASECLASS (type, n));
+
+  return count;
+}
+
+/* Returns the block to be used for symbol searches for the given SYMTAB,
+   which may be NULL.  */
+
+static struct block *
+get_search_block (struct symtab *symtab)
+{
+  struct block *block;
+
+  if (symtab != NULL)
+    block = BLOCKVECTOR_BLOCK (BLOCKVECTOR (symtab), STATIC_BLOCK);
+  else
+    {
+      enum language save_language;
+
+      /* get_selected_block can change the current language when there is
+	 no selected frame yet.  */
+      save_language = current_language->la_language;
+      block = get_selected_block (0);
+      set_language (save_language);
+    }
 
   return block;
 }
 
-/* Iterate over static and global blocks.  */
+/* Recursive helper function for decode_line_1.
+   Look for methods named NAME in type T.
+   Return number of matches.
+   Put matches in SYM_ARR, which should have been allocated with
+   a size of total_number_of_methods (T) * sizeof (struct symbol *).
+   Note that this function is g++ specific.  */
 
-static void
-iterate_over_file_blocks
-  (struct symtab *symtab, const lookup_name_info &name,
-   domain_enum domain, gdb::function_view<symbol_found_callback_ftype> callback)
+static int
+find_methods (struct type *t, char *name, enum language language,
+	      struct symbol **sym_arr, struct symtab *file_symtab)
 {
-  struct block *block;
-
-  for (block = BLOCKVECTOR_BLOCK (SYMTAB_BLOCKVECTOR (symtab), STATIC_BLOCK);
-       block != NULL;
-       block = BLOCK_SUPERBLOCK (block))
-    LA_ITERATE_OVER_SYMBOLS (block, name, domain, callback);
-}
-
-/* A helper for find_method.  This finds all methods in type T of
-   language T_LANG which match NAME.  It adds matching symbol names to
-   RESULT_NAMES, and adds T's direct superclasses to SUPERCLASSES.  */
-
-static void
-find_methods (struct type *t, enum language t_lang, const char *name,
-	      std::vector<const char *> *result_names,
-	      std::vector<struct type *> *superclasses)
-{
+  int i1 = 0;
   int ibase;
-  const char *class_name = TYPE_NAME (t);
+  char *class_name = type_name_no_tag (t);
+  struct cleanup *cleanup;
+  char *canon;
+
+  /* NAME is typed by the user: it needs to be canonicalized before
+     passing to lookup_symbol.  */
+  canon = cp_canonicalize_string (name);
+  if (canon != NULL)
+    {
+      name = canon;
+      cleanup = make_cleanup (xfree, name);
+    }
+  else
+    cleanup = make_cleanup (null_cleanup, NULL);
 
   /* Ignore this class if it doesn't have a name.  This is ugly, but
      unless we figure out how to get the physname without the name of
      the class, then the loop can't do any good.  */
-  if (class_name)
+  if (class_name
+      && (lookup_symbol_in_language (class_name, get_search_block (file_symtab),
+			 STRUCT_DOMAIN, language, (int *) NULL)))
     {
       int method_counter;
-      lookup_name_info lookup_name (name, symbol_name_match_type::FULL);
-      symbol_name_matcher_ftype *symbol_name_compare
-	= get_symbol_name_matcher (language_def (t_lang), lookup_name);
+      int name_len = strlen (name);
 
-      t = check_typedef (t);
+      CHECK_TYPEDEF (t);
 
       /* Loop over each method name.  At this level, all overloads of a name
          are counted as a single name.  There is an inner loop which loops over
@@ -1249,47 +278,206 @@ find_methods (struct type *t, enum language t_lang, const char *name,
 	   method_counter >= 0;
 	   --method_counter)
 	{
-	  const char *method_name = TYPE_FN_FIELDLIST_NAME (t, method_counter);
+	  char *method_name = TYPE_FN_FIELDLIST_NAME (t, method_counter);
+	  char dem_opname[64];
 
-	  if (symbol_name_compare (method_name, lookup_name, NULL))
+	  if (strncmp (method_name, "__", 2) == 0 ||
+	      strncmp (method_name, "op", 2) == 0 ||
+	      strncmp (method_name, "type", 4) == 0)
 	    {
-	      int field_counter;
-
-	      for (field_counter = (TYPE_FN_FIELDLIST_LENGTH (t, method_counter)
-				    - 1);
-		   field_counter >= 0;
-		   --field_counter)
-		{
-		  struct fn_field *f;
-		  const char *phys_name;
-
-		  f = TYPE_FN_FIELDLIST1 (t, method_counter);
-		  if (TYPE_FN_FIELD_STUB (f, field_counter))
-		    continue;
-		  phys_name = TYPE_FN_FIELD_PHYSNAME (f, field_counter);
-		  result_names->push_back (phys_name);
-		}
+	      if (cplus_demangle_opname (method_name, dem_opname, DMGL_ANSI))
+		method_name = dem_opname;
+	      else if (cplus_demangle_opname (method_name, dem_opname, 0))
+		method_name = dem_opname;
 	    }
+
+	  if (strcmp_iw (name, method_name) == 0)
+	    /* Find all the overloaded methods with that name.  */
+	    i1 += add_matching_methods (method_counter, t, language,
+					sym_arr + i1);
+	  else if (strncmp (class_name, name, name_len) == 0
+		   && (class_name[name_len] == '\0'
+		       || class_name[name_len] == '<'))
+	    i1 += add_constructors (method_counter, t, language,
+				    sym_arr + i1);
 	}
     }
 
-  for (ibase = 0; ibase < TYPE_N_BASECLASSES (t); ibase++)
-    superclasses->push_back (TYPE_BASECLASS (t, ibase));
+  /* Only search baseclasses if there is no match yet, since names in
+     derived classes override those in baseclasses.
+
+     FIXME: The above is not true; it is only true of member functions
+     if they have the same number of arguments (??? - section 13.1 of the
+     ARM says the function members are not in the same scope but doesn't
+     really spell out the rules in a way I understand.  In any case, if
+     the number of arguments differ this is a case in which we can overload
+     rather than hiding without any problem, and gcc 2.4.5 does overload
+     rather than hiding in this case).  */
+
+  if (i1 == 0)
+    for (ibase = 0; ibase < TYPE_N_BASECLASSES (t); ibase++)
+      i1 += find_methods (TYPE_BASECLASS (t, ibase), name,
+			  language, sym_arr + i1, file_symtab);
+
+  do_cleanups (cleanup);
+  return i1;
 }
+
+/* Add the symbols associated to methods of the class whose type is T
+   and whose name matches the method indexed by METHOD_COUNTER in the
+   array SYM_ARR.  Return the number of methods added.  */
+
+static int
+add_matching_methods (int method_counter, struct type *t,
+		      enum language language, struct symbol **sym_arr)
+{
+  int field_counter;
+  int i1 = 0;
+
+  for (field_counter = TYPE_FN_FIELDLIST_LENGTH (t, method_counter) - 1;
+       field_counter >= 0;
+       --field_counter)
+    {
+      struct fn_field *f;
+      char *phys_name;
+
+      f = TYPE_FN_FIELDLIST1 (t, method_counter);
+
+      if (TYPE_FN_FIELD_STUB (f, field_counter))
+	{
+	  char *tmp_name;
+
+	  tmp_name = gdb_mangle_name (t,
+				      method_counter,
+				      field_counter);
+	  phys_name = alloca (strlen (tmp_name) + 1);
+	  strcpy (phys_name, tmp_name);
+	  xfree (tmp_name);
+	}
+      else
+	phys_name = TYPE_FN_FIELD_PHYSNAME (f, field_counter);
+
+      sym_arr[i1] = lookup_symbol_in_language (phys_name,
+				   NULL, VAR_DOMAIN,
+				   language,
+				   (int *) NULL);
+      if (sym_arr[i1])
+	i1++;
+      else
+	{
+	  /* This error message gets printed, but the method
+	     still seems to be found.
+	     fputs_filtered("(Cannot find method ", gdb_stdout);
+	     fprintf_symbol_filtered (gdb_stdout, phys_name,
+	                              language_cplus,
+	                              DMGL_PARAMS | DMGL_ANSI);
+	     fputs_filtered(" - possibly inlined.)\n", gdb_stdout);
+	  */
+	}
+    }
+
+  return i1;
+}
+
+/* Add the symbols associated to constructors of the class whose type
+   is CLASS_TYPE and which are indexed by by METHOD_COUNTER to the
+   array SYM_ARR.  Return the number of methods added.  */
+
+static int
+add_constructors (int method_counter, struct type *t,
+		  enum language language, struct symbol **sym_arr)
+{
+  int field_counter;
+  int i1 = 0;
+
+  /* For GCC 3.x and stabs, constructors and destructors
+     have names like __base_ctor and __complete_dtor.
+     Check the physname for now if we're looking for a
+     constructor.  */
+  for (field_counter
+	 = TYPE_FN_FIELDLIST_LENGTH (t, method_counter) - 1;
+       field_counter >= 0;
+       --field_counter)
+    {
+      struct fn_field *f;
+      char *phys_name;
+
+      f = TYPE_FN_FIELDLIST1 (t, method_counter);
+
+      /* GCC 3.x will never produce stabs stub methods, so
+	 we don't need to handle this case.  */
+      if (TYPE_FN_FIELD_STUB (f, field_counter))
+	continue;
+      phys_name = TYPE_FN_FIELD_PHYSNAME (f, field_counter);
+      if (! is_constructor_name (phys_name))
+	continue;
+
+      /* If this method is actually defined, include it in the
+	 list.  */
+      sym_arr[i1] = lookup_symbol_in_language (phys_name,
+				   NULL, VAR_DOMAIN,
+				   language,
+				   (int *) NULL);
+      if (sym_arr[i1])
+	i1++;
+    }
+
+  return i1;
+}
+
+/* Helper function for decode_line_1.
+   Build a canonical line spec in CANONICAL if it is non-NULL and if
+   the SAL has a symtab.
+   If SYMNAME is non-NULL the canonical line spec is `filename:symname'.
+   If SYMNAME is NULL the line number from SAL is used and the canonical
+   line spec is `filename:linenum'.  */
+
+static void
+build_canonical_line_spec (struct symtab_and_line *sal, char *symname,
+			   struct linespec_result *canonical)
+{
+  char **canonical_arr;
+  char *canonical_name;
+  char *filename;
+  struct symtab *s = sal->symtab;
+
+  if (s == (struct symtab *) NULL
+      || s->filename == (char *) NULL
+      || canonical == NULL)
+    return;
+
+  canonical_arr = (char **) xmalloc (sizeof (char *));
+  canonical->canonical = canonical_arr;
+
+  filename = s->filename;
+  if (symname != NULL)
+    {
+      canonical_name = xmalloc (strlen (filename) + strlen (symname) + 2);
+      sprintf (canonical_name, "%s:%s", filename, symname);
+    }
+  else
+    {
+      canonical_name = xmalloc (strlen (filename) + 30);
+      sprintf (canonical_name, "%s:%d", filename, sal->line);
+    }
+  canonical_arr[0] = canonical_name;
+}
+
+
 
 /* Find an instance of the character C in the string S that is outside
    of all parenthesis pairs, single-quoted strings, and double-quoted
    strings.  Also, ignore the char within a template name, like a ','
-   within foo<int, int>, while considering C++ operator</operator<<.  */
+   within foo<int, int>.  */
 
-const char *
-find_toplevel_char (const char *s, char c)
+static char *
+find_toplevel_char (char *s, char c)
 {
   int quoted = 0;		/* zero if we're not in quotes;
 				   '"' if we're in a double-quoted string;
 				   '\'' if we're in a single-quoted string.  */
   int depth = 0;		/* Number of unclosed parens we've seen.  */
-  const char *scan;
+  char *scan;
 
   for (scan = s; *scan; scan++)
     {
@@ -1308,1186 +496,300 @@ find_toplevel_char (const char *s, char c)
 	depth++;
       else if ((*scan == ')' || *scan == '>') && depth > 0)
 	depth--;
-      else if (*scan == 'o' && !quoted && depth == 0)
-	{
-	  /* Handle C++ operator names.  */
-	  if (strncmp (scan, CP_OPERATOR_STR, CP_OPERATOR_LEN) == 0)
-	    {
-	      scan += CP_OPERATOR_LEN;
-	      if (*scan == c)
-		return scan;
-	      while (isspace (*scan))
-		{
-		  ++scan;
-		  if (*scan == c)
-		    return scan;
-		}
-	      if (*scan == '\0')
-		break;
-
-	      switch (*scan)
-		{
-		  /* Skip over one less than the appropriate number of
-		     characters: the for loop will skip over the last
-		     one.  */
-		case '<':
-		  if (scan[1] == '<')
-		    {
-		      scan++;
-		      if (*scan == c)
-			return scan;
-		    }
-		  break;
-		case '>':
-		  if (scan[1] == '>')
-		    {
-		      scan++;
-		      if (*scan == c)
-			return scan;
-		    }
-		  break;
-		}
-	    }
-	}
     }
 
   return 0;
 }
 
-/* The string equivalent of find_toplevel_char.  Returns a pointer
-   to the location of NEEDLE in HAYSTACK, ignoring any occurrences
-   inside "()" and "<>".  Returns NULL if NEEDLE was not found.  */
+/* Determines if the gives string corresponds to an Objective-C method
+   representation, such as -[Foo bar:] or +[Foo bar].  Objective-C symbols
+   are allowed to have spaces and parentheses in them.  */
 
-static const char *
-find_toplevel_string (const char *haystack, const char *needle)
+static int 
+is_objc_method_format (const char *s)
 {
-  const char *s = haystack;
-
-  do
-    {
-      s = find_toplevel_char (s, *needle);
-
-      if (s != NULL)
-	{
-	  /* Found first char in HAYSTACK;  check rest of string.  */
-	  if (startswith (s, needle))
-	    return s;
-
-	  /* Didn't find it; loop over HAYSTACK, looking for the next
-	     instance of the first character of NEEDLE.  */
-	  ++s;
-	}
-    }
-  while (s != NULL && *s != '\0');
-
-  /* NEEDLE was not found in HAYSTACK.  */
-  return NULL;
+  if (s == NULL || *s == '\0')
+    return 0;
+  /* Handle arguments with the format FILENAME:SYMBOL.  */
+  if ((s[0] == ':') && (strchr ("+-", s[1]) != NULL) 
+      && (s[2] == '[') && strchr(s, ']'))
+    return 1;
+  /* Handle arguments that are just SYMBOL.  */
+  else if ((strchr ("+-", s[0]) != NULL) && (s[1] == '[') && strchr(s, ']'))
+    return 1;
+  return 0;
 }
 
-/* Convert CANONICAL to its string representation using
-   symtab_to_fullname for SYMTAB.  */
+/* Given a list of NELTS symbols in SYM_ARR, return a list of lines to
+   operate on (ask user if necessary).
+   If CANONICAL is non-NULL return a corresponding array of mangled names
+   as canonical line specs there.  */
 
-static std::string
-canonical_to_fullform (const struct linespec_canonical_name *canonical)
+static struct symtabs_and_lines
+decode_line_2 (struct symbol *sym_arr[], int nelts, int funfirstline,
+	       struct linespec_result *canonical)
 {
-  if (canonical->symtab == NULL)
-    return canonical->suffix;
-  else
-    return string_printf ("%s:%s", symtab_to_fullname (canonical->symtab),
-			  canonical->suffix);
-}
-
-/* Given FILTERS, a list of canonical names, filter the sals in RESULT
-   and store the result in SELF->CANONICAL.  */
-
-static void
-filter_results (struct linespec_state *self,
-		std::vector<symtab_and_line> *result,
-		const std::vector<const char *> &filters)
-{
-  for (const char *name : filters)
-    {
-      linespec_sals lsal;
-
-      for (size_t j = 0; j < result->size (); ++j)
-	{
-	  const struct linespec_canonical_name *canonical;
-
-	  canonical = &self->canonical_names[j];
-	  std::string fullform = canonical_to_fullform (canonical);
-
-	  if (name == fullform)
-	    lsal.sals.push_back ((*result)[j]);
-	}
-
-      if (!lsal.sals.empty ())
-	{
-	  lsal.canonical = xstrdup (name);
-	  self->canonical->lsals.push_back (std::move (lsal));
-	}
-    }
-
-  self->canonical->pre_expanded = 0;
-}
-
-/* Store RESULT into SELF->CANONICAL.  */
-
-static void
-convert_results_to_lsals (struct linespec_state *self,
-			  std::vector<symtab_and_line> *result)
-{
-  struct linespec_sals lsal;
-
-  lsal.canonical = NULL;
-  lsal.sals = std::move (*result);
-  self->canonical->lsals.push_back (std::move (lsal));
-}
-
-/* A structure that contains two string representations of a struct
-   linespec_canonical_name:
-     - one where the symtab's fullname is used;
-     - one where the filename followed the "set filename-display"
-       setting.  */
-
-struct decode_line_2_item
-{
-  decode_line_2_item (std::string &&fullform_, std::string &&displayform_,
-		      bool selected_)
-    : fullform (std::move (fullform_)),
-      displayform (std::move (displayform_)),
-      selected (selected_)
-  {
-  }
-
-  /* The form using symtab_to_fullname.  */
-  std::string fullform;
-
-  /* The form using symtab_to_filename_for_display.  */
-  std::string displayform;
-
-  /* Field is initialized to zero and it is set to one if the user
-     requested breakpoint for this entry.  */
-  unsigned int selected : 1;
-};
-
-/* Helper for std::sort to sort decode_line_2_item entries by
-   DISPLAYFORM and secondarily by FULLFORM.  */
-
-static bool
-decode_line_2_compare_items (const decode_line_2_item &a,
-			     const decode_line_2_item &b)
-{
-  if (a.displayform != b.displayform)
-    return a.displayform < b.displayform;
-  return a.fullform < b.fullform;
-}
-
-/* Handle multiple results in RESULT depending on SELECT_MODE.  This
-   will either return normally, throw an exception on multiple
-   results, or present a menu to the user.  On return, the SALS vector
-   in SELF->CANONICAL is set up properly.  */
-
-static void
-decode_line_2 (struct linespec_state *self,
-	       std::vector<symtab_and_line> *result,
-	       const char *select_mode)
-{
-  char *args;
-  const char *prompt;
+  struct symtabs_and_lines values, return_values;
+  char *args, *arg1;
   int i;
-  std::vector<const char *> filters;
-  std::vector<struct decode_line_2_item> items;
+  char *prompt;
+  char *symname;
+  struct cleanup *old_chain;
+  char **canonical_arr = (char **) NULL;
+  const char *select_mode = multiple_symbols_select_mode ();
 
-  gdb_assert (select_mode != multiple_symbols_all);
-  gdb_assert (self->canonical != NULL);
-  gdb_assert (!result->empty ());
-
-  /* Prepare ITEMS array.  */
-  for (i = 0; i < result->size (); ++i)
-    {
-      const struct linespec_canonical_name *canonical;
-      std::string displayform;
-
-      canonical = &self->canonical_names[i];
-      gdb_assert (canonical->suffix != NULL);
-
-      std::string fullform = canonical_to_fullform (canonical);
-
-      if (canonical->symtab == NULL)
-	displayform = canonical->suffix;
-      else
-	{
-	  const char *fn_for_display;
-
-	  fn_for_display = symtab_to_filename_for_display (canonical->symtab);
-	  displayform = string_printf ("%s:%s", fn_for_display,
-				       canonical->suffix);
-	}
-
-      items.emplace_back (std::move (fullform), std::move (displayform),
-			  false);
-    }
-
-  /* Sort the list of method names.  */
-  std::sort (items.begin (), items.end (), decode_line_2_compare_items);
-
-  /* Remove entries with the same FULLFORM.  */
-  items.erase (std::unique (items.begin (), items.end (),
-			    [] (const struct decode_line_2_item &a,
-				const struct decode_line_2_item &b)
-			      {
-				return a.fullform == b.fullform;
-			      }),
-	       items.end ());
-
-  if (select_mode == multiple_symbols_cancel && items.size () > 1)
+  if (select_mode == multiple_symbols_cancel)
     error (_("canceled because the command is ambiguous\n"
 	     "See set/show multiple-symbol."));
   
-  if (select_mode == multiple_symbols_all || items.size () == 1)
+  values.sals = (struct symtab_and_line *)
+    alloca (nelts * sizeof (struct symtab_and_line));
+  return_values.sals = (struct symtab_and_line *)
+    xmalloc (nelts * sizeof (struct symtab_and_line));
+  old_chain = make_cleanup (xfree, return_values.sals);
+
+  if (canonical)
     {
-      convert_results_to_lsals (self, result);
-      return;
+      canonical_arr = (char **) xmalloc (nelts * sizeof (char *));
+      make_cleanup (xfree, canonical_arr);
+      memset (canonical_arr, 0, nelts * sizeof (char *));
+      canonical->canonical = canonical_arr;
     }
 
-  printf_unfiltered (_("[0] cancel\n[1] all\n"));
-  for (i = 0; i < items.size (); i++)
-    printf_unfiltered ("[%d] %s\n", i + 2, items[i].displayform.c_str ());
-
-  prompt = getenv ("PS2");
-  if (prompt == NULL)
+  i = 0;
+  while (i < nelts)
     {
-      prompt = "> ";
+      init_sal (&return_values.sals[i]);	/* Initialize to zeroes.  */
+      init_sal (&values.sals[i]);
+      if (sym_arr[i] && SYMBOL_CLASS (sym_arr[i]) == LOC_BLOCK)
+	values.sals[i] = find_function_start_sal (sym_arr[i], funfirstline);
+      i++;
     }
-  args = command_line_input (prompt, "overload-choice");
+
+  /* If select_mode is "all", then do not print the multiple-choice
+     menu and act as if the user had chosen choice "1" (all).  */
+  if (select_mode == multiple_symbols_all
+      || ui_out_is_mi_like_p (interp_ui_out (top_level_interpreter ())))
+    args = "1";
+  else
+    {
+      i = 0;
+      printf_unfiltered (_("[0] cancel\n[1] all\n"));
+      while (i < nelts)
+        {
+          if (sym_arr[i] && SYMBOL_CLASS (sym_arr[i]) == LOC_BLOCK)
+            {
+              if (values.sals[i].symtab)
+                printf_unfiltered ("[%d] %s at %s:%d\n",
+                                   (i + 2),
+                                   SYMBOL_PRINT_NAME (sym_arr[i]),
+                                   values.sals[i].symtab->filename,
+                                   values.sals[i].line);
+              else
+                printf_unfiltered (_("[%d] %s at ?FILE:%d [No symtab? "
+				     "Probably broken debug info...]\n"),
+                                   (i + 2),
+                                   SYMBOL_PRINT_NAME (sym_arr[i]),
+                                   values.sals[i].line);
+
+            }
+          else
+            printf_unfiltered (_("?HERE\n"));
+          i++;
+        }
+
+      prompt = getenv ("PS2");
+      if (prompt == NULL)
+        {
+          prompt = "> ";
+        }
+      args = command_line_input (prompt, 0, "overload-choice");
+    }
 
   if (args == 0 || *args == 0)
     error_no_arg (_("one or more choice numbers"));
 
-  number_or_range_parser parser (args);
-  while (!parser.finished ())
+  i = 0;
+  while (*args)
     {
-      int num = parser.get_number ();
+      int num;
+
+      arg1 = args;
+      while (*arg1 >= '0' && *arg1 <= '9')
+	arg1++;
+      if (*arg1 && *arg1 != ' ' && *arg1 != '\t')
+	error (_("Arguments must be choice numbers."));
+
+      num = atoi (args);
 
       if (num == 0)
 	error (_("canceled"));
       else if (num == 1)
 	{
-	  /* We intentionally make this result in a single breakpoint,
-	     contrary to what older versions of gdb did.  The
-	     rationale is that this lets a user get the
-	     multiple_symbols_all behavior even with the 'ask'
-	     setting; and he can get separate breakpoints by entering
-	     "2-57" at the query.  */
-	  convert_results_to_lsals (self, result);
-	  return;
+	  if (canonical_arr)
+	    {
+	      for (i = 0; i < nelts; i++)
+		{
+		  if (canonical_arr[i] == NULL)
+		    {
+		      symname = SYMBOL_LINKAGE_NAME (sym_arr[i]);
+		      canonical_arr[i] = xstrdup (symname);
+		    }
+		}
+	    }
+	  memcpy (return_values.sals, values.sals,
+		  (nelts * sizeof (struct symtab_and_line)));
+	  return_values.nelts = nelts;
+	  discard_cleanups (old_chain);
+	  return return_values;
 	}
 
-      num -= 2;
-      if (num >= items.size ())
-	printf_unfiltered (_("No choice number %d.\n"), num);
+      if (num >= nelts + 2)
+	{
+	  printf_unfiltered (_("No choice number %d.\n"), num);
+	}
       else
 	{
-	  struct decode_line_2_item *item = &items[num];
-
-	  if (!item->selected)
+	  num -= 2;
+	  if (values.sals[num].pc)
 	    {
-	      filters.push_back (item->fullform.c_str ());
-	      item->selected = 1;
+	      if (canonical_arr)
+		{
+		  symname = SYMBOL_LINKAGE_NAME (sym_arr[num]);
+		  make_cleanup (xfree, symname);
+		  canonical_arr[i] = xstrdup (symname);
+		}
+	      return_values.sals[i++] = values.sals[num];
+	      values.sals[num].pc = 0;
 	    }
 	  else
 	    {
 	      printf_unfiltered (_("duplicate request for %d ignored.\n"),
-				 num + 2);
+				 num);
 	    }
 	}
+
+      args = arg1;
+      while (*args == ' ' || *args == '\t')
+	args++;
+    }
+  return_values.nelts = i;
+  discard_cleanups (old_chain);
+  return return_values;
+}
+
+/* Valid delimiters for linespec keywords "if", "thread" or "task".  */
+
+static int
+is_linespec_boundary (char c)
+{
+  return c == ' ' || c == '\t' || c == '\0' || c == ',';
+}
+
+/* A helper function for decode_line_1 and friends which skips P
+   past any method overload information at the beginning of P, e.g.,
+   "(const struct foo *)".
+
+   This function assumes that P has already been validated to contain
+   overload information, and it will assert if *P != '('.  */
+static char *
+find_method_overload_end (char *p)
+{
+  int depth = 0;
+
+  gdb_assert (*p == '(');
+
+  while (*p)
+    {
+      if (*p == '(')
+	++depth;
+      else if (*p == ')')
+	{
+	  if (--depth == 0)
+	    {
+	      ++p;
+	      break;
+	    }
+	}
+      ++p;
     }
 
-  filter_results (self, result, filters);
+  return p;
+}
+
+/* Keep important information used when looking up a name.  This includes
+   template parameters, overload information, and important keywords, including
+   the possible Java trailing type.  */
+
+static char *
+keep_name_info (char *p, int on_boundary)
+{
+  const char *quotes = get_gdb_completer_quote_characters ();
+  char *saved_p = p;
+  int nest = 0;
+
+  while (*p)
+    {
+      if (strchr (quotes, *p))
+	break;
+
+      if (*p == ',' && !nest)
+	break;
+
+      if (on_boundary && !nest)
+	{
+	  const char *const words[] = { "if", "thread", "task" };
+	  int wordi;
+
+	  for (wordi = 0; wordi < ARRAY_SIZE (words); wordi++)
+	    if (strncmp (p, words[wordi], strlen (words[wordi])) == 0
+		&& is_linespec_boundary (p[strlen (words[wordi])]))
+	      break;
+	  if (wordi < ARRAY_SIZE (words))
+	    break;
+	}
+
+      if (*p == '(' || *p == '<' || *p == '[')
+	nest++;
+      else if ((*p == ')' || *p == '>' || *p == ']') && nest > 0)
+	nest--;
+
+      p++;
+
+      /* The ',' check could fail on "operator ,".  */
+      p += cp_validate_operator (p);
+
+      on_boundary = is_linespec_boundary (p[-1]);
+    }
+
+  while (p > saved_p && is_linespec_boundary (p[-1]))
+    p--;
+
+  return p;
 }
 
 
-
 /* The parser of linespec itself.  */
 
-/* Throw an appropriate error when SYMBOL is not found (optionally in
-   FILENAME).  */
-
-static void ATTRIBUTE_NORETURN
-symbol_not_found_error (const char *symbol, const char *filename)
-{
-  if (symbol == NULL)
-    symbol = "";
-
-  if (!have_full_symbols ()
-      && !have_partial_symbols ()
-      && !have_minimal_symbols ())
-    throw_error (NOT_FOUND_ERROR,
-		 _("No symbol table is loaded.  Use the \"file\" command."));
-
-  /* If SYMBOL starts with '$', the user attempted to either lookup
-     a function/variable in his code starting with '$' or an internal
-     variable of that name.  Since we do not know which, be concise and
-     explain both possibilities.  */
-  if (*symbol == '$')
-    {
-      if (filename)
-	throw_error (NOT_FOUND_ERROR,
-		     _("Undefined convenience variable or function \"%s\" "
-		       "not defined in \"%s\"."), symbol, filename);
-      else
-	throw_error (NOT_FOUND_ERROR,
-		     _("Undefined convenience variable or function \"%s\" "
-		       "not defined."), symbol);
-    }
-  else
-    {
-      if (filename)
-	throw_error (NOT_FOUND_ERROR,
-		     _("Function \"%s\" not defined in \"%s\"."),
-		     symbol, filename);
-      else
-	throw_error (NOT_FOUND_ERROR,
-		     _("Function \"%s\" not defined."), symbol);
-    }
-}
-
-/* Throw an appropriate error when an unexpected token is encountered 
-   in the input.  */
-
-static void ATTRIBUTE_NORETURN
-unexpected_linespec_error (linespec_parser *parser)
-{
-  linespec_token token;
-  static const char * token_type_strings[]
-    = {"keyword", "colon", "string", "number", "comma", "end of input"};
-
-  /* Get the token that generated the error.  */
-  token = linespec_lexer_lex_one (parser);
-
-  /* Finally, throw the error.  */
-  if (token.type == LSTOKEN_STRING || token.type == LSTOKEN_NUMBER
-      || token.type == LSTOKEN_KEYWORD)
-    {
-      gdb::unique_xmalloc_ptr<char> string = copy_token_string (token);
-      throw_error (GENERIC_ERROR,
-		   _("malformed linespec error: unexpected %s, \"%s\""),
-		   token_type_strings[token.type], string.get ());
-    }
-  else
-    throw_error (GENERIC_ERROR,
-		 _("malformed linespec error: unexpected %s"),
-		 token_type_strings[token.type]);
-}
-
-/* Throw an undefined label error.  */
-
-static void ATTRIBUTE_NORETURN
-undefined_label_error (const char *function, const char *label)
-{
-  if (function != NULL)
-    throw_error (NOT_FOUND_ERROR,
-                _("No label \"%s\" defined in function \"%s\"."),
-                label, function);
-  else
-    throw_error (NOT_FOUND_ERROR,
-                _("No label \"%s\" defined in current function."),
-                label);
-}
-
-/* Throw a source file not found error.  */
-
-static void ATTRIBUTE_NORETURN
-source_file_not_found_error (const char *name)
-{
-  throw_error (NOT_FOUND_ERROR, _("No source file named %s."), name);
-}
-
-/* Unless at EIO, save the current stream position as completion word
-   point, and consume the next token.  */
-
-static linespec_token
-save_stream_and_consume_token (linespec_parser *parser)
-{
-  if (linespec_lexer_peek_token (parser).type != LSTOKEN_EOI)
-    parser->completion_word = PARSER_STREAM (parser);
-  return linespec_lexer_consume_token (parser);
-}
-
-/* See description in linespec.h.  */
-
-struct line_offset
-linespec_parse_line_offset (const char *string)
-{
-  const char *start = string;
-  struct line_offset line_offset = {0, LINE_OFFSET_NONE};
-
-  if (*string == '+')
-    {
-      line_offset.sign = LINE_OFFSET_PLUS;
-      ++string;
-    }
-  else if (*string == '-')
-    {
-      line_offset.sign = LINE_OFFSET_MINUS;
-      ++string;
-    }
-
-  if (*string != '\0' && !isdigit (*string))
-    error (_("malformed line offset: \"%s\""), start);
-
-  /* Right now, we only allow base 10 for offsets.  */
-  line_offset.offset = atoi (string);
-  return line_offset;
-}
-
-/* In completion mode, if the user is still typing the number, there's
-   no possible completion to offer.  But if there's already input past
-   the number, setup to expect NEXT.  */
-
-static void
-set_completion_after_number (linespec_parser *parser,
-			     linespec_complete_what next)
-{
-  if (*PARSER_STREAM (parser) == ' ')
-    {
-      parser->completion_word = skip_spaces (PARSER_STREAM (parser) + 1);
-      parser->complete_what = next;
-    }
-  else
-    {
-      parser->completion_word = PARSER_STREAM (parser);
-      parser->complete_what = linespec_complete_what::NOTHING;
-    }
-}
-
-/* Parse the basic_spec in PARSER's input.  */
-
-static void
-linespec_parse_basic (linespec_parser *parser)
-{
-  gdb::unique_xmalloc_ptr<char> name;
-  linespec_token token;
-  std::vector<block_symbol> symbols;
-  std::vector<block_symbol> *labels;
-  std::vector<bound_minimal_symbol> minimal_symbols;
-
-  /* Get the next token.  */
-  token = linespec_lexer_lex_one (parser);
-
-  /* If it is EOI or KEYWORD, issue an error.  */
-  if (token.type == LSTOKEN_KEYWORD)
-    {
-      parser->complete_what = linespec_complete_what::NOTHING;
-      unexpected_linespec_error (parser);
-    }
-  else if (token.type == LSTOKEN_EOI)
-    {
-      unexpected_linespec_error (parser);
-    }
-  /* If it is a LSTOKEN_NUMBER, we have an offset.  */
-  else if (token.type == LSTOKEN_NUMBER)
-    {
-      set_completion_after_number (parser, linespec_complete_what::KEYWORD);
-
-      /* Record the line offset and get the next token.  */
-      name = copy_token_string (token);
-      PARSER_EXPLICIT (parser)->line_offset
-	= linespec_parse_line_offset (name.get ());
-
-      /* Get the next token.  */
-      token = linespec_lexer_consume_token (parser);
-
-      /* If the next token is a comma, stop parsing and return.  */
-      if (token.type == LSTOKEN_COMMA)
-	{
-	  parser->complete_what = linespec_complete_what::NOTHING;
-	  return;
-	}
-
-      /* If the next token is anything but EOI or KEYWORD, issue
-	 an error.  */
-      if (token.type != LSTOKEN_KEYWORD && token.type != LSTOKEN_EOI)
-	unexpected_linespec_error (parser);
-    }
-
-  if (token.type == LSTOKEN_KEYWORD || token.type == LSTOKEN_EOI)
-    return;
-
-  /* Next token must be LSTOKEN_STRING.  */
-  if (token.type != LSTOKEN_STRING)
-    {
-      parser->complete_what = linespec_complete_what::NOTHING;
-      unexpected_linespec_error (parser);
-    }
-
-  /* The current token will contain the name of a function, method,
-     or label.  */
-  name = copy_token_string (token);
-
-  if (parser->completion_tracker != NULL)
-    {
-      /* If the function name ends with a ":", then this may be an
-	 incomplete "::" scope operator instead of a label separator.
-	 E.g.,
-	   "b klass:<tab>"
-	 which should expand to:
-	   "b klass::method()"
-
-	 Do a tentative completion assuming the later.  If we find
-	 completions, advance the stream past the colon token and make
-	 it part of the function name/token.  */
-
-      if (!parser->completion_quote_char
-	  && strcmp (PARSER_STREAM (parser), ":") == 0)
-	{
-	  completion_tracker tmp_tracker;
-	  const char *source_filename
-	    = PARSER_EXPLICIT (parser)->source_filename;
-	  symbol_name_match_type match_type
-	    = PARSER_EXPLICIT (parser)->func_name_match_type;
-
-	  linespec_complete_function (tmp_tracker,
-				      parser->completion_word,
-				      match_type,
-				      source_filename);
-
-	  if (tmp_tracker.have_completions ())
-	    {
-	      PARSER_STREAM (parser)++;
-	      LS_TOKEN_STOKEN (token).length++;
-
-	      name.reset (savestring (parser->completion_word,
-				      (PARSER_STREAM (parser)
-				       - parser->completion_word)));
-	    }
-	}
-
-      PARSER_EXPLICIT (parser)->function_name = name.release ();
-    }
-  else
-    {
-      /* Try looking it up as a function/method.  */
-      find_linespec_symbols (PARSER_STATE (parser),
-			     PARSER_RESULT (parser)->file_symtabs, name.get (),
-			     PARSER_EXPLICIT (parser)->func_name_match_type,
-			     &symbols, &minimal_symbols);
-
-      if (!symbols.empty () || !minimal_symbols.empty ())
-	{
-	  PARSER_RESULT (parser)->function_symbols
-	    = new std::vector<block_symbol> (std::move (symbols));
-	  PARSER_RESULT (parser)->minimal_symbols
-	    = new std::vector<bound_minimal_symbol>
-	        (std::move (minimal_symbols));
-	  PARSER_EXPLICIT (parser)->function_name = name.release ();
-	}
-      else
-	{
-	  /* NAME was not a function or a method.  So it must be a label
-	     name or user specified variable like "break foo.c:$zippo".  */
-	  labels = find_label_symbols (PARSER_STATE (parser), NULL,
-				       &symbols, name.get ());
-	  if (labels != NULL)
-	    {
-	      PARSER_RESULT (parser)->labels.label_symbols = labels;
-	      PARSER_RESULT (parser)->labels.function_symbols
-		= new std::vector<block_symbol> (std::move (symbols));
-	      PARSER_EXPLICIT (parser)->label_name = name.release ();
-	    }
-	  else if (token.type == LSTOKEN_STRING
-		   && *LS_TOKEN_STOKEN (token).ptr == '$')
-	    {
-	      /* User specified a convenience variable or history value.  */
-	      PARSER_EXPLICIT (parser)->line_offset
-		= linespec_parse_variable (PARSER_STATE (parser), name.get ());
-
-	      if (PARSER_EXPLICIT (parser)->line_offset.sign == LINE_OFFSET_UNKNOWN)
-		{
-		  /* The user-specified variable was not valid.  Do not
-		     throw an error here.  parse_linespec will do it for us.  */
-		  PARSER_EXPLICIT (parser)->function_name = name.release ();
-		  return;
-		}
-	    }
-	  else
-	    {
-	      /* The name is also not a label.  Abort parsing.  Do not throw
-		 an error here.  parse_linespec will do it for us.  */
-
-	      /* Save a copy of the name we were trying to lookup.  */
-	      PARSER_EXPLICIT (parser)->function_name = name.release ();
-	      return;
-	    }
-	}
-    }
-
-  int previous_qc = parser->completion_quote_char;
-
-  /* Get the next token.  */
-  token = linespec_lexer_consume_token (parser);
-
-  if (token.type == LSTOKEN_EOI)
-    {
-      if (previous_qc && !parser->completion_quote_char)
-	parser->complete_what = linespec_complete_what::KEYWORD;
-    }
-  else if (token.type == LSTOKEN_COLON)
-    {
-      /* User specified a label or a lineno.  */
-      token = linespec_lexer_consume_token (parser);
-
-      if (token.type == LSTOKEN_NUMBER)
-	{
-	  /* User specified an offset.  Record the line offset and
-	     get the next token.  */
-	  set_completion_after_number (parser, linespec_complete_what::KEYWORD);
-
-	  name = copy_token_string (token);
-	  PARSER_EXPLICIT (parser)->line_offset
-	    = linespec_parse_line_offset (name.get ());
-
-	  /* Get the next token.  */
-	  token = linespec_lexer_consume_token (parser);
-	}
-      else if (token.type == LSTOKEN_EOI && parser->completion_tracker != NULL)
-	{
-	  parser->complete_what = linespec_complete_what::LABEL;
-	}
-      else if (token.type == LSTOKEN_STRING)
-	{
-	  parser->complete_what = linespec_complete_what::LABEL;
-
-	  /* If we have text after the label separated by whitespace
-	     (e.g., "b func():lab i<tab>"), don't consider it part of
-	     the label.  In completion mode that should complete to
-	     "if", in normal mode, the 'i' should be treated as
-	     garbage.  */
-	  if (parser->completion_quote_char == '\0')
-	    {
-	      const char *ptr = LS_TOKEN_STOKEN (token).ptr;
-	      for (size_t i = 0; i < LS_TOKEN_STOKEN (token).length; i++)
-		{
-		  if (ptr[i] == ' ')
-		    {
-		      LS_TOKEN_STOKEN (token).length = i;
-		      PARSER_STREAM (parser) = skip_spaces (ptr + i + 1);
-		      break;
-		    }
-		}
-	    }
-
-	  if (parser->completion_tracker != NULL)
-	    {
-	      if (PARSER_STREAM (parser)[-1] == ' ')
-		{
-		  parser->completion_word = PARSER_STREAM (parser);
-		  parser->complete_what = linespec_complete_what::KEYWORD;
-		}
-	    }
-	  else
-	    {
-	      /* Grab a copy of the label's name and look it up.  */
-	      name = copy_token_string (token);
-	      labels
-		= find_label_symbols (PARSER_STATE (parser),
-				      PARSER_RESULT (parser)->function_symbols,
-				      &symbols, name.get ());
-
-	      if (labels != NULL)
-		{
-		  PARSER_RESULT (parser)->labels.label_symbols = labels;
-		  PARSER_RESULT (parser)->labels.function_symbols
-		    = new std::vector<block_symbol> (std::move (symbols));
-		  PARSER_EXPLICIT (parser)->label_name = name.release ();
-		}
-	      else
-		{
-		  /* We don't know what it was, but it isn't a label.  */
-		  undefined_label_error
-		    (PARSER_EXPLICIT (parser)->function_name, name.get ());
-		}
-
-	    }
-
-	  /* Check for a line offset.  */
-	  token = save_stream_and_consume_token (parser);
-	  if (token.type == LSTOKEN_COLON)
-	    {
-	      /* Get the next token.  */
-	      token = linespec_lexer_consume_token (parser);
-
-	      /* It must be a line offset.  */
-	      if (token.type != LSTOKEN_NUMBER)
-		unexpected_linespec_error (parser);
-
-	      /* Record the line offset and get the next token.  */
-	      name = copy_token_string (token);
-
-	      PARSER_EXPLICIT (parser)->line_offset
-		= linespec_parse_line_offset (name.get ());
-
-	      /* Get the next token.  */
-	      token = linespec_lexer_consume_token (parser);
-	    }
-	}
-      else
-	{
-	  /* Trailing ':' in the input. Issue an error.  */
-	  unexpected_linespec_error (parser);
-	}
-    }
-}
-
-/* Canonicalize the linespec contained in LS.  The result is saved into
-   STATE->canonical.  This function handles both linespec and explicit
-   locations.  */
-
-static void
-canonicalize_linespec (struct linespec_state *state, const linespec_p ls)
-{
-  struct event_location *canon;
-  struct explicit_location *explicit_loc;
-
-  /* If canonicalization was not requested, no need to do anything.  */
-  if (!state->canonical)
-    return;
-
-  /* Save everything as an explicit location.  */
-  state->canonical->location
-    = new_explicit_location (&ls->explicit_loc);
-  canon = state->canonical->location.get ();
-  explicit_loc = get_explicit_location (canon);
-
-  if (explicit_loc->label_name != NULL)
-    {
-      state->canonical->special_display = 1;
-
-      if (explicit_loc->function_name == NULL)
-	{
-	  /* No function was specified, so add the symbol name.  */
-	  gdb_assert (!ls->labels.function_symbols->empty ()
-		      && (ls->labels.function_symbols->size () == 1));
-	  block_symbol s = ls->labels.function_symbols->front ();
-	  explicit_loc->function_name
-	    = xstrdup (SYMBOL_NATURAL_NAME (s.symbol));
-	}
-    }
-
-  /* If this location originally came from a linespec, save a string
-     representation of it for display and saving to file.  */
-  if (state->is_linespec)
-    {
-      char *linespec = explicit_location_to_linespec (explicit_loc);
-
-      set_event_location_string (canon, linespec);
-      xfree (linespec);
-    }
-}
-
-/* Given a line offset in LS, construct the relevant SALs.  */
-
-static std::vector<symtab_and_line>
-create_sals_line_offset (struct linespec_state *self,
-			 linespec_p ls)
-{
-  int use_default = 0;
-
-  /* This is where we need to make sure we have good defaults.
-     We must guarantee that this section of code is never executed
-     when we are called with just a function name, since
-     set_default_source_symtab_and_line uses
-     select_source_symtab that calls us with such an argument.  */
-
-  if (ls->file_symtabs->size () == 1
-      && ls->file_symtabs->front () == nullptr)
-    {
-      set_current_program_space (self->program_space);
-
-      /* Make sure we have at least a default source line.  */
-      set_default_source_symtab_and_line ();
-      initialize_defaults (&self->default_symtab, &self->default_line);
-      *ls->file_symtabs
-	= collect_symtabs_from_filename (self->default_symtab->filename,
-					 self->search_pspace);
-      use_default = 1;
-    }
-
-  symtab_and_line val;
-  val.line = ls->explicit_loc.line_offset.offset;
-  switch (ls->explicit_loc.line_offset.sign)
-    {
-    case LINE_OFFSET_PLUS:
-      if (ls->explicit_loc.line_offset.offset == 0)
-	val.line = 5;
-      if (use_default)
-	val.line = self->default_line + val.line;
-      break;
-
-    case LINE_OFFSET_MINUS:
-      if (ls->explicit_loc.line_offset.offset == 0)
-	val.line = 15;
-      if (use_default)
-	val.line = self->default_line - val.line;
-      else
-	val.line = -val.line;
-      break;
-
-    case LINE_OFFSET_NONE:
-      break;			/* No need to adjust val.line.  */
-    }
-
-  std::vector<symtab_and_line> values;
-  if (self->list_mode)
-    values = decode_digits_list_mode (self, ls, val);
-  else
-    {
-      struct linetable_entry *best_entry = NULL;
-      int i, j;
-
-      std::vector<symtab_and_line> intermediate_results
-	= decode_digits_ordinary (self, ls, val.line, &best_entry);
-      if (intermediate_results.empty () && best_entry != NULL)
-	intermediate_results = decode_digits_ordinary (self, ls,
-						       best_entry->line,
-						       &best_entry);
-
-      /* For optimized code, the compiler can scatter one source line
-	 across disjoint ranges of PC values, even when no duplicate
-	 functions or inline functions are involved.  For example,
-	 'for (;;)' inside a non-template, non-inline, and non-ctor-or-dtor
-	 function can result in two PC ranges.  In this case, we don't
-	 want to set a breakpoint on the first PC of each range.  To filter
-	 such cases, we use containing blocks -- for each PC found
-	 above, we see if there are other PCs that are in the same
-	 block.  If yes, the other PCs are filtered out.  */
-
-      gdb::def_vector<int> filter (intermediate_results.size ());
-      gdb::def_vector<const block *> blocks (intermediate_results.size ());
-
-      for (i = 0; i < intermediate_results.size (); ++i)
-	{
-	  set_current_program_space (intermediate_results[i].pspace);
-
-	  filter[i] = 1;
-	  blocks[i] = block_for_pc_sect (intermediate_results[i].pc,
-					 intermediate_results[i].section);
-	}
-
-      for (i = 0; i < intermediate_results.size (); ++i)
-	{
-	  if (blocks[i] != NULL)
-	    for (j = i + 1; j < intermediate_results.size (); ++j)
-	      {
-		if (blocks[j] == blocks[i])
-		  {
-		    filter[j] = 0;
-		    break;
-		  }
-	      }
-	}
-
-      for (i = 0; i < intermediate_results.size (); ++i)
-	if (filter[i])
-	  {
-	    struct symbol *sym = (blocks[i]
-				  ? block_containing_function (blocks[i])
-				  : NULL);
-
-	    if (self->funfirstline)
-	      skip_prologue_sal (&intermediate_results[i]);
-	    intermediate_results[i].symbol = sym;
-	    add_sal_to_sals (self, &values, &intermediate_results[i],
-			     sym ? SYMBOL_NATURAL_NAME (sym) : NULL, 0);
-	  }
-    }
-
-  if (values.empty ())
-    {
-      if (ls->explicit_loc.source_filename)
-	throw_error (NOT_FOUND_ERROR, _("No line %d in file \"%s\"."),
-		     val.line, ls->explicit_loc.source_filename);
-      else
-	throw_error (NOT_FOUND_ERROR, _("No line %d in the current file."),
-		     val.line);
-    }
-
-  return values;
-}
-
-/* Convert the given ADDRESS into SaLs.  */
-
-static std::vector<symtab_and_line>
-convert_address_location_to_sals (struct linespec_state *self,
-				  CORE_ADDR address)
-{
-  symtab_and_line sal = find_pc_line (address, 0);
-  sal.pc = address;
-  sal.section = find_pc_overlay (address);
-  sal.explicit_pc = 1;
-  sal.symbol = find_pc_sect_containing_function (sal.pc, sal.section);
-
-  std::vector<symtab_and_line> sals;
-  add_sal_to_sals (self, &sals, &sal, core_addr_to_string (address), 1);
-
-  return sals;
-}
-
-/* Create and return SALs from the linespec LS.  */
-
-static std::vector<symtab_and_line>
-convert_linespec_to_sals (struct linespec_state *state, linespec_p ls)
-{
-  std::vector<symtab_and_line> sals;
-
-  if (ls->labels.label_symbols != NULL)
-    {
-      /* We have just a bunch of functions/methods or labels.  */
-      struct symtab_and_line sal;
-
-      for (const auto &sym : *ls->labels.label_symbols)
-	{
-	  struct program_space *pspace
-	    = SYMTAB_PSPACE (symbol_symtab (sym.symbol));
-
-	  if (symbol_to_sal (&sal, state->funfirstline, sym.symbol)
-	      && maybe_add_address (state->addr_set, pspace, sal.pc))
-	    add_sal_to_sals (state, &sals, &sal,
-			     SYMBOL_NATURAL_NAME (sym.symbol), 0);
-	}
-    }
-  else if (ls->function_symbols != NULL || ls->minimal_symbols != NULL)
-    {
-      /* We have just a bunch of functions and/or methods.  */
-      if (ls->function_symbols != NULL)
-	{
-	  /* Sort symbols so that symbols with the same program space are next
-	     to each other.  */
-	  std::sort (ls->function_symbols->begin (),
-		     ls->function_symbols->end (),
-		     compare_symbols);
-
-	  for (const auto &sym : *ls->function_symbols)
-	    {
-	      program_space *pspace
-		= SYMTAB_PSPACE (symbol_symtab (sym.symbol));
-	      set_current_program_space (pspace);
-
-	      /* Don't skip to the first line of the function if we
-		 had found an ifunc minimal symbol for this function,
-		 because that means that this function is an ifunc
-		 resolver with the same name as the ifunc itself.  */
-	      bool found_ifunc = false;
-
-	      if (state->funfirstline
-		   && ls->minimal_symbols != NULL
-		   && SYMBOL_CLASS (sym.symbol) == LOC_BLOCK)
-		{
-		  const CORE_ADDR addr
-		    = BLOCK_ENTRY_PC (SYMBOL_BLOCK_VALUE (sym.symbol));
-
-		  for (const auto &elem : *ls->minimal_symbols)
-		    {
-		      if (MSYMBOL_TYPE (elem.minsym) == mst_text_gnu_ifunc
-			  || MSYMBOL_TYPE (elem.minsym) == mst_data_gnu_ifunc)
-			{
-			  CORE_ADDR msym_addr = BMSYMBOL_VALUE_ADDRESS (elem);
-			  if (MSYMBOL_TYPE (elem.minsym) == mst_data_gnu_ifunc)
-			    {
-			      struct gdbarch *gdbarch
-				= get_objfile_arch (elem.objfile);
-			      msym_addr
-				= (gdbarch_convert_from_func_ptr_addr
-				   (gdbarch,
-				    msym_addr,
-				    current_top_target ()));
-			    }
-
-			  if (msym_addr == addr)
-			    {
-			      found_ifunc = true;
-			      break;
-			    }
-			}
-		    }
-		}
-
-	      if (!found_ifunc)
-		{
-		  symtab_and_line sal;
-		  if (symbol_to_sal (&sal, state->funfirstline, sym.symbol)
-		      && maybe_add_address (state->addr_set, pspace, sal.pc))
-		    add_sal_to_sals (state, &sals, &sal,
-				     SYMBOL_NATURAL_NAME (sym.symbol), 0);
-		}
-	    }
-	}
-
-      if (ls->minimal_symbols != NULL)
-	{
-	  /* Sort minimal symbols by program space, too  */
-	  std::sort (ls->minimal_symbols->begin (),
-		     ls->minimal_symbols->end (),
-		     compare_msymbols);
-
-	  for (const auto &elem : *ls->minimal_symbols)
-	    {
-	      program_space *pspace = elem.objfile->pspace;
-	      set_current_program_space (pspace);
-	      minsym_found (state, elem.objfile, elem.minsym, &sals);
-	    }
-	}
-    }
-  else if (ls->explicit_loc.line_offset.sign != LINE_OFFSET_UNKNOWN)
-    {
-      /* Only an offset was specified.  */
-	sals = create_sals_line_offset (state, ls);
-
-	/* Make sure we have a filename for canonicalization.  */
-	if (ls->explicit_loc.source_filename == NULL)
-	  {
-	    const char *fullname = symtab_to_fullname (state->default_symtab);
-
-	    /* It may be more appropriate to keep DEFAULT_SYMTAB in its symtab
-	       form so that displaying SOURCE_FILENAME can follow the current
-	       FILENAME_DISPLAY_STRING setting.  But as it is used only rarely
-	       it has been kept for code simplicity only in absolute form.  */
-	    ls->explicit_loc.source_filename = xstrdup (fullname);
-	  }
-    }
-  else
-    {
-      /* We haven't found any results...  */
-      return sals;
-    }
-
-  canonicalize_linespec (state, ls);
-
-  if (!sals.empty () && state->canonical != NULL)
-    state->canonical->pre_expanded = 1;
-
-  return sals;
-}
-
-/* Build RESULT from the explicit location components SOURCE_FILENAME,
-   FUNCTION_NAME, LABEL_NAME and LINE_OFFSET.  */
-
-static void
-convert_explicit_location_to_linespec (struct linespec_state *self,
-				       linespec_p result,
-				       const char *source_filename,
-				       const char *function_name,
-				       symbol_name_match_type fname_match_type,
-				       const char *label_name,
-				       struct line_offset line_offset)
-{
-  std::vector<block_symbol> symbols;
-  std::vector<block_symbol> *labels;
-  std::vector<bound_minimal_symbol> minimal_symbols;
-
-  result->explicit_loc.func_name_match_type = fname_match_type;
-
-  if (source_filename != NULL)
-    {
-      TRY
-	{
-	  *result->file_symtabs
-	    = symtabs_from_filename (source_filename, self->search_pspace);
-	}
-      CATCH (except, RETURN_MASK_ERROR)
-	{
-	  source_file_not_found_error (source_filename);
-	}
-      END_CATCH
-      result->explicit_loc.source_filename = xstrdup (source_filename);
-    }
-  else
-    {
-      /* A NULL entry means to use the default symtab.  */
-      result->file_symtabs->push_back (nullptr);
-    }
-
-  if (function_name != NULL)
-    {
-      find_linespec_symbols (self, result->file_symtabs,
-			     function_name, fname_match_type,
-			     &symbols, &minimal_symbols);
-
-      if (symbols.empty () && minimal_symbols.empty ())
-	symbol_not_found_error (function_name,
-				result->explicit_loc.source_filename);
-
-      result->explicit_loc.function_name = xstrdup (function_name);
-      result->function_symbols
-	= new std::vector<block_symbol> (std::move (symbols));
-      result->minimal_symbols
-	= new std::vector<bound_minimal_symbol> (std::move (minimal_symbols));
-    }
-
-  if (label_name != NULL)
-    {
-      labels = find_label_symbols (self, result->function_symbols,
-				   &symbols, label_name);
-
-      if (labels == NULL)
-	undefined_label_error (result->explicit_loc.function_name,
-			       label_name);
-
-      result->explicit_loc.label_name = xstrdup (label_name);
-      result->labels.label_symbols = labels;
-      result->labels.function_symbols
-	= new std::vector<block_symbol> (std::move (symbols));
-    }
-
-  if (line_offset.sign != LINE_OFFSET_UNKNOWN)
-    result->explicit_loc.line_offset = line_offset;
-}
-
-/* Convert the explicit location EXPLICIT_LOC into SaLs.  */
-
-static std::vector<symtab_and_line>
-convert_explicit_location_to_sals (struct linespec_state *self,
-				   linespec_p result,
-				   const struct explicit_location *explicit_loc)
-{
-  convert_explicit_location_to_linespec (self, result,
-					 explicit_loc->source_filename,
-					 explicit_loc->function_name,
-					 explicit_loc->func_name_match_type,
-					 explicit_loc->label_name,
-					 explicit_loc->line_offset);
-  return convert_linespec_to_sals (self, result);
-}
-
-/* Parse a string that specifies a linespec.
-
-   The basic grammar of linespecs:
-
-   linespec -> var_spec | basic_spec
-   var_spec -> '$' (STRING | NUMBER)
-
-   basic_spec -> file_offset_spec | function_spec | label_spec
-   file_offset_spec -> opt_file_spec offset_spec
-   function_spec -> opt_file_spec function_name_spec opt_label_spec
-   label_spec -> label_name_spec
-
-   opt_file_spec -> "" | file_name_spec ':'
-   opt_label_spec -> "" | ':' label_name_spec
-
-   file_name_spec -> STRING
-   function_name_spec -> STRING
-   label_name_spec -> STRING
-   function_name_spec -> STRING
-   offset_spec -> NUMBER
-               -> '+' NUMBER
-	       -> '-' NUMBER
-
-   This may all be followed by several keywords such as "if EXPR",
-   which we ignore.
-
-   A comma will terminate parsing.
-
-   The function may be an undebuggable function found in minimal symbol table.
+/* Parse a string that specifies a line number.
+   Pass the address of a char * variable; that variable will be
+   advanced over the characters actually parsed.
+
+   The string can be:
+
+   LINENUM -- that line number in current file.  PC returned is 0.
+   FILE:LINENUM -- that line in that file.  PC returned is 0.
+   FUNCTION -- line number of openbrace of that function.
+   PC returned is the start of the function.
+   LABEL -- a label in the current scope
+   VARIABLE -- line number of definition of that variable.
+   PC returned is 0.
+   FILE:FUNCTION -- likewise, but prefer functions in that file.
+   *EXPR -- line in which address EXPR appears.
+
+   This may all be followed by an "if EXPR", which we ignore.
+
+   FUNCTION may be an undebuggable function found in minimal symbol table.
 
    If the argument FUNFIRSTLINE is nonzero, we want the first line
    of real code inside a function when a function is specified, and it is
@@ -2507,838 +809,296 @@ convert_explicit_location_to_sals (struct linespec_state *self,
    if no file is validly specified.  Callers must check that.
    Also, the line number returned may be invalid.  */
 
-/* Parse the linespec in ARG.  MATCH_TYPE indicates how function names
-   should be matched.  */
+/* We allow single quotes in various places.  This is a hideous
+   kludge, which exists because the completer can't yet deal with the
+   lack of single quotes.  FIXME: write a linespec_completer which we
+   can use as appropriate instead of make_symbol_completion_list.  */
 
-static std::vector<symtab_and_line>
-parse_linespec (linespec_parser *parser, const char *arg,
-		symbol_name_match_type match_type)
+struct symtabs_and_lines
+decode_line_1 (char **argptr, int funfirstline, struct symtab *default_symtab,
+	       int default_line, struct linespec_result *canonical)
 {
-  linespec_token token;
-  struct gdb_exception file_exception = exception_none;
+  char *p;
+  char *q;
+  /* If a file name is specified, this is its symtab.  */
+  struct symtab *file_symtab = NULL;
 
-  /* A special case to start.  It has become quite popular for
-     IDEs to work around bugs in the previous parser by quoting
-     the entire linespec, so we attempt to deal with this nicely.  */
-  parser->is_quote_enclosed = 0;
-  if (parser->completion_tracker == NULL
-      && !is_ada_operator (arg)
-      && strchr (linespec_quote_characters, *arg) != NULL)
+  char *copy;
+  /* This says whether or not something in *ARGPTR is quoted with
+     completer_quotes (i.e. with single quotes).  */
+  int is_quoted;
+  /* Is *ARGPTR is enclosed in double quotes?  */
+  int is_quote_enclosed;
+  int is_objc_method = 0;
+  char *saved_arg = *argptr;
+  /* If IS_QUOTED, the end of the quoted bit.  */
+  char *end_quote = NULL;
+  /* Is *ARGPTR enclosed in single quotes?  */
+  int is_squote_enclosed = 0;
+  /* The "first half" of the linespec.  */
+  char *first_half;
+
+  /* If we are parsing `function:label', this holds the symbol for the
+     function.  */
+  struct symbol *function_symbol = NULL;
+  /* If FUNCTION_SYMBOL is not NULL, then this is the exception that
+     was thrown when trying to parse a filename.  */
+  volatile struct gdb_exception file_exception;
+
+  /* Defaults have defaults.  */
+
+  initialize_defaults (&default_symtab, &default_line);
+  
+  /* See if arg is *PC.  */
+
+  if (**argptr == '*')
+    return decode_indirect (argptr);
+
+  is_quoted = (strchr (get_gdb_completer_quote_characters (),
+		       **argptr) != NULL);
+
+  if (is_quoted)
     {
-      const char *end;
+      end_quote = skip_quoted (*argptr);
+      if (*end_quote == '\0')
+	is_squote_enclosed = 1;
+    }
 
-      end = skip_quote_char (arg + 1, *arg);
-      if (end != NULL && is_closing_quote_enclosed (end))
+  /* Check to see if it's a multipart linespec (with colons or
+     periods).  */
+
+  /* Locate the end of the first half of the linespec.
+     After the call, for instance, if the argptr string is "foo.c:123"
+     p will point at "123".  If there is only one part, like "foo", p
+     will point to "".  If this is a C++ name, like "A::B::foo", p will
+     point to "::B::foo".  Argptr is not changed by this call.  */
+
+  first_half = p = locate_first_half (argptr, &is_quote_enclosed);
+
+  /* First things first: if ARGPTR starts with a filename, get its
+     symtab and strip the filename from ARGPTR.  */
+  TRY_CATCH (file_exception, RETURN_MASK_ERROR)
+    {
+      file_symtab = symtab_from_filename (argptr, p, is_quote_enclosed);
+    }
+
+  if (file_exception.reason >= 0)
+    {
+      /* Check for single quotes on the non-filename part.  */
+      is_quoted = (**argptr
+		   && strchr (get_gdb_completer_quote_characters (),
+			      **argptr) != NULL);
+      if (is_quoted)
+	end_quote = skip_quoted (*argptr);
+
+      /* Locate the next "half" of the linespec.  */
+      first_half = p = locate_first_half (argptr, &is_quote_enclosed);
+    }
+
+  /* Check if this is an Objective-C method (anything that starts with
+     a '+' or '-' and a '[').  */
+  if (is_objc_method_format (p))
+    is_objc_method = 1;
+
+  /* Check if the symbol could be an Objective-C selector.  */
+
+  {
+    struct symtabs_and_lines values;
+
+    values = decode_objc (argptr, funfirstline, file_symtab,
+			  canonical, saved_arg);
+    if (values.sals != NULL)
+      return values;
+  }
+
+  /* Does it look like there actually were two parts?  */
+
+  if (p[0] == ':' || p[0] == '.')
+    {
+      /* Is it a C++ or Java compound data structure?
+	 The check on p[1] == ':' is capturing the case of "::",
+	 since p[0]==':' was checked above.
+	 Note that the call to decode_compound does everything
+	 for us, including the lookup on the symbol table, so we
+	 can return now.  */
+	
+      if (p[0] == '.' || p[1] == ':')
 	{
-	  /* Here's the special case.  Skip ARG past the initial
-	     quote.  */
-	  ++arg;
-	  parser->is_quote_enclosed = 1;
-	}
-    }
+	  struct symtabs_and_lines values;
+	  volatile struct gdb_exception ex;
+	  char *saved_argptr = *argptr;
 
-  parser->lexer.saved_arg = arg;
-  parser->lexer.stream = arg;
-  parser->completion_word = arg;
-  parser->complete_what = linespec_complete_what::FUNCTION;
-  PARSER_EXPLICIT (parser)->func_name_match_type = match_type;
+	  if (is_quote_enclosed)
+	    ++saved_arg;
 
-  /* Initialize the default symtab and line offset.  */
-  initialize_defaults (&PARSER_STATE (parser)->default_symtab,
-		       &PARSER_STATE (parser)->default_line);
+	  /* Initialize it just to avoid a GCC false warning.  */
+	  memset (&values, 0, sizeof (values));
 
-  /* Objective-C shortcut.  */
-  if (parser->completion_tracker == NULL)
-    {
-      std::vector<symtab_and_line> values
-	= decode_objc (PARSER_STATE (parser), PARSER_RESULT (parser), arg);
-      if (!values.empty ())
-	return values;
-    }
-  else
-    {
-      /* "-"/"+" is either an objc selector, or a number.  There's
-	 nothing to complete the latter to, so just let the caller
-	 complete on functions, which finds objc selectors, if there's
-	 any.  */
-      if ((arg[0] == '-' || arg[0] == '+') && arg[1] == '\0')
-	return {};
-    }
+	  TRY_CATCH (ex, RETURN_MASK_ERROR)
+	    {
+	      values = decode_compound (argptr, funfirstline, canonical,
+					file_symtab, saved_arg, p);
+	    }
+	  if ((is_quoted || is_squote_enclosed) && **argptr == '\'')
+	    *argptr = *argptr + 1;
 
-  /* Start parsing.  */
+	  if (ex.reason >= 0)
+	    return values;
 
-  /* Get the first token.  */
-  token = linespec_lexer_consume_token (parser);
+	  if (ex.error != NOT_FOUND_ERROR)
+	    throw_exception (ex);
 
-  /* It must be either LSTOKEN_STRING or LSTOKEN_NUMBER.  */
-  if (token.type == LSTOKEN_STRING && *LS_TOKEN_STOKEN (token).ptr == '$')
-    {
-      /* A NULL entry means to use GLOBAL_DEFAULT_SYMTAB.  */
-      if (parser->completion_tracker == NULL)
-	PARSER_RESULT (parser)->file_symtabs->push_back (nullptr);
-
-      /* User specified a convenience variable or history value.  */
-      gdb::unique_xmalloc_ptr<char> var = copy_token_string (token);
-      PARSER_EXPLICIT (parser)->line_offset
-	= linespec_parse_variable (PARSER_STATE (parser), var.get ());
-
-      /* If a line_offset wasn't found (VAR is the name of a user
-	 variable/function), then skip to normal symbol processing.  */
-      if (PARSER_EXPLICIT (parser)->line_offset.sign != LINE_OFFSET_UNKNOWN)
-	{
-	  /* Consume this token.  */
-	  linespec_lexer_consume_token (parser);
-
-	  goto convert_to_sals;
-	}
-    }
-  else if (token.type == LSTOKEN_EOI && parser->completion_tracker != NULL)
-    {
-      /* Let the default linespec_complete_what::FUNCTION kick in.  */
-      unexpected_linespec_error (parser);
-    }
-  else if (token.type != LSTOKEN_STRING && token.type != LSTOKEN_NUMBER)
-    {
-      parser->complete_what = linespec_complete_what::NOTHING;
-      unexpected_linespec_error (parser);
-    }
-
-  /* Shortcut: If the next token is not LSTOKEN_COLON, we know that
-     this token cannot represent a filename.  */
-  token = linespec_lexer_peek_token (parser);
-
-  if (token.type == LSTOKEN_COLON)
-    {
-      /* Get the current token again and extract the filename.  */
-      token = linespec_lexer_lex_one (parser);
-      gdb::unique_xmalloc_ptr<char> user_filename = copy_token_string (token);
-
-      /* Check if the input is a filename.  */
-      TRY
-	{
-	  *PARSER_RESULT (parser)->file_symtabs
-	    = symtabs_from_filename (user_filename.get (),
-				     PARSER_STATE (parser)->search_pspace);
-	}
-      CATCH (ex, RETURN_MASK_ERROR)
-	{
-	  file_exception = ex;
-	}
-      END_CATCH
-
-      if (file_exception.reason >= 0)
-	{
-	  /* Symtabs were found for the file.  Record the filename.  */
-	  PARSER_EXPLICIT (parser)->source_filename = user_filename.release ();
-
-	  /* Get the next token.  */
-	  token = linespec_lexer_consume_token (parser);
-
-	  /* This is LSTOKEN_COLON; consume it.  */
-	  linespec_lexer_consume_token (parser);
+	  *argptr = saved_argptr;
 	}
       else
 	{
-	  /* A NULL entry means to use GLOBAL_DEFAULT_SYMTAB.  */
-	  PARSER_RESULT (parser)->file_symtabs->push_back (nullptr);
-	}
-    }
-  /* If the next token is not EOI, KEYWORD, or COMMA, issue an error.  */
-  else if (parser->completion_tracker == NULL
-	   && (token.type != LSTOKEN_EOI && token.type != LSTOKEN_KEYWORD
-	       && token.type != LSTOKEN_COMMA))
-    {
-      /* TOKEN is the _next_ token, not the one currently in the parser.
-	 Consuming the token will give the correct error message.  */
-      linespec_lexer_consume_token (parser);
-      unexpected_linespec_error (parser);
-    }
-  else
-    {
-      /* A NULL entry means to use GLOBAL_DEFAULT_SYMTAB.  */
-      PARSER_RESULT (parser)->file_symtabs->push_back (nullptr);
-    }
-
-  /* Parse the rest of the linespec.  */
-  linespec_parse_basic (parser);
-
-  if (parser->completion_tracker == NULL
-      && PARSER_RESULT (parser)->function_symbols == NULL
-      && PARSER_RESULT (parser)->labels.label_symbols == NULL
-      && PARSER_EXPLICIT (parser)->line_offset.sign == LINE_OFFSET_UNKNOWN
-      && PARSER_RESULT (parser)->minimal_symbols == NULL)
-    {
-      /* The linespec didn't parse.  Re-throw the file exception if
-	 there was one.  */
-      if (file_exception.reason < 0)
-	throw_exception (file_exception);
-
-      /* Otherwise, the symbol is not found.  */
-      symbol_not_found_error (PARSER_EXPLICIT (parser)->function_name,
-			      PARSER_EXPLICIT (parser)->source_filename);
-    }
-
- convert_to_sals:
-
-  /* Get the last token and record how much of the input was parsed,
-     if necessary.  */
-  token = linespec_lexer_lex_one (parser);
-  if (token.type != LSTOKEN_EOI && token.type != LSTOKEN_KEYWORD)
-    unexpected_linespec_error (parser);
-  else if (token.type == LSTOKEN_KEYWORD)
-    {
-      /* Setup the completion word past the keyword.  Lexing never
-	 advances past a keyword automatically, so skip it
-	 manually.  */
-      parser->completion_word
-	= skip_spaces (skip_to_space (PARSER_STREAM (parser)));
-      parser->complete_what = linespec_complete_what::EXPRESSION;
-    }
-
-  /* Convert the data in PARSER_RESULT to SALs.  */
-  if (parser->completion_tracker == NULL)
-    return convert_linespec_to_sals (PARSER_STATE (parser),
-				     PARSER_RESULT (parser));
-
-  return {};
-}
-
-
-/* A constructor for linespec_state.  */
-
-static void
-linespec_state_constructor (struct linespec_state *self,
-			    int flags, const struct language_defn *language,
-			    struct program_space *search_pspace,
-			    struct symtab *default_symtab,
-			    int default_line,
-			    struct linespec_result *canonical)
-{
-  memset (self, 0, sizeof (*self));
-  self->language = language;
-  self->funfirstline = (flags & DECODE_LINE_FUNFIRSTLINE) ? 1 : 0;
-  self->list_mode = (flags & DECODE_LINE_LIST_MODE) ? 1 : 0;
-  self->search_pspace = search_pspace;
-  self->default_symtab = default_symtab;
-  self->default_line = default_line;
-  self->canonical = canonical;
-  self->program_space = current_program_space;
-  self->addr_set = htab_create_alloc (10, hash_address_entry, eq_address_entry,
-				      xfree, xcalloc, xfree);
-  self->is_linespec = 0;
-}
-
-/* Initialize a new linespec parser.  */
-
-linespec_parser::linespec_parser (int flags,
-				  const struct language_defn *language,
-				  struct program_space *search_pspace,
-				  struct symtab *default_symtab,
-				  int default_line,
-				  struct linespec_result *canonical)
-{
-  lexer.current.type = LSTOKEN_CONSUMED;
-  PARSER_RESULT (this)->file_symtabs = new std::vector<symtab *> ();
-  PARSER_EXPLICIT (this)->func_name_match_type
-    = symbol_name_match_type::WILD;
-  PARSER_EXPLICIT (this)->line_offset.sign = LINE_OFFSET_UNKNOWN;
-  linespec_state_constructor (PARSER_STATE (this), flags, language,
-			      search_pspace,
-			      default_symtab, default_line, canonical);
-}
-
-/* A destructor for linespec_state.  */
-
-static void
-linespec_state_destructor (struct linespec_state *self)
-{
-  htab_delete (self->addr_set);
-  xfree (self->canonical_names);
-}
-
-/* Delete a linespec parser.  */
-
-linespec_parser::~linespec_parser ()
-{
-  xfree (PARSER_EXPLICIT (this)->source_filename);
-  xfree (PARSER_EXPLICIT (this)->label_name);
-  xfree (PARSER_EXPLICIT (this)->function_name);
-
-  delete PARSER_RESULT (this)->file_symtabs;
-  delete PARSER_RESULT (this)->function_symbols;
-  delete PARSER_RESULT (this)->minimal_symbols;
-  delete PARSER_RESULT (this)->labels.label_symbols;
-  delete PARSER_RESULT (this)->labels.function_symbols;
-
-  linespec_state_destructor (PARSER_STATE (this));
-}
-
-/* See description in linespec.h.  */
-
-void
-linespec_lex_to_end (const char **stringp)
-{
-  linespec_token token;
-  const char *orig;
-
-  if (stringp == NULL || *stringp == NULL)
-    return;
-
-  linespec_parser parser (0, current_language, NULL, NULL, 0, NULL);
-  parser.lexer.saved_arg = *stringp;
-  PARSER_STREAM (&parser) = orig = *stringp;
-
-  do
-    {
-      /* Stop before any comma tokens;  we need it to keep it
-	 as the next token in the string.  */
-      token = linespec_lexer_peek_token (&parser);
-      if (token.type == LSTOKEN_COMMA)
-	break;
-      token = linespec_lexer_consume_token (&parser);
-    }
-  while (token.type != LSTOKEN_EOI && token.type != LSTOKEN_KEYWORD);
-
-  *stringp += PARSER_STREAM (&parser) - orig;
-}
-
-/* See linespec.h.  */
-
-void
-linespec_complete_function (completion_tracker &tracker,
-			    const char *function,
-			    symbol_name_match_type func_match_type,
-			    const char *source_filename)
-{
-  complete_symbol_mode mode = complete_symbol_mode::LINESPEC;
-
-  if (source_filename != NULL)
-    {
-      collect_file_symbol_completion_matches (tracker, mode, func_match_type,
-					      function, function, source_filename);
-    }
-  else
-    {
-      collect_symbol_completion_matches (tracker, mode, func_match_type,
-					 function, function);
-
-    }
-}
-
-/* Helper for complete_linespec to simplify it.  SOURCE_FILENAME is
-   only meaningful if COMPONENT is FUNCTION.  */
-
-static void
-complete_linespec_component (linespec_parser *parser,
-			     completion_tracker &tracker,
-			     const char *text,
-			     linespec_complete_what component,
-			     const char *source_filename)
-{
-  if (component == linespec_complete_what::KEYWORD)
-    {
-      complete_on_enum (tracker, linespec_keywords, text, text);
-    }
-  else if (component == linespec_complete_what::EXPRESSION)
-    {
-      const char *word
-	= advance_to_expression_complete_word_point (tracker, text);
-      complete_expression (tracker, text, word);
-    }
-  else if (component == linespec_complete_what::FUNCTION)
-    {
-      completion_list fn_list;
-
-      symbol_name_match_type match_type
-	= PARSER_EXPLICIT (parser)->func_name_match_type;
-      linespec_complete_function (tracker, text, match_type, source_filename);
-      if (source_filename == NULL)
-	{
-	  /* Haven't seen a source component, like in "b
-	     file.c:function[TAB]".  Maybe this wasn't a function, but
-	     a filename instead, like "b file.[TAB]".  */
-	  fn_list = complete_source_filenames (text);
-	}
-
-      /* If we only have a single filename completion, append a ':' for
-	 the user, since that's the only thing that can usefully follow
-	 the filename.  */
-      if (fn_list.size () == 1 && !tracker.have_completions ())
-	{
-	  char *fn = fn_list[0].release ();
-
-	  /* If we also need to append a quote char, it needs to be
-	     appended before the ':'.  Append it now, and make ':' the
-	     new "quote" char.  */
-	  if (tracker.quote_char ())
+	  /* If there was an exception looking up a specified filename earlier,
+	     then check whether we were really given `function:label'.   */
+	  if (file_exception.reason < 0)
 	    {
-	      char quote_char_str[2] = { (char) tracker.quote_char () };
-
-	      fn = reconcat (fn, fn, quote_char_str, (char *) NULL);
-	      tracker.set_quote_char (':');
+	      function_symbol = find_function_symbol (argptr, p,
+						      is_quote_enclosed);
+	      /* If we did not find a function, re-throw the original
+		 exception.  */
+	      if (!function_symbol)
+		throw_exception (file_exception);
 	    }
-	  else
-	    fn = reconcat (fn, fn, ":", (char *) NULL);
-	  fn_list[0].reset (fn);
 
-	  /* Tell readline to skip appending a space.  */
-	  tracker.set_suppress_append_ws (true);
-	}
-      tracker.add_completions (std::move (fn_list));
-    }
-}
-
-/* Helper for linespec_complete_label.  Find labels that match
-   LABEL_NAME in the function symbols listed in the PARSER, and add
-   them to the tracker.  */
-
-static void
-complete_label (completion_tracker &tracker,
-		linespec_parser *parser,
-		const char *label_name)
-{
-  std::vector<block_symbol> label_function_symbols;
-  std::vector<block_symbol> *labels
-    = find_label_symbols (PARSER_STATE (parser),
-			  PARSER_RESULT (parser)->function_symbols,
-			  &label_function_symbols,
-			  label_name, true);
-
-  if (labels != nullptr)
-    {
-      for (const auto &label : *labels)
-	{
-	  char *match = xstrdup (SYMBOL_SEARCH_NAME (label.symbol));
-	  tracker.add_completion (gdb::unique_xmalloc_ptr<char> (match));
-	}
-      delete labels;
-    }
-}
-
-/* See linespec.h.  */
-
-void
-linespec_complete_label (completion_tracker &tracker,
-			 const struct language_defn *language,
-			 const char *source_filename,
-			 const char *function_name,
-			 symbol_name_match_type func_name_match_type,
-			 const char *label_name)
-{
-  linespec_parser parser (0, language, NULL, NULL, 0, NULL);
-
-  line_offset unknown_offset = { 0, LINE_OFFSET_UNKNOWN };
-
-  TRY
-    {
-      convert_explicit_location_to_linespec (PARSER_STATE (&parser),
-					     PARSER_RESULT (&parser),
-					     source_filename,
-					     function_name,
-					     func_name_match_type,
-					     NULL, unknown_offset);
-    }
-  CATCH (ex, RETURN_MASK_ERROR)
-    {
-      return;
-    }
-  END_CATCH
-
-  complete_label (tracker, &parser, label_name);
-}
-
-/* See description in linespec.h.  */
-
-void
-linespec_complete (completion_tracker &tracker, const char *text,
-		   symbol_name_match_type match_type)
-{
-  const char *orig = text;
-
-  linespec_parser parser (0, current_language, NULL, NULL, 0, NULL);
-  parser.lexer.saved_arg = text;
-  PARSER_EXPLICIT (&parser)->func_name_match_type = match_type;
-  PARSER_STREAM (&parser) = text;
-
-  parser.completion_tracker = &tracker;
-  PARSER_STATE (&parser)->is_linespec = 1;
-
-  /* Parse as much as possible.  parser.completion_word will hold
-     furthest completion point we managed to parse to.  */
-  TRY
-    {
-      parse_linespec (&parser, text, match_type);
-    }
-  CATCH (except, RETURN_MASK_ERROR)
-    {
-    }
-  END_CATCH
-
-  if (parser.completion_quote_char != '\0'
-      && parser.completion_quote_end != NULL
-      && parser.completion_quote_end[1] == '\0')
-    {
-      /* If completing a quoted string with the cursor right at
-	 terminating quote char, complete the completion word without
-	 interpretation, so that readline advances the cursor one
-	 whitespace past the quote, even if there's no match.  This
-	 makes these cases behave the same:
-
-	   before: "b function()"
-	   after:  "b function() "
-
-	   before: "b 'function()'"
-	   after:  "b 'function()' "
-
-	 and trusts the user in this case:
-
-	   before: "b 'not_loaded_function_yet()'"
-	   after:  "b 'not_loaded_function_yet()' "
-      */
-      parser.complete_what = linespec_complete_what::NOTHING;
-      parser.completion_quote_char = '\0';
-
-      gdb::unique_xmalloc_ptr<char> text_copy
-	(xstrdup (parser.completion_word));
-      tracker.add_completion (std::move (text_copy));
-    }
-
-  tracker.set_quote_char (parser.completion_quote_char);
-
-  if (parser.complete_what == linespec_complete_what::LABEL)
-    {
-      parser.complete_what = linespec_complete_what::NOTHING;
-
-      const char *func_name = PARSER_EXPLICIT (&parser)->function_name;
-
-      std::vector<block_symbol> function_symbols;
-      std::vector<bound_minimal_symbol> minimal_symbols;
-      find_linespec_symbols (PARSER_STATE (&parser),
-			     PARSER_RESULT (&parser)->file_symtabs,
-			     func_name, match_type,
-			     &function_symbols, &minimal_symbols);
-
-      PARSER_RESULT (&parser)->function_symbols
-	= new std::vector<block_symbol> (std::move (function_symbols));
-      PARSER_RESULT (&parser)->minimal_symbols
-	= new std::vector<bound_minimal_symbol> (std::move (minimal_symbols));
-
-      complete_label (tracker, &parser, parser.completion_word);
-    }
-  else if (parser.complete_what == linespec_complete_what::FUNCTION)
-    {
-      /* While parsing/lexing, we didn't know whether the completion
-	 word completes to a unique function/source name already or
-	 not.
-
-	 E.g.:
-	   "b function() <tab>"
-	 may need to complete either to:
-	   "b function() const"
-	 or to:
-	   "b function() if/thread/task"
-
-	 Or, this:
-	   "b foo t"
-	 may need to complete either to:
-	   "b foo template_fun<T>()"
-	 with "foo" being the template function's return type, or to:
-	   "b foo thread/task"
-
-	 Or, this:
-	   "b file<TAB>"
-	 may need to complete either to a source file name:
-	   "b file.c"
-	 or this, also a filename, but a unique completion:
-	   "b file.c:"
-	 or to a function name:
-	   "b file_function"
-
-	 Address that by completing assuming source or function, and
-	 seeing if we find a completion that matches exactly the
-	 completion word.  If so, then it must be a function (see note
-	 below) and we advance the completion word to the end of input
-	 and switch to KEYWORD completion mode.
-
-	 Note: if we find a unique completion for a source filename,
-	 then it won't match the completion word, because the LCD will
-	 contain a trailing ':'.  And if we're completing at or after
-	 the ':', then complete_linespec_component won't try to
-	 complete on source filenames.  */
-
-      const char *word = parser.completion_word;
-
-      complete_linespec_component (&parser, tracker,
-				   parser.completion_word,
-				   linespec_complete_what::FUNCTION,
-				   PARSER_EXPLICIT (&parser)->source_filename);
-
-      parser.complete_what = linespec_complete_what::NOTHING;
-
-      if (tracker.quote_char ())
-	{
-	  /* The function/file name was not close-quoted, so this
-	     can't be a keyword.  Note: complete_linespec_component
-	     may have swapped the original quote char for ':' when we
-	     get here, but that still indicates the same.  */
-	}
-      else if (!tracker.have_completions ())
-	{
-	  size_t key_start;
-	  size_t wordlen = strlen (parser.completion_word);
-
-	  key_start
-	    = string_find_incomplete_keyword_at_end (linespec_keywords,
-						     parser.completion_word,
-						     wordlen);
-
-	  if (key_start != -1
-	      || (wordlen > 0
-		  && parser.completion_word[wordlen - 1] == ' '))
+	  /* Check for single quotes on the non-filename part.  */
+	  if (!is_quoted)
 	    {
-	      parser.completion_word += key_start;
-	      parser.complete_what = linespec_complete_what::KEYWORD;
+	      is_quoted = (**argptr
+			   && strchr (get_gdb_completer_quote_characters (),
+				      **argptr) != NULL);
+	      if (is_quoted)
+		end_quote = skip_quoted (*argptr);
 	    }
 	}
-      else if (tracker.completes_to_completion_word (word))
-	{
-	  /* Skip the function and complete on keywords.  */
-	  parser.completion_word += strlen (word);
-	  parser.complete_what = linespec_complete_what::KEYWORD;
-	  tracker.discard_completions ();
-	}
     }
 
-  tracker.advance_custom_word_point_by (parser.completion_word - orig);
+  /* file_symtab is specified file's symtab, or 0 if no file specified.
+     If we are parsing `function:symbol', then FUNCTION_SYMBOL is the
+     function before the `:'.
+     arg no longer contains the file name.  */
 
-  complete_linespec_component (&parser, tracker,
-			       parser.completion_word,
-			       parser.complete_what,
-			       PARSER_EXPLICIT (&parser)->source_filename);
+  /* If the filename was quoted, we must re-check the quotation.  */
 
-  /* If we're past the "filename:function:label:offset" linespec, and
-     didn't find any match, then assume the user might want to create
-     a pending breakpoint anyway and offer the keyword
-     completions.  */
-  if (!parser.completion_quote_char
-      && (parser.complete_what == linespec_complete_what::FUNCTION
-	  || parser.complete_what == linespec_complete_what::LABEL
-	  || parser.complete_what == linespec_complete_what::NOTHING)
-      && !tracker.have_completions ())
+  if (end_quote == first_half && *end_quote!= '\0')
     {
-      const char *end
-	= parser.completion_word + strlen (parser.completion_word);
-
-      if (end > orig && end[-1] == ' ')
-	{
-	  tracker.advance_custom_word_point_by (end - parser.completion_word);
-
-	  complete_linespec_component (&parser, tracker, end,
-				       linespec_complete_what::KEYWORD,
-				       NULL);
-	}
-    }
-}
-
-/* A helper function for decode_line_full and decode_line_1 to
-   turn LOCATION into std::vector<symtab_and_line>.  */
-
-static std::vector<symtab_and_line>
-event_location_to_sals (linespec_parser *parser,
-			const struct event_location *location)
-{
-  std::vector<symtab_and_line> result;
-
-  switch (event_location_type (location))
-    {
-    case LINESPEC_LOCATION:
-      {
-	PARSER_STATE (parser)->is_linespec = 1;
-	TRY
-	  {
-	    const linespec_location *ls = get_linespec_location (location);
-	    result = parse_linespec (parser,
-				     ls->spec_string, ls->match_type);
-	  }
-	CATCH (except, RETURN_MASK_ERROR)
-	  {
-	    throw_exception (except);
-	  }
-	END_CATCH
-      }
-      break;
-
-    case ADDRESS_LOCATION:
-      {
-	const char *addr_string = get_address_string_location (location);
-	CORE_ADDR addr = get_address_location (location);
-
-	if (addr_string != NULL)
-	  {
-	    addr = linespec_expression_to_pc (&addr_string);
-	    if (PARSER_STATE (parser)->canonical != NULL)
-	      PARSER_STATE (parser)->canonical->location
-		= copy_event_location (location);
-	  }
-
-	result = convert_address_location_to_sals (PARSER_STATE (parser),
-						   addr);
-      }
-      break;
-
-    case EXPLICIT_LOCATION:
-      {
-	const struct explicit_location *explicit_loc;
-
-	explicit_loc = get_explicit_location_const (location);
-	result = convert_explicit_location_to_sals (PARSER_STATE (parser),
-						    PARSER_RESULT (parser),
-						    explicit_loc);
-      }
-      break;
-
-    case PROBE_LOCATION:
-      /* Probes are handled by their own decoders.  */
-      gdb_assert_not_reached ("attempt to decode probe location");
-      break;
-
-    default:
-      gdb_assert_not_reached ("unhandled event location type");
+      is_quoted = (**argptr
+		   && strchr (get_gdb_completer_quote_characters (),
+			      **argptr) != NULL);
+      if (is_quoted)
+	end_quote = skip_quoted (*argptr);
     }
 
-  return result;
-}
+  /* Check whether arg is all digits (and sign).  */
 
-/* See linespec.h.  */
+  q = *argptr;
+  if (*q == '-' || *q == '+')
+    q++;
+  while (*q >= '0' && *q <= '9')
+    q++;
 
-void
-decode_line_full (const struct event_location *location, int flags,
-		  struct program_space *search_pspace,
-		  struct symtab *default_symtab,
-		  int default_line, struct linespec_result *canonical,
-		  const char *select_mode,
-		  const char *filter)
-{
-  std::vector<const char *> filters;
-  struct linespec_state *state;
+  if (q != *argptr && (*q == 0 || *q == ' ' || *q == '\t' || *q == ',')
+      && function_symbol == NULL)
+    /* We found a token consisting of all digits -- at least one digit.  */
+    return decode_all_digits (argptr, default_symtab, default_line,
+			      canonical, file_symtab, q);
 
-  gdb_assert (canonical != NULL);
-  /* The filter only makes sense for 'all'.  */
-  gdb_assert (filter == NULL || select_mode == multiple_symbols_all);
-  gdb_assert (select_mode == NULL
-	      || select_mode == multiple_symbols_all
-	      || select_mode == multiple_symbols_ask
-	      || select_mode == multiple_symbols_cancel);
-  gdb_assert ((flags & DECODE_LINE_LIST_MODE) == 0);
+  /* Arg token is not digits => try it as a variable name
+     Find the next token (everything up to end or next whitespace).  */
 
-  linespec_parser parser (flags, current_language,
-			  search_pspace, default_symtab,
-			  default_line, canonical);
-
-  scoped_restore_current_program_space restore_pspace;
-
-  std::vector<symtab_and_line> result = event_location_to_sals (&parser,
-								location);
-  state = PARSER_STATE (&parser);
-
-  gdb_assert (result.size () == 1 || canonical->pre_expanded);
-  canonical->pre_expanded = 1;
-
-  /* Arrange for allocated canonical names to be freed.  */
-  std::vector<gdb::unique_xmalloc_ptr<char>> hold_names;
-  for (int i = 0; i < result.size (); ++i)
+  if (**argptr == '$')		/* May be a convenience variable.  */
+    /* One or two $ chars possible.  */
+    p = skip_quoted (*argptr + (((*argptr)[1] == '$') ? 2 : 1));
+  else if (is_quoted || is_squote_enclosed)
     {
-      gdb_assert (state->canonical_names[i].suffix != NULL);
-      hold_names.emplace_back (state->canonical_names[i].suffix);
+      p = end_quote;
+      if (p[-1] != '\'')
+	error (_("Unmatched single quote."));
     }
-
-  if (select_mode == NULL)
+  else if (is_objc_method)
     {
-      if (top_level_interpreter ()->interp_ui_out ()->is_mi_like_p ())
-	select_mode = multiple_symbols_all;
-      else
-	select_mode = multiple_symbols_select_mode ();
-    }
-
-  if (select_mode == multiple_symbols_all)
-    {
-      if (filter != NULL)
-	{
-	  filters.push_back (filter);
-	  filter_results (state, &result, filters);
-	}
-      else
-	convert_results_to_lsals (state, &result);
+      /* allow word separators in method names for Obj-C.  */
+      p = skip_quoted_chars (*argptr, NULL, "");
     }
   else
-    decode_line_2 (state, &result, select_mode);
-}
+    {
+      p = skip_quoted (*argptr);
+    }
 
-/* See linespec.h.  */
+  /* Keep any important naming information.  */
+  p = keep_name_info (p, p == saved_arg || is_linespec_boundary (p[-1]));
 
-std::vector<symtab_and_line>
-decode_line_1 (const struct event_location *location, int flags,
-	       struct program_space *search_pspace,
-	       struct symtab *default_symtab,
-	       int default_line)
-{
-  linespec_parser parser (flags, current_language,
-			  search_pspace, default_symtab,
-			  default_line, NULL);
+  copy = (char *) alloca (p - *argptr + 1);
+  memcpy (copy, *argptr, p - *argptr);
+  copy[p - *argptr] = '\0';
+  if (p != *argptr
+      && copy[0]
+      && copy[0] == copy[p - *argptr - 1]
+      && strchr (get_gdb_completer_quote_characters (), copy[0]) != NULL)
+    {
+      copy[p - *argptr - 1] = '\0';
+      copy++;
+    }
+  else if (is_quoted || is_squote_enclosed)
+    copy[p - *argptr - 1] = '\0';
+  while (*p == ' ' || *p == '\t')
+    p++;
+  *argptr = p;
 
-  scoped_restore_current_program_space restore_pspace;
+  /* If it starts with $: may be a legitimate variable or routine name
+     (e.g. HP-UX millicode routines such as $$dyncall), or it may
+     be history value, or it may be a convenience variable.  */
 
-  return event_location_to_sals (&parser, location);
-}
+  if (*copy == '$' && function_symbol == NULL)
+    return decode_dollar (copy, funfirstline, default_symtab,
+			  canonical, file_symtab);
 
-/* See linespec.h.  */
+  /* Try the token as a label, but only if no file was specified,
+     because we can only really find labels in the current scope.  */
 
-std::vector<symtab_and_line>
-decode_line_with_current_source (const char *string, int flags)
-{
-  if (string == 0)
-    error (_("Empty line specification."));
+  if (!file_symtab)
+    {
+      struct symtabs_and_lines label_result;
+      if (decode_label (function_symbol, copy, canonical, &label_result))
+	return label_result;
+    }
 
-  /* We use whatever is set as the current source line.  We do not try
-     and get a default source symtab+line or it will recursively call us!  */
-  symtab_and_line cursal = get_current_source_symtab_and_line ();
+  if (function_symbol)
+    throw_exception (file_exception);
 
-  event_location_up location = string_to_event_location (&string,
-							 current_language);
-  std::vector<symtab_and_line> sals
-    = decode_line_1 (location.get (), flags, NULL, cursal.symtab, cursal.line);
+  /* Look up that token as a variable.
+     If file specified, use that file's per-file block to start with.  */
 
-  if (*string)
-    error (_("Junk at end of line specification: %s"), string);
-
-  return sals;
-}
-
-/* See linespec.h.  */
-
-std::vector<symtab_and_line>
-decode_line_with_last_displayed (const char *string, int flags)
-{
-  if (string == 0)
-    error (_("Empty line specification."));
-
-  event_location_up location = string_to_event_location (&string,
-							 current_language);
-  std::vector<symtab_and_line> sals
-    = (last_displayed_sal_is_valid ()
-       ? decode_line_1 (location.get (), flags, NULL,
-			get_last_displayed_symtab (),
-			get_last_displayed_line ())
-       : decode_line_1 (location.get (), flags, NULL,
-			(struct symtab *) NULL, 0));
-
-  if (*string)
-    error (_("Junk at end of line specification: %s"), string);
-
-  return sals;
+  return decode_variable (copy, funfirstline, canonical, file_symtab);
 }
 
 
+
+/* Now, more helper functions for decode_line_1.  Some conventions
+   that these functions follow:
+
+   Decode_line_1 typically passes along some of its arguments or local
+   variables to the subfunctions.  It passes the variables by
+   reference if they are modified by the subfunction, and by value
+   otherwise.
+
+   Some of the functions have side effects that don't arise from
+   variables that are passed by reference.  In particular, if a
+   function is passed ARGPTR as an argument, it modifies what ARGPTR
+   points to; typically, it advances *ARGPTR past whatever substring
+   it has just looked at.  (If it doesn't modify *ARGPTR, then the
+   function gets passed *ARGPTR instead, which is then called ARG.)
+   Also, functions that return a struct symtabs_and_lines may modify
+   CANONICAL, as in the description of decode_line_1.
+
+   If a function returns a struct symtabs_and_lines, then that struct
+   will immediately make its way up the call chain to be returned by
+   decode_line_1.  In particular, all of the functions decode_XXX
+   calculate the appropriate struct symtabs_and_lines, under the
+   assumption that their argument is of the form XXX.  */
 
 /* First, some functions to initialize stuff at the beggining of the
    function.  */
@@ -3361,20 +1121,141 @@ initialize_defaults (struct symtab **default_symtab, int *default_line)
 
 
 
-/* Evaluate the expression pointed to by EXP_PTR into a CORE_ADDR,
-   advancing EXP_PTR past any parsed text.  */
+/* Decode arg of the form *PC.  */
 
-CORE_ADDR
-linespec_expression_to_pc (const char **exp_ptr)
+static struct symtabs_and_lines
+decode_indirect (char **argptr)
 {
-  if (current_program_space->executing_startup)
-    /* The error message doesn't really matter, because this case
-       should only hit during breakpoint reset.  */
-    throw_error (NOT_FOUND_ERROR, _("cannot evaluate expressions while "
-				    "program space is in startup"));
+  struct symtabs_and_lines values;
+  CORE_ADDR pc;
+  
+  (*argptr)++;
+  pc = value_as_address (parse_to_comma_and_eval (argptr));
 
-  (*exp_ptr)++;
-  return value_as_address (parse_to_comma_and_eval (exp_ptr));
+  values.sals = (struct symtab_and_line *)
+    xmalloc (sizeof (struct symtab_and_line));
+
+  values.nelts = 1;
+  values.sals[0] = find_pc_line (pc, 0);
+  values.sals[0].pc = pc;
+  values.sals[0].section = find_pc_overlay (pc);
+  values.sals[0].explicit_pc = 1;
+
+  return values;
+}
+
+
+
+/* Locate the first half of the linespec, ending in a colon, period,
+   or whitespace.  (More or less.)  Also, check to see if *ARGPTR is
+   enclosed in double quotes; if so, set is_quote_enclosed, advance
+   ARGPTR past that and zero out the trailing double quote.
+   If ARGPTR is just a simple name like "main", p will point to ""
+   at the end.  */
+
+static char *
+locate_first_half (char **argptr, int *is_quote_enclosed)
+{
+  char *ii;
+  char *p, *p1;
+  int has_comma;
+
+  /* Maybe we were called with a line range FILENAME:LINENUM,FILENAME:LINENUM
+     and we must isolate the first half.  Outer layers will call again later
+     for the second half.
+
+     Don't count commas that appear in argument lists of overloaded
+     functions, or in quoted strings.  It's stupid to go to this much
+     trouble when the rest of the function is such an obvious roach hotel.  */
+  ii = find_toplevel_char (*argptr, ',');
+  has_comma = (ii != 0);
+
+  /* Temporarily zap out second half to not confuse the code below.
+     This is undone below.  Do not change ii!!  */
+  if (has_comma)
+    {
+      *ii = '\0';
+    }
+
+  /* Maybe arg is FILE : LINENUM or FILE : FUNCTION.  May also be
+     CLASS::MEMBER, or NAMESPACE::NAME.  Look for ':', but ignore
+     inside of <>.  */
+
+  p = *argptr;
+  if (p[0] == '"')
+    {
+      *is_quote_enclosed = 1;
+      (*argptr)++;
+      p++;
+    }
+  else
+    {
+      *is_quote_enclosed = 0;
+      if (strchr (get_gdb_completer_quote_characters (), *p))
+	{
+	  ++(*argptr);
+	  ++p;
+	}
+    }
+  for (; *p; p++)
+    {
+      if (p[0] == '<')
+	{
+	  char *temp_end = find_template_name_end (p);
+
+	  if (!temp_end)
+	    error (_("malformed template specification in command"));
+	  p = temp_end;
+	}
+
+      if (p[0] == '(')
+	p = find_method_overload_end (p);
+
+      /* Check for a colon and a plus or minus and a [ (which
+         indicates an Objective-C method).  */
+      if (is_objc_method_format (p))
+	{
+	  break;
+	}
+      /* Check for the end of the first half of the linespec.  End of
+         line, a tab, a colon or a space.  But if enclosed in double
+	 quotes we do not break on enclosed spaces.  */
+      if (!*p
+	  || p[0] == '\t'
+	  || (p[0] == ':')
+	  || ((p[0] == ' ') && !*is_quote_enclosed))
+	break;
+      if (p[0] == '.' && strchr (p, ':') == NULL)
+	{
+	  /* Java qualified method.  Find the *last* '.', since the
+	     others are package qualifiers.  Stop at any open parenthesis
+	     which might provide overload information.  */
+	  for (p1 = p; *p1 && *p1 != '('; p1++)
+	    {
+	      if (*p1 == '.')
+		p = p1;
+	    }
+	  break;
+	}
+    }
+  while (p[0] == ' ' || p[0] == '\t')
+    p++;
+
+  /* If the closing double quote was left at the end, remove it.  */
+  if (*is_quote_enclosed)
+    {
+      char *closing_quote = strchr (p - 1, '"');
+
+      if (closing_quote && closing_quote[1] == '\0')
+	*closing_quote = '\0';
+    }
+
+  /* Now that we've safely parsed the first half, put back ',' so
+     outer layers can see it.  */
+  if (has_comma)
+    *ii = ',';
+
+  return p;
 }
 
 
@@ -3386,1129 +1267,979 @@ linespec_expression_to_pc (const char **exp_ptr)
    than one method that could represent the selector, then use some of
    the existing C++ code to let the user choose one.  */
 
-static std::vector<symtab_and_line>
-decode_objc (struct linespec_state *self, linespec_p ls, const char *arg)
+struct symtabs_and_lines
+decode_objc (char **argptr, int funfirstline, struct symtab *file_symtab,
+	     struct linespec_result *canonical, char *saved_arg)
 {
-  struct collect_info info;
-  std::vector<const char *> symbol_names;
-  const char *new_argptr;
+  struct symtabs_and_lines values;
+  struct symbol **sym_arr = NULL;
+  struct symbol *sym = NULL;
+  struct block *block = NULL;
+  unsigned i1 = 0;
+  unsigned i2 = 0;
 
-  info.state = self;
-  std::vector<symtab *> symtabs;
-  symtabs.push_back (nullptr);
+  values.sals = NULL;
+  values.nelts = 0;
 
-  info.file_symtabs = &symtabs;
-
-  std::vector<block_symbol> symbols;
-  info.result.symbols = &symbols;
-  std::vector<bound_minimal_symbol> minimal_symbols;
-  info.result.minimal_symbols = &minimal_symbols;
-
-  new_argptr = find_imps (arg, &symbol_names);
-  if (symbol_names.empty ())
-    return {};
-
-  add_all_symbol_names_from_pspace (&info, NULL, symbol_names,
-				    FUNCTIONS_DOMAIN);
-
-  std::vector<symtab_and_line> values;
-  if (!symbols.empty () || !minimal_symbols.empty ())
+  find_imps (file_symtab, get_search_block (file_symtab), *argptr,
+	     NULL, &i1, &i2); 
+    
+  if (i1 > 0)
     {
-      char *saved_arg;
+      sym_arr = (struct symbol **)
+	alloca ((i1 + 1) * sizeof (struct symbol *));
+      sym_arr[i1] = NULL;
 
-      saved_arg = (char *) alloca (new_argptr - arg + 1);
-      memcpy (saved_arg, arg, new_argptr - arg);
-      saved_arg[new_argptr - arg] = '\0';
+      *argptr = find_imps (file_symtab, block, *argptr, sym_arr, &i1, &i2);
+    }
 
-      ls->explicit_loc.function_name = xstrdup (saved_arg);
-      ls->function_symbols
-	= new std::vector<block_symbol> (std::move (symbols));
-      ls->minimal_symbols
-	= new std::vector<bound_minimal_symbol> (std::move (minimal_symbols));
-      values = convert_linespec_to_sals (self, ls);
-
-      if (self->canonical)
+  /* i1 now represents the TOTAL number of matches found.
+     i2 represents how many HIGH-LEVEL (struct symbol) matches,
+     which will come first in the sym_arr array.  Any low-level
+     (minimal_symbol) matches will follow those.  */
+      
+  if (i1 == 1)
+    {
+      if (i2 > 0)
 	{
-	  std::string holder;
-	  const char *str;
-
-	  self->canonical->pre_expanded = 1;
-
-	  if (ls->explicit_loc.source_filename)
-	    {
-	      holder = string_printf ("%s:%s",
-				      ls->explicit_loc.source_filename,
-				      saved_arg);
-	      str = holder.c_str ();
-	    }
-	  else
-	    str = saved_arg;
-
-	  self->canonical->location
-	    = new_linespec_location (&str, symbol_name_match_type::FULL);
+	  /* Already a struct symbol.  */
+	  sym = sym_arr[0];
 	}
+      else
+	{
+	  sym = find_pc_function (SYMBOL_VALUE_ADDRESS (sym_arr[0]));
+	  if ((sym != NULL) && strcmp (SYMBOL_LINKAGE_NAME (sym_arr[0]),
+				       SYMBOL_LINKAGE_NAME (sym)) != 0)
+	    {
+	      warning (_("debugging symbol \"%s\" does "
+			 "not match selector; ignoring"),
+		       SYMBOL_LINKAGE_NAME (sym));
+	      sym = NULL;
+	    }
+	}
+	      
+      values.sals = (struct symtab_and_line *)
+	xmalloc (sizeof (struct symtab_and_line));
+      values.nelts = 1;
+	      
+      if (sym && SYMBOL_CLASS (sym) == LOC_BLOCK)
+	{
+	  /* Canonicalize this, so it remains resolved for dylib loads.  */
+	  values.sals[0] = find_function_start_sal (sym, funfirstline);
+	  build_canonical_line_spec (values.sals,
+				     SYMBOL_NATURAL_NAME (sym), canonical);
+	}
+      else
+	{
+	  /* The only match was a non-debuggable symbol, which might point
+	     to a function descriptor; resolve it to the actual code address
+	     instead.  */
+	  struct minimal_symbol *msymbol = (struct minimal_symbol *)sym_arr[0];
+	  struct objfile *objfile = msymbol_objfile (msymbol);
+	  struct gdbarch *gdbarch = get_objfile_arch (objfile);
+	  CORE_ADDR pc = SYMBOL_VALUE_ADDRESS (msymbol);
+
+	  pc = gdbarch_convert_from_func_ptr_addr (gdbarch, pc,
+						   &current_target);
+
+	  init_sal (&values.sals[0]);
+	  values.sals[0].pc = pc;
+	}
+      return values;
+    }
+
+  if (i1 > 1)
+    {
+      /* More than one match.  The user must choose one or more.  */
+      return decode_line_2 (sym_arr, i2, funfirstline, canonical);
     }
 
   return values;
 }
 
-namespace {
+/* This handles C++ and Java compound data structures.  P should point
+   at the first component separator, i.e. double-colon or period.  As
+   an example, on entrance to this function we could have ARGPTR
+   pointing to "AAA::inA::fun" and P pointing to "::inA::fun".  */
 
-/* A function object that serves as symbol_found_callback_ftype
-   callback for iterate_over_symbols.  This is used by
-   lookup_prefix_sym to collect type symbols.  */
-class decode_compound_collector
+static struct symtabs_and_lines
+decode_compound (char **argptr, int funfirstline,
+		 struct linespec_result *canonical, struct symtab *file_symtab,
+		 char *the_real_saved_arg, char *p)
 {
-public:
-  decode_compound_collector ()
-  {
-    m_unique_syms = htab_create_alloc (1, htab_hash_pointer,
-				       htab_eq_pointer, NULL,
-				       xcalloc, xfree);
-  }
-
-  ~decode_compound_collector ()
-  {
-    if (m_unique_syms != NULL)
-      htab_delete (m_unique_syms);
-  }
-
-  /* Return all symbols collected.  */
-  std::vector<block_symbol> release_symbols ()
-  {
-    return std::move (m_symbols);
-  }
-
-  /* Callable as a symbol_found_callback_ftype callback.  */
-  bool operator () (block_symbol *bsym);
-
-private:
-  /* A hash table of all symbols we found.  We use this to avoid
-     adding any symbol more than once.  */
-  htab_t m_unique_syms;
-
-  /* The result vector.  */
-  std::vector<block_symbol>  m_symbols;
-};
-
-bool
-decode_compound_collector::operator () (block_symbol *bsym)
-{
-  void **slot;
+  struct symtabs_and_lines values;
+  char *p2;
+  char *saved_arg2 = *argptr;
+  char *temp_end;
+  struct symbol *sym;
+  char *copy;
+  struct symbol *sym_class;
   struct type *t;
-  struct symbol *sym = bsym->symbol;
+  char *saved_arg;
 
-  if (SYMBOL_CLASS (sym) != LOC_TYPEDEF)
-    return true; /* Continue iterating.  */
+  /* If the user specified any completer quote characters in the input,
+     strip them.  They are superfluous.  */
+  saved_arg = alloca (strlen (the_real_saved_arg) + 1);
+  {
+    char *dst = saved_arg;
+    char *src = the_real_saved_arg;
+    char *quotes = get_gdb_completer_quote_characters ();
+    while (*src != '\0')
+      {
+	if (strchr (quotes, *src) == NULL)
+	  *dst++ = *src;
+	++src;
+      }
+    *dst = '\0';
+  }
 
-  t = SYMBOL_TYPE (sym);
-  t = check_typedef (t);
-  if (TYPE_CODE (t) != TYPE_CODE_STRUCT
-      && TYPE_CODE (t) != TYPE_CODE_UNION
-      && TYPE_CODE (t) != TYPE_CODE_NAMESPACE)
-    return true; /* Continue iterating.  */
+  /* First check for "global" namespace specification, of the form
+     "::foo".  If found, skip over the colons and jump to normal
+     symbol processing.  I.e. the whole line specification starts with
+     "::" (note the condition that *argptr == p).  */
+  if (p[0] == ':' 
+      && ((*argptr == p) || (p[-1] == ' ') || (p[-1] == '\t')))
+    saved_arg2 += 2;
 
-  slot = htab_find_slot (m_unique_syms, sym, INSERT);
-  if (!*slot)
-    {
-      *slot = sym;
-      m_symbols.push_back (*bsym);
-    }
+  /* Given our example "AAA::inA::fun", we have two cases to consider:
 
-  return true; /* Continue iterating.  */
-}
+     1) AAA::inA is the name of a class.  In that case, presumably it
+        has a method called "fun"; we then look up that method using
+        find_method.
 
-} // namespace
+     2) AAA::inA isn't the name of a class.  In that case, either the
+        user made a typo, AAA::inA is the name of a namespace, or it is
+        the name of a minimal symbol.
+        We just look up AAA::inA::fun with lookup_symbol.  If that fails,
+        try lookup_minimal_symbol.
 
-/* Return any symbols corresponding to CLASS_NAME in FILE_SYMTABS.  */
+     Thus, our first task is to find everything before the last set of
+     double-colons and figure out if it's the name of a class.  So we
+     first loop through all of the double-colons.  */
 
-static std::vector<block_symbol>
-lookup_prefix_sym (struct linespec_state *state,
-		   std::vector<symtab *> *file_symtabs,
-		   const char *class_name)
-{
-  decode_compound_collector collector;
+  p2 = p;		/* Save for restart.  */
 
-  lookup_name_info lookup_name (class_name, symbol_name_match_type::FULL);
+  /* This is very messy.  Following the example above we have now the
+     following pointers:
+     p -> "::inA::fun"
+     argptr -> "AAA::inA::fun
+     saved_arg -> "AAA::inA::fun
+     saved_arg2 -> "AAA::inA::fun
+     p2 -> "::inA::fun".  */
 
-  for (const auto &elt : *file_symtabs)
-    {
-      if (elt == nullptr)
-	{
-	  iterate_over_all_matching_symtabs (state, lookup_name,
-					     STRUCT_DOMAIN, ALL_DOMAIN,
-					     NULL, false, collector);
-	  iterate_over_all_matching_symtabs (state, lookup_name,
-					     VAR_DOMAIN, ALL_DOMAIN,
-					     NULL, false, collector);
-	}
-      else
-	{
-	  /* Program spaces that are executing startup should have
-	     been filtered out earlier.  */
-	  gdb_assert (!SYMTAB_PSPACE (elt)->executing_startup);
-	  set_current_program_space (SYMTAB_PSPACE (elt));
-	  iterate_over_file_blocks (elt, lookup_name, STRUCT_DOMAIN, collector);
-	  iterate_over_file_blocks (elt, lookup_name, VAR_DOMAIN, collector);
-	}
-    }
-
-  return collector.release_symbols ();
-}
-
-/* A std::sort comparison function for symbols.  The resulting order does
-   not actually matter; we just need to be able to sort them so that
-   symbols with the same program space end up next to each other.  */
-
-static bool
-compare_symbols (const block_symbol &a, const block_symbol &b)
-{
-  uintptr_t uia, uib;
-
-  uia = (uintptr_t) SYMTAB_PSPACE (symbol_symtab (a.symbol));
-  uib = (uintptr_t) SYMTAB_PSPACE (symbol_symtab (b.symbol));
-
-  if (uia < uib)
-    return true;
-  if (uia > uib)
-    return false;
-
-  uia = (uintptr_t) a.symbol;
-  uib = (uintptr_t) b.symbol;
-
-  if (uia < uib)
-    return true;
-
-  return false;
-}
-
-/* Like compare_symbols but for minimal symbols.  */
-
-static bool
-compare_msymbols (const bound_minimal_symbol &a, const bound_minimal_symbol &b)
-{
-  uintptr_t uia, uib;
-
-  uia = (uintptr_t) a.objfile->pspace;
-  uib = (uintptr_t) a.objfile->pspace;
-
-  if (uia < uib)
-    return true;
-  if (uia > uib)
-    return false;
-
-  uia = (uintptr_t) a.minsym;
-  uib = (uintptr_t) b.minsym;
-
-  if (uia < uib)
-    return true;
-
-  return false;
-}
-
-/* Look for all the matching instances of each symbol in NAMES.  Only
-   instances from PSPACE are considered; other program spaces are
-   handled by our caller.  If PSPACE is NULL, then all program spaces
-   are considered.  Results are stored into INFO.  */
-
-static void
-add_all_symbol_names_from_pspace (struct collect_info *info,
-				  struct program_space *pspace,
-				  const std::vector<const char *> &names,
-				  enum search_domain search_domain)
-{
-  for (const char *iter : names)
-    add_matching_symbols_to_info (iter,
-				  symbol_name_match_type::FULL,
-				  search_domain, info, pspace);
-}
-
-static void
-find_superclass_methods (std::vector<struct type *> &&superclasses,
-			 const char *name, enum language name_lang,
-			 std::vector<const char *> *result_names)
-{
-  size_t old_len = result_names->size ();
+  /* In the loop below, with these strings, we'll make 2 passes, each
+     is marked in comments.  */
 
   while (1)
     {
-      std::vector<struct type *> new_supers;
+      static char *break_characters = " \t(";
 
-      for (type *t : superclasses)
-	find_methods (t, name_lang, name, result_names, &new_supers);
+      /* Move pointer up to next possible class/namespace token.  */
 
-      if (result_names->size () != old_len || new_supers.empty ())
-	break;
+      p = p2 + 1;	/* Restart with old value +1.  */
 
-      superclasses = std::move (new_supers);
-    }
+      /* PASS1: at this point p2->"::inA::fun", so p->":inA::fun",
+	 i.e. if there is a double-colon, p will now point to the
+	 second colon.  */
+      /* PASS2: p2->"::fun", p->":fun" */
+
+      /* Move pointer ahead to next double-colon.  */
+      while (*p
+	     && strchr (break_characters, *p) == NULL
+	     && strchr (get_gdb_completer_quote_characters (), *p) == NULL)
+	{
+	  if (current_language->la_language == language_cplus)
+	    p += cp_validate_operator (p);
+
+	  if (p[0] == '<')
+	    {
+	      temp_end = find_template_name_end (p);
+	      if (!temp_end)
+		error (_("malformed template specification in command"));
+	      p = temp_end;
+	    }
+	  /* Note that, since, at the start of this loop, p would be
+	     pointing to the second colon in a double-colon, we only
+	     satisfy the condition below if there is another
+	     double-colon to the right (after).  I.e. there is another
+	     component that can be a class or a namespace.  I.e, if at
+	     the beginning of this loop (PASS1), we had
+	     p->":inA::fun", we'll trigger this when p has been
+	     advanced to point to "::fun".  */
+	  /* PASS2: we will not trigger this.  */
+	  else if ((p[0] == ':') && (p[1] == ':'))
+	    break;	/* Found double-colon.  */
+	  else
+	    {
+	      /* PASS2: We'll keep getting here, until P points to one of the
+		 break characters, at which point we exit this loop.  */
+	      if (*p)
+		{
+		  if (p[1] == '('
+		      && strncmp (&p[1], CP_ANONYMOUS_NAMESPACE_STR,
+				  CP_ANONYMOUS_NAMESPACE_LEN) == 0)
+		    p += CP_ANONYMOUS_NAMESPACE_LEN;
+		  else if (strchr (break_characters, *p) == NULL)
+		    ++p;
+		}
+	    }
+	}
+
+      if (*p != ':')
+	break;		/* Out of the while (1).  This would happen
+			   for instance if we have looked up
+			   unsuccessfully all the components of the
+			   string, and p->""(PASS2).  */
+
+      /* We get here if p points to one of the break characters or "" (i.e.,
+	 string ended).  */
+      /* Save restart for next time around.  */
+      p2 = p;
+      /* Restore argptr as it was on entry to this function.  */
+      *argptr = saved_arg2;
+      /* PASS1: at this point p->"::fun" argptr->"AAA::inA::fun",
+	 p2->"::fun".  */
+
+      /* All ready for next pass through the loop.  */
+    }			/* while (1) */
+
+
+  /* Start of lookup in the symbol tables.  */
+
+  /* Lookup in the symbol table the substring between argptr and
+     p.  Note, this call changes the value of argptr.  */
+  /* Before the call, argptr->"AAA::inA::fun",
+     p->"", p2->"::fun".  After the call: argptr->"fun", p, p2
+     unchanged.  */
+  sym_class = lookup_prefix_sym (argptr, p2, file_symtab);
+
+  /* If sym_class has been found, and if "AAA::inA" is a class, then
+     we're in case 1 above.  So we look up "fun" as a method of that
+     class.  */
+  if (sym_class &&
+      (t = check_typedef (SYMBOL_TYPE (sym_class)),
+       (TYPE_CODE (t) == TYPE_CODE_STRUCT
+	|| TYPE_CODE (t) == TYPE_CODE_UNION)))
+    {
+      /* Arg token is not digits => try it as a function name.
+	 Find the next token (everything up to end or next
+	 blank).  */
+      if (**argptr
+	  && strchr (get_gdb_completer_quote_characters (),
+		     **argptr) != NULL)
+	{
+	  p = skip_quoted (*argptr);
+	  *argptr = *argptr + 1;
+	}
+      else
+	{
+	  /* At this point argptr->"fun".  */
+	  char *a;
+
+	  p = *argptr;
+	  while (*p && *p != ' ' && *p != '\t' && *p != ',' && *p != ':'
+		 && *p != '(')
+	    p++;
+	  /* At this point p->"".  String ended.  */
+	  /* Nope, C++ operators could have spaces in them
+	     ("foo::operator <" or "foo::operator delete []").
+	     I apologize, this is a bit hacky...  */
+	  if (current_language->la_language == language_cplus
+	      && *p == ' ' && p - 8 - *argptr + 1 > 0)
+	    {
+	      /* The above loop has already swallowed "operator".  */
+	      p += cp_validate_operator (p - 8) - 8;
+	    }
+
+	  /* Keep any important naming information.  */
+	  p = keep_name_info (p, 1);
+	}
+
+      /* Allocate our own copy of the substring between argptr and
+	 p.  */
+      copy = (char *) alloca (p - *argptr + 1);
+      memcpy (copy, *argptr, p - *argptr);
+      copy[p - *argptr] = '\0';
+      if (p != *argptr
+	  && copy[p - *argptr - 1]
+	  && strchr (get_gdb_completer_quote_characters (),
+		     copy[p - *argptr - 1]) != NULL)
+	copy[p - *argptr - 1] = '\0';
+
+      /* At this point copy->"fun", p->"".  */
+
+      /* No line number may be specified.  */
+      while (*p == ' ' || *p == '\t')
+	p++;
+      *argptr = p;
+      /* At this point arptr->"".  */
+
+      /* Look for copy as a method of sym_class.  */
+      /* At this point copy->"fun", sym_class is "AAA:inA",
+	 saved_arg->"AAA::inA::fun".  This concludes the scanning of
+	 the string for possible components matches.  If we find it
+	 here, we return.  If not, and we are at the and of the string,
+	 we'll lookup the whole string in the symbol tables.  */
+
+      return find_method (funfirstline, canonical, saved_arg, copy, t,
+			  sym_class, file_symtab);
+    } /* End if symbol found.  */
+
+
+  /* We couldn't find a class, so we're in case 2 above.  We check the
+     entire name as a symbol instead.  */
+
+  p = keep_name_info (p, 1);
+
+  copy = (char *) alloca (p - saved_arg2 + 1);
+  memcpy (copy, saved_arg2, p - saved_arg2);
+  /* Note: if is_quoted should be true, we snuff out quote here
+     anyway.  */
+  copy[p - saved_arg2] = '\000';
+  /* Set argptr to skip over the name.  */
+  *argptr = (*p == '\'') ? p + 1 : p;
+
+  /* Look up entire name.  */
+  sym = lookup_symbol (copy, get_selected_block (0), VAR_DOMAIN, 0);
+  if (sym)
+    return symbol_found (funfirstline, canonical, copy, sym, NULL, NULL);
+  else
+    {
+      struct minimal_symbol *msym;
+
+      /* Couldn't find any interpretation as classes/namespaces.  As a last
+	 resort, try the minimal symbol tables.  */
+      msym = lookup_minimal_symbol (copy, NULL, NULL);
+      if (msym != NULL)
+	return minsym_found (funfirstline, msym);
+    }    
+
+  /* Couldn't find a minimal symbol, either, so give up.  */
+  cplusplus_error (the_real_saved_arg,
+		   "Can't find member of namespace, "
+		   "class, struct, or union named \"%s\"\n",
+		   copy);
 }
 
-/* This finds the method METHOD_NAME in the class CLASS_NAME whose type is
-   given by one of the symbols in SYM_CLASSES.  Matches are returned
-   in SYMBOLS (for debug symbols) and MINSYMS (for minimal symbols).  */
+/* Next come some helper functions for decode_compound.  */
 
-static void
-find_method (struct linespec_state *self, std::vector<symtab *> *file_symtabs,
-	     const char *class_name, const char *method_name,
-	     std::vector<block_symbol> *sym_classes,
-	     std::vector<block_symbol> *symbols,
-	     std::vector<bound_minimal_symbol> *minsyms)
+/* Return the symbol corresponding to the substring of *ARGPTR ending
+   at P, allowing whitespace.  Also, advance *ARGPTR past the symbol
+   name in question, the compound object separator ("::" or "."), and
+   whitespace.  Note that *ARGPTR is changed whether or not the
+   lookup_symbol call finds anything (i.e we return NULL).  As an
+   example, say ARGPTR is "AAA::inA::fun" and P is "::inA::fun".  */
+
+static struct symbol *
+lookup_prefix_sym (char **argptr, char *p, struct symtab *file_symtab)
 {
-  size_t last_result_len;
-  std::vector<struct type *> superclass_vec;
-  std::vector<const char *> result_names;
-  struct collect_info info;
+  char *p1;
+  char *copy;
+  struct symbol *sym;
 
-  /* Sort symbols so that symbols with the same program space are next
-     to each other.  */
-  std::sort (sym_classes->begin (), sym_classes->end (),
-	     compare_symbols);
+  /* Extract the class name.  */
+  p1 = p;
+  while (p != *argptr && p[-1] == ' ')
+    --p;
+  copy = (char *) alloca (p - *argptr + 1);
+  memcpy (copy, *argptr, p - *argptr);
+  copy[p - *argptr] = 0;
 
-  info.state = self;
-  info.file_symtabs = file_symtabs;
-  info.result.symbols = symbols;
-  info.result.minimal_symbols = minsyms;
+  /* Discard the class name from the argptr.  */
+  p = p1 + (p1[0] == ':' ? 2 : 1);
+  while (*p == ' ' || *p == '\t')
+    p++;
+  *argptr = p;
 
-  /* Iterate over all the types, looking for the names of existing
-     methods matching METHOD_NAME.  If we cannot find a direct method in a
-     given program space, then we consider inherited methods; this is
-     not ideal (ideal would be to respect C++ hiding rules), but it
-     seems good enough and is what GDB has historically done.  We only
-     need to collect the names because later we find all symbols with
-     those names.  This loop is written in a somewhat funny way
-     because we collect data across the program space before deciding
-     what to do.  */
-  last_result_len = 0;
-  unsigned int ix = 0;
-  for (const auto &elt : *sym_classes)
+  /* At this point p1->"::inA::fun", p->"inA::fun" copy->"AAA",
+     argptr->"inA::fun".  */
+
+  sym = lookup_symbol (copy, get_search_block (file_symtab), STRUCT_DOMAIN, 0);
+  if (sym == NULL)
     {
-      struct type *t;
-      struct program_space *pspace;
-      struct symbol *sym = elt.symbol;
+      /* Typedefs are in VAR_DOMAIN so the above symbol lookup will
+	 fail when the user attempts to lookup a method of a class
+	 via a typedef'd name (NOT via the class's name, which is already
+	 handled in symbol_matches_domain).  So try the lookup again
+	 using VAR_DOMAIN (where typedefs live) and double-check that we
+	 found a struct/class type.  */
+      struct symbol *s = lookup_symbol (copy, 0, VAR_DOMAIN, 0);
 
-      /* Program spaces that are executing startup should have
-	 been filtered out earlier.  */
-      pspace = SYMTAB_PSPACE (symbol_symtab (sym));
-      gdb_assert (!pspace->executing_startup);
-      set_current_program_space (pspace);
-      t = check_typedef (SYMBOL_TYPE (sym));
-      find_methods (t, SYMBOL_LANGUAGE (sym),
-		    method_name, &result_names, &superclass_vec);
-
-      /* Handle all items from a single program space at once; and be
-	 sure not to miss the last batch.  */
-      if (ix == sym_classes->size () - 1
-	  || (pspace
-	      != SYMTAB_PSPACE (symbol_symtab (sym_classes->at (ix + 1).symbol))))
+      if (s != NULL)
 	{
-	  /* If we did not find a direct implementation anywhere in
-	     this program space, consider superclasses.  */
-	  if (result_names.size () == last_result_len)
-	    find_superclass_methods (std::move (superclass_vec), method_name,
-				     SYMBOL_LANGUAGE (sym), &result_names);
+	  struct type *t = SYMBOL_TYPE (s);
 
-	  /* We have a list of candidate symbol names, so now we
-	     iterate over the symbol tables looking for all
-	     matches in this pspace.  */
-	  add_all_symbol_names_from_pspace (&info, pspace, result_names,
-					    FUNCTIONS_DOMAIN);
-
-	  superclass_vec.clear ();
-	  last_result_len = result_names.size ();
-	  ++ix;
+	  CHECK_TYPEDEF (t);
+	  if (TYPE_CODE (t) == TYPE_CODE_STRUCT)
+	    return s;
 	}
     }
 
-  if (!symbols->empty () || !minsyms->empty ())
-    return;
+  return sym;
+}
 
-  /* Throw an NOT_FOUND_ERROR.  This will be caught by the caller
-     and other attempts to locate the symbol will be made.  */
-  throw_error (NOT_FOUND_ERROR, _("see caller, this text doesn't matter"));
+/* This finds the method COPY in the class whose type is T and whose
+   symbol is SYM_CLASS.  */
+
+static struct symtabs_and_lines
+find_method (int funfirstline, struct linespec_result *canonical,
+	     char *saved_arg,
+	     char *copy, struct type *t, struct symbol *sym_class,
+	     struct symtab *file_symtab)
+{
+  struct symtabs_and_lines values;
+  struct symbol *sym = NULL;
+  int i1;	/*  Counter for the symbol array.  */
+  struct symbol **sym_arr =  alloca (total_number_of_methods (t)
+				     * sizeof (struct symbol *));
+
+  /* Find all methods with a matching name, and put them in
+     sym_arr.  */
+
+  i1 = find_methods (t, copy, SYMBOL_LANGUAGE (sym_class), sym_arr,
+		     file_symtab);
+
+  /* If we were given a specific overload instance in COPY, defer the field
+     acceptance till the strcmp_iw verification below, even if we found just
+     a single field with that name.  */
+  if (i1 == 1 && strchr (copy, '(') == NULL)
+    {
+      /* There is exactly one field with that name.  */
+      sym = sym_arr[0];
+
+      if (sym && SYMBOL_CLASS (sym) == LOC_BLOCK)
+	{
+	  values.sals = (struct symtab_and_line *)
+	    xmalloc (sizeof (struct symtab_and_line));
+	  values.nelts = 1;
+	  values.sals[0] = find_function_start_sal (sym,
+						    funfirstline);
+	}
+      else
+	{
+	  values.sals = NULL;
+	  values.nelts = 0;
+	}
+      return values;
+    }
+  if (i1 > 0)
+    {
+      /* If we were given a specific overload instance, use that
+	 (or error if no matches were found).  Otherwise ask the user
+	 which one to use.  */
+      if (strchr (copy, '('))
+	{
+	  int i;
+	  char *name;
+	  char *canon;
+	  struct cleanup *cleanup;
+
+	  /* Construct the proper search name based on SYM_CLASS and COPY.
+	     SAVED_ARG may contain a valid name, but that name might not be
+	     what is actually stored in the symbol table.  For example,
+	     if SAVED_ARG (and SYM_CLASS) were found via an import
+	     ("using namespace" in C++), then the physname of
+	     SYM_CLASS ("A::myclass") may not be the same as SAVED_ARG
+	     ("myclass").  */
+	  name = xmalloc (strlen (SYMBOL_NATURAL_NAME (sym_class))
+			  + 2 /* "::" */ + strlen (copy) + 1);
+	  strcpy (name, SYMBOL_NATURAL_NAME (sym_class));
+	  strcat (name, "::");
+	  strcat (name, copy);
+	  canon = cp_canonicalize_string (name);
+	  if (canon != NULL)
+	    {
+	      xfree (name);
+	      name = canon;
+	    }
+	  cleanup = make_cleanup (xfree, name);
+
+	  for (i = 0; i < i1; ++i)
+	    {
+	      if (strcmp_iw (name, SYMBOL_LINKAGE_NAME (sym_arr[i])) == 0)
+		{
+		  values.sals = (struct symtab_and_line *)
+		    xmalloc (sizeof (struct symtab_and_line));
+		  values.nelts = 1;
+		  values.sals[0] = find_function_start_sal (sym_arr[i],
+							    funfirstline);
+		  do_cleanups (cleanup);
+		  return values;
+		}
+	    }
+
+	  cplusplus_error (saved_arg, _("the class `%s' does not have "
+					"any method instance named %s"),
+				      SYMBOL_PRINT_NAME (sym_class), copy);
+	}
+
+      return decode_line_2 (sym_arr, i1, funfirstline, canonical);
+    }
+  else
+    {
+      if (copy[0] == '~')
+	cplusplus_error (saved_arg,
+			 "the class `%s' does not have destructor defined\n",
+			 SYMBOL_PRINT_NAME (sym_class));
+      else
+	cplusplus_error (saved_arg,
+			 "the class %s does not have any method named %s\n",
+			 SYMBOL_PRINT_NAME (sym_class), copy);
+    }
 }
 
 
 
-namespace {
+/* Return the symtab associated to the filename given by the substring
+   of *ARGPTR ending at P, and advance ARGPTR past that filename.  */
 
-/* This function object is a callback for iterate_over_symtabs, used
-   when collecting all matching symtabs.  */
-
-class symtab_collector
+static struct symtab *
+symtab_from_filename (char **argptr, char *p, int is_quote_enclosed)
 {
-public:
-  symtab_collector ()
-  {
-    m_symtab_table = htab_create (1, htab_hash_pointer, htab_eq_pointer,
-				  NULL);
-  }
-
-  ~symtab_collector ()
-  {
-    if (m_symtab_table != NULL)
-      htab_delete (m_symtab_table);
-  }
-
-  /* Callable as a symbol_found_callback_ftype callback.  */
-  bool operator () (symtab *sym);
-
-  /* Return an rvalue reference to the collected symtabs.  */
-  std::vector<symtab *> &&release_symtabs ()
-  {
-    return std::move (m_symtabs);
-  }
-
-private:
-  /* The result vector of symtabs.  */
-  std::vector<symtab *> m_symtabs;
-
-  /* This is used to ensure the symtabs are unique.  */
-  htab_t m_symtab_table;
-};
-
-bool
-symtab_collector::operator () (struct symtab *symtab)
-{
-  void **slot;
-
-  slot = htab_find_slot (m_symtab_table, symtab, INSERT);
-  if (!*slot)
-    {
-      *slot = symtab;
-      m_symtabs.push_back (symtab);
-    }
-
-  return false;
-}
-
-} // namespace
-
-/* Given a file name, return a list of all matching symtabs.  If
-   SEARCH_PSPACE is not NULL, the search is restricted to just that
-   program space.  */
-
-static std::vector<symtab *>
-collect_symtabs_from_filename (const char *file,
-			       struct program_space *search_pspace)
-{
-  symtab_collector collector;
+  char *p1;
+  char *copy;
+  struct symtab *file_symtab;
+  
+  p1 = p;
+  while (p != *argptr && p[-1] == ' ')
+    --p;
+  if ((*p == '"') && is_quote_enclosed)
+    --p;
+  copy = (char *) alloca (p - *argptr + 1);
+  memcpy (copy, *argptr, p - *argptr);
+  /* It may have the ending quote right after the file name.  */
+  if ((is_quote_enclosed && copy[p - *argptr - 1] == '"')
+      || copy[p - *argptr - 1] == '\'')
+    copy[p - *argptr - 1] = 0;
+  else
+    copy[p - *argptr] = 0;
 
   /* Find that file's data.  */
-  if (search_pspace == NULL)
-    {
-      struct program_space *pspace;
-
-      ALL_PSPACES (pspace)
-        {
-	  if (pspace->executing_startup)
-	    continue;
-
-	  set_current_program_space (pspace);
-	  iterate_over_symtabs (file, collector);
-	}
-    }
-  else
-    {
-      set_current_program_space (search_pspace);
-      iterate_over_symtabs (file, collector);
-    }
-
-  return collector.release_symtabs ();
-}
-
-/* Return all the symtabs associated to the FILENAME.  If SEARCH_PSPACE is
-   not NULL, the search is restricted to just that program space.  */
-
-static std::vector<symtab *>
-symtabs_from_filename (const char *filename,
-		       struct program_space *search_pspace)
-{
-  std::vector<symtab *> result
-    = collect_symtabs_from_filename (filename, search_pspace);
-
-  if (result.empty ())
+  file_symtab = lookup_symtab (copy);
+  if (file_symtab == 0)
     {
       if (!have_full_symbols () && !have_partial_symbols ())
 	throw_error (NOT_FOUND_ERROR,
 		     _("No symbol table is loaded.  "
 		       "Use the \"file\" command."));
-      source_file_not_found_error (filename);
+      throw_error (NOT_FOUND_ERROR, _("No source file named %s."), copy);
     }
 
-  return result;
+  /* Discard the file name from the arg.  */
+  p = p1 + 1;
+  while (*p == ' ' || *p == '\t')
+    p++;
+  *argptr = p;
+
+  return file_symtab;
 }
 
-/* See symtab.h.  */
+/* Look up a function symbol in *ARGPTR.  If found, advance *ARGPTR
+   and return the symbol.  If not found, return NULL.  */
 
-void
-symbol_searcher::find_all_symbols (const std::string &name,
-				   const struct language_defn *language,
-				   enum search_domain search_domain,
-				   std::vector<symtab *> *search_symtabs,
-				   struct program_space *search_pspace)
+static struct symbol *
+find_function_symbol (char **argptr, char *p, int is_quote_enclosed)
 {
-  symbol_searcher_collect_info info;
-  struct linespec_state state;
+  char *p1;
+  char *copy;
+  struct symbol *function_symbol;
 
-  memset (&state, 0, sizeof (state));
-  state.language = language;
-  info.state = &state;
-
-  info.result.symbols = &m_symbols;
-  info.result.minimal_symbols = &m_minimal_symbols;
-  std::vector<symtab *> all_symtabs;
-  if (search_symtabs == nullptr)
-    {
-      all_symtabs.push_back (nullptr);
-      search_symtabs = &all_symtabs;
-    }
-  info.file_symtabs = search_symtabs;
-
-  add_matching_symbols_to_info (name.c_str (), symbol_name_match_type::WILD,
-				search_domain, &info, search_pspace);
-}
-
-/* Look up a function symbol named NAME in symtabs FILE_SYMTABS.  Matching
-   debug symbols are returned in SYMBOLS.  Matching minimal symbols are
-   returned in MINSYMS.  */
-
-static void
-find_function_symbols (struct linespec_state *state,
-		       std::vector<symtab *> *file_symtabs, const char *name,
-		       symbol_name_match_type name_match_type,
-		       std::vector<block_symbol> *symbols,
-		       std::vector<bound_minimal_symbol> *minsyms)
-{
-  struct collect_info info;
-  std::vector<const char *> symbol_names;
-
-  info.state = state;
-  info.result.symbols = symbols;
-  info.result.minimal_symbols = minsyms;
-  info.file_symtabs = file_symtabs;
-
-  /* Try NAME as an Objective-C selector.  */
-  find_imps (name, &symbol_names);
-  if (!symbol_names.empty ())
-    add_all_symbol_names_from_pspace (&info, state->search_pspace,
-				      symbol_names, FUNCTIONS_DOMAIN);
+  p1 = p;
+  while (p != *argptr && p[-1] == ' ')
+    --p;
+  if ((*p == '"') && is_quote_enclosed)
+    --p;
+  copy = (char *) alloca (p - *argptr + 1);
+  memcpy (copy, *argptr, p - *argptr);
+  /* It may have the ending quote right after the file name.  */
+  if ((is_quote_enclosed && copy[p - *argptr - 1] == '"')
+      || copy[p - *argptr - 1] == '\'')
+    copy[p - *argptr - 1] = 0;
   else
-    add_matching_symbols_to_info (name, name_match_type, FUNCTIONS_DOMAIN,
-				  &info, state->search_pspace);
-}
+    copy[p - *argptr] = 0;
 
-/* Find all symbols named NAME in FILE_SYMTABS, returning debug symbols
-   in SYMBOLS and minimal symbols in MINSYMS.  */
+  function_symbol = lookup_symbol (copy, get_selected_block (0),
+				   VAR_DOMAIN, 0);
+  if (!function_symbol || SYMBOL_CLASS (function_symbol) != LOC_BLOCK)
+    return NULL;
 
-static void
-find_linespec_symbols (struct linespec_state *state,
-		       std::vector<symtab *> *file_symtabs,
-		       const char *lookup_name,
-		       symbol_name_match_type name_match_type,
-		       std::vector <block_symbol> *symbols,
-		       std::vector<bound_minimal_symbol> *minsyms)
-{
-  std::string canon = cp_canonicalize_string_no_typedefs (lookup_name);
-  if (!canon.empty ())
-    lookup_name = canon.c_str ();
+  /* Discard the file name from the arg.  */
+  p = p1 + 1;
+  while (*p == ' ' || *p == '\t')
+    p++;
+  *argptr = p;
 
-  /* It's important to not call expand_symtabs_matching unnecessarily
-     as it can really slow things down (by unnecessarily expanding
-     potentially 1000s of symtabs, which when debugging some apps can
-     cost 100s of seconds).  Avoid this to some extent by *first* calling
-     find_function_symbols, and only if that doesn't find anything
-     *then* call find_method.  This handles two important cases:
-     1) break (anonymous namespace)::foo
-     2) break class::method where method is in class (and not a baseclass)  */
-
-  find_function_symbols (state, file_symtabs, lookup_name,
-			 name_match_type, symbols, minsyms);
-
-  /* If we were unable to locate a symbol of the same name, try dividing
-     the name into class and method names and searching the class and its
-     baseclasses.  */
-  if (symbols->empty () && minsyms->empty ())
-    {
-      std::string klass, method;
-      const char *last, *p, *scope_op;
-
-      /* See if we can find a scope operator and break this symbol
-	 name into namespaces${SCOPE_OPERATOR}class_name and method_name.  */
-      scope_op = "::";
-      p = find_toplevel_string (lookup_name, scope_op);
-
-      last = NULL;
-      while (p != NULL)
-	{
-	  last = p;
-	  p = find_toplevel_string (p + strlen (scope_op), scope_op);
-	}
-
-      /* If no scope operator was found, there is nothing more we can do;
-	 we already attempted to lookup the entire name as a symbol
-	 and failed.  */
-      if (last == NULL)
-	return;
-
-      /* LOOKUP_NAME points to the class name.
-	 LAST points to the method name.  */
-      klass = std::string (lookup_name, last - lookup_name);
-
-      /* Skip past the scope operator.  */
-      last += strlen (scope_op);
-      method = last;
-
-      /* Find a list of classes named KLASS.  */
-      std::vector<block_symbol> classes
-	= lookup_prefix_sym (state, file_symtabs, klass.c_str ());
-      if (!classes.empty ())
-	{
-	  /* Now locate a list of suitable methods named METHOD.  */
-	  TRY
-	    {
-	      find_method (state, file_symtabs,
-			   klass.c_str (), method.c_str (),
-			   &classes, symbols, minsyms);
-	    }
-
-	  /* If successful, we're done.  If NOT_FOUND_ERROR
-	     was not thrown, rethrow the exception that we did get.  */
-	  CATCH (except, RETURN_MASK_ERROR)
-	    {
-	      if (except.error != NOT_FOUND_ERROR)
-		throw_exception (except);
-	    }
-	  END_CATCH
-	}
-    }
-}
-
-/* Helper for find_label_symbols.  Find all labels that match name
-   NAME in BLOCK.  Return all labels that match in FUNCTION_SYMBOLS.
-   Return the actual function symbol in which the label was found in
-   LABEL_FUNC_RET.  If COMPLETION_MODE is true, then NAME is
-   interpreted as a label name prefix.  Otherwise, only a label named
-   exactly NAME match.  */
-
-static void
-find_label_symbols_in_block (const struct block *block,
-			     const char *name, struct symbol *fn_sym,
-			     bool completion_mode,
-			     std::vector<block_symbol> *result,
-			     std::vector<block_symbol> *label_funcs_ret)
-{
-  if (completion_mode)
-    {
-      struct block_iterator iter;
-      struct symbol *sym;
-      size_t name_len = strlen (name);
-
-      int (*cmp) (const char *, const char *, size_t);
-      cmp = case_sensitivity == case_sensitive_on ? strncmp : strncasecmp;
-
-      ALL_BLOCK_SYMBOLS (block, iter, sym)
-	{
-	  if (symbol_matches_domain (SYMBOL_LANGUAGE (sym),
-				     SYMBOL_DOMAIN (sym), LABEL_DOMAIN)
-	      && cmp (SYMBOL_SEARCH_NAME (sym), name, name_len) == 0)
-	    {
-	      result->push_back ({sym, block});
-	      label_funcs_ret->push_back ({fn_sym, block});
-	    }
-	}
-    }
-  else
-    {
-      struct block_symbol label_sym
-	= lookup_symbol (name, block, LABEL_DOMAIN, 0);
-
-      if (label_sym.symbol != NULL)
-	{
-	  result->push_back (label_sym);
-	  label_funcs_ret->push_back ({fn_sym, block});
-	}
-    }
-}
-
-/* Return all labels that match name NAME in FUNCTION_SYMBOLS or NULL
-   if no matches were found.
-
-   Return the actual function symbol in which the label was found in
-   LABEL_FUNC_RET.  If COMPLETION_MODE is true, then NAME is
-   interpreted as a label name prefix.  Otherwise, only labels named
-   exactly NAME match.  */
-
-
-static std::vector<block_symbol> *
-find_label_symbols (struct linespec_state *self,
-		    std::vector<block_symbol> *function_symbols,
-		    std::vector<block_symbol> *label_funcs_ret,
-		    const char *name,
-		    bool completion_mode)
-{
-  const struct block *block;
-  struct symbol *fn_sym;
-  std::vector<block_symbol> result;
-
-  if (function_symbols == NULL)
-    {
-      set_current_program_space (self->program_space);
-      block = get_current_search_block ();
-
-      for (;
-	   block && !BLOCK_FUNCTION (block);
-	   block = BLOCK_SUPERBLOCK (block))
-	;
-      if (!block)
-	return NULL;
-      fn_sym = BLOCK_FUNCTION (block);
-
-      find_label_symbols_in_block (block, name, fn_sym, completion_mode,
-				   &result, label_funcs_ret);
-    }
-  else
-    {
-      for (const auto &elt : *function_symbols)
-	{
-	  fn_sym = elt.symbol;
-	  set_current_program_space (SYMTAB_PSPACE (symbol_symtab (fn_sym)));
-	  block = SYMBOL_BLOCK_VALUE (fn_sym);
-
-	  find_label_symbols_in_block (block, name, fn_sym, completion_mode,
-				       &result, label_funcs_ret);
-	}
-    }
-
-  if (!result.empty ())
-    return new std::vector<block_symbol> (std::move (result));
-  return nullptr;
+  return function_symbol;
 }
 
 
 
-/* A helper for create_sals_line_offset that handles the 'list_mode' case.  */
+/* This decodes a line where the argument is all digits (possibly
+   preceded by a sign).  Q should point to the end of those digits;
+   the other arguments are as usual.  */
 
-static std::vector<symtab_and_line>
-decode_digits_list_mode (struct linespec_state *self,
-			 linespec_p ls,
-			 struct symtab_and_line val)
+static struct symtabs_and_lines
+decode_all_digits (char **argptr, struct symtab *default_symtab,
+		   int default_line, struct linespec_result *canonical,
+		   struct symtab *file_symtab, char *q)
+
 {
-  gdb_assert (self->list_mode);
+  struct symtabs_and_lines values;
+  struct symtab_and_line val;
 
-  std::vector<symtab_and_line> values;
-
-  for (const auto &elt : *ls->file_symtabs)
+  enum sign
     {
-      /* The logic above should ensure this.  */
-      gdb_assert (elt != NULL);
+      none, plus, minus
+    }
+  sign = none;
 
-      set_current_program_space (SYMTAB_PSPACE (elt));
+  /* We might need a canonical line spec if no file was specified.  */
+  int need_canonical = (file_symtab == NULL) ? 1 : 0;
 
-      /* Simplistic search just for the list command.  */
-      val.symtab = find_line_symtab (elt, val.line, NULL, NULL);
-      if (val.symtab == NULL)
-	val.symtab = elt;
-      val.pspace = SYMTAB_PSPACE (elt);
-      val.pc = 0;
-      val.explicit_line = 1;
+  init_sal (&val);
 
-      add_sal_to_sals (self, &values, &val, NULL, 0);
+  val.pspace = current_program_space;
+
+  /* This is where we need to make sure that we have good defaults.
+     We must guarantee that this section of code is never executed
+     when we are called with just a function name, since
+     set_default_source_symtab_and_line uses
+     select_source_symtab that calls us with such an argument.  */
+
+  if (file_symtab == 0 && default_symtab == 0)
+    {
+      /* Make sure we have at least a default source file.  */
+      set_default_source_symtab_and_line ();
+      initialize_defaults (&default_symtab, &default_line);
     }
 
+  if (**argptr == '+')
+    sign = plus, (*argptr)++;
+  else if (**argptr == '-')
+    sign = minus, (*argptr)++;
+  val.line = atoi (*argptr);
+  switch (sign)
+    {
+    case plus:
+      if (q == *argptr)
+	val.line = 5;
+      if (file_symtab == 0)
+	val.line = default_line + val.line;
+      break;
+    case minus:
+      if (q == *argptr)
+	val.line = 15;
+      if (file_symtab == 0)
+	val.line = default_line - val.line;
+      else
+	val.line = 1;
+      break;
+    case none:
+      break;		/* No need to adjust val.line.  */
+    }
+
+  while (*q == ' ' || *q == '\t')
+    q++;
+  *argptr = q;
+  if (file_symtab == 0)
+    file_symtab = default_symtab;
+
+  /* It is possible that this source file has more than one symtab, 
+     and that the new line number specification has moved us from the
+     default (in file_symtab) to a new one.  */
+  val.symtab = find_line_symtab (file_symtab, val.line, NULL, NULL);
+  if (val.symtab == 0)
+    val.symtab = file_symtab;
+
+  val.pspace = SYMTAB_PSPACE (val.symtab);
+  val.pc = 0;
+  values.sals = (struct symtab_and_line *)
+    xmalloc (sizeof (struct symtab_and_line));
+  values.sals[0] = val;
+  values.nelts = 1;
+  if (need_canonical)
+    build_canonical_line_spec (values.sals, NULL, canonical);
+  values.sals[0].explicit_line = 1;
   return values;
 }
 
-/* A helper for create_sals_line_offset that iterates over the symtabs,
-   adding lines to the VEC.  */
-
-static std::vector<symtab_and_line>
-decode_digits_ordinary (struct linespec_state *self,
-			linespec_p ls,
-			int line,
-			struct linetable_entry **best_entry)
-{
-  std::vector<symtab_and_line> sals;
-  for (const auto &elt : *ls->file_symtabs)
-    {
-      std::vector<CORE_ADDR> pcs;
-
-      /* The logic above should ensure this.  */
-      gdb_assert (elt != NULL);
-
-      set_current_program_space (SYMTAB_PSPACE (elt));
-
-      pcs = find_pcs_for_symtab_line (elt, line, best_entry);
-      for (CORE_ADDR pc : pcs)
-	{
-	  symtab_and_line sal;
-	  sal.pspace = SYMTAB_PSPACE (elt);
-	  sal.symtab = elt;
-	  sal.line = line;
-	  sal.pc = pc;
-	  sals.push_back (std::move (sal));
-	}
-    }
-
-  return sals;
-}
-
 
 
-/* Return the line offset represented by VARIABLE.  */
+/* Decode a linespec starting with a dollar sign.  */
 
-static struct line_offset
-linespec_parse_variable (struct linespec_state *self, const char *variable)
+static struct symtabs_and_lines
+decode_dollar (char *copy, int funfirstline, struct symtab *default_symtab,
+	       struct linespec_result *canonical, struct symtab *file_symtab)
 {
+  LONGEST valx;
   int index = 0;
-  const char *p;
-  struct line_offset offset = {0, LINE_OFFSET_NONE};
+  int need_canonical = 0;
+  struct symtabs_and_lines values;
+  struct symtab_and_line val;
+  char *p;
+  struct symbol *sym;
+  struct minimal_symbol *msymbol;
 
-  p = (variable[1] == '$') ? variable + 2 : variable + 1;
-  if (*p == '$')
-    ++p;
+  p = (copy[1] == '$') ? copy + 2 : copy + 1;
   while (*p >= '0' && *p <= '9')
-    ++p;
+    p++;
   if (!*p)		/* Reached end of token without hitting non-digit.  */
     {
       /* We have a value history reference.  */
       struct value *val_history;
 
-      sscanf ((variable[1] == '$') ? variable + 2 : variable + 1, "%d", &index);
-      val_history
-	= access_value_history ((variable[1] == '$') ? -index : index);
+      sscanf ((copy[1] == '$') ? copy + 2 : copy + 1, "%d", &index);
+      val_history = access_value_history ((copy[1] == '$') ? -index : index);
       if (TYPE_CODE (value_type (val_history)) != TYPE_CODE_INT)
 	error (_("History values used in line "
 		 "specs must have integer values."));
-      offset.offset = value_as_long (val_history);
+      valx = value_as_long (val_history);
     }
   else
     {
       /* Not all digits -- may be user variable/function or a
 	 convenience variable.  */
-      LONGEST valx;
-      struct internalvar *ivar;
 
-      /* Try it as a convenience variable.  If it is not a convenience
-	 variable, return and allow normal symbol lookup to occur.  */
-      ivar = lookup_only_internalvar (variable + 1);
-      if (ivar == NULL)
-	/* No internal variable with that name.  Mark the offset
-	   as unknown to allow the name to be looked up as a symbol.  */
-	offset.sign = LINE_OFFSET_UNKNOWN;
-      else
-	{
-	  /* We found a valid variable name.  If it is not an integer,
-	     throw an error.  */
-	  if (!get_internalvar_integer (ivar, &valx))
-	    error (_("Convenience variables used in line "
-		     "specs must have integer values."));
-	  else
-	    offset.offset = valx;
-	}
+      /* Look up entire name as a symbol first.  */
+      sym = lookup_symbol (copy, 0, VAR_DOMAIN, 0);
+      file_symtab = (struct symtab *) NULL;
+      need_canonical = 1;
+      /* Symbol was found --> jump to normal symbol processing.  */
+      if (sym)
+	return symbol_found (funfirstline, canonical, copy, sym, NULL, NULL);
+
+      /* If symbol was not found, look in minimal symbol tables.  */
+      msymbol = lookup_minimal_symbol (copy, NULL, NULL);
+      /* Min symbol was found --> jump to minsym processing.  */
+      if (msymbol)
+	return minsym_found (funfirstline, msymbol);
+
+      /* Not a user variable or function -- must be convenience variable.  */
+      if (!get_internalvar_integer (lookup_internalvar (copy + 1), &valx))
+	error (_("Convenience variables used in line "
+		 "specs must have integer values."));
     }
 
-  return offset;
+  init_sal (&val);
+
+  /* Either history value or convenience value from above, in valx.  */
+  val.symtab = file_symtab ? file_symtab : default_symtab;
+  val.line = valx;
+  val.pc = 0;
+  val.pspace = current_program_space;
+
+  values.sals = (struct symtab_and_line *) xmalloc (sizeof val);
+  values.sals[0] = val;
+  values.nelts = 1;
+
+  if (need_canonical)
+    build_canonical_line_spec (values.sals, NULL, canonical);
+
+  return values;
 }
+
 
 
-/* We've found a minimal symbol MSYMBOL in OBJFILE to associate with our
-   linespec; return the SAL in RESULT.  This function should return SALs
-   matching those from find_function_start_sal, otherwise false
-   multiple-locations breakpoints could be placed.  */
-
-static void
-minsym_found (struct linespec_state *self, struct objfile *objfile,
-	      struct minimal_symbol *msymbol,
-	      std::vector<symtab_and_line> *result)
-{
-  bool want_start_sal;
-
-  CORE_ADDR func_addr;
-  bool is_function = msymbol_is_function (objfile, msymbol, &func_addr);
-
-  if (is_function)
-    {
-      const char *msym_name = MSYMBOL_LINKAGE_NAME (msymbol);
-
-      if (MSYMBOL_TYPE (msymbol) == mst_text_gnu_ifunc
-	  || MSYMBOL_TYPE (msymbol) == mst_data_gnu_ifunc)
-	want_start_sal = gnu_ifunc_resolve_name (msym_name, &func_addr);
-      else
-	want_start_sal = true;
-    }
-
-  symtab_and_line sal;
-
-  if (is_function && want_start_sal)
-    sal = find_function_start_sal (func_addr, NULL, self->funfirstline);
-  else
-    {
-      sal.objfile = objfile;
-      sal.msymbol = msymbol;
-      /* Store func_addr, not the minsym's address in case this was an
-	 ifunc that hasn't been resolved yet.  */
-      if (is_function)
-	sal.pc = func_addr;
-      else
-	sal.pc = MSYMBOL_VALUE_ADDRESS (objfile, msymbol);
-      sal.pspace = current_program_space;
-    }
-
-  sal.section = MSYMBOL_OBJ_SECTION (objfile, msymbol);
-
-  if (maybe_add_address (self->addr_set, objfile->pspace, sal.pc))
-    add_sal_to_sals (self, result, &sal, MSYMBOL_NATURAL_NAME (msymbol), 0);
-}
-
-/* A helper function to classify a minimal_symbol_type according to
-   priority.  */
+/* A helper for decode_line_1 that tries to find a label.  The label
+   is searched for in the current block.
+   FUNCTION_SYMBOL is the enclosing function; or NULL if none
+   specified.
+   COPY is the name of the label to find.
+   CANONICAL is the same as the "canonical" argument to decode_line_1.
+   RESULT is a pointer to a symtabs_and_lines structure which will be
+   filled in on success.
+   This function returns 1 if a label was found, 0 otherwise.  */
 
 static int
-classify_mtype (enum minimal_symbol_type t)
+decode_label (struct symbol *function_symbol, char *copy,
+	      struct linespec_result *canonical,
+	      struct symtabs_and_lines *result)
 {
-  switch (t)
-    {
-    case mst_file_text:
-    case mst_file_data:
-    case mst_file_bss:
-      /* Intermediate priority.  */
-      return 1;
+  struct symbol *sym;
+  struct block *block;
 
-    case mst_solib_trampoline:
-      /* Lowest priority.  */
-      return 2;
-
-    default:
-      /* Highest priority.  */
-      return 0;
-    }
-}
-
-/* Callback for std::sort that sorts symbols by priority.  */
-
-static bool
-compare_msyms (const bound_minimal_symbol &a, const bound_minimal_symbol &b)
-{
-  enum minimal_symbol_type ta = MSYMBOL_TYPE (a.minsym);
-  enum minimal_symbol_type tb = MSYMBOL_TYPE (b.minsym);
-
-  return classify_mtype (ta) < classify_mtype (tb);
-}
-
-/* Helper for search_minsyms_for_name that adds the symbol to the
-   result.  */
-
-static void
-add_minsym (struct minimal_symbol *minsym, struct objfile *objfile,
-	    struct symtab *symtab, int list_mode,
-	    std::vector<struct bound_minimal_symbol> *msyms)
-{
-  if (symtab != NULL)
-    {
-      /* We're looking for a label for which we don't have debug
-	 info.  */
-      CORE_ADDR func_addr;
-      if (msymbol_is_function (objfile, minsym, &func_addr))
-	{
-	  symtab_and_line sal = find_pc_sect_line (func_addr, NULL, 0);
-
-	  if (symtab != sal.symtab)
-	    return;
-	}
-    }
-
-  /* Exclude data symbols when looking for breakpoint locations.  */
-  if (!list_mode && !msymbol_is_function (objfile, minsym))
-    return;
-
-  struct bound_minimal_symbol mo = {minsym, objfile};
-  msyms->push_back (mo);
-  return;
-}
-
-/* Search for minimal symbols called NAME.  If SEARCH_PSPACE
-   is not NULL, the search is restricted to just that program
-   space.
-
-   If SYMTAB is NULL, search all objfiles, otherwise
-   restrict results to the given SYMTAB.  */
-
-static void
-search_minsyms_for_name (struct collect_info *info,
-			 const lookup_name_info &name,
-			 struct program_space *search_pspace,
-			 struct symtab *symtab)
-{
-  std::vector<struct bound_minimal_symbol> minsyms;
-
-  if (symtab == NULL)
-    {
-      struct program_space *pspace;
-
-      ALL_PSPACES (pspace)
-      {
-	if (search_pspace != NULL && search_pspace != pspace)
-	  continue;
-	if (pspace->executing_startup)
-	  continue;
-
-	set_current_program_space (pspace);
-
-	for (objfile *objfile : current_program_space->objfiles ())
-	  {
-	    iterate_over_minimal_symbols (objfile, name,
-					  [&] (struct minimal_symbol *msym)
-					  {
-					    add_minsym (msym, objfile, nullptr,
-							info->state->list_mode,
-							&minsyms);
-					    return false;
-					  });
-	  }
-      }
-    }
+  if (function_symbol)
+    block = SYMBOL_BLOCK_VALUE (function_symbol);
   else
     {
-      if (search_pspace == NULL || SYMTAB_PSPACE (symtab) == search_pspace)
-	{
-	  set_current_program_space (SYMTAB_PSPACE (symtab));
-	  iterate_over_minimal_symbols
-	    (SYMTAB_OBJFILE (symtab), name,
-	     [&] (struct minimal_symbol *msym)
-	       {
-		 add_minsym (msym, SYMTAB_OBJFILE (symtab), symtab,
-			     info->state->list_mode, &minsyms);
-		 return false;
-	       });
-	}
+      block = get_selected_block (0);
+      for (;
+	   block && !BLOCK_FUNCTION (block);
+	   block = BLOCK_SUPERBLOCK (block))
+	;
+      if (!block)
+	return 0;
+      function_symbol = BLOCK_FUNCTION (block);
     }
 
-  if (!minsyms.empty ())
-    {
-      int classification;
+  sym = lookup_symbol (copy, block, LABEL_DOMAIN, 0);
 
-      std::sort (minsyms.begin (), minsyms.end (), compare_msyms);
+  if (sym != NULL)
+    *result = symbol_found (0, canonical, copy, sym, NULL, function_symbol);
 
-      /* Now the minsyms are in classification order.  So, we walk
-	 over them and process just the minsyms with the same
-	 classification as the very first minsym in the list.  */
-      classification = classify_mtype (MSYMBOL_TYPE (minsyms[0].minsym));
-
-      for (const bound_minimal_symbol &item : minsyms)
-	{
-	  if (classify_mtype (MSYMBOL_TYPE (item.minsym)) != classification)
-	    break;
-
-	  info->result.minimal_symbols->push_back (item);
-	}
-    }
+  return sym != NULL;
 }
 
-/* A helper function to add all symbols matching NAME to INFO.  If
-   PSPACE is not NULL, the search is restricted to just that program
-   space.  */
+/* Decode a linespec that's a variable.  If FILE_SYMTAB is non-NULL,
+   look in that symtab's static variables first.  */ 
 
-static void
-add_matching_symbols_to_info (const char *name,
-			      symbol_name_match_type name_match_type,
-			      enum search_domain search_domain,
-			      struct collect_info *info,
-			      struct program_space *pspace)
+static struct symtabs_and_lines
+decode_variable (char *copy, int funfirstline,
+		 struct linespec_result *canonical,
+		 struct symtab *file_symtab)
 {
-  lookup_name_info lookup_name (name, name_match_type);
+  struct symbol *sym;
+  struct minimal_symbol *msymbol;
 
-  for (const auto &elt : *info->file_symtabs)
-    {
-      if (elt == nullptr)
-	{
-	  iterate_over_all_matching_symtabs (info->state, lookup_name,
-					     VAR_DOMAIN, search_domain,
-					     pspace, true,
-					     [&] (block_symbol *bsym)
-	    { return info->add_symbol (bsym); });
-	  search_minsyms_for_name (info, lookup_name, pspace, NULL);
-	}
-      else if (pspace == NULL || pspace == SYMTAB_PSPACE (elt))
-	{
-	  int prev_len = info->result.symbols->size ();
+  sym = lookup_symbol (copy, get_search_block (file_symtab),
+		       VAR_DOMAIN, 0);
 
-	  /* Program spaces that are executing startup should have
-	     been filtered out earlier.  */
-	  gdb_assert (!SYMTAB_PSPACE (elt)->executing_startup);
-	  set_current_program_space (SYMTAB_PSPACE (elt));
-	  iterate_over_file_blocks (elt, lookup_name, VAR_DOMAIN,
-				    [&] (block_symbol *bsym)
-	    { return info->add_symbol (bsym); });
+  if (sym != NULL)
+    return symbol_found (funfirstline, canonical, copy, sym, file_symtab, NULL);
 
-	  /* If no new symbols were found in this iteration and this symtab
-	     is in assembler, we might actually be looking for a label for
-	     which we don't have debug info.  Check for a minimal symbol in
-	     this case.  */
-	  if (prev_len == info->result.symbols->size ()
-	      && elt->language == language_asm)
-	    search_minsyms_for_name (info, lookup_name, pspace, elt);
-	}
-    }
+  msymbol = lookup_minimal_symbol (copy, NULL, NULL);
+
+  if (msymbol != NULL)
+    return minsym_found (funfirstline, msymbol);
+
+  if (!have_full_symbols ()
+      && !have_partial_symbols ()
+      && !have_minimal_symbols ())
+    throw_error (NOT_FOUND_ERROR,
+		 _("No symbol table is loaded.  Use the \"file\" command."));
+  throw_error (NOT_FOUND_ERROR, _("Function \"%s\" not defined."), copy);
 }
+
 
 
 
 /* Now come some functions that are called from multiple places within
    decode_line_1.  */
 
-static int
-symbol_to_sal (struct symtab_and_line *result,
-	       int funfirstline, struct symbol *sym)
+/* We've found a symbol SYM to associate with our linespec; build a
+   corresponding struct symtabs_and_lines.  */
+
+static struct symtabs_and_lines
+symbol_found (int funfirstline, struct linespec_result *canonical, char *copy,
+	      struct symbol *sym, struct symtab *file_symtab,
+	      struct symbol *function_symbol)
 {
+  struct symtabs_and_lines values;
+  
   if (SYMBOL_CLASS (sym) == LOC_BLOCK)
     {
-      *result = find_function_start_sal (sym, funfirstline);
-      return 1;
+      /* Arg is the name of a function.  */
+      values.sals = (struct symtab_and_line *)
+	xmalloc (sizeof (struct symtab_and_line));
+      values.sals[0] = find_function_start_sal (sym, funfirstline);
+      values.nelts = 1;
+
+      /* Don't use the SYMBOL_LINE; if used at all it points to
+	 the line containing the parameters or thereabouts, not
+	 the first line of code.  */
+
+      /* We might need a canonical line spec if it is a static
+	 function.  */
+      if (file_symtab == 0)
+	{
+	  struct blockvector *bv = BLOCKVECTOR (SYMBOL_SYMTAB (sym));
+	  struct block *b = BLOCKVECTOR_BLOCK (bv, STATIC_BLOCK);
+
+	  if (lookup_block_symbol (b, copy, VAR_DOMAIN) != NULL)
+	    build_canonical_line_spec (values.sals, copy, canonical);
+	}
+      return values;
     }
   else
     {
       if (SYMBOL_CLASS (sym) == LOC_LABEL && SYMBOL_VALUE_ADDRESS (sym) != 0)
 	{
-	  *result = {};
-	  result->symtab = symbol_symtab (sym);
-	  result->symbol = sym;
-	  result->line = SYMBOL_LINE (sym);
-	  result->pc = SYMBOL_VALUE_ADDRESS (sym);
-	  result->pspace = SYMTAB_PSPACE (result->symtab);
-	  result->explicit_pc = 1;
-	  return 1;
+	  /* We know its line number.  */
+	  values.sals = (struct symtab_and_line *)
+	    xmalloc (sizeof (struct symtab_and_line));
+	  values.nelts = 1;
+	  init_sal (&values.sals[0]);
+	  values.sals[0].symtab = SYMBOL_SYMTAB (sym);
+	  values.sals[0].line = SYMBOL_LINE (sym);
+	  values.sals[0].pc = SYMBOL_VALUE_ADDRESS (sym);
+	  values.sals[0].pspace = SYMTAB_PSPACE (SYMBOL_SYMTAB (sym));
+	  values.sals[0].explicit_pc = 1;
+
+	  if (canonical)
+	    {
+	      canonical->special_display = 1;
+	      canonical->canonical = xmalloc (sizeof (char *));
+	      canonical->canonical[0]
+		= xstrprintf ("%s:%s",
+			      SYMBOL_NATURAL_NAME (function_symbol),
+			      SYMBOL_NATURAL_NAME (sym));
+	    }
+
+	  return values;
 	}
       else if (funfirstline)
 	{
-	  /* Nothing.  */
+	  /* NOT_FOUND_ERROR is not correct but it ensures COPY will be
+	     searched also as a minimal symbol.  */
+
+	  throw_error (NOT_FOUND_ERROR, _("\"%s\" is not a function"), copy);
 	}
       else if (SYMBOL_LINE (sym) != 0)
 	{
 	  /* We know its line number.  */
-	  *result = {};
-	  result->symtab = symbol_symtab (sym);
-	  result->symbol = sym;
-	  result->line = SYMBOL_LINE (sym);
-	  result->pc = SYMBOL_VALUE_ADDRESS (sym);
-	  result->pspace = SYMTAB_PSPACE (result->symtab);
-	  return 1;
+	  values.sals = (struct symtab_and_line *)
+	    xmalloc (sizeof (struct symtab_and_line));
+	  values.nelts = 1;
+	  memset (&values.sals[0], 0, sizeof (values.sals[0]));
+	  values.sals[0].symtab = SYMBOL_SYMTAB (sym);
+	  values.sals[0].line = SYMBOL_LINE (sym);
+	  values.sals[0].pspace = SYMTAB_PSPACE (SYMBOL_SYMTAB (sym));
+	  return values;
 	}
+      else
+	/* This can happen if it is compiled with a compiler which doesn't
+	   put out line numbers for variables.  */
+	/* FIXME: Shouldn't we just set .line and .symtab to zero
+	   and return?  For example, "info line foo" could print
+	   the address.  */
+	error (_("Line number not known for symbol \"%s\""), copy);
     }
-
-  return 0;
 }
 
-linespec_result::~linespec_result ()
+/* We've found a minimal symbol MSYMBOL to associate with our
+   linespec; build a corresponding struct symtabs_and_lines.  */
+
+static struct symtabs_and_lines
+minsym_found (int funfirstline, struct minimal_symbol *msymbol)
 {
-  for (linespec_sals &lsal : lsals)
-    xfree (lsal.canonical);
+  struct objfile *objfile = msymbol_objfile (msymbol);
+  struct gdbarch *gdbarch = get_objfile_arch (objfile);
+  struct symtabs_and_lines values;
+  CORE_ADDR pc;
+
+  values.sals = (struct symtab_and_line *)
+    xmalloc (sizeof (struct symtab_and_line));
+  values.sals[0] = find_pc_sect_line (SYMBOL_VALUE_ADDRESS (msymbol),
+				      (struct obj_section *) 0, 0);
+  values.sals[0].section = SYMBOL_OBJ_SECTION (msymbol);
+
+  /* The minimal symbol might point to a function descriptor;
+     resolve it to the actual code address instead.  */
+  pc = gdbarch_convert_from_func_ptr_addr (gdbarch,
+                                           values.sals[0].pc,
+                                           &current_target);
+  if (pc != values.sals[0].pc)
+    values.sals[0] = find_pc_sect_line (pc, NULL, 0);
+
+  if (funfirstline)
+    skip_prologue_sal (&values.sals[0]);
+
+  values.nelts = 1;
+  return values;
 }
 
-/* Return the quote characters permitted by the linespec parser.  */
-
-const char *
-get_gdb_linespec_parser_quote_characters (void)
+void
+init_linespec_result (struct linespec_result *lr)
 {
-  return linespec_quote_characters;
+  memset (lr, 0, sizeof (*lr));
 }

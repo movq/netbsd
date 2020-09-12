@@ -1,5 +1,5 @@
 /* Cell SPU GNU/Linux support -- shared library handling.
-   Copyright (C) 2009-2019 Free Software Foundation, Inc.
+   Copyright (C) 2009, 2010, 2011 Free Software Foundation, Inc.
 
    Contributed by Ulrich Weigand <uweigand@de.ibm.com>.
 
@@ -19,9 +19,10 @@
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #include "defs.h"
-#include "solib-spu.h"
 #include "gdbcore.h"
-#include <sys/stat.h>
+#include "gdb_string.h"
+#include "gdb_assert.h"
+#include "gdb_stat.h"
 #include "arch-utils.h"
 #include "bfd.h"
 #include "symtab.h"
@@ -30,10 +31,10 @@
 #include "solist.h"
 #include "inferior.h"
 #include "objfiles.h"
-#include "observable.h"
+#include "observer.h"
 #include "breakpoint.h"
 #include "gdbthread.h"
-#include "gdb_bfd.h"
+#include "exceptions.h"
 
 #include "spu-tdep.h"
 
@@ -56,8 +57,8 @@ spu_relocate_main_executable (int spufs_fd)
   if (symfile_objfile == NULL)
     return;
 
-  new_offsets = XALLOCAVEC (struct section_offsets,
-			    symfile_objfile->num_sections);
+  new_offsets = alloca (symfile_objfile->num_sections
+			* sizeof (struct section_offsets));
 
   for (i = 0; i < symfile_objfile->num_sections; i++)
     new_offsets->offsets[i] = SPUADDR (spufs_fd, 0);
@@ -86,7 +87,7 @@ spu_skip_standalone_loader (void)
 
       inferior_thread ()->control.in_infcall = 1; /* Suppress MI messages.  */
 
-      target_resume (inferior_ptid, 1, GDB_SIGNAL_0);
+      target_resume (inferior_ptid, 1, TARGET_SIGNAL_0);
       target_wait (minus_one_ptid, &ws, 0);
       set_executing (minus_one_ptid, 0);
 
@@ -101,16 +102,17 @@ static void
 append_ocl_sos (struct so_list **link_ptr)
 {
   CORE_ADDR *ocl_program_addr_base;
+  struct objfile *objfile;
 
-  for (objfile *objfile : current_program_space->objfiles ())
+  ALL_OBJFILES (objfile)
     {
-      ocl_program_addr_base
-	= (CORE_ADDR *) objfile_data (objfile, ocl_program_data_key);
+      ocl_program_addr_base = objfile_data (objfile, ocl_program_data_key);
       if (ocl_program_addr_base != NULL)
         {
 	  enum bfd_endian byte_order = bfd_big_endian (objfile->obfd)?
 					 BFD_ENDIAN_BIG : BFD_ENDIAN_LITTLE;
-	  TRY
+	  volatile struct gdb_exception ex;
+	  TRY_CATCH (ex, RETURN_MASK_ALL)
 	    {
 	      CORE_ADDR data =
 		read_memory_unsigned_integer (*ocl_program_addr_base,
@@ -118,22 +120,22 @@ append_ocl_sos (struct so_list **link_ptr)
 					      byte_order);
 	      if (data != 0x0)
 		{
-		  struct so_list *newobj;
+		  struct so_list *new;
 
 		  /* Allocate so_list structure.  */
-		  newobj = XCNEW (struct so_list);
+		  new = XZALLOC (struct so_list);
 
 		  /* Encode FD and object ID in path name.  */
-		  xsnprintf (newobj->so_name, sizeof newobj->so_name, "@%s <%d>",
+		  xsnprintf (new->so_name, sizeof new->so_name, "@%s <%d>",
 			     hex_string (data),
 			     SPUADDR_SPU (*ocl_program_addr_base));
-		  strcpy (newobj->so_original_name, newobj->so_name);
+		  strcpy (new->so_original_name, new->so_name);
 
-		  *link_ptr = newobj;
-		  link_ptr = &newobj->next;
+		  *link_ptr = new;
+		  link_ptr = &new->next;
 		}
 	    }
-	  CATCH (ex, RETURN_MASK_ALL)
+	  if (ex.reason < 0)
 	    {
 	      /* Ignore memory errors.  */
 	      switch (ex.error)
@@ -145,7 +147,6 @@ append_ocl_sos (struct so_list **link_ptr)
 		  break;
 		}
 	    }
-	  END_CATCH
 	}
     }
 }
@@ -155,11 +156,11 @@ append_ocl_sos (struct so_list **link_ptr)
 static struct so_list *
 spu_current_sos (void)
 {
-  enum bfd_endian byte_order = gdbarch_byte_order (target_gdbarch ());
+  enum bfd_endian byte_order = gdbarch_byte_order (target_gdbarch);
   struct so_list *head;
   struct so_list **link_ptr;
 
-  gdb_byte buf[MAX_SPE_FD * 4];
+  char buf[MAX_SPE_FD * 4];
   int i, size;
 
   /* First, retrieve the SVR4 shared library list.  */
@@ -170,7 +171,7 @@ spu_current_sos (void)
     ;
 
   /* Determine list of SPU ids.  */
-  size = target_read (current_top_target (), TARGET_OBJECT_SPU, NULL,
+  size = target_read (&current_target, TARGET_OBJECT_SPU, NULL,
 		      buf, 0, sizeof buf);
 
   /* Do not add stand-alone SPE executable context as shared library,
@@ -195,7 +196,7 @@ spu_current_sos (void)
   for (i = 0; i < size; i += 4)
     {
       int fd = extract_unsigned_integer (buf + i, 4, byte_order);
-      struct so_list *newobj;
+      struct so_list *new;
 
       unsigned long long addr;
       char annex[32], id[100];
@@ -205,8 +206,8 @@ spu_current_sos (void)
 	 already created the SPE context, but not installed the object-id
 	 yet.  Skip such entries; we'll be back for them later.  */
       xsnprintf (annex, sizeof annex, "%d/object-id", fd);
-      len = target_read (current_top_target (), TARGET_OBJECT_SPU, annex,
-			 (gdb_byte *) id, 0, sizeof id);
+      len = target_read (&current_target, TARGET_OBJECT_SPU, annex,
+			 id, 0, sizeof id);
       if (len <= 0 || len >= sizeof id)
 	continue;
       id[len] = 0;
@@ -214,16 +215,16 @@ spu_current_sos (void)
 	continue;
 
       /* Allocate so_list structure.  */
-      newobj = XCNEW (struct so_list);
+      new = XZALLOC (struct so_list);
 
       /* Encode FD and object ID in path name.  Choose the name so as not
 	 to conflict with any (normal) SVR4 library path name.  */
-      xsnprintf (newobj->so_name, sizeof newobj->so_name, "@%s <%d>",
+      xsnprintf (new->so_name, sizeof new->so_name, "@%s <%d>",
 		 hex_string (addr), fd);
-      strcpy (newobj->so_original_name, newobj->so_name);
+      strcpy (new->so_original_name, new->so_name);
 
-      *link_ptr = newobj;
-      link_ptr = &newobj->next;
+      *link_ptr = new;
+      link_ptr = &new->next;
     }
 
   /* Append OpenCL sos.  */
@@ -283,9 +284,7 @@ static int
 spu_bfd_iovec_close (bfd *nbfd, void *stream)
 {
   xfree (stream);
-
-  /* Zero means success.  */
-  return 0;
+  return 1;
 }
 
 static file_ptr
@@ -295,7 +294,7 @@ spu_bfd_iovec_pread (bfd *abfd, void *stream, void *buf,
   CORE_ADDR addr = *(CORE_ADDR *)stream;
   int ret;
 
-  ret = target_read_memory (addr + offset, (gdb_byte *) buf, nbytes);
+  ret = target_read_memory (addr + offset, buf, nbytes);
   if (ret != 0)
     {
       bfd_set_error (bfd_error_invalid_operation);
@@ -313,37 +312,40 @@ spu_bfd_iovec_stat (bfd *abfd, void *stream, struct stat *sb)
      table to find the extent of the last section but that seems
      pointless when the size is needed only for checks of other
      parsed values in dbxread.c.  */
-  memset (sb, 0, sizeof (struct stat));
   sb->st_size = INT_MAX;
   return 0;
 }
 
-static gdb_bfd_ref_ptr
-spu_bfd_fopen (const char *name, CORE_ADDR addr)
+static bfd *
+spu_bfd_fopen (char *name, CORE_ADDR addr)
 {
-  CORE_ADDR *open_closure = XNEW (CORE_ADDR);
+  bfd *nbfd;
 
+  CORE_ADDR *open_closure = xmalloc (sizeof (CORE_ADDR));
   *open_closure = addr;
 
-  gdb_bfd_ref_ptr nbfd (gdb_bfd_openr_iovec (name, "elf32-spu",
-					     spu_bfd_iovec_open, open_closure,
-					     spu_bfd_iovec_pread,
-					     spu_bfd_iovec_close,
-					     spu_bfd_iovec_stat));
-  if (nbfd == NULL)
+  nbfd = bfd_openr_iovec (xstrdup (name), "elf32-spu",
+                          spu_bfd_iovec_open, open_closure,
+                          spu_bfd_iovec_pread, spu_bfd_iovec_close,
+			  spu_bfd_iovec_stat);
+  if (!nbfd)
     return NULL;
 
-  if (!bfd_check_format (nbfd.get (), bfd_object))
-    return NULL;
+  if (!bfd_check_format (nbfd, bfd_object))
+    {
+      bfd_close (nbfd);
+      return NULL;
+    }
 
   return nbfd;
 }
 
 /* Open shared library BFD.  */
-static gdb_bfd_ref_ptr
-spu_bfd_open (const char *pathname)
+static bfd *
+spu_bfd_open (char *pathname)
 {
-  const char *original_name = strrchr (pathname, '@');
+  char *original_name = strrchr (pathname, '@');
+  bfd *abfd;
   asection *spu_name;
   unsigned long long addr;
   int fd;
@@ -357,23 +359,21 @@ spu_bfd_open (const char *pathname)
     internal_error (__FILE__, __LINE__, "bad object ID");
 
   /* Open BFD representing SPE executable.  */
-  gdb_bfd_ref_ptr abfd (spu_bfd_fopen (original_name, (CORE_ADDR) addr));
-  if (abfd == NULL)
+  abfd = spu_bfd_fopen (original_name, (CORE_ADDR) addr);
+  if (!abfd)
     error (_("Cannot read SPE executable at %s"), original_name);
 
   /* Retrieve SPU name note.  */
-  spu_name = bfd_get_section_by_name (abfd.get (), ".note.spu_name");
+  spu_name = bfd_get_section_by_name (abfd, ".note.spu_name");
   if (spu_name)
     {
-      int sect_size = bfd_section_size (abfd.get (), spu_name);
+      int sect_size = bfd_section_size (abfd, spu_name);
 
       if (sect_size > 20)
 	{
-	  char *buf
-	    = (char *) alloca (sect_size - 20 + strlen (original_name) + 1);
+	  char *buf = alloca (sect_size - 20 + strlen (original_name) + 1);
 
-	  bfd_get_section_contents (abfd.get (), spu_name, buf, 20,
-				    sect_size - 20);
+	  bfd_get_section_contents (abfd, spu_name, buf, 20, sect_size - 20);
 	  buf[sect_size - 20] = '\0';
 
 	  strcat (buf, original_name);
@@ -387,8 +387,8 @@ spu_bfd_open (const char *pathname)
 }
 
 /* Lookup global symbol in a SPE executable.  */
-static struct block_symbol
-spu_lookup_lib_symbol (struct objfile *objfile,
+static struct symbol *
+spu_lookup_lib_symbol (const struct objfile *objfile,
 		       const char *name,
 		       const domain_enum domain)
 {
@@ -397,14 +397,14 @@ spu_lookup_lib_symbol (struct objfile *objfile,
 
   if (svr4_so_ops.lookup_lib_global_symbol != NULL)
     return svr4_so_ops.lookup_lib_global_symbol (objfile, name, domain);
-  return (struct block_symbol) {NULL, NULL};
+  return NULL;
 }
 
 /* Enable shared library breakpoint.  */
 static int
 spu_enable_break (struct objfile *objfile)
 {
-  struct bound_minimal_symbol spe_event_sym;
+  struct minimal_symbol *spe_event_sym = NULL;
 
   /* The libspe library will call __spe_context_update_event whenever any
      SPE context is allocated or destroyed.  */
@@ -412,13 +412,13 @@ spu_enable_break (struct objfile *objfile)
 					 NULL, objfile);
 
   /* Place a solib_event breakpoint on the symbol.  */
-  if (spe_event_sym.minsym)
+  if (spe_event_sym)
     {
-      CORE_ADDR addr = BMSYMBOL_VALUE_ADDRESS (spe_event_sym);
+      CORE_ADDR addr = SYMBOL_VALUE_ADDRESS (spe_event_sym);
 
-      addr = gdbarch_convert_from_func_ptr_addr (target_gdbarch (), addr,
-						 current_top_target ());
-      create_solib_event_breakpoint (target_gdbarch (), addr);
+      addr = gdbarch_convert_from_func_ptr_addr (target_gdbarch, addr,
+                                                 &current_target);
+      create_solib_event_breakpoint (target_gdbarch, addr);
       return 1;
     }
 
@@ -430,8 +430,8 @@ spu_enable_break (struct objfile *objfile)
 static void
 ocl_enable_break (struct objfile *objfile)
 {
-  struct bound_minimal_symbol event_sym;
-  struct bound_minimal_symbol addr_sym;
+  struct minimal_symbol *event_sym = NULL;
+  struct minimal_symbol *addr_sym = NULL;
 
   /* The OpenCL runtime on the SPU will call __opencl_program_update_event
      whenever an OpenCL program is loaded.  */
@@ -441,10 +441,10 @@ ocl_enable_break (struct objfile *objfile)
      at opencl_elf_image_address.  */
   addr_sym = lookup_minimal_symbol ("opencl_elf_image_address", NULL, objfile);
 
-  if (event_sym.minsym && addr_sym.minsym)
+  if (event_sym && addr_sym)
     {
       /* Place a solib_event breakpoint on the symbol.  */
-      CORE_ADDR event_addr = BMSYMBOL_VALUE_ADDRESS (event_sym);
+      CORE_ADDR event_addr = SYMBOL_VALUE_ADDRESS (event_sym);
       create_solib_event_breakpoint (get_objfile_arch (objfile), event_addr);
 
       /* Store the address of the symbol that will point to OpenCL program
@@ -455,7 +455,7 @@ ocl_enable_break (struct objfile *objfile)
 		  &objfile->objfile_obstack,
 		  objfile->sections_end - objfile->sections,
 		  CORE_ADDR);
-	  *ocl_program_addr_base = BMSYMBOL_VALUE_ADDRESS (addr_sym);
+	  *ocl_program_addr_base = SYMBOL_VALUE_ADDRESS (addr_sym);
 	  set_objfile_data (objfile, ocl_program_data_key,
 			    ocl_program_addr_base);
         }
@@ -544,7 +544,7 @@ spu_solib_loaded (struct so_list *so)
 void
 _initialize_spu_solib (void)
 {
-  gdb::observers::solib_loaded.attach (spu_solib_loaded);
+  observer_attach_solib_loaded (spu_solib_loaded);
   ocl_program_data_key = register_objfile_data ();
 }
 

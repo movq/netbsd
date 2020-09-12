@@ -1,5 +1,5 @@
 /* Library support for -fsplit-stack.  */
-/* Copyright (C) 2009-2019 Free Software Foundation, Inc.
+/* Copyright (C) 2009-2013 Free Software Foundation, Inc.
    Contributed by Ian Lance Taylor <iant@google.com>.
 
 This file is part of GCC.
@@ -23,16 +23,13 @@ a copy of the GCC Runtime Library Exception along with this program;
 see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
 <http://www.gnu.org/licenses/>.  */
 
-/* powerpc 32-bit not supported.  */
-#if !defined __powerpc__ || defined __powerpc64__
-
 #include "tconfig.h"
 #include "tsystem.h"
 #include "coretypes.h"
 #include "tm.h"
 #include "libgcc_tm.h"
 
-/* If inhibit_libc is defined, we cannot compile this file.  The
+/* If inhibit_libc is defined, we can not compile this file.  The
    effect is that people will not be able to use -fsplit-stack.  That
    is much better than failing the build particularly since people
    will want to define inhibit_libc while building a compiler which
@@ -243,12 +240,6 @@ __thread struct initial_sp __morestack_initial_sp
 
 static sigset_t __morestack_fullmask;
 
-/* Page size, as returned from getpagesize(). Set on startup. */
-static unsigned int static_pagesize;
-
-/* Set on startup to non-zero value if SPLIT_STACK_GUARD env var is set. */
-static int use_guard_page;
-
 /* Convert an integer to a decimal string without using much stack
    space.  Return a pointer to the part of the buffer to use.  We this
    instead of sprintf because sprintf will require too much stack
@@ -326,6 +317,8 @@ __morestack_fail (const char *msg, size_t len, int err)
 static struct stack_segment *
 allocate_segment (size_t frame_size)
 {
+  static unsigned int static_pagesize;
+  static int use_guard_page;
   unsigned int pagesize;
   unsigned int overhead;
   unsigned int allocate;
@@ -333,6 +326,27 @@ allocate_segment (size_t frame_size)
   struct stack_segment *pss;
 
   pagesize = static_pagesize;
+  if (pagesize == 0)
+    {
+      unsigned int p;
+
+      pagesize = getpagesize ();
+
+#ifdef __GCC_HAVE_SYNC_COMPARE_AND_SWAP_4
+      p = __sync_val_compare_and_swap (&static_pagesize, 0, pagesize);
+#else
+      /* Just hope this assignment is atomic.  */
+      static_pagesize = pagesize;
+      p = 0;
+#endif
+
+      use_guard_page = getenv ("SPLIT_STACK_GUARD") != 0;
+
+      /* FIXME: I'm not sure this assert should be in the released
+	 code.  */
+      assert (p == 0 || p == pagesize);
+    }
+
   overhead = sizeof (struct stack_segment);
 
   allocate = pagesize;
@@ -364,7 +378,7 @@ allocate_segment (size_t frame_size)
     {
       void *guard;
 
-#ifdef __LIBGCC_STACK_GROWS_DOWNWARD__
+#ifdef STACK_GROWS_DOWNWARD
       guard = space;
       space = (char *) space + pagesize;
 #else
@@ -482,7 +496,7 @@ __generic_morestack_set_initial_sp (void *sp, size_t len)
      to the nearest 512 byte boundary.  It's not essential that we be
      precise here; getting it wrong will just leave some stack space
      unused.  */
-#ifdef __LIBGCC_STACK_GROWS_DOWNWARD__
+#ifdef STACK_GROWS_DOWNWARD
   sp = (void *) ((((__UINTPTR_TYPE__) sp + 511U) / 512U) * 512U);
 #else
   sp = (void *) ((((__UINTPTR_TYPE__) sp - 511U) / 512U) * 512U);
@@ -570,7 +584,7 @@ __generic_morestack (size_t *pframe_size, void *old_stack, size_t param_size)
   /* Align the returned stack to a 32-byte boundary.  */
   aligned = (param_size + 31) & ~ (size_t) 31;
 
-#ifdef __LIBGCC_STACK_GROWS_DOWNWARD__
+#ifdef STACK_GROWS_DOWNWARD
   {
     char *bottom = (char *) (current + 1) + current->size;
     to = bottom - aligned;
@@ -614,7 +628,7 @@ __generic_releasestack (size_t *pavailable)
 
   if (current != NULL)
     {
-#ifdef __LIBGCC_STACK_GROWS_DOWNWARD__
+#ifdef STACK_GROWS_DOWNWARD
       *pavailable = (char *) old_stack - (char *) (current + 1);
 #else
       *pavailable = (char *) (current + 1) + current->size - (char *) old_stack;
@@ -625,7 +639,7 @@ __generic_releasestack (size_t *pavailable)
       size_t used;
 
       /* We have popped back to the original stack.  */
-#ifdef __LIBGCC_STACK_GROWS_DOWNWARD__
+#ifdef STACK_GROWS_DOWNWARD
       if ((char *) old_stack >= (char *) __morestack_initial_sp.sp)
 	used = 0;
       else
@@ -764,7 +778,7 @@ __generic_findstack (void *stack)
 	  && (char *) pss + pss->size > (char *) stack)
 	{
 	  __morestack_current_segment = pss;
-#ifdef __LIBGCC_STACK_GROWS_DOWNWARD__
+#ifdef STACK_GROWS_DOWNWARD
 	  return (char *) stack - (char *) (pss + 1);
 #else
 	  return (char *) (pss + 1) + pss->size - (char *) stack;
@@ -777,7 +791,7 @@ __generic_findstack (void *stack)
   if (__morestack_initial_sp.sp == NULL)
     return 0;
 
-#ifdef __LIBGCC_STACK_GROWS_DOWNWARD__
+#ifdef STACK_GROWS_DOWNWARD
   if ((char *) stack >= (char *) __morestack_initial_sp.sp)
     used = 0;
   else
@@ -798,10 +812,7 @@ __generic_findstack (void *stack)
 /* This function is called at program startup time to make sure that
    mmap, munmap, and getpagesize are resolved if linking dynamically.
    We want to resolve them while we have enough stack for them, rather
-   than calling into the dynamic linker while low on stack space.
-   Similarly, invoke getenv here to check for split-stack related control
-   variables, since doing do as part of the __morestack path can result
-   in unwanted use of SSE/AVX registers (see GCC PR 86213). */
+   than calling into the dynamic linker while low on stack space.  */
 
 void
 __morestack_load_mmap (void)
@@ -811,12 +822,7 @@ __morestack_load_mmap (void)
      TLS accessor function is resolved.  */
   mmap (__morestack_current_segment, 0, PROT_READ, MAP_ANONYMOUS, -1, 0);
   mprotect (NULL, 0, 0);
-  munmap (0, static_pagesize);
-
-  /* Initialize these values here, so as to avoid dynamic linker
-     activity as part of a __morestack call. */
-  static_pagesize = getpagesize();
-  use_guard_page = getenv ("SPLIT_STACK_GUARD") != 0;
+  munmap (0, getpagesize ());
 }
 
 /* This function may be used to iterate over the stack segments.
@@ -863,7 +869,7 @@ __splitstack_find (void *segment_arg, void *sp, size_t *len,
 
       *next_segment = (void *) (uintptr_type) 2;
       *next_sp = NULL;
-#ifdef __LIBGCC_STACK_GROWS_DOWNWARD__
+#ifdef STACK_GROWS_DOWNWARD
       if ((char *) sp >= isp)
 	return NULL;
       *len = (char *) isp - (char *) sp;
@@ -929,11 +935,6 @@ __splitstack_find (void *segment_arg, void *sp, size_t *len,
       nsp -= 12 * sizeof (void *);
 #elif defined (__i386__)
       nsp -= 6 * sizeof (void *);
-#elif defined __powerpc64__
-#elif defined __s390x__
-      nsp -= 2 * 160;
-#elif defined __s390__
-      nsp -= 2 * 96;
 #else
 #error "unrecognized target"
 #endif
@@ -941,7 +942,7 @@ __splitstack_find (void *segment_arg, void *sp, size_t *len,
       *next_sp = (void *) nsp;
     }
 
-#ifdef __LIBGCC_STACK_GROWS_DOWNWARD__
+#ifdef STACK_GROWS_DOWNWARD
   *len = (char *) (segment + 1) + segment->size - (char *) sp;
   ret = (void *) sp;
 #else
@@ -1045,7 +1046,7 @@ __splitstack_makecontext (size_t stack_size, void *context[NUMBER_OFFSETS],
   segment = allocate_segment (stack_size);
   context[MORESTACK_SEGMENTS] = segment;
   context[CURRENT_SEGMENT] = segment;
-#ifdef __LIBGCC_STACK_GROWS_DOWNWARD__
+#ifdef STACK_GROWS_DOWNWARD
   initial_sp = (void *) ((char *) (segment + 1) + segment->size);
 #else
   initial_sp = (void *) (segment + 1);
@@ -1081,13 +1082,13 @@ __splitstack_resetcontext (void *context[10], size_t *size)
       initial_sp = context[INITIAL_SP];
       initial_size = (uintptr_type) context[INITIAL_SP_LEN];
       ret = initial_sp;
-#ifdef __LIBGCC_STACK_GROWS_DOWNWARD__
+#ifdef STACK_GROWS_DOWNWARD
       ret = (void *) ((char *) ret - initial_size);
 #endif
     }
   else
     {
-#ifdef __LIBGCC_STACK_GROWS_DOWNWARD__
+#ifdef STACK_GROWS_DOWNWARD
       initial_sp = (void *) ((char *) (segment + 1) + segment->size);
 #else
       initial_sp = (void *) (segment + 1);
@@ -1169,4 +1170,3 @@ __splitstack_find_context (void *context[NUMBER_OFFSETS], size_t *stack_size,
 }
 
 #endif /* !defined (inhibit_libc) */
-#endif /* not powerpc 32-bit */

@@ -1,6 +1,7 @@
 // std::numpunct implementation details, GNU version -*- C++ -*-
 
-// Copyright (C) 2001-2019 Free Software Foundation, Inc.
+// Copyright (C) 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009
+// Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
@@ -30,63 +31,10 @@
 
 #include <locale>
 #include <bits/c++locale_internal.h>
-#include <iconv.h>
 
-namespace std _GLIBCXX_VISIBILITY(default)
-{
-_GLIBCXX_BEGIN_NAMESPACE_VERSION
+_GLIBCXX_BEGIN_NAMESPACE(std)
 
-  extern char __narrow_multibyte_chars(const char* s, __locale_t cloc);
-
-// This file might be compiled twice, but we only want to define this once.
-#if ! _GLIBCXX_USE_CXX11_ABI
-  char
-  __narrow_multibyte_chars(const char* s, __locale_t cloc)
-  {
-    const char* codeset = __nl_langinfo_l(CODESET, cloc);
-    if (!strcmp(codeset, "UTF-8"))
-      {
-	// optimize for some known cases
-	if (!strcmp(s, "\u202F")) // NARROW NO-BREAK SPACE
-	  return ' ';
-	if (!strcmp(s, "\u2019")) // RIGHT SINGLE QUOTATION MARK
-	  return '\'';
-	if (!strcmp(s, "\u066C")) // ARABIC THOUSANDS SEPARATOR
-	  return '\'';
-      }
-
-    iconv_t cd = iconv_open("ASCII//TRANSLIT", codeset);
-    if (cd != (iconv_t)-1)
-      {
-	char c1;
-	size_t inbytesleft = strlen(s);
-	size_t outbytesleft = 1;
-	char* inbuf = const_cast<char*>(s);
-	char* outbuf = &c1;
-	size_t n = iconv(cd, &inbuf, &inbytesleft, &outbuf, &outbytesleft);
-	iconv_close(cd);
-	if (n != (size_t)-1)
-	  {
-	    cd = iconv_open(codeset, "ASCII");
-	    if (cd != (iconv_t)-1)
-	      {
-		char c2;
-		inbuf = &c1;
-		inbytesleft = 1;
-		outbuf = &c2;
-		outbytesleft = 1;
-		n = iconv(cd, &inbuf, &inbytesleft, &outbuf, &outbytesleft);
-		iconv_close(cd);
-		if (n != (size_t)-1)
-		  return c2;
-	      }
-	  }
-      }
-    return '\0';
-  }
-#endif
-
-  template<>
+  template<> 
     void
     numpunct<char>::_M_initialize_numpunct(__c_locale __cloc)
     {
@@ -112,15 +60,10 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       else
 	{
 	  // Named locale.
-	  _M_data->_M_decimal_point = *(__nl_langinfo_l(DECIMAL_POINT,
+	  _M_data->_M_decimal_point = *(__nl_langinfo_l(DECIMAL_POINT, 
 							__cloc));
-	  const char* thousands_sep = __nl_langinfo_l(THOUSANDS_SEP, __cloc);
-
-	  if (thousands_sep[0] != '\0' && thousands_sep[1] != '\0')
-	    _M_data->_M_thousands_sep = __narrow_multibyte_chars(thousands_sep,
-								 __cloc);
-	  else
-	    _M_data->_M_thousands_sep = *thousands_sep;
+	  _M_data->_M_thousands_sep = *(__nl_langinfo_l(THOUSANDS_SEP, 
+							__cloc));
 
 	  // Check for NULL, which implies no grouping.
 	  if (_M_data->_M_thousands_sep == '\0')
@@ -167,17 +110,17 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       _M_data->_M_falsename = "false";
       _M_data->_M_falsename_size = 5;
     }
-
-  template<>
+ 
+  template<> 
     numpunct<char>::~numpunct()
     {
       if (_M_data->_M_grouping_size)
 	delete [] _M_data->_M_grouping;
       delete _M_data;
     }
-
+   
 #ifdef _GLIBCXX_USE_WCHAR_T
-  template<>
+  template<> 
     void
     numpunct<wchar_t>::_M_initialize_numpunct(__c_locale __cloc)
     {
@@ -260,7 +203,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       _M_data->_M_falsename_size = 5;
     }
 
-  template<>
+  template<> 
     numpunct<wchar_t>::~numpunct()
     {
       if (_M_data->_M_grouping_size)
@@ -269,5 +212,4 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
     }
  #endif
 
-_GLIBCXX_END_NAMESPACE_VERSION
-} // namespace
+_GLIBCXX_END_NAMESPACE

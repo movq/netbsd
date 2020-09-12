@@ -1,6 +1,7 @@
 // Low-level functions for atomic operations: Generic version  -*- C++ -*-
 
-// Copyright (C) 1999-2019 Free Software Foundation, Inc.
+// Copyright (C) 1999, 2001, 2002, 2003, 2004, 2005, 2006, 2009
+// Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
@@ -22,10 +23,14 @@
 // see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
 // <http://www.gnu.org/licenses/>.
 
+/** @file ext/atomicity.h
+ *  This file is a GNU extension to the Standard C++ Library.
+ */
+
 #include <ext/atomicity.h>
 #include <ext/concurrence.h>
 
-namespace
+namespace 
 {
   __gnu_cxx::__mutex&
   get_atomic_mutex()
@@ -35,9 +40,7 @@ namespace
   }
 } // anonymous namespace
 
-namespace __gnu_cxx _GLIBCXX_VISIBILITY(default)
-{
-_GLIBCXX_BEGIN_NAMESPACE_VERSION
+_GLIBCXX_BEGIN_NAMESPACE(__gnu_cxx)
 
   _Atomic_word
   __attribute__ ((__unused__))
@@ -55,5 +58,4 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
   __atomic_add(volatile _Atomic_word* __mem, int __val) throw ()
   { __exchange_and_add(__mem, __val); }
 
-_GLIBCXX_END_NAMESPACE_VERSION
-} // namespace
+_GLIBCXX_END_NAMESPACE

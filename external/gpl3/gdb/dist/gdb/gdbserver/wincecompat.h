@@ -1,5 +1,5 @@
 /* Compatibility routines for Windows CE.
-   Copyright (C) 2007-2019 Free Software Foundation, Inc.
+   Copyright (C) 2007, 2008, 2009, 2010, 2011 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -16,8 +16,8 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-#ifndef GDBSERVER_WINCECOMPAT_H
-#define GDBSERVER_WINCECOMPAT_H
+#ifndef WINCECOMPAT_H
+#define WINCECOMPAT_H
 
 #include <windows.h>
 
@@ -27,4 +27,4 @@
 extern char * strwinerror (DWORD error);
 #define strerror strwinerror
 
-#endif /* GDBSERVER_WINCECOMPAT_H */
+#endif

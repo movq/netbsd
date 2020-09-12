@@ -1,5 +1,5 @@
 /* Common target dependent code for GDB on ARM systems.
-   Copyright (C) 1988-2019 Free Software Foundation, Inc.
+   Copyright (C) 1988-2016 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -16,8 +16,8 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-#ifndef ARCH_ARM_H
-#define ARCH_ARM_H
+#ifndef ARM_H
+#define ARM_H
 
 /* Register numbers of various important registers.  */
 
@@ -56,14 +56,6 @@ enum gdb_regnum {
   ARM_LAST_ARG_REGNUM = ARM_A4_REGNUM,
   ARM_NUM_FP_ARG_REGS = 4,
   ARM_LAST_FP_ARG_REGNUM = ARM_F3_REGNUM
-};
-
-/* Enum describing the different kinds of breakpoints.  */
-enum arm_breakpoint_kinds
-{
-   ARM_BP_KIND_THUMB = 2,
-   ARM_BP_KIND_THUMB2 = 3,
-   ARM_BP_KIND_ARM = 4,
 };
 
 /* Instruction condition field values.  */
@@ -146,4 +138,4 @@ unsigned long shifted_reg_val (struct regcache *regcache,
 			       unsigned long pc_val,
 			       unsigned long status_reg);
 
-#endif /* ARCH_ARM_H */
+#endif

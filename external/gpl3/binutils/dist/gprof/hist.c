@@ -1,6 +1,7 @@
 /* hist.c  -  Histogram related operations.
 
-   Copyright (C) 1999-2020 Free Software Foundation, Inc.
+   Copyright 1999, 2000, 2001, 2002, 2004, 2005, 2007
+   Free Software Foundation, Inc.
 
    This file is part of GNU Binutils.
 
@@ -47,8 +48,6 @@ extern void flat_blurb (FILE * fp);
 static histogram *find_histogram (bfd_vma lowpc, bfd_vma highpc);
 static histogram *find_histogram_for_pc (bfd_vma pc);
 
-histogram * histograms;
-unsigned num_histograms;
 double hist_scale;
 static char hist_dimension[16] = "seconds";
 static char hist_dimension_abbrev = 's';
@@ -80,14 +79,14 @@ SItab[] =
 
 /* Reads just the header part of histogram record into
    *RECORD from IFP.  FILENAME is the name of IFP and
-   is provided for formatting error messages only.
+   is provided for formatting error messages only.  
 
    If FIRST is non-zero, sets global variables HZ, HIST_DIMENSION,
    HIST_DIMENSION_ABBREV, HIST_SCALE.  If FIRST is zero, checks
    that the new histogram is compatible with already-set values
    of those variables and emits an error if that's not so.  */
 static void
-read_histogram_header (histogram *record,
+read_histogram_header (histogram *record, 
 		       FILE *ifp, const char *filename,
 		       int first)
 {
@@ -109,7 +108,7 @@ read_histogram_header (histogram *record,
       done (1);
     }
 
-  n_hist_scale = (double)((record->highpc - record->lowpc) / sizeof (UNIT))
+  n_hist_scale = (double)((record->highpc - record->lowpc) / sizeof (UNIT)) 
     / record->num_bins;
 
   if (first)
@@ -124,13 +123,13 @@ read_histogram_header (histogram *record,
       hz = profrate;
       memcpy (hist_dimension, n_hist_dimension, 15);
       hist_dimension_abbrev = n_hist_dimension_abbrev;
-      hist_scale = n_hist_scale;
+      hist_scale = n_hist_scale;      
     }
   else
     {
       if (strncmp (n_hist_dimension, hist_dimension, 15) != 0)
 	{
-	  fprintf (stderr,
+	  fprintf (stderr, 
 		   _("%s: dimension unit changed between histogram records\n"
 		     "%s: from '%s'\n"
 		     "%s: to '%s'\n"),
@@ -140,12 +139,12 @@ read_histogram_header (histogram *record,
 
       if (n_hist_dimension_abbrev != hist_dimension_abbrev)
 	{
-	  fprintf (stderr,
+	  fprintf (stderr, 
 		   _("%s: dimension abbreviation changed between histogram records\n"
 		     "%s: from '%c'\n"
 		     "%s: to '%c'\n"),
 		   whoami, whoami, hist_dimension_abbrev, whoami, n_hist_dimension_abbrev);
-	  done (1);
+	  done (1);	  
 	}
 
       /* The only reason we require the same scale for histograms is that
@@ -154,10 +153,10 @@ read_histogram_header (histogram *record,
 	 things for different functions.  */
       if (fabs (hist_scale - n_hist_scale) > 0.000001)
 	{
-	  fprintf (stderr,
+	  fprintf (stderr, 
 		   _("%s: different scales in histogram records"),
 		   whoami);
-	  done (1);
+	  done (1);      
 	}
     }
 }
@@ -191,22 +190,22 @@ hist_read_rec (FILE * ifp, const char *filename)
       hist_clip_symbol_address (&lowpc, &highpc);
       if (lowpc != highpc)
 	{
-	  fprintf (stderr,
+	  fprintf (stderr, 
 		   _("%s: overlapping histogram records\n"),
 		   whoami);
-	  done (1);
+	  done (1);      
 	}
 
       /* This is new record.  Add it to global array and allocate space for
 	 the samples.  */
-      histograms = (struct histogram *)
-          xrealloc (histograms, sizeof (histogram) * (num_histograms + 1));
+      histograms = xrealloc (histograms,
+			     sizeof (histogram) * (num_histograms + 1));
       memcpy (histograms + num_histograms,
 	      &n_record, sizeof (histogram));
-      record = &histograms[num_histograms];
+      record = &histograms[num_histograms];      
       ++num_histograms;
 
-      record->sample = (int *) xmalloc (record->num_bins
+      record->sample = (int *) xmalloc (record->num_bins 
 					* sizeof (record->sample[0]));
       memset (record->sample, 0, record->num_bins * sizeof (record->sample[0]));
     }
@@ -217,9 +216,9 @@ hist_read_rec (FILE * ifp, const char *filename)
 
   DBG (SAMPLEDEBUG,
        printf ("[hist_read_rec] n_lowpc 0x%lx n_highpc 0x%lx ncnt %u\n",
-	       (unsigned long) record->lowpc, (unsigned long) record->highpc,
+	       (unsigned long) record->lowpc, (unsigned long) record->highpc, 
                record->num_bins));
-
+           
   for (i = 0; i < record->num_bins; ++i)
     {
       UNIT count;
@@ -233,8 +232,8 @@ hist_read_rec (FILE * ifp, const char *filename)
       record->sample[i] += bfd_get_16 (core_bfd, (bfd_byte *) & count[0]);
       DBG (SAMPLEDEBUG,
 	   printf ("[hist_read_rec] 0x%lx: %u\n",
-		   (unsigned long) (record->lowpc
-                                    + i * (record->highpc - record->lowpc)
+		   (unsigned long) (record->lowpc 
+                                    + i * (record->highpc - record->lowpc) 
                                     / record->num_bins),
 		   record->sample[i]));
     }
@@ -255,7 +254,7 @@ hist_write_hist (FILE * ofp, const char *filename)
       histogram *record = &histograms[r];
 
       /* Write header.  */
-
+      
       if (gmon_io_write_8 (ofp, GMON_TAG_TIME_HIST)
 	  || gmon_io_write_vma (ofp, record->lowpc)
 	  || gmon_io_write_vma (ofp, record->highpc)
@@ -267,11 +266,11 @@ hist_write_hist (FILE * ofp, const char *filename)
 	  perror (filename);
 	  done (1);
 	}
-
+      
       for (i = 0; i < record->num_bins; ++i)
 	{
 	  bfd_put_16 (core_bfd, (bfd_vma) record->sample[i], (bfd_byte *) &count[0]);
-
+	  
 	  if (fwrite (&count[0], sizeof (count), 1, ofp) != 1)
 	    {
 	      perror (filename);
@@ -289,7 +288,7 @@ hist_write_hist (FILE * ofp, const char *filename)
    next bin.  */
 
 static void
-scale_and_align_entries (void)
+scale_and_align_entries ()
 {
   Sym *sym;
   bfd_vma bin_of_entry;
@@ -364,13 +363,13 @@ hist_assign_samples_1 (histogram *r)
   bfd_vma sym_low_pc, sym_high_pc;
   bfd_vma overlap, addr;
   unsigned int bin_count;
-  unsigned int i, j, k;
-  double count_time, credit;
+  unsigned int i, j;
+  double time, credit;
 
   bfd_vma lowpc = r->lowpc / sizeof (UNIT);
 
   /* Iterate over all sample bins.  */
-  for (i = 0, k = 1; i < r->num_bins; ++i)
+  for (i = 0, j = 1; i < r->num_bins; ++i)
     {
       bin_count = r->sample[i];
       if (! bin_count)
@@ -378,7 +377,7 @@ hist_assign_samples_1 (histogram *r)
 
       bin_low_pc = lowpc + (bfd_vma) (hist_scale * i);
       bin_high_pc = lowpc + (bfd_vma) (hist_scale * (i + 1));
-      count_time = bin_count;
+      time = bin_count;
 
       DBG (SAMPLEDEBUG,
 	   printf (
@@ -386,13 +385,10 @@ hist_assign_samples_1 (histogram *r)
 		    (unsigned long) (sizeof (UNIT) * bin_low_pc),
 		    (unsigned long) (sizeof (UNIT) * bin_high_pc),
 		    bin_count));
-      total_time += count_time;
+      total_time += time;
 
-      /* Credit all symbols that are covered by bin I.
-
-         PR gprof/13325: Make sure that K does not get decremented
-	 and J will never be less than 0.  */
-      for (j = k - 1; j < symtab.len; k = ++j)
+      /* Credit all symbols that are covered by bin I.  */
+      for (j = j - 1; j < symtab.len; ++j)
 	{
 	  sym_low_pc = symtab.base[j].hist.scaled_addr;
 	  sym_high_pc = symtab.base[j + 1].hist.scaled_addr;
@@ -416,11 +412,11 @@ hist_assign_samples_1 (histogram *r)
 	       "[assign_samples] [0x%lx,0x%lx) %s gets %f ticks %ld overlap\n",
 			   (unsigned long) symtab.base[j].addr,
 			   (unsigned long) (sizeof (UNIT) * sym_high_pc),
-			   symtab.base[j].name, overlap * count_time / hist_scale,
+			   symtab.base[j].name, overlap * time / hist_scale,
 			   (long) overlap));
 
 	      addr = symtab.base[j].addr;
-	      credit = overlap * count_time / hist_scale;
+	      credit = overlap * time / hist_scale;
 
 	      /* Credit symbol if it appears in INCL_FLAT or that
 		 table is empty and it does not appear it in
@@ -445,7 +441,7 @@ hist_assign_samples_1 (histogram *r)
 
 /* Calls 'hist_assign_sampes_1' for all histogram records read so far. */
 void
-hist_assign_samples (void)
+hist_assign_samples ()
 {
   unsigned i;
 
@@ -453,7 +449,7 @@ hist_assign_samples (void)
 
   for (i = 0; i < num_histograms; ++i)
     hist_assign_samples_1 (&histograms[i]);
-
+  
 }
 
 /* Print header for flag histogram profile.  */
@@ -562,12 +558,12 @@ cmp_time (const PTR lp, const PTR rp)
 /* Print the flat histogram profile.  */
 
 void
-hist_print (void)
+hist_print ()
 {
   Sym **time_sorted_syms, *top_dog, *sym;
-  unsigned int sym_index;
+  unsigned int index;
   unsigned log_scale;
-  double top_time;
+  double top_time, time;
   bfd_vma addr;
 
   if (first_output)
@@ -594,8 +590,8 @@ hist_print (void)
      and tertiary keys).  */
   time_sorted_syms = (Sym **) xmalloc (symtab.len * sizeof (Sym *));
 
-  for (sym_index = 0; sym_index < symtab.len; ++sym_index)
-    time_sorted_syms[sym_index] = &symtab.base[sym_index];
+  for (index = 0; index < symtab.len; ++index)
+    time_sorted_syms[index] = &symtab.base[index];
 
   qsort (time_sorted_syms, symtab.len, sizeof (Sym *), cmp_time);
 
@@ -611,20 +607,18 @@ hist_print (void)
       top_dog = 0;
       top_time = 0.0;
 
-      for (sym_index = 0; sym_index < symtab.len; ++sym_index)
+      for (index = 0; index < symtab.len; ++index)
 	{
-	  sym = time_sorted_syms[sym_index];
+	  sym = time_sorted_syms[index];
 
 	  if (sym->ncalls != 0)
 	    {
-	      double call_time;
+	      time = (sym->hist.time + sym->cg.child_time) / sym->ncalls;
 
-	      call_time = (sym->hist.time + sym->cg.child_time) / sym->ncalls;
-
-	      if (call_time > top_time)
+	      if (time > top_time)
 		{
 		  top_dog = sym;
-		  top_time = call_time;
+		  top_time = time;
 		}
 	    }
 	}
@@ -637,7 +631,7 @@ hist_print (void)
 	    {
 	      double scaled_value = SItab[log_scale].scale * top_time;
 
-	      if (scaled_value >= 1.0 && scaled_value < 1000.0)
+	      if (scaled_value >= 1.0 && scaled_value < 1000.0) 
 		break;
 	    }
 	}
@@ -648,16 +642,16 @@ hist_print (void)
      I-cache misses etc.).  */
   print_header (SItab[log_scale].prefix);
 
-  for (sym_index = 0; sym_index < symtab.len; ++sym_index)
+  for (index = 0; index < symtab.len; ++index)
     {
-      addr = time_sorted_syms[sym_index]->addr;
+      addr = time_sorted_syms[index]->addr;
 
       /* Print symbol if its in INCL_FLAT table or that table
 	is empty and the symbol is not in EXCL_FLAT.  */
       if (sym_lookup (&syms[INCL_FLAT], addr)
 	  || (syms[INCL_FLAT].len == 0
 	      && !sym_lookup (&syms[EXCL_FLAT], addr)))
-	print_line (time_sorted_syms[sym_index], SItab[log_scale].scale);
+	print_line (time_sorted_syms[index], SItab[log_scale].scale);
     }
 
   free (time_sorted_syms);
@@ -675,7 +669,7 @@ hist_check_address (unsigned address)
     if (histograms[i].lowpc <= address && address < histograms[i].highpc)
       return 1;
 
-  return 0;
+  return 0;        
 }
 
 #if ! defined(min)
@@ -750,5 +744,5 @@ find_histogram_for_pc (bfd_vma pc)
       if (histograms[i].lowpc <= pc && pc < histograms[i].highpc)
 	return &histograms[i];
     }
-  return 0;
+  return 0;  
 }

@@ -1,5 +1,5 @@
 /* tc-pdp11.c - pdp11-specific -
-   Copyright (C) 2001-2020 Free Software Foundation, Inc.
+   Copyright 2001, 2002, 2004, 2005, 2007 Free Software Foundation, Inc.
 
    This file is part of GAS, the GNU Assembler.
 
@@ -15,8 +15,7 @@
 
    You should have received a copy of the GNU General Public License
    along with GAS; see the file COPYING.  If not, write to
-   the Free Software Foundation, 51 Franklin Street - Fifth Floor,
-   Boston, MA 02110-1301, USA.  */
+   the Free Software Foundation, 51 Franklin Street - Fifth Floor, Boston, MA 02110-1301, USA.  */
 
 #include "as.h"
 #include "safe-ctype.h"
@@ -30,7 +29,7 @@ extern int flonum_gen2vax (int, FLONUM_TYPE * f, LITTLENUM_TYPE *);
 /* A representation for PDP-11 machine code.  */
 struct pdp11_code
 {
-  const char *error;
+  char *error;
   int code;
   int additional;	/* Is there an additional word?  */
   int word;		/* Additional word, if any.  */
@@ -85,7 +84,7 @@ const pseudo_typeS md_pseudo_table[] =
 static struct hash_control *insn_hash = NULL;
 
 static int
-set_option (const char *arg)
+set_option (char *arg)
 {
   int yes = 1;
 
@@ -109,7 +108,7 @@ set_option (const char *arg)
       arg += 3;
     }
 
-  /* Commercial instructions.  */
+  /* Commersial instructions.  */
   if (strcmp (arg, "cis") == 0)
     pdp11_extension[PDP11_CIS] = yes;
   /* Call supervisor mode.  */
@@ -190,7 +189,7 @@ md_begin (void)
 
   insn_hash = hash_new ();
   if (insn_hash == NULL)
-    as_fatal (_("Virtual memory exhausted"));
+    as_fatal ("Virtual memory exhausted");
 
   for (i = 0; i < pdp11_num_opcodes; i++)
     hash_insert (insn_hash, pdp11_opcodes[i].name, (void *) (pdp11_opcodes + i));
@@ -203,7 +202,7 @@ md_number_to_chars (char con[], valueT value, int nbytes)
 {
   /* On a PDP-11, 0x1234 is stored as "\x12\x34", and
      0x12345678 is stored as "\x56\x78\x12\x34". It's
-     anyone's guess what 0x123456 would be stored like.  */
+     anyones guess what 0x123456 would be stored like.  */
 
   switch (nbytes)
     {
@@ -248,10 +247,6 @@ md_apply_fix (fixS *fixP,
 
   switch (fixP->fx_r_type)
     {
-    case BFD_RELOC_8:
-      mask = 0xff;
-      shift = 0;
-      break;
     case BFD_RELOC_16:
     case BFD_RELOC_16_PCREL:
       mask = 0xffff;
@@ -283,11 +278,13 @@ md_apply_fix (fixS *fixP,
 }
 
 long
-md_chars_to_number (unsigned char *con, int nbytes)
+md_chars_to_number (con, nbytes)
+     unsigned char con[];	/* Low order byte 1st.  */
+     int nbytes;		/* Number of bytes in the input.  */
 {
   /* On a PDP-11, 0x1234 is stored as "\x12\x34", and
      0x12345678 is stored as "\x56\x78\x12\x34". It's
-     anyone's guess what 0x123456 would be stored like.  */
+     anyones guess what 0x123456 would be stored like.  */
   switch (nbytes)
     {
     case 0:
@@ -337,7 +334,7 @@ parse_reg (char *str, struct pdp11_code *operand)
 	  str++;
 	  break;
 	default:
-	  operand->error = _("Bad register name");
+	  operand->error = "Bad register name";
 	  return str - 1;
 	}
     }
@@ -354,7 +351,10 @@ parse_reg (char *str, struct pdp11_code *operand)
       str += 2;
     }
   else
-    operand->error = _("Bad register name");
+    {
+      operand->error = "Bad register name";
+      return str;
+    }
 
   return str;
 }
@@ -377,13 +377,13 @@ parse_ac5 (char *str, struct pdp11_code *operand)
 	  str++;
 	  break;
 	default:
-	  operand->error = _("Bad register name");
+	  operand->error = "Bad register name";
 	  return str - 2;
 	}
     }
   else
     {
-      operand->error = _("Bad register name");
+      operand->error = "Bad register name";
       return str;
     }
 
@@ -396,7 +396,7 @@ parse_ac (char *str, struct pdp11_code *operand)
   str = parse_ac5 (str, operand);
   if (!operand->error && operand->code > 3)
     {
-      operand->error = _("Bad register name");
+	  operand->error = "Bad register name";
 	  return str - 3;
     }
 
@@ -415,7 +415,7 @@ parse_expression (char *str, struct pdp11_code *operand)
   if (seg == NULL)
     {
       input_line_pointer = save_input_line_pointer;
-      operand->error = _("Error in expression");
+      operand->error = "Error in expression";
       return str;
     }
 
@@ -443,7 +443,7 @@ parse_op_no_deferred (char *str, struct pdp11_code *operand)
       str = skip_whitespace (str);
       if (*str != ')')
 	{
-	  operand->error = _("Missing ')'");
+	  operand->error = "Missing ')'";
 	  return str;
 	}
       str++;
@@ -479,7 +479,7 @@ parse_op_no_deferred (char *str, struct pdp11_code *operand)
         case O_big:
           if (operand->reloc.exp.X_add_number > 0)
             {
-              operand->error = _("Error in expression");
+              operand->error = "Error in expression";
               break;
             }
           /* It's a floating literal...  */
@@ -490,7 +490,7 @@ parse_op_no_deferred (char *str, struct pdp11_code *operand)
             as_warn (_("Low order bits truncated in immediate float operand"));
           break;
 	default:
-	  operand->error = _("Error in expression");
+	  operand->error = "Error in expression";
 	  break;
 	}
       operand->code = 027;
@@ -499,6 +499,8 @@ parse_op_no_deferred (char *str, struct pdp11_code *operand)
       /* label, d(rn), -(rn)  */
     default:
       {
+	char *old = str;
+
 	if (strncmp (str, "-(", 2) == 0)	/* -(rn) */
 	  {
 	    str = parse_reg (str + 2, operand);
@@ -507,7 +509,7 @@ parse_op_no_deferred (char *str, struct pdp11_code *operand)
 	    str = skip_whitespace (str);
 	    if (*str != ')')
 	      {
-		operand->error = _("Missing ')'");
+		operand->error = "Missing ')'";
 		return str;
 	      }
 	    operand->code |= 040;
@@ -523,6 +525,11 @@ parse_op_no_deferred (char *str, struct pdp11_code *operand)
 
 	if (*str != '(')
 	  {
+	    if (operand->reloc.exp.X_op != O_symbol)
+	      {
+		operand->error = "Label expected";
+		return old;
+	      }
 	    operand->code = 067;
 	    operand->additional = 1;
 	    operand->word = 0;
@@ -541,7 +548,7 @@ parse_op_no_deferred (char *str, struct pdp11_code *operand)
 
 	if (*str != ')')
 	  {
-	    operand->error = _("Missing ')'");
+	    operand->error = "Missing ')'";
 	    return str;
 	  }
 
@@ -551,8 +558,8 @@ parse_op_no_deferred (char *str, struct pdp11_code *operand)
 	switch (operand->reloc.exp.X_op)
 	  {
 	  case O_symbol:
-	    operand->reloc.type = BFD_RELOC_16;
-	    operand->reloc.pc_rel = 0;
+	    operand->word = 0;
+	    operand->reloc.pc_rel = 1;
 	    break;
 	  case O_constant:
 	    if ((operand->code & 7) == 7)
@@ -582,34 +589,9 @@ parse_op_noreg (char *str, struct pdp11_code *operand)
 
   if (*str == '@' || *str == '*')
     {
-      /* @(Rn) == @0(Rn): Mode 7, Indexed deferred.
-	 Check for auto-increment deferred.  */
-      if (str[1] == '('
-	  && str[2] != 0
-	  && str[3] != 0
-	  && str[4] != 0
-	  && str[5] != '+')
-        {
-	  /* Change implied to explicit index deferred.  */
-          *str = '0';
-          str = parse_op_no_deferred (str, operand);
-        }
-      else
-        {
-          /* @Rn == (Rn): Register deferred.  */
-          str = parse_reg (str + 1, operand);
-	  
-          /* Not @Rn */
-          if (operand->error)
-	    {
-	      operand->error = NULL;
-	      str = parse_op_no_deferred (str, operand);
-	    }
-        }
-
+      str = parse_op_no_deferred (str + 1, operand);
       if (operand->error)
 	return str;
-
       operand->code |= 010;
     }
   else
@@ -631,7 +613,7 @@ parse_op (char *str, struct pdp11_code *operand)
   parse_ac5 (str, operand);
   if (!operand->error)
     {
-      operand->error = _("Float AC not legal as integer operand");
+      operand->error = "Float AC not legal as integer operand";
       return str;
     }
 
@@ -651,7 +633,7 @@ parse_fop (char *str, struct pdp11_code *operand)
   parse_reg (str, operand);
   if (!operand->error)
     {
-      operand->error = _("General register not legal as float operand");
+      operand->error = "General register not legal as float operand";
       return str;
     }
 
@@ -675,7 +657,7 @@ md_assemble (char *instruction_string)
   struct pdp11_code insn, op1, op2;
   int error;
   int size;
-  const char *err = NULL;
+  char *err = NULL;
   char *str;
   char *p;
   char c;
@@ -684,7 +666,7 @@ md_assemble (char *instruction_string)
   p = find_whitespace (str);
   if (p - str == 0)
     {
-      as_bad (_("No instruction found"));
+      as_bad ("No instruction found");
       return;
     }
 
@@ -700,7 +682,7 @@ md_assemble (char *instruction_string)
 
   if (!pdp11_extension[op->extension])
     {
-      as_warn (_("Unsupported instruction set extension: %s"), op->name);
+      as_warn ("Unsupported instruction set extension: %s", op->name);
       return;
     }
 
@@ -721,6 +703,8 @@ md_assemble (char *instruction_string)
     {
     case PDP11_OPCODE_NO_OPS:
       str = skip_whitespace (str);
+      if (*str == 0)
+	str = "";
       break;
 
     case PDP11_OPCODE_IMM3:
@@ -734,7 +718,7 @@ md_assemble (char *instruction_string)
 	break;
       if (op1.reloc.exp.X_op != O_constant || op1.reloc.type != BFD_RELOC_NONE)
 	{
-	  op1.error = _("operand is not an absolute constant");
+	  op1.error = "operand is not an absolute constant";
 	  break;
 	}
       switch (op->type)
@@ -742,21 +726,21 @@ md_assemble (char *instruction_string)
 	case PDP11_OPCODE_IMM3:
 	  if (op1.reloc.exp.X_add_number & ~7)
 	    {
-	      op1.error = _("3-bit immediate out of range");
+	      op1.error = "3-bit immediate out of range";
 	      break;
 	    }
 	  break;
 	case PDP11_OPCODE_IMM6:
 	  if (op1.reloc.exp.X_add_number & ~0x3f)
 	    {
-	      op1.error = _("6-bit immediate out of range");
+	      op1.error = "6-bit immediate out of range";
 	      break;
 	    }
 	  break;
 	case PDP11_OPCODE_IMM8:
 	  if (op1.reloc.exp.X_add_number & ~0xff)
 	    {
-	      op1.error = _("8-bit immediate out of range");
+	      op1.error = "8-bit immediate out of range";
 	      break;
 	    }
 	  break;
@@ -766,22 +750,22 @@ md_assemble (char *instruction_string)
 
     case PDP11_OPCODE_DISPL:
       {
-	char *new_pointer;
-	new_pointer = parse_expression (str, &op1);
+	char *new;
+	new = parse_expression (str, &op1);
 	op1.code = 0;
 	op1.reloc.pc_rel = 1;
 	op1.reloc.type = BFD_RELOC_PDP11_DISP_8_PCREL;
 	if (op1.reloc.exp.X_op != O_symbol)
 	  {
-	    op1.error = _("Symbol expected");
+	    op1.error = "Symbol expected";
 	    break;
 	  }
 	if (op1.code & ~0xff)
 	  {
-	    err = _("8-bit displacement out of range");
+	    err = "8-bit displacement out of range";
 	    break;
 	  }
-	str = new_pointer;
+	str = new;
 	insn.code |= op1.code;
 	insn.reloc = op1.reloc;
       }
@@ -820,7 +804,7 @@ md_assemble (char *instruction_string)
       str = parse_separator (str, &error);
       if (error)
 	{
-	  op2.error = _("Missing ','");
+	  op2.error = "Missing ','";
 	  break;
 	}
       str = parse_op (str, &op1);
@@ -841,7 +825,7 @@ md_assemble (char *instruction_string)
       str = parse_separator (str, &error);
       if (error)
 	{
-	  op2.error = _("Missing ','");
+	  op2.error = "Missing ','";
 	  break;
 	}
       str = parse_reg (str, &op2);
@@ -858,7 +842,7 @@ md_assemble (char *instruction_string)
       str = parse_separator (str, &error);
       if (error)
 	{
-	  op1.error = _("Missing ','");
+	  op1.error = "Missing ','";
 	  break;
 	}
       str = parse_fop (str, &op1);
@@ -879,7 +863,7 @@ md_assemble (char *instruction_string)
       str = parse_separator (str, &error);
       if (error)
 	{
-	  op1.error = _("Missing ','");
+	  op1.error = "Missing ','";
 	  break;
 	}
       str = parse_ac (str, &op2);
@@ -896,7 +880,7 @@ md_assemble (char *instruction_string)
       str = parse_separator (str, &error);
       if (error)
 	{
-	  op1.error = _("Missing ','");
+	  op1.error = "Missing ','";
 	  break;
 	}
       str = parse_op (str, &op1);
@@ -917,7 +901,7 @@ md_assemble (char *instruction_string)
       str = parse_separator (str, &error);
       if (error)
 	{
-	  op1.error = _("Missing ','");
+	  op1.error = "Missing ','";
 	  break;
 	}
       str = parse_ac (str, &op2);
@@ -936,7 +920,7 @@ md_assemble (char *instruction_string)
       str = parse_separator (str, &error);
       if (error)
 	{
-	  op2.error = _("Missing ','");
+	  op2.error = "Missing ','";
 	  break;
 	}
       str = parse_op (str, &op2);
@@ -949,7 +933,7 @@ md_assemble (char *instruction_string)
 
     case PDP11_OPCODE_REG_DISPL:
       {
-	char *new_pointer;
+	char *new;
 	str = parse_reg (str, &op2);
 	if (op2.error)
 	  break;
@@ -957,24 +941,24 @@ md_assemble (char *instruction_string)
 	str = parse_separator (str, &error);
 	if (error)
 	  {
-	    op1.error = _("Missing ','");
+	    op1.error = "Missing ','";
 	    break;
 	  }
-	new_pointer = parse_expression (str, &op1);
+	new = parse_expression (str, &op1);
 	op1.code = 0;
 	op1.reloc.pc_rel = 1;
 	op1.reloc.type = BFD_RELOC_PDP11_DISP_6_PCREL;
 	if (op1.reloc.exp.X_op != O_symbol)
 	  {
-	    op1.error = _("Symbol expected");
+	    op1.error = "Symbol expected";
 	    break;
 	  }
 	if (op1.code & ~0x3f)
 	  {
-	    err = _("6-bit displacement out of range");
+	    err = "6-bit displacement out of range";
 	    break;
 	  }
-	str = new_pointer;
+	str = new;
 	insn.code |= op1.code;
 	insn.reloc = op1.reloc;
       }
@@ -992,7 +976,7 @@ md_assemble (char *instruction_string)
     {
       str = skip_whitespace (str);
       if (*str)
-	err = _("Too many operands");
+	err = "Too many operands";
     }
 
   {
@@ -1000,7 +984,7 @@ md_assemble (char *instruction_string)
 
     if (err)
       {
-	as_bad ("%s", err);
+	as_bad (err);
 	return;
       }
 
@@ -1067,7 +1051,7 @@ md_create_long_jump (char *ptr ATTRIBUTE_UNUSED,
 }
 
 static int
-set_cpu_model (const char *arg)
+set_cpu_model (char *arg)
 {
   char buf[4];
   char *model = buf;
@@ -1183,7 +1167,7 @@ set_cpu_model (const char *arg)
 }
 
 static int
-set_machine_model (const char *arg)
+set_machine_model (char *arg)
 {
   if (strncmp (arg, "pdp-11/", 7) != 0
       && strncmp (arg, "pdp11/", 6) != 0
@@ -1270,7 +1254,7 @@ size_t md_longopts_size = sizeof (md_longopts);
    See if it's a processor-specific option.  */
 
 int
-md_parse_option (int c, const char *arg)
+md_parse_option (int c, char *arg)
 {
   init_defaults ();
 
@@ -1312,9 +1296,9 @@ md_show_usage (FILE *stream)
 {
   fprintf (stream, "\
 \n\
-PDP-11 instruction set extensions:\n\
+PDP-11 instruction set extentions:\n\
 \n\
--m(no-)cis		allow (disallow) commercial instruction set\n\
+-m(no-)cis		allow (disallow) commersial instruction set\n\
 -m(no-)csm		allow (disallow) CSM instruction\n\
 -m(no-)eis		allow (disallow) full extended instruction set\n\
 -m(no-)fis		allow (disallow) KEV11 floating-point instructions\n\
@@ -1328,8 +1312,8 @@ PDP-11 instruction set extensions:\n\
 -m(no-)ucode		allow (disallow) microcode instructions\n\
 -mall-extensions	allow all instruction set extensions\n\
 			(this is the default)\n\
--mno-extensions		disallow all instruction set extensions\n\
--pic			generate position-independent code\n\
+-mno-extentions		disallow all instruction set extensions\n\
+-pic			generate position-indepenent code\n\
 \n\
 PDP-11 CPU model options:\n\
 \n\
@@ -1410,9 +1394,9 @@ tc_gen_reloc (asection *section ATTRIBUTE_UNUSED,
   arelent *reloc;
   bfd_reloc_code_real_type code;
 
-  reloc = XNEW (arelent);
+  reloc = xmalloc (sizeof (* reloc));
 
-  reloc->sym_ptr_ptr = XNEW (asymbol *);
+  reloc->sym_ptr_ptr = xmalloc (sizeof (asymbol *));
   *reloc->sym_ptr_ptr = symbol_get_bfdsym (fixp->fx_addsy);
   reloc->address = fixp->fx_frag->fr_address + fixp->fx_where;
 
@@ -1442,7 +1426,7 @@ tc_gen_reloc (asection *section ATTRIBUTE_UNUSED,
   if (reloc->howto == NULL)
     {
       as_bad_where (fixp->fx_file, fixp->fx_line,
-		    _("Can not represent %s relocation in this object file format"),
+		    "Can not represent %s relocation in this object file format",
 		    bfd_get_reloc_code_name (code));
       return NULL;
     }
@@ -1468,7 +1452,7 @@ pseudo_even (int c ATTRIBUTE_UNUSED)
   record_alignment (now_seg, alignment);
 }
 
-const char *
+char *
 md_atof (int type, char * litP, int * sizeP)
 {
   return vax_md_atof (type, litP, sizeP);

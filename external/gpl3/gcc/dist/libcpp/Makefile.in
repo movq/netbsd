@@ -1,7 +1,7 @@
 # @configure_input@
 # Makefile for libcpp.  Run 'configure' to generate Makefile from Makefile.in
 
-# Copyright (C) 2004-2019 Free Software Foundation, Inc.
+# Copyright (C) 2004, 2008, 2009 Free Software Foundation, Inc.
 
 #This file is part of libcpp.
 
@@ -56,8 +56,6 @@ XGETTEXT = @XGETTEXT@
 CCDEPMODE = @CCDEPMODE@
 CXXDEPMODE = @CXXDEPMODE@
 DEPDIR = @DEPDIR@
-NOEXCEPTION_FLAGS = @noexception_flags@
-PICFLAG = @PICFLAG@
 
 datarootdir = @datarootdir@
 datadir = @datadir@
@@ -73,14 +71,20 @@ depcomp = $(SHELL) $(srcdir)/../depcomp
 INCLUDES = -I$(srcdir) -I. -I$(srcdir)/../include @INCINTL@ \
 	-I$(srcdir)/include
 
-ALL_CFLAGS = $(CFLAGS) $(WARN_CFLAGS) $(INCLUDES) $(CPPFLAGS) $(PICFLAG)
-ALL_CXXFLAGS = $(CXXFLAGS) $(WARN_CXXFLAGS) $(NOEXCEPTION_FLAGS) $(INCLUDES) \
-	$(CPPFLAGS) $(PICFLAG)
+ALL_CFLAGS = $(CFLAGS) $(WARN_CFLAGS) $(INCLUDES) $(CPPFLAGS)
+ALL_CXXFLAGS = $(CXXFLAGS) $(WARN_CXXFLAGS) $(INCLUDES) $(CPPFLAGS)
 
 # The name of the compiler to use.
+ENABLE_BUILD_WITH_CXX = @ENABLE_BUILD_WITH_CXX@
+ifneq ($(ENABLE_BUILD_WITH_CXX),yes)
+COMPILER = $(CC)
+COMPILER_FLAGS = $(ALL_CFLAGS)
+DEPMODE = $(CCDEPMODE)
+else
 COMPILER = $(CXX)
 COMPILER_FLAGS = $(ALL_CXXFLAGS)
 DEPMODE = $(CXXDEPMODE)
+endif
 
 
 libcpp_a_OBJS = charset.o directives.o directives-only.o errors.o \
@@ -137,7 +141,7 @@ $(srcdir)/config.in: @MAINT@ $(srcdir)/configure.ac
 localedir.h: localedir.hs; @true
 localedir.hs: Makefile
 	echo "#define LOCALEDIR \"$(localedir)\"" > localedir.new
-	$(SHELL) $(srcdir)/../move-if-change localedir.new localedir.h
+	$(srcdir)/../move-if-change localedir.new localedir.h
 	echo timestamp > localedir.hs
 
 # Installation rules and other phony targets
@@ -245,24 +249,18 @@ po/$(PACKAGE).pot: $(libcpp_a_SOURCES)
 	$(mkinstalldirs) $(srcdir)/po
 	$(XGETTEXT) --default-domain=$(PACKAGE) \
 	  --keyword=_ --keyword=N_ \
-	  --keyword=cpp_error:3 \
-	  --keyword=cpp_warning:3 \
-	  --keyword=cpp_pedwarning:3 \
-	  --keyword=cpp_warning_syshdr:3 \
+	  --keyword=cpp_error:3 --keyword=cpp_errno:3 \
 	  --keyword=cpp_error_with_line:5 \
-	  --keyword=cpp_warning_with_line:5 \
-	  --keyword=cpp_pedwarning_with_line:5 \
-	  --keyword=cpp_warning_with_line_syshdr:5 \
-	  --keyword=cpp_errno:3 \
 	  --keyword=SYNTAX_ERROR --keyword=SYNTAX_ERROR2 \
 	  --copyright-holder="Free Software Foundation, Inc." \
-	  --msgid-bugs-address="https://gcc.gnu.org/bugs/" \
+	  --msgid-bugs-address="http://gcc.gnu.org/bugs.html" \
 	  --language=c -o po/$(PACKAGE).pot.tmp $^
 	sed 's:$(srcdir)/::g' <po/$(PACKAGE).pot.tmp >po/$(PACKAGE).pot
 	rm po/$(PACKAGE).pot.tmp
 
-TAGS_SOURCES = $(libcpp_a_SOURCES) internal.h system.h ucnid.h \
-    include/cpplib.h include/line-map.h include/mkdeps.h include/symtab.h
+TAGS_SOURCES = $(libcpp_a_SOURCES) internal.h ucnid.h \
+    include/line-map.h include/symtab.h include/cpp-id-data.h \
+    include/cpplib.h include/mkdeps.h system.h
 
 TAGS: $(TAGS_SOURCES)
 	cd $(srcdir) && etags $(TAGS_SOURCES)

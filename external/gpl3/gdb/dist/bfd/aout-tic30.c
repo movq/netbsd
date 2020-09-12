@@ -1,5 +1,7 @@
 /* BFD back-end for TMS320C30 a.out binaries.
-   Copyright (C) 1998-2019 Free Software Foundation, Inc.
+   Copyright 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005, 2007, 2009,
+   2010
+   Free Software Foundation, Inc.
    Contributed by Steven Haworth (steve@pm.cse.rmit.edu.au)
 
    This file is part of BFD, the Binary File Descriptor library.
@@ -21,10 +23,10 @@
 
 #define TARGET_IS_BIG_ENDIAN_P
 #define N_HEADER_IN_TEXT(x)	1
-#define TEXT_START_ADDR		1024
-#define TARGET_PAGE_SIZE	128
-#define SEGMENT_SIZE		TARGET_PAGE_SIZE
-#define DEFAULT_ARCH		bfd_arch_tic30
+#define TEXT_START_ADDR 	1024
+#define TARGET_PAGE_SIZE 	128
+#define SEGMENT_SIZE   		TARGET_PAGE_SIZE
+#define DEFAULT_ARCH 		bfd_arch_tic30
 #define ARCH_SIZE 32
 
 /* Do not "beautify" the CONCAT* macro args.  Traditional C will not
@@ -43,11 +45,11 @@
 
 #define MY_reloc_howto(BFD, REL, IN, EX, PC)   tic30_aout_reloc_howto (BFD, REL, & IN, & EX, & PC)
 
-#define MY_final_link_relocate	  tic30_aout_final_link_relocate
-#define MY_object_p		  tic30_aout_object_p
-#define MY_mkobject		  NAME (aout,mkobject)
+#define MY_final_link_relocate    tic30_aout_final_link_relocate
+#define MY_object_p               tic30_aout_object_p
+#define MY_mkobject               NAME (aout,mkobject)
 #define MY_write_object_contents  tic30_aout_write_object_contents
-#define MY_set_sizes		  tic30_aout_set_sizes
+#define MY_set_sizes              tic30_aout_set_sizes
 
 #ifndef MY_exec_hdr_flags
 #define MY_exec_hdr_flags 1
@@ -187,7 +189,7 @@ tic30_aout_fix_16 (bfd *abfd,
   bfd_vma relocation;
 
   /* Make sure that the symbol's section is defined.  */
-  if (bfd_is_und_section (symbol->section) && (symbol->flags & BSF_WEAK) == 0)
+  if (symbol->section == &bfd_und_section && (symbol->flags & BSF_WEAK) == 0)
     return output_bfd ? bfd_reloc_ok : bfd_reloc_undefined;
   /* Get the size of the input section and turn it into the TMS320C30
      32-bit address format.  */
@@ -212,7 +214,7 @@ tic30_aout_fix_32 (bfd *abfd,
   bfd_vma relocation;
 
   /* Make sure that the symbol's section is defined.  */
-  if (bfd_is_und_section (symbol->section) && (symbol->flags & BSF_WEAK) == 0)
+  if (symbol->section == &bfd_und_section && (symbol->flags & BSF_WEAK) == 0)
     return output_bfd ? bfd_reloc_ok : bfd_reloc_undefined;
   /* Get the size of the input section and turn it into the TMS320C30
      32-bit address format.  */
@@ -324,9 +326,9 @@ tic30_aout_reloc_howto (bfd *abfd,
  (bfd_get_8 (BFD, ADDR + 2)      )
 
 #define bfd_putb_24(BFD,DATA,ADDR)				\
- bfd_put_8 (BFD, (bfd_byte) ((DATA >> 16) & 0xFF), ADDR	   );	\
+ bfd_put_8 (BFD, (bfd_byte) ((DATA >> 16) & 0xFF), ADDR    );	\
  bfd_put_8 (BFD, (bfd_byte) ((DATA >>  8) & 0xFF), ADDR + 1);	\
- bfd_put_8 (BFD, (bfd_byte) ( DATA	  & 0xFF), ADDR + 2)
+ bfd_put_8 (BFD, (bfd_byte) ( DATA        & 0xFF), ADDR + 2)
 
 /* Set parameters about this a.out file that are machine-dependent.
    This routine is called from some_aout_object_p just before it returns.  */
@@ -339,32 +341,32 @@ tic30_aout_callback (bfd *abfd)
   unsigned long arch_align;
 
   /* Calculate the file positions of the parts of a newly read aout header.  */
-  obj_textsec (abfd)->size = N_TXTSIZE (execp);
+  obj_textsec (abfd)->size = N_TXTSIZE (*execp);
 
   /* The virtual memory addresses of the sections.  */
-  obj_textsec (abfd)->vma = N_TXTADDR (execp);
-  obj_datasec (abfd)->vma = N_DATADDR (execp);
-  obj_bsssec (abfd)->vma = N_BSSADDR (execp);
+  obj_textsec (abfd)->vma = N_TXTADDR (*execp);
+  obj_datasec (abfd)->vma = N_DATADDR (*execp);
+  obj_bsssec (abfd)->vma = N_BSSADDR (*execp);
 
   obj_textsec (abfd)->lma = obj_textsec (abfd)->vma;
   obj_datasec (abfd)->lma = obj_datasec (abfd)->vma;
   obj_bsssec (abfd)->lma = obj_bsssec (abfd)->vma;
 
   /* The file offsets of the sections.  */
-  obj_textsec (abfd)->filepos = N_TXTOFF (execp);
-  obj_datasec (abfd)->filepos = N_DATOFF (execp);
+  obj_textsec (abfd)->filepos = N_TXTOFF (*execp);
+  obj_datasec (abfd)->filepos = N_DATOFF (*execp);
 
   /* The file offsets of the relocation info.  */
-  obj_textsec (abfd)->rel_filepos = N_TRELOFF (execp);
-  obj_datasec (abfd)->rel_filepos = N_DRELOFF (execp);
+  obj_textsec (abfd)->rel_filepos = N_TRELOFF (*execp);
+  obj_datasec (abfd)->rel_filepos = N_DRELOFF (*execp);
 
   /* The file offsets of the string table and symbol table.  */
-  obj_sym_filepos (abfd) = N_SYMOFF (execp);
-  obj_str_filepos (abfd) = N_STROFF (execp);
+  obj_sym_filepos (abfd) = N_SYMOFF (*execp);
+  obj_str_filepos (abfd) = N_STROFF (*execp);
 
   /* Determine the architecture and machine type of the object file.  */
 #ifdef SET_ARCH_MACH
-  SET_ARCH_MACH (abfd, execp);
+  SET_ARCH_MACH (abfd, *execp);
 #else
   bfd_default_set_arch_mach (abfd, DEFAULT_ARCH, 0L);
 #endif
@@ -568,10 +570,10 @@ tic30_aout_object_p (bfd *abfd)
   exec.a_info = H_GET_32 (abfd, exec_bytes.e_info);
 #endif /* SWAP_MAGIC */
 
-  if (N_BADMAG (&exec))
+  if (N_BADMAG (exec))
     return 0;
 #ifdef MACHTYPE_OK
-  if (!(MACHTYPE_OK (N_MACHTYPE (&exec))))
+  if (!(MACHTYPE_OK (N_MACHTYPE (exec))))
     return 0;
 #endif
 
@@ -636,8 +638,11 @@ tic30_aout_write_object_contents (bfd *abfd)
   obj_reloc_entry_size (abfd) = RELOC_STD_SIZE;
 
   {
+    bfd_size_type text_size;	/* Dummy vars.  */
+    file_ptr text_end;
+
     if (adata (abfd).magic == undecided_magic)
-      NAME (aout, adjust_sizes_and_vmas) (abfd);
+      NAME (aout, adjust_sizes_and_vmas) (abfd, &text_size, &text_end);
 
     execp->a_syms = bfd_get_symcount (abfd) * EXTERNAL_NLIST_SIZE;
     execp->a_entry = bfd_get_start_address (abfd);
@@ -661,19 +666,19 @@ tic30_aout_write_object_contents (bfd *abfd)
     if (bfd_get_outsymbols (abfd) != (asymbol **) NULL
 	&& bfd_get_symcount (abfd) != 0)
       {
-	if (bfd_seek (abfd, (file_ptr) (N_SYMOFF (execp)), SEEK_SET) != 0)
+	if (bfd_seek (abfd, (file_ptr) (N_SYMOFF (*execp)), SEEK_SET) != 0)
 	  return FALSE;
 
 	if (!NAME (aout, write_syms) (abfd))
 	  return FALSE;
       }
 
-    if (bfd_seek (abfd, (file_ptr) (N_TRELOFF (execp)), SEEK_SET) != 0)
+    if (bfd_seek (abfd, (file_ptr) (N_TRELOFF (*execp)), SEEK_SET) != 0)
       return FALSE;
     if (!NAME (aout, squirt_out_relocs) (abfd, obj_textsec (abfd)))
       return FALSE;
 
-    if (bfd_seek (abfd, (file_ptr) (N_DRELOFF (execp)), SEEK_SET) != 0)
+    if (bfd_seek (abfd, (file_ptr) (N_DRELOFF (*execp)), SEEK_SET) != 0)
       return FALSE;
     if (!NAME (aout, squirt_out_relocs) (abfd, obj_datasec (abfd)))
       return FALSE;
@@ -696,7 +701,7 @@ MY_final_link_callback (bfd *abfd,
 
   *ptreloff = obj_datasec (abfd)->filepos + execp->a_data;
   *pdreloff = *ptreloff + execp->a_trsize;
-  *psymoff = *pdreloff + execp->a_drsize;
+  *psymoff = *pdreloff + execp->a_drsize;;
 }
 
 #endif
@@ -828,7 +833,7 @@ tic30_aout_set_arch_mach (bfd *abfd,
   _bfd_archive_bsd_construct_extended_name_table
 #endif
 #ifndef	MY_write_armap
-#define	MY_write_armap			_bfd_bsd_write_armap
+#define	MY_write_armap			bsd_write_armap
 #endif
 #ifndef MY_read_ar_hdr
 #define MY_read_ar_hdr			_bfd_generic_read_ar_hdr
@@ -840,12 +845,12 @@ tic30_aout_set_arch_mach (bfd *abfd,
 #define	MY_truncate_arname		bfd_bsd_truncate_arname
 #endif
 #ifndef MY_update_armap_timestamp
-#define MY_update_armap_timestamp	_bfd_archive_bsd_update_armap_timestamp
+#define MY_update_armap_timestamp 	_bfd_archive_bsd_update_armap_timestamp
 #endif
 
 /* No core file defined here -- configure in trad-core.c separately.  */
 #ifndef	MY_core_file_failing_command
-#define	MY_core_file_failing_command	_bfd_nocore_core_file_failing_command
+#define	MY_core_file_failing_command 	_bfd_nocore_core_file_failing_command
 #endif
 #ifndef	MY_core_file_failing_signal
 #define	MY_core_file_failing_signal	_bfd_nocore_core_file_failing_signal
@@ -855,20 +860,21 @@ tic30_aout_set_arch_mach (bfd *abfd,
 				_bfd_nocore_core_file_matches_executable_p
 #endif
 #ifndef	MY_core_file_pid
-#define	MY_core_file_pid		_bfd_nocore_core_file_pid
+#define	MY_core_file_pid  		_bfd_nocore_core_file_pid
 #endif
 #ifndef	MY_core_file_p
 #define	MY_core_file_p			_bfd_dummy_target
 #endif
 
 #ifndef MY_bfd_debug_info_start
-#define MY_bfd_debug_info_start		_bfd_void_bfd
+#define MY_bfd_debug_info_start		bfd_void
 #endif
 #ifndef MY_bfd_debug_info_end
-#define MY_bfd_debug_info_end		_bfd_void_bfd
+#define MY_bfd_debug_info_end		bfd_void
 #endif
 #ifndef MY_bfd_debug_info_accumulate
-#define MY_bfd_debug_info_accumulate	_bfd_void_bfd_asection
+#define MY_bfd_debug_info_accumulate	\
+		(void (*) (bfd*, struct bfd_section *)) bfd_void
 #endif
 
 #ifndef MY_core_file_failing_command
@@ -904,9 +910,6 @@ tic30_aout_set_arch_mach (bfd *abfd,
 #ifndef MY_canonicalize_reloc
 #define MY_canonicalize_reloc NAME (aout, canonicalize_reloc)
 #endif
-#ifndef MY_set_reloc
-#define MY_set_reloc _bfd_generic_set_reloc
-#endif
 #ifndef MY_make_empty_symbol
 #define MY_make_empty_symbol NAME (aout, make_empty_symbol)
 #endif
@@ -916,10 +919,6 @@ tic30_aout_set_arch_mach (bfd *abfd,
 #ifndef MY_get_symbol_info
 #define MY_get_symbol_info NAME (aout, get_symbol_info)
 #endif
-#ifndef MY_get_symbol_version_string
-#define MY_get_symbol_version_string \
-  _bfd_nosymbols_get_symbol_version_string
-#endif
 #ifndef MY_get_lineno
 #define MY_get_lineno NAME (aout, get_lineno)
 #endif
@@ -928,9 +927,6 @@ tic30_aout_set_arch_mach (bfd *abfd,
 #endif
 #ifndef MY_find_nearest_line
 #define MY_find_nearest_line NAME (aout, find_nearest_line)
-#endif
-#ifndef MY_find_line
-#define MY_find_line _bfd_nosymbols_find_line
 #endif
 #ifndef MY_find_inliner_info
 #define MY_find_inliner_info _bfd_nosymbols_find_inliner_info
@@ -948,9 +944,6 @@ tic30_aout_set_arch_mach (bfd *abfd,
 #ifndef MY_bfd_gc_sections
 #define MY_bfd_gc_sections bfd_generic_gc_sections
 #endif
-#ifndef MY_bfd_lookup_section_flags
-#define MY_bfd_lookup_section_flags bfd_generic_lookup_section_flags
-#endif
 #ifndef MY_bfd_merge_sections
 #define MY_bfd_merge_sections bfd_generic_merge_sections
 #endif
@@ -966,12 +959,6 @@ tic30_aout_set_arch_mach (bfd *abfd,
 #endif
 #ifndef MY_bfd_define_common_symbol
 #define MY_bfd_define_common_symbol bfd_generic_define_common_symbol
-#endif
-#ifndef MY_bfd_link_hide_symbol
-#define MY_bfd_link_hide_symbol _bfd_generic_link_hide_symbol
-#endif
-#ifndef MY_bfd_define_start_stop
-#define MY_bfd_define_start_stop bfd_generic_define_start_stop
 #endif
 #ifndef MY_bfd_reloc_type_lookup
 #define MY_bfd_reloc_type_lookup tic30_aout_reloc_type_lookup
@@ -991,6 +978,9 @@ tic30_aout_set_arch_mach (bfd *abfd,
 #ifndef MY_bfd_link_hash_table_create
 #define MY_bfd_link_hash_table_create NAME (aout, link_hash_table_create)
 #endif
+#ifndef MY_bfd_link_hash_table_free
+#define MY_bfd_link_hash_table_free _bfd_generic_link_hash_table_free
+#endif
 #ifndef MY_bfd_link_add_symbols
 #define MY_bfd_link_add_symbols NAME (aout, link_add_symbols)
 #endif
@@ -1003,10 +993,6 @@ tic30_aout_set_arch_mach (bfd *abfd,
 #endif
 #ifndef MY_bfd_link_split_section
 #define MY_bfd_link_split_section  _bfd_generic_link_split_section
-#endif
-
-#ifndef MY_bfd_link_check_relocs
-#define MY_bfd_link_check_relocs   _bfd_generic_link_check_relocs
 #endif
 
 #ifndef MY_bfd_copy_private_bfd_data
@@ -1038,7 +1024,8 @@ tic30_aout_set_arch_mach (bfd *abfd,
 #endif
 
 #ifndef MY_bfd_is_target_special_symbol
-#define MY_bfd_is_target_special_symbol _bfd_bool_bfd_asymbol_false
+#define MY_bfd_is_target_special_symbol  \
+  ((bfd_boolean (*) (bfd *, asymbol *)) bfd_false)
 #endif
 
 #ifndef MY_bfd_free_cached_info
@@ -1093,31 +1080,18 @@ const bfd_target tic30_aout_vec =
   MY_symbol_leading_char,
   AR_PAD_CHAR,			/* AR_pad_char.  */
   15,				/* AR_max_namelen.  */
-  0,				/* match priority.  */
   bfd_getb64, bfd_getb_signed_64, bfd_putb64,
   bfd_getb32, bfd_getb_signed_32, bfd_putb32,
   bfd_getb16, bfd_getb_signed_16, bfd_putb16,	/* Data.  */
   bfd_getb64, bfd_getb_signed_64, bfd_putb64,
   bfd_getb32, bfd_getb_signed_32, bfd_putb32,
   bfd_getb16, bfd_getb_signed_16, bfd_putb16,	/* Headers.  */
-  {				/* bfd_check_format.  */
-    _bfd_dummy_target,
-    MY_object_p,
-    bfd_generic_archive_p,
-    MY_core_file_p
-  },
-  {				/* bfd_set_format.  */
-    _bfd_bool_bfd_false_error,
-    MY_mkobject,
-    _bfd_generic_mkarchive,
-    _bfd_bool_bfd_false_error
-  },
-  {				/* bfd_write_contents.  */
-    _bfd_bool_bfd_false_error,
-    MY_write_object_contents,
-    _bfd_write_archive_contents,
-    _bfd_bool_bfd_false_error
-  },
+  {_bfd_dummy_target, MY_object_p,		/* bfd_check_format.  */
+   bfd_generic_archive_p, MY_core_file_p},
+  {bfd_false, MY_mkobject,			/* bfd_set_format.  */
+   _bfd_generic_mkarchive, bfd_false},
+  {bfd_false, MY_write_object_contents,		/* bfd_write_contents.  */
+   _bfd_write_archive_contents, bfd_false},
 
   BFD_JUMP_TABLE_GENERIC (MY),
   BFD_JUMP_TABLE_COPY (MY),

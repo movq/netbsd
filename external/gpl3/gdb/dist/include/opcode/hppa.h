@@ -1,10 +1,12 @@
 /* Table of opcodes for the PA-RISC.
-   Copyright (C) 1990-2019 Free Software Foundation, Inc.
+   Copyright 1990, 1991, 1992, 1993, 1994, 1995, 1996, 1998, 1999, 2000,
+   2001, 2002, 2003, 2004, 2005, 2006, 2009, 2010
+   Free Software Foundation, Inc.
 
    Contributed by the Center for Software Science at the
    University of Utah (pa-gdb-bugs@cs.utah.edu).
 
-   This file is part of the GNU opcodes library.
+   This file is part of GAS, the GNU Assembler, and GDB, the GNU disassembler.
 
    GAS/GDB is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -42,7 +44,7 @@ struct pa_opcode
     const char *name;
     unsigned long int match;	/* Bits that must be set...  */
     unsigned long int mask;	/* ... in these bits. */
-    const char *args;
+    char *args;
     enum pa_arch arch;
     char flags;
 };
@@ -594,7 +596,7 @@ static const struct pa_opcode pa_opcodes[] =
 { "addibf",	0xac000000, 0xfc000000, "?dn5,b,w", pa10, 0},
 { "bb",		0xc0006000, 0xffe06000, "?Bnx,!,w", pa20, FLAG_STRICT}, 
 { "bb",		0xc0004000, 0xffe06000, "?bnx,!,w", pa10, FLAG_STRICT}, 
-{ "bb",		0xc4006000, 0xfc006000, "?Bnx,B,w", pa20, FLAG_STRICT}, 
+{ "bb",		0xc4004000, 0xfc004000, "?Bnx,B,w", pa20, FLAG_STRICT}, 
 { "bb",		0xc4004000, 0xfc006000, "?bnx,Q,w", pa10, FLAG_STRICT}, 
 { "bb",		0xc4004000, 0xfc006000, "?bnx,Q,w", pa10, 0}, 
 { "bvb",	0xc0004000, 0xffe04000, "?bnx,w", pa10, 0},
@@ -893,8 +895,8 @@ static const struct pa_opcode pa_opcodes[] =
 { "fstdx",	0x2c000200, 0xfc0013c0, "cxcCft,x(s,b)", pa11, FLAG_STRICT},
 { "fstdx",	0x2c000200, 0xfc00dfc0, "cxft,x(b)", pa10, 0},
 { "fstdx",	0x2c000200, 0xfc001fc0, "cxft,x(s,b)", pa10, 0},
-{ "fstqx",	0x3c000200, 0xfc00dfc0, "cXft,x(b)", pa10, 0},
-{ "fstqx",	0x3c000200, 0xfc001fc0, "cXft,x(s,b)", pa10, 0},
+{ "fstqx",	0x3c000200, 0xfc00dfc0, "cxft,x(b)", pa10, 0},
+{ "fstqx",	0x3c000200, 0xfc001fc0, "cxft,x(s,b)", pa10, 0},
 { "fldws",	0x24001000, 0xfc00df80, "cm5(b),fT", pa10, FLAG_STRICT},
 { "fldws",	0x24001000, 0xfc001f80, "cm5(s,b),fT", pa10, FLAG_STRICT},
 { "fldws",	0x24001000, 0xfc00d380, "cmcc5(b),fT", pa11, FLAG_STRICT},
@@ -919,8 +921,8 @@ static const struct pa_opcode pa_opcodes[] =
 { "fstds",	0x2c001200, 0xfc0013c0, "cmcCft,5(s,b)", pa11, FLAG_STRICT},
 { "fstds",	0x2c001200, 0xfc00dfc0, "cmft,5(b)", pa10, 0},
 { "fstds",	0x2c001200, 0xfc001fc0, "cmft,5(s,b)", pa10, 0},
-{ "fstqs",	0x3c001200, 0xfc00dfc0, "cMft,5(b)", pa10, 0},
-{ "fstqs",	0x3c001200, 0xfc001fc0, "cMft,5(s,b)", pa10, 0},
+{ "fstqs",	0x3c001200, 0xfc00dfc0, "cmft,5(b)", pa10, 0},
+{ "fstqs",	0x3c001200, 0xfc001fc0, "cmft,5(s,b)", pa10, 0},
 { "fadd",	0x30000600, 0xfc00e7e0, "Ffa,fb,fT", pa10, 0},
 { "fadd",	0x38000600, 0xfc00e720, "IfA,fB,fT", pa10, 0},
 { "fsub",	0x30002600, 0xfc00e7e0, "Ffa,fb,fT", pa10, 0},

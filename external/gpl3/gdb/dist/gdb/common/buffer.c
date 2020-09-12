@@ -1,6 +1,6 @@
 /* A simple growing buffer for GDB.
   
-   Copyright (C) 2009-2019 Free Software Foundation, Inc.
+   Copyright (C) 2009-2013 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -17,10 +17,21 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-#include "common-defs.h"
+#ifdef GDBSERVER
+#include "server.h"
+#else
+#include "defs.h"
+#endif
+
 #include "xml-utils.h"
 #include "buffer.h"
 #include "inttypes.h"
+
+#include <stdlib.h>
+#include <string.h>
+#include <stdio.h>
+#include <stdint.h>
+
 void
 buffer_grow (struct buffer *buffer, const char *data, size_t size)
 {
@@ -37,7 +48,7 @@ buffer_grow (struct buffer *buffer, const char *data, size_t size)
 
   while (buffer->used_size + size > new_buffer_size)
     new_buffer_size *= 2;
-  new_buffer = (char *) xrealloc (buffer->buffer, new_buffer_size);
+  new_buffer = xrealloc (buffer->buffer, new_buffer_size);
   memcpy (new_buffer + buffer->used_size, data, size);
   buffer->buffer = new_buffer;
   buffer->buffer_size = new_buffer_size;
@@ -88,6 +99,7 @@ buffer_xml_printf (struct buffer *buffer, const char *format, ...)
       if (percent)
 	{
 	  char buf[32];
+	  char *p;
 	  char *str = buf;
 	  const char *f_old = f;
 	  
@@ -162,8 +174,9 @@ buffer_xml_printf (struct buffer *buffer, const char *format, ...)
 	  if (str)
 	    {
 	      buffer_grow (buffer, prev, f_old - prev - 1);
-	      std::string p = xml_escape_text (str);
-	      buffer_grow_str (buffer, p.c_str ());
+	      p = xml_escape_text (str);
+	      buffer_grow_str (buffer, p);
+	      xfree (p);
 	      prev = f + 1;
 	    }
 	  percent = 0;

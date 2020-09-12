@@ -29,7 +29,6 @@ shift ; extrafiles=$9
 shift ; opcfile=$9
 
 rootdir=${srcdir}/../..
-move_if_change="${CONFIG_SHELL:-/bin/sh} ${rootdir}/move-if-change"
 
 test -z "${opcfile}" && opcfile=/dev/null
 
@@ -71,11 +70,11 @@ arch)
 		-B ${tmp}-arch.c1 \
 		-N ${tmp}-all.h1
 	sed $sedscript < ${tmp}-arch.h1 > ${tmp}-arch.h
-	${move_if_change} ${tmp}-arch.h ${srcdir}/arch.h
+	${rootdir}/move-if-change ${tmp}-arch.h ${srcdir}/arch.h
 	sed $sedscript < ${tmp}-arch.c1 > ${tmp}-arch.c
-	${move_if_change} ${tmp}-arch.c ${srcdir}/arch.c
+	${rootdir}/move-if-change ${tmp}-arch.c ${srcdir}/arch.c
 	sed $sedscript < ${tmp}-all.h1 > ${tmp}-all.h
-	${move_if_change} ${tmp}-all.h ${srcdir}/cpuall.h
+	${rootdir}/move-if-change ${tmp}-all.h ${srcdir}/cpuall.h
 
 	rm -f ${tmp}-arch.h1 ${tmp}-arch.c1 ${tmp}-all.h1
 	;;
@@ -137,11 +136,11 @@ cpu | decode | cpu-decode)
 	case $action in
 	*cpu*)
 		sed $sedscript < ${tmp}-cpu.h1 > ${tmp}-cpu.h
-		${move_if_change} ${tmp}-cpu.h ${srcdir}/cpu${suffix}.h
+		${rootdir}/move-if-change ${tmp}-cpu.h ${srcdir}/cpu${suffix}.h
 		sed $sedscript < ${tmp}-cpu.c1 > ${tmp}-cpu.c
-		${move_if_change} ${tmp}-cpu.c ${srcdir}/cpu${suffix}.c
+		${rootdir}/move-if-change ${tmp}-cpu.c ${srcdir}/cpu${suffix}.c
 		sed $sedscript < ${tmp}-mod.c1 > ${tmp}-mod.c
-		${move_if_change} ${tmp}-mod.c ${srcdir}/model${suffix}.c
+		${rootdir}/move-if-change ${tmp}-mod.c ${srcdir}/model${suffix}.c
 		rm -f ${tmp}-cpu.h1 ${tmp}-cpu.c1 ${tmp}-mod.c1
 		;;
 	esac
@@ -149,36 +148,36 @@ cpu | decode | cpu-decode)
 	case $action in
 	*decode*)
 		sed $sedscript < ${tmp}-dec.h1 > ${tmp}-dec.h
-		${move_if_change} ${tmp}-dec.h ${srcdir}/decode${suffix}.h
+		${rootdir}/move-if-change ${tmp}-dec.h ${srcdir}/decode${suffix}.h
 		sed $sedscript < ${tmp}-dec.c1 > ${tmp}-dec.c
-		${move_if_change} ${tmp}-dec.c ${srcdir}/decode${suffix}.c
+		${rootdir}/move-if-change ${tmp}-dec.c ${srcdir}/decode${suffix}.c
 		rm -f ${tmp}-dec.h1 ${tmp}-dec.c1
 		;;
 	esac
 
 	if test -f ${tmp}-ext.c1 ; then \
 		sed $sedscript < ${tmp}-ext.c1 > ${tmp}-ext.c ; \
-		${move_if_change} ${tmp}-ext.c ${srcdir}/extract${suffix}.c ; \
+		${rootdir}/move-if-change ${tmp}-ext.c ${srcdir}/extract${suffix}.c ; \
 		rm -f ${tmp}-ext.c1
 	fi
 	if test -f ${tmp}-read.c1 ; then \
 		sed $sedscript < ${tmp}-read.c1 > ${tmp}-read.c ; \
-		${move_if_change} ${tmp}-read.c ${srcdir}/read${suffix}.c ; \
+		${rootdir}/move-if-change ${tmp}-read.c ${srcdir}/read${suffix}.c ; \
 		rm -f ${tmp}-read.c1
 	fi
 	if test -f ${tmp}-write.c1 ; then \
 		sed $sedscript < ${tmp}-write.c1 > ${tmp}-write.c ; \
-		${move_if_change} ${tmp}-write.c ${srcdir}/write${suffix}.c ; \
+		${rootdir}/move-if-change ${tmp}-write.c ${srcdir}/write${suffix}.c ; \
 		rm -f ${tmp}-write.c1
 	fi
 	if test -f ${tmp}-sem.c1 ; then \
 		sed $sedscript < ${tmp}-sem.c1 > ${tmp}-sem.c ; \
-		${move_if_change} ${tmp}-sem.c ${srcdir}/sem${suffix}.c ; \
+		${rootdir}/move-if-change ${tmp}-sem.c ${srcdir}/sem${suffix}.c ; \
 		rm -f ${tmp}-sem.c1
 	fi
 	if test -f ${tmp}-semsw.c1 ; then \
 		sed $sedscript < ${tmp}-semsw.c1 > ${tmp}-semsw.c ; \
-		${move_if_change} ${tmp}-semsw.c ${srcdir}/sem${suffix}-switch.c ; \
+		${rootdir}/move-if-change ${tmp}-semsw.c ${srcdir}/sem${suffix}-switch.c ; \
 		rm -f ${tmp}-semsw.c1
 	fi
 
@@ -196,7 +195,7 @@ defs)
 		-i ${isa} \
 		-G ${tmp}-defs.h1
 	sed $sedscript < ${tmp}-defs.h1 > ${tmp}-defs.h
-	${move_if_change} ${tmp}-defs.h ${srcdir}/defs${suffix}.h
+	${rootdir}/move-if-change ${tmp}-defs.h ${srcdir}/defs${suffix}.h
 	rm -f ${tmp}-defs.h1
 	;;
 
@@ -217,11 +216,11 @@ desc)
 		-C ${tmp}-desc.c1 \
 		-O ${tmp}-opc.h1
 	sed $sedscript < ${tmp}-desc.h1 > ${tmp}-desc.h
-	${move_if_change} ${tmp}-desc.h ${srcdir}/${arch}-desc.h
+	${rootdir}/move-if-change ${tmp}-desc.h ${srcdir}/${arch}-desc.h
 	sed $sedscript < ${tmp}-desc.c1 > ${tmp}-desc.c
-	${move_if_change} ${tmp}-desc.c ${srcdir}/${arch}-desc.c
+	${rootdir}/move-if-change ${tmp}-desc.c ${srcdir}/${arch}-desc.c
 	sed $sedscript < ${tmp}-opc.h1 > ${tmp}-opc.h
-	${move_if_change} ${tmp}-opc.h ${srcdir}/${arch}-opc.h
+	${rootdir}/move-if-change ${tmp}-opc.h ${srcdir}/${arch}-opc.h
 
 	rm -f ${tmp}-desc.h1 ${tmp}-desc.c1 ${tmp}-opc.h1
 	;;

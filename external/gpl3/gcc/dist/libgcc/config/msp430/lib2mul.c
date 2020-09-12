@@ -1,5 +1,5 @@
 /* libgcc routines for MSP430
-   Copyright (C) 2005-2019 Free Software Foundation, Inc.
+   Copyright (C) 2005-2015 Free Software Foundation, Inc.
    Contributed by Red Hat.
 
    This file is part of GCC.
@@ -30,35 +30,12 @@ typedef unsigned int  uint08_type   __attribute__ ((mode (QI)));
 #define C3B(a,b,c) a##b##c
 #define C3(a,b,c) C3B(a,b,c)
 
-#if defined MUL_NONE
 
-/* The software multiply library needs __mspabi_mpyll.  */
-
-#undef UINT_TYPE
-#undef BITS_MINUS_1
-#undef NAME_MODE
-
-#define UINT_TYPE	uint32_type
-#define BITS_MINUS_1	31
-#define NAME_MODE	si
+#define UINT_TYPE	uint16_type
+#define BITS_MINUS_1	15
+#define NAME_MODE	hi
 
 #include "msp430-mul.h"
-
-#elif defined MUL_16
-
-signed long long
-__mspabi_mpysll (signed long a, signed long b)
-{
-  return (signed long long) a * (signed long long) b;
-}
-
-unsigned long long
-__mspabi_mpyull (unsigned long a, unsigned long b)
-{
-  return (unsigned long long) a * (unsigned long long) b;
-}
-
-#else
 
 #undef UINT_TYPE
 #undef BITS_MINUS_1
@@ -70,4 +47,12 @@ __mspabi_mpyull (unsigned long a, unsigned long b)
 
 #include "msp430-mul.h"
 
-#endif /* MUL_NONE */
+#undef UINT_TYPE
+#undef BITS_MINUS_1
+#undef NAME_MODE
+
+#define UINT_TYPE	uint32_type
+#define BITS_MINUS_1	31
+#define NAME_MODE	si
+
+#include "msp430-mul.h"

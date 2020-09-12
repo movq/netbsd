@@ -1,5 +1,7 @@
 /* Subroutines for insn-output.c for Motorola 68000 family.
-   Copyright (C) 1987-2019 Free Software Foundation, Inc.
+   Copyright (C) 1987, 1993, 1994, 1995, 1996, 1997, 1998, 1999, 2000,
+   2001, 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010
+   Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -17,58 +19,34 @@ You should have received a copy of the GNU General Public License
 along with GCC; see the file COPYING3.  If not see
 <http://www.gnu.org/licenses/>.  */
 
-#define IN_TARGET_CODE 1
-
 #include "config.h"
 #include "system.h"
 #include "coretypes.h"
-#include "backend.h"
-#include "cfghooks.h"
+#include "tm.h"
 #include "tree.h"
-#include "stringpool.h"
-#include "attribs.h"
 #include "rtl.h"
-#include "df.h"
-#include "alias.h"
-#include "fold-const.h"
-#include "calls.h"
-#include "stor-layout.h"
-#include "varasm.h"
+#include "function.h"
 #include "regs.h"
+#include "hard-reg-set.h"
+#include "real.h"
 #include "insn-config.h"
 #include "conditions.h"
 #include "output.h"
 #include "insn-attr.h"
 #include "recog.h"
-#include "diagnostic-core.h"
-#include "flags.h"
-#include "expmed.h"
-#include "dojump.h"
-#include "explow.h"
-#include "memmodel.h"
-#include "emit-rtl.h"
-#include "stmt.h"
+#include "toplev.h"
 #include "expr.h"
 #include "reload.h"
 #include "tm_p.h"
 #include "target.h"
+#include "target-def.h"
 #include "debug.h"
-#include "cfgrtl.h"
-#include "cfganal.h"
-#include "lcm.h"
-#include "cfgbuild.h"
-#include "cfgcleanup.h"
+#include "flags.h"
+#include "df.h"
 /* ??? Need to add a dependency between m68k.o and sched-int.h.  */
 #include "sched-int.h"
 #include "insn-codes.h"
-#include "opts.h"
-#include "optabs.h"
-#include "builtins.h"
-#include "rtl-iter.h"
-#include "toplev.h"
-
-/* This file should be included last.  */
-#include "target-def.h"
+#include "ggc.h"
 
 enum reg_class regno_reg_class[] =
 {
@@ -144,10 +122,9 @@ struct m68k_address {
   int scale;
 };
 
-static int m68k_sched_adjust_cost (rtx_insn *, int, rtx_insn *, int,
-				   unsigned int);
+static int m68k_sched_adjust_cost (rtx, rtx, rtx, int);
 static int m68k_sched_issue_rate (void);
-static int m68k_sched_variable_issue (FILE *, int, rtx_insn *, int);
+static int m68k_sched_variable_issue (FILE *, int, rtx, int);
 static void m68k_sched_md_init_global (FILE *, int, int);
 static void m68k_sched_md_finish_global (FILE *, int);
 static void m68k_sched_md_init (FILE *, int, int);
@@ -156,10 +133,8 @@ static void m68k_sched_dfa_post_advance_cycle (void);
 static int m68k_sched_first_cycle_multipass_dfa_lookahead (void);
 
 static bool m68k_can_eliminate (const int, const int);
-static void m68k_conditional_register_usage (void);
-static bool m68k_legitimate_address_p (machine_mode, rtx, bool);
-static void m68k_option_override (void);
-static void m68k_override_options_after_change (void);
+static bool m68k_legitimate_address_p (enum machine_mode, rtx, bool);
+static bool m68k_handle_option (size_t, const char *, int);
 static rtx find_addr_reg (rtx);
 static const char *singlemove_string (rtx *);
 static void m68k_output_mi_thunk (FILE *, tree, HOST_WIDE_INT,
@@ -172,29 +147,18 @@ static void m68k_compute_frame_layout (void);
 static bool m68k_save_reg (unsigned int regno, bool interrupt_handler);
 static bool m68k_ok_for_sibcall_p (tree, tree);
 static bool m68k_tls_symbol_p (rtx);
-static rtx m68k_legitimize_address (rtx, rtx, machine_mode);
-static bool m68k_rtx_costs (rtx, machine_mode, int, int, int *, bool);
+static rtx m68k_legitimize_address (rtx, rtx, enum machine_mode);
+static bool m68k_rtx_costs (rtx, int, int, int *, bool);
 #if M68K_HONOR_TARGET_STRICT_ALIGNMENT
 static bool m68k_return_in_memory (const_tree, const_tree);
 #endif
 static void m68k_output_dwarf_dtprel (FILE *, int, rtx) ATTRIBUTE_UNUSED;
 static void m68k_trampoline_init (rtx, tree, rtx);
-static poly_int64 m68k_return_pops_args (tree, tree, poly_int64);
 static rtx m68k_delegitimize_address (rtx);
-static void m68k_function_arg_advance (cumulative_args_t, machine_mode,
-				       const_tree, bool);
-static rtx m68k_function_arg (cumulative_args_t, machine_mode,
-			      const_tree, bool);
-static bool m68k_cannot_force_const_mem (machine_mode mode, rtx x);
-static bool m68k_output_addr_const_extra (FILE *, rtx);
-static void m68k_init_sync_libfuncs (void) ATTRIBUTE_UNUSED;
-static enum flt_eval_method
-m68k_excess_precision (enum excess_precision_type);
-static unsigned int m68k_hard_regno_nregs (unsigned int, machine_mode);
-static bool m68k_hard_regno_mode_ok (unsigned int, machine_mode);
-static bool m68k_modes_tieable_p (machine_mode, machine_mode);
-static machine_mode m68k_promote_function_mode (const_tree, machine_mode,
-						int *, const_tree, int);
+
+
+/* Specify the identification number of the library being built */
+const char *m68k_library_id_string = "_current_shared_library_a5_offset_";
 
 /* Initialize the GCC target structure.  */
 
@@ -265,11 +229,8 @@ static machine_mode m68k_promote_function_mode (const_tree, machine_mode,
 #define TARGET_SCHED_FIRST_CYCLE_MULTIPASS_DFA_LOOKAHEAD	\
   m68k_sched_first_cycle_multipass_dfa_lookahead
 
-#undef TARGET_OPTION_OVERRIDE
-#define TARGET_OPTION_OVERRIDE m68k_option_override
-
-#undef TARGET_OVERRIDE_OPTIONS_AFTER_CHANGE
-#define TARGET_OVERRIDE_OPTIONS_AFTER_CHANGE m68k_override_options_after_change
+#undef TARGET_HANDLE_OPTION
+#define TARGET_HANDLE_OPTION m68k_handle_option
 
 #undef TARGET_RTX_COSTS
 #define TARGET_RTX_COSTS m68k_rtx_costs
@@ -284,7 +245,7 @@ static machine_mode m68k_promote_function_mode (const_tree, machine_mode,
 #define TARGET_STRUCT_VALUE_RTX m68k_struct_value_rtx
 
 #undef TARGET_CANNOT_FORCE_CONST_MEM
-#define TARGET_CANNOT_FORCE_CONST_MEM m68k_cannot_force_const_mem
+#define TARGET_CANNOT_FORCE_CONST_MEM m68k_illegitimate_symbolic_constant_p
 
 #undef TARGET_FUNCTION_OK_FOR_SIBCALL
 #define TARGET_FUNCTION_OK_FOR_SIBCALL m68k_ok_for_sibcall_p
@@ -302,71 +263,25 @@ static machine_mode m68k_promote_function_mode (const_tree, machine_mode,
 #define TARGET_ASM_OUTPUT_DWARF_DTPREL m68k_output_dwarf_dtprel
 #endif
 
-#undef TARGET_LRA_P
-#define TARGET_LRA_P hook_bool_void_false
-
 #undef TARGET_LEGITIMATE_ADDRESS_P
 #define TARGET_LEGITIMATE_ADDRESS_P	m68k_legitimate_address_p
 
 #undef TARGET_CAN_ELIMINATE
 #define TARGET_CAN_ELIMINATE m68k_can_eliminate
 
-#undef TARGET_CONDITIONAL_REGISTER_USAGE
-#define TARGET_CONDITIONAL_REGISTER_USAGE m68k_conditional_register_usage
-
 #undef TARGET_TRAMPOLINE_INIT
 #define TARGET_TRAMPOLINE_INIT m68k_trampoline_init
-
-#undef TARGET_RETURN_POPS_ARGS
-#define TARGET_RETURN_POPS_ARGS m68k_return_pops_args
 
 #undef TARGET_DELEGITIMIZE_ADDRESS
 #define TARGET_DELEGITIMIZE_ADDRESS m68k_delegitimize_address
 
-#undef TARGET_FUNCTION_ARG
-#define TARGET_FUNCTION_ARG m68k_function_arg
-
-#undef TARGET_FUNCTION_ARG_ADVANCE
-#define TARGET_FUNCTION_ARG_ADVANCE m68k_function_arg_advance
-
-#undef TARGET_LEGITIMATE_CONSTANT_P
-#define TARGET_LEGITIMATE_CONSTANT_P m68k_legitimate_constant_p
-
-#undef TARGET_ASM_OUTPUT_ADDR_CONST_EXTRA
-#define TARGET_ASM_OUTPUT_ADDR_CONST_EXTRA m68k_output_addr_const_extra
-
-#undef TARGET_C_EXCESS_PRECISION
-#define TARGET_C_EXCESS_PRECISION m68k_excess_precision
-
-/* The value stored by TAS.  */
-#undef TARGET_ATOMIC_TEST_AND_SET_TRUEVAL
-#define TARGET_ATOMIC_TEST_AND_SET_TRUEVAL 128
-
-#undef TARGET_HARD_REGNO_NREGS
-#define TARGET_HARD_REGNO_NREGS m68k_hard_regno_nregs
-#undef TARGET_HARD_REGNO_MODE_OK
-#define TARGET_HARD_REGNO_MODE_OK m68k_hard_regno_mode_ok
-
-#undef TARGET_MODES_TIEABLE_P
-#define TARGET_MODES_TIEABLE_P m68k_modes_tieable_p
-
-#undef TARGET_PROMOTE_FUNCTION_MODE
-#define TARGET_PROMOTE_FUNCTION_MODE m68k_promote_function_mode
-
-#undef  TARGET_HAVE_SPECULATION_SAFE_VALUE
-#define TARGET_HAVE_SPECULATION_SAFE_VALUE speculation_safe_value_not_needed
-
 static const struct attribute_spec m68k_attribute_table[] =
 {
-  /* { name, min_len, max_len, decl_req, type_req, fn_type_req,
-       affects_type_identity, handler, exclude } */
-  { "interrupt", 0, 0, true,  false, false, false,
-    m68k_handle_fndecl_attribute, NULL },
-  { "interrupt_handler", 0, 0, true,  false, false, false,
-    m68k_handle_fndecl_attribute, NULL },
-  { "interrupt_thread", 0, 0, true,  false, false, false,
-    m68k_handle_fndecl_attribute, NULL },
-  { NULL, 0, 0, false, false, false, false, NULL, NULL }
+  /* { name, min_len, max_len, decl_req, type_req, fn_type_req, handler } */
+  { "interrupt", 0, 0, true,  false, false, m68k_handle_fndecl_attribute },
+  { "interrupt_handler", 0, 0, true,  false, false, m68k_handle_fndecl_attribute },
+  { "interrupt_thread", 0, 0, true,  false, false, m68k_handle_fndecl_attribute },
+  { NULL,                0, 0, false, false, false, NULL }
 };
 
 struct gcc_target targetm = TARGET_INITIALIZER;
@@ -378,7 +293,7 @@ struct gcc_target targetm = TARGET_INITIALIZER;
    generated 68881 code for 68020 and 68030 targets unless explicitly told
    not to.  */
 #define FL_FOR_isa_20    (FL_FOR_isa_10 | FL_ISA_68020 \
-			  | FL_BITFIELD | FL_68881 | FL_CAS)
+			  | FL_BITFIELD | FL_68881)
 #define FL_FOR_isa_40    (FL_FOR_isa_20 | FL_ISA_68040)
 #define FL_FOR_isa_cpu32 (FL_FOR_isa_10 | FL_ISA_68020)
 
@@ -439,10 +354,20 @@ static const struct m68k_target_selection all_devices[] =
    Used for -march selection.  */
 static const struct m68k_target_selection all_isas[] =
 {
-#define M68K_ISA(NAME,DEVICE,MICROARCH,ISA,FLAGS) \
-  { NAME, DEVICE, NULL, u##MICROARCH, ISA, FLAGS },
-#include "m68k-isas.def"
-#undef M68K_ISA
+  { "68000",    m68000,     NULL,  u68000,   isa_00,    FL_FOR_isa_00 },
+  { "68010",    m68010,     NULL,  u68010,   isa_10,    FL_FOR_isa_10 },
+  { "68020",    m68020,     NULL,  u68020,   isa_20,    FL_FOR_isa_20 },
+  { "68030",    m68030,     NULL,  u68030,   isa_20,    FL_FOR_isa_20 },
+  { "68040",    m68040,     NULL,  u68040,   isa_40,    FL_FOR_isa_40 },
+  { "68060",    m68060,     NULL,  u68060,   isa_40,    FL_FOR_isa_40 },
+  { "cpu32",    cpu32,      NULL,  ucpu32,   isa_20,    FL_FOR_isa_cpu32 },
+  { "isaa",     mcf5206e,   NULL,  ucfv2,    isa_a,     (FL_FOR_isa_a
+							 | FL_CF_HWDIV) },
+  { "isaaplus", mcf5271,    NULL,  ucfv2,    isa_aplus, (FL_FOR_isa_aplus
+							 | FL_CF_HWDIV) },
+  { "isab",     mcf5407,    NULL,  ucfv4,    isa_b,     FL_FOR_isa_b },
+  { "isac",     unk_device, NULL,  ucfv4,    isa_c,     (FL_FOR_isa_c
+							 | FL_CF_HWDIV) },
   { NULL,       unk_device, NULL,  unk_arch, isa_max,   0 }
 };
 
@@ -450,10 +375,24 @@ static const struct m68k_target_selection all_isas[] =
    device.  Used for -mtune selection.  */
 static const struct m68k_target_selection all_microarchs[] =
 {
-#define M68K_MICROARCH(NAME,DEVICE,MICROARCH,ISA,FLAGS) \
-  { NAME, DEVICE, NULL, u##MICROARCH, ISA, FLAGS },
-#include "m68k-microarchs.def"
-#undef M68K_MICROARCH
+  { "68000",    m68000,     NULL,  u68000,    isa_00,  FL_FOR_isa_00 },
+  { "68010",    m68010,     NULL,  u68010,    isa_10,  FL_FOR_isa_10 },
+  { "68020",    m68020,     NULL,  u68020,    isa_20,  FL_FOR_isa_20 },
+  { "68020-40", m68020,     NULL,  u68020_40, isa_20,  FL_FOR_isa_20 },
+  { "68020-60", m68020,     NULL,  u68020_60, isa_20,  FL_FOR_isa_20 },
+  { "68030",    m68030,     NULL,  u68030,    isa_20,  FL_FOR_isa_20 },
+  { "68040",    m68040,     NULL,  u68040,    isa_40,  FL_FOR_isa_40 },
+  { "68060",    m68060,     NULL,  u68060,    isa_40,  FL_FOR_isa_40 },
+  { "cpu32",    cpu32,      NULL,  ucpu32,    isa_20,  FL_FOR_isa_cpu32 },
+  { "cfv1",     mcf51qe,    NULL,  ucfv1,     isa_c,   FL_FOR_isa_c },
+  { "cfv2",     mcf5206,    NULL,  ucfv2,     isa_a,   FL_FOR_isa_a },
+  { "cfv3",     mcf5307,    NULL,  ucfv3,     isa_a,   (FL_FOR_isa_a
+							| FL_CF_HWDIV) },
+  { "cfv4",     mcf5407,    NULL,  ucfv4,     isa_b,   FL_FOR_isa_b },
+  { "cfv4e",    mcf547x,    NULL,  ucfv4e,    isa_b,   (FL_FOR_isa_b
+							| FL_CF_USP
+							| FL_CF_EMAC
+							| FL_CF_FPU) },
   { NULL,       unk_device, NULL,  unk_arch,  isa_max, 0 }
 };
 
@@ -488,22 +427,128 @@ const char *m68k_symbolic_jump;
 enum M68K_SYMBOLIC_CALL m68k_symbolic_call_var;
 
 
-/* Implement TARGET_OPTION_OVERRIDE.  */
+/* See whether TABLE has an entry with name NAME.  Return true and
+   store the entry in *ENTRY if so, otherwise return false and
+   leave *ENTRY alone.  */
 
-static void
-m68k_option_override (void)
+static bool
+m68k_find_selection (const struct m68k_target_selection **entry,
+		     const struct m68k_target_selection *table,
+		     const char *name)
+{
+  size_t i;
+
+  for (i = 0; table[i].name; i++)
+    if (strcmp (table[i].name, name) == 0)
+      {
+	*entry = table + i;
+	return true;
+      }
+  return false;
+}
+
+/* Implement TARGET_HANDLE_OPTION.  */
+
+static bool
+m68k_handle_option (size_t code, const char *arg, int value)
+{
+  switch (code)
+    {
+    case OPT_march_:
+      return m68k_find_selection (&m68k_arch_entry, all_isas, arg);
+
+    case OPT_mcpu_:
+      return m68k_find_selection (&m68k_cpu_entry, all_devices, arg);
+
+    case OPT_mtune_:
+      return m68k_find_selection (&m68k_tune_entry, all_microarchs, arg);
+
+    case OPT_m5200:
+      return m68k_find_selection (&m68k_cpu_entry, all_devices, "5206");
+
+    case OPT_m5206e:
+      return m68k_find_selection (&m68k_cpu_entry, all_devices, "5206e");
+
+    case OPT_m528x:
+      return m68k_find_selection (&m68k_cpu_entry, all_devices, "528x");
+
+    case OPT_m5307:
+      return m68k_find_selection (&m68k_cpu_entry, all_devices, "5307");
+
+    case OPT_m5407:
+      return m68k_find_selection (&m68k_cpu_entry, all_devices, "5407");
+
+    case OPT_mcfv4e:
+      return m68k_find_selection (&m68k_cpu_entry, all_devices, "547x");
+
+    case OPT_m68000:
+    case OPT_mc68000:
+      return m68k_find_selection (&m68k_cpu_entry, all_devices, "68000");
+
+    case OPT_m68010:
+      return m68k_find_selection (&m68k_cpu_entry, all_devices, "68010");
+
+    case OPT_m68020:
+    case OPT_mc68020:
+      return m68k_find_selection (&m68k_cpu_entry, all_devices, "68020");
+
+    case OPT_m68020_40:
+      return (m68k_find_selection (&m68k_tune_entry, all_microarchs,
+				   "68020-40")
+	      && m68k_find_selection (&m68k_cpu_entry, all_devices, "68020"));
+
+    case OPT_m68020_60:
+      return (m68k_find_selection (&m68k_tune_entry, all_microarchs,
+				   "68020-60")
+	      && m68k_find_selection (&m68k_cpu_entry, all_devices, "68020"));
+
+    case OPT_m68030:
+      return m68k_find_selection (&m68k_cpu_entry, all_devices, "68030");
+
+    case OPT_m68040:
+      return m68k_find_selection (&m68k_cpu_entry, all_devices, "68040");
+
+    case OPT_m68060:
+      return m68k_find_selection (&m68k_cpu_entry, all_devices, "68060");
+
+    case OPT_m68302:
+      return m68k_find_selection (&m68k_cpu_entry, all_devices, "68302");
+
+    case OPT_m68332:
+    case OPT_mcpu32:
+      return m68k_find_selection (&m68k_cpu_entry, all_devices, "68332");
+
+    case OPT_mshared_library_id_:
+      if (value > MAX_LIBRARY_ID)
+	error ("-mshared-library-id=%s is not between 0 and %d",
+	       arg, MAX_LIBRARY_ID);
+      else
+        {
+	  char *tmp;
+	  asprintf (&tmp, "%d", (value * -4) - 4);
+	  m68k_library_id_string = tmp;
+	}
+      return true;
+
+    default:
+      return true;
+    }
+}
+
+/* Sometimes certain combinations of command options do not make
+   sense on a particular target machine.  You can define a macro
+   `OVERRIDE_OPTIONS' to take account of this.  This macro, if
+   defined, is executed once just after all the command options have
+   been parsed.
+
+   Don't use this macro to turn on various extra optimizations for
+   `-O'.  That is what `OPTIMIZATION_OPTIONS' is for.  */
+
+void
+override_options (void)
 {
   const struct m68k_target_selection *entry;
   unsigned long target_mask;
-
-  if (global_options_set.x_m68k_arch_option)
-    m68k_arch_entry = &all_isas[m68k_arch_option];
-
-  if (global_options_set.x_m68k_cpu_option)
-    m68k_cpu_entry = &all_devices[(int) m68k_cpu_option];
-
-  if (global_options_set.x_m68k_tune_option)
-    m68k_tune_entry = &all_microarchs[(int) m68k_tune_option];
 
   /* User can choose:
 
@@ -524,7 +569,7 @@ m68k_option_override (void)
       if (m68k_arch_entry
 	  && (m68k_arch_entry->microarch != m68k_cpu_entry->microarch
 	      || (m68k_arch_entry->flags & ~m68k_cpu_entry->flags) != 0))
-	warning (0, "%<-mcpu=%s%> conflicts with %<-march=%s%>",
+	warning (0, "-mcpu=%s conflicts with -march=%s",
 		 m68k_cpu_entry->name, m68k_arch_entry->name);
 
       entry = m68k_cpu_entry;
@@ -565,7 +610,7 @@ m68k_option_override (void)
     {
       enum target_device dev;
       dev = all_microarchs[M68K_DEFAULT_TUNE].device;
-      m68k_tune_flags = all_devices[dev].flags;
+      m68k_tune_flags = all_devices[dev]->flags;
     }
 #endif
   else
@@ -583,7 +628,7 @@ m68k_option_override (void)
    * both specified together.  Doing so simply doesn't make sense.
    */
   if (TARGET_SEP_DATA && TARGET_ID_SHARED_LIBRARY)
-    error ("cannot specify both %<-msep-data%> and %<-mid-shared-library%>");
+    error ("cannot specify both -msep-data and -mid-shared-library");
 
   /* If we're generating code for a separate A5 relative data segment,
    * we've got to enable -fPIC as well.  This might be relaxable to
@@ -595,7 +640,7 @@ m68k_option_override (void)
   /* -mpcrel -fPIC uses 32-bit pc-relative displacements.  Raise an
      error if the target does not support them.  */
   if (TARGET_PCREL && !TARGET_68020 && flag_pic == 2)
-    error ("%<-mpcrel%> %<-fPIC%> is not currently supported on selected cpu");
+    error ("-mpcrel -fPIC is not currently supported on selected cpu");
 
   /* ??? A historic way of turning on pic, or is this intended to
      be an embedded thing that doesn't have the same name binding
@@ -655,29 +700,17 @@ m68k_option_override (void)
     }
 
 #ifndef ASM_OUTPUT_ALIGN_WITH_NOP
-  parse_alignment_opts ();
-  int label_alignment = align_labels.levels[0].get_value ();
-  if (label_alignment > 2)
+  if (align_labels > 2)
     {
-      warning (0, "%<-falign-labels=%d%> is not supported", label_alignment);
-      str_align_labels = "1";
+      warning (0, "-falign-labels=%d is not supported", align_labels);
+      align_labels = 0;
     }
-
-  int loop_alignment = align_loops.levels[0].get_value ();
-  if (loop_alignment > 2)
+  if (align_loops > 2)
     {
-      warning (0, "%<-falign-loops=%d%> is not supported", loop_alignment);
-      str_align_loops = "1";
+      warning (0, "-falign-loops=%d is not supported", align_loops);
+      align_loops = 0;
     }
 #endif
-
-  if ((opt_fstack_limit_symbol_arg != NULL || opt_fstack_limit_register_no >= 0)
-      && !TARGET_68020)
-    {
-      warning (0, "%<-fstack-limit-%> options are not supported on this cpu");
-      opt_fstack_limit_symbol_arg = NULL;
-      opt_fstack_limit_register_no = -1;
-    }
 
   SUBTARGET_OVERRIDE_OPTIONS;
 
@@ -696,7 +729,6 @@ m68k_option_override (void)
       flag_schedule_insns = 0;
       flag_schedule_insns_after_reload = 0;
       flag_modulo_sched = 0;
-      flag_live_range_shrinkage = 0;
     }
 
   if (m68k_sched_cpu != CPU_UNKNOWN)
@@ -707,20 +739,6 @@ m68k_option_override (void)
 	m68k_sched_mac = MAC_CF_MAC;
       else
 	m68k_sched_mac = MAC_NO;
-    }
-}
-
-/* Implement TARGET_OVERRIDE_OPTIONS_AFTER_CHANGE.  */
-
-static void
-m68k_override_options_after_change (void)
-{
-  if (m68k_sched_cpu == CPU_UNKNOWN)
-    {
-      flag_schedule_insns = 0;
-      flag_schedule_insns_after_reload = 0;
-      flag_modulo_sched = 0;
-      flag_live_range_shrinkage = 0;
     }
 }
 
@@ -945,7 +963,7 @@ m68k_save_reg (unsigned int regno, bool interrupt_handler)
       if (df_regs_ever_live_p (regno))
 	return true;
 
-      if (!crtl->is_leaf && call_used_regs[regno])
+      if (!current_function_is_leaf && call_used_regs[regno])
 	return true;
     }
 
@@ -964,14 +982,14 @@ m68k_save_reg (unsigned int regno, bool interrupt_handler)
    whether or not this is pre-decrement (if STORE_P) or post-increment
    (if !STORE_P) operation.  */
 
-static rtx_insn *
+static rtx
 m68k_emit_movem (rtx base, HOST_WIDE_INT offset,
 		 unsigned int count, unsigned int regno,
 		 unsigned int mask, bool store_p, bool adjust_stack_p)
 {
   int i;
   rtx body, addr, src, operands[2];
-  machine_mode mode;
+  enum machine_mode mode;
 
   body = gen_rtx_PARALLEL (VOIDmode, rtvec_alloc (adjust_stack_p + count));
   mode = reg_raw_mode[regno];
@@ -979,21 +997,20 @@ m68k_emit_movem (rtx base, HOST_WIDE_INT offset,
 
   if (adjust_stack_p)
     {
-      src = plus_constant (Pmode, base,
-			   (count
-			    * GET_MODE_SIZE (mode)
-			    * (HOST_WIDE_INT) (store_p ? -1 : 1)));
-      XVECEXP (body, 0, i++) = gen_rtx_SET (base, src);
+      src = plus_constant (base, (count
+				  * GET_MODE_SIZE (mode)
+				  * (HOST_WIDE_INT) (store_p ? -1 : 1)));
+      XVECEXP (body, 0, i++) = gen_rtx_SET (VOIDmode, base, src);
     }
 
   for (; mask != 0; mask >>= 1, regno++)
     if (mask & 1)
       {
-	addr = plus_constant (Pmode, base, offset);
+	addr = plus_constant (base, offset);
 	operands[!store_p] = gen_frame_mem (mode, addr);
 	operands[store_p] = gen_rtx_REG (mode, regno);
 	XVECEXP (body, 0, i++)
-	  = gen_rtx_SET (operands[0], operands[1]);
+	  = gen_rtx_SET (VOIDmode, operands[0], operands[1]);
 	offset += GET_MODE_SIZE (mode);
       }
   gcc_assert (i == XVECLEN (body, 0));
@@ -1004,7 +1021,7 @@ m68k_emit_movem (rtx base, HOST_WIDE_INT offset,
 /* Make INSN a frame-related instruction.  */
 
 static void
-m68k_set_frame_related (rtx_insn *insn)
+m68k_set_frame_related (rtx insn)
 {
   rtx body;
   int i;
@@ -1022,21 +1039,17 @@ void
 m68k_expand_prologue (void)
 {
   HOST_WIDE_INT fsize_with_regs;
-  rtx limit, src, dest;
+  rtx limit, src, dest, insn;
 
   m68k_compute_frame_layout ();
-
-  if (flag_stack_usage_info)
-    current_function_static_stack_size
-      = current_frame.size + current_frame.offset;
 
   /* If the stack limit is a symbol, we can check it here,
      before actually allocating the space.  */
   if (crtl->limit_stack
       && GET_CODE (stack_limit_rtx) == SYMBOL_REF)
     {
-      limit = plus_constant (Pmode, stack_limit_rtx, current_frame.size + 4);
-      if (!m68k_legitimate_constant_p (Pmode, limit))
+      limit = plus_constant (stack_limit_rtx, current_frame.size + 4);
+      if (!LEGITIMATE_CONSTANT_P (limit))
 	{
 	  emit_move_insn (gen_rtx_REG (Pmode, D0_REG), limit);
 	  limit = gen_rtx_REG (Pmode, D0_REG);
@@ -1169,7 +1182,7 @@ m68k_expand_prologue (void)
 
   if (!TARGET_SEP_DATA
       && crtl->uses_pic_offset_table)
-    emit_insn (gen_load_got (pic_offset_table_rtx));
+    insn = emit_insn (gen_load_got (pic_offset_table_rtx));
 }
 
 /* Return true if a simple (return) instruction is sufficient for this
@@ -1205,11 +1218,12 @@ m68k_expand_epilogue (bool sibcall_p)
   big = false;
   restore_from_sp = false;
 
-  /* FIXME : crtl->is_leaf below is too strong.
+  /* FIXME : current_function_is_leaf below is too strong.
      What we really need to know there is if there could be pending
      stack adjustment needed at that point.  */
   restore_from_sp = (!frame_pointer_needed
-		     || (!cfun->calls_alloca && crtl->is_leaf));
+		     || (!cfun->calls_alloca
+			 && current_function_is_leaf));
 
   /* fsize_with_regs is the size we need to adjust the sp when
      popping the frame.  */
@@ -1238,7 +1252,6 @@ m68k_expand_epilogue (bool sibcall_p)
 	     stack-based restore.  */
 	  emit_move_insn (gen_rtx_REG (Pmode, A1_REG),
 			  GEN_INT (-(current_frame.offset + fsize)));
-	  emit_insn (gen_blockage ());
 	  emit_insn (gen_addsi3 (stack_pointer_rtx,
 				 gen_rtx_REG (Pmode, A1_REG),
 				 frame_pointer_rtx));
@@ -1269,12 +1282,12 @@ m68k_expand_epilogue (bool sibcall_p)
 		/* Generate the address -OFFSET(%fp,%a1.l).  */
 		addr = gen_rtx_REG (Pmode, A1_REG);
 		addr = gen_rtx_PLUS (Pmode, addr, frame_pointer_rtx);
-		addr = plus_constant (Pmode, addr, -offset);
+		addr = plus_constant (addr, -offset);
 	      }
 	    else if (restore_from_sp)
 	      addr = gen_rtx_POST_INC (Pmode, stack_pointer_rtx);
 	    else
-	      addr = plus_constant (Pmode, frame_pointer_rtx, -offset);
+	      addr = plus_constant (frame_pointer_rtx, -offset);
 	    emit_move_insn (gen_rtx_REG (SImode, D0_REG + i),
 			    gen_frame_mem (SImode, addr));
 	    offset -= GET_MODE_SIZE (SImode);
@@ -1340,7 +1353,6 @@ m68k_expand_epilogue (bool sibcall_p)
 			 current_frame.fpu_mask, false, false);
     }
 
-  emit_insn (gen_blockage ());
   if (frame_pointer_needed)
     emit_insn (gen_unlink (frame_pointer_rtx));
   else if (fsize_with_regs)
@@ -1354,7 +1366,7 @@ m68k_expand_epilogue (bool sibcall_p)
 			   EH_RETURN_STACKADJ_RTX));
 
   if (!sibcall_p)
-    emit_jump_insn (ret_rtx);
+    emit_jump_insn (gen_rtx_RETURN (VOIDmode));
 }
 
 /* Return true if X is a valid comparison operator for the dbcc 
@@ -1366,7 +1378,7 @@ m68k_expand_epilogue (bool sibcall_p)
    It also rejects some comparisons when CC_NO_OVERFLOW is set.  */
    
 int
-valid_dbcc_comparison_p_2 (rtx x, machine_mode mode ATTRIBUTE_UNUSED)
+valid_dbcc_comparison_p_2 (rtx x, enum machine_mode mode ATTRIBUTE_UNUSED)
 {
   switch (GET_CODE (x))
     {
@@ -1461,28 +1473,6 @@ m68k_ok_for_sibcall_p (tree decl, tree exp)
   return false;
 }
 
-/* On the m68k all args are always pushed.  */
-
-static rtx
-m68k_function_arg (cumulative_args_t cum ATTRIBUTE_UNUSED,
-		   machine_mode mode ATTRIBUTE_UNUSED,
-		   const_tree type ATTRIBUTE_UNUSED,
-		   bool named ATTRIBUTE_UNUSED)
-{
-  return NULL_RTX;
-}
-
-static void
-m68k_function_arg_advance (cumulative_args_t cum_v, machine_mode mode,
-			   const_tree type, bool named ATTRIBUTE_UNUSED)
-{
-  CUMULATIVE_ARGS *cum = get_cumulative_args (cum_v);
-
-  *cum += (mode != BLKmode
-	   ? (GET_MODE_SIZE (mode) + 3) & ~3
-	   : (int_size_in_bytes (type) + 3) & ~3);
-}
-
 /* Convert X to a legitimate function call memory reference and return the
    result.  */
 
@@ -1517,7 +1507,7 @@ m68k_legitimize_sibcall_address (rtx x)
    nothing needs to be done because REG can certainly go in an address reg.  */
 
 static rtx
-m68k_legitimize_address (rtx x, rtx oldx, machine_mode mode)
+m68k_legitimize_address (rtx x, rtx oldx, enum machine_mode mode)
 {
   if (m68k_tls_symbol_p (x))
     return m68k_legitimize_tls_address (x);
@@ -1647,11 +1637,11 @@ output_dbcc_and_branch (rtx *operands)
      to compensate for the fact that dbcc decrements in HImode.  */
   switch (GET_MODE (operands[0]))
     {
-      case E_SImode:
+      case SImode:
         output_asm_insn ("clr%.w %0\n\tsubq%.l #1,%0\n\tjpl %l1", operands);
         break;
 
-      case E_HImode:
+      case HImode:
         break;
 
       default:
@@ -1797,7 +1787,7 @@ output_scc_di (rtx op, rtx operand1, rtx operand2, rtx dest)
 }
 
 const char *
-output_btst (rtx *operands, rtx countop, rtx dataop, rtx_insn *insn, int signpos)
+output_btst (rtx *operands, rtx countop, rtx dataop, rtx insn, int signpos)
 {
   operands[0] = countop;
   operands[1] = dataop;
@@ -1943,14 +1933,6 @@ m68k_illegitimate_symbolic_constant_p (rtx x)
   return m68k_tls_reference_p (x, false);
 }
 
-/* Implement TARGET_CANNOT_FORCE_CONST_MEM.  */
-
-static bool
-m68k_cannot_force_const_mem (machine_mode mode ATTRIBUTE_UNUSED, rtx x)
-{
-  return m68k_illegitimate_symbolic_constant_p (x);
-}
-
 /* Return true if X is a legitimate constant address that can reach
    bytes in the range [X, X + REACH).  STRICT_P says whether we need
    strict checking.  */
@@ -1988,12 +1970,12 @@ m68k_jump_table_ref_p (rtx x)
   if (GET_CODE (x) != LABEL_REF)
     return false;
 
-  rtx_insn *insn = as_a <rtx_insn *> (XEXP (x, 0));
-  if (!NEXT_INSN (insn) && !PREV_INSN (insn))
+  x = XEXP (x, 0);
+  if (!NEXT_INSN (x) && !PREV_INSN (x))
     return true;
 
-  insn = next_nonnote_insn (insn);
-  return insn && JUMP_TABLE_DATA_P (insn);
+  x = next_nonnote_insn (x);
+  return x && JUMP_TABLE_DATA_P (x);
 }
 
 /* Return true if X is a legitimate address for values of mode MODE.
@@ -2001,7 +1983,7 @@ m68k_jump_table_ref_p (rtx x)
    is valid, describe its components in *ADDRESS.  */
 
 static bool
-m68k_decompose_address (machine_mode mode, rtx x,
+m68k_decompose_address (enum machine_mode mode, rtx x,
 			bool strict_p, struct m68k_address *address)
 {
   unsigned int reach;
@@ -2149,7 +2131,7 @@ m68k_decompose_address (machine_mode mode, rtx x,
    STRICT_P says whether strict checking is needed.  */
 
 bool
-m68k_legitimate_address_p (machine_mode mode, rtx x, bool strict_p)
+m68k_legitimate_address_p (enum machine_mode mode, rtx x, bool strict_p)
 {
   struct m68k_address address;
 
@@ -2166,14 +2148,6 @@ m68k_legitimate_mem_p (rtx x, struct m68k_address *address)
 	  && m68k_decompose_address (GET_MODE (x), XEXP (x, 0),
 				     reload_in_progress || reload_completed,
 				     address));
-}
-
-/* Implement TARGET_LEGITIMATE_CONSTANT_P.  */
-
-bool
-m68k_legitimate_constant_p (machine_mode mode, rtx x)
-{
-  return mode != XFmode && !m68k_illegitimate_symbolic_constant_p (x);
 }
 
 /* Return true if X matches the 'Q' constraint.  It must be a memory
@@ -2329,11 +2303,57 @@ m68k_unwrap_symbol (rtx orig, bool unwrap_reloc32_p)
   return m68k_unwrap_symbol_1 (orig, unwrap_reloc32_p, NULL);
 }
 
-/* Adjust decorated address operand before outputing assembler for it.  */
+/* Helper for m68k_final_prescan_insn.  */
 
-static void
-m68k_adjust_decorated_operand (rtx op)
+static int
+m68k_final_prescan_insn_1 (rtx *x_ptr, void *data ATTRIBUTE_UNUSED)
 {
+  rtx x = *x_ptr;
+
+  if (m68k_unwrap_symbol (x, true) != x)
+    /* For rationale of the below, see comment in m68k_final_prescan_insn.  */
+    {
+      rtx plus;
+
+      gcc_assert (GET_CODE (x) == CONST);
+      plus = XEXP (x, 0);
+
+      if (GET_CODE (plus) == PLUS || GET_CODE (plus) == MINUS)
+	{
+	  rtx unspec;
+	  rtx addend;
+
+	  unspec = XEXP (plus, 0);
+	  gcc_assert (GET_CODE (unspec) == UNSPEC);
+	  addend = XEXP (plus, 1);
+	  gcc_assert (CONST_INT_P (addend));
+
+	  /* We now have all the pieces, rearrange them.  */
+
+	  /* Move symbol to plus.  */
+	  XEXP (plus, 0) = XVECEXP (unspec, 0, 0);
+
+	  /* Move plus inside unspec.  */
+	  XVECEXP (unspec, 0, 0) = plus;
+
+	  /* Move unspec to top level of const.  */
+	  XEXP (x, 0) = unspec;
+	}
+
+      return -1;
+    }
+
+  return 0;
+}
+
+/* Prescan insn before outputing assembler for it.  */
+
+void
+m68k_final_prescan_insn (rtx insn ATTRIBUTE_UNUSED,
+			 rtx *operands, int n_operands)
+{
+  int i;
+
   /* Combine and, possibly, other optimizations may do good job
      converting
        (const (unspec [(symbol)]))
@@ -2351,40 +2371,13 @@ m68k_adjust_decorated_operand (rtx op)
      Note, that the top level of operand remains intact, so we don't have
      to patch up anything outside of the operand.  */
 
-  subrtx_var_iterator::array_type array;
-  FOR_EACH_SUBRTX_VAR (iter, array, op, ALL)
+  for (i = 0; i < n_operands; ++i)
     {
-      rtx x = *iter;
-      if (m68k_unwrap_symbol (x, true) != x)
-	{
-	  rtx plus;
+      rtx op;
 
-	  gcc_assert (GET_CODE (x) == CONST);
-	  plus = XEXP (x, 0);
+      op = operands[i];
 
-	  if (GET_CODE (plus) == PLUS || GET_CODE (plus) == MINUS)
-	    {
-	      rtx unspec;
-	      rtx addend;
-
-	      unspec = XEXP (plus, 0);
-	      gcc_assert (GET_CODE (unspec) == UNSPEC);
-	      addend = XEXP (plus, 1);
-	      gcc_assert (CONST_INT_P (addend));
-
-	      /* We now have all the pieces, rearrange them.  */
-
-	      /* Move symbol to plus.  */
-	      XEXP (plus, 0) = XVECEXP (unspec, 0, 0);
-
-	      /* Move plus inside unspec.  */
-	      XVECEXP (unspec, 0, 0) = plus;
-
-	      /* Move unspec to top level of const.  */
-	      XEXP (x, 0) = unspec;
-	    }
-	  iter.skip_subrtxes ();
-	}
+      for_each_rtx (&op, m68k_final_prescan_insn_1, NULL);
     }
 }
 
@@ -2394,7 +2387,7 @@ m68k_adjust_decorated_operand (rtx op)
 static rtx
 m68k_move_to_reg (rtx x, rtx orig, rtx reg)
 {
-  rtx_insn *insn;
+  rtx insn;
 
   if (reg == NULL_RTX)
     {
@@ -2465,7 +2458,7 @@ m68k_wrap_symbol_into_got_ref (rtx x, enum m68k_reloc reloc, rtx temp_reg)
    handled.  */
 
 rtx
-legitimize_pic_address (rtx orig, machine_mode mode ATTRIBUTE_UNUSED,
+legitimize_pic_address (rtx orig, enum machine_mode mode ATTRIBUTE_UNUSED,
 		        rtx reg)
 {
   rtx pic_ref = orig;
@@ -2496,7 +2489,7 @@ legitimize_pic_address (rtx orig, machine_mode mode ATTRIBUTE_UNUSED,
 				     base == reg ? 0 : reg);
 
       if (GET_CODE (orig) == CONST_INT)
-	pic_ref = plus_constant (Pmode, base, INTVAL (orig));
+	pic_ref = plus_constant (base, INTVAL (orig));
       else
 	pic_ref = gen_rtx_PLUS (Pmode, base, orig);
     }
@@ -2531,7 +2524,7 @@ static rtx
 m68k_call_tls_get_addr (rtx x, rtx eqv, enum m68k_reloc reloc)
 {
   rtx a0;
-  rtx_insn *insns;
+  rtx insns;
   rtx dest;
 
   /* Emit the call sequence.  */
@@ -2541,7 +2534,7 @@ m68k_call_tls_get_addr (rtx x, rtx eqv, enum m68k_reloc reloc)
      consider (plus (%a5) (const (unspec))) to be a good enough
      operand for push, so it forces it into a register.  The bad
      thing about this is that combiner, due to copy propagation and other
-     optimizations, sometimes cannot later fix this.  As a consequence,
+     optimizations, sometimes can not later fix this.  As a consequence,
      additional register may be allocated resulting in a spill.
      For reference, see args processing loops in
      calls.c:emit_library_call_value_1.
@@ -2556,7 +2549,7 @@ m68k_call_tls_get_addr (rtx x, rtx eqv, enum m68k_reloc reloc)
 
   m68k_libcall_value_in_a0_p = true;
   a0 = emit_library_call_value (m68k_get_tls_get_addr (), NULL_RTX, LCT_PURE,
-				Pmode, x, Pmode);
+				Pmode, 1, x, Pmode);
   m68k_libcall_value_in_a0_p = false;
   
   insns = get_insns ();
@@ -2591,7 +2584,7 @@ m68k_call_m68k_read_tp (void)
 {
   rtx a0;
   rtx eqv;
-  rtx_insn *insns;
+  rtx insns;
   rtx dest;
 
   start_sequence ();
@@ -2605,7 +2598,7 @@ m68k_call_m68k_read_tp (void)
   /* Emit the call sequence.  */
   m68k_libcall_value_in_a0_p = true;
   a0 = emit_library_call_value (m68k_get_m68k_read_tp (), NULL_RTX, LCT_PURE,
-				Pmode);
+				Pmode, 0);
   m68k_libcall_value_in_a0_p = false;
   insns = get_insns ();
   end_sequence ();
@@ -2710,6 +2703,22 @@ m68k_tls_symbol_p (rtx x)
   return SYMBOL_REF_TLS_MODEL (x) != 0;
 }
 
+/* Helper for m68k_tls_referenced_p.  */
+
+static int
+m68k_tls_reference_p_1 (rtx *x_ptr, void *data ATTRIBUTE_UNUSED)
+{
+  /* Note: this is not the same as m68k_tls_symbol_p.  */
+  if (GET_CODE (*x_ptr) == SYMBOL_REF)
+    return SYMBOL_REF_TLS_MODEL (*x_ptr) != 0 ? 1 : 0;
+
+  /* Don't recurse into legitimate TLS references.  */
+  if (m68k_tls_reference_p (*x_ptr, true))
+    return -1;
+
+  return 0;
+}
+
 /* If !LEGITIMATE_P, return true if X is a TLS symbol reference,
    though illegitimate one.
    If LEGITIMATE_P, return true if X is a legitimate TLS symbol reference.  */
@@ -2721,22 +2730,7 @@ m68k_tls_reference_p (rtx x, bool legitimate_p)
     return false;
 
   if (!legitimate_p)
-    {
-      subrtx_var_iterator::array_type array;
-      FOR_EACH_SUBRTX_VAR (iter, array, x, ALL)
-	{
-	  rtx x = *iter;
-
-	  /* Note: this is not the same as m68k_tls_symbol_p.  */
-	  if (GET_CODE (x) == SYMBOL_REF && SYMBOL_REF_TLS_MODEL (x) != 0)
-	    return true;
-
-	  /* Don't recurse into legitimate TLS references.  */
-	  if (m68k_tls_reference_p (x, true))
-	    iter.skip_subrtxes ();
-	}
-      return false;
-    }
+    return for_each_rtx (&x, m68k_tls_reference_p_1, NULL) == 1 ? true : false;
   else
     {
       enum m68k_reloc reloc = RELOC_GOT;
@@ -2820,12 +2814,9 @@ const_int_cost (HOST_WIDE_INT i)
 }
 
 static bool
-m68k_rtx_costs (rtx x, machine_mode mode, int outer_code,
-		int opno ATTRIBUTE_UNUSED,
-		int *total, bool speed ATTRIBUTE_UNUSED)
+m68k_rtx_costs (rtx x, int code, int outer_code, int *total,
+		bool speed ATTRIBUTE_UNUSED)
 {
-  int code = GET_CODE (x);
-
   switch (code)
     {
     case CONST_INT:
@@ -2882,7 +2873,7 @@ m68k_rtx_costs (rtx x, machine_mode mode, int outer_code,
 
     case PLUS:
       /* An lea costs about three times as much as a simple add.  */
-      if (mode == SImode
+      if (GET_MODE (x) == SImode
 	  && GET_CODE (XEXP (x, 1)) == REG
 	  && GET_CODE (XEXP (x, 0)) == MULT
 	  && GET_CODE (XEXP (XEXP (x, 0), 0)) == REG
@@ -2938,9 +2929,9 @@ m68k_rtx_costs (rtx x, machine_mode mode, int outer_code,
     case MULT:
       if ((GET_CODE (XEXP (x, 0)) == ZERO_EXTEND
 	   || GET_CODE (XEXP (x, 0)) == SIGN_EXTEND)
-	  && mode == SImode)
+	  && GET_MODE (x) == SImode)
         *total = COSTS_N_INSNS (MULW_COST);
-      else if (mode == QImode || mode == HImode)
+      else if (GET_MODE (x) == QImode || GET_MODE (x) == HImode)
         *total = COSTS_N_INSNS (MULW_COST);
       else
         *total = COSTS_N_INSNS (MULL_COST);
@@ -2950,7 +2941,7 @@ m68k_rtx_costs (rtx x, machine_mode mode, int outer_code,
     case UDIV:
     case MOD:
     case UMOD:
-      if (mode == QImode || mode == HImode)
+      if (GET_MODE (x) == QImode || GET_MODE (x) == HImode)
         *total = COSTS_N_INSNS (DIVW_COST);	/* div.w */
       else if (TARGET_CF_HWDIV)
         *total = COSTS_N_INSNS (18);
@@ -3327,10 +3318,11 @@ handle_move_double (rtx operands[2],
 	{
 	  if (GET_CODE (operands[1]) == CONST_DOUBLE)
 	    {
+	      REAL_VALUE_TYPE r;
 	      long l[3];
 
-	      REAL_VALUE_TO_TARGET_LONG_DOUBLE
-		(*CONST_DOUBLE_REAL_VALUE (operands[1]), l);
+	      REAL_VALUE_FROM_CONST_DOUBLE (r, operands[1]);
+	      REAL_VALUE_TO_TARGET_LONG_DOUBLE (r, l);
 	      operands[1] = GEN_INT (l[0]);
 	      middlehalf[1] = GEN_INT (l[1]);
 	      latehalf[1] = GEN_INT (l[2]);
@@ -3368,12 +3360,12 @@ handle_move_double (rtx operands[2],
 	latehalf[1] = adjust_address (operands[1], SImode, 0);
     }
 
-  /* If insn is effectively movd N(REG),-(REG) then we will do the high
-     word first.  We should use the adjusted operand 1 (which is N+4(REG))
-     for the low word as well, to compensate for the first decrement of
-     REG.  */
+  /* If insn is effectively movd N(sp),-(sp) then we will do the
+     high word first.  We should use the adjusted operand 1 (which is N+4(sp))
+     for the low word as well, to compensate for the first decrement of sp.  */
   if (optype0 == PUSHOP
-      && reg_overlap_mentioned_p (XEXP (XEXP (operands[0], 0), 0), operands[1]))
+      && REGNO (XEXP (XEXP (operands[0], 0), 0)) == STACK_POINTER_REGNUM
+      && reg_overlap_mentioned_p (stack_pointer_rtx, operands[1]))
     operands[1] = middlehalf[1] = latehalf[1];
 
   /* For (set (reg:DI N) (mem:DI ... (reg:SI N) ...)),
@@ -3523,7 +3515,8 @@ output_reg_adjust (rtx reg, int n)
 {
   const char *s;
 
-  gcc_assert (GET_MODE (reg) == SImode && n >= -12 && n != 0 && n <= 12);
+  gcc_assert (GET_MODE (reg) == SImode
+	      && -12 <= n && n != 0 && n <= 12);
 
   switch (n)
     {
@@ -3565,7 +3558,8 @@ emit_reg_adjust (rtx reg1, int n)
 {
   rtx reg2;
 
-  gcc_assert (GET_MODE (reg1) == SImode && n >= -12 && n != 0 && n <= 12);
+  gcc_assert (GET_MODE (reg1) == SImode
+	      && -12 <= n && n != 0 && n <= 12);
 
   reg1 = copy_rtx (reg1);
   reg2 = copy_rtx (reg1);
@@ -3595,7 +3589,7 @@ output_movsi (rtx operands[2])
 
 /* Copy OP and change its mode to MODE.  */
 static rtx
-copy_operand (rtx op, machine_mode mode)
+copy_operand (rtx op, enum machine_mode mode)
 {
   /* ??? This looks really ugly.  There must be a better way
      to change a mode on the operand.  */
@@ -3646,7 +3640,7 @@ m68k_emit_move_double (rtx operands[2])
    new rtx with the correct mode.  */
 
 static rtx
-force_mode (machine_mode mode, rtx orig)
+force_mode (enum machine_mode mode, rtx orig)
 {
   if (mode == GET_MODE (orig))
     return orig;
@@ -3658,7 +3652,7 @@ force_mode (machine_mode mode, rtx orig)
 }
 
 static int
-fp_reg_operand (rtx op, machine_mode mode ATTRIBUTE_UNUSED)
+fp_reg_operand (rtx op, enum machine_mode mode ATTRIBUTE_UNUSED)
 {
   return reg_renumber && FP_REG_P (op);
 }
@@ -3674,7 +3668,7 @@ fp_reg_operand (rtx op, machine_mode mode ATTRIBUTE_UNUSED)
    of SCRATCH_REG in the proper mode.  */
 
 int
-emit_move_sequence (rtx *operands, machine_mode mode, rtx scratch_reg)
+emit_move_sequence (rtx *operands, enum machine_mode mode, rtx scratch_reg)
 {
   register rtx operand0 = operands[0];
   register rtx operand1 = operands[1];
@@ -3683,7 +3677,7 @@ emit_move_sequence (rtx *operands, machine_mode mode, rtx scratch_reg)
   if (scratch_reg
       && reload_in_progress && GET_CODE (operand0) == REG
       && REGNO (operand0) >= FIRST_PSEUDO_REGISTER)
-    operand0 = reg_equiv_mem (REGNO (operand0));
+    operand0 = reg_equiv_mem[REGNO (operand0)];
   else if (scratch_reg
 	   && reload_in_progress && GET_CODE (operand0) == SUBREG
 	   && GET_CODE (SUBREG_REG (operand0)) == REG
@@ -3692,15 +3686,15 @@ emit_move_sequence (rtx *operands, machine_mode mode, rtx scratch_reg)
      /* We must not alter SUBREG_BYTE (operand0) since that would confuse
 	the code which tracks sets/uses for delete_output_reload.  */
       rtx temp = gen_rtx_SUBREG (GET_MODE (operand0),
-				 reg_equiv_mem (REGNO (SUBREG_REG (operand0))),
+				 reg_equiv_mem [REGNO (SUBREG_REG (operand0))],
 				 SUBREG_BYTE (operand0));
-      operand0 = alter_subreg (&temp, true);
+      operand0 = alter_subreg (&temp);
     }
 
   if (scratch_reg
       && reload_in_progress && GET_CODE (operand1) == REG
       && REGNO (operand1) >= FIRST_PSEUDO_REGISTER)
-    operand1 = reg_equiv_mem (REGNO (operand1));
+    operand1 = reg_equiv_mem[REGNO (operand1)];
   else if (scratch_reg
 	   && reload_in_progress && GET_CODE (operand1) == SUBREG
 	   && GET_CODE (SUBREG_REG (operand1)) == REG
@@ -3709,9 +3703,9 @@ emit_move_sequence (rtx *operands, machine_mode mode, rtx scratch_reg)
      /* We must not alter SUBREG_BYTE (operand0) since that would confuse
 	the code which tracks sets/uses for delete_output_reload.  */
       rtx temp = gen_rtx_SUBREG (GET_MODE (operand1),
-				 reg_equiv_mem (REGNO (SUBREG_REG (operand1))),
+				 reg_equiv_mem [REGNO (SUBREG_REG (operand1))],
 				 SUBREG_BYTE (operand1));
-      operand1 = alter_subreg (&temp, true);
+      operand1 = alter_subreg (&temp);
     }
 
   if (scratch_reg && reload_in_progress && GET_CODE (operand0) == MEM
@@ -3753,7 +3747,8 @@ emit_move_sequence (rtx *operands, machine_mode mode, rtx scratch_reg)
 	}
       else
 	emit_move_insn (scratch_reg, XEXP (operand1, 0));
-      emit_insn (gen_rtx_SET (operand0, gen_rtx_MEM (mode, scratch_reg)));
+      emit_insn (gen_rtx_SET (VOIDmode, operand0,
+			      gen_rtx_MEM (mode, scratch_reg)));
       return 1;
     }
   else if (fp_reg_operand (operand1, mode)
@@ -3786,7 +3781,8 @@ emit_move_sequence (rtx *operands, machine_mode mode, rtx scratch_reg)
 	}
       else
 	emit_move_insn (scratch_reg, XEXP (operand0, 0));
-      emit_insn (gen_rtx_SET (gen_rtx_MEM (mode, scratch_reg), operand1));
+      emit_insn (gen_rtx_SET (VOIDmode, gen_rtx_MEM (mode, scratch_reg),
+			      operand1));
       return 1;
     }
   /* Handle secondary reloads for loads of FP registers from constant
@@ -3813,10 +3809,11 @@ emit_move_sequence (rtx *operands, machine_mode mode, rtx scratch_reg)
 	 memory location into scratch_reg.  */
       xoperands[0] = scratch_reg;
       xoperands[1] = XEXP (force_const_mem (mode, operand1), 0);
-      emit_insn (gen_rtx_SET (scratch_reg, xoperands[1]));
+      emit_insn (gen_rtx_SET (mode, scratch_reg, xoperands[1]));
 
       /* Now load the destination register.  */
-      emit_insn (gen_rtx_SET (operand0, gen_rtx_MEM (mode, scratch_reg)));
+      emit_insn (gen_rtx_SET (mode, operand0,
+			      gen_rtx_MEM (mode, scratch_reg)));
       return 1;
     }
 
@@ -4244,13 +4241,6 @@ notice_update_cc (rtx exp, rtx insn)
       && cc_status.value2
       && reg_overlap_mentioned_p (cc_status.value1, cc_status.value2))
     cc_status.value2 = 0;
-  /* Check for PRE_DEC in dest modifying a register used in src.  */
-  if (cc_status.value1 && GET_CODE (cc_status.value1) == MEM
-      && GET_CODE (XEXP (cc_status.value1, 0)) == PRE_DEC
-      && cc_status.value2
-      && reg_overlap_mentioned_p (XEXP (XEXP (cc_status.value1, 0), 0),
-				  cc_status.value2))
-    cc_status.value2 = 0;
   if (((cc_status.value1 && FP_REG_P (cc_status.value1))
        || (cc_status.value2 && FP_REG_P (cc_status.value2))))
     cc_status.flags = CC_IN_68881;
@@ -4258,8 +4248,7 @@ notice_update_cc (rtx exp, rtx insn)
       && GET_MODE_CLASS (GET_MODE (XEXP (cc_status.value2, 0))) == MODE_FLOAT)
     {
       cc_status.flags = CC_IN_68881;
-      if (!FP_REG_P (XEXP (cc_status.value2, 0))
-	  && FP_REG_P (XEXP (cc_status.value2, 1)))
+      if (!FP_REG_P (XEXP (cc_status.value2, 0)))
 	cc_status.flags |= CC_REVERSED;
     }
 }
@@ -4333,7 +4322,7 @@ init_68881_table (void)
 {
   int i;
   REAL_VALUE_TYPE r;
-  machine_mode mode;
+  enum machine_mode mode;
 
   mode = SFmode;
   for (i = 0; i < 7; i++)
@@ -4349,7 +4338,7 @@ init_68881_table (void)
 int
 standard_68881_constant_p (rtx x)
 {
-  const REAL_VALUE_TYPE *r;
+  REAL_VALUE_TYPE r;
   int i;
 
   /* fmovecr must be emulated on the 68040 and 68060, so it shouldn't be
@@ -4360,19 +4349,20 @@ standard_68881_constant_p (rtx x)
   if (! inited_68881_table)
     init_68881_table ();
 
-  r = CONST_DOUBLE_REAL_VALUE (x);
+  REAL_VALUE_FROM_CONST_DOUBLE (r, x);
 
-  /* Use real_identical instead of real_equal so that -0.0 is rejected.  */
+  /* Use REAL_VALUES_IDENTICAL instead of REAL_VALUES_EQUAL so that -0.0
+     is rejected.  */
   for (i = 0; i < 6; i++)
     {
-      if (real_identical (r, &values_68881[i]))
+      if (REAL_VALUES_IDENTICAL (r, values_68881[i]))
         return (codes_68881[i]);
     }
   
   if (GET_MODE (x) == SFmode)
     return 0;
 
-  if (real_equal (r, &values_68881[6]))
+  if (REAL_VALUES_EQUAL (r, values_68881[6]))
     return (codes_68881[6]);
 
   /* larger powers of ten in the constants ram are not used
@@ -4386,18 +4376,17 @@ standard_68881_constant_p (rtx x)
 int
 floating_exact_log2 (rtx x)
 {
-  const REAL_VALUE_TYPE *r;
-  REAL_VALUE_TYPE r1;
+  REAL_VALUE_TYPE r, r1;
   int exp;
 
-  r = CONST_DOUBLE_REAL_VALUE (x);
+  REAL_VALUE_FROM_CONST_DOUBLE (r, x);
 
-  if (real_less (r, &dconst1))
+  if (REAL_VALUES_LESS (r, dconst1))
     return 0;
 
-  exp = real_exponent (r);
+  exp = real_exponent (&r);
   real_2expN (&r1, exp, DFmode);
-  if (real_equal (&r1, r))
+  if (REAL_VALUES_EQUAL (r1, r))
     return exp;
 
   return 0;
@@ -4451,9 +4440,6 @@ floating_exact_log2 (rtx x)
 void
 print_operand (FILE *file, rtx op, int letter)
 {
-  if (op != NULL_RTX)
-    m68k_adjust_decorated_operand (op);
-
   if (letter == '.')
     {
       if (MOTOROLA)
@@ -4500,7 +4486,7 @@ print_operand (FILE *file, rtx op, int letter)
     }
   else if (GET_CODE (op) == MEM)
     {
-      output_address (GET_MODE (op), XEXP (op, 0));
+      output_address (XEXP (op, 0));
       if (letter == 'd' && ! TARGET_68020
 	  && CONSTANT_ADDRESS_P (XEXP (op, 0))
 	  && !(GET_CODE (XEXP (op, 0)) == CONST_INT
@@ -4510,21 +4496,27 @@ print_operand (FILE *file, rtx op, int letter)
     }
   else if (GET_CODE (op) == CONST_DOUBLE && GET_MODE (op) == SFmode)
     {
+      REAL_VALUE_TYPE r;
       long l;
-      REAL_VALUE_TO_TARGET_SINGLE (*CONST_DOUBLE_REAL_VALUE (op), l);
+      REAL_VALUE_FROM_CONST_DOUBLE (r, op);
+      REAL_VALUE_TO_TARGET_SINGLE (r, l);
       asm_fprintf (file, "%I0x%lx", l & 0xFFFFFFFF);
     }
   else if (GET_CODE (op) == CONST_DOUBLE && GET_MODE (op) == XFmode)
     {
+      REAL_VALUE_TYPE r;
       long l[3];
-      REAL_VALUE_TO_TARGET_LONG_DOUBLE (*CONST_DOUBLE_REAL_VALUE (op), l);
+      REAL_VALUE_FROM_CONST_DOUBLE (r, op);
+      REAL_VALUE_TO_TARGET_LONG_DOUBLE (r, l);
       asm_fprintf (file, "%I0x%lx%08lx%08lx", l[0] & 0xFFFFFFFF,
 		   l[1] & 0xFFFFFFFF, l[2] & 0xFFFFFFFF);
     }
   else if (GET_CODE (op) == CONST_DOUBLE && GET_MODE (op) == DFmode)
     {
+      REAL_VALUE_TYPE r;
       long l[2];
-      REAL_VALUE_TO_TARGET_DOUBLE (*CONST_DOUBLE_REAL_VALUE (op), l);
+      REAL_VALUE_FROM_CONST_DOUBLE (r, op);
+      REAL_VALUE_TO_TARGET_DOUBLE (r, l);
       asm_fprintf (file, "%I0x%lx%08lx", l[0] & 0xFFFFFFFF, l[1] & 0xFFFFFFFF);
     }
   else
@@ -4573,7 +4565,6 @@ m68k_get_reloc_decoration (enum m68k_reloc reloc)
 		}
 	    }
 	}
-      gcc_unreachable ();
 
     case RELOC_TLSGD:
       return "@TLSGD";
@@ -4595,9 +4586,9 @@ m68k_get_reloc_decoration (enum m68k_reloc reloc)
     }
 }
 
-/* m68k implementation of TARGET_OUTPUT_ADDR_CONST_EXTRA.  */
+/* m68k implementation of OUTPUT_ADDR_CONST_EXTRA.  */
 
-static bool
+bool
 m68k_output_addr_const_extra (FILE *file, rtx x)
 {
   if (GET_CODE (x) == UNSPEC)
@@ -4607,8 +4598,7 @@ m68k_output_addr_const_extra (FILE *file, rtx x)
 	case UNSPEC_RELOC16:
 	case UNSPEC_RELOC32:
 	  output_addr_const (file, XVECEXP (x, 0, 0));
-	  fputs (m68k_get_reloc_decoration
-		 ((enum m68k_reloc) INTVAL (XVECEXP (x, 0, 1))), file);
+	  fputs (m68k_get_reloc_decoration (INTVAL (XVECEXP (x, 0, 1))), file);
 	  return true;
 
 	default:
@@ -4637,46 +4627,49 @@ m68k_output_dwarf_dtprel (FILE *file, int size, rtx x)
 static rtx
 m68k_delegitimize_address (rtx orig_x)
 {
-  rtx x;
-  struct m68k_address addr;
-  rtx unspec;
+  rtx x, y;
+  rtx addend = NULL_RTX;
+  rtx result;
 
   orig_x = delegitimize_mem_from_attrs (orig_x);
-  x = orig_x;
-  if (MEM_P (x))
-    x = XEXP (x, 0);
-
-  if (GET_CODE (x) != PLUS || GET_MODE (x) != Pmode)
+  if (! MEM_P (orig_x))
     return orig_x;
 
-  if (!m68k_decompose_address (GET_MODE (x), x, false, &addr)
-      || addr.offset == NULL_RTX
-      || GET_CODE (addr.offset) != CONST)
-    return orig_x;
+  x = XEXP (orig_x, 0);
 
-  unspec = XEXP (addr.offset, 0);
-  if (GET_CODE (unspec) == PLUS && CONST_INT_P (XEXP (unspec, 1)))
-    unspec = XEXP (unspec, 0);
-  if (GET_CODE (unspec) != UNSPEC 
-      || (XINT (unspec, 1) != UNSPEC_RELOC16
-	  && XINT (unspec, 1) != UNSPEC_RELOC32))
-    return orig_x;
-  x = XVECEXP (unspec, 0, 0);
-  gcc_assert (GET_CODE (x) == SYMBOL_REF || GET_CODE (x) == LABEL_REF);
-  if (unspec != XEXP (addr.offset, 0))
-    x = gen_rtx_PLUS (Pmode, x, XEXP (XEXP (addr.offset, 0), 1));
-  if (addr.index)
+  if (GET_CODE (x) == PLUS
+      && GET_CODE (XEXP (x, 1)) == CONST
+      && REG_P (XEXP (x, 0))
+      && REGNO (XEXP (x, 0)) == PIC_REG)
     {
-      rtx idx = addr.index;
-      if (addr.scale != 1)
-	idx = gen_rtx_MULT (Pmode, idx, GEN_INT (addr.scale));
-      x = gen_rtx_PLUS (Pmode, idx, x);
+      y = x = XEXP (XEXP (x, 1), 0);
+
+      /* Handle an addend.  */
+      if ((GET_CODE (x) == PLUS || GET_CODE (x) == MINUS)
+	  && CONST_INT_P (XEXP (x, 1)))
+	{
+	  addend = XEXP (x, 1);
+	  x = XEXP (x, 0);
+	}
+
+      if (GET_CODE (x) == UNSPEC
+	  && (XINT (x, 1) == UNSPEC_RELOC16
+	      || XINT (x, 1) == UNSPEC_RELOC32))
+	{
+	  result = XVECEXP (x, 0, 0);
+	  if (addend)
+	    {
+	      if (GET_CODE (y) == PLUS)
+		result = gen_rtx_PLUS (Pmode, result, addend);
+	      else
+		result = gen_rtx_MINUS (Pmode, result, addend);
+	      result = gen_rtx_CONST (Pmode, result);
+	    }
+	  return result;
+	}
     }
-  if (addr.base)
-    x = gen_rtx_PLUS (Pmode, addr.base, x);
-  if (MEM_P (orig_x))
-    x = replace_equiv_address_nv (orig_x, x);
-  return x;
+
+  return orig_x;
 }
   
 
@@ -4701,8 +4694,6 @@ void
 print_operand_address (FILE *file, rtx addr)
 {
   struct m68k_address address;
-
-  m68k_adjust_decorated_operand (addr);
 
   if (!m68k_decompose_address (QImode, addr, true, &address))
     gcc_unreachable ();
@@ -4828,10 +4819,10 @@ print_operand_address (FILE *file, rtx addr)
    clear insn.  */
 
 bool
-strict_low_part_peephole_ok (machine_mode mode, rtx_insn *first_insn,
+strict_low_part_peephole_ok (enum machine_mode mode, rtx first_insn,
                              rtx target)
 {
-  rtx_insn *p = first_insn;
+  rtx p = first_insn;
 
   while ((p = PREV_INSN (p)))
     {
@@ -5071,8 +5062,7 @@ m68k_output_mi_thunk (FILE *file, tree thunk ATTRIBUTE_UNUSED,
 		      HOST_WIDE_INT delta, HOST_WIDE_INT vcall_offset,
 		      tree function)
 {
-  rtx this_slot, offset, addr, mem, tmp;
-  rtx_insn *insn;
+  rtx this_slot, offset, addr, mem, insn, tmp;
 
   /* Avoid clobbering the struct value reg by using the
      static chain reg as a temporary.  */
@@ -5082,8 +5072,7 @@ m68k_output_mi_thunk (FILE *file, tree thunk ATTRIBUTE_UNUSED,
   reload_completed = 1;
 
   /* The "this" pointer is stored at 4(%sp).  */
-  this_slot = gen_rtx_MEM (Pmode, plus_constant (Pmode,
-						 stack_pointer_rtx, 4));
+  this_slot = gen_rtx_MEM (Pmode, plus_constant (stack_pointer_rtx, 4));
 
   /* Add DELTA to THIS.  */
   if (delta != 0)
@@ -5108,10 +5097,10 @@ m68k_output_mi_thunk (FILE *file, tree thunk ATTRIBUTE_UNUSED,
       emit_move_insn (tmp, gen_rtx_MEM (Pmode, tmp));
 
       /* Set ADDR to a legitimate address for *THIS + VCALL_OFFSET.  */
-      addr = plus_constant (Pmode, tmp, vcall_offset);
+      addr = plus_constant (tmp, vcall_offset);
       if (!m68k_legitimate_address_p (Pmode, addr, true))
 	{
-	  emit_insn (gen_rtx_SET (tmp, addr));
+	  emit_insn (gen_rtx_SET (VOIDmode, tmp, addr));
 	  addr = tmp;
 	}
 
@@ -5186,26 +5175,12 @@ m68k_hard_regno_rename_ok (unsigned int old_reg ATTRIBUTE_UNUSED,
   return 1;
 }
 
-/* Implement TARGET_HARD_REGNO_NREGS.
+/* Value is true if hard register REGNO can hold a value of machine-mode
+   MODE.  On the 68000, we let the cpu registers can hold any mode, but
+   restrict the 68881 registers to floating-point modes.  */
 
-   On the m68k, ordinary registers hold 32 bits worth;
-   for the 68881 registers, a single register is always enough for
-   anything that can be stored in them at all.  */
-
-static unsigned int
-m68k_hard_regno_nregs (unsigned int regno, machine_mode mode)
-{
-  if (regno >= 16)
-    return GET_MODE_NUNITS (mode);
-  return CEIL (GET_MODE_SIZE (mode), UNITS_PER_WORD);
-}
-
-/* Implement TARGET_HARD_REGNO_MODE_OK.  On the 68000, we let the cpu
-   registers can hold any mode, but restrict the 68881 registers to
-   floating-point modes.  */
-
-static bool
-m68k_hard_regno_mode_ok (unsigned int regno, machine_mode mode)
+bool
+m68k_regno_mode_ok (int regno, enum machine_mode mode)
 {
   if (DATA_REGNO_P (regno))
     {
@@ -5230,23 +5205,11 @@ m68k_hard_regno_mode_ok (unsigned int regno, machine_mode mode)
   return false;
 }
 
-/* Implement TARGET_MODES_TIEABLE_P.  */
-
-static bool
-m68k_modes_tieable_p (machine_mode mode1, machine_mode mode2)
-{
-  return (!TARGET_HARD_FLOAT
-	  || ((GET_MODE_CLASS (mode1) == MODE_FLOAT
-	       || GET_MODE_CLASS (mode1) == MODE_COMPLEX_FLOAT)
-	      == (GET_MODE_CLASS (mode2) == MODE_FLOAT
-		  || GET_MODE_CLASS (mode2) == MODE_COMPLEX_FLOAT)));
-}
-
 /* Implement SECONDARY_RELOAD_CLASS.  */
 
 enum reg_class
 m68k_secondary_reload_class (enum reg_class rclass,
-			     machine_mode mode, rtx x)
+			     enum machine_mode mode, rtx x)
 {
   int regno;
 
@@ -5309,12 +5272,12 @@ m68k_preferred_reload_class (rtx x, enum reg_class rclass)
    If there is need for a hard-float ABI it is probably worth doing it
    properly and also passing function arguments in FP registers.  */
 rtx
-m68k_libcall_value (machine_mode mode)
+m68k_libcall_value (enum machine_mode mode)
 {
   switch (mode) {
-  case E_SFmode:
-  case E_DFmode:
-  case E_XFmode:
+  case SFmode:
+  case DFmode:
+  case XFmode:
     if (TARGET_68881)
       return gen_rtx_REG (mode, FP0_REG);
     break;
@@ -5331,13 +5294,13 @@ m68k_libcall_value (machine_mode mode)
 rtx
 m68k_function_value (const_tree valtype, const_tree func ATTRIBUTE_UNUSED)
 {
-  machine_mode mode;
+  enum machine_mode mode;
 
   mode = TYPE_MODE (valtype);
   switch (mode) {
-  case E_SFmode:
-  case E_DFmode:
-  case E_XFmode:
+  case SFmode:
+  case DFmode:
+  case XFmode:
     if (TARGET_68881)
       return gen_rtx_REG (mode, FP0_REG);
     break;
@@ -5374,7 +5337,7 @@ m68k_function_value (const_tree valtype, const_tree func ATTRIBUTE_UNUSED)
 static bool
 m68k_return_in_memory (const_tree type, const_tree fntype ATTRIBUTE_UNUSED)
 {
-  machine_mode mode = TYPE_MODE (type);
+  enum machine_mode mode = TYPE_MODE (type);
 
   if (mode == BLKmode)
     return true;
@@ -5436,7 +5399,7 @@ enum attr_op_type
 
 /* Return type of memory ADDR_RTX refers to.  */
 static enum attr_op_type
-sched_address_type (machine_mode mode, rtx addr_rtx)
+sched_address_type (enum machine_mode mode, rtx addr_rtx)
 {
   struct m68k_address address;
 
@@ -5469,7 +5432,7 @@ sched_address_type (machine_mode mode, rtx addr_rtx)
 
 /* Return X or Y (depending on OPX_P) operand of INSN.  */
 static rtx
-sched_get_operand (rtx_insn *insn, bool opx_p)
+sched_get_operand (rtx insn, bool opx_p)
 {
   int i;
 
@@ -5492,7 +5455,7 @@ sched_get_operand (rtx_insn *insn, bool opx_p)
 /* Return type of INSN's operand X (if OPX_P) or operand Y (if !OPX_P).
    If ADDRESS_P is true, return type of memory location operand refers to.  */
 static enum attr_op_type
-sched_attr_op_type (rtx_insn *insn, bool opx_p, bool address_p)
+sched_attr_op_type (rtx insn, bool opx_p, bool address_p)
 {
   rtx op;
 
@@ -5563,11 +5526,11 @@ sched_attr_op_type (rtx_insn *insn, bool opx_p, bool address_p)
     {
       switch (GET_MODE (op))
 	{
-	case E_SFmode:
+	case SFmode:
 	  return OP_TYPE_IMM_W;
 
-	case E_VOIDmode:
-	case E_DFmode:
+	case VOIDmode:
+	case DFmode:
 	  return OP_TYPE_IMM_L;
 
 	default:
@@ -5581,13 +5544,13 @@ sched_attr_op_type (rtx_insn *insn, bool opx_p, bool address_p)
     {
       switch (GET_MODE (op))
 	{
-	case E_QImode:
+	case QImode:
 	  return OP_TYPE_IMM_Q;
 
-	case E_HImode:
+	case HImode:
 	  return OP_TYPE_IMM_W;
 
-	case E_SImode:
+	case SImode:
 	  return OP_TYPE_IMM_L;
 
 	default:
@@ -5611,7 +5574,7 @@ sched_attr_op_type (rtx_insn *insn, bool opx_p, bool address_p)
    Return type of INSN's operand X.
    If ADDRESS_P is true, return type of memory location operand refers to.  */
 enum attr_opx_type
-m68k_sched_attr_opx_type (rtx_insn *insn, int address_p)
+m68k_sched_attr_opx_type (rtx insn, int address_p)
 {
   switch (sched_attr_op_type (insn, true, address_p != 0))
     {
@@ -5647,6 +5610,7 @@ m68k_sched_attr_opx_type (rtx_insn *insn, int address_p)
 
     default:
       gcc_unreachable ();
+      return 0;
     }
 }
 
@@ -5654,7 +5618,7 @@ m68k_sched_attr_opx_type (rtx_insn *insn, int address_p)
    Return type of INSN's operand Y.
    If ADDRESS_P is true, return type of memory location operand refers to.  */
 enum attr_opy_type
-m68k_sched_attr_opy_type (rtx_insn *insn, int address_p)
+m68k_sched_attr_opy_type (rtx insn, int address_p)
 {
   switch (sched_attr_op_type (insn, false, address_p != 0))
     {
@@ -5690,12 +5654,13 @@ m68k_sched_attr_opy_type (rtx_insn *insn, int address_p)
 
     default:
       gcc_unreachable ();
+      return 0;
     }
 }
 
 /* Return size of INSN as int.  */
 static int
-sched_get_attr_size_int (rtx_insn *insn)
+sched_get_attr_size_int (rtx insn)
 {
   int size;
 
@@ -5780,7 +5745,7 @@ sched_get_attr_size_int (rtx_insn *insn)
 
 /* Return size of INSN as attribute enum value.  */
 enum attr_size
-m68k_sched_attr_size (rtx_insn *insn)
+m68k_sched_attr_size (rtx insn)
 {
   switch (sched_get_attr_size_int (insn))
     {
@@ -5795,13 +5760,14 @@ m68k_sched_attr_size (rtx_insn *insn)
 
     default:
       gcc_unreachable ();
+      return 0;
     }
 }
 
 /* Return operand X or Y (depending on OPX_P) of INSN,
    if it is a MEM, or NULL overwise.  */
 static enum attr_op_type
-sched_get_opxy_mem_type (rtx_insn *insn, bool opx_p)
+sched_get_opxy_mem_type (rtx insn, bool opx_p)
 {
   if (opx_p)
     {
@@ -5826,6 +5792,7 @@ sched_get_opxy_mem_type (rtx_insn *insn, bool opx_p)
 
 	default:
 	  gcc_unreachable ();
+	  return 0;
 	}
     }
   else
@@ -5851,13 +5818,14 @@ sched_get_opxy_mem_type (rtx_insn *insn, bool opx_p)
 
 	default:
 	  gcc_unreachable ();
+	  return 0;
 	}
     }
 }
 
 /* Implement op_mem attribute.  */
 enum attr_op_mem
-m68k_sched_attr_op_mem (rtx_insn *insn)
+m68k_sched_attr_op_mem (rtx insn)
 {
   enum attr_op_type opx;
   enum attr_op_type opy;
@@ -5883,6 +5851,7 @@ m68k_sched_attr_op_mem (rtx_insn *insn)
 
 	default:
 	  gcc_unreachable ();
+	  return 0;
 	}
     }
 
@@ -5901,6 +5870,7 @@ m68k_sched_attr_op_mem (rtx_insn *insn)
 
 	default:
 	  gcc_unreachable ();
+	  return 0;
 	}
     }
 
@@ -5954,6 +5924,26 @@ m68k_sched_attr_op_mem (rtx_insn *insn)
   return OP_MEM_I1;
 }
 
+/* Jump instructions types.  Indexed by INSN_UID.
+   The same rtl insn can be expanded into different asm instructions
+   depending on the cc0_status.  To properly determine type of jump
+   instructions we scan instruction stream and map jumps types to this
+   array.  */
+static enum attr_type *sched_branch_type;
+
+/* Return the type of the jump insn.  */
+enum attr_type
+m68k_sched_branch_type (rtx insn)
+{
+  enum attr_type type;
+
+  type = sched_branch_type[INSN_UID (insn)];
+
+  gcc_assert (type != 0);
+
+  return type;
+}
+
 /* Data for ColdFire V4 index bypass.
    Producer modifies register that is used as index in consumer with
    specified scale.  */
@@ -5976,8 +5966,8 @@ static state_t sched_adjust_cost_state;
 /* Implement adjust_cost scheduler hook.
    Return adjusted COST of dependency LINK between DEF_INSN and INSN.  */
 static int
-m68k_sched_adjust_cost (rtx_insn *insn, int, rtx_insn *def_insn, int cost,
-			unsigned int)
+m68k_sched_adjust_cost (rtx insn, rtx link ATTRIBUTE_UNUSED, rtx def_insn,
+			int cost)
 {
   int delay;
 
@@ -6063,7 +6053,7 @@ struct _sched_ib
     /* Size of buffer in records.  */
     int n_insns;
 
-    /* Array to hold data on adjustments made to the size of the buffer.  */
+    /* Array to hold data on adjustements made to the size of the buffer.  */
     int *adjust;
 
     /* Index of the above array.  */
@@ -6087,7 +6077,7 @@ static int sched_mem_unit_code;
 static int
 m68k_sched_variable_issue (FILE *sched_dump ATTRIBUTE_UNUSED,
 			   int sched_verbose ATTRIBUTE_UNUSED,
-			   rtx_insn *insn, int can_issue_more)
+			   rtx insn, int can_issue_more)
 {
   int insn_size;
 
@@ -6125,7 +6115,7 @@ m68k_sched_variable_issue (FILE *sched_dump ATTRIBUTE_UNUSED,
 	  if (sched_ib.records.adjust_index == sched_ib.records.n_insns)
 	    sched_ib.records.adjust_index = 0;
 
-	  /* Undo adjustment we did 7 instructions ago.  */
+	  /* Undo adjustement we did 7 instructions ago.  */
 	  sched_ib.size
 	    += sched_ib.records.adjust[sched_ib.records.adjust_index];
 
@@ -6140,14 +6130,7 @@ m68k_sched_variable_issue (FILE *sched_dump ATTRIBUTE_UNUSED,
 	  gcc_unreachable ();
 	}
 
-      if (insn_size > sched_ib.filled)
-	/* Scheduling for register pressure does not always take DFA into
-	   account.  Workaround instruction buffer not being filled enough.  */
-	{
-	  gcc_assert (sched_pressure == SCHED_PRESSURE_WEIGHTED);
-	  insn_size = sched_ib.filled;
-	}
-
+      gcc_assert (insn_size <= sched_ib.filled);
       --can_issue_more;
     }
   else if (GET_CODE (PATTERN (insn)) == ASM_INPUT
@@ -6169,7 +6152,7 @@ m68k_sched_first_cycle_multipass_dfa_lookahead (void)
   return m68k_sched_issue_rate () - 1;
 }
 
-/* Implementation of targetm.sched.init_global () hook.
+/* Implementation of targetm.sched.md_init_global () hook.
    It is invoked once per scheduling pass and is used here
    to initialize scheduler constants.  */
 static void
@@ -6177,27 +6160,42 @@ m68k_sched_md_init_global (FILE *sched_dump ATTRIBUTE_UNUSED,
 			   int sched_verbose ATTRIBUTE_UNUSED,
 			   int n_insns ATTRIBUTE_UNUSED)
 {
+  /* Init branch types.  */
+  {
+    rtx insn;
+
+    sched_branch_type = XCNEWVEC (enum attr_type, get_max_uid () + 1);
+
+    for (insn = get_insns (); insn != NULL_RTX; insn = NEXT_INSN (insn))
+      {
+	if (JUMP_P (insn))
+	  /* !!! FIXME: Implement real scan here.  */
+	  sched_branch_type[INSN_UID (insn)] = TYPE_BCC;
+      }
+  }
+
+#ifdef ENABLE_CHECKING
   /* Check that all instructions have DFA reservations and
      that all instructions can be issued from a clean state.  */
-  if (flag_checking)
-    {
-      rtx_insn *insn;
-      state_t state;
+  {
+    rtx insn;
+    state_t state;
 
-      state = alloca (state_size ());
+    state = alloca (state_size ());
 
-      for (insn = get_insns (); insn != NULL; insn = NEXT_INSN (insn))
-	{
-	  if (INSN_P (insn) && recog_memoized (insn) >= 0)
-	    {
-	      gcc_assert (insn_has_dfa_reservation_p (insn));
+    for (insn = get_insns (); insn != NULL_RTX; insn = NEXT_INSN (insn))
+      {
+ 	if (INSN_P (insn) && recog_memoized (insn) >= 0)
+	  {
+ 	    gcc_assert (insn_has_dfa_reservation_p (insn));
 
-	      state_reset (state);
-	      if (state_transition (state, insn) >= 0)
-		gcc_unreachable ();
-	    }
-	}
-    }
+ 	    state_reset (state);
+ 	    if (state_transition (state, insn) >= 0)
+ 	      gcc_unreachable ();
+ 	  }
+      }
+  }
+#endif
 
   /* Setup target cpu.  */
 
@@ -6257,9 +6255,12 @@ m68k_sched_md_finish_global (FILE *dump ATTRIBUTE_UNUSED,
   sched_ib.records.adjust = NULL;
   sched_ib.records.n_insns = 0;
   max_insn_size = 0;
+
+  free (sched_branch_type);
+  sched_branch_type = NULL;
 }
 
-/* Implementation of targetm.sched.init () hook.
+/* Implementation of targetm.sched.md_init () hook.
    It is invoked each time scheduler starts on the new block (basic block or
    extended basic block).  */
 static void
@@ -6335,15 +6336,14 @@ m68k_sched_dfa_post_advance_cycle (void)
   while (--i >= 0)
     {
       if (state_transition (curr_state, sched_ib.insn) >= 0)
-	/* Pick up scheduler state.  */
-	++sched_ib.filled;
+	gcc_unreachable ();
     }
 }
 
 /* Return X or Y (depending on OPX_P) operand of INSN,
    if it is an integer register, or NULL overwise.  */
 static rtx
-sched_get_reg_operand (rtx_insn *insn, bool opx_p)
+sched_get_reg_operand (rtx insn, bool opx_p)
 {
   rtx op = NULL;
 
@@ -6376,7 +6376,7 @@ sched_get_reg_operand (rtx_insn *insn, bool opx_p)
 /* Return true, if X or Y (depending on OPX_P) operand of INSN
    is a MEM.  */
 static bool
-sched_mem_operand_p (rtx_insn *insn, bool opx_p)
+sched_mem_operand_p (rtx insn, bool opx_p)
 {
   switch (sched_get_opxy_mem_type (insn, opx_p))
     {
@@ -6392,7 +6392,7 @@ sched_mem_operand_p (rtx_insn *insn, bool opx_p)
 /* Return X or Y (depending on OPX_P) operand of INSN,
    if it is a MEM, or NULL overwise.  */
 static rtx
-sched_get_mem_operand (rtx_insn *insn, bool must_read_p, bool must_write_p)
+sched_get_mem_operand (rtx insn, bool must_read_p, bool must_write_p)
 {
   bool opx_p;
   bool opy_p;
@@ -6425,7 +6425,7 @@ sched_get_mem_operand (rtx_insn *insn, bool must_read_p, bool must_write_p)
 /* Return non-zero if PRO modifies register used as part of
    address in CON.  */
 int
-m68k_sched_address_bypass_p (rtx_insn *pro, rtx_insn *con)
+m68k_sched_address_bypass_p (rtx pro, rtx con)
 {
   rtx pro_x;
   rtx con_mem_read;
@@ -6447,7 +6447,7 @@ m68k_sched_address_bypass_p (rtx_insn *pro, rtx_insn *con)
    if PRO modifies register used as index in CON,
    return scale of indexed memory access in CON.  Return zero overwise.  */
 static int
-sched_get_indexed_address_scale (rtx_insn *pro, rtx_insn *con)
+sched_get_indexed_address_scale (rtx pro, rtx con)
 {
   rtx reg;
   rtx mem;
@@ -6476,7 +6476,7 @@ sched_get_indexed_address_scale (rtx_insn *pro, rtx_insn *con)
 /* Return non-zero if PRO modifies register used
    as index with scale 2 or 4 in CON.  */
 int
-m68k_sched_indexed_address_bypass_p (rtx_insn *pro, rtx_insn *con)
+m68k_sched_indexed_address_bypass_p (rtx pro, rtx con)
 {
   gcc_assert (sched_cfv4_bypass_data.pro == NULL
 	      && sched_cfv4_bypass_data.con == NULL
@@ -6525,121 +6525,6 @@ m68k_trampoline_init (rtx m_tramp, tree fndecl, rtx chain_value)
   emit_move_insn (mem, fnaddr);
 
   FINALIZE_TRAMPOLINE (XEXP (m_tramp, 0));
-}
-
-/* On the 68000, the RTS insn cannot pop anything.
-   On the 68010, the RTD insn may be used to pop them if the number
-     of args is fixed, but if the number is variable then the caller
-     must pop them all.  RTD can't be used for library calls now
-     because the library is compiled with the Unix compiler.
-   Use of RTD is a selectable option, since it is incompatible with
-   standard Unix calling sequences.  If the option is not selected,
-   the caller must always pop the args.  */
-
-static poly_int64
-m68k_return_pops_args (tree fundecl, tree funtype, poly_int64 size)
-{
-  return ((TARGET_RTD
-	   && (!fundecl
-	       || TREE_CODE (fundecl) != IDENTIFIER_NODE)
-	   && (!stdarg_p (funtype)))
-	  ? (HOST_WIDE_INT) size : 0);
-}
-
-/* Make sure everything's fine if we *don't* have a given processor.
-   This assumes that putting a register in fixed_regs will keep the
-   compiler's mitts completely off it.  We don't bother to zero it out
-   of register classes.  */
-
-static void
-m68k_conditional_register_usage (void)
-{
-  int i;
-  HARD_REG_SET x;
-  if (!TARGET_HARD_FLOAT)
-    {
-      COPY_HARD_REG_SET (x, reg_class_contents[(int)FP_REGS]);
-      for (i = 0; i < FIRST_PSEUDO_REGISTER; i++)
-        if (TEST_HARD_REG_BIT (x, i))
-	  fixed_regs[i] = call_used_regs[i] = 1;
-    }
-  if (flag_pic)
-    fixed_regs[PIC_REG] = call_used_regs[PIC_REG] = 1;
-}
-
-static void
-m68k_init_sync_libfuncs (void)
-{
-  init_sync_libfuncs (UNITS_PER_WORD);
-}
-
-/* Implements EPILOGUE_USES.  All registers are live on exit from an
-   interrupt routine.  */
-bool
-m68k_epilogue_uses (int regno ATTRIBUTE_UNUSED)
-{
-  return (reload_completed
-	  && (m68k_get_function_kind (current_function_decl)
-	      == m68k_fk_interrupt_handler));
-}
-
-
-/* Implement TARGET_C_EXCESS_PRECISION.
-
-   Set the value of FLT_EVAL_METHOD in float.h.  When using 68040 fp
-   instructions, we get proper intermediate rounding, otherwise we
-   get extended precision results.  */
-
-static enum flt_eval_method
-m68k_excess_precision (enum excess_precision_type type)
-{
-  switch (type)
-    {
-      case EXCESS_PRECISION_TYPE_FAST:
-	/* The fastest type to promote to will always be the native type,
-	   whether that occurs with implicit excess precision or
-	   otherwise.  */
-	return FLT_EVAL_METHOD_PROMOTE_TO_FLOAT;
-      case EXCESS_PRECISION_TYPE_STANDARD:
-      case EXCESS_PRECISION_TYPE_IMPLICIT:
-	/* Otherwise, the excess precision we want when we are
-	   in a standards compliant mode, and the implicit precision we
-	   provide can be identical.  */
-	if (TARGET_68040 || ! TARGET_68881)
-	  return FLT_EVAL_METHOD_PROMOTE_TO_FLOAT;
-
-	return FLT_EVAL_METHOD_PROMOTE_TO_LONG_DOUBLE;
-      default:
-	gcc_unreachable ();
-    }
-  return FLT_EVAL_METHOD_UNPREDICTABLE;
-}
-
-/* Implement PUSH_ROUNDING.  On the 680x0, sp@- in a byte insn really pushes
-   a word.  On the ColdFire, sp@- in a byte insn pushes just a byte.  */
-
-poly_int64
-m68k_push_rounding (poly_int64 bytes)
-{
-  if (TARGET_COLDFIRE)
-    return bytes;
-  return (bytes + 1) & ~1;
-}
-
-/* Implement TARGET_PROMOTE_FUNCTION_MODE.  */
-
-static machine_mode
-m68k_promote_function_mode (const_tree type, machine_mode mode,
-                            int *punsignedp ATTRIBUTE_UNUSED,
-                            const_tree fntype ATTRIBUTE_UNUSED,
-                            int for_return)
-{
-  /* Promote libcall arguments narrower than int to match the normal C
-     ABI (for which promotions are handled via
-     TARGET_PROMOTE_PROTOTYPES).  */
-  if (type == NULL_TREE && !for_return && (mode == QImode || mode == HImode))
-    return SImode;
-  return mode;
 }
 
 #include "gt-m68k.h"

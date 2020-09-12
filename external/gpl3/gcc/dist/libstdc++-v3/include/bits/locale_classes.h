@@ -1,6 +1,8 @@
 // Locale support -*- C++ -*-
 
-// Copyright (C) 1997-2019 Free Software Foundation, Inc.
+// Copyright (C) 1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005,
+// 2006, 2007, 2008, 2009, 2010
+// Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
@@ -22,9 +24,9 @@
 // see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
 // <http://www.gnu.org/licenses/>.
 
-/** @file bits/locale_classes.h
+/** @file locale_classes.h
  *  This is an internal header file, included by other library headers.
- *  Do not attempt to use it directly. @headername{locale}
+ *  You should not attempt to use it directly.
  */
 
 //
@@ -40,9 +42,7 @@
 #include <string>
 #include <ext/atomicity.h>
 
-namespace std _GLIBCXX_VISIBILITY(default)
-{
-_GLIBCXX_BEGIN_NAMESPACE_VERSION
+_GLIBCXX_BEGIN_NAMESPACE(std)
 
   // 22.1.1 Class locale
   /**
@@ -121,7 +121,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
      *
      *  Constructs a copy of @a other.
      *
-     *  @param  __other  The locale to copy.
+     *  @param  other  The locale to copy.
     */
     locale(const locale& __other) throw();
 
@@ -130,8 +130,8 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
      *
      *  Constructs a copy of the named C library locale.
      *
-     *  @param  __s  Name of the locale to construct.
-     *  @throw  std::runtime_error if __s is null or an undefined locale.
+     *  @param  s  Name of the locale to construct.
+     *  @throw  std::runtime_error if s is null or an undefined locale.
     */
     explicit
     locale(const char* __s);
@@ -143,40 +143,12 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
      *  cat are replaced with those from the locale named by @a s.  If base is
      *  named, this locale instance will also be named.
      *
-     *  @param  __base  The locale to copy.
-     *  @param  __s  Name of the locale to use facets from.
-     *  @param  __cat  Set of categories defining the facets to use from __s.
-     *  @throw  std::runtime_error if __s is null or an undefined locale.
+     *  @param  base  The locale to copy.
+     *  @param  s  Name of the locale to use facets from.
+     *  @param  cat  Set of categories defining the facets to use from s.
+     *  @throw  std::runtime_error if s is null or an undefined locale.
     */
     locale(const locale& __base, const char* __s, category __cat);
-
-#if __cplusplus >= 201103L
-    /**
-     *  @brief  Named locale constructor.
-     *
-     *  Constructs a copy of the named C library locale.
-     *
-     *  @param  __s  Name of the locale to construct.
-     *  @throw  std::runtime_error if __s is an undefined locale.
-    */
-    explicit
-    locale(const std::string& __s) : locale(__s.c_str()) { }
-
-    /**
-     *  @brief  Construct locale with facets from another locale.
-     *
-     *  Constructs a copy of the locale @a base.  The facets specified by @a
-     *  cat are replaced with those from the locale named by @a s.  If base is
-     *  named, this locale instance will also be named.
-     *
-     *  @param  __base  The locale to copy.
-     *  @param  __s  Name of the locale to use facets from.
-     *  @param  __cat  Set of categories defining the facets to use from __s.
-     *  @throw  std::runtime_error if __s is an undefined locale.
-    */
-    locale(const locale& __base, const std::string& __s, category __cat)
-    : locale(__base, __s.c_str(), __cat) { }
-#endif
 
     /**
      *  @brief  Construct locale with facets from another locale.
@@ -185,22 +157,21 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
      *  cat are replaced with those from the locale @a add.  If @a base and @a
      *  add are named, this locale instance will also be named.
      *
-     *  @param  __base  The locale to copy.
-     *  @param  __add  The locale to use facets from.
-     *  @param  __cat  Set of categories defining the facets to use from add.
+     *  @param  base  The locale to copy.
+     *  @param  add  The locale to use facets from.
+     *  @param  cat  Set of categories defining the facets to use from add.
     */
     locale(const locale& __base, const locale& __add, category __cat);
 
     /**
      *  @brief  Construct locale with another facet.
      *
-     *  Constructs a copy of the locale @a __other.  The facet @a __f
-     *  is added to @a __other, replacing an existing facet of type
-     *  Facet if there is one.  If @a __f is null, this locale is a
-     *  copy of @a __other.
+     *  Constructs a copy of the locale @a other.  The facet @f is added to
+     *  @other, replacing an existing facet of type Facet if there is one.  If
+     *  @f is null, this locale is a copy of @a other.
      *
-     *  @param  __other  The locale to copy.
-     *  @param  __f  The facet to add in.
+     *  @param  other  The locale to copy.
+     *  @param  f  The facet to add in.
     */
     template<typename _Facet>
       locale(const locale& __other, _Facet* __f);
@@ -213,7 +184,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
      *
      *  Set this locale to be a copy of @a other.
      *
-     *  @param  __other  The locale to copy.
+     *  @param  other  The locale to copy.
      *  @return  A reference to this locale.
     */
     const locale&
@@ -226,10 +197,10 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
      *  existing facet of type Facet from the locale @a other into the new
      *  locale.
      *
-     *  @tparam  _Facet  The facet type to copy from other
-     *  @param  __other  The locale to copy from.
+     *  @param  Facet  The facet type to copy from other
+     *  @param  other  The locale to copy from.
      *  @return  Newly constructed locale.
-     *  @throw  std::runtime_error if __other has no facet of type _Facet.
+     *  @throw  std::runtime_error if other has no facet of type Facet.
     */
     template<typename _Facet>
       locale
@@ -240,14 +211,13 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
      *  @brief  Return locale name.
      *  @return  Locale name or "*" if unnamed.
     */
-    _GLIBCXX_DEFAULT_ABI_TAG
     string
     name() const;
 
     /**
      *  @brief  Locale equality.
      *
-     *  @param  __other  The locale to compare against.
+     *  @param  other  The locale to compare against.
      *  @return  True if other and this refer to the same locale instance, are
      *		 copies, or have the same name.  False otherwise.
     */
@@ -257,8 +227,8 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
     /**
      *  @brief  Locale inequality.
      *
-     *  @param  __other  The locale to compare against.
-     *  @return  ! (*this == __other)
+     *  @param  other  The locale to compare against.
+     *  @return  ! (*this == other)
     */
     bool
     operator!=(const locale& __other) const throw()
@@ -275,9 +245,9 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
      *  std::sort(v.begin(), v.end(), loc);
      *  @endcode
      *
-     *  @param  __s1  First string to compare.
-     *  @param  __s2  Second string to compare.
-     *  @return  True if collate<_Char> facet compares __s1 < __s2, else false.
+     *  @param  s1  First string to compare.
+     *  @param  s2  Second string to compare.
+     *  @return  True if collate<Char> facet compares s1 < s2, else false.
     */
     template<typename _Char, typename _Traits, typename _Alloc>
       bool
@@ -292,11 +262,11 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
      *  copy of the previous global locale.  If the argument has a name, it
      *  will also call std::setlocale(LC_ALL, loc.name()).
      *
-     *  @param  __loc  The new locale to make global.
+     *  @param  locale  The new locale to make global.
      *  @return  Copy of the old global locale.
     */
     static locale
-    global(const locale& __loc);
+    global(const locale&);
 
     /**
      *  @brief  Return reference to the C locale.
@@ -350,10 +320,6 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 
     void
     _M_coalesce(const locale& __base, const locale& __add, category __cat);
-
-#if _GLIBCXX_USE_CXX11_ABI
-    static const id* const _S_twinned_facets[];
-#endif
   };
 
 
@@ -397,7 +363,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
      *  facet is destroyed when the last referencing locale is destroyed.
      *  Otherwise the facet will never be destroyed.
      *
-     *  @param __refs  The initial value for reference count.
+     *  @param refs  The initial value for reference count.
     */
     explicit
     facet(size_t __refs = 0) throw() : _M_refcount(__refs ? 1 : 0)
@@ -428,19 +394,6 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
     _GLIBCXX_CONST static const char*
     _S_get_c_name() throw();
 
-#if __cplusplus < 201103L
-  private:
-    facet(const facet&);  // Not defined.
-
-    facet&
-    operator=(const facet&);  // Not defined.
-#else
-    facet(const facet&) = delete;
-
-    facet&
-    operator=(const facet&) = delete;
-#endif
-
   private:
     void
     _M_add_reference() const throw()
@@ -449,11 +402,8 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
     void
     _M_remove_reference() const throw()
     {
-      // Be race-detector-friendly.  For more info see bits/c++config.
-      _GLIBCXX_SYNCHRONIZATION_HAPPENS_BEFORE(&_M_refcount);
       if (__gnu_cxx::__exchange_and_add_dispatch(&_M_refcount, -1) == 1)
 	{
-          _GLIBCXX_SYNCHRONIZATION_HAPPENS_AFTER(&_M_refcount);
 	  __try
 	    { delete this; }
 	  __catch(...)
@@ -461,11 +411,10 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	}
     }
 
-    const facet* _M_sso_shim(const id*) const;
-    const facet* _M_cow_shim(const id*) const;
+    facet(const facet&);  // Not defined.
 
-  protected:
-    class __shim; // For internal use only.
+    facet&
+    operator=(const facet&);  // Not defined.
   };
 
 
@@ -559,11 +508,8 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
     void
     _M_remove_reference() throw()
     {
-      // Be race-detector-friendly.  For more info see bits/c++config.
-      _GLIBCXX_SYNCHRONIZATION_HAPPENS_BEFORE(&_M_refcount);
       if (__gnu_cxx::__exchange_and_add_dispatch(&_M_refcount, -1) == 1)
 	{
-          _GLIBCXX_SYNCHRONIZATION_HAPPENS_AFTER(&_M_refcount);
 	  __try
 	    { delete this; }
 	  __catch(...)
@@ -610,20 +556,42 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       _M_init_facet(_Facet* __facet)
       { _M_install_facet(&_Facet::id, __facet); }
 
-    template<typename _Facet>
-      void
-      _M_init_facet_unchecked(_Facet* __facet)
-      {
-	__facet->_M_add_reference();
-	_M_facets[_Facet::id._M_id()] = __facet;
-      }
-
     void
     _M_install_cache(const facet*, size_t);
-
-    void _M_init_extra(facet**);
-    void _M_init_extra(void*, void*, const char*, const char*);
   };
+
+
+  /**
+   *  @brief  Test for the presence of a facet.
+   *
+   *  has_facet tests the locale argument for the presence of the facet type
+   *  provided as the template parameter.  Facets derived from the facet
+   *  parameter will also return true.
+   *
+   *  @param  Facet  The facet type to test the presence of.
+   *  @param  locale  The locale to test.
+   *  @return  true if locale contains a facet of type Facet, else false.
+  */
+  template<typename _Facet>
+    bool
+    has_facet(const locale& __loc) throw();
+
+  /**
+   *  @brief  Return a facet.
+   *
+   *  use_facet looks for and returns a reference to a facet of type Facet
+   *  where Facet is the template parameter.  If has_facet(locale) is true,
+   *  there is a suitable facet to return.  It throws std::bad_cast if the
+   *  locale doesn't contain a facet of type Facet.
+   *
+   *  @param  Facet  The facet type to access.
+   *  @param  locale  The locale to use.
+   *  @return  Reference to facet of type Facet.
+   *  @throw  std::bad_cast if locale doesn't contain a facet of type Facet.
+  */
+  template<typename _Facet>
+    const _Facet&
+    use_facet(const locale& __loc);
 
 
   /**
@@ -639,7 +607,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
    *  collate facet.
   */
   template<typename _CharT>
-    class _GLIBCXX_NAMESPACE_CXX11 collate : public locale::facet
+    class collate : public locale::facet
     {
     public:
       // Types:
@@ -663,7 +631,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
        *
        *  This is the constructor provided by the standard.
        *
-       *  @param __refs  Passed to the base facet class.
+       *  @param refs  Passed to the base facet class.
       */
       explicit
       collate(size_t __refs = 0)
@@ -676,8 +644,8 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
        *  This is a constructor for use by the library itself to set up new
        *  locales.
        *
-       *  @param __cloc  The C locale.
-       *  @param __refs  Passed to the base facet class.
+       *  @param cloc  The C locale.
+       *  @param refs  Passed to the base facet class.
       */
       explicit
       collate(__c_locale __cloc, size_t __refs = 0)
@@ -690,10 +658,10 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
        *  This function compares two strings and returns the result by calling
        *  collate::do_compare().
        *
-       *  @param __lo1  Start of string 1.
-       *  @param __hi1  End of string 1.
-       *  @param __lo2  Start of string 2.
-       *  @param __hi2  End of string 2.
+       *  @param lo1  Start of string 1.
+       *  @param hi1  End of string 1.
+       *  @param lo2  Start of string 2.
+       *  @param hi2  End of string 2.
        *  @return  1 if string1 > string2, -1 if string1 < string2, else 0.
       */
       int
@@ -711,8 +679,8 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
        *  locales, it may replace two chars with one, change a char for
        *  another, etc.  It does so by returning collate::do_transform().
        *
-       *  @param __lo  Start of string.
-       *  @param __hi  End of string.
+       *  @param lo  Start of string.
+       *  @param hi  End of string.
        *  @return  Transformed string_type.
       */
       string_type
@@ -725,8 +693,8 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
        *  This function computes and returns a hash on the input string.  It
        *  does so by returning collate::do_hash().
        *
-       *  @param __lo  Start of string.
-       *  @param __hi  End of string.
+       *  @param lo  Start of string.
+       *  @param hi  End of string.
        *  @return  Hash value.
       */
       long
@@ -752,10 +720,10 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
        *  This function is a hook for derived classes to change the value
        *  returned.  @see compare().
        *
-       *  @param __lo1  Start of string 1.
-       *  @param __hi1  End of string 1.
-       *  @param __lo2  Start of string 2.
-       *  @param __hi2  End of string 2.
+       *  @param lo1  Start of string 1.
+       *  @param hi1  End of string 1.
+       *  @param lo2  Start of string 2.
+       *  @param hi2  End of string 2.
        *  @return  1 if string1 > string2, -1 if string1 < string2, else 0.
       */
       virtual int
@@ -768,9 +736,11 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
        *  This function is a hook for derived classes to change the value
        *  returned.
        *
-       *  @param __lo  Start.
-       *  @param __hi  End.
-       *  @return  transformed string.
+       *  @param lo1  Start of string 1.
+       *  @param hi1  End of string 1.
+       *  @param lo2  Start of string 2.
+       *  @param hi2  End of string 2.
+       *  @return  1 if string1 > string2, -1 if string1 < string2, else 0.
       */
       virtual string_type
       do_transform(const _CharT* __lo, const _CharT* __hi) const;
@@ -781,8 +751,8 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
        *  This function computes and returns a hash on the input string.  This
        *  function is a hook for derived classes to change the value returned.
        *
-       *  @param __lo  Start of string.
-       *  @param __hi  End of string.
+       *  @param lo  Start of string.
+       *  @param hi  End of string.
        *  @return  Hash value.
       */
       virtual long
@@ -813,7 +783,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 
   /// class collate_byname [22.2.4.2].
   template<typename _CharT>
-    class _GLIBCXX_NAMESPACE_CXX11 collate_byname : public collate<_CharT>
+    class collate_byname : public collate<_CharT>
     {
     public:
       //@{
@@ -834,20 +804,15 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	  }
       }
 
-#if __cplusplus >= 201103L
-      explicit
-      collate_byname(const string& __s, size_t __refs = 0)
-      : collate_byname(__s.c_str(), __refs) { }
-#endif
-
     protected:
       virtual
       ~collate_byname() { }
     };
 
-_GLIBCXX_END_NAMESPACE_VERSION
-} // namespace
+_GLIBCXX_END_NAMESPACE
 
+#ifndef _GLIBCXX_EXPORT_TEMPLATE
 # include <bits/locale_classes.tcc>
+#endif
 
 #endif

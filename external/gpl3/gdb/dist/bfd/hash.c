@@ -1,5 +1,6 @@
 /* hash.c -- hash table routines for BFD
-   Copyright (C) 1993-2019 Free Software Foundation, Inc.
+   Copyright 1993, 1994, 1995, 1997, 1999, 2001, 2002, 2003, 2004, 2005,
+   2006, 2007, 2009, 2010 Free Software Foundation, Inc.
    Written by Steve Chamberlain <sac@cygnus.com>
 
    This file is part of BFD, the Binary File Descriptor library.
@@ -231,8 +232,8 @@ EXAMPLE
 
 .struct bfd_hash_entry *
 .@var{function_name} (struct bfd_hash_entry *entry,
-.		      struct bfd_hash_table *table,
-.		      const char *string)
+.                     struct bfd_hash_table *table,
+.                     const char *string)
 .{
 .  struct @var{entry_type} *ret = (@var{entry_type} *) entry;
 .
@@ -242,12 +243,12 @@ EXAMPLE
 .    {
 .      ret = bfd_hash_allocate (table, sizeof (* ret));
 .      if (ret == NULL)
-.	 return NULL;
+.        return NULL;
 .    }
 .
 . {* Call the allocation method of the base class.  *}
 .  ret = ((@var{entry_type} *)
-.	  @var{base_newfunc} ((struct bfd_hash_entry *) ret, table, string));
+.	 @var{base_newfunc} ((struct bfd_hash_entry *) ret, table, string));
 .
 . {* Initialize the local fields here.  *}
 .
@@ -309,37 +310,28 @@ higher_prime_number (unsigned long n)
 {
   /* These are primes that are near, but slightly smaller than, a
      power of two.  */
-  static const unsigned long primes[] =
-    {
-      (unsigned long) 31,
-      (unsigned long) 61,
-      (unsigned long) 127,
-      (unsigned long) 251,
-      (unsigned long) 509,
-      (unsigned long) 1021,
-      (unsigned long) 2039,
-      (unsigned long) 4093,
-      (unsigned long) 8191,
-      (unsigned long) 16381,
-      (unsigned long) 32749,
-      (unsigned long) 65521,
-      (unsigned long) 131071,
-      (unsigned long) 262139,
-      (unsigned long) 524287,
-      (unsigned long) 1048573,
-      (unsigned long) 2097143,
-      (unsigned long) 4194301,
-      (unsigned long) 8388593,
-      (unsigned long) 16777213,
-      (unsigned long) 33554393,
-      (unsigned long) 67108859,
-      (unsigned long) 134217689,
-      (unsigned long) 268435399,
-      (unsigned long) 536870909,
-      (unsigned long) 1073741789,
-      (unsigned long) 2147483647,
+  static const unsigned long primes[] = {
+    (unsigned long) 127,
+    (unsigned long) 2039,
+    (unsigned long) 32749,
+    (unsigned long) 65521,
+    (unsigned long) 131071,
+    (unsigned long) 262139,
+    (unsigned long) 524287,
+    (unsigned long) 1048573,
+    (unsigned long) 2097143,
+    (unsigned long) 4194301,
+    (unsigned long) 8388593,
+    (unsigned long) 16777213,
+    (unsigned long) 33554393,
+    (unsigned long) 67108859,
+    (unsigned long) 134217689,
+    (unsigned long) 268435399,
+    (unsigned long) 536870909,
+    (unsigned long) 1073741789,
+    (unsigned long) 2147483647,
 					/* 4294967291L */
-      ((unsigned long) 2147483647) + ((unsigned long) 2147483644),
+    ((unsigned long) 2147483647) + ((unsigned long) 2147483644),
   };
 
   const unsigned long *low = &primes[0];
@@ -360,7 +352,7 @@ higher_prime_number (unsigned long n)
   return *low;
 }
 
-static unsigned long bfd_default_hash_table_size = DEFAULT_SIZE;
+static size_t bfd_default_hash_table_size = DEFAULT_SIZE;
 
 /* Create a new hash table, given a number of entries.  */
 
@@ -372,15 +364,9 @@ bfd_hash_table_init_n (struct bfd_hash_table *table,
 		       unsigned int entsize,
 		       unsigned int size)
 {
-  unsigned long alloc;
+  unsigned int alloc;
 
-  alloc = size;
-  alloc *= sizeof (struct bfd_hash_entry *);
-  if (alloc / sizeof (struct bfd_hash_entry *) != size)
-    {
-      bfd_set_error (bfd_error_no_memory);
-      return FALSE;
-    }
+  alloc = size * sizeof (struct bfd_hash_entry *);
 
   table->memory = (void *) objalloc_create ();
   if (table->memory == NULL)
@@ -392,7 +378,6 @@ bfd_hash_table_init_n (struct bfd_hash_table *table,
       objalloc_alloc ((struct objalloc *) table->memory, alloc);
   if (table->table == NULL)
     {
-      bfd_hash_table_free (table);
       bfd_set_error (bfd_error_no_memory);
       return FALSE;
     }
@@ -435,7 +420,6 @@ bfd_hash_hash (const char *string, unsigned int *lenp)
   unsigned int len;
   unsigned int c;
 
-  BFD_ASSERT (string != NULL);
   hash = 0;
   len = 0;
   s = (const unsigned char *) string;
@@ -484,7 +468,7 @@ bfd_hash_lookup (struct bfd_hash_table *table,
       char *new_string;
 
       new_string = (char *) objalloc_alloc ((struct objalloc *) table->memory,
-					    len + 1);
+                                            len + 1);
       if (!new_string)
 	{
 	  bfd_set_error (bfd_error_no_memory);
@@ -539,7 +523,7 @@ bfd_hash_insert (struct bfd_hash_table *table,
 	  table->frozen = 1;
 	  return hashp;
 	}
-      memset (newtable, 0, alloc);
+      memset ((PTR) newtable, 0, alloc);
 
       for (hi = 0; hi < table->size; hi ++)
 	while (table->table[hi])
@@ -635,7 +619,7 @@ bfd_hash_newfunc (struct bfd_hash_entry *entry,
 {
   if (entry == NULL)
     entry = (struct bfd_hash_entry *) bfd_hash_allocate (table,
-							 sizeof (* entry));
+                                                         sizeof (* entry));
   return entry;
 }
 
@@ -661,15 +645,15 @@ bfd_hash_traverse (struct bfd_hash_table *table,
   table->frozen = 0;
 }
 
-unsigned long
-bfd_hash_set_default_size (unsigned long hash_size)
+void
+bfd_hash_set_default_size (bfd_size_type hash_size)
 {
   /* Extend this prime list if you want more granularity of hash table size.  */
-  static const unsigned long hash_size_primes[] =
+  static const bfd_size_type hash_size_primes[] =
     {
-      31, 61, 127, 251, 509, 1021, 2039, 4091, 8191, 16381, 32749, 65537
+      251, 509, 1021, 2039, 4051, 8599, 16699, 32749
     };
-  unsigned int _index;
+  size_t _index;
 
   /* Work out best prime number near the hash_size.  */
   for (_index = 0; _index < ARRAY_SIZE (hash_size_primes) - 1; ++_index)
@@ -677,7 +661,6 @@ bfd_hash_set_default_size (unsigned long hash_size)
       break;
 
   bfd_default_hash_table_size = hash_size_primes[_index];
-  return bfd_default_hash_table_size;
 }
 
 /* A few different object file formats (a.out, COFF, ELF) use a string
@@ -732,7 +715,7 @@ strtab_hash_newfunc (struct bfd_hash_entry *entry,
      subclass.  */
   if (ret == NULL)
     ret = (struct strtab_hash_entry *) bfd_hash_allocate (table,
-							  sizeof (* ret));
+                                                          sizeof (* ret));
   if (ret == NULL)
     return NULL;
 
@@ -809,8 +792,7 @@ _bfd_stringtab_free (struct bfd_strtab_hash *table)
 
 /* Get the index of a string in a strtab, adding it if it is not
    already present.  If HASH is FALSE, we don't really use the hash
-   table, and we don't eliminate duplicate strings.  If COPY is true
-   then store a copy of STR if creating a new entry.  */
+   table, and we don't eliminate duplicate strings.  */
 
 bfd_size_type
 _bfd_stringtab_add (struct bfd_strtab_hash *tab,
@@ -829,20 +811,18 @@ _bfd_stringtab_add (struct bfd_strtab_hash *tab,
   else
     {
       entry = (struct strtab_hash_entry *) bfd_hash_allocate (&tab->table,
-							      sizeof (* entry));
+                                                              sizeof (* entry));
       if (entry == NULL)
 	return (bfd_size_type) -1;
       if (! copy)
 	entry->root.string = str;
       else
 	{
-	  size_t len = strlen (str) + 1;
 	  char *n;
 
-	  n = (char *) bfd_hash_allocate (&tab->table, len);
+	  n = (char *) bfd_hash_allocate (&tab->table, strlen (str) + 1);
 	  if (n == NULL)
 	    return (bfd_size_type) -1;
-	  memcpy (n, str, len);
 	  entry->root.string = n;
 	}
       entry->index = (bfd_size_type) -1;

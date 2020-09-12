@@ -1,6 +1,7 @@
 /* This test program is part of GDB, the GNU debugger.
 
-   Copyright 1992-2019 Free Software Foundation, Inc.
+   Copyright 1992, 1993, 1994, 1997, 1999, 2004, 2007, 2008, 2009, 2010, 2011
+   Free Software Foundation, Inc.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -13,7 +14,8 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.
+   */
 
 /*
  *	Test file with lots of different types, for testing the
@@ -88,14 +90,14 @@ double		v_double_array[2];
    a special case kludge in GDB (Unix system include files like to define
    caddr_t), but for a variety of types.  */
 typedef char *char_addr;
-char_addr a_char_addr;
+static char_addr a_char_addr;
 typedef unsigned short *ushort_addr;
-ushort_addr a_ushort_addr;
+static ushort_addr a_ushort_addr;
 typedef signed long *slong_addr;
-slong_addr a_slong_addr;
+static slong_addr a_slong_addr;
 #ifndef NO_LONG_LONG
 typedef signed long long *slong_long_addr;
-slong_long_addr a_slong_long_addr;
+static slong_long_addr a_slong_long_addr;
 #endif
 
 char		*v_char_pointer;
@@ -135,7 +137,7 @@ struct t_struct {
 #endif
     float	v_float_member;
     double	v_double_member;
-} v_struct1, *v_struct_ptr1;
+} v_struct1;
 
 struct {
     char	v_char_member;
@@ -147,7 +149,7 @@ struct {
 #endif
     float	v_float_member;
     double	v_double_member;
-} v_struct2, *v_struct_ptr2;
+} v_struct2;
 
 /**** unions *******/
 
@@ -161,7 +163,7 @@ union t_union {
 #endif
     float	v_float_member;
     double	v_double_member;
-} v_union, *v_union_ptr;
+} v_union;
 
 union {
     char	v_char_member;
@@ -173,7 +175,7 @@ union {
 #endif
     float	v_float_member;
     double	v_double_member;
-} v_union2, *v_union_ptr2;
+} v_union2;
 
 /*** Functions returning type ********/
 
@@ -246,6 +248,10 @@ enum cars {chevy, ford, porsche} clunker;
 
 int main ()
 {
+#ifdef usestubs
+  set_debug_traps();
+  breakpoint();
+#endif
   /* Some linkers (e.g. on AIX) remove unreferenced variables,
      so make sure to reference them. */
   v_char = 0;

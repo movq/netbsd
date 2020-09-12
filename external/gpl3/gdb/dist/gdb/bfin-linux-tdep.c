@@ -1,6 +1,7 @@
 /* Target-dependent code for Analog Devices Blackfin processor, for GDB.
 
-   Copyright (C) 2005-2019 Free Software Foundation, Inc.
+   Copyright (C) 2005, 2006, 2007, 2008, 2009, 2010, 2011
+   Free Software Foundation, Inc.
 
    Contributed by Analog Devices, Inc.
 
@@ -99,9 +100,11 @@ bfin_linux_sigframe_init (const struct tramp_frame *self,
 			  struct trad_frame_cache *this_cache,
 			  CORE_ADDR func)
 {
+  struct gdbarch *gdbarch = get_frame_arch (this_frame);
   CORE_ADDR sp = get_frame_sp (this_frame);
   CORE_ADDR pc = get_frame_pc (this_frame);
   CORE_ADDR sigcontext = sp + SIGCONTEXT_OFFSET;
+  struct frame_id this_id;
   const int *reg_offset = bfin_linux_sigcontext_reg_offset;
   int i;
 
@@ -121,16 +124,16 @@ static const struct tramp_frame bfin_linux_sigframe =
   {
     { 0x00ADE128, 0xffffffff },	/* P0 = __NR_rt_sigreturn; */
     { 0x00A0, 0xffff },		/* EXCPT 0; */
-    { TRAMP_SENTINEL_INSN, ULONGEST_MAX },
+    { TRAMP_SENTINEL_INSN, -1 },
   },
   bfin_linux_sigframe_init,
 };
 
 static LONGEST
 bfin_linux_get_syscall_number (struct gdbarch *gdbarch,
-			       thread_info *thread)
+                               ptid_t ptid)
 {
-  struct regcache *regcache = get_thread_regcache (thread);
+  struct regcache *regcache = get_thread_regcache (ptid);
   enum bfd_endian byte_order = gdbarch_byte_order (gdbarch);
   /* The content of a register.  */
   gdb_byte buf[4];
@@ -140,7 +143,7 @@ bfin_linux_get_syscall_number (struct gdbarch *gdbarch,
   /* Getting the system call number from the register.
      When dealing with Blackfin architecture, this information
      is stored at %p0 register.  */
-  regcache->cooked_read (BFIN_P0_REGNUM, buf);
+  regcache_cooked_read (regcache, BFIN_P0_REGNUM, buf);
 
   ret = extract_signed_integer (buf, 4, byte_order);
 
@@ -156,10 +159,13 @@ bfin_linux_init_abi (struct gdbarch_info info, struct gdbarch *gdbarch)
   tramp_frame_prepend_unwinder (gdbarch, &bfin_linux_sigframe);
 
   /* Functions for 'catch syscall'.  */
-  set_xml_syscall_file_name (gdbarch, "syscalls/bfin-linux.xml");
+  set_xml_syscall_file_name ("syscalls/bfin-linux.xml");
   set_gdbarch_get_syscall_number (gdbarch,
                                   bfin_linux_get_syscall_number);
 }
+
+/* Provide a prototype to silence -Wmissing-prototypes.  */
+extern initialize_file_ftype _initialize_bfin_linux_tdep;
 
 void
 _initialize_bfin_linux_tdep (void)

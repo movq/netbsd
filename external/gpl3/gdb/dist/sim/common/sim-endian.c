@@ -1,6 +1,6 @@
 /* The common simulator framework for GDB, the GNU Debugger.
 
-   Copyright 2002-2019 Free Software Foundation, Inc.
+   Copyright 2002, 2007, 2008, 2009, 2010, 2011 Free Software Foundation, Inc.
 
    Contributed by Andrew Cagney and Red Hat.
 
@@ -25,13 +25,14 @@
 
 #include "sim-basics.h"
 #include "sim-assert.h"
+#include "sim-io.h"
 
 
 #if !defined(_SWAP_1)
 #define _SWAP_1(SET,RAW) SET (RAW)
 #endif
 
-#if !defined(_SWAP_2) && (HOST_BYTE_ORDER == BFD_ENDIAN_LITTLE) && defined(htons)
+#if !defined(_SWAP_2) && (WITH_HOST_BYTE_ORDER == LITTLE_ENDIAN) && defined(htons)
 #define _SWAP_2(SET,RAW) SET htons (RAW)
 #endif
 
@@ -39,7 +40,7 @@
 #define _SWAP_2(SET,RAW) SET (((RAW) >> 8) | ((RAW) << 8))
 #endif
 
-#if !defined(_SWAP_4) && (HOST_BYTE_ORDER == BFD_ENDIAN_LITTLE) && defined(htonl)
+#if !defined(_SWAP_4) && (WITH_HOST_BYTE_ORDER == LITTLE_ENDIAN) && defined(htonl)
 #define _SWAP_4(SET,RAW) SET htonl (RAW)
 #endif
 
@@ -93,7 +94,7 @@ INLINE_SIM_ENDIAN\
 (unsigned_8)
 sim_endian_split_16 (unsigned_16 word, int w)
 {
-  if (HOST_BYTE_ORDER == BFD_ENDIAN_LITTLE)
+  if (CURRENT_HOST_BYTE_ORDER == LITTLE_ENDIAN)
     {
       return word.a[1 - w];
     }
@@ -110,7 +111,7 @@ sim_endian_join_16 (unsigned_8 h, unsigned_8 l)
 
 {
   unsigned_16 word;
-  if (HOST_BYTE_ORDER == BFD_ENDIAN_LITTLE)
+  if (CURRENT_HOST_BYTE_ORDER == LITTLE_ENDIAN)
     {
       word.a[0] = l;
       word.a[1] = h;

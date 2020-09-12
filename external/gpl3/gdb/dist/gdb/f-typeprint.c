@@ -1,6 +1,8 @@
 /* Support for printing Fortran types for GDB, the GNU debugger.
 
-   Copyright (C) 1986-2019 Free Software Foundation, Inc.
+   Copyright (C) 1986, 1988, 1989, 1991, 1993, 1994, 1995, 1996, 1998, 2000,
+   2001, 2002, 2003, 2006, 2007, 2008, 2009, 2010, 2011
+   Free Software Foundation, Inc.
 
    Contributed by Motorola.  Adapted from the C version by Farooq Butt
    (fmbutt@engage.sps.mot.com).
@@ -30,7 +32,9 @@
 #include "gdbcore.h"
 #include "target.h"
 #include "f-lang.h"
-#include "typeprint.h"
+
+#include "gdb_string.h"
+#include <errno.h>
 
 #if 0				/* Currently unused.  */
 static void f_type_print_args (struct type *, struct ui_file *);
@@ -49,21 +53,10 @@ void f_type_print_base (struct type *, struct ui_file *, int, int);
 
 void
 f_print_type (struct type *type, const char *varstring, struct ui_file *stream,
-	      int show, int level, const struct type_print_options *flags)
+	      int show, int level)
 {
   enum type_code code;
-
-  if (type_not_associated (type))
-    {
-      val_print_not_associated (stream);
-      return;
-    }
-
-  if (type_not_allocated (type))
-    {
-      val_print_not_allocated (stream);
-      return;
-    }
+  int demangled_args;
 
   f_type_print_base (type, stream, show, level);
   code = TYPE_CODE (type);
@@ -80,15 +73,12 @@ f_print_type (struct type *type, const char *varstring, struct ui_file *stream,
 
   if (varstring != NULL)
     {
-      int demangled_args;
-
       fputs_filtered (varstring, stream);
 
       /* For demangled function names, we have the arglist as part of the name,
          so don't print an additional pair of ()'s.  */
 
-      demangled_args = (*varstring != '\0'
-			&& varstring[strlen (varstring) - 1] == ')');
+      demangled_args = varstring[strlen (varstring) - 1] == ')'; 
       f_type_print_varspec_suffix (type, stream, show, 0, demangled_args, 0);
    }
 }
@@ -142,6 +132,7 @@ f_type_print_varspec_prefix (struct type *type, struct ui_file *stream,
     case TYPE_CODE_SET:
     case TYPE_CODE_RANGE:
     case TYPE_CODE_STRING:
+    case TYPE_CODE_BITSTRING:
     case TYPE_CODE_METHOD:
     case TYPE_CODE_REF:
     case TYPE_CODE_COMPLEX:
@@ -182,35 +173,28 @@ f_type_print_varspec_suffix (struct type *type, struct ui_file *stream,
       if (arrayprint_recurse_level == 1)
 	fprintf_filtered (stream, "(");
 
-      if (type_not_associated (type))
-        val_print_not_associated (stream);
-      else if (type_not_allocated (type))
-        val_print_not_allocated (stream);
+      if (TYPE_CODE (TYPE_TARGET_TYPE (type)) == TYPE_CODE_ARRAY)
+	f_type_print_varspec_suffix (TYPE_TARGET_TYPE (type), stream, 0, 0, 0,
+				     arrayprint_recurse_level);
+
+      lower_bound = f77_get_lowerbound (type);
+      if (lower_bound != 1)	/* Not the default.  */
+	fprintf_filtered (stream, "%d:", lower_bound);
+
+      /* Make sure that, if we have an assumed size array, we
+         print out a warning and print the upperbound as '*'.  */
+
+      if (TYPE_ARRAY_UPPER_BOUND_IS_UNDEFINED (type))
+	fprintf_filtered (stream, "*");
       else
-        {
-          if (TYPE_CODE (TYPE_TARGET_TYPE (type)) == TYPE_CODE_ARRAY)
-            f_type_print_varspec_suffix (TYPE_TARGET_TYPE (type), stream, 0,
-                                        0, 0, arrayprint_recurse_level);
+	{
+	  upper_bound = f77_get_upperbound (type);
+	  fprintf_filtered (stream, "%d", upper_bound);
+	}
 
-          lower_bound = f77_get_lowerbound (type);
-          if (lower_bound != 1)	/* Not the default.  */
-            fprintf_filtered (stream, "%d:", lower_bound);
-
-          /* Make sure that, if we have an assumed size array, we
-             print out a warning and print the upperbound as '*'.  */
-
-          if (TYPE_ARRAY_UPPER_BOUND_IS_UNDEFINED (type))
-            fprintf_filtered (stream, "*");
-          else
-            {
-              upper_bound = f77_get_upperbound (type);
-              fprintf_filtered (stream, "%d", upper_bound);
-            }
-
-          if (TYPE_CODE (TYPE_TARGET_TYPE (type)) != TYPE_CODE_ARRAY)
-            f_type_print_varspec_suffix (TYPE_TARGET_TYPE (type), stream, 0,
-                                        0, 0, arrayprint_recurse_level);
-        }
+      if (TYPE_CODE (TYPE_TARGET_TYPE (type)) != TYPE_CODE_ARRAY)
+	f_type_print_varspec_suffix (TYPE_TARGET_TYPE (type), stream, 0, 0, 0,
+				     arrayprint_recurse_level);
       if (arrayprint_recurse_level == 1)
 	fprintf_filtered (stream, ")");
       else
@@ -247,6 +231,7 @@ f_type_print_varspec_suffix (struct type *type, struct ui_file *stream,
     case TYPE_CODE_SET:
     case TYPE_CODE_RANGE:
     case TYPE_CODE_STRING:
+    case TYPE_CODE_BITSTRING:
     case TYPE_CODE_METHOD:
     case TYPE_CODE_COMPLEX:
     case TYPE_CODE_TYPEDEF:
@@ -290,17 +275,12 @@ f_type_print_base (struct type *type, struct ui_file *stream, int show,
 
   if ((show <= 0) && (TYPE_NAME (type) != NULL))
     {
-      const char *prefix = "";
-      if (TYPE_CODE (type) == TYPE_CODE_UNION)
-	prefix = "Type, C_Union :: ";
-      else if (TYPE_CODE (type) == TYPE_CODE_STRUCT)
-	prefix = "Type ";
-      fprintfi_filtered (level, stream, "%s%s", prefix, TYPE_NAME (type));
+      fputs_filtered (TYPE_NAME (type), stream);
       return;
     }
 
   if (TYPE_CODE (type) != TYPE_CODE_TYPEDEF)
-    type = check_typedef (type);
+    CHECK_TYPEDEF (type);
 
   switch (TYPE_CODE (type))
     {
@@ -309,23 +289,18 @@ f_type_print_base (struct type *type, struct ui_file *stream, int show,
       break;
 
     case TYPE_CODE_ARRAY:
-      f_type_print_base (TYPE_TARGET_TYPE (type), stream, show, level);
-      break;
     case TYPE_CODE_FUNC:
-      if (TYPE_TARGET_TYPE (type) == NULL)
-	type_print_unknown_return_type (stream);
-      else
-	f_type_print_base (TYPE_TARGET_TYPE (type), stream, show, level);
+      f_type_print_base (TYPE_TARGET_TYPE (type), stream, show, level);
       break;
 
     case TYPE_CODE_PTR:
-      fprintfi_filtered (level, stream, "PTR TO -> ( ");
-      f_type_print_base (TYPE_TARGET_TYPE (type), stream, show, 0);
+      fprintf_filtered (stream, "PTR TO -> ( ");
+      f_type_print_base (TYPE_TARGET_TYPE (type), stream, 0, level);
       break;
 
     case TYPE_CODE_REF:
-      fprintfi_filtered (level, stream, "REF TO -> ( ");
-      f_type_print_base (TYPE_TARGET_TYPE (type), stream, show, 0);
+      fprintf_filtered (stream, "REF TO -> ( ");
+      f_type_print_base (TYPE_TARGET_TYPE (type), stream, 0, level);
       break;
 
     case TYPE_CODE_VOID:
@@ -346,6 +321,10 @@ f_type_print_base (struct type *type, struct ui_file *stream, int show,
       break;
 
     case TYPE_CODE_CHAR:
+      /* Override name "char" and make it "character".  */
+      fprintfi_filtered (level, stream, "character");
+      break;
+
     case TYPE_CODE_INT:
       /* There may be some character types that attempt to come
          through as TYPE_CODE_INT since dbxstclass.h is so
@@ -375,29 +354,24 @@ f_type_print_base (struct type *type, struct ui_file *stream, int show,
 	fprintfi_filtered (level, stream, "Type, C_Union :: ");
       else
 	fprintfi_filtered (level, stream, "Type ");
-      fputs_filtered (TYPE_NAME (type), stream);
-      /* According to the definition,
-         we only print structure elements in case show > 0.  */
-      if (show > 0)
+      fputs_filtered (TYPE_TAG_NAME (type), stream);
+      fputs_filtered ("\n", stream);
+      for (index = 0; index < TYPE_NFIELDS (type); index++)
 	{
+	  f_type_print_base (TYPE_FIELD_TYPE (type, index), stream, show,
+			     level + 4);
+	  fputs_filtered (" :: ", stream);
+	  fputs_filtered (TYPE_FIELD_NAME (type, index), stream);
+	  f_type_print_varspec_suffix (TYPE_FIELD_TYPE (type, index),
+				       stream, 0, 0, 0, 0);
 	  fputs_filtered ("\n", stream);
-	  for (index = 0; index < TYPE_NFIELDS (type); index++)
-	    {
-	      f_type_print_base (TYPE_FIELD_TYPE (type, index), stream,
-				 show - 1, level + 4);
-	      fputs_filtered (" :: ", stream);
-	      fputs_filtered (TYPE_FIELD_NAME (type, index), stream);
-	      f_type_print_varspec_suffix (TYPE_FIELD_TYPE (type, index),
-					   stream, show - 1, 0, 0, 0);
-	      fputs_filtered ("\n", stream);
-	    }
-	  fprintfi_filtered (level, stream, "End Type ");
-	  fputs_filtered (TYPE_NAME (type), stream);
-	}
+	} 
+      fprintfi_filtered (level, stream, "End Type ");
+      fputs_filtered (TYPE_TAG_NAME (type), stream);
       break;
 
     case TYPE_CODE_MODULE:
-      fprintfi_filtered (level, stream, "module %s", TYPE_NAME (type));
+      fprintfi_filtered (level, stream, "module %s", TYPE_TAG_NAME (type));
       break;
 
     default_case:

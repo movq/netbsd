@@ -1,5 +1,7 @@
 /* BFD back-end for s-record objects.
-   Copyright (C) 1990-2020 Free Software Foundation, Inc.
+   Copyright 1990, 1991, 1992, 1993, 1994, 1995, 1996, 1997, 1998, 1999,
+   2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007
+   Free Software Foundation, Inc.
    Written by Steve Chamberlain of Cygnus Support <sac@cygnus.com>.
 
    This file is part of BFD, the Binary File Descriptor library.
@@ -94,7 +96,7 @@
 	  _start $14
 	  _etext $8036
 	  _edata $8036
-	  _end $8036
+ 	  _end $8036
 	$$
 
    DESCRIPTION
@@ -129,12 +131,12 @@ static const char digs[] = "0123456789ABCDEF";
 /* The number of data bytes we actually fit onto a line on output.
    This variable can be modified by objcopy's --srec-len parameter.
    For a 0x75 byte record you should set --srec-len=0x70.  */
-unsigned int _bfd_srec_len = DEFAULT_CHUNK;
+unsigned int Chunk = DEFAULT_CHUNK;
 
 /* The type of srec output (free or forced to S3).
    This variable can be modified by objcopy's --srec-forceS3
    parameter.  */
-bfd_boolean _bfd_srec_forceS3 = FALSE;
+bfd_boolean S3Forced = FALSE;
 
 /* When writing an S-record file, the S-records can not be output as
    they are seen.  This structure is used to hold them in memory.  */
@@ -196,7 +198,7 @@ srec_mkobject (bfd *abfd)
 
   srec_init ();
 
-  tdata = (tdata_type *) bfd_alloc (abfd, sizeof (tdata_type));
+  tdata = bfd_alloc (abfd, sizeof (tdata_type));
   if (tdata == NULL)
     return FALSE;
 
@@ -246,18 +248,17 @@ srec_bad_byte (bfd *abfd,
     }
   else
     {
-      char buf[40];
+      char buf[10];
 
       if (! ISPRINT (c))
-	sprintf (buf, "\\%03o", (unsigned int) c & 0xff);
+	sprintf (buf, "\\%03o", (unsigned int) c);
       else
 	{
 	  buf[0] = c;
 	  buf[1] = '\0';
 	}
-      _bfd_error_handler
-	/* xgettext:c-format */
-	(_("%pB:%d: unexpected character `%s' in S-record file"),
+      (*_bfd_error_handler)
+	(_("%B:%d: Unexpected character `%s' in S-record file\n"),
 	 abfd, lineno, buf);
       bfd_set_error (bfd_error_bad_value);
     }
@@ -270,7 +271,7 @@ srec_new_symbol (bfd *abfd, const char *name, bfd_vma val)
 {
   struct srec_symbol *n;
 
-  n = (struct srec_symbol *) bfd_alloc (abfd, sizeof (* n));
+  n = bfd_alloc (abfd, sizeof (* n));
   if (n == NULL)
     return FALSE;
 
@@ -362,7 +363,7 @@ srec_scan (bfd *abfd)
 		}
 
 	      alc = 10;
-	      symbuf = (char *) bfd_malloc (alc + 1);
+	      symbuf = bfd_malloc (alc + 1);
 	      if (symbuf == NULL)
 		goto error_return;
 
@@ -377,7 +378,7 @@ srec_scan (bfd *abfd)
 		      char *n;
 
 		      alc *= 2;
-		      n = (char *) bfd_realloc (symbuf, alc + 1);
+		      n = bfd_realloc (symbuf, alc + 1);
 		      if (n == NULL)
 			goto error_return;
 		      p = n + (p - symbuf);
@@ -394,7 +395,7 @@ srec_scan (bfd *abfd)
 		}
 
 	      *p++ = '\0';
-	      symname = (char *) bfd_alloc (abfd, (bfd_size_type) (p - symbuf));
+	      symname = bfd_alloc (abfd, (bfd_size_type) (p - symbuf));
 	      if (symname == NULL)
 		goto error_return;
 	      strcpy (symname, symbuf);
@@ -453,8 +454,8 @@ srec_scan (bfd *abfd)
 	case 'S':
 	  {
 	    file_ptr pos;
-	    unsigned char hdr[3];
-	    unsigned int bytes, min_bytes;
+	    char hdr[3];
+	    unsigned int bytes;
 	    bfd_vma address;
 	    bfd_byte *data;
 	    unsigned char check_sum;
@@ -477,25 +478,11 @@ srec_scan (bfd *abfd)
 	      }
 
 	    check_sum = bytes = HEX (hdr + 1);
-	    min_bytes = 3;
-	    if (hdr[0] == '2' || hdr[0] == '8')
-	      min_bytes = 4;
-	    else if (hdr[0] == '3' || hdr[0] == '7')
-	      min_bytes = 5;
-	    if (bytes < min_bytes)
-	      {
-		/* xgettext:c-format */
-		_bfd_error_handler (_("%pB:%d: byte count %d too small"),
-				    abfd, lineno, bytes);
-		bfd_set_error (bfd_error_bad_value);
-		goto error_return;
-	      }
-
 	    if (bytes * 2 > bufsize)
 	      {
 		if (buf != NULL)
 		  free (buf);
-		buf = (bfd_byte *) bfd_malloc ((bfd_size_type) bytes * 2);
+		buf = bfd_malloc ((bfd_size_type) bytes * 2);
 		if (buf == NULL)
 		  goto error_return;
 		bufsize = bytes * 2;
@@ -555,7 +542,7 @@ srec_scan (bfd *abfd)
 
 		    sprintf (secbuf, ".sec%d", bfd_count_sections (abfd) + 1);
 		    amt = strlen (secbuf) + 1;
-		    secname = (char *) bfd_alloc (abfd, amt);
+		    secname = bfd_alloc (abfd, amt);
 		    strcpy (secname, secbuf);
 		    flags = SEC_HAS_CONTENTS | SEC_LOAD | SEC_ALLOC;
 		    sec = bfd_make_section_with_flags (abfd, secname, flags);
@@ -576,9 +563,8 @@ srec_scan (bfd *abfd)
 		check_sum = 255 - (check_sum & 0xff);
 		if (check_sum != HEX (data))
 		  {
-		    _bfd_error_handler
-		      /* xgettext:c-format */
-		      (_("%pB:%d: bad checksum in S-record file"),
+		    (*_bfd_error_handler)
+		      (_("%B:%d: Bad checksum in S-record file\n"),
 		       abfd, lineno);
 		    bfd_set_error (bfd_error_bad_value);
 		    goto error_return;
@@ -610,9 +596,8 @@ srec_scan (bfd *abfd)
 		check_sum = 255 - (check_sum & 0xff);
 		if (check_sum != HEX (data))
 		  {
-		    _bfd_error_handler
-		      /* xgettext:c-format */
-		      (_("%pB:%d: bad checksum in S-record file"),
+		    (*_bfd_error_handler)
+		      (_("%B:%d: Bad checksum in S-record file\n"),
 		       abfd, lineno);
 		    bfd_set_error (bfd_error_bad_value);
 		    goto error_return;
@@ -753,7 +738,7 @@ srec_read_section (bfd *abfd, asection *section, bfd_byte *contents)
 	{
 	  if (buf != NULL)
 	    free (buf);
-	  buf = (bfd_byte *) bfd_malloc ((bfd_size_type) bytes * 2);
+	  buf = bfd_malloc ((bfd_size_type) bytes * 2);
 	  if (buf == NULL)
 	    goto error_return;
 	  bufsize = bytes * 2;
@@ -853,8 +838,7 @@ srec_get_section_contents (bfd *abfd,
       if (section->used_by_bfd == NULL)
 	return FALSE;
 
-      if (! srec_read_section (abfd, section,
-			       (bfd_byte *) section->used_by_bfd))
+      if (! srec_read_section (abfd, section, section->used_by_bfd))
 	return FALSE;
     }
 
@@ -885,11 +869,10 @@ srec_set_section_contents (bfd *abfd,
 			   file_ptr offset,
 			   bfd_size_type bytes_to_do)
 {
-  int opb = bfd_octets_per_byte (abfd, NULL);
   tdata_type *tdata = abfd->tdata.srec_data;
   srec_data_list_type *entry;
 
-  entry = (srec_data_list_type *) bfd_alloc (abfd, sizeof (* entry));
+  entry = bfd_alloc (abfd, sizeof (* entry));
   if (entry == NULL)
     return FALSE;
 
@@ -899,25 +882,25 @@ srec_set_section_contents (bfd *abfd,
     {
       bfd_byte *data;
 
-      data = (bfd_byte *) bfd_alloc (abfd, bytes_to_do);
+      data = bfd_alloc (abfd, bytes_to_do);
       if (data == NULL)
 	return FALSE;
       memcpy ((void *) data, location, (size_t) bytes_to_do);
 
-      /* If _bfd_srec_forceS3 is TRUE then always select S3 records,
-	 regardless of the size of the addresses.  */
-      if (_bfd_srec_forceS3)
+      /* Ff S3Forced is TRUE then always select S3 records,
+	 regardless of the siez of the addresses.  */
+      if (S3Forced)
 	tdata->type = 3;
-      else if ((section->lma + (offset + bytes_to_do) / opb - 1) <= 0xffff)
+      else if ((section->lma + offset + bytes_to_do - 1) <= 0xffff)
 	;  /* The default, S1, is OK.  */
-      else if ((section->lma + (offset + bytes_to_do) / opb - 1) <= 0xffffff
+      else if ((section->lma + offset + bytes_to_do - 1) <= 0xffffff
 	       && tdata->type <= 2)
 	tdata->type = 2;
       else
 	tdata->type = 3;
 
       entry->data = data;
-      entry->where = section->lma + offset / opb;
+      entry->where = section->lma + offset;
       entry->size = bytes_to_do;
 
       /* Sort the records by address.  Optimize for the common case of
@@ -976,12 +959,10 @@ srec_write_record (bfd *abfd,
     case 7:
       TOHEX (dst, (address >> 24), check_sum);
       dst += 2;
-      /* Fall through.  */
     case 8:
     case 2:
       TOHEX (dst, (address >> 16), check_sum);
       dst += 2;
-      /* Fall through.  */
     case 9:
     case 1:
     case 0:
@@ -1040,21 +1021,20 @@ srec_write_section (bfd *abfd,
      have three, and S3 (tdata->type == 3) records have four.
      The total length can't exceed 255, and a zero data length will
      spin for a long time.  */
-  if (_bfd_srec_len == 0)
-    _bfd_srec_len = 1;
-  else if (_bfd_srec_len > MAXCHUNK - tdata->type - 2)
-    _bfd_srec_len = MAXCHUNK - tdata->type - 2;
+  if (Chunk == 0)
+    Chunk = 1;
+  else if (Chunk > MAXCHUNK - tdata->type - 2)
+    Chunk = MAXCHUNK - tdata->type - 2;
 
   while (octets_written < list->size)
     {
       bfd_vma address;
       unsigned int octets_this_chunk = list->size - octets_written;
 
-      if (octets_this_chunk > _bfd_srec_len)
-	octets_this_chunk = _bfd_srec_len;
+      if (octets_this_chunk > Chunk)
+	octets_this_chunk = Chunk;
 
-      address = list->where + (octets_written
-			       / bfd_octets_per_byte (abfd, NULL));
+      address = list->where + octets_written / bfd_octets_per_byte (abfd);
 
       if (! srec_write_record (abfd,
 			       tdata->type,
@@ -1201,7 +1181,7 @@ srec_canonicalize_symtab (bfd *abfd, asymbol **alocation)
       asymbol *c;
       struct srec_symbol *s;
 
-      csymbols = (asymbol *) bfd_alloc (abfd, symcount * sizeof (asymbol));
+      csymbols = bfd_alloc (abfd, symcount * sizeof (asymbol));
       if (csymbols == NULL)
 	return -1;
       abfd->tdata.srec_data->csymbols = csymbols;
@@ -1255,40 +1235,32 @@ srec_print_symbol (bfd *abfd,
     }
 }
 
-#define	srec_close_and_cleanup			  _bfd_generic_close_and_cleanup
-#define srec_bfd_free_cached_info		  _bfd_generic_bfd_free_cached_info
-#define srec_new_section_hook			  _bfd_generic_new_section_hook
-#define srec_bfd_is_target_special_symbol	  _bfd_bool_bfd_asymbol_false
-#define srec_bfd_is_local_label_name		  bfd_generic_is_local_label_name
-#define srec_get_lineno				  _bfd_nosymbols_get_lineno
-#define srec_find_nearest_line			  _bfd_nosymbols_find_nearest_line
-#define srec_find_line				  _bfd_nosymbols_find_line
-#define srec_find_inliner_info			  _bfd_nosymbols_find_inliner_info
-#define srec_make_empty_symbol			  _bfd_generic_make_empty_symbol
-#define srec_get_symbol_version_string		  _bfd_nosymbols_get_symbol_version_string
-#define srec_bfd_make_debug_symbol		  _bfd_nosymbols_bfd_make_debug_symbol
-#define srec_read_minisymbols			  _bfd_generic_read_minisymbols
-#define srec_minisymbol_to_symbol		  _bfd_generic_minisymbol_to_symbol
-#define srec_get_section_contents_in_window	  _bfd_generic_get_section_contents_in_window
-#define srec_bfd_get_relocated_section_contents	  bfd_generic_get_relocated_section_contents
-#define srec_bfd_relax_section			  bfd_generic_relax_section
-#define srec_bfd_gc_sections			  bfd_generic_gc_sections
-#define srec_bfd_lookup_section_flags		  bfd_generic_lookup_section_flags
-#define srec_bfd_merge_sections			  bfd_generic_merge_sections
-#define srec_bfd_is_group_section		  bfd_generic_is_group_section
-#define srec_bfd_group_name			  bfd_generic_group_name
-#define srec_bfd_discard_group			  bfd_generic_discard_group
-#define srec_section_already_linked		  _bfd_generic_section_already_linked
-#define srec_bfd_define_common_symbol		  bfd_generic_define_common_symbol
-#define srec_bfd_link_hide_symbol		  _bfd_generic_link_hide_symbol
-#define srec_bfd_define_start_stop		  bfd_generic_define_start_stop
-#define srec_bfd_link_hash_table_create		  _bfd_generic_link_hash_table_create
-#define srec_bfd_link_add_symbols		  _bfd_generic_link_add_symbols
-#define srec_bfd_link_just_syms			  _bfd_generic_link_just_syms
-#define srec_bfd_copy_link_hash_symbol_type	  _bfd_generic_copy_link_hash_symbol_type
-#define srec_bfd_final_link			  _bfd_generic_final_link
-#define srec_bfd_link_split_section		  _bfd_generic_link_split_section
-#define srec_bfd_link_check_relocs		  _bfd_generic_link_check_relocs
+#define	srec_close_and_cleanup                    _bfd_generic_close_and_cleanup
+#define srec_bfd_free_cached_info                 _bfd_generic_bfd_free_cached_info
+#define srec_new_section_hook                     _bfd_generic_new_section_hook
+#define srec_bfd_is_target_special_symbol         ((bfd_boolean (*) (bfd *, asymbol *)) bfd_false)
+#define srec_bfd_is_local_label_name              bfd_generic_is_local_label_name
+#define srec_get_lineno                           _bfd_nosymbols_get_lineno
+#define srec_find_nearest_line                    _bfd_nosymbols_find_nearest_line
+#define srec_find_inliner_info                    _bfd_nosymbols_find_inliner_info
+#define srec_make_empty_symbol                    _bfd_generic_make_empty_symbol
+#define srec_bfd_make_debug_symbol                _bfd_nosymbols_bfd_make_debug_symbol
+#define srec_read_minisymbols                     _bfd_generic_read_minisymbols
+#define srec_minisymbol_to_symbol                 _bfd_generic_minisymbol_to_symbol
+#define srec_get_section_contents_in_window       _bfd_generic_get_section_contents_in_window
+#define srec_bfd_get_relocated_section_contents   bfd_generic_get_relocated_section_contents
+#define srec_bfd_relax_section                    bfd_generic_relax_section
+#define srec_bfd_gc_sections                      bfd_generic_gc_sections
+#define srec_bfd_merge_sections                   bfd_generic_merge_sections
+#define srec_bfd_is_group_section                 bfd_generic_is_group_section
+#define srec_bfd_discard_group                    bfd_generic_discard_group
+#define srec_section_already_linked               _bfd_generic_section_already_linked
+#define srec_bfd_link_hash_table_create           _bfd_generic_link_hash_table_create
+#define srec_bfd_link_hash_table_free             _bfd_generic_link_hash_table_free
+#define srec_bfd_link_add_symbols                 _bfd_generic_link_add_symbols
+#define srec_bfd_link_just_syms                   _bfd_generic_link_just_syms
+#define srec_bfd_final_link                       _bfd_generic_final_link
+#define srec_bfd_link_split_section               _bfd_generic_link_split_section
 
 const bfd_target srec_vec =
 {
@@ -1304,7 +1276,6 @@ const bfd_target srec_vec =
   0,				/* Leading underscore.  */
   ' ',				/* AR_pad_char.  */
   16,				/* AR_max_namelen.  */
-  0,				/* match priority.  */
   bfd_getb64, bfd_getb_signed_64, bfd_putb64,
   bfd_getb32, bfd_getb_signed_32, bfd_putb32,
   bfd_getb16, bfd_getb_signed_16, bfd_putb16,	/* Data.  */
@@ -1319,16 +1290,16 @@ const bfd_target srec_vec =
     _bfd_dummy_target,
   },
   {
-    _bfd_bool_bfd_false_error,
+    bfd_false,
     srec_mkobject,
     _bfd_generic_mkarchive,
-    _bfd_bool_bfd_false_error,
+    bfd_false,
   },
   {				/* bfd_write_contents.  */
-    _bfd_bool_bfd_false_error,
+    bfd_false,
     srec_write_object_contents,
     _bfd_write_archive_contents,
-    _bfd_bool_bfd_false_error,
+    bfd_false,
   },
 
   BFD_JUMP_TABLE_GENERIC (srec),
@@ -1360,7 +1331,6 @@ const bfd_target symbolsrec_vec =
   0,				/* Leading underscore.  */
   ' ',				/* AR_pad_char.  */
   16,				/* AR_max_namelen.  */
-  0,				/* match priority.  */
   bfd_getb64, bfd_getb_signed_64, bfd_putb64,
   bfd_getb32, bfd_getb_signed_32, bfd_putb32,
   bfd_getb16, bfd_getb_signed_16, bfd_putb16,	/* Data.  */
@@ -1375,16 +1345,16 @@ const bfd_target symbolsrec_vec =
     _bfd_dummy_target,
   },
   {
-    _bfd_bool_bfd_false_error,
+    bfd_false,
     srec_mkobject,
     _bfd_generic_mkarchive,
-    _bfd_bool_bfd_false_error,
+    bfd_false,
   },
   {				/* bfd_write_contents.  */
-    _bfd_bool_bfd_false_error,
+    bfd_false,
     symbolsrec_write_object_contents,
     _bfd_write_archive_contents,
-    _bfd_bool_bfd_false_error,
+    bfd_false,
   },
 
   BFD_JUMP_TABLE_GENERIC (srec),

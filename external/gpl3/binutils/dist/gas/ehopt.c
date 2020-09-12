@@ -1,5 +1,6 @@
 /* ehopt.c--optimize gcc exception frame information.
-   Copyright (C) 1998-2020 Free Software Foundation, Inc.
+   Copyright 1998, 2000, 2001, 2003, 2005, 2007, 2008
+   Free Software Foundation, Inc.
    Written by Ian Lance Taylor <ian@cygnus.com>.
 
    This file is part of GAS, the GNU Assembler.
@@ -21,12 +22,13 @@
 
 #include "as.h"
 #include "subsegs.h"
+#include "struc-symbol.h"
 
 /* We include this ELF file, even though we may not be assembling for
    ELF, since the exception frame information is always in a format
    derived from DWARF.  */
 
-#include "dwarf2.h"
+#include "elf/dwarf2.h"
 
 /* Try to optimize gcc 2.8 exception frame information.
 
@@ -103,7 +105,7 @@ get_cie_info (struct cie_info *info)
 {
   fragS *f;
   fixS *fix;
-  unsigned int offset;
+  int offset;
   char CIE_id;
   char augmentation[10];
   int iaug;
@@ -118,7 +120,7 @@ get_cie_info (struct cie_info *info)
 
   /* First make sure that the CIE Identifier Tag is 0/-1.  */
 
-  if (strncmp (segment_name (now_seg), ".debug_frame", 12) == 0)
+  if (strcmp (segment_name (now_seg), ".debug_frame") == 0)
     CIE_id = (char)0xff;
   else
     CIE_id = 0;
@@ -225,19 +227,6 @@ get_cie_info (struct cie_info *info)
   return 1;
 }
 
-enum frame_state
-{
-  state_idle,
-  state_saw_size,
-  state_saw_cie_offset,
-  state_saw_pc_begin,
-  state_seeing_aug_size,
-  state_skipping_aug,
-  state_wait_loc4,
-  state_saw_loc4,
-  state_error,
-};
-
 /* This function is called from emit_expr.  It looks for cases which
    we can optimize.
 
@@ -256,7 +245,18 @@ check_eh_frame (expressionS *exp, unsigned int *pnbytes)
 {
   struct frame_data
   {
-    enum frame_state state;
+    enum frame_state
+    {
+      state_idle,
+      state_saw_size,
+      state_saw_cie_offset,
+      state_saw_pc_begin,
+      state_seeing_aug_size,
+      state_skipping_aug,
+      state_wait_loc4,
+      state_saw_loc4,
+      state_error,
+    } state;
 
     int cie_info_ok;
     struct cie_info cie_info;
@@ -283,10 +283,9 @@ check_eh_frame (expressionS *exp, unsigned int *pnbytes)
 #endif
 
   /* Select the proper section data.  */
-  if (strncmp (segment_name (now_seg), ".eh_frame", 9) == 0
-      && segment_name (now_seg)[9] != '_')
+  if (strcmp (segment_name (now_seg), ".eh_frame") == 0)
     d = &eh_frame_data;
-  else if (strncmp (segment_name (now_seg), ".debug_frame", 12) == 0)
+  else if (strcmp (segment_name (now_seg), ".debug_frame") == 0)
     d = &debug_frame_data;
   else
     return 0;
@@ -325,7 +324,7 @@ check_eh_frame (expressionS *exp, unsigned int *pnbytes)
     case state_saw_size:
     case state_saw_cie_offset:
       /* Assume whatever form it appears in, it appears atomically.  */
-      d->state = (enum frame_state) (d->state + 1);
+      d->state += 1;
       break;
 
     case state_saw_pc_begin:
@@ -433,28 +432,23 @@ check_eh_frame (expressionS *exp, unsigned int *pnbytes)
 		|| exp->X_op == O_right_shift)
 	       && d->cie_info.code_alignment > 1)
 	{
-	  if (symbol_symbolS (exp->X_add_symbol)
-	      && symbol_constant_p (exp->X_op_symbol)
-	      && S_GET_SEGMENT (exp->X_op_symbol) == absolute_section
+	  if (exp->X_add_symbol->bsym
+	      && exp->X_op_symbol->bsym
+	      && exp->X_add_symbol->sy_value.X_op == O_subtract
+	      && exp->X_op_symbol->sy_value.X_op == O_constant
 	      && ((exp->X_op == O_divide
-		   ? *symbol_X_add_number (exp->X_op_symbol)
-		   : (offsetT) 1 << *symbol_X_add_number (exp->X_op_symbol))
+		   ? exp->X_op_symbol->sy_value.X_add_number
+		   : (offsetT) 1 << exp->X_op_symbol->sy_value.X_add_number)
 		  == (offsetT) d->cie_info.code_alignment))
 	    {
-	      expressionS *symval;
-
-	      symval = symbol_get_value_expression (exp->X_add_symbol);
-	      if (symval->X_op == O_subtract)
-		{
-		  /* This is a case we can optimize as well.  The
-		     expression was not reduced, so we can not finish
-		     the optimization until the end of the assembly.
-		     We set up a variant frag which we handle later.  */
-		  frag_var (rs_cfa, 4, 0, d->cie_info.code_alignment << 3,
-			    make_expr_symbol (symval),
-			    d->loc4_fix, (char *) d->loc4_frag);
-		  return 1;
-		}
+	      /* This is a case we can optimize as well.  The expression was
+		 not reduced, so we can not finish the optimization until the
+		 end of the assembly.  We set up a variant frag which we
+		 handle later.  */
+	      frag_var (rs_cfa, 4, 0, d->cie_info.code_alignment << 3,
+			make_expr_symbol (&exp->X_add_symbol->sy_value),
+			d->loc4_fix, (char *) d->loc4_frag);
+	      return 1;
 	    }
 	}
       break;
@@ -480,11 +474,9 @@ eh_frame_estimate_size_before_relax (fragS *frag)
 
   diff = resolve_symbol_value (frag->fr_symbol);
 
-  gas_assert (ca > 0);
+  assert (ca > 0);
   diff /= ca;
-  if (diff == 0)
-    ret = -1;
-  else if (diff < 0x40)
+  if (diff < 0x40)
     ret = 0;
   else if (diff < 0x100)
     ret = 1;
@@ -493,7 +485,7 @@ eh_frame_estimate_size_before_relax (fragS *frag)
   else
     ret = 4;
 
-  frag->fr_subtype = (frag->fr_subtype & ~7) | (ret & 7);
+  frag->fr_subtype = (frag->fr_subtype & ~7) | ret;
 
   return ret;
 }
@@ -508,8 +500,6 @@ eh_frame_relax_frag (fragS *frag)
   int oldsize, newsize;
 
   oldsize = frag->fr_subtype & 7;
-  if (oldsize == 7)
-    oldsize = -1;
   newsize = eh_frame_estimate_size_before_relax (frag);
   return newsize - oldsize;
 }
@@ -531,38 +521,30 @@ eh_frame_convert_frag (fragS *frag)
   diff = resolve_symbol_value (frag->fr_symbol);
 
   ca = frag->fr_subtype >> 3;
-  gas_assert (ca > 0);
+  assert (ca > 0);
   diff /= ca;
   switch (frag->fr_subtype & 7)
     {
     case 0:
-      gas_assert (diff < 0x40);
+      assert (diff < 0x40);
       loc4_frag->fr_literal[loc4_fix] = DW_CFA_advance_loc | diff;
       break;
 
     case 1:
-      gas_assert (diff < 0x100);
+      assert (diff < 0x100);
       loc4_frag->fr_literal[loc4_fix] = DW_CFA_advance_loc1;
       frag->fr_literal[frag->fr_fix] = diff;
       break;
 
     case 2:
-      gas_assert (diff < 0x10000);
+      assert (diff < 0x10000);
       loc4_frag->fr_literal[loc4_fix] = DW_CFA_advance_loc2;
       md_number_to_chars (frag->fr_literal + frag->fr_fix, diff, 2);
       break;
 
-    case 4:
+    default:
       md_number_to_chars (frag->fr_literal + frag->fr_fix, diff, 4);
       break;
-
-    case 7:
-      gas_assert (diff == 0);
-      frag->fr_fix -= 8;
-      break;
-
-    default:
-      abort ();
     }
 
   frag->fr_fix += frag->fr_subtype & 7;

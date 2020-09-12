@@ -1,5 +1,5 @@
 /* Structured Exception Handling (SEH) runtime interface routines.
-   Copyright (C) 2010-2019 Free Software Foundation, Inc.
+   Copyright (C) 2010-2013 Free Software Foundation, Inc.
 
    This file is part of GCC.
 
@@ -79,7 +79,7 @@ struct _Unwind_Context
 _Unwind_Word
 _Unwind_GetGR (struct _Unwind_Context *c, int index)
 {
-  if (index < 0 || index >= 2)
+  if (index < 0 || index > 2)
     abort ();
   return c->reg[index];
 }
@@ -89,7 +89,7 @@ _Unwind_GetGR (struct _Unwind_Context *c, int index)
 void
 _Unwind_SetGR (struct _Unwind_Context *c, int index, _Unwind_Word val)
 {
-  if (index < 0 || index >= 2)
+  if (index < 0 || index > 2)
     abort ();
   c->reg[index] = val;
 }
@@ -131,7 +131,7 @@ _Unwind_SetIP (struct _Unwind_Context *c, _Unwind_Ptr val)
   c->ra = val;
 }
 
-_Unwind_Ptr 
+void *
 _Unwind_GetLanguageSpecificData (struct _Unwind_Context *c)
 {
   return c->disp->HandlerData;
@@ -221,7 +221,7 @@ _GCC_specific_handler (PEXCEPTION_RECORD ms_exc, void *this_frame,
 	 test is that we're the target frame.  */
       if (ms_exc->ExceptionInformation[1] == (_Unwind_Ptr) this_frame)
 	{
-	  RtlUnwindEx (this_frame, (PVOID) ms_exc->ExceptionInformation[2],
+	  RtlUnwindEx (this_frame, ms_exc->ExceptionInformation[2],
 		       ms_exc, gcc_exc, ms_orig_context,
 		       ms_disp->HistoryTable);
 	  abort ();
@@ -313,9 +313,8 @@ _GCC_specific_handler (PEXCEPTION_RECORD ms_exc, void *this_frame,
 	  ms_exc->ExceptionInformation[3] = gcc_context.reg[1];
 
 	  /* Begin phase 2.  Perform the unwinding.  */
-	  RtlUnwindEx (this_frame, (PVOID)gcc_context.ra, ms_exc,
-		       (PVOID)gcc_context.reg[0], ms_orig_context,
-		       ms_disp->HistoryTable);
+	  RtlUnwindEx (this_frame, gcc_context.ra, ms_exc, gcc_exc,
+		       ms_orig_context, ms_disp->HistoryTable);
 	}
 
       /* In _Unwind_RaiseException we return _URC_FATAL_PHASE1_ERROR.  */
@@ -365,7 +364,7 @@ _Unwind_Resume (struct _Unwind_Exception *gcc_exc)
   ms_context.ContextFlags = CONTEXT_ALL;
   RtlCaptureContext (&ms_context);
 
-  RtlUnwindEx ((void *) gcc_exc->private_[1], (PVOID)gcc_exc->private_[2],
+  RtlUnwindEx ((void *) gcc_exc->private_[1], gcc_exc->private_[2],
 	       &ms_exc, gcc_exc, &ms_context, &ms_history);
 
   /* Is RtlUnwindEx declared noreturn?  */
@@ -431,40 +430,43 @@ _Unwind_DeleteException (struct _Unwind_Exception *exc)
 /* Perform stack backtrace through unwind data.  */
 
 _Unwind_Reason_Code
-_Unwind_Backtrace(_Unwind_Trace_Fn trace,
-		  void *trace_argument)
+_Unwind_Backtrace(_Unwind_Trace_Fn trace ATTRIBUTE_UNUSED,
+		  void *trace_argument ATTRIBUTE_UNUSED)
 {
+#if 0
   UNWIND_HISTORY_TABLE ms_history;
   CONTEXT ms_context;
   struct _Unwind_Context gcc_context;
-  DISPATCHER_CONTEXT disp_context;
 
   memset (&ms_history, 0, sizeof(ms_history));
   memset (&gcc_context, 0, sizeof(gcc_context));
-  memset (&disp_context, 0, sizeof(disp_context));
 
   ms_context.ContextFlags = CONTEXT_ALL;
   RtlCaptureContext (&ms_context);
 
-  gcc_context.disp = &disp_context;
-  gcc_context.disp->ContextRecord = &ms_context;
-  gcc_context.disp->HistoryTable = &ms_history;
+  gcc_context.disp.ContextRecord = &ms_context;
+  gcc_context.disp.HistoryTable = &ms_history;
 
   while (1)
     {
-      gcc_context.disp->ControlPc = ms_context.Rip;
-      gcc_context.disp->FunctionEntry
-	= RtlLookupFunctionEntry (ms_context.Rip, &gcc_context.disp->ImageBase,
+      gcc_context.disp.ControlPc = ms_context.Rip;
+      gcc_context.disp.FunctionEntry
+	= RtlLookupFunctionEntry (ms_context.Rip, &gcc_context.disp.ImageBase,
 				  &ms_history);
 
-      if (!gcc_context.disp->FunctionEntry)
-	return _URC_END_OF_STACK;
-
-      gcc_context.disp->LanguageHandler
-	= RtlVirtualUnwind (0, gcc_context.disp->ImageBase, ms_context.Rip,
-			    gcc_context.disp->FunctionEntry, &ms_context,
-			    &gcc_context.disp->HandlerData,
-			    &gcc_context.disp->EstablisherFrame, NULL);
+      if (gcc_context.disp.FunctionEntry)
+	{
+	  gcc_context.disp.LanguageHandler
+	    = RtlVirtualUnwind (0, gcc_context.disp.ImageBase, ms_context.Rip,
+				gcc_context.disp.FunctionEntry, &ms_context,
+				&gcc_context.disp.HandlerData,
+				&gcc_context.disp.EstablisherFrame, NULL);
+	}
+      else
+	{
+	  ms_context.Rip = *(ULONG_PTR *)ms_context.Rsp;
+	  ms_context.Rsp += 8;
+	}
 
       /* Call trace function.  */
       if (trace (&gcc_context, trace_argument) != _URC_NO_REASON)
@@ -474,5 +476,8 @@ _Unwind_Backtrace(_Unwind_Trace_Fn trace,
       if (ms_context.Rip == 0)
 	return _URC_END_OF_STACK;
     }
+#else
+  return _URC_END_OF_STACK;
+#endif
 }
 #endif /* __SEH__  && !defined (__USING_SJLJ_EXCEPTIONS__)  */

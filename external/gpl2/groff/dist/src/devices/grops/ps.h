@@ -1,4 +1,4 @@
-/*	$NetBSD: ps.h,v 1.1.1.1 2016/01/13 18:41:49 christos Exp $	*/
+/*	$NetBSD: ps.h,v 1.1 2016/01/13 18:41:49 christos Exp $	*/
 
 // -*- C++ -*-
 /* Copyright (C) 1989, 1990, 1991, 1992, 2002, 2003

@@ -1,9 +1,8 @@
-/* DO NOT EDIT!  -*- buffer-read-only: t -*- vi:set ro:  */
 /* Instruction opcode header for lm32.
 
 THIS FILE IS MACHINE GENERATED WITH CGEN.
 
-Copyright (C) 1996-2020 Free Software Foundation, Inc.
+Copyright 1996-2010 Free Software Foundation, Inc.
 
 This file is part of the GNU Binutils and/or GDB, the GNU debugger.
 
@@ -26,17 +25,13 @@ This file is part of the GNU Binutils and/or GDB, the GNU debugger.
 #ifndef LM32_OPC_H
 #define LM32_OPC_H
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 /* -- opc.h */
 
 /* Allows reason codes to be output when assembler errors occur.  */
 #define CGEN_VERBOSE_ASSEMBLER_ERRORS
 
 #define CGEN_DIS_HASH_SIZE 64
-#define CGEN_DIS_HASH(buf,value) ((value >> 26) & 0x3f)
+#define CGEN_DIS_HASH(buf,value) ((value >> 26) & 0x3f) 
 
 /* -- asm.c */
 /* Enum declaration for lm32 instruction types.  */
@@ -106,9 +101,5 @@ struct cgen_fields
 {\
 }
 
-
-   #ifdef __cplusplus
-   }
-   #endif
 
 #endif /* LM32_OPC_H */

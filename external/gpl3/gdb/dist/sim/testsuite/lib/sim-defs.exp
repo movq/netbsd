@@ -1,5 +1,4 @@
 # Simulator dejagnu utilities.
-# TODO: Switch to using dg-xxx helpers rather than parsing the files directly.
 
 # Communicate simulator path from sim_init to sim_version.
 # For some reason [board_info target sim] doesn't work in sim_version.
@@ -13,16 +12,6 @@ proc sim_init { args } {
     global sim_path
     set sim_path [board_info target sim]
     # Need to return an empty string (copied from GAS).
-
-    # As gross as it is, we unset the linker script specified by the target
-    # board.  The simulator board file mips-sim.exp, sets ldscript to the
-    # MIPS libgloss linker scripts which include libgcc (and possibly other
-    # libraries), which the linker (used to link these tests rather than the
-    # compiler) can't necessarily find.  Similarly iq2000-sim.exp and
-    # m68hc11-sim.exp.  So, we make it a common rule to clear the slate for
-    # all simulators.
-    unset_currtarget_info ldscript
-
     return ""
 }
 
@@ -180,7 +169,6 @@ proc sim_run { prog sim_opts prog_opts redir options } {
 # mach: [all | machine names]
 # as[(mach-list)]: <assembler options>
 # ld[(mach-list)]: <linker options>
-# cc[(mach-list)]: <compiler options>
 # sim[(mach-list)]: <simulator options>
 # progopts: <arguments to the program being simulated>
 # output: program output pattern to match with string-match
@@ -202,7 +190,6 @@ proc run_sim_test { name requested_machs } {
     global cpu_option
     global global_as_options
     global global_ld_options
-    global global_cc_options
     global global_sim_options
 
     if [string match "*/*" $name] {
@@ -220,7 +207,6 @@ proc run_sim_test { name requested_machs } {
     # Clear default options
     set opts(as) ""
     set opts(ld) ""
-    set opts(cc) ""
     set opts(progopts) ""
     set opts(sim) ""
     set opts(output) ""
@@ -229,16 +215,12 @@ proc run_sim_test { name requested_machs } {
     set opts(xerror) "no"
     set opts(xfail) ""
     set opts(kfail) ""
-    set seen_output 0
 
     if ![info exists global_as_options] {
         set global_as_options ""
     }
     if ![info exists global_ld_options] {
         set global_ld_options ""
-    }
-    if ![info exists global_cc_options] {
-        set global_cc_options ""
     }
     if ![info exists global_sim_options] {
         set global_sim_options ""
@@ -251,9 +233,6 @@ proc run_sim_test { name requested_machs } {
 	}
 	if [info exists opts(ld,$m)] {
 	    unset opts(ld,$m)
-	}
-	if [info exists opts(cc,$m)] {
-	    unset opts(cc,$m)
 	}
 	if [info exists opts(sim,$m)] {
 	    unset opts(sim,$m)
@@ -272,7 +251,6 @@ proc run_sim_test { name requested_machs } {
 	# Multiple "output" specifications concatenate, they don't override.
 	if { $opt_name == "output" } {
 	    set opt_val "$opts(output)$opt_val"
-	    set seen_output 1
 	}
 	# Similar with "xfail" and "kfail", but arguments are space-separated.
 	if { $opt_name == "xfail" || $opt_name == "kfail" } {
@@ -289,7 +267,7 @@ proc run_sim_test { name requested_machs } {
 
     set testname $name
     set sourcefile $file
-    if { $seen_output == 0 } {
+    if { $opts(output) == "" } {
 	if { "$opts(xerror)" == "no" } {
 	    set opts(output) "pass\n"
 	} else {
@@ -332,44 +310,23 @@ proc run_sim_test { name requested_machs } {
 	if [info exists cpu_option] {
 	    set as_options "$as_options $cpu_option=$mach"
 	}
-	regsub {(^ *| +)([^ ]+)} "$as_options $global_as_options" { -Wa,\2} c_as_options
+	set comp_output [target_assemble $sourcefile ${name}.o "$as_options $global_as_options"]
+
+	if ![string match "" $comp_output] {
+	    verbose -log "$comp_output" 3
+	    fail "$mach $testname (assembling)"
+	    continue
+	}
 
 	if ![info exists opts(ld,$mach)] {
 	    set opts(ld,$mach) $opts(ld)
 	}
-	regsub {(^ *| +)([^ ]+)} "$opts(ld,$mach) $global_ld_options" { -Wl,\2} c_ld_options
 
-	if ![info exists opts(cc,$mach)] {
-	    set opts(cc,$mach) $opts(cc)
-	}
-
-	if [string match "*.c" $sourcefile] {
-	    set comp_output [target_compile $sourcefile ${name}.x "executable" \
-		[list "incdir=$srcdir/$subdir" "additional_flags=$c_as_options $c_ld_options $opts(cc,$mach) $global_cc_options"]]
-	    set method "compiling/linking"
-	} else {
-	    if [string match "*.S" $sourcefile] {
-		set comp_output [target_compile $sourcefile ${name}.o "object" \
-		    [list "incdir=$srcdir/$subdir" "additional_flags=$c_as_options"]]
-		set method "compiling"
-	    } else {
-		set comp_output [target_assemble $sourcefile ${name}.o "$as_options $global_as_options"]
-		set method "assembling"
-	    }
-
-	    if ![string match "" $comp_output] {
-		verbose -log "$comp_output" 3
-		fail "$mach $testname (${method})"
-		continue
-	    }
-
-	    set comp_output [target_link ${name}.o ${name}.x "$opts(ld,$mach) $global_ld_options"]
-	    set method "linking"
-	}
+	set comp_output [target_link ${name}.o ${name}.x "$opts(ld,$mach) $global_ld_options"]
 
 	if ![string match "" $comp_output] {
 	    verbose -log "$comp_output" 3
-	    fail "$mach $testname (${method})"
+	    fail "$mach $testname (linking)"
 	    continue
 	}
 
@@ -424,7 +381,6 @@ proc run_sim_test { name requested_machs } {
 # Subroutine of run_sim_test to process options in FILE.
 
 proc slurp_options { file } {
-    global subdir srcdir
     if [catch { set f [open $file r] } x] {
 	#perror "couldn't open `$file': $x"
 	perror "$x"
@@ -444,10 +400,6 @@ proc slurp_options { file } {
 	# Whitespace here is space-tab.
 	if [regexp $pat $line xxx opt_name opt_machs opt_val] {
 	    # match!
-	    set opt_val [string map [list \
-		{$srcdir} "$srcdir" \
-		{$subdir} "$subdir" \
-	    ] "$opt_val"]
 	    lappend opt_array [list $opt_name $opt_machs $opt_val]
 	    set seen_opt 1
 	} else {

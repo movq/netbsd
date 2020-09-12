@@ -1,5 +1,6 @@
 /* Disassembler code for CRIS.
-   Copyright (C) 2000-2020 Free Software Foundation, Inc.
+   Copyright 2000, 2001, 2002, 2004, 2005, 2006, 2007, 2008
+   Free Software Foundation, Inc.
    Contributed by Axis Communications AB, Lund, Sweden.
    Written by Hans-Peter Nilsson.
 
@@ -20,8 +21,8 @@
    Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston,
    MA 02110-1301, USA.  */
 
-#include "sysdep.h"
 #include "dis-asm.h"
+#include "sysdep.h"
 #include "opcode/cris.h"
 #include "libiberty.h"
 
@@ -659,17 +660,17 @@ bytes_to_skip (unsigned int insn,
 {
   /* Each insn is a word plus "immediate" operands.  */
   unsigned to_skip = 2;
-  const char *template_name = (const char *) matchedp->args;
+  const char *template = matchedp->args;
   const char *s;
 
-  for (s = template_name; *s; s++)
+  for (s = template; *s; s++)
     if ((*s == 's' || *s == 'N' || *s == 'Y')
 	&& (insn & 0x400) && (insn & 15) == 15
 	&& prefix_matchedp == NULL)
       {
 	/* Immediate via [pc+], so we have to check the size of the
 	   operand.  */
-	int mode_size = 1 << ((insn >> 4) & (*template_name == 'z' ? 1 : 3));
+	int mode_size = 1 << ((insn >> 4) & (*template == 'z' ? 1 : 3));
 
 	if (matchedp->imm_oprnd_size == SIZE_FIX_32)
 	  to_skip += 4;
@@ -813,7 +814,7 @@ print_with_operands (const struct cris_opcode *opcodep,
 	*tp++ = 'c';
 	*tp++ = 'r';
 	break;
-
+	
       case '[':
       case ']':
       case ',':
@@ -850,8 +851,9 @@ print_with_operands (const struct cris_opcode *opcodep,
       case 'n':
 	{
 	  /* Like N but pc-relative to the start of the insn.  */
-	  int32_t number = (buffer[2] + buffer[3] * 256 + buffer[4] * 65536
-			    + buffer[5] * 0x1000000u);
+	  unsigned long number
+	    = (buffer[2] + buffer[3] * 256 + buffer[4] * 65536
+	       + buffer[5] * 0x1000000 + addr);
 
 	  /* Finish off and output previous formatted bytes.  */
 	  *tp = 0;
@@ -859,14 +861,14 @@ print_with_operands (const struct cris_opcode *opcodep,
 	    (*info->fprintf_func) (info->stream, "%s", temp);
 	  tp = temp;
 
-	  (*info->print_address_func) (addr + number, info);
+	  (*info->print_address_func) ((bfd_vma) number, info);
 	}
 	break;
 
       case 'u':
 	{
 	  /* Like n but the offset is bits <3:0> in the instruction.  */
-	  unsigned int number = (buffer[0] & 0xf) * 2;
+	  unsigned long number = (buffer[0] & 0xf) * 2 + addr;
 
 	  /* Finish off and output previous formatted bytes.  */
 	  *tp = 0;
@@ -874,7 +876,7 @@ print_with_operands (const struct cris_opcode *opcodep,
 	    (*info->fprintf_func) (info->stream, "%s", temp);
 	  tp = temp;
 
-	  (*info->print_address_func) (addr + number, info);
+	  (*info->print_address_func) ((bfd_vma) number, info);
 	}
 	break;
 
@@ -888,7 +890,7 @@ print_with_operands (const struct cris_opcode *opcodep,
 	  {
 	    /* We're looking at [pc+], i.e. we need to output an immediate
 	       number, where the size can depend on different things.  */
-	    int32_t number;
+	    long number;
 	    int signedp
 	      = ((*cs == 'z' && (insn & 0x20))
 		 || opcodep->match == BDAP_QUICK_OPCODE);
@@ -939,8 +941,9 @@ print_with_operands (const struct cris_opcode *opcodep,
 		break;
 
 	      case 4:
-		number = (buffer[2] + buffer[3] * 256 + buffer[4] * 65536
-			  + buffer[5] * 0x1000000u);
+		number
+		  = buffer[2] + buffer[3] * 256 + buffer[4] * 65536
+		  + buffer[5] * 0x1000000;
 		break;
 
 	      default:
@@ -1040,10 +1043,10 @@ print_with_operands (const struct cris_opcode *opcodep,
 		      {
 			/* It's [pc+].  This cannot possibly be anything
 			   but an address.  */
-			int32_t number = (prefix_buffer[2]
-					  + prefix_buffer[3] * 256
-					  + prefix_buffer[4] * 65536
-					  + prefix_buffer[5] * 0x1000000u);
+			unsigned long number
+			  = prefix_buffer[2] + prefix_buffer[3] * 256
+			  + prefix_buffer[4] * 65536
+			  + prefix_buffer[5] * 0x1000000;
 
 			info->target = (bfd_vma) number;
 
@@ -1129,7 +1132,7 @@ print_with_operands (const struct cris_opcode *opcodep,
 
 		    if ((prefix_insn & 0x400) && (prefix_insn & 15) == 15)
 		      {
-			int32_t number;
+			long number;
 			unsigned int nbytes;
 
 			/* It's a value.  Get its size.  */
@@ -1155,9 +1158,10 @@ print_with_operands (const struct cris_opcode *opcodep,
 			    break;
 
 			  case 4:
-			    number = (prefix_buffer[2] + prefix_buffer[3] * 256
-				      + prefix_buffer[4] * 65536
-				      + prefix_buffer[5] * 0x1000000u);
+			    number
+			      = prefix_buffer[2] + prefix_buffer[3] * 256
+			      + prefix_buffer[4] * 65536
+			      + prefix_buffer[5] * 0x1000000;
 			    break;
 
 			  default:

@@ -1,14 +1,12 @@
 MACHINE=
 SCRIPT_NAME=mep
-OUTPUT_FORMAT="elf32-mep-little"
+OUTPUT_FORMAT="elf32-mep"
 TEXT_START_ADDR=0x1000
 ARCH=mep
 MAXPAGESIZE=256
 ENTRY=_start
 EMBEDDED=yes
-TEMPLATE_NAME=elf
-
-if test -n "${RELOCATING}"; then
+TEMPLATE_NAME=elf32
 DATA_START_SYMBOLS='__data_start = . ;'
 OTHER_GOT_SYMBOLS='
   . = ALIGN(4);
@@ -25,7 +23,7 @@ OTHER_READONLY_SECTIONS='
   __stack_size = 0x100000;
   __stack0  = (__stack - (0 *  (__stack_size / 1)) + 15) / 16 * 16;
 
-  .rostacktab :
+  .rostacktab : 
   {
     /* Emit a table describing the location of the different stacks.
        Only 1 processor in the default configuration.  */
@@ -55,4 +53,3 @@ OTHER_BSS_SECTIONS='
   __assert_near_size = ASSERT (. <= 0x1000000, "near section overflow");
   .farbss : { PROVIDE (__farbss_start = .); *(.farbss) *(.farbss.*) PROVIDE (__farbss_end = .); }
 '
-fi

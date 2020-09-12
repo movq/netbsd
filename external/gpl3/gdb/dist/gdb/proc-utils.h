@@ -1,5 +1,6 @@
 /* Machine independent support for SVR4 /proc (process file system) for GDB.
-   Copyright (C) 1999-2019 Free Software Foundation, Inc.
+   Copyright (C) 1999, 2000, 2007, 2008, 2009, 2010, 2011
+   Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -16,9 +17,6 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-#ifndef PROC_UTILS_H
-#define PROC_UTILS_H
-
 /* From proc-why.c */
 
 /*
@@ -32,16 +30,7 @@ extern void proc_prettyprint_syscalls (sysset_t *sysset, int verbose);
 
 extern void proc_prettyprint_syscall (int num, int verbose);
 
-extern void proc_prettyprint_signalset (sigset_t *sigset, int verbose);
-
-extern void proc_prettyprint_signal (int signo, int verbose);
-
-extern void proc_prettyprint_faultset (fltset_t *fltset, int verbose);
-
-extern void proc_prettyprint_fault (int faultno, int verbose);
-
-extern void proc_prettyprint_actionset (struct sigaction *actions,
-					int verbose);
+extern void proc_prettyprint_flags (unsigned long flags, int verbose);
 
 extern void proc_prettyfprint_signalset (FILE *file, sigset_t *sigset,
 					 int verbose);
@@ -67,18 +56,6 @@ extern void proc_prettyfprint_syscalls (FILE *file, sysset_t *sysset,
 extern void proc_prettyfprint_status (long, int, int, int);
 
 
-/* From proc-flags.c */
-
-/*
- * Pretty-print the prstatus flags.
- */
-
-extern void proc_prettyprint_flags (unsigned long flags, int verbose);
-
-extern void proc_prettyfprint_flags (FILE *file, unsigned long flags,
-				     int verbose);
-
-
 /* From proc-api.c */
 
 /*
@@ -91,7 +68,7 @@ extern  int   ioctl_with_trace (int, long, void *, char *, int);
 extern  pid_t wait_with_trace  (int *, char *, int);
 extern  int   open_with_trace  (char *, int, char *, int);
 extern  int   close_with_trace (int, char *, int);
-extern  void  procfs_note      (const char *, const char *, int);
+extern  void  procfs_note      (char *, char *, int);
 
 #ifdef PROCFS_TRACE
 /*
@@ -115,6 +92,8 @@ extern  void  procfs_note      (const char *, const char *, int);
 
 /* Define the type (and more importantly the width) of the control
    word used to write to the /proc/PID/ctl file.  */
+#if defined (PROC_CTL_WORD_TYPE)
+typedef PROC_CTL_WORD_TYPE procfs_ctl_t;
+#else
 typedef long procfs_ctl_t;
-
-#endif /* PROC_UTILS_H */
+#endif

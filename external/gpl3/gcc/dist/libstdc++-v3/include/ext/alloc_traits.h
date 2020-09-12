@@ -1,6 +1,6 @@
 // Allocator traits -*- C++ -*-
 
-// Copyright (C) 2011-2019 Free Software Foundation, Inc.
+// Copyright (C) 2011-2013 Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
@@ -42,11 +42,82 @@ namespace __gnu_cxx _GLIBCXX_VISIBILITY(default)
 {
 _GLIBCXX_BEGIN_NAMESPACE_VERSION
 
+#if __cplusplus >= 201103L
+  template<typename _Alloc>
+    struct __allocator_always_compares_equal
+    { static const bool value = false; };
+
+  template<typename _Alloc>
+    const bool __allocator_always_compares_equal<_Alloc>::value;
+
+  template<typename _Tp>
+    struct __allocator_always_compares_equal<std::allocator<_Tp>>
+    { static const bool value = true; };
+
+  template<typename _Tp>
+    const bool __allocator_always_compares_equal<std::allocator<_Tp>>::value;
+
+  template<typename, typename> struct array_allocator;
+
+  template<typename _Tp, typename _Array>
+    struct __allocator_always_compares_equal<array_allocator<_Tp, _Array>>
+    { static const bool value = true; };
+
+  template<typename _Tp, typename _Array>
+    const bool
+    __allocator_always_compares_equal<array_allocator<_Tp, _Array>>::value;
+
+  template<typename> struct bitmap_allocator;
+
+  template<typename _Tp>
+    struct __allocator_always_compares_equal<bitmap_allocator<_Tp>>
+    { static const bool value = true; };
+
+  template<typename _Tp>
+    const bool __allocator_always_compares_equal<bitmap_allocator<_Tp>>::value;
+
+  template<typename> struct malloc_allocator;
+
+  template<typename _Tp>
+    struct __allocator_always_compares_equal<malloc_allocator<_Tp>>
+    { static const bool value = true; };
+
+  template<typename _Tp>
+    const bool __allocator_always_compares_equal<malloc_allocator<_Tp>>::value;
+
+  template<typename> struct mt_allocator;
+
+  template<typename _Tp>
+    struct __allocator_always_compares_equal<mt_allocator<_Tp>>
+    { static const bool value = true; };
+
+  template<typename _Tp>
+    const bool __allocator_always_compares_equal<mt_allocator<_Tp>>::value;
+
+  template<typename> struct new_allocator;
+
+  template<typename _Tp>
+    struct __allocator_always_compares_equal<new_allocator<_Tp>>
+    { static const bool value = true; };
+
+  template<typename _Tp>
+    const bool __allocator_always_compares_equal<new_allocator<_Tp>>::value;
+
+  template<typename> struct pool_allocator;
+
+  template<typename _Tp>
+    struct __allocator_always_compares_equal<pool_allocator<_Tp>>
+    { static const bool value = true; };
+
+  template<typename _Tp>
+    const bool __allocator_always_compares_equal<pool_allocator<_Tp>>::value;
+#endif
+
 /**
- * @brief  Uniform interface to C++98 and C++11 allocators.
+ * @brief  Uniform interface to C++98 and C++0x allocators.
  * @ingroup allocators
 */
-template<typename _Alloc, typename = typename _Alloc::value_type>
+template<typename _Alloc>
   struct __alloc_traits
 #if __cplusplus >= 201103L
   : std::allocator_traits<_Alloc>
@@ -60,7 +131,7 @@ template<typename _Alloc, typename = typename _Alloc::value_type>
     typedef typename _Base_type::const_pointer      const_pointer;
     typedef typename _Base_type::size_type          size_type;
     typedef typename _Base_type::difference_type    difference_type;
-    // C++11 allocators do not define reference or const_reference
+    // C++0x allocators do not define reference or const_reference
     typedef value_type&                             reference;
     typedef const value_type&                       const_reference;
     using _Base_type::allocate;
@@ -71,19 +142,18 @@ template<typename _Alloc, typename = typename _Alloc::value_type>
 
   private:
     template<typename _Ptr>
-      using __is_custom_pointer
-	= std::__and_<std::is_same<pointer, _Ptr>,
-		      std::__not_<std::is_pointer<_Ptr>>>;
+      struct __is_custom_pointer
+      : std::integral_constant<bool, std::is_same<pointer, _Ptr>::value
+                                     && !std::is_pointer<_Ptr>::value>
+      { };
 
   public:
     // overload construct for non-standard pointer types
     template<typename _Ptr, typename... _Args>
       static typename std::enable_if<__is_custom_pointer<_Ptr>::value>::type
       construct(_Alloc& __a, _Ptr __p, _Args&&... __args)
-      noexcept(noexcept(_Base_type::construct(__a, std::__to_address(__p),
-					      std::forward<_Args>(__args)...)))
       {
-	_Base_type::construct(__a, std::__to_address(__p),
+	_Base_type::construct(__a, std::addressof(*__p),
 			      std::forward<_Args>(__args)...);
       }
 
@@ -91,8 +161,7 @@ template<typename _Alloc, typename = typename _Alloc::value_type>
     template<typename _Ptr>
       static typename std::enable_if<__is_custom_pointer<_Ptr>::value>::type
       destroy(_Alloc& __a, _Ptr __p)
-      noexcept(noexcept(_Base_type::destroy(__a, std::__to_address(__p))))
-      { _Base_type::destroy(__a, std::__to_address(__p)); }
+      { _Base_type::destroy(__a, std::addressof(*__p)); }
 
     static _Alloc _S_select_on_copy(const _Alloc& __a)
     { return _Base_type::select_on_container_copy_construction(__a); }
@@ -110,10 +179,17 @@ template<typename _Alloc, typename = typename _Alloc::value_type>
     { return _Base_type::propagate_on_container_swap::value; }
 
     static constexpr bool _S_always_equal()
-    { return _Base_type::is_always_equal::value; }
+    { return __allocator_always_compares_equal<_Alloc>::value; }
 
     static constexpr bool _S_nothrow_move()
     { return _S_propagate_on_move_assign() || _S_always_equal(); }
+
+    static constexpr bool _S_nothrow_swap()
+    {
+      using std::swap;
+      return !_S_propagate_on_swap()
+       	|| noexcept(swap(std::declval<_Alloc&>(), std::declval<_Alloc&>()));
+    }
 
     template<typename _Tp>
       struct rebind
@@ -128,7 +204,7 @@ template<typename _Alloc, typename = typename _Alloc::value_type>
     typedef typename _Alloc::size_type              size_type;
     typedef typename _Alloc::difference_type        difference_type;
 
-    _GLIBCXX_NODISCARD static pointer
+    static pointer
     allocate(_Alloc& __a, size_type __n)
     { return __a.allocate(__n); }
 
@@ -161,6 +237,6 @@ template<typename _Alloc, typename = typename _Alloc::value_type>
   };
 
 _GLIBCXX_END_NAMESPACE_VERSION
-} // namespace __gnu_cxx
+} // namespace std
 
 #endif

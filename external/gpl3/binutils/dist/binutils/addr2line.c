@@ -1,5 +1,6 @@
 /* addr2line.c -- convert addresses to line number and function name
-   Copyright (C) 1997-2020 Free Software Foundation, Inc.
+   Copyright 1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2006, 2007
+   Free Software Foundation, Inc.
    Contributed by Ulrich Lauther <Ulrich.Lauther@mchp.siemens.de>
 
    This file is part of GNU Binutils.
@@ -36,17 +37,11 @@
 #include "libiberty.h"
 #include "demangle.h"
 #include "bucomm.h"
-#include "elf-bfd.h"
 
 static bfd_boolean unwind_inlines;	/* -i, unwind inlined functions. */
-static bfd_boolean with_addresses;	/* -a, show addresses.  */
 static bfd_boolean with_functions;	/* -f, show function names.  */
 static bfd_boolean do_demangle;		/* -C, demangle names.  */
-static bfd_boolean pretty_print;	/* -p, print on one line.  */
 static bfd_boolean base_names;		/* -s, strip directory names.  */
-
-/* Flags passed to the name demangler.  */
-static int demangle_flags = DMGL_PARAMS | DMGL_ANSI;
 
 static int naddr;		/* Number of addresses to process.  */
 static char **addr;		/* Hex addresses to process.  */
@@ -55,17 +50,11 @@ static asymbol **syms;		/* Symbol table.  */
 
 static struct option long_options[] =
 {
-  {"addresses", no_argument, NULL, 'a'},
   {"basenames", no_argument, NULL, 's'},
   {"demangle", optional_argument, NULL, 'C'},
   {"exe", required_argument, NULL, 'e'},
   {"functions", no_argument, NULL, 'f'},
   {"inlines", no_argument, NULL, 'i'},
-  {"pretty-print", no_argument, NULL, 'p'},
-  {"recurse-limit", no_argument, NULL, 'R'},
-  {"recursion-limit", no_argument, NULL, 'R'},  
-  {"no-recurse-limit", no_argument, NULL, 'r'},
-  {"no-recursion-limit", no_argument, NULL, 'r'},  
   {"section", required_argument, NULL, 'j'},
   {"target", required_argument, NULL, 'b'},
   {"help", no_argument, NULL, 'H'},
@@ -89,17 +78,13 @@ usage (FILE *stream, int status)
   fprintf (stream, _(" If no addresses are specified on the command line, they will be read from stdin\n"));
   fprintf (stream, _(" The options are:\n\
   @<file>                Read options from <file>\n\
-  -a --addresses         Show addresses\n\
   -b --target=<bfdname>  Set the binary file format\n\
   -e --exe=<executable>  Set the input file name (default is a.out)\n\
   -i --inlines           Unwind inlined functions\n\
   -j --section=<name>    Read section-relative offsets instead of addresses\n\
-  -p --pretty-print      Make the output easier to read for humans\n\
   -s --basenames         Strip directory names\n\
   -f --functions         Show function names\n\
   -C --demangle[=style]  Demangle function names\n\
-  -R --recurse-limit     Enable a limit on recursion whilst demangling.  [Default]\n\
-  -r --no-recurse-limit  Disable a limit on recursion whilst demangling\n\
   -h --help              Display this information\n\
   -v --version           Display the program's version\n\
 \n"));
@@ -115,48 +100,18 @@ usage (FILE *stream, int status)
 static void
 slurp_symtab (bfd *abfd)
 {
-  long storage;
   long symcount;
-  bfd_boolean dynamic = FALSE;
+  unsigned int size;
 
   if ((bfd_get_file_flags (abfd) & HAS_SYMS) == 0)
     return;
 
-  storage = bfd_get_symtab_upper_bound (abfd);
-  if (storage == 0)
-    {
-      storage = bfd_get_dynamic_symtab_upper_bound (abfd);
-      dynamic = TRUE;
-    }
-  if (storage < 0)
-    bfd_fatal (bfd_get_filename (abfd));
+  symcount = bfd_read_minisymbols (abfd, FALSE, (void *) &syms, &size);
+  if (symcount == 0)
+    symcount = bfd_read_minisymbols (abfd, TRUE /* dynamic */, (void *) &syms, &size);
 
-  syms = (asymbol **) xmalloc (storage);
-  if (dynamic)
-    symcount = bfd_canonicalize_dynamic_symtab (abfd, syms);
-  else
-    symcount = bfd_canonicalize_symtab (abfd, syms);
   if (symcount < 0)
     bfd_fatal (bfd_get_filename (abfd));
-
-  /* If there are no symbols left after canonicalization and
-     we have not tried the dynamic symbols then give them a go.  */
-  if (symcount == 0
-      && ! dynamic
-      && (storage = bfd_get_dynamic_symtab_upper_bound (abfd)) > 0)
-    {
-      free (syms);
-      syms = xmalloc (storage);
-      symcount = bfd_canonicalize_dynamic_symtab (abfd, syms);
-    }
-
-  /* PR 17512: file: 2a1d3b5b.
-     Do not pretend that we have some symbols when we don't.  */
-  if (symcount <= 0)
-    {
-      free (syms);
-      syms = NULL;
-    }
 }
 
 /* These global variables are used to pass information between
@@ -166,7 +121,6 @@ static bfd_vma pc;
 static const char *filename;
 static const char *functionname;
 static unsigned int line;
-static unsigned int discriminator;
 static bfd_boolean found;
 
 /* Look for an address in a section.  This is called via
@@ -182,20 +136,19 @@ find_address_in_section (bfd *abfd, asection *section,
   if (found)
     return;
 
-  if ((bfd_section_flags (section) & SEC_ALLOC) == 0)
+  if ((bfd_get_section_flags (abfd, section) & SEC_ALLOC) == 0)
     return;
 
-  vma = bfd_section_vma (section);
+  vma = bfd_get_section_vma (abfd, section);
   if (pc < vma)
     return;
 
-  size = bfd_section_size (section);
+  size = bfd_get_section_size (section);
   if (pc >= vma + size)
     return;
 
-  found = bfd_find_nearest_line_discriminator (abfd, section, syms, pc - vma,
-                                               &filename, &functionname,
-                                               &line, &discriminator);
+  found = bfd_find_nearest_line (abfd, section, syms, pc - vma,
+				 &filename, &functionname, &line);
 }
 
 /* Look for an offset in a section.  This is directly called.  */
@@ -208,16 +161,15 @@ find_offset_in_section (bfd *abfd, asection *section)
   if (found)
     return;
 
-  if ((bfd_section_flags (section) & SEC_ALLOC) == 0)
+  if ((bfd_get_section_flags (abfd, section) & SEC_ALLOC) == 0)
     return;
 
-  size = bfd_section_size (section);
+  size = bfd_get_section_size (section);
   if (pc >= size)
     return;
 
-  found = bfd_find_nearest_line_discriminator (abfd, section, syms, pc,
-                                               &filename, &functionname,
-                                               &line, &discriminator);
+  found = bfd_find_nearest_line (abfd, section, syms, pc,
+				 &filename, &functionname, &line);
 }
 
 /* Read hexadecimal addresses from stdin, translate into
@@ -246,27 +198,6 @@ translate_addresses (bfd *abfd, asection *section)
 	  pc = bfd_scan_vma (*addr++, NULL, 16);
 	}
 
-      if (bfd_get_flavour (abfd) == bfd_target_elf_flavour)
-	{
-	  const struct elf_backend_data *bed = get_elf_backend_data (abfd);
-	  bfd_vma sign = (bfd_vma) 1 << (bed->s->arch_size - 1);
-
-	  pc &= (sign << 1) - 1;
-	  if (bed->sign_extend_vma)
-	    pc = (pc ^ sign) - sign;
-	}
-
-      if (with_addresses)
-        {
-          printf ("0x");
-          bfd_printf_vma (abfd, pc);
-
-          if (pretty_print)
-            printf (": ");
-          else
-            printf ("\n");
-        }
-
       found = FALSE;
       if (section)
 	find_offset_in_section (abfd, section);
@@ -276,83 +207,49 @@ translate_addresses (bfd *abfd, asection *section)
       if (! found)
 	{
 	  if (with_functions)
-	    {
-	      if (pretty_print)
-		printf ("?? ");
-	      else
-		printf ("??\n");
-	    }
+	    printf ("??\n");
 	  printf ("??:0\n");
 	}
       else
 	{
-	  while (1)
-            {
-              if (with_functions)
-                {
-                  const char *name;
-                  char *alloc = NULL;
+	  do {
+	    if (with_functions)
+	      {
+		const char *name;
+		char *alloc = NULL;
 
-                  name = functionname;
-                  if (name == NULL || *name == '\0')
-                    name = "??";
-                  else if (do_demangle)
-                    {
-                      alloc = bfd_demangle (abfd, name, demangle_flags);
-                      if (alloc != NULL)
-                        name = alloc;
-                    }
+		name = functionname;
+		if (name == NULL || *name == '\0')
+		  name = "??";
+		else if (do_demangle)
+		  {
+		    alloc = bfd_demangle (abfd, name, DMGL_ANSI | DMGL_PARAMS);
+		    if (alloc != NULL)
+		      name = alloc;
+		  }
 
-                  printf ("%s", name);
-                  if (pretty_print)
-		    /* Note for translators:  This printf is used to join the
-		       function name just printed above to the line number/
-		       file name pair that is about to be printed below.  Eg:
+		printf ("%s\n", name);
 
-		         foo at 123:bar.c  */
-                    printf (_(" at "));
-                  else
-                    printf ("\n");
+		if (alloc != NULL)
+		  free (alloc);
+	      }
 
-                  if (alloc != NULL)
-                    free (alloc);
-                }
+	    if (base_names && filename != NULL)
+	      {
+		char *h;
 
-              if (base_names && filename != NULL)
-                {
-                  char *h;
+		h = strrchr (filename, '/');
+		if (h != NULL)
+		  filename = h + 1;
+	      }
 
-                  h = strrchr (filename, '/');
-                  if (h != NULL)
-                    filename = h + 1;
-                }
+	    printf ("%s:%u\n", filename ? filename : "??", line);
+	    if (!unwind_inlines)
+	      found = FALSE;
+	    else
+	      found = bfd_find_inliner_info (abfd, &filename, &functionname, &line);
+	  } while (found);
 
-              printf ("%s:", filename ? filename : "??");
-	      if (line != 0)
-                {
-                  if (discriminator != 0)
-                    printf ("%u (discriminator %u)\n", line, discriminator);
-                  else
-                    printf ("%u\n", line);
-                }
-	      else
-		printf ("?\n");
-              if (!unwind_inlines)
-                found = FALSE;
-              else
-                found = bfd_find_inliner_info (abfd, &filename, &functionname,
-					       &line);
-              if (! found)
-                break;
-              if (pretty_print)
-		/* Note for translators: This printf is used to join the
-		   line number/file name pair that has just been printed with
-		   the line number/file name pair that is going to be printed
-		   by the next iteration of the while loop.  Eg:
-
-		     123:bar.c (inlined by) 456:main.c  */
-                printf (_(" (inlined by) "));
-            }
 	}
 
       /* fflush() is essential for using this command as a server
@@ -379,9 +276,6 @@ process_file (const char *file_name, const char *section_name,
   abfd = bfd_openr (file_name, target);
   if (abfd == NULL)
     bfd_fatal (file_name);
-
-  /* Decompress sections.  */
-  abfd->flags |= BFD_DECOMPRESS;
 
   if (bfd_check_format (abfd, bfd_archive))
     fatal (_("%s: cannot get addresses from archive"), file_name);
@@ -440,27 +334,22 @@ main (int argc, char **argv)
 
   program_name = *argv;
   xmalloc_set_program_name (program_name);
-  bfd_set_error_program_name (program_name);
 
   expandargv (&argc, &argv);
 
-  if (bfd_init () != BFD_INIT_MAGIC)
-    fatal (_("fatal error: libbfd ABI mismatch"));
+  bfd_init ();
   set_default_bfd_target ();
 
   file_name = NULL;
   section_name = NULL;
   target = NULL;
-  while ((c = getopt_long (argc, argv, "ab:Ce:rRsfHhij:pVv", long_options, (int *) 0))
+  while ((c = getopt_long (argc, argv, "b:Ce:sfHhij:Vv", long_options, (int *) 0))
 	 != EOF)
     {
       switch (c)
 	{
 	case 0:
 	  break;		/* We've been given a long option.  */
-	case 'a':
-	  with_addresses = TRUE;
-	  break;
 	case 'b':
 	  target = optarg;
 	  break;
@@ -478,12 +367,6 @@ main (int argc, char **argv)
 	      cplus_demangle_set_style (style);
 	    }
 	  break;
-	case 'r':
-	  demangle_flags |= DMGL_NO_RECURSE_LIMIT;
-	  break;
-	case 'R':
-	  demangle_flags &= ~ DMGL_NO_RECURSE_LIMIT;
-	  break;
 	case 'e':
 	  file_name = optarg;
 	  break;
@@ -493,9 +376,6 @@ main (int argc, char **argv)
 	case 'f':
 	  with_functions = TRUE;
 	  break;
-        case 'p':
-          pretty_print = TRUE;
-          break;
 	case 'v':
 	case 'V':
 	  print_version ("addr2line");

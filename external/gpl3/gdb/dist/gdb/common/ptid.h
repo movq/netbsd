@@ -1,6 +1,6 @@
 /* The ptid_t type and common functions operating on it.
 
-   Copyright (C) 1986-2019 Free Software Foundation, Inc.
+   Copyright (C) 1986-2013 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -17,139 +17,69 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-#ifndef COMMON_PTID_H
-#define COMMON_PTID_H
+#ifndef PTID_H
+#define PTID_H
 
-/* The ptid struct is a collection of the various "ids" necessary for
-   identifying the inferior process/thread being debugged.  This
-   consists of the process id (pid), lightweight process id (lwp) and
-   thread id (tid).  When manipulating ptids, the constructors,
-   accessors, and predicates declared in this file should be used.  Do
-   NOT access the struct ptid members directly.
+/* The ptid struct is a collection of the various "ids" necessary
+   for identifying the inferior.  This consists of the process id
+   (pid), thread id (tid), and other fields necessary for uniquely
+   identifying the inferior process/thread being debugged.  When
+   manipulating ptids, the constructors, accessors, and predicate
+   declared in server.h should be used.  These are as follows:
 
-   process_stratum targets that handle threading themselves should
-   prefer using the ptid.lwp field, leaving the ptid.tid field for any
-   thread_stratum target that might want to sit on top.
-*/
+      ptid_build	- Make a new ptid from a pid, lwp, and tid.
+      pid_to_ptid	- Make a new ptid from just a pid.
+      ptid_get_pid	- Fetch the pid component of a ptid.
+      ptid_get_lwp	- Fetch the lwp component of a ptid.
+      ptid_get_tid	- Fetch the tid component of a ptid.
+      ptid_equal	- Test to see if two ptids are equal.
 
-class ptid_t
-{
-public:
-  /* Must have a trivial defaulted default constructor so that the
-     type remains POD.  */
-  ptid_t () noexcept = default;
+   Please do NOT access the struct ptid members directly (except, of
+   course, in the implementation of the above ptid manipulation
+   functions).  */
 
-  /* Make a ptid given the necessary PID, LWP, and TID components.
-
-     A ptid with only a PID (LWP and TID equal to zero) is usually used to
-     represent a whole process, including all its lwps/threads.  */
-
-  explicit constexpr ptid_t (int pid, long lwp = 0, long tid = 0)
-    : m_pid (pid), m_lwp (lwp), m_tid (tid)
-  {}
-
-  /* Fetch the pid (process id) component from the ptid.  */
-
-  constexpr int pid () const
-  { return m_pid; }
-
-  /* Return true if the ptid's lwp member is non-zero.  */
-
-  constexpr bool lwp_p () const
-  { return m_lwp != 0; }
-
-  /* Fetch the lwp (lightweight process) component from the ptid.  */
-
-  constexpr long lwp () const
-  { return m_lwp; }
-
-  /* Return true if the ptid's tid member is non-zero.  */
-
-  constexpr bool tid_p () const
-  { return m_tid != 0; }
-
-  /* Fetch the tid (thread id) component from a ptid.  */
-
-  constexpr long tid () const
-  { return m_tid; }
-
-  /* Return true if the ptid represents a whole process, including all its
-     lwps/threads.  Such ptids have the form of (pid, 0, 0), with
-     pid != -1.  */
-
-  constexpr bool is_pid () const
+struct ptid
   {
-    return (*this != make_null ()
-	    && *this != make_minus_one ()
-	    && m_lwp == 0
-	    && m_tid == 0);
-  }
+    /* Process id */
+    int pid;
 
-  /* Compare two ptids to see if they are equal.  */
+    /* Lightweight process id */
+    long lwp;
 
-  constexpr bool operator== (const ptid_t &other) const
-  {
-    return (m_pid == other.m_pid
-	    && m_lwp == other.m_lwp
-	    && m_tid == other.m_tid);
-  }
+    /* Thread id */
+    long tid;
+  };
 
-  /* Compare two ptids to see if they are different.  */
-
-  constexpr bool operator!= (const ptid_t &other) const
-  {
-    return !(*this == other);
-  }
-
-  /* Return true if the ptid matches FILTER.  FILTER can be the wild
-     card MINUS_ONE_PTID (all ptids match it); can be a ptid representing
-     a process (ptid.is_pid () returns true), in which case, all lwps and
-     threads of that given process match, lwps and threads of other
-     processes do not; or, it can represent a specific thread, in which
-     case, only that thread will match true.  The ptid must represent a
-     specific LWP or THREAD, it can never be a wild card.  */
-
-  constexpr bool matches (const ptid_t &filter) const
-  {
-    return (/* If filter represents any ptid, it's always a match.  */
-	    filter == make_minus_one ()
-	    /* If filter is only a pid, any ptid with that pid
-	       matches.  */
-	    || (filter.is_pid () && m_pid == filter.pid ())
-
-	    /* Otherwise, this ptid only matches if it's exactly equal
-	       to filter.  */
-	    || *this == filter);
-  }
-
-  /* Make a null ptid.  */
-
-  static constexpr ptid_t make_null ()
-  { return ptid_t (0, 0, 0); }
-
-  /* Make a minus one ptid.  */
-
-  static constexpr ptid_t make_minus_one ()
-  { return ptid_t (-1, 0, 0); }
-
-private:
-  /* Process id.  */
-  int m_pid;
-
-  /* Lightweight process id.  */
-  long m_lwp;
-
-  /* Thread id.  */
-  long m_tid;
-};
+typedef struct ptid ptid_t;
 
 /* The null or zero ptid, often used to indicate no process. */
-
 extern ptid_t null_ptid;
 
-/* The (-1,0,0) ptid, often used to indicate either an error condition
+/* The -1 ptid, often used to indicate either an error condition
    or a "don't care" condition, i.e, "run all threads."  */
-
 extern ptid_t minus_one_ptid;
 
-#endif /* COMMON_PTID_H */
+/* Attempt to find and return an existing ptid with the given PID, LWP,
+   and TID components.  If none exists, create a new one and return
+   that.  */
+ptid_t ptid_build (int pid, long lwp, long tid);
+
+/* Find/Create a ptid from just a pid. */
+ptid_t pid_to_ptid (int pid);
+
+/* Fetch the pid (process id) component from a ptid. */
+int ptid_get_pid (ptid_t ptid);
+
+/* Fetch the lwp (lightweight process) component from a ptid. */
+long ptid_get_lwp (ptid_t ptid);
+
+/* Fetch the tid (thread id) component from a ptid. */
+long ptid_get_tid (ptid_t ptid);
+
+/* Compare two ptids to see if they are equal */
+int ptid_equal (ptid_t p1, ptid_t p2);
+
+/* Return true if PTID represents a process id.  */
+int ptid_is_pid (ptid_t ptid);
+
+#endif

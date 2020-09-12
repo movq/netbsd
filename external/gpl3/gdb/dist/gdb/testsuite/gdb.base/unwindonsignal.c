@@ -1,6 +1,6 @@
 /* This testcase is part of GDB, the GNU debugger.
 
-   Copyright 2008-2019 Free Software Foundation, Inc.
+   Copyright 2008, 2010, 2011 Free Software Foundation, Inc.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -17,6 +17,7 @@
 
 /* Support program for testing unwindonsignal.  */
 
+#include <stdio.h>
 #include <signal.h>
 #include <unistd.h>
 
@@ -24,7 +25,11 @@ void
 gen_signal ()
 {
   /* According to sigall.exp, SIGABRT is always supported.  */
+#ifdef SIGABRT
   kill (getpid (), SIGABRT);
+#endif
+  /* If we get here we couldn't generate a signal, tell dejagnu.  */
+  printf ("no signal\n");
 }
 
 /* Easy place to set a breakpoint.  */
@@ -37,6 +42,10 @@ stop_here ()
 int
 main ()
 {
+#ifdef usestubs
+  set_debug_traps ();
+  breakpoint ();
+#endif
 
 #ifdef SIG_SETMASK
   /* Ensure all the signals aren't blocked.

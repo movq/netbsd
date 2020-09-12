@@ -1,6 +1,7 @@
 /* Pascal language support routines for GDB, the GNU debugger.
 
-   Copyright (C) 2000-2019 Free Software Foundation, Inc.
+   Copyright (C) 2000, 2002, 2003, 2004, 2005, 2007, 2008, 2009, 2010, 2011
+   Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -20,17 +21,19 @@
 /* This file is derived from c-lang.c */
 
 #include "defs.h"
+#include "gdb_string.h"
 #include "symtab.h"
 #include "gdbtypes.h"
 #include "expression.h"
 #include "parser-defs.h"
 #include "language.h"
-#include "varobj.h"
 #include "p-lang.h"
 #include "valprint.h"
 #include "value.h"
 #include <ctype.h>
-#include "c-lang.h"
+
+extern void _initialize_pascal_language (void);
+
 
 /* All GPC versions until now (2007-09-27) also define a symbol called
    '_p_initialize'.  Check for the presence of this symbol first.  */
@@ -56,23 +59,23 @@ static const char GPC_MAIN_PROGRAM_NAME_2[] = "pascal_main_program";
 const char *
 pascal_main_name (void)
 {
-  struct bound_minimal_symbol msym;
+  struct minimal_symbol *msym;
 
   msym = lookup_minimal_symbol (GPC_P_INITIALIZE, NULL, NULL);
 
   /*  If '_p_initialize' was not found, the main program is likely not
      written in Pascal.  */
-  if (msym.minsym == NULL)
+  if (msym == NULL)
     return NULL;
 
   msym = lookup_minimal_symbol (GPC_MAIN_PROGRAM_NAME_1, NULL, NULL);
-  if (msym.minsym != NULL)
+  if (msym != NULL)
     {
       return GPC_MAIN_PROGRAM_NAME_1;
     }
 
   msym = lookup_minimal_symbol (GPC_MAIN_PROGRAM_NAME_2, NULL, NULL);
-  if (msym.minsym != NULL)
+  if (msym != NULL)
     {
       return GPC_MAIN_PROGRAM_NAME_2;
     }
@@ -96,7 +99,7 @@ int
 is_pascal_string_type (struct type *type,int *length_pos,
                        int *length_size, int *string_pos,
 		       struct type **char_type,
-		       const char **arrayname)
+		       char **arrayname)
 {
   if (type != NULL && TYPE_CODE (type) == TYPE_CODE_STRUCT)
     {
@@ -277,7 +280,10 @@ pascal_printstr (struct ui_file *stream, struct type *type,
 	{
 	  if (in_quotes)
 	    {
-	      fputs_filtered ("', ", stream);
+	      if (options->inspect_it)
+		fputs_filtered ("\\', ", stream);
+	      else
+		fputs_filtered ("', ", stream);
 	      in_quotes = 0;
 	    }
 	  pascal_printchar (current_char, type, stream);
@@ -290,7 +296,10 @@ pascal_printstr (struct ui_file *stream, struct type *type,
 	{
 	  if ((!in_quotes) && (PRINT_LITERAL_FORM (current_char)))
 	    {
-	      fputs_filtered ("'", stream);
+	      if (options->inspect_it)
+		fputs_filtered ("\\'", stream);
+	      else
+		fputs_filtered ("'", stream);
 	      in_quotes = 1;
 	    }
 	  pascal_one_char (current_char, stream, &in_quotes);
@@ -300,7 +309,12 @@ pascal_printstr (struct ui_file *stream, struct type *type,
 
   /* Terminate the quotes if necessary.  */
   if (in_quotes)
-    fputs_filtered ("'", stream);
+    {
+      if (options->inspect_it)
+	fputs_filtered ("\\'", stream);
+      else
+	fputs_filtered ("'", stream);
+    }
 
   if (force_ellipses || i < length)
     fputs_filtered ("...", stream);
@@ -337,7 +351,7 @@ const struct op_print pascal_op_print_tab[] =
   {"^", UNOP_IND, PREC_SUFFIX, 1},
   {"@", UNOP_ADDR, PREC_PREFIX, 0},
   {"sizeof", UNOP_SIZEOF, PREC_PREFIX, 0},
-  {NULL, OP_NULL, PREC_PREFIX, 0}
+  {NULL, 0, 0, 0}
 };
 
 enum pascal_primitive_types {
@@ -410,23 +424,18 @@ pascal_language_arch_info (struct gdbarch *gdbarch,
   lai->bool_type_default = builtin->builtin_bool;
 }
 
-static const char *p_extensions[] =
-{
-  ".pas", ".p", ".pp", NULL
-};
-
-extern const struct language_defn pascal_language_defn =
+const struct language_defn pascal_language_defn =
 {
   "pascal",			/* Language name */
-  "Pascal",
   language_pascal,
   range_check_on,
+  type_check_on,
   case_sensitive_on,
   array_row_major,
   macro_expansion_no,
-  p_extensions,
   &exp_descriptor_standard,
   pascal_parse,
+  pascal_error,
   null_post_parser,
   pascal_printchar,		/* Print a character constant */
   pascal_printstr,		/* Function to print string constant */
@@ -435,30 +444,26 @@ extern const struct language_defn pascal_language_defn =
   pascal_print_typedef,		/* Print a typedef using appropriate syntax */
   pascal_val_print,		/* Print a value using appropriate syntax */
   pascal_value_print,		/* Print a top-level value */
-  default_read_var_value,	/* la_read_var_value */
   NULL,				/* Language specific skip_trampoline */
   "this",		        /* name_of_this */
-  false,			/* la_store_sym_names_in_linkage_form_p */
   basic_lookup_symbol_nonlocal,	/* lookup_symbol_nonlocal */
   basic_lookup_transparent_type,/* lookup_transparent_type */
   NULL,				/* Language specific symbol demangler */
-  NULL,
   NULL,				/* Language specific class_name_from_physname */
   pascal_op_print_tab,		/* expression operators for printing */
   1,				/* c-style arrays */
   0,				/* String lower bound */
   default_word_break_characters,
-  default_collect_symbol_completion_matches,
+  default_make_symbol_completion_list,
   pascal_language_arch_info,
   default_print_array_index,
   default_pass_by_reference,
   default_get_string,
-  c_watch_location_expression,
-  NULL,				/* la_compare_symbol_for_completion */
-  iterate_over_symbols,
-  default_search_name_hash,
-  &default_varobj_ops,
-  NULL,
-  NULL,
   LANG_MAGIC
 };
+
+void
+_initialize_pascal_language (void)
+{
+  add_language (&pascal_language_defn);
+}

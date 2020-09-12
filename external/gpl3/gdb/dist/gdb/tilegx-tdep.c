@@ -1,6 +1,6 @@
 /* Target-dependent code for the Tilera TILE-Gx processor.
 
-   Copyright (C) 2012-2019 Free Software Foundation, Inc.
+   Copyright (C) 2012-2013 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -30,17 +30,20 @@
 #include "value.h"
 #include "dis-asm.h"
 #include "inferior.h"
+#include "gdb_string.h"
+#include "gdb_assert.h"
 #include "arch-utils.h"
+#include "floatformat.h"
 #include "regcache.h"
 #include "regset.h"
+#include "doublest.h"
 #include "osabi.h"
 #include "linux-tdep.h"
 #include "objfiles.h"
 #include "solib-svr4.h"
+#include "symtab.h"
 #include "tilegx-tdep.h"
 #include "opcode/tilegx.h"
-#include <algorithm>
-#include "common/byte-vector.h"
 
 struct tilegx_frame_cache
 {
@@ -219,7 +222,7 @@ tilegx_extract_return_value (struct type *type, struct regcache *regcache,
   int i, regnum = TILEGX_R0_REGNUM;
 
   for (i = 0; i < len; i += tilegx_reg_size)
-    regcache->raw_read (regnum++, valbuf + i);
+    regcache_raw_read (regcache, regnum++, valbuf + i);
 }
 
 /* Copy the function return value from VALBUF into the proper
@@ -236,7 +239,7 @@ tilegx_store_return_value (struct type *type, struct regcache *regcache,
       gdb_byte buf[tilegx_reg_size] = { 0 };
 
       memcpy (buf, valbuf, TYPE_LENGTH (type));
-      regcache->raw_write (TILEGX_R0_REGNUM, buf);
+      regcache_raw_write (regcache, TILEGX_R0_REGNUM, buf);
     }
   else
     {
@@ -244,7 +247,7 @@ tilegx_store_return_value (struct type *type, struct regcache *regcache,
       int i, regnum = TILEGX_R0_REGNUM;
 
       for (i = 0; i < len; i += tilegx_reg_size)
-	regcache->raw_write (regnum++, (gdb_byte *) valbuf + i);
+	regcache_raw_write (regcache, regnum++, (gdb_byte *) valbuf + i);
     }
 }
 
@@ -281,19 +284,19 @@ tilegx_push_dummy_call (struct gdbarch *gdbarch,
 			struct regcache *regcache,
 			CORE_ADDR bp_addr, int nargs,
 			struct value **args,
-			CORE_ADDR sp, function_call_return_method return_method,
+			CORE_ADDR sp, int struct_return,
 			CORE_ADDR struct_addr)
 {
   enum bfd_endian byte_order = gdbarch_byte_order (gdbarch);
   CORE_ADDR stack_dest = sp;
   int argreg = TILEGX_R0_REGNUM;
   int i, j;
-  int typelen, slacklen;
+  int typelen, slacklen, alignlen;
   static const gdb_byte four_zero_words[16] = { 0 };
 
   /* If struct_return is 1, then the struct return address will
      consume one argument-passing register.  */
-  if (return_method == return_method_struct)
+  if (struct_return)
     regcache_cooked_write_unsigned (regcache, argreg++, struct_addr);
 
   /* Arguments are passed in R0 - R9, and as soon as an argument
@@ -327,17 +330,21 @@ tilegx_push_dummy_call (struct gdbarch *gdbarch,
      the stack, word aligned.  */
   for (j = nargs - 1; j >= i; j--)
     {
+      gdb_byte *val;
+      struct cleanup *back_to;
       const gdb_byte *contents = value_contents (args[j]);
 
       typelen = TYPE_LENGTH (value_enclosing_type (args[j]));
       slacklen = align_up (typelen, 8) - typelen;
-      gdb::byte_vector val (typelen + slacklen);
-      memcpy (val.data (), contents, typelen);
-      memset (val.data () + typelen, 0, slacklen);
+      val = xmalloc (typelen + slacklen);
+      back_to = make_cleanup (xfree, val);
+      memcpy (val, contents, typelen);
+      memset (val + typelen, 0, slacklen);
 
       /* Now write data to the stack.  The stack grows downwards.  */
       stack_dest -= typelen + slacklen;
-      write_memory (stack_dest, val.data (), typelen + slacklen);
+      write_memory (stack_dest, val, typelen + slacklen);
+      do_cleanups (back_to);
     }
 
   /* Add 16 bytes for linkage space to the stack.  */
@@ -371,6 +378,9 @@ tilegx_analyze_prologue (struct gdbarch* gdbarch,
   enum bfd_endian byte_order = gdbarch_byte_order (gdbarch);
   CORE_ADDR next_addr;
   CORE_ADDR prolog_end = end_addr;
+  ULONGEST inst, inst2;
+  LONGEST offset;
+  int regnum;
   gdb_byte instbuf[32 * TILEGX_BUNDLE_SIZE_IN_BYTES];
   CORE_ADDR instbuf_start;
   unsigned int instbuf_size;
@@ -424,14 +434,13 @@ tilegx_analyze_prologue (struct gdbarch* gdbarch,
 	  if (instbuf_size > size_on_same_page)
 	    instbuf_size = size_on_same_page;
 
-	  instbuf_size = std::min ((CORE_ADDR) instbuf_size,
-				   (end_addr - next_addr));
+	  instbuf_size = min (instbuf_size, (end_addr - next_addr));
 	  instbuf_start = next_addr;
 
 	  status = safe_frame_unwind_memory (next_frame, instbuf_start,
 					     instbuf, instbuf_size);
 	  if (status == 0)
-	    memory_error (TARGET_XFER_E_IO, next_addr);
+	    memory_error (status, next_addr);
 	}
 
       reverse_frame_valid = 0;
@@ -444,7 +453,7 @@ tilegx_analyze_prologue (struct gdbarch* gdbarch,
       for (i = 0; i < num_insns; i++)
 	{
 	  struct tilegx_decoded_instruction *this_insn = &decoded[i];
-	  long long *operands = this_insn->operand_values;
+	  int64_t *operands = (int64_t *) this_insn->operand_values;
 	  const struct tilegx_opcode *opcode = this_insn->opcode;
 
 	  switch (opcode->mnemonic)
@@ -749,14 +758,14 @@ tilegx_skip_prologue (struct gdbarch *gdbarch, CORE_ADDR start_pc)
         = skip_prologue_using_sal (gdbarch, func_start);
 
       if (post_prologue_pc != 0)
-        return std::max (start_pc, post_prologue_pc);
+        return max (start_pc, post_prologue_pc);
     }
 
   /* Don't straddle a section boundary.  */
   s = find_pc_section (start_pc);
   end_pc = start_pc + 8 * TILEGX_BUNDLE_SIZE_IN_BYTES;
   if (s != NULL)
-    end_pc = std::min (end_pc, obj_section_endaddr (s));
+    end_pc = min (end_pc, obj_section_endaddr (s));
 
   /* Otherwise, try to skip prologue the hard way.  */
   return tilegx_analyze_prologue (gdbarch,
@@ -765,15 +774,16 @@ tilegx_skip_prologue (struct gdbarch *gdbarch, CORE_ADDR start_pc)
 				  NULL, NULL);
 }
 
-/* This is the implementation of gdbarch method stack_frame_destroyed_p.  */
+/* This is the implementation of gdbarch method in_function_epilogue_p.  */
 
 static int
-tilegx_stack_frame_destroyed_p (struct gdbarch *gdbarch, CORE_ADDR pc)
+tilegx_in_function_epilogue_p (struct gdbarch *gdbarch, CORE_ADDR pc)
 {
   CORE_ADDR func_addr = 0, func_end = 0;
 
   if (find_pc_partial_function (pc, NULL, &func_addr, &func_end))
     {
+      ULONGEST inst, inst2;
       CORE_ADDR addr = func_end - TILEGX_BUNDLE_SIZE_IN_BYTES;
 
       /* FIXME: Find the actual epilogue.  */
@@ -837,11 +847,19 @@ tilegx_write_pc (struct regcache *regcache, CORE_ADDR pc)
                                   INT_SWINT_1_SIGRETURN);
 }
 
-/* 64-bit pattern for a { bpt ; nop } bundle.  */
-constexpr gdb_byte tilegx_break_insn[] =
-  { 0x00, 0x50, 0x48, 0x51, 0xae, 0x44, 0x6a, 0x28 };
+/* This is the implementation of gdbarch method breakpoint_from_pc.  */
 
-typedef BP_MANIPULATION (tilegx_break_insn) tilegx_breakpoint;
+static const unsigned char *
+tilegx_breakpoint_from_pc (struct gdbarch *gdbarch,
+			   CORE_ADDR *pcptr, int *lenptr)
+{
+  /* 64-bit pattern for a { bpt ; nop } bundle.  */
+  static const unsigned char breakpoint[] =
+    { 0x00, 0x50, 0x48, 0x51, 0xae, 0x44, 0x6a, 0x28 };
+
+  *lenptr = sizeof (breakpoint);
+  return breakpoint;
+}
 
 /* Normal frames.  */
 
@@ -851,9 +869,10 @@ tilegx_frame_cache (struct frame_info *this_frame, void **this_cache)
   struct gdbarch *gdbarch = get_frame_arch (this_frame);
   struct tilegx_frame_cache *cache;
   CORE_ADDR current_pc;
+  int i;
 
   if (*this_cache)
-    return (struct tilegx_frame_cache *) *this_cache;
+    return *this_cache;
 
   cache = FRAME_OBSTACK_ZALLOC (struct tilegx_frame_cache);
   *this_cache = cache;
@@ -1035,7 +1054,8 @@ tilegx_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
 
   set_gdbarch_skip_prologue (gdbarch, tilegx_skip_prologue);
 
-  set_gdbarch_stack_frame_destroyed_p (gdbarch, tilegx_stack_frame_destroyed_p);
+  set_gdbarch_in_function_epilogue_p (gdbarch,
+				      tilegx_in_function_epilogue_p);
 
   /* Map debug registers into internal register numbers.  */
   set_gdbarch_dwarf2_reg_to_regnum (gdbarch, tilegx_dwarf2_reg_to_regnum);
@@ -1044,11 +1064,10 @@ tilegx_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
   set_gdbarch_push_dummy_call (gdbarch, tilegx_push_dummy_call);
   set_gdbarch_get_longjmp_target (gdbarch, tilegx_get_longjmp_target);
   set_gdbarch_write_pc (gdbarch, tilegx_write_pc);
-  set_gdbarch_breakpoint_kind_from_pc (gdbarch,
-				       tilegx_breakpoint::kind_from_pc);
-  set_gdbarch_sw_breakpoint_from_kind (gdbarch,
-				       tilegx_breakpoint::bp_from_kind);
+  set_gdbarch_breakpoint_from_pc (gdbarch, tilegx_breakpoint_from_pc);
   set_gdbarch_return_value (gdbarch, tilegx_return_value);
+
+  set_gdbarch_print_insn (gdbarch, print_insn_tilegx);
 
   gdbarch_init_osabi (info, gdbarch);
 
@@ -1057,6 +1076,9 @@ tilegx_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
 
   return gdbarch;
 }
+
+/* Provide a prototype to silence -Wmissing-prototypes.  */
+extern initialize_file_ftype _initialize_tilegx_tdep;
 
 void
 _initialize_tilegx_tdep (void)

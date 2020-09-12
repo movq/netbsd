@@ -1,6 +1,6 @@
 /* Blackfin Serial Peripheral Interface (SPI) model
 
-   Copyright (C) 2010-2019 Free Software Foundation, Inc.
+   Copyright (C) 2010-2011 Free Software Foundation, Inc.
    Contributed by Analog Devices, Inc.
 
    This file is part of simulators.
@@ -77,15 +77,13 @@ bfin_spi_io_write_buffer (struct hw *me, const void *source, int space,
   bu32 value;
   bu16 *valuep;
 
-  /* Invalid access mode is higher priority than missing register.  */
-  if (!dv_bfin_mmr_require_16 (me, addr, nr_bytes, true))
-    return 0;
-
   value = dv_load_2 (source);
   mmr_off = addr - spi->base;
   valuep = (void *)((unsigned long)spi + mmr_base() + mmr_off);
 
   HW_TRACE_WRITE ();
+
+  dv_bfin_mmr_require_16 (me, addr, nr_bytes, true);
 
   switch (mmr_off)
     {
@@ -109,7 +107,7 @@ bfin_spi_io_write_buffer (struct hw *me, const void *source, int space,
       break;
     default:
       dv_bfin_mmr_invalid (me, addr, nr_bytes, true);
-      return 0;
+      break;
     }
 
   return nr_bytes;
@@ -123,14 +121,12 @@ bfin_spi_io_read_buffer (struct hw *me, void *dest, int space,
   bu32 mmr_off;
   bu16 *valuep;
 
-  /* Invalid access mode is higher priority than missing register.  */
-  if (!dv_bfin_mmr_require_16 (me, addr, nr_bytes, false))
-    return 0;
-
   mmr_off = addr - spi->base;
   valuep = (void *)((unsigned long)spi + mmr_base() + mmr_off);
 
   HW_TRACE_READ ();
+
+  dv_bfin_mmr_require_16 (me, addr, nr_bytes, false);
 
   switch (mmr_off)
     {
@@ -149,7 +145,7 @@ bfin_spi_io_read_buffer (struct hw *me, void *dest, int space,
       break;
     default:
       dv_bfin_mmr_invalid (me, addr, nr_bytes, false);
-      return 0;
+      break;
     }
 
   return nr_bytes;

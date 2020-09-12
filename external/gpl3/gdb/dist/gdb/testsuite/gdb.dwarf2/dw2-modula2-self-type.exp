@@ -1,4 +1,4 @@
-# Copyright 2010-2019 Free Software Foundation, Inc.
+# Copyright 2010, 2011 Free Software Foundation, Inc.
 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -19,14 +19,17 @@ if {![dwarf2_support]} {
     return 0  
 }
 
-standard_testfile .S
+set testfile "dw2-modula2-self-type"
+set srcfile ${testfile}.S
+set executable ${testfile}.x
+set binfile ${objdir}/${subdir}/${executable}
 
 # First try referencing DW_AT_frame_base which is not defined.
 if  { [gdb_compile "${srcdir}/${subdir}/${srcfile}" "${binfile}" object {}] != "" } {
     return -1
 }
 
-clean_restart $testfile
+clean_restart $executable
 
 # C language would just naively print:
 # type = void (*)(void (*)(void (*)(void (*)(void (*)(...

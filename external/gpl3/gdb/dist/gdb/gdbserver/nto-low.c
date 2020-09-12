@@ -1,6 +1,6 @@
 /* QNX Neutrino specific low level interface, for the remote server
    for GDB.
-   Copyright (C) 2009-2019 Free Software Foundation, Inc.
+   Copyright (C) 2009, 2010, 2011 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -19,23 +19,20 @@
 
 
 #include "server.h"
-#include "gdbthread.h"
 #include "nto-low.h"
-#include "hostio.h"
 
 #include <limits.h>
 #include <fcntl.h>
 #include <spawn.h>
 #include <sys/procfs.h>
 #include <sys/auxv.h>
+#include <stdarg.h>
 #include <sys/iomgr.h>
 #include <sys/neutrino.h>
 
 
 extern int using_threads;
 int using_threads = 1;
-
-const struct target_desc *nto_tdesc;
 
 static void
 nto_trace (const char *fmt, ...)
@@ -91,13 +88,13 @@ nto_set_thread (ptid_t ptid)
 {
   int res = 0;
 
-  TRACE ("%s pid: %d tid: %ld\n", __func__, ptid.pid (),
-	 ptid.lwp ());
+  TRACE ("%s pid: %d tid: %ld\n", __func__, ptid_get_pid (ptid),
+	 ptid_get_lwp (ptid));
   if (nto_inferior.ctl_fd != -1
-      && ptid != null_ptid
-      && ptid != minus_one_ptid)
+      && !ptid_equal (ptid, null_ptid)
+      && !ptid_equal (ptid, minus_one_ptid))
     {
-      pthread_t tid = ptid.lwp ();
+      pthread_t tid = ptid_get_lwp (ptid);
 
       if (EOK == devctl (nto_inferior.ctl_fd, DCMD_PROC_CURTHREAD, &tid,
 	  sizeof (tid), 0))
@@ -142,7 +139,7 @@ nto_find_new_threads (struct nto_inferior *nto_inferior)
 	{
 	  struct thread_info *ti;
 
-	  ptid = ptid_t (nto_inferior->pid, tid, 0);
+	  ptid = ptid_build (nto_inferior->pid, tid, 0);
 	  ti = find_thread_ptid (ptid);
 	  if (ti != NULL)
 	    {
@@ -157,7 +154,7 @@ nto_find_new_threads (struct nto_inferior *nto_inferior)
       if (status.state != STATE_DEAD)
 	{
 	  TRACE ("Adding thread %d\n", tid);
-	  ptid = ptid_t (nto_inferior->pid, tid, 0);
+	  ptid = ptid_build (nto_inferior->pid, tid, 0);
 	  if (!find_thread_ptid (ptid))
 	    add_thread (ptid, NULL);
 	}
@@ -205,15 +202,13 @@ do_attach (pid_t pid)
       && (status.flags & _DEBUG_FLAG_STOPPED))
     {
       ptid_t ptid;
-      struct process_info *proc;
 
       kill (pid, SIGCONT);
-      ptid = ptid_t (status.pid, status.tid, 0);
+      ptid = ptid_build (status.pid, status.tid, 0);
       the_low_target.arch_setup ();
-      proc = add_process (status.pid, 1);
-      proc->tdesc = nto_tdesc;
+      add_process (status.pid, 1);
       TRACE ("Adding thread: pid=%d tid=%ld\n", status.pid,
-	     ptid.lwp ());
+	     ptid_get_lwp (ptid));
       nto_find_new_threads (&nto_inferior);
     }
   else
@@ -347,17 +342,14 @@ nto_read_auxv_from_initial_stack (CORE_ADDR initial_stack,
   return len_read;
 }
 
-/* Start inferior specified by PROGRAM, using PROGRAM_ARGS as its
-   arguments.  */
+/* Start inferior specified by PROGRAM passing arguments ALLARGS.  */
 
 static int
-nto_create_inferior (const char *program,
-		     const std::vector<char *> &program_args)
+nto_create_inferior (char *program, char **allargs)
 {
   struct inheritance inherit;
   pid_t pid;
   sigset_t set;
-  std::string str_program_args = stringify_argv (program_args);
 
   TRACE ("%s %s\n", __func__, program);
   /* Clear any pending SIGUSR1's but keep the behavior the same.  */
@@ -370,8 +362,7 @@ nto_create_inferior (const char *program,
   memset (&inherit, 0, sizeof (inherit));
   inherit.flags |= SPAWN_SETGROUP | SPAWN_HOLD;
   inherit.pgroup = SPAWN_NEWPGROUP;
-  pid = spawnp (program, 0, NULL, &inherit,
-		(char *) str_program_args.c_str (), 0);
+  pid = spawnp (program, 0, NULL, &inherit, allargs, 0);
   sigprocmask (SIG_BLOCK, &set, NULL);
 
   if (pid == -1)
@@ -397,10 +388,8 @@ nto_attach (unsigned long pid)
 /* Send signal to process PID.  */
 
 static int
-nto_kill (process_info *proc)
+nto_kill (int pid)
 {
-  int pid = proc->pid;
-
   TRACE ("%s %d\n", __func__, pid);
   kill (pid, SIGKILL);
   do_detach ();
@@ -410,9 +399,9 @@ nto_kill (process_info *proc)
 /* Detach from process PID.  */
 
 static int
-nto_detach (process_info *proc)
+nto_detach (int pid)
 {
-  TRACE ("%s %d\n", __func__, proc->pid);
+  TRACE ("%s %d\n", __func__, pid);
   do_detach ();
   return 0;
 }
@@ -432,9 +421,9 @@ nto_thread_alive (ptid_t ptid)
 {
   int res;
 
-  TRACE ("%s pid:%d tid:%d\n", __func__, ptid.pid (),
-	 ptid.lwp ());
-  if (SignalKill (0, ptid.pid (), ptid.lwp (),
+  TRACE ("%s pid:%d tid:%d\n", __func__, ptid_get_pid (ptid),
+	 ptid_get_lwp (ptid));
+  if (SignalKill (0, ptid_get_pid (ptid), ptid_get_lwp (ptid),
 		  0, 0, 0) == -1)
     res = 0;
   else
@@ -542,14 +531,14 @@ nto_wait (ptid_t ptid,
     {
       TRACE ("SSTEP\n");
       ourstatus->kind = TARGET_WAITKIND_STOPPED;
-      ourstatus->value.sig = GDB_SIGNAL_TRAP;
+      ourstatus->value.sig = TARGET_SIGNAL_TRAP;
     }
   /* Was it a breakpoint?  */
   else if (status.flags & trace_mask)
     {
       TRACE ("STOPPED\n");
       ourstatus->kind = TARGET_WAITKIND_STOPPED;
-      ourstatus->value.sig = GDB_SIGNAL_TRAP;
+      ourstatus->value.sig = TARGET_SIGNAL_TRAP;
     }
   else if (status.flags & _DEBUG_FLAG_ISTOP)
     {
@@ -560,7 +549,7 @@ nto_wait (ptid_t ptid,
 	  TRACE ("  SIGNALLED\n");
 	  ourstatus->kind = TARGET_WAITKIND_STOPPED;
 	  ourstatus->value.sig =
-	    gdb_signal_from_host (status.info.si_signo);
+	    target_signal_from_host (status.info.si_signo);
 	  nto_inferior.exit_signo = ourstatus->value.sig;
 	  break;
 	case _DEBUG_WHY_FAULTED:
@@ -574,7 +563,7 @@ nto_wait (ptid_t ptid,
 	  else
 	    {
 	      ourstatus->value.sig =
-		gdb_signal_from_host (status.info.si_signo);
+		target_signal_from_host (status.info.si_signo);
 	      nto_inferior.exit_signo = ourstatus->value.sig;
 	    }
 	  break;
@@ -584,7 +573,7 @@ nto_wait (ptid_t ptid,
 	    int waitval = 0;
 
 	    TRACE ("  TERMINATED\n");
-	    waitpid (ptid.pid (), &waitval, WNOHANG);
+	    waitpid (ptid_get_pid (ptid), &waitval, WNOHANG);
 	    if (nto_inferior.exit_signo)
 	      {
 		/* Abnormal death.  */
@@ -605,13 +594,13 @@ nto_wait (ptid_t ptid,
 	  TRACE ("REQUESTED\n");
 	  /* We are assuming a requested stop is due to a SIGINT.  */
 	  ourstatus->kind = TARGET_WAITKIND_STOPPED;
-	  ourstatus->value.sig = GDB_SIGNAL_INT;
+	  ourstatus->value.sig = TARGET_SIGNAL_INT;
 	  nto_inferior.exit_signo = 0;
 	  break;
 	}
     }
 
-  return ptid_t (status.pid, status.tid, 0);
+  return ptid_build (status.pid, status.tid, 0);
 }
 
 /* Fetch inferior's registers for currently selected thread (CURRENT_INFERIOR).
@@ -622,17 +611,18 @@ nto_fetch_registers (struct regcache *regcache, int regno)
 {
   int regsize;
   procfs_greg greg;
+  ptid_t ptid;
 
   TRACE ("%s (regno=%d)\n", __func__, regno);
   if (regno >= the_low_target.num_regs)
     return;
 
-  if (current_thread == NULL)
+  if (current_inferior == NULL)
     {
-      TRACE ("current_thread is NULL\n");
+      TRACE ("current_inferior is NULL\n");
       return;
     }
-  ptid_t ptid = ptid_of (current_thread);
+  ptid = thread_to_gdb_id (current_inferior);
   if (!nto_set_thread (ptid))
     return;
 
@@ -670,15 +660,16 @@ nto_store_registers (struct regcache *regcache, int regno)
 {
   procfs_greg greg;
   int err;
+  ptid_t ptid;
 
   TRACE ("%s (regno:%d)\n", __func__, regno);
 
-  if (current_thread == NULL)
+  if (current_inferior == NULL)
     {
-      TRACE ("current_thread is NULL\n");
+      TRACE ("current_inferior is NULL\n");
       return;
     }
-  ptid_t ptid = ptid_of (current_thread);
+  ptid = thread_to_gdb_id (current_inferior);
   if (!nto_set_thread (ptid))
     return;
 
@@ -742,7 +733,7 @@ static void
 nto_request_interrupt (void)
 {
   TRACE ("%s\n", __func__);
-  nto_set_thread (ptid_t (nto_inferior.pid, 1, 0));
+  nto_set_thread (ptid_build (nto_inferior.pid, 1, 0));
   if (EOK != devctl (nto_inferior.ctl_fd, DCMD_PROC_STOP, NULL, 0, 0))
     TRACE ("Error stopping inferior.\n");
 }
@@ -774,46 +765,30 @@ nto_read_auxv (CORE_ADDR offset, unsigned char *myaddr, unsigned int len)
   return nto_read_auxv_from_initial_stack (initial_stack, myaddr, len);
 }
 
-static int
-nto_supports_z_point_type (char z_type)
-{
-  switch (z_type)
-    {
-    case Z_PACKET_SW_BP:
-    case Z_PACKET_HW_BP:
-    case Z_PACKET_WRITE_WP:
-    case Z_PACKET_READ_WP:
-    case Z_PACKET_ACCESS_WP:
-      return 1;
-    default:
-      return 0;
-    }
-}
-
-/* Insert {break/watch}point at address ADDR.  SIZE is not used.  */
+/* Insert {break/watch}point at address ADDR.
+   TYPE must be in '0'..'4' range.  LEN is not used.  */
 
 static int
-nto_insert_point (enum raw_bkpt_type type, CORE_ADDR addr,
-		  int size, struct raw_breakpoint *bp)
+nto_insert_point (char type, CORE_ADDR addr, int len)
 {
   int wtype = _DEBUG_BREAK_HW; /* Always request HW.  */
 
-  TRACE ("%s type:%c addr: 0x%08lx len:%d\n", __func__, (int)type, addr, size);
+  TRACE ("%s type:%c addr: 0x%08lx len:%d\n", __func__, (int)type, addr, len);
   switch (type)
     {
-    case raw_bkpt_type_sw:
+    case '0': /* software-breakpoint */
       wtype = _DEBUG_BREAK_EXEC;
       break;
-    case raw_bkpt_type_hw:
+    case '1': /* hardware-breakpoint */
       wtype |= _DEBUG_BREAK_EXEC;
       break;
-    case raw_bkpt_type_write_wp:
+    case '2':  /* write watchpoint */
       wtype |= _DEBUG_BREAK_RW;
       break;
-    case raw_bkpt_type_read_wp:
+    case '3':  /* read watchpoint */
       wtype |= _DEBUG_BREAK_RD;
       break;
-    case raw_bkpt_type_access_wp:
+    case '4':  /* access watchpoint */
       wtype |= _DEBUG_BREAK_RW;
       break;
     default:
@@ -822,30 +797,30 @@ nto_insert_point (enum raw_bkpt_type type, CORE_ADDR addr,
   return nto_breakpoint (addr, wtype, 0);
 }
 
-/* Remove {break/watch}point at address ADDR.  SIZE is not used.  */
+/* Remove {break/watch}point at address ADDR.
+   TYPE must be in '0'..'4' range.  LEN is not used.  */
 
 static int
-nto_remove_point (enum raw_bkpt_type type, CORE_ADDR addr,
-		  int size, struct raw_breakpoint *bp)
+nto_remove_point (char type, CORE_ADDR addr, int len)
 {
   int wtype = _DEBUG_BREAK_HW; /* Always request HW.  */
 
-  TRACE ("%s type:%c addr: 0x%08lx len:%d\n", __func__, (int)type, addr, size);
+  TRACE ("%s type:%c addr: 0x%08lx len:%d\n", __func__, (int)type, addr, len);
   switch (type)
     {
-    case raw_bkpt_type_sw:
+    case '0': /* software-breakpoint */
       wtype = _DEBUG_BREAK_EXEC;
       break;
-    case raw_bkpt_type_hw:
+    case '1': /* hardware-breakpoint */
       wtype |= _DEBUG_BREAK_EXEC;
       break;
-    case raw_bkpt_type_write_wp:
+    case '2':  /* write watchpoint */
       wtype |= _DEBUG_BREAK_RW;
       break;
-    case raw_bkpt_type_read_wp:
+    case '3':  /* read watchpoint */
       wtype |= _DEBUG_BREAK_RD;
       break;
-    case raw_bkpt_type_access_wp:
+    case '4':  /* access watchpoint */
       wtype |= _DEBUG_BREAK_RW;
       break;
     default:
@@ -865,9 +840,11 @@ nto_stopped_by_watchpoint (void)
   int ret = 0;
 
   TRACE ("%s\n", __func__);
-  if (nto_inferior.ctl_fd != -1 && current_thread != NULL)
+  if (nto_inferior.ctl_fd != -1 && current_inferior != NULL)
     {
-      ptid_t ptid = ptid_of (current_thread);
+      ptid_t ptid;
+
+      ptid = thread_to_gdb_id (current_inferior);
       if (nto_set_thread (ptid))
 	{
 	  const int watchmask = _DEBUG_FLAG_TRACE_RD | _DEBUG_FLAG_TRACE_WR
@@ -895,9 +872,11 @@ nto_stopped_data_address (void)
   CORE_ADDR ret = (CORE_ADDR)0;
 
   TRACE ("%s\n", __func__);
-  if (nto_inferior.ctl_fd != -1 && current_thread != NULL)
+  if (nto_inferior.ctl_fd != -1 && current_inferior != NULL)
     {
-      ptid_t ptid = ptid_of (current_thread);
+      ptid_t ptid;
+
+      ptid = thread_to_gdb_id (current_inferior);
 
       if (nto_set_thread (ptid))
 	{
@@ -921,19 +900,10 @@ nto_supports_non_stop (void)
   return 0;
 }
 
-/* Implementation of the target_ops method "sw_breakpoint_from_kind".  */
-
-static const gdb_byte *
-nto_sw_breakpoint_from_kind (int kind, int *size)
-{
-  *size = the_low_target.breakpoint_len;
-  return the_low_target.breakpoint;
-}
 
 
 static struct target_ops nto_target_ops = {
   nto_create_inferior,
-  NULL,  /* post_create_inferior */
   nto_attach,
   nto_kill,
   nto_detach,
@@ -951,14 +921,8 @@ static struct target_ops nto_target_ops = {
   NULL, /* nto_look_up_symbols */
   nto_request_interrupt,
   nto_read_auxv,
-  nto_supports_z_point_type,
   nto_insert_point,
   nto_remove_point,
-  NULL, /* stopped_by_sw_breakpoint */
-  NULL, /* supports_stopped_by_sw_breakpoint */
-  NULL, /* stopped_by_hw_breakpoint */
-  NULL, /* supports_stopped_by_hw_breakpoint */
-  target_can_do_hardware_single_step,
   nto_stopped_by_watchpoint,
   nto_stopped_data_address,
   NULL, /* nto_read_offsets */
@@ -969,41 +933,7 @@ static struct target_ops nto_target_ops = {
   NULL, /* xfer_siginfo */
   nto_supports_non_stop,
   NULL, /* async */
-  NULL, /* start_non_stop */
-  NULL, /* supports_multi_process */
-  NULL, /* supports_fork_events */
-  NULL, /* supports_vfork_events */
-  NULL, /* supports_exec_events */
-  NULL, /* handle_new_gdb_connection */
-  NULL, /* handle_monitor_command */
-  NULL, /* core_of_thread */
-  NULL, /* read_loadmap */
-  NULL, /* process_qsupported */
-  NULL, /* supports_tracepoints */
-  NULL, /* read_pc */
-  NULL, /* write_pc */
-  NULL, /* thread_stopped */
-  NULL, /* get_tib_address */
-  NULL, /* pause_all */
-  NULL, /* unpause_all */
-  NULL, /* stabilize_threads */
-  NULL, /* install_fast_tracepoint_jump_pad */
-  NULL, /* emit_ops */
-  NULL, /* supports_disable_randomization */
-  NULL, /* get_min_fast_tracepoint_insn_len */
-  NULL, /* qxfer_libraries_svr4 */
-  NULL, /* support_agent */
-  NULL, /* enable_btrace */
-  NULL, /* disable_btrace */
-  NULL, /* read_btrace */
-  NULL, /* read_btrace_conf */
-  NULL, /* supports_range_stepping */
-  NULL, /* pid_to_exec_file */
-  NULL, /* multifs_open */
-  NULL, /* multifs_unlink */
-  NULL, /* multifs_readlink */
-  NULL, /* breakpoint_kind_from_pc */
-  nto_sw_breakpoint_from_kind,
+  NULL  /* start_non_stop */
 };
 
 
@@ -1017,6 +947,8 @@ initialize_low (void)
 
   TRACE ("%s\n", __func__);
   set_target_ops (&nto_target_ops);
+  set_breakpoint_data (the_low_target.breakpoint,
+		       the_low_target.breakpoint_len);
 
   /* We use SIGUSR1 to gain control after we block waiting for a process.
      We use sigwaitevent to wait.  */

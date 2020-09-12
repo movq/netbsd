@@ -1,5 +1,6 @@
 /* Interface GDB to the GNU Hurd.
-   Copyright (C) 1992-2019 Free Software Foundation, Inc.
+   Copyright (C) 1992, 1995, 1996, 1997, 1998, 1999, 2000, 2001, 2006, 2007,
+   2008, 2009, 2010, 2011 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -18,14 +19,18 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ */
 
-/* Include this first, to pick up the <mach.h> 'thread_info' diversion.  */
-#include "gnu-nat.h"
+#include <ctype.h>
+#include <errno.h>
+#include <limits.h>
+#include <setjmp.h>
+#include <signal.h>
+#include <stdio.h>
+#include "gdb_string.h"
+#include <sys/ptrace.h>
 
-/* Mach/Hurd headers are not yet ready for C++ compilation.  */
-extern "C"
-{
 #include <mach.h>
 #include <mach_error.h>
 #include <mach/exception.h>
@@ -46,43 +51,29 @@ extern "C"
 #include <hurd/sigpreempt.h>
 
 #include <portinfo.h>
-}
 
 #include "defs.h"
-
-#include <ctype.h>
-#include <limits.h>
-#include <setjmp.h>
-#include <signal.h>
-#include <sys/ptrace.h>
-#include <elf.h>
-#include <link.h>
-
 #include "inferior.h"
 #include "symtab.h"
 #include "value.h"
 #include "language.h"
 #include "target.h"
-#include "common/gdb_wait.h"
+#include "gdb_wait.h"
 #include "gdbcmd.h"
 #include "gdbcore.h"
 #include "gdbthread.h"
+#include "gdb_assert.h"
 #include "gdb_obstack.h"
-#include "tid-parse.h"
-#include "nat/fork-inferior.h"
 
+#include "gnu-nat.h"
 #include "inf-child.h"
 
-/* MIG stubs are not yet ready for C++ compilation.  */
-extern "C"
-{
 #include "exc_request_S.h"
 #include "notify_S.h"
 #include "process_reply_S.h"
 #include "msg_reply_S.h"
 #include "exc_request_U.h"
 #include "msg_U.h"
-}
 
 static process_t proc_server = MACH_PORT_NULL;
 
@@ -97,7 +88,7 @@ int gnu_debug_flag = 0;
 
 /* Forward decls */
 
-static struct inf *make_inf ();
+struct inf *make_inf ();
 void inf_clear_wait (struct inf *inf);
 void inf_cleanup (struct inf *inf);
 void inf_startup (struct inf *inf, int pid);
@@ -106,6 +97,7 @@ void inf_set_pid (struct inf *inf, pid_t pid);
 void inf_validate_procs (struct inf *inf);
 void inf_steal_exc_ports (struct inf *inf);
 void inf_restore_exc_ports (struct inf *inf);
+struct proc *inf_tid_to_proc (struct inf *inf, int tid);
 void inf_set_threads_resume_sc (struct inf *inf,
 				struct proc *run_thread,
 				int run_others);
@@ -115,7 +107,7 @@ void inf_resume (struct inf *inf);
 void inf_set_step_thread (struct inf *inf, struct proc *proc);
 void inf_detach (struct inf *inf);
 void inf_attach (struct inf *inf, int pid);
-void inf_signal (struct inf *inf, enum gdb_signal sig);
+void inf_signal (struct inf *inf, enum target_signal sig);
 void inf_continue (struct inf *inf);
 
 #define inf_debug(_inf, msg, args...) \
@@ -127,8 +119,8 @@ void proc_abort (struct proc *proc, int force);
 struct proc *make_proc (struct inf *inf, mach_port_t port, int tid);
 struct proc *_proc_free (struct proc *proc);
 int proc_update_sc (struct proc *proc);
-kern_return_t proc_get_exception_port (struct proc *proc, mach_port_t * port);
-kern_return_t proc_set_exception_port (struct proc *proc, mach_port_t port);
+error_t proc_get_exception_port (struct proc *proc, mach_port_t * port);
+error_t proc_set_exception_port (struct proc *proc, mach_port_t port);
 static mach_port_t _proc_get_exc_port (struct proc *proc);
 void proc_steal_exc_port (struct proc *proc, mach_port_t exc_port);
 void proc_restore_exc_port (struct proc *proc);
@@ -147,7 +139,7 @@ int proc_trace (struct proc *proc, int set);
    afterwards).  This effects INF's threads' resume_sc count.  */
 #define INF_RESUME_MSGPORT_RPC(inf, rpc_expr) \
   (inf_set_threads_resume_sc_for_signal_thread (inf) \
-   ? ({ kern_return_t __e; \
+   ? ({ error_t __e; \
 	inf_resume (inf); \
 	__e = INF_MSGPORT_RPC (inf, rpc_expr); \
 	inf_suspend (inf); \
@@ -220,9 +212,9 @@ struct inf
     unsigned int no_wait:1;
 
     /* When starting a new inferior, we don't try to validate threads until all
-       the proper execs have been done, which this flag states we still
+       the proper execs have been done.  This is a count of how many execs we
        expect to happen.  */
-    unsigned int pending_execs:1;
+    unsigned pending_execs;
 
     /* Fields describing global state.  */
 
@@ -381,7 +373,7 @@ proc_get_state (struct proc *proc, int will_modify)
   if (!proc->state_valid)
     {
       mach_msg_type_number_t state_size = THREAD_STATE_SIZE;
-      kern_return_t err =
+      error_t err =
 	thread_get_state (proc->port, THREAD_STATE_FLAVOR,
 			  (thread_state_t) &proc->state, &state_size);
 
@@ -401,7 +393,7 @@ proc_get_state (struct proc *proc, int will_modify)
 
 
 /* Set PORT to PROC's exception port.  */
-kern_return_t
+error_t
 proc_get_exception_port (struct proc * proc, mach_port_t * port)
 {
   if (proc_is_task (proc))
@@ -411,10 +403,10 @@ proc_get_exception_port (struct proc * proc, mach_port_t * port)
 }
 
 /* Set PROC's exception port to PORT.  */
-kern_return_t
+error_t
 proc_set_exception_port (struct proc * proc, mach_port_t port)
 {
-  proc_debug (proc, "setting exception port: %lu", port);
+  proc_debug (proc, "setting exception port: %d", port);
   if (proc_is_task (proc))
     return task_set_exception_port (proc->port, port);
   else
@@ -426,7 +418,7 @@ static mach_port_t
 _proc_get_exc_port (struct proc *proc)
 {
   mach_port_t exc_port;
-  kern_return_t err = proc_get_exception_port (proc, &exc_port);
+  error_t err = proc_get_exception_port (proc, &exc_port);
 
   if (err)
     /* PROC must be dead.  */
@@ -452,9 +444,9 @@ proc_steal_exc_port (struct proc *proc, mach_port_t exc_port)
 
   if (cur_exc_port)
     {
-      kern_return_t err = 0;
+      error_t err = 0;
 
-      proc_debug (proc, "inserting exception port: %lu", exc_port);
+      proc_debug (proc, "inserting exception port: %d", exc_port);
 
       if (cur_exc_port != exc_port)
 	/* Put in our exception port.  */
@@ -475,7 +467,7 @@ proc_steal_exc_port (struct proc *proc, mach_port_t exc_port)
 	  proc->saved_exc_port = cur_exc_port;
 	}
 
-      proc_debug (proc, "saved exception port: %lu", proc->saved_exc_port);
+      proc_debug (proc, "saved exception port: %d", proc->saved_exc_port);
 
       if (!err)
 	proc->exc_port = exc_port;
@@ -495,7 +487,7 @@ proc_restore_exc_port (struct proc *proc)
 
   if (cur_exc_port)
     {
-      kern_return_t err = 0;
+      error_t err = 0;
 
       proc_debug (proc, "restoring real exception port");
 
@@ -551,9 +543,9 @@ static int next_thread_id = 1;
 struct proc *
 make_proc (struct inf *inf, mach_port_t port, int tid)
 {
-  kern_return_t err;
+  error_t err;
   mach_port_t prev_port = MACH_PORT_NULL;
-  struct proc *proc = XNEW (struct proc);
+  struct proc *proc = xmalloc (sizeof (struct proc));
 
   proc->port = port;
   proc->tid = tid;
@@ -587,11 +579,11 @@ make_proc (struct inf *inf, mach_port_t port, int tid)
 				    MACH_MSG_TYPE_MAKE_SEND_ONCE,
 				    &prev_port);
   if (err)
-    warning (_("Couldn't request notification for port %lu: %s"),
+    warning (_("Couldn't request notification for port %d: %s"),
 	     port, safe_strerror (err));
   else
     {
-      proc_debug (proc, "notifications to: %lu", inf->event_port);
+      proc_debug (proc, "notifications to: %d", inf->event_port);
       if (prev_port != MACH_PORT_NULL)
 	mach_port_deallocate (mach_task_self (), prev_port);
     }
@@ -647,10 +639,10 @@ _proc_free (struct proc *proc)
 }
 
 
-static struct inf *
+struct inf *
 make_inf (void)
 {
-  struct inf *inf = XNEW (struct inf);
+  struct inf *inf = xmalloc (sizeof (struct inf));
 
   inf->task = 0;
   inf->threads = 0;
@@ -727,7 +719,7 @@ inf_cleanup (struct inf *inf)
 void
 inf_startup (struct inf *inf, int pid)
 {
-  kern_return_t err;
+  error_t err;
 
   inf_debug (inf, "startup: pid = %d", pid);
 
@@ -759,14 +751,14 @@ inf_set_pid (struct inf *inf, pid_t pid)
     task_port = MACH_PORT_NULL;
   else
     {
-      kern_return_t err = proc_pid2task (proc_server, pid, &task_port);
+      error_t err = proc_pid2task (proc_server, pid, &task_port);
 
       if (err)
 	error (_("Error getting task for pid %d: %s"),
 	       pid, safe_strerror (err));
     }
 
-  inf_debug (inf, "setting task: %lu", task_port);
+  inf_debug (inf, "setting task: %d", task_port);
 
   if (inf->pause_sc)
     task_suspend (task_port);
@@ -808,7 +800,7 @@ inf_validate_procinfo (struct inf *inf)
   struct procinfo *pi;
   mach_msg_type_number_t pi_len = 0;
   int info_flags = 0;
-  kern_return_t err =
+  error_t err =
     proc_getprocinfo (proc_server, inf->pid, &info_flags,
 		      (procinfo_t *) &pi, &pi_len, &noise, &noise_len);
 
@@ -818,8 +810,7 @@ inf_validate_procinfo (struct inf *inf)
       inf->nomsg = !!(pi->state & PI_NOMSG);
       if (inf->nomsg)
 	inf->traced = !!(pi->state & PI_TRACED);
-      vm_deallocate (mach_task_self (), (vm_address_t) pi,
-		     pi_len * sizeof (*(procinfo_t) 0));
+      vm_deallocate (mach_task_self (), (vm_address_t) pi, pi_len);
       if (noise_len > 0)
 	vm_deallocate (mach_task_self (), (vm_address_t) noise, noise_len);
     }
@@ -836,7 +827,7 @@ inf_validate_task_sc (struct inf *inf)
   mach_msg_type_number_t pi_len = 0;
   int info_flags = PI_FETCH_TASKINFO;
   int suspend_count = -1;
-  kern_return_t err;
+  error_t err;
 
  retry:
   err = proc_getprocinfo (proc_server, inf->pid, &info_flags,
@@ -859,16 +850,21 @@ inf_validate_task_sc (struct inf *inf)
 
   suspend_count = pi->taskinfo.suspend_count;
 
-  vm_deallocate (mach_task_self (), (vm_address_t) pi,
-		 pi_len * sizeof (*(procinfo_t) 0));
+  vm_deallocate (mach_task_self (), (vm_address_t) pi, pi_len);
   if (noise_len > 0)
-    vm_deallocate (mach_task_self (), (vm_address_t) noise, noise_len);
+    vm_deallocate (mach_task_self (), (vm_address_t) pi, pi_len);
 
   if (inf->task->cur_sc < suspend_count)
     {
-      if (!query (_("Pid %d has an additional task suspend count of %d;"
-		    " clear it? "), inf->pid,
-		  suspend_count - inf->task->cur_sc))
+      int abort;
+
+      target_terminal_ours ();	/* Allow I/O.  */
+      abort = !query (_("Pid %d has an additional task suspend count of %d;"
+		      " clear it? "), inf->pid,
+		      suspend_count - inf->task->cur_sc);
+      target_terminal_inferior ();	/* Give it back to the child.  */
+
+      if (abort)
 	error (_("Additional task suspend count left untouched."));
 
       inf->task->cur_sc = suspend_count;
@@ -879,7 +875,7 @@ inf_validate_task_sc (struct inf *inf)
    is.  If INF is running, the resume_sc count of INF's threads will
    be modified, and the signal thread will briefly be run to change
    the trace state.  */
-static void
+void
 inf_set_traced (struct inf *inf, int on)
 {
   if (on == inf->traced)
@@ -889,7 +885,7 @@ inf_set_traced (struct inf *inf, int on)
     /* Make it take effect immediately.  */
     {
       sigset_t mask = on ? ~(sigset_t) 0 : 0;
-      kern_return_t err =
+      error_t err =
 	INF_RESUME_MSGPORT_RPC (inf, msg_set_init_int (msgport, refport,
 						       INIT_TRACEMASK, mask));
 
@@ -980,7 +976,7 @@ inf_tid_to_thread (struct inf *inf, int tid)
 }
 
 /* Converts a thread port to a struct proc.  */
-static struct proc *
+struct proc *
 inf_port_to_thread (struct inf *inf, mach_port_t port)
 {
   struct proc *thread = inf->threads;
@@ -991,17 +987,6 @@ inf_port_to_thread (struct inf *inf, mach_port_t port)
     else
       thread = thread->next;
   return 0;
-}
-
-/* See gnu-nat.h.  */
-
-void
-inf_threads (struct inf *inf, inf_threads_ftype *f, void *arg)
-{
-  struct proc *thread;
-
-  for (thread = inf->threads; thread; thread = thread->next)
-    f (thread, arg);
 }
 
 
@@ -1021,7 +1006,7 @@ inf_validate_procs (struct inf *inf)
 
   if (task)
     {
-      kern_return_t err = task_threads (task->port, &threads, &num_threads);
+      error_t err = task_threads (task->port, &threads, &num_threads);
 
       inf_debug (inf, "fetching threads");
       if (err)
@@ -1097,13 +1082,13 @@ inf_validate_procs (struct inf *inf)
 	    else
 	      inf->threads = thread;
 	    last = thread;
-	    proc_debug (thread, "new thread: %lu", threads[i]);
+	    proc_debug (thread, "new thread: %d", threads[i]);
 
-	    ptid = ptid_t (inf->pid, thread->tid, 0);
+	    ptid = ptid_build (inf->pid, 0, thread->tid);
 
 	    /* Tell GDB's generic thread code.  */
 
-	    if (inferior_ptid == ptid_t (inf->pid))
+	    if (ptid_equal (inferior_ptid, pid_to_ptid (inf->pid)))
 	      /* This is the first time we're hearing about thread
 		 ids, after a fork-child.  */
 	      thread_change_ptid (inferior_ptid, ptid);
@@ -1269,7 +1254,7 @@ inf_detach (struct inf *inf)
 	  if (inf->nomsg)
 	    inf_continue (inf);
 	  else
-	    inf_signal (inf, GDB_SIGNAL_0);
+	    inf_signal (inf, TARGET_SIGNAL_0);
 	}
 
       proc_restore_exc_port (task);
@@ -1336,12 +1321,12 @@ inf_restore_exc_ports (struct inf *inf)
    signal 0, will continue it.  INF is assumed to be in a paused state, and
    the resume_sc's of INF's threads may be affected.  */
 void
-inf_signal (struct inf *inf, enum gdb_signal sig)
+inf_signal (struct inf *inf, enum target_signal sig)
 {
-  kern_return_t err = 0;
-  int host_sig = gdb_signal_to_host (sig);
+  error_t err = 0;
+  int host_sig = target_signal_to_host (sig);
 
-#define NAME gdb_signal_to_name (sig)
+#define NAME target_signal_to_name (sig)
 
   if (host_sig >= _NSIG)
     /* A mach exception.  Exceptions are encoded in the signal space by
@@ -1362,7 +1347,7 @@ inf_signal (struct inf *inf, enum gdb_signal sig)
 	  struct exc_state *e = &w->exc;
 
 	  inf_debug (inf, "passing through exception:"
-		     " task = %lu, thread = %lu, exc = %d"
+		     " task = %d, thread = %d, exc = %d"
 		     ", code = %d, subcode = %d",
 		     w->thread->port, inf->task->port,
 		     e->exception, e->code, e->subcode);
@@ -1427,7 +1412,7 @@ void
 inf_continue (struct inf *inf)
 {
   process_t proc;
-  kern_return_t err = proc_pid2proc (proc_server, inf->pid, &proc);
+  error_t err = proc_pid2proc (proc_server, inf->pid, &proc);
 
   if (!err)
     {
@@ -1457,17 +1442,10 @@ struct inf *gnu_current_inf = 0;
    multi-threaded, we don't bother to lock this.  */
 struct inf *waiting_inf;
 
-/* MIG stubs are not yet ready for C++ compilation.  */
-extern "C" int exc_server (mach_msg_header_t *, mach_msg_header_t *);
-extern "C" int msg_reply_server (mach_msg_header_t *, mach_msg_header_t *);
-extern "C" int notify_server (mach_msg_header_t *, mach_msg_header_t *);
-extern "C" int process_reply_server (mach_msg_header_t *, mach_msg_header_t *);
-
 /* Wait for something to happen in the inferior, returning what in STATUS.  */
-
-ptid_t
-gnu_nat_target::wait (ptid_t ptid, struct target_waitstatus *status,
-		      int options)
+static ptid_t
+gnu_wait (struct target_ops *ops,
+	  ptid_t ptid, struct target_waitstatus *status, int options)
 {
   struct msg
     {
@@ -1475,9 +1453,14 @@ gnu_nat_target::wait (ptid_t ptid, struct target_waitstatus *status,
       mach_msg_type_t type;
       int data[8000];
     } msg;
-  kern_return_t err;
+  error_t err;
   struct proc *thread;
   struct inf *inf = gnu_current_inf;
+
+  extern int exc_server (mach_msg_header_t *, mach_msg_header_t *);
+  extern int msg_reply_server (mach_msg_header_t *, mach_msg_header_t *);
+  extern int notify_server (mach_msg_header_t *, mach_msg_header_t *);
+  extern int process_reply_server (mach_msg_header_t *, mach_msg_header_t *);
 
   gdb_assert (inf->task);
 
@@ -1587,14 +1570,26 @@ rewait:
 	   while execing.  */
 	{
 	  w->suppress = 1;
-	  inf_debug (inf, "pending_execs, ignoring minor event");
+	  inf_debug (inf, "pending_execs = %d, ignoring minor event",
+		     inf->pending_execs);
 	}
       else if (kind == TARGET_WAITKIND_STOPPED
-	       && w->status.value.sig == GDB_SIGNAL_TRAP)
+	       && w->status.value.sig == TARGET_SIGNAL_TRAP)
 	/* Ah hah!  A SIGTRAP from the inferior while starting up probably
 	   means we've succesfully completed an exec!  */
 	{
-	  inf_debug (inf, "one pending exec completed");
+	  if (--inf->pending_execs == 0)
+	    /* We're done!  */
+	    {
+#if 0				/* do we need this?  */
+	      prune_threads (1);	/* Get rid of the old shell
+					   threads.  */
+	      renumber_threads (0);	/* Give our threads reasonable
+					   names.  */
+#endif
+	    }
+	  inf_debug (inf, "pending exec completed, pending_execs => %d",
+		     inf->pending_execs);
 	}
       else if (kind == TARGET_WAITKIND_STOPPED)
 	/* It's possible that this signal is because of a crashed process
@@ -1619,17 +1614,17 @@ rewait:
 
   thread = inf->wait.thread;
   if (thread)
-    ptid = ptid_t (inf->pid, thread->tid, 0);
-  else if (ptid == minus_one_ptid)
+    ptid = ptid_build (inf->pid, 0, thread->tid);
+  else if (ptid_equal (ptid, minus_one_ptid))
     thread = inf_tid_to_thread (inf, -1);
   else
-    thread = inf_tid_to_thread (inf, ptid.lwp ());
+    thread = inf_tid_to_thread (inf, ptid_get_tid (ptid));
 
   if (!thread || thread->port == MACH_PORT_NULL)
     {
       /* TID is dead; try and find a new thread.  */
       if (inf_update_procs (inf) && inf->threads)
-	ptid = ptid_t (inf->pid, inf->threads->tid, 0); /* The first
+	ptid = ptid_build (inf->pid, 0, inf->threads->tid); /* The first
 							       available
 							       thread.  */
       else
@@ -1637,7 +1632,7 @@ rewait:
     }
 
   if (thread
-      && ptid != minus_one_ptid
+      && !ptid_equal (ptid, minus_one_ptid)
       && status->kind != TARGET_WAITKIND_SPURIOUS
       && inf->pause_sc == 0 && thread->pause_sc == 0)
     /* If something actually happened to THREAD, make sure we
@@ -1662,7 +1657,7 @@ rewait:
 
 
 /* The rpc handler called by exc_server.  */
-kern_return_t
+error_t
 S_exception_raise_request (mach_port_t port, mach_port_t reply_port,
 			   thread_t thread_port, task_t task_port,
 			   int exception, int code, int subcode)
@@ -1671,7 +1666,7 @@ S_exception_raise_request (mach_port_t port, mach_port_t reply_port,
   struct proc *thread = inf_port_to_thread (inf, thread_port);
 
   inf_debug (waiting_inf,
-	     "thread = %lu, task = %lu, exc = %d, code = %d, subcode = %d",
+	     "thread = %d, task = %d, exc = %d, code = %d, subcode = %d",
 	     thread_port, task_port, exception, code, subcode);
 
   if (!thread)
@@ -1699,7 +1694,7 @@ S_exception_raise_request (mach_port_t port, mach_port_t reply_port,
       if (exception == EXC_BREAKPOINT)
 	/* GDB likes to get SIGTRAP for breakpoints.  */
 	{
-	  inf->wait.status.value.sig = GDB_SIGNAL_TRAP;
+	  inf->wait.status.value.sig = TARGET_SIGNAL_TRAP;
 	  mach_port_deallocate (mach_task_self (), reply_port);
 	}
       else
@@ -1707,13 +1702,13 @@ S_exception_raise_request (mach_port_t port, mach_port_t reply_port,
 	{
 	  if (thread->exc_port == port)
 	    {
-	      inf_debug (waiting_inf, "Handler is thread exception port <%lu>",
+	      inf_debug (waiting_inf, "Handler is thread exception port <%d>",
 			 thread->saved_exc_port);
 	      inf->wait.exc.handler = thread->saved_exc_port;
 	    }
 	  else
 	    {
-	      inf_debug (waiting_inf, "Handler is task exception port <%lu>",
+	      inf_debug (waiting_inf, "Handler is task exception port <%d>",
 			 inf->task->saved_exc_port);
 	      inf->wait.exc.handler = inf->task->saved_exc_port;
 	      gdb_assert (inf->task->exc_port == port);
@@ -1733,7 +1728,7 @@ S_exception_raise_request (mach_port_t port, mach_port_t reply_port,
 	     them after _NSIG; this assumes they're positive (and not
 	     extremely large)!  */
 	  inf->wait.status.value.sig =
-	    gdb_signal_from_host (_NSIG + exception);
+	    target_signal_from_host (_NSIG + exception);
 	}
     }
   else
@@ -1749,22 +1744,22 @@ S_exception_raise_request (mach_port_t port, mach_port_t reply_port,
 
 /* Fill in INF's wait field after a task has died without giving us more
    detailed information.  */
-static void
+void
 inf_task_died_status (struct inf *inf)
 {
   warning (_("Pid %d died with unknown exit status, using SIGKILL."),
 	   inf->pid);
   inf->wait.status.kind = TARGET_WAITKIND_SIGNALLED;
-  inf->wait.status.value.sig = GDB_SIGNAL_KILL;
+  inf->wait.status.value.sig = TARGET_SIGNAL_KILL;
 }
 
 /* Notify server routines.  The only real one is dead name notification.  */
-kern_return_t
+error_t
 do_mach_notify_dead_name (mach_port_t notify, mach_port_t dead_port)
 {
   struct inf *inf = waiting_inf;
 
-  inf_debug (waiting_inf, "port = %lu", dead_port);
+  inf_debug (waiting_inf, "port = %d", dead_port);
 
   if (inf->task && inf->task->port == dead_port)
     {
@@ -1801,29 +1796,48 @@ do_mach_notify_dead_name (mach_port_t notify, mach_port_t dead_port)
 }
 
 
-#define ILL_RPC(fun, ...) \
-  extern kern_return_t fun (__VA_ARGS__); \
-  kern_return_t fun (__VA_ARGS__) \
-  { \
-    warning (_("illegal rpc: %s"), #fun); \
-    return 0; \
-  }
+static error_t
+ill_rpc (char *fun)
+{
+  warning (_("illegal rpc: %s"), fun);
+  return 0;
+}
 
-ILL_RPC (do_mach_notify_no_senders,
-	 mach_port_t notify, mach_port_mscount_t count)
-ILL_RPC (do_mach_notify_port_deleted,
-	 mach_port_t notify, mach_port_t name)
-ILL_RPC (do_mach_notify_msg_accepted,
-	 mach_port_t notify, mach_port_t name)
-ILL_RPC (do_mach_notify_port_destroyed,
-	 mach_port_t notify, mach_port_t name)
-ILL_RPC (do_mach_notify_send_once,
-	 mach_port_t notify)
+error_t
+do_mach_notify_no_senders (mach_port_t notify, mach_port_mscount_t count)
+{
+  return ill_rpc ("do_mach_notify_no_senders");
+}
+
+error_t
+do_mach_notify_port_deleted (mach_port_t notify, mach_port_t name)
+{
+  return ill_rpc ("do_mach_notify_port_deleted");
+}
+
+error_t
+do_mach_notify_msg_accepted (mach_port_t notify, mach_port_t name)
+{
+  return ill_rpc ("do_mach_notify_msg_accepted");
+}
+
+error_t
+do_mach_notify_port_destroyed (mach_port_t notify, mach_port_t name)
+{
+  return ill_rpc ("do_mach_notify_port_destroyed");
+}
+
+error_t
+do_mach_notify_send_once (mach_port_t notify)
+{
+  return ill_rpc ("do_mach_notify_send_once");
+}
+
 
 /* Process_reply server routines.  We only use process_wait_reply.  */
 
-kern_return_t
-S_proc_wait_reply (mach_port_t reply, kern_return_t err,
+error_t
+S_proc_wait_reply (mach_port_t reply, error_t err,
 		   int status, int sigcode, rusage_t rusage, pid_t pid)
 {
   struct inf *inf = waiting_inf;
@@ -1875,73 +1889,24 @@ S_proc_wait_reply (mach_port_t reply, kern_return_t err,
   return 0;
 }
 
-ILL_RPC (S_proc_setmsgport_reply,
-	 mach_port_t reply_port, kern_return_t return_code,
-	 mach_port_t oldmsgport)
-ILL_RPC (S_proc_getmsgport_reply,
-	 mach_port_t reply_port, kern_return_t return_code,
-	 mach_port_t msgports, mach_msg_type_name_t msgportsPoly)
-ILL_RPC (S_proc_pid2task_reply,
-	 mach_port_t reply_port, kern_return_t return_code, mach_port_t task)
-ILL_RPC (S_proc_task2pid_reply,
-	 mach_port_t reply_port, kern_return_t return_code, pid_t pid)
-ILL_RPC (S_proc_task2proc_reply,
-	 mach_port_t reply_port, kern_return_t return_code,
-	 mach_port_t proc, mach_msg_type_name_t procPoly)
-ILL_RPC (S_proc_proc2task_reply,
-	 mach_port_t reply_port, kern_return_t return_code, mach_port_t task)
-ILL_RPC (S_proc_pid2proc_reply,
-	 mach_port_t reply_port, kern_return_t return_code,
-	 mach_port_t proc, mach_msg_type_name_t procPoly)
-ILL_RPC (S_proc_getprocinfo_reply,
-	 mach_port_t reply_port, kern_return_t return_code,
-	 int flags, procinfo_t procinfo, mach_msg_type_number_t procinfoCnt,
-	 data_t threadwaits, mach_msg_type_number_t threadwaitsCnt)
-ILL_RPC (S_proc_getprocargs_reply,
-	 mach_port_t reply_port, kern_return_t return_code,
-	 data_t procargs, mach_msg_type_number_t procargsCnt)
-ILL_RPC (S_proc_getprocenv_reply,
-	 mach_port_t reply_port, kern_return_t return_code,
-	 data_t procenv, mach_msg_type_number_t procenvCnt)
-ILL_RPC (S_proc_getloginid_reply,
-	 mach_port_t reply_port, kern_return_t return_code, pid_t login_id)
-ILL_RPC (S_proc_getloginpids_reply,
-	 mach_port_t reply_port, kern_return_t return_code,
-	 pidarray_t pids, mach_msg_type_number_t pidsCnt)
-ILL_RPC (S_proc_getlogin_reply,
-	 mach_port_t reply_port, kern_return_t return_code, string_t logname)
-ILL_RPC (S_proc_getsid_reply,
-	 mach_port_t reply_port, kern_return_t return_code, pid_t sid)
-ILL_RPC (S_proc_getsessionpgids_reply,
-	 mach_port_t reply_port, kern_return_t return_code,
-	 pidarray_t pgidset, mach_msg_type_number_t pgidsetCnt)
-ILL_RPC (S_proc_getsessionpids_reply,
-	 mach_port_t reply_port, kern_return_t return_code,
-	 pidarray_t pidset, mach_msg_type_number_t pidsetCnt)
-ILL_RPC (S_proc_getsidport_reply,
-	 mach_port_t reply_port, kern_return_t return_code,
-	 mach_port_t sessport)
-ILL_RPC (S_proc_getpgrp_reply,
-	 mach_port_t reply_port, kern_return_t return_code, pid_t pgrp)
-ILL_RPC (S_proc_getpgrppids_reply,
-	 mach_port_t reply_port, kern_return_t return_code,
-	 pidarray_t pidset, mach_msg_type_number_t pidsetCnt)
-ILL_RPC (S_proc_get_tty_reply,
-	 mach_port_t reply_port, kern_return_t return_code, mach_port_t tty)
-ILL_RPC (S_proc_getnports_reply,
-	 mach_port_t reply_port, kern_return_t return_code,
-	 mach_msg_type_number_t nports)
-ILL_RPC (S_proc_is_important_reply,
-	 mach_port_t reply_port, kern_return_t return_code,
-	 boolean_t essential)
-ILL_RPC (S_proc_get_code_reply,
-	 mach_port_t reply_port, kern_return_t return_code,
-	 vm_address_t start_code, vm_address_t end_code)
+error_t
+S_proc_setmsgport_reply (mach_port_t reply, error_t err,
+			 mach_port_t old_msg_port)
+{
+  return ill_rpc ("S_proc_setmsgport_reply");
+}
+
+error_t
+S_proc_getmsgport_reply (mach_port_t reply, error_t err, mach_port_t msg_port)
+{
+  return ill_rpc ("S_proc_getmsgport_reply");
+}
+
 
 /* Msg_reply server routines.  We only use msg_sig_post_untraced_reply.  */
 
-kern_return_t
-S_msg_sig_post_untraced_reply (mach_port_t reply, kern_return_t err)
+error_t
+S_msg_sig_post_untraced_reply (mach_port_t reply, error_t err)
 {
   struct inf *inf = waiting_inf;
 
@@ -1953,7 +1918,7 @@ S_msg_sig_post_untraced_reply (mach_port_t reply, kern_return_t err)
        server should like).  */
     {
       inf->wait.status.kind = TARGET_WAITKIND_STOPPED;
-      inf->wait.status.value.sig = GDB_SIGNAL_0;
+      inf->wait.status.value.sig = TARGET_SIGNAL_0;
     }
   else if (err)
     warning (_("Signal delivery failed: %s"), safe_strerror (err));
@@ -1970,15 +1935,19 @@ S_msg_sig_post_untraced_reply (mach_port_t reply, kern_return_t err)
   return 0;
 }
 
-ILL_RPC (S_msg_sig_post_reply,
-	 mach_port_t reply, kern_return_t err)
+error_t
+S_msg_sig_post_reply (mach_port_t reply, error_t err)
+{
+  return ill_rpc ("S_msg_sig_post_reply");
+}
+
 
 /* Returns the number of messages queued for the receive right PORT.  */
 static mach_port_msgcount_t
 port_msgs_queued (mach_port_t port)
 {
   struct mach_port_status status;
-  kern_return_t err =
+  error_t err =
     mach_port_get_receive_status (mach_task_self (), port, &status);
 
   if (err)
@@ -2004,8 +1973,9 @@ port_msgs_queued (mach_port_t port)
    still unprocessed from the last resume we did (any given resume may result
    in multiple events returned by wait).  */
 
-void
-gnu_nat_target::resume (ptid_t ptid, int step, enum gdb_signal sig)
+static void
+gnu_resume (struct target_ops *ops,
+	    ptid_t ptid, int step, enum target_signal sig)
 {
   struct proc *step_thread = 0;
   int resume_all;
@@ -2016,9 +1986,9 @@ gnu_nat_target::resume (ptid_t ptid, int step, enum gdb_signal sig)
 
   inf_validate_procinfo (inf);
 
-  if (sig != GDB_SIGNAL_0 || inf->stopped)
+  if (sig != TARGET_SIGNAL_0 || inf->stopped)
     {
-      if (sig == GDB_SIGNAL_0 && inf->nomsg)
+      if (sig == TARGET_SIGNAL_0 && inf->nomsg)
 	inf_continue (inf);
       else
 	inf_signal (inf, sig);
@@ -2030,7 +2000,7 @@ gnu_nat_target::resume (ptid_t ptid, int step, enum gdb_signal sig)
       proc_abort (inf->wait.thread, 1);
       warning (_("Aborting %s with unforwarded exception %s."),
 	       proc_string (inf->wait.thread),
-	       gdb_signal_to_name (inf->wait.status.value.sig));
+	       target_signal_to_name (inf->wait.status.value.sig));
     }
 
   if (port_msgs_queued (inf->event_port))
@@ -2041,20 +2011,19 @@ gnu_nat_target::resume (ptid_t ptid, int step, enum gdb_signal sig)
   inf_update_procs (inf);
 
   /* A specific PTID means `step only this process id'.  */
-  resume_all = ptid == minus_one_ptid;
+  resume_all = ptid_equal (ptid, minus_one_ptid);
 
   if (resume_all)
     /* Allow all threads to run, except perhaps single-stepping one.  */
     {
-      inf_debug (inf, "running all threads; tid = %d",
-		 inferior_ptid.pid ());
+      inf_debug (inf, "running all threads; tid = %d", PIDGET (inferior_ptid));
       ptid = inferior_ptid;	/* What to step.  */
       inf_set_threads_resume_sc (inf, 0, 1);
     }
   else
     /* Just allow a single thread to run.  */
     {
-      struct proc *thread = inf_tid_to_thread (inf, ptid.lwp ());
+      struct proc *thread = inf_tid_to_thread (inf, ptid_get_tid (ptid));
 
       if (!thread)
 	error (_("Can't run single thread id %s: no such thread!"),
@@ -2065,7 +2034,7 @@ gnu_nat_target::resume (ptid_t ptid, int step, enum gdb_signal sig)
 
   if (step)
     {
-      step_thread = inf_tid_to_thread (inf, ptid.lwp ());
+      step_thread = inf_tid_to_thread (inf, ptid_get_tid (ptid));
       if (!step_thread)
 	warning (_("Can't step thread id %s: no such thread."),
 		 target_pid_to_str (ptid));
@@ -2080,8 +2049,8 @@ gnu_nat_target::resume (ptid_t ptid, int step, enum gdb_signal sig)
 }
 
 
-void
-gnu_nat_target::kill ()
+static void
+gnu_kill_inferior (struct target_ops *ops)
 {
   struct proc *task = gnu_current_inf->task;
 
@@ -2091,16 +2060,17 @@ gnu_nat_target::kill ()
       task_terminate (task->port);
       inf_set_pid (gnu_current_inf, -1);
     }
-  target_mourn_inferior (inferior_ptid);
+  target_mourn_inferior ();
 }
 
 /* Clean up after the inferior dies.  */
-void
-gnu_nat_target::mourn_inferior ()
+static void
+gnu_mourn_inferior (struct target_ops *ops)
 {
   inf_debug (gnu_current_inf, "rip");
   inf_detach (gnu_current_inf);
-  inf_child_target::mourn_inferior ();
+  unpush_target (ops);
+  generic_mourn_inferior ();
 }
 
 
@@ -2127,42 +2097,33 @@ cur_inf (void)
 }
 
 static void
-gnu_ptrace_me (void)
-{
-  /* We're in the child; make this process stop as soon as it execs.  */
-  struct inf *inf = cur_inf ();
-  inf_debug (inf, "tracing self");
-  if (ptrace (PTRACE_TRACEME) != 0)
-    trace_start_error_with_name ("ptrace");
-}
-
-void
-gnu_nat_target::create_inferior (const char *exec_file,
-				 const std::string &allargs,
-				 char **env,
-				 int from_tty)
+gnu_create_inferior (struct target_ops *ops, 
+		     char *exec_file, char *allargs, char **env,
+		     int from_tty)
 {
   struct inf *inf = cur_inf ();
   int pid;
 
+  void trace_me ()
+  {
+    /* We're in the child; make this process stop as soon as it execs.  */
+    inf_debug (inf, "tracing self");
+    if (ptrace (PTRACE_TRACEME) != 0)
+      error (_("ptrace (PTRACE_TRACEME) failed!"));
+  }
+
   inf_debug (inf, "creating inferior");
 
-  pid = fork_inferior (exec_file, allargs, env, gnu_ptrace_me,
-                       NULL, NULL, NULL, NULL);
-
-  /* We have something that executes now.  We'll be running through
-     the shell at this point (if startup-with-shell is true), but the
-     pid shouldn't change.  */
-  add_thread_silent (ptid_t (pid));
+  pid = fork_inferior (exec_file, allargs, env, trace_me, NULL, NULL, NULL);
 
   /* Attach to the now stopped child, which is actually a shell...  */
   inf_debug (inf, "attaching to child: %d", pid);
 
   inf_attach (inf, pid);
 
-  push_target (this);
+  push_target (ops);
 
-  inf->pending_execs = 1;
+  inf->pending_execs = 2;
   inf->nomsg = 1;
   inf->traced = 1;
 
@@ -2172,13 +2133,9 @@ gnu_nat_target::create_inferior (const char *exec_file,
 
   /* We now have thread info.  */
   thread_change_ptid (inferior_ptid,
-		      ptid_t (inf->pid, inf_pick_first_thread (), 0));
+		      ptid_build (inf->pid, 0, inf_pick_first_thread ()));
 
-  gdb_startup_inferior (pid, START_INFERIOR_TRAPS_EXPECTED);
-
-  inf->pending_execs = 0;
-  /* Get rid of the old shell threads.  */
-  prune_threads ();
+  startup_inferior (inf->pending_execs);
 
   inf_validate_procinfo (inf);
   inf_update_signal_thread (inf);
@@ -2195,8 +2152,8 @@ gnu_nat_target::create_inferior (const char *exec_file,
 
 /* Attach to process PID, then initialize for debugging it
    and wait for the trace-trap that results from attaching.  */
-void
-gnu_nat_target::attach (const char *args, int from_tty)
+static void
+gnu_attach (struct target_ops *ops, char *args, int from_tty)
 {
   int pid;
   char *exec_file;
@@ -2225,7 +2182,7 @@ gnu_nat_target::attach (const char *args, int from_tty)
 
   inf_attach (inf, pid);
 
-  push_target (this);
+  push_target (ops);
 
   inferior = current_inferior ();
   inferior_appeared (inferior, pid);
@@ -2233,11 +2190,11 @@ gnu_nat_target::attach (const char *args, int from_tty)
 
   inf_update_procs (inf);
 
-  inferior_ptid = ptid_t (pid, inf_pick_first_thread (), 0);
+  inferior_ptid = ptid_build (pid, 0, inf_pick_first_thread ());
 
   /* We have to initialize the terminal settings now, since the code
      below might try to restore them.  */
-  target_terminal::init ();
+  target_terminal_init ();
 
   /* If the process was stopped before we attached, make it continue the next
      time the user does a continue.  */
@@ -2259,8 +2216,8 @@ gnu_nat_target::attach (const char *args, int from_tty)
    to work, it may be necessary for the process to have been
    previously attached.  It *might* work if the program was
    started via fork.  */
-void
-gnu_nat_target::detach (inferior *inf, int from_tty)
+static void
+gnu_detach (struct target_ops *ops, char *args, int from_tty)
 {
   int pid;
 
@@ -2281,39 +2238,45 @@ gnu_nat_target::detach (inferior *inf, int from_tty)
   inf_detach (gnu_current_inf);
 
   inferior_ptid = null_ptid;
-  detach_inferior (find_inferior_pid (pid));
+  detach_inferior (pid);
 
-  maybe_unpush_target ();
+  unpush_target (ops);	/* Pop out of handling an inferior.  */
 }
 
-
-void
-gnu_nat_target::stop (ptid_t ptid)
+static void
+gnu_terminal_init_inferior (void)
 {
-  error (_("stop target function not implemented"));
+  gdb_assert (gnu_current_inf);
+  terminal_init_inferior_with_pgrp (gnu_current_inf->pid);
 }
 
-bool
-gnu_nat_target::thread_alive (ptid_t ptid)
+static void
+gnu_stop (ptid_t ptid)
+{
+  error (_("to_stop target function not implemented"));
+}
+
+static int
+gnu_thread_alive (struct target_ops *ops, ptid_t ptid)
 {
   inf_update_procs (gnu_current_inf);
   return !!inf_tid_to_thread (gnu_current_inf,
-			      ptid.lwp ());
+			      ptid_get_tid (ptid));
 }
 
 
 /* Read inferior task's LEN bytes from ADDR and copy it to MYADDR in
    gdb's address space.  Return 0 on failure; number of bytes read
    otherwise.  */
-static int
-gnu_read_inferior (task_t task, CORE_ADDR addr, gdb_byte *myaddr, int length)
+int
+gnu_read_inferior (task_t task, CORE_ADDR addr, char *myaddr, int length)
 {
-  kern_return_t err;
+  error_t err;
   vm_address_t low_address = (vm_address_t) trunc_page (addr);
   vm_size_t aligned_length =
   (vm_size_t) round_page (addr + length) - low_address;
   pointer_t copied;
-  mach_msg_type_number_t copy_count;
+  int copy_count;
 
   /* Get memory from inferior with page aligned addresses.  */
   err = vm_read (task, low_address, aligned_length, &copied, &copy_count);
@@ -2351,22 +2314,21 @@ struct obstack region_obstack;
 
 /* Write gdb's LEN bytes from MYADDR and copy it to ADDR in inferior
    task's address space.  */
-static int
-gnu_write_inferior (task_t task, CORE_ADDR addr,
-		    const gdb_byte *myaddr, int length)
+int
+gnu_write_inferior (task_t task, CORE_ADDR addr, char *myaddr, int length)
 {
-  kern_return_t err;
+  error_t err = 0;
   vm_address_t low_address = (vm_address_t) trunc_page (addr);
   vm_size_t aligned_length =
   (vm_size_t) round_page (addr + length) - low_address;
   pointer_t copied;
-  mach_msg_type_number_t copy_count;
+  int copy_count;
   int deallocate = 0;
 
-  const char *errstr = "Bug in gnu_write_inferior";
+  char *errstr = "Bug in gnu_write_inferior";
 
   struct vm_region_list *region_element;
-  struct vm_region_list *region_head = NULL;
+  struct vm_region_list *region_head = (struct vm_region_list *) NULL;
 
   /* Get memory from inferior with page aligned addresses.  */
   err = vm_read (task,
@@ -2417,7 +2379,7 @@ gnu_write_inferior (task_t task, CORE_ADDR addr,
 	/* Check for holes in memory.  */
 	if (old_address != region_address)
 	  {
-	    warning (_("No memory at 0x%lx. Nothing written"),
+	    warning (_("No memory at 0x%x. Nothing written"),
 		     old_address);
 	    err = KERN_SUCCESS;
 	    length = 0;
@@ -2426,7 +2388,7 @@ gnu_write_inferior (task_t task, CORE_ADDR addr,
 
 	if (!(max_protection & VM_PROT_WRITE))
 	  {
-	    warning (_("Memory at address 0x%lx is unwritable. "
+	    warning (_("Memory at address 0x%x is unwritable. "
 		       "Nothing written"),
 		     old_address);
 	    err = KERN_SUCCESS;
@@ -2435,7 +2397,9 @@ gnu_write_inferior (task_t task, CORE_ADDR addr,
 	  }
 
 	/* Chain the regions for later use.  */
-	region_element = XOBNEW (&region_obstack, struct vm_region_list);
+	region_element =
+	  (struct vm_region_list *)
+	  obstack_alloc (&region_obstack, sizeof (struct vm_region_list));
 
 	region_element->protection = protection;
 	region_element->start = region_address;
@@ -2507,127 +2471,38 @@ out:
 }
 
 
-
-/* Implement the to_xfer_partial target_ops method for
-   TARGET_OBJECT_MEMORY.  */
-
-static enum target_xfer_status
-gnu_xfer_memory (gdb_byte *readbuf, const gdb_byte *writebuf,
-		 CORE_ADDR memaddr, ULONGEST len, ULONGEST *xfered_len)
+/* Return 0 on failure, number of bytes handled otherwise.  TARGET
+   is ignored.  */
+static int
+gnu_xfer_memory (CORE_ADDR memaddr, gdb_byte *myaddr, int len, int write,
+		 struct mem_attrib *attrib,
+		 struct target_ops *target)
 {
   task_t task = (gnu_current_inf
 		 ? (gnu_current_inf->task
 		    ? gnu_current_inf->task->port : 0)
 		 : 0);
-  int res;
 
   if (task == MACH_PORT_NULL)
-    return TARGET_XFER_E_IO;
-
-  if (writebuf != NULL)
-    {
-      inf_debug (gnu_current_inf, "writing %s[%s] <-- %s",
-		 paddress (target_gdbarch (), memaddr), pulongest (len),
-		 host_address_to_string (writebuf));
-      res = gnu_write_inferior (task, memaddr, writebuf, len);
-    }
+    return 0;
   else
     {
-      inf_debug (gnu_current_inf, "reading %s[%s] --> %s",
-		 paddress (target_gdbarch (), memaddr), pulongest (len),
-		 host_address_to_string (readbuf));
-      res = gnu_read_inferior (task, memaddr, readbuf, len);
-    }
-  gdb_assert (res >= 0);
-  if (res == 0)
-    return TARGET_XFER_E_IO;
-  else
-    {
-      *xfered_len = (ULONGEST) res;
-      return TARGET_XFER_OK;
-    }
-}
-
-/* GNU does not have auxv, but we can at least fake the AT_ENTRY entry for PIE
-   binaries.  */
-static enum target_xfer_status
-gnu_xfer_auxv (gdb_byte *readbuf, const gdb_byte *writebuf,
-	       CORE_ADDR memaddr, ULONGEST len, ULONGEST *xfered_len)
-{
-  task_t task = (gnu_current_inf
-		 ? (gnu_current_inf->task
-		    ? gnu_current_inf->task->port : 0)
-		 : 0);
-  process_t proc;
-  int res;
-  kern_return_t err;
-  vm_address_t entry;
-  ElfW(auxv_t) auxv[2];
-
-  if (task == MACH_PORT_NULL)
-    return TARGET_XFER_E_IO;
-  if (writebuf != NULL)
-    return TARGET_XFER_E_IO;
-
-  if (memaddr == sizeof (auxv))
-    return TARGET_XFER_EOF;
-  if (memaddr > sizeof (auxv))
-    return TARGET_XFER_E_IO;
-
-  err = proc_task2proc (proc_server, task, &proc);
-  if (err != 0)
-    return TARGET_XFER_E_IO;
-
-  /* Get entry from proc server.  */
-  err = proc_get_entry (proc, &entry);
-  if (err != 0)
-    return TARGET_XFER_E_IO;
-
-  /* Fake auxv entry.  */
-  auxv[0].a_type = AT_ENTRY;
-  auxv[0].a_un.a_val = entry;
-  auxv[1].a_type = AT_NULL;
-  auxv[1].a_un.a_val = 0;
-
-  inf_debug (gnu_current_inf, "reading auxv %s[%s] --> %s",
-	     paddress (target_gdbarch (), memaddr), pulongest (len),
-	     host_address_to_string (readbuf));
-
-  if (memaddr + len > sizeof (auxv))
-    len = sizeof (auxv) - memaddr;
-
-  memcpy (readbuf, (gdb_byte *) &auxv + memaddr, len);
-  *xfered_len = len;
-
-  return TARGET_XFER_OK;
-}
-
-/* Target to_xfer_partial implementation.  */
-
-enum target_xfer_status
-gnu_nat_target::xfer_partial (enum target_object object,
-			      const char *annex, gdb_byte *readbuf,
-			      const gdb_byte *writebuf, ULONGEST offset,
-			      ULONGEST len, ULONGEST *xfered_len)
-{
-  switch (object)
-    {
-    case TARGET_OBJECT_MEMORY:
-      return gnu_xfer_memory (readbuf, writebuf, offset, len, xfered_len);
-    case TARGET_OBJECT_AUXV:
-      return gnu_xfer_auxv (readbuf, writebuf, offset, len, xfered_len);
-    default:
-      return TARGET_XFER_E_IO;
+      inf_debug (gnu_current_inf, "%s %s[%d] %s %s",
+		 write ? "writing" : "reading",
+		 paddress (target_gdbarch, memaddr), len,
+		 write ? "<--" : "-->", host_address_to_string (myaddr));
+      if (write)
+	return gnu_write_inferior (task, memaddr, myaddr, len);
+      else
+	return gnu_read_inferior (task, memaddr, myaddr, len);
     }
 }
 
 /* Call FUNC on each memory region in the task.  */
-
-int
-gnu_nat_target::find_memory_regions (find_memory_region_ftype func,
-				     void *data)
+static int
+gnu_find_memory_regions (find_memory_region_ftype func, void *data)
 {
-  kern_return_t err;
+  error_t err;
   task_t task;
   vm_address_t region_address, last_region_address, last_region_end;
   vm_prot_t last_protection;
@@ -2682,7 +2557,6 @@ gnu_nat_target::find_memory_regions (find_memory_region_ftype func,
 		     last_protection & VM_PROT_READ,
 		     last_protection & VM_PROT_WRITE,
 		     last_protection & VM_PROT_EXECUTE,
-		     1, /* MODIFIED is unknown, pass it as true.  */
 		     data);
 	  last_region_address = region_address;
 	  last_region_end = region_address += region_length;
@@ -2696,7 +2570,6 @@ gnu_nat_target::find_memory_regions (find_memory_region_ftype func,
 	     last_protection & VM_PROT_READ,
 	     last_protection & VM_PROT_WRITE,
 	     last_protection & VM_PROT_EXECUTE,
-	     1, /* MODIFIED is unknown, pass it as true.  */
 	     data);
 
   return 0;
@@ -2710,18 +2583,18 @@ proc_string (struct proc *proc)
   static char tid_str[80];
 
   if (proc_is_task (proc))
-    xsnprintf (tid_str, sizeof (tid_str), "process %d", proc->inf->pid);
+    sprintf (tid_str, "process %d", proc->inf->pid);
   else
-    xsnprintf (tid_str, sizeof (tid_str), "Thread %d.%d",
-	       proc->inf->pid, proc->tid);
+    sprintf (tid_str, "Thread %d.%d",
+	     proc->inf->pid, proc->tid);
   return tid_str;
 }
 
-const char *
-gnu_nat_target::pid_to_str (ptid_t ptid)
+static char *
+gnu_pid_to_str (struct target_ops *ops, ptid_t ptid)
 {
   struct inf *inf = gnu_current_inf;
-  int tid = ptid.lwp ();
+  int tid = ptid_get_tid (ptid);
   struct proc *thread = inf_tid_to_thread (inf, tid);
 
   if (thread)
@@ -2730,16 +2603,47 @@ gnu_nat_target::pid_to_str (ptid_t ptid)
     {
       static char tid_str[80];
 
-      xsnprintf (tid_str, sizeof (tid_str), "bogus thread id %d", tid);
+      sprintf (tid_str, "bogus thread id %d", tid);
       return tid_str;
     }
 }
 
 
+/* Create a prototype generic GNU/Hurd target.  The client can
+   override it with local methods.  */
+
+struct target_ops *
+gnu_target (void)
+{
+  struct target_ops *t = inf_child_target ();
+
+  t->to_shortname = "GNU";
+  t->to_longname = "GNU Hurd process";
+  t->to_doc = "GNU Hurd process";
+
+  t->to_attach = gnu_attach;
+  t->to_attach_no_wait = 1;
+  t->to_detach = gnu_detach;
+  t->to_resume = gnu_resume;
+  t->to_wait = gnu_wait;
+  t->deprecated_xfer_memory = gnu_xfer_memory;
+  t->to_find_memory_regions = gnu_find_memory_regions;
+  t->to_terminal_init = gnu_terminal_init_inferior;
+  t->to_kill = gnu_kill_inferior;
+  t->to_create_inferior = gnu_create_inferior;
+  t->to_mourn_inferior = gnu_mourn_inferior;
+  t->to_thread_alive = gnu_thread_alive;
+  t->to_pid_to_str = gnu_pid_to_str;
+  t->to_stop = gnu_stop;
+
+  return t;
+}
+
+
 /* User task commands.  */
 
-static struct cmd_list_element *set_task_cmd_list = 0;
-static struct cmd_list_element *show_task_cmd_list = 0;
+struct cmd_list_element *set_task_cmd_list = 0;
+struct cmd_list_element *show_task_cmd_list = 0;
 /* User thread commands.  */
 
 /* Commands with a prefix of `set/show thread'.  */
@@ -2752,35 +2656,35 @@ struct cmd_list_element *set_thread_default_cmd_list = NULL;
 struct cmd_list_element *show_thread_default_cmd_list = NULL;
 
 static void
-set_thread_cmd (const char *args, int from_tty)
+set_thread_cmd (char *args, int from_tty)
 {
   printf_unfiltered ("\"set thread\" must be followed by the "
 		     "name of a thread property, or \"default\".\n");
 }
 
 static void
-show_thread_cmd (const char *args, int from_tty)
+show_thread_cmd (char *args, int from_tty)
 {
   printf_unfiltered ("\"show thread\" must be followed by the "
 		     "name of a thread property, or \"default\".\n");
 }
 
 static void
-set_thread_default_cmd (const char *args, int from_tty)
+set_thread_default_cmd (char *args, int from_tty)
 {
   printf_unfiltered ("\"set thread default\" must be followed "
 		     "by the name of a thread property.\n");
 }
 
 static void
-show_thread_default_cmd (const char *args, int from_tty)
+show_thread_default_cmd (char *args, int from_tty)
 {
   printf_unfiltered ("\"show thread default\" must be followed "
 		     "by the name of a thread property.\n");
 }
 
 static int
-parse_int_arg (const char *args, const char *cmd_prefix)
+parse_int_arg (char *args, char *cmd_prefix)
 {
   if (args)
     {
@@ -2795,8 +2699,7 @@ parse_int_arg (const char *args, const char *cmd_prefix)
 }
 
 static int
-_parse_bool_arg (const char *args, const char *t_val, const char *f_val,
-		 const char *cmd_prefix)
+_parse_bool_arg (char *args, char *t_val, char *f_val, char *cmd_prefix)
 {
   if (!args || strcmp (args, t_val) == 0)
     return 1;
@@ -2812,7 +2715,7 @@ _parse_bool_arg (const char *args, const char *t_val, const char *f_val,
   _parse_bool_arg (args, "on", "off", cmd_prefix)
 
 static void
-check_empty (const char *args, const char *cmd_prefix)
+check_empty (char *args, char *cmd_prefix)
 {
   if (args)
     error (_("Garbage after \"%s\" command: `%s'"), cmd_prefix, args);
@@ -2824,7 +2727,7 @@ cur_thread (void)
 {
   struct inf *inf = cur_inf ();
   struct proc *thread = inf_tid_to_thread (inf,
-					   inferior_ptid.lwp ());
+					   ptid_get_tid (inferior_ptid));
   if (!thread)
     error (_("No current thread."));
   return thread;
@@ -2843,12 +2746,12 @@ active_inf (void)
 
 
 static void
-set_task_pause_cmd (int arg, int from_tty)
+set_task_pause_cmd (char *args, int from_tty)
 {
   struct inf *inf = cur_inf ();
   int old_sc = inf->pause_sc;
 
-  inf->pause_sc = arg;
+  inf->pause_sc = parse_bool_arg (args, "set task pause");
 
   if (old_sc == 0 && inf->pause_sc != 0)
     /* If the task is currently unsuspended, immediately suspend it,
@@ -2857,13 +2760,7 @@ set_task_pause_cmd (int arg, int from_tty)
 }
 
 static void
-set_task_pause_cmd (const char *args, int from_tty)
-{
-  set_task_pause_cmd (parse_bool_arg (args, "set task pause"), from_tty);
-}
-
-static void
-show_task_pause_cmd (const char *args, int from_tty)
+show_task_pause_cmd (char *args, int from_tty)
 {
   struct inf *inf = cur_inf ();
 
@@ -2875,14 +2772,14 @@ show_task_pause_cmd (const char *args, int from_tty)
 }
 
 static void
-set_task_detach_sc_cmd (const char *args, int from_tty)
+set_task_detach_sc_cmd (char *args, int from_tty)
 {
   cur_inf ()->detach_sc = parse_int_arg (args,
 					 "set task detach-suspend-count");
 }
 
 static void
-show_task_detach_sc_cmd (const char *args, int from_tty)
+show_task_detach_sc_cmd (char *args, int from_tty)
 {
   check_empty (args, "show task detach-suspend-count");
   printf_unfiltered ("The inferior task will be left with a "
@@ -2892,7 +2789,7 @@ show_task_detach_sc_cmd (const char *args, int from_tty)
 
 
 static void
-set_thread_default_pause_cmd (const char *args, int from_tty)
+set_thread_default_pause_cmd (char *args, int from_tty)
 {
   struct inf *inf = cur_inf ();
 
@@ -2901,7 +2798,7 @@ set_thread_default_pause_cmd (const char *args, int from_tty)
 }
 
 static void
-show_thread_default_pause_cmd (const char *args, int from_tty)
+show_thread_default_pause_cmd (char *args, int from_tty)
 {
   struct inf *inf = cur_inf ();
   int sc = inf->default_thread_pause_sc;
@@ -2913,7 +2810,7 @@ show_thread_default_pause_cmd (const char *args, int from_tty)
 }
 
 static void
-set_thread_default_run_cmd (const char *args, int from_tty)
+set_thread_default_run_cmd (char *args, int from_tty)
 {
   struct inf *inf = cur_inf ();
 
@@ -2922,7 +2819,7 @@ set_thread_default_run_cmd (const char *args, int from_tty)
 }
 
 static void
-show_thread_default_run_cmd (const char *args, int from_tty)
+show_thread_default_run_cmd (char *args, int from_tty)
 {
   struct inf *inf = cur_inf ();
 
@@ -2932,14 +2829,14 @@ show_thread_default_run_cmd (const char *args, int from_tty)
 }
 
 static void
-set_thread_default_detach_sc_cmd (const char *args, int from_tty)
+set_thread_default_detach_sc_cmd (char *args, int from_tty)
 {
   cur_inf ()->default_thread_detach_sc =
     parse_int_arg (args, "set thread default detach-suspend-count");
 }
 
 static void
-show_thread_default_detach_sc_cmd (const char *args, int from_tty)
+show_thread_default_detach_sc_cmd (char *args, int from_tty)
 {
   check_empty (args, "show thread default detach-suspend-count");
   printf_unfiltered ("New threads will get a detach-suspend-count of %d.\n",
@@ -2952,7 +2849,7 @@ show_thread_default_detach_sc_cmd (const char *args, int from_tty)
 static void
 steal_exc_port (struct proc *proc, mach_port_t name)
 {
-  kern_return_t err;
+  error_t err;
   mach_port_t port;
   mach_msg_type_name_t port_type;
 
@@ -2963,7 +2860,7 @@ steal_exc_port (struct proc *proc, mach_port_t name)
 				 name, MACH_MSG_TYPE_COPY_SEND,
 				 &port, &port_type);
   if (err)
-    error (_("Couldn't extract send right %lu from inferior: %s"),
+    error (_("Couldn't extract send right %d from inferior: %s"),
 	   name, safe_strerror (err));
 
   if (proc->saved_exc_port)
@@ -2985,7 +2882,7 @@ steal_exc_port (struct proc *proc, mach_port_t name)
 }
 
 static void
-set_task_exc_port_cmd (const char *args, int from_tty)
+set_task_exc_port_cmd (char *args, int from_tty)
 {
   struct inf *inf = cur_inf ();
 
@@ -2995,13 +2892,13 @@ set_task_exc_port_cmd (const char *args, int from_tty)
 }
 
 static void
-set_stopped_cmd (const char *args, int from_tty)
+set_stopped_cmd (char *args, int from_tty)
 {
   cur_inf ()->stopped = _parse_bool_arg (args, "yes", "no", "set stopped");
 }
 
 static void
-show_stopped_cmd (const char *args, int from_tty)
+show_stopped_cmd (char *args, int from_tty)
 {
   struct inf *inf = active_inf ();
 
@@ -3011,25 +2908,30 @@ show_stopped_cmd (const char *args, int from_tty)
 }
 
 static void
-set_sig_thread_cmd (const char *args, int from_tty)
+set_sig_thread_cmd (char *args, int from_tty)
 {
   struct inf *inf = cur_inf ();
 
   if (!args || (!isdigit (*args) && strcmp (args, "none") != 0))
     error (_("Illegal argument to \"set signal-thread\" command.\n"
-	     "Should be a thread ID, or \"none\"."));
+	   "Should be an integer thread ID, or `none'."));
 
   if (strcmp (args, "none") == 0)
     inf->signal_thread = 0;
   else
     {
-      struct thread_info *tp = parse_thread_id (args, NULL);
-      inf->signal_thread = inf_tid_to_thread (inf, tp->ptid.lwp ());
+      int tid = ptid_get_tid (thread_id_to_pid (atoi (args)));
+
+      if (tid < 0)
+	error (_("Thread ID %s not known.  "
+		 "Use the \"info threads\" command to\n"
+	       "see the IDs of currently known threads."), args);
+      inf->signal_thread = inf_tid_to_thread (inf, tid);
     }
 }
 
 static void
-show_sig_thread_cmd (const char *args, int from_tty)
+show_sig_thread_cmd (char *args, int from_tty)
 {
   struct inf *inf = active_inf ();
 
@@ -3043,11 +2945,11 @@ show_sig_thread_cmd (const char *args, int from_tty)
 
 
 static void
-set_signals_cmd (int arg, int from_tty)
+set_signals_cmd (char *args, int from_tty)
 {
   struct inf *inf = cur_inf ();
 
-  inf->want_signals = arg;
+  inf->want_signals = parse_bool_arg (args, "set signals");
 
   if (inf->task && inf->want_signals != inf->traced)
     /* Make this take effect immediately in a running process.  */
@@ -3055,13 +2957,7 @@ set_signals_cmd (int arg, int from_tty)
 }
 
 static void
-set_signals_cmd (const char *args, int from_tty)
-{
-  set_signals_cmd(parse_bool_arg (args, "set signals"), from_tty);
-}
-
-static void
-show_signals_cmd (const char *args, int from_tty)
+show_signals_cmd (char *args, int from_tty)
 {
   struct inf *inf = cur_inf ();
 
@@ -3073,24 +2969,20 @@ show_signals_cmd (const char *args, int from_tty)
 }
 
 static void
-set_exceptions_cmd (int arg, int from_tty)
+set_exceptions_cmd (char *args, int from_tty)
 {
   struct inf *inf = cur_inf ();
+  int val = parse_bool_arg (args, "set exceptions");
 
-  /* Make this take effect immediately in a running process.  */
-  /* XXX */ ;
+  if (inf->task && inf->want_exceptions != val)
+    /* Make this take effect immediately in a running process.  */
+    /* XXX */ ;
 
-  inf->want_exceptions = arg;
+  inf->want_exceptions = val;
 }
 
 static void
-set_exceptions_cmd (const char *args, int from_tty)
-{
-  set_exceptions_cmd (parse_bool_arg (args, "set exceptions"), from_tty);
-}
-
-static void
-show_exceptions_cmd (const char *args, int from_tty)
+show_exceptions_cmd (char *args, int from_tty)
 {
   struct inf *inf = cur_inf ();
 
@@ -3103,14 +2995,14 @@ show_exceptions_cmd (const char *args, int from_tty)
 
 
 static void
-set_task_cmd (const char *args, int from_tty)
+set_task_cmd (char *args, int from_tty)
 {
   printf_unfiltered ("\"set task\" must be followed by the name"
 		     " of a task property.\n");
 }
 
 static void
-show_task_cmd (const char *args, int from_tty)
+show_task_cmd (char *args, int from_tty)
 {
   struct inf *inf = cur_inf ();
 
@@ -3138,19 +3030,19 @@ show_task_cmd (const char *args, int from_tty)
 
 
 static void
-set_noninvasive_cmd (const char *args, int from_tty)
+set_noninvasive_cmd (char *args, int from_tty)
 {
   /* Invert the sense of the arg for each component.  */
-  int inv_arg = parse_bool_arg (args, "set noninvasive") ? 0 : 1;
+  char *inv_args = parse_bool_arg (args, "set noninvasive") ? "off" : "on";
 
-  set_task_pause_cmd (inv_arg, from_tty);
-  set_signals_cmd (inv_arg, from_tty);
-  set_exceptions_cmd (inv_arg, from_tty);
+  set_task_pause_cmd (inv_args, from_tty);
+  set_signals_cmd (inv_args, from_tty);
+  set_exceptions_cmd (inv_args, from_tty);
 }
 
 
 static void
-info_port_rights (const char *args, mach_port_type_t only)
+info_port_rights (char *args, mach_port_type_t only)
 {
   struct inf *inf = active_inf ();
   struct value *vmark = value_mark ();
@@ -3184,31 +3076,31 @@ info_port_rights (const char *args, mach_port_type_t only)
 }
 
 static void
-info_send_rights_cmd (const char *args, int from_tty)
+info_send_rights_cmd (char *args, int from_tty)
 {
   info_port_rights (args, MACH_PORT_TYPE_SEND);
 }
 
 static void
-info_recv_rights_cmd (const char *args, int from_tty)
+info_recv_rights_cmd (char *args, int from_tty)
 {
   info_port_rights (args, MACH_PORT_TYPE_RECEIVE);
 }
 
 static void
-info_port_sets_cmd (const char *args, int from_tty)
+info_port_sets_cmd (char *args, int from_tty)
 {
   info_port_rights (args, MACH_PORT_TYPE_PORT_SET);
 }
 
 static void
-info_dead_names_cmd (const char *args, int from_tty)
+info_dead_names_cmd (char *args, int from_tty)
 {
   info_port_rights (args, MACH_PORT_TYPE_DEAD_NAME);
 }
 
 static void
-info_port_rights_cmd (const char *args, int from_tty)
+info_port_rights_cmd (char *args, int from_tty)
 {
   info_port_rights (args, ~0);
 }
@@ -3323,16 +3215,21 @@ This is the same as setting `task pause', `exceptions', and\n\
 	   &setlist);
 
   /* Commands to show information about the task's ports.  */
-  add_info ("send-rights", info_send_rights_cmd,
-	    _("Show information about the task's send rights"));
-  add_info ("receive-rights", info_recv_rights_cmd,
-	    _("Show information about the task's receive rights"));
-  add_info ("port-rights", info_port_rights_cmd,
-	    _("Show information about the task's port rights"));
-  add_info ("port-sets", info_port_sets_cmd,
-	    _("Show information about the task's port sets"));
-  add_info ("dead-names", info_dead_names_cmd,
-	    _("Show information about the task's dead names"));
+  add_cmd ("send-rights", class_info, info_send_rights_cmd,
+	   _("Show information about the task's send rights"),
+	   &infolist);
+  add_cmd ("receive-rights", class_info, info_recv_rights_cmd,
+	   _("Show information about the task's receive rights"),
+	   &infolist);
+  add_cmd ("port-rights", class_info, info_port_rights_cmd,
+	   _("Show information about the task's port rights"),
+	   &infolist);
+  add_cmd ("port-sets", class_info, info_port_sets_cmd,
+	   _("Show information about the task's port sets"),
+	   &infolist);
+  add_cmd ("dead-names", class_info, info_dead_names_cmd,
+	   _("Show information about the task's dead names"),
+	   &infolist);
   add_info_alias ("ports", "port-rights", 1);
   add_info_alias ("port", "port-rights", 1);
   add_info_alias ("psets", "port-sets", 1);
@@ -3340,7 +3237,7 @@ This is the same as setting `task pause', `exceptions', and\n\
 
 
 static void
-set_thread_pause_cmd (const char *args, int from_tty)
+set_thread_pause_cmd (char *args, int from_tty)
 {
   struct proc *thread = cur_thread ();
   int old_sc = thread->pause_sc;
@@ -3353,7 +3250,7 @@ set_thread_pause_cmd (const char *args, int from_tty)
 }
 
 static void
-show_thread_pause_cmd (const char *args, int from_tty)
+show_thread_pause_cmd (char *args, int from_tty)
 {
   struct proc *thread = cur_thread ();
   int sc = thread->pause_sc;
@@ -3366,7 +3263,7 @@ show_thread_pause_cmd (const char *args, int from_tty)
 }
 
 static void
-set_thread_run_cmd (const char *args, int from_tty)
+set_thread_run_cmd (char *args, int from_tty)
 {
   struct proc *thread = cur_thread ();
 
@@ -3374,7 +3271,7 @@ set_thread_run_cmd (const char *args, int from_tty)
 }
 
 static void
-show_thread_run_cmd (const char *args, int from_tty)
+show_thread_run_cmd (char *args, int from_tty)
 {
   struct proc *thread = cur_thread ();
 
@@ -3385,14 +3282,14 @@ show_thread_run_cmd (const char *args, int from_tty)
 }
 
 static void
-set_thread_detach_sc_cmd (const char *args, int from_tty)
+set_thread_detach_sc_cmd (char *args, int from_tty)
 {
   cur_thread ()->detach_sc = parse_int_arg (args,
 					    "set thread detach-suspend-count");
 }
 
 static void
-show_thread_detach_sc_cmd (const char *args, int from_tty)
+show_thread_detach_sc_cmd (char *args, int from_tty)
 {
   struct proc *thread = cur_thread ();
 
@@ -3404,7 +3301,7 @@ show_thread_detach_sc_cmd (const char *args, int from_tty)
 }
 
 static void
-set_thread_exc_port_cmd (const char *args, int from_tty)
+set_thread_exc_port_cmd (char *args, int from_tty)
 {
   struct proc *thread = cur_thread ();
 
@@ -3428,16 +3325,15 @@ show_thread_cmd (char *args, int from_tty)
 #endif
 
 static void
-thread_takeover_sc_cmd (const char *args, int from_tty)
+thread_takeover_sc_cmd (char *args, int from_tty)
 {
   struct proc *thread = cur_thread ();
 
   thread_basic_info_data_t _info;
   thread_basic_info_t info = &_info;
   mach_msg_type_number_t info_len = THREAD_BASIC_INFO_COUNT;
-  kern_return_t err
-    = mach_thread_info (thread->port, THREAD_BASIC_INFO,
-			(int *) &info, &info_len);
+  error_t err =
+  thread_info (thread->port, THREAD_BASIC_INFO, (int *) &info, &info_len);
   if (err)
     error (("%s."), safe_strerror (err));
   thread->sc = info->suspend_count;
@@ -3513,6 +3409,7 @@ to the thread's initial suspend-count when gdb notices the threads."),
 	   &thread_cmd_list);
 }
 
+
 void
 _initialize_gnu_nat (void)
 {
@@ -3542,7 +3439,7 @@ void
 flush_inferior_icache (CORE_ADDR pc, int amount)
 {
   vm_machine_attribute_val_t flush = MATTR_VAL_ICACHE_FLUSH;
-  kern_return_t ret;
+  error_t ret;
 
   ret = vm_machine_attribute (gnu_current_inf->task->port,
 			      pc,

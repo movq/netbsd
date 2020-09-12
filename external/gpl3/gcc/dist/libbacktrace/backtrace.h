@@ -1,5 +1,5 @@
 /* backtrace.h -- Public header file for stack backtrace library.
-   Copyright (C) 2012-2019 Free Software Foundation, Inc.
+   Copyright (C) 2012-2013 Free Software Foundation, Inc.
    Written by Ian Lance Taylor, Google.
 
 Redistribution and use in source and binary forms, with or without
@@ -7,13 +7,13 @@ modification, are permitted provided that the following conditions are
 met:
 
     (1) Redistributions of source code must retain the above copyright
-    notice, this list of conditions and the following disclaimer.
+    notice, this list of conditions and the following disclaimer. 
 
     (2) Redistributions in binary form must reproduce the above copyright
     notice, this list of conditions and the following disclaimer in
     the documentation and/or other materials provided with the
-    distribution.
-
+    distribution.  
+    
     (3) The name of the author may not be used to
     endorse or promote products derived from this software without
     specific prior written permission.
@@ -89,16 +89,11 @@ typedef void (*backtrace_error_callback) (void *data, const char *msg,
    system-specific path names.  If not NULL, FILENAME must point to a
    permanent buffer.  If THREADED is non-zero the state may be
    accessed by multiple threads simultaneously, and the library will
-   use appropriate atomic operations.  If THREADED is zero the state
+   use appropriate locks (this requires that the library be configured
+   with --enable-backtrace-threads).  If THREADED is zero the state
    may only be accessed by one thread at a time.  This returns a state
    pointer on success, NULL on error.  If an error occurs, this will
-   call the ERROR_CALLBACK routine.
-
-   Calling this function allocates resources that cannot be freed.
-   There is no backtrace_free_state function.  The state is used to
-   cache information that is expensive to recompute.  Programs are
-   expected to call this function at most once and to save the return
-   value for all later calls to backtrace functions.  */
+   call the ERROR_CALLBACK routine.  */
 
 extern struct backtrace_state *backtrace_create_state (
     const char *filename, int threaded,
@@ -175,25 +170,24 @@ extern int backtrace_pcinfo (struct backtrace_state *state, uintptr_t pc,
 /* The type of the callback argument to backtrace_syminfo.  DATA and
    PC are the arguments passed to backtrace_syminfo.  SYMNAME is the
    name of the symbol for the corresponding code.  SYMVAL is the
-   value and SYMSIZE is the size of the symbol.  SYMNAME will be NULL
-   if no error occurred but the symbol could not be found.  */
+   value.  SYMNAME will be NULL if no error occurred but the symbol
+   could not be found.  */
 
 typedef void (*backtrace_syminfo_callback) (void *data, uintptr_t pc,
 					    const char *symname,
-					    uintptr_t symval,
-					    uintptr_t symsize);
+					    uintptr_t symval);
 
-/* Given ADDR, an address or program counter in the current program,
-   call the callback information with the symbol name and value
-   describing the function or variable in which ADDR may be found.
-   This will call either CALLBACK or ERROR_CALLBACK exactly once.
-   This returns 1 on success, 0 on failure.  This function requires
-   the symbol table but does not require the debug info.  Note that if
-   the symbol table is present but ADDR could not be found in the
-   table, CALLBACK will be called with a NULL SYMNAME argument.
-   Returns 1 on success, 0 on error.  */
+/* Given PC, a program counter in the current program, call the
+   callback information with the symbol name and value describing the
+   function in which PC may be found.  This will call either CALLBACK
+   or ERROR_CALLBACK exactly once.  This returns 1 on success, 0 on
+   failure.  This function requires the symbol table but does not
+   require the debug info.  Note that if the symbol table is present
+   but PC could not be found in the table, CALLBACK will be called
+   with a NULL SYMNAME argument.  Returns 1 on success, 0 on
+   error.  */
 
-extern int backtrace_syminfo (struct backtrace_state *state, uintptr_t addr,
+extern int backtrace_syminfo (struct backtrace_state *state, uintptr_t pc,
 			      backtrace_syminfo_callback callback,
 			      backtrace_error_callback error_callback,
 			      void *data);

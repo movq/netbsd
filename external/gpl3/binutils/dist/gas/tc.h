@@ -1,6 +1,8 @@
 /* tc.h - target cpu dependent
 
-   Copyright (C) 1987-2020 Free Software Foundation, Inc.
+   Copyright 1987, 1990, 1991, 1992, 1993, 1994, 1995, 2000, 2001, 2003,
+   2004, 2005, 2007
+   Free Software Foundation, Inc.
 
    This file is part of GAS, the GNU Assembler.
 
@@ -24,14 +26,12 @@
 
 extern const pseudo_typeS md_pseudo_table[];
 
-const char * md_atof (int, char *, int *);
-int    md_parse_option (int, const char *);
+char * md_atof (int, char *, int *);
+int    md_parse_option (int, char *);
 void   md_show_usage (FILE *);
 void   md_assemble (char *);
 void   md_begin (void);
-#ifndef md_number_to_chars
 void   md_number_to_chars (char *, valueT, int);
-#endif
 void   md_apply_fix (fixS *, valueT *, segT);
 
 #ifndef WORKING_DOT_WORD
@@ -39,7 +39,7 @@ extern int md_short_jump_size;
 extern int md_long_jump_size;
 #endif
 
-#ifdef TE_PE
+#ifdef USE_UNIQUE
 /* The name of an external symbol which is
    used to make weak PE symbol names unique.  */
 extern const char * an_external_name;
@@ -75,6 +75,3 @@ extern arelent *tc_gen_reloc (asection *, fixS *);
 #else
 extern arelent **tc_gen_reloc (asection *, fixS *);
 #endif
-
-extern const char FLT_CHARS[];
-extern const char EXP_CHARS[];

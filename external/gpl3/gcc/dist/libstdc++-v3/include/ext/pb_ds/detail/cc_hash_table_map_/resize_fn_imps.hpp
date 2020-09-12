@@ -1,6 +1,6 @@
 // -*- C++ -*-
 
-// Copyright (C) 2005-2019 Free Software Foundation, Inc.
+// Copyright (C) 2005, 2006, 2007, 2008, 2009 Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the terms
@@ -34,7 +34,7 @@
 // warranty.
 
 /**
- * @file cc_hash_table_map_/resize_fn_imps.hpp
+ * @file resize_fn_imps.hpp
  * Contains implementations of cc_ht_map_'s resize related functions.
  */
 
@@ -70,7 +70,7 @@ do_resize_if_needed_no_throw()
   __catch(...)
     { }
 
-  PB_DS_ASSERT_VALID((*this))
+  _GLIBCXX_DEBUG_ONLY(assert_valid();)
 }
 
 PB_DS_CLASS_T_DEC
@@ -78,7 +78,7 @@ void
 PB_DS_CLASS_C_DEC::
 resize_imp(size_type new_size)
 {
-  PB_DS_ASSERT_VALID((*this))
+  _GLIBCXX_DEBUG_ONLY(assert_valid();)
   if (new_size == m_num_e)
     return;
 
@@ -103,7 +103,7 @@ resize_imp(size_type new_size)
   // At this point no exceptions can be thrown.
   resize_imp_no_exceptions(new_size, a_p_entries_resized, old_size);
   Resize_Policy::notify_resized(new_size);
-  PB_DS_ASSERT_VALID((*this))
+  _GLIBCXX_DEBUG_ONLY(assert_valid();)
 }
 
 PB_DS_CLASS_T_DEC
@@ -112,21 +112,20 @@ PB_DS_CLASS_C_DEC::
 resize_imp_no_exceptions(size_type new_size, entry_pointer_array a_p_entries_resized, size_type old_size)
 {
   std::fill(a_p_entries_resized, a_p_entries_resized + m_num_e,
-	    entry_pointer(0));
+	    entry_pointer(NULL));
 
   for (size_type pos = 0; pos < old_size; ++pos)
     {
       entry_pointer p_e = m_entries[pos];
-      while (p_e != 0)
+      while (p_e != NULL)
 	p_e = resize_imp_no_exceptions_reassign_pointer(p_e, a_p_entries_resized,  traits_base::m_store_extra_indicator);
     }
 
   m_num_e = new_size;
-  _GLIBCXX_DEBUG_ONLY(assert_entry_pointer_array_valid(a_p_entries_resized,
-						       __FILE__, __LINE__);)
+  _GLIBCXX_DEBUG_ONLY(assert_entry_pointer_array_valid(a_p_entries_resized);)
   s_entry_pointer_allocator.deallocate(m_entries, old_size);
   m_entries = a_p_entries_resized;
-  PB_DS_ASSERT_VALID((*this))
+  _GLIBCXX_DEBUG_ONLY(assert_valid();)
 }
 
 #include <ext/pb_ds/detail/cc_hash_table_map_/resize_no_store_hash_fn_imps.hpp>

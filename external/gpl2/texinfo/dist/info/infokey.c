@@ -1,4 +1,4 @@
-/*	$NetBSD: infokey.c,v 1.3 2016/10/08 20:34:59 joerg Exp $	*/
+/*	$NetBSD: infokey.c,v 1.1 2016/01/14 00:11:29 christos Exp $	*/
 
 /* infokey.c -- compile ~/.infokey to ~/.info.
    Id: infokey.c,v 1.9 2004/12/14 00:15:36 karl Exp 
@@ -446,7 +446,7 @@ compile (FILE *fp, const char *filename, struct sect *sections)
 #define	To_seq(c) \
 		  do { \
 		    if (slen < sizeof seq) \
-		      seq[slen++] = meta ? (char)Meta(c) : (c); \
+		      seq[slen++] = meta ? Meta(c) : (c); \
 		    else \
 		      { \
 			syntax_error(filename, lnum, _("key sequence too long"), \
@@ -641,7 +641,7 @@ compile (FILE *fp, const char *filename, struct sect *sections)
 		{
 		  syntax_error (filename, lnum,
                       (char *) _("NUL character (^%c) not permitted"),
-                      (void *)((intptr_t)c), NULL, NULL, NULL);
+                      (void *) (long) c, NULL, NULL, NULL);
 		  error = 1;
 		}
 	      seqstate = normal;
@@ -665,7 +665,7 @@ compile (FILE *fp, const char *filename, struct sect *sections)
 	      if (alen == 0)
 		{
 		  syntax_error (filename, lnum, (char *) _("missing action name"),
-                      (void *)((intptr_t)c), NULL, NULL, NULL);
+				(void *) (long) c, NULL, NULL, NULL);
 		  error = 1;
 		}
 	      else

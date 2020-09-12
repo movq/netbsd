@@ -1,4 +1,5 @@
-# Copyright 1999-2019 Free Software Foundation, Inc.
+# Copyright 1999, 2000, 2001, 2005, 2007, 2008, 2009, 2010, 2011
+# Free Software Foundation, Inc.
 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -13,13 +14,14 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-# Test Machine interface (MI) operations
-#
+# Test Machine interface (MI) operations 
 # Verify that, using the MI, we can run a simple program and perform
-# exec-until.
+# exec-until.  
+
+# The goal is not to
+# test gdb functionality, which is done by other tests, but to verify
+# the correct output response to MI operations.  
 #
-# The goal is not to test gdb functionality, which is done by other
-# tests, but to verify the correct output response to MI operations.
 
 load_lib mi-support.exp
 set MIFLAGS "-i=mi"
@@ -29,10 +31,11 @@ if [mi_gdb_start] {
     continue
 }
 
-standard_testfile until.c
-
-if  { [gdb_compile "${srcdir}/${subdir}/${srcfile}" "${binfile}" executable {debug}] != "" } {
-     untested "failed to compile"
+set testfile "until"
+set srcfile ${testfile}.c
+set binfile ${objdir}/${subdir}/${testfile}
+if  { [gdb_compile "${srcdir}/${subdir}/${srcfile}" "${binfile}" executable {debug additional_flags=-DFAKEARGV}] != "" } {
+     untested mi-until.exp
      return -1
 }
 
@@ -42,13 +45,14 @@ mi_gdb_reinitialize_dir $srcdir/$subdir
 mi_gdb_load ${binfile}
 
 proc test_running_to_foo {} {
-    set line [gdb_get_line_number "in-loop"]
-    mi_create_breakpoint $line \
-	"break-insert operation" \
-	-number 1 -func foo -file ".*until.c" -line $line
+    global mi_gdb_prompt
+    global hex
+
+    mi_create_breakpoint "10" 1 "keep" foo ".*until.c" 10 ".*" \
+             "break-insert operation"
 
     mi_run_cmd
-    mi_expect_stop "breakpoint-hit" "foo" "" ".*until.c" $line \
+    mi_expect_stop "breakpoint-hit" "foo" "" ".*until.c" 10 \
       { "" "disp=\"keep\"" } "run to main"
 
     mi_gdb_test "100-break-delete 1" "100\\^done" "break-delete 1"
@@ -56,24 +60,21 @@ proc test_running_to_foo {} {
 }
 
 proc test_until {} {
+    global mi_gdb_prompt
+    global hex fullname_syntax srcfile
+
     setup_kfail gdb/2104 "*-*-*"
-    set line [gdb_get_line_number "after-loop"]
-    mi_execute_to "exec-until" "end-stepping-range" "foo" "" ".*until.c" $line "" \
+    mi_execute_to "exec-until" "end-stepping-range" "foo" "" ".*until.c" "12" "" \
         "until after while loop"
 
-    set line [gdb_get_line_number "until-here"]
-    mi_execute_to "exec-until $line" "location-reached" "foo" "" ".*until.c" $line ""\
+    mi_execute_to "exec-until 15" "location-reached" "foo" "" ".*until.c" "15" ""\
         "until line number"
 
-    set line [gdb_get_line_number "until-there"]
-    mi_execute_to "exec-until until.c:$line" "location-reached" "foo" "" ".*until.c" $line ""\
+    mi_execute_to "exec-until until.c:17" "location-reached" "foo" "" ".*until.c" "17" ""\
         "until line number:file"
 
-    # This is supposed to NOT stop at the return statement, but right
-    # after foo is over.
-    set line [gdb_get_line_number "at-return"]
-    mi_execute_to "exec-until until.c:$line" "location-reached" "main" ""\
-	".*until.c" "([expr $line-2]|[expr $line-1])" ""\
+    # This is supposed to NOT stop at line 25. It stops right after foo is over.
+    mi_execute_to "exec-until until.c:25" "location-reached" "main" "" ".*until.c" "(23|24)" ""\
         "until after current function"
 }
 

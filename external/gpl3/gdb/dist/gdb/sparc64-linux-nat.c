@@ -1,6 +1,7 @@
 /* Native-dependent code for GNU/Linux UltraSPARC.
 
-   Copyright (C) 2003-2019 Free Software Foundation, Inc.
+   Copyright (C) 2003, 2005, 2006, 2007, 2008, 2009, 2010, 2011
+   Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -30,26 +31,7 @@
 #include "target.h"
 #include "linux-nat.h"
 
-class sparc64_linux_nat_target final : public linux_nat_target
-{
-public:
-  /* Add our register access methods.  */
-  void fetch_registers (struct regcache *regcache, int regnum) override
-  { sparc_fetch_inferior_registers (regcache, regnum); }
-
-  void store_registers (struct regcache *regcache, int regnum) override
-  { sparc_store_inferior_registers (regcache, regnum); }
-
-  /* Override linux_nat_target low methods.  */
-
-  /* ADI support */
-  void low_forget_process (pid_t pid) override
-  { sparc64_forget_process (pid); }
-};
-
-static sparc64_linux_nat_target the_sparc64_linux_nat_target;
-
-static const struct sparc_gregmap sparc64_linux_ptrace_gregmap =
+static const struct sparc_gregset sparc64_linux_ptrace_gregset =
 {
   16 * 8,			/* "tstate" */
   17 * 8,			/* %pc */
@@ -66,36 +48,45 @@ static const struct sparc_gregmap sparc64_linux_ptrace_gregmap =
 void
 supply_gregset (struct regcache *regcache, const prgregset_t *gregs)
 {
-  sparc64_supply_gregset (sparc_gregmap, regcache, -1, gregs);
+  sparc64_supply_gregset (sparc_gregset, regcache, -1, gregs);
 }
 
 void
 supply_fpregset (struct regcache *regcache, const prfpregset_t *fpregs)
 {
-  sparc64_supply_fpregset (&sparc64_bsd_fpregmap, regcache, -1, fpregs);
+  sparc64_supply_fpregset (regcache, -1, fpregs);
 }
 
 void
 fill_gregset (const struct regcache *regcache, prgregset_t *gregs, int regnum)
 {
-  sparc64_collect_gregset (sparc_gregmap, regcache, regnum, gregs);
+  sparc64_collect_gregset (sparc_gregset, regcache, regnum, gregs);
 }
 
 void
 fill_fpregset (const struct regcache *regcache,
 	       prfpregset_t *fpregs, int regnum)
 {
-  sparc64_collect_fpregset (&sparc64_bsd_fpregmap, regcache, regnum, fpregs);
+  sparc64_collect_fpregset (regcache, regnum, fpregs);
 }
+
+/* Provide a prototype to silence -Wmissing-prototypes.  */
+void _initialize_sparc64_linux_nat (void);
 
 void
 _initialize_sparc64_linux_nat (void)
 {
-  sparc_fpregmap = &sparc64_bsd_fpregmap;
+  struct target_ops *t;
+
+  /* Fill in the generic GNU/Linux methods.  */
+  t = linux_target ();
+
+  /* Add our register access methods.  */
+  t->to_fetch_registers = sparc_fetch_inferior_registers;
+  t->to_store_registers = sparc_store_inferior_registers;
 
   /* Register the target.  */
-  linux_target = &the_sparc64_linux_nat_target;
-  add_inf_child_target (&the_sparc64_linux_nat_target);
+  linux_nat_add_target (t);
 
-  sparc_gregmap = &sparc64_linux_ptrace_gregmap;
+  sparc_gregset = &sparc64_linux_ptrace_gregset;
 }

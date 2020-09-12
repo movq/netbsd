@@ -1,5 +1,6 @@
 /* Perform branch target register load optimizations.
-   Copyright (C) 2001-2019 Free Software Foundation, Inc.
+   Copyright (C) 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009
+   Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -20,44 +21,39 @@ along with GCC; see the file COPYING3.  If not see
 #include "config.h"
 #include "system.h"
 #include "coretypes.h"
-#include "backend.h"
-#include "target.h"
+#include "tm.h"
 #include "rtl.h"
-#include "tree.h"
-#include "df.h"
-#include "insn-config.h"
+#include "hard-reg-set.h"
 #include "regs.h"
-#include "memmodel.h"
-#include "emit-rtl.h"
-#include "recog.h"
-#include "diagnostic-core.h"
+#include "fibheap.h"
+#include "output.h"
+#include "target.h"
 #include "expr.h"
+#include "flags.h"
 #include "insn-attr.h"
+#include "function.h"
+#include "except.h"
+#include "tm_p.h"
+#include "toplev.h"
 #include "tree-pass.h"
-#include "cfgrtl.h"
-#include "cfganal.h"
-#include "cfgcleanup.h"
-#include "cfgloop.h"
-#include "rtl-iter.h"
-#include "fibonacci_heap.h"
-
-struct btr_def;
+#include "recog.h"
+#include "df.h"
 
 /* Target register optimizations - these are performed after reload.  */
 
-struct btr_def_group
+typedef struct btr_def_group_s
 {
-  btr_def_group *next;
+  struct btr_def_group_s *next;
   rtx src;
-  btr_def *members;
-};
+  struct btr_def_s *members;
+} *btr_def_group;
 
-struct btr_user
+typedef struct btr_user_s
 {
-  btr_user *next;
+  struct btr_user_s *next;
   basic_block bb;
   int luid;
-  rtx_insn *insn;
+  rtx insn;
   /* If INSN has a single use of a single branch register, then
      USE points to it within INSN.  If there is more than
      one branch register use, or the use is in some way ambiguous,
@@ -66,7 +62,7 @@ struct btr_user
   int n_reaching_defs;
   int first_reaching_def;
   char other_use_this_block;
-};
+} *btr_user;
 
 /* btr_def structs appear on three lists:
      1. A list of all btr_def structures (head is
@@ -77,21 +73,21 @@ struct btr_user
 	group (head is in a BTR_DEF_GROUP struct, linked by
 	NEXT_THIS_GROUP field).  */
 
-struct btr_def
+typedef struct btr_def_s
 {
-  btr_def *next_this_bb;
-  btr_def *next_this_group;
+  struct btr_def_s *next_this_bb;
+  struct btr_def_s *next_this_group;
   basic_block bb;
   int luid;
-  rtx_insn *insn;
+  rtx insn;
   int btr;
   int cost;
   /* For a branch register setting insn that has a constant
      source (i.e. a label), group links together all the
      insns with the same source.  For other branch register
      setting insns, group is NULL.  */
-  btr_def_group *group;
-  btr_user *uses;
+  btr_def_group group;
+  btr_user uses;
   /* If this def has a reaching use which is not a simple use
      in a branch instruction, then has_ambiguous_use will be true,
      and we will not attempt to migrate this definition.  */
@@ -111,40 +107,40 @@ struct btr_def
      to clear out trs_live_at_end again.  */
   char own_end;
   bitmap live_range;
-};
-
-typedef fibonacci_heap <long, btr_def> btr_heap_t;
-typedef fibonacci_node <long, btr_def> btr_heap_node_t;
+} *btr_def;
 
 static int issue_rate;
 
 static int basic_block_freq (const_basic_block);
-static int insn_sets_btr_p (const rtx_insn *, int, int *);
-static void find_btr_def_group (btr_def_group **, btr_def *);
-static btr_def *add_btr_def (btr_heap_t *, basic_block, int, rtx_insn *,
-			    unsigned int, int, btr_def_group **);
-static btr_user *new_btr_user (basic_block, int, rtx_insn *);
+static int insn_sets_btr_p (const_rtx, int, int *);
+static rtx *find_btr_use (rtx);
+static int btr_referenced_p (rtx, rtx *);
+static int find_btr_reference (rtx *, void *);
+static void find_btr_def_group (btr_def_group *, btr_def);
+static btr_def add_btr_def (fibheap_t, basic_block, int, rtx,
+			    unsigned int, int, btr_def_group *);
+static btr_user new_btr_user (basic_block, int, rtx);
 static void dump_hard_reg_set (HARD_REG_SET);
 static void dump_btrs_live (int);
-static void note_other_use_this_block (unsigned int, btr_user *);
-static void compute_defs_uses_and_gen (btr_heap_t *, btr_def **, btr_user **,
+static void note_other_use_this_block (unsigned int, btr_user);
+static void compute_defs_uses_and_gen (fibheap_t, btr_def *,btr_user *,
 				       sbitmap *, sbitmap *, HARD_REG_SET *);
 static void compute_kill (sbitmap *, sbitmap *, HARD_REG_SET *);
 static void compute_out (sbitmap *bb_out, sbitmap *, sbitmap *, int);
-static void link_btr_uses (btr_def **, btr_user **, sbitmap *, sbitmap *, int);
-static void build_btr_def_use_webs (btr_heap_t *);
-static int block_at_edge_of_live_range_p (int, btr_def *);
-static void clear_btr_from_live_range (btr_def *def);
-static void add_btr_to_live_range (btr_def *, int);
+static void link_btr_uses (btr_def *, btr_user *, sbitmap *, sbitmap *, int);
+static void build_btr_def_use_webs (fibheap_t);
+static int block_at_edge_of_live_range_p (int, btr_def);
+static void clear_btr_from_live_range (btr_def def);
+static void add_btr_to_live_range (btr_def, int);
 static void augment_live_range (bitmap, HARD_REG_SET *, basic_block,
 				basic_block, int);
 static int choose_btr (HARD_REG_SET);
-static void combine_btr_defs (btr_def *, HARD_REG_SET *);
-static void btr_def_live_range (btr_def *, HARD_REG_SET *);
-static void move_btr_def (basic_block, int, btr_def *, bitmap, HARD_REG_SET *);
-static int migrate_btr_def (btr_def *, int);
+static void combine_btr_defs (btr_def, HARD_REG_SET *);
+static void btr_def_live_range (btr_def, HARD_REG_SET *);
+static void move_btr_def (basic_block, int, btr_def, bitmap, HARD_REG_SET *);
+static int migrate_btr_def (btr_def, int);
 static void migrate_btr_defs (enum reg_class, int);
-static int can_move_up (const_basic_block, const rtx_insn *, int);
+static int can_move_up (const_basic_block, const_rtx, int);
 static void note_btr_set (rtx, const_rtx, void *);
 
 /* The following code performs code motion of target load instructions
@@ -185,30 +181,40 @@ static int first_btr, last_btr;
 static int
 basic_block_freq (const_basic_block bb)
 {
-  return bb->count.to_frequency (cfun);
+  return bb->frequency;
 }
 
-/* If the rtx at *XP references (sets or reads) any branch target
-   register, return one such register.  If EXCLUDEP is set, disregard
-   any references within that location.  */
-static rtx *
-find_btr_use (rtx *xp, rtx *excludep = 0)
+static rtx *btr_reference_found;
+
+/* A subroutine of btr_referenced_p, called through for_each_rtx.
+   PREG is a pointer to an rtx that is to be excluded from the
+   traversal.  If we find a reference to a target register anywhere
+   else, return 1, and put a pointer to it into btr_reference_found.  */
+static int
+find_btr_reference (rtx *px, void *preg)
 {
-  subrtx_ptr_iterator::array_type array;
-  FOR_EACH_SUBRTX_PTR (iter, array, xp, NONCONST)
+  rtx x;
+
+  if (px == preg)
+    return -1;
+  x = *px;
+  if (!REG_P (x))
+    return 0;
+  if (overlaps_hard_reg_set_p (all_btrs, GET_MODE (x), REGNO (x)))
     {
-      rtx *loc = *iter;
-      if (loc == excludep)
-	iter.skip_subrtxes ();
-      else
-	{
-	  const_rtx x = *loc;
-	  if (REG_P (x)
-	      && overlaps_hard_reg_set_p (all_btrs, GET_MODE (x), REGNO (x)))
-	    return loc;
-	}
+      btr_reference_found = px;
+      return 1;
     }
-  return 0;
+  return -1;
+}
+
+/* Return nonzero if X references (sets or reads) any branch target register.
+   If EXCLUDEP is set, disregard any references within the rtx pointed to
+   by it.  If returning nonzero, also set btr_reference_found as above.  */
+static int
+btr_referenced_p (rtx x, rtx *excludep)
+{
+  return for_each_rtx (&x, find_btr_reference, excludep);
 }
 
 /* Return true if insn is an instruction that sets a target register.
@@ -216,7 +222,7 @@ find_btr_use (rtx *xp, rtx *excludep = 0)
    If such a set is found and REGNO is nonzero, assign the register number
    of the destination register to *REGNO.  */
 static int
-insn_sets_btr_p (const rtx_insn *insn, int check_const, int *regno)
+insn_sets_btr_p (const_rtx insn, int check_const, int *regno)
 {
   rtx set;
 
@@ -232,7 +238,7 @@ insn_sets_btr_p (const rtx_insn *insn, int check_const, int *regno)
       if (REG_P (dest)
 	  && TEST_HARD_REG_BIT (all_btrs, REGNO (dest)))
 	{
-	  gcc_assert (!find_btr_use (&src));
+	  gcc_assert (!btr_referenced_p (src, NULL));
 
 	  if (!check_const || CONSTANT_P (src))
 	    {
@@ -245,15 +251,22 @@ insn_sets_btr_p (const rtx_insn *insn, int check_const, int *regno)
   return 0;
 }
 
+/* Find and return a use of a target register within an instruction INSN.  */
+static rtx *
+find_btr_use (rtx insn)
+{
+  return btr_referenced_p (insn, NULL) ? btr_reference_found : NULL;
+}
+
 /* Find the group that the target register definition DEF belongs
    to in the list starting with *ALL_BTR_DEF_GROUPS.  If no such
    group exists, create one.  Add def to the group.  */
 static void
-find_btr_def_group (btr_def_group **all_btr_def_groups, btr_def *def)
+find_btr_def_group (btr_def_group *all_btr_def_groups, btr_def def)
 {
   if (insn_sets_btr_p (def->insn, 1, NULL))
     {
-      btr_def_group *this_group;
+      btr_def_group this_group;
       rtx def_src = SET_SRC (single_set (def->insn));
 
       /* ?? This linear search is an efficiency concern, particularly
@@ -266,7 +279,7 @@ find_btr_def_group (btr_def_group **all_btr_def_groups, btr_def *def)
 
       if (!this_group)
 	{
-	  this_group = XOBNEW (&migrate_btrl_obstack, btr_def_group);
+	  this_group = XOBNEW (&migrate_btrl_obstack, struct btr_def_group_s);
 	  this_group->src = def_src;
 	  this_group->members = NULL;
 	  this_group->next = *all_btr_def_groups;
@@ -283,13 +296,12 @@ find_btr_def_group (btr_def_group **all_btr_def_groups, btr_def *def)
 /* Create a new target register definition structure, for a definition in
    block BB, instruction INSN, and insert it into ALL_BTR_DEFS.  Return
    the new definition.  */
-static btr_def *
-add_btr_def (btr_heap_t *all_btr_defs, basic_block bb, int insn_luid,
-	     rtx_insn *insn,
+static btr_def
+add_btr_def (fibheap_t all_btr_defs, basic_block bb, int insn_luid, rtx insn,
 	     unsigned int dest_reg, int other_btr_uses_before_def,
-	     btr_def_group **all_btr_def_groups)
+	     btr_def_group *all_btr_def_groups)
 {
-  btr_def *this_def = XOBNEW (&migrate_btrl_obstack, btr_def);
+  btr_def this_def = XOBNEW (&migrate_btrl_obstack, struct btr_def_s);
   this_def->bb = bb;
   this_def->luid = insn_luid;
   this_def->insn = insn;
@@ -304,7 +316,7 @@ add_btr_def (btr_heap_t *all_btr_defs, basic_block bb, int insn_luid,
   this_def->live_range = NULL;
   find_btr_def_group (all_btr_def_groups, this_def);
 
-  all_btr_defs->insert (-this_def->cost, this_def);
+  fibheap_insert (all_btr_defs, -this_def->cost, this_def);
 
   if (dump_file)
     fprintf (dump_file,
@@ -317,16 +329,16 @@ add_btr_def (btr_heap_t *all_btr_defs, basic_block bb, int insn_luid,
 
 /* Create a new target register user structure, for a use in block BB,
    instruction INSN.  Return the new user.  */
-static btr_user *
-new_btr_user (basic_block bb, int insn_luid, rtx_insn *insn)
+static btr_user
+new_btr_user (basic_block bb, int insn_luid, rtx insn)
 {
   /* This instruction reads target registers.  We need
      to decide whether we can replace all target register
      uses easily.
    */
-  rtx *usep = find_btr_use (&PATTERN (insn));
+  rtx *usep = find_btr_use (PATTERN (insn));
   rtx use;
-  btr_user *user = NULL;
+  btr_user user = NULL;
 
   if (usep)
     {
@@ -335,12 +347,12 @@ new_btr_user (basic_block bb, int insn_luid, rtx_insn *insn)
       /* We want to ensure that USE is the only use of a target
 	 register in INSN, so that we know that to rewrite INSN to use
 	 a different target register, all we have to do is replace USE.  */
-      unambiguous_single_use = !find_btr_use (&PATTERN (insn), usep);
+      unambiguous_single_use = !btr_referenced_p (PATTERN (insn), usep);
       if (!unambiguous_single_use)
 	usep = NULL;
     }
   use = usep ? *usep : NULL_RTX;
-  user = XOBNEW (&migrate_btrl_obstack, btr_user);
+  user = XOBNEW (&migrate_btrl_obstack, struct btr_user_s);
   user->bb = bb;
   user->luid = insn_luid;
   user->insn = insn;
@@ -387,22 +399,22 @@ dump_btrs_live (int bb)
    If any of them use the same register, set their other_use_this_block
    flag.  */
 static void
-note_other_use_this_block (unsigned int regno, btr_user *users_this_bb)
+note_other_use_this_block (unsigned int regno, btr_user users_this_bb)
 {
-  btr_user *user;
+  btr_user user;
 
   for (user = users_this_bb; user != NULL; user = user->next)
     if (user->use && REGNO (user->use) == regno)
       user->other_use_this_block = 1;
 }
 
-struct defs_uses_info {
-  btr_user *users_this_bb;
+typedef struct {
+  btr_user users_this_bb;
   HARD_REG_SET btrs_written_in_block;
   HARD_REG_SET btrs_live_in_block;
   sbitmap bb_gen;
   sbitmap *btr_defset;
-};
+} defs_uses_info;
 
 /* Called via note_stores or directly to register stores into /
    clobbers of a branch target register DEST that are not recognized as
@@ -417,21 +429,21 @@ note_btr_set (rtx dest, const_rtx set ATTRIBUTE_UNUSED, void *data)
   if (!REG_P (dest))
     return;
   regno = REGNO (dest);
-  end_regno = END_REGNO (dest);
+  end_regno = END_HARD_REGNO (dest);
   for (; regno < end_regno; regno++)
     if (TEST_HARD_REG_BIT (all_btrs, regno))
       {
 	note_other_use_this_block (regno, info->users_this_bb);
 	SET_HARD_REG_BIT (info->btrs_written_in_block, regno);
 	SET_HARD_REG_BIT (info->btrs_live_in_block, regno);
-	bitmap_and_compl (info->bb_gen, info->bb_gen,
+	sbitmap_difference (info->bb_gen, info->bb_gen,
 			    info->btr_defset[regno - first_btr]);
       }
 }
 
 static void
-compute_defs_uses_and_gen (btr_heap_t *all_btr_defs, btr_def **def_array,
-			   btr_user **use_array, sbitmap *btr_defset,
+compute_defs_uses_and_gen (fibheap_t all_btr_defs, btr_def *def_array,
+			   btr_user *use_array, sbitmap *btr_defset,
 			   sbitmap *bb_gen, HARD_REG_SET *btrs_written)
 {
   /* Scan the code building up the set of all defs and all uses.
@@ -442,17 +454,17 @@ compute_defs_uses_and_gen (btr_heap_t *all_btr_defs, btr_def **def_array,
   */
   int i;
   int insn_luid = 0;
-  btr_def_group *all_btr_def_groups = NULL;
+  btr_def_group all_btr_def_groups = NULL;
   defs_uses_info info;
 
-  bitmap_vector_clear (bb_gen, last_basic_block_for_fn (cfun));
-  for (i = NUM_FIXED_BLOCKS; i < last_basic_block_for_fn (cfun); i++)
+  sbitmap_vector_zero (bb_gen, last_basic_block);
+  for (i = NUM_FIXED_BLOCKS; i < last_basic_block; i++)
     {
-      basic_block bb = BASIC_BLOCK_FOR_FN (cfun, i);
+      basic_block bb = BASIC_BLOCK (i);
       int reg;
-      btr_def *defs_this_bb = NULL;
-      rtx_insn *insn;
-      rtx_insn *last;
+      btr_def defs_this_bb = NULL;
+      rtx insn;
+      rtx last;
       int can_throw = 0;
 
       info.users_this_bb = NULL;
@@ -477,7 +489,7 @@ compute_defs_uses_and_gen (btr_heap_t *all_btr_defs, btr_def **def_array,
 
 	      if (insn_sets_btr_p (insn, 0, &regno))
 		{
-		  btr_def *def = add_btr_def (
+		  btr_def def = add_btr_def (
 		      all_btr_defs, bb, insn_luid, insn, regno,
 		      TEST_HARD_REG_BIT (info.btrs_live_in_block, regno),
 		      &all_btr_def_groups);
@@ -485,19 +497,19 @@ compute_defs_uses_and_gen (btr_heap_t *all_btr_defs, btr_def **def_array,
 		  def_array[insn_uid] = def;
 		  SET_HARD_REG_BIT (info.btrs_written_in_block, regno);
 		  SET_HARD_REG_BIT (info.btrs_live_in_block, regno);
-		  bitmap_and_compl (bb_gen[i], bb_gen[i],
+		  sbitmap_difference (bb_gen[i], bb_gen[i],
 				      btr_defset[regno - first_btr]);
-		  bitmap_set_bit (bb_gen[i], insn_uid);
+		  SET_BIT (bb_gen[i], insn_uid);
 		  def->next_this_bb = defs_this_bb;
 		  defs_this_bb = def;
-		  bitmap_set_bit (btr_defset[regno - first_btr], insn_uid);
+		  SET_BIT (btr_defset[regno - first_btr], insn_uid);
 		  note_other_use_this_block (regno, info.users_this_bb);
 		}
 	      /* Check for the blockage emitted by expand_nl_goto_receiver.  */
 	      else if (cfun->has_nonlocal_label
 		       && GET_CODE (PATTERN (insn)) == UNSPEC_VOLATILE)
 		{
-		  btr_user *user;
+		  btr_user user;
 
 		  /* Do the equivalent of calling note_other_use_this_block
 		     for every target register.  */
@@ -507,13 +519,13 @@ compute_defs_uses_and_gen (btr_heap_t *all_btr_defs, btr_def **def_array,
 		      user->other_use_this_block = 1;
 		  IOR_HARD_REG_SET (info.btrs_written_in_block, all_btrs);
 		  IOR_HARD_REG_SET (info.btrs_live_in_block, all_btrs);
-		  bitmap_clear (info.bb_gen);
+		  sbitmap_zero (info.bb_gen);
 		}
 	      else
 		{
-		  if (find_btr_use (&PATTERN (insn)))
+		  if (btr_referenced_p (PATTERN (insn), NULL))
 		    {
-		      btr_user *user = new_btr_user (bb, insn_luid, insn);
+		      btr_user user = new_btr_user (bb, insn_luid, insn);
 
 		      use_array[insn_uid] = user;
 		      if (user->use)
@@ -524,7 +536,8 @@ compute_defs_uses_and_gen (btr_heap_t *all_btr_defs, btr_def **def_array,
 			  int reg;
 			  for (reg = first_btr; reg <= last_btr; reg++)
 			    if (TEST_HARD_REG_BIT (all_btrs, reg)
-				&& refers_to_regno_p (reg, user->insn))
+				&& refers_to_regno_p (reg, reg + 1, user->insn,
+						      NULL))
 			      {
 				note_other_use_this_block (reg,
 							   info.users_this_bb);
@@ -545,7 +558,7 @@ compute_defs_uses_and_gen (btr_heap_t *all_btr_defs, btr_def **def_array,
 		      /* Check for sibcall.  */
 		      if (GET_CODE (pat) == PARALLEL)
 			for (i = XVECLEN (pat, 0) - 1; i >= 0; i--)
-			  if (ANY_RETURN_P (XVECEXP (pat, 0, i)))
+			  if (GET_CODE (XVECEXP (pat, 0, i)) == RETURN)
 			    {
 			      COMPL_HARD_REG_SET (call_saved,
 						  call_used_reg_set);
@@ -587,12 +600,12 @@ compute_defs_uses_and_gen (btr_heap_t *all_btr_defs, btr_def **def_array,
 	  int regno;
 
 	  for (regno = first_btr; regno <= last_btr; regno++)
-	    if (refers_to_regno_p (regno, insn))
+	    if (refers_to_regno_p (regno, regno+1, insn, NULL))
 	      SET_HARD_REG_BIT (btrs_live_at_end[i], regno);
 	}
 
       if (dump_file)
-	dump_btrs_live (i);
+	dump_btrs_live(i);
     }
 }
 
@@ -605,13 +618,13 @@ compute_kill (sbitmap *bb_kill, sbitmap *btr_defset,
 
   /* For each basic block, form the set BB_KILL - the set
      of definitions that the block kills.  */
-  bitmap_vector_clear (bb_kill, last_basic_block_for_fn (cfun));
-  for (i = NUM_FIXED_BLOCKS; i < last_basic_block_for_fn (cfun); i++)
+  sbitmap_vector_zero (bb_kill, last_basic_block);
+  for (i = NUM_FIXED_BLOCKS; i < last_basic_block; i++)
     {
       for (regno = first_btr; regno <= last_btr; regno++)
 	if (TEST_HARD_REG_BIT (all_btrs, regno)
 	    && TEST_HARD_REG_BIT (btrs_written[i], regno))
-	  bitmap_ior (bb_kill[i], bb_kill[i],
+	  sbitmap_a_or_b (bb_kill[i], bb_kill[i],
 			  btr_defset[regno - first_btr]);
     }
 }
@@ -627,40 +640,41 @@ compute_out (sbitmap *bb_out, sbitmap *bb_gen, sbitmap *bb_kill, int max_uid)
      Iterate until the bb_out sets stop growing.  */
   int i;
   int changed;
-  auto_sbitmap bb_in (max_uid);
+  sbitmap bb_in = sbitmap_alloc (max_uid);
 
-  for (i = NUM_FIXED_BLOCKS; i < last_basic_block_for_fn (cfun); i++)
-    bitmap_copy (bb_out[i], bb_gen[i]);
+  for (i = NUM_FIXED_BLOCKS; i < last_basic_block; i++)
+    sbitmap_copy (bb_out[i], bb_gen[i]);
 
   changed = 1;
   while (changed)
     {
       changed = 0;
-      for (i = NUM_FIXED_BLOCKS; i < last_basic_block_for_fn (cfun); i++)
+      for (i = NUM_FIXED_BLOCKS; i < last_basic_block; i++)
 	{
-	  bitmap_union_of_preds (bb_in, bb_out, BASIC_BLOCK_FOR_FN (cfun, i));
-	  changed |= bitmap_ior_and_compl (bb_out[i], bb_gen[i],
+	  sbitmap_union_of_preds (bb_in, bb_out, i);
+	  changed |= sbitmap_union_of_diff_cg (bb_out[i], bb_gen[i],
 					       bb_in, bb_kill[i]);
 	}
     }
+  sbitmap_free (bb_in);
 }
 
 static void
-link_btr_uses (btr_def **def_array, btr_user **use_array, sbitmap *bb_out,
+link_btr_uses (btr_def *def_array, btr_user *use_array, sbitmap *bb_out,
 	       sbitmap *btr_defset, int max_uid)
 {
   int i;
-  auto_sbitmap reaching_defs (max_uid);
+  sbitmap reaching_defs = sbitmap_alloc (max_uid);
 
   /* Link uses to the uses lists of all of their reaching defs.
      Count up the number of reaching defs of each use.  */
-  for (i = NUM_FIXED_BLOCKS; i < last_basic_block_for_fn (cfun); i++)
+  for (i = NUM_FIXED_BLOCKS; i < last_basic_block; i++)
     {
-      basic_block bb = BASIC_BLOCK_FOR_FN (cfun, i);
-      rtx_insn *insn;
-      rtx_insn *last;
+      basic_block bb = BASIC_BLOCK (i);
+      rtx insn;
+      rtx last;
 
-      bitmap_union_of_preds (reaching_defs, bb_out, BASIC_BLOCK_FOR_FN (cfun, i));
+      sbitmap_union_of_preds (reaching_defs, bb_out, i);
       for (insn = BB_HEAD (bb), last = NEXT_INSN (BB_END (bb));
 	   insn != last;
 	   insn = NEXT_INSN (insn))
@@ -669,26 +683,26 @@ link_btr_uses (btr_def **def_array, btr_user **use_array, sbitmap *bb_out,
 	    {
 	      int insn_uid = INSN_UID (insn);
 
-	      btr_def *def   = def_array[insn_uid];
-	      btr_user *user = use_array[insn_uid];
+	      btr_def def   = def_array[insn_uid];
+	      btr_user user = use_array[insn_uid];
 	      if (def != NULL)
 		{
 		  /* Remove all reaching defs of regno except
 		     for this one.  */
-		  bitmap_and_compl (reaching_defs, reaching_defs,
+		  sbitmap_difference (reaching_defs, reaching_defs,
 				      btr_defset[def->btr - first_btr]);
-		  bitmap_set_bit (reaching_defs, insn_uid);
+		  SET_BIT(reaching_defs, insn_uid);
 		}
 
 	      if (user != NULL)
 		{
 		  /* Find all the reaching defs for this use.  */
-		  auto_sbitmap reaching_defs_of_reg (max_uid);
+		  sbitmap reaching_defs_of_reg = sbitmap_alloc(max_uid);
 		  unsigned int uid = 0;
 		  sbitmap_iterator sbi;
 
 		  if (user->use)
-		    bitmap_and (
+		    sbitmap_a_and_b (
 		      reaching_defs_of_reg,
 		      reaching_defs,
 		      btr_defset[REGNO (user->use) - first_btr]);
@@ -696,18 +710,19 @@ link_btr_uses (btr_def **def_array, btr_user **use_array, sbitmap *bb_out,
 		    {
 		      int reg;
 
-		      bitmap_clear (reaching_defs_of_reg);
+		      sbitmap_zero (reaching_defs_of_reg);
 		      for (reg = first_btr; reg <= last_btr; reg++)
 			if (TEST_HARD_REG_BIT (all_btrs, reg)
-			    && refers_to_regno_p (reg, user->insn))
-			  bitmap_or_and (reaching_defs_of_reg,
+			    && refers_to_regno_p (reg, reg + 1, user->insn,
+						  NULL))
+			  sbitmap_a_or_b_and_c (reaching_defs_of_reg,
 			    reaching_defs_of_reg,
 			    reaching_defs,
 			    btr_defset[reg - first_btr]);
 		    }
-		  EXECUTE_IF_SET_IN_BITMAP (reaching_defs_of_reg, 0, uid, sbi)
+		  EXECUTE_IF_SET_IN_SBITMAP (reaching_defs_of_reg, 0, uid, sbi)
 		    {
-		      btr_def *def = def_array[uid];
+		      btr_def def = def_array[uid];
 
 		      /* We now know that def reaches user.  */
 
@@ -738,6 +753,7 @@ link_btr_uses (btr_def **def_array, btr_user **use_array, sbitmap *bb_out,
 		      user->next = def->uses;
 		      def->uses = user;
 		    }
+		  sbitmap_free (reaching_defs_of_reg);
 		}
 
 	      if (CALL_P (insn))
@@ -747,39 +763,38 @@ link_btr_uses (btr_def **def_array, btr_user **use_array, sbitmap *bb_out,
 		  for (regno = first_btr; regno <= last_btr; regno++)
 		    if (TEST_HARD_REG_BIT (all_btrs, regno)
 			&& TEST_HARD_REG_BIT (call_used_reg_set, regno))
-		      bitmap_and_compl (reaching_defs, reaching_defs,
+		      sbitmap_difference (reaching_defs, reaching_defs,
 					  btr_defset[regno - first_btr]);
 		}
 	    }
 	}
     }
+  sbitmap_free (reaching_defs);
 }
 
 static void
-build_btr_def_use_webs (btr_heap_t *all_btr_defs)
+build_btr_def_use_webs (fibheap_t all_btr_defs)
 {
   const int max_uid = get_max_uid ();
-  btr_def  **def_array   = XCNEWVEC (btr_def *, max_uid);
-  btr_user **use_array   = XCNEWVEC (btr_user *, max_uid);
+  btr_def  *def_array   = XCNEWVEC (btr_def, max_uid);
+  btr_user *use_array   = XCNEWVEC (btr_user, max_uid);
   sbitmap *btr_defset   = sbitmap_vector_alloc (
 			   (last_btr - first_btr) + 1, max_uid);
-  sbitmap *bb_gen = sbitmap_vector_alloc (last_basic_block_for_fn (cfun),
-					  max_uid);
-  HARD_REG_SET *btrs_written = XCNEWVEC (HARD_REG_SET,
-					 last_basic_block_for_fn (cfun));
+  sbitmap *bb_gen      = sbitmap_vector_alloc (last_basic_block, max_uid);
+  HARD_REG_SET *btrs_written = XCNEWVEC (HARD_REG_SET, last_basic_block);
   sbitmap *bb_kill;
   sbitmap *bb_out;
 
-  bitmap_vector_clear (btr_defset, (last_btr - first_btr) + 1);
+  sbitmap_vector_zero (btr_defset, (last_btr - first_btr) + 1);
 
   compute_defs_uses_and_gen (all_btr_defs, def_array, use_array, btr_defset,
 			     bb_gen, btrs_written);
 
-  bb_kill = sbitmap_vector_alloc (last_basic_block_for_fn (cfun), max_uid);
+  bb_kill = sbitmap_vector_alloc (last_basic_block, max_uid);
   compute_kill (bb_kill, btr_defset, btrs_written);
   free (btrs_written);
 
-  bb_out = sbitmap_vector_alloc (last_basic_block_for_fn (cfun), max_uid);
+  bb_out = sbitmap_vector_alloc (last_basic_block, max_uid);
   compute_out (bb_out, bb_gen, bb_kill, max_uid);
 
   sbitmap_vector_free (bb_gen);
@@ -797,16 +812,15 @@ build_btr_def_use_webs (btr_heap_t *all_btr_defs)
    live range of the definition DEF, AND there are other live
    ranges of the same target register that include BB.  */
 static int
-block_at_edge_of_live_range_p (int bb, btr_def *def)
+block_at_edge_of_live_range_p (int bb, btr_def def)
 {
-  if (def->other_btr_uses_before_def
-      && BASIC_BLOCK_FOR_FN (cfun, bb) == def->bb)
+  if (def->other_btr_uses_before_def && BASIC_BLOCK (bb) == def->bb)
     return 1;
   else if (def->other_btr_uses_after_use)
     {
-      btr_user *user;
+      btr_user user;
       for (user = def->uses; user != NULL; user = user->next)
-	if (BASIC_BLOCK_FOR_FN (cfun, bb) == user->bb)
+	if (BASIC_BLOCK (bb) == user->bb)
 	  return 1;
     }
   return 0;
@@ -821,7 +835,7 @@ block_at_edge_of_live_range_p (int bb, btr_def *def)
    to remove the target register from the live set of these blocks
    only if they do not contain other live ranges for the same register.  */
 static void
-clear_btr_from_live_range (btr_def *def)
+clear_btr_from_live_range (btr_def def)
 {
   unsigned bb;
   bitmap_iterator bi;
@@ -849,7 +863,7 @@ clear_btr_from_live_range (btr_def *def)
    If OWN_END is set, also show that the register is live from our
    definitions at the end of the basic block where it is defined.  */
 static void
-add_btr_to_live_range (btr_def *def, int own_end)
+add_btr_to_live_range (btr_def def, int own_end)
 {
   unsigned bb;
   bitmap_iterator bi;
@@ -886,7 +900,7 @@ augment_live_range (bitmap live_range, HARD_REG_SET *btrs_live_in_range,
 {
   basic_block *worklist, *tos;
 
-  tos = worklist = XNEWVEC (basic_block, n_basic_blocks_for_fn (cfun) + 1);
+  tos = worklist = XNEWVEC (basic_block, n_basic_blocks + 1);
 
   if (dominated_by_p (CDI_DOMINATORS, new_bb, head_bb))
     {
@@ -992,11 +1006,11 @@ choose_btr (HARD_REG_SET used_btrs)
    in this live range, but ignore the live range represented by DEF
    when calculating this set.  */
 static void
-btr_def_live_range (btr_def *def, HARD_REG_SET *btrs_live_in_range)
+btr_def_live_range (btr_def def, HARD_REG_SET *btrs_live_in_range)
 {
   if (!def->live_range)
     {
-      btr_user *user;
+      btr_user user;
 
       def->live_range = BITMAP_ALLOC (NULL);
 
@@ -1039,9 +1053,9 @@ btr_def_live_range (btr_def *def, HARD_REG_SET *btrs_live_in_range)
    group that are dominated by DEF, provided that there is a target
    register available to allocate to the merged web.  */
 static void
-combine_btr_defs (btr_def *def, HARD_REG_SET *btrs_live_in_range)
+combine_btr_defs (btr_def def, HARD_REG_SET *btrs_live_in_range)
 {
-  btr_def *other_def;
+  btr_def other_def;
 
   for (other_def = def->group->members;
        other_def != NULL;
@@ -1058,8 +1072,8 @@ combine_btr_defs (btr_def *def, HARD_REG_SET *btrs_live_in_range)
 	     target registers live over the merged range.  */
 	  int btr;
 	  HARD_REG_SET combined_btrs_live;
-	  auto_bitmap combined_live_range;
-	  btr_user *user;
+	  bitmap combined_live_range = BITMAP_ALLOC (NULL);
+	  btr_user user;
 
 	  if (other_def->live_range == NULL)
 	    {
@@ -1089,7 +1103,7 @@ combine_btr_defs (btr_def *def, HARD_REG_SET *btrs_live_in_range)
 	      user = other_def->uses;
 	      while (user != NULL)
 		{
-		  btr_user *next = user->next;
+		  btr_user next = user->next;
 
 		  user->next = def->uses;
 		  def->uses = user;
@@ -1116,6 +1130,7 @@ combine_btr_defs (btr_def *def, HARD_REG_SET *btrs_live_in_range)
 	      delete_insn (other_def->insn);
 
 	    }
+	  BITMAP_FREE (combined_live_range);
 	}
     }
 }
@@ -1127,7 +1142,7 @@ combine_btr_defs (btr_def *def, HARD_REG_SET *btrs_live_in_range)
    If this new position means that other defs in the
    same group can be combined with DEF then combine them.  */
 static void
-move_btr_def (basic_block new_def_bb, int btr, btr_def *def, bitmap live_range,
+move_btr_def (basic_block new_def_bb, int btr, btr_def def, bitmap live_range,
 	     HARD_REG_SET *btrs_live_in_range)
 {
   /* We can move the instruction.
@@ -1136,13 +1151,13 @@ move_btr_def (basic_block new_def_bb, int btr, btr_def *def, bitmap live_range,
      Replace all uses of the old target register definition by
      uses of the new definition.  Delete the old definition.  */
   basic_block b = new_def_bb;
-  rtx_insn *insp = BB_HEAD (b);
-  rtx_insn *old_insn = def->insn;
+  rtx insp = BB_HEAD (b);
+  rtx old_insn = def->insn;
   rtx src;
   rtx btr_rtx;
-  rtx_insn *new_insn;
-  machine_mode btr_mode;
-  btr_user *user;
+  rtx new_insn;
+  enum machine_mode btr_mode;
+  btr_user user;
   rtx set;
 
   if (dump_file)
@@ -1218,7 +1233,7 @@ move_btr_def (basic_block new_def_bb, int btr, btr_def *def, bitmap live_range,
 /* We anticipate intra-block scheduling to be done.  See if INSN could move
    up within BB by N_INSNS.  */
 static int
-can_move_up (const_basic_block bb, const rtx_insn *insn, int n_insns)
+can_move_up (const_basic_block bb, const_rtx insn, int n_insns)
 {
   while (insn != BB_HEAD (bb) && n_insns > 0)
     {
@@ -1252,15 +1267,16 @@ can_move_up (const_basic_block bb, const rtx_insn *insn, int n_insns)
    MIN_COST, but we may be able to reduce it further).
    Return zero if no further migration is possible.  */
 static int
-migrate_btr_def (btr_def *def, int min_cost)
+migrate_btr_def (btr_def def, int min_cost)
 {
+  bitmap live_range;
   HARD_REG_SET btrs_live_in_range;
   int btr_used_near_def = 0;
   int def_basic_block_freq;
   basic_block attempt;
   int give_up = 0;
   int def_moved = 0;
-  btr_user *user;
+  btr_user user;
   int def_latency;
 
   if (dump_file)
@@ -1287,7 +1303,7 @@ migrate_btr_def (btr_def *def, int min_cost)
     }
 
   btr_def_live_range (def, &btrs_live_in_range);
-  auto_bitmap live_range;
+  live_range = BITMAP_ALLOC (NULL);
   bitmap_copy (live_range, def->live_range);
 
 #ifdef INSN_SCHEDULING
@@ -1312,8 +1328,7 @@ migrate_btr_def (btr_def *def, int min_cost)
   def_basic_block_freq = basic_block_freq (def->bb);
 
   for (attempt = get_immediate_dominator (CDI_DOMINATORS, def->bb);
-       !give_up && attempt && attempt != ENTRY_BLOCK_PTR_FOR_FN (cfun)
-       && def->cost >= min_cost;
+       !give_up && attempt && attempt != ENTRY_BLOCK_PTR && def->cost >= min_cost;
        attempt = get_immediate_dominator (CDI_DOMINATORS, attempt))
     {
       /* Try to move the instruction that sets the target register into
@@ -1348,7 +1363,7 @@ migrate_btr_def (btr_def *def, int min_cost)
 	  if (btr != -1)
 	    {
 	      move_btr_def (attempt, btr, def, live_range, &btrs_live_in_range);
-	      bitmap_copy (live_range, def->live_range);
+	      bitmap_copy(live_range, def->live_range);
 	      btr_used_near_def = 0;
 	      def_moved = 1;
 	      def_basic_block_freq = basic_block_freq (def->bb);
@@ -1371,7 +1386,7 @@ migrate_btr_def (btr_def *def, int min_cost)
       if (dump_file)
 	fprintf (dump_file, "failed to move\n");
     }
-
+  BITMAP_FREE (live_range);
   return !give_up;
 }
 
@@ -1380,7 +1395,7 @@ migrate_btr_def (btr_def *def, int min_cost)
 static void
 migrate_btr_defs (enum reg_class btr_class, int allow_callee_save)
 {
-  btr_heap_t all_btr_defs (LONG_MIN);
+  fibheap_t all_btr_defs = fibheap_new ();
   int reg;
 
   gcc_obstack_init (&migrate_btrl_obstack);
@@ -1388,14 +1403,14 @@ migrate_btr_defs (enum reg_class btr_class, int allow_callee_save)
     {
       int i;
 
-      for (i = NUM_FIXED_BLOCKS; i < last_basic_block_for_fn (cfun); i++)
+      for (i = NUM_FIXED_BLOCKS; i < last_basic_block; i++)
 	{
-	  basic_block bb = BASIC_BLOCK_FOR_FN (cfun, i);
-	  fprintf (dump_file, "Basic block %d: count = ", i);
-	  bb->count.dump (dump_file);
-	  fprintf (dump_file, " loop-depth = %d idom = %d\n",
-		   bb_loop_depth (bb),
-		   get_immediate_dominator (CDI_DOMINATORS, bb)->index);
+	  basic_block bb = BASIC_BLOCK (i);
+	  fprintf(dump_file,
+	    "Basic block %d: count = " HOST_WIDEST_INT_PRINT_DEC
+	    " loop-depth = %d idom = %d\n",
+	    i, (HOST_WIDEST_INT) bb->count, bb->loop_depth,
+	    get_immediate_dominator (CDI_DOMINATORS, bb)->index);
 	}
     }
 
@@ -1411,18 +1426,18 @@ migrate_btr_defs (enum reg_class btr_class, int allow_callee_save)
 	  first_btr = reg;
       }
 
-  btrs_live = XCNEWVEC (HARD_REG_SET, last_basic_block_for_fn (cfun));
-  btrs_live_at_end = XCNEWVEC (HARD_REG_SET, last_basic_block_for_fn (cfun));
+  btrs_live = XCNEWVEC (HARD_REG_SET, last_basic_block);
+  btrs_live_at_end = XCNEWVEC (HARD_REG_SET, last_basic_block);
 
-  build_btr_def_use_webs (&all_btr_defs);
+  build_btr_def_use_webs (all_btr_defs);
 
-  while (!all_btr_defs.empty ())
+  while (!fibheap_empty (all_btr_defs))
     {
-      int min_cost = -all_btr_defs.min_key ();
-      btr_def *def = all_btr_defs.extract_min ();
+      btr_def def = (btr_def) fibheap_extract_min (all_btr_defs);
+      int min_cost = -fibheap_min_key (all_btr_defs);
       if (migrate_btr_def (def, min_cost))
 	{
-	  all_btr_defs.insert (-def->cost, def);
+	  fibheap_insert (all_btr_defs, -def->cost, (void *) def);
 	  if (dump_file)
 	    {
 	      fprintf (dump_file,
@@ -1437,13 +1452,13 @@ migrate_btr_defs (enum reg_class btr_class, int allow_callee_save)
   free (btrs_live);
   free (btrs_live_at_end);
   obstack_free (&migrate_btrl_obstack, NULL);
+  fibheap_delete (all_btr_defs);
 }
 
 static void
 branch_target_load_optimize (bool after_prologue_epilogue_gen)
 {
-  enum reg_class klass
-    = (enum reg_class) targetm.branch_target_register_class ();
+  enum reg_class klass = targetm.branch_target_register_class ();
   if (klass != NO_REGS)
     {
       /* Initialize issue_rate.  */
@@ -1474,81 +1489,50 @@ branch_target_load_optimize (bool after_prologue_epilogue_gen)
     }
 }
 
-namespace {
-
-const pass_data pass_data_branch_target_load_optimize1 =
+static bool
+gate_handle_branch_target_load_optimize1 (void)
 {
-  RTL_PASS, /* type */
-  "btl1", /* name */
-  OPTGROUP_NONE, /* optinfo_flags */
-  TV_NONE, /* tv_id */
-  0, /* properties_required */
-  0, /* properties_provided */
-  0, /* properties_destroyed */
-  0, /* todo_flags_start */
-  0, /* todo_flags_finish */
-};
-
-class pass_branch_target_load_optimize1 : public rtl_opt_pass
-{
-public:
-  pass_branch_target_load_optimize1 (gcc::context *ctxt)
-    : rtl_opt_pass (pass_data_branch_target_load_optimize1, ctxt)
-  {}
-
-  /* opt_pass methods: */
-  virtual bool gate (function *) { return flag_branch_target_load_optimize; }
-  virtual unsigned int execute (function *)
-    {
-      branch_target_load_optimize (epilogue_completed);
-      return 0;
-    }
-
-}; // class pass_branch_target_load_optimize1
-
-} // anon namespace
-
-rtl_opt_pass *
-make_pass_branch_target_load_optimize1 (gcc::context *ctxt)
-{
-  return new pass_branch_target_load_optimize1 (ctxt);
+  return flag_branch_target_load_optimize;
 }
 
 
-namespace {
-
-const pass_data pass_data_branch_target_load_optimize2 =
+static unsigned int
+rest_of_handle_branch_target_load_optimize1 (void)
 {
-  RTL_PASS, /* type */
-  "btl2", /* name */
-  OPTGROUP_NONE, /* optinfo_flags */
-  TV_NONE, /* tv_id */
-  0, /* properties_required */
-  0, /* properties_provided */
-  0, /* properties_destroyed */
-  0, /* todo_flags_start */
-  0, /* todo_flags_finish */
+  branch_target_load_optimize (epilogue_completed);
+  return 0;
+}
+
+struct rtl_opt_pass pass_branch_target_load_optimize1 =
+{
+ {
+  RTL_PASS,
+  "btl1",                               /* name */
+  gate_handle_branch_target_load_optimize1,      /* gate */
+  rest_of_handle_branch_target_load_optimize1,   /* execute */
+  NULL,                                 /* sub */
+  NULL,                                 /* next */
+  0,                                    /* static_pass_number */
+  TV_NONE,	                        /* tv_id */
+  0,                                    /* properties_required */
+  0,                                    /* properties_provided */
+  0,                                    /* properties_destroyed */
+  0,                                    /* todo_flags_start */
+  TODO_dump_func |
+  TODO_verify_rtl_sharing |
+  TODO_ggc_collect,                     /* todo_flags_finish */
+ }
 };
 
-class pass_branch_target_load_optimize2 : public rtl_opt_pass
+static bool
+gate_handle_branch_target_load_optimize2 (void)
 {
-public:
-  pass_branch_target_load_optimize2 (gcc::context *ctxt)
-    : rtl_opt_pass (pass_data_branch_target_load_optimize2, ctxt)
-  {}
+  return (optimize > 0 && flag_branch_target_load_optimize2);
+}
 
-  /* opt_pass methods: */
-  virtual bool gate (function *)
-    {
-      return (optimize > 0 && flag_branch_target_load_optimize2);
-    }
 
-  virtual unsigned int execute (function *);
-
-}; // class pass_branch_target_load_optimize2
-
-unsigned int
-pass_branch_target_load_optimize2::execute (function *)
+static unsigned int
+rest_of_handle_branch_target_load_optimize2 (void)
 {
   static int warned = 0;
 
@@ -1560,7 +1544,7 @@ pass_branch_target_load_optimize2::execute (function *)
       && !warned)
     {
       warning (0, "branch target register load optimization is not intended "
-	       "to be run twice");
+		  "to be run twice");
 
       warned = 1;
     }
@@ -1569,10 +1553,22 @@ pass_branch_target_load_optimize2::execute (function *)
   return 0;
 }
 
-} // anon namespace
-
-rtl_opt_pass *
-make_pass_branch_target_load_optimize2 (gcc::context *ctxt)
+struct rtl_opt_pass pass_branch_target_load_optimize2 =
 {
-  return new pass_branch_target_load_optimize2 (ctxt);
-}
+ {
+  RTL_PASS,
+  "btl2",                               /* name */
+  gate_handle_branch_target_load_optimize2,      /* gate */
+  rest_of_handle_branch_target_load_optimize2,   /* execute */
+  NULL,                                 /* sub */
+  NULL,                                 /* next */
+  0,                                    /* static_pass_number */
+  TV_NONE,				/* tv_id */
+  0,                                    /* properties_required */
+  0,                                    /* properties_provided */
+  0,                                    /* properties_destroyed */
+  0,                                    /* todo_flags_start */
+  TODO_dump_func |
+  TODO_ggc_collect,                     /* todo_flags_finish */
+ }
+};

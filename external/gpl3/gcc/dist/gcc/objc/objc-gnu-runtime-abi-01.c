@@ -1,5 +1,5 @@
 /* GNU Runtime ABI version 8
-   Copyright (C) 2011-2019 Free Software Foundation, Inc.
+   Copyright (C) 2011-2013 Free Software Foundation, Inc.
    Contributed by Iain Sandoe (split from objc-act.c)
 
 This file is part of GCC.
@@ -21,10 +21,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "config.h"
 #include "system.h"
 #include "coretypes.h"
-#include "options.h"
 #include "tree.h"
-#include "stringpool.h"
-#include "attribs.h"
 
 #ifdef OBJCPLUS
 #include "cp/cp-tree.h"
@@ -45,6 +42,7 @@ along with GCC; see the file COPYING3.  If not see
 #endif  /* OBJCPLUS */
 
 #include "toplev.h"
+#include "ggc.h"
 #include "tree-iterator.h"
 
 #include "objc-runtime-hooks.h"
@@ -78,7 +76,7 @@ along with GCC; see the file COPYING3.  If not see
    For example, at present, any target that includes an implementation of
    the NeXT runtime needs to place Objective-C meta-data into specific
    named sections.  This should _not_ be done for the GNU runtime, and the
-   following macro is used to attach Objective-C private attributes that may
+   folowing macro is used to attach Objective-C private attributes that may
    be used to identify the runtime for which the meta-data are intended.  */
 
 #define OBJCMETA(DECL,VERS,KIND)					\
@@ -130,8 +128,7 @@ objc_gnu_runtime_abi_01_init (objc_runtime_hooks *rthooks)
   /* GNU runtime does not need the compiler to change code in order to do GC. */
   if (flag_objc_gc)
     {
-      warning_at (UNKNOWN_LOCATION, 0,
-		  "%<-fobjc-gc%> is ignored for %<-fgnu-runtime%>");
+      warning_at (0, 0, "%<-fobjc-gc%> is ignored for %<-fgnu-runtime%>");
       flag_objc_gc = 0;
     }
 
@@ -480,7 +477,7 @@ build_protocol_template (void)
   objc_finish_struct (objc_protocol_template, decls);
 }
 
-/* --- names, decls + identifiers --- */
+/* --- names, decls + identifers --- */
 
 static void
 build_selector_table_decl (void)
@@ -491,8 +488,6 @@ build_selector_table_decl (void)
   temp = build_array_type (objc_selector_template, NULL_TREE);
 
   UOBJC_SELECTOR_TABLE_decl = start_var_decl (temp, "_OBJC_SELECTOR_TABLE");
-  /* Squash `defined but not used' warning check_global_declaration.  */
-  TREE_USED (UOBJC_SELECTOR_TABLE_decl) = 1;
   OBJCMETA (UOBJC_SELECTOR_TABLE_decl, objc_meta, meta_base);
 }
 
@@ -704,7 +699,7 @@ build_objc_method_call (location_t loc, int super_flag, tree method_prototype,
      then cast the pointer, then call it with the method arguments.  */
   tv->quick_push (lookup_object);
   tv->quick_push (selector);
-  method = build_function_call_vec (loc, vNULL, sender, tv, NULL);
+  method = build_function_call_vec (loc, sender, tv, NULL);
   vec_free (tv);
 
   /* Pass the appropriate object to the method.  */
@@ -719,7 +714,7 @@ build_objc_method_call (location_t loc, int super_flag, tree method_prototype,
 
   /* Build an obj_type_ref, with the correct cast for the method call.  */
   t = build3 (OBJ_TYPE_REF, sender_cast, method, lookup_object, size_zero_node);
-  t = build_function_call_vec (loc, vNULL, t, parms, NULL);
+  t = build_function_call_vec (loc, t, parms, NULL);
   vec_free (parms);
   return t;
 }
@@ -891,7 +886,7 @@ objc_add_static_instance (tree constructor, tree class_decl)
   /* We may be writing something else just now.
      Postpone till end of input. */
   DECL_DEFER_OUTPUT (decl) = 1;
-  lang_hooks.decls.pushdecl (decl);
+  pushdecl_top_level (decl);
   rest_of_decl_compilation (decl, 1, 0);
 
   /* Add the DECL to the head of this CLASS' list.  */
@@ -2168,7 +2163,7 @@ objc_eh_runtime_type (tree type)
 	 we use the c++ typeinfo decl. */
       return build_eh_type_type (type);
 #else
-      error ("non-objective-c type %qT cannot be caught", type);
+      error ("non-objective-c type '%T' cannot be caught", type);
       ident = get_identifier ("ErrorMarkNode");
       goto make_err_class;
 #endif
@@ -2217,8 +2212,7 @@ build_throw_stmt (location_t loc, tree throw_expr, bool rethrown ATTRIBUTE_UNUSE
   /* A throw is just a call to the runtime throw function with the
      object as a parameter.  */
   parms->quick_push (throw_expr);
-  t = build_function_call_vec (loc, vNULL, objc_exception_throw_decl, parms,
-			       NULL);
+  t = build_function_call_vec (loc, objc_exception_throw_decl, parms, NULL);
   vec_free (parms);
   return add_stmt (t);
 }

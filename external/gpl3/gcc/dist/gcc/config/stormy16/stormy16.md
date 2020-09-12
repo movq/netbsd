@@ -1,5 +1,6 @@
 ;; XSTORMY16 Machine description template
-;; Copyright (C) 1997-2019 Free Software Foundation, Inc.
+;; Copyright (C) 1997, 1998, 1999, 2001, 2002, 2003, 2004, 2005, 2007, 2008
+;; Free Software Foundation, Inc.
 ;; Contributed by Red Hat, Inc.
 
 ;; This file is part of GCC.
@@ -94,7 +95,6 @@
 			(set_attr "psw_operand" "clobber")])
 
 (include "predicates.md")
-(include "constraints.md")
 
 ;; ::::::::::::::::::::
 ;; ::
@@ -114,7 +114,7 @@
 ;; insns like this one are never generated.
 
 (define_insn "pushqi1"
-  [(set (mem:QI (post_inc:HI (reg:HI 15)))
+  [(set (mem:QI (post_inc (reg:HI 15)))
 	(match_operand:QI 0 "register_operand" "r"))]
   ""
   "push %0"
@@ -123,7 +123,7 @@
 
 (define_insn "popqi1"
   [(set (match_operand:QI 0 "register_operand" "=r")
-	(mem:QI (pre_dec:HI (reg:HI 15))))]
+	(mem:QI (pre_dec (reg:HI 15))))]
   ""
   "pop %0"
   [(set_attr "psw_operand" "nop")
@@ -168,7 +168,7 @@
    (set_attr "psw_operand" "0,0,0,0,nop,0,nop,0,0")])
 
 (define_insn "pushhi1"
-  [(set (mem:HI (post_inc:HI (reg:HI 15)))
+  [(set (mem:HI (post_inc (reg:HI 15)))
 	(match_operand:HI 0 "register_operand" "r"))]
   ""
   "push %0"
@@ -177,7 +177,7 @@
 
 (define_insn "pophi1"
   [(set (match_operand:HI 0 "register_operand" "=r")
-	(mem:HI (pre_dec:HI (reg:HI 15))))]
+	(mem:HI (pre_dec (reg:HI 15))))]
   ""
   "pop %0"
   [(set_attr "psw_operand" "nop")
@@ -185,7 +185,7 @@
 
 (define_expand "movhi"
   [(set (match_operand:HI 0 "nonimmediate_nonstack_operand" "")
-	(match_operand:HI 1 "general_operand" ""))]
+	(match_operand:HI 1 "xs_hi_general_operand" ""))]
   ""
   { xstormy16_expand_move (HImode, operands[0], operands[1]);
     DONE;
@@ -193,7 +193,7 @@
 
 (define_insn "movhi_internal"
   [(set (match_operand:HI 0 "nonimmediate_nonstack_operand" "=r,m,e,e,T,r,S,W,e")
-	(match_operand:HI 1 "general_operand"                "r,e,m,L,L,i,i,ie,W"))]
+	(match_operand:HI 1 "xs_hi_general_operand"          "r,e,m,L,L,i,i,ie,W"))]
   ""
   "@
    mov %0,%1
@@ -759,6 +759,21 @@
   DONE;
 })
 
+(define_expand "cbranchsi4"
+  [(set (pc)
+	(if_then_else (match_operator 0 "comparison_operator"
+				      [(match_operand:SI 1 "register_operand" "")
+				       (match_operand:SI 2 "nonmemory_operand" "")])
+		      (label_ref (match_operand 3 "" ""))
+		      (pc)))
+   (clobber (reg:BI CARRY_REG))]
+  ""
+  {
+  xstormy16_emit_cbranch (GET_CODE (operands[0]), operands[1], operands[2],
+			  operands[3]);
+  DONE;
+})
+
 (define_insn "cbranchhi"
   [(set (pc)
 	(if_then_else (match_operator:HI 1 "comparison_operator"
@@ -811,6 +826,24 @@
 }"
   [(set_attr "branch_class" "bcc8p2")
    (set_attr "psw_operand" "clobber")])
+
+(define_insn_and_split "*ineqbranchsi"
+  [(set (pc)
+	(if_then_else (match_operator:SI 1 "xstormy16_ineqsi_operator"
+				      [(match_operand:SI 2 "register_operand"
+							 "r")
+				       (match_operand:SI 3 "nonmemory_operand"
+							 "ri")])
+		      (label_ref (match_operand 0 "" ""))
+		      (pc)))
+   (clobber (match_operand:SI 4 "register_operand" "=2"))
+   (clobber (reg:BI CARRY_REG))]
+  ""
+  "#"
+  "reload_completed"
+  [(pc)]
+  { xstormy16_split_cbranch (SImode, operands[0], operands[1], operands[2]); DONE; }
+  [(set_attr "length" "8")])
 
 (define_insn "*ineqbranch_1"
   [(set (pc)

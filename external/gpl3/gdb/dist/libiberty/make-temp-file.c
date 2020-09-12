@@ -1,5 +1,6 @@
 /* Utility to pick a temporary filename prefix.
-   Copyright (C) 1996-2019 Free Software Foundation, Inc.
+   Copyright (C) 1996, 1997, 1998, 2001, 2009, 2010
+   Free Software Foundation, Inc.
 
 This file is part of the libiberty library.
 Libiberty is free software; you can redistribute it and/or
@@ -56,7 +57,7 @@ extern int mkstemps (char *, int);
 
 /* Name of temporary file.
    mktemp requires 6 trailing X's.  */
-#define TEMP_FILE "XXXXXX"
+#define TEMP_FILE "ccXXXXXX"
 #define TEMP_FILE_LEN (sizeof(TEMP_FILE) - 1)
 
 #if !defined(_WIN32) || defined(__CYGWIN__)
@@ -92,7 +93,7 @@ static char *memoized_tmpdir;
 
 /*
 
-@deftypefn Replacement const char* choose_tmpdir ()
+@deftypefn Replacement char* choose_tmpdir ()
 
 Returns a pointer to a directory path suitable for creating temporary
 files in.
@@ -101,7 +102,7 @@ files in.
 
 */
 
-const char *
+char *
 choose_tmpdir (void)
 {
   if (!memoized_tmpdir)
@@ -129,10 +130,10 @@ choose_tmpdir (void)
 	base = try_dir (P_tmpdir, base);
 #endif
 
-      /* Try /tmp, /var/tmp, then /usr/tmp.  */
-      base = try_dir (tmp, base);
+      /* Try /var/tmp, /usr/tmp, then /tmp.  */
       base = try_dir (vartmp, base);
       base = try_dir (usrtmp, base);
+      base = try_dir (tmp, base);
       
       /* If all else fails, use the current directory!  */
       if (base == 0)
@@ -181,31 +182,25 @@ string is @code{malloc}ed, and the temporary file has been created.
 */
 
 char *
-make_temp_file_with_prefix (const char *prefix, const char *suffix)
+make_temp_file (const char *suffix)
 {
   const char *base = choose_tmpdir ();
   char *temp_filename;
-  int base_len, suffix_len, prefix_len;
+  int base_len, suffix_len;
   int fd;
-
-  if (prefix == 0)
-    prefix = "cc";
 
   if (suffix == 0)
     suffix = "";
 
   base_len = strlen (base);
-  prefix_len = strlen (prefix);
   suffix_len = strlen (suffix);
 
   temp_filename = XNEWVEC (char, base_len
 			   + TEMP_FILE_LEN
-			   + suffix_len
-			   + prefix_len + 1);
+			   + suffix_len + 1);
   strcpy (temp_filename, base);
-  strcpy (temp_filename + base_len, prefix);
-  strcpy (temp_filename + base_len + prefix_len, TEMP_FILE);
-  strcpy (temp_filename + base_len + prefix_len + TEMP_FILE_LEN, suffix);
+  strcpy (temp_filename + base_len, TEMP_FILE);
+  strcpy (temp_filename + base_len + TEMP_FILE_LEN, suffix);
 
   fd = mkstemps (temp_filename, suffix_len);
   /* Mkstemps failed.  It may be EPERM, ENOSPC etc.  */
@@ -219,10 +214,4 @@ make_temp_file_with_prefix (const char *prefix, const char *suffix)
   if (close (fd))
     abort ();
   return temp_filename;
-}
-
-char *
-make_temp_file (const char *suffix)
-{
-  return make_temp_file_with_prefix (NULL, suffix);
 }

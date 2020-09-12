@@ -1,5 +1,5 @@
 /* BFD support for the M16C/M32C processors.
-   Copyright (C) 2004-2020 Free Software Foundation, Inc.
+   Copyright (C) 2004, 2007 Free Software Foundation, Inc.
 
    This file is part of BFD, the Binary File Descriptor library.
 
@@ -22,26 +22,36 @@
 #include "bfd.h"
 #include "libbfd.h"
 
-/* Like bfd_default_scan but if the string is just "m32c" then
-   skip the m16c architecture.  */
-
-static bfd_boolean
-m32c_scan (const bfd_arch_info_type * info, const char * string)
+static const bfd_arch_info_type arch_info_struct[] =
 {
-  if (strcmp (string, "m32c") == 0
-      && info->mach == bfd_mach_m16c)
-    return FALSE;
-
-  return bfd_default_scan (info, string);
-}
-
-#define N(number, print, align, default, next)			   \
-{ 32, 32, 8, bfd_arch_m32c, number, "m32c", print, align, default, \
-  bfd_default_compatible, m32c_scan, bfd_arch_default_fill, next, 0 }
-
-static const bfd_arch_info_type arch_info_struct =
-  N (bfd_mach_m32c, "m32c", 3, FALSE, NULL);
+  {
+    32,				/* bits per word */
+    32,				/* bits per address */
+    8,				/* bits per byte */
+    bfd_arch_m32c,		/* architecture */
+    bfd_mach_m32c,		/* machine */
+    "m32c",			/* architecture name */
+    "m32c",			/* printable name */
+    3,				/* section align power */
+    FALSE,			/* the default ? */
+    bfd_default_compatible,	/* architecture comparison fn */
+    bfd_default_scan,		/* string to architecture convert fn */
+    NULL			/* next in list */
+  },
+};
 
 const bfd_arch_info_type bfd_m32c_arch =
-  N (bfd_mach_m16c, "m16c", 4, TRUE, &arch_info_struct);
-
+{
+  32,				/* Bits per word.  */
+  32,				/* Bits per address.  */
+  8,				/* Bits per byte.  */
+  bfd_arch_m32c,		/* Architecture.  */
+  bfd_mach_m16c,		/* Machine.  */
+  "m32c",			/* Architecture name.  */
+  "m16c",			/* Printable name.  */
+  4,				/* Section align power.  */
+  TRUE,				/* The default ?  */
+  bfd_default_compatible,	/* Architecture comparison fn.  */
+  bfd_default_scan,		/* String to architecture convert fn.  */
+  &arch_info_struct[0],		/* Next in list.  */
+};

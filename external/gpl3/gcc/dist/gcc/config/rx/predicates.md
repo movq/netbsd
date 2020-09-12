@@ -1,5 +1,5 @@
 ;; Predicate definitions for Renesas RX.
-;; Copyright (C) 2008-2019 Free Software Foundation, Inc.
+;; Copyright (C) 2008, 2009, 2011 Free Software Foundation, Inc.
 ;; Contributed by Red Hat.
 ;;
 ;; This file is part of GCC.
@@ -24,9 +24,7 @@
 ;; Only registers and symbol refs are allowed.
 
 (define_predicate "rx_call_operand"
-  (ior (match_code "reg")
-       (and (match_test "!TARGET_JSR")
-	    (match_code "symbol_ref")))
+  (match_code "symbol_ref,reg")
 )
 
 ;; For sibcall operations we can only use a symbolic address.
@@ -71,16 +69,6 @@
 
 (define_predicate "rx_compare_operand"
   (ior (match_operand 0 "register_operand")
-       (match_operand 0 "rx_restricted_mem_operand"))
-)
-
-;; Check that the operand is suitable as the source operand
-;; for a min/max instruction.  This is the same as
-;; rx_source_operand except that CONST_INTs are allowed but
-;; REGs and SUBREGs are not.
-
-(define_predicate "rx_minmaxex_operand"
-  (ior (match_operand 0 "immediate_operand")
        (match_operand 0 "rx_restricted_mem_operand"))
 )
 
@@ -296,7 +284,7 @@
 )
 
 (define_predicate "rx_zs_comparison_operator"
-  (match_code "eq,ne,lt,ge")
+  (match_code "eq,ne")
 )
 
 ;; GT and LE omitted due to operand swap required.

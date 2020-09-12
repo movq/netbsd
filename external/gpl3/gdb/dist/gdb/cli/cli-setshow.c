@@ -1,6 +1,7 @@
 /* Handle set and show GDB commands.
 
-   Copyright (C) 2000-2019 Free Software Foundation, Inc.
+   Copyright (c) 2000, 2001, 2002, 2003, 2007, 2008, 2009, 2010, 2011
+   Free Software Foundation, Inc.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -19,30 +20,18 @@
 #include "readline/tilde.h"
 #include "value.h"
 #include <ctype.h>
+#include "gdb_string.h"
 #include "arch-utils.h"
-#include "observable.h"
 
 #include "ui-out.h"
 
 #include "cli/cli-decode.h"
 #include "cli/cli-cmds.h"
 #include "cli/cli-setshow.h"
-#include "cli/cli-utils.h"
 
-/* Return true if the change of command parameter should be notified.  */
+/* Prototypes for local functions.  */
 
-static int
-notify_command_param_changed_p (int param_changed, struct cmd_list_element *c)
-{
-  if (param_changed == 0)
-    return 0;
-
-  if (c->theclass == class_maintenance || c->theclass == class_deprecated
-      || c->theclass == class_obscure)
-    return 0;
-
-  return 1;
-}
+static int parse_binary_operation (char *);
 
 
 static enum auto_boolean
@@ -72,10 +61,8 @@ parse_auto_binary_operation (const char *arg)
   return AUTO_BOOLEAN_AUTO; /* Pacify GCC.  */
 }
 
-/* See cli-setshow.h.  */
-
-int
-parse_cli_boolean_value (const char *arg)
+static int
+parse_binary_operation (char *arg)
 {
   int length;
 
@@ -98,7 +85,10 @@ parse_cli_boolean_value (const char *arg)
 	   || strncmp (arg, "disable", length) == 0)
     return 0;
   else
-    return -1;
+    {
+      error (_("\"on\" or \"off\" expected."));
+      return 0;
+    }
 }
 
 void
@@ -127,566 +117,341 @@ deprecated_show_value_hack (struct ui_file *ignore_file,
     }
 }
 
-/* Returns true if ARG is "unlimited".  */
-
-static int
-is_unlimited_literal (const char *arg)
-{
-  size_t len = sizeof ("unlimited") - 1;
-
-  arg = skip_spaces (arg);
-
-  return (strncmp (arg, "unlimited", len) == 0
-	  && (isspace (arg[len]) || arg[len] == '\0'));
-}
-
-
-/* Do a "set" command.  ARG is NULL if no argument, or the
+/* Do a "set" or "show" command.  ARG is NULL if no argument, or the
    text of the argument, and FROM_TTY is nonzero if this command is
    being entered directly by the user (i.e. these are just like any
    other command).  C is the command list element for the command.  */
 
 void
-do_set_command (const char *arg, int from_tty, struct cmd_list_element *c)
+do_setshow_command (char *arg, int from_tty, struct cmd_list_element *c)
 {
-  /* A flag to indicate the option is changed or not.  */
-  int option_changed = 0;
-
-  gdb_assert (c->type == set_cmd);
-
-  switch (c->var_type)
+  if (c->type == set_cmd)
     {
-    case var_string:
-      {
-	char *newobj;
-	const char *p;
-	char *q;
-	int ch;
-
-	if (arg == NULL)
-	  arg = "";
-	newobj = (char *) xmalloc (strlen (arg) + 2);
-	p = arg;
-	q = newobj;
-	while ((ch = *p++) != '\000')
+      switch (c->var_type)
+	{
+	case var_string:
 	  {
-	    if (ch == '\\')
+	    char *new;
+	    char *p;
+	    char *q;
+	    int ch;
+
+	    if (arg == NULL)
+	      arg = "";
+	    new = (char *) xmalloc (strlen (arg) + 2);
+	    p = arg;
+	    q = new;
+	    while ((ch = *p++) != '\000')
 	      {
-		/* \ at end of argument is used after spaces
-		   so they won't be lost.  */
-		/* This is obsolete now that we no longer strip
-		   trailing whitespace and actually, the backslash
-		   didn't get here in my test, readline or
-		   something did something funky with a backslash
-		   right before a newline.  */
-		if (*p == 0)
-		  break;
-		ch = parse_escape (get_current_arch (), &p);
-		if (ch == 0)
-		  break;	/* C loses */
-		else if (ch > 0)
+		if (ch == '\\')
+		  {
+		    /* \ at end of argument is used after spaces
+		       so they won't be lost.  */
+		    /* This is obsolete now that we no longer strip
+		       trailing whitespace and actually, the backslash
+		       didn't get here in my test, readline or
+		       something did something funky with a backslash
+		       right before a newline.  */
+		    if (*p == 0)
+		      break;
+		    ch = parse_escape (get_current_arch (), &p);
+		    if (ch == 0)
+		      break;	/* C loses */
+		    else if (ch > 0)
+		      *q++ = ch;
+		  }
+		else
 		  *q++ = ch;
 	      }
-	    else
-	      *q++ = ch;
-	  }
 #if 0
-	if (*(p - 1) != '\\')
-	  *q++ = ' ';
+	    if (*(p - 1) != '\\')
+	      *q++ = ' ';
 #endif
-	*q++ = '\0';
-	newobj = (char *) xrealloc (newobj, q - newobj);
-
-	if (*(char **) c->var == NULL
-	    || strcmp (*(char **) c->var, newobj) != 0)
-	  {
-	    xfree (*(char **) c->var);
-	    *(char **) c->var = newobj;
-
-	    option_changed = 1;
+	    *q++ = '\0';
+	    new = (char *) xrealloc (new, q - new);
+	    if (*(char **) c->var != NULL)
+	      xfree (*(char **) c->var);
+	    *(char **) c->var = new;
 	  }
-	else
-	  xfree (newobj);
-      }
-      break;
-    case var_string_noescape:
-      if (arg == NULL)
-	arg = "";
-
-      if (*(char **) c->var == NULL || strcmp (*(char **) c->var, arg) != 0)
-	{
-	  xfree (*(char **) c->var);
+	  break;
+	case var_string_noescape:
+	  if (arg == NULL)
+	    arg = "";
+	  if (*(char **) c->var != NULL)
+	    xfree (*(char **) c->var);
 	  *(char **) c->var = xstrdup (arg);
-
-	  option_changed = 1;
-	}
-      break;
-    case var_filename:
-      if (arg == NULL)
-	error_no_arg (_("filename to set it to."));
-      /* FALLTHROUGH */
-    case var_optional_filename:
-      {
-	char *val = NULL;
-
-	if (arg != NULL)
+	  break;
+	case var_optional_filename:
+	  if (arg == NULL)
+	    arg = "";
+	  if (*(char **) c->var != NULL)
+	    xfree (*(char **) c->var);
+	  *(char **) c->var = xstrdup (arg);
+	  break;
+	case var_filename:
+	  if (arg == NULL)
+	    error_no_arg (_("filename to set it to."));
+	  if (*(char **) c->var != NULL)
+	    xfree (*(char **) c->var);
 	  {
 	    /* Clear trailing whitespace of filename.  */
-	    const char *ptr = arg + strlen (arg) - 1;
-	    char *copy;
+	    char *ptr = arg + strlen (arg) - 1;
 
 	    while (ptr >= arg && (*ptr == ' ' || *ptr == '\t'))
 	      ptr--;
-	    copy = xstrndup (arg, ptr + 1 - arg);
-
-	    val = tilde_expand (copy);
-	    xfree (copy);
+	    *(ptr + 1) = '\0';
 	  }
-	else
-	  val = xstrdup ("");
-
-	if (*(char **) c->var == NULL
-	    || strcmp (*(char **) c->var, val) != 0)
+	  *(char **) c->var = tilde_expand (arg);
+	  break;
+	case var_boolean:
+	  *(int *) c->var = parse_binary_operation (arg);
+	  break;
+	case var_auto_boolean:
+	  *(enum auto_boolean *) c->var = parse_auto_binary_operation (arg);
+	  break;
+	case var_uinteger:
+	  if (arg == NULL)
+	    error_no_arg (_("integer to set it to."));
+	  *(unsigned int *) c->var = parse_and_eval_long (arg);
+	  if (*(unsigned int *) c->var == 0)
+	    *(unsigned int *) c->var = UINT_MAX;
+	  break;
+	case var_integer:
 	  {
-	    xfree (*(char **) c->var);
-	    *(char **) c->var = val;
+	    unsigned int val;
 
-	    option_changed = 1;
-	  }
-	else
-	  xfree (val);
-      }
-      break;
-    case var_boolean:
-      {
-	int val = parse_cli_boolean_value (arg);
-
-	if (val < 0)
-	  error (_("\"on\" or \"off\" expected."));
-	if (val != *(int *) c->var)
-	  {
-	    *(int *) c->var = val;
-
-	    option_changed = 1;
-	  }
-      }
-      break;
-    case var_auto_boolean:
-      {
-	enum auto_boolean val = parse_auto_binary_operation (arg);
-
-	if (*(enum auto_boolean *) c->var != val)
-	  {
-	    *(enum auto_boolean *) c->var = val;
-
-	    option_changed = 1;
-	  }
-      }
-      break;
-    case var_uinteger:
-    case var_zuinteger:
-      {
-	LONGEST val;
-
-	if (arg == NULL)
-	  {
-	    if (c->var_type == var_uinteger)
-	      error_no_arg (_("integer to set it to, or \"unlimited\"."));
-	    else
+	    if (arg == NULL)
 	      error_no_arg (_("integer to set it to."));
-	  }
-
-	if (c->var_type == var_uinteger && is_unlimited_literal (arg))
-	  val = 0;
-	else
-	  val = parse_and_eval_long (arg);
-
-	if (c->var_type == var_uinteger && val == 0)
-	  val = UINT_MAX;
-	else if (val < 0
-		 /* For var_uinteger, don't let the user set the value
-		    to UINT_MAX directly, as that exposes an
-		    implementation detail to the user interface.  */
-		 || (c->var_type == var_uinteger && val >= UINT_MAX)
-		 || (c->var_type == var_zuinteger && val > UINT_MAX))
-	  error (_("integer %s out of range"), plongest (val));
-
-	if (*(unsigned int *) c->var != val)
-	  {
-	    *(unsigned int *) c->var = val;
-
-	    option_changed = 1;
-	  }
-      }
-      break;
-    case var_integer:
-    case var_zinteger:
-      {
-	LONGEST val;
-
-	if (arg == NULL)
-	  {
-	    if (c->var_type == var_integer)
-	      error_no_arg (_("integer to set it to, or \"unlimited\"."));
+	    val = parse_and_eval_long (arg);
+	    if (val == 0)
+	      *(int *) c->var = INT_MAX;
+	    else if (val >= INT_MAX)
+	      error (_("integer %u out of range"), val);
 	    else
-	      error_no_arg (_("integer to set it to."));
+	      *(int *) c->var = val;
+	    break;
 	  }
-
-	if (c->var_type == var_integer && is_unlimited_literal (arg))
-	  val = 0;
-	else
-	  val = parse_and_eval_long (arg);
-
-	if (val == 0 && c->var_type == var_integer)
-	  val = INT_MAX;
-	else if (val < INT_MIN
-		 /* For var_integer, don't let the user set the value
-		    to INT_MAX directly, as that exposes an
-		    implementation detail to the user interface.  */
-		 || (c->var_type == var_integer && val >= INT_MAX)
-		 || (c->var_type == var_zinteger && val > INT_MAX))
-	  error (_("integer %s out of range"), plongest (val));
-
-	if (*(int *) c->var != val)
+	case var_zinteger:
+	  if (arg == NULL)
+	    error_no_arg (_("integer to set it to."));
+	  *(int *) c->var = parse_and_eval_long (arg);
+	  break;
+	case var_zuinteger:
+	  if (arg == NULL)
+	    error_no_arg (_("integer to set it to."));
+	  *(unsigned int *) c->var = parse_and_eval_long (arg);
+	  break;
+	case var_enum:
 	  {
-	    *(int *) c->var = val;
+	    int i;
+	    int len;
+	    int nmatches;
+	    const char *match = NULL;
+	    char *p;
 
-	    option_changed = 1;
-	  }
-	break;
-      }
-    case var_enum:
-      {
-	int i;
-	int len;
-	int nmatches;
-	const char *match = NULL;
-	const char *p;
-
-	/* If no argument was supplied, print an informative error
-	   message.  */
-	if (arg == NULL)
-	  {
-	    std::string msg;
-
-	    for (i = 0; c->enums[i]; i++)
+	    /* If no argument was supplied, print an informative error
+	       message.  */
+	    if (arg == NULL)
 	      {
-		if (i != 0)
-		  msg += ", ";
-		msg += c->enums[i];
+		char *msg;
+		int msg_len = 0;
+
+		for (i = 0; c->enums[i]; i++)
+		  msg_len += strlen (c->enums[i]) + 2;
+
+		msg = xmalloc (msg_len);
+		*msg = '\0';
+		make_cleanup (xfree, msg);
+		
+		for (i = 0; c->enums[i]; i++)
+		  {
+		    if (i != 0)
+		      strcat (msg, ", ");
+		    strcat (msg, c->enums[i]);
+		  }
+		error (_("Requires an argument. Valid arguments are %s."), 
+		       msg);
 	      }
-	    error (_("Requires an argument. Valid arguments are %s."), 
-		   msg.c_str ());
-	  }
 
-	p = strchr (arg, ' ');
+	    p = strchr (arg, ' ');
 
-	if (p)
-	  len = p - arg;
-	else
-	  len = strlen (arg);
+	    if (p)
+	      len = p - arg;
+	    else
+	      len = strlen (arg);
 
-	nmatches = 0;
-	for (i = 0; c->enums[i]; i++)
-	  if (strncmp (arg, c->enums[i], len) == 0)
-	    {
-	      if (c->enums[i][len] == '\0')
+	    nmatches = 0;
+	    for (i = 0; c->enums[i]; i++)
+	      if (strncmp (arg, c->enums[i], len) == 0)
 		{
-		  match = c->enums[i];
-		  nmatches = 1;
-		  break; /* Exact match.  */
+		  if (c->enums[i][len] == '\0')
+		    {
+		      match = c->enums[i];
+		      nmatches = 1;
+		      break; /* Exact match.  */
+		    }
+		  else
+		    {
+		      match = c->enums[i];
+		      nmatches++;
+		    }
 		}
-	      else
-		{
-		  match = c->enums[i];
-		  nmatches++;
-		}
-	    }
 
-	if (nmatches <= 0)
-	  error (_("Undefined item: \"%s\"."), arg);
+	    if (nmatches <= 0)
+	      error (_("Undefined item: \"%s\"."), arg);
 
-	if (nmatches > 1)
-	  error (_("Ambiguous item \"%s\"."), arg);
+	    if (nmatches > 1)
+	      error (_("Ambiguous item \"%s\"."), arg);
 
-	if (*(const char **) c->var != match)
-	  {
 	    *(const char **) c->var = match;
-
-	    option_changed = 1;
 	  }
-      }
-      break;
-    case var_zuinteger_unlimited:
-      {
-	LONGEST val;
-
-	if (arg == NULL)
-	  error_no_arg (_("integer to set it to, or \"unlimited\"."));
-
-	if (is_unlimited_literal (arg))
-	  val = -1;
-	else
-	  val = parse_and_eval_long (arg);
-
-	if (val > INT_MAX)
-	  error (_("integer %s out of range"), plongest (val));
-	else if (val < -1)
-	  error (_("only -1 is allowed to set as unlimited"));
-
-	if (*(int *) c->var != val)
-	  {
-	    *(int *) c->var = val;
-	    option_changed = 1;
-	  }
-      }
-      break;
-    default:
-      error (_("gdb internal error: bad var_type in do_setshow_command"));
+	  break;
+	default:
+	  error (_("gdb internal error: bad var_type in do_setshow_command"));
+	}
     }
-  c->func (c, NULL, from_tty);
-
-  if (notify_command_param_changed_p (option_changed, c))
+  else if (c->type == show_cmd)
     {
-      char *name, *cp;
-      struct cmd_list_element **cmds;
-      struct cmd_list_element *p;
-      int i;
-      int length = 0;
+      struct cleanup *old_chain;
+      struct ui_stream *stb;
 
-      /* Compute the whole multi-word command options.  If user types command
-	 'set foo bar baz on', c->name is 'baz', and GDB can't pass "bar" to
-	 command option change notification, because it is confusing.  We can
-	 trace back through field 'prefix' to compute the whole options,
-	 and pass "foo bar baz" to notification.  */
+      stb = ui_out_stream_new (uiout);
+      old_chain = make_cleanup_ui_out_stream_delete (stb);
 
-      for (i = 0, p = c; p != NULL; i++)
-	{
-	  length += strlen (p->name);
-	  length++;
-
-	  p = p->prefix;
-	}
-      cp = name = (char *) xmalloc (length);
-      cmds = XNEWVEC (struct cmd_list_element *, i);
-
-      /* Track back through filed 'prefix' and cache them in CMDS.  */
-      for (i = 0, p = c; p != NULL; i++)
-	{
-	  cmds[i] = p;
-	  p = p->prefix;
-	}
-
-      /* Don't trigger any observer notification if prefixlist is not
-	 setlist.  */
-      i--;
-      if (cmds[i]->prefixlist != &setlist)
-	{
-	  xfree (cmds);
-	  xfree (name);
-
-	  return;
-	}
-      /* Traverse them in the reversed order, and copy their names into
-	 NAME.  */
-      for (i--; i >= 0; i--)
-	{
-	  memcpy (cp, cmds[i]->name, strlen (cmds[i]->name));
-	  cp += strlen (cmds[i]->name);
-
-	  if (i != 0)
-	    {
-	      cp[0] = ' ';
-	      cp++;
-	    }
-	}
-      cp[0] = 0;
-
-      xfree (cmds);
+      /* Possibly call the pre hook.  */
+      if (c->pre_show_hook)
+	(c->pre_show_hook) (c);
 
       switch (c->var_type)
 	{
 	case var_string:
+	  if (*(char **) c->var)
+	    fputstr_filtered (*(char **) c->var, '"', stb->stream);
+	  break;
 	case var_string_noescape:
-	case var_filename:
 	case var_optional_filename:
+	case var_filename:
 	case var_enum:
-	  gdb::observers::command_param_changed.notify (name, *(char **) c->var);
+	  if (*(char **) c->var)
+	    fputs_filtered (*(char **) c->var, stb->stream);
 	  break;
 	case var_boolean:
-	  {
-	    const char *opt = *(int *) c->var ? "on" : "off";
-
-	    gdb::observers::command_param_changed.notify (name, opt);
-	  }
+	  fputs_filtered (*(int *) c->var ? "on" : "off", stb->stream);
 	  break;
 	case var_auto_boolean:
-	  {
-	    const char *s = auto_boolean_enums[*(enum auto_boolean *) c->var];
-
-	    gdb::observers::command_param_changed.notify (name, s);
-	  }
+	  switch (*(enum auto_boolean*) c->var)
+	    {
+	    case AUTO_BOOLEAN_TRUE:
+	      fputs_filtered ("on", stb->stream);
+	      break;
+	    case AUTO_BOOLEAN_FALSE:
+	      fputs_filtered ("off", stb->stream);
+	      break;
+	    case AUTO_BOOLEAN_AUTO:
+	      fputs_filtered ("auto", stb->stream);
+	      break;
+	    default:
+	      internal_error (__FILE__, __LINE__,
+			      _("do_setshow_command: "
+				"invalid var_auto_boolean"));
+	      break;
+	    }
 	  break;
 	case var_uinteger:
+	  if (*(unsigned int *) c->var == UINT_MAX)
+	    {
+	      fputs_filtered ("unlimited", stb->stream);
+	      break;
+	    }
+	  /* else fall through */
 	case var_zuinteger:
-	  {
-	    char s[64];
-
-	    xsnprintf (s, sizeof s, "%u", *(unsigned int *) c->var);
-	    gdb::observers::command_param_changed.notify (name, s);
-	  }
+	case var_zinteger:
+	  fprintf_filtered (stb->stream, "%u", *(unsigned int *) c->var);
 	  break;
 	case var_integer:
-	case var_zinteger:
-	case var_zuinteger_unlimited:
-	  {
-	    char s[64];
-
-	    xsnprintf (s, sizeof s, "%d", *(int *) c->var);
-	    gdb::observers::command_param_changed.notify (name, s);
-	  }
+	  if (*(int *) c->var == INT_MAX)
+	    {
+	      fputs_filtered ("unlimited", stb->stream);
+	    }
+	  else
+	    fprintf_filtered (stb->stream, "%d", *(int *) c->var);
 	  break;
-	}
-      xfree (name);
-    }
-}
 
-/* Do a "show" command.  ARG is NULL if no argument, or the
-   text of the argument, and FROM_TTY is nonzero if this command is
-   being entered directly by the user (i.e. these are just like any
-   other command).  C is the command list element for the command.  */
-
-void
-do_show_command (const char *arg, int from_tty, struct cmd_list_element *c)
-{
-  struct ui_out *uiout = current_uiout;
-
-  gdb_assert (c->type == show_cmd);
-
-  string_file stb;
-
-  /* Possibly call the pre hook.  */
-  if (c->pre_show_hook)
-    (c->pre_show_hook) (c);
-
-  switch (c->var_type)
-    {
-    case var_string:
-      if (*(char **) c->var)
-	stb.putstr (*(char **) c->var, '"');
-      break;
-    case var_string_noescape:
-    case var_optional_filename:
-    case var_filename:
-    case var_enum:
-      if (*(char **) c->var)
-	stb.puts (*(char **) c->var);
-      break;
-    case var_boolean:
-      stb.puts (*(int *) c->var ? "on" : "off");
-      break;
-    case var_auto_boolean:
-      switch (*(enum auto_boolean*) c->var)
-	{
-	case AUTO_BOOLEAN_TRUE:
-	  stb.puts ("on");
-	  break;
-	case AUTO_BOOLEAN_FALSE:
-	  stb.puts ("off");
-	  break;
-	case AUTO_BOOLEAN_AUTO:
-	  stb.puts ("auto");
-	  break;
 	default:
-	  internal_error (__FILE__, __LINE__,
-			  _("do_show_command: "
-			    "invalid var_auto_boolean"));
-	  break;
+	  error (_("gdb internal error: bad var_type in do_setshow_command"));
 	}
-      break;
-    case var_uinteger:
-    case var_zuinteger:
-      if (c->var_type == var_uinteger
-	  && *(unsigned int *) c->var == UINT_MAX)
-	stb.puts ("unlimited");
+
+
+      /* FIXME: cagney/2005-02-10: Need to split this in half: code to
+	 convert the value into a string (esentially the above); and
+	 code to print the value out.  For the latter there should be
+	 MI and CLI specific versions.  */
+
+      if (ui_out_is_mi_like_p (uiout))
+	ui_out_field_stream (uiout, "value", stb);
       else
-	stb.printf ("%u", *(unsigned int *) c->var);
-      break;
-    case var_integer:
-    case var_zinteger:
-      if (c->var_type == var_integer
-	  && *(int *) c->var == INT_MAX)
-	stb.puts ("unlimited");
-      else
-	stb.printf ("%d", *(int *) c->var);
-      break;
-    case var_zuinteger_unlimited:
-      {
-	if (*(int *) c->var == -1)
-	  stb.puts ("unlimited");
-	else
-	  stb.printf ("%d", *(int *) c->var);
-      }
-      break;
-    default:
-      error (_("gdb internal error: bad var_type in do_show_command"));
+	{
+	  char *value = ui_file_xstrdup (stb->stream, NULL);
+
+	  make_cleanup (xfree, value);
+	  if (c->show_value_func != NULL)
+	    c->show_value_func (gdb_stdout, from_tty, c, value);
+	  else
+	    deprecated_show_value_hack (gdb_stdout, from_tty, c, value);
+	}
+      do_cleanups (old_chain);
     }
-
-
-  /* FIXME: cagney/2005-02-10: Need to split this in half: code to
-     convert the value into a string (esentially the above); and
-     code to print the value out.  For the latter there should be
-     MI and CLI specific versions.  */
-
-  if (uiout->is_mi_like_p ())
-    uiout->field_stream ("value", stb);
   else
-    {
-      if (c->show_value_func != NULL)
-	c->show_value_func (gdb_stdout, from_tty, c, stb.c_str ());
-      else
-	deprecated_show_value_hack (gdb_stdout, from_tty, c, stb.c_str ());
-    }
-
+    error (_("gdb internal error: bad cmd_type in do_setshow_command"));
   c->func (c, NULL, from_tty);
+  if (c->type == set_cmd && deprecated_set_hook)
+    deprecated_set_hook (c);
 }
 
 /* Show all the settings in a list of show commands.  */
 
 void
-cmd_show_list (struct cmd_list_element *list, int from_tty, const char *prefix)
+cmd_show_list (struct cmd_list_element *list, int from_tty, char *prefix)
 {
-  struct ui_out *uiout = current_uiout;
+  struct cleanup *showlist_chain;
 
-  ui_out_emit_tuple tuple_emitter (uiout, "showlist");
+  showlist_chain = make_cleanup_ui_out_tuple_begin_end (uiout, "showlist");
   for (; list != NULL; list = list->next)
     {
       /* If we find a prefix, run its list, prefixing our output by its
          prefix (with "show " skipped).  */
       if (list->prefixlist && !list->abbrev_flag)
 	{
-	  ui_out_emit_tuple optionlist_emitter (uiout, "optionlist");
-	  const char *new_prefix = strstr (list->prefixname, "show ") + 5;
+	  struct cleanup *optionlist_chain
+	    = make_cleanup_ui_out_tuple_begin_end (uiout, "optionlist");
+	  char *new_prefix = strstr (list->prefixname, "show ") + 5;
 
-	  if (uiout->is_mi_like_p ())
-	    uiout->field_string ("prefix", new_prefix);
+	  if (ui_out_is_mi_like_p (uiout))
+	    ui_out_field_string (uiout, "prefix", new_prefix);
 	  cmd_show_list (*list->prefixlist, from_tty, new_prefix);
+	  /* Close the tuple.  */
+	  do_cleanups (optionlist_chain);
 	}
       else
 	{
-	  if (list->theclass != no_set_class)
+	  if (list->class != no_set_class)
 	    {
-	      ui_out_emit_tuple option_emitter (uiout, "option");
+	      struct cleanup *option_chain
+		= make_cleanup_ui_out_tuple_begin_end (uiout, "option");
 
-	      uiout->text (prefix);
-	      uiout->field_string ("name", list->name);
-	      uiout->text (":  ");
+	      ui_out_text (uiout, prefix);
+	      ui_out_field_string (uiout, "name", list->name);
+	      ui_out_text (uiout, ":  ");
 	      if (list->type == show_cmd)
-		do_show_command ((char *) NULL, from_tty, list);
+		do_setshow_command ((char *) NULL, from_tty, list);
 	      else
 		cmd_func (list, NULL, from_tty);
+	      /* Close the tuple.  */
+	      do_cleanups (option_chain);
 	    }
 	}
     }
+  /* Close the tuple.  */
+  do_cleanups (showlist_chain);
 }
 

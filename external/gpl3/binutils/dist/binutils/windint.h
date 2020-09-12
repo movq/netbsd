@@ -1,5 +1,6 @@
 /* windint.h -- internal header file for windres program.
-   Copyright (C) 1997-2020 Free Software Foundation, Inc.
+   Copyright 1997, 1998, 1999, 2000, 2001, 2002, 2003, 2005, 2007
+   Free Software Foundation, Inc.
    Written by Kai Tietz, Onevision.
 
    This file is part of GNU Binutils.
@@ -943,18 +944,6 @@ struct __attribute__ ((__packed__)) bin_fixed_versioninfo
 };
 #define BIN_FIXED_VERSIONINFO_SIZE 52
 
-/* A list of string version information.  */
-
-typedef struct rc_ver_stringtable
-{
-  /* Next item.  */
-  struct rc_ver_stringtable *next;
-  /* Language.  */
-  unichar *language;
-  /* Strings.  */
-  struct rc_ver_stringinfo *strings;
-} rc_ver_stringtable;
-
 /* A list of variable version information.  */
 
 typedef struct rc_ver_info
@@ -968,8 +957,10 @@ typedef struct rc_ver_info
     /* StringFileInfo data.  */
     struct
     {
-      /* String tables.  */
-      struct rc_ver_stringtable *stringtables;
+      /* Language.  */
+      unichar *language;
+      /* Strings.  */
+      struct rc_ver_stringinfo *strings;
     } string;
     /* VarFileInfo data.  */
     struct
@@ -1092,6 +1083,6 @@ extern rc_uint_type windres_get_16 (windres_bfd *, const void *, rc_uint_type);
 extern rc_uint_type windres_get_32 (windres_bfd *, const void *, rc_uint_type);
 
 extern void set_windres_bfd (windres_bfd *, bfd *, asection *, rc_uint_type);
-extern void set_windres_bfd_endianness (windres_bfd *, int);
+extern void set_windres_bfd_endianess (windres_bfd *, int);
 
 #endif

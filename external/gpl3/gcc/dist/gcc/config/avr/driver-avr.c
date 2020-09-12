@@ -1,6 +1,6 @@
 /* Subroutines for the gcc driver.
-   Copyright (C) 2009-2019 Free Software Foundation, Inc.
-   Contributed by Georg-Johann Lay <avr@gjlay.de>
+   Copyright (C) 2009 Free Software Foundation, Inc.
+   Contributed by Anatoly Sokolov <aesok@post.ru>
 
 This file is part of GCC.
 
@@ -18,96 +18,98 @@ You should have received a copy of the GNU General Public License
 along with GCC; see the file COPYING3.  If not see
 <http://www.gnu.org/licenses/>.  */
 
-#define IN_TARGET_CODE 1
-
 #include "config.h"
 #include "system.h"
 #include "coretypes.h"
-#include "diagnostic.h"
 #include "tm.h"
+#include <stdlib.h>
 
-// Remove -nodevicelib and -nodevicespecs from the command line if not needed.
-#define X_NODEVLIB "%<nodevicelib %<nodevicespecs"
+/* Current architecture.  */
+const struct base_arch_s *avr_current_arch = NULL;
 
-static const char dir_separator_str[] = { DIR_SEPARATOR, 0 };
+/* Current device.  */
+const struct mcu_type_s *avr_current_device = NULL;
 
+/* Initialize avr_current_arch and avr_current_device variables.  */
 
-/* Implement spec function `device-specs-file´.
-
-   Validate mcu name given with -mmcu option. Compose
-   -specs=<specs-file-name>%s. If everything went well then argv[0] is the
-   inflated (absolute) first device-specs directory and argv[1] is a device
-   or core name as supplied by -mmcu=*. When building GCC the path might be
-   relative.  */
-
-const char*
-avr_devicespecs_file (int argc, const char **argv)
+static void
+avr_set_current_device (const char *name)
 {
-  const char *mmcu = NULL;
-
-#ifdef DEBUG_SPECS
-  if (verbose_flag)
-    fnotice (stderr, "Running spec function '%s' with %d args\n\n",
-             __FUNCTION__, argc);
-#endif
-
-  switch (argc)
+ 
+ if (NULL != avr_current_arch)
+   return;
+ 
+  for (avr_current_device = avr_mcu_types; avr_current_device->name;
+       avr_current_device++)
     {
-    case 0:
-      fatal_error (input_location,
-                   "bad usage of spec function %qs", "device-specs-file");
-      return X_NODEVLIB;
-
-    case 1:
-      if (strcmp ("device-specs", argv[0]) == 0)
-        {
-          /* FIXME:  This means "device-specs%s" from avr.h:DRIVER_SELF_SPECS
-             has not been resolved to a path.  That case can occur when the
-             c++ testsuite is run from the build directory.  DejaGNU's
-             libgloss.exp:get_multilibs runs $compiler without -B, i.e.runs
-             xgcc without specifying a prefix.  Without any prefix, there is
-             no means to find out where the specs files might be located.
-             get_multilibs runs xgcc --print-multi-lib, hence we don't actually
-             need information form a specs file and may skip it here.  */
-          return X_NODEVLIB;
-        }
-
-      mmcu = AVR_MMCU_DEFAULT;
-      break;
-
-    default:
-      mmcu = argv[1];
-
-      // Allow specifying the same MCU more than once.
-
-      for (int i = 2; i < argc; i++)
-	if (strcmp (mmcu, argv[i]) != 0)
-          {
-            error ("specified option %qs more than once", "-mmcu");
-            return X_NODEVLIB;
-          }
-
-      break;
+      if (strcmp (avr_current_device->name, name) == 0)
+        break;
     }
 
-  // Filter out silly -mmcu= arguments like "foo bar".
-
-  for (const char *s = mmcu; *s; s++)
-    if (!ISALNUM (*s)
-        && '-' != *s
-        && '_' != *s)
-      {
-        error ("strange device name %qs after %qs: bad character %qc",
-               mmcu, "-mmcu=", *s);
-        return X_NODEVLIB;
-      }
-
-  return concat ("%{!nodevicespecs:-specs=device-specs", dir_separator_str,
-		 "specs-", mmcu, "%s} %<nodevicespecs"
-#if defined (WITH_AVRLIBC)
-                 " %{mmcu=avr*:" X_NODEVLIB "} %{!mmcu=*:" X_NODEVLIB "}",
-#else
-                 " " X_NODEVLIB,
-#endif
-                 NULL);
+  avr_current_arch = &avr_arch_types[avr_current_device->arch];
 }
+
+/* Returns command line parameters that describe the device architecture.  */
+
+const char *
+avr_device_to_arch (int argc, const char **argv)
+{
+  if (0 == argc)
+    return;
+
+  avr_set_current_device (argv[0]);
+
+  return concat ("-m ", avr_current_arch->arch_name, NULL);
+}
+
+/* Returns command line parameters that describe start of date section.  */
+
+const char *
+avr_device_to_data_start (int argc, const char **argv)
+{
+  unsigned long data_section_start;
+  char data_section_start_str[16];
+
+  if (0 == argc)
+    return;  
+
+  avr_set_current_device (argv[0]);
+  
+  if (avr_current_device->data_section_start 
+      == avr_current_arch->default_data_section_start)
+    return NULL;
+    
+  data_section_start = 0x800000 + avr_current_device->data_section_start;
+  
+  snprintf (data_section_start_str, sizeof(data_section_start_str) - 1,
+            "0x%lX", data_section_start);
+  
+  return concat ("-Tdata ", data_section_start_str, NULL);    
+}
+
+/* Returns command line parameters that describe the device startfile.  */
+
+const char *
+avr_device_to_startfiles (int argc, const char **argv)
+{
+  if (0 == argc)
+    return;
+
+  avr_set_current_device (argv[0]);
+
+  return concat ("crt", avr_current_device->library_name, ".o%s", NULL);
+}
+
+/* Returns command line parameters that describe the device library.  */
+
+const char *
+avr_device_to_devicelib (int argc, const char **argv)
+{
+  if (0 == argc)
+    return;
+
+  avr_set_current_device (argv[0]);
+
+  return concat ("-l", avr_current_device->library_name, NULL);
+}
+

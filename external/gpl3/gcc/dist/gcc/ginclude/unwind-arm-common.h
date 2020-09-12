@@ -1,5 +1,5 @@
 /* Header file for the ARM EABI and C6X unwinders
-   Copyright (C) 2003-2019 Free Software Foundation, Inc.
+   Copyright (C) 2003-2013 Free Software Foundation, Inc.
    Contributed by Paul Brook
 
    This file is free software; you can redistribute it and/or modify it
@@ -183,7 +183,7 @@ extern "C" {
 #define _Unwind_Exception _Unwind_Control_Block
   typedef char _Unwind_Exception_Class[8];
 
-  _Unwind_Ptr _Unwind_GetLanguageSpecificData (_Unwind_Context *);
+  void * _Unwind_GetLanguageSpecificData (_Unwind_Context *);
   _Unwind_Ptr _Unwind_GetRegionStart (_Unwind_Context *);
 
   _Unwind_Ptr _Unwind_GetDataRelBase (_Unwind_Context *);
@@ -234,7 +234,7 @@ extern "C" {
     }
 
   _Unwind_Ptr _Unwind_GetRegionStart (_Unwind_Context *);
-  _Unwind_Ptr _Unwind_GetLanguageSpecificData (_Unwind_Context *);
+  void * _Unwind_GetLanguageSpecificData (_Unwind_Context *);
 
 /* leb128 type numbers have a potentially unlimited size.
    The target of the following definitions of _sleb128_t and _uleb128_t

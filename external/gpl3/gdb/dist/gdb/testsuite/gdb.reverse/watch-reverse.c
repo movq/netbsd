@@ -1,6 +1,6 @@
 /* This testcase is part of GDB, the GNU debugger.
 
-   Copyright 2008-2019 Free Software Foundation, Inc.
+   Copyright 2008, 2009, 2010, 2011 Free Software Foundation, Inc.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -78,7 +78,11 @@ void marker6 ()
 {
 }
 
+#ifdef PROTOTYPES
 void recurser (int  x)
+#else
+void recurser (x) int  x;
+#endif
 {
   int  local_x;
 
@@ -135,6 +139,10 @@ func4 ()
 
 int main ()
 {
+#ifdef usestubs
+  set_debug_traps();
+  breakpoint();
+#endif
   struct1.val = 1;
   struct2.val = 2;
   ptr1 = &struct1;

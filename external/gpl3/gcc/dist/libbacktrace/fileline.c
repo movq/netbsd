@@ -1,5 +1,5 @@
 /* fileline.c -- Get file and line number information in a backtrace.
-   Copyright (C) 2012-2019 Free Software Foundation, Inc.
+   Copyright (C) 2012-2013 Free Software Foundation, Inc.
    Written by Ian Lance Taylor, Google.
 
 Redistribution and use in source and binary forms, with or without
@@ -7,13 +7,13 @@ modification, are permitted provided that the following conditions are
 met:
 
     (1) Redistributions of source code must retain the above copyright
-    notice, this list of conditions and the following disclaimer.
+    notice, this list of conditions and the following disclaimer. 
 
     (2) Redistributions in binary form must reproduce the above copyright
     notice, this list of conditions and the following disclaimer in
     the documentation and/or other materials provided with the
-    distribution.
-
+    distribution.  
+    
     (3) The name of the author may not be used to
     endorse or promote products derived from this software without
     specific prior written permission.
@@ -37,7 +37,6 @@ POSSIBILITY OF SUCH DAMAGE.  */
 #include <errno.h>
 #include <fcntl.h>
 #include <stdlib.h>
-#include <unistd.h>
 
 #include "backtrace.h"
 #include "internal.h"
@@ -58,13 +57,16 @@ fileline_initialize (struct backtrace_state *state,
   int pass;
   int called_error_callback;
   int descriptor;
-  const char *filename;
-  char buf[64];
 
-  if (!state->threaded)
-    failed = state->fileline_initialization_failed;
-  else
-    failed = backtrace_atomic_load_int (&state->fileline_initialization_failed);
+  failed = state->fileline_initialization_failed;
+
+  if (state->threaded)
+    {
+      /* Use __sync_bool_compare_and_swap to do an atomic load.  */
+      while (!__sync_bool_compare_and_swap
+	     (&state->fileline_initialization_failed, failed, failed))
+	failed = state->fileline_initialization_failed;
+    }
 
   if (failed)
     {
@@ -72,10 +74,13 @@ fileline_initialize (struct backtrace_state *state,
       return 0;
     }
 
-  if (!state->threaded)
-    fileline_fn = state->fileline_fn;
-  else
-    fileline_fn = backtrace_atomic_load_pointer (&state->fileline_fn);
+  fileline_fn = state->fileline_fn;
+  if (state->threaded)
+    {
+      while (!__sync_bool_compare_and_swap (&state->fileline_fn, fileline_fn,
+					    fileline_fn))
+	fileline_fn = state->fileline_fn;
+    }
   if (fileline_fn != NULL)
     return 1;
 
@@ -83,8 +88,9 @@ fileline_initialize (struct backtrace_state *state,
 
   descriptor = -1;
   called_error_callback = 0;
-  for (pass = 0; pass < 5; ++pass)
+  for (pass = 0; pass < 4; ++pass)
     {
+      const char *filename;
       int does_not_exist;
 
       switch (pass)
@@ -100,11 +106,6 @@ fileline_initialize (struct backtrace_state *state,
 	  break;
 	case 3:
 	  filename = "/proc/curproc/file";
-	  break;
-	case 4:
-	  snprintf (buf, sizeof (buf), "/proc/%ld/object/a.out",
-		    (long) getpid ());
-	  filename = buf;
 	  break;
 	default:
 	  abort ();
@@ -140,8 +141,8 @@ fileline_initialize (struct backtrace_state *state,
 
   if (!failed)
     {
-      if (!backtrace_initialize (state, filename, descriptor, error_callback,
-				 data, &fileline_fn))
+      if (!backtrace_initialize (state, descriptor, error_callback, data,
+				 &fileline_fn))
 	failed = 1;
     }
 
@@ -150,7 +151,8 @@ fileline_initialize (struct backtrace_state *state,
       if (!state->threaded)
 	state->fileline_initialization_failed = 1;
       else
-	backtrace_atomic_store_int (&state->fileline_initialization_failed, 1);
+	__sync_bool_compare_and_swap (&state->fileline_initialization_failed,
+				      0, failed);
       return 0;
     }
 
@@ -158,10 +160,15 @@ fileline_initialize (struct backtrace_state *state,
     state->fileline_fn = fileline_fn;
   else
     {
-      backtrace_atomic_store_pointer (&state->fileline_fn, fileline_fn);
+      __sync_bool_compare_and_swap (&state->fileline_fn, NULL, fileline_fn);
 
-      /* Note that if two threads initialize at once, one of the data
-	 sets may be leaked.  */
+      /* At this point we know that state->fileline_fn is not NULL.
+	 Either we stored our value, or some other thread stored its
+	 value.  If some other thread stored its value, we leak the
+	 one we just initialized.  Either way, state->fileline_fn is
+	 initialized.  The compare_and_swap is a full memory barrier,
+	 so we should have full access to that value even if it was
+	 created by another thread.  */
     }
 
   return 1;

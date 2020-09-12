@@ -1,6 +1,7 @@
 /* Definitions for a frame unwinder, for GDB, the GNU debugger.
 
-   Copyright (C) 2003-2019 Free Software Foundation, Inc.
+   Copyright (C) 2003, 2004, 2007, 2008, 2009, 2010, 2011
+   Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -44,10 +45,7 @@ struct value;
 
 /* Given THIS frame, take a whiff of its registers (namely
    the PC and attributes) and if SELF is the applicable unwinder,
-   return non-zero.  Possibly also initialize THIS_PROLOGUE_CACHE; but
-   only if returning 1.  Initializing THIS_PROLOGUE_CACHE in other
-   cases (0 return) is invalid.  In case of exception, the caller has
-   to set *THIS_PROLOGUE_CACHE to NULL.  */
+   return non-zero.  Possibly also initialize THIS_PROLOGUE_CACHE.  */
 
 typedef int (frame_sniffer_ftype) (const struct frame_unwind *self,
 				   struct frame_info *this_frame,
@@ -69,18 +67,6 @@ int default_frame_sniffer (const struct frame_unwind *self,
 enum unwind_stop_reason
   default_frame_unwind_stop_reason (struct frame_info *this_frame,
 				    void **this_cache);
-
-/* A default unwind_pc callback that simply unwinds the register identified
-   by GDBARCH_PC_REGNUM.  */
-
-extern CORE_ADDR default_unwind_pc (struct gdbarch *gdbarch,
-				    struct frame_info *next_frame);
-
-/* A default unwind_sp callback that simply unwinds the register identified
-   by GDBARCH_SP_REGNUM.  */
-
-extern CORE_ADDR default_unwind_sp (struct gdbarch *gdbarch,
-				    struct frame_info *next_frame);
 
 /* Assuming the frame chain: (outer) prev <-> this <-> next (inner);
    use THIS frame, and through it the NEXT frame's register unwind

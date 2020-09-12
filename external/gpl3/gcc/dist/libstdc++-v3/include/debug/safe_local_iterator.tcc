@@ -1,6 +1,6 @@
 // Debugging iterator implementation (out of line) -*- C++ -*-
 
-// Copyright (C) 2011-2019 Free Software Foundation, Inc.
+// Copyright (C) 2011-2013 Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
@@ -32,62 +32,21 @@
 namespace __gnu_debug
 {
   template<typename _Iterator, typename _Sequence>
-    typename _Distance_traits<_Iterator>::__type
-    _Safe_local_iterator<_Iterator, _Sequence>::
-    _M_get_distance_to(const _Safe_local_iterator& __rhs) const
-    {
-      if (base() == __rhs.base())
-	return { 0, __dp_exact };
+    template<typename _Other>
+      bool
+      _Safe_local_iterator<_Iterator, _Sequence>::
+      _M_valid_range(const _Safe_local_iterator<_Other, _Sequence>& __rhs) const
+      {
+	if (!_M_can_compare(__rhs))
+	  return false;
+	if (_M_bucket != __rhs._M_bucket)
+	  return false;
 
-      if (_M_is_begin())
-	{
-	  if (__rhs._M_is_end())
-	    return
-	      {
-		_M_get_sequence()->bucket_size(bucket()),
-		__dp_exact
-	      };
-
-	  return { 1, __dp_sign };
-	}
-
-      if (_M_is_end())
-	{
-	  if (__rhs._M_is_begin())
-	    return
-	      {
-		-_M_get_sequence()->bucket_size(bucket()),
-		__dp_exact
-	      };
-
-	  return { -1, __dp_sign };
-	}
-
-      if (__rhs._M_is_begin())
-	return { -1, __dp_sign };
-
-      if (__rhs._M_is_end())
-	return { 1, __dp_sign };
-
-      return { 1, __dp_equality };
-    }
-
-  template<typename _Iterator, typename _Sequence>
-    bool
-    _Safe_local_iterator<_Iterator, _Sequence>::
-    _M_valid_range(const _Safe_local_iterator& __rhs,
-		std::pair<difference_type, _Distance_precision>& __dist) const
-    {
-      if (!_M_can_compare(__rhs))
-	return false;
-
-      if (bucket() != __rhs.bucket())
-	return false;
-
-      /* Determine if we can order the iterators without the help of
-	 the container */
-      __dist = _M_get_distance_to(__rhs);
-      switch (__dist.second)
+	/* Determine if we can order the iterators without the help of
+	   the container */
+	std::pair<difference_type, _Distance_precision> __dist =
+	  __get_distance(base(), __rhs.base());
+	switch (__dist.second)
 	{
 	case __dp_equality:
 	  if (__dist.first == 0)
@@ -99,9 +58,18 @@ namespace __gnu_debug
 	  return __dist.first >= 0;
 	}
 
-      // Assume that this is a valid range; we can't check anything else
-      return true;
-    }
+	/* We can only test for equality, but check if one of the
+	   iterators is at an extreme. */
+	/* Optim for classic [begin, it) or [it, end) ranges, limit checks
+	 * when code is valid. */
+	if (_M_is_begin() || __rhs._M_is_end())
+	  return true;
+	if (_M_is_end() || __rhs._M_is_begin())
+	  return false;
+
+	// Assume that this is a valid range; we can't check anything else
+	return true;
+      }
 } // namespace __gnu_debug
 
 #endif

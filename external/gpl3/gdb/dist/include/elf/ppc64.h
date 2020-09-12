@@ -1,5 +1,5 @@
 /* PPC64 ELF support for BFD.
-   Copyright (C) 2003-2019 Free Software Foundation, Inc.
+   Copyright 2003, 2005, 2009, 2010 Free Software Foundation, Inc.
 
    This file is part of BFD, the Binary File Descriptor library.
 
@@ -139,43 +139,11 @@ START_RELOC_NUMBERS (elf_ppc64_reloc_type)
   RELOC_NUMBER (R_PPC64_DTPREL16_HIGHESTA, 106)
   RELOC_NUMBER (R_PPC64_TLSGD,		   107)
   RELOC_NUMBER (R_PPC64_TLSLD,		   108)
-  RELOC_NUMBER (R_PPC64_TOCSAVE,	   109)
-
-/* Added when HA and HI relocs were changed to report overflows.  */
-  RELOC_NUMBER (R_PPC64_ADDR16_HIGH,	   110)
-  RELOC_NUMBER (R_PPC64_ADDR16_HIGHA,	   111)
-  RELOC_NUMBER (R_PPC64_TPREL16_HIGH,	   112)
-  RELOC_NUMBER (R_PPC64_TPREL16_HIGHA,	   113)
-  RELOC_NUMBER (R_PPC64_DTPREL16_HIGH,	   114)
-  RELOC_NUMBER (R_PPC64_DTPREL16_HIGHA,	   115)
-
-/* Added for ELFv2.  */
-  RELOC_NUMBER (R_PPC64_REL24_NOTOC,	   116)
-  RELOC_NUMBER (R_PPC64_ADDR64_LOCAL,	   117)
-  RELOC_NUMBER (R_PPC64_ENTRY,		   118)
-
-/* Marker reloc for inline plt call insns.  */
-  RELOC_NUMBER (R_PPC64_PLTSEQ,		   119)
-  RELOC_NUMBER (R_PPC64_PLTCALL,	   120)
 
 #ifndef RELOC_MACROS_GEN_FUNC
-/* Relocation only used internally by gas or ld.  If you need to use
-   these reloc numbers, you can change them to some other unused value
-   without affecting the ABI.  They will never appear in object files.  */
-  RELOC_NUMBER (R_PPC64_LO_DS_OPT,	   200)
-  RELOC_NUMBER (R_PPC64_16DX_HA,	   201)
+/* Fake relocation only used internally by ld.  */
+  RELOC_NUMBER (R_PPC64_LO_DS_OPT,	   128)
 #endif
-
-  RELOC_NUMBER (R_PPC64_REL16_HIGH,	   240)
-  RELOC_NUMBER (R_PPC64_REL16_HIGHA,	   241)
-  RELOC_NUMBER (R_PPC64_REL16_HIGHER,	   242)
-  RELOC_NUMBER (R_PPC64_REL16_HIGHERA,	   243)
-  RELOC_NUMBER (R_PPC64_REL16_HIGHEST,	   244)
-  RELOC_NUMBER (R_PPC64_REL16_HIGHESTA,	   245)
-
-/* Power9 split rel16 for addpcis.  */
-  RELOC_NUMBER (R_PPC64_REL16DX_HA,	   246)
-
 /* Support STT_GNU_IFUNC plt calls.  */
   RELOC_NUMBER (R_PPC64_JMP_IREL,	   247)
   RELOC_NUMBER (R_PPC64_IRELATIVE,	   248)
@@ -192,67 +160,8 @@ START_RELOC_NUMBERS (elf_ppc64_reloc_type)
 
 END_RELOC_NUMBERS (R_PPC64_max)
 
-#define IS_PPC64_TLS_RELOC(R)						\
-  (((R) >= R_PPC64_TLS && (R) <= R_PPC64_DTPREL16_HIGHESTA)		\
-   || ((R) >= R_PPC64_TPREL16_HIGH && (R) <= R_PPC64_DTPREL16_HIGHA))
-
-
-/* e_flags bits specifying ABI.
-   1 for original function descriptor using ABI,
-   2 for revised ABI without function descriptors,
-   0 for unspecified or not using any features affected by the differences.  */
-#define EF_PPC64_ABI	3
-
-/* The ELFv2 ABI uses three bits in the symbol st_other field of a
-   function definition to specify the number of bytes between a
-   function's global entry point and local entry point.
-   Values of two to six specify powers of two from four to sixty four
-   bytes.  For such functions:
-   The global entry point is used when it is necessary to set up the
-   toc pointer (r2) for the function.  Callers must enter the global
-   entry point with r12 set to the global entry point address.  On
-   return from the function r2 will contain the toc pointer for the
-   function.
-   The local entry point is used when r2 is known to already be valid
-   for the function.  There is no requirement on r12 when using the
-   local entry point, and on return r2 will contain the same value as
-   at entry.
-   A value of zero in these bits means that the function has a single
-   entry point with no requirement on r12 or r2, and that on return r2
-   will contain the same value as at entry.
-   A value of one means that the function has a single entry point
-   with no requirement on r12 or r2, and that r2 is *not* preserved.
-   A value of seven is reserved.  */
-#define STO_PPC64_LOCAL_BIT		5
-#define STO_PPC64_LOCAL_MASK		(7 << STO_PPC64_LOCAL_BIT)
-
-// 3 bit other field to bytes.
-static inline unsigned int
-ppc64_decode_local_entry(unsigned int other)
-{
-  return ((1 << other) >> 2) << 2;
-}
-
-// bytes to field value.
-static inline unsigned int
-ppc64_encode_local_entry(unsigned int val)
-{
-  return (val >= 4 * 4
-	  ? (val >= 8 * 4
-	     ? (val >= 16 * 4 ? 6 : 5)
-	     : 4)
-	  : (val >= 2 * 4
-	     ? 3
-	     : (val >= 1 * 4 ? 2 : 0)));
-}
-
-/* st_other to number of bytes.  */
-#define PPC64_LOCAL_ENTRY_OFFSET(other)				\
-  ppc64_decode_local_entry (((other) & STO_PPC64_LOCAL_MASK)	\
-			    >> STO_PPC64_LOCAL_BIT)
-/* number of bytes to st_other.  */
-#define PPC64_SET_LOCAL_ENTRY_OFFSET(val)		\
-  ppc64_encode_local_entry (val) << STO_PPC64_LOCAL_BIT
+#define IS_PPC64_TLS_RELOC(R) \
+  ((R) >= R_PPC64_TLS && (R) <= R_PPC64_DTPREL16_HIGHESTA)
 
 /* Specify the start of the .glink section.  */
 #define DT_PPC64_GLINK		DT_LOPROC
@@ -261,10 +170,7 @@ ppc64_encode_local_entry(unsigned int val)
 #define DT_PPC64_OPD		(DT_LOPROC + 1)
 #define DT_PPC64_OPDSZ		(DT_LOPROC + 2)
 
-/* Specify whether various optimisations are possible.  */
-#define DT_PPC64_OPT		(DT_LOPROC + 3)
-#define PPC64_OPT_TLS		1
-#define PPC64_OPT_MULTI_TOC	2
-#define PPC64_OPT_LOCALENTRY	4
+/* Specify that tls descriptors should be optimized.  */
+#define DT_PPC64_TLSOPT		(DT_LOPROC + 3)
 
 #endif /* _ELF_PPC64_H */

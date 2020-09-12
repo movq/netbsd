@@ -1,6 +1,8 @@
 /* Operating system specific defines to be used when targeting GCC for
    hosting on Windows32, using a Unix style C library and tools.
-   Copyright (C) 1995-2019 Free Software Foundation, Inc.
+   Copyright (C) 1995, 1996, 1997, 1998, 1999, 2000, 2001, 2002, 2003,
+   2004, 2005, 2007, 2008, 2009, 2010
+   Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -19,6 +21,7 @@ along with GCC; see the file COPYING3.  If not see
 <http://www.gnu.org/licenses/>.  */
 
 #define DBX_DEBUGGING_INFO 1
+#define SDB_DEBUGGING_INFO 1
 #if TARGET_64BIT_DEFAULT || defined (HAVE_GAS_PE_SECREL32_RELOC)
 #define DWARF2_DEBUGGING_INFO 1
 #endif
@@ -30,37 +33,11 @@ along with GCC; see the file COPYING3.  If not see
 #define PREFERRED_DEBUGGING_TYPE DBX_DEBUG
 #endif
 
-#undef TARGET_SEH
-#define TARGET_SEH  (TARGET_64BIT_MS_ABI && flag_unwind_tables)
-
-/* Win64 with SEH cannot represent DRAP stack frames.  Disable its use.
-   Force the use of different mechanisms to allocate aligned local data.  */
-#undef MAX_STACK_ALIGNMENT
-#define MAX_STACK_ALIGNMENT  (TARGET_SEH ? 128 : MAX_OFILE_ALIGNMENT)
-
-/* 32-bit Windows aligns the stack on a 4-byte boundary but SSE instructions
-   may require 16-byte alignment.  */
-#undef STACK_REALIGN_DEFAULT
-#define STACK_REALIGN_DEFAULT TARGET_SSE
-
-/* Support hooks for SEH.  */
-#undef  TARGET_ASM_UNWIND_EMIT
-#define TARGET_ASM_UNWIND_EMIT  i386_pe_seh_unwind_emit
-#undef  TARGET_ASM_UNWIND_EMIT_BEFORE_INSN
-#define TARGET_ASM_UNWIND_EMIT_BEFORE_INSN  false
-#undef  TARGET_ASM_FUNCTION_END_PROLOGUE
-#define TARGET_ASM_FUNCTION_END_PROLOGUE  i386_pe_seh_end_prologue
-#undef  TARGET_ASM_EMIT_EXCEPT_PERSONALITY
-#define TARGET_ASM_EMIT_EXCEPT_PERSONALITY i386_pe_seh_emit_except_personality
-#undef  TARGET_ASM_INIT_SECTIONS
-#define TARGET_ASM_INIT_SECTIONS  i386_pe_seh_init_sections
-#define SUBTARGET_ASM_UNWIND_INIT  i386_pe_seh_init
+#undef TARGET_64BIT_MS_ABI
+#define TARGET_64BIT_MS_ABI (!cfun ? ix86_abi == MS_ABI : TARGET_64BIT && cfun->machine->call_abi == MS_ABI)
 
 #undef DEFAULT_ABI
 #define DEFAULT_ABI (TARGET_64BIT ? MS_ABI : SYSV_ABI)
-
-#undef TARGET_PECOFF
-#define TARGET_PECOFF 1
 
 #if ! defined (USE_MINGW64_LEADING_UNDERSCORES)
 #undef USER_LABEL_PREFIX
@@ -93,24 +70,17 @@ along with GCC; see the file COPYING3.  If not see
   (TARGET_64BIT ? dbx64_register_map[(n)]		\
 		: svr4_dbx_register_map[(n)])
 
-/* The 64-bit MS_ABI changes the set of call-used registers.  */
-#undef DWARF_FRAME_REGISTERS
-#define DWARF_FRAME_REGISTERS (TARGET_64BIT ? 33 : 17)
-
 #ifdef HAVE_GAS_PE_SECREL32_RELOC
 /* Use section relative relocations for debugging offsets.  Unlike
    other targets that fake this by putting the section VMA at 0, PE
    won't allow it.  */
-#define ASM_OUTPUT_DWARF_OFFSET(FILE, SIZE, LABEL, OFFSET, SECTION) \
+#define ASM_OUTPUT_DWARF_OFFSET(FILE, SIZE, LABEL, SECTION)	\
   do {								\
     switch (SIZE)						\
       {								\
       case 4:							\
 	fputs ("\t.secrel32\t", FILE);				\
 	assemble_name (FILE, LABEL);				\
-	if ((OFFSET) != 0)					\
-	  fprintf (FILE, "+" HOST_WIDE_INT_PRINT_DEC,		\
-		   (HOST_WIDE_INT) (OFFSET));			\
 	break;							\
       case 8:							\
 	/* This is a hack.  There is no 64-bit section relative	\
@@ -120,9 +90,6 @@ along with GCC; see the file COPYING3.  If not see
 	   Fake the 64-bit offset by zero-extending it.  */	\
 	fputs ("\t.secrel32\t", FILE);				\
 	assemble_name (FILE, LABEL);				\
-	if ((OFFSET) != 0)					\
-	  fprintf (FILE, "+" HOST_WIDE_INT_PRINT_DEC,		\
-		   (HOST_WIDE_INT) (OFFSET));			\
 	fputs ("\n\t.long\t0", FILE);				\
 	break;							\
       default:							\
@@ -133,23 +100,21 @@ along with GCC; see the file COPYING3.  If not see
 
 #define TARGET_EXECUTABLE_SUFFIX ".exe"
 
+#include <stdio.h>
+
 #define TARGET_OS_CPP_BUILTINS()					\
   do									\
     {									\
 	if (!TARGET_64BIT)						\
 	  builtin_define ("_X86_=1");					\
-	if (TARGET_SEH)							\
-	  builtin_define ("__SEH__");				\
 	builtin_assert ("system=winnt");				\
 	builtin_define ("__stdcall=__attribute__((__stdcall__))");	\
 	builtin_define ("__fastcall=__attribute__((__fastcall__))");	\
-	builtin_define ("__thiscall=__attribute__((__thiscall__))");	\
 	builtin_define ("__cdecl=__attribute__((__cdecl__))");		\
 	if (!flag_iso)							\
 	  {								\
 	    builtin_define ("_stdcall=__attribute__((__stdcall__))");	\
 	    builtin_define ("_fastcall=__attribute__((__fastcall__))");	\
-	    builtin_define ("_thiscall=__attribute__((__thiscall__))");	\
 	    builtin_define ("_cdecl=__attribute__((__cdecl__))");	\
 	  }								\
 	/* Even though linkonce works with static libs, this is needed 	\
@@ -181,9 +146,6 @@ along with GCC; see the file COPYING3.  If not see
 #undef MATH_LIBRARY
 #define MATH_LIBRARY ""
 
-#undef TARGET_LIBC_HAS_FUNCTION
-#define TARGET_LIBC_HAS_FUNCTION no_c99_libc_has_function
-
 #define SIZE_TYPE (TARGET_64BIT ? "long long unsigned int" : "unsigned int")
 #define PTRDIFF_TYPE (TARGET_64BIT ? "long long int" : "int")
 
@@ -193,6 +155,12 @@ along with GCC; see the file COPYING3.  If not see
 /* Windows64 continues to use a 32-bit long type.  */
 #undef LONG_TYPE_SIZE
 #define LONG_TYPE_SIZE 32
+
+/* Enable parsing of #pragma pack(push,<n>) and #pragma pack(pop).  */
+#define HANDLE_PRAGMA_PACK_PUSH_POP 1
+
+union tree_node;
+#define TREE union tree_node *
 
 #define drectve_section() \
   (fprintf (asm_out_file, "\t.section .drectve\n"), \
@@ -208,8 +176,21 @@ along with GCC; see the file COPYING3.  If not see
 #undef  SUBTARGET_OVERRIDE_OPTIONS
 #define SUBTARGET_OVERRIDE_OPTIONS					\
 do {									\
-  flag_pic = TARGET_64BIT ? 1 : 0;                                      \
-} while (0)
+  if (TARGET_64BIT && flag_pic != 1)					\
+    {									\
+      if (flag_pic > 1)							\
+        warning (0,							\
+	         "-fPIC ignored for target (all code is position independent)"\
+                 );                         				\
+      flag_pic = 1;							\
+    }									\
+  else if (!TARGET_64BIT && flag_pic)					\
+    {									\
+      warning (0, "-f%s ignored for target (all code is position independent)",\
+	       (flag_pic > 1) ? "PIC" : "pic");				\
+      flag_pic = 0;							\
+    }									\
+} while (0)								\
 
 /* Define this macro if references to a symbol must be treated
    differently depending on something about the variable or
@@ -229,11 +210,6 @@ do {									\
    Note that we can be called twice on the same decl.  */
 
 #define SUBTARGET_ENCODE_SECTION_INFO  i386_pe_encode_section_info
-
-/* Local and global relocs can be placed always into readonly memory
-   for PE-COFF targets.  */
-#undef TARGET_ASM_RELOC_RW_MASK
-#define TARGET_ASM_RELOC_RW_MASK i386_pe_reloc_rw_mask
 
 /* Output a common block.  */
 #undef ASM_OUTPUT_ALIGNED_DECL_COMMON
@@ -259,14 +235,13 @@ do {						\
   fputs ((NAME), (STREAM));			\
 } while (0)
 
-/* This does much the same in memory rather than to a stream.  */
-#undef TARGET_MANGLE_ASSEMBLER_NAME
-#define TARGET_MANGLE_ASSEMBLER_NAME i386_pe_mangle_assembler_name
-
 
 /* Emit code to check the stack when allocating more than 4000
    bytes in one go.  */
 #define CHECK_STACK_LIMIT 4000
+
+#undef STACK_BOUNDARY
+#define STACK_BOUNDARY	(ix86_abi == MS_ABI ? 128 : BITS_PER_WORD)
 
 /* By default, target has a 80387, uses IEEE compatible arithmetic,
    returns float values in the 387 and needs stack probes.
@@ -287,7 +262,7 @@ do {						\
 
 #undef ASM_OUTPUT_ALIGN
 #define ASM_OUTPUT_ALIGN(FILE,LOG)	\
-    if ((LOG) != 0) fprintf ((FILE), "\t.align %d\n", 1 << (LOG))
+    if ((LOG)!=0) fprintf ((FILE), "\t.align %d\n", 1<<(LOG))
 
 /* Windows uses explicit import from shared libraries.  */
 #define MULTIPLE_SYMBOL_SPACES 1
@@ -304,31 +279,18 @@ do {						\
 #define TARGET_SECTION_TYPE_FLAGS  i386_pe_section_type_flags
 
 /* Write the extra assembler code needed to declare a function
-   properly.  */
+   properly.  If we are generating SDB debugging information, this
+   will happen automatically, so we only need to handle other cases.  */
 #undef ASM_DECLARE_FUNCTION_NAME
-#define ASM_DECLARE_FUNCTION_NAME(FILE, NAME, DECL) \
-  i386_pe_start_function (FILE, NAME, DECL)
-
-/* Write the extra assembler code needed to declare the name of a
-   cold function partition properly.  */
-
-#undef ASM_DECLARE_COLD_FUNCTION_NAME
-#define ASM_DECLARE_COLD_FUNCTION_NAME(FILE, NAME, DECL)	\
-  do								\
-    {								\
-      i386_pe_declare_function_type (FILE, NAME, 0);		\
-      i386_pe_seh_cold_init (FILE, NAME);			\
-      ASM_OUTPUT_LABEL (FILE, NAME);				\
-    }								\
+#define ASM_DECLARE_FUNCTION_NAME(FILE, NAME, DECL)			\
+  do									\
+    {									\
+      i386_pe_maybe_record_exported_symbol (DECL, NAME, 0);		\
+      if (write_symbols != SDB_DEBUG)					\
+	i386_pe_declare_function_type (FILE, NAME, TREE_PUBLIC (DECL));	\
+      ASM_OUTPUT_LABEL (FILE, NAME);					\
+    }									\
   while (0)
-
-#undef ASM_DECLARE_FUNCTION_SIZE
-#define ASM_DECLARE_FUNCTION_SIZE(FILE,NAME,DECL) \
-  i386_pe_end_function (FILE, NAME, DECL)
-
-#undef ASM_DECLARE_COLD_FUNCTION_SIZE
-#define ASM_DECLARE_COLD_FUNCTION_SIZE(FILE,NAME,DECL) \
-  i386_pe_end_cold_function (FILE, NAME, DECL)
 
 /* Add an external function to the list of functions to be declared at
    the end of the file.  */
@@ -353,27 +315,27 @@ do {						\
 #undef TARGET_ASM_FILE_END
 #define TARGET_ASM_FILE_END i386_pe_file_end
 
-/* Kludge because of missing PE-COFF support for early LTO debug.  */
-#undef  TARGET_ASM_LTO_START
-#define TARGET_ASM_LTO_START i386_pe_asm_lto_start
-#undef  TARGET_ASM_LTO_END
-#define TARGET_ASM_LTO_END i386_pe_asm_lto_end
-
 #undef ASM_COMMENT_START
 #define ASM_COMMENT_START " #"
 
 #ifndef DWARF2_UNWIND_INFO
-/* If configured with --disable-sjlj-exceptions, use DWARF2 for 32-bit
-   mode else default to SJLJ.  64-bit code uses SEH unless you request
-   SJLJ.  */
+/* If configured with --disable-sjlj-exceptions, use DWARF2, else
+   default to SJLJ.  */
 #if  (defined (CONFIG_SJLJ_EXCEPTIONS) && !CONFIG_SJLJ_EXCEPTIONS)
 /* The logic of this #if must be kept synchronised with the logic
-   for selecting the tmake_eh_file fragment in libgcc/config.host.  */
+   for selecting the tmake_eh_file fragment in config.gcc.  */
 #define DWARF2_UNWIND_INFO 1
+/* If multilib is selected break build as sjlj is required.  */
+#if defined (TARGET_BI_ARCH)
+#error For 64-bit windows and 32-bit based multilib version of gcc just SJLJ exceptions are supported.
+#endif
 #else
 #define DWARF2_UNWIND_INFO 0
 #endif
 #endif
+
+/* Don't assume anything about the header files.  */
+#define NO_IMPLICIT_EXTERN_C
 
 #undef PROFILE_HOOK
 #define PROFILE_HOOK(LABEL)						\
@@ -420,6 +382,11 @@ do {						\
 #define BIGGEST_FIELD_ALIGNMENT 64
 #endif
 
+/* A bit-field declared as `int' forces `int' alignment for the struct.  */
+#undef PCC_BITFIELD_TYPE_MATTERS
+#define PCC_BITFIELD_TYPE_MATTERS 1
+#define GROUP_BITFIELDS_BY_ALIGN TYPE_NATIVE(rec)
+
 /* Enable alias attribute support.  */
 #ifndef SET_ASM_OP
 #define SET_ASM_OP "\t.set\t"
@@ -450,8 +417,12 @@ do {						\
       fputc ('\n', (FILE));           \
     }                                 \
   while (0)
-
 #endif /* HAVE_GAS_WEAK */
+
+/* FIXME: SUPPORTS_WEAK && TARGET_HAVE_NAMED_SECTIONS is true,
+   but for .jcr section to work we also need crtbegin and crtend
+   objects.  */
+#define TARGET_USE_JCR_SECTION 1
 
 /* Decide whether it is safe to use a local alias for a virtual function
    when constructing thunks.  */
@@ -459,10 +430,8 @@ do {						\
 #define TARGET_USE_LOCAL_THUNK_ALIAS_P(DECL) (!DECL_ONE_ONLY (DECL))
 
 #define SUBTARGET_ATTRIBUTE_TABLE \
-  { "selectany", 0, 0, true, false, false, false, \
-    ix86_handle_selectany_attribute, NULL }
-  /* { name, min_len, max_len, decl_req, type_req, fn_type_req,
-       affects_type_identity, handler, exclude } */
+  { "selectany", 0, 0, true, false, false, ix86_handle_selectany_attribute }
+  /* { name, min_len, max_len, decl_req, type_req, fn_type_req, handler } */
 
 /*  mcount() does not need a counter variable.  */
 #undef NO_PROFILE_COUNTERS
@@ -470,17 +439,10 @@ do {						\
 
 #define TARGET_VALID_DLLIMPORT_ATTRIBUTE_P i386_pe_valid_dllimport_attribute_p
 #define TARGET_CXX_ADJUST_CLASS_AT_DEFINITION i386_pe_adjust_class_at_definition
-#define SUBTARGET_MANGLE_DECL_ASSEMBLER_NAME i386_pe_mangle_decl_assembler_name
+#define TARGET_MANGLE_DECL_ASSEMBLER_NAME i386_pe_mangle_decl_assembler_name
 
-#undef TARGET_ASM_ASSEMBLE_VISIBILITY
-#define TARGET_ASM_ASSEMBLE_VISIBILITY i386_pe_assemble_visibility
+#undef TREE
 
-#undef SUB_TARGET_RECORD_STUB
-#define SUB_TARGET_RECORD_STUB i386_pe_record_stub
-
-/* Static stack checking is supported by means of probes.  */
-#define STACK_CHECK_STATIC_BUILTIN 1
-
-#ifndef HAVE_GAS_ALIGNED_COMM
-# define HAVE_GAS_ALIGNED_COMM 0
+#ifndef BUFSIZ
+# undef FILE
 #endif

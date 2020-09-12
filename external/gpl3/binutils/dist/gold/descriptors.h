@@ -1,6 +1,6 @@
 // descriptors.h -- manage file descriptors for gold   -*- C++ -*-
 
-// Copyright (C) 2008-2020 Free Software Foundation, Inc.
+// Copyright 2008 Free Software Foundation, Inc.
 // Written by Ian Lance Taylor <iant@google.com>.
 
 // This file is part of gold.
@@ -25,10 +25,10 @@
 
 #include <vector>
 
-#include "gold-threads.h"
-
 namespace gold
 {
+
+class Lock;
 
 // This class manages file descriptors for gold.
 
@@ -56,10 +56,6 @@ class Descriptors
   void
   release(int descriptor, bool permanent);
 
-  // Close all the descriptors open for reading.
-  void
-  close_all();
-
  private:
   // Information kept for a descriptor.
   struct Open_descriptor
@@ -73,8 +69,6 @@ class Descriptors
     bool inuse;
     // Whether this is a write descriptor.
     bool is_write;
-    // Whether the descriptor is on the stack.
-    bool is_on_stack;
   };
 
   bool
@@ -82,8 +76,6 @@ class Descriptors
 
   // We need to lock before accessing any fields.
   Lock* lock_;
-  // Used to initialize the lock_ field exactly once.
-  Initialize_lock initialize_lock_;
   // Information for descriptors.
   std::vector<Open_descriptor> open_descriptors_;
   // Top of stack.
@@ -107,10 +99,6 @@ open_descriptor(int descriptor, const char* name, int flags, int mode = 0)
 inline void
 release_descriptor(int descriptor, bool permanent)
 { descriptors.release(descriptor, permanent); }
-
-inline void
-close_all_descriptors()
-{ descriptors.close_all(); }
 
 } // End namespace gold.
 

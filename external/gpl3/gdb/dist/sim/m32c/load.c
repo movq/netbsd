@@ -1,6 +1,7 @@
 /* load.c --- loading object files into the M32C simulator.
 
-Copyright (C) 2005-2019 Free Software Foundation, Inc.
+Copyright (C) 2005, 2007, 2008, 2009, 2010, 2011
+Free Software Foundation, Inc.
 Contributed by Red Hat, Inc.
 
 This file is part of the GNU simulators.
@@ -18,7 +19,7 @@ GNU General Public License for more details.
 You should have received a copy of the GNU General Public License
 along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-#include "config.h"
+
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
@@ -27,9 +28,8 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #include "cpu.h"
 #include "mem.h"
-#include "load.h"
 
-int (*decode_opcode) (void) = 0;
+int (*decode_opcode) () = 0;
 int default_machine = 0;
 
 void
@@ -89,13 +89,12 @@ m32c_load (bfd * prog)
 	{
 	  char *buf;
 	  bfd_size_type size;
-	  bfd_vma base;
 
 	  size = bfd_get_section_size (s);
 	  if (size <= 0)
 	    continue;
 
-	  base = bfd_section_lma (prog, s);
+	  bfd_vma base = bfd_section_lma (prog, s);
 	  if (verbose)
 	    fprintf (stderr, "[load a=%08x s=%08x %s]\n",
 		     (int) base, (int) size, bfd_get_section_name (prog, s));

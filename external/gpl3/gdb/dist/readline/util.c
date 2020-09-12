@@ -1,24 +1,24 @@
 /* util.c -- readline utility functions */
 
-/* Copyright (C) 1987-2010 Free Software Foundation, Inc.
+/* Copyright (C) 1987-2005 Free Software Foundation, Inc.
 
-   This file is part of the GNU Readline Library (Readline), a library
-   for reading lines of text with interactive input and history editing.      
+   This file is part of the GNU Readline Library, a library for
+   reading lines of text with interactive input and history editing.
 
-   Readline is free software: you can redistribute it and/or modify
-   it under the terms of the GNU General Public License as published by
-   the Free Software Foundation, either version 3 of the License, or
+   The GNU Readline Library is free software; you can redistribute it
+   and/or modify it under the terms of the GNU General Public License
+   as published by the Free Software Foundation; either version 2, or
    (at your option) any later version.
 
-   Readline is distributed in the hope that it will be useful,
-   but WITHOUT ANY WARRANTY; without even the implied warranty of
-   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   The GNU Readline Library is distributed in the hope that it will be
+   useful, but WITHOUT ANY WARRANTY; without even the implied warranty
+   of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
    GNU General Public License for more details.
 
-   You should have received a copy of the GNU General Public License
-   along with Readline.  If not, see <http://www.gnu.org/licenses/>.
-*/
-
+   The GNU General Public License is often shipped with GNU software, and
+   is generally kept in a file called COPYING or LICENSE.  If you do not
+   have a copy of the license, write to the Free Software Foundation,
+   59 Temple Place, Suite 330, Boston, MA 02111 USA. */
 #define READLINE_LIBRARY
 
 #if defined (HAVE_CONFIG_H)
@@ -55,7 +55,6 @@
 
 #include "rlprivate.h"
 #include "xmalloc.h"
-#include "rlshell.h"
 
 /* **************************************************************** */
 /*								    */
@@ -67,7 +66,7 @@
    in words, or 1 if it is. */
 
 int _rl_allow_pathname_alphabetic_chars = 0;
-static const char * const pathname_alphabetic_chars = "/-_=~.#$";
+static const char *pathname_alphabetic_chars = "/-_=~.#$";
 
 int
 rl_alphabetic (c)
@@ -82,7 +81,8 @@ rl_alphabetic (c)
 
 #if defined (HANDLE_MULTIBYTE)
 int
-_rl_walphabetic (wchar_t wc)
+_rl_walphabetic (wc)
+     wchar_t wc;
 {
   int c;
 
@@ -109,7 +109,7 @@ _rl_abort_internal ()
     _rl_pop_executing_macro ();
 
   rl_last_func = (rl_command_func_t *)NULL;
-  longjmp (_rl_top_level, 1);
+  longjmp (readline_top_level, 1);
   return (0);
 }
 
@@ -118,13 +118,6 @@ rl_abort (count, key)
      int count, key;
 {
   return (_rl_abort_internal ());
-}
-
-int
-_rl_null_function (count, key)
-     int count, key;
-{
-  return 0;
 }
 
 int
@@ -192,7 +185,6 @@ rl_tilde_expand (ignore, key)
     {
       homedir = tilde_expand ("~");
       _rl_replace_text (homedir, start, end);
-      xfree (homedir);
       return (0);
     }
   else if (rl_line_buffer[start] != '~')
@@ -220,95 +212,13 @@ rl_tilde_expand (ignore, key)
       strncpy (temp, rl_line_buffer + start, len);
       temp[len] = '\0';
       homedir = tilde_expand (temp);
-      xfree (temp);
+      free (temp);
 
       _rl_replace_text (homedir, start, end);
-      xfree (homedir);
     }
 
   return (0);
 }
-
-#if defined (USE_VARARGS)
-void
-#if defined (PREFER_STDARG)
-_rl_ttymsg (const char *format, ...)
-#else
-_rl_ttymsg (va_alist)
-     va_dcl
-#endif
-{
-  va_list args;
-#if defined (PREFER_VARARGS)
-  char *format;
-#endif
-
-#if defined (PREFER_STDARG)
-  va_start (args, format);
-#else
-  va_start (args);
-  format = va_arg (args, char *);
-#endif
-
-  fprintf (stderr, "readline: ");
-  vfprintf (stderr, format, args);
-  fprintf (stderr, "\n");
-  fflush (stderr);
-
-  va_end (args);
-
-  rl_forced_update_display ();
-}
-
-void
-#if defined (PREFER_STDARG)
-_rl_errmsg (const char *format, ...)
-#else
-_rl_errmsg (va_alist)
-     va_dcl
-#endif
-{
-  va_list args;
-#if defined (PREFER_VARARGS)
-  char *format;
-#endif
-
-#if defined (PREFER_STDARG)
-  va_start (args, format);
-#else
-  va_start (args);
-  format = va_arg (args, char *);
-#endif
-
-  fprintf (stderr, "readline: ");
-  vfprintf (stderr, format, args);
-  fprintf (stderr, "\n");
-  fflush (stderr);
-
-  va_end (args);
-}
-
-#else /* !USE_VARARGS */
-void
-_rl_ttymsg (format, arg1, arg2)
-     char *format;
-{
-  fprintf (stderr, "readline: ");
-  fprintf (stderr, format, arg1, arg2);
-  fprintf (stderr, "\n");
-
-  rl_forced_update_display ();
-}
-
-void
-_rl_errmsg (format, arg1, arg2)
-     char *format;
-{
-  fprintf (stderr, "readline: ");
-  fprintf (stderr, format, arg1, arg2);
-  fprintf (stderr, "\n");
-}
-#endif /* !USE_VARARGS */
 
 /* **************************************************************** */
 /*								    */
@@ -367,56 +277,41 @@ _rl_strpbrk (string1, string2)
 
 #if !defined (HAVE_STRCASECMP)
 /* Compare at most COUNT characters from string1 to string2.  Case
-   doesn't matter (strncasecmp). */
+   doesn't matter. */
 int
 _rl_strnicmp (string1, string2, count)
      char *string1, *string2;
      int count;
 {
-  register char *s1, *s2;
-  int d;
+  register char ch1, ch2;
 
-  if (count <= 0 || (string1 == string2))
-    return 0;
-
-  s1 = string1;
-  s2 = string2;
-  do
+  while (count)
     {
-      d = _rl_to_lower (*s1) - _rl_to_lower (*s2);	/* XXX - cast to unsigned char? */
-      if (d != 0)
-	return d;
-      if (*s1++ == '\0')
+      ch1 = *string1++;
+      ch2 = *string2++;
+      if (_rl_to_upper(ch1) == _rl_to_upper(ch2))
+	count--;
+      else
         break;
-      s2++;
     }
-  while (--count != 0);
-
-  return (0);
+  return (count);
 }
 
-/* strcmp (), but caseless (strcasecmp). */
+/* strcmp (), but caseless. */
 int
 _rl_stricmp (string1, string2)
      char *string1, *string2;
 {
-  register char *s1, *s2;
-  int d;
+  register char ch1, ch2;
 
-  s1 = string1;
-  s2 = string2;
-
-  if (s1 == s2)
-    return 0;
-
-  while ((d = _rl_to_lower (*s1) - _rl_to_lower (*s2)) == 0)
+  while (*string1 && *string2)
     {
-      if (*s1++ == '\0')
-        return 0;
-      s2++;
+      ch1 = *string1++;
+      ch2 = *string2++;
+      if (_rl_to_upper(ch1) != _rl_to_upper(ch2))
+	return (1);
     }
-
-  return (d);
+  return (*string1 - *string2);
 }
 #endif /* !HAVE_STRCASECMP */
 
@@ -449,16 +344,6 @@ FUNCTION_FOR_MACRO (_rl_to_lower)
 FUNCTION_FOR_MACRO (_rl_to_upper)
 FUNCTION_FOR_MACRO (_rl_uppercase_p)
 
-/* A convenience function, to force memory deallocation to be performed
-   by readline.  DLLs on Windows apparently require this. */
-void
-rl_free (mem)
-     void *mem;
-{
-  if (mem)
-    free (mem);
-}
-
 /* Backwards compatibility, now that savestring has been removed from
    all `public' readline header files. */
 #undef _rl_savestring
@@ -468,70 +353,3 @@ _rl_savestring (s)
 {
   return (strcpy ((char *)xmalloc (1 + (int)strlen (s)), (s)));
 }
-
-#if defined (USE_VARARGS)
-static FILE *_rl_tracefp;
-
-void
-#if defined (PREFER_STDARG)
-_rl_trace (const char *format, ...)
-#else
-_rl_trace (va_alist)
-     va_dcl
-#endif
-{
-  va_list args;
-#if defined (PREFER_VARARGS)
-  char *format;
-#endif
-
-#if defined (PREFER_STDARG)
-  va_start (args, format);
-#else
-  va_start (args);
-  format = va_arg (args, char *);
-#endif
-
-  if (_rl_tracefp == 0)
-    _rl_tropen ();
-  vfprintf (_rl_tracefp, format, args);
-  fprintf (_rl_tracefp, "\n");
-  fflush (_rl_tracefp);
-
-  va_end (args);
-}
-
-int
-_rl_tropen ()
-{
-  char fnbuf[128];
-
-  if (_rl_tracefp)
-    fclose (_rl_tracefp);
-#if defined (_WIN32) && !defined (__CYGWIN__)
-  /* Windows doesn't have /var/tmp, so open the trace file in the
-     user's temporary directory instead.  */
-  sprintf (fnbuf, "%s/rltrace.%ld",
-	   (sh_get_env_value ("TEMP")
-	    ? sh_get_env_value ("TEMP")
-	    : "."),
-	   getpid ());
-#else
-  snprintf (fnbuf, sizeof(fnbuf), "/var/tmp/rltrace.%ld", (long)getpid());
-#endif
-  unlink (fnbuf);
-  _rl_tracefp = fopen (fnbuf, "w+");
-  return _rl_tracefp != 0;
-}
-
-int
-_rl_trclose ()
-{
-  int r;
-
-  r = fclose (_rl_tracefp);
-  _rl_tracefp = 0;
-  return r;
-}
-
-#endif

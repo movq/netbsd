@@ -1,4 +1,4 @@
-/* Copyright (C) 2009-2019 Free Software Foundation, Inc.
+/* Copyright (C) 2009, 2010, 2011 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -25,24 +25,10 @@
 #include <unistd.h>
 #include <sys/ioctl.h>
 #include <sys/types.h>
-#include "common/gdb_wait.h"
+#include <sys/wait.h>
 #include <signal.h>
-#include "common/filestuff.h"
-#include "common/common-inferior.h"
-#include "nat/fork-inferior.h"
 
 int using_threads = 1;
-
-const struct target_desc *lynx_tdesc;
-
-/* Per-process private data.  */
-
-struct process_info_private
-{
-  /* The PTID obtained from the last wait performed on this process.
-     Initialized to null_ptid until the first wait is performed.  */
-  ptid_t last_wait_event_ptid;
-};
 
 /* Print a debug trace on standard output if debug_threads is set.  */
 
@@ -64,14 +50,14 @@ lynx_debug (char *string, ...)
 /* Build a ptid_t given a PID and a LynxOS TID.  */
 
 static ptid_t
-lynx_ptid_t (int pid, long tid)
+lynx_ptid_build (int pid, long tid)
 {
   /* brobecker/2010-06-21: It looks like the LWP field in ptids
      should be distinct for each thread (see write_ptid where it
      writes the thread ID from the LWP).  So instead of storing
      the LynxOS tid in the tid field of the ptid, we store it in
      the lwp field.  */
-  return ptid_t (pid, tid, 0);
+  return ptid_build (pid, tid, 0);
 }
 
 /* Return the process ID of the given PTID.
@@ -83,7 +69,7 @@ lynx_ptid_t (int pid, long tid)
 static int
 lynx_ptid_get_pid (ptid_t ptid)
 {
-  return ptid.pid ();
+  return ptid_get_pid (ptid);
 }
 
 /* Return the LynxOS tid of the given PTID.  */
@@ -91,9 +77,9 @@ lynx_ptid_get_pid (ptid_t ptid)
 static long
 lynx_ptid_get_tid (ptid_t ptid)
 {
-  /* See lynx_ptid_t: The LynxOS tid is stored inside the lwp field
+  /* See lynx_ptid_build: The LynxOS tid is stored inside the lwp field
      of the ptid.  */
-  return ptid.lwp ();
+  return ptid_get_lwp (ptid);
 }
 
 /* For a given PTID, return the associated PID as known by the LynxOS
@@ -110,79 +96,169 @@ lynx_ptrace_pid_from_ptid (ptid_t ptid)
 static char *
 ptrace_request_to_str (int request)
 {
-#define CASE(X) case X: return #X
   switch (request)
     {
-      CASE(PTRACE_TRACEME);
-      CASE(PTRACE_PEEKTEXT);
-      CASE(PTRACE_PEEKDATA);
-      CASE(PTRACE_PEEKUSER);
-      CASE(PTRACE_POKETEXT);
-      CASE(PTRACE_POKEDATA);
-      CASE(PTRACE_POKEUSER);
-      CASE(PTRACE_CONT);
-      CASE(PTRACE_KILL);
-      CASE(PTRACE_SINGLESTEP);
-      CASE(PTRACE_ATTACH);
-      CASE(PTRACE_DETACH);
-      CASE(PTRACE_GETREGS);
-      CASE(PTRACE_SETREGS);
-      CASE(PTRACE_GETFPREGS);
-      CASE(PTRACE_SETFPREGS);
-      CASE(PTRACE_READDATA);
-      CASE(PTRACE_WRITEDATA);
-      CASE(PTRACE_READTEXT);
-      CASE(PTRACE_WRITETEXT);
-      CASE(PTRACE_GETFPAREGS);
-      CASE(PTRACE_SETFPAREGS);
-      CASE(PTRACE_GETWINDOW);
-      CASE(PTRACE_SETWINDOW);
-      CASE(PTRACE_SYSCALL);
-      CASE(PTRACE_DUMPCORE);
-      CASE(PTRACE_SETWRBKPT);
-      CASE(PTRACE_SETACBKPT);
-      CASE(PTRACE_CLRBKPT);
-      CASE(PTRACE_GET_UCODE);
+      case PTRACE_TRACEME:
+        return "PTRACE_TRACEME";
+        break;
+      case PTRACE_PEEKTEXT:
+        return "PTRACE_PEEKTEXT";
+        break;
+      case PTRACE_PEEKDATA:
+        return "PTRACE_PEEKDATA";
+        break;
+      case PTRACE_PEEKUSER:
+        return "PTRACE_PEEKUSER";
+        break;
+      case PTRACE_POKETEXT:
+        return "PTRACE_POKETEXT";
+        break;
+      case PTRACE_POKEDATA:
+        return "PTRACE_POKEDATA";
+        break;
+      case PTRACE_POKEUSER:
+        return "PTRACE_POKEUSER";
+        break;
+      case PTRACE_CONT:
+        return "PTRACE_CONT";
+        break;
+      case PTRACE_KILL:
+        return "PTRACE_KILL";
+        break;
+      case PTRACE_SINGLESTEP:
+        return "PTRACE_SINGLESTEP";
+        break;
+      case PTRACE_ATTACH:
+        return "PTRACE_ATTACH";
+        break;
+      case PTRACE_DETACH:
+        return "PTRACE_DETACH";
+        break;
+      case PTRACE_GETREGS:
+        return "PTRACE_GETREGS";
+        break;
+      case PTRACE_SETREGS:
+        return "PTRACE_SETREGS";
+        break;
+      case PTRACE_GETFPREGS:
+        return "PTRACE_GETFPREGS";
+        break;
+      case PTRACE_SETFPREGS:
+        return "PTRACE_SETFPREGS";
+        break;
+      case PTRACE_READDATA:
+        return "PTRACE_READDATA";
+        break;
+      case PTRACE_WRITEDATA:
+        return "PTRACE_WRITEDATA";
+        break;
+      case PTRACE_READTEXT:
+        return "PTRACE_READTEXT";
+        break;
+      case PTRACE_WRITETEXT:
+        return "PTRACE_WRITETEXT";
+        break;
+      case PTRACE_GETFPAREGS:
+        return "PTRACE_GETFPAREGS";
+        break;
+      case PTRACE_SETFPAREGS:
+        return "PTRACE_SETFPAREGS";
+        break;
+      case PTRACE_GETWINDOW:
+        return "PTRACE_GETWINDOW";
+        break;
+      case PTRACE_SETWINDOW:
+        return "PTRACE_SETWINDOW";
+        break;
+      case PTRACE_SYSCALL:
+        return "PTRACE_SYSCALL";
+        break;
+      case PTRACE_DUMPCORE:
+        return "PTRACE_DUMPCORE";
+        break;
+      case PTRACE_SETWRBKPT:
+        return "PTRACE_SETWRBKPT";
+        break;
+      case PTRACE_SETACBKPT:
+        return "PTRACE_SETACBKPT";
+        break;
+      case PTRACE_CLRBKPT:
+        return "PTRACE_CLRBKPT";
+        break;
+      case PTRACE_GET_UCODE:
+        return "PTRACE_GET_UCODE";
+        break;
 #ifdef PT_READ_GPR
-      CASE(PT_READ_GPR);
+      case PT_READ_GPR:
+        return "PT_READ_GPR";
+        break;
 #endif
 #ifdef PT_WRITE_GPR
-      CASE(PT_WRITE_GPR);
+      case PT_WRITE_GPR:
+        return "PT_WRITE_GPR";
+        break;
 #endif
 #ifdef PT_READ_FPR
-      CASE(PT_READ_FPR);
+      case PT_READ_FPR:
+        return "PT_READ_FPR";
+        break;
 #endif
 #ifdef PT_WRITE_FPR
-      CASE(PT_WRITE_FPR);
+      case PT_WRITE_FPR:
+        return "PT_WRITE_FPR";
+        break;
 #endif
 #ifdef PT_READ_VPR
-      CASE(PT_READ_VPR);
+      case PT_READ_VPR:
+        return "PT_READ_VPR";
+        break;
 #endif
 #ifdef PT_WRITE_VPR
-      CASE(PT_WRITE_VPR);
+      case PT_WRITE_VPR:
+        return "PT_WRITE_VPR";
+        break;
 #endif
 #ifdef PTRACE_PEEKUSP
-      CASE(PTRACE_PEEKUSP);
+      case PTRACE_PEEKUSP:
+        return "PTRACE_PEEKUSP";
+        break;
 #endif
 #ifdef PTRACE_POKEUSP
-      CASE(PTRACE_POKEUSP);
+      case PTRACE_POKEUSP:
+        return "PTRACE_POKEUSP";
+        break;
 #endif
-      CASE(PTRACE_PEEKTHREAD);
-      CASE(PTRACE_THREADUSER);
-      CASE(PTRACE_FPREAD);
-      CASE(PTRACE_FPWRITE);
-      CASE(PTRACE_SETSIG);
-      CASE(PTRACE_CONT_ONE);
-      CASE(PTRACE_KILL_ONE);
-      CASE(PTRACE_SINGLESTEP_ONE);
-      CASE(PTRACE_GETLOADINFO);
-      CASE(PTRACE_GETTRACESIG);
-#ifdef PTRACE_GETTHREADLIST
-      CASE(PTRACE_GETTHREADLIST);
-#endif
+      case PTRACE_PEEKTHREAD:
+        return "PTRACE_PEEKTHREAD";
+        break;
+      case PTRACE_THREADUSER:
+        return "PTRACE_THREADUSER";
+        break;
+      case PTRACE_FPREAD:
+        return "PTRACE_FPREAD";
+        break;
+      case PTRACE_FPWRITE:
+        return "PTRACE_FPWRITE";
+        break;
+      case PTRACE_SETSIG:
+        return "PTRACE_SETSIG";
+        break;
+      case PTRACE_CONT_ONE:
+        return "PTRACE_CONT_ONE";
+        break;
+      case PTRACE_KILL_ONE:
+        return "PTRACE_KILL_ONE";
+        break;
+      case PTRACE_SINGLESTEP_ONE:
+        return "PTRACE_SINGLESTEP_ONE";
+        break;
+      case PTRACE_GETLOADINFO:
+        return "PTRACE_GETLOADINFO";
+        break;
+      case PTRACE_GETTHREADLIST:
+        return "PTRACE_GETTHREADLIST";
+        break;
     }
-#undef CASE
-
   return "<unknown-request>";
 }
 
@@ -210,101 +286,41 @@ lynx_ptrace (int request, ptid_t ptid, int addr, int data, int addr2)
   return result;
 }
 
-/* Call add_process with the given parameters, and initializes
-   the process' private data.  */
-
-static struct process_info *
-lynx_add_process (int pid, int attached)
-{
-  struct process_info *proc;
-
-  proc = add_process (pid, attached);
-  proc->tdesc = lynx_tdesc;
-  proc->priv = XCNEW (struct process_info_private);
-  proc->priv->last_wait_event_ptid = null_ptid;
-
-  return proc;
-}
-
-/* Callback used by fork_inferior to start tracing the inferior.  */
-
-static void
-lynx_ptrace_fun ()
-{
-  int pgrp;
-
-  /* Switch child to its own process group so that signals won't
-     directly affect GDBserver. */
-  pgrp = getpid();
-  if (pgrp < 0)
-    trace_start_error_with_name ("pgrp");
-  if (setpgid (0, pgrp) < 0)
-    trace_start_error_with_name ("setpgid");
-  if (ioctl (0, TIOCSPGRP, &pgrp) < 0)
-    trace_start_error_with_name ("ioctl");
-  if (lynx_ptrace (PTRACE_TRACEME, null_ptid, 0, 0, 0) < 0)
-    trace_start_error_with_name ("lynx_ptrace");
-}
-
 /* Implement the create_inferior method of the target_ops vector.  */
 
 static int
-lynx_create_inferior (const char *program,
-		      const std::vector<char *> &program_args)
+lynx_create_inferior (char *program, char **allargs)
 {
+  struct process_info *new_process;
   int pid;
-  std::string str_program_args = stringify_argv (program_args);
 
   lynx_debug ("lynx_create_inferior ()");
 
-  pid = fork_inferior (program,
-		       str_program_args.c_str (),
-		       get_environ ()->envp (), lynx_ptrace_fun,
-		       NULL, NULL, NULL, NULL);
+  pid = fork ();
+  if (pid < 0)
+    perror_with_name ("fork");
 
-  post_fork_inferior (pid, program);
+  if (pid == 0)
+    {
+      int pgrp;
 
-  lynx_add_process (pid, 0);
+      /* Switch child to its own process group so that signals won't
+         directly affect gdbserver. */
+      pgrp = getpid();
+      setpgid (0, pgrp);
+      ioctl (0, TIOCSPGRP, &pgrp);
+      lynx_ptrace (PTRACE_TRACEME, null_ptid, 0, 0, 0);
+      execv (program, allargs);
+      fprintf (stderr, "Cannot exec %s: %s.\n", program, strerror (errno));
+      fflush (stderr);
+      _exit (0177);
+    }
+
+  new_process = add_process (pid, 0);
   /* Do not add the process thread just yet, as we do not know its tid.
      We will add it later, during the wait for the STOP event corresponding
      to the lynx_ptrace (PTRACE_TRACEME) call above.  */
   return pid;
-}
-
-/* Assuming we've just attached to a running inferior whose pid is PID,
-   add all threads running in that process.  */
-
-static void
-lynx_add_threads_after_attach (int pid)
-{
-  /* Ugh!  There appears to be no way to get the list of threads
-     in the program we just attached to.  So get the list by calling
-     the "ps" command.  This is only needed now, as we will then
-     keep the thread list up to date thanks to thread creation and
-     exit notifications.  */
-  FILE *f;
-  char buf[256];
-  int thread_pid, thread_tid;
-
-  f = popen ("ps atx", "r");
-  if (f == NULL)
-    perror_with_name ("Cannot get thread list");
-
-  while (fgets (buf, sizeof (buf), f) != NULL)
-    if ((sscanf (buf, "%d %d", &thread_pid, &thread_tid) == 2
-	 && thread_pid == pid))
-    {
-      ptid_t thread_ptid = lynx_ptid_t (pid, thread_tid);
-
-      if (!find_thread_ptid (thread_ptid))
-	{
-	  lynx_debug ("New thread: (pid = %d, tid = %d)",
-		      pid, thread_tid);
-	  add_thread (thread_ptid, NULL);
-	}
-    }
-
-  pclose (f);
 }
 
 /* Implement the attach target_ops method.  */
@@ -312,14 +328,15 @@ lynx_add_threads_after_attach (int pid)
 static int
 lynx_attach (unsigned long pid)
 {
-  ptid_t ptid = lynx_ptid_t (pid, 0);
+  struct process_info *new_process;
+  ptid_t ptid = lynx_ptid_build (pid, 0);
 
   if (lynx_ptrace (PTRACE_ATTACH, ptid, 0, 0, 0) != 0)
     error ("Cannot attach to process %lu: %s (%d)\n", pid,
 	   strerror (errno), errno);
 
-  lynx_add_process (pid, 1);
-  lynx_add_threads_after_attach (pid);
+  new_process = add_process (pid, 1);
+  add_thread (ptid, NULL);
 
   return 0;
 }
@@ -329,35 +346,15 @@ lynx_attach (unsigned long pid)
 static void
 lynx_resume (struct thread_resume *resume_info, size_t n)
 {
-  ptid_t ptid = resume_info[0].thread;
-  const int request
-    = (resume_info[0].kind == resume_step
-       ? (n == 1 ? PTRACE_SINGLESTEP_ONE : PTRACE_SINGLESTEP)
-       : PTRACE_CONT);
+  ptid_t inferior_ptid = thread_to_gdb_id (current_inferior);
+  /* FIXME: Assume for now that n == 1.  */
+  const int request = (resume_info[0].kind == resume_step
+                       ? PTRACE_SINGLESTEP : PTRACE_CONT);
   const int signal = resume_info[0].sig;
+  int ret;
 
-  /* If given a minus_one_ptid, then try using the current_process'
-     private->last_wait_event_ptid.  On most LynxOS versions,
-     using any of the process' thread works well enough, but
-     LynxOS 178 is a little more sensitive, and triggers some
-     unexpected signals (Eg SIG61) when we resume the inferior
-     using a different thread.  */
-  if (ptid == minus_one_ptid)
-    ptid = current_process()->priv->last_wait_event_ptid;
-
-  /* The ptid might still be minus_one_ptid; this can happen between
-     the moment we create the inferior or attach to a process, and
-     the moment we resume its execution for the first time.  It is
-     fine to use the current_thread's ptid in those cases.  */
-  if (ptid == minus_one_ptid)
-    ptid = ptid_of (current_thread);
-
-  regcache_invalidate_pid (ptid.pid ());
-
-  errno = 0;
-  lynx_ptrace (request, ptid, 1, signal, 0);
-  if (errno)
-    perror_with_name ("ptrace");
+  regcache_invalidate ();
+  ret = lynx_ptrace (request, inferior_ptid, 1, signal, 0);
 }
 
 /* Resume the execution of the given PTID.  */
@@ -372,6 +369,16 @@ lynx_continue (ptid_t ptid)
   resume_info.sig = 0;
 
   lynx_resume (&resume_info, 1);
+}
+
+/* Remove all inferiors and associated threads.  */
+
+static void
+lynx_clear_inferiors (void)
+{
+  /* We do not use private data, so nothing much to do except calling
+     clear_inferiors.  */
+  clear_inferiors ();
 }
 
 /* A wrapper around waitpid that handles the various idiosyncrasies
@@ -422,16 +429,15 @@ lynx_wait_1 (ptid_t ptid, struct target_waitstatus *status, int options)
   int wstat;
   ptid_t new_ptid;
 
-  if (ptid == minus_one_ptid)
-    pid = lynx_ptid_get_pid (ptid_of (current_thread));
+  if (ptid_equal (ptid, minus_one_ptid))
+    pid = lynx_ptid_get_pid (thread_to_gdb_id (current_inferior));
   else
     pid = BUILDPID (lynx_ptid_get_pid (ptid), lynx_ptid_get_tid (ptid));
 
 retry:
 
   ret = lynx_waitpid (pid, &wstat);
-  new_ptid = lynx_ptid_t (ret, ((union wait *) &wstat)->w_tid);
-  find_process_pid (ret)->priv->last_wait_event_ptid = new_ptid;
+  new_ptid = lynx_ptid_build (ret, ((union wait *) &wstat)->w_tid);
 
   /* If this is a new thread, then add it now.  The reason why we do
      this here instead of when handling new-thread events is because
@@ -439,16 +445,12 @@ retry:
      for non-threaded applications where the new-thread events are not
      generated.  */
   if (!find_thread_ptid (new_ptid))
-    {
-      lynx_debug ("New thread: (pid = %d, tid = %d)",
-		  lynx_ptid_get_pid (new_ptid), lynx_ptid_get_tid (new_ptid));
-      add_thread (new_ptid, NULL);
-    }
+    add_thread (new_ptid, NULL);
 
   if (WIFSTOPPED (wstat))
     {
       status->kind = TARGET_WAITKIND_STOPPED;
-      status->value.integer = gdb_signal_from_host (WSTOPSIG (wstat));
+      status->value.integer = target_signal_from_host (WSTOPSIG (wstat));
       lynx_debug ("process stopped with signal: %d",
                   status->value.integer);
     }
@@ -461,7 +463,7 @@ retry:
   else if (WIFSIGNALED (wstat))
     {
       status->kind = TARGET_WAITKIND_SIGNALLED;
-      status->value.integer = gdb_signal_from_host (WTERMSIG (wstat));
+      status->value.integer = target_signal_from_host (WTERMSIG (wstat));
       lynx_debug ("process terminated with code: %d",
                   status->value.integer);
     }
@@ -471,7 +473,7 @@ retry:
 	 in fact get here.  But if we do, handle the event the best
 	 we can.  */
       status->kind = TARGET_WAITKIND_STOPPED;
-      status->value.integer = gdb_signal_from_host (0);
+      status->value.integer = target_signal_from_host (0);
       lynx_debug ("unknown event ????");
     }
 
@@ -479,7 +481,7 @@ retry:
      breakpoint events (Eg. new-thread events).  Handle those other types
      of events, and resume the execution if necessary.  */
   if (status->kind == TARGET_WAITKIND_STOPPED
-      && status->value.integer == GDB_SIGNAL_TRAP)
+      && status->value.integer == TARGET_SIGNAL_TRAP)
     {
       const int realsig = lynx_ptrace (PTRACE_GETTRACESIG, new_ptid, 0, 0, 0);
 
@@ -489,12 +491,12 @@ retry:
 	  case SIGNEWTHREAD:
 	    /* We just added the new thread above.  No need to do anything
 	       further.  Just resume the execution again.  */
-	    lynx_continue (new_ptid);
+	    lynx_continue (ptid);
 	    goto retry;
 
 	  case SIGTHREADEXIT:
 	    remove_thread (find_thread_ptid (new_ptid));
-	    lynx_continue (new_ptid);
+	    lynx_continue (ptid);
 	    goto retry;
 	}
     }
@@ -522,10 +524,15 @@ lynx_wait (ptid_t ptid, struct target_waitstatus *status, int options)
 /* Implement the kill target_ops method.  */
 
 static int
-lynx_kill (process_info *process)
+lynx_kill (int pid)
 {
-  ptid_t ptid = lynx_ptid_t (process->pid, 0);
+  ptid_t ptid = lynx_ptid_build (pid, 0);
   struct target_waitstatus status;
+  struct process_info *process;
+
+  process = find_process_pid (pid);
+  if (process == NULL)
+    return -1;
 
   lynx_ptrace (PTRACE_KILL, ptid, 0, 0, 0);
   lynx_wait (ptid, &status, 0);
@@ -536,9 +543,14 @@ lynx_kill (process_info *process)
 /* Implement the detach target_ops method.  */
 
 static int
-lynx_detach (process_info *process)
+lynx_detach (int pid)
 {
-  ptid_t ptid = lynx_ptid_t (process->pid, 0);
+  ptid_t ptid = lynx_ptid_build (pid, 0);
+  struct process_info *process;
+
+  process = find_process_pid (pid);
+  if (process == NULL)
+    return -1;
 
   lynx_ptrace (PTRACE_DETACH, ptid, 0, 0, 0);
   the_target->mourn (process);
@@ -550,13 +562,7 @@ lynx_detach (process_info *process)
 static void
 lynx_mourn (struct process_info *proc)
 {
-  for_each_thread (proc->pid, remove_thread);
-
-  /* Free our private data.  */
-  free (proc->priv);
-  proc->priv = NULL;
-
-  remove_process (proc);
+  lynx_clear_inferiors ();
 }
 
 /* Implement the join target_ops method.  */
@@ -584,7 +590,7 @@ static void
 lynx_fetch_registers (struct regcache *regcache, int regno)
 {
   struct lynx_regset_info *regset = lynx_target_regsets;
-  ptid_t inferior_ptid = ptid_of (current_thread);
+  ptid_t inferior_ptid = thread_to_gdb_id (current_inferior);
 
   lynx_debug ("lynx_fetch_registers (regno = %d)", regno);
 
@@ -609,7 +615,7 @@ static void
 lynx_store_registers (struct regcache *regcache, int regno)
 {
   struct lynx_regset_info *regset = lynx_target_regsets;
-  ptid_t inferior_ptid = ptid_of (current_thread);
+  ptid_t inferior_ptid = thread_to_gdb_id (current_inferior);
 
   lynx_debug ("lynx_store_registers (regno = %d)", regno);
 
@@ -645,7 +651,7 @@ lynx_read_memory (CORE_ADDR memaddr, unsigned char *myaddr, int len)
   int buf;
   const int xfer_size = sizeof (buf);
   CORE_ADDR addr = memaddr & -(CORE_ADDR) xfer_size;
-  ptid_t inferior_ptid = ptid_of (current_thread);
+  ptid_t inferior_ptid = thread_to_gdb_id (current_inferior);
 
   while (addr < memaddr + len)
     {
@@ -678,7 +684,7 @@ lynx_write_memory (CORE_ADDR memaddr, const unsigned char *myaddr, int len)
   int buf;
   const int xfer_size = sizeof (buf);
   CORE_ADDR addr = memaddr & -(CORE_ADDR) xfer_size;
-  ptid_t inferior_ptid = ptid_of (current_thread);
+  ptid_t inferior_ptid = thread_to_gdb_id (current_inferior);
 
   while (addr < memaddr + len)
     {
@@ -690,13 +696,11 @@ lynx_write_memory (CORE_ADDR memaddr, const unsigned char *myaddr, int len)
       if (addr + xfer_size > memaddr + len)
         truncate = addr + xfer_size - memaddr - len;
       if (skip > 0 || truncate > 0)
-	{
-	  /* We need to read the memory at this address in order to preserve
-	     the data that we are not overwriting.  */
-	  lynx_read_memory (addr, (unsigned char *) &buf, xfer_size);
-	  if (errno)
-	    return errno;
-	}
+        /* We need to read the memory at this address in order to preserve
+           the data that we are not overwriting.  */
+        lynx_read_memory (addr, (unsigned char *) &buf, xfer_size);
+        if (errno)
+          return errno;
       memcpy ((gdb_byte *) &buf + skip, myaddr + (addr - memaddr) + skip,
               xfer_size - skip - truncate);
       errno = 0;
@@ -714,7 +718,7 @@ lynx_write_memory (CORE_ADDR memaddr, const unsigned char *myaddr, int len)
 static void
 lynx_request_interrupt (void)
 {
-  ptid_t inferior_ptid = ptid_of (get_first_thread ());
+  ptid_t inferior_ptid = thread_to_gdb_id (current_inferior);
 
   kill (lynx_ptid_get_pid (inferior_ptid), SIGINT);
 }
@@ -723,7 +727,6 @@ lynx_request_interrupt (void)
 
 static struct target_ops lynx_target_ops = {
   lynx_create_inferior,
-  NULL,  /* post_create_inferior */
   lynx_attach,
   lynx_kill,
   lynx_detach,
@@ -741,14 +744,8 @@ static struct target_ops lynx_target_ops = {
   NULL,  /* look_up_symbols */
   lynx_request_interrupt,
   NULL,  /* read_auxv */
-  NULL,  /* supports_z_point_type */
   NULL,  /* insert_point */
   NULL,  /* remove_point */
-  NULL,  /* stopped_by_sw_breakpoint */
-  NULL,  /* supports_stopped_by_sw_breakpoint */
-  NULL,  /* stopped_by_hw_breakpoint */
-  NULL,  /* supports_stopped_by_hw_breakpoint */
-  target_can_do_hardware_single_step,
   NULL,  /* stopped_by_watchpoint */
   NULL,  /* stopped_data_address */
   NULL,  /* read_offsets */
@@ -761,10 +758,6 @@ static struct target_ops lynx_target_ops = {
   NULL,  /* async */
   NULL,  /* start_non_stop */
   NULL,  /* supports_multi_process */
-  NULL,  /* supports_fork_events */
-  NULL,  /* supports_vfork_events */
-  NULL,  /* supports_exec_events */
-  NULL,  /* handle_new_gdb_connection */
   NULL,  /* handle_monitor_command */
 };
 

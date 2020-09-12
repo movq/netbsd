@@ -1,6 +1,6 @@
 dnl Process this file with autoconf to produce a configure script.
 
-dnl Copyright (C) 2005-2019 Free Software Foundation, Inc.
+dnl Copyright (C) 2005-2013 Free Software Foundation, Inc.
 dnl Contributed by Red Hat, Inc.
 dnl 
 dnl This file is part of the GNU simulators.
@@ -18,12 +18,11 @@ dnl
 dnl You should have received a copy of the GNU General Public License
 dnl along with this program.  If not, see <http://www.gnu.org/licenses/>.
 dnl
+AC_PREREQ(2.64)dnl
 AC_INIT(Makefile.in)
 sinclude(../common/acinclude.m4)
 
 SIM_AC_COMMON
-
-SIM_AC_OPTION_WARNINGS
 
 AC_CHECK_HEADERS(sys/select.h termios.h sys/socket.h netinet/in.h netinet/tcp.h)
 

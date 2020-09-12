@@ -1,4 +1,4 @@
-/*	$NetBSD: kwset.h,v 1.1.1.1 2016/01/10 21:36:21 christos Exp $	*/
+/*	$NetBSD: kwset.h,v 1.1 2016/01/10 21:36:21 christos Exp $	*/
 
 /* kwset.h - header declaring the keyword set library.
    Copyright (C) 1989, 1998 Free Software Foundation, Inc.

@@ -1,4 +1,4 @@
-# Copyright 2012-2019 Free Software Foundation, Inc.
+# Copyright 2012-2013 Free Software Foundation, Inc.
 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -13,10 +13,15 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
+if { [is_remote target] || ![isnative] } then {
+    unsupported "inferior-died.exp"
+    continue
+}
+
 # Until "set follow-fork-mode" and "catch fork" are implemented on
 # other targets...
 #
-if { ![istarget "*-*-linux*"] } then {
+if {![istarget "hppa*-hp-hpux*"] && ![istarget "*-*-linux*"]} then {
     unsupported "inferior-died.exp"
     continue
 }
@@ -26,18 +31,17 @@ if { ![support_displaced_stepping] } {
     return -1
 }
 
-standard_testfile .c
+set testfile "inferior-died"
+set srcfile ${testfile}.c
+set binfile ${objdir}/${subdir}/${testfile}
 
-if { [build_executable "failed to build" ${testfile} ${testfile}.c] } {
+if { [prepare_for_testing ${testfile}.exp ${testfile} ${testfile}.c] } {
     return -1
 }
 
-save_vars { GDBFLAGS } {
-    append GDBFLAGS " -ex \"set non-stop on\""
-    clean_restart ${binfile}
-}
-
 gdb_test_no_output "set detach-on-fork off"
+gdb_test_no_output "set target-async on"
+gdb_test_no_output "set non-stop on"
 
 if ![runto_main] {
     return

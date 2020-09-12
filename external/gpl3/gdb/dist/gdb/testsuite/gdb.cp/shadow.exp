@@ -1,4 +1,4 @@
-# Copyright 2008-2019 Free Software Foundation, Inc.
+# Copyright 2008, 2011 Free Software Foundation, Inc.
 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -16,16 +16,29 @@
 # Test that when multiple variables have the same
 # name the one from the correct scope is printed.
 
+if $tracelevel then {
+    strace $tracelevel
+}
 
-standard_testfile .cc
 
-if [get_compiler_info] {
+set testfile shadow
+set srcfile ${testfile}.cc
+set binfile ${objdir}/${subdir}/${testfile}
+if  { [gdb_compile "${srcdir}/${subdir}/${srcfile}" "${binfile}" executable {debug c++}] != "" } {
+    untested "Couldn't compile test program"
     return -1
 }
 
-if {[prepare_for_testing "failed to prepare" $testfile $srcfile {debug c++}]} {
+if [get_compiler_info ${binfile}] {
     return -1
 }
+
+# Get things started.
+
+gdb_exit
+gdb_start
+gdb_reinitialize_dir $srcdir/$subdir
+gdb_load ${binfile}
 
 if ![runto_main] then {
     perror "couldn't run to breakpoint main"
@@ -39,7 +52,7 @@ if ![runto_main] then {
 gdb_breakpoint [gdb_get_line_number "marker1"]
 gdb_continue_to_breakpoint "marker1"
 
-gdb_test "print x" "= 33" "print class x shadowing global x"
+gdb_test "print x" "= 33" "Print class x shadowing global x"
 
 
 ############################################
@@ -49,7 +62,7 @@ gdb_test "print x" "= 33" "print class x shadowing global x"
 gdb_breakpoint [gdb_get_line_number "marker2"]
 gdb_continue_to_breakpoint "marker2"
 
-gdb_test "print x" "= 44" "print local x shadowing class x"
+gdb_test "print x" "= 44" "Print local x shadowing class x"
 
 ############################################
 # Test inner scope x is printed not outer scope
@@ -57,7 +70,7 @@ gdb_test "print x" "= 44" "print local x shadowing class x"
 gdb_breakpoint [gdb_get_line_number "marker3"]
 gdb_continue_to_breakpoint "marker3"
 
-gdb_test "print x" "= 55" "print inner scope x"
+gdb_test "print x" "= 55" "Print inner scope x"
 
 ############################################
 # Test printing local variable is not shadowed
@@ -66,7 +79,7 @@ gdb_test "print x" "= 55" "print inner scope x"
 gdb_breakpoint [gdb_get_line_number "marker4"]
 gdb_continue_to_breakpoint "marker4"
 
-gdb_test "print x" "= 55" "print local x not namespace x"
+gdb_test "print x" "= 55" "Print local x not namespace x"
 
 ############################################
 # Test imported namespace element is printed
@@ -79,4 +92,4 @@ if { [test_compiler_info {gcc-[0-3]-*}] ||
     setup_xfail *-*-*
 }
 
-gdb_test "print x" "= 11" "print imported namespace x"
+gdb_test "print x" "= 11" "Print imported namespace x"

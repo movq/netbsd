@@ -1,5 +1,6 @@
 /* Default error handlers for CPP Library.
-   Copyright (C) 1986-2019 Free Software Foundation, Inc.
+   Copyright (C) 1986, 1987, 1989, 1992, 1993, 1994, 1995, 1998, 1999, 2000,
+   2001, 2002, 2004, 2008, 2009 Free Software Foundation, Inc.
    Written by Per Bothner, 1994.
    Based on CCCP program by Paul Rubin, June 1986
    Adapted to ANSI C, Richard Stallman, Jan 1987
@@ -27,32 +28,15 @@ along with this program; see the file COPYING3.  If not see
 #include "cpplib.h"
 #include "internal.h"
 
-/* Print a diagnostic at the given location.  */
-
-ATTRIBUTE_FPTR_PRINTF(5,0)
-static bool
-cpp_diagnostic_at (cpp_reader * pfile, enum cpp_diagnostic_level level,
-		   enum cpp_warning_reason reason, rich_location *richloc,
-		   const char *msgid, va_list *ap)
+/* Print an error at the location of the previously lexed token.  */
+bool
+cpp_error (cpp_reader * pfile, int level, const char *msgid, ...)
 {
+  source_location src_loc;
+  va_list ap;
   bool ret;
 
-  if (!pfile->cb.diagnostic)
-    abort ();
-  ret = pfile->cb.diagnostic (pfile, level, reason, richloc, _(msgid), ap);
-
-  return ret;
-}
-
-/* Print a diagnostic at the location of the previously lexed token.  */
-
-ATTRIBUTE_FPTR_PRINTF(4,0)
-static bool
-cpp_diagnostic (cpp_reader * pfile, enum cpp_diagnostic_level level,
-		enum cpp_warning_reason reason,
-		const char *msgid, va_list *ap)
-{
-  location_t src_loc;
+  va_start (ap, msgid);
 
   if (CPP_OPTION (pfile, traditional))
     {
@@ -65,244 +49,48 @@ cpp_diagnostic (cpp_reader * pfile, enum cpp_diagnostic_level level,
      current run -- that is invalid.  */
   else if (pfile->cur_token == pfile->cur_run->base)
     {
-      src_loc = 0;
+      if (pfile->cur_run->prev != NULL)
+	src_loc = pfile->cur_run->prev->limit->src_loc;
+      else
+	src_loc = 0;
     }
   else
     {
       src_loc = pfile->cur_token[-1].src_loc;
     }
-  rich_location richloc (pfile->line_table, src_loc);
-  return cpp_diagnostic_at (pfile, level, reason, &richloc, msgid, ap);
-}
 
-/* Print a warning or error, depending on the value of LEVEL.  */
-
-bool
-cpp_error (cpp_reader * pfile, enum cpp_diagnostic_level level,
-	   const char *msgid, ...)
-{
-  va_list ap;
-  bool ret;
-
-  va_start (ap, msgid);
-
-  ret = cpp_diagnostic (pfile, level, CPP_W_NONE, msgid, &ap);
-
-  va_end (ap);
-  return ret;
-}
-
-/* Print a warning.  The warning reason may be given in REASON.  */
-
-bool
-cpp_warning (cpp_reader * pfile, enum cpp_warning_reason reason,
-	     const char *msgid, ...)
-{
-  va_list ap;
-  bool ret;
-
-  va_start (ap, msgid);
-
-  ret = cpp_diagnostic (pfile, CPP_DL_WARNING, reason, msgid, &ap);
-
-  va_end (ap);
-  return ret;
-}
-
-/* Print a pedantic warning.  The warning reason may be given in REASON.  */
-
-bool
-cpp_pedwarning (cpp_reader * pfile, enum cpp_warning_reason reason,
-		const char *msgid, ...)
-{
-  va_list ap;
-  bool ret;
-
-  va_start (ap, msgid);
-
-  ret = cpp_diagnostic (pfile, CPP_DL_PEDWARN, reason, msgid, &ap);
-
-  va_end (ap);
-  return ret;
-}
-
-/* Print a warning, including system headers.  The warning reason may be
-   given in REASON.  */
-
-bool
-cpp_warning_syshdr (cpp_reader * pfile, enum cpp_warning_reason reason,
-		    const char *msgid, ...)
-{
-  va_list ap;
-  bool ret;
-
-  va_start (ap, msgid);
-
-  ret = cpp_diagnostic (pfile, CPP_DL_WARNING_SYSHDR, reason, msgid, &ap);
-
-  va_end (ap);
-  return ret;
-}
-
-/* Print a diagnostic at a specific location.  */
-
-ATTRIBUTE_FPTR_PRINTF(6,0)
-static bool
-cpp_diagnostic_with_line (cpp_reader * pfile, enum cpp_diagnostic_level level,
-			  enum cpp_warning_reason reason,
-			  location_t src_loc, unsigned int column,
-			  const char *msgid, va_list *ap)
-{
-  bool ret;
-  
-  if (!pfile->cb.diagnostic)
+  if (!pfile->cb.error)
     abort ();
-  rich_location richloc (pfile->line_table, src_loc);
-  if (column)
-    richloc.override_column (column);
-  ret = pfile->cb.diagnostic (pfile, level, reason, &richloc, _(msgid), ap);
+  ret = pfile->cb.error (pfile, level, src_loc, 0, _(msgid), &ap);
 
+  va_end (ap);
   return ret;
 }
 
-/* Print a warning or error, depending on the value of LEVEL.  */
-
+/* Print an error at a specific location.  */
 bool
-cpp_error_with_line (cpp_reader *pfile, enum cpp_diagnostic_level level,
-		     location_t src_loc, unsigned int column,
+cpp_error_with_line (cpp_reader *pfile, int level,
+		     source_location src_loc, unsigned int column,
 		     const char *msgid, ...)
 {
   va_list ap;
   bool ret;
-
+  
   va_start (ap, msgid);
 
-  ret = cpp_diagnostic_with_line (pfile, level, CPP_W_NONE, src_loc,
-                                  column, msgid, &ap);
+  if (!pfile->cb.error)
+    abort ();
+  ret = pfile->cb.error (pfile, level, src_loc, column, _(msgid), &ap);
 
   va_end (ap);
   return ret;
 }
 
-/* Print a warning.  The warning reason may be given in REASON.  */
-
 bool
-cpp_warning_with_line (cpp_reader *pfile, enum cpp_warning_reason reason,
-		       location_t src_loc, unsigned int column,
-		       const char *msgid, ...)
+cpp_errno (cpp_reader *pfile, int level, const char *msgid)
 {
-  va_list ap;
-  bool ret;
+  if (msgid[0] == '\0')
+    msgid = _("stdout");
 
-  va_start (ap, msgid);
-
-  ret = cpp_diagnostic_with_line (pfile, CPP_DL_WARNING, reason, src_loc,
-                                  column, msgid, &ap);
-
-  va_end (ap);
-  return ret;
-}
-
-/* Print a pedantic warning.  The warning reason may be given in REASON.  */
-
-bool
-cpp_pedwarning_with_line (cpp_reader *pfile, enum cpp_warning_reason reason,
-			  location_t src_loc, unsigned int column,
-			  const char *msgid, ...)
-{
-  va_list ap;
-  bool ret;
-
-  va_start (ap, msgid);
-
-  ret = cpp_diagnostic_with_line (pfile, CPP_DL_PEDWARN, reason, src_loc,
-                                  column, msgid, &ap);
-
-  va_end (ap);
-  return ret;
-}
-
-/* Print a warning, including system headers.  The warning reason may be
-   given in REASON.  */
-
-bool
-cpp_warning_with_line_syshdr (cpp_reader *pfile, enum cpp_warning_reason reason,
-			      location_t src_loc, unsigned int column,
-			      const char *msgid, ...)
-{
-  va_list ap;
-  bool ret;
-
-  va_start (ap, msgid);
-
-  ret = cpp_diagnostic_with_line (pfile, CPP_DL_WARNING_SYSHDR, reason, src_loc,
-                                  column, msgid, &ap);
-
-  va_end (ap);
-  return ret;
-}
-
-/* As cpp_error, but use SRC_LOC as the location of the error, without
-   a column override.  */
-
-bool
-cpp_error_at (cpp_reader * pfile, enum cpp_diagnostic_level level,
-	      location_t src_loc, const char *msgid, ...)
-{
-  va_list ap;
-  bool ret;
-
-  va_start (ap, msgid);
-
-  rich_location richloc (pfile->line_table, src_loc);
-  ret = cpp_diagnostic_at (pfile, level, CPP_W_NONE, &richloc,
-			   msgid, &ap);
-
-  va_end (ap);
-  return ret;
-}
-
-/* As cpp_error, but use RICHLOC as the location of the error, without
-   a column override.  */
-
-bool
-cpp_error_at (cpp_reader * pfile, enum cpp_diagnostic_level level,
-	      rich_location *richloc, const char *msgid, ...)
-{
-  va_list ap;
-  bool ret;
-
-  va_start (ap, msgid);
-
-  ret = cpp_diagnostic_at (pfile, level, CPP_W_NONE, richloc,
-			   msgid, &ap);
-
-  va_end (ap);
-  return ret;
-}
-
-/* Print a warning or error, depending on the value of LEVEL.  Include
-   information from errno.  */
-
-bool
-cpp_errno (cpp_reader *pfile, enum cpp_diagnostic_level level,
-	   const char *msgid)
-{
-  return cpp_error (pfile, level, "%s: %s", _(msgid), xstrerror (errno));
-}
-
-/* Print a warning or error, depending on the value of LEVEL.  Include
-   information from errno.  Unlike cpp_errno, the argument is a filename
-   that is not localized, but "" is replaced with localized "stdout".  */
-
-bool
-cpp_errno_filename (cpp_reader *pfile, enum cpp_diagnostic_level level,
-		    const char *filename,
-		    location_t loc)
-{
-  if (filename[0] == '\0')
-    filename = _("stdout");
-
-  return cpp_error_at (pfile, level, loc, "%s: %s", filename,
-		       xstrerror (errno));
+  return cpp_error (pfile, level, "%s: %s", msgid, xstrerror (errno));
 }

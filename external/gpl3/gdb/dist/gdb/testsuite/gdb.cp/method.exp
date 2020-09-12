@@ -1,4 +1,5 @@
-# Copyright 1998-2019 Free Software Foundation, Inc.
+# Copyright 1998, 1999, 2001, 2002, 2003, 2004, 2007, 2008, 2009, 2010, 2011
+# Free Software Foundation, Inc.
 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -28,21 +29,34 @@
 # integrate FPARAM symbols in HP debug info into the local var list
 # for the function or method's block.)
 
+if $tracelevel then {
+        strace $tracelevel
+        }
+
 #
 # test running programs
 #
 
 if { [skip_cplus_tests] } { continue }
 
-standard_testfile .cc
+set testfile "method"
+set srcfile ${testfile}.cc
+set binfile ${objdir}/${subdir}/${testfile}
 
-if [get_compiler_info "c++"] {
+if  { [gdb_compile "${srcdir}/${subdir}/${srcfile}" "${binfile}" executable {debug c++}] != "" } {
+     untested method.exp
+     return -1
+}
+
+if [get_compiler_info $binfile "c++"] {
   return -1
 }
 
-if {[prepare_for_testing "failed to prepare" $testfile $srcfile {debug c++}]} {
-    return -1
-}
+gdb_exit
+gdb_start
+gdb_reinitialize_dir $srcdir/$subdir
+gdb_load ${binfile}
+
 
 #
 # set it up at a breakpoint so we can play with the variable values
@@ -151,6 +165,9 @@ gdb_test_multiple "ptype A" "ptype A" {
     }
     -re "type = class A \{\r\n\[ \]*public:\r\n\[ \]*int x;\r\n\[ \]*int y;\r\n\r\n\[ \]*int foo\\(int\\);\r\n\[ \]*int bar\\(int\\) const;\r\n\[ \]*int baz\\(int, char\\) volatile;\r\n\[ \]*int qux\\(int, float\\) (const volatile|volatile const);\r\n\[ \]*A & operator=\\(A const ?&\\);\r\n\[ \]*A\\(A const ?&\\);\r\n\[ \]*A\\((void|)\\);\r\n\}\r\n$gdb_prompt $" {
 	pass "ptype A"
+    }
+    -re "type = class A \{\r\n\[ \]*public:\r\n\[ \]*int x;\r\n\[ \]*int y;\r\n\r\n\[ \]*int foo\\(int\\);\r\n\[ \]*int bar\\(int\\) const;\r\n\[ \]*int baz\\(int, char\\);\r\n\[ \]*int qux\\(int, float\\) const;\r\n\}\r\n$gdb_prompt $" {
+	pass "ptype A (HP aCC bug -- volatile not indicated)"
     }
     -re "type = class A \{\r\n\[ \]*public:\r\n\[ \]*int x;\r\n\[ \]*int y;\r\n\r\n\[ \]*int foo\\(int\\);\r\n\[ \]*int bar\\(int\\) const;\r\n\[ \]*int baz\\(int, char\\) volatile;\r\n\[ \]*int qux\\(int, float\\) const volatile;\r\n\}\r\n$gdb_prompt $" {
 	pass "ptype A"

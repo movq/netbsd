@@ -1,6 +1,7 @@
 // Backward-compat support -*- C++ -*-
 
-// Copyright (C) 2001-2019 Free Software Foundation, Inc.
+// Copyright (C) 2001, 2002, 2004, 2005, 2009, 2010
+// Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
@@ -40,22 +41,17 @@
 // MAY BE REMOVED in a future standard revision.  One should use the
 // header <sstream> instead.
 
-/** @file strstream
- *  This is a Standard C++ Library header.
- */
-
 #ifndef _BACKWARD_STRSTREAM
 #define _BACKWARD_STRSTREAM
 
-#include <backward/backward_warning.h>
+#include "backward_warning.h"
 #include <iosfwd>
 #include <ios>
 #include <istream>
 #include <ostream>
+#include <string>
 
-namespace std _GLIBCXX_VISIBILITY(default)
-{
-_GLIBCXX_BEGIN_NAMESPACE_VERSION
+_GLIBCXX_BEGIN_NAMESPACE(std)
 
   // Class strstreambuf, a streambuf class that manages an array of char.
   // Note that this class is not a template.
@@ -68,12 +64,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 
   public:
     // Constructor, destructor
-#if __cplusplus >= 201103L
-    strstreambuf() : strstreambuf(0) { }
-    explicit strstreambuf(streamsize __initial_capacity);
-#else
     explicit strstreambuf(streamsize __initial_capacity = 0);
-#endif
     strstreambuf(void* (*__alloc)(size_t), void (*__free)(void*));
 
     strstreambuf(char* __get, streamsize __n, char* __put = 0) throw ();
@@ -85,33 +76,6 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
     strstreambuf(const unsigned char* __get, streamsize __n) throw ();
 
     virtual ~strstreambuf();
-
-#if __cplusplus >= 201103L
-    strstreambuf(strstreambuf&& __rhs) noexcept
-    : _Base(__rhs), _M_alloc_fun(__rhs._M_alloc_fun),
-      _M_free_fun(__rhs._M_free_fun), _M_dynamic(__rhs._M_dynamic),
-      _M_frozen(__rhs._M_frozen), _M_constant(__rhs._M_constant)
-    {
-      __rhs.setg(nullptr, nullptr, nullptr);
-      __rhs.setp(nullptr, nullptr);
-    }
-
-    strstreambuf&
-    operator=(strstreambuf&& __rhs) noexcept
-    {
-      if (_M_dynamic && !_M_frozen)
-	_M_free(eback());
-      _Base::operator=(static_cast<const _Base&>(__rhs));
-      _M_alloc_fun = __rhs._M_alloc_fun;
-      _M_free_fun = __rhs._M_free_fun;
-      _M_dynamic = __rhs._M_dynamic;
-      _M_frozen = __rhs._M_frozen;
-      _M_constant = __rhs._M_constant;
-      __rhs.setg(nullptr, nullptr, nullptr);
-      __rhs.setp(nullptr, nullptr);
-      return *this;
-    }
-#endif
 
   public:
     void freeze(bool = true) throw ();
@@ -130,12 +94,10 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 			     = ios_base::in | ios_base::out);
 
   private:
-#if __cplusplus < 201103L
     strstreambuf&
     operator=(const strstreambuf&);
 
     strstreambuf(const strstreambuf&);
-#endif
 
     // Dynamic allocation, possibly using _M_alloc_fun and _M_free_fun.
     char* _M_alloc(size_t);
@@ -144,6 +106,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
     // Helper function used in constructors.
     void _M_setup(char* __get, char* __put, streamsize __n) throw ();
 
+  private:
     // Data members.
     void* (*_M_alloc_fun)(size_t);
     void  (*_M_free_fun)(void*);
@@ -163,14 +126,6 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
     istrstream(const char*, streamsize);
     virtual ~istrstream();
 
-#if __cplusplus >= 201103L
-    istrstream(istrstream&& __rhs)
-    : istream(std::move(__rhs)), _M_buf(std::move(__rhs._M_buf))
-    { set_rdbuf(&_M_buf); }
-
-    istrstream& operator=(istrstream&&) = default;
-#endif
-
     _GLIBCXX_CONST strstreambuf* rdbuf() const throw ();
     char* str() throw ();
 
@@ -185,14 +140,6 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
     ostrstream();
     ostrstream(char*, int, ios_base::openmode = ios_base::out);
     virtual ~ostrstream();
-
-#if __cplusplus >= 201103L
-    ostrstream(ostrstream&& __rhs)
-    : ostream(std::move(__rhs)), _M_buf(std::move(__rhs._M_buf))
-    { set_rdbuf(&_M_buf); }
-
-    ostrstream& operator=(ostrstream&&) = default;
-#endif
 
     _GLIBCXX_CONST strstreambuf* rdbuf() const throw ();
     void freeze(bool = true) throw();
@@ -216,14 +163,6 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
     strstream(char*, int, ios_base::openmode = ios_base::in | ios_base::out);
     virtual ~strstream();
 
-#if __cplusplus >= 201103L
-    strstream(strstream&& __rhs)
-    : iostream(std::move(__rhs)), _M_buf(std::move(__rhs._M_buf))
-    { set_rdbuf(&_M_buf); }
-
-    strstream& operator=(strstream&&) = default;
-#endif
-
     _GLIBCXX_CONST strstreambuf* rdbuf() const throw ();
     void freeze(bool = true) throw ();
     _GLIBCXX_PURE int pcount() const throw ();
@@ -233,7 +172,6 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
     strstreambuf _M_buf;
   };
 
-_GLIBCXX_END_NAMESPACE_VERSION
-} // namespace
+_GLIBCXX_END_NAMESPACE
 
 #endif

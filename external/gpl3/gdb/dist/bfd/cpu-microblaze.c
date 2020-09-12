@@ -1,6 +1,6 @@
 /* BFD Xilinx MicroBlaze architecture definition
 
-   Copyright (C) 2009-2019 Free Software Foundation, Inc.
+   Copyright 2009 Free Software Foundation, Inc.
 
    This file is part of BFD, the Binary File Descriptor library.
 
@@ -19,23 +19,22 @@
    Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston,
    MA 02110-1301, USA.  */
 
-#include "sysdep.h"
 #include "bfd.h"
+#include "sysdep.h"
 #include "libbfd.h"
 
 const bfd_arch_info_type bfd_microblaze_arch =
 {
-  32,				/* 32 bits in a word.  */
-  32,				/* 32 bits in an address.  */
-  8,				/* 8 bits in a byte.  */
-  bfd_arch_microblaze,		/* Architecture.  */
-  0,				/* Machine number - 0 for now.  */
-  "microblaze",			/* Architecture name.  */
-  "MicroBlaze",			/* Printable name.  */
-  3,				/* Section align power.  */
-  TRUE,				/* Is this the default architecture ?  */
+  32,		  		/* 32 bits in a word.  */
+  32,		  		/* 32 bits in an address.  */
+  8,		  		/* 8 bits in a byte.  */
+  bfd_arch_microblaze, 		/* Architecture.  */
+  0,		  		/* Machine number - 0 for now.  */
+  "microblaze",	  		/* Architecture name.  */
+  "MicroBlaze",	  		/* Printable name.  */
+  3,		  		/* Section align power.  */
+  TRUE,		  		/* Is this the default architecture ?  */
   bfd_default_compatible,	/* Architecture comparison function.  */
-  bfd_default_scan,		/* String to architecture conversion.  */
-  bfd_arch_default_fill,	/* Default fill.  */
-  NULL				/* Next in list.  */
+  bfd_default_scan,	   	/* String to architecture conversion.  */
+  NULL			   	/* Next in list.  */
 };

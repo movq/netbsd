@@ -1,5 +1,6 @@
 /* File format for coverage information
-   Copyright (C) 1996-2019 Free Software Foundation, Inc.
+   Copyright (C) 1996, 1997, 1998, 2000, 2002, 2003, 2004, 2005, 2007,
+   2008  Free Software Foundation, Inc.
    Contributed by Bob Manson <manson@cygnus.com>.
    Completely remangled by Nathan Sidwell <nathan@codesourcery.com>.
 
@@ -36,68 +37,6 @@ static const gcov_unsigned_t *gcov_read_words (unsigned);
 static void gcov_allocate (unsigned);
 #endif
 
-/* Optimum number of gcov_unsigned_t's read from or written to disk.  */
-#define GCOV_BLOCK_SIZE (1 << 10)
-
-struct gcov_var
-{
-  FILE *file;
-  gcov_position_t start;	/* Position of first byte of block */
-  unsigned offset;		/* Read/write position within the block.  */
-  unsigned length;		/* Read limit in the block.  */
-  unsigned overread;		/* Number of words overread.  */
-  int error;			/* < 0 overflow, > 0 disk error.  */
-  int mode;	                /* < 0 writing, > 0 reading */
-#if IN_LIBGCOV
-  /* Holds one block plus 4 bytes, thus all coverage reads & writes
-     fit within this buffer and we always can transfer GCOV_BLOCK_SIZE
-     to and from the disk. libgcov never backtracks and only writes 4
-     or 8 byte objects.  */
-  gcov_unsigned_t buffer[GCOV_BLOCK_SIZE + 1];
-#else
-  int endian;			/* Swap endianness.  */
-  /* Holds a variable length block, as the compiler can write
-     strings and needs to backtrack.  */
-  size_t alloc;
-  gcov_unsigned_t *buffer;
-#endif
-} gcov_var;
-
-/* Save the current position in the gcov file.  */
-/* We need to expose this function when compiling for gcov-tool.  */
-#ifndef IN_GCOV_TOOL
-static inline
-#endif
-gcov_position_t
-gcov_position (void)
-{
-  gcov_nonruntime_assert (gcov_var.mode > 0); 
-  return gcov_var.start + gcov_var.offset;
-}
-
-/* Return nonzero if the error flag is set.  */
-/* We need to expose this function when compiling for gcov-tool.  */
-#ifndef IN_GCOV_TOOL
-static inline
-#endif
-int
-gcov_is_error (void)
-{
-  return gcov_var.file ? gcov_var.error : 1;
-}
-
-#if IN_LIBGCOV
-/* Move to beginning of file and initialize for writing.  */
-GCOV_LINKAGE inline void
-gcov_rewrite (void)
-{
-  gcov_var.mode = -1; 
-  gcov_var.start = 0;
-  gcov_var.offset = 0;
-  fseek (gcov_var.file, 0L, SEEK_SET);
-}
-#endif
-
 static inline gcov_unsigned_t from_file (gcov_unsigned_t value)
 {
 #if !IN_LIBGCOV
@@ -115,9 +54,10 @@ static inline gcov_unsigned_t from_file (gcov_unsigned_t value)
    opened. If MODE is >= 0 an existing file will be opened, if
    possible, and if MODE is <= 0, a new file will be created. Use
    MODE=0 to attempt to reopen an existing file and then fall back on
-   creating a new one.  If MODE > 0, the file will be opened in
+   creating a new one.  If MODE < 0, the file will be opened in
    read-only mode.  Otherwise it will be opened for modification.
-   Return zero on failure, non-zero on success.  */
+   Return zero on failure, >0 on opening an existing file and <0 on
+   creating a new one.  */
 
 GCOV_LINKAGE int
 #if IN_LIBGCOV
@@ -127,7 +67,7 @@ gcov_open (const char *name, int mode)
 #endif
 {
 #if IN_LIBGCOV
-  int mode = 0;
+  const int mode = 0;
 #endif
 #if GCOV_LOCKED
   struct flock s_flock;
@@ -139,7 +79,7 @@ gcov_open (const char *name, int mode)
   s_flock.l_pid = getpid ();
 #endif
 
-  gcov_nonruntime_assert (!gcov_var.file);
+  gcc_assert (!gcov_var.file);
   gcov_var.start = 0;
   gcov_var.offset = gcov_var.length = 0;
   gcov_var.overread = -1u;
@@ -152,15 +92,13 @@ gcov_open (const char *name, int mode)
     {
       /* Read-only mode - acquire a read-lock.  */
       s_flock.l_type = F_RDLCK;
-      /* pass mode (ignored) for compatibility */
-      fd = open (name, O_RDONLY, S_IRUSR | S_IWUSR);
+      fd = open (name, O_RDONLY);
     }
   else
-     {
-       /* Write mode - acquire a write-lock.  */
-       s_flock.l_type = F_WRLCK;
-       /* Truncate if force new mode.  */
-       fd = open (name, O_RDWR | O_CREAT | (mode < 0 ? O_TRUNC : 0), 0666);
+    {
+      /* Write mode - acquire a write-lock.  */
+      s_flock.l_type = F_WRLCK;
+      fd = open (name, O_RDWR | O_CREAT, 0666);
     }
   if (fd < 0)
     return 0;
@@ -175,22 +113,41 @@ gcov_open (const char *name, int mode)
       close (fd);
       return 0;
     }
+
+  if (mode > 0)
+    gcov_var.mode = 1;
+  else if (mode == 0)
+    {
+      struct stat st;
+
+      if (fstat (fd, &st) < 0)
+	{
+	  fclose (gcov_var.file);
+	  gcov_var.file = 0;
+	  return 0;
+	}
+      if (st.st_size != 0)
+	gcov_var.mode = 1;
+      else
+	gcov_var.mode = mode * 2 + 1;
+    }
+  else
+    gcov_var.mode = mode * 2 + 1;
 #else
   if (mode >= 0)
-    /* Open an existing file.  */
     gcov_var.file = fopen (name, (mode > 0) ? "rb" : "r+b");
 
   if (gcov_var.file)
-    mode = 1;
+    gcov_var.mode = 1;
   else if (mode <= 0)
-    /* Create a new file.  */
-    gcov_var.file = fopen (name, "w+b");
-
+    {
+      gcov_var.file = fopen (name, "w+b");
+      if (gcov_var.file)
+	gcov_var.mode = mode * 2 + 1;
+    }
   if (!gcov_var.file)
     return 0;
 #endif
-
-  gcov_var.mode = mode ? mode : 1;
 
   setbuf (gcov_var.file, (char *)0);
 
@@ -279,13 +236,14 @@ gcov_write_words (unsigned words)
 {
   gcov_unsigned_t *result;
 
-  gcov_nonruntime_assert (gcov_var.mode < 0);
+  gcc_assert (gcov_var.mode < 0);
 #if IN_LIBGCOV
   if (gcov_var.offset >= GCOV_BLOCK_SIZE)
     {
       gcov_write_block (GCOV_BLOCK_SIZE);
       if (gcov_var.offset)
 	{
+	  gcc_assert (gcov_var.offset == 1);
 	  memcpy (gcov_var.buffer, gcov_var.buffer + GCOV_BLOCK_SIZE, 4);
 	}
     }
@@ -347,44 +305,8 @@ gcov_write_string (const char *string)
   buffer = gcov_write_words (1 + alloc);
 
   buffer[0] = alloc;
-
-  if (alloc > 0)
-    {
-      buffer[alloc] = 0; /* place nul terminators.  */
-      memcpy (&buffer[1], string, length);
-    }
-}
-#endif
-
-#if !IN_LIBGCOV
-/* Write FILENAME to coverage file.  Sets error flag on file
-   error, overflow flag on overflow */
-
-GCOV_LINKAGE void
-gcov_write_filename (const char *filename)
-{
-  if (profile_abs_path_flag && filename && filename[0]
-      && !(IS_DIR_SEPARATOR (filename[0])
-#if HAVE_DOS_BASED_FILE_SYSTEM
-	   || filename[1] == ':'
-#endif
-	  ))
-    {
-      char *buf = getcwd (NULL, 0);
-      if (buf != NULL && buf[0])
-	{
-	  size_t len = strlen (buf);
-	  buf = (char*)xrealloc (buf, len + strlen (filename) + 2);
-	  if (!IS_DIR_SEPARATOR (buf[len - 1]))
-	    strcat (buf, "/");
-	  strcat (buf, filename);
-	  gcov_write_string (buf);
-	  free (buf);
-	  return;
-	}
-    }
-
-  gcov_write_string (filename);
+  buffer[alloc] = 0;
+  memcpy (&buffer[1], string, length);
 }
 #endif
 
@@ -416,9 +338,9 @@ gcov_write_length (gcov_position_t position)
   gcov_unsigned_t length;
   gcov_unsigned_t *buffer;
 
-  gcov_nonruntime_assert (gcov_var.mode < 0);
-  gcov_nonruntime_assert (position + 2 <= gcov_var.start + gcov_var.offset);
-  gcov_nonruntime_assert (position >= gcov_var.start);
+  gcc_assert (gcov_var.mode < 0);
+  gcc_assert (position + 2 <= gcov_var.start + gcov_var.offset);
+  gcc_assert (position >= gcov_var.start);
   offset = position - gcov_var.start;
   length = gcov_var.offset - offset - 2;
   buffer = (gcov_unsigned_t *) &gcov_var.buffer[offset];
@@ -446,11 +368,20 @@ gcov_write_tag_length (gcov_unsigned_t tag, gcov_unsigned_t length)
 GCOV_LINKAGE void
 gcov_write_summary (gcov_unsigned_t tag, const struct gcov_summary *summary)
 {
-  gcov_write_tag_length (tag, GCOV_TAG_SUMMARY_LENGTH);
-  gcov_write_unsigned (summary->runs);
-  gcov_write_unsigned (summary->sum_max);
-}
+  unsigned ix;
+  const struct gcov_ctr_summary *csum;
 
+  gcov_write_tag_length (tag, GCOV_TAG_SUMMARY_LENGTH);
+  gcov_write_unsigned (summary->checksum);
+  for (csum = summary->ctrs, ix = GCOV_COUNTERS_SUMMABLE; ix--; csum++)
+    {
+      gcov_write_unsigned (csum->num);
+      gcov_write_unsigned (csum->runs);
+      gcov_write_counter (csum->sum_all);
+      gcov_write_counter (csum->run_max);
+      gcov_write_counter (csum->sum_max);
+    }
+}
 #endif /* IN_LIBGCOV */
 
 #endif /*!IN_GCOV */
@@ -464,24 +395,23 @@ gcov_read_words (unsigned words)
   const gcov_unsigned_t *result;
   unsigned excess = gcov_var.length - gcov_var.offset;
 
-  if (gcov_var.mode <= 0)
-    return NULL;
-
+  gcc_assert (gcov_var.mode > 0);
   if (excess < words)
     {
       gcov_var.start += gcov_var.offset;
+#if IN_LIBGCOV
       if (excess)
 	{
-#if IN_LIBGCOV
+	  gcc_assert (excess == 1);
 	  memcpy (gcov_var.buffer, gcov_var.buffer + gcov_var.offset, 4);
-#else
-	  memmove (gcov_var.buffer, gcov_var.buffer + gcov_var.offset,
-		   excess * 4);
-#endif
 	}
+#else
+      memmove (gcov_var.buffer, gcov_var.buffer + gcov_var.offset, excess * 4);
+#endif
       gcov_var.offset = 0;
       gcov_var.length = excess;
 #if IN_LIBGCOV
+      gcc_assert (!gcov_var.length || gcov_var.length == 1);
       excess = GCOV_BLOCK_SIZE;
 #else
       if (gcov_var.length + words > gcov_var.alloc)
@@ -538,62 +468,11 @@ gcov_read_counter (void)
   return value;
 }
 
-/* Mangle filename path of BASE and output new allocated pointer with
-   mangled path.  */
-
-char *
-mangle_path (char const *base)
-{
-  /* Convert '/' to '#', convert '..' to '^',
-     convert ':' to '~' on DOS based file system.  */
-  const char *probe;
-  char *buffer = (char *)xmalloc (strlen (base) + 1);
-  char *ptr = buffer;
-
-#if HAVE_DOS_BASED_FILE_SYSTEM
-  if (base[0] && base[1] == ':')
-    {
-      ptr[0] = base[0];
-      ptr[1] = '~';
-      ptr += 2;
-      base += 2;
-    }
-#endif
-  for (; *base; base = probe)
-    {
-      size_t len;
-
-      for (probe = base; *probe; probe++)
-	if (*probe == '/')
-	  break;
-      len = probe - base;
-      if (len == 2 && base[0] == '.' && base[1] == '.')
-	*ptr++ = '^';
-      else
-	{
-	  memcpy (ptr, base, len);
-	  ptr += len;
-	}
-      if (*probe)
-	{
-	  *ptr++ = '#';
-	  probe++;
-	}
-    }
-
-  /* Terminate the string.  */
-  *ptr = '\0';
-
-  return buffer;
-}
-
-/* We need to expose the below function when compiling for gcov-tool.  */
-
-#if !IN_LIBGCOV || defined (IN_GCOV_TOOL)
 /* Read string from coverage file. Returns a pointer to a static
    buffer, or NULL on empty string. You must copy the string before
    calling another gcov function.  */
 
+#if !IN_LIBGCOV
 GCOV_LINKAGE const char *
 gcov_read_string (void)
 {
@@ -609,20 +488,28 @@ gcov_read_string (void)
 GCOV_LINKAGE void
 gcov_read_summary (struct gcov_summary *summary)
 {
-  summary->runs = gcov_read_unsigned ();
-  summary->sum_max = gcov_read_unsigned ();
+  unsigned ix;
+  struct gcov_ctr_summary *csum;
+
+  summary->checksum = gcov_read_unsigned ();
+  for (csum = summary->ctrs, ix = GCOV_COUNTERS_SUMMABLE; ix--; csum++)
+    {
+      csum->num = gcov_read_unsigned ();
+      csum->runs = gcov_read_unsigned ();
+      csum->sum_all = gcov_read_counter ();
+      csum->run_max = gcov_read_counter ();
+      csum->sum_max = gcov_read_counter ();
+    }
 }
 
-/* We need to expose the below function when compiling for gcov-tool.  */
-
-#if !IN_LIBGCOV || defined (IN_GCOV_TOOL)
+#if !IN_LIBGCOV
 /* Reset to a known position.  BASE should have been obtained from
    gcov_position, LENGTH should be a record length.  */
 
 GCOV_LINKAGE void
 gcov_sync (gcov_position_t base, gcov_unsigned_t length)
 {
-  gcov_nonruntime_assert (gcov_var.mode > 0);
+  gcc_assert (gcov_var.mode > 0);
   base += length;
   if (base - gcov_var.start <= gcov_var.length)
     gcov_var.offset = base - gcov_var.start;
@@ -641,6 +528,7 @@ gcov_sync (gcov_position_t base, gcov_unsigned_t length)
 GCOV_LINKAGE void
 gcov_seek (gcov_position_t base)
 {
+  gcc_assert (gcov_var.mode < 0);
   if (gcov_var.offset)
     gcov_write_block (gcov_var.offset);
   fseek (gcov_var.file, base << 2, SEEK_SET);

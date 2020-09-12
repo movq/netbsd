@@ -1,4 +1,4 @@
-// Copyright (C) 2002-2019 Free Software Foundation, Inc.
+// Copyright (C) 2002, 2004, 2006, 2008, 2009 Free Software Foundation, Inc.
 //  
 // This file is part of GCC.
 //
@@ -30,12 +30,10 @@
 #include <new>
 #include <ext/atomicity.h>
 #include <ext/concurrence.h>
-#include <bits/atomic_lockfree_defines.h>
 #if defined(__GTHREADS) && defined(__GTHREAD_HAS_COND) \
-  && (ATOMIC_INT_LOCK_FREE > 1) && defined(_GLIBCXX_HAVE_LINUX_FUTEX)
+    && defined(_GLIBCXX_ATOMIC_BUILTINS_4) && defined(_GLIBCXX_HAVE_LINUX_FUTEX)
 # include <climits>
 # include <syscall.h>
-# include <unistd.h>
 # define _GLIBCXX_USE_FUTEX
 # define _GLIBCXX_FUTEX_WAIT 0
 # define _GLIBCXX_FUTEX_WAKE 1
@@ -86,7 +84,7 @@ namespace
 # if defined(__GTHREAD_HAS_COND) && !defined(_GLIBCXX_USE_FUTEX)
 namespace
 {
-  // A single condition variable controlling all static initializations.
+  // A single conditional variable controlling all static initializations.
   static __gnu_cxx::__cond* static_cond;  
 
   // using a fake type to avoid initializing a static class.
@@ -108,33 +106,22 @@ namespace
 # endif
 
 # ifndef _GLIBCXX_GUARD_TEST_AND_ACQUIRE
-
-// Test the guard variable with a memory load with
-// acquire semantics.
-
 inline bool
 __test_and_acquire (__cxxabiv1::__guard *g)
 {
-  unsigned char __c;
-  unsigned char *__p = reinterpret_cast<unsigned char *>(g);
-  __atomic_load (__p, &__c,  __ATOMIC_ACQUIRE);
-  (void) __p;
-  return _GLIBCXX_GUARD_TEST(&__c);
+  bool b = _GLIBCXX_GUARD_TEST (g);
+  _GLIBCXX_READ_MEM_BARRIER;
+  return b;
 }
 #  define _GLIBCXX_GUARD_TEST_AND_ACQUIRE(G) __test_and_acquire (G)
 # endif
 
 # ifndef _GLIBCXX_GUARD_SET_AND_RELEASE
-
-// Set the guard variable to 1 with memory order release semantics.
-
 inline void
 __set_and_release (__cxxabiv1::__guard *g)
 {
-  unsigned char *__p = reinterpret_cast<unsigned char *>(g);
-  unsigned char val = 1;
-  __atomic_store (__p, &val, __ATOMIC_RELEASE);
-  (void) __p;
+  _GLIBCXX_WRITE_MEM_BARRIER;
+  _GLIBCXX_GUARD_SET (g);
 }
 #  define _GLIBCXX_GUARD_SET_AND_RELEASE(G) __set_and_release (G)
 # endif
@@ -147,8 +134,13 @@ __set_and_release (__cxxabiv1::__guard *g)
 
 #endif /* __GTHREADS */
 
+namespace __gnu_cxx
+{
+  recursive_init_error::~recursive_init_error() throw() { }
+}
+
 //
-// Here are C++ run-time routines for guarded initialization of static
+// Here are C++ run-time routines for guarded initiailization of static
 // variables. There are 4 scenarios under which these routines are called:
 //
 //   1. Threads not supported (__GTHREADS not defined)
@@ -159,24 +151,24 @@ __set_and_release (__cxxabiv1::__guard *g)
 //
 // The old code supported scenarios 1-3 but was broken since it used a global
 // mutex for all threads and had the mutex locked during the whole duration of
-// initialization of a guarded static variable. The following created a
-// dead-lock with the old code.
+// initlization of a guarded static variable. The following created a dead-lock
+// with the old code.
 //
 //	Thread 1 acquires the global mutex.
 //	Thread 1 starts initializing static variable.
 //	Thread 1 creates thread 2 during initialization.
-//	Thread 2 attempts to acquire mutex to initialize another variable.
+//	Thread 2 attempts to acuqire mutex to initialize another variable.
 //	Thread 2 blocks since thread 1 is locking the mutex.
 //	Thread 1 waits for result from thread 2 and also blocks. A deadlock.
 //
-// The new code here can handle this situation and thus is more robust. However,
-// we need to use the POSIX thread condition variable, which is not supported
+// The new code here can handle this situation and thus is more robust. Howere,
+// we need to use the POSIX thread conditional variable, which is not supported
 // in all platforms, notably older versions of Microsoft Windows. The gthr*.h
 // headers define a symbol __GTHREAD_HAS_COND for platforms that support POSIX
-// like condition variables. For platforms that do not support condition
+// like conditional variables. For platforms that do not support conditional
 // variables, we need to fall back to the old code.
 
-// If _GLIBCXX_USE_FUTEX, no global mutex or condition variable is used,
+// If _GLIBCXX_USE_FUTEX, no global mutex or conditional variable is used,
 // only atomic operations are used together with futex syscall.
 // Valid values of the first integer in guard are:
 // 0				  No thread encountered the guarded init
@@ -215,7 +207,7 @@ namespace __cxxabiv1
   static inline void
   throw_recursive_init_exception()
   {
-#if __cpp_exceptions
+#ifdef __EXCEPTIONS
 	throw __gnu_cxx::recursive_init_error();
 #else
 	// Use __builtin_trap so we don't require abort().
@@ -223,7 +215,7 @@ namespace __cxxabiv1
 #endif
   }
 
-  // acquire() is a helper function used to acquire guard if thread support is
+  // acuire() is a helper function used to acquire guard if thread support is
   // not compiled in or is compiled in but not enabled at run-time.
   static int
   acquire(__guard *g)
@@ -250,7 +242,7 @@ namespace __cxxabiv1
       return 0;
 
 # ifdef _GLIBCXX_USE_FUTEX
-    // If __atomic_* and futex syscall are supported, don't use any global
+    // If __sync_* and futex syscall are supported, don't use any global
     // mutex.
     if (__gthread_active_p ())
       {
@@ -261,45 +253,23 @@ namespace __cxxabiv1
 
 	while (1)
 	  {
-	    int expected(0);
-	    if (__atomic_compare_exchange_n(gi, &expected, pending_bit, false,
-					    __ATOMIC_ACQ_REL,
-					    __ATOMIC_ACQUIRE))
+	    int old = __sync_val_compare_and_swap (gi, 0, pending_bit);
+	    if (old == 0)
+	      return 1;	// This thread should do the initialization.
+
+	    if (old == guard_bit)
+	      return 0;	// Already initialized.
+
+	    if (old == pending_bit)
 	      {
-		// This thread should do the initialization.
-		return 1;
-	      }
-	      
-	    if (expected == guard_bit)
-	      {
-		// Already initialized.
-		return 0;	
+		int newv = old | waiting_bit;
+		if (__sync_val_compare_and_swap (gi, old, newv) != old)
+		  continue;
+
+		old = newv;
 	      }
 
-	     if (expected == pending_bit)
-	       {
-		 // Use acquire here.
-		 int newv = expected | waiting_bit;
-		 if (!__atomic_compare_exchange_n(gi, &expected, newv, false,
-						  __ATOMIC_ACQ_REL, 
-						  __ATOMIC_ACQUIRE))
-		   {
-		     if (expected == guard_bit)
-		       {
-			 // Make a thread that failed to set the
-			 // waiting bit exit the function earlier,
-			 // if it detects that another thread has
-			 // successfully finished initialising.
-			 return 0;
-		       }
-		     if (expected == 0)
-		       continue;
-		   }
-		 
-		 expected = newv;
-	       }
-
-	    syscall (SYS_futex, gi, _GLIBCXX_FUTEX_WAIT, expected, 0);
+	    syscall (SYS_futex, gi, _GLIBCXX_FUTEX_WAIT, old, 0);
 	  }
       }
 # else
@@ -318,7 +288,7 @@ namespace __cxxabiv1
 	      {
 		// The guarded static is currently being initialized by
 		// another thread, so we release mutex and wait for the
-		// condition variable. We will lock the mutex again after
+		// conditional variable. We will lock the mutex again after
 		// this.
 		get_static_cond().wait_recursive(&get_static_mutex());
 	      }
@@ -329,7 +299,7 @@ namespace __cxxabiv1
 	      }
 #  else
 	    // This provides compatibility with older systems not supporting
-	    // POSIX like condition variables.
+	    // POSIX like conditional variables.
 	    if (acquire(g))
 	      {
 		mw.unlock = false;
@@ -349,13 +319,13 @@ namespace __cxxabiv1
   void __cxa_guard_abort (__guard *g) throw ()
   {
 #ifdef _GLIBCXX_USE_FUTEX
-    // If __atomic_* and futex syscall are supported, don't use any global
+    // If __sync_* and futex syscall are supported, don't use any global
     // mutex.
     if (__gthread_active_p ())
       {
 	int *gi = (int *) (void *) g;
 	const int waiting_bit = _GLIBCXX_GUARD_WAITING_BIT;
-	int old = __atomic_exchange_n (gi, 0, __ATOMIC_ACQ_REL);
+	int old = __sync_lock_test_and_set (gi, 0);
 
 	if ((old & waiting_bit) != 0)
 	  syscall (SYS_futex, gi, _GLIBCXX_FUTEX_WAKE, INT_MAX);
@@ -369,7 +339,7 @@ namespace __cxxabiv1
 	set_init_in_progress_flag(g, 0);
 
 	// If we abort, we still need to wake up all other threads waiting for
-	// the condition variable.
+	// the conditional variable.
         get_static_cond().broadcast();
 	return;
       }	
@@ -378,7 +348,7 @@ namespace __cxxabiv1
     set_init_in_progress_flag(g, 0);
 #if defined(__GTHREADS) && !defined(__GTHREAD_HAS_COND)
     // This provides compatibility with older systems not supporting POSIX like
-    // condition variables.
+    // conditional variables.
     if (__gthread_active_p ())
       static_mutex->unlock();
 #endif
@@ -388,14 +358,14 @@ namespace __cxxabiv1
   void __cxa_guard_release (__guard *g) throw ()
   {
 #ifdef _GLIBCXX_USE_FUTEX
-    // If __atomic_* and futex syscall are supported, don't use any global
+    // If __sync_* and futex syscall are supported, don't use any global
     // mutex.
     if (__gthread_active_p ())
       {
 	int *gi = (int *) (void *) g;
 	const int guard_bit = _GLIBCXX_GUARD_BIT;
 	const int waiting_bit = _GLIBCXX_GUARD_WAITING_BIT;
-	int old = __atomic_exchange_n (gi, guard_bit, __ATOMIC_ACQ_REL);
+	int old = __sync_lock_test_and_set (gi, guard_bit);
 
 	if ((old & waiting_bit) != 0)
 	  syscall (SYS_futex, gi, _GLIBCXX_FUTEX_WAKE, INT_MAX);
@@ -419,7 +389,7 @@ namespace __cxxabiv1
 
 #if defined(__GTHREADS) && !defined(__GTHREAD_HAS_COND)
     // This provides compatibility with older systems not supporting POSIX like
-    // condition variables.
+    // conditional variables.
     if (__gthread_active_p())
       static_mutex->unlock();
 #endif

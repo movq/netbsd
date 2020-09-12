@@ -1,14 +1,4 @@
-/* config.in.  Generated from configure.ac by autoheader.  */
-
-/* Check that config.h is #included before system headers
-   (this works only for glibc, but that should be enough).  */
-#if defined(__GLIBC__) && !defined(__FreeBSD_kernel__) && !defined(__CONFIG_H__)
-#  error config.h must be #included before system headers
-#endif
-#define __CONFIG_H__ 1
-
-/* Define if building universal (internal helper macro) */
-#undef AC_APPLE_UNIVERSAL_BUILD
+/* config.in.  Generated from configure.in by autoheader.  */
 
 /* Define if using AIX 5.2 value for C_WEAKEXT. */
 #undef AIX_WEAK_SUPPORT
@@ -36,30 +26,6 @@
 /* Default emulation. */
 #undef DEFAULT_EMULATION
 
-/* Define if you want compressed debug sections by default. */
-#undef DEFAULT_FLAG_COMPRESS_DEBUG
-
-/* Define to 1 if you want to generate GNU Build attribute notes by default,
-   if none are contained in the input. */
-#undef DEFAULT_GENERATE_BUILD_NOTES
-
-/* Define to 1 if you want to generate ELF common symbols with the STT_COMMON
-   type by default. */
-#undef DEFAULT_GENERATE_ELF_STT_COMMON
-
-/* Define to 1 if you want to generate x86 relax relocations by default. */
-#undef DEFAULT_GENERATE_X86_RELAX_RELOCATIONS
-
-/* Define to 1 if you want to fix Loongson3 LLSC Errata by default. */
-#undef DEFAULT_MIPS_FIX_LOONGSON3_LLSC
-
-/* Define to 1 if you want to generate RISC-V arch attribute by default. */
-#undef DEFAULT_RISCV_ATTR
-
-/* Define to 1 if you want to generate GNU x86 used ISA and feature properties
-   by default. */
-#undef DEFAULT_X86_USED_NOTE
-
 /* Supported emulations. */
 #undef EMULATIONS
 
@@ -77,40 +43,8 @@
    */
 #undef HAVE_ALLOCA_H
 
-/* Define to 1 if you have the declaration of `asprintf', and to 0 if you
-   don't. */
-#undef HAVE_DECL_ASPRINTF
-
-/* Define to 1 if you have the declaration of `free', and to 0 if you don't.
-   */
-#undef HAVE_DECL_FREE
-
-/* Define to 1 if you have the declaration of `getenv', and to 0 if you don't.
-   */
-#undef HAVE_DECL_GETENV
-
 /* Is the prototype for getopt in <unistd.h> in the expected format? */
 #undef HAVE_DECL_GETOPT
-
-/* Define to 1 if you have the declaration of `malloc', and to 0 if you don't.
-   */
-#undef HAVE_DECL_MALLOC
-
-/* Define to 1 if you have the declaration of `mempcpy', and to 0 if you
-   don't. */
-#undef HAVE_DECL_MEMPCPY
-
-/* Define to 1 if you have the declaration of `realloc', and to 0 if you
-   don't. */
-#undef HAVE_DECL_REALLOC
-
-/* Define to 1 if you have the declaration of `stpcpy', and to 0 if you don't.
-   */
-#undef HAVE_DECL_STPCPY
-
-/* Define to 1 if you have the declaration of `strstr', and to 0 if you don't.
-   */
-#undef HAVE_DECL_STRSTR
 
 /* Define to 1 if you have the declaration of `vsnprintf', and to 0 if you
    don't. */
@@ -125,14 +59,8 @@
 /* Define to 1 if you have the <inttypes.h> header file. */
 #undef HAVE_INTTYPES_H
 
-/* Define if your <locale.h> file defines LC_MESSAGES. */
-#undef HAVE_LC_MESSAGES
-
 /* Define to 1 if you have the <limits.h> header file. */
 #undef HAVE_LIMITS_H
-
-/* Define to 1 if you have the <locale.h> header file. */
-#undef HAVE_LOCALE_H
 
 /* Define to 1 if you have the <memory.h> header file. */
 #undef HAVE_MEMORY_H
@@ -143,8 +71,8 @@
 /* Define to 1 if you have the `sbrk' function. */
 #undef HAVE_SBRK
 
-/* Define to 1 if you have the `setlocale' function. */
-#undef HAVE_SETLOCALE
+/* Define to 1 if you have the <stdarg.h> header file. */
+#undef HAVE_STDARG_H
 
 /* Define to 1 if you have the <stdint.h> header file. */
 #undef HAVE_STDINT_H
@@ -158,26 +86,11 @@
 /* Define to 1 if you have the <string.h> header file. */
 #undef HAVE_STRING_H
 
-/* Define to 1 if you have the `strsignal' function. */
-#undef HAVE_STRSIGNAL
-
-/* Define if <sys/stat.h> has struct stat.st_mtim.tv_nsec */
-#undef HAVE_ST_MTIM_TV_NSEC
-
-/* Define if <sys/stat.h> has struct stat.st_mtim.tv_sec */
-#undef HAVE_ST_MTIM_TV_SEC
-
 /* Define to 1 if you have the <sys/stat.h> header file. */
 #undef HAVE_SYS_STAT_H
 
 /* Define to 1 if you have the <sys/types.h> header file. */
 #undef HAVE_SYS_TYPES_H
-
-/* Define to 1 if you have the <time.h> header file. */
-#undef HAVE_TIME_H
-
-/* Define if <time.h> has struct tm.tm_gmtoff. */
-#undef HAVE_TM_GMTOFF
 
 /* Define to 1 if you have the <unistd.h> header file. */
 #undef HAVE_UNISTD_H
@@ -185,8 +98,8 @@
 /* Define to 1 if you have the `unlink' function. */
 #undef HAVE_UNLINK
 
-/* Define to 1 if you have the <windows.h> header file. */
-#undef HAVE_WINDOWS_H
+/* Define to 1 if you have the <varargs.h> header file. */
+#undef HAVE_VARARGS_H
 
 /* Using i386 COFF? */
 #undef I386COFF
@@ -194,6 +107,12 @@
 /* Define to the sub-directory in which libtool stores uninstalled libraries.
    */
 #undef LT_OBJDIR
+
+/* Using m68k COFF? */
+#undef M68KCOFF
+
+/* Using m88k COFF? */
+#undef M88KCOFF
 
 /* Default CPU for MIPS targets. */
 #undef MIPS_CPU_STRING_DEFAULT
@@ -203,33 +122,6 @@
 
 /* Choose a default ABI for MIPS targets. */
 #undef MIPS_DEFAULT_ABI
-
-/* Define value for nds32_arch_name */
-#undef NDS32_DEFAULT_ARCH_NAME
-
-/* Define default value for nds32_audio_ext */
-#undef NDS32_DEFAULT_AUDIO_EXT
-
-/* Define default value for nds32_dsp_ext */
-#undef NDS32_DEFAULT_DSP_EXT
-
-/* Define default value for nds32_dx_regs */
-#undef NDS32_DEFAULT_DX_REGS
-
-/* Define default value for nds32_perf_ext */
-#undef NDS32_DEFAULT_PERF_EXT
-
-/* Define default value for nds32_perf_ext2 */
-#undef NDS32_DEFAULT_PERF_EXT2
-
-/* Define default value for nds32_string_ext */
-#undef NDS32_DEFAULT_STRING_EXT
-
-/* Define default value for nds32_zol_ext */
-#undef NDS32_DEFAULT_ZOL_EXT
-
-/* Define default value for nds32_linux_toolchain */
-#undef NDS32_LINUX_TOOLCHAIN
 
 /* Define if environ is not declared in system header files. */
 #undef NEED_DECLARATION_ENVIRON
@@ -254,6 +146,9 @@
 
 /* a.out support? */
 #undef OBJ_MAYBE_AOUT
+
+/* b.out support? */
+#undef OBJ_MAYBE_BOUT
 
 /* COFF support? */
 #undef OBJ_MAYBE_COFF
@@ -285,15 +180,15 @@
 /* Define to the one symbol short name of this package. */
 #undef PACKAGE_TARNAME
 
-/* Define to the home page for this package. */
-#undef PACKAGE_URL
-
 /* Define to the version of this package. */
 #undef PACKAGE_VERSION
 
+/* Define if defaulting to ELF on SCO 5. */
+#undef SCO_ELF
+
 /* If using the C implementation of alloca, define if you know the
    direction of stack growth for your system; otherwise it will be
-   automatically deduced at runtime.
+   automatically deduced at run-time.
 	STACK_DIRECTION > 0 => grows toward higher addresses
 	STACK_DIRECTION < 0 => grows toward lower addresses
 	STACK_DIRECTION = 0 => direction of growth unknown */
@@ -304,9 +199,6 @@
 
 /* Using strict COFF? */
 #undef STRICTCOFF
-
-/* Define if you can safely include both <string.h> and <strings.h>. */
-#undef STRING_WITH_STRINGS
 
 /* Target alias. */
 #undef TARGET_ALIAS
@@ -326,11 +218,11 @@
 /* Define if default target is PowerPC Solaris. */
 #undef TARGET_SOLARIS_COMMENT
 
+/* Define if target is Symbian OS. */
+#undef TARGET_SYMBIAN
+
 /* Target vendor. */
 #undef TARGET_VENDOR
-
-/* Target specific CPU. */
-#undef TARGET_WITH_CPU
 
 /* Use b modifier when opening binary files? */
 #undef USE_BINARY_FOPEN
@@ -340,6 +232,35 @@
 
 /* Allow use of E_MIPS_ABI_O32 on MIPS targets. */
 #undef USE_E_MIPS_ABI_O32
+
+/* Using cgen code? */
+#undef USING_CGEN
+
+/* Version number of package */
+#undef VERSION
+
+/* Define to 1 if your processor stores words with the most significant byte
+   first (like Motorola and SPARC, unlike Intel and VAX). */
+#undef WORDS_BIGENDIAN
+
+/* Define to 1 if `lex' declares `yytext' as a `char *' by default, not a
+   `char[]'. */
+#undef YYTEXT_POINTER
+
+/* Enable GNU extensions on systems that have them.  */
+#ifndef _GNU_SOURCE
+# undef _GNU_SOURCE
+#endif
+
+/* Define to 1 if on MINIX. */
+#undef _MINIX
+
+/* Define to 2 if the system does not provide POSIX.1 features except with
+   this defined. */
+#undef _POSIX_1_SOURCE
+
+/* Define to 1 if you need to in order for `stat' and other things to work. */
+#undef _POSIX_SOURCE
 
 /* Enable extensions on AIX 3, Interix.  */
 #ifndef _ALL_SOURCE
@@ -363,54 +284,8 @@
 #endif
 
 
-/* Using cgen code? */
-#undef USING_CGEN
-
-/* Version number of package */
-#undef VERSION
-
-/* Define WORDS_BIGENDIAN to 1 if your processor stores words with the most
-   significant byte first (like Motorola and SPARC, unlike Intel). */
-#if defined AC_APPLE_UNIVERSAL_BUILD
-# if defined __BIG_ENDIAN__
-#  define WORDS_BIGENDIAN 1
-# endif
-#else
-# ifndef WORDS_BIGENDIAN
-#  undef WORDS_BIGENDIAN
-# endif
-#endif
-
-/* Define to 1 if `lex' declares `yytext' as a `char *' by default, not a
-   `char[]'. */
-#undef YYTEXT_POINTER
-
-/* Enable large inode numbers on Mac OS X 10.5.  */
-#ifndef _DARWIN_USE_64_BIT_INODE
-# define _DARWIN_USE_64_BIT_INODE 1
-#endif
-
-/* Number of bits in a file offset, on hosts where this is settable. */
-#undef _FILE_OFFSET_BITS
-
-/* Define for large files, on AIX-style hosts. */
-#undef _LARGE_FILES
-
-/* Define to 1 if on MINIX. */
-#undef _MINIX
-
-/* Define to 2 if the system does not provide POSIX.1 features except with
-   this defined. */
-#undef _POSIX_1_SOURCE
-
-/* Define to 1 if you need to in order for `stat' and other things to work. */
-#undef _POSIX_SOURCE
-
 /* Define to `__inline__' or `__inline' if that's what the C compiler
    calls it, or to nothing if 'inline' is not supported under any name.  */
 #ifndef __cplusplus
 #undef inline
 #endif
-
-/* Define to `unsigned int' if <sys/types.h> does not define. */
-#undef size_t

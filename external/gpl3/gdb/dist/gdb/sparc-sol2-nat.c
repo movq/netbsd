@@ -1,6 +1,7 @@
 /* Native-dependent code for Solaris SPARC.
 
-   Copyright (C) 2003-2019 Free Software Foundation, Inc.
+   Copyright (C) 2003, 2004, 2007, 2008, 2009, 2010, 2011
+   Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -40,10 +41,16 @@
    PR_MODEL_LP64, we know that GDB is being compiled as a 64-bit
    program.
 
+   GNU/Linux uses the same formats as Solaris for its core files (but
+   not for ptrace(2)).  The GNU/Linux headers don't define
+   PR_MODEL_NATIVE though.  Therefore we rely on the __arch64__ define
+   provided by GCC to determine the appropriate data model.
+
    Note that a 32-bit GDB won't be able to debug a 64-bit target
    process using /proc on Solaris.  */
 
-#if PR_MODEL_NATIVE == PR_MODEL_LP64
+#if (defined (__arch64__) || \
+     (defined (PR_MODEL_NATIVE) && (PR_MODEL_NATIVE == PR_MODEL_LP64)))
 
 #include "sparc64-tdep.h"
 
@@ -52,8 +59,8 @@
 #define sparc_collect_gregset sparc64_collect_gregset
 #define sparc_collect_fpregset sparc64_collect_fpregset
 
-#define sparc_sol2_gregmap sparc64_sol2_gregmap
-#define sparc_sol2_fpregmap sparc64_sol2_fpregmap
+#define sparc_sol2_gregset sparc64_sol2_gregset
+#define sparc_sol2_fpregset sparc64_sol2_fpregset
 
 #else
 
@@ -62,32 +69,47 @@
 #define sparc_collect_gregset sparc32_collect_gregset
 #define sparc_collect_fpregset sparc32_collect_fpregset
 
-#define sparc_sol2_gregmap sparc32_sol2_gregmap
-#define sparc_sol2_fpregmap sparc32_sol2_fpregmap
+#define sparc_sol2_gregset sparc32_sol2_gregset
+#define sparc_sol2_fpregset sparc32_sol2_fpregset
 
 #endif
 
 void
 supply_gregset (struct regcache *regcache, const prgregset_t *gregs)
 {
-  sparc_supply_gregset (&sparc_sol2_gregmap, regcache, -1, gregs);
+  sparc_supply_gregset (&sparc_sol2_gregset, regcache, -1, gregs);
 }
 
 void
 supply_fpregset (struct regcache *regcache, const prfpregset_t *fpregs)
 {
-  sparc_supply_fpregset (&sparc_sol2_fpregmap, regcache, -1, fpregs);
+  sparc_supply_fpregset (regcache, -1, fpregs);
 }
 
 void
 fill_gregset (const struct regcache *regcache, prgregset_t *gregs, int regnum)
 {
-  sparc_collect_gregset (&sparc_sol2_gregmap, regcache, regnum, gregs);
+  sparc_collect_gregset (&sparc_sol2_gregset, regcache, regnum, gregs);
 }
 
 void
 fill_fpregset (const struct regcache *regcache,
 	       prfpregset_t *fpregs, int regnum)
 {
-  sparc_collect_fpregset (&sparc_sol2_fpregmap, regcache, regnum, fpregs);
+  sparc_collect_fpregset (regcache, regnum, fpregs);
+}
+
+/* Provide a prototype to silence -Wmissing-prototypes.  */
+extern initialize_file_ftype _initialize_sparc_sol2_nat;
+
+void
+_initialize_sparc_sol2_nat (void)
+{
+  struct target_ops *t;
+
+  t = procfs_target ();
+#ifdef NEW_PROC_API	/* Solaris 6 and above can do HW watchpoints.  */
+  procfs_use_watchpoints (t);
+#endif
+  add_target (t);
 }

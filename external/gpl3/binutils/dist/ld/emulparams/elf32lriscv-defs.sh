@@ -1,12 +1,18 @@
 # This is an ELF platform.
 SCRIPT_NAME=elf
-ARCH=riscv
-NO_REL_RELOCS=yes
 
-TEMPLATE_NAME=elf
+# Handle both little-ended 32-bit RISC-V objects.
+ARCH=riscv
+OUTPUT_FORMAT="elf32-littleriscv"
+
+TEMPLATE_NAME=elf32
 EXTRA_EM_FILE=riscvelf
 
-ELFSIZE=32
+case "$EMULATION_NAME" in
+elf32*) ELFSIZE=32; LIBPATH_SUFFIX=32 ;;
+elf64*) ELFSIZE=64; LIBPATH_SUFFIX=   ;;
+*) echo $0: unhandled emulation $EMULATION_NAME >&2; exit 1 ;;
+esac
 
 if test `echo "$host" | sed -e s/64//` = `echo "$target" | sed -e s/64//`; then
   case " $EMULATION_LIBPATH " in
@@ -16,33 +22,38 @@ if test `echo "$host" | sed -e s/64//` = `echo "$target" | sed -e s/64//`; then
   esac
 fi
 
-# Enable shared library support for everything except an embedded elf target.
-case "$target" in
-  riscv*-elf)
-    ;;
-  *)
-    GENERATE_SHLIB_SCRIPT=yes
-    GENERATE_PIE_SCRIPT=yes
-    ;;
-esac
+GENERATE_SHLIB_SCRIPT=yes
+GENERATE_PIE_SCRIPT=yes
 
-TEXT_START_ADDR=0x10000
+TEXT_START_ADDR=0x10000000
+SHLIB_TEXT_START_ADDR=0x1000000
 MAXPAGESIZE="CONSTANT (MAXPAGESIZE)"
-COMMONPAGESIZE="CONSTANT (COMMONPAGESIZE)"
+ENTRY=_start
 
-DATA_START_SYMBOLS="${CREATE_SHLIB-__DATA_BEGIN__ = .;}"
+# Unlike most targets, the RISC-V backend puts all dynamic relocations
+# in a single dynobj section, which it also calls ".rel.dyn".  It does
+# this so that it can easily sort all dynamic relocations before the
+# output section has been populated.
+OTHER_GOT_RELOC_SECTIONS="
+  .rel.dyn      ${RELOCATING-0} : { *(.rel.dyn) }
+"
+GOT=".got          ${RELOCATING-0} : { *(.got) }"
+unset OTHER_READWRITE_SECTIONS
+unset OTHER_RELRO_SECTIONS
 
-SDATA_START_SYMBOLS="${CREATE_SHLIB-__SDATA_BEGIN__ = .;}
-    *(.srodata.cst16) *(.srodata.cst8) *(.srodata.cst4) *(.srodata.cst2) *(.srodata .srodata.*)"
+# Magic symbols.
+TEXT_START_SYMBOLS='_ftext = . ;'
+DATA_START_SYMBOLS='_fdata = . ;'
+OTHER_BSS_SYMBOLS='_fbss = .;'
 
-INITIAL_READONLY_SECTIONS=".interp         : { *(.interp) } ${CREATE_PIE-${INITIAL_READONLY_SECTIONS}}"
-INITIAL_READONLY_SECTIONS="${RELOCATING+${CREATE_SHLIB-${INITIAL_READONLY_SECTIONS}}}"
+INITIAL_READONLY_SECTIONS=".interp       ${RELOCATING-0} : { *(.interp) }"
+SDATA_START_SYMBOLS="_gp = . + 0x800;
+    *(.srodata.cst16) *(.srodata.cst8) *(.srodata.cst4) *(.srodata.cst2) *(.srodata*)"
+if test -n "${CREATE_SHLIB}"; then
+  INITIAL_READONLY_SECTIONS=
+  SDATA_START_SYMBOLS=
+  OTHER_READONLY_SECTIONS=".srodata      ${RELOCATING-0} : { *(.srodata.cst16) *(.srodata.cst8) *(.srodata.cst4) *(.srodata.cst2) *(.srodata*) }"
+  unset GOT
+fi
 
-# We must cover as much of sdata as possible if it exists.  If sdata+bss is
-# smaller than 0x1000 then we should start from bss end to cover as much of
-# the program as possible.  But we can't allow gp to cover any of rodata, as
-# the address of variables in rodata may change during relaxation, so we start
-# from data in that case.
-OTHER_END_SYMBOLS="${CREATE_SHLIB-__BSS_END__ = .;
-    __global_pointer$ = MIN(__SDATA_BEGIN__ + 0x800,
-		            MAX(__DATA_BEGIN__ + 0x800, __BSS_END__ - 0x800));}"
+TEXT_DYNAMIC=

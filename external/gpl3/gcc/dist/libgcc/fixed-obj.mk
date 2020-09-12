@@ -22,12 +22,10 @@ endif
 
 #$(info $o$(objext): -DL$($o-label) $($o-opt))
 
-ifneq ($o,$(filter $o,$(LIB2FUNCS_EXCLUDE)))
-$o$(objext): %$(objext): $(srcdir)/fixed-bit.c
-	$(gcc_compile) -DL$($*-label) $($*-opt) -c $(srcdir)/fixed-bit.c $(vis_hide)
+$o$(objext): %$(objext): $(gcc_srcdir)/config/fixed-bit.c
+	$(gcc_compile) -DL$($*-label) $($*-opt) -c $(gcc_srcdir)/config/fixed-bit.c $(vis_hide)
 
 ifeq ($(enable_shared),yes)
-$(o)_s$(objext): %_s$(objext): $(srcdir)/fixed-bit.c
-	$(gcc_s_compile) -DL$($*-label) $($*-opt) -c $(srcdir)/fixed-bit.c
-endif
+$(o)_s$(objext): %_s$(objext): $(gcc_srcdir)/config/fixed-bit.c
+	$(gcc_s_compile) -DL$($*-label) $($*-opt) -c $(gcc_srcdir)/config/fixed-bit.c
 endif

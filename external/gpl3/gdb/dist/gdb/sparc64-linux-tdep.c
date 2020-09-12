@@ -1,6 +1,7 @@
 /* Target-dependent code for GNU/Linux UltraSPARC.
 
-   Copyright (C) 2003-2019 Free Software Foundation, Inc.
+   Copyright (C) 2003, 2004, 2005, 2007, 2008, 2009, 2010, 2011
+   Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -33,17 +34,6 @@
 #include "xml-syscall.h"
 #include "linux-tdep.h"
 
-/* ADI specific si_code */
-#ifndef SEGV_ACCADI
-#define SEGV_ACCADI	3
-#endif
-#ifndef SEGV_ADIDERR
-#define SEGV_ADIDERR	4
-#endif
-#ifndef SEGV_ADIPERR
-#define SEGV_ADIPERR	5
-#endif
-
 /* The syscall's XML filename for sparc 64-bit.  */
 #define XML_SYSCALL_FILENAME_SPARC64 "syscalls/sparc64-linux.xml"
 
@@ -64,9 +54,9 @@ static const struct tramp_frame sparc64_linux_rt_sigframe =
   SIGTRAMP_FRAME,
   4,
   {
-    { 0x82102065, ULONGEST_MAX },		/* mov __NR_rt_sigreturn, %g1 */
-    { 0x91d0206d, ULONGEST_MAX },		/* ta  0x6d */
-    { TRAMP_SENTINEL_INSN, ULONGEST_MAX }
+    { 0x82102065, -1 },		/* mov __NR_rt_sigreturn, %g1 */
+    { 0x91d0206d, -1 },		/* ta  0x6d */
+    { TRAMP_SENTINEL_INSN, -1 }
   },
   sparc64_linux_sigframe_init
 };
@@ -115,62 +105,6 @@ sparc64_linux_sigframe_init (const struct tramp_frame *self,
     }
   trad_frame_set_id (this_cache, frame_id_build (base, func));
 }
-
-/* sparc64 GNU/Linux implementation of the handle_segmentation_fault
-   gdbarch hook.
-   Displays information related to ADI memory corruptions.  */
-
-void
-sparc64_linux_handle_segmentation_fault (struct gdbarch *gdbarch,
-				      struct ui_out *uiout)
-{
-  if (gdbarch_bfd_arch_info (gdbarch)->bits_per_word != 64)
-    return;
-
-  CORE_ADDR addr = 0;
-  long si_code = 0;
-
-  TRY
-    {
-      /* Evaluate si_code to see if the segfault is ADI related.  */
-      si_code = parse_and_eval_long ("$_siginfo.si_code\n");
-
-      if (si_code >= SEGV_ACCADI && si_code <= SEGV_ADIPERR)
-        addr = parse_and_eval_long ("$_siginfo._sifields._sigfault.si_addr");
-    }
-  CATCH (exception, RETURN_MASK_ALL)
-    {
-      return;
-    }
-  END_CATCH
-
-  /* Print out ADI event based on sig_code value */
-  switch (si_code)
-    {
-    case SEGV_ACCADI:	/* adi not enabled */
-      uiout->text ("\n");
-      uiout->field_string ("sigcode-meaning", _("ADI disabled"));
-      uiout->text (_(" while accessing address "));
-      uiout->field_fmt ("bound-access", "%s", paddress (gdbarch, addr));
-      break;
-    case SEGV_ADIDERR:	/* disrupting mismatch */
-      uiout->text ("\n");
-      uiout->field_string ("sigcode-meaning", _("ADI deferred mismatch"));
-      uiout->text (_(" while accessing address "));
-      uiout->field_fmt ("bound-access", "%s", paddress (gdbarch, addr));
-      break;
-    case SEGV_ADIPERR:	/* precise mismatch */
-      uiout->text ("\n");
-      uiout->field_string ("sigcode-meaning", _("ADI precise mismatch"));
-      uiout->text (_(" while accessing address "));
-      uiout->field_fmt ("bound-access", "%s", paddress (gdbarch, addr));
-      break;
-    default:
-      break;
-    }
-
-}
-
 
 /* Return the address of a system call's alternative return
    address.  */
@@ -178,9 +112,7 @@ sparc64_linux_handle_segmentation_fault (struct gdbarch *gdbarch,
 static CORE_ADDR
 sparc64_linux_step_trap (struct frame_info *frame, unsigned long insn)
 {
-  /* __NR_rt_sigreturn is 101  */
-  if ((insn == 0x91d0206d)
-      && (get_frame_register_unsigned (frame, SPARC_G1_REGNUM) == 101))
+  if (insn == 0x91d0206d)
     {
       struct gdbarch *gdbarch = get_frame_arch (frame);
       enum bfd_endian byte_order = gdbarch_byte_order (gdbarch);
@@ -206,7 +138,7 @@ sparc64_linux_step_trap (struct frame_info *frame, unsigned long insn)
 }
 
 
-const struct sparc_gregmap sparc64_linux_core_gregmap =
+const struct sparc_gregset sparc64_linux_core_gregset =
 {
   32 * 8,			/* %tstate */
   33 * 8,			/* %tpc */
@@ -225,7 +157,7 @@ sparc64_linux_supply_core_gregset (const struct regset *regset,
 				   struct regcache *regcache,
 				   int regnum, const void *gregs, size_t len)
 {
-  sparc64_supply_gregset (&sparc64_linux_core_gregmap,
+  sparc64_supply_gregset (&sparc64_linux_core_gregset,
 			  regcache, regnum, gregs);
 }
 
@@ -234,7 +166,7 @@ sparc64_linux_collect_core_gregset (const struct regset *regset,
 				    const struct regcache *regcache,
 				    int regnum, void *gregs, size_t len)
 {
-  sparc64_collect_gregset (&sparc64_linux_core_gregmap,
+  sparc64_collect_gregset (&sparc64_linux_core_gregset,
 			   regcache, regnum, gregs);
 }
 
@@ -243,7 +175,7 @@ sparc64_linux_supply_core_fpregset (const struct regset *regset,
 				    struct regcache *regcache,
 				    int regnum, const void *fpregs, size_t len)
 {
-  sparc64_supply_fpregset (&sparc64_bsd_fpregmap, regcache, regnum, fpregs);
+  sparc64_supply_fpregset (regcache, regnum, fpregs);
 }
 
 static void
@@ -251,7 +183,7 @@ sparc64_linux_collect_core_fpregset (const struct regset *regset,
 				     const struct regcache *regcache,
 				     int regnum, void *fpregs, size_t len)
 {
-  sparc64_collect_fpregset (&sparc64_bsd_fpregmap, regcache, regnum, fpregs);
+  sparc64_collect_fpregset (regcache, regnum, fpregs);
 }
 
 /* Set the program counter for process PTID to PC.  */
@@ -261,7 +193,7 @@ sparc64_linux_collect_core_fpregset (const struct regset *regset,
 static void
 sparc64_linux_write_pc (struct regcache *regcache, CORE_ADDR pc)
 {
-  struct gdbarch_tdep *tdep = gdbarch_tdep (regcache->arch ());
+  struct gdbarch_tdep *tdep = gdbarch_tdep (get_regcache_arch (regcache));
   ULONGEST state;
 
   regcache_cooked_write_unsigned (regcache, tdep->pc_regnum, pc);
@@ -282,9 +214,9 @@ sparc64_linux_write_pc (struct regcache *regcache, CORE_ADDR pc)
 
 static LONGEST
 sparc64_linux_get_syscall_number (struct gdbarch *gdbarch,
-				  thread_info *thread)
+				  ptid_t ptid)
 {
-  struct regcache *regcache = get_thread_regcache (thread);
+  struct regcache *regcache = get_thread_regcache (ptid);
   enum bfd_endian byte_order = gdbarch_byte_order (gdbarch);
   /* The content of a register.  */
   gdb_byte buf[8];
@@ -294,7 +226,7 @@ sparc64_linux_get_syscall_number (struct gdbarch *gdbarch,
   /* Getting the system call number from the register.
      When dealing with the sparc architecture, this information
      is stored at the %g1 register.  */
-  regcache->cooked_read (SPARC_G1_REGNUM, buf);
+  regcache_cooked_read (regcache, SPARC_G1_REGNUM, buf);
 
   ret = extract_signed_integer (buf, 8, byte_order);
 
@@ -302,63 +234,6 @@ sparc64_linux_get_syscall_number (struct gdbarch *gdbarch,
 }
 
 
-/* Implement the "get_longjmp_target" gdbarch method.  */
-
-static int
-sparc64_linux_get_longjmp_target (struct frame_info *frame, CORE_ADDR *pc)
-{
-  struct gdbarch *gdbarch = get_frame_arch (frame);
-  CORE_ADDR jb_addr;
-  gdb_byte buf[8];
-
-  jb_addr = get_frame_register_unsigned (frame, SPARC_O0_REGNUM);
-
-  /* setjmp and longjmp in SPARC64 are implemented in glibc using the
-     setcontext and getcontext system calls respectively.  These
-     system calls operate on ucontext_t structures, which happen to
-     partially have the same structure than jmp_buf.  However the
-     ucontext returned by getcontext, and thus the jmp_buf structure
-     returned by setjmp, contains the context of the trap instruction
-     in the glibc __[sig]setjmp wrapper, not the context of the user
-     code calling setjmp.
-
-     %o7 in the jmp_buf structure is stored at offset 18*8 in the
-     mc_gregs array, which is itself located at offset 32 into
-     jmp_buf.  See bits/setjmp.h.  This register contains the address
-     of the 'call setjmp' instruction in user code.
-
-     In order to determine the longjmp target address in the
-     initiating frame we need to examine the call instruction itself,
-     in particular whether the annul bit is set.  If it is not set
-     then we need to jump over the instruction at the delay slot.  */
-
-  if (target_read_memory (jb_addr + 32 + (18 * 8), buf, 8))
-    return 0;
-
-  *pc = extract_unsigned_integer (buf, 8, gdbarch_byte_order (gdbarch));
-
-  if (!sparc_is_annulled_branch_insn (*pc))
-      *pc += 4; /* delay slot insn  */
-  *pc += 4; /* call insn  */
-
-  return 1;
-}
-
-
-
-static const struct regset sparc64_linux_gregset =
-  {
-    NULL,
-    sparc64_linux_supply_core_gregset,
-    sparc64_linux_collect_core_gregset
-  };
-
-static const struct regset sparc64_linux_fpregset =
-  {
-    NULL,
-    sparc64_linux_supply_core_fpregset,
-    sparc64_linux_collect_core_fpregset
-  };
 
 static void
 sparc64_linux_init_abi (struct gdbarch_info info, struct gdbarch *gdbarch)
@@ -367,10 +242,12 @@ sparc64_linux_init_abi (struct gdbarch_info info, struct gdbarch *gdbarch)
 
   linux_init_abi (info, gdbarch);
 
-  tdep->gregset = &sparc64_linux_gregset;
+  tdep->gregset = regset_alloc (gdbarch, sparc64_linux_supply_core_gregset,
+				sparc64_linux_collect_core_gregset);
   tdep->sizeof_gregset = 288;
 
-  tdep->fpregset = &sparc64_linux_fpregset;
+  tdep->fpregset = regset_alloc (gdbarch, sparc64_linux_supply_core_fpregset,
+				 sparc64_linux_collect_core_fpregset);
   tdep->sizeof_fpregset = 280;
 
   tramp_frame_prepend_unwinder (gdbarch, &sparc64_linux_rt_sigframe);
@@ -396,18 +273,17 @@ sparc64_linux_init_abi (struct gdbarch_info info, struct gdbarch *gdbarch)
   /* Make sure we can single-step over signal return system calls.  */
   tdep->step_trap = sparc64_linux_step_trap;
 
-  /* Make sure we can single-step over longjmp calls.  */
-  set_gdbarch_get_longjmp_target (gdbarch, sparc64_linux_get_longjmp_target);
-
   set_gdbarch_write_pc (gdbarch, sparc64_linux_write_pc);
 
   /* Functions for 'catch syscall'.  */
-  set_xml_syscall_file_name (gdbarch, XML_SYSCALL_FILENAME_SPARC64);
+  set_xml_syscall_file_name (XML_SYSCALL_FILENAME_SPARC64);
   set_gdbarch_get_syscall_number (gdbarch,
                                   sparc64_linux_get_syscall_number);
-  set_gdbarch_handle_segmentation_fault (gdbarch,
-					 sparc64_linux_handle_segmentation_fault);
 }
+
+
+/* Provide a prototype to silence -Wmissing-prototypes.  */
+extern void _initialize_sparc64_linux_tdep (void);
 
 void
 _initialize_sparc64_linux_tdep (void)

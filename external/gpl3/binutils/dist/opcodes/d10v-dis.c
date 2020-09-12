@@ -1,5 +1,6 @@
 /* Disassemble D10V instructions.
-   Copyright (C) 1996-2020 Free Software Foundation, Inc.
+   Copyright 1996, 1997, 1998, 2000, 2001, 2005, 2007
+   Free Software Foundation, Inc.
 
    This file is part of the GNU opcodes library.
 
@@ -18,10 +19,11 @@
    Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston,
    MA 02110-1301, USA.  */
 
-#include "sysdep.h"
 #include <stdio.h>
+
+#include "sysdep.h"
 #include "opcode/d10v.h"
-#include "disassemble.h"
+#include "dis-asm.h"
 
 /* The PC wraps at 18 bits, except for the segment number,
    so use this mask to keep the parts we want.  */

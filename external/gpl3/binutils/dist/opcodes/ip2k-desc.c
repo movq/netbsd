@@ -1,9 +1,8 @@
-/* DO NOT EDIT!  -*- buffer-read-only: t -*- vi:set ro:  */
 /* CPU data for ip2k.
 
 THIS FILE IS MACHINE GENERATED WITH CGEN.
 
-Copyright (C) 1996-2020 Free Software Foundation, Inc.
+Copyright 1996-2007 Free Software Foundation, Inc.
 
 This file is part of the GNU Binutils and/or GDB, the GNU debugger.
 
@@ -264,7 +263,11 @@ CGEN_KEYWORD ip2k_cgen_opval_register_names =
 
 /* The hardware table.  */
 
+#if defined (__STDC__) || defined (ALMOST_STDC) || defined (HAVE_STRINGIZE)
 #define A(a) (1 << CGEN_HW_##a)
+#else
+#define A(a) (1 << CGEN_HW_/**/a)
+#endif
 
 const CGEN_HW_ENTRY ip2k_cgen_hw_table[] =
 {
@@ -289,7 +292,11 @@ const CGEN_HW_ENTRY ip2k_cgen_hw_table[] =
 
 /* The instruction field table.  */
 
+#if defined (__STDC__) || defined (ALMOST_STDC) || defined (HAVE_STRINGIZE)
 #define A(a) (1 << CGEN_IFLD_##a)
+#else
+#define A(a) (1 << CGEN_IFLD_/**/a)
+#endif
 
 const CGEN_IFLD ip2k_cgen_ifld_table[] =
 {
@@ -326,62 +333,70 @@ const CGEN_IFLD ip2k_cgen_ifld_table[] =
 
 /* The operand table.  */
 
+#if defined (__STDC__) || defined (ALMOST_STDC) || defined (HAVE_STRINGIZE)
 #define A(a) (1 << CGEN_OPERAND_##a)
+#else
+#define A(a) (1 << CGEN_OPERAND_/**/a)
+#endif
+#if defined (__STDC__) || defined (ALMOST_STDC) || defined (HAVE_STRINGIZE)
 #define OPERAND(op) IP2K_OPERAND_##op
+#else
+#define OPERAND(op) IP2K_OPERAND_/**/op
+#endif
 
 const CGEN_OPERAND ip2k_cgen_operand_table[] =
 {
 /* pc: program counter */
   { "pc", IP2K_OPERAND_PC, HW_H_PC, 0, 0,
-    { 0, { (const PTR) &ip2k_cgen_ifld_table[IP2K_F_NIL] } },
+    { 0, { (const PTR) &ip2k_cgen_ifld_table[IP2K_F_NIL] } }, 
     { 0|A(SEM_ONLY), { { { (1<<MACH_BASE), 0 } } } }  },
 /* addr16cjp: 13-bit address */
   { "addr16cjp", IP2K_OPERAND_ADDR16CJP, HW_H_UINT, 12, 13,
-    { 0, { (const PTR) &ip2k_cgen_ifld_table[IP2K_F_ADDR16CJP] } },
+    { 0, { (const PTR) &ip2k_cgen_ifld_table[IP2K_F_ADDR16CJP] } }, 
     { 0|A(ABS_ADDR), { { { (1<<MACH_BASE), 0 } } } }  },
 /* fr: register */
   { "fr", IP2K_OPERAND_FR, HW_H_REGISTERS, 8, 9,
-    { 0, { (const PTR) &ip2k_cgen_ifld_table[IP2K_F_REG] } },
+    { 0, { (const PTR) &ip2k_cgen_ifld_table[IP2K_F_REG] } }, 
     { 0|A(ABS_ADDR), { { { (1<<MACH_BASE), 0 } } } }  },
 /* lit8: 8-bit signed literal */
   { "lit8", IP2K_OPERAND_LIT8, HW_H_SINT, 7, 8,
-    { 0, { (const PTR) &ip2k_cgen_ifld_table[IP2K_F_IMM8] } },
+    { 0, { (const PTR) &ip2k_cgen_ifld_table[IP2K_F_IMM8] } }, 
     { 0, { { { (1<<MACH_BASE), 0 } } } }  },
 /* bitno: bit number */
   { "bitno", IP2K_OPERAND_BITNO, HW_H_UINT, 11, 3,
-    { 0, { (const PTR) &ip2k_cgen_ifld_table[IP2K_F_BITNO] } },
+    { 0, { (const PTR) &ip2k_cgen_ifld_table[IP2K_F_BITNO] } }, 
     { 0, { { { (1<<MACH_BASE), 0 } } } }  },
 /* addr16p: page number */
   { "addr16p", IP2K_OPERAND_ADDR16P, HW_H_UINT, 2, 3,
-    { 0, { (const PTR) &ip2k_cgen_ifld_table[IP2K_F_PAGE3] } },
+    { 0, { (const PTR) &ip2k_cgen_ifld_table[IP2K_F_PAGE3] } }, 
     { 0, { { { (1<<MACH_BASE), 0 } } } }  },
 /* addr16h: high 8 bits of address */
   { "addr16h", IP2K_OPERAND_ADDR16H, HW_H_UINT, 7, 8,
-    { 0, { (const PTR) &ip2k_cgen_ifld_table[IP2K_F_IMM8] } },
+    { 0, { (const PTR) &ip2k_cgen_ifld_table[IP2K_F_IMM8] } }, 
     { 0, { { { (1<<MACH_BASE), 0 } } } }  },
 /* addr16l: low 8 bits of address */
   { "addr16l", IP2K_OPERAND_ADDR16L, HW_H_UINT, 7, 8,
-    { 0, { (const PTR) &ip2k_cgen_ifld_table[IP2K_F_IMM8] } },
+    { 0, { (const PTR) &ip2k_cgen_ifld_table[IP2K_F_IMM8] } }, 
     { 0, { { { (1<<MACH_BASE), 0 } } } }  },
 /* reti3: reti flags */
   { "reti3", IP2K_OPERAND_RETI3, HW_H_UINT, 2, 3,
-    { 0, { (const PTR) &ip2k_cgen_ifld_table[IP2K_F_RETI3] } },
+    { 0, { (const PTR) &ip2k_cgen_ifld_table[IP2K_F_RETI3] } }, 
     { 0, { { { (1<<MACH_BASE), 0 } } } }  },
 /* pabits: page bits */
   { "pabits", IP2K_OPERAND_PABITS, HW_H_PABITS, 0, 0,
-    { 0, { (const PTR) 0 } },
+    { 0, { (const PTR) 0 } }, 
     { 0, { { { (1<<MACH_BASE), 0 } } } }  },
 /* zbit: zero bit */
   { "zbit", IP2K_OPERAND_ZBIT, HW_H_ZBIT, 0, 0,
-    { 0, { (const PTR) 0 } },
+    { 0, { (const PTR) 0 } }, 
     { 0, { { { (1<<MACH_BASE), 0 } } } }  },
 /* cbit: carry bit */
   { "cbit", IP2K_OPERAND_CBIT, HW_H_CBIT, 0, 0,
-    { 0, { (const PTR) 0 } },
+    { 0, { (const PTR) 0 } }, 
     { 0, { { { (1<<MACH_BASE), 0 } } } }  },
 /* dcbit: digit carry bit */
   { "dcbit", IP2K_OPERAND_DCBIT, HW_H_DCBIT, 0, 0,
-    { 0, { (const PTR) 0 } },
+    { 0, { (const PTR) 0 } }, 
     { 0, { { { (1<<MACH_BASE), 0 } } } }  },
 /* sentinel */
   { 0, 0, 0, 0, 0,
@@ -395,7 +410,11 @@ const CGEN_OPERAND ip2k_cgen_operand_table[] =
 /* The instruction table.  */
 
 #define OP(field) CGEN_SYNTAX_MAKE_FIELD (OPERAND (field))
+#if defined (__STDC__) || defined (ALMOST_STDC) || defined (HAVE_STRINGIZE)
 #define A(a) (1 << CGEN_INSN_##a)
+#else
+#define A(a) (1 << CGEN_INSN_/**/a)
+#endif
 
 static const CGEN_IBASE ip2k_cgen_insn_table[MAX_INSNS] =
 {
@@ -845,11 +864,6 @@ init_tables (void)
 {
 }
 
-#ifndef opcodes_error_handler
-#define opcodes_error_handler(...) \
-  fprintf (stderr, __VA_ARGS__); fputc ('\n', stderr)
-#endif
-
 static const CGEN_MACH * lookup_mach_via_bfd_name (const CGEN_MACH *, const char *);
 static void build_hw_table      (CGEN_CPU_TABLE *);
 static void build_ifield_table  (CGEN_CPU_TABLE *);
@@ -868,7 +882,7 @@ lookup_mach_via_bfd_name (const CGEN_MACH *table, const char *name)
 	return table;
       ++table;
     }
-  return NULL;
+  abort ();
 }
 
 /* Subroutine of ip2k_cgen_cpu_open to build the hardware table.  */
@@ -1010,11 +1024,8 @@ ip2k_cgen_rebuild_tables (CGEN_CPU_TABLE *cd)
 	{
 	  if (cd->insn_chunk_bitsize != 0 && cd->insn_chunk_bitsize != mach->insn_chunk_bitsize)
 	    {
-	      opcodes_error_handler
-		(/* xgettext:c-format */
-		 _("internal error: ip2k_cgen_rebuild_tables: "
-		   "conflicting insn-chunk-bitsize values: `%d' vs. `%d'"),
-		 cd->insn_chunk_bitsize, mach->insn_chunk_bitsize);
+	      fprintf (stderr, "ip2k_cgen_rebuild_tables: conflicting insn-chunk-bitsize values: `%d' vs. `%d'\n",
+		       cd->insn_chunk_bitsize, mach->insn_chunk_bitsize);
 	      abort ();
 	    }
 
@@ -1048,7 +1059,11 @@ ip2k_cgen_rebuild_tables (CGEN_CPU_TABLE *cd)
    CGEN_CPU_OPEN_END:     terminates arguments
 
    ??? Simultaneous multiple isas might not make sense, but it's not (yet)
-   precluded.  */
+   precluded.
+
+   ??? We only support ISO C stdargs here, not K&R.
+   Laziness, plus experiment to see if anything requires K&R - eventually
+   K&R will no longer be supported - e.g. GDB is currently trying this.  */
 
 CGEN_CPU_DESC
 ip2k_cgen_cpu_open (enum cgen_cpu_open_arg arg_type, ...)
@@ -1085,19 +1100,15 @@ ip2k_cgen_cpu_open (enum cgen_cpu_open_arg arg_type, ...)
 	    const CGEN_MACH *mach =
 	      lookup_mach_via_bfd_name (ip2k_cgen_mach_table, name);
 
-	    if (mach != NULL)
-	      machs |= 1 << mach->num;
+	    machs |= 1 << mach->num;
 	    break;
 	  }
 	case CGEN_CPU_OPEN_ENDIAN :
 	  endian = va_arg (ap, enum cgen_endian);
 	  break;
 	default :
-	  opcodes_error_handler
-	    (/* xgettext:c-format */
-	     _("internal error: ip2k_cgen_cpu_open: "
-	       "unsupported argument `%d'"),
-	     arg_type);
+	  fprintf (stderr, "ip2k_cgen_cpu_open: unsupported argument `%d'\n",
+		   arg_type);
 	  abort (); /* ??? return NULL? */
 	}
       arg_type = va_arg (ap, enum cgen_cpu_open_arg);
@@ -1112,9 +1123,7 @@ ip2k_cgen_cpu_open (enum cgen_cpu_open_arg arg_type, ...)
   if (endian == CGEN_ENDIAN_UNKNOWN)
     {
       /* ??? If target has only one, could have a default.  */
-      opcodes_error_handler
-	(/* xgettext:c-format */
-	 _("internal error: ip2k_cgen_cpu_open: no endianness specified"));
+      fprintf (stderr, "ip2k_cgen_cpu_open: no endianness specified\n");
       abort ();
     }
 
@@ -1133,7 +1142,7 @@ ip2k_cgen_cpu_open (enum cgen_cpu_open_arg arg_type, ...)
 
   /* Default to not allowing signed overflow.  */
   cd->signed_overflow_ok_p = 0;
-
+  
   return (CGEN_CPU_DESC) cd;
 }
 
@@ -1173,7 +1182,7 @@ ip2k_cgen_cpu_close (CGEN_CPU_DESC cd)
       for (i = 0; i < cd->insn_table.num_init_entries; ++i, ++insns)
 	if (CGEN_INSN_RX (insns))
 	  regfree (CGEN_INSN_RX (insns));
-    }
+    }  
 
   if (cd->macro_insn_table.init_entries)
     free ((CGEN_INSN *) cd->macro_insn_table.init_entries);

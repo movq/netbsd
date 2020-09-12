@@ -1,6 +1,6 @@
 /* A simple stack-based virtual machine to demonstrate
    JIT-compilation.
-   Copyright (C) 2014-2019 Free Software Foundation, Inc.
+   Copyright (C) 2014-2015 Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -27,29 +27,6 @@ along with GCC; see the file COPYING3.  If not see
 #include <dejagnu.h>
 
 #include <libgccjit++.h>
-
-/* Wrapper around a gcc_jit_result *.  */
-
-class compilation_result
-{
-public:
-  compilation_result (gcc_jit_result *result) :
-    m_result (result)
-  {
-  }
-  ~compilation_result ()
-  {
-    gcc_jit_result_release (m_result);
-  }
-
-  void *get_code (const char *funcname)
-  {
-    return gcc_jit_result_get_code (m_result, funcname);
-  }
-
-private:
-  gcc_jit_result *m_result;
-};
 
 /* Functions are compiled to this function ptr type.  */
 typedef int (*toyvm_compiled_func) (int);
@@ -123,19 +100,11 @@ public:
   int
   interpret (int arg, FILE *trace);
 
-  compilation_result
+  toyvm_compiled_func
   compile ();
-
-  const char *
-  get_function_name () const { return m_funcname; }
-
-private:
-  void
-  make_function_name (const char *filename);
 
 private:
   const char *fn_filename;
-  char       *m_funcname;
   int         fn_num_ops;
   toyvm_op    fn_ops[MAX_OPS];
   friend struct compilation_state;
@@ -180,8 +149,8 @@ toyvm_function::add_unary_op (enum opcode opcode,
   add_op (opcode, operand, linenum);
 }
 
-void
-toyvm_function::make_function_name (const char *filename)
+static char *
+get_function_name (const char *filename)
 {
   /* Skip any path separators.  */
   const char *pathsep = strrchr (filename, '/');
@@ -189,12 +158,14 @@ toyvm_function::make_function_name (const char *filename)
     filename = pathsep + 1;
 
   /* Copy filename to funcname.  */
-  m_funcname = (char *)malloc (strlen (filename) + 1);
+  char *funcname = (char *)malloc (strlen (filename) + 1);
 
-  strcpy (m_funcname, filename);
+  strcpy (funcname, filename);
 
   /* Convert "." to NIL terminator.  */
-  *(strchr (m_funcname, '.')) = '\0';
+  *(strchr (funcname, '.')) = '\0';
+
+  return funcname;
 }
 
 toyvm_function *
@@ -226,7 +197,6 @@ toyvm_function::parse (const char *filename, const char *name)
       goto error;
     }
   fn->fn_filename = filename;
-  fn->make_function_name (filename);
 
   /* Read the lines of the file.  */
   while ((linelen = getline (&line, &bufsize, f)) != -1)
@@ -450,7 +420,7 @@ public:
   void create_types ();
   void create_locations ();
   void create_function (const char *funcname);
-  compilation_result compile ();
+  gcc_jit_result *compile ();
 
 private:
   void
@@ -492,18 +462,24 @@ private:
 
 /* The main compilation hook.  */
 
-compilation_result
+toyvm_compiled_func
 toyvm_function::compile ()
 {
   compilation_state state (*this);
+  char *funcname;
+
+  funcname = get_function_name (fn_filename);
 
   state.create_context ();
   state.create_types ();
   state.create_locations ();
-  state.create_function (get_function_name ());
+  state.create_function (funcname);
 
   /* We've now finished populating the context.  Compile it.  */
-  return state.compile ();
+  gcc_jit_result *result = state.compile ();
+
+  return (toyvm_compiled_func)gcc_jit_result_get_code (result, funcname);
+  /* (this leaks "result" and "funcname") */
 }
 
 /* Stack manipulation.  */
@@ -791,7 +767,7 @@ compilation_state::create_function (const char *funcname)
     } /* end of loop on PC locations.  */
 }
 
-compilation_result
+gcc_jit_result *
 compilation_state::compile ()
 {
   return ctxt.compile ();
@@ -849,10 +825,7 @@ test_script (const char *scripts_dir, const char *script_name, int input,
   interpreted_result = fn->interpret (input, NULL);
   CHECK_VALUE (interpreted_result, expected_result);
 
-  compilation_result compiler_result = fn->compile ();
-
-  const char *funcname = fn->get_function_name ();
-  code = (toyvm_compiled_func)compiler_result.get_code (funcname);
+  code = fn->compile ();
   CHECK_NON_NULL (code);
 
   compiled_result = code (input);
@@ -921,12 +894,7 @@ main (int argc, char **argv)
 	  fn->interpret (atoi (argv[2]), NULL));
 
   /* JIT-compilation.  */
-  compilation_result compiler_result = fn->compile ();
-
-  const char *funcname = fn->get_function_name ();
-  toyvm_compiled_func code
-    = (toyvm_compiled_func)compiler_result.get_code (funcname);
-
+  toyvm_compiled_func code = fn->compile ();
   printf ("compiler result: %d\n",
 	  code (atoi (argv[2])));
 

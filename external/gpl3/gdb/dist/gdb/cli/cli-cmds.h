@@ -1,5 +1,6 @@
 /* Header file for GDB CLI command implementation library.
-   Copyright (C) 2000-2019 Free Software Foundation, Inc.
+   Copyright (c) 2000,2006,2007,2008,2009,2010,2011
+   Free Software Foundation, Inc.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -14,11 +15,8 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-#ifndef CLI_CLI_CMDS_H
-#define CLI_CLI_CMDS_H
-
-#include "common/filestuff.h"
-#include "common/gdb_optional.h"
+#if !defined (CLI_CMDS_H)
+#define CLI_CMDS_H 1
 
 /* Chain containing all defined commands.  */
 
@@ -48,9 +46,17 @@ extern struct cmd_list_element *detachlist;
 
 extern struct cmd_list_element *killlist;
 
+/* Chain containing all defined toggle subcommands.  */
+
+extern struct cmd_list_element *togglelist;
+
 /* Chain containing all defined stop subcommands.  */
 
 extern struct cmd_list_element *stoplist;
+
+/* Chain containing all defined "enable breakpoint" subcommands.  */
+
+extern struct cmd_list_element *enablebreaklist;
 
 /* Chain containing all defined set subcommands */
 
@@ -110,36 +116,22 @@ int is_complete_command (struct cmd_list_element *cmd);
 
 /* Exported to gdb/main.c */
 
-extern void cd_command (const char *, int);
+extern void cd_command (char *, int);
 
 /* Exported to gdb/top.c and gdb/main.c */
 
-extern void quit_command (const char *, int);
+extern void quit_command (char *, int);
 
-extern void source_script (const char *, int);
+extern void source_script (char *, int);
 
 /* Exported to objfiles.c.  */
 
-/* The script that was opened.  */
-struct open_script
-{
-  gdb_file_up stream;
-  gdb::unique_xmalloc_ptr<char> full_path;
-
-  open_script (gdb_file_up &&stream_,
-	       gdb::unique_xmalloc_ptr<char> &&full_path_)
-    : stream (std::move (stream_)),
-      full_path (std::move (full_path_))
-  {
-  }
-};
-
-extern gdb::optional<open_script>
-    find_and_open_script (const char *file, int search_path);
+extern int find_and_open_script (const char *file, int search_path,
+				 FILE **streamp, char **full_path);
 
 /* Command tracing state.  */
 
 extern int source_verbose;
 extern int trace_commands;
 
-#endif /* CLI_CLI_CMDS_H */
+#endif /* !defined (CLI_CMDS_H) */

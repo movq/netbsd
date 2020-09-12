@@ -1,5 +1,5 @@
 /* Utility to pick a temporary filename prefix.
-   Copyright (C) 1996-2020 Free Software Foundation, Inc.
+   Copyright (C) 1996, 1997, 1998 Free Software Foundation, Inc.
 
 This file is part of the libiberty library.
 Libiberty is free software; you can redistribute it and/or
@@ -22,10 +22,6 @@ Boston, MA 02110-1301, USA.  */
 #endif
 
 #include <stdio.h>	/* May get P_tmpdir.  */
-#include <sys/types.h>
-#ifdef HAVE_UNISTD_H
-#include <unistd.h>
-#endif
 #ifdef HAVE_STDLIB_H
 #include <stdlib.h>
 #endif
@@ -34,6 +30,7 @@ Boston, MA 02110-1301, USA.  */
 #endif
 
 #include "libiberty.h"
+extern char *choose_tmpdir (void);
 
 /* Name of temporary file.
    mktemp requires 6 trailing X's.  */

@@ -1,4 +1,5 @@
-# Copyright 2011-2019 Free Software Foundation, Inc.
+# Copyright 2011
+# Free Software Foundation, Inc.
 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -17,16 +18,18 @@
 
 # Test the memory attribute commands.
 
-standard_testfile .c
+if $tracelevel then {
+    strace $tracelevel
+}
 
-if { [prepare_for_testing "failed to prepare" $testfile $srcfile] } {
+set testfile "memattr"
+set srcfile  ${testfile}.c
+
+if { [prepare_for_testing $testfile.exp $testfile $srcfile] } {
     return -1
 }
 
 runto main
-
-# Delete all target-supplied memory regions.
-delete_memory_regions
 
 set mem1start -1
 set mem2start -1
@@ -113,31 +116,24 @@ set see3 0
 set see4 0
 set see5 0
 
-set info_mem_header_pattern \
-    "info mem.*Num\[ \t\]+Enb\[ \t\]+Low\[ \t\]+Addr\[ \t\]+High\[ \t\]+Addr\[ \t\]+Attrs\[^\r\n\]*\r\n"
-
 gdb_test_multiple "info mem" "info mem(1)" {
-    -re ${info_mem_header_pattern} {
-	# Discard the header.
-	exp_continue
-    }
-    -re "^1   y  \[ \t\]+$hex $hex wo nocache \[^\r\n\]*\r\n" {
+    -re "1   y  \[ \t\]+$hex $hex wo nocache \[^\r\n\]*" {
 	set see1 1
 	exp_continue
     }
-    -re "^2   y  \[ \t\]+$hex $hex ro nocache \[^\r\n\]*\r\n" {
+    -re "2   y  \[ \t\]+$hex $hex ro nocache \[^\r\n\]*" {
 	set see2 1
 	exp_continue
     }
-    -re "^3   y  \[ \t\]+$hex $hex rw nocache \[^\r\n\]*\r\n" {
+    -re "3   y  \[ \t\]+$hex $hex rw nocache \[^\r\n\]*" {
 	set see3 1
 	exp_continue
     }
-    -re "^4   y  \[ \t\]+$hex $hex rw nocache \[^\r\n\]*\r\n" {
+    -re "4   y  \[ \t\]+$hex $hex rw nocache \[^\r\n\]*" {
 	set see4 1
 	exp_continue
     }
-    -re "^5   y  \[ \t\]+$hex $hex rw nocache \[^\r\n\]*\r\n" {
+    -re "5   y  \[ \t\]+$hex $hex rw nocache .\[^\r\n\]*" {
 	set see5 1
 	exp_continue
     }
@@ -191,27 +187,23 @@ set see4 0
 set see5 0
 
 gdb_test_multiple "info mem" "mem 2 and 4 were disabled" {
-    -re ${info_mem_header_pattern} {
-	# Discard the header.
-	exp_continue
-    }
-    -re "^1   y  \[ \t\]+$hex $hex wo nocache \[^\r\n\]*.." {
+    -re "1   y  \[ \t\]+$hex $hex wo nocache \[^\r\n\]*" {
 	set see1 1
 	exp_continue
     }
-    -re "^2   n  \[ \t\]+$hex $hex ro nocache \[^\r\n\]*.." {
+    -re "2   n  \[ \t\]+$hex $hex ro nocache \[^\r\n\]*" {
 	set see2 1
 	exp_continue
     }
-    -re "^3   y  \[ \t\]+$hex $hex rw nocache \[^\r\n\]*.." {
+    -re "3   y  \[ \t\]+$hex $hex rw nocache \[^\r\n\]*" {
 	set see3 1
 	exp_continue
     }
-    -re "^4   n  \[ \t\]+$hex $hex rw nocache \[^\r\n\]*.." {
+    -re "4   n  \[ \t\]+$hex $hex rw nocache \[^\r\n\]*" {
 	set see4 1
 	exp_continue
     }
-    -re "^5   y  \[ \t\]+$hex $hex rw nocache \[^\r\n\]*.." {
+    -re "5   y  \[ \t\]+$hex $hex rw nocache .\[^\r\n\]*" {
 	set see5 1
 	exp_continue
     }
@@ -233,27 +225,23 @@ set see4 0
 set see5 0
 
 gdb_test_multiple "info mem" "mem 2-4 were enabled" {
-    -re ${info_mem_header_pattern} {
-	# Discard the header.
-	exp_continue
-    }
-    -re "^1   y  \[ \t\]+$hex $hex wo nocache \[^\r\n\]*.." {
+    -re "1   y  \[ \t\]+$hex $hex wo nocache \[^\r\n\]*" {
 	set see1 1
 	exp_continue
     }
-    -re "^2   y  \[ \t\]+$hex $hex ro nocache \[^\r\n\]*.." {
+    -re "2   y  \[ \t\]+$hex $hex ro nocache \[^\r\n\]*" {
 	set see2 1
 	exp_continue
     }
-    -re "^3   y  \[ \t\]+$hex $hex rw nocache \[^\r\n\]*.." {
+    -re "3   y  \[ \t\]+$hex $hex rw nocache \[^\r\n\]*" {
 	set see3 1
 	exp_continue
     }
-    -re "^4   y  \[ \t\]+$hex $hex rw nocache \[^\r\n\]*.." {
+    -re "4   y  \[ \t\]+$hex $hex rw nocache \[^\r\n\]*" {
 	set see4 1
 	exp_continue
     }
-    -re "^5   y  \[ \t\]+$hex $hex rw nocache \[^\r\n\]*.." {
+    -re "5   y  \[ \t\]+$hex $hex rw nocache .\[^\r\n\]*" {
 	set see5 1
 	exp_continue
     }
@@ -275,27 +263,23 @@ set see4 0
 set see5 0
 
 gdb_test_multiple "info mem" "mem 1 to 5 were disabled" {
-    -re ${info_mem_header_pattern} {
-	# Discard the header.
-	exp_continue
-    }
-    -re "^1   n  \[ \t\]+$hex $hex wo nocache \[^\r\n\]*.." {
+    -re "1   n  \[ \t\]+$hex $hex wo nocache \[^\r\n\]*" {
 	set see1 1
 	exp_continue
     }
-    -re "^2   n  \[ \t\]+$hex $hex ro nocache \[^\r\n\]*.." {
+    -re "2   n  \[ \t\]+$hex $hex ro nocache \[^\r\n\]*" {
 	set see2 1
 	exp_continue
     }
-    -re "^3   n  \[ \t\]+$hex $hex rw nocache \[^\r\n\]*.." {
+    -re "3   n  \[ \t\]+$hex $hex rw nocache \[^\r\n\]*" {
 	set see3 1
 	exp_continue
     }
-    -re "^4   n  \[ \t\]+$hex $hex rw nocache \[^\r\n\]*.." {
+    -re "4   n  \[ \t\]+$hex $hex rw nocache \[^\r\n\]*" {
 	set see4 1
 	exp_continue
     }
-    -re "^5   n  \[ \t\]+$hex $hex rw nocache \[^\r\n\]*.." {
+    -re "5   n  \[ \t\]+$hex $hex rw nocache .\[^\r\n\]*" {
 	set see5 1
 	exp_continue
     }
@@ -317,27 +301,23 @@ set see4 0
 set see5 0
 
 gdb_test_multiple "info mem" "mem 1 to 5 were enabled" {
-    -re ${info_mem_header_pattern} {
-	# Discard the header.
-	exp_continue
-    }
-    -re "^1   y  \[ \t\]+$hex $hex wo nocache \[^\r\n\]*.." {
+    -re "1   y  \[ \t\]+$hex $hex wo nocache \[^\r\n\]*" {
 	set see1 1
 	exp_continue
     }
-    -re "^2   y  \[ \t\]+$hex $hex ro nocache \[^\r\n\]*.." {
+    -re "2   y  \[ \t\]+$hex $hex ro nocache \[^\r\n\]*" {
 	set see2 1
 	exp_continue
     }
-    -re "^3   y  \[ \t\]+$hex $hex rw nocache \[^\r\n\]*.." {
+    -re "3   y  \[ \t\]+$hex $hex rw nocache \[^\r\n\]*" {
 	set see3 1
 	exp_continue
     }
-    -re "^4   y  \[ \t\]+$hex $hex rw nocache \[^\r\n\]*.." {
+    -re "4   y  \[ \t\]+$hex $hex rw nocache \[^\r\n\]*" {
 	set see4 1
 	exp_continue
     }
-    -re "^5   y  \[ \t\]+$hex $hex rw nocache \[^\r\n\]*.." {
+    -re "5   y  \[ \t\]+$hex $hex rw nocache .\[^\r\n\]*" {
 	set see5 1
 	exp_continue
     }
@@ -366,27 +346,23 @@ set see5 0
 
 gdb_test_no_output "delete mem 1" "delete mem 1"
 gdb_test_multiple "info mem" "mem 1 was deleted" {
-    -re ${info_mem_header_pattern} {
-	# Discard the header.
-	exp_continue
-    }
-    -re "^1   y  \[ \t\]+$hex $hex wo nocache \[^\r\n\]*.." {
+    -re "1   y  \[ \t\]+$hex $hex wo nocache \[^\r\n\]*" {
 	set see1 1
 	exp_continue
     }
-    -re "^2   y  \[ \t\]+$hex $hex ro nocache \[^\r\n\]*.." {
+    -re "2   y  \[ \t\]+$hex $hex ro nocache \[^\r\n\]*" {
 	set see2 1
 	exp_continue
     }
-    -re "^3   y  \[ \t\]+$hex $hex rw nocache \[^\r\n\]*.." {
+    -re "3   y  \[ \t\]+$hex $hex rw nocache \[^\r\n\]*" {
 	set see3 1
 	exp_continue
     }
-    -re "^4   y  \[ \t\]+$hex $hex rw nocache \[^\r\n\]*.." {
+    -re "4   y  \[ \t\]+$hex $hex rw nocache \[^\r\n\]*" {
 	set see4 1
 	exp_continue
     }
-    -re "^5   y  \[ \t\]+$hex $hex rw nocache \[^\r\n\]*.." {
+    -re "5   y  \[ \t\]+$hex $hex rw nocache .\[^\r\n\]*" {
 	set see5 1
 	exp_continue
     }
@@ -407,27 +383,23 @@ set see5 0
 
 gdb_test_no_output "delete mem 2 4" "delete mem 2 4"
 gdb_test_multiple "info mem" "mem 2 and 4 were deleted" {
-    -re ${info_mem_header_pattern} {
-	# Discard the header.
-	exp_continue
-    }
-    -re "^1   y  \[ \t\]+$hex $hex wo nocache \[^\r\n\]*.." {
+    -re "1   y  \[ \t\]+$hex $hex wo nocache \[^\r\n\]*" {
 	set see1 1
 	exp_continue
     }
-    -re "^2   y  \[ \t\]+$hex $hex ro nocache \[^\r\n\]*.." {
+    -re "2   y  \[ \t\]+$hex $hex ro nocache \[^\r\n\]*" {
 	set see2 1
 	exp_continue
     }
-    -re "^3   y  \[ \t\]+$hex $hex rw nocache \[^\r\n\]*.." {
+    -re "3   y  \[ \t\]+$hex $hex rw nocache \[^\r\n\]*" {
 	set see3 1
 	exp_continue
     }
-    -re "^4   y  \[ \t\]+$hex $hex rw nocache \[^\r\n\]*.." {
+    -re "4   y  \[ \t\]+$hex $hex rw nocache \[^\r\n\]*" {
 	set see4 1
 	exp_continue
     }
-    -re "^5   y  \[ \t\]+$hex $hex rw nocache \[^\r\n\]*.." {
+    -re "5   y  \[ \t\]+$hex $hex rw nocache .\[^\r\n\]*" {
 	set see5 1
 	exp_continue
     }
@@ -450,27 +422,23 @@ gdb_test "delete mem 2-4" \
     "No memory region number 2.*No memory region number 4." \
     "delete mem 2-4"
 gdb_test_multiple "info mem" "mem 2-4 were deleted" {
-    -re ${info_mem_header_pattern} {
-	# Discard the header.
-	exp_continue
-    }
-    -re "^1   y  \[ \t\]+$hex $hex wo nocache \[^\r\n\]*.." {
+    -re "1   y  \[ \t\]+$hex $hex wo nocache \[^\r\n\]*" {
 	set see1 1
 	exp_continue
     }
-    -re "^2   y  \[ \t\]+$hex $hex ro nocache \[^\r\n\]*.." {
+    -re "2   y  \[ \t\]+$hex $hex ro nocache \[^\r\n\]*" {
 	set see2 1
 	exp_continue
     }
-    -re "^3   y  \[ \t\]+$hex $hex rw nocache \[^\r\n\]*.." {
+    -re "3   y  \[ \t\]+$hex $hex rw nocache \[^\r\n\]*" {
 	set see3 1
 	exp_continue
     }
-    -re "^4   y  \[ \t\]+$hex $hex rw nocache \[^\r\n\]*.." {
+    -re "4   y  \[ \t\]+$hex $hex rw nocache \[^\r\n\]*" {
 	set see4 1
 	exp_continue
     }
-    -re "^5   y  \[ \t\]+$hex $hex rw nocache \[^\r\n\]*.." {
+    -re "5   y  \[ \t\]+$hex $hex rw nocache .\[^\r\n\]*" {
 	set see5 1
 	exp_continue
     }
@@ -485,85 +453,3 @@ gdb_test_multiple "info mem" "mem 2-4 were deleted" {
 
 gdb_test "delete mem 8" "No memory region number 8." \
     "delete non-existant region"
-
-#
-# Test overlapping checking
-#
-
-# Create a region that doesn't overlap (a PASS in the table).
-
-proc region_pass { region } {
-    gdb_test_no_output "mem $region ro" "$region: no-overlap"
-}
-
-# Try to create a region that overlaps (a FAIL in the table).
-
-proc region_fail { region } {
-    gdb_test "mem $region ro" "overlapping memory region" "$region: overlap"
-}
-
-# Test normal case (upper != 0)
-#
-#        lo'       hi'
-#         |--------|
-#  10 20 30 40 50 60 70 80 90
-#      |-----|                FAIL
-#         |--|                FAIL
-#            |--|             FAIL
-#               |--|          FAIL
-#               |-----|       FAIL
-#         |--------|          FAIL
-#      |--------------|       FAIL
-#      |--------------------- FAIL
-#         |------------------ FAIL
-#            |--------------- FAIL
-#      |--|                   PASS
-#                  |--|       PASS
-#                        |--- PASS
-
-# Clear the memory regions list.
-delete_memory_regions
-gdb_test_no_output "mem 0x30 0x60 ro"
-with_test_prefix "0x30 0x60" {
-    region_fail "0x20 0x40"
-    region_fail "0x30 0x40"
-    region_fail "0x40 0x50"
-    region_fail "0x50 0x60"
-    region_fail "0x50 0x70"
-    region_fail "0x30 0x60"
-    region_fail "0x20 0x70"
-    region_fail "0x20 0x0"
-    region_fail "0x30 0x0"
-    region_fail "0x40 0x0"
-    region_pass "0x20 0x30"
-    region_pass "0x60 0x70"
-    region_pass "0x80 0x0"
-}
-
-# Test special case (upper == 0)
-#
-#           lo'             hi'
-#            |---------------
-#  00 10 20 30 40 50 60 70 80
-#         |--------|          FAIL
-#            |-----|          FAIL
-#               |--|          FAIL
-#         |------------------ FAIL
-#            |--------------- FAIL
-#               |------------ FAIL
-#         |--|                PASS
-#   |--|                      PASS
-
-# Clear the memory regions list.
-delete_memory_regions
-gdb_test_no_output "mem 0x30 0x0 ro"
-with_test_prefix "0x30 0x0" {
-    region_fail "0x20 0x50"
-    region_fail "0x30 0x50"
-    region_fail "0x40 0x50"
-    region_fail "0x20 0x0"
-    region_fail "0x30 0x0"
-    region_fail "0x40 0x0"
-    region_pass "0x20 0x30"
-    region_pass "0x00 0x10"
-}

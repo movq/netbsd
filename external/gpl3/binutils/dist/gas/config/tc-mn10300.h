@@ -1,5 +1,6 @@
 /* tc-mn10300.h -- Header file for tc-mn10300.c.
-   Copyright (C) 1996-2020 Free Software Foundation, Inc.
+   Copyright 1996, 1997, 2000, 2001, 2002, 2003, 2004, 2005, 2007
+   Free Software Foundation, Inc.
 
    This file is part of GAS, the GNU Assembler.
 
@@ -28,29 +29,20 @@
 #define TC_FORCE_RELOCATION(FIX) mn10300_force_relocation (FIX)
 extern bfd_boolean mn10300_force_relocation (struct fix *);
 
-/* tc-mn10300.c uses TC_FORCE_RELOCATION_LOCAL, a macro that should
-   only appear in write.c.  The use is likely incorrect.  Duplicating
-   the definition here rather than expanding it in
-   TC_FORCE_RELOCATION_LOCAL at least ensures write.c changes will be
-   flagged immediately with a compile error.  */
-#define GENERIC_FORCE_RELOCATION_LOCAL(FIX)	\
-  (!(FIX)->fx_pcrel				\
-   || TC_FORCE_RELOCATION (FIX))
-
 #define TC_FORCE_RELOCATION_LOCAL(FIX)			\
-  (GENERIC_FORCE_RELOCATION_LOCAL (FIX)			\
+  (!(FIX)->fx_pcrel					\
    || (FIX)->fx_r_type == BFD_RELOC_32_PLT_PCREL	\
    || (FIX)->fx_r_type == BFD_RELOC_MN10300_GOT32	\
-   || (FIX)->fx_r_type == BFD_RELOC_32_GOT_PCREL)
+   || (FIX)->fx_r_type == BFD_RELOC_32_GOT_PCREL	\
+   || TC_FORCE_RELOCATION (FIX))
 
 #define md_parse_name(NAME, EXPRP, MODE, NEXTCHARP) \
     mn10300_parse_name ((NAME), (EXPRP), (MODE), (NEXTCHARP))
 int mn10300_parse_name (char const *, expressionS *, enum expr_mode, char *);
 
-#define TC_CONS_FIX_NEW(FRAG, OFF, LEN, EXP, RELOC)	\
-  mn10300_cons_fix_new ((FRAG), (OFF), (LEN), (EXP), (RELOC))
-void mn10300_cons_fix_new (fragS *, int, int, expressionS *,
-			   bfd_reloc_code_real_type);
+#define TC_CONS_FIX_NEW(FRAG, OFF, LEN, EXP) \
+     mn10300_cons_fix_new ((FRAG), (OFF), (LEN), (EXP))
+void mn10300_cons_fix_new (fragS *, int, int, expressionS *);
 
 /* This is used to construct expressions out of @GOTOFF, @PLT and @GOT
    symbols.  The relocation type is stored in X_md.  */
@@ -71,8 +63,8 @@ void mn10300_cons_fix_new (fragS *, int, int, expressionS *,
    linker, but this fix is simpler, and it pretty much only affects
    object size a little bit.  */
 #define TC_FORCE_RELOCATION_SUB_SAME(FIX, SEC)	\
-  (GENERIC_FORCE_RELOCATION_SUB_SAME (FIX, SEC)	\
-   || ((SEC)->flags & SEC_CODE) != 0		\
+  (((SEC)->flags & SEC_CODE) != 0		\
+   || ! SEG_NORMAL (SEC)			\
    || (FIX)->fx_r_type == BFD_RELOC_MN10300_ALIGN \
    || TC_FORCE_RELOCATION (FIX))
 

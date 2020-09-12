@@ -1,6 +1,6 @@
 /* Python interface to new object file loading events.
 
-   Copyright (C) 2011-2019 Free Software Foundation, Inc.
+   Copyright (C) 2011-2013 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -20,21 +20,31 @@
 #include "defs.h"
 #include "py-event.h"
 
-static gdbpy_ref<>
+static PyTypeObject new_objfile_event_object_type;
+
+static PyObject *
 create_new_objfile_event_object (struct objfile *objfile)
 {
-  gdbpy_ref<> objfile_event
-    = create_event_object (&new_objfile_event_object_type);
-  if (objfile_event == NULL)
-    return NULL;
+  PyObject *objfile_event;
+  PyObject *py_objfile;
 
-  gdbpy_ref<> py_objfile = objfile_to_objfile_object (objfile);
-  if (py_objfile == NULL || evpy_add_attribute (objfile_event.get (),
-						"new_objfile",
-						py_objfile.get ()) < 0)
-    return NULL;
+  objfile_event = create_event_object (&new_objfile_event_object_type);
+  if (!objfile_event)
+    goto fail;
+
+  /* Note that objfile_to_objfile_object returns a borrowed reference,
+     so we don't need a decref here.  */
+  py_objfile = objfile_to_objfile_object (objfile);
+  if (!py_objfile || evpy_add_attribute (objfile_event,
+                                         "new_objfile",
+                                         py_objfile) < 0)
+    goto fail;
 
   return objfile_event;
+
+ fail:
+  Py_XDECREF (objfile_event);
+  return NULL;
 }
 
 /* Callback function which notifies observers when a new objfile event occurs.
@@ -44,48 +54,20 @@ create_new_objfile_event_object (struct objfile *objfile)
 int
 emit_new_objfile_event (struct objfile *objfile)
 {
+  PyObject *event;
+
   if (evregpy_no_listeners_p (gdb_py_events.new_objfile))
     return 0;
 
-  gdbpy_ref<> event = create_new_objfile_event_object (objfile);
-  if (event != NULL)
-    return evpy_emit_event (event.get (), gdb_py_events.new_objfile);
+  event = create_new_objfile_event_object (objfile);
+  if (event)
+    return evpy_emit_event (event, gdb_py_events.new_objfile);
   return -1;
 }
 
-
-/* Subroutine of emit_clear_objfiles_event to simplify it.  */
-
-static gdbpy_ref<>
-create_clear_objfiles_event_object (void)
-{
-  gdbpy_ref<> objfile_event
-    = create_event_object (&clear_objfiles_event_object_type);
-  if (objfile_event == NULL)
-    return NULL;
-
-  gdbpy_ref<> py_progspace = pspace_to_pspace_object (current_program_space);
-  if (py_progspace == NULL || evpy_add_attribute (objfile_event.get (),
-						  "progspace",
-						  py_progspace.get ()) < 0)
-    return NULL;
-
-  return objfile_event;
-}
-
-/* Callback function which notifies observers when the "clear objfiles"
-   event occurs.
-   This function will create a new Python clear_objfiles event object.
-   Return -1 if emit fails.  */
-
-int
-emit_clear_objfiles_event (void)
-{
-  if (evregpy_no_listeners_p (gdb_py_events.clear_objfiles))
-    return 0;
-
-  gdbpy_ref<> event = create_clear_objfiles_event_object ();
-  if (event != NULL)
-    return evpy_emit_event (event.get (), gdb_py_events.clear_objfiles);
-  return -1;
-}
+GDBPY_NEW_EVENT_TYPE (new_objfile,
+                      "gdb.NewObjFileEvent",
+                      "NewObjFileEvent",
+                      "GDB new object file event object",
+                      event_object_type,
+                      static);

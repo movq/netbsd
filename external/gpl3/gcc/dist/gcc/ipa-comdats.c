@@ -1,5 +1,5 @@
 /* Localize comdats.
-   Copyright (C) 2014-2019 Free Software Foundation, Inc.
+   Copyright (C) 2014-2015 Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -52,9 +52,26 @@ along with GCC; see the file COPYING3.  If not see
 #include "system.h"
 #include "coretypes.h"
 #include "tm.h"
+#include "hash-set.h"
+#include "machmode.h"
+#include "vec.h"
+#include "double-int.h"
+#include "input.h"
+#include "alias.h"
+#include "symtab.h"
+#include "wide-int.h"
+#include "inchash.h"
 #include "tree.h"
-#include "tree-pass.h"
+#include "hash-map.h"
+#include "is-a.h"
+#include "plugin-api.h"
+#include "vec.h"
+#include "hard-reg-set.h"
+#include "input.h"
+#include "function.h"
+#include "ipa-ref.h"
 #include "cgraph.h"
+#include "tree-pass.h"
 
 /* Main dataflow loop propagating comdat groups across
    the symbol table.  All references to SYMBOL are examined
@@ -82,7 +99,7 @@ propagate_comdat_group (struct symtab_node *symbol,
 	  continue;
 	}
 
-      /* One COMDAT group cannot hold both variables and functions at
+      /* One COMDAT group can not hold both variables and functions at
 	 a same time.  For now we just go to BOTTOM, in future we may
 	 invent special comdat groups for this case.  */
 
@@ -127,7 +144,7 @@ propagate_comdat_group (struct symtab_node *symbol,
 
 	if (cgraph_node * cn = dyn_cast <cgraph_node *> (symbol2))
 	  {
-	    /* Thunks cannot call across section boundary.  */
+	    /* Thunks can not call across section boundary.  */
 	    if (cn->thunk.thunk_p)
 	      newgroup = propagate_comdat_group (symbol2, newgroup, map);
 	    /* If we see inline clone, its comdat group actually
@@ -211,11 +228,8 @@ set_comdat_group (symtab_node *symbol,
   symtab_node *head = (symtab_node *)head_p;
 
   gcc_assert (!symbol->get_comdat_group ());
-  if (symbol->real_symbol_p ())
-    {
-      symbol->set_comdat_group (head->get_comdat_group ());
-      symbol->add_to_same_comdat_group (head);
-    }
+  symbol->set_comdat_group (head->get_comdat_group ());
+  symbol->add_to_same_comdat_group (head);
   return false;
 }
 
@@ -257,7 +271,7 @@ ipa_comdats (void)
 	/* Mark the symbol so we won't waste time visiting it for dataflow.  */
 	symbol->aux = (symtab_node *) (void *) 1;
       }
-    /* See symbols that cannot be privatized to comdats; that is externally
+    /* See symbols that can not be privatized to comdats; that is externally
        visible symbols or otherwise used ones.  We also do not want to mangle
        user section names.  */
     else if (symbol->externally_visible
@@ -419,7 +433,7 @@ public:
 bool
 pass_ipa_comdats::gate (function *)
 {
-  return HAVE_COMDAT_GROUP;
+  return optimize;
 }
 
 } // anon namespace

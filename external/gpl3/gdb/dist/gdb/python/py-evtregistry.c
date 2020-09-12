@@ -1,6 +1,6 @@
 /* Python interface to inferior thread event registries.
 
-   Copyright (C) 2009-2019 Free Software Foundation, Inc.
+   Copyright (C) 2009, 2010, 2011 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -21,10 +21,7 @@
 #include "command.h"
 #include "py-events.h"
 
-events_object gdb_py_events;
-
-extern PyTypeObject eventregistry_object_type
-    CPYCHECKER_TYPE_OBJECT_FOR_TYPEDEF ("eventregistry_object");
+static PyTypeObject eventregistry_object_type;
 
 /* Implementation of EventRegistry.connect () -> NULL.
    Add FUNCTION to the list of listeners.  */
@@ -79,37 +76,39 @@ evregpy_disconnect (PyObject *self, PyObject *function)
 eventregistry_object *
 create_eventregistry_object (void)
 {
-  gdbpy_ref<eventregistry_object>
-    eventregistry_obj (PyObject_New (eventregistry_object,
-				     &eventregistry_object_type));
+  eventregistry_object *eventregistry_obj;
 
-  if (eventregistry_obj == NULL)
+  eventregistry_obj = PyObject_New (eventregistry_object,
+                                    &eventregistry_object_type);
+
+  if (!eventregistry_obj)
     return NULL;
 
   eventregistry_obj->callbacks = PyList_New (0);
   if (!eventregistry_obj->callbacks)
     return NULL;
 
-  return eventregistry_obj.release ();
+  return eventregistry_obj;
 }
 
 static void
 evregpy_dealloc (PyObject *self)
 {
   Py_XDECREF (((eventregistry_object *) self)->callbacks);
-  Py_TYPE (self)->tp_free (self);
+  self->ob_type->tp_free (self);
 }
 
 /* Initialize the Python event registry code.  */
 
-int
+void
 gdbpy_initialize_eventregistry (void)
 {
   if (PyType_Ready (&eventregistry_object_type) < 0)
-    return -1;
+    return;
 
-  return gdb_pymodule_addobject (gdb_module, "EventRegistry",
-				 (PyObject *) &eventregistry_object_type);
+  Py_INCREF (&eventregistry_object_type);
+  PyModule_AddObject (gdb_module, "EventRegistry",
+                      (PyObject *) &eventregistry_object_type);
 }
 
 /* Retern the number of listeners currently connected to this
@@ -128,9 +127,10 @@ static PyMethodDef eventregistry_object_methods[] =
   { NULL } /* Sentinel.  */
 };
 
-PyTypeObject eventregistry_object_type =
+static PyTypeObject eventregistry_object_type =
 {
-  PyVarObject_HEAD_INIT (NULL, 0)
+  PyObject_HEAD_INIT (NULL)
+  0,                                          /* ob_size */
   "gdb.EventRegistry",                        /* tp_name */
   sizeof (eventregistry_object),              /* tp_basicsize */
   0,                                          /* tp_itemsize */

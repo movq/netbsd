@@ -1,5 +1,5 @@
 /* Define builtin-in macros for all front ends that perform preprocessing
-   Copyright (C) 2010-2019 Free Software Foundation, Inc.
+   Copyright (C) 2010-2013 Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -20,13 +20,13 @@ along with GCC; see the file COPYING3.  If not see
 #include "config.h"
 #include "system.h"
 #include "coretypes.h"
-#include "memmodel.h"
-#include "target.h"
+#include "tm.h"
 #include "tree.h"
 #include "version.h"
 #include "flags.h"
-#include "cpplib.h"
+#include "cpp-id-data.h"
 #include "cppbuiltin.h"
+#include "target.h"
 
 
 /* Parse a BASEVER version string of the format "major.minor.patchlevel"
@@ -90,17 +90,8 @@ define_builtin_macros_for_compilation_flags (cpp_reader *pfile)
       cpp_define_formatted (pfile, "__PIE__=%d", flag_pie);
     }
 
-  if (flag_sanitize & SANITIZE_ADDRESS)
+  if (flag_asan)
     cpp_define (pfile, "__SANITIZE_ADDRESS__");
-
-  if (flag_sanitize & SANITIZE_UNDEFINED)
-    cpp_define (pfile, "__SANITIZE_UNDEFINED__");
-
-  if (flag_sanitize & SANITIZE_LEAK)
-    cpp_define (pfile, "__SANITIZE_LEAK__");
-
-  if (flag_sanitize & SANITIZE_THREAD)
-    cpp_define (pfile, "__SANITIZE_THREAD__");
 
   if (optimize_size)
     cpp_define (pfile, "__OPTIMIZE_SIZE__");
@@ -111,8 +102,6 @@ define_builtin_macros_for_compilation_flags (cpp_reader *pfile)
     cpp_define (pfile, "__FAST_MATH__");
   if (flag_signaling_nans)
     cpp_define (pfile, "__SUPPORT_SNAN__");
-  if (!flag_errno_math)
-    cpp_define (pfile, "__NO_MATH_ERRNO__");
 
   cpp_define_formatted (pfile, "__FINITE_MATH_ONLY__=%d",
 			flag_finite_math_only);
@@ -138,8 +127,8 @@ static void
 define_builtin_macros_for_type_sizes (cpp_reader *pfile)
 {
 #define define_type_sizeof(NAME, TYPE)                             \
-    cpp_define_formatted (pfile, NAME"=" HOST_WIDE_INT_PRINT_DEC,   \
-                          tree_to_uhwi (TYPE_SIZE_UNIT (TYPE)))
+    cpp_define_formatted (pfile, NAME"="HOST_WIDE_INT_PRINT_DEC,   \
+                          tree_low_cst (TYPE_SIZE_UNIT (TYPE), 1))
 
   define_type_sizeof ("__SIZEOF_INT__", integer_type_node);
   define_type_sizeof ("__SIZEOF_LONG__", long_integer_type_node);
@@ -184,7 +173,7 @@ define_builtin_macros_for_type_sizes (cpp_reader *pfile)
   /* ptr_type_node can't be used here since ptr_mode is only set when
      toplev calls backend_init which is not done with -E switch.  */
   cpp_define_formatted (pfile, "__SIZEOF_POINTER__=%d",
-			1 << ceil_log2 ((POINTER_SIZE + BITS_PER_UNIT - 1) / BITS_PER_UNIT));
+			POINTER_SIZE / BITS_PER_UNIT);
 }
 
 

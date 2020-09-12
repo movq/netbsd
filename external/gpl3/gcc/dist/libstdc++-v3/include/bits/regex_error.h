@@ -1,6 +1,6 @@
 // class template regex -*- C++ -*-
 
-// Copyright (C) 2010-2019 Free Software Foundation, Inc.
+// Copyright (C) 2010-2013 Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
@@ -32,8 +32,6 @@
 
 namespace std _GLIBCXX_VISIBILITY(default)
 {
-_GLIBCXX_BEGIN_NAMESPACE_VERSION
-
 /**
  * @addtogroup regex
  * @{
@@ -41,11 +39,13 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 
 namespace regex_constants
 {
+_GLIBCXX_BEGIN_NAMESPACE_VERSION
+
   /**
    * @name 5.3 Error Types
    */
   //@{
-
+ 
   enum error_type
     {
       _S_error_collate,
@@ -61,6 +61,7 @@ namespace regex_constants
       _S_error_badrepeat,
       _S_error_complexity,
       _S_error_stack,
+      _S_error_last
     };
 
   /** The expression contained an invalid collating element name. */
@@ -120,7 +121,10 @@ namespace regex_constants
   constexpr error_type error_stack(_S_error_stack);
 
   //@}
+_GLIBCXX_END_NAMESPACE_VERSION
 } // namespace regex_constants
+
+_GLIBCXX_BEGIN_NAMESPACE_VERSION
 
   // [7.8] Class regex_error
   /**
@@ -152,23 +156,12 @@ namespace regex_constants
     regex_constants::error_type
     code() const
     { return _M_code; }
-
-  private:
-    regex_error(regex_constants::error_type __ecode, const char* __what)
-    : std::runtime_error(__what), _M_code(__ecode)
-    { }
-
-    friend void __throw_regex_error(regex_constants::error_type, const char*);
   };
 
   //@} // group regex
 
   void
   __throw_regex_error(regex_constants::error_type __ecode);
-
-  inline void
-  __throw_regex_error(regex_constants::error_type __ecode, const char* __what)
-  { _GLIBCXX_THROW_OR_ABORT(regex_error(__ecode, __what)); }
 
 _GLIBCXX_END_NAMESPACE_VERSION
 } // namespace std

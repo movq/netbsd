@@ -1,6 +1,6 @@
 /* Test program for MPX map allocated bounds.
 
-   Copyright 2015-2019 Free Software Foundation, Inc.
+   Copyright 2015 Free Software Foundation, Inc.
 
    Contributed by Intel Corp. <walfred.tedeschi@intel.com>
 			      <mircea.gherzan@intel.com>
@@ -70,9 +70,8 @@ foo (T *p)
 #if defined  __GNUC__ && !defined __INTEL_COMPILER
   __bnd_store_ptr_bounds (x, &x);
 #endif
-  /* Dummy assign.  */
-  x = x + 1;			/* after-assign */
-  return;
+
+  return;			/* after-assign */
 }
 
 int

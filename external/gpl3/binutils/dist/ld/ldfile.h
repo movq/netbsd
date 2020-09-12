@@ -1,5 +1,6 @@
 /* ldfile.h -
-   Copyright (C) 1991-2020 Free Software Foundation, Inc.
+   Copyright 1991, 1992, 1993, 1994, 1995, 2000, 2002, 2003, 2004, 2007
+   Free Software Foundation, Inc.
 
    This file is part of the GNU Binutils.
 
@@ -21,6 +22,7 @@
 #ifndef LDFILE_H
 #define LDFILE_H
 
+extern const char *ldfile_input_filename;
 extern bfd_boolean ldfile_assumed_script;
 extern unsigned long ldfile_output_machine;
 extern enum bfd_architecture ldfile_output_architecture;
@@ -36,6 +38,8 @@ typedef struct search_dirs {
   const char *name;
   /* TRUE if this is from the command line.  */
   bfd_boolean cmdline;
+  /* true if this is from within the sys-root.  */
+  bfd_boolean sysrooted;
 } search_dirs_type;
 
 extern search_dirs_type *search_head;
@@ -45,10 +49,6 @@ extern void ldfile_add_arch
 extern void ldfile_add_library_path
   (const char *, bfd_boolean cmdline);
 extern void ldfile_open_command_file
-  (const char *name);
-extern void ldfile_open_script_file
-  (const char *name);
-extern void ldfile_open_default_command_file
   (const char *name);
 extern void ldfile_open_file
   (struct lang_input_statement_struct *);

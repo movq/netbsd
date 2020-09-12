@@ -1,4 +1,4 @@
-/* Copyright (C) 2009-2019 Free Software Foundation, Inc.
+/* Copyright (C) 2009-2015 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -15,11 +15,13 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-#ifndef NAT_MIPS_LINUX_WATCH_H
-#define NAT_MIPS_LINUX_WATCH_H
+#ifndef MIPS_LINUX_WATCH_H
+#define MIPS_LINUX_WATCH_H 1
 
 #include <asm/ptrace.h>
-#include "common/break-common.h"
+#include <stdint.h>
+
+#include "break-common.h"
 
 #define MAX_DEBUG_REGISTER 8
 
@@ -94,7 +96,7 @@ struct mips_watchpoint
 {
   CORE_ADDR addr;
   int len;
-  enum target_hw_bp_type type;
+  int type;
   struct mips_watchpoint *next;
 };
 
@@ -110,10 +112,9 @@ int mips_linux_watch_try_one_watch (struct pt_watch_regs *regs,
 				    CORE_ADDR addr, int len, uint32_t irw);
 void mips_linux_watch_populate_regs (struct mips_watchpoint *current_watches,
 				     struct pt_watch_regs *regs);
-uint32_t mips_linux_watch_type_to_irw (enum target_hw_bp_type type);
+uint32_t mips_linux_watch_type_to_irw (int type);
 
 int mips_linux_read_watch_registers (long lwpid,
 				     struct pt_watch_regs *watch_readback,
 				     int *watch_readback_valid, int force);
-
-#endif /* NAT_MIPS_LINUX_WATCH_H */
+#endif

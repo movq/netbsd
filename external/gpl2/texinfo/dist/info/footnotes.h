@@ -1,4 +1,4 @@
-/*	$NetBSD: footnotes.h,v 1.1.1.1 2016/01/14 00:11:29 christos Exp $	*/
+/*	$NetBSD: footnotes.h,v 1.1 2016/01/14 00:11:29 christos Exp $	*/
 
 /* footnotes.h -- Some functions for manipulating footnotes.
    Id: footnotes.h,v 1.3 2004/04/11 17:56:45 karl Exp 

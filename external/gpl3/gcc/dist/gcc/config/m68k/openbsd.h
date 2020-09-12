@@ -1,5 +1,5 @@
 /* Configuration file for an m68k OpenBSD target.
-   Copyright (C) 1999-2019 Free Software Foundation, Inc.
+   Copyright (C) 1999, 2002, 2003, 2007 Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -34,8 +34,9 @@ along with GCC; see the file COPYING3.  If not see
 #define CPP_SPEC "%{!msoft-float:-D__HAVE_68881__ -D__HAVE_FPU__} %{posix:-D_POSIX_SOURCE} %{pthread:-D_POSIX_THREADS}"
 
 #undef ASM_SPEC
-#define ASM_SPEC \
-  "%(asm_cpu_spec) %{" FPIE1_OR_FPIC1_SPEC ":-k} %{" FPIE2_OR_FPIC2_SPEC ":-k -K}"
+#define ASM_SPEC "%(asm_cpu_spec) %{fpic|fpie:-k} %{fPIC|fPIE:-k -K}"
+
+#define AS_NEEDS_DASH_FOR_PIPED_INPUT
 
 /* Layout of source language data types.  */
 
@@ -87,5 +88,3 @@ along with GCC; see the file COPYING3.  If not see
 /* All configurations that don't use elf must be explicit about not using
    dwarf unwind information.  */
 #define DWARF2_UNWIND_INFO 0
-
-#define TARGET_HAVE_NAMED_SECTIONS false

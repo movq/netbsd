@@ -1,6 +1,6 @@
 /* Target-dependent code for GNU/Linux on MIPS processors.
 
-   Copyright (C) 2006-2019 Free Software Foundation, Inc.
+   Copyright 2006, 2007, 2008, 2009, 2010, 2011 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -16,9 +16,6 @@
 
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
-
-#ifndef MIPS_LINUX_TDEP_H
-#define MIPS_LINUX_TDEP_H
 
 /* Copied from <asm/elf.h>.  */
 #define ELF_NGREG       45
@@ -39,8 +36,6 @@ typedef mips_elf_fpreg_t mips_elf_fpregset_t[ELF_NFPREG];
 #define MMLO		68
 #define FPC_CSR		69
 #define FPC_EIR		70
-#define DSP_BASE	71
-#define DSP_CONTROL	77
 
 #define EF_REG0			6
 #define EF_REG31		37
@@ -55,6 +50,8 @@ typedef mips_elf_fpreg_t mips_elf_fpregset_t[ELF_NFPREG];
 
 void mips_supply_gregset (struct regcache *, const mips_elf_gregset_t *);
 void mips_fill_gregset (const struct regcache *, mips_elf_gregset_t *, int);
+void mips_supply_fpregset (struct regcache *, const mips_elf_fpregset_t *);
+void mips_fill_fpregset (const struct regcache *, mips_elf_fpregset_t *, int);
 
 /* 64-bit support.  */
 
@@ -100,17 +97,9 @@ void mips64_fill_fpregset (const struct regcache *,
 enum {
   /* The Linux kernel stores an error code from any interrupted
      syscall in a "register" (in $0's save slot).  */
-  MIPS_RESTART_REGNUM = 79
+  MIPS_RESTART_REGNUM = MIPS_LAST_EMBED_REGNUM + 1
 };
 
 /* Return 1 if MIPS_RESTART_REGNUM is usable.  */
 
 int mips_linux_restart_reg_p (struct gdbarch *gdbarch);
-
-/* Target descriptions.  */
-extern struct target_desc *tdesc_mips_linux;
-extern struct target_desc *tdesc_mips64_linux;
-extern struct target_desc *tdesc_mips_dsp_linux;
-extern struct target_desc *tdesc_mips64_dsp_linux;
-
-#endif /* MIPS_LINUX_TDEP_H */

@@ -1,5 +1,5 @@
 /* Back-propagation of usage information to definitions.
-   Copyright (C) 2015-2019 Free Software Foundation, Inc.
+   Copyright (C) 2015-2016 Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -188,7 +188,7 @@ static void
 dump_usage_prefix (FILE *file, tree var)
 {
   fprintf (file, "  ");
-  print_generic_expr (file, var);
+  print_generic_expr (file, var, 0);
   fprintf (file, ": ");
 }
 
@@ -258,12 +258,7 @@ private:
 
   /* A bitmap of blocks that we have finished processing in the initial
      post-order walk.  */
-  auto_sbitmap m_visited_blocks;
-
-  /* A bitmap of phis that we have finished processing in the initial
-     post-order walk, excluding those from blocks mentioned in
-     M_VISITED_BLOCKS.  */
-  auto_bitmap m_visited_phis;
+  sbitmap m_visited_blocks;
 
   /* A worklist of SSA names whose definitions need to be reconsidered.  */
   auto_vec <tree, 64> m_worklist;
@@ -277,7 +272,7 @@ private:
 backprop::backprop (function *fn)
   : m_fn (fn),
     m_info_pool ("usage_info"),
-    m_visited_blocks (last_basic_block_for_fn (m_fn)),
+    m_visited_blocks (sbitmap_alloc (last_basic_block_for_fn (m_fn))),
     m_worklist_names (BITMAP_ALLOC (NULL))
 {
   bitmap_clear (m_visited_blocks);
@@ -286,6 +281,7 @@ backprop::backprop (function *fn)
 backprop::~backprop ()
 {
   BITMAP_FREE (m_worklist_names);
+  sbitmap_free (m_visited_blocks);
   m_info_pool.release ();
 }
 
@@ -314,7 +310,7 @@ backprop::push_to_worklist (tree var)
   if (dump_file && (dump_flags & TDF_DETAILS))
     {
       fprintf (dump_file, "[WORKLIST] Pushing ");
-      print_generic_expr (dump_file, var);
+      print_generic_expr (dump_file, var, 0);
       fprintf (dump_file, "\n");
     }
 }
@@ -330,7 +326,7 @@ backprop::pop_from_worklist ()
   if (dump_file && (dump_flags & TDF_DETAILS))
     {
       fprintf (dump_file, "[WORKLIST] Popping ");
-      print_generic_expr (dump_file, var);
+      print_generic_expr (dump_file, var, 0);
       fprintf (dump_file, "\n");
     }
   return var;
@@ -359,7 +355,6 @@ backprop::process_builtin_call_use (gcall *call, tree rhs, usage_info *info)
       break;
 
     CASE_CFN_COPYSIGN:
-    CASE_CFN_COPYSIGN_FN:
       /* The sign of the first input is ignored.  */
       if (rhs != gimple_call_arg (call, 1))
 	info->flags.ignore_sign = true;
@@ -379,10 +374,6 @@ backprop::process_builtin_call_use (gcall *call, tree rhs, usage_info *info)
       }
 
     CASE_CFN_FMA:
-    CASE_CFN_FMA_FN:
-    case CFN_FMS:
-    case CFN_FNMA:
-    case CFN_FNMS:
       /* In X * X + Y, where Y is distinct from X, the sign of X doesn't
 	 matter.  */
       if (gimple_call_arg (call, 0) == rhs
@@ -413,7 +404,6 @@ backprop::process_assign_use (gassign *assign, tree rhs, usage_info *info)
   switch (gimple_assign_rhs_code (assign))
     {
     case ABS_EXPR:
-    case ABSU_EXPR:
       /* The sign of the input doesn't matter.  */
       info->flags.ignore_sign = true;
       break;
@@ -427,6 +417,15 @@ backprop::process_assign_use (gassign *assign, tree rhs, usage_info *info)
 	  if (lhs_info)
 	    *info = *lhs_info;
 	}
+      break;
+
+    case FMA_EXPR:
+      /* In X * X + Y, where Y is distinct from X, the sign of X doesn't
+	 matter.  */
+      if (gimple_assign_rhs1 (assign) == rhs
+	  && gimple_assign_rhs2 (assign) == rhs
+	  && gimple_assign_rhs3 (assign) != rhs)
+	info->flags.ignore_sign = true;
       break;
 
     case MULT_EXPR:
@@ -471,7 +470,7 @@ backprop::process_use (gimple *stmt, tree rhs, usage_info *info)
   if (dump_file && (dump_flags & TDF_DETAILS))
     {
       fprintf (dump_file, "[USE] ");
-      print_generic_expr (dump_file, rhs);
+      print_generic_expr (dump_file, rhs, 0);
       fprintf (dump_file, " in ");
       print_gimple_stmt (dump_file, stmt, 0, TDF_SLIM);
     }
@@ -496,26 +495,22 @@ bool
 backprop::intersect_uses (tree var, usage_info *info)
 {
   imm_use_iterator iter;
-  use_operand_p use_p;
+  gimple *stmt;
   *info = usage_info::intersection_identity ();
-  FOR_EACH_IMM_USE_FAST (use_p, iter, var)
+  FOR_EACH_IMM_USE_STMT (stmt, iter, var)
     {
-      gimple *stmt = USE_STMT (use_p);
       if (is_gimple_debug (stmt))
 	continue;
-      gphi *phi = dyn_cast <gphi *> (stmt);
-      if (phi
-	  && !bitmap_bit_p (m_visited_blocks, gimple_bb (phi)->index)
-	  && !bitmap_bit_p (m_visited_phis,
-			    SSA_NAME_VERSION (gimple_phi_result (phi))))
+      if (is_a <gphi *> (stmt)
+	  && !bitmap_bit_p (m_visited_blocks, gimple_bb (stmt)->index))
 	{
 	  /* Skip unprocessed phis.  */
 	  if (dump_file && (dump_flags & TDF_DETAILS))
 	    {
 	      fprintf (dump_file, "[BACKEDGE] ");
-	      print_generic_expr (dump_file, var);
+	      print_generic_expr (dump_file, var, 0);
 	      fprintf (dump_file, " in ");
-	      print_gimple_stmt (dump_file, phi, 0, TDF_SLIM);
+	      print_gimple_stmt (dump_file, stmt, 0, TDF_SLIM);
 	    }
 	}
       else
@@ -524,7 +519,10 @@ backprop::intersect_uses (tree var, usage_info *info)
 	  process_use (stmt, var, &subinfo);
 	  *info &= subinfo;
 	  if (!info->is_useful ())
-	    return false;
+	    {
+	      BREAK_FROM_IMM_USE_STMT (iter);
+	      return false;
+	    }
 	}
     }
   return true;
@@ -636,12 +634,7 @@ backprop::process_block (basic_block bb)
     }
   for (gphi_iterator gpi = gsi_start_phis (bb); !gsi_end_p (gpi);
        gsi_next (&gpi))
-    {
-      tree result = gimple_phi_result (gpi.phi ());
-      process_var (result);
-      bitmap_set_bit (m_visited_phis, SSA_NAME_VERSION (result));
-    }
-  bitmap_clear (m_visited_phis);
+    process_var (gimple_phi_result (gpi.phi ()));
 }
 
 /* Delete the definition of VAR, which has no uses.  */
@@ -666,9 +659,9 @@ static void
 note_replacement (gimple *stmt, tree old_rhs, tree new_rhs)
 {
   fprintf (dump_file, "Replacing use of ");
-  print_generic_expr (dump_file, old_rhs);
+  print_generic_expr (dump_file, old_rhs, 0);
   fprintf (dump_file, " with ");
-  print_generic_expr (dump_file, new_rhs);
+  print_generic_expr (dump_file, new_rhs, 0);
   fprintf (dump_file, " in ");
   print_gimple_stmt (dump_file, stmt, 0, TDF_SLIM);
 }
@@ -687,7 +680,6 @@ strip_sign_op_1 (tree rhs)
     switch (gimple_assign_rhs_code (assign))
       {
       case ABS_EXPR:
-      case ABSU_EXPR:
       case NEGATE_EXPR:
 	return gimple_assign_rhs1 (assign);
 
@@ -698,7 +690,6 @@ strip_sign_op_1 (tree rhs)
     switch (gimple_call_combined_fn (call))
       {
       CASE_CFN_COPYSIGN:
-      CASE_CFN_COPYSIGN_FN:
 	return gimple_call_arg (call, 0);
 
       default:
@@ -736,9 +727,8 @@ strip_sign_op (tree rhs)
 void
 backprop::prepare_change (tree var)
 {
-  if (MAY_HAVE_DEBUG_BIND_STMTS)
+  if (MAY_HAVE_DEBUG_STMTS)
     insert_debug_temp_for_var_def (NULL, var);
-  reset_flow_sensitive_info (var);
 }
 
 /* STMT has been changed.  Give the fold machinery a chance to simplify

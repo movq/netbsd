@@ -5,8 +5,7 @@
 
 class A
 {
-	public:
-		int a;
+	int a;
 };
 
 class C : public A
@@ -14,7 +13,6 @@ class C : public A
 	public:
 		C()
 		{
-			a = 5;
 		};
 		void testLocation()
 		{

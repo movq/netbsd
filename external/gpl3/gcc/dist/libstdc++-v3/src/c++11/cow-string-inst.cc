@@ -1,6 +1,6 @@
 // Reference-counted COW string instantiations -*- C++ -*-
 
-// Copyright (C) 2014-2019 Free Software Foundation, Inc.
+// Copyright (C) 2014-2015 Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
@@ -29,9 +29,34 @@
 #define _GLIBCXX_USE_CXX11_ABI 0
 #include "string-inst.cc"
 
+#include <istream>
+#include <ostream>
+
 #if ! _GLIBCXX_USE_DUAL_ABI
 # error This file should not be compiled for this configuration.
 #endif
+
+namespace std _GLIBCXX_VISIBILITY(default)
+{
+_GLIBCXX_BEGIN_NAMESPACE_VERSION
+
+  // These came from c++98/misc-inst.cc, repeat them for COW string
+  // string related to iostreams.
+  template 
+    basic_istream<char>& 
+    operator>>(basic_istream<char>&, string&);
+  template 
+    basic_ostream<char>& 
+    operator<<(basic_ostream<char>&, const string&);
+  template 
+    basic_istream<char>& 
+    getline(basic_istream<char>&, string&, char);
+  template 
+    basic_istream<char>& 
+    getline(basic_istream<char>&, string&);
+
+_GLIBCXX_END_NAMESPACE_VERSION
+} // namespace
 
 #ifdef  _GLIBCXX_USE_C99_STDINT_TR1
 #include <random>
@@ -77,9 +102,8 @@ namespace std _GLIBCXX_VISIBILITY(default)
   }
 
   void
-  random_device::_M_init_pretr1(const std::string& token [[gnu::unused]])
+  random_device::_M_init_pretr1(const std::string& token)
   {
-#ifndef _GLIBCXX_USE_CRT_RAND_S
     unsigned long __seed = 5489UL;
     if (token != "mt19937")
       {
@@ -91,7 +115,6 @@ namespace std _GLIBCXX_VISIBILITY(default)
 					 "(const std::string&)"));
       }
     _M_mt.seed(__seed);
-#endif
   }
 } // namespace
 #endif

@@ -1,5 +1,6 @@
 /* Hash tables for the CPP library.
-   Copyright (C) 1986-2019 Free Software Foundation, Inc.
+   Copyright (C) 1986, 1987, 1989, 1992, 1993, 1994, 1995, 1996, 1998,
+   1999, 2000, 2001, 2002, 2007, 2009 Free Software Foundation, Inc.
    Written by Per Bothner, 1994.
    Based on CCCP program by Paul Rubin, June 1986
    Adapted to ANSI C, Richard Stallman, Jan 1987
@@ -27,12 +28,12 @@ along with this program; see the file COPYING3.  If not see
 #include "cpplib.h"
 #include "internal.h"
 
-static hashnode alloc_node (cpp_hash_table *);
+static hashnode alloc_node (hash_table *);
 
 /* Return an identifier node for hashtable.c.  Used by cpplib except
    when integrated with the C front ends.  */
 static hashnode
-alloc_node (cpp_hash_table *table)
+alloc_node (hash_table *table)
 {
   cpp_hashnode *node;
 
@@ -44,7 +45,7 @@ alloc_node (cpp_hash_table *table)
 /* Set up the identifier hash table.  Use TABLE if non-null, otherwise
    create our own.  */
 void
-_cpp_init_hashtable (cpp_reader *pfile, cpp_hash_table *table)
+_cpp_init_hashtable (cpp_reader *pfile, hash_table *table)
 {
   struct spec_nodes *s;
 
@@ -54,7 +55,9 @@ _cpp_init_hashtable (cpp_reader *pfile, cpp_hash_table *table)
       table = ht_create (13);	/* 8K (=2^13) entries.  */
       table->alloc_node = alloc_node;
 
-      obstack_specify_allocation (&pfile->hash_ob, 0, 0, xmalloc, free);
+      _obstack_begin (&pfile->hash_ob, 0, 0,
+		      (void *(*) (long)) xmalloc,
+		      (void (*) (void *)) free);
     }
 
   table->pfile = pfile;
@@ -70,10 +73,6 @@ _cpp_init_hashtable (cpp_reader *pfile, cpp_hash_table *table)
   s->n_false		= cpp_lookup (pfile, DSC("false"));
   s->n__VA_ARGS__       = cpp_lookup (pfile, DSC("__VA_ARGS__"));
   s->n__VA_ARGS__->flags |= NODE_DIAGNOSTIC;
-  s->n__VA_OPT__        = cpp_lookup (pfile, DSC("__VA_OPT__"));
-  s->n__VA_OPT__->flags |= NODE_DIAGNOSTIC;
-  s->n__has_include__   = cpp_lookup (pfile, DSC("__has_include__"));
-  s->n__has_include_next__ = cpp_lookup (pfile, DSC("__has_include_next__"));
 }
 
 /* Tear down the identifier hash table.  */
@@ -104,8 +103,8 @@ cpp_defined (cpp_reader *pfile, const unsigned char *str, int len)
 
   node = CPP_HASHNODE (ht_lookup (pfile->hash_table, str, len, HT_NO_INSERT));
 
-  /* If it's a macro, it cannot have been poisoned.  */
-  return node && cpp_macro_p (node);
+  /* If it's of type NT_MACRO, it cannot be poisoned.  */
+  return node && node->type == NT_MACRO;
 }
 
 /* We don't need a proxy since the hash table's identifier comes first

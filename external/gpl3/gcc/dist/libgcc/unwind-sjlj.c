@@ -1,5 +1,5 @@
 /* SJLJ exception handling and frame unwind runtime interface routines.
-   Copyright (C) 1997-2019 Free Software Foundation, Inc.
+   Copyright (C) 1997-2013 Free Software Foundation, Inc.
 
    This file is part of GCC.
 
@@ -32,11 +32,11 @@
 
 #ifdef __USING_SJLJ_EXCEPTIONS__
 
-#ifdef __LIBGCC_DONT_USE_BUILTIN_SETJMP__
+#ifdef DONT_USE_BUILTIN_SETJMP
 #ifndef inhibit_libc
 #include <setjmp.h>
 #else
-typedef void *jmp_buf[__LIBGCC_JMP_BUF_SIZE__];
+typedef void *jmp_buf[JMP_BUF_SIZE];
 extern void longjmp(jmp_buf, int) __attribute__((noreturn));
 #endif
 #else
@@ -70,7 +70,7 @@ struct SjLj_Function_Context
   _Unwind_Personality_Fn personality;
   void *lsda;
 
-#ifdef __LIBGCC_DONT_USE_BUILTIN_SETJMP__
+#ifdef DONT_USE_BUILTIN_SETJMP
   /* We don't know what sort of alignment requirements the system
      jmp_buf has.  We over estimated in except.c, and now we have
      to match that here just in case the system *didn't* have more
@@ -185,7 +185,7 @@ _Unwind_GetCFA (struct _Unwind_Context *context __attribute__((unused)))
 {
   /* ??? Ideally __builtin_setjmp places the CFA in the jmpbuf.  */
 
-#ifndef __LIBGCC_DONT_USE_BUILTIN_SETJMP__
+#ifndef DONT_USE_BUILTIN_SETJMP
   /* This is a crude imitation of the CFA: the saved stack pointer.
      This is roughly the CFA of the frame before CONTEXT.  When using the
      DWARF-2 unwinder _Unwind_GetCFA returns the CFA of the frame described
@@ -231,10 +231,10 @@ _Unwind_SetIP (struct _Unwind_Context *context, _Unwind_Ptr val)
   context->fc->call_site = val - 1;
 }
 
-_Unwind_Ptr
+void *
 _Unwind_GetLanguageSpecificData (struct _Unwind_Context *context)
 {
-  return (_Unwind_Ptr) context->fc->lsda;
+  return context->fc->lsda;
 }
 
 _Unwind_Ptr
@@ -300,8 +300,7 @@ uw_init_context (struct _Unwind_Context *context)
 
 static void __attribute__((noreturn))
 uw_install_context (struct _Unwind_Context *current __attribute__((unused)),
-                    struct _Unwind_Context *target,
-		    unsigned long frames __attribute__((unused)))
+                    struct _Unwind_Context *target)
 {
   _Unwind_SjLj_SetContext (target->fc);
   longjmp (target->fc->jbuf, 1);

@@ -44,7 +44,7 @@
 .\" for an already extremely slow package.
 .\"
 .
-.Dd July 27, 2018
+.Dd August 28, 2005
 .Os
 .Dt GROFF_MDOC 7
 .
@@ -391,7 +391,7 @@ that is, a blank space preceded by the escape character
 .Ql \e .
 This method may be used with any macro but has the side effect of
 interfering with the adjustment of text over the length of a line.
-.Xr troff 1
+.Xr Troff
 sees the hard space as if it were any other printable character and cannot
 split the string into blank or newline separated pieces as one would expect.
 This method is useful for strings which are not expected to overlap a line
@@ -433,7 +433,7 @@ would see three arguments, and the result would be:
 .
 .Ss "Trailing Blank Space Characters"
 .
-.Xr troff 1
+.Xr Troff
 can be confused by blank space characters at the end of a line.
 It is a wise preventive measure to globally remove all blank spaces
 from
@@ -562,8 +562,8 @@ The body of a man page is easily constructed from a basic template:
 .Bd -literal -offset indent
 \&.\e" The following commands are required for all man pages.
 \&.Dd Month day, year
-\&.Dt DOCUMENT_TITLE [section number] [architecture/volume]
 \&.Os [OPERATING_SYSTEM] [version/release]
+\&.Dt DOCUMENT_TITLE [section number] [architecture/volume]
 \&.Sh NAME
 \&.Nm name
 \&.Nd one line description of name
@@ -599,14 +599,13 @@ The body of a man page is easily constructed from a basic template:
 .
 The first items in the template are the commands
 .Ql .Dd ,
-.Ql .Dt ,
+.Ql .Os ,
 and
-.Ql .Os ;
-the document date, the man page title (in
+.Ql .Dt ;
+the document date, the operating system the man page or subject source is
+developed or modified for, and the man page title (in
 .Em upper case )
-along with the section of the manual the page belongs in, and
-the operating system the man page or subject source is
-developed or modified for.
+along with the section of the manual the page belongs in.
 These commands identify the page and are discussed below in
 .Sx TITLE MACROS .
 .Pp
@@ -769,9 +768,9 @@ By default, the following architecture keywords are defined:
 .
 \# we use `No' to avoid hyphenation
 .Bd -ragged -offset indent
-.No alpha , acorn32 , algor , amd64 , amiga , arc , arm26 ,
+.No alpha , acorn26 , acorn32 , algor , amd64 , amiga , arc , arm26 ,
 .No arm32 , atari , bebox , cats , cesfic , cobalt , dreamcast , evbarm ,
-.No evbmips , evbppc , evbsh3 , hp300 , hpcmips , hppa , i386 , luna68k ,
+.No evbmips , evbppc , evbsh3 , hp300 , hp700 , hpcmips , i386 , luna68k ,
 .No m68k , mac68k , macppc , mips , mmeye , mvme68k , mvmeppc , netwinder ,
 .No news68k , newsmips , next68k , ofppc , pc532 , pmax , pmppc , powerpc ,
 .No prep , sandpoint , sgimips , sh3 , shark , sparc , sparc64 , sun3 ,
@@ -1123,7 +1122,7 @@ The following punctuation characters are recognized by
 .El
 .Pp
 .
-.Xr troff 1
+.Xr Troff
 is limited as a macro language, and has difficulty when presented with a
 string containing a member of the mathematical, logical or quotation set:
 .
@@ -1133,7 +1132,7 @@ string containing a member of the mathematical, logical or quotation set:
 .Pp
 .
 The problem is that
-.Xr troff 1
+.Xr troff
 may assume it is supposed to actually perform the operation or evaluation
 suggested by the characters.
 To prevent the accidental evaluation of these characters, escape them with
@@ -1180,8 +1179,8 @@ documented, or the name of the author of the actual manual page.
 .An "Joe Author"
 .It Li ".An \*[q]Joe Author\*[q] ,"
 .An "Joe Author" ,
-.It Li ".An \*[q]Joe Author\*[q] Aq Mt nobody@FreeBSD.org"
-.An "Joe Author" Aq Mt nobody@FreeBSD.org
+.It Li ".An \*[q]Joe Author\*[q] Aq nobody@FreeBSD.org"
+.An "Joe Author" Aq nobody@FreeBSD.org
 .It Li ".An \*[q]Joe Author\*[q] ) ) ,"
 .An "Joe Author" ) ) ,
 .El
@@ -1243,7 +1242,7 @@ The default width is 12n.
 The
 .Ql .Cd
 macro is used to demonstrate a
-.Xr config 1
+.Xr config 8
 declaration for a device interface in a section four manual.
 .Pp
 .Dl Usage: .Cd Ao argument Ac ...
@@ -1272,8 +1271,7 @@ macro does not assert a dash in front of every argument.
 Traditionally flags are marked by the preceding dash, however, some commands
 or subsets of commands do not use them.
 Command modifiers may also be specified in conjunction with interactive
-commands such as editor commands, or used for fixed command strings given
-on the command line to change program behaviour.
+commands such as editor commands.
 See
 .Sx Flags .
 .Pp
@@ -1690,8 +1688,6 @@ and their results are:
 .Lb libintl
 .It Li libipsec
 .Lb libipsec
-.It Li libisns
-.Lb libisns
 .It Li libkvm
 .Lb libkvm
 .It Li libm
@@ -1706,8 +1702,6 @@ and their results are:
 .Lb libossaudio
 .It Li libpam
 .Lb libpam
-.It Li libpanel
-.Lb libpanel
 .It Li libpcap
 .Lb libpcap
 .It Li libpci
@@ -1718,14 +1712,10 @@ and their results are:
 .Lb libposix
 .It Li libpthread
 .Lb libpthread
-.It Li libpthread_dbg
-.Lb libpthread_dbg
 .It Li libresolv
 .Lb libresolv
 .It Li librt
 .Lb librt
-.It Li libsaslc
-.Lb libsaslc
 .It Li libtermcap
 .Lb libtermcap
 .It Li libusbhid
@@ -1946,10 +1936,6 @@ are:
 .St -isoC-90
 .It Li -isoC-99
 .St -isoC-99
-.It Li -isoC-2011
-.St -isoC-2011
-.It Li -isoC-2018
-.St -isoC-2018
 .El
 .Pp
 .
@@ -1981,8 +1967,6 @@ Part 1: System API
 .St -p1003.1-2001
 .It Li -p1003.1-2004
 .St -p1003.1-2004
-.It Li -p1003.1-2008
-.St -p1003.1-2008
 .El
 .Pp
 .
@@ -2002,8 +1986,8 @@ Part 2: Shell and Utilities
 .Pp
 .
 X/Open
-.Pp
 .Bl -tag -width ".Li -p1003.1g-2000" -compact -offset indent
+.Pp
 .It Li -susv2
 .St -susv2
 .It Li -svid4
@@ -2291,16 +2275,16 @@ respectively.
 .
 .Bd -filled -offset 4n
 .Bl -column "quote" "close" "open" "Angle Bracket Enclosure" "`string' or string"
-.It Em Quote Ta Em Open Ta Em Close Ta Em Function               Ta Em Result
-.It No .Aq   Ta    .Ao  Ta    .Ac   Ta "Angle Bracket Enclosure" Ta Ao string Ac
-.It No .Bq   Ta    .Bo  Ta    .Bc   Ta "Bracket Enclosure"       Ta Bo string Bc
-.It No .Brq  Ta    .Bro Ta    .Brc  Ta "Brace Enclosure"         Ta Bro string Brc
-.It No .Dq   Ta    .Do  Ta    .Dc   Ta "Double Quote"            Ta Do string Dc
-.It No .Eq   Ta    .Eo  Ta    .Ec   Ta "Enclose String (in XX)"  Ta XXstringXX
-.It No .Pq   Ta    .Po  Ta    .Pc   Ta "Parenthesis Enclosure"   Ta Po string Pc
-.It No .Ql   Ta         Ta          Ta "Quoted Literal"          Ta So string Sc or Li string
-.It No .Qq   Ta    .Qo  Ta    .Qc   Ta "Straight Double Quote"   Ta Qo string Qc
-.It No .Sq   Ta    .So  Ta    .Sc   Ta "Single Quote"            Ta So string Sc
+.Em Quote Ta Em Open Ta Em Close Ta Em Function               Ta Em Result
+.No .Aq   Ta    .Ao  Ta    .Ac   Ta "Angle Bracket Enclosure" Ta Ao string Ac
+.No .Bq   Ta    .Bo  Ta    .Bc   Ta "Bracket Enclosure"       Ta Bo string Bc
+.No .Brq  Ta    .Bro Ta    .Brc  Ta "Brace Enclosure"         Ta Bro string Brc
+.No .Dq   Ta    .Do  Ta    .Dc   Ta "Double Quote"            Ta Do string Dc
+.No .Eq   Ta    .Eo  Ta    .Ec   Ta "Enclose String (in XX)"  Ta XXstringXX
+.No .Pq   Ta    .Po  Ta    .Pc   Ta "Parenthesis Enclosure"   Ta Po string Pc
+.No .Ql   Ta         Ta          Ta "Quoted Literal"          Ta So string Sc or Li string
+.No .Qq   Ta    .Qo  Ta    .Qc   Ta "Straight Double Quote"   Ta Qo string Qc
+.No .Sq   Ta    .So  Ta    .Sc   Ta "Single Quote"            Ta So string Sc
 .El
 .Ed
 .Pp
@@ -2544,8 +2528,6 @@ Corporate or foreign author.
 Report name.
 .It Li .%T
 Title of article.
-.It Li .%U
-Optional hypertext reference.
 .It Li .%V
 Volume.
 .El
@@ -2892,8 +2874,7 @@ Currently
 style references are not accommodated.
 .Pp
 It is recommended that the cross references are sorted on the section
-number, then alphabetically (case-insensitive) on the names within
-a section, and placed
+number, then alphabetically on the names within a section, and placed
 in that order and comma separated.
 Example:
 .Pp
@@ -3234,7 +3215,7 @@ This
 .Em left
 aligns the block about two inches from the right side of the page.
 This macro needs work and perhaps may never do the right thing within
-.Xr troff 1 .
+.Xr troff .
 .El
 .Pp
 .
@@ -3882,10 +3863,7 @@ followed by the file name, then the contents of
 It is neither callable nor parsed.
 .
 .It Li .Lk
-link (for conversion to HTML).
-.Pp
-.Dl Usage: .Lk Ao href Ac Bo anchor-text Bc
-.Pp
+To be written.
 .
 .It Li .Me
 Exact usage unknown.
@@ -3897,10 +3875,7 @@ source file describes it as a macro for
 Its default width is 6n.
 .
 .It Li .Mt
-mailto (for conversion to HTML).
-.Pp
-.Dl Usage: .Mt Ao email_address Ac
-.Pp
+To be written.
 .
 .It Li .Ot
 Exact usage unknown.

@@ -43,9 +43,6 @@
    */
 #undef HAVE_DIRENT_H
 
-/* Define to 1 if you have the <dlfcn.h> header file. */
-#undef HAVE_DLFCN_H
-
 /* Define to 1 if you have the `dup' function. */
 #undef HAVE_DUP
 
@@ -163,16 +160,16 @@
 /* Define if struct statfs is defined in <sys/mount.h> */
 #undef HAVE_STRUCT_STATFS
 
-/* Define to 1 if `st_blksize' is a member of `struct stat'. */
+/* Define to 1 if `struct stat' is a member of `st_blksize'. */
 #undef HAVE_STRUCT_STAT_ST_BLKSIZE
 
-/* Define to 1 if `st_blocks' is a member of `struct stat'. */
+/* Define to 1 if `struct stat' is a member of `st_blocks'. */
 #undef HAVE_STRUCT_STAT_ST_BLOCKS
 
-/* Define to 1 if `st_rdev' is a member of `struct stat'. */
+/* Define to 1 if `struct stat' is a member of `st_rdev'. */
 #undef HAVE_STRUCT_STAT_ST_RDEV
 
-/* Define to 1 if `tm_zone' is a member of `struct tm'. */
+/* Define to 1 if `struct tm' is a member of `tm_zone'. */
 #undef HAVE_STRUCT_TM_TM_ZONE
 
 /* Define to 1 if your `struct stat' has `st_blksize'. Deprecated, use
@@ -284,8 +281,8 @@
 /* Define to 1 if you have the `unlink' function. */
 #undef HAVE_UNLINK
 
-/* Define to 1 if you have the <windows.h> header file. */
-#undef HAVE_WINDOWS_H
+/* Define to 1 if you have the <zlib.h> header file. */
+#undef HAVE_ZLIB_H
 
 /* Define to the address where bug reports for this package should be sent. */
 #undef PACKAGE_BUGREPORT
@@ -324,18 +321,6 @@
    Windows, we use the Windows API when building for MinGW, but the POSIX API
    when building for Cygwin. */
 #undef USE_WIN32API
-
-/* Sim assert settings */
-#undef WITH_ASSERT
-
-/* Sim default environment */
-#undef WITH_ENVIRONMENT
-
-/* How to route I/O */
-#undef WITH_STDIO
-
-/* Sim trace settings */
-#undef WITH_TRACE
 
 /* Define WORDS_BIGENDIAN to 1 if your processor stores words with the most
    significant byte first (like Motorola and SPARC, unlike Intel). */

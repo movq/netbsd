@@ -1,5 +1,6 @@
 /* Interface for common GDB/MI data
-   Copyright (C) 2005-2019 Free Software Foundation, Inc.
+   Copyright (C) 2005, 2007, 2008, 2009, 2010, 2011
+   Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -16,12 +17,8 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-#ifndef MI_MI_COMMON_H
-#define MI_MI_COMMON_H
-
-#include "interps.h"
-
-struct mi_console_file;
+#ifndef MI_COMMON_H
+#define MI_COMMON_H
 
 /* Represents the reason why GDB is sending an asynchronous command to
    the front end.  NOTE: When modifing this, don't forget to update
@@ -40,54 +37,25 @@ enum async_reply_reason
   EXEC_ASYNC_EXITED,
   EXEC_ASYNC_EXITED_NORMALLY,
   EXEC_ASYNC_SIGNAL_RECEIVED,
-  EXEC_ASYNC_SOLIB_EVENT,
-  EXEC_ASYNC_FORK,
-  EXEC_ASYNC_VFORK,
-  EXEC_ASYNC_SYSCALL_ENTRY,
-  EXEC_ASYNC_SYSCALL_RETURN,
-  EXEC_ASYNC_EXEC,
   /* This is here only to represent the number of enums.  */
   EXEC_ASYNC_LAST
 };
 
 const char *async_reason_lookup (enum async_reply_reason reason);
 
-/* An MI interpreter.  */
-
-class mi_interp final : public interp
+struct mi_interp
 {
-public:
-  mi_interp (const char *name)
-    : interp (name)
-  {}
-
-  void init (bool top_level) override;
-  void resume () override;
-  void suspend () override;
-  gdb_exception exec (const char *command_str) override;
-  ui_out *interp_ui_out () override;
-  void set_logging (ui_file_up logfile, bool logging_redirect) override;
-  void pre_command_loop () override;
-
   /* MI's output channels */
-  mi_console_file *out;
-  mi_console_file *err;
-  mi_console_file *log;
-  mi_console_file *targ;
-  mi_console_file *event_channel;
+  struct ui_file *out;
+  struct ui_file *err;
+  struct ui_file *log;
+  struct ui_file *targ;
+  struct ui_file *event_channel;
 
-  /* Raw console output.  */
-  struct ui_file *raw_stdout;
-
-  /* Save the original value of raw_stdout here when logging, so we
-     can restore correctly when done.  */
-  struct ui_file *saved_raw_stdout;
-
-  /* MI's builder.  */
-  struct ui_out *mi_uiout;
-
-  /* MI's CLI builder (wraps OUT).  */
-  struct ui_out *cli_uiout;
+  /* This is the interpreter for the mi... */
+  struct interp *mi2_interp;
+  struct interp *mi1_interp;
+  struct interp *mi_interp;
 };
 
-#endif /* MI_MI_COMMON_H */
+#endif

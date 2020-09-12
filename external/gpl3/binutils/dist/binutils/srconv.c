@@ -1,5 +1,6 @@
 /* srconv.c -- Sysroff conversion program
-   Copyright (C) 1994-2020 Free Software Foundation, Inc.
+   Copyright 1994, 1995, 1996, 1998, 1999, 2000, 2001, 2002, 2003, 2004,
+   2005, 2007 Free Software Foundation, Inc.
 
    This file is part of GNU Binutils.
 
@@ -31,7 +32,6 @@
 #include "sysroff.h"
 #include "coffgrok.h"
 #include "libiberty.h"
-#include "filenames.h"
 #include "getopt.h"
 
 #include "coff/internal.h"
@@ -43,12 +43,52 @@ static int addrsize;
 static char *toolname;
 static char **rnames;
 
+static int get_member_id (int);
+static int get_ordinary_id (int);
+static char *section_translate (char *);
+static char *strip_suffix (const char *);
+static void checksum (FILE *, unsigned char *, int, int);
+static void writeINT (int, unsigned char *, int *, int, FILE *);
+static void writeBITS (int, unsigned char *, int *, int);
+static void writeBARRAY (barray, unsigned char *, int *, int, FILE *);
+static void writeCHARS (char *, unsigned char *, int *, int, FILE *);
+static void wr_tr (void);
+static void wr_un (struct coff_ofile *, struct coff_sfile *, int, int);
+static void wr_hd (struct coff_ofile *);
+static void wr_sh (struct coff_ofile *, struct coff_section *);
+static void wr_ob (struct coff_ofile *, struct coff_section *);
+static void wr_rl (struct coff_ofile *, struct coff_section *);
+static void wr_object_body (struct coff_ofile *);
+static void wr_dps_start
+  (struct coff_sfile *, struct coff_section *, struct coff_scope *, int, int);
+static void wr_dps_end (struct coff_section *, struct coff_scope *, int);
+static int *nints (int);
+static void walk_tree_type_1
+  (struct coff_sfile *, struct coff_symbol *, struct coff_type *, int);
+static void walk_tree_type
+  (struct coff_sfile *, struct coff_symbol *, struct coff_type *, int);
 static void walk_tree_symbol
   (struct coff_sfile *, struct coff_section *, struct coff_symbol *, int);
 static void walk_tree_scope
   (struct coff_section *, struct coff_sfile *, struct coff_scope *, int, int);
+static void walk_tree_sfile (struct coff_section *, struct coff_sfile *);
+static void wr_program_structure (struct coff_ofile *, struct coff_sfile *);
+static void wr_du (struct coff_ofile *, struct coff_sfile *, int);
+static void wr_dus (struct coff_ofile *, struct coff_sfile *);
 static int find_base (struct coff_sfile *, struct coff_section *);
+static void wr_dln (struct coff_ofile *, struct coff_sfile *, int);
 static void wr_globals (struct coff_ofile *, struct coff_sfile *, int);
+static void wr_debug (struct coff_ofile *);
+static void wr_cs (void);
+static int wr_sc (struct coff_ofile *, struct coff_sfile *);
+static void wr_er (struct coff_ofile *, struct coff_sfile *, int);
+static void wr_ed (struct coff_ofile *, struct coff_sfile *, int);
+static void wr_unit_info (struct coff_ofile *);
+static void wr_module (struct coff_ofile *);
+static int align (int);
+static void prescan (struct coff_ofile *);
+static void show_usage (FILE *, int);
+extern int main (int, char **);
 
 static FILE *file;
 static bfd *abfd;
@@ -118,18 +158,17 @@ strip_suffix (const char *name)
 
 /* IT LEN stuff CS */
 static void
-checksum (FILE *ffile, unsigned char *ptr, int size, int ccode)
+checksum (FILE *file, unsigned char *ptr, int size, int code)
 {
   int j;
   int last;
   int sum = 0;
   int bytes = size / 8;
 
-  last = !(ccode & 0xff00);
+  last = !(code & 0xff00);
   if (size & 0x7)
-    fatal (_("Checksum failure"));
-
-  ptr[0] = ccode | (last ? 0x80 : 0);
+    abort ();
+  ptr[0] = code | (last ? 0x80 : 0);
   ptr[1] = bytes + 1;
 
   for (j = 0; j < bytes; j++)
@@ -137,14 +176,14 @@ checksum (FILE *ffile, unsigned char *ptr, int size, int ccode)
 
   /* Glue on a checksum too.  */
   ptr[bytes] = ~sum;
-  if (fwrite (ptr, bytes + 1, 1, ffile) != 1)
+  if (fwrite (ptr, bytes + 1, 1, file) != 1)
     /* FIXME: Return error status.  */
-    fatal (_("Failed to write checksum"));
+    abort ();
 }
 
 
 static void
-writeINT (int n, unsigned char *ptr, int *idx, int size, FILE *ffile)
+writeINT (int n, unsigned char *ptr, int *idx, int size, FILE *file)
 {
   int byte = *idx / 8;
 
@@ -156,7 +195,7 @@ writeINT (int n, unsigned char *ptr, int *idx, int size, FILE *ffile)
   if (byte > 240)
     {
       /* Lets write out that record and do another one.  */
-      checksum (ffile, ptr, *idx, code | 0x1000);
+      checksum (file, ptr, *idx, code | 0x1000);
       *idx = 16;
       byte = *idx / 8;
     }
@@ -179,7 +218,7 @@ writeINT (int n, unsigned char *ptr, int *idx, int size, FILE *ffile)
       ptr[byte + 3] = n >> 0;
       break;
     default:
-      fatal (_("Unsupported integer write size: %d"), size);
+      abort ();
     }
   *idx += size * 8;
 }
@@ -203,24 +242,24 @@ writeBITS (int val, unsigned char *ptr, int *idx, int size)
 
 static void
 writeBARRAY (barray data, unsigned char *ptr, int *idx,
-	     int size ATTRIBUTE_UNUSED, FILE *ffile)
+	     int size ATTRIBUTE_UNUSED, FILE *file)
 {
   int i;
 
-  writeINT (data.len, ptr, idx, 1, ffile);
+  writeINT (data.len, ptr, idx, 1, file);
   for (i = 0; i < data.len; i++)
-    writeINT (data.data[i], ptr, idx, 1, ffile);
+    writeINT (data.data[i], ptr, idx, 1, file);
 }
 
 static void
-writeCHARS (char *string, unsigned char *ptr, int *idx, int size, FILE *ffile)
+writeCHARS (char *string, unsigned char *ptr, int *idx, int size, FILE *file)
 {
   int i = *idx / 8;
 
   if (i > 240)
     {
       /* Lets write out that record and do another one.  */
-      checksum (ffile, ptr, *idx, code | 0x1000);
+      checksum (file, ptr, *idx, code | 0x1000);
       *idx = 16;
       i = *idx / 8;
     }
@@ -265,7 +304,7 @@ wr_tr (void)
 
   if (fwrite (b, sizeof (b), 1, file) != 1)
     /* FIXME: Return error status.  */
-    fatal (_("Failed to write TR block"));
+    abort ();
 }
 
 static void
@@ -356,8 +395,7 @@ wr_hd (struct coff_ofile *p)
 	  toolname = "C_H8/300S";
 	  break;
 	default:
-	  fatal (_("Unrecognized H8300 sub-architecture: %ld"),
-		 bfd_get_mach (abfd));
+	  abort();
 	}
       rnames = rname_h8300;
       break;
@@ -374,10 +412,10 @@ wr_hd (struct coff_ofile *p)
       rnames = rname_sh;
       break;
     default:
-      fatal (_("Unsupported architecture: %d"), bfd_get_arch (abfd));
+      abort ();
     }
 
-  if (! (bfd_get_file_flags(abfd) & EXEC_P))
+  if (! bfd_get_file_flags(abfd) & EXEC_P)
     {
       hd.ep = 0;
     }
@@ -419,14 +457,14 @@ wr_ob (struct coff_ofile *p ATTRIBUTE_UNUSED, struct coff_section *section)
   unsigned char stuff[200];
 
   i = 0;
-  while (i < bfd_section_size (section->bfd_section))
+  while (i < bfd_get_section_size (section->bfd_section))
     {
       struct IT_ob ob;
       int todo = 200;		/* Copy in 200 byte lumps.  */
 
       ob.spare = 0;
-      if (i + todo > bfd_section_size (section->bfd_section))
-	todo = bfd_section_size (section->bfd_section) - i;
+      if (i + todo > bfd_get_section_size (section->bfd_section))
+	todo = bfd_get_section_size (section->bfd_section) - i;
 
       if (first)
 	{
@@ -828,7 +866,7 @@ walk_tree_type_1 (struct coff_sfile *sfile, struct coff_symbol *symbol,
       break;
 
     default:
-      fatal (_("Unrecognised type: %d"), type->type);
+      abort ();
     }
 }
 
@@ -874,14 +912,13 @@ static void
 walk_tree_type (struct coff_sfile *sfile, struct coff_symbol *symbol,
 		struct coff_type *type, int nest)
 {
-  struct IT_dty dty;
-
-  dty.spare = 0;
-  dty.end = 0;
-  dty.neg = 0x1001;
-
   if (symbol->type->type == coff_function_type)
     {
+      struct IT_dty dty;
+
+      dty.end = 0;
+      dty.neg = 0x1001;
+
       sysroff_swap_dty_out (file, &dty);
       walk_tree_type_1 (sfile, symbol, type, nest);
       dty.end = 1;
@@ -907,6 +944,10 @@ walk_tree_type (struct coff_sfile *sfile, struct coff_symbol *symbol,
     }
   else
     {
+      struct IT_dty dty;
+
+      dty.end = 0;
+      dty.neg = 0x1001;
       sysroff_swap_dty_out (file, &dty);
       walk_tree_type_1 (sfile, symbol, type, nest);
       dty.end = 1;
@@ -954,7 +995,7 @@ walk_tree_symbol (struct coff_sfile *sfile, struct coff_section *section ATTRIBU
       return;
 
     default:
-      fatal (_("Unrecognised coff symbol type: %d"), symbol->type->type);
+      abort ();
     }
 
   if (symbol->where->where == coff_where_member_of_struct)
@@ -1016,7 +1057,7 @@ walk_tree_symbol (struct coff_sfile *sfile, struct coff_section *section ATTRIBU
       break;
 
     default:
-      fatal (_("Unrecognised coff symbol visibility: %d"), symbol->visible->type);
+      abort ();
     }
 
   dsy.dlength = symbol->type->size;
@@ -1042,7 +1083,7 @@ walk_tree_symbol (struct coff_sfile *sfile, struct coff_section *section ATTRIBU
       break;
 
     default:
-      fatal (_("Unrecognised coff symbol location: %d"), symbol->where->where);
+      abort ();
     }
 
   switch (symbol->where->where)
@@ -1087,7 +1128,7 @@ walk_tree_symbol (struct coff_sfile *sfile, struct coff_section *section ATTRIBU
       break;
 
     default:
-      fatal (_("Unrecognised coff symbol location: %d"), symbol->where->where);
+      abort ();
     }
 
   if (symbol->where->where == coff_where_register)
@@ -1116,7 +1157,7 @@ walk_tree_symbol (struct coff_sfile *sfile, struct coff_section *section ATTRIBU
       break;
 
     default:
-      fatal (_("Unrecognised coff symbol visibility: %d"), symbol->visible->type);
+      abort ();
     }
 
   dsy.sfn = 0;
@@ -1161,8 +1202,6 @@ walk_tree_sfile (struct coff_section *section, struct coff_sfile *sfile)
 static void
 wr_program_structure (struct coff_ofile *p, struct coff_sfile *sfile)
 {
-  if (p->nsections < 4)
-    return;
   walk_tree_sfile (p->sections + 4, sfile);
 }
 
@@ -1421,7 +1460,7 @@ wr_cs (void)
 
   if (fwrite (b, sizeof (b), 1, file) != 1)
     /* FIXME: Return error status.  */
-    fatal (_("Failed to write CS struct"));
+    abort ();
 }
 
 /* Write out the SC records for a unit.  Create an SC
@@ -1538,7 +1577,6 @@ wr_sc (struct coff_ofile *ptr, struct coff_sfile *sfile)
       sysroff_swap_sc_out (file, &sc);
       scount++;
     }
-  free (info);
   return scount;
 }
 
@@ -1659,18 +1697,15 @@ align (int x)
    ordinary defs - dunno why, but thats what hitachi does with 'em.  */
 
 static void
-prescan (struct coff_ofile *otree)
+prescan (struct coff_ofile *tree)
 {
   struct coff_symbol *s;
   struct coff_section *common_section;
 
-  if (otree->nsections < 3)
-    return;
-
   /* Find the common section - always section 3.  */
-  common_section = otree->sections + 3;
+  common_section = tree->sections + 3;
 
-  for (s = otree->symbol_list_head;
+  for (s = tree->symbol_list_head;
        s;
        s = s->next_in_ofile_list)
     {
@@ -1689,12 +1724,12 @@ prescan (struct coff_ofile *otree)
 
 char *program_name;
 
-ATTRIBUTE_NORETURN static void
-show_usage (FILE *ffile, int status)
+static void
+show_usage (FILE *file, int status)
 {
-  fprintf (ffile, _("Usage: %s [option(s)] in-file [out-file]\n"), program_name);
-  fprintf (ffile, _("Convert a COFF object file into a SYSROFF object file\n"));
-  fprintf (ffile, _(" The options are:\n\
+  fprintf (file, _("Usage: %s [option(s)] in-file [out-file]\n"), program_name);
+  fprintf (file, _("Convert a COFF object file into a SYSROFF object file\n"));
+  fprintf (file, _(" The options are:\n\
   -q --quick       (Obsolete - ignored)\n\
   -n --noprescan   Do not perform a scan to convert commons into defs\n\
   -d --debug       Display information about what is being done\n\
@@ -1703,7 +1738,7 @@ show_usage (FILE *ffile, int status)
   -v --version     Print the program's version number\n"));
 
   if (REPORT_BUGS_TO[0] && status == 0)
-    fprintf (ffile, _("Report bugs to %s\n"), REPORT_BUGS_TO);
+    fprintf (file, _("Report bugs to %s\n"), REPORT_BUGS_TO);
   exit (status);
 }
 
@@ -1735,7 +1770,6 @@ main (int ac, char **av)
 
   program_name = av[0];
   xmalloc_set_program_name (program_name);
-  bfd_set_error_program_name (program_name);
 
   expandargv (&ac, &av);
 
@@ -1783,7 +1817,7 @@ main (int ac, char **av)
 	  ++optind;
 	  if (optind < ac)
 	    show_usage (stderr, 1);
-	  if (filename_cmp (input_file, output_file) == 0)
+	  if (strcmp (input_file, output_file) == 0)
 	    {
 	      fatal (_("input and output files must be different"));
 	    }
@@ -1847,12 +1881,10 @@ main (int ac, char **av)
     printf ("ids %d %d\n", base1, base2);
 
   tree = coff_grok (abfd);
-  if (tree)
-    {
-      if (!noprescan)
-	prescan (tree);
 
-      wr_module (tree);
-    }
+  if (!noprescan)
+    prescan (tree);
+
+  wr_module (tree);
   return 0;
 }

@@ -1,5 +1,7 @@
 /* input_file.c - Deal with Input Files -
-   Copyright (C) 1987-2020 Free Software Foundation, Inc.
+   Copyright 1987, 1990, 1991, 1992, 1993, 1994, 1995, 1999, 2000, 2001,
+   2002, 2003, 2005, 2006, 2007
+   Free Software Foundation, Inc.
 
    This file is part of GAS, the GNU Assembler.
 
@@ -27,6 +29,8 @@
 #include "input-file.h"
 #include "safe-ctype.h"
 
+static int input_file_get (char *, int);
+
 /* This variable is non-zero if the file currently being read should be
    preprocessed by app.  It is zero if the file can be read straight in.  */
 int preprocess = 0;
@@ -42,13 +46,13 @@ int preprocess = 0;
 /* We use static data: the data area is not sharable.  */
 
 static FILE *f_in;
-static const char *file_name;
+static char *file_name;
 
 /* Struct for saving the state of this module for file includes.  */
 struct saved_file
   {
     FILE * f_in;
-    const char * file_name;
+    char * file_name;
     int    preprocess;
     char * app_save;
   };
@@ -67,7 +71,7 @@ input_file_end (void)
 }
 
 /* Return BUFFER_SIZE.  */
-size_t
+unsigned int
 input_file_buffer_size (void)
 {
   return (BUFFER_SIZE);
@@ -79,9 +83,9 @@ input_file_buffer_size (void)
 char *
 input_file_push (void)
 {
-  struct saved_file *saved;
+  register struct saved_file *saved;
 
-  saved = XNEW (struct saved_file);
+  saved = (struct saved_file *) xmalloc (sizeof *saved);
 
   saved->f_in = f_in;
   saved->file_name = file_name;
@@ -98,7 +102,7 @@ input_file_push (void)
 void
 input_file_pop (char *arg)
 {
-  struct saved_file *saved = (struct saved_file *) arg;
+  register struct saved_file *saved = (struct saved_file *) arg;
 
   input_file_end ();		/* Close out old file.  */
 
@@ -111,10 +115,8 @@ input_file_pop (char *arg)
   free (arg);
 }
 
-/* Open the specified file, "" means stdin.  Filename must not be null.  */
-
 void
-input_file_open (const char *filename,
+input_file_open (char *filename, /* "" means use stdin. Must not be 0.  */
 		 int pre)
 {
   int c;
@@ -122,7 +124,7 @@ input_file_open (const char *filename,
 
   preprocess = pre;
 
-  gas_assert (filename != 0);	/* Filename may not be NULL.  */
+  assert (filename != 0);	/* Filename may not be NULL.  */
   if (filename[0])
     {
       f_in = fopen (filename, FOPEN_RT);
@@ -154,15 +156,6 @@ input_file_open (const char *filename,
       f_in = NULL;
       return;
     }
-
-  /* Check for an empty input file.  */
-  if (feof (f_in))
-    {
-      fclose (f_in);
-      f_in = NULL;
-      return;
-    }
-  gas_assert (c != EOF);
 
   if (c == '#')
     {
@@ -211,17 +204,17 @@ input_file_close (void)
 
 /* This function is passed to do_scrub_chars.  */
 
-static size_t
-input_file_get (char *buf, size_t buflen)
+static int
+input_file_get (char *buf, int buflen)
 {
-  size_t size;
-
-  if (feof (f_in))
-    return 0;
+  int size;
 
   size = fread (buf, sizeof (char), buflen, f_in);
-  if (ferror (f_in))
-    as_bad (_("can't read from %s: %s"), file_name, xstrerror (errno));
+  if (size < 0)
+    {
+      as_bad (_("can't read from %s: %s"), file_name, xstrerror (errno));
+      size = 0;
+    }
   return size;
 }
 
@@ -231,7 +224,7 @@ char *
 input_file_give_next_buffer (char *where /* Where to place 1st character of new buffer.  */)
 {
   char *return_value;		/* -> Last char of what we read, + 1.  */
-  size_t size;
+  register int size;
 
   if (f_in == (FILE *) 0)
     return 0;
@@ -242,8 +235,12 @@ input_file_give_next_buffer (char *where /* Where to place 1st character of new 
   if (preprocess)
     size = do_scrub_chars (input_file_get, where, BUFFER_SIZE);
   else
-    size = input_file_get (where, BUFFER_SIZE);
-
+    size = fread (where, sizeof (char), BUFFER_SIZE, f_in);
+  if (size < 0)
+    {
+      as_bad (_("can't read from %s: %s"), file_name, xstrerror (errno));
+      size = 0;
+    }
   if (size)
     return_value = where + size;
   else

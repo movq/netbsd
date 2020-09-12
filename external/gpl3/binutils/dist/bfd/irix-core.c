@@ -1,5 +1,6 @@
 /* BFD back-end for Irix core files.
-   Copyright (C) 1993-2020 Free Software Foundation, Inc.
+   Copyright 1993, 1994, 1996, 1999, 2001, 2002, 2004, 2006, 2007
+   Free Software Foundation, Inc.
    Written by Stu Grossman, Cygnus Support.
    Converted to back-end form by Ian Lance Taylor, Cygnus Support
 
@@ -43,7 +44,6 @@ struct sgi_core_struct
 #define core_command(bfd) (core_hdr(bfd)->cmd)
 
 #define irix_core_core_file_matches_executable_p generic_core_file_matches_executable_p
-#define irix_core_core_file_pid _bfd_nocore_core_file_pid
 
 static asection *make_bfd_asection
   (bfd *, const char *, flagword, bfd_size_type, bfd_vma, file_ptr);
@@ -61,7 +61,7 @@ do_sections64 (bfd *abfd, struct coreout *coreout)
 
   for (i = 0; i < coreout->c_nvmap; i++)
     {
-      val = bfd_bread (&vmap, (bfd_size_type) sizeof vmap, abfd);
+      val = bfd_bread ((PTR) &vmap, (bfd_size_type) sizeof vmap, abfd);
       if (val != sizeof vmap)
 	break;
 
@@ -109,7 +109,7 @@ do_sections (bfd *abfd, struct coreout *coreout)
 
   for (i = 0; i < coreout->c_nvmap; i++)
     {
-      val = bfd_bread (&vmap, (bfd_size_type) sizeof vmap, abfd);
+      val = bfd_bread ((PTR) &vmap, (bfd_size_type) sizeof vmap, abfd);
       if (val != sizeof vmap)
 	break;
 
@@ -146,11 +146,11 @@ do_sections (bfd *abfd, struct coreout *coreout)
 
 static asection *
 make_bfd_asection (bfd *abfd,
-		   const char *name,
-		   flagword flags,
-		   bfd_size_type size,
-		   bfd_vma vma,
-		   file_ptr filepos)
+                   const char *name,
+                   flagword flags,
+                   bfd_size_type size,
+                   bfd_vma vma,
+                   file_ptr filepos)
 {
   asection *asect;
 
@@ -174,7 +174,7 @@ irix_core_core_file_p (bfd *abfd)
   struct idesc *idg, *idf, *ids;
   bfd_size_type amt;
 
-  val = bfd_bread (&coreout, (bfd_size_type) sizeof coreout, abfd);
+  val = bfd_bread ((PTR) &coreout, (bfd_size_type) sizeof coreout, abfd);
   if (val != sizeof coreout)
     {
       if (bfd_get_error () != bfd_error_system_call)
@@ -279,7 +279,7 @@ swap_abort(void)
 #define	NO_PUT64 ((void (*) (bfd_uint64_t, void *)) swap_abort)
 #define	NO_GETS64 ((bfd_int64_t (*) (const void *)) swap_abort)
 
-const bfd_target core_irix_vec =
+const bfd_target irix_core_vec =
   {
     "irix-core",
     bfd_target_unknown_flavour,
@@ -289,10 +289,9 @@ const bfd_target core_irix_vec =
      HAS_LINENO | HAS_DEBUG |
      HAS_SYMS | HAS_LOCALS | WP_TEXT | D_PAGED),
     (SEC_HAS_CONTENTS | SEC_ALLOC | SEC_LOAD | SEC_RELOC), /* section flags */
-    0,							   /* symbol prefix */
+    0,			                                   /* symbol prefix */
     ' ',						   /* ar_pad_char */
     16,							   /* ar_max_namelen */
-    0,							   /* match_priority */
     NO_GET64, NO_GETS64, NO_PUT64,	/* 64 bit data */
     NO_GET, NO_GETS, NO_PUT,		/* 32 bit data */
     NO_GET, NO_GETS, NO_PUT,		/* 16 bit data */
@@ -307,16 +306,12 @@ const bfd_target core_irix_vec =
       irix_core_core_file_p		/* a core file */
     },
     {				/* bfd_set_format */
-      _bfd_bool_bfd_false_error,
-      _bfd_bool_bfd_false_error,
-      _bfd_bool_bfd_false_error,
-      _bfd_bool_bfd_false_error
+      bfd_false, bfd_false,
+      bfd_false, bfd_false
     },
     {				/* bfd_write_contents */
-      _bfd_bool_bfd_false_error,
-      _bfd_bool_bfd_false_error,
-      _bfd_bool_bfd_false_error,
-      _bfd_bool_bfd_false_error
+      bfd_false, bfd_false,
+      bfd_false, bfd_false
     },
 
     BFD_JUMP_TABLE_GENERIC (_bfd_generic),
@@ -331,7 +326,7 @@ const bfd_target core_irix_vec =
 
     NULL,
 
-    NULL			/* backend_data */
+    (PTR) 0			/* backend_data */
   };
 
 #endif /* IRIX_CORE */

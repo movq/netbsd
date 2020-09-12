@@ -1,5 +1,6 @@
 /* Helper routines for C++ support in GDB.
-   Copyright (C) 2002-2019 Free Software Foundation, Inc.
+   Copyright (C) 2002, 2003, 2004, 2005, 2007, 2008, 2009, 2010, 2011
+   Free Software Foundation, Inc.
 
    Contributed by MontaVista Software.
    Namespace support contributed by David Carlton.
@@ -25,21 +26,15 @@
 /* We need this for 'domain_enum', alas...  */
 
 #include "symtab.h"
-#include "common/vec.h"
-#include "common/gdb_vecs.h"
-#include "gdb_obstack.h"
-#include "common/array-view.h"
-#include <vector>
 
 /* Opaque declarations.  */
 
 struct symbol;
+struct obstack;
 struct block;
-struct buildsym_compunit;
 struct objfile;
 struct type;
 struct demangle_component;
-struct using_direct;
 
 /* A string representing the name of the anonymous namespace used in GDB.  */
 
@@ -49,44 +44,69 @@ struct using_direct;
 
 #define CP_ANONYMOUS_NAMESPACE_LEN 21
 
-/* A string representing the start of an operator name.  */
+/* This struct is designed to store data from using directives.  It
+   says that names from namespace IMPORT_SRC should be visible within
+   namespace IMPORT_DEST.  These form a linked list; NEXT is the next
+   element of the list.  If the imported namespace or declaration has
+   been aliased within the IMPORT_DEST namespace, ALIAS is set to a
+   string representing the alias.  Otherwise, ALIAS is NULL.
+   DECLARATION is the name of the imported declaration, if this import
+   statement represents one.  Otherwise DECLARATION is NULL and this
+   import statement represents a namespace.
 
-#define CP_OPERATOR_STR "operator"
+   C++:      using namespace A;
+   Fortran:  use A
+   import_src = "A"
+   import_dest = local scope of the import statement even such as ""
+   alias = NULL
+   declaration = NULL
 
-/* The length of CP_OPERATOR_STR.  */
+   C++:      using A::x;
+   Fortran:  use A, only: x
+   import_src = "A"
+   import_dest = local scope of the import statement even such as ""
+   alias = NULL
+   declaration = "x"
+   The declaration will get imported as import_dest::x.
 
-#define CP_OPERATOR_LEN 8
+   C++:      namespace LOCALNS = A;
+   Fortran has no way to address non-local namespace/module.
+   import_src = "A"
+   import_dest = local scope of the import statement even such as ""
+   alias = "LOCALNS"
+   declaration = NULL
+   The namespace will get imported as the import_dest::LOCALNS
+   namespace.
 
-/* The result of parsing a name.  */
+   C++ cannot express it, it would be something like: using localname
+   = A::x;
+   Fortran:  use A, only localname => x
+   import_src = "A"
+   import_dest = local scope of the import statement even such as ""
+   alias = "localname"
+   declaration = "x"
+   The declaration will get imported as localname or
+   `import_dest`localname.  */
 
-struct demangle_parse_info
+struct using_direct
 {
-  demangle_parse_info ();
+  char *import_src;
+  char *import_dest;
 
-  ~demangle_parse_info ();
+  char *alias;
+  char *declaration;
 
-  /* The memory used during the parse.  */
-  struct demangle_info *info;
+  struct using_direct *next;
 
-  /* The result of the parse.  */
-  struct demangle_component *tree;
-
-  /* Any temporary memory used during typedef replacement.  */
-  struct obstack obstack;
+  /* Used during import search to temporarily mark this node as
+     searched.  */
+  int searched;
 };
 
 
 /* Functions from cp-support.c.  */
 
-extern std::string cp_canonicalize_string (const char *string);
-
-extern std::string cp_canonicalize_string_no_typedefs (const char *string);
-
-typedef const char *(canonicalization_ftype) (struct type *, void *);
-
-extern std::string cp_canonicalize_string_full (const char *string,
-						canonicalization_ftype *finder,
-						void *data);
+extern char *cp_canonicalize_string (const char *string);
 
 extern char *cp_class_name_from_physname (const char *physname);
 
@@ -96,103 +116,86 @@ extern unsigned int cp_find_first_component (const char *name);
 
 extern unsigned int cp_entire_prefix_len (const char *name);
 
-extern gdb::unique_xmalloc_ptr<char> cp_func_name (const char *full_name);
+extern char *cp_func_name (const char *full_name);
 
-extern gdb::unique_xmalloc_ptr<char> cp_remove_params
-  (const char *demanged_name);
+extern char *cp_remove_params (const char *demangled_name);
 
-/* DEMANGLED_NAME is the name of a function, (optionally) including
-   parameters and (optionally) a return type.  Return the name of the
-   function without parameters or return type, or NULL if we can not
-   parse the name.  If COMPLETION_MODE is true, then tolerate a
-   non-existing or unbalanced parameter list.  */
-extern gdb::unique_xmalloc_ptr<char> cp_remove_params_if_any
-  (const char *demangled_name, bool completion_mode);
+extern struct symbol **make_symbol_overload_list (const char *,
+						  const char *);
 
-extern std::vector<symbol *> make_symbol_overload_list (const char *,
-							const char *);
-
-extern void add_symbol_overload_list_adl
-  (gdb::array_view<type *> arg_types,
-   const char *func_name,
-   std::vector<symbol *> *overload_list);
+extern struct symbol **make_symbol_overload_list_adl (struct type **arg_types,
+                                                      int nargs,
+                                                      const char *func_name);
 
 extern struct type *cp_lookup_rtti_type (const char *name,
 					 struct block *block);
 
-/* Produce an unsigned hash value from SEARCH_NAME that is compatible
-   with cp_symbol_name_matches.  Only the last component in
-   "foo::bar::function()" is considered for hashing purposes (i.e.,
-   the entire prefix is skipped), so that later on looking up for
-   "function" or "bar::function" in all namespaces is possible.  */
-extern unsigned int cp_search_name_hash (const char *search_name);
-
-/* Implement the "la_get_symbol_name_matcher" language_defn method for
-   C++.  */
-extern symbol_name_matcher_ftype *cp_get_symbol_name_matcher
-  (const lookup_name_info &lookup_name);
+extern int cp_validate_operator (const char *input);
 
 /* Functions/variables from cp-namespace.c.  */
 
-extern int cp_is_in_anonymous (const char *symbol_name);
+extern int cp_is_anonymous (const char *namespace);
 
-extern void cp_scan_for_anonymous_namespaces (struct buildsym_compunit *,
-					      const struct symbol *symbol,
-					      struct objfile *objfile);
+extern void cp_add_using_directive (const char *dest,
+                                    const char *src,
+                                    const char *alias,
+				    const char *declaration,
+                                    struct obstack *obstack);
 
-extern struct block_symbol cp_lookup_symbol_nonlocal
-     (const struct language_defn *langdef,
-      const char *name,
-      const struct block *block,
-      const domain_enum domain);
+extern void cp_initialize_namespace (void);
 
-extern struct block_symbol
-  cp_lookup_symbol_namespace (const char *the_namespace,
-			      const char *name,
-			      const struct block *block,
-			      const domain_enum domain);
+extern void cp_finalize_namespace (struct block *static_block,
+				   struct obstack *obstack);
 
-extern struct block_symbol cp_lookup_symbol_imports_or_template
+extern void cp_set_block_scope (const struct symbol *symbol,
+				struct block *block,
+				struct obstack *obstack,
+				const char *processing_current_prefix,
+				int processing_has_namespace_info);
+
+extern void cp_scan_for_anonymous_namespaces (const struct symbol *symbol);
+
+extern struct symbol *cp_lookup_symbol_nonlocal (const char *name,
+						 const struct block *block,
+						 const domain_enum domain);
+
+extern struct symbol *cp_lookup_symbol_namespace (const char *namespace,
+						  const char *name,
+						  const struct block *block,
+						  const domain_enum domain);
+
+extern struct symbol *cp_lookup_symbol_imports (const char *scope,
+                                                const char *name,
+                                                const struct block *block,
+                                                const domain_enum domain,
+                                                const int declaration_only,
+                                                const int search_parents);
+
+extern struct symbol *cp_lookup_symbol_imports_or_template
      (const char *scope,
       const char *name,
       const struct block *block,
       const domain_enum domain);
 
-extern struct block_symbol
-  cp_lookup_nested_symbol (struct type *parent_type,
-			   const char *nested_name,
-			   const struct block *block,
-			   const domain_enum domain);
+extern struct type *cp_lookup_nested_type (struct type *parent_type,
+					   const char *nested_name,
+					   const struct block *block);
+
+extern void cp_check_possible_namespace_symbols (const char *name,
+						 struct objfile *objfile);
 
 struct type *cp_lookup_transparent_type (const char *name);
 
-/* See description in cp-namespace.c.  */
-
-struct type *cp_find_type_baseclass_by_name (struct type *parent_type,
-					     const char *name);
-
 /* Functions from cp-name-parser.y.  */
 
-extern std::unique_ptr<demangle_parse_info> cp_demangled_name_to_comp
-     (const char *demangled_name, std::string *errmsg);
+extern struct demangle_component *cp_demangled_name_to_comp
+  (const char *demangled_name, const char **errmsg);
 
-extern gdb::unique_xmalloc_ptr<char> cp_comp_to_string
-  (struct demangle_component *result, int estimated_len);
-
-extern void cp_merge_demangle_parse_infos (struct demangle_parse_info *,
-					   struct demangle_component *,
-					   struct demangle_parse_info *);
+extern char *cp_comp_to_string (struct demangle_component *result,
+				int estimated_len);
 
 /* The list of "maint cplus" commands.  */
 
 extern struct cmd_list_element *maint_cplus_cmd_list;
-
-/* A wrapper for bfd_demangle.  */
-
-char *gdb_demangle (const char *name, int options);
-
-/* Like gdb_demangle, but suitable for use as la_sniff_from_mangled_name.  */
-
-int gdb_sniff_from_mangled_name (const char *mangled, char **demangled);
 
 #endif /* CP_SUPPORT_H */

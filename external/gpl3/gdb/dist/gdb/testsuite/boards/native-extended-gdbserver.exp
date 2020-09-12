@@ -1,4 +1,4 @@
-# Copyright 2011-2019 Free Software Foundation, Inc.
+# Copyright 2011-2013 Free Software Foundation, Inc.
 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -17,17 +17,43 @@
 # natively with gdbserver, in extended-remote mode.
 #
 # To use this file:
+# bash$ touch ${my_dejagnu_dir}/my-dejagnu.exp
+# bash$ export DEJAGNU=${my_dejagnu_dir}/my-dejagnu.exp
+# bash$ mkdir ${my_dejagnu_dir}/boards
+# bash$ cp ${src_dir}/gdb/testsuite/boards/native-extended-gdbserver.exp \
+#   ${my_dejagnu_dir}/boards
 # bash$ cd ${build_dir}/gdb
 # bash$ make check RUNTESTFLAGS="--target_board=native-extended-gdbserver"
 
 load_generic_config "extended-gdbserver"
-load_board_description "gdbserver-base"
-load_board_description "local-board"
+
+# By default, dejagnu makes the board remote unless the board name
+# matches localhost.  Force it to be NOT remote.
+global board
+global board_info
+set board_info($board,isremote) 0
+
+process_multilib_options ""
+
+# The default compiler for this target.
+set_board_info compiler "[find_gcc]"
+
+# Can't do input (or output) in the current gdbserver.
+set_board_info gdb,noinferiorio 1
+
+# gdbserver does not intercept target file operations and perform them
+# on the host.
+set_board_info gdb,nofileio 1
+
+set_board_info sockethost "localhost:"
 
 # We will be using the extended GDB remote protocol.
 set_board_info gdb_protocol "extended-remote"
 
-send_user "configuring for gdbserver local testing (extended-remote)\n"
+# Test the copy of gdbserver in the build directory.
+set_board_info gdb_server_prog "../gdbserver/gdbserver"
+
+send_user "configuring for gdbserver local testing (extended-remote)\n";
 
 # We must load this explicitly here, and rename the procedures we want
 # to override.  If we didn't do this, given that mi-support.exp is
@@ -55,29 +81,28 @@ if { [info procs extended_gdbserver_mi_gdb_start] == "" } {
     rename mi_gdb_start extended_gdbserver_mi_gdb_start
 }
 proc mi_gdb_start { args } {
-    global gdbserver_reconnect_p
-
     # Spawn GDB.
     set res [extended_gdbserver_mi_gdb_start $args]
     if { $res } {
 	return $res
     }
 
-    # And then spawn GDBserver and connect to it in extended-remote
-    # mode, unless the test wants to explicitly test reconnection.
-    if {![info exists gdbserver_reconnect_p] || !$gdbserver_reconnect_p} {
-	mi_gdbserver_start_multi
-    }
+    # And then GDBserver, ready for extended-remote mode.
+    mi_gdbserver_start_multi
     return 0
 }
 
-# Helper that runs "set remote exec-file" with the last loaded file.
-
-proc extended_gdbserver_load_last_file {} {
+# Overriden in order to set the remote exec-file whenever a file is
+# loaded to gdb.
+#
+proc gdb_load { arg } {
     global gdb_prompt
-    global last_loaded_file
 
-    send_gdb "set remote exec-file $last_loaded_file\n"
+    if { $arg != "" } {
+	if [gdb_file_cmd $arg] then { return -1 }
+    }
+
+    send_gdb "set remote exec-file $arg\n"
     gdb_expect {
 	-re "$gdb_prompt $" {}
 	timeout {
@@ -88,37 +113,6 @@ proc extended_gdbserver_load_last_file {} {
 
     return 0
 }
-
-# Overriden in order to set the remote exec-file whenever a file is
-# loaded to gdb.
-#
-if { [info procs extended_gdbserver_gdb_file_cmd] == "" } {
-    rename gdb_file_cmd extended_gdbserver_gdb_file_cmd
-}
-proc gdb_file_cmd { arg } {
-    if [extended_gdbserver_gdb_file_cmd $arg] {
-	return -1
-    }
-    return [extended_gdbserver_load_last_file]
-}
-
-proc gdb_reload { } {
-    return [extended_gdbserver_load_last_file]
-}
-
-# With the two procedure overrides above, it shouldn't be necessary to
-# override this one too.  However, not doing so regresses
-# gdb.base/dbx.exp.  See comments above gdb.base/dbx.exp:gdb_file_cmd.
-# Once testing of the "symbol-file"/"exec-file" commands is moved out
-# to a separate non-dbx testcase, we should be able to remove this.
-proc gdb_load { arg } {
-    if { $arg != "" } {
-	if [gdb_file_cmd $arg] then { return -1 }
-    }
-
-    return [extended_gdbserver_load_last_file]
-}
-
 
 # Likewise, for MI.
 #
@@ -142,4 +136,15 @@ proc mi_gdb_load { arg } {
     }
 
     return 0
+}
+
+proc ${board}_download { board host dest } {
+    return $host
+}
+
+proc ${board}_file { dest op args } {
+    if { $op == "delete" } {
+	return 0
+    }
+    return [eval [list standard_file $dest $op] $args]
 }

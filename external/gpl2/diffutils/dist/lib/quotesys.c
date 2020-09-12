@@ -1,4 +1,4 @@
-/*	$NetBSD: quotesys.c,v 1.1.1.1 2016/01/13 03:15:30 christos Exp $	*/
+/*	$NetBSD: quotesys.c,v 1.1 2016/01/13 03:15:30 christos Exp $	*/
 
 /* Shell command argument quoting.
    Copyright (C) 1994, 1995, 1997 Free Software Foundation, Inc.

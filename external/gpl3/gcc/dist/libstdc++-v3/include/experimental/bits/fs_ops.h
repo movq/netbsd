@@ -1,6 +1,6 @@
 // Filesystem operational functions -*- C++ -*-
 
-// Copyright (C) 2014-2019 Free Software Foundation, Inc.
+// Copyright (C) 2014-2016 Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
@@ -38,16 +38,16 @@
 
 namespace std _GLIBCXX_VISIBILITY(default)
 {
-_GLIBCXX_BEGIN_NAMESPACE_VERSION
-
 namespace experimental
 {
 namespace filesystem
 {
 inline namespace v1
 {
+_GLIBCXX_BEGIN_NAMESPACE_VERSION
+
   /**
-   * @ingroup filesystem-ts
+   * @ingroup filesystem
    * @{
    */
 
@@ -131,11 +131,8 @@ inline namespace v1
   {
     auto __s = status(__p, __ec);
     if (status_known(__s))
-      {
-	__ec.clear();
-	return __s.type() != file_type::not_found;
-      }
-    return false;
+      __ec.clear();
+    return exists(__s);
   }
 
   uintmax_t file_size(const path& __p);
@@ -288,12 +285,11 @@ inline namespace v1
   path temp_directory_path();
   path temp_directory_path(error_code& __ec);
 
-  // @} group filesystem-ts
+  // @} group filesystem
+_GLIBCXX_END_NAMESPACE_VERSION
 } // namespace v1
 } // namespace filesystem
 } // namespace experimental
-
-_GLIBCXX_END_NAMESPACE_VERSION
 } // namespace std
 
 #endif // C++11

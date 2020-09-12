@@ -1,5 +1,5 @@
 /* BFD support for AArch64.
-   Copyright (C) 2009-2019 Free Software Foundation, Inc.
+   Copyright 2009, 2010, 2011, 2012  Free Software Foundation, Inc.
    Contributed by ARM Ltd.
 
    This file is part of BFD, the Binary File Descriptor library.
@@ -37,10 +37,6 @@ compatible (const bfd_arch_info_type * a, const bfd_arch_info_type * b)
   /* If a & b are for the same machine then all is well.  */
   if (a->mach == b->mach)
     return a;
-
-  /* Don't allow mixing ilp32 with lp64.  */
-  if ((a->mach & bfd_mach_aarch64_ilp32) != (b->mach & bfd_mach_aarch64_ilp32))
-    return NULL;
 
   /* Otherwise if either a or b is the 'default' machine
      then it can be polymorphed into the other.  */
@@ -100,16 +96,14 @@ scan (const struct bfd_arch_info *info, const char *string)
   return FALSE;
 }
 
-#define N(NUMBER, PRINT, WORDSIZE, DEFAULT, NEXT)		\
-  { WORDSIZE, WORDSIZE, 8, bfd_arch_aarch64, NUMBER,		\
+#define N(NUMBER, PRINT, DEFAULT, NEXT)				\
+  { 64, 64, 8, bfd_arch_aarch64, NUMBER,			\
     "aarch64", PRINT, 4, DEFAULT, compatible, scan,		\
     bfd_arch_default_fill, NEXT }
 
-static const bfd_arch_info_type bfd_aarch64_arch_ilp32 =
-  N (bfd_mach_aarch64_ilp32, "aarch64:ilp32", 32, FALSE, NULL);
-
 const bfd_arch_info_type bfd_aarch64_arch =
-  N (0, "aarch64", 64, TRUE, &bfd_aarch64_arch_ilp32);
+  N (0, "aarch64", TRUE, NULL);
+
 
 bfd_boolean
 bfd_is_aarch64_special_symbol_name (const char *name, int type)

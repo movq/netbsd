@@ -1,6 +1,6 @@
 /* This testcase is part of GDB, the GNU debugger.
 
-   Copyright 2004-2019 Free Software Foundation, Inc.
+   Copyright 2004, 2007, 2008, 2009, 2010, 2011 Free Software Foundation, Inc.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -41,25 +41,34 @@ T fun()
   return foo;  
 }
 
+#ifdef PROTOTYPES
 void Fun(T foo)
+#else
+void Fun(foo)
+     T foo;
+#endif
 {
   L = foo;
 }
 
-void zed ()
+zed ()
 {
   L = 'Z';
 }
 
 int main()
 {
+#ifdef usestubs
+  set_debug_traps();
+  breakpoint();
+#endif
   int i;
 
   Fun(foo);	
 
   /* An infinite loop that first clears all the variables and then
      calls the function.  This "hack" is to make re-testing easier -
-     "advance fun" is guaranteed to have always been preceded by a
+     "advance fun" is guaranteed to have always been preceeded by a
      global variable clearing zed call.  */
 
   zed ();

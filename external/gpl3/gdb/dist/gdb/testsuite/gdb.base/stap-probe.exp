@@ -1,4 +1,4 @@
-# Copyright (C) 2012-2019 Free Software Foundation, Inc.
+# Copyright (C) 2012-2013 Free Software Foundation, Inc.
 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -13,15 +13,15 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-standard_testfile
+set testfile stap-probe
 
 # Run the tests.  We run the tests two different ways: once with a
 # plain probe, and once with a probe that has an associated semaphore.
 # This returns -1 on failure to compile or start, 0 otherwise.
 proc stap_test {exec_name {arg ""}} {
-    global testfile hex srcfile
+    global testfile hex
 
-    if {[prepare_for_testing "failed to prepare" ${exec_name} $srcfile \
+    if {[prepare_for_testing ${testfile}.exp ${exec_name} ${testfile}.c \
 	   [concat $arg debug]]} {
 	return -1
     }
@@ -30,7 +30,7 @@ proc stap_test {exec_name {arg ""}} {
 	return -1
     }
 
-    gdb_test "print \$_probe_argc" "No probe at PC $hex" \
+    gdb_test "print \$_probe_argc" "No SystemTap probe at PC $hex" \
 	"check argument not at probe point"
 
     gdb_test "info probes stap" \
@@ -96,7 +96,7 @@ proc stap_test {exec_name {arg ""}} {
 proc stap_test_no_debuginfo {exec_name {arg ""}} {
     global testfile hex
 
-    if {[prepare_for_testing "failed to prepare" ${exec_name} ${testfile}.c \
+    if {[prepare_for_testing ${testfile}.exp ${exec_name} ${testfile}.c \
 	   {$arg nodebug optimize=-O2}]} {
 	return -1
     }
@@ -161,7 +161,7 @@ proc stap_test_no_debuginfo {exec_name {arg ""}} {
 
 with_test_prefix "without semaphore, not optimized" {
     if {[stap_test "stap-probe-nosem-noopt"] == -1} {
-	untested "stap probe test failed"
+	untested stap-probe.exp
 	  return -1
     }
 }

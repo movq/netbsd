@@ -1,4 +1,5 @@
-# Copyright 1988-2019 Free Software Foundation, Inc.
+# Copyright 1988, 1990, 1991, 1992, 1994, 1995, 1996, 1997, 1999, 2002, 2003,
+# 2004, 2007, 2008, 2009, 2010, 2011 Free Software Foundation, Inc.
 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -15,6 +16,10 @@
 
 # This file was written by Rob Savoye. (rob@cygnus.com)
 
+if $tracelevel {
+    strace $tracelevel
+}
+
 #
 # test running programs
 #
@@ -25,33 +30,37 @@ if [target_info exists no_long_long] {
     set exec_opts [list debug]
 }
 
-standard_testfile .c
-
+set testfile whatis
+set srcfile ${testfile}.c
+set binfile ${objdir}/${subdir}/${testfile}
 if  { [gdb_compile "${srcdir}/${subdir}/${srcfile}" "${binfile}" executable $exec_opts] != "" } {
-     untested "failed to compile"
+     untested whatis.exp
      return -1
 }
 
 # Create and source the file that provides information about the compiler
 # used to compile the test case.
-if [get_compiler_info] {
-    return -1
+if [get_compiler_info ${binfile}] {
+    return -1;
 }
 
 # Start with a fresh gdb.
 
-clean_restart $binfile
+gdb_exit
+gdb_start
+gdb_reinitialize_dir $srcdir/$subdir
+gdb_load $binfile
 
 # Define a procedure to set up an xfail for all targets that put out a
 # `long' type as an `int' type.
-# Sun cc has this problem.
+# Sun/Ultrix cc have this problem.
 # It was said that COFF targets can not distinguish int from long either.
 
 proc setup_xfail_on_long_vs_int {} {
     global gcc_compiled
 
     if {!$gcc_compiled} {
-	setup_xfail "*-sun-sunos4*" "i*86-sequent-bsd*"
+	setup_xfail "*-sun-sunos4*" "*-*-ultrix*" "i*86-sequent-bsd*"
     }
 }
 
@@ -67,6 +76,7 @@ gdb_test "whatis v_char" \
     "type = (unsigned char|char)" \
     "whatis char"
 
+if {!$gcc_compiled} then { setup_xfail "mips-sgi-irix*" }
 gdb_test "whatis v_signed_char" \
     "type = (signed char|char)" \
     "whatis signed char"
@@ -281,77 +291,27 @@ gdb_test "whatis v_double_pointer" \
     "whatis double pointer"
 
 
-# test whatis command with structure types
-
-# First with a type argument, with both "set print object" set to "on"
-# and "off", ending with "off" for the following tests.
-foreach_with_prefix print_object {"on" "off"} {
-    gdb_test_no_output "set print object $print_object"
-
-    gdb_test "whatis struct t_struct" \
-	"type = struct t_struct" \
-	"whatis named structure using type name"
-
-    gdb_test "whatis struct t_struct *" \
-	"type = struct t_struct \\*" \
-	"whatis named structure using type name and pointer"
-
-    gdb_test "whatis struct t_struct &" \
-	"type = struct t_struct &" \
-	"whatis named structure using type name and reference"
+if { $hp_aCC_compiler } {
+    set unstruct "unnamed\.struct\..*"
+    set ununion "unnamed\.union\..*"
+} else {
+    set unstruct "\.\.\."
+    set ununion "\.\.\."
 }
 
-# Now with an expression argument.
-
+# test whatis command with structure types
 gdb_test "whatis v_struct1" \
     "type = struct t_struct" \
     "whatis named structure"
 
+gdb_test "whatis struct t_struct" \
+    "type = struct t_struct" \
+    "whatis named structure using type name"
+
 gdb_test "whatis v_struct2" \
-    "type = struct \{\.\.\.\}" \
+    "type = struct \{$unstruct\}" \
     "whatis unnamed structure"
 
-gdb_test "whatis &v_struct1" \
-    "type = struct t_struct \\*"
-
-gdb_test "whatis &v_struct2" \
-    "type = struct {\\.\\.\\.} \\*"
-
-gdb_test "whatis v_struct_ptr1" \
-    "type = struct t_struct \\*"
-
-gdb_test "whatis v_struct_ptr2" \
-    "type = struct {\\.\\.\\.} \\*"
-
-gdb_test "whatis &v_struct_ptr1" \
-    "type = struct t_struct \\*\\*"
-
-gdb_test "whatis &v_struct_ptr2" \
-    "type = struct {\\.\\.\\.} \\*\\*"
-
-gdb_test "whatis v_struct1.v_char_member" \
-    "type = char"
-
-gdb_test "whatis v_struct2.v_char_member" \
-    "type = char"
-
-gdb_test "whatis v_struct_ptr1->v_char_member" \
-    "type = char"
-
-gdb_test "whatis v_struct_ptr2->v_char_member" \
-    "type = char"
-
-gdb_test "whatis &(v_struct1.v_char_member)" \
-    "type = char \\*"
-
-gdb_test "whatis &(v_struct2.v_char_member)" \
-    "type = char \\*"
-
-gdb_test "whatis &(v_struct_ptr1->v_char_member)" \
-    "type = char \\*"
-
-gdb_test "whatis &(v_struct_ptr2->v_char_member)" \
-    "type = char \\*"
 
 # test whatis command with union types
 gdb_test "whatis v_union" \
@@ -363,53 +323,15 @@ gdb_test "whatis union t_union" \
     "whatis named union using type name"
 
 gdb_test "whatis v_union2" \
-    "type = union \{\.\.\.\}" \
+    "type = union \{$ununion\}" \
     "whatis unnamed union"
 
-gdb_test "whatis &v_union" \
-    "type = union t_union \\*"
 
-gdb_test "whatis &v_union2" \
-    "type = union {\\.\\.\\.} \\*"
-
-gdb_test "whatis v_union_ptr" \
-    "type = union t_union \\*"
-
-gdb_test "whatis v_union_ptr2" \
-    "type = union {\\.\\.\\.} \\*"
-
-gdb_test "whatis &v_union_ptr" \
-    "type = union t_union \\*\\*"
-
-gdb_test "whatis &v_union_ptr2" \
-    "type = union {\\.\\.\\.} \\*\\*"
-
-gdb_test "whatis v_union.v_char_member" \
-    "type = char"
-
-gdb_test "whatis v_union2.v_char_member" \
-    "type = char"
-
-gdb_test "whatis v_union_ptr->v_char_member" \
-    "type = char"
-
-gdb_test "whatis v_union_ptr2->v_char_member" \
-    "type = char"
-
-gdb_test "whatis &(v_union.v_char_member)" \
-    "type = char \\*"
-
-gdb_test "whatis &(v_union2.v_char_member)" \
-    "type = char \\*"
-
-gdb_test "whatis &(v_union_ptr->v_char_member)" \
-    "type = char \\*"
-
-gdb_test "whatis &(v_union_ptr2->v_char_member)" \
-    "type = char \\*"
-
-
-# Using stabs we will mark these functions as prototyped.  This
+# HP-UX: HP aCC compiler w/ +objdebug option detects language as
+# c++, so we need the 'void' pattern here.
+# Without +objdebug compilation option we still need to match ''.
+# - guo
+# Also, using stabs we will mark these functions as prototyped.  This
 # is harmless but causes an extra VOID to be printed.
 set void "(void|)"
 
@@ -516,8 +438,14 @@ gdb_test "whatis nested_su.outer_int" \
     "type = int" \
     "whatis outer structure member"
 
+if {$hp_aCC_compiler} {
+    set outer "outer_struct::"
+} else {
+    set outer ""
+}
+
 gdb_test "whatis nested_su.inner_struct_instance" \
-    "type = struct inner_struct" \
+    "type = struct ${outer}inner_struct" \
     "whatis inner structure"
 
 gdb_test "whatis nested_su.inner_struct_instance.inner_int" \
@@ -525,7 +453,7 @@ gdb_test "whatis nested_su.inner_struct_instance.inner_int" \
     "whatis inner structure member"
 
 gdb_test "whatis nested_su.inner_union_instance" \
-    "type = union inner_union" \
+    "type = union ${outer}inner_union" \
     "whatis inner union"
 
 gdb_test "whatis nested_su.inner_union_instance.inner_union_int" \
@@ -541,45 +469,3 @@ gdb_test "whatis char_addr" \
 gdb_test "whatis a_char_addr" \
     "type = char_addr" \
     "whatis applied to variable defined by typedef"
-
-# Regression tests for PR 9514.
-
-gdb_test "whatis void (**)()" \
-  "type = void \\(\\*\\*\\)\\(\\)" \
-  "whatis applied to pointer to pointer to function"
-
-gdb_test "whatis void (** const)()" \
-  "type = void \\(\\*\\* const\\)\\(\\)" \
-  "whatis applied to const pointer to pointer to function"
-
-gdb_test "whatis void (* const *)()" \
-  "type = void \\(\\* const \\*\\)\\(\\)" \
-  "whatis applied to pointer to const pointer to function"
-
-gdb_test "whatis int *(*)()" \
-    "type = int \\*\\(\\*\\)\\(\\)" \
-    "whatis applied to pointer to function returning pointer to int"
-
-gdb_test "whatis int *(**)()" \
-    "type = int \\*\\(\\*\\*\\)\\(\\)" \
-    "whatis applied to pointer to pointer to function returning pointer to int"
-
-gdb_test "whatis char (*(*)())\[23\]" \
-    "type = char \\(\\*\\(\\*\\)\\(\\)\\)\\\[23\\\]" \
-    "whatis applied to pointer to function returning pointer to array"
-
-gdb_test "whatis int (*)(int, int)" \
-    "type = int \\(\\*\\)\\(int, int\\)" \
-    "whatis applied to pointer to function taking int,int and returning int"
-
-gdb_test "whatis int (*)(const int *, ...)" \
-    "type = int \\(\\*\\)\\(const int \\*, \\.\\.\\.\\)" \
-    "whatis applied to pointer to function taking const int ptr and varargs and returning int"
-
-gdb_test "whatis int (*)(void, int, int)" \
-    "parameter types following 'void'" \
-    "whatis applied to function with types trailing 'void'"
-
-gdb_test "whatis int (*)(int, void, int)" \
-    "'void' invalid as parameter type" \
-    "whatis applied to function with 'void' parameter type"

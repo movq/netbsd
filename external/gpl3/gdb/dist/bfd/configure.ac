@@ -1,22 +1,23 @@
 dnl Process this file with autoconf to produce a configure script.
 dnl
-dnl   Copyright (C) 2012-2019 Free Software Foundation, Inc.
+dnl   Copyright (C) 2012-2015 Free Software Foundation, Inc.
 dnl
 dnl This file is free software; you can redistribute it and/or modify
 dnl it under the terms of the GNU General Public License as published by
 dnl the Free Software Foundation; either version 3 of the License, or
 dnl (at your option) any later version.
-dnl
+dnl 
 dnl This program is distributed in the hope that it will be useful,
 dnl but WITHOUT ANY WARRANTY; without even the implied warranty of
 dnl MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 dnl GNU General Public License for more details.
-dnl
+dnl 
 dnl You should have received a copy of the GNU General Public License
 dnl along with this program; see the file COPYING3.  If not see
 dnl <http://www.gnu.org/licenses/>.
 dnl
 
+AC_PREREQ(2.59)
 m4_include([version.m4])
 AC_INIT([bfd], BFD_VERSION)
 AC_CONFIG_SRCDIR([libbfd.c])
@@ -67,15 +68,6 @@ AC_ARG_ENABLE(targets,
   *)        enable_targets=$enableval ;;
 esac])dnl
 
-AC_ARG_ENABLE(64_bit_archive,
-	      AS_HELP_STRING([--enable-64-bit-archive],
-	      [force 64-bit archives]),
-[case "${enableval}" in
-  yes)  want_64_bit_archive=true  ;;
-  no)   want_64_bit_archive=false ;;
-  *)    AC_MSG_ERROR(bad value ${enableval} for 64-bit-archive option) ;;
-esac],[want_64_bit_archive=unset])dnl
-
 AC_ARG_WITH(mmap,
 [  --with-mmap             try using mmap for BFD input files if available],
 [case "${withval}" in
@@ -96,32 +88,6 @@ if test $use_secureplt = true; then
     [Define if we should default to creating read-only plt entries])
 fi
 
-# Decide if -z separate-code should be enabled in ELF linker by default.
-ac_default_ld_z_separate_code=unset
-AC_ARG_ENABLE(separate-code,
-	      AS_HELP_STRING([--enable-separate-code],
-	      [enable -z separate-code in ELF linker by default]),
-[case "${enableval}" in
-  yes) ac_default_ld_z_separate_code=1 ;;
-  no) ac_default_ld_z_separate_code=0 ;;
-esac])
-# Enable -z separate-code by default for Linux/x86.
-changequote(,)dnl
-case "${target}" in
-i[3-7]86-*-linux-* | x86_64-*-linux-*)
-changequote([,])dnl
-  if test ${ac_default_ld_z_separate_code} = unset; then
-    ac_default_ld_z_separate_code=1
-  fi
-  ;;
-esac
-if test "${ac_default_ld_z_separate_code}" = unset; then
-  ac_default_ld_z_separate_code=0
-fi
-AC_DEFINE_UNQUOTED(DEFAULT_LD_Z_SEPARATE_CODE,
-  $ac_default_ld_z_separate_code,
-  [Define to 1 if you want to enable -z separate-code in ELF linker by default.])
-
 AC_ARG_ENABLE(leading-mingw64-underscores,
   AS_HELP_STRING([--enable-leading-mingw64-underscores],
                  [Enable leading underscores on 64 bit mingw targets]),
@@ -136,6 +102,26 @@ AC_ARG_WITH(separate-debug-dir,
                  [Look for global separate debug info in DIR [[default=LIBDIR/debug]]]),
 [DEBUGDIR="${withval}"])
 AC_SUBST(DEBUGDIR)
+
+# Check to see if we should allow the generation of
+# symbols with the ELF standard's STT_COMMON type.
+AC_ARG_ENABLE(elf-stt-common,
+[  --enable-elf-stt-common Allow the generation of ELF symbols with the STT_COMMON type],
+[case "${enableval}" in
+  yes) want_elf_stt_common=true ;;
+  no)  want_elf_stt_common=false ;;
+  *)   AC_MSG_ERROR(bad value ${enableval} for ELF STT_COMMON option) ;;
+ esac],
+# We have to choose a default behaviour.  For native builds we could
+# test whether the loader supports the STT_COMMON type, but that would
+# mean that built binaries could not be exported to older systems where
+# the loader does not support it. So by default we always choose to
+# disable this feature.
+  want_elf_stt_common=false)dnl
+if test $want_elf_stt_common = true; then
+  AC_DEFINE(USE_STT_COMMON, 1,
+    [Define if we may generate symbols with ELF's STT_COMMON type])
+fi
 
 ACX_PKGVERSION([GNU Binutils])
 ACX_BUGURL([http://www.sourceware.org/bugzilla/])
@@ -168,7 +154,7 @@ bfd_default_target_size=32
 
 # host stuff:
 
-ALL_LINGUAS="da es fi fr hr id ja ro ru rw sr sv tr uk vi zh_CN pt"
+ALL_LINGUAS="fr tr ja es sv da zh_CN ro rw vi fi id ru uk"
 ZW_GNU_GETTEXT_SISTER_DIR
 AM_PO_SUBDIRS
 
@@ -185,8 +171,7 @@ BFD_HOST_64_BIT=
 BFD_HOST_U_64_BIT=
 BFD_HOSTPTR_T="unsigned long"
 
-AC_TYPE_LONG_DOUBLE
-AC_CHECK_TYPES([long long], [AC_CHECK_SIZEOF(long long)])
+AC_CHECK_SIZEOF(long long)
 AC_CHECK_SIZEOF(void *)
 AC_CHECK_SIZEOF(long)
 
@@ -222,14 +207,14 @@ AC_SUBST(BFD_HOSTPTR_T)
 
 BFD_CC_FOR_BUILD
 
-AC_CHECK_HEADERS(alloca.h stddef.h string.h strings.h stdlib.h time.h unistd.h wchar.h wctype.h)
+AC_CHECK_HEADERS(alloca.h stddef.h string.h strings.h stdlib.h time.h unistd.h wchar.h)
 AC_CHECK_HEADERS(fcntl.h sys/file.h sys/time.h sys/stat.h sys/resource.h)
 GCC_HEADER_STDINT(bfd_stdint.h)
 AC_HEADER_TIME
 AC_HEADER_DIRENT
 
 ACX_HEADER_STRING
-AC_CHECK_FUNCS(fcntl getpagesize setitimer sysconf fdopen getuid getgid fileno fls)
+AC_CHECK_FUNCS(fcntl getpagesize setitimer sysconf fdopen getuid getgid fileno)
 AC_CHECK_FUNCS(strtoull getrlimit)
 
 AC_CHECK_DECLS(basename)
@@ -247,8 +232,6 @@ AC_CHECK_DECLS(malloc)
 AC_CHECK_DECLS(realloc)
 AC_CHECK_DECLS(stpcpy)
 AC_CHECK_DECLS(strstr)
-AC_CHECK_DECLS(asprintf)
-AC_CHECK_DECLS(vasprintf)
 AC_CHECK_DECLS(snprintf)
 AC_CHECK_DECLS(vsnprintf)
 AC_CHECK_DECLS(strnlen)
@@ -257,18 +240,306 @@ AC_CHECK_DECLS(strnlen)
 # This is used only by compress.c.
 AM_ZLIB
 
-save_CFLAGS="$CFLAGS"
-CFLAGS="$CFLAGS -Werror"
-AC_CACHE_CHECK([compiler support for hidden visibility], bfd_cv_hidden,
-[AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[
-const char hw[] __attribute__ ((__visibility__ ("hidden"))) = "Hello, World\n";
-extern void print (const char *) __attribute__ ((__visibility__ ("hidden")));]],
-	[[print (hw);]])],
-  [bfd_cv_hidden=yes], [bfd_cv_hidden=no])])
-CFLAGS="$save_CFLAGS"
-if test $bfd_cv_hidden = yes; then
-  AC_DEFINE(HAVE_HIDDEN, 1,
-	    [Define if your compiler supports hidden visibility.])
+# If we are configured native, pick a core file support file.
+COREFILE=
+COREFLAG=
+CORE_HEADER=
+TRAD_HEADER=
+if test "${target}" = "${host}"; then
+  case "${host}" in
+  alpha*-*-freebsd* | alpha*-*-kfreebsd*-gnu | alpha*-*-*vms*)
+	COREFILE=''
+	;;
+  alpha*-*-linux-*)
+	COREFILE=trad-core.lo
+	TRAD_HEADER='"hosts/alphalinux.h"'
+	;;
+  alpha*-*-netbsd* | alpha*-*-openbsd*)
+	COREFILE=netbsd-core.lo
+	;;
+  alpha*-*-*)
+        COREFILE=osf-core.lo
+	;;
+  arm-*-freebsd* | arm-*-kfreebsd*-gnu)
+	COREFILE='' ;;
+  arm-*-netbsd* | arm-*-openbsd*)
+	COREFILE=netbsd-core.lo
+	;;
+  arm-*-riscix)		COREFILE=trad-core.lo ;;
+  hppa*-*-hpux*)	COREFILE=hpux-core.lo ;;
+  hppa*-*-hiux*)	COREFILE=hpux-core.lo ;;
+  hppa*-*-mpeix*)	COREFILE=hpux-core.lo ;;
+  hppa*-*-bsd*)		COREFILE="hpux-core.lo hppabsd-core.lo"
+			COREFLAG="-DHPUX_CORE -DHPPABSD_CORE" ;;
+  hppa*-*-netbsd* | hppa*-*-openbsd*)
+	COREFILE=netbsd-core.lo
+	;;
+
+  i370-*-*)
+	COREFILE=trad-core.lo
+	TRAD_HEADER='"hosts/i370linux.h"'
+	;;
+
+changequote(,)dnl
+  i[3-7]86-sequent-bsd*)
+changequote([,])dnl
+	COREFILE=trad-core.lo
+	TRAD_HEADER='"hosts/symmetry.h"'
+	;;
+changequote(,)dnl
+  i[3-7]86-sequent-sysv4*) ;;
+  i[3-7]86-sequent-sysv*)
+changequote([,])dnl
+	COREFILE=trad-core.lo
+	TRAD_HEADER='"hosts/symmetry.h"'
+	;;
+changequote(,)dnl
+  i[3-7]86-*-bsdi)
+changequote([,])dnl
+	COREFILE=
+	;;
+changequote(,)dnl
+  i[3-7]86-*-bsd* | i[3-7]86-*-freebsd[123] | i[3-7]86-*-freebsd[123]\.* | i[3-7]86-*-freebsd4\.[01234] | i[3-7]86-*-freebsd4\.[01234]\.* | i[3-7]86-*-freebsd*aout*)
+changequote([,])dnl
+	COREFILE=trad-core.lo
+	TRAD_HEADER='"hosts/i386bsd.h"'
+	;;
+changequote(,)dnl
+  i[3-7]86-*-freebsd* | i[3-7]86-*-kfreebsd*-gnu | i[3-7]86-*-dragonfly*)
+changequote([,])dnl
+	COREFILE=''
+	TRAD_HEADER='"hosts/i386bsd.h"'
+	;;
+changequote(,)dnl
+  i[3-7]86-*-netbsd* | i[3-7]86-*-knetbsd*-gnu | i[3-7]86-*-openbsd*)
+changequote([,])dnl
+	COREFILE=netbsd-core.lo
+	;;
+changequote(,)dnl
+  i[3-7]86-esix-sysv3*)
+changequote([,])dnl
+	COREFILE=trad-core.lo
+	TRAD_HEADER='"hosts/esix.h"'
+	;;
+changequote(,)dnl
+  i[3-7]86-*-sco3.2v5*)
+changequote([,])dnl
+	COREFILE=sco5-core.lo
+	;;
+changequote(,)dnl
+  i[3-7]86-*-sco* | i[3-7]86-*-isc*)
+changequote([,])dnl
+	COREFILE=trad-core.lo
+	TRAD_HEADER='"hosts/i386sco.h"'
+	;;
+changequote(,)dnl
+  i[3-7]86-*-mach3*)
+changequote([,])dnl
+	COREFILE=trad-core.lo
+	TRAD_HEADER='"hosts/i386mach3.h"'
+	;;
+changequote(,)dnl
+  i[3-7]86-*-linux-*)
+changequote([,])dnl
+	COREFILE=trad-core.lo
+	TRAD_HEADER='"hosts/i386linux.h"'
+	case "$enable_targets"-"$want64" in
+	*x86_64-*linux*|*-true)
+	  CORE_HEADER='"hosts/x86-64linux.h"'
+	esac
+	;;
+changequote(,)dnl
+  i[3-7]86-*-isc*)	COREFILE=trad-core.lo ;;
+  i[3-7]86-*-aix*)	COREFILE=aix386-core.lo ;;
+changequote([,])dnl
+  i860-*-mach3* | i860-*-osf1*)
+	COREFILE=trad-core.lo
+	TRAD_HEADER='"hosts/i860mach3.h"'
+	;;
+  mips-*-netbsd* | mips*-*-openbsd*)
+	COREFILE=netbsd-core.lo
+	;;
+  mips-dec-*)
+	COREFILE=trad-core.lo
+	TRAD_HEADER='"hosts/decstation.h"'
+	;;
+  mips-sgi-irix4*)	COREFILE=irix-core.lo ;;
+  mips-sgi-irix5*)	COREFILE=irix-core.lo ;;
+  mips-sgi-irix6*)	COREFILE=irix-core.lo ;;
+  mips-*-sysv4*)	;;
+  mips-*-sysv* | mips-*-riscos*)
+	COREFILE=trad-core.lo
+	TRAD_HEADER='"hosts/riscos.h"'
+	;;
+  mips-sony-bsd*)
+	COREFILE=trad-core.lo
+	TRAD_HEADER='"hosts/news-mips.h"'
+	;;
+  m68*-bull*-sysv*)
+	COREFILE=trad-core.lo
+	TRAD_HEADER='"hosts/dpx2.h"'
+	;;
+  m68*-hp-hpux*)	COREFILE=hpux-core.lo ;;
+  m68*-hp-bsd*)
+	COREFILE=trad-core.lo
+	TRAD_HEADER='"hosts/hp300bsd.h"'
+	;;
+  m68*-*-linux-*)
+	COREFILE=trad-core.lo
+	TRAD_HEADER='"hosts/m68klinux.h"'
+	;;
+  m68*-motorola-sysv*)
+	COREFILE=trad-core.lo
+	TRAD_HEADER='"hosts/delta68.h"'
+	;;
+  m68*-sony-*)
+	COREFILE=trad-core.lo
+	TRAD_HEADER='"hosts/news.h"'
+	;;
+  m68*-*-netbsd* | m68*-*-openbsd*)
+	COREFILE=netbsd-core.lo
+	;;
+  m68*-apple-aux*)
+	COREFILE=trad-core.lo
+	TRAD_HEADER='"hosts/m68kaux.h"'
+	;;
+  m88*-*-sysv4*)
+	;;
+  m88*-motorola-sysv*)
+	COREFILE=ptrace-core.lo
+	;;
+  m88*-*-mach3*)
+	COREFILE=trad-core.lo
+	TRAD_HEADER='"hosts/m88kmach3.h"'
+	;;
+  m88*-*-openbsd*)
+	COREFILE=netbsd-core.lo
+	;;
+  ns32k-pc532-mach)
+	COREFILE=trad-core.lo
+	TRAD_HEADER='"hosts/pc532mach.h"'
+	;;
+  ns32k-*-netbsd* | ns32k-*-openbsd*)
+	COREFILE=netbsd-core.lo
+	;;
+  rs6000-*-lynx*)
+	COREFILE=lynx-core.lo
+	;;
+changequote(,)dnl
+  rs6000-*-aix[5-9].* | powerpc-*-aix[5-9].*)
+changequote([,])dnl
+        COREFILE=rs6000-core.lo
+	COREFLAG="$COREFLAG -DAIX_5_CORE -DAIX_CORE_DUMPX_CORE"
+	;;
+changequote(,)dnl
+  rs6000-*-aix4.[3-9]* | powerpc-*-aix4.[3-9]*)
+changequote([,])dnl
+        COREFILE=rs6000-core.lo
+	COREFLAG="$COREFLAG -DAIX_CORE_DUMPX_CORE"
+	# Not all versions of AIX with -DAIX_CORE_DUMPX_CORE
+	# have c_impl as a member of struct core_dumpx
+	AC_MSG_CHECKING([for c_impl in struct core_dumpx])
+	AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[#include <core.h>]], [[struct core_dumpx c; c.c_impl = 0;]])],[AC_DEFINE(HAVE_ST_C_IMPL, 1,
+	    [Define if struct core_dumpx has member c_impl])
+	  AC_MSG_RESULT(yes)],[AC_MSG_RESULT(no)])
+	;;
+  rs6000-*-aix4*)	COREFILE=rs6000-core.lo ;;
+  rs6000-*-*)		COREFILE=rs6000-core.lo ;;
+  powerpc-*-aix4*)	COREFILE=rs6000-core.lo ;;
+  powerpc-*-aix*)	COREFILE=rs6000-core.lo ;;
+  powerpc-*-beos*)	;;
+  powerpc-*-freebsd* | powerpc-*-kfreebsd*-gnu)
+		        COREFILE='' ;;
+  powerpc-*-netbsd*)	COREFILE=netbsd-core.lo ;;
+  powerpc-*-*bsd*)	COREFILE=netbsd-core.lo ;;
+  s390*-*-*)            COREFILE=trad-core.lo ;;
+  sh*-*-netbsd* | sh*-*-openbsd*)
+	COREFILE=netbsd-core.lo
+	;;
+  sparc-*-netbsd* | sparc*-*-openbsd*)
+	COREFILE=netbsd-core.lo
+	;;
+  tahoe-*-*)
+	COREFILE=trad-core.lo
+	TRAD_HEADER='"hosts/tahoe.h"'
+	;;
+  vax-*-netbsd* | vax-*-openbsd*)
+	COREFILE=netbsd-core.lo
+	;;
+  vax-*-ultrix2*)
+	COREFILE=trad-core.lo
+	TRAD_HEADER='"hosts/vaxult2.h"'
+	;;
+  vax-*-ultrix*)
+	COREFILE=trad-core.lo
+	TRAD_HEADER='"hosts/vaxult2.h"'
+	;;
+  vax-*-linux-*)
+	COREFILE=trad-core.lo
+	TRAD_HEADER='"hosts/vaxlinux.h"'
+	;;
+  vax-*-*)
+	COREFILE=trad-core.lo
+	TRAD_HEADER='"hosts/vaxbsd.h"'
+	;;
+  x86_64-*-linux*)
+	CORE_HEADER='"hosts/x86-64linux.h"'
+	;;
+  x86_64-*-netbsd* | x86_64-*-openbsd*)
+	COREFILE=netbsd-core.lo
+	;;
+  esac
+
+  case "$COREFILE" in
+  aix386-core.lo)	COREFLAG=-DAIX386_CORE ;;
+  hppabsd-core.lo)	COREFLAG=-DHPPABSD_CORE ;;
+  hpux-core.lo)		COREFLAG=-DHPUX_CORE ;;
+  irix-core.lo)		COREFLAG=-DIRIX_CORE ;;
+  lynx-core.lo)		COREFLAG=-DLYNX_CORE ;;
+  netbsd-core.lo)	COREFLAG=-DNETBSD_CORE ;;
+  osf-core.lo)		COREFLAG=-DOSF_CORE ;;
+  ptrace-core.lo)	COREFLAG=-DPTRACE_CORE ;;
+  rs6000-core.lo)	COREFLAG="$COREFLAG -DAIX_CORE" ;;
+  sco5-core.lo)		COREFLAG="$COREFLAG -DSCO5_CORE" ;;
+  trad-core.lo)		COREFLAG="$COREFLAG -DTRAD_CORE" ;;
+  esac
+
+  # ELF corefile support has several flavors, but all of
+  # them use something called <sys/procfs.h>
+  AC_CHECK_HEADERS(sys/procfs.h)
+  if test "$ac_cv_header_sys_procfs_h" = yes; then
+    BFD_HAVE_SYS_PROCFS_TYPE(prstatus_t)
+    BFD_HAVE_SYS_PROCFS_TYPE(prstatus32_t)
+    BFD_HAVE_SYS_PROCFS_TYPE_MEMBER(prstatus_t, pr_who)
+    BFD_HAVE_SYS_PROCFS_TYPE_MEMBER(prstatus32_t, pr_who)
+    BFD_HAVE_SYS_PROCFS_TYPE(pstatus_t)
+    BFD_HAVE_SYS_PROCFS_TYPE(pxstatus_t)
+    BFD_HAVE_SYS_PROCFS_TYPE(pstatus32_t)
+    BFD_HAVE_SYS_PROCFS_TYPE(prpsinfo_t)
+    BFD_HAVE_SYS_PROCFS_TYPE_MEMBER(prpsinfo_t, pr_pid)
+    BFD_HAVE_SYS_PROCFS_TYPE(prpsinfo32_t)
+    BFD_HAVE_SYS_PROCFS_TYPE_MEMBER(prpsinfo32_t, pr_pid)
+    BFD_HAVE_SYS_PROCFS_TYPE(psinfo_t)
+    BFD_HAVE_SYS_PROCFS_TYPE_MEMBER(psinfo_t, pr_pid)
+    BFD_HAVE_SYS_PROCFS_TYPE(psinfo32_t)
+    BFD_HAVE_SYS_PROCFS_TYPE_MEMBER(psinfo32_t, pr_pid)
+    BFD_HAVE_SYS_PROCFS_TYPE(lwpstatus_t)
+    BFD_HAVE_SYS_PROCFS_TYPE(lwpxstatus_t)
+    BFD_HAVE_SYS_PROCFS_TYPE_MEMBER(lwpstatus_t, pr_context)
+    BFD_HAVE_SYS_PROCFS_TYPE_MEMBER(lwpstatus_t, pr_reg)
+    BFD_HAVE_SYS_PROCFS_TYPE_MEMBER(lwpstatus_t, pr_fpreg)
+    BFD_HAVE_SYS_PROCFS_TYPE(win32_pstatus_t)
+  fi
+fi
+AC_SUBST(COREFILE)
+AC_SUBST(COREFLAG)
+if test -n "$CORE_HEADER"; then
+  AC_DEFINE_UNQUOTED(CORE_HEADER, $CORE_HEADER,
+    [Name of host specific core header file to include in elf.c.])
+fi
+if test -n "$TRAD_HEADER"; then
+  AC_DEFINE_UNQUOTED(TRAD_HEADER, $TRAD_HEADER,
+    [Name of host specific header file to include in trad-core.c.])
 fi
 
 # Check if linker supports --as-needed and --no-as-needed options
@@ -296,15 +567,15 @@ changequote([,])dnl
     SHARED_LIBADD="-L`pwd`/../libiberty/pic -liberty"
   fi
 
+# More hacks to build DLLs on Windows.
   case "${host}" in
-  # More hacks to build DLLs on Windows.
   *-*-cygwin*)
     SHARED_LDFLAGS="-no-undefined"
     SHARED_LIBADD="-L`pwd`/../libiberty -liberty -L`pwd`/../intl -lintl -lcygwin -lkernel32"
   ;;
 
-  # Use built-in libintl on macOS, since it is not provided by libc.
-  *-*-darwin*)
+  # Hack to build or1k-src on OSX
+  or1k*-*-darwin*)
     SHARED_LIBADD="-L`pwd`/../libiberty/pic -L`pwd`/../intl -liberty -lintl"
   ;;
   esac
@@ -405,8 +676,8 @@ selarchs="$f"
 # Target backend .o files.
 tb=
 
-elf="elf.lo elflink.lo elf-attrs.lo elf-strtab.lo elf-eh-frame.lo
-     dwarf1.lo dwarf2.lo"
+elf="elf.lo elflink.lo elf-attrs.lo elf-strtab.lo
+     elf-eh-frame.lo dwarf1.lo dwarf2.lo"
 coffgen="coffgen.lo dwarf2.lo"
 coff="cofflink.lo $coffgen"
 ecoff="ecofflink.lo $coffgen"
@@ -421,26 +692,29 @@ do
     # use one entry per line, even though this leads to long lines.
     aarch64_elf32_be_vec)	 tb="$tb elf32-aarch64.lo elfxx-aarch64.lo elf-ifunc.lo elf32.lo $elf"; target_size=64 ;;
     aarch64_elf32_le_vec)	 tb="$tb elf32-aarch64.lo elfxx-aarch64.lo elf-ifunc.lo elf32.lo $elf"; target_size=64 ;;
-    aarch64_elf64_be_vec)	   tb="$tb elf64-aarch64.lo elfxx-aarch64.lo elf-ifunc.lo elf64.lo $elf"; target_size=64 ;;
-    aarch64_elf64_be_cloudabi_vec) tb="$tb elf64-aarch64.lo elfxx-aarch64.lo elf-ifunc.lo elf64.lo $elf"; target_size=64 ;;
-    aarch64_elf64_le_vec)	   tb="$tb elf64-aarch64.lo elfxx-aarch64.lo elf-ifunc.lo elf64.lo $elf"; target_size=64 ;;
-    aarch64_elf64_le_cloudabi_vec) tb="$tb elf64-aarch64.lo elfxx-aarch64.lo elf-ifunc.lo elf64.lo $elf"; target_size=64 ;;
-    aarch64_mach_o_vec)		 tb="$tb mach-o-aarch64.lo"; target_size=64 ;;
+    aarch64_elf64_be_vec)	 tb="$tb elf64-aarch64.lo elfxx-aarch64.lo elf-ifunc.lo elf64.lo $elf"; target_size=64 ;;
+    aarch64_elf64_le_vec)	 tb="$tb elf64-aarch64.lo elfxx-aarch64.lo elf-ifunc.lo elf64.lo $elf"; target_size=64 ;;
     alpha_ecoff_le_vec)		 tb="$tb coff-alpha.lo ecoff.lo $ecoff"; target_size=64 ;;
     alpha_elf64_vec)		 tb="$tb elf64-alpha.lo elf64.lo $elf"; target_size=64 ;;
     alpha_elf64_fbsd_vec)	 tb="$tb elf64-alpha.lo elf64.lo $elf"; target_size=64 ;;
+    alpha_nlm32_vec)		 tb="$tb nlm32-alpha.lo nlm32.lo nlm.lo"; target_size=64 ;;
     alpha_vms_vec)		 tb="$tb vms-alpha.lo vms-misc.lo vms-lib.lo"; target_size=64 ;;
     alpha_vms_lib_txt_vec)	 tb="$tb vms-lib.lo vms-misc.lo" ;;
     am33_elf32_linux_vec)	 tb="$tb elf32-am33lin.lo elf32.lo $elf" ;;
     aout0_be_vec)		 tb="$tb aout0.lo aout32.lo" ;;
     aout64_vec)			 tb="$tb demo64.lo aout64.lo"; target_size=64 ;;
     aout_vec)			 tb="$tb host-aout.lo aout32.lo" ;;
+    aout_adobe_vec)		 tb="$tb aout-adobe.lo aout32.lo" ;;
     arc_elf32_be_vec)		 tb="$tb elf32-arc.lo elf32.lo $elf" ;;
     arc_elf32_le_vec)		 tb="$tb elf32-arc.lo elf32.lo $elf" ;;
+    arm_aout_be_vec)		 tb="$tb aout-arm.lo aout32.lo" ;;
+    arm_aout_le_vec)		 tb="$tb aout-arm.lo aout32.lo" ;;
+    arm_aout_nbsd_vec)		 tb="$tb armnetbsd.lo aout32.lo" ;;
+    arm_aout_riscix_vec)	 tb="$tb aout32.lo riscix.lo" ;;
+    arm_coff_be_vec)		 tb="$tb coff-arm.lo $coff" ;;
+    arm_coff_le_vec)		 tb="$tb coff-arm.lo $coff" ;;
     arm_elf32_be_vec)		 tb="$tb elf32-arm.lo elf32.lo elf-nacl.lo elf-vxworks.lo $elf" ;;
     arm_elf32_le_vec)		 tb="$tb elf32-arm.lo elf32.lo elf-nacl.lo elf-vxworks.lo $elf" ;;
-    arm_elf32_fdpic_be_vec)	 tb="$tb elf32-arm.lo elf32.lo elf-nacl.lo elf-vxworks.lo $elf" ;;
-    arm_elf32_fdpic_le_vec)	 tb="$tb elf32-arm.lo elf32.lo elf-nacl.lo elf-vxworks.lo $elf" ;;
     arm_elf32_nacl_be_vec)	 tb="$tb elf32-arm.lo elf32.lo elf-nacl.lo elf-vxworks.lo $elf" ;;
     arm_elf32_nacl_le_vec)	 tb="$tb elf32-arm.lo elf32.lo elf-nacl.lo elf-vxworks.lo $elf" ;;
     arm_elf32_symbian_be_vec)	 tb="$tb elf32-arm.lo elf32.lo elf-nacl.lo elf-vxworks.lo $elf" ;;
@@ -449,24 +723,27 @@ do
     arm_elf32_vxworks_le_vec)	 tb="$tb elf32-arm.lo elf32.lo elf-nacl.lo elf-vxworks.lo $elf" ;;
     arm_pe_be_vec)		 tb="$tb pe-arm.lo peigen.lo $coff" ;;
     arm_pe_le_vec)		 tb="$tb pe-arm.lo peigen.lo $coff" ;;
+    arm_pe_epoc_be_vec)		 tb="$tb epoc-pe-arm.lo peigen.lo $coff" ;;
+    arm_pe_epoc_le_vec)		 tb="$tb epoc-pe-arm.lo peigen.lo $coff" ;;
     arm_pe_wince_be_vec)	 tb="$tb pe-arm-wince.lo pe-arm.lo peigen.lo $coff" ;;
     arm_pe_wince_le_vec)	 tb="$tb pe-arm-wince.lo pe-arm.lo peigen.lo $coff" ;;
     arm_pei_be_vec)		 tb="$tb pei-arm.lo peigen.lo $coff" ;;
     arm_pei_le_vec)		 tb="$tb pei-arm.lo peigen.lo $coff" ;;
+    arm_pei_epoc_be_vec)	 tb="$tb epoc-pei-arm.lo peigen.lo $coff" ;;
+    arm_pei_epoc_le_vec)	 tb="$tb epoc-pei-arm.lo peigen.lo $coff" ;;
     arm_pei_wince_be_vec)	 tb="$tb pei-arm-wince.lo pei-arm.lo peigen.lo $coff" ;;
     arm_pei_wince_le_vec)	 tb="$tb pei-arm-wince.lo pei-arm.lo peigen.lo $coff" ;;
-    arm_mach_o_vec)		 tb="$tb mach-o-arm.lo" ;;
     avr_elf32_vec)		 tb="$tb elf32-avr.lo elf32.lo $elf" ;;
     bfin_elf32_vec)		 tb="$tb elf32-bfin.lo elf32.lo $elf" ;;
     bfin_elf32_fdpic_vec)	 tb="$tb elf32-bfin.lo elf32.lo $elf" ;;
+    bout_be_vec)		 tb="$tb bout.lo aout32.lo" ;;
+    bout_le_vec)		 tb="$tb bout.lo aout32.lo" ;;
     cr16_elf32_vec)		 tb="$tb elf32-cr16.lo elf32.lo $elf" ;;
     cr16c_elf32_vec)		 tb="$tb elf32-cr16c.lo elf32.lo $elf" ;;
     cris_aout_vec)		 tb="$tb aout-cris.lo" ;;
     cris_elf32_vec)		 tb="$tb elf32-cris.lo elf32.lo $elf" ;;
     cris_elf32_us_vec)		 tb="$tb elf32-cris.lo elf32.lo $elf" ;;
     crx_elf32_vec)		 tb="$tb elf32-crx.lo elf32.lo $elf" ;;
-    csky_elf32_be_vec)		 tb="$tb elf32-csky.lo elf32.lo $elf" ;;
-    csky_elf32_le_vec)		 tb="$tb elf32-csky.lo elf32.lo $elf" ;;
     d10v_elf32_vec)		 tb="$tb elf32-d10v.lo elf32.lo $elf" ;;
     d30v_elf32_vec)		 tb="$tb elf32-d30v.lo elf32.lo $elf" ;;
     dlx_elf32_be_vec)		 tb="$tb elf32-dlx.lo elf32.lo $elf" ;;
@@ -478,31 +755,43 @@ do
     fr30_elf32_vec)		 tb="$tb elf32-fr30.lo elf32.lo $elf" ;;
     frv_elf32_vec)		 tb="$tb elf32-frv.lo elf32.lo $elf" ;;
     frv_elf32_fdpic_vec)	 tb="$tb elf32-frv.lo elf32.lo $elf" ;;
+    h8300_coff_vec)		 tb="$tb coff-h8300.lo reloc16.lo $coffgen" ;;
     h8300_elf32_vec)		 tb="$tb elf32-h8300.lo elf32.lo $elf" ;;
-    h8300_elf32_linux_vec)	 tb="$tb elf32-h8300.lo elf32.lo $elf" ;;
+    h8500_coff_vec)		 tb="$tb coff-h8500.lo reloc16.lo $coffgen" ;;
     hppa_elf32_vec)		 tb="$tb elf32-hppa.lo elf32.lo $elf" ;;
     hppa_elf32_linux_vec)	 tb="$tb elf32-hppa.lo elf32.lo $elf" ;;
     hppa_elf32_nbsd_vec)	 tb="$tb elf32-hppa.lo elf32.lo $elf" ;;
     hppa_elf64_vec)		 tb="$tb elf64-hppa.lo elf64.lo $elf"; target_size=64 ;;
     hppa_elf64_linux_vec)	 tb="$tb elf64-hppa.lo elf64.lo $elf"; target_size=64 ;;
     hppa_som_vec)		 tb="$tb som.lo" ;;
+    i370_elf32_vec)		 tb="$tb elf32-i370.lo elf32.lo $elf" ;;
     i386_aout_vec)		 tb="$tb i386aout.lo aout32.lo" ;;
     i386_aout_bsd_vec)		 tb="$tb i386bsd.lo aout32.lo" ;;
+    i386_aout_dynix_vec)	 tb="$tb i386dynix.lo aout32.lo" ;;
+    i386_aout_fbsd_vec)		 tb="$tb i386freebsd.lo aout32.lo" ;;
+    i386_aout_linux_vec)	 tb="$tb i386linux.lo aout32.lo" ;;
     i386_aout_lynx_vec)		 tb="$tb i386lynx.lo lynx-core.lo aout32.lo" ;;
+    i386_aout_mach3_vec)	 tb="$tb i386mach3.lo aout32.lo" ;;
+    i386_aout_nbsd_vec)		 tb="$tb i386netbsd.lo aout32.lo" ;;
+    i386_aout_os9k_vec)		 tb="$tb i386os9k.lo aout32.lo" ;;
     i386_coff_vec)		 tb="$tb coff-i386.lo $coff" ;;
     i386_coff_go32_vec)		 tb="$tb coff-go32.lo $coff" ;;
     i386_coff_go32stubbed_vec)	 tb="$tb coff-stgo32.lo $coff" ;;
     i386_coff_lynx_vec)		 tb="$tb cf-i386lynx.lo lynx-core.lo $coff" ;;
-    i386_elf32_vec)		 tb="$tb elf32-i386.lo elfxx-x86.lo elf-ifunc.lo elf-nacl.lo elf-vxworks.lo elf32.lo $elf" ;;
-    i386_elf32_fbsd_vec)	 tb="$tb elf32-i386.lo elfxx-x86.lo elf-ifunc.lo elf-nacl.lo elf-vxworks.lo elf32.lo $elf" ;;
-    i386_elf32_nacl_vec)	 tb="$tb elf32-i386.lo elfxx-x86.lo elf-ifunc.lo elf-nacl.lo elf-vxworks.lo elf32.lo $elf" ;;
-    i386_elf32_sol2_vec)	 tb="$tb elf32-i386.lo elfxx-x86.lo elf-ifunc.lo elf-nacl.lo elf-vxworks.lo elf32.lo $elf" ;;
-    i386_elf32_vxworks_vec)	 tb="$tb elf32-i386.lo elfxx-x86.lo elf-ifunc.lo elf-nacl.lo elf-vxworks.lo elf32.lo $elf" ;;
+    i386_elf32_vec)		 tb="$tb elf32-i386.lo elf-ifunc.lo elf-nacl.lo elf-vxworks.lo elf32.lo $elf" ;;
+    i386_elf32_fbsd_vec)	 tb="$tb elf32-i386.lo elf-ifunc.lo elf-nacl.lo elf-vxworks.lo elf32.lo $elf" ;;
+    i386_elf32_nacl_vec)	 tb="$tb elf32-i386.lo elf-ifunc.lo elf-nacl.lo elf-vxworks.lo elf32.lo $elf" ;;
+    i386_elf32_sol2_vec)	 tb="$tb elf32-i386.lo elf-ifunc.lo elf-nacl.lo elf-vxworks.lo elf32.lo $elf" ;;
+    i386_elf32_vxworks_vec)	 tb="$tb elf32-i386.lo elf-ifunc.lo elf-nacl.lo elf-vxworks.lo elf32.lo $elf" ;;
     i386_mach_o_vec)		 tb="$tb mach-o-i386.lo" ;;
     i386_msdos_vec)		 tb="$tb i386msdos.lo" ;;
+    i386_nlm32_vec)		 tb="$tb nlm32-i386.lo nlm32.lo nlm.lo" ;;
     i386_pe_vec)		 tb="$tb pe-i386.lo peigen.lo $coff" ;;
     i386_pei_vec)		 tb="$tb pei-i386.lo peigen.lo $coff" ;;
-    iamcu_elf32_vec)		 tb="$tb elf32-i386.lo elfxx-x86.lo elf-ifunc.lo elf-nacl.lo elf-vxworks.lo elf32.lo $elf" ;;
+    i860_coff_vec)		 tb="$tb coff-i860.lo $coff" ;;
+    i860_elf32_vec)		 tb="$tb elf32-i860.lo elf32.lo $elf" ;;
+    i860_elf32_le_vec)		 tb="$tb elf32-i860.lo elf32.lo $elf" ;;
+    i960_elf32_vec)		 tb="$tb elf32-i960.lo elf32.lo $elf" ;;
     ia64_elf32_be_vec)		 tb="$tb elf32-ia64.lo elfxx-ia64.lo elf32.lo $elf" ;;
     ia64_elf32_hpux_be_vec)	 tb="$tb elf32-ia64.lo elfxx-ia64.lo elf32.lo $elf" ;;
     ia64_elf64_be_vec)		 tb="$tb elf64-ia64.lo elfxx-ia64.lo elf64.lo $elf"; target_size=64 ;;
@@ -510,12 +799,15 @@ do
     ia64_elf64_hpux_be_vec)	 tb="$tb elf64-ia64.lo elfxx-ia64.lo elf64.lo $elf"; target_size=64 ;;
     ia64_elf64_vms_vec)		 tb="$tb elf64-ia64-vms.lo elf64-ia64.lo elfxx-ia64.lo elf64.lo vms-lib.lo vms-misc.lo $elf"; target_size=64 ;;
     ia64_pei_vec)		 tb="$tb pei-ia64.lo pepigen.lo $coff"; target_size=64 ;;
+    icoff_be_vec)		 tb="$tb coff-i960.lo $coff" ;;
+    icoff_le_vec)		 tb="$tb coff-i960.lo $coff" ;;
+    ieee_vec)			 tb="$tb ieee.lo" ;;
     ip2k_elf32_vec)		 tb="$tb elf32-ip2k.lo elf32.lo $elf" ;;
     iq2000_elf32_vec)		 tb="$tb elf32-iq2000.lo elf32.lo $elf" ;;
-    k1om_elf64_vec)		 tb="$tb elf64-x86-64.lo elfxx-x86.lo elf-ifunc.lo elf-nacl.lo elf64.lo $elf"; target_size=64 ;;
-    k1om_elf64_fbsd_vec)	 tb="$tb elf64-x86-64.lo elfxx-x86.lo elf-ifunc.lo elf-nacl.lo elf64.lo $elf"; target_size=64 ;;
-    l1om_elf64_vec)		 tb="$tb elf64-x86-64.lo elfxx-x86.lo elf-ifunc.lo elf-nacl.lo elf64.lo $elf"; target_size=64 ;;
-    l1om_elf64_fbsd_vec)	 tb="$tb elf64-x86-64.lo elfxx-x86.lo elf-ifunc.lo elf-nacl.lo elf64.lo $elf"; target_size=64 ;;
+    k1om_elf64_vec)		 tb="$tb elf64-x86-64.lo elf-ifunc.lo elf-nacl.lo elf64.lo $elf"; target_size=64 ;;
+    k1om_elf64_fbsd_vec)	 tb="$tb elf64-x86-64.lo elf-ifunc.lo elf-nacl.lo elf64.lo $elf"; target_size=64 ;;
+    l1om_elf64_vec)		 tb="$tb elf64-x86-64.lo elf-ifunc.lo elf-nacl.lo elf64.lo $elf"; target_size=64 ;;
+    l1om_elf64_fbsd_vec)	 tb="$tb elf64-x86-64.lo elf-ifunc.lo elf-nacl.lo elf64.lo $elf"; target_size=64 ;;
     lm32_elf32_vec)		 tb="$tb elf32-lm32.lo elf32.lo $elf" ;;
     lm32_elf32_fdpic_vec)	 tb="$tb elf32-lm32.lo elf32.lo $elf" ;;
     m32c_elf32_vec)		 tb="$tb elf32-m32c.lo elf32.lo $elf" ;;
@@ -525,8 +817,23 @@ do
     m32r_elf32_linux_le_vec)	 tb="$tb elf32-m32r.lo elf32.lo $elf" ;;
     m68hc11_elf32_vec)		 tb="$tb elf32-m68hc11.lo elf32-m68hc1x.lo elf32.lo $elf" ;;
     m68hc12_elf32_vec)		 tb="$tb elf32-m68hc12.lo elf32-m68hc1x.lo elf32.lo $elf" ;;
+    m68k_aout_4knbsd_vec)	 tb="$tb m68k4knetbsd.lo aout32.lo" ;;
+    m68k_aout_hp300bsd_vec)	 tb="$tb hp300bsd.lo aout32.lo" ;;
+    m68k_aout_hp300hpux_vec)	 tb="$tb hp300hpux.lo aout32.lo" ;;
+    m68k_aout_linux_vec)	 tb="$tb m68klinux.lo aout32.lo" ;;
+    m68k_aout_nbsd_vec)		 tb="$tb m68knetbsd.lo aout32.lo" ;;
+    m68k_aout_newsos3_vec)	 tb="$tb newsos3.lo aout32.lo" ;;
+    m68k_coff_vec)		 tb="$tb coff-m68k.lo $coff" ;;
+    m68k_coff_apollo_vec)	 tb="$tb coff-apollo.lo $coffgen" ;;
+    m68k_coff_aux_vec)		 tb="$tb coff-aux.lo coff-m68k.lo $coff" ;;
+    m68k_coff_sysv_vec)		 tb="$tb coff-svm68k.lo $coff" ;;
+    m68k_coff_un_vec)		 tb="$tb coff-u68k.lo coff-m68k.lo $coff" ;;
     m68k_elf32_vec)		 tb="$tb elf32-m68k.lo elf32.lo $elf" ;;
-    s12z_elf32_vec)		 tb="$tb elf32-s12z.lo elf32.lo $elf" ;;
+    m68k_versados_vec)		 tb="$tb versados.lo" ;;
+    m88k_aout_mach3_vec)	 tb="$tb m88kmach3.lo aout32.lo" ;;
+    m88k_aout_obsd_vec)		 tb="$tb m88kopenbsd.lo aout32.lo" ;;
+    m88k_coff_bcs_vec)		 tb="$tb coff-m88k.lo $coffgen" ;;
+    m88k_elf32_vec)		 tb="$tb elf32-m88k.lo elf32.lo $elf" ;;
     mach_o_be_vec)		 tb="$tb mach-o.lo dwarf2.lo" ;;
     mach_o_le_vec)		 tb="$tb mach-o.lo dwarf2.lo" ;;
     mach_o_fat_vec)		 tb="$tb mach-o.lo dwarf2.lo" ;;
@@ -564,6 +871,8 @@ do
     mips_elf64_trad_le_vec)	 tb="$tb elf64-mips.lo elf64.lo elfxx-mips.lo elf-vxworks.lo elf32.lo $elf $ecoff"; target_size=64 ;;
     mips_elf64_tradfbsd_be_vec)  tb="$tb elf64-mips.lo elf64.lo elfxx-mips.lo elf-vxworks.lo elf32.lo $elf $ecoff"; target_size=64 ;;
     mips_elf64_tradfbsd_le_vec)  tb="$tb elf64-mips.lo elf64.lo elfxx-mips.lo elf-vxworks.lo elf32.lo $elf $ecoff"; target_size=64 ;;
+    mips_pe_le_vec)		 tb="$tb pe-mips.lo peigen.lo $coff" ;;
+    mips_pei_le_vec)		 tb="$tb pei-mips.lo peigen.lo $coff" ;;
     mmix_elf64_vec)		 tb="$tb elf64-mmix.lo elf64.lo $elf" target_size=64 ;;
     mmix_mmo_vec)			 tb="$tb mmo.lo" target_size=64 ;;
     mn10200_elf32_vec)		 tb="$tb elf-m10200.lo elf32.lo $elf" ;;
@@ -577,7 +886,6 @@ do
     nds32_elf32_le_vec)		 tb="$tb elf32-nds32.lo elf32.lo $elf" ;;
     nds32_elf32_linux_be_vec)	 tb="$tb elf32-nds32.lo elf32.lo $elf" ;;
     nds32_elf32_linux_le_vec)	 tb="$tb elf32-nds32.lo elf32.lo $elf" ;;
-    nfp_elf64_vec)		 tb="$tb elf64-nfp.lo elf64.lo $elf" ;;
     nios2_elf32_be_vec)		 tb="$tb elf32-nios2.lo elf32.lo $elf" ;;
     nios2_elf32_le_vec)		 tb="$tb elf32-nios2.lo elf32.lo $elf" ;;
     ns32k_aout_pc532mach_vec)	 tb="$tb pc532-mach.lo aout-ns32k.lo" ;;
@@ -597,14 +905,12 @@ do
     powerpc_elf64_vec)		 tb="$tb elf64-ppc.lo elf64-gen.lo elf64.lo $elf"; target_size=64 ;;
     powerpc_elf64_le_vec)	 tb="$tb elf64-ppc.lo elf64-gen.lo elf64.lo $elf" target_size=64 ;;
     powerpc_elf64_fbsd_vec)	 tb="$tb elf64-ppc.lo elf64-gen.lo elf64.lo $elf" target_size=64 ;;
+    powerpc_nlm32_vec)		 tb="$tb nlm32-ppc.lo nlm32.lo nlm.lo" ;;
     powerpc_pe_vec)		 tb="$tb pe-ppc.lo peigen.lo $coff" ;;
     powerpc_pe_le_vec)		 tb="$tb pe-ppc.lo peigen.lo $coff" ;;
     powerpc_pei_vec)		 tb="$tb pei-ppc.lo peigen.lo $coff" ;;
     powerpc_pei_le_vec)		 tb="$tb pei-ppc.lo peigen.lo $coff" ;;
     powerpc_xcoff_vec)		 tb="$tb coff-rs6000.lo $xcoff" ;;
-    pru_elf32_vec)		 tb="$tb elf32-pru.lo elf32.lo $elf" ;;
-    riscv_elf32_vec)		 tb="$tb elf32-riscv.lo elfxx-riscv.lo elf32.lo $elf" ;;
-    riscv_elf64_vec)		 tb="$tb elf64-riscv.lo elf64.lo elfxx-riscv.lo elf32.lo $elf"; target_size=64 ;;
     rl78_elf32_vec)		 tb="$tb elf32-rl78.lo elf32.lo $elf" ;;
     rs6000_xcoff64_vec)		 tb="$tb coff64-rs6000.lo aix5ppc-core.lo $xcoff"; target_size=64 ;;
     rs6000_xcoff64_aix_vec)	 tb="$tb coff64-rs6000.lo aix5ppc-core.lo $xcoff"; target_size=64 ;;
@@ -612,11 +918,22 @@ do
     rx_elf32_be_vec)		 tb="$tb elf32-rx.lo elf32.lo $elf" ;;
     rx_elf32_be_ns_vec)		 tb="$tb elf32-rx.lo elf32.lo $elf" ;;
     rx_elf32_le_vec)		 tb="$tb elf32-rx.lo elf32.lo $elf" ;;
-    rx_elf32_linux_le_vec)	 tb="$tb elf32-rx.lo elf32.lo $elf" ;;
     s390_elf32_vec)		 tb="$tb elf32-s390.lo elf32.lo $elf" ;;
     s390_elf64_vec)		 tb="$tb elf64-s390.lo elf64.lo $elf"; target_size=64 ;;
     score_elf32_be_vec)		 tb="$tb elf32-score.lo elf32-score7.lo elf32.lo $elf"; want64=true; target_size=64 ;;
     score_elf32_le_vec)		 tb="$tb elf32-score.lo elf32-score7.lo elf32.lo $elf"; want64=true; target_size=64 ;;
+    sh64_elf32_vec)		 tb="$tb elf32-sh64.lo elf32-sh64-com.lo elf-vxworks.lo elf32.lo $elf" target_size=64 ;;
+    sh64_elf32_le_vec)		 tb="$tb elf32-sh64.lo elf32-sh64-com.lo elf-vxworks.lo elf32.lo $elf" target_size=64 ;;
+    sh64_elf32_linux_vec)	 tb="$tb elf32-sh64.lo elf32-sh64-com.lo elf-vxworks.lo elf32.lo $elf" target_size=64 ;;
+    sh64_elf32_linux_be_vec)	 tb="$tb elf32-sh64.lo elf32-sh64-com.lo elf-vxworks.lo elf32.lo $elf" target_size=64 ;;
+    sh64_elf32_nbsd_vec)	 tb="$tb elf32-sh64.lo elf32-sh64-com.lo elf-vxworks.lo elf32.lo $elf" ;;
+    sh64_elf32_nbsd_le_vec)	 tb="$tb elf32-sh64.lo elf32-sh64-com.lo elf-vxworks.lo elf32.lo $elf" ;;
+    sh64_elf64_vec)		 tb="$tb elf64-sh64.lo elf64.lo $elf" target_size=64 ;;
+    sh64_elf64_le_vec)		 tb="$tb elf64-sh64.lo elf64.lo $elf" target_size=64 ;;
+    sh64_elf64_linux_vec)	 tb="$tb elf64-sh64.lo elf64.lo $elf" target_size=64 ;;
+    sh64_elf64_linux_be_vec)	 tb="$tb elf64-sh64.lo elf64.lo $elf" target_size=64 ;;
+    sh64_elf64_nbsd_vec)	 tb="$tb elf64-sh64.lo elf64.lo $elf" target_size=64 ;;
+    sh64_elf64_nbsd_le_vec)	 tb="$tb elf64-sh64.lo elf64.lo $elf" target_size=64 ;;
     sh_coff_vec)		 tb="$tb coff-sh.lo $coff" ;;
     sh_coff_le_vec)		 tb="$tb coff-sh.lo $coff" ;;
     sh_coff_small_vec)		 tb="$tb coff-sh.lo $coff" ;;
@@ -629,16 +946,25 @@ do
     sh_elf32_linux_be_vec)	 tb="$tb elf32-sh.lo elf-vxworks.lo elf32.lo $elf coff-sh.lo $coff" ;;
     sh_elf32_nbsd_vec)		 tb="$tb elf32-sh.lo elf-vxworks.lo elf32.lo $elf coff-sh.lo $coff" ;;
     sh_elf32_nbsd_le_vec)	 tb="$tb elf32-sh.lo elf-vxworks.lo elf32.lo $elf coff-sh.lo $coff" ;;
+    sh_elf32_symbian_le_vec)	 tb="$tb elf32-sh-symbian.lo elf32-sh64-com.lo elf-vxworks.lo elf32.lo $elf coff-sh.lo $coff" ;;
     sh_elf32_vxworks_vec)	 tb="$tb elf32-sh.lo elf-vxworks.lo elf32.lo $elf coff-sh.lo $coff" ;;
     sh_elf32_vxworks_le_vec)	 tb="$tb elf32-sh.lo elf-vxworks.lo elf32.lo $elf coff-sh.lo $coff" ;;
     sh_pe_le_vec)		 tb="$tb pe-sh.lo coff-sh.lo peigen.lo $coff" ;;
     sh_pei_le_vec)		 tb="$tb pei-sh.lo coff-sh.lo peigen.lo $coff" ;;
+    sparc_aout_le_vec)		 tb="$tb aout-sparcle.lo aout32.lo" ;;
+    sparc_aout_linux_vec)	 tb="$tb sparclinux.lo aout32.lo" ;;
+    sparc_aout_lynx_vec)	 tb="$tb sparclynx.lo lynx-core.lo aout32.lo" ;;
+    sparc_aout_nbsd_vec)	 tb="$tb sparcnetbsd.lo aout32.lo" ;;
+    sparc_aout_sunos_be_vec)	 tb="$tb sunos.lo aout32.lo" ;;
+    sparc_coff_vec)		 tb="$tb coff-sparc.lo $coffgen" ;;
+    sparc_coff_lynx_vec)	 tb="$tb cf-sparclynx.lo lynx-core.lo $coffgen" ;;
     sparc_elf32_vec)		 tb="$tb elf32-sparc.lo elfxx-sparc.lo elf-vxworks.lo elf32.lo $elf" ;;
     sparc_elf32_sol2_vec)	 tb="$tb elf32-sparc.lo elfxx-sparc.lo elf-vxworks.lo elf32.lo $elf" ;;
     sparc_elf32_vxworks_vec)	 tb="$tb elf32-sparc.lo elfxx-sparc.lo elf-vxworks.lo elf32.lo $elf" ;;
     sparc_elf64_vec)		 tb="$tb elf64-sparc.lo elfxx-sparc.lo elf-vxworks.lo elf64.lo $elf"; target_size=64 ;;
     sparc_elf64_fbsd_vec)	 tb="$tb elf64-sparc.lo elfxx-sparc.lo elf-vxworks.lo elf64.lo $elf"; target_size=64 ;;
     sparc_elf64_sol2_vec)	 tb="$tb elf64-sparc.lo elfxx-sparc.lo elf-vxworks.lo elf64.lo $elf"; target_size=64 ;;
+    sparc_nlm32_vec)		 tb="$tb nlm32-sparc.lo nlm32.lo nlm.lo" ;;
     spu_elf32_vec)		 tb="$tb elf32-spu.lo elf32.lo $elf" ;;
     sym_vec)			 tb="$tb xsym.lo" ;;
     tic30_aout_vec)		 tb="$tb aout-tic30.lo" ;;
@@ -670,20 +996,19 @@ do
     v800_elf32_vec)		 tb="$tb elf32-v850.lo elf32.lo $elf" ;;
     v850_elf32_vec)		 tb="$tb elf32-v850.lo elf32.lo $elf" ;;
     vax_aout_1knbsd_vec)	 tb="$tb vax1knetbsd.lo aout32.lo" ;;
+    vax_aout_bsd_vec)		 tb="$tb vaxbsd.lo aout32.lo" ;;
     vax_aout_nbsd_vec)		 tb="$tb vaxnetbsd.lo aout32.lo" ;;
     vax_elf32_vec)		 tb="$tb elf32-vax.lo elf32.lo $elf" ;;
-    ft32_elf32_vec)		 tb="$tb elf32-ft32.lo elf32.lo $elf" ;;
     visium_elf32_vec)		 tb="$tb elf32-visium.lo elf32.lo $elf" ;;
-    wasm_vec)                    tb="$tb wasm-module.lo" ;;
-    wasm32_elf32_vec)            tb="$tb elf32-wasm32.lo elf32.lo $elf" ;;
+    w65_coff_vec)		 tb="$tb coff-w65.lo reloc16.lo $coffgen" ;;
+    we32k_coff_vec)		 tb="$tb coff-we32k.lo $coffgen" ;;
     x86_64_coff_vec)		 tb="$tb coff-x86_64.lo $coff"; target_size=64 ;;
-    x86_64_elf32_vec)		 tb="$tb elf64-x86-64.lo elfxx-x86.lo elf-ifunc.lo elf-nacl.lo elf64.lo elf32.lo $elf"; target_size=64 ;;
-    x86_64_elf32_nacl_vec)	 tb="$tb elf64-x86-64.lo elfxx-x86.lo elf-ifunc.lo elf-nacl.lo elf64.lo elf32.lo $elf"; target_size=64 ;;
-    x86_64_elf64_vec)		 tb="$tb elf64-x86-64.lo elfxx-x86.lo elf-ifunc.lo elf-nacl.lo elf64.lo $elf"; target_size=64 ;;
-    x86_64_elf64_cloudabi_vec)	 tb="$tb elf64-x86-64.lo elfxx-x86.lo elf-ifunc.lo elf-nacl.lo elf64.lo $elf"; target_size=64 ;;
-    x86_64_elf64_fbsd_vec)	 tb="$tb elf64-x86-64.lo elfxx-x86.lo elf-ifunc.lo elf-nacl.lo elf64.lo $elf"; target_size=64 ;;
-    x86_64_elf64_nacl_vec)	 tb="$tb elf64-x86-64.lo elfxx-x86.lo elf-ifunc.lo elf-nacl.lo elf64.lo $elf"; target_size=64 ;;
-    x86_64_elf64_sol2_vec)	 tb="$tb elf64-x86-64.lo elfxx-x86.lo elf-ifunc.lo elf-nacl.lo elf64.lo $elf"; target_size=64 ;;
+    x86_64_elf32_vec)		 tb="$tb elf64-x86-64.lo elf-ifunc.lo elf-nacl.lo elf64.lo elf32.lo $elf"; target_size=64 ;;
+    x86_64_elf32_nacl_vec)	 tb="$tb elf64-x86-64.lo elf-ifunc.lo elf-nacl.lo elf64.lo elf32.lo $elf"; target_size=64 ;;
+    x86_64_elf64_vec)		 tb="$tb elf64-x86-64.lo elf-ifunc.lo elf-nacl.lo elf64.lo $elf"; target_size=64 ;;
+    x86_64_elf64_fbsd_vec)	 tb="$tb elf64-x86-64.lo elf-ifunc.lo elf-nacl.lo elf64.lo $elf"; target_size=64 ;;
+    x86_64_elf64_nacl_vec)	 tb="$tb elf64-x86-64.lo elf-ifunc.lo elf-nacl.lo elf64.lo $elf"; target_size=64 ;;
+    x86_64_elf64_sol2_vec)	 tb="$tb elf64-x86-64.lo elf-ifunc.lo elf-nacl.lo elf64.lo $elf"; target_size=64 ;;
     x86_64_mach_o_vec)		 tb="$tb mach-o-x86-64.lo" ;;
     x86_64_pe_vec)		 tb="$tb pe-x86_64.lo pex64igen.lo $coff"; target_size=64 ;;
     x86_64_pe_be_vec)		 tb="$tb pe-x86_64.lo pex64igen.lo $coff"; target_size=64 ;;
@@ -762,13 +1087,6 @@ else	# all_targets is true
     selarchs=`echo $selarchs | sed -e 's/^/\&/' -e 's/ \(.\)/,\&\1/g'`
 fi	# all_targets is true
 
-# 64-bit archives need a 64-bit bfd_vma.
-if test "x$want_64_bit_archive" = xtrue; then
-  want64=true
-  AC_DEFINE(USE_64_BIT_ARCHIVE, 1,
-    [Define if 64-bit archives should always be used.])
-fi
-
 case ${host64}-${target64}-${want64} in
   *true*)
     wordsize=64
@@ -797,264 +1115,12 @@ case ${host64}-${target64}-${want64} in
     ;;
 esac
 
-tdefaults=""
-test -n "${defvec}" && tdefaults="${tdefaults} -DDEFAULT_VECTOR=${defvec}"
-test -n "${selvecs}" && tdefaults="${tdefaults} -DSELECT_VECS='${selvecs}'"
-test -n "${assocvecs}" && tdefaults="${tdefaults} -DASSOCIATED_VECS='${assocvecs}'"
-test -n "${selarchs}" && tdefaults="${tdefaults} -DSELECT_ARCHITECTURES='${selarchs}'"
-
 AC_SUBST(wordsize)
 AC_SUBST(bfd64_libs)
 AC_SUBST(all_backends)
 AC_SUBST(bfd_backends)
 AC_SUBST(bfd_machines)
 AC_SUBST(bfd_default_target_size)
-AC_SUBST(tdefaults)
-AC_SUBST(havevecs)
-
-# If we are configured native, pick a core file support file.
-COREFILE=
-COREFLAG=
-CORE_HEADER=
-TRAD_HEADER=
-if test "${target}" = "${host}"; then
-  case "${host}" in
-  alpha*-*-freebsd* | alpha*-*-kfreebsd*-gnu | alpha*-*-*vms*)
-	COREFILE=''
-	;;
-  alpha*-*-linux-*)
-	COREFILE=trad-core.lo
-	TRAD_HEADER='"hosts/alphalinux.h"'
-	;;
-  alpha*-*-netbsd* | alpha*-*-openbsd*)
-	COREFILE=netbsd-core.lo
-	;;
-  alpha*-*-*)
-        COREFILE=osf-core.lo
-	;;
-  arm-*-freebsd* | arm-*-kfreebsd*-gnu)
-	COREFILE='' ;;
-  arm-*-netbsd* | arm-*-openbsd*)
-	COREFILE=netbsd-core.lo
-	;;
-  arm-*-riscix)		COREFILE=trad-core.lo ;;
-  hppa*-*-hpux*)	COREFILE=hpux-core.lo ;;
-  hppa*-*-hiux*)	COREFILE=hpux-core.lo ;;
-  hppa*-*-mpeix*)	COREFILE=hpux-core.lo ;;
-  hppa*-*-bsd*)		COREFILE="hpux-core.lo hppabsd-core.lo"
-			COREFLAG="-DHPUX_CORE -DHPPABSD_CORE" ;;
-  hppa*-*-netbsd* | hppa*-*-openbsd*)
-	COREFILE=netbsd-core.lo
-	;;
-
-changequote(,)dnl
-  i[3-7]86-sequent-bsd*)
-changequote([,])dnl
-	COREFILE=trad-core.lo
-	TRAD_HEADER='"hosts/symmetry.h"'
-	;;
-changequote(,)dnl
-  i[3-7]86-sequent-sysv4*) ;;
-  i[3-7]86-sequent-sysv*)
-changequote([,])dnl
-	COREFILE=trad-core.lo
-	TRAD_HEADER='"hosts/symmetry.h"'
-	;;
-changequote(,)dnl
-  i[3-7]86-*-bsdi)
-changequote([,])dnl
-	COREFILE=
-	;;
-changequote(,)dnl
-  i[3-7]86-*-bsd* | i[3-7]86-*-freebsd[123] | i[3-7]86-*-freebsd[123]\.* | i[3-7]86-*-freebsd4\.[01234] | i[3-7]86-*-freebsd4\.[01234]\.* | i[3-7]86-*-freebsd*aout*)
-changequote([,])dnl
-	COREFILE=trad-core.lo
-	TRAD_HEADER='"hosts/i386bsd.h"'
-	;;
-changequote(,)dnl
-  i[3-7]86-*-freebsd* | i[3-7]86-*-kfreebsd*-gnu | i[3-7]86-*-dragonfly*)
-changequote([,])dnl
-	COREFILE=''
-	TRAD_HEADER='"hosts/i386bsd.h"'
-	;;
-changequote(,)dnl
-  i[3-7]86-*-netbsd* | i[3-7]86-*-knetbsd*-gnu | i[3-7]86-*-openbsd*)
-changequote([,])dnl
-	COREFILE=netbsd-core.lo
-	;;
-changequote(,)dnl
-  i[3-7]86-esix-sysv3*)
-changequote([,])dnl
-	COREFILE=trad-core.lo
-	TRAD_HEADER='"hosts/esix.h"'
-	;;
-changequote(,)dnl
-  i[3-7]86-*-sco3.2v5*)
-changequote([,])dnl
-	COREFILE=sco5-core.lo
-	;;
-changequote(,)dnl
-  i[3-7]86-*-sco* | i[3-7]86-*-isc*)
-changequote([,])dnl
-	COREFILE=trad-core.lo
-	TRAD_HEADER='"hosts/i386sco.h"'
-	;;
-changequote(,)dnl
-  i[3-7]86-*-mach3*)
-changequote([,])dnl
-	COREFILE=trad-core.lo
-	TRAD_HEADER='"hosts/i386mach3.h"'
-	;;
-changequote(,)dnl
-  i[3-7]86-*-linux-*)
-changequote([,])dnl
-	COREFILE=trad-core.lo
-	TRAD_HEADER='"hosts/i386linux.h"'
-	case "$enable_targets"-"$want64" in
-	*x86_64-*linux*|*-true)
-	  CORE_HEADER='"hosts/x86-64linux.h"'
-	esac
-	;;
-changequote(,)dnl
-  i[3-7]86-*-isc*)	COREFILE=trad-core.lo ;;
-  i[3-7]86-*-aix*)	COREFILE=aix386-core.lo ;;
-changequote([,])dnl
-  mips-*-netbsd* | mips*-*-openbsd*)
-	COREFILE=netbsd-core.lo
-	;;
-  mips-sgi-irix4*)	COREFILE=irix-core.lo ;;
-  mips-sgi-irix5*)	COREFILE=irix-core.lo ;;
-  mips-sgi-irix6*)	COREFILE=irix-core.lo ;;
-  m68*-*-linux-*)
-	COREFILE=trad-core.lo
-	TRAD_HEADER='"hosts/m68klinux.h"'
-	;;
-  m68*-*-netbsd*)
-	COREFILE=netbsd-core.lo
-	;;
-  ns32k-pc532-mach)
-	COREFILE=trad-core.lo
-	TRAD_HEADER='"hosts/pc532mach.h"'
-	;;
-  ns32k-*-netbsd* | ns32k-*-openbsd*)
-	COREFILE=netbsd-core.lo
-	;;
-  rs6000-*-lynx*)
-	COREFILE=lynx-core.lo
-	;;
-changequote(,)dnl
-  rs6000-*-aix[5-9].* | powerpc-*-aix[5-9].* | powerpc64-*-aix[5-9].*)
-changequote([,])dnl
-        COREFILE=rs6000-core.lo
-	COREFLAG="$COREFLAG -DAIX_5_CORE -DAIX_CORE_DUMPX_CORE"
-	;;
-changequote(,)dnl
-  rs6000-*-aix4.[3-9]* | powerpc-*-aix4.[3-9]*)
-changequote([,])dnl
-        COREFILE=rs6000-core.lo
-	COREFLAG="$COREFLAG -DAIX_CORE_DUMPX_CORE"
-	# Not all versions of AIX with -DAIX_CORE_DUMPX_CORE
-	# have c_impl as a member of struct core_dumpx
-	AC_MSG_CHECKING([for c_impl in struct core_dumpx])
-	AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[#include <core.h>]], [[struct core_dumpx c; c.c_impl = 0;]])],[AC_DEFINE(HAVE_ST_C_IMPL, 1,
-	    [Define if struct core_dumpx has member c_impl])
-	  AC_MSG_RESULT(yes)],[AC_MSG_RESULT(no)])
-	;;
-  rs6000-*-aix4*)	COREFILE=rs6000-core.lo ;;
-  rs6000-*-*)		COREFILE=rs6000-core.lo ;;
-  powerpc64-*-aix*)	COREFILE=rs6000-core.lo ;;
-  powerpc-*-aix4*)	COREFILE=rs6000-core.lo ;;
-  powerpc-*-aix*)	COREFILE=rs6000-core.lo ;;
-  powerpc-*-beos*)	;;
-  powerpc-*-freebsd* | powerpc-*-kfreebsd*-gnu)
-		        COREFILE='' ;;
-  powerpc-*-netbsd*)	COREFILE=netbsd-core.lo ;;
-  powerpc-*-*bsd*)	COREFILE=netbsd-core.lo ;;
-  s390*-*-*)            COREFILE=trad-core.lo ;;
-  sh*-*-netbsd* | sh*-*-openbsd*)
-	COREFILE=netbsd-core.lo
-	;;
-  sparc-*-netbsd* | sparc*-*-openbsd*)
-	COREFILE=netbsd-core.lo
-	;;
-  vax-*-netbsd* | vax-*-openbsd*)
-	COREFILE=netbsd-core.lo
-	;;
-  vax-*-ultrix2*)
-	COREFILE=trad-core.lo
-	TRAD_HEADER='"hosts/vaxult2.h"'
-	;;
-  vax-*-ultrix*)
-	COREFILE=trad-core.lo
-	TRAD_HEADER='"hosts/vaxult2.h"'
-	;;
-  vax-*-linux-*)
-	COREFILE=trad-core.lo
-	TRAD_HEADER='"hosts/vaxlinux.h"'
-	;;
-  vax-*-*)
-	COREFILE=trad-core.lo
-	TRAD_HEADER='"hosts/vaxbsd.h"'
-	;;
-  x86_64-*-linux*)
-	CORE_HEADER='"hosts/x86-64linux.h"'
-	;;
-  x86_64-*-netbsd* | x86_64-*-openbsd*)
-	COREFILE=netbsd-core.lo
-	;;
-  esac
-
-  case "$COREFILE" in
-  aix386-core.lo)	COREFLAG=-DAIX386_CORE ;;
-  hppabsd-core.lo)	COREFLAG=-DHPPABSD_CORE ;;
-  hpux-core.lo)		COREFLAG=-DHPUX_CORE ;;
-  irix-core.lo)		COREFLAG=-DIRIX_CORE ;;
-  lynx-core.lo)		COREFLAG=-DLYNX_CORE ;;
-  netbsd-core.lo)	COREFLAG=-DNETBSD_CORE ;;
-  osf-core.lo)		COREFLAG=-DOSF_CORE ;;
-  ptrace-core.lo)	COREFLAG=-DPTRACE_CORE ;;
-  rs6000-core.lo)	COREFLAG="$COREFLAG -DAIX_CORE" ;;
-  sco5-core.lo)		COREFLAG="$COREFLAG -DSCO5_CORE" ;;
-  trad-core.lo)		COREFLAG="$COREFLAG -DTRAD_CORE" ;;
-  esac
-
-  # ELF corefile support has several flavors, but all of
-  # them use something called <sys/procfs.h>
-  AC_CHECK_HEADERS(sys/procfs.h)
-  if test "$ac_cv_header_sys_procfs_h" = yes; then
-    BFD_HAVE_SYS_PROCFS_TYPE(prstatus_t)
-    BFD_HAVE_SYS_PROCFS_TYPE(prstatus32_t)
-    BFD_HAVE_SYS_PROCFS_TYPE_MEMBER(prstatus_t, pr_who)
-    BFD_HAVE_SYS_PROCFS_TYPE_MEMBER(prstatus32_t, pr_who)
-    BFD_HAVE_SYS_PROCFS_TYPE(pstatus_t)
-    BFD_HAVE_SYS_PROCFS_TYPE(pxstatus_t)
-    BFD_HAVE_SYS_PROCFS_TYPE(pstatus32_t)
-    BFD_HAVE_SYS_PROCFS_TYPE(prpsinfo_t)
-    BFD_HAVE_SYS_PROCFS_TYPE_MEMBER(prpsinfo_t, pr_pid)
-    BFD_HAVE_SYS_PROCFS_TYPE(prpsinfo32_t)
-    BFD_HAVE_SYS_PROCFS_TYPE_MEMBER(prpsinfo32_t, pr_pid)
-    BFD_HAVE_SYS_PROCFS_TYPE(psinfo_t)
-    BFD_HAVE_SYS_PROCFS_TYPE_MEMBER(psinfo_t, pr_pid)
-    BFD_HAVE_SYS_PROCFS_TYPE(psinfo32_t)
-    BFD_HAVE_SYS_PROCFS_TYPE_MEMBER(psinfo32_t, pr_pid)
-    BFD_HAVE_SYS_PROCFS_TYPE(lwpstatus_t)
-    BFD_HAVE_SYS_PROCFS_TYPE(lwpxstatus_t)
-    BFD_HAVE_SYS_PROCFS_TYPE_MEMBER(lwpstatus_t, pr_context)
-    BFD_HAVE_SYS_PROCFS_TYPE_MEMBER(lwpstatus_t, pr_reg)
-    BFD_HAVE_SYS_PROCFS_TYPE_MEMBER(lwpstatus_t, pr_fpreg)
-    BFD_HAVE_SYS_PROCFS_TYPE(win32_pstatus_t)
-  fi
-fi
-AC_SUBST(COREFILE)
-AC_SUBST(COREFLAG)
-if test -n "$CORE_HEADER"; then
-  AC_DEFINE_UNQUOTED(CORE_HEADER, $CORE_HEADER,
-    [Name of host specific core header file to include in elf.c.])
-fi
-if test -n "$TRAD_HEADER"; then
-  AC_DEFINE_UNQUOTED(TRAD_HEADER, $TRAD_HEADER,
-    [Name of host specific header file to include in trad-core.c.])
-fi
 
 if test "$plugins" = "yes"; then
   supports_plugins=1
@@ -1064,7 +1130,7 @@ fi
 AC_SUBST(supports_plugins)
 AC_SUBST(lt_cv_dlopen_libs)
 
-# Determine the host dependent file_ptr a.k.a. off_t type.  In order
+# Determine the host dependant file_ptr a.k.a. off_t type.  In order
 # prefer: off64_t - if ftello64 and fseeko64, off_t - if ftello and
 # fseeko, long.  This assumes that sizeof off_t is .ge. sizeof long.
 # Hopefully a reasonable assumption since fseeko et.al. should be
@@ -1084,6 +1150,15 @@ fi
 AC_MSG_RESULT($bfd_file_ptr)
 AC_SUBST(bfd_file_ptr)
 AC_SUBST(bfd_ufile_ptr)
+
+
+tdefaults=""
+test -n "${defvec}" && tdefaults="${tdefaults} -DDEFAULT_VECTOR=${defvec}"
+test -n "${selvecs}" && tdefaults="${tdefaults} -DSELECT_VECS='${selvecs}'"
+test -n "${assocvecs}" && tdefaults="${tdefaults} -DASSOCIATED_VECS='${assocvecs}'"
+test -n "${selarchs}" && tdefaults="${tdefaults} -DSELECT_ARCHITECTURES='${selarchs}'"
+AC_SUBST(tdefaults)
+AC_SUBST(havevecs)
 
 dnl AC_CHECK_HEADERS(sys/mman.h)
 AC_FUNC_MMAP

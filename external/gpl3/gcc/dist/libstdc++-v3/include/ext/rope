@@ -1,6 +1,7 @@
 // SGI's rope class -*- C++ -*-
 
-// Copyright (C) 2001-2019 Free Software Foundation, Inc.
+// Copyright (C) 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009
+// Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
@@ -43,8 +44,6 @@
 #ifndef _ROPE
 #define _ROPE 1
 
-#pragma GCC system_header
-
 #include <algorithm>
 #include <iosfwd>
 #include <bits/stl_construct.h>
@@ -63,9 +62,7 @@
 
 #include <ext/memory> // For uninitialized_copy_n
 
-namespace __gnu_cxx _GLIBCXX_VISIBILITY(default)
-{
-_GLIBCXX_BEGIN_NAMESPACE_VERSION
+_GLIBCXX_BEGIN_NAMESPACE(__gnu_cxx)
 
   namespace __detail
   {
@@ -150,7 +147,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
     class char_producer
     {
     public:
-      virtual ~char_producer() { }
+      virtual ~char_producer() { };
 
       virtual void
       operator()(size_t __start_pos, size_t __len,
@@ -314,7 +311,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       // compile-time would do.  Hence this should all be private
       // for now.
       // The symmetry with char_producer is accidental and temporary.
-      virtual ~_Rope_char_consumer() { }
+      virtual ~_Rope_char_consumer() { };
   
       virtual bool
       operator()(const _CharT* __buffer, size_t __len) = 0;
@@ -459,27 +456,19 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
     volatile _RC_t _M_ref_count;
 
     // Constructor
-#ifdef __GTHREAD_MUTEX_INIT
-    __gthread_mutex_t _M_ref_count_lock = __GTHREAD_MUTEX_INIT;
-#else
     __gthread_mutex_t _M_ref_count_lock;
-#endif
 
-    _Refcount_Base(_RC_t __n) : _M_ref_count(__n)
+    _Refcount_Base(_RC_t __n) : _M_ref_count(__n), _M_ref_count_lock()
     {
-#ifndef __GTHREAD_MUTEX_INIT
-#ifdef __GTHREAD_MUTEX_INIT_FUNCTION
+#ifdef __GTHREAD_MUTEX_INIT
+      __gthread_mutex_t __tmp = __GTHREAD_MUTEX_INIT;
+      _M_ref_count_lock = __tmp;
+#elif defined(__GTHREAD_MUTEX_INIT_FUNCTION)
       __GTHREAD_MUTEX_INIT_FUNCTION (&_M_ref_count_lock);
 #else
 #error __GTHREAD_MUTEX_INIT or __GTHREAD_MUTEX_INIT_FUNCTION should be defined by gthr.h abstraction layer, report problem to libstdc++@gcc.gnu.org.
 #endif
-#endif
     }
-
-#ifndef __GTHREAD_MUTEX_INIT
-    ~_Refcount_Base()
-    { __gthread_mutex_destroy(&_M_ref_count_lock); }
-#endif
 
     void
     _M_incr()
@@ -590,11 +579,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       bool _M_is_balanced:8;
       unsigned char _M_depth;
       __GC_CONST _CharT* _M_c_string;
-#ifdef __GTHREAD_MUTEX_INIT
-      __gthread_mutex_t _M_c_string_lock = __GTHREAD_MUTEX_INIT;
-#else
       __gthread_mutex_t _M_c_string_lock;
-#endif
                         /* Flattened version of string, if needed.  */
                         /* typically 0.                             */
                         /* If it's not 0, then the memory is owned  */
@@ -615,11 +600,13 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 #endif
 	_M_tag(__t), _M_is_balanced(__b), _M_depth(__d), _M_c_string(0)
 #ifdef __GTHREAD_MUTEX_INIT
-      { }
+    {
+      // Do not copy a POSIX/gthr mutex once in use.  However, bits are bits.
+      __gthread_mutex_t __tmp = __GTHREAD_MUTEX_INIT;
+      _M_c_string_lock = __tmp;
+    }
 #else
-      { __GTHREAD_MUTEX_INIT_FUNCTION (&_M_c_string_lock); }
-      ~_Rope_RopeRep()
-      { __gthread_mutex_destroy (&_M_c_string_lock); }
+    { __GTHREAD_MUTEX_INIT_FUNCTION (&_M_c_string_lock); }
 #endif
 #ifdef __GC
       void
@@ -740,7 +727,7 @@ protected:
         if (_M_data != this->_M_c_string)
 	  this->_M_free_c_string();
 	
-	this->__STL_FREE_STRING(_M_data, this->_M_size, this->_M_get_allocator());
+        __STL_FREE_STRING(_M_data, this->_M_size, this->_M_get_allocator());
       }
 #endif
 protected:
@@ -923,10 +910,10 @@ protected:
 
       ~_Rope_self_destruct_ptr()
       { _Rope_RopeRep<_CharT, _Alloc>::_S_unref(_M_ptr); }
-#if __cpp_exceptions
-      _Rope_self_destruct_ptr() : _M_ptr(0) { }
+#ifdef __EXCEPTIONS
+      _Rope_self_destruct_ptr() : _M_ptr(0) { };
 #else
-      _Rope_self_destruct_ptr() { }
+      _Rope_self_destruct_ptr() { };
 #endif
       _Rope_self_destruct_ptr(_Rope_RopeRep<_CharT, _Alloc>* __p)
       : _M_ptr(__p) { }
@@ -1119,7 +1106,7 @@ protected:
     
       _Rope_iterator_base(const _Rope_iterator_base& __x)
       {
-        if (0 != __x._M_buf_ptr && __x._M_buf_start != __x._M_tmp_buf)
+        if (0 != __x._M_buf_ptr)
 	  *this = __x;
 	else
 	  {
@@ -1153,7 +1140,7 @@ protected:
       typedef const _CharT* pointer;
 
     public:
-      _Rope_const_iterator() { }
+      _Rope_const_iterator() { };
 
       _Rope_const_iterator(const _Rope_const_iterator& __x)
       : _Rope_iterator_base<_CharT,_Alloc>(__x) { }
@@ -1166,7 +1153,7 @@ protected:
       _Rope_const_iterator&
       operator=(const _Rope_const_iterator& __x)
       {
-        if (0 != __x._M_buf_ptr && __x._M_buf_start != __x._M_tmp_buf)
+        if (0 != __x._M_buf_ptr)
 	  *(static_cast<_Rope_iterator_base<_CharT, _Alloc>*>(this)) = __x;
 	else
 	  {
@@ -1181,7 +1168,7 @@ protected:
       operator*()
       {
         if (0 == this->_M_buf_ptr)
-	  this->_S_setcache(*this);
+	  _S_setcache(*this);
         return *this->_M_buf_ptr;
       }
 
@@ -1310,7 +1297,7 @@ protected:
         _M_root_rope(__r)
       { _RopeRep::_S_ref(this->_M_root);
         if (!(__r -> empty()))
-	  this->_S_setcache(*this);
+	  _S_setcache(*this);
       }
 
       void _M_check();
@@ -1325,7 +1312,7 @@ protected:
       _Rope_iterator()
       {
         this->_M_root = 0;  // Needed for reference counting.
-      }
+      };
 
       _Rope_iterator(const _Rope_iterator& __x)
       : _Rope_iterator_base<_CharT, _Alloc>(__x)
@@ -1345,7 +1332,7 @@ protected:
         _RopeRep* __old = this->_M_root;
 	
         _RopeRep::_S_ref(__x._M_root);
-        if (0 != __x._M_buf_ptr && __x._M_buf_start != __x._M_tmp_buf)
+        if (0 != __x._M_buf_ptr)
 	  {
             _M_root_rope = __x._M_root_rope;
             *(static_cast<_Rope_iterator_base<_CharT, _Alloc>*>(this)) = __x;
@@ -1544,7 +1531,7 @@ protected:
       typedef typename _Base::allocator_type allocator_type;
       using _Base::_M_tree_ptr;
       using _Base::get_allocator;
-      using _Base::_M_get_allocator;
+      using _Base::_M_get_allocator;      
       typedef __GC_CONST _CharT* _Cstrptr;
       
       static _CharT _S_empty_c_str[1];
@@ -1797,7 +1784,7 @@ protected:
       static int _S_compare(const _RopeRep* __x, const _RopeRep* __y);
       
     public:
-      _GLIBCXX_NODISCARD bool
+      bool
       empty() const
       { return 0 == this->_M_tree_ptr; }
       
@@ -1876,9 +1863,8 @@ protected:
 	   const allocator_type& __a = allocator_type())
       : _Base(__a)
       {
-	this->_M_tree_ptr = (0 == __len)
-	  ? 0
-	  : _S_new_RopeFunction(__fn, __len, __delete_fn, _M_get_allocator());
+	this->_M_tree_ptr = (0 == __len) ?
+	  0 : _S_new_RopeFunction(__fn, __len, __delete_fn, __a);
       }
 
       rope(const rope& __x, const allocator_type& __a = allocator_type())
@@ -2931,14 +2917,11 @@ protected:
     swap(rope<_CharT, _Alloc>& __x, rope<_CharT, _Alloc>& __y)
     { __x.swap(__y); }
 
-_GLIBCXX_END_NAMESPACE_VERSION
-} // namespace
+_GLIBCXX_END_NAMESPACE
 
 
-namespace std _GLIBCXX_VISIBILITY(default)
+namespace std
 { 
-_GLIBCXX_BEGIN_NAMESPACE_VERSION
-
 namespace tr1
 {
   template<>
@@ -2968,8 +2951,6 @@ namespace tr1
       }
     };
 } // namespace tr1
-
-_GLIBCXX_END_NAMESPACE_VERSION
 } // namespace std
 
 # include <ext/ropeimpl.h>

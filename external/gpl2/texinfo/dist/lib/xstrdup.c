@@ -1,4 +1,4 @@
-/*	$NetBSD: xstrdup.c,v 1.1.1.1 2016/01/14 00:11:29 christos Exp $	*/
+/*	$NetBSD: xstrdup.c,v 1.1 2016/01/14 00:11:29 christos Exp $	*/
 
 /* xstrdup.c -- copy a string with out of memory checking
    Copyright (C) 1990, 1996, 1998, 2001, 2003 Free Software Foundation, Inc.

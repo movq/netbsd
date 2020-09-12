@@ -1,5 +1,6 @@
 /* rescoff.c -- read and write resources in Windows COFF files.
-   Copyright (C) 1997-2020 Free Software Foundation, Inc.
+   Copyright 1997, 1998, 1999, 2000, 2003, 2007, 2008
+   Free Software Foundation, Inc.
    Written by Ian Lance Taylor, Cygnus Support.
    Rewritten by Kai Tietz, Onevision.
 
@@ -117,7 +118,7 @@ read_coff_rsrc (const char *filename, const char *target)
   asection *sec;
   bfd_size_type size;
   bfd_byte *data;
-  struct coff_file_info flaginfo;
+  struct coff_file_info finfo;
 
   if (filename == NULL)
     fatal (_("filename required for COFF input"));
@@ -141,30 +142,24 @@ read_coff_rsrc (const char *filename, const char *target)
     }
 
   set_windres_bfd (&wrbfd, abfd, sec, WR_KIND_BFD);
-  size = bfd_section_size (sec);
-  /* PR 17512: file: 1b25ba5d
-     The call to get_file_size here may be expensive
-     but there is no other way to determine if the section size
-     is reasonable.  */
-  if (size > (bfd_size_type) get_file_size (filename))
-    fatal (_("%s: .rsrc section is bigger than the file!"), filename);
-
+  size = bfd_section_size (abfd, sec);
   data = (bfd_byte *) res_alloc (size);
+
   get_windres_bfd_content (&wrbfd, data, 0, size);
 
-  flaginfo.filename = filename;
-  flaginfo.data = data;
-  flaginfo.data_end = data + size;
-  flaginfo.secaddr = (bfd_section_vma (sec)
-		      - pe_data (abfd)->pe_opthdr.ImageBase);
+  finfo.filename = filename;
+  finfo.data = data;
+  finfo.data_end = data + size;
+  finfo.secaddr = (bfd_get_section_vma (abfd, sec)
+		   - pe_data (abfd)->pe_opthdr.ImageBase);
 
   /* Now just read in the top level resource directory.  Note that we
      don't free data, since we create resource entries that point into
      it.  If we ever want to free up the resource information we read,
      this will have to be cleaned up.  */
 
-  ret = read_coff_res_dir (&wrbfd, data, &flaginfo, (const rc_res_id *) NULL, 0);
-
+  ret = read_coff_res_dir (&wrbfd, data, &finfo, (const rc_res_id *) NULL, 0);
+  
   bfd_close (abfd);
 
   return ret;
@@ -173,16 +168,16 @@ read_coff_rsrc (const char *filename, const char *target)
 /* Give an error if we are out of bounds.  */
 
 static void
-overrun (const struct coff_file_info *flaginfo, const char *msg)
+overrun (const struct coff_file_info *finfo, const char *msg)
 {
-  fatal (_("%s: %s: address out of bounds"), flaginfo->filename, msg);
+  fatal (_("%s: %s: address out of bounds"), finfo->filename, msg);
 }
 
 /* Read a resource directory.  */
 
 static rc_res_directory *
 read_coff_res_dir (windres_bfd *wrbfd, const bfd_byte *data,
-		   const struct coff_file_info *flaginfo,
+		   const struct coff_file_info *finfo,
 		   const rc_res_id *type, int level)
 {
   const struct extern_res_directory *erd;
@@ -191,15 +186,8 @@ read_coff_res_dir (windres_bfd *wrbfd, const bfd_byte *data,
   rc_res_entry **pp;
   const struct extern_res_entry *ere;
 
-  /* PR 17512: file: 09d80f53.
-     Whilst in theory resources can nest to any level, in practice
-     Microsoft only defines 3 levels.  Corrupt files however might
-     claim to use more.  */
-  if (level > 4)
-    overrun (flaginfo, _("Resources nest too deep"));
-
-  if ((size_t) (flaginfo->data_end - data) < sizeof (struct extern_res_directory))
-    overrun (flaginfo, _("directory"));
+  if ((size_t) (finfo->data_end - data) < sizeof (struct extern_res_directory))
+    overrun (finfo, _("directory"));
 
   erd = (const struct extern_res_directory *) data;
 
@@ -226,8 +214,8 @@ read_coff_res_dir (windres_bfd *wrbfd, const bfd_byte *data,
       const bfd_byte *ers;
       int length, j;
 
-      if ((const bfd_byte *) ere >= flaginfo->data_end)
-	overrun (flaginfo, _("named directory entry"));
+      if ((const bfd_byte *) ere >= finfo->data_end)
+	overrun (finfo, _("named directory entry"));
 
       name = windres_get_32 (wrbfd, ere->name, 4);
       rva = windres_get_32 (wrbfd, ere->rva, 4);
@@ -235,10 +223,10 @@ read_coff_res_dir (windres_bfd *wrbfd, const bfd_byte *data,
       /* For some reason the high bit in NAME is set.  */
       name &=~ 0x80000000;
 
-      if (name > (rc_uint_type) (flaginfo->data_end - flaginfo->data))
-	overrun (flaginfo, _("directory entry name"));
+      if (name > (rc_uint_type) (finfo->data_end - finfo->data))
+	overrun (finfo, _("directory entry name"));
 
-      ers = flaginfo->data + name;
+      ers = finfo->data + name;
 
       re = (rc_res_entry *) res_alloc (sizeof *re);
       re->next = NULL;
@@ -247,12 +235,7 @@ read_coff_res_dir (windres_bfd *wrbfd, const bfd_byte *data,
       re->id.u.n.length = length;
       re->id.u.n.name = (unichar *) res_alloc (length * sizeof (unichar));
       for (j = 0; j < length; j++)
-	{
-	  /* PR 17512: file: 05dc4a16.  */
-	  if (length < 0 || ers >= flaginfo->data_end || ers + j * 2 + 4 >= flaginfo->data_end)
-	    overrun (flaginfo, _("resource name"));
-	  re->id.u.n.name[j] = windres_get_16 (wrbfd, ers + j * 2 + 2, 2);
-	}
+	re->id.u.n.name[j] = windres_get_16 (wrbfd, ers + j * 2 + 2, 2);
 
       if (level == 0)
 	type = &re->id;
@@ -260,18 +243,18 @@ read_coff_res_dir (windres_bfd *wrbfd, const bfd_byte *data,
       if ((rva & 0x80000000) != 0)
 	{
 	  rva &=~ 0x80000000;
-	  if (rva >= (rc_uint_type) (flaginfo->data_end - flaginfo->data))
-	    overrun (flaginfo, _("named subdirectory"));
+	  if (rva >= (rc_uint_type) (finfo->data_end - finfo->data))
+	    overrun (finfo, _("named subdirectory"));
 	  re->subdir = 1;
-	  re->u.dir = read_coff_res_dir (wrbfd, flaginfo->data + rva, flaginfo, type,
+	  re->u.dir = read_coff_res_dir (wrbfd, finfo->data + rva, finfo, type,
 					 level + 1);
 	}
       else
 	{
-	  if (rva >= (rc_uint_type) (flaginfo->data_end - flaginfo->data))
-	    overrun (flaginfo, _("named resource"));
+	  if (rva >= (rc_uint_type) (finfo->data_end - finfo->data))
+	    overrun (finfo, _("named resource"));
 	  re->subdir = 0;
-	  re->u.res = read_coff_data_entry (wrbfd, flaginfo->data + rva, flaginfo, type);
+	  re->u.res = read_coff_data_entry (wrbfd, finfo->data + rva, finfo, type);
 	}
 
       *pp = re;
@@ -283,8 +266,8 @@ read_coff_res_dir (windres_bfd *wrbfd, const bfd_byte *data,
       unsigned long name, rva;
       rc_res_entry *re;
 
-      if ((const bfd_byte *) ere >= flaginfo->data_end)
-	overrun (flaginfo, _("ID directory entry"));
+      if ((const bfd_byte *) ere >= finfo->data_end)
+	overrun (finfo, _("ID directory entry"));
 
       name = windres_get_32 (wrbfd, ere->name, 4);
       rva = windres_get_32 (wrbfd, ere->rva, 4);
@@ -300,18 +283,18 @@ read_coff_res_dir (windres_bfd *wrbfd, const bfd_byte *data,
       if ((rva & 0x80000000) != 0)
 	{
 	  rva &=~ 0x80000000;
-	  if (rva >= (rc_uint_type) (flaginfo->data_end - flaginfo->data))
-	    overrun (flaginfo, _("ID subdirectory"));
+	  if (rva >= (rc_uint_type) (finfo->data_end - finfo->data))
+	    overrun (finfo, _("ID subdirectory"));
 	  re->subdir = 1;
-	  re->u.dir = read_coff_res_dir (wrbfd, flaginfo->data + rva, flaginfo, type,
+	  re->u.dir = read_coff_res_dir (wrbfd, finfo->data + rva, finfo, type,
 					 level + 1);
 	}
       else
 	{
-	  if (rva >= (rc_uint_type) (flaginfo->data_end - flaginfo->data))
-	    overrun (flaginfo, _("ID resource"));
+	  if (rva >= (rc_uint_type) (finfo->data_end - finfo->data))
+	    overrun (finfo, _("ID resource"));
 	  re->subdir = 0;
-	  re->u.res = read_coff_data_entry (wrbfd, flaginfo->data + rva, flaginfo, type);
+	  re->u.res = read_coff_data_entry (wrbfd, finfo->data + rva, finfo, type);
 	}
 
       *pp = re;
@@ -325,7 +308,7 @@ read_coff_res_dir (windres_bfd *wrbfd, const bfd_byte *data,
 
 static rc_res_resource *
 read_coff_data_entry (windres_bfd *wrbfd, const bfd_byte *data,
-		      const struct coff_file_info *flaginfo,
+		      const struct coff_file_info *finfo,
 		      const rc_res_id *type)
 {
   const struct extern_res_data *erd;
@@ -336,21 +319,21 @@ read_coff_data_entry (windres_bfd *wrbfd, const bfd_byte *data,
   if (type == NULL)
     fatal (_("resource type unknown"));
 
-  if ((size_t) (flaginfo->data_end - data) < sizeof (struct extern_res_data))
-    overrun (flaginfo, _("data entry"));
+  if ((size_t) (finfo->data_end - data) < sizeof (struct extern_res_data))
+    overrun (finfo, _("data entry"));
 
   erd = (const struct extern_res_data *) data;
 
   size = windres_get_32 (wrbfd, erd->size, 4);
   rva = windres_get_32 (wrbfd, erd->rva, 4);
-  if (rva < flaginfo->secaddr
-      || rva - flaginfo->secaddr >= (rc_uint_type) (flaginfo->data_end - flaginfo->data))
-    overrun (flaginfo, _("resource data"));
+  if (rva < finfo->secaddr
+      || rva - finfo->secaddr >= (rc_uint_type) (finfo->data_end - finfo->data))
+    overrun (finfo, _("resource data"));
 
-  resdata = flaginfo->data + (rva - flaginfo->secaddr);
+  resdata = finfo->data + (rva - finfo->secaddr);
 
-  if (size > (rc_uint_type) (flaginfo->data_end - resdata))
-    overrun (flaginfo, _("resource data size"));
+  if (size > (rc_uint_type) (finfo->data_end - resdata))
+    overrun (finfo, _("resource data size"));
 
   r = bin_to_res (wrbfd, *type, resdata, size);
 
@@ -518,22 +501,22 @@ write_coff_file (const char *filename, const char *target,
      know the various offsets we will need.  */
   coff_bin_sizes (resources, &cwi);
 
-  /* Force the directory strings to be 64 bit aligned.  Every other
-     structure is 64 bit aligned anyhow.  */
-  cwi.dirstrsize = (cwi.dirstrsize + 7) & ~7;
+  /* Force the directory strings to be 32 bit aligned.  Every other
+     structure is 32 bit aligned anyhow.  */
+  cwi.dirstrsize = (cwi.dirstrsize + 3) &~ 3;
 
   /* Actually convert the resources to binary.  */
   coff_to_bin (resources, &cwi);
 
-  /* Add another few bytes to the directory strings if needed for
+  /* Add another 2 bytes to the directory strings if needed for
      alignment.  */
-  if ((cwi.dirstrs.length & 7) != 0)
+  if ((cwi.dirstrs.length & 3) != 0)
     {
-      rc_uint_type pad = 8 - (cwi.dirstrs.length & 7);
       bfd_byte *ex;
 
-      ex = coff_alloc (& cwi.dirstrs, pad);
-      memset (ex, 0, pad);
+      ex = coff_alloc (&cwi.dirstrs, 2);
+      ex[0] = 0;
+      ex[1] = 0;
     }
 
   /* Make sure that the data we built came out to the same size as we
@@ -547,7 +530,7 @@ write_coff_file (const char *filename, const char *target,
 	    + cwi.dataentsize
 	    + cwi.resources.length);
 
-  if (!bfd_set_section_size (sec, length))
+  if (! bfd_set_section_size (abfd, sec, length))
     bfd_fatal ("bfd_set_section_size");
 
   bfd_set_reloc (abfd, sec, cwi.relocs, cwi.reloc_count);
@@ -758,10 +741,10 @@ coff_res_to_bin (const rc_res_resource *res, struct coff_write_info *cwi)
     cwi->resources.last->next = d;
 
   cwi->resources.last = d;
-  cwi->resources.length += (d->length + 7) & ~7;
+  cwi->resources.length += (d->length + 3) & ~3;
 
   windres_put_32 (cwi->wrbfd, erd->size, d->length);
 
-  /* Force the next resource to have 64 bit alignment.  */
-  d->length = (d->length + 7) & ~7;
+  /* Force the next resource to have 32 bit alignment.  */
+  d->length = (d->length + 3) & ~3;
 }

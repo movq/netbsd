@@ -1,4 +1,4 @@
-/*	$NetBSD: toc.c,v 1.1.1.1 2016/01/14 00:11:29 christos Exp $	*/
+/*	$NetBSD: toc.c,v 1.1 2016/01/14 00:11:29 christos Exp $	*/
 
 /* toc.c -- table of contents handling.
    Id: toc.c,v 1.6 2004/04/11 17:56:47 karl Exp 

@@ -1,5 +1,6 @@
 /* Prototypes for exported functions defined in xstormy16.c
-   Copyright (C) 2000-2019 Free Software Foundation, Inc.
+   Copyright (C) 2000, 2001, 2003, 2004, 2007, 2008
+   Free Software Foundation, Inc.
    Contributed by Red Hat, Inc.
 
 This file is part of GCC.
@@ -28,21 +29,33 @@ extern int direct_return (void);
 extern int xstormy16_interrupt_function_p (void);
 extern int xstormy16_epilogue_uses (int);
 extern void xstormy16_function_profiler (void);
-extern poly_int64 xstormy16_push_rounding (poly_int64);
 
 #if defined (TREE_CODE)
 extern void xstormy16_asm_output_aligned_common (FILE *, tree, const char *,
 						 int, int, int);
 #endif
 
+#if defined (TREE_CODE) && defined (HAVE_MACHINE_MODES)
+extern CUMULATIVE_ARGS xstormy16_function_arg_advance 
+ (CUMULATIVE_ARGS, enum machine_mode, tree, int);
+extern rtx xstormy16_function_arg
+ (CUMULATIVE_ARGS, enum machine_mode, tree, int);
+#endif
+
 #if defined (TREE_CODE) && defined (RTX_CODE)
 extern void xstormy16_initialize_trampoline (rtx, rtx, rtx);
+extern rtx xstormy16_function_value (const_tree, const_tree);
 #endif
 
 #ifdef RTX_CODE
 extern void xstormy16_emit_cbranch (enum rtx_code, rtx, rtx, rtx);
-extern char *xstormy16_output_cbranch_hi (rtx, const char *, int, rtx_insn *);
-extern char *xstormy16_output_cbranch_si (rtx, const char *, int, rtx_insn *);
+extern char *xstormy16_output_cbranch_hi (rtx, const char *, int, rtx);
+extern char *xstormy16_output_cbranch_si (rtx, const char *, int, rtx);
+extern int xstormy16_mode_dependent_address_p (rtx);
+extern int xstormy16_extra_constraint_p (rtx, int);
+
+extern void xstormy16_print_operand (FILE *, rtx, int);
+extern void xstormy16_print_operand_address (FILE *, rtx);
 
 extern void xstormy16_expand_casesi (rtx, rtx, rtx, rtx, rtx);
 extern void xstormy16_output_addr_vec (FILE *, rtx, rtx);
@@ -52,19 +65,19 @@ extern void xstormy16_expand_andqi3 (rtx *);
 #endif
 
 #if defined (HAVE_MACHINE_MODES) && defined (RTX_CODE)
-extern void xstormy16_split_cbranch (machine_mode, rtx, rtx, rtx);
-extern int  short_memory_operand (rtx, machine_mode);
-extern int  nonimmediate_nonstack_operand (rtx, machine_mode);
+extern void xstormy16_split_cbranch (enum machine_mode, rtx, rtx, rtx);
+extern int  short_memory_operand (rtx, enum machine_mode);
+extern int  nonimmediate_nonstack_operand (rtx, enum machine_mode);
 extern enum reg_class xstormy16_secondary_reload_class 
- (enum reg_class, machine_mode, rtx);
-extern void xstormy16_split_move (machine_mode, rtx, rtx);
-extern void xstormy16_expand_move (machine_mode, rtx, rtx);
-extern void xstormy16_expand_arith (machine_mode, enum rtx_code, 
+ (enum reg_class, enum machine_mode, rtx);
+extern enum reg_class xstormy16_preferred_reload_class (rtx, enum reg_class);
+extern void xstormy16_split_move (enum machine_mode, rtx, rtx);
+extern void xstormy16_expand_move (enum machine_mode, rtx, rtx);
+extern void xstormy16_expand_arith (enum machine_mode, enum rtx_code, 
 				    rtx, rtx, rtx);
-extern const char * xstormy16_output_shift (machine_mode, enum rtx_code, 
+extern const char * xstormy16_output_shift (enum machine_mode, enum rtx_code, 
 					    rtx, rtx, rtx);
-extern int  xstormy16_below100_symbol (rtx, machine_mode);
-extern int  xstormy16_splittable_below100_operand (rtx, machine_mode);
-extern bool xstormy16_legitimate_address_p (machine_mode, rtx, bool);
+extern int  xstormy16_below100_symbol (rtx, enum machine_mode);
+extern int  xstormy16_splittable_below100_operand (rtx, enum machine_mode);
 #endif
 

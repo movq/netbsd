@@ -1,7 +1,8 @@
 #!/bin/sh -u
 
 # Register protocol definitions for GDB, the GNU debugger.
-# Copyright (C) 2001-2019 Free Software Foundation, Inc.
+# Copyright 2001, 2002, 2007, 2008, 2009, 2010, 2011
+# Free Software Foundation, Inc.
 #
 # This file is part of GDB.
 #
@@ -17,6 +18,18 @@
 #
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
+move_if_change ()
+{
+    file=$1
+    if test -r ${file} && cmp -s "${file}" new-"${file}"
+    then
+	echo "${file} unchanged." 1>&2
+    else
+	mv new-"${file}" "${file}"
+	echo "${file} updated." 1>&2
+    fi
+}
 
 # Format of the input files
 read="type entry"
@@ -82,7 +95,7 @@ cat <<EOF
 /* *INDENT-OFF* */ /* THIS FILE IS GENERATED */
 
 /* A register protocol for GDB, the GNU debugger.
-   Copyright (C) 2001-2013 Free Software Foundation, Inc.
+   Copyright 2001, 2002 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -109,7 +122,6 @@ exec > new-$2
 copyright $1
 echo '#include "server.h"'
 echo '#include "regdef.h"'
-echo '#include "tdesc.h"'
 echo
 offset=0
 i=0
@@ -118,21 +130,12 @@ xmltarget=x
 xmlarch=x
 xmlosabi=x
 expedite=x
-feature=x
 exec < $1
 while do_read
 do
   if test "${type}" = "name"; then
     name="${entry}"
-
-    echo "const struct target_desc *tdesc_${name};"
-    echo ""
-    echo "void"
-    echo "init_registers_${name} (void)"
-    echo "{"
-    echo "  static struct target_desc tdesc_${name}_s;"
-    echo "  struct target_desc *result = &tdesc_${name}_s;"
-    echo "  struct tdesc_feature *feature = tdesc_create_feature (result, \"${name}\");"
+    echo "struct reg regs_${name}[] = {"
     continue
   elif test "${type}" = "xmltarget"; then
     xmltarget="${entry}"
@@ -146,32 +149,24 @@ do
   elif test "${type}" = "expedite"; then
     expedite="${entry}"
     continue
-  elif test "${type}" = "feature"; then
-    feature="${entry}"
-    continue
   elif test "${name}" = x; then
     echo "$0: $1 does not specify \`\`name''." 1>&2
     exit 1
   else
-    echo "  tdesc_create_reg (feature, \"${entry}\","
-    echo "  0, 0, NULL, ${type}, NULL);"
-
+    echo "  { \"${entry}\", ${offset}, ${type} },"
     offset=`expr ${offset} + ${type}`
     i=`expr $i + 1`
   fi
 done
 
+echo "};"
 echo
-echo "static const char *expedite_regs_${name}[] = { \"`echo ${expedite} | sed 's/,/", "/g'`\", 0 };"
-
-echo "#ifndef IN_PROCESS_AGENT"
-if test "${feature}" != x; then
-  echo "static const char *xmltarget_${name} = 0;"
-elif test "${xmltarget}" = x; then
+echo "const char *expedite_regs_${name}[] = { \"`echo ${expedite} | sed 's/,/", "/g'`\", 0 };"
+if test "${xmltarget}" = x; then
   if test "${xmlarch}" = x && test "${xmlosabi}" = x; then
-    echo "static const char *xmltarget_${name} = 0;"
+    echo "const char *xmltarget_${name} = 0;"
   else
-    echo "static const char *xmltarget_${name} = \"@<target>\\"
+    echo "const char *xmltarget_${name} = \"@<target>\\"
     if test "${xmlarch}" != x; then
       echo "<architecture>${xmlarch}</architecture>\\"
     fi
@@ -181,20 +176,21 @@ elif test "${xmltarget}" = x; then
     echo "</target>\";"
   fi
 else
-  echo "static const char *xmltarget_${name} = \"${xmltarget}\";"
+  echo "const char *xmltarget_${name} = \"${xmltarget}\";"
 fi
 echo
 
 cat <<EOF
-  result->xmltarget = xmltarget_${name};
-#endif
-
-  init_target_desc (result, expedite_regs_${name});
-
-  tdesc_${name} = result;
+void
+init_registers_${name} ()
+{
+    set_register_cache (regs_${name},
+			sizeof (regs_${name}) / sizeof (regs_${name}[0]));
+    gdbserver_expedite_regs = expedite_regs_${name};
+    gdbserver_xmltarget = xmltarget_${name};
 }
 EOF
 
 # close things off
 exec 1>&2
-mv -- "new-$2" "$2"
+move_if_change $2

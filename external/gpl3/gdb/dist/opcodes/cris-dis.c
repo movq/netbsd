@@ -1,5 +1,6 @@
 /* Disassembler code for CRIS.
-   Copyright (C) 2000-2019 Free Software Foundation, Inc.
+   Copyright 2000, 2001, 2002, 2004, 2005, 2006, 2007, 2008, 2009
+   Free Software Foundation, Inc.
    Contributed by Axis Communications AB, Lund, Sweden.
    Written by Hans-Peter Nilsson.
 
@@ -20,8 +21,8 @@
    Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston,
    MA 02110-1301, USA.  */
 
-#include "sysdep.h"
 #include "dis-asm.h"
+#include "sysdep.h"
 #include "opcode/cris.h"
 #include "libiberty.h"
 
@@ -813,7 +814,7 @@ print_with_operands (const struct cris_opcode *opcodep,
 	*tp++ = 'c';
 	*tp++ = 'r';
 	break;
-
+	
       case '[':
       case ']':
       case ',':

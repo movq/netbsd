@@ -1,5 +1,6 @@
 /* atof_vax.c - turn a Flonum into a VAX floating point number
-   Copyright (C) 1987-2020 Free Software Foundation, Inc.
+   Copyright 1987, 1992, 1993, 1995, 1997, 1999, 2000, 2005, 2007
+   Free Software Foundation, Inc.
 
    This file is part of GAS, the GNU Assembler.
 
@@ -267,27 +268,10 @@ flonum_gen2vax (int format_letter,	/* One of 'd' 'f' 'g' 'h'.  */
 	  int exponent_skippage;
 	  LITTLENUM_TYPE word1;
 
+	  /* JF: Deal with new Nan, +Inf and -Inf codes.  */
 	  if (f->sign != '-' && f->sign != '+')
 	    {
-	      if (f->sign == 0)
-		{
-		  /* All NaNs are 0.  */
-		  memset (words, 0x00, sizeof (LITTLENUM_TYPE) * precision);
-		}
-	      else if (f->sign == 'P')
-		{
-		  /* Positive Infinity.  */
-		  memset (words, 0xff, sizeof (LITTLENUM_TYPE) * precision);
-		  words[0] &= 0x7fff;
-		}
-	      else if (f->sign == 'N')
-		{
-		  /* Negative Infinity.  */
-		  memset (words, 0x00, sizeof (LITTLENUM_TYPE) * precision);
-		  words[0] = 0x0080;
-		}
-	      else
-		make_invalid_floating_point_number (words);
+	      make_invalid_floating_point_number (words);
 	      return return_value;
 	    }
 
@@ -311,7 +295,7 @@ flonum_gen2vax (int format_letter,	/* One of 'd' 'f' 'g' 'h'.  */
 	  /* Seek (and forget) 1st significant bit.  */
 	  for (exponent_skippage = 0;
 	       !next_bits (1);
-	       exponent_skippage++);
+	       exponent_skippage++);;
 
 	  exponent_1 = f->exponent + f->leader + 1 - f->low;
 	  /* Radix LITTLENUM_RADIX, point just higher than f->leader.  */
@@ -396,7 +380,7 @@ flonum_gen2vax (int format_letter,	/* One of 'd' 'f' 'g' 'h'.  */
   	Address of where to build floating point literal.
   		Assumed to be 'big enough'.
   	Address of where to return size of literal (in chars).
-
+  
    Out:	Input_line_pointer->of next char after floating number.
   	Error message, or 0.
   	Floating point literal.
@@ -404,7 +388,7 @@ flonum_gen2vax (int format_letter,	/* One of 'd' 'f' 'g' 'h'.  */
 
 #define MAXIMUM_NUMBER_OF_LITTLENUMS  8 	/* For .hfloats.  */
 
-const char *
+char *
 vax_md_atof (int what_statement_type,
 	     char *literalP,
 	     int *sizeP)

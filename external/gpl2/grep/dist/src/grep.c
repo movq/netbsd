@@ -1,4 +1,4 @@
-/*	$NetBSD: grep.c,v 1.2 2016/01/10 22:16:40 christos Exp $	*/
+/*	$NetBSD: grep.c,v 1.1 2016/01/10 21:36:20 christos Exp $	*/
 
 /* grep.c - main driver file for grep.
    Copyright 1992, 1997-1999, 2000 Free Software Foundation, Inc.
@@ -52,13 +52,6 @@ struct stats
   struct stats const *parent;
   struct stat stat;
 };
-
-#include <limits.h>
-#define MAX_OFF_T (sizeof(off_t) == sizeof(char) ? INT_MAX : \
-                   (sizeof(off_t) == sizeof(short) ? SHRT_MAX : \
-                    (sizeof(off_t) == sizeof(int) ? INT_MAX : \
-                     (sizeof(off_t) == sizeof(long) ? LONG_MAX : \
-                      (sizeof(off_t) == sizeof(long long) ? LLONG_MAX : INTMAX_MAX)))))
 
 /* base of chain of stat buffers, used to detect directory loops */
 static struct stats stats_base;
@@ -211,7 +204,7 @@ context_length_arg (char const *str, int *out)
 	 && 0 <= (*out = value)
 	 && *out == value))
     {
-      error (2, 0, "%s: %s", str, _("invalid context length argument"));
+      error (2, 0, "%s: %s\n", str, _("invalid context length argument"));
     }
 }
 
@@ -549,10 +542,7 @@ prline (char const *beg, char const *lim, int sep)
 	  if (b == lim)
 	    break;
 	  if (match_size == 0)
-	    {
-	      beg++;
-	      continue;
-	    }
+	    break;
 	  if(color_option)
 	    printf("\33[%sm", grep_color);
 	  fwrite(b, sizeof (char), match_size, stdout);
@@ -1008,7 +998,7 @@ grepdir (char const *dir, struct stats const *stats)
 	  && ancestor->stat.st_dev == stats->stat.st_dev)
 	{
 	  if (!suppress_errors)
-	    error (0, 0, _("warning: %s: %s"), dir,
+	    error (0, 0, _("warning: %s: %s\n"), dir,
 		   _("recursive directory loop"));
 	  return 1;
 	}
@@ -1073,11 +1063,8 @@ Regexp selection and interpretation:\n"), program_name);
       printf (_("\
   -E, --extended-regexp     PATTERN is an extended regular expression\n\
   -F, --fixed-strings       PATTERN is a set of newline-separated strings\n\
-  -G, --basic-regexp        PATTERN is a basic regular expression\n"));
-#if HAVE_LIBPCRE
-      printf (_("\
+  -G, --basic-regexp        PATTERN is a basic regular expression\n\
   -P, --perl-regexp         PATTERN is a Perl regular expression\n"));
-#endif
       printf (_("\
   -e, --regexp=PATTERN      use PATTERN as a regular expression\n\
   -f, --file=FILE           obtain PATTERN from FILE\n\
@@ -1296,16 +1283,13 @@ int
 main (int argc, char **argv)
 {
   char *keys;
-  size_t cc, keycc, oldcc, keyalloc;
+  size_t keycc, oldcc, keyalloc;
   int with_filenames;
-  int opt, status;
+  int opt, cc, status;
   int default_context;
   FILE *fp;
   extern char *optarg;
   extern int optind;
-#ifdef __NetBSD__
-  extern char *__progname;
-#endif
 
   initialize_main (&argc, &argv);
   program_name = argv[0];
@@ -1348,7 +1332,7 @@ main (int argc, char **argv)
   eolbyte = '\n';
   filename_mask = ~0;
 
-  max_count = MAX_OFF_T;
+  max_count = TYPE_MAXIMUM (off_t);
 
   /* The value -1 means to use DEFAULT_CONTEXT. */
   out_after = out_before = -1;
@@ -1523,7 +1507,7 @@ main (int argc, char **argv)
 		break;
 	      /* Fall through.  */
 	    case LONGINT_OVERFLOW:
-	      max_count = MAX_OFF_T;
+	      max_count = TYPE_MAXIMUM (off_t);
 	      break;
 
 	    default:
@@ -1673,11 +1657,7 @@ main (int argc, char **argv)
     }
 
   if (! matcher)
-#ifdef __NetBSD__
-    matcher = __progname;
-#else
     matcher = "grep";
-#endif
 
   if (show_version)
     {
@@ -1756,12 +1736,7 @@ warranty; not even for MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.\n"))
 	while ( ++optind < argc);
     }
   else
-    {
-      if (directories == RECURSE_DIRECTORIES) {
-	error (0, 0, _("warning: recursive search of stdin"));
-      }
-      status = grepfile ((char *) NULL, &stats_base);
-    }
+    status = grepfile ((char *) NULL, &stats_base);
 
   /* We register via atexit() to test stdout.  */
   exit (errseen ? 2 : status);

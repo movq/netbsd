@@ -1,6 +1,7 @@
 /* Utilities to execute a program in a subprocess (possibly linked by pipes
    with other subprocesses), and wait for it.  Generic Win32 specialization.
-   Copyright (C) 1996-2020 Free Software Foundation, Inc.
+   Copyright (C) 1996, 1997, 1998, 1999, 2000, 2001, 2003, 2004, 2005, 2006
+   Free Software Foundation, Inc.
 
 This file is part of the libiberty library.
 Libiberty is free software; you can redistribute it and/or
@@ -77,13 +78,13 @@ backslashify (char *s)
 }
 
 static int pex_win32_open_read (struct pex_obj *, const char *, int);
-static int pex_win32_open_write (struct pex_obj *, const char *, int, int);
+static int pex_win32_open_write (struct pex_obj *, const char *, int);
 static pid_t pex_win32_exec_child (struct pex_obj *, int, const char *,
 				  char * const *, char * const *,
                                   int, int, int, int,
 				  const char **, int *);
 static int pex_win32_close (struct pex_obj *, int);
-static pid_t pex_win32_wait (struct pex_obj *, pid_t, int *,
+static int pex_win32_wait (struct pex_obj *, pid_t, int *,
 			   struct pex_time *, int, const char **, int *);
 static int pex_win32_pipe (struct pex_obj *, int *, int);
 static FILE *pex_win32_fdopenr (struct pex_obj *, int, int);
@@ -125,12 +126,10 @@ pex_win32_open_read (struct pex_obj *obj ATTRIBUTE_UNUSED, const char *name,
 
 static int
 pex_win32_open_write (struct pex_obj *obj ATTRIBUTE_UNUSED, const char *name,
-		      int binary, int append)
+		      int binary)
 {
   /* Note that we can't use O_EXCL here because gcc may have already
      created the temporary file via make_temp_file.  */
-  if (append)
-    return -1;
   return _open (name,
 		(_O_WRONLY | _O_CREAT | _O_TRUNC
 		 | (binary ? _O_BINARY : _O_TEXT)),
@@ -211,8 +210,10 @@ mingw_rootify (const char *executable)
   if (!namebuf || !foundbuf)
     {
       RegCloseKey (hKey);
-      free (namebuf);
-      free (foundbuf);
+      if (namebuf)
+	free (namebuf);
+      if (foundbuf)
+	free (foundbuf);
       return executable;
     }
 
@@ -314,7 +315,8 @@ msys_rootify (const char *executable)
     return tack_on_executable (buf, executable);
 
   /* failed */
-  free (buf);
+  if (buf)
+    free (buf);
   return executable;
 }
 #endif
@@ -341,25 +343,17 @@ argv_to_cmdline (char *const *argv)
   char *p;
   size_t cmdline_len;
   int i, j, k;
-  int needs_quotes;
 
   cmdline_len = 0;
   for (i = 0; argv[i]; i++)
     {
-      /* We only quote arguments that contain spaces, \t or " characters to
-	 prevent wasting 2 chars per argument of the CreateProcess 32k char
-	 limit.  We need only escape embedded double-quotes and immediately
+      /* We quote every last argument.  This simplifies the problem;
+	 we need only escape embedded double-quotes and immediately
 	 preceeding backslash characters.  A sequence of backslach characters
 	 that is not follwed by a double quote character will not be
 	 escaped.  */
-      needs_quotes = 0;
       for (j = 0; argv[i][j]; j++)
 	{
-	  if (argv[i][j] == ' ' || argv[i][j] == '\t' || argv[i][j] == '"')
-	    {
-	      needs_quotes = 1;
-	    }
-
 	  if (argv[i][j] == '"')
 	    {
 	      /* Escape preceeding backslashes.  */
@@ -369,39 +363,18 @@ argv_to_cmdline (char *const *argv)
 	      cmdline_len++;
 	    }
 	}
-      if (j == 0)
-	needs_quotes = 1;
       /* Trailing backslashes also need to be escaped because they will be
          followed by the terminating quote.  */
-      if (needs_quotes)
-        {
-          for (k = j - 1; k >= 0 && argv[i][k] == '\\'; k--)
-            cmdline_len++;
-        }
+      for (k = j - 1; k >= 0 && argv[i][k] == '\\'; k--)
+	cmdline_len++;
       cmdline_len += j;
-      /* for leading and trailing quotes and space */
-      cmdline_len += needs_quotes * 2 + 1;
+      cmdline_len += 3;  /* for leading and trailing quotes and space */
     }
   cmdline = XNEWVEC (char, cmdline_len);
   p = cmdline;
   for (i = 0; argv[i]; i++)
     {
-      needs_quotes = 0;
-      for (j = 0; argv[i][j]; j++)
-        {
-          if (argv[i][j] == ' ' || argv[i][j] == '\t' || argv[i][j] == '"')
-            {
-              needs_quotes = 1;
-              break;
-            }
-        }
-      if (j == 0)
-	needs_quotes = 1;
-
-      if (needs_quotes)
-        {
-          *p++ = '"';
-        }
+      *p++ = '"';
       for (j = 0; argv[i][j]; j++)
 	{
 	  if (argv[i][j] == '"')
@@ -412,12 +385,9 @@ argv_to_cmdline (char *const *argv)
 	    }
 	  *p++ = argv[i][j];
 	}
-      if (needs_quotes)
-        {
-          for (k = j - 1; k >= 0 && argv[i][k] == '\\'; k--)
-            *p++ = '\\';
-          *p++ = '"';
-        }
+      for (k = j - 1; k >= 0 && argv[i][k] == '\\'; k--)
+	*p++ = '\\';
+      *p++ = '"';
       *p++ = ' ';
     }
   p[-1] = '\0';
@@ -637,7 +607,8 @@ win32_spawn (const char *executable,
 		      si,
 		      pi))
     {
-      free (env_block);
+      if (env_block)
+        free (env_block);
 
       free (full_executable);
 
@@ -647,14 +618,18 @@ win32_spawn (const char *executable,
   /* Clean up.  */
   CloseHandle (pi->hThread);
   free (full_executable);
-  free (env_block);
+  if (env_block)
+    free (env_block);
 
   return (pid_t) pi->hProcess;
 
  error:
-  free (env_block);
-  free (cmdline);
-  free (full_executable);
+  if (env_block)
+    free (env_block);
+  if (cmdline)
+    free (cmdline);
+  if (full_executable)
+    free (full_executable);
 
   return (pid_t) -1;
 }
@@ -730,7 +705,7 @@ spawn_script (const char *executable, char *const *argv,
 				     dwCreationFlags, si, pi);
 		  if (executable1 != newex)
 		    free ((char *) newex);
-		  if (pid == (pid_t) -1)
+		  if ((long) pid < 0)
 		    {
 		      newex = msys_rootify (executable1);
 		      if (newex != executable1)
@@ -747,7 +722,7 @@ spawn_script (const char *executable, char *const *argv,
 	    }
 	}
     }
-  if (pid == (pid_t) -1)
+  if ((long) pid < 0)
     errno = save_errno;
   return pid;
 }
@@ -771,21 +746,6 @@ pex_win32_exec_child (struct pex_obj *obj ATTRIBUTE_UNUSED, int flags,
   OSVERSIONINFO version_info;
   STARTUPINFO si;
   PROCESS_INFORMATION pi;
-  int orig_out, orig_in, orig_err;
-  BOOL separate_stderr = !(flags & PEX_STDERR_TO_STDOUT);
-
-  /* Ensure we have inheritable descriptors to pass to the child.  */
-  orig_in = in;
-  in = _dup (orig_in);
-  
-  orig_out = out;
-  out = _dup (orig_out);
-  
-  if (separate_stderr)
-    {
-      orig_err = errdes;
-      errdes = _dup (orig_err);
-    }
 
   stdin_handle = INVALID_HANDLE_VALUE;
   stdout_handle = INVALID_HANDLE_VALUE;
@@ -793,7 +753,7 @@ pex_win32_exec_child (struct pex_obj *obj ATTRIBUTE_UNUSED, int flags,
 
   stdin_handle = (HANDLE) _get_osfhandle (in);
   stdout_handle = (HANDLE) _get_osfhandle (out);
-  if (separate_stderr)
+  if (!(flags & PEX_STDERR_TO_STDOUT))
     stderr_handle = (HANDLE) _get_osfhandle (errdes);
   else
     stderr_handle = stdout_handle;
@@ -862,29 +822,12 @@ pex_win32_exec_child (struct pex_obj *obj ATTRIBUTE_UNUSED, int flags,
       *errmsg = "CreateProcess";
     }
 
-  /* If the child was created successfully, close the original file
-     descriptors.  If the process creation fails, these are closed by
-     pex_run_in_environment instead.  We must not close them twice as
-     that seems to cause a Windows exception.  */
-     
-  if (pid != (pid_t) -1)
-    {
-      if (orig_in != STDIN_FILENO)
-	_close (orig_in);
-      if (orig_out != STDOUT_FILENO)
-	_close (orig_out);
-      if (separate_stderr
-	  && orig_err != STDERR_FILENO)
-	_close (orig_err);
-    }
-
-  /* Close the standard input, standard output and standard error handles
-     in the parent.  */ 
-
-  _close (in);
-  _close (out);
-  if (separate_stderr)
-    _close (errdes);
+  /* Close the standard output and standard error handles in the
+     parent.  */ 
+  if (out != STDOUT_FILENO)
+    obj->funcs->close (obj, out);
+  if (errdes != STDERR_FILENO)
+    obj->funcs->close (obj, errdes);
 
   return pid;
 }
@@ -897,7 +840,7 @@ pex_win32_exec_child (struct pex_obj *obj ATTRIBUTE_UNUSED, int flags,
    status == 3.  We fix the status code to conform to the usual WIF*
    macros.  Note that WIFSIGNALED will never be true under CRTDLL. */
 
-static pid_t
+static int
 pex_win32_wait (struct pex_obj *obj ATTRIBUTE_UNUSED, pid_t pid,
 		int *status, struct pex_time *time, int done ATTRIBUTE_UNUSED,
 		const char **errmsg, int *err)
@@ -940,7 +883,7 @@ static int
 pex_win32_pipe (struct pex_obj *obj ATTRIBUTE_UNUSED, int *p,
 		int binary)
 {
-  return _pipe (p, 256, (binary ? _O_BINARY : _O_TEXT) | _O_NOINHERIT);
+  return _pipe (p, 256, binary ? _O_BINARY : _O_TEXT);
 }
 
 /* Get a FILE pointer to read from a file descriptor.  */
@@ -949,11 +892,6 @@ static FILE *
 pex_win32_fdopenr (struct pex_obj *obj ATTRIBUTE_UNUSED, int fd,
 		   int binary)
 {
-  HANDLE h = (HANDLE) _get_osfhandle (fd);
-  if (h == INVALID_HANDLE_VALUE)
-    return NULL;
-  if (! SetHandleInformation (h, HANDLE_FLAG_INHERIT, 0))
-    return NULL;
   return fdopen (fd, binary ? "rb" : "r");
 }
 

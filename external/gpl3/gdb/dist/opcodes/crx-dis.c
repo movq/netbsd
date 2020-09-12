@@ -1,5 +1,5 @@
 /* Disassembler code for CRX.
-   Copyright (C) 2004-2019 Free Software Foundation, Inc.
+   Copyright 2004, 2005, 2006, 2007 Free Software Foundation, Inc.
    Contributed by Tomer Levi, NSC, Israel.
    Written by Tomer Levi.
 
@@ -20,8 +20,8 @@
    Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston,
    MA 02110-1301, USA.  */
 
+#include "dis-asm.h"
 #include "sysdep.h"
-#include "disassemble.h"
 #include "opcode/crx.h"
 
 /* String to print when opcode was not matched.  */
@@ -58,11 +58,11 @@ typedef struct
 cinv_entry;
 
 /* CRX 'cinv' options.  */
-static const cinv_entry crx_cinvs[] =
+const cinv_entry crx_cinvs[] =
 {
-  {"[i]", 2}, {"[i,u]", 3}, {"[d]", 4}, {"[d,u]", 5},
-  {"[d,i]", 6}, {"[d,i,u]", 7}, {"[b]", 8},
-  {"[b,i]", 10}, {"[b,i,u]", 11}, {"[b,d]", 12},
+  {"[i]", 2}, {"[i,u]", 3}, {"[d]", 4}, {"[d,u]", 5}, 
+  {"[d,i]", 6}, {"[d,i,u]", 7}, {"[b]", 8}, 
+  {"[b,i]", 10}, {"[b,i,u]", 11}, {"[b,d]", 12}, 
   {"[b,d,u]", 13}, {"[b,d,i]", 14}, {"[b,d,i,u]", 15}
 };
 
@@ -76,27 +76,27 @@ typedef enum REG_ARG_TYPE
     /* CO-Processor register (c<N>).  */
     COP_ARG,
     /* CO-Processor special register (cs<N>).  */
-    COPS_ARG
+    COPS_ARG 
   }
 REG_ARG_TYPE;
 
 /* Number of valid 'cinv' instruction options.  */
-static int NUMCINVS = ((sizeof crx_cinvs)/(sizeof crx_cinvs[0]));
+int NUMCINVS = ((sizeof crx_cinvs)/(sizeof crx_cinvs[0]));
 /* Current opcode table entry we're disassembling.  */
-static const inst *instruction;
+const inst *instruction;
 /* Current instruction we're disassembling.  */
-static ins currInsn;
+ins currInsn;
 /* The current instruction is read into 3 consecutive words.  */
-static wordU words[3];
+wordU words[3];
 /* Contains all words in appropriate order.  */
-static ULONGLONG allWords;
+ULONGLONG allWords;
 /* Holds the current processed argument number.  */
-static int processing_argument_number;
+int processing_argument_number;
 /* Nonzero means a CST4 instruction.  */
-static int cst4flag;
+int cst4flag;
 /* Nonzero means the instruction's original size is
    incremented (escape sequence is used).  */
-static int size_changed;
+int size_changed;
 
 static int get_number_of_operands (void);
 static argtype getargtype     (operand_type);
@@ -244,7 +244,7 @@ powerof2 (int x)
 void
 getregliststring (int mask, char *string, enum REG_ARG_TYPE core_cop)
 {
-  char temp_string[16];
+  char temp_string[5];
   int i;
 
   string[0] = '{';
@@ -534,8 +534,8 @@ print_arg (argument *a, bfd_vma memaddr, struct disassemble_info *info)
 
       else if (INST_HAS_REG_LIST)
         {
-	  REG_ARG_TYPE reg_arg_type = IS_INSN_TYPE (COP_REG_INS) ?
-				 COP_ARG : IS_INSN_TYPE (COPS_REG_INS) ?
+	  REG_ARG_TYPE reg_arg_type = IS_INSN_TYPE (COP_REG_INS) ? 
+				 COP_ARG : IS_INSN_TYPE (COPS_REG_INS) ? 
 				 COPS_ARG : (instruction->flags & USER_REG) ?
 				 USER_REG_ARG : REG_ARG;
 
@@ -548,7 +548,7 @@ print_arg (argument *a, bfd_vma memaddr, struct disassemble_info *info)
 		    func (stream, "%s", string);
 		  }
 		else
-		  func (stream, "$0x%lx", a->constant & 0xffffffff);
+		  func (stream, "$0x%lx", a->constant);
 	    }
 	  else
             {
@@ -557,12 +557,12 @@ print_arg (argument *a, bfd_vma memaddr, struct disassemble_info *info)
             }
         }
       else
-	func (stream, "$0x%lx", a->constant & 0xffffffff);
+	func (stream, "$0x%lx", a->constant);
       break;
 
     case arg_idxr:
-      func (stream, "0x%lx(%s,%s,%d)", a->constant & 0xffffffff,
-	    getregname (a->r), getregname (a->i_r), powerof2 (a->scale));
+      func (stream, "0x%lx(%s,%s,%d)", a->constant, getregname (a->r),
+	    getregname (a->i_r), powerof2 (a->scale));
       break;
 
     case arg_rbase:
@@ -570,7 +570,7 @@ print_arg (argument *a, bfd_vma memaddr, struct disassemble_info *info)
       break;
 
     case arg_cr:
-      func (stream, "0x%lx(%s)", a->constant & 0xffffffff, getregname (a->r));
+      func (stream, "0x%lx(%s)", a->constant, getregname (a->r));
 
       if (IS_INSN_TYPE (LD_STOR_INS_INC))
 	func (stream, "+");
@@ -714,7 +714,9 @@ get_words_at_PC (bfd_vma memaddr, struct disassemble_info *info)
 /* Prints the instruction by calling print_arguments after proper matching.  */
 
 int
-print_insn_crx (bfd_vma memaddr, struct disassemble_info *info)
+print_insn_crx (memaddr, info)
+     bfd_vma memaddr;
+     struct disassemble_info *info;
 {
   int is_decoded;     /* Nonzero means instruction has a match.  */
 
@@ -727,7 +729,7 @@ print_insn_crx (bfd_vma memaddr, struct disassemble_info *info)
   /* Find a matching opcode in table.  */
   is_decoded = match_opcode ();
   /* If found, print the instruction's mnemonic and arguments.  */
-  if (is_decoded > 0 && (words[0] != 0 || words[1] != 0))
+  if (is_decoded > 0 && (words[0] << 16 || words[1]) != 0)
     {
       info->fprintf_func (info->stream, "%s", instruction->mnemonic);
       if ((currInsn.nargs = get_number_of_operands ()) != 0)

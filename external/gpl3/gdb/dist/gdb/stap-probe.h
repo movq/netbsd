@@ -1,6 +1,6 @@
 /* SystemTap probe support for GDB.
 
-   Copyright (C) 2012-2019 Free Software Foundation, Inc.
+   Copyright (C) 2012-2013 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -20,33 +20,13 @@
 #if !defined (STAP_PROBE_H)
 #define STAP_PROBE_H 1
 
-/* For `struct parser_state'.  */
-#include "parser-defs.h"
-
 /* Structure which holds information about the parsing process of one probe's
    argument.  */
 
 struct stap_parse_info
 {
-  stap_parse_info (const char *arg_, struct type *arg_type_,
-		   size_t initial_size, const struct language_defn *lang,
-		   struct gdbarch *gdbarch)
-    : arg (arg_),
-      pstate (initial_size, lang, gdbarch),
-      saved_arg (arg_),
-      arg_type (arg_type_),
-      gdbarch (gdbarch),
-      inside_paren_p (0)
-  {
-  }
-
-  DISABLE_COPY_AND_ASSIGN (stap_parse_info);
-
   /* The probe's argument in a string format.  */
   const char *arg;
-
-  /* The parser state to be used when generating the expression.  */
-  struct parser_state pstate;
 
   /* A pointer to the full chain of arguments.  This is useful for printing
      error messages.  The parser functions should not modify this argument

@@ -1,4 +1,4 @@
-# Copyright 2005-2019 Free Software Foundation, Inc.
+# Copyright 2005, 2007, 2008, 2009, 2010, 2011 Free Software Foundation, Inc.
 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -13,27 +13,37 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
+if $tracelevel then {
+	strace $tracelevel
+}
+
 load_lib "ada.exp"
 
 if { [skip_ada_tests] } { return -1 }
 
 # This testcase verifies the behavior of the `start' command, which
 # does not work when we use the gdb stub...
-if [use_gdb_stub] {
-    untested "skipping tests due to use_gdb_stub"
+if [target_info exists use_gdb_stub] {
+    untested exec_changed.exp
     return
 }
 
-standard_ada_testfile first
+set testdir "exec_changed"
+file mkdir ${objdir}/${subdir}/${testdir}
 
 # Build the first test program (note that cygwin needs the $EXEEXT).
-if {[gdb_compile_ada "${srcfile}" "${binfile}$EXEEXT" executable {debug}] != ""} {
+set testfile1 "${testdir}/first"
+set srcfile1 ${srcdir}/${subdir}/${testfile1}.adb
+set binfile1 ${objdir}/${subdir}/${testfile1}$EXEEXT
+
+if {[gdb_compile_ada "${srcfile1}" "${binfile1}" executable {debug}] != ""} {
     return -1
 }
 
 # Build the second test program
-set srcfile2 ${srcdir}/${subdir}/${testdir}/second.adb
-set binfile2 [standard_output_file second$EXEEXT]
+set testfile2 "${testdir}/second"
+set srcfile2 ${srcdir}/${subdir}/${testfile2}.adb
+set binfile2 ${objdir}/${subdir}/${testfile2}$EXEEXT
 
 if {[gdb_compile_ada "${srcfile2}" "${binfile2}" executable {debug}] != ""} {
     return -1
@@ -41,15 +51,16 @@ if {[gdb_compile_ada "${srcfile2}" "${binfile2}" executable {debug}] != ""} {
 
 # Start with a fresh gdb.
 
-set common_binfile [standard_output_file common$EXEEXT]
+set testfile "${testdir}/common"
+set binfile ${objdir}/${subdir}/${testfile}$EXEEXT
 
 gdb_start
 gdb_reinitialize_dir $srcdir/$subdir
 
 # Load the first executable.
 
-gdb_test "shell mv ${binfile} ${common_binfile}" ".*" ""
-gdb_load ${common_binfile}
+gdb_test "shell mv ${binfile1} ${binfile}" ".*" ""
+gdb_load ${binfile}
 
 # Start the program, we should land in the program main procedure
 if { [gdb_start_cmd] < 0 } {
@@ -65,10 +76,10 @@ gdb_test "" \
 # second executable into its place.  Ensure that the new
 # executable is at least a second newer than the old.
 
-gdb_test "shell mv ${common_binfile} ${binfile}" ".*" ""
-gdb_test "shell mv ${binfile2} ${common_binfile}" ".*" ""
+gdb_test "shell mv ${binfile} ${binfile1}" ".*" ""
+gdb_test "shell mv ${binfile2} ${binfile}" ".*" ""
 gdb_test "shell sleep 1" ".*" ""
-gdb_test "shell touch ${common_binfile}" ".*" ""
+gdb_test "shell touch ${binfile}" ".*" ""
 
 # Start the program a second time, GDB should land in procedure Second
 # this time.
@@ -79,31 +90,4 @@ if { [gdb_start_cmd] < 0 } {
     gdb_test "" \
              "second \\(\\) at .*second.adb.*" \
              "start second"
-}
-
-# Try again, this time with just changing the file time of first.
-
-clean_restart "${binfile}$EXEEXT"
-
-# Ensure we don't accidently use the main symbol cache.
-gdb_test_no_output "mt set symbol-cache-size 0"
-
-# Put something in the symbol lookup cache that will get looked up when
-# starting after having re-read symbols.  PR 17855.
-gdb_breakpoint break_me
-
-gdb_test "shell touch ${binfile}$EXEEXT" ".*" ""
-gdb_test "shell sleep 1" ".*" ""
-
-if { [gdb_start_cmd] < 0 } {
-    # PR 17855: At this point gdb may have crashed or gotten an internal
-    # error, but we still need to detect this.  Just issue any simple command
-    # to verify gdb is still running.  This will establish in gdb.log whether
-    # gdb is still running.
-    gdb_test_no_output "set \$check_gdb_running = 0" "check gdb running"
-    fail "start just first"
-} else {
-    gdb_test "" \
-	"first \\(\\) at .*first.adb.*" \
-	"start just first"
 }

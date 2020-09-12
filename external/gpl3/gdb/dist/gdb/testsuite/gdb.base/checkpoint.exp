@@ -1,4 +1,5 @@
-#   Copyright 2005-2019 Free Software Foundation, Inc.
+#   Copyright 2005, 2007, 2008, 2009, 2010, 2011
+#   Free Software Foundation, Inc.
 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -13,6 +14,14 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
+if $tracelevel then {
+	strace $tracelevel
+	}
+
+if { [is_remote target] || ![isnative] } then {
+    continue
+}
+
 # Until "set follow-fork-mode" and "catch fork" are implemented on
 # other targets...
 #
@@ -20,34 +29,30 @@ if {![istarget "*-*-linux*"]} then {
     continue
 }
 
-# Checkpoint support is currently implemented in the Linux native
-# target, so only works with "target native".
-if { [target_info gdb_protocol] != "" } {
-    continue
-}
 
-# Must name the source file explicitly, otherwise when driven by
-# checkpoints-ns.exp, we'd try compiling checkpoints-ns.c, which
-# doesn't exist.
-standard_testfile checkpoint.c
+set testfile "checkpoint"
+set srcfile ${testfile}.c
+set binfile ${objdir}/${subdir}/${testfile}
 
-set pi_txt [gdb_remote_download host ${srcdir}/${subdir}/pi.txt]
-if {[is_remote host]} {
-    set copy1_txt copy1.txt
-} else {
-    set copy1_txt [standard_output_file copy1.txt]
-}
-
-if {[prepare_for_testing "failed to prepare" $testfile $srcfile \
-	 [list debug "additional_flags=-DPI_TXT=\"$pi_txt\" -DCOPY1_TXT=\"$copy1_txt\""]]} {
+if  { [gdb_compile "${srcdir}/${subdir}/${srcfile}" "${binfile}" executable {debug}] != "" } {
+     untested checkpoint.exp
      return -1
 }
+
+# Start with a fresh gdb
+
+gdb_exit
+gdb_start
+gdb_reinitialize_dir $srcdir/$subdir
+gdb_load ${binfile}
 
 global gdb_prompt
 
 #
 # This tests gdb checkpoint and restart.
 #
+
+remote_download host ${srcdir}/${subdir}/pi.txt pi.txt
 
 runto_main
 set break1_loc [gdb_get_line_number "breakpoint 1"]
@@ -88,7 +93,7 @@ gdb_test "continue 10" "breakpoint 1.*" "break1 ten"
 gdb_test "checkpoint" ".*" ""
 
 gdb_test "info checkpoints" \
-    " 1 .* 2 .* 3 .* 4 .* 5 .* 6 .* 7 .* 8 .* 9 .* 10 .*" \
+    " 10 .* 9 .* 8 .* 7 .* 6 .* 5 .* 4 .* 3 .* 2 .* 1 .*" \
     "info checkpoints one"
 
 delete_breakpoints
@@ -153,9 +158,9 @@ gdb_test "restart 0" "Switching to .*breakpoint 2.*" "restart 0 one"
 gdb_breakpoint $break3_loc
 gdb_test "continue" "breakpoint 3.*" "break3 one"
 
-gdb_test "shell diff -s $pi_txt $copy1_txt" \
-    "Files .*pi.txt and .*copy1.txt are identical.*" \
-    "diff input and output one"
+gdb_test "shell diff -s pi.txt copy1.txt" \
+    "Files pi.txt and copy1.txt are identical.*" \
+    "Diff input and output one"
 
 #
 # And now run from various checkpoints, allowing 
@@ -206,9 +211,9 @@ gdb_test "continue 1100" "breakpoint 1.*" "breakpoint 1 7 one"
 gdb_test "step" "if .c == EOF.*" "step in 7 two"
 gdb_test "print lines" " = 1162.*" "verify lines 7 two"
 
-gdb_test "shell diff -s $pi_txt $copy1_txt" \
-    "Files .*pi.txt and .*copy1.txt are identical.*" \
-    "diff input and output two"
+gdb_test "shell diff -s pi.txt copy1.txt" \
+    "Files pi.txt and copy1.txt are identical.*" \
+    "Diff input and output two"
 
 # 
 # OK, now allow the original program to delete the output file, 
@@ -219,18 +224,52 @@ gdb_test "restart 0" "Switching to .*breakpoint 3.*" "restart 0 one"
 gdb_breakpoint $break4_loc
 gdb_test "continue" "breakpoint 4.*" "break4 one"
 
-gdb_test "shell diff $pi_txt $copy1_txt" \
-    "diff: .*copy1.txt: No such file or directory" \
+gdb_test "shell diff pi.txt copy1.txt" \
+    "diff: copy1.txt: No such file or directory" \
     "delete copy1"
 
 delete_breakpoints
 gdb_breakpoint $break2_loc
 
-for {set num 1} {$num <= 10} {incr num} {
-    gdb_test "restart $num" "if .c == EOF.*" "restart $num three"
-    gdb_test "continue" "breakpoint 2.*" "break2 $num one"
-    gdb_test "print (long) ftell (out) > 100000" " = 1.*" "outfile still open $num"
-}
+gdb_test "restart 1" "if .c == EOF.*" "restart 1 three"
+gdb_test "continue" "breakpoint 2.*" "break2 1 one"
+gdb_test "print ftell (out) > 100000" " = 1.*" "outfile still open 1"
+
+gdb_test "restart 2" "if .c == EOF.*" "restart 1 three"
+gdb_test "continue" "breakpoint 2.*" "break2 2 one"
+gdb_test "print ftell (out) > 100000" " = 1.*" "outfile still open 2"
+
+gdb_test "restart 3" "if .c == EOF.*" "restart 1 three"
+gdb_test "continue" "breakpoint 2.*" "break2 3 one"
+gdb_test "print ftell (out) > 100000" " = 1.*" "outfile still open 3"
+
+gdb_test "restart 4" "if .c == EOF.*" "restart 1 three"
+gdb_test "continue" "breakpoint 2.*" "break2 4 one"
+gdb_test "print ftell (out) > 100000" " = 1.*" "outfile still open 4"
+
+gdb_test "restart 5" "if .c == EOF.*" "restart 1 three"
+gdb_test "continue" "breakpoint 2.*" "break2 5 one"
+gdb_test "print ftell (out) > 100000" " = 1.*" "outfile still open 5"
+
+gdb_test "restart 6" "if .c == EOF.*" "restart 1 three"
+gdb_test "continue" "breakpoint 2.*" "break2 6 one"
+gdb_test "print ftell (out) > 100000" " = 1.*" "outfile still open 6"
+
+gdb_test "restart 7" "if .c == EOF.*" "restart 1 three"
+gdb_test "continue" "breakpoint 2.*" "break2 7 one"
+gdb_test "print ftell (out) > 100000" " = 1.*" "outfile still open 7"
+
+gdb_test "restart 8" "if .c == EOF.*" "restart 1 three"
+gdb_test "continue" "breakpoint 2.*" "break2 8 one"
+gdb_test "print ftell (out) > 100000" " = 1.*" "outfile still open 8"
+
+gdb_test "restart 9" "if .c == EOF.*" "restart 1 three"
+gdb_test "continue" "breakpoint 2.*" "break2 9 one"
+gdb_test "print ftell (out) > 100000" " = 1.*" "outfile still open 9"
+
+gdb_test "restart 10" "if .c == EOF.*" "restart 1 three"
+gdb_test "continue" "breakpoint 2.*" "break2 10 one"
+gdb_test "print ftell (out) > 100000" " = 1.*" "outfile still open 10"
 
 #
 # Now confirm that if one fork exits, we automatically switch to another one.
@@ -239,29 +278,29 @@ for {set num 1} {$num <= 10} {incr num} {
 delete_breakpoints
 gdb_test "continue" \
     "Deleting copy.*$inferior_exited_re normally.*Switching to.*" \
-    "exit, dropped into next fork one"
+    "Exit, dropped into next fork one"
 
 gdb_test "continue" \
     "Deleting copy.*$inferior_exited_re normally.*Switching to.*" \
-    "exit, dropped into next fork two"
+    "Exit, dropped into next fork two"
 
 gdb_test "continue" \
     "Deleting copy.*$inferior_exited_re normally.*Switching to.*" \
-    "exit, dropped into next fork three"
+    "Exit, dropped into next fork three"
 
 gdb_test "continue" \
     "Deleting copy.*$inferior_exited_re normally.*Switching to.*" \
-    "exit, dropped into next fork four"
+    "Exit, dropped into next fork four"
 
 gdb_test "continue" \
     "Deleting copy.*$inferior_exited_re normally.*Switching to.*" \
-    "exit, dropped into next fork five"
+    "Exit, dropped into next fork five"
 
 #
 # There should be still at least five forks left
 # 
 
-gdb_test "info checkpoints" " 1 .* 2 .* 3 .* 4 .* 5 .*" \
+gdb_test "info checkpoints" " 5 .* 4 .* 3 .* 2 .* 1 .*" \
     "info checkpoints two"
 
 #
@@ -340,3 +379,5 @@ verbose "Timeout now $timeout sec."
 #
 # Finished: cleanup
 #
+
+remote_exec build "rm -f pi.txt"

@@ -1,6 +1,6 @@
 dnl Process this file with autoconf to produce a configure script.
 
-dnl Copyright (C) 2005-2019 Free Software Foundation, Inc.
+dnl Copyright (C) 2005-2013 Free Software Foundation, Inc.
 dnl Contributed by Red Hat, Inc.
 dnl 
 dnl This file is part of the GNU simulators.
@@ -18,6 +18,7 @@ dnl
 dnl You should have received a copy of the GNU General Public License
 dnl along with this program.  If not, see <http://www.gnu.org/licenses/>.
 dnl
+AC_PREREQ(2.64)dnl
 AC_INIT(Makefile.in)
 sinclude(../common/acinclude.m4)
 
@@ -26,16 +27,14 @@ SIM_AC_COMMON
 AC_CHECK_HEADERS(getopt.h)
 
 AC_ARG_ENABLE(cycle-accurate,
-[AS_HELP_STRING([--disable-cycle-accurate],
-		[Disable cycle accurate simulation (faster runtime)])],
+[  --disable-cycle-accurate ],
 [case "${enableval}" in
 yes | no) ;;
 *)	AC_MSG_ERROR(bad value ${enableval} given for --enable-cycle-accurate option) ;;
 esac])
 
 AC_ARG_ENABLE(cycle-stats,
-[AS_HELP_STRING([--disable-cycle-stats],
-		[Disable cycle statistics (faster runtime)])],
+[  --disable-cycle-stats ],
 [case "${enableval}" in
 yes | no) ;;
 *)	AC_MSG_ERROR(bad value ${enableval} given for --enable-cycle-stats option) ;;

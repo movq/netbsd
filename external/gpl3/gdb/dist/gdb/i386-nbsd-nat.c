@@ -1,6 +1,6 @@
 /* Native-dependent code for NetBSD/i386.
 
-   Copyright (C) 2004-2019 Free Software Foundation, Inc.
+   Copyright (C) 2004-2017 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -23,13 +23,11 @@
 #include "target.h"
 
 #include "i386-tdep.h"
-#include "i387-tdep.h"
 #include "i386-bsd-nat.h"
 
 /* Support for debugging kernel virtual memory images.  */
 
 #include <sys/types.h>
-#include <machine/reg.h>
 #include <machine/frame.h>
 #include <machine/pcb.h>
 
@@ -41,25 +39,21 @@ i386nbsd_supply_pcb (struct regcache *regcache, struct pcb *pcb)
 {
   struct switchframe sf;
 
-  /* The following is true for NetBSD 1.6.2 and after:
+  /* The following is true for NetBSD 1.6.2:
 
      The pcb contains %esp and %ebp at the point of the context switch
-     in cpu_switch()/cpu_switchto().  At that point we have a stack frame as
-     described by `struct switchframe', which for NetBSD (2.0 and later) has
-     the following layout:
+     in cpu_switch().  At that point we have a stack frame as
+     described by `struct switchframe', which for NetBSD 1.6.2 has the
+     following layout:
 
+     interrupt level
      %edi
      %esi
      %ebx
-     return address
+     %eip
 
      we reconstruct the register state as it would look when we just
-     returned from cpu_switch()/cpu_switchto().
-
-     For core dumps the pcb is saved by savectx()/dumpsys() and contains the
-     stack pointer and frame pointer.  A new dumpsys() fakes a switchframe
-     whereas older code isn't reliable so use an iffy heuristic to detect this
-     and use the frame pointer to recover enough state.  */
+     returned from cpu_switch().  */
 
   /* The stack pointer shouldn't be zero.  */
   if (pcb->pcb_esp == 0)
@@ -67,23 +61,30 @@ i386nbsd_supply_pcb (struct regcache *regcache, struct pcb *pcb)
 
   read_memory (pcb->pcb_esp, (gdb_byte *)&sf, sizeof sf);
   pcb->pcb_esp += sizeof (struct switchframe);
-  regcache->raw_supply (I386_EDI_REGNUM, &sf.sf_edi);
-  regcache->raw_supply (I386_ESI_REGNUM, &sf.sf_esi);
-  regcache->raw_supply (I386_EBP_REGNUM, &pcb->pcb_ebp);
-  regcache->raw_supply (I386_ESP_REGNUM, &pcb->pcb_esp);
-  regcache->raw_supply (I386_EBX_REGNUM, &sf.sf_ebx);
-  regcache->raw_supply (I386_EIP_REGNUM, &sf.sf_eip);
+  regcache_raw_supply (regcache, I386_EDI_REGNUM, &sf.sf_edi);
+  regcache_raw_supply (regcache, I386_ESI_REGNUM, &sf.sf_esi);
+  regcache_raw_supply (regcache, I386_EBP_REGNUM, &pcb->pcb_ebp);
+  regcache_raw_supply (regcache, I386_ESP_REGNUM, &pcb->pcb_esp);
+  regcache_raw_supply (regcache, I386_EBX_REGNUM, &sf.sf_ebx);
+  regcache_raw_supply (regcache, I386_EIP_REGNUM, &sf.sf_eip);
 
   return 1;
 }
+
 
-static i386_bsd_nat_target<nbsd_nat_target> the_i386_nbsd_nat_target;
+/* Provide a prototype to silence -Wmissing-prototypes.  */
+void _initialize_i386nbsd_nat (void);
 
 void
 _initialize_i386nbsd_nat (void)
 {
-  add_inf_child_target (&the_i386_nbsd_nat_target);
+  struct target_ops *t;
 
+  /* Add some extra features to the common *BSD/i386 target.  */
+  t = i386bsd_target ();
+  t->to_pid_to_exec_file = nbsd_pid_to_exec_file;
+  add_target (t);
+ 
   /* Support debugging kernel virtual memory images.  */
   bsd_kvm_add_target (i386nbsd_supply_pcb);
 }

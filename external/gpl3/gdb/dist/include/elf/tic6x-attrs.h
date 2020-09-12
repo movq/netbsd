@@ -1,5 +1,6 @@
 /* TI C6X ELF attributes.
-   Copyright (C) 2010-2019 Free Software Foundation, Inc.
+   Copyright 2010
+   Free Software Foundation, Inc.
 
    This file is part of BFD, the Binary File Descriptor library.
 

@@ -1,6 +1,6 @@
 /* Disassemble SPU instructions
 
-   Copyright (C) 2006-2019 Free Software Foundation, Inc.
+   Copyright 2006, 2007 Free Software Foundation, Inc.
 
    This file is part of the GNU opcodes library.
 
@@ -19,9 +19,9 @@
    Free Software Foundation, 51 Franklin Street - Fifth Floor, Boston,
    MA 02110-1301, USA.  */
 
-#include "sysdep.h"
 #include <stdio.h>
-#include "disassemble.h"
+#include "sysdep.h"
+#include "dis-asm.h"
 #include "opcode/spu.h"
 
 /* This file provides a disassembler function which uses

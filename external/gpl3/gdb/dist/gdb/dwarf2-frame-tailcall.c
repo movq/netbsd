@@ -1,6 +1,6 @@
 /* Virtual tail call frames unwinder for GDB.
 
-   Copyright (C) 2010-2019 Free Software Foundation, Inc.
+   Copyright (C) 2010-2013 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -18,12 +18,14 @@
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #include "defs.h"
+#include "gdb_assert.h"
 #include "frame.h"
 #include "dwarf2-frame-tailcall.h"
 #include "dwarf2loc.h"
 #include "frame-unwind.h"
 #include "block.h"
 #include "hashtab.h"
+#include "exceptions.h"
 #include "gdbtypes.h"
 #include "regcache.h"
 #include "value.h"
@@ -68,7 +70,7 @@ struct tailcall_cache
 static hashval_t
 cache_hash (const void *arg)
 {
-  const struct tailcall_cache *cache = (const struct tailcall_cache *) arg;
+  const struct tailcall_cache *cache = arg;
 
   return htab_hash_pointer (cache->next_bottom_frame);
 }
@@ -78,8 +80,8 @@ cache_hash (const void *arg)
 static int
 cache_eq (const void *arg1, const void *arg2)
 {
-  const struct tailcall_cache *cache1 = (const struct tailcall_cache *) arg1;
-  const struct tailcall_cache *cache2 = (const struct tailcall_cache *) arg2;
+  const struct tailcall_cache *cache1 = arg1;
+  const struct tailcall_cache *cache2 = arg2;
 
   return cache1->next_bottom_frame == cache2->next_bottom_frame;
 }
@@ -91,8 +93,10 @@ cache_eq (const void *arg1, const void *arg2)
 static struct tailcall_cache *
 cache_new_ref1 (struct frame_info *next_bottom_frame)
 {
-  struct tailcall_cache *cache = XCNEW (struct tailcall_cache);
+  struct tailcall_cache *cache;
   void **slot;
+
+  cache = xzalloc (sizeof (*cache));
 
   cache->next_bottom_frame = next_bottom_frame;
   cache->refc = 1;
@@ -160,7 +164,7 @@ cache_find (struct frame_info *fi)
   if (slot == NULL)
     return NULL;
 
-  cache = (struct tailcall_cache *) *slot;
+  cache = *slot;
   gdb_assert (cache != NULL);
   return cache;
 }
@@ -195,7 +199,7 @@ pretended_chain_levels (struct call_site_chain *chain)
     return chain->length;
 
   chain_levels = chain->callers + chain->callees;
-  gdb_assert (chain_levels <= chain->length);
+  gdb_assert (chain_levels < chain->length);
 
   return chain_levels;
 }
@@ -209,7 +213,7 @@ static void
 tailcall_frame_this_id (struct frame_info *this_frame, void **this_cache,
 			struct frame_id *this_id)
 {
-  struct tailcall_cache *cache = (struct tailcall_cache *) *this_cache;
+  struct tailcall_cache *cache = *this_cache;
   struct frame_info *next_frame;
 
   /* Tail call does not make sense for a sentinel frame.  */
@@ -264,7 +268,7 @@ dwarf2_tailcall_prev_register_first (struct frame_info *this_frame,
 				     void **tailcall_cachep, int regnum)
 {
   struct gdbarch *this_gdbarch = get_frame_arch (this_frame);
-  struct tailcall_cache *cache = (struct tailcall_cache *) *tailcall_cachep;
+  struct tailcall_cache *cache = *tailcall_cachep;
   CORE_ADDR addr;
 
   if (regnum == gdbarch_pc_regnum (this_gdbarch))
@@ -293,7 +297,7 @@ static struct value *
 tailcall_frame_prev_register (struct frame_info *this_frame,
 			       void **this_cache, int regnum)
 {
-  struct tailcall_cache *cache = (struct tailcall_cache *) *this_cache;
+  struct tailcall_cache *cache = *this_cache;
   struct value *val;
 
   gdb_assert (this_frame != cache->next_bottom_frame);
@@ -317,9 +321,6 @@ tailcall_frame_sniffer (const struct frame_unwind *self,
   struct frame_info *next_frame;
   int next_levels;
   struct tailcall_cache *cache;
-
-  if (!dwarf2_frame_unwinders_enabled_p)
-    return 0;
 
   /* Inner tail call element does not make sense for a sentinel frame.  */
   next_frame = get_next_frame (this_frame);
@@ -369,6 +370,7 @@ dwarf2_tailcall_sniffer_first (struct frame_info *this_frame,
   struct gdbarch *prev_gdbarch;
   struct call_site_chain *chain = NULL;
   struct tailcall_cache *cache;
+  volatile struct gdb_exception except;
 
   gdb_assert (*tailcall_cachep == NULL);
 
@@ -377,7 +379,7 @@ dwarf2_tailcall_sniffer_first (struct frame_info *this_frame,
   this_pc = get_frame_address_in_block (this_frame);
 
   /* Catch any unwinding errors.  */
-  TRY
+  TRY_CATCH (except, RETURN_MASK_ERROR)
     {
       int sp_regnum;
 
@@ -389,23 +391,20 @@ dwarf2_tailcall_sniffer_first (struct frame_info *this_frame,
       /* call_site_find_chain can throw an exception.  */
       chain = call_site_find_chain (prev_gdbarch, prev_pc, this_pc);
 
-      if (entry_cfa_sp_offsetp != NULL)
-	{
-	  sp_regnum = gdbarch_sp_regnum (prev_gdbarch);
-	  if (sp_regnum != -1)
-	    {
-	      prev_sp = frame_unwind_register_unsigned (this_frame, sp_regnum);
-	      prev_sp_p = 1;
-	    }
-	}
+      if (entry_cfa_sp_offsetp == NULL)
+	break;
+      sp_regnum = gdbarch_sp_regnum (prev_gdbarch);
+      if (sp_regnum == -1)
+	break;
+      prev_sp = frame_unwind_register_unsigned (this_frame, sp_regnum);
+      prev_sp_p = 1;
     }
-  CATCH (except, RETURN_MASK_ERROR)
+  if (except.reason < 0)
     {
       if (entry_values_debug)
 	exception_print (gdb_stdout, except);
       return;
     }
-  END_CATCH
 
   /* Ambiguous unwind or unambiguous unwind verified as matching.  */
   if (chain == NULL || chain->length == 0)
@@ -435,7 +434,7 @@ dwarf2_tailcall_sniffer_first (struct frame_info *this_frame,
 static void
 tailcall_frame_dealloc_cache (struct frame_info *self, void *this_cache)
 {
-  struct tailcall_cache *cache = (struct tailcall_cache *) this_cache;
+  struct tailcall_cache *cache = this_cache;
 
   cache_unref (cache);
 }
@@ -447,7 +446,7 @@ static struct gdbarch *
 tailcall_frame_prev_arch (struct frame_info *this_frame,
 			  void **this_prologue_cache)
 {
-  struct tailcall_cache *cache = (struct tailcall_cache *) *this_prologue_cache;
+  struct tailcall_cache *cache = *this_prologue_cache;
 
   return get_frame_arch (cache->next_bottom_frame);
 }
@@ -466,6 +465,9 @@ const struct frame_unwind dwarf2_tailcall_frame_unwind =
   tailcall_frame_dealloc_cache,
   tailcall_frame_prev_arch
 };
+
+/* Provide a prototype to silence -Wmissing-prototypes.  */
+extern initialize_file_ftype _initialize_tailcall_frame;
 
 void
 _initialize_tailcall_frame (void)

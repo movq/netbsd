@@ -1,6 +1,7 @@
 /* General window behavior.
 
-   Copyright (C) 1998-2019 Free Software Foundation, Inc.
+   Copyright (C) 1998, 1999, 2000, 2001, 2002, 2003, 2007, 2008, 2009, 2010,
+   2011 Free Software Foundation, Inc.
 
    Contributed by Hewlett-Packard Company.
 
@@ -43,7 +44,8 @@ tui_refresh_win (struct tui_gen_win_info *win_info)
 	{
 	  struct tui_gen_win_info *data_item_win_ptr;
 
-	  data_item_win_ptr = &win_info->content[i]->which_element.data_window;
+	  data_item_win_ptr = &((tui_win_content)
+				win_info->content)[i]->which_element.data_window;
 	  if (data_item_win_ptr != NULL
 	      && data_item_win_ptr->handle != (WINDOW *) NULL)
 	    wrefresh (data_item_win_ptr->handle);
@@ -193,7 +195,7 @@ make_visible (struct tui_gen_win_info *win_info, int visible)
     {
       win_info->is_visible = FALSE;
       tui_delete_win (win_info->handle);
-      win_info->handle = NULL;
+      win_info->handle = (WINDOW *) NULL;
     }
 
   return;
@@ -246,35 +248,32 @@ tui_make_all_invisible (void)
   make_all_visible (0);
 }
 
-static void
-tui_refresh_wi(struct tui_gen_win_info *wi)
-{
-  if (wi == NULL || wi->handle == NULL || !wi->is_visible)
-    return;
-
-  touchwin (wi->handle);
-  tui_refresh_win (wi);
-}
-
 /* Function to refresh all the windows currently displayed.  */
 
 void
 tui_refresh_all (struct tui_win_info **list)
 {
-  int type;
+  enum tui_win_type type;
+  struct tui_gen_win_info *locator = tui_locator_win_info_ptr ();
 
   for (type = SRC_WIN; (type < MAX_MAJOR_WINDOWS); type++)
     {
-      if (!list[type] || !list[type]->generic.is_visible)
-	continue;
-      if (type == SRC_WIN || type == DISASSEM_WIN)
+      if (list[type] && list[type]->generic.is_visible)
 	{
-	  tui_refresh_wi (list[type]->detail.source_info.execution_info);
+	  if (type == SRC_WIN || type == DISASSEM_WIN)
+	    {
+	      touchwin (list[type]->detail.source_info.execution_info->handle);
+	      tui_refresh_win (list[type]->detail.source_info.execution_info);
+	    }
+	  touchwin (list[type]->generic.handle);
+	  tui_refresh_win (&list[type]->generic);
 	}
-      tui_refresh_wi (&list[type]->generic);
     }
-
-  tui_refresh_wi (tui_locator_win_info_ptr ());
+  if (locator->is_visible)
+    {
+      touchwin (locator->handle);
+      tui_refresh_win (locator);
+    }
 }
 
 

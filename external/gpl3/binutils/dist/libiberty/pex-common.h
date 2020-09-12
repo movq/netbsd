@@ -1,6 +1,7 @@
 /* Utilities to execute a program in a subprocess (possibly linked by pipes
    with other subprocesses), and wait for it.  Shared logic.
-   Copyright (C) 1996-2020 Free Software Foundation, Inc.
+   Copyright (C) 1996, 1997, 1998, 1999, 2000, 2001, 2003, 2004
+   Free Software Foundation, Inc.
 
 This file is part of the libiberty library.
 Libiberty is free software; you can redistribute it and/or
@@ -69,7 +70,7 @@ struct pex_obj
   /* Number of child processes.  */
   int count;
   /* PIDs of child processes; array allocated using malloc.  */
-  pid_t *children;
+  long *children;
   /* Exit statuses of child processes; array allocated using malloc.  */
   int *status;
   /* Time used by child processes; array allocated using malloc.  */
@@ -103,7 +104,7 @@ struct pex_funcs
   /* Open file NAME for writing.  If BINARY is non-zero, open in
      binary mode.  Return >= 0 on success, -1 on error.  */
   int (*open_write) (struct pex_obj *, const char */* name */,
-                     int /* binary */, int /* append */);
+                     int /* binary */);
   /* Execute a child process.  FLAGS, EXECUTABLE, ARGV, ERR are from
      pex_run.  IN, OUT, ERRDES, TOCLOSE are all descriptors, from
      open_read, open_write, or pipe, or they are one of STDIN_FILE_NO,
@@ -125,7 +126,7 @@ struct pex_funcs
      and time in *TIME (if it is not null).  CHILD is from fork.  DONE
      is 1 if this is called via pex_free.  ERRMSG and ERR are as in
      fork.  Return 0 on success, -1 on error.  */
-  pid_t (*wait) (struct pex_obj *, pid_t /* child */, int * /* status */,
+  int (*wait) (struct pex_obj *, pid_t /* child */, int * /* status */,
                struct pex_time * /* time */, int /* done */,
                const char ** /* errmsg */, int * /* err */);
   /* Create a pipe (only called if PEX_USE_PIPES is set) storing two

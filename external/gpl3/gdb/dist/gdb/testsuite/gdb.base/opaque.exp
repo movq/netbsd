@@ -1,4 +1,5 @@
-# Copyright 1992-2019 Free Software Foundation, Inc.
+# Copyright 1992, 1994, 1995, 1996, 1997, 1999, 2002, 2007, 2008, 2009, 2010,
+# 2011 Free Software Foundation, Inc.
 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -15,19 +16,46 @@
 
 # This file was written by Fred Fish. (fnf@cygnus.com)
 
+if $tracelevel then {
+	strace $tracelevel
+}
+
+
+set testfile "opaque"
+set binfile ${objdir}/${subdir}/opaque
+
+#if  { [gdb_compile "${srcdir}/${subdir}/opaque0.c ${srcdir}/${subdir}/opaque1.c" "${binfile}" executable {debug}] != "" } {
+#     gdb_suppress_entire_file "Testcase compile failed, so all tests in this file will automatically fail."
+#}
+
+if  { [gdb_compile "${srcdir}/${subdir}/opaque0.c" "${binfile}0.o" object {debug}] != "" } {
+     untested opaque.exp
+     return -1
+}
+
+if  { [gdb_compile "${srcdir}/${subdir}/opaque1.c" "${binfile}1.o" object {debug}] != "" } {
+     untested opaque.exp
+     return -1
+}
+
+if  { [gdb_compile "${binfile}0.o ${binfile}1.o" ${binfile} executable {debug}] != "" } {
+     untested opaque.exp
+     return -1
+}
+
 
 # Create and source the file that provides information about the compiler
 # used to compile the test case.
-if [get_compiler_info] {
-    return -1
+if [get_compiler_info ${binfile}] {
+    return -1;
 }
 
-standard_testfile opaque0.c opaque1.c
+# Start with a fresh gdb.
 
-if {[prepare_for_testing "failed to prepare" $testfile \
-	 [list $srcfile $srcfile2] debug]} {
-    return -1
-}
+gdb_exit
+gdb_start
+gdb_reinitialize_dir $srcdir/$subdir
+gdb_load ${binfile}
 
 #
 # Test basic opaque structure handling (statically).
@@ -55,9 +83,9 @@ proc setup_xfail_on_opaque_pointer {} {
 	global gcc_compiled
 
 	setup_xfail "vax-*-*" "i*86-sequent-bsd*"
-       if {!$gcc_compiled} then {
-               setup_xfail "alpha-*-*"
-       }
+	if {!$gcc_compiled} then {
+		setup_xfail "alpha-*-*" "mips-sgi-irix5*"
+	}
 }
 
 # This seems easier than trying to track different versions of xlc; I'm
@@ -110,6 +138,11 @@ gdb_test "ptype struct foo" \
 # have learned during the static tests.
 #
 
+if [istarget "mips-idt-*"] then {
+    # Restart because IDT/SIM runs out of file descriptors.
+    gdb_exit
+    gdb_start
+}
 gdb_reinitialize_dir $srcdir/$subdir
 gdb_load ${binfile}
 
@@ -160,6 +193,11 @@ gdb_test "ptype struct foo" \
 # Now reload the symbols again so we forget about anything we might
 # have learned reading the symbols during the previous tests.
 
+if [istarget "mips-idt-*"] then {
+    # Restart because IDT/SIM runs out of file descriptors.
+    gdb_exit
+    gdb_start
+}
 gdb_reinitialize_dir $srcdir/$subdir
 gdb_load ${binfile}
 

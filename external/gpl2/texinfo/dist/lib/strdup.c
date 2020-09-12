@@ -1,4 +1,4 @@
-/*	$NetBSD: strdup.c,v 1.1.1.1 2016/01/14 00:11:29 christos Exp $	*/
+/*	$NetBSD: strdup.c,v 1.1 2016/01/14 00:11:29 christos Exp $	*/
 
 /* Copyright (C) 1991, 1996, 1997, 1998, 2002, 2003, 2004 Free Software
    Foundation, Inc.

@@ -1,6 +1,8 @@
 // Locale support -*- C++ -*-
 
-// Copyright (C) 1997-2019 Free Software Foundation, Inc.
+// Copyright (C) 1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005
+// 2006, 2007, 2009
+// Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
@@ -26,7 +28,7 @@
 // ISO C++ 14882: 22.1  Locales
 //
 
-/** @file include/locale
+/** @file locale
  *  This is a Standard C++ Library header.
  */
 
@@ -39,8 +41,5 @@
 #include <bits/locale_classes.h>
 #include <bits/locale_facets.h>
 #include <bits/locale_facets_nonio.h>
-#if __cplusplus >= 201103L
-#  include <bits/locale_conv.h>
-#endif
 
 #endif /* _GLIBCXX_LOCALE */

@@ -1,4 +1,4 @@
-/*	$NetBSD: infodoc.c,v 1.1.1.1 2016/01/14 00:11:29 christos Exp $	*/
+/*	$NetBSD: infodoc.c,v 1.1 2016/01/14 00:11:29 christos Exp $	*/
 
 /* infodoc.c -- functions which build documentation nodes.
    Id: infodoc.c,v 1.8 2004/04/11 17:56:45 karl Exp 

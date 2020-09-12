@@ -1,4 +1,4 @@
---  Copyright 2008-2019 Free Software Foundation, Inc.
+--  Copyright 2008, 2009, 2010, 2011 Free Software Foundation, Inc.
 --
 --  This program is free software; you can redistribute it and/or modify
 --  it under the terms of the GNU General Public License as published by
@@ -20,10 +20,5 @@ package body Pck is
    begin
       Inner.Inside_Variable := Not_In_Scope + I;
    end Proc;
-
-   procedure Ambiguous_Func is
-   begin
-      null;
-   end Ambiguous_Func;
 
 end Pck;

@@ -1,6 +1,7 @@
 /* Native support for GNU/Linux.
 
-   Copyright (C) 1999-2019 Free Software Foundation, Inc.
+   Copyright 1999, 2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009,
+   2010, 2011 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -17,13 +18,8 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-#ifndef CONFIG_NM_LINUX_H
-#define CONFIG_NM_LINUX_H
-
 /* Use elf_gregset_t and elf_fpregset_t, rather than
    gregset_t and fpregset_t.  */
 
 #define GDB_GREGSET_T  elf_gregset_t
 #define GDB_FPREGSET_T elf_fpregset_t
-
-#endif /* CONFIG_NM_LINUX_H */

@@ -1,5 +1,5 @@
 /* Common configuration file for NetBSD ELF targets.
-   Copyright (C) 2002-2019 Free Software Foundation, Inc.
+   Copyright (C) 2002, 2007 Free Software Foundation, Inc.
    Contributed by Wasabi Systems, Inc.
 
 This file is part of GCC.
@@ -26,6 +26,18 @@ along with GCC; see the file COPYING3.  If not see
     }						\
   while (0)
 
+/* This defines which switch letters take arguments.  On NetBSD, most
+   of the normal cases (defined by gcc.c) apply, and we also have -h*
+   and -z* options (for the linker) (coming from SVR4).  */
+
+#undef SWITCH_TAKES_ARG
+#define SWITCH_TAKES_ARG(CHAR)			\
+  (DEFAULT_SWITCH_TAKES_ARG (CHAR)		\
+   || (CHAR) == 'h'				\
+   || (CHAR) == 'z'				\
+   || (CHAR) == 'R')
+
+
 /* Provide a STARTFILE_SPEC appropriate for NetBSD ELF.  Here we
    provide support for the special GCC option -static.  On ELF
    targets, we also add the crtbegin.o file, which provides part
@@ -39,12 +51,9 @@ along with GCC; see the file COPYING3.  If not see
        %{p:gcrt0%O%s}		\
        %{!p:crt0%O%s}}}		\
    %:if-exists(crti%O%s)	\
-   %{pie:crtbeginS%O%s}		\
-   %{!pie:			\
-     %{static:%:if-exists-else(crtbeginT%O%s crtbegin%O%s)} \
-     %{!static:                 \
-       %{shared:crtbeginS%O%s}	\
-       %{!shared:crtbegin%O%s}}}"
+   %{static:%:if-exists-else(crtbeginT%O%s crtbegin%O%s)} \
+   %{!static: \
+     %{!shared:crtbegin%O%s} %{shared:crtbeginS%O%s}}"
 
 #undef STARTFILE_SPEC
 #define STARTFILE_SPEC NETBSD_STARTFILE_SPEC
@@ -55,10 +64,7 @@ along with GCC; see the file COPYING3.  If not see
    C++ file-scope static objects deconstructed after exiting "main".  */
 
 #define NETBSD_ENDFILE_SPEC	\
-  "%{!shared:                   \
-    %{!pie:crtend%O%s}          \
-    %{pie:crtendS%O%s}}         \
-   %{shared:crtendS%O%s}        \
+  "%{!shared:crtend%O%s} %{shared:crtendS%O%s} \
    %:if-exists(crtn%O%s)"
 
 #undef ENDFILE_SPEC
@@ -73,49 +79,20 @@ along with GCC; see the file COPYING3.  If not see
 
    Target-specific code must provide the %(netbsd_entry_point) spec.  */
 
-#define NETBSD_LINK_LD_ELF_SO_SPEC \
-  "%{!dynamic-linker:-dynamic-linker /usr/libexec/ld.elf_so}"
-
 #define NETBSD_LINK_SPEC_ELF \
   "%{assert*} %{R*} %{rpath*} \
    %{shared:-shared} \
-   %{symbolic:-Bsymbolic} \
    %{!shared: \
      -dc -dp \
      %{!nostdlib: \
-       %{!r: \
+       %{!r*: \
 	 %{!e*:-e %(netbsd_entry_point)}}} \
-     %{pie:-pie} \
      %{!static: \
        %{rdynamic:-export-dynamic} \
-       %(netbsd_link_ld_elf_so)} \
-     %{static:-static \
-       %{pie:--no-dynamic-linker}}} \
-   %{!shared:%{!nostdlib:%{!nodefaultlibs:\
-     %{%:sanitize(address): -lasan } \
-     %{%:sanitize(undefined): -lubsan}}}}"
-
-/* Provide the standard list of subtarget extra specs for NetBSD targets.  */
-#define NETBSD_SUBTARGET_EXTRA_SPECS \
-  { "netbsd_link_ld_elf_so",    NETBSD_LINK_LD_ELF_SO_SPEC }, \
-  { "netbsd_cpp_spec",          NETBSD_CPP_SPEC }, \
-  { "netbsd_link_spec",         NETBSD_LINK_SPEC_ELF }, \
-  { "netbsd_entry_point",       NETBSD_ENTRY_POINT }, \
-  { "netbsd_endfile_spec",      NETBSD_ENDFILE_SPEC },
-
-#undef SUBTARGET_EXTRA_SPECS
-#define SUBTARGET_EXTRA_SPECS   NETBSD_SUBTARGET_EXTRA_SPECS
-
+       %{!dynamic-linker:-dynamic-linker /usr/libexec/ld.elf_so}} \
+     %{static:-static}}"
 
 /* Use --as-needed -lgcc_s for eh support.  */
 #ifdef HAVE_LD_AS_NEEDED
 #define USE_LD_AS_NEEDED 1
 #endif
-
-#undef TARGET_UNWIND_TABLES_DEFAULT
-#define TARGET_UNWIND_TABLES_DEFAULT true
-
-#undef REAL_LIBGCC_SPEC
-#define REAL_LIBGCC_SPEC						   \
-   "%{static|static-libgcc:-lgcc}"					   \
-   "%{!static:%{!static-libgcc:--as-needed -lgcc_s --no-as-needed -lgcc}}"

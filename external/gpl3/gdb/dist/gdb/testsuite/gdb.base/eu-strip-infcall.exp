@@ -1,4 +1,4 @@
-# Copyright (C) 2011-2019 Free Software Foundation, Inc.
+# Copyright (C) 2011-2013 Free Software Foundation, Inc.
 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -13,7 +13,8 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-standard_testfile
+set testfile eu-strip-infcall
+set binfile ${objdir}/${subdir}/${testfile}
 
 if {[build_executable ${testfile}.exp $testfile] == -1} {
     return -1
@@ -22,7 +23,7 @@ if {[build_executable ${testfile}.exp $testfile] == -1} {
 set test "eu-strip"
 set status [remote_exec build "eu-strip -f ${binfile}.debug $binfile"]
 if {[lindex $status 0] != 0} {
-    untested "failed to compile"
+    untested ${testfile}.exp
     return 0
 }
 

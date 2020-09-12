@@ -1,4 +1,4 @@
-# Copyright (C) 2002-2016 Free Software Foundation, Inc.
+# Copyright (C) 2002-2012 Free Software Foundation, Inc.
 #
 # This file is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -27,44 +27,15 @@
 
 
 # Specification in the form of a command-line invocation:
-#   gnulib-tool --import --lib=libgnu --source-base=import --m4-base=import/m4 --doc-base=doc --tests-base=tests --aux-dir=import/extra --no-conditional-dependencies --no-libtool --macro-prefix=gl --no-vc-files alloca canonicalize-lgpl dirent dirfd errno fnmatch-gnu frexpl getcwd glob inet_ntop inttypes limits-h lstat memchr memmem mkdir mkdtemp mkostemp pathmax rawmemchr readlink rename setenv signal-h strchrnul strstr strtok_r sys_stat unistd unsetenv update-copyright wchar wctype-h
+#   gnulib-tool --import --dir=. --lib=libgnu --source-base=import --m4-base=import/m4 --doc-base=doc --tests-base=tests --aux-dir=import/extra --no-conditional-dependencies --no-libtool --macro-prefix=gl --no-vc-files fnmatch-gnu inttypes memmem update-copyright
 
 # Specification in the form of a few gnulib-tool.m4 macro invocations:
 gl_LOCAL_DIR([])
 gl_MODULES([
-  alloca
-  canonicalize-lgpl
-  dirent
-  dirfd
-  errno
   fnmatch-gnu
-  frexpl
-  getcwd
-  glob
-  inet_ntop
   inttypes
-  limits-h
-  lstat
-  memchr
   memmem
-  mkdir
-  mkdtemp
-  mkostemp
-  pathmax
-  rawmemchr
-  readlink
-  rename
-  setenv
-  signal-h
-  strchrnul
-  strstr
-  strtok_r
-  sys_stat
-  unistd
-  unsetenv
   update-copyright
-  wchar
-  wctype-h
 ])
 gl_AVOID([])
 gl_SOURCE_BASE([import])

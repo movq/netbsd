@@ -1,4 +1,4 @@
-.\"	$NetBSD: rcs.ms,v 1.2 2016/01/14 04:22:39 christos Exp $
+.\" Format this file with:
 .\" pic file | tbl | troff -ms
 .\"
 .\" \*s stands for $, and avoids problems when this file is checked in.

@@ -1,5 +1,6 @@
 /*  dv-m68hc11sio.c -- Simulation of the 68HC11 serial device.
-    Copyright (C) 1999-2019 Free Software Foundation, Inc.
+    Copyright (C) 1999, 2000, 2001, 2007, 2008, 2009, 2010, 2011
+    Free Software Foundation, Inc.
     Written by Stephane Carrez (stcarrez@worldnet.fr)
     (From a driver model Contributed by Cygnus Solutions.)
 
@@ -240,7 +241,7 @@ m68hc11sio_port_event (struct hw *me,
 }
 
 
-static void
+void
 m68hc11sio_rx_poll (struct hw *me, void *data)
 {
   SIM_DESC sd;
@@ -313,7 +314,7 @@ m68hc11sio_rx_poll (struct hw *me, void *data)
 }
 
 
-static void
+void
 m68hc11sio_tx_poll (struct hw *me, void *data)
 {
   SIM_DESC sd;

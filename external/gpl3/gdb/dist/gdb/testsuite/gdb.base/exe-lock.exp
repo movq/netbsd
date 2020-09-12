@@ -1,4 +1,4 @@
-# Copyright 2009-2019 Free Software Foundation, Inc.
+# Copyright 2009, 2010, 2011 Free Software Foundation, Inc.
 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -13,21 +13,29 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
+if $tracelevel {
+    strace $tracelevel
+}
+
 # The intent of this testcase is to verify that GDB does not keep
 # a filesystem lock on the executable file once the executable
 # is no longer running.
 
-standard_testfile arrayidx.c
+set testfile "arrayidx"
+set srcfile ${testfile}.c
 # $EXEEXT suffix is needed here, because otherwise, Windows targets
 # don't find the $binfile for 'file delete $binfile'.
-append binfile $EXEEXT
+set binfile ${objdir}/${subdir}/${testfile}$EXEEXT
 
 if { [gdb_compile "${srcdir}/${subdir}/${srcfile}" "${binfile}" executable {debug}] != "" } {
-    untested "failed to compile"
+    untested "Couldn't compile ${srcfile}"
     return -1
 }
 
-clean_restart ${binfile}
+gdb_exit
+gdb_start
+gdb_reinitialize_dir $srcdir/$subdir
+gdb_load ${binfile}
 
 # Sanity-check: Verify that the executable exists. This is just to
 # make sure that, when we verify later that the file does not exist,

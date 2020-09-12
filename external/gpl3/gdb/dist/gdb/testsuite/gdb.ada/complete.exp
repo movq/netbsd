@@ -1,4 +1,4 @@
-# Copyright 2005-2019 Free Software Foundation, Inc.
+# Copyright 2005, 2007, 2009, 2010, 2011 Free Software Foundation, Inc.
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -13,10 +13,18 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
+if $tracelevel then {
+    strace $tracelevel
+}
+
 load_lib "ada.exp"
 
-standard_ada_testfile foo
+set testdir "complete"
+set testfile "${testdir}/foo"
+set srcfile ${srcdir}/${subdir}/${testfile}.adb
+set binfile ${objdir}/${subdir}/${testfile}
 
+file mkdir ${objdir}/${subdir}/${testdir}
 if {[gdb_compile_ada "${srcfile}" "${binfile}" executable [list debug ]] != "" } {
   return -1
 }
@@ -38,12 +46,25 @@ proc test_gdb_complete { expr expected_output } {
 }
 
 # A convenience function that verifies that the "complete EXPR" command
-# does not generate any output.
+# does not genearte any output.
 
 proc test_gdb_no_completion { expr } {
-    gdb_test_no_output "complete p $expr"
+    # FIXME: brobecker/2007-12-27: How do you verify that the command
+    # output is actually really empty???  For now, the following does
+    # not verify this at all:
+    test_gdb_complete "$expr" ""
 }
 
+# A convenience function that joins all the arguments together,
+# with a regexp that matches zero-or-more end of lines in between
+# each argument.  This function is ideal to write the expected output
+# of a GDB command that generates more than a couple of lines, as
+# this allows us to write each line as a separate string, which is
+# easier to read by a human being.
+
+proc multi_line { args } {
+    return [join $args "\[\r\n\]*"]
+}
 # Try a global variable, only one match should be found:
 
 test_gdb_complete "my_glob" \
@@ -82,16 +103,6 @@ test_gdb_no_completion "exported"
 # check the "<...>" notation.
 test_gdb_complete "<Exported" \
                   "p <Exported_Capitalized>"
-
-# While at it, make sure we can print the symbol too, using the '<'
-# notation.
-gdb_test "p <Exported_Capitalized>" " = 2"
-
-# Confirm that we can't print the symbol without the '<' notation.
-gdb_test "p Exported_Capitalized" \
-    "No definition of \"exported_capitalized\" in current context."
-gdb_test "p exported_capitalized" \
-    "No definition of \"exported_capitalized\" in current context."
 
 # A global symbol, created by the binder, that starts with __gnat...
 test_gdb_complete "__gnat_ada_main_progra" \
@@ -150,7 +161,6 @@ test_gdb_complete "external_ident" \
 test_gdb_complete "pck" \
                   [multi_line "(p pck\\.ad\[sb\])?" \
                               "(p pck\\.ad\[sb\])?" \
-                              "p pck.ambiguous_func" \
                               "p pck.external_identical_one" \
                               "p pck.inner.inside_variable" \
                               "p pck.local_identical_one" \
@@ -162,7 +172,6 @@ test_gdb_complete "pck" \
 test_gdb_complete "pck." \
                   [multi_line "(p pck\\.ad\[sb\])?" \
                               "(p pck\\.ad\[sb\])?" \
-                              "p pck.ambiguous_func" \
                               "p pck.external_identical_one" \
                               "p pck.inner.inside_variable" \
                               "p pck.local_identical_one" \
@@ -174,54 +183,4 @@ test_gdb_complete "pck." \
 test_gdb_complete "<pck__my" \
                   "p <pck__my_global_variable>"
 
-# Very simple completion, but using the interactive form, this time.
-# The verification we are trying to make involves the event loop,
-# and using the "complete" command is not sufficient to reproduce
-# the original problem.
 
-if { [readline_is_used] } {
-    set test "interactive complete 'print some'"
-    send_gdb "print some\t"
-    gdb_test_multiple "" "$test" {
-	-re "^print some_local_variable $" {
-	    send_gdb "\n"
-	    gdb_test_multiple "" "$test" {
-		-re " = 1$eol$gdb_prompt $" {
-		    pass "$test"
-		}
-	    }
-	}
-    }
-}
-
-# Usually, parsing a function name that is ambiguous yields a menu through
-# which users can select a specific function.  This should not happen during
-# completion, though.
-test_gdb_complete "ambig" \
-                  [multi_line "p ambiguous_func" \
-                              "p ambiguous_proc" ]
-test_gdb_complete "ambiguous_f" \
-                  "p ambiguous_func"
-test_gdb_complete "ambiguous_func" \
-                  "p ambiguous_func"
-
-# Perform a test intented to verify the behavior where the number
-# of possible completions is very large.  The goal is not to verify
-# precisely the list returned by the complete command (this depends
-# on too many parameters -- targets, compiler version, runtime, etc).
-# However, we want to sanity-check each one of them, knowing that
-# each result should start with "break ada" and that the proposed
-# completion should look like a valid symbol name (in particular,
-# no uppercase letters...).  See gdb/22670.
-
-gdb_test_no_output "set max-completions unlimited"
-
-set test "complete break ada"
-gdb_test_multiple "$test" $test {
-    -re "^$test$eol\(break ada(\[a-z0-9._@\])*$eol\)+$gdb_prompt $" {
-        pass $test
-    }
-    -re "\[A-Z\].*$gdb_prompt $" {
-	fail "$test (gdb/22670)"
-    }
-}

@@ -1,4 +1,4 @@
-/*	$NetBSD: mem-limits.h,v 1.2 2016/01/13 21:56:38 christos Exp $	*/
+/*	$NetBSD: mem-limits.h,v 1.1 2016/01/13 21:42:18 christos Exp $	*/
 
 /* Includes for memory limit warnings.
    Copyright (C) 1990, 1993, 1994 Free Software Foundation, Inc.
@@ -41,7 +41,7 @@ Cambridge, MA 02139, USA.  */
 #include <sys/resource.h>
 #endif
 
-#if defined(__bsdi__) || defined(__NetBSD__)
+#ifdef __bsdi__
 #define BSD4_2
 #endif
 
@@ -173,8 +173,7 @@ get_lim_data ()
 {
   struct rlimit XXrlimit;
 
-  if (getrlimit (RLIMIT_DATA, &XXrlimit) == -1)
-	XXrlimit.rlim_cur = -1;
+  getrlimit (RLIMIT_DATA, &XXrlimit);
 #ifdef RLIM_INFINITY
   lim_data = XXrlimit.rlim_cur & RLIM_INFINITY; /* soft limit */
 #else

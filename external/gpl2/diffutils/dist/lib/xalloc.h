@@ -1,4 +1,4 @@
-/*	$NetBSD: xalloc.h,v 1.1.1.1 2016/01/13 03:15:30 christos Exp $	*/
+/*	$NetBSD: xalloc.h,v 1.1 2016/01/13 03:15:30 christos Exp $	*/
 
 /* xalloc.h -- malloc with out-of-memory checking
    Copyright (C) 1990-1998, 1999, 2000, 2002 Free Software Foundation, Inc.

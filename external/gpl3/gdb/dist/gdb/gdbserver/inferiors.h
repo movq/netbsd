@@ -1,5 +1,5 @@
 /* Inferior process information for the remote server for GDB.
-   Copyright (C) 1993-2019 Free Software Foundation, Inc.
+   Copyright (C) 1993-2014 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -16,14 +16,23 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-#ifndef GDBSERVER_INFERIORS_H
-#define GDBSERVER_INFERIORS_H
+#ifndef INFERIORS_H
+#define INFERIORS_H
 
-#include "common/gdb_vecs.h"
-#include <list>
+/* Generic information for tracking a list of ``inferiors'' - threads,
+   processes, etc.  */
+struct inferior_list
+{
+  struct inferior_list_entry *head;
+  struct inferior_list_entry *tail;
+};
+struct inferior_list_entry
+{
+  ptid_t id;
+  struct inferior_list_entry *next;
+};
 
 struct thread_info;
-struct regcache;
 struct target_desc;
 struct sym_cache;
 struct breakpoint;
@@ -33,12 +42,7 @@ struct process_info_private;
 
 struct process_info
 {
-  process_info (int pid_, int attached_)
-  : pid (pid_), attached (attached_)
-  {}
-
-  /* This process' pid.  */
-  int pid;
+  struct inferior_list_entry head;
 
   /* Nonzero if this child process was attached rather than
      spawned.  */
@@ -46,91 +50,43 @@ struct process_info
 
   /* True if GDB asked us to detach from this process, but we remained
      attached anyway.  */
-  int gdb_detached = 0;
+  int gdb_detached;
 
   /* The symbol cache.  */
-  struct sym_cache *symbol_cache = NULL;
+  struct sym_cache *symbol_cache;
 
   /* The list of memory breakpoints.  */
-  struct breakpoint *breakpoints = NULL;
+  struct breakpoint *breakpoints;
 
   /* The list of raw memory breakpoints.  */
-  struct raw_breakpoint *raw_breakpoints = NULL;
+  struct raw_breakpoint *raw_breakpoints;
 
   /* The list of installed fast tracepoints.  */
-  struct fast_tracepoint_jump *fast_tracepoint_jumps = NULL;
+  struct fast_tracepoint_jump *fast_tracepoint_jumps;
 
-  /* The list of syscalls to report, or just a single element, ANY_SYSCALL,
-     for unfiltered syscall reporting.  */
-  std::vector<int> syscalls_to_catch;
-
-  const struct target_desc *tdesc = NULL;
+  const struct target_desc *tdesc;
 
   /* Private target data.  */
-  struct process_info_private *priv = NULL;
+  struct process_info_private *private;
 };
 
-/* Get the pid of PROC.  */
-
-static inline int
-pid_of (const process_info *proc)
-{
-  return proc->pid;
-}
-
 /* Return a pointer to the process that corresponds to the current
-   thread (current_thread).  It is an error to call this if there is
+   thread (current_inferior).  It is an error to call this if there is
    no current thread selected.  */
 
 struct process_info *current_process (void);
-struct process_info *get_thread_process (const struct thread_info *);
+struct process_info *get_thread_process (struct thread_info *);
 
-extern std::list<process_info *> all_processes;
+extern struct inferior_list all_processes;
 
-/* Invoke FUNC for each process.  */
+void add_inferior_to_list (struct inferior_list *list,
+			   struct inferior_list_entry *new_inferior);
+void for_each_inferior (struct inferior_list *list,
+			void (*action) (struct inferior_list_entry *));
 
-template <typename Func>
-static void
-for_each_process (Func func)
-{
-  std::list<process_info *>::iterator next, cur = all_processes.begin ();
-
-  while (cur != all_processes.end ())
-    {
-      next = cur;
-      next++;
-      func (*cur);
-      cur = next;
-    }
-}
-
-/* Find the first process for which FUNC returns true.  Return NULL if no
-   process satisfying FUNC is found.  */
-
-template <typename Func>
-static process_info *
-find_process (Func func)
-{
-  std::list<process_info *>::iterator next, cur = all_processes.begin ();
-
-  while (cur != all_processes.end ())
-    {
-      next = cur;
-      next++;
-
-      if (func (*cur))
-        return *cur;
-
-      cur = next;
-    }
-
-  return NULL;
-}
-
-extern struct thread_info *current_thread;
-
-/* Return the first process in the processes list.  */
-struct process_info *get_first_process (void);
+extern struct thread_info *current_inferior;
+void remove_inferior (struct inferior_list *list,
+		      struct inferior_list_entry *entry);
 
 struct process_info *add_process (int pid, int attached);
 void remove_process (struct process_info *process);
@@ -138,10 +94,21 @@ struct process_info *find_process_pid (int pid);
 int have_started_inferiors_p (void);
 int have_attached_inferiors_p (void);
 
+ptid_t thread_id_to_gdb_id (ptid_t);
+ptid_t thread_to_gdb_id (struct thread_info *);
+ptid_t gdb_id_to_thread_id (ptid_t);
+
 void clear_inferiors (void);
+struct inferior_list_entry *find_inferior
+     (struct inferior_list *,
+      int (*func) (struct inferior_list_entry *,
+		   void *),
+      void *arg);
+struct inferior_list_entry *find_inferior_id (struct inferior_list *list,
+					      ptid_t id);
+void *inferior_target_data (struct thread_info *);
+void set_inferior_target_data (struct thread_info *, void *);
+void *inferior_regcache_data (struct thread_info *);
+void set_inferior_regcache_data (struct thread_info *, void *);
 
-void *thread_target_data (struct thread_info *);
-struct regcache *thread_regcache_data (struct thread_info *);
-void set_thread_regcache_data (struct thread_info *, struct regcache *);
-
-#endif /* GDBSERVER_INFERIORS_H */
+#endif /* INFERIORS_H */

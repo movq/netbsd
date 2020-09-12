@@ -55,16 +55,20 @@ int type3_regs[15] = { 2, 1, 0, 27, 26, 25, 24, 31, 30, 29, 28, 23, 22, 20, 21};
 #endif
 
 
-unsigned32   trace_values[3];
-int          trace_num_values;
-unsigned32   trace_pc;
-const char * trace_name;
-int          trace_module;
+unsigned32 trace_values[3];
+int trace_num_values;
+unsigned32 trace_pc;
+const char *trace_name;
+int trace_module;
 
 
 void
-trace_input (char *name, enum op_types type, int size)
+trace_input (name, type, size)
+     char *name;
+     enum op_types type;
+     int size;
 {
+
   if (!TRACE_ALU_P (STATE_CPU (simulator, 0)))
     return;
 
@@ -222,13 +226,14 @@ trace_result (int has_result, unsigned32 result)
 
   /* append any result to the end of the buffer */
   if (has_result)
-    sprintf (chp, " :: 0x%.8lx", (unsigned long) result);
+    sprintf (chp, " :: 0x%.8lx", (unsigned long)result);
   
-  trace_generic (simulator, STATE_CPU (simulator, 0), trace_module, "%s", buf);
+  trace_generic (simulator, STATE_CPU (simulator, 0), trace_module, buf);
 }
 
 void
-trace_output (enum op_types result)
+trace_output (result)
+     enum op_types result;
 {
   if (!TRACE_ALU_P (STATE_CPU (simulator, 0)))
     return;
@@ -315,7 +320,7 @@ condition_met (unsigned code)
   return 1;
 }
 
-unsigned long
+static unsigned long
 Add32 (unsigned long a1, unsigned long a2, int * carry)
 {
   unsigned long result = (a1 + a2);
@@ -391,34 +396,32 @@ Multiply64 (int sign, unsigned long op0)
 }
 
 
-/* Read a null terminated string from memory, return in a buffer.  */
-
+/* Read a null terminated string from memory, return in a buffer */
 static char *
-fetch_str (SIM_DESC sd, address_word addr)
+fetch_str (sd, addr)
+     SIM_DESC sd;
+     address_word addr;
 {
   char *buf;
   int nr = 0;
-
   while (sim_core_read_1 (STATE_CPU (sd, 0),
 			  PC, read_map, addr + nr) != 0)
     nr++;
-
   buf = NZALLOC (char, nr + 1);
-  sim_read (simulator, addr, (unsigned char *) buf, nr);
-
+  sim_read (simulator, addr, buf, nr);
   return buf;
 }
 
 /* Read a null terminated argument vector from memory, return in a
-   buffer.  */
-
+   buffer */
 static char **
-fetch_argv (SIM_DESC sd, address_word addr)
+fetch_argv (sd, addr)
+     SIM_DESC sd;
+     address_word addr;
 {
   int max_nr = 64;
   int nr = 0;
   char **buf = xmalloc (max_nr * sizeof (char*));
-
   while (1)
     {
       unsigned32 a = sim_core_read_4 (STATE_CPU (sd, 0),
@@ -439,7 +442,7 @@ fetch_argv (SIM_DESC sd, address_word addr)
 
 /* sst.b */
 int
-OP_380 (void)
+OP_380 ()
 {
   trace_input ("sst.b", OP_STORE16, 1);
 
@@ -452,7 +455,7 @@ OP_380 (void)
 
 /* sst.h */
 int
-OP_480 (void)
+OP_480 ()
 {
   trace_input ("sst.h", OP_STORE16, 2);
 
@@ -465,7 +468,7 @@ OP_480 (void)
 
 /* sst.w */
 int
-OP_501 (void)
+OP_501 ()
 {
   trace_input ("sst.w", OP_STORE16, 4);
 
@@ -478,7 +481,7 @@ OP_501 (void)
 
 /* ld.b */
 int
-OP_700 (void)
+OP_700 ()
 {
   int adr;
 
@@ -495,7 +498,7 @@ OP_700 (void)
 
 /* ld.h */
 int
-OP_720 (void)
+OP_720 ()
 {
   int adr;
 
@@ -513,7 +516,7 @@ OP_720 (void)
 
 /* ld.w */
 int
-OP_10720 (void)
+OP_10720 ()
 {
   int adr;
 
@@ -531,7 +534,7 @@ OP_10720 (void)
 
 /* st.b */
 int
-OP_740 (void)
+OP_740 ()
 {
   trace_input ("st.b", OP_STORE32, 1);
 
@@ -544,7 +547,7 @@ OP_740 (void)
 
 /* st.h */
 int
-OP_760 (void)
+OP_760 ()
 {
   int adr;
   
@@ -562,7 +565,7 @@ OP_760 (void)
 
 /* st.w */
 int
-OP_10760 (void)
+OP_10760 ()
 {
   int adr;
   
@@ -580,7 +583,7 @@ OP_10760 (void)
 
 /* add reg, reg */
 int
-OP_1C0 (void)
+OP_1C0 ()
 {
   unsigned int op0, op1, result, z, s, cy, ov;
 
@@ -612,7 +615,7 @@ OP_1C0 (void)
 
 /* add sign_extend(imm5), reg */
 int
-OP_240 (void)
+OP_240 ()
 {
   unsigned int op0, op1, result, z, s, cy, ov;
   int temp;
@@ -644,7 +647,7 @@ OP_240 (void)
 
 /* addi sign_extend(imm16), reg, reg */
 int
-OP_600 (void)
+OP_600 ()
 {
   unsigned int op0, op1, result, z, s, cy, ov;
 
@@ -675,7 +678,7 @@ OP_600 (void)
 
 /* sub reg1, reg2 */
 int
-OP_1A0 (void)
+OP_1A0 ()
 {
   unsigned int op0, op1, result, z, s, cy, ov;
 
@@ -704,7 +707,7 @@ OP_1A0 (void)
 
 /* subr reg1, reg2 */
 int
-OP_180 (void)
+OP_180 ()
 {
   unsigned int op0, op1, result, z, s, cy, ov;
 
@@ -733,7 +736,7 @@ OP_180 (void)
 
 /* sxh reg1 */
 int
-OP_E0 (void)
+OP_E0 ()
 {
   trace_input ("mulh", OP_REG_REG, 0);
       
@@ -746,7 +749,7 @@ OP_E0 (void)
 
 /* mulh sign_extend(imm5), reg2 */
 int
-OP_2E0 (void)
+OP_2E0 ()
 {
   trace_input ("mulh", OP_IMM_REG, 0);
   
@@ -759,7 +762,7 @@ OP_2E0 (void)
 
 /* mulhi imm16, reg1, reg2 */
 int
-OP_6E0 (void)
+OP_6E0 ()
 {
   trace_input ("mulhi", OP_IMM16_REG_REG, 0);
   
@@ -772,7 +775,7 @@ OP_6E0 (void)
 
 /* cmp reg, reg */
 int
-OP_1E0 (void)
+OP_1E0 ()
 {
   unsigned int op0, op1, result, z, s, cy, ov;
 
@@ -800,7 +803,7 @@ OP_1E0 (void)
 
 /* cmp sign_extend(imm5), reg */
 int
-OP_260 (void)
+OP_260 ()
 {
   unsigned int op0, op1, result, z, s, cy, ov;
   int temp;
@@ -830,7 +833,7 @@ OP_260 (void)
 
 /* setf cccc,reg2 */
 int
-OP_7E0 (void)
+OP_7E0 ()
 {
   trace_input ("setf", OP_EX1, 0);
 
@@ -843,7 +846,7 @@ OP_7E0 (void)
 
 /* satadd reg,reg */
 int
-OP_C0 (void)
+OP_C0 ()
 {
   unsigned int op0, op1, result, z, s, cy, ov, sat;
   
@@ -891,7 +894,7 @@ OP_C0 (void)
 
 /* satadd sign_extend(imm5), reg */
 int
-OP_220 (void)
+OP_220 ()
 {
   unsigned int op0, op1, result, z, s, cy, ov, sat;
 
@@ -942,7 +945,7 @@ OP_220 (void)
 
 /* satsub reg1, reg2 */
 int
-OP_A0 (void)
+OP_A0 ()
 {
   unsigned int op0, op1, result, z, s, cy, ov, sat;
   
@@ -990,7 +993,7 @@ OP_A0 (void)
 
 /* satsubi sign_extend(imm16), reg */
 int
-OP_660 (void)
+OP_660 ()
 {
   unsigned int op0, op1, result, z, s, cy, ov, sat;
   int temp;
@@ -1041,7 +1044,7 @@ OP_660 (void)
 
 /* satsubr reg,reg */
 int
-OP_80 (void)
+OP_80 ()
 {
   unsigned int op0, op1, result, z, s, cy, ov, sat;
   
@@ -1090,7 +1093,7 @@ OP_80 (void)
 
 /* tst reg,reg */
 int
-OP_160 (void)
+OP_160 ()
 {
   unsigned int op0, op1, result, z, s;
 
@@ -1115,7 +1118,7 @@ OP_160 (void)
 
 /* mov sign_extend(imm5), reg */
 int
-OP_200 (void)
+OP_200 ()
 {
   int value = SEXT5 (OP[0]);
   
@@ -1130,7 +1133,7 @@ OP_200 (void)
 
 /* movhi imm16, reg, reg */
 int
-OP_640 (void)
+OP_640 ()
 {
   trace_input ("movhi", OP_UIMM16_REG_REG, 16);
       
@@ -1143,7 +1146,7 @@ OP_640 (void)
 
 /* sar zero_extend(imm5),reg1 */
 int
-OP_2A0 (void)
+OP_2A0 ()
 {
   unsigned int op0, op1, result, z, s, cy;
 
@@ -1169,7 +1172,7 @@ OP_2A0 (void)
 
 /* sar reg1, reg2 */
 int
-OP_A007E0 (void)
+OP_A007E0 ()
 {
   unsigned int op0, op1, result, z, s, cy;
 
@@ -1196,7 +1199,7 @@ OP_A007E0 (void)
 
 /* shl zero_extend(imm5),reg1 */
 int
-OP_2C0 (void)
+OP_2C0 ()
 {
   unsigned int op0, op1, result, z, s, cy;
 
@@ -1222,7 +1225,7 @@ OP_2C0 (void)
 
 /* shl reg1, reg2 */
 int
-OP_C007E0 (void)
+OP_C007E0 ()
 {
   unsigned int op0, op1, result, z, s, cy;
 
@@ -1248,7 +1251,7 @@ OP_C007E0 (void)
 
 /* shr zero_extend(imm5),reg1 */
 int
-OP_280 (void)
+OP_280 ()
 {
   unsigned int op0, op1, result, z, s, cy;
 
@@ -1274,7 +1277,7 @@ OP_280 (void)
 
 /* shr reg1, reg2 */
 int
-OP_8007E0 (void)
+OP_8007E0 ()
 {
   unsigned int op0, op1, result, z, s, cy;
 
@@ -1300,7 +1303,7 @@ OP_8007E0 (void)
 
 /* or reg, reg */
 int
-OP_100 (void)
+OP_100 ()
 {
   unsigned int op0, op1, result, z, s;
 
@@ -1326,7 +1329,7 @@ OP_100 (void)
 
 /* ori zero_extend(imm16), reg, reg */
 int
-OP_680 (void)
+OP_680 ()
 {
   unsigned int op0, op1, result, z, s;
 
@@ -1350,7 +1353,7 @@ OP_680 (void)
 
 /* and reg, reg */
 int
-OP_140 (void)
+OP_140 ()
 {
   unsigned int op0, op1, result, z, s;
 
@@ -1376,7 +1379,7 @@ OP_140 (void)
 
 /* andi zero_extend(imm16), reg, reg */
 int
-OP_6C0 (void)
+OP_6C0 ()
 {
   unsigned int result, z;
 
@@ -1400,7 +1403,7 @@ OP_6C0 (void)
 
 /* xor reg, reg */
 int
-OP_120 (void)
+OP_120 ()
 {
   unsigned int op0, op1, result, z, s;
 
@@ -1426,7 +1429,7 @@ OP_120 (void)
 
 /* xori zero_extend(imm16), reg, reg */
 int
-OP_6A0 (void)
+OP_6A0 ()
 {
   unsigned int op0, op1, result, z, s;
 
@@ -1450,7 +1453,7 @@ OP_6A0 (void)
 
 /* not reg1, reg2 */
 int
-OP_20 (void)
+OP_20 ()
 {
   unsigned int op0, result, z, s;
 
@@ -1474,7 +1477,7 @@ OP_20 (void)
 
 /* set1 */
 int
-OP_7C0 (void)
+OP_7C0 ()
 {
   unsigned int op0, op1, op2;
   int temp;
@@ -1497,7 +1500,7 @@ OP_7C0 (void)
 
 /* not1 */
 int
-OP_47C0 (void)
+OP_47C0 ()
 {
   unsigned int op0, op1, op2;
   int temp;
@@ -1520,7 +1523,7 @@ OP_47C0 (void)
 
 /* clr1 */
 int
-OP_87C0 (void)
+OP_87C0 ()
 {
   unsigned int op0, op1, op2;
   int temp;
@@ -1543,7 +1546,7 @@ OP_87C0 (void)
 
 /* tst1 */
 int
-OP_C7C0 (void)
+OP_C7C0 ()
 {
   unsigned int op0, op1, op2;
   int temp;
@@ -1564,7 +1567,7 @@ OP_C7C0 (void)
 
 /* di */
 int
-OP_16007E0 (void)
+OP_16007E0 ()
 {
   trace_input ("di", OP_NONE, 0);
   PSW |= PSW_ID;
@@ -1575,7 +1578,7 @@ OP_16007E0 (void)
 
 /* ei */
 int
-OP_16087E0 (void)
+OP_16087E0 ()
 {
   trace_input ("ei", OP_NONE, 0);
   PSW &= ~PSW_ID;
@@ -1586,7 +1589,7 @@ OP_16087E0 (void)
 
 /* halt */
 int
-OP_12007E0 (void)
+OP_12007E0 ()
 {
   trace_input ("halt", OP_NONE, 0);
   /* FIXME this should put processor into a mode where NMI still handled */
@@ -1598,7 +1601,7 @@ OP_12007E0 (void)
 
 /* trap */
 int
-OP_10007E0 (void)
+OP_10007E0 ()
 {
   trace_input ("trap", OP_TRAP, 0);
   trace_output (OP_TRAP);
@@ -1682,7 +1685,7 @@ OP_10007E0 (void)
 	    buf = PARM1;
 	    RETVAL = pipe (host_fd);
 	    SW (buf, host_fd[0]);
-	    buf += sizeof (uint16);
+	    buf += sizeof(uint16);
 	    SW (buf, host_fd[1]);
 	    RETERR = errno;
 	  }
@@ -1709,7 +1712,7 @@ OP_10007E0 (void)
 	  {
 	    char *buf = zalloc (PARM3);
 	    RETVAL = sim_io_read (simulator, PARM1, buf, PARM3);
-	    sim_write (simulator, PARM2, (unsigned char *) buf, PARM3);
+	    sim_write (simulator, PARM2, buf, PARM3);
 	    free (buf);
 	    if ((int) RETVAL < 0)
 	      RETERR = sim_io_get_errno (simulator);
@@ -1721,7 +1724,7 @@ OP_10007E0 (void)
 	case TARGET_SYS_write:
 	  {
 	    char *buf = zalloc (PARM3);
-	    sim_read (simulator, PARM2, (unsigned char *) buf, PARM3);
+	    sim_read (simulator, PARM2, buf, PARM3);
 	    if (PARM1 == 1)
 	      RETVAL = sim_io_write_stdout (simulator, buf, PARM3);
 	    else
@@ -2834,778 +2837,5 @@ OP_307E0 (void)
   trace_output (OP_PUSHPOP2);
 
   return 4;
-}
-
-/* V850E2R FPU functions */
-/*
-  sim_fpu_status_invalid_snan = 1,				-V--- (sim spec.)
-  sim_fpu_status_invalid_qnan = 2,				----- (sim spec.)
-  sim_fpu_status_invalid_isi = 4, (inf - inf)			-V---
-  sim_fpu_status_invalid_idi = 8, (inf / inf)			-V---
-  sim_fpu_status_invalid_zdz = 16, (0 / 0)			-V---
-  sim_fpu_status_invalid_imz = 32, (inf * 0)			-V---
-  sim_fpu_status_invalid_cvi = 64, convert to integer		-V---
-  sim_fpu_status_invalid_div0 = 128, (X / 0)			--Z--
-  sim_fpu_status_invalid_cmp = 256, compare			----- (sim spec.)
-  sim_fpu_status_invalid_sqrt = 512,				-V---
-  sim_fpu_status_rounded = 1024,				I----
-  sim_fpu_status_inexact = 2048,				I---- (sim spec.)
-  sim_fpu_status_overflow = 4096,				I--O-
-  sim_fpu_status_underflow = 8192,				I---U
-  sim_fpu_status_denorm = 16384,				----U (sim spec.)
-*/  
-    
-void
-update_fpsr (SIM_DESC sd, sim_fpu_status status, unsigned int mask, unsigned int double_op_p)
-{
-  unsigned int fpsr = FPSR & mask;
-
-  unsigned int flags = 0;
-
-  if (fpsr & FPSR_XEI
-      && ((status & (sim_fpu_status_rounded
-		     | sim_fpu_status_overflow
-		     | sim_fpu_status_inexact))
-	  || (status & sim_fpu_status_underflow
-	      && (fpsr & (FPSR_XEU | FPSR_XEI)) == 0
-	      && fpsr & FPSR_FS)))
-    {
-      flags |= FPSR_XCI | FPSR_XPI;
-    }
-
-  if (fpsr & FPSR_XEV
-      && (status & (sim_fpu_status_invalid_isi
-		    | sim_fpu_status_invalid_imz
-		    | sim_fpu_status_invalid_zdz
-		    | sim_fpu_status_invalid_idi
-		    | sim_fpu_status_invalid_cvi
-		    | sim_fpu_status_invalid_sqrt
-		    | sim_fpu_status_invalid_snan)))
-    {
-      flags |= FPSR_XCV | FPSR_XPV;
-    }
-
-  if (fpsr & FPSR_XEZ
-      && (status & sim_fpu_status_invalid_div0))
-    {
-      flags |= FPSR_XCV | FPSR_XPV;
-    }
-
-  if (fpsr & FPSR_XEO
-      && (status & sim_fpu_status_overflow))
-    {
-      flags |= FPSR_XCO | FPSR_XPO;
-    }
-      
-  if (((fpsr & FPSR_XEU) || (fpsr & FPSR_FS) == 0)
-      && (status & (sim_fpu_status_underflow
-		    | sim_fpu_status_denorm)))
-    {
-      flags |= FPSR_XCU | FPSR_XPU;
-    }
-
-  if (flags)
-    {
-      FPSR &= ~FPSR_XC;
-      FPSR |= flags;
-
-      SignalExceptionFPE (sd, double_op_p);
-    }
-}
-
-/* Exception.  */
-
-void
-SignalException (SIM_DESC sd)
-{
-  if (MPM & MPM_AUE)
-    {
-      PSW = PSW & ~(PSW_NPV | PSW_DMP | PSW_IMP);
-    }
-}
-
-void
-SignalExceptionFPE (SIM_DESC sd, unsigned int double_op_p)
-{								
-  if (((PSW & (PSW_NP|PSW_ID)) == 0)
-      || !(FPSR & (double_op_p ? FPSR_DEM : FPSR_SEM)))		
-    {								
-      EIPC = PC;							
-      EIPSW = PSW;						
-      EIIC = (FPSR & (double_op_p ? FPSR_DEM : FPSR_SEM)) 	
-	? 0x71 : 0x72;						
-      PSW |= (PSW_EP | PSW_ID);
-      PC = 0x70;
-
-      SignalException (sd);
-    }								
-}
-
-void
-check_invalid_snan (SIM_DESC sd, sim_fpu_status status, unsigned int double_op_p)
-{
-  if ((FPSR & FPSR_XEI)
-      && (status & sim_fpu_status_invalid_snan))
-    {
-      FPSR &= ~FPSR_XC;
-      FPSR |= FPSR_XCV;
-      FPSR |= FPSR_XPV;
-      SignalExceptionFPE (sd, double_op_p);
-    }
-}
-
-int
-v850_float_compare (SIM_DESC sd, int cmp, sim_fpu wop1, sim_fpu wop2, int double_op_p)
-{
-  int result = -1;
-  
-  if (sim_fpu_is_nan (&wop1) || sim_fpu_is_nan (&wop2))
-    {
-      if (cmp & 0x8)
-	{
-	  if (FPSR & FPSR_XEV)
-	    {
-	      FPSR |= FPSR_XCV | FPSR_XPV;
-	      SignalExceptionFPE (sd, double_op_p);
-	    }
-	}
-
-      switch (cmp)
-	{
-	case FPU_CMP_F:
-	  result = 0;
-	  break;
-	case FPU_CMP_UN:
-	  result = 1;
-	  break;
-	case FPU_CMP_EQ:
-	  result = 0;
-	  break;
-	case FPU_CMP_UEQ:
-	  result = 1;
-	  break;
-	case FPU_CMP_OLT:
-	  result = 0;
-	  break;
-	case FPU_CMP_ULT:
-	  result = 1;
-	  break;
-	case FPU_CMP_OLE:
-	  result = 0;
-	  break;
-	case FPU_CMP_ULE:
-	  result = 1;
-	  break;
-	case FPU_CMP_SF:
-	  result = 0;
-	  break;
-	case FPU_CMP_NGLE:
-	  result = 1;
-	  break;
-	case FPU_CMP_SEQ:
-	  result = 0;
-	  break;
-	case FPU_CMP_NGL:
-	  result = 1;
-	  break;
-	case FPU_CMP_LT:
-	  result = 0;
-	  break;
-	case FPU_CMP_NGE:
-	  result = 1;
-	  break;
-	case FPU_CMP_LE:
-	  result = 0;
-	  break;
-	case FPU_CMP_NGT:
-	  result = 1;
-	  break;
-	default:
-	  abort ();
-	}
-    }
-  else if (sim_fpu_is_infinity (&wop1) && sim_fpu_is_infinity (&wop2)
-	   && sim_fpu_sign (&wop1) == sim_fpu_sign (&wop2))
-    {
-      switch (cmp)
-	{
-	case FPU_CMP_F:
-	  result = 0;
-	  break;
-	case FPU_CMP_UN:
-	  result = 0;
-	  break;
-	case FPU_CMP_EQ:
-	  result = 1;
-	  break;
-	case FPU_CMP_UEQ:
-	  result = 1;
-	  break;
-	case FPU_CMP_OLT:
-	  result = 0;
-	  break;
-	case FPU_CMP_ULT:
-	  result = 0;
-	  break;
-	case FPU_CMP_OLE:
-	  result = 1;
-	  break;
-	case FPU_CMP_ULE:
-	  result = 1;
-	  break;
-	case FPU_CMP_SF:
-	  result = 0;
-	  break;
-	case FPU_CMP_NGLE:
-	  result = 0;
-	  break;
-	case FPU_CMP_SEQ:
-	  result = 1;
-	  break;
-	case FPU_CMP_NGL:
-	  result = 1;
-	  break;
-	case FPU_CMP_LT:
-	  result = 0;
-	  break;
-	case FPU_CMP_NGE:
-	  result = 0;
-	  break;
-	case FPU_CMP_LE:
-	  result = 1;
-	  break;
-	case FPU_CMP_NGT:
-	  result = 1;
-	  break;
-	default:
-	  abort ();
-	}
-    }
-  else
-    {
-      int gt = 0,lt = 0,eq = 0, status;
-
-      status = sim_fpu_cmp (&wop1, &wop2);
-
-      switch (status)
-	{
-	case SIM_FPU_IS_SNAN:
-	case SIM_FPU_IS_QNAN:
-	  abort ();
-	  break;
-
-	case SIM_FPU_IS_NINF:
-	  lt = 1;
-	  break;
-	case SIM_FPU_IS_PINF:
-	  gt = 1;
-	  break;
-	case SIM_FPU_IS_NNUMBER:
-	  lt = 1;
-	  break;
-	case SIM_FPU_IS_PNUMBER:
-	  gt = 1;
-	  break;
-	case SIM_FPU_IS_NDENORM:
-	  lt = 1;
-	  break;
-	case SIM_FPU_IS_PDENORM:
-	  gt = 1;
-	  break;
-	case SIM_FPU_IS_NZERO:
-	case SIM_FPU_IS_PZERO:
-	  eq = 1;
-	  break;
-	}
-  
-      switch (cmp)
-	{
-	case FPU_CMP_F:
-	  result = 0;
-	  break;
-	case FPU_CMP_UN:
-	  result = 0;
-	  break;
-	case FPU_CMP_EQ:
-	  result = eq;
-	  break;
-	case FPU_CMP_UEQ:
-	  result = eq;
-	  break;
-	case FPU_CMP_OLT:
-	  result = lt;
-	  break;
-	case FPU_CMP_ULT:
-	  result = lt;
-	  break;
-	case FPU_CMP_OLE:
-	  result = lt || eq;
-	  break;
-	case FPU_CMP_ULE:
-	  result = lt || eq;
-	  break;
-	case FPU_CMP_SF:
-	  result = 0;
-	  break;
-	case FPU_CMP_NGLE:
-	  result = 0;
-	  break;
-	case FPU_CMP_SEQ:
-	  result = eq;
-	  break;
-	case FPU_CMP_NGL:
-	  result = eq;
-	  break;
-	case FPU_CMP_LT:
-	  result = lt;
-	  break;
-	case FPU_CMP_NGE:
-	  result = lt;
-	  break;
-	case FPU_CMP_LE:
-	  result = lt || eq;
-	  break;
-	case FPU_CMP_NGT:
-	  result = lt || eq;
-	  break;
-	}
-    }
-
-  ASSERT (result != -1);
-  return result;
-}
-
-void
-v850_div (SIM_DESC sd, unsigned int op0, unsigned int op1, unsigned int *op2p, unsigned int *op3p)
-{
-  signed long int quotient;
-  signed long int remainder;
-  signed long int divide_by;
-  signed long int divide_this;
-  bfd_boolean     overflow = FALSE;
-  
-  /* Compute the result.  */
-  divide_by   = op0;
-  divide_this = op1;
-
-  if (divide_by == 0 || (divide_by == -1 && divide_this == (1 << 31)))
-    {
-      overflow  = TRUE;
-      divide_by = 1;
-    }
-  
-  quotient  = divide_this / divide_by;
-  remainder = divide_this % divide_by;
-  
-  /* Set condition codes.  */
-  PSW &= ~(PSW_Z | PSW_S | PSW_OV);
-  
-  if (overflow)      PSW |= PSW_OV;
-  if (quotient == 0) PSW |= PSW_Z;
-  if (quotient <  0) PSW |= PSW_S;
-  
-  *op2p = quotient;
-  *op3p = remainder;
-}
-
-void
-v850_divu (SIM_DESC sd, unsigned int op0, unsigned int op1, unsigned int *op2p, unsigned int *op3p)
-{
-  unsigned long int quotient;
-  unsigned long int remainder;
-  unsigned long int divide_by;
-  unsigned long int divide_this;
-  bfd_boolean       overflow = FALSE;
-  
-  /* Compute the result.  */
-  
-  divide_by   = op0;
-  divide_this = op1;
-  
-  if (divide_by == 0)
-    {
-      overflow = TRUE;
-      divide_by  = 1;
-    }
-  
-  quotient  = divide_this / divide_by;
-  remainder = divide_this % divide_by;
-  
-  /* Set condition codes.  */
-  PSW &= ~(PSW_Z | PSW_S | PSW_OV);
-  
-  if (overflow)      PSW |= PSW_OV;
-  if (quotient == 0) PSW |= PSW_Z;
-  if (quotient & 0x80000000) PSW |= PSW_S;
-  
-  *op2p = quotient;
-  *op3p = remainder;
-}
-
-void
-v850_sar (SIM_DESC sd, unsigned int op0, unsigned int op1, unsigned int *op2p)
-{
-  unsigned int result, z, s, cy;
-
-  op0 &= 0x1f;
-  result = (signed)op1 >> op0;
-
-  /* Compute the condition codes.  */
-  z = (result == 0);
-  s = (result & 0x80000000);
-  cy = (op1 & (1 << (op0 - 1)));
-
-  /* Store the result and condition codes.  */
-  PSW &= ~(PSW_Z | PSW_S | PSW_OV | PSW_CY);
-  PSW |= ((z ? PSW_Z : 0) | (s ? PSW_S : 0)
-		| (cy ? PSW_CY : 0));
-
-  *op2p = result;
-}
-
-void
-v850_shl (SIM_DESC sd, unsigned int op0, unsigned int op1, unsigned int *op2p)
-{
-  unsigned int result, z, s, cy;
-
-  op0 &= 0x1f;
-  result = op1 << op0;
-
-  /* Compute the condition codes.  */
-  z = (result == 0);
-  s = (result & 0x80000000);
-  cy = (op1 & (1 << (32 - op0)));
-
-  /* Store the result and condition codes.  */
-  PSW &= ~(PSW_Z | PSW_S | PSW_OV | PSW_CY);
-  PSW |= ((z ? PSW_Z : 0) | (s ? PSW_S : 0)
-		| (cy ? PSW_CY : 0));
-
-  *op2p = result;
-}
-
-void
-v850_rotl (SIM_DESC sd, unsigned int amount, unsigned int src, unsigned int * dest)
-{
-  unsigned int result, z, s, cy;
-
-  amount &= 0x1f;
-  result = src << amount;
-  result |= src >> (32 - amount);
-
-  /* Compute the condition codes.  */
-  z = (result == 0);
-  s = (result & 0x80000000);
-  cy = ! (result & 1);
-
-  /* Store the result and condition codes.  */
-  PSW &= ~(PSW_Z | PSW_S | PSW_OV | PSW_CY);
-  PSW |= ((z ? PSW_Z : 0) | (s ? PSW_S : 0)
-		| (cy ? PSW_CY : 0));
-
-  * dest = result;
-}
-
-void
-v850_bins (SIM_DESC sd, unsigned int source, unsigned int lsb, unsigned int msb,
-	   unsigned int * dest)
-{
-  unsigned int mask;
-  unsigned int result, pos, width;
-  unsigned int z, s;
-
-  pos = lsb;
-  width = (msb - lsb) + 1;
-
-  mask = ~ (-(1 << width));
-  source &= mask;
-  mask <<= pos;
-  result = (* dest) & ~ mask;
-  result |= source << pos;
-
-  /* Compute the condition codes.  */
-  z = (result == 0);
-  s = result & 0x80000000;
-
-  /* Store the result and condition codes.  */
-  PSW &= ~(PSW_Z | PSW_S | PSW_OV );
-  PSW |= (z ? PSW_Z : 0) | (s ? PSW_S : 0);
-  
-  * dest = result;
-}
-
-void
-v850_shr (SIM_DESC sd, unsigned int op0, unsigned int op1, unsigned int *op2p)
-{
-  unsigned int result, z, s, cy;
-
-  op0 &=  0x1f;
-  result = op1 >> op0;
-
-  /* Compute the condition codes.  */
-  z = (result == 0);
-  s = (result & 0x80000000);
-  cy = (op1 & (1 << (op0 - 1)));
-
-  /* Store the result and condition codes.  */
-  PSW &= ~(PSW_Z | PSW_S | PSW_OV | PSW_CY);
-  PSW |= ((z ? PSW_Z : 0) | (s ? PSW_S : 0)
-		| (cy ? PSW_CY : 0));
-
-  *op2p = result;
-}
-
-void
-v850_satadd (SIM_DESC sd, unsigned int op0, unsigned int op1, unsigned int *op2p)
-{
-  unsigned int result, z, s, cy, ov, sat;
-
-  result = op0 + op1;
-  
-  /* Compute the condition codes.  */
-  z = (result == 0);
-  s = (result & 0x80000000);
-  cy = (result < op0 || result < op1);
-  ov = ((op0 & 0x80000000) == (op1 & 0x80000000)
-	&& (op0 & 0x80000000) != (result & 0x80000000));
-  sat = ov;
-  
-  /* Store the result and condition codes.  */
-  PSW &= ~(PSW_Z | PSW_S | PSW_CY | PSW_OV);
-  PSW |= ((z ? PSW_Z : 0) | (s ? PSW_S : 0)
-	  | (cy ? PSW_CY : 0) | (ov ? PSW_OV : 0)
-	  | (sat ? PSW_SAT : 0));
-  
-  /* Handle saturated results.  */
-  if (sat && s)
-    {
-      result = 0x7fffffff;
-      PSW &= ~PSW_S;
-    }
-  else if (sat)
-    {
-      result = 0x80000000;
-      PSW |= PSW_S;
-    }
-
-  *op2p = result;
-}
-
-void
-v850_satsub (SIM_DESC sd, unsigned int op0, unsigned int op1, unsigned int *op2p)
-{
-  unsigned int result, z, s, cy, ov, sat;
-
-  /* Compute the result.  */
-  result = op1 - op0;
-  
-  /* Compute the condition codes.  */
-  z = (result == 0);
-  s = (result & 0x80000000);
-  cy = (op1 < op0);
-  ov = ((op1 & 0x80000000) != (op0 & 0x80000000)
-	&& (op1 & 0x80000000) != (result & 0x80000000));
-  sat = ov;
-  
-  /* Store the result and condition codes.  */
-  PSW &= ~(PSW_Z | PSW_S | PSW_CY | PSW_OV);
-  PSW |= ((z ? PSW_Z : 0) | (s ? PSW_S : 0)
-	  | (cy ? PSW_CY : 0) | (ov ? PSW_OV : 0)
-	  | (sat ? PSW_SAT : 0));
-
-  /* Handle saturated results.  */
-  if (sat && s)
-    {
-      result = 0x7fffffff;
-      PSW &= ~PSW_S;
-    }
-  else if (sat)
-    {
-      result = 0x80000000;
-      PSW |= PSW_S;
-    }
-
-  *op2p = result;
-}
-
-unsigned32
-load_data_mem (SIM_DESC  sd,
-	       SIM_ADDR  addr,
-	       int       len)
-{
-  uint32 data;
-
-  switch (len)
-    {
-    case 1:
-      data = sim_core_read_unaligned_1 (STATE_CPU (sd, 0), 
-					PC, read_map, addr);
-      break;
-    case 2:
-      data = sim_core_read_unaligned_2 (STATE_CPU (sd, 0), 
-					PC, read_map, addr);
-      break;
-    case 4:
-      data = sim_core_read_unaligned_4 (STATE_CPU (sd, 0), 
-					PC, read_map, addr);
-      break;
-    default:
-      abort ();
-    }
-  return data;
-}
-
-void
-store_data_mem (SIM_DESC    sd,
-		SIM_ADDR    addr,
-		int         len,
-		unsigned32  data)
-{
-  switch (len)
-    {
-    case 1:
-      store_mem (addr, 1, data);
-      break;
-    case 2:
-      store_mem (addr, 2, data);
-      break;
-    case 4:
-      store_mem (addr, 4, data);
-      break;
-    default:
-      abort ();
-    }
-}
-
-int
-mpu_load_mem_test (SIM_DESC sd, unsigned int addr, int size, int base_reg)
-{
-  int result = 1;
-
-  if (PSW & PSW_DMP)
-    {
-      if (IPE0 && addr >= IPA2ADDR (IPA0L) && addr <= IPA2ADDR (IPA0L) && IPR0)
-	{
-	  /* text area */
-	}
-      else if (IPE1 && addr >= IPA2ADDR (IPA1L) && addr <= IPA2ADDR (IPA1L) && IPR1)
-	{
-	  /* text area */
-	}
-      else if (IPE2 && addr >= IPA2ADDR (IPA2L) && addr <= IPA2ADDR (IPA2L) && IPR2)
-	{
-	  /* text area */
-	}
-      else if (IPE3 && addr >= IPA2ADDR (IPA3L) && addr <= IPA2ADDR (IPA3L) && IPR3)
-	{
-	  /* text area */
-	}
-      else if (addr >= PPA2ADDR (PPA & ~PPM) && addr <= DPA2ADDR (PPA | PPM))
-	{
-	  /* preifarallel area */
-	}
-      else if (addr >= PPA2ADDR (SPAL) && addr <= DPA2ADDR (SPAU))
-	{
-	  /* stack area */
-	}
-      else if (DPE0 && addr >= DPA2ADDR (DPA0L) && addr <= DPA2ADDR (DPA0L) && DPR0
-	       && ((SPAL & SPAL_SPS) ? base_reg == SP_REGNO : 1))
-	{
-	  /* data area */
-	}
-      else if (DPE1 && addr >= DPA2ADDR (DPA1L) && addr <= DPA2ADDR (DPA1L) && DPR1
-	       && ((SPAL & SPAL_SPS) ? base_reg == SP_REGNO : 1))
-	{
-	  /* data area */
-	}
-      else if (DPE2 && addr >= DPA2ADDR (DPA2L) && addr <= DPA2ADDR (DPA2L) && DPR2
-	       && ((SPAL & SPAL_SPS) ? base_reg == SP_REGNO : 1))
-	{
-	  /* data area */
-	}
-      else if (DPE3 && addr >= DPA2ADDR (DPA3L) && addr <= DPA2ADDR (DPA3L) && DPR3
-	       && ((SPAL & SPAL_SPS) ? base_reg == SP_REGNO : 1))
-	{
-	  /* data area */
-	}
-      else
-	{
-	  VMECR &= ~(VMECR_VMW | VMECR_VMX);
-	  VMECR |= VMECR_VMR;
-	  VMADR = addr;
-	  VMTID = TID;
-	  FEIC = 0x431;
-
-	  PC = 0x30;
-
-	  SignalException (sd);
-	  result = 0;
-	}
-    }
-
-  return result;
-}
-
-int
-mpu_store_mem_test (SIM_DESC sd, unsigned int addr, int size, int base_reg)
-{
-  int result = 1;
-
-  if (PSW & PSW_DMP)
-    {
-      if (addr >= PPA2ADDR (PPA & ~PPM) && addr <= DPA2ADDR (PPA | PPM))
-	{
-	  /* preifarallel area */
-	}
-      else if (addr >= PPA2ADDR (SPAL) && addr <= DPA2ADDR (SPAU))
-	{
-	  /* stack area */
-	}
-      else if (DPE0 && addr >= DPA2ADDR (DPA0L) && addr <= DPA2ADDR (DPA0L) && DPW0
-	       && ((SPAL & SPAL_SPS) ? base_reg == SP_REGNO : 1))
-	{
-	  /* data area */
-	}
-      else if (DPE1 && addr >= DPA2ADDR (DPA1L) && addr <= DPA2ADDR (DPA1L) && DPW1
-	       && ((SPAL & SPAL_SPS) ? base_reg == SP_REGNO : 1))
-	{
-	  /* data area */
-	}
-      else if (DPE2 && addr >= DPA2ADDR (DPA2L) && addr <= DPA2ADDR (DPA2L) && DPW2
-	       && ((SPAL & SPAL_SPS) ? base_reg == SP_REGNO : 1))
-	{
-	  /* data area */
-	}
-      else if (DPE3 && addr >= DPA2ADDR (DPA3L) && addr <= DPA2ADDR (DPA3L) && DPW3
-	       && ((SPAL & SPAL_SPS) ? base_reg == SP_REGNO : 1))
-	{
-	  /* data area */
-	}
-      else
-	{
-	  if (addr >= PPA2ADDR (PPA & ~PPM) && addr <= DPA2ADDR (PPA | PPM))
-	    {
-	      FEIC = 0x432;
-	      VPTID = TID;
-	      VPADR = PC;
-#ifdef NOT_YET
-	      VIP_PP;
-	      VPECR;
-#endif	      
-	    }
-	  else
-	    {
-	      FEIC = 0x431;
-	      VMTID = TID;
-	      VMADR = VMECR;
-	      VMECR &= ~(VMECR_VMW | VMECR_VMX);
-	      VMECR |= VMECR_VMR;
-	      PC = 0x30;
-	    }
-	  result = 0;
-	}
-    }
-
-  return result;
 }
 

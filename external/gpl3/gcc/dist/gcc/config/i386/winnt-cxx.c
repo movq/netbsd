@@ -1,6 +1,6 @@
 /* Target support for C++ classes on Windows.
    Contributed by Danny Smith (dannysmith@users.sourceforge.net)
-   Copyright (C) 2005-2019 Free Software Foundation, Inc.
+   Copyright (C) 2005, 2007, 2009  Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -18,14 +18,20 @@ You should have received a copy of the GNU General Public License
 along with GCC; see the file COPYING3.  If not see
 <http://www.gnu.org/licenses/>.  */
 
-#define IN_TARGET_CODE 1
-
 #include "config.h"
 #include "system.h"
 #include "coretypes.h"
+#include "tm.h"
+#include "rtl.h"
+#include "regs.h"
+#include "hard-reg-set.h"
+#include "output.h"
+#include "tree.h"
 #include "cp/cp-tree.h" /* This is why we're a separate module.  */
-#include "stringpool.h"
-#include "attribs.h"
+#include "flags.h"
+#include "tm_p.h"
+#include "toplev.h"
+#include "hashtab.h"
 
 bool
 i386_pe_type_dllimport_p (tree decl)
@@ -63,13 +69,6 @@ i386_pe_type_dllexport_p (tree decl)
   if (TREE_CODE (TREE_TYPE (decl)) == METHOD_TYPE
       && DECL_ARTIFICIAL (decl) && !DECL_THUNK_P (decl))
     return false;
-  if (TREE_CODE (decl) == FUNCTION_DECL
-      && DECL_DECLARED_INLINE_P (decl))
-    {
-      if (DECL_REALLY_EXTERN (decl)
-	  || !flag_keep_inline_dllexport)
-	return false;
-    }
   return true;
 }
 
@@ -102,25 +101,14 @@ i386_pe_adjust_class_at_definition (tree t)
  
   if (lookup_attribute ("dllexport", TYPE_ATTRIBUTES (t)) != NULL_TREE)
     {
-      tree tmv = TYPE_MAIN_VARIANT (t);
-
-      /* Make sure that we set dllexport attribute to typeinfo's
-	 base declaration, as otherwise it would fail to be exported as
-	 it isn't a class-member.  */
-      if (tmv != NULL_TREE
-	  && CLASSTYPE_TYPEINFO_VAR (tmv) != NULL_TREE)
-	{
-	  tree na, ti_decl = CLASSTYPE_TYPEINFO_VAR (tmv);
-	  na = tree_cons (get_identifier ("dllexport"), NULL_TREE,
-			  NULL_TREE);
-	  decl_attributes (&ti_decl, na, 0);
-	}
-
-      /* Check FUNCTION_DECL's and static VAR_DECL's.  */
-      for (member = TYPE_FIELDS (t); member; member = DECL_CHAIN (member))
+      /* Check static VAR_DECL's.  */
+      for (member = TYPE_FIELDS (t); member; member = TREE_CHAIN (member))
 	if (TREE_CODE (member) == VAR_DECL)     
 	  maybe_add_dllexport (member);
-	else if (TREE_CODE (member) == FUNCTION_DECL)
+    
+      /* Check FUNCTION_DECL's.  */
+      for (member = TYPE_METHODS (t); member;  member = TREE_CHAIN (member))
+	if (TREE_CODE (member) == FUNCTION_DECL)
 	  {
 	    tree thunk;
 	    maybe_add_dllexport (member);
@@ -129,11 +117,9 @@ i386_pe_adjust_class_at_definition (tree t)
 	    for (thunk = DECL_THUNKS (member); thunk;
 		 thunk = TREE_CHAIN (thunk))
 	      maybe_add_dllexport (thunk);
-	  }
-
+	}
       /* Check vtables  */
-      for (member = CLASSTYPE_VTABLES (t);
-	   member; member = DECL_CHAIN (member))
+      for (member = CLASSTYPE_VTABLES (t); member;  member = TREE_CHAIN (member))
 	if (TREE_CODE (member) == VAR_DECL) 
 	  maybe_add_dllexport (member);
     }
@@ -148,24 +134,26 @@ i386_pe_adjust_class_at_definition (tree t)
 	 That is just right since out-of class declarations can only be a
 	 definition.   */
 
-      /* Check FUNCTION_DECL's and static VAR_DECL's.  */
-      for (member = TYPE_FIELDS (t); member; member = DECL_CHAIN (member))
+      /* Check static VAR_DECL's.  */
+      for (member = TYPE_FIELDS (t); member; member = TREE_CHAIN (member))
 	if (TREE_CODE (member) == VAR_DECL)     
 	  maybe_add_dllimport (member);
-	else if (TREE_CODE (member) == FUNCTION_DECL)
+    
+      /* Check FUNCTION_DECL's.  */
+      for (member = TYPE_METHODS (t); member;  member = TREE_CHAIN (member))
+	if (TREE_CODE (member) == FUNCTION_DECL)
 	  {
 	    tree thunk;
 	    maybe_add_dllimport (member);
 	  
 	    /* Also add the attribute to its thunks.  */
 	    for (thunk = DECL_THUNKS (member); thunk;
-		 thunk = DECL_CHAIN (thunk))
+		 thunk = TREE_CHAIN (thunk))
 	      maybe_add_dllimport (thunk);
-	  }
+	 }
  
       /* Check vtables  */
-      for (member = CLASSTYPE_VTABLES (t);
-	   member;  member = DECL_CHAIN (member))
+      for (member = CLASSTYPE_VTABLES (t); member;  member = TREE_CHAIN (member))
 	if (TREE_CODE (member) == VAR_DECL) 
 	  maybe_add_dllimport (member);
 

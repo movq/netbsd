@@ -1,5 +1,5 @@
 /* Debugging routines for the remote server for GDB.
-   Copyright (C) 2014-2019 Free Software Foundation, Inc.
+   Copyright (C) 2014-2015 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -17,7 +17,7 @@
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #include "server.h"
-#include <chrono>
+#include <sys/time.h>
 
 /* Enable miscellaneous debugging output.  The name is historical - it
    was originally used to debug LinuxThreads support.  */
@@ -27,7 +27,8 @@ int debug_threads;
 int debug_timestamp;
 
 /* Print a debugging message.
-   If the text begins a new line it is preceded by a timestamp.
+   If the text begins a new line it is preceded by a timestamp, if the
+   system has gettimeofday.
    We don't get fancy with newline checking, we just check whether the
    previous call ended with "\n".  */
 
@@ -40,13 +41,14 @@ debug_vprintf (const char *format, va_list ap)
 
   if (debug_timestamp && new_line)
     {
-      using namespace std::chrono;
+      struct timeval tm;
 
-      steady_clock::time_point now = steady_clock::now ();
-      seconds s = duration_cast<seconds> (now.time_since_epoch ());
-      microseconds us = duration_cast<microseconds> (now.time_since_epoch ()) - s;
+      gettimeofday (&tm, NULL);
 
-      fprintf (stderr, "%ld.%06ld ", (long) s.count (), (long) us.count ());
+      /* If gettimeofday doesn't exist, and as a portability solution it has
+	 been replaced with, e.g., time, then it doesn't make sense to print
+	 the microseconds field.  Is there a way to check for that?  */
+      fprintf (stderr, "%ld:%06ld ", (long) tm.tv_sec, (long) tm.tv_usec);
     }
 #endif
 

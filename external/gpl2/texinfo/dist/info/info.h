@@ -1,4 +1,4 @@
-/*	$NetBSD: info.h,v 1.1.1.1 2016/01/14 00:11:29 christos Exp $	*/
+/*	$NetBSD: info.h,v 1.1 2016/01/14 00:11:29 christos Exp $	*/
 
 /* info.h -- Header file which includes all of the other headers.
    Id: info.h,v 1.4 2004/04/11 17:56:45 karl Exp 

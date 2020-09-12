@@ -1,6 +1,7 @@
 /* Manage register sets.
 
-   Copyright (C) 2003-2019 Free Software Foundation, Inc.
+   Copyright (C) 2003, 2004, 2007, 2008, 2009, 2010, 2011
+   Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -23,6 +24,14 @@
 struct gdbarch;
 struct regcache;
 
+/* Data structure for the supported register notes in a core file.  */
+struct core_regset_section
+{
+  const char *sect_name;
+  int size;
+  const char *human_name;
+};
+
 /* Data structure describing a register set.  */
 
 typedef void (supply_regset_ftype) (const struct regset *, struct regcache *,
@@ -33,10 +42,9 @@ typedef void (collect_regset_ftype) (const struct regset *,
 
 struct regset
 {
-  /* Pointer to a "register map", for private use by the methods
-     below.  Typically describes how the regset's registers are
-     arranged in the buffer collected to or supplied from.  */
-  const void *regmap;
+  /* Data pointer for private use by the methods below, presumably
+     providing some sort of description of the register set.  */
+  const void *descr;
 
   /* Function supplying values in a register set to a register cache.  */
   supply_regset_ftype *supply_regset;
@@ -44,12 +52,19 @@ struct regset
   /* Function collecting values in a register set from a register cache.  */
   collect_regset_ftype *collect_regset;
 
-  unsigned flags;
+  /* Architecture associated with the register set.  */
+  struct gdbarch *arch;
 };
 
-/* Values for a regset's 'flags' field.  */
+/* Allocate a fresh 'struct regset' whose supply_regset function is
+   SUPPLY_REGSET, and whose collect_regset function is COLLECT_REGSET.
+   If the regset has no collect_regset function, pass NULL for
+   COLLECT_REGSET.
 
-#define REGSET_VARIABLE_SIZE 1	/* Accept a larger regset section size
-				   in a core file without warning.  */
+   The object returned is allocated on ARCH's obstack.  */
+
+extern struct regset *regset_alloc (struct gdbarch *arch,
+                                    supply_regset_ftype *supply_regset,
+                                    collect_regset_ftype *collect_regset);
 
 #endif /* regset.h */

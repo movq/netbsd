@@ -1,5 +1,7 @@
 /* as.h - global header file
-   Copyright (C) 1987-2020 Free Software Foundation, Inc.
+   Copyright 1987, 1990, 1991, 1992, 1993, 1994, 1995, 1996, 1997, 1998,
+   1999, 2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008
+   Free Software Foundation, Inc.
 
    This file is part of GAS, the GNU Assembler.
 
@@ -21,30 +23,67 @@
 #ifndef GAS
 #define GAS 1
 /* I think this stuff is largely out of date.  xoxorich.
-
+ 
    CAPITALISED names are #defined.
    "lowercaseH" is #defined if "lowercase.h" has been #include-d.
    "lowercaseT" is a typedef of "lowercase" objects.
    "lowercaseP" is type "pointer to object of type 'lowercase'".
    "lowercaseS" is typedef struct ... lowercaseS.
-
+  
    #define DEBUG to enable all the "know" assertion tests.
    #define SUSPECT when debugging hash code.
    #define COMMON as "extern" for all modules except one, where you #define
   	COMMON as "".
    If TEST is #defined, then we are testing a module: #define COMMON as "".  */
 
-#include "alloca-conf.h"
+#include "config.h"
+
+/* This is the code recommended in the autoconf documentation, almost
+   verbatim.  If it doesn't work for you, let me know, and notify
+   djm@gnu.ai.mit.edu as well.  */
+/* Added void* version for STDC case.  This is to be compatible with
+   the declaration in bison.simple, used for m68k operand parsing.
+   --KR 1995.08.08 */
+/* Force void* decl for hpux.  This is what Bison uses.  --KR 1995.08.16 */
+
+#ifndef __GNUC__
+# if HAVE_ALLOCA_H
+#  include <alloca.h>
+# else
+#  ifdef _AIX
+/* Indented so that pre-ansi C compilers will ignore it, rather than
+   choke on it.  Some versions of AIX require this to be the first
+   thing in the file.  */
+ #pragma alloca
+#  else
+#   ifndef alloca /* predefined by HP cc +Olibcalls */
+#    if !defined (__STDC__) && !defined (__hpux)
+extern char *alloca ();
+#    else
+extern void *alloca ();
+#    endif /* __STDC__, __hpux */
+#   endif /* alloca */
+#  endif /* _AIX */
+# endif /* HAVE_ALLOCA_H */
+#endif /* __GNUC__ */
+
+/* Prefer varargs for non-ANSI compiler, since some will barf if the
+   ellipsis definition is used with a no-arguments declaration.  */
+#if defined (HAVE_VARARGS_H) && !defined (__STDC__)
+#undef HAVE_STDARG_H
+#endif
+
+#if defined (HAVE_STDARG_H)
+#define USE_STDARG
+#endif
+#if !defined (USE_STDARG) && defined (HAVE_VARARGS_H)
+#define USE_VARARGS
+#endif
 
 /* Now, tend to the rest of the configuration.  */
 
 /* System include files first...  */
 #include <stdio.h>
-
-#ifdef STRING_WITH_STRINGS
-#include <string.h>
-#include <strings.h>
-#else
 #ifdef HAVE_STRING_H
 #include <string.h>
 #else
@@ -52,8 +91,6 @@
 #include <strings.h>
 #endif
 #endif
-#endif
-
 #ifdef HAVE_STDLIB_H
 #include <stdlib.h>
 #endif
@@ -69,23 +106,39 @@
 #include <errno.h>
 #endif
 
+#ifdef USE_STDARG
 #include <stdarg.h>
+#endif
+
+#ifdef USE_VARARGS
+#include <varargs.h>
+#endif
+
+#if !defined (USE_STDARG) && !defined (USE_VARARGS)
+/* Roll our own.  */
+#define va_alist REST
+#define va_dcl
+typedef int * va_list;
+#define va_start(ARGS)	ARGS = &REST
+#define va_end(ARGS)
+#endif
 
 #include "getopt.h"
 /* The first getopt value for machine-independent long options.
    150 isn't special; it's just an arbitrary non-ASCII char value.  */
 #define OPTION_STD_BASE 150
 /* The first getopt value for machine-dependent long options.
-   290 gives the standard options room to grow.  */
-#define OPTION_MD_BASE  290
+   190 gives the standard options room to grow.  */
+#define OPTION_MD_BASE 190
 
 #ifdef DEBUG
 #undef NDEBUG
 #endif
 #if __GNUC__ < 2 || (__GNUC__ == 2 && __GNUC_MINOR__ < 6)
-#define __PRETTY_FUNCTION__  ((char *) NULL)
+#define __PRETTY_FUNCTION__  ((char*)0)
 #endif
-#define gas_assert(P)	((void) ((P) ? 0 : (abort (), 0)))
+#define assert(P) \
+  ((void) ((P) ? 0 : (as_assert (__FILE__, __LINE__, __PRETTY_FUNCTION__), 0)))
 #undef abort
 #define abort()		as_abort (__FILE__, __LINE__, __PRETTY_FUNCTION__)
 
@@ -96,6 +149,13 @@
 
 /* Define the standard progress macros.  */
 #include "progress.h"
+
+/* This doesn't get taken care of anywhere.  */
+#ifndef __MWERKS__  /* Metrowerks C chokes on the "defined (inline)"  */
+#if !defined (__GNUC__) && !defined (inline)
+#define inline
+#endif
+#endif /* !__MWERKS__ */
 
 /* Other stuff from config.h.  */
 #ifdef NEED_DECLARATION_ENVIRON
@@ -118,10 +178,6 @@ extern void *realloc ();
 extern char *strstr ();
 #endif
 
-#if !HAVE_DECL_MEMPCPY
-void *mempcpy(void *, const void *, size_t);
-#endif
-
 #if !HAVE_DECL_VSNPRINTF
 extern int vsnprintf(char *, size_t, const char *, va_list);
 #endif
@@ -134,6 +190,14 @@ extern int vsnprintf(char *, size_t, const char *, va_list);
 /* Hack to make "gcc -Wall" not complain about obstack macros.  */
 #if !defined (memcpy) && !defined (bcopy)
 #define bcopy(src,dest,size)	memcpy (dest, src, size)
+#endif
+
+/* Make Saber happier on obstack.h.  */
+#ifdef SABER
+#undef  __PTR_TO_INT
+#define __PTR_TO_INT(P) ((int) (P))
+#undef  __INT_TO_PTR
+#define __INT_TO_PTR(P) ((char *) (P))
 #endif
 
 #ifndef __LINE__
@@ -200,10 +264,10 @@ typedef addressT valueT;
 
 #if ENABLE_CHECKING || defined (DEBUG)
 #ifndef know
-#define know(p) gas_assert(p)	/* Verify our assumptions!  */
+#define know(p) assert(p)	/* Verify our assumptions!  */
 #endif /* not yet defined */
 #else
-#define know(p)	do {} while (0)	/* know() checks are no-op.ed  */
+#define know(p)			/* know() checks are no-op.ed  */
 #endif
 
 /* input_scrub.c */
@@ -226,7 +290,7 @@ COMMON subsegT now_subseg;
 /* Segment our instructions emit to.  */
 COMMON segT now_seg;
 
-#define segment_name(SEG)	bfd_section_name (SEG)
+#define segment_name(SEG)	bfd_get_section_name (stdoutput, SEG)
 
 extern segT reg_section, expr_section;
 /* Shouldn't these be eliminated someday?  */
@@ -278,16 +342,6 @@ enum _relax_state
      fr_symbol: operand
      1 variable char: fill character  */
   rs_space,
-
-  /* .nop directive with expression operand that needs to be computed
-     later.  Similar to rs_space, but different.  It fills with no-op
-     instructions.
-     fr_symbol: operand
-     1 constant byte: no-op fill control byte.  */
-  rs_space_nop,
-
-  /* Similar to rs_fill.  It is used to implement .nop directive .  */
-  rs_fill_nop,
 
   /* A DWARF leb128 value; only ELF uses this.  The subtype is 0 for
      unsigned, 1 for signed.  */
@@ -364,9 +418,6 @@ COMMON int flag_strip_local_absolute;
 /* True if we should generate a traditional format object file.  */
 COMMON int flag_traditional_format;
 
-/* Type of compressed debug sections we should generate.   */
-COMMON enum compressed_debug_section_type flag_compress_debug;
-
 /* TRUE if .note.GNU-stack section with SEC_CODE should be created */
 COMMON int flag_execstack;
 
@@ -374,7 +425,7 @@ COMMON int flag_execstack;
 COMMON int flag_noexecstack;
 
 /* name of emitted object file */
-COMMON const char *out_file_name;
+COMMON char *out_file_name;
 
 /* name of file defining extensions to the basic instruction set */
 COMMON char *insttbl_file_name;
@@ -385,8 +436,6 @@ COMMON int need_pass_2;
 /* TRUE if we should do no relaxing, and
    leave lots of padding.  */
 COMMON int linkrelax;
-
-COMMON int do_not_pad_sections_to_alignment;
 
 /* TRUE if we should produce a listing.  */
 extern int listing;
@@ -411,8 +460,6 @@ enum debug_info_type
 
 extern enum debug_info_type debug_type;
 extern int use_gnu_debug_info_extensions;
-COMMON bfd_boolean flag_dwarf_sections;
-extern int flag_dwarf_cie_version;
 
 /* Maximum level of macro nesting.  */
 extern int max_macro_nest;
@@ -436,6 +483,7 @@ struct _pseudo_type
 
 typedef struct _pseudo_type pseudo_typeS;
 
+#ifdef USE_STDARG
 #if (__GNUC__ >= 2) && !defined(VMS)
 /* for use with -Wformat */
 
@@ -450,17 +498,24 @@ typedef struct _pseudo_type pseudo_typeS;
   void FCN (const char *format, ...) \
     __attribute__ ((__format__ (__printf__, 1, 2)))
 #define PRINTF_WHERE_LIKE(FCN) \
-  void FCN (const char *file, unsigned int line, const char *format, ...) \
+  void FCN (char *file, unsigned int line, const char *format, ...) \
     __attribute__ ((__format__ (__printf__, 3, 4)))
 
 #else /* __GNUC__ < 2 || defined(VMS) */
 
 #define PRINTF_LIKE(FCN)	void FCN (const char *format, ...)
-#define PRINTF_WHERE_LIKE(FCN)	void FCN (const char *file, \
+#define PRINTF_WHERE_LIKE(FCN)	void FCN (char *file, \
 					  unsigned int line, \
 					  const char *format, ...)
 
 #endif /* __GNUC__ < 2 || defined(VMS) */
+
+#else /* ! USE_STDARG */
+
+#define PRINTF_LIKE(FCN)	void FCN ()
+#define PRINTF_WHERE_LIKE(FCN)	void FCN ()
+
+#endif /* ! USE_STDARG */
 
 PRINTF_LIKE (as_bad);
 PRINTF_LIKE (as_fatal) ATTRIBUTE_NORETURN;
@@ -469,31 +524,24 @@ PRINTF_LIKE (as_warn);
 PRINTF_WHERE_LIKE (as_bad_where);
 PRINTF_WHERE_LIKE (as_warn_where);
 
+void   as_assert (const char *, int, const char *);
 void   as_abort (const char *, int, const char *) ATTRIBUTE_NORETURN;
-void   signal_init (void);
 void   sprint_value (char *, addressT);
 int    had_errors (void);
 int    had_warnings (void);
-void   as_warn_value_out_of_range (const char *, offsetT, offsetT, offsetT,
-				   const char *, unsigned);
-void   as_bad_value_out_of_range (const char *, offsetT, offsetT, offsetT,
-				  const char *, unsigned);
+void   as_warn_value_out_of_range (char *, offsetT, offsetT, offsetT, char *, unsigned);
+void   as_bad_value_out_of_range (char *, offsetT, offsetT, offsetT, char *, unsigned);
 void   print_version_id (void);
 char * app_push (void);
-
-/* Number of littlenums required to hold an extended precision number.	*/
-#define MAX_LITTLENUMS 6
-
 char * atof_ieee (char *, int, LITTLENUM_TYPE *);
-char * atof_ieee_detail (char *, int, int, LITTLENUM_TYPE *, FLONUM_TYPE *);
-const char * ieee_md_atof (int, char *, int *, bfd_boolean);
-const char * vax_md_atof (int, char *, int *);
-char * input_scrub_include_file (const char *, char *);
+char * ieee_md_atof (int, char *, int *, bfd_boolean);
+char * vax_md_atof (int, char *, int *);
+char * input_scrub_include_file (char *, char *);
 void   input_scrub_insert_line (const char *);
 void   input_scrub_insert_file (char *);
-char * input_scrub_new_file (const char *);
+char * input_scrub_new_file (char *);
 char * input_scrub_next_buffer (char **bufp);
-size_t do_scrub_chars (size_t (*get) (char *, size_t), char *, size_t);
+int    do_scrub_chars (int (*get) (char *, int), char *, int);
 int    gen_to_words (LITTLENUM_TYPE *, int, long);
 int    had_err (void);
 int    ignore_input (void);
@@ -501,15 +549,14 @@ void   cond_finish_check (int);
 void   cond_exit_macro (int);
 int    seen_at_least_1_file (void);
 void   app_pop (char *);
-const char * as_where (unsigned int *);
-const char * as_where_physical (unsigned int *);
+void   as_where (char **, unsigned int *);
 void   bump_line_counters (void);
 void   do_scrub_begin (int);
 void   input_scrub_begin (void);
 void   input_scrub_close (void);
 void   input_scrub_end (void);
-int    new_logical_line (const char *, int);
-int    new_logical_line_flags (const char *, int, int);
+int    new_logical_line (char *, int);
+int    new_logical_line_flags (char *, int, int);
 void   subsegs_begin (void);
 void   subseg_change (segT, int);
 segT   subseg_new (const char *, subsegT);
@@ -518,20 +565,12 @@ void   subseg_set (segT, subsegT);
 int    subseg_text_p (segT);
 int    seg_not_empty_p (segT);
 void   start_dependencies (char *);
-void   register_dependency (const char *);
+void   register_dependency (char *);
 void   print_dependencies (void);
 segT   subseg_get (const char *, int);
 
 const char *remap_debug_filename (const char *);
 void add_debug_prefix_map (const char *);
-
-static inline char *
-xmemdup0 (const char *in, size_t len)
-{
-  char *out = (char *) xmalloc (len + 1);
-  out[len] = 0;
-  return (char *) memcpy (out, in, len);
-}
 
 struct expressionS;
 struct fix;
@@ -549,7 +588,7 @@ int generic_force_reloc (struct fix *);
 
 #include "expr.h"		/* Before targ-*.h */
 
-/* This one starts the chain of target dependent headers.  */
+/* This one starts the chain of target dependant headers.  */
 #include "targ-env.h"
 
 #ifdef OBJ_MAYBE_ELF
@@ -588,29 +627,10 @@ COMMON int flag_m68k_mri;
 #define flag_m68k_mri 0
 #endif
 
-#ifndef TC_STRING_ESCAPES
-#define TC_STRING_ESCAPES 1
-#endif
-
 #ifdef WARN_COMMENTS
 COMMON int           warn_comment;
 COMMON unsigned int  found_comment;
-COMMON const char *        found_comment_file;
-#endif
-
-#if defined OBJ_ELF || defined OBJ_MAYBE_ELF
-/* If .size directive failure should be error or warning.  */
-COMMON int flag_allow_nonconst_size;
-
-/* If we should generate ELF common symbols with the STT_COMMON type.  */
-extern int flag_use_elf_stt_common;
-
-/* TRUE iff GNU Build attribute notes should
-   be generated if none are in the input files.  */
-extern bfd_boolean flag_generate_build_notes;
-
-/* If section name substitution sequences should be honored */
-COMMON int flag_sectname_subst;
+COMMON char *        found_comment_file;
 #endif
 
 #ifndef DOLLAR_AMBIGU
@@ -651,13 +671,6 @@ COMMON int flag_sectname_subst;
 #endif
 #if OCTETS_PER_BYTE != (1<<OCTETS_PER_BYTE_POWER)
  #error "Octets per byte conflicts with its power-of-two definition!"
-#endif
-
-#if defined OBJ_ELF || defined OBJ_MAYBE_ELF
-/* On ELF platforms, mark debug sections with SEC_ELF_OCTETS */
-#define SEC_OCTETS (IS_ELF ? SEC_ELF_OCTETS : 0)
-#else
-#define SEC_OCTETS 0
 #endif
 
 #endif /* GAS */

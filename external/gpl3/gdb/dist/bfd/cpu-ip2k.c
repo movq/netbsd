@@ -1,5 +1,5 @@
 /* BFD support for the Scenix IP2xxx processor.
-   Copyright (C) 2000-2019 Free Software Foundation, Inc.
+   Copyright 2000, 2002, 2005, 2007 Free Software Foundation, Inc.
 
    This file is part of BFD, the Binary File Descriptor library.
 
@@ -32,10 +32,9 @@ const bfd_arch_info_type bfd_ip2k_nonext_arch =
   "ip2k",			/* Architecture name.  */
   "ip2022",			/* Machine name.  */
   1,				/* Section align power.  */
-  FALSE,			/* The default ?  */
+  FALSE,		        /* The default ?  */
   bfd_default_compatible,	/* Architecture comparison fn.  */
   bfd_default_scan,		/* String to architecture convert fn.  */
-  bfd_arch_default_fill,	/* Default fill.  */
   NULL				/* Next in list.  */
 };
 
@@ -52,6 +51,5 @@ const bfd_arch_info_type bfd_ip2k_arch =
   TRUE,				/* The default ?  */
   bfd_default_compatible,	/* Architecture comparison fn.  */
   bfd_default_scan,		/* String to architecture convert fn.  */
-  bfd_arch_default_fill,	/* Default fill.  */
   & bfd_ip2k_nonext_arch	/* Next in list.  */
 };

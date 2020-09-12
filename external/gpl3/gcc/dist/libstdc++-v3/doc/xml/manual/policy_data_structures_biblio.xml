@@ -181,7 +181,7 @@
     <biblioentry xml:id="biblio.dawestimer">
       <title>
 	<link xmlns:xlink="http://www.w3.org/1999/xlink"
-	      xlink:href="http://www.boost.org/libs/timer/">
+	      xlink:href="www.boost.org/doc/libs/release/libs/timer/">
 	  Boost Timer Library
 	</link>
       </title>
@@ -208,7 +208,7 @@
     <biblioentry xml:id="biblio.clearypool">
       <title>
 	<link xmlns:xlink="http://www.w3.org/1999/xlink"
-	      xlink:href="http://www.boost.org/libs/pool/">
+	      xlink:href="www.boost.org/doc/libs/release/libs/pool/">
 	  Boost Pool Library
 	</link>
       </title>
@@ -236,7 +236,7 @@
     <biblioentry xml:id="biblio.maddocktraits">
       <title>
 	<link xmlns:xlink="http://www.w3.org/1999/xlink"
-	      xlink:href="http://www.boost.org/libs/type_traits/">
+	      xlink:href="www.boost.org/doc/libs/release/libs/type_traits/">
 	  Boost Type Traits Library
 	</link>
       </title>
@@ -892,9 +892,12 @@
     </biblioentry>
 
     <!-- 26 -->
-    <biblioentry xml:id="biblio.maverick_lowerbounds">
+    <biblioentry xml:id="biblio.maverik_lowerbounds">
       <title>
-	Deamortization - Part 2: Binomial Heaps
+	<link xmlns:xlink="http://www.w3.org/1999/xlink"
+	      xlink:href="http://magic.aladdin.cs.cmu.edu/2005/08/01/deamortization-part-2-binomial-heaps/">
+	  Deamortization - Part 2: Binomial Heaps
+	</link>
       </title>
       <date>
 	2005
@@ -903,7 +906,7 @@
       <author>
 	<personname>
 	  <firstname>
-	    Maverick
+	    Maverik
 	  </firstname>
 	  <surname>
 	    Woo
@@ -1062,7 +1065,7 @@
     <biblioentry xml:id="biblio.mscom">
       <title>
 	<link xmlns:xlink="http://www.w3.org/1999/xlink"
-	      xlink:href="https://docs.microsoft.com/en-us/windows/desktop/com/the-component-object-model">
+	      xlink:href="https://www.microsoft.com/com/">
 	  COM: Component Model Object Technologies
 	</link>
       </title>
@@ -1139,7 +1142,7 @@
     <biblioentry xml:id="biblio.nelson96stlpq">
       <title>
 	<link xmlns:xlink="http://www.w3.org/1999/xlink"
-	      xlink:href="https://marknelson.us/posts/1996/01/01/priority-queues.html">Priority Queues and the STL
+	      xlink:href="http://marknelson.us/1996/01/01/priority-queues/">Priority Queues and the STL
 	</link>
       </title>
       <date>
@@ -1206,7 +1209,7 @@
     <biblioentry xml:id="biblio.sgi_stl">
       <title>
 	<link xmlns:xlink="http://www.w3.org/1999/xlink"
-	      xlink:href="https://web.archive.org/web/20171225062613/http://www.sgi.com/tech/stl/">
+	      xlink:href="http://www.sgi.com/tech/stl/">
 	  Standard Template Library Programmer's Guide
 	</link>
       </title>
@@ -1419,7 +1422,10 @@
     <!-- 45 -->
     <biblioentry xml:id="biblio.wickland96thirty">
       <title>
-	Thirty Years Among the Dead
+	<link xmlns:xlink="http://www.w3.org/1999/xlink"
+	      xlink:href="http://myweb.wvnet.edu/~gsa00121/books/amongdead30.zip">
+	  Thirty Years Among the Dead
+	</link>
       </title>
       <date>
 	1996

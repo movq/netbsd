@@ -1,6 +1,6 @@
 // -*- C++ -*- compatibility header.
 
-// Copyright (C) 2007-2019 Free Software Foundation, Inc.
+// Copyright (C) 2007, 2009 Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
@@ -28,17 +28,11 @@
 
 #include <bits/c++config.h>
 
-#if __cplusplus >= 201103L
+#ifdef __GXX_EXPERIMENTAL_CXX0X__
 # include <ccomplex>
-#endif
-
-#if __cplusplus >= 201103L && defined(__STRICT_ANSI__)
-// For strict modes do not include the C library's <complex.h>, see PR 82417.
-#elif _GLIBCXX_HAVE_COMPLEX_H
-# include_next <complex.h>
-# ifdef _GLIBCXX_COMPLEX
-// See PR56111, keep the macro in C++03 if possible.
-#  undef complex
+#else
+# if _GLIBCXX_HAVE_COMPLEX_H
+#  include_next <complex.h>
 # endif
 #endif
 

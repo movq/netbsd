@@ -1,5 +1,6 @@
 /* Sysroff object format dumper.
-   Copyright (C) 1994-2020 Free Software Foundation, Inc.
+   Copyright 1994, 1995, 1998, 1999, 2000, 2001, 2002, 2003, 2005, 2007
+   Free Software Foundation, Inc.
 
    This file is part of GNU Binutils.
 
@@ -38,7 +39,21 @@ static int code;
 static int addrsize = 4;
 static FILE *file;
 
+static void dh (unsigned char *, int);
+static void itheader (char *, int);
+static void p (void);
+static void tabout (void);
+static void pbarray (barray *);
+static int getone (int);
+static int opt (int);
+static void must (int);
+static void tab (int, char *);
+static void dump_symbol_info (void);
 static void derived_type (void);
+static void module (void);
+static void show_usage (FILE *, int);
+
+extern int main (int, char **);
 
 static char *
 getCHARS (unsigned char *ptr, int *idx, int size, int max)
@@ -48,13 +63,10 @@ getCHARS (unsigned char *ptr, int *idx, int size, int max)
   int b = size;
 
   if (b >= max)
-    return _("*undefined*");
+    return "*undefined*";
 
   if (b == 0)
     {
-      /* PR 17512: file: 13caced2.  */
-      if (oc >= max)
-	return _("*corrupt*");
       /* Got to work out the length of the string from self.  */
       b = ptr[oc++];
       (*idx) += 8;
@@ -122,7 +134,7 @@ fillup (unsigned char *ptr)
     sum += ptr[i];
 
   if ((sum & 0xff) != 0xff)
-    printf (_("SUM IS %x\n"), sum);
+    printf ("SUM IS %x\n", sum);
 
   if (dump)
     dh (ptr, size);
@@ -155,12 +167,7 @@ getINT (unsigned char *ptr, int *idx, int size, int max)
   int byte = *idx / 8;
 
   if (byte >= max)
-    {
-      /* PR 17512: file: id:000001,src:000002,op:flip1,pos:45.  */
-      /* Prevent infinite loops re-reading beyond the end of the buffer.  */
-      fatal (_("ICE: getINT: Out of buffer space"));
-      return 0;
-    }
+    return 0;
 
   if (size == -2)
     size = addrsize;
@@ -182,7 +189,7 @@ getINT (unsigned char *ptr, int *idx, int size, int max)
       n = (ptr[byte + 0] << 24) + (ptr[byte + 1] << 16) + (ptr[byte + 2] << 8) + (ptr[byte + 3]);
       break;
     default:
-      fatal (_("Unsupported read size: %d"), size);
+      abort ();
     }
 
   *idx += size * 8;
@@ -204,9 +211,9 @@ getBITS (unsigned char *ptr, int *idx, int size, int max)
 }
 
 static void
-itheader (char *name, int icode)
+itheader (char *name, int code)
 {
-  printf ("\n%s 0x%02x\n", name, icode);
+  printf ("\n%s 0x%02x\n", name, code);
 }
 
 static int indent;
@@ -493,7 +500,7 @@ getone (int type)
       break;
 
     default:
-      printf (_("GOT A %x\n"), c);
+      printf ("GOT A %x\n", c);
       return 0;
       break;
     }
@@ -511,7 +518,7 @@ static void
 must (int x)
 {
   if (!getone (x))
-    printf (_("WANTED %x!!\n"), x);
+    printf ("WANTED %x!!\n", x);
 }
 
 static void
@@ -522,14 +529,15 @@ tab (int i, char *s)
   if (s)
     {
       p ();
-      puts (s);
+      printf (s);
+      printf ("\n");
     }
 }
 
 static void
 dump_symbol_info (void)
 {
-  tab (1, _("SYMBOL INFO"));
+  tab (1, "SYMBOL INFO");
 
   while (opt (IT_dsy_CODE))
     {
@@ -547,7 +555,7 @@ dump_symbol_info (void)
 static void
 derived_type (void)
 {
-  tab (1, _("DERIVED TYPE"));
+  tab (1, "DERIVED TYPE");
 
   while (1)
     {
@@ -604,13 +612,11 @@ module (void)
   int c = 0;
   int l = 0;
 
-  tab (1, _("MODULE***\n"));
+  tab (1, "MODULE***\n");
 
   do
     {
       c = getc (file);
-      if (c == EOF)
-	break;
       ungetc (c, file);
 
       c &= 0x7f;
@@ -635,17 +641,17 @@ module (void)
 
 char *program_name;
 
-ATTRIBUTE_NORETURN static void
-show_usage (FILE *ffile, int status)
+static void
+show_usage (FILE *file, int status)
 {
-  fprintf (ffile, _("Usage: %s [option(s)] in-file\n"), program_name);
-  fprintf (ffile, _("Print a human readable interpretation of a SYSROFF object file\n"));
-  fprintf (ffile, _(" The options are:\n\
+  fprintf (file, _("Usage: %s [option(s)] in-file\n"), program_name);
+  fprintf (file, _("Print a human readable interpretation of a SYSROFF object file\n"));
+  fprintf (file, _(" The options are:\n\
   -h --help        Display this information\n\
   -v --version     Print the program's version number\n"));
 
   if (REPORT_BUGS_TO[0] && status == 0)
-    fprintf (ffile, _("Report bugs to %s\n"), REPORT_BUGS_TO);
+    fprintf (file, _("Report bugs to %s\n"), REPORT_BUGS_TO);
   exit (status);
 }
 
@@ -653,7 +659,7 @@ int
 main (int ac, char **av)
 {
   char *input_file = NULL;
-  int option;
+  int opt;
   static struct option long_options[] =
   {
     {"help", no_argument, 0, 'h'},
@@ -672,13 +678,12 @@ main (int ac, char **av)
 
   program_name = av[0];
   xmalloc_set_program_name (program_name);
-  bfd_set_error_program_name (program_name);
 
   expandargv (&ac, &av);
 
-  while ((option = getopt_long (ac, av, "HhVv", long_options, (int *) NULL)) != EOF)
+  while ((opt = getopt_long (ac, av, "HhVv", long_options, (int *) NULL)) != EOF)
     {
-      switch (option)
+      switch (opt)
 	{
 	case 'H':
 	case 'h':

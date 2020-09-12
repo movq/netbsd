@@ -1,5 +1,6 @@
 /*
-   Copyright (C) 2001-2019 Free Software Foundation, Inc.
+   Copyright (C) 2001, 2002, 2005, 2008, 2009, 2010
+   Free Software Foundation, Inc.
    See license.html for license.
 
    This just provides documentation for stuff that doesn't need to be in the
@@ -27,12 +28,6 @@
 */
 /** @namespace std::tr1::__detail
  *  @brief Implementation details not part of the namespace std::tr1 interface.
-*/
-/** @namespace std::tr2
- *  @brief ISO C++ TR2 entities toplevel namespace is std::tr2.
-*/
-/** @namespace std::tr2::__detail
- *  @brief Implementation details not part of the namespace std::tr2 interface.
 */
 /** @namespace __gnu_cxx
  *  @brief GNU extensions for public use.

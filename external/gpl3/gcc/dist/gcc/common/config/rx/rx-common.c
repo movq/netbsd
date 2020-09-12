@@ -1,5 +1,5 @@
 /* Common hooks for Renesas RX.
-   Copyright (C) 2008-2019 Free Software Foundation, Inc.
+   Copyright (C) 2008-2013 Free Software Foundation, Inc.
 
    This file is part of GCC.
 
@@ -51,16 +51,13 @@ rx_handle_option (struct gcc_options *opts,
       return value >= 0 && value <= 4;
 
     case OPT_mcpu_:
-      if ((enum rx_cpu_types) value == RX200 || 
-          (enum rx_cpu_types) value == RX100)
+      if ((enum rx_cpu_types) value == RX200)
 	opts->x_target_flags |= MASK_NO_USE_FPU;
       break;
       
     case OPT_fpu:
       if (opts->x_rx_cpu_type == RX200)
 	error_at (loc, "the RX200 cpu does not have FPU hardware");
-      else if (opts->x_rx_cpu_type == RX100)
-	error_at (loc, "the RX100 cpu does not have FPU hardware");
       break;
 
     default:
@@ -70,8 +67,18 @@ rx_handle_option (struct gcc_options *opts,
   return true;
 }
 
+/* Implement TARGET_OPTION_OPTIMIZATION_TABLE.  */
+static const struct default_options rx_option_optimization_table[] =
+  {
+    { OPT_LEVELS_1_PLUS, OPT_fomit_frame_pointer, NULL, 1 },
+    { OPT_LEVELS_NONE, 0, NULL, 0 }
+  };
+
 #undef  TARGET_HANDLE_OPTION
 #define TARGET_HANDLE_OPTION			rx_handle_option
+
+#undef  TARGET_OPTION_OPTIMIZATION_TABLE
+#define TARGET_OPTION_OPTIMIZATION_TABLE	rx_option_optimization_table
 
 #undef  TARGET_EXCEPT_UNWIND_INFO
 #define TARGET_EXCEPT_UNWIND_INFO		sjlj_except_unwind_info

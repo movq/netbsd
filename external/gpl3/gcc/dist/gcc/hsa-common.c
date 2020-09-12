@@ -1,5 +1,5 @@
 /* Implementation of commonly needed HSAIL related functions and methods.
-   Copyright (C) 2013-2019 Free Software Foundation, Inc.
+   Copyright (C) 2013-2017 Free Software Foundation, Inc.
    Contributed by Martin Jambor <mjambor@suse.cz> and
    Martin Liska <mliska@suse.cz>.
 
@@ -40,8 +40,6 @@ along with GCC; see the file COPYING3.  If not see
 #include "internal-fn.h"
 #include "ctype.h"
 #include "builtins.h"
-#include "stringpool.h"
-#include "attribs.h"
 
 /* Structure containing intermediate HSA representation of the generated
    function.  */
@@ -810,8 +808,8 @@ void
 hsa_summary_t::link_functions (cgraph_node *gpu, cgraph_node *host,
 			       hsa_function_kind kind, bool gridified_kernel_p)
 {
-  hsa_function_summary *gpu_summary = get_create (gpu);
-  hsa_function_summary *host_summary = get_create (host);
+  hsa_function_summary *gpu_summary = get (gpu);
+  hsa_function_summary *host_summary = get (host);
 
   gpu_summary->m_kind = kind;
   host_summary->m_kind = kind;
@@ -840,7 +838,7 @@ hsa_register_kernel (cgraph_node *host)
 {
   if (hsa_summaries == NULL)
     hsa_summaries = new hsa_summary_t (symtab);
-  hsa_function_summary *s = hsa_summaries->get_create (host);
+  hsa_function_summary *s = hsa_summaries->get (host);
   s->m_kind = HSA_KERNEL;
 }
 

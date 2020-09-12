@@ -1,5 +1,6 @@
 /* Definitions of target machine for GNU compiler, for HP-UX.
-   Copyright (C) 1991-2019 Free Software Foundation, Inc.
+   Copyright (C) 1991, 1995, 1996, 2002, 2003, 2004, 2007, 2008
+   Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -21,11 +22,8 @@ along with GCC; see the file COPYING3.  If not see
 #undef TARGET_HPUX
 #define TARGET_HPUX 1
 
-#undef HPUX_LONG_DOUBLE_LIBRARY
-#define HPUX_LONG_DOUBLE_LIBRARY 1
-
 #undef TARGET_DEFAULT
-#define TARGET_DEFAULT 0
+#define TARGET_DEFAULT MASK_BIG_SWITCH
 
 /* Make GCC agree with types.h.  */
 #undef SIZE_TYPE
@@ -35,6 +33,7 @@ along with GCC; see the file COPYING3.  If not see
 #define PTRDIFF_TYPE "int"
 
 #define LONG_DOUBLE_TYPE_SIZE 128
+#define HPUX_LONG_DOUBLE_LIBRARY
 #define FLOAT_LIB_COMPARE_RETURNS_BOOL(MODE, COMPARISON) ((MODE) == TFmode)
 
 /* GCC always defines __STDC__.  HP C++ compilers don't define it.  This
@@ -102,6 +101,10 @@ along with GCC; see the file COPYING3.  If not see
   "%{mlinker-opt:-O} %{!shared:-u main} %{static:-a archive} %{g*:-a archive} %{shared:-b}"
 #endif
 
+/* hpux8 and later have C++ compatible include files, so do not
+   pretend they are `extern "C"'.  */
+#define NO_IMPLICIT_EXTERN_C
+
 /* hpux11 and earlier don't have fputc_unlocked, so we must inhibit the
    transformation of fputs_unlocked and fprintf_unlocked to fputc_unlocked.  */
 #define DONT_HAVE_FPUTC_UNLOCKED
@@ -111,5 +114,12 @@ along with GCC; see the file COPYING3.  If not see
 #undef TARGET_HPUX_UNWIND_LIBRARY
 #define TARGET_HPUX_UNWIND_LIBRARY 1
 
-#undef TARGET_LIBC_HAS_FUNCTION
-#define TARGET_LIBC_HAS_FUNCTION no_c99_libc_has_function
+/* Handle #pragma weak and #pragma pack.  */
+#undef HANDLE_SYSV_PRAGMA
+#define HANDLE_SYSV_PRAGMA
+
+/* Define this so we can compile MS code for use with WINE.  */
+#undef HANDLE_PRAGMA_PACK_PUSH_POP
+#define HANDLE_PRAGMA_PACK_PUSH_POP
+
+#define MD_UNWIND_SUPPORT "config/pa/hpux-unwind.h"

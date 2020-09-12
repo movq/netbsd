@@ -1,6 +1,6 @@
 /* This testcase is part of GDB, the GNU debugger.
 
-   Copyright 2010-2019 Free Software Foundation, Inc.
+   Copyright 2010, 2011 Free Software Foundation, Inc.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -17,13 +17,6 @@
 
 int my_global_symbol = 42;
 
-/* Symbol MY_BSS_SYMBOL is referenced, and should be placed into .bss
-   section.  */
-
-static int my_bss_symbol;
-
-/* Symbol MY_STATIC_SYMBOL is never referenced and so will be eliminated.  */
-
 static int my_static_symbol;
 
 int
@@ -31,7 +24,7 @@ main ()
 {
   int v_in_main;
 
-  return v_in_main + my_bss_symbol;
+  return v_in_main;
 }
 
 int

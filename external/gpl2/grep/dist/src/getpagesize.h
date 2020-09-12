@@ -1,4 +1,4 @@
-/*	$NetBSD: getpagesize.h,v 1.1.1.1 2016/01/10 21:36:20 christos Exp $	*/
+/*	$NetBSD: getpagesize.h,v 1.1 2016/01/10 21:36:20 christos Exp $	*/
 
 /* Emulate getpagesize on systems that lack it.  */
 

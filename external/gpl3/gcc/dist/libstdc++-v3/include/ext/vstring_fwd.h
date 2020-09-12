@@ -1,6 +1,6 @@
-// <vstring.h> Forward declarations -*- C++ -*-
+// Versatile string forward -*- C++ -*-
 
-// Copyright (C) 2005-2019 Free Software Foundation, Inc.
+// Copyright (C) 2005, 2006, 2007, 2008, 2009 Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
@@ -23,8 +23,9 @@
 // <http://www.gnu.org/licenses/>.
 
 /** @file ext/vstring_fwd.h
+ *  This file is a GNU extension to the Standard C++ Library.
  *  This is an internal header file, included by other library headers.
- *  Do not attempt to use it directly. @headername{ext/vstring.h}
+ *  You should not attempt to use it directly.
  */
 
 #ifndef _VSTRING_FWD_H
@@ -36,9 +37,7 @@
 #include <bits/char_traits.h>
 #include <bits/allocator.h>
 
-namespace __gnu_cxx _GLIBCXX_VISIBILITY(default)
-{
-_GLIBCXX_BEGIN_NAMESPACE_VERSION
+_GLIBCXX_BEGIN_NAMESPACE(__gnu_cxx)
 
   template<typename _CharT, typename _Traits, typename _Alloc>
     class __sso_string_base;
@@ -66,7 +65,9 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 		 std::allocator<wchar_t>, __rc_string_base> __wrc_string;
 #endif  
 
-#if __cplusplus >= 201103L
+#if (defined(__GXX_EXPERIMENTAL_CXX0X__) \
+     && defined(_GLIBCXX_USE_C99_STDINT_TR1))
+
   typedef __versa_string<char16_t>                          __u16vstring;
   typedef __u16vstring                                      __u16sso_string;
   typedef 
@@ -78,9 +79,9 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
   typedef 
   __versa_string<char32_t, std::char_traits<char32_t>,
 		 std::allocator<char32_t>, __rc_string_base> __u32rc_string;
-#endif // C++11
 
-_GLIBCXX_END_NAMESPACE_VERSION
-} // namespace
+#endif
+
+_GLIBCXX_END_NAMESPACE
 
 #endif /* _VSTRING_FWD_H */

@@ -1,5 +1,5 @@
 /* genmddeps.c - creates a makefile dependency fragment for the md file.
-   Copyright (C) 2004-2019 Free Software Foundation, Inc.
+   Copyright (C) 2004, 2007 Free Software Foundation, Inc.
 
    This program is free software; you can redistribute it and/or modify it
    under the terms of the GNU General Public License as published by the
@@ -18,10 +18,10 @@
 #include "bconfig.h"
 #include "system.h"
 #include "coretypes.h"
+#include "tm.h"
+#include "rtl.h"
+#include "gensupport.h"
 #include "errors.h"
-#include "statistics.h"
-#include "vec.h"
-#include "read-md.h"
 
 
 struct filedep
@@ -42,16 +42,15 @@ add_filedep (const char *pathname)
 }
 
 int
-main (int argc, const char **argv)
+main (int argc, char **argv)
 {
   struct filedep *d;
 
   progname = "genmddeps";
   include_callback = add_filedep;
 
-  noop_reader reader;
-  if (!reader.read_md_files (argc, argv, NULL))
-    return FATAL_EXIT_CODE;
+  if (init_md_reader_args (argc, argv) != SUCCESS_EXIT_CODE)
+    return (FATAL_EXIT_CODE);
 
   *last = NULL;
 

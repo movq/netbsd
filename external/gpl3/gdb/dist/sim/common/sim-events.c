@@ -1,6 +1,6 @@
 /* The common simulator framework for GDB, the GNU Debugger.
 
-   Copyright 2002-2019 Free Software Foundation, Inc.
+   Copyright 2002, 2007, 2008, 2009, 2010, 2011 Free Software Foundation, Inc.
 
    Contributed by Andrew Cagney and Red Hat.
 
@@ -25,7 +25,6 @@
 
 #include "sim-main.h"
 #include "sim-assert.h"
-#include "libiberty.h"
 
 #ifdef HAVE_STRING_H
 #include <string.h>
@@ -141,14 +140,21 @@ struct _sim_event {
 
 #define _ETRACE sd, NULL
 
+#undef ETRACE_P
+#define ETRACE_P (WITH_TRACE && STATE_EVENTS (sd)->trace)
+
 #undef ETRACE
 #define ETRACE(ARGS) \
 do \
   { \
-    if (STRACE_EVENTS_P (sd)) \
+    if (ETRACE_P) \
       { \
         if (STRACE_DEBUG_P (sd)) \
-	  trace_printf (sd, NULL, "%s:%d: ", lbasename (__FILE__), __LINE__); \
+	  { \
+	    const char *file; \
+	    SIM_FILTER_PATH (file, __FILE__); \
+	    trace_printf (sd, NULL, "%s:%d: ", file, __LINE__); \
+	  } \
         trace_printf  ARGS; \
       } \
   } \
@@ -273,7 +279,7 @@ sim_events_zalloc (SIM_DESC sd)
       /*-LOCK-*/
       sigset_t old_mask;
       sigset_t new_mask;
-      sigfillset (&new_mask);
+      sigfillset(&new_mask);
       sigprocmask (SIG_SETMASK, &new_mask, &old_mask);
 #endif
       new = ZALLOC (sim_event);
@@ -403,7 +409,7 @@ update_time_from_event (SIM_DESC sd)
       events->time_of_event = current_time - 1;
       events->time_from_event = -1;
     }
-  if (STRACE_EVENTS_P (sd))
+  if (ETRACE_P)
     {
       sim_event *event;
       int i;
@@ -515,18 +521,18 @@ sim_events_schedule_vtracef (SIM_DESC sd,
   new_event->data = data;
   new_event->handler = handler;
   new_event->watching = watch_timer;
-  if (fmt == NULL || !STRACE_EVENTS_P (sd) || vasprintf (&new_event->trace, fmt, ap) < 0)
+  if (fmt == NULL || !ETRACE_P || vasprintf (&new_event->trace, fmt, ap) < 0)
     new_event->trace = NULL;
-  insert_sim_event (sd, new_event, delta_time);
-  ETRACE ((_ETRACE,
-	   "event scheduled at %ld - tag 0x%lx - time %ld, handler 0x%lx, data 0x%lx%s%s\n",
-	   (long)sim_events_time (sd),
-	   (long)new_event,
-	   (long)new_event->time_of_event,
-	   (long)new_event->handler,
-	   (long)new_event->data,
-	   (new_event->trace != NULL) ? ", " : "",
-	   (new_event->trace != NULL) ? new_event->trace : ""));
+  insert_sim_event(sd, new_event, delta_time);
+  ETRACE((_ETRACE,
+	  "event scheduled at %ld - tag 0x%lx - time %ld, handler 0x%lx, data 0x%lx%s%s\n",
+	  (long)sim_events_time(sd),
+	  (long)new_event,
+	  (long)new_event->time_of_event,
+	  (long)new_event->handler,
+	  (long)new_event->data,
+	  (new_event->trace != NULL) ? ", " : "",
+	  (new_event->trace != NULL) ? new_event->trace : ""));
   return new_event;
 }
 #endif
@@ -545,7 +551,7 @@ sim_events_schedule_after_signal (SIM_DESC sd,
   /*-LOCK-*/
   sigset_t old_mask;
   sigset_t new_mask;
-  sigfillset (&new_mask);
+  sigfillset(&new_mask);
   sigprocmask (SIG_SETMASK, &new_mask, &old_mask);
 #endif
 
@@ -555,7 +561,7 @@ sim_events_schedule_after_signal (SIM_DESC sd,
   if (events->nr_held > MAX_NR_SIGNAL_SIM_EVENTS)
     {
       sim_engine_abort (NULL, NULL, NULL_CIA,
-			"sim_events_schedule_after_signal - buffer overflow");
+			"sim_events_schedule_after_signal - buffer oveflow");
     }
 
   new_event->data = data;
@@ -572,7 +578,7 @@ sim_events_schedule_after_signal (SIM_DESC sd,
 
   ETRACE ((_ETRACE,
 	   "signal scheduled at %ld - tag 0x%lx - time %ld, handler 0x%lx, data 0x%lx\n",
-	   (long)sim_events_time (sd),
+	   (long)sim_events_time(sd),
 	   (long)new_event,
 	   (long)new_event->time_of_event,
 	   (long)new_event->handler,
@@ -635,7 +641,7 @@ sim_events_watch_sim (SIM_DESC sd,
   /* type */
   switch (byte_order)
     {
-    case BFD_ENDIAN_UNKNOWN:
+    case 0:
       switch (nr_bytes)
 	{
 	case 1: new_event->watching = watch_sim_host_1; break;
@@ -645,7 +651,7 @@ sim_events_watch_sim (SIM_DESC sd,
 	default: sim_io_error (sd, "sim_events_watch_sim - invalid nr bytes");
 	}
       break;
-    case BFD_ENDIAN_BIG:
+    case BIG_ENDIAN:
       switch (nr_bytes)
 	{
 	case 1: new_event->watching = watch_sim_be_1; break;
@@ -655,7 +661,7 @@ sim_events_watch_sim (SIM_DESC sd,
 	default: sim_io_error (sd, "sim_events_watch_sim - invalid nr bytes");
 	}
       break;
-    case BFD_ENDIAN_LITTLE:
+    case LITTLE_ENDIAN:
       switch (nr_bytes)
 	{
 	case 1: new_event->watching = watch_sim_le_1; break;
@@ -714,7 +720,7 @@ sim_events_watch_core (SIM_DESC sd,
   /* type */
   switch (byte_order)
     {
-    case BFD_ENDIAN_UNKNOWN:
+    case 0:
       switch (nr_bytes)
 	{
 	case 1: new_event->watching = watch_core_targ_1; break;
@@ -724,7 +730,7 @@ sim_events_watch_core (SIM_DESC sd,
 	default: sim_io_error (sd, "sim_events_watch_core - invalid nr bytes");
 	}
       break;
-    case BFD_ENDIAN_BIG:
+    case BIG_ENDIAN:
       switch (nr_bytes)
 	{
 	case 1: new_event->watching = watch_core_be_1; break;
@@ -734,7 +740,7 @@ sim_events_watch_core (SIM_DESC sd,
 	default: sim_io_error (sd, "sim_events_watch_core - invalid nr bytes");
 	}
       break;
-    case BFD_ENDIAN_LITTLE:
+    case LITTLE_ENDIAN:
       switch (nr_bytes)
 	{
 	case 1: new_event->watching = watch_core_le_1; break;
@@ -1063,7 +1069,7 @@ sim_events_preprocess (SIM_DESC sd,
 		       int events_were_last,
 		       int events_were_next)
 {
-  sim_events *events = STATE_EVENTS (sd);
+  sim_events *events = STATE_EVENTS(sd);
   if (events_were_last)
     {
       /* Halted part way through event processing */
@@ -1086,8 +1092,8 @@ INLINE_SIM_EVENTS\
 (void)
 sim_events_process (SIM_DESC sd)
 {
-  sim_events *events = STATE_EVENTS (sd);
-  signed64 event_time = sim_events_time (sd);
+  sim_events *events = STATE_EVENTS(sd);
+  signed64 event_time = sim_events_time(sd);
 
   /* Clear work_pending before checking nr_held.  Clearing
      work_pending after nr_held (with out a lock could loose an
@@ -1104,8 +1110,8 @@ sim_events_process (SIM_DESC sd)
       /*-LOCK-*/
       sigset_t old_mask;
       sigset_t new_mask;
-      sigfillset (&new_mask);
-      sigprocmask (SIG_SETMASK, &new_mask, &old_mask);
+      sigfillset(&new_mask);
+      sigprocmask(SIG_SETMASK, &new_mask, &old_mask);
 #endif
 
       for (i = 0; i < events->nr_held; i++)
@@ -1120,7 +1126,7 @@ sim_events_process (SIM_DESC sd)
 
 #if defined(HAVE_SIGPROCMASK) && defined(SIG_SETMASK)
       /*-UNLOCK-*/
-      sigprocmask (SIG_SETMASK, &old_mask, NULL);
+      sigprocmask(SIG_SETMASK, &old_mask, NULL);
 #endif
 
     }
@@ -1139,14 +1145,14 @@ sim_events_process (SIM_DESC sd)
 	{
 	  sim_event_handler *handler = to_do->handler;
 	  void *data = to_do->data;
-	  ETRACE ((_ETRACE,
-		   "event issued at %ld - tag 0x%lx - handler 0x%lx, data 0x%lx%s%s\n",
-		   (long) event_time,
-		   (long) to_do,
-		   (long) handler,
-		   (long) data,
-		   (to_do->trace != NULL) ? ", " : "",
-		   (to_do->trace != NULL) ? to_do->trace : ""));
+	  ETRACE((_ETRACE,
+		  "event issued at %ld - tag 0x%lx - handler 0x%lx, data 0x%lx%s%s\n",
+		  (long) event_time,
+		  (long) to_do,
+		  (long) handler,
+		  (long) data,
+		  (to_do->trace != NULL) ? ", " : "",
+		  (to_do->trace != NULL) ? to_do->trace : ""));
 	  sim_events_free (sd, to_do);
 	  handler (sd, data);
 	}
@@ -1167,14 +1173,14 @@ sim_events_process (SIM_DESC sd)
       void *data = to_do->data;
       events->queue = to_do->next;
       update_time_from_event (sd);
-      ETRACE ((_ETRACE,
-	       "event issued at %ld - tag 0x%lx - handler 0x%lx, data 0x%lx%s%s\n",
-	       (long) event_time,
-	       (long) to_do,
-	       (long) handler,
-	       (long) data,
-	       (to_do->trace != NULL) ? ", " : "",
-	       (to_do->trace != NULL) ? to_do->trace : ""));
+      ETRACE((_ETRACE,
+	      "event issued at %ld - tag 0x%lx - handler 0x%lx, data 0x%lx%s%s\n",
+	      (long) event_time,
+	      (long) to_do,
+	      (long) handler,
+	      (long) data,
+	      (to_do->trace != NULL) ? ", " : "",
+	      (to_do->trace != NULL) ? to_do->trace : ""));
       sim_events_free (sd, to_do);
       handler (sd, data);
     }

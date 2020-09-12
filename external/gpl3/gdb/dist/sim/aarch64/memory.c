@@ -1,6 +1,6 @@
 /* memory.c -- Memory accessor functions for the AArch64 simulator
 
-   Copyright (C) 2015-2019 Free Software Foundation, Inc.
+   Copyright (C) 2015-2016 Free Software Foundation, Inc.
 
    Contributed by Red Hat.
 
@@ -25,7 +25,10 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "bfd.h"
 #include "libiberty.h"
+#include "elf/internal.h"
+#include "elf/common.h"
 
 #include "memory.h"
 #include "simulator.h"
@@ -160,10 +163,10 @@ aarch64_get_mem_ptr (sim_cpu *cpu, uint64_t address)
 uint64_t
 aarch64_get_heap_start (sim_cpu *cpu)
 {
-  uint64_t heap = trace_sym_value (CPU_STATE (cpu), "end");
+  uint64_t heap = aarch64_get_sym_value ("end");
 
   if (heap == 0)
-    heap = trace_sym_value (CPU_STATE (cpu), "_end");
+    heap = aarch64_get_sym_value ("_end");
   if (heap == 0)
     {
       heap = STACK_TOP - 0x100000;

@@ -1,5 +1,7 @@
 /* ld-emul.h - Linker emulation header file
-   Copyright (C) 1991-2020 Free Software Foundation, Inc.
+   Copyright 1991, 1992, 1993, 1994, 1995, 1996, 1997, 1998, 2000, 2001,
+   2002, 2003, 2004, 2005, 2007
+   Free Software Foundation, Inc.
 
    This file is part of the GNU Binutils.
 
@@ -34,8 +36,6 @@ extern void ldemul_before_parse
   (void);
 extern void ldemul_after_open
   (void);
-extern void ldemul_after_check_relocs
-  (void);
 extern void ldemul_after_allocation
   (void);
 extern void ldemul_before_allocation
@@ -58,8 +58,8 @@ extern void ldemul_set_symbols
   (void);
 extern void ldemul_create_output_section_statements
   (void);
-extern lang_output_section_statement_type *ldemul_place_orphan
-  (asection *, const char *, int);
+extern bfd_boolean ldemul_place_orphan
+  (asection *);
 extern bfd_boolean ldemul_parse_args
   (int, char **);
 extern void ldemul_add_options
@@ -77,8 +77,6 @@ extern char *ldemul_default_target
 extern void after_parse_default
   (void);
 extern void after_open_default
-  (void);
-extern void after_check_relocs_default
   (void);
 extern void after_allocation_default
   (void);
@@ -98,16 +96,6 @@ extern int  ldemul_find_potential_libraries
   (char *, struct lang_input_statement_struct *);
 extern struct bfd_elf_version_expr *ldemul_new_vers_pattern
   (struct bfd_elf_version_expr *);
-extern void ldemul_extra_map_file_text
-  (bfd *, struct bfd_link_info *, FILE *);
-/* Return 1 if we are emitting CTF early, and 0 if ldemul_examine_strtab_for_ctf
-   will be called by the target.  */
-extern int ldemul_emit_ctf_early
-  (void);
-/* Called from per-target code to examine the strtab and symtab.  */
-extern void ldemul_examine_strtab_for_ctf
-  (struct ctf_file *, struct elf_sym_strtab *, bfd_size_type,
-   struct elf_strtab_hash *);
 
 typedef struct ld_emulation_xfer_struct {
   /* Run before parsing the command line and script file.
@@ -125,9 +113,6 @@ typedef struct ld_emulation_xfer_struct {
 
   /* Run after opening all input files, and loading the symbols.  */
   void   (*after_open) (void);
-
-  /* Run after checking relocations.  */
-  void   (*after_check_relocs)  (void);
 
   /* Run after allocating output sections.  */
   void   (*after_allocation)  (void);
@@ -166,8 +151,8 @@ typedef struct ld_emulation_xfer_struct {
   /* Place an orphan section.  Return TRUE if it was placed, FALSE if
      the default action should be taken.  This field may be NULL, in
      which case the default action will always be taken.  */
-  lang_output_section_statement_type *(*place_orphan)
-    (asection *, const char *, int);
+  bfd_boolean (*place_orphan)
+    (asection *);
 
   /* Run after assigning parsing with the args, but before
      reading the script.  Used to initialize symbols used in the script.  */
@@ -211,24 +196,6 @@ typedef struct ld_emulation_xfer_struct {
   struct bfd_elf_version_expr * (*new_vers_pattern)
     (struct bfd_elf_version_expr *);
 
-  /* Called when printing the map file, in case there are
-     emulation-specific sections for it.  */
-  void (*extra_map_file_text)
-    (bfd *, struct bfd_link_info *, FILE *);
-
-  /* If this returns true, we emit CTF as early as possible: if false, we emit
-     CTF once the strtab and symtab are laid out.  */
-  int (*emit_ctf_early)
-    (void);
-
-  /* Called to examine the string and symbol table late enough in linking that
-     they are finally laid out.  If emit_ctf_early returns true, this is not
-     called and ldemul_maybe_emit_ctf() emits CTF in 'early' mode: otherwise, it
-     waits until 'late'. (Late mode needs explicit support at per-target link
-     time to get called at all).  If set, called by ld when the examine_strtab
-     bfd_link_callback is invoked by per-target code.  */
-  void (*examine_strtab_for_ctf) (struct ctf_file *, struct elf_sym_strtab *,
-				  bfd_size_type, struct elf_strtab_hash *);
 } ld_emulation_xfer_type;
 
 typedef enum {

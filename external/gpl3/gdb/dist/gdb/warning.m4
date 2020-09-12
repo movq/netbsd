@@ -1,5 +1,5 @@
 dnl Autoconf configure script for GDB, the GNU debugger.
-dnl Copyright (C) 1995-2019 Free Software Foundation, Inc.
+dnl Copyright (C) 1995-2016 Free Software Foundation, Inc.
 dnl
 dnl This file is part of GDB.
 dnl
@@ -35,34 +35,27 @@ if test "${ERROR_ON_WARNING}" = yes ; then
     WERROR_CFLAGS="-Werror"
 fi
 
-# The options we'll try to enable.
+# These options work in either C or C++ modes.
 build_warnings="-Wall -Wpointer-arith \
--Wno-unused -Wunused-value -Wunused-variable -Wunused-function \
+-Wno-unused -Wunused-value -Wunused-function \
 -Wno-switch -Wno-char-subscripts \
--Wempty-body -Wunused-but-set-parameter -Wunused-but-set-variable \
--Wno-sign-compare -Wno-error=maybe-uninitialized \
--Wno-mismatched-tags \
--Wno-error=deprecated-register \
--Wsuggest-override \
--Wimplicit-fallthrough=3 \
--Wduplicated-cond \
--Wshadow=local"
+-Wempty-body -Wunused-but-set-parameter -Wunused-but-set-variable"
 
+# Now add in C and C++ specific options, depending on mode.
+if test "$enable_build_with_cxx" = "yes"; then
+   build_warnings="$build_warnings -Wno-sign-compare -Wno-write-strings \
+-Wno-narrowing"
+else
+   build_warnings="$build_warnings -Wpointer-sign -Wmissing-prototypes \
+-Wdeclaration-after-statement -Wmissing-parameter-type \
+-Wold-style-declaration -Wold-style-definition"
+fi
+
+# Enable -Wno-format by default when using gcc on mingw since many
+# GCC versions complain about %I64.
 case "${host}" in
-  *-*-mingw32*)
-    # Enable -Wno-format by default when using gcc on mingw since many
-    # GCC versions complain about %I64.
-    build_warnings="$build_warnings -Wno-format" ;;
-  *-*-solaris*)
-    # Solaris 11.4 <python2.7/ceval.h> uses #pragma no_inline that GCC
-    # doesn't understand.
-    build_warnings="$build_warnings -Wno-unknown-pragmas"
-    # Solaris 11 <unistd.h> marks vfork deprecated.
-    build_warnings="$build_warnings -Wno-deprecated-declarations" ;;
-  *)
-    # Note that gcc requires -Wformat for -Wformat-nonliteral to work,
-    # but there's a special case for this below.
-    build_warnings="$build_warnings -Wformat-nonliteral" ;;
+  *-*-mingw32*) build_warnings="$build_warnings -Wno-format" ;;
+  *) build_warnings="$build_warnings -Wformat-nonliteral" ;;
 esac
 
 AC_ARG_ENABLE(build-warnings,
@@ -96,7 +89,9 @@ fi])dnl
 
 # The set of warnings supported by a C++ compiler is not the same as
 # of the C compiler.
-AC_LANG_PUSH([C++])
+if test "$enable_build_with_cxx" = "yes"; then
+    AC_LANG_PUSH([C++])
+fi
 
 WARN_CFLAGS=""
 if test "x${build_warnings}" != x -a "x$GCC" = xyes
@@ -110,12 +105,6 @@ then
 	case $w in
 	-Wno-*)
 		wtest=`echo $w | sed 's/-Wno-/-W/g'` ;;
-        -Wformat-nonliteral)
-		# gcc requires -Wformat before -Wformat-nonliteral
-		# will work, so stick them together.
-		w="-Wformat $w"
-		wtest="$w"
-		;;
 	*)
 		wtest=$w ;;
 	esac
@@ -125,23 +114,10 @@ then
 	*)
 	    # Check whether GCC accepts it.
 	    saved_CFLAGS="$CFLAGS"
-	    CFLAGS="$CFLAGS -Werror $wtest"
+	    CFLAGS="$CFLAGS $wtest"
 	    saved_CXXFLAGS="$CXXFLAGS"
-	    CXXFLAGS="$CXXFLAGS -Werror $wtest"
-	    if test "x$w" = "x-Wunused-variable"; then
-	      # Check for https://gcc.gnu.org/bugzilla/show_bug.cgi?id=38958,
-	      # fixed in GCC 4.9.  This test is derived from the gdb
-	      # source code that triggered this bug in GCC.
-	      AC_TRY_COMPILE(
-	        [struct scoped_restore_base {};
-                 struct scoped_restore_tmpl : public scoped_restore_base {
-		   ~scoped_restore_tmpl() {}
-		 };],
-		[const scoped_restore_base &b = scoped_restore_tmpl();],
-		WARN_CFLAGS="${WARN_CFLAGS} $w",)
-	    else
-	      AC_TRY_COMPILE([],[],WARN_CFLAGS="${WARN_CFLAGS} $w",)
-	    fi
+	    CXXFLAGS="$CXXFLAGS $wtest"
+	    AC_TRY_COMPILE([],[],WARN_CFLAGS="${WARN_CFLAGS} $w",)
 	    CFLAGS="$saved_CFLAGS"
 	    CXXFLAGS="$saved_CXXFLAGS"
 	esac
@@ -151,5 +127,7 @@ fi
 AC_SUBST(WARN_CFLAGS)
 AC_SUBST(WERROR_CFLAGS)
 
-AC_LANG_POP([C++])
+if test "$enable_build_with_cxx" = "yes"; then
+   AC_LANG_POP([C++])
+fi
 ])

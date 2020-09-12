@@ -1,4 +1,4 @@
-/*	$NetBSD: addftinfo.cpp,v 1.1.1.1 2016/01/13 18:41:49 christos Exp $	*/
+/*	$NetBSD: addftinfo.cpp,v 1.1 2016/01/13 18:41:49 christos Exp $	*/
 
 // -*- C++ -*-
 /* Copyright (C) 1989-1992, 2000, 2001 Free Software Foundation, Inc.

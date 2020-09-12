@@ -1,6 +1,6 @@
 // -*- C++ -*-
 
-// Copyright (C) 2005-2019 Free Software Foundation, Inc.
+// Copyright (C) 2005, 2006, 2009 Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the terms
@@ -34,7 +34,7 @@
 // warranty.
 
 /**
- * @file bin_search_tree_/traits.hpp
+ * @file traits.hpp
  * Contains an implementation for bin_search_tree_.
  */
 
@@ -48,29 +48,34 @@ namespace __gnu_pbds
 {
   namespace detail
   {
-    /// Binary search tree traits, primary template
-    /// @ingroup traits
+
     template<typename Key,
 	     typename Mapped,
 	     class Cmp_Fn,
-	     template<typename Node_CItr,
-		      class Node_Itr,
-		      class _Cmp_Fn,
-		      typename _Alloc>
-	     class Node_Update,
+	     template<typename Const_Node_Iterator,
+		      class Node_Iterator,
+		      class Cmp_Fn,
+		      class Allocator>
+    class Node_Update,
 	     class Node,
-	     typename _Alloc>
+	     class Allocator>
     struct bin_search_tree_traits
     {
     private:
-      typedef types_traits<Key, Mapped, _Alloc, false> type_traits;
+      typedef
+      types_traits<
+      Key,
+      Mapped,
+      Allocator,
+      false>
+      type_traits;
 
     public:
       typedef Node node;
 
       typedef
       bin_search_tree_const_it_<
-	typename _Alloc::template rebind<
+	typename Allocator::template rebind<
 	node>::other::pointer,
 	typename type_traits::value_type,
 	typename type_traits::pointer,
@@ -78,12 +83,12 @@ namespace __gnu_pbds
 	typename type_traits::reference,
 	typename type_traits::const_reference,
 	true,
-	_Alloc>
-      point_const_iterator;
+	Allocator>
+      const_point_iterator;
 
       typedef
       bin_search_tree_it_<
-	typename _Alloc::template rebind<
+	typename Allocator::template rebind<
 	node>::other::pointer,
 	typename type_traits::value_type,
 	typename type_traits::pointer,
@@ -91,12 +96,12 @@ namespace __gnu_pbds
 	typename type_traits::reference,
 	typename type_traits::const_reference,
 	true,
-	_Alloc>
+	Allocator>
       point_iterator;
 
       typedef
       bin_search_tree_const_it_<
-	typename _Alloc::template rebind<
+	typename Allocator::template rebind<
 	node>::other::pointer,
 	typename type_traits::value_type,
 	typename type_traits::pointer,
@@ -104,12 +109,12 @@ namespace __gnu_pbds
 	typename type_traits::reference,
 	typename type_traits::const_reference,
 	false,
-	_Alloc>
+	Allocator>
       const_reverse_iterator;
 
       typedef
       bin_search_tree_it_<
-	typename _Alloc::template rebind<
+	typename Allocator::template rebind<
 	node>::other::pointer,
 	typename type_traits::value_type,
 	typename type_traits::pointer,
@@ -117,67 +122,74 @@ namespace __gnu_pbds
 	typename type_traits::reference,
 	typename type_traits::const_reference,
 	false,
-	_Alloc>
+	Allocator>
       reverse_iterator;
 
-      /// This is an iterator to an iterator: it iterates over nodes,
-      /// and de-referencing it returns one of the tree's iterators.
       typedef
       bin_search_tree_const_node_it_<
 	Node,
-	point_const_iterator,
+	const_point_iterator,
 	point_iterator,
-	_Alloc>
-      node_const_iterator;
+	Allocator>
+      const_node_iterator;
 
       typedef
       bin_search_tree_node_it_<
 	Node,
-	point_const_iterator,
+	const_point_iterator,
 	point_iterator,
-	_Alloc>
+	Allocator>
       node_iterator;
 
       typedef
       Node_Update<
-	node_const_iterator,
+	const_node_iterator,
 	node_iterator,
 	Cmp_Fn,
-	_Alloc>
+	Allocator>
       node_update;
 
       typedef
-      __gnu_pbds::null_node_update<
-	node_const_iterator,
+      __gnu_pbds::null_tree_node_update<
+	const_node_iterator,
 	node_iterator,
 	Cmp_Fn,
-	_Alloc>* 
+	Allocator>* 
       null_node_update_pointer;
     };
 
-    /// Specialization.
-    /// @ingroup traits
     template<typename Key,
 	     class Cmp_Fn,
-	     template<typename Node_CItr,
-		      class Node_Itr,
-		      class _Cmp_Fn,
-		      typename _Alloc>
-	     class Node_Update,
+	     template<typename Const_Node_Iterator,
+		      class Node_Iterator,
+		      class Cmp_Fn,
+		      class Allocator>
+    class Node_Update,
 	     class Node,
-	     typename _Alloc>
-    struct
-    bin_search_tree_traits<Key, null_type, Cmp_Fn, Node_Update, Node, _Alloc>
+	     class Allocator>
+    struct bin_search_tree_traits<
+      Key,
+      null_mapped_type,
+      Cmp_Fn,
+      Node_Update,
+      Node,
+      Allocator>
     {
     private:
-      typedef types_traits<Key, null_type, _Alloc, false> type_traits;
+      typedef
+      types_traits<
+      Key,
+      null_mapped_type,
+      Allocator,
+      false>
+      type_traits;
 
     public:
       typedef Node node;
 
       typedef
       bin_search_tree_const_it_<
-	typename _Alloc::template rebind<
+	typename Allocator::template rebind<
 	node>::other::pointer,
 	typename type_traits::value_type,
 	typename type_traits::pointer,
@@ -185,14 +197,14 @@ namespace __gnu_pbds
 	typename type_traits::reference,
 	typename type_traits::const_reference,
 	true,
-	_Alloc>
-      point_const_iterator;
+	Allocator>
+      const_point_iterator;
 
-      typedef point_const_iterator point_iterator;
+      typedef const_point_iterator point_iterator;
 
       typedef
       bin_search_tree_const_it_<
-	typename _Alloc::template rebind<
+	typename Allocator::template rebind<
 	node>::other::pointer,
 	typename type_traits::value_type,
 	typename type_traits::pointer,
@@ -200,33 +212,35 @@ namespace __gnu_pbds
 	typename type_traits::reference,
 	typename type_traits::const_reference,
 	false,
-	_Alloc>
+	Allocator>
       const_reverse_iterator;
 
       typedef const_reverse_iterator reverse_iterator;
 
-      /// This is an iterator to an iterator: it iterates over nodes,
-      /// and de-referencing it returns one of the tree's iterators.
       typedef
       bin_search_tree_const_node_it_<
 	Node,
-	point_const_iterator,
+	const_point_iterator,
 	point_iterator,
-	_Alloc>
-      node_const_iterator;
+	Allocator>
+      const_node_iterator;
 
-      typedef node_const_iterator node_iterator;
+      typedef const_node_iterator node_iterator;
 
       typedef
-      Node_Update<node_const_iterator, node_iterator, Cmp_Fn, _Alloc>
+      Node_Update<
+	const_node_iterator,
+	node_iterator,
+	Cmp_Fn,
+	Allocator>
       node_update;
 
       typedef
-      __gnu_pbds::null_node_update<
-	node_const_iterator,
+      __gnu_pbds::null_tree_node_update<
+	const_node_iterator,
 	node_iterator,
 	Cmp_Fn,
-	_Alloc>* 
+	Allocator>* 
       null_node_update_pointer;
     };
 

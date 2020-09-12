@@ -1,41 +1,45 @@
-<chapter xmlns="http://docbook.org/ns/docbook" version="5.0" 
-	 xml:id="std.io" xreflabel="Input and Output">
+<?xml version='1.0'?>
+<!DOCTYPE chapter PUBLIC "-//OASIS//DTD DocBook XML V4.5//EN"
+ "http://www.oasis-open.org/docbook/xml/4.5/docbookx.dtd"
+[ ]>
+
+<chapter id="std.io" xreflabel="Input and Output">
 <?dbhtml filename="io.html"?>
 
-<info><title>
+<chapterinfo>
+  <keywordset>
+    <keyword>
+      ISO C++
+    </keyword>
+    <keyword>
+      library
+    </keyword>
+  </keywordset>
+</chapterinfo>
+
+<title>
   Input and Output
   <indexterm><primary>Input and Output</primary></indexterm>
 </title>
-  <keywordset>
-    <keyword>ISO C++</keyword>
-    <keyword>library</keyword>
-  </keywordset>
-</info>
-
-
 
 <!-- Sect1 01 : Iostream Objects -->
-<section xml:id="std.io.objects" xreflabel="IO Objects"><info><title>Iostream Objects</title></info>
+<sect1 id="std.io.objects" xreflabel="IO Objects">
 <?dbhtml filename="iostream_objects.html"?>
-  
+  <title>Iostream Objects</title>
 
    <para>To minimize the time you have to wait on the compiler, it's good to
       only include the headers you really need.  Many people simply include
-      <filename class="headerfile">&lt;iostream&gt;</filename> when they don't
-      need to -- and that can <emphasis>penalize your runtime as well.</emphasis>
-      Here are some tips on which header to use
+      &lt;iostream&gt; when they don't need to -- and that can <emphasis>penalize
+      your runtime as well.</emphasis>  Here are some tips on which header to use
       for which situations, starting with the simplest.
    </para>
-   <para><emphasis><filename class="headerfile">&lt;iosfwd&gt;</filename></emphasis>
-      should be included whenever you simply need the <emphasis>name</emphasis>
-      of an I/O-related class, such as "<classname>ofstream</classname>" or
-      "<classname>basic_streambuf</classname>".
-      Like the name implies, these are forward declarations.
-      (A word to all you fellow old school programmers:
-      trying to forward declare classes like "<code>class istream;</code>"
-      won't work.
-      Look in the <filename class="headerfile">&lt;iosfwd&gt;</filename> header
-      if you'd like to know why.)  For example,
+   <para><emphasis>&lt;iosfwd&gt;</emphasis> should be included whenever you simply
+      need the <emphasis>name</emphasis> of an I/O-related class, such as
+      &quot;ofstream&quot; or &quot;basic_streambuf&quot;.  Like the name
+      implies, these are forward declarations.  (A word to all you fellow
+      old school programmers:  trying to forward declare classes like
+      &quot;class istream;&quot; won't work.  Look in the iosfwd header if
+      you'd like to know why.)  For example,
    </para>
    <programlisting>
     #include &lt;iosfwd&gt;
@@ -48,43 +52,33 @@
 
     extern std::ostream&amp; operator&lt;&lt; (std::ostream&amp;, MyClass&amp;);
    </programlisting>
-   <para><emphasis><filename class="headerfile">&lt;ios&gt;</filename></emphasis>
-      declares the base classes for the entire I/O stream hierarchy,
-      <classname>std::ios_base</classname> and <classname>std::basic_ios&lt;charT&gt;</classname>,
-      the counting types <type>std::streamoff</type> and <type>std::streamsize</type>,
-      the file positioning type <type>std::fpos</type>,
-      and the various manipulators like <function>std::hex</function>,
-      <function>std::fixed</function>, <function>std::noshowbase</function>,
-      and so forth.
+   <para><emphasis>&lt;ios&gt;</emphasis> declares the base classes for the entire
+      I/O stream hierarchy, std::ios_base and std::basic_ios&lt;charT&gt;, the
+      counting types std::streamoff and std::streamsize, the file
+      positioning type std::fpos, and the various manipulators like
+      std::hex, std::fixed, std::noshowbase, and so forth.
    </para>
-   <para>The <classname>ios_base</classname> class is what holds the format
-      flags, the state flags, and the functions which change them
-      (<function>setf()</function>, <function>width()</function>,
-      <function>precision()</function>, etc).
-      You can also store extra data and register callback functions
-      through <classname>ios_base</classname>, but that has been historically
-      underused.  Anything
+   <para>The ios_base class is what holds the format flags, the state flags,
+      and the functions which change them (setf(), width(), precision(),
+      etc).  You can also store extra data and register callback functions
+      through ios_base, but that has been historically underused.  Anything
       which doesn't depend on the type of characters stored is consolidated
       here.
    </para>
-   <para>The class template <classname>basic_ios</classname> is the highest
-      class template in the
+   <para>The template class basic_ios is the highest template class in the
       hierarchy; it is the first one depending on the character type, and
       holds all general state associated with that type:  the pointer to the
       polymorphic stream buffer, the facet information, etc.
    </para>
-   <para><emphasis><filename class="headerfile">&lt;streambuf&gt;</filename></emphasis>
-      declares the class template <classname>basic_streambuf</classname>, and
-      two standard instantiations, <type>streambuf</type> and
-      <type>wstreambuf</type>.  If you need to work with the vastly useful and
-      capable stream buffer classes, e.g., to create a new form of storage
+   <para><emphasis>&lt;streambuf&gt;</emphasis> declares the template class
+      basic_streambuf, and two standard instantiations, streambuf and
+      wstreambuf.  If you need to work with the vastly useful and capable
+      stream buffer classes, e.g., to create a new form of storage
       transport, this header is the one to include.
    </para>
-   <para><emphasis><filename class="headerfile">&lt;istream&gt;</filename></emphasis>
-       and <emphasis><filename class="headerfile">&lt;ostream&gt;</filename></emphasis>
-       are the headers to include when you are using the overloaded
-      <code>&gt;&gt;</code> and <code>&lt;&lt;</code> operators,
-      or any of the other abstract stream formatting functions.
+   <para><emphasis>&lt;istream&gt;</emphasis>/<emphasis>&lt;ostream&gt;</emphasis> are
+      the headers to include when you are using the &gt;&gt;/&lt;&lt;
+      interface, or any of the other abstract stream formatting functions.
       For example,
    </para>
    <programlisting>
@@ -95,33 +89,25 @@
        return os &lt;&lt; c.data1() &lt;&lt; c.data2();
     }
    </programlisting>
-   <para>The <type>std::istream</type> and <type>std::ostream</type> classes
-      are the abstract parents of
+   <para>The std::istream and std::ostream classes are the abstract parents of
       the various concrete implementations.  If you are only using the
       interfaces, then you only need to use the appropriate interface header.
    </para>
-   <para><emphasis><filename class="headerfile">&lt;iomanip&gt;</filename></emphasis>
-      provides "extractors and inserters that alter information maintained by
-      class <classname>ios_base</classname> and its derived classes,"
-      such as <function>std::setprecision</function> and
-      <function>std::setw</function>.  If you need
+   <para><emphasis>&lt;iomanip&gt;</emphasis> provides &quot;extractors and inserters
+      that alter information maintained by class ios_base and its derived
+      classes,&quot; such as std::setprecision and std::setw.  If you need
       to write expressions like <code>os &lt;&lt; setw(3);</code> or
-      <code>is &gt;&gt; setbase(8);</code>, you must include
-      <filename class="headerfile">&lt;iomanip&gt;</filename>.
+      <code>is &gt;&gt; setbase(8);</code>, you must include &lt;iomanip&gt;.
    </para>
-   <para><emphasis><filename class="headerfile">&lt;sstream&gt;</filename></emphasis>
-      and <emphasis><filename class="headerfile">&lt;fstream&gt;</filename></emphasis>
+   <para><emphasis>&lt;sstream&gt;</emphasis>/<emphasis>&lt;fstream&gt;</emphasis>
       declare the six stringstream and fstream classes.  As they are the
-      standard concrete descendants of <type>istream</type> and <type>ostream</type>,
-      you will already know about them.
+      standard concrete descendants of istream and ostream, you will already
+      know about them.
    </para>
-   <para>Finally, <emphasis><filename class="headerfile">&lt;iostream&gt;</filename></emphasis>
-      provides the eight standard global objects
-      (<code>cin</code>, <code>cout</code>, etc).  To do this correctly, this
-      header also provides the contents of the
-      <filename class="headerfile">&lt;istream&gt;</filename> and
-      <filename class="headerfile">&lt;ostream&gt;</filename>
-      headers, but nothing else.  The contents of this header look like:
+   <para>Finally, <emphasis>&lt;iostream&gt;</emphasis> provides the eight standard
+      global objects (cin, cout, etc).  To do this correctly, this header
+      also provides the contents of the &lt;istream&gt; and &lt;ostream&gt;
+      headers, but nothing else.  The contents of this header look like
    </para>
    <programlisting>
     #include &lt;ostream&gt;
@@ -141,8 +127,7 @@
       must be initialized before any of your own code uses them; this is
       guaranteed by the standard.  Like any other global object, they must
       be initialized once and only once.  This is typically done with a
-      construct like the one above, and the nested class
-      <classname>ios_base::Init</classname> is
+      construct like the one above, and the nested class ios_base::Init is
       specified in the standard for just this reason.
    </para>
    <para>How does it work?  Because the header is included before any of your
@@ -152,10 +137,9 @@
       constructor runs, the eight stream objects are set up.
    </para>
    <para>The <code>static</code> keyword means that each object file compiled
-      from a source file containing
-      <filename class="headerfile">&lt;iostream&gt;</filename> will have its own
+      from a source file containing &lt;iostream&gt; will have its own
       private copy of <emphasis>__foo</emphasis>.  There is no specified order
-      of construction across object files (it's one of those pesky NP complete
+      of construction across object files (it's one of those pesky NP
       problems that make life so interesting), so one copy in each object
       file means that the stream objects are guaranteed to be set up before
       any of your code which uses them could run, thereby meeting the
@@ -167,32 +151,30 @@
       inside a function call, but over several dozen or hundreds of object
       files, that time can add up.  (It's not in a tight loop, either.)
    </para>
-   <para>The lesson?  Only include
-      <filename class="headerfile">&lt;iostream&gt;</filename> when you need
-      to use one of
+   <para>The lesson?  Only include &lt;iostream&gt; when you need to use one of
       the standard objects in that source file; you'll pay less startup
       time.  Only include the header files you need to in general; your
       compile times will go down when there's less parsing work to do.
    </para>
 
-</section>
+</sect1>
 
 <!-- Sect1 02 : Stream Buffers -->
-<section xml:id="std.io.streambufs" xreflabel="Stream Buffers"><info><title>Stream Buffers</title></info>
+<sect1 id="std.io.streambufs" xreflabel="Stream Buffers">
 <?dbhtml filename="streambufs.html"?>
-  
+  <title>Stream Buffers</title>
 
-  <section xml:id="io.streambuf.derived" xreflabel="Derived streambuf Classes"><info><title>Derived streambuf Classes</title></info>
-    
+  <sect2 id="io.streambuf.derived" xreflabel="Derived streambuf Classes">
+    <title>Derived streambuf Classes</title>
     <para>
     </para>
 
    <para>Creating your own stream buffers for I/O can be remarkably easy.
       If you are interested in doing so, we highly recommend two very
       excellent books:
-      <link xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="http://www.angelikalanger.com/iostreams.html">Standard C++
-      IOStreams and Locales</link> by Langer and Kreft, ISBN 0-201-18395-1, and
-      <link xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="http://www.josuttis.com/libbook/">The C++ Standard Library</link>
+      <ulink url="http://www.angelikalanger.com/iostreams.html">Standard C++
+      IOStreams and Locales</ulink> by Langer and Kreft, ISBN 0-201-18395-1, and
+      <ulink url="http://www.josuttis.com/libbook/">The C++ Standard Library</ulink>
       by Nicolai Josuttis, ISBN 0-201-37926-0.  Both are published by
       Addison-Wesley, who isn't paying us a cent for saying that, honest.
    </para>
@@ -240,17 +222,16 @@
     }
    </programlisting>
    <para>Try it yourself!  More examples can be found in 3.1.x code, in
-      <filename>include/ext/*_filebuf.h</filename>, and in the article
-      <link xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="http://gabisoft.free.fr/articles/fltrsbf1.html">Filtering
-      Streambufs</link>
-      by James Kanze.
+      <code>include/ext/*_filebuf.h</code>, and in this article by James Kanze:
+      <ulink url="http://kanze.james.neuf.fr/articles/fltrsbf1.html">Filtering
+      Streambufs</ulink>.
    </para>
 
-  </section>
+  </sect2>
 
-  <section xml:id="io.streambuf.buffering" xreflabel="Buffering"><info><title>Buffering</title></info>
-    
-   <para>First, are you sure that you understand buffering?  Particularly
+  <sect2 id="io.streambuf.buffering" xreflabel="Buffering">
+    <title>Buffering</title>
+   <para>First, are you sure that you understand buffering?  Chaptericularly
       the fact that C++ may not, in fact, have anything to do with it?
    </para>
    <para>The rules for buffering can be a little odd, but they aren't any
@@ -260,8 +241,8 @@
       when the output stream is, in fact, a terminal and not a file
       or some other device -- and <emphasis>that</emphasis> may not even be true
       since C++ says nothing about files nor terminals.  All of that is
-      system-dependent.  (The "newline-buffer-flushing only occurring
-      on terminals" thing is mostly true on Unix systems, though.)
+      system-dependent.  (The &quot;newline-buffer-flushing only occurring
+      on terminals&quot; thing is mostly true on Unix systems, though.)
    </para>
    <para>Some people also believe that sending <code>endl</code> down an
       output stream only writes a newline.  This is incorrect; after a
@@ -271,17 +252,17 @@
       wasted when doing this to a file:
    </para>
    <programlisting>
-   output &lt;&lt; "a line of text" &lt;&lt; endl;
+   output &lt;&lt; &quot;a line of text&quot; &lt;&lt; endl;
    output &lt;&lt; some_data_variable &lt;&lt; endl;
-   output &lt;&lt; "another line of text" &lt;&lt; endl; </programlisting>
+   output &lt;&lt; &quot;another line of text&quot; &lt;&lt; endl; </programlisting>
    <para>The proper thing to do in this case to just write the data out
       and let the libraries and the system worry about the buffering.
       If you need a newline, just write a newline:
    </para>
    <programlisting>
-   output &lt;&lt; "a line of text\n"
+   output &lt;&lt; &quot;a line of text\n&quot;
 	  &lt;&lt; some_data_variable &lt;&lt; '\n'
-	  &lt;&lt; "another line of text\n"; </programlisting>
+	  &lt;&lt; &quot;another line of text\n&quot;; </programlisting>
    <para>I have also joined the output statements into a single statement.
       You could make the code prettier by moving the single newline to
       the start of the quoted text on the last line, for example.
@@ -308,10 +289,10 @@
    os.rdbuf()-&gt;pubsetbuf(0,0);
    is.rdbuf()-&gt;pubsetbuf(0,0);
 
-   os.open("/foo/bar/baz");
-   is.open("/qux/quux/quuux");
+   os.open(&quot;/foo/bar/baz&quot;);
+   is.open(&quot;/qux/quux/quuux&quot;);
    ...
-   os &lt;&lt; "this data is written immediately\n";
+   os &lt;&lt; &quot;this data is written immediately\n&quot;;
    is &gt;&gt; i;   // and this will probably cause a disk read </programlisting>
    <para>Since all aspects of buffering are handled by a streambuf-derived
       member, it is necessary to get at that member with <code>rdbuf()</code>.
@@ -322,8 +303,8 @@
    <para>A great deal of this is implementation-dependent.  For example,
       <code>streambuf</code> does not specify any actions for its own
       <code>setbuf()</code>-ish functions; the classes derived from
-      <code>streambuf</code> each define behavior that "makes
-      sense" for that class:  an argument of (0,0) turns off buffering
+      <code>streambuf</code> each define behavior that &quot;makes
+      sense&quot; for that class:  an argument of (0,0) turns off buffering
       for <code>filebuf</code> but does nothing at all for its siblings
       <code>stringbuf</code> and <code>strstreambuf</code>, and specifying
       anything other than (0,0) has varying effects.
@@ -339,15 +320,15 @@
       changing those are system-dependent.
    </para>
 
-  </section>
-</section>
+  </sect2>
+</sect1>
 
 <!-- Sect1 03 : Memory-based Streams -->
-<section xml:id="std.io.memstreams" xreflabel="Memory Streams"><info><title>Memory Based Streams</title></info>
+<sect1 id="std.io.memstreams" xreflabel="Memory Streams">
 <?dbhtml filename="stringstreams.html"?>
-  
-  <section xml:id="std.io.memstreams.compat" xreflabel="Compatibility strstream"><info><title>Compatibility With strstream</title></info>
-    
+  <title>Memory Based Streams</title>
+  <sect2 id="std.io.memstreams.compat" xreflabel="Compatibility strstream">
+    <title>Compatibility With strstream</title>
     <para>
     </para>
    <para>Stringstreams (defined in the header <code>&lt;sstream&gt;</code>)
@@ -379,23 +360,23 @@
    <para>If you are a user of the strstream classes, you need to update
       your code.  You don't have to explicitly append <code>ends</code> to
       terminate the C-style character array, you don't have to mess with
-      "freezing" functions, and you don't have to manage the
+      &quot;freezing&quot; functions, and you don't have to manage the
       memory yourself.  The strstreams have been officially deprecated,
       which means that 1) future revisions of the C++ Standard won't
       support them, and 2) if you use them, people will laugh at you.
    </para>
 
 
-  </section>
-</section>
+  </sect2>
+</sect1>
 
 <!-- Sect1 04 : File-based Streams -->
-<section xml:id="std.io.filestreams" xreflabel="File Streams"><info><title>File Based Streams</title></info>
+<sect1 id="std.io.filestreams" xreflabel="File Streams">
 <?dbhtml filename="fstreams.html"?>
-  
+  <title>File Based Streams</title>
 
-  <section xml:id="std.io.filestreams.copying_a_file" xreflabel="Copying a File"><info><title>Copying a File</title></info>
-  
+  <sect2 id="std.io.filestreams.copying_a_file" xreflabel="Copying a File">
+  <title>Copying a File</title>
   <para>
   </para>
 
@@ -414,23 +395,23 @@
    OUT &lt;&lt; IN;</programlisting>
    <para>For those of you who don't already know why this doesn't work
       (probably from having done it before), I invite you to quickly
-      create a simple text file called "input_file" containing
+      create a simple text file called &quot;input_file&quot; containing
       the sentence
    </para>
       <programlisting>
       The quick brown fox jumped over the lazy dog.</programlisting>
    <para>surrounded by blank lines.  Code it up and try it.  The contents
-      of "output_file" may surprise you.
+      of &quot;output_file&quot; may surprise you.
    </para>
    <para>Seriously, go do it.  Get surprised, then come back.  It's worth it.
    </para>
    <para>The thing to remember is that the <code>basic_[io]stream</code> classes
-      handle formatting, nothing else.  In particular, they break up on
+      handle formatting, nothing else.  In chaptericular, they break up on
       whitespace.  The actual reading, writing, and storing of data is
       handled by the <code>basic_streambuf</code> family.  Fortunately, the
       <code>operator&lt;&lt;</code> is overloaded to take an ostream and
       a pointer-to-streambuf, in order to help with just this kind of
-      "dump the data verbatim" situation.
+      &quot;dump the data verbatim&quot; situation.
    </para>
    <para>Why a <emphasis>pointer</emphasis> to streambuf and not just a streambuf?  Well,
       the [io]streams hold pointers (or references, depending on the
@@ -443,10 +424,10 @@
    <programlisting>
    OUT &lt;&lt; IN.rdbuf();</programlisting>
    <para>So what <emphasis>was</emphasis> happening with OUT&lt;&lt;IN?  Undefined
-      behavior, since that particular &lt;&lt; isn't defined by the Standard.
+      behavior, since that chaptericular &lt;&lt; isn't defined by the Standard.
       I have seen instances where it is implemented, but the character
       extraction process removes all the whitespace, leaving you with no
-      blank lines and only "Thequickbrownfox...".  With
+      blank lines and only &quot;Thequickbrownfox...&quot;.  With
       libraries that do not define that operator, IN (or one of IN's
       member pointers) sometimes gets converted to a void*, and the output
       file then contains a perfect text representation of a hexadecimal
@@ -458,10 +439,10 @@
       descendants.
    </para>
 
-  </section>
+  </sect2>
 
-  <section xml:id="std.io.filestreams.binary" xreflabel="Binary Input and Output"><info><title>Binary Input and Output</title></info>
-    
+  <sect2 id="std.io.filestreams.binary" xreflabel="Binary Input and Output">
+    <title>Binary Input and Output</title>
     <para>
     </para>
    <para>The first and most important thing to remember about binary I/O is
@@ -473,7 +454,7 @@
    <para>Sorry.  Them's the breaks.
    </para>
    <para>This isn't going to try and be a complete tutorial on reading and
-      writing binary files (because "binary"
+      writing binary files (because &quot;binary&quot;
       covers a lot of ground), but we will try and clear
       up a couple of misconceptions and common errors.
    </para>
@@ -500,7 +481,7 @@
    </para>
    <para>Third, using the <code>get()</code> and <code>put()/write()</code> member
       functions still aren't guaranteed to help you.  These are
-      "unformatted" I/O functions, but still character-based.
+      &quot;unformatted&quot; I/O functions, but still character-based.
       (This may or may not be what you want, see below.)
    </para>
    <para>Notice how all the problems here are due to the inappropriate use
@@ -577,9 +558,9 @@
    <para>
       An instructive thread from comp.lang.c++.moderated delved off into
       this topic starting more or less at
-      <link xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="https://groups.google.com/forum/#!topic/comp.std.c++/D4e0q9eVSoc">this post</link>
-      and continuing to the end of the thread. (The subject heading is "binary iostreams" on both comp.std.c++
-      and comp.lang.c++.moderated.) Take special note of the replies by James Kanze and Dietmar Kühl.
+      <ulink url="http://groups.google.com/group/comp.std.c++/browse_thread/thread/f87b4abd7954a87/946a3eb9921e382d?q=comp.std.c%2B%2B+binary+iostream#946a3eb9921e382d">this</ulink>
+      post and continuing to the end of the thread. (The subject heading is &quot;binary iostreams&quot; on both comp.std.c++
+      and comp.lang.c++.moderated.) Take special note of the replies by James Kanze and Dietmar K&uuml;hl.
    </para>
     <para>Briefly, the problems of byte ordering and type sizes mean that
       the unformatted functions like <code>ostream::put()</code> and
@@ -588,28 +569,28 @@
       invocation of a program to another invocation of the same program
       on a different platform, etc.
    </para>
- </section>
+ </sect2>
 
-</section>
+</sect1>
 
 <!-- Sect1 03 : Interacting with C -->
-<section xml:id="std.io.c" xreflabel="Interacting with C"><info><title>Interacting with C</title></info>
+<sect1 id="std.io.c" xreflabel="Interacting with C">
 <?dbhtml filename="io_and_c.html"?>
-  
+  <title>Interacting with C</title>
 
 
-  <section xml:id="std.io.c.FILE" xreflabel="Using FILE* and file descriptors"><info><title>Using FILE* and file descriptors</title></info>
-    
+  <sect2 id="std.io.c.FILE" xreflabel="Using FILE* and file descriptors">
+    <title>Using FILE* and file descriptors</title>
     <para>
       See the <link linkend="manual.ext.io">extensions</link> for using
       <type>FILE</type> and <type>file descriptors</type> with
       <classname>ofstream</classname> and
       <classname>ifstream</classname>.
     </para>
-  </section>
+  </sect2>
 
-  <section xml:id="std.io.c.sync" xreflabel="Performance Issues"><info><title>Performance</title></info>
-    
+  <sect2 id="std.io.c.sync" xreflabel="Performance Issues">
+    <title>Performance</title>
     <para>
       Pathetic Performance? Ditch C.
     </para>
@@ -623,9 +604,9 @@
      #include &lt;iostream&gt;
      #include &lt;cstdio&gt;
 
-     std::cout &lt;&lt; "Hel";
-     std::printf ("lo, worl");
-     std::cout &lt;&lt; "d!\n";
+     std::cout &lt;&lt; &quot;Hel&quot;;
+     std::printf (&quot;lo, worl&quot;);
+     std::cout &lt;&lt; &quot;d!\n&quot;;
    </programlisting>
    <para>This must do what you think it does.
    </para>
@@ -660,13 +641,13 @@
    <para>Note, by the way, that the synchronization requirement only applies to
       the standard streams (<code>cin</code>, <code>cout</code>,
       <code>cerr</code>,
-      <code>clog</code>, and their wide-character counterparts).  File stream
+      <code>clog</code>, and their wide-character counterchapters).  File stream
       objects that you declare yourself have no such requirement and are fully
       buffered.
    </para>
 
 
-  </section>
-</section>
+  </sect2>
+</sect1>
 
 </chapter>

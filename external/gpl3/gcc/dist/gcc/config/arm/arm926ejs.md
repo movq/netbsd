@@ -1,5 +1,5 @@
 ;; ARM 926EJ-S Pipeline Description
-;; Copyright (C) 2003-2019 Free Software Foundation, Inc.
+;; Copyright (C) 2003, 2007 Free Software Foundation, Inc.
 ;; Written by CodeSourcery, LLC.
 ;;
 ;; This file is part of GCC.
@@ -50,7 +50,7 @@
 
 ;; ALU instructions require three cycles to execute, and use the ALU
 ;; pipeline in each of the three stages.  The results are available
-;; after the execute stage has finished.
+;; after the execute stage stage has finished.
 ;;
 ;; If the destination register is the PC, the pipelines are stalled
 ;; for several cycles.  That case is not modeled here.
@@ -58,16 +58,7 @@
 ;; ALU operations with no shifted operand
 (define_insn_reservation "9_alu_op" 1 
  (and (eq_attr "tune" "arm926ejs")
-      (eq_attr "type" "alu_imm,alus_imm,logic_imm,logics_imm,\
-                       alu_sreg,alus_sreg,logic_reg,logics_reg,\
-                       adc_imm,adcs_imm,adc_reg,adcs_reg,\
-                       adr,bfm,rev,\
-                       alu_shift_imm,alus_shift_imm,\
-                       logic_shift_imm,logics_shift_imm,\
-                       shift_imm,shift_reg,extend,\
-                       mov_imm,mov_reg,mov_shift,\
-                       mvn_imm,mvn_reg,mvn_shift,\
-                       multiple,no_insn"))
+      (eq_attr "type" "alu,alu_shift"))
  "e,m,w")
 
 ;; ALU operations with a shift-by-register operand
@@ -76,9 +67,7 @@
 ;; the execute stage.
 (define_insn_reservation "9_alu_shift_reg_op" 2 
  (and (eq_attr "tune" "arm926ejs")
-      (eq_attr "type" "alu_shift_reg,alus_shift_reg,\
-                       logic_shift_reg,logics_shift_reg,\
-                       mov_shift_reg,mvn_shift_reg"))
+      (eq_attr "type" "alu_shift_reg"))
  "e*2,m,w")
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -92,32 +81,32 @@
 
 (define_insn_reservation "9_mult1" 3
  (and (eq_attr "tune" "arm926ejs")
-      (eq_attr "type" "smlalxy,mul,mla"))
+      (eq_attr "insn" "smlalxy,mul,mla"))
  "e*2,m,w")
 
 (define_insn_reservation "9_mult2" 4
  (and (eq_attr "tune" "arm926ejs")
-      (eq_attr "type" "muls,mlas"))
+      (eq_attr "insn" "muls,mlas"))
  "e*3,m,w")
 
 (define_insn_reservation "9_mult3" 4
  (and (eq_attr "tune" "arm926ejs")
-      (eq_attr "type" "umull,umlal,smull,smlal"))
+      (eq_attr "insn" "umull,umlal,smull,smlal"))
  "e*3,m,w")
 
 (define_insn_reservation "9_mult4" 5
  (and (eq_attr "tune" "arm926ejs")
-      (eq_attr "type" "umulls,umlals,smulls,smlals"))
+      (eq_attr "insn" "umulls,umlals,smulls,smlals"))
  "e*4,m,w")
 
 (define_insn_reservation "9_mult5" 2
  (and (eq_attr "tune" "arm926ejs")
-      (eq_attr "type" "smulxy,smlaxy,smlawx"))
+      (eq_attr "insn" "smulxy,smlaxy,smlawx"))
  "e,m,w")
 
 (define_insn_reservation "9_mult6" 3
  (and (eq_attr "tune" "arm926ejs")
-      (eq_attr "type" "smlalxy"))
+      (eq_attr "insn" "smlalxy"))
  "e*2,m,w")
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -133,43 +122,43 @@
 ;; most common and (b) the pessimistic assumption will lead to fewer stalls.
 (define_insn_reservation "9_load1_op" 3
  (and (eq_attr "tune" "arm926ejs")
-      (eq_attr "type" "load_4,load_byte"))
+      (eq_attr "type" "load1,load_byte"))
  "e*2,m,w")
 
 (define_insn_reservation "9_store1_op" 0
  (and (eq_attr "tune" "arm926ejs")
-      (eq_attr "type" "store_4"))
+      (eq_attr "type" "store1"))
  "e,m,w")
 
 ;; multiple word loads and stores
 (define_insn_reservation "9_load2_op" 3
  (and (eq_attr "tune" "arm926ejs")
-      (eq_attr "type" "load_8"))
+      (eq_attr "type" "load2"))
  "e,m*2,w")
 
 (define_insn_reservation "9_load3_op" 4
  (and (eq_attr "tune" "arm926ejs")
-      (eq_attr "type" "load_12"))
+      (eq_attr "type" "load3"))
  "e,m*3,w")
 
 (define_insn_reservation "9_load4_op" 5
  (and (eq_attr "tune" "arm926ejs")
-      (eq_attr "type" "load_16"))
+      (eq_attr "type" "load4"))
  "e,m*4,w")
 
 (define_insn_reservation "9_store2_op" 0
  (and (eq_attr "tune" "arm926ejs")
-      (eq_attr "type" "store_8"))
+      (eq_attr "type" "store2"))
  "e,m*2,w")
 
 (define_insn_reservation "9_store3_op" 0
  (and (eq_attr "tune" "arm926ejs")
-      (eq_attr "type" "store_12"))
+      (eq_attr "type" "store3"))
  "e,m*3,w")
 
 (define_insn_reservation "9_store4_op" 0
  (and (eq_attr "tune" "arm926ejs")
-      (eq_attr "type" "store_16"))
+      (eq_attr "type" "store4"))
  "e,m*4,w")
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;

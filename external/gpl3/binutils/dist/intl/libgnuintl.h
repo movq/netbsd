@@ -112,24 +112,12 @@ extern "C" {
 # define _INTL_ASM(cname)
 #endif
 
-/* _INTL_MAY_RETURN_STRING_ARG(n) declares that the given function may return
-   its n-th argument literally.  This enables GCC to warn for example about
-   printf (gettext ("foo %y")).  */
-#if defined __GNUC__ && __GNUC__ >= 3 && !(defined __APPLE_CC__ && __APPLE_CC__ > 1 && !(defined __clang__ && __clang__ && __clang_major__ >= 3) && defined __cplusplus)
-# define _INTL_MAY_RETURN_STRING_ARG(n) __attribute__ ((__format_arg__ (n)))
-#else
-# define _INTL_MAY_RETURN_STRING_ARG(n)
-#endif
-
 /* Look up MSGID in the current default message catalog for the current
    LC_MESSAGES locale.  If not found, returns MSGID itself (the default
    text).  */
 #ifdef _INTL_REDIRECT_INLINE
-extern char *libintl_gettext (const char *__msgid)
-       _INTL_MAY_RETURN_STRING_ARG (1);
-static inline
-_INTL_MAY_RETURN_STRING_ARG (1)
-char *gettext (const char *__msgid)
+extern char *libintl_gettext (const char *__msgid);
+static inline char *gettext (const char *__msgid)
 {
   return libintl_gettext (__msgid);
 }
@@ -138,18 +126,14 @@ char *gettext (const char *__msgid)
 # define gettext libintl_gettext
 #endif
 extern char *gettext _INTL_PARAMS ((const char *__msgid))
-       _INTL_ASM (libintl_gettext)
-       _INTL_MAY_RETURN_STRING_ARG (1);
+       _INTL_ASM (libintl_gettext);
 #endif
 
 /* Look up MSGID in the DOMAINNAME message catalog for the current
    LC_MESSAGES locale.  */
 #ifdef _INTL_REDIRECT_INLINE
-extern char *libintl_dgettext (const char *__domainname, const char *__msgid)
-       _INTL_MAY_RETURN_STRING_ARG (2);
-static inline
-_INTL_MAY_RETURN_STRING_ARG (2)
-char *dgettext (const char *__domainname, const char *__msgid)
+extern char *libintl_dgettext (const char *__domainname, const char *__msgid);
+static inline char *dgettext (const char *__domainname, const char *__msgid)
 {
   return libintl_dgettext (__domainname, __msgid);
 }
@@ -159,19 +143,16 @@ char *dgettext (const char *__domainname, const char *__msgid)
 #endif
 extern char *dgettext _INTL_PARAMS ((const char *__domainname,
 				     const char *__msgid))
-       _INTL_ASM (libintl_dgettext)
-       _INTL_MAY_RETURN_STRING_ARG (2);
+       _INTL_ASM (libintl_dgettext);
 #endif
 
 /* Look up MSGID in the DOMAINNAME message catalog for the current CATEGORY
    locale.  */
 #ifdef _INTL_REDIRECT_INLINE
 extern char *libintl_dcgettext (const char *__domainname, const char *__msgid,
-				int __category)
-       _INTL_MAY_RETURN_STRING_ARG (2);
-static inline
-_INTL_MAY_RETURN_STRING_ARG (2)
-char *dcgettext (const char *__domainname, const char *__msgid, int __category)
+				int __category);
+static inline char *dcgettext (const char *__domainname, const char *__msgid,
+			       int __category)
 {
   return libintl_dcgettext (__domainname, __msgid, __category);
 }
@@ -182,8 +163,7 @@ char *dcgettext (const char *__domainname, const char *__msgid, int __category)
 extern char *dcgettext _INTL_PARAMS ((const char *__domainname,
 				      const char *__msgid,
 				      int __category))
-       _INTL_ASM (libintl_dcgettext)
-       _INTL_MAY_RETURN_STRING_ARG (2);
+       _INTL_ASM (libintl_dcgettext);
 #endif
 
 
@@ -191,12 +171,9 @@ extern char *dcgettext _INTL_PARAMS ((const char *__domainname,
    number N.  */
 #ifdef _INTL_REDIRECT_INLINE
 extern char *libintl_ngettext (const char *__msgid1, const char *__msgid2,
-			       unsigned long int __n)
-       _INTL_MAY_RETURN_STRING_ARG (1) _INTL_MAY_RETURN_STRING_ARG (2);
-static inline
-_INTL_MAY_RETURN_STRING_ARG (1) _INTL_MAY_RETURN_STRING_ARG (2)
-char *ngettext (const char *__msgid1, const char *__msgid2,
-		unsigned long int __n)
+			       unsigned long int __n);
+static inline char *ngettext (const char *__msgid1, const char *__msgid2,
+			      unsigned long int __n)
 {
   return libintl_ngettext (__msgid1, __msgid2, __n);
 }
@@ -207,20 +184,16 @@ char *ngettext (const char *__msgid1, const char *__msgid2,
 extern char *ngettext _INTL_PARAMS ((const char *__msgid1,
 				     const char *__msgid2,
 				     unsigned long int __n))
-       _INTL_ASM (libintl_ngettext)
-       _INTL_MAY_RETURN_STRING_ARG (1) _INTL_MAY_RETURN_STRING_ARG (2);
+       _INTL_ASM (libintl_ngettext);
 #endif
 
 /* Similar to `dgettext' but select the plural form corresponding to the
    number N.  */
 #ifdef _INTL_REDIRECT_INLINE
 extern char *libintl_dngettext (const char *__domainname, const char *__msgid1,
-				const char *__msgid2, unsigned long int __n)
-       _INTL_MAY_RETURN_STRING_ARG (2) _INTL_MAY_RETURN_STRING_ARG (3);
-static inline
-_INTL_MAY_RETURN_STRING_ARG (2) _INTL_MAY_RETURN_STRING_ARG (3)
-char *dngettext (const char *__domainname, const char *__msgid1,
-		 const char *__msgid2, unsigned long int __n)
+				const char *__msgid2, unsigned long int __n);
+static inline char *dngettext (const char *__domainname, const char *__msgid1,
+			       const char *__msgid2, unsigned long int __n)
 {
   return libintl_dngettext (__domainname, __msgid1, __msgid2, __n);
 }
@@ -232,8 +205,7 @@ extern char *dngettext _INTL_PARAMS ((const char *__domainname,
 				      const char *__msgid1,
 				      const char *__msgid2,
 				      unsigned long int __n))
-       _INTL_ASM (libintl_dngettext)
-       _INTL_MAY_RETURN_STRING_ARG (2) _INTL_MAY_RETURN_STRING_ARG (3);
+       _INTL_ASM (libintl_dngettext);
 #endif
 
 /* Similar to `dcgettext' but select the plural form corresponding to the
@@ -241,13 +213,10 @@ extern char *dngettext _INTL_PARAMS ((const char *__domainname,
 #ifdef _INTL_REDIRECT_INLINE
 extern char *libintl_dcngettext (const char *__domainname,
 				 const char *__msgid1, const char *__msgid2,
-				 unsigned long int __n, int __category)
-       _INTL_MAY_RETURN_STRING_ARG (2) _INTL_MAY_RETURN_STRING_ARG (3);
-static inline
-_INTL_MAY_RETURN_STRING_ARG (2) _INTL_MAY_RETURN_STRING_ARG (3)
-char *dcngettext (const char *__domainname,
-		  const char *__msgid1, const char *__msgid2,
-		  unsigned long int __n, int __category)
+				 unsigned long int __n, int __category);
+static inline char *dcngettext (const char *__domainname,
+				const char *__msgid1, const char *__msgid2,
+				unsigned long int __n, int __category)
 {
   return libintl_dcngettext (__domainname, __msgid1, __msgid2, __n, __category);
 }
@@ -260,8 +229,7 @@ extern char *dcngettext _INTL_PARAMS ((const char *__domainname,
 				       const char *__msgid2,
 				       unsigned long int __n,
 				       int __category))
-       _INTL_ASM (libintl_dcngettext)
-       _INTL_MAY_RETURN_STRING_ARG (2) _INTL_MAY_RETURN_STRING_ARG (3);
+       _INTL_ASM (libintl_dcngettext);
 #endif
 
 

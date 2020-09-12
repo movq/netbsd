@@ -1,5 +1,6 @@
 /* ELF strtab with GC and suffix merging support.
-   Copyright (C) 2001-2020 Free Software Foundation, Inc.
+   Copyright 2001, 2002, 2003, 2005, 2006, 2007, 2008
+   Free Software Foundation, Inc.
    Written by Jakub Jelinek <jakub@redhat.com>.
 
    This file is part of BFD, the Binary File Descriptor library.
@@ -48,9 +49,9 @@ struct elf_strtab_hash
 {
   struct bfd_hash_table table;
   /* Next available index.  */
-  size_t size;
+  bfd_size_type size;
   /* Number of array entries alloced.  */
-  size_t alloced;
+  bfd_size_type alloced;
   /* Final strtab size.  */
   bfd_size_type sec_size;
   /* Array of pointers to strtab entries.  */
@@ -67,8 +68,7 @@ elf_strtab_hash_newfunc (struct bfd_hash_entry *entry,
   /* Allocate the structure if it has not already been allocated by a
      subclass.  */
   if (entry == NULL)
-    entry = (struct bfd_hash_entry *)
-	bfd_hash_allocate (table, sizeof (struct elf_strtab_hash_entry));
+    entry = bfd_hash_allocate (table, sizeof (struct elf_strtab_hash_entry));
   if (entry == NULL)
     return NULL;
 
@@ -97,7 +97,7 @@ _bfd_elf_strtab_init (void)
   struct elf_strtab_hash *table;
   bfd_size_type amt = sizeof (struct elf_strtab_hash);
 
-  table = (struct elf_strtab_hash *) bfd_malloc (amt);
+  table = bfd_malloc (amt);
   if (table == NULL)
     return NULL;
 
@@ -112,8 +112,7 @@ _bfd_elf_strtab_init (void)
   table->size = 1;
   table->alloced = 64;
   amt = sizeof (struct elf_strtab_hasn_entry *);
-  table->array = ((struct elf_strtab_hash_entry **)
-		  bfd_malloc (table->alloced * amt));
+  table->array = bfd_malloc (table->alloced * amt);
   if (table->array == NULL)
     {
       free (table);
@@ -138,7 +137,7 @@ _bfd_elf_strtab_free (struct elf_strtab_hash *tab)
 /* Get the index of an entity in a hash table, adding it if it is not
    already present.  */
 
-size_t
+bfd_size_type
 _bfd_elf_strtab_add (struct elf_strtab_hash *tab,
 		     const char *str,
 		     bfd_boolean copy)
@@ -155,7 +154,7 @@ _bfd_elf_strtab_add (struct elf_strtab_hash *tab,
 	  bfd_hash_lookup (&tab->table, str, TRUE, copy);
 
   if (entry == NULL)
-    return (size_t) -1;
+    return (bfd_size_type) -1;
 
   entry->refcount++;
   if (entry->len == 0)
@@ -167,10 +166,9 @@ _bfd_elf_strtab_add (struct elf_strtab_hash *tab,
 	{
 	  bfd_size_type amt = sizeof (struct elf_strtab_hash_entry *);
 	  tab->alloced *= 2;
-	  tab->array = (struct elf_strtab_hash_entry **)
-	      bfd_realloc_or_free (tab->array, tab->alloced * amt);
+	  tab->array = bfd_realloc_or_free (tab->array, tab->alloced * amt);
 	  if (tab->array == NULL)
-	    return (size_t) -1;
+	    return (bfd_size_type) -1;
 	}
 
       entry->u.index = tab->size++;
@@ -180,9 +178,9 @@ _bfd_elf_strtab_add (struct elf_strtab_hash *tab,
 }
 
 void
-_bfd_elf_strtab_addref (struct elf_strtab_hash *tab, size_t idx)
+_bfd_elf_strtab_addref (struct elf_strtab_hash *tab, bfd_size_type idx)
 {
-  if (idx == 0 || idx == (size_t) -1)
+  if (idx == 0 || idx == (bfd_size_type) -1)
     return;
   BFD_ASSERT (tab->sec_size == 0);
   BFD_ASSERT (idx < tab->size);
@@ -190,9 +188,9 @@ _bfd_elf_strtab_addref (struct elf_strtab_hash *tab, size_t idx)
 }
 
 void
-_bfd_elf_strtab_delref (struct elf_strtab_hash *tab, size_t idx)
+_bfd_elf_strtab_delref (struct elf_strtab_hash *tab, bfd_size_type idx)
 {
-  if (idx == 0 || idx == (size_t) -1)
+  if (idx == 0 || idx == (bfd_size_type) -1)
     return;
   BFD_ASSERT (tab->sec_size == 0);
   BFD_ASSERT (idx < tab->size);
@@ -200,68 +198,13 @@ _bfd_elf_strtab_delref (struct elf_strtab_hash *tab, size_t idx)
   --tab->array[idx]->refcount;
 }
 
-unsigned int
-_bfd_elf_strtab_refcount (struct elf_strtab_hash *tab, size_t idx)
-{
-  return tab->array[idx]->refcount;
-}
-
 void
 _bfd_elf_strtab_clear_all_refs (struct elf_strtab_hash *tab)
 {
-  size_t idx;
+  bfd_size_type idx;
 
-  for (idx = 1; idx < tab->size; idx++)
+  for (idx = 1; idx < tab->size; ++idx)
     tab->array[idx]->refcount = 0;
-}
-
-/* Save strtab refcounts prior to adding --as-needed library.  */
-
-struct strtab_save
-{
-  size_t size;
-  unsigned int refcount[1];
-};
-
-void *
-_bfd_elf_strtab_save (struct elf_strtab_hash *tab)
-{
-  struct strtab_save *save;
-  size_t idx, size;
-
-  size = sizeof (*save) + (tab->size - 1) * sizeof (save->refcount[0]);
-  save = bfd_malloc (size);
-  if (save == NULL)
-    return save;
-
-  save->size = tab->size;
-  for (idx = 1; idx < tab->size; idx++)
-    save->refcount[idx] = tab->array[idx]->refcount;
-  return save;
-}
-
-/* Restore strtab refcounts on finding --as-needed library not needed.  */
-
-void
-_bfd_elf_strtab_restore (struct elf_strtab_hash *tab, void *buf)
-{
-  size_t idx, curr_size = tab->size;
-  struct strtab_save *save = (struct strtab_save *) buf;
-
-  BFD_ASSERT (tab->sec_size == 0);
-  BFD_ASSERT (save->size <= curr_size);
-  tab->size = save->size;
-  for (idx = 1; idx < save->size; ++idx)
-    tab->array[idx]->refcount = save->refcount[idx];
-
-  for (; idx < curr_size; ++idx)
-    {
-      /* We don't remove entries from the hash table, just set their
-	 REFCOUNT to zero.  Setting LEN zero will result in the size
-	 growing if the entry is added again.  See _bfd_elf_strtab_add.  */
-      tab->array[idx]->refcount = 0;
-      tab->array[idx]->len = 0;
-    }
 }
 
 bfd_size_type
@@ -271,13 +214,7 @@ _bfd_elf_strtab_size (struct elf_strtab_hash *tab)
 }
 
 bfd_size_type
-_bfd_elf_strtab_len (struct elf_strtab_hash *tab)
-{
-  return tab->size;
-}
-
-bfd_size_type
-_bfd_elf_strtab_offset (struct elf_strtab_hash *tab, size_t idx)
+_bfd_elf_strtab_offset (struct elf_strtab_hash *tab, bfd_size_type idx)
 {
   struct elf_strtab_hash_entry *entry;
 
@@ -291,24 +228,10 @@ _bfd_elf_strtab_offset (struct elf_strtab_hash *tab, size_t idx)
   return tab->array[idx]->u.index;
 }
 
-const char *
-_bfd_elf_strtab_str (struct elf_strtab_hash *tab, size_t idx,
-		     bfd_size_type *offset)
-{
-  if (idx == 0)
-    return 0;
-  BFD_ASSERT (idx < tab->size);
-  BFD_ASSERT (tab->sec_size);
-  if (offset)
-    *offset = tab->array[idx]->u.index;
-  return tab->array[idx]->root.string;
-}
-
 bfd_boolean
 _bfd_elf_strtab_emit (register bfd *abfd, struct elf_strtab_hash *tab)
 {
-  bfd_size_type off = 1;
-  size_t i;
+  bfd_size_type off = 1, i;
 
   if (bfd_bwrite ("", 1, abfd) != 1)
     return FALSE;
@@ -334,9 +257,7 @@ _bfd_elf_strtab_emit (register bfd *abfd, struct elf_strtab_hash *tab)
   return TRUE;
 }
 
-/* Compare two elf_strtab_hash_entry structures.  Called via qsort.
-   Won't ever return zero as all entries differ, so there is no issue
-   with qsort stability here.  */
+/* Compare two elf_strtab_hash_entry structures.  Called via qsort.  */
 
 static int
 strrevcmp (const void *a, const void *b)
@@ -380,13 +301,17 @@ void
 _bfd_elf_strtab_finalize (struct elf_strtab_hash *tab)
 {
   struct elf_strtab_hash_entry **array, **a, *e;
-  bfd_size_type amt, sec_size;
-  size_t size, i;
+  bfd_size_type size, amt;
+
+  /* GCC 2.91.66 (egcs-1.1.2) on i386 miscompiles this function when i is
+     a 64-bit bfd_size_type: a 64-bit target or --enable-64-bit-bfd.
+     Besides, indexing with a long long wouldn't give anything but extra
+     cycles.  */
+  size_t i;
 
   /* Sort the strings by suffix and length.  */
-  amt = tab->size;
-  amt *= sizeof (struct elf_strtab_hash_entry *);
-  array = (struct elf_strtab_hash_entry **) bfd_malloc (amt);
+  amt = tab->size * sizeof (struct elf_strtab_hash_entry *);
+  array = bfd_malloc (amt);
   if (array == NULL)
     goto alloc_failure;
 
@@ -444,18 +369,18 @@ alloc_failure:
     free (array);
 
   /* Assign positions to the strings we want to keep.  */
-  sec_size = 1;
+  size = 1;
   for (i = 1; i < tab->size; ++i)
     {
       e = tab->array[i];
       if (e->refcount && e->len > 0)
 	{
-	  e->u.index = sec_size;
-	  sec_size += e->len;
+	  e->u.index = size;
+	  size += e->len;
 	}
     }
 
-  tab->sec_size = sec_size;
+  tab->sec_size = size;
 
   /* Adjust the rest.  */
   for (i = 1; i < tab->size; ++i)

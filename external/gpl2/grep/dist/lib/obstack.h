@@ -1,4 +1,4 @@
-/*	$NetBSD: obstack.h,v 1.1.1.1 2016/01/10 21:36:18 christos Exp $	*/
+/*	$NetBSD: obstack.h,v 1.1 2016/01/10 21:36:18 christos Exp $	*/
 
 /* obstack.h - object stack macros
    Copyright (C) 1988,89,90,91,92,93,94,96,97,98,99 Free Software Foundation, Inc.

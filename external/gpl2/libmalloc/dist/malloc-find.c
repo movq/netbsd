@@ -1,4 +1,4 @@
-/*	$NetBSD: malloc-find.c,v 1.1.1.1 2016/01/13 21:42:18 christos Exp $	*/
+/*	$NetBSD: malloc-find.c,v 1.1 2016/01/13 21:42:18 christos Exp $	*/
 
 /* Find the starting address of a malloc'd block, from anywhere inside it.
    Copyright (C) 1995 Free Software Foundation, Inc.

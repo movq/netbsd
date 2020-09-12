@@ -1,7 +1,8 @@
 /* Operating system specific defines to be used when targeting GCC for
    hosting on Windows 32/64 via mingw-w64 runtime, using GNU tools and
    the Windows API Library.
-   Copyright (C) 2009-2019 Free Software Foundation, Inc.
+   Copyright (C) 2009,
+   2009 Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -19,36 +20,24 @@ You should have received a copy of the GNU General Public License
 along with GCC; see the file COPYING3.  If not see
 <http://www.gnu.org/licenses/>.  */
 
-/* Enable -municode feature and support optional pthread support.  */
+/* Enable -municode feature.  */
 
 #undef CPP_SPEC
-#define CPP_SPEC "%{posix:-D_POSIX_SOURCE} %{mthreads:-D_MT} " \
-		 "%{municode:-DUNICODE} " \
-		 "%{" SPEC_PTHREAD1 ":-D_REENTRANT} " \
-		 "%{" SPEC_PTHREAD2 ":-U_REENTRANT} "
+#define CPP_SPEC "%{posix:-D_POSIX_SOURCE} %{mthreads:-D_MT} \
+  %{municode:-DUNICODE}"
 
 #undef STARTFILE_SPEC
 #define STARTFILE_SPEC "%{shared|mdll:dllcrt2%O%s} \
   %{!shared:%{!mdll:%{!municode:crt2%O%s}}} \
   %{!shared:%{!mdll:%{municode:crt2u%O%s}}} \
   %{pg:gcrt2%O%s} \
-  crtbegin.o%s \
-  %{fvtable-verify=none:%s; \
-    fvtable-verify=preinit:vtv_start.o%s; \
-    fvtable-verify=std:vtv_start.o%s}"
+  crtbegin.o%s"
 
 /* Enable multilib.  */
 
 #undef ASM_SPEC
-#define ASM_SPEC "%{m32:--32} %{m64:--64}"
-
-#undef LIB_SPEC
-#define LIB_SPEC "%{pg:-lgmon} %{" SPEC_PTHREAD1 ":-lpthread} " \
-		 "%{" SPEC_PTHREAD2 ": } " \
-		 "%{mwindows:-lgdi32 -lcomdlg32} " \
-     "%{fvtable-verify=preinit:-lvtv -lpsapi; \
-        fvtable-verify=std:-lvtv -lpsapi} " \
-		 "-ladvapi32 -lshell32 -luser32 -lkernel32"
+#define ASM_SPEC "%{v:-v} %{n} %{T} %{Ym,*} %{Yd,*} \
+ %{Wa,*:%*} %{m32:--32} %{m64:--64}"
 
 #undef SPEC_32
 #undef SPEC_64
@@ -81,14 +70,6 @@ along with GCC; see the file COPYING3.  If not see
 #define MULTILIB_DEFAULTS { "m32" }
 #endif
 
-#undef LINK_SPEC_LARGE_ADDR_AWARE
-#if MINGW_DEFAULT_LARGE_ADDR_AWARE
-# define LINK_SPEC_LARGE_ADDR_AWARE \
-  "%{!shared:%{!mdll:%{" SPEC_32 ":--large-address-aware}}}"
-#else
-# define LINK_SPEC_LARGE_ADDR_AWARE ""
-#endif
-
 #undef LINK_SPEC
 #define LINK_SPEC SUB_LINK_SPEC " %{mwindows:--subsystem windows} \
   %{mconsole:--subsystem console} \
@@ -96,5 +77,4 @@ along with GCC; see the file COPYING3.  If not see
   %{shared: --shared} %{mdll:--dll} \
   %{static:-Bstatic} %{!static:-Bdynamic} \
   %{shared|mdll: " SUB_LINK_ENTRY " --enable-auto-image-base} \
-  " LINK_SPEC_LARGE_ADDR_AWARE "\
   %(shared_libgcc_undefs)"

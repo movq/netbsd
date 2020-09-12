@@ -1,20 +1,18 @@
-2020-03-12  Release Manager
+2011-04-28  Release Manager
 
-	* GCC 9.3.0 released.
+	* GCC 4.5.3 released.
 
-2019-08-12  Release Manager
+2010-12-16  Release Manager
 
-	* GCC 9.2.0 released.
+	* GCC 4.5.2 released.
 
-2019-05-03  Release Manager
+2010-07-31  Release Manager
 
-	* GCC 9.1.0 released.
+	* GCC 4.5.1 released.
 
-2012-08-26  Hans-Peter Nilsson  <hp@axis.com>
+2010-04-14  Release Manager
 
-	* btest-gcc.sh (TESTLOGS): Make gfortran.sum optional.
-
-	* btest-gcc.sh (TESTLOGS): Add libmudflap.sum, if it exists.
+	* GCC 4.5.0 released.
 
 2009-09-02  Geoff Keating  <geoffk@apple.com>
 

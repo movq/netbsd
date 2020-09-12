@@ -1,5 +1,6 @@
 /* MI Command Set - symbol commands.
-   Copyright (C) 2003-2019 Free Software Foundation, Inc.
+   Copyright (C) 2003, 2007, 2008, 2009, 2010, 2011
+   Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -22,18 +23,20 @@
 #include "objfiles.h"
 #include "ui-out.h"
 
-/* Print the list of all pc addresses and lines of code for the
-   provided (full or base) source file name.  The entries are sorted
-   in ascending PC order.  */
+/* SYMBOL-LIST-LINES:
+
+   Print the list of all pc addresses and lines of code for
+   the provided (full or base) source file name.  The entries
+   are sorted in ascending PC order. */
 
 void
-mi_cmd_symbol_list_lines (const char *command, char **argv, int argc)
+mi_cmd_symbol_list_lines (char *command, char **argv, int argc)
 {
   struct gdbarch *gdbarch;
   char *filename;
   struct symtab *s;
   int i;
-  struct ui_out *uiout = current_uiout;
+  struct cleanup *cleanup_stack, *cleanup_tuple;
 
   if (argc != 1)
     error (_("-symbol-list-lines: Usage: SOURCE_FILENAME"));
@@ -44,18 +47,21 @@ mi_cmd_symbol_list_lines (const char *command, char **argv, int argc)
   if (s == NULL)
     error (_("-symbol-list-lines: Unknown source file name."));
 
-  /* Now, dump the associated line table.  The pc addresses are
-     already sorted by increasing values in the symbol table, so no
-     need to perform any other sorting.  */
+  /* Now, dump the associated line table.  The pc addresses are already
+     sorted by increasing values in the symbol table, so no need to
+     perform any other sorting. */
 
-  gdbarch = get_objfile_arch (SYMTAB_OBJFILE (s));
+  gdbarch = get_objfile_arch (s->objfile);
+  cleanup_stack = make_cleanup_ui_out_list_begin_end (uiout, "lines");
 
-  ui_out_emit_list list_emitter (uiout, "lines");
-  if (SYMTAB_LINETABLE (s) != NULL && SYMTAB_LINETABLE (s)->nitems > 0)
-    for (i = 0; i < SYMTAB_LINETABLE (s)->nitems; i++)
+  if (LINETABLE (s) != NULL && LINETABLE (s)->nitems > 0)
+    for (i = 0; i < LINETABLE (s)->nitems; i++)
     {
-      ui_out_emit_tuple tuple_emitter (uiout, NULL);
-      uiout->field_core_addr ("pc", gdbarch, SYMTAB_LINETABLE (s)->item[i].pc);
-      uiout->field_int ("line", SYMTAB_LINETABLE (s)->item[i].line);
+      cleanup_tuple = make_cleanup_ui_out_tuple_begin_end (uiout, NULL);
+      ui_out_field_core_addr (uiout, "pc", gdbarch, LINETABLE (s)->item[i].pc);
+      ui_out_field_int (uiout, "line", LINETABLE (s)->item[i].line);
+      do_cleanups (cleanup_tuple);
     }
+
+  do_cleanups (cleanup_stack);
 }

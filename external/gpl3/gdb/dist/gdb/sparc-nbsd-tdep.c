@@ -1,6 +1,6 @@
 /* Target-dependent code for NetBSD/sparc.
 
-   Copyright (C) 2002-2019 Free Software Foundation, Inc.
+   Copyright (C) 2002-2017 Free Software Foundation, Inc.
    Contributed by Wasabi Systems, Inc.
 
    This file is part of GDB.
@@ -31,7 +31,6 @@
 #include "trad-frame.h"
 
 #include "sparc-tdep.h"
-#include "sparc-nbsd-tdep.h"
 #include "nbsd-tdep.h"
 
 /* Macros to extract fields from SPARC instructions.  */
@@ -291,7 +290,7 @@ static const struct regset sparc32nbsd_fpregset =
     NULL, sparc32nbsd_supply_fpregset, NULL
   };
 
-static void
+void
 sparc32nbsd_init_abi (struct gdbarch_info info, struct gdbarch *gdbarch)
 {
   struct gdbarch_tdep *tdep = gdbarch_tdep (gdbarch);
@@ -310,20 +309,18 @@ sparc32nbsd_init_abi (struct gdbarch_info info, struct gdbarch *gdbarch)
   tdep->step_trap = sparcnbsd_step_trap;
 
   frame_unwind_append_unwinder (gdbarch, &sparc32nbsd_sigcontext_frame_unwind);
-}
-
-void
-sparc32nbsd_elf_init_abi (struct gdbarch_info info, struct gdbarch *gdbarch)
-{
-  sparc32nbsd_init_abi (info, gdbarch);
 
   set_solib_svr4_fetch_link_map_offsets
     (gdbarch, svr4_ilp32_fetch_link_map_offsets);
 }
 
+
+/* Provide a prototype to silence -Wmissing-prototypes.  */
+void _initialize_sparcnbsd_tdep (void);
+
 void
 _initialize_sparcnbsd_tdep (void)
 {
   gdbarch_register_osabi (bfd_arch_sparc, 0, GDB_OSABI_NETBSD,
-			  sparc32nbsd_elf_init_abi);
+			  sparc32nbsd_init_abi);
 }

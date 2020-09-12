@@ -1,4 +1,4 @@
-/*	$NetBSD: printf-parse.c,v 1.1.1.1 2016/01/14 00:11:28 christos Exp $	*/
+/*	$NetBSD: printf-parse.c,v 1.1 2016/01/14 00:11:28 christos Exp $	*/
 
 /* Formatted output to strings.
    Copyright (C) 1999-2000, 2002-2003 Free Software Foundation, Inc.

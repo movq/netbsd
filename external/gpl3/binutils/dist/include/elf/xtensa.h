@@ -1,12 +1,12 @@
 /* Xtensa ELF support for BFD.
-   Copyright (C) 2003-2020 Free Software Foundation, Inc.
+   Copyright 2003, 2004, 2007, 2008 Free Software Foundation, Inc.
    Contributed by Bob Wilson (bwilson@tensilica.com) at Tensilica.
 
    This file is part of BFD, the Binary File Descriptor library.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 3 of the License, or
+   the Free Software Foundation; either version 2 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -25,10 +25,6 @@
 #define _ELF_XTENSA_H
 
 #include "elf/reloc-macros.h"
-
-#ifdef __cplusplus
-extern "C" {
-#endif
 
 /* Relocations.  */
 START_RELOC_NUMBERS (elf_xtensa_reloc_type)
@@ -208,19 +204,5 @@ typedef struct property_table_entry_t
     (((align) << 12) & XTENSA_PROP_ALIGNMENT_MASK))
 
 #define XTENSA_PROP_INSN_ABSLIT        0x00020000
-
-extern asection *xtensa_make_property_section (asection *, const char *);
-extern int
-xtensa_read_table_entries (bfd *abfd,
-			   asection *section,
-			   property_table_entry **table_p,
-			   const char *sec_name,
-			   bfd_boolean output_addr);
-extern int
-xtensa_compute_fill_extra_space (property_table_entry *entry);
-
-#ifdef __cplusplus
-}
-#endif
 
 #endif /* _ELF_XTENSA_H */

@@ -1,4 +1,4 @@
-/*	$NetBSD: intl-compat.c,v 1.1.1.1 2016/01/10 21:36:17 christos Exp $	*/
+/*	$NetBSD: intl-compat.c,v 1.1 2016/01/10 21:36:17 christos Exp $	*/
 
 /* intl-compat.c - Stub functions to call gettext functions from GNU gettext
    Library.

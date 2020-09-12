@@ -1,6 +1,6 @@
 /* Simulator for Analog Devices Blackfin processors.
 
-   Copyright (C) 2005-2019 Free Software Foundation, Inc.
+   Copyright (C) 2005-2011 Free Software Foundation, Inc.
    Contributed by Analog Devices, Inc.
 
    This file is part of simulators.
@@ -32,14 +32,11 @@
 #include "gdb/callback.h"
 #include "gdb/signals.h"
 #include "sim-main.h"
-#include "sim-syscall.h"
 #include "sim-hw.h"
 
 #include "targ-vals.h"
 
-/* The numbers here do not matter.  They just need to be unique.  They also
-   need not be static across releases -- they're used internally only.  The
-   mapping from the Linux ABI to the CB values is in linux-targ-map.h.  */
+/* The numbers here do not matter.  They just need to be unique.  */
 #define CB_SYS_ioctl        201
 #define CB_SYS_mmap2        202
 #define CB_SYS_munmap       203
@@ -92,7 +89,7 @@
 # define setgid(gid) -1
 #endif
 
-static const char cb_linux_stat_map_32[] =
+static const char stat_map_32[] =
 /* Linux kernel 32bit layout:  */
 "st_dev,2:space,2:st_ino,4:st_mode,2:st_nlink,2:st_uid,2:st_gid,2:st_rdev,2:"
 "space,2:st_size,4:st_blksize,4:st_blocks,4:st_atime,4:st_atimensec,4:"
@@ -102,15 +99,50 @@ static const char cb_linux_stat_map_32[] =
 "st_rdev,8:space,2:space,2:st_size,4:st_blksiez,4:st_blocks,4:st_atime,4:"
 "st_atimensec,4:st_mtime,4:st_mtimensec,4:st_ctime,4:st_ctimensec,4:space,4:"
 "space,4";  */
-static const char cb_linux_stat_map_64[] =
+static const char stat_map_64[] =
 "st_dev,8:space,4:space,4:st_mode,4:st_nlink,4:st_uid,4:st_gid,4:st_rdev,8:"
 "space,4:st_size,8:st_blksize,4:st_blocks,8:st_atime,4:st_atimensec,4:"
 "st_mtime,4:st_mtimensec,4:st_ctime,4:st_ctimensec,4:st_ino,8";
-static const char cb_libgloss_stat_map_32[] =
-"st_dev,2:st_ino,2:st_mode,4:st_nlink,2:st_uid,2:st_gid,2:st_rdev,2:"
-"st_size,4:st_atime,4:space,4:st_mtime,4:space,4:st_ctime,4:"
-"space,4:st_blksize,4:st_blocks,4:space,8";
-static const char *stat_map_32, *stat_map_64;
+
+/* Count the number of arguments in an argv.  */
+static int
+count_argc (const char * const *argv)
+{
+  int i;
+
+  if (! argv)
+    return -1;
+
+  for (i = 0; argv[i] != NULL; ++i)
+    continue;
+  return i;
+}
+
+/* Read/write functions for system call interface.  */
+
+static int
+syscall_read_mem (host_callback *cb, struct cb_syscall *sc,
+		  unsigned long taddr, char *buf, int bytes)
+{
+  SIM_DESC sd = (SIM_DESC) sc->p1;
+  SIM_CPU *cpu = (SIM_CPU *) sc->p2;
+
+  MAYBE_TRACE (CORE, cpu, "DBUS FETCH (syscall) %i bytes @ 0x%08lx", bytes, taddr);
+
+  return sim_core_read_buffer (sd, cpu, read_map, buf, taddr, bytes);
+}
+
+static int
+syscall_write_mem (host_callback *cb, struct cb_syscall *sc,
+		  unsigned long taddr, const char *buf, int bytes)
+{
+  SIM_DESC sd = (SIM_DESC) sc->p1;
+  SIM_CPU *cpu = (SIM_CPU *) sc->p2;
+
+  MAYBE_TRACE (CORE, cpu, "DBUS STORE (syscall) %i bytes @ 0x%08lx", bytes, taddr);
+
+  return sim_core_write_buffer (sd, cpu, write_map, buf, taddr, bytes);
+}
 
 /* Simulate a monitor trap, put the result into r0 and errno into r1
    return offset by which to adjust pc.  */
@@ -119,12 +151,12 @@ void
 bfin_syscall (SIM_CPU *cpu)
 {
   SIM_DESC sd = CPU_STATE (cpu);
-  char * const *argv = (void *)STATE_PROG_ARGV (sd);
+  const char * const *argv = (void *)STATE_PROG_ARGV (sd);
   host_callback *cb = STATE_CALLBACK (sd);
   bu32 args[6];
   CB_SYSCALL sc;
   char *p;
-  char _tbuf[1024 * 3], *tbuf = _tbuf, tstr[1024];
+  char _tbuf[512], *tbuf = _tbuf;
   int fmt_ret_hex = 0;
 
   CB_SYSCALL_INIT (&sc);
@@ -153,8 +185,8 @@ bfin_syscall (SIM_CPU *cpu)
     }
   sc.p1 = (PTR) sd;
   sc.p2 = (PTR) cpu;
-  sc.read_mem = sim_syscall_read_mem;
-  sc.write_mem = sim_syscall_write_mem;
+  sc.read_mem = syscall_read_mem;
+  sc.write_mem = syscall_write_mem;
 
   /* Common cb_syscall() handles most functions.  */
   switch (cb_target_to_host_syscall (cb, sc.func))
@@ -166,12 +198,12 @@ bfin_syscall (SIM_CPU *cpu)
 #ifdef CB_SYS_argc
     case CB_SYS_argc:
       tbuf += sprintf (tbuf, "argc()");
-      sc.result = countargv ((char **)argv);
+      sc.result = count_argc (argv);
       break;
     case CB_SYS_argnlen:
       {
       tbuf += sprintf (tbuf, "argnlen(%u)", args[0]);
-	if (sc.arg1 < countargv ((char **)argv))
+	if (sc.arg1 < count_argc (argv))
 	  sc.result = strlen (argv[sc.arg1]);
 	else
 	  sc.result = -1;
@@ -180,7 +212,7 @@ bfin_syscall (SIM_CPU *cpu)
     case CB_SYS_argn:
       {
 	tbuf += sprintf (tbuf, "argn(%u)", args[0]);
-	if (sc.arg1 < countargv ((char **)argv))
+	if (sc.arg1 < count_argc (argv))
 	  {
 	    const char *argn = argv[sc.arg1];
 	    int len = strlen (argn);
@@ -403,18 +435,14 @@ bfin_syscall (SIM_CPU *cpu)
       break;
 
     case CB_SYS_stat64:
-      if (cb_get_string (cb, &sc, tstr, sizeof (tstr), args[0]))
-	strcpy (tstr, "???");
-      tbuf += sprintf (tbuf, "stat64(%#x:\"%s\", %u)", args[0], tstr, args[1]);
+      tbuf += sprintf (tbuf, "stat64(%#x, %u)", args[0], args[1]);
       cb->stat_map = stat_map_64;
       sc.func = TARGET_LINUX_SYS_stat;
       cb_syscall (cb, &sc);
       cb->stat_map = stat_map_32;
       break;
     case CB_SYS_lstat64:
-      if (cb_get_string (cb, &sc, tstr, sizeof (tstr), args[0]))
-	strcpy (tstr, "???");
-      tbuf += sprintf (tbuf, "lstat64(%#x:\"%s\", %u)", args[0], tstr, args[1]);
+      tbuf += sprintf (tbuf, "lstat64(%#x, %u)", args[0], args[1]);
       cb->stat_map = stat_map_64;
       sc.func = TARGET_LINUX_SYS_lstat;
       cb_syscall (cb, &sc);
@@ -482,10 +510,7 @@ bfin_syscall (SIM_CPU *cpu)
       break;
 
     case CB_SYS_open:
-      if (cb_get_string (cb, &sc, tstr, sizeof (tstr), args[0]))
-	strcpy (tstr, "???");
-      tbuf += sprintf (tbuf, "open(%#x:\"%s\", %#x, %o)",
-		       args[0], tstr, args[1], args[2]);
+      tbuf += sprintf (tbuf, "open(%#x, %#x, %o)", args[0], args[1], args[2]);
       goto case_default;
     case CB_SYS_close:
       tbuf += sprintf (tbuf, "close(%i)", args[0]);
@@ -494,47 +519,31 @@ bfin_syscall (SIM_CPU *cpu)
       tbuf += sprintf (tbuf, "read(%i, %#x, %u)", args[0], args[1], args[2]);
       goto case_default;
     case CB_SYS_write:
-      if (cb_get_string (cb, &sc, tstr, sizeof (tstr), args[1]))
-	strcpy (tstr, "???");
-      tbuf += sprintf (tbuf, "write(%i, %#x:\"%s\", %u)",
-		       args[0], args[1], tstr, args[2]);
+      tbuf += sprintf (tbuf, "write(%i, %#x, %u)", args[0], args[1], args[2]);
       goto case_default;
     case CB_SYS_lseek:
       tbuf += sprintf (tbuf, "lseek(%i, %i, %i)", args[0], args[1], args[2]);
       goto case_default;
     case CB_SYS_unlink:
-      if (cb_get_string (cb, &sc, tstr, sizeof (tstr), args[0]))
-	strcpy (tstr, "???");
-      tbuf += sprintf (tbuf, "unlink(%#x:\"%s\")", args[0], tstr);
+      tbuf += sprintf (tbuf, "unlink(%#x)", args[0]);
       goto case_default;
     case CB_SYS_truncate:
-      if (cb_get_string (cb, &sc, tstr, sizeof (tstr), args[0]))
-	strcpy (tstr, "???");
-      tbuf += sprintf (tbuf, "truncate(%#x:\"%s\", %i)", args[0], tstr, args[1]);
+      tbuf += sprintf (tbuf, "truncate(%#x, %i)", args[0], args[1]);
       goto case_default;
     case CB_SYS_ftruncate:
       tbuf += sprintf (tbuf, "ftruncate(%i, %i)", args[0], args[1]);
       goto case_default;
     case CB_SYS_rename:
-      if (cb_get_string (cb, &sc, tstr, sizeof (tstr), args[0]))
-	strcpy (tstr, "???");
-      tbuf += sprintf (tbuf, "rename(%#x:\"%s\", ", args[0], tstr);
-      if (cb_get_string (cb, &sc, tstr, sizeof (tstr), args[1]))
-	strcpy (tstr, "???");
-      tbuf += sprintf (tbuf, "%#x:\"%s\")", args[1], tstr);
+      tbuf += sprintf (tbuf, "rename(%#x, %#x)", args[0], args[1]);
       goto case_default;
     case CB_SYS_stat:
-      if (cb_get_string (cb, &sc, tstr, sizeof (tstr), args[0]))
-	strcpy (tstr, "???");
-      tbuf += sprintf (tbuf, "stat(%#x:\"%s\", %#x)", args[0], tstr, args[1]);
+      tbuf += sprintf (tbuf, "stat(%#x, %#x)", args[0], args[1]);
       goto case_default;
     case CB_SYS_fstat:
       tbuf += sprintf (tbuf, "fstat(%i, %#x)", args[0], args[1]);
       goto case_default;
     case CB_SYS_lstat:
-      if (cb_get_string (cb, &sc, tstr, sizeof (tstr), args[0]))
-	strcpy (tstr, "???");
-      tbuf += sprintf (tbuf, "lstat(%#x:\"%s\", %#x)", args[0], tstr, args[1]);
+      tbuf += sprintf (tbuf, "lstat(%i, %#x)", args[0], args[1]);
       goto case_default;
     case CB_SYS_pipe:
       tbuf += sprintf (tbuf, "pipe(%#x, %#x)", args[0], args[1]);
@@ -585,11 +594,27 @@ bfin_syscall (SIM_CPU *cpu)
     {
       tbuf += sprintf (tbuf, "%lu (error = %i)", sc.result, sc.errcode);
       SET_DREG (0, sc.result);
-      SET_DREG (1, sc.result2);
-      SET_DREG (2, sc.errcode);
+      /* Blackfin libgloss only expects R0 to be updated, not R1.  */
+      /*SET_DREG (1, sc.errcode);*/
     }
 
   TRACE_SYSCALL (cpu, "%s", _tbuf);
+}
+
+void
+trace_register (SIM_DESC sd,
+		sim_cpu *cpu,
+		const char *fmt,
+		...)
+{
+  va_list ap;
+  trace_printf (sd, cpu, "%s %s",
+		"reg:     ",
+		TRACE_PREFIX (CPU_TRACE_DATA (cpu)));
+  va_start (ap, fmt);
+  trace_vprintf (sd, cpu, fmt, ap);
+  va_end (ap);
+  trace_printf (sd, cpu, "\n");
 }
 
 /* Execute a single instruction.  */
@@ -605,8 +630,6 @@ step_once (SIM_CPU *cpu)
   if (TRACE_ANY_P (cpu))
     trace_prefix (sd, cpu, NULL_CIA, oldpc, TRACE_LINENUM_P (cpu),
 		  NULL, 0, " "); /* Use a space for gcc warnings.  */
-
-  TRACE_DISASM (cpu, oldpc);
 
   /* Handle hardware single stepping when lower than EVT3, and when SYSCFG
      has already had the SSSTEP bit enabled.  */
@@ -716,7 +739,7 @@ bfin_initialize_cpu (SIM_DESC sd, SIM_CPU *cpu)
 
 SIM_DESC
 sim_open (SIM_OPEN_KIND kind, host_callback *callback,
-	  struct bfd *abfd, char * const *argv)
+	  struct bfd *abfd, char **argv)
 {
   char c;
   int i;
@@ -757,7 +780,9 @@ sim_open (SIM_OPEN_KIND kind, host_callback *callback,
   e_sim_add_option_table (sd, bfin_mmu_options);
   e_sim_add_option_table (sd, bfin_mach_options);
 
-  /* The parser will print an error message for us, so we silently return.  */
+  /* getopt will print the error message so we just have to exit if this fails.
+     FIXME: Hmmm...  in the case of gdb we need getopt to call
+     print_filtered.  */
   if (sim_parse_args (sd, argv) != SIM_RC_OK)
     {
       free_state (sd);
@@ -806,8 +831,14 @@ sim_open (SIM_OPEN_KIND kind, host_callback *callback,
   return sd;
 }
 
+void
+sim_close (SIM_DESC sd, int quitting)
+{
+  sim_module_uninstall (sd);
+}
+
 /* Some utils don't like having a NULL environ.  */
-static char * const simple_env[] = { "HOME=/", "PATH=/bin", NULL };
+static const char * const simple_env[] = { "HOME=/", "PATH=/bin", NULL };
 
 static bu32 fdpic_load_offset;
 
@@ -917,7 +948,7 @@ bfin_fdpic_load (SIM_DESC sd, SIM_CPU *cpu, struct bfd *abfd, bu32 *sp,
 
 	free (data);
 
-	max_load_addr = max (paddr + memsz, max_load_addr);
+	max_load_addr = MAX (paddr + memsz, max_load_addr);
 
 	*sp -= 12;
 	sim_write (sd, *sp+0, (void *)&paddr, 4); /* loadseg.addr  */
@@ -948,7 +979,7 @@ bfin_fdpic_load (SIM_DESC sd, SIM_CPU *cpu, struct bfd *abfd, bu32 *sp,
       }
 
   /* Update the load offset with a few extra pages.  */
-  fdpic_load_offset = ALIGN (max (max_load_addr, fdpic_load_offset), 0x10000);
+  fdpic_load_offset = ALIGN (MAX (max_load_addr, fdpic_load_offset), 0x10000);
   fdpic_load_offset += 0x10000;
 
   /* Push the summary loadmap info onto the stack last.  */
@@ -965,7 +996,7 @@ bfin_fdpic_load (SIM_DESC sd, SIM_CPU *cpu, struct bfd *abfd, bu32 *sp,
 
 static void
 bfin_user_init (SIM_DESC sd, SIM_CPU *cpu, struct bfd *abfd,
-		char * const *argv, char * const *env)
+		const char * const *argv, const char * const *env)
 {
   /* XXX: Missing host -> target endian ...  */
   /* Linux starts the user app with the stack:
@@ -992,7 +1023,7 @@ bfin_user_init (SIM_DESC sd, SIM_CPU *cpu, struct bfd *abfd,
 
   /* start, at_phdr, at_phnum, at_base, at_entry, pt_dynamic  */
   bu32 elf_addrs[6];
-  bu32 auxvt;
+  bu32 auxvt, auxvt_size;
   bu32 exec_loadmap, ldso_loadmap;
   char *ldso_path;
 
@@ -1059,7 +1090,7 @@ bfin_user_init (SIM_DESC sd, SIM_CPU *cpu, struct bfd *abfd,
   sim_pc_set (cpu, elf_addrs[0]);
 
   /* Figure out how much storage the argv/env strings need.  */
-  argc = countargv ((char **)argv);
+  argc = count_argc (argv);
   if (argc == -1)
     argc = 0;
   argv_flat = argc; /* NUL bytes  */
@@ -1068,7 +1099,7 @@ bfin_user_init (SIM_DESC sd, SIM_CPU *cpu, struct bfd *abfd,
 
   if (!env)
     env = simple_env;
-  envc = countargv ((char **)env);
+  envc = count_argc (env);
   env_flat = envc; /* NUL bytes  */
   for (i = 0; i < envc; ++i)
     env_flat += strlen (env[i]);
@@ -1085,9 +1116,9 @@ bfin_user_init (SIM_DESC sd, SIM_CPU *cpu, struct bfd *abfd,
   sp -= 4; \
   auxvt = (at); \
   sim_write (sd, sp, (void *)&auxvt, 4)
+  auxvt_size = 0;
       unsigned int egid = getegid (), gid = getgid ();
       unsigned int euid = geteuid (), uid = getuid ();
-      bu32 auxvt_size = 0;
       AT_PUSH (AT_NULL, 0);
       AT_PUSH (AT_SECURE, egid != gid || euid != uid);
       AT_PUSH (AT_EGID, egid);
@@ -1142,12 +1173,11 @@ bfin_user_init (SIM_DESC sd, SIM_CPU *cpu, struct bfd *abfd,
   cb->errno_map = cb_linux_errno_map;
   cb->open_map = cb_linux_open_map;
   cb->signal_map = cb_linux_signal_map;
-  cb->stat_map = stat_map_32 = cb_linux_stat_map_32;
-  stat_map_64 = cb_linux_stat_map_64;
+  cb->stat_map = stat_map_32;
 }
 
 static void
-bfin_os_init (SIM_DESC sd, SIM_CPU *cpu, char * const *argv)
+bfin_os_init (SIM_DESC sd, SIM_CPU *cpu, const char * const *argv)
 {
   /* Pass the command line via a string in R0 like Linux expects.  */
   int i;
@@ -1173,18 +1203,9 @@ bfin_os_init (SIM_DESC sd, SIM_CPU *cpu, char * const *argv)
   sim_write (sd, cmdline, &byte, 1);
 }
 
-static void
-bfin_virtual_init (SIM_DESC sd, SIM_CPU *cpu)
-{
-  host_callback *cb = STATE_CALLBACK (sd);
-
-  cb->stat_map = stat_map_32 = cb_libgloss_stat_map_32;
-  stat_map_64 = NULL;
-}
-
 SIM_RC
 sim_create_inferior (SIM_DESC sd, struct bfd *abfd,
-		     char * const *argv, char * const *env)
+		     char **argv, char **env)
 {
   SIM_CPU *cpu = STATE_CPU (sd, 0);
   SIM_ADDR addr;
@@ -1196,28 +1217,34 @@ sim_create_inferior (SIM_DESC sd, struct bfd *abfd,
     addr = 0;
   sim_pc_set (cpu, addr);
 
-  /* Standalone mode (i.e. `run`) will take care of the argv for us in
-     sim_open() -> sim_parse_args().  But in debug mode (i.e. 'target sim'
-     with `gdb`), we need to handle it because the user can change the
-     argv on the fly via gdb's 'run'.  */
-  if (STATE_PROG_ARGV (sd) != argv)
+  /* Standalone mode (i.e. `bfin-...-run`) will take care of the argv
+     for us in sim_open() -> sim_parse_args().  But in debug mode (i.e.
+     'target sim' with `bfin-...-gdb`), we need to handle it.  */
+  if (STATE_OPEN_KIND (sd) == SIM_OPEN_DEBUG)
     {
-      freeargv (STATE_PROG_ARGV (sd));
+      free (STATE_PROG_ARGV (sd));
       STATE_PROG_ARGV (sd) = dupargv (argv);
     }
 
   switch (STATE_ENVIRONMENT (sd))
     {
     case USER_ENVIRONMENT:
-      bfin_user_init (sd, cpu, abfd, argv, env);
+      bfin_user_init (sd, cpu, abfd, (void *)argv, (void *)env);
       break;
     case OPERATING_ENVIRONMENT:
-      bfin_os_init (sd, cpu, argv);
+      bfin_os_init (sd, cpu, (void *)argv);
       break;
     default:
-      bfin_virtual_init (sd, cpu);
+      /* Nothing to do for virtual/all envs.  */
       break;
     }
 
   return SIM_RC_OK;
+}
+
+void
+sim_do_command (SIM_DESC sd, char *cmd)
+{
+  if (sim_args_command (sd, cmd) != SIM_RC_OK)
+    sim_io_eprintf (sd, "Unknown command `%s'\n", cmd);
 }

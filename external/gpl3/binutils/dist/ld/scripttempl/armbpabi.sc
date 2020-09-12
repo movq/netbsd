@@ -2,12 +2,6 @@
 # OS, where a separate postlinker will operated on the generated
 # executable or shared object.  See elf.sc for configuration variables
 # that apply; only BPABI-specific variables will be noted here.
-#
-# Copyright (C) 2014-2020 Free Software Foundation, Inc.
-#
-# Copying and distribution of this file, with or without modification,
-# are permitted in any medium without royalty provided the copyright
-# notice and this notice are preserved.
 
 test -z "$ENTRY" && ENTRY=_start
 test -z "${BIG_OUTPUT_FORMAT}" && BIG_OUTPUT_FORMAT=${OUTPUT_FORMAT}
@@ -35,16 +29,16 @@ fi
 INTERP=".interp       0 : { *(.interp) }"
 PLT=".plt          ${RELOCATING-0} : { *(.plt) }"
 RODATA=".rodata       ${RELOCATING-0} : { *(.rodata${RELOCATING+ .rodata.* .gnu.linkonce.r.*}) }"
-DATARELRO=".data.rel.ro : { *(.data.rel.ro.local) *(.data.rel.ro .data.rel.ro.*) }"
-DISCARDED="/DISCARD/ : { *(.note.GNU-stack) *(.gnu_debuglink)  *(.gnu.lto_*) }"
+DATARELRO=".data.rel.ro : { *(.data.rel.ro.local) *(.data.rel.ro*) }"
+DISCARDED="/DISCARD/ : { *(.note.GNU-stack) *(.gnu_debuglink) }"
 if test -z "${NO_SMALL_DATA}"; then
   SBSS=".sbss         ${RELOCATING-0} :
   {
     ${RELOCATING+PROVIDE (__sbss_start = .);}
     ${RELOCATING+PROVIDE (___sbss_start = .);}
-    ${RELOCATING+*(.dynsbss)}
+    *(.dynsbss)
     *(.sbss${RELOCATING+ .sbss.* .gnu.linkonce.sb.*})
-    ${RELOCATING+*(.scommon)}
+    *(.scommon)
     ${RELOCATING+PROVIDE (__sbss_end = .);}
     ${RELOCATING+PROVIDE (___sbss_end = .);}
   }"
@@ -52,7 +46,7 @@ if test -z "${NO_SMALL_DATA}"; then
   SDATA="/* We want the small data sections together, so single-instruction offsets
      can access them all, and initialized data all before uninitialized, so
      we can shorten the on-disk segment size.  */
-  .sdata        ${RELOCATING-0} :
+  .sdata        ${RELOCATING-0} : 
   {
     ${RELOCATING+${SDATA_START_SYMBOLS}}
     *(.sdata${RELOCATING+ .sdata.* .gnu.linkonce.s.*})
@@ -70,25 +64,7 @@ else
   NO_SMALL_DATA=" "
 fi
 test -n "$SEPARATE_GOTPLT" && SEPARATE_GOTPLT=" "
-INIT_ARRAY=".init_array   ${RELOCATING-0} :
-  {
-    /* SymbianOS uses this symbol.  */
-    ${RELOCATING+PROVIDE (SHT\$\$INIT_ARRAY\$\$Base = .);}
-    ${RELOCATING+${CREATE_SHLIB-PROVIDE_HIDDEN (__init_array_start = .);}}
-    KEEP (*(SORT(.init_array.*)))
-    KEEP (*(.init_array))
-    ${RELOCATING+${CREATE_SHLIB-PROVIDE_HIDDEN (__init_array_end = .);}}
-    /* SymbianOS uses this symbol.  */
-    ${RELOCATING+PROVIDE (SHT\$\$INIT_ARRAY\$\$Limit = .);}
-  }"
-FINI_ARRAY=".fini_array   ${RELOCATING-0} :
-  {
-    ${RELOCATING+${CREATE_SHLIB-PROVIDE_HIDDEN (__fini_array_start = .);}}
-    KEEP (*(SORT(.fini_array.*)))
-    KEEP (*(.fini_array))
-    ${RELOCATING+${CREATE_SHLIB-PROVIDE_HIDDEN (__fini_array_end = .);}}
-  }"
-CTOR=".ctors        ${CONSTRUCTING-0} :
+CTOR=".ctors        ${CONSTRUCTING-0} : 
   {
     ${CONSTRUCTING+${CTOR_START}}
     /* gcc uses crtbegin.o to find the start of
@@ -135,7 +111,7 @@ SHLIB_TEXT_START_ADDR="SEGMENT_START(\"text\", ${SHLIB_TEXT_START_ADDR:-0})"
 DATA_ADDR="SEGMENT_START(\"data\", ${DATA_ADDR-${DATA_SEGMENT_ALIGN}})"
 SHLIB_DATA_ADDR="SEGMENT_START(\"data\", ${SHLIB_DATA_ADDR-${DATA_SEGMENT_ALIGN}})"
 
-# If this is for an embedded system, don't add SIZEOF_HEADERS.
+# if this is for an embedded system, don't add SIZEOF_HEADERS.
 if [ -z "$EMBEDDED" ]; then
    test -z "${TEXT_BASE_ADDRESS}" && TEXT_BASE_ADDRESS="${TEXT_START_ADDR} + SIZEOF_HEADERS"
    SHLIB_BASE_ADDRESS="${SHLIB_TEXT_START_ADDR} + SIZEOF_HEADERS"
@@ -145,50 +121,42 @@ else
 fi
 
 cat <<EOF
-/* Copyright (C) 2014-2020 Free Software Foundation, Inc.
-
-   Copying and distribution of this script, with or without modification,
-   are permitted in any medium without royalty provided the copyright
-   notice and this notice are preserved.  */
-
 OUTPUT_FORMAT("${OUTPUT_FORMAT}", "${BIG_OUTPUT_FORMAT}",
 	      "${LITTLE_OUTPUT_FORMAT}")
 OUTPUT_ARCH(${OUTPUT_ARCH})
-EOF
+${RELOCATING+ENTRY(${ENTRY})}
 
-test -n "${RELOCATING}" && cat <<EOF
-ENTRY(${ENTRY})
+${RELOCATING+${LIB_SEARCH_DIRS}}
+${RELOCATING+/* Do we need any of these for elf?
+   __DYNAMIC = 0; ${STACKZERO+${STACKZERO}} ${SHLIB_PATH+${SHLIB_PATH}}  */}
+${RELOCATING+${EXECUTABLE_SYMBOLS}}
+${RELOCATING+${INPUT_FILES}}
+${RELOCATING- /* For some reason, the Solaris linker makes bad executables
+  if gld -r is used and the intermediate file has sections starting
+  at non-zero addresses.  Could be a Solaris ld bug, could be a GNU ld
+  bug.  But for now assigning the zero vmas works.  */}
 
-${LIB_SEARCH_DIRS}
-/* Do we need any of these for elf?
-   __DYNAMIC = 0; ${STACKZERO+${STACKZERO}} ${SHLIB_PATH+${SHLIB_PATH}}  */
-${EXECUTABLE_SYMBOLS}
-${INPUT_FILES}
-
-/* ARM's proprietary toolchain generate these symbols to match the start
+/* ARM's proprietary toolchain generate these symbols to match the start 
    and end of particular sections of the image.  SymbianOS uses these
-   symbols.  We provide them for compatibility with ARM's toolchains.
-   These symbols should be bound locally; each shared object may define
-   its own version of these symbols.  */
-
+   symbols.  We provide them for compatibility with ARM's toolchains.  
+   These symbols should be bound locally; each shared object may define 
+   its own version of these symbols.  */ 
+	
 VERSION
-{
+{ 
   /* Give these a dummy version to work around linker lameness.
      The name used shouldn't matter as these are all local symbols.  */
-  __GNU {
-    local:
+  __GNU { 
+    local: 
       Image\$\$ER_RO\$\$Base;
       Image\$\$ER_RO\$\$Limit;
       SHT\$\$INIT_ARRAY\$\$Base;
       SHT\$\$INIT_ARRAY\$\$Limit;
-      .ARM.exidx\$\$Base;
+      .ARM.exidx\$\$Base;	
       .ARM.exidx\$\$Limit;
   };
 }
 
-EOF
-
-cat <<EOF
 SECTIONS
 {
   /* Read-only sections, merged into text segment: */
@@ -205,24 +173,24 @@ SECTIONS
 
 EOF
 cat <<EOF
-  .init         ${RELOCATING-0} :
-  {
+  .init         ${RELOCATING-0} : 
+  { 
     ${RELOCATING+${INIT_START}}
-    KEEP (*(SORT_NONE(.init)))
+    KEEP (*(.init))
     ${RELOCATING+${INIT_END}}
   } =${NOP-0}
   .text         ${RELOCATING-0} :
   {
     ${RELOCATING+${TEXT_START_SYMBOLS}}
     *(.text .stub${RELOCATING+ .text.* .gnu.linkonce.t.*})
-    /* .gnu.warning sections are handled specially by elf.em.  */
+    /* .gnu.warning sections are handled specially by elf32.em.  */
     *(.gnu.warning)
     ${RELOCATING+${OTHER_TEXT_SECTIONS}}
   } =${NOP-0}
   .fini         ${RELOCATING-0} :
   {
     ${RELOCATING+${FINI_START}}
-    KEEP (*(SORT_NONE(.fini)))
+    KEEP (*(.fini))
     ${RELOCATING+${FINI_END}}
   } =${NOP-0}
   /* The SymbianOS kernel requires that the PLT go at the end of the
@@ -250,13 +218,29 @@ cat <<EOF
     KEEP (*(.preinit_array))
     ${RELOCATING+${CREATE_SHLIB-PROVIDE_HIDDEN (__preinit_array_end = .);}}
   }
-  ${RELOCATING+${INIT_ARRAY}}
-  ${RELOCATING+${FINI_ARRAY}}
+  .init_array   ${RELOCATING-0} :
+  {
+    /* SymbianOS uses this symbol.  */
+    ${RELOCATING+PROVIDE (SHT\$\$INIT_ARRAY\$\$Base = .);}
+    ${RELOCATING+${CREATE_SHLIB-PROVIDE_HIDDEN (__init_array_start = .);}}
+    KEEP (*(SORT(.init_array.*)))
+    KEEP (*(.init_array))
+    ${RELOCATING+${CREATE_SHLIB-PROVIDE_HIDDEN (__init_array_end = .);}}
+    /* SymbianOS uses this symbol.  */
+    ${RELOCATING+PROVIDE (SHT\$\$INIT_ARRAY\$\$Limit = .);}
+  }
+  .fini_array   ${RELOCATING-0} :
+  {
+    ${RELOCATING+${CREATE_SHLIB-PROVIDE_HIDDEN (__fini_array_start = .);}}
+    KEEP (*(.fini_array))
+    KEEP (*(SORT(.fini_array.*)))
+    ${RELOCATING+${CREATE_SHLIB-PROVIDE_HIDDEN (__fini_array_end = .);}}
+  }
 
   ${OTHER_READONLY_SECTIONS}
-  .eh_frame_hdr ${RELOCATING-0} : { *(.eh_frame_hdr) }
+  .eh_frame_hdr : { *(.eh_frame_hdr) }
   .eh_frame     ${RELOCATING-0} : ONLY_IF_RO { KEEP (*(.eh_frame)) }
-  .gcc_except_table ${RELOCATING-0} : ONLY_IF_RO { KEEP (*(.gcc_except_table${RELOCATING+ .gcc_except_table.*})) }
+  .gcc_except_table ${RELOCATING-0} : ONLY_IF_RO { KEEP (*(.gcc_except_table)) *(.gcc_except_table.*) }
 
   /* Adjust the address for the data segment.  We want to adjust up to
      the same address within the page on the next page up.  */
@@ -266,7 +250,7 @@ cat <<EOF
 
   /* Exception handling  */
   .eh_frame     ${RELOCATING-0} : ONLY_IF_RW { KEEP (*(.eh_frame)) }
-  .gcc_except_table ${RELOCATING-0} : ONLY_IF_RW { KEEP (*(.gcc_except_table${RELOCATING+ .gcc_except_table.*})) }
+  .gcc_except_table ${RELOCATING-0} : ONLY_IF_RW { KEEP (*(.gcc_except_table)) *(.gcc_except_table.*) }
 
   /* Thread Local Storage sections  */
   .tdata	${RELOCATING-0} : { *(.tdata${RELOCATING+ .tdata.* .gnu.linkonce.td.*}) }
@@ -305,13 +289,13 @@ cat <<EOF
   ${BSS_PLT+${PLT}}
   .bss          ${RELOCATING-0} :
   {
-   ${RELOCATING+*(.dynbss)}
+   *(.dynbss)
    *(.bss${RELOCATING+ .bss.* .gnu.linkonce.b.*})
-   ${RELOCATING+*(COMMON)
+   *(COMMON)
    /* Align here to ensure that the .bss section occupies space up to
       _end.  Align after .bss to ensure correct alignment even if the
       .bss section disappears because there are no input sections.  */
-   . = ALIGN(${ALIGNMENT});}
+   ${RELOCATING+. = ALIGN(${ALIGNMENT});}
   }
   ${RELOCATING+${OTHER_BSS_END_SYMBOLS}}
   ${RELOCATING+. = ALIGN(${ALIGNMENT});}
@@ -319,7 +303,6 @@ cat <<EOF
   ${RELOCATING+_end = .;}
   ${RELOCATING+PROVIDE (end = .);}
   ${RELOCATING+${DATA_SEGMENT_END}}
-  ${STACK_ADDR+${STACK}}
 
   /* These sections are not mapped under the BPABI.  */
   .dynamic      0 : { *(.dynamic) }
@@ -340,11 +323,39 @@ cat <<EOF
   .stab.indexstr 0 : { *(.stab.indexstr) }
 
   .comment       0 : { *(.comment) }
-EOF
 
-. $srcdir/scripttempl/DWARF.sc
+  /* DWARF debug sections.
+     Symbols in the DWARF debugging sections are relative to the beginning
+     of the section so we begin them at 0.  */
 
-cat <<EOF
+  /* DWARF 1 */
+  .debug          0 : { *(.debug) }
+  .line           0 : { *(.line) }
+
+  /* GNU DWARF 1 extensions */
+  .debug_srcinfo  0 : { *(.debug_srcinfo) }
+  .debug_sfnames  0 : { *(.debug_sfnames) }
+
+  /* DWARF 1.1 and DWARF 2 */
+  .debug_aranges  0 : { *(.debug_aranges) }
+  .debug_pubnames 0 : { *(.debug_pubnames) }
+
+  /* DWARF 2 */
+  .debug_info     0 : { *(.debug_info .gnu.linkonce.wi.*) }
+  .debug_abbrev   0 : { *(.debug_abbrev) }
+  .debug_line     0 : { *(.debug_line) }
+  .debug_frame    0 : { *(.debug_frame) }
+  .debug_str      0 : { *(.debug_str) }
+  .debug_loc      0 : { *(.debug_loc) }
+  .debug_macinfo  0 : { *(.debug_macinfo) }
+
+  /* SGI/MIPS DWARF 2 extensions */
+  .debug_weaknames 0 : { *(.debug_weaknames) }
+  .debug_funcnames 0 : { *(.debug_funcnames) }
+  .debug_typenames 0 : { *(.debug_typenames) }
+  .debug_varnames  0 : { *(.debug_varnames) }
+
+  ${STACK_ADDR+${STACK}}
   ${OTHER_SECTIONS}
   ${RELOCATING+${OTHER_SYMBOLS}}
   ${RELOCATING+${DISCARDED}}
@@ -367,8 +378,8 @@ eval $COMBRELOCCAT <<EOF
   .rel.rodata   0 : { *(.rel.rodata${RELOCATING+ .rel.rodata.* .rel.gnu.linkonce.r.*}) }
   .rela.rodata  0 : { *(.rela.rodata${RELOCATING+ .rela.rodata.* .rela.gnu.linkonce.r.*}) }
   ${OTHER_READONLY_RELOC_SECTIONS}
-  .rel.data.rel.ro 0 : { *(.rel.data.rel.ro${RELOCATING+ .rel.data.rel.ro.*}) }
-  .rela.data.rel.ro 0 : { *(.rela.data.rel.ro${RELOCATING+ .rela.data.rel.ro.*}) }
+  .rel.data.rel.ro 0 : { *(.rel.data.rel.ro${RELOCATING+*}) }
+  .rela.data.rel.ro 0 : { *(.rel.data.rel.ro${RELOCATING+*}) }
   .rel.data     0 : { *(.rel.data${RELOCATING+ .rel.data.* .rel.gnu.linkonce.d.*}) }
   .rela.data    0 : { *(.rela.data${RELOCATING+ .rela.data.* .rela.gnu.linkonce.d.*}) }
   .rel.tdata	0 : { *(.rel.tdata${RELOCATING+ .rel.tdata.* .rel.gnu.linkonce.td.*}) }
@@ -395,13 +406,13 @@ cat <<EOF
   .rel.dyn      0 :
     {
 EOF
-sed -e '/^[	 ]*[{}][	 ]*$/d;/:[	 ]*$/d;/\.rela\./d;s/^.*: { *\(.*\)}$/      \1/' $COMBRELOC
+sed -e '/^[ 	]*[{}][ 	]*$/d;/:[ 	]*$/d;/\.rela\./d;s/^.*: { *\(.*\)}$/      \1/' $COMBRELOC
 cat <<EOF
     }
   .rela.dyn     0 :
     {
 EOF
-sed -e '/^[	 ]*[{}][	 ]*$/d;/:[	 ]*$/d;/\.rel\./d;s/^.*: { *\(.*\)}/      \1/' $COMBRELOC
+sed -e '/^[ 	]*[{}][ 	]*$/d;/:[ 	]*$/d;/\.rel\./d;s/^.*: { *\(.*\)}/      \1/' $COMBRELOC
 cat <<EOF
     }
 EOF

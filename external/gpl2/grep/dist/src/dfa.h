@@ -1,4 +1,4 @@
-/*	$NetBSD: dfa.h,v 1.1.1.1 2016/01/10 21:36:21 christos Exp $	*/
+/*	$NetBSD: dfa.h,v 1.1 2016/01/10 21:36:21 christos Exp $	*/
 
 /* dfa.h - declarations for GNU deterministic regexp compiler
    Copyright (C) 1988, 1998 Free Software Foundation, Inc.

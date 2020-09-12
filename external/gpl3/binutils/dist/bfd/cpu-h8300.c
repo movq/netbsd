@@ -1,5 +1,6 @@
 /* BFD library support routines for the Renesas H8/300 architecture.
-   Copyright (C) 1990-2020 Free Software Foundation, Inc.
+   Copyright 1990, 1991, 1992, 1993, 1994, 1995, 1996, 2000, 2001, 2002,
+   2003, 2004, 2007 Free Software Foundation, Inc.
    Hacked by Steve Chamberlain of Cygnus Support.
 
    This file is part of BFD, the Binary File Descriptor library.
@@ -22,7 +23,6 @@
 #include "sysdep.h"
 #include "bfd.h"
 #include "libbfd.h"
-#include "cpu-h8300.h"
 
 static bfd_boolean
 h8300_scan (const struct bfd_arch_info *info, const char *string)
@@ -83,7 +83,7 @@ h8300_scan (const struct bfd_arch_info *info, const char *string)
 
 	  return (info->mach == bfd_mach_h8300sx);
 	}
-
+      
       return (info->mach == bfd_mach_h8300s);
     }
   else
@@ -114,30 +114,117 @@ compatible (const bfd_arch_info_type *in, const bfd_arch_info_type *out)
     return in;
 }
 
-#define N(word, addr, number, name, print, default, next)	  \
-  { word, addr, 8, bfd_arch_h8300, number, name, print, 1, default, \
-    compatible, h8300_scan, bfd_arch_default_fill, next, 0 }
-
 static const bfd_arch_info_type h8300sxn_info_struct =
-  N (32, 16, bfd_mach_h8300sxn, "h8300sxn", "h8300sxn", FALSE, NULL);
+{
+  32,				/* 32 bits in a word */
+  16,				/* 16 bits in an address */
+  8,				/* 8 bits in a byte */
+  bfd_arch_h8300,
+  bfd_mach_h8300sxn,
+  "h8300sxn",			/* arch_name  */
+  "h8300sxn",			/* printable name */
+  1,
+  FALSE,			/* the default machine */
+  compatible,
+  h8300_scan,
+  0
+};
 
 static const bfd_arch_info_type h8300sx_info_struct =
-  N (32, 32, bfd_mach_h8300sx, "h8300sx", "h8300sx", FALSE, &h8300sxn_info_struct);
+{
+  32,				/* 32 bits in a word */
+  32,				/* 32 bits in an address */
+  8,				/* 8 bits in a byte */
+  bfd_arch_h8300,
+  bfd_mach_h8300sx,
+  "h8300sx",			/* arch_name  */
+  "h8300sx",			/* printable name */
+  1,
+  FALSE,			/* the default machine */
+  compatible,
+  h8300_scan,
+  &h8300sxn_info_struct
+};
 
 static const bfd_arch_info_type h8300sn_info_struct =
-  N (32, 16, bfd_mach_h8300sn, "h8300sn", "h8300sn", FALSE, &h8300sx_info_struct);
+{
+  32,				/* 32 bits in a word.  */
+  16,				/* 16 bits in an address.  */
+  8,				/* 8 bits in a byte.  */
+  bfd_arch_h8300,
+  bfd_mach_h8300sn,
+  "h8300sn",			/* Architecture name.  */
+  "h8300sn",			/* Printable name.  */
+  1,
+  FALSE,			/* The default machine.  */
+  compatible,
+  h8300_scan,
+  &h8300sx_info_struct
+};
 
 static const bfd_arch_info_type h8300hn_info_struct =
-  N (32, 16, bfd_mach_h8300hn, "h8300hn", "h8300hn", FALSE, &h8300sn_info_struct);
+{
+  32,				/* 32 bits in a word.  */
+  16,				/* 16 bits in an address.  */
+  8,				/* 8 bits in a byte.  */
+  bfd_arch_h8300,
+  bfd_mach_h8300hn,
+  "h8300hn",			/* Architecture name.  */
+  "h8300hn",			/* Printable name.  */
+  1,
+  FALSE,			/* The default machine.  */
+  compatible,
+  h8300_scan,
+  &h8300sn_info_struct
+};
 
 static const bfd_arch_info_type h8300s_info_struct =
-  N (32, 32, bfd_mach_h8300s, "h8300s", "h8300s", FALSE, & h8300hn_info_struct);
+{
+  32,				/* 32 bits in a word.  */
+  32,				/* 32 bits in an address.  */
+  8,				/* 8 bits in a byte.  */
+  bfd_arch_h8300,
+  bfd_mach_h8300s,
+  "h8300s",			/* Architecture name.  */
+  "h8300s",			/* Printable name.  */
+  1,
+  FALSE,			/* The default machine.  */
+  compatible,
+  h8300_scan,
+  & h8300hn_info_struct
+};
 
 static const bfd_arch_info_type h8300h_info_struct =
-  N (32, 32, bfd_mach_h8300h, "h8300h", "h8300h", FALSE, &h8300s_info_struct);
+{
+  32,				/* 32 bits in a word.  */
+  32,				/* 32 bits in an address.  */
+  8,				/* 8 bits in a byte.  */
+  bfd_arch_h8300,
+  bfd_mach_h8300h,
+  "h8300h",			/* Architecture name.  */
+  "h8300h",			/* Printable name.  */
+  1,
+  FALSE,			/* The default machine.  */
+  compatible,
+  h8300_scan,
+  &h8300s_info_struct
+};
 
 const bfd_arch_info_type bfd_h8300_arch =
-  N (16, 16, bfd_mach_h8300, "h8300", "h8300", TRUE, &h8300h_info_struct);
+{
+  16,				/* 16 bits in a word.  */
+  16,				/* 16 bits in an address.  */
+  8,				/* 8 bits in a byte.  */
+  bfd_arch_h8300,
+  bfd_mach_h8300,
+  "h8300",			/* Architecture name.  */
+  "h8300",			/* Printable name.  */
+  1,
+  TRUE,				/* The default machine.  */
+  compatible,
+  h8300_scan,
+  &h8300h_info_struct
+};
 
 /* Pad the given address to 32 bits, converting 16-bit and 24-bit
    addresses into the values they would have had on a h8s target.  */

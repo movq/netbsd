@@ -1,6 +1,6 @@
 /* Program and address space management, for GDB, the GNU debugger.
 
-   Copyright (C) 2009-2019 Free Software Foundation, Inc.
+   Copyright (C) 2009, 2010, 2011 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -24,7 +24,6 @@
 #include "gdbcore.h"
 #include "solib.h"
 #include "gdbthread.h"
-#include "inferior.h"
 
 /* The last program space number assigned.  */
 int last_program_space_num = 0;
@@ -38,19 +37,20 @@ struct program_space *current_program_space;
 /* The last address space number assigned.  */
 static int highest_address_space_num;
 
+/* Prototypes for local functions */
+
+static void program_space_alloc_data (struct program_space *);
+static void program_space_free_data (struct program_space *);
 
 
-/* Keep a registry of per-program_space data-pointers required by other GDB
-   modules.  */
+/* An address space.  Currently this is not used for much other than
+   for comparing if pspaces/inferior/threads see the same address
+   space.  */
 
-DEFINE_REGISTRY (program_space, REGISTRY_ACCESS_FIELD)
-
-/* Keep a registry of per-address_space data-pointers required by other GDB
-   modules.  */
-
-DEFINE_REGISTRY (address_space, REGISTRY_ACCESS_FIELD)
-
-
+struct address_space
+{
+  int num;
+};
 
 /* Create a new address space object, and add it to the list.  */
 
@@ -59,9 +59,8 @@ new_address_space (void)
 {
   struct address_space *aspace;
 
-  aspace = XCNEW (struct address_space);
+  aspace = XZALLOC (struct address_space);
   aspace->num = ++highest_address_space_num;
-  address_space_alloc_data (aspace);
 
   return aspace;
 }
@@ -73,7 +72,7 @@ new_address_space (void)
 struct address_space *
 maybe_new_address_space (void)
 {
-  int shared_aspace = gdbarch_has_shared_address_space (target_gdbarch ());
+  int shared_aspace = gdbarch_has_shared_address_space (target_gdbarch);
 
   if (shared_aspace)
     {
@@ -87,7 +86,6 @@ maybe_new_address_space (void)
 static void
 free_address_space (struct address_space *aspace)
 {
-  address_space_free_data (aspace);
   xfree (aspace);
 }
 
@@ -110,21 +108,22 @@ init_address_spaces (void)
 /* Adds a new empty program space to the program space list, and binds
    it to ASPACE.  Returns the pointer to the new object.  */
 
-program_space::program_space (address_space *aspace_)
-: num (++last_program_space_num), aspace (aspace_)
+struct program_space *
+add_program_space (struct address_space *aspace)
 {
-  program_space_alloc_data (this);
+  struct program_space *pspace;
 
-  if (program_spaces == NULL)
-    program_spaces = this;
-  else
-    {
-      struct program_space *last;
+  pspace = XZALLOC (struct program_space);
 
-      for (last = program_spaces; last->next != NULL; last = last->next)
-	;
-      last->next = this;
-    }
+  pspace->num = ++last_program_space_num;
+  pspace->aspace = aspace;
+
+  program_space_alloc_data (pspace);
+
+  pspace->next = program_spaces;
+  program_spaces = pspace;
+
+  return pspace;
 }
 
 /* Releases program space PSPACE, and all its contents (shared
@@ -133,24 +132,52 @@ program_space::program_space (address_space *aspace_)
    is the current program space, since there should always be a
    program space.  */
 
-program_space::~program_space ()
+static void
+release_program_space (struct program_space *pspace)
 {
-  gdb_assert (this != current_program_space);
+  struct cleanup *old_chain = save_current_program_space ();
 
-  scoped_restore_current_program_space restore_pspace;
+  gdb_assert (pspace != current_program_space);
 
-  set_current_program_space (this);
+  set_current_program_space (pspace);
 
-  breakpoint_program_space_exit (this);
+  breakpoint_program_space_exit (pspace);
   no_shared_libraries (NULL, 0);
   exec_close ();
   free_all_objfiles ();
-  if (!gdbarch_has_shared_address_space (target_gdbarch ()))
-    free_address_space (this->aspace);
-  clear_section_table (&this->target_sections);
-  clear_program_space_solib_cache (this);
+  if (!gdbarch_has_shared_address_space (target_gdbarch))
+    free_address_space (pspace->aspace);
+  resize_section_table (&pspace->target_sections,
+			-resize_section_table (&pspace->target_sections, 0));
     /* Discard any data modules have associated with the PSPACE.  */
-  program_space_free_data (this);
+  program_space_free_data (pspace);
+  xfree (pspace);
+
+  do_cleanups (old_chain);
+}
+
+/* Unlinks PSPACE from the pspace list, and releases it.  */
+
+void
+remove_program_space (struct program_space *pspace)
+{
+  struct program_space *ss, **ss_link;
+
+  ss = program_spaces;
+  ss_link = &program_spaces;
+  while (ss)
+    {
+      if (ss != pspace)
+	{
+	  ss_link = &ss->next;
+	  ss = *ss_link;
+	  continue;
+	}
+
+      *ss_link = ss->next;
+      release_program_space (ss);
+      ss = *ss_link;
+    }
 }
 
 /* Copies program space SRC to DEST.  Copies the main executable file,
@@ -159,17 +186,19 @@ program_space::~program_space ()
 struct program_space *
 clone_program_space (struct program_space *dest, struct program_space *src)
 {
-  scoped_restore_current_program_space restore_pspace;
+  struct cleanup *old_chain;
+
+  old_chain = save_current_program_space ();
 
   set_current_program_space (dest);
 
-  if (src->pspace_exec_filename != NULL)
-    exec_file_attach (src->pspace_exec_filename, 0);
+  if (src->ebfd != NULL)
+    exec_file_attach (bfd_get_filename (src->ebfd), 0);
 
   if (src->symfile_object_file != NULL)
-    symbol_file_add_main (objfile_name (src->symfile_object_file),
-			  SYMFILE_DEFER_BP_RESET);
+    symbol_file_add_main (src->symfile_object_file->name, 0);
 
+  do_cleanups (old_chain);
   return dest;
 }
 
@@ -191,10 +220,34 @@ set_current_program_space (struct program_space *pspace)
   reinit_frame_cache ();
 }
 
+/* A cleanups callback, helper for save_current_program_space
+   below.  */
+
+static void
+restore_program_space (void *arg)
+{
+  struct program_space *saved_pspace = arg;
+
+  set_current_program_space (saved_pspace);
+}
+
+/* Save the current program space so that it may be restored by a later
+   call to do_cleanups.  Returns the struct cleanup pointer needed for
+   later doing the cleanup.  */
+
+struct cleanup *
+save_current_program_space (void)
+{
+  struct cleanup *old_chain = make_cleanup (restore_program_space,
+					    current_program_space);
+
+  return old_chain;
+}
+
 /* Returns true iff there's no inferior bound to PSPACE.  */
 
-int
-program_space_empty_p (struct program_space *pspace)
+static int
+pspace_empty_p (struct program_space *pspace)
 {
   if (find_inferior_for_program_space (pspace) != NULL)
       return 0;
@@ -202,31 +255,30 @@ program_space_empty_p (struct program_space *pspace)
   return 1;
 }
 
-/* Remove a program space from the program spaces list and release it.  It is
-   an error to call this function while PSPACE is the current program space. */
+/* Prune away automatically added program spaces that aren't required
+   anymore.  */
 
 void
-delete_program_space (struct program_space *pspace)
+prune_program_spaces (void)
 {
   struct program_space *ss, **ss_link;
-  gdb_assert (pspace != NULL);
-  gdb_assert (pspace != current_program_space);
+  struct program_space *current = current_program_space;
 
   ss = program_spaces;
   ss_link = &program_spaces;
-  while (ss != NULL)
+  while (ss)
     {
-      if (ss == pspace)
+      if (ss == current || !pspace_empty_p (ss))
 	{
-	  *ss_link = ss->next;
-	  break;
+	  ss_link = &ss->next;
+	  ss = *ss_link;
+	  continue;
 	}
 
-      ss_link = &ss->next;
+      *ss_link = ss->next;
+      release_program_space (ss);
       ss = *ss_link;
     }
-
-  delete pspace;
 }
 
 /* Prints the list of program spaces and their details on UIOUT.  If
@@ -238,6 +290,11 @@ print_program_space (struct ui_out *uiout, int requested)
 {
   struct program_space *pspace;
   int count = 0;
+  struct cleanup *old_chain;
+
+  /* Might as well prune away unneeded ones, so the user doesn't even
+     seem them.  */
+  prune_program_spaces ();
 
   /* Compute number of pspaces we will print.  */
   ALL_PSPACES (pspace)
@@ -251,33 +308,35 @@ print_program_space (struct ui_out *uiout, int requested)
   /* There should always be at least one.  */
   gdb_assert (count > 0);
 
-  ui_out_emit_table table_emitter (uiout, 3, count, "pspaces");
-  uiout->table_header (1, ui_left, "current", "");
-  uiout->table_header (4, ui_left, "id", "Id");
-  uiout->table_header (17, ui_left, "exec", "Executable");
-  uiout->table_body ();
+  old_chain = make_cleanup_ui_out_table_begin_end (uiout, 3, count, "pspaces");
+  ui_out_table_header (uiout, 1, ui_left, "current", "");
+  ui_out_table_header (uiout, 4, ui_left, "id", "Id");
+  ui_out_table_header (uiout, 17, ui_left, "exec", "Executable");
+  ui_out_table_body (uiout);
 
   ALL_PSPACES (pspace)
     {
+      struct cleanup *chain2;
       struct inferior *inf;
       int printed_header;
 
       if (requested != -1 && requested != pspace->num)
 	continue;
 
-      ui_out_emit_tuple tuple_emitter (uiout, NULL);
+      chain2 = make_cleanup_ui_out_tuple_begin_end (uiout, NULL);
 
       if (pspace == current_program_space)
-	uiout->field_string ("current", "*");
+	ui_out_field_string (uiout, "current", "*");
       else
-	uiout->field_skip ("current");
+	ui_out_field_skip (uiout, "current");
 
-      uiout->field_int ("id", pspace->num);
+      ui_out_field_int (uiout, "id", pspace->num);
 
-      if (pspace->pspace_exec_filename)
-	uiout->field_string ("exec", pspace->pspace_exec_filename);
+      if (pspace->ebfd)
+	ui_out_field_string (uiout, "exec",
+			     bfd_get_filename (pspace->ebfd));
       else
-	uiout->field_skip ("exec");
+	ui_out_field_skip (uiout, "exec");
 
       /* Print extra info that doesn't really fit in tabular form.
 	 Currently, we print the list of inferiors bound to a pspace.
@@ -293,16 +352,19 @@ print_program_space (struct ui_out *uiout, int requested)
 		printed_header = 1;
 		printf_filtered ("\n\tBound inferiors: ID %d (%s)",
 				 inf->num,
-				 target_pid_to_str (ptid_t (inf->pid)));
+				 target_pid_to_str (pid_to_ptid (inf->pid)));
 	      }
 	    else
 	      printf_filtered (", ID %d (%s)",
 			       inf->num,
-			       target_pid_to_str (ptid_t (inf->pid)));
+			       target_pid_to_str (pid_to_ptid (inf->pid)));
 	  }
 
-      uiout->text ("\n");
+      ui_out_text (uiout, "\n");
+      do_cleanups (chain2);
     }
+
+  do_cleanups (old_chain);
 }
 
 /* Boolean test for an already-known program space id.  */
@@ -324,7 +386,7 @@ valid_program_space_id (int num)
    indicating which the program space to print information about.  */
 
 static void
-maintenance_info_program_spaces_command (const char *args, int from_tty)
+maintenance_info_program_spaces_command (char *args, int from_tty)
 {
   int requested = -1;
 
@@ -335,7 +397,7 @@ maintenance_info_program_spaces_command (const char *args, int from_tty)
 	error (_("program space ID %d not known."), requested);
     }
 
-  print_program_space (current_uiout, requested);
+  print_program_space (uiout, requested);
 }
 
 /* Simply returns the count of program spaces.  */
@@ -366,7 +428,7 @@ number_of_program_spaces (void)
 void
 update_address_spaces (void)
 {
-  int shared_aspace = gdbarch_has_shared_address_space (target_gdbarch ());
+  int shared_aspace = gdbarch_has_shared_address_space (target_gdbarch);
   struct program_space *pspace;
   struct inferior *inf;
 
@@ -388,21 +450,157 @@ update_address_spaces (void)
       }
 
   for (inf = inferior_list; inf; inf = inf->next)
-    if (gdbarch_has_global_solist (target_gdbarch ()))
+    if (gdbarch_has_global_solist (target_gdbarch))
       inf->aspace = maybe_new_address_space ();
     else
       inf->aspace = inf->pspace->aspace;
 }
 
-
+/* Save the current program space so that it may be restored by a later
+   call to do_cleanups.  Returns the struct cleanup pointer needed for
+   later doing the cleanup.  */
 
-/* See progspace.h.  */
+struct cleanup *
+save_current_space_and_thread (void)
+{
+  struct cleanup *old_chain;
+
+  /* If restoring to null thread, we need to restore the pspace as
+     well, hence, we need to save the current program space first.  */
+  old_chain = save_current_program_space ();
+  save_current_inferior ();
+  make_cleanup_restore_current_thread ();
+
+  return old_chain;
+}
+
+/* Switches full context to program space PSPACE.  Switches to the
+   first thread found bound to PSPACE.  */
 
 void
-clear_program_space_solib_cache (struct program_space *pspace)
+switch_to_program_space_and_thread (struct program_space *pspace)
 {
-  pspace->added_solibs.clear ();
-  pspace->deleted_solibs.clear ();
+  struct inferior *inf;
+
+  inf = find_inferior_for_program_space (pspace);
+  if (inf != NULL)
+    {
+      struct thread_info *tp;
+
+      tp = any_live_thread_of_process (inf->pid);
+      if (tp != NULL)
+	{
+	  switch_to_thread (tp->ptid);
+	  /* Switching thread switches pspace implicitly.  We're
+	     done.  */
+	  return;
+	}
+    }
+
+  switch_to_thread (null_ptid);
+  set_current_program_space (pspace);
+}
+
+
+
+/* Keep a registry of per-program_space data-pointers required by other GDB
+   modules.  */
+
+struct program_space_data
+{
+  unsigned index;
+  void (*cleanup) (struct program_space *, void *);
+};
+
+struct program_space_data_registration
+{
+  struct program_space_data *data;
+  struct program_space_data_registration *next;
+};
+
+struct program_space_data_registry
+{
+  struct program_space_data_registration *registrations;
+  unsigned num_registrations;
+};
+
+static struct program_space_data_registry program_space_data_registry
+  = { NULL, 0 };
+
+const struct program_space_data *
+register_program_space_data_with_cleanup
+  (void (*cleanup) (struct program_space *, void *))
+{
+  struct program_space_data_registration **curr;
+
+  /* Append new registration.  */
+  for (curr = &program_space_data_registry.registrations;
+       *curr != NULL; curr = &(*curr)->next);
+
+  *curr = XMALLOC (struct program_space_data_registration);
+  (*curr)->next = NULL;
+  (*curr)->data = XMALLOC (struct program_space_data);
+  (*curr)->data->index = program_space_data_registry.num_registrations++;
+  (*curr)->data->cleanup = cleanup;
+
+  return (*curr)->data;
+}
+
+const struct program_space_data *
+register_program_space_data (void)
+{
+  return register_program_space_data_with_cleanup (NULL);
+}
+
+static void
+program_space_alloc_data (struct program_space *pspace)
+{
+  gdb_assert (pspace->data == NULL);
+  pspace->num_data = program_space_data_registry.num_registrations;
+  pspace->data = XCALLOC (pspace->num_data, void *);
+}
+
+static void
+program_space_free_data (struct program_space *pspace)
+{
+  gdb_assert (pspace->data != NULL);
+  clear_program_space_data (pspace);
+  xfree (pspace->data);
+  pspace->data = NULL;
+}
+
+void
+clear_program_space_data (struct program_space *pspace)
+{
+  struct program_space_data_registration *registration;
+  int i;
+
+  gdb_assert (pspace->data != NULL);
+
+  for (registration = program_space_data_registry.registrations, i = 0;
+       i < pspace->num_data;
+       registration = registration->next, i++)
+    if (pspace->data[i] != NULL && registration->data->cleanup)
+      registration->data->cleanup (pspace, pspace->data[i]);
+
+  memset (pspace->data, 0, pspace->num_data * sizeof (void *));
+}
+
+void
+set_program_space_data (struct program_space *pspace,
+		       const struct program_space_data *data,
+		       void *value)
+{
+  gdb_assert (data->index < pspace->num_data);
+  pspace->data[data->index] = value;
+}
+
+void *
+program_space_data (struct program_space *pspace,
+		    const struct program_space_data *data)
+{
+  gdb_assert (data->index < pspace->num_data);
+  return pspace->data[data->index];
 }
 
 
@@ -422,5 +620,5 @@ initialize_progspace (void)
      modules have done that.  Do this before
      initialize_current_architecture, because that accesses exec_bfd,
      which in turn dereferences current_program_space.  */
-  current_program_space = new program_space (new_address_space ());
+  current_program_space = add_program_space (new_address_space ());
 }

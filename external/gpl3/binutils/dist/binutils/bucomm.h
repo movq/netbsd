@@ -1,5 +1,6 @@
 /* bucomm.h -- binutils common include file.
-   Copyright (C) 1991-2020 Free Software Foundation, Inc.
+   Copyright 1991, 1992, 1993, 1994, 1995, 1996, 1997, 1998, 1999, 2000,
+   2001, 2002, 2003, 2005, 2006, 2007 Free Software Foundation, Inc.
 
    This file is part of GNU Binutils.
 
@@ -21,10 +22,8 @@
 #ifndef _BUCOMM_H
 #define _BUCOMM_H
 
-/* In bucomm.c.  */
-
 /* Return the filename in a static buffer.  */
-const char *bfd_get_archive_filename (const bfd *);
+const char *bfd_get_archive_filename (bfd *);
 
 void bfd_nonfatal (const char *);
 
@@ -49,31 +48,29 @@ void list_supported_architectures (const char *, FILE *);
 
 int display_info (void);
 
-void print_arelt_descr (FILE *, bfd *, bfd_boolean, bfd_boolean);
+void print_arelt_descr (FILE *, bfd *, bfd_boolean);
 
-char *make_tempname (const char *);
-char *make_tempdir (const char *);
+char *make_tempname (char *);
+char *make_tempdir (char *);
 
 bfd_vma parse_vma (const char *, const char *);
 
 off_t get_file_size (const char *);
 
-bfd_boolean is_valid_archive_path (char const *);
-
 extern char *program_name;
 
-/* In filemode.c.  */
+/* filemode.c */
 void mode_string (unsigned long, char *);
 
-/* In version.c.  */
+/* version.c */
 extern void print_version (const char *);
 
-/* In rename.c.  */
+/* rename.c */
 extern void set_times (const char *, const struct stat *);
 
 extern int smart_rename (const char *, const char *, int);
 
-/* In libiberty.  */
+/* libiberty.  */
 void *xmalloc (size_t);
 
 void *xrealloc (void *, size_t);

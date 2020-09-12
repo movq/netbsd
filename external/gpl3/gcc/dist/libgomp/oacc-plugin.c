@@ -1,4 +1,4 @@
-/* Copyright (C) 2014-2019 Free Software Foundation, Inc.
+/* Copyright (C) 2014-2015 Free Software Foundation, Inc.
 
    Contributed by Mentor Embedded.
 
@@ -31,14 +31,11 @@
 #include "oacc-int.h"
 
 void
-GOMP_PLUGIN_async_unmap_vars (void *ptr, int async)
+GOMP_PLUGIN_async_unmap_vars (void *ptr)
 {
   struct target_mem_desc *tgt = ptr;
-  struct gomp_device_descr *devicep = tgt->device_descr;
 
-  devicep->openacc.async_set_async_func (async);
-  gomp_unmap_vars (tgt, true);
-  devicep->openacc.async_set_async_func (acc_async_sync);
+  gomp_unmap_vars (tgt, false);
 }
 
 /* Return the target-specific part of the TLS data for the current thread.  */
@@ -48,15 +45,4 @@ GOMP_PLUGIN_acc_thread (void)
 {
   struct goacc_thread *thr = goacc_thread ();
   return thr ? thr->target_tls : NULL;
-}
-
-int
-GOMP_PLUGIN_acc_default_dim (unsigned int i)
-{
-  if (i >= GOMP_DIM_MAX)
-    {
-      gomp_fatal ("invalid dimension argument: %d", i);
-      return -1;
-    }
-  return goacc_default_dims[i];
 }

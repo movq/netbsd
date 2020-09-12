@@ -1,4 +1,4 @@
-/* Copyright (C) 2007-2019 Free Software Foundation, Inc.
+/* Copyright (C) 2007, 2008, 2009 Free Software Foundation, Inc.
 
    This file is part of GCC.
 
@@ -19,7 +19,8 @@
    You should have received a copy of the GNU General Public License and
    a copy of the GCC Runtime Library Exception along with this program;
    see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
-   <http://www.gnu.org/licenses/>.  */
+   <http://www.gnu.org/licenses/>.
+
 
 /* Implemented from the specification included in the Intel C++ Compiler
    User Guide and Reference, version 10.0.  */
@@ -27,15 +28,13 @@
 #ifndef _SMMINTRIN_H_INCLUDED
 #define _SMMINTRIN_H_INCLUDED
 
+#ifndef __SSE4_1__
+# error "SSE4.1 instruction set not enabled"
+#else
+
 /* We need definitions from the SSSE3, SSE3, SSE2 and SSE header
    files.  */
 #include <tmmintrin.h>
-
-#ifndef __SSE4_1__
-#pragma GCC push_options
-#pragma GCC target("sse4.1")
-#define __DISABLE_SSE4_1__
-#endif /* __SSE4_1__ */
 
 /* Rounding mode macros. */
 #define _MM_FROUND_TO_NEAREST_INT	0x00
@@ -267,7 +266,7 @@ _mm_dp_pd (__m128d __X, __m128d __Y, const int __M)
 extern __inline __m128i __attribute__((__gnu_inline__, __always_inline__, __artificial__))
 _mm_cmpeq_epi64 (__m128i __X, __m128i __Y)
 {
-  return (__m128i) ((__v2di)__X == (__v2di)__Y);
+  return (__m128i) __builtin_ia32_pcmpeqq ((__v2di)__X, (__v2di)__Y);
 }
 
 /*  Min/max packed integer instructions.  */
@@ -325,7 +324,7 @@ _mm_max_epu32 (__m128i __X, __m128i __Y)
 extern __inline __m128i __attribute__((__gnu_inline__, __always_inline__, __artificial__))
 _mm_mullo_epi32 (__m128i __X, __m128i __Y)
 {
-  return (__m128i) ((__v4su)__X * (__v4su)__Y);
+  return (__m128i) __builtin_ia32_pmulld128 ((__v4si)__X, (__v4si)__Y);
 }
 
 /* Packed integer 32-bit multiplication of 2 pairs of operands
@@ -440,7 +439,7 @@ _mm_insert_epi64 (__m128i __D, long long __S, const int __N)
 extern __inline int __attribute__((__gnu_inline__, __always_inline__, __artificial__))
 _mm_extract_epi8 (__m128i __X, const int __N)
 {
-   return (unsigned char) __builtin_ia32_vec_ext_v16qi ((__v16qi)__X, __N);
+   return __builtin_ia32_vec_ext_v16qi ((__v16qi)__X, __N);
 }
 
 extern __inline int __attribute__((__gnu_inline__, __always_inline__, __artificial__))
@@ -458,7 +457,7 @@ _mm_extract_epi64 (__m128i __X, const int __N)
 #endif
 #else
 #define _mm_extract_epi8(X, N) \
-  ((int) (unsigned char) __builtin_ia32_vec_ext_v16qi ((__v16qi)(__m128i)(X), (int)(N)))
+  ((int) __builtin_ia32_vec_ext_v16qi ((__v16qi)(__m128i)(X), (int)(N)))
 #define _mm_extract_epi32(X, N) \
   ((int) __builtin_ia32_vec_ext_v4si ((__v4si)(__m128i)(X), (int)(N)))
 
@@ -584,11 +583,7 @@ _mm_stream_load_si128 (__m128i *__X)
   return (__m128i) __builtin_ia32_movntdqa ((__v2di *) __X);
 }
 
-#ifndef __SSE4_2__
-#pragma GCC push_options
-#pragma GCC target("sse4.2")
-#define __DISABLE_SSE4_2__
-#endif /* __SSE4_2__ */
+#ifdef __SSE4_2__
 
 /* These macros specify the source data format.  */
 #define _SIDD_UBYTE_OPS			0x00
@@ -602,7 +597,7 @@ _mm_stream_load_si128 (__m128i *__X)
 #define _SIDD_CMP_EQUAL_EACH		0x08
 #define _SIDD_CMP_EQUAL_ORDERED		0x0c
 
-/* These macros specify the polarity.  */
+/* These macros specify the the polarity.  */
 #define _SIDD_POSITIVE_POLARITY		0x00
 #define _SIDD_NEGATIVE_POLARITY		0x10
 #define _SIDD_MASKED_POSITIVE_POLARITY	0x20
@@ -795,32 +790,12 @@ _mm_cmpestrz (__m128i __X, int __LX, __m128i __Y, int __LY, const int __M)
 extern __inline __m128i __attribute__((__gnu_inline__, __always_inline__, __artificial__))
 _mm_cmpgt_epi64 (__m128i __X, __m128i __Y)
 {
-  return (__m128i) ((__v2di)__X > (__v2di)__Y);
+  return (__m128i) __builtin_ia32_pcmpgtq ((__v2di)__X, (__v2di)__Y);
 }
 
-#ifdef __DISABLE_SSE4_2__
-#undef __DISABLE_SSE4_2__
-#pragma GCC pop_options
-#endif /* __DISABLE_SSE4_2__ */
-
-#ifdef __DISABLE_SSE4_1__
-#undef __DISABLE_SSE4_1__
-#pragma GCC pop_options
-#endif /* __DISABLE_SSE4_1__ */
-
+#ifdef __POPCNT__
 #include <popcntintrin.h>
-
-#ifndef __SSE4_1__
-#pragma GCC push_options
-#pragma GCC target("sse4.1")
-#define __DISABLE_SSE4_1__
-#endif /* __SSE4_1__ */
-
-#ifndef __SSE4_2__
-#pragma GCC push_options
-#pragma GCC target("sse4.2")
-#define __DISABLE_SSE4_2__
-#endif /* __SSE4_1__ */
+#endif
 
 /* Accumulate CRC32 (polynomial 0x11EDC6F41) value.  */
 extern __inline unsigned int __attribute__((__gnu_inline__, __always_inline__, __artificial__))
@@ -849,14 +824,8 @@ _mm_crc32_u64 (unsigned long long __C, unsigned long long __V)
 }
 #endif
 
-#ifdef __DISABLE_SSE4_2__
-#undef __DISABLE_SSE4_2__
-#pragma GCC pop_options
-#endif /* __DISABLE_SSE4_2__ */
+#endif /* __SSE4_2__ */
 
-#ifdef __DISABLE_SSE4_1__
-#undef __DISABLE_SSE4_1__
-#pragma GCC pop_options
-#endif /* __DISABLE_SSE4_1__ */
+#endif /* __SSE4_1__ */
 
 #endif /* _SMMINTRIN_H_INCLUDED */

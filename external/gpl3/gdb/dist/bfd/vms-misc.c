@@ -1,6 +1,7 @@
 /* vms-misc.c -- BFD back-end for VMS/VAX (openVMS/VAX) and
    EVAX (openVMS/Alpha) files.
-   Copyright (C) 1996-2019 Free Software Foundation, Inc.
+   Copyright 1996, 1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005,
+   2007, 2008, 2009, 2010  Free Software Foundation, Inc.
 
    Miscellaneous functions.
 
@@ -135,11 +136,11 @@ _bfd_hexdump (int level, unsigned char *ptr, int size, int offset)
 #endif
 
 
-/* Copy sized string (string with fixed size) to new allocated area.
-   Size is string size (size of record).  */
+/* Copy sized string (string with fixed size) to new allocated area
+   size is string size (size of record)  */
 
 char *
-_bfd_vms_save_sized_string (unsigned char *str, unsigned int size)
+_bfd_vms_save_sized_string (unsigned char *str, int size)
 {
   char *newstr = bfd_malloc ((bfd_size_type) size + 1);
 
@@ -151,16 +152,14 @@ _bfd_vms_save_sized_string (unsigned char *str, unsigned int size)
   return newstr;
 }
 
-/* Copy counted string (string with size at first byte) to new allocated area.
-   PTR points to size byte on entry.  */
+/* Copy counted string (string with size at first byte) to new allocated area
+   ptr points to size byte on entry  */
 
 char *
-_bfd_vms_save_counted_string (unsigned char *ptr, unsigned int maxlen)
+_bfd_vms_save_counted_string (unsigned char *ptr)
 {
-  unsigned int len = *ptr++;
+  int len = *ptr++;
 
-  if (len > maxlen)
-    return NULL;
   return _bfd_vms_save_sized_string (ptr, len);
 }
 
@@ -252,7 +251,7 @@ _bfd_vms_output_end_subrec (struct vms_rec_wr *recwr)
 
   /* Put length to buffer.  */
   bfd_putl16 ((bfd_vma) (recwr->size - recwr->subrec_offset),
-	      recwr->buf + recwr->subrec_offset + 2);
+              recwr->buf + recwr->subrec_offset + 2);
 
   /* Close the subrecord.  */
   recwr->subrec_offset = 0;
@@ -358,12 +357,12 @@ _bfd_vms_output_counted (struct vms_rec_wr *recwr, const char *value)
   len = strlen (value);
   if (len == 0)
     {
-      _bfd_error_handler (_("_bfd_vms_output_counted called with zero bytes"));
+      (*_bfd_error_handler) (_("_bfd_vms_output_counted called with zero bytes"));
       return;
     }
   if (len > 255)
     {
-      _bfd_error_handler (_("_bfd_vms_output_counted called with too many bytes"));
+      (*_bfd_error_handler) (_("_bfd_vms_output_counted called with too many bytes"));
       return;
     }
   _bfd_vms_output_byte (recwr, (unsigned int) len & 0xff);
@@ -516,12 +515,12 @@ vms_get_module_name (const char *filename, bfd_boolean upcase)
   for (fptr = fname; *fptr != 0; fptr++)
     {
       if (*fptr == ';' || (fptr - fname) >= 31)
-	{
-	  *fptr = 0;
-	  break;
-	}
+        {
+          *fptr = 0;
+          break;
+        }
       if (upcase)
-	*fptr = TOUPPER (*fptr);
+        *fptr = TOUPPER (*fptr);
     }
   return fname;
 }
@@ -531,10 +530,7 @@ vms_get_module_name (const char *filename, bfd_boolean upcase)
    -  100ns granularity
    -  epoch is Nov 17, 1858.
    Here has the constants and the routines used to convert VMS from/to UNIX time.
-   The conversion routines don't assume 64 bits arithmetic.
-
-   Here we assume that the definition of time_t is the UNIX one, ie integer
-   type, expressing seconds since the epoch.  */
+   The conversion routines don't assume 64 bits arithmetic.  */
 
 /* UNIX time granularity for VMS, ie 1s / 100ns.  */
 #define VMS_TIME_FACTOR 10000000
@@ -550,7 +546,6 @@ vms_time_to_time_t (unsigned int hi, unsigned int lo)
   unsigned int tmp;
   unsigned int rlo;
   int i;
-  time_t res;
 
   /* First convert to seconds.  */
   tmp = hi % VMS_TIME_FACTOR;
@@ -567,18 +562,14 @@ vms_time_to_time_t (unsigned int hi, unsigned int lo)
   lo = rlo;
 
   /* Return 0 in case of overflow.  */
-  if (hi > 1
-      || (hi == 1 && lo >= VMS_TIME_OFFSET))
+  if (lo > VMS_TIME_OFFSET && hi > 1)
     return 0;
 
   /* Return 0 in case of underflow.  */
-  if (hi == 0 && lo < VMS_TIME_OFFSET)
+  if (lo < VMS_TIME_OFFSET)
     return 0;
 
-  res = lo - VMS_TIME_OFFSET;
-  if (res <= 0)
-    return 0;
-  return res;
+  return lo - VMS_TIME_OFFSET;
 }
 
 /* Convert a time_t to a VMS time.  */

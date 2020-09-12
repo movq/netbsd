@@ -1,4 +1,4 @@
-# Copyright (C) 2010-2019 Free Software Foundation, Inc.
+# Copyright (C) 2010, 2011 Free Software Foundation, Inc.
 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -37,7 +37,7 @@ def lookup_function_lookup_test(val):
     return None
 
 
-class pp_s (object):
+class pp_s:
     def __init__(self, val):
         self.val = val
 
@@ -49,7 +49,7 @@ class pp_s (object):
         return "a=<" + str(self.val["a"]) + "> b=<" + str(self.val["b"]) + ">"
 
 
-class pp_ss (object):
+class pp_ss:
     def __init__(self, val):
         self.val = val
 
@@ -67,12 +67,8 @@ def build_pretty_printer():
     pp.add_printer('struct ss', '^struct ss$', lambda val: pp_ss(val))
     pp.add_printer('ss', '^ss$', lambda val: pp_ss(val))
 
-    pp.add_printer('enum flag_enum', '^flag_enum$',
-                   gdb.printing.FlagEnumerationPrinter('enum flag_enum'))
-
     return pp
 
 
 gdb.printing.register_pretty_printer(gdb, lookup_function_lookup_test)
-my_pretty_printer = build_pretty_printer()
-gdb.printing.register_pretty_printer(gdb, my_pretty_printer)
+gdb.printing.register_pretty_printer(gdb, build_pretty_printer())

@@ -1,6 +1,6 @@
 // Specific definitions for newlib  -*- C++ -*-
 
-// Copyright (C) 2000-2019 Free Software Foundation, Inc.
+// Copyright (C) 2000, 2005, 2009 Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
@@ -22,9 +22,9 @@
 // see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
 // <http://www.gnu.org/licenses/>.
 
-/** @file bits/os_defines.h
+/** @file os_defines.h
  *  This is an internal header file, included by other library headers.
- *  Do not attempt to use it directly. @headername{iosfwd}
+ *  You should not attempt to use it directly.
  */
 
 #ifndef _GLIBCXX_OS_DEFINES
@@ -47,15 +47,6 @@
 
 // See libstdc++/20806.
 #define _GLIBCXX_HAVE_DOS_BASED_FILESYSTEM 1
-
-// Enable use of GetModuleHandleEx (requires Windows XP/2003) in
-// __cxa_thread_atexit to prevent modules from being unloaded before
-// their dtors are called
-#define _GLIBCXX_THREAD_ATEXIT_WIN32 1
-
-// See libstdc++/69506
-#define _GLIBCXX_USE_WEAK_REF 0
-
 #endif
 
 #endif

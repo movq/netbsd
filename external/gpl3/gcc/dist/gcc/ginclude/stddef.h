@@ -1,4 +1,5 @@
-/* Copyright (C) 1989-2019 Free Software Foundation, Inc.
+/* Copyright (C) 1989, 1997, 1998, 1999, 2000, 2002, 2004, 2009
+   Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -40,21 +41,28 @@ see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
 #define _STDDEF_H_
 /* snaroff@next.com says the NeXT needs this.  */
 #define _ANSI_STDDEF_H
+/* Irix 5.1 needs this.  */
+#define __STDDEF_H__
 #endif
 
 #ifndef __sys_stdtypes_h
 /* This avoids lossage on SunOS but only if stdtypes.h comes first.
    There's no way to win with the other order!  Sun lossage.  */
 
-#if defined(__NetBSD__)
+/* On 4.3bsd-net2, make sure ansi.h is included, so we have
+   one less case to deal with in the following.  */
+#if defined (__BSD_NET2__) || defined (____386BSD____) || (defined (__FreeBSD__) && (__FreeBSD__ < 5)) || defined(__NetBSD__)
 #include <machine/ansi.h>
 #endif
-
-#if defined (__FreeBSD__)
+/* On FreeBSD 5, machine/ansi.h does not exist anymore... */
+#if defined (__FreeBSD__) && (__FreeBSD__ >= 5)
 #include <sys/_types.h>
 #endif
 
-#if defined(__NetBSD__)
+/* In 4.3bsd-net2, machine/ansi.h defines these symbols, which are
+   defined if the corresponding type is *not* defined.
+   FreeBSD-2.1 defines _MACHINE_ANSI_H_ instead of _ANSI_H_ */
+#if defined(_ANSI_H_) || defined(_MACHINE_ANSI_H_)
 #if !defined(_SIZE_T_) && !defined(_BSD_SIZE_T_)
 #define _SIZE_T
 #endif
@@ -81,7 +89,7 @@ see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
 #undef _WCHAR_T_
 #undef _BSD_WCHAR_T_
 #endif
-#endif /* defined(__NetBSD__) */
+#endif /* defined(_ANSI_H_) || defined(_MACHINE_ANSI_H_) */
 
 /* Sequent's header files use _PTRDIFF_T_ in some conflicting way.
    Just ignore it.  */
@@ -127,7 +135,6 @@ _TYPE_wchar_t;
 #ifndef _BSD_PTRDIFF_T_
 #ifndef ___int_ptrdiff_t_h
 #ifndef _GCC_PTRDIFF_T
-#ifndef _PTRDIFF_T_DECLARED /* DragonFly */
 #define _PTRDIFF_T
 #define _T_PTRDIFF_
 #define _T_PTRDIFF
@@ -136,12 +143,10 @@ _TYPE_wchar_t;
 #define _BSD_PTRDIFF_T_
 #define ___int_ptrdiff_t_h
 #define _GCC_PTRDIFF_T
-#define _PTRDIFF_T_DECLARED
 #ifndef __PTRDIFF_TYPE__
 #define __PTRDIFF_TYPE__ long int
 #endif
 typedef __PTRDIFF_TYPE__ ptrdiff_t;
-#endif /* _PTRDIFF_T_DECLARED */
 #endif /* _GCC_PTRDIFF_T */
 #endif /* ___int_ptrdiff_t_h */
 #endif /* _BSD_PTRDIFF_T_ */
@@ -194,11 +199,8 @@ typedef __PTRDIFF_TYPE__ ptrdiff_t;
 #define ___int_size_t_h
 #define _GCC_SIZE_T
 #define _SIZET_
-#if defined (__FreeBSD__) \
-  || defined(__DragonFly__) \
-  || defined(__FreeBSD_kernel__) \
-  || defined(__VMS__)
-/* __size_t is a typedef, must not trash it.  */
+#if defined (__FreeBSD__) && (__FreeBSD__ >= 5)
+/* __size_t is a typedef on FreeBSD 5!, must not trash it. */
 #else
 #define __size_t
 #endif
@@ -352,7 +354,10 @@ typedef __WINT_TYPE__ wint_t;
 #undef __need_wint_t
 #endif
 
-#if defined(__NetBSD__)
+/*  In 4.3bsd-net2, leave these undefined to indicate that size_t, etc.
+    are already defined.  */
+/*  BSD/OS 3.1 and FreeBSD [23].x require the MACHINE_ANSI_H check here.  */
+#if defined(_ANSI_H_) || defined(_MACHINE_ANSI_H_)
 /*  The references to _GCC_PTRDIFF_T_, _GCC_SIZE_T_, and _GCC_WCHAR_T_
     are probably typos and should be removed before 2.8 is released.  */
 #ifdef _GCC_PTRDIFF_T_
@@ -380,7 +385,7 @@ typedef __WINT_TYPE__ wint_t;
 #undef _WCHAR_T_
 #undef _BSD_WCHAR_T_
 #endif
-#endif /* __NetBSD__ */
+#endif /* _ANSI_H_ || _MACHINE_ANSI_H_ */
 
 #endif /* __sys_stdtypes_h */
 
@@ -404,35 +409,6 @@ typedef __WINT_TYPE__ wint_t;
 
 /* Offset of member MEMBER in a struct of type TYPE. */
 #define offsetof(TYPE, MEMBER) __builtin_offsetof (TYPE, MEMBER)
-
-#if (defined (__STDC_VERSION__) && __STDC_VERSION__ >= 201112L) \
-  || (defined(__cplusplus) && __cplusplus >= 201103L)
-#ifndef _GCC_MAX_ALIGN_T
-#define _GCC_MAX_ALIGN_T
-/* Type whose alignment is supported in every context and is at least
-   as great as that of any standard type not using alignment
-   specifiers.  */
-typedef struct {
-  long long __max_align_ll __attribute__((__aligned__(__alignof__(long long))));
-  long double __max_align_ld __attribute__((__aligned__(__alignof__(long double))));
-  /* _Float128 is defined as a basic type, so max_align_t must be
-     sufficiently aligned for it.  This code must work in C++, so we
-     use __float128 here; that is only available on some
-     architectures, but only on i386 is extra alignment needed for
-     __float128.  */
-#ifdef __i386__
-  __float128 __max_align_f128 __attribute__((__aligned__(__alignof(__float128))));
-#endif
-} max_align_t;
-#endif
-#endif /* C11 or C++11.  */
-
-#if defined(__cplusplus) && __cplusplus >= 201103L
-#ifndef _GXX_NULLPTR_T
-#define _GXX_NULLPTR_T
-  typedef decltype(nullptr) nullptr_t;
-#endif
-#endif /* C++11.  */
 
 #endif /* _STDDEF_H was defined this time */
 

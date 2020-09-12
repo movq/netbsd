@@ -1,6 +1,7 @@
 # This testcase is part of GDB, the GNU debugger.
 
-# Copyright 1997-2019 Free Software Foundation, Inc.
+# Copyright 1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2007, 2008, 2009,
+# 2010, 2011 Free Software Foundation, Inc.
 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -18,27 +19,42 @@
 # long_long.exp   Test printing of 64-bit things in 32-bit gdb.
 #                 Also test differnet kinds of formats.
 #
+if $tracelevel then {
+	strace $tracelevel
+}
+
 if [target_info exists no_long_long] {
     return 0
 }
 
-standard_testfile .c
+set testfile long_long
+set srcfile ${testfile}.c
+set binfile ${objdir}/${subdir}/${testfile}
 
 # What compiler are we using?
 #
-if [get_compiler_info] {
+if [get_compiler_info ${binfile}] {
     return -1
 }
 
-if  { [gdb_compile "${srcdir}/${subdir}/${srcfile}" "${binfile}" executable [concat debug nowarnings]] != "" } {
-     untested "failed to compile"
+if {$hp_cc_compiler} {
+    set flag "+e"
+} else {
+    set flag ""
+}
+
+if  { [gdb_compile "${srcdir}/${subdir}/${srcfile}" "${binfile}" executable [concat debug additional_flags=$flag nowarnings]] != "" } {
+     untested long_long.exp
      return -1
 }
 
 # use this to debug:
 #log_user 1
 
-clean_restart ${binfile}
+gdb_exit
+gdb_start
+gdb_reinitialize_dir $srcdir/$subdir
+gdb_load ${binfile}
 
 if { ![runto known_types] } then { 
    fail "run to known_types" 
@@ -149,8 +165,10 @@ if { $sizeof_double == 8 || $sizeof_long_double == 8 } {
     # words swapped in big endian format.
     # EABI targets default to natural-endian VFP format.
 
-    if { ([istarget "arm*-*-*"]) \
-	 && !([istarget "*-*-*eabi*"] || \
+    if { ([istarget "arm*-*-*"] || \
+	  [istarget "xscale*-*-*"] || \
+	  [istarget "strongarm*-*-*"]) \
+	 && !([istarget "*-*-*eabi"] || \
 	      [istarget "*-*-mingw32ce*"] || \
 	      [istarget "*-*-openbsd*"] || \
 	      [istarget "*-*-symbianelf"]) } then {
@@ -279,11 +297,6 @@ gdb_test "x/2gt g" "000000010010001101000101011001111000100110101011110011011110
 gdb_test_ptr "x/2ga g" "" "" "0x89abcdef.*0x77053977" "0x123456789abcdef.*0xa72ee53977053977"
 gdb_test "x/2gc g" "-17 '.\[0-9\]*'.*119 'w'"
 gdb_test "x/2gf g" "3.5127005640885037e-303.*-5.9822653797615723e-120"
-
-# Repeat behavior.
-gdb_test "x/2bx b" "0x01.*0xa7" "set up for repeat"
-send_gdb "\n"
-gdb_test "" "0x00.*0x00" "repeat x command"
 
 gdb_exit
 return 0

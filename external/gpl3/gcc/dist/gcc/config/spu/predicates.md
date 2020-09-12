@@ -1,5 +1,5 @@
 ;; Predicate definitions for CELL SPU
-;; Copyright (C) 2006-2019 Free Software Foundation, Inc.
+;; Copyright (C) 2006, 2007 Free Software Foundation, Inc.
 ;;
 ;; This file is free software; you can redistribute it and/or modify it under
 ;; the terms of the GNU General Public License as published by the Free
@@ -58,7 +58,7 @@
 
 (define_predicate "vec_imm_operand"
   (and (match_code "const_int,const_double,const_vector")
-       (match_test "spu_legitimate_constant_p (mode, op)")))
+       (match_test "spu_legitimate_constant_p (op)")))
 
 (define_predicate "spu_arith_operand"
   (match_code "reg,subreg,const_int,const_vector")

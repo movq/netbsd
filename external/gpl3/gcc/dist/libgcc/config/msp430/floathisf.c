@@ -4,8 +4,6 @@ typedef float SFtype __attribute__ ((mode (SF)));
 
 extern SFtype __floatsisf (unsigned long);
 
-SFtype __floathisf (HItype);
-
 SFtype
 __floathisf (HItype u)
 {

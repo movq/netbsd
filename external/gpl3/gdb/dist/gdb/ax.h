@@ -1,5 +1,6 @@
 /* Definitions for expressions designed to be executed on the agent
-   Copyright (C) 1998-2019 Free Software Foundation, Inc.
+   Copyright (C) 1998, 1999, 2000, 2007, 2008, 2009, 2010, 2011
+   Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -16,10 +17,10 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-#ifndef AX_H
-#define AX_H
+#ifndef AGENTEXPR_H
+#define AGENTEXPR_H
 
-#include "common/vec.h"
+#include "doublest.h"		/* For DOUBLEST.  */
 
 /* It's sometimes useful to be able to debug programs that you can't
    really stop for more than a fraction of a second.  To this end, the
@@ -79,14 +80,20 @@ enum agent_flaws
 
 /* Agent expression data structures.  */
 
+/* The type of an element of the agent expression stack.
+   The bytecode operation indicates which element we should access;
+   the value itself has no typing information.  GDB generates all
+   bytecode streams, so we don't have to worry about type errors.  */
+
+union agent_val
+  {
+    LONGEST l;
+    DOUBLEST d;
+  };
+
 /* A buffer containing a agent expression.  */
 struct agent_expr
   {
-    /* Construct an empty agent expression.  */
-    explicit agent_expr (struct gdbarch *gdbarch, CORE_ADDR scope);
-
-    ~agent_expr ();
-
     /* The bytes of the expression.  */
     unsigned char *buf;
 
@@ -136,27 +143,7 @@ struct agent_expr
     */
     int reg_mask_len;
     unsigned char *reg_mask;
-
-    /* For the data tracing facility, we need to insert `trace' bytecodes
-       before each data fetch; this records all the memory that the
-       expression touches in the course of evaluation, so that memory will
-       be available when the user later tries to evaluate the expression
-       in GDB.
-
-       Setting the flag 'tracing' to non-zero enables the code that
-       emits the trace bytecodes at the appropriate points.  */
-
-    unsigned int tracing : 1;
-
-    /* This indicates that pointers to chars should get an added
-       tracenz bytecode to record nonzero bytes, up to a length that
-       is the value of trace_string.  */
-
-    int trace_string;
   };
-
-/* An agent_expr owning pointer.  */
-typedef std::unique_ptr<agent_expr> agent_expr_up;
 
 /* The actual values of the various bytecode operations.  */
 
@@ -164,7 +151,7 @@ enum agent_op
   {
 #define DEFOP(NAME, SIZE, DATA_SIZE, CONSUMED, PRODUCED, VALUE)  \
     aop_ ## NAME = VALUE,
-#include "common/ax.def"
+#include "ax.def"
 #undef DEFOP
     aop_last
   };
@@ -173,8 +160,12 @@ enum agent_op
 
 /* Functions for building expressions.  */
 
-/* Append a raw byte to EXPR.  */
-extern void ax_raw_byte (struct agent_expr *expr, gdb_byte byte);
+/* Allocate a new, empty agent expression.  */
+extern struct agent_expr *new_agent_expr (struct gdbarch *, CORE_ADDR);
+
+/* Free a agent expression.  */
+extern void free_agent_expr (struct agent_expr *);
+extern struct cleanup *make_cleanup_free_agent_expr (struct agent_expr *);
 
 /* Append a simple operator OP to EXPR.  */
 extern void ax_simple (struct agent_expr *EXPR, enum agent_op OP);
@@ -222,9 +213,6 @@ extern void ax_reg_mask (struct agent_expr *ax, int reg);
 
 /* Assemble code to operate on a trace state variable.  */
 extern void ax_tsv (struct agent_expr *expr, enum agent_op op, int num);
-
-/* Append a string to the bytecode stream.  */
-extern void ax_string (struct agent_expr *x, const char *str, int slen);
 
 
 /* Functions for printing out expressions, and otherwise debugging
@@ -267,4 +255,4 @@ extern struct aop_map aop_map[];
 
 extern void ax_reqs (struct agent_expr *ax);
 
-#endif /* AX_H */
+#endif /* AGENTEXPR_H */

@@ -1,6 +1,7 @@
-/* Header file for command creation.
+/* Header file for command-reading library command.c.
 
-   Copyright (C) 1986-2019 Free Software Foundation, Inc.
+   Copyright (C) 1986, 1989, 1990, 1991, 1992, 1993, 1994, 1995, 1999, 2000,
+   2002, 2004, 2007, 2008, 2009, 2010, 2011 Free Software Foundation, Inc.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -17,14 +18,6 @@
 
 #if !defined (COMMAND_H)
 #define COMMAND_H 1
-
-#include "common/gdb_vecs.h"
-#include "common/scoped_restore.h"
-
-struct completion_tracker;
-
-/* This file defines the public interface for any code wanting to
-   create commands.  */
 
 /* Command classes are top-level categories into which commands are
    broken down for "help" purposes.
@@ -79,8 +72,7 @@ typedef enum var_types
 
     /* Like var_uinteger but signed.  *VAR is an int.  The user can
        type 0 to mean "unlimited", which is stored in *VAR as
-       INT_MAX.  The only remaining use of it is the Python API.
-       Don't use it elsewhere.  */
+       INT_MAX.  */
     var_integer,
 
     /* String which the user enters with escapes (e.g. the user types
@@ -96,16 +88,12 @@ typedef enum var_types
     /* String which stores a filename.  (*VAR) is a malloc'd
        string.  */
     var_filename,
-    /* ZeroableInteger.  *VAR is an int.  Like var_integer except
+    /* ZeroableInteger.  *VAR is an int.  Like Unsigned Integer except
        that zero really means zero.  */
     var_zinteger,
     /* ZeroableUnsignedInteger.  *VAR is an unsigned int.  Zero really
        means zero.  */
     var_zuinteger,
-    /* ZeroableUnsignedInteger with unlimited value.  *VAR is an int,
-       but its range is [0, INT_MAX].  -1 stands for unlimited and
-       other negative numbers are not allowed.  */
-    var_zuinteger_unlimited,
     /* Enumerated type.  Can only have one of the specified values.
        *VAR is a char pointer to the name of the element that we
        find.  */
@@ -116,112 +104,52 @@ var_types;
 /* This structure records one command'd definition.  */
 struct cmd_list_element;
 
-typedef void cmd_const_cfunc_ftype (const char *args, int from_tty);
-
-/* This structure specifies notifications to be suppressed by a cli
-   command interpreter.  */
-
-struct cli_suppress_notification
-{
-  /* Inferior, thread, frame selected notification suppressed?  */
-  int user_selected_context;
-};
-
-extern struct cli_suppress_notification cli_suppress_notification;
-
 /* Forward-declarations of the entry-points of cli/cli-decode.c.  */
 
-/* API to the manipulation of command lists.  */
-
-extern int valid_user_defined_cmd_name_p (const char *name);
-
-/* Const-correct variant of the above.  */
-
-extern struct cmd_list_element *add_cmd (const char *, enum command_class,
-					 cmd_const_cfunc_ftype *fun,
-					 const char *,
+extern struct cmd_list_element *add_cmd (char *, enum command_class,
+					 void (*fun) (char *, int), char *,
 					 struct cmd_list_element **);
 
-/* Like add_cmd, but no command function is specified.  */
-
-extern struct cmd_list_element *add_cmd (const char *, enum command_class,
-					 const char *,
-					 struct cmd_list_element **);
-
-extern struct cmd_list_element *add_cmd_suppress_notification
-			(const char *name, enum command_class theclass,
-			 cmd_const_cfunc_ftype *fun, const char *doc,
-			 struct cmd_list_element **list,
-			 int *suppress_notification);
-
-extern struct cmd_list_element *add_alias_cmd (const char *, const char *,
+extern struct cmd_list_element *add_alias_cmd (char *, char *,
 					       enum command_class, int,
 					       struct cmd_list_element **);
 
-extern struct cmd_list_element *add_alias_cmd (const char *,
-					       cmd_list_element *,
-					       enum command_class, int,
-					       struct cmd_list_element **);
-
-
-extern struct cmd_list_element *add_prefix_cmd (const char *, enum command_class,
-						cmd_const_cfunc_ftype *fun,
-						const char *,
+extern struct cmd_list_element *add_prefix_cmd (char *, enum command_class,
+						void (*fun) (char *, int),
+						char *,
 						struct cmd_list_element **,
-						const char *, int,
+						char *, int,
 						struct cmd_list_element **);
 
-extern struct cmd_list_element *add_prefix_cmd_suppress_notification
-			(const char *name, enum command_class theclass,
-			 cmd_const_cfunc_ftype *fun,
-			 const char *doc, struct cmd_list_element **prefixlist,
-			 const char *prefixname, int allow_unknown,
-			 struct cmd_list_element **list,
-			 int *suppress_notification);
-
-extern struct cmd_list_element *add_abbrev_prefix_cmd (const char *,
+extern struct cmd_list_element *add_abbrev_prefix_cmd (char *,
 						       enum command_class,
-						       cmd_const_cfunc_ftype *fun,
-						       const char *,
+						       void (*fun) (char *,
+								    int),
+						       char *,
 						       struct cmd_list_element
-						       **, const char *, int,
+						       **, char *, int,
 						       struct cmd_list_element
 						       **);
 
-typedef void cmd_const_sfunc_ftype (const char *args, int from_tty,
-				    struct cmd_list_element *c);
+/* Set the commands corresponding callback.  */
+
+typedef void cmd_cfunc_ftype (char *args, int from_tty);
+extern void set_cmd_cfunc (struct cmd_list_element *cmd,
+			   cmd_cfunc_ftype *cfunc);
+
+typedef void cmd_sfunc_ftype (char *args, int from_tty,
+			      struct cmd_list_element *c);
 extern void set_cmd_sfunc (struct cmd_list_element *cmd,
-			   cmd_const_sfunc_ftype *sfunc);
+			   cmd_sfunc_ftype *sfunc);
 
-/* A completion routine.  Add possible completions to tracker.
-
-   TEXT is the text beyond what was matched for the command itself
-   (leading whitespace is skipped).  It stops where we are supposed to
-   stop completing (rl_point) and is '\0' terminated.  WORD points in
-   the same buffer as TEXT, and completions should be returned
-   relative to this position.  For example, suppose TEXT is "foo" and
-   we want to complete to "foobar".  If WORD is "oo", return "oobar";
-   if WORD is "baz/foo", return "baz/foobar".  */
-typedef void completer_ftype (struct cmd_list_element *,
-			      completion_tracker &tracker,
-			      const char *text, const char *word);
-
-/* Same, but for set_cmd_completer_handle_brkchars.  */
-typedef void completer_handle_brkchars_ftype (struct cmd_list_element *,
-					      completion_tracker &tracker,
-					      const char *text, const char *word);
-
-extern void set_cmd_completer (struct cmd_list_element *, completer_ftype *);
-
-/* Set the completer_handle_brkchars callback.  */
-
-extern void set_cmd_completer_handle_brkchars (struct cmd_list_element *,
-					       completer_handle_brkchars_ftype *);
+extern void set_cmd_completer (struct cmd_list_element *,
+			       char **(*completer) (struct cmd_list_element *,
+						    char *, char *));
 
 /* HACK: cagney/2002-02-23: Code, mostly in tracepoints.c, grubs
    around in cmd objects to test the value of the commands sfunc().  */
 extern int cmd_cfunc_eq (struct cmd_list_element *cmd,
-			 cmd_const_cfunc_ftype *cfun);
+			 void (*cfunc) (char *args, int from_tty));
 
 /* Each command object has a local context attached to it.  */
 extern void set_cmd_context (struct cmd_list_element *cmd,
@@ -238,60 +166,53 @@ extern void execute_cmd_post_hook (struct cmd_list_element *cmd);
 /* Return the type of the command.  */
 extern enum cmd_types cmd_type (struct cmd_list_element *cmd);
 
-/* Flag for an ambiguous cmd_list result.  */
-#define CMD_LIST_AMBIGUOUS ((struct cmd_list_element *) -1)
 
-extern struct cmd_list_element *lookup_cmd (const char **,
-					    struct cmd_list_element *,
-					    const char *,
+extern struct cmd_list_element *lookup_cmd (char **,
+					    struct cmd_list_element *, char *,
 					    int, int);
 
-extern struct cmd_list_element *lookup_cmd_1 (const char **,
+extern struct cmd_list_element *lookup_cmd_1 (char **,
 					      struct cmd_list_element *,
 					      struct cmd_list_element **,
 					      int);
 
 extern struct cmd_list_element *deprecate_cmd (struct cmd_list_element *,
-					       const char * );
+					       char * );
 
-extern void deprecated_cmd_warning (const char *);
+extern void deprecated_cmd_warning (char **);
 
-extern int lookup_cmd_composition (const char *text,
+extern int lookup_cmd_composition (char *text,
 				   struct cmd_list_element **alias,
 				   struct cmd_list_element **prefix_cmd,
 				   struct cmd_list_element **cmd);
 
-extern struct cmd_list_element *add_com (const char *, enum command_class,
-					 cmd_const_cfunc_ftype *fun,
-					 const char *);
+extern struct cmd_list_element *add_com (char *, enum command_class,
+					 void (*fun) (char *, int),
+					 char *);
 
-extern struct cmd_list_element *add_com_alias (const char *, const char *,
+extern struct cmd_list_element *add_com_alias (char *, char *,
 					       enum command_class, int);
 
-extern struct cmd_list_element *add_com_suppress_notification
-		       (const char *name, enum command_class theclass,
-			cmd_const_cfunc_ftype *fun, const char *doc,
-			int *supress_notification);
+extern struct cmd_list_element *add_info (char *,
+					  void (*fun) (char *, int),
+					  char *);
 
-extern struct cmd_list_element *add_info (const char *,
-					  cmd_const_cfunc_ftype *fun,
-					  const char *);
+extern struct cmd_list_element *add_info_alias (char *, char *, int);
 
-extern struct cmd_list_element *add_info_alias (const char *, const char *,
-						int);
+extern char **complete_on_cmdlist (struct cmd_list_element *,
+				   char *, char *);
 
-extern void complete_on_cmdlist (struct cmd_list_element *,
-				 completion_tracker &tracker,
-				 const char *, const char *, int);
+extern char **complete_on_enum (const char *enumlist[],
+				char *, char *);
 
-extern void complete_on_enum (completion_tracker &tracker,
-			      const char *const *enumlist,
-			      const char *, const char *);
+extern void help_cmd (char *, struct ui_file *);
 
-/* Functions that implement commands about CLI commands.  */
-
-extern void help_list (struct cmd_list_element *, const char *,
+extern void help_list (struct cmd_list_element *, char *,
 		       enum command_class, struct ui_file *);
+
+extern void help_cmd_list (struct cmd_list_element *,
+			   enum command_class,
+			   char *, int, struct ui_file *);
 
 /* Method for show a set/show variable's VALUE on FILE.  If this
    method isn't supplied deprecated_show_value_hack() is called (which
@@ -304,170 +225,151 @@ typedef void (show_value_ftype) (struct ui_file *file,
    instead print the value out directly.  */
 extern show_value_ftype deprecated_show_value_hack;
 
-extern void add_setshow_enum_cmd (const char *name,
-				  enum command_class theclass,
-				  const char *const *enumlist,
+extern void add_setshow_enum_cmd (char *name,
+				  enum command_class class,
+				  const char *enumlist[],
 				  const char **var,
 				  const char *set_doc,
 				  const char *show_doc,
 				  const char *help_doc,
-				  cmd_const_sfunc_ftype *set_func,
+				  cmd_sfunc_ftype *set_func,
 				  show_value_ftype *show_func,
 				  struct cmd_list_element **set_list,
-				  struct cmd_list_element **show_list,
-				  void *context = nullptr);
+				  struct cmd_list_element **show_list);
 
-extern void add_setshow_auto_boolean_cmd (const char *name,
-					  enum command_class theclass,
+extern void add_setshow_auto_boolean_cmd (char *name,
+					  enum command_class class,
 					  enum auto_boolean *var,
 					  const char *set_doc,
 					  const char *show_doc,
 					  const char *help_doc,
-					  cmd_const_sfunc_ftype *set_func,
+					  cmd_sfunc_ftype *set_func,
 					  show_value_ftype *show_func,
 					  struct cmd_list_element **set_list,
 					  struct cmd_list_element **show_list);
 
-extern void add_setshow_boolean_cmd (const char *name,
-				     enum command_class theclass,
+extern void add_setshow_boolean_cmd (char *name,
+				     enum command_class class,
 				     int *var,
 				     const char *set_doc, const char *show_doc,
 				     const char *help_doc,
-				     cmd_const_sfunc_ftype *set_func,
+				     cmd_sfunc_ftype *set_func,
 				     show_value_ftype *show_func,
 				     struct cmd_list_element **set_list,
 				     struct cmd_list_element **show_list);
 
-extern void add_setshow_filename_cmd (const char *name,
-				      enum command_class theclass,
+extern void add_setshow_filename_cmd (char *name,
+				      enum command_class class,
 				      char **var,
 				      const char *set_doc,
 				      const char *show_doc,
 				      const char *help_doc,
-				      cmd_const_sfunc_ftype *set_func,
+				      cmd_sfunc_ftype *set_func,
 				      show_value_ftype *show_func,
 				      struct cmd_list_element **set_list,
 				      struct cmd_list_element **show_list);
 
-extern void add_setshow_string_cmd (const char *name,
-				    enum command_class theclass,
+extern void add_setshow_string_cmd (char *name,
+				    enum command_class class,
 				    char **var,
 				    const char *set_doc,
 				    const char *show_doc,
 				    const char *help_doc,
-				    cmd_const_sfunc_ftype *set_func,
+				    cmd_sfunc_ftype *set_func,
 				    show_value_ftype *show_func,
 				    struct cmd_list_element **set_list,
 				    struct cmd_list_element **show_list);
 
-extern struct cmd_list_element *add_setshow_string_noescape_cmd
-		      (const char *name,
-		       enum command_class theclass,
-		       char **var,
-		       const char *set_doc,
-		       const char *show_doc,
-		       const char *help_doc,
-		       cmd_const_sfunc_ftype *set_func,
-		       show_value_ftype *show_func,
-		       struct cmd_list_element **set_list,
-		       struct cmd_list_element **show_list);
+extern void add_setshow_string_noescape_cmd (char *name,
+					     enum command_class class,
+					     char **var,
+					     const char *set_doc,
+					     const char *show_doc,
+					     const char *help_doc,
+					     cmd_sfunc_ftype *set_func,
+					     show_value_ftype *show_func,
+					     struct cmd_list_element **set_list,
+					     struct cmd_list_element **show_list);
 
-extern void add_setshow_optional_filename_cmd (const char *name,
-					       enum command_class theclass,
+extern void add_setshow_optional_filename_cmd (char *name,
+					       enum command_class class,
 					       char **var,
 					       const char *set_doc,
 					       const char *show_doc,
 					       const char *help_doc,
-					       cmd_const_sfunc_ftype *set_func,
+					       cmd_sfunc_ftype *set_func,
 					       show_value_ftype *show_func,
 					       struct cmd_list_element **set_list,
 					       struct cmd_list_element **show_list);
 
-extern void add_setshow_integer_cmd (const char *name,
-				     enum command_class theclass,
+extern void add_setshow_integer_cmd (char *name,
+				     enum command_class class,
 				     int *var,
 				     const char *set_doc,
 				     const char *show_doc,
 				     const char *help_doc,
-				     cmd_const_sfunc_ftype *set_func,
+				     cmd_sfunc_ftype *set_func,
 				     show_value_ftype *show_func,
 				     struct cmd_list_element **set_list,
 				     struct cmd_list_element **show_list);
 
-extern void add_setshow_uinteger_cmd (const char *name,
-				      enum command_class theclass,
+extern void add_setshow_uinteger_cmd (char *name,
+				      enum command_class class,
 				      unsigned int *var,
 				      const char *set_doc,
 				      const char *show_doc,
 				      const char *help_doc,
-				      cmd_const_sfunc_ftype *set_func,
+				      cmd_sfunc_ftype *set_func,
 				      show_value_ftype *show_func,
 				      struct cmd_list_element **set_list,
 				      struct cmd_list_element **show_list);
 
-extern void add_setshow_zinteger_cmd (const char *name,
-				      enum command_class theclass,
+extern void add_setshow_zinteger_cmd (char *name,
+				      enum command_class class,
 				      int *var,
 				      const char *set_doc,
 				      const char *show_doc,
 				      const char *help_doc,
-				      cmd_const_sfunc_ftype *set_func,
+				      cmd_sfunc_ftype *set_func,
 				      show_value_ftype *show_func,
 				      struct cmd_list_element **set_list,
 				      struct cmd_list_element **show_list);
 
-extern void add_setshow_zuinteger_cmd (const char *name,
-				       enum command_class theclass,
+extern void add_setshow_zuinteger_cmd (char *name,
+				       enum command_class class,
 				       unsigned int *var,
 				       const char *set_doc,
 				       const char *show_doc,
 				       const char *help_doc,
-				       cmd_const_sfunc_ftype *set_func,
-				       show_value_ftype *show_func,
-				       struct cmd_list_element **set_list,
-				       struct cmd_list_element **show_list);
-
-extern void
-  add_setshow_zuinteger_unlimited_cmd (const char *name,
-				       enum command_class theclass,
-				       int *var,
-				       const char *set_doc,
-				       const char *show_doc,
-				       const char *help_doc,
-				       cmd_const_sfunc_ftype *set_func,
+				       cmd_sfunc_ftype *set_func,
 				       show_value_ftype *show_func,
 				       struct cmd_list_element **set_list,
 				       struct cmd_list_element **show_list);
 
 /* Do a "show" command for each thing on a command list.  */
 
-extern void cmd_show_list (struct cmd_list_element *, int, const char *);
+extern void cmd_show_list (struct cmd_list_element *, int, char *);
 
 /* Used everywhere whenever at least one parameter is required and
    none is specified.  */
 
-extern void error_no_arg (const char *) ATTRIBUTE_NORETURN;
+extern void error_no_arg (char *) ATTRIBUTE_NORETURN;
 
 extern void dont_repeat (void);
 
-extern scoped_restore_tmpl<int> prevent_dont_repeat (void);
-
-/* Set the arguments that will be passed if the current command is
-   repeated.  Note that the passed-in string must be a constant.  */
-
-extern void set_repeat_arguments (const char *args);
+extern struct cleanup *prevent_dont_repeat (void);
 
 /* Used to mark commands that don't do anything.  If we just leave the
    function field NULL, the command is interpreted as a help topic, or
    as a class of commands.  */
 
-extern void not_just_help_class_command (const char *, int);
+extern void not_just_help_class_command (char *, int);
 
 /* Check function pointer.  */
 extern int cmd_func_p (struct cmd_list_element *cmd);
 
 /* Call the command function.  */
 extern void cmd_func (struct cmd_list_element *cmd,
-		      const char *args, int from_tty);
+		      char *args, int from_tty);
 
 #endif /* !defined (COMMAND_H) */

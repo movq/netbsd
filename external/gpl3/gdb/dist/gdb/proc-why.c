@@ -1,6 +1,7 @@
-/* Machine-independent support for Solaris /proc (process file system)
+/* Machine-independent support for SVR4 /proc (process file system)
 
-   Copyright (C) 1999-2019 Free Software Foundation, Inc.
+   Copyright (C) 1999, 2000, 2004, 2007, 2008, 2009, 2010, 2011
+   Free Software Foundation, Inc.
 
    Written by Michael Snyder at Cygnus Solutions.
    Based on work by Fred Fish, Stu Grossman, Geoff Noer, and others.
@@ -20,8 +21,11 @@
 
 #include "defs.h"
 
+#ifdef NEW_PROC_API
 #define _STRUCTURED_PROC 1
+#endif
 
+#include <stdio.h>
 #include <sys/types.h>
 #include <sys/procfs.h>
 
@@ -36,8 +40,8 @@
 struct trans
 {
   int value;                    /* The numeric value.  */
-  const char *name;                   /* The equivalent symbolic value.  */
-  const char *desc;                   /* Short description of value.  */
+  char *name;                   /* The equivalent symbolic value.  */
+  char *desc;                   /* Short description of value.  */
 };
 
 /* Translate values in the pr_why field of a `struct prstatus' or
@@ -45,15 +49,55 @@ struct trans
 
 static struct trans pr_why_table[] =
 {
+#if defined (PR_REQUESTED)
+  /* All platforms.  */
   { PR_REQUESTED, "PR_REQUESTED", 
     "Directed to stop by debugger via P(IO)CSTOP or P(IO)CWSTOP" },
+#endif
+#if defined (PR_SIGNALLED)
+  /* All platforms.  */
   { PR_SIGNALLED, "PR_SIGNALLED", "Receipt of a traced signal" },
+#endif
+#if defined (PR_SYSENTRY)
+  /* All platforms.  */
   { PR_SYSENTRY, "PR_SYSENTRY", "Entry to a traced system call" },
+#endif
+#if defined (PR_SYSEXIT)
+  /* All platforms.  */
   { PR_SYSEXIT, "PR_SYSEXIT", "Exit from a traced system call" },
+#endif
+#if defined (PR_JOBCONTROL)
+  /* All platforms.  */
   { PR_JOBCONTROL, "PR_JOBCONTROL", "Default job control stop signal action" },
+#endif
+#if defined (PR_FAULTED)
+  /* All platforms.  */
   { PR_FAULTED, "PR_FAULTED", "Incurred a traced hardware fault" },
+#endif
+#if defined (PR_SUSPENDED)
+  /* Solaris and UnixWare.  */
   { PR_SUSPENDED, "PR_SUSPENDED", "Process suspended" },
+#endif
+#if defined (PR_CHECKPOINT)
+  /* Solaris only.  */
   { PR_CHECKPOINT, "PR_CHECKPOINT", "Process stopped at checkpoint" },
+#endif
+#if defined (PR_FORKSTOP)
+  /* OSF/1 only.  */
+  { PR_FORKSTOP, "PR_FORKSTOP", "Process stopped at end of fork call" },
+#endif
+#if defined (PR_TCRSTOP)
+  /* OSF/1 only.  */
+  { PR_TCRSTOP, "PR_TCRSTOP", "Process stopped on thread creation" },
+#endif
+#if defined (PR_TTSTOP)
+  /* OSF/1 only.  */
+  { PR_TTSTOP, "PR_TTSTOP", "Process stopped on thread termination" },
+#endif
+#if defined (PR_DEAD)
+  /* OSF/1 only.  */
+  { PR_DEAD, "PR_DEAD", "Process stopped in exit system call" },
+#endif
 };
 
 /* Pretty-print the pr_why field of a `struct prstatus' or `struct
@@ -76,25 +120,42 @@ proc_prettyfprint_why (FILE *file, unsigned long why, unsigned long what,
 	  fprintf (file, ": %s ", pr_why_table[i].desc);
 
 	switch (why) {
+#ifdef PR_REQUESTED
 	case PR_REQUESTED:
 	  break;		/* Nothing more to print.  */
+#endif
+#ifdef PR_SIGNALLED
 	case PR_SIGNALLED:
 	  proc_prettyfprint_signal (file, what, verbose);
 	  break;
+#endif
+#ifdef PR_FAULTED
 	case PR_FAULTED:
 	  proc_prettyfprint_fault (file, what, verbose);
 	  break;
+#endif
+#ifdef PR_SYSENTRY
 	case PR_SYSENTRY:
 	  fprintf (file, "Entry to ");
 	  proc_prettyfprint_syscall (file, what, verbose);
 	  break;
+#endif
+#ifdef PR_SYSEXIT
 	case PR_SYSEXIT:
 	  fprintf (file, "Exit from ");
 	  proc_prettyfprint_syscall (file, what, verbose);
 	  break;
+#endif
+#ifdef PR_JOBCONTROL
 	case PR_JOBCONTROL:
 	  proc_prettyfprint_signal (file, what, verbose);
 	  break;
+#endif
+#ifdef PR_DEAD
+	case PR_DEAD:
+	  fprintf (file, "Exit status: %ld\n", what);
+	  break;
+#endif
 	default:
 	  fprintf (file, "Unknown why %ld, what %ld\n", why, what);
 	  break;

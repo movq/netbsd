@@ -1,5 +1,6 @@
 /* Generic support for 64-bit ELF
-   Copyright (C) 1993-2019 Free Software Foundation, Inc.
+   Copyright 1993, 1995, 1998, 1999, 2001, 2002, 2004, 2005, 2007
+   Free Software Foundation, Inc.
 
    This file is part of BFD, the Binary File Descriptor library.
 
@@ -41,22 +42,20 @@ static reloc_howto_type dummy =
 	 0,			/* dst_mask */
 	 FALSE);		/* pcrel_offset */
 
-static bfd_boolean
+static void
 elf_generic_info_to_howto (bfd *abfd ATTRIBUTE_UNUSED,
 			   arelent *bfd_reloc,
 			   Elf_Internal_Rela *elf_reloc ATTRIBUTE_UNUSED)
 {
   bfd_reloc->howto = &dummy;
-  return TRUE;
 }
 
-static bfd_boolean
+static void
 elf_generic_info_to_howto_rel (bfd *abfd ATTRIBUTE_UNUSED,
 			       arelent *bfd_reloc,
 			       Elf_Internal_Rela *elf_reloc ATTRIBUTE_UNUSED)
 {
   bfd_reloc->howto = &dummy;
-  return TRUE;
 }
 
 static void
@@ -67,8 +66,7 @@ check_for_relocs (bfd * abfd, asection * o, void * failed)
       Elf_Internal_Ehdr *ehdrp;
 
       ehdrp = elf_elfheader (abfd);
-      /* xgettext:c-format */
-      _bfd_error_handler (_("%pB: Relocations in generic ELF (EM: %d)"),
+      _bfd_error_handler (_("%B: Relocations in generic ELF (EM: %d)"),
 			  abfd, ehdrp->e_machine);
 
       bfd_set_error (bfd_error_wrong_format);
@@ -89,9 +87,9 @@ elf64_generic_link_add_symbols (bfd *abfd, struct bfd_link_info *info)
   return bfd_elf_link_add_symbols (abfd, info);
 }
 
-#define TARGET_LITTLE_SYM		elf64_le_vec
+#define TARGET_LITTLE_SYM		bfd_elf64_little_generic_vec
 #define TARGET_LITTLE_NAME		"elf64-little"
-#define TARGET_BIG_SYM			elf64_be_vec
+#define TARGET_BIG_SYM			bfd_elf64_big_generic_vec
 #define TARGET_BIG_NAME			"elf64-big"
 #define ELF_ARCH			bfd_arch_unknown
 #define ELF_MACHINE_CODE		EM_NONE

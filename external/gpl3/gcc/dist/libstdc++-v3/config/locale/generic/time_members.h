@@ -1,6 +1,7 @@
 // std::time_get, std::time_put implementation, generic version -*- C++ -*-
 
-// Copyright (C) 2001-2019 Free Software Foundation, Inc.
+// Copyright (C) 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009
+// Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
@@ -22,9 +23,9 @@
 // see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
 // <http://www.gnu.org/licenses/>.
 
-/** @file bits/time_members.h
+/** @file time_members.h
  *  This is an internal header file, included by other library headers.
- *  Do not attempt to use it directly. @headername{locale}
+ *  You should not attempt to use it directly.
  */
 
 //
@@ -34,30 +35,28 @@
 
 // Written by Benjamin Kosnik <bkoz@redhat.com>
 
-namespace std _GLIBCXX_VISIBILITY(default)
-{
-_GLIBCXX_BEGIN_NAMESPACE_VERSION
+_GLIBCXX_BEGIN_NAMESPACE(std)
 
   template<typename _CharT>
-    __timepunct<_CharT>::__timepunct(size_t __refs)
-    : facet(__refs), _M_data(0)
-    {
+    __timepunct<_CharT>::__timepunct(size_t __refs) 
+    : facet(__refs), _M_data(NULL)
+    { 
       _M_name_timepunct = _S_get_c_name();
-      _M_initialize_timepunct();
+      _M_initialize_timepunct(); 
     }
 
   template<typename _CharT>
-    __timepunct<_CharT>::__timepunct(__cache_type* __cache, size_t __refs)
+    __timepunct<_CharT>::__timepunct(__cache_type* __cache, size_t __refs) 
     : facet(__refs), _M_data(__cache)
-    {
+    { 
       _M_name_timepunct = _S_get_c_name();
-      _M_initialize_timepunct();
+      _M_initialize_timepunct(); 
     }
 
   template<typename _CharT>
-    __timepunct<_CharT>::__timepunct(__c_locale __cloc, const char* __s,
-				     size_t __refs)
-    : facet(__refs), _M_data(0)
+    __timepunct<_CharT>::__timepunct(__c_locale __cloc, const char* __s, 
+				     size_t __refs) 
+    : facet(__refs), _M_data(NULL)
     {
       if (__builtin_strcmp(__s, _S_get_c_name()) != 0)
 	{
@@ -81,12 +80,11 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 
   template<typename _CharT>
     __timepunct<_CharT>::~__timepunct()
-    {
+    { 
       if (_M_name_timepunct != _S_get_c_name())
 	delete [] _M_name_timepunct;
       delete _M_data;
-      _S_destroy_c_locale(_M_c_locale_timepunct);
+      _S_destroy_c_locale(_M_c_locale_timepunct); 
     }
 
-_GLIBCXX_END_NAMESPACE_VERSION
-} // namespace
+_GLIBCXX_END_NAMESPACE

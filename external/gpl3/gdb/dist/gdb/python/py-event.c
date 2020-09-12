@@ -1,6 +1,6 @@
 /* Python interface to inferior events.
 
-   Copyright (C) 2009-2019 Free Software Foundation, Inc.
+   Copyright (C) 2009, 2010, 2011 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -17,48 +17,52 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-#include "defs.h"
 #include "py-event.h"
 
 void
 evpy_dealloc (PyObject *self)
 {
   Py_XDECREF (((event_object *) self)->dict);
-  Py_TYPE (self)->tp_free (self);
+  self->ob_type->tp_free (self);
 }
 
-gdbpy_ref<>
+PyObject *
 create_event_object (PyTypeObject *py_type)
 {
-  gdbpy_ref<event_object> event_obj (PyObject_New (event_object, py_type));
-  if (event_obj == NULL)
-    return NULL;
+  event_object *event_obj;
+
+  event_obj = PyObject_New (event_object, py_type);
+  if (!event_obj)
+    goto fail;
 
   event_obj->dict = PyDict_New ();
   if (!event_obj->dict)
-    return NULL;
+    goto fail;
 
-  return gdbpy_ref<> ((PyObject *) event_obj.release ());
+  return (PyObject*) event_obj;
+
+ fail:
+  Py_XDECREF (event_obj);
+  return NULL;
 }
 
 /* Add the attribute ATTR to the event object EVENT.  In
    python this attribute will be accessible by the name NAME.
-   returns 0 if the operation succeeds and -1 otherwise.  This
-   function acquires a new reference to ATTR.  */
+   returns 0 if the operation succeeds and -1 otherwise.  */
 
 int
-evpy_add_attribute (PyObject *event, const char *name, PyObject *attr)
+evpy_add_attribute (PyObject *event, char *name, PyObject *attr)
 {
   return PyObject_SetAttrString (event, name, attr);
 }
 
 /* Initialize the Python event code.  */
 
-int
+void
 gdbpy_initialize_event (void)
 {
-  return gdbpy_initialize_event_generic (&event_object_type,
-					 "Event");
+  gdbpy_initialize_event_generic (&event_object_type,
+                                  "Event");
 }
 
 /* Initialize the given event type.  If BASE is not NULL it will
@@ -67,12 +71,20 @@ gdbpy_initialize_event (void)
 
 int
 gdbpy_initialize_event_generic (PyTypeObject *type,
-                                const char *name)
+                                char *name)
 {
   if (PyType_Ready (type) < 0)
-    return -1;
+    goto fail;
 
-  return gdb_pymodule_addobject (gdb_module, name, (PyObject *) type);
+  Py_INCREF (type);
+  if (PyModule_AddObject (gdb_module, name, (PyObject *) type) < 0)
+    goto fail;
+
+  return 0;
+
+  fail:
+    Py_XDECREF (type);
+    return -1;
 }
 
 
@@ -83,27 +95,25 @@ int
 evpy_emit_event (PyObject *event,
                  eventregistry_object *registry)
 {
+  PyObject *callback_list_copy = NULL;
   Py_ssize_t i;
 
   /* Create a copy of call back list and use that for
      notifying listeners to avoid skipping callbacks
      in the case of a callback being disconnected during
      a notification.  */
-  gdbpy_ref<> callback_list_copy (PySequence_List (registry->callbacks));
-  if (callback_list_copy == NULL)
-    return -1;
+  callback_list_copy = PySequence_List (registry->callbacks);
+  if (!callback_list_copy)
+    goto fail;
 
-  for (i = 0; i < PyList_Size (callback_list_copy.get ()); i++)
+  for (i = 0; i < PyList_Size (callback_list_copy); i++)
     {
-      PyObject *func = PyList_GetItem (callback_list_copy.get (), i);
+      PyObject *func = PyList_GetItem (callback_list_copy, i);
 
       if (func == NULL)
-	return -1;
+	goto fail;
 
-      gdbpy_ref<> func_result (PyObject_CallFunctionObjArgs (func, event,
-							     NULL));
-
-      if (func_result == NULL)
+      if (!PyObject_CallFunctionObjArgs (func, event, NULL))
 	{
 	  /* Print the trace here, but keep going -- we want to try to
 	     call all of the callbacks even if one is broken.  */
@@ -111,19 +121,21 @@ evpy_emit_event (PyObject *event,
 	}
     }
 
+  Py_XDECREF (callback_list_copy);
+  Py_XDECREF (event);
   return 0;
-}
 
-static gdb_PyGetSetDef event_object_getset[] =
-{
-  { "__dict__", gdb_py_generic_dict, NULL,
-    "The __dict__ for this event.", &event_object_type },
-  { NULL }
-};
+ fail:
+  gdbpy_print_stack ();
+  Py_XDECREF (callback_list_copy);
+  Py_XDECREF (event);
+  return -1;
+}
 
 PyTypeObject event_object_type =
 {
-  PyVarObject_HEAD_INIT (NULL, 0)
+  PyObject_HEAD_INIT (NULL)
+  0,                                          /* ob_size */
   "gdb.Event",                                /* tp_name */
   sizeof (event_object),                      /* tp_basicsize */
   0,                                          /* tp_itemsize */
@@ -152,7 +164,7 @@ PyTypeObject event_object_type =
   0,                                          /* tp_iternext */
   0,                                          /* tp_methods */
   0,                                          /* tp_members */
-  event_object_getset,			      /* tp_getset */
+  0,                                          /* tp_getset */
   0,                                          /* tp_base */
   0,                                          /* tp_dict */
   0,                                          /* tp_descr_get */

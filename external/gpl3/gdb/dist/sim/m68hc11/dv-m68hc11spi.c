@@ -1,5 +1,6 @@
 /*  dv-m68hc11spi.c -- Simulation of the 68HC11 SPI
-    Copyright (C) 2000-2019 Free Software Foundation, Inc.
+    Copyright (C) 2000, 2002, 2003, 2007, 2008, 2009, 2010, 2011
+    Free Software Foundation, Inc.
     Written by Stephane Carrez (stcarrez@nerim.fr)
     (From a driver model Contributed by Cygnus Solutions.)
 
@@ -156,7 +157,7 @@ m68hc11spi_port_event (struct hw *me,
 {
   SIM_DESC sd;
   struct m68hc11spi *controller;
-  sim_cpu *cpu;
+  sim_cpu* cpu;
   unsigned8 val;
   
   controller = hw_data (me);
@@ -234,7 +235,7 @@ set_bit_port (struct hw *me, sim_cpu *cpu, int port, int mask, int value)
 #define SPI_START_BIT  1
 #define SPI_MIDDLE_BIT 2
 
-static void
+void
 m68hc11spi_clock (struct hw *me, void *data)
 {
   SIM_DESC sd;

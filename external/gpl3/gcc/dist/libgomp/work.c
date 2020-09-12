@@ -1,8 +1,7 @@
-/* Copyright (C) 2005-2019 Free Software Foundation, Inc.
+/* Copyright (C) 2005, 2008, 2009 Free Software Foundation, Inc.
    Contributed by Richard Henderson <rth@redhat.com>.
 
-   This file is part of the GNU Offloading and Multi Processing Library
-   (libgomp).
+   This file is part of the GNU OpenMP Library (libgomp).
 
    Libgomp is free software; you can redistribute it and/or modify it
    under the terms of the GNU General Public License as published by
@@ -76,15 +75,7 @@ alloc_work_share (struct gomp_team *team)
 #endif
 
   team->work_share_chunk *= 2;
-  /* Allocating gomp_work_share structures aligned is just an
-     optimization, don't do it when using the fallback method.  */
-#ifdef GOMP_HAVE_EFFICIENT_ALIGNED_ALLOC
-  ws = gomp_aligned_alloc (__alignof (struct gomp_work_share),
-			   team->work_share_chunk
-			   * sizeof (struct gomp_work_share));
-#else
   ws = gomp_malloc (team->work_share_chunk * sizeof (struct gomp_work_share));
-#endif
   ws->next_alloc = team->work_shares[0].next_alloc;
   team->work_shares[0].next_alloc = ws;
   team->work_share_list_alloc = &ws[1];
@@ -98,38 +89,30 @@ alloc_work_share (struct gomp_team *team)
    This shouldn't touch the next_alloc field.  */
 
 void
-gomp_init_work_share (struct gomp_work_share *ws, size_t ordered,
+gomp_init_work_share (struct gomp_work_share *ws, bool ordered,
 		      unsigned nthreads)
 {
   gomp_mutex_init (&ws->lock);
   if (__builtin_expect (ordered, 0))
     {
-#define INLINE_ORDERED_TEAM_IDS_SIZE \
-  (sizeof (struct gomp_work_share) \
-   - offsetof (struct gomp_work_share, inline_ordered_team_ids))
+#define INLINE_ORDERED_TEAM_IDS_CNT \
+  ((sizeof (struct gomp_work_share) \
+    - offsetof (struct gomp_work_share, inline_ordered_team_ids)) \
+   / sizeof (((struct gomp_work_share *) 0)->inline_ordered_team_ids[0]))
 
-      if (__builtin_expect (ordered != 1, 0))
-	{
-	  size_t o = nthreads * sizeof (*ws->ordered_team_ids);
-	  o += __alignof__ (long long) - 1;
-	  if ((offsetof (struct gomp_work_share, inline_ordered_team_ids)
-	       & (__alignof__ (long long) - 1)) == 0)
-	    o &= ~(__alignof__ (long long) - 1);
-	  ordered += o - 1;
-	}
-      else
-	ordered = nthreads * sizeof (*ws->ordered_team_ids);
-      if (ordered > INLINE_ORDERED_TEAM_IDS_SIZE)
-	ws->ordered_team_ids = gomp_malloc (ordered);
+      if (nthreads > INLINE_ORDERED_TEAM_IDS_CNT)
+	ws->ordered_team_ids
+	  = gomp_malloc (nthreads * sizeof (*ws->ordered_team_ids));
       else
 	ws->ordered_team_ids = ws->inline_ordered_team_ids;
-      memset (ws->ordered_team_ids, '\0', ordered);
+      memset (ws->ordered_team_ids, '\0',
+	      nthreads * sizeof (*ws->ordered_team_ids));
       ws->ordered_num_used = 0;
       ws->ordered_owner = -1;
       ws->ordered_cur = 0;
     }
   else
-    ws->ordered_team_ids = ws->inline_ordered_team_ids;
+    ws->ordered_team_ids = NULL;
   gomp_ptrlock_init (&ws->next_ws, NULL);
   ws->threads_completed = 0;
 }
@@ -182,7 +165,7 @@ free_work_share (struct gomp_team *team, struct gomp_work_share *ws)
    if this was the first thread to reach this point.  */
 
 bool
-gomp_work_share_start (size_t ordered)
+gomp_work_share_start (bool ordered)
 {
   struct gomp_thread *thr = gomp_thread ();
   struct gomp_team *team = thr->ts.team;
@@ -194,7 +177,7 @@ gomp_work_share_start (size_t ordered)
       ws = gomp_malloc (sizeof (*ws));
       gomp_init_work_share (ws, ordered, 1);
       thr->ts.work_share = ws;
-      return true;
+      return ws;
     }
 
   ws = thr->ts.work_share;
@@ -238,40 +221,11 @@ gomp_work_share_end (void)
   if (gomp_barrier_last_thread (bstate))
     {
       if (__builtin_expect (thr->ts.last_work_share != NULL, 1))
-	{
-	  team->work_shares_to_free = thr->ts.work_share;
-	  free_work_share (team, thr->ts.last_work_share);
-	}
+	free_work_share (team, thr->ts.last_work_share);
     }
 
   gomp_team_barrier_wait_end (&team->barrier, bstate);
   thr->ts.last_work_share = NULL;
-}
-
-/* The current thread is done with its current work sharing construct.
-   This version implies a cancellable barrier at the end of the work-share.  */
-
-bool
-gomp_work_share_end_cancel (void)
-{
-  struct gomp_thread *thr = gomp_thread ();
-  struct gomp_team *team = thr->ts.team;
-  gomp_barrier_state_t bstate;
-
-  /* Cancellable work sharing constructs cannot be orphaned.  */
-  bstate = gomp_barrier_wait_cancel_start (&team->barrier);
-
-  if (gomp_barrier_last_thread (bstate))
-    {
-      if (__builtin_expect (thr->ts.last_work_share != NULL, 1))
-	{
-	  team->work_shares_to_free = thr->ts.work_share;
-	  free_work_share (team, thr->ts.last_work_share);
-	}
-    }
-  thr->ts.last_work_share = NULL;
-
-  return gomp_team_barrier_wait_cancel_end (&team->barrier, bstate);
 }
 
 /* The current thread is done with its current work sharing construct.
@@ -305,9 +259,6 @@ gomp_work_share_end_nowait (void)
 #endif
 
   if (completed == team->nthreads)
-    {
-      team->work_shares_to_free = thr->ts.work_share;
-      free_work_share (team, thr->ts.last_work_share);
-    }
+    free_work_share (team, thr->ts.last_work_share);
   thr->ts.last_work_share = NULL;
 }

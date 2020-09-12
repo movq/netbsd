@@ -1,4 +1,5 @@
-# Copyright (C) 2000-2019 Free Software Foundation, Inc.
+# Copyright (C) 2000, 2007, 2008, 2009, 2010, 2011
+# Free Software Foundation, Inc.
 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -15,6 +16,10 @@
 
 # This file was written by Kazu Hirata. (kazu@hxi.com)
 
+if $tracelevel then {
+	strace $tracelevel
+}
+
 if ![istarget "h8300*-*-*"] {
     verbose "Tests ignored for all but h8300s based targets."
     return
@@ -25,7 +30,7 @@ set testfile "h8300s"
 set srcfile ${srcdir}/${subdir}/${testfile}.s
 set binfile ${objdir}/${subdir}/${testfile}
 if  { [gdb_compile "${srcfile}" "${binfile}" executable {debug additional_flags=-ms}] != "" } {
-     untested "failed to compile"
+     untested h8300s.exp
      return -1
 }
 

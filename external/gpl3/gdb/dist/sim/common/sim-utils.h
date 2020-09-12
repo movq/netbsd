@@ -1,5 +1,6 @@
 /* Miscellaneous simulator utilities.
-   Copyright (C) 1997-2019 Free Software Foundation, Inc.
+   Copyright (C) 1997, 2007, 2008, 2009, 2010, 2011
+   Free Software Foundation, Inc.
    Contributed by Cygnus Support.
 
 This file is part of GDB, the GNU debugger.
@@ -45,7 +46,7 @@ unsigned long sim_elapsed_time_since (SIM_ELAPSED_TIME start);
 
 /* Utilities for manipulating the load image.  */
 
-SIM_RC sim_analyze_program (SIM_DESC sd, const char *prog_name,
+SIM_RC sim_analyze_program (SIM_DESC sd, char *prog_name,
 			    struct bfd *prog_bfd);
 
 /* Load program PROG into the simulator using the function DO_LOAD.
@@ -60,10 +61,10 @@ SIM_RC sim_analyze_program (SIM_DESC sd, const char *prog_name,
    write the program sections at LMA interpreted as a virtual address.
    This is still accommodated for backward compatibility reasons. */
 
-typedef int sim_write_fn (SIM_DESC sd, SIM_ADDR mem,
-			  const unsigned char *buf, int length);
+typedef int sim_write_fn PARAMS ((SIM_DESC sd, SIM_ADDR mem,
+				      const unsigned char *buf, int length));
 struct bfd *sim_load_file (SIM_DESC sd, const char *myname,
-			   host_callback *callback, const char *prog,
+			   host_callback *callback, char *prog,
 			   struct bfd *prog_bfd, int verbose_p,
 			   int lma_p, sim_write_fn do_load);
 

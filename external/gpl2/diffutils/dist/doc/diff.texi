@@ -1,5 +1,5 @@
 \input texinfo @c -*-texinfo-*-
-@c $NetBSD: diff.texi,v 1.1.1.1 2016/01/13 03:15:29 christos Exp $
+@c $NetBSD: diff.texi,v 1.1 2016/01/13 03:15:29 christos Exp $
 @comment Id
 @comment %**start of header
 @setfilename diff.info

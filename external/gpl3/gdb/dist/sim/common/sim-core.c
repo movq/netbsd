@@ -1,6 +1,6 @@
 /* The common simulator framework for GDB, the GNU Debugger.
 
-   Copyright 2002-2019 Free Software Foundation, Inc.
+   Copyright 2002, 2007, 2008, 2009, 2010, 2011 Free Software Foundation, Inc.
 
    Contributed by Andrew Cagney and Red Hat.
 
@@ -28,6 +28,9 @@
 
 #if (WITH_HW)
 #include "sim-hw.h"
+#define device_error(client, ...) device_error ((device *)(client), __VA_ARGS__)
+#define device_io_read_buffer(client, ...) device_io_read_buffer ((device *)(client), __VA_ARGS__)
+#define device_io_write_buffer(client, ...) device_io_write_buffer ((device *)(client), __VA_ARGS__)
 #endif
 
 /* "core" module install handler.
@@ -62,7 +65,7 @@ sim_core_install (SIM_DESC sd)
 static void
 sim_core_uninstall (SIM_DESC sd)
 {
-  sim_core *core = STATE_CORE (sd);
+  sim_core *core = STATE_CORE(sd);
   unsigned map;
   /* blow away any mappings */
   for (map = 0; map < nr_maps; map++) {
@@ -71,10 +74,10 @@ sim_core_uninstall (SIM_DESC sd)
       sim_core_mapping *tbd = curr;
       curr = curr->next;
       if (tbd->free_buffer != NULL) {
-	SIM_ASSERT (tbd->buffer != NULL);
-	free (tbd->free_buffer);
+	SIM_ASSERT(tbd->buffer != NULL);
+	free(tbd->free_buffer);
       }
-      free (tbd);
+      free(tbd);
     }
     core->common.map[map].first = NULL;
   }
@@ -139,18 +142,25 @@ new_sim_core_mapping (SIM_DESC sd,
 		      address_word addr,
 		      address_word nr_bytes,
 		      unsigned modulo,
+#if WITH_HW
 		      struct hw *device,
+#else
+		      device *device,
+#endif
 		      void *buffer,
 		      void *free_buffer)
 {
-  sim_core_mapping *new_mapping = ZALLOC (sim_core_mapping);
+  sim_core_mapping *new_mapping = ZALLOC(sim_core_mapping);
   /* common */
   new_mapping->level = level;
   new_mapping->space = space;
   new_mapping->base = addr;
   new_mapping->nr_bytes = nr_bytes;
   new_mapping->bound = addr + (nr_bytes - 1);
-  new_mapping->mask = modulo - 1;
+  if (modulo == 0)
+    new_mapping->mask = (unsigned) 0 - 1;
+  else
+    new_mapping->mask = modulo - 1;
   new_mapping->buffer = buffer;
   new_mapping->free_buffer = free_buffer;
   new_mapping->device = device;
@@ -168,7 +178,11 @@ sim_core_map_attach (SIM_DESC sd,
 		     address_word addr,
 		     address_word nr_bytes,
 		     unsigned modulo,
+#if WITH_HW
 		     struct hw *client, /*callback/default*/
+#else
+		     device *client, /*callback/default*/
+#endif
 		     void *buffer, /*raw_memory*/
 		     void *free_buffer) /*raw_memory*/
 {
@@ -183,6 +197,9 @@ sim_core_map_attach (SIM_DESC sd,
   /* actually do occasionally get a zero size map */
   if (nr_bytes == 0)
     {
+#if (WITH_DEVICES)
+      device_error(client, "called on sim_core_map_attach with size zero");
+#endif
 #if (WITH_HW)
       sim_hw_abort (sd, client, "called on sim_core_map_attach with size zero");
 #endif
@@ -192,7 +209,7 @@ sim_core_map_attach (SIM_DESC sd,
   /* find the insertion point (between last/next) */
   next_mapping = access_map->first;
   last_mapping = &access_map->first;
-  while (next_mapping != NULL
+  while(next_mapping != NULL
 	&& (next_mapping->level < level
 	    || (next_mapping->level == level
 		&& next_mapping->bound < addr)))
@@ -209,6 +226,17 @@ sim_core_map_attach (SIM_DESC sd,
   if (next_mapping != NULL && next_mapping->level == level
       && next_mapping->base < (addr + (nr_bytes - 1)))
     {
+#if (WITH_DEVICES)
+      device_error (client, "memory map %d:0x%lx..0x%lx (%ld bytes) overlaps %d:0x%lx..0x%lx (%ld bytes)",
+		    space,
+		    (long) addr,
+		    (long) (addr + nr_bytes - 1),
+		    (long) nr_bytes,
+		    next_mapping->space,
+		    (long) next_mapping->base,
+		    (long) next_mapping->bound,
+		    (long) next_mapping->nr_bytes);
+#endif
 #if WITH_HW
       sim_hw_abort (sd, client, "memory map %d:0x%lx..0x%lx (%ld bytes) overlaps %d:0x%lx..0x%lx (%ld bytes)",
 		    space,
@@ -232,10 +260,10 @@ sim_core_map_attach (SIM_DESC sd,
   }
 
   /* create/insert the new mapping */
-  *last_mapping = new_sim_core_mapping (sd,
-					level,
-					space, addr, nr_bytes, modulo,
-					client, buffer, free_buffer);
+  *last_mapping = new_sim_core_mapping(sd,
+				       level,
+				       space, addr, nr_bytes, modulo,
+				       client, buffer, free_buffer);
   (*last_mapping)->next = next_mapping;
 }
 #endif
@@ -254,10 +282,14 @@ sim_core_attach (SIM_DESC sd,
 		 address_word addr,
 		 address_word nr_bytes,
 		 unsigned modulo,
+#if WITH_HW
 		 struct hw *client,
+#else
+		 device *client,
+#endif
 		 void *optional_buffer)
 {
-  sim_core *memory = STATE_CORE (sd);
+  sim_core *memory = STATE_CORE(sd);
   unsigned map;
   void *buffer;
   void *free_buffer;
@@ -266,8 +298,22 @@ sim_core_attach (SIM_DESC sd,
   if (cpu != NULL)
     sim_io_error (sd, "sim_core_map_attach - processor specific memory map not yet supported");
 
+  /* verify modulo memory */
+  if (!WITH_MODULO_MEMORY && modulo != 0)
+    {
+#if (WITH_DEVICES)
+      device_error (client, "sim_core_attach - internal error - modulo memory disabled");
+#endif
+#if (WITH_HW)
+      sim_hw_abort (sd, client, "sim_core_attach - internal error - modulo memory disabled");
+#endif
+      sim_io_error (sd, "sim_core_attach - internal error - modulo memory disabled");
+    }
   if (client != NULL && modulo != 0)
     {
+#if (WITH_DEVICES)
+      device_error (client, "sim_core_attach - internal error - modulo and callback memory conflict");
+#endif
 #if (WITH_HW)
       sim_hw_abort (sd, client, "sim_core_attach - internal error - modulo and callback memory conflict");
 #endif
@@ -286,6 +332,9 @@ sim_core_attach (SIM_DESC sd,
 	}
       if (mask != sizeof (unsigned64) - 1)
 	{
+#if (WITH_DEVICES)
+	  device_error (client, "sim_core_attach - internal error - modulo %lx not power of two", (long) modulo);
+#endif
 #if (WITH_HW)
 	  sim_hw_abort (sd, client, "sim_core_attach - internal error - modulo %lx not power of two", (long) modulo);
 #endif
@@ -296,6 +345,9 @@ sim_core_attach (SIM_DESC sd,
   /* verify consistency between device and buffer */
   if (client != NULL && optional_buffer != NULL)
     {
+#if (WITH_DEVICES)
+      device_error (client, "sim_core_attach - internal error - conflicting buffer and attach arguments");
+#endif
 #if (WITH_HW)
       sim_hw_abort (sd, client, "sim_core_attach - internal error - conflicting buffer and attach arguments");
 #endif
@@ -411,14 +463,14 @@ sim_core_detach (SIM_DESC sd,
 
 STATIC_INLINE_SIM_CORE\
 (sim_core_mapping *)
-sim_core_find_mapping (sim_core_common *core,
-		       unsigned map,
-		       address_word addr,
-		       unsigned nr_bytes,
-		       transfer_type transfer,
-		       int abort, /*either 0 or 1 - hint to inline/-O */
-		       sim_cpu *cpu, /* abort => cpu != NULL */
-		       sim_cia cia)
+sim_core_find_mapping(sim_core_common *core,
+		      unsigned map,
+		      address_word addr,
+		      unsigned nr_bytes,
+		      transfer_type transfer,
+		      int abort, /*either 0 or 1 - hint to inline/-O */
+		      sim_cpu *cpu, /* abort => cpu != NULL */
+		      sim_cia cia)
 {
   sim_core_mapping *mapping = core->map[map].first;
   ASSERT ((addr & (nr_bytes - 1)) == 0); /* must be aligned */
@@ -445,8 +497,12 @@ STATIC_INLINE_SIM_CORE\
 sim_core_translate (sim_core_mapping *mapping,
 		    address_word addr)
 {
-  return (void *)((unsigned8 *) mapping->buffer
-		  + ((addr - mapping->base) & mapping->mask));
+  if (WITH_MODULO_MEMORY)
+    return (void *)((unsigned8 *) mapping->buffer
+		    + ((addr - mapping->base) & mapping->mask));
+  else
+    return (void *)((unsigned8 *) mapping->buffer
+		    + addr - mapping->base);
 }
 
 
@@ -471,36 +527,44 @@ sim_core_read_buffer (SIM_DESC sd,
 			    0 /*dont-abort*/, NULL, NULL_CIA);
     if (mapping == NULL)
       break;
+#if (WITH_DEVICES)
+    if (mapping->device != NULL)
+      {
+	int nr_bytes = len - count;
+	sim_cia cia = cpu ? CIA_GET (cpu) : NULL_CIA;
+	if (raddr + nr_bytes - 1> mapping->bound)
+	  nr_bytes = mapping->bound - raddr + 1;
+	if (device_io_read_buffer (mapping->device,
+				   (unsigned_1*)buffer + count,
+				   mapping->space,
+				   raddr,
+				   nr_bytes,
+				   sd,
+				   cpu,
+				   cia) != nr_bytes)
+	  break;
+	count += nr_bytes;
+	continue;
+      }
+#endif
 #if (WITH_HW)
     if (mapping->device != NULL)
       {
 	int nr_bytes = len - count;
 	if (raddr + nr_bytes - 1> mapping->bound)
 	  nr_bytes = mapping->bound - raddr + 1;
-	/* If the access was initiated by a cpu, pass it down so errors can
-	   be propagated properly.  For other sources (e.g. GDB or DMA), we
-	   can only signal errors via the return value.  */
-	if (cpu)
-	  {
-	    sim_cia cia = cpu ? CPU_PC_GET (cpu) : NULL_CIA;
-	    sim_cpu_hw_io_read_buffer (cpu, cia, mapping->device,
-				       (unsigned_1*)buffer + count,
-				       mapping->space,
-				       raddr,
-				       nr_bytes);
-	  }
-	else if (sim_hw_io_read_buffer (sd, mapping->device,
-					(unsigned_1*)buffer + count,
-					mapping->space,
-					raddr,
-					nr_bytes) != nr_bytes)
+	if (sim_hw_io_read_buffer (sd, mapping->device,
+				   (unsigned_1*)buffer + count,
+				   mapping->space,
+				   raddr,
+				   nr_bytes) != nr_bytes)
 	  break;
 	count += nr_bytes;
 	continue;
       }
 #endif
     ((unsigned_1*)buffer)[count] =
-      *(unsigned_1*)sim_core_translate (mapping, raddr);
+      *(unsigned_1*)sim_core_translate(mapping, raddr);
     count += 1;
  }
   return count;
@@ -529,35 +593,45 @@ sim_core_write_buffer (SIM_DESC sd,
 			       0 /*dont-abort*/, NULL, NULL_CIA);
       if (mapping == NULL)
 	break;
-#if (WITH_HW)
-      if (mapping->device != NULL)
+#if (WITH_DEVICES)
+      if (WITH_CALLBACK_MEMORY
+	  && mapping->device != NULL)
 	{
 	  int nr_bytes = len - count;
+	  sim_cia cia = cpu ? CIA_GET (cpu) : NULL_CIA;
 	  if (raddr + nr_bytes - 1 > mapping->bound)
 	    nr_bytes = mapping->bound - raddr + 1;
-	  /* If the access was initiated by a cpu, pass it down so errors can
-	     be propagated properly.  For other sources (e.g. GDB or DMA), we
-	     can only signal errors via the return value.  */
-	  if (cpu)
-	    {
-	      sim_cia cia = cpu ? CPU_PC_GET (cpu) : NULL_CIA;
-	      sim_cpu_hw_io_write_buffer (cpu, cia, mapping->device,
-					  (unsigned_1*)buffer + count,
-					  mapping->space,
-					  raddr,
-					  nr_bytes);
-	    }
-	  else if (sim_hw_io_write_buffer (sd, mapping->device,
-					  (unsigned_1*)buffer + count,
-					  mapping->space,
-					  raddr,
-					  nr_bytes) != nr_bytes)
+	  if (device_io_write_buffer (mapping->device,
+				      (unsigned_1*)buffer + count,
+				      mapping->space,
+				      raddr,
+				      nr_bytes,
+				      sd,
+				      cpu,
+				      cia) != nr_bytes)
 	    break;
 	  count += nr_bytes;
 	  continue;
 	}
 #endif
-      *(unsigned_1*)sim_core_translate (mapping, raddr) =
+#if (WITH_HW)
+      if (WITH_CALLBACK_MEMORY
+	  && mapping->device != NULL)
+	{
+	  int nr_bytes = len - count;
+	  if (raddr + nr_bytes - 1 > mapping->bound)
+	    nr_bytes = mapping->bound - raddr + 1;
+	  if (sim_hw_io_write_buffer (sd, mapping->device,
+				      (unsigned_1*)buffer + count,
+				      mapping->space,
+				      raddr,
+				      nr_bytes) != nr_bytes)
+	    break;
+	  count += nr_bytes;
+	  continue;
+	}
+#endif
+      *(unsigned_1*)sim_core_translate(mapping, raddr) =
 	((unsigned_1*)buffer)[count];
       count += 1;
     }
@@ -587,7 +661,7 @@ sim_core_set_xor (SIM_DESC sd,
 	    mask = 0;
 	  while (i - 1 < WITH_XOR_ENDIAN)
 	    {
-	      cpu_core->byte_xor[i-1] = mask;
+	      cpu_core->xor[i-1] = mask;
 	      mask = (mask << 1) & (WITH_XOR_ENDIAN - 1);
 	      i = (i << 1);
 	    }
@@ -634,8 +708,7 @@ sim_core_xor_read_buffer (SIM_DESC sd,
 			  address_word addr,
 			  unsigned nr_bytes)
 {
-  address_word byte_xor
-    = (cpu == NULL ? STATE_CORE (sd)->byte_xor : CPU_CORE (cpu)->byte_xor[0]);
+  address_word byte_xor = (cpu == NULL ? STATE_CORE (sd)->byte_xor : CPU_CORE (cpu)->xor[0]);
   if (!WITH_XOR_ENDIAN || !byte_xor)
     return sim_core_read_buffer (sd, cpu, map, buffer, addr, nr_bytes);
   else
@@ -687,8 +760,7 @@ sim_core_xor_write_buffer (SIM_DESC sd,
 			   address_word addr,
 			   unsigned nr_bytes)
 {
-  address_word byte_xor
-    = (cpu == NULL ? STATE_CORE (sd)->byte_xor : CPU_CORE (cpu)->byte_xor[0]);
+  address_word byte_xor = (cpu == NULL ? STATE_CORE (sd)->byte_xor : CPU_CORE (cpu)->xor[0]);
   if (!WITH_XOR_ENDIAN || !byte_xor)
     return sim_core_write_buffer (sd, cpu, map, buffer, addr, nr_bytes);
   else
@@ -745,7 +817,7 @@ sim_core_trans_addr (SIM_DESC sd,
                            0 /*dont-abort*/, NULL, NULL_CIA);
   if (mapping == NULL)
     return NULL;
-  return sim_core_translate (mapping, addr);
+  return sim_core_translate(mapping, addr);
 }
 #endif
 

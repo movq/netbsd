@@ -1,6 +1,8 @@
 /* Gcov.c: prepend line execution counts and branch probabilities to a
    source file.
-   Copyright (C) 1990-2019 Free Software Foundation, Inc.
+   Copyright (C) 1990, 1991, 1992, 1993, 1994, 1996, 1997, 1998, 1999,
+   2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010
+   Free Software Foundation, Inc.
    Contributed by James E. Wilson of Cygnus Support.
    Mangled by Bob Manson of Cygnus Support.
    Mangled further by Nathan Sidwell <nathan@codesourcery.com>
@@ -31,28 +33,13 @@ along with Gcov; see the file COPYING3.  If not see
    probabilities of fall through arcs.  */
 
 #include "config.h"
-#define INCLUDE_ALGORITHM
-#define INCLUDE_VECTOR
-#define INCLUDE_STRING
-#define INCLUDE_MAP
-#define INCLUDE_SET
 #include "system.h"
 #include "coretypes.h"
 #include "tm.h"
 #include "intl.h"
-#include "diagnostic.h"
 #include "version.h"
-#include "demangle.h"
-#include "color-macros.h"
-#include "pretty-print.h"
-#include "json.h"
 
-#include <zlib.h>
 #include <getopt.h>
-
-#include "md5.h"
-
-using namespace std;
 
 #define IN_GCOV 1
 #include "gcov-io.h"
@@ -67,14 +54,9 @@ using namespace std;
    some places we make use of the knowledge of how profile.c works to
    select particular algorithms here.  */
 
-/* The code validates that the profile information read in corresponds
-   to the code currently being compiled.  Rather than checking for
-   identical files, the code below compares a checksum on the CFG
-   (based on the order of basic blocks and the arcs in the CFG).  If
-   the CFG checksum in the gcda file match the CFG checksum in the
-   gcno file, the profile data will be used.  */
-
 /* This is the size of the buffer used to read in source file lines.  */
+
+#define STRING_SIZE 200
 
 struct function_info;
 struct block_info;
@@ -82,7 +64,7 @@ struct source_info;
 
 /* Describes an arc between two basic blocks.  */
 
-struct arc_info
+typedef struct arc_info
 {
   /* source and destination blocks.  */
   struct block_info *src;
@@ -98,9 +80,6 @@ struct arc_info
   unsigned int fake : 1;
   unsigned int fall_through : 1;
 
-  /* Arc to a catch handler.  */
-  unsigned int is_throw : 1;
-
   /* Arc is for a function that abnormally returns.  */
   unsigned int is_call_non_return : 1;
 
@@ -113,48 +92,33 @@ struct arc_info
   /* Loop making arc.  */
   unsigned int cycle : 1;
 
+  /* Next branch on line.  */
+  struct arc_info *line_next;
+
   /* Links to next arc on src and dst lists.  */
   struct arc_info *succ_next;
   struct arc_info *pred_next;
-};
-
-/* Describes which locations (lines and files) are associated with
-   a basic block.  */
-
-struct block_location_info
-{
-  block_location_info (unsigned _source_file_idx):
-    source_file_idx (_source_file_idx)
-  {}
-
-  unsigned source_file_idx;
-  vector<unsigned> lines;
-};
+} arc_t;
 
 /* Describes a basic block. Contains lists of arcs to successor and
    predecessor blocks.  */
 
-struct block_info
+typedef struct block_info
 {
-  /* Constructor.  */
-  block_info ();
-
   /* Chain of exit and entry arcs.  */
-  arc_info *succ;
-  arc_info *pred;
+  arc_t *succ;
+  arc_t *pred;
 
   /* Number of unprocessed exit and entry arcs.  */
   gcov_type num_succ;
   gcov_type num_pred;
 
-  unsigned id;
-
   /* Block execution count.  */
   gcov_type count;
+  unsigned flags : 13;
   unsigned count_valid : 1;
   unsigned valid_chain : 1;
   unsigned invalid_chain : 1;
-  unsigned exceptional : 1;
 
   /* Block is a call instrumenting site.  */
   unsigned is_call_site : 1; /* Does the call.  */
@@ -163,182 +127,65 @@ struct block_info
   /* Block is a landing pad for longjmp or throw.  */
   unsigned is_nonlocal_return : 1;
 
-  vector<block_location_info> locations;
-
-  struct
+  union
   {
-    /* Single line graph cycle workspace.  Used for all-blocks
-       mode.  */
-    arc_info *arc;
-    unsigned ident;
-  } cycle; /* Used in all-blocks mode, after blocks are linked onto
-	     lines.  */
+    struct
+    {
+     /* Array of line numbers and source files. source files are
+        introduced by a linenumber of zero, the next 'line number' is
+        the number of the source file.  Always starts with a source
+        file.  */
+      unsigned *encoding;
+      unsigned num;
+    } line; /* Valid until blocks are linked onto lines */
+    struct
+    {
+      /* Single line graph cycle workspace.  Used for all-blocks
+	 mode.  */
+      arc_t *arc;
+      unsigned ident;
+    } cycle; /* Used in all-blocks mode, after blocks are linked onto
+	       lines.  */
+  } u;
 
   /* Temporary chain for solving graph, and for chaining blocks on one
      line.  */
   struct block_info *chain;
 
-};
-
-block_info::block_info (): succ (NULL), pred (NULL), num_succ (0), num_pred (0),
-  id (0), count (0), count_valid (0), valid_chain (0), invalid_chain (0),
-  exceptional (0), is_call_site (0), is_call_return (0), is_nonlocal_return (0),
-  locations (), chain (NULL)
-{
-  cycle.arc = NULL;
-}
-
-/* Describes a single line of source.  Contains a chain of basic blocks
-   with code on it.  */
-
-struct line_info
-{
-  /* Default constructor.  */
-  line_info ();
-
-  /* Return true when NEEDLE is one of basic blocks the line belongs to.  */
-  bool has_block (block_info *needle);
-
-  /* Execution count.  */
-  gcov_type count;
-
-  /* Branches from blocks that end on this line.  */
-  vector<arc_info *> branches;
-
-  /* blocks which start on this line.  Used in all-blocks mode.  */
-  vector<block_info *> blocks;
-
-  unsigned exists : 1;
-  unsigned unexceptional : 1;
-  unsigned has_unexecuted_block : 1;
-};
-
-line_info::line_info (): count (0), branches (), blocks (), exists (false),
-  unexceptional (0), has_unexecuted_block (0)
-{
-}
-
-bool
-line_info::has_block (block_info *needle)
-{
-  return std::find (blocks.begin (), blocks.end (), needle) != blocks.end ();
-}
-
-/* Output demangled function names.  */
-
-static int flag_demangled_names = 0;
+} block_t;
 
 /* Describes a single function. Contains an array of basic blocks.  */
 
-struct function_info
+typedef struct function_info
 {
-  function_info ();
-  ~function_info ();
-
-  /* Return true when line N belongs to the function in source file SRC_IDX.
-     The line must be defined in body of the function, can't be inlined.  */
-  bool group_line_p (unsigned n, unsigned src_idx);
-
-  /* Function filter based on function_info::artificial variable.  */
-
-  static inline bool
-  is_artificial (function_info *fn)
-  {
-    return fn->artificial;
-  }
-
   /* Name of function.  */
-  char *m_name;
-  char *m_demangled_name;
+  char *name;
   unsigned ident;
-  unsigned lineno_checksum;
-  unsigned cfg_checksum;
+  unsigned checksum;
 
-  /* The graph contains at least one fake incoming edge.  */
-  unsigned has_catch : 1;
-
-  /* True when the function is artificial and does not exist
-     in a source file.  */
-  unsigned artificial : 1;
-
-  /* True when multiple functions start at a line in a source file.  */
-  unsigned is_group : 1;
-
-  /* Array of basic blocks.  Like in GCC, the entry block is
-     at blocks[0] and the exit block is at blocks[1].  */
-#define ENTRY_BLOCK (0)
-#define EXIT_BLOCK (1)
-  vector<block_info> blocks;
+  /* Array of basic blocks.  */
+  block_t *blocks;
+  unsigned num_blocks;
   unsigned blocks_executed;
 
   /* Raw arc coverage counts.  */
-  vector<gcov_type> counts;
+  gcov_type *counts;
+  unsigned num_counts;
 
   /* First line number.  */
-  unsigned start_line;
+  unsigned line;
+  struct source_info *src;
 
-  /* First line column.  */
-  unsigned start_column;
-
-  /* Last line number.  */
-  unsigned end_line;
-
-  /* Last line column.  */
-  unsigned end_column;
-
-  /* Index of source file where the function is defined.  */
-  unsigned src;
-
-  /* Vector of line information.  */
-  vector<line_info> lines;
+  /* Next function in same source file.  */
+  struct function_info *line_next;
 
   /* Next function.  */
   struct function_info *next;
-
-  /*  Get demangled name of a function.  The demangled name
-      is converted when it is used for the first time.  */
-  char *get_demangled_name ()
-  {
-    if (m_demangled_name == NULL)
-      {
-	m_demangled_name = cplus_demangle (m_name, DMGL_PARAMS);
-	if (!m_demangled_name)
-	  m_demangled_name = m_name;
-      }
-
-    return m_demangled_name;
-  }
-
-  /* Get name of the function based on flag_demangled_names.  */
-  char *get_name ()
-  {
-    return flag_demangled_names ? get_demangled_name () : m_name;
-  }
-
-  /* Return number of basic blocks (without entry and exit block).  */
-  unsigned get_block_count ()
-  {
-    return blocks.size () - 2;
-  }
-};
-
-/* Function info comparer that will sort functions according to starting
-   line.  */
-
-struct function_line_start_cmp
-{
-  inline bool operator() (const function_info *lhs,
-			  const function_info *rhs)
-    {
-      return (lhs->start_line == rhs->start_line
-	      ? lhs->start_column < rhs->start_column
-	      : lhs->start_line < rhs->start_line);
-    }
-};
+} function_t;
 
 /* Describes coverage of a file or function.  */
 
-struct coverage_info
+typedef struct coverage_info
 {
   int lines;
   int lines_executed;
@@ -351,154 +198,79 @@ struct coverage_info
   int calls_executed;
 
   char *name;
-};
+} coverage_t;
+
+/* Describes a single line of source. Contains a chain of basic blocks
+   with code on it.  */
+
+typedef struct line_info
+{
+  gcov_type count;	   /* execution count */
+  union
+  {
+    arc_t *branches;	   /* branches from blocks that end on this
+			      line. Used for branch-counts when not
+			      all-blocks mode.  */
+    block_t *blocks;       /* blocks which start on this line.  Used
+			      in all-blocks mode.  */
+  } u;
+  unsigned exists : 1;
+} line_t;
 
 /* Describes a file mentioned in the block graph.  Contains an array
    of line info.  */
 
-struct source_info
+typedef struct source_info
 {
-  /* Default constructor.  */
-  source_info ();
-
-  vector<function_info *> *get_functions_at_location (unsigned line_num) const;
-
-  /* Register a new function.  */
-  void add_function (function_info *fn);
-
-  /* Index of the source_info in sources vector.  */
-  unsigned index;
-
-  /* Canonical name of source file.  */
+  /* Name of source file.  */
   char *name;
+  unsigned index;
   time_t file_time;
 
-  /* Vector of line information.  */
-  vector<line_info> lines;
+  /* Array of line information.  */
+  line_t *lines;
+  unsigned num_lines;
 
-  coverage_info coverage;
-
-  /* Maximum line count in the source file.  */
-  unsigned int maximum_count;
+  coverage_t coverage;
 
   /* Functions in this source file.  These are in ascending line
      number order.  */
-  vector<function_info *> functions;
+  function_t *functions;
 
-  /* Line number to functions map.  */
-  vector<vector<function_info *> *> line_to_function_map;
-};
+  /* Next source file.  */
+  struct source_info *next;
+} source_t;
 
-source_info::source_info (): index (0), name (NULL), file_time (),
-  lines (), coverage (), maximum_count (0), functions ()
-{
-}
+/* Holds a list of function basic block graphs.  */
 
-/* Register a new function.  */
-void
-source_info::add_function (function_info *fn)
-{
-  functions.push_back (fn);
+static function_t *functions;
 
-  if (fn->start_line >= line_to_function_map.size ())
-    line_to_function_map.resize (fn->start_line + 1);
+/* This points to the head of the sourcefile structure list.  New elements
+   are always prepended.  */
 
-  vector<function_info *> **slot = &line_to_function_map[fn->start_line];
-  if (*slot == NULL)
-    *slot = new vector<function_info *> ();
+static source_t *sources;
 
-  (*slot)->push_back (fn);
-}
+/* Next index for a source file.  */
 
-vector<function_info *> *
-source_info::get_functions_at_location (unsigned line_num) const
-{
-  if (line_num >= line_to_function_map.size ())
-    return NULL;
-
-  vector<function_info *> *slot = line_to_function_map[line_num];
-  if (slot != NULL)
-    std::sort (slot->begin (), slot->end (), function_line_start_cmp ());
-
-  return slot;
-}
-
-class name_map
-{
-public:
-  name_map ()
-  {
-  }
-
-  name_map (char *_name, unsigned _src): name (_name), src (_src)
-  {
-  }
-
-  bool operator== (const name_map &rhs) const
-  {
-#if HAVE_DOS_BASED_FILE_SYSTEM
-    return strcasecmp (this->name, rhs.name) == 0;
-#else
-    return strcmp (this->name, rhs.name) == 0;
-#endif
-  }
-
-  bool operator< (const name_map &rhs) const
-  {
-#if HAVE_DOS_BASED_FILE_SYSTEM
-    return strcasecmp (this->name, rhs.name) < 0;
-#else
-    return strcmp (this->name, rhs.name) < 0;
-#endif
-  }
-
-  const char *name;  /* Source file name */
-  unsigned src;  /* Source file */
-};
-
-/* Vector of all functions.  */
-static vector<function_info *> functions;
-
-/* Function ident to function_info * map.  */
-static map<unsigned, function_info *> ident_to_fn;
-
-/* Vector of source files.  */
-static vector<source_info> sources;
-
-/* Mapping of file names to sources */
-static vector<name_map> names;
-
-/* Record all processed files in order to warn about
-   a file being read multiple times.  */
-static vector<char *> processed_files;
+static unsigned source_index;
 
 /* This holds data summary information.  */
 
-static unsigned object_runs;
-
-static unsigned total_lines;
-static unsigned total_executed;
+static struct gcov_summary object_summary;
+static unsigned program_count;
 
 /* Modification time of graph file.  */
 
 static time_t bbg_file_time;
 
-/* Name of the notes (gcno) output file.  The "bbg" prefix is for
-   historical reasons, when the notes file contained only the
-   basic block graph notes.  */
+/* Name and file pointer of the input file for the basic block graph.  */
 
 static char *bbg_file_name;
 
 /* Stamp of the bbg file */
 static unsigned bbg_stamp;
 
-/* Supports has_unexecuted_blocks functionality.  */
-static unsigned bbg_supports_has_unexecuted_blocks;
-
-/* Working directory in which a TU was compiled.  */
-static const char *bbg_cwd;
-
-/* Name and file pointer of the input file for the count data (gcda).  */
+/* Name and file pointer of the input file for the arc count data.  */
 
 static char *da_file_name;
 
@@ -525,50 +297,16 @@ static int flag_unconditional = 0;
 
 static int flag_gcov_file = 1;
 
-/* Output to stdout instead to a gcov file.  */
-
-static int flag_use_stdout = 0;
-
-/* Output progress indication if this is true.  This is off by default
-   and can be turned on by the -d option.  */
-
-static int flag_display_progress = 0;
-
-/* Output *.gcov file in JSON intermediate format used by consumers.  */
-
-static int flag_json_format = 0;
-
 /* For included files, make the gcov output file name include the name
    of the input source file.  For example, if x.h is included in a.c,
    then the output file name is a.c##x.h.gcov instead of x.h.gcov.  */
 
 static int flag_long_names = 0;
 
-/* For situations when a long name can potentially hit filesystem path limit,
-   let's calculate md5sum of the path and append it to a file name.  */
-
-static int flag_hash_filenames = 0;
-
-/* Print verbose informations.  */
-
-static int flag_verbose = 0;
-
-/* Print colored output.  */
-
-static int flag_use_colors = 0;
-
-/* Use perf-like colors to indicate hot lines.  */
-
-static int flag_use_hotness_colors = 0;
-
 /* Output count information for every basic block, not merely those
    that contain line number information.  */
 
 static int flag_all_blocks = 0;
-
-/* Output human readable numbers.  */
-
-static int flag_human_readable_numbers = 0;
 
 /* Output summary info for each function.  */
 
@@ -578,17 +316,6 @@ static int flag_function_summary = 0;
    graph and data files are looked for, if nonzero.  */
 
 static char *object_directory = 0;
-
-/* Source directory prefix.  This is removed from source pathnames
-   that match, when generating the output file name.  */
-
-static char *source_prefix = 0;
-static size_t source_length = 0;
-
-/* Only show data for sources with relative pathnames.  Absolute ones
-   usually indicate a system header file, which although it may
-   contain inline functions, is usually uninteresting.  */
-static int flag_relative_only = 0;
 
 /* Preserve all pathname components. Needed when object files and
    source files are in subdirectories. '/' is mangled as '#', '.' is
@@ -602,245 +329,37 @@ static int flag_preserve_paths = 0;
 static int flag_counts = 0;
 
 /* Forward declarations.  */
+static void fnotice (FILE *, const char *, ...) ATTRIBUTE_PRINTF_2;
 static int process_args (int, char **);
 static void print_usage (int) ATTRIBUTE_NORETURN;
 static void print_version (void) ATTRIBUTE_NORETURN;
 static void process_file (const char *);
-static void process_all_functions (void);
 static void generate_results (const char *);
 static void create_file_names (const char *);
-static char *canonicalize_name (const char *);
-static unsigned find_source (const char *);
-static void read_graph_file (void);
+static source_t *find_source (const char *);
+static int read_graph_file (void);
 static int read_count_file (void);
-static void solve_flow_graph (function_info *);
-static void find_exception_blocks (function_info *);
-static void add_branch_counts (coverage_info *, const arc_info *);
-static void add_line_counts (coverage_info *, function_info *);
-static void executed_summary (unsigned, unsigned);
-static void function_summary (const coverage_info *);
-static void file_summary (const coverage_info *);
+static void solve_flow_graph (function_t *);
+static void add_branch_counts (coverage_t *, const arc_t *);
+static void add_line_counts (coverage_t *, function_t *);
+static void function_summary (const coverage_t *, const char *);
 static const char *format_gcov (gcov_type, gcov_type, int);
-static void accumulate_line_counts (source_info *);
-static void output_gcov_file (const char *, source_info *);
-static int output_branch_count (FILE *, int, const arc_info *);
-static void output_lines (FILE *, const source_info *);
+static void accumulate_line_counts (source_t *);
+static int output_branch_count (FILE *, int, const arc_t *);
+static void output_lines (FILE *, const source_t *);
 static char *make_gcov_file_name (const char *, const char *);
-static char *mangle_name (const char *, char *);
 static void release_structures (void);
 extern int main (int, char **);
-
-function_info::function_info (): m_name (NULL), m_demangled_name (NULL),
-  ident (0), lineno_checksum (0), cfg_checksum (0), has_catch (0),
-  artificial (0), is_group (0),
-  blocks (), blocks_executed (0), counts (),
-  start_line (0), start_column (0), end_line (0), end_column (0),
-  src (0), lines (), next (NULL)
-{
-}
-
-function_info::~function_info ()
-{
-  for (int i = blocks.size () - 1; i >= 0; i--)
-    {
-      arc_info *arc, *arc_n;
-
-      for (arc = blocks[i].succ; arc; arc = arc_n)
-	{
-	  arc_n = arc->succ_next;
-	  free (arc);
-	}
-    }
-  if (m_demangled_name != m_name)
-    free (m_demangled_name);
-  free (m_name);
-}
-
-bool function_info::group_line_p (unsigned n, unsigned src_idx)
-{
-  return is_group && src == src_idx && start_line <= n && n <= end_line;
-}
-
-/* Cycle detection!
-   There are a bajillion algorithms that do this.  Boost's function is named
-   hawick_cycles, so I used the algorithm by K. A. Hawick and H. A. James in
-   "Enumerating Circuits and Loops in Graphs with Self-Arcs and Multiple-Arcs"
-   (url at <http://complexity.massey.ac.nz/cstn/013/cstn-013.pdf>).
-
-   The basic algorithm is simple: effectively, we're finding all simple paths
-   in a subgraph (that shrinks every iteration).  Duplicates are filtered by
-   "blocking" a path when a node is added to the path (this also prevents non-
-   simple paths)--the node is unblocked only when it participates in a cycle.
-   */
-
-typedef vector<arc_info *> arc_vector_t;
-typedef vector<const block_info *> block_vector_t;
-
-/* Handle cycle identified by EDGES, where the function finds minimum cs_count
-   and subtract the value from all counts.  The subtracted value is added
-   to COUNT.  Returns type of loop.  */
-
-static void
-handle_cycle (const arc_vector_t &edges, int64_t &count)
-{
-  /* Find the minimum edge of the cycle, and reduce all nodes in the cycle by
-     that amount.  */
-  int64_t cycle_count = INTTYPE_MAXIMUM (int64_t);
-  for (unsigned i = 0; i < edges.size (); i++)
-    {
-      int64_t ecount = edges[i]->cs_count;
-      if (cycle_count > ecount)
-	cycle_count = ecount;
-    }
-  count += cycle_count;
-  for (unsigned i = 0; i < edges.size (); i++)
-    edges[i]->cs_count -= cycle_count;
-
-  gcc_assert (cycle_count > 0);
-}
-
-/* Unblock a block U from BLOCKED.  Apart from that, iterate all blocks
-   blocked by U in BLOCK_LISTS.  */
-
-static void
-unblock (const block_info *u, block_vector_t &blocked,
-	 vector<block_vector_t > &block_lists)
-{
-  block_vector_t::iterator it = find (blocked.begin (), blocked.end (), u);
-  if (it == blocked.end ())
-    return;
-
-  unsigned index = it - blocked.begin ();
-  blocked.erase (it);
-
-  block_vector_t to_unblock (block_lists[index]);
-
-  block_lists.erase (block_lists.begin () + index);
-
-  for (block_vector_t::iterator it = to_unblock.begin ();
-       it != to_unblock.end (); it++)
-    unblock (*it, blocked, block_lists);
-}
-
-/* Return true when PATH contains a zero cycle arc count.  */
-
-static bool
-path_contains_zero_or_negative_cycle_arc (arc_vector_t &path)
-{
-  for (unsigned i = 0; i < path.size (); i++)
-    if (path[i]->cs_count <= 0)
-      return true;
-  return false;
-}
-
-/* Find circuit going to block V, PATH is provisional seen cycle.
-   BLOCKED is vector of blocked vertices, BLOCK_LISTS contains vertices
-   blocked by a block.  COUNT is accumulated count of the current LINE.
-   Returns what type of loop it contains.  */
-
-static bool
-circuit (block_info *v, arc_vector_t &path, block_info *start,
-	 block_vector_t &blocked, vector<block_vector_t> &block_lists,
-	 line_info &linfo, int64_t &count)
-{
-  bool loop_found = false;
-
-  /* Add v to the block list.  */
-  gcc_assert (find (blocked.begin (), blocked.end (), v) == blocked.end ());
-  blocked.push_back (v);
-  block_lists.push_back (block_vector_t ());
-
-  for (arc_info *arc = v->succ; arc; arc = arc->succ_next)
-    {
-      block_info *w = arc->dst;
-      if (w < start
-	  || arc->cs_count <= 0
-	  || !linfo.has_block (w))
-	continue;
-
-      path.push_back (arc);
-      if (w == start)
-	{
-	  /* Cycle has been found.  */
-	  handle_cycle (path, count);
-	  loop_found = true;
-	}
-      else if (!path_contains_zero_or_negative_cycle_arc (path)
-	       &&  find (blocked.begin (), blocked.end (), w) == blocked.end ())
-	loop_found |= circuit (w, path, start, blocked, block_lists, linfo,
-			       count);
-
-      path.pop_back ();
-    }
-
-  if (loop_found)
-    unblock (v, blocked, block_lists);
-  else
-    for (arc_info *arc = v->succ; arc; arc = arc->succ_next)
-      {
-	block_info *w = arc->dst;
-	if (w < start
-	    || arc->cs_count <= 0
-	    || !linfo.has_block (w))
-	  continue;
-
-	size_t index
-	  = find (blocked.begin (), blocked.end (), w) - blocked.begin ();
-	gcc_assert (index < blocked.size ());
-	block_vector_t &list = block_lists[index];
-	if (find (list.begin (), list.end (), v) == list.end ())
-	  list.push_back (v);
-      }
-
-  return loop_found;
-}
-
-/* Find cycles for a LINFO.  */
-
-static gcov_type
-get_cycles_count (line_info &linfo)
-{
-  /* Note that this algorithm works even if blocks aren't in sorted order.
-     Each iteration of the circuit detection is completely independent
-     (except for reducing counts, but that shouldn't matter anyways).
-     Therefore, operating on a permuted order (i.e., non-sorted) only
-     has the effect of permuting the output cycles.  */
-
-  bool loop_found = false;
-  gcov_type count = 0;
-  for (vector<block_info *>::iterator it = linfo.blocks.begin ();
-       it != linfo.blocks.end (); it++)
-    {
-      arc_vector_t path;
-      block_vector_t blocked;
-      vector<block_vector_t > block_lists;
-      loop_found |= circuit (*it, path, *it, blocked, block_lists, linfo,
-			     count);
-    }
-
-  return count;
-}
 
 int
 main (int argc, char **argv)
 {
   int argno;
-  int first_arg;
-  const char *p;
-
-  p = argv[0] + strlen (argv[0]);
-  while (p != argv[0] && !IS_DIR_SEPARATOR (p[-1]))
-    --p;
-  progname = p;
-
-  xmalloc_set_program_name (progname);
 
   /* Unlock the stdio streams.  */
   unlock_std_streams ();
 
   gcc_init_libintl ();
-
-  diagnostic_initialize (global_dc, 0);
 
   /* Handle response files.  */
   expandargv (&argc, &argv);
@@ -852,24 +371,24 @@ main (int argc, char **argv)
   if (argc - argno > 1)
     multiple_files = 1;
 
-  first_arg = argno;
-
   for (; argno != argc; argno++)
-    {
-      if (flag_display_progress)
-	printf ("Processing file %d out of %d\n", argno - first_arg + 1,
-		argc - first_arg);
-      process_file (argv[argno]);
+    process_file (argv[argno]);
 
-      if (flag_json_format || argno == argc - 1)
-	{
-	  process_all_functions ();
-	  generate_results (argv[argno]);
-	  release_structures ();
-	}
-    }
+  generate_results (multiple_files ? NULL : argv[argc - 1]);
+
+  release_structures ();
 
   return 0;
+}
+
+static void
+fnotice (FILE *file, const char *cmsgid, ...)
+{
+  va_list ap;
+
+  va_start (ap, cmsgid);
+  vfprintf (file, _(cmsgid), ap);
+  va_end (ap);
 }
 
 /* Print a usage message and exit.  If ERROR_P is nonzero, this is an error,
@@ -881,32 +400,21 @@ print_usage (int error_p)
   FILE *file = error_p ? stderr : stdout;
   int status = error_p ? FATAL_EXIT_CODE : SUCCESS_EXIT_CODE;
 
-  fnotice (file, "Usage: gcov [OPTION...] SOURCE|OBJ...\n\n");
+  fnotice (file, "Usage: gcov [OPTION]... SOURCEFILE...\n\n");
   fnotice (file, "Print code coverage information.\n\n");
+  fnotice (file, "  -h, --help                      Print this help, then exit\n");
+  fnotice (file, "  -v, --version                   Print version number, then exit\n");
   fnotice (file, "  -a, --all-blocks                Show information for every basic block\n");
   fnotice (file, "  -b, --branch-probabilities      Include branch probabilities in output\n");
-  fnotice (file, "  -c, --branch-counts             Output counts of branches taken\n\
+  fnotice (file, "  -c, --branch-counts             Given counts of branches taken\n\
                                     rather than percentages\n");
-  fnotice (file, "  -d, --display-progress          Display progress information\n");
-  fnotice (file, "  -f, --function-summaries        Output summaries for each function\n");
-  fnotice (file, "  -h, --help                      Print this help, then exit\n");
-  fnotice (file, "  -i, --json-format               Output JSON intermediate format into .gcov.json.gz file\n");
-  fnotice (file, "  -j, --human-readable            Output human readable numbers\n");
-  fnotice (file, "  -k, --use-colors                Emit colored output\n");
+  fnotice (file, "  -n, --no-output                 Do not create an output file\n");
   fnotice (file, "  -l, --long-file-names           Use long output file names for included\n\
                                     source files\n");
-  fnotice (file, "  -m, --demangled-names           Output demangled function names\n");
-  fnotice (file, "  -n, --no-output                 Do not create an output file\n");
+  fnotice (file, "  -f, --function-summaries        Output summaries for each function\n");
   fnotice (file, "  -o, --object-directory DIR|FILE Search for object files in DIR or called FILE\n");
   fnotice (file, "  -p, --preserve-paths            Preserve all pathname components\n");
-  fnotice (file, "  -q, --use-hotness-colors        Emit perf-like colored output for hot lines\n");
-  fnotice (file, "  -r, --relative-only             Only show data for relative sources\n");
-  fnotice (file, "  -s, --source-prefix DIR         Source prefix to elide\n");
-  fnotice (file, "  -t, --stdout                    Output to stdout instead of a file\n");
   fnotice (file, "  -u, --unconditional-branches    Show unconditional branch counts too\n");
-  fnotice (file, "  -v, --version                   Print version number, then exit\n");
-  fnotice (file, "  -w, --verbose                   Print verbose informations\n");
-  fnotice (file, "  -x, --hash-filenames            Hash long pathnames\n");
   fnotice (file, "\nFor bug reporting instructions, please see:\n%s.\n",
 	   bug_report_url);
   exit (status);
@@ -918,7 +426,7 @@ static void
 print_version (void)
 {
   fnotice (stdout, "gcov %s%s\n", pkgversion_string, version_string);
-  fprintf (stdout, "Copyright %s 2019 Free Software Foundation, Inc.\n",
+  fprintf (stdout, "Copyright %s 2010 Free Software Foundation, Inc.\n",
 	   _("(C)"));
   fnotice (stdout,
 	   _("This is free software; see the source for copying conditions.\n"
@@ -931,27 +439,16 @@ static const struct option options[] =
 {
   { "help",                 no_argument,       NULL, 'h' },
   { "version",              no_argument,       NULL, 'v' },
-  { "verbose",              no_argument,       NULL, 'w' },
   { "all-blocks",           no_argument,       NULL, 'a' },
   { "branch-probabilities", no_argument,       NULL, 'b' },
   { "branch-counts",        no_argument,       NULL, 'c' },
-  { "json-format",	    no_argument,       NULL, 'i' },
-  { "human-readable",	    no_argument,       NULL, 'j' },
   { "no-output",            no_argument,       NULL, 'n' },
   { "long-file-names",      no_argument,       NULL, 'l' },
   { "function-summaries",   no_argument,       NULL, 'f' },
-  { "demangled-names",      no_argument,       NULL, 'm' },
   { "preserve-paths",       no_argument,       NULL, 'p' },
-  { "relative-only",        no_argument,       NULL, 'r' },
   { "object-directory",     required_argument, NULL, 'o' },
   { "object-file",          required_argument, NULL, 'o' },
-  { "source-prefix",        required_argument, NULL, 's' },
-  { "stdout",		    no_argument,       NULL, 't' },
   { "unconditional-branches", no_argument,     NULL, 'u' },
-  { "display-progress",     no_argument,       NULL, 'd' },
-  { "hash-filenames",	    no_argument,       NULL, 'x' },
-  { "use-colors",	    no_argument,       NULL, 'k' },
-  { "use-hotness-colors",   no_argument,       NULL, 'q' },
   { 0, 0, 0, 0 }
 };
 
@@ -962,8 +459,7 @@ process_args (int argc, char **argv)
 {
   int opt;
 
-  const char *opts = "abcdfhijklmno:pqrs:tuvwx";
-  while ((opt = getopt_long (argc, argv, opts, options, NULL)) != -1)
+  while ((opt = getopt_long (argc, argv, "abcfhlno:puv", options, NULL)) != -1)
     {
       switch (opt)
 	{
@@ -985,52 +481,17 @@ process_args (int argc, char **argv)
 	case 'l':
 	  flag_long_names = 1;
 	  break;
-	case 'j':
-	  flag_human_readable_numbers = 1;
-	  break;
-	case 'k':
-	  flag_use_colors = 1;
-	  break;
-	case 'q':
-	  flag_use_hotness_colors = 1;
-	  break;
-	case 'm':
-	  flag_demangled_names = 1;
-	  break;
 	case 'n':
 	  flag_gcov_file = 0;
 	  break;
 	case 'o':
 	  object_directory = optarg;
 	  break;
-	case 's':
-	  source_prefix = optarg;
-	  source_length = strlen (source_prefix);
-	  break;
-	case 'r':
-	  flag_relative_only = 1;
-	  break;
 	case 'p':
 	  flag_preserve_paths = 1;
 	  break;
 	case 'u':
 	  flag_unconditional = 1;
-	  break;
-	case 'i':
-	  flag_json_format = 1;
-	  flag_gcov_file = 1;
-	  break;
-	case 'd':
-	  flag_display_progress = 1;
-	  break;
-	case 'x':
-	  flag_hash_filenames = 1;
-	  break;
-	case 'w':
-	  flag_verbose = 1;
-	  break;
-	case 't':
-	  flag_use_stdout = 1;
 	  break;
 	case 'v':
 	  print_version ();
@@ -1044,464 +505,88 @@ process_args (int argc, char **argv)
   return optind;
 }
 
-/* Output intermediate LINE sitting on LINE_NUM to JSON OBJECT.
-   Add FUNCTION_NAME to the LINE.  */
-
-static void
-output_intermediate_json_line (json::array *object,
-			       line_info *line, unsigned line_num,
-			       const char *function_name)
-{
-  if (!line->exists)
-    return;
-
-  json::object *lineo = new json::object ();
-  lineo->set ("line_number", new json::number (line_num));
-  if (function_name != NULL)
-    lineo->set ("function_name", new json::string (function_name));
-  lineo->set ("count", new json::number (line->count));
-  lineo->set ("unexecuted_block",
-	      new json::literal (line->has_unexecuted_block));
-
-  json::array *branches = new json::array ();
-  lineo->set ("branches", branches);
-
-  vector<arc_info *>::const_iterator it;
-  if (flag_branches)
-    for (it = line->branches.begin (); it != line->branches.end ();
-	 it++)
-      {
-	if (!(*it)->is_unconditional && !(*it)->is_call_non_return)
-	  {
-	    json::object *branch = new json::object ();
-	    branch->set ("count", new json::number ((*it)->count));
-	    branch->set ("throw", new json::literal ((*it)->is_throw));
-	    branch->set ("fallthrough",
-			 new json::literal ((*it)->fall_through));
-	    branches->append (branch);
-	  }
-      }
-
-  object->append (lineo);
-}
-
-/* Get the name of the gcov file.  The return value must be free'd.
-
-   It appends the '.gcov' extension to the *basename* of the file.
-   The resulting file name will be in PWD.
-
-   e.g.,
-   input: foo.da,       output: foo.da.gcov
-   input: a/b/foo.cc,   output: foo.cc.gcov  */
-
-static char *
-get_gcov_intermediate_filename (const char *file_name)
-{
-  const char *gcov = ".gcov.json.gz";
-  char *result;
-  const char *cptr;
-
-  /* Find the 'basename'.  */
-  cptr = lbasename (file_name);
-
-  result = XNEWVEC (char, strlen (cptr) + strlen (gcov) + 1);
-  sprintf (result, "%s%s", cptr, gcov);
-
-  return result;
-}
-
-/* Output the result in JSON intermediate format.
-   Source info SRC is dumped into JSON_FILES which is JSON array.  */
-
-static void
-output_json_intermediate_file (json::array *json_files, source_info *src)
-{
-  json::object *root = new json::object ();
-  json_files->append (root);
-
-  root->set ("file", new json::string (src->name));
-
-  json::array *functions = new json::array ();
-  root->set ("functions", functions);
-
-  std::sort (src->functions.begin (), src->functions.end (),
-	     function_line_start_cmp ());
-  for (vector<function_info *>::iterator it = src->functions.begin ();
-       it != src->functions.end (); it++)
-    {
-      json::object *function = new json::object ();
-      function->set ("name", new json::string ((*it)->m_name));
-      function->set ("demangled_name",
-		     new json::string ((*it)->get_demangled_name ()));
-      function->set ("start_line", new json::number ((*it)->start_line));
-      function->set ("start_column", new json::number ((*it)->start_column));
-      function->set ("end_line", new json::number ((*it)->end_line));
-      function->set ("end_column", new json::number ((*it)->end_column));
-      function->set ("blocks",
-		     new json::number ((*it)->get_block_count ()));
-      function->set ("blocks_executed",
-		     new json::number ((*it)->blocks_executed));
-      function->set ("execution_count",
-		     new json::number ((*it)->blocks[0].count));
-
-      functions->append (function);
-    }
-
-  json::array *lineso = new json::array ();
-  root->set ("lines", lineso);
-
-  function_info *last_non_group_fn = NULL;
-
-  for (unsigned line_num = 1; line_num <= src->lines.size (); line_num++)
-    {
-      vector<function_info *> *fns = src->get_functions_at_location (line_num);
-
-      if (fns != NULL)
-	/* Print first group functions that begin on the line.  */
-	for (vector<function_info *>::iterator it2 = fns->begin ();
-	     it2 != fns->end (); it2++)
-	  {
-	    if (!(*it2)->is_group)
-	      last_non_group_fn = *it2;
-
-	    vector<line_info> &lines = (*it2)->lines;
-	    for (unsigned i = 0; i < lines.size (); i++)
-	      {
-		line_info *line = &lines[i];
-		output_intermediate_json_line (lineso, line, line_num + i,
-					       (*it2)->m_name);
-	      }
-	  }
-
-      /* Follow with lines associated with the source file.  */
-      if (line_num < src->lines.size ())
-	output_intermediate_json_line (lineso, &src->lines[line_num], line_num,
-				       (last_non_group_fn != NULL
-					? last_non_group_fn->m_name : NULL));
-    }
-}
-
-/* Function start pair.  */
-struct function_start
-{
-  unsigned source_file_idx;
-  unsigned start_line;
-};
-
-/* Traits class for function start hash maps below.  */
-
-struct function_start_pair_hash : typed_noop_remove <function_start>
-{
-  typedef function_start value_type;
-  typedef function_start compare_type;
-
-  static hashval_t
-  hash (const function_start &ref)
-  {
-    inchash::hash hstate (0);
-    hstate.add_int (ref.source_file_idx);
-    hstate.add_int (ref.start_line);
-    return hstate.end ();
-  }
-
-  static bool
-  equal (const function_start &ref1, const function_start &ref2)
-  {
-    return (ref1.source_file_idx == ref2.source_file_idx
-	    && ref1.start_line == ref2.start_line);
-  }
-
-  static void
-  mark_deleted (function_start &ref)
-  {
-    ref.start_line = ~1U;
-  }
-
-  static void
-  mark_empty (function_start &ref)
-  {
-    ref.start_line = ~2U;
-  }
-
-  static bool
-  is_deleted (const function_start &ref)
-  {
-    return ref.start_line == ~1U;
-  }
-
-  static bool
-  is_empty (const function_start &ref)
-  {
-    return ref.start_line == ~2U;
-  }
-};
-
-/* Process a single input file.  */
+/* Process a single source file.  */
 
 static void
 process_file (const char *file_name)
 {
+  function_t *fn;
+  function_t *fn_p;
+  function_t *old_functions;
+
+  /* Save and clear the list of current functions.  They will be appended
+     later.  */
+  old_functions = functions;
+  functions = NULL;
+
   create_file_names (file_name);
+  if (read_graph_file ())
+    return;
 
-  for (unsigned i = 0; i < processed_files.size (); i++)
-    if (strcmp (da_file_name, processed_files[i]) == 0)
-      {
-	fnotice (stderr, "'%s' file is already processed\n",
-		 file_name);
-	return;
-      }
-
-  processed_files.push_back (xstrdup (da_file_name));
-
-  read_graph_file ();
-  read_count_file ();
-}
-
-/* Process all functions in all files.  */
-
-static void
-process_all_functions (void)
-{
-  hash_map<function_start_pair_hash, function_info *> fn_map;
-
-  /* Identify group functions.  */
-  for (vector<function_info *>::iterator it = functions.begin ();
-       it != functions.end (); it++)
-    if (!(*it)->artificial)
-      {
-	function_start needle;
-	needle.source_file_idx = (*it)->src;
-	needle.start_line = (*it)->start_line;
-
-	function_info **slot = fn_map.get (needle);
-	if (slot)
-	  {
-	    (*slot)->is_group = 1;
-	    (*it)->is_group = 1;
-	  }
-	else
-	  fn_map.put (needle, *it);
-      }
-
-  /* Remove all artificial function.  */
-  functions.erase (remove_if (functions.begin (), functions.end (),
-			      function_info::is_artificial), functions.end ());
-
-  for (vector<function_info *>::iterator it = functions.begin ();
-       it != functions.end (); it++)
+  if (!functions)
     {
-      function_info *fn = *it;
-      unsigned src = fn->src;
-
-      if (!fn->counts.empty () || no_data_file)
-	{
-	  source_info *s = &sources[src];
-	  s->add_function (fn);
-
-	  /* Mark last line in files touched by function.  */
-	  for (unsigned block_no = 0; block_no != fn->blocks.size ();
-	       block_no++)
-	    {
-	      block_info *block = &fn->blocks[block_no];
-	      for (unsigned i = 0; i < block->locations.size (); i++)
-		{
-		  /* Sort lines of locations.  */
-		  sort (block->locations[i].lines.begin (),
-			block->locations[i].lines.end ());
-
-		  if (!block->locations[i].lines.empty ())
-		    {
-		      s = &sources[block->locations[i].source_file_idx];
-		      unsigned last_line
-			= block->locations[i].lines.back ();
-
-		      /* Record new lines for the function.  */
-		      if (last_line >= s->lines.size ())
-			{
-			  s = &sources[block->locations[i].source_file_idx];
-			  unsigned last_line
-			    = block->locations[i].lines.back ();
-
-			  /* Record new lines for the function.  */
-			  if (last_line >= s->lines.size ())
-			    {
-			      /* Record new lines for a source file.  */
-			      s->lines.resize (last_line + 1);
-			    }
-			}
-		    }
-		}
-	    }
-
-	  /* Allocate lines for group function, following start_line
-	     and end_line information of the function.  */
-	  if (fn->is_group)
-	    fn->lines.resize (fn->end_line - fn->start_line + 1);
-
-	  solve_flow_graph (fn);
-	  if (fn->has_catch)
-	    find_exception_blocks (fn);
-	}
-      else
-	{
-	  /* The function was not in the executable -- some other
-	     instance must have been selected.  */
-	}
+      fnotice (stderr, "%s:no functions found\n", bbg_file_name);
+      return;
     }
-}
 
-static void
-output_gcov_file (const char *file_name, source_info *src)
-{
-  char *gcov_file_name = make_gcov_file_name (file_name, src->coverage.name);
+  if (read_count_file ())
+    return;
 
-  if (src->coverage.lines)
-    {
-      FILE *gcov_file = fopen (gcov_file_name, "w");
-      if (gcov_file)
-	{
-	  fnotice (stdout, "Creating '%s'\n", gcov_file_name);
-	  output_lines (gcov_file, src);
-	  if (ferror (gcov_file))
-	    fnotice (stderr, "Error writing output file '%s'\n",
-		     gcov_file_name);
-	  fclose (gcov_file);
-	}
-      else
-	fnotice (stderr, "Could not open output file '%s'\n", gcov_file_name);
-    }
-  else
-    {
-      unlink (gcov_file_name);
-      fnotice (stdout, "Removing '%s'\n", gcov_file_name);
-    }
-  free (gcov_file_name);
+  for (fn_p = NULL, fn = functions; fn; fn_p = fn, fn = fn->next)
+    solve_flow_graph (fn);
+
+  if (fn_p)
+    fn_p->next = old_functions;
 }
 
 static void
 generate_results (const char *file_name)
 {
-  char *gcov_intermediate_filename;
+  source_t *src;
+  function_t *fn;
 
-  for (vector<function_info *>::iterator it = functions.begin ();
-       it != functions.end (); it++)
+  for (src = sources; src; src = src->next)
+    src->lines = XCNEWVEC (line_t, src->num_lines);
+  for (fn = functions; fn; fn = fn->next)
     {
-      function_info *fn = *it;
-      coverage_info coverage;
+      coverage_t coverage;
 
       memset (&coverage, 0, sizeof (coverage));
-      coverage.name = fn->get_name ();
+      coverage.name = fn->name;
       add_line_counts (flag_function_summary ? &coverage : NULL, fn);
       if (flag_function_summary)
 	{
-	  function_summary (&coverage);
+	  function_summary (&coverage, "Function");
 	  fnotice (stdout, "\n");
 	}
     }
 
-  name_map needle;
-
-  if (file_name)
+  for (src = sources; src; src = src->next)
     {
-      needle.name = file_name;
-      vector<name_map>::iterator it = std::find (names.begin (), names.end (),
-						 needle);
-      if (it != names.end ())
-	file_name = sources[it->src].coverage.name;
-      else
-	file_name = canonicalize_name (file_name);
-    }
-
-  gcov_intermediate_filename = get_gcov_intermediate_filename (file_name);
-
-  json::object *root = new json::object ();
-  root->set ("format_version", new json::string ("1"));
-  root->set ("gcc_version", new json::string (version_string));
-
-  if (bbg_cwd != NULL)
-    root->set ("current_working_directory", new json::string (bbg_cwd));
-  root->set ("data_file", new json::string (file_name));
-
-  json::array *json_files = new json::array ();
-  root->set ("files", json_files);
-
-  for (vector<source_info>::iterator it = sources.begin ();
-       it != sources.end (); it++)
-    {
-      source_info *src = &(*it);
-      if (flag_relative_only)
-	{
-	  /* Ignore this source, if it is an absolute path (after
-	     source prefix removal).  */
-	  char first = src->coverage.name[0];
-
-#if HAVE_DOS_BASED_FILE_SYSTEM
-	  if (first && src->coverage.name[1] == ':')
-	    first = src->coverage.name[2];
-#endif
-	  if (IS_DIR_SEPARATOR (first))
-	    continue;
-	}
-
       accumulate_line_counts (src);
-
-      if (!flag_use_stdout)
-	file_summary (&src->coverage);
-      total_lines += src->coverage.lines;
-      total_executed += src->coverage.lines_executed;
+      function_summary (&src->coverage, "File");
       if (flag_gcov_file)
 	{
-	  if (flag_json_format)
-	    output_json_intermediate_file (json_files, src);
+	  char *gcov_file_name = make_gcov_file_name (file_name, src->name);
+	  FILE *gcov_file = fopen (gcov_file_name, "w");
+
+	  if (gcov_file)
+	    {
+	      fnotice (stdout, "%s:creating '%s'\n",
+		       src->name, gcov_file_name);
+	      output_lines (gcov_file, src);
+	      if (ferror (gcov_file))
+		    fnotice (stderr, "%s:error writing output file '%s'\n",
+			     src->name, gcov_file_name);
+	      fclose (gcov_file);
+	    }
 	  else
-	    {
-	      if (flag_use_stdout)
-		{
-		  if (src->coverage.lines)
-		    output_lines (stdout, src);
-		}
-	      else
-		{
-		  output_gcov_file (file_name, src);
-		  fnotice (stdout, "\n");
-		}
-	    }
+	    fnotice (stderr, "%s:could not open output file '%s'\n",
+		     src->name, gcov_file_name);
+	  free (gcov_file_name);
 	}
+      fnotice (stdout, "\n");
     }
-
-  if (flag_gcov_file && flag_json_format)
-    {
-      if (flag_use_stdout)
-	{
-	  root->dump (stdout);
-	  printf ("\n");
-	}
-      else
-	{
-	  pretty_printer pp;
-	  root->print (&pp);
-	  pp_formatted_text (&pp);
-
-	  gzFile output = gzopen (gcov_intermediate_filename, "w");
-	  if (output == NULL)
-	    {
-	      fnotice (stderr, "Cannot open JSON output file %s\n",
-		       gcov_intermediate_filename);
-	      return;
-	    }
-
-	  if (gzputs (output, pp_formatted_text (&pp)) == EOF
-	      || gzclose (output))
-	    {
-	      fnotice (stderr, "Error writing JSON output file %s\n",
-		       gcov_intermediate_filename);
-	      return;
-	    }
-	}
-    }
-
-  if (!file_name)
-    executed_summary (total_lines, total_executed);
 }
 
 /* Release all memory used.  */
@@ -1509,22 +594,45 @@ generate_results (const char *file_name)
 static void
 release_structures (void)
 {
-  for (vector<function_info *>::iterator it = functions.begin ();
-       it != functions.end (); it++)
-    delete (*it);
+  function_t *fn;
+  source_t *src;
 
-  sources.resize (0);
-  names.resize (0);
-  functions.resize (0);
-  ident_to_fn.clear ();
+  while ((src = sources))
+    {
+      sources = src->next;
+
+      free (src->name);
+      free (src->lines);
+    }
+
+  while ((fn = functions))
+    {
+      unsigned ix;
+      block_t *block;
+
+      functions = fn->next;
+      for (ix = fn->num_blocks, block = fn->blocks; ix--; block++)
+	{
+	  arc_t *arc, *arc_n;
+
+	  for (arc = block->succ; arc; arc = arc_n)
+	    {
+	      arc_n = arc->succ_next;
+	      free (arc);
+	    }
+	}
+      free (fn->blocks);
+      free (fn->counts);
+    }
 }
 
-/* Generate the names of the graph and data files.  If OBJECT_DIRECTORY
-   is not specified, these are named from FILE_NAME sans extension.  If
-   OBJECT_DIRECTORY is specified and is a directory, the files are in that
-   directory, but named from the basename of the FILE_NAME, sans extension.
-   Otherwise OBJECT_DIRECTORY is taken to be the name of the object *file*
-   and the data files are named from that.  */
+/* Generate the names of the graph and data files. If OBJECT_DIRECTORY
+   is not specified, these are looked for in the current directory,
+   and named from the basename of the FILE_NAME sans extension. If
+   OBJECT_DIRECTORY is specified and is a directory, the files are in
+   that directory, but named from the basename of the FILE_NAME, sans
+   extension. Otherwise OBJECT_DIRECTORY is taken to be the name of
+   the object *file*, and the data files are named from that.  */
 
 static void
 create_file_names (const char *file_name)
@@ -1535,8 +643,10 @@ create_file_names (const char *file_name)
   int base;
 
   /* Free previous file names.  */
-  free (bbg_file_name);
-  free (da_file_name);
+  if (bbg_file_name)
+    free (bbg_file_name);
+  if (da_file_name)
+    free (da_file_name);
   da_file_name = bbg_file_name = NULL;
   bbg_file_time = 0;
   bbg_stamp = 0;
@@ -1551,14 +661,14 @@ create_file_names (const char *file_name)
 
       base = !stat (object_directory, &status) && S_ISDIR (status.st_mode);
       strcat (name, object_directory);
-      if (base && (!IS_DIR_SEPARATOR (name[strlen (name) - 1])))
+      if (base && (! IS_DIR_SEPARATOR (name[strlen (name) - 1])))
 	strcat (name, "/");
     }
   else
     {
       name = XNEWVEC (char, length + 1);
-      strcpy (name, file_name);
-      base = 0;
+      name[0] = 0;
+      base = 1;
     }
 
   if (base)
@@ -1569,7 +679,7 @@ create_file_names (const char *file_name)
     }
 
   /* Remove the extension.  */
-  cptr = strrchr (CONST_CAST (char *, lbasename (name)), '.');
+  cptr = strrchr (name, '.');
   if (cptr)
     *cptr = 0;
 
@@ -1590,110 +700,74 @@ create_file_names (const char *file_name)
 /* Find or create a source file structure for FILE_NAME. Copies
    FILE_NAME on creation */
 
-static unsigned
+static source_t *
 find_source (const char *file_name)
 {
-  char *canon;
-  unsigned idx;
+  source_t *src;
   struct stat status;
 
   if (!file_name)
     file_name = "<unknown>";
 
-  name_map needle;
-  needle.name = file_name;
+  for (src = sources; src; src = src->next)
+    if (!strcmp (file_name, src->name))
+      break;
 
-  vector<name_map>::iterator it = std::find (names.begin (), names.end (),
-					     needle);
-  if (it != names.end ())
+  if (!src)
     {
-      idx = it->src;
-      goto check_date;
-    }
-
-  /* Not found, try the canonical name. */
-  canon = canonicalize_name (file_name);
-  needle.name = canon;
-  it = std::find (names.begin (), names.end (), needle);
-  if (it == names.end ())
-    {
-      /* Not found with canonical name, create a new source.  */
-      source_info *src;
-
-      idx = sources.size ();
-      needle = name_map (canon, idx);
-      names.push_back (needle);
-
-      sources.push_back (source_info ());
-      src = &sources.back ();
-      src->name = canon;
+      src = XCNEW (source_t);
+      src->name = xstrdup (file_name);
       src->coverage.name = src->name;
-      src->index = idx;
-      if (source_length
-#if HAVE_DOS_BASED_FILE_SYSTEM
-	  /* You lose if separators don't match exactly in the
-	     prefix.  */
-	  && !strncasecmp (source_prefix, src->coverage.name, source_length)
-#else
-	  && !strncmp (source_prefix, src->coverage.name, source_length)
-#endif
-	  && IS_DIR_SEPARATOR (src->coverage.name[source_length]))
-	src->coverage.name += source_length + 1;
-      if (!stat (src->name, &status))
+      src->index = source_index++;
+      src->next = sources;
+      sources = src;
+
+      if (!stat (file_name, &status))
 	src->file_time = status.st_mtime;
     }
-  else
-    idx = it->src;
 
-  needle.name = file_name;
-  if (std::find (names.begin (), names.end (), needle) == names.end ())
-    {
-      /* Append the non-canonical name.  */
-      names.push_back (name_map (xstrdup (file_name), idx));
-    }
-
-  /* Resort the name map.  */
-  std::sort (names.begin (), names.end ());
-
- check_date:
-  if (sources[idx].file_time > bbg_file_time)
+  if (src->file_time > bbg_file_time)
     {
       static int info_emitted;
 
-      fnotice (stderr, "%s:source file is newer than notes file '%s'\n",
-	       file_name, bbg_file_name);
+      fnotice (stderr, "%s:source file is newer than graph file '%s'\n",
+	       src->name, bbg_file_name);
       if (!info_emitted)
 	{
 	  fnotice (stderr,
-		   "(the message is displayed only once per source file)\n");
+		   "(the message is only displayed one per source file)\n");
 	  info_emitted = 1;
 	}
-      sources[idx].file_time = 0;
+      src->file_time = 0;
     }
 
-  return idx;
+  return src;
 }
 
-/* Read the notes file.  Save functions to FUNCTIONS global vector.  */
+/* Read the graph file. Return nonzero on fatal error.  */
 
-static void
+static int
 read_graph_file (void)
 {
   unsigned version;
   unsigned current_tag = 0;
+  struct function_info *fn = NULL;
+  function_t *old_functions_head = functions;
+  source_t *src = NULL;
+  unsigned ix;
   unsigned tag;
 
   if (!gcov_open (bbg_file_name, 1))
     {
-      fnotice (stderr, "%s:cannot open notes file\n", bbg_file_name);
-      return;
+      fnotice (stderr, "%s:cannot open graph file\n", bbg_file_name);
+      return 1;
     }
   bbg_file_time = gcov_time ();
   if (!gcov_magic (gcov_read_unsigned (), GCOV_NOTE_MAGIC))
     {
-      fnotice (stderr, "%s:not a gcov notes file\n", bbg_file_name);
+      fnotice (stderr, "%s:not a gcov graph file\n", bbg_file_name);
       gcov_close ();
-      return;
+      return 1;
     }
 
   version = gcov_read_unsigned ();
@@ -1708,10 +782,7 @@ read_graph_file (void)
 	       bbg_file_name, v, e);
     }
   bbg_stamp = gcov_read_unsigned ();
-  bbg_cwd = xstrdup (gcov_read_string ());
-  bbg_supports_has_unexecuted_blocks = gcov_read_unsigned ();
 
-  function_info *fn = NULL;
   while ((tag = gcov_read_unsigned ()))
     {
       unsigned length = gcov_read_unsigned ();
@@ -1720,68 +791,77 @@ read_graph_file (void)
       if (tag == GCOV_TAG_FUNCTION)
 	{
 	  char *function_name;
-	  unsigned ident;
-	  unsigned lineno_checksum, cfg_checksum;
+	  unsigned ident, checksum, lineno;
+	  source_t *src;
+	  function_t *probe, *prev;
 
 	  ident = gcov_read_unsigned ();
-	  lineno_checksum = gcov_read_unsigned ();
-	  cfg_checksum = gcov_read_unsigned ();
+	  checksum = gcov_read_unsigned ();
 	  function_name = xstrdup (gcov_read_string ());
-	  unsigned artificial = gcov_read_unsigned ();
-	  unsigned src_idx = find_source (gcov_read_string ());
-	  unsigned start_line = gcov_read_unsigned ();
-	  unsigned start_column = gcov_read_unsigned ();
-	  unsigned end_line = gcov_read_unsigned ();
-	  unsigned end_column = gcov_read_unsigned ();
+	  src = find_source (gcov_read_string ());
+	  lineno = gcov_read_unsigned ();
 
-	  fn = new function_info ();
-	  functions.push_back (fn);
-	  ident_to_fn[ident] = fn;
-
-	  fn->m_name = function_name;
+	  fn = XCNEW (function_t);
+	  fn->name = function_name;
 	  fn->ident = ident;
-	  fn->lineno_checksum = lineno_checksum;
-	  fn->cfg_checksum = cfg_checksum;
-	  fn->src = src_idx;
-	  fn->start_line = start_line;
-	  fn->start_column = start_column;
-	  fn->end_line = end_line;
-	  fn->end_column = end_column;
-	  fn->artificial = artificial;
+	  fn->checksum = checksum;
+	  fn->src = src;
+	  fn->line = lineno;
 
+	  fn->next = functions;
+	  functions = fn;
 	  current_tag = tag;
+
+	  if (lineno >= src->num_lines)
+	    src->num_lines = lineno + 1;
+	  /* Now insert it into the source file's list of
+	     functions. Normally functions will be encountered in
+	     ascending order, so a simple scan is quick.  */
+	  for (probe = src->functions, prev = NULL;
+	       probe && probe->line > lineno;
+	       prev = probe, probe = probe->line_next)
+	    continue;
+	  fn->line_next = probe;
+	  if (prev)
+	    prev->line_next = fn;
+	  else
+	    src->functions = fn;
 	}
       else if (fn && tag == GCOV_TAG_BLOCKS)
 	{
-	  if (!fn->blocks.empty ())
+	  if (fn->blocks)
 	    fnotice (stderr, "%s:already seen blocks for '%s'\n",
-		     bbg_file_name, fn->get_name ());
+		     bbg_file_name, fn->name);
 	  else
-	    fn->blocks.resize (gcov_read_unsigned ());
+	    {
+	      unsigned ix, num_blocks = GCOV_TAG_BLOCKS_NUM (length);
+	      fn->num_blocks = num_blocks;
+
+	      fn->blocks = XCNEWVEC (block_t, fn->num_blocks);
+	      for (ix = 0; ix != num_blocks; ix++)
+		fn->blocks[ix].flags = gcov_read_unsigned ();
+	    }
 	}
       else if (fn && tag == GCOV_TAG_ARCS)
 	{
 	  unsigned src = gcov_read_unsigned ();
-	  fn->blocks[src].id = src;
 	  unsigned num_dests = GCOV_TAG_ARCS_NUM (length);
-	  block_info *src_blk = &fn->blocks[src];
-	  unsigned mark_catches = 0;
-	  struct arc_info *arc;
 
-	  if (src >= fn->blocks.size () || fn->blocks[src].succ)
+	  if (src >= fn->num_blocks || fn->blocks[src].succ)
 	    goto corrupt;
 
 	  while (num_dests--)
 	    {
+	      struct arc_info *arc;
 	      unsigned dest = gcov_read_unsigned ();
 	      unsigned flags = gcov_read_unsigned ();
 
-	      if (dest >= fn->blocks.size ())
+	      if (dest >= fn->num_blocks)
 		goto corrupt;
-	      arc = XCNEW (arc_info);
+	      arc = XCNEW (arc_t);
 
 	      arc->dst = &fn->blocks[dest];
-	      arc->src = src_blk;
+	      arc->src = &fn->blocks[src];
 
 	      arc->count = 0;
 	      arc->count_valid = 0;
@@ -1789,9 +869,9 @@ read_graph_file (void)
 	      arc->fake = !!(flags & GCOV_ARC_FAKE);
 	      arc->fall_through = !!(flags & GCOV_ARC_FALLTHROUGH);
 
-	      arc->succ_next = src_blk->succ;
-	      src_blk->succ = arc;
-	      src_blk->num_succ++;
+	      arc->succ_next = fn->blocks[src].succ;
+	      fn->blocks[src].succ = arc;
+	      fn->blocks[src].num_succ++;
 
 	      arc->pred_next = fn->blocks[dest].pred;
 	      fn->blocks[dest].pred = arc;
@@ -1805,59 +885,59 @@ read_graph_file (void)
 			 source block must be a call.  */
 		      fn->blocks[src].is_call_site = 1;
 		      arc->is_call_non_return = 1;
-		      mark_catches = 1;
 		    }
 		  else
 		    {
 		      /* Non-local return from a callee of this
-			 function.  The destination block is a setjmp.  */
+		         function. The destination block is a catch or
+		         setjmp.  */
 		      arc->is_nonlocal_return = 1;
 		      fn->blocks[dest].is_nonlocal_return = 1;
 		    }
 		}
 
 	      if (!arc->on_tree)
-		fn->counts.push_back (0);
-	    }
-
-	  if (mark_catches)
-	    {
-	      /* We have a fake exit from this block.  The other
-		 non-fall through exits must be to catch handlers.
-		 Mark them as catch arcs.  */
-
-	      for (arc = src_blk->succ; arc; arc = arc->succ_next)
-		if (!arc->fake && !arc->fall_through)
-		  {
-		    arc->is_throw = 1;
-		    fn->has_catch = 1;
-		  }
+		fn->num_counts++;
 	    }
 	}
       else if (fn && tag == GCOV_TAG_LINES)
 	{
 	  unsigned blockno = gcov_read_unsigned ();
-	  block_info *block = &fn->blocks[blockno];
+	  unsigned *line_nos = XCNEWVEC (unsigned, length - 1);
 
-	  if (blockno >= fn->blocks.size ())
+	  if (blockno >= fn->num_blocks || fn->blocks[blockno].u.line.encoding)
 	    goto corrupt;
 
-	  while (true)
+	  for (ix = 0; ;  )
 	    {
 	      unsigned lineno = gcov_read_unsigned ();
 
 	      if (lineno)
-		block->locations.back ().lines.push_back (lineno);
+		{
+		  if (!ix)
+		    {
+		      line_nos[ix++] = 0;
+		      line_nos[ix++] = src->index;
+		    }
+		  line_nos[ix++] = lineno;
+		  if (lineno >= src->num_lines)
+		    src->num_lines = lineno + 1;
+		}
 	      else
 		{
 		  const char *file_name = gcov_read_string ();
 
 		  if (!file_name)
 		    break;
-		  block->locations.push_back (block_location_info
-					      (find_source (file_name)));
+		  src = find_source (file_name);
+
+		  line_nos[ix++] = 0;
+		  line_nos[ix++] = src->index;
 		}
 	    }
+
+	  fn->blocks[blockno].u.line.encoding = line_nos;
+	  fn->blocks[blockno].u.line.num = ix;
 	}
       else if (current_tag && !GCOV_TAG_IS_SUBTAG (current_tag, tag))
 	{
@@ -1869,13 +949,65 @@ read_graph_file (void)
 	{
 	corrupt:;
 	  fnotice (stderr, "%s:corrupted\n", bbg_file_name);
-	  break;
+	  gcov_close ();
+	  return 1;
 	}
     }
   gcov_close ();
 
-  if (functions.empty ())
-    fnotice (stderr, "%s:no functions found\n", bbg_file_name);
+  /* We built everything backwards, so nreverse them all.  */
+
+  /* Reverse sources. Not strictly necessary, but we'll then process
+     them in the 'expected' order.  */
+  {
+    source_t *src, *src_p, *src_n;
+
+    for (src_p = NULL, src = sources; src; src_p = src, src = src_n)
+      {
+	src_n = src->next;
+	src->next = src_p;
+      }
+    sources =  src_p;
+  }
+
+  /* Reverse functions.  */
+  {
+    function_t *fn, *fn_p, *fn_n;
+
+    for (fn_p = old_functions_head, fn = functions;
+	 fn != old_functions_head;
+	 fn_p = fn, fn = fn_n)
+      {
+	unsigned ix;
+
+	fn_n = fn->next;
+	fn->next = fn_p;
+
+	/* Reverse the arcs.  */
+	for (ix = fn->num_blocks; ix--;)
+	  {
+	    arc_t *arc, *arc_p, *arc_n;
+
+	    for (arc_p = NULL, arc = fn->blocks[ix].succ; arc;
+		 arc_p = arc, arc = arc_n)
+	      {
+		arc_n = arc->succ_next;
+		arc->succ_next = arc_p;
+	      }
+	    fn->blocks[ix].succ = arc_p;
+
+	    for (arc_p = NULL, arc = fn->blocks[ix].pred; arc;
+		 arc_p = arc, arc = arc_n)
+	      {
+		arc_n = arc->pred_next;
+		arc->pred_next = arc_p;
+	      }
+	    fn->blocks[ix].pred = arc_p;
+	  }
+      }
+    functions = fn_p;
+  }
+  return 0;
 }
 
 /* Reads profiles from the count file and attach to each
@@ -1887,9 +1019,8 @@ read_count_file (void)
   unsigned ix;
   unsigned version;
   unsigned tag;
-  function_info *fn = NULL;
+  function_t *fn = NULL;
   int error = 0;
-  map<unsigned, function_info *>::iterator it;
 
   if (!gcov_open (da_file_name, 1))
     {
@@ -1919,7 +1050,7 @@ read_count_file (void)
   tag = gcov_read_unsigned ();
   if (tag != bbg_stamp)
     {
-      fnotice (stderr, "%s:stamp mismatch with notes file\n", da_file_name);
+      fnotice (stderr, "%s:stamp mismatch with graph file\n", da_file_name);
       goto cleanup;
     }
 
@@ -1929,48 +1060,60 @@ read_count_file (void)
       unsigned long base = gcov_position ();
 
       if (tag == GCOV_TAG_OBJECT_SUMMARY)
+	gcov_read_summary (&object_summary);
+      else if (tag == GCOV_TAG_PROGRAM_SUMMARY)
+	program_count++;
+      else if (tag == GCOV_TAG_FUNCTION)
 	{
-	  struct gcov_summary summary;
-	  gcov_read_summary (&summary);
-	  object_runs = summary.runs;
-	}
-      else if (tag == GCOV_TAG_FUNCTION && !length)
-	; /* placeholder  */
-      else if (tag == GCOV_TAG_FUNCTION && length == GCOV_TAG_FUNCTION_LENGTH)
-	{
-	  unsigned ident;
-	  ident = gcov_read_unsigned ();
-	  fn = NULL;
-	  it = ident_to_fn.find (ident);
-	  if (it != ident_to_fn.end ())
-	    fn = it->second;
+	  {
+	    unsigned ident = gcov_read_unsigned ();
+	    struct function_info *fn_n = functions;
+
+	    /* Try to find the function in the list.
+	       To speed up the search, first start from the last function
+	       found.   */
+	    for (fn = fn ? fn->next : NULL; ; fn = fn->next)
+	      {
+		if (fn)
+		  ;
+		else if ((fn = fn_n))
+		  fn_n = NULL;
+		else
+		  {
+		    fnotice (stderr, "%s:unknown function '%u'\n",
+			     da_file_name, ident);
+		    break;
+		  }
+		if (fn->ident == ident)
+		  break;
+	      }
+	  }
 
 	  if (!fn)
 	    ;
-	  else if (gcov_read_unsigned () != fn->lineno_checksum
-		   || gcov_read_unsigned () != fn->cfg_checksum)
+	  else if (gcov_read_unsigned () != fn->checksum)
 	    {
 	    mismatch:;
 	      fnotice (stderr, "%s:profile mismatch for '%s'\n",
-		       da_file_name, fn->get_name ());
+		       da_file_name, fn->name);
 	      goto cleanup;
 	    }
 	}
       else if (tag == GCOV_TAG_FOR_COUNTER (GCOV_COUNTER_ARCS) && fn)
 	{
-	  if (length != GCOV_TAG_COUNTER_LENGTH (fn->counts.size ()))
+	  if (length != GCOV_TAG_COUNTER_LENGTH (fn->num_counts))
 	    goto mismatch;
 
-	  for (ix = 0; ix != fn->counts.size (); ix++)
+	  if (!fn->counts)
+	    fn->counts = XCNEWVEC (gcov_type, fn->num_counts);
+
+	  for (ix = 0; ix != fn->num_counts; ix++)
 	    fn->counts[ix] += gcov_read_counter ();
 	}
       gcov_sync (base, length);
       if ((error = gcov_is_error ()))
 	{
-	  fnotice (stderr,
-		   error < 0
-		   ? N_("%s:overflowed\n")
-		   : N_("%s:corrupted\n"),
+	  fnotice (stderr, error < 0 ? "%s:overflowed\n" : "%s:corrupted\n",
 		   da_file_name);
 	  goto cleanup;
 	}
@@ -1984,65 +1127,42 @@ read_count_file (void)
    to the blocks and the uninstrumented arcs.  */
 
 static void
-solve_flow_graph (function_info *fn)
+solve_flow_graph (function_t *fn)
 {
   unsigned ix;
-  arc_info *arc;
-  gcov_type *count_ptr = &fn->counts.front ();
-  block_info *blk;
-  block_info *valid_blocks = NULL;    /* valid, but unpropagated blocks.  */
-  block_info *invalid_blocks = NULL;  /* invalid, but inferable blocks.  */
+  arc_t *arc;
+  gcov_type *count_ptr = fn->counts;
+  block_t *blk;
+  block_t *valid_blocks = NULL;    /* valid, but unpropagated blocks.  */
+  block_t *invalid_blocks = NULL;  /* invalid, but inferable blocks.  */
 
-  /* The arcs were built in reverse order.  Fix that now.  */
-  for (ix = fn->blocks.size (); ix--;)
-    {
-      arc_info *arc_p, *arc_n;
-
-      for (arc_p = NULL, arc = fn->blocks[ix].succ; arc;
-	   arc_p = arc, arc = arc_n)
-	{
-	  arc_n = arc->succ_next;
-	  arc->succ_next = arc_p;
-	}
-      fn->blocks[ix].succ = arc_p;
-
-      for (arc_p = NULL, arc = fn->blocks[ix].pred; arc;
-	   arc_p = arc, arc = arc_n)
-	{
-	  arc_n = arc->pred_next;
-	  arc->pred_next = arc_p;
-	}
-      fn->blocks[ix].pred = arc_p;
-    }
-
-  if (fn->blocks.size () < 2)
+  if (fn->num_blocks < 2)
     fnotice (stderr, "%s:'%s' lacks entry and/or exit blocks\n",
-	     bbg_file_name, fn->get_name ());
+	     bbg_file_name, fn->name);
   else
     {
-      if (fn->blocks[ENTRY_BLOCK].num_pred)
+      if (fn->blocks[0].num_pred)
 	fnotice (stderr, "%s:'%s' has arcs to entry block\n",
-		 bbg_file_name, fn->get_name ());
+		 bbg_file_name, fn->name);
       else
 	/* We can't deduce the entry block counts from the lack of
 	   predecessors.  */
-	fn->blocks[ENTRY_BLOCK].num_pred = ~(unsigned)0;
+	fn->blocks[0].num_pred = ~(unsigned)0;
 
-      if (fn->blocks[EXIT_BLOCK].num_succ)
+      if (fn->blocks[fn->num_blocks - 1].num_succ)
 	fnotice (stderr, "%s:'%s' has arcs from exit block\n",
-		 bbg_file_name, fn->get_name ());
+		 bbg_file_name, fn->name);
       else
 	/* Likewise, we can't deduce exit block counts from the lack
 	   of its successors.  */
-	fn->blocks[EXIT_BLOCK].num_succ = ~(unsigned)0;
+	fn->blocks[fn->num_blocks - 1].num_succ = ~(unsigned)0;
     }
 
   /* Propagate the measured counts, this must be done in the same
      order as the code in profile.c  */
-  for (unsigned i = 0; i < fn->blocks.size (); i++)
+  for (ix = 0, blk = fn->blocks; ix != fn->num_blocks; ix++, blk++)
     {
-      blk = &fn->blocks[i];
-      block_info const *prev_dst = NULL;
+      block_t const *prev_dst = NULL;
       int out_of_order = 0;
       int non_fake_succ = 0;
 
@@ -2089,12 +1209,12 @@ solve_flow_graph (function_info *fn)
 	 smart sort.  */
       if (out_of_order)
 	{
-	  arc_info *start = blk->succ;
+	  arc_t *start = blk->succ;
 	  unsigned changes = 1;
 
 	  while (changes)
 	    {
-	      arc_info *arc, *arc_p, *arc_n;
+	      arc_t *arc, *arc_p, *arc_n;
 
 	      changes = 0;
 	      for (arc_p = NULL, arc = start; (arc_n = arc->succ_next);)
@@ -2132,7 +1252,7 @@ solve_flow_graph (function_info *fn)
       while ((blk = invalid_blocks))
 	{
 	  gcov_type total = 0;
-	  const arc_info *arc;
+	  const arc_t *arc;
 
 	  invalid_blocks = blk->chain;
 	  blk->invalid_chain = 0;
@@ -2154,13 +1274,13 @@ solve_flow_graph (function_info *fn)
       while ((blk = valid_blocks))
 	{
 	  gcov_type total;
-	  arc_info *arc, *inv_arc;
+	  arc_t *arc, *inv_arc;
 
 	  valid_blocks = blk->chain;
 	  blk->valid_chain = 0;
 	  if (blk->num_succ == 1)
 	    {
-	      block_info *dst;
+	      block_t *dst;
 
 	      total = blk->count;
 	      inv_arc = NULL;
@@ -2196,7 +1316,7 @@ solve_flow_graph (function_info *fn)
 	    }
 	  if (blk->num_pred == 1)
 	    {
-	      block_info *src;
+	      block_t *src;
 
 	      total = blk->count;
 	      inv_arc = NULL;
@@ -2235,49 +1355,21 @@ solve_flow_graph (function_info *fn)
 
   /* If the graph has been correctly solved, every block will have a
      valid count.  */
-  for (unsigned i = 0; ix < fn->blocks.size (); i++)
-    if (!fn->blocks[i].count_valid)
+  for (ix = 0; ix < fn->num_blocks; ix++)
+    if (!fn->blocks[ix].count_valid)
       {
 	fnotice (stderr, "%s:graph is unsolvable for '%s'\n",
-		 bbg_file_name, fn->get_name ());
+		 bbg_file_name, fn->name);
 	break;
       }
 }
 
-/* Mark all the blocks only reachable via an incoming catch.  */
-
-static void
-find_exception_blocks (function_info *fn)
-{
-  unsigned ix;
-  block_info **queue = XALLOCAVEC (block_info *, fn->blocks.size ());
-
-  /* First mark all blocks as exceptional.  */
-  for (ix = fn->blocks.size (); ix--;)
-    fn->blocks[ix].exceptional = 1;
-
-  /* Now mark all the blocks reachable via non-fake edges */
-  queue[0] = &fn->blocks[0];
-  queue[0]->exceptional = 0;
-  for (ix = 1; ix;)
-    {
-      block_info *block = queue[--ix];
-      const arc_info *arc;
-
-      for (arc = block->succ; arc; arc = arc->succ_next)
-	if (!arc->fake && !arc->is_throw && arc->dst->exceptional)
-	  {
-	    arc->dst->exceptional = 0;
-	    queue[ix++] = arc->dst;
-	  }
-    }
-}
 
 
 /* Increment totals in COVERAGE according to arc ARC.  */
 
 static void
-add_branch_counts (coverage_info *coverage, const arc_info *arc)
+add_branch_counts (coverage_t *coverage, const arc_t *arc)
 {
   if (arc->is_call_non_return)
     {
@@ -2295,87 +1387,65 @@ add_branch_counts (coverage_info *coverage, const arc_info *arc)
     }
 }
 
-/* Format COUNT, if flag_human_readable_numbers is set, return it human
-   readable format.  */
-
-static char const *
-format_count (gcov_type count)
-{
-  static char buffer[64];
-  const char *units = " kMGTPEZY";
-
-  if (count < 1000 || !flag_human_readable_numbers)
-    {
-      sprintf (buffer, "%" PRId64, count);
-      return buffer;
-    }
-
-  unsigned i;
-  gcov_type divisor = 1;
-  for (i = 0; units[i+1]; i++, divisor *= 1000)
-    {
-      if (count + divisor / 2 < 1000 * divisor)
-	break;
-    }
-  float r = 1.0f * count / divisor;
-  sprintf (buffer, "%.1f%c", r, units[i]);
-  return buffer;
-}
-
-/* Format a GCOV_TYPE integer as either a percent ratio, or absolute
-   count.  If DECIMAL_PLACES >= 0, format TOP/BOTTOM * 100 to DECIMAL_PLACES.
-   If DECIMAL_PLACES is zero, no decimal point is printed. Only print 100% when
-   TOP==BOTTOM and only print 0% when TOP=0.  If DECIMAL_PLACES < 0, then simply
+/* Format a HOST_WIDE_INT as either a percent ratio, or absolute
+   count.  If dp >= 0, format TOP/BOTTOM * 100 to DP decimal places.
+   If DP is zero, no decimal point is printed. Only print 100% when
+   TOP==BOTTOM and only print 0% when TOP=0.  If dp < 0, then simply
    format TOP.  Return pointer to a static string.  */
 
 static char const *
-format_gcov (gcov_type top, gcov_type bottom, int decimal_places)
+format_gcov (gcov_type top, gcov_type bottom, int dp)
 {
   static char buffer[20];
 
-  if (decimal_places >= 0)
+  if (dp >= 0)
     {
-      float ratio = bottom ? 100.0f * top / bottom: 0;
+      float ratio = bottom ? (float)top / bottom : 0;
+      int ix;
+      unsigned limit = 100;
+      unsigned percent;
 
-      /* Round up to 1% if there's a small non-zero value.  */
-      if (ratio > 0.0f && ratio < 0.5f && decimal_places == 0)
-	ratio = 1.0f;
-      sprintf (buffer, "%.*f%%", decimal_places, ratio);
+      for (ix = dp; ix--; )
+	limit *= 10;
+
+      percent = (unsigned) (ratio * limit + (float)0.5);
+      if (percent <= 0 && top)
+	percent = 1;
+      else if (percent >= limit && top != bottom)
+	percent = limit - 1;
+      ix = sprintf (buffer, "%.*u%%", dp + 1, percent);
+      if (dp)
+	{
+	  dp++;
+	  do
+	    {
+	      buffer[ix+1] = buffer[ix];
+	      ix--;
+	    }
+	  while (dp--);
+	  buffer[ix + 1] = '.';
+	}
     }
   else
-    return format_count (top);
+    sprintf (buffer, HOST_WIDEST_INT_PRINT_DEC, (HOST_WIDEST_INT)top);
 
   return buffer;
 }
 
-/* Summary of execution */
-
-static void
-executed_summary (unsigned lines, unsigned executed)
-{
-  if (lines)
-    fnotice (stdout, "Lines executed:%s of %d\n",
-	     format_gcov (executed, lines, 2), lines);
-  else
-    fnotice (stdout, "No executable lines\n");
-}
 
 /* Output summary info for a function.  */
 
 static void
-function_summary (const coverage_info *coverage)
+function_summary (const coverage_t *coverage, const char *title)
 {
-  fnotice (stdout, "%s '%s'\n", "Function", coverage->name);
-  executed_summary (coverage->lines, coverage->lines_executed);
-}
+  fnotice (stdout, "%s '%s'\n", title, coverage->name);
 
-/* Output summary info for a file.  */
-
-static void
-file_summary (const coverage_info *coverage)
-{
-  fnotice (stdout, "%s '%s'\n", "File", coverage->name);
-  executed_summary (coverage->lines, coverage->lines_executed);
+  if (coverage->lines)
+    fnotice (stdout, "Lines executed:%s of %d\n",
+	     format_gcov (coverage->lines_executed, coverage->lines, 2),
+	     coverage->lines);
+  else
+    fnotice (stdout, "No executable lines\n");
 
   if (flag_branches)
     {
@@ -2401,174 +1471,88 @@ file_summary (const coverage_info *coverage)
     }
 }
 
-/* Canonicalize the filename NAME by canonicalizing directory
-   separators, eliding . components and resolving .. components
-   appropriately.  Always returns a unique string.  */
-
-static char *
-canonicalize_name (const char *name)
-{
-  /* The canonical name cannot be longer than the incoming name.  */
-  char *result = XNEWVEC (char, strlen (name) + 1);
-  const char *base = name, *probe;
-  char *ptr = result;
-  char *dd_base;
-  int slash = 0;
-
-#if HAVE_DOS_BASED_FILE_SYSTEM
-  if (base[0] && base[1] == ':')
-    {
-      result[0] = base[0];
-      result[1] = ':';
-      base += 2;
-      ptr += 2;
-    }
-#endif
-  for (dd_base = ptr; *base; base = probe)
-    {
-      size_t len;
-
-      for (probe = base; *probe; probe++)
-	if (IS_DIR_SEPARATOR (*probe))
-	  break;
-
-      len = probe - base;
-      if (len == 1 && base[0] == '.')
-	/* Elide a '.' directory */
-	;
-      else if (len == 2 && base[0] == '.' && base[1] == '.')
-	{
-	  /* '..', we can only elide it and the previous directory, if
-	     we're not a symlink.  */
-	  struct stat ATTRIBUTE_UNUSED buf;
-
-	  *ptr = 0;
-	  if (dd_base == ptr
-#if defined (S_ISLNK)
-	      /* S_ISLNK is not POSIX.1-1996.  */
-	      || stat (result, &buf) || S_ISLNK (buf.st_mode)
-#endif
-		)
-	    {
-	      /* Cannot elide, or unreadable or a symlink.  */
-	      dd_base = ptr + 2 + slash;
-	      goto regular;
-	    }
-	  while (ptr != dd_base && *ptr != '/')
-	    ptr--;
-	  slash = ptr != result;
-	}
-      else
-	{
-	regular:
-	  /* Regular pathname component.  */
-	  if (slash)
-	    *ptr++ = '/';
-	  memcpy (ptr, base, len);
-	  ptr += len;
-	  slash = 1;
-	}
-
-      for (; IS_DIR_SEPARATOR (*probe); probe++)
-	continue;
-    }
-  *ptr = 0;
-
-  return result;
-}
-
-/* Print hex representation of 16 bytes from SUM and write it to BUFFER.  */
-
-static void
-md5sum_to_hex (const char *sum, char *buffer)
-{
-  for (unsigned i = 0; i < 16; i++)
-    sprintf (buffer + (2 * i), "%02x", (unsigned char)sum[i]);
-}
-
-/* Generate an output file name. INPUT_NAME is the canonicalized main
-   input file and SRC_NAME is the canonicalized file name.
-   LONG_OUTPUT_NAMES and PRESERVE_PATHS affect name generation.  With
+/* Generate an output file name. LONG_OUTPUT_NAMES and PRESERVE_PATHS
+   affect name generation. With preserve_paths we create a filename
+   from all path components of the source file, replacing '/' with
+   '#', without it we simply take the basename component. With
    long_output_names we prepend the processed name of the input file
    to each output name (except when the current source file is the
    input file, so you don't get a double concatenation). The two
-   components are separated by '##'.  With preserve_paths we create a
-   filename from all path components of the source file, replacing '/'
-   with '#', and .. with '^', without it we simply take the basename
-   component.  (Remember, the canonicalized name will already have
-   elided '.' components and converted \\ separators.)  */
+   components are separated by '##'. Also '.' filename components are
+   removed and '..'  components are renamed to '^'.  */
 
 static char *
 make_gcov_file_name (const char *input_name, const char *src_name)
 {
-  char *ptr;
-  char *result;
+  const char *cptr;
+  char *name;
 
   if (flag_long_names && input_name && strcmp (src_name, input_name))
     {
+      name = XNEWVEC (char, strlen (src_name) + strlen (input_name) + 10);
+      name[0] = 0;
       /* Generate the input filename part.  */
-      result = XNEWVEC (char, strlen (input_name) + strlen (src_name) + 10);
-
-      ptr = result;
-      ptr = mangle_name (input_name, ptr);
-      ptr[0] = ptr[1] = '#';
-      ptr += 2;
+      cptr = flag_preserve_paths ? NULL : lbasename (input_name);
+      strcat (name, cptr ? cptr : input_name);
+      strcat (name, "##");
     }
   else
     {
-      result = XNEWVEC (char, strlen (src_name) + 10);
-      ptr = result;
+      name = XNEWVEC (char, strlen (src_name) + 10);
+      name[0] = 0;
     }
-
-  ptr = mangle_name (src_name, ptr);
-  strcpy (ptr, ".gcov");
-
-  /* When hashing filenames, we shorten them by only using the filename
-     component and appending a hash of the full (mangled) pathname.  */
-  if (flag_hash_filenames)
-    {
-      md5_ctx ctx;
-      char md5sum[16];
-      char md5sum_hex[33];
-
-      md5_init_ctx (&ctx);
-      md5_process_bytes (src_name, strlen (src_name), &ctx);
-      md5_finish_ctx (&ctx, md5sum);
-      md5sum_to_hex (md5sum, md5sum_hex);
-      free (result);
-
-      result = XNEWVEC (char, strlen (src_name) + 50);
-      ptr = result;
-      ptr = mangle_name (src_name, ptr);
-      ptr[0] = ptr[1] = '#';
-      ptr += 2;
-      memcpy (ptr, md5sum_hex, 32);
-      ptr += 32;
-      strcpy (ptr, ".gcov");
-    }
-
-  return result;
-}
-
-/* Mangle BASE name, copy it at the beginning of PTR buffer and
-   return address of the \0 character of the buffer.  */
-
-static char *
-mangle_name (char const *base, char *ptr)
-{
-  size_t len;
 
   /* Generate the source filename part.  */
-  if (!flag_preserve_paths)
-    base = lbasename (base);
-  else
-    base = mangle_path (base);
 
-  len = strlen (base);
-  memcpy (ptr, base, len);
-  ptr += len;
+  cptr = flag_preserve_paths ? NULL : lbasename (src_name);
+  strcat (name, cptr ? cptr : src_name);
 
-  return ptr;
+  if (flag_preserve_paths)
+    {
+      /* Convert '/' and '\' to '#', remove '/./', convert '/../' to '/^/',
+	 convert ':' to '~' on DOS based file system.  */
+      char *pnew = name, *pold = name;
+
+      /* First check for leading drive separator.  */
+
+      while (*pold != '\0')
+	{
+	  if (*pold == '/' || *pold == '\\')
+	    {
+	      *pnew++ = '#';
+	      pold++;
+	    }
+#if defined (HAVE_DOS_BASED_FILE_SYSTEM)
+	  else if (*pold == ':')
+	    {
+	      *pnew++ = '~';
+	      pold++;
+	    }
+#endif
+	  else if ((*pold == '/' && strstr (pold, "/./") == pold)
+		   || (*pold == '\\' && strstr (pold, "\\.\\") == pold))
+	      pold += 3;
+	  else if (*pold == '/' && strstr (pold, "/../") == pold)
+	    {
+	      strcpy (pnew, "/^/");
+	      pnew += 3;
+	      pold += 4;
+	    }
+	  else if (*pold == '\\' && strstr (pold, "\\..\\") == pold)
+	    {
+	      strcpy (pnew, "\\^\\");
+	      pnew += 3;
+	      pold += 4;
+	    }
+	  else
+	    *pnew++ = *pold++;
+	}
+
+      *pnew = '\0';
+    }
+
+  strcat (name, ".gcov");
+  return name;
 }
 
 /* Scan through the bb_data for each line in the block, increment
@@ -2576,206 +1560,264 @@ mangle_name (char const *base, char *ptr)
    the appropriate basic block.  */
 
 static void
-add_line_counts (coverage_info *coverage, function_info *fn)
+add_line_counts (coverage_t *coverage, function_t *fn)
 {
-  bool has_any_line = false;
+  unsigned ix;
+  line_t *line = NULL; /* This is propagated from one iteration to the
+			  next.  */
+
   /* Scan each basic block.  */
-  for (unsigned ix = 0; ix != fn->blocks.size (); ix++)
+  for (ix = 0; ix != fn->num_blocks; ix++)
     {
-      line_info *line = NULL;
-      block_info *block = &fn->blocks[ix];
-      if (block->count && ix && ix + 1 != fn->blocks.size ())
+      block_t *block = &fn->blocks[ix];
+      unsigned *encoding;
+      const source_t *src = NULL;
+      unsigned jx;
+
+      if (block->count && ix && ix + 1 != fn->num_blocks)
 	fn->blocks_executed++;
-      for (unsigned i = 0; i < block->locations.size (); i++)
+      for (jx = 0, encoding = block->u.line.encoding;
+	   jx != block->u.line.num; jx++, encoding++)
+	if (!*encoding)
+	  {
+	    unsigned src_n = *++encoding;
+
+	    for (src = sources; src->index != src_n; src = src->next)
+	      continue;
+	    jx++;
+	  }
+	else
+	  {
+	    line = &src->lines[*encoding];
+
+	    if (coverage)
+	      {
+		if (!line->exists)
+		  coverage->lines++;
+		if (!line->count && block->count)
+		  coverage->lines_executed++;
+	      }
+	    line->exists = 1;
+	    line->count += block->count;
+	  }
+      free (block->u.line.encoding);
+      block->u.cycle.arc = NULL;
+      block->u.cycle.ident = ~0U;
+
+      if (!ix || ix + 1 == fn->num_blocks)
+	/* Entry or exit block */;
+      else if (flag_all_blocks)
 	{
-	  unsigned src_idx = block->locations[i].source_file_idx;
-	  vector<unsigned> &lines = block->locations[i].lines;
+	  line_t *block_line = line ? line : &fn->src->lines[fn->line];
 
-	  block->cycle.arc = NULL;
-	  block->cycle.ident = ~0U;
+	  block->chain = block_line->u.blocks;
+	  block_line->u.blocks = block;
+	}
+      else if (flag_branches)
+	{
+	  arc_t *arc;
 
-	  for (unsigned j = 0; j < lines.size (); j++)
+	  for (arc = block->succ; arc; arc = arc->succ_next)
 	    {
-	      unsigned ln = lines[j];
-
-	      /* Line belongs to a function that is in a group.  */
-	      if (fn->group_line_p (ln, src_idx))
-		{
-		  gcc_assert (lines[j] - fn->start_line < fn->lines.size ());
-		  line = &(fn->lines[lines[j] - fn->start_line]);
-		  line->exists = 1;
-		  if (!block->exceptional)
-		    {
-		      line->unexceptional = 1;
-		      if (block->count == 0)
-			line->has_unexecuted_block = 1;
-		    }
-		  line->count += block->count;
-		}
-	      else
-		{
-		  gcc_assert (ln < sources[src_idx].lines.size ());
-		  line = &(sources[src_idx].lines[ln]);
-		  if (coverage)
-		    {
-		      if (!line->exists)
-			coverage->lines++;
-		      if (!line->count && block->count)
-			coverage->lines_executed++;
-		    }
-		  line->exists = 1;
-		  if (!block->exceptional)
-		    {
-		      line->unexceptional = 1;
-		      if (block->count == 0)
-			line->has_unexecuted_block = 1;
-		    }
-		  line->count += block->count;
-		}
-	    }
-
-	  has_any_line = true;
-
-	  if (!ix || ix + 1 == fn->blocks.size ())
-	    /* Entry or exit block.  */;
-	  else if (line != NULL)
-	    {
-	      line->blocks.push_back (block);
-
-	      if (flag_branches)
-		{
-		  arc_info *arc;
-
-		  for (arc = block->succ; arc; arc = arc->succ_next)
-		    line->branches.push_back (arc);
-		}
+	      arc->line_next = line->u.branches;
+	      line->u.branches = arc;
+	      if (coverage && !arc->is_unconditional)
+		add_branch_counts (coverage, arc);
 	    }
 	}
     }
-
-  if (!has_any_line)
-    fnotice (stderr, "%s:no lines for '%s'\n", bbg_file_name,
-	     fn->get_name ());
-}
-
-/* Accumulate info for LINE that belongs to SRC source file.  If ADD_COVERAGE
-   is set to true, update source file summary.  */
-
-static void accumulate_line_info (line_info *line, source_info *src,
-				  bool add_coverage)
-{
-  if (add_coverage)
-    for (vector<arc_info *>::iterator it = line->branches.begin ();
-	 it != line->branches.end (); it++)
-      add_branch_counts (&src->coverage, *it);
-
-  if (!line->blocks.empty ())
-    {
-      /* The user expects the line count to be the number of times
-	 a line has been executed.  Simply summing the block count
-	 will give an artificially high number.  The Right Thing
-	 is to sum the entry counts to the graph of blocks on this
-	 line, then find the elementary cycles of the local graph
-	 and add the transition counts of those cycles.  */
-      gcov_type count = 0;
-
-      /* Cycle detection.  */
-      for (vector<block_info *>::iterator it = line->blocks.begin ();
-	   it != line->blocks.end (); it++)
-	{
-	  for (arc_info *arc = (*it)->pred; arc; arc = arc->pred_next)
-	    if (!line->has_block (arc->src))
-	      count += arc->count;
-	  for (arc_info *arc = (*it)->succ; arc; arc = arc->succ_next)
-	    arc->cs_count = arc->count;
-	}
-
-      /* Now, add the count of loops entirely on this line.  */
-      count += get_cycles_count (*line);
-      line->count = count;
-
-      if (line->count > src->maximum_count)
-	src->maximum_count = line->count;
-    }
-
-  if (line->exists && add_coverage)
-    {
-      src->coverage.lines++;
-      if (line->count)
-	src->coverage.lines_executed++;
-    }
+  if (!line)
+    fnotice (stderr, "%s:no lines for '%s'\n", bbg_file_name, fn->name);
 }
 
 /* Accumulate the line counts of a file.  */
 
 static void
-accumulate_line_counts (source_info *src)
+accumulate_line_counts (source_t *src)
 {
-  /* First work on group functions.  */
-  for (vector<function_info *>::iterator it = src->functions.begin ();
-       it != src->functions.end (); it++)
+  line_t *line;
+  function_t *fn, *fn_p, *fn_n;
+  unsigned ix;
+
+  /* Reverse the function order.  */
+  for (fn = src->functions, fn_p = NULL; fn;
+       fn_p = fn, fn = fn_n)
     {
-      function_info *fn = *it;
-
-      if (fn->src != src->index || !fn->is_group)
-	continue;
-
-      for (vector<line_info>::iterator it2 = fn->lines.begin ();
-	   it2 != fn->lines.end (); it2++)
-	  {
-	    line_info *line = &(*it2);
-	    accumulate_line_info (line, src, false);
-	  }
+      fn_n = fn->line_next;
+      fn->line_next = fn_p;
     }
+  src->functions = fn_p;
 
-  /* Work on global lines that line in source file SRC.  */
-  for (vector<line_info>::iterator it = src->lines.begin ();
-       it != src->lines.end (); it++)
-    accumulate_line_info (&(*it), src, true);
+  for (ix = src->num_lines, line = src->lines; ix--; line++)
+    {
+      if (!flag_all_blocks)
+	{
+	  arc_t *arc, *arc_p, *arc_n;
 
-  /* If not using intermediate mode, sum lines of group functions and
-     add them to lines that live in a source file.  */
-  if (!flag_json_format)
-    for (vector<function_info *>::iterator it = src->functions.begin ();
-	 it != src->functions.end (); it++)
-      {
-	function_info *fn = *it;
+	  /* Total and reverse the branch information.  */
+	  for (arc = line->u.branches, arc_p = NULL; arc;
+	       arc_p = arc, arc = arc_n)
+	    {
+	      arc_n = arc->line_next;
+	      arc->line_next = arc_p;
 
-	if (fn->src != src->index || !fn->is_group)
-	  continue;
+	      add_branch_counts (&src->coverage, arc);
+	    }
+	  line->u.branches = arc_p;
+	}
+      else if (line->u.blocks)
+	{
+	  /* The user expects the line count to be the number of times
+	     a line has been executed. Simply summing the block count
+	     will give an artificially high number.  The Right Thing
+	     is to sum the entry counts to the graph of blocks on this
+	     line, then find the elementary cycles of the local graph
+	     and add the transition counts of those cycles.  */
+	  block_t *block, *block_p, *block_n;
+	  gcov_type count = 0;
 
-	for (unsigned i = 0; i < fn->lines.size (); i++)
-	  {
-	    line_info *fn_line = &fn->lines[i];
-	    if (fn_line->exists)
-	      {
-		unsigned ln = fn->start_line + i;
-		line_info *src_line = &src->lines[ln];
+	  /* Reverse the block information.  */
+	  for (block = line->u.blocks, block_p = NULL; block;
+	       block_p = block, block = block_n)
+	    {
+	      block_n = block->chain;
+	      block->chain = block_p;
+	      block->u.cycle.ident = ix;
+	    }
+	  line->u.blocks = block_p;
 
-		if (!src_line->exists)
-		  src->coverage.lines++;
-		if (!src_line->count && fn_line->count)
-		  src->coverage.lines_executed++;
+	  /* Sum the entry arcs.  */
+	  for (block = line->u.blocks; block; block = block->chain)
+	    {
+	      arc_t *arc;
 
-		src_line->count += fn_line->count;
-		src_line->exists = 1;
+	      for (arc = block->pred; arc; arc = arc->pred_next)
+		{
+		  if (arc->src->u.cycle.ident != ix)
+		    count += arc->count;
+		  if (flag_branches)
+		    add_branch_counts (&src->coverage, arc);
+		}
 
-		if (fn_line->has_unexecuted_block)
-		  src_line->has_unexecuted_block = 1;
+	      /* Initialize the cs_count.  */
+	      for (arc = block->succ; arc; arc = arc->succ_next)
+		arc->cs_count = arc->count;
+	    }
 
-		if (fn_line->unexceptional)
-		  src_line->unexceptional = 1;
-	      }
-	  }
-      }
+	  /* Find the loops. This uses the algorithm described in
+	     Tiernan 'An Efficient Search Algorithm to Find the
+	     Elementary Circuits of a Graph', CACM Dec 1970. We hold
+	     the P array by having each block point to the arc that
+	     connects to the previous block. The H array is implicitly
+	     held because of the arc ordering, and the block's
+	     previous arc pointer.
+
+	     Although the algorithm is O(N^3) for highly connected
+	     graphs, at worst we'll have O(N^2), as most blocks have
+	     only one or two exits. Most graphs will be small.
+
+	     For each loop we find, locate the arc with the smallest
+	     transition count, and add that to the cumulative
+	     count.  Decrease flow over the cycle and remove the arc
+	     from consideration.  */
+	  for (block = line->u.blocks; block; block = block->chain)
+	    {
+	      block_t *head = block;
+	      arc_t *arc;
+
+	    next_vertex:;
+	      arc = head->succ;
+	    current_vertex:;
+	      while (arc)
+		{
+		  block_t *dst = arc->dst;
+		  if (/* Already used that arc.  */
+		      arc->cycle
+		      /* Not to same graph, or before first vertex.  */
+		      || dst->u.cycle.ident != ix
+		      /* Already in path.  */
+		      || dst->u.cycle.arc)
+		    {
+		      arc = arc->succ_next;
+		      continue;
+		    }
+
+		  if (dst == block)
+		    {
+		      /* Found a closing arc.  */
+		      gcov_type cycle_count = arc->cs_count;
+		      arc_t *cycle_arc = arc;
+		      arc_t *probe_arc;
+
+		      /* Locate the smallest arc count of the loop.  */
+		      for (dst = head; (probe_arc = dst->u.cycle.arc);
+			   dst = probe_arc->src)
+			if (cycle_count > probe_arc->cs_count)
+			  {
+			    cycle_count = probe_arc->cs_count;
+			    cycle_arc = probe_arc;
+			  }
+
+		      count += cycle_count;
+		      cycle_arc->cycle = 1;
+
+		      /* Remove the flow from the cycle.  */
+		      arc->cs_count -= cycle_count;
+		      for (dst = head; (probe_arc = dst->u.cycle.arc);
+			   dst = probe_arc->src)
+			probe_arc->cs_count -= cycle_count;
+
+		      /* Unwind to the cyclic arc.  */
+		      while (head != cycle_arc->src)
+			{
+			  arc = head->u.cycle.arc;
+			  head->u.cycle.arc = NULL;
+			  head = arc->src;
+			}
+		      /* Move on.  */
+		      arc = arc->succ_next;
+		      continue;
+		    }
+
+		  /* Add new block to chain.  */
+		  dst->u.cycle.arc = arc;
+		  head = dst;
+		  goto next_vertex;
+		}
+	      /* We could not add another vertex to the path. Remove
+		 the last vertex from the list.  */
+	      arc = head->u.cycle.arc;
+	      if (arc)
+		{
+		  /* It was not the first vertex. Move onto next arc.  */
+		  head->u.cycle.arc = NULL;
+		  head = arc->src;
+		  arc = arc->succ_next;
+		  goto current_vertex;
+		}
+	      /* Mark this block as unusable.  */
+	      block->u.cycle.ident = ~0U;
+	    }
+
+	  line->count = count;
+	}
+
+      if (line->exists)
+	{
+	  src->coverage.lines++;
+	  if (line->count)
+	    src->coverage.lines_executed++;
+	}
+    }
 }
 
 /* Output information about ARC number IX.  Returns nonzero if
    anything is output.  */
 
 static int
-output_branch_count (FILE *gcov_file, int ix, const arc_info *arc)
+output_branch_count (FILE *gcov_file, int ix, const arc_t *arc)
 {
+
   if (arc->is_call_non_return)
     {
       if (arc->src->count)
@@ -2790,17 +1832,11 @@ output_branch_count (FILE *gcov_file, int ix, const arc_info *arc)
   else if (!arc->is_unconditional)
     {
       if (arc->src->count)
-	fnotice (gcov_file, "branch %2d taken %s%s", ix,
+	fnotice (gcov_file, "branch %2d taken %s%s\n", ix,
 		 format_gcov (arc->count, arc->src->count, -flag_counts),
-		 arc->fall_through ? " (fallthrough)"
-		 : arc->is_throw ? " (throw)" : "");
+		 arc->fall_through ? " (fallthrough)" : "");
       else
-	fnotice (gcov_file, "branch %2d never executed", ix);
-
-      if (flag_verbose)
-	fnotice (gcov_file, " (BB %d)", arc->dst->id);
-
-      fnotice (gcov_file, "\n");
+	fnotice (gcov_file, "branch %2d never executed\n", ix);
     }
   else if (flag_unconditional && !arc->dst->is_call_return)
     {
@@ -2813,211 +1849,7 @@ output_branch_count (FILE *gcov_file, int ix, const arc_info *arc)
   else
     return 0;
   return 1;
-}
 
-static const char *
-read_line (FILE *file)
-{
-  static char *string;
-  static size_t string_len;
-  size_t pos = 0;
-  char *ptr;
-
-  if (!string_len)
-    {
-      string_len = 200;
-      string = XNEWVEC (char, string_len);
-    }
-
-  while ((ptr = fgets (string + pos, string_len - pos, file)))
-    {
-      size_t len = strlen (string + pos);
-
-      if (len && string[pos + len - 1] == '\n')
-	{
-	  string[pos + len - 1] = 0;
-	  return string;
-	}
-      pos += len;
-      /* If the file contains NUL characters or an incomplete
-	 last line, which can happen more than once in one run,
-	 we have to avoid doubling the STRING_LEN unnecessarily.  */
-      if (pos > string_len / 2)
-	{
-	  string_len *= 2;
-	  string = XRESIZEVEC (char, string, string_len);
-	}
-    }
-
-  return pos ? string : NULL;
-}
-
-/* Pad string S with spaces from left to have total width equal to 9.  */
-
-static void
-pad_count_string (string &s)
-{
-  if (s.size () < 9)
-    s.insert (0, 9 - s.size (), ' ');
-}
-
-/* Print GCOV line beginning to F stream.  If EXISTS is set to true, the
-   line exists in source file.  UNEXCEPTIONAL indicated that it's not in
-   an exceptional statement.  The output is printed for LINE_NUM of given
-   COUNT of executions.  EXCEPTIONAL_STRING and UNEXCEPTIONAL_STRING are
-   used to indicate non-executed blocks.  */
-
-static void
-output_line_beginning (FILE *f, bool exists, bool unexceptional,
-		       bool has_unexecuted_block,
-		       gcov_type count, unsigned line_num,
-		       const char *exceptional_string,
-		       const char *unexceptional_string,
-		       unsigned int maximum_count)
-{
-  string s;
-  if (exists)
-    {
-      if (count > 0)
-	{
-	  s = format_gcov (count, 0, -1);
-	  if (has_unexecuted_block
-	      && bbg_supports_has_unexecuted_blocks)
-	    {
-	      if (flag_use_colors)
-		{
-		  pad_count_string (s);
-		  s.insert (0, SGR_SEQ (COLOR_BG_MAGENTA
-					COLOR_SEPARATOR COLOR_FG_WHITE));
-		  s += SGR_RESET;
-		}
-	      else
-		s += "*";
-	    }
-	  pad_count_string (s);
-	}
-      else
-	{
-	  if (flag_use_colors)
-	    {
-	      s = "0";
-	      pad_count_string (s);
-	      if (unexceptional)
-		s.insert (0, SGR_SEQ (COLOR_BG_RED
-				      COLOR_SEPARATOR COLOR_FG_WHITE));
-	      else
-		s.insert (0, SGR_SEQ (COLOR_BG_CYAN
-				      COLOR_SEPARATOR COLOR_FG_WHITE));
-	      s += SGR_RESET;
-	    }
-	  else
-	    {
-	      s = unexceptional ? unexceptional_string : exceptional_string;
-	      pad_count_string (s);
-	    }
-	}
-    }
-  else
-    {
-      s = "-";
-      pad_count_string (s);
-    }
-
-  /* Format line number in output.  */
-  char buffer[16];
-  sprintf (buffer, "%5u", line_num);
-  string linestr (buffer);
-
-  if (flag_use_hotness_colors && maximum_count)
-    {
-      if (count * 2 > maximum_count) /* > 50%.  */
-	linestr.insert (0, SGR_SEQ (COLOR_BG_RED));
-      else if (count * 5 > maximum_count) /* > 20%.  */
-	linestr.insert (0, SGR_SEQ (COLOR_BG_YELLOW));
-      else if (count * 10 > maximum_count) /* > 10%.  */
-	linestr.insert (0, SGR_SEQ (COLOR_BG_GREEN));
-      linestr += SGR_RESET;
-    }
-
-  fprintf (f, "%s:%s", s.c_str (), linestr.c_str ());
-}
-
-static void
-print_source_line (FILE *f, const vector<const char *> &source_lines,
-		   unsigned line)
-{
-  gcc_assert (line >= 1);
-  gcc_assert (line <= source_lines.size ());
-
-  fprintf (f, ":%s\n", source_lines[line - 1]);
-}
-
-/* Output line details for LINE and print it to F file.  LINE lives on
-   LINE_NUM.  */
-
-static void
-output_line_details (FILE *f, const line_info *line, unsigned line_num)
-{
-  if (flag_all_blocks)
-    {
-      arc_info *arc;
-      int ix, jx;
-
-      ix = jx = 0;
-      for (vector<block_info *>::const_iterator it = line->blocks.begin ();
-	   it != line->blocks.end (); it++)
-	{
-	  if (!(*it)->is_call_return)
-	    {
-	      output_line_beginning (f, line->exists,
-				     (*it)->exceptional, false,
-				     (*it)->count, line_num,
-				     "%%%%%", "$$$$$", 0);
-	      fprintf (f, "-block %2d", ix++);
-	      if (flag_verbose)
-		fprintf (f, " (BB %u)", (*it)->id);
-	      fprintf (f, "\n");
-	    }
-	  if (flag_branches)
-	    for (arc = (*it)->succ; arc; arc = arc->succ_next)
-	      jx += output_branch_count (f, jx, arc);
-	}
-    }
-  else if (flag_branches)
-    {
-      int ix;
-
-      ix = 0;
-      for (vector<arc_info *>::const_iterator it = line->branches.begin ();
-	   it != line->branches.end (); it++)
-	ix += output_branch_count (f, ix, (*it));
-    }
-}
-
-/* Output detail statistics about function FN to file F.  */
-
-static void
-output_function_details (FILE *f, function_info *fn)
-{
-  if (!flag_branches)
-    return;
-
-  arc_info *arc = fn->blocks[EXIT_BLOCK].pred;
-  gcov_type return_count = fn->blocks[EXIT_BLOCK].count;
-  gcov_type called_count = fn->blocks[ENTRY_BLOCK].count;
-
-  for (; arc; arc = arc->pred_next)
-    if (arc->fake)
-      return_count -= arc->count;
-
-  fprintf (f, "function %s", fn->get_name ());
-  fprintf (f, " called %s",
-	   format_gcov (called_count, 0, -1));
-  fprintf (f, " returned %s",
-	   format_gcov (return_count, called_count, 0));
-  fprintf (f, " blocks executed %s",
-	   format_gcov (fn->blocks_executed, fn->get_block_count (), 0));
-  fprintf (f, "\n");
 }
 
 /* Read in the source file one line at a time, and output that line to
@@ -3025,145 +1857,129 @@ output_function_details (FILE *f, function_info *fn)
    information.  */
 
 static void
-output_lines (FILE *gcov_file, const source_info *src)
+output_lines (FILE *gcov_file, const source_t *src)
 {
-#define  DEFAULT_LINE_START "        -:    0:"
-#define FN_SEPARATOR "------------------\n"
-
   FILE *source_file;
-  const char *retval;
+  unsigned line_num;	/* current line number.  */
+  const line_t *line;           /* current line info ptr.  */
+  char string[STRING_SIZE];     /* line buffer.  */
+  char const *retval = "";	/* status of source file reading.  */
+  function_t *fn = NULL;
 
-  /* Print colorization legend.  */
-  if (flag_use_colors)
-    fprintf (gcov_file, "%s",
-	     DEFAULT_LINE_START "Colorization: profile count: " \
-	     SGR_SEQ (COLOR_BG_CYAN) "zero coverage (exceptional)" SGR_RESET \
-	     " " \
-	     SGR_SEQ (COLOR_BG_RED) "zero coverage (unexceptional)" SGR_RESET \
-	     " " \
-	     SGR_SEQ (COLOR_BG_MAGENTA) "unexecuted block" SGR_RESET "\n");
-
-  if (flag_use_hotness_colors)
-    fprintf (gcov_file, "%s",
-	     DEFAULT_LINE_START "Colorization: line numbers: hotness: " \
-	     SGR_SEQ (COLOR_BG_RED) "> 50%" SGR_RESET " " \
-	     SGR_SEQ (COLOR_BG_YELLOW) "> 20%" SGR_RESET " " \
-	     SGR_SEQ (COLOR_BG_GREEN) "> 10%" SGR_RESET "\n");
-
-  fprintf (gcov_file, DEFAULT_LINE_START "Source:%s\n", src->coverage.name);
+  fprintf (gcov_file, "%9s:%5d:Source:%s\n", "-", 0, src->name);
   if (!multiple_files)
     {
-      fprintf (gcov_file, DEFAULT_LINE_START "Graph:%s\n", bbg_file_name);
-      fprintf (gcov_file, DEFAULT_LINE_START "Data:%s\n",
+      fprintf (gcov_file, "%9s:%5d:Graph:%s\n", "-", 0, bbg_file_name);
+      fprintf (gcov_file, "%9s:%5d:Data:%s\n", "-", 0,
 	       no_data_file ? "-" : da_file_name);
-      fprintf (gcov_file, DEFAULT_LINE_START "Runs:%u\n", object_runs);
+      fprintf (gcov_file, "%9s:%5d:Runs:%u\n", "-", 0,
+	       object_summary.ctrs[GCOV_COUNTER_ARCS].runs);
     }
+  fprintf (gcov_file, "%9s:%5d:Programs:%u\n", "-", 0, program_count);
 
   source_file = fopen (src->name, "r");
   if (!source_file)
-    fnotice (stderr, "Cannot open source file %s\n", src->name);
-  else if (src->file_time == 0)
-    fprintf (gcov_file, DEFAULT_LINE_START "Source is newer than graph\n");
-
-  vector<const char *> source_lines;
-  if (source_file)
-    while ((retval = read_line (source_file)) != NULL)
-      source_lines.push_back (xstrdup (retval));
-
-  unsigned line_start_group = 0;
-  vector<function_info *> *fns;
-
-  for (unsigned line_num = 1; line_num <= source_lines.size (); line_num++)
     {
-      if (line_num >= src->lines.size ())
-	{
-	  fprintf (gcov_file, "%9s:%5u", "-", line_num);
-	  print_source_line (gcov_file, source_lines, line_num);
-	  continue;
-	}
+      fnotice (stderr, "%s:cannot open source file\n", src->name);
+      retval = NULL;
+    }
+  else if (src->file_time == 0)
+    fprintf (gcov_file, "%9s:%5d:Source is newer than graph\n", "-", 0);
 
-      const line_info *line = &src->lines[line_num];
+  if (flag_branches)
+    fn = src->functions;
 
-      if (line_start_group == 0)
+  for (line_num = 1, line = &src->lines[line_num];
+       line_num < src->num_lines; line_num++, line++)
+    {
+      for (; fn && fn->line == line_num; fn = fn->line_next)
 	{
-	  fns = src->get_functions_at_location (line_num);
-	  if (fns != NULL && fns->size () > 1)
-	    {
-	      /* It's possible to have functions that partially overlap,
-		 thus take the maximum end_line of functions starting
-		 at LINE_NUM.  */
-	      for (unsigned i = 0; i < fns->size (); i++)
-		if ((*fns)[i]->end_line > line_start_group)
-		  line_start_group = (*fns)[i]->end_line;
-	    }
-	  else if (fns != NULL && fns->size () == 1)
-	    {
-	      function_info *fn = (*fns)[0];
-	      output_function_details (gcov_file, fn);
-	    }
+	  arc_t *arc = fn->blocks[fn->num_blocks - 1].pred;
+	  gcov_type return_count = fn->blocks[fn->num_blocks - 1].count;
+
+	  for (; arc; arc = arc->pred_next)
+	    if (arc->fake)
+	      return_count -= arc->count;
+
+	  fprintf (gcov_file, "function %s", fn->name);
+	  fprintf (gcov_file, " called %s",
+		   format_gcov (fn->blocks[0].count, 0, -1));
+	  fprintf (gcov_file, " returned %s",
+		   format_gcov (return_count, fn->blocks[0].count, 0));
+	  fprintf (gcov_file, " blocks executed %s",
+		   format_gcov (fn->blocks_executed, fn->num_blocks - 2, 0));
+	  fprintf (gcov_file, "\n");
 	}
 
       /* For lines which don't exist in the .bb file, print '-' before
 	 the source line.  For lines which exist but were never
-	 executed, print '#####' or '=====' before the source line.
-	 Otherwise, print the execution count before the source line.
-	 There are 16 spaces of indentation added before the source
-	 line so that tabs won't be messed up.  */
-      output_line_beginning (gcov_file, line->exists, line->unexceptional,
-			     line->has_unexecuted_block, line->count,
-			     line_num, "=====", "#####", src->maximum_count);
+	 executed, print '#####' before the source line.  Otherwise,
+	 print the execution count before the source line.  There are
+	 16 spaces of indentation added before the source line so that
+	 tabs won't be messed up.  */
+      fprintf (gcov_file, "%9s:%5u:",
+	       !line->exists ? "-" : !line->count ? "#####"
+	       : format_gcov (line->count, 0, -1), line_num);
 
-      print_source_line (gcov_file, source_lines, line_num);
-      output_line_details (gcov_file, line, line_num);
-
-      if (line_start_group == line_num)
+      if (retval)
 	{
-	  for (vector<function_info *>::iterator it = fns->begin ();
-	       it != fns->end (); it++)
+	  /* Copy source line.  */
+	  do
 	    {
-	      function_info *fn = *it;
-	      vector<line_info> &lines = fn->lines;
-
-	      fprintf (gcov_file, FN_SEPARATOR);
-
-	      string fn_name = fn->get_name ();
-	      if (flag_use_colors)
-		{
-		  fn_name.insert (0, SGR_SEQ (COLOR_FG_CYAN));
-		  fn_name += SGR_RESET;
-		}
-
-	      fprintf (gcov_file, "%s:\n", fn_name.c_str ());
-
-	      output_function_details (gcov_file, fn);
-
-	      /* Print all lines covered by the function.  */
-	      for (unsigned i = 0; i < lines.size (); i++)
-		{
-		  line_info *line = &lines[i];
-		  unsigned l = fn->start_line + i;
-
-		  /* For lines which don't exist in the .bb file, print '-'
-		     before the source line.  For lines which exist but
-		     were never executed, print '#####' or '=====' before
-		     the source line.  Otherwise, print the execution count
-		     before the source line.
-		     There are 16 spaces of indentation added before the source
-		     line so that tabs won't be messed up.  */
-		  output_line_beginning (gcov_file, line->exists,
-					 line->unexceptional,
-					 line->has_unexecuted_block,
-					 line->count,
-					 l, "=====", "#####",
-					 src->maximum_count);
-
-		  print_source_line (gcov_file, source_lines, l);
-		  output_line_details (gcov_file, line, l);
-		}
+	      retval = fgets (string, STRING_SIZE, source_file);
+	      if (!retval)
+		break;
+	      fputs (retval, gcov_file);
 	    }
+	  while (!retval[0] || retval[strlen (retval) - 1] != '\n');
+	}
+      if (!retval)
+	fputs ("/*EOF*/\n", gcov_file);
 
-	  fprintf (gcov_file, FN_SEPARATOR);
-	  line_start_group = 0;
+      if (flag_all_blocks)
+	{
+	  block_t *block;
+	  arc_t *arc;
+	  int ix, jx;
+
+	  for (ix = jx = 0, block = line->u.blocks; block;
+	       block = block->chain)
+	    {
+	      if (!block->is_call_return)
+		fprintf (gcov_file, "%9s:%5u-block %2d\n",
+			 !line->exists ? "-" : !block->count ? "$$$$$"
+			 : format_gcov (block->count, 0, -1),
+			 line_num, ix++);
+	      if (flag_branches)
+		for (arc = block->succ; arc; arc = arc->succ_next)
+		  jx += output_branch_count (gcov_file, jx, arc);
+	    }
+	}
+      else if (flag_branches)
+	{
+	  int ix;
+	  arc_t *arc;
+
+	  for (ix = 0, arc = line->u.branches; arc; arc = arc->line_next)
+	    ix += output_branch_count (gcov_file, ix, arc);
+	}
+    }
+
+  /* Handle all remaining source lines.  There may be lines after the
+     last line of code.  */
+  if (retval)
+    {
+      for (; (retval = fgets (string, STRING_SIZE, source_file)); line_num++)
+	{
+	  fprintf (gcov_file, "%9s:%5u:%s", "-", line_num, retval);
+
+	  while (!retval[0] || retval[strlen (retval) - 1] != '\n')
+	    {
+	      retval = fgets (string, STRING_SIZE, source_file);
+	      if (!retval)
+		break;
+	      fputs (retval, gcov_file);
+	    }
 	}
     }
 

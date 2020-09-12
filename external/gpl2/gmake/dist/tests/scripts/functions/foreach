@@ -1,5 +1,5 @@
 #                                                                    -*-perl-*-
-# $Id: foreach,v 1.1.1.1 2014/08/18 06:47:57 christos Exp $
+# $Id: foreach,v 1.1 2014/08/18 06:47:57 christos Exp $
 
 $description = "Test the foreach function.";
 

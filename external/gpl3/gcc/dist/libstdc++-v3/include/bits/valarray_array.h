@@ -1,6 +1,8 @@
 // The template and inlines for the -*- C++ -*- internal _Array helper class.
 
-// Copyright (C) 1997-2019 Free Software Foundation, Inc.
+// Copyright (C) 1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005,
+// 2006, 2007, 2008, 2009
+// Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
@@ -22,9 +24,9 @@
 // see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
 // <http://www.gnu.org/licenses/>.
 
-/** @file bits/valarray_array.h
+/** @file valarray_array.h
  *  This is an internal header file, included by other library headers.
- *  Do not attempt to use it directly. @headername{valarray}
+ *  You should not attempt to use it directly.
  */
 
 // Written by Gabriel Dos Reis <Gabriel.Dos-Reis@DPTMaths.ENS-Cachan.Fr>
@@ -39,23 +41,24 @@
 #include <cstdlib>
 #include <new>
 
-namespace std _GLIBCXX_VISIBILITY(default)
-{
-_GLIBCXX_BEGIN_NAMESPACE_VERSION
+_GLIBCXX_BEGIN_NAMESPACE(std)
 
   //
   // Helper functions on raw pointers
   //
 
-  // We get memory the old fashioned way
-  template<typename _Tp>
-    _Tp*
-    __valarray_get_storage(size_t) __attribute__((__malloc__));
+  // We get memory by the old fashion way
+  inline void*
+  __valarray_get_memory(size_t __n)
+  { return operator new(__n); }
 
   template<typename _Tp>
-    inline _Tp*
+    inline _Tp*__restrict__
     __valarray_get_storage(size_t __n)
-    { return static_cast<_Tp*>(operator new(__n * sizeof(_Tp))); }
+    {
+      return static_cast<_Tp*__restrict__>
+	(std::__valarray_get_memory(__n * sizeof(_Tp)));
+    }
 
   // Return memory to the system
   inline void
@@ -124,7 +127,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
     inline void
     __valarray_fill_construct(_Tp* __b, _Tp* __e, const _Tp __t)
     {
-      _Array_init_ctor<_Tp, __is_trivial(_Tp)>::_S_do_it(__b, __e, __t);
+      _Array_init_ctor<_Tp, __is_pod(_Tp)>::_S_do_it(__b, __e, __t);
     }
 
   //
@@ -149,10 +152,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
     {
       inline static void
       _S_do_it(const _Tp* __b, const _Tp* __e, _Tp* __restrict__ __o)
-      {
-	if (__b)
-	  __builtin_memcpy(__o, __b, (__e - __b) * sizeof(_Tp));
-      }
+      { __builtin_memcpy(__o, __b, (__e - __b) * sizeof(_Tp)); }
     };
 
   template<typename _Tp>
@@ -160,7 +160,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
     __valarray_copy_construct(const _Tp* __b, const _Tp* __e,
 			      _Tp* __restrict__ __o)
     {
-      _Array_copy_ctor<_Tp, __is_trivial(_Tp)>::_S_do_it(__b, __e, __o);
+      _Array_copy_ctor<_Tp, __is_pod(_Tp)>::_S_do_it(__b, __e, __o);
     }
 
   // copy-construct raw array [__o, *) from strided array __a[<__n : __s>]
@@ -169,7 +169,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
     __valarray_copy_construct (const _Tp* __restrict__ __a, size_t __n,
 			       size_t __s, _Tp* __restrict__ __o)
     {
-      if (__is_trivial(_Tp))
+      if (__is_pod(_Tp))
 	while (__n--)
 	  {
 	    *__o++ = *__a;
@@ -190,7 +190,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 			       const size_t* __restrict__ __i,
 			       _Tp* __restrict__ __o, size_t __n)
     {
-      if (__is_trivial(_Tp))
+      if (__is_pod(_Tp))
 	while (__n--)
 	  *__o++ = __a[*__i++];
       else
@@ -203,7 +203,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
     inline void
     __valarray_destroy_elements(_Tp* __b, _Tp* __e)
     {
-      if (!__is_trivial(_Tp))
+      if (!__is_pod(_Tp))
 	while (__b != __e)
 	  {
 	    __b->~_Tp();
@@ -258,10 +258,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
     {
       inline static void
       _S_do_it(const _Tp* __restrict__ __a, size_t __n, _Tp* __restrict__ __b)
-      {
-	if (__n != 0)
-	  __builtin_memcpy(__b, __a, __n * sizeof (_Tp));
-      }
+      { __builtin_memcpy(__b, __a, __n * sizeof (_Tp)); }
     };
 
   // Copy a plain array __a[<__n>] into a play array __b[<>]
@@ -270,7 +267,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
     __valarray_copy(const _Tp* __restrict__ __a, size_t __n,
 		    _Tp* __restrict__ __b)
     {
-      _Array_copier<_Tp, __is_trivial(_Tp)>::_S_do_it(__a, __n, __b);
+      _Array_copier<_Tp, __is_pod(_Tp)>::_S_do_it(__a, __n, __b);
     }
 
   // Copy strided array __a[<__n : __s>] in plain __b[<__n>]
@@ -338,18 +335,30 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
     }
 
   //
-  // Compute the sum of elements in range [__f, __l) which must not be empty.
+  // Compute the sum of elements in range [__f, __l)
   // This is a naive algorithm.  It suffers from cancelling.
-  // In the future try to specialize for _Tp = float, double, long double
-  // using a more accurate algorithm.
+  // In the future try to specialize
+  // for _Tp = float, double, long double using a more accurate
+  // algorithm.
   //
   template<typename _Tp>
     inline _Tp
     __valarray_sum(const _Tp* __f, const _Tp* __l)
     {
-      _Tp __r = *__f++;
+      _Tp __r = _Tp();
       while (__f != __l)
 	__r += *__f++;
+      return __r;
+    }
+
+  // Compute the product of all elements in range [__f, __l)
+  template<typename _Tp>
+    inline _Tp
+    __valarray_product(const _Tp* __f, const _Tp* __l)
+    {
+      _Tp __r = _Tp(1);
+      while (__f != __l)
+	__r = __r * *__f++;
       return __r;
     }
 
@@ -395,6 +404,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
   template<typename _Tp>
     struct _Array
     {
+      explicit _Array(size_t);
       explicit _Array(_Tp* const __restrict__);
       explicit _Array(const valarray<_Tp>&);
       _Array(const _Tp* __restrict__, size_t);
@@ -486,6 +496,12 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       std::__valarray_copy(__src._M_data, __n, __i._M_data,
 		    __dst._M_data, __j._M_data);
     }
+
+  template<typename _Tp>
+    inline
+    _Array<_Tp>::_Array(size_t __n)
+    : _M_data(__valarray_get_storage<_Tp>(__n))
+    { std::__valarray_default_construct(_M_data, _M_data + __n); }
 
   template<typename _Tp>
     inline
@@ -669,9 +685,10 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 
 #undef _DEFINE_ARRAY_FUNCTION
 
-_GLIBCXX_END_NAMESPACE_VERSION
-} // namespace
+_GLIBCXX_END_NAMESPACE
 
+#ifndef _GLIBCXX_EXPORT_TEMPLATE
 # include <bits/valarray_array.tcc>
+#endif
 
 #endif /* _ARRAY_H */

@@ -1,4 +1,4 @@
-/*	$NetBSD: isdir.c,v 1.1.1.1 2016/01/10 21:36:18 christos Exp $	*/
+/*	$NetBSD: isdir.c,v 1.1 2016/01/10 21:36:18 christos Exp $	*/
 
 /* isdir.c -- determine whether a directory exists
    Copyright (C) 1990, 1998 Free Software Foundation, Inc.

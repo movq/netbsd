@@ -1,7 +1,7 @@
 #ifndef MICROBLAZE_H
 #define MICROBLAZE_H
 
-/* Copyright 2009-2019 Free Software Foundation, Inc.
+/* Copyright 2009, 2010, 2011 Free Software Foundation, Inc.
 
    This file is part of the Xilinx MicroBlaze simulator.
 
@@ -16,7 +16,9 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, see <http://www.gnu.org/licenses/>.  */
+   along with this program; if not, write to the Free Software
+   Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston,
+   MA 02110-1301, USA.  */
 
 #include "../../opcodes/microblaze-opcm.h"
 
@@ -24,7 +26,7 @@
 #define GET_RA	((inst & RA_MASK) >> RA_LOW)
 #define GET_RB	((inst & RB_MASK) >> RB_LOW)
 
-#define CPU     cpu->microblaze_cpu
+#define CPU     microblaze_state.cpu[0].microblaze_cpu
 
 #define RD      CPU.regs[rd]
 #define RA      CPU.regs[ra]
@@ -52,16 +54,18 @@
 #define RETREG  CPU.regs[3]
 
 
-#define MEM_RD_BYTE(X)	sim_core_read_1 (cpu, 0, read_map, X)
-#define MEM_RD_HALF(X)	sim_core_read_2 (cpu, 0, read_map, X)
-#define MEM_RD_WORD(X)	sim_core_read_4 (cpu, 0, read_map, X)
+#define MEM(X)	memory[X]
+
+#define MEM_RD_BYTE(X)	rbat(X)
+#define MEM_RD_HALF(X)	rhat(X)
+#define MEM_RD_WORD(X)	rlat(X)
 #define MEM_RD_UBYTE(X) (ubyte) MEM_RD_BYTE(X)
 #define MEM_RD_UHALF(X) (uhalf) MEM_RD_HALF(X)
 #define MEM_RD_UWORD(X) (uword) MEM_RD_WORD(X)
 
-#define MEM_WR_BYTE(X, D) sim_core_write_1 (cpu, 0, write_map, X, D)
-#define MEM_WR_HALF(X, D) sim_core_write_2 (cpu, 0, write_map, X, D)
-#define MEM_WR_WORD(X, D) sim_core_write_4 (cpu, 0, write_map, X, D)
+#define MEM_WR_BYTE(X, D) wbat(X, D)
+#define MEM_WR_HALF(X, D) what(X, D)
+#define MEM_WR_WORD(X, D) wlat(X, D)
 
 
 #define MICROBLAZE_SEXT8(X)	((char) X)

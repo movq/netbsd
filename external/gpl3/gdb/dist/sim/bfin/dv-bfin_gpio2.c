@@ -1,7 +1,7 @@
 /* Blackfin General Purpose Ports (GPIO) model
    For "new style" GPIOs on BF54x parts.
 
-   Copyright (C) 2010-2019 Free Software Foundation, Inc.
+   Copyright (C) 2010-2013 Free Software Foundation, Inc.
    Contributed by Analog Devices, Inc. and Mike Frysinger.
 
    This file is part of simulators.
@@ -66,27 +66,21 @@ bfin_gpio_io_write_buffer (struct hw *me, const void *source, int space,
   bu32 *value32p;
   void *valuep;
 
-  mmr_off = addr - port->base;
-
-  /* Invalid access mode is higher priority than missing register.  */
-  if (mmr_off == mmr_offset (mux))
-    {
-      if (!dv_bfin_mmr_require_32 (me, addr, nr_bytes, true))
-	return 0;
-    }
-  else
-    if (!dv_bfin_mmr_require_16 (me, addr, nr_bytes, true))
-	return 0;
-
   if (nr_bytes == 4)
     value = dv_load_4 (source);
   else
     value = dv_load_2 (source);
+  mmr_off = addr - port->base;
   valuep = (void *)((unsigned long)port + mmr_base() + mmr_off);
   value16p = valuep;
   value32p = valuep;
 
   HW_TRACE_WRITE ();
+
+  if (mmr_off == mmr_offset (mux))
+    dv_bfin_mmr_require_32 (me, addr, nr_bytes, true);
+  else
+    dv_bfin_mmr_require_16 (me, addr, nr_bytes, true);
 
   switch (mmr_off)
     {
@@ -114,7 +108,7 @@ bfin_gpio_io_write_buffer (struct hw *me, const void *source, int space,
       break;
     default:
       dv_bfin_mmr_invalid (me, addr, nr_bytes, true);
-      return 0;
+      break;
     }
 
   /* If tweaking output pins, make sure we send updated port info.  */
@@ -154,22 +148,16 @@ bfin_gpio_io_read_buffer (struct hw *me, void *dest, int space,
   void *valuep;
 
   mmr_off = addr - port->base;
-
-  /* Invalid access mode is higher priority than missing register.  */
-  if (mmr_off == mmr_offset (mux))
-    {
-      if (!dv_bfin_mmr_require_32 (me, addr, nr_bytes, false))
-	return 0;
-    }
-  else
-    if (!dv_bfin_mmr_require_16 (me, addr, nr_bytes, false))
-      return 0;
-
   valuep = (void *)((unsigned long)port + mmr_base() + mmr_off);
   value16p = valuep;
   value32p = valuep;
 
   HW_TRACE_READ ();
+
+  if (mmr_off == mmr_offset (mux))
+    dv_bfin_mmr_require_32 (me, addr, nr_bytes, false);
+  else
+    dv_bfin_mmr_require_16 (me, addr, nr_bytes, false);
 
   switch (mmr_off)
     {
@@ -191,7 +179,7 @@ bfin_gpio_io_read_buffer (struct hw *me, void *dest, int space,
       break;
     default:
       dv_bfin_mmr_invalid (me, addr, nr_bytes, false);
-      return 0;
+      break;
     }
 
   return nr_bytes;

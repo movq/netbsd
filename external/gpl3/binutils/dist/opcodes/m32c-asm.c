@@ -1,11 +1,11 @@
-/* DO NOT EDIT!  -*- buffer-read-only: t -*- vi:set ro:  */
 /* Assembler interface for targets using CGEN. -*- C -*-
    CGEN: Cpu tools GENerator
 
    THIS FILE IS MACHINE GENERATED WITH CGEN.
    - the resultant file is machine generated, cgen-asm.in isn't
 
-   Copyright (C) 1996-2020 Free Software Foundation, Inc.
+   Copyright 1996, 1997, 1998, 1999, 2000, 2001, 2005, 2007
+   Free Software Foundation, Inc.
 
    This file is part of libopcodes.
 
@@ -59,14 +59,14 @@ m32c_cgen_isa_register (const char **strp)
  {
    int u;
    const char *s = *strp;
-   static char * m32c_register_names [] =
+   static char * m32c_register_names [] = 
      {
        "r0", "r1", "r2", "r3", "r0l", "r0h", "r1l", "r1h",
        "a0", "a1", "r2r0", "r3r1", "sp", "fb", "dct0", "dct1", "flg", "svf",
        "drc0", "drc1", "dmd0", "dmd1", "intb", "svp", "vct", "isp", "dma0",
        "dma1", "dra0", "dra1", "dsa0", "dsa1", 0
      };
-
+ 
    for (u = 0; m32c_register_names[u]; u++)
      {
        int len = strlen (m32c_register_names[u]);
@@ -125,31 +125,32 @@ parse_unsigned8 (CGEN_CPU_DESC cd, const char **strp,
 		 int opindex, unsigned long *valuep)
 {
   const char *errmsg = 0;
-  unsigned long value = 0;
+  unsigned long value;
   long have_zero = 0;
 
   if (strncasecmp (*strp, "%dsp8(", 6) == 0)
     {
       enum cgen_parse_operand_result result_type;
-      bfd_vma val;
+      bfd_vma value;
+      const char *errmsg;
 
       *strp += 6;
       errmsg = cgen_parse_address (cd, strp, opindex, BFD_RELOC_8,
-				   & result_type, & val);
+				   & result_type, & value);
       if (**strp != ')')
 	return _("missing `)'");
       (*strp) ++;
 
       if (errmsg == NULL
   	  && result_type == CGEN_PARSE_OPERAND_RESULT_NUMBER)
-	return _("%dsp8() takes a symbolic address, not a number");
-
-      value = val;
+	{
+	  return _("%dsp8() takes a symbolic address, not a number");
+	}
       *valuep = value;
       return errmsg;
     }
 
-  if (strncmp (*strp, "0x0", 3) == 0
+  if (strncmp (*strp, "0x0", 3) == 0 
       || (**strp == '0' && *(*strp + 1) != 'x'))
     have_zero = 1;
 
@@ -174,7 +175,7 @@ parse_signed4 (CGEN_CPU_DESC cd, const char **strp,
   signed long value;
   long have_zero = 0;
 
-  if (strncmp (*strp, "0x0", 3) == 0
+  if (strncmp (*strp, "0x0", 3) == 0 
       || (**strp == '0' && *(*strp + 1) != 'x'))
     have_zero = 1;
 
@@ -199,7 +200,7 @@ parse_signed4n (CGEN_CPU_DESC cd, const char **strp,
   signed long value;
   long have_zero = 0;
 
-  if (strncmp (*strp, "0x0", 3) == 0
+  if (strncmp (*strp, "0x0", 3) == 0 
       || (**strp == '0' && *(*strp + 1) != 'x'))
     have_zero = 1;
 
@@ -221,25 +222,26 @@ parse_signed8 (CGEN_CPU_DESC cd, const char **strp,
 	       int opindex, signed long *valuep)
 {
   const char *errmsg = 0;
-  signed long value = 0;
+  signed long value;
 
   if (strncasecmp (*strp, "%hi8(", 5) == 0)
     {
       enum cgen_parse_operand_result result_type;
-      bfd_vma val;
+      bfd_vma value;
+      const char *errmsg;
 
       *strp += 5;
       errmsg = cgen_parse_address (cd, strp, opindex, BFD_RELOC_M32C_HI8,
-				   & result_type, & val);
+				   & result_type, & value);
       if (**strp != ')')
 	return _("missing `)'");
       (*strp) ++;
 
       if (errmsg == NULL
   	  && result_type == CGEN_PARSE_OPERAND_RESULT_NUMBER)
-	val >>= 16;
-
-      value = val;
+	{
+	  value >>= 16;
+	}
       *valuep = value;
       return errmsg;
     }
@@ -261,26 +263,27 @@ parse_unsigned16 (CGEN_CPU_DESC cd, const char **strp,
 		 int opindex, unsigned long *valuep)
 {
   const char *errmsg = 0;
-  unsigned long value = 0;
+  unsigned long value;
   long have_zero = 0;
 
   if (strncasecmp (*strp, "%dsp16(", 7) == 0)
     {
       enum cgen_parse_operand_result result_type;
-      bfd_vma val;
+      bfd_vma value;
+      const char *errmsg;
 
       *strp += 7;
       errmsg = cgen_parse_address (cd, strp, opindex, BFD_RELOC_16,
-				   & result_type, & val);
+				   & result_type, & value);
       if (**strp != ')')
 	return _("missing `)'");
       (*strp) ++;
 
       if (errmsg == NULL
   	  && result_type == CGEN_PARSE_OPERAND_RESULT_NUMBER)
-	return _("%dsp16() takes a symbolic address, not a number");
-
-      value = val;
+	{
+	  return _("%dsp16() takes a symbolic address, not a number");
+	}
       *valuep = value;
       return errmsg;
     }
@@ -293,10 +296,10 @@ parse_unsigned16 (CGEN_CPU_DESC cd, const char **strp,
   if (m32c_cgen_isa_register (strp))
     return "Invalid literal"; /* Anything -- will not be seen.  */
 
-  if (strncmp (*strp, "0x0", 3) == 0
+  if (strncmp (*strp, "0x0", 3) == 0 
       || (**strp == '0' && *(*strp + 1) != 'x'))
     have_zero = 1;
-
+  
   errmsg = cgen_parse_unsigned_integer (cd, strp, opindex, & value);
   if (errmsg)
     return errmsg;
@@ -320,25 +323,26 @@ parse_signed16 (CGEN_CPU_DESC cd, const char **strp,
 	       int opindex, signed long *valuep)
 {
   const char *errmsg = 0;
-  signed long value = 0;
+  signed long value;
 
   if (strncasecmp (*strp, "%lo16(", 6) == 0)
     {
       enum cgen_parse_operand_result result_type;
-      bfd_vma val;
+      bfd_vma value;
+      const char *errmsg;
 
       *strp += 6;
       errmsg = cgen_parse_address (cd, strp, opindex, BFD_RELOC_LO16,
-				   & result_type, & val);
+				   & result_type, & value);
       if (**strp != ')')
 	return _("missing `)'");
       (*strp) ++;
 
       if (errmsg == NULL
   	  && result_type == CGEN_PARSE_OPERAND_RESULT_NUMBER)
-	val &= 0xffff;
-
-      value = val;
+	{
+	  value &= 0xffff;
+	}
       *valuep = value;
       return errmsg;
     }
@@ -346,20 +350,21 @@ parse_signed16 (CGEN_CPU_DESC cd, const char **strp,
   if (strncasecmp (*strp, "%hi16(", 6) == 0)
     {
       enum cgen_parse_operand_result result_type;
-      bfd_vma val;
+      bfd_vma value;
+      const char *errmsg;
 
       *strp += 6;
       errmsg = cgen_parse_address (cd, strp, opindex, BFD_RELOC_HI16,
-				   & result_type, & val);
+				   & result_type, & value);
       if (**strp != ')')
 	return _("missing `)'");
       (*strp) ++;
 
       if (errmsg == NULL
   	  && result_type == CGEN_PARSE_OPERAND_RESULT_NUMBER)
-	val >>= 16;
-
-      value = val;
+	{
+	  value >>= 16;
+	}
       *valuep = value;
       return errmsg;
     }
@@ -382,7 +387,7 @@ parse_unsigned20 (CGEN_CPU_DESC cd, const char **strp,
 {
   const char *errmsg = 0;
   unsigned long value;
-
+  
   /* Don't successfully parse literals beginning with '['.  */
   if (**strp == '[')
     return "Invalid literal"; /* Anything -- will not be seen.  */
@@ -408,7 +413,7 @@ parse_unsigned24 (CGEN_CPU_DESC cd, const char **strp,
 {
   const char *errmsg = 0;
   unsigned long value;
-
+  
   /* Don't successfully parse literals beginning with '['.  */
   if (**strp == '[')
     return "Invalid literal"; /* Anything -- will not be seen.  */
@@ -454,7 +459,7 @@ parse_signed32 (CGEN_CPU_DESC cd, const char **strp,
 {
   const char *errmsg = 0;
   signed long value;
-
+  
   errmsg = cgen_parse_signed_integer (cd, strp, opindex, & value);
   if (errmsg)
     return errmsg;
@@ -487,7 +492,7 @@ parse_imm3_S (CGEN_CPU_DESC cd, const char **strp,
 {
   const char *errmsg = 0;
   signed long value;
-
+  
   errmsg = cgen_parse_signed_integer (cd, strp, opindex, & value);
   if (errmsg)
     return errmsg;
@@ -505,7 +510,7 @@ parse_bit3_S (CGEN_CPU_DESC cd, const char **strp,
 {
   const char *errmsg = 0;
   signed long value;
-
+  
   errmsg = cgen_parse_signed_integer (cd, strp, opindex, & value);
   if (errmsg)
     return errmsg;
@@ -535,7 +540,7 @@ parse_lab_5_3 (CGEN_CPU_DESC cd,
   if (type_addr)
     *type_addr = op_res;
 
-  if (op_res == CGEN_PARSE_OPERAND_RESULT_QUEUED)
+  if (op_res == CGEN_PARSE_OPERAND_ADDRESS)
     {
       /* This is a hack; the field cannot handle near-zero signed
 	 offsets that CGEN wants to put in to indicate an "empty"
@@ -592,7 +597,7 @@ parse_unsigned_bitbase (CGEN_CPU_DESC cd, const char **strp,
 
   ++newp;
 
-  if (strncmp (newp, "0x0", 3) == 0
+  if (strncmp (newp, "0x0", 3) == 0 
       || (newp[0] == '0' && newp[1] != 'x'))
     have_zero = 1;
 
@@ -647,7 +652,7 @@ parse_signed_bitbase (CGEN_CPU_DESC cd, const char **strp,
 
   ++newp;
 
-  if (strncmp (newp, "0x0", 3) == 0
+  if (strncmp (newp, "0x0", 3) == 0 
       || (newp[0] == '0' && newp[1] != 'x'))
     have_zero = 1;
 
@@ -732,7 +737,7 @@ static const char *
 parse_suffix (const char **strp, char suffix)
 {
   const char *newp = *strp;
-
+  
   if (**strp == ':' && TOLOWER (*(*strp + 1)) == suffix)
     newp = *strp + 2;
 
@@ -741,7 +746,7 @@ parse_suffix (const char **strp, char suffix)
       *strp = newp;
       return 0;
     }
-
+	
   return "Invalid suffix"; /* Anything -- will not be seen.  */
 }
 
@@ -860,7 +865,7 @@ parse_regset (CGEN_CPU_DESC cd ATTRIBUTE_UNUSED,
 {
   const char *errmsg = 0;
   int regno = 0;
-
+ 
   *valuep = 0;
   while (**strp && **strp != ')')
     {
@@ -879,19 +884,19 @@ parse_regset (CGEN_CPU_DESC cd ATTRIBUTE_UNUSED,
 	    errmsg = _("Register number is not valid");
 	  regno = **strp - '0' + 4;
 	}
-
+      
       else if (strncasecmp (*strp, "sb", 2) == 0 || strncasecmp (*strp, "SB", 2) == 0)
 	{
 	  regno = 6;
 	  ++*strp;
 	}
-
+      
       else if (strncasecmp (*strp, "fb", 2) == 0 || strncasecmp (*strp, "FB", 2) == 0)
 	{
 	  regno = 7;
 	  ++*strp;
 	}
-
+      
       if (push) /* Mask is reversed for push.  */
 	*valuep |= 0x80 >> regno;
       else
@@ -1581,16 +1586,14 @@ m32c_cgen_parse_operand (CGEN_CPU_DESC cd,
 
     default :
       /* xgettext:c-format */
-      opcodes_error_handler
-	(_("internal error: unrecognized field %d while parsing"),
-	 opindex);
+      fprintf (stderr, _("Unrecognized field %d while parsing.\n"), opindex);
       abort ();
   }
 
   return errmsg;
 }
 
-cgen_parse_fn * const m32c_cgen_parse_handlers[] =
+cgen_parse_fn * const m32c_cgen_parse_handlers[] = 
 {
   parse_insn_normal,
 };
@@ -1620,9 +1623,9 @@ CGEN_ASM_INIT_HOOK
 
    Returns NULL for success, an error message for failure.  */
 
-char *
+char * 
 m32c_cgen_build_insn_regex (CGEN_INSN *insn)
-{
+{  
   CGEN_OPCODE *opc = (CGEN_OPCODE *) CGEN_INSN_OPCODE (insn);
   const char *mnem = CGEN_INSN_MNEMONIC (insn);
   char rxbuf[CGEN_MAX_RX_ELEMENTS];
@@ -1661,18 +1664,18 @@ m32c_cgen_build_insn_regex (CGEN_INSN *insn)
   /* Copy any remaining literals from the syntax string into the rx.  */
   for(; * syn != 0 && rx <= rxbuf + (CGEN_MAX_RX_ELEMENTS - 7 - 4); ++syn)
     {
-      if (CGEN_SYNTAX_CHAR_P (* syn))
+      if (CGEN_SYNTAX_CHAR_P (* syn)) 
 	{
 	  char c = CGEN_SYNTAX_CHAR (* syn);
 
-	  switch (c)
+	  switch (c) 
 	    {
 	      /* Escape any regex metacharacters in the syntax.  */
-	    case '.': case '[': case '\\':
-	    case '*': case '^': case '$':
+	    case '.': case '[': case '\\': 
+	    case '*': case '^': case '$': 
 
 #ifdef CGEN_ESCAPE_EXTENDED_REGEX
-	    case '?': case '{': case '}':
+	    case '?': case '{': case '}': 
 	    case '(': case ')': case '*':
 	    case '|': case '+': case ']':
 #endif
@@ -1702,20 +1705,20 @@ m32c_cgen_build_insn_regex (CGEN_INSN *insn)
     }
 
   /* Trailing whitespace ok.  */
-  * rx++ = '[';
-  * rx++ = ' ';
-  * rx++ = '\t';
-  * rx++ = ']';
-  * rx++ = '*';
+  * rx++ = '['; 
+  * rx++ = ' '; 
+  * rx++ = '\t'; 
+  * rx++ = ']'; 
+  * rx++ = '*'; 
 
   /* But anchor it after that.  */
-  * rx++ = '$';
+  * rx++ = '$'; 
   * rx = '\0';
 
   CGEN_INSN_RX (insn) = xmalloc (sizeof (regex_t));
   reg_err = regcomp ((regex_t *) CGEN_INSN_RX (insn), rxbuf, REG_NOSUB);
 
-  if (reg_err == 0)
+  if (reg_err == 0) 
     return NULL;
   else
     {
@@ -1833,11 +1836,9 @@ parse_insn_normal (CGEN_CPU_DESC cd,
 	  continue;
 	}
 
-#ifdef CGEN_MNEMONIC_OPERANDS
-      (void) past_opcode_p;
-#endif
       /* We have an operand of some sort.  */
-      errmsg = cd->parse_operand (cd, CGEN_SYNTAX_FIELD (*syn), &str, fields);
+      errmsg = cd->parse_operand (cd, CGEN_SYNTAX_FIELD (*syn),
+					  &str, fields);
       if (errmsg)
 	return errmsg;
 
@@ -1914,7 +1915,7 @@ m32c_cgen_assemble_insn (CGEN_CPU_DESC cd,
       const CGEN_INSN *insn = ilist->insn;
       recognized_mnemonic = 1;
 
-#ifdef CGEN_VALIDATE_INSN_SUPPORTED
+#ifdef CGEN_VALIDATE_INSN_SUPPORTED 
       /* Not usually needed as unsupported opcodes
 	 shouldn't be in the hash lists.  */
       /* Is this insn supported by the selected cpu?  */
@@ -1954,40 +1955,32 @@ m32c_cgen_assemble_insn (CGEN_CPU_DESC cd,
 
   {
     static char errbuf[150];
-    const char *tmp_errmsg;
 #ifdef CGEN_VERBOSE_ASSEMBLER_ERRORS
-#define be_verbose 1
+    const char *tmp_errmsg;
+
+    /* If requesting verbose error messages, use insert_errmsg.
+       Failing that, use parse_errmsg.  */
+    tmp_errmsg = (insert_errmsg ? insert_errmsg :
+		  parse_errmsg ? parse_errmsg :
+		  recognized_mnemonic ?
+		  _("unrecognized form of instruction") :
+		  _("unrecognized instruction"));
+
+    if (strlen (start) > 50)
+      /* xgettext:c-format */
+      sprintf (errbuf, "%s `%.50s...'", tmp_errmsg, start);
+    else 
+      /* xgettext:c-format */
+      sprintf (errbuf, "%s `%.50s'", tmp_errmsg, start);
 #else
-#define be_verbose 0
+    if (strlen (start) > 50)
+      /* xgettext:c-format */
+      sprintf (errbuf, _("bad instruction `%.50s...'"), start);
+    else 
+      /* xgettext:c-format */
+      sprintf (errbuf, _("bad instruction `%.50s'"), start);
 #endif
-
-    if (be_verbose)
-      {
-	/* If requesting verbose error messages, use insert_errmsg.
-	   Failing that, use parse_errmsg.  */
-	tmp_errmsg = (insert_errmsg ? insert_errmsg :
-		      parse_errmsg ? parse_errmsg :
-		      recognized_mnemonic ?
-		      _("unrecognized form of instruction") :
-		      _("unrecognized instruction"));
-
-	if (strlen (start) > 50)
-	  /* xgettext:c-format */
-	  sprintf (errbuf, "%s `%.50s...'", tmp_errmsg, start);
-	else
-	  /* xgettext:c-format */
-	  sprintf (errbuf, "%s `%.50s'", tmp_errmsg, start);
-      }
-    else
-      {
-	if (strlen (start) > 50)
-	  /* xgettext:c-format */
-	  sprintf (errbuf, _("bad instruction `%.50s...'"), start);
-	else
-	  /* xgettext:c-format */
-	  sprintf (errbuf, _("bad instruction `%.50s'"), start);
-      }
-
+      
     *errmsg = errbuf;
     return NULL;
   }

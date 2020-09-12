@@ -2,7 +2,8 @@
    Written by Fred Fish <fnf@cygnus.com>
    Rewritten by Jim Blandy <jimb@cygnus.com>
 
-   Copyright (C) 1999-2019 Free Software Foundation, Inc.
+   Copyright (C) 1999, 2000, 2002, 2003, 2007, 2008, 2009, 2010, 2011
+   Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -22,6 +23,11 @@
 #include "defs.h"
 #include "gdb_obstack.h"
 #include "bcache.h"
+#include "gdb_string.h"		/* For memcpy declaration */
+#include "gdb_assert.h"
+
+#include <stddef.h>
+#include <stdlib.h>
 
 /* The type used to hold a single bcache string.  The user data is
    stored in d.data.  Since it can be any type, it needs to have the
@@ -203,9 +209,9 @@ expand_hash_table (struct bcache *bcache)
    never seen those bytes before, add a copy of them to BCACHE.  In
    either case, return a pointer to BCACHE's copy of that string.  */
 const void *
-bcache (const void *addr, int length, struct bcache *cache)
+bcache (const void *addr, int length, struct bcache *bcache)
 {
-  return bcache_full (addr, length, cache, NULL);
+  return bcache_full (addr, length, bcache, NULL);
 }
 
 /* Find a copy of the LENGTH bytes at ADDR in BCACHE.  If BCACHE has
@@ -264,15 +270,14 @@ bcache_full (const void *addr, int length, struct bcache *bcache, int *added)
 
   /* The user's string isn't in the list.  Insert it after *ps.  */
   {
-    struct bstring *newobj
-      = (struct bstring *) obstack_alloc (&bcache->cache,
-					  BSTRING_SIZE (length));
+    struct bstring *new
+      = obstack_alloc (&bcache->cache, BSTRING_SIZE (length));
 
-    memcpy (&newobj->d.data, addr, length);
-    newobj->length = length;
-    newobj->next = bcache->bucket[hash_index];
-    newobj->half_hash = half_hash;
-    bcache->bucket[hash_index] = newobj;
+    memcpy (&new->d.data, addr, length);
+    new->length = length;
+    new->next = bcache->bucket[hash_index];
+    new->half_hash = half_hash;
+    bcache->bucket[hash_index] = new;
 
     bcache->unique_count++;
     bcache->unique_size += length;
@@ -281,7 +286,7 @@ bcache_full (const void *addr, int length, struct bcache *bcache, int *added)
     if (added)
       *added = 1;
 
-    return &newobj->d.data;
+    return &new->d.data;
   }
 }
 
@@ -309,7 +314,7 @@ bcache_xmalloc (unsigned long (*hash_function)(const void *, int length),
 					int length))
 {
   /* Allocate the bcache pre-zeroed.  */
-  struct bcache *b = XCNEW (struct bcache);
+  struct bcache *b = XCALLOC (1, struct bcache);
 
   if (hash_function)
     b->hash_function = hash_function;
@@ -356,7 +361,7 @@ print_percentage (int portion, int total)
    BCACHE holds.  Statistics are printed using `printf_filtered' and
    its ilk.  */
 void
-print_bcache_statistics (struct bcache *c, const char *type)
+print_bcache_statistics (struct bcache *c, char *type)
 {
   int occupied_buckets;
   int max_chain_length;
@@ -368,8 +373,8 @@ print_bcache_statistics (struct bcache *c, const char *type)
      lengths, and measure chain lengths.  */
   {
     unsigned int b;
-    int *chain_length = XCNEWVEC (int, c->num_buckets + 1);
-    int *entry_size = XCNEWVEC (int, c->unique_count + 1);
+    int *chain_length = XCALLOC (c->num_buckets + 1, int);
+    int *entry_size = XCALLOC (c->unique_count + 1, int);
     int stringi = 0;
 
     occupied_buckets = 0;

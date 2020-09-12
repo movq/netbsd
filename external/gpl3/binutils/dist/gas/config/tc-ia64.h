@@ -1,5 +1,6 @@
 /* tc-ia64.h -- Header file for tc-ia64.c.
-   Copyright (C) 1998-2020 Free Software Foundation, Inc.
+   Copyright 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005, 2007, 2008
+   Free Software Foundation, Inc.
    Contributed by David Mosberger-Tang <davidm@hpl.hp.com>
 
    This file is part of GAS, the GNU Assembler.
@@ -78,9 +79,6 @@ extern const char *ia64_target_format (void);
 #define LEX_QM		(LEX_NAME|LEX_BEGIN_NAME) /* allow `?' inside name */
 #define LEX_HASH	LEX_END_NAME	/* allow `#' ending a name */
 
-#define TC_PREDICATE_START_CHAR '('
-#define TC_PREDICATE_END_CHAR ')'
-
 extern const char ia64_symbol_chars[];
 #define tc_symbol_chars ia64_symbol_chars
 
@@ -106,12 +104,11 @@ extern void ia64_cons_align (int);
 extern void ia64_flush_insns (void);
 extern int ia64_fix_adjustable (struct fix *);
 extern int ia64_force_relocation (struct fix *);
-extern void ia64_cons_fix_new (fragS *, int, int, expressionS *,
-			       bfd_reloc_code_real_type);
+extern void ia64_cons_fix_new (fragS *, int, int, expressionS *);
 extern void ia64_validate_fix (struct fix *);
 extern char * ia64_canonicalize_symbol_name (char *);
-extern bfd_vma ia64_elf_section_letter (int, const char **);
-extern flagword ia64_elf_section_flags (flagword, bfd_vma, int);
+extern int ia64_elf_section_letter (int, char **);
+extern flagword ia64_elf_section_flags (flagword, int, int);
 extern int ia64_elf_section_type (const char *, size_t);
 extern long ia64_pcrel_from_section (struct fix *, segT);
 extern void ia64_md_do_align (int, const char *, int, int);
@@ -149,7 +146,7 @@ extern void ia64_convert_frag (fragS *);
 #define md_elf_section_flags		ia64_elf_section_flags
 #define TC_FIX_TYPE			struct ia64_fix
 #define TC_INIT_FIX_DATA(f)		{ f->tc_fix_data.opnd = 0; }
-#define TC_CONS_FIX_NEW(f,o,l,e,r)	ia64_cons_fix_new (f, o, l, e, r)
+#define TC_CONS_FIX_NEW(f,o,l,e)	ia64_cons_fix_new (f, o, l, e)
 #define TC_VALIDATE_FIX(fix,seg,skip)	ia64_validate_fix (fix)
 #define MD_PCREL_FROM_SECTION(fix,sec)	ia64_pcrel_from_section (fix, sec)
 #define md_section_align(seg,size)	(size)
@@ -159,14 +156,10 @@ extern void ia64_convert_frag (fragS *);
 #define md_after_parse_args()		ia64_after_parse_args ()
 #define TC_DWARF2_EMIT_OFFSET		ia64_dwarf2_emit_offset
 #define tc_check_label(l)		ia64_check_label (l)
-#ifdef TE_VMS
-#define tc_init_after_args() ia64_vms_note ()
-void ia64_vms_note (void);
-#endif
 
 /* Record if an alignment frag should end with a stop bit.  */
 #define TC_FRAG_TYPE			int
-#define TC_FRAG_INIT(FRAGP, MAX_BYTES)	do {(FRAGP)->tc_frag_data = 0;}while (0)
+#define TC_FRAG_INIT(FRAGP)		do {(FRAGP)->tc_frag_data = 0;}while (0)
 
 /* Give an error if a frag containing code is not aligned to a 16 byte
    boundary.  */
@@ -320,11 +313,6 @@ typedef struct unwind_record
 
 #define TC_FORCE_RELOCATION_LOCAL(FIX)			\
   ((FIX)->fx_r_type != BFD_RELOC_UNUSED			\
-   && (GENERIC_FORCE_RELOCATION_LOCAL (FIX)		\
-       || (FIX)->fx_r_type == BFD_RELOC_IA64_PLTOFF22))
-
-/* VMS backtraces expect dwarf version 3.  */
-#ifdef TE_VMS
-#define DWARF2_VERSION 3
-#define DWARF2_LINE_VERSION 3
-#endif
+   && (!(FIX)->fx_pcrel					\
+       || (FIX)->fx_r_type == BFD_RELOC_IA64_PLTOFF22	\
+       || TC_FORCE_RELOCATION (FIX)))

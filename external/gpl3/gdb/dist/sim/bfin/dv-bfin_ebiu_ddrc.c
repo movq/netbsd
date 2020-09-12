@@ -1,6 +1,6 @@
 /* Blackfin External Bus Interface Unit (EBIU) DDR Controller (DDRC) Model.
 
-   Copyright (C) 2010-2019 Free Software Foundation, Inc.
+   Copyright (C) 2010-2011 Free Software Foundation, Inc.
    Contributed by Analog Devices, Inc.
 
    This file is part of simulators.
@@ -68,10 +68,6 @@ bfin_ebiu_ddrc_io_write_buffer (struct hw *me, const void *source,
   bu32 *value32p;
   void *valuep;
 
-  /* Invalid access mode is higher priority than missing register.  */
-  if (!dv_bfin_mmr_require_16_32 (me, addr, nr_bytes, true))
-    return 0;
-
   if (nr_bytes == 4)
     value = dv_load_4 (source);
   else
@@ -88,13 +84,11 @@ bfin_ebiu_ddrc_io_write_buffer (struct hw *me, const void *source,
     {
     case mmr_offset(errmst):
     case mmr_offset(rstctl):
-      if (!dv_bfin_mmr_require_16 (me, addr, nr_bytes, true))
-	return 0;
+      dv_bfin_mmr_require_16 (me, addr, nr_bytes, true);
       *value16p = value;
       break;
     default:
-      if (!dv_bfin_mmr_require_32 (me, addr, nr_bytes, true))
-	return 0;
+      dv_bfin_mmr_require_32 (me, addr, nr_bytes, true);
       *value32p = value;
       break;
     }
@@ -112,10 +106,6 @@ bfin_ebiu_ddrc_io_read_buffer (struct hw *me, void *dest,
   bu16 *value16p;
   void *valuep;
 
-  /* Invalid access mode is higher priority than missing register.  */
-  if (!dv_bfin_mmr_require_16_32 (me, addr, nr_bytes, true))
-    return 0;
-
   mmr_off = addr - ddrc->base;
   valuep = (void *)((unsigned long)ddrc + mmr_base() + mmr_off);
   value16p = valuep;
@@ -127,13 +117,11 @@ bfin_ebiu_ddrc_io_read_buffer (struct hw *me, void *dest,
     {
     case mmr_offset(errmst):
     case mmr_offset(rstctl):
-      if (!dv_bfin_mmr_require_16 (me, addr, nr_bytes, false))
-	return 0;
+      dv_bfin_mmr_require_16 (me, addr, nr_bytes, false);
       dv_store_2 (dest, *value16p);
       break;
     default:
-      if (!dv_bfin_mmr_require_32 (me, addr, nr_bytes, false))
-	return 0;
+      dv_bfin_mmr_require_32 (me, addr, nr_bytes, false);
       dv_store_4 (dest, *value32p);
       break;
     }

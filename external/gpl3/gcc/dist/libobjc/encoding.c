@@ -1,5 +1,6 @@
 /* Encoding of types for Objective C.
-   Copyright (C) 1993-2019 Free Software Foundation, Inc.
+   Copyright (C) 1993, 1995, 1996, 1997, 1998, 2000, 2002, 2004, 2009
+   Free Software Foundation, Inc.
    Contributed by Kresten Krab Thorup
    Bitfield support by Ovidiu Predescu
 
@@ -26,20 +27,12 @@ see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
 
 /* FIXME: This file has no business including tm.h.  */
 
-/* FIXME: This file contains functions that will abort the entire
-   program if they fail.  Is that really needed ?  */
-
-#include "config.h"
-#include "objc-private/common.h"
-#include "objc-private/error.h"
 #include "tconfig.h"
 #include "coretypes.h"
 #include "tm.h"
-#include "objc/runtime.h"
-#include "objc-private/module-abi-8.h" /* For struct objc_method */
+#include "objc/objc-api.h"
+#include "objc/encoding.h"
 #include <stdlib.h>
-#include <ctype.h>
-#include <string.h>                    /* For memcpy.  */
 
 #undef  MAX
 #define MAX(X, Y)                    \
@@ -81,7 +74,6 @@ see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
 #define DECL_MODE(TYPE) *(TYPE)
 #define TYPE_MODE(TYPE) *(TYPE)
 
-#undef  DFmode
 #define DFmode          _C_DBL
 
 #define strip_array_types(TYPE)      ({const char *_field = (TYPE); \
@@ -95,8 +87,11 @@ see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
 /* Some ports (eg ARM) allow the structure size boundary to be
    selected at compile-time.  We override the normal definition with
    one that has a constant value for this compilation.  */
+#ifndef BITS_PER_UNIT
+#define BITS_PER_UNIT 8
+#endif
 #undef  STRUCTURE_SIZE_BOUNDARY
-#define STRUCTURE_SIZE_BOUNDARY (__CHAR_BIT__ * sizeof (struct{char a;}))
+#define STRUCTURE_SIZE_BOUNDARY (BITS_PER_UNIT * sizeof (struct{char a;}))
 
 /* Some ROUND_TYPE_ALIGN macros use TARGET_foo, and consequently
    target_flags.  Define a dummy entry here to so we don't die.
@@ -110,115 +105,35 @@ static int __attribute__ ((__unused__)) not_target_flags = 0;
 #undef ALTIVEC_VECTOR_MODE
 #define ALTIVEC_VECTOR_MODE(MODE) (0)
 
-/* Replace TARGET_VSX, TARGET_ALTIVEC, and TARGET_64BIT with constants based on
-   the current switches, rather than looking in the options structure.  */
-#ifdef _ARCH_PPC
-#undef TARGET_VSX
-#undef TARGET_ALTIVEC
-#undef TARGET_64BIT
-
-#ifdef __VSX__
-#define TARGET_VSX 1
-#else
-#define TARGET_VSX 0
-#endif
-
-#ifdef __ALTIVEC__
-#define TARGET_ALTIVEC 1
-#else
-#define TARGET_ALTIVEC 0
-#endif
-
-#ifdef _ARCH_PPC64
-#define TARGET_64BIT 1
-#else
-#define TARGET_64BIT 0
-#endif
-#endif
-
-/* Furthermore, some (powerpc) targets also use TARGET_ALIGN_NATURAL
- in their alignment macros. Currently[4.5/6], rs6000.h points this
- to a static variable, initialized by target overrides. This is reset
- in linux64.h but not in darwin64.h.  The macro is not used by *86*.  */
-
-#if __MACH__ 
-# if __LP64__
-#  undef TARGET_ALIGN_NATURAL
-#  define TARGET_ALIGN_NATURAL 1
-# endif
-
-/* On Darwin32, we need to recurse until we find the starting stuct type.  */
-static int 
-_darwin_rs6000_special_round_type_align (const char *struc, int comp, int spec)
-{
-  const char *_stp , *_fields = TYPE_FIELDS (struc);
-  if (!_fields)
-    return MAX (comp, spec);
-  _stp = strip_array_types (_fields);
-  if (TYPE_MODE(_stp) == _C_COMPLEX)
-   _stp++;
-  switch (TYPE_MODE(_stp))
-    {
-      case RECORD_TYPE:
-      case UNION_TYPE:
-	return MAX (MAX (comp, spec), objc_alignof_type (_stp) * __CHAR_BIT__);
-	break;
-      case E_DFmode:
-      case _C_LNG_LNG:
-      case _C_ULNG_LNG:
-	return MAX (MAX (comp, spec), 64);
-	break;
-
-      default:
-	return MAX (comp, spec);
-	break;
-    }
-}
-
-/* See comment below.  */
-#define darwin_rs6000_special_round_type_align(S,C,S2)			\
-  (_darwin_rs6000_special_round_type_align ((char*)(S), (int)(C), (int)(S2)))
-#endif
 
 /*  FIXME: while this file has no business including tm.h, this
     definitely has no business defining this macro but it
     is only way around without really rewritting this file,
-    should look after the branch of 3.4 to fix this.   */
+    should look after the branch of 3.4 to fix this.  */
 #define rs6000_special_round_type_align(STRUCT, COMPUTED, SPECIFIED)	\
-  ({ const char *_fields = TYPE_FIELDS (STRUCT);			\
+  ({ const char *_fields = TYPE_FIELDS (STRUCT);				\
   ((_fields != 0							\
     && TYPE_MODE (strip_array_types (TREE_TYPE (_fields))) == DFmode)	\
    ? MAX (MAX (COMPUTED, SPECIFIED), 64)				\
    : MAX (COMPUTED, SPECIFIED));})
+/* FIXME: The word 'fixme' is insufficient to explain the wrong-ness
+   of this next macro definition.  */
+#define darwin_rs6000_special_round_type_align(S,C,S2) \
+  rs6000_special_round_type_align(S,C,S2)
 
-#define rs6000_special_adjust_field_align_p(FIELD, COMPUTED) 0
-
-/* Skip a variable name, enclosed in quotes (").  */
-static inline
-const char *
-objc_skip_variable_name (const char *type)
-{
-  /* Skip the variable name if any.  */
-  if (*type == '"')
-    {
-      /* FIXME: How do we know we won't read beyond the end of the
-	 string.  Here and in the rest of the file!  */
-      /* Skip '"'.  */
-      type++;
-      /* Skip to the next '"'.  */
-      while (*type != '"')
-	type++;
-      /* Skip '"'.  */
-      type++;
-    }
-
-  return type;
-}
+/*
+  return the size of an object specified by type
+*/
 
 int
 objc_sizeof_type (const char *type)
 {
-  type = objc_skip_variable_name (type);
+  /* Skip the variable name if any */
+  if (*type == '"')
+    {
+      for (type++; *type++ != '"';)
+	/* do nothing */;
+    }
 
   switch (*type) {
   case _C_BOOL:
@@ -285,10 +200,6 @@ objc_sizeof_type (const char *type)
     return sizeof (double);
     break;
 
-  case _C_LNG_DBL:
-    return sizeof (long double);
-    break;
-
   case _C_VOID:
     return sizeof (void);
     break;
@@ -308,23 +219,9 @@ objc_sizeof_type (const char *type)
     }
     break;
 
-  case _C_VECTOR:
-    {
-      /* Skip the '!'.  */
-      type++;
-      /* Skip the '['.  */
-      type++;
-
-      /* The size in bytes is the following number.  */
-      int size = atoi (type);
-      return size;
-    }
-    break;
-
   case _C_BFLD:
     {
-      /* The GNU encoding of bitfields is: b 'position' 'type'
-	 'size'.  */
+      /* The new encoding of bitfields is: b 'position' 'type' 'size' */
       int position, size;
       int startByte, endByte;
 
@@ -333,8 +230,8 @@ objc_sizeof_type (const char *type)
 	;
       size = atoi (type + 1);
 
-      startByte = position / __CHAR_BIT__;
-      endByte = (position + size) / __CHAR_BIT__;
+      startByte = position / BITS_PER_UNIT;
+      endByte = (position + size) / BITS_PER_UNIT;
       return endByte - startByte;
     }
 
@@ -404,18 +301,11 @@ objc_sizeof_type (const char *type)
 	    case _C_DBL:
 	      return sizeof (_Complex double);
 	      break;
-
-	    case _C_LNG_DBL:
-	      return sizeof (_Complex long double);
-	      break;
 	    
 	    default:
 	      {
-		/* FIXME: Is this so bad that we have to abort the
-		   entire program ?  (it applies to all the other
-		   _objc_abort calls in this file).
-		*/
-		_objc_abort ("unknown complex type %s\n", type);
+		objc_error (nil, OBJC_ERR_BAD_TYPE, "unknown complex type %s\n",
+			    type);
 		return 0;
 	      }
 	}
@@ -423,17 +313,26 @@ objc_sizeof_type (const char *type)
 
   default:
     {
-      _objc_abort ("unknown type %s\n", type);
+      objc_error (nil, OBJC_ERR_BAD_TYPE, "unknown type %s\n", type);
       return 0;
     }
   }
 }
 
+
+/*
+  Return the alignment of an object specified by type
+*/
+
 int
 objc_alignof_type (const char *type)
 {
-  type = objc_skip_variable_name (type);
-
+  /* Skip the variable name if any */
+  if (*type == '"')
+    {
+      for (type++; *type++ != '"';)
+	/* do nothing */;
+    }
   switch (*type) {
   case _C_BOOL:
     return __alignof__ (_Bool);
@@ -499,10 +398,6 @@ objc_alignof_type (const char *type)
     return __alignof__ (double);
     break;
 
-  case _C_LNG_DBL:
-    return __alignof__ (long double);
-    break;
-
   case _C_PTR:
   case _C_ATOM:
   case _C_CHARPTR:
@@ -514,23 +409,6 @@ objc_alignof_type (const char *type)
       /* do nothing */;
     return objc_alignof_type (type);
 
-  case _C_VECTOR:
-    {   
-      /* Skip the '!'.  */
-      type++;
-      /* Skip the '['.  */
-      type++;
-      
-      /* Skip the size.  */
-      while (isdigit ((unsigned char)*type))
-	type++;
-      
-      /* Skip the ','.  */
-      type++;
-      
-      /* The alignment in bytes is the following number.  */
-      return atoi (type);
-    }
   case _C_STRUCT_B:
   case _C_UNION_B:
     {
@@ -598,14 +476,11 @@ objc_alignof_type (const char *type)
 	    case _C_DBL:
 	      return __alignof__ (_Complex double);
 	      break;
-
-	    case _C_LNG_DBL:
-	      return __alignof__ (_Complex long double);
-	      break;
 	    
 	    default:
 	      {
-		_objc_abort ("unknown complex type %s\n", type);
+		objc_error (nil, OBJC_ERR_BAD_TYPE, "unknown complex type %s\n",
+			    type);
 		return 0;
 	      }
 	}
@@ -613,30 +488,51 @@ objc_alignof_type (const char *type)
 
   default:
     {
-      _objc_abort ("unknown type %s\n", type);
+      objc_error (nil, OBJC_ERR_BAD_TYPE, "unknown type %s\n", type);
       return 0;
     }
   }
 }
+
+/*
+  The aligned size if the size rounded up to the nearest alignment.
+*/
 
 int
 objc_aligned_size (const char *type)
 {
   int size, align;
 
-  type = objc_skip_variable_name (type);
+  /* Skip the variable name */
+  if (*type == '"')
+    {
+      for (type++; *type++ != '"';)
+	/* do nothing */;
+    }
+
   size = objc_sizeof_type (type);
   align = objc_alignof_type (type);
 
   return ROUND (size, align);
 }
 
+/*
+  The size rounded up to the nearest integral of the wordsize, taken
+  to be the size of a void *.
+*/
+
 int
 objc_promoted_size (const char *type)
 {
   int size, wordsize;
 
-  type = objc_skip_variable_name (type);
+  /* Skip the variable name */
+  if (*type == '"')
+    {
+      for (type++; *type++ != '"';)
+	/* do nothing */;
+    }
+
   size = objc_sizeof_type (type);
   wordsize = sizeof (void *);
 
@@ -648,7 +544,7 @@ objc_promoted_size (const char *type)
   occurring in method prototype encodings.
 */
 
-const char *
+inline const char *
 objc_skip_type_qualifiers (const char *type)
 {
   while (*type == _C_CONST
@@ -665,10 +561,22 @@ objc_skip_type_qualifiers (const char *type)
   return type;
 }
 
+
+/*
+  Skip one typespec element.  If the typespec is prepended by type
+  qualifiers, these are skipped as well.
+*/
+
 const char *
 objc_skip_typespec (const char *type)
 {
-  type = objc_skip_variable_name (type);
+  /* Skip the variable name if any */
+  if (*type == '"')
+    {
+      for (type++; *type++ != '"';)
+	/* do nothing */;
+    }
+
   type = objc_skip_type_qualifiers (type);
 
   switch (*type) {
@@ -704,7 +612,6 @@ objc_skip_typespec (const char *type)
   case _C_ULNG_LNG:
   case _C_FLT:
   case _C_DBL:
-  case _C_LNG_DBL:
   case _C_VOID:
   case _C_UNDEF:
     return ++type;
@@ -716,6 +623,7 @@ objc_skip_typespec (const char *type)
 
   case _C_ARY_B:
     /* skip digits, typespec and closing ']' */
+
     while (isdigit ((unsigned char)*++type))
       ;
     type = objc_skip_typespec (type);
@@ -723,37 +631,12 @@ objc_skip_typespec (const char *type)
       return ++type;
     else
       {
-	_objc_abort ("bad array type %s\n", type);
-	return 0;
-      }
-
-  case _C_VECTOR:
-    /* Skip '!' */
-    type++;
-    /* Skip '[' */
-    type++;
-    /* Skip digits (size) */
-    while (isdigit ((unsigned char)*type))
-      type++;
-    /* Skip ',' */
-    type++;
-    /* Skip digits (alignment) */
-    while (isdigit ((unsigned char)*type))
-      type++;
-    /* Skip typespec.  */
-    type = objc_skip_typespec (type);
-    /* Skip closing ']'.  */
-    if (*type == _C_ARY_E)
-      return ++type;
-    else
-      {
-	_objc_abort ("bad vector type %s\n", type);
+	objc_error (nil, OBJC_ERR_BAD_TYPE, "bad array type %s\n", type);
 	return 0;
       }
 
   case _C_BFLD:
-    /* The GNU encoding of bitfields is: b 'position' 'type'
-       'size'.  */
+    /* The new encoding of bitfields is: b 'position' 'type' 'size' */
     while (isdigit ((unsigned char)*++type))
       ;	/* skip position */
     while (isdigit ((unsigned char)*++type))
@@ -789,7 +672,7 @@ objc_skip_typespec (const char *type)
 
   default:
     {
-      _objc_abort ("unknown type %s\n", type);
+      objc_error (nil, OBJC_ERR_BAD_TYPE, "unknown type %s\n", type);
       return 0;
     }
   }
@@ -799,28 +682,19 @@ objc_skip_typespec (const char *type)
   Skip an offset as part of a method encoding.  This is prepended by a
   '+' if the argument is passed in registers.
 */
-const char *
+inline const char *
 objc_skip_offset (const char *type)
 {
-  /* The offset is prepended by a '+' if the argument is passed in
-     registers.  PS: The compiler stopped generating this '+' in
-     version 3.4.  */
   if (*type == '+')
     type++;
-
-  /* Some people claim that on some platforms, where the stack grows
-     backwards, the compiler generates negative offsets (??).  Skip a
-     '-' for such a negative offset.  */
-  if (*type == '-')
-    type++;
-
-  /* Skip the digits that represent the offset.  */
-  while (isdigit ((unsigned char) *type))
-    type++;
-
+  while (isdigit ((unsigned char) *++type))
+    ;
   return type;
 }
 
+/*
+  Skip an argument specification of a method encoding.
+*/
 const char *
 objc_skip_argspec (const char *type)
 {
@@ -829,199 +703,117 @@ objc_skip_argspec (const char *type)
   return type;
 }
 
-char *
-method_copyReturnType (struct objc_method *method)
+/*
+  Return the number of arguments that the method MTH expects.
+  Note that all methods need two implicit arguments `self' and
+  `_cmd'.
+*/
+int
+method_get_number_of_arguments (struct objc_method *mth)
 {
-  if (method == NULL)
-    return 0;
-  else
+  int i = 0;
+  const char *type = mth->method_types;
+  while (*type)
     {
-      char *returnValue;
-      size_t returnValueSize;
-
-      /* Determine returnValueSize.  */
-      {
-	/* Find the end of the first argument.  We want to return the
-	   first argument spec, plus 1 byte for the \0 at the end.  */
-	const char *type = method->method_types;
-	if (*type == '\0')
-	  return NULL;
-	type = objc_skip_argspec (type);
-	returnValueSize = type - method->method_types + 1;
-      }
-
-      /* Copy the first argument into returnValue.  */
-      returnValue = malloc (sizeof (char) * returnValueSize);
-      memcpy (returnValue, method->method_types, returnValueSize);
-      returnValue[returnValueSize - 1] = '\0';
-
-      return returnValue;
+      type = objc_skip_argspec (type);
+      i += 1;
     }
+  return i - 1;
 }
 
-char *
-method_copyArgumentType (struct objc_method * method, unsigned int argumentNumber)
+/*
+  Return the size of the argument block needed on the stack to invoke
+  the method MTH.  This may be zero, if all arguments are passed in
+  registers.
+*/
+
+int
+method_get_sizeof_arguments (struct objc_method *mth)
 {
-  if (method == NULL)
-    return 0;
-  else
-    {
-      char *returnValue;
-      const char *returnValueStart;
-      size_t returnValueSize;
+  const char *type = objc_skip_typespec (mth->method_types);
+  return atoi (type);
+}
 
-      /* Determine returnValueStart and returnValueSize.  */
+/*
+  Return a pointer to the next argument of ARGFRAME.  type points to
+  the last argument.  Typical use of this look like:
+
+  {
+    char *datum, *type;
+    for (datum = method_get_first_argument (method, argframe, &type);
+         datum; datum = method_get_next_argument (argframe, &type))
       {
-	const char *type = method->method_types;
-
-	/* Skip the first argument (return type).  */
-	type = objc_skip_argspec (type);
-
-	/* Now keep skipping arguments until we get to
-	   argumentNumber.  */
-	while (argumentNumber > 0)
+        unsigned flags = objc_get_type_qualifiers (type);
+        type = objc_skip_type_qualifiers (type);
+	if (*type != _C_PTR)
+          [portal encodeData: datum ofType: type];
+	else
 	  {
-	    /* We are supposed to skip an argument, but the string is
-	       finished.  This means we were asked for a non-existing
-	       argument.  */
-	    if (*type == '\0')
-	      return NULL;
-
-	    type = objc_skip_argspec (type);
-	    argumentNumber--;
+	    if ((flags & _F_IN) == _F_IN)
+              [portal encodeData: *(char **) datum ofType: ++type];
 	  }
-
-	/* If the argument does not exist, return NULL.  */
-	if (*type == '\0')
-	  return NULL;
-
-	returnValueStart = type;
-	type = objc_skip_argspec (type);
-	returnValueSize = type - returnValueStart + 1;
       }
-      
-      /* Copy the argument into returnValue.  */
-      returnValue = malloc (sizeof (char) * returnValueSize);
-      memcpy (returnValue, returnValueStart, returnValueSize);
-      returnValue[returnValueSize - 1] = '\0';
+  }
+*/
 
-      return returnValue;
-    }
-}
-
-void method_getReturnType (struct objc_method * method, char *returnValue, 
-			   size_t returnValueSize)
+char *
+method_get_next_argument (arglist_t argframe, const char **type)
 {
-  if (returnValue == NULL  ||  returnValueSize == 0)
-    return;
+  const char *t = objc_skip_argspec (*type);
 
-  /* Zero the string; we'll then write the argument type at the
-     beginning of it, if needed.  */
-  memset (returnValue, 0, returnValueSize);
-
-  if (method == NULL)
-    return;
-  else
-    {
-      size_t argumentTypeSize;
-
-      /* Determine argumentTypeSize.  */
-      {
-	/* Find the end of the first argument.  We want to return the
-	   first argument spec.  */
-	const char *type = method->method_types;
-	if (*type == '\0')
-	  return;
-	type = objc_skip_argspec (type);
-	argumentTypeSize = type - method->method_types;
-	if (argumentTypeSize > returnValueSize)
-	  argumentTypeSize = returnValueSize;
-      }
-      /* Copy the argument at the beginning of the string.  */
-      memcpy (returnValue, method->method_types, argumentTypeSize);
-    }
-}
-
-void method_getArgumentType (struct objc_method * method, unsigned int argumentNumber,
-			     char *returnValue, size_t returnValueSize)
-{
-  if (returnValue == NULL  ||  returnValueSize == 0)
-    return;
-
-  /* Zero the string; we'll then write the argument type at the
-     beginning of it, if needed.  */
-  memset (returnValue, 0, returnValueSize);
-
-  if (method == NULL)
-    return;
-  else
-    {
-      const char *returnValueStart;
-      size_t argumentTypeSize;
-
-      /* Determine returnValueStart and argumentTypeSize.  */
-      {
-	const char *type = method->method_types;
-
-	/* Skip the first argument (return type).  */
-	type = objc_skip_argspec (type);
-
-	/* Now keep skipping arguments until we get to
-	   argumentNumber.  */
-	while (argumentNumber > 0)
-	  {
-	    /* We are supposed to skip an argument, but the string is
-	       finished.  This means we were asked for a non-existing
-	       argument.  */
-	    if (*type == '\0')
-	      return;
-
-	    type = objc_skip_argspec (type);
-	    argumentNumber--;
-	  }
-
-	/* If the argument does not exist, it's game over.  */
-	if (*type == '\0')
-	  return;
-
-	returnValueStart = type;
-	type = objc_skip_argspec (type);
-	argumentTypeSize = type - returnValueStart;
-	if (argumentTypeSize > returnValueSize)
-	  argumentTypeSize = returnValueSize;
-      }
-      /* Copy the argument at the beginning of the string.  */
-      memcpy (returnValue, returnValueStart, argumentTypeSize);
-    }
-}
-
-unsigned int
-method_getNumberOfArguments (struct objc_method *method)
-{
-  if (method == NULL)
+  if (*t == '\0')
     return 0;
-  else
-    {
-      unsigned int i = 0;
-      const char *type = method->method_types;
-      while (*type)
-	{
-	  type = objc_skip_argspec (type);
-	  i += 1;
-	}
 
-      if (i == 0)
-	{
-	  /* This could only happen if method_types is invalid; in
-	     that case, return 0.  */
-	  return 0;
-	}
-      else
-	{
-	  /* Remove the return type.  */
-	  return (i - 1);
-	}
-    }
+  *type = t;
+  t = objc_skip_typespec (t);
+
+  if (*t == '+')
+    return argframe->arg_regs + atoi (++t);
+  else
+    return argframe->arg_ptr + atoi (t);
+}
+
+/*
+  Return a pointer to the value of the first argument of the method
+  described in M with the given argumentframe ARGFRAME.  The type
+  is returned in TYPE.  type must be passed to successive calls of
+  method_get_next_argument.
+*/
+char *
+method_get_first_argument (struct objc_method *m,
+			   arglist_t argframe,
+			   const char **type)
+{
+  *type = m->method_types;
+  return method_get_next_argument (argframe, type);
+}
+
+/*
+   Return a pointer to the ARGth argument of the method
+   M from the frame ARGFRAME.  The type of the argument
+   is returned in the value-result argument TYPE
+*/
+
+char *
+method_get_nth_argument (struct objc_method *m,
+			 arglist_t argframe, int arg,
+			 const char **type)
+{
+  const char *t = objc_skip_argspec (m->method_types);
+
+  if (arg > method_get_number_of_arguments (m))
+    return 0;
+
+  while (arg--)
+    t = objc_skip_argspec (t);
+
+  *type = t;
+  t = objc_skip_typespec (t);
+
+  if (*t == '+')
+    return argframe->arg_regs + atoi (++t);
+  else
+    return argframe->arg_ptr + atoi (t);
 }
 
 unsigned
@@ -1033,19 +825,20 @@ objc_get_type_qualifiers (const char *type)
   while (flag)
     switch (*type++)
       {
-      case _C_CONST:       res |= _F_CONST; break;
-      case _C_IN:          res |= _F_IN; break;
-      case _C_INOUT:       res |= _F_INOUT; break;
-      case _C_OUT:         res |= _F_OUT; break;
-      case _C_BYCOPY:      res |= _F_BYCOPY; break;
-      case _C_BYREF:       res |= _F_BYREF; break;
-      case _C_ONEWAY:      res |= _F_ONEWAY; break;
+      case _C_CONST:	res |= _F_CONST; break;
+      case _C_IN:	res |= _F_IN; break;
+      case _C_INOUT:	res |= _F_INOUT; break;
+      case _C_OUT:	res |= _F_OUT; break;
+      case _C_BYCOPY:	res |= _F_BYCOPY; break;
+      case _C_BYREF:  res |= _F_BYREF; break;
+      case _C_ONEWAY:	res |= _F_ONEWAY; break;
       case _C_GCINVISIBLE: res |= _F_GCINVISIBLE; break;
       default: flag = NO;
     }
 
   return res;
 }
+
 
 /* The following three functions can be used to determine how a
    structure is laid out by the compiler. For example:
@@ -1067,18 +860,19 @@ objc_get_type_qualifiers (const char *type)
   These functions are used by objc_sizeof_type and objc_alignof_type
   functions to compute the size and alignment of structures. The
   previous method of computing the size and alignment of a structure
-  was not working on some architectures, particularly on AIX, and in
-  the presence of bitfields inside the structure.  */
+  was not working on some architectures, particulary on AIX, and in
+  the presence of bitfields inside the structure. */
 void
 objc_layout_structure (const char *type,
-		       struct objc_struct_layout *layout)
+                           struct objc_struct_layout *layout)
 {
   const char *ntype;
 
   if (*type != _C_UNION_B && *type != _C_STRUCT_B)
     {
-      _objc_abort ("record (or union) type expected in objc_layout_structure, got %s\n",
-		   type);
+      objc_error (nil, OBJC_ERR_BAD_TYPE,
+                 "record (or union) type expected in objc_layout_structure, got %s\n",
+                 type);
     }
 
   type ++;
@@ -1097,10 +891,11 @@ objc_layout_structure (const char *type,
   layout->type = type;
   layout->prev_type = NULL;
   layout->record_size = 0;
-  layout->record_align = __CHAR_BIT__;
+  layout->record_align = BITS_PER_UNIT;
 
   layout->record_align = MAX (layout->record_align, STRUCTURE_SIZE_BOUNDARY);
 }
+
 
 BOOL
 objc_layout_structure_next_member (struct objc_struct_layout *layout)
@@ -1109,10 +904,7 @@ objc_layout_structure_next_member (struct objc_struct_layout *layout)
 
   /* The following are used only if the field is a bitfield */
   register const char *bfld_type = 0;
-#ifdef HAVE_BITFIELD_TYPE_MATTERS
-  register int bfld_type_align = 0;
-#endif
-  register int bfld_field_size = 0;
+  register int bfld_type_align = 0, bfld_field_size = 0;
 
   /* The current type without the type qualifiers */
   const char *type;
@@ -1124,10 +916,10 @@ objc_layout_structure_next_member (struct objc_struct_layout *layout)
       type = objc_skip_type_qualifiers (layout->prev_type);
       if (unionp)
         layout->record_size = MAX (layout->record_size,
-				   objc_sizeof_type (type) * __CHAR_BIT__);
+				   objc_sizeof_type (type) * BITS_PER_UNIT);
 
       else if (*type != _C_BFLD)
-	layout->record_size += objc_sizeof_type (type) * __CHAR_BIT__;
+        layout->record_size += objc_sizeof_type (type) * BITS_PER_UNIT;
       else {
         /* Get the bitfield's type */
         for (bfld_type = type + 1;
@@ -1135,9 +927,7 @@ objc_layout_structure_next_member (struct objc_struct_layout *layout)
              bfld_type++)
           /* do nothing */;
 
-#ifdef HAVE_BITFIELD_TYPE_MATTERS
-	bfld_type_align = objc_alignof_type (bfld_type) * __CHAR_BIT__;
-#endif
+        bfld_type_align = objc_alignof_type (bfld_type) * BITS_PER_UNIT;
         bfld_field_size = atoi (objc_skip_typespec (bfld_type));
         layout->record_size += bfld_field_size;
       }
@@ -1148,11 +938,16 @@ objc_layout_structure_next_member (struct objc_struct_layout *layout)
     return NO;
 
   /* Skip the variable name if any */
-  layout->type = objc_skip_variable_name (layout->type);
+  if (*layout->type == '"')
+    {
+      for (layout->type++; *layout->type++ != '"';)
+        /* do nothing */;
+    }
+
   type = objc_skip_type_qualifiers (layout->type);
 
   if (*type != _C_BFLD)
-    desired_align = objc_alignof_type (type) * __CHAR_BIT__;
+    desired_align = objc_alignof_type (type) * BITS_PER_UNIT;
   else
     {
       desired_align = 1;
@@ -1162,24 +957,21 @@ objc_layout_structure_next_member (struct objc_struct_layout *layout)
            bfld_type++)
         /* do nothing */;
 
-#ifdef HAVE_BITFIELD_TYPE_MATTERS
-      bfld_type_align = objc_alignof_type (bfld_type) * __CHAR_BIT__;
-#endif
+      bfld_type_align = objc_alignof_type (bfld_type) * BITS_PER_UNIT;
       bfld_field_size = atoi (objc_skip_typespec (bfld_type));
     }
 
-  /* The following won't work for vectors.  */
 #ifdef BIGGEST_FIELD_ALIGNMENT
   desired_align = MIN (desired_align, BIGGEST_FIELD_ALIGNMENT);
 #endif
 #ifdef ADJUST_FIELD_ALIGN
-  desired_align = ADJUST_FIELD_ALIGN (type, type, desired_align);
+  desired_align = ADJUST_FIELD_ALIGN (type, desired_align);
 #endif
 
   /* Record must have at least as much alignment as any field.
      Otherwise, the alignment of the field within the record
      is meaningless.  */
-#ifndef HAVE_BITFIELD_TYPE_MATTERS
+#ifndef PCC_BITFIELD_TYPE_MATTERS
   layout->record_align = MAX (layout->record_align, desired_align);
 #else	/* PCC_BITFIELD_TYPE_MATTERS */
   if (*type == _C_BFLD)
@@ -1191,7 +983,7 @@ objc_layout_structure_next_member (struct objc_struct_layout *layout)
       if (bfld_field_size)
         layout->record_align = MAX (layout->record_align, desired_align);
       else
-	desired_align = objc_alignof_type (bfld_type) * __CHAR_BIT__;
+        desired_align = objc_alignof_type (bfld_type) * BITS_PER_UNIT;
 
       /* A named bit field of declared type `int'
          forces the entire structure to have `int' alignment.
@@ -1205,7 +997,7 @@ objc_layout_structure_next_member (struct objc_struct_layout *layout)
         if (maximum_field_alignment != 0)
           type_align = MIN (type_align, maximum_field_alignment);
         else if (DECL_PACKED (field))
-	  type_align = MIN (type_align, __CHAR_BIT__);
+          type_align = MIN (type_align, BITS_PER_UNIT);
 #endif
 
         layout->record_align = MAX (layout->record_align, type_align);
@@ -1236,6 +1028,7 @@ objc_layout_structure_next_member (struct objc_struct_layout *layout)
   return YES;
 }
 
+
 void objc_layout_finish_structure (struct objc_struct_layout *layout,
                                    unsigned int *size,
                                    unsigned int *align)
@@ -1256,16 +1049,23 @@ void objc_layout_finish_structure (struct objc_struct_layout *layout,
       layout->record_align = MAX (1, layout->record_align);
 #endif
 
+#ifdef ROUND_TYPE_SIZE
+      layout->record_size = ROUND_TYPE_SIZE (layout->original_type,
+                                             layout->record_size,
+                                             layout->record_align);
+#else
       /* Round the size up to be a multiple of the required alignment */
       layout->record_size = ROUND (layout->record_size, layout->record_align);
+#endif
 
       layout->type = NULL;
     }
   if (size)
-    *size = layout->record_size / __CHAR_BIT__;
+    *size = layout->record_size / BITS_PER_UNIT;
   if (align)
-    *align = layout->record_align / __CHAR_BIT__;
+    *align = layout->record_align / BITS_PER_UNIT;
 }
+
 
 void objc_layout_structure_get_info (struct objc_struct_layout *layout,
                                      unsigned int *offset,
@@ -1273,9 +1073,9 @@ void objc_layout_structure_get_info (struct objc_struct_layout *layout,
                                      const char **type)
 {
   if (offset)
-    *offset = layout->record_size / __CHAR_BIT__;
+    *offset = layout->record_size / BITS_PER_UNIT;
   if (align)
-    *align = layout->record_align / __CHAR_BIT__;
+    *align = layout->record_align / BITS_PER_UNIT;
   if (type)
     *type = layout->prev_type;
 }

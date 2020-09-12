@@ -1,6 +1,6 @@
 // -*- C++ -*-
 
-// Copyright (C) 2007-2019 Free Software Foundation, Inc.
+// Copyright (C) 2007, 2008, 2009 Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the terms
@@ -31,7 +31,7 @@
  *
  *  P. J. Varman, S. D. Scheufler, B. R. Iyer, and G. R. Ricard.
  *  Merging Multiple Lists on Hierarchical-Memory Multiprocessors.
- *  Journal of Parallel and Distributed Computing, 12(2):171-177, 1991.
+ *  Journal of Parallel and Distributed Computing, 12(2):171–177, 1991.
  *
  *  This file is a GNU parallel extension to the Standard C++ Library.
  */
@@ -45,6 +45,8 @@
 #include <queue>
 
 #include <bits/stl_algo.h>
+
+#include <parallel/sort.h>
 
 namespace __gnu_parallel
 {
@@ -228,7 +230,7 @@ namespace __gnu_parallel
           __n /= 2;
 
           _SeqNumber __lmax_seq = -1;  // to avoid warning
-          const _ValueType* __lmax = 0; // impossible to avoid the warning?
+          const _ValueType* __lmax = NULL; // impossible to avoid the warning?
           for (_SeqNumber __i = 0; __i < __m; __i++)
             {
               if (__a[__i] > 0)
@@ -330,8 +332,8 @@ namespace __gnu_parallel
       // Compare the keys on both edges of the border.
 
       // Maximum of left edge, minimum of right edge.
-      _ValueType* __maxleft = 0;
-      _ValueType* __minright = 0;
+      _ValueType* __maxleft = NULL;
+      _ValueType* __minright = NULL;
       for (_SeqNumber __i = 0; __i < __m; __i++)
         {
           if (__a[__i] > 0)
@@ -480,7 +482,7 @@ namespace __gnu_parallel
         {
           __n /= 2;
 
-          const _Tp* __lmax = 0;
+          const _Tp* __lmax = NULL;
           for (_SeqNumber __i = 0; __i < __m; ++__i)
             {
               if (__a[__i] > 0)

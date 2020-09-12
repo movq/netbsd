@@ -1,5 +1,5 @@
 /* Opcode table for TI TMS320C80 (MVP).
-   Copyright (C) 1996-2019 Free Software Foundation, Inc.
+   Copyright 1996, 1997, 2000, 2005, 2007 Free Software Foundation, Inc.
 
    This file is part of the GNU opcodes library.
 
@@ -18,8 +18,8 @@
    Free Software Foundation, 51 Franklin Street - Fifth Floor, Boston,
    MA 02110-1301, USA.  */
 
-#include "sysdep.h"
 #include <stdio.h>
+#include "sysdep.h"
 #include "opcode/tic80.h"
 
 /* This file holds various tables for the TMS320C80 (MVP).
@@ -233,7 +233,9 @@ const int tic80_num_predefined_symbols = sizeof (tic80_predefined_symbols) / siz
  */
 
 int
-tic80_symbol_to_value (char *name, int symbol_class)
+tic80_symbol_to_value (name, symbol_class)
+     char *name;
+     int symbol_class;
 {
   const struct predefined_symbol *pdsp;
   int low = 0;
@@ -254,7 +256,7 @@ tic80_symbol_to_value (char *name, int symbol_class)
 	{
 	  low = middle + 1;
 	}
-      else
+      else 
 	{
 	  pdsp = &tic80_predefined_symbols[middle];
 	  if ((symbol_class == 0) || (symbol_class & PDS_VALUE (pdsp)))
@@ -273,7 +275,9 @@ tic80_symbol_to_value (char *name, int symbol_class)
    is zero, the first matching symbol is returned. */
 
 const char *
-tic80_value_to_symbol (int val, int symbol_class)
+tic80_value_to_symbol (val, symbol_class)
+     int val;
+     int symbol_class;
 {
   const struct predefined_symbol *pdsp;
   int ival;
@@ -306,7 +310,8 @@ tic80_value_to_symbol (int val, int symbol_class)
    returns NULL. */
 
 const struct predefined_symbol *
-tic80_next_predefined_symbol (const struct predefined_symbol *pdsp)
+tic80_next_predefined_symbol (pdsp)
+     const struct predefined_symbol *pdsp;
 {
   if (pdsp == NULL)
     {

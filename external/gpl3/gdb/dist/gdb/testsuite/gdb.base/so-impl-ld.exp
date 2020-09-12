@@ -1,4 +1,5 @@
-# Copyright 1997-2019 Free Software Foundation, Inc.
+# Copyright 1997, 1998, 1999, 2000, 2001, 2003, 2005, 2007, 2008, 2009, 2010,
+# 2011 Free Software Foundation, Inc.
 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -13,34 +14,50 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
+if $tracelevel then {
+	strace $tracelevel
+	}
+
 
 if {[skip_shlib_tests]} {
     return 0
 }
 
-standard_testfile .c
+set testfile "so-impl-ld"
 set libfile "solib1"
+set srcfile $srcdir/$subdir/$testfile.c
 set libsrc  $srcdir/$subdir/$libfile.c
-set lib_sl  [standard_output_file $libfile.sl]
+set binfile $objdir/$subdir/$testfile
+set lib_sl  $objdir/$subdir/$libfile.sl
 
 set lib_opts  debug
 set exec_opts [list debug shlib=$lib_sl]
 
-if [get_compiler_info] {
+if [get_compiler_info ${binfile}] {
     return -1
 }
 
+if [get_compiler_info ${binfile}] {
+    return -1
+}
+
+if [test_compiler_info "hpcc-*"] {
+    lappend exec_opts "additional_flags=-Ae"
+}
+
 if { [gdb_compile_shlib $libsrc $lib_sl $lib_opts] != ""
-     || [gdb_compile $srcdir/$subdir/$srcfile $binfile \
-	     executable $exec_opts] != ""} {
-    untested "failed to compile"
+     || [gdb_compile $srcfile $binfile executable $exec_opts] != ""} {
+    untested "Couldn't compile $libsrc or $srcfile."
     return -1
 }
 
 # Start with a fresh gdb
 
-clean_restart ${binfile}
-gdb_load_shlib $lib_sl
+gdb_exit
+gdb_start
+gdb_reinitialize_dir $srcdir/$subdir
+gdb_load ${binfile}
+gdb_load_shlibs $lib_sl
 
 # This program implicitly loads SOM shared libraries.
 #
@@ -53,12 +70,12 @@ gdb_test "next" "21\[ \t\]*result = solib_main .result.;" \
 
 # Verify that we can step into the second shlib call.
 #
-gdb_test "step" "solib_main .arg=10000. at.*${libfile}.c:${decimal}.* HERE .*" \
+gdb_test "step" "solib_main .arg=10000. at.*${libfile}.c:17.*" \
     "step into solib call"
 
 # Verify that we can step within the shlib call.
 #
-gdb_test "next" "${decimal}\[ \t\]*\}.* STEP .*" "step in solib call"
+gdb_test "next" "18\[ \t\]*\}" "step in solib call"
 
 # Verify that we can step out of the shlib call, and back out into
 # the caller.

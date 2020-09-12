@@ -1,5 +1,5 @@
 /* Find near-matches for macros.
-   Copyright (C) 2016-2019 Free Software Foundation, Inc.
+   Copyright (C) 2016-2018 Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -45,13 +45,13 @@ name_reserved_for_implementation_p (const char *str)
 static bool
 should_suggest_as_macro_p (cpp_hashnode *hashnode)
 {
-  if (!cpp_macro_p (hashnode))
+  if (hashnode->type != NT_MACRO)
     return false;
 
-  /* Don't suggest names reserved for the implementation, but do
-     suggest the builtin macros such as __FILE__, __LINE__ etc.  */
-  if (cpp_user_macro_p (hashnode)
-      && name_reserved_for_implementation_p ((const char *)hashnode->ident.str))
+  /* Don't suggest names reserved for the implementation, but do suggest the builtin
+     macros such as __FILE__, __LINE__ etc.  */
+  if (name_reserved_for_implementation_p ((const char *)hashnode->ident.str)
+      && !(hashnode->flags & NODE_BUILTIN))
     return false;
 
   return true;

@@ -2,7 +2,7 @@
 
 THIS FILE IS MACHINE GENERATED WITH CGEN.
 
-Copyright 1996-2019 Free Software Foundation, Inc.
+Copyright 1996-2010 Free Software Foundation, Inc.
 
 This file is part of the GNU simulators.
 
@@ -17,7 +17,8 @@ This file is part of the GNU simulators.
    License for more details.
 
    You should have received a copy of the GNU General Public License along
-   with this program; if not, see <http://www.gnu.org/licenses/>.
+   with this program; if not, write to the Free Software Foundation, Inc.,
+   51 Franklin Street - Fifth Floor, Boston, MA 02110-1301, USA.
 
 */
 
@@ -292,7 +293,7 @@ sh64_compact_init_idesc_table (SIM_CPU *cpu)
     init_idesc (cpu, id, t);
 
   /* Now fill in the values for the chosen cpu.  */
-  for (t = sh64_compact_insn_sem, tend = t + ARRAY_SIZE (sh64_compact_insn_sem);
+  for (t = sh64_compact_insn_sem, tend = t + sizeof (sh64_compact_insn_sem) / sizeof (*t);
        t != tend; ++t)
     {
       init_idesc (cpu, & table[t->index], t);
@@ -2649,7 +2650,7 @@ sh64_compact_decode (SIM_CPU *current_cpu, IADDR pc,
 
 
   /* Record the fields for the semantic handler.  */
-  CGEN_TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_empty", (char *) 0));
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_empty", (char *) 0));
 
 #undef FLD
     return idesc;
@@ -2669,7 +2670,7 @@ sh64_compact_decode (SIM_CPU *current_cpu, IADDR pc,
   /* Record the fields for the semantic handler.  */
   FLD (f_rm) = f_rm;
   FLD (f_rn) = f_rn;
-  CGEN_TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_add_compact", "f_rm 0x%x", 'x', f_rm, "f_rn 0x%x", 'x', f_rn, (char *) 0));
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_add_compact", "f_rm 0x%x", 'x', f_rm, "f_rn 0x%x", 'x', f_rn, (char *) 0));
 
 #if WITH_PROFILE_MODEL_P
   /* Record the fields for profiling.  */
@@ -2698,7 +2699,7 @@ sh64_compact_decode (SIM_CPU *current_cpu, IADDR pc,
   /* Record the fields for the semantic handler.  */
   FLD (f_imm8) = f_imm8;
   FLD (f_rn) = f_rn;
-  CGEN_TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_addi_compact", "f_imm8 0x%x", 'x', f_imm8, "f_rn 0x%x", 'x', f_rn, (char *) 0));
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_addi_compact", "f_imm8 0x%x", 'x', f_imm8, "f_rn 0x%x", 'x', f_rn, (char *) 0));
 
 #if WITH_PROFILE_MODEL_P
   /* Record the fields for profiling.  */
@@ -2726,7 +2727,7 @@ sh64_compact_decode (SIM_CPU *current_cpu, IADDR pc,
   /* Record the fields for the semantic handler.  */
   FLD (f_rm) = f_rm;
   FLD (f_rn) = f_rn;
-  CGEN_TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_addc_compact", "f_rm 0x%x", 'x', f_rm, "f_rn 0x%x", 'x', f_rn, (char *) 0));
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_addc_compact", "f_rm 0x%x", 'x', f_rm, "f_rn 0x%x", 'x', f_rn, (char *) 0));
 
 #if WITH_PROFILE_MODEL_P
   /* Record the fields for profiling.  */
@@ -2755,7 +2756,7 @@ sh64_compact_decode (SIM_CPU *current_cpu, IADDR pc,
   /* Record the fields for the semantic handler.  */
   FLD (f_rm) = f_rm;
   FLD (f_rn) = f_rn;
-  CGEN_TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_addv_compact", "f_rm 0x%x", 'x', f_rm, "f_rn 0x%x", 'x', f_rn, (char *) 0));
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_addv_compact", "f_rm 0x%x", 'x', f_rm, "f_rn 0x%x", 'x', f_rn, (char *) 0));
 
 #if WITH_PROFILE_MODEL_P
   /* Record the fields for profiling.  */
@@ -2784,7 +2785,7 @@ sh64_compact_decode (SIM_CPU *current_cpu, IADDR pc,
   /* Record the fields for the semantic handler.  */
   FLD (f_rm) = f_rm;
   FLD (f_rn) = f_rn;
-  CGEN_TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_and_compact", "f_rm 0x%x", 'x', f_rm, "f_rn 0x%x", 'x', f_rn, (char *) 0));
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_and_compact", "f_rm 0x%x", 'x', f_rm, "f_rn 0x%x", 'x', f_rn, (char *) 0));
 
 #if WITH_PROFILE_MODEL_P
   /* Record the fields for profiling.  */
@@ -2810,7 +2811,7 @@ sh64_compact_decode (SIM_CPU *current_cpu, IADDR pc,
 
   /* Record the fields for the semantic handler.  */
   FLD (f_imm8) = f_imm8;
-  CGEN_TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_andi_compact", "f_imm8 0x%x", 'x', f_imm8, (char *) 0));
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_andi_compact", "f_imm8 0x%x", 'x', f_imm8, (char *) 0));
 
 #if WITH_PROFILE_MODEL_P
   /* Record the fields for profiling.  */
@@ -2835,7 +2836,7 @@ sh64_compact_decode (SIM_CPU *current_cpu, IADDR pc,
 
   /* Record the fields for the semantic handler.  */
   FLD (f_imm8) = f_imm8;
-  CGEN_TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_andb_compact", "f_imm8 0x%x", 'x', f_imm8, (char *) 0));
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_andb_compact", "f_imm8 0x%x", 'x', f_imm8, (char *) 0));
 
 #if WITH_PROFILE_MODEL_P
   /* Record the fields for profiling.  */
@@ -2859,7 +2860,7 @@ sh64_compact_decode (SIM_CPU *current_cpu, IADDR pc,
 
   /* Record the fields for the semantic handler.  */
   FLD (i_disp8) = f_disp8;
-  CGEN_TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_bf_compact", "disp8 0x%x", 'x', f_disp8, (char *) 0));
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_bf_compact", "disp8 0x%x", 'x', f_disp8, (char *) 0));
 
 #if WITH_PROFILE_MODEL_P
   /* Record the fields for profiling.  */
@@ -2882,7 +2883,7 @@ sh64_compact_decode (SIM_CPU *current_cpu, IADDR pc,
 
   /* Record the fields for the semantic handler.  */
   FLD (i_disp8) = f_disp8;
-  CGEN_TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_bfs_compact", "disp8 0x%x", 'x', f_disp8, (char *) 0));
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_bfs_compact", "disp8 0x%x", 'x', f_disp8, (char *) 0));
 
 #if WITH_PROFILE_MODEL_P
   /* Record the fields for profiling.  */
@@ -2905,7 +2906,7 @@ sh64_compact_decode (SIM_CPU *current_cpu, IADDR pc,
 
   /* Record the fields for the semantic handler.  */
   FLD (i_disp12) = f_disp12;
-  CGEN_TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_bra_compact", "disp12 0x%x", 'x', f_disp12, (char *) 0));
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_bra_compact", "disp12 0x%x", 'x', f_disp12, (char *) 0));
 
 #if WITH_PROFILE_MODEL_P
   /* Record the fields for profiling.  */
@@ -2928,7 +2929,7 @@ sh64_compact_decode (SIM_CPU *current_cpu, IADDR pc,
 
   /* Record the fields for the semantic handler.  */
   FLD (f_rn) = f_rn;
-  CGEN_TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_braf_compact", "f_rn 0x%x", 'x', f_rn, (char *) 0));
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_braf_compact", "f_rn 0x%x", 'x', f_rn, (char *) 0));
 
 #if WITH_PROFILE_MODEL_P
   /* Record the fields for profiling.  */
@@ -2948,7 +2949,7 @@ sh64_compact_decode (SIM_CPU *current_cpu, IADDR pc,
 
 
   /* Record the fields for the semantic handler.  */
-  CGEN_TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_brk_compact", (char *) 0));
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_brk_compact", (char *) 0));
 
 #if WITH_PROFILE_MODEL_P
   /* Record the fields for profiling.  */
@@ -2971,7 +2972,7 @@ sh64_compact_decode (SIM_CPU *current_cpu, IADDR pc,
 
   /* Record the fields for the semantic handler.  */
   FLD (i_disp12) = f_disp12;
-  CGEN_TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_bsr_compact", "disp12 0x%x", 'x', f_disp12, (char *) 0));
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_bsr_compact", "disp12 0x%x", 'x', f_disp12, (char *) 0));
 
 #if WITH_PROFILE_MODEL_P
   /* Record the fields for profiling.  */
@@ -2994,7 +2995,7 @@ sh64_compact_decode (SIM_CPU *current_cpu, IADDR pc,
 
   /* Record the fields for the semantic handler.  */
   FLD (f_rn) = f_rn;
-  CGEN_TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_bsrf_compact", "f_rn 0x%x", 'x', f_rn, (char *) 0));
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_bsrf_compact", "f_rn 0x%x", 'x', f_rn, (char *) 0));
 
 #if WITH_PROFILE_MODEL_P
   /* Record the fields for profiling.  */
@@ -3014,7 +3015,7 @@ sh64_compact_decode (SIM_CPU *current_cpu, IADDR pc,
 
 
   /* Record the fields for the semantic handler.  */
-  CGEN_TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_clrmac_compact", (char *) 0));
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_clrmac_compact", (char *) 0));
 
 #undef FLD
     return idesc;
@@ -3027,7 +3028,7 @@ sh64_compact_decode (SIM_CPU *current_cpu, IADDR pc,
 
 
   /* Record the fields for the semantic handler.  */
-  CGEN_TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_clrs_compact", (char *) 0));
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_clrs_compact", (char *) 0));
 
 #undef FLD
     return idesc;
@@ -3040,7 +3041,7 @@ sh64_compact_decode (SIM_CPU *current_cpu, IADDR pc,
 
 
   /* Record the fields for the semantic handler.  */
-  CGEN_TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_clrt_compact", (char *) 0));
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_clrt_compact", (char *) 0));
 
 #undef FLD
     return idesc;
@@ -3060,7 +3061,7 @@ sh64_compact_decode (SIM_CPU *current_cpu, IADDR pc,
   /* Record the fields for the semantic handler.  */
   FLD (f_rm) = f_rm;
   FLD (f_rn) = f_rn;
-  CGEN_TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_cmpeq_compact", "f_rm 0x%x", 'x', f_rm, "f_rn 0x%x", 'x', f_rn, (char *) 0));
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_cmpeq_compact", "f_rm 0x%x", 'x', f_rm, "f_rn 0x%x", 'x', f_rn, (char *) 0));
 
 #if WITH_PROFILE_MODEL_P
   /* Record the fields for profiling.  */
@@ -3085,7 +3086,7 @@ sh64_compact_decode (SIM_CPU *current_cpu, IADDR pc,
 
   /* Record the fields for the semantic handler.  */
   FLD (f_imm8) = f_imm8;
-  CGEN_TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_cmpeqi_compact", "f_imm8 0x%x", 'x', f_imm8, (char *) 0));
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_cmpeqi_compact", "f_imm8 0x%x", 'x', f_imm8, (char *) 0));
 
 #if WITH_PROFILE_MODEL_P
   /* Record the fields for profiling.  */
@@ -3109,7 +3110,7 @@ sh64_compact_decode (SIM_CPU *current_cpu, IADDR pc,
 
   /* Record the fields for the semantic handler.  */
   FLD (f_rn) = f_rn;
-  CGEN_TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_cmppl_compact", "f_rn 0x%x", 'x', f_rn, (char *) 0));
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_cmppl_compact", "f_rn 0x%x", 'x', f_rn, (char *) 0));
 
 #if WITH_PROFILE_MODEL_P
   /* Record the fields for profiling.  */
@@ -3136,7 +3137,7 @@ sh64_compact_decode (SIM_CPU *current_cpu, IADDR pc,
   /* Record the fields for the semantic handler.  */
   FLD (f_rm) = f_rm;
   FLD (f_rn) = f_rn;
-  CGEN_TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_div0s_compact", "f_rm 0x%x", 'x', f_rm, "f_rn 0x%x", 'x', f_rn, (char *) 0));
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_div0s_compact", "f_rm 0x%x", 'x', f_rm, "f_rn 0x%x", 'x', f_rn, (char *) 0));
 
 #if WITH_PROFILE_MODEL_P
   /* Record the fields for profiling.  */
@@ -3157,7 +3158,7 @@ sh64_compact_decode (SIM_CPU *current_cpu, IADDR pc,
 
 
   /* Record the fields for the semantic handler.  */
-  CGEN_TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_div0u_compact", (char *) 0));
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_div0u_compact", (char *) 0));
 
 #undef FLD
     return idesc;
@@ -3177,7 +3178,7 @@ sh64_compact_decode (SIM_CPU *current_cpu, IADDR pc,
   /* Record the fields for the semantic handler.  */
   FLD (f_rm) = f_rm;
   FLD (f_rn) = f_rn;
-  CGEN_TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_div1_compact", "f_rm 0x%x", 'x', f_rm, "f_rn 0x%x", 'x', f_rn, (char *) 0));
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_div1_compact", "f_rm 0x%x", 'x', f_rm, "f_rn 0x%x", 'x', f_rn, (char *) 0));
 
 #if WITH_PROFILE_MODEL_P
   /* Record the fields for profiling.  */
@@ -3203,7 +3204,7 @@ sh64_compact_decode (SIM_CPU *current_cpu, IADDR pc,
 
   /* Record the fields for the semantic handler.  */
   FLD (f_rn) = f_rn;
-  CGEN_TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_divu_compact", "f_rn 0x%x", 'x', f_rn, (char *) 0));
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_divu_compact", "f_rn 0x%x", 'x', f_rn, (char *) 0));
 
 #if WITH_PROFILE_MODEL_P
   /* Record the fields for profiling.  */
@@ -3232,7 +3233,7 @@ sh64_compact_decode (SIM_CPU *current_cpu, IADDR pc,
   /* Record the fields for the semantic handler.  */
   FLD (f_rm) = f_rm;
   FLD (f_rn) = f_rn;
-  CGEN_TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_dmulsl_compact", "f_rm 0x%x", 'x', f_rm, "f_rn 0x%x", 'x', f_rn, (char *) 0));
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_dmulsl_compact", "f_rm 0x%x", 'x', f_rm, "f_rn 0x%x", 'x', f_rn, (char *) 0));
 
 #if WITH_PROFILE_MODEL_P
   /* Record the fields for profiling.  */
@@ -3257,7 +3258,7 @@ sh64_compact_decode (SIM_CPU *current_cpu, IADDR pc,
 
   /* Record the fields for the semantic handler.  */
   FLD (f_rn) = f_rn;
-  CGEN_TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_dt_compact", "f_rn 0x%x", 'x', f_rn, (char *) 0));
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_dt_compact", "f_rn 0x%x", 'x', f_rn, (char *) 0));
 
 #if WITH_PROFILE_MODEL_P
   /* Record the fields for profiling.  */
@@ -3285,7 +3286,7 @@ sh64_compact_decode (SIM_CPU *current_cpu, IADDR pc,
   /* Record the fields for the semantic handler.  */
   FLD (f_rm) = f_rm;
   FLD (f_rn) = f_rn;
-  CGEN_TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_extsb_compact", "f_rm 0x%x", 'x', f_rm, "f_rn 0x%x", 'x', f_rn, (char *) 0));
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_extsb_compact", "f_rm 0x%x", 'x', f_rm, "f_rn 0x%x", 'x', f_rn, (char *) 0));
 
 #if WITH_PROFILE_MODEL_P
   /* Record the fields for profiling.  */
@@ -3310,7 +3311,7 @@ sh64_compact_decode (SIM_CPU *current_cpu, IADDR pc,
 
   /* Record the fields for the semantic handler.  */
   FLD (f_rn) = f_rn;
-  CGEN_TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_fabs_compact", "f_rn 0x%x", 'x', f_rn, (char *) 0));
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_fabs_compact", "f_rn 0x%x", 'x', f_rn, (char *) 0));
 
 #if WITH_PROFILE_MODEL_P
   /* Record the fields for profiling.  */
@@ -3338,7 +3339,7 @@ sh64_compact_decode (SIM_CPU *current_cpu, IADDR pc,
   /* Record the fields for the semantic handler.  */
   FLD (f_rm) = f_rm;
   FLD (f_rn) = f_rn;
-  CGEN_TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_fadd_compact", "f_rm 0x%x", 'x', f_rm, "f_rn 0x%x", 'x', f_rn, (char *) 0));
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_fadd_compact", "f_rm 0x%x", 'x', f_rm, "f_rn 0x%x", 'x', f_rn, (char *) 0));
 
 #if WITH_PROFILE_MODEL_P
   /* Record the fields for profiling.  */
@@ -3367,7 +3368,7 @@ sh64_compact_decode (SIM_CPU *current_cpu, IADDR pc,
   /* Record the fields for the semantic handler.  */
   FLD (f_rm) = f_rm;
   FLD (f_rn) = f_rn;
-  CGEN_TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_fcmpeq_compact", "f_rm 0x%x", 'x', f_rm, "f_rn 0x%x", 'x', f_rn, (char *) 0));
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_fcmpeq_compact", "f_rm 0x%x", 'x', f_rm, "f_rn 0x%x", 'x', f_rn, (char *) 0));
 
 #if WITH_PROFILE_MODEL_P
   /* Record the fields for profiling.  */
@@ -3392,7 +3393,7 @@ sh64_compact_decode (SIM_CPU *current_cpu, IADDR pc,
 
   /* Record the fields for the semantic handler.  */
   FLD (f_dn) = f_dn;
-  CGEN_TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_fcnvds_compact", "f_dn 0x%x", 'x', f_dn, (char *) 0));
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_fcnvds_compact", "f_dn 0x%x", 'x', f_dn, (char *) 0));
 
 #if WITH_PROFILE_MODEL_P
   /* Record the fields for profiling.  */
@@ -3417,7 +3418,7 @@ sh64_compact_decode (SIM_CPU *current_cpu, IADDR pc,
 
   /* Record the fields for the semantic handler.  */
   FLD (f_dn) = f_dn;
-  CGEN_TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_fcnvsd_compact", "f_dn 0x%x", 'x', f_dn, (char *) 0));
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_fcnvsd_compact", "f_dn 0x%x", 'x', f_dn, (char *) 0));
 
 #if WITH_PROFILE_MODEL_P
   /* Record the fields for profiling.  */
@@ -3445,7 +3446,7 @@ sh64_compact_decode (SIM_CPU *current_cpu, IADDR pc,
   /* Record the fields for the semantic handler.  */
   FLD (f_vm) = f_vm;
   FLD (f_vn) = f_vn;
-  CGEN_TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_fipr_compact", "f_vm 0x%x", 'x', f_vm, "f_vn 0x%x", 'x', f_vn, (char *) 0));
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_fipr_compact", "f_vm 0x%x", 'x', f_vm, "f_vn 0x%x", 'x', f_vn, (char *) 0));
 
 #undef FLD
     return idesc;
@@ -3462,7 +3463,7 @@ sh64_compact_decode (SIM_CPU *current_cpu, IADDR pc,
 
   /* Record the fields for the semantic handler.  */
   FLD (f_rn) = f_rn;
-  CGEN_TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_flds_compact", "f_rn 0x%x", 'x', f_rn, (char *) 0));
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_flds_compact", "f_rn 0x%x", 'x', f_rn, (char *) 0));
 
 #if WITH_PROFILE_MODEL_P
   /* Record the fields for profiling.  */
@@ -3487,7 +3488,7 @@ sh64_compact_decode (SIM_CPU *current_cpu, IADDR pc,
 
   /* Record the fields for the semantic handler.  */
   FLD (f_rn) = f_rn;
-  CGEN_TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_fldi0_compact", "f_rn 0x%x", 'x', f_rn, (char *) 0));
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_fldi0_compact", "f_rn 0x%x", 'x', f_rn, (char *) 0));
 
 #if WITH_PROFILE_MODEL_P
   /* Record the fields for profiling.  */
@@ -3511,7 +3512,7 @@ sh64_compact_decode (SIM_CPU *current_cpu, IADDR pc,
 
   /* Record the fields for the semantic handler.  */
   FLD (f_rn) = f_rn;
-  CGEN_TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_float_compact", "f_rn 0x%x", 'x', f_rn, (char *) 0));
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_float_compact", "f_rn 0x%x", 'x', f_rn, (char *) 0));
 
 #if WITH_PROFILE_MODEL_P
   /* Record the fields for profiling.  */
@@ -3539,7 +3540,7 @@ sh64_compact_decode (SIM_CPU *current_cpu, IADDR pc,
   /* Record the fields for the semantic handler.  */
   FLD (f_rm) = f_rm;
   FLD (f_rn) = f_rn;
-  CGEN_TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_fmac_compact", "f_rm 0x%x", 'x', f_rm, "f_rn 0x%x", 'x', f_rn, (char *) 0));
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_fmac_compact", "f_rm 0x%x", 'x', f_rm, "f_rn 0x%x", 'x', f_rn, (char *) 0));
 
 #if WITH_PROFILE_MODEL_P
   /* Record the fields for profiling.  */
@@ -3569,7 +3570,7 @@ sh64_compact_decode (SIM_CPU *current_cpu, IADDR pc,
   /* Record the fields for the semantic handler.  */
   FLD (f_rm) = f_rm;
   FLD (f_rn) = f_rn;
-  CGEN_TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_fmov1_compact", "f_rm 0x%x", 'x', f_rm, "f_rn 0x%x", 'x', f_rn, (char *) 0));
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_fmov1_compact", "f_rm 0x%x", 'x', f_rm, "f_rn 0x%x", 'x', f_rn, (char *) 0));
 
 #if WITH_PROFILE_MODEL_P
   /* Record the fields for profiling.  */
@@ -3597,7 +3598,7 @@ sh64_compact_decode (SIM_CPU *current_cpu, IADDR pc,
   /* Record the fields for the semantic handler.  */
   FLD (f_rm) = f_rm;
   FLD (f_rn) = f_rn;
-  CGEN_TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_fmov2_compact", "f_rm 0x%x", 'x', f_rm, "f_rn 0x%x", 'x', f_rn, (char *) 0));
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_fmov2_compact", "f_rm 0x%x", 'x', f_rm, "f_rn 0x%x", 'x', f_rn, (char *) 0));
 
 #if WITH_PROFILE_MODEL_P
   /* Record the fields for profiling.  */
@@ -3625,7 +3626,7 @@ sh64_compact_decode (SIM_CPU *current_cpu, IADDR pc,
   /* Record the fields for the semantic handler.  */
   FLD (f_rm) = f_rm;
   FLD (f_rn) = f_rn;
-  CGEN_TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_fmov3_compact", "f_rm 0x%x", 'x', f_rm, "f_rn 0x%x", 'x', f_rn, (char *) 0));
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_fmov3_compact", "f_rm 0x%x", 'x', f_rm, "f_rn 0x%x", 'x', f_rn, (char *) 0));
 
 #if WITH_PROFILE_MODEL_P
   /* Record the fields for profiling.  */
@@ -3654,7 +3655,7 @@ sh64_compact_decode (SIM_CPU *current_cpu, IADDR pc,
   /* Record the fields for the semantic handler.  */
   FLD (f_rm) = f_rm;
   FLD (f_rn) = f_rn;
-  CGEN_TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_fmov4_compact", "f_rm 0x%x", 'x', f_rm, "f_rn 0x%x", 'x', f_rn, (char *) 0));
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_fmov4_compact", "f_rm 0x%x", 'x', f_rm, "f_rn 0x%x", 'x', f_rn, (char *) 0));
 
 #if WITH_PROFILE_MODEL_P
   /* Record the fields for profiling.  */
@@ -3683,7 +3684,7 @@ sh64_compact_decode (SIM_CPU *current_cpu, IADDR pc,
   /* Record the fields for the semantic handler.  */
   FLD (f_rm) = f_rm;
   FLD (f_rn) = f_rn;
-  CGEN_TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_fmov5_compact", "f_rm 0x%x", 'x', f_rm, "f_rn 0x%x", 'x', f_rn, (char *) 0));
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_fmov5_compact", "f_rm 0x%x", 'x', f_rm, "f_rn 0x%x", 'x', f_rn, (char *) 0));
 
 #if WITH_PROFILE_MODEL_P
   /* Record the fields for profiling.  */
@@ -3711,7 +3712,7 @@ sh64_compact_decode (SIM_CPU *current_cpu, IADDR pc,
   /* Record the fields for the semantic handler.  */
   FLD (f_rm) = f_rm;
   FLD (f_rn) = f_rn;
-  CGEN_TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_fmov6_compact", "f_rm 0x%x", 'x', f_rm, "f_rn 0x%x", 'x', f_rn, (char *) 0));
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_fmov6_compact", "f_rm 0x%x", 'x', f_rm, "f_rn 0x%x", 'x', f_rn, (char *) 0));
 
 #if WITH_PROFILE_MODEL_P
   /* Record the fields for profiling.  */
@@ -3740,7 +3741,7 @@ sh64_compact_decode (SIM_CPU *current_cpu, IADDR pc,
   /* Record the fields for the semantic handler.  */
   FLD (f_rm) = f_rm;
   FLD (f_rn) = f_rn;
-  CGEN_TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_fmov7_compact", "f_rm 0x%x", 'x', f_rm, "f_rn 0x%x", 'x', f_rn, (char *) 0));
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_fmov7_compact", "f_rm 0x%x", 'x', f_rm, "f_rn 0x%x", 'x', f_rn, (char *) 0));
 
 #if WITH_PROFILE_MODEL_P
   /* Record the fields for profiling.  */
@@ -3772,7 +3773,7 @@ sh64_compact_decode (SIM_CPU *current_cpu, IADDR pc,
   FLD (f_imm12x8) = f_imm12x8;
   FLD (f_rm) = f_rm;
   FLD (f_dn) = f_dn;
-  CGEN_TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_fmov8_compact", "f_imm12x8 0x%x", 'x', f_imm12x8, "f_rm 0x%x", 'x', f_rm, "f_dn 0x%x", 'x', f_dn, (char *) 0));
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_fmov8_compact", "f_imm12x8 0x%x", 'x', f_imm12x8, "f_rm 0x%x", 'x', f_rm, "f_dn 0x%x", 'x', f_dn, (char *) 0));
 
 #if WITH_PROFILE_MODEL_P
   /* Record the fields for profiling.  */
@@ -3803,7 +3804,7 @@ sh64_compact_decode (SIM_CPU *current_cpu, IADDR pc,
   FLD (f_dm) = f_dm;
   FLD (f_imm12x8) = f_imm12x8;
   FLD (f_rn) = f_rn;
-  CGEN_TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_fmov9_compact", "f_dm 0x%x", 'x', f_dm, "f_imm12x8 0x%x", 'x', f_imm12x8, "f_rn 0x%x", 'x', f_rn, (char *) 0));
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_fmov9_compact", "f_dm 0x%x", 'x', f_dm, "f_imm12x8 0x%x", 'x', f_imm12x8, "f_rn 0x%x", 'x', f_rn, (char *) 0));
 
 #if WITH_PROFILE_MODEL_P
   /* Record the fields for profiling.  */
@@ -3824,7 +3825,7 @@ sh64_compact_decode (SIM_CPU *current_cpu, IADDR pc,
 
 
   /* Record the fields for the semantic handler.  */
-  CGEN_TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_frchg_compact", (char *) 0));
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_frchg_compact", (char *) 0));
 
 #undef FLD
     return idesc;
@@ -3837,7 +3838,7 @@ sh64_compact_decode (SIM_CPU *current_cpu, IADDR pc,
 
 
   /* Record the fields for the semantic handler.  */
-  CGEN_TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_fschg_compact", (char *) 0));
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_fschg_compact", (char *) 0));
 
 #undef FLD
     return idesc;
@@ -3854,7 +3855,7 @@ sh64_compact_decode (SIM_CPU *current_cpu, IADDR pc,
 
   /* Record the fields for the semantic handler.  */
   FLD (f_rn) = f_rn;
-  CGEN_TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_fsts_compact", "f_rn 0x%x", 'x', f_rn, (char *) 0));
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_fsts_compact", "f_rn 0x%x", 'x', f_rn, (char *) 0));
 
 #if WITH_PROFILE_MODEL_P
   /* Record the fields for profiling.  */
@@ -3879,7 +3880,7 @@ sh64_compact_decode (SIM_CPU *current_cpu, IADDR pc,
 
   /* Record the fields for the semantic handler.  */
   FLD (f_rn) = f_rn;
-  CGEN_TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_ftrc_compact", "f_rn 0x%x", 'x', f_rn, (char *) 0));
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_ftrc_compact", "f_rn 0x%x", 'x', f_rn, (char *) 0));
 
 #if WITH_PROFILE_MODEL_P
   /* Record the fields for profiling.  */
@@ -3904,7 +3905,7 @@ sh64_compact_decode (SIM_CPU *current_cpu, IADDR pc,
 
   /* Record the fields for the semantic handler.  */
   FLD (f_vn) = f_vn;
-  CGEN_TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_ftrv_compact", "f_vn 0x%x", 'x', f_vn, (char *) 0));
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_ftrv_compact", "f_vn 0x%x", 'x', f_vn, (char *) 0));
 
 #undef FLD
     return idesc;
@@ -3921,7 +3922,7 @@ sh64_compact_decode (SIM_CPU *current_cpu, IADDR pc,
 
   /* Record the fields for the semantic handler.  */
   FLD (f_rn) = f_rn;
-  CGEN_TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_ldc_gbr_compact", "f_rn 0x%x", 'x', f_rn, (char *) 0));
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_ldc_gbr_compact", "f_rn 0x%x", 'x', f_rn, (char *) 0));
 
 #if WITH_PROFILE_MODEL_P
   /* Record the fields for profiling.  */
@@ -3945,7 +3946,7 @@ sh64_compact_decode (SIM_CPU *current_cpu, IADDR pc,
 
   /* Record the fields for the semantic handler.  */
   FLD (f_rn) = f_rn;
-  CGEN_TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_ldc_vbr_compact", "f_rn 0x%x", 'x', f_rn, (char *) 0));
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_ldc_vbr_compact", "f_rn 0x%x", 'x', f_rn, (char *) 0));
 
 #if WITH_PROFILE_MODEL_P
   /* Record the fields for profiling.  */
@@ -3969,7 +3970,7 @@ sh64_compact_decode (SIM_CPU *current_cpu, IADDR pc,
 
   /* Record the fields for the semantic handler.  */
   FLD (f_rn) = f_rn;
-  CGEN_TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_ldc_sr_compact", "f_rn 0x%x", 'x', f_rn, (char *) 0));
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_ldc_sr_compact", "f_rn 0x%x", 'x', f_rn, (char *) 0));
 
 #if WITH_PROFILE_MODEL_P
   /* Record the fields for profiling.  */
@@ -3993,7 +3994,7 @@ sh64_compact_decode (SIM_CPU *current_cpu, IADDR pc,
 
   /* Record the fields for the semantic handler.  */
   FLD (f_rn) = f_rn;
-  CGEN_TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_ldcl_gbr_compact", "f_rn 0x%x", 'x', f_rn, (char *) 0));
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_ldcl_gbr_compact", "f_rn 0x%x", 'x', f_rn, (char *) 0));
 
 #if WITH_PROFILE_MODEL_P
   /* Record the fields for profiling.  */
@@ -4018,7 +4019,7 @@ sh64_compact_decode (SIM_CPU *current_cpu, IADDR pc,
 
   /* Record the fields for the semantic handler.  */
   FLD (f_rn) = f_rn;
-  CGEN_TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_ldcl_vbr_compact", "f_rn 0x%x", 'x', f_rn, (char *) 0));
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_ldcl_vbr_compact", "f_rn 0x%x", 'x', f_rn, (char *) 0));
 
 #if WITH_PROFILE_MODEL_P
   /* Record the fields for profiling.  */
@@ -4043,7 +4044,7 @@ sh64_compact_decode (SIM_CPU *current_cpu, IADDR pc,
 
   /* Record the fields for the semantic handler.  */
   FLD (f_rn) = f_rn;
-  CGEN_TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_lds_fpscr_compact", "f_rn 0x%x", 'x', f_rn, (char *) 0));
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_lds_fpscr_compact", "f_rn 0x%x", 'x', f_rn, (char *) 0));
 
 #if WITH_PROFILE_MODEL_P
   /* Record the fields for profiling.  */
@@ -4067,7 +4068,7 @@ sh64_compact_decode (SIM_CPU *current_cpu, IADDR pc,
 
   /* Record the fields for the semantic handler.  */
   FLD (f_rn) = f_rn;
-  CGEN_TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_ldsl_fpscr_compact", "f_rn 0x%x", 'x', f_rn, (char *) 0));
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_ldsl_fpscr_compact", "f_rn 0x%x", 'x', f_rn, (char *) 0));
 
 #if WITH_PROFILE_MODEL_P
   /* Record the fields for profiling.  */
@@ -4092,7 +4093,7 @@ sh64_compact_decode (SIM_CPU *current_cpu, IADDR pc,
 
   /* Record the fields for the semantic handler.  */
   FLD (f_rn) = f_rn;
-  CGEN_TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_lds_fpul_compact", "f_rn 0x%x", 'x', f_rn, (char *) 0));
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_lds_fpul_compact", "f_rn 0x%x", 'x', f_rn, (char *) 0));
 
 #if WITH_PROFILE_MODEL_P
   /* Record the fields for profiling.  */
@@ -4117,7 +4118,7 @@ sh64_compact_decode (SIM_CPU *current_cpu, IADDR pc,
 
   /* Record the fields for the semantic handler.  */
   FLD (f_rn) = f_rn;
-  CGEN_TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_ldsl_fpul_compact", "f_rn 0x%x", 'x', f_rn, (char *) 0));
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_ldsl_fpul_compact", "f_rn 0x%x", 'x', f_rn, (char *) 0));
 
 #if WITH_PROFILE_MODEL_P
   /* Record the fields for profiling.  */
@@ -4143,7 +4144,7 @@ sh64_compact_decode (SIM_CPU *current_cpu, IADDR pc,
 
   /* Record the fields for the semantic handler.  */
   FLD (f_rn) = f_rn;
-  CGEN_TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_lds_mach_compact", "f_rn 0x%x", 'x', f_rn, (char *) 0));
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_lds_mach_compact", "f_rn 0x%x", 'x', f_rn, (char *) 0));
 
 #if WITH_PROFILE_MODEL_P
   /* Record the fields for profiling.  */
@@ -4167,7 +4168,7 @@ sh64_compact_decode (SIM_CPU *current_cpu, IADDR pc,
 
   /* Record the fields for the semantic handler.  */
   FLD (f_rn) = f_rn;
-  CGEN_TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_ldsl_mach_compact", "f_rn 0x%x", 'x', f_rn, (char *) 0));
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_ldsl_mach_compact", "f_rn 0x%x", 'x', f_rn, (char *) 0));
 
 #if WITH_PROFILE_MODEL_P
   /* Record the fields for profiling.  */
@@ -4192,7 +4193,7 @@ sh64_compact_decode (SIM_CPU *current_cpu, IADDR pc,
 
   /* Record the fields for the semantic handler.  */
   FLD (f_rn) = f_rn;
-  CGEN_TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_lds_macl_compact", "f_rn 0x%x", 'x', f_rn, (char *) 0));
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_lds_macl_compact", "f_rn 0x%x", 'x', f_rn, (char *) 0));
 
 #if WITH_PROFILE_MODEL_P
   /* Record the fields for profiling.  */
@@ -4216,7 +4217,7 @@ sh64_compact_decode (SIM_CPU *current_cpu, IADDR pc,
 
   /* Record the fields for the semantic handler.  */
   FLD (f_rn) = f_rn;
-  CGEN_TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_ldsl_macl_compact", "f_rn 0x%x", 'x', f_rn, (char *) 0));
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_ldsl_macl_compact", "f_rn 0x%x", 'x', f_rn, (char *) 0));
 
 #if WITH_PROFILE_MODEL_P
   /* Record the fields for profiling.  */
@@ -4241,7 +4242,7 @@ sh64_compact_decode (SIM_CPU *current_cpu, IADDR pc,
 
   /* Record the fields for the semantic handler.  */
   FLD (f_rn) = f_rn;
-  CGEN_TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_lds_pr_compact", "f_rn 0x%x", 'x', f_rn, (char *) 0));
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_lds_pr_compact", "f_rn 0x%x", 'x', f_rn, (char *) 0));
 
 #if WITH_PROFILE_MODEL_P
   /* Record the fields for profiling.  */
@@ -4265,7 +4266,7 @@ sh64_compact_decode (SIM_CPU *current_cpu, IADDR pc,
 
   /* Record the fields for the semantic handler.  */
   FLD (f_rn) = f_rn;
-  CGEN_TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_ldsl_pr_compact", "f_rn 0x%x", 'x', f_rn, (char *) 0));
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_ldsl_pr_compact", "f_rn 0x%x", 'x', f_rn, (char *) 0));
 
 #if WITH_PROFILE_MODEL_P
   /* Record the fields for profiling.  */
@@ -4293,7 +4294,7 @@ sh64_compact_decode (SIM_CPU *current_cpu, IADDR pc,
   /* Record the fields for the semantic handler.  */
   FLD (f_rm) = f_rm;
   FLD (f_rn) = f_rn;
-  CGEN_TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_macl_compact", "f_rm 0x%x", 'x', f_rm, "f_rn 0x%x", 'x', f_rn, (char *) 0));
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_macl_compact", "f_rm 0x%x", 'x', f_rm, "f_rn 0x%x", 'x', f_rn, (char *) 0));
 
 #if WITH_PROFILE_MODEL_P
   /* Record the fields for profiling.  */
@@ -4323,7 +4324,7 @@ sh64_compact_decode (SIM_CPU *current_cpu, IADDR pc,
   /* Record the fields for the semantic handler.  */
   FLD (f_rm) = f_rm;
   FLD (f_rn) = f_rn;
-  CGEN_TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_macw_compact", "f_rm 0x%x", 'x', f_rm, "f_rn 0x%x", 'x', f_rn, (char *) 0));
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_macw_compact", "f_rm 0x%x", 'x', f_rm, "f_rn 0x%x", 'x', f_rn, (char *) 0));
 
 #if WITH_PROFILE_MODEL_P
   /* Record the fields for profiling.  */
@@ -4353,7 +4354,7 @@ sh64_compact_decode (SIM_CPU *current_cpu, IADDR pc,
   /* Record the fields for the semantic handler.  */
   FLD (f_rm) = f_rm;
   FLD (f_rn) = f_rn;
-  CGEN_TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_mov_compact", "f_rm 0x%x", 'x', f_rm, "f_rn 0x%x", 'x', f_rn, (char *) 0));
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_mov_compact", "f_rm 0x%x", 'x', f_rm, "f_rn 0x%x", 'x', f_rn, (char *) 0));
 
 #if WITH_PROFILE_MODEL_P
   /* Record the fields for profiling.  */
@@ -4381,7 +4382,7 @@ sh64_compact_decode (SIM_CPU *current_cpu, IADDR pc,
   /* Record the fields for the semantic handler.  */
   FLD (f_imm8) = f_imm8;
   FLD (f_rn) = f_rn;
-  CGEN_TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_movi_compact", "f_imm8 0x%x", 'x', f_imm8, "f_rn 0x%x", 'x', f_rn, (char *) 0));
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_movi_compact", "f_imm8 0x%x", 'x', f_imm8, "f_rn 0x%x", 'x', f_rn, (char *) 0));
 
 #if WITH_PROFILE_MODEL_P
   /* Record the fields for profiling.  */
@@ -4412,7 +4413,7 @@ sh64_compact_decode (SIM_CPU *current_cpu, IADDR pc,
   /* Record the fields for the semantic handler.  */
   FLD (f_imm20) = f_imm20;
   FLD (f_rn) = f_rn;
-  CGEN_TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_movi20_compact", "f_imm20 0x%x", 'x', f_imm20, "f_rn 0x%x", 'x', f_rn, (char *) 0));
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_movi20_compact", "f_imm20 0x%x", 'x', f_imm20, "f_rn 0x%x", 'x', f_rn, (char *) 0));
 
 #if WITH_PROFILE_MODEL_P
   /* Record the fields for profiling.  */
@@ -4439,7 +4440,7 @@ sh64_compact_decode (SIM_CPU *current_cpu, IADDR pc,
   /* Record the fields for the semantic handler.  */
   FLD (f_rm) = f_rm;
   FLD (f_rn) = f_rn;
-  CGEN_TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_movb1_compact", "f_rm 0x%x", 'x', f_rm, "f_rn 0x%x", 'x', f_rn, (char *) 0));
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_movb1_compact", "f_rm 0x%x", 'x', f_rm, "f_rn 0x%x", 'x', f_rn, (char *) 0));
 
 #if WITH_PROFILE_MODEL_P
   /* Record the fields for profiling.  */
@@ -4467,7 +4468,7 @@ sh64_compact_decode (SIM_CPU *current_cpu, IADDR pc,
   /* Record the fields for the semantic handler.  */
   FLD (f_rm) = f_rm;
   FLD (f_rn) = f_rn;
-  CGEN_TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_movb2_compact", "f_rm 0x%x", 'x', f_rm, "f_rn 0x%x", 'x', f_rn, (char *) 0));
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_movb2_compact", "f_rm 0x%x", 'x', f_rm, "f_rn 0x%x", 'x', f_rn, (char *) 0));
 
 #if WITH_PROFILE_MODEL_P
   /* Record the fields for profiling.  */
@@ -4496,7 +4497,7 @@ sh64_compact_decode (SIM_CPU *current_cpu, IADDR pc,
   /* Record the fields for the semantic handler.  */
   FLD (f_rm) = f_rm;
   FLD (f_rn) = f_rn;
-  CGEN_TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_movb3_compact", "f_rm 0x%x", 'x', f_rm, "f_rn 0x%x", 'x', f_rn, (char *) 0));
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_movb3_compact", "f_rm 0x%x", 'x', f_rm, "f_rn 0x%x", 'x', f_rn, (char *) 0));
 
 #if WITH_PROFILE_MODEL_P
   /* Record the fields for profiling.  */
@@ -4522,7 +4523,7 @@ sh64_compact_decode (SIM_CPU *current_cpu, IADDR pc,
 
   /* Record the fields for the semantic handler.  */
   FLD (f_imm8) = f_imm8;
-  CGEN_TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_movb4_compact", "f_imm8 0x%x", 'x', f_imm8, (char *) 0));
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_movb4_compact", "f_imm8 0x%x", 'x', f_imm8, (char *) 0));
 
 #if WITH_PROFILE_MODEL_P
   /* Record the fields for profiling.  */
@@ -4549,7 +4550,7 @@ sh64_compact_decode (SIM_CPU *current_cpu, IADDR pc,
   /* Record the fields for the semantic handler.  */
   FLD (f_imm4) = f_imm4;
   FLD (f_rm) = f_rm;
-  CGEN_TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_movb5_compact", "f_imm4 0x%x", 'x', f_imm4, "f_rm 0x%x", 'x', f_rm, (char *) 0));
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_movb5_compact", "f_imm4 0x%x", 'x', f_imm4, "f_rm 0x%x", 'x', f_rm, (char *) 0));
 
 #if WITH_PROFILE_MODEL_P
   /* Record the fields for profiling.  */
@@ -4577,7 +4578,7 @@ sh64_compact_decode (SIM_CPU *current_cpu, IADDR pc,
   /* Record the fields for the semantic handler.  */
   FLD (f_rm) = f_rm;
   FLD (f_rn) = f_rn;
-  CGEN_TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_movb6_compact", "f_rm 0x%x", 'x', f_rm, "f_rn 0x%x", 'x', f_rn, (char *) 0));
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_movb6_compact", "f_rm 0x%x", 'x', f_rm, "f_rn 0x%x", 'x', f_rn, (char *) 0));
 
 #if WITH_PROFILE_MODEL_P
   /* Record the fields for profiling.  */
@@ -4605,7 +4606,7 @@ sh64_compact_decode (SIM_CPU *current_cpu, IADDR pc,
   /* Record the fields for the semantic handler.  */
   FLD (f_rm) = f_rm;
   FLD (f_rn) = f_rn;
-  CGEN_TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_movb7_compact", "f_rm 0x%x", 'x', f_rm, "f_rn 0x%x", 'x', f_rn, (char *) 0));
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_movb7_compact", "f_rm 0x%x", 'x', f_rm, "f_rn 0x%x", 'x', f_rn, (char *) 0));
 
 #if WITH_PROFILE_MODEL_P
   /* Record the fields for profiling.  */
@@ -4634,7 +4635,7 @@ sh64_compact_decode (SIM_CPU *current_cpu, IADDR pc,
   /* Record the fields for the semantic handler.  */
   FLD (f_rm) = f_rm;
   FLD (f_rn) = f_rn;
-  CGEN_TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_movb8_compact", "f_rm 0x%x", 'x', f_rm, "f_rn 0x%x", 'x', f_rn, (char *) 0));
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_movb8_compact", "f_rm 0x%x", 'x', f_rm, "f_rn 0x%x", 'x', f_rn, (char *) 0));
 
 #if WITH_PROFILE_MODEL_P
   /* Record the fields for profiling.  */
@@ -4660,7 +4661,7 @@ sh64_compact_decode (SIM_CPU *current_cpu, IADDR pc,
 
   /* Record the fields for the semantic handler.  */
   FLD (f_imm8) = f_imm8;
-  CGEN_TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_movb9_compact", "f_imm8 0x%x", 'x', f_imm8, (char *) 0));
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_movb9_compact", "f_imm8 0x%x", 'x', f_imm8, (char *) 0));
 
 #if WITH_PROFILE_MODEL_P
   /* Record the fields for profiling.  */
@@ -4687,7 +4688,7 @@ sh64_compact_decode (SIM_CPU *current_cpu, IADDR pc,
   /* Record the fields for the semantic handler.  */
   FLD (f_imm4) = f_imm4;
   FLD (f_rm) = f_rm;
-  CGEN_TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_movb10_compact", "f_imm4 0x%x", 'x', f_imm4, "f_rm 0x%x", 'x', f_rm, (char *) 0));
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_movb10_compact", "f_imm4 0x%x", 'x', f_imm4, "f_rm 0x%x", 'x', f_rm, (char *) 0));
 
 #if WITH_PROFILE_MODEL_P
   /* Record the fields for profiling.  */
@@ -4715,7 +4716,7 @@ sh64_compact_decode (SIM_CPU *current_cpu, IADDR pc,
   /* Record the fields for the semantic handler.  */
   FLD (f_rm) = f_rm;
   FLD (f_rn) = f_rn;
-  CGEN_TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_movl1_compact", "f_rm 0x%x", 'x', f_rm, "f_rn 0x%x", 'x', f_rn, (char *) 0));
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_movl1_compact", "f_rm 0x%x", 'x', f_rm, "f_rn 0x%x", 'x', f_rn, (char *) 0));
 
 #if WITH_PROFILE_MODEL_P
   /* Record the fields for profiling.  */
@@ -4743,7 +4744,7 @@ sh64_compact_decode (SIM_CPU *current_cpu, IADDR pc,
   /* Record the fields for the semantic handler.  */
   FLD (f_rm) = f_rm;
   FLD (f_rn) = f_rn;
-  CGEN_TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_movl2_compact", "f_rm 0x%x", 'x', f_rm, "f_rn 0x%x", 'x', f_rn, (char *) 0));
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_movl2_compact", "f_rm 0x%x", 'x', f_rm, "f_rn 0x%x", 'x', f_rn, (char *) 0));
 
 #if WITH_PROFILE_MODEL_P
   /* Record the fields for profiling.  */
@@ -4772,7 +4773,7 @@ sh64_compact_decode (SIM_CPU *current_cpu, IADDR pc,
   /* Record the fields for the semantic handler.  */
   FLD (f_rm) = f_rm;
   FLD (f_rn) = f_rn;
-  CGEN_TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_movl3_compact", "f_rm 0x%x", 'x', f_rm, "f_rn 0x%x", 'x', f_rn, (char *) 0));
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_movl3_compact", "f_rm 0x%x", 'x', f_rm, "f_rn 0x%x", 'x', f_rn, (char *) 0));
 
 #if WITH_PROFILE_MODEL_P
   /* Record the fields for profiling.  */
@@ -4798,7 +4799,7 @@ sh64_compact_decode (SIM_CPU *current_cpu, IADDR pc,
 
   /* Record the fields for the semantic handler.  */
   FLD (f_imm8x4) = f_imm8x4;
-  CGEN_TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_movl4_compact", "f_imm8x4 0x%x", 'x', f_imm8x4, (char *) 0));
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_movl4_compact", "f_imm8x4 0x%x", 'x', f_imm8x4, (char *) 0));
 
 #if WITH_PROFILE_MODEL_P
   /* Record the fields for profiling.  */
@@ -4828,7 +4829,7 @@ sh64_compact_decode (SIM_CPU *current_cpu, IADDR pc,
   FLD (f_imm4x4) = f_imm4x4;
   FLD (f_rm) = f_rm;
   FLD (f_rn) = f_rn;
-  CGEN_TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_movl5_compact", "f_imm4x4 0x%x", 'x', f_imm4x4, "f_rm 0x%x", 'x', f_rm, "f_rn 0x%x", 'x', f_rn, (char *) 0));
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_movl5_compact", "f_imm4x4 0x%x", 'x', f_imm4x4, "f_rm 0x%x", 'x', f_rm, "f_rn 0x%x", 'x', f_rn, (char *) 0));
 
 #if WITH_PROFILE_MODEL_P
   /* Record the fields for profiling.  */
@@ -4856,7 +4857,7 @@ sh64_compact_decode (SIM_CPU *current_cpu, IADDR pc,
   /* Record the fields for the semantic handler.  */
   FLD (f_rm) = f_rm;
   FLD (f_rn) = f_rn;
-  CGEN_TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_movl6_compact", "f_rm 0x%x", 'x', f_rm, "f_rn 0x%x", 'x', f_rn, (char *) 0));
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_movl6_compact", "f_rm 0x%x", 'x', f_rm, "f_rn 0x%x", 'x', f_rn, (char *) 0));
 
 #if WITH_PROFILE_MODEL_P
   /* Record the fields for profiling.  */
@@ -4884,7 +4885,7 @@ sh64_compact_decode (SIM_CPU *current_cpu, IADDR pc,
   /* Record the fields for the semantic handler.  */
   FLD (f_rm) = f_rm;
   FLD (f_rn) = f_rn;
-  CGEN_TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_movl7_compact", "f_rm 0x%x", 'x', f_rm, "f_rn 0x%x", 'x', f_rn, (char *) 0));
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_movl7_compact", "f_rm 0x%x", 'x', f_rm, "f_rn 0x%x", 'x', f_rn, (char *) 0));
 
 #if WITH_PROFILE_MODEL_P
   /* Record the fields for profiling.  */
@@ -4914,7 +4915,7 @@ sh64_compact_decode (SIM_CPU *current_cpu, IADDR pc,
   /* Record the fields for the semantic handler.  */
   FLD (f_rm) = f_rm;
   FLD (f_rn) = f_rn;
-  CGEN_TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_movl8_compact", "f_rm 0x%x", 'x', f_rm, "f_rn 0x%x", 'x', f_rn, (char *) 0));
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_movl8_compact", "f_rm 0x%x", 'x', f_rm, "f_rn 0x%x", 'x', f_rn, (char *) 0));
 
 #if WITH_PROFILE_MODEL_P
   /* Record the fields for profiling.  */
@@ -4940,7 +4941,7 @@ sh64_compact_decode (SIM_CPU *current_cpu, IADDR pc,
 
   /* Record the fields for the semantic handler.  */
   FLD (f_imm8x4) = f_imm8x4;
-  CGEN_TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_movl9_compact", "f_imm8x4 0x%x", 'x', f_imm8x4, (char *) 0));
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_movl9_compact", "f_imm8x4 0x%x", 'x', f_imm8x4, (char *) 0));
 
 #if WITH_PROFILE_MODEL_P
   /* Record the fields for profiling.  */
@@ -4967,7 +4968,7 @@ sh64_compact_decode (SIM_CPU *current_cpu, IADDR pc,
   /* Record the fields for the semantic handler.  */
   FLD (f_imm8x4) = f_imm8x4;
   FLD (f_rn) = f_rn;
-  CGEN_TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_movl10_compact", "f_imm8x4 0x%x", 'x', f_imm8x4, "f_rn 0x%x", 'x', f_rn, (char *) 0));
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_movl10_compact", "f_imm8x4 0x%x", 'x', f_imm8x4, "f_rn 0x%x", 'x', f_rn, (char *) 0));
 
 #if WITH_PROFILE_MODEL_P
   /* Record the fields for profiling.  */
@@ -4997,7 +4998,7 @@ sh64_compact_decode (SIM_CPU *current_cpu, IADDR pc,
   FLD (f_imm4x4) = f_imm4x4;
   FLD (f_rm) = f_rm;
   FLD (f_rn) = f_rn;
-  CGEN_TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_movl11_compact", "f_imm4x4 0x%x", 'x', f_imm4x4, "f_rm 0x%x", 'x', f_rm, "f_rn 0x%x", 'x', f_rn, (char *) 0));
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_movl11_compact", "f_imm4x4 0x%x", 'x', f_imm4x4, "f_rm 0x%x", 'x', f_rm, "f_rn 0x%x", 'x', f_rn, (char *) 0));
 
 #if WITH_PROFILE_MODEL_P
   /* Record the fields for profiling.  */
@@ -5028,7 +5029,7 @@ sh64_compact_decode (SIM_CPU *current_cpu, IADDR pc,
   FLD (f_imm12x4) = f_imm12x4;
   FLD (f_rm) = f_rm;
   FLD (f_rn) = f_rn;
-  CGEN_TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_movl12_compact", "f_imm12x4 0x%x", 'x', f_imm12x4, "f_rm 0x%x", 'x', f_rm, "f_rn 0x%x", 'x', f_rn, (char *) 0));
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_movl12_compact", "f_imm12x4 0x%x", 'x', f_imm12x4, "f_rm 0x%x", 'x', f_rm, "f_rn 0x%x", 'x', f_rn, (char *) 0));
 
 #if WITH_PROFILE_MODEL_P
   /* Record the fields for profiling.  */
@@ -5059,7 +5060,7 @@ sh64_compact_decode (SIM_CPU *current_cpu, IADDR pc,
   FLD (f_imm12x4) = f_imm12x4;
   FLD (f_rm) = f_rm;
   FLD (f_rn) = f_rn;
-  CGEN_TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_movl13_compact", "f_imm12x4 0x%x", 'x', f_imm12x4, "f_rm 0x%x", 'x', f_rm, "f_rn 0x%x", 'x', f_rn, (char *) 0));
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_movl13_compact", "f_imm12x4 0x%x", 'x', f_imm12x4, "f_rm 0x%x", 'x', f_rm, "f_rn 0x%x", 'x', f_rn, (char *) 0));
 
 #if WITH_PROFILE_MODEL_P
   /* Record the fields for profiling.  */
@@ -5087,7 +5088,7 @@ sh64_compact_decode (SIM_CPU *current_cpu, IADDR pc,
   /* Record the fields for the semantic handler.  */
   FLD (f_rm) = f_rm;
   FLD (f_rn) = f_rn;
-  CGEN_TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_movw1_compact", "f_rm 0x%x", 'x', f_rm, "f_rn 0x%x", 'x', f_rn, (char *) 0));
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_movw1_compact", "f_rm 0x%x", 'x', f_rm, "f_rn 0x%x", 'x', f_rn, (char *) 0));
 
 #if WITH_PROFILE_MODEL_P
   /* Record the fields for profiling.  */
@@ -5115,7 +5116,7 @@ sh64_compact_decode (SIM_CPU *current_cpu, IADDR pc,
   /* Record the fields for the semantic handler.  */
   FLD (f_rm) = f_rm;
   FLD (f_rn) = f_rn;
-  CGEN_TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_movw2_compact", "f_rm 0x%x", 'x', f_rm, "f_rn 0x%x", 'x', f_rn, (char *) 0));
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_movw2_compact", "f_rm 0x%x", 'x', f_rm, "f_rn 0x%x", 'x', f_rn, (char *) 0));
 
 #if WITH_PROFILE_MODEL_P
   /* Record the fields for profiling.  */
@@ -5144,7 +5145,7 @@ sh64_compact_decode (SIM_CPU *current_cpu, IADDR pc,
   /* Record the fields for the semantic handler.  */
   FLD (f_rm) = f_rm;
   FLD (f_rn) = f_rn;
-  CGEN_TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_movw3_compact", "f_rm 0x%x", 'x', f_rm, "f_rn 0x%x", 'x', f_rn, (char *) 0));
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_movw3_compact", "f_rm 0x%x", 'x', f_rm, "f_rn 0x%x", 'x', f_rn, (char *) 0));
 
 #if WITH_PROFILE_MODEL_P
   /* Record the fields for profiling.  */
@@ -5170,7 +5171,7 @@ sh64_compact_decode (SIM_CPU *current_cpu, IADDR pc,
 
   /* Record the fields for the semantic handler.  */
   FLD (f_imm8x2) = f_imm8x2;
-  CGEN_TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_movw4_compact", "f_imm8x2 0x%x", 'x', f_imm8x2, (char *) 0));
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_movw4_compact", "f_imm8x2 0x%x", 'x', f_imm8x2, (char *) 0));
 
 #if WITH_PROFILE_MODEL_P
   /* Record the fields for profiling.  */
@@ -5197,7 +5198,7 @@ sh64_compact_decode (SIM_CPU *current_cpu, IADDR pc,
   /* Record the fields for the semantic handler.  */
   FLD (f_imm4x2) = f_imm4x2;
   FLD (f_rm) = f_rm;
-  CGEN_TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_movw5_compact", "f_imm4x2 0x%x", 'x', f_imm4x2, "f_rm 0x%x", 'x', f_rm, (char *) 0));
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_movw5_compact", "f_imm4x2 0x%x", 'x', f_imm4x2, "f_rm 0x%x", 'x', f_rm, (char *) 0));
 
 #if WITH_PROFILE_MODEL_P
   /* Record the fields for profiling.  */
@@ -5225,7 +5226,7 @@ sh64_compact_decode (SIM_CPU *current_cpu, IADDR pc,
   /* Record the fields for the semantic handler.  */
   FLD (f_rm) = f_rm;
   FLD (f_rn) = f_rn;
-  CGEN_TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_movw6_compact", "f_rm 0x%x", 'x', f_rm, "f_rn 0x%x", 'x', f_rn, (char *) 0));
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_movw6_compact", "f_rm 0x%x", 'x', f_rm, "f_rn 0x%x", 'x', f_rn, (char *) 0));
 
 #if WITH_PROFILE_MODEL_P
   /* Record the fields for profiling.  */
@@ -5253,7 +5254,7 @@ sh64_compact_decode (SIM_CPU *current_cpu, IADDR pc,
   /* Record the fields for the semantic handler.  */
   FLD (f_rm) = f_rm;
   FLD (f_rn) = f_rn;
-  CGEN_TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_movw7_compact", "f_rm 0x%x", 'x', f_rm, "f_rn 0x%x", 'x', f_rn, (char *) 0));
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_movw7_compact", "f_rm 0x%x", 'x', f_rm, "f_rn 0x%x", 'x', f_rn, (char *) 0));
 
 #if WITH_PROFILE_MODEL_P
   /* Record the fields for profiling.  */
@@ -5282,7 +5283,7 @@ sh64_compact_decode (SIM_CPU *current_cpu, IADDR pc,
   /* Record the fields for the semantic handler.  */
   FLD (f_rm) = f_rm;
   FLD (f_rn) = f_rn;
-  CGEN_TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_movw8_compact", "f_rm 0x%x", 'x', f_rm, "f_rn 0x%x", 'x', f_rn, (char *) 0));
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_movw8_compact", "f_rm 0x%x", 'x', f_rm, "f_rn 0x%x", 'x', f_rn, (char *) 0));
 
 #if WITH_PROFILE_MODEL_P
   /* Record the fields for profiling.  */
@@ -5308,7 +5309,7 @@ sh64_compact_decode (SIM_CPU *current_cpu, IADDR pc,
 
   /* Record the fields for the semantic handler.  */
   FLD (f_imm8x2) = f_imm8x2;
-  CGEN_TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_movw9_compact", "f_imm8x2 0x%x", 'x', f_imm8x2, (char *) 0));
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_movw9_compact", "f_imm8x2 0x%x", 'x', f_imm8x2, (char *) 0));
 
 #if WITH_PROFILE_MODEL_P
   /* Record the fields for profiling.  */
@@ -5335,7 +5336,7 @@ sh64_compact_decode (SIM_CPU *current_cpu, IADDR pc,
   /* Record the fields for the semantic handler.  */
   FLD (f_imm8x2) = f_imm8x2;
   FLD (f_rn) = f_rn;
-  CGEN_TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_movw10_compact", "f_imm8x2 0x%x", 'x', f_imm8x2, "f_rn 0x%x", 'x', f_rn, (char *) 0));
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_movw10_compact", "f_imm8x2 0x%x", 'x', f_imm8x2, "f_rn 0x%x", 'x', f_rn, (char *) 0));
 
 #if WITH_PROFILE_MODEL_P
   /* Record the fields for profiling.  */
@@ -5362,7 +5363,7 @@ sh64_compact_decode (SIM_CPU *current_cpu, IADDR pc,
   /* Record the fields for the semantic handler.  */
   FLD (f_imm4x2) = f_imm4x2;
   FLD (f_rm) = f_rm;
-  CGEN_TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_movw11_compact", "f_imm4x2 0x%x", 'x', f_imm4x2, "f_rm 0x%x", 'x', f_rm, (char *) 0));
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_movw11_compact", "f_imm4x2 0x%x", 'x', f_imm4x2, "f_rm 0x%x", 'x', f_rm, (char *) 0));
 
 #if WITH_PROFILE_MODEL_P
   /* Record the fields for profiling.  */
@@ -5387,7 +5388,7 @@ sh64_compact_decode (SIM_CPU *current_cpu, IADDR pc,
 
   /* Record the fields for the semantic handler.  */
   FLD (f_imm8x4) = f_imm8x4;
-  CGEN_TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_mova_compact", "f_imm8x4 0x%x", 'x', f_imm8x4, (char *) 0));
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_mova_compact", "f_imm8x4 0x%x", 'x', f_imm8x4, (char *) 0));
 
 #if WITH_PROFILE_MODEL_P
   /* Record the fields for profiling.  */
@@ -5411,7 +5412,7 @@ sh64_compact_decode (SIM_CPU *current_cpu, IADDR pc,
 
   /* Record the fields for the semantic handler.  */
   FLD (f_rn) = f_rn;
-  CGEN_TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_movcal_compact", "f_rn 0x%x", 'x', f_rn, (char *) 0));
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_movcal_compact", "f_rn 0x%x", 'x', f_rn, (char *) 0));
 
 #if WITH_PROFILE_MODEL_P
   /* Record the fields for profiling.  */
@@ -5436,7 +5437,7 @@ sh64_compact_decode (SIM_CPU *current_cpu, IADDR pc,
 
   /* Record the fields for the semantic handler.  */
   FLD (f_rn) = f_rn;
-  CGEN_TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_movcol_compact", "f_rn 0x%x", 'x', f_rn, (char *) 0));
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_movcol_compact", "f_rn 0x%x", 'x', f_rn, (char *) 0));
 
 #if WITH_PROFILE_MODEL_P
   /* Record the fields for profiling.  */
@@ -5461,7 +5462,7 @@ sh64_compact_decode (SIM_CPU *current_cpu, IADDR pc,
 
   /* Record the fields for the semantic handler.  */
   FLD (f_rn) = f_rn;
-  CGEN_TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_movt_compact", "f_rn 0x%x", 'x', f_rn, (char *) 0));
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_movt_compact", "f_rn 0x%x", 'x', f_rn, (char *) 0));
 
 #if WITH_PROFILE_MODEL_P
   /* Record the fields for profiling.  */
@@ -5485,7 +5486,7 @@ sh64_compact_decode (SIM_CPU *current_cpu, IADDR pc,
 
   /* Record the fields for the semantic handler.  */
   FLD (f_rn) = f_rn;
-  CGEN_TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_movual_compact", "f_rn 0x%x", 'x', f_rn, (char *) 0));
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_movual_compact", "f_rn 0x%x", 'x', f_rn, (char *) 0));
 
 #if WITH_PROFILE_MODEL_P
   /* Record the fields for profiling.  */
@@ -5510,7 +5511,7 @@ sh64_compact_decode (SIM_CPU *current_cpu, IADDR pc,
 
   /* Record the fields for the semantic handler.  */
   FLD (f_rn) = f_rn;
-  CGEN_TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_movual2_compact", "f_rn 0x%x", 'x', f_rn, (char *) 0));
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_movual2_compact", "f_rn 0x%x", 'x', f_rn, (char *) 0));
 
 #if WITH_PROFILE_MODEL_P
   /* Record the fields for profiling.  */
@@ -5539,7 +5540,7 @@ sh64_compact_decode (SIM_CPU *current_cpu, IADDR pc,
   /* Record the fields for the semantic handler.  */
   FLD (f_rm) = f_rm;
   FLD (f_rn) = f_rn;
-  CGEN_TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_mull_compact", "f_rm 0x%x", 'x', f_rm, "f_rn 0x%x", 'x', f_rn, (char *) 0));
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_mull_compact", "f_rm 0x%x", 'x', f_rm, "f_rn 0x%x", 'x', f_rn, (char *) 0));
 
 #if WITH_PROFILE_MODEL_P
   /* Record the fields for profiling.  */
@@ -5567,7 +5568,7 @@ sh64_compact_decode (SIM_CPU *current_cpu, IADDR pc,
   /* Record the fields for the semantic handler.  */
   FLD (f_rm) = f_rm;
   FLD (f_rn) = f_rn;
-  CGEN_TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_negc_compact", "f_rm 0x%x", 'x', f_rm, "f_rn 0x%x", 'x', f_rn, (char *) 0));
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_negc_compact", "f_rm 0x%x", 'x', f_rm, "f_rn 0x%x", 'x', f_rn, (char *) 0));
 
 #if WITH_PROFILE_MODEL_P
   /* Record the fields for profiling.  */
@@ -5588,7 +5589,7 @@ sh64_compact_decode (SIM_CPU *current_cpu, IADDR pc,
 
 
   /* Record the fields for the semantic handler.  */
-  CGEN_TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_nop_compact", (char *) 0));
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_nop_compact", (char *) 0));
 
 #undef FLD
     return idesc;
@@ -5605,7 +5606,7 @@ sh64_compact_decode (SIM_CPU *current_cpu, IADDR pc,
 
   /* Record the fields for the semantic handler.  */
   FLD (f_rn) = f_rn;
-  CGEN_TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_pref_compact", "f_rn 0x%x", 'x', f_rn, (char *) 0));
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_pref_compact", "f_rn 0x%x", 'x', f_rn, (char *) 0));
 
 #if WITH_PROFILE_MODEL_P
   /* Record the fields for profiling.  */
@@ -5629,7 +5630,7 @@ sh64_compact_decode (SIM_CPU *current_cpu, IADDR pc,
 
   /* Record the fields for the semantic handler.  */
   FLD (f_rn) = f_rn;
-  CGEN_TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_rotcl_compact", "f_rn 0x%x", 'x', f_rn, (char *) 0));
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_rotcl_compact", "f_rn 0x%x", 'x', f_rn, (char *) 0));
 
 #if WITH_PROFILE_MODEL_P
   /* Record the fields for profiling.  */
@@ -5650,7 +5651,7 @@ sh64_compact_decode (SIM_CPU *current_cpu, IADDR pc,
 
 
   /* Record the fields for the semantic handler.  */
-  CGEN_TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_rts_compact", (char *) 0));
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_rts_compact", (char *) 0));
 
 #if WITH_PROFILE_MODEL_P
   /* Record the fields for profiling.  */
@@ -5676,7 +5677,7 @@ sh64_compact_decode (SIM_CPU *current_cpu, IADDR pc,
   /* Record the fields for the semantic handler.  */
   FLD (f_rm) = f_rm;
   FLD (f_rn) = f_rn;
-  CGEN_TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_shad_compact", "f_rm 0x%x", 'x', f_rm, "f_rn 0x%x", 'x', f_rn, (char *) 0));
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_shad_compact", "f_rm 0x%x", 'x', f_rm, "f_rn 0x%x", 'x', f_rn, (char *) 0));
 
 #if WITH_PROFILE_MODEL_P
   /* Record the fields for profiling.  */
@@ -5702,7 +5703,7 @@ sh64_compact_decode (SIM_CPU *current_cpu, IADDR pc,
 
   /* Record the fields for the semantic handler.  */
   FLD (f_rn) = f_rn;
-  CGEN_TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_stc_gbr_compact", "f_rn 0x%x", 'x', f_rn, (char *) 0));
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_stc_gbr_compact", "f_rn 0x%x", 'x', f_rn, (char *) 0));
 
 #if WITH_PROFILE_MODEL_P
   /* Record the fields for profiling.  */
@@ -5726,7 +5727,7 @@ sh64_compact_decode (SIM_CPU *current_cpu, IADDR pc,
 
   /* Record the fields for the semantic handler.  */
   FLD (f_rn) = f_rn;
-  CGEN_TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_stc_vbr_compact", "f_rn 0x%x", 'x', f_rn, (char *) 0));
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_stc_vbr_compact", "f_rn 0x%x", 'x', f_rn, (char *) 0));
 
 #if WITH_PROFILE_MODEL_P
   /* Record the fields for profiling.  */
@@ -5750,7 +5751,7 @@ sh64_compact_decode (SIM_CPU *current_cpu, IADDR pc,
 
   /* Record the fields for the semantic handler.  */
   FLD (f_rn) = f_rn;
-  CGEN_TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_stcl_gbr_compact", "f_rn 0x%x", 'x', f_rn, (char *) 0));
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_stcl_gbr_compact", "f_rn 0x%x", 'x', f_rn, (char *) 0));
 
 #if WITH_PROFILE_MODEL_P
   /* Record the fields for profiling.  */
@@ -5775,7 +5776,7 @@ sh64_compact_decode (SIM_CPU *current_cpu, IADDR pc,
 
   /* Record the fields for the semantic handler.  */
   FLD (f_rn) = f_rn;
-  CGEN_TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_stcl_vbr_compact", "f_rn 0x%x", 'x', f_rn, (char *) 0));
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_stcl_vbr_compact", "f_rn 0x%x", 'x', f_rn, (char *) 0));
 
 #if WITH_PROFILE_MODEL_P
   /* Record the fields for profiling.  */
@@ -5800,7 +5801,7 @@ sh64_compact_decode (SIM_CPU *current_cpu, IADDR pc,
 
   /* Record the fields for the semantic handler.  */
   FLD (f_rn) = f_rn;
-  CGEN_TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_sts_fpscr_compact", "f_rn 0x%x", 'x', f_rn, (char *) 0));
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_sts_fpscr_compact", "f_rn 0x%x", 'x', f_rn, (char *) 0));
 
 #if WITH_PROFILE_MODEL_P
   /* Record the fields for profiling.  */
@@ -5824,7 +5825,7 @@ sh64_compact_decode (SIM_CPU *current_cpu, IADDR pc,
 
   /* Record the fields for the semantic handler.  */
   FLD (f_rn) = f_rn;
-  CGEN_TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_stsl_fpscr_compact", "f_rn 0x%x", 'x', f_rn, (char *) 0));
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_stsl_fpscr_compact", "f_rn 0x%x", 'x', f_rn, (char *) 0));
 
 #if WITH_PROFILE_MODEL_P
   /* Record the fields for profiling.  */
@@ -5849,7 +5850,7 @@ sh64_compact_decode (SIM_CPU *current_cpu, IADDR pc,
 
   /* Record the fields for the semantic handler.  */
   FLD (f_rn) = f_rn;
-  CGEN_TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_sts_fpul_compact", "f_rn 0x%x", 'x', f_rn, (char *) 0));
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_sts_fpul_compact", "f_rn 0x%x", 'x', f_rn, (char *) 0));
 
 #if WITH_PROFILE_MODEL_P
   /* Record the fields for profiling.  */
@@ -5874,7 +5875,7 @@ sh64_compact_decode (SIM_CPU *current_cpu, IADDR pc,
 
   /* Record the fields for the semantic handler.  */
   FLD (f_rn) = f_rn;
-  CGEN_TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_stsl_fpul_compact", "f_rn 0x%x", 'x', f_rn, (char *) 0));
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_stsl_fpul_compact", "f_rn 0x%x", 'x', f_rn, (char *) 0));
 
 #if WITH_PROFILE_MODEL_P
   /* Record the fields for profiling.  */
@@ -5900,7 +5901,7 @@ sh64_compact_decode (SIM_CPU *current_cpu, IADDR pc,
 
   /* Record the fields for the semantic handler.  */
   FLD (f_rn) = f_rn;
-  CGEN_TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_sts_mach_compact", "f_rn 0x%x", 'x', f_rn, (char *) 0));
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_sts_mach_compact", "f_rn 0x%x", 'x', f_rn, (char *) 0));
 
 #if WITH_PROFILE_MODEL_P
   /* Record the fields for profiling.  */
@@ -5924,7 +5925,7 @@ sh64_compact_decode (SIM_CPU *current_cpu, IADDR pc,
 
   /* Record the fields for the semantic handler.  */
   FLD (f_rn) = f_rn;
-  CGEN_TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_stsl_mach_compact", "f_rn 0x%x", 'x', f_rn, (char *) 0));
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_stsl_mach_compact", "f_rn 0x%x", 'x', f_rn, (char *) 0));
 
 #if WITH_PROFILE_MODEL_P
   /* Record the fields for profiling.  */
@@ -5949,7 +5950,7 @@ sh64_compact_decode (SIM_CPU *current_cpu, IADDR pc,
 
   /* Record the fields for the semantic handler.  */
   FLD (f_rn) = f_rn;
-  CGEN_TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_sts_macl_compact", "f_rn 0x%x", 'x', f_rn, (char *) 0));
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_sts_macl_compact", "f_rn 0x%x", 'x', f_rn, (char *) 0));
 
 #if WITH_PROFILE_MODEL_P
   /* Record the fields for profiling.  */
@@ -5973,7 +5974,7 @@ sh64_compact_decode (SIM_CPU *current_cpu, IADDR pc,
 
   /* Record the fields for the semantic handler.  */
   FLD (f_rn) = f_rn;
-  CGEN_TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_stsl_macl_compact", "f_rn 0x%x", 'x', f_rn, (char *) 0));
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_stsl_macl_compact", "f_rn 0x%x", 'x', f_rn, (char *) 0));
 
 #if WITH_PROFILE_MODEL_P
   /* Record the fields for profiling.  */
@@ -5998,7 +5999,7 @@ sh64_compact_decode (SIM_CPU *current_cpu, IADDR pc,
 
   /* Record the fields for the semantic handler.  */
   FLD (f_rn) = f_rn;
-  CGEN_TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_sts_pr_compact", "f_rn 0x%x", 'x', f_rn, (char *) 0));
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_sts_pr_compact", "f_rn 0x%x", 'x', f_rn, (char *) 0));
 
 #if WITH_PROFILE_MODEL_P
   /* Record the fields for profiling.  */
@@ -6022,7 +6023,7 @@ sh64_compact_decode (SIM_CPU *current_cpu, IADDR pc,
 
   /* Record the fields for the semantic handler.  */
   FLD (f_rn) = f_rn;
-  CGEN_TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_stsl_pr_compact", "f_rn 0x%x", 'x', f_rn, (char *) 0));
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_stsl_pr_compact", "f_rn 0x%x", 'x', f_rn, (char *) 0));
 
 #if WITH_PROFILE_MODEL_P
   /* Record the fields for profiling.  */
@@ -6047,7 +6048,7 @@ sh64_compact_decode (SIM_CPU *current_cpu, IADDR pc,
 
   /* Record the fields for the semantic handler.  */
   FLD (f_rn) = f_rn;
-  CGEN_TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_tasb_compact", "f_rn 0x%x", 'x', f_rn, (char *) 0));
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_tasb_compact", "f_rn 0x%x", 'x', f_rn, (char *) 0));
 
 #if WITH_PROFILE_MODEL_P
   /* Record the fields for profiling.  */
@@ -6071,7 +6072,7 @@ sh64_compact_decode (SIM_CPU *current_cpu, IADDR pc,
 
   /* Record the fields for the semantic handler.  */
   FLD (f_imm8) = f_imm8;
-  CGEN_TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_trapa_compact", "f_imm8 0x%x", 'x', f_imm8, (char *) 0));
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_trapa_compact", "f_imm8 0x%x", 'x', f_imm8, (char *) 0));
 
 #if WITH_PROFILE_MODEL_P
   /* Record the fields for profiling.  */
@@ -6094,7 +6095,7 @@ sh64_compact_decode (SIM_CPU *current_cpu, IADDR pc,
 
   /* Record the fields for the semantic handler.  */
   FLD (f_imm8) = f_imm8;
-  CGEN_TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_tsti_compact", "f_imm8 0x%x", 'x', f_imm8, (char *) 0));
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_tsti_compact", "f_imm8 0x%x", 'x', f_imm8, (char *) 0));
 
 #if WITH_PROFILE_MODEL_P
   /* Record the fields for profiling.  */
@@ -6118,7 +6119,7 @@ sh64_compact_decode (SIM_CPU *current_cpu, IADDR pc,
 
   /* Record the fields for the semantic handler.  */
   FLD (f_imm8) = f_imm8;
-  CGEN_TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_tstb_compact", "f_imm8 0x%x", 'x', f_imm8, (char *) 0));
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_tstb_compact", "f_imm8 0x%x", 'x', f_imm8, (char *) 0));
 
 #if WITH_PROFILE_MODEL_P
   /* Record the fields for profiling.  */

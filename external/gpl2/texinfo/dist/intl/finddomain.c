@@ -1,4 +1,4 @@
-/*	$NetBSD: finddomain.c,v 1.1.1.1 2016/01/14 00:11:28 christos Exp $	*/
+/*	$NetBSD: finddomain.c,v 1.1 2016/01/14 00:11:28 christos Exp $	*/
 
 /* Handle list of needed message catalogs
    Copyright (C) 1995-1999, 2000-2001, 2003 Free Software Foundation, Inc.

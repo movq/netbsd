@@ -1,6 +1,6 @@
 // -*- C++ -*-
 
-// Copyright (C) 2005-2019 Free Software Foundation, Inc.
+// Copyright (C) 2005, 2006, 2009 Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the terms
@@ -41,85 +41,85 @@
 #ifndef PB_DS_SAMPLE_RESIZE_POLICY_HPP
 #define PB_DS_SAMPLE_RESIZE_POLICY_HPP
 
-namespace __gnu_pbds
+// A sample resize policy.
+class sample_resize_policy
 {
-  /// A sample resize policy.
-  class sample_resize_policy
-  {
-  public:
-    /// Size type.
-    typedef std::size_t size_type;
+public:
 
-    /// Default constructor.
-    sample_resize_policy();
+  // Size type.
+  typedef size_t size_type;
 
-    /// Copy constructor.
-    sample_range_hashing(const sample_resize_policy& other);
+  // Default constructor.
+  sample_resize_policy();
 
-    /// Swaps content.
-    inline void
-    swap(sample_resize_policy& other);
+  // Copy constructor.
+  sample_range_hashing(const sample_resize_policy& other);
 
-  protected:
-    /// Notifies a search started.
-    inline void
-    notify_insert_search_start();
+  // Swaps content.
+  inline void
+  swap(sample_resize_policy& other);
 
-    /// Notifies a search encountered a collision.
-    inline void
-    notify_insert_search_collision();
+protected:
 
-    /// Notifies a search ended.
-    inline void
-    notify_insert_search_end();
+  // Notifies a search started.
+  inline void
+  notify_insert_search_start();
 
-    /// Notifies a search started.
-    inline void
-    notify_find_search_start();
+  // Notifies a search encountered a collision.
+  inline void
+  notify_insert_search_collision();
 
-    /// Notifies a search encountered a collision.
-    inline void
-    notify_find_search_collision();
+  // Notifies a search ended.
+  inline void
+  notify_insert_search_end();
 
-    /// Notifies a search ended.
-    inline void
-    notify_find_search_end();
+  // Notifies a search started.
+  inline void
+  notify_find_search_start();
 
-    /// Notifies a search started.
-    inline void
-    notify_erase_search_start();
+  // Notifies a search encountered a collision.
+  inline void
+  notify_find_search_collision();
 
-    /// Notifies a search encountered a collision.
-    inline void
-    notify_erase_search_collision();
+  // Notifies a search ended.
+  inline void
+  notify_find_search_end();
 
-    /// Notifies a search ended.
-    inline void
-    notify_erase_search_end();
+  // Notifies a search started.
+  inline void
+  notify_erase_search_start();
 
-    /// Notifies an element was inserted.
-    inline void
-    notify_inserted(size_type num_e);
+  // Notifies a search encountered a collision.
+  inline void
+  notify_erase_search_collision();
 
-    /// Notifies an element was erased.
-    inline void
-    notify_erased(size_type num_e);
+  // Notifies a search ended.
+  inline void
+  notify_erase_search_end();
 
-    /// Notifies the table was cleared.
-    void
-    notify_cleared();
+  // Notifies an element was inserted.
+  inline void
+  notify_inserted(size_type num_e);
 
-    /// Notifies the table was resized to new_size.
-    void
-    notify_resized(size_type new_size);
+  // Notifies an element was erased.
+  inline void
+  notify_erased(size_type num_e);
 
-    /// Queries whether a resize is needed.
-    inline bool
-    is_resize_needed() const;
+  // Notifies the table was cleared.
+  void
+  notify_cleared();
 
-    /// Queries what the new size should be.
-    size_type
-    get_new_size(size_type size, size_type num_used_e) const;
-  };
-}
-#endif
+  // Notifies the table was resized to new_size.
+  void
+  notify_resized(size_type new_size);
+
+  // Queries whether a resize is needed.
+  inline bool
+  is_resize_needed() const;
+
+  // Queries what the new size should be.
+  size_type
+  get_new_size(size_type size, size_type num_used_e) const;
+};
+
+#endif 

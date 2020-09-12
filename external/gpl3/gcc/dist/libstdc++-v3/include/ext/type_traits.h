@@ -1,6 +1,6 @@
 // -*- C++ -*-
 
-// Copyright (C) 2005-2019 Free Software Foundation, Inc.
+// Copyright (C) 2005, 2006, 2007, 2009 Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the terms
@@ -34,11 +34,7 @@
 #include <bits/c++config.h>
 #include <bits/cpp_type_traits.h>
 
-extern "C++" {
-
-namespace __gnu_cxx _GLIBCXX_VISIBILITY(default)
-{
-_GLIBCXX_BEGIN_NAMESPACE_VERSION
+_GLIBCXX_BEGIN_NAMESPACE(__gnu_cxx)
 
   // Define a nested type if some predicate holds.
   template<bool, typename>
@@ -157,65 +153,52 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
     __is_null_pointer(_Type)
     { return false; }
 
-#if __cplusplus >= 201103L
-  inline bool
-  __is_null_pointer(std::nullptr_t)
-  { return true; }
-#endif
 
   // For complex and cmath
   template<typename _Tp, bool = std::__is_integer<_Tp>::__value>
     struct __promote
     { typedef double __type; };
 
-  // No nested __type member for non-integer non-floating point types,
-  // allows this type to be used for SFINAE to constrain overloads in
-  // <cmath> and <complex> to only the intended types.
   template<typename _Tp>
     struct __promote<_Tp, false>
-    { };
+    { typedef _Tp __type; };
 
-  template<>
-    struct __promote<long double>
-    { typedef long double __type; };
-
-  template<>
-    struct __promote<double>
-    { typedef double __type; };
-
-  template<>
-    struct __promote<float>
-    { typedef float __type; };
-
-  template<typename _Tp, typename _Up,
-           typename _Tp2 = typename __promote<_Tp>::__type,
-           typename _Up2 = typename __promote<_Up>::__type>
+  template<typename _Tp, typename _Up>
     struct __promote_2
     {
-      typedef __typeof__(_Tp2() + _Up2()) __type;
+    private:
+      typedef typename __promote<_Tp>::__type __type1;
+      typedef typename __promote<_Up>::__type __type2;
+
+    public:
+      typedef __typeof__(__type1() + __type2()) __type;
     };
 
-  template<typename _Tp, typename _Up, typename _Vp,
-           typename _Tp2 = typename __promote<_Tp>::__type,
-           typename _Up2 = typename __promote<_Up>::__type,
-           typename _Vp2 = typename __promote<_Vp>::__type>
+  template<typename _Tp, typename _Up, typename _Vp>
     struct __promote_3
     {
-      typedef __typeof__(_Tp2() + _Up2() + _Vp2()) __type;
+    private:
+      typedef typename __promote<_Tp>::__type __type1;
+      typedef typename __promote<_Up>::__type __type2;
+      typedef typename __promote<_Vp>::__type __type3;
+
+    public:
+      typedef __typeof__(__type1() + __type2() + __type3()) __type;
     };
 
-  template<typename _Tp, typename _Up, typename _Vp, typename _Wp,
-           typename _Tp2 = typename __promote<_Tp>::__type,
-           typename _Up2 = typename __promote<_Up>::__type,
-           typename _Vp2 = typename __promote<_Vp>::__type,
-           typename _Wp2 = typename __promote<_Wp>::__type>
+  template<typename _Tp, typename _Up, typename _Vp, typename _Wp>
     struct __promote_4
     {
-      typedef __typeof__(_Tp2() + _Up2() + _Vp2() + _Wp2()) __type;
+    private:
+      typedef typename __promote<_Tp>::__type __type1;
+      typedef typename __promote<_Up>::__type __type2;
+      typedef typename __promote<_Vp>::__type __type3;
+      typedef typename __promote<_Wp>::__type __type4;
+
+    public:
+      typedef __typeof__(__type1() + __type2() + __type3() + __type4()) __type;
     };
 
-_GLIBCXX_END_NAMESPACE_VERSION
-} // namespace
-} // extern "C++"
+_GLIBCXX_END_NAMESPACE
 
 #endif 

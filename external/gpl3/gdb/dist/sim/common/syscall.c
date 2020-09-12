@@ -1,5 +1,6 @@
 /* Remote target system call support.
-   Copyright 1997-2019 Free Software Foundation, Inc.
+   Copyright 1997, 1998, 2002, 2004, 2007, 2008, 2009, 2010, 2011
+   Free Software Foundation, Inc.
    Contributed by Cygnus Solutions.
 
    This file is part of GDB.
@@ -24,7 +25,7 @@
    supported.  */
 
 #ifdef HAVE_CONFIG_H
-#include "config.h"
+#include "cconfig.h"
 #endif
 #include "ansidecl.h"
 #include "libiberty.h"
@@ -75,9 +76,13 @@ char *simulator_sysroot = "";
 /* Utility of cb_syscall to fetch a path name or other string from the target.
    The result is 0 for success or a host errno value.  */
 
-int
-cb_get_string (host_callback *cb, CB_SYSCALL *sc, char *buf, int buflen,
-	       TADDR addr)
+static int
+get_string (cb, sc, buf, buflen, addr)
+     host_callback *cb;
+     CB_SYSCALL *sc;
+     char *buf;
+     int buflen;
+     TADDR addr;
 {
   char *p, *pend;
 
@@ -106,13 +111,17 @@ cb_get_string (host_callback *cb, CB_SYSCALL *sc, char *buf, int buflen,
    If an error occurs, no buffer is left malloc'd.  */
 
 static int
-get_path (host_callback *cb, CB_SYSCALL *sc, TADDR addr, char **bufp)
+get_path (cb, sc, addr, bufp)
+     host_callback *cb;
+     CB_SYSCALL *sc;
+     TADDR addr;
+     char **bufp;
 {
   char *buf = xmalloc (MAX_PATH_LEN);
   int result;
   int sysroot_len = strlen (simulator_sysroot);
 
-  result = cb_get_string (cb, sc, buf, MAX_PATH_LEN - sysroot_len, addr);
+  result = get_string (cb, sc, buf, MAX_PATH_LEN - sysroot_len, addr);
   if (result == 0)
     {
       /* Prepend absolute paths with simulator_sysroot.  Relative paths
@@ -139,7 +148,9 @@ get_path (host_callback *cb, CB_SYSCALL *sc, TADDR addr, char **bufp)
 /* Perform a system call on behalf of the target.  */
 
 CB_RC
-cb_syscall (host_callback *cb, CB_SYSCALL *sc)
+cb_syscall (cb, sc)
+     host_callback *cb;
+     CB_SYSCALL *sc;
 {
   TWORD result = 0, errcode = 0;
 
@@ -240,7 +251,7 @@ cb_syscall (host_callback *cb, CB_SYSCALL *sc)
 #endif /* wip */
 
     case CB_SYS_exit :
-      /* Caller must catch and handle; see sim_syscall as an example.  */
+      /* Caller must catch and handle.  */
       break;
 
     case CB_SYS_open :
@@ -334,12 +345,12 @@ cb_syscall (host_callback *cb, CB_SYSCALL *sc)
 		errcode = EINVAL;
 		goto FinishSyscall;
 	      }
-	    if (cb_is_stdout (cb, fd))
+	    if (cb_is_stdout(cb, fd))
 	      {
 		result = (int) (*cb->write_stdout) (cb, buf, bytes_read);
 		(*cb->flush_stdout) (cb);
 	      }
-	    else if (cb_is_stderr (cb, fd))
+	    else if (cb_is_stderr(cb, fd))
 	      {
 		result = (int) (*cb->write_stderr) (cb, buf, bytes_read);
 		(*cb->flush_stderr) (cb);
@@ -455,7 +466,7 @@ cb_syscall (host_callback *cb, CB_SYSCALL *sc)
 	    result = -1;
 	    goto FinishSyscall;
 	  }
-	result = (*cb->to_stat) (cb, path, &statbuf);
+	result = (*cb->stat) (cb, path, &statbuf);
 	free (path);
 	if (result < 0)
 	  goto ErrorFinish;
@@ -488,7 +499,7 @@ cb_syscall (host_callback *cb, CB_SYSCALL *sc)
 	struct stat statbuf;
 	TADDR addr = sc->arg2;
 
-	result = (*cb->to_fstat) (cb, sc->arg1, &statbuf);
+	result = (*cb->fstat) (cb, sc->arg1, &statbuf);
 	if (result < 0)
 	  goto ErrorFinish;
 	buflen = cb_host_to_target_stat (cb, NULL, NULL);
@@ -526,7 +537,7 @@ cb_syscall (host_callback *cb, CB_SYSCALL *sc)
 	    result = -1;
 	    goto FinishSyscall;
 	  }
-	result = (*cb->to_lstat) (cb, path, &statbuf);
+	result = (*cb->lstat) (cb, path, &statbuf);
 	free (path);
 	if (result < 0)
 	  goto ErrorFinish;

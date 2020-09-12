@@ -1,6 +1,6 @@
 /* Convenience functions implemented in Python.
 
-   Copyright (C) 2008-2019 Free Software Foundation, Inc.
+   Copyright (C) 2008, 2009, 2010, 2011 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -20,6 +20,7 @@
 
 #include "defs.h"
 #include "value.h"
+#include "exceptions.h"
 #include "python-internal.h"
 #include "charset.h"
 #include "gdbcmd.h"
@@ -28,29 +29,25 @@
 #include "expression.h"
 #include "language.h"
 
-extern PyTypeObject fnpy_object_type
-    CPYCHECKER_TYPE_OBJECT_FOR_TYPEDEF ("PyObject");
+static PyTypeObject fnpy_object_type;
 
 
 
-/* Return a reference to a tuple ARGC elements long.  Each element of the
-   tuple is a PyObject converted from the corresponding element of ARGV.  */
-
-static gdbpy_ref<>
+static PyObject *
 convert_values_to_python (int argc, struct value **argv)
 {
   int i;
-  gdbpy_ref<> result (PyTuple_New (argc));
-
-  if (result == NULL)
-    return NULL;
+  PyObject *result = PyTuple_New (argc);
 
   for (i = 0; i < argc; ++i)
     {
-      gdbpy_ref<> elt (value_to_value_object (argv[i]));
-      if (elt == NULL)
-	return NULL;
-      PyTuple_SetItem (result.get (), i, elt.release ());
+      PyObject *elt = value_to_value_object (argv[i]);
+      if (! elt)
+	{
+	  Py_DECREF (result);
+	  error (_("Could not convert value to Python object."));
+	}
+      PyTuple_SetItem (result, i, elt);
     }
   return result;
 }
@@ -61,38 +58,88 @@ static struct value *
 fnpy_call (struct gdbarch *gdbarch, const struct language_defn *language,
 	   void *cookie, int argc, struct value **argv)
 {
-  /* The gdbpy_enter object needs to be placed first, so that it's the last to
-     be destroyed.  */
-  gdbpy_enter enter_py (gdbarch, language);
-  struct value *value;
-  gdbpy_ref<> result;
-  gdbpy_ref<> args = convert_values_to_python (argc, argv);
+  struct value *value = NULL;
+  PyObject *result, *callable, *args;
+  struct cleanup *cleanup;
 
-  /* convert_values_to_python can return NULL on error.  If we
-     encounter this, do not call the function, but allow the Python ->
-     error code conversion below to deal with the Python exception.
-     Note, that this is different if the function simply does not
-     have arguments.  */
+  cleanup = ensure_python_env (gdbarch, language);
 
-  if (args != NULL)
+  args = convert_values_to_python (argc, argv);
+
+  callable = PyObject_GetAttrString ((PyObject *) cookie, "invoke");
+  if (! callable)
     {
-      gdbpy_ref<> callable (PyObject_GetAttrString ((PyObject *) cookie,
-						    "invoke"));
-      if (callable == NULL)
-	error (_("No method named 'invoke' in object."));
-
-      result.reset (PyObject_Call (callable.get (), args.get (), NULL));
+      Py_DECREF (args);
+      error (_("No method named 'invoke' in object."));
     }
 
-  if (result == NULL)
-    gdbpy_handle_exception ();
+  result = PyObject_Call (callable, args, NULL);
+  Py_DECREF (callable);
+  Py_DECREF (args);
 
-  value = convert_value_from_python (result.get ());
+  if (!result)
+    {
+      PyObject *ptype, *pvalue, *ptraceback;
+      char *msg;
+
+      PyErr_Fetch (&ptype, &pvalue, &ptraceback);
+
+      /* Try to fetch an error message contained within ptype, pvalue.
+	 When fetching the error message we need to make our own copy,
+	 we no longer own ptype, pvalue after the call to PyErr_Restore.  */
+
+      msg = gdbpy_exception_to_string (ptype, pvalue);
+      make_cleanup (xfree, msg);
+
+      if (msg == NULL)
+	{
+	  /* An error occurred computing the string representation of the
+	     error message.  This is rare, but we should inform the user.  */
+
+	  printf_filtered (_("An error occurred in a Python "
+			     "convenience function\n"
+			     "and then another occurred computing the "
+			     "error message.\n"));
+	  gdbpy_print_stack ();
+	}
+
+      /* Don't print the stack for gdb.GdbError exceptions.
+	 It is generally used to flag user errors.
+
+	 We also don't want to print "Error occurred in Python command"
+	 for user errors.  However, a missing message for gdb.GdbError
+	 exceptions is arguably a bug, so we flag it as such.  */
+
+      if (!PyErr_GivenExceptionMatches (ptype, gdbpy_gdberror_exc)
+	  || msg == NULL || *msg == '\0')
+	{
+	  PyErr_Restore (ptype, pvalue, ptraceback);
+	  gdbpy_print_stack ();
+	  if (msg != NULL && *msg != '\0')
+	    error (_("Error occurred in Python convenience function: %s"),
+		   msg);
+	  else
+	    error (_("Error occurred in Python convenience function."));
+	}
+      else
+	{
+	  Py_XDECREF (ptype);
+	  Py_XDECREF (pvalue);
+	  Py_XDECREF (ptraceback);
+	  error ("%s", msg);
+	}
+    }
+
+  value = convert_value_from_python (result);
   if (value == NULL)
     {
+      Py_DECREF (result);
       gdbpy_print_stack ();
       error (_("Error while executing Python code."));
     }
+
+  Py_DECREF (result);
+  do_cleanups (cleanup);
 
   return value;
 }
@@ -103,53 +150,50 @@ fnpy_call (struct gdbarch *gdbarch, const struct language_defn *language,
 static int
 fnpy_init (PyObject *self, PyObject *args, PyObject *kwds)
 {
-  const char *name;
-  gdb::unique_xmalloc_ptr<char> docstring;
+  char *name, *docstring = NULL;
 
   if (! PyArg_ParseTuple (args, "s", &name))
     return -1;
-
-  gdbpy_ref<> self_ref = gdbpy_ref<>::new_reference (self);
+  Py_INCREF (self);
 
   if (PyObject_HasAttrString (self, "__doc__"))
     {
-      gdbpy_ref<> ds_obj (PyObject_GetAttrString (self, "__doc__"));
-      if (ds_obj != NULL)
+      PyObject *ds_obj = PyObject_GetAttrString (self, "__doc__");
+      if (ds_obj && gdbpy_is_string (ds_obj))
 	{
-	  if (gdbpy_is_string (ds_obj.get ()))
+	  docstring = python_string_to_host_string (ds_obj);
+	  if (docstring == NULL)
 	    {
-	      docstring = python_string_to_host_string (ds_obj.get ());
-	      if (docstring == NULL)
-		return -1;
+	      Py_DECREF (self);
+	      return -1;
 	    }
 	}
     }
   if (! docstring)
-    docstring.reset (xstrdup (_("This function is not documented.")));
+    docstring = xstrdup (_("This function is not documented."));
 
-  add_internal_function (name, docstring.release (), fnpy_call,
-			 self_ref.release ());
+  add_internal_function (name, docstring, fnpy_call, self);
   return 0;
 }
 
 /* Initialize internal function support.  */
 
-int
+void
 gdbpy_initialize_functions (void)
 {
-  fnpy_object_type.tp_new = PyType_GenericNew;
   if (PyType_Ready (&fnpy_object_type) < 0)
-    return -1;
+    return;
 
-  return gdb_pymodule_addobject (gdb_module, "Function",
-				 (PyObject *) &fnpy_object_type);
+  Py_INCREF (&fnpy_object_type);
+  PyModule_AddObject (gdb_module, "Function", (PyObject *) &fnpy_object_type);
 }
 
 
 
-PyTypeObject fnpy_object_type =
+static PyTypeObject fnpy_object_type =
 {
-  PyVarObject_HEAD_INIT (NULL, 0)
+  PyObject_HEAD_INIT (NULL)
+  0,				  /*ob_size*/
   "gdb.Function",		  /*tp_name*/
   sizeof (PyObject),		  /*tp_basicsize*/
   0,				  /*tp_itemsize*/
@@ -186,4 +230,5 @@ PyTypeObject fnpy_object_type =
   0,				  /* tp_dictoffset */
   fnpy_init,			  /* tp_init */
   0,				  /* tp_alloc */
+  PyType_GenericNew		  /* tp_new */
 };

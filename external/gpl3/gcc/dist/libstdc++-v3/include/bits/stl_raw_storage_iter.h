@@ -1,6 +1,7 @@
 // -*- C++ -*-
 
-// Copyright (C) 2001-2019 Free Software Foundation, Inc.
+// Copyright (C) 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2009
+// Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
@@ -48,17 +49,15 @@
  * purpose.  It is provided "as is" without express or implied warranty.
  */
 
-/** @file bits/stl_raw_storage_iter.h
+/** @file stl_raw_storage_iter.h
  *  This is an internal header file, included by other library headers.
- *  Do not attempt to use it directly. @headername{memory}
+ *  You should not attempt to use it directly.
  */
 
 #ifndef _STL_RAW_STORAGE_ITERATOR_H
 #define _STL_RAW_STORAGE_ITERATOR_H 1
 
-namespace std _GLIBCXX_VISIBILITY(default)
-{
-_GLIBCXX_BEGIN_NAMESPACE_VERSION
+_GLIBCXX_BEGIN_NAMESPACE(std)
 
   /**
    *  This iterator class lets algorithms store their results into
@@ -82,42 +81,26 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       raw_storage_iterator&
       operator=(const _Tp& __element)
       {
-	std::_Construct(std::__addressof(*_M_iter), __element);
+	std::_Construct(&*_M_iter, __element);
 	return *this;
       }
 
-#if __cplusplus >= 201103L
-      // _GLIBCXX_RESOLVE_LIB_DEFECTS
-      // 2127. Move-construction with raw_storage_iterator
-      raw_storage_iterator&
-      operator=(_Tp&& __element)
-      {
-	std::_Construct(std::__addressof(*_M_iter), std::move(__element));
-	return *this;
-      }
-#endif
-
-      raw_storage_iterator&
+      raw_storage_iterator<_OutputIterator, _Tp>&
       operator++()
       {
 	++_M_iter;
 	return *this;
       }
 
-      raw_storage_iterator
+      raw_storage_iterator<_OutputIterator, _Tp>
       operator++(int)
       {
-	raw_storage_iterator __tmp = *this;
+	raw_storage_iterator<_OutputIterator, _Tp> __tmp = *this;
 	++_M_iter;
 	return __tmp;
       }
-
-      // _GLIBCXX_RESOLVE_LIB_DEFECTS
-      // 2454. Add raw_storage_iterator::base() member
-      _OutputIterator base() const { return _M_iter; }
     };
 
-_GLIBCXX_END_NAMESPACE_VERSION
-} // namespace
+_GLIBCXX_END_NAMESPACE
 
 #endif

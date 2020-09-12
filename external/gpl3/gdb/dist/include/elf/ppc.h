@@ -1,5 +1,6 @@
 /* PPC ELF support for BFD.
-   Copyright (C) 1995-2019 Free Software Foundation, Inc.
+   Copyright 1995, 1996, 1998, 2000, 2001, 2002, 2003, 2005, 2007, 2008,
+   2009, 2010 Free Software Foundation, Inc.
 
    By Michael Meissner, Cygnus Support, <meissner@cygnus.com>,
    from information in the System V Application Binary Interface,
@@ -73,14 +74,10 @@ START_RELOC_NUMBERS (elf_ppc_reloc_type)
   RELOC_NUMBER (R_PPC_ADDR30,		 37)
 
 #ifndef RELOC_MACROS_GEN_FUNC
-/* Relocations only used internally by ld.  If you need to use these
-   reloc numbers, you can change them to some other unused value
-   without affecting the ABI.  They will never appear in object files.  */
+/* Fake relocations for branch stubs, only used internally by ld.  */
   RELOC_NUMBER (R_PPC_RELAX,		 48)
   RELOC_NUMBER (R_PPC_RELAX_PLT,	 49)
   RELOC_NUMBER (R_PPC_RELAX_PLTREL24,	 50)
-/* Reloc only used internally by gas.  As above, value is unimportant.  */
-  RELOC_NUMBER (R_PPC_16DX_HA,		 51)
 #endif
 
   /* Relocs added to support TLS.  */
@@ -134,33 +131,6 @@ START_RELOC_NUMBERS (elf_ppc_reloc_type)
   RELOC_NUMBER (R_PPC_EMB_BIT_FLD,	115)
   RELOC_NUMBER (R_PPC_EMB_RELSDA,	116)
 
-/* Marker reloc for inline plt call insns.  */
-  RELOC_NUMBER (R_PPC_PLTSEQ,		119)
-  RELOC_NUMBER (R_PPC_PLTCALL,		120)
-
-/* PowerPC VLE relocations.  */
-  RELOC_NUMBER (R_PPC_VLE_REL8,		216)
-  RELOC_NUMBER (R_PPC_VLE_REL15,	217)
-  RELOC_NUMBER (R_PPC_VLE_REL24,	218)
-  RELOC_NUMBER (R_PPC_VLE_LO16A,	219)
-  RELOC_NUMBER (R_PPC_VLE_LO16D,	220)
-  RELOC_NUMBER (R_PPC_VLE_HI16A,	221)
-  RELOC_NUMBER (R_PPC_VLE_HI16D,	222)
-  RELOC_NUMBER (R_PPC_VLE_HA16A,	223)
-  RELOC_NUMBER (R_PPC_VLE_HA16D,	224)
-  RELOC_NUMBER (R_PPC_VLE_SDA21,	225)
-  RELOC_NUMBER (R_PPC_VLE_SDA21_LO,	226)
-  RELOC_NUMBER (R_PPC_VLE_SDAREL_LO16A,	227)
-  RELOC_NUMBER (R_PPC_VLE_SDAREL_LO16D,	228)
-  RELOC_NUMBER (R_PPC_VLE_SDAREL_HI16A,	229)
-  RELOC_NUMBER (R_PPC_VLE_SDAREL_HI16D,	230)
-  RELOC_NUMBER (R_PPC_VLE_SDAREL_HA16A,	231)
-  RELOC_NUMBER (R_PPC_VLE_SDAREL_HA16D,	232)
-  RELOC_NUMBER (R_PPC_VLE_ADDR20,	233)
-
-/* Power9 split rel16 for addpcis.  */
-  RELOC_NUMBER (R_PPC_REL16DX_HA,	246)
-
 /* Support STT_GNU_IFUNC plt calls.  */
   RELOC_NUMBER (R_PPC_IRELATIVE,	248)
 
@@ -187,8 +157,7 @@ END_RELOC_NUMBERS (R_PPC_max)
 #define DT_PPC_GOT		(DT_LOPROC)
 
 /* Specify that tls descriptors should be optimized.  */
-#define DT_PPC_OPT		(DT_LOPROC + 1)
-#define PPC_OPT_TLS		1
+#define DT_PPC_TLSOPT		(DT_LOPROC + 1)
 
 /* Processor specific flags for the ELF header e_flags field.  */
 
@@ -196,12 +165,6 @@ END_RELOC_NUMBERS (R_PPC_max)
 
 #define	EF_PPC_RELOCATABLE	0x00010000	/* PowerPC -mrelocatable flag.  */
 #define	EF_PPC_RELOCATABLE_LIB	0x00008000	/* PowerPC -mrelocatable-lib flag.  */
-
-/* Processor specific program headers, p_flags field.  */
-#define PF_PPC_VLE		0x10000000	/* PowerPC VLE.  */
-
-/* Processor specific section headers, sh_flags field.  */
-#define SHF_PPC_VLE		0x10000000	/* PowerPC VLE text section.  */
 
 /* Processor specific section headers, sh_type field.  */
 
@@ -211,35 +174,15 @@ END_RELOC_NUMBERS (R_PPC_max)
 						   specified in the associated \
 						   symbol table entry.  */
 
-/* APUinfo note section.  */
-#define APUINFO_SECTION_NAME	".PPC.EMB.apuinfo"
-#define APUINFO_LABEL		"APUinfo"
-
-#define PPC_APUINFO_ISEL	0x40
-#define PPC_APUINFO_PMR		0x41
-#define PPC_APUINFO_RFMCI	0x42
-#define PPC_APUINFO_CACHELCK	0x43
-#define PPC_APUINFO_SPE		0x100
-#define PPC_APUINFO_EFS		0x101
-#define PPC_APUINFO_BRLOCK	0x102
-#define PPC_APUINFO_VLE		0x104
-
 /* Object attribute tags.  */
 enum
 {
   /* 0-3 are generic.  */
-
-  /* FP ABI, low 2 bits:
-     1 for double precision hard-float,
-     2 for soft-float,
-     3 for single precision hard-float.
-     0 for not tagged or not using any ABIs affected by the differences.
-     Next 2 bits:
-     1 for ibm long double
-     2 for 64-bit long double
-     3 for IEEE long double.
-     0 for not tagged or not using any ABIs affected by the differences.  */
-  Tag_GNU_Power_ABI_FP = 4,
+  Tag_GNU_Power_ABI_FP = 4, /* Value 1 for hard-float, 2 for
+			       soft-float, 3 for single=precision 
+			       hard-float; 0 for not tagged or not
+			       using any ABIs affected by the
+			       differences.  */
 
   /* Value 1 for general purpose registers only, 2 for AltiVec
      registers, 3 for SPE registers; 0 for not tagged or not using any

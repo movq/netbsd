@@ -1,4 +1,4 @@
-/*	$NetBSD: closeout.h,v 1.1.1.1 2016/01/10 21:36:18 christos Exp $	*/
+/*	$NetBSD: closeout.h,v 1.1 2016/01/10 21:36:18 christos Exp $	*/
 
 #ifndef CLOSEOUT_H
 # define CLOSEOUT_H 1

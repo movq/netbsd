@@ -1,4 +1,4 @@
-/* Copyright (C) 2006-2019 Free Software Foundation, Inc.
+/* Copyright (C) 2006-2013 Free Software Foundation, Inc.
 
 This file is free software; you can redistribute it and/or modify it
 under the terms of the GNU General Public License as published by the
@@ -25,6 +25,7 @@ see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
 
 #include "lib1funcs.h"
 
+#if !__SHMEDIA__
 #ifdef L_udivsi3_i4i
 
 /* 88 bytes; sh4-200 cycle counts:
@@ -318,3 +319,4 @@ L1:
 	ENDFUNC(GLOBAL(sdivsi3_i4i))
 #endif /* __SH_FPU_DOUBLE__ */
 #endif /* L_sdivsi3_i4i */
+#endif /* !__SHMEDIA__ */

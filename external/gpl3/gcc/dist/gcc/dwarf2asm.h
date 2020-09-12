@@ -1,5 +1,5 @@
 /* Dwarf2 assembler output helper routines.
-   Copyright (C) 2001-2019 Free Software Foundation, Inc.
+   Copyright (C) 2001, 2003, 2005, 2007, 2008 Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -17,8 +17,6 @@ You should have received a copy of the GNU General Public License
 along with GCC; see the file COPYING3.  If not see
 <http://www.gnu.org/licenses/>.  */
 
-#ifndef GCC_DWARF2ASM_H
-#define GCC_DWARF2ASM_H
 
 extern void dw2_assemble_integer (int, rtx);
 
@@ -32,17 +30,9 @@ extern void dw2_asm_output_delta (int, const char *, const char *,
 				  const char *, ...)
      ATTRIBUTE_NULL_PRINTF_4;
 
-extern void dw2_asm_output_vms_delta (int, const char *, const char *,
-				      const char *, ...)
-     ATTRIBUTE_NULL_PRINTF_4;
-
 extern void dw2_asm_output_offset (int, const char *, section *,
 				   const char *, ...)
      ATTRIBUTE_NULL_PRINTF_4;
-
-extern void dw2_asm_output_offset (int, const char *, HOST_WIDE_INT,
-				   section *, const char *, ...)
-     ATTRIBUTE_NULL_PRINTF_5;
 
 extern void dw2_asm_output_addr (int, const char *, const char *, ...)
      ATTRIBUTE_NULL_PRINTF_3;
@@ -70,10 +60,6 @@ extern void dw2_asm_output_data_sleb128	(HOST_WIDE_INT,
 					 const char *, ...)
      ATTRIBUTE_NULL_PRINTF_2;
 
-extern void dw2_asm_output_symname_uleb128 (const char *,
-					    const char *, ...)
-     ATTRIBUTE_NULL_PRINTF_2;
-
 extern void dw2_asm_output_delta_uleb128 (const char *, const char *,
 					  const char *, ...)
      ATTRIBUTE_NULL_PRINTF_3;
@@ -96,5 +82,3 @@ extern void dw2_asm_output_delta_sleb128 (const char *, const char *,
 					  const char *, ...)
      ATTRIBUTE_NULL_PRINTF_3;
 #endif
-
-#endif /* GCC_DWARF2ASM_H */

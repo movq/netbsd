@@ -1,6 +1,6 @@
 /* The common simulator framework for GDB, the GNU Debugger.
 
-   Copyright 2002-2019 Free Software Foundation, Inc.
+   Copyright 2002, 2007, 2008, 2009, 2010, 2011 Free Software Foundation, Inc.
 
    Contributed by Andrew Cagney and Red Hat.
 
@@ -20,8 +20,8 @@
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 
-#ifndef SIM_ENDIAN_H
-#define SIM_ENDIAN_H
+#ifndef _SIM_ENDIAN_H_
+#define _SIM_ENDIAN_H_
 
 
 /* C byte conversion functions */
@@ -411,4 +411,4 @@ do { \
 #include "sim-endian.c"
 #endif
 
-#endif /* SIM_ENDIAN_H */
+#endif /* _SIM_ENDIAN_H_ */

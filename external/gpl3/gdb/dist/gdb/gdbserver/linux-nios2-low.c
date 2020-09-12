@@ -1,6 +1,6 @@
 /* GNU/Linux/Nios II specific low level interface, for the remote server for
    GDB.
-   Copyright (C) 2008-2019 Free Software Foundation, Inc.
+   Copyright (C) 2008-2014 Free Software Foundation, Inc.
 
    Contributed by Mentor Graphics, Inc.
 
@@ -21,8 +21,7 @@
 
 #include "server.h"
 #include "linux-low.h"
-#include "elf/common.h"
-#include "nat/gdb_ptrace.h"
+#include <sys/ptrace.h>
 #include <endian.h>
 #include "gdb_proc_service.h"
 #include <asm/ptrace.h>
@@ -33,7 +32,7 @@
 
 /* The following definition must agree with the number of registers
    defined in "struct user_regs" in GLIBC
-   (sysdeps/unix/sysv/linux/nios2/sys/user.h), and also with
+   (ports/sysdeps/unix/sysv/linux/nios2/sys/user.h), and also with
    NIOS2_NUM_REGS in GDB proper.  */
 
 #define nios2_num_regs 49
@@ -95,31 +94,43 @@ nios2_cannot_store_register (int regno)
   return 0;
 }
 
-/* Breakpoint support.  Also see comments on nios2_breakpoint_from_pc
-   in nios2-tdep.c.  */
+/* Implement the get_pc linux_target_ops method.  */
 
-#if defined(__nios2_arch__) && __nios2_arch__ == 2
-#define NIOS2_BREAKPOINT 0xb7fd0020
-#define CDX_BREAKPOINT 0xd7c9
-#else
-#define NIOS2_BREAKPOINT 0x003b6ffa
-#endif
+static CORE_ADDR
+nios2_get_pc (struct regcache *regcache)
+{
+  union nios2_register pc;
 
-/* We only register the 4-byte breakpoint, even on R2 targets which also
-   support 2-byte breakpoints.  Since there is no supports_z_point_type
-   function provided, gdbserver never inserts software breakpoints itself
-   and instead relies on GDB to insert the breakpoint of the correct length
-   via a memory write.  */
-static const unsigned int nios2_breakpoint = NIOS2_BREAKPOINT;
+  collect_register_by_name (regcache, "pc", pc.buf);
+  return pc.reg32;
+}
+
+/* Implement the set_pc linux_target_ops method.  */
+
+static void
+nios2_set_pc (struct regcache *regcache, CORE_ADDR pc)
+{
+  union nios2_register newpc;
+
+  newpc.reg32 = pc;
+  supply_register_by_name (regcache, "pc", newpc.buf);
+}
+
+/* Breakpoint support.  */
+
+static const unsigned int nios2_breakpoint = 0x003b6ffa;
 #define nios2_breakpoint_len 4
 
-/* Implementation of linux_target_ops method "sw_breakpoint_from_kind".  */
+/* Implement the breakpoint_reinsert_addr linux_target_ops method.  */
 
-static const gdb_byte *
-nios2_sw_breakpoint_from_kind (int kind, int *size)
+static CORE_ADDR
+nios2_reinsert_addr (void)
 {
-  *size = nios2_breakpoint_len;
-  return (const gdb_byte *) &nios2_breakpoint;
+  union nios2_register ra;
+  struct regcache *regcache = get_thread_regcache (current_inferior, 1);
+
+  collect_register_by_name (regcache, "ra", ra.buf);
+  return ra.reg32;
 }
 
 /* Implement the breakpoint_at linux_target_ops method.  */
@@ -128,13 +139,6 @@ static int
 nios2_breakpoint_at (CORE_ADDR where)
 {
   unsigned int insn;
-
-  /* For R2, first check for the 2-byte CDX trap.n breakpoint encoding.  */
-#if defined(__nios2_arch__) && __nios2_arch__ == 2
-  (*the_target->read_memory) (where, (unsigned char *) &insn, 2);
-  if (insn == CDX_BREAKPOINT)
-    return 1;
-#endif
 
   (*the_target->read_memory) (where, (unsigned char *) &insn, 4);
   if (insn == nios2_breakpoint)
@@ -145,7 +149,7 @@ nios2_breakpoint_at (CORE_ADDR where)
 /* Fetch the thread-local storage pointer for libthread_db.  */
 
 ps_err_e
-ps_get_thread_area (struct ps_prochandle *ph,
+ps_get_thread_area (const struct ps_prochandle *ph,
                     lwpid_t lwpid, int idx, void **base)
 {
   if (ptrace (PTRACE_GET_THREAD_AREA, lwpid, NULL, base) != 0)
@@ -158,6 +162,8 @@ ps_get_thread_area (struct ps_prochandle *ph,
 
   return PS_OK;
 }
+
+#ifdef HAVE_PTRACE_GETREGS
 
 /* Helper functions to collect/supply a single register REGNO.  */
 
@@ -183,7 +189,7 @@ nios2_supply_register (struct regcache *regcache, int regno,
 static void
 nios2_fill_gregset (struct regcache *regcache, void *buf)
 {
-  union nios2_register *regset = (union nios2_register *) buf;
+  union nios2_register *regset = buf;
   int i;
 
   for (i = 1; i < nios2_num_regs; i++)
@@ -193,19 +199,21 @@ nios2_fill_gregset (struct regcache *regcache, void *buf)
 static void
 nios2_store_gregset (struct regcache *regcache, const void *buf)
 {
-  const union nios2_register *regset = (union nios2_register *) buf;
+  const union nios2_register *regset = buf;
   int i;
 
   for (i = 0; i < nios2_num_regs; i++)
     nios2_supply_register (regcache, i, regset + i);
 }
+#endif /* HAVE_PTRACE_GETREGS */
 
 static struct regset_info nios2_regsets[] =
 {
-  { PTRACE_GETREGSET, PTRACE_SETREGSET, NT_PRSTATUS,
-    nios2_num_regs * 4, GENERAL_REGS,
+#ifdef HAVE_PTRACE_GETREGS
+  { PTRACE_GETREGS, PTRACE_SETREGS, 0, nios2_num_regs * 4, GENERAL_REGS,
     nios2_fill_gregset, nios2_store_gregset },
-  NULL_REGSET
+#endif /* HAVE_PTRACE_GETREGS */
+  { 0, 0, 0, -1, -1, NULL, NULL }
 };
 
 static struct regsets_info nios2_regsets_info =
@@ -241,11 +249,11 @@ struct linux_target_ops the_low_target =
   nios2_cannot_fetch_register,
   nios2_cannot_store_register,
   NULL,
-  linux_get_pc_32bit,
-  linux_set_pc_32bit,
-  NULL, /* breakpoint_kind_from_pc */
-  nios2_sw_breakpoint_from_kind,
-  NULL, /* get_next_pcs */
+  nios2_get_pc,
+  nios2_set_pc,
+  (const unsigned char *) &nios2_breakpoint,
+  nios2_breakpoint_len,
+  nios2_reinsert_addr,
   0,
   nios2_breakpoint_at,
 };

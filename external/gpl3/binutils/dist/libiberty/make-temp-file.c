@@ -1,5 +1,5 @@
 /* Utility to pick a temporary filename prefix.
-   Copyright (C) 1996-2020 Free Software Foundation, Inc.
+   Copyright (C) 1996, 1997, 1998, 2001 Free Software Foundation, Inc.
 
 This file is part of the libiberty library.
 Libiberty is free software; you can redistribute it and/or
@@ -36,9 +36,6 @@ Boston, MA 02110-1301, USA.  */
 #ifdef HAVE_SYS_FILE_H
 #include <sys/file.h>   /* May get R_OK, etc. on some systems.  */
 #endif
-#if defined(_WIN32) && !defined(__CYGWIN__)
-#include <windows.h>
-#endif
 
 #ifndef R_OK
 #define R_OK 4
@@ -56,10 +53,8 @@ extern int mkstemps (char *, int);
 
 /* Name of temporary file.
    mktemp requires 6 trailing X's.  */
-#define TEMP_FILE "XXXXXX"
+#define TEMP_FILE "ccXXXXXX"
 #define TEMP_FILE_LEN (sizeof(TEMP_FILE) - 1)
-
-#if !defined(_WIN32) || defined(__CYGWIN__)
 
 /* Subroutine of choose_tmpdir.
    If BASE is non-NULL, return it.
@@ -86,13 +81,11 @@ static const char usrtmp[] =
 static const char vartmp[] =
 { DIR_SEPARATOR, 'v', 'a', 'r', DIR_SEPARATOR, 't', 'm', 'p', 0 };
 
-#endif
-
 static char *memoized_tmpdir;
 
 /*
 
-@deftypefn Replacement const char* choose_tmpdir ()
+@deftypefn Replacement char* choose_tmpdir ()
 
 Returns a pointer to a directory path suitable for creating temporary
 files in.
@@ -101,71 +94,43 @@ files in.
 
 */
 
-const char *
+char *
 choose_tmpdir (void)
 {
-  if (!memoized_tmpdir)
-    {
-#if !defined(_WIN32) || defined(__CYGWIN__)
-      const char *base = 0;
-      char *tmpdir;
-      unsigned int len;
-      
-#ifdef VMS
-      /* Try VMS standard temp logical.  */
-      base = try_dir ("/sys$scratch", base);
-#else
-      base = try_dir (getenv ("TMPDIR"), base);
-      base = try_dir (getenv ("TMP"), base);
-      base = try_dir (getenv ("TEMP"), base);
-#endif
-      
+  const char *base = 0;
+  char *tmpdir;
+  unsigned int len;
+
+  if (memoized_tmpdir)
+    return memoized_tmpdir;
+
+  base = try_dir (getenv ("TMPDIR"), base);
+  base = try_dir (getenv ("TMP"), base);
+  base = try_dir (getenv ("TEMP"), base);
+
 #ifdef P_tmpdir
-      /* We really want a directory name here as if concatenated with say \dir
-	 we do not end up with a double \\ which defines an UNC path.  */
-      if (strcmp (P_tmpdir, "\\") == 0)
-	base = try_dir ("\\.", base);
-      else
-	base = try_dir (P_tmpdir, base);
+  base = try_dir (P_tmpdir, base);
 #endif
 
-      /* Try /tmp, /var/tmp, then /usr/tmp.  */
-      base = try_dir (tmp, base);
-      base = try_dir (vartmp, base);
-      base = try_dir (usrtmp, base);
-      
-      /* If all else fails, use the current directory!  */
-      if (base == 0)
-	base = ".";
-      /* Append DIR_SEPARATOR to the directory we've chosen
-	 and return it.  */
-      len = strlen (base);
-      tmpdir = XNEWVEC (char, len + 2);
-      strcpy (tmpdir, base);
-      tmpdir[len] = DIR_SEPARATOR;
-      tmpdir[len+1] = '\0';
-      memoized_tmpdir = tmpdir;
-#else /* defined(_WIN32) && !defined(__CYGWIN__) */
-      DWORD len;
+  /* Try /var/tmp, /usr/tmp, then /tmp.  */
+  base = try_dir (vartmp, base);
+  base = try_dir (usrtmp, base);
+  base = try_dir (tmp, base);
+ 
+  /* If all else fails, use the current directory!  */
+  if (base == 0)
+    base = ".";
 
-      /* Figure out how much space we need.  */
-      len = GetTempPath(0, NULL);
-      if (len)
-	{
-	  memoized_tmpdir = XNEWVEC (char, len);
-	  if (!GetTempPath(len, memoized_tmpdir))
-	    {
-	      XDELETEVEC (memoized_tmpdir);
-	      memoized_tmpdir = NULL;
-	    }
-	}
-      if (!memoized_tmpdir)
-	/* If all else fails, use the current directory.  */
-	memoized_tmpdir = xstrdup (".\\");
-#endif /* defined(_WIN32) && !defined(__CYGWIN__) */
-    }
+  /* Append DIR_SEPARATOR to the directory we've chosen
+     and return it.  */
+  len = strlen (base);
+  tmpdir = XNEWVEC (char, len + 2);
+  strcpy (tmpdir, base);
+  tmpdir[len] = DIR_SEPARATOR;
+  tmpdir[len+1] = '\0';
 
-  return memoized_tmpdir;
+  memoized_tmpdir = tmpdir;
+  return tmpdir;
 }
 
 /*
@@ -181,31 +146,25 @@ string is @code{malloc}ed, and the temporary file has been created.
 */
 
 char *
-make_temp_file_with_prefix (const char *prefix, const char *suffix)
+make_temp_file (const char *suffix)
 {
   const char *base = choose_tmpdir ();
   char *temp_filename;
-  int base_len, suffix_len, prefix_len;
+  int base_len, suffix_len;
   int fd;
-
-  if (prefix == 0)
-    prefix = "cc";
 
   if (suffix == 0)
     suffix = "";
 
   base_len = strlen (base);
-  prefix_len = strlen (prefix);
   suffix_len = strlen (suffix);
 
   temp_filename = XNEWVEC (char, base_len
 			   + TEMP_FILE_LEN
-			   + suffix_len
-			   + prefix_len + 1);
+			   + suffix_len + 1);
   strcpy (temp_filename, base);
-  strcpy (temp_filename + base_len, prefix);
-  strcpy (temp_filename + base_len + prefix_len, TEMP_FILE);
-  strcpy (temp_filename + base_len + prefix_len + TEMP_FILE_LEN, suffix);
+  strcpy (temp_filename + base_len, TEMP_FILE);
+  strcpy (temp_filename + base_len + TEMP_FILE_LEN, suffix);
 
   fd = mkstemps (temp_filename, suffix_len);
   /* Mkstemps failed.  It may be EPERM, ENOSPC etc.  */
@@ -219,10 +178,4 @@ make_temp_file_with_prefix (const char *prefix, const char *suffix)
   if (close (fd))
     abort ();
   return temp_filename;
-}
-
-char *
-make_temp_file (const char *suffix)
-{
-  return make_temp_file_with_prefix (NULL, suffix);
 }

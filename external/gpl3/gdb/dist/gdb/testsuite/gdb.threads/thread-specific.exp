@@ -1,4 +1,4 @@
-# Copyright 2004-2019 Free Software Foundation, Inc.
+# Copyright 2004, 2007, 2008, 2009, 2010, 2011 Free Software Foundation, Inc.
 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -17,10 +17,16 @@
 # It tests that the correct breakpoint is reported when we hit a
 # thread-specific breakpoint inserted for several threads.
 
+if $tracelevel then {
+	strace $tracelevel
+}
 
-standard_testfile
 
-if {[gdb_compile_pthreads "${srcdir}/${subdir}/${srcfile}" "${binfile}" executable debug] != "" } {
+set testfile "thread-specific"
+set srcfile ${testfile}.c
+set binfile ${objdir}/${subdir}/${testfile}
+
+if {[gdb_compile_pthreads "${srcdir}/${subdir}/${srcfile}" "${binfile}" executable [list debug "incdir=${objdir}"]] != "" } {
     return -1
 }
 
@@ -61,15 +67,18 @@ proc get_thread_list { } {
   return $thr_list
 }
 
-clean_restart ${binfile}
+# Start with a fresh gdb.
+
+gdb_exit
+gdb_start
+gdb_reinitialize_dir $srcdir/$subdir
+
+gdb_load ${binfile}
 
 gdb_test_no_output "set print sevenbit-strings"
 gdb_test_no_output "set width 0"
 
-# As this test only runs a single inferior, $_thread and $_gthread
-# should match throughout.
 gdb_test {print $_thread} ".* = 0" "thread var when not running"
-gdb_test {print $_gthread} ".* = 0" "gthread var when not running"
 
 runto_main
 
@@ -85,7 +94,6 @@ if {[llength $threads] == 0} {
 }
 
 gdb_test {print $_thread} ".* = [lindex $threads 0]" "thread var in main"
-gdb_test {print $_gthread} ".* = [lindex $threads 0]" "gthread var in main"
 
 gdb_test_multiple "break $line thread [lindex $threads 0]" \
   "breakpoint $line main thread" {
@@ -99,7 +107,6 @@ foreach thread [lrange $threads 1 end] {
   gdb_breakpoint "$line thread $thread"
 }
 
-set this_breakpoint -1
 gdb_test_multiple "continue" "continue to thread-specific breakpoint" {
 	-re "Breakpoint $main_breakpoint, .* at .*\r\n$gdb_prompt $" {
 	    fail "continue to thread-specific breakpoint (wrong breakpoint)"
@@ -110,23 +117,13 @@ gdb_test_multiple "continue" "continue to thread-specific breakpoint" {
 	}
 }
 
-set this_thread -1
-if { $this_breakpoint != -1 } {
-    gdb_test_multiple "info breakpoint $this_breakpoint" "info on bp" {
-	-re ".*stop only in thread (\[0-9\]*).*$gdb_prompt $" {
-	    set this_thread $expect_out(1,string)
-	    pass "found breakpoint for thread number"
-	}
+gdb_test_multiple "info breakpoint $this_breakpoint" "info on bp" {
+    -re ".*stop only in thread (\[0-9\]*).*$gdb_prompt $" {
+	set this_thread $expect_out(1,string)
+	pass "found breakpoint for thread number"
     }
-} else {
-    untested "info on bp"
 }
 
-if { $this_thread != -1 } {
-    gdb_test {print $_thread} ".* = $this_thread" "thread var at break"
-    gdb_test {print $_gthread} ".* = $this_thread" "gthread var at break"
-} else {
-    untested "thread var at break"
-}
+gdb_test {print $_thread} ".* = $this_thread" "thread var at break"
 
 return 0

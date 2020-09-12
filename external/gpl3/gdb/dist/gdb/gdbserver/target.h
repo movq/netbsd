@@ -1,5 +1,6 @@
 /* Target operations for the remote server for GDB.
-   Copyright (C) 2002-2019 Free Software Foundation, Inc.
+   Copyright (C) 2002, 2003, 2004, 2005, 2007, 2008, 2009, 2010, 2011
+   Free Software Foundation, Inc.
 
    Contributed by MontaVista Software.
 
@@ -18,21 +19,24 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-#ifndef GDBSERVER_TARGET_H
-#define GDBSERVER_TARGET_H
-
-#include <sys/types.h> /* for mode_t */
-#include "target/target.h"
-#include "target/resume.h"
-#include "target/wait.h"
-#include "target/waitstatus.h"
-#include "mem-break.h"
-#include "common/btrace-common.h"
-#include <vector>
+#ifndef TARGET_H
+#define TARGET_H
 
 struct emit_ops;
-struct buffer;
-struct process_info;
+
+/* Ways to "resume" a thread.  */
+
+enum resume_kind
+{
+  /* Thread should continue.  */
+  resume_continue,
+
+  /* Thread should single-step.  */
+  resume_step,
+
+  /* Thread should be stopped.  */
+  resume_stop
+};
 
 /* This structure describes how to resume a particular thread (or all
    threads) based on the client's request.  If thread is -1, then this
@@ -50,35 +54,73 @@ struct thread_resume
      thread.  If stopping a thread, and this is 0, the target should
      stop the thread however it best decides to (e.g., SIGSTOP on
      linux; SuspendThread on win32).  This is a host signal value (not
-     enum gdb_signal).  */
+     enum target_signal).  */
   int sig;
-
-  /* Range to single step within.  Valid only iff KIND is resume_step.
-
-     Single-step once, and then continuing stepping as long as the
-     thread stops in this range.  (If the range is empty
-     [STEP_RANGE_START == STEP_RANGE_END], then this is a single-step
-     request.)  */
-  CORE_ADDR step_range_start;	/* Inclusive */
-  CORE_ADDR step_range_end;	/* Exclusive */
 };
+
+/* Generally, what has the program done?  */
+enum target_waitkind
+  {
+    /* The program has exited.  The exit status is in
+       value.integer.  */
+    TARGET_WAITKIND_EXITED,
+
+    /* The program has stopped with a signal.  Which signal is in
+       value.sig.  */
+    TARGET_WAITKIND_STOPPED,
+
+    /* The program has terminated with a signal.  Which signal is in
+       value.sig.  */
+    TARGET_WAITKIND_SIGNALLED,
+
+    /* The program is letting us know that it dynamically loaded
+       something.  */
+    TARGET_WAITKIND_LOADED,
+
+    /* The program has exec'ed a new executable file.  The new file's
+       pathname is pointed to by value.execd_pathname.  */
+    TARGET_WAITKIND_EXECD,
+
+    /* Nothing of interest to GDB happened, but we stopped anyway.  */
+    TARGET_WAITKIND_SPURIOUS,
+
+    /* An event has occurred, but we should wait again.  In this case,
+       we want to go back to the event loop and wait there for another
+       event from the inferior.  */
+    TARGET_WAITKIND_IGNORE
+  };
+
+struct target_waitstatus
+  {
+    enum target_waitkind kind;
+
+    /* Forked child pid, execd pathname, exit status or signal number.  */
+    union
+      {
+	int integer;
+	enum target_signal sig;
+	ptid_t related_pid;
+	char *execd_pathname;
+      }
+    value;
+  };
+
+/* Options that can be passed to target_ops->wait.  */
+
+#define TARGET_WNOHANG 1
 
 struct target_ops
 {
   /* Start a new process.
 
      PROGRAM is a path to the program to execute.
-     PROGRAM_ARGS is a standard NULL-terminated array of arguments,
-     to be passed to the inferior as ``argv'' (along with PROGRAM).
+     ARGS is a standard NULL-terminated array of arguments,
+     to be passed to the inferior as ``argv''.
 
      Returns the new PID on success, -1 on failure.  Registers the new
      process with the process list.  */
-  int (*create_inferior) (const char *program,
-			  const std::vector<char *> &program_args);
 
-  /* Do additional setup after a new process is created, including
-     exec-wrapper completion.  */
-  void (*post_create_inferior) (void);
+  int (*create_inferior) (char *program, char **args);
 
   /* Attach to a running process.
 
@@ -90,21 +132,20 @@ struct target_ops
 
   int (*attach) (unsigned long pid);
 
-  /* Kill process PROC.  Return -1 on failure, and 0 on success.  */
+  /* Kill inferior PID.  Return -1 on failure, and 0 on success.  */
 
-  int (*kill) (process_info *proc);
+  int (*kill) (int pid);
 
-  /* Detach from process PROC.  Return -1 on failure, and 0 on
+  /* Detach from inferior PID. Return -1 on failure, and 0 on
      success.  */
 
-  int (*detach) (process_info *proc);
+  int (*detach) (int pid);
 
   /* The inferior process has died.  Do what is right.  */
 
   void (*mourn) (struct process_info *proc);
 
-  /* Wait for process PID to exit.  */
-
+  /* Wait for inferior PID to exit.  */
   void (*join) (int pid);
 
   /* Return 1 iff the thread with process ID PID is alive.  */
@@ -145,8 +186,8 @@ struct target_ops
      inferior such that it is possible to access memory.
 
      This should generally only be called from client facing routines,
-     such as gdb_read_memory/gdb_write_memory, or the GDB breakpoint
-     insertion routine.
+     such as gdb_read_memory/gdb_write_memory, or the insert_point
+     callbacks.
 
      Like `read_memory' and `write_memory' below, returns 0 on success
      and errno on failure.  */
@@ -196,41 +237,17 @@ struct target_ops
   int (*read_auxv) (CORE_ADDR offset, unsigned char *myaddr,
 		    unsigned int len);
 
-  /* Returns true if GDB Z breakpoint type TYPE is supported, false
-     otherwise.  The type is coded as follows:
+  /* Insert and remove a break or watchpoint.
+     Returns 0 on success, -1 on failure and 1 on unsupported.
+     The type is coded as follows:
        '0' - software-breakpoint
        '1' - hardware-breakpoint
        '2' - write watchpoint
        '3' - read watchpoint
-       '4' - access watchpoint
-  */
-  int (*supports_z_point_type) (char z_type);
+       '4' - access watchpoint  */
 
-  /* Insert and remove a break or watchpoint.
-     Returns 0 on success, -1 on failure and 1 on unsupported.  */
-
-  int (*insert_point) (enum raw_bkpt_type type, CORE_ADDR addr,
-		       int size, struct raw_breakpoint *bp);
-  int (*remove_point) (enum raw_bkpt_type type, CORE_ADDR addr,
-		       int size, struct raw_breakpoint *bp);
-
-  /* Returns 1 if the target stopped because it executed a software
-     breakpoint instruction, 0 otherwise.  */
-  int (*stopped_by_sw_breakpoint) (void);
-
-  /* Returns true if the target knows whether a trap was caused by a
-     SW breakpoint triggering.  */
-  int (*supports_stopped_by_sw_breakpoint) (void);
-
-  /* Returns 1 if the target stopped for a hardware breakpoint.  */
-  int (*stopped_by_hw_breakpoint) (void);
-
-  /* Returns true if the target knows whether a trap was caused by a
-     HW breakpoint triggering.  */
-  int (*supports_stopped_by_hw_breakpoint) (void);
-
-  /* Returns true if the target can do hardware single step.  */
-  int (*supports_hardware_single_step) (void);
+  int (*insert_point) (char type, CORE_ADDR addr, int len);
+  int (*remove_point) (char type, CORE_ADDR addr, int len);
 
   /* Returns 1 if target was stopped due to a watchpoint hit, 0 otherwise.  */
 
@@ -287,18 +304,6 @@ struct target_ops
   /* Returns true if the target supports multi-process debugging.  */
   int (*supports_multi_process) (void);
 
-  /* Returns true if fork events are supported.  */
-  int (*supports_fork_events) (void);
-
-  /* Returns true if vfork events are supported.  */
-  int (*supports_vfork_events) (void);
-
-  /* Returns true if exec events are supported.  */
-  int (*supports_exec_events) (void);
-
-  /* Allows target to re-initialize connection-specific settings.  */
-  void (*handle_new_gdb_connection) (void);
-
   /* If not NULL, target-specific routine to process monitor command.
      Returns 1 if handled, or 0 to perform default processing.  */
   int (*handle_monitor_command) (char *);
@@ -306,13 +311,8 @@ struct target_ops
   /* Returns the core given a thread, or -1 if not known.  */
   int (*core_of_thread) (ptid_t);
 
-  /* Read loadmaps.  Read LEN bytes at OFFSET into a buffer at MYADDR.  */
-  int (*read_loadmap) (const char *annex, CORE_ADDR offset,
-		       unsigned char *myaddr, unsigned int len);
-
-  /* Target specific qSupported support.  FEATURES is an array of
-     features with COUNT elements.  */
-  void (*process_qsupported) (char **features, int count);
+  /* Target specific qSupported support.  */
+  void (*process_qsupported) (const char *);
 
   /* Return 1 if the target supports tracepoints, 0 (or leave the
      callback NULL) otherwise.  */
@@ -330,7 +330,7 @@ struct target_ops
   /* Read Thread Information Block address.  */
   int (*get_tib_address) (ptid_t ptid, CORE_ADDR *address);
 
-  /* Pause all threads.  If FREEZE, arrange for any resume attempt to
+  /* Pause all threads.  If FREEZE, arrange for any resume attempt be
      be ignored until an unpause_all call unfreezes threads again.
      There can be nested calls to pause_all, so a freeze counter
      should be maintained.  */
@@ -342,6 +342,9 @@ struct target_ops
      the pause call.  */
   void (*unpause_all) (int unfreeze);
 
+  /* Cancel all pending breakpoints hits in all threads.  */
+  void (*cancel_breakpoints) (void);
+
   /* Stabilize all threads.  That is, force them out of jump pads.  */
   void (*stabilize_threads) (void);
 
@@ -352,174 +355,44 @@ struct target_ops
      pad lock object.  ORIG_SIZE is the size in bytes of the
      instruction at TPADDR.  JUMP_ENTRY points to the address of the
      jump pad entry, and on return holds the address past the end of
-     the created jump pad.  If a trampoline is created by the function,
-     then TRAMPOLINE and TRAMPOLINE_SIZE return the address and size of
-     the trampoline, else they remain unchanged.  JJUMP_PAD_INSN is a
-     buffer containing a copy of the instruction at TPADDR.
-     ADJUST_INSN_ADDR and ADJUST_INSN_ADDR_END are output parameters that
-     return the address range where the instruction at TPADDR was relocated
-     to.  If an error occurs, the ERR may be used to pass on an error
-     message.  */
+     the created jump pad. JJUMP_PAD_INSN is a buffer containing a
+     copy of the instruction at TPADDR.  ADJUST_INSN_ADDR and
+     ADJUST_INSN_ADDR_END are output parameters that return the
+     address range where the instruction at TPADDR was relocated
+     to.  */
   int (*install_fast_tracepoint_jump_pad) (CORE_ADDR tpoint, CORE_ADDR tpaddr,
 					   CORE_ADDR collector,
 					   CORE_ADDR lockaddr,
 					   ULONGEST orig_size,
 					   CORE_ADDR *jump_entry,
-					   CORE_ADDR *trampoline,
-					   ULONGEST *trampoline_size,
 					   unsigned char *jjump_pad_insn,
 					   ULONGEST *jjump_pad_insn_size,
 					   CORE_ADDR *adjusted_insn_addr,
-					   CORE_ADDR *adjusted_insn_addr_end,
-					   char *err);
+					   CORE_ADDR *adjusted_insn_addr_end);
 
   /* Return the bytecode operations vector for the current inferior.
      Returns NULL if bytecode compilation is not supported.  */
   struct emit_ops *(*emit_ops) (void);
-
-  /* Returns true if the target supports disabling randomization.  */
-  int (*supports_disable_randomization) (void);
-
-  /* Return the minimum length of an instruction that can be safely overwritten
-     for use as a fast tracepoint.  */
-  int (*get_min_fast_tracepoint_insn_len) (void);
-
-  /* Read solib info on SVR4 platforms.  */
-  int (*qxfer_libraries_svr4) (const char *annex, unsigned char *readbuf,
-			       unsigned const char *writebuf,
-			       CORE_ADDR offset, int len);
-
-  /* Return true if target supports debugging agent.  */
-  int (*supports_agent) (void);
-
-  /* Enable branch tracing for PTID based on CONF and allocate a branch trace
-     target information struct for reading and for disabling branch trace.  */
-  struct btrace_target_info *(*enable_btrace)
-    (ptid_t ptid, const struct btrace_config *conf);
-
-  /* Disable branch tracing.
-     Returns zero on success, non-zero otherwise.  */
-  int (*disable_btrace) (struct btrace_target_info *tinfo);
-
-  /* Read branch trace data into buffer.
-     Return 0 on success; print an error message into BUFFER and return -1,
-     otherwise.  */
-  int (*read_btrace) (struct btrace_target_info *, struct buffer *,
-		      enum btrace_read_type type);
-
-  /* Read the branch trace configuration into BUFFER.
-     Return 0 on success; print an error message into BUFFER and return -1
-     otherwise.  */
-  int (*read_btrace_conf) (const struct btrace_target_info *, struct buffer *);
-
-  /* Return true if target supports range stepping.  */
-  int (*supports_range_stepping) (void);
-
-  /* Return the full absolute name of the executable file that was
-     run to create the process PID.  If the executable file cannot
-     be determined, NULL is returned.  Otherwise, a pointer to a
-     character string containing the pathname is returned.  This
-     string should be copied into a buffer by the client if the string
-     will not be immediately used, or if it must persist.  */
-  char *(*pid_to_exec_file) (int pid);
-
-  /* Multiple-filesystem-aware open.  Like open(2), but operating in
-     the filesystem as it appears to process PID.  Systems where all
-     processes share a common filesystem should set this to NULL.
-     If NULL, the caller should fall back to open(2).  */
-  int (*multifs_open) (int pid, const char *filename,
-		       int flags, mode_t mode);
-
-  /* Multiple-filesystem-aware unlink.  Like unlink(2), but operates
-     in the filesystem as it appears to process PID.  Systems where
-     all processes share a common filesystem should set this to NULL.
-     If NULL, the caller should fall back to unlink(2).  */
-  int (*multifs_unlink) (int pid, const char *filename);
-
-  /* Multiple-filesystem-aware readlink.  Like readlink(2), but
-     operating in the filesystem as it appears to process PID.
-     Systems where all processes share a common filesystem should
-     set this to NULL.  If NULL, the caller should fall back to
-     readlink(2).  */
-  ssize_t (*multifs_readlink) (int pid, const char *filename,
-			       char *buf, size_t bufsiz);
-
-  /* Return the breakpoint kind for this target based on PC.  The PCPTR is
-     adjusted to the real memory location in case a flag (e.g., the Thumb bit on
-     ARM) was present in the PC.  */
-  int (*breakpoint_kind_from_pc) (CORE_ADDR *pcptr);
-
-  /* Return the software breakpoint from KIND.  KIND can have target
-     specific meaning like the Z0 kind parameter.
-     SIZE is set to the software breakpoint's length in memory.  */
-  const gdb_byte *(*sw_breakpoint_from_kind) (int kind, int *size);
-
-  /* Return the thread's name, or NULL if the target is unable to determine it.
-     The returned value must not be freed by the caller.  */
-  const char *(*thread_name) (ptid_t thread);
-
-  /* Return the breakpoint kind for this target based on the current
-     processor state (e.g. the current instruction mode on ARM) and the
-     PC.  The PCPTR is adjusted to the real memory location in case a flag
-     (e.g., the Thumb bit on ARM) is present in the PC.  */
-  int (*breakpoint_kind_from_current_state) (CORE_ADDR *pcptr);
-
-  /* Returns true if the target can software single step.  */
-  int (*supports_software_single_step) (void);
-
-  /* Return 1 if the target supports catch syscall, 0 (or leave the
-     callback NULL) otherwise.  */
-  int (*supports_catch_syscall) (void);
-
-  /* Return tdesc index for IPA.  */
-  int (*get_ipa_tdesc_idx) (void);
-
-  /* Thread ID to (numeric) thread handle: Return true on success and
-     false for failure.  Return pointer to thread handle via HANDLE
-     and the handle's length via HANDLE_LEN.  */
-  bool (*thread_handle) (ptid_t ptid, gdb_byte **handle, int *handle_len);
 };
 
 extern struct target_ops *the_target;
 
 void set_target_ops (struct target_ops *);
 
-#define create_inferior(program, program_args)	\
-  (*the_target->create_inferior) (program, program_args)
-
-#define target_post_create_inferior()			 \
-  do							 \
-    {							 \
-      if (the_target->post_create_inferior != NULL)	 \
-	(*the_target->post_create_inferior) ();		 \
-    } while (0)
+#define create_inferior(program, args) \
+  (*the_target->create_inferior) (program, args)
 
 #define myattach(pid) \
   (*the_target->attach) (pid)
 
-int kill_inferior (process_info *proc);
+#define kill_inferior(pid) \
+  (*the_target->kill) (pid)
 
-#define target_supports_fork_events() \
-  (the_target->supports_fork_events ? \
-   (*the_target->supports_fork_events) () : 0)
+#define detach_inferior(pid) \
+  (*the_target->detach) (pid)
 
-#define target_supports_vfork_events() \
-  (the_target->supports_vfork_events ? \
-   (*the_target->supports_vfork_events) () : 0)
-
-#define target_supports_exec_events() \
-  (the_target->supports_exec_events ? \
-   (*the_target->supports_exec_events) () : 0)
-
-#define target_handle_new_gdb_connection()		 \
-  do							 \
-    {							 \
-      if (the_target->handle_new_gdb_connection != NULL) \
-	(*the_target->handle_new_gdb_connection) ();	 \
-    } while (0)
-
-#define detach_inferior(proc) \
-  (*the_target->detach) (proc)
+#define mourn_inferior(PROC) \
+  (*the_target->mourn) (PROC)
 
 #define mythread_alive(pid) \
   (*the_target->thread_alive) (pid)
@@ -539,20 +412,16 @@ int kill_inferior (process_info *proc);
 #define target_async(enable) \
   (the_target->async ? (*the_target->async) (enable) : 0)
 
-#define target_process_qsupported(features, count)	\
+#define target_supports_multi_process() \
+  (the_target->supports_multi_process ? \
+   (*the_target->supports_multi_process) () : 0)
+
+#define target_process_qsupported(query)		\
   do							\
     {							\
       if (the_target->process_qsupported)		\
-	the_target->process_qsupported (features, count); \
+	the_target->process_qsupported (query);		\
     } while (0)
-
-#define target_supports_catch_syscall()              	\
-  (the_target->supports_catch_syscall ?			\
-   (*the_target->supports_catch_syscall) () : 0)
-
-#define target_get_ipa_tdesc_idx()			\
-  (the_target->get_ipa_tdesc_idx			\
-   ? (*the_target->get_ipa_tdesc_idx) () : 0)
 
 #define target_supports_tracepoints()			\
   (the_target->supports_tracepoints			\
@@ -560,10 +429,6 @@ int kill_inferior (process_info *proc);
 
 #define target_supports_fast_tracepoints()		\
   (the_target->install_fast_tracepoint_jump_pad != NULL)
-
-#define target_get_min_fast_tracepoint_insn_len()	\
-  (the_target->get_min_fast_tracepoint_insn_len		\
-   ? (*the_target->get_min_fast_tracepoint_insn_len) () : 0)
 
 #define thread_stopped(thread) \
   (*the_target->thread_stopped) (thread)
@@ -582,6 +447,13 @@ int kill_inferior (process_info *proc);
 	(*the_target->unpause_all) (unfreeze);	\
     } while (0)
 
+#define cancel_breakpoints()			\
+  do						\
+    {						\
+      if (the_target->cancel_breakpoints)     	\
+	(*the_target->cancel_breakpoints) ();  	\
+    } while (0)
+
 #define stabilize_threads()			\
   do						\
     {						\
@@ -592,111 +464,20 @@ int kill_inferior (process_info *proc);
 #define install_fast_tracepoint_jump_pad(tpoint, tpaddr,		\
 					 collector, lockaddr,		\
 					 orig_size,			\
-					 jump_entry,			\
-					 trampoline, trampoline_size,	\
-					 jjump_pad_insn,		\
+					 jump_entry, jjump_pad_insn,	\
 					 jjump_pad_insn_size,		\
 					 adjusted_insn_addr,		\
-					 adjusted_insn_addr_end,	\
-					 err)				\
+					 adjusted_insn_addr_end)	\
   (*the_target->install_fast_tracepoint_jump_pad) (tpoint, tpaddr,	\
 						   collector,lockaddr,	\
 						   orig_size, jump_entry, \
-						   trampoline,		\
-						   trampoline_size,	\
 						   jjump_pad_insn,	\
 						   jjump_pad_insn_size, \
 						   adjusted_insn_addr,	\
-						   adjusted_insn_addr_end, \
-						   err)
+						   adjusted_insn_addr_end)
 
 #define target_emit_ops() \
   (the_target->emit_ops ? (*the_target->emit_ops) () : NULL)
-
-#define target_supports_disable_randomization() \
-  (the_target->supports_disable_randomization ? \
-   (*the_target->supports_disable_randomization) () : 0)
-
-#define target_supports_agent() \
-  (the_target->supports_agent ? \
-   (*the_target->supports_agent) () : 0)
-
-static inline struct btrace_target_info *
-target_enable_btrace (ptid_t ptid, const struct btrace_config *conf)
-{
-  if (the_target->enable_btrace == nullptr)
-    error (_("Target does not support branch tracing."));
-
-  return (*the_target->enable_btrace) (ptid, conf);
-}
-
-static inline int
-target_disable_btrace (struct btrace_target_info *tinfo)
-{
-  if (the_target->disable_btrace == nullptr)
-    error (_("Target does not support branch tracing."));
-
-  return (*the_target->disable_btrace) (tinfo);
-}
-
-static inline int
-target_read_btrace (struct btrace_target_info *tinfo,
-		    struct buffer *buffer,
-		    enum btrace_read_type type)
-{
-  if (the_target->read_btrace == nullptr)
-    error (_("Target does not support branch tracing."));
-
-  return (*the_target->read_btrace) (tinfo, buffer, type);
-}
-
-static inline int
-target_read_btrace_conf (struct btrace_target_info *tinfo,
-			 struct buffer *buffer)
-{
-  if (the_target->read_btrace_conf == nullptr)
-    error (_("Target does not support branch tracing."));
-
-  return (*the_target->read_btrace_conf) (tinfo, buffer);
-}
-
-#define target_supports_range_stepping() \
-  (the_target->supports_range_stepping ? \
-   (*the_target->supports_range_stepping) () : 0)
-
-#define target_supports_stopped_by_sw_breakpoint() \
-  (the_target->supports_stopped_by_sw_breakpoint ? \
-   (*the_target->supports_stopped_by_sw_breakpoint) () : 0)
-
-#define target_stopped_by_sw_breakpoint() \
-  (the_target->stopped_by_sw_breakpoint ? \
-   (*the_target->stopped_by_sw_breakpoint) () : 0)
-
-#define target_supports_stopped_by_hw_breakpoint() \
-  (the_target->supports_stopped_by_hw_breakpoint ? \
-   (*the_target->supports_stopped_by_hw_breakpoint) () : 0)
-
-#define target_supports_hardware_single_step() \
-  (the_target->supports_hardware_single_step ? \
-   (*the_target->supports_hardware_single_step) () : 0)
-
-#define target_stopped_by_hw_breakpoint() \
-  (the_target->stopped_by_hw_breakpoint ? \
-   (*the_target->stopped_by_hw_breakpoint) () : 0)
-
-#define target_breakpoint_kind_from_pc(pcptr) \
-  (the_target->breakpoint_kind_from_pc \
-   ? (*the_target->breakpoint_kind_from_pc) (pcptr) \
-   : default_breakpoint_kind_from_pc (pcptr))
-
-#define target_breakpoint_kind_from_current_state(pcptr) \
-  (the_target->breakpoint_kind_from_current_state \
-   ? (*the_target->breakpoint_kind_from_current_state) (pcptr) \
-   : target_breakpoint_kind_from_pc (pcptr))
-
-#define target_supports_software_single_step() \
-  (the_target->supports_software_single_step ? \
-   (*the_target->supports_software_single_step) () : 0)
 
 /* Start non-stop mode, returns 0 on success, -1 on failure.   */
 
@@ -705,36 +486,27 @@ int start_non_stop (int nonstop);
 ptid_t mywait (ptid_t ptid, struct target_waitstatus *ourstatus, int options,
 	       int connected_wait);
 
-/* Prepare to read or write memory from the inferior process.  See the
-   corresponding target_ops methods for more details.  */
+#define prepare_to_access_memory()		\
+  (the_target->prepare_to_access_memory		\
+   ? (*the_target->prepare_to_access_memory) () \
+   : 0)
 
-int prepare_to_access_memory (void);
-void done_accessing_memory (void);
-
-#define target_core_of_thread(ptid)		\
-  (the_target->core_of_thread ? (*the_target->core_of_thread) (ptid) \
-   : -1)
-
-#define target_thread_name(ptid)                                \
-  (the_target->thread_name ? (*the_target->thread_name) (ptid)  \
-   : NULL)
-
-#define target_thread_handle(ptid, handle, handle_len) \
-   (the_target->thread_handle ? (*the_target->thread_handle) \
-                                  (ptid, handle, handle_len) \
-   : false)
+#define done_accessing_memory()				\
+  do							\
+    {							\
+      if (the_target->done_accessing_memory)     	\
+	(*the_target->done_accessing_memory) ();  	\
+    } while (0)
 
 int read_inferior_memory (CORE_ADDR memaddr, unsigned char *myaddr, int len);
 
 int write_inferior_memory (CORE_ADDR memaddr, const unsigned char *myaddr,
 			   int len);
 
-int set_desired_thread ();
+void set_desired_inferior (int id);
 
 const char *target_pid_to_str (ptid_t);
 
-int target_can_do_hardware_single_step (void);
+const char *target_waitstatus_to_string (const struct target_waitstatus *);
 
-int default_breakpoint_kind_from_pc (CORE_ADDR *pcptr);
-
-#endif /* GDBSERVER_TARGET_H */
+#endif /* TARGET_H */

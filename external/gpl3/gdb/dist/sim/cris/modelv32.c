@@ -2,7 +2,7 @@
 
 THIS FILE IS MACHINE GENERATED WITH CGEN.
 
-Copyright 1996-2019 Free Software Foundation, Inc.
+Copyright 1996-2010 Free Software Foundation, Inc.
 
 This file is part of the GNU simulators.
 
@@ -17,7 +17,8 @@ This file is part of the GNU simulators.
    License for more details.
 
    You should have received a copy of the GNU General Public License along
-   with this program; if not, see <http://www.gnu.org/licenses/>.
+   with this program; if not, write to the Free Software Foundation, Inc.,
+   51 Franklin Street - Fifth Floor, Boston, MA 02110-1301, USA.
 
 */
 
@@ -5904,7 +5905,7 @@ crisv32_model_init (SIM_CPU *cpu)
 #define TIMING_DATA(td) 0
 #endif
 
-static const SIM_MODEL crisv32_models[] =
+static const MODEL crisv32_models[] =
 {
   { "crisv32", & crisv32_mach, MODEL_CRISV32, TIMING_DATA (& crisv32_timing[0]), crisv32_model_init },
   { 0 }
@@ -5912,7 +5913,7 @@ static const SIM_MODEL crisv32_models[] =
 
 /* The properties of this cpu's implementation.  */
 
-static const SIM_MACH_IMP_PROPERTIES crisv32f_imp_properties =
+static const MACH_IMP_PROPERTIES crisv32f_imp_properties =
 {
   sizeof (SIM_CPU),
 #if WITH_SCACHE
@@ -5954,7 +5955,7 @@ crisv32_init_cpu (SIM_CPU *cpu)
 #endif
 }
 
-const SIM_MACH crisv32_mach =
+const MACH crisv32_mach =
 {
   "crisv32", "crisv32", MACH_CRISV32,
   32, 32, & crisv32_models[0], & crisv32f_imp_properties,

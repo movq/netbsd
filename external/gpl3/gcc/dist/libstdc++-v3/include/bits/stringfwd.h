@@ -1,6 +1,8 @@
-// <string> Forward declarations -*- C++ -*-
+// String support -*- C++ -*-
 
-// Copyright (C) 2001-2019 Free Software Foundation, Inc.
+// Copyright (C) 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009,
+// 2010
+// Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
@@ -22,9 +24,9 @@
 // see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
 // <http://www.gnu.org/licenses/>.
 
-/** @file bits/stringfwd.h
+/** @file stringfwd.h
  *  This is an internal header file, included by other library headers.
- *  Do not attempt to use it directly. @headername{string}
+ *  You should not attempt to use it directly.
  */
 
 //
@@ -37,11 +39,11 @@
 #pragma GCC system_header
 
 #include <bits/c++config.h>
-#include <bits/memoryfwd.h>
 
-namespace std _GLIBCXX_VISIBILITY(default)
-{
-_GLIBCXX_BEGIN_NAMESPACE_VERSION
+_GLIBCXX_BEGIN_NAMESPACE(std)
+
+  template<typename _Alloc>
+    class allocator;
 
   /**
    *  @defgroup strings Strings
@@ -52,53 +54,32 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
   template<class _CharT>
     struct char_traits;
 
-  template<> struct char_traits<char>;
-
-#ifdef _GLIBCXX_USE_WCHAR_T
-  template<> struct char_traits<wchar_t>;
-#endif
-
-#ifdef _GLIBCXX_USE_CHAR8_T
-  template<> struct char_traits<char8_t>;
-#endif
-
-#if __cplusplus >= 201103L
-  template<> struct char_traits<char16_t>;
-  template<> struct char_traits<char32_t>;
-#endif
-
-_GLIBCXX_BEGIN_NAMESPACE_CXX11
-
   template<typename _CharT, typename _Traits = char_traits<_CharT>,
            typename _Alloc = allocator<_CharT> >
     class basic_string;
 
-_GLIBCXX_END_NAMESPACE_CXX11
+  template<> struct char_traits<char>;
 
-  /// A string of @c char
-  typedef basic_string<char>    string;   
+  typedef basic_string<char>    string;   ///< A string of @c char
 
 #ifdef _GLIBCXX_USE_WCHAR_T
-  /// A string of @c wchar_t
-  typedef basic_string<wchar_t> wstring;   
+  template<> struct char_traits<wchar_t>;
+
+  typedef basic_string<wchar_t> wstring;   ///< A string of @c wchar_t
 #endif
 
-#ifdef _GLIBCXX_USE_CHAR8_T
-  /// A string of @c char8_t
-  typedef basic_string<char8_t> u8string;
+#if (defined(__GXX_EXPERIMENTAL_CXX0X__) \
+     && defined(_GLIBCXX_USE_C99_STDINT_TR1))
+
+  template<> struct char_traits<char16_t>;
+  template<> struct char_traits<char32_t>;
+
+  typedef basic_string<char16_t> u16string; ///< A string of @c char16_t
+  typedef basic_string<char32_t> u32string; ///< A string of @c char32_t
+
 #endif
-
-#if __cplusplus >= 201103L
-  /// A string of @c char16_t
-  typedef basic_string<char16_t> u16string; 
-
-  /// A string of @c char32_t
-  typedef basic_string<char32_t> u32string; 
-#endif
-
   /** @}  */
 
-_GLIBCXX_END_NAMESPACE_VERSION
-} // namespace std
+_GLIBCXX_END_NAMESPACE
 
 #endif	// _STRINGFWD_H

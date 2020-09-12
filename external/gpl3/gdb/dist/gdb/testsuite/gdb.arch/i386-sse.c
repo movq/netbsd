@@ -1,6 +1,6 @@
 /* Test program for SSE registers.
 
-   Copyright 2004-2019 Free Software Foundation, Inc.
+   Copyright 2004, 2007, 2008, 2009, 2010, 2011 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -18,7 +18,7 @@
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #include <stdio.h>
-#include "nat/x86-cpuid.h"
+#include "i386-cpuid.h"
 
 typedef struct {
   float f[4];
@@ -51,10 +51,7 @@ v4sf_t data[] =
 int
 have_sse (void)
 {
-  int edx;
-
-  if (!x86_cpuid (1, NULL, NULL, NULL, &edx))
-    return 0;
+  int edx = i386_cpuid ();
 
   if (edx & bit_SSE)
     return 1;

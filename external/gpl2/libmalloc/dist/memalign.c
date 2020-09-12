@@ -1,4 +1,4 @@
-/*	$NetBSD: memalign.c,v 1.1.1.1 2016/01/13 21:42:18 christos Exp $	*/
+/*	$NetBSD: memalign.c,v 1.1 2016/01/13 21:42:18 christos Exp $	*/
 
 /* Copyright (C) 1991, 1992, 1993, 1994, 1995 Free Software Foundation, Inc.
 

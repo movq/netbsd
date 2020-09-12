@@ -1,5 +1,5 @@
 # This shell script emits a C file. -*- C -*-
-#   Copyright (C) 2004-2020 Free Software Foundation, Inc.
+#   Copyright 2004, 2006, 2007, 2008 Free Software Foundation, Inc.
 #
 # This file is part of the GNU Binutils.
 #
@@ -25,67 +25,39 @@ fragment <<EOF
 #include "elf/riscv.h"
 #include "elfxx-riscv.h"
 
+#define is_riscv_elf(bfd)				\
+  (bfd_get_flavour (bfd) == bfd_target_elf_flavour	\
+   && elf_tdata (bfd) != NULL				\
+   && elf_object_id (bfd) == RISCV_ELF_DATA)
+
 static void
-riscv_elf_before_allocation (void)
+riscv_after_parse (void)
+{
+  /* .gnu.hash and the RISC-V ABI require .dynsym to be sorted in different
+     ways.  .gnu.hash needs symbols to be grouped by hash code whereas the
+     RISC-V ABI requires a mapping between the GOT and the symbol table.  */
+  if (link_info.emit_gnu_hash)
+    {
+      einfo ("%X%P: .gnu.hash is incompatible with the RISC-V ABI\n");
+      link_info.emit_hash = TRUE;
+      link_info.emit_gnu_hash = FALSE;
+    }
+  after_parse_default ();
+}
+
+static void
+riscv_before_allocation (void)
 {
   gld${EMULATION_NAME}_before_allocation ();
 
   if (link_info.discard == discard_sec_merge)
     link_info.discard = discard_l;
 
-  if (!bfd_link_relocatable (&link_info))
-    {
-      /* We always need at least some relaxation to handle code alignment.  */
-      if (RELAXATION_DISABLED_BY_USER)
-	TARGET_ENABLE_RELAXATION;
-      else
-	ENABLE_RELAXATION;
-    }
-
-  link_info.relax_pass = 3;
-}
-
-static void
-gld${EMULATION_NAME}_after_allocation (void)
-{
-  int need_layout = 0;
-
-  /* Don't attempt to discard unused .eh_frame sections until the final link,
-     as we can't reliably tell if they're used until after relaxation.  */
-  if (!bfd_link_relocatable (&link_info))
-    {
-      need_layout = bfd_elf_discard_info (link_info.output_bfd, &link_info);
-      if (need_layout < 0)
-	{
-	  einfo (_("%X%P: .eh_frame/.stab edit: %E\n"));
-	  return;
-	}
-    }
-
-  ldelf_map_segments (need_layout);
-}
-
-/* This is a convenient point to tell BFD about target specific flags.
-   After the output has been created, but before inputs are read.  */
-
-static void
-riscv_create_output_section_statements (void)
-{
-  /* See PR 22920 for an example of why this is necessary.  */
-  if (strstr (bfd_get_target (link_info.output_bfd), "riscv") == NULL)
-    {
-      /* The RISC-V backend needs special fields in the output hash structure.
-	 These will only be created if the output format is a RISC-V format,
-	 hence we do not support linking and changing output formats at the
-	 same time.  Use a link followed by objcopy to change output formats.  */
-      einfo (_("%F%P: error: cannot change output format"
-	       " whilst linking %s binaries\n"), "RISC-V");
-      return;
-    }
+  if (RELAXATION_DISABLED_BY_DEFAULT)
+    ENABLE_RELAXATION;
 }
 
 EOF
 
-LDEMUL_BEFORE_ALLOCATION=riscv_elf_before_allocation
-LDEMUL_AFTER_ALLOCATION=gld${EMULATION_NAME}_after_allocation
-LDEMUL_CREATE_OUTPUT_SECTION_STATEMENTS=riscv_create_output_section_statements
+LDEMUL_AFTER_PARSE=riscv_after_parse
+LDEMUL_BEFORE_ALLOCATION=riscv_before_allocation

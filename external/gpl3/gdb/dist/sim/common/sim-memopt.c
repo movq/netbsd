@@ -1,5 +1,6 @@
 /* Simulator memory option handling.
-   Copyright (C) 1996-2019 Free Software Foundation, Inc.
+   Copyright (C) 1996-1999, 2007, 2008, 2009, 2010, 2011
+   Free Software Foundation, Inc.
    Contributed by Cygnus Support.
 
 This file is part of GDB, the GNU debugger.
@@ -17,7 +18,7 @@ GNU General Public License for more details.
 You should have received a copy of the GNU General Public License
 along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-#include "config.h"
+#include "cconfig.h"
 
 #include "sim-main.h"
 #include "sim-assert.h"
@@ -195,7 +196,7 @@ do_memopt_add (SIM_DESC sd,
 	  if (free_buffer == 0 || free_buffer == (char*)-1) /* MAP_FAILED */
 	    {
 	      sim_io_error (sd, "Error, cannot mmap file (%s).\n",
-			    strerror (errno));
+			    strerror(errno));
 	    }
 	}
 #endif
@@ -499,7 +500,7 @@ memory_option_handler (SIM_DESC sd, sim_cpu *cpu, int opt,
 	if (mmap_next_fd < 0)
 	  {
 	    sim_io_eprintf (sd, "Cannot open file `%s': %s\n",
-			    arg, strerror (errno));
+			    arg, strerror(errno));
 	    return SIM_RC_FAIL;
 	  }
 

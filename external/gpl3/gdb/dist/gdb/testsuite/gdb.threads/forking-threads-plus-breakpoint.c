@@ -1,6 +1,6 @@
 /* This testcase is part of GDB, the GNU debugger.
 
-   Copyright 2015-2019 Free Software Foundation, Inc.
+   Copyright 2015 Free Software Foundation, Inc.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -22,7 +22,6 @@
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <stdlib.h>
-#include <errno.h>
 
 /* Number of threads.  Each thread continuously spawns a fork and wait
    for it.  If we have another thread continuously start a step over,
@@ -50,23 +49,14 @@ thread_forks (void *arg)
     {
       pid_t pid;
 
-      do
-	{
-	  pid = fork ();
-	}
-      while (pid == -1 && errno == EINTR);
+      pid = fork ();
 
       if (pid > 0)
 	{
 	  int status;
 
 	  /* Parent.  */
-	  do
-	    {
-	      pid = waitpid (pid, &status, 0);
-	    }
-	  while (pid == -1 && errno == EINTR);
-
+	  pid = waitpid (pid, &status, 0);
 	  if (pid == -1)
 	    {
 	      perror ("wait");

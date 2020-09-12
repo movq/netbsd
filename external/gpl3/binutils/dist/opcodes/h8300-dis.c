@@ -1,5 +1,6 @@
 /* Disassemble h8300 instructions.
-   Copyright (C) 1993-2020 Free Software Foundation, Inc.
+   Copyright 1993, 1994, 1996, 1998, 2000, 2001, 2002, 2003, 2004, 2005, 2006,
+   2007  Free Software Foundation, Inc.
 
    This file is part of the GNU opcodes library.
 
@@ -23,7 +24,7 @@
 #include "sysdep.h"
 #define h8_opcodes h8ops
 #include "opcode/h8300.h"
-#include "disassemble.h"
+#include "dis-asm.h"
 #include "opintl.h"
 #include "libiberty.h"
 
@@ -52,6 +53,19 @@ bfd_h8_disassemble_init (void)
 
   for (p = h8_opcodes, pi = h8_instructions; p->name; p++, pi++)
     {
+      int n1 = 0;
+      int n2 = 0;
+
+      if ((int) p->data.nib[0] < 16)
+	n1 = (int) p->data.nib[0];
+      else
+	n1 = 0;
+
+      if ((int) p->data.nib[1] < 16)
+	n2 = (int) p->data.nib[1];
+      else
+	n2 = 0;
+
       /* Just make sure there are an even number of nibbles in it, and
 	 that the count is the same as the length.  */
       for (i = 0; p->data.nib[i] != (op_type) E; i++)
@@ -59,8 +73,7 @@ bfd_h8_disassemble_init (void)
 
       if (i & 1)
 	{
-	  /* xgettext:c-format */
-	  opcodes_error_handler (_("internal error, h8_disassemble_init"));
+	  fprintf (stderr, "Internal error, h8_disassemble_init.\n");
 	  abort ();
 	}
 
@@ -140,8 +153,7 @@ extract_immediate (FILE *stream,
       break;
     case L_32:
       *len = 32;
-      *cst = (((unsigned) data[0] << 24) + (data[1] << 16)
-	      + (data[2] << 8) + data[3]);
+      *cst = (data[0] << 24) + (data[1] << 16) + (data[2] << 8) + data[3];
       break;
     default:
       *len = 0;
@@ -271,14 +283,14 @@ print_one_arg (disassemble_info *info,
 	{
 	  outfn (stream, ".%s%d (0x%lx)",
 		   (short) cst > 0 ? "+" : "",
-		   (short) cst,
+		   (short) cst, 
 		   (long)(addr + (short) cst + len));
 	}
       else
 	{
 	  outfn (stream, ".%s%d (0x%lx)",
 		   (char) cst > 0 ? "+" : "",
-		   (char) cst,
+		   (char) cst, 
 		   (long)(addr + (char) cst + len));
 	}
     }
@@ -287,19 +299,19 @@ print_one_arg (disassemble_info *info,
 
   else if ((x & MODE) == INDEXB)
     /* Always take low half of reg.  */
-    outfn (stream, "@(0x%x:%d,%s.b)", cst, cstlen,
+    outfn (stream, "@(0x%x:%d,%s.b)", cst, cstlen, 
 	   regnames[rdisp_n < 8 ? rdisp_n + 8 : rdisp_n]);
 
   else if ((x & MODE) == INDEXW)
     /* Always take low half of reg.  */
-    outfn (stream, "@(0x%x:%d,%s.w)", cst, cstlen,
+    outfn (stream, "@(0x%x:%d,%s.w)", cst, cstlen, 
 	   wregnames[rdisp_n < 8 ? rdisp_n : rdisp_n - 8]);
 
   else if ((x & MODE) == INDEXL)
     outfn (stream, "@(0x%x:%d,%s.l)", cst, cstlen, lregnames[rdisp_n]);
 
   else if (x & CTRL)
-    outfn (stream, "%s", cregnames[rn]);
+    outfn (stream, cregnames[rn]);
 
   else if ((x & MODE) == CCR)
     outfn (stream, "ccr");
@@ -462,8 +474,8 @@ bfd_h8_disassemble (bfd_vma addr, disassemble_info *info, int mach)
 		       || (looking_for & MODE) == INDEXW
 		       || (looking_for & MODE) == INDEXL)
 		{
-		  extract_immediate (stream, looking_for, thisnib,
-				     data + len / 2, cst + opnr,
+		  extract_immediate (stream, looking_for, thisnib, 
+				     data + len / 2, cst + opnr, 
 				     cstlen + opnr, q);
 		  /* Even address == bra, odd == bra/s.  */
 		  if (q->how == O (O_BRAS, SB))
@@ -531,8 +543,8 @@ bfd_h8_disassemble (bfd_vma addr, disassemble_info *info, int mach)
 		{
 		  int i = len / 2;
 
-		  cst[opnr] = (((unsigned) data[i] << 24)
-			       | (data[i + 1] << 16)
+		  cst[opnr] = ((data[i] << 24) 
+			       | (data[i + 1] << 16) 
 			       | (data[i + 2] << 8)
 			       | (data[i + 3]));
 
@@ -542,9 +554,13 @@ bfd_h8_disassemble (bfd_vma addr, disassemble_info *info, int mach)
 		{
 		  int i = len / 2;
 
-		  cst[opnr] =
+		  cst[opnr] = 
 		    (data[i] << 16) | (data[i + 1] << 8) | (data[i + 2]);
 		  cstlen[opnr] = 24;
+		}
+	      else if (looking_for & IGNORE)
+		{
+		  ;
 		}
 	      else if (looking_for & DISPREG)
 		{
@@ -631,21 +647,21 @@ bfd_h8_disassemble (bfd_vma addr, disassemble_info *info, int mach)
 		      if (args[1] == (op_type) E)
 			{
 			  /* Short form.  */
-			  print_one_arg (info, addr, args[0], cst[0],
-					 cstlen[0], dispregno[0], regno[0],
+			  print_one_arg (info, addr, args[0], cst[0], 
+					 cstlen[0], dispregno[0], regno[0], 
 					 pregnames, qi->length);
 			  outfn (stream, ",er%d", dispregno[0]);
 			}
 		      else
 			{
 			  outfn (stream, "@(0x%x:%d,", cst[0], cstlen[0]);
-			  print_one_arg (info, addr, args[1], cst[1],
-					 cstlen[1], dispregno[1], regno[1],
+			  print_one_arg (info, addr, args[1], cst[1], 
+					 cstlen[1], dispregno[1], regno[1], 
 					 pregnames, qi->length);
 			  outfn (stream, ".%c),",
 				 (args[0] & MODE) == INDEXB ? 'b' : 'w');
-			  print_one_arg (info, addr, args[2], cst[2],
-					 cstlen[2], dispregno[2], regno[2],
+			  print_one_arg (info, addr, args[2], cst[2], 
+					 cstlen[2], dispregno[2], regno[2], 
 					 pregnames, qi->length);
 			}
 		      return qi->length;
@@ -667,7 +683,7 @@ bfd_h8_disassemble (bfd_vma addr, disassemble_info *info, int mach)
 			return qi->length;
 		      }
 
-		    for (nargs = 0;
+		    for (nargs = 0; 
 			 nargs < 3 && args[nargs] != (op_type) E;
 			 nargs++)
 		      {

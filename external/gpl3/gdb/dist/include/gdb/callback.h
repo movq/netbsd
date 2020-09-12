@@ -1,5 +1,5 @@
 /* Remote target system call callback support.
-   Copyright (C) 1997-2019 Free Software Foundation, Inc.
+   Copyright 1997, 2007, 2008, 2009, 2010, 2011 Free Software Foundation, Inc.
    Contributed by Cygnus Solutions.
 
    This file is part of GDB.
@@ -59,7 +59,6 @@
    name of the symbol.  */
 
 typedef struct {
-  const char *name;
   int host_val;
   int target_val;
 } CB_TARGET_DEFS_MAP;
@@ -89,9 +88,9 @@ struct host_callback_struct
   void (*flush_stdout) (host_callback *);
   int (*write_stderr) (host_callback *, const char *, int);
   void (*flush_stderr) (host_callback *);
-  int (*to_stat) (host_callback *, const char *, struct stat *);
-  int (*to_fstat) (host_callback *, int, struct stat *);
-  int (*to_lstat) (host_callback *, const char *, struct stat *);
+  int (*stat) (host_callback *, const char *, struct stat *);
+  int (*fstat) (host_callback *, int, struct stat *);
+  int (*lstat) (host_callback *, const char *, struct stat *);
   int (*ftruncate) (host_callback *, int, long);
   int (*truncate) (host_callback *, const char *, long);
   int (*pipe) (host_callback *, int *);
@@ -232,11 +231,6 @@ extern host_callback default_callback;
 #define CB_SYS_truncate	21
 #define CB_SYS_ftruncate 22
 #define CB_SYS_pipe 	23
-
-/* New ARGV support.  */
-#define CB_SYS_argc	24
-#define CB_SYS_argnlen	25
-#define CB_SYS_argn	26
 
 /* Struct use to pass and return information necessary to perform a
    system call.  */
@@ -315,15 +309,7 @@ int cb_target_to_host_open (host_callback *, int);
 int cb_target_to_host_signal (host_callback *, int);
 
 /* Translate host signal number to target.  */
-int cb_host_to_gdb_signal (host_callback *, int);
-
-/* Translate symbols into human readable strings.  */
-const char *cb_host_str_syscall (host_callback *, int);
-const char *cb_host_str_errno (host_callback *, int);
-const char *cb_host_str_signal (host_callback *, int);
-const char *cb_target_str_syscall (host_callback *, int);
-const char *cb_target_str_errno (host_callback *, int);
-const char *cb_target_str_signal (host_callback *, int);
+int cb_host_to_target_signal (host_callback *, int);
 
 /* Translate host stat struct to target.
    If stat struct ptr is NULL, just compute target stat struct size.
@@ -337,9 +323,6 @@ void cb_store_target_endian (host_callback *, char *, int, long);
 int cb_is_stdin (host_callback *, int);
 int cb_is_stdout (host_callback *, int);
 int cb_is_stderr (host_callback *, int);
-
-/* Read a string out of the target.  */
-int cb_get_string (host_callback *, CB_SYSCALL *, char *, int, unsigned long);
 
 /* Perform a system call.  */
 CB_RC cb_syscall (host_callback *, CB_SYSCALL *);

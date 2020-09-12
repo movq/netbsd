@@ -1,10 +1,10 @@
-/* DO NOT EDIT!  -*- buffer-read-only: t -*- vi:set ro:  */
 /* Instruction building/extraction support for fr30. -*- C -*-
 
    THIS FILE IS MACHINE GENERATED WITH CGEN: Cpu tools GENerator.
    - the resultant file is machine generated, cgen-ibld.in isn't
 
-   Copyright (C) 1996-2020 Free Software Foundation, Inc.
+   Copyright 1996, 1997, 1998, 1999, 2000, 2001, 2005, 2006, 2007
+   Free Software Foundation, Inc.
 
    This file is part of libopcodes.
 
@@ -33,7 +33,6 @@
 #include "symcat.h"
 #include "fr30-desc.h"
 #include "fr30-opc.h"
-#include "cgen/basic-modes.h"
 #include "opintl.h"
 #include "safe-ctype.h"
 
@@ -138,7 +137,7 @@ insert_normal (CGEN_CPU_DESC cd,
   if (length == 0)
     return NULL;
 
-  if (word_length > 8 * sizeof (CGEN_INSN_INT))
+  if (word_length > 32)
     abort ();
 
   /* For architectures with insns smaller than the base-insn-bitsize,
@@ -155,7 +154,7 @@ insert_normal (CGEN_CPU_DESC cd,
     {
       long minval = - (1L << (length - 1));
       unsigned long maxval = mask;
-
+      
       if ((value > 0 && (unsigned long) value > maxval)
 	  || value < minval)
 	{
@@ -193,7 +192,7 @@ insert_normal (CGEN_CPU_DESC cd,
 	{
 	  long minval = - (1L << (length - 1));
 	  long maxval =   (1L << (length - 1)) - 1;
-
+	  
 	  if (value < minval || value > maxval)
 	    {
 	      sprintf
@@ -208,19 +207,12 @@ insert_normal (CGEN_CPU_DESC cd,
 #if CGEN_INT_INSN_P
 
   {
-    int shift_within_word, shift_to_word, shift;
+    int shift;
 
-    /* How to shift the value to BIT0 of the word.  */
-    shift_to_word = total_length - (word_offset + word_length);
-
-    /* How to shift the value to the field within the word.  */
     if (CGEN_INSN_LSB0_P)
-      shift_within_word = start + 1 - length;
+      shift = (word_offset + start + 1) - length;
     else
-      shift_within_word = word_length - start - length;
-
-    /* The total SHIFT, then mask in the value.  */
-    shift = shift_to_word + shift_within_word;
+      shift = total_length - (word_offset + start + length);
     *buffer = (*buffer & ~(mask << shift)) | ((value & mask) << shift);
   }
 
@@ -449,7 +441,7 @@ extract_normal (CGEN_CPU_DESC cd,
       return 1;
     }
 
-  if (word_length > 8 * sizeof (CGEN_INSN_INT))
+  if (word_length > 32)
     abort ();
 
   /* For architectures with insns smaller than the insn-base-bitsize,
@@ -476,7 +468,7 @@ extract_normal (CGEN_CPU_DESC cd,
     {
       unsigned char *bufp = ex_info->insn_bytes + word_offset / 8;
 
-      if (word_length > 8 * sizeof (CGEN_INSN_INT))
+      if (word_length > 32)
 	abort ();
 
       if (fill_cache (cd, ex_info, word_offset / 8, word_length / 8, pc) == 0)
@@ -612,7 +604,7 @@ fr30_cgen_insert_operand (CGEN_CPU_DESC cd,
     case FR30_OPERAND_DIR10 :
       {
         long value = fields->f_dir10;
-        value = ((USI) (value) >> (2));
+        value = ((unsigned int) (value) >> (2));
         errmsg = insert_normal (cd, value, 0, 0, 8, 8, 16, total_length, buffer);
       }
       break;
@@ -622,14 +614,14 @@ fr30_cgen_insert_operand (CGEN_CPU_DESC cd,
     case FR30_OPERAND_DIR9 :
       {
         long value = fields->f_dir9;
-        value = ((USI) (value) >> (1));
+        value = ((unsigned int) (value) >> (1));
         errmsg = insert_normal (cd, value, 0, 0, 8, 8, 16, total_length, buffer);
       }
       break;
     case FR30_OPERAND_DISP10 :
       {
         long value = fields->f_disp10;
-        value = ((SI) (value) >> (2));
+        value = ((int) (value) >> (2));
         errmsg = insert_normal (cd, value, 0|(1<<CGEN_IFLD_SIGNED), 0, 4, 8, 16, total_length, buffer);
       }
       break;
@@ -639,14 +631,14 @@ fr30_cgen_insert_operand (CGEN_CPU_DESC cd,
     case FR30_OPERAND_DISP9 :
       {
         long value = fields->f_disp9;
-        value = ((SI) (value) >> (1));
+        value = ((int) (value) >> (1));
         errmsg = insert_normal (cd, value, 0|(1<<CGEN_IFLD_SIGNED), 0, 4, 8, 16, total_length, buffer);
       }
       break;
     case FR30_OPERAND_I20 :
       {
 {
-  FLD (f_i20_4) = ((UINT) (FLD (f_i20)) >> (16));
+  FLD (f_i20_4) = ((unsigned int) (FLD (f_i20)) >> (16));
   FLD (f_i20_16) = ((FLD (f_i20)) & (65535));
 }
         errmsg = insert_normal (cd, fields->f_i20_4, 0, 0, 8, 4, 16, total_length, buffer);
@@ -666,14 +658,14 @@ fr30_cgen_insert_operand (CGEN_CPU_DESC cd,
     case FR30_OPERAND_LABEL12 :
       {
         long value = fields->f_rel12;
-        value = ((SI) (((value) - (((pc) + (2))))) >> (1));
+        value = ((int) (((value) - (((pc) + (2))))) >> (1));
         errmsg = insert_normal (cd, value, 0|(1<<CGEN_IFLD_SIGNED)|(1<<CGEN_IFLD_PCREL_ADDR), 0, 5, 11, 16, total_length, buffer);
       }
       break;
     case FR30_OPERAND_LABEL9 :
       {
         long value = fields->f_rel9;
-        value = ((SI) (((value) - (((pc) + (2))))) >> (1));
+        value = ((int) (((value) - (((pc) + (2))))) >> (1));
         errmsg = insert_normal (cd, value, 0|(1<<CGEN_IFLD_SIGNED)|(1<<CGEN_IFLD_PCREL_ADDR), 0, 8, 8, 16, total_length, buffer);
       }
       break;
@@ -701,14 +693,14 @@ fr30_cgen_insert_operand (CGEN_CPU_DESC cd,
     case FR30_OPERAND_S10 :
       {
         long value = fields->f_s10;
-        value = ((SI) (value) >> (2));
+        value = ((int) (value) >> (2));
         errmsg = insert_normal (cd, value, 0|(1<<CGEN_IFLD_SIGNED), 0, 8, 8, 16, total_length, buffer);
       }
       break;
     case FR30_OPERAND_U10 :
       {
         long value = fields->f_u10;
-        value = ((USI) (value) >> (2));
+        value = ((unsigned int) (value) >> (2));
         errmsg = insert_normal (cd, value, 0, 0, 8, 8, 16, total_length, buffer);
       }
       break;
@@ -724,16 +716,15 @@ fr30_cgen_insert_operand (CGEN_CPU_DESC cd,
     case FR30_OPERAND_UDISP6 :
       {
         long value = fields->f_udisp6;
-        value = ((USI) (value) >> (2));
+        value = ((unsigned int) (value) >> (2));
         errmsg = insert_normal (cd, value, 0, 0, 8, 4, 16, total_length, buffer);
       }
       break;
 
     default :
       /* xgettext:c-format */
-      opcodes_error_handler
-	(_("internal error: unrecognized field %d while building insn"),
-	 opindex);
+      fprintf (stderr, _("Unrecognized field %d while building insn.\n"),
+	       opindex);
       abort ();
   }
 
@@ -831,7 +822,7 @@ fr30_cgen_extract_operand (CGEN_CPU_DESC cd,
       {
         long value;
         length = extract_normal (cd, ex_info, insn_value, 0|(1<<CGEN_IFLD_SIGNED), 0, 4, 8, 16, total_length, pc, & value);
-        value = ((value) * (4));
+        value = ((value) << (2));
         fields->f_disp10 = value;
       }
       break;
@@ -842,7 +833,7 @@ fr30_cgen_extract_operand (CGEN_CPU_DESC cd,
       {
         long value;
         length = extract_normal (cd, ex_info, insn_value, 0|(1<<CGEN_IFLD_SIGNED), 0, 4, 8, 16, total_length, pc, & value);
-        value = ((value) * (2));
+        value = ((value) << (1));
         fields->f_disp9 = value;
       }
       break;
@@ -867,7 +858,7 @@ fr30_cgen_extract_operand (CGEN_CPU_DESC cd,
       {
         long value;
         length = extract_normal (cd, ex_info, insn_value, 0|(1<<CGEN_IFLD_SIGNED)|(1<<CGEN_IFLD_PCREL_ADDR), 0, 5, 11, 16, total_length, pc, & value);
-        value = ((((value) * (2))) + (((pc) + (2))));
+        value = ((((value) << (1))) + (((pc) + (2))));
         fields->f_rel12 = value;
       }
       break;
@@ -875,7 +866,7 @@ fr30_cgen_extract_operand (CGEN_CPU_DESC cd,
       {
         long value;
         length = extract_normal (cd, ex_info, insn_value, 0|(1<<CGEN_IFLD_SIGNED)|(1<<CGEN_IFLD_PCREL_ADDR), 0, 8, 8, 16, total_length, pc, & value);
-        value = ((((value) * (2))) + (((pc) + (2))));
+        value = ((((value) << (1))) + (((pc) + (2))));
         fields->f_rel9 = value;
       }
       break;
@@ -883,7 +874,7 @@ fr30_cgen_extract_operand (CGEN_CPU_DESC cd,
       {
         long value;
         length = extract_normal (cd, ex_info, insn_value, 0, 0, 8, 4, 16, total_length, pc, & value);
-        value = ((value) | (-16));
+        value = ((value) | (((-1) << (4))));
         fields->f_m4 = value;
       }
       break;
@@ -905,7 +896,7 @@ fr30_cgen_extract_operand (CGEN_CPU_DESC cd,
       {
         long value;
         length = extract_normal (cd, ex_info, insn_value, 0|(1<<CGEN_IFLD_SIGNED), 0, 8, 8, 16, total_length, pc, & value);
-        value = ((value) * (4));
+        value = ((value) << (2));
         fields->f_s10 = value;
       }
       break;
@@ -937,21 +928,20 @@ fr30_cgen_extract_operand (CGEN_CPU_DESC cd,
 
     default :
       /* xgettext:c-format */
-      opcodes_error_handler
-	(_("internal error: unrecognized field %d while decoding insn"),
-	 opindex);
+      fprintf (stderr, _("Unrecognized field %d while decoding insn.\n"),
+	       opindex);
       abort ();
     }
 
   return length;
 }
 
-cgen_insert_fn * const fr30_cgen_insert_handlers[] =
+cgen_insert_fn * const fr30_cgen_insert_handlers[] = 
 {
   insert_insn_normal,
 };
 
-cgen_extract_fn * const fr30_cgen_extract_handlers[] =
+cgen_extract_fn * const fr30_cgen_extract_handlers[] = 
 {
   extract_insn_normal,
 };
@@ -1084,9 +1074,8 @@ fr30_cgen_get_int_operand (CGEN_CPU_DESC cd ATTRIBUTE_UNUSED,
 
     default :
       /* xgettext:c-format */
-      opcodes_error_handler
-	(_("internal error: unrecognized field %d while getting int operand"),
-	 opindex);
+      fprintf (stderr, _("Unrecognized field %d while getting int operand.\n"),
+		       opindex);
       abort ();
   }
 
@@ -1213,9 +1202,8 @@ fr30_cgen_get_vma_operand (CGEN_CPU_DESC cd ATTRIBUTE_UNUSED,
 
     default :
       /* xgettext:c-format */
-      opcodes_error_handler
-	(_("internal error: unrecognized field %d while getting vma operand"),
-	 opindex);
+      fprintf (stderr, _("Unrecognized field %d while getting vma operand.\n"),
+		       opindex);
       abort ();
   }
 
@@ -1345,9 +1333,8 @@ fr30_cgen_set_int_operand (CGEN_CPU_DESC cd ATTRIBUTE_UNUSED,
 
     default :
       /* xgettext:c-format */
-      opcodes_error_handler
-	(_("internal error: unrecognized field %d while setting int operand"),
-	 opindex);
+      fprintf (stderr, _("Unrecognized field %d while setting int operand.\n"),
+		       opindex);
       abort ();
   }
 }
@@ -1467,9 +1454,8 @@ fr30_cgen_set_vma_operand (CGEN_CPU_DESC cd ATTRIBUTE_UNUSED,
 
     default :
       /* xgettext:c-format */
-      opcodes_error_handler
-	(_("internal error: unrecognized field %d while setting vma operand"),
-	 opindex);
+      fprintf (stderr, _("Unrecognized field %d while setting vma operand.\n"),
+		       opindex);
       abort ();
   }
 }

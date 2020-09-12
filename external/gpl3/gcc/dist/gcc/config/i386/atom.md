@@ -1,5 +1,5 @@
 ;; Atom Scheduling
-;; Copyright (C) 2009-2019 Free Software Foundation, Inc.
+;; Copyright (C) 2009 Free Software Foundation, Inc.
 ;;
 ;; This file is part of GCC.
 ;;
@@ -433,25 +433,25 @@
 
 (define_insn_reservation  "atom_sselog" 1
   (and (eq_attr "cpu" "atom")
-       (and (eq_attr "type" "sselog,sseshuf")
+       (and (eq_attr "type" "sselog")
             (eq_attr "memory" "none")))
   "atom-simple-either")
 
 (define_insn_reservation  "atom_sselog_mem" 1
   (and (eq_attr "cpu" "atom")
-       (and (eq_attr "type" "sselog,sseshuf")
+       (and (eq_attr "type" "sselog")
             (eq_attr "memory" "!none")))
   "atom-simple-either")
 
 (define_insn_reservation  "atom_sselog1" 1
   (and (eq_attr "cpu" "atom")
-       (and (eq_attr "type" "sselog1,sseshuf1")
+       (and (eq_attr "type" "sselog1")
             (eq_attr "memory" "none")))
   "atom-simple-0")
 
 (define_insn_reservation  "atom_sselog1_mem" 1
   (and (eq_attr "cpu" "atom")
-       (and (eq_attr "type" "sselog1,sseshuf1")
+       (and (eq_attr "type" "sselog1")
             (eq_attr "memory" "!none")))
   "atom-simple-0")
 
@@ -544,14 +544,16 @@
 (define_insn_reservation  "atom_sse_4" 1
   (and (eq_attr "cpu" "atom")
        (and (eq_attr "type" "sse")
-            (eq_attr "atom_sse_attr" "fence,prefetch")))
+            (ior (eq_attr "atom_sse_attr" "fence")
+                 (eq_attr "atom_sse_attr" "prefetch"))))
   "atom-simple-0")
 
 ;; rcpps, rsqrtss, sqrt, ldmxcsr
 (define_insn_reservation  "atom_sse_5" 7
   (and (eq_attr "cpu" "atom")
        (and (eq_attr "type" "sse")
-            (ior (eq_attr "atom_sse_attr" "sqrt,mxcsr")
+            (ior (ior (eq_attr "atom_sse_attr" "sqrt")
+                      (eq_attr "atom_sse_attr" "mxcsr"))
                  (and (eq_attr "atom_sse_attr" "rcp")
                       (eq_attr "mode" "V4SF")))))
   "atom-complex, atom-all-eu*6")
@@ -594,7 +596,7 @@
 ;; no memory simple
 (define_insn_reservation  "atom_sseadd" 5
   (and (eq_attr "cpu" "atom")
-       (and (eq_attr "type" "sseadd,sseadd1")
+       (and (eq_attr "type" "sseadd")
             (and (eq_attr "memory" "none")
                  (and (eq_attr "mode" "!V2DF")
                       (eq_attr "atom_unit" "!complex")))))
@@ -603,7 +605,7 @@
 ;; memory simple
 (define_insn_reservation  "atom_sseadd_mem" 5
   (and (eq_attr "cpu" "atom")
-       (and (eq_attr "type" "sseadd,sseadd1")
+       (and (eq_attr "type" "sseadd")
             (and (eq_attr "memory" "!none")
                  (and (eq_attr "mode" "!V2DF")
                       (eq_attr "atom_unit" "!complex")))))
@@ -612,7 +614,7 @@
 ;; maxps, minps, *pd, hadd, hsub
 (define_insn_reservation  "atom_sseadd_3" 8
   (and (eq_attr "cpu" "atom")
-       (and (eq_attr "type" "sseadd,sseadd1")
+       (and (eq_attr "type" "sseadd")
             (ior (eq_attr "mode" "V2DF") (eq_attr "atom_unit" "complex"))))
   "atom-complex, atom-all-eu*7")
 

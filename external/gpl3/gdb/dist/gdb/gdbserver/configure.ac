@@ -1,5 +1,6 @@
 dnl Autoconf configure script for GDB server.
-dnl Copyright (C) 2000-2019 Free Software Foundation, Inc.
+dnl Copyright (C) 2000, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009,
+dnl 2010, 2011 Free Software Foundation, Inc.
 dnl
 dnl This file is part of GDB.
 dnl
@@ -18,93 +19,32 @@ dnl along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 dnl Process this file with autoconf to produce a configure script.
 
+AC_PREREQ(2.59)dnl
+
 AC_INIT(server.c)
 AC_CONFIG_HEADER(config.h:config.in)
-
-AM_MAINTAINER_MODE
+AC_CONFIG_LIBOBJ_DIR(../gnulib)
 
 AC_PROG_CC
-AC_PROG_CXX
 AC_GNU_SOURCE
-AC_SYS_LARGEFILE
 
 AC_CANONICAL_SYSTEM
 
 AC_PROG_INSTALL
-AC_CHECK_TOOL(AR, ar)
-AC_PROG_RANLIB
 
 AC_ARG_PROGRAM
 
-# We require a C++11 compiler.  Check if one is available, and if
-# necessary, set CXX_DIALECT to some -std=xxx switch.
-AX_CXX_COMPILE_STDCXX(11, , mandatory)
-
 AC_HEADER_STDC
 
-# Set the 'development' global.
-. $srcdir/../../bfd/development.sh
-
-# Enable -lmcheck by default (it provides cheap-enough memory
-# mangling), but turn it off for releases.
-if $development; then
-  libmcheck_default=yes
-else
-  libmcheck_default=no
-fi
-GDB_AC_LIBMCHECK(${libmcheck_default})
-
-GDB_AC_SELFTEST([
-  srv_selftest_objs="common/selftest.o"
-])
-
-ACX_NONCANONICAL_TARGET
-ACX_NONCANONICAL_HOST
-
-# Dependency checking.
-ZW_CREATE_DEPDIR
-
-# Create sub-directories for objects and dependencies.
-CONFIG_SRC_SUBDIR="arch common"
-AC_SUBST(CONFIG_SRC_SUBDIR)
-
-AC_CONFIG_COMMANDS([gdbdepdir],[
-  for subdir in ${CONFIG_SRC_SUBDIR}
-  do
-      $SHELL $ac_aux_dir/mkinstalldirs $subdir/$DEPDIR
-  done],
-  [ac_aux_dir=$ac_aux_dir DEPDIR=$DEPDIR CONFIG_SRC_SUBDIR="$CONFIG_SRC_SUBDIR"])
-
-ZW_PROG_COMPILER_DEPENDENCIES([CC])
-
-gnulib_extra_configure_args=
-# If large-file support is disabled, make sure gnulib does the same.
-if test "$enable_largefile" = no; then
-gnulib_extra_configure_args="$gnulib_extra_configure_args --disable-largefile"
-fi
-
-# Configure gnulib.  We can't use AC_CONFIG_SUBDIRS as that'd expect
-# to find the the source subdir to be configured directly under
-# gdbserver/.  We need to build gnulib under some other directory not
-# "gnulib", to avoid the problem of both GDB and GDBserver wanting to
-# build it in the same directory, when building in the source dir.
-ACX_CONFIGURE_DIR(["../gnulib"], ["build-gnulib-gdbserver"],
-                  ["$gnulib_extra_configure_args"])
-
-ACX_CONFIGURE_DIR(["../../libiberty"], ["build-libiberty-gdbserver"])
-
-AC_CHECK_HEADERS(termios.h sys/reg.h string.h dnl
-		 proc_service.h sys/procfs.h linux/elf.h dnl
-		 fcntl.h signal.h sys/file.h dnl
+AC_FUNC_ALLOCA
+AC_CHECK_HEADERS(sgtty.h termio.h termios.h sys/reg.h string.h dnl
+		 proc_service.h sys/procfs.h thread_db.h linux/elf.h dnl
+		 stdlib.h unistd.h dnl
+		 errno.h fcntl.h signal.h sys/file.h malloc.h dnl
 		 sys/ioctl.h netinet/in.h sys/socket.h netdb.h dnl
-		 netinet/tcp.h arpa/inet.h)
-AC_FUNC_FORK
-AC_CHECK_FUNCS(getauxval pread pwrite pread64 setns)
-
-GDB_AC_COMMON
-
-# Check the return and argument types of ptrace.
-GDB_AC_PTRACE
+		 netinet/tcp.h arpa/inet.h sys/wait.h)
+AC_CHECK_FUNCS(pread pwrite pread64)
+AC_REPLACE_FUNCS(memmem vasprintf vsnprintf)
 
 # Check for UST
 ustlibs=""
@@ -154,7 +94,47 @@ fi
 AC_SUBST(ustlibs)
 AC_SUBST(ustinc)
 
-AM_GDB_WARNINGS
+AC_ARG_ENABLE(werror,
+  AS_HELP_STRING([--enable-werror], [treat compile warnings as errors]),
+  [case "${enableval}" in
+     yes | y) ERROR_ON_WARNING="yes" ;;
+     no | n)  ERROR_ON_WARNING="no" ;;
+     *) AC_MSG_ERROR(bad value ${enableval} for --enable-werror) ;;
+   esac])
+
+# Enable -Werror by default when using gcc
+if test "${GCC}" = yes -a -z "${ERROR_ON_WARNING}" ; then
+    ERROR_ON_WARNING=yes
+fi
+
+WERROR_CFLAGS=""
+if test "${ERROR_ON_WARNING}" = yes ; then
+    WERROR_CFLAGS="-Werror"
+fi
+
+build_warnings="-Wall -Wdeclaration-after-statement -Wpointer-arith \
+-Wformat-nonliteral -Wno-char-subscripts"
+
+WARN_CFLAGS=""
+if test "x$GCC" = xyes
+then
+    AC_MSG_CHECKING(compiler warning flags)
+    # Separate out the -Werror flag as some files just cannot be
+    # compiled with it enabled.
+    for w in ${build_warnings}; do
+	case $w in
+	-Werr*) WERROR_CFLAGS=-Werror ;;
+	*) # Check that GCC accepts it
+	    saved_CFLAGS="$CFLAGS"
+	    CFLAGS="$CFLAGS $w"
+	    AC_TRY_COMPILE([],[],WARN_CFLAGS="${WARN_CFLAGS} $w",)
+	    CFLAGS="$saved_CFLAGS"
+	esac
+    done
+    AC_MSG_RESULT(${WARN_CFLAGS} ${WERROR_CFLAGS})
+fi
+AC_SUBST(WARN_CFLAGS)
+AC_SUBST(WERROR_CFLAGS)
 
 dnl dladdr is glibc-specific.  It is used by thread-db.c but only for
 dnl debugging messages.  It lives in -ldl which is handled below so we don't
@@ -165,42 +145,28 @@ LIBS="$LIBS -ldl"
 AC_CHECK_FUNCS(dladdr)
 LIBS="$old_LIBS"
 
-libiberty_INIT
+have_errno=no
+AC_MSG_CHECKING(for errno)
+AC_TRY_LINK([
+#if HAVE_ERRNO_H
+#include <errno.h>
+#endif], [static int x; x = errno;],
+  [AC_MSG_RESULT(yes - in errno.h); AC_DEFINE(HAVE_ERRNO, 1, [Define if errno is available]) have_errno=yes])
+if test $have_errno = no; then
+AC_TRY_LINK([
+#if HAVE_ERRNO_H
+#include <errno.h>
+#endif], [extern int errno; static int x; x = errno;],
+  [AC_MSG_RESULT(yes - must define); AC_DEFINE(HAVE_ERRNO, 1, [Define if errno is available]) AC_DEFINE(MUST_DEFINE_ERRNO, 1, [Checking if errno must be defined])],
+  [AC_MSG_RESULT(no)])
+fi
 
-AC_CHECK_DECLS([strerror, perror, vasprintf, vsnprintf])
-
-AC_CHECK_MEMBERS([struct stat.st_blocks, struct stat.st_blksize])
-
-# See if <sys/user.h> supports the %fs_base and %gs_bas amd64 segment registers.
-# Older amd64 Linux's don't have the fs_base and gs_base members of
-# `struct user_regs_struct'.
-AC_CHECK_MEMBERS([struct user_regs_struct.fs_base, struct user_regs_struct.gs_base],
-     [], [], [#include <sys/types.h>
-#include <sys/user.h>])
-
+AC_CHECK_DECLS([strerror, perror, memmem, vasprintf, vsnprintf])
 
 AC_CHECK_TYPES(socklen_t, [], [],
 [#include <sys/types.h>
 #include <sys/socket.h>
 ])
-
-case "${target}" in
-  *-android*)
-    # Starting with NDK version 9, <elf.h> actually includes definitions
-    # of Elf32_auxv_t and Elf64_auxv_t. But sadly, <elf.h> includes
-    # <sys/exec_elf.h> which defines some of the ELF types incorrectly,
-    # leading to conflicts with the defintions from <linux/elf.h>.
-    # This makes it impossible for us to include both <elf.h> and
-    # <linux/elf.h>, which means that, in practice, we do not have
-    # access to Elf32_auxv_t and Elf64_auxv_t on this platform.
-    # Therefore, do not try to auto-detect availability, as it would
-    # get it wrong on this platform.
-    ;;
-  *)
-    AC_CHECK_TYPES([Elf32_auxv_t, Elf64_auxv_t], [], [],
-    #include <elf.h>
-    )
-esac
 
 ACX_PKGVERSION([GDB])
 ACX_BUGURL([http://www.gnu.org/software/gdb/bugs/])
@@ -224,20 +190,6 @@ got it
                     [gdb_cv_i386_is_x86_64=no])
                     CPPFLAGS="$save_CPPFLAGS"])
     ;;
-
-  x86_64-*-linux*)
-    AC_CACHE_CHECK([if building for x32], [gdb_cv_x86_is_x32],
-		   [save_CPPFLAGS="$CPPFLAGS"
-		    CPPFLAGS="$CPPFLAGS $CFLAGS"
-		    AC_EGREP_CPP([got it], [
-#if __x86_64__ && __ILP32__
-got it
-#endif
-		 ], [gdb_cv_x86_is_x32=yes],
-		    [gdb_cv_x86_is_x32=no])
-		    CPPFLAGS="$save_CPPFLAGS"])
-    ;;
-
   m68k-*-*)
     AC_CACHE_CHECK([if building for Coldfire], [gdb_cv_m68k_is_coldfire],
       	           [save_CPPFLAGS="$CPPFLAGS"
@@ -253,10 +205,6 @@ got it
 esac
 
 . ${srcdir}/configure.srv
-
-# Add in the common host objects.
-. ${srcdir}/../common/common.host
-srv_host_obs="$common_host_obs"
 
 if test "${srv_mingwce}" = "yes"; then
   LIBS="$LIBS -lws2"
@@ -313,27 +261,11 @@ if test "${srv_linux_regsets}" = "yes"; then
   fi
 fi
 
-if test "${srv_linux_btrace}" = "yes"; then
-  AC_DEFINE(HAVE_LINUX_BTRACE, 1,
-	    [Define if the target supports branch tracing.])
-fi
-
 if test "$ac_cv_header_sys_procfs_h" = yes; then
   BFD_HAVE_SYS_PROCFS_TYPE(lwpid_t)
   BFD_HAVE_SYS_PROCFS_TYPE(psaddr_t)
   BFD_HAVE_SYS_PROCFS_TYPE(prgregset_t)
-  BFD_HAVE_SYS_PROCFS_TYPE(prfpregset_t)
   BFD_HAVE_SYS_PROCFS_TYPE(elf_fpregset_t)
-fi
-
-dnl Some systems (e.g., Android) have lwpid_t defined in libthread_db.h.
-if test "$bfd_cv_have_sys_procfs_type_lwpid_t" != yes; then
-  GDBSERVER_HAVE_THREAD_DB_TYPE(lwpid_t)
-fi
-
-dnl Some systems (e.g., Android) have psaddr_t defined in libthread_db.h.
-if test "$bfd_cv_have_sys_procfs_type_psaddr_t" != yes; then
-  GDBSERVER_HAVE_THREAD_DB_TYPE(psaddr_t)
 fi
 
 dnl Check for libdl, but do not add it to LIBS as only gdbserver
@@ -344,6 +276,7 @@ LIBS="$old_LIBS"
 
 srv_thread_depfiles=
 srv_libs=
+USE_THREAD_DB=
 
 if test "$srv_linux_thread_db" = "yes"; then
   if test "$ac_cv_lib_dl_dlopen" = "yes"; then
@@ -371,7 +304,7 @@ if test "$srv_linux_thread_db" = "yes"; then
   fi
 
   srv_thread_depfiles="thread-db.o proc-service.o"
-  AC_DEFINE(USE_THREAD_DB, 1, [Define if we should use libthread_db.])
+  USE_THREAD_DB="-DUSE_THREAD_DB"
   AC_CACHE_CHECK([for TD_VERSION], gdbsrv_cv_have_td_version,
   [AC_TRY_COMPILE([#include <thread_db.h>], [TD_VERSION;],
 		  [gdbsrv_cv_have_td_version=yes],
@@ -402,7 +335,7 @@ if test "$srv_xmlfiles" != ""; then
   done
 fi
 
-GDBSERVER_DEPFILES="$srv_regobj $srv_tgtobj $srv_hostio_err_objs $srv_thread_depfiles $srv_host_obs $srv_selftest_objs"
+GDBSERVER_DEPFILES="$srv_regobj $srv_tgtobj $srv_hostio_err_objs $srv_thread_depfiles"
 GDBSERVER_LIBS="$srv_libs"
 
 dnl Check whether the target supports __sync_*_compare_and_swap.
@@ -419,33 +352,10 @@ fi
 dnl Check for -fvisibility=hidden support in the compiler.
 saved_cflags="$CFLAGS"
 CFLAGS="$CFLAGS -fvisibility=hidden"
-AC_COMPILE_IFELSE([AC_LANG_PROGRAM([])],
+AC_COMPILE_IFELSE(AC_LANG_PROGRAM([]),
 		        [gdbsrv_cv_have_visibility_hidden=yes],
 	        	[gdbsrv_cv_have_visibility_hidden=no])
 CFLAGS="$saved_cflags"
-
-dnl Check if we can disable the virtual address space randomization.
-dnl The functionality of setarch -R.
-AC_CHECK_DECLS([ADDR_NO_RANDOMIZE],,, [#include <sys/personality.h>])
-define([PERSONALITY_TEST], [AC_LANG_PROGRAM([#include <sys/personality.h>], [
-#      if !HAVE_DECL_ADDR_NO_RANDOMIZE
-#       define ADDR_NO_RANDOMIZE 0x0040000
-#      endif
-       /* Test the flag could be set and stays set.  */
-       personality (personality (0xffffffff) | ADDR_NO_RANDOMIZE);
-       if (!(personality (personality (0xffffffff)) & ADDR_NO_RANDOMIZE))
-           return 1])])
-AC_RUN_IFELSE([PERSONALITY_TEST],
-              [gdbsrv_cv_have_personality=true],
-              [gdbsrv_cv_have_personality=false],
-              [AC_LINK_IFELSE([PERSONALITY_TEST],
-                              [gdbsrv_cv_have_personality=true],
-                              [gdbsrv_cv_have_personality=false])])
-if $gdbsrv_cv_have_personality
-then
-    AC_DEFINE([HAVE_PERSONALITY], 1,
-              [Define if you support the personality syscall.])
-fi
 
 
 IPA_DEPFILES=""
@@ -480,24 +390,15 @@ fi
 
 AC_SUBST(GDBSERVER_DEPFILES)
 AC_SUBST(GDBSERVER_LIBS)
+AC_SUBST(USE_THREAD_DB)
 AC_SUBST(srv_xmlbuiltin)
 AC_SUBST(srv_xmlfiles)
 AC_SUBST(IPA_DEPFILES)
 AC_SUBST(extra_libraries)
 
-GNULIB=build-gnulib-gdbserver/import
-
-GNULIB_STDINT_H=
-if test x"$STDINT_H" != x; then
-  GNULIB_STDINT_H=$GNULIB/$STDINT_H
-fi
-AC_SUBST(GNULIB_STDINT_H)
-
-AC_CONFIG_FILES([Makefile],
+AC_OUTPUT(Makefile,
 [case x$CONFIG_HEADERS in
 xconfig.h:config.in)
 echo > stamp-h ;;
 esac
 ])
-
-AC_OUTPUT

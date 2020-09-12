@@ -1,32 +1,34 @@
 /* ELF support for BFD.
-   Copyright (C) 1991-2020 Free Software Foundation, Inc.
+   Copyright 1991, 1992, 1993, 1994, 1995, 1997, 1998, 2000, 2001, 2002,
+   2003, 2006, 2007, 2008 Free Software Foundation, Inc.
 
    Written by Fred Fish @ Cygnus Support, from information published
    in "UNIX System V Release 4, Programmers Guide: ANSI C and
    Programming Support Tools".
 
-   This file is part of BFD, the Binary File Descriptor library.
+This file is part of BFD, the Binary File Descriptor library.
 
-   This program is free software; you can redistribute it and/or modify
-   it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 3 of the License, or
-   (at your option) any later version.
+This program is free software; you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation; either version 2 of the License, or
+(at your option) any later version.
 
-   This program is distributed in the hope that it will be useful,
-   but WITHOUT ANY WARRANTY; without even the implied warranty of
-   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-   GNU General Public License for more details.
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
 
-   You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston,
-   MA 02110-1301, USA.  */
+You should have received a copy of the GNU General Public License
+along with this program; if not, write to the Free Software
+Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA 02110-1301, USA.  */
+
 
 /* This file is part of ELF support for BFD, and contains the portions
    that describe how ELF is represented internally in the BFD library.
    I.E. it describes the in-memory representation of ELF.  It requires
    the elf-common.h file which contains the portions that are common to
-   both the internal and external representations.  */
+   both the internal and external representations. */
+
 
 /* NOTE that these structures are not kept in the same order as they appear
    in the object file.  In some cases they've been reordered for more optimal
@@ -115,14 +117,6 @@ typedef struct elf_internal_shdr {
   unsigned char *contents;		/* Section contents.  */
 } Elf_Internal_Shdr;
 
-/* Compression header */
-
-typedef struct elf_internal_chdr {
-  unsigned int	ch_type;		/* Type of compression */
-  bfd_size_type	ch_size;		/* Size of uncompressed data in bytes */
-  bfd_vma	ch_addralign;		/* Alignment of uncompressed data */
-} Elf_Internal_Chdr;
-
 /* Symbol table entry */
 
 struct elf_internal_sym {
@@ -131,7 +125,6 @@ struct elf_internal_sym {
   unsigned long	st_name;		/* Symbol name, index in string tbl */
   unsigned char	st_info;		/* Type and binding attributes */
   unsigned char	st_other;		/* Visibilty, and target specific */
-  unsigned char st_target_internal;	/* Internal-only information */
   unsigned int  st_shndx;		/* Associated section index */
 };
 
@@ -289,13 +282,6 @@ struct elf_segment_map
   unsigned int includes_filehdr : 1;
   /* Whether this segment includes the program headers.  */
   unsigned int includes_phdrs : 1;
-  /* Assume this PT_LOAD header has an lma of zero when sorting
-     headers before assigning file offsets.  PT_LOAD headers with this
-     flag set are placed after one with includes_filehdr set, and
-     before PT_LOAD headers without this flag set.  */
-  unsigned int no_sort_lma : 1;
-  /* Index holding original order before sorting segments.  */
-  unsigned int idx;
   /* Number of sections (may be 0).  */
   unsigned int count;
   /* Sections.  Actual number of elements is in count field.  */
@@ -304,80 +290,42 @@ struct elf_segment_map
 
 /* .tbss is special.  It doesn't contribute memory space to normal
    segments and it doesn't take file space in normal segments.  */
-#define ELF_TBSS_SPECIAL(sec_hdr, segment)			\
-  (((sec_hdr)->sh_flags & SHF_TLS) != 0				\
-   && (sec_hdr)->sh_type == SHT_NOBITS				\
-   && (segment)->p_type != PT_TLS)
-
 #define ELF_SECTION_SIZE(sec_hdr, segment)			\
-  (ELF_TBSS_SPECIAL(sec_hdr, segment) ? 0 : (sec_hdr)->sh_size)
+   (((sec_hdr->sh_flags & SHF_TLS) == 0				\
+     || sec_hdr->sh_type != SHT_NOBITS				\
+     || segment->p_type == PT_TLS) ? sec_hdr->sh_size : 0)
 
-/* Decide if the section SEC_HDR is in SEGMENT.  If CHECK_VMA, then
-   VMAs are checked for alloc sections.  If STRICT, then a zero size
-   section won't match at the end of a segment, unless the segment
-   is also zero size.  Regardless of STRICT and CHECK_VMA, zero size
-   sections won't match at the start or end of PT_DYNAMIC nor PT_NOTE,
-   unless PT_DYNAMIC and PT_NOTE are themselves zero sized.  */
-#define ELF_SECTION_IN_SEGMENT_1(sec_hdr, segment, check_vma, strict)	\
-  ((/* Only PT_LOAD, PT_GNU_RELRO and PT_TLS segments can contain	\
-       SHF_TLS sections.  */						\
-    ((((sec_hdr)->sh_flags & SHF_TLS) != 0)				\
-     && ((segment)->p_type == PT_TLS					\
-	 || (segment)->p_type == PT_GNU_RELRO				\
-	 || (segment)->p_type == PT_LOAD))				\
-    /* PT_TLS segment contains only SHF_TLS sections, PT_PHDR no	\
-       sections at all.  */						\
-    || (((sec_hdr)->sh_flags & SHF_TLS) == 0				\
-	&& (segment)->p_type != PT_TLS					\
-	&& (segment)->p_type != PT_PHDR))				\
-   /* PT_LOAD and similar segments only have SHF_ALLOC sections.  */	\
-   && !(((sec_hdr)->sh_flags & SHF_ALLOC) == 0				\
-	&& ((segment)->p_type == PT_LOAD				\
-	    || (segment)->p_type == PT_DYNAMIC				\
-	    || (segment)->p_type == PT_GNU_EH_FRAME			\
-	    || (segment)->p_type == PT_GNU_STACK			\
-	    || (segment)->p_type == PT_GNU_RELRO			\
-	    || ((segment)->p_type >= PT_GNU_MBIND_LO			\
-		&& (segment)->p_type <= PT_GNU_MBIND_HI)))		\
-   /* Any section besides one of type SHT_NOBITS must have file		\
-      offsets within the segment.  */					\
-   && ((sec_hdr)->sh_type == SHT_NOBITS					\
-       || ((bfd_vma) (sec_hdr)->sh_offset >= (segment)->p_offset	\
-	   && (!(strict)						\
-	       || ((sec_hdr)->sh_offset - (segment)->p_offset		\
-		   <= (segment)->p_filesz - 1))				\
-	   && (((sec_hdr)->sh_offset - (segment)->p_offset		\
-		+ ELF_SECTION_SIZE(sec_hdr, segment))			\
-	       <= (segment)->p_filesz)))				\
-   /* SHF_ALLOC sections must have VMAs within the segment.  */		\
-   && (!(check_vma)							\
-       || ((sec_hdr)->sh_flags & SHF_ALLOC) == 0			\
-       || ((sec_hdr)->sh_addr >= (segment)->p_vaddr			\
-	   && (!(strict)						\
-	       || ((sec_hdr)->sh_addr - (segment)->p_vaddr		\
-		   <= (segment)->p_memsz - 1))				\
-	   && (((sec_hdr)->sh_addr - (segment)->p_vaddr			\
-		+ ELF_SECTION_SIZE(sec_hdr, segment))			\
-	       <= (segment)->p_memsz)))					\
-   /* No zero size sections at start or end of PT_DYNAMIC nor		\
-      PT_NOTE.  */							\
-   && (((segment)->p_type != PT_DYNAMIC					\
-	&& (segment)->p_type != PT_NOTE)				\
-       || (sec_hdr)->sh_size != 0					\
-       || (segment)->p_memsz == 0					\
-       || (((sec_hdr)->sh_type == SHT_NOBITS				\
-	    || ((bfd_vma) (sec_hdr)->sh_offset > (segment)->p_offset	\
-	        && ((sec_hdr)->sh_offset - (segment)->p_offset		\
-		    < (segment)->p_filesz)))				\
-	   && (((sec_hdr)->sh_flags & SHF_ALLOC) == 0			\
-	       || ((sec_hdr)->sh_addr > (segment)->p_vaddr		\
-		   && ((sec_hdr)->sh_addr - (segment)->p_vaddr		\
-		       < (segment)->p_memsz))))))
+/* Decide if the given sec_hdr is in the given segment.  PT_TLS segment
+   contains only SHF_TLS sections.  Only PT_LOAD, PT_GNU_RELRO and
+   and PT_TLS segments can contain SHF_TLS sections.  */
+#define ELF_IS_SECTION_IN_SEGMENT(sec_hdr, segment)			\
+  (((((sec_hdr->sh_flags & SHF_TLS) != 0)				\
+     && (segment->p_type == PT_TLS					\
+	 || segment->p_type == PT_GNU_RELRO				\
+	 || segment->p_type == PT_LOAD))				\
+    || ((sec_hdr->sh_flags & SHF_TLS) == 0				\
+	&& segment->p_type != PT_TLS))					\
+   /* Any section besides one of type SHT_NOBITS must have a file	\
+      offset within the segment.  */					\
+   && (sec_hdr->sh_type == SHT_NOBITS					\
+       || ((bfd_vma) sec_hdr->sh_offset >= segment->p_offset		\
+	   && (sec_hdr->sh_offset + ELF_SECTION_SIZE(sec_hdr, segment)	\
+	       <= segment->p_offset + segment->p_filesz)))		\
+   /* SHF_ALLOC sections must have VMAs within the segment.  Be		\
+      careful about segments right at the end of memory.  */		\
+   && ((sec_hdr->sh_flags & SHF_ALLOC) == 0				\
+       || (sec_hdr->sh_addr >= segment->p_vaddr				\
+	   && (sec_hdr->sh_addr - segment->p_vaddr			\
+	       + ELF_SECTION_SIZE(sec_hdr, segment) <= segment->p_memsz))))
 
-#define ELF_SECTION_IN_SEGMENT(sec_hdr, segment)			\
-  (ELF_SECTION_IN_SEGMENT_1 (sec_hdr, segment, 1, 0))
+/* Decide if the given sec_hdr is in the given segment in file.  */
+#define ELF_IS_SECTION_IN_SEGMENT_FILE(sec_hdr, segment)	\
+  (sec_hdr->sh_size > 0						\
+   && ELF_IS_SECTION_IN_SEGMENT (sec_hdr, segment))
 
-#define ELF_SECTION_IN_SEGMENT_STRICT(sec_hdr, segment)			\
-  (ELF_SECTION_IN_SEGMENT_1 (sec_hdr, segment, 1, 1))
+/* Decide if the given sec_hdr is in the given segment in memory.  */
+#define ELF_IS_SECTION_IN_SEGMENT_MEMORY(sec_hdr, segment)	\
+  (ELF_SECTION_SIZE(sec_hdr, segment) > 0			\
+   && ELF_IS_SECTION_IN_SEGMENT (sec_hdr, segment))
 
 #endif /* _ELF_INTERNAL_H */

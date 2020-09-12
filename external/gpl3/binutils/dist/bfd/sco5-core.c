@@ -1,5 +1,6 @@
 /* BFD back end for SCO5 core files (U-area and raw sections)
-   Copyright (C) 1998-2020 Free Software Foundation, Inc.
+   Copyright 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007
+   Free Software Foundation, Inc.
    Written by Jouke Numan <jnuman@hiscom.nl>
 
    This file is part of BFD, the Binary File Descriptor library.
@@ -43,16 +44,23 @@ struct sco5_core_struct
 
 /* forward declarations */
 
+static asection *make_bfd_asection
+  PARAMS ((bfd *, const char *, flagword, bfd_size_type, bfd_vma, file_ptr));
+static struct user *read_uarea PARAMS ((bfd *, int));
+const bfd_target *sco5_core_file_p PARAMS ((bfd *abfd));
+char *sco5_core_file_failing_command PARAMS ((bfd *abfd));
+int sco5_core_file_failing_signal PARAMS ((bfd *abfd));
 #define sco5_core_file_matches_executable_p generic_core_file_matches_executable_p
-#define sco5_core_file_pid _bfd_nocore_core_file_pid
+static void swap_abort PARAMS ((void));
 
 static asection *
-make_bfd_asection (bfd *abfd,
-		   const char *name,
-		   flagword flags,
-		   bfd_size_type size,
-		   bfd_vma vma,
-		   file_ptr filepos)
+make_bfd_asection (abfd, name, flags, size, vma, filepos)
+     bfd *abfd;
+     const char *name;
+     flagword flags;
+     bfd_size_type size;
+     bfd_vma vma;
+     file_ptr filepos;
 {
   asection *asect;
 
@@ -68,7 +76,10 @@ make_bfd_asection (bfd *abfd,
 }
 
 static struct user *
-read_uarea (bfd *abfd, int filepos)
+read_uarea(abfd, filepos)
+     bfd *abfd;
+     int filepos;
+
 {
   struct sco5_core_struct *rawptr;
   bfd_size_type amt = sizeof (struct sco5_core_struct);
@@ -102,7 +113,8 @@ read_uarea (bfd *abfd, int filepos)
 }
 
 const bfd_target *
-sco5_core_file_p (bfd *abfd)
+sco5_core_file_p (abfd)
+     bfd *abfd;
 {
   int coffset_siz, val, nsecs, cheadoffs;
   int coresize;
@@ -286,8 +298,8 @@ sco5_core_file_p (bfd *abfd)
 	  secname = NULL;	/* Ignore these */
 	  break;
 	default:
-	  _bfd_error_handler ("Unhandled SCO core file section type %d\n",
-			      chead.cs_stype);
+	  (*_bfd_error_handler) ("Unhandled SCO core file section type %d\n",
+				 chead.cs_stype);
 	  continue;
 	}
 
@@ -313,7 +325,8 @@ sco5_core_file_p (bfd *abfd)
 }
 
 char *
-sco5_core_file_failing_command (bfd *abfd)
+sco5_core_file_failing_command (abfd)
+     bfd *abfd;
 {
   char *com = abfd->tdata.sco5_core_data->u.u_comm;
   if (*com)
@@ -323,7 +336,8 @@ sco5_core_file_failing_command (bfd *abfd)
 }
 
 int
-sco5_core_file_failing_signal (bfd *ignore_abfd)
+sco5_core_file_failing_signal (ignore_abfd)
+     bfd *ignore_abfd;
 {
   return ((ignore_abfd->tdata.sco5_core_data->u.u_sysabort != 0)
 	  ? ignore_abfd->tdata.sco5_core_data->u.u_sysabort
@@ -332,7 +346,7 @@ sco5_core_file_failing_signal (bfd *ignore_abfd)
 
 /* If somebody calls any byte-swapping routines, shoot them.  */
 static void
-swap_abort (void)
+swap_abort ()
 {
   abort (); /* This way doesn't require any declaration for ANSI to fuck up */
 }
@@ -344,7 +358,7 @@ swap_abort (void)
 #define	NO_PUT64 ((void (*) (bfd_uint64_t, void *)) swap_abort)
 #define	NO_GETS64 ((bfd_int64_t (*) (const void *)) swap_abort)
 
-const bfd_target core_sco5_vec =
+const bfd_target sco5_core_vec =
   {
     "sco5-core",
     bfd_target_unknown_flavour,
@@ -354,10 +368,9 @@ const bfd_target core_sco5_vec =
      HAS_LINENO | HAS_DEBUG |
      HAS_SYMS | HAS_LOCALS | WP_TEXT | D_PAGED),
     (SEC_HAS_CONTENTS | SEC_ALLOC | SEC_LOAD | SEC_RELOC), /* section flags */
-    0,				/* symbol prefix */
-    ' ',			/* ar_pad_char */
-    16,				/* ar_max_namelen */
-    0,				/* match priority.  */
+    0,							   /* symbol prefix */
+    ' ',						   /* ar_pad_char */
+    16,							   /* ar_max_namelen */
     NO_GET64, NO_GETS64, NO_PUT64,	/* 64 bit data */
     NO_GET, NO_GETS, NO_PUT,		/* 32 bit data */
     NO_GET, NO_GETS, NO_PUT,		/* 16 bit data */
@@ -372,12 +385,12 @@ const bfd_target core_sco5_vec =
       sco5_core_file_p			/* a core file */
     },
     {				/* bfd_set_format */
-      _bfd_bool_bfd_false_error, bfd_false,
-      _bfd_bool_bfd_false_error, bfd_false
+      bfd_false, bfd_false,
+      bfd_false, bfd_false
     },
     {				/* bfd_write_contents */
-      _bfd_bool_bfd_false_error, bfd_false,
-      _bfd_bool_bfd_false_error, bfd_false
+      bfd_false, bfd_false,
+      bfd_false, bfd_false
     },
 
     BFD_JUMP_TABLE_GENERIC (_bfd_generic),
@@ -392,5 +405,5 @@ const bfd_target core_sco5_vec =
 
     NULL,
 
-    NULL			/* backend_data */
+    (PTR) 0			/* backend_data */
   };

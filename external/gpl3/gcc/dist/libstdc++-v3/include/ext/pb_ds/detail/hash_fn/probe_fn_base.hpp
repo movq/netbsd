@@ -1,6 +1,6 @@
 // -*- C++ -*-
 
-// Copyright (C) 2005-2019 Free Software Foundation, Inc.
+// Copyright (C) 2005, 2006, 2009 Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the terms
@@ -47,8 +47,7 @@ namespace __gnu_pbds
 {
   namespace detail
   {
-    /// Probe functor base.
-    template<typename _Alloc>
+    template<typename Allocator>
     class probe_fn_base
     {
     protected:

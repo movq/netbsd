@@ -1,6 +1,6 @@
 /* Internal header for GDB/Scheme code.
 
-   Copyright (C) 2014-2019 Free Software Foundation, Inc.
+   Copyright (C) 2014-2015 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -17,12 +17,11 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-#ifndef GUILE_GUILE_INTERNAL_H
-#define GUILE_GUILE_INTERNAL_H
-
 /* See README file in this directory for implementation notes, coding
    conventions, et.al.  */
 
+#ifndef GDB_GUILE_INTERNAL_H
+#define GDB_GUILE_INTERNAL_H
 
 #include "hashtab.h"
 #include "extension-priv.h"
@@ -50,42 +49,6 @@ typedef struct
 /* End of scheme_variable table mark.  */
 
 #define END_VARIABLES { NULL, SCM_BOOL_F, NULL }
-
-/* Although scm_t_subr is meant to hold a function pointer, at least
-   in some versions of guile, it is actually a typedef to "void *".
-   That means that in C++, an explicit cast is necessary to convert
-   function pointer to scm_t_subr.  But a cast also makes it possible
-   to pass function pointers with the wrong type by mistake.  So
-   instead of adding such casts throughout, we use 'as_a_scm_t_subr'
-   to do the conversion, which (only) has overloads for function
-   pointer types that are valid.
-
-   See https://lists.gnu.org/archive/html/guile-devel/2013-03/msg00001.html.
-*/
-
-static inline scm_t_subr
-as_a_scm_t_subr (SCM (*func) (void))
-{
-  return (scm_t_subr) func;
-}
-
-static inline scm_t_subr
-as_a_scm_t_subr (SCM (*func) (SCM))
-{
-  return (scm_t_subr) func;
-}
-
-static inline scm_t_subr
-as_a_scm_t_subr (SCM (*func) (SCM, SCM))
-{
-  return (scm_t_subr) func;
-}
-
-static inline scm_t_subr
-as_a_scm_t_subr (SCM (*func) (SCM, SCM, SCM))
-{
-  return (scm_t_subr) func;
-}
 
 /* Scheme functions to define during initialization.  */
 
@@ -176,15 +139,14 @@ extern SCM gdbscm_string_string;
 
 /* scm-utils.c */
 
-extern void gdbscm_define_variables (const scheme_variable *, int is_public);
+extern void gdbscm_define_variables (const scheme_variable *, int public);
 
-extern void gdbscm_define_functions (const scheme_function *, int is_public);
+extern void gdbscm_define_functions (const scheme_function *, int public);
 
 extern void gdbscm_define_integer_constants (const scheme_integer_constant *,
-					     int is_public);
+					     int public);
 
-extern void gdbscm_printf (SCM port, const char *format, ...)
-  ATTRIBUTE_PRINTF (2, 3);
+extern void gdbscm_printf (SCM port, const char *format, ...);
 
 extern void gdbscm_debug_display (SCM obj);
 
@@ -363,8 +325,7 @@ extern void gdbscm_print_exception_with_stack (SCM port, SCM stack,
 
 extern void gdbscm_print_gdb_exception (SCM port, SCM exception);
 
-extern gdb::unique_xmalloc_ptr<char> gdbscm_exception_message_to_string
-    (SCM exception);
+extern char *gdbscm_exception_message_to_string (SCM exception);
 
 extern excp_matcher_func gdbscm_memory_error_p;
 
@@ -378,7 +339,7 @@ extern void gdbscm_memory_error (const char *subr, const char *msg, SCM args)
 
 /* scm-safe-call.c */
 
-extern const char *gdbscm_with_guile (const char *(*func) (void *), void *data);
+extern void *gdbscm_with_guile (void *(*func) (void *), void *data);
 
 extern SCM gdbscm_call_guile (SCM (*func) (void *), void *data,
 			      excp_matcher_func *ok_excps);
@@ -403,8 +364,7 @@ extern SCM gdbscm_safe_apply_1 (SCM proc, SCM arg0, SCM args,
 
 extern SCM gdbscm_unsafe_call_1 (SCM proc, SCM arg0);
 
-extern gdb::unique_xmalloc_ptr<char> gdbscm_safe_eval_string
-  (const char *string, int display_result);
+extern char *gdbscm_safe_eval_string (const char *string, int display_result);
 
 extern char *gdbscm_safe_source_script (const char *filename);
 
@@ -520,21 +480,20 @@ extern SCM psscm_scm_from_pspace (struct program_space *);
 
 extern int gdbscm_scm_string_to_int (SCM string);
 
-extern gdb::unique_xmalloc_ptr<char> gdbscm_scm_to_c_string (SCM string);
+extern char *gdbscm_scm_to_c_string (SCM string);
 
 extern SCM gdbscm_scm_from_c_string (const char *string);
 
-extern SCM gdbscm_scm_from_printf (const char *format, ...)
-    ATTRIBUTE_PRINTF (1, 2);
+extern SCM gdbscm_scm_from_printf (const char *format, ...);
 
-extern gdb::unique_xmalloc_ptr<char> gdbscm_scm_to_string
-  (SCM string, size_t *lenp, const char *charset, int strict, SCM *except_scmp);
+extern char *gdbscm_scm_to_string (SCM string, size_t *lenp,
+				   const char *charset,
+				   int strict, SCM *except_scmp);
 
 extern SCM gdbscm_scm_from_string (const char *string, size_t len,
 				   const char *charset, int strict);
 
-extern gdb::unique_xmalloc_ptr<char> gdbscm_scm_to_host_string
-  (SCM string, size_t *lenp, SCM *except);
+extern char *gdbscm_scm_to_host_string (SCM string, size_t *lenp, SCM *except);
 
 extern SCM gdbscm_scm_from_host_string (const char *string, size_t len);
 
@@ -564,8 +523,6 @@ extern SCM tyscm_scm_from_type (struct type *type);
 extern type_smob *tyscm_get_type_smob_arg_unsafe (SCM type_scm, int arg_pos,
 						  const char *func_name);
 
-extern struct type *tyscm_scm_to_type (SCM t_scm);
-
 extern struct type *tyscm_type_smob_type (type_smob *t_smob);
 
 extern SCM tyscm_scm_from_field (SCM type_scm, int field_num);
@@ -592,7 +549,6 @@ extern struct value *vlscm_convert_value_from_scheme
 /* stript_lang methods */
 
 extern objfile_script_sourcer_func gdbscm_source_objfile_script;
-extern objfile_script_executor_func gdbscm_execute_objfile_script;
 
 extern int gdbscm_auto_load_enabled (const struct extension_language_defn *);
 
@@ -602,10 +558,10 @@ extern void gdbscm_preserve_values
 
 extern enum ext_lang_rc gdbscm_apply_val_pretty_printer
   (const struct extension_language_defn *,
-   struct type *type,
-   LONGEST embedded_offset, CORE_ADDR address,
+   struct type *type, const gdb_byte *valaddr,
+   int embedded_offset, CORE_ADDR address,
    struct ui_file *stream, int recurse,
-   struct value *val,
+   const struct value *val,
    const struct value_print_options *options,
    const struct language_defn *language);
 
@@ -640,18 +596,8 @@ extern void gdbscm_initialize_symtabs (void);
 extern void gdbscm_initialize_types (void);
 extern void gdbscm_initialize_values (void);
 
-
-/* A complication with the Guile code is that we have two types of
-   exceptions to consider.  GDB/C++ exceptions, and Guile/SJLJ
-   exceptions.  Code that is facing the Guile interpreter must not
-   throw GDB exceptions, instead Scheme exceptions must be thrown.
-   Also, because Guile exceptions are SJLJ based, Guile-facing code
-   must not use local objects with dtors, unless wrapped in a scope
-   with a TRY/CATCH, because the dtors won't otherwise be run when a
-   Guile exceptions is thrown.  */
-
-/* Use this after a TRY/CATCH to throw the appropriate Scheme
-   exception if a GDB error occurred.  */
+/* Use these after a TRY_CATCH to throw the appropriate Scheme exception
+   if a GDB error occurred.  */
 
 #define GDBSCM_HANDLE_GDB_EXCEPTION(exception)		\
   do {							\
@@ -662,35 +608,16 @@ extern void gdbscm_initialize_values (void);
       }							\
   } while (0)
 
-/* Use this to wrap a callable to throw the appropriate Scheme
-   exception if the callable throws a GDB error.  ARGS are forwarded
-   to FUNC.  Returns the result of FUNC, unless FUNC returns a Scheme
-   exception, in which case that exception is thrown.  Note that while
-   the callable is free to use objects of types with destructors,
-   because GDB errors are C++ exceptions, the caller of gdbscm_wrap
-   must not use such objects, because their destructors would not be
-   called when a Scheme exception is thrown.  */
+/* If cleanups are establish outside the TRY_CATCH block, use this version.  */
 
-template<typename Function, typename... Args>
-SCM
-gdbscm_wrap (Function &&func, Args &&... args)
-{
-  SCM result = SCM_BOOL_F;
+#define GDBSCM_HANDLE_GDB_EXCEPTION_WITH_CLEANUPS(exception, cleanups)	\
+  do {									\
+    if (exception.reason < 0)						\
+      {									\
+	do_cleanups (cleanups);						\
+	gdbscm_throw_gdb_exception (exception);				\
+        /*NOTREACHED */							\
+      }									\
+  } while (0)
 
-  TRY
-    {
-      result = func (std::forward<Args> (args)...);
-    }
-  CATCH (except, RETURN_MASK_ALL)
-    {
-      GDBSCM_HANDLE_GDB_EXCEPTION (except);
-    }
-  END_CATCH
-
-  if (gdbscm_is_exception (result))
-    gdbscm_throw (result);
-
-  return result;
-}
-
-#endif /* GUILE_GUILE_INTERNAL_H */
+#endif /* GDB_GUILE_INTERNAL_H */

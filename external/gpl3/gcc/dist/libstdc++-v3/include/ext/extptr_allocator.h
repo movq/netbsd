@@ -1,6 +1,6 @@
 // <extptr_allocator.h> -*- C++ -*-
 
-// Copyright (C) 2008-2019 Free Software Foundation, Inc.
+// Copyright (C) 2008, 2009 Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
@@ -23,10 +23,8 @@
 // <http://www.gnu.org/licenses/>.
 
 /**
- *  @file ext/extptr_allocator.h
- *  This file is a GNU extension to the Standard C++ Library.
- *
- *  @author Bob Walters
+ * @file ext/extptr_allocator.h
+ * @author Bob Walters
  *
  * An example allocator which uses an alternative pointer type from
  * bits/pointer.h.  Supports test cases which confirm container support
@@ -37,12 +35,10 @@
 #define _EXTPTR_ALLOCATOR_H 1
 
 #include <memory>
-#include <ext/numeric_traits.h>
+#include <limits>
 #include <ext/pointer.h>
 
-namespace __gnu_cxx _GLIBCXX_VISIBILITY(default)
-{
-_GLIBCXX_BEGIN_NAMESPACE_VERSION
+_GLIBCXX_BEGIN_NAMESPACE(__gnu_cxx)
 
   /**
    * @brief An example allocator which uses a non-standard pointer type.
@@ -72,62 +68,46 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
         struct rebind
         { typedef _ExtPtr_allocator<_Up> other; };
 
-      _ExtPtr_allocator() _GLIBCXX_USE_NOEXCEPT 
+      _ExtPtr_allocator() throw() 
       : _M_real_alloc() { }
 
-      _ExtPtr_allocator(const _ExtPtr_allocator& __rarg) _GLIBCXX_USE_NOEXCEPT
+      _ExtPtr_allocator(const _ExtPtr_allocator &__rarg) throw()
       : _M_real_alloc(__rarg._M_real_alloc) { }
 
       template<typename _Up>
-        _ExtPtr_allocator(const _ExtPtr_allocator<_Up>& __rarg)
-	_GLIBCXX_USE_NOEXCEPT
+        _ExtPtr_allocator(const _ExtPtr_allocator<_Up>& __rarg) throw()
         : _M_real_alloc(__rarg._M_getUnderlyingImp()) { }
 
-      ~_ExtPtr_allocator() _GLIBCXX_USE_NOEXCEPT
+      ~_ExtPtr_allocator() throw()
       { }
 
-      pointer address(reference __x) const _GLIBCXX_NOEXCEPT
-      { return std::__addressof(__x); }
+      pointer address(reference __x) const
+      { return &__x; }
 
-      const_pointer address(const_reference __x) const _GLIBCXX_NOEXCEPT
-      { return std::__addressof(__x); }
+      const_pointer address(const_reference __x) const
+      { return &__x; }
 
-      _GLIBCXX_NODISCARD pointer allocate(size_type __n, void* __hint = 0)
+      pointer allocate(size_type __n, void* __hint = 0)
       { return _M_real_alloc.allocate(__n,__hint); }
 
       void deallocate(pointer __p, size_type __n)
       { _M_real_alloc.deallocate(__p.get(), __n); }
 
-      size_type max_size() const _GLIBCXX_USE_NOEXCEPT
-      { return __numeric_traits<size_type>::__max / sizeof(_Tp); }
-
-#if __cplusplus >= 201103L
-      template<typename _Up, typename... _Args>
-        void
-        construct(_Up* __p, _Args&&... __args)
-	{ ::new((void *)__p) _Up(std::forward<_Args>(__args)...); }
-
-      template<typename... _Args>
-        void
-        construct(pointer __p, _Args&&... __args)
-	{ construct(__p.get(), std::forward<_Args>(__args)...); }
-
-      template<typename _Up>
-        void 
-        destroy(_Up* __p)
-        { __p->~_Up(); }
-
-      void destroy(pointer __p)
-      { destroy(__p.get()); }
-
-#else
+      size_type max_size() const throw()
+      { return std::numeric_limits<size_type>::max() / sizeof(_Tp); }
 
       void construct(pointer __p, const _Tp& __val)
       { ::new(__p.get()) _Tp(__val); }
 
+#ifdef __GXX_EXPERIMENTAL_CXX0X__
+      template<typename... _Args>
+        void
+        construct(pointer __p, _Args&&... __args)
+        { ::new(__p.get()) _Tp(std::forward<_Args>(__args)...); }
+#endif
+
       void destroy(pointer __p)
       { __p->~_Tp(); }
-#endif
 
       template<typename _Up>
         inline bool
@@ -191,7 +171,6 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       __larg._M_real_alloc = __tmp;
     }
 
-_GLIBCXX_END_NAMESPACE_VERSION
-} // namespace
+_GLIBCXX_END_NAMESPACE
 
 #endif /* _EXTPTR_ALLOCATOR_H */

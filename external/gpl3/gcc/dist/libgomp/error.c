@@ -1,8 +1,7 @@
-/* Copyright (C) 2005-2019 Free Software Foundation, Inc.
+/* Copyright (C) 2005, 2009 Free Software Foundation, Inc.
    Contributed by Richard Henderson <rth@redhat.com>.
 
-   This file is part of the GNU Offloading and Multi Processing Library
-   (libgomp).
+   This file is part of the GNU OpenMP Library (libgomp).
 
    Libgomp is free software; you can redistribute it and/or modify it
    under the terms of the GNU General Public License as published by
@@ -36,26 +35,7 @@
 #include <stdlib.h>
 
 
-#undef gomp_vdebug
-void
-gomp_vdebug (int kind __attribute__ ((unused)), const char *msg, va_list list)
-{
-  if (gomp_debug_var)
-    vfprintf (stderr, msg, list);
-}
-
-#undef gomp_debug
-void
-gomp_debug (int kind, const char *msg, ...)
-{
-  va_list list;
-
-  va_start (list, msg);
-  gomp_vdebug (kind, msg, list);
-  va_end (list);
-}
-
-void
+static void
 gomp_verror (const char *fmt, va_list list)
 {
   fputs ("\nlibgomp: ", stderr);
@@ -74,18 +54,13 @@ gomp_error (const char *fmt, ...)
 }
 
 void
-gomp_vfatal (const char *fmt, va_list list)
-{
-  gomp_verror (fmt, list);
-  exit (EXIT_FAILURE);
-}
-
-void
 gomp_fatal (const char *fmt, ...)
 {
   va_list list;
 
   va_start (list, fmt);
-  gomp_vfatal (fmt, list);
+  gomp_verror (fmt, list);
   va_end (list);
+
+  exit (EXIT_FAILURE);
 }

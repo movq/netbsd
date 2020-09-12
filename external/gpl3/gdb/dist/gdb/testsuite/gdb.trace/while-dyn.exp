@@ -1,4 +1,5 @@
-#   Copyright 1998-2019 Free Software Foundation, Inc.
+#   Copyright 1998, 2007, 2008, 2009, 2010, 2011
+#   Free Software Foundation, Inc.
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -17,19 +18,21 @@
 
 load_lib "trace-support.exp"
 
+if $tracelevel then {
+    strace $tracelevel
+}
+
 
 gdb_exit
 gdb_start
 
-standard_testfile actions.c
-set executable $testfile
-if ![gdb_trace_common_supports_arch] {
-    unsupported "no trace-common.h support for arch"
-    return -1
-}
+set testfile "actions"
+set srcfile $testfile.c
+set executable while-dyn
+set binfile $objdir/$subdir/$executable
 if { [gdb_compile "$srcdir/$subdir/$srcfile" $binfile \
 	  executable {debug nowarnings}] != "" } {
-    untested "failed to compile"
+    untested while-dyn.exp
     return -1
 }
 gdb_load $binfile
@@ -38,14 +41,24 @@ gdb_test "tfind none"  ".*" ""
 runto_main
 gdb_reinitialize_dir $srcdir/$subdir
 
+# We generously give ourselves one "pass" if we successfully 
+# detect that this test cannot be run on this target!
 if { ![gdb_target_supports_trace] } then {
-    unsupported "current target does not support trace"
-    return 1
+    pass "Current target does not support trace"
+    return 1;
 }
 
 #
 # test while-stepping dynamically (live target)
 #
+
+if [istarget "x86_64-*"] then {
+    set fpreg "\$rbp"
+} elseif [istarget "i?86-*"] then {
+    set fpreg "\$ebp"
+} else {
+    set fpreg "\$fp"
+}
 
 proc test_while_stepping { while_stepping } {
     global fpreg
@@ -68,7 +81,7 @@ proc test_while_stepping { while_stepping } {
 
     gdb_trace_setactions "5.12: define $while_stepping <stepcount>" \
 	"" \
-	"collect \$$fpreg" "^$" \
+	"collect $fpreg" "^$" \
 	"$while_stepping 5" "^$" \
 	"collect p" "^$" \
 	"end" "^$" \
@@ -76,7 +89,7 @@ proc test_while_stepping { while_stepping } {
 
     gdb_test "tstart" ".*" ""
 
-    gdb_breakpoint "end" qualified
+    gdb_test "break end" ".*" ""
     gdb_test "continue" \
 	"Continuing.*Breakpoint $decimal, end.*" \
 	"$while_stepping: run trace experiment"

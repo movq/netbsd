@@ -1,5 +1,5 @@
 /* RTL specific diagnostic subroutines for GCC
-   Copyright (C) 2001-2019 Free Software Foundation, Inc.
+   Copyright (C) 2001, 2002, 2003, 2004, 2007, 2008 Free Software Foundation, Inc.
    Contributed by Gabriel Dos Reis <gdr@codesourcery.com>
 
 This file is part of GCC.
@@ -19,20 +19,25 @@ along with GCC; see the file COPYING3.  If not see
 <http://www.gnu.org/licenses/>.  */
 
 #include "config.h"
+#undef FLOAT /* This is for hpux. They should change hpux.  */
+#undef FFS  /* Some systems define this in param.h.  */
 #include "system.h"
 #include "coretypes.h"
 #include "tm.h"
-#include "rtl-error.h"
-#include "diagnostic.h"
+#include "rtl.h"
+#include "insn-attr.h"
+#include "insn-config.h"
+#include "input.h"
+#include "toplev.h"
 #include "intl.h"
+#include "diagnostic.h"
 
-static location_t location_for_asm (const rtx_insn *);
-static void diagnostic_for_asm (const rtx_insn *, const char *, va_list *,
-				diagnostic_t) ATTRIBUTE_GCC_DIAG(2,0);
+static location_t location_for_asm (const_rtx);
+static void diagnostic_for_asm (const_rtx, const char *, va_list *, diagnostic_t) ATTRIBUTE_GCC_DIAG(2,0);
 
 /* Figure the location of the given INSN.  */
 static location_t
-location_for_asm (const rtx_insn *insn)
+location_for_asm (const_rtx insn)
 {
   rtx body = PATTERN (insn);
   rtx asmop;
@@ -63,19 +68,18 @@ location_for_asm (const rtx_insn *insn)
    of the insn INSN.  This is used only when INSN is an `asm' with operands,
    and each ASM_OPERANDS records its own source file and line.  */
 static void
-diagnostic_for_asm (const rtx_insn *insn, const char *msg, va_list *args_ptr,
+diagnostic_for_asm (const_rtx insn, const char *msg, va_list *args_ptr,
 		    diagnostic_t kind)
 {
   diagnostic_info diagnostic;
-  rich_location richloc (line_table, location_for_asm (insn));
 
   diagnostic_set_info (&diagnostic, msg, args_ptr,
-		       &richloc, kind);
-  diagnostic_report_diagnostic (global_dc, &diagnostic);
+		       location_for_asm (insn), kind);
+  report_diagnostic (&diagnostic);
 }
 
 void
-error_for_asm (const rtx_insn *insn, const char *gmsgid, ...)
+error_for_asm (const_rtx insn, const char *gmsgid, ...)
 {
   va_list ap;
 
@@ -85,7 +89,7 @@ error_for_asm (const rtx_insn *insn, const char *gmsgid, ...)
 }
 
 void
-warning_for_asm (const rtx_insn *insn, const char *gmsgid, ...)
+warning_for_asm (const_rtx insn, const char *gmsgid, ...)
 {
   va_list ap;
 

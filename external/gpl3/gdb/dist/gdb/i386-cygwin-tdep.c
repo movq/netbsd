@@ -1,6 +1,7 @@
 /* Target-dependent code for Cygwin running on i386's, for GDB.
 
-   Copyright (C) 2003-2019 Free Software Foundation, Inc.
+   Copyright (C) 2003, 2007, 2008, 2009, 2010, 2011
+   Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -19,12 +20,15 @@
 
 #include "defs.h"
 #include "osabi.h"
+#include "gdb_string.h"
 #include "i386-tdep.h"
 #include "windows-tdep.h"
 #include "regset.h"
 #include "gdb_obstack.h"
 #include "xml-support.h"
 #include "gdbcore.h"
+#include "solib.h"
+#include "solib-target.h"
 #include "inferior.h"
 
 /* Core file support.  */
@@ -88,6 +92,27 @@ static int i386_windows_gregset_reg_offset[] =
 
 #define I386_WINDOWS_SIZEOF_GREGSET 716
 
+/* Return the appropriate register set for the core section identified
+   by SECT_NAME and SECT_SIZE.  */
+
+static const struct regset *
+i386_windows_regset_from_core_section (struct gdbarch *gdbarch,
+				     const char *sect_name, size_t sect_size)
+{
+  struct gdbarch_tdep *tdep = gdbarch_tdep (gdbarch);
+
+  if (strcmp (sect_name, ".reg") == 0
+      && sect_size == I386_WINDOWS_SIZEOF_GREGSET)
+    {
+      if (tdep->gregset == NULL)
+        tdep->gregset = regset_alloc (gdbarch, i386_supply_gregset,
+                                      i386_collect_gregset);
+      return tdep->gregset;
+    }
+
+  return NULL;
+}
+
 struct cpms_data
 {
   struct gdbarch *gdbarch;
@@ -98,19 +123,19 @@ struct cpms_data
 static void
 core_process_module_section (bfd *abfd, asection *sect, void *obj)
 {
-  struct cpms_data *data = (struct cpms_data *) obj;
+  struct cpms_data *data = obj;
   enum bfd_endian byte_order = gdbarch_byte_order (data->gdbarch);
 
   char *module_name;
   size_t module_name_size;
   CORE_ADDR base_addr;
 
-  gdb_byte *buf = NULL;
+  char *buf = NULL;
 
-  if (!startswith (sect->name, ".module"))
+  if (strncmp (sect->name, ".module", 7) != 0)
     return;
 
-  buf = (gdb_byte *) xmalloc (bfd_get_section_size (sect) + 1);
+  buf = xmalloc (bfd_get_section_size (sect) + 1);
   if (!buf)
     {
       printf_unfiltered ("memory allocation failed for %s\n", sect->name);
@@ -130,9 +155,9 @@ core_process_module_section (bfd *abfd, asection *sect, void *obj)
   module_name_size =
     extract_unsigned_integer (buf + 8, 4, byte_order);
 
-  if (12 + module_name_size > bfd_get_section_size (sect))
+  module_name = buf + 12;
+  if (module_name - buf + module_name_size > bfd_get_section_size (sect))
     goto out;
-  module_name = (char *) buf + 12;
 
   /* The first module is the .exe itself.  */
   if (data->module_count != 0)
@@ -146,14 +171,14 @@ out:
   return;
 }
 
-static ULONGEST
+static LONGEST
 windows_core_xfer_shared_libraries (struct gdbarch *gdbarch,
 				  gdb_byte *readbuf,
-				  ULONGEST offset, ULONGEST len)
+				  ULONGEST offset, LONGEST len)
 {
   struct obstack obstack;
   const char *buf;
-  ULONGEST len_avail;
+  LONGEST len_avail;
   struct cpms_data data = { gdbarch, &obstack, 0 };
 
   obstack_init (&obstack);
@@ -163,7 +188,7 @@ windows_core_xfer_shared_libraries (struct gdbarch *gdbarch,
 			 &data);
   obstack_grow_str0 (&obstack, "</library-list>\n");
 
-  buf = (const char *) obstack_finish (&obstack);
+  buf = obstack_finish (&obstack);
   len_avail = strlen (buf);
   if (offset >= len_avail)
     return 0;
@@ -178,14 +203,14 @@ windows_core_xfer_shared_libraries (struct gdbarch *gdbarch,
 
 /* This is how we want PTIDs from core files to be printed.  */
 
-static const char *
+static char *
 i386_windows_core_pid_to_str (struct gdbarch *gdbarch, ptid_t ptid)
 {
   static char buf[80];
 
-  if (ptid.lwp () != 0)
+  if (ptid_get_lwp (ptid) != 0)
     {
-      snprintf (buf, sizeof (buf), "Thread 0x%lx", ptid.lwp ());
+      snprintf (buf, sizeof (buf), "Thread 0x%lx", ptid_get_lwp (ptid));
       return buf;
     }
 
@@ -209,8 +234,6 @@ i386_cygwin_init_abi (struct gdbarch_info info, struct gdbarch *gdbarch)
 {
   struct gdbarch_tdep *tdep = gdbarch_tdep (gdbarch);
 
-  windows_init_abi (info, gdbarch);
-
   set_gdbarch_skip_trampoline_code (gdbarch, i386_cygwin_skip_trampoline_code);
 
   set_gdbarch_skip_main_prologue (gdbarch, i386_skip_main_prologue);
@@ -221,14 +244,20 @@ i386_cygwin_init_abi (struct gdbarch_info info, struct gdbarch *gdbarch)
   tdep->gregset_num_regs = ARRAY_SIZE (i386_windows_gregset_reg_offset);
   tdep->sizeof_gregset = I386_WINDOWS_SIZEOF_GREGSET;
 
-  tdep->sizeof_fpregset = 0;
+  set_solib_ops (gdbarch, &solib_target_so_ops);
 
   /* Core file support.  */
+  set_gdbarch_regset_from_core_section
+    (gdbarch, i386_windows_regset_from_core_section);
   set_gdbarch_core_xfer_shared_libraries
     (gdbarch, windows_core_xfer_shared_libraries);
   set_gdbarch_core_pid_to_str (gdbarch, i386_windows_core_pid_to_str);
 
   set_gdbarch_auto_wide_charset (gdbarch, i386_cygwin_auto_wide_charset);
+
+  /* Canonical paths on this target look like
+     `c:\Program Files\Foo App\mydll.dll', for example.  */
+  set_gdbarch_has_dos_based_file_system (gdbarch, 1);
 }
 
 static enum gdb_osabi
@@ -236,6 +265,8 @@ i386_cygwin_osabi_sniffer (bfd *abfd)
 {
   char *target_name = bfd_get_target (abfd);
 
+  /* Interix also uses pei-i386.
+     We need a way to distinguish between the two.  */
   if (strcmp (target_name, "pei-i386") == 0)
     return GDB_OSABI_CYGWIN;
 
@@ -251,6 +282,9 @@ i386_cygwin_osabi_sniffer (bfd *abfd)
 
   return GDB_OSABI_UNKNOWN;
 }
+
+/* Provide a prototype to silence -Wmissing-prototypes.  */
+void _initialize_i386_cygwin_tdep (void);
 
 void
 _initialize_i386_cygwin_tdep (void)

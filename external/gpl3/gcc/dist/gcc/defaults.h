@@ -1,5 +1,7 @@
 /* Definitions of various defaults for tm.h macros.
-   Copyright (C) 1992-2019 Free Software Foundation, Inc.
+   Copyright (C) 1992, 1996, 1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004,
+   2005, 2007, 2008, 2009, 2010
+   Free Software Foundation, Inc.
    Contributed by Ron Guilmette (rfg@monkeys.com)
 
 This file is part of GCC.
@@ -26,10 +28,17 @@ see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
 #ifndef GCC_DEFAULTS_H
 #define GCC_DEFAULTS_H
 
-/* How to start an assembler comment.  */
-#ifndef ASM_COMMENT_START
-#define ASM_COMMENT_START ";#"
+#ifndef GET_ENVIRONMENT
+#define GET_ENVIRONMENT(VALUE, NAME) do { (VALUE) = getenv (NAME); } while (0)
 #endif
+
+#define obstack_chunk_alloc	((void *(*) (long)) xmalloc)
+#define obstack_chunk_free	((void (*) (void *)) free)
+#define OBSTACK_CHUNK_SIZE	0
+#define gcc_obstack_init(OBSTACK)			\
+  _obstack_begin ((OBSTACK), OBSTACK_CHUNK_SIZE, 0,	\
+		  obstack_chunk_alloc,			\
+		  obstack_chunk_free)
 
 /* Store in OUTPUT a string (made with alloca) containing an
    assembler-name for a local static variable or function named NAME.
@@ -76,7 +85,7 @@ see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
 	  int c = p[i];			   				      \
 	  if (c == '\"' || c == '\\')					      \
 	    putc ('\\', asm_out_file);					      \
-	  if (ISPRINT (c))						      \
+	  if (ISPRINT(c))						      \
 	    putc (c, asm_out_file);					      \
 	  else								      \
 	    {								      \
@@ -86,7 +95,7 @@ see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
 		 The VAX assembler fails to stop reading the escape	      \
 		 after three digits, so this is the only way we		      \
 		 can get it to parse the data properly.  */		      \
-	      if (i < thissize - 1 && ISDIGIT (p[i + 1]))		      \
+	      if (i < thissize - 1 && ISDIGIT(p[i + 1]))		      \
 		fprintf (asm_out_file, "\"\n\t.ascii \"");		      \
 	  }								      \
 	}								      \
@@ -109,10 +118,6 @@ see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
 #endif
 #endif
 
-#ifndef IFUNC_ASM_TYPE
-#define IFUNC_ASM_TYPE "gnu_indirect_function"
-#endif
-
 #ifndef TLS_COMMON_ASM_OP
 #define TLS_COMMON_ASM_OP ".tls_common"
 #endif
@@ -123,7 +128,7 @@ see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
     {									\
       fprintf ((FILE), "\t%s\t", TLS_COMMON_ASM_OP);			\
       assemble_name ((FILE), (NAME));					\
-      fprintf ((FILE), "," HOST_WIDE_INT_PRINT_UNSIGNED",%u\n",		\
+      fprintf ((FILE), ","HOST_WIDE_INT_PRINT_UNSIGNED",%u\n",		\
 	       (SIZE), DECL_ALIGN (DECL) / BITS_PER_UNIT);		\
     }									\
   while (0)
@@ -136,22 +141,11 @@ see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
 #endif
 
 /* This is how to output the definition of a user-level label named
-   NAME, such as the label on variable NAME.  */
+   NAME, such as the label on a static function or variable NAME.  */
 
 #ifndef ASM_OUTPUT_LABEL
 #define ASM_OUTPUT_LABEL(FILE,NAME) \
-  do {						\
-    assemble_name ((FILE), (NAME));		\
-    fputs (":\n", (FILE));			\
-  } while (0)
-#endif
-
-/* This is how to output the definition of a user-level label named
-   NAME, such as the label on a function.  */
-
-#ifndef ASM_OUTPUT_FUNCTION_LABEL
-#define ASM_OUTPUT_FUNCTION_LABEL(FILE, NAME, DECL) \
-  ASM_OUTPUT_LABEL ((FILE), (NAME))
+  do { assemble_name ((FILE), (NAME)); fputs (":\n", (FILE)); } while (0)
 #endif
 
 /* Output the definition of a compiler-generated label named NAME.  */
@@ -166,11 +160,7 @@ see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
 /* This is how to output a reference to a user-level label named NAME.  */
 
 #ifndef ASM_OUTPUT_LABELREF
-#define ASM_OUTPUT_LABELREF(FILE,NAME)  \
-  do {							\
-    fputs (user_label_prefix, (FILE));			\
-    fputs ((NAME), (FILE));				\
-  } while (0)
+#define ASM_OUTPUT_LABELREF(FILE,NAME)  asm_fprintf ((FILE), "%U%s", (NAME))
 #endif
 
 /* Allow target to print debug info labels specially.  This is useful for
@@ -260,20 +250,13 @@ see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
 #endif
 #endif
 
-/* This determines whether or not we support weak symbols.  SUPPORTS_WEAK
-   must be a preprocessor constant.  */
+/* This determines whether or not we support weak symbols.  */
 #ifndef SUPPORTS_WEAK
 #if defined (ASM_WEAKEN_LABEL) || defined (ASM_WEAKEN_DECL)
 #define SUPPORTS_WEAK 1
 #else
 #define SUPPORTS_WEAK 0
 #endif
-#endif
-
-/* This determines whether or not we support weak symbols during target
-   code generation.  TARGET_SUPPORTS_WEAK can be any valid C expression.  */
-#ifndef TARGET_SUPPORTS_WEAK
-#define TARGET_SUPPORTS_WEAK (SUPPORTS_WEAK)
 #endif
 
 /* This determines whether or not we support the discriminator
@@ -330,6 +313,12 @@ see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
 # endif
 #endif
 
+/* Determines whether we may use common symbols to represent one-only
+   semantics (a.k.a. "vague linkage").  */
+#ifndef USE_COMMON_FOR_ONE_ONLY
+# define USE_COMMON_FOR_ONE_ONLY 1
+#endif
+
 /* By default we can assume that all global symbols are in one namespace,
    across all shared libraries.  */
 #ifndef MULTIPLE_SYMBOL_SPACES
@@ -342,16 +331,24 @@ see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
 #define SUPPORTS_INIT_PRIORITY 1
 #endif /* SUPPORTS_INIT_PRIORITY */
 
+/* If duplicate library search directories can be removed from a
+   linker command without changing the linker's semantics, give this
+   symbol a nonzero.  */
+#ifndef LINK_ELIMINATE_DUPLICATE_LDIRECTORIES
+#define LINK_ELIMINATE_DUPLICATE_LDIRECTORIES 0
+#endif /* LINK_ELIMINATE_DUPLICATE_LDIRECTORIES */
+
 /* If we have a definition of INCOMING_RETURN_ADDR_RTX, assume that
    the rest of the DWARF 2 frame unwind support is also provided.  */
-#if !defined (DWARF2_UNWIND_INFO) && defined (INCOMING_RETURN_ADDR_RTX)
+#if !defined (DWARF2_UNWIND_INFO) && defined (INCOMING_RETURN_ADDR_RTX) \
+    && !defined (TARGET_UNWIND_INFO)
 #define DWARF2_UNWIND_INFO 1
 #endif
 
 /* If we have named sections, and we're using crtstuff to run ctors,
    use them for registering eh frame information.  */
 #if defined (TARGET_ASM_NAMED_SECTION) && DWARF2_UNWIND_INFO \
-    && !defined (EH_FRAME_THROUGH_COLLECT2)
+    && !defined(EH_FRAME_IN_DATA_SECTION)
 #ifndef EH_FRAME_SECTION_NAME
 #define EH_FRAME_SECTION_NAME ".eh_frame"
 #endif
@@ -377,19 +374,25 @@ see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
 #endif
 #endif
 
-/* Provide defaults for stuff that may not be defined when using
-   sjlj exceptions.  */
-#ifndef EH_RETURN_DATA_REGNO
-#define EH_RETURN_DATA_REGNO(N) INVALID_REGNUM
+/* If we have named section and we support weak symbols, then use the
+   .jcr section for recording java classes which need to be registered
+   at program start-up time.  */
+#if defined (TARGET_ASM_NAMED_SECTION) && SUPPORTS_WEAK
+#ifndef JCR_SECTION_NAME
+#define JCR_SECTION_NAME ".jcr"
+#endif
 #endif
 
-/* Offset between the eh handler address and entry in eh tables.  */
-#ifndef RETURN_ADDR_OFFSET
-#define RETURN_ADDR_OFFSET 0
+/* This decision to use a .jcr section can be overridden by defining
+   USE_JCR_SECTION to 0 in target file.  This is necessary if target
+   can define JCR_SECTION_NAME but does not have crtstuff or
+   linker support for .jcr section.  */
+#ifndef TARGET_USE_JCR_SECTION
+#ifdef JCR_SECTION_NAME
+#define TARGET_USE_JCR_SECTION 1
+#else
+#define TARGET_USE_JCR_SECTION 0
 #endif
-
-#ifndef MASK_RETURN_ADDR
-#define MASK_RETURN_ADDR NULL_RTX
 #endif
 
 /* Number of hardware registers that go into the DWARF-2 unwind info.
@@ -399,26 +402,6 @@ see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
 #define DWARF_FRAME_REGISTERS FIRST_PSEUDO_REGISTER
 #endif
 
-/* Offsets recorded in opcodes are a multiple of this alignment factor.  */
-#ifndef DWARF_CIE_DATA_ALIGNMENT
-#ifdef STACK_GROWS_DOWNWARD
-#define DWARF_CIE_DATA_ALIGNMENT (-((int) UNITS_PER_WORD))
-#else
-#define DWARF_CIE_DATA_ALIGNMENT ((int) UNITS_PER_WORD)
-#endif
-#endif
-
-/* The DWARF 2 CFA column which tracks the return address.  Normally this
-   is the column for PC, or the first column after all of the hard
-   registers.  */
-#ifndef DWARF_FRAME_RETURN_COLUMN
-#ifdef PC_REGNUM
-#define DWARF_FRAME_RETURN_COLUMN	DWARF_FRAME_REGNUM (PC_REGNUM)
-#else
-#define DWARF_FRAME_RETURN_COLUMN	DWARF_FRAME_REGISTERS
-#endif
-#endif
-
 /* How to renumber registers for dbx and gdb.  If not defined, assume
    no renumbering is necessary.  */
 
@@ -426,49 +409,13 @@ see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
 #define DBX_REGISTER_NUMBER(REGNO) (REGNO)
 #endif
 
-/* The mapping from gcc register number to DWARF 2 CFA column number.
-   By default, we just provide columns for all registers.  */
-#ifndef DWARF_FRAME_REGNUM
-#define DWARF_FRAME_REGNUM(REG) DBX_REGISTER_NUMBER (REG)
-#endif
-
-/* The mapping from dwarf CFA reg number to internal dwarf reg numbers.  */
-#ifndef DWARF_REG_TO_UNWIND_COLUMN
-#define DWARF_REG_TO_UNWIND_COLUMN(REGNO) (REGNO)
-#endif
-
-/* Map register numbers held in the call frame info that gcc has
-   collected using DWARF_FRAME_REGNUM to those that should be output in
-   .debug_frame and .eh_frame.  */
-#ifndef DWARF2_FRAME_REG_OUT
-#define DWARF2_FRAME_REG_OUT(REGNO, FOR_EH) (REGNO)
-#endif
-
-/* The size of addresses as they appear in the Dwarf 2 data.
-   Some architectures use word addresses to refer to code locations,
-   but Dwarf 2 info always uses byte addresses.  On such machines,
-   Dwarf 2 addresses need to be larger than the architecture's
-   pointers.  */
-#ifndef DWARF2_ADDR_SIZE
-#define DWARF2_ADDR_SIZE ((POINTER_SIZE + BITS_PER_UNIT - 1) / BITS_PER_UNIT)
-#endif
-
-/* The size in bytes of a DWARF field indicating an offset or length
-   relative to a debug info section, specified to be 4 bytes in the
-   DWARF-2 specification.  The SGI/MIPS ABI defines it to be the same
-   as PTR_SIZE.  */
-#ifndef DWARF_OFFSET_SIZE
-#define DWARF_OFFSET_SIZE 4
-#endif
-
-/* The size in bytes of a DWARF 4 type signature.  */
-#ifndef DWARF_TYPE_SIGNATURE_SIZE
-#define DWARF_TYPE_SIGNATURE_SIZE 8
-#endif
-
 /* Default sizes for base C types.  If the sizes are different for
    your target, you should override these values by defining the
    appropriate symbols in your tm.h file.  */
+
+#ifndef BITS_PER_UNIT
+#define BITS_PER_UNIT 8
+#endif
 
 #ifndef BITS_PER_WORD
 #define BITS_PER_WORD (BITS_PER_UNIT * UNITS_PER_WORD)
@@ -569,10 +516,6 @@ see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
 #define SIZE_TYPE "long unsigned int"
 #endif
 
-#ifndef SIZETYPE
-#define SIZETYPE SIZE_TYPE
-#endif
-
 #ifndef PID_TYPE
 #define PID_TYPE "int"
 #endif
@@ -582,10 +525,6 @@ see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
    these guesses; getting the wrong type of a given width will not
    affect C++ name mangling because in C++ these are distinct types
    not typedefs.  */
-
-#ifndef CHAR8_TYPE
-#define CHAR8_TYPE "unsigned char"
-#endif
 
 #ifdef UINT_LEAST16_TYPE
 #define CHAR16_TYPE UINT_LEAST16_TYPE
@@ -746,17 +685,9 @@ see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
 #ifndef POINTER_SIZE
 #define POINTER_SIZE BITS_PER_WORD
 #endif
-#ifndef POINTER_SIZE_UNITS
-#define POINTER_SIZE_UNITS ((POINTER_SIZE + BITS_PER_UNIT - 1) / BITS_PER_UNIT)
-#endif
-
 
 #ifndef PIC_OFFSET_TABLE_REGNUM
 #define PIC_OFFSET_TABLE_REGNUM INVALID_REGNUM
-#endif
-
-#ifndef PIC_OFFSET_TABLE_REG_CALL_CLOBBERED
-#define PIC_OFFSET_TABLE_REG_CALL_CLOBBERED 0
 #endif
 
 #ifndef TARGET_DLLIMPORT_DECL_ATTRIBUTES
@@ -783,11 +714,6 @@ see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
 
 #ifndef ACCUMULATE_OUTGOING_ARGS
 #define ACCUMULATE_OUTGOING_ARGS 0
-#endif
-
-/* By default, use the GNU runtime for Objective C.  */
-#ifndef NEXT_OBJC_RUNTIME
-#define NEXT_OBJC_RUNTIME 0
 #endif
 
 /* Supply a default definition for PUSH_ARGS.  */
@@ -841,6 +767,16 @@ see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
 #define TARGET_DEFAULT_PACK_STRUCT 0
 #endif
 
+/* By default, the C++ compiler will use function addresses in the
+   vtable entries.  Setting this nonzero tells the compiler to use
+   function descriptors instead.  The value of this macro says how
+   many words wide the descriptor is (normally 2).  It is assumed
+   that the address of a function descriptor may be treated as a
+   pointer to a function.  */
+#ifndef TARGET_VTABLE_USES_DESCRIPTORS
+#define TARGET_VTABLE_USES_DESCRIPTORS 0
+#endif
+
 /* By default, the vtable entries are void pointers, the so the alignment
    is the same as pointer alignment.  The value of this macro specifies
    the alignment of the vtable entry in bits.  It should be defined only
@@ -864,15 +800,6 @@ see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
 #define TARGET_USE_LOCAL_THUNK_ALIAS_P(DECL) 1
 #else
 #define TARGET_USE_LOCAL_THUNK_ALIAS_P(DECL) 0
-#endif
-#endif
-
-/* Decide whether target supports aliases.  */
-#ifndef TARGET_SUPPORTS_ALIASES
-#ifdef ASM_OUTPUT_DEF
-#define TARGET_SUPPORTS_ALIASES 1
-#else
-#define TARGET_SUPPORTS_ALIASES 0
 #endif
 #endif
 
@@ -901,7 +828,7 @@ see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
 /* If more than one debugging type is supported, you must define
    PREFERRED_DEBUGGING_TYPE to choose the default.  */
 
-#if 1 < (defined (DBX_DEBUGGING_INFO) \
+#if 1 < (defined (DBX_DEBUGGING_INFO) + defined (SDB_DEBUGGING_INFO) \
          + defined (DWARF2_DEBUGGING_INFO) + defined (XCOFF_DEBUGGING_INFO) \
          + defined (VMS_DEBUGGING_INFO))
 #ifndef PREFERRED_DEBUGGING_TYPE
@@ -913,7 +840,10 @@ see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
 #elif defined DBX_DEBUGGING_INFO
 #define PREFERRED_DEBUGGING_TYPE DBX_DEBUG
 
-#elif defined DWARF2_DEBUGGING_INFO || defined DWARF2_LINENO_DEBUGGING_INFO
+#elif defined SDB_DEBUGGING_INFO
+#define PREFERRED_DEBUGGING_TYPE SDB_DEBUG
+
+#elif defined DWARF2_DEBUGGING_INFO
 #define PREFERRED_DEBUGGING_TYPE DWARF2_DEBUG
 
 #elif defined VMS_DEBUGGING_INFO
@@ -925,6 +855,14 @@ see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
 #else
 /* No debugging format is supported by this target.  */
 #define PREFERRED_DEBUGGING_TYPE NO_DEBUG
+#endif
+
+#ifndef LARGEST_EXPONENT_IS_NORMAL
+#define LARGEST_EXPONENT_IS_NORMAL(SIZE) 0
+#endif
+
+#ifndef ROUND_TOWARDS_ZERO
+#define ROUND_TOWARDS_ZERO 0
 #endif
 
 #ifndef FLOAT_LIB_COMPARE_RETURNS_BOOL
@@ -944,13 +882,23 @@ see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
 #define FLOAT_WORDS_BIG_ENDIAN WORDS_BIG_ENDIAN
 #endif
 
-#ifndef REG_WORDS_BIG_ENDIAN
-#define REG_WORDS_BIG_ENDIAN WORDS_BIG_ENDIAN
+#ifdef TARGET_FLT_EVAL_METHOD
+#define TARGET_FLT_EVAL_METHOD_NON_DEFAULT 1
+#else
+#define TARGET_FLT_EVAL_METHOD 0
+#define TARGET_FLT_EVAL_METHOD_NON_DEFAULT 0
 #endif
-
 
 #ifndef TARGET_DEC_EVAL_METHOD
 #define TARGET_DEC_EVAL_METHOD 2
+#endif
+
+#ifndef HOT_TEXT_SECTION_NAME
+#define HOT_TEXT_SECTION_NAME ".text.hot"
+#endif
+
+#ifndef UNLIKELY_EXECUTED_TEXT_SECTION_NAME
+#define UNLIKELY_EXECUTED_TEXT_SECTION_NAME ".text.unlikely"
 #endif
 
 #ifndef HAS_LONG_COND_BRANCH
@@ -961,20 +909,100 @@ see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
 #define HAS_LONG_UNCOND_BRANCH 0
 #endif
 
+/* By default, only attempt to parallelize bitwise operations, and
+   possibly adds/subtracts using bit-twiddling.  */
+#ifndef UNITS_PER_SIMD_WORD
+#define UNITS_PER_SIMD_WORD(MODE) UNITS_PER_WORD
+#endif
+
 /* Determine whether __cxa_atexit, rather than atexit, is used to
    register C++ destructors for local statics and global objects.  */
 #ifndef DEFAULT_USE_CXA_ATEXIT
 #define DEFAULT_USE_CXA_ATEXIT 0
 #endif
 
+/* If none of these macros are defined, the port must use the new
+   technique of defining constraints in the machine description.
+   tm_p.h will define those macros that machine-independent code
+   still uses.  */
+#if  !defined CONSTRAINT_LEN			\
+  && !defined REG_CLASS_FROM_LETTER		\
+  && !defined REG_CLASS_FROM_CONSTRAINT		\
+  && !defined CONST_OK_FOR_LETTER_P		\
+  && !defined CONST_OK_FOR_CONSTRAINT_P		\
+  && !defined CONST_DOUBLE_OK_FOR_LETTER_P	\
+  && !defined CONST_DOUBLE_OK_FOR_CONSTRAINT_P  \
+  && !defined EXTRA_CONSTRAINT			\
+  && !defined EXTRA_CONSTRAINT_STR		\
+  && !defined EXTRA_MEMORY_CONSTRAINT		\
+  && !defined EXTRA_ADDRESS_CONSTRAINT
+
+#define USE_MD_CONSTRAINTS
+
 #if GCC_VERSION >= 3000 && defined IN_GCC
 /* These old constraint macros shouldn't appear anywhere in a
    configuration using MD constraint definitions.  */
+#pragma GCC poison REG_CLASS_FROM_LETTER CONST_OK_FOR_LETTER_P \
+                   CONST_DOUBLE_OK_FOR_LETTER_P EXTRA_CONSTRAINT
 #endif
 
-/* Determin whether the target runtime library is Bionic */
-#ifndef TARGET_HAS_BIONIC
-#define TARGET_HAS_BIONIC 0
+#else /* old constraint mechanism in use */
+
+/* Determine whether extra constraint letter should be handled
+   via address reload (like 'o').  */
+#ifndef EXTRA_MEMORY_CONSTRAINT
+#define EXTRA_MEMORY_CONSTRAINT(C,STR) 0
+#endif
+
+/* Determine whether extra constraint letter should be handled
+   as an address (like 'p').  */
+#ifndef EXTRA_ADDRESS_CONSTRAINT
+#define EXTRA_ADDRESS_CONSTRAINT(C,STR) 0
+#endif
+
+/* When a port defines CONSTRAINT_LEN, it should use DEFAULT_CONSTRAINT_LEN
+   for all the characters that it does not want to change, so things like the
+  'length' of a digit in a matching constraint is an implementation detail,
+   and not part of the interface.  */
+#define DEFAULT_CONSTRAINT_LEN(C,STR) 1
+
+#ifndef CONSTRAINT_LEN
+#define CONSTRAINT_LEN(C,STR) DEFAULT_CONSTRAINT_LEN (C, STR)
+#endif
+
+#if defined (CONST_OK_FOR_LETTER_P) && ! defined (CONST_OK_FOR_CONSTRAINT_P)
+#define CONST_OK_FOR_CONSTRAINT_P(VAL,C,STR) CONST_OK_FOR_LETTER_P (VAL, C)
+#endif
+
+#if defined (CONST_DOUBLE_OK_FOR_LETTER_P) && ! defined (CONST_DOUBLE_OK_FOR_CONSTRAINT_P)
+#define CONST_DOUBLE_OK_FOR_CONSTRAINT_P(OP,C,STR) \
+  CONST_DOUBLE_OK_FOR_LETTER_P (OP, C)
+#endif
+
+#ifndef REG_CLASS_FROM_CONSTRAINT
+#define REG_CLASS_FROM_CONSTRAINT(C,STR) REG_CLASS_FROM_LETTER (C)
+#endif
+
+#if defined (EXTRA_CONSTRAINT) && ! defined (EXTRA_CONSTRAINT_STR)
+#define EXTRA_CONSTRAINT_STR(OP, C,STR) EXTRA_CONSTRAINT (OP, C)
+#endif
+
+#endif /* old constraint mechanism in use */
+
+#ifndef REGISTER_MOVE_COST
+#define REGISTER_MOVE_COST(m, x, y) 2
+#endif
+
+/* Determine whether the entire c99 runtime
+   is present in the runtime library.  */
+#ifndef TARGET_C99_FUNCTIONS
+#define TARGET_C99_FUNCTIONS 0
+#endif
+
+/* Determine whether the target runtime library has
+   a sincos implementation following the GNU extension.  */
+#ifndef TARGET_HAS_SINCOS
+#define TARGET_HAS_SINCOS 0
 #endif
 
 /* Indicate that CLZ and CTZ are undefined at zero.  */
@@ -1001,42 +1029,12 @@ see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
 #define MOVE_MAX_PIECES   MOVE_MAX
 #endif
 
-/* STORE_MAX_PIECES is the number of bytes at a time that we can
-   store efficiently.  Due to internal GCC limitations, this is
-   MOVE_MAX_PIECES limited by the number of bytes GCC can represent
-   for an immediate constant.  */
-
-#ifndef STORE_MAX_PIECES
-#define STORE_MAX_PIECES  MIN (MOVE_MAX_PIECES, 2 * sizeof (HOST_WIDE_INT))
-#endif
-
-/* Likewise for block comparisons.  */
-#ifndef COMPARE_MAX_PIECES
-#define COMPARE_MAX_PIECES  MOVE_MAX_PIECES
-#endif
-
-#ifndef MAX_MOVE_MAX
-#define MAX_MOVE_MAX MOVE_MAX
-#endif
-
-#ifndef MIN_UNITS_PER_WORD
-#define MIN_UNITS_PER_WORD UNITS_PER_WORD
-#endif
-
-#ifndef MAX_BITS_PER_WORD
-#define MAX_BITS_PER_WORD BITS_PER_WORD
-#endif
-
 #ifndef STACK_POINTER_OFFSET
 #define STACK_POINTER_OFFSET    0
 #endif
 
 #ifndef LOCAL_REGNO
 #define LOCAL_REGNO(REGNO)  0
-#endif
-
-#ifndef HONOR_REG_ALLOC_ORDER
-#define HONOR_REG_ALLOC_ORDER 0
 #endif
 
 /* EXIT_IGNORE_STACK should be nonzero if, when returning from a function,
@@ -1051,18 +1049,9 @@ see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
 #define CASE_VECTOR_PC_RELATIVE 0
 #endif
 
-/* Force minimum alignment to be able to use the least significant bits
-   for distinguishing descriptor addresses from code addresses.  */
-#define FUNCTION_ALIGNMENT(ALIGN)					\
-  (lang_hooks.custom_function_descriptors				\
-   && targetm.calls.custom_function_descriptors > 0			\
-   ? MAX ((ALIGN),						\
-	  2 * targetm.calls.custom_function_descriptors * BITS_PER_UNIT)\
-   : (ALIGN))
-
 /* Assume that trampolines need function alignment.  */
 #ifndef TRAMPOLINE_ALIGNMENT
-#define TRAMPOLINE_ALIGNMENT FUNCTION_ALIGNMENT (FUNCTION_BOUNDARY)
+#define TRAMPOLINE_ALIGNMENT FUNCTION_BOUNDARY
 #endif
 
 /* Register mappings for target machines without register windows.  */
@@ -1097,10 +1086,6 @@ see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
 
 #ifndef FRAME_GROWS_DOWNWARD
 #define FRAME_GROWS_DOWNWARD 0
-#endif
-
-#ifndef RETURN_ADDR_IN_PREVIOUS_FRAME
-#define RETURN_ADDR_IN_PREVIOUS_FRAME 0
 #endif
 
 /* On most machines, the CFA coincides with the first incoming parm.  */
@@ -1167,296 +1152,17 @@ see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
 #define ATTRIBUTE_ALIGNED_VALUE BIGGEST_ALIGNMENT
 #endif
 
+/* Many ports have no mode-dependent addresses (except possibly autoincrement
+   and autodecrement addresses, which are handled by target-independent code
+   in recog.c).  */
+#ifndef GO_IF_MODE_DEPENDENT_ADDRESS
+#define GO_IF_MODE_DEPENDENT_ADDRESS(X, WIN)
+#endif
+
 /* For most ports anything that evaluates to a constant symbolic
    or integer value is acceptable as a constant address.  */
 #ifndef CONSTANT_ADDRESS_P
 #define CONSTANT_ADDRESS_P(X)   (CONSTANT_P (X) && GET_CODE (X) != CONST_DOUBLE)
-#endif
-
-#ifndef MAX_FIXED_MODE_SIZE
-#define MAX_FIXED_MODE_SIZE GET_MODE_BITSIZE (DImode)
-#endif
-
-/* Nonzero if structures and unions should be returned in memory.
-
-   This should only be defined if compatibility with another compiler or
-   with an ABI is needed, because it results in slower code.  */
-
-#ifndef DEFAULT_PCC_STRUCT_RETURN
-#define DEFAULT_PCC_STRUCT_RETURN 1
-#endif
-
-#ifndef PCC_BITFIELD_TYPE_MATTERS
-#define PCC_BITFIELD_TYPE_MATTERS false
-#endif
-
-#ifndef INSN_SETS_ARE_DELAYED
-#define INSN_SETS_ARE_DELAYED(INSN) false
-#endif
-
-#ifndef INSN_REFERENCES_ARE_DELAYED
-#define INSN_REFERENCES_ARE_DELAYED(INSN) false
-#endif
-
-#ifndef NO_FUNCTION_CSE
-#define NO_FUNCTION_CSE false
-#endif
-
-#ifndef HARD_REGNO_RENAME_OK
-#define HARD_REGNO_RENAME_OK(FROM, TO) true
-#endif
-
-#ifndef EPILOGUE_USES
-#define EPILOGUE_USES(REG) false
-#endif
-
-#ifndef ARGS_GROW_DOWNWARD
-#define ARGS_GROW_DOWNWARD 0
-#endif
-
-#ifndef STACK_GROWS_DOWNWARD
-#define STACK_GROWS_DOWNWARD 0
-#endif
-
-#ifndef STACK_PUSH_CODE
-#if STACK_GROWS_DOWNWARD
-#define STACK_PUSH_CODE PRE_DEC
-#else
-#define STACK_PUSH_CODE PRE_INC
-#endif
-#endif
-
-/* Default value for flag_pie when flag_pie is initialized to -1:
-   --enable-default-pie: Default flag_pie to -fPIE.
-   --disable-default-pie: Default flag_pie to 0.
- */
-#ifdef ENABLE_DEFAULT_PIE
-# ifndef DEFAULT_FLAG_PIE
-#  define DEFAULT_FLAG_PIE 2
-# endif
-#else
-# define DEFAULT_FLAG_PIE 0
-#endif
-
-#ifndef SWITCHABLE_TARGET
-#define SWITCHABLE_TARGET 0
-#endif
-
-/* If the target supports integers that are wider than two
-   HOST_WIDE_INTs on the host compiler, then the target should define
-   TARGET_SUPPORTS_WIDE_INT and make the appropriate fixups.
-   Otherwise the compiler really is not robust.  */
-#ifndef TARGET_SUPPORTS_WIDE_INT
-#define TARGET_SUPPORTS_WIDE_INT 0
-#endif
-
-#ifndef SHORT_IMMEDIATES_SIGN_EXTEND
-#define SHORT_IMMEDIATES_SIGN_EXTEND 0
-#endif
-
-#ifndef WORD_REGISTER_OPERATIONS
-#define WORD_REGISTER_OPERATIONS 0
-#endif
-
-#ifndef LOAD_EXTEND_OP
-#define LOAD_EXTEND_OP(M) UNKNOWN
-#endif
-
-#ifndef INITIAL_FRAME_ADDRESS_RTX
-#define INITIAL_FRAME_ADDRESS_RTX NULL
-#endif
-
-#ifndef SETUP_FRAME_ADDRESSES
-#define SETUP_FRAME_ADDRESSES() do { } while (0)
-#endif
-
-#ifndef DYNAMIC_CHAIN_ADDRESS
-#define DYNAMIC_CHAIN_ADDRESS(x) (x)
-#endif
-
-#ifndef FRAME_ADDR_RTX
-#define FRAME_ADDR_RTX(x) (x)
-#endif
-
-#ifndef REVERSE_CONDITION
-#define REVERSE_CONDITION(code, mode) reverse_condition (code)
-#endif
-
-#ifndef TARGET_PECOFF
-#define TARGET_PECOFF 0
-#endif
-
-#ifndef TARGET_COFF
-#define TARGET_COFF 0
-#endif
-
-#ifndef EH_RETURN_HANDLER_RTX
-#define EH_RETURN_HANDLER_RTX NULL
-#endif
-
-#ifdef GCC_INSN_FLAGS_H
-/* Dependent default target macro definitions
-
-   This section of defaults.h defines target macros that depend on generated
-   headers.  This is a bit awkward:  We want to put all default definitions
-   for target macros in defaults.h, but some of the defaults depend on the
-   HAVE_* flags defines of insn-flags.h.  But insn-flags.h is not always
-   included by files that do include defaults.h.
-
-   Fortunately, the default macro definitions that depend on the HAVE_*
-   macros are also the ones that will only be used inside GCC itself, i.e.
-   not in the gen* programs or in target objects like libgcc.
-
-   Obviously, it would be best to keep this section of defaults.h as small
-   as possible, by converting the macros defined below to target hooks or
-   functions.
-*/
-
-/* The default branch cost is 1.  */
-#ifndef BRANCH_COST
-#define BRANCH_COST(speed_p, predictable_p) 1
-#endif
-
-/* If a memory-to-memory move would take MOVE_RATIO or more simple
-   move-instruction sequences, we will do a movmem or libcall instead.  */
-
-#ifndef MOVE_RATIO
-#if defined (HAVE_movmemqi) || defined (HAVE_movmemhi) || defined (HAVE_movmemsi) || defined (HAVE_movmemdi) || defined (HAVE_movmemti)
-#define MOVE_RATIO(speed) 2
-#else
-/* If we are optimizing for space (-Os), cut down the default move ratio.  */
-#define MOVE_RATIO(speed) ((speed) ? 15 : 3)
-#endif
-#endif
-
-/* If a clear memory operation would take CLEAR_RATIO or more simple
-   move-instruction sequences, we will do a setmem or libcall instead.  */
-
-#ifndef CLEAR_RATIO
-#if defined (HAVE_setmemqi) || defined (HAVE_setmemhi) || defined (HAVE_setmemsi) || defined (HAVE_setmemdi) || defined (HAVE_setmemti)
-#define CLEAR_RATIO(speed) 2
-#else
-/* If we are optimizing for space, cut down the default clear ratio.  */
-#define CLEAR_RATIO(speed) ((speed) ? 15 :3)
-#endif
-#endif
-
-/* If a memory set (to value other than zero) operation would take
-   SET_RATIO or more simple move-instruction sequences, we will do a movmem
-   or libcall instead.  */
-#ifndef SET_RATIO
-#define SET_RATIO(speed) MOVE_RATIO (speed)
-#endif
-
-/* Supply a default definition of STACK_SAVEAREA_MODE for emit_stack_save.
-   Normally move_insn, so Pmode stack pointer.  */
-
-#ifndef STACK_SAVEAREA_MODE
-#define STACK_SAVEAREA_MODE(LEVEL) Pmode
-#endif
-
-/* Supply a default definition of STACK_SIZE_MODE for
-   allocate_dynamic_stack_space.  Normally PLUS/MINUS, so word_mode.  */
-
-#ifndef STACK_SIZE_MODE
-#define STACK_SIZE_MODE word_mode
-#endif
-
-/* Default value for flag_stack_protect when flag_stack_protect is initialized to -1:
-   --enable-default-ssp: Default flag_stack_protect to -fstack-protector-strong.
-   --disable-default-ssp: Default flag_stack_protect to 0.
- */
-#ifdef ENABLE_DEFAULT_SSP
-# ifndef DEFAULT_FLAG_SSP
-#  define DEFAULT_FLAG_SSP 3
-# endif
-#else
-# define DEFAULT_FLAG_SSP 0
-#endif
-
-/* Provide default values for the macros controlling stack checking.  */
-
-/* The default is neither full builtin stack checking...  */
-#ifndef STACK_CHECK_BUILTIN
-#define STACK_CHECK_BUILTIN 0
-#endif
-
-/* ...nor static builtin stack checking.  */
-#ifndef STACK_CHECK_STATIC_BUILTIN
-#define STACK_CHECK_STATIC_BUILTIN 0
-#endif
-
-/* The default interval is one page (4096 bytes).  */
-#ifndef STACK_CHECK_PROBE_INTERVAL_EXP
-#define STACK_CHECK_PROBE_INTERVAL_EXP 12
-#endif
-
-/* The default is not to move the stack pointer.  */
-#ifndef STACK_CHECK_MOVING_SP
-#define STACK_CHECK_MOVING_SP 0
-#endif
-
-/* This is a kludge to try to capture the discrepancy between the old
-   mechanism (generic stack checking) and the new mechanism (static
-   builtin stack checking).  STACK_CHECK_PROTECT needs to be bumped
-   for the latter because part of the protection area is effectively
-   included in STACK_CHECK_MAX_FRAME_SIZE for the former.  */
-#ifdef STACK_CHECK_PROTECT
-#define STACK_OLD_CHECK_PROTECT STACK_CHECK_PROTECT
-#else
-#define STACK_OLD_CHECK_PROTECT						\
- (!global_options.x_flag_exceptions					\
-  ? 75 * UNITS_PER_WORD							\
-  : targetm_common.except_unwind_info (&global_options) == UI_SJLJ	\
-    ? 4 * 1024								\
-    : 8 * 1024)
-#endif
-
-/* Minimum amount of stack required to recover from an anticipated stack
-   overflow detection.  The default value conveys an estimate of the amount
-   of stack required to propagate an exception.  */
-#ifndef STACK_CHECK_PROTECT
-#define STACK_CHECK_PROTECT						\
- (!global_options.x_flag_exceptions					\
-  ? 4 * 1024								\
-  : targetm_common.except_unwind_info (&global_options) == UI_SJLJ	\
-    ? 8 * 1024								\
-    : 12 * 1024)
-#endif
-
-/* Make the maximum frame size be the largest we can and still only need
-   one probe per function.  */
-#ifndef STACK_CHECK_MAX_FRAME_SIZE
-#define STACK_CHECK_MAX_FRAME_SIZE \
-  ((1 << STACK_CHECK_PROBE_INTERVAL_EXP) - UNITS_PER_WORD)
-#endif
-
-/* This is arbitrary, but should be large enough everywhere.  */
-#ifndef STACK_CHECK_FIXED_FRAME_SIZE
-#define STACK_CHECK_FIXED_FRAME_SIZE (4 * UNITS_PER_WORD)
-#endif
-
-/* Provide a reasonable default for the maximum size of an object to
-   allocate in the fixed frame.  We may need to be able to make this
-   controllable by the user at some point.  */
-#ifndef STACK_CHECK_MAX_VAR_SIZE
-#define STACK_CHECK_MAX_VAR_SIZE (STACK_CHECK_MAX_FRAME_SIZE / 100)
-#endif
-
-/* By default, the C++ compiler will use function addresses in the
-   vtable entries.  Setting this nonzero tells the compiler to use
-   function descriptors instead.  The value of this macro says how
-   many words wide the descriptor is (normally 2).  It is assumed
-   that the address of a function descriptor may be treated as a
-   pointer to a function.  */
-#ifndef TARGET_VTABLE_USES_DESCRIPTORS
-#define TARGET_VTABLE_USES_DESCRIPTORS 0
-#endif
-
-#endif /* GCC_INSN_FLAGS_H  */
-
-#ifndef DWARF_GNAT_ENCODINGS_DEFAULT
-#define DWARF_GNAT_ENCODINGS_DEFAULT DWARF_GNAT_ENCODINGS_GDB
 #endif
 
 #endif  /* ! GCC_DEFAULTS_H */

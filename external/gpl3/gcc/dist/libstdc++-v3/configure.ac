@@ -1,7 +1,8 @@
 # Process this file with autoreconf to produce a configure script.
 
+AC_PREREQ(2.64)
 AC_INIT(package-unused, version-unused,, libstdc++)
-AC_CONFIG_SRCDIR(src/shared/hashtable-aux.cc)
+AC_CONFIG_SRCDIR(src/ios.cc)
 AC_CONFIG_HEADER(config.h)
 
 # This works around the fact that libtool configuration may change LD
@@ -9,6 +10,10 @@ AC_CONFIG_HEADER(config.h)
 # keeping the changes in LD private, export them just because LD is
 # exported.  Only used at the end of this file.
 ### am handles this now?  ORIGINAL_LD_FOR_MULTILIBS=$LD
+
+# For libtool versioning info, format is CURRENT:REVISION:AGE
+libtool_VERSION=6:14:0
+AC_SUBST(libtool_VERSION)
 
 # Find the rest of the source tree framework.
 AM_ENABLE_MULTILIB(, ..)
@@ -37,9 +42,6 @@ if test "$build" != "$host"; then
   # We are being configured with some form of cross compiler.
   GLIBCXX_IS_NATIVE=false
   case "$host","$target" in
-      *-*-netbsd*,*-*-netbsd*)
-        GLIBCXX_IS_NATIVE=true
-        ;;
     # Darwin crosses can use the host system's libraries and headers,
     # because of the fat library support.  Of course, it must be the
     # same version of Darwin on both sides.  Allow the user to
@@ -70,10 +72,9 @@ fi
 #  foreign:  we don't follow the normal rules for GNU packages (no COPYING
 #            file in the top srcdir, etc, etc), so stop complaining.
 #  no-dependencies:  turns off auto dependency generation (just for now)
-#  no-dist:  we don't want 'dist' and related rules.
 #  -Wall:  turns on all automake warnings...
 #  -Wno-portability:  ...except this one, since GNU make is now required.
-AM_INIT_AUTOMAKE([1.9.3 no-define foreign no-dependencies no-dist -Wall -Wno-portability -Wno-override])
+AM_INIT_AUTOMAKE([1.9.3 no-define foreign no-dependencies -Wall -Wno-portability -Wno-override])
 AH_TEMPLATE(PACKAGE, [Name of package])
 AH_TEMPLATE(VERSION, [Version number of package])
 
@@ -86,58 +87,16 @@ AC_PROG_CC
 AC_PROG_CXX
 CXXFLAGS="$save_CXXFLAGS"
 
-AC_SYS_LARGEFILE
-
 # Runs configure.host, and assorted other critical bits.  Sets
 # up critical shell variables.
 GLIBCXX_CONFIGURE
 
-# Libtool setup.
 if test "x${with_newlib}" != "xyes"; then
   AC_LIBTOOL_DLOPEN
 fi
 AM_PROG_LIBTOOL
-ACX_LT_HOST_FLAGS
 AC_SUBST(enable_shared)
 AC_SUBST(enable_static)
-
-if test "$enable_vtable_verify" = yes; then
-  predep_objects_CXX="${predep_objects_CXX} ${glibcxx_builddir}/../libgcc/vtv_start.o"
-  postdep_objects_CXX="${postdep_objects_CXX} ${glibcxx_builddir}/../libgcc/vtv_end.o"
-fi
-
-
-# libtool variables for C++ shared and position-independent compiles.
-#
-# Use glibcxx_lt_pic_flag to designate the automake variable
-# used to encapsulate the default libtool approach to creating objects
-# with position-independent code. Default: -prefer-pic.
-#
-# Use glibcxx_compiler_shared_flag to designate a compile-time flags for
-# creating shared objects. Default: -D_GLIBCXX_SHARED.
-#
-# Use glibcxx_compiler_pic_flag to designate a compile-time flags for
-# creating position-independent objects. This varies with the target
-# hardware and operating system, but is often: -DPIC -fPIC.
-if test "$enable_shared" = yes; then
-  glibcxx_lt_pic_flag="-prefer-pic"
-  glibcxx_compiler_pic_flag="$lt_prog_compiler_pic_CXX"
-  glibcxx_compiler_shared_flag="-D_GLIBCXX_SHARED"
-
-else
-  glibcxx_lt_pic_flag=
-  glibcxx_compiler_pic_flag=
-  glibcxx_compiler_shared_flag=
-fi
-AC_SUBST(glibcxx_lt_pic_flag)
-AC_SUBST(glibcxx_compiler_pic_flag)
-AC_SUBST(glibcxx_compiler_shared_flag)
-
-# Override the libtool's pic_flag and pic_mode.
-# Do this step after AM_PROG_LIBTOOL, but before AC_OUTPUT.
-# NB: this impacts --with-pic and --without-pic.
-lt_prog_compiler_pic_CXX="$glibcxx_compiler_pic_flag $glibcxx_compiler_shared_flag"
-pic_mode='default'
 
 # Eliminate -lstdc++ addition to postdeps for cross compiles.
 postdeps_CXX=`echo " $postdeps_CXX " | sed 's, -lstdc++ ,,g'`
@@ -147,19 +106,12 @@ postdeps_CXX=`echo " $postdeps_CXX " | sed 's, -lstdc++ ,,g'`
 ## than just ignoring the results.  Faster /and/ more correct, win win.
 GLIBCXX_ENABLE_HOSTED
 
-# Enable descriptive messages to standard output on termination.
-GLIBCXX_ENABLE_VERBOSE
-
 # Enable compiler support that doesn't require linking.
+GLIBCXX_ENABLE_SJLJ_EXCEPTIONS
 GLIBCXX_ENABLE_PCH($is_hosted)
 GLIBCXX_ENABLE_THREADS
 GLIBCXX_ENABLE_ATOMIC_BUILTINS
-GLIBCXX_ENABLE_LOCK_POLICY
 GLIBCXX_ENABLE_DECIMAL_FLOAT
-GLIBCXX_ENABLE_INT128_FLOAT128
-if test "$enable_float128" = yes; then
-  port_specific_symbol_files="$port_specific_symbol_files \$(top_srcdir)/config/abi/pre/float128.ver"
-fi
 
 # Checks for compiler support that doesn't require linking.
 GLIBCXX_CHECK_COMPILER_FEATURES
@@ -173,21 +125,14 @@ GLIBCXX_ENABLE_LONG_LONG([yes])
 GLIBCXX_ENABLE_WCHAR_T([yes])
 GLIBCXX_ENABLE_C99([yes])
 GLIBCXX_ENABLE_CONCEPT_CHECKS([no])
-GLIBCXX_ENABLE_DEBUG_FLAGS(["-gdwarf-4 -g3 -O0 -D_GLIBCXX_ASSERTIONS"])
+GLIBCXX_ENABLE_DEBUG_FLAGS(["-g3 -O0"])
 GLIBCXX_ENABLE_DEBUG([no])
 GLIBCXX_ENABLE_PARALLEL([yes])
 GLIBCXX_ENABLE_CXX_FLAGS
 GLIBCXX_ENABLE_FULLY_DYNAMIC_STRING([no])
-GLIBCXX_ENABLE_EXTERN_TEMPLATE([yes])
-GLIBCXX_ENABLE_PYTHON
-GLIBCXX_ENABLE_WERROR([no])
-GLIBCXX_ENABLE_VTABLE_VERIFY([no])
 
 # Checks for operating systems support that doesn't require linking.
-GLIBCXX_CHECK_STDIO_PROTO
-GLIBCXX_CHECK_MATH11_PROTO
 GLIBCXX_CHECK_SYSTEM_ERROR
-GLIBCXX_CHECK_UCHAR_H
 
 # For the streamoff typedef.
 GLIBCXX_CHECK_INT64_T
@@ -204,51 +149,30 @@ GLIBCXX_CHECK_S_ISREG_OR_S_IFREG
 AC_CHECK_HEADERS(sys/uio.h)
 GLIBCXX_CHECK_WRITEV
 
-# Check for fenv.h and complex.h before GLIBCXX_CHECK_C99_TR1
-# so that the check is done with the C compiler (not C++).
-# Checking with C++ can break a canadian cross build if either
-# file does not exist in C but does in C++.
-AC_CHECK_HEADERS(fenv.h complex.h)
-
 # For C99 support to TR1.
 GLIBCXX_CHECK_C99_TR1
 
-# For the EOF, SEEK_CUR, and SEEK_END integer constants.
-GLIBCXX_COMPUTE_STDIO_INTEGER_CONSTANTS
+# For common values of EOF, SEEK_CUR, SEEK_END.
+GLIBCXX_CHECK_STDIO_MACROS
 
 # For gettimeofday support.
 GLIBCXX_CHECK_GETTIMEOFDAY
 
 # For clock_gettime, nanosleep and sched_yield support.
-GLIBCXX_ENABLE_LIBSTDCXX_TIME
+# NB: The default is [no], because otherwise it requires linking.
+GLIBCXX_ENABLE_LIBSTDCXX_TIME([no])
 
-# Check for tmpnam which is obsolescent in POSIX.1-2008
-GLIBCXX_CHECK_TMPNAM
+# For gthread support
+GLIBCXX_CHECK_GTHREADS
 
 AC_LC_MESSAGES
-
-# For hardware_concurrency
-AC_CHECK_HEADERS(sys/sysinfo.h)
-GLIBCXX_CHECK_GET_NPROCS
-AC_CHECK_HEADERS(unistd.h)
-GLIBCXX_CHECK_SC_NPROCESSORS_ONLN
-GLIBCXX_CHECK_SC_NPROC_ONLN
-GLIBCXX_CHECK_PTHREADS_NUM_PROCESSORS_NP
-GLIBCXX_CHECK_SYSCTL_HW_NCPU
-GLIBCXX_CHECK_SDT_H
 
 # Check for available headers.
 AC_CHECK_HEADERS([endian.h execinfo.h float.h fp.h ieeefp.h inttypes.h \
 locale.h machine/endian.h machine/param.h nan.h stdint.h stdlib.h string.h \
 strings.h sys/ipc.h sys/isa_defs.h sys/machine.h sys/param.h \
 sys/resource.h sys/sem.h sys/stat.h sys/time.h sys/types.h unistd.h \
-wchar.h wctype.h linux/types.h])
-
-AC_CHECK_HEADERS([linux/random.h], [], [],
-[[#ifdef HAVE_LINUX_TYPES_H
-# include <linux/types.h>
-#endif
-]])
+wchar.h wctype.h])
 
 # Only do link tests if native. Else, hardcode.
 if $GLIBCXX_IS_NATIVE; then
@@ -260,21 +184,11 @@ if $GLIBCXX_IS_NATIVE; then
   GLIBCXX_CHECK_MATH_SUPPORT
   GLIBCXX_CHECK_STDLIB_SUPPORT
 
-  # For /dev/random and /dev/urandom for std::random_device.
-  GLIBCXX_CHECK_DEV_RANDOM
+  # For /dev/random and /dev/urandom for TR1.
+  GLIBCXX_CHECK_RANDOM_TR1
 
   # For TLS support.
   GCC_CHECK_TLS
-
-  AC_CHECK_FUNCS(__cxa_thread_atexit_impl __cxa_thread_atexit)
-  AC_CHECK_FUNCS(aligned_alloc posix_memalign memalign _aligned_malloc)
-  AC_CHECK_FUNCS(_wfopen)
-
-  # C11 functions for C++17 library
-  AC_CHECK_FUNCS(timespec_get)
-
-  # For Networking TS.
-  AC_CHECK_FUNCS(sockatmark)
 
   # For iconv support.
   AM_ICONV
@@ -316,7 +230,7 @@ else
     AC_DEFINE(HAVE_HYPOT)
 
     # GLIBCXX_CHECK_STDLIB_SUPPORT
-    AC_DEFINE(HAVE_STRTOF)
+    AC_DEFINE(HAVE_STRTOF)        
 
     AC_DEFINE(HAVE_ACOSF)
     AC_DEFINE(HAVE_ASINF)
@@ -342,7 +256,6 @@ else
     AC_DEFINE(HAVE_TANHF)
 
     AC_DEFINE(HAVE_ICONV)
-    AC_DEFINE(HAVE_MEMALIGN)
   else
     GLIBCXX_CROSSCONFIG
   fi
@@ -380,22 +293,19 @@ fi
 # Check for _Unwind_GetIPInfo.
 GCC_CHECK_UNWIND_GETIPINFO
 
+
 GCC_LINUX_FUTEX([AC_DEFINE(HAVE_LINUX_FUTEX, 1, [Define if futex syscall is available.])])
 
 GCC_HEADER_STDINT(include/gstdint.h)
 
+# This depends on GLIBCXX CHECK_LINKER_FEATURES, but without it assumes no.
 GLIBCXX_ENABLE_SYMVERS([yes])
-AC_SUBST(libtool_VERSION)
-
-GLIBCXX_ENABLE_LIBSTDCXX_VISIBILITY([yes])
-
-GLIBCXX_ENABLE_LIBSTDCXX_DUAL_ABI([yes])
-GLIBCXX_DEFAULT_ABI
+GLIBCXX_ENABLE_VISIBILITY([yes])
 
 ac_ldbl_compat=no
-LONG_DOUBLE_COMPAT_FLAGS="-mlong-double-64"
 case "$target" in
   powerpc*-*-linux* | \
+  powerpc*-*-gnu* | \
   sparc*-*-linux* | \
   s390*-*-linux* | \
   alpha*-*-linux*)
@@ -408,93 +318,12 @@ case "$target" in
     AC_DEFINE([_GLIBCXX_LONG_DOUBLE_COMPAT],1,
 	      [Define if compatibility should be provided for -mlong-double-64.])
     port_specific_symbol_files="\$(top_srcdir)/config/os/gnu-linux/ldbl-extra.ver"
-    case "$target" in
-      powerpc*-*-linux*)
-	LONG_DOUBLE_COMPAT_FLAGS="$LONG_DOUBLE_COMPAT_FLAGS -mno-gnu-attribute" ;;
-    esac
   fi
 esac
-AC_SUBST(LONG_DOUBLE_COMPAT_FLAGS)
 GLIBCXX_CONDITIONAL(GLIBCXX_LDBL_COMPAT, test $ac_ldbl_compat = yes)
-
-# Check if assembler supports disabling hardware capability support.
-GCC_CHECK_ASSEMBLER_HWCAP
-
-# Check if assembler supports rdrand opcode.
-GLIBCXX_CHECK_X86_RDRAND
 
 # This depends on GLIBCXX_ENABLE_SYMVERS and GLIBCXX_IS_NATIVE.
 GLIBCXX_CONFIGURE_TESTSUITE
-
-# For gthread support.  Depends on GLIBCXX_ENABLE_SYMVERS.
-GLIBCXX_CHECK_GTHREADS
-
-# For Filesystem TS.
-AC_CHECK_HEADERS([fcntl.h dirent.h sys/statvfs.h utime.h])
-GLIBCXX_ENABLE_FILESYSTEM_TS
-GLIBCXX_CHECK_FILESYSTEM_DEPS
-
-# For Networking TS.
-AC_CHECK_HEADERS([fcntl.h sys/ioctl.h sys/socket.h sys/uio.h poll.h netdb.h arpa/inet.h netinet/in.h netinet/tcp.h])
-
-# For Transactional Memory TS
-GLIBCXX_CHECK_SIZE_T_MANGLING
-
-# Check which release added std::exception_ptr for the target
-GLIBCXX_CHECK_EXCEPTION_PTR_SYMVER
-
-# Define documentation rules conditionally.
-
-# See if makeinfo has been installed and is modern enough
-# that we can use it.
-ACX_CHECK_PROG_VER([MAKEINFO], [makeinfo], [--version],
-		   [GNU texinfo.* \([0-9][0-9.]*\)],
-		   [4.[4-9]*|4.[1-9][0-9]*|[5-9]*|[1-9][0-9]*])
-AM_CONDITIONAL(BUILD_INFO, test $gcc_cv_prog_makeinfo_modern = "yes")
-
-# Check for doxygen
-AC_CHECK_PROG([DOXYGEN], doxygen, yes, no)
-AC_CHECK_PROG([DOT], dot, yes, no)
-
-# Check for docbook
-AC_CHECK_PROG([XMLCATALOG], xmlcatalog, yes, no)
-AC_CHECK_PROG([XSLTPROC], xsltproc, yes, no)
-AC_CHECK_PROG([XMLLINT], xmllint, yes, no)
-GLIBCXX_CONFIGURE_DOCBOOK
-
-# Check for xml/html dependencies.
-AM_CONDITIONAL(BUILD_XML,
-	       test $ac_cv_prog_DOXYGEN = "yes" &&
-	       test $ac_cv_prog_DOT = "yes" &&
-	       test $ac_cv_prog_XSLTPROC = "yes" &&
-	       test $ac_cv_prog_XMLLINT = "yes" &&
-	       test $glibcxx_stylesheets = "yes")
-
-AM_CONDITIONAL(BUILD_HTML,
-	       test $ac_cv_prog_DOXYGEN = "yes" &&
-	       test $ac_cv_prog_DOT = "yes" &&
-	       test $ac_cv_prog_XSLTPROC = "yes" &&
-	       test $ac_cv_prog_XMLLINT = "yes" &&
-	       test $glibcxx_stylesheets = "yes")
-
-# Check for man dependencies.
-AM_CONDITIONAL(BUILD_MAN,
-	       test $ac_cv_prog_DOXYGEN = "yes" &&
-	       test $ac_cv_prog_DOT = "yes")
-
-# Check for pdf dependencies.
-AC_CHECK_PROG([DBLATEX], dblatex, yes, no)
-AC_CHECK_PROG([PDFLATEX], pdflatex, yes, no)
-AM_CONDITIONAL(BUILD_PDF,
-	       test $ac_cv_prog_DBLATEX = "yes" &&
-	       test $ac_cv_prog_PDFLATEX = "yes")
-
-case "$build" in
- *-*-darwin* ) glibcxx_include_dir_notparallel=yes ;;
- * ) glibcxx_include_dir_notparallel=no ;;
-esac
-AM_CONDITIONAL(INCLUDE_DIR_NOTPARALLEL,
-               test $glibcxx_include_dir_notparallel = "yes")
 
 # Propagate the target-specific source directories through the build chain.
 ATOMICITY_SRCDIR=config/${atomicity_dir}
@@ -504,8 +333,6 @@ CPU_DEFINES_SRCDIR=config/${cpu_defines_dir}
 OS_INC_SRCDIR=config/${os_include_dir}
 ERROR_CONSTANTS_SRCDIR=config/${error_constants_dir}
 ABI_TWEAKS_SRCDIR=config/${abi_tweaks_dir}
-CPU_OPT_EXT_RANDOM=config/${cpu_opt_ext_random}
-CPU_OPT_BITS_RANDOM=config/${cpu_opt_bits_random}
 AC_SUBST(ATOMICITY_SRCDIR)
 AC_SUBST(ATOMIC_WORD_SRCDIR)
 AC_SUBST(ATOMIC_FLAGS)
@@ -513,22 +340,13 @@ AC_SUBST(CPU_DEFINES_SRCDIR)
 AC_SUBST(ABI_TWEAKS_SRCDIR)
 AC_SUBST(OS_INC_SRCDIR)
 AC_SUBST(ERROR_CONSTANTS_SRCDIR)
-AC_SUBST(CPU_OPT_EXT_RANDOM)
-AC_SUBST(CPU_OPT_BITS_RANDOM)
 
-
-# Add CET specific flags if Intel CET is enabled.
-GCC_CET_FLAGS(CET_FLAGS)
-EXTRA_CXX_FLAGS="$EXTRA_CXX_FLAGS $CET_FLAGS"
-EXTRA_CFLAGS="$EXTRA_CFLAGS $CET_FLAGS"
-AC_SUBST(EXTRA_CFLAGS)
-AC_SUBST(EXTRA_CXX_FLAGS)
 
 # Determine cross-compile flags and AM_CONDITIONALs.
 #AC_SUBST(GLIBCXX_IS_NATIVE)
 #AM_CONDITIONAL(CANADIAN, test $CANADIAN = yes)
 GLIBCXX_EVALUATE_CONDITIONALS
-
+ 
 AC_CACHE_SAVE
 
 if test ${multilib} = yes; then
@@ -544,16 +362,18 @@ GLIBCXX_EXPORT_INSTALL_INFO
 GLIBCXX_EXPORT_INCLUDES
 GLIBCXX_EXPORT_FLAGS
 
-# Determine what GCC version number to use in filesystem paths.
-GCC_BASE_VER
+if test "$enable_shared" = yes; then
+  LIBSUPCXX_PICFLAGS="-prefer-pic"
+else
+  LIBSUPCXX_PICFLAGS=
+fi
+AC_SUBST(LIBSUPCXX_PICFLAGS)
 
 dnl In autoconf 2.5x, AC_OUTPUT is replaced by four AC_CONFIG_* macros,
 dnl which can all be called multiple times as needed, plus one (different)
 dnl AC_OUTPUT macro.  This one lists the files to be created:
 AC_CONFIG_FILES(Makefile)
 AC_CONFIG_FILES([scripts/testsuite_flags],[chmod +x scripts/testsuite_flags])
-AC_CONFIG_FILES([scripts/extract_symvers],[chmod +x scripts/extract_symvers])
-AC_CONFIG_FILES([doc/xsl/customization.xsl])
 
 # Multilibs need MULTISUBDIR defined correctly in certain makefiles so
 # that multilib installs will end up installed in the correct place.

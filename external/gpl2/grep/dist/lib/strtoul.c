@@ -1,4 +1,4 @@
-/*	$NetBSD: strtoul.c,v 1.1.1.1 2016/01/10 21:36:19 christos Exp $	*/
+/*	$NetBSD: strtoul.c,v 1.1 2016/01/10 21:36:19 christos Exp $	*/
 
 /* Copyright (C) 1991, 1999 Free Software Foundation, Inc.
 

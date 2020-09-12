@@ -1,5 +1,6 @@
 %{ /* rcparse.y -- parser for Windows rc files
-   Copyright (C) 1997-2020 Free Software Foundation, Inc.
+   Copyright 1997, 1998, 1999, 2000, 2001, 2002, 2003, 2005, 2007
+   Free Software Foundation, Inc.
    Written by Ian Lance Taylor, Cygnus Support.
    Extended by Kai Tietz, Onevision.
 
@@ -78,7 +79,6 @@ static const rc_res_id res_null_text = { 1, {{0, &null_unichar}}};
   rc_rcdata_item *rcdata_item;
   rc_fixed_versioninfo *fixver;
   rc_ver_info *verinfo;
-  rc_ver_stringtable *verstringtable;
   rc_ver_stringinfo *verstring;
   rc_ver_varinfo *vervar;
   rc_toolbar_item *toobar_item;
@@ -150,7 +150,6 @@ static const rc_res_id res_null_text = { 1, {{0, &null_unichar}}};
 %type <rcdata_item> opt_control_data
 %type <fixver> fixedverinfo
 %type <verinfo> verblocks
-%type <verstringtable> verstringtables
 %type <verstring> vervals
 %type <vervar> vertrans
 %type <toobar_item> toolbar_data
@@ -163,7 +162,7 @@ static const rc_res_id res_null_text = { 1, {{0, &null_unichar}}};
 %type <s> file_name
 %type <uni> res_unicode_string resname res_unicode_string_concat
 %type <ss> sizedstring
-%type <suni> sizedunistring res_unicode_sizedstring res_unicode_sizedstring_concat
+%type <suni> sizedunistring
 %type <i> sizednumexpr sizedposnumexpr
 
 %left '|'
@@ -562,7 +561,7 @@ control:
 	      base_style = BS_AUTO3STATE;
 	      class.named = 0;
 	      class.u.id = CTL_BUTTON;
-	      res_text_field = $2;
+	      res_text_field = $2;	
 	    }
 	    control_params
 	  {
@@ -574,7 +573,7 @@ control:
 	      base_style = BS_AUTOCHECKBOX;
 	      class.named = 0;
 	      class.u.id = CTL_BUTTON;
-	      res_text_field = $2;
+	      res_text_field = $2;	
 	    }
 	    control_params
 	  {
@@ -586,7 +585,7 @@ control:
 	      base_style = BS_AUTORADIOBUTTON;
 	      class.named = 0;
 	      class.u.id = CTL_BUTTON;
-	      res_text_field = $2;
+	      res_text_field = $2;	
 	    }
 	    control_params
 	  {
@@ -598,7 +597,7 @@ control:
 	      base_style = ES_LEFT | WS_BORDER | WS_TABSTOP;
 	      class.named = 0;
 	      class.u.id = CTL_EDIT;
-	      res_text_field = $2;
+	      res_text_field = $2;	
 	    }
 	    control_params
 	  {
@@ -613,7 +612,7 @@ control:
 	      base_style = BS_CHECKBOX | WS_TABSTOP;
 	      class.named = 0;
 	      class.u.id = CTL_BUTTON;
-	      res_text_field = $2;
+	      res_text_field = $2;	
 	    }
 	    control_params
 	  {
@@ -627,7 +626,7 @@ control:
 	      base_style = 0;
 	      class.named = 0;
 	      class.u.id = CTL_COMBOBOX;
-	      res_text_field = res_null_text;
+	      res_text_field = res_null_text;	
 	    }
 	    control_params
 	  {
@@ -659,7 +658,7 @@ control:
 	      base_style = SS_CENTER;
 	      class.named = 0;
 	      class.u.id = CTL_STATIC;
-	      res_text_field = $2;
+	      res_text_field = $2;	
 	    }
 	    control_params
 	  {
@@ -671,7 +670,7 @@ control:
 	      base_style = BS_DEFPUSHBUTTON | WS_TABSTOP;
 	      class.named = 0;
 	      class.u.id = CTL_BUTTON;
-	      res_text_field = $2;
+	      res_text_field = $2;	
 	    }
 	    control_params
 	  {
@@ -683,7 +682,7 @@ control:
 	      base_style = ES_LEFT | WS_BORDER | WS_TABSTOP;
 	      class.named = 0;
 	      class.u.id = CTL_EDIT;
-	      res_text_field = res_null_text;
+	      res_text_field = res_null_text;	
 	    }
 	    control_params
 	  {
@@ -695,7 +694,7 @@ control:
 	      base_style = BS_GROUPBOX;
 	      class.named = 0;
 	      class.u.id = CTL_BUTTON;
-	      res_text_field = $2;
+	      res_text_field = $2;	
 	    }
 	    control_params
 	  {
@@ -707,7 +706,7 @@ control:
 	      base_style = ES_LEFT | WS_BORDER | WS_TABSTOP;
 	      class.named = 0;
 	      class.u.id = CTL_EDIT;
-	      res_text_field = $2;
+	      res_text_field = $2;	
 	    }
 	    control_params
 	  {
@@ -745,7 +744,7 @@ control:
 	      base_style = ES_LEFT | WS_BORDER | WS_TABSTOP;
 	      class.named = 0;
 	      class.u.id = CTL_EDIT;
-	      res_text_field = $2;
+	      res_text_field = $2;	
 	    }
 	    control_params
 	  {
@@ -760,7 +759,7 @@ control:
 	      base_style = LBS_NOTIFY | WS_BORDER;
 	      class.named = 0;
 	      class.u.id = CTL_LISTBOX;
-	      res_text_field = res_null_text;
+	      res_text_field = res_null_text;	
 	    }
 	    control_params
 	  {
@@ -772,7 +771,7 @@ control:
 	      base_style = SS_LEFT;
 	      class.named = 0;
 	      class.u.id = CTL_STATIC;
-	      res_text_field = $2;
+	      res_text_field = $2;	
 	    }
 	    control_params
 	  {
@@ -795,7 +794,7 @@ control:
 	      base_style = BS_PUSHBUTTON | WS_TABSTOP;
 	      class.named = 0;
 	      class.u.id = CTL_BUTTON;
-	      res_text_field = $2;
+	      res_text_field = $2;	
 	    }
 	    control_params
 	  {
@@ -807,7 +806,7 @@ control:
 	      base_style = BS_RADIOBUTTON;
 	      class.named = 0;
 	      class.u.id = CTL_BUTTON;
-	      res_text_field = $2;
+	      res_text_field = $2;	
 	    }
 	    control_params
 	  {
@@ -819,7 +818,7 @@ control:
 	      base_style = SS_RIGHT;
 	      class.named = 0;
 	      class.u.id = CTL_STATIC;
-	      res_text_field = $2;
+	      res_text_field = $2;	
 	    }
 	    control_params
 	  {
@@ -831,7 +830,7 @@ control:
 	      base_style = 0;
 	      class.named = 0;
 	      class.u.id = CTL_SCROLLBAR;
-	      res_text_field = res_null_text;
+	      res_text_field = res_null_text;	
 	    }
 	    control_params
 	  {
@@ -843,14 +842,14 @@ control:
 	      base_style = BS_3STATE;
 	      class.named = 0;
 	      class.u.id = CTL_BUTTON;
-	      res_text_field = $2;
+	      res_text_field = $2;	
 	    }
 	    control_params
 	  {
 	    $$ = $4;
 	  }
 	| USERBUTTON resref numexpr ',' numexpr ',' numexpr ','
-	    numexpr ',' numexpr ','
+	    numexpr ',' numexpr ',' 
 	    { style = WS_CHILD | WS_VISIBLE; }
 	    styleexpr optcnumexpr
 	  {
@@ -1249,30 +1248,26 @@ rcdata_data:
 	    $1.last->next = ri;
 	    $$.last = ri;
 	  }
-	| rcdata_data ','
-	  {
-	    $$=$1;
-	  }
 	;
 
 /* Stringtable resources.  */
 
 stringtable:
-	  STRINGTABLE suboptions BEG
-	    { sub_res_info = $2; rcparse_rcdata (); }
-	    string_data END { rcparse_normal (); }
+	  STRINGTABLE suboptions BEG 
+	    { sub_res_info = $2; }
+	    string_data END
 	;
 
 string_data:
 	  /* empty */
-	| string_data numexpr res_unicode_sizedstring_concat
+	| string_data numexpr res_unicode_string_concat
 	  {
-	    define_stringtable (&sub_res_info, $2, $3.s, $3.length);
+	    define_stringtable (&sub_res_info, $2, $3);
 	    rcparse_discard_strings ();
 	  }
-	| string_data numexpr ',' res_unicode_sizedstring_concat
+	| string_data numexpr ',' res_unicode_string_concat
 	  {
-	    define_stringtable (&sub_res_info, $2, $4.s, $4.length);
+	    define_stringtable (&sub_res_info, $2, $4);
 	    rcparse_discard_strings ();
 	  }
 	| string_data error
@@ -1422,18 +1417,16 @@ fixedverinfo:
 		  res_alloc (sizeof (rc_fixed_versioninfo)));
 	    memset ($$, 0, sizeof (rc_fixed_versioninfo));
 	  }
-	| fixedverinfo FILEVERSION numexpr optcnumexpr optcnumexpr
-	  optcnumexpr
+	| fixedverinfo FILEVERSION numexpr cnumexpr cnumexpr cnumexpr
 	  {
-	    $1->file_version_ms = ($3 << 16) | ($4 & 0xffff);
-	    $1->file_version_ls = ($5 << 16) | ($6 & 0xffff);
+	    $1->file_version_ms = ($3 << 16) | $4;
+	    $1->file_version_ls = ($5 << 16) | $6;
 	    $$ = $1;
 	  }
-	| fixedverinfo PRODUCTVERSION numexpr optcnumexpr optcnumexpr
-	  optcnumexpr
+	| fixedverinfo PRODUCTVERSION numexpr cnumexpr cnumexpr cnumexpr
 	  {
-	    $1->product_version_ms = ($3 << 16) | ($4 & 0xffff);
-	    $1->product_version_ls = ($5 << 16) | ($6 & 0xffff);
+	    $1->product_version_ms = ($3 << 16) | $4;
+	    $1->product_version_ls = ($5 << 16) | $6;
 	    $$ = $1;
 	  }
 	| fixedverinfo FILEFLAGSMASK numexpr
@@ -1474,24 +1467,13 @@ verblocks:
 	  {
 	    $$ = NULL;
 	  }
-	| verblocks BLOCKSTRINGFILEINFO BEG verstringtables END
+	| verblocks BLOCKSTRINGFILEINFO BEG BLOCK BEG vervals END END
 	  {
-	    $$ = append_ver_stringfileinfo ($1, $4);
+	    $$ = append_ver_stringfileinfo ($1, $4, $6);
 	  }
 	| verblocks BLOCKVARFILEINFO BEG VALUE res_unicode_string_concat vertrans END
 	  {
 	    $$ = append_ver_varfileinfo ($1, $5, $6);
-	  }
-	;
-
-verstringtables:
-      /* empty */
-	  {
-	    $$ = NULL;
-	  }
-	| verstringtables BLOCK BEG vervals END
-	  {
-	    $$ = append_ver_stringtable ($1, $2, $4);
 	  }
 	;
 
@@ -1719,43 +1701,6 @@ res_unicode_string:
 	  }
 	;
 
-res_unicode_sizedstring:
-	  sizedunistring
-	  {
-	    $$ = $1;
-	  }
-	| sizedstring
-	  {
-	    unichar *h = NULL;
-	    rc_uint_type l = 0;
-	    unicode_from_ascii_len (&l, &h, $1.s, $1.length);
-	    $$.s = h;
-	    $$.length = l;
-	  }
-	;
-
-/* Concat string */
-res_unicode_sizedstring_concat:
-	  res_unicode_sizedstring
-	  {
-	    $$ = $1;
-	  }
-	|
-	  res_unicode_sizedstring_concat res_unicode_sizedstring
-	  {
-	    rc_uint_type l1 = $1.length;
-	    rc_uint_type l2 = $2.length;
-	    unichar *h = (unichar *) res_alloc ((l1 + l2 + 1) * sizeof (unichar));
-	    if (l1 != 0)
-	      memcpy (h, $1.s, l1 * sizeof (unichar));
-	    if (l2 != 0)
-	      memcpy (h + l1, $2.s, l2  * sizeof (unichar));
-	    h[l1 + l2] = 0;
-	    $$.length = l1 + l2;
-	    $$.s = h;
-	  }
-	;
-
 sizedstring:
 	  SIZEDSTRING
 	  {
@@ -1887,12 +1832,12 @@ sizednumexpr:
 	  }
 	| sizednumexpr '/' sizednumexpr
 	  {
-	    $$.val = $1.val / ($3.val ? $3.val : 1);
+	    $$.val = $1.val / $3.val;
 	    $$.dword = $1.dword || $3.dword;
 	  }
 	| sizednumexpr '%' sizednumexpr
 	  {
-	    $$.val = $1.val % ($3.val ? $3.val : 1);
+	    $$.val = $1.val % $3.val;
 	    $$.dword = $1.dword || $3.dword;
 	  }
 	| sizednumexpr '+' sizednumexpr
@@ -1966,13 +1911,12 @@ sizedposnumexpr:
 	  }
 	| sizedposnumexpr '/' sizednumexpr
 	  {
-	    $$.val = $1.val / ($3.val ? $3.val : 1);
+	    $$.val = $1.val / $3.val;
 	    $$.dword = $1.dword || $3.dword;
 	  }
 	| sizedposnumexpr '%' sizednumexpr
 	  {
-	    /* PR 17512: file: 89105a25.  */
-	    $$.val = $1.val % ($3.val ? $3.val : 1);
+	    $$.val = $1.val % $3.val;
 	    $$.dword = $1.dword || $3.dword;
 	  }
 	| sizedposnumexpr '+' sizednumexpr

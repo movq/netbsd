@@ -25,7 +25,7 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301 USA.  */
  *
  * $Source: /home/mike/src/cvs/netbsd/src/external/gpl2/gmake/dist/w32/include/sub_proc.h,v $
  *
- * $Id: sub_proc.h,v 1.1.1.1 2014/08/18 06:47:56 christos Exp $
+ * $Id: sub_proc.h,v 1.1 2014/08/18 06:47:56 christos Exp $
  */
 
 #define EXTERN_DECL(entry, args) extern entry args

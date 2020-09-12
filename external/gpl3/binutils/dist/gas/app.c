@@ -1,5 +1,7 @@
 /* This is the Assembler Pre-Processor
-   Copyright (C) 1987-2020 Free Software Foundation, Inc.
+   Copyright 1987, 1990, 1991, 1992, 1993, 1994, 1995, 1996, 1997, 1998,
+   1999, 2000, 2001, 2002, 2003, 2006, 2007
+   Free Software Foundation, Inc.
 
    This file is part of GAS, the GNU Assembler.
 
@@ -54,9 +56,6 @@ static const char mri_pseudo[] = ".mri 0";
    See the comment in do_scrub_chars.  */
 static const char   symver_pseudo[] = ".symver";
 static const char * symver_state;
-#endif
-#ifdef TC_ARM
-static char last_char;
 #endif
 
 static char lex[256];
@@ -120,7 +119,8 @@ do_scrub_begin (int m68k_mri ATTRIBUTE_UNUSED)
     {
       lex['"'] = LEX_IS_STRINGQUOTE;
 
-#if ! defined (TC_HPPA)
+#if ! defined (TC_HPPA) && ! defined (TC_I370)
+      /* I370 uses single-quotes to delimit integer, float constants.  */
       lex['\''] = LEX_IS_ONECHAR_QUOTE;
 #endif
 
@@ -160,10 +160,7 @@ do_scrub_begin (int m68k_mri ATTRIBUTE_UNUSED)
   for (p = line_comment_chars; *p; p++)
     lex[(unsigned char) *p] = LEX_IS_LINE_COMMENT_START;
 
-#ifndef tc_line_separator_chars
-#define tc_line_separator_chars line_separator_chars
-#endif
-  for (p = tc_line_separator_chars; *p; p++)
+  for (p = line_separator_chars; *p; p++)
     lex[(unsigned char) *p] = LEX_IS_LINE_SEPARATOR;
 
 #ifdef tc_parallel_separator_chars
@@ -213,11 +210,11 @@ do_scrub_begin (int m68k_mri ATTRIBUTE_UNUSED)
 /* Saved state of the scrubber.  */
 static int state;
 static int old_state;
-static const char *out_string;
+static char *out_string;
 static char out_buf[20];
 static int add_newlines;
 static char *saved_input;
-static size_t saved_input_len;
+static int saved_input_len;
 static char input_buffer[32 * 1024];
 static const char *mri_state;
 static char mri_last_ch;
@@ -231,11 +228,11 @@ struct app_save
 {
   int          state;
   int          old_state;
-  const char * out_string;
+  char *       out_string;
   char         out_buf[sizeof (out_buf)];
   int          add_newlines;
   char *       saved_input;
-  size_t       saved_input_len;
+  int          saved_input_len;
 #ifdef TC_M68K
   int          scrub_m68k_mri;
 #endif
@@ -244,17 +241,14 @@ struct app_save
 #if defined TC_ARM && defined OBJ_ELF
   const char * symver_state;
 #endif
-#ifdef TC_ARM
-  char last_char;
-#endif
 };
 
 char *
 app_push (void)
 {
-  struct app_save *saved;
+  register struct app_save *saved;
 
-  saved = XNEW (struct app_save);
+  saved = (struct app_save *) xmalloc (sizeof (*saved));
   saved->state = state;
   saved->old_state = old_state;
   saved->out_string = out_string;
@@ -264,7 +258,7 @@ app_push (void)
     saved->saved_input = NULL;
   else
     {
-      saved->saved_input = XNEWVEC (char, saved_input_len);
+      saved->saved_input = xmalloc (saved_input_len);
       memcpy (saved->saved_input, saved_input, saved_input_len);
       saved->saved_input_len = saved_input_len;
     }
@@ -276,15 +270,11 @@ app_push (void)
 #if defined TC_ARM && defined OBJ_ELF
   saved->symver_state = symver_state;
 #endif
-#ifdef TC_ARM
-  saved->last_char = last_char;
-#endif
 
   /* do_scrub_begin() is not useful, just wastes time.  */
 
   state = 0;
   saved_input = NULL;
-  add_newlines = 0;
 
   return (char *) saved;
 }
@@ -292,7 +282,7 @@ app_push (void)
 void
 app_pop (char *arg)
 {
-  struct app_save *saved = (struct app_save *) arg;
+  register struct app_save *saved = (struct app_save *) arg;
 
   /* There is no do_scrub_end ().  */
   state = saved->state;
@@ -304,7 +294,7 @@ app_pop (char *arg)
     saved_input = NULL;
   else
     {
-      gas_assert (saved->saved_input_len <= sizeof (input_buffer));
+      assert (saved->saved_input_len <= (int) (sizeof input_buffer));
       memcpy (input_buffer, saved->saved_input, saved->saved_input_len);
       saved_input = input_buffer;
       saved_input_len = saved->saved_input_len;
@@ -317,9 +307,6 @@ app_pop (char *arg)
   mri_last_ch = saved->mri_last_ch;
 #if defined TC_ARM && defined OBJ_ELF
   symver_state = saved->symver_state;
-#endif
-#ifdef TC_ARM
-  last_char = saved->last_char;
 #endif
 
   free (arg);
@@ -363,15 +350,15 @@ process_escape (int ch)
    machine, and saves its state so that it may return at any point.
    This is the way the old code used to work.  */
 
-size_t
-do_scrub_chars (size_t (*get) (char *, size_t), char *tostart, size_t tolen)
+int
+do_scrub_chars (int (*get) (char *, int), char *tostart, int tolen)
 {
   char *to = tostart;
   char *toend = tostart + tolen;
   char *from;
   char *fromend;
-  size_t fromlen;
-  int ch, ch2 = 0;
+  int fromlen;
+  register int ch, ch2 = 0;
   /* Character that started the string we're working on.  */
   static char quotechar;
 
@@ -397,11 +384,11 @@ do_scrub_chars (size_t (*get) (char *, size_t), char *tostart, size_t tolen)
 	 13: After seeing a vertical bar, looking for a second
 	     vertical bar as a parallel expression separator.
 #endif
-#ifdef TC_PREDICATE_START_CHAR
-	 14: After seeing a predicate start character at state 0, looking
-	     for a predicate end character as predicate.
-	 15: After seeing a predicate start character at state 1, looking
-	     for a predicate end character as predicate.
+#ifdef TC_IA64
+	 14: After seeing a `(' at state 0, looking for a `)' as
+	     predicate.
+	 15: After seeing a `(' at state 1, looking for a `)' as
+	     predicate.
 #endif
 #ifdef TC_Z80
 	 16: After seeing an 'a' or an 'A' at the start of a symbol
@@ -560,7 +547,7 @@ do_scrub_chars (size_t (*get) (char *, size_t), char *tostart, size_t tolen)
 	     GET and PUT macros.  */
 	  {
 	    char *s;
-	    ptrdiff_t len;
+	    int len;
 
 	    for (s = from; s < fromend; s++)
 	      {
@@ -602,11 +589,13 @@ do_scrub_chars (size_t (*get) (char *, size_t), char *tostart, size_t tolen)
 	      state = old_state;
 	      PUT (ch);
 	    }
-	  else if (TC_STRING_ESCAPES && ch == '\\')
+#ifndef NO_STRING_ESCAPES
+	  else if (ch == '\\')
 	    {
 	      state = 6;
 	      PUT (ch);
 	    }
+#endif
 	  else if (scrub_m68k_mri && ch == '\n')
 	    {
 	      /* Just quietly terminate the string.  This permits lines like
@@ -678,23 +667,13 @@ do_scrub_chars (size_t (*get) (char *, size_t), char *tostart, size_t tolen)
 	     line from just after the first white space.  */
 	  state = 1;
 	  PUT ('|');
-#ifdef TC_TIC6X
-	  /* "||^" is used for SPMASKed instructions.  */
-	  ch = GET ();
-	  if (ch == EOF)
-	    goto fromeof;
-	  else if (ch == '^')
-	    PUT ('^');
-	  else
-	    UNGET (ch);
-#endif
 	  continue;
 #endif
 #ifdef TC_Z80
 	case 16:
 	  /* We have seen an 'a' at the start of a symbol, look for an 'f'.  */
 	  ch = GET ();
-	  if (ch == 'f' || ch == 'F')
+	  if (ch == 'f' || ch == 'F') 
 	    {
 	      state = 17;
 	      PUT (ch);
@@ -704,7 +683,6 @@ do_scrub_chars (size_t (*get) (char *, size_t), char *tostart, size_t tolen)
 	      state = 9;
 	      break;
 	    }
-	  /* Fall through.  */
 	case 17:
 	  /* We have seen "af" at the start of a symbol,
 	     a ' here is a part of that symbol.  */
@@ -724,8 +702,8 @@ do_scrub_chars (size_t (*get) (char *, size_t), char *tostart, size_t tolen)
       /* flushchar: */
       ch = GET ();
 
-#ifdef TC_PREDICATE_START_CHAR
-      if (ch == TC_PREDICATE_START_CHAR && (state == 0 || state == 1))
+#ifdef TC_IA64
+      if (ch == '(' && (state == 0 || state == 1))
 	{
 	  state += 14;
 	  PUT (ch);
@@ -733,7 +711,7 @@ do_scrub_chars (size_t (*get) (char *, size_t), char *tostart, size_t tolen)
 	}
       else if (state == 14 || state == 15)
 	{
-	  if (ch == TC_PREDICATE_END_CHAR)
+	  if (ch == ')')
 	    {
 	      state -= 14;
 	      PUT (ch);
@@ -927,11 +905,7 @@ do_scrub_chars (size_t (*get) (char *, size_t), char *tostart, size_t tolen)
 	      PUT (' ');
 	      break;
 	    case 3:
-#ifndef TC_KEEP_OPERAND_SPACES
-	      /* For TI C6X, we keep these spaces as they may separate
-		 functional unit specifiers from operands.  */
 	      if (scrub_m68k_mri)
-#endif
 		{
 		  /* In MRI mode, we keep these spaces.  */
 		  UNGET (ch);
@@ -941,9 +915,7 @@ do_scrub_chars (size_t (*get) (char *, size_t), char *tostart, size_t tolen)
 	      goto recycle;	/* Sp in operands */
 	    case 9:
 	    case 10:
-#ifndef TC_KEEP_OPERAND_SPACES
 	      if (scrub_m68k_mri)
-#endif
 		{
 		  /* In MRI mode, we keep these spaces.  */
 		  state = 3;
@@ -1050,6 +1022,7 @@ do_scrub_chars (size_t (*get) (char *, size_t), char *tostart, size_t tolen)
 	  PUT (ch);
 	  break;
 
+#ifndef IEEE_STYLE
 	case LEX_IS_ONECHAR_QUOTE:
 #ifdef H_TICK_HEX
 	  if (state == 9 && enable_h_tick_hex)
@@ -1111,6 +1084,7 @@ do_scrub_chars (size_t (*get) (char *, size_t), char *tostart, size_t tolen)
 	  out_string = out_buf;
 	  PUT (*out_string++);
 	  break;
+#endif
 
 	case LEX_IS_COLON:
 #ifdef KEEP_WHITE_AROUND_COLON
@@ -1195,7 +1169,7 @@ do_scrub_chars (size_t (*get) (char *, size_t), char *tostart, size_t tolen)
 		  state = -2;
 		  break;
 		}
-	      else if (ch2 != EOF)
+	      else
 		{
 		  UNGET (ch2);
 		}
@@ -1226,16 +1200,9 @@ do_scrub_chars (size_t (*get) (char *, size_t), char *tostart, size_t tolen)
 		  while (ch != EOF && !IS_NEWLINE (ch))
 		    ch = GET ();
 		  if (ch == EOF)
-		    {
-		      as_warn (_("end of file in comment; newline inserted"));
-		      PUT ('\n');
-		    }
-		  else /* IS_NEWLINE (ch) */
-		    {
-		      /* To process non-zero add_newlines.  */
-		      UNGET (ch);
-		    }
+		    as_warn (_("end of file in comment; newline inserted"));
 		  state = 0;
+		  PUT ('\n');
 		  break;
 		}
 	      /* Looks like `# 123 "filename"' from cpp.  */
@@ -1292,14 +1259,14 @@ do_scrub_chars (size_t (*get) (char *, size_t), char *tostart, size_t tolen)
 #ifdef TC_ARM
 	  /* For the ARM, care is needed not to damage occurrences of \@
 	     by stripping the @ onwards.  Yuck.  */
-	  if ((to > tostart ? to[-1] : last_char) == '\\')
+	  if (to > tostart && *(to - 1) == '\\')
 	    /* Do not treat the @ as a start-of-comment.  */
 	    goto de_fault;
 #endif
 
 #ifdef WARN_COMMENTS
 	  if (!found_comment)
-	    found_comment_file = as_where (&found_comment);
+	    as_where (&found_comment_file, &found_comment);
 #endif
 	  do
 	    {
@@ -1329,8 +1296,8 @@ do_scrub_chars (size_t (*get) (char *, size_t), char *tostart, size_t tolen)
 	      else
 		UNGET (quot);
 	    }
+	  /* FALL THROUGH */
 #endif
-	  /* Fall through.  */
 
 	case LEX_IS_SYMBOL_COMPONENT:
 	  if (state == 10)
@@ -1346,12 +1313,12 @@ do_scrub_chars (size_t (*get) (char *, size_t), char *tostart, size_t tolen)
 
 #ifdef TC_Z80
 	  /* "af'" is a symbol containing '\''.  */
-	  if (state == 3 && (ch == 'a' || ch == 'A'))
+	  if (state == 3 && (ch == 'a' || ch == 'A')) 
 	    {
 	      state = 16;
 	      PUT (ch);
 	      ch = GET ();
-	      if (ch == 'f' || ch == 'F')
+	      if (ch == 'f' || ch == 'F') 
 		{
 		  state = 17;
 		  PUT (ch);
@@ -1360,7 +1327,7 @@ do_scrub_chars (size_t (*get) (char *, size_t), char *tostart, size_t tolen)
 	      else
 		{
 		  state = 9;
-		  if (ch == EOF || !IS_SYMBOL_COMPONENT (ch))
+		  if (!IS_SYMBOL_COMPONENT (ch)) 
 		    {
 		      if (ch != EOF)
 			UNGET (ch);
@@ -1382,7 +1349,7 @@ do_scrub_chars (size_t (*get) (char *, size_t), char *tostart, size_t tolen)
 	      )
 	    {
 	      char *s;
-	      ptrdiff_t len;
+	      int len;
 
 	      for (s = from; s < fromend; s++)
 		{
@@ -1472,10 +1439,6 @@ do_scrub_chars (size_t (*get) (char *, size_t), char *tostart, size_t tolen)
 
  fromeof:
   /* We have reached the end of the input.  */
-#ifdef TC_ARM
-  if (to > tostart)
-    last_char = to[-1];
-#endif
   return to - tostart;
 
  tofull:
@@ -1489,9 +1452,5 @@ do_scrub_chars (size_t (*get) (char *, size_t), char *tostart, size_t tolen)
   else
     saved_input = NULL;
 
-#ifdef TC_ARM
-  if (to > tostart)
-    last_char = to[-1];
-#endif
   return to - tostart;
 }

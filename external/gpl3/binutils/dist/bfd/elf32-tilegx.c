@@ -1,5 +1,5 @@
 /* TILE-Gx-specific support for 32-bit ELF.
-   Copyright (C) 2011-2020 Free Software Foundation, Inc.
+   Copyright 2011 Free Software Foundation, Inc.
 
    This file is part of BFD, the Binary File Descriptor library.
 
@@ -38,11 +38,11 @@ tilegx_elf_grok_prstatus (bfd *abfd, Elf_Internal_Note *note)
     return FALSE;
 
   /* pr_cursig */
-  elf_tdata (abfd)->core->signal =
+  elf_tdata (abfd)->core_signal =
     bfd_get_16 (abfd, note->descdata + TILEGX_PRSTATUS_OFFSET_PR_CURSIG);
 
   /* pr_pid */
-  elf_tdata (abfd)->core->pid =
+  elf_tdata (abfd)->core_pid =
     bfd_get_32 (abfd, note->descdata + TILEGX_PRSTATUS_OFFSET_PR_PID);
 
   /* pr_reg */
@@ -60,9 +60,9 @@ tilegx_elf_grok_psinfo (bfd *abfd, Elf_Internal_Note *note)
   if (note->descsz != TILEGX_PRPSINFO_SIZEOF)
     return FALSE;
 
-  elf_tdata (abfd)->core->program
+  elf_tdata (abfd)->core_program
     = _bfd_elfcore_strndup (abfd, note->descdata + TILEGX_PRPSINFO_OFFSET_PR_FNAME, 16);
-  elf_tdata (abfd)->core->command
+  elf_tdata (abfd)->core_command
     = _bfd_elfcore_strndup (abfd, note->descdata + TILEGX_PRPSINFO_OFFSET_PR_PSARGS, ELF_PR_PSARGS_SIZE);
 
 
@@ -70,7 +70,7 @@ tilegx_elf_grok_psinfo (bfd *abfd, Elf_Internal_Note *note)
      onto the end of the args in some (at least one anyway)
      implementations, so strip it off if it exists.  */
   {
-    char *command = elf_tdata (abfd)->core->command;
+    char *command = elf_tdata (abfd)->core_command;
     int n = strlen (command);
 
     if (0 < n && command[n - 1] == ' ')
@@ -87,14 +87,14 @@ tilegx_elf_grok_psinfo (bfd *abfd, Elf_Internal_Note *note)
 #define ELF_MAXPAGESIZE		0x10000
 #define ELF_COMMONPAGESIZE	0x10000
 
-#define TARGET_BIG_SYM		tilegx_elf32_be_vec
-#define TARGET_BIG_NAME		"elf32-tilegx-be"
-#define TARGET_LITTLE_SYM	tilegx_elf32_le_vec
-#define TARGET_LITTLE_NAME	"elf32-tilegx-le"
+#define TARGET_BIG_SYM          bfd_elf32_tilegx_be_vec
+#define TARGET_BIG_NAME         "elf32-tilegx-be"
+#define TARGET_LITTLE_SYM       bfd_elf32_tilegx_le_vec
+#define TARGET_LITTLE_NAME      "elf32-tilegx-le"
 
 #define elf_backend_reloc_type_class	     tilegx_reloc_type_class
 
-#define bfd_elf32_bfd_reloc_name_lookup	     tilegx_reloc_name_lookup
+#define bfd_elf32_bfd_reloc_name_lookup      tilegx_reloc_name_lookup
 #define bfd_elf32_bfd_link_hash_table_create tilegx_elf_link_hash_table_create
 #define bfd_elf32_bfd_reloc_type_lookup	     tilegx_reloc_type_lookup
 #define bfd_elf32_bfd_merge_private_bfd_data \
@@ -110,11 +110,12 @@ tilegx_elf_grok_psinfo (bfd *abfd, Elf_Internal_Note *note)
 #define elf_backend_finish_dynamic_symbol    tilegx_elf_finish_dynamic_symbol
 #define elf_backend_finish_dynamic_sections  tilegx_elf_finish_dynamic_sections
 #define elf_backend_gc_mark_hook	     tilegx_elf_gc_mark_hook
+#define elf_backend_gc_sweep_hook            tilegx_elf_gc_sweep_hook
 #define elf_backend_plt_sym_val		     tilegx_elf_plt_sym_val
-#define elf_info_to_howto_rel		     NULL
-#define elf_info_to_howto		     tilegx_info_to_howto_rela
-#define elf_backend_grok_prstatus	     tilegx_elf_grok_prstatus
-#define elf_backend_grok_psinfo		     tilegx_elf_grok_psinfo
+#define elf_info_to_howto_rel                NULL
+#define elf_info_to_howto                    tilegx_info_to_howto_rela
+#define elf_backend_grok_prstatus            tilegx_elf_grok_prstatus
+#define elf_backend_grok_psinfo              tilegx_elf_grok_psinfo
 #define elf_backend_additional_program_headers tilegx_additional_program_headers
 
 #define elf_backend_init_index_section	_bfd_elf_init_1_index_section
@@ -127,7 +128,6 @@ tilegx_elf_grok_psinfo (bfd *abfd, Elf_Internal_Note *note)
 #define elf_backend_plt_alignment 6
 #define elf_backend_want_plt_sym 1
 #define elf_backend_got_header_size 4
-#define elf_backend_want_dynrelro 1
 #define elf_backend_rela_normal 1
 #define elf_backend_default_execstack 0
 

@@ -1,5 +1,6 @@
 /* rddbg.c -- Read debugging information into a generic form.
-   Copyright (C) 1995-2020 Free Software Foundation, Inc.
+   Copyright 1995, 1996, 1997, 2000, 2002, 2003, 2005, 2007, 2008
+   Free Software Foundation, Inc.
    Written by Ian Lance Taylor <ian@cygnus.com>.
 
    This file is part of GNU Binutils.
@@ -35,6 +36,7 @@ static bfd_boolean read_section_stabs_debugging_info
   (bfd *, asymbol **, long, void *, bfd_boolean *);
 static bfd_boolean read_symbol_stabs_debugging_info
   (bfd *, asymbol **, long, void *, bfd_boolean *);
+static bfd_boolean read_ieee_debugging_info (bfd *, void *, bfd_boolean *);
 static void save_stab (int, int, bfd_vma, const char *);
 static void stab_context (void);
 static void free_saved_stabs (void);
@@ -60,6 +62,12 @@ read_debugging_info (bfd *abfd, asymbol **syms, long symcount, bfd_boolean no_me
     {
       if (! read_symbol_stabs_debugging_info (abfd, syms, symcount, dhandle,
 					      &found))
+	return NULL;
+    }
+
+  if (bfd_get_flavour (abfd) == bfd_target_ieee_flavour)
+    {
+      if (! read_ieee_debugging_info (abfd, dhandle, &found))
 	return NULL;
     }
 
@@ -121,53 +129,42 @@ read_section_stabs_debugging_info (bfd *abfd, asymbol **syms, long symcount,
 	  bfd_byte *stab;
 	  bfd_size_type stroff, next_stroff;
 
-	  stabsize = bfd_section_size (sec);
+	  stabsize = bfd_section_size (abfd, sec);
 	  stabs = (bfd_byte *) xmalloc (stabsize);
 	  if (! bfd_get_section_contents (abfd, sec, stabs, 0, stabsize))
 	    {
 	      fprintf (stderr, "%s: %s: %s\n",
 		       bfd_get_filename (abfd), names[i].secname,
 		       bfd_errmsg (bfd_get_error ()));
-	      free (shandle);
-	      free (stabs);
 	      return FALSE;
 	    }
 
-	  strsize = bfd_section_size (strsec);
-	  strings = (bfd_byte *) xmalloc (strsize + 1);
+	  strsize = bfd_section_size (abfd, strsec);
+	  strings = (bfd_byte *) xmalloc (strsize);
 	  if (! bfd_get_section_contents (abfd, strsec, strings, 0, strsize))
 	    {
 	      fprintf (stderr, "%s: %s: %s\n",
 		       bfd_get_filename (abfd), names[i].strsecname,
 		       bfd_errmsg (bfd_get_error ()));
-	      free (shandle);
-	      free (strings);
-	      free (stabs);
 	      return FALSE;
 	    }
-	  /* Zero terminate the strings table, just in case.  */
-	  strings [strsize] = 0;
+
 	  if (shandle == NULL)
 	    {
 	      shandle = start_stab (dhandle, abfd, TRUE, syms, symcount);
 	      if (shandle == NULL)
-		{
-		  free (strings);
-		  free (stabs);
-		  return FALSE;
-		}
+		return FALSE;
 	    }
 
 	  *pfound = TRUE;
 
 	  stroff = 0;
 	  next_stroff = 0;
-	  /* PR 17512: file: 078-60391-0.001:0.1.  */
-	  for (stab = stabs; stab <= (stabs + stabsize) - 12; stab += 12)
+	  for (stab = stabs; stab < stabs + stabsize; stab += 12)
 	    {
 	      unsigned int strx;
 	      int type;
-	      int other ATTRIBUTE_UNUSED;
+	      int other;
 	      int desc;
 	      bfd_vma value;
 
@@ -188,42 +185,32 @@ read_section_stabs_debugging_info (bfd *abfd, asymbol **syms, long symcount,
 		}
 	      else
 		{
-		  size_t len;
 		  char *f, *s;
 
-		  if (stroff + strx >= strsize)
+		  f = NULL;
+
+		  if (stroff + strx > strsize)
 		    {
-		      fprintf (stderr, _("%s: %s: stab entry %ld is corrupt, strx = 0x%x, type = %d\n"),
+		      fprintf (stderr, "%s: %s: stab entry %ld is corrupt, strx = 0x%x, type = %d\n",
 			       bfd_get_filename (abfd), names[i].secname,
 			       (long) (stab - stabs) / 12, strx, type);
 		      continue;
 		    }
 
 		  s = (char *) strings + stroff + strx;
-		  f = NULL;
 
-		  /* PR 17512: file: 002-87578-0.001:0.1.
-		     It is possible to craft a file where, without the 'strlen (s) > 0',
-		     an attempt to read the byte before 'strings' would occur.  */
-		  while ((len = strlen (s)) > 0
-			 && s[len  - 1] == '\\'
+		  while (s[strlen (s) - 1] == '\\'
 			 && stab + 12 < stabs + stabsize)
 		    {
 		      char *p;
 
 		      stab += 12;
-		      p = s + len - 1;
+		      p = s + strlen (s) - 1;
 		      *p = '\0';
-		      strx = stroff + bfd_get_32 (abfd, stab);
-		      if (strx >= strsize)
-			{
-			  fprintf (stderr, _("%s: %s: stab entry %ld is corrupt\n"),
-				   bfd_get_filename (abfd), names[i].secname,
-				   (long) (stab - stabs) / 12);
-			  break;
-			}
-
-		      s = concat (s, (char *) strings + strx,
+		      s = concat (s,
+				  ((char *) strings
+				   + stroff
+				   + bfd_get_32 (abfd, stab)),
 				  (const char *) NULL);
 
 		      /* We have to restore the backslash, because, if
@@ -231,7 +218,8 @@ read_section_stabs_debugging_info (bfd *abfd, asymbol **syms, long symcount,
 			 see the same string more than once.  */
 		      *p = '\\';
 
-		      free (f);
+		      if (f != NULL)
+			free (f);
 		      f = s;
 		    }
 
@@ -241,10 +229,6 @@ read_section_stabs_debugging_info (bfd *abfd, asymbol **syms, long symcount,
 		    {
 		      stab_context ();
 		      free_saved_stabs ();
-		      free (f);
-		      free (shandle);
-		      free (stabs);
-		      free (strings);
 		      return FALSE;
 		    }
 
@@ -304,12 +288,8 @@ read_symbol_stabs_debugging_info (bfd *abfd, asymbol **syms, long symcount,
 	  *pfound = TRUE;
 
 	  s = i.name;
-	  if (s == NULL || strlen (s) < 1)
-	    return FALSE;
 	  f = NULL;
-
-	  while (strlen (s) > 0
-		 && s[strlen (s) - 1] == '\\'
+	  while (s[strlen (s) - 1] == '\\'
 		 && ps + 1 < symend)
 	    {
 	      char *sc, *n;
@@ -348,6 +328,37 @@ read_symbol_stabs_debugging_info (bfd *abfd, asymbol **syms, long symcount,
       if (! finish_stab (dhandle, shandle))
 	return FALSE;
     }
+
+  return TRUE;
+}
+
+/* Read IEEE debugging information.  */
+
+static bfd_boolean
+read_ieee_debugging_info (bfd *abfd, void *dhandle, bfd_boolean *pfound)
+{
+  asection *dsec;
+  bfd_size_type size;
+  bfd_byte *contents;
+
+  /* The BFD backend puts the debugging information into a section
+     named .debug.  */
+
+  dsec = bfd_get_section_by_name (abfd, ".debug");
+  if (dsec == NULL)
+    return TRUE;
+
+  size = bfd_section_size (abfd, dsec);
+  contents = (bfd_byte *) xmalloc (size);
+  if (! bfd_get_section_contents (abfd, dsec, contents, 0, size))
+    return FALSE;
+
+  if (! parse_ieee (dhandle, abfd, contents, size))
+    return FALSE;
+
+  free (contents);
+
+  *pfound = TRUE;
 
   return TRUE;
 }

@@ -1,5 +1,6 @@
 /* BFD back-end for i386 a.out binaries under LynxOS.
-   Copyright (C) 1990-2020 Free Software Foundation, Inc.
+   Copyright 1990, 1991, 1992, 1993, 1994, 1995, 1996, 1999, 2001, 2002,
+   2003, 2007 Free Software Foundation, Inc.
 
    This file is part of BFD, the Binary File Descriptor library.
 
@@ -18,6 +19,8 @@
    Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston,
    MA 02110-1301, USA.  */
 
+#define N_SHARED_LIB(x) 0
+
 #define TEXT_START_ADDR 0
 #define TARGET_PAGE_SIZE 4096
 #define SEGMENT_SIZE TARGET_PAGE_SIZE
@@ -26,7 +29,7 @@
 /* Do not "beautify" the CONCAT* macro args.  Traditional C will not
    remove whitespace added here, and thus will fail to concatenate
    the tokens.  */
-#define MY(OP) CONCAT2 (i386_aout_lynx_,OP)
+#define MY(OP) CONCAT2 (i386lynx_aout_,OP)
 #define TARGETNAME "a.out-i386-lynx"
 
 #include "sysdep.h"
@@ -36,12 +39,14 @@
 #ifndef WRITE_HEADERS
 #define WRITE_HEADERS(abfd, execp)					      \
       {									      \
+	bfd_size_type text_size; /* dummy vars */			      \
+	file_ptr text_end;						      \
 	if (adata(abfd).magic == undecided_magic)			      \
-	  NAME(aout,adjust_sizes_and_vmas) (abfd);			      \
-									      \
+	  NAME(aout,adjust_sizes_and_vmas) (abfd, &text_size, &text_end);     \
+    									      \
 	execp->a_syms = bfd_get_symcount (abfd) * EXTERNAL_NLIST_SIZE;	      \
 	execp->a_entry = bfd_get_start_address (abfd);			      \
-									      \
+    									      \
 	execp->a_trsize = ((obj_textsec (abfd)->reloc_count) *		      \
 			   obj_reloc_entry_size (abfd));		      \
 	execp->a_drsize = ((obj_datasec (abfd)->reloc_count) *		      \
@@ -49,28 +54,28 @@
 	NAME(aout,swap_exec_header_out) (abfd, execp, &exec_bytes);	      \
 									      \
 	if (bfd_seek (abfd, (file_ptr) 0, SEEK_SET) != 0		      \
-	    || bfd_bwrite (&exec_bytes, (bfd_size_type) EXEC_BYTES_SIZE, \
+	    || bfd_bwrite ((PTR) &exec_bytes, (bfd_size_type) EXEC_BYTES_SIZE, \
 			  abfd) != EXEC_BYTES_SIZE)			      \
 	  return FALSE;							      \
 	/* Now write out reloc info, followed by syms and strings */	      \
-									      \
-	if (bfd_get_symcount (abfd) != 0)				      \
+  									      \
+	if (bfd_get_symcount (abfd) != 0) 				      \
 	    {								      \
-	      if (bfd_seek (abfd, (file_ptr) (N_SYMOFF (execp)), SEEK_SET)    \
+	      if (bfd_seek (abfd, (file_ptr) (N_SYMOFF(*execp)), SEEK_SET)    \
 		  != 0)							      \
-		return FALSE;						      \
+	        return FALSE;						      \
 									      \
 	      if (! NAME(aout,write_syms) (abfd)) return FALSE;		      \
 									      \
-	      if (bfd_seek (abfd, (file_ptr) (N_TRELOFF (execp)), SEEK_SET)   \
+	      if (bfd_seek (abfd, (file_ptr) (N_TRELOFF(*execp)), SEEK_SET)   \
 		  != 0)							      \
-		return FALSE;						      \
+	        return FALSE;						      \
 									      \
 	      if (!NAME(lynx,squirt_out_relocs) (abfd, obj_textsec (abfd)))   \
 		return FALSE;						      \
-	      if (bfd_seek (abfd, (file_ptr) (N_DRELOFF (execp)), SEEK_SET)   \
+	      if (bfd_seek (abfd, (file_ptr) (N_DRELOFF(*execp)), SEEK_SET)   \
 		  != 0)							      \
-		return 0;						      \
+	        return 0;						      \
 									      \
 	      if (!NAME(lynx,squirt_out_relocs) (abfd, obj_datasec (abfd)))   \
 		return FALSE;						      \
@@ -81,6 +86,22 @@
 #include "libaout.h"
 #include "aout/aout64.h"
 
+void NAME (lynx,swap_std_reloc_out)
+  PARAMS ((bfd *, arelent *, struct reloc_std_external *));
+void NAME (lynx,swap_ext_reloc_out)
+  PARAMS ((bfd *, arelent *, struct reloc_ext_external *));
+void NAME (lynx,swap_ext_reloc_in)
+  PARAMS ((bfd *, struct reloc_ext_external *, arelent *, asymbol **,
+	   bfd_size_type));
+void NAME (lynx,swap_std_reloc_in)
+  PARAMS ((bfd *, struct reloc_std_external *, arelent *, asymbol **,
+	   bfd_size_type));
+bfd_boolean NAME (lynx,slurp_reloc_table)
+  PARAMS ((bfd *, sec_ptr, asymbol **));
+bfd_boolean NAME (lynx,squirt_out_relocs)
+  PARAMS ((bfd *, asection *));
+long NAME (lynx,canonicalize_reloc)
+  PARAMS ((bfd *, sec_ptr, arelent **, asymbol **));
 
 #ifdef LYNX_CORE
 
@@ -105,10 +126,11 @@ extern reloc_howto_type aout_32_std_howto_table[];
 /* Standard reloc stuff */
 /* Output standard relocation information to a file in target byte order. */
 
-static void
-NAME(lynx,swap_std_reloc_out) (bfd *abfd,
-			       arelent *g,
-			       struct reloc_std_external *natptr)
+void
+NAME(lynx,swap_std_reloc_out) (abfd, g, natptr)
+     bfd *abfd;
+     arelent *g;
+     struct reloc_std_external *natptr;
 {
   int r_index;
   asymbol *sym = *(g->sym_ptr_ptr);
@@ -116,6 +138,7 @@ NAME(lynx,swap_std_reloc_out) (bfd *abfd,
   unsigned int r_length;
   int r_pcrel;
   int r_baserel, r_jmptable, r_relative;
+  unsigned int r_addend;
   asection *output_section = sym->section->output_section;
 
   PUT_WORD (abfd, g->address, natptr->r_address);
@@ -127,6 +150,8 @@ NAME(lynx,swap_std_reloc_out) (bfd *abfd,
   r_jmptable = 0;
   r_relative = 0;
 
+  r_addend = g->addend + (*(g->sym_ptr_ptr))->section->output_section->vma;
+
   /* name was clobbered by aout_write_syms to be symbol index */
 
   /* If this relocation is relative to a symbol then set the
@@ -136,6 +161,7 @@ NAME(lynx,swap_std_reloc_out) (bfd *abfd,
      from the abs section, or as a symbol which has an abs value.
      check for that here
   */
+
 
   if (bfd_is_com_section (output_section)
       || bfd_is_abs_section (output_section)
@@ -195,10 +221,11 @@ NAME(lynx,swap_std_reloc_out) (bfd *abfd,
 /* Extended stuff */
 /* Output extended relocation information to a file in target byte order. */
 
-static void
-NAME(lynx,swap_ext_reloc_out) (bfd *abfd,
-			       arelent *g,
-			       struct reloc_ext_external *natptr)
+void
+NAME(lynx,swap_ext_reloc_out) (abfd, g, natptr)
+     bfd *abfd;
+     arelent *g;
+     register struct reloc_ext_external *natptr;
 {
   int r_index;
   int r_extern;
@@ -279,16 +306,13 @@ NAME(lynx,swap_ext_reloc_out) (bfd *abfd,
    to give the true offset from the section */
 
 
-#define MOVE_ADDRESS(ad)						\
-  if (r_extern)								\
-    {									\
+#define MOVE_ADDRESS(ad)       						\
+  if (r_extern) {							\
    /* undefined symbol */						\
      cache_ptr->sym_ptr_ptr = symbols + r_index;			\
      cache_ptr->addend = ad;						\
-    }									\
-  else									\
-    {									\
-    /* defined, section relative. replace symbol with pointer to	\
+     } else {								\
+    /* defined, section relative. replace symbol with pointer to    	\
        symbol which points to section  */				\
     switch (r_index) {							\
     case N_TEXT:							\
@@ -313,14 +337,15 @@ NAME(lynx,swap_ext_reloc_out) (bfd *abfd,
       cache_ptr->addend = ad;						\
       break;								\
     }									\
-  }									\
+  }     								\
 
-static void
-NAME(lynx,swap_ext_reloc_in) (bfd *abfd,
-			      struct reloc_ext_external *bytes,
-			      arelent *cache_ptr,
-			      asymbol **symbols,
-			      bfd_size_type symcount ATTRIBUTE_UNUSED)
+void
+NAME(lynx,swap_ext_reloc_in) (abfd, bytes, cache_ptr, symbols, symcount)
+     bfd *abfd;
+     struct reloc_ext_external *bytes;
+     arelent *cache_ptr;
+     asymbol **symbols;
+     bfd_size_type symcount ATTRIBUTE_UNUSED;
 {
   int r_index;
   int r_extern;
@@ -338,17 +363,19 @@ NAME(lynx,swap_ext_reloc_in) (bfd *abfd,
   MOVE_ADDRESS (GET_SWORD (abfd, bytes->r_addend));
 }
 
-static void
-NAME(lynx,swap_std_reloc_in) (bfd *abfd,
-			      struct reloc_std_external *bytes,
-			      arelent *cache_ptr,
-			      asymbol **symbols,
-			      bfd_size_type symcount ATTRIBUTE_UNUSED)
+void
+NAME(lynx,swap_std_reloc_in) (abfd, bytes, cache_ptr, symbols, symcount)
+     bfd *abfd;
+     struct reloc_std_external *bytes;
+     arelent *cache_ptr;
+     asymbol **symbols;
+     bfd_size_type symcount ATTRIBUTE_UNUSED;
 {
   int r_index;
   int r_extern;
   unsigned int r_length;
   int r_pcrel;
+  int r_baserel, r_jmptable, r_relative;
   struct aoutdata *su = &(abfd->tdata.aout_data->a);
 
   cache_ptr->address = H_GET_32 (abfd, bytes->r_address);
@@ -356,6 +383,9 @@ NAME(lynx,swap_std_reloc_in) (bfd *abfd,
   r_index = bytes->r_index[1];
   r_extern = (0 != (bytes->r_index[0] & RELOC_STD_BITS_EXTERN_BIG));
   r_pcrel = (0 != (bytes->r_index[0] & RELOC_STD_BITS_PCREL_BIG));
+  r_baserel = (0 != (bytes->r_index[0] & RELOC_STD_BITS_BASEREL_BIG));
+  r_jmptable = (0 != (bytes->r_index[0] & RELOC_STD_BITS_JMPTABLE_BIG));
+  r_relative = (0 != (bytes->r_index[0] & RELOC_STD_BITS_RELATIVE_BIG));
   r_length = (bytes->r_index[0] & RELOC_STD_BITS_LENGTH_BIG)
     >> RELOC_STD_BITS_LENGTH_SH_BIG;
 
@@ -367,14 +397,15 @@ NAME(lynx,swap_std_reloc_in) (bfd *abfd,
 
 /* Reloc hackery */
 
-static bfd_boolean
-NAME(lynx,slurp_reloc_table) (bfd *abfd,
-			      sec_ptr asect,
-			      asymbol **symbols)
+bfd_boolean
+NAME(lynx,slurp_reloc_table) (abfd, asect, symbols)
+     bfd *abfd;
+     sec_ptr asect;
+     asymbol **symbols;
 {
   bfd_size_type count;
   bfd_size_type reloc_size;
-  void * relocs;
+  PTR relocs;
   arelent *reloc_cache;
   size_t each_size;
 
@@ -411,7 +442,7 @@ doit:
   if (!reloc_cache && count != 0)
     return FALSE;
 
-  relocs = bfd_alloc (abfd, reloc_size);
+  relocs = (PTR) bfd_alloc (abfd, reloc_size);
   if (!relocs && reloc_size != 0)
     {
       free (reloc_cache);
@@ -427,7 +458,7 @@ doit:
 
   if (each_size == RELOC_EXT_SIZE)
     {
-      struct reloc_ext_external *rptr = (struct reloc_ext_external *) relocs;
+      register struct reloc_ext_external *rptr = (struct reloc_ext_external *) relocs;
       unsigned int counter = 0;
       arelent *cache_ptr = reloc_cache;
 
@@ -439,7 +470,7 @@ doit:
     }
   else
     {
-      struct reloc_std_external *rptr = (struct reloc_std_external *) relocs;
+      register struct reloc_std_external *rptr = (struct reloc_std_external *) relocs;
       unsigned int counter = 0;
       arelent *cache_ptr = reloc_cache;
 
@@ -461,12 +492,15 @@ doit:
 
 /* Write out a relocation section into an object file.  */
 
-static bfd_boolean
-NAME(lynx,squirt_out_relocs) (bfd *abfd, asection *section)
+bfd_boolean
+NAME(lynx,squirt_out_relocs) (abfd, section)
+     bfd *abfd;
+     asection *section;
 {
   arelent **generic;
   unsigned char *native, *natptr;
   size_t each_size;
+
   unsigned int count = section->reloc_count;
   bfd_size_type natsize;
 
@@ -497,7 +531,7 @@ NAME(lynx,squirt_out_relocs) (bfd *abfd, asection *section)
 	NAME(lynx,swap_std_reloc_out) (abfd, *generic, (struct reloc_std_external *) natptr);
     }
 
-  if (bfd_bwrite (native, natsize, abfd) != natsize)
+  if (bfd_bwrite ((PTR) native, natsize, abfd) != natsize)
     {
       bfd_release (abfd, native);
       return FALSE;
@@ -508,11 +542,12 @@ NAME(lynx,squirt_out_relocs) (bfd *abfd, asection *section)
 }
 
 /* This is stupid.  This function should be a boolean predicate */
-static long
-NAME(lynx,canonicalize_reloc) (bfd *abfd,
-			       sec_ptr section,
-			       arelent **relptr,
-			       asymbol **symbols)
+long
+NAME(lynx,canonicalize_reloc) (abfd, section, relptr, symbols)
+     bfd *abfd;
+     sec_ptr section;
+     arelent **relptr;
+     asymbol **symbols;
 {
   arelent *tblptr = section->relocation;
   unsigned int count;

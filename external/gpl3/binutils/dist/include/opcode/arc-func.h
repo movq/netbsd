@@ -1,5 +1,6 @@
 /* Replace functions for the ARC relocs.
-   Copyright (C) 2015-2020 Free Software Foundation, Inc.
+   Copyright 2015
+   Free Software Foundation, Inc.
 
    This file is part of GAS, the GNU Assembler, GDB, the GNU debugger, and
    the GNU Binutils.
@@ -25,7 +26,6 @@
 ATTRIBUTE_UNUSED static unsigned
 replace_none (unsigned insn, int value ATTRIBUTE_UNUSED)
 {
-  insn = insn & ~0x00;
 
   return insn;
 }
@@ -38,7 +38,6 @@ replace_none (unsigned insn, int value ATTRIBUTE_UNUSED)
 ATTRIBUTE_UNUSED static unsigned
 replace_bits8 (unsigned insn, int value ATTRIBUTE_UNUSED)
 {
-  insn = insn & ~0xff;
   insn |= ((value >> 0) & 0x00ff) << 0;
 
   return insn;
@@ -52,7 +51,6 @@ replace_bits8 (unsigned insn, int value ATTRIBUTE_UNUSED)
 ATTRIBUTE_UNUSED static unsigned
 replace_bits16 (unsigned insn, int value ATTRIBUTE_UNUSED)
 {
-  insn = insn & ~0xffff;
   insn |= ((value >> 0) & 0xffff) << 0;
 
   return insn;
@@ -66,7 +64,6 @@ replace_bits16 (unsigned insn, int value ATTRIBUTE_UNUSED)
 ATTRIBUTE_UNUSED static unsigned
 replace_bits24 (unsigned insn, int value ATTRIBUTE_UNUSED)
 {
-  insn = insn & ~0xffffff;
   insn |= ((value >> 0) & 0xffffff) << 0;
 
   return insn;
@@ -74,28 +71,12 @@ replace_bits24 (unsigned insn, int value ATTRIBUTE_UNUSED)
 
 #endif /* REPLACE_bits24 */
 
-/* Special 24 bit replace for big endian.  */
-/* mask  = 111111111111111111111111.  */
-#ifndef REPLACE_bits24_be
-#define REPLACE_bits24_be
-ATTRIBUTE_UNUSED static unsigned
-replace_bits24_be (unsigned insn, int value ATTRIBUTE_UNUSED)
-{
-  insn = insn & ~0xffffff00;
-  insn |= ((value >> 0) & 0xffffff) << 8;
-
-  return insn;
-}
-
-#endif /* REPLACE_bits24_be */
-
 /* mask  = 11111111111111111111111111111111.  */
 #ifndef REPLACE_word32
 #define REPLACE_word32
 ATTRIBUTE_UNUSED static unsigned
 replace_word32 (unsigned insn, int value ATTRIBUTE_UNUSED)
 {
-  insn = insn & ~0xffffffff;
   insn |= ((value >> 0) & 0xffffffff) << 0;
 
   return insn;
@@ -109,7 +90,6 @@ replace_word32 (unsigned insn, int value ATTRIBUTE_UNUSED)
 ATTRIBUTE_UNUSED static unsigned
 replace_limm (unsigned insn, int value ATTRIBUTE_UNUSED)
 {
-  insn = insn & ~0xffffffff;
   insn |= ((value >> 0) & 0xffffffff) << 0;
 
   return insn;
@@ -123,7 +103,6 @@ replace_limm (unsigned insn, int value ATTRIBUTE_UNUSED)
 ATTRIBUTE_UNUSED static unsigned
 replace_limms (unsigned insn, int value ATTRIBUTE_UNUSED)
 {
-  insn = insn & ~0xffffffff;
   insn |= ((value >> 0) & 0xffffffff) << 0;
 
   return insn;
@@ -137,7 +116,6 @@ replace_limms (unsigned insn, int value ATTRIBUTE_UNUSED)
 ATTRIBUTE_UNUSED static unsigned
 replace_disp21h (unsigned insn, int value ATTRIBUTE_UNUSED)
 {
-  insn = insn & ~0x7feffc0;
   insn |= ((value >> 0) & 0x03ff) << 17;
   insn |= ((value >> 10) & 0x03ff) << 6;
 
@@ -152,7 +130,6 @@ replace_disp21h (unsigned insn, int value ATTRIBUTE_UNUSED)
 ATTRIBUTE_UNUSED static unsigned
 replace_disp21w (unsigned insn, int value ATTRIBUTE_UNUSED)
 {
-  insn = insn & ~0x7fcffc0;
   insn |= ((value >> 0) & 0x01ff) << 18;
   insn |= ((value >> 9) & 0x03ff) << 6;
 
@@ -167,7 +144,6 @@ replace_disp21w (unsigned insn, int value ATTRIBUTE_UNUSED)
 ATTRIBUTE_UNUSED static unsigned
 replace_disp25h (unsigned insn, int value ATTRIBUTE_UNUSED)
 {
-  insn = insn & ~0x7feffcf;
   insn |= ((value >> 0) & 0x03ff) << 17;
   insn |= ((value >> 10) & 0x03ff) << 6;
   insn |= ((value >> 20) & 0x000f) << 0;
@@ -183,7 +159,6 @@ replace_disp25h (unsigned insn, int value ATTRIBUTE_UNUSED)
 ATTRIBUTE_UNUSED static unsigned
 replace_disp25w (unsigned insn, int value ATTRIBUTE_UNUSED)
 {
-  insn = insn & ~0x7fcffcf;
   insn |= ((value >> 0) & 0x01ff) << 18;
   insn |= ((value >> 9) & 0x03ff) << 6;
   insn |= ((value >> 19) & 0x000f) << 0;
@@ -199,7 +174,6 @@ replace_disp25w (unsigned insn, int value ATTRIBUTE_UNUSED)
 ATTRIBUTE_UNUSED static unsigned
 replace_disp9 (unsigned insn, int value ATTRIBUTE_UNUSED)
 {
-  insn = insn & ~0x1ff;
   insn |= ((value >> 0) & 0x01ff) << 0;
 
   return insn;
@@ -213,7 +187,6 @@ replace_disp9 (unsigned insn, int value ATTRIBUTE_UNUSED)
 ATTRIBUTE_UNUSED static unsigned
 replace_disp9ls (unsigned insn, int value ATTRIBUTE_UNUSED)
 {
-  insn = insn & ~0xff8000;
   insn |= ((value >> 0) & 0x00ff) << 16;
   insn |= ((value >> 8) & 0x0001) << 15;
 
@@ -228,7 +201,6 @@ replace_disp9ls (unsigned insn, int value ATTRIBUTE_UNUSED)
 ATTRIBUTE_UNUSED static unsigned
 replace_disp9s (unsigned insn, int value ATTRIBUTE_UNUSED)
 {
-  insn = insn & ~0x1ff;
   insn |= ((value >> 0) & 0x01ff) << 0;
 
   return insn;
@@ -242,7 +214,6 @@ replace_disp9s (unsigned insn, int value ATTRIBUTE_UNUSED)
 ATTRIBUTE_UNUSED static unsigned
 replace_disp13s (unsigned insn, int value ATTRIBUTE_UNUSED)
 {
-  insn = insn & ~0x7ff;
   insn |= ((value >> 0) & 0x07ff) << 0;
 
   return insn;
@@ -256,7 +227,6 @@ replace_disp13s (unsigned insn, int value ATTRIBUTE_UNUSED)
 ATTRIBUTE_UNUSED static unsigned
 replace_disp9s1 (unsigned insn, int value ATTRIBUTE_UNUSED)
 {
-  insn = insn & ~0x7e7;
   insn |= ((value >> 0) & 0x0007) << 0;
   insn |= ((value >> 3) & 0x003f) << 5;
 
@@ -264,31 +234,3 @@ replace_disp9s1 (unsigned insn, int value ATTRIBUTE_UNUSED)
 }
 
 #endif /* REPLACE_disp9s1 */
-
-/* mask  = 00000000000000000000111111222222.  */
-#ifndef REPLACE_disp12s
-#define REPLACE_disp12s
-ATTRIBUTE_UNUSED static unsigned
-replace_disp12s (unsigned insn, int value ATTRIBUTE_UNUSED)
-{
-  insn = insn & ~0xfff;
-  insn |= ((value >> 0) & 0x003f) << 6;
-  insn |= ((value >> 6) & 0x003f) << 0;
-  return insn;
-}
-
-#endif /* REPLACE_disp12s */
-
-/* mask  = 0000001111111111.  */
-#ifndef REPLACE_jli
-#define REPLACE_jli
-ATTRIBUTE_UNUSED static unsigned
-replace_jli (unsigned insn, int value)
-{
-  insn = insn & ~0x3ff;
-  insn |= ((value >> 0) & 0x03ff) << 0;
-
-  return insn;
-}
-
-#endif /* REPLACE_jli */

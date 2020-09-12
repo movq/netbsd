@@ -1,4 +1,4 @@
-# Copyright 2014-2019 Free Software Foundation, Inc.
+# Copyright 2014-2015 Free Software Foundation, Inc.
 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -42,15 +42,15 @@ clean_restart ${testfile}
 #
 gdb_test "compile code int i=2;" \
     "The program must be running for the compile command to work.*" \
-    "test compile code command without running inferior"
+    "Test compile code command without running inferior"
 
 gdb_test "compile int i=2;" \
     "The program must be running for the compile command to work.*" \
-    "test compile command without running inferior"
+    "Test compile command without running inferior"
 
 gdb_test "compile file -r ${srcdir}/${subdir}/${testfile}-mod.c" \
     "The program must be running for the compile command to work.*" \
-    "test compile file command without running inferior"
+    "Test compile file command without running inferior"
 
 if ![runto_main] {
     return -1
@@ -66,20 +66,20 @@ if {[skip_compile_feature_tests]} {
 #
 
 gdb_test_no_output "compile -- f = 10" \
-    "test abbreviations and code delimiter"
+    "Test abbreviations and code delimiter"
 
 gdb_test "compile f = 10;" ".*= 10;: No such file.*" \
     "Test abbreviations and code collision"
 
-gdb_test_no_output "compile -r -- void _gdb_expr(){int i = 5;}" \
-    "test delimiter with -r"
+gdb_test_no_output "compile -r -- _gdb_expr(){int i = 5;}" \
+    "Test delimiter with -r"
 
-gdb_test_no_output "compile -raw -- void _gdb_expr(){int i = 5;}" \
-    "test delimiter with -raw"
+gdb_test_no_output "compile -raw -- _gdb_expr(){int i = 5;}" \
+    "Test delimiter with -raw"
 
-gdb_test "compile -- -r  void _gdb_expr(){int i = 5;}" \
+gdb_test "compile -- -r  _gdb_expr(){int i = 5;}" \
     ".* error: 'r' undeclared \\(first use in this function\\).*" \
-    "test delimiter with -r after it"
+    "Test delimiter with -r after it"
 
 gdb_test "p globalvar" " = 10" "expect 10"
 
@@ -131,19 +131,16 @@ gdb_test_no_output "compile code globalvar = static_local"
 gdb_test "p globalvar" " = 77000" "check static_local"
 
 gdb_test_no_output "compile code static int staticvar = 5; intptr = &staticvar" \
-    "do not keep jit in memory"
-gdb_test "p *intptr" "Cannot access memory at address 0x\[0-9a-f\]+" "expect no 5"
+    "keep jit in memory"
+gdb_test "p *intptr" " = 5" "expect 5"
 
 gdb_test "compile code func_doesnotexist ();" "warning: Could not find symbol \"func_doesnotexist\" for .*"
 
 gdb_test "compile code *(volatile int *) 0 = 0;" \
     "The program being debugged was signaled while in a function called from GDB\\.\r\nGDB remains in the frame where the signal was received\\.\r\n.*" \
     "compile code segfault first"
-gdb_test "bt" [multi_line \
-		   "#0  ($hex in )?_gdb_expr .*" \
-		   "#1  <function called from gdb>" \
-		   "#2  .*" \
-		  ]
+gdb_test "bt" \
+    "\r\n#0  \[^\r\n\]* in _gdb_expr \[^\r\n\]*\r\n#1  <function called from gdb>\r\n.*"
 
 set test "p/x \$pc"
 set infcall_pc 0
@@ -192,61 +189,43 @@ gdb_test "p localvar" " = 1"
 # Test setting fields and also many different types.
 #
 
-set skip_struct_object 0
-set test "compile code struct_object.selffield = &struct_object"
-gdb_test_multiple $test $test {
-    -re "^$test\r\n$gdb_prompt $" {
-	pass "$test"
-    }
-    -re " error: Unexpected type id from GCC, check you use recent enough GCC\\.\r\n.*\r\n$gdb_prompt $" {
-	xfail "$test (PR compile/18202)"
+gdb_test_no_output "compile code struct_object.selffield = &struct_object"
+gdb_test "print struct_object.selffield == &struct_object" " = 1"
 
-	# All following tests will break with the same error message.
-	set skip_struct_object 1
-    }
+gdb_test_no_output "compile code struct_object.charfield = 1"
+gdb_test "print struct_object.charfield" " = 1 '\\\\001'"
+gdb_test_no_output "compile code struct_object.ucharfield = 1"
+gdb_test "print struct_object.ucharfield" " = 1 '\\\\001'"
+
+foreach {field value} {
+    shortfield -5
+    ushortfield 5
+    intfield -7
+    uintfield 7
+    bitfield 2
+    longfield -9
+    ulongfield 9
+    enumfield ONE
+    floatfield 1
+    doublefield 2
+} {
+    gdb_test_no_output "compile code struct_object.$field = $value"
+    gdb_test "print struct_object.$field" " = $value"
 }
 
-if {$skip_struct_object} {
-    untested "all struct_object tests"
-} else {
-    gdb_test "print struct_object.selffield == &struct_object" " = 1"
+gdb_test_no_output "compile code struct_object.arrayfield\[2\] = 7"
+gdb_test "print struct_object.arrayfield" \
+    " = \\{0, 0, 7, 0, 0\\}"
 
-    gdb_test_no_output "compile code struct_object.charfield = 1"
-    gdb_test "print struct_object.charfield" " = 1 '\\\\001'"
-    gdb_test_no_output "compile code struct_object.ucharfield = 1"
-    gdb_test "print struct_object.ucharfield" " = 1 '\\\\001'"
+gdb_test_no_output "compile code struct_object.complexfield = 7 + 5i"
+gdb_test "print struct_object.complexfield" " = 7 \\+ 5 \\* I"
 
-    foreach {field value} {
-	shortfield -5
-	ushortfield 5
-	intfield -7
-	uintfield 7
-	bitfield 2
-	longfield -9
-	ulongfield 9
-	enumfield ONE
-	floatfield 1
-	doublefield 2
-    } {
-	gdb_test_no_output "compile code struct_object.$field = $value"
-	gdb_test "print struct_object.$field" " = $value"
-    }
+gdb_test_no_output "compile code struct_object.boolfield = 1"
+gdb_test "print struct_object.boolfield" " = true"
 
-    gdb_test_no_output "compile code struct_object.arrayfield\[2\] = 7"
-    gdb_test "print struct_object.arrayfield" \
-	" = \\{0, 0, 7, 0, 0\\}"
-
-    gdb_test_no_output "compile code struct_object.complexfield = 7 + 5i"
-    gdb_test "print struct_object.complexfield" " = 7 \\+ 5 \\* I"
-
-    gdb_test_no_output "compile code struct_object.boolfield = 1"
-    gdb_test "print struct_object.boolfield" " = true"
-
-    gdb_test_no_output "compile code struct_object.vectorfield\[2\] = 7"
-    gdb_test "print struct_object.vectorfield" \
-	" = \\{0, 0, 7, 0\\}"
-
-}
+gdb_test_no_output "compile code struct_object.vectorfield\[2\] = 7"
+gdb_test "print struct_object.vectorfield" \
+    " = \\{0, 0, 7, 0\\}"
 
 gdb_test_no_output "compile code union_object.typedeffield = 7"
 gdb_test "print union_object.typedeffield" " = 7"
@@ -256,7 +235,7 @@ gdb_test "print union_object.intfield" " = 7"
 # LOC_UNRESOLVED tests.
 
 gdb_test "print unresolved" " = 20"
-gdb_test_no_output "compile code globalvar = unresolved;"
+gdb_test "compile code globalvar = unresolved;"
 gdb_test "print globalvar" " = 20" "print unresolved value"
 
 # Test shadowing with global and static variables.
@@ -282,7 +261,7 @@ gdb_test "print 'compile.c'::globalshadow" " = 77000" \
 
 # Test GOT vs. resolving jit function pointers.
 
-gdb_test_no_output "compile -raw -- int func(){return 21;} void _gdb_expr(){ void abort (void); int (*funcp)()=func; if (funcp()!=21) abort(); }" \
+gdb_test_no_output "compile -raw -- int func(){return 21;} _gdb_expr(){int (*funcp)()=func; if (funcp()!=21) abort();}" \
     "pointer to jit function"
 
 #
@@ -299,14 +278,12 @@ gdb_test "p globalvar" " = 77" "expect 77"
 
 # Test reference to minimal_symbol, not (full) symbol.
 
-gdb_test "compile code globalvar = func_nodebug (75);" \
-    "warning: function has unknown return type; assuming int" \
+gdb_test_no_output "compile code globalvar = func_nodebug (75);" \
     "call func_nodebug"
 gdb_test "p globalvar" " = -75" "expect -75"
-gdb_test \
-    "compile code int (*funcp) (int) = func_nodebug; globalvar = funcp (76);" \
-    "warning: function has unknown return type; assuming int" \
-    "call func_nodebug indirectly"
+gdb_test_no_output \
+  "compile code int (*funcp) (int) = func_nodebug; globalvar = funcp (76);" \
+  "call func_nodebug indirectly"
 gdb_test "p globalvar" " = -76" "expect -76"
 
 
@@ -327,9 +304,9 @@ gdb_test "show compile-args" \
     "Compile command command-line arguments are .*"
 gdb_test "compile code -z" "Unknown argument.*"
 
-gdb_test "set lang rust" \
+gdb_test "set lang java" \
     "Warning: the current language does not match this frame."
-gdb_test "compile code globalvar" "No compiler support for language rust\\."
+gdb_test "compile code globalvar" "No compiler support for this language\."
 gdb_test_no_output "set lang auto"
 
 gdb_test_no_output "compile code union union_type newdecl_u"
@@ -344,7 +321,7 @@ gdb_test "compile file -r" \
     "Test compile file and raw option without a filename"
 gdb_test "compile file -z" \
     "Unknown argument.*" \
-    "test compile file with unknown argument"
+    "Test compile file with unknown argument"
 
 
 # LOC_CONST tests.
@@ -353,7 +330,7 @@ if { $srcfile3 != "" } {
     gdb_test "p constvar" " = 3"
     gdb_test "info addr constvar" {Symbol "constvar" is constant\.}
 
-    gdb_test_no_output "compile code globalvar = constvar;"
+    gdb_test "compile code globalvar = constvar;"
     gdb_test "print globalvar" " = 3" "print constvar value"
 } else {
     untested "print constvar value"
@@ -367,17 +344,13 @@ if {[skip_shlib_tests]} {
 }
 
 set libbin [standard_output_file ${testfile}-shlib.so]
-set binfile [standard_output_file ${testfile}-shlib]
-
 if { [gdb_compile_shlib ${srcdir}/${subdir}/${srcfile2} $libbin {debug}] != ""
-     || [gdb_compile ${srcdir}/${subdir}/${srcfile} $binfile executable \
-	     [list debug shlib=$libbin]] == -1 } {
+     || [build_executable $testfile ${testfile}-shlib $srcfile \
+	     [list debug ldflags=$libbin]] == -1 } {
     return -1
 }
 
-clean_restart $binfile
-gdb_load_shlib $libbin
-
+clean_restart ${testfile}-shlib
 if ![runto_main] {
     return -1
 }

@@ -1,6 +1,7 @@
-/* Override definitions in elfos.h to be correct for IA64.
+/* Override definitions in elfos.h/svr4.h to be correct for IA64.
 
-Copyright (C) 2000-2019 Free Software Foundation, Inc.
+Copyright (C) 2000, 2001, 2002, 2003, 2004, 2005,
+2007 Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -103,8 +104,12 @@ do {						\
 #undef FINI_SECTION_ASM_OP
 #define FINI_SECTION_ASM_OP	"\t.section\t.fini,\"ax\",\"progbits\""
 
+/* svr4.h undefines this, so we need to define it here.  */
 #define DBX_REGISTER_NUMBER(REGNO) \
   ia64_dbx_register_number(REGNO)
+
+/* Things that svr4.h defines to the wrong type, because it assumes 32-bit
+   ints and 32-bit longs.  */
 
 #undef SIZE_TYPE
 #define SIZE_TYPE "long unsigned int"
@@ -122,7 +127,12 @@ do {						\
 
 #undef ASM_DECLARE_FUNCTION_NAME
 #define ASM_DECLARE_FUNCTION_NAME(FILE, NAME, DECL) \
-  ia64_start_function(FILE,NAME,DECL)
+do {									\
+  fputs ("\t.proc ", FILE);						\
+  assemble_name (FILE, NAME);						\
+  fputc ('\n', FILE);							\
+  ASM_OUTPUT_LABEL (FILE, NAME);					\
+} while (0)
 
 /* We redefine this to use the ia64 .endp pseudo-op.  */
 

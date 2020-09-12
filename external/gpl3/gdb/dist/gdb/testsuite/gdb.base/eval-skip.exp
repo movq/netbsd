@@ -1,4 +1,5 @@
-# Copyright 1998-2019 Free Software Foundation, Inc.
+# Copyright 1998, 1999, 2007, 2008, 2009, 2010, 2011
+# Free Software Foundation, Inc.
 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -28,22 +29,31 @@
 #
 
 
+if $tracelevel then {
+        strace $tracelevel
+}
+
 # Check to see if we have an executable to test.  If not, then either we
 # haven't tried to compile one, or the compilation failed for some reason.
 # In either case, just notify the user and skip the tests in this file.
 
-standard_testfile int-type.c
+set testfile "int-type"
+set srcfile ${testfile}.c
+set binfile ${objdir}/${subdir}/${testfile}
 
 if  { [gdb_compile "${srcdir}/${subdir}/${srcfile}" "${binfile}" executable {debug nowarnings}] != "" } {
-     untested "failed to compile"
+     untested eval-skip.exp
      return -1
     }
 
-if [get_compiler_info] {
+if [get_compiler_info $binfile] {
     return -1
 }
 
-clean_restart ${binfile}
+gdb_exit
+gdb_start
+gdb_reinitialize_dir $srcdir/$subdir
+gdb_load ${binfile}
 
 
 if ![runto_main] then {

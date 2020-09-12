@@ -6,7 +6,7 @@
 # in the space separated list in $ADD_BRANCHES.
 
 SVNROOT=${SVNROOT:-"file:///svn/gcc"}
-IGNORE_BRANCHES='gcc-(2_95|3_0|3_1|3_2|3_3|3_4|4_0|4_1|4_2|4_3|4_4|4_5|4_6|4_7|4_8|4_9|5|6)-branch'
+IGNORE_BRANCHES='gcc-(2_95|3_0|3_1|3_2|3_3|3_4|4_0|4_1|4_2)-branch'
 ADD_BRANCHES='HEAD'
 
 # Run this from /tmp.
@@ -15,36 +15,41 @@ export SVNROOT
 /bin/mkdir /tmp/$$
 cd /tmp/$$
 
+# The path to cvs.
 SVN=${SVN:-/usr/bin/svn}
 
 # Compute the branches which we should update.
 BRANCHES=`$SVN ls $SVNROOT/branches \
 	  | sed -e 's/\///' \
-          | egrep 'gcc-[0-9]+(_[0-9]+)?-branch$' \
+          | egrep 'gcc-[0-9]+_[0-9]+-branch$' \
           | egrep -v $IGNORE_BRANCHES`
 # Always update the mainline.
 BRANCHES="${BRANCHES} ${ADD_BRANCHES}"
 
-# This is put into the datestamp files.
+# ARGS is passed to 'cvs co'
 CURR_DATE=`/bin/date +"%Y%m%d"`
 
+# version is all there is
 datestamp_FILES="gcc/DATESTAMP"
 
+FILES="$datestamp_FILES"
 
 # Assume all will go well.
 RESULT=0
 for BRANCH in $BRANCHES; do
   echo "Working on \"$BRANCH\"."
-  # Check out the files on the branch.  HEAD is in a different namespace.
+  # Check out the files on the branch.  HEAD is a special case; if
+  # you check out files with -r HEAD, CVS will not let you check 
+  # in changes.
   if test "$BRANCH" = HEAD; then 
-    SVNROOT2=${SVNROOT}/trunk
-  else    
-    SVNROOT2=${SVNROOT}/branches/${BRANCH}
+    for i in $FILES; do
+      ${SVN} -q co -N ${SVNROOT}/trunk/`dirname $i` `basename $i`
+    done
+  else
+    for i in $FILES; do
+      ${SVN} -q co -N ${SVNROOT}/branches/${BRANCH}/`dirname $i` `basename $i`
+    done
   fi
-
-  for i in $datestamp_FILES; do
-    ${SVN} -q co -N ${SVNROOT2}/`dirname $i` `basename $i`
-  done
 
   # There are no files to commit yet.
   COMMIT_FILES=""
@@ -76,7 +81,7 @@ for BRANCH in $BRANCHES; do
   fi
   
   # Remove the files.
-  for i in $datestamp_FILES; do
+  for i in $FILES; do
    rm -rf /tmp/$$/`basename $i`
   done
 done

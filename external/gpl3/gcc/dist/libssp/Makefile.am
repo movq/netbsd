@@ -1,40 +1,25 @@
 ## Makefile for the toplevel directory of the libssp library.
 ##
-## Copyright (C) 2005-2019 Free Software Foundation, Inc.
+## Copyright (C) 2005
+## Free Software Foundation, Inc.
 ##
 
-AUTOMAKE_OPTIONS = foreign
+AUTOMAKE_OPTIONS = 1.9.5 foreign
 ACLOCAL_AMFLAGS = -I .. -I ../config
 MAINT_CHARSET = latin1
 
 # May be used by various substitution variables.
-gcc_version := $(shell @get_gcc_base_ver@ $(top_srcdir)/../gcc/BASE-VER)
+gcc_version := $(shell cat $(top_srcdir)/../gcc/BASE-VER)
 
 if LIBSSP_USE_SYMVER
-if LIBSSP_USE_SYMVER_GNU
 version_arg = -Wl,--version-script=$(srcdir)/ssp.map
 version_dep = $(srcdir)/ssp.map
-endif
-if LIBSSP_USE_SYMVER_SUN
-version_arg = -Wl,-M,ssp.map-sun
-version_dep = ssp.map-sun
-ssp.map-sun : $(srcdir)/ssp.map \
-		$(top_srcdir)/../contrib/make_sunver.pl \
-		$(libssp_la_OBJECTS) $(libssp_la_LIBADD)
-	perl $(top_srcdir)/../contrib/make_sunver.pl \
-	  $(srcdir)/ssp.map \
-	  $(libssp_la_OBJECTS:%.lo=.libs/%.o) \
-	 `echo $(libssp_la_LIBADD) | \
-	    sed 's,/\([^/.]*\)\.la,/.libs/\1.a,g'` \
-	 > $@ || (rm -f $@ ; exit 1)
-endif
 else
 version_arg =
 version_dep =
 endif
 
 AM_CFLAGS = -Wall
-AM_CFLAGS += $(XCFLAGS)
 
 toolexeclib_LTLIBRARIES = libssp.la libssp_nonshared.la
 
@@ -50,11 +35,11 @@ libssp_la_SOURCES = \
 libssp_la_LIBADD = 
 libssp_la_DEPENDENCIES = $(version_dep) $(libssp_la_LIBADD)
 libssp_la_LDFLAGS = -version-info `grep -v '^\#' $(srcdir)/libtool-version` \
-		    $(version_arg) $(lt_host_flags)
+		    $(version_arg) -no-undefined -bindir "$(bindir)"
 
 libssp_nonshared_la_SOURCES = \
 	ssp-local.c
-libssp_nonshared_la_CFLAGS = -prefer-pic $(XCFLAGS)
+libssp_nonshared_la_CFLAGS = -prefer-pic
 libssp_nonshared_la_LIBADD = 
 libssp_nonshared_la_DEPENDENCIES = $(libssp_nonshared_la_LIBADD)
 libssp_nonshared_la_LDFLAGS = -static
@@ -107,4 +92,3 @@ MAKEOVERRIDES=
 
 ## ################################################################
 
-include $(top_srcdir)/../multilib.am

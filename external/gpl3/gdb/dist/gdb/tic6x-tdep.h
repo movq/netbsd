@@ -1,5 +1,5 @@
 /* GNU/Linux on  TI C6x target support.
-   Copyright (C) 2011-2019 Free Software Foundation, Inc.
+   Copyright (C) 2011-2013 Free Software Foundation, Inc.
    Contributed by Yao Qi <yao@codesourcery.com>
 
    This file is part of GDB.
@@ -16,9 +16,6 @@
 
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
-
-#ifndef TIC6X_TDEP_H
-#define TIC6X_TDEP_H
 
 enum
 {
@@ -50,9 +47,7 @@ struct gdbarch_tdep
      instruction.  */
   CORE_ADDR (*syscall_next_pc) (struct frame_info *frame);
 
-  const gdb_byte *breakpoint; /* Breakpoint instruction.  */
+  const char *breakpoint; /* Breakpoint instruction.  */
 
   int has_gp; /* Has general purpose registers A16 - A31 and B16 - B31.  */
 };
-
-#endif /* TIC6X_TDEP_H */

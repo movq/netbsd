@@ -1,14 +1,17 @@
+# If you change this file, please also look at files which source this one:
+# elf64hppa.sh
+
 SCRIPT_NAME=elf
 ELFSIZE=64
+# FIXME: this output format is for hpux.
 OUTPUT_FORMAT="elf64-hppa-linux"
-NO_REL_RELOCS=yes
 TEXT_START_ADDR=0x10000
 TARGET_PAGE_SIZE=0x10000
 MAXPAGESIZE="CONSTANT (MAXPAGESIZE)"
 ARCH=hppa
 MACHINE=hppa2.0w
 ENTRY="main"
-TEMPLATE_NAME=elf
+TEMPLATE_NAME=elf32
 GENERATE_SHLIB_SCRIPT=yes
 
 # We really want multiple .stub sections, one for each input .text section,

@@ -3,7 +3,8 @@
 (echo;echo;echo;echo)>e${EMULATION_NAME}.c # there, now line numbers match ;-)
 fragment <<EOF
 /* This file is part of GLD, the Gnu Linker.
-   Copyright (C) 1999-2020 Free Software Foundation, Inc.
+   Copyright 1999, 2000, 2002, 2003, 2004, 2007
+   Free Software Foundation, Inc.
 
    This file is part of the GNU Binutils.
 
@@ -30,7 +31,6 @@ fragment <<EOF
 #include "sysdep.h"
 #include "bfd.h"
 #include "bfdlink.h"
-#include "ctf-api.h"
 #include "getopt.h"
 
 #include "ld.h"
@@ -79,17 +79,17 @@ gld${EMULATION_NAME}_handle_option (int optc)
 
     case OPTION_COFF_FORMAT:
       if ((*optarg == '0' || *optarg == '1' || *optarg == '2')
-	  && optarg[1] == '\0')
-	{
-	  static char buf[] = "coffX-${OUTPUT_FORMAT_TEMPLATE}";
-	  coff_version = *optarg - '0';
-	  buf[4] = *optarg;
-	  lang_add_output_format (buf, NULL, NULL, 0);
-	}
+          && optarg[1] == '\0')
+      {
+        static char buf[] = "coffX-${OUTPUT_FORMAT_TEMPLATE}";
+        coff_version = *optarg - '0';
+        buf[4] = *optarg;
+	lang_add_output_format (buf, NULL, NULL, 0);
+      }
       else
-	{
-	  einfo (_("%F%P: invalid COFF format version %s\n"), optarg);
-	}
+        {
+	  einfo (_("%P%F: invalid COFF format version %s\n"), optarg);
+        }
       break;
     }
   return FALSE;
@@ -106,7 +106,7 @@ gld_${EMULATION_NAME}_before_parse(void)
 static char *
 gld_${EMULATION_NAME}_get_script (int *isfile)
 EOF
-if test x"$COMPILE_IN" = xyes
+if test -n "$COMPILE_IN"
 then
 # Scripts compiled in.
 
@@ -119,9 +119,9 @@ $s/$/n"/
 fragment <<EOF
 {
   *isfile = 0;
-  if (bfd_link_relocatable (&link_info) && config.build_constructors)
+  if (link_info.relocatable && config.build_constructors)
     return `sed "$sc" ldscripts/${EMULATION_NAME}.xu`;
-  else if (bfd_link_relocatable (&link_info))
+  else if (link_info.relocatable)
     return `sed "$sc" ldscripts/${EMULATION_NAME}.xr`;
   else if (!config.text_read_only)
     return `sed "$sc" ldscripts/${EMULATION_NAME}.xbn`;
@@ -139,9 +139,9 @@ fragment <<EOF
 {
   *isfile = 1;
 
-  if (bfd_link_relocatable (&link_info) && config.build_constructors)
+  if (link_info.relocatable && config.build_constructors)
     return "ldscripts/${EMULATION_NAME}.xu";
-  else if (bfd_link_relocatable (&link_info))
+  else if (link_info.relocatable)
     return "ldscripts/${EMULATION_NAME}.xr";
   else if (!config.text_read_only)
     return "ldscripts/${EMULATION_NAME}.xbn";
@@ -162,7 +162,6 @@ struct ld_emulation_xfer_struct ld_${EMULATION_NAME}_emulation =
   hll_default,
   after_parse_default,
   after_open_default,
-  after_check_relocs_default,
   after_allocation_default,
   set_output_arch_default,
   ldemul_default_target,
@@ -182,9 +181,6 @@ struct ld_emulation_xfer_struct ld_${EMULATION_NAME}_emulation =
   gld_${EMULATION_NAME}_list_options,
   NULL, /* recognized file */
   NULL,	/* find_potential_libraries */
-  NULL,	/* new_vers_pattern */
-  NULL,  /* extra_map_file_text */
-  ${LDEMUL_EMIT_CTF_EARLY-NULL},
-  ${LDEMUL_EXAMINE_STRTAB_FOR_CTF-NULL}
+  NULL	/* new_vers_pattern */
 };
 EOF

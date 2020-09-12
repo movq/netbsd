@@ -1,4 +1,4 @@
-/*	$NetBSD: strerror.c,v 1.1.1.1 2016/01/14 00:11:29 christos Exp $	*/
+/*	$NetBSD: strerror.c,v 1.1 2016/01/14 00:11:29 christos Exp $	*/
 
 /* strerror.c --- ANSI C compatible system error routine
 

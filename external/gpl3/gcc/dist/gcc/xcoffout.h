@@ -1,6 +1,7 @@
 /* XCOFF definitions.  These are needed in dbxout.c, final.c,
    and xcoffout.h.
-   Copyright (C) 1998-2019 Free Software Foundation, Inc.
+   Copyright (C) 1998, 2000, 2002, 2003, 2004, 2007, 2008
+   Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -18,8 +19,6 @@ You should have received a copy of the GNU General Public License
 along with GCC; see the file COPYING3.  If not see
 <http://www.gnu.org/licenses/>.  */
 
-#ifndef GCC_XCOFFOUT_H
-#define GCC_XCOFFOUT_H
 
 /* Tags and typedefs are C_DECL in XCOFF, not C_LSYM.  */
 
@@ -127,9 +126,6 @@ extern const char *xcoff_current_include_file;
 
 extern char *xcoff_bss_section_name;
 extern char *xcoff_private_data_section_name;
-extern char *xcoff_private_rodata_section_name;
-extern char *xcoff_tls_data_section_name;
-extern char *xcoff_tbss_section_name;
 extern char *xcoff_read_only_section_name;
 
 /* Last source file name mentioned in a NOTE insn.  */
@@ -162,11 +158,8 @@ do {							\
 /* Do not emit any marker for XCOFF until assembler allows XFT_CV.  */
 #define NO_DBX_GCC_MARKER
 
-/* XCOFF32 maximum length is 64K; XLC limits to 16K.  */
-#define DBX_CONTIN_LENGTH 16384
-
-/* XLC uses '?' as continuation character.  */
-#define DBX_CONTIN_CHAR '?'
+/* Do not break .stabs pseudos into continuations.  */
+#define DBX_CONTIN_LENGTH 0
 
 /* Don't try to use the `x' type-cross-reference character in DBX data.
    Also has the consequence of putting each struct, union or enum
@@ -182,14 +175,11 @@ do {							\
 /* Prototype functions in xcoffout.c.  */
 
 extern int stab_to_sclass (int);
-extern void xcoffout_begin_prologue (unsigned int, unsigned int, const char *);
+extern void xcoffout_begin_prologue (unsigned int, const char *);
 extern void xcoffout_begin_block (unsigned, unsigned);
 extern void xcoffout_end_epilogue (unsigned int, const char *);
 extern void xcoffout_end_function (unsigned int);
 extern void xcoffout_end_block (unsigned, unsigned);
 extern int xcoff_assign_fundamental_type_number (tree);
 extern void xcoffout_declare_function (FILE *, tree, const char *);
-extern void xcoffout_source_line (unsigned int, unsigned int, const char *,
-				  int, bool);
-
-#endif /* GCC_XCOFFOUT_H */
+extern void xcoffout_source_line (unsigned int, const char *, int, bool);

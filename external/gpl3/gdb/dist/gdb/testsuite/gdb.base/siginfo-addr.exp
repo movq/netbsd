@@ -1,4 +1,4 @@
-# Copyright 2004-2019 Free Software Foundation, Inc.
+# Copyright 2004, 2007, 2008, 2009, 2010, 2011 Free Software Foundation, Inc.
 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -26,23 +26,46 @@ if [target_info exists gdb,nosignals] {
     continue
 }
 
-standard_testfile
-if {[prepare_for_testing "failed to prepare" $testfile $srcfile debug]} {
+if [gdb_skip_stdio_test "siginfo-addr.exp"] {
+    continue
+}
+
+if $tracelevel then {
+    strace $tracelevel
+}
+
+
+set testfile siginfo-addr
+set srcfile ${testfile}.c
+set binfile ${objdir}/${subdir}/${testfile}
+if  { [gdb_compile "${srcdir}/${subdir}/${srcfile}" "${binfile}" executable {debug}] != "" } {
+    untested "Couldn't compile ${srcfile}.c"
     return -1
 }
+
+# get things started
+gdb_exit
+gdb_start
+gdb_reinitialize_dir $srcdir/$subdir
+gdb_load ${binfile}
 
 gdb_test "display/i \$pc"
 
 # Advance to main
-if ![runto_main] then {
-    fail "can't run to main"
-    return 0
+if { ![runto_main] } then {
+    gdb_suppress_tests;
 }
 
 # Run to the signal.
 gdb_test "continue" ".*Program received signal SIGSEGV.*" "continue to signal"
 
-gdb_breakpoint "pass"
-
 # Check for correct si_addr.
-gdb_test "continue" "Breakpoint .* pass .*" "correct si_addr"
+set test "program exit"
+gdb_test_multiple "continue" "${test}" {
+    -re "Correct si_addr" {
+	pass "si_addr value"
+    }
+    -re "Got si_addr" {
+	fail "si_addr value"
+    }
+}

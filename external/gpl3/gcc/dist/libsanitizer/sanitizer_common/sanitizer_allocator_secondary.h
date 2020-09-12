@@ -12,71 +12,20 @@
 #error This file must be included inside sanitizer_allocator.h
 #endif
 
-// Fixed array to store LargeMmapAllocator chunks list, limited to 32K total
-// allocated chunks. To be used in memory constrained or not memory hungry cases
-// (currently, 32 bits and internal allocator).
-class LargeMmapAllocatorPtrArrayStatic {
- public:
-  INLINE void *Init() { return &p_[0]; }
-  INLINE void EnsureSpace(uptr n) { CHECK_LT(n, kMaxNumChunks); }
- private:
-  static const int kMaxNumChunks = 1 << 15;
-  uptr p_[kMaxNumChunks];
-};
-
-// Much less restricted LargeMmapAllocator chunks list (comparing to
-// PtrArrayStatic). Backed by mmaped memory region and can hold up to 1M chunks.
-// ReservedAddressRange was used instead of just MAP_NORESERVE to achieve the
-// same functionality in Fuchsia case, which does not support MAP_NORESERVE.
-class LargeMmapAllocatorPtrArrayDynamic {
- public:
-  INLINE void *Init() {
-    uptr p = address_range_.Init(kMaxNumChunks * sizeof(uptr),
-                                 SecondaryAllocatorName);
-    CHECK(p);
-    return reinterpret_cast<void*>(p);
-  }
-
-  INLINE void EnsureSpace(uptr n) {
-    CHECK_LT(n, kMaxNumChunks);
-    DCHECK(n <= n_reserved_);
-    if (UNLIKELY(n == n_reserved_)) {
-      address_range_.MapOrDie(
-          reinterpret_cast<uptr>(address_range_.base()) +
-              n_reserved_ * sizeof(uptr),
-          kChunksBlockCount * sizeof(uptr));
-      n_reserved_ += kChunksBlockCount;
-    }
-  }
-
- private:
-  static const int kMaxNumChunks = 1 << 20;
-  static const int kChunksBlockCount = 1 << 14;
-  ReservedAddressRange address_range_;
-  uptr n_reserved_;
-};
-
-#if SANITIZER_WORDSIZE == 32
-typedef LargeMmapAllocatorPtrArrayStatic DefaultLargeMmapAllocatorPtrArray;
-#else
-typedef LargeMmapAllocatorPtrArrayDynamic DefaultLargeMmapAllocatorPtrArray;
-#endif
-
 // This class can (de)allocate only large chunks of memory using mmap/unmap.
 // The main purpose of this allocator is to cover large and rare allocation
 // sizes not covered by more efficient allocators (e.g. SizeClassAllocator64).
-template <class MapUnmapCallback = NoOpMapUnmapCallback,
-          class PtrArrayT = DefaultLargeMmapAllocatorPtrArray>
+template <class MapUnmapCallback = NoOpMapUnmapCallback>
 class LargeMmapAllocator {
  public:
-  void InitLinkerInitialized() {
+  void InitLinkerInitialized(bool may_return_null) {
     page_size_ = GetPageSizeCached();
-    chunks_ = reinterpret_cast<Header**>(ptr_array_.Init());
+    atomic_store(&may_return_null_, may_return_null, memory_order_relaxed);
   }
 
-  void Init() {
+  void Init(bool may_return_null) {
     internal_memset(this, 0, sizeof(*this));
-    InitLinkerInitialized();
+    InitLinkerInitialized(may_return_null);
   }
 
   void *Allocate(AllocatorStats *stat, uptr size, uptr alignment) {
@@ -85,16 +34,9 @@ class LargeMmapAllocator {
     if (alignment > page_size_)
       map_size += alignment;
     // Overflow.
-    if (map_size < size) {
-      Report("WARNING: %s: LargeMmapAllocator allocation overflow: "
-             "0x%zx bytes with 0x%zx alignment requested\n",
-             SanitizerToolName, map_size, alignment);
-      return nullptr;
-    }
+    if (map_size < size) return ReturnNullOrDieOnBadRequest();
     uptr map_beg = reinterpret_cast<uptr>(
-        MmapOrDieOnFatalError(map_size, SecondaryAllocatorName));
-    if (!map_beg)
-      return nullptr;
+        MmapOrDie(map_size, "LargeMmapAllocator"));
     CHECK(IsAligned(map_beg, page_size_));
     MapUnmapCallback().OnMap(map_beg, map_size);
     uptr map_end = map_beg + map_size;
@@ -113,11 +55,11 @@ class LargeMmapAllocator {
     CHECK_LT(size_log, ARRAY_SIZE(stats.by_size_log));
     {
       SpinMutexLock l(&mutex_);
-      ptr_array_.EnsureSpace(n_chunks_);
       uptr idx = n_chunks_++;
+      chunks_sorted_ = false;
+      CHECK_LT(idx, kMaxNumChunks);
       h->chunk_idx = idx;
       chunks_[idx] = h;
-      chunks_sorted_ = false;
       stats.n_allocs++;
       stats.currently_allocated += map_size;
       stats.max_allocated = Max(stats.max_allocated, stats.currently_allocated);
@@ -128,6 +70,24 @@ class LargeMmapAllocator {
     return reinterpret_cast<void*>(res);
   }
 
+  bool MayReturnNull() const {
+    return atomic_load(&may_return_null_, memory_order_acquire);
+  }
+
+  void *ReturnNullOrDieOnBadRequest() {
+    if (MayReturnNull()) return nullptr;
+    ReportAllocatorCannotReturnNull(false);
+  }
+
+  void *ReturnNullOrDieOnOOM() {
+    if (MayReturnNull()) return nullptr;
+    ReportAllocatorCannotReturnNull(true);
+  }
+
+  void SetMayReturnNull(bool may_return_null) {
+    atomic_store(&may_return_null_, may_return_null, memory_order_release);
+  }
+
   void Deallocate(AllocatorStats *stat, void *p) {
     Header *h = GetHeader(p);
     {
@@ -135,8 +95,9 @@ class LargeMmapAllocator {
       uptr idx = h->chunk_idx;
       CHECK_EQ(chunks_[idx], h);
       CHECK_LT(idx, n_chunks_);
-      chunks_[idx] = chunks_[--n_chunks_];
+      chunks_[idx] = chunks_[n_chunks_ - 1];
       chunks_[idx]->chunk_idx = idx;
+      n_chunks_--;
       chunks_sorted_ = false;
       stats.n_frees++;
       stats.currently_allocated -= h->map_size;
@@ -198,14 +159,6 @@ class LargeMmapAllocator {
     return GetUser(h);
   }
 
-  void EnsureSortedChunks() {
-    if (chunks_sorted_) return;
-    Sort(reinterpret_cast<uptr *>(chunks_), n_chunks_);
-    for (uptr i = 0; i < n_chunks_; i++)
-      chunks_[i]->chunk_idx = i;
-    chunks_sorted_ = true;
-  }
-
   // This function does the same as GetBlockBegin, but is much faster.
   // Must be called with the allocator locked.
   void *GetBlockBeginFastLocked(void *ptr) {
@@ -213,10 +166,16 @@ class LargeMmapAllocator {
     uptr p = reinterpret_cast<uptr>(ptr);
     uptr n = n_chunks_;
     if (!n) return nullptr;
-    EnsureSortedChunks();
-    auto min_mmap_ = reinterpret_cast<uptr>(chunks_[0]);
-    auto max_mmap_ =
-        reinterpret_cast<uptr>(chunks_[n - 1]) + chunks_[n - 1]->map_size;
+    if (!chunks_sorted_) {
+      // Do one-time sort. chunks_sorted_ is reset in Allocate/Deallocate.
+      SortArray(reinterpret_cast<uptr*>(chunks_), n);
+      for (uptr i = 0; i < n; i++)
+        chunks_[i]->chunk_idx = i;
+      chunks_sorted_ = true;
+      min_mmap_ = reinterpret_cast<uptr>(chunks_[0]);
+      max_mmap_ = reinterpret_cast<uptr>(chunks_[n - 1]) +
+          chunks_[n - 1]->map_size;
+    }
     if (p < min_mmap_ || p >= max_mmap_)
       return nullptr;
     uptr beg = 0, end = n - 1;
@@ -269,17 +228,12 @@ class LargeMmapAllocator {
   // Iterate over all existing chunks.
   // The allocator must be locked when calling this function.
   void ForEachChunk(ForEachChunkCallback callback, void *arg) {
-    EnsureSortedChunks();  // Avoid doing the sort while iterating.
-    for (uptr i = 0; i < n_chunks_; i++) {
-      auto t = chunks_[i];
-      callback(reinterpret_cast<uptr>(GetUser(t)), arg);
-      // Consistency check: verify that the array did not change.
-      CHECK_EQ(chunks_[i], t);
-      CHECK_EQ(chunks_[i]->chunk_idx, i);
-    }
+    for (uptr i = 0; i < n_chunks_; i++)
+      callback(reinterpret_cast<uptr>(GetUser(chunks_[i])), arg);
   }
 
  private:
+  static const int kMaxNumChunks = 1 << FIRST_32_SECOND_64(15, 18);
   struct Header {
     uptr map_beg;
     uptr map_size;
@@ -305,12 +259,13 @@ class LargeMmapAllocator {
   }
 
   uptr page_size_;
-  Header **chunks_;
-  PtrArrayT ptr_array_;
+  Header *chunks_[kMaxNumChunks];
   uptr n_chunks_;
+  uptr min_mmap_, max_mmap_;
   bool chunks_sorted_;
   struct Stats {
     uptr n_allocs, n_frees, currently_allocated, max_allocated, by_size_log[64];
   } stats;
-  StaticSpinMutex mutex_;
+  atomic_uint8_t may_return_null_;
+  SpinMutex mutex_;
 };

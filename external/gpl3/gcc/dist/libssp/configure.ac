@@ -2,12 +2,13 @@
 # 
 # aclocal -I .. -I ../config && autoconf && autoheader && automake
 
+AC_PREREQ(2.64)
 AC_INIT(libssp, 1.0)
 AC_CONFIG_SRCDIR(ssp.c)
 AC_CANONICAL_SYSTEM
 ACX_NONCANONICAL_TARGET
 
-AM_INIT_AUTOMAKE([no-dist])
+AM_INIT_AUTOMAKE
 
 AC_MSG_CHECKING([for --enable-version-specific-runtime-libs])
 AC_ARG_ENABLE(version-specific-runtime-libs,
@@ -61,11 +62,6 @@ void __attribute__((noinline)) bar (char *x)
 [AC_MSG_RESULT(no)])
 CFLAGS="$save_CFLAGS"
 
-# Add CET specific flags if CET is enabled
-GCC_CET_FLAGS(CET_FLAGS)
-XCFLAGS="$XCFLAGS $CET_FLAGS"
-AC_SUBST(XCFLAGS)
-
 AC_MSG_CHECKING([whether hidden visibility is supported])
 AC_TRY_COMPILE([
 void __attribute__((visibility ("hidden"))) bar (void) {}],,
@@ -76,47 +72,23 @@ if test x$ssp_hidden = xyes; then
 fi
 
 AC_MSG_CHECKING([whether symbol versioning is supported])
-AC_ARG_ENABLE(symvers,
-AS_HELP_STRING([--disable-symvers],
-  [disable symbol versioning for libssp]),
-ssp_use_symver=$enableval,
-ssp_use_symver=yes)
-if test "x$ssp_use_symver" != xno; then
-  if test x$gcc_no_link = xyes; then
-    # If we cannot link, we cannot build shared libraries, so do not use
-    # symbol versioning.
-    ssp_use_symver=no
-  else
-    save_LDFLAGS="$LDFLAGS"
-    LDFLAGS="$LDFLAGS -fPIC -shared -Wl,--version-script,./conftest.map"
-    cat > conftest.map <<EOF
+cat > conftest.map <<EOF
 FOO_1.0 {
   global: *foo*; bar; local: *;
 };
 EOF
-    AC_TRY_LINK([int foo;],[],[ssp_use_symver=gnu],[ssp_use_symver=no])
-    if test x$ssp_use_symver = xno; then
-      case "$target_os" in
-        solaris2*)
-          LDFLAGS="$save_LDFLAGS"
-          LDFLAGS="$LDFLAGS -fPIC -shared -Wl,-M,./conftest.map"
-          # Sun ld cannot handle wildcards and treats all entries as undefined.
-          cat > conftest.map <<EOF
-FOO_1.0 {
-  global: foo; local: *;
-};
-EOF
-          AC_TRY_LINK([int foo;],[],[ssp_use_symver=sun],[ssp_use_symver=no])
-	  ;;
-      esac
-    fi
-    LDFLAGS="$save_LDFLAGS"
-  fi
+save_LDFLAGS="$LDFLAGS"
+LDFLAGS="$LDFLAGS -fPIC -shared -Wl,--version-script,./conftest.map"
+if test x$gcc_no_link = xyes; then
+  # If we cannot link, we cannot build shared libraries, so do not use
+  # symbol versioning.
+  ssp_use_symver=no
+else
+  AC_TRY_LINK([int foo;],[],[ssp_use_symver=yes],[ssp_use_symver=no])
 fi
+LDFLAGS="$save_LDFLAGS"
 AC_MSG_RESULT($ssp_use_symver)
-AM_CONDITIONAL(LIBSSP_USE_SYMVER, [test "x$ssp_use_symver" != xno])
-AM_CONDITIONAL(LIBSSP_USE_SYMVER_GNU, [test "x$ssp_use_symver" = xgnu])
-AM_CONDITIONAL(LIBSSP_USE_SYMVER_SUN, [test "x$ssp_use_symver" = xsun])
+AM_CONDITIONAL(LIBSSP_USE_SYMVER, [test "x$ssp_use_symver" = xyes])
 
 AC_CHECK_HEADERS(alloca.h malloc.h paths.h syslog.h string.h unistd.h fcntl.h stdio.h limits.h)
 
@@ -126,11 +98,11 @@ if test x$gcc_no_link = xyes; then
   AC_DEFINE(HAVE_STRNCPY)
   AC_DEFINE(HAVE_STRNCAT)
 else
-  AC_CHECK_FUNCS(memmove mempcpy strncpy strncat)
+  AC_CHECK_FUNCS(mempcpy strncpy strncat)
 fi
 
 AC_MSG_CHECKING([whether vsnprintf is usable])
-AC_RUN_IFELSE([AC_LANG_PROGRAM([
+AC_RUN_IFELSE(AC_LANG_PROGRAM([
 #include <stdarg.h>
 #include <string.h>
 #include <stdio.h>
@@ -146,7 +118,7 @@ int foo (char *buf, size_t n, const char *fmt, ...)
 [char buf@<:@8@:>@; memset (buf, 'A', sizeof (buf));
  if (foo (buf, 4, ".%s.", "CDEFG") != 7)
    return 1;
- return memcmp (buf, ".CD\0AAAA", sizeof (buf)) != 0;])],
+ return memcmp (buf, ".CD\0AAAA", sizeof (buf)) != 0;]),
 [ssp_have_usable_vsnprintf=define],
 [ssp_have_usable_vsnprintf=undef],
 [ssp_have_usable_vsnprintf=undef])
@@ -159,7 +131,6 @@ fi
 AC_SUBST(ssp_have_usable_vsnprintf)
 
 AM_PROG_LIBTOOL
-ACX_LT_HOST_FLAGS
 AC_SUBST(enable_shared)
 AC_SUBST(enable_static)
 
@@ -198,9 +169,6 @@ if test ${multilib} = yes; then
 else
   multilib_arg=
 fi
-
-# Determine what GCC version number to use in filesystem paths.
-GCC_BASE_VER
 
 AC_CONFIG_FILES([Makefile ssp/ssp.h])
 AC_OUTPUT

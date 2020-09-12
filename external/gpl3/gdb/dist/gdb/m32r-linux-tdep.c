@@ -1,6 +1,7 @@
 /* Target-dependent code for GNU/Linux m32r.
 
-   Copyright (C) 2004-2019 Free Software Foundation, Inc.
+   Copyright (C) 2004, 2007, 2008, 2009, 2010, 2011
+   Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -26,6 +27,8 @@
 #include "osabi.h"
 #include "reggroups.h"
 #include "regset.h"
+
+#include "gdb_string.h"
 
 #include "glibc-tdep.h"
 #include "solib-svr4.h"
@@ -171,7 +174,7 @@ m32r_linux_rt_sigtramp_start (CORE_ADDR pc, struct frame_info *this_frame)
 }
 
 static int
-m32r_linux_pc_in_sigtramp (CORE_ADDR pc, const char *name,
+m32r_linux_pc_in_sigtramp (CORE_ADDR pc, char *name,
 			   struct frame_info *this_frame)
 {
   /* If we have NAME, we can optimize the search.  The trampolines are
@@ -230,7 +233,7 @@ m32r_linux_sigtramp_frame_cache (struct frame_info *this_frame,
   int regnum;
 
   if ((*this_cache) != NULL)
-    return (struct m32r_frame_cache *) (*this_cache);
+    return (*this_cache);
   cache = FRAME_OBSTACK_ZALLOC (struct m32r_frame_cache);
   (*this_cache) = cache;
   cache->saved_regs = trad_frame_alloc_saved_regs (this_frame);
@@ -291,7 +294,7 @@ m32r_linux_sigtramp_frame_sniffer (const struct frame_unwind *self,
 				   void **this_cache)
 {
   CORE_ADDR pc = get_frame_pc (this_frame);
-  const char *name;
+  char *name;
 
   find_pc_partial_function (pc, &name, NULL, NULL);
   if (m32r_linux_pc_in_sigtramp (pc, name, this_frame))
@@ -344,26 +347,19 @@ static int m32r_pt_regs_offset[] = {
 #define SPU_OFFSET (4 * 23)
 #define SPI_OFFSET (4 * 26)
 
-#define M32R_LINUX_GREGS_SIZE (4 * 28)
-
 static void
 m32r_linux_supply_gregset (const struct regset *regset,
 			   struct regcache *regcache, int regnum,
 			   const void *gregs, size_t size)
 {
-  const gdb_byte *regs = (const gdb_byte *) gregs;
-  enum bfd_endian byte_order =
-    gdbarch_byte_order (regcache->arch ());
-  ULONGEST psw, bbpsw;
-  gdb_byte buf[4];
-  const gdb_byte *p;
+  const char *regs = gregs;
+  unsigned long psw, bbpsw;
   int i;
 
-  psw = extract_unsigned_integer (regs + PSW_OFFSET, 4, byte_order);
-  bbpsw = extract_unsigned_integer (regs + BBPSW_OFFSET, 4, byte_order);
-  psw = ((0x00c1 & bbpsw) << 8) | ((0xc100 & psw) >> 8);
+  psw = *((unsigned long *) (regs + PSW_OFFSET));
+  bbpsw = *((unsigned long *) (regs + BBPSW_OFFSET));
 
-  for (i = 0; i < ARRAY_SIZE (m32r_pt_regs_offset); i++)
+  for (i = 0; i < sizeof (m32r_pt_regs_offset) / 4; i++)
     {
       if (regnum != -1 && regnum != i)
 	continue;
@@ -371,82 +367,46 @@ m32r_linux_supply_gregset (const struct regset *regset,
       switch (i)
 	{
 	case PSW_REGNUM:
-	  store_unsigned_integer (buf, 4, byte_order, psw);
-	  p = buf;
+	  *((unsigned long *) (regs + m32r_pt_regs_offset[i])) =
+	    ((0x00c1 & bbpsw) << 8) | ((0xc100 & psw) >> 8);
 	  break;
 	case CBR_REGNUM:
-	  store_unsigned_integer (buf, 4, byte_order, psw & 1);
-	  p = buf;
+	  *((unsigned long *) (regs + m32r_pt_regs_offset[i])) =
+	    ((psw >> 8) & 1);
 	  break;
 	case M32R_SP_REGNUM:
-	  p = regs + ((psw & 0x80) ? SPU_OFFSET : SPI_OFFSET);
+	  if (psw & 0x8000)
+	    *((unsigned long *) (regs + m32r_pt_regs_offset[i])) =
+	      *((unsigned long *) (regs + SPU_OFFSET));
+	  else
+	    *((unsigned long *) (regs + m32r_pt_regs_offset[i])) =
+	      *((unsigned long *) (regs + SPI_OFFSET));
 	  break;
-	default:
-	  p = regs + m32r_pt_regs_offset[i];
 	}
 
-      regcache->raw_supply (i, p);
+      regcache_raw_supply (regcache, i,
+			   regs + m32r_pt_regs_offset[i]);
     }
 }
 
-static void
-m32r_linux_collect_gregset (const struct regset *regset,
-			    const struct regcache *regcache,
-			    int regnum, void *gregs, size_t size)
-{
-  gdb_byte *regs = (gdb_byte *) gregs;
-  int i;
-  enum bfd_endian byte_order =
-    gdbarch_byte_order (regcache->arch ());
-  ULONGEST psw;
-  gdb_byte buf[4];
-
-  regcache->raw_collect (PSW_REGNUM, buf);
-  psw = extract_unsigned_integer (buf, 4, byte_order);
-
-  for (i = 0; i < ARRAY_SIZE (m32r_pt_regs_offset); i++)
-    {
-      if (regnum != -1 && regnum != i)
-	continue;
-
-      switch (i)
-	{
-	case PSW_REGNUM:
-	  store_unsigned_integer (regs + PSW_OFFSET, 4, byte_order,
-				  (psw & 0xc1) << 8);
-	  store_unsigned_integer (regs + BBPSW_OFFSET, 4, byte_order,
-				  (psw >> 8) & 0xc1);
-	  break;
-	case CBR_REGNUM:
-	  break;
-	case M32R_SP_REGNUM:
-	  regcache->raw_collect
-	    (i, regs + ((psw & 0x80) ? SPU_OFFSET : SPI_OFFSET));
-	  break;
-	default:
-	  regcache->raw_collect (i, regs + m32r_pt_regs_offset[i]);
-	}
-    }
-}
-
-static const struct regset m32r_linux_gregset = {
-  NULL,
-  m32r_linux_supply_gregset, m32r_linux_collect_gregset
+static struct regset m32r_linux_gregset = {
+  NULL, m32r_linux_supply_gregset
 };
 
-static void
-m32r_linux_iterate_over_regset_sections (struct gdbarch *gdbarch,
-					 iterate_over_regset_sections_cb *cb,
-					 void *cb_data,
-					 const struct regcache *regcache)
+static const struct regset *
+m32r_linux_regset_from_core_section (struct gdbarch *core_arch,
+				     const char *sect_name, size_t sect_size)
 {
-  cb (".reg", M32R_LINUX_GREGS_SIZE, M32R_LINUX_GREGS_SIZE, &m32r_linux_gregset,
-      NULL, cb_data);
+  struct gdbarch_tdep *tdep = gdbarch_tdep (core_arch);
+  if (strcmp (sect_name, ".reg") == 0)
+    return &m32r_linux_gregset;
+  return NULL;
 }
 
 static void
 m32r_linux_init_abi (struct gdbarch_info info, struct gdbarch *gdbarch)
 {
+  struct gdbarch_tdep *tdep = gdbarch_tdep (gdbarch);
 
   linux_init_abi (info, gdbarch);
 
@@ -462,13 +422,16 @@ m32r_linux_init_abi (struct gdbarch_info info, struct gdbarch *gdbarch)
     (gdbarch, svr4_ilp32_fetch_link_map_offsets);
 
   /* Core file support.  */
-  set_gdbarch_iterate_over_regset_sections
-    (gdbarch, m32r_linux_iterate_over_regset_sections);
+  set_gdbarch_regset_from_core_section
+    (gdbarch, m32r_linux_regset_from_core_section);
 
   /* Enable TLS support.  */
   set_gdbarch_fetch_tls_load_module_address (gdbarch,
                                              svr4_fetch_objfile_link_map);
 }
+
+/* Provide a prototype to silence -Wmissing-prototypes.  */
+extern void _initialize_m32r_linux_tdep (void);
 
 void
 _initialize_m32r_linux_tdep (void)

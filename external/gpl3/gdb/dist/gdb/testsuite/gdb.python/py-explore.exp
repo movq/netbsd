@@ -1,4 +1,4 @@
-# Copyright 2012-2019 Free Software Foundation, Inc.
+# Copyright 2012-2013 Free Software Foundation, Inc.
 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -15,7 +15,7 @@
 
 standard_testfile
 
-if { [prepare_for_testing "failed to prepare" ${testfile} ${srcfile}] } {
+if { [prepare_for_testing ${testfile}.exp ${testfile} ${srcfile}] } {
     return -1
 }
 
@@ -119,7 +119,7 @@ gdb_test_multiple "explore darray_ref" "" {
                                     -re ".*Returning to parent value.*Enter the index of the element you want to explore in 'darray_ref':.*" {
                                         pass "end explore_as_array_index_2"
                                         gdb_test_multiple "\0" "end explore_as_array" {
-                                            -re "\[\n\r\]+$gdb_prompt" {
+                                            -re "\[\n\r\]+" {
                                                 pass "end explore_as_array"
                                             }
                                         }

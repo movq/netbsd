@@ -1,5 +1,6 @@
 /* Pthreads test program.
-   Copyright 1996-2019 Free Software Foundation, Inc.
+   Copyright 1996, 2002, 2003, 2004, 2007, 2008, 2009, 2010, 2011
+   Free Software Foundation, Inc.
 
    Written by Keith Seitz of Red Hat.
    Copied from gdb.threads/pthreads.c.
@@ -23,7 +24,19 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <pthread.h>
-#include <unistd.h>
+
+/* Under OSF 2.0 & 3.0 and HPUX 10, the second arg of pthread_create
+   is prototyped to be just a "pthread_attr_t", while under Solaris it
+   is a "pthread_attr_t *".  Arg! */
+
+#if defined (__osf__) || defined (__hpux__)
+#define PTHREAD_CREATE_ARG2(arg) arg
+#define PTHREAD_CREATE_NULL_ARG2 null_attr
+static pthread_attr_t null_attr;
+#else
+#define PTHREAD_CREATE_ARG2(arg) &arg
+#define PTHREAD_CREATE_NULL_ARG2 NULL
+#endif
 
 void *
 routine (void *arg)
@@ -51,7 +64,7 @@ create_thread (void)
 {
   pthread_t tid;
 
-  if (pthread_create (&tid, NULL, routine, (void *) 0xfeedface))
+  if (pthread_create (&tid, PTHREAD_CREATE_NULL_ARG2, routine, (void *) 0xfeedface))
     {
       perror ("pthread_create 1");
       exit (1);

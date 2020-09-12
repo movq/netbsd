@@ -1,5 +1,5 @@
 /* GDB-friendly replacement for <locale.h>.
-   Copyright (C) 2002-2019 Free Software Foundation, Inc.
+   Copyright (C) 2002-2013 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -16,8 +16,8 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-#ifndef COMMON_GDB_LOCALE_H
-#define COMMON_GDB_LOCALE_H
+#ifndef GDB_LOCALE_H
+#define GDB_LOCALE_H
 
 #ifdef HAVE_LOCALE_H
 # include <locale.h>
@@ -32,6 +32,11 @@
 #  define N_(String) (String)
 # endif
 #else
+# define gettext(Msgid) (Msgid)
+# define dgettext(Domainname, Msgid) (Msgid)
+# define dcgettext(Domainname, Msgid, Category) (Msgid)
+# define textdomain(Domainname) while (0) /* nothing */
+# define bindtextdomain(Domainname, Dirname) while (0) /* nothing */
 # define _(String) (String)
 # define N_(String) (String)
 #endif
@@ -40,4 +45,4 @@
 #include <langinfo.h>
 #endif
 
-#endif /* COMMON_GDB_LOCALE_H */
+#endif /* GDB_LOCALE_H */

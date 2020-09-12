@@ -1,7 +1,7 @@
 /* Target-dependent code for Lattice Mico32 processor, for GDB.
    Contributed by Jon Beniston <jon@beniston.com>
 
-   Copyright (C) 2009-2019 Free Software Foundation, Inc.
+   Copyright (C) 2009, 2010, 2011 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -35,8 +35,9 @@
 #include "regcache.h"
 #include "trad-frame.h"
 #include "reggroups.h"
-#include "../opcodes/lm32-desc.h"
-#include <algorithm>
+#include "opcodes/lm32-desc.h"
+
+#include "gdb_string.h"
 
 /* Macros to extract fields from an instruction.  */
 #define LM32_OPCODE(insn)       ((insn >> 26) & 0x3f)
@@ -91,7 +92,7 @@ lm32_register_reggroup_p (struct gdbarch *gdbarch, int regnum,
 static const char *
 lm32_register_name (struct gdbarch *gdbarch, int reg_nr)
 {
-  static const char *register_names[] = {
+  static char *register_names[] = {
     "r0", "r1", "r2", "r3", "r4", "r5", "r6", "r7",
     "r8", "r9", "r10", "r11", "r12", "r13", "r14", "r15",
     "r16", "r17", "r18", "r19", "r20", "r21", "r22", "r23",
@@ -187,6 +188,7 @@ static CORE_ADDR
 lm32_skip_prologue (struct gdbarch *gdbarch, CORE_ADDR pc)
 {
   CORE_ADDR func_addr, limit_pc;
+  struct symtab_and_line sal;
   struct lm32_frame_cache frame_info;
   struct trad_frame_saved_reg saved_regs[SIM_LM32_NUM_REGS];
 
@@ -198,7 +200,7 @@ lm32_skip_prologue (struct gdbarch *gdbarch, CORE_ADDR pc)
       CORE_ADDR post_prologue_pc
 	= skip_prologue_using_sal (gdbarch, func_addr);
       if (post_prologue_pc != 0)
-	return std::max (pc, post_prologue_pc);
+	return max (pc, post_prologue_pc);
     }
 
   /* Can't determine prologue from the symbol table, need to examine
@@ -216,10 +218,16 @@ lm32_skip_prologue (struct gdbarch *gdbarch, CORE_ADDR pc)
 }
 
 /* Create a breakpoint instruction.  */
-constexpr gdb_byte lm32_break_insn[4] = { OP_RAISE << 2, 0, 0, 2 };
 
-typedef BP_MANIPULATION (lm32_break_insn) lm32_breakpoint;
+static const gdb_byte *
+lm32_breakpoint_from_pc (struct gdbarch *gdbarch, CORE_ADDR *pcptr,
+			 int *lenptr)
+{
+  static const gdb_byte breakpoint[4] = { OP_RAISE << 2, 0, 0, 2 };
 
+  *lenptr = sizeof (breakpoint);
+  return breakpoint;
+}
 
 /* Setup registers and stack for faking a call to a function in the 
    inferior.  */
@@ -228,8 +236,7 @@ static CORE_ADDR
 lm32_push_dummy_call (struct gdbarch *gdbarch, struct value *function,
 		      struct regcache *regcache, CORE_ADDR bp_addr,
 		      int nargs, struct value **args, CORE_ADDR sp,
-		      function_call_return_method return_method,
-		      CORE_ADDR struct_addr)
+		      int struct_return, CORE_ADDR struct_addr)
 {
   enum bfd_endian byte_order = gdbarch_byte_order (gdbarch);
   int first_arg_reg = SIM_LM32_R1_REGNUM;
@@ -241,7 +248,7 @@ lm32_push_dummy_call (struct gdbarch *gdbarch, struct value *function,
 
   /* If we're returning a large struct, a pointer to the address to
      store it at is passed as a first hidden parameter.  */
-  if (return_method == return_method_struct)
+  if (struct_return)
     {
       regcache_cooked_write_unsigned (regcache, first_arg_reg, struct_addr);
       first_arg_reg++;
@@ -255,6 +262,9 @@ lm32_push_dummy_call (struct gdbarch *gdbarch, struct value *function,
       struct value *arg = args[i];
       struct type *arg_type = check_typedef (value_type (arg));
       gdb_byte *contents;
+      int len;
+      int j;
+      int reg;
       ULONGEST val;
 
       /* Promote small integer types to int.  */
@@ -276,8 +286,8 @@ lm32_push_dummy_call (struct gdbarch *gdbarch, struct value *function,
       /* FIXME: Handle structures.  */
 
       contents = (gdb_byte *) value_contents (arg);
-      val = extract_unsigned_integer (contents, TYPE_LENGTH (arg_type),
-				      byte_order);
+      len = TYPE_LENGTH (arg_type);
+      val = extract_unsigned_integer (contents, len, byte_order);
 
       /* First num_arg_regs parameters are passed by registers, 
          and the rest are passed on the stack.  */
@@ -285,8 +295,7 @@ lm32_push_dummy_call (struct gdbarch *gdbarch, struct value *function,
 	regcache_cooked_write_unsigned (regcache, first_arg_reg + i, val);
       else
 	{
-	  write_memory_unsigned_integer (sp, TYPE_LENGTH (arg_type), byte_order,
-					 val);
+	  write_memory (sp, (void *) &val, len);
 	  sp -= 4;
 	}
     }
@@ -304,8 +313,9 @@ static void
 lm32_extract_return_value (struct type *type, struct regcache *regcache,
 			   gdb_byte *valbuf)
 {
-  struct gdbarch *gdbarch = regcache->arch ();
+  struct gdbarch *gdbarch = get_regcache_arch (regcache);
   enum bfd_endian byte_order = gdbarch_byte_order (gdbarch);
+  int offset;
   ULONGEST l;
   CORE_ADDR return_buffer;
 
@@ -341,7 +351,7 @@ static void
 lm32_store_return_value (struct type *type, struct regcache *regcache,
 			 const gdb_byte *valbuf)
 {
-  struct gdbarch *gdbarch = regcache->arch ();
+  struct gdbarch *gdbarch = get_regcache_arch (regcache);
   enum bfd_endian byte_order = gdbarch_byte_order (gdbarch);
   ULONGEST val;
   int len = TYPE_LENGTH (type);
@@ -364,7 +374,7 @@ lm32_store_return_value (struct type *type, struct regcache *regcache,
 
 /* Determine whether a functions return value is in a register or memory.  */
 static enum return_value_convention
-lm32_return_value (struct gdbarch *gdbarch, struct value *function,
+lm32_return_value (struct gdbarch *gdbarch, struct type *func_type,
 		   struct type *valtype, struct regcache *regcache,
 		   gdb_byte *readbuf, const gdb_byte *writebuf)
 {
@@ -412,14 +422,20 @@ lm32_dummy_id (struct gdbarch *gdbarch, struct frame_info *this_frame)
 static struct lm32_frame_cache *
 lm32_frame_cache (struct frame_info *this_frame, void **this_prologue_cache)
 {
+  CORE_ADDR prologue_pc;
   CORE_ADDR current_pc;
   ULONGEST prev_sp;
   ULONGEST this_base;
   struct lm32_frame_cache *info;
+  int prefixed;
+  unsigned long instruction;
+  int op;
+  int offsets[32];
   int i;
+  long immediate;
 
   if ((*this_prologue_cache))
-    return (struct lm32_frame_cache *) (*this_prologue_cache);
+    return (*this_prologue_cache);
 
   info = FRAME_OBSTACK_ZALLOC (struct lm32_frame_cache);
   (*this_prologue_cache) = info;
@@ -522,7 +538,7 @@ lm32_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
     return arches->gdbarch;
 
   /* None found, create a new architecture from the information provided.  */
-  tdep = XCNEW (struct gdbarch_tdep);
+  tdep = XMALLOC (struct gdbarch_tdep);
   gdbarch = gdbarch_alloc (&info, tdep);
 
   /* Type sizes.  */
@@ -558,13 +574,15 @@ lm32_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
   frame_unwind_append_unwinder (gdbarch, &lm32_frame_unwind);
 
   /* Breakpoints.  */
-  set_gdbarch_breakpoint_kind_from_pc (gdbarch, lm32_breakpoint::kind_from_pc);
-  set_gdbarch_sw_breakpoint_from_kind (gdbarch, lm32_breakpoint::bp_from_kind);
+  set_gdbarch_breakpoint_from_pc (gdbarch, lm32_breakpoint_from_pc);
   set_gdbarch_have_nonsteppable_watchpoint (gdbarch, 1);
 
   /* Calling functions in the inferior.  */
   set_gdbarch_push_dummy_call (gdbarch, lm32_push_dummy_call);
   set_gdbarch_return_value (gdbarch, lm32_return_value);
+
+  /* Instruction disassembler.  */
+  set_gdbarch_print_insn (gdbarch, print_insn_lm32);
 
   lm32_add_reggroups (gdbarch);
   set_gdbarch_register_reggroup_p (gdbarch, lm32_register_reggroup_p);

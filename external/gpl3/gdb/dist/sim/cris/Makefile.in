@@ -1,7 +1,8 @@
 # Makefile template for Configure for the CRIS simulator, based on a mix
 # of the ones for m32r and i960.
 #
-# Copyright (C) 2004-2019 Free Software Foundation, Inc.
+# Copyright (C) 2004, 2005, 2007, 2008, 2009, 2010, 2011
+# Free Software Foundation, Inc.
 # Contributed by Axis Communications.
 #
 # This program is free software; you can redistribute it and/or modify
@@ -22,14 +23,21 @@
 CRISV10F_OBJS = crisv10f.o cpuv10.o decodev10.o modelv10.o mloopv10f.o
 CRISV32F_OBJS = crisv32f.o cpuv32.o decodev32.o modelv32.o mloopv32f.o
 
+CONFIG_DEVICES =
+
 SIM_OBJS = \
 	$(SIM_NEW_COMMON_OBJS) \
+	sim-cpu.o \
+	sim-hrw.o \
+	sim-model.o \
+	sim-reg.o \
 	cgen-utils.o cgen-trace.o cgen-scache.o \
-	cgen-run.o \
+	cgen-run.o sim-reason.o sim-engine.o sim-stop.o \
 	sim-if.o arch.o \
 	$(CRISV10F_OBJS) \
 	$(CRISV32F_OBJS) \
-	traps.o \
+	traps.o devices.o \
+	$(CONFIG_DEVICES) \
 	cris-desc.o
 
 # Extra headers included by sim-main.h.
@@ -38,12 +46,15 @@ SIM_EXTRA_DEPS = \
 	$(CGEN_INCLUDE_DEPS) $(srccom)/cgen-ops.h \
 	arch.h cpuall.h cris-sim.h cris-desc.h
 
+SIM_RUN_OBJS = nrun.o
 SIM_EXTRA_CLEAN = cris-clean
 
 # This selects the cris newlib/libgloss syscall definitions.
 NL_TARGET = -DNL_TARGET_cris
 
 ## COMMON_POST_CONFIG_FRAG
+
+CGEN_CPU_DIR = $(CGENDIR)/../cpu
 
 arch = cris
 
@@ -70,7 +81,7 @@ check: rvdummy$(EXEEXT)
 rvdummy$(EXEEXT): rvdummy.o $(EXTRA_LIBDEPS)
 	$(CC) $(ALL_CFLAGS) -o rvdummy$(EXEEXT) rvdummy.o $(EXTRA_LIBS)
 
-rvdummy.o: rvdummy.c config.h $(remote_sim_h) $(callback_h)
+rvdummy.o: rvdummy.c config.h tconfig.h $(remote_sim_h) $(callback_h)
 
 # CRISV10 objs
 
@@ -138,17 +149,17 @@ CGEN_MAINT = ; @true
 # Useful when making CGEN-generated files manually, without --enable-cgen-maint.
 stamps: stamp-v10fmloop stamp-v32fmloop stamp-arch stamp-v10fcpu stamp-v32fcpu stamp-desc
 
-stamp-arch: $(CGEN_READ_SCM) $(CGEN_ARCH_SCM) $(CPU_DIR)/cris.cpu Makefile
+stamp-arch: $(CGEN_READ_SCM) $(CGEN_ARCH_SCM) $(CGEN_CPU_DIR)/cris.cpu Makefile
 	$(MAKE) cgen-arch $(CGEN_FLAGS_TO_PASS) mach=crisv10,crisv32 \
-	  archfile=$(CPU_DIR)/cris.cpu \
+	  archfile=$(CGEN_CPU_DIR)/cris.cpu \
 	  FLAGS="with-scache with-profile=fn"
 	touch stamp-arch
 arch.h arch.c cpuall.h: $(CGEN_MAINT) stamp-arch
 
 # The sed-hack is supposed to be temporary, until we get CGEN to emit it.
-stamp-v10fcpu: $(CGEN_READ_SCM) $(CGEN_CPU_SCM) $(CGEN_DECODE_SCM) $(CPU_DIR)/cris.cpu Makefile
+stamp-v10fcpu: $(CGEN_READ_SCM) $(CGEN_CPU_SCM) $(CGEN_DECODE_SCM) $(CGEN_CPU_DIR)/cris.cpu Makefile
 	$(MAKE) cgen-cpu-decode $(CGEN_FLAGS_TO_PASS) \
-	  archfile=$(CPU_DIR)/cris.cpu \
+	  archfile=$(CGEN_CPU_DIR)/cris.cpu \
 	  cpu=crisv10f mach=crisv10 SUFFIX=v10 FLAGS="with-scache with-profile=fn" EXTRAFILES="$(CGEN_CPU_SEMSW)"
 	$(SHELL) $(srcroot)/move-if-change $(srcdir)/semv10-switch.c $(srcdir)/semcrisv10f-switch.c
 	sed -ne 'p; s/^\(#include "sim-assert.h"\)$$/#include "cgen-ops.h"/p' < $(srcdir)/decodev10.c > decodev10.c.tmp
@@ -156,9 +167,9 @@ stamp-v10fcpu: $(CGEN_READ_SCM) $(CGEN_CPU_SCM) $(CGEN_DECODE_SCM) $(CPU_DIR)/cr
 	touch stamp-v10fcpu
 cpuv10.h cpuv10.c semcrisv10f-switch.c modelv10.c decodev10.c decodev10.h: $(CGEN_MAINT) stamp-v10fcpu
 
-stamp-v32fcpu: $(CGEN_READ_SCM) $(CGEN_CPU_SCM) $(CGEN_DECODE_SCM) $(CPU_DIR)/cris.cpu Makefile
+stamp-v32fcpu: $(CGEN_READ_SCM) $(CGEN_CPU_SCM) $(CGEN_DECODE_SCM) $(CGEN_CPU_DIR)/cris.cpu Makefile
 	$(MAKE) cgen-cpu-decode $(CGEN_FLAGS_TO_PASS) \
-	  archfile=$(CPU_DIR)/cris.cpu \
+	  archfile=$(CGEN_CPU_DIR)/cris.cpu \
 	  cpu=crisv32f mach=crisv32 SUFFIX=v32 FLAGS="with-scache with-profile=fn" EXTRAFILES="$(CGEN_CPU_SEMSW)"
 	$(SHELL) $(srcroot)/move-if-change $(srcdir)/semv32-switch.c $(srcdir)/semcrisv32f-switch.c
 	sed -ne 'p; s/^\(#include "sim-assert.h"\)$$/#include "cgen-ops.h"/p' < $(srcdir)/decodev32.c > decodev32.c.tmp
@@ -166,9 +177,9 @@ stamp-v32fcpu: $(CGEN_READ_SCM) $(CGEN_CPU_SCM) $(CGEN_DECODE_SCM) $(CPU_DIR)/cr
 	touch stamp-v32fcpu
 cpuv32.h cpuv32.c semcrisv32f-switch.c modelv32.c decodev32.c decodev32.h: $(CGEN_MAINT) stamp-v32fcpu
 
-stamp-desc: $(CGEN_READ_SCM) $(CGEN_DESC_SCM) $(CPU_DIR)/cris.cpu Makefile
+stamp-desc: $(CGEN_READ_SCM) $(CGEN_DESC_SCM) $(CGEN_CPU_DIR)/cris.cpu Makefile
 	$(MAKE) cgen-desc $(CGEN_FLAGS_TO_PASS) \
-		archfile=$(CPU_DIR)/cris.cpu \
+		archfile=$(CGEN_CPU_DIR)/cris.cpu \
 		cpu=cris mach=all
 	touch stamp-desc
 cris-desc.c cris-desc.h cris-opc.h: $(CGEN_MAINT) stamp-desc

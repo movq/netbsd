@@ -1,6 +1,6 @@
 // auto_ptr implementation -*- C++ -*-
 
-// Copyright (C) 2007-2019 Free Software Foundation, Inc.
+// Copyright (C) 2007, 2008, 2009, 2010 Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
@@ -24,7 +24,7 @@
 
 /** @file backward/auto_ptr.h
  *  This is an internal header file, included by other library headers.
- *  Do not attempt to use it directly. @headername{memory}
+ *  You should not attempt to use it directly.
  */
 
 #ifndef _BACKWARD_AUTO_PTR_H
@@ -33,9 +33,7 @@
 #include <bits/c++config.h>
 #include <debug/debug.h>
 
-namespace std _GLIBCXX_VISIBILITY(default)
-{
-_GLIBCXX_BEGIN_NAMESPACE_VERSION
+_GLIBCXX_BEGIN_NAMESPACE(std)
 
   /**
    *  A wrapper class to provide auto_ptr with reference semantics.
@@ -51,10 +49,8 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       
       explicit
       auto_ptr_ref(_Tp1* __p): _M_ptr(__p) { }
-    } _GLIBCXX_DEPRECATED;
+    } _GLIBCXX_DEPRECATED_ATTR;
 
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
 
   /**
    *  @brief  A simple smart pointer providing strict ownership semantics.
@@ -97,30 +93,30 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       
       /**
        *  @brief  An %auto_ptr is usually constructed from a raw pointer.
-       *  @param  __p  A pointer (defaults to NULL).
+       *  @param  p  A pointer (defaults to NULL).
        *
-       *  This object now @e owns the object pointed to by @a __p.
+       *  This object now @e owns the object pointed to by @a p.
        */
       explicit
       auto_ptr(element_type* __p = 0) throw() : _M_ptr(__p) { }
 
       /**
        *  @brief  An %auto_ptr can be constructed from another %auto_ptr.
-       *  @param  __a  Another %auto_ptr of the same type.
+       *  @param  a  Another %auto_ptr of the same type.
        *
-       *  This object now @e owns the object previously owned by @a __a,
+       *  This object now @e owns the object previously owned by @a a,
        *  which has given up ownership.
        */
       auto_ptr(auto_ptr& __a) throw() : _M_ptr(__a.release()) { }
 
       /**
        *  @brief  An %auto_ptr can be constructed from another %auto_ptr.
-       *  @param  __a  Another %auto_ptr of a different but related type.
+       *  @param  a  Another %auto_ptr of a different but related type.
        *
        *  A pointer-to-Tp1 must be convertible to a
        *  pointer-to-Tp/element_type.
        *
-       *  This object now @e owns the object previously owned by @a __a,
+       *  This object now @e owns the object previously owned by @a a,
        *  which has given up ownership.
        */
       template<typename _Tp1>
@@ -128,9 +124,9 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 
       /**
        *  @brief  %auto_ptr assignment operator.
-       *  @param  __a  Another %auto_ptr of the same type.
+       *  @param  a  Another %auto_ptr of the same type.
        *
-       *  This object now @e owns the object previously owned by @a __a,
+       *  This object now @e owns the object previously owned by @a a,
        *  which has given up ownership.  The object that this one @e
        *  used to own and track has been deleted.
        */
@@ -143,11 +139,11 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 
       /**
        *  @brief  %auto_ptr assignment operator.
-       *  @param  __a  Another %auto_ptr of a different but related type.
+       *  @param  a  Another %auto_ptr of a different but related type.
        *
        *  A pointer-to-Tp1 must be convertible to a pointer-to-Tp/element_type.
        *
-       *  This object now @e owns the object previously owned by @a __a,
+       *  This object now @e owns the object previously owned by @a a,
        *  which has given up ownership.  The object that this one @e
        *  used to own and track has been deleted.
        */
@@ -182,7 +178,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       element_type&
       operator*() const throw() 
       {
-	__glibcxx_assert(_M_ptr != 0);
+	_GLIBCXX_DEBUG_ASSERT(_M_ptr != 0);
 	return *_M_ptr; 
       }
       
@@ -195,7 +191,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       element_type*
       operator->() const throw() 
       {
-	__glibcxx_assert(_M_ptr != 0);
+	_GLIBCXX_DEBUG_ASSERT(_M_ptr != 0);
 	return _M_ptr; 
       }
       
@@ -233,9 +229,9 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       
       /**
        *  @brief  Forcibly deletes the managed object.
-       *  @param  __p  A pointer (defaults to NULL).
+       *  @param  p  A pointer (defaults to NULL).
        *
-       *  This object now @e owns the object pointed to by @a __p.  The
+       *  This object now @e owns the object pointed to by @a p.  The
        *  previous object has been deleted.
        */
       void
@@ -251,17 +247,13 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       /** 
        *  @brief  Automatic conversions
        *
-       *  These operations are supposed to convert an %auto_ptr into and from
-       *  an auto_ptr_ref automatically as needed.  This would allow
-       *  constructs such as
+       *  These operations convert an %auto_ptr into and from an auto_ptr_ref
+       *  automatically as needed.  This allows constructs such as
        *  @code
        *    auto_ptr<Derived>  func_returning_auto_ptr(.....);
        *    ...
        *    auto_ptr<Base> ptr = func_returning_auto_ptr(.....);
        *  @endcode
-       *
-       *  But it doesn't work, and won't be fixed. For further details see
-       *  http://cplusplus.github.io/LWG/lwg-closed.html#463
        */
       auto_ptr(auto_ptr_ref<element_type> __ref) throw()
       : _M_ptr(__ref._M_ptr) { }
@@ -284,7 +276,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       template<typename _Tp1>
         operator auto_ptr<_Tp1>() throw()
         { return auto_ptr<_Tp1>(this->release()); }
-    } _GLIBCXX_DEPRECATED;
+    } _GLIBCXX_DEPRECATED_ATTR;
 
   // _GLIBCXX_RESOLVE_LIB_DEFECTS
   // 541. shared_ptr template assignment and void
@@ -293,45 +285,8 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
     {
     public:
       typedef void element_type;
-    } _GLIBCXX_DEPRECATED;
+    } _GLIBCXX_DEPRECATED_ATTR;
 
-#if __cplusplus >= 201103L
-  template<_Lock_policy _Lp>
-  template<typename _Tp>
-    inline
-    __shared_count<_Lp>::__shared_count(std::auto_ptr<_Tp>&& __r)
-    : _M_pi(new _Sp_counted_ptr<_Tp*, _Lp>(__r.get()))
-    { __r.release(); }
-
-  template<typename _Tp, _Lock_policy _Lp>
-  template<typename _Tp1, typename>
-    inline
-    __shared_ptr<_Tp, _Lp>::__shared_ptr(std::auto_ptr<_Tp1>&& __r)
-    : _M_ptr(__r.get()), _M_refcount()
-    {
-      __glibcxx_function_requires(_ConvertibleConcept<_Tp1*, _Tp*>)
-      static_assert( sizeof(_Tp1) > 0, "incomplete type" );
-      _Tp1* __tmp = __r.get();
-      _M_refcount = __shared_count<_Lp>(std::move(__r));
-      _M_enable_shared_from_this_with(__tmp);
-    }
-
-  template<typename _Tp>
-  template<typename _Tp1, typename>
-    inline
-    shared_ptr<_Tp>::shared_ptr(std::auto_ptr<_Tp1>&& __r)
-    : __shared_ptr<_Tp>(std::move(__r)) { }
-
-  template<typename _Tp, typename _Dp>
-  template<typename _Up, typename>
-    inline
-    unique_ptr<_Tp, _Dp>::unique_ptr(auto_ptr<_Up>&& __u) noexcept
-    : _M_t(__u.release(), deleter_type()) { }
-#endif
-
-#pragma GCC diagnostic pop
-
-_GLIBCXX_END_NAMESPACE_VERSION
-} // namespace
+_GLIBCXX_END_NAMESPACE
 
 #endif /* _BACKWARD_AUTO_PTR_H */

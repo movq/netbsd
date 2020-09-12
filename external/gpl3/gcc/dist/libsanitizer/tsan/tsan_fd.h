@@ -40,9 +40,9 @@ void FdInit();
 void FdAcquire(ThreadState *thr, uptr pc, int fd);
 void FdRelease(ThreadState *thr, uptr pc, int fd);
 void FdAccess(ThreadState *thr, uptr pc, int fd);
-void FdClose(ThreadState *thr, uptr pc, int fd, bool write = true);
+void FdClose(ThreadState *thr, uptr pc, int fd);
 void FdFileCreate(ThreadState *thr, uptr pc, int fd);
-void FdDup(ThreadState *thr, uptr pc, int oldfd, int newfd, bool write);
+void FdDup(ThreadState *thr, uptr pc, int oldfd, int newfd);
 void FdPipeCreate(ThreadState *thr, uptr pc, int rfd, int wfd);
 void FdEventCreate(ThreadState *thr, uptr pc, int fd);
 void FdSignalCreate(ThreadState *thr, uptr pc, int fd);
@@ -55,8 +55,8 @@ void FdSocketConnect(ThreadState *thr, uptr pc, int fd);
 bool FdLocation(uptr addr, int *fd, int *tid, u32 *stack);
 void FdOnFork(ThreadState *thr, uptr pc);
 
-uptr File2addr(const char *path);
-uptr Dir2addr(const char *path);
+uptr File2addr(char *path);
+uptr Dir2addr(char *path);
 
 }  // namespace __tsan
 

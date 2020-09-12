@@ -1,4 +1,4 @@
-/*	$NetBSD: malloc.c,v 1.1.1.1 2016/01/13 03:15:30 christos Exp $	*/
+/*	$NetBSD: malloc.c,v 1.1 2016/01/13 03:15:30 christos Exp $	*/
 
 /* Work around bug on some systems where malloc (0) fails.
    Copyright (C) 1997, 1998 Free Software Foundation, Inc.

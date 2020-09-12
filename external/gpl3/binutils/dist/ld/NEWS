@@ -1,345 +1,5 @@
 -*- text -*-
 
-Changes in 2.34:
-
-* cr16c support removed.
-
-* Add support for z80-elf.
-
-* Add support for relocation of each byte or word of multibyte value to Z80
-  targets.
-
-* Add support for Zilog eZ80 (both ADL and Z80 mode) and Zilog Z180 CPUs.
-
-Changes in 2.33:
-
-* Add command-line option --no-print-map-discarded.
-
-* The Cortex-A53 Erratum 843419 workaround now supports a choice of which
-  workaround to use.  The option --fix-cortex-a53-843419 now takes an
-  optional argument --fix-cortex-a53-843419[=full|adr|adrp] which can be
-  used to force a particular workaround to be used.  See --help for AArch64
-  for more details.
-
-* Add target handlers for AArch64 for ELF GNU program properties.
-
-* Add support for GNU_PROPERTY_AARCH64_FEATURE_1_BTI in ELF GNU program
-  properties in the AArch64 ELF linker.
-
-* Add support for GNU_PROPERTY_AARCH64_FEATURE_1_PAC in ELF GNU program
-  properties in the AArch64 ELF linker.
-
-* Add -z force-bti for AArch64 to enable GNU_PROPERTY_AARCH64_FEATURE_1_BTI
-  on output while warning about missing GNU_PROPERTY_AARCH64_FEATURE_1_BTI
-  on inputs and use PLTs protected with BTI.
-
-* Add -z pac-plt for AArch64 to pick PAC enabled PLTs.
-
-Changes in 2.32:
-
-* Report property change in linker map file when merging GNU properties.
-
-* Add support for the C-SKY processor series.
-
-* -t now doesn't report members within archives, unless -t is given twice.
-  A single -t is now more useful when generating a list of files that should be
-  packaged for a linker bug report.  For example:
-    gcc hello.c -save-temps -Wl,-t | xargs realpath | sort | uniq > files
-    tar cJf test.tar.xz `cat files`
-
-Changes in 2.31:
-
-* Speed up direct linking with DLLs for Cygwin and Mingw targets.
-
-* Add a configure option --enable-separate-code to decide whether
-  -z separate-code should be enabled in ELF linker by default.  Default
-  to yes for Linux/x86 targets.  Note that -z separate-code can increase
-  disk and memory size.
-
-Changes in 2.30:
-
-* Add -z separate-code to generate separate code PT_LOAD segment.
-
-* Add "-z undefs" command-line option as the inverse of the "-z defs" option.
-
-* Add -z globalaudit command-line option to force audit libraries to be run
-  for every dynamic object loaded by an executable - provided that the loader
-  supports this functionality.
-
-* Tighten linker script grammar around file name specifiers to prevent the use
-  of SORT_BY_ALIGNMENT and SORT_BY_INIT_PRIORITY on filenames.  These would
-  previously be accepted but had no effect.
-
-* The EXCLUDE_FILE directive can now be placed within any SORT_* directive
-  within input section lists.
-
-Changes in 2.29:
-
-* Support for -z shstk in the x86 ELF linker to generate
-  GNU_PROPERTY_X86_FEATURE_1_SHSTK in ELF GNU program properties.
-
-* Add support for GNU_PROPERTY_X86_FEATURE_1_SHSTK in ELF GNU program
-  properties in the x86 ELF linker.
-
-* Add support for GNU_PROPERTY_X86_FEATURE_1_IBT in ELF GNU program
-  properties in the x86 ELF linker.
-
-* Support for -z ibtplt in the x86 ELF linker to generate IBT-enabled
-  PLT.
-
-* Support for -z ibt in the x86 ELF linker to generate IBT-enabled
-  PLT as well as GNU_PROPERTY_X86_FEATURE_1_IBT in ELF GNU program
-  properties.
-
-* Add support for ELF SHF_GNU_MBIND and PT_GNU_MBIND_XXX.
-
-* Add support for ELF GNU program properties.
-
-* Add support for the Texas Instruments PRU processor.
-
-* When configuring for arc*-*-linux* targets the default linker emulation will
-  change if --with-cpu=nps400 is used at configure time.
-
-* Improve assignment of LMAs to orphan sections in some edge cases where a
-  mixture of both AT>LMA_REGION and AT(LMA) are used.
-
-* Orphan sections placed after an empty section that has an AT(LMA) will now
-  take an load memory address starting from LMA.
-
-* Section groups can now be resolved (the group deleted and the group members
-  placed like normal sections) at partial link time either using the new linker
-  option --force-group-allocation or by placing FORCE_GROUP_ALLOCATION into the
-  linker script.
-
-Changes in 2.28:
-
-* The EXCLUDE_FILE linker script construct can now be applied outside of the
-  section list in order for the exclusions to apply over all input sections in
-  the list.
-
-* Add support for the RISC-V architecture.
-
-* The command-line option --no-eh-frame-hdr can now be used in ELF based
-  linkers to disable the automatic generation of .eh_frame_hdr sections.
-
-* Add --in-implib=<infile> to the ARM linker to enable specifying a set of
-  Secure Gateway veneers that must exist in the output import library specified
-  by --out-implib=<outfile> and the address they must have.  As such,
-  --in-implib is only supported in combination with --cmse-implib.
-
-* Extended the --out-implib=<file> option, previously restricted to x86 PE
-  targets, to any ELF based target.  This allows the generation of an import
-  library for an ELF executable, which can then be used by another application
-  to link against the executable.
-
-Changes in 2.27:
-
-* Add a configure option --enable-relro to decide whether -z relro should
-  be enabled in ELF linker by default.  Default to yes for all Linux
-  targets except FRV, HPPA, IA64 and MIPS.  Note that -z relro can increase
-  disk and memory size.
-
-* Support for -z noreloc-overflow in the x86-64 ELF linker to disable
-  relocation overflow check.
-
-* Add -z common/-z nocommon options for ELF targets to control whether to
-  convert common symbols to the STT_COMMON type during a relocatable link.
-
-* Support for -z nodynamic-undefined-weak in the x86 ELF linker, which
-  avoids dynamic relocations against undefined weak symbols in executable.
-
-* The NOCROSSREFSTO command was added to the linker script language.
-
-* Add --no-apply-dynamic-relocs to the AArch64 linker to do not apply link-time
-  values for dynamic relocations.
-
-Changes in 2.26:
-
-* Add --fix-stm32l4xx-629360 to the ARM linker to enable a link-time
-  workaround for a bug in the bus matrix / memory controller for some of
-  the STM32 Cortex-M4 based products (STM32L4xx)
-
-* Add a configure option --enable-compressed-debug-sections={all,ld} to
-  decide whether DWARF debug sections should be compressed by default.
-
-* Add support for the ARC EM/HS, and ARC600/700 architectures.
-
-* Experimental support for linker garbage collection (--gc-sections)
-  has been enabled for COFF and PE based targets.
-
-* New command-line option for ELF targets to compress DWARF debug
-  sections, --compress-debug-sections=[none|zlib|zlib-gnu|zlib-gabi].
-
-* New command-line option, --orphan-handling=[place|warn|error|discard], to
-  adjust how orphan sections are handled.  The default is 'place' which gives
-  the current behaviour, 'warn' and 'error' issue a warning or error
-  respectively when orphan sections are found, and 'discard' will discard all
-  orphan sections.
-
-* Add support for LLVM plugin.
-
-* Add --print-memory-usage option to report memory blocks usage.
-
-* Add --require-defined option, it's like --undefined except the new symbol
-  must be defined by the end of the link.
-
-Changes in 2.25:
-
-* PE binaries now once again contain real timestamps by default.  To disable
-  the inclusion of a timestamp in a PE binary, use the --no-insert-timestamp
-  command-line option.
-
-* Replace support for openrisc and or32 with support for or1k.
-
-* Add support for the --build-id command-line option to COFF based targets.
-
-* x86/x86_64 pe-coff now supports the --build-id option.
-
-* Add support for the Andes NDS32.
-
-Changes in 2.24:
-
-* Add LOG2CEIL() builtin function to the linker script language
-
-* Add support for the Texas Instruments MSP430X processor.
-
-* Add support for Altera Nios II.
-
-* Add support for the V850E3V5 architecture.
-
-* Add support for the Imagination Technologies Meta processor.
-
-* --enable-new-dtags no longer generates old dtags in addition to new dtags.
-
-* Remove linker support for MIPS ECOFF targets.
-
-* Add ALIGN_WITH_INPUT to the linker script language to force the alignment of
-  an output section to use the maximum alignment of all its input sections.
-
-Changes in 2.23:
-
-* Enable compressed debug section feature for x86/x86_64 pe-coff.
-
-* Add support for the 64-bit ARM architecture: AArch64.
-
-* Added SORT_NONE to the linker script language to disable section sorting.
-
-* Add a linker-provided symbol when producing ELF output, '__ehdr_start'
-  to point to the ELF file header (and nearby program headers) in the
-  program's memory image.
-
-* Add support for S12X processor.
-
-* Add support for the VLE extension to the PowerPC architecture.
-
-* Add support for the Freescale XGATE architecture.
-
-* Add option -f FILE on AIX (for response file).
-
-* Add support for the Renesas RL78 architecture.
-
-* Add support for the Adapteva EPIPHANY architecture.
-
-Changes in 2.22:
-
-* --copy-dt-needed-entries is no longer enabled by default.  Instead
-  --no-copy-dt-needed-entries is the default.
-
-* INPUT_SECTION_FLAGS has been added to the linker script language
-  to allow selection of input sections by section header section flags.
-
-* Add support for the Tilera TILEPro and TILE-Gx architectures.
-
-* Added SORT_BY_INIT_PRIORITY to the linker script language to permit
-  sorting sections by numerical value of the GCC init_priority attribute
-  encoded in the section name.
-
-Changes in 2.21:
-
-* Linker script expression evaluation is somewhat more sane.  This may
-  break scripts that depend on quirks of the old expression evaluation.
-
-* Turn off underscoring for x86_64 PE+-COFF targets.  For old behavior the
-  option --enable-leading-mingw64-underscores can be used on configure of
-  bfd.
-
-* Add support for the TMS320C6000 (TI C6X) processor family.
-
-* --add-needed renamed to --copy-dt-needed-entries in order to avoid confusion
-  with --as-needed option.
-
-* Extend .def file syntax by '== <ID>' for imports and exports. This allows
-  to alias the import/export table name written in PE image.
-
-* Add --exclude-all-symbols option to PE based linkers.  This prevents all
-  symbols from automatically being exported.
-
-* Add support for the Renesas RX processor.
-
-* Add support for alpha-vms target.
-
-Changes in 2.20:
-
-* GNU/Linux targets now support the STB_GNU_UNIQUE symbol binding.  This is a
-  GNU extension to the standard set of ELF symbol bindings.  The binding will
-  be passed on to the dynamic linker which will make sure that in the entire
-  process there is just one symbol with the given name and type in use.
-
-* PE targets now support a GNU extension to allow the alignment of common
-  common symbols to be specified.  This support uses custom options in
-  the .drectve section, which will be disregarded by the native tools.
-
-* PE targets now add primitive support for ELF version scripts; symbols
-  are not versioned, but the local and global symbol visibility directives
-  are respected when filtering symbols in auto-export mode.
-
-* New option --no-export-dynamic to undo the effect of the -E and
-  --export-dynamic options.
-
-* ELF: --warn-alternate-em option to warn if an object has alternate
-  ELF machine code.
-
-* New script function REGION_ALIAS to add alias names to memory regions.
-
-* PE targets no longer make use of the long section names PE extension to
-  the COFF format when generating executable images, by default.  The old
-  (slightly non-conformant) behaviour can still be invoked by using the
-  new '--enable-long-section-names' command-line option.  It is also enabled
-  automatically in the presence of un-stripped debug information, as GDB
-  needs to be able to find the debug info sections by their full names.
-
-* For GNU/Linux systems the linker will now avoid processing any relocations
-  made against symbols of the STT_GNU_IFUNC type and instead emit them into
-  the resulting binary for processing by the loader.
-
-* --as-needed now links in a dynamic library if it satisfies undefined
-  symbols in regular objects, or in other dynamic libraries.  In the
-  latter case the library is not linked if it is found in a DT_NEEDED
-  entry of one of the libraries already linked.
-
-* Add a new command-line option, -Ttext-segment ADDR, for ELF targets
-  to set the address of the first byte of the text segment.
-
-* Add support for Sunplus score architecture.
-
-* Add new option --use-nul-prefixed-import-tables to ld for PE targets to
-  allow fallback to old import table generation with null element prefix.
-
-* Windows PE systems now support a new --exclude-modules-for-implib option,
-  allowing users to partition object files and archive members between a DLL
-  and its associated import library as they are generated during linking.
-
-* Add support for Lattice Mico32 (lm32) architecture.
-
-* Add CR16 ELF --embedded-relocs (used to embedded relocations into binaries
-  for Embedded-PIC code) option.
-
-* Add to the PE/PE+ targets the support of two different kinds of
-  pseudo-relocations.  They can be selected by the switches
-  --enable-runtime-pseudo-reloc-v1 and --enable-runtime-pseudo-reloc-v2.
-  For the switch --enable-runtime-pseudo-reloc it uses for 32-bit
-  runtime pseudo relocation version one, for 64-bit the version two.
-
 Changes in 2.19:
 
 * Linker scripts support a new INSERT command that makes it easier to
@@ -352,11 +12,11 @@ Changes in 2.19:
   direction of sorting.
 
 * The M68K linker now supports multiple GOT generation schemes controlled via
-  the --got=<type> command-line option.
+  the --got=<type> command line option.
 
 * The ARM EABI linker will now generate stubs for function calls to symbols
   that are too far away.  The placement of the stubs is controlled by a new
-  linker command-line option: --stub-group-size=N.
+  linker command line option: --stub-group-size=N.
 
 Changes in 2.18:
 
@@ -371,7 +31,7 @@ Changes in 2.18:
 * -l:foo now searches the library path for a filename called foo,
   without converting it to libfoo.a or libfoo.so.
 
-* Add a new command-line option '--default-script=FILE' or '-dT FILE'
+* Add a new command line option '--default-script=FILE' or '-dT FILE'
   which specifies a replacement for the built in, default linker
   script.
 
@@ -445,7 +105,7 @@ Changes in 2.16:
   language to permit sorting sections by section name or section
   maximum alignment.
 
-* Added a new linker command-line switch, --sort-section name|alignment,
+* Added a new linker command line switch, --sort-section name|alignment,
   to sort sections by section name or maximum alignment.
 
 * ELF: --add-needed/--no-add-needed options to control if a DT_NEEDED tag
@@ -455,7 +115,7 @@ Changes in 2.16:
 
 * Support for the sh-symbianelf target added.
 
-* A new linker command-line switch has been added which allows the hash table
+* A new linker command line switch has been added which allows the hash table
   size to be set to a suitable prime value near to its argument.  This switch
   is --hash-size=<NUMBER>.  Also if the switch --reduce-memory-overheads is
   used, and --hash-size has not been used, then the default value will be set
@@ -555,7 +215,7 @@ Changes in version 2.11:
 
 * TI C54x support, by Timothy Wall.
 
-* Added command-line switch --section-start to set the start address of any
+* Added command line switch --section-start to set the start address of any
   specified section.
 
 * Added ability to emit full relocation information in linked executables,
@@ -775,12 +435,6 @@ Changes in version 2.1:
   other utilities should work on Risc/Ultrix and Irix.
 
 
-Copyright (C) 2012-2020 Free Software Foundation, Inc.
-
-Copying and distribution of this file, with or without modification,
-are permitted in any medium without royalty provided the copyright
-notice and this notice are preserved.
-
 Local variables:
 fill-column: 79
 End:

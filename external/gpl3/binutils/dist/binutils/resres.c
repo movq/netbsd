@@ -1,5 +1,6 @@
 /* resres.c: read_res_file and write_res_file implementation for windres.
-   Copyright (C) 1998-2020 Free Software Foundation, Inc.
+   Copyright 1998, 1999, 2001, 2002, 2007, 2008
+   Free Software Foundation, Inc.
    Written by Anders Norlander <anorland@hem2.passagen.se>.
    Rewritten by Kai Tietz, Onevision.
 
@@ -31,6 +32,7 @@
 #include "windres.h"
 
 #include <assert.h>
+#include <time.h>
 
 static rc_uint_type write_res_directory (windres_bfd *, rc_uint_type,
 				    	 const rc_res_directory *, const rc_res_id *,
@@ -96,7 +98,7 @@ read_res_file (const char *fn)
   off = 0;
 
   if (! probe_binary (&wrbfd, flen))
-    set_windres_bfd_endianness (&wrbfd, ! target_is_bigendian);
+    set_windres_bfd_endianess (&wrbfd, ! target_is_bigendian);
 
   skip_null_resource (&wrbfd, &off, flen);
 
@@ -142,7 +144,7 @@ write_res_file (const char *fn,const rc_res_directory *resdir)
   sec_length = write_res_directory ((windres_bfd *) NULL, 0x20UL, resdir,
 				    (const rc_res_id *) NULL,
 				    (const rc_res_id *) NULL, &language, 1);
-  if (!bfd_set_section_size (sec, (sec_length + 3) & ~3))
+  if (! bfd_set_section_size (abfd, sec, (sec_length + 3) & ~3))
     bfd_fatal ("bfd_set_section_size");
   if ((sec_length & 3) != 0)
     set_windres_bfd_content (&wrbfd, sign, sec_length, 4-(sec_length & 3));
@@ -386,7 +388,8 @@ write_res_bin (windres_bfd *wrbfd, rc_uint_type off, const rc_res_resource *res,
 
 /* Get number of bytes needed to store an id in binary format */
 static unsigned long
-get_id_size (const rc_res_id *id)
+get_id_size (id)
+     const rc_res_id *id;
 {
   if (id->named)
     return sizeof (unichar) * (id->u.n.length + 1);
@@ -498,7 +501,7 @@ write_res_info (windres_bfd *wrbfd, rc_uint_type off, const rc_res_res_info *inf
   if (wrbfd)
     {
       struct bin_res_info l;
-
+      
       windres_put_32 (wrbfd, l.version, info->version);
       windres_put_16 (wrbfd, l.memflags, info->memflags);
       windres_put_16 (wrbfd, l.language, info->language);
@@ -644,7 +647,7 @@ res_add_resource (rc_res_resource *r, const rc_res_id *type, const rc_res_id *id
    and modified to add an existing resource.
  */
 static void
-res_append_resource (rc_res_directory **res_dirs, rc_res_resource *resource,
+res_append_resource (rc_res_directory **resources, rc_res_resource *resource,
 		     int cids, const rc_res_id *ids, int dupok)
 {
   rc_res_entry *re = NULL;
@@ -655,21 +658,25 @@ res_append_resource (rc_res_directory **res_dirs, rc_res_resource *resource,
     {
       rc_res_entry **pp;
 
-      if (*res_dirs == NULL)
+      if (*resources == NULL)
 	{
-	  *res_dirs = ((rc_res_directory *)
-			res_alloc (sizeof (rc_res_directory)));
+	  static unsigned long timeval;
 
-	  (*res_dirs)->characteristics = 0;
-	  /* Using a real timestamp only serves to create non-deterministic
-	     results.  Use zero instead.  */
-	  (*res_dirs)->time = 0;
-	  (*res_dirs)->major = 0;
-	  (*res_dirs)->minor = 0;
-	  (*res_dirs)->entries = NULL;
+	  /* Use the same timestamp for every resource created in a
+	     single run.  */
+	  if (timeval == 0)
+	    timeval = time (NULL);
+
+	  *resources = ((rc_res_directory *)
+			res_alloc (sizeof (rc_res_directory)));
+	  (*resources)->characteristics = 0;
+	  (*resources)->time = timeval;
+	  (*resources)->major = 0;
+	  (*resources)->minor = 0;
+	  (*resources)->entries = NULL;
 	}
 
-      for (pp = &(*res_dirs)->entries; *pp != NULL; pp = &(*pp)->next)
+      for (pp = &(*resources)->entries; *pp != NULL; pp = &(*pp)->next)
 	if (res_id_cmp ((*pp)->id, ids[i]) == 0)
 	  break;
 
@@ -704,7 +711,7 @@ res_append_resource (rc_res_directory **res_dirs, rc_res_resource *resource,
 	      xexit (1);
 	    }
 
-	  res_dirs = &re->u.dir;
+	  resources = &re->u.dir;
 	}
     }
 

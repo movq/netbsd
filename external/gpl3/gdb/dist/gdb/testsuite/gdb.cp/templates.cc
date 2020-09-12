@@ -734,7 +734,10 @@ int main()
 {
     int i;
     long l, m, n;
-
+#ifdef usestubs
+    set_debug_traps();
+    breakpoint();
+#endif
     i = i + 1;
 
     // New tests added here

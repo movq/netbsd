@@ -1,5 +1,5 @@
 /* Remote utility routines for the remote server for GDB.
-   Copyright (C) 1993-2019 Free Software Foundation, Inc.
+   Copyright (C) 1993-2014 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -16,25 +16,27 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-#ifndef GDBSERVER_REMOTE_UTILS_H
-#define GDBSERVER_REMOTE_UTILS_H
+#ifndef REMOTE_UTILS_H
+#define REMOTE_UTILS_H
 
 extern int remote_debug;
+extern int noack_mode;
+extern int transport_is_reliable;
 
 int gdb_connected (void);
 
 #define STDIO_CONNECTION_NAME "stdio"
 int remote_connection_is_stdio (void);
 
-ptid_t read_ptid (const char *buf, const char **obuf);
+ptid_t read_ptid (char *buf, char **obuf);
 char *write_ptid (char *buf, ptid_t ptid);
 
 int putpkt (char *buf);
 int putpkt_binary (char *buf, int len);
 int putpkt_notif (char *buf);
 int getpkt (char *buf);
-void remote_prepare (const char *name);
-void remote_open (const char *name);
+void remote_prepare (char *name);
+void remote_open (char *name);
 void remote_close (void);
 void write_ok (char *buf);
 void write_enn (char *buf);
@@ -42,6 +44,10 @@ void initialize_async_io (void);
 void enable_async_io (void);
 void disable_async_io (void);
 void check_remote_input_interrupt_request (void);
+void convert_ascii_to_int (const char *from, unsigned char *to, int n);
+void convert_int_to_ascii (const unsigned char *from, char *to, int n);
+void new_thread_notify (int id);
+void dead_thread_notify (int id);
 void prepare_resume_reply (char *buf, ptid_t ptid,
 			   struct target_waitstatus *status);
 
@@ -62,6 +68,13 @@ int decode_search_memory_packet (const char *buf, int packet_len,
 				 gdb_byte *pattern,
 				 unsigned int *pattern_lenp);
 
+int unhexify (char *bin, const char *hex, int count);
+int hexify (char *hex, const char *bin, int count);
+int remote_escape_output (const gdb_byte *buffer, int len,
+			  gdb_byte *out_buf, int *out_len,
+			  int out_maxlen);
+char *unpack_varlen_hex (char *buff,  ULONGEST *result);
+
 void clear_symbol_cache (struct sym_cache **symcache_p);
 int look_up_one_symbol (const char *name, CORE_ADDR *addrp, int may_ask_gdb);
 
@@ -69,4 +82,4 @@ int relocate_instruction (CORE_ADDR *to, CORE_ADDR oldloc);
 
 void monitor_output (const char *msg);
 
-#endif /* GDBSERVER_REMOTE_UTILS_H */
+#endif /* REMOTE_UTILS_H */

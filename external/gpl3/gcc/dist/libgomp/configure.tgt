@@ -14,15 +14,8 @@
 if test $gcc_cv_have_tls = yes ; then
   case "${target}" in
 
-    *-*-k*bsd*-gnu*)
-	;;
-
-    *-*-linux* | *-*-gnu*)
-	XCFLAGS="${XCFLAGS} -ftls-model=initial-exec -DUSING_INITIAL_EXEC_TLS"
-	;;
-
-    *-*-rtems*)
-	XCFLAGS="${XCFLAGS} -ftls-model=local-exec"
+    *-*-linux*)
+	XCFLAGS="${XCFLAGS} -ftls-model=initial-exec"
 	;;
   esac
 fi
@@ -31,19 +24,11 @@ fi
 config_path="posix"
 
 # Check for futex enabled all at once.
-if test x$enable_linux_futex = xyes; then
+if test $enable_linux_futex = yes; then
   case "${target}" in
-
-    aarch64*-*-linux*)
-	config_path="linux posix"
-	;;
 
     alpha*-*-linux*)
 	config_path="linux/alpha linux posix"
-	;;
-
-    arm*-*-linux*)
-	config_path="linux posix"
 	;;
 
     ia64*-*-linux*)
@@ -62,15 +47,11 @@ if test x$enable_linux_futex = xyes; then
 	config_path="linux/s390 linux posix"
 	;;
 
-    tile*-*-linux*)
-	config_path="linux/tile linux posix"
-	;;
-
     # Note that bare i386 is not included here.  We need cmpxchg.
     i[456]86-*-linux*)
 	config_path="linux/x86 linux posix"
 	case " ${CC} ${CFLAGS} " in
-	  *" -m64 "*|*" -mx32 "*)
+	  *" -m64 "*)
 	    ;;
 	  *)
 	    if test -z "$with_arch"; then
@@ -86,7 +67,7 @@ if test x$enable_linux_futex = xyes; then
 	config_path="linux/x86 linux posix"
 	case " ${CC} ${CFLAGS} " in
 	  *" -m32 "*)
-	    XCFLAGS="${XCFLAGS} -march=i486 -mtune=generic"
+	    XCFLAGS="${XCFLAGS} -march=i486 -mtune=i686"
 	    ;;
 	esac
 	;;
@@ -117,7 +98,6 @@ fi
 case "${target}" in
 
   *-*-hpux*)
-	config_path="hpux posix"
 	case "${target}" in
 	  *-*-hpux11*)
 	     # HPUX v11.x requires -lrt to resolve sem_init in libgomp.la
@@ -136,34 +116,19 @@ case "${target}" in
 	config_path="mingw32 posix"
 	;;
 
+  *-*-solaris2.[56]*)
+	config_path="posix95 posix"
+	XLDFLAGS="${XLDFLAGS} -lposix4"
+	;;
+
   *-*-darwin*)
-	config_path="bsd darwin posix"
+	config_path="bsd posix"
 	;;
 
-  *-*-freebsd*)
+  mips-sgi-irix6*)
 	# Need to link with -lpthread so libgomp.so is self-contained.
 	XLDFLAGS="${XLDFLAGS} -lpthread"
 	;;
-
-  *-*-aix*)
-	config_path="posix"
-	# Need to link with -lpthread so libgomp.so is self-contained.
-	XLDFLAGS="${XLDFLAGS} -lpthread"
-	# AIX needs -frandom-seed for bootstrap compare.
-	XCFLAGS="${XCFLAGS} -frandom-seed=\$@"
-	;;
-
-  nvptx*-*-*)
-	config_path="nvptx"
-	;;
-
-  *-*-rtems*)
-	# Use self-contained synchronization objects if provided by Newlib
-	if test "x$ac_cv_type_struct__Mutex_Control" = xyes ; then
-	    config_path="rtems posix"
-	fi
-	;;
-
   *)
 	;;
 

@@ -1,4 +1,5 @@
-/* Copyright (C) 2013-2019 Free Software Foundation, Inc.
+/* Copyright (C) 2013
+   Free Software Foundation
   
    This file is part of GCC.
   
@@ -46,11 +47,7 @@ extern void __VLTChangePermission (int);
 /* TODO - Replace '4096' below with correct big page size.  */
 #define VTV_PAGE_SIZE 4096
 #else 
-#if defined(__sun__) && defined(__svr4__) && defined(__sparc__)
-#define VTV_PAGE_SIZE 8192
-#else
 #define VTV_PAGE_SIZE 4096
-#endif
 #endif
 
 

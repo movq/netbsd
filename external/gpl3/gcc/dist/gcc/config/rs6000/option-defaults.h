@@ -1,5 +1,7 @@
 /* Definitions of default options for config/rs6000 configurations.
-   Copyright (C) 1992-2019 Free Software Foundation, Inc.
+   Copyright (C) 1992, 1993, 1994, 1995, 1996, 1997, 1998, 1999,
+   2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009
+   Free Software Foundation, Inc.
 
    This file is part of GCC.
 
@@ -25,7 +27,7 @@
 /* This header needs to be included after any other headers affecting
    TARGET_DEFAULT.  */
 
-#if TARGET_AIX_OS
+#if TARGET_AIX
 #define OPT_64 "maix64"
 #define OPT_32 "maix32"
 #else
@@ -33,17 +35,16 @@
 #define OPT_32 "m32"
 #endif
 
-#ifndef OPTION_MASK_64BIT
-#define OPTION_MASK_64BIT 0
+#ifndef MASK_64BIT
 #define MASK_64BIT 0
 #endif
 
-#if TARGET_DEFAULT & OPTION_MASK_64BIT
-#define OPT_ARCH64 "!" OPT_32
+#if TARGET_DEFAULT & MASK_64BIT
+#define OPT_ARCH64 "!"OPT_32
 #define OPT_ARCH32 OPT_32
 #else
 #define OPT_ARCH64 OPT_64
-#define OPT_ARCH32 "!" OPT_64
+#define OPT_ARCH32 "!"OPT_64
 #endif
 
 /* Support for a compile-time default CPU, et cetera.  The rules are:
@@ -54,7 +55,6 @@
    --with-float is ignored if -mhard-float or -msoft-float are
      specified.  */
 #define OPTION_DEFAULT_SPECS \
-  {"abi", "%{!mabi=elfv*:-mabi=%(VALUE)}" }, \
   {"tune", "%{!mtune=*:%{!mcpu=*:-mtune=%(VALUE)}}" }, \
   {"tune_32", "%{" OPT_ARCH32 ":%{!mtune=*:%{!mcpu=*:-mtune=%(VALUE)}}}" }, \
   {"tune_64", "%{" OPT_ARCH64 ":%{!mtune=*:%{!mcpu=*:-mtune=%(VALUE)}}}" }, \

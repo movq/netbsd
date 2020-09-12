@@ -1,6 +1,6 @@
 // -*- C++ -*-
 
-// Copyright (C) 2005-2019 Free Software Foundation, Inc.
+// Copyright (C) 2005, 2006, 2009 Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the terms
@@ -34,7 +34,7 @@
 // warranty.
 
 /**
- * @file bin_search_tree_/node_iterators.hpp
+ * @file node_iterators.hpp
  * Contains an implementation class for bin_search_tree_.
  */
 
@@ -47,143 +47,191 @@ namespace __gnu_pbds
 {
   namespace detail
   {
-#define PB_DS_TREE_CONST_NODE_ITERATOR_CLASS_C_DEC \
-    bin_search_tree_const_node_it_<Node, Const_Iterator, Iterator, _Alloc>
 
-    /// Const node iterator.
+#define PB_DS_TREE_CONST_NODE_ITERATOR_CLASS_C_DEC			\
+    bin_search_tree_const_node_it_<					\
+							Node,		\
+							Const_Iterator,	\
+							Iterator,	\
+							Allocator>
+
+    // Const node iterator.
     template<typename Node,
 	     class Const_Iterator,
 	     class Iterator,
-	     typename _Alloc>
+	     class Allocator>
     class bin_search_tree_const_node_it_
     {
     private:
+
+    private:
       typedef
-      typename _Alloc::template rebind<
+      typename Allocator::template rebind<
       Node>::other::pointer
       node_pointer;
 
     public:
-      /// Category.
+
+      // Category.
       typedef trivial_iterator_tag iterator_category;
 
-      /// Difference type.
+      // Difference type.
       typedef trivial_iterator_difference_type difference_type;
 
-      /// Iterator's value type.
+      // __Iterator's value type.
       typedef Const_Iterator value_type;
 
-      /// Iterator's reference type.
+      // __Iterator's reference type.
       typedef Const_Iterator reference;
 
-      /// Iterator's __const reference type.
+      // __Iterator's __const reference type.
       typedef Const_Iterator const_reference;
 
-      /// Metadata type.
+      // Metadata type.
       typedef typename Node::metadata_type metadata_type;
 
-      /// Const metadata reference type.
+      // Const metadata reference type.
       typedef
-      typename _Alloc::template rebind<metadata_type>::other::const_reference
-      metadata_const_reference;
+      typename Allocator::template rebind<
+	metadata_type>::other::const_reference
+      const_metadata_reference;
 
+    public:
 
-      bin_search_tree_const_node_it_(const node_pointer p_nd = 0)
-      : m_p_nd(const_cast<node_pointer>(p_nd))
+      // Default constructor.
+      /*
+	inline
+	bin_search_tree_const_node_it_()
+      */
+
+      inline
+      bin_search_tree_const_node_it_(const node_pointer p_nd = NULL) : m_p_nd(const_cast<node_pointer>(p_nd))
       { }
 
-      /// Access.
-      const_reference
+      // Access.
+      inline const_reference
       operator*() const
-      { return Const_Iterator(m_p_nd); }
+      {
+	return (Const_Iterator(m_p_nd));
+      }
 
-      /// Metadata access.
-      metadata_const_reference
+      // Metadata access.
+      inline const_metadata_reference
       get_metadata() const
-      { return m_p_nd->get_metadata(); }
+      {
+	return (m_p_nd->get_metadata());
+      }
 
-      /// Returns the __const node iterator associated with the left node.
-      PB_DS_TREE_CONST_NODE_ITERATOR_CLASS_C_DEC
+      // Returns the __const node iterator associated with the left node.
+      inline PB_DS_TREE_CONST_NODE_ITERATOR_CLASS_C_DEC
       get_l_child() const
-      { return PB_DS_TREE_CONST_NODE_ITERATOR_CLASS_C_DEC(m_p_nd->m_p_left); }
+      {
+	return (PB_DS_TREE_CONST_NODE_ITERATOR_CLASS_C_DEC(m_p_nd->m_p_left));
+      }
 
-      /// Returns the __const node iterator associated with the right node.
-      PB_DS_TREE_CONST_NODE_ITERATOR_CLASS_C_DEC
+      // Returns the __const node iterator associated with the right node.
+      inline PB_DS_TREE_CONST_NODE_ITERATOR_CLASS_C_DEC
       get_r_child() const
-      { return PB_DS_TREE_CONST_NODE_ITERATOR_CLASS_C_DEC(m_p_nd->m_p_right); }
+      {
+	return (PB_DS_TREE_CONST_NODE_ITERATOR_CLASS_C_DEC(m_p_nd->m_p_right));
+      }
 
-      /// Compares to a different iterator object.
-      bool
+      // Compares to a different iterator object.
+      inline bool
       operator==(const PB_DS_TREE_CONST_NODE_ITERATOR_CLASS_C_DEC& other) const
-      { return m_p_nd == other.m_p_nd; }
+      {
+	return (m_p_nd == other.m_p_nd);
+      }
 
-      /// Compares (negatively) to a different iterator object.
-      bool
+      // Compares (negatively) to a different iterator object.
+      inline bool
       operator!=(const PB_DS_TREE_CONST_NODE_ITERATOR_CLASS_C_DEC& other) const
-      { return m_p_nd != other.m_p_nd; }
+      {
+	return (m_p_nd != other.m_p_nd);
+      }
 
+    public:
       node_pointer m_p_nd;
     };
 
-#define PB_DS_TREE_NODE_ITERATOR_CLASS_C_DEC \
-    bin_search_tree_node_it_<Node, Const_Iterator, Iterator, _Alloc>
+#define PB_DS_TREE_NODE_ITERATOR_CLASS_C_DEC			\
+    bin_search_tree_node_it_<					\
+						Node,		\
+						Const_Iterator, \
+						Iterator,	\
+						Allocator>
 
-    /// Node iterator.
+    // Node iterator.
     template<typename Node,
 	     class Const_Iterator,
 	     class Iterator,
-	     typename _Alloc>
-    class bin_search_tree_node_it_
-    : public PB_DS_TREE_CONST_NODE_ITERATOR_CLASS_C_DEC
+	     class Allocator>
+    class bin_search_tree_node_it_ : 
+      public PB_DS_TREE_CONST_NODE_ITERATOR_CLASS_C_DEC
+
     {
+
     private:
       typedef
-      typename _Alloc::template rebind<
+      typename Allocator::template rebind<
       Node>::other::pointer
       node_pointer;
 
     public:
-      /// Iterator's value type.
+
+      // __Iterator's value type.
       typedef Iterator value_type;
 
-      /// Iterator's reference type.
+      // __Iterator's reference type.
       typedef Iterator reference;
 
-      /// Iterator's __const reference type.
+      // __Iterator's __const reference type.
       typedef Iterator const_reference;
 
+    public:
+
+      // Default constructor.
+      /*
+	inline
+	bin_search_tree_node_it_();
+      */
+
       inline
-      bin_search_tree_node_it_(const node_pointer p_nd = 0)
-      : PB_DS_TREE_CONST_NODE_ITERATOR_CLASS_C_DEC(const_cast<node_pointer>(p_nd))
+      bin_search_tree_node_it_(const node_pointer p_nd = NULL) : PB_DS_TREE_CONST_NODE_ITERATOR_CLASS_C_DEC(
+													    const_cast<node_pointer>(p_nd))
       { }
 
-      /// Access.
-      Iterator
+      // Access.
+      inline Iterator
       operator*() const
-      { return Iterator(PB_DS_TREE_CONST_NODE_ITERATOR_CLASS_C_DEC::m_p_nd); }
-
-      /// Returns the node iterator associated with the left node.
-      PB_DS_TREE_NODE_ITERATOR_CLASS_C_DEC
-      get_l_child() const
       {
-	return PB_DS_TREE_NODE_ITERATOR_CLASS_C_DEC(
-						    PB_DS_TREE_CONST_NODE_ITERATOR_CLASS_C_DEC::m_p_nd->m_p_left);
+	return (Iterator(PB_DS_TREE_CONST_NODE_ITERATOR_CLASS_C_DEC::m_p_nd));
       }
 
-      /// Returns the node iterator associated with the right node.
-      PB_DS_TREE_NODE_ITERATOR_CLASS_C_DEC
+      // Returns the node iterator associated with the left node.
+      inline PB_DS_TREE_NODE_ITERATOR_CLASS_C_DEC
+      get_l_child() const
+      {
+	return (PB_DS_TREE_NODE_ITERATOR_CLASS_C_DEC(
+						     PB_DS_TREE_CONST_NODE_ITERATOR_CLASS_C_DEC::m_p_nd->m_p_left));
+      }
+
+      // Returns the node iterator associated with the right node.
+      inline PB_DS_TREE_NODE_ITERATOR_CLASS_C_DEC
       get_r_child() const
       {
-	return PB_DS_TREE_NODE_ITERATOR_CLASS_C_DEC(
-						    PB_DS_TREE_CONST_NODE_ITERATOR_CLASS_C_DEC::m_p_nd->m_p_right);
+	return (PB_DS_TREE_NODE_ITERATOR_CLASS_C_DEC(
+						     PB_DS_TREE_CONST_NODE_ITERATOR_CLASS_C_DEC::m_p_nd->m_p_right));
       }
 
     };
 
 #undef PB_DS_TREE_CONST_NODE_ITERATOR_CLASS_C_DEC
+
 #undef PB_DS_TREE_NODE_ITERATOR_CLASS_C_DEC
 
   } // namespace detail
 } // namespace __gnu_pbds
 
 #endif // #ifndef PB_DS_BIN_SEARCH_TREE_NODE_ITERATORS_HPP
+

@@ -1,4 +1,4 @@
-# Copyright 2008-2019 Free Software Foundation, Inc.
+# Copyright 2008, 2010, 2011 Free Software Foundation, Inc.
 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -13,24 +13,33 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-load_lib mi-support.exp
-set MIFLAGS "-i=mi"
+set testfile "inline-cmds"
+set srcfile "${testfile}.c"
+set srcfile2 "inline-markers.c"
+set fullsrcfile "${srcdir}/${subdir}/${srcfile}"
+set fullsrcfile2 "${srcdir}/${subdir}/${srcfile2}"
+set sources [list ${fullsrcfile} ${fullsrcfile2}]
+set binfile ${objdir}/${subdir}/${testfile}
 
-standard_testfile .c inline-markers.c
-
-if {[prepare_for_testing "failed to prepare" $testfile \
-	 [list $srcfile $srcfile2] {debug additional_flags=-Winline}]} {
+if  { [gdb_compile $sources ${binfile} \
+	   executable {debug optimize=-O2}] != "" } {
+    untested inline-cmds.exp
     return -1
 }
+
+gdb_exit
+gdb_start
+gdb_reinitialize_dir $srcdir/$subdir
+gdb_load ${binfile}
 
 gdb_test_no_output "set listsize 1"
 
 runto_main
 
-get_compiler_info
+get_compiler_info $binfile
 get_debug_format
 if { [skip_inline_frame_tests] } {
-    untested "skipping inline frame tests"
+    untested inline-cmds.exp
     return
 }
 
@@ -254,20 +263,7 @@ gdb_continue_to_breakpoint "finish into func1"
 
 gdb_test "next" ".*marker \\\(\\\);" "next to finish marker"
 gdb_test "step" ".*set breakpoint 2 here.*" "step into finish marker"
-
-# Some architectures will have one or more instructions after
-# the call instruction which still are part of the call sequence,
-# so it should be expected to return to the caller line after issue 
-# a 'finish' command.
-gdb_test_multiple "finish" "finish from marker" {
-    -re "func1 \\\(\\\);.*\r\n$gdb_prompt $" {
-	pass "finish from marker to func1"
-    }
-    -re "marker \\\(\\\);.*\r\n$gdb_prompt $" {
-	pass "finish from marker"
-	gdb_test "step" "func1 \\\(\\\);.*" "step after marker to reach func1"
-    }
-}
+gdb_test "finish" "func1 \\\(\\\);" "finish from marker to func1"
 
 gdb_test "step" "bar \\\(\\\);" "step into func1 for finish"
 gdb_test "finish" "func3 \\\(\\\);" "finish from func1 to func3"
@@ -277,15 +273,7 @@ set line6 [gdb_get_line_number "set breakpoint 6 here"]
 gdb_breakpoint $line6
 gdb_continue_to_breakpoint "before the outer_inline call"
 gdb_test "step" "marker \\\(\\\) at .*" "reach 1 the outer_inline call"
-gdb_test_multiple "finish" "finish from marker" {
-    -re "main \\\(\\\) at .*outer_inline2 \\\(\\\);.*\r\n$gdb_prompt $" {
-	pass "reach outer_inline2"
-    }
-    -re "main \\\(\\\) at .*marker \\\(\\\);.*\r\n$gdb_prompt $" {
-	pass "finish from marker"
-	gdb_test "step" "outer_inline2 \\\(\\\);.*" "step after marker to reach outer_inline2"
-    }
-}
+gdb_test "finish" "main \\\(\\\) at .*outer_inline2 \\\(\\\);" "reach outer_inline2"
 gdb_test "bt" "#0  main.*" "backtrace at main of outer_inline"
 gdb_test "step" "outer_inline2 \\\(\\\) at .*" "enter outer_inline2"
 gdb_test "bt" "#0  outer_inline2.*#1  main.*" "backtrace at outer_inline2"
@@ -318,62 +306,3 @@ gdb_test "up" "#3  .*outer_inline2.*" "up to outer_inline2"
 gdb_test "info frame" ".*inlined into frame.*" "outer_inline2 inlined"
 gdb_test "up" "#4  main.*" "up from outer_inline2"
 gdb_test "info frame" ".*\n caller of frame.*" "main not inlined"
-
-gdb_exit
-
-# Send a CLI "step" command over MI.  CLI_OUTPUT_RE is a regexp that
-# matches the expected CLI output.  MESSAGE is used as test message.
-
-proc mi_cli_step {cli_output_re message} {
-    global mi_gdb_prompt
-    global srcfile
-    global decimal
-
-    send_gdb "interpreter-exec console \"step\"\n"
-    gdb_expect {
-	-re "\\^running\r\n\\*running,thread-id=\"all\"\r\n${mi_gdb_prompt}${cli_output_re}" {
-	    pass $message
-	}
-	timeout {
-	    fail "$message (timeout)"
-	}
-	eof {
-	    fail "$message (eof)"
-	}
-    }
-
-    # mi_expect_stop handles "set mi-async on/off" differences.
-    mi_expect_stop "end-stepping-range" "\[^\r\n\]*" "" ".*$srcfile" "$decimal" \
-	"" "got *stopped for $message"
-}
-
-# Test that stepping into an inlined function with the CLI "step"
-# command run while the top interpreter is MI results in the expected
-# CLI output sent to MI's console.
-with_test_prefix "mi" {
-    if [mi_gdb_start] {
-	continue
-    }
-    mi_gdb_load ${binfile}
-    mi_runto main
-
-    set line_number [gdb_get_line_number "set mi break here"]
-    mi_gdb_test "-break-insert ${srcfile}:${line_number}" \
-	{\^done,bkpt=.number="2",type="breakpoint".*\}} \
-	"set breakpoint"
-
-    mi_execute_to "exec-continue" "breakpoint-hit" "main" "" ".*" ".*" \
-	{ "" "disp=\"keep\"" } "breakpoint hit"
-
-    incr line_number 2
-
-    # Step to the line that does an inline call.
-    set re "~\"$line_number\\\\t  result = func1 \\(\\);\\\\n\"\r\n"
-    mi_cli_step "${re}" "step to inline call"
-
-    # Step into the inlined function.
-    set re [multi_line \
-		"~\"func1 \\(\\) at .*$srcfile:$decimal\\\\n\"" \
-		"~\"$decimal\\\\t  bar \\(\\);\\\\n\"\r\n"]
-    mi_cli_step "${re}" "step into inline call"
-}

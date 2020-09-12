@@ -1,5 +1,5 @@
 /* Common code for the plugin and lto1.
-   Copyright (C) 2008-2019 Free Software Foundation, Inc.
+   Copyright (C) 2008 Free Software Foundation, Inc.
    Contributed by Rafael Avila de Espindola (espindola@google.com).
 
 This file is part of GCC.
@@ -20,7 +20,7 @@ along with GCC; see the file COPYING3.  If not see
 
 
 
-static const char *lto_resolution_str[10] =
+static const char *lto_resolution_str[9] =
 {
   "UNKNOWN",
   "UNDEF",
@@ -30,6 +30,5 @@ static const char *lto_resolution_str[10] =
   "PREEMPTED_IR",
   "RESOLVED_IR",
   "RESOLVED_EXEC",
-  "RESOLVED_DYN",
-  "PREVAILING_DEF_IRONLY_EXP",
+  "RESOLVED_DYN"
 };

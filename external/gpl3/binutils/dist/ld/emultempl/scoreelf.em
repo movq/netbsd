@@ -1,7 +1,6 @@
 # This shell script emits a C file. -*- C -*-
-#   Copyright (C) 2006-2020 Free Software Foundation, Inc.
+#   Copyright 2006, 2007, 2008 Free Software Foundation, Inc.
 #   Contributed by:
-#   Brain.lin (brain.lin@sunplusct.com)
 #   Mei Ligang (ligang@sunnorth.com.cn)
 #   Pei-Lin Tsai (pltsai@sunplus.com)
 
@@ -23,24 +22,19 @@
 # MA 02110-1301, USA.
 #
 
-# This file is sourced from elf.em, and defines extra score-elf
+# This file is sourced from elf32.em, and defines extra score-elf
 # specific routines.
 #
 fragment <<EOF
 
-#include "elf32-score.h"
-
 static void
-gld${EMULATION_NAME}_before_parse (void)
+gld${EMULATION_NAME}_before_parse ()
 {
 #ifndef TARGET_			/* I.e., if not generic.  */
-  ldfile_set_output_arch ("`echo ${ARCH}`", bfd_arch_unknown);
+  ldfile_set_output_arch ("`echo ${ARCH}`");
 #endif /* not TARGET_ */
-  input_flags.dynamic = ${DYNAMIC_LINK-TRUE};
-  config.has_shared = `if test -n "$GENERATE_SHLIB_SCRIPT" ; then echo TRUE ; else echo FALSE ; fi`;
-  config.separate_code = `if test "x${SEPARATE_CODE}" = xyes ; then echo TRUE ; else echo FALSE ; fi`;
-  link_info.check_relocs_after_open_input = TRUE;
-  link_info.relro = DEFAULT_LD_Z_RELRO;
+  config.dynamic_link = ${DYNAMIC_LINK-true};
+  config.has_shared = `if test -n "$GENERATE_SHLIB_SCRIPT" ; then echo true ; else echo false ; fi`;
 }
 
 static void
@@ -52,8 +46,7 @@ score_elf_after_open (void)
 	 These will only be created if the output format is an score format,
 	 hence we do not support linking and changing output formats at the
 	 same time.  Use a link followed by objcopy to change output formats.  */
-      einfo (_("%F%P: error: cannot change output format "
-	       "whilst linking %s binaries\n"), "S+core");
+      einfo ("%F%X%P: error: cannot change output format whilst linking S+core binaries\n");
       return;
     }
 
@@ -62,15 +55,6 @@ score_elf_after_open (void)
 }
 
 EOF
-
-# Define some shell vars to insert bits of code into the standard elf
-# parse_args and list_options functions.
-#
-PARSE_AND_LIST_PROLOGUE=''
-PARSE_AND_LIST_SHORTOPTS=
-PARSE_AND_LIST_LONGOPTS=''
-PARSE_AND_LIST_OPTIONS=''
-PARSE_AND_LIST_ARGS_CASES=''
 
 # We have our own after_open and before_allocation functions, but they call
 # the standard routines, so give them a different name.

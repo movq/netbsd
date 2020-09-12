@@ -1,4 +1,5 @@
-# Copyright 1998-2019 Free Software Foundation, Inc.
+# Copyright 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2007, 2008, 2009, 2010,
+# 2011 Free Software Foundation, Inc.
 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -20,17 +21,29 @@
 
 # Tests for overloaded member functions.
 
+if $tracelevel then {
+    strace $tracelevel
+}
+
 set ws "\[\r\n\t \]+"
 set nl "\[\r\n\]+"
 
 
 if { [skip_cplus_tests] } { continue }
 
-standard_testfile .cc
+set testfile "overload"
+set srcfile ${testfile}.cc
+set binfile ${objdir}/${subdir}/${testfile}
 
-if {[prepare_for_testing "failed to prepare" $testfile $srcfile {debug c++}]} {
-    return -1
+if  { [gdb_compile "${srcdir}/${subdir}/${srcfile}" "${binfile}" executable {debug c++}] != "" } {
+     untested overload.exp
+     return -1
 }
+
+gdb_exit
+gdb_start
+gdb_reinitialize_dir $srcdir/$subdir
+gdb_load ${binfile}
 
 # Set it up at a breakpoint so we can play with the variable values.
 
@@ -38,9 +51,6 @@ if ![runto 'marker1'] then {
     perror "couldn't run to marker1"
     continue
 }
-
-# Prevent symbol on address 0x0 being printed.
-gdb_test_no_output "set print symbol off"
 
 gdb_test "up" ".*main.*" "up from marker1"
 
@@ -91,6 +101,11 @@ set re_synth	"foo & operator=\\(foo const ?&\\);"
 gdb_test "print foo_instance1" "\\$\[0-9\]+ = \{ifoo = 111, ccpfoo = 0x0\}"
 
 gdb_test_multiple "ptype foo_instance1" "ptype foo_instance1" {
+    -re "type = $re_class${ws}$re_fields${ws}$re_ctor${ws}$re_dtor${ws}$re_methods$nl\}$nl$gdb_prompt $" {
+	# gcc 2.95.3 -gdwarf-2
+	# TODO: this is not a quirk!
+	pass "ptype foo_instance1 (HP aCC -- known quirk with ~foo parameter list)"
+    }
     -re "type = $re_class${ws}$XX_fields${ws}$re_synth${ws}$re_dtor${ws}$re_ctor${ws}$re_methods$nl\}$nl$gdb_prompt $" {
 	# gcc 2.95.3 -gstabs+, no "const" on "const char *"
 	# TODO: gdb.base/constvar.exp has XFAILed this kind of problem for a
@@ -136,9 +151,6 @@ gdb_test "print foo_instance3" "\\$\[0-9\]+ = \{ifoo = 222, ccpfoo = $hex \"A\"\
 
 gdb_test "print foo_instance1.overloadargs(1)" "\\$\[0-9\]+ = 1" \
     "print call overloaded func 1 arg"
-
-# Regression test for overloading with function pointer type.
-gdb_test "print foo_instance1.overloadfnarg(23, intintfunc)" " = 23"
 
 # If GDB fails to restore the selected frame properly after the
 # inferior function call above (see GDB PR 1155 for an explanation of
@@ -263,24 +275,10 @@ gdb_test "print bar(d)" "= 22"
 
 # List overloaded functions.
 
-gdb_test_no_output "set listsize 1" ""
-
-# Build source listing pattern based on an inclusive line range.
-
-proc line_range_pattern { range_start range_end } {
-    global line_re
-
-    for {set i $range_start} {$i <= $range_end} {incr i} {
-	append pattern "\r\n$i\[ \t\]\[^\r\n\]*"
-    }
-
-    verbose -log "pattern $pattern"
-    return $pattern
-}
-
 # The void case is tricky because some compilers say "(void)"
 # and some compilers say "()".
 
+gdb_test_no_output "set listsize 1" ""
 gdb_test_multiple "info func overloadfnarg" "list overloaded function with no args" {
     -re ".*overloadfnarg\\(void\\).*$gdb_prompt $" {
 	# gcc 2
@@ -317,10 +315,13 @@ gdb_test "list '${srcfile}:intToChar(char)'" "int intToChar.*"
 gdb_test "list '${srcfile}':intToChar(char)" "int intToChar.*"
 gdb_test "list '${srcfile}':'intToChar(char)'" "int intToChar.*"
 
-# And with filename and namespace.
+# And with filename and namespace... which does not work.
 
-gdb_test "list ${srcfile}:foo::overloadfnarg(int)" "int foo::overloadfnarg.*}"
-gdb_test "list ${srcfile}:'foo::overloadfnarg(int)'" "int foo::overloadfnarg.*}"
+setup_kfail gdb/11289 *-*-*
+gdb_test "list ${srcfile}:foo::overloadfnarg(int)" "int foo::overloadfnarg"
+
+setup_kfail gdb/11289 *-*-*
+gdb_test "list ${srcfile}:'foo::overloadfnarg(int)'" "int foo::overloadfnarg"
 
 # Now some tests to see how overloading and namespaces interact.
 
@@ -337,24 +338,6 @@ gdb_test "print K::staticoverload (2, 3)" " = 5"
 gdb_test "print N::nsoverload ()" " = 1"
 gdb_test "print N::nsoverload (2)" " = 2"
 gdb_test "print N::nsoverload (2, 3)" " = 5"
-
-# Test "list function" when there are multiple "function" overloads.
-
-with_test_prefix "list all overloads" {
-    # Bump up listsize again, to make sure the number of lines to
-    # display before/after each location is computed correctly.
-    gdb_test_no_output "set listsize 10"
-
-    set line_bar_A [gdb_get_line_number "int bar (A)"]
-    set line_bar_B [gdb_get_line_number "int bar (B)"]
-    set lines1 [line_range_pattern [expr $line_bar_A - 5] [expr $line_bar_A + 4]]
-    set lines2 [line_range_pattern [expr $line_bar_B - 5] [expr $line_bar_B + 4]]
-
-    set any "\[^\r\n\]*"
-    set h1_re "file: \"${any}overload.cc\", line number: $line_bar_A, symbol: \"bar\\(A\\)\""
-    set h2_re "file: \"${any}overload.cc\", line number: $line_bar_B, symbol: \"bar\\(B\\)\""
-    gdb_test "list bar" "${h1_re}${lines1}\r\n${h2_re}${lines2}"
-}
 
 if ![runto 'XXX::marker2'] then {
     perror "couldn't run to XXX::marker2"

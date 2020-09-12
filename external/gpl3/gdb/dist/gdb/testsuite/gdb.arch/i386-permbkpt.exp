@@ -1,4 +1,4 @@
-# Copyright (C) 2009-2019 Free Software Foundation, Inc.
+# Copyright (C) 2009, 2010, 2011 Free Software Foundation, Inc.
 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -16,6 +16,10 @@
 
 # This file is part of the gdb testsuite.
 
+if $tracelevel {
+    strace $tracelevel
+}
+
 # Test inserting breakpoints over permanent breakpoints on i386 and amd64.
 
 if { ![istarget "i?86-*-*"] && ![istarget "x86_64-*-*"] } then {
@@ -23,17 +27,26 @@ if { ![istarget "i?86-*-*"] && ![istarget "x86_64-*-*"] } then {
     return
 }
 
-standard_testfile .S
+set testfile "i386-permbkpt"
+set srcfile ${testfile}.S
+set binfile ${objdir}/${subdir}/${testfile}
 
-# some targets have leading underscores on assembly symbols.
-set additional_flags [gdb_target_symbol_prefix_flags_asm]
+# Some targets have leading underscores on assembly symbols.
+# TODO: detect this automatically
+set additional_flags ""
+if { [istarget "*-*-cygwin*"] || [istarget "*-*-mingw*"] } then {
+    set additional_flags "additional_flags=-DSYMBOL_PREFIX=_"
+}
 
 if { [gdb_compile "${srcdir}/${subdir}/${srcfile}" "${binfile}" executable [list debug $additional_flags]] != "" } {
-    untested "failed to compile"
+    untested i386-permbkpt.exp
     return -1
 }
 
-clean_restart ${binfile}
+gdb_exit
+gdb_start
+gdb_reinitialize_dir $srcdir/$subdir
+gdb_load ${binfile}
 
-gdb_test "break main" "" "first permanent break"
-gdb_test "break main" "" "second permanent break"
+gdb_test "break main" "" "First permanent break"
+gdb_test "break main" "" "Second permanent break"

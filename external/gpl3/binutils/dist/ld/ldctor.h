@@ -1,5 +1,6 @@
 /* ldctor.h - linker constructor support
-   Copyright (C) 1991-2020 Free Software Foundation, Inc.
+   Copyright 1991, 1992, 1993, 1994, 1995, 1998, 2000, 2002, 2003,
+   2007  Free Software Foundation, Inc.
 
    This file is part of the GNU Binutils.
 
@@ -40,10 +41,7 @@ struct set_info {
 };
 
 struct set_element {
-  union {
-    struct set_element *next;		/* Next element.  */
-    long idx;
-  } u;
+  struct set_element *next;		/* Next element.  */
   const char *name;			/* Name in set (may be NULL).  */
   asection *section;			/* Section of value in set.  */
   bfd_vma value;			/* Value in set.  */

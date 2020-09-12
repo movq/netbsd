@@ -1,6 +1,6 @@
 // class template regex -*- C++ -*-
 
-// Copyright (C) 2013-2019 Free Software Foundation, Inc.
+// Copyright (C) 2013-2015 Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
@@ -30,9 +30,8 @@
 
 // FIXME make comments doxygen format.
 
-/*
 // This compiler refers to "Regular Expression Matching Can Be Simple And Fast"
-// (http://swtch.com/~rsc/regexp/regexp1.html),
+// (http://swtch.com/~rsc/regexp/regexp1.html"),
 // but doesn't strictly follow it.
 //
 // When compiling, states are *chained* instead of tree- or graph-constructed.
@@ -52,15 +51,14 @@
 // article.
 //
 // That's why we introduced dummy node here ------ "end_tag" is a dummy node.
-// All dummy nodes will be eliminated at the end of compilation.
-*/
+// All dummy node will be eliminated at the end of compiling process.
 
 namespace std _GLIBCXX_VISIBILITY(default)
 {
-_GLIBCXX_BEGIN_NAMESPACE_VERSION
-
 namespace __detail
 {
+_GLIBCXX_BEGIN_NAMESPACE_VERSION
+
   template<typename _TraitsT>
     _Compiler<_TraitsT>::
     _Compiler(_IterT __b, _IterT __e,
@@ -85,7 +83,7 @@ namespace __detail
       if (!_M_match_token(_ScannerT::_S_token_eof))
 	__throw_regex_error(regex_constants::error_paren);
       __r._M_append(_M_pop());
-      __glibcxx_assert(_M_stack.empty());
+      _GLIBCXX_DEBUG_ASSERT(_M_stack.empty());
       __r._M_append(_M_nfa->_M_insert_subexpr_end());
       __r._M_append(_M_nfa->_M_insert_accept());
       _M_nfa->_M_eliminate_dummy();
@@ -164,8 +162,7 @@ namespace __detail
 	  auto __neg = _M_value[0] == 'n';
 	  this->_M_disjunction();
 	  if (!_M_match_token(_ScannerT::_S_token_subexpr_end))
-	    __throw_regex_error(regex_constants::error_paren,
-				"Parenthesis is not closed.");
+	    __throw_regex_error(regex_constants::error_paren);
 	  auto __tmp = _M_pop();
 	  __tmp._M_append(_M_nfa->_M_insert_accept());
 	  _M_stack.push(
@@ -187,8 +184,7 @@ namespace __detail
       auto __init = [this, &__neg]()
 	{
 	  if (_M_stack.empty())
-	    __throw_regex_error(regex_constants::error_badrepeat,
-				"Nothing to repeat before a quantifier.");
+	    __throw_regex_error(regex_constants::error_badrepeat);
 	  __neg = __neg && _M_match_token(_ScannerT::_S_token_opt);
 	};
       if (_M_match_token(_ScannerT::_S_token_closure0))
@@ -224,11 +220,9 @@ namespace __detail
       else if (_M_match_token(_ScannerT::_S_token_interval_begin))
 	{
 	  if (_M_stack.empty())
-	    __throw_regex_error(regex_constants::error_badrepeat,
-				"Nothing to repeat before a quantifier.");
+	    __throw_regex_error(regex_constants::error_badrepeat);
 	  if (!_M_match_token(_ScannerT::_S_token_dup_count))
-	    __throw_regex_error(regex_constants::error_badbrace,
-				"Unexpected token in brace expression.");
+	    __throw_regex_error(regex_constants::error_badbrace);
 	  _StateSeqT __r(_M_pop());
 	  _StateSeqT __e(*_M_nfa, _M_nfa->_M_insert_dummy());
 	  long __min_rep = _M_cur_int_value(10);
@@ -244,8 +238,7 @@ namespace __detail
 	  else
 	    __n = 0;
 	  if (!_M_match_token(_ScannerT::_S_token_interval_end))
-	    __throw_regex_error(regex_constants::error_brace,
-				"Unexpected end of brace expression.");
+	    __throw_regex_error(regex_constants::error_brace);
 
 	  __neg = __neg && _M_match_token(_ScannerT::_S_token_opt);
 
@@ -264,8 +257,7 @@ namespace __detail
 	  else
 	    {
 	      if (__n < 0)
-		__throw_regex_error(regex_constants::error_badbrace,
-				    "Invalid range in brace expression.");
+		__throw_regex_error(regex_constants::error_badbrace);
 	      auto __end = _M_nfa->_M_insert_dummy();
 	      // _M_alt is the "match more" branch, and _M_next is the
 	      // "match less" one. Switch _M_alt and _M_next of all created
@@ -294,19 +286,19 @@ namespace __detail
       return true;
     }
 
-#define __INSERT_REGEX_MATCHER(__func, ...)\
-	do {\
+#define __INSERT_REGEX_MATCHER(__func, args...)\
+	do\
 	  if (!(_M_flags & regex_constants::icase))\
 	    if (!(_M_flags & regex_constants::collate))\
-	      __func<false, false>(__VA_ARGS__);\
+	      __func<false, false>(args);\
 	    else\
-	      __func<false, true>(__VA_ARGS__);\
+	      __func<false, true>(args);\
 	  else\
 	    if (!(_M_flags & regex_constants::collate))\
-	      __func<true, false>(__VA_ARGS__);\
+	      __func<true, false>(args);\
 	    else\
-	      __func<true, true>(__VA_ARGS__);\
-	} while (false)
+	      __func<true, true>(args);\
+	while (false)
 
   template<typename _TraitsT>
     bool
@@ -332,8 +324,7 @@ namespace __detail
 	  _StateSeqT __r(*_M_nfa, _M_nfa->_M_insert_dummy());
 	  this->_M_disjunction();
 	  if (!_M_match_token(_ScannerT::_S_token_subexpr_end))
-	    __throw_regex_error(regex_constants::error_paren,
-				"Parenthesis is not closed.");
+	    __throw_regex_error(regex_constants::error_paren);
 	  __r._M_append(_M_pop());
 	  _M_stack.push(__r);
 	}
@@ -342,8 +333,7 @@ namespace __detail
 	  _StateSeqT __r(*_M_nfa, _M_nfa->_M_insert_subexpr_begin());
 	  this->_M_disjunction();
 	  if (!_M_match_token(_ScannerT::_S_token_subexpr_end))
-	    __throw_regex_error(regex_constants::error_paren,
-				"Parenthesis is not closed.");
+	    __throw_regex_error(regex_constants::error_paren);
 	  __r._M_append(_M_pop());
 	  __r._M_append(_M_nfa->_M_insert_subexpr_end());
 	  _M_stack.push(__r);
@@ -409,7 +399,7 @@ namespace __detail
     _Compiler<_TraitsT>::
     _M_insert_character_class_matcher()
     {
-      __glibcxx_assert(_M_value.size() == 1);
+      _GLIBCXX_DEBUG_ASSERT(_M_value.size() == 1);
       _BracketMatcher<_TraitsT, __icase, __collate> __matcher
 	(_M_ctype.is(_CtypeT::upper, _M_value[0]), _M_traits);
       __matcher._M_add_character_class(_M_value, false);
@@ -428,21 +418,13 @@ namespace __detail
       pair<bool, _CharT> __last_char; // Optional<_CharT>
       __last_char.first = false;
       if (!(_M_flags & regex_constants::ECMAScript))
-	{
-	  if (_M_try_char())
-	    {
-	      __last_char.first = true;
-	      __last_char.second = _M_value[0];
-	    }
-	  else if (_M_match_token(_ScannerT::_S_token_bracket_dash))
-	    {
-	      __last_char.first = true;
-	      __last_char.second = '-';
-	    }
-	}
+	if (_M_try_char())
+	  {
+	    __matcher._M_add_char(_M_value[0]);
+	    __last_char.first = true;
+	    __last_char.second = _M_value[0];
+	  }
       while (_M_expression_term(__last_char, __matcher));
-      if (__last_char.first)
-	__matcher._M_add_char(__last_char.second);
       __matcher._M_ready();
       _M_stack.push(_StateSeqT(
 		      *_M_nfa,
@@ -459,43 +441,19 @@ namespace __detail
       if (_M_match_token(_ScannerT::_S_token_bracket_end))
 	return false;
 
-      const auto __push_char = [&](_CharT __ch)
-      {
-	if (__last_char.first)
-	  __matcher._M_add_char(__last_char.second);
-	else
-	  __last_char.first = true;
-	__last_char.second = __ch;
-      };
-      const auto __flush = [&]
-      {
-	if (__last_char.first)
-	  {
-	    __matcher._M_add_char(__last_char.second);
-	    __last_char.first = false;
-	  }
-      };
-
       if (_M_match_token(_ScannerT::_S_token_collsymbol))
 	{
 	  auto __symbol = __matcher._M_add_collate_element(_M_value);
 	  if (__symbol.size() == 1)
-	    __push_char(__symbol[0]);
-	  else
-	    __flush();
+	    {
+	      __last_char.first = true;
+	      __last_char.second = __symbol[0];
+	    }
 	}
       else if (_M_match_token(_ScannerT::_S_token_equiv_class_name))
-	{
-	  __flush();
-	  __matcher._M_add_equivalence_class(_M_value);
-	}
+	__matcher._M_add_equivalence_class(_M_value);
       else if (_M_match_token(_ScannerT::_S_token_char_class_name))
-	{
-	  __flush();
-	  __matcher._M_add_character_class(_M_value, false);
-	}
-      else if (_M_try_char())
-	__push_char(_M_value[0]);
+	__matcher._M_add_character_class(_M_value, false);
       // POSIX doesn't allow '-' as a start-range char (say [a-z--0]),
       // except when the '-' is the first or last character in the bracket
       // expression ([--0]). ECMAScript treats all '-' after a range as a
@@ -506,58 +464,51 @@ namespace __detail
       // Clang (3.5) always uses ECMAScript style even in its POSIX syntax.
       //
       // It turns out that no one reads BNFs ;)
-      else if (_M_match_token(_ScannerT::_S_token_bracket_dash))
+      else if (_M_try_char())
 	{
 	  if (!__last_char.first)
 	    {
-	      if (!(_M_flags & regex_constants::ECMAScript))
+	      __matcher._M_add_char(_M_value[0]);
+	      if (_M_value[0] == '-'
+		  && !(_M_flags & regex_constants::ECMAScript))
 		{
 		  if (_M_match_token(_ScannerT::_S_token_bracket_end))
-		    {
-		      __push_char('-');
-		      return false;
-		    }
-		  __throw_regex_error(
-		    regex_constants::error_range,
-		    "Unexpected dash in bracket expression. For POSIX syntax, "
-		    "a dash is not treated literally only when it is at "
-		    "beginning or end.");
+		    return false;
+		  __throw_regex_error(regex_constants::error_range);
 		}
-	      __push_char('-');
+	      __last_char.first = true;
+	      __last_char.second = _M_value[0];
 	    }
 	  else
 	    {
-	      if (_M_try_char())
+	      if (_M_value[0] == '-')
 		{
-		  __matcher._M_make_range(__last_char.second, _M_value[0]);
-		  __last_char.first = false;
-		}
-	      else if (_M_match_token(_ScannerT::_S_token_bracket_dash))
-		{
-		  __matcher._M_make_range(__last_char.second, '-');
-		  __last_char.first = false;
+		  if (_M_try_char())
+		    {
+		      __matcher._M_make_range(__last_char.second , _M_value[0]);
+		      __last_char.first = false;
+		    }
+		  else
+		    {
+		      if (_M_scanner._M_get_token()
+			  != _ScannerT::_S_token_bracket_end)
+			__throw_regex_error(regex_constants::error_range);
+		      __matcher._M_add_char(_M_value[0]);
+		    }
 		}
 	      else
 		{
-		  if (_M_scanner._M_get_token()
-		      != _ScannerT::_S_token_bracket_end)
-		    __throw_regex_error(
-		      regex_constants::error_range,
-		      "Character is expected after a dash.");
-		  __push_char('-');
+		  __matcher._M_add_char(_M_value[0]);
+		  __last_char.second = _M_value[0];
 		}
 	    }
 	}
       else if (_M_match_token(_ScannerT::_S_token_quoted_class))
-	{
-	  __flush();
-	  __matcher._M_add_character_class(_M_value,
-					   _M_ctype.is(_CtypeT::upper,
-						       _M_value[0]));
-	}
+	__matcher._M_add_character_class(_M_value,
+					 _M_ctype.is(_CtypeT::upper,
+						     _M_value[0]));
       else
-	__throw_regex_error(regex_constants::error_brack,
-			    "Unexpected character in bracket expression.");
+	__throw_regex_error(regex_constants::error_brack);
 
       return true;
     }
@@ -614,28 +565,39 @@ namespace __detail
     _BracketMatcher<_TraitsT, __icase, __collate>::
     _M_apply(_CharT __ch, false_type) const
     {
-      return [this, __ch]
-      {
-	if (std::binary_search(_M_char_set.begin(), _M_char_set.end(),
-			       _M_translator._M_translate(__ch)))
-	  return true;
-	auto __s = _M_translator._M_transform(__ch);
-	for (auto& __it : _M_range_set)
-	  if (_M_translator._M_match_range(__it.first, __it.second, __s))
-	    return true;
-	if (_M_traits.isctype(__ch, _M_class_set))
-	  return true;
-	if (std::find(_M_equiv_set.begin(), _M_equiv_set.end(),
-		      _M_traits.transform_primary(&__ch, &__ch+1))
-	    != _M_equiv_set.end())
-	  return true;
-	for (auto& __it : _M_neg_class_set)
-	  if (!_M_traits.isctype(__ch, __it))
-	    return true;
-	return false;
-      }() ^ _M_is_non_matching;
+      bool __ret = std::binary_search(_M_char_set.begin(), _M_char_set.end(),
+				      _M_translator._M_translate(__ch));
+      if (!__ret)
+	{
+	  auto __s = _M_translator._M_transform(__ch);
+	  for (auto& __it : _M_range_set)
+	    if (__it.first <= __s && __s <= __it.second)
+	      {
+		__ret = true;
+		break;
+	      }
+	  if (_M_traits.isctype(__ch, _M_class_set))
+	    __ret = true;
+	  else if (std::find(_M_equiv_set.begin(), _M_equiv_set.end(),
+			     _M_traits.transform_primary(&__ch, &__ch+1))
+		   != _M_equiv_set.end())
+	    __ret = true;
+	  else
+	    {
+	      for (auto& __it : _M_neg_class_set)
+		if (!_M_traits.isctype(__ch, __it))
+		  {
+		    __ret = true;
+		    break;
+		  }
+	    }
+	}
+      if (_M_is_non_matching)
+	return !__ret;
+      else
+	return __ret;
     }
-} // namespace __detail
 
 _GLIBCXX_END_NAMESPACE_VERSION
+} // namespace __detail
 } // namespace

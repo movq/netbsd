@@ -1,6 +1,6 @@
 // std::rel_ops implementation -*- C++ -*-
 
-// Copyright (C) 2001-2019 Free Software Foundation, Inc.
+// Copyright (C) 2001, 2002, 2004, 2005, 2008 Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
@@ -48,9 +48,9 @@
  *
  */
 
-/** @file bits/stl_relops.h
+/** @file stl_relops.h
  *  This is an internal header file, included by other library headers.
- *  Do not attempt to use it directly. @headername{utility}
+ *  You should not attempt to use it directly.
  *
  *  Inclusion of this file has been removed from
  *  all of the other STL headers for safety reasons, except std_utility.h.
@@ -58,15 +58,13 @@
  *  with http://gcc.gnu.org/ml/libstdc++/2001-01/msg00223.html, or
  *  http://gcc.gnu.org/onlinedocs/libstdc++/faq.html#faq.ambiguous_overloads
  *
- *  Short summary: the rel_ops operators should be avoided for the present.
+ *  Short summary:  the rel_ops operators should be avoided for the present.
  */
 
 #ifndef _STL_RELOPS_H
 #define _STL_RELOPS_H 1
 
-namespace std _GLIBCXX_VISIBILITY(default)
-{
-_GLIBCXX_BEGIN_NAMESPACE_VERSION
+_GLIBCXX_BEGIN_NAMESPACE(std)
 
   namespace rel_ops
   {
@@ -76,9 +74,9 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 
     /**
      *  @brief Defines @c != for arbitrary types, in terms of @c ==.
-     *  @param  __x  A thing.
-     *  @param  __y  Another thing.
-     *  @return   __x != __y
+     *  @param  x  A thing.
+     *  @param  y  Another thing.
+     *  @return   x != y
      *
      *  This function uses @c == to determine its result.
      */
@@ -89,9 +87,9 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 
     /**
      *  @brief Defines @c > for arbitrary types, in terms of @c <.
-     *  @param  __x  A thing.
-     *  @param  __y  Another thing.
-     *  @return   __x > __y
+     *  @param  x  A thing.
+     *  @param  y  Another thing.
+     *  @return   x > y
      *
      *  This function uses @c < to determine its result.
      */
@@ -102,9 +100,9 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 
     /**
      *  @brief Defines @c <= for arbitrary types, in terms of @c <.
-     *  @param  __x  A thing.
-     *  @param  __y  Another thing.
-     *  @return   __x <= __y
+     *  @param  x  A thing.
+     *  @param  y  Another thing.
+     *  @return   x <= y
      *
      *  This function uses @c < to determine its result.
      */
@@ -115,9 +113,9 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 
     /**
      *  @brief Defines @c >= for arbitrary types, in terms of @c <.
-     *  @param  __x  A thing.
-     *  @param  __y  Another thing.
-     *  @return   __x >= __y
+     *  @param  x  A thing.
+     *  @param  y  Another thing.
+     *  @return   x >= y
      *
      *  This function uses @c < to determine its result.
      */
@@ -125,9 +123,9 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       inline bool
       operator>=(const _Tp& __x, const _Tp& __y)
       { return !(__x < __y); }
+
   } // namespace rel_ops
 
-_GLIBCXX_END_NAMESPACE_VERSION
-} // namespace std
+_GLIBCXX_END_NAMESPACE
 
 #endif /* _STL_RELOPS_H */

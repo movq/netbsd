@@ -1,5 +1,6 @@
 /* ia64.h -- Header file for ia64 opcode table
-   Copyright (C) 1998-2019 Free Software Foundation, Inc.
+   Copyright (C) 1998, 1999, 2000, 2002, 2005, 2006, 2010
+   Free Software Foundation, Inc.
    Contributed by David Mosberger-Tang <davidm@hpl.hp.com>
 
    This file is part of BFD, the Binary File Descriptor library.
@@ -25,9 +26,6 @@
 
 #include "bfd.h"
 
-#ifdef __cplusplus
-extern "C" {
-#endif
 
 typedef BFD_HOST_U_64_BIT ia64_insn;
 
@@ -93,7 +91,6 @@ enum ia64_opnd
     IA64_OPND_R2,	/* second register # */
     IA64_OPND_R3,	/* third register # */
     IA64_OPND_R3_2,	/* third register # (limited to gr0-gr3) */
-    IA64_OPND_DAHR3,	/* dahr reg # ( bits 23-25) */
 
     /* memory operands: */
     IA64_OPND_MR3,	/* memory at addr of third register # */
@@ -108,7 +105,6 @@ enum ia64_opnd
     IA64_OPND_PKR_R3,	/* pkr[reg] */
     IA64_OPND_PMC_R3,	/* pmc[reg] */
     IA64_OPND_PMD_R3,	/* pmd[reg] */
-    IA64_OPND_DAHR_R3,	/* dahr[reg] */
     IA64_OPND_RR_R3,	/* rr[reg] */
 
     /* immediate operands: */
@@ -138,9 +134,7 @@ enum ia64_opnd
     IA64_OPND_IMM9a,	/* signed 9-bit immediate (bits 6-12, 27, 36) */
     IA64_OPND_IMM9b,	/* signed 9-bit immediate (bits 13-19, 27, 36) */
     IA64_OPND_IMM14,	/* signed 14-bit immediate (bits 13-19, 27-32, 36) */
-    IA64_OPND_IMMU16,	/* unsigned 16-bit immediate (bits 6-9, 12-22, 36) */
     IA64_OPND_IMM17,	/* signed 17-bit immediate (2*bits 6-12, 24-31, 36) */
-    IA64_OPND_IMMU19,	/* unsigned 19-bit immediate (bits 6-9, 12-25, 36) */
     IA64_OPND_IMMU21,	/* unsigned 21-bit immediate (bits 6-25, 36) */
     IA64_OPND_IMM22,	/* signed 22-bit immediate (bits 13-19, 22-36) */
     IA64_OPND_IMMU24,	/* unsigned 24-bit immediate (bits 6-26, 31-32, 36) */
@@ -160,9 +154,6 @@ enum ia64_opnd
     IA64_OPND_TGT25c,	/* signed 25-bit (ip + 16*bits 13-32, 36) */
     IA64_OPND_TGT64,    /* 64-bit (ip + 16*bits 13-32, 36, 2-40(L)) */
     IA64_OPND_LDXMOV,	/* any symbol, generates R_IA64_LDXMOV.  */
-
-    IA64_OPND_CNT6a,	/* 6-bit count  (bits 6-11) */
-    IA64_OPND_STRD5b,	/* 5-bit stride (bits 13-17) */
 
     IA64_OPND_COUNT	/* # of operand types (MUST BE LAST!) */
   };
@@ -200,7 +191,6 @@ enum ia64_resource_specifier
   IA64_RS_CR_IRR,
   IA64_RS_CR_LRR,
   IA64_RS_CR, /* 3-7,10-15,18,28-63,75-79,82-127 */
-  IA64_RS_DAHR,
   IA64_RS_DBR,
   IA64_RS_FR,
   IA64_RS_FRb,
@@ -222,7 +212,6 @@ enum ia64_resource_specifier
   IA64_RS_PSR, /* PSR bits */
   IA64_RS_RSE, /* implementation-specific RSE resources */
   IA64_RS_AR_FPSR,
-
 };
 
 enum ia64_rse_resource
@@ -420,9 +409,5 @@ extern const struct ia64_dependency *ia64_find_dependency (int);
 /* To avoid circular library dependencies, this array is implemented
    in bfd/cpu-ia64-opc.c: */
 extern const struct ia64_operand elf64_ia64_operands[IA64_OPND_COUNT];
-
-#ifdef __cplusplus
-}
-#endif
 
 #endif /* opcode_ia64_h */

@@ -1,4 +1,4 @@
-# Copyright 2009-2019 Free Software Foundation, Inc.
+# Copyright 2009, 2010, 2011 Free Software Foundation, Inc.
 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -18,40 +18,41 @@
 # debugging with watchpoints.
 
 # This test suitable only for process record-replay
-if ![supports_process_record] {
+if ![target_info exists gdb,use_precord] {
     return
 }
 
-standard_testfile watch-reverse.c
-set precsave [standard_output_file watch.precsave]
+set testfile "watch-reverse"
+set srcfile ${testfile}.c
+set binfile ${objdir}/${subdir}/${testfile}
 
-if { [prepare_for_testing "failed to prepare" $testfile $srcfile] } {
+if { [prepare_for_testing $testfile.exp $testfile $srcfile] } {
     return -1
 }
 
 runto main
 
-if [supports_process_record] {
+if [target_info exists gdb,use_precord] {
     # Activate process record/replay
-    gdb_test_no_output "record" "turn on process record"
+    gdb_test_no_output "record" "Turn on process record"
 }
 
 set end_location  [gdb_get_line_number "end of main"  ]
 gdb_test "break $end_location" \
-    "Breakpoint $decimal at .*$srcfile, line $end_location\." \
-    "breakpoint at end of main"
+    "Breakpoint $decimal at .*/$srcfile, line $end_location\." \
+    "BP at end of main"
 
 gdb_test "continue" "Breakpoint .* end of main .*" "run to end of main"
 
-gdb_test "record save $precsave" \
-    "Saved core file $precsave with execution log\."  \
+gdb_test "record save watch.precsave" \
+    "Saved core file watch.precsave with execution log\."  \
     "save process recfile"
 
-gdb_test "kill" "" "kill process, prepare to debug log file" \
+gdb_test "kill" "" "Kill process, prepare to debug log file" \
     "Kill the program being debugged\\? \\(y or n\\) " "y"
 
-gdb_test "record restore $precsave" \
-    "Restored records from core file .*" \
+gdb_test "record restore watch.precsave" \
+    "Program terminated with signal .*" \
     "reload core file"
 
 # Only software watchpoints can be used in reverse
@@ -65,7 +66,7 @@ gdb_test "break marker2" \
     "Breakpoint $decimal at $hex: file .*$srcfile, line $decimal.*" \
     "set breakpoint at marker2"
 
-gdb_continue_to_breakpoint "marker1" ".*$srcfile:.*"
+gdb_continue_to_breakpoint "marker1" ".*/$srcfile:.*"
 
 gdb_test "watch ival3" \
     ".*\[Ww\]atchpoint $decimal: ival3.*" \
@@ -102,7 +103,7 @@ gdb_test "continue" \
 # Continue until we hit the finishing marker function.
 # Make sure we hit no more watchpoints.
 
-gdb_continue_to_breakpoint "marker2" ".*$srcfile:.*"
+gdb_continue_to_breakpoint "marker2" ".*/$srcfile:.*"
 
 ###
 ###

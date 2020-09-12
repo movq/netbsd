@@ -1,6 +1,7 @@
 // Functions used by iterators -*- C++ -*-
 
-// Copyright (C) 2001-2019 Free Software Foundation, Inc.
+// Copyright (C) 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010
+// Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
@@ -48,9 +49,9 @@
  * purpose.  It is provided "as is" without express or implied warranty.
  */
 
-/** @file bits/stl_iterator_base_funcs.h
+/** @file stl_iterator_base_funcs.h
  *  This is an internal header file, included by other library headers.
- *  Do not attempt to use it directly. @headername{iterator}
+ *  You should not attempt to use it directly.
  *
  *  This file contains all of the general iterator-related utility
  *  functions, such as distance() and advance().
@@ -62,21 +63,11 @@
 #pragma GCC system_header
 
 #include <bits/concept_check.h>
-#include <debug/assertions.h>
 
-namespace std _GLIBCXX_VISIBILITY(default)
-{
-_GLIBCXX_BEGIN_NAMESPACE_VERSION
-
-_GLIBCXX_BEGIN_NAMESPACE_CONTAINER
-  // Forward declaration for the overloads of __distance.
-  template <typename> struct _List_iterator;
-  template <typename> struct _List_const_iterator;
-_GLIBCXX_END_NAMESPACE_CONTAINER
+_GLIBCXX_BEGIN_NAMESPACE(std)
 
   template<typename _InputIterator>
-    inline _GLIBCXX14_CONSTEXPR
-    typename iterator_traits<_InputIterator>::difference_type
+    inline typename iterator_traits<_InputIterator>::difference_type
     __distance(_InputIterator __first, _InputIterator __last,
                input_iterator_tag)
     {
@@ -93,8 +84,7 @@ _GLIBCXX_END_NAMESPACE_CONTAINER
     }
 
   template<typename _RandomAccessIterator>
-    inline _GLIBCXX14_CONSTEXPR
-    typename iterator_traits<_RandomAccessIterator>::difference_type
+    inline typename iterator_traits<_RandomAccessIterator>::difference_type
     __distance(_RandomAccessIterator __first, _RandomAccessIterator __last,
                random_access_iterator_tag)
     {
@@ -104,37 +94,20 @@ _GLIBCXX_END_NAMESPACE_CONTAINER
       return __last - __first;
     }
 
-#if _GLIBCXX_USE_CXX11_ABI
-  // Forward declaration because of the qualified call in distance.
-  template<typename _Tp>
-    ptrdiff_t
-    __distance(_GLIBCXX_STD_C::_List_iterator<_Tp>,
-	       _GLIBCXX_STD_C::_List_iterator<_Tp>,
-	       input_iterator_tag);
-
-  template<typename _Tp>
-    ptrdiff_t
-    __distance(_GLIBCXX_STD_C::_List_const_iterator<_Tp>,
-	       _GLIBCXX_STD_C::_List_const_iterator<_Tp>,
-	       input_iterator_tag);
-#endif
-
   /**
    *  @brief A generalization of pointer arithmetic.
-   *  @param  __first  An input iterator.
-   *  @param  __last  An input iterator.
+   *  @param  first  An input iterator.
+   *  @param  last  An input iterator.
    *  @return  The distance between them.
    *
-   *  Returns @c n such that __first + n == __last.  This requires
-   *  that @p __last must be reachable from @p __first.  Note that @c
-   *  n may be negative.
+   *  Returns @c n such that first + n == last.  This requires that @p last
+   *  must be reachable from @p first.  Note that @c n may be negative.
    *
    *  For random access iterators, this uses their @c + and @c - operations
    *  and are constant time.  For other %iterator classes they are linear time.
   */
   template<typename _InputIterator>
-    inline _GLIBCXX17_CONSTEXPR
-    typename iterator_traits<_InputIterator>::difference_type
+    inline typename iterator_traits<_InputIterator>::difference_type
     distance(_InputIterator __first, _InputIterator __last)
     {
       // concept requirements -- taken care of in __distance
@@ -143,18 +116,17 @@ _GLIBCXX_END_NAMESPACE_CONTAINER
     }
 
   template<typename _InputIterator, typename _Distance>
-    inline _GLIBCXX14_CONSTEXPR void
+    inline void
     __advance(_InputIterator& __i, _Distance __n, input_iterator_tag)
     {
       // concept requirements
       __glibcxx_function_requires(_InputIteratorConcept<_InputIterator>)
-      __glibcxx_assert(__n >= 0);
       while (__n--)
 	++__i;
     }
 
   template<typename _BidirectionalIterator, typename _Distance>
-    inline _GLIBCXX14_CONSTEXPR void
+    inline void
     __advance(_BidirectionalIterator& __i, _Distance __n,
 	      bidirectional_iterator_tag)
     {
@@ -170,35 +142,30 @@ _GLIBCXX_END_NAMESPACE_CONTAINER
     }
 
   template<typename _RandomAccessIterator, typename _Distance>
-    inline _GLIBCXX14_CONSTEXPR void
+    inline void
     __advance(_RandomAccessIterator& __i, _Distance __n,
               random_access_iterator_tag)
     {
       // concept requirements
       __glibcxx_function_requires(_RandomAccessIteratorConcept<
 				  _RandomAccessIterator>)
-      if (__builtin_constant_p(__n) && __n == 1)
-	++__i;
-      else if (__builtin_constant_p(__n) && __n == -1)
-	--__i;
-      else
-	__i += __n;
+      __i += __n;
     }
 
   /**
    *  @brief A generalization of pointer arithmetic.
-   *  @param  __i  An input iterator.
-   *  @param  __n  The @a delta by which to change @p __i.
+   *  @param  i  An input iterator.
+   *  @param  n  The @a delta by which to change @p i.
    *  @return  Nothing.
    *
    *  This increments @p i by @p n.  For bidirectional and random access
-   *  iterators, @p __n may be negative, in which case @p __i is decremented.
+   *  iterators, @p n may be negative, in which case @p i is decremented.
    *
    *  For random access iterators, this uses their @c + and @c - operations
    *  and are constant time.  For other %iterator classes they are linear time.
   */
   template<typename _InputIterator, typename _Distance>
-    inline _GLIBCXX17_CONSTEXPR void
+    inline void
     advance(_InputIterator& __i, _Distance __n)
     {
       // concept requirements -- taken care of in __advance
@@ -206,34 +173,38 @@ _GLIBCXX_END_NAMESPACE_CONTAINER
       std::__advance(__i, __d, std::__iterator_category(__i));
     }
 
-#if __cplusplus >= 201103L
+_GLIBCXX_END_NAMESPACE
 
-  template<typename _InputIterator>
-    inline _GLIBCXX17_CONSTEXPR _InputIterator
-    next(_InputIterator __x, typename
-	 iterator_traits<_InputIterator>::difference_type __n = 1)
+#ifdef __GXX_EXPERIMENTAL_CXX0X__
+
+#include <ext/type_traits.h> // For __enable_if and __is_iterator
+
+_GLIBCXX_BEGIN_NAMESPACE(std)
+
+  template<typename _ForwardIterator>
+    inline typename
+    __gnu_cxx::__enable_if<__is_iterator<_ForwardIterator>::__value,
+			   _ForwardIterator>::__type
+    next(_ForwardIterator __x, typename
+	 iterator_traits<_ForwardIterator>::difference_type __n = 1)
     {
-      // concept requirements
-      __glibcxx_function_requires(_InputIteratorConcept<_InputIterator>)
       std::advance(__x, __n);
       return __x;
     }
 
   template<typename _BidirectionalIterator>
-    inline _GLIBCXX17_CONSTEXPR _BidirectionalIterator
+    inline typename
+    __gnu_cxx::__enable_if<__is_iterator<_BidirectionalIterator>::__value,
+			   _BidirectionalIterator>::__type
     prev(_BidirectionalIterator __x, typename
 	 iterator_traits<_BidirectionalIterator>::difference_type __n = 1) 
     {
-      // concept requirements
-      __glibcxx_function_requires(_BidirectionalIteratorConcept<
-				  _BidirectionalIterator>)
       std::advance(__x, -__n);
       return __x;
     }
 
-#endif // C++11
+_GLIBCXX_END_NAMESPACE
 
-_GLIBCXX_END_NAMESPACE_VERSION
-} // namespace
+#endif // __GXX_EXPERIMENTAL_CXX0X__
 
 #endif /* _STL_ITERATOR_BASE_FUNCS_H */

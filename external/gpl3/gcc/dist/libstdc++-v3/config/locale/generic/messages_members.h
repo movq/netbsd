@@ -1,6 +1,7 @@
 // std::messages implementation details, generic version -*- C++ -*-
 
-// Copyright (C) 2001-2019 Free Software Foundation, Inc.
+// Copyright (C) 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2009
+// Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
@@ -22,9 +23,9 @@
 // see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
 // <http://www.gnu.org/licenses/>.
 
-/** @file bits/messages_members.h
+/** @file messages_members.h
  *  This is an internal header file, included by other library headers.
- *  Do not attempt to use it directly. @headername{locale}
+ *  You should not attempt to use it directly.
  */
 
 //
@@ -33,9 +34,7 @@
 
 // Written by Benjamin Kosnik <bkoz@redhat.com>
 
-namespace std _GLIBCXX_VISIBILITY(default)
-{
-_GLIBCXX_BEGIN_NAMESPACE_VERSION
+_GLIBCXX_BEGIN_NAMESPACE(std)
 
   // Non-virtual member functions.
   template<typename _CharT>
@@ -44,13 +43,13 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
      { _M_c_locale_messages = _S_get_c_locale(); }
 
   template<typename _CharT>
-     messages<_CharT>::messages(__c_locale, const char*, size_t __refs)
+     messages<_CharT>::messages(__c_locale, const char*, size_t __refs) 
      : facet(__refs)
      { _M_c_locale_messages = _S_get_c_locale(); }
 
   template<typename _CharT>
-    typename messages<_CharT>::catalog
-    messages<_CharT>::open(const basic_string<char>& __s, const locale& __loc,
+    typename messages<_CharT>::catalog 
+    messages<_CharT>::open(const basic_string<char>& __s, const locale& __loc, 
 			   const char*) const
     { return this->do_open(__s, __loc); }
 
@@ -60,33 +59,32 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
     { _S_destroy_c_locale(_M_c_locale_messages); }
 
   template<typename _CharT>
-    typename messages<_CharT>::catalog
+    typename messages<_CharT>::catalog 
     messages<_CharT>::do_open(const basic_string<char>&, const locale&) const
     { return 0; }
 
   template<typename _CharT>
-    typename messages<_CharT>::string_type
-    messages<_CharT>::do_get(catalog, int, int,
+    typename messages<_CharT>::string_type  
+    messages<_CharT>::do_get(catalog, int, int, 
 			     const string_type& __dfault) const
     { return __dfault; }
 
   template<typename _CharT>
-    void
-    messages<_CharT>::do_close(catalog) const
+    void    
+    messages<_CharT>::do_close(catalog) const 
     { }
 
    // messages_byname
    template<typename _CharT>
      messages_byname<_CharT>::messages_byname(const char* __s, size_t __refs)
-     : messages<_CharT>(__refs)
-     {
+     : messages<_CharT>(__refs) 
+     { 
 	if (__builtin_strcmp(__s, "C") != 0
 	    && __builtin_strcmp(__s, "POSIX") != 0)
 	  {
 	    this->_S_destroy_c_locale(this->_M_c_locale_messages);
-	    this->_S_create_c_locale(this->_M_c_locale_messages, __s);
+	    this->_S_create_c_locale(this->_M_c_locale_messages, __s); 
 	  }
      }
 
-_GLIBCXX_END_NAMESPACE_VERSION
-} // namespace
+_GLIBCXX_END_NAMESPACE

@@ -1,4 +1,4 @@
-# Copyright 2004-2019 Free Software Foundation, Inc.
+# Copyright 2004, 2007, 2008, 2009, 2010, 2011 Free Software Foundation, Inc.
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -14,6 +14,10 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #
 # This file is part of the gdb testsuite.
+
+if $tracelevel {
+    strace $tracelevel
+}
 
 
 # Test handling of nullified instructions for the pa target.
@@ -36,7 +40,7 @@ set binfile ${objdir}/${subdir}/${testfile}
 set gcorefile ${objdir}/${subdir}/${testfile}.gcore
 
 if { [gdb_compile "${srcdir}/${subdir}/${srcfile}" "${binfile}" executable {}] != "" } {
-    unsupported "failed to compile"
+    unsupported "Testcase compile failed."
     return -1
 }
 
@@ -51,7 +55,7 @@ gdb_load ${binfile}
 # that we end up back at the caller and not at the second instruction.
 
 gdb_breakpoint foo
-gdb_test "run" "Breakpoint 1, .* in foo.*" "breakpoint at foo"
+gdb_test "run" "Breakpoint 1, .* in foo.*" "Breakpoint at foo"
 
 set test "stepi till main"
 gdb_test_multiple "stepi" "${test}" {
@@ -88,10 +92,7 @@ proc get_addr_of_sym { sym } {
   return $addr
 }
 
-if  ![runto_main] then {
-    fail "can't run to main"
-    return 0
-}
+if { ! [ runto_main ] } then { gdb_suppress_tests; }
 
 set foo [get_addr_of_sym "foo"]
 set bar [get_addr_of_sym "bar"]
@@ -100,9 +101,9 @@ set foo_last "(bar - 4)"
 gdb_breakpoint "*$foo_last"
 
 gdb_test "continue" "Breakpoint \[0-9\]*,.* in foo.*"
-gdb_test "backtrace" "in foo.*in main.*" "backtrace from last insn in foo"
+gdb_test "backtrace" "in foo.*in main.*" "Backtrace from last insn in foo"
 gdb_test "stepi" "in foo.*" "stepi to nullified instruction stays in foo"
-gdb_test "backtrace" "in foo.*in main.*" "backtrace from nullified insn"
+gdb_test "backtrace" "in foo.*in main.*" "Backtrace from nullified insn"
 gdb_test "stepi" "in main.*" "stepi to main"
 
 # In the third test, we verify that backtraces from nullified instructions
@@ -110,8 +111,26 @@ gdb_test "stepi" "in main.*" "stepi to main"
 
 proc gen_core { test } {
   global gcorefile
+  global gdb_prompt
+  set gcore_works 0
+  set escapedfilename [string_to_regexp $gcorefile]
 
-  set gcore_works [gdb_gcore_cmd $gcorefile "$test: gcore"]
+  # gcore is not yet implemented for HPUX
+  setup_xfail hppa*-*-hpux*
+
+  gdb_test_multiple "gcore $gcorefile" "$test: gcore" {
+    -re "Saved corefile ${escapedfilename}\[\r\n\]+$gdb_prompt $" {
+      pass "$test: gcore"
+      set gcore_works 1
+    }
+    -re "Undefined command.*$gdb_prompt $" {
+      fail "$test: gcore (undefined command)"
+    }
+    -re "Can't create a corefile\[\r\n\]+$gdb_prompt $" {
+      fail "$test: gcore (can't create corefile)"
+    }
+  }
+
   return $gcore_works
 }
 
@@ -125,10 +144,7 @@ proc test_core_bt { test } {
 }
 
 set test "core at last insn in foo"
-if ![runto_main] then {
-    fail "can't run to main"
-    return 0
-}
+if { ! [ runto_main ] } then { gdb_suppress_tests; }
 gdb_breakpoint "*$foo_last"
 gdb_test "continue" "Breakpoint \[0-9\]*,.* in foo.*" "$test: continue to breakpoint"
 if [gen_core $test] {
@@ -136,10 +152,7 @@ if [gen_core $test] {
 }
 
 set test "core at nullified insn"
-if ![runto_main] then {
-    fail "can't run to main"
-    return 0
-}
+if { ! [ runto_main ] } then { gdb_suppress_tests; }
 gdb_breakpoint "*$foo_last"
 gdb_test "continue" "Breakpoint \[0-9\]*,.* in foo.*" "$test: continue to breakpoint"
 gdb_test "stepi" ".*in foo.*" "$test: step to nullified instruction"

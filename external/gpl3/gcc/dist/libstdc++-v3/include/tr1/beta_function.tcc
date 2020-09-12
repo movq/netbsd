@@ -1,6 +1,7 @@
 // Special functions -*- C++ -*-
 
-// Copyright (C) 2006-2019 Free Software Foundation, Inc.
+// Copyright (C) 2006, 2007, 2008, 2009
+// Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
@@ -24,7 +25,7 @@
 
 /** @file tr1/beta_function.tcc
  *  This is an internal header file, included by other library headers.
- *  Do not attempt to use it directly. @headername{tr1/cmath}
+ *  You should not attempt to use it directly.
  */
 
 //
@@ -46,24 +47,17 @@
 #ifndef _GLIBCXX_TR1_BETA_FUNCTION_TCC
 #define _GLIBCXX_TR1_BETA_FUNCTION_TCC 1
 
-namespace std _GLIBCXX_VISIBILITY(default)
+namespace std
 {
-_GLIBCXX_BEGIN_NAMESPACE_VERSION
-
-#if _GLIBCXX_USE_STD_SPEC_FUNCS
-# define _GLIBCXX_MATH_NS ::std
-#elif defined(_GLIBCXX_TR1_CMATH)
 namespace tr1
 {
-# define _GLIBCXX_MATH_NS ::std::tr1
-#else
-# error do not include this header directly, use <cmath> or <tr1/cmath>
-#endif
+
   // [5.2] Special functions
 
   // Implementation-space details.
   namespace __detail
   {
+
     /**
      *   @brief  Return the beta function: \f$B(x,y)\f$.
      * 
@@ -85,15 +79,15 @@ namespace tr1
 #if _GLIBCXX_USE_C99_MATH_TR1
       if (__x > __y)
         {
-          __bet = _GLIBCXX_MATH_NS::tgamma(__x)
-                / _GLIBCXX_MATH_NS::tgamma(__x + __y);
-          __bet *= _GLIBCXX_MATH_NS::tgamma(__y);
+          __bet = std::tr1::tgamma(__x)
+                / std::tr1::tgamma(__x + __y);
+          __bet *= std::tr1::tgamma(__y);
         }
       else
         {
-          __bet = _GLIBCXX_MATH_NS::tgamma(__y)
-                / _GLIBCXX_MATH_NS::tgamma(__x + __y);
-          __bet *= _GLIBCXX_MATH_NS::tgamma(__x);
+          __bet = std::tr1::tgamma(__y)
+                / std::tr1::tgamma(__x + __y);
+          __bet *= std::tr1::tgamma(__x);
         }
 #else
       if (__x > __y)
@@ -129,9 +123,9 @@ namespace tr1
     __beta_lgamma(_Tp __x, _Tp __y)
     {
 #if _GLIBCXX_USE_C99_MATH_TR1
-      _Tp __bet = _GLIBCXX_MATH_NS::lgamma(__x)
-                + _GLIBCXX_MATH_NS::lgamma(__y)
-                - _GLIBCXX_MATH_NS::lgamma(__x + __y);
+      _Tp __bet = std::tr1::lgamma(__x)
+                + std::tr1::lgamma(__y)
+                - std::tr1::lgamma(__x + __y);
 #else
       _Tp __bet = __log_gamma(__x)
                 + __log_gamma(__y)
@@ -195,13 +189,9 @@ namespace tr1
       else
         return __beta_lgamma(__x, __y);
     }
-  } // namespace __detail
-#undef _GLIBCXX_MATH_NS
-#if ! _GLIBCXX_USE_STD_SPEC_FUNCS && defined(_GLIBCXX_TR1_CMATH)
-} // namespace tr1
-#endif
 
-_GLIBCXX_END_NAMESPACE_VERSION
+  } // namespace std::tr1::__detail
+}
 }
 
-#endif // _GLIBCXX_TR1_BETA_FUNCTION_TCC
+#endif // __GLIBCXX_TR1_BETA_FUNCTION_TCC

@@ -1,6 +1,6 @@
 /* Native-dependent code for NetBSD/sh.
 
-   Copyright (C) 2002-2019 Free Software Foundation, Inc.
+   Copyright (C) 2002-2017 Free Software Foundation, Inc.
 
    Contributed by Wasabi Systems, Inc.
 
@@ -29,43 +29,34 @@
 #include "sh-tdep.h"
 #include "inf-ptrace.h"
 #include "regcache.h"
-#include "inf-ptrace.h"
-#include "nbsd-nat.h"
 
-struct sh_nbsd_nat_target final : public nbsd_nat_target
-{
-  void fetch_registers (struct regcache *, int) override;
-  void store_registers (struct regcache *, int) override;
-};
-
-static sh_nbsd_nat_target the_sh_nbsd_nat_target;
 
 /* Determine if PT_GETREGS fetches this register.  */
 #define GETREGS_SUPPLIES(gdbarch, regno) \
   (((regno) >= R0_REGNUM && (regno) <= (R0_REGNUM + 15)) \
 || (regno) == gdbarch_pc_regnum (gdbarch) || (regno) == PR_REGNUM \
 || (regno) == MACH_REGNUM || (regno) == MACL_REGNUM \
-|| (regno) == SR_REGNUM || (regno) == GBR_REGNUM)
+|| (regno) == SR_REGNUM)
 
 /* Sizeof `struct reg' in <machine/reg.h>.  */
-#define SHNBSD_SIZEOF_GREGS	(22 * 4)
+#define SHNBSD_SIZEOF_GREGS	(21 * 4)
 
-void
-sh_nbsd_nat_target::fetch_registers (struct regcache *regcache, int regno)
+static void
+shnbsd_fetch_inferior_registers (struct target_ops *ops,
+				 struct regcache *regcache, int regno)
 {
-  ptid_t ptid = regcache->ptid ();
-  pid_t pid = ptid.pid ();
-  int lwp = ptid.lwp ();
+  pid_t pid = ptid_get_pid (regcache_get_ptid (regcache));
 
-  if (regno == -1 || GETREGS_SUPPLIES (regcache->arch (), regno))
+  if (regno == -1 || GETREGS_SUPPLIES (get_regcache_arch (regcache), regno))
     {
-      struct reg regs;
+      struct reg inferior_registers;
 
-      if (ptrace (PT_GETREGS, pid, (PTRACE_TYPE_ARG3) &regs, lwp) == -1)
+      if (ptrace (PT_GETREGS, pid,
+		  (PTRACE_TYPE_ARG3) &inferior_registers, 0) == -1)
 	perror_with_name (_("Couldn't get registers"));
 
       sh_corefile_supply_regset (&sh_corefile_gregset, regcache, regno,
-				 (char *) &regs,
+				 (char *) &inferior_registers,
 				 SHNBSD_SIZEOF_GREGS);
 
       if (regno != -1)
@@ -73,25 +64,26 @@ sh_nbsd_nat_target::fetch_registers (struct regcache *regcache, int regno)
     }
 }
 
-void
-sh_nbsd_nat_target::store_registers (struct regcache *regcache, int regno)
+static void
+shnbsd_store_inferior_registers (struct target_ops *ops,
+				 struct regcache *regcache, int regno)
 {
-  ptid_t ptid = regcache->ptid ();
-  pid_t pid = ptid.pid ();
-  int lwp = ptid.lwp ();
+  pid_t pid = ptid_get_pid (regcache_get_ptid (regcache));
 
-  if (regno == -1 || GETREGS_SUPPLIES (regcache->arch (), regno))
+  if (regno == -1 || GETREGS_SUPPLIES (get_regcache_arch (regcache), regno))
     {
-      struct reg regs;
+      struct reg inferior_registers;
 
-      if (ptrace (PT_GETREGS, pid, (PTRACE_TYPE_ARG3) &regs, lwp) == -1)
+      if (ptrace (PT_GETREGS, pid,
+		  (PTRACE_TYPE_ARG3) &inferior_registers, 0) == -1)
 	perror_with_name (_("Couldn't get registers"));
 
       sh_corefile_collect_regset (&sh_corefile_gregset, regcache, regno,
-				  (char *) &regs,
+				  (char *) &inferior_registers,
 				  SHNBSD_SIZEOF_GREGS);
 
-      if (ptrace (PT_SETREGS, pid, (PTRACE_TYPE_ARG3) &regs, lwp) == -1)
+      if (ptrace (PT_SETREGS, pid,
+		  (PTRACE_TYPE_ARG3) &inferior_registers, 0) == -1)
 	perror_with_name (_("Couldn't set registers"));
 
       if (regno != -1)
@@ -99,8 +91,16 @@ sh_nbsd_nat_target::store_registers (struct regcache *regcache, int regno)
     }
 }
 
+/* Provide a prototype to silence -Wmissing-prototypes.  */
+void _initialize_shnbsd_nat (void);
+
 void
 _initialize_shnbsd_nat (void)
 {
-  add_inf_child_target (&the_sh_nbsd_nat_target);
+  struct target_ops *t;
+
+  t = inf_ptrace_target ();
+  t->to_fetch_registers = shnbsd_fetch_inferior_registers;
+  t->to_store_registers = shnbsd_store_inferior_registers;
+  add_target (t);
 }

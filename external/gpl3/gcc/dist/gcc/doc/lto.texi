@@ -1,4 +1,4 @@
-@c Copyright (C) 2010-2019 Free Software Foundation, Inc.
+@c Copyright (C) 2010-2013 Free Software Foundation, Inc.
 @c This is part of the GCC manual.
 @c For copying conditions, see the file gcc.texi.
 @c Contributed by Jan Hubicka <jh@suse.cz> and
@@ -43,7 +43,7 @@ existing build systems, as one can, for instance, produce archives of
 the files.  Additionally, one might be able to ship one set of fat
 objects which could be used both for development and the production of
 optimized builds.  A, perhaps surprising, side effect of this feature
-is that any mistake in the toolchain leads to LTO information not
+is that any mistake in the toolchain that leads to LTO information not
 being used (e.g.@: an older @code{libtool} calling @code{ld} directly).
 This is both an advantage, as the system is more robust, and a
 disadvantage, as the user is not informed that the optimization has
@@ -353,7 +353,7 @@ To simplify development, the GCC pass manager differentiates
 between normal inter-procedural passes and small inter-procedural
 passes.  A @emph{small inter-procedural pass}
 (@code{SIMPLE_IPA_PASS}) is a pass that does
-everything at once and thus it cannot be executed during WPA in
+everything at once and thus it can not be executed during WPA in
 WHOPR mode.  It defines only the @emph{Execute} stage and during
 this stage it accesses and modifies the function bodies.  Such
 passes are useful for optimization at LGEN or LTRANS time and are
@@ -538,6 +538,10 @@ plugin obtains the symbol resolution information which specifies
 which symbols provided by the claimed objects are bound from the
 rest of a binary being linked.
 
+Currently, the linker plugin  works only in combination
+with the Gold linker, but a GNU ld implementation is under
+development.
+
 GCC is designed to be independent of the rest of the toolchain
 and aims to support linkers without plugin support.  For this
 reason it does not use the linker plugin by default.  Instead,
@@ -582,10 +586,4 @@ optimizes an object and produces the final assembly.
 This option specifies a file to which the names of LTRANS output
 files are written.  This option is only meaningful in conjunction
 with @option{-fwpa}.
-
-@item -fresolution=@var{file}
-@opindex fresolution
-This option specifies the linker resolution file.  This option is
-only meaningful in conjunction with @option{-fwpa} and as option
-to pass through to the LTO linker plugin.
 @end itemize

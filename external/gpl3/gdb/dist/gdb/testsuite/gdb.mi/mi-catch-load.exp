@@ -1,4 +1,4 @@
-# Copyright 2012-2019 Free Software Foundation, Inc.
+# Copyright 2012-2013 Free Software Foundation, Inc.
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
 # the Free Software Foundation; either version 3 of the License, or
@@ -25,14 +25,14 @@ if [mi_gdb_start] {
 
 if {[get_compiler_info]} {
     warning "Could not get compiler info"
-    untested "no compiler info"
+    untested mi-catch-load.exp
     return -1
 }
 
 standard_testfile mi-catch-load.c
 
 if  { [gdb_compile "${srcdir}/${subdir}/${srcfile}" "${binfile}" executable {debug shlib_load}] != "" } {
-    untested "failed to compile"
+    untested mi-catch-load.exp
     return -1
 }
 
@@ -41,7 +41,7 @@ set srcfile2 ${testfile2}.c
 set binfile2 [standard_output_file ${testfile2}.so]
 set binfile2_dlopen [shlib_target_file ${testfile2}.so]
 if { [gdb_compile_shlib "${srcdir}/${subdir}/${srcfile2}" ${binfile2} {debug}] != "" } {
-    untested "failed to compile shared library"
+    untested mi-catch-load.exp
     return -1
 }
 mi_run_to_main
@@ -58,7 +58,6 @@ gdb_expect {
         pass "catch-load: solib-event stop"
     }
     -re ".*$mi_gdb_prompt$" {
-	setup_kfail mi/15945 *-*-*mingw*
         fail "catch-load: solib-event stop"
     }
     timeout {
@@ -86,7 +85,6 @@ gdb_expect {
         pass "catch-unload: solib-event stop"
     }
     -re ".*$mi_gdb_prompt$" {
-	setup_kfail mi/15945 *-*-*mingw*
         fail "catch-unload: solib-event stop"
     }
     timeout {

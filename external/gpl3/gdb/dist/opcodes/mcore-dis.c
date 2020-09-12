@@ -1,5 +1,6 @@
 /* Disassemble Motorola M*Core instructions.
-   Copyright (C) 1993-2019 Free Software Foundation, Inc.
+   Copyright 1993, 1999, 2000, 2001, 2002, 2005, 2007, 2009
+   Free Software Foundation, Inc.
 
    This file is part of the GNU opcodes library.
 
@@ -20,12 +21,11 @@
 
 #include "sysdep.h"
 #include <stdio.h>
-#include "libiberty.h"
 #define STATIC_TABLE
 #define DEFINE_TABLE
 
 #include "mcore-opc.h"
-#include "disassemble.h"
+#include "dis-asm.h"
 
 /* Mask for each mcore_opclass: */
 static const unsigned short imsk[] = {
@@ -89,14 +89,15 @@ static const char *crname[] = {
 static const unsigned isiz[] = { 2, 0, 1, 0 };
 
 int
-print_insn_mcore (bfd_vma memaddr,
-		  struct disassemble_info *info)
+print_insn_mcore (memaddr, info)
+     bfd_vma memaddr;
+     struct disassemble_info *info;
 {
   unsigned char ibytes[4];
   fprintf_ftype print_func = info->fprintf_func;
   void *stream = info->stream;
   unsigned short inst;
-  unsigned int i;
+  const mcore_opcode_info *op;
   int status;
 
   info->bytes_per_chunk = 2;
@@ -117,19 +118,19 @@ print_insn_mcore (bfd_vma memaddr,
     abort ();
 
   /* Just a linear search of the table.  */
-  for (i = 0; i < ARRAY_SIZE (mcore_table); i++)
-    if (mcore_table[i].inst == (inst & imsk[mcore_table[i].opclass]))
+  for (op = mcore_table; op->name != 0; op++)
+    if (op->inst == (inst & imsk[op->opclass]))
       break;
 
-  if (i == ARRAY_SIZE (mcore_table))
+  if (op->name == 0)
     (*print_func) (stream, ".short 0x%04x", inst);
   else
     {
       const char *name = grname[inst & 0x0F];
 
-      (*print_func) (stream, "%s", mcore_table[i].name);
+      (*print_func) (stream, "%s", op->name);
 
-      switch (mcore_table[i].opclass)
+      switch (op->opclass)
 	{
 	case O0:
 	  break;
@@ -203,7 +204,7 @@ print_insn_mcore (bfd_vma memaddr,
 
 	    (*print_func) (stream, "\t0x%lx", (long)(memaddr + 2 + (val << 1)));
 
-	    if (strcmp (mcore_table[i].name, "bsr") == 0)
+	    if (strcmp (op->name, "bsr") == 0)
 	      {
 		/* For bsr, we'll try to get a symbol for the target.  */
 		val = memaddr + 2 + (val << 1);
@@ -233,9 +234,6 @@ print_insn_mcore (bfd_vma memaddr,
 
 	    val = (memaddr + 2 + ((inst & 0xFF) << 2)) & 0xFFFFFFFC;
 
-	    /* We are not reading an instruction, so allow
-	       reads to extend beyond the next symbol.  */
-	    info->stop_vma = 0;
 	    status = info->read_memory_func (val, ibytes, 4, info);
 	    if (status != 0)
 	      {
@@ -266,9 +264,6 @@ print_insn_mcore (bfd_vma memaddr,
 
 	    val = (memaddr + 2 + ((inst & 0xFF) << 2)) & 0xFFFFFFFC;
 
-	    /* We are not reading an instruction, so allow
-	       reads to extend beyond the next symbol.  */
-	    info->stop_vma = 0;
 	    status = info->read_memory_func (val, ibytes, 4, info);
 	    if (status != 0)
 	      {

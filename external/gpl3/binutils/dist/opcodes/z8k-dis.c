@@ -1,5 +1,6 @@
 /* Disassemble z8000 code.
-   Copyright (C) 1992-2020 Free Software Foundation, Inc.
+   Copyright 1992, 1993, 1998, 2000, 2001, 2002, 2003, 2007
+   Free Software Foundation, Inc.
 
    This file is part of the GNU opcodes library.
 
@@ -19,8 +20,7 @@
    MA 02110-1301, USA.  */
 
 #include "sysdep.h"
-#include "disassemble.h"
-#include "libiberty.h"
+#include "dis-asm.h"
 
 #define DEFINE_TABLE
 #include "z8k-opc.h"
@@ -36,9 +36,9 @@ typedef struct
   unsigned short words[24];
 
   /* Nibble number of first word not yet fetched.  */
-  unsigned int max_fetched;
+  int max_fetched;
   bfd_vma insn_start;
-  OPCODES_SIGJMP_BUF bailout;
+  jmp_buf bailout;
 
   int tabl_index;
   char instr_asmsrc[80];
@@ -77,7 +77,7 @@ fetch_data (struct disassemble_info *info, int nibble)
   if (status != 0)
     {
       (*info->memory_error_func) (status, priv->insn_start, info);
-      OPCODES_SIGLONGJMP (priv->bailout, 1);
+      longjmp (priv->bailout, 1);
     }
 
   {
@@ -150,7 +150,7 @@ print_insn_z8k (bfd_vma addr, disassemble_info *info, int is_segmented)
   info->private_data = (PTR) &instr_data;
   instr_data.max_fetched = 0;
   instr_data.insn_start = addr;
-  if (OPCODES_SIGSETJMP (instr_data.bailout) != 0)
+  if (setjmp (instr_data.bailout) != 0)
     /* Error return.  */
     return -1;
 
@@ -190,7 +190,7 @@ print_insn_z8002 (bfd_vma addr, disassemble_info *info)
 int
 z8k_lookup_instr (unsigned char *nibbles, disassemble_info *info)
 {
-  unsigned int nibl_index, tabl_index;
+  int nibl_index, tabl_index;
   int nibl_matched;
   int need_fetch = 0;
   unsigned short instr_nibl;
@@ -203,9 +203,7 @@ z8k_lookup_instr (unsigned char *nibbles, disassemble_info *info)
     {
       nibl_matched = 1;
       for (nibl_index = 0;
-	   nibl_matched
-	     && nibl_index < ARRAY_SIZE (z8k_table[0].byte_info)
-	     && nibl_index < z8k_table[tabl_index].length * 2;
+	   nibl_index < z8k_table[tabl_index].length * 2 && nibl_matched;
 	   nibl_index++)
 	{
 	  if ((nibl_index % 4) == 0)
@@ -284,7 +282,7 @@ output_instr (instr_data_s *instr_data,
               unsigned long addr ATTRIBUTE_UNUSED,
               disassemble_info *info)
 {
-  unsigned int num_bytes;
+  int num_bytes;
   char out_str[100];
 
   out_str[0] = 0;
@@ -300,7 +298,7 @@ output_instr (instr_data_s *instr_data,
 static void
 unpack_instr (instr_data_s *instr_data, int is_segmented, disassemble_info *info)
 {
-  unsigned int nibl_count, loop;
+  int nibl_count, loop;
   unsigned short instr_nibl, instr_byte, instr_word;
   long instr_long;
   unsigned int tabl_datum, datum_class;
@@ -369,8 +367,8 @@ unpack_instr (instr_data_s *instr_data, int is_segmented, disassemble_info *info
 	      break;
 	    case ARG_IMM32:
 	      FETCH_DATA (info, nibl_count + 8);
-	      instr_long = ((unsigned) instr_data->words[nibl_count] << 16
-			    | instr_data->words[nibl_count + 4]);
+	      instr_long = (instr_data->words[nibl_count] << 16)
+		| (instr_data->words[nibl_count + 4]);
 	      instr_data->immediate = instr_long;
 	      nibl_count += 7;
 	      break;
@@ -402,17 +400,17 @@ unpack_instr (instr_data_s *instr_data, int is_segmented, disassemble_info *info
 	      if (instr_nibl & 0x8)
 		{
 		  FETCH_DATA (info, nibl_count + 8);
-		  instr_long = ((unsigned) instr_data->words[nibl_count] << 16
-				| instr_data->words[nibl_count + 4]);
-		  instr_data->address = ((instr_word & 0x7f00) << 16
-					 | (instr_long & 0xffff));
+		  instr_long = (instr_data->words[nibl_count] << 16)
+		    | (instr_data->words[nibl_count + 4]);
+		  instr_data->address = ((instr_word & 0x7f00) << 16)
+		    + (instr_long & 0xffff);
 		  nibl_count += 7;
 		  seg_length = 2;
 		}
 	      else
 		{
-		  instr_data->address = ((instr_word & 0x7f00) << 16
-					 | (instr_word & 0x00ff));
+		  instr_data->address = ((instr_word & 0x7f00) << 16)
+		    + (instr_word & 0x00ff);
 		  nibl_count += 3;
 		}
 	    }

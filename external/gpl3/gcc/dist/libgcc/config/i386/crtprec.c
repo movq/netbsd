@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2007-2019 Free Software Foundation, Inc.
+ * Copyright (C) 2007-2013 Free Software Foundation, Inc.
  *
  * This file is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -21,7 +21,6 @@
  * <http://www.gnu.org/licenses/>.
  */
 
-#ifndef _SOFT_FLOAT
 #if __PREC == 32
  #define X87CW		(0 << 8)	/* Single precision (24 bits) */
 #elif __PREC == 64
@@ -39,11 +38,10 @@ set_precision (void)
 {
   unsigned short int cwd;
 
-  asm volatile ("fnstcw\t%0" : "=m" (cwd));
+  asm volatile ("fstcw\t%0" : "=m" (cwd));
 
   cwd &= ~X87CW_PCMASK;
   cwd |= X87CW;
 
   asm volatile ("fldcw\t%0" : : "m" (cwd));
 }
-#endif

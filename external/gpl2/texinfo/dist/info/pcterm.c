@@ -1,4 +1,4 @@
-/*	$NetBSD: pcterm.c,v 1.1.1.1 2016/01/14 00:11:29 christos Exp $	*/
+/*	$NetBSD: pcterm.c,v 1.1 2016/01/14 00:11:29 christos Exp $	*/
 
 /* pcterm.c -- How to handle the PC terminal for Info under MS-DOS/MS-Windows.
    Id: pcterm.c,v 1.4 2004/04/11 17:56:46 karl Exp 

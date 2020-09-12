@@ -1,6 +1,7 @@
 /* Utilities to execute a program in a subprocess (possibly linked by pipes
    with other subprocesses), and wait for it.  DJGPP specialization.
-   Copyright (C) 1996-2019 Free Software Foundation, Inc.
+   Copyright (C) 1996, 1997, 1998, 1999, 2000, 2001, 2003, 2005
+   Free Software Foundation, Inc.
 
 This file is part of the libiberty library.
 Libiberty is free software; you can redistribute it and/or
@@ -42,7 +43,7 @@ extern int errno;
 #endif
 
 static int pex_djgpp_open_read (struct pex_obj *, const char *, int);
-static int pex_djgpp_open_write (struct pex_obj *, const char *, int, int);
+static int pex_djgpp_open_write (struct pex_obj *, const char *, int);
 static pid_t pex_djgpp_exec_child (struct pex_obj *, int, const char *,
 				  char * const *, char * const *,
 				  int, int, int, int,
@@ -89,12 +90,10 @@ pex_djgpp_open_read (struct pex_obj *obj ATTRIBUTE_UNUSED,
 
 static int
 pex_djgpp_open_write (struct pex_obj *obj ATTRIBUTE_UNUSED,
-		      const char *name, int binary, int append)
+		      const char *name, int binary)
 {
   /* Note that we can't use O_EXCL here because gcc may have already
      created the temporary file via make_temp_file.  */
-  if (append)
-    return -1;
   return open (name,
 	       (O_WRONLY | O_CREAT | O_TRUNC
 		| (binary ? O_BINARY : O_TEXT)),

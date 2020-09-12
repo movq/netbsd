@@ -1,5 +1,6 @@
 /* SPARC ELF support for BFD.
-   Copyright (C) 1996-2019 Free Software Foundation, Inc.
+   Copyright 1996, 1997, 1998, 1999, 2000, 2001, 2003, 2008, 2010
+   Free Software Foundation, Inc.
    By Doug Evans, Cygnus Support, <dje@cygnus.com>.
 
    This file is part of BFD, the Binary File Descriptor library.
@@ -160,7 +161,6 @@ START_RELOC_NUMBERS (elf_sparc_reloc_type)
   RELOC_NUMBER (R_SPARC_H34, 85)
   RELOC_NUMBER (R_SPARC_SIZE32, 86)
   RELOC_NUMBER (R_SPARC_SIZE64, 87)
-  RELOC_NUMBER (R_SPARC_WDISP10, 88)
   
   EMPTY_RELOC  (R_SPARC_max_std)
 
@@ -184,78 +184,5 @@ END_RELOC_NUMBERS (R_SPARC_max)
 /* Values for Elf64_Dyn.d_tag.  */
 
 #define DT_SPARC_REGISTER	0x70000001
-
-/* Object attribute tags.  */
-enum
-{
-  /* 0-3 are generic.  */
-  Tag_GNU_Sparc_HWCAPS = 4,
-  Tag_GNU_Sparc_HWCAPS2 = 8
-};
-
-/* Generally speaking the ELF_SPARC_HWCAP_* and ELF_SPARC_HWCAP2_*
-   values match the AV_SPARC_* and AV2_SPARC_* bits respectively.
-
-   However Solaris 11 introduced a backwards-incompatible change
-   deprecating the RANDOM, TRANS and ASI_CACHE_SPARING bits in the
-   AT_SUNW_CAP_HW1 flags, reusing the bits for the unrelated hwcaps
-   FJATHHPC, FJDES and FJAES respectively.  In GNU/Linux we opted to
-   keep the old hwcaps in Tag_GNU_Sparc_HWCAPS and allocate bits for
-   FJATHHPC, FJDES and JFAES in Tag_GNU_Sparc_HWCAPS2.  */
-
-#define ELF_SPARC_HWCAP_MUL32	0x00000001 /* umul/umulcc/smul/smulcc insns */
-#define ELF_SPARC_HWCAP_DIV32	0x00000002 /* udiv/udivcc/sdiv/sdivcc insns */
-#define ELF_SPARC_HWCAP_FSMULD	0x00000004 /* 'fsmuld' insn */
-#define ELF_SPARC_HWCAP_V8PLUS	0x00000008 /* v9 insns available to 32bit */
-#define ELF_SPARC_HWCAP_POPC	0x00000010 /* 'popc' insn */
-#define ELF_SPARC_HWCAP_VIS	0x00000020 /* VIS insns */
-#define ELF_SPARC_HWCAP_VIS2	0x00000040 /* VIS2 insns */
-#define ELF_SPARC_HWCAP_ASI_BLK_INIT	\
-				0x00000080 /* block init ASIs */
-#define ELF_SPARC_HWCAP_FMAF	0x00000100 /* fused multiply-add */
-#define ELF_SPARC_HWCAP_VIS3	0x00000400 /* VIS3 insns */
-#define ELF_SPARC_HWCAP_HPC	0x00000800 /* HPC insns */
-#define ELF_SPARC_HWCAP_RANDOM	0x00001000 /* 'random' insn */
-#define ELF_SPARC_HWCAP_TRANS	0x00002000 /* transaction insns */
-#define ELF_SPARC_HWCAP_FJFMAU	0x00004000 /* unfused multiply-add */
-#define ELF_SPARC_HWCAP_IMA	0x00008000 /* integer multiply-add */
-#define ELF_SPARC_HWCAP_ASI_CACHE_SPARING \
-				0x00010000 /* cache sparing ASIs */
-#define ELF_SPARC_HWCAP_AES	0x00020000 /* AES crypto insns */
-#define ELF_SPARC_HWCAP_DES	0x00040000 /* DES crypto insns */
-#define ELF_SPARC_HWCAP_KASUMI	0x00080000 /* KASUMI crypto insns */
-#define ELF_SPARC_HWCAP_CAMELLIA \
-				0x00100000 /* CAMELLIA crypto insns */
-#define ELF_SPARC_HWCAP_MD5	0x00200000 /* MD5 hashing insns */
-#define ELF_SPARC_HWCAP_SHA1	0x00400000 /* SHA1 hashing insns */
-#define ELF_SPARC_HWCAP_SHA256	0x00800000 /* SHA256 hashing insns */
-#define ELF_SPARC_HWCAP_SHA512	0x01000000 /* SHA512 hashing insns */
-#define ELF_SPARC_HWCAP_MPMUL	0x02000000 /* Multiple Precision Multiply */
-#define ELF_SPARC_HWCAP_MONT	0x04000000 /* Montgomery Mult/Sqrt */
-#define ELF_SPARC_HWCAP_PAUSE	0x08000000 /* Pause insn */
-#define ELF_SPARC_HWCAP_CBCOND	0x10000000 /* Compare and Branch insns */
-#define ELF_SPARC_HWCAP_CRC32C	0x20000000 /* CRC32C insn */
-
-#define ELF_SPARC_HWCAP2_FJATHPLUS 0x00000001 /* Fujitsu Athena+ */
-#define ELF_SPARC_HWCAP2_VIS3B     0x00000002 /* Subset of VIS3 present on sparc64 X+ */
-#define ELF_SPARC_HWCAP2_ADP       0x00000004 /* Application Data Protection */
-#define ELF_SPARC_HWCAP2_SPARC5    0x00000008 /* The 29 new fp and sub instructions */
-#define ELF_SPARC_HWCAP2_MWAIT     0x00000010 /* mwait instruction and load/monitor ASIs */
-#define ELF_SPARC_HWCAP2_XMPMUL    0x00000020 /* XOR multiple precision multiply */
-#define ELF_SPARC_HWCAP2_XMONT     0x00000040 /* XOR Montgomery mult/sqr instructions */
-#define ELF_SPARC_HWCAP2_NSEC      \
-                                   0x00000080 /* pause insn with support for nsec timings */
-#define ELF_SPARC_HWCAP2_FJATHHPC  0x00001000 /* Fujitsu HPC instrs */
-#define ELF_SPARC_HWCAP2_FJDES     0x00002000 /* Fujitsu DES instrs */
-#define ELF_SPARC_HWCAP2_FJAES     0x00010000 /* Fujitsu AES instrs */
-
-#define ELF_SPARC_HWCAP2_SPARC6    0x00020000 /* OSA2017 new instructions */
-#define ELF_SPARC_HWCAP2_ONADDSUB  0x00040000 /* Oracle Number add/subtract */
-#define ELF_SPARC_HWCAP2_ONMUL     0x00080000 /* Oracle Number multiply */
-#define ELF_SPARC_HWCAP2_ONDIV     0x00100000 /* Oracle Number divide */
-#define ELF_SPARC_HWCAP2_DICTUNP   0x00200000 /* Dictionary unpack instruction */
-#define ELF_SPARC_HWCAP2_FPCMPSHL  0x00400000 /* Partition compare with shifted result */
-#define ELF_SPARC_HWCAP2_RLE       0x00800000 /* Run-length encoded burst and length */
-#define ELF_SPARC_HWCAP2_SHA3      0x01000000 /* SHA3 instruction */
 
 #endif /* _ELF_SPARC_H */

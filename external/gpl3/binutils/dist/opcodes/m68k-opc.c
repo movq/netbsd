@@ -1,5 +1,7 @@
 /* Opcode table for m680[012346]0/m6888[12]/m68851/mcf5200.
-   Copyright (C) 1989-2020 Free Software Foundation, Inc.
+   Copyright 1989, 1991, 1992, 1993, 1994, 1995, 1996, 1997, 1998, 1999,
+   2000, 2001, 2003, 2004, 2005, 2006, 2007
+   Free Software Foundation, Inc.
 
    This file is part of the GNU opcodes library.
 
@@ -292,7 +294,7 @@ const struct m68k_opcode m68k_opcodes[] =
 {"cmpl", 6,	one(0006200),	one(0177700), "#lDs", mcfisa_a },
 {"cmpl", 2,	one(0130610),	one(0170770), "+s+d", m68000up },
 {"cmpl", 2,	one(0130200),	one(0170700), "*lDd", m68000up | mcfisa_a },
-
+  
 {"cp0bcbusy",2, one (0176300), one (01777770), "BW", mcfisa_a},
 {"cp1bcbusy",2, one (0177300), one (01777770), "BW", mcfisa_a},
 {"cp0nop",   4, two (0176000,0), two (01777477,0170777), "jE", mcfisa_a},
@@ -316,7 +318,7 @@ const struct m68k_opcode m68k_opcodes[] =
 {"cp1stl",   6, one (0177600), one (01777700), ".R1pwjEK3", mcfisa_a},
 {"cp0st",    6, one (0176600), one (01777700), ".R1pwjEK3", mcfisa_a},
 {"cp1st",    6, one (0177600), one (01777700), ".R1pwjEK3", mcfisa_a},
-
+  
 {"dbcc", 2,	one(0052310),	one(0177770), "DsBw", m68000up },
 {"dbcs", 2,	one(0052710),	one(0177770), "DsBw", m68000up },
 {"dbeq", 2,	one(0053710),	one(0177770), "DsBw", m68000up },
@@ -376,7 +378,7 @@ const struct m68k_opcode m68k_opcodes[] =
 {"eor", 4,	one(0005174),	one(0177777), "#wSs", m68000up },
 {"eor", 4,	one(0005100),	one(0177700), "#w$s", m68000up },
 {"eor", 2,	one(0130500),	one(0170700), "Dd$s", m68000up },
-
+		
 {"exg", 2,	one(0140500),	one(0170770), "DdDs", m68000up },
 {"exg", 2,	one(0140510),	one(0170770), "AdAs", m68000up },
 {"exg", 2,	one(0140610),	one(0170770), "DdAs", m68000up },
@@ -526,9 +528,6 @@ const struct m68k_opcode m68k_opcodes[] =
 {"fatanhx", 4,	two(0xF000, 0x000D), two(0xF1C0, 0xE07F), "IiF8F7", mfloat },
 {"fatanhx", 4,	two(0xF000, 0x480D), two(0xF1C0, 0xFC7F), "Ii;xF7", mfloat },
 {"fatanhx", 4,	two(0xF000, 0x000D), two(0xF1C0, 0xE07F), "IiFt",   mfloat },
-
-/* This is the same as `fbf .+2'.  */
-{"fnop", 4,	two(0xF280, 0x0000), two(0xFFFF, 0xFFFF), "Ii", mfloat | cfloat },
 
 {"fbeq", 2,	one(0xF081),		one(0xF1FF), "IdBW", mfloat | cfloat },
 {"fbf", 2,	one(0xF080),		one(0xF1FF), "IdBW", mfloat | cfloat },
@@ -1085,6 +1084,8 @@ const struct m68k_opcode m68k_opcodes[] =
 {"fdnegx", 4,	two(0xF000, 0x485E), two(0xF1C0, 0xFC7F), "Ii;xF7", m68040up },
 {"fdnegx", 4,	two(0xF000, 0x005E), two(0xF1C0, 0xE07F), "IiFt",   m68040up },
 
+{"fnop", 4,	two(0xF280, 0x0000), two(0xFFFF, 0xFFFF), "Ii", mfloat | cfloat },
+
 {"fremb", 4,	two(0xF000, 0x5825), two(0xF1C0, 0xFC7F), "Ii;bF7", mfloat },
 {"fremd", 4,	two(0xF000, 0x5425), two(0xF1C0, 0xFC7F), "Ii;FF7", mfloat },
 {"freml", 4,	two(0xF000, 0x4025), two(0xF1C0, 0xFC7F), "Ii;lF7", mfloat },
@@ -1501,19 +1502,12 @@ const struct m68k_opcode m68k_opcodes[] =
 {"macw", 4,  	two(0xa000, 0x0200), two(0xf130, 0x0900), "uMumMheH", mcfemac },/* Ry,Rx,+1/-1,accX.  */
 {"macw", 4,  	two(0xa000, 0x0000), two(0xf130, 0x0f00), "uMumeH", mcfemac }, /* Ry,Rx,accX.  */
 
-{"macw", 4,  	two(0xa080, 0x0000), two(0xf180, 0x0910), "uNuoiI4/Rn", mcfemac },
-{"macw", 4,  	two(0xa080, 0x0200), two(0xf180, 0x0910), "uNuoMh4/Rn", mcfemac },
-{"macw", 4,  	two(0xa080, 0x0000), two(0xf180, 0x0f10), "uNuo4/Rn", mcfemac },
-{"macw", 4,  	two(0xa000, 0x0000), two(0xf1b0, 0x0910), "uMumiI", mcfemac },
-{"macw", 4,  	two(0xa000, 0x0200), two(0xf1b0, 0x0910), "uMumMh", mcfemac },
-{"macw", 4,  	two(0xa000, 0x0000), two(0xf1b0, 0x0f10), "uMum", mcfemac },
-
 {"macl", 4,  	two(0xa080, 0x0800), two(0xf180, 0x0910), "RNRoiI4/Rn", mcfmac },
 {"macl", 4,  	two(0xa080, 0x0a00), two(0xf180, 0x0910), "RNRoMh4/Rn", mcfmac },
 {"macl", 4,  	two(0xa080, 0x0800), two(0xf180, 0x0f10), "RNRo4/Rn", mcfmac },
 {"macl", 4,  	two(0xa000, 0x0800), two(0xf1b0, 0x0b00), "RMRmiI", mcfmac },
 {"macl", 4,  	two(0xa000, 0x0a00), two(0xf1b0, 0x0b00), "RMRmMh", mcfmac },
-{"macl", 4,  	two(0xa000, 0x0800), two(0xf1b0, 0x0900), "RMRm", mcfmac },
+{"macl", 4,  	two(0xa000, 0x0800), two(0xf1b0, 0x0800), "RMRm", mcfmac },
 
 {"macl", 4,  	two(0xa000, 0x0800), two(0xf100, 0x0900), "R3R1iI4/RneG", mcfemac },
 {"macl", 4,  	two(0xa000, 0x0a00), two(0xf100, 0x0900), "R3R1Mh4/RneG", mcfemac },
@@ -1521,13 +1515,6 @@ const struct m68k_opcode m68k_opcodes[] =
 {"macl", 4,  	two(0xa000, 0x0800), two(0xf130, 0x0900), "RMRmiIeH", mcfemac },
 {"macl", 4,  	two(0xa000, 0x0a00), two(0xf130, 0x0900), "RMRmMheH", mcfemac },
 {"macl", 4,  	two(0xa000, 0x0800), two(0xf130, 0x0f00), "RMRmeH", mcfemac },
-
-{"macl", 4,  	two(0xa080, 0x0800), two(0xf180, 0x0910), "RNRoiI4/Rn", mcfemac },
-{"macl", 4,  	two(0xa080, 0x0a00), two(0xf180, 0x0910), "RNRoMh4/Rn", mcfemac },
-{"macl", 4,  	two(0xa080, 0x0800), two(0xf180, 0x0f10), "RNRo4/Rn", mcfemac },
-{"macl", 4,  	two(0xa000, 0x0800), two(0xf1b0, 0x0b10), "RMRmiI", mcfemac },
-{"macl", 4,  	two(0xa000, 0x0a00), two(0xf1b0, 0x0b10), "RMRmMh", mcfemac },
-{"macl", 4,  	two(0xa000, 0x0800), two(0xf1b0, 0x0910), "RMRm", mcfemac },
 
 /* NOTE: The mcf5200 family programmer's reference manual does not
    indicate the byte form of the movea instruction is invalid (as it
@@ -1565,10 +1552,15 @@ const struct m68k_opcode m68k_opcodes[] =
 {"moveml", 4,	one(0044300),	one(0177700), "#w>s", m68000up },
 {"moveml", 4,	one(0046300),	one(0177700), "<sLw", m68000up },
 {"moveml", 4,	one(0046300),	one(0177700), "<s#w", m68000up },
-{"moveml", 4,	one(0044300),	one(0177700), "Lwys", mcfisa_a },
-{"moveml", 4,	one(0044300),	one(0177700), "#wys", mcfisa_a },
-{"moveml", 4,	one(0046300),	one(0177700), "ysLw", mcfisa_a },
-{"moveml", 4,	one(0046300),	one(0177700), "ys#w", mcfisa_a },
+/* FIXME: need specifier for mode 2 and 5 to simplify below insn patterns.  */
+{"moveml", 4,	one(0044320),	one(0177770), "Lwas", mcfisa_a },
+{"moveml", 4,	one(0044320),	one(0177770), "#was", mcfisa_a },
+{"moveml", 4,	one(0044350),	one(0177770), "Lwds", mcfisa_a },
+{"moveml", 4,	one(0044350),	one(0177770), "#wds", mcfisa_a },
+{"moveml", 4,	one(0046320),	one(0177770), "asLw", mcfisa_a },
+{"moveml", 4,	one(0046320),	one(0177770), "as#w", mcfisa_a },
+{"moveml", 4,	one(0046350),	one(0177770), "dsLw", mcfisa_a },
+{"moveml", 4,	one(0046350),	one(0177770), "ds#w", mcfisa_a },
 
 {"movepw", 2,	one(0000410),	one(0170770), "dsDd", m68000up },
 {"movepw", 2,	one(0000610),	one(0170770), "Ddds", m68000up },
@@ -1589,13 +1581,13 @@ const struct m68k_opcode m68k_opcodes[] =
 {"moveb", 2,	one(0010200),	one(0170700), "obad", mcfisa_a },
 {"moveb", 2,	one(0010300),	one(0170700), "ob+d", mcfisa_a },
 {"moveb", 2,	one(0010400),	one(0170700), "ob-d", mcfisa_a },
-{"moveb", 2,	one(0010074),	one(0170077), "#bpd", mcfisa_b | mcfisa_c },
+{"moveb", 2,	one(0010000),	one(0170000), "obnd", mcfisa_b | mcfisa_c },
 
 {"movew", 2,	one(0030000),	one(0170000), "*w%d", m68000up },
 {"movew", 2,	one(0030000),	one(0170000), "ms%d", mcfisa_a },
 {"movew", 2,	one(0030000),	one(0170000), "nspd", mcfisa_a },
 {"movew", 2,	one(0030000),	one(0170000), "owmd", mcfisa_a },
-{"movew", 2,	one(0030074),	one(0170077), "#wpd", mcfisa_b | mcfisa_c },
+{"movew", 2,	one(0030000),	one(0170000), "ownd", mcfisa_b | mcfisa_c },
 {"movew", 2,	one(0040300),	one(0177700), "Ss$s", m68000up },
 {"movew", 2,	one(0040300),	one(0177770), "SsDs", mcfisa_a },
 {"movew", 2,	one(0041300),	one(0177700), "Cs$s", m68010up },
@@ -1612,6 +1604,7 @@ const struct m68k_opcode m68k_opcodes[] =
 {"movel", 2,	one(0020000),	one(0170000), "ms%d", mcfisa_a },
 {"movel", 2,	one(0020000),	one(0170000), "nspd", mcfisa_a },
 {"movel", 2,	one(0020000),	one(0170000), "olmd", mcfisa_a },
+{"movel", 2,	one(0020000),	one(0170000), "olnd", mcfisa_b | mcfisa_c },
 {"movel", 2,	one(0047140),	one(0177770), "AsUd", m68000up | mcfusp },
 {"movel", 2,	one(0047150),	one(0177770), "UdAs", m68000up | mcfusp },
 {"movel", 2,	one(0120600),	one(0177760), "EsRs", mcfmac },
@@ -1644,7 +1637,7 @@ const struct m68k_opcode m68k_opcodes[] =
 {"move", 2,	one(0030000),	one(0170000), "ms%d", mcfisa_a },
 {"move", 2,	one(0030000),	one(0170000), "nspd", mcfisa_a },
 {"move", 2,	one(0030000),	one(0170000), "owmd", mcfisa_a },
-{"move", 2,	one(0030074),	one(0170077), "#wpd", mcfisa_b | mcfisa_c },
+{"move", 2,	one(0030000),	one(0170000), "ownd", mcfisa_b | mcfisa_c },
 {"move", 2,	one(0040300),	one(0177700), "Ss$s", m68000up },
 {"move", 2,	one(0040300),	one(0177770), "SsDs", mcfisa_a },
 {"move", 2,	one(0041300),	one(0177700), "Cs$s", m68010up },
@@ -1697,7 +1690,7 @@ const struct m68k_opcode m68k_opcodes[] =
 {"msacl", 4,  	two(0xa080, 0x0900), two(0xf180, 0x0f10), "RNRo4/Rn", mcfmac },
 {"msacl", 4,  	two(0xa000, 0x0900), two(0xf1b0, 0x0b00), "RMRmiI", mcfmac },
 {"msacl", 4,  	two(0xa000, 0x0b00), two(0xf1b0, 0x0b00), "RMRmMh", mcfmac },
-{"msacl", 4,  	two(0xa000, 0x0900), two(0xf1b0, 0x0900), "RMRm", mcfmac },
+{"msacl", 4,  	two(0xa000, 0x0900), two(0xf1b0, 0x0800), "RMRm", mcfmac },
 
 {"msacl", 4,  	two(0xa000, 0x0900), two(0xf100, 0x0900), "R3R1iI4/RneG", mcfemac },
 {"msacl", 4,  	two(0xa000, 0x0b00), two(0xf100, 0x0900), "R3R1Mh4/RneG", mcfemac },
@@ -1862,11 +1855,11 @@ const struct m68k_opcode m68k_opcodes[] =
 {"pmove", 4,    two(0xf000,0x4200), two(0xffc0,0xe3ff), "28%s", m68851 },
 {"pmove", 4,    two(0xf000,0x4000), two(0xffc0,0xe3ff), "|sW8", m68030|m68851 },
 {"pmove", 4,    two(0xf000,0x4200), two(0xffc0,0xe3ff), "W8~s", m68030|m68851 },
+{"pmove", 4,    two(0xf000,0x6200), two(0xffc0,0xe3e3), "*wX3", m68851 },
+{"pmove", 4,    two(0xf000,0x6000), two(0xffc0,0xe3e3), "X3%s", m68851 },
 {"pmove", 4,    two(0xf000,0x6000), two(0xffc0,0xffff), "*wY8", m68030|m68851 },
 {"pmove", 4,    two(0xf000,0x6200), two(0xffc0,0xffff), "Y8%s", m68030|m68851 },
 {"pmove", 4,    two(0xf000,0x6600), two(0xffc0,0xffff), "Z8%s", m68851 },
-{"pmove", 4,    two(0xf000,0x6000), two(0xffc0,0xe3e3), "*wX3", m68851 },
-{"pmove", 4,    two(0xf000,0x6200), two(0xffc0,0xe3e3), "X3%s", m68851 },
 {"pmove", 4,    two(0xf000,0x0800), two(0xffc0,0xfbff), "*l38", m68030 },
 {"pmove", 4,    two(0xf000,0x0a00), two(0xffc0,0xfbff), "38%s", m68030 },
 
@@ -2019,21 +2012,19 @@ const struct m68k_opcode m68k_opcodes[] =
 {"roxrl", 2,	one(0160260),		one(0170770), "DdDs", m68000up },
 
 {"rtd", 4,	one(0047164),		one(0177777), "#w", m68010up },
-
+		
 {"rte", 2,	one(0047163),		one(0177777), "",   m68000up | mcfisa_a },
-
+		
 {"rtm", 2,	one(0003300),		one(0177760), "Rs", m68020 },
-
+		
 {"rtr", 2,	one(0047167),		one(0177777), "",   m68000up },
-
+		
 {"rts", 2,	one(0047165),		one(0177777), "",   m68000up | mcfisa_a },
 
 {"satsl", 2,	one(0046200),		one(0177770), "Ds", mcfisa_b | mcfisa_c },
 
 {"sbcd", 2,	one(0100400),		one(0170770), "DsDd", m68000up },
 {"sbcd", 2,	one(0100410),		one(0170770), "-s-d", m68000up },
-
-{"stldsr", 6,   two(0x40e7, 0x46fc),    two(0xffff, 0xffff), "#w", mcfisa_aa | mcfisa_c },
 
   /* Traps have to come before conditional sets, as they have a more
      specific opcode.  */
@@ -2325,7 +2316,7 @@ const struct m68k_opcode_alias m68k_opcode_aliases[] =
   { "dbhsw",	"dbcc", },
   { "dbra",	"dbf", },
   { "dbraw",	"dbf", },
-  { "tdivsl",	"divsll", },
+  { "tdivsl",	"divsl", },
   { "divs",	"divsw", },
   { "divu",	"divuw", },
   { "ext",	"extw", },
@@ -2435,7 +2426,7 @@ const struct m68k_opcode_alias m68k_opcode_aliases[] =
   { "movsw",	"movesw", },
   { "mov3q",	"mov3ql", },
 
-  { "tdivul",	"divull", },	/* For m68k-svr4.  */
+  { "tdivul",	"divul", },	/* For m68k-svr4.  */
   { "fmovb",	"fmoveb", },
   { "fsmovb",	"fsmoveb", },
   { "fdmovb",	"fdmoveb", },
